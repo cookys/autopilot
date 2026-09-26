@@ -1,0 +1,470 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "hook-advisories-reach-model-2026-09-26",
+  "logical_plan_id": "hook-advisories-reach-model-2026-09-26",
+  "session_id": "ee9eb17b-41da-4ab1-9beb-06049b64c5bd",
+  "session_key": "22f51bb452aecd843607cb62106cd1a04c03f042c3893fa93bef197b23cbf08e",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "644a0f3ee51b9b62f4e7088c110f5009cb033e7b0a4d5e7adc32a48db67e0065",
+  "manifest_sha256": "7e3f0ff564ecadbdb85351b994e4e367ae05f3b30adadf91a1a528545a57410f",
+  "plan_sha256": "8a2ed244daecde33eae74f24a993589d76432ad734507cad6f2496ab4df8670e",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "7be868285320e62506cd51607cd56c2e7f1c467ae3304ab776b0ed3cd17eee0d"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "6b4a713c449fcdcdb02e4565a7d2fc385deb6fe386eacaf80d0fdd84164ac4fc",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-lOC4n0/stdout",
+          "digest": "6b4a713c449fcdcdb02e4565a7d2fc385deb6fe386eacaf80d0fdd84164ac4fc"
+        },
+        "receipt_digest": "bccf793d51d463a1f8c4b45dad8b38a7f6b605fa0805904acf001239fc1e927c"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "grok_deep",
+      "target_id": "grok_deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.6",
+          "operation": "plan-review",
+          "request_digest": "8c4c691645e191cd68153a04a48be0b8b1fca993d5909f1c76e14be73f31574b"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "b425d3d1d4c1836be56357ea3a7f360b617baf9609657645cfc24a2c941161b3",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-hqlyYR",
+          "digest": "b425d3d1d4c1836be56357ea3a7f360b617baf9609657645cfc24a2c941161b3"
+        },
+        "receipt_digest": "98f261c05b0b69f488e2286c977345f856771cd56a461df9bcb8f62892c36158"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_consult",
+      "target_id": "minimax_consult",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "58d1e6e5c314a7f4cea22b82da24b9bb6dceb4fe8dc0cbe916750c1ed22bc369"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-xf9esv",
+          "digest": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d"
+        },
+        "receipt_digest": "fc065560e974a2d206ed554dc3042597dbbe1f1809f89ef85a106a22c0143185"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "family": "openai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "grok_deep",
+      "target_id": "grok_deep",
+      "family": "xai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "minimax_consult",
+      "target_id": "minimax_consult",
+      "family": "minimax",
+      "verdict": "READY"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P2 deferred Stop relay output contract",
+      "claim": "P2 changes the model-visible advisory by prepending a deferred-source label, violating the byte-identical wording requirement.",
+      "evidence": "Section 2.5 requires advisory text to remain byte-identical and forbids adding wording, while P2 requires every delivered entry to be prefixed with '[deferred from Stop] <source>: '.",
+      "evidence_reference": "Plan §2.5 and §4 P2; frozen rubric R2",
+      "repair": "Remove all model-visible prefix and source decoration. Keep source only as internal queue metadata, preserve each original stderr byte sequence including its line termination, and test the decoded additionalContext bytes against the pre-change stderr bytes.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d9555df497c3a04c7220782381ca37d4afa7e00df98514dfbc93dd01c9bfde11"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Shared runtime used by cost-tracker.js, check-console.js, and batch-format.js",
+      "claim": "The proposed advisory-queue helper is a shared runtime module between hooks, directly conflicting with the frozen requirement that each hook use its own inline emitter without shared runtime code.",
+      "evidence": "Section 2.5 introduces an exception for the Stop relay queue, and §3 assigns enqueue(sessionId, source, text) to hooks/lib/advisory-queue.js for all three Stop hooks. Frozen R4 contains no such exception.",
+      "evidence_reference": "Plan §2.5, §3 Group S, and §3 New; frozen rubric R4",
+      "repair": "Inline a small fail-open queue writer in each Stop hook against one documented on-disk format, leaving advisory-relay.js as the sole reader. Do not proceed with the shared helper while R4 remains frozen.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "666c463b4f679dbaacafc7c1118e192bb095a801bb2cd338738a259a244ae68b"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P3 release metadata and mirror synchronization boundary",
+      "claim": "The plan places a mutating hook-count synchronization action inside the implementation file map without assigning it exclusively to depth-0's release step, contradicting the prohibition on implementation edits to release metadata.",
+      "evidence": "Section 3 includes 'sync-version.js --hook-count +1' among new work and P3 says to sync mirrors, while §2.5 says implementation commits must not edit the version or .claude-plugin/plugin.json and that depth-0 lands the release.",
+      "evidence_reference": "Plan §2.5, §3 New, and §4 P3; frozen rubric R6",
+      "repair": "Remove the mutating sync-version action from implementer phases. Define a separate depth-0 release step that updates hook-count mirrors, .claude-plugin/plugin.json, version metadata, and CHANGELOG as applicable, then runs the inventory and mirror checks.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "082163e2ffb6fde656e9264022fbf40713d9eae13d184a3cdba9ca7e14f0e805"
+    },
+    {
+      "rubric_id": "R9",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Deferred relay delivery and overflow semantics",
+      "claim": "KR2's unconditional exactly-once delivery promise is incompatible with P2's intentional eviction of queued advisories at the 20-entry or 8 KiB cap.",
+      "evidence": "KR2 says a Stop-group advisory is queued once and delivered exactly once. P2 says the oldest entries are dropped when either cap is exceeded, so some queued advisories are deliberately delivered zero times.",
+      "evidence_reference": "Plan §2 KR2 and §4 P2; frozen rubric R9",
+      "repair": "Define bounded semantics before implementation: scope exactly-once delivery to retained entries during normal operation, specify overflow as intentional eviction with deterministic tests, and document an atomic rename-based drain and recovery policy; alternatively remove lossy eviction.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "97ec40b7949c481bcf99fcffba70fccaa98f8a115f85557067177600810de322"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "P1 rate-limit verification for all group-T hooks",
+      "claim": "The plan asserts that every group-T hook rate-limits but documents concrete limiting behavior for only four hooks, leaving the remaining listed hooks unsubstantiated.",
+      "evidence": "Section 3 lists eleven group-T hooks. Section 6 names limiting behavior only for cost-fuse, context-budget, depth0-delegate-gate, and reload-watch, then delegates confirmation of every hook to P1.",
+      "evidence_reference": "Plan §3 Group T and §6 Advisory spam in context; frozen rubric R7",
+      "repair": "During P1, record the existing trigger or rate limiter for every remaining group-T hook and exclude any hook lacking one, as the plan already requires; do not add new thresholds within this mechanism-only change.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "eda1f069b72801694ddfbf8817f85d13e1521a15b3c418a912aa9a6747cff83f"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P2 advisory-relay additionalContext; plan §4 P2 prefix vs §2.5 byte-identical rule",
+      "claim": "P2 tells the relay to prefix every Stop advisory with [deferred from Stop] <source>: which adds wording, so the model-visible text is not byte-identical to today's stderr and trips the R10 inversion (changing advisory wording).",
+      "evidence": "Plan §0 and §2.5 require advisory text to stay BYTE-IDENTICAL and never add or remove wording, and they call this a mechanism-only change so no eval is needed. Plan §4 P2 then says advisory-relay emits the queued text through U2 additionalContext prefixed [deferred from Stop] <source>:. That prefix is new wording in the only channel the model sees. Frozen R10 lists changing advisory wording as a guaranteed failure, alongside permissionDecision allow and Stop additionalContext.",
+      "evidence_reference": "docs/plans/2026-09-26-hook-advisories-reach-model.md §0 thesis, §2.5 bullet 2, §4 P2 drain sentence, §6 inversion; frozen rubric R2 and R10",
+      "repair": "Rewrite P2 so additionalContext equals the queued stderr bytes with no prefix, suffix, or source label. Keep source as queue metadata for tests and debug logs only. If the Board wants a visible envelope, amend §2.5 with an explicit exception that quotes the exact prefix bytes before P2 starts.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "49b596d14f0202febe36fc871042450c07f3ecfac66249269d9b1a137e63ff63"
+    },
+    {
+      "rubric_id": "R9",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "P2 enqueue key vs Group S session identity; KR2 session isolation",
+      "claim": "The relay drains payload.session_id, but existing Group S session helpers do not all use that field, so opt-in Stop advisories can be queued under a cwd-hash id that UserPromptSubmit will never drain.",
+      "evidence": "cost-tracker.js keys off input.session_id with env fallback. check-console.js never reads session_id. batch-format.js getSessionId uses CLAUDE_CODE_SESSION_ID or CLAUDE_SESSION_ID, else sha1 of cwd sliced to 12 hex chars. A cwd-hash cannot match a Claude session UUID. Plan P2 drains only payload.session_id on UserPromptSubmit. KR2 requires same-session delivery and cross-session isolation.",
+      "evidence_reference": "hooks/batch-format.js lines 21-24; hooks/check-console.js; hooks/cost-tracker.js lines 43-44; plan §2 KR2 and §4 P2",
+      "repair": "Pin enqueue's sessionId as sanitizeSessionId of Stop stdin payload.session_id; if that field is missing or empty, skip enqueue (do not fall back to cwd hash or env-only ids). advisory-relay must drain the same UserPromptSubmit payload.session_id. Add a case with env unset where payload.session_id still delivers once and a different session_id delivers nothing.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "f0872febe480bcdcf2255489e2aa72563b3ad3dc5594122e791822176494d39a"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "hooks/opt-in-multiplexer.js stdout forwarding for Group T opt-in children",
+      "claim": "The multiplexer today writes every child stdout in order, so two additionalContext JSON objects on one event can clobber or fail to parse; P1 must specify the merge object, not only verify.",
+      "evidence": "opt-in-multiplexer.js EVENT_TABLE PostToolUse runs test-runner then design-quality via spawnSync and process.stdout.write(child.stdout) for each. Both hooks are Group T advisory paths. Concatenated JSON objects are not one hookSpecificOutput. PreToolUse can also pair branch-protection warn JSON with another child. Current children that deny use exit 2 plus stderr (config-protection, exec-boundary, commit-secret-scan), so merge must keep last non-zero exit and must never invent permissionDecision allow.",
+      "evidence_reference": "hooks/opt-in-multiplexer.js lines 41-45 and 108-114; hooks/test-runner.js lines 82-84; hooks/design-quality.js lines 44-49; plan §3 multiplexer paragraph and §6 Multiplexer merging",
+      "repair": "In P1, parse each child stdout as JSON, join additionalContext with newline into one hookSpecificOutput whose hookEventName is the multiplexer event, and emit no permissionDecision on advisory-only children. If a child already emitted deny or ask, forward that decision unchanged and still attach merged additionalContext only when it does not require an allow decision. On parse failure, fail-open: exit 0, no stdout. New suite case: two children both emit additionalContext.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0afc780d013af387589a3bb0154fd69822b76541af4f373a06abc2b715eeb627"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "P3 acceptance vs implementation-commit freeze of plugin.json and version",
+      "claim": "P3 acceptance requires check-hook-inventory.js green after adding default-on advisory-relay, which cannot pass without rewriting plugin.json hook-count fragments that implementation commits are forbidden to touch.",
+      "evidence": "§2.5 forbids editing CHANGELOG, the version, or .claude-plugin/plugin.json in implementation commits. §3 tells implementers to run sync-version.js --hook-count +1. scripts/sync-version.js always writes .claude-plugin/plugin.json and requires --version; there is no increment flag, and parseInt of +1 is 1. check-hook-inventory.js --check compares derived default-on counts to .claude-plugin/plugin.json, plugin.json, marketplace.json, and CLAUDE.md. P3 acceptance lists that check with no new FAIL.",
+      "evidence_reference": "plan §2.5 last bullet, §3 New bullet, §4 P3 acceptance; scripts/sync-version.js header USAGE and write list; scripts/check-hook-inventory.js lines 241-244",
+      "repair": "Drop sync-version from implementation file-map. P2/P3 may add hooks.json, hooks/README.md, hook-classes, and advisory-relay.js. Depth-0 release runs sync-version with the new integer hook count plus CHANGELOG and plugin.json. Move check-hook-inventory.js --check to that release commit, not P3 implementation acceptance.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0d35135d736b46563f7a6868f0e911d54c4568edf6ef7fbd81898add82ac8e8d"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "§5 re-expectation list; dispatch-model-guard acknowledged-allow path",
+      "claim": "§5 lists dispatch-model-guard case 6e, which pins empty stdout on the acknowledged-allow stderr note, a path Group T does not convert; leaving it on the list invites emitting additionalContext there.",
+      "evidence": "Group T names dispatch-model-guard mode=warn lines ~161 and ~184. handleGuard in warn mode writes reason and exits 0. The acknowledged path at line 172 writes reason plus the extra phrase acknowledged as intentional, allowing, then exits 0 with empty stdout. Case 6e asserts that empty stdout. Cases 6d, 12, and 21 are the warn-mode silent-stdout pins that must change. Converting 6e would add wording and make a currently silent allow into model-visible context.",
+      "evidence_reference": "plan §3 Group T dispatch-model-guard.js ~:161,:184; plan §5 cases 6d, 6e, 12, 21; hooks/dispatch-model-guard.js lines 160-173; hooks/tests/dispatch-model-guard.test.sh case 6e",
+      "repair": "Remove case 6e from the §5 re-expectation list. P1 converts only the warn-mode branches at lines 161 and 184. Leave the acknowledged-allow path stderr-only with empty stdout so case 6e stays unmodified.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "47e1055f872c161d16e85bb4bcae3f41f57fcd409c25e5bd4074b46658941c64"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Group T advisory cadence; plan §6 spam risk vs the every-hook rate-limit claim",
+      "claim": "§6 claims every Group T hook already rate-limits, but that is true only for the four named default-on hooks; several listed Group T advisories fire on every matching tool call.",
+      "evidence": "Rate limits named in §6: cost-fuse warned_multiple, context-budget lastT1Call, depth0-delegate-gate every threshold reads, reload-watch on mtime change. Remaining Group T paths with no cadence limiter: dispatch-model-guard warn on every matching Task/Agent; orchestrator-edit-gate default warn on every gated Edit/Write; branch-protection WARNING on every merge/rebase/reset/cherry-pick/revert; large-file-warner on every Read of a file at least 500KB without offset/limit; design-quality on every matching frontend Write/Edit that still hits SIGNALS; test-runner on every failing sibling test; mcp-health PostToolUseFailure on every classified infra failure. P1 says report a hook without a limiter and do not silently ship it, but the universal already-rate-limits sentence can skip that report.",
+      "evidence_reference": "plan §6 Advisory spam paragraph; hooks/large-file-warner.js lines 56-59; hooks/design-quality.js lines 44-49; hooks/test-runner.js lines 82-84; hooks/orchestrator-edit-gate.js lines 19-20 and 114-116; hooks/dispatch-model-guard.js lines 160-162; hooks/branch-protection.js lines 91-94; hooks/mcp-health.js lines 87-90",
+      "repair": "Replace Every group-T hook already rate-limits with the four default-on hooks that do, and list the event-gated Group T paths above as no-cadence. P1 must record that list in the phase report before shipping those paths; do not add new rate limits in this change.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d64ab228a411043cc7bcbc66883f6a31549b2efbc2455070ee9acbadaa3e9c6e"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "eda1f069b72801694ddfbf8817f85d13e1521a15b3c418a912aa9a6747cff83f",
+      "rubric_id": "R7",
+      "affected_surface": "P1 rate-limit verification for all group-T hooks",
+      "claim": "The plan asserts that every group-T hook rate-limits but documents concrete limiting behavior for only four hooks, leaving the remaining listed hooks unsubstantiated.",
+      "evidence_reference": "Plan §3 Group T and §6 Advisory spam in context; frozen rubric R7",
+      "disposition": null
+    },
+    {
+      "fingerprint": "f0872febe480bcdcf2255489e2aa72563b3ad3dc5594122e791822176494d39a",
+      "rubric_id": "R9",
+      "affected_surface": "P2 enqueue key vs Group S session identity; KR2 session isolation",
+      "claim": "The relay drains payload.session_id, but existing Group S session helpers do not all use that field, so opt-in Stop advisories can be queued under a cwd-hash id that UserPromptSubmit will never drain.",
+      "evidence_reference": "hooks/batch-format.js lines 21-24; hooks/check-console.js; hooks/cost-tracker.js lines 43-44; plan §2 KR2 and §4 P2",
+      "disposition": null
+    },
+    {
+      "fingerprint": "0afc780d013af387589a3bb0154fd69822b76541af4f373a06abc2b715eeb627",
+      "rubric_id": "R8",
+      "affected_surface": "hooks/opt-in-multiplexer.js stdout forwarding for Group T opt-in children",
+      "claim": "The multiplexer today writes every child stdout in order, so two additionalContext JSON objects on one event can clobber or fail to parse; P1 must specify the merge object, not only verify.",
+      "evidence_reference": "hooks/opt-in-multiplexer.js lines 41-45 and 108-114; hooks/test-runner.js lines 82-84; hooks/design-quality.js lines 44-49; plan §3 multiplexer paragraph and §6 Multiplexer merging",
+      "disposition": null
+    },
+    {
+      "fingerprint": "0d35135d736b46563f7a6868f0e911d54c4568edf6ef7fbd81898add82ac8e8d",
+      "rubric_id": "R6",
+      "affected_surface": "P3 acceptance vs implementation-commit freeze of plugin.json and version",
+      "claim": "P3 acceptance requires check-hook-inventory.js green after adding default-on advisory-relay, which cannot pass without rewriting plugin.json hook-count fragments that implementation commits are forbidden to touch.",
+      "evidence_reference": "plan §2.5 last bullet, §3 New bullet, §4 P3 acceptance; scripts/sync-version.js header USAGE and write list; scripts/check-hook-inventory.js lines 241-244",
+      "disposition": null
+    },
+    {
+      "fingerprint": "47e1055f872c161d16e85bb4bcae3f41f57fcd409c25e5bd4074b46658941c64",
+      "rubric_id": "R5",
+      "affected_surface": "§5 re-expectation list; dispatch-model-guard acknowledged-allow path",
+      "claim": "§5 lists dispatch-model-guard case 6e, which pins empty stdout on the acknowledged-allow stderr note, a path Group T does not convert; leaving it on the list invites emitting additionalContext there.",
+      "evidence_reference": "plan §3 Group T dispatch-model-guard.js ~:161,:184; plan §5 cases 6d, 6e, 12, 21; hooks/dispatch-model-guard.js lines 160-173; hooks/tests/dispatch-model-guard.test.sh case 6e",
+      "disposition": null
+    },
+    {
+      "fingerprint": "d64ab228a411043cc7bcbc66883f6a31549b2efbc2455070ee9acbadaa3e9c6e",
+      "rubric_id": "R7",
+      "affected_surface": "Group T advisory cadence; plan §6 spam risk vs the every-hook rate-limit claim",
+      "claim": "§6 claims every Group T hook already rate-limits, but that is true only for the four named default-on hooks; several listed Group T advisories fire on every matching tool call.",
+      "evidence_reference": "plan §6 Advisory spam paragraph; hooks/large-file-warner.js lines 56-59; hooks/design-quality.js lines 44-49; hooks/test-runner.js lines 82-84; hooks/orchestrator-edit-gate.js lines 19-20 and 114-116; hooks/dispatch-model-guard.js lines 160-162; hooks/branch-protection.js lines 91-94; hooks/mcp-health.js lines 87-90",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-09-26T14:01:23.890Z"
+}

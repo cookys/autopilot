@@ -29,7 +29,8 @@ Opt-in hooks share the defect.
 ## 2. OKR / KRs
 - **KR1**: for every hook in §3 group T, the advisory is emitted on stdout as `{"hookSpecificOutput":{"hookEventName":<event>,"additionalContext":<same text>}}`, the stderr copy is kept (debug log), the exit code is unchanged, and no `permissionDecision` is emitted on that path.
   A test per hook asserts the stdout JSON, the byte-identical text, and the absence of `permissionDecision`.
-- **KR2**: a Stop-group advisory (§3 group S) is queued once and delivered exactly once, on the next UserPromptSubmit of the SAME session, as model-visible context. A second prompt delivers nothing, and a different session never receives it.
+- **KR2**: a Stop-group advisory (§3 group S) is queued and delivered AT MOST once, verbatim, on the next UserPromptSubmit of the SAME `session_id`, as model-visible context.
+  A second prompt delivers nothing, and a different session never receives it. Entries evicted by the cap (oldest first) or older than 24 h are dropped with a debug-log line and never delivered.
   This is proven by hook tests and by a live probe (P0).
 - **KR3**: deny and block paths (exit 2, `permissionDecision:"deny"`/`"ask"`) are byte-for-byte unchanged, and every existing hook suite stays green. Only the listed stderr-pinning assertions (§5) are re-expected, and each re-expectation is named in its commit.
 - **KR4**: `dirty-protected-paths` keeps `systemMessage` as a deliberate human-facing reminder. It is documented as such and not relayed.
@@ -38,8 +39,9 @@ Opt-in hooks share the defect.
 - Node ≥ 20.10, built-ins only. Every hook stays fail-open (an internal error ⇒ exit 0, no stdout).
 - Advisory text is BYTE-IDENTICAL to today's stderr text. Never add or remove wording.
 - An advisory path never emits `permissionDecision` (an `"allow"` auto-approves the tool call, which was the v2.36.97 lesson). Deny/ask/exit-2 paths are untouched.
-- Each hook gets its own small inline emitter (no shared runtime module between hooks; this keeps single-crash isolation, per the foreman-guard/context-budget header notes).
-  The one exception is the Stop relay queue (P2), a tiny write-only helper plus its single reader.
+- Each hook gets its own small inline emitter, and there is NO shared runtime module between hooks, including for the Stop queue. This keeps single-crash isolation, per the foreman-guard/context-budget header notes.
+  Group-S hooks each inline their own atomic append to the documented queue file format, and only advisory-relay.js reads it.
+- Implementation commits never run `sync-version.js`. The hook-count sync and `check-hook-inventory.js` belong to the depth-0 landing step.
 - New cases go in NEW suites. Existing suites change only on the §5 list.
 - Do not edit CHANGELOG, the version, or `.claude-plugin/plugin.json` in implementation commits; depth-0 lands the release.
 
@@ -63,14 +65,16 @@ Opt-in hooks share the defect.
   - `hooks/test-runner.js` (~:84);
   - `hooks/mcp-health.js` (PostToolUseFailure, ~:87).
 
-  For hooks dispatched through `hooks/opt-in-multiplexer.js`, confirm that the multiplexer forwards a child's stdout JSON to Claude Code. If it drops or merges it, the multiplexer must merge `additionalContext` from several children into one JSON object (P1 covers this).
+  **Multiplexer (hard requirement)**: `hooks/opt-in-multiplexer.js` must parse each child's stdout JSON and merge every `hookSpecificOutput.additionalContext` into ONE object joined by newlines.
+  It preserves any deny/ask decision (deny wins over ask) and writes exactly one JSON object; a test runs two advising children.
 
 **Group S (Stop → deferred relay):** `hooks/cost-tracker.js` (~:134, default-on), `hooks/check-console.js` (~:53), and `hooks/batch-format.js` (~:57,:71), all opt-in.
 
 **New:**
 - `hooks/advisory-relay.js` (UserPromptSubmit): drains this session's queue and emits it as context.
-- `hooks/lib/advisory-queue.js` (or the repo's existing hook-lib location): `enqueue(sessionId, source, text)`, write-only, atomic append, capped at 20 entries and 8 KiB, living under the live-state dir (tmpfs, `scripts/lib/live-state-dir.js`).
-- `hooks/hooks.json` wiring, the hook-inventory row, `hooks/README.md`, `sync-version.js --hook-count +1`, and the hook-classes entry if the repo keeps one.
+- The queue FILE FORMAT, with no shared module: `<live-state base>/advisory-queue/<sanitized session_id>.jsonl`, one JSON line per entry `{ts, source, text}`. The base is the tmpfs
+  live-state dir that `scripts/lib/live-state-dir.js` resolves. Each writer inlines an O_APPEND write of one line, then trims to the newest 20 entries / 8 KiB. Keys come strictly from the payload's `session_id`.
+- `hooks/hooks.json` wiring, the `hooks/README.md` row, and the hook-classes entry if the repo keeps one. The hook-count sync and inventory check happen at landing (depth-0).
 
 **Unchanged by design:** `hooks/dirty-protected-paths.js` (a human-facing systemMessage; its README row says so).
 
@@ -87,12 +91,12 @@ Where one invocation has several advisories, join them with `\n` into ONE JSON o
 **Acceptance**: KR1 and KR3. The new suite is `hooks/tests/hook-advisory-channel.test.sh`, with one case per hook plus a negative control asserting that no advisory path contains `permissionDecision`.
 
 **P2 (S–M) group S relay (depends on P0).** Group-S hooks call `enqueue` in addition to their existing stderr (and keep any systemMessage). `advisory-relay.js`
-drains ONLY `payload.session_id`'s queue, emits it through P0's chosen channel prefixed `[deferred from Stop] <source>: `, and deletes the queue atomically. The queue is capped (oldest dropped),
+drains ONLY `payload.session_id`'s queue, emits the entries' `text` VERBATIM (joined by a single newline, with no prefix or framing) as UserPromptSubmit `additionalContext`, and deletes the queue atomically (rename, then read). The queue is capped (oldest dropped),
 and entries older than 24 h are discarded unread. **Acceptance**: KR2, with cases for delivery once, no double delivery, session isolation, cap/age, and fail-open on a corrupt queue.
 
 **P3 (S) docs.** Update the `hooks/README.md` rows for every touched hook (which channel reaches the model) and add the advisory-relay row. Note that dirty-protected-paths is human-facing.
 Add a short "hook output channels" paragraph with the probe table to the hooks reference that documents authoring conventions. Sync the mirrors.
-**Acceptance**: `sync-codex-plugin-skills.sh --check`, `validate.sh`, `check-hook-inventory.js`, and `doc-drift-gate.js .` with no new FAIL.
+**Acceptance**: `sync-codex-plugin-skills.sh --check`, `validate.sh`, and `doc-drift-gate.js .` with no new FAIL. `check-hook-inventory.js` runs at landing, after the hook-count sync.
 
 ## 5. Test / validation
 - New: `hooks/tests/hook-advisory-channel.test.sh` (P1) and `hooks/tests/advisory-relay.test.sh` (P2).
@@ -100,13 +104,16 @@ Add a short "hook output channels" paragraph with the probe table to the hooks r
   - `hooks/tests/cost-fuse.test.sh` cases 4, 4b, 5d;
   - `hooks/orchestrator-edit-gate.test.js:460-465`;
   - `hooks/context-budget.test.js:157-161, 552-558`;
-  - `hooks/tests/dispatch-model-guard.test.sh` cases 6d, 6e, 12, 21;
+  - `hooks/tests/dispatch-model-guard.test.sh` cases 6d, 12, 21 (case 6e is the acknowledged silent allow and must stay unchanged);
   - `hooks/tests/reload-watch-detects-mtime-change.test.sh:31`.
 - Every suite that `grep -l` finds for each touched hook name. At landing: the full `hooks/tests/run.sh --parallel 8`, with reds rerun solo and compared at base.
 
 ## 6. Risks + inversion
-- 🟠 **Advisory spam in context**: a hook that nudges every call now costs tokens every call. Every group-T hook already rate-limits (cost-fuse per multiple, context-budget per tier/interval,
-  depth0-delegate-gate periodic, reload-watch on change). P1 must confirm each rate limit and add none; a hook without one is reported, not silently shipped.
+- 🟠 **Advisory volume in context**. Each group-T hook's cadence:
+  - rate-limited: cost-fuse (per spend multiple), context-budget (per tier/interval), depth0-delegate-gate (periodic), reload-watch (on change);
+  - event-driven, one advisory per triggering event: dispatch-model-guard and orchestrator-edit-gate (per warn-mode breach), branch-protection (per protected-branch mutation), large-file-warner (per large read),
+    design-quality (per checked write), test-runner (per failing run), mcp-health (per MCP failure).
+  That cadence is accepted. No limiter is added, because that would be a guidance change; P1 confirms each cadence in code.
 - 🟠 **Multiplexer merging**: several opt-in children emitting JSON could clobber each other. P1 verifies and merges.
 - 🟡 **The relay is new default-on surface**: it is inert with an empty queue, and fail-open on corruption.
 - Inversion: what guarantees failure? Emitting `permissionDecision:"allow"` to carry text, using Stop `additionalContext`, or changing advisory wording. All three are forbidden in §2.5.
@@ -122,3 +129,6 @@ None for the Board. P0 may drop P2 by its stop condition.
 
 ## Review log
 R0 author: depth-0 (opus), 2026-09-26.
+G1 (sol chair / grok deep / MiniMax third, all transported): 11 findings, 4 blockers. Dispositions are in `2026-09-26-hook-advisories-reach-model.g1-dispositions.json`:
+- accepted blockers (all folded): no relay prefix; no shared queue module (inline writers, documented format); hook-count sync moved to landing; KR2 reworded to at-most-once with cap/age drops;
+- accepted and folded: the cadence table, strict `session_id` keying, merging in the multiplexer, the inventory check at landing, and dropping case 6e.

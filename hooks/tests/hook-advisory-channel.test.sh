@@ -279,13 +279,8 @@ assert_eq 0 "$__RUN_EXIT" "mcp-health failure: exit 0"
 assert_contains "$__RUN_STDERR" "marked unhealthy" "mcp-health failure: stderr still has advisory"
 assert_advisory_stdout "PostToolUseFailure" "mcp-health failure"
 
-# ── 13. mcp-health pre argv (unhealthy window still writes model text) ─
-# pre's model-facing write currently exits 2. Tests still require the advisory
-# JSON channel (exit 0 is the failure-path sibling above). Drive the write via
-# a healthy retry-window expiry so the hook stays exit 0: seed lastError and
-# nextRetry in the past, then... that path does NOT write. The only pre write
-# is the unhealthy+backoff branch. Emit JSON on that write; keep exit 2 in
-# product. This case asserts the JSON channel on the write (exit remains 2).
+# ── 13. mcp-health pre argv (exit-2 path: stderr only, empty stdout) ─
+# pre's deny write exits 2. Exit-2 paths must not emit additionalContext JSON.
 HOME="$HOOK_HOME" node -e '
 const fs = require("fs");
 const path = require("path");
@@ -299,7 +294,7 @@ CAPTURE_STDIN='{"tool_name":"mcp__demo__call","hook_event_name":"PreToolUse"}'
 capture_node "$TEST_TMP" mcp-health.js pre
 assert_eq 2 "$__RUN_EXIT" "mcp-health pre: exit 2 (deny path unchanged)"
 assert_contains "$__RUN_STDERR" "is unhealthy" "mcp-health pre: stderr still has advisory"
-assert_advisory_stdout "PreToolUse" "mcp-health pre"
+assert_eq "" "$__RUN_STDOUT" "mcp-health pre: exit-2 stdout empty"
 unset AUTOPILOT_HOOK_MCP_HEALTH
 
 # ── 14. multiplexer: two advising children merge ──────────────────────
@@ -370,6 +365,71 @@ function w(v){ if(v&&typeof v==="object"){ if(Object.prototype.hasOwnProperty.ca
 w(o);
 ' "$__RUN_STDOUT"
 assert_eq 0 "$?" "mux drop-allow: additionalContext kept, permissionDecision absent"
+
+# ── 17. multiplexer: preserve JSON deny on exit 0 ─────────────────────
+printf '%s\n' '#!/usr/bin/env node
+process.stdout.write(JSON.stringify({hookSpecificOutput:{hookEventName:"PostToolUse",additionalContext:"DENY-ADV",permissionDecision:"deny",permissionDecisionReason:"blocked"}})+"\n");
+' > "$MUX_ROOT/hooks/test-runner.js"
+printf '%s\n' '#!/usr/bin/env node
+process.stdout.write(JSON.stringify({hookSpecificOutput:{hookEventName:"PostToolUse",additionalContext:"ASK-ADV",permissionDecision:"ask",permissionDecisionReason:"confirm"}})+"\n");
+' > "$MUX_ROOT/hooks/design-quality.js"
+CAPTURE_PLUGIN_ROOT="$MUX_ROOT"
+CAPTURE_STDIN='{"tool_name":"Edit","tool_input":{"file_path":"x.js"}}'
+capture_node "$TEST_TMP" opt-in-multiplexer.js PostToolUse
+assert_eq 0 "$__RUN_EXIT" "mux deny: multiplexer still exits 0"
+node -e '
+const o=JSON.parse(process.argv[1]);
+const h=o.hookSpecificOutput;
+if (h.permissionDecision!=="deny") process.exit(1);
+if (h.permissionDecisionReason!=="blocked") process.exit(2);
+if (h.additionalContext!=="DENY-ADV\nASK-ADV") process.exit(3);
+' "$__RUN_STDOUT"
+assert_eq 0 "$?" "mux deny: permissionDecision deny wins, additionalContext merged"
+
+# ── 18. multiplexer: preserve ask when no denier ──────────────────────
+printf '%s\n' '#!/usr/bin/env node
+process.stdout.write(JSON.stringify({hookSpecificOutput:{hookEventName:"PostToolUse",additionalContext:"ASK-ONLY",permissionDecision:"ask",permissionDecisionReason:"confirm"}})+"\n");
+' > "$MUX_ROOT/hooks/test-runner.js"
+printf '%s\n' '#!/usr/bin/env node
+process.exit(0);
+' > "$MUX_ROOT/hooks/design-quality.js"
+capture_node "$TEST_TMP" opt-in-multiplexer.js PostToolUse
+assert_eq 0 "$__RUN_EXIT" "mux ask: exit 0"
+node -e '
+const o=JSON.parse(process.argv[1]);
+const h=o.hookSpecificOutput;
+if (h.permissionDecision!=="ask") process.exit(1);
+if (h.permissionDecisionReason!=="confirm") process.exit(2);
+if (h.additionalContext!=="ASK-ONLY") process.exit(3);
+' "$__RUN_STDOUT"
+assert_eq 0 "$?" "mux ask: permissionDecision ask preserved"
+
+# ── 19. multiplexer: child exit 1 propagates, no merged stdout ───────
+printf '%s\n' '#!/usr/bin/env node
+process.stdout.write(JSON.stringify({hookSpecificOutput:{hookEventName:"PostToolUse",additionalContext:"SHOULD-DROP"}})+"\n");
+process.exit(0);
+' > "$MUX_ROOT/hooks/test-runner.js"
+printf '%s\n' '#!/usr/bin/env node
+process.exit(1);
+' > "$MUX_ROOT/hooks/design-quality.js"
+HOME="$HOOK_HOME" TMPDIR="$HOOK_TMPDIR" CLAUDE_PLUGIN_ROOT="$MUX_ROOT" \
+  node "$HOOKS_DIR/opt-in-multiplexer.js" PostToolUse >"$TEST_TMP/mux-e1.out" 2>"$TEST_TMP/mux-e1.err" <<< "$CAPTURE_STDIN"
+assert_eq 1 "$?" "mux exit1: multiplexer exits 1"
+assert_eq "" "$(cat "$TEST_TMP/mux-e1.out")" "mux exit1: no merged stdout JSON"
+
+# ── 20. multiplexer: exit 2 still wins over exit 1 ────────────────────
+printf '%s\n' '#!/usr/bin/env node
+process.exit(1);
+' > "$MUX_ROOT/hooks/test-runner.js"
+printf '%s\n' '#!/usr/bin/env node
+process.stdout.write("EXIT2-RAW-STDOUT");
+process.exit(2);
+' > "$MUX_ROOT/hooks/design-quality.js"
+HOME="$HOOK_HOME" TMPDIR="$HOOK_TMPDIR" CLAUDE_PLUGIN_ROOT="$MUX_ROOT" \
+  node "$HOOKS_DIR/opt-in-multiplexer.js" PostToolUse >"$TEST_TMP/mux-e2w.out" 2>/dev/null <<< "$CAPTURE_STDIN"
+assert_eq 2 "$?" "mux exit2-over-exit1: multiplexer exits 2"
+assert_eq "EXIT2-RAW-STDOUT" "$(cat "$TEST_TMP/mux-e2w.out")" "mux exit2-over-exit1: passthrough stdout"
+
 unset AUTOPILOT_HOOK_TEST_RUNNER AUTOPILOT_HOOK_DESIGN_QUALITY
 unset CAPTURE_PLUGIN_ROOT
 

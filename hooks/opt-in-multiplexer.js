@@ -96,6 +96,7 @@ function main() {
 
   const ran = [];
   let exit2Child = null;
+  let nonZeroExit = null;
   for (const reg of EVENT_TABLE[eventName]) {
     if (!isEnabled(reg.stem, userConfig)) continue;
     if (!matcherHits(reg.matcher, toolName)) continue;
@@ -108,8 +109,12 @@ function main() {
     });
     ran.push(child);
     if (child.stderr && child.stderr.length) process.stderr.write(child.stderr);
-    if (typeof child.status === 'number' && child.status === 2) {
-      exit2Child = child;
+    if (typeof child.status === 'number') {
+      if (child.status === 2) {
+        exit2Child = child;
+      } else if (child.status !== 0) {
+        nonZeroExit = child.status;
+      }
     }
   }
 
@@ -120,7 +125,13 @@ function main() {
     process.exit(2);
   }
 
+  if (typeof nonZeroExit === 'number') {
+    process.exit(nonZeroExit);
+  }
+
   const contexts = [];
+  let mergedDecision = null;
+  let mergedReason;
   for (const child of ran) {
     if (!child.stdout || !child.stdout.length) continue;
     let obj;
@@ -131,16 +142,40 @@ function main() {
     }
     const hso = obj && obj.hookSpecificOutput;
     if (!hso || typeof hso !== 'object') continue;
-    if (typeof hso.additionalContext !== 'string') continue;
-    contexts.push(hso.additionalContext);
+    if (typeof hso.additionalContext === 'string') {
+      contexts.push(hso.additionalContext);
+    }
+    const decision = hso.permissionDecision;
+    if (decision === 'deny') {
+      mergedDecision = 'deny';
+      if (typeof hso.permissionDecisionReason === 'string') {
+        mergedReason = hso.permissionDecisionReason;
+      } else {
+        mergedReason = undefined;
+      }
+    } else if (decision === 'ask' && mergedDecision !== 'deny') {
+      mergedDecision = 'ask';
+      if (typeof hso.permissionDecisionReason === 'string') {
+        mergedReason = hso.permissionDecisionReason;
+      } else {
+        mergedReason = undefined;
+      }
+    }
   }
-  if (contexts.length) {
-    process.stdout.write(`${JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName: eventName,
-        additionalContext: contexts.join('\n'),
-      },
-    })}\n`);
+  if (contexts.length || mergedDecision) {
+    const hookSpecificOutput = {
+      hookEventName: eventName,
+    };
+    if (contexts.length) {
+      hookSpecificOutput.additionalContext = contexts.join('\n');
+    }
+    if (mergedDecision) {
+      hookSpecificOutput.permissionDecision = mergedDecision;
+      if (typeof mergedReason === 'string') {
+        hookSpecificOutput.permissionDecisionReason = mergedReason;
+      }
+    }
+    process.stdout.write(`${JSON.stringify({ hookSpecificOutput })}\n`);
   }
   process.exit(0);
 }

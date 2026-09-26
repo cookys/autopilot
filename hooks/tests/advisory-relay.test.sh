@@ -139,6 +139,7 @@ printf '{"type":"assistant","message":{"model":"claude-sonnet-5","usage":{"input
 run_hook cost-tracker.js "$(printf '{"session_id":"","transcript_path":"%s","hook_event_name":"Stop","cwd":"%s"}' "$TR" "$TEST_TMP")"
 assert_eq 0 "$__RUN_EXIT" "empty session_id still exit 0"
 assert_contains "$__RUN_STDERR" 'cost-tracker: session' "empty session_id still warns on stderr"
+assert_contains "$__RUN_STDERR" 'cost-tracker: debug missing/empty session_id; advisory not enqueued' "empty session_id writes debug line"
 # sanitized empty would be 'unknown' — must not create that file either
 UNK="$(queue_path 'unknown')"
 # queue_path('unknown') uses sanitize of literal 'unknown', not empty. Empty skip means no file for unknown from empty sid.
@@ -203,6 +204,7 @@ done
 CAP_TR="$TEST_TMP/cap-transcript.jsonl"
 { turn 400 10 5; turn 700 10 5; } > "$CAP_TR"
 run_hook cost-tracker.js "$(printf '{"session_id":"%s","transcript_path":"%s","hook_event_name":"Stop","cwd":"%s"}' "$CAP_SID" "$CAP_TR" "$TEST_TMP")"
+assert_contains "$__RUN_STDERR" 'cost-tracker: debug dropped advisory-queue entry (cap eviction)' "cap eviction writes debug line"
 # After writer cap, at most 20 lines on disk
 CAP_LINES="$(grep -c . "$CAP_Q" || true)"
 if [ "${CAP_LINES:-0}" -gt 20 ]; then
@@ -255,6 +257,7 @@ run_hook advisory-relay.js "$(printf '{"session_id":"%s"}' "$AGE_SID")"
 assert_eq 0 "$__RUN_EXIT" "age filter exit 0"
 assert_contains "$__RUN_STDOUT" 'fresh-new' "recent entry delivered"
 assert_not_contains "$__RUN_STDOUT" 'stale-old' "stale entry not delivered"
+assert_contains "$__RUN_STDERR" 'advisory-relay: debug dropped' "age-expiry drop writes debug line"
 assert_file_absent "$AGE_Q" "age-filtered queue deleted"
 
 # ── fail-open on corrupt queue ───────────────────────────────────────────────
@@ -288,5 +291,108 @@ assert_eq "$(cat "$OFF_Q")" "$BEFORE" "opt-out queue unchanged"
 run_hook advisory-relay.js '{}'
 assert_eq 0 "$__RUN_EXIT" "relay empty payload exit 0"
 assert_eq "" "$__RUN_STDOUT" "relay empty payload silent"
+assert_contains "$__RUN_STDERR" 'advisory-relay: debug missing/empty session_id' "relay missing session_id writes debug line"
+
+# ── writer corrupt-line drop (not wrap) ─────────────────────────────────────
+CORR_SID="adv-writer-corrupt"
+CORR_Q="$(queue_path "$CORR_SID")"
+mkdir -p "$(dirname "$CORR_Q")"
+printf '%s\n' 'this-is-not-json' > "$CORR_Q"
+CORR_TR="$TEST_TMP/corr-transcript.jsonl"
+{ turn 400 10 5; turn 700 10 5; } > "$CORR_TR"
+run_hook cost-tracker.js "$(printf '{"session_id":"%s","transcript_path":"%s","hook_event_name":"Stop","cwd":"%s"}' "$CORR_SID" "$CORR_TR" "$TEST_TMP")"
+assert_eq 0 "$__RUN_EXIT" "cost-tracker corrupt-line path exit 0"
+assert_contains "$__RUN_STDERR" 'cost-tracker: debug dropped corrupt advisory-queue line' "cost-tracker corrupt drop debug"
+assert_eq "$(grep -c 'this-is-not-json' "$CORR_Q" || true)" "0" "cost-tracker dropped corrupt line"
+assert_eq "$(grep -c 'this-is-not-json' "$CORR_Q" || true)" "0" "cost-tracker did not wrap corrupt line"
+
+CC_CORR_SID="adv-cc-corrupt"
+CC_CORR_Q="$(queue_path "$CC_CORR_SID")"
+mkdir -p "$(dirname "$CC_CORR_Q")"
+printf '%s\n' 'this-is-not-json' > "$CC_CORR_Q"
+CC_CORR_PAYLOAD="$(printf '{"session_id":"%s","hook_event_name":"Stop"}' "$CC_CORR_SID")"
+(
+  cd "$CC_REPO"
+  HOME="$HOOK_HOME" TMPDIR="$HOOK_TMPDIR" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" \
+    AUTOPILOT_LIVE_DIR="$AUTOPILOT_LIVE_DIR" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
+    AUTOPILOT_HOOK_CHECK_CONSOLE=1 \
+    node "$HOOKS_DIR/check-console.js" >"$TEST_TMP/cc-corr.out" 2>"$TEST_TMP/cc-corr.err" <<< "$CC_CORR_PAYLOAD"
+)
+assert_contains "$(cat "$TEST_TMP/cc-corr.err")" 'check-console: debug dropped corrupt advisory-queue line' "check-console corrupt drop debug"
+assert_eq "$(grep -c 'this-is-not-json' "$CC_CORR_Q" || true)" "0" "check-console dropped corrupt line"
+
+BF_CORR_SID="adv-bf-corrupt"
+BF_CORR_Q="$(queue_path "$BF_CORR_SID")"
+mkdir -p "$(dirname "$BF_CORR_Q")"
+printf '%s\n' 'this-is-not-json' > "$BF_CORR_Q"
+printf '#!/bin/sh\necho "prettier-w" >&2\n' > "$BF_REPO/node_modules/.bin/prettier"
+chmod +x "$BF_REPO/node_modules/.bin/prettier"
+export CLAUDE_CODE_SESSION_ID="$BF_CORR_SID"
+printf '%s\n' "$BF_REPO/keep.js" > "$HOOK_TMPDIR/claude-edited-${BF_CORR_SID}.txt"
+BF_CORR_PAYLOAD="$(printf '{"session_id":"%s","hook_event_name":"Stop"}' "$BF_CORR_SID")"
+(
+  cd "$BF_REPO"
+  HOME="$HOOK_HOME" TMPDIR="$HOOK_TMPDIR" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" \
+    AUTOPILOT_LIVE_DIR="$AUTOPILOT_LIVE_DIR" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
+    AUTOPILOT_HOOK_BATCH_FORMAT=1 CLAUDE_CODE_SESSION_ID="$BF_CORR_SID" \
+    node "$HOOKS_DIR/batch-format.js" >"$TEST_TMP/bf-corr.out" 2>"$TEST_TMP/bf-corr.err" <<< "$BF_CORR_PAYLOAD"
+)
+assert_contains "$(cat "$TEST_TMP/bf-corr.err")" 'batch-format: debug dropped corrupt advisory-queue line' "batch-format corrupt drop debug"
+assert_eq "$(grep -c 'this-is-not-json' "$BF_CORR_Q" || true)" "0" "batch-format dropped corrupt line"
+
+# ── check-console / batch-format missing session_id debug ───────────────────
+CC_MISS_PAYLOAD='{"session_id":"","hook_event_name":"Stop"}'
+(
+  cd "$CC_REPO"
+  HOME="$HOOK_HOME" TMPDIR="$HOOK_TMPDIR" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" \
+    AUTOPILOT_LIVE_DIR="$AUTOPILOT_LIVE_DIR" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
+    AUTOPILOT_HOOK_CHECK_CONSOLE=1 \
+    node "$HOOKS_DIR/check-console.js" >"$TEST_TMP/cc-miss.out" 2>"$TEST_TMP/cc-miss.err" <<< "$CC_MISS_PAYLOAD"
+)
+assert_contains "$(cat "$TEST_TMP/cc-miss.err")" 'check-console: debug missing/empty session_id; advisory not enqueued' "check-console empty session_id debug"
+
+BF_MISS_SID="adv-bf-miss"
+export CLAUDE_CODE_SESSION_ID="$BF_MISS_SID"
+printf '%s\n' "$BF_REPO/keep.js" > "$HOOK_TMPDIR/claude-edited-${BF_MISS_SID}.txt"
+BF_MISS_PAYLOAD='{"session_id":"","hook_event_name":"Stop"}'
+(
+  cd "$BF_REPO"
+  HOME="$HOOK_HOME" TMPDIR="$HOOK_TMPDIR" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" \
+    AUTOPILOT_LIVE_DIR="$AUTOPILOT_LIVE_DIR" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
+    AUTOPILOT_HOOK_BATCH_FORMAT=1 CLAUDE_CODE_SESSION_ID="$BF_MISS_SID" \
+    node "$HOOKS_DIR/batch-format.js" >"$TEST_TMP/bf-miss.out" 2>"$TEST_TMP/bf-miss.err" <<< "$BF_MISS_PAYLOAD"
+)
+assert_contains "$(cat "$TEST_TMP/bf-miss.err")" 'batch-format: debug missing/empty session_id; advisory not enqueued' "batch-format empty session_id debug"
+
+# ── batch-format tsc advisory enqueue ───────────────────────────────────────
+TSC_SID="adv-bf-tsc"
+TSC_REPO="$TEST_TMP/bf-tsc-repo"
+mkdir -p "$TSC_REPO/node_modules/.bin"
+printf '#!/bin/sh\nexit 0\n' > "$TSC_REPO/node_modules/.bin/prettier"
+chmod +x "$TSC_REPO/node_modules/.bin/prettier"
+mkdir -p "$TSC_REPO/bin"
+printf '%s\n' '#!/bin/sh' 'echo "error TS2304: Cannot find name fake."' > "$TSC_REPO/bin/npx"
+chmod +x "$TSC_REPO/bin/npx"
+printf 'export const x = 1;\n' > "$TSC_REPO/keep.ts"
+export CLAUDE_CODE_SESSION_ID="$TSC_SID"
+printf '%s\n' "$TSC_REPO/keep.ts" > "$HOOK_TMPDIR/claude-edited-${TSC_SID}.txt"
+TSC_PAYLOAD="$(printf '{"session_id":"%s","hook_event_name":"Stop"}' "$TSC_SID")"
+(
+  cd "$TSC_REPO"
+  HOME="$HOOK_HOME" TMPDIR="$HOOK_TMPDIR" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" \
+    AUTOPILOT_LIVE_DIR="$AUTOPILOT_LIVE_DIR" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
+    AUTOPILOT_HOOK_BATCH_FORMAT=1 CLAUDE_CODE_SESSION_ID="$TSC_SID" \
+    PATH="$TSC_REPO/bin:$PATH" \
+    node "$HOOKS_DIR/batch-format.js" >"$TEST_TMP/bf-tsc.out" 2>"$TEST_TMP/bf-tsc.err" <<< "$TSC_PAYLOAD"
+)
+assert_eq 0 "$?" "batch-format tsc path exit 0"
+assert_contains "$(cat "$TEST_TMP/bf-tsc.err")" 'TypeScript errors:' "batch-format tsc stderr"
+TSC_Q="$(queue_path "$TSC_SID")"
+assert_file_exists "$TSC_Q" "batch-format tsc wrote queue file"
+TSC_QTEXT="$(queue_text_of "$TSC_Q")"
+TSC_EXPECT="$(cat "$TEST_TMP/bf-tsc.err")"
+TSC_EXPECT="${TSC_EXPECT%$'\n'}"
+assert_eq "$TSC_QTEXT" "$TSC_EXPECT" "batch-format tsc queue text byte-identical to stderr"
+unset CLAUDE_CODE_SESSION_ID AUTOPILOT_HOOK_BATCH_FORMAT AUTOPILOT_HOOK_CHECK_CONSOLE
 
 finalize_test

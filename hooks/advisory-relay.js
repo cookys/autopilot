@@ -23,7 +23,10 @@ try {
   let payload;
   try { payload = JSON.parse(raw); } catch { process.exit(0); }
   const sid = payload && payload.session_id;
-  if (typeof sid !== 'string' || sid.length === 0) process.exit(0);
+  if (typeof sid !== 'string' || sid.length === 0) {
+    process.stderr.write('advisory-relay: debug missing/empty session_id; queue not drained\n');
+    process.exit(0);
+  }
 
   const { resolveLiveDir, sanitizeSessionId } = require('../scripts/lib/live-state-dir.js');
   const qfile = path.join(resolveLiveDir().base, 'advisory-queue', `${sanitizeSessionId(sid)}.jsonl`);
@@ -46,14 +49,27 @@ try {
 
   const cutoff = Date.now() - 24 * 60 * 60 * 1000;
   const texts = [];
+  let expiredOrMalformed = 0;
   for (const line of body.split('\n')) {
     if (!line.trim()) continue;
     let obj;
-    try { obj = JSON.parse(line); } catch { continue; }
-    if (!obj || typeof obj.text !== 'string') continue;
+    try { obj = JSON.parse(line); } catch {
+      expiredOrMalformed += 1;
+      continue;
+    }
+    if (!obj || typeof obj.text !== 'string') {
+      expiredOrMalformed += 1;
+      continue;
+    }
     const ts = typeof obj.ts === 'string' ? Date.parse(obj.ts) : NaN;
-    if (!Number.isFinite(ts) || ts < cutoff) continue;
+    if (!Number.isFinite(ts) || ts < cutoff) {
+      expiredOrMalformed += 1;
+      continue;
+    }
     texts.push(obj.text);
+  }
+  if (expiredOrMalformed > 0) {
+    process.stderr.write(`advisory-relay: debug dropped ${expiredOrMalformed} expired/malformed entries\n`);
   }
 
   if (texts.length > 0) {

@@ -66,12 +66,6 @@ try {
         `MCP server '${server}' is unhealthy (${entry.failures} failures). ` +
         `Retry in ${waitSec}s. Last error: ${entry.lastError || 'unknown'}\n`;
       process.stderr.write(text);
-      process.stdout.write(`${JSON.stringify({
-        hookSpecificOutput: {
-          hookEventName: 'PreToolUse',
-          additionalContext: text.replace(/\n$/, ''),
-        },
-      })}\n`);
       process.exit(2);
     }
     // Past retry window or healthy — clear and allow

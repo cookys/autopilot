@@ -111,12 +111,6 @@ function hasWorktreeMarkerAbove(target) {
       if (mode === 'block') {
         const text = `${d.reason}\n`;
         process.stderr.write(text);
-        process.stdout.write(`${JSON.stringify({
-          hookSpecificOutput: {
-            hookEventName: 'PreToolUse',
-            additionalContext: d.reason,
-          },
-        })}\n`);
         exitCode = 2; // PreToolUse exit 2 ⇒ deny the tool call
       } else {
         const text = `[orchestrator-edit-gate warn] ${d.reason}\n`;

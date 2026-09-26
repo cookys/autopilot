@@ -410,6 +410,7 @@ test('wrapper: l5 marker + depth-0 + product file + block ⇒ exit 2 deny', () =
   const r = runHook(payload(path.join(repo, 'src', 'a.js')), env);
   assert.strictEqual(r.status, 2);
   assert.match(r.stderr, /dispatch/i);
+  assert.strictEqual(r.stdout, '');
 });
 
 test('wrapper: l5 marker + SUBAGENT payload ⇒ exit 0 (foreman passes)', () => {
@@ -448,6 +449,7 @@ test('wrapper: depth-0 editing inside a dispatch worktree ⇒ exit 2 (WHERE-not-
   setMarker(env, repo, 'l5');
   const r = runHook(payload(path.join(wt, 'src.js')), env);
   assert.strictEqual(r.status, 2);
+  assert.strictEqual(r.stdout, '');
 });
 
 test('wrapper: file outside repo/worktrees (scratch) ⇒ exit 0', () => {

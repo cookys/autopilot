@@ -1,0 +1,1 @@
+NONE. Nothing new has come in since my last answer. The only NONCE-STOP line I've seen was the earlier stop hook output, `NONCE-STOP-X2-a17be4`, which arrived before that answer.

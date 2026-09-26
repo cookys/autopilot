@@ -41,6 +41,7 @@ Opt-in hooks share the defect.
 - An advisory path never emits `permissionDecision` (an `"allow"` auto-approves the tool call, which was the v2.36.97 lesson). Deny/ask/exit-2 paths are untouched.
 - Each hook gets its own small inline emitter, and there is NO shared runtime module between hooks, including for the Stop queue. This keeps single-crash isolation, per the foreman-guard/context-budget header notes.
   Group-S hooks each inline their own atomic append to the documented queue file format, and only advisory-relay.js reads it.
+- Stop hooks never emit `hookSpecificOutput.additionalContext` and never exit 2 for an advisory (the probe showed a re-fire loop and a forced extra turn). A test asserts that group-S stdout carries no additionalContext.
 - Implementation commits never run `sync-version.js`. The hook-count sync and `check-hook-inventory.js` belong to the depth-0 landing step.
 - New cases go in NEW suites. Existing suites change only on the §5 list.
 - Do not edit CHANGELOG, the version, or `.claude-plugin/plugin.json` in implementation commits; depth-0 lands the release.
@@ -66,14 +67,17 @@ Opt-in hooks share the defect.
   - `hooks/mcp-health.js` (PostToolUseFailure, ~:87).
 
   **Multiplexer (hard requirement)**: `hooks/opt-in-multiplexer.js` must parse each child's stdout JSON and merge every `hookSpecificOutput.additionalContext` into ONE object joined by newlines.
-  It preserves any deny/ask decision (deny wins over ask) and writes exactly one JSON object; a test runs two advising children.
+  It preserves any deny/ask decision (deny wins over ask), STRIPS any child's `permissionDecision:"allow"` (it never forwards an allow), and writes exactly one JSON object.
+  **If ANY child exits 2, the multiplexer behaves exactly as today**: exit 2, stderr passthrough, no stdout JSON, and advisories dropped for that invocation.
+  Tests: two advising children; an advising sibling next to an exit-2 sibling; a child that emits allow.
 
 **Group S (Stop → deferred relay):** `hooks/cost-tracker.js` (~:134, default-on), `hooks/check-console.js` (~:53), and `hooks/batch-format.js` (~:57,:71), all opt-in.
 
 **New:**
-- `hooks/advisory-relay.js` (UserPromptSubmit): drains this session's queue and emits it as context.
+- `hooks/advisory-relay.js` (UserPromptSubmit, **default-on**; inert when the session's queue is absent or empty; opt-out with `AUTOPILOT_ADVISORY_RELAY=off`): drains this session's queue and emits it as context.
 - The queue FILE FORMAT, with no shared module: `<live-state base>/advisory-queue/<sanitized session_id>.jsonl`, one JSON line per entry `{ts, source, text}`. The base is the tmpfs
-  live-state dir that `scripts/lib/live-state-dir.js` resolves. Each writer inlines an O_APPEND write of one line, then trims to the newest 20 entries / 8 KiB. Keys come strictly from the payload's `session_id`.
+  live-state dir that `scripts/lib/live-state-dir.js` resolves. Each writer inlines an O_APPEND write of one line. `ts` is an ISO-8601 UTC string. A missing or empty `session_id` means the entry is not enqueued (debug-log line only).
+  The cap trims oldest-first to 20 entries, then oldest-first again until the file is ≤ 8 KiB; a single entry over 8 KiB is truncated to 8 KiB. Keys come strictly from the payload's `session_id`.
 - `hooks/hooks.json` wiring, the `hooks/README.md` row, and the hook-classes entry if the repo keeps one. The hook-count sync and inventory check happen at landing (depth-0).
 
 **Unchanged by design:** `hooks/dirty-protected-paths.js` (a human-facing systemMessage; its README row says so).
@@ -90,7 +94,7 @@ Group T still ships.
 Where one invocation has several advisories, join them with `\n` into ONE JSON object. For the multiplexer, verify forwarding and add merging if needed.
 **Acceptance**: KR1 and KR3. The new suite is `hooks/tests/hook-advisory-channel.test.sh`, with one case per hook plus a negative control asserting that no advisory path contains `permissionDecision`.
 
-**P2 (S–M) group S relay (depends on P0).** Group-S hooks call `enqueue` in addition to their existing stderr (and keep any systemMessage). `advisory-relay.js`
+**P2 (S–M) group S relay (depends on P0).** Group-S hooks append to the queue file per §3's format (inline, no shared module) in addition to their existing stderr (and keep any systemMessage). `advisory-relay.js`
 drains ONLY `payload.session_id`'s queue, emits the entries' `text` VERBATIM (joined by a single newline, with no prefix or framing) as UserPromptSubmit `additionalContext`, and deletes the queue atomically (rename, then read). The queue is capped (oldest dropped),
 and entries older than 24 h are discarded unread. **Acceptance**: KR2, with cases for delivery once, no double delivery, session isolation, cap/age, and fail-open on a corrupt queue.
 
@@ -132,3 +136,11 @@ R0 author: depth-0 (opus), 2026-09-26.
 G1 (sol chair / grok deep / MiniMax third, all transported): 11 findings, 4 blockers. Dispositions are in `2026-09-26-hook-advisories-reach-model.g1-dispositions.json`:
 - accepted blockers (all folded): no relay prefix; no shared queue module (inline writers, documented format); hook-count sync moved to landing; KR2 reworded to at-most-once with cap/age drops;
 - accepted and folded: the cadence table, strict `session_id` keying, merging in the multiplexer, the inventory check at landing, and dropping case 6e.
+G2 (terminal at the cap; sol READY, grok STOP, MiniMax CONDITIONAL): 6 findings, 2 blockers. Dispositions are in `…g2-dispositions.json`, and the freeze check exited 0 against the G2 artifact.
+This commit is the bounded repair:
+- an explicit ban on Stop additionalContext and exit 2;
+- the multiplexer keeps any exit-2 invocation exactly as today and strips allow;
+- the leftover enqueue wording is fixed;
+- the queue format is pinned (ts, empty session, cap order);
+- the relay is stated as default-on with an opt-out.
+No G3.

@@ -1,0 +1,334 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "hook-advisories-reach-model-2026-09-26",
+  "logical_plan_id": "hook-advisories-reach-model-2026-09-26",
+  "session_id": "8a6c8633-a20f-4597-8679-23e8798f3471",
+  "session_key": "22f51bb452aecd843607cb62106cd1a04c03f042c3893fa93bef197b23cbf08e",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "644a0f3ee51b9b62f4e7088c110f5009cb033e7b0a4d5e7adc32a48db67e0065",
+  "manifest_sha256": "7e3f0ff564ecadbdb85351b994e4e367ae05f3b30adadf91a1a528545a57410f",
+  "plan_sha256": "2828a6064912d3744a139dab0d594fc1d265ef1eb52d496c8bf33b47c7a06866",
+  "growth_ratio": {
+    "numerator": 2377,
+    "denominator": 2068
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "4cbb4a411ac0dd7fd67bc754a22c725a250abd5921443f36f8218ce80ee645eb"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-a8aoEa/stdout",
+          "digest": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d"
+        },
+        "receipt_digest": "7467b3830f00c00fbe2805953798bf4a9511d776f9cd0123066c68c2fe14491b"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "grok_deep",
+      "target_id": "grok_deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.6",
+          "operation": "plan-review",
+          "request_digest": "ad7e75ff255063b34ae418c0f676ce1fc8fe4a484b6022cca122e21feb951eaf"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "b7cae29a37e78ae3aac516ede4601ef51f5fd09bbd429ce9772e20d7860d49ff",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-FhVGhP",
+          "digest": "b7cae29a37e78ae3aac516ede4601ef51f5fd09bbd429ce9772e20d7860d49ff"
+        },
+        "receipt_digest": "d5fcb5e75cfdc5667b89676c7204a554455dc0535115ce58011e6a07d9539d5e"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_consult",
+      "target_id": "minimax_consult",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "536b2561ce997bde692a6417f056d809b1854fcecce28eb7113d537c1fd10d31"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "ee9dd7e479f5818ae3dab5f6a833f61aa7301f3326d53c2ac59ce417a92d2f6c",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-WyH0PV",
+          "digest": "ee9dd7e479f5818ae3dab5f6a833f61aa7301f3326d53c2ac59ce417a92d2f6c"
+        },
+        "receipt_digest": "8b729cb29baad28beb100e5e447f7b24a679cdfb54a46b41100bc6bde1a3ee2a"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "family": "openai",
+      "verdict": "READY"
+    },
+    {
+      "seat_id": "grok_deep",
+      "target_id": "grok_deep",
+      "family": "xai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "minimax_consult",
+      "target_id": "minimax_consult",
+      "family": "minimax",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R10",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "§2.5 implementer constraint block and P2 Group-S Stop stdout",
+      "claim": "The implementer-copied §2.5 list still omits the Stop additionalContext inversion, so a P2 Group-S change can emit Group-T-style additionalContext on Stop and re-enter the multi-fire Stop loop the probe ruled unusable.",
+      "evidence": "Frozen R10 says using Stop additionalContext is forbidden in §2.5. Plan §2.5 lists Node/fail-open, byte-identical wording, no permissionDecision, inline queue writers, no sync-version, new suites, and no CHANGELOG/version/plugin.json edits, and never says Stop paths must not emit hookSpecificOutput.additionalContext. P2 tells Group-S hooks to enqueue in addition to existing stderr and to keep any systemMessage, which does not forbid also writing Stop additionalContext. Plan §0 and the channel-probe V4 ruling record that Stop additionalContext is accepted and re-fires Stop about nine times per turn, derailing the answer.",
+      "evidence_reference": "Frozen rubric R10; plan §2.5, §4 P2, §0 Stop additionalContext bullet, §6 inversion; docs/plans/evidence/2026-09-26-hook-channel-probe/RULING.md V4",
+      "repair": "Add a §2.5 bullet copied into every implementer dispatch: Stop/Group-S paths never emit hookSpecificOutput.additionalContext or permissionDecision; they only append the documented queue line plus the existing stderr/systemMessage. P2 tests assert Stop advisory stdout contains neither additionalContext nor permissionDecision.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "07dd3da7f2e08afd8eeec8efa3838e147233e345e0b9280da8c028844b73f838"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P1 opt-in-multiplexer merge versus sibling exit-2 children",
+      "claim": "The folded multiplexer merge writes one JSON object with every child additionalContext, so an exit-2 block sibling that today has empty stdout would start carrying advisory JSON on the same blocked invocation.",
+      "evidence": "Plan §3 requires parsing each child stdout, merging additionalContext with newlines, preserving deny/ask (deny wins), and writing exactly one JSON object. It does not mention children that block with exit 2 and empty stdout. hooks/opt-in-multiplexer.js PreToolUse runs branch-protection before exec-boundary and commit-secret-scan; branch-protection still blocks direct commits with exit 2 and stderr only, while the merge/rebase warning at about line 92 is the Group-T advisory that will emit additionalContext. Today a warn-plus-exit-2 multiplexer invocation has empty stdout and a non-zero exit. After the stated merge it would emit additionalContext JSON on that same exit-2 invocation, which frozen R3 says must stay untouched.",
+      "evidence_reference": "Plan §3 multiplexer paragraph; hooks/opt-in-multiplexer.js EVENT_TABLE PreToolUse and stdout passthrough loop; hooks/branch-protection.js commit exit-2 path versus merge/rebase warning path; frozen rubric R3 and R8",
+      "repair": "Pin the P1 merge contract: forward only permissionDecision deny or ask (deny wins, never allow). When any child exits non-zero, keep that exit code and keep multiplexer stdout empty unless a child already emitted deny/ask JSON, in which case forward that decision object without attaching additionalContext. Put a warn-plus-exit-2 case in the new suite beside the two-advising-children case.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "95d46ebf5ebda348b14b867da7d270136569caab09eccd57363d1f714bc4a30a"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "P2 Group-S writer wording versus the no-shared-module rule",
+      "claim": "P2 still tells Group-S hooks to call enqueue, which contradicts the inline-only queue writers required by §2.5 and §3 and is the shape that recreates a shared queue helper.",
+      "evidence": "Plan §2.5 and §3 require each Group-S hook to inline its own O_APPEND against the documented jsonl format, with only advisory-relay.js reading the file, and they no longer name a shared queue module. P2 still opens with Group-S hooks call enqueue in addition to their existing stderr. That call-shaped leftover is enough for an implementer following the phase text to add a shared enqueue helper while §2.5 forbids a shared runtime module between hooks, including for the Stop queue.",
+      "evidence_reference": "Plan §2.5 no-shared-module and Group-S inline-append bullets; plan §3 queue FILE FORMAT; plan §4 P2 first sentence",
+      "repair": "Rewrite P2 so each Group-S hook inlines the documented one-line O_APPEND and fail-open wrap locally. Do not name enqueue as a callable and do not add a shared queue module.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "203d3ae79929eac96ab16089edfa16299cb7987d0ad9dedc0f98e1b72ce57d04"
+    },
+    {
+      "rubric_id": "R9",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "advisory-queue jsonl contract used by Group-S writers and advisory-relay.js",
+      "claim": "The documented queue format does not pin timestamp encoding, missing session_id behavior, or whole-line capping, so inlined writers can desynchronize, mix sessions, or corrupt the default-on queue into a fail-open no-delivery path.",
+      "evidence": "§3 defines each line as {ts, source, text}, says each writer O_APPENDs then trims to the newest 20 entries / 8 KiB, and keys strictly on payload session_id. ts as ISO string versus Unix milliseconds is unspecified, so inlined 24h checks can drop every line or none. Empty session_id is not told to skip; scripts/lib/live-state-dir.js maps empty to unknown, which would share one queue across sessions. Writer-side read-slice-rewrite trim races with the separate Stop registrations in hooks/hooks.json (opt-in multiplexer and default-on cost-tracker), and a raw 8 KiB byte cut can split a jsonl line, after which P2 fail-opens and delivers nothing. Plan 2.6 also says the relay is inert with an empty queue, which must mean zero stdout bytes, not an empty additionalContext envelope.",
+      "evidence_reference": "Plan §2.6 Compatibility, §3 New queue FILE FORMAT, §4 P2 drain/cap/fail-open sentences; hooks/hooks.json Stop blocks for opt-in-multiplexer.js and cost-tracker.js; scripts/lib/live-state-dir.js sanitizeSessionId empty-input contract",
+      "repair": "Specify ts as a JSON number of Unix milliseconds; if payload session_id is missing or empty, skip enqueue and skip drain with no stdout; writers only O_APPEND one complete line; advisory-relay applies the 20-entry and 8 KiB caps after the atomic rename-read by dropping whole oldest lines, drops a single oversize line unread with a debug-log line, and on empty, corrupt, or missing-session drain exits 0 with no stdout.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "35897ecd32183e9cd397bd113beb543ae1df6c7527c5999a06053a9de0558fe5"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "hooks/opt-in-multiplexer.js merging logic for child permissionDecision values",
+      "claim": "The multiplexer spec preserves deny/ask but does not explicitly state behavior when a child emits permissionDecision:\"allow\"; under R3/R10 allow on advisory paths is forbidden, so the implementer needs explicit guidance to avoid an auto-approval regression.",
+      "evidence": "Plan §3 says \"It preserves any deny/ask decision (deny wins over ask) and writes exactly one JSON object\" without specifying what happens to allow from a child; the acceptance test only runs two advising children, which exercise additionalContext merging but not an allow case.",
+      "evidence_reference": "docs/plans/2026-09-26-hook-advisories-reach-model.md §3 multiplexer hard requirement; P1 acceptance; FROZEN_RUBRIC R3, R8, R10",
+      "repair": "Add one sentence to the multiplexer spec stating that any child-emitted permissionDecision:\"allow\" is dropped and never propagated (consistent with R3/R10), and extend the multiplexer test with a third case where one advising child emits permissionDecision:\"allow\" and the merged output asserts no permissionDecision key.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_consult",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "6d5443a3c4c0ff430b83eb35be68dee88a842a7931f800f71882d4296eafbca6"
+    },
+    {
+      "rubric_id": "R9",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "hooks/hooks.json wiring and hooks/README.md row for hooks/advisory-relay.js",
+      "claim": "R9 and §6 both label advisory-relay as a \"new default-on surface\", but §3's \"New\" block says only \"hooks/hooks.json wiring\" without explicitly stating default-on vs opt-in, leaving the wiring decision ambiguous for the implementer.",
+      "evidence": "§3 \"New\" block: \"hooks/hooks.json wiring, the hooks/README.md row, and the hook-classes entry if the repo keeps one\" — no scope qualifier. R9 risk and §6 both describe the relay as a \"new default-on surface\". §2.6 calls it \"additive\" and \"inert when nothing is queued\" which is consistent with default-on but does not state it.",
+      "evidence_reference": "docs/plans/2026-09-26-hook-advisories-reach-model.md §3 New block; §2.6 compatibility; §6 risks; FROZEN_RUBRIC R9",
+      "repair": "In §3, change the wiring bullet to explicitly state \"hooks/hooks.json: register advisory-relay (UserPromptSubmit) under the default-on group\" and mirror this in the hooks/README.md row so the install/wiring step is unambiguous. No current change; follow-up only.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_consult",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0cd64363ca8c2b71b436e441319fe919fa9247bc1345601275fdde6706e51f33"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "203d3ae79929eac96ab16089edfa16299cb7987d0ad9dedc0f98e1b72ce57d04",
+      "rubric_id": "R4",
+      "affected_surface": "P2 Group-S writer wording versus the no-shared-module rule",
+      "claim": "P2 still tells Group-S hooks to call enqueue, which contradicts the inline-only queue writers required by §2.5 and §3 and is the shape that recreates a shared queue helper.",
+      "evidence_reference": "Plan §2.5 no-shared-module and Group-S inline-append bullets; plan §3 queue FILE FORMAT; plan §4 P2 first sentence",
+      "disposition": null
+    },
+    {
+      "fingerprint": "35897ecd32183e9cd397bd113beb543ae1df6c7527c5999a06053a9de0558fe5",
+      "rubric_id": "R9",
+      "affected_surface": "advisory-queue jsonl contract used by Group-S writers and advisory-relay.js",
+      "claim": "The documented queue format does not pin timestamp encoding, missing session_id behavior, or whole-line capping, so inlined writers can desynchronize, mix sessions, or corrupt the default-on queue into a fail-open no-delivery path.",
+      "evidence_reference": "Plan §2.6 Compatibility, §3 New queue FILE FORMAT, §4 P2 drain/cap/fail-open sentences; hooks/hooks.json Stop blocks for opt-in-multiplexer.js and cost-tracker.js; scripts/lib/live-state-dir.js sanitizeSessionId empty-input contract",
+      "disposition": null
+    },
+    {
+      "fingerprint": "6d5443a3c4c0ff430b83eb35be68dee88a842a7931f800f71882d4296eafbca6",
+      "rubric_id": "R8",
+      "affected_surface": "hooks/opt-in-multiplexer.js merging logic for child permissionDecision values",
+      "claim": "The multiplexer spec preserves deny/ask but does not explicitly state behavior when a child emits permissionDecision:\"allow\"; under R3/R10 allow on advisory paths is forbidden, so the implementer needs explicit guidance to avoid an auto-approval regression.",
+      "evidence_reference": "docs/plans/2026-09-26-hook-advisories-reach-model.md §3 multiplexer hard requirement; P1 acceptance; FROZEN_RUBRIC R3, R8, R10",
+      "disposition": null
+    },
+    {
+      "fingerprint": "0cd64363ca8c2b71b436e441319fe919fa9247bc1345601275fdde6706e51f33",
+      "rubric_id": "R9",
+      "affected_surface": "hooks/hooks.json wiring and hooks/README.md row for hooks/advisory-relay.js",
+      "claim": "R9 and §6 both label advisory-relay as a \"new default-on surface\", but §3's \"New\" block says only \"hooks/hooks.json wiring\" without explicitly stating default-on vs opt-in, leaving the wiring decision ambiguous for the implementer.",
+      "evidence_reference": "docs/plans/2026-09-26-hook-advisories-reach-model.md §3 New block; §2.6 compatibility; §6 risks; FROZEN_RUBRIC R9",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-09-26T14:16:32.949Z"
+}

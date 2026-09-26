@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "hook-advisories-reach-model-2026-09-26",
+  "generation": 2,
+  "findings": [
+    {"fingerprint": "07dd3da7f2e08afd8eeec8efa3838e147233e345e0b9280da8c028844b73f838", "disposition": "accepted_blocker", "rationale": "Correct: the ban must be explicit, not only implied by §0. Bounded repair: §2.5 gains 'Stop hooks never emit hookSpecificOutput.additionalContext and never exit 2 for an advisory (probe: a re-fire loop and a forced turn)', plus a test asserting group-S stdout has no additionalContext."},
+    {"fingerprint": "95d46ebf5ebda348b14b867da7d270136569caab09eccd57363d1f714bc4a30a", "disposition": "accepted_blocker", "rationale": "Correct: merging must not alter a block. Bounded repair: if ANY child exits 2, the multiplexer behaves exactly as today (exit 2, stderr passthrough, no stdout JSON, advisories dropped for that invocation). A deny/ask JSON child keeps precedence. A test covers an advising sibling next to an exit-2 sibling."},
+    {"fingerprint": "203d3ae79929eac96ab16089edfa16299cb7987d0ad9dedc0f98e1b72ce57d04", "disposition": "accepted_nonblocking", "rationale": "A leftover from the G1 fold. Bounded repair: P2's wording becomes 'append to the queue file per §3's format (inline, no shared module)'."},
+    {"fingerprint": "35897ecd32183e9cd397bd113beb543ae1df6c7527c5999a06053a9de0558fe5", "disposition": "accepted_nonblocking", "rationale": "Folded: `ts` is an ISO-8601 UTC string. A missing or empty `session_id` means do not enqueue, with a debug-log line only. The cap trims oldest-first to 20 entries, then oldest-first again until the file is ≤ 8 KiB; a single entry over 8 KiB is truncated to 8 KiB."},
+    {"fingerprint": "6d5443a3c4c0ff430b83eb35be68dee88a842a7931f800f71882d4296eafbca6", "disposition": "accepted_nonblocking", "rationale": "Folded: the multiplexer never forwards `permissionDecision:\"allow\"`. It strips an allow from any child before merging (deny/ask kept), and a test pins it."},
+    {"fingerprint": "0cd64363ca8c2b71b436e441319fe919fa9247bc1345601275fdde6706e51f33", "disposition": "accepted_nonblocking", "rationale": "Folded: advisory-relay is default-on, inert when the session's queue is absent or empty, and opt-out via AUTOPILOT_ADVISORY_RELAY=off (the repo's per-hook off-switch convention)."}
+  ]
+}

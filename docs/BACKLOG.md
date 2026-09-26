@@ -806,3 +806,11 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: 2026-09-23 CI repair, dispatch cluster (620ef6ed fallback order: task_surface → round changed files → park)
 - **Pointer**: docs/backlog/ci-repair-2026-09-23-followups.md
 - **Context**: add a probe where both fallbacks are empty and assert the occurrence count is unchanged after park.
+
+### A hook suite writes into the operator's real ~/.autopilot/engine-capability/capability.jsonl during run.sh
+- **Status**: open
+- **Trigger**: FIRED 2026-09-26: one row (cc-shim / MiniMax-M3, "Passive capture from review dispatch failure") appeared during a full `run.sh --parallel 8` at the v2.36.98 landing and was removed by hand
+- **Effort**: S
+- **Source**: v2.36.98 landing report
+- **Pointer**: docs/backlog/suite-pollutes-real-capability-store.md
+- **Context**: attribution is unconfirmed; suspect subsystem is engine-qualify / dispatch-review passive capture; fix is finding the suite with a guarded HOME and making it hermetic.

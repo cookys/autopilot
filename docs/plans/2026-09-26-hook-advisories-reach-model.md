@@ -75,7 +75,9 @@ Opt-in hooks share the defect.
 **Unchanged by design:** `hooks/dirty-protected-paths.js` (a human-facing systemMessage; its README row says so).
 
 ## 4. Phases
-**P0 (S) probe: does UserPromptSubmit output reach the model?** Use the same method as `2026-09-26-hook-channel-probe`, with two variants: (a) plain stdout text, and (b)
+**P0 (S) probe: does UserPromptSubmit output reach the model? — DONE 2026-09-26** (`docs/plans/evidence/2026-09-26-hook-channel-probe/ups/RULING.md`):
+both plain stdout (U1) and `hookSpecificOutput.additionalContext` (U2) are MODEL-VISIBLE on a resumed session's next prompt, with the current turn's nonce quoted verbatim.
+**Chosen for P2: U2 `additionalContext`.** It uses the same channel as group T and stays out of the human-facing `-p` stdout. P2 stays in scope. Original design, kept for the record: Use the same method as `2026-09-26-hook-channel-probe`, with two variants: (a) plain stdout text, and (b)
 `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":…}}`, each with a nonce, on the SECOND prompt of a resumed session. Record which is visible and pick
 it for P2. **Stop condition**: if neither is visible, P2 is dropped. Group S then keeps stderr but the README documents it as debug-only, and a BACKLOG row records the gap.
 Group T still ships.

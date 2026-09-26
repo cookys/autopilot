@@ -1,6 +1,6 @@
 # Rubric — 2026-09-26-hook-advisories-reach-model.md
 
-> Source plan: docs/plans/2026-09-26-hook-advisories-reach-model.md
+> Source plan: docs/plans/_archive/2026/09/2026-09-26-hook-advisories-reach-model.md
 
 R1: Node ≥ 20.10, built-ins only. Every hook stays fail-open (an internal error ⇒ exit 0, no stdout).
 R2: Advisory text is BYTE-IDENTICAL to today's stderr text. Never add or remove wording.

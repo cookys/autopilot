@@ -1,4 +1,4 @@
-# UserPromptSubmit hook output reach-the-model probe (P0, plan `docs/plans/2026-09-26-hook-advisories-reach-model.md` §4)
+# UserPromptSubmit hook output reach-the-model probe (P0, plan `docs/plans/_archive/2026/09/2026-09-26-hook-advisories-reach-model.md` §4)
 
 Method: same as the parent `2026-09-26-hook-channel-probe` (see `../RULING.md`) —
 a Node `UserPromptSubmit` hook appends raw stdin to `payloads-<v>.jsonl` and

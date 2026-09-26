@@ -251,7 +251,7 @@
       "affected_surface": "hooks/opt-in-multiplexer.js merging logic for child permissionDecision values",
       "claim": "The multiplexer spec preserves deny/ask but does not explicitly state behavior when a child emits permissionDecision:\"allow\"; under R3/R10 allow on advisory paths is forbidden, so the implementer needs explicit guidance to avoid an auto-approval regression.",
       "evidence": "Plan §3 says \"It preserves any deny/ask decision (deny wins over ask) and writes exactly one JSON object\" without specifying what happens to allow from a child; the acceptance test only runs two advising children, which exercise additionalContext merging but not an allow case.",
-      "evidence_reference": "docs/plans/2026-09-26-hook-advisories-reach-model.md §3 multiplexer hard requirement; P1 acceptance; FROZEN_RUBRIC R3, R8, R10",
+      "evidence_reference": "docs/plans/_archive/2026/09/2026-09-26-hook-advisories-reach-model.md §3 multiplexer hard requirement; P1 acceptance; FROZEN_RUBRIC R3, R8, R10",
       "repair": "Add one sentence to the multiplexer spec stating that any child-emitted permissionDecision:\"allow\" is dropped and never propagated (consistent with R3/R10), and extend the multiplexer test with a third case where one advising child emits permissionDecision:\"allow\" and the merged output asserts no permissionDecision key.",
       "blocks_next_slice_or_immediate_integrity": false,
       "cannot_defer_to_spike": false,
@@ -275,7 +275,7 @@
       "affected_surface": "hooks/hooks.json wiring and hooks/README.md row for hooks/advisory-relay.js",
       "claim": "R9 and §6 both label advisory-relay as a \"new default-on surface\", but §3's \"New\" block says only \"hooks/hooks.json wiring\" without explicitly stating default-on vs opt-in, leaving the wiring decision ambiguous for the implementer.",
       "evidence": "§3 \"New\" block: \"hooks/hooks.json wiring, the hooks/README.md row, and the hook-classes entry if the repo keeps one\" — no scope qualifier. R9 risk and §6 both describe the relay as a \"new default-on surface\". §2.6 calls it \"additive\" and \"inert when nothing is queued\" which is consistent with default-on but does not state it.",
-      "evidence_reference": "docs/plans/2026-09-26-hook-advisories-reach-model.md §3 New block; §2.6 compatibility; §6 risks; FROZEN_RUBRIC R9",
+      "evidence_reference": "docs/plans/_archive/2026/09/2026-09-26-hook-advisories-reach-model.md §3 New block; §2.6 compatibility; §6 risks; FROZEN_RUBRIC R9",
       "repair": "In §3, change the wiring bullet to explicitly state \"hooks/hooks.json: register advisory-relay (UserPromptSubmit) under the default-on group\" and mirror this in the hooks/README.md row so the install/wiring step is unambiguous. No current change; follow-up only.",
       "blocks_next_slice_or_immediate_integrity": false,
       "cannot_defer_to_spike": false,
@@ -315,7 +315,7 @@
       "rubric_id": "R8",
       "affected_surface": "hooks/opt-in-multiplexer.js merging logic for child permissionDecision values",
       "claim": "The multiplexer spec preserves deny/ask but does not explicitly state behavior when a child emits permissionDecision:\"allow\"; under R3/R10 allow on advisory paths is forbidden, so the implementer needs explicit guidance to avoid an auto-approval regression.",
-      "evidence_reference": "docs/plans/2026-09-26-hook-advisories-reach-model.md §3 multiplexer hard requirement; P1 acceptance; FROZEN_RUBRIC R3, R8, R10",
+      "evidence_reference": "docs/plans/_archive/2026/09/2026-09-26-hook-advisories-reach-model.md §3 multiplexer hard requirement; P1 acceptance; FROZEN_RUBRIC R3, R8, R10",
       "disposition": null
     },
     {
@@ -323,7 +323,7 @@
       "rubric_id": "R9",
       "affected_surface": "hooks/hooks.json wiring and hooks/README.md row for hooks/advisory-relay.js",
       "claim": "R9 and §6 both label advisory-relay as a \"new default-on surface\", but §3's \"New\" block says only \"hooks/hooks.json wiring\" without explicitly stating default-on vs opt-in, leaving the wiring decision ambiguous for the implementer.",
-      "evidence_reference": "docs/plans/2026-09-26-hook-advisories-reach-model.md §3 New block; §2.6 compatibility; §6 risks; FROZEN_RUBRIC R9",
+      "evidence_reference": "docs/plans/_archive/2026/09/2026-09-26-hook-advisories-reach-model.md §3 New block; §2.6 compatibility; §6 risks; FROZEN_RUBRIC R9",
       "disposition": null
     }
   ],

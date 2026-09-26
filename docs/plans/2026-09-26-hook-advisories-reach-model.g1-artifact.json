@@ -275,7 +275,7 @@
       "affected_surface": "P2 advisory-relay additionalContext; plan §4 P2 prefix vs §2.5 byte-identical rule",
       "claim": "P2 tells the relay to prefix every Stop advisory with [deferred from Stop] <source>: which adds wording, so the model-visible text is not byte-identical to today's stderr and trips the R10 inversion (changing advisory wording).",
       "evidence": "Plan §0 and §2.5 require advisory text to stay BYTE-IDENTICAL and never add or remove wording, and they call this a mechanism-only change so no eval is needed. Plan §4 P2 then says advisory-relay emits the queued text through U2 additionalContext prefixed [deferred from Stop] <source>:. That prefix is new wording in the only channel the model sees. Frozen R10 lists changing advisory wording as a guaranteed failure, alongside permissionDecision allow and Stop additionalContext.",
-      "evidence_reference": "docs/plans/2026-09-26-hook-advisories-reach-model.md §0 thesis, §2.5 bullet 2, §4 P2 drain sentence, §6 inversion; frozen rubric R2 and R10",
+      "evidence_reference": "docs/plans/_archive/2026/09/2026-09-26-hook-advisories-reach-model.md §0 thesis, §2.5 bullet 2, §4 P2 drain sentence, §6 inversion; frozen rubric R2 and R10",
       "repair": "Rewrite P2 so additionalContext equals the queued stderr bytes with no prefix, suffix, or source label. Keep source as queue metadata for tests and debug logs only. If the Board wants a visible envelope, amend §2.5 with an explicit exception that quotes the exact prefix bytes before P2 starts.",
       "blocks_next_slice_or_immediate_integrity": true,
       "cannot_defer_to_spike": true,

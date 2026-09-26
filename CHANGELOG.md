@@ -1,5 +1,20 @@
 # Changelog
 
+## v2.36.98 — hook advisories reach the model（group-T additionalContext、group-S 下一輪送達、advisory-relay）
+
+Plan: `docs/plans/2026-09-26-hook-advisories-reach-model.md`。
+
+- **原本只寫到 stderr、模型看不到的預設開啟建議，現在真的送得到模型**：`cost-fuse`（花費保險絲 warn）、`context-budget`（T1 100k 提醒，T2 150k 仍走原本的 exit 2）、`depth0-delegate-gate`（連續讀取類呼叫提醒）、`reload-watch`（外掛重新載入提醒）、`dispatch-model-guard`（warn 模式那兩條）——五個預設開啟 hook 的建議路徑，現在同一份文字會**額外**寫一份 `hookSpecificOutput.additionalContext` 到 stdout（既有的 stderr 寫入原封不動保留給偵錯用）。建議文字逐字不變，且這條路徑**不會**帶 `permissionDecision`（只有真正的拒絕才會帶，避免建議附帶的呼叫被意外自動放行）。
+- **opt-in（Tier B）的同類 hook 也比照辦理**：`orchestrator-edit-gate`、`branch-protection`、`large-file-warner`、`design-quality`、`test-runner`，以及 `mcp-health` 的 `PostToolUseFailure` 半邊（`PreToolUse` 那個 exit-2 的不健康視窗維持原樣，stderr-only，deny 路徑逐位元組不變）。
+- **opt-in multiplexer（`hooks/opt-in-multiplexer.js`）現在會合併多個子行程的建議，且絕不轉發 allow**：同一事件下，每個啟用中子行程的 `additionalContext` 會合併成一份、用換行接起來；任一子行程若帶 `permissionDecision:"deny"` 或 `"ask"`，合併結果會保留最強的那個（deny 蓋過 ask），但只要是 `"allow"` 一律去除，不會轉發。任一子行程 exit 2 時，multiplexer 維持原行為：直接 exit 2、逐位元組原樣轉發該子行程的 stdout，不做合併；其他非 0/2 的結束碼也照舊往外傳遞。
+- **新的預設開啟 hook `advisory-relay`（`UserPromptSubmit`）**：Stop 事件的建議（`cost-tracker` 預設開啟；`check-console`／`batch-format` opt-in）現在會先寫進一個以 session 為 key 的佇列檔（`<live-state base>/advisory-queue/<sid>.jsonl`，20 筆／8 KiB 上限，超過先丟最舊的），`advisory-relay` 在你**下一次送出訊息時**把佇列內容原樣讀出來當 `additionalContext` 送給模型，讀完即刪（rename 再讀，最多送達一次），超過 24 小時的舊項目會被捨棄不送。退出開關：`AUTOPILOT_ADVISORY_RELAY=off`。之所以不能像 group-T 一樣同一回合直接送達，是因為 Stop 事件本身沒有乾淨的同回合模型通道（`additionalContext` 在 Stop 上會造成重觸發迴圈，`systemMessage` 只有人看得到，不會進模型）。
+- **落地複審抓到並修正的問題**（`claude-fable-5-1` 高強度複審，對 4 個已落地 commit 的合併 diff）：opt-in multiplexer 原本會把所有子行程的 `permissionDecision` 一律去除（包含 deny／ask），變成一個 opt-in PreToolUse 子行程若改用 exit-0 JSON 表達拒絕就會被靜默放行——目前掛在 multiplexer 底下的 7 個 opt-in PreToolUse hook 全部都是用 exit 2 拒絕、沒有一個受影響，但已修正保留 deny/ask 語意；`mcp-health` 的 exit-2 不健康視窗與 `orchestrator-edit-gate` 的 exit-2 block 分支，一度也各自多寫了一份 `additionalContext` 到 stdout，違反「deny/exit-2 路徑逐位元組不變」的要求，已移除；multiplexer 一度把「任一子行程非 0 結束碼」的傳遞窄化成只認 exit 2，一個子行程 exit 1 會被靜默吞掉，已恢復傳遞；三個 group-S 佇列寫入端（`cost-tracker`／`check-console`／`batch-format`）原本用「整檔讀出再整檔寫回」的方式做上限裁切，同一個 Stop 事件底下多個寫入端有機會互相踩掉對方剛附加的那行，已改成寫暫存檔再 rename 進去；一行壞掉、無法解析的佇列紀錄，原本會被包成一個假的 `{text: <原始亂碼>}` 項目留在佇列裡，已改成直接捨棄；`batch-format` 只把 Prettier 的警告文字排進佇列，tsc 的型別錯誤文字漏掉了，已比照補上；佇列項目被上限裁掉、逾期捨棄、或因 `session_id` 缺失／空白而從未排入，現在都會各自寫一行 stderr 偵錯訊息，方便事後追查（不會跟使用者看得到的建議文字混在一起）。
+- **探針證據**：`docs/plans/evidence/2026-09-26-hook-channel-probe/`（`RULING.md` 為 group-T 用的既有通道，`ups/RULING.md` 為 P0 對 `UserPromptSubmit additionalContext` 是否送達模型的探針，結論可行，因此才選了 group-S relay 這個設計）。
+- **落地驗證**：`hooks/tests/run.sh --parallel 8`（378 個測試檔，2 個 pre-existing 紅——`engine-qualify-verdict-stability` D6 honest/parity、`migrate-backlog-entries`——`origin/develop` 基準同樣紅，非本輪引入；一次平行跑污染了本機真實的 `~/.autopilot/engine-capability/capability.jsonl`，已還原，與本次 hook 改動無關，屬既有測試隔離缺口）；`check-js-syntax`／`sync-codex-plugin-skills --check`／`validate.sh`／`check-hook-inventory`／`check-readme-parity` 全綠；`doc-drift-gate` 維持既有 3 個 baseline FAIL（links/fences/script-refs），無新增。`claude-fable-5-1` 高強度複審對完整 `origin/develop..HEAD` diff 跑了兩輪：第一輪 `FIX-THEN-SHIP`（1 個 🔴 + 4 個 🟠 MUST-FIX，depth-0 全數採納並修正，見上；2 個 🟡 MUST-FIX 之一同樣採納修正，另一個經覆核為誤報予以駁回；2 個 🔵 未處理）；修正後第二輪 `FIX-THEN-SHIP`（僅 1 個 🟡 MUST-FIX——`hooks/README.md` 的 `mcp-health` 說明行修正前沒跟上 exit-2 路徑不再送 `additionalContext` 的修正，已同步改成只講 `PostToolUseFailure`；沒有新增的 🔴/🟠）。
+- **已知後續（review 🔵 CUT/FOLLOW-UP）**：三個 group-S 寫入端即使這次沒有真的觸發上限裁切，仍會整檔讀出再重寫（只是現在改成寫暫存檔再 rename），之後可以改成只在真的裁切時才重寫；單一項目超過 8 KiB 時逐字元裁切是 O(n²)，但目前三個 hook 自己送進來的文字都有長度上限，實際打不到這個路徑；`test-runner.js` 的換行裁切用 `/\n+$/` 而不是跟其他 hook一致的 `/\n$/`；`cost-tracker.js` 的建議文字目前分別寫在 stderr 樣板字串跟佇列變數兩處，兩者現在逐字元相同，但沒有共用同一個常數。
+
+prose-justification: 本版新增 group-T/group-S 兩種模型可見建議通道、multiplexer 的 deny/ask 保留語意、以及新 hook `advisory-relay` 三個新使用者可見行為，散文成長是這些新行為與兩輪落地複審發現/修正過程本身需要的說明，不是散文膨脹；相對 v2.35.2 基線的既有落差是先前版本累積的，這一行只讓當版區段滿足 north-star 閘門。
+
 ## v2.36.97 — foreman-guard：角色感知 Bash 上限、收尾前保留額度、model-visible 建議
 
 Plan: `docs/plans/2026-09-25-foreman-guard-role-caps-reserve.md`（已歸檔）。回報者：openclaw 上的 hangar session。

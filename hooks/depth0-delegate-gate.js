@@ -247,8 +247,15 @@ function classify(tool, input) {
     }
 
     if (verdict.nudge) {
-      process.stderr.write(`depth0-delegate-gate: ${verdict.reads} consecutive read-class calls at depth-0 — `
-        + 'delegate to an Explore/survey subagent (model: sonnet) and read only its conclusion\n');
+      const advisory = `depth0-delegate-gate: ${verdict.reads} consecutive read-class calls at depth-0 — `
+        + 'delegate to an Explore/survey subagent (model: sonnet) and read only its conclusion';
+      process.stderr.write(`${advisory}\n`);
+      process.stdout.write(`${JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: 'PreToolUse',
+          additionalContext: advisory,
+        },
+      })}\n`);
     }
     process.exit(0);
   } catch {

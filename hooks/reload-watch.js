@@ -92,9 +92,14 @@ try {
 
   if (changed.length > 0) {
     const friendly = changed.map(friendlyName).join(', ');
-    process.stderr.write(
-      `⚠ Plugin catalog signal changed (${friendly}) — run /reload-plugins before next routing query so the skill catalog reflects on-disk state.\n`
-    );
+    const advisory = `⚠ Plugin catalog signal changed (${friendly}) — run /reload-plugins before next routing query so the skill catalog reflects on-disk state.`;
+    process.stderr.write(`${advisory}\n`);
+    process.stdout.write(`${JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'PostToolUse',
+        additionalContext: advisory,
+      },
+    })}\n`);
     // Save AFTER emitting: if writeFileSync crashes mid-emit, next invocation
     // will re-fire the same reminder (preferred over silently losing it).
     saveState({ ...previous, ...current });

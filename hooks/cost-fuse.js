@@ -356,6 +356,12 @@ function sumTodayTierSpend(costsFile, tiersSet) {
         const st = loadState(file);
         if (currentMultiple > st.warned_multiple) {
           process.stderr.write(`${reason}\n`);
+          process.stdout.write(`${JSON.stringify({
+            hookSpecificOutput: {
+              hookEventName: 'PreToolUse',
+              additionalContext: `${reason}`,
+            },
+          })}\n`);
           st.warned_multiple = currentMultiple;
           saveState(file, st);
         }

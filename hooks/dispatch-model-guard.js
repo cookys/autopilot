@@ -159,6 +159,12 @@ const INTENTIONAL_RE = /\(intentional\b[^)]*\)/i;
 function handleGuard(reason, mode, { acknowledged = false } = {}) {
   if (mode === 'warn') {
     process.stderr.write(reason + '\n');
+    process.stdout.write(`${JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        additionalContext: reason,
+      },
+    })}\n`);
     process.exit(0);
   }
   if (mode === 'ask') {
@@ -182,6 +188,12 @@ function handleGuard(reason, mode, { acknowledged = false } = {}) {
 function handleDeny(reason, mode) {
   if (mode === 'warn') {
     process.stderr.write(reason + '\n');
+    process.stdout.write(`${JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        additionalContext: reason,
+      },
+    })}\n`);
     process.exit(0);
   }
   // denial on fail-closed header check (mode !== 'warn')

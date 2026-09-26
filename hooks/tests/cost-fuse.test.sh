@@ -100,7 +100,9 @@ unset AUTOPILOT_COST_FUSE_MODE
 rm -rf "$AUTOPILOT_COST_FUSE_DIR"
 run_hook cost-fuse.js "$(make_payload Edit '' 'fuse-session-1')"
 assert_eq 0 "$__RUN_EXIT" "case4: exit 0 on warn"
-assert_eq "" "$__RUN_STDOUT" "case4: stdout silent on warn"
+assert_contains "$__RUN_STDOUT" '"hookEventName":"PreToolUse"' "case4: stdout advisory envelope"
+assert_contains "$__RUN_STDOUT" '"additionalContext"' "case4: stdout additionalContext"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision"' "case4: warn path never permissionDecision"
 assert_contains "$__RUN_STDERR" "cost-fuse" "case4: stderr has cost-fuse warning"
 assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"ask"' "case4: never ask"
 
@@ -162,7 +164,8 @@ STATE_FILE="$AUTOPILOT_COST_FUSE_DIR/fuse-session-1.json"
 node -e 'const fs=require("fs");fs.writeFileSync(process.argv[1], JSON.stringify({warned_multiple:1, day: process.argv[2]}))' "$STATE_FILE" "$YESTERDAY"
 run_hook cost-fuse.js "$(make_payload Edit '' 'fuse-session-1')"
 assert_eq 0 "$__RUN_EXIT" "case5d: exit 0 on warn"
-assert_eq "" "$__RUN_STDOUT" "case5d: stdout silent on warn"
+assert_contains "$__RUN_STDOUT" '"additionalContext"' "case5d: stdout advisory envelope"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision"' "case5d: warn path never permissionDecision"
 assert_contains "$__RUN_STDERR" "cost-fuse" "case5d: stderr warns again today despite yesterday's warned_multiple=1"
 
 # ── 6. AUTOPILOT_COSTS_FILE nonexistent → inert (exit 0 silently) ─────

@@ -68,7 +68,9 @@ unset DISPATCH_GUARD_CONFIG_OVERRIDE
 printf '%s\n' "- mode: warn" "- require_engine_header: off" > "$TEST_TMP/config6d.md"
 export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config6d.md"
 run_hook dispatch-model-guard.js "$PAYLOAD"
-assert_eq "" "$__RUN_STDOUT" "case6d-silent stdout (warn mode)"
+assert_contains "$__RUN_STDOUT" '"hookEventName":"PreToolUse"' "case6d-stdout advisory envelope"
+assert_contains "$__RUN_STDOUT" '"additionalContext"' "case6d-stdout additionalContext"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision"' "case6d-warn never permissionDecision"
 assert_contains "$__RUN_STDERR" "no model specified" "case6d-stderr warning"
 unset DISPATCH_GUARD_CONFIG_OVERRIDE
 
@@ -158,7 +160,8 @@ export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config12.md"
 PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable@agy effort=low\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "case12-exit"
-assert_eq "" "$__RUN_STDOUT" "case12-stdout-silent"
+assert_contains "$__RUN_STDOUT" '"additionalContext"' "case12-stdout-advisory"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision"' "case12-warn never permissionDecision"
 assert_contains "$__RUN_STDERR" "dispatch-model-guard" "case12-stderr-carries-warn-advisory"
 unset DISPATCH_GUARD_CONFIG_OVERRIDE
 
@@ -241,7 +244,8 @@ export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config21.md"
 PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"sonnet"},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "case21-exit"
-assert_eq "" "$__RUN_STDOUT" "case21-stdout-silent"
+assert_contains "$__RUN_STDOUT" '"additionalContext"' "case21-stdout-advisory"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision"' "case21-warn never permissionDecision"
 assert_contains "$__RUN_STDERR" "dispatch-model-guard" "case21-stderr-carries-warn-advisory"
 unset DISPATCH_GUARD_CONFIG_OVERRIDE
 

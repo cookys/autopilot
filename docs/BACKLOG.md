@@ -20,14 +20,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/foreman-guard-cost-shaped-gate.md
 - **Context**: role/call-count caps say nothing about cost; a clone-based foreman whose l4-l6 marker is INACTIVE is invisible to both today.
 
-### Hook advisories written to stderr with exit 0 never reach the model — 6 default-on, 8 opt-in
-- **Status**: open
-- **Trigger**: FIRED 2026-09-25. Inventory done and the docs rule is verified; the default-on nudges (cost-fuse, context-budget T1, depth0-delegate-gate, reload-watch, cost-tracker) are silent today
-- **Effort**: M
-- **Source**: v2.36.97 foreman-guard ship (docs check + P1 probes), plus the read-only inventory of 2026-09-25
-- **Pointer**: docs/backlog/hook-stderr-advisories-invisible.md
-- **Context**: move PreToolUse/PostToolUse advisories to `additionalContext` (with no permissionDecision) and keep the text byte-identical. Stop and PostToolUseFailure need a channel probe first. This is a mechanism change (no eval).
-
 ### `dispatch-hetero.sh --timeout` is accepted and recorded but never applied to the grok rail
 - **Status**: open
 - **Trigger**: the next grok dispatch anyone needs to bound, or any audit of runner-branch parity

@@ -2,6 +2,7 @@
   "schema_version": 1,
   "hooks": [
     { "stem": "accumulator", "class": "invariant_effect" },
+    { "stem": "advisory-relay", "class": "invariant_effect" },
     { "stem": "audit-log", "class": "invariant_effect" },
     { "stem": "batch-format", "class": "invariant_effect" },
     { "stem": "branch-protection", "class": "invariant_effect" },

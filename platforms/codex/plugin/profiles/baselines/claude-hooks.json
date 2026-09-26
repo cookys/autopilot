@@ -40,6 +40,18 @@
         ]
       }
     ],
+    "UserPromptSubmit": [
+      {
+        "//": "advisory-relay: deferred-relay half of the group-S Stop advisory queue (cost-tracker / check-console / batch-format). Default-on; AUTOPILOT_ADVISORY_RELAY=off to opt out. Inert on an absent/empty queue (safe default-on).",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/advisory-relay.js"
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "//": "D6: single per-event opt-in multiplexer. Spawns only enabled opt-in handlers (branch-protection, exec-boundary, commit-secret-scan, large-file-warner, config-protection, mcp-health pre, orchestrator-edit-gate). Disabled stems start zero children.",

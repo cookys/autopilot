@@ -8,6 +8,7 @@
 'use strict';
 
 const fs = require('fs');
+const path = require('path');
 const { spawnSync } = require('child_process');
 const { isEnabled } = require('./_shared/opt-in');
 
@@ -24,7 +25,14 @@ const EXCLUDED = [
 const MAX_REPORT = 5;
 
 try {
-  fs.readFileSync('/dev/stdin', 'utf8');
+  let rawIn = '';
+  try { rawIn = fs.readFileSync(0, 'utf8'); }
+  catch { rawIn = fs.readFileSync('/dev/stdin', 'utf8'); }
+  let sessionId = '';
+  try {
+    const parsed = JSON.parse(rawIn);
+    if (parsed && typeof parsed.session_id === 'string') sessionId = parsed.session_id;
+  } catch { /* payload optional */ }
 
   const diff = spawnSync('git', ['diff', '--name-only', 'HEAD'], {
     timeout: 3000,
@@ -50,10 +58,37 @@ try {
 
   if (hits.length > 0) {
     const report = hits.map(h => `  ${h.file}:${h.line}`).join('\n');
-    process.stderr.write(
+    const written =
       `console.log found in modified files:\n${report}\n` +
-      `Consider removing before committing.\n`
-    );
+      `Consider removing before committing.\n`;
+    process.stderr.write(written);
+    try {
+      if (typeof sessionId === 'string' && sessionId.length > 0) {
+        const { resolveLiveDir, sanitizeSessionId } = require('../scripts/lib/live-state-dir.js');
+        const qdir = path.join(resolveLiveDir().base, 'advisory-queue');
+        fs.mkdirSync(qdir, { recursive: true });
+        const qfile = path.join(qdir, `${sanitizeSessionId(sessionId)}.jsonl`);
+        const qtext = written.endsWith('\n') ? written.slice(0, -1) : written;
+        const qfd = fs.openSync(qfile, 'a');
+        try {
+          fs.writeSync(qfd, `${JSON.stringify({ ts: new Date().toISOString(), source: 'check-console', text: qtext })}\n`);
+        } finally { fs.closeSync(qfd); }
+        let qlines = fs.readFileSync(qfile, 'utf8').split('\n').filter((l) => l.length > 0);
+        const qents = [];
+        for (const ql of qlines) {
+          try { qents.push(JSON.parse(ql)); } catch { qents.push({ ts: new Date().toISOString(), source: 'check-console', text: ql }); }
+        }
+        while (qents.length > 20) qents.shift();
+        const qdump = () => qents.map((e) => `${JSON.stringify(e)}\n`).join('');
+        while (qents.length > 1 && Buffer.byteLength(qdump(), 'utf8') > 8192) qents.shift();
+        if (qents.length === 1 && Buffer.byteLength(qdump(), 'utf8') > 8192) {
+          let t = typeof qents[0].text === 'string' ? qents[0].text : '';
+          while (t.length > 0 && Buffer.byteLength(`${JSON.stringify({ ...qents[0], text: t })}\n`, 'utf8') > 8192) t = t.slice(0, -1);
+          qents[0].text = t;
+        }
+        fs.writeFileSync(qfile, qdump());
+      }
+    } catch { /* queue is best-effort */ }
   }
 
   process.exit(0);

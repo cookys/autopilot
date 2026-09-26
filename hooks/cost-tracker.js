@@ -132,6 +132,34 @@ try {
     if (cacheRead >= next) {
       while (cacheRead >= next * 2) next *= 2;
       process.stderr.write(`cost-tracker: session ${session} has read ${cacheRead.toLocaleString('en-US')} cache tokens cumulatively (threshold ${next.toLocaleString('en-US')}) — a long-lived context is being re-read on every call; write a handoff and /clear, or split the work (docs/ironlaw-to-gate-map.md #6).\n`);
+      try {
+        const sid = input.session_id;
+        if (typeof sid === 'string' && sid.length > 0) {
+          const { resolveLiveDir, sanitizeSessionId } = require('../scripts/lib/live-state-dir.js');
+          const qdir = path.join(resolveLiveDir().base, 'advisory-queue');
+          fs.mkdirSync(qdir, { recursive: true });
+          const qfile = path.join(qdir, `${sanitizeSessionId(sid)}.jsonl`);
+          const qtext = `cost-tracker: session ${session} has read ${cacheRead.toLocaleString('en-US')} cache tokens cumulatively (threshold ${next.toLocaleString('en-US')}) — a long-lived context is being re-read on every call; write a handoff and /clear, or split the work (docs/ironlaw-to-gate-map.md #6).`;
+          const qfd = fs.openSync(qfile, 'a');
+          try {
+            fs.writeSync(qfd, `${JSON.stringify({ ts: new Date().toISOString(), source: 'cost-tracker', text: qtext })}\n`);
+          } finally { fs.closeSync(qfd); }
+          let qlines = fs.readFileSync(qfile, 'utf8').split('\n').filter((l) => l.length > 0);
+          const qents = [];
+          for (const ql of qlines) {
+            try { qents.push(JSON.parse(ql)); } catch { qents.push({ ts: new Date().toISOString(), source: 'cost-tracker', text: ql }); }
+          }
+          while (qents.length > 20) qents.shift();
+          const qdump = () => qents.map((e) => `${JSON.stringify(e)}\n`).join('');
+          while (qents.length > 1 && Buffer.byteLength(qdump(), 'utf8') > 8192) qents.shift();
+          if (qents.length === 1 && Buffer.byteLength(qdump(), 'utf8') > 8192) {
+            let t = typeof qents[0].text === 'string' ? qents[0].text : '';
+            while (t.length > 0 && Buffer.byteLength(`${JSON.stringify({ ...qents[0], text: t })}\n`, 'utf8') > 8192) t = t.slice(0, -1);
+            qents[0].text = t;
+          }
+          fs.writeFileSync(qfile, qdump());
+        }
+      } catch { /* queue is best-effort */ }
       writeCursor({ cache_read_warned: next });
     }
   } catch { /* report is best-effort */ }

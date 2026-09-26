@@ -1,5 +1,7 @@
 # Hook advisories written to stderr with exit 0 never reach the model
 
+> **RESOLVED in v2.36.98** (plan `docs/plans/_archive/2026/09/2026-09-26-hook-advisories-reach-model.md`): every Class A item now emits `additionalContext`, Stop advisories go through `advisory-relay`, and the Class D channels were probed (`docs/plans/evidence/2026-09-26-hook-channel-probe/`). This file is kept as the inventory record.
+
 Found 2026-09-25 while shipping v2.36.97 (foreman-guard). The official docs (code.claude.com/docs/en/hooks) say:
 "Stderr from a hook that exits 0 goes to the debug log only, never the transcript, and Claude never sees it."
 Probes proved that `hookSpecificOutput.additionalContext` does reach the model, including inside a subagent, and that it does so without any `permissionDecision`

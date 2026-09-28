@@ -12,6 +12,22 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 4. ~~foreman rail Shape B~~ v2.36.34 · 5. ~~`308-db` (a) residue sweep~~ v2.36.35 · 6. ~~2026-09-12 dogfood four defects~~ v2.36.36 ·
 7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41 · 9. ~~ledger flag burns a grant~~ v2.36.42 · 10. ~~reviewer no_verdict releases the claim~~ v2.36.43. Next: operator-named work, or the 308-8f dispatch-hetero reports.
 
+### `engine-qualify-verdict-stability.test.sh` is red at origin/develop — D6 honest/parity grader-hash drift
+- **Status**: open
+- **Trigger**: FIRED — red at origin/develop 2026-09-28
+- **Effort**: S
+- **Source**: v2.36.100 landing gate
+- **Pointer**: docs/backlog/preexisting-reds-2026-09-28.md
+- **Context**: `Error: impl evaluation grader drifted from its pinned hash`; confirmed red at `origin/develop` base before and after the v2.36.100 diff, unrelated to it.
+
+### `migrate-backlog-entries.test.sh` is red at origin/develop — real BACKLOG.md migratable count below the ≥100 gate
+- **Status**: open
+- **Trigger**: FIRED — red at origin/develop 2026-09-28
+- **Effort**: S
+- **Source**: v2.36.100 landing gate
+- **Pointer**: docs/backlog/preexisting-reds-2026-09-28.md
+- **Context**: a test that reads the real `docs/BACKLOG.md` store; count may move with row churn (incl. this landing's own net-zero row change).
+
 ### foreman-guard needs a cost-shaped gate (cache-read tokens or lifetime); covers clone foremen w/ INACTIVE marker
 - **Status**: open
 - **Trigger**: a hook-readable cumulative per-agent token feed exists, or a clone-based foreman is measured running away

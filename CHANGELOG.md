@@ -2,54 +2,15 @@
 
 ## v2.36.100 — context-budget reads the same live dir the statusline writes
 
-- **1M-context sessions got false context-budget T1/T2 at ~100–200k** because hooks (which run
-  without `XDG_RUNTIME_DIR` in their env) read `/dev/shm` while the statusline (which does inherit
-  the session's `XDG_RUNTIME_DIR`) writes `/run/user/<uid>`. `resolveLiveDir` now infers
-  `/run/user/<uid>/autopilot` when `XDG_RUNTIME_DIR` is absent, and tightens a self-owned runtime
-  dir to 0700 when its parent is private to the user (the codeforge-created dir is 0775).
-- **Rule (revised once after review)**: a pre-existing candidate directory, owned by the current uid
-  and not a symlink, with any group/other permission bits set, is chmod'd to 0700 and accepted if and
-  only if its parent directory is owned by the current uid, is a real directory (not a symlink), and
-  has no group/other bits of its own. The candidate's own bits don't matter once the parent is
-  private — nothing could have been planted there by another user. Every other case (parent not
-  private, foreign uid, symlink, not a directory) keeps reject-and-fall-through. The first landed
-  version of this rule excluded any candidate with other-bits set at all (`(mode & 0o007) === 0`),
-  which review round 3 found still rejected the real production case — codeforge's own 0775
-  directory — because round 2's real-host proof had run against a dir already tightened to 0700 by
-  round 1 and never exercised a fresh 0775 directory. Depth-0 adjudicated round 3's finding as real
-  and the rule above replaces it.
-- **Migration note**: hook-owned state in `/dev/shm/autopilot-<uid>/` (advisory-queue,
-  context-budget, depth0-gate, dirty-tree-reminder) is orphaned once — all advisory/rebuildable;
-  queued advisories and window memory reset once.
-- **Landing verification**: `hooks/tests/run.sh --parallel 8` (380 test files; 2 pre-existing red —
-  `engine-qualify-verdict-stability` D6 honest/parity grader-hash-drift, `migrate-backlog-entries`
-  (real `docs/BACKLOG.md` migratable-entry count one short of its ≥100 gate) — both confirmed red at
-  `origin/develop` base, not introduced by this change); `check-js-syntax` / `sync-codex-plugin-skills
-  --check` / `validate.sh` all green; `node scripts/lib/live-state-dir.test.js` /
-  `node hooks/context-budget.test.js` / `node scripts/statusline-live-tee.test.js` all green.
-  Real-host proof: with `XDG_RUNTIME_DIR` unset and `/run/user/<uid>/autopilot` forced to 0775,
-  `resolveLiveDir` resolves `xdg-inferred` at that path and tightens it to 0700; a live
-  `hooks/context-budget.js` run against a genuine 1M-window session then reads
-  `lastLive.present:true`, `knownWindow:1000000`, silent (no false T1/T2).
-  `claude-fable-5-1` high-effort review on the full `origin/develop..HEAD` diff went through three
-  rounds: round 1 `FIX-THEN-SHIP` (🟠 tighten-mask too loose, `0o002` → `0o007`); round 2's
-  `SHIP-AS-IS` was reopened when the combined range was re-reviewed and returned `FIX-THEN-SHIP`
-  (🔴 the `0o007` guard rejects the real 0775 production case); round 3, against the private-parent
-  rule above and both spec files concatenated, `SHIP-AS-IS`
-  (`review-1790571747-63755-152a`, 🟡/🔵 CUT/FOLLOW-UP only).
-- **Known follow-ups (review 🟡/🔵 CUT/FOLLOW-UP)**: `hooks/tests/hooks-live-state-misc.test.sh` was
-  edited outside the brief's literal allowed-files list — forced by the rule change breaking its
-  pre-existing row-132 pin, judged in-scope by two separate review rounds; `scripts/lib/live-state-dir.test.js`
-  gained only positive tightening cases (0770/0775/0777 under a private parent) with no
-  `0775 under a 0755 (public) parent ⇒ rejected` mirror — that negative case is covered by the shell
-  suite and the symlink reject in the misc suite, so the JS twin is optional hardening, not a gap.
+- **症狀**：1M-context session 在約 100–200k 就被誤判 context-budget T1/T2——hook 沒繼承 `XDG_RUNTIME_DIR` 讀 `/dev/shm`，statusline 有繼承、寫的是 `/run/user/<uid>`，兩邊各讀各寫。
+- **成因**：`resolveLiveDir()` 在 `XDG_RUNTIME_DIR` 缺席時沒有去推斷 `/run/user/<uid>/autopilot`，新增 `xdg-inferred` 候選補上這條路徑。
+- **新規則（父目錄私有才放行）**：既存候選目錄 owner 是自己、非符號連結，即使自身帶 group/other 權限位，只要父目錄也是自己所有、非連結、且父目錄本身無 group/other 位（私有），就 chmod 0700 後接受——父目錄一旦私有，候選自身的權限位就不再有意義；父目錄不私有／owner 不符／是連結一律維持拒絕。
+- **規則中途改過一次**：第一版寫成排除任何帶 other 位的候選，round 3 複審抓到這仍會拒絕 codeforge 真實產生的 0775 目錄（round 2 的真機驗證跑在已被 round 1 自己 chmod 成 0700 的目錄上，沒測到真正的 0775）；depth-0 裁定為真，換成上面的父目錄規則。
+- **migration**：`/dev/shm/autopilot-<uid>/` 下的 hook 狀態（advisory-queue、context-budget、depth0-gate、dirty-tree-reminder）一次性失聯，全部是可重建的 advisory，佇列與視窗記憶重置一次即可。
+- **review 三輪**：round 1 FIX-THEN-SHIP（🟠 mask 太寬）→ round 2 SHIP-AS-IS 被整包複審打回 FIX-THEN-SHIP（🔴 仍拒真實 0775）→ round 3 對父目錄新規則 SHIP-AS-IS（`review-1790571747-63755-152a`）。
+- **既有紅**（非本版引入，`origin/develop` 基準同樣紅）：`engine-qualify-verdict-stability`（D6 honest/parity grader-hash drift）、`migrate-backlog-entries`（真實 `docs/BACKLOG.md` 可遷移列數低於 ≥100 閘門）。
 
-prose-justification: this version fixes a real user-visible bug (false T1/T2 in 1M-context sessions)
-whose private-parent tightening rule was revised once mid-landing after review found the first rule
-still rejected the real production case; the prose growth is the explanation of that rule, the
-revision itself, and the three-round review history needed to justify shipping it, not padding —
-the pre-existing gap against the v2.35.2 baseline is inherited from earlier versions, this line only
-brings the v2.36.100 section itself under the north-star gate.
+prose-justification: 本版修真實使用者可見的誤判（1M session 假 T1/T2），規則中途被複審打回重訂一次，說明規則本身、修訂原因與三輪 review 是必要事實不是灌水；相對 v2.35.2 基線的既有落差是先前版本累積的，這裡只讓本版區段本身通過 north-star 閘門。
 
 ## v2.36.99 — 測試不能再寫進操作者真實的 capability store
 

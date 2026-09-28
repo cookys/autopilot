@@ -1075,3 +1075,19 @@ run's ghost, not the current instrument's result — a §12-adjacent trap where 
 current but measures a superseded stimulus.
 
 **Related**: `docs/plans/evidence/2026-08-28-consult-discuss-qualify/ADMINISTRATION-LEDGER.md`.
+
+## 47. A real-host proof that mutates the state it proves makes every later proof vacuous
+
+2026-09-28, v2.36.100: round 1's real-host proof for a live-dir permission fix `chmod`'d the real
+`/run/user/1000/autopilot` from 0775 to 0700 as a side effect of running it. Round 2's proof, and
+depth-0's own before/after check, then ran against that already-tightened 0700 dir and passed —
+while the round-2 rule still rejected the real production case (0775 under a private parent). Only
+the landing foreman's combined review across the full range caught it (🔴). Compounding it: the spec
+author (depth-0) had written the rule as "no other bits" despite having observed the real dir at 0775
+in the pre-check — the wrong rule was picked *with* the disconfirming observation already in hand.
+Round 1 also wrote a synthetic `livedir-proof-*.json` into the real context dir (removed by depth-0)
+— a second way a proof run leaves the store it's supposed to only observe.
+
+Rule: a real-host proof must restore its precondition before each run (here: `chmod 0775` the
+target and `stat` it to confirm) and never write into a real store. A test suite for a permission
+rule must name the actual production case, not only synthetic ones.

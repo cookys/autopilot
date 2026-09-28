@@ -36,13 +36,13 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/foreman-guard-cost-shaped-gate.md
 - **Context**: role/call-count caps say nothing about cost; a clone-based foreman whose l4-l6 marker is INACTIVE is invisible to both today.
 
-### `dispatch-hetero.sh --timeout` is accepted and recorded but never applied to the grok rail
+### dispatch-hetero watchdog: review 🔵 follow-ups (setsid degrade, cgroup fallback, deadline mislabel, dup keys)
 - **Status**: open
-- **Trigger**: the next grok dispatch anyone needs to bound, or any audit of runner-branch parity
+- **Trigger**: next dispatch-hetero containment change
 - **Effort**: S
-- **Source**: 2026-09-22 foreman phase-1 build (a `--timeout 20m` grok dispatch alive at 22m39s; the foreman was planning around a deadline that never fires)
-- **Pointer**: docs/backlog/dispatch-hetero-grok-timeout-not-applied.md
-- **Context**: agy forwards `$TIMEOUT` to `run_worker`, the two grok branches do not, and `run_worker` adds none; the manifest still emits `timeout_seconds`, so the record states an unenforced bound.
+- **Source**: v2.36.101 review 🔵 follow-ups
+- **Pointer**: docs/backlog/dispatch-hetero-watchdog-followups.md
+- **Context**: v2.36.101's watchdog closed the `--timeout`-unenforced gap; rounds 5-6 left non-blocking follow-ups, collected in the pointer.
 
 ### OpenCode Go needs a Responses-protocol transport and an `x-opencode-session` header
 - **Status**: open

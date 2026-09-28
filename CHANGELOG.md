@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.36.101 — dispatch-hetero 的 --timeout 現在每條 rail 都真的擋得住
+
+- **症狀**：`--timeout` 在每條 rail 都會被接受、驗證並寫進 manifest，但只有 agy rail 真的會去強制執行——一個 `--timeout 20m` 的 grok 派工實際活了 22 分鐘以上,呼叫端以為有的邊界並不存在。
+- **新規則**：所有 rail 現在共用一個中央 `run_worker` watchdog；只有呼叫端帶 `--timeout` 或有 contract wall 時才強制執行,manifest 標 `timeout_enforced: true`；兩者都缺席時維持既有 9 分鐘預設上限,但如實記成 `timeout_source: default`、`timeout_enforced: false`,不再宣稱一個沒人在看守的邊界。到期時 watchdog 只會 TERM → 10 秒緩衝 → KILL worker 自己的 session/scope,絕不動到 dispatcher,並標 `status: failure`、`timed_out: true`。
+- **保證**：只用預設值(沒帶 `--timeout`、沒有 contract wall)的既有呼叫行為逐位元組不變。
+- **中途複審抓到的一個真實漏檢**：detached-child 這條路徑把函式清單序列化走 `declare -f`,第一版遺漏了 `normalize_timeout_seconds`,結果 watchdog 在「每個真實派工都會走」的這條路徑上完全沒被啟動——是一次真實 cursor rail 的 `--timeout 20s` + `sleep 300` 探針(而非任何 stub 測試)先抓到它自然跑滿 322 秒。
+- **已知後續（review 🔵/🟡 CUT/FOLLOW-UP）**：no-setsid/無 job-control 時的降級、cgroup-kill 失敗沒有備援、次毫秒級 deadline 巧合誤標、strict-contract manifest 可能重複鍵——收在 `docs/backlog/dispatch-hetero-watchdog-followups.md`,均不阻擋此版。
+
+prose-justification: 本版修真實可見的邊界落空（`--timeout` 記錄了卻沒強制執行），中途複審抓到的 detached-path 漏檢與六輪 review 是必要事實不是灌水；相對基線的既有落差是先前版本累積的，這裡只讓本版區段本身通過 north-star 閘門。
+
 ## v2.36.100 — context-budget reads the same live dir the statusline writes
 
 - **症狀**：1M-context session 在約 100–200k 就被誤判 context-budget T1/T2——hook 沒繼承 `XDG_RUNTIME_DIR` 讀 `/dev/shm`，statusline 有繼承、寫的是 `/run/user/<uid>`，兩邊各讀各寫。

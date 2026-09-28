@@ -1,61 +1,46 @@
 ## 目標
-接續 autopilot 維護。2026-09-25 這個 session 把 peer 回報的 `foreman-guard-role-aware-caps` backlog 候選做完，出貨 **v2.36.97**（`edc0e9cc` 之後的 closeout commit）。
-09-21 那份 handoff 裡的事項都已結案：wave-1 在 v2.36.81 落地，depth-0 委派閘門在 v2.36.82 出貨，wave-1b 在 v2.36.95 出貨，B1 在 v2.36.96 出貨。
+接續 autopilot 維護。2026-09-24～28 這個 session（ee9eb17b，opus）出貨了 v2.36.95 到 v2.36.99，另外有一個知識落地 commit 和一個專案 skill。下一步從 BACKLOG 裡已觸發的 S 級開始。
 
-## 鐵律（沿用 owner 09-21 的規定）
-- depth-0 只做三件事：讀報告、下裁決、派工。產品碼、落地、release 都交給工頭（sonnet Agent，在 clone 裡做）。
-- BACKLOG 是佇列：有 plan 或已出貨就刪列。plan 要登記在 INDEX（`active`）。🔵 不進 BACKLOG。
-- rail 有缺陷時，一律先出 Fix 版再重派，或依文件降級。
+## 現況
+- 分支 `develop`，HEAD `370a9723`（docs(knowledge): hook output-channel facts, evidence-discipline §42-46…），已 push，工作區乾淨，沒有 stash，只有主 checkout 一個 worktree。
+- 這個 session 出貨的東西：
+  - v2.36.95：wave-1b，10 個 backlog 列。
+  - v2.36.96：B1 resolver-a，7 列。09-21 開的六包 bundle 全部結案。
+  - v2.36.97：foreman-guard 依角色設上限（worker／reviewer 120）、最後 8 次的收尾保留、提醒走 `additionalContext`（不帶 `permissionDecision`）。
+  - v2.36.98：14 個 hook 的提醒改走 `additionalContext`；Stop 提醒改由新的 `advisory-relay`（UserPromptSubmit）在下一次送出訊息時送達；multiplexer 會合併提醒，並保留 deny／ask。
+  - v2.36.99：`AUTOPILOT_TEST_RUN_GUARD`，跑測試時不准寫入真實的 capability store。
+  - `370a9723`：portability 文件補上 hook 輸出管道的實測表；evidence-discipline 補上 §42–§46（stash 裡的舊內容以 §45/§46 重新落地）；sonnet 工頭配方補上新條款。
+  - `fd6f1c1d`：專案 skill `.claude/skills/foreman-landing-pipeline/`（流程檢查清單加四份 brief 範本）。
 
-## 現況（HEAD = v2.36.99 + CHANGELOG 更正 commit `43b53a76`，已 push）
-00. **測試再也不能寫進操作者真實的 capability store（v2.36.99，`441fafe9`）**：`hooks/tests/run.sh` 設 `AUTOPILOT_TEST_RUN_GUARD=1`，
-   `engine-capability-state.js` 的寫入指令在這個旗標下，只要會落到真實帳號 home 底下的預設 store，就拒絕並印出路徑和父行程。
-   2026-09-26 的「污染」在 2026-09-28 用絆線 clone 跑兩次完整套件（parallel 8、parallel 1），**零命中**：那筆資料較可能是真實的被動紀錄，
-   v2.36.98 的工頭誤刪了它（下次真實派工會自然補回）。`441fafe9` 的 QC trailer 誤帶字面 `<id>`，真實審查編號記在 CHANGELOG v2.36.99。
-   **教訓**：發版 clone 一定要 `git config core.hooksPath .githooks`，否則 pre-push 的 qc-gate 不會跑。
-0. **hook advisories 現在會送到模型（v2.36.98，`5a838b2d` + closeout commit）**：origin
-   `docs/backlog/hook-stderr-advisories-invisible.md` 那批「stderr + exit 0 模型看不到」的建議
-   （cost-fuse、context-budget T1、depth0-delegate-gate、reload-watch、dispatch-model-guard warn 等）
-   全部改走 `hookSpecificOutput.additionalContext`；Stop 事件（cost-tracker、check-console、
-   batch-format）沒有乾淨的同回合通道，改成寫進一個以 session 為 key 的佇列檔，由新的預設開啟 hook
-   `advisory-relay`（`UserPromptSubmit`）在下一次送出訊息時原樣讀出來當 `additionalContext` 送達
-   （退出開關 `AUTOPILOT_ADVISORY_RELAY=off`）；`dirty-protected-paths` 的 `systemMessage` 確認是
-   human-UI-only、故意不進佇列。兩輪 combined-diff review（fable）分別抓到 multiplexer 誤丟
-   deny/ask、exit-1 路徑被吞、queue race、`tsc` 沒排進 relay（round 1），以及一則過時文件字句
-   （round 2）——**單列 review 抓不到的東西，combined review 抓到了**。落地時 land-phase 全套重跑
-   出現一次疑似 REAL-STORE POLLUTION，已在 v2.36.99 查清（見 00）。evidence 全在
-   `docs/plans/evidence/2026-09-26-hook-channel-probe/landing/README.md`。
-1. **foreman-guard 角色感知上限 + close-out reserve 已出貨（v2.36.97，`edc0e9cc`）**：`docs/backlog/foreman-guard-role-aware-caps.md` 那個候選（B1 落地後即可排入的觸發條件已滿足）做完了——角色感知 Bash 上限（`Role: worker`/`Role: reviewer` 120、工頭與未宣告角色 40）、收尾前保留額度（close-out reserve）、無 marker 的 `Engine:` 派工子代理改一律不擋＋每 40 次建議。落地前複審抓到一個 🟠 allow-bypass（`emitAllowContext()` 誤帶 `permissionDecision:"allow"`，等於幫每則建議自動放行底下的指令）並已修正——**這是本輪的關鍵教訓：advisory hook 絕不能帶 `permissionDecision:"allow"`**，只有真拒絕才設這個欄位。收尾 pass（本 session）修了三個已知後續：CHANGELOG v2.36.97 段落的簡體字 `没`→`沒`、`hooks/README.md` foreman-guard 行的過時措辭（「depth-0 and plain sessions are untouched」與新的無 marker 建議路徑矛盾）、`foreman-guard-roles.test.sh` 的 TMPDIR-unset 案例在沒有 `/dev/shm` 的主機上改成印 SKIP 而不是 fail。全套 evidence 在
-   `docs/plans/evidence/2026-09-25-foreman-guard-roles/landing/README.md`。
-1a. **09-21 的六個 backlog bundle 全數出貨**：B1 `review-loop-resolver-a`（wave 2，7 列）落地為 v2.36.96，plan 已歸檔到
-   `docs/plans/_archive/2026/09/`，evidence 見 `docs/plans/evidence/2026-09-25-backlog-b1/README.md`。
-   其餘 5 個 bundle 的 plan 也都已歸檔到 `docs/plans/_archive/2026/09/`。
-1b. **下一輪候選**：
-   - `docs/backlog/dispatch-hetero-grok-timeout-not-applied.md`（S，grok 的兩個分支沒把 `$TIMEOUT` 轉給
-     `run_worker`，manifest 卻照樣記 `timeout_seconds`）；
-   - `docs/backlog/foreman-guard-cost-shaped-gate.md`（cost-shaped gate 尚未觸發，仍是 shadow-only）。
-2. **平行派工配方**：證據與教訓在 `docs/plans/evidence/2026-09-24-backlog-wave-1b/README.md`。重點有兩條：
-   - clone-local 的 shadow commit 要一開始就寫進 brief，不能事後用訊息補，工頭會（也應該）拒收。
-   - 每列的 Verify 要涵蓋它所改契約的使用端套件，不能只跑 bundle 套件。
-3. v2.36.95 最終審查留了三個 🔵：
-   - `--exclude` 白名單判定過寬；
-   - `runnerConsumesEffort` 的名單與 probe 的 `_EFFORT_CONSUMER` 是兩份手抄；
-   - `admit-backlog-follow-ups` 的 finally 裡 releaseLock 沒有 try/catch。
-   照規則不進 BACKLOG，有人碰到這些檔案時順手處理。
-4. 停放：
-   - `origin/main` 大幅落後 develop，等 owner 決定；
-   - `stash@{0}`（evidence-discipline §20/§21，需要 QC 才能進 protected references/）別動；
-   - `check-plan-graduation` 有 44 條 `plan_reference_dangling`，這次之前就存在、不擋；
-   - 一個 5 天前的 `dispatch-review` 測試 mock node 程序（`/tmp/autopilot-test-dispatch-review-6PySJr`）還活著，owner 決定要不要清。
+## 已決事項（不重議）
+- depth-0 只做三件事：讀報告、下裁決、派工。產品碼、落地、release 都交給 sonnet 工頭在 clone 裡做。流程照 `foreman-landing-pipeline` skill 走。
+- 工頭不能自己駁回審查的 🔴／🟠，只有 depth-0 能在重新核對後駁回（ADR-0001）。最後一定要做一次 `origin/develop..HEAD` 的整包審查。
+- 發版 clone 一定要 `git config core.hooksPath .githooks`；QC trailer 的審查編號要從 manifest 填（v2.36.99 曾經帶著字面上的 `<id>` 推上去）。
+- 沒有 l4–l6 marker 時，foreman-guard 只提醒、不擋（operator 2026-09-25 的決定）。
+- 只負責提醒的 hook 絕對不能送 `permissionDecision:"allow"`；Stop 不能用 `additionalContext`，也不能用 exit 2 送提醒。
+- 2026-09-26 那筆 capability「污染」判定為不成立：絆線實驗跑兩次完整套件都零觸發。
+
+## 下一步
+1. **context-budget 讀錯 live dir（S 級，已觸發）**：`docs/backlog/context-budget-live-dir-mismatch.md`。hook 執行時沒有 `XDG_RUNTIME_DIR`，所以選了 `/dev/shm`；statusline 寫的卻是 `/run/user/<uid>`。結果是 1M 的 session 在大約 150k 被誤報 T2。
+   這是本機 session 308-d1 回報的，它要求修好後告訴 owner，不需要回覆那個 session。修法候選：讀取時把每個候選目錄都掃一遍，或是用 `/run/user/<uid>` 推回 xdg，再加一個 XDG 有／無的組合測試。走 Fix 流程，派工頭處理。
+2. `docs/backlog/dispatch-hetero-grok-timeout-not-applied.md`（S 級）。
+3. `docs/backlog/foreman-guard-cost-shaped-gate.md`（觸發條件還沒成立，不要先做）。
 
 ## 驗證方式
-- `git status --short` 空；
-- `git log --oneline -1` 是 v2.36.95 或其後；
-- `node scripts/check-plan-graduation.js --repo-root . --json` 的 exit 為 0；
-- `bash scripts/preflight-release.sh` 通過。
+- `git status --short` 是空的；`git log --oneline -1` 是 `370a9723` 或之後的 commit。
+- `node scripts/check-plan-graduation.js --repo-root . --json` 的 exit 是 0（有 44 條 `plan_reference_dangling` 是原本就有的）。
+- `bash scripts/preflight-release.sh` 回報 v2.36.99 一致。
+- `node scripts/check-hook-inventory.js --check` 顯示 32 個 hook（19 個預設開啟）。
+
+## Read-order
+1. /home/cookys/projects/autopilot/.claude/skills/foreman-landing-pipeline/SKILL.md：派工到發版的流程和範本。
+2. /home/cookys/projects/autopilot/docs/backlog/context-budget-live-dir-mismatch.md：下一步第 1 項的證據。
+3. /home/cookys/projects/autopilot/references/evidence-discipline.md §42–§46：這兩天的教訓。
+4. /home/cookys/projects/autopilot/hooks/README.md § Hook Output Channels：哪些 hook 輸出模型看得到。
 
 ## 陷阱
-- 引用改寫別碰 sha-bound plan（`docs/mission-*-sources.json` 封印的）。
-- zsh 的 `set -- $var` 不會切詞，要用 `bash -c`。
-- 工頭停車後不會被自己的背景工作叫醒：depth-0 要自己設 dead-man，時間到去看 git，再用 `SendMessage` 戳它。
-- 1M session 沒有 statusline tee 時，context-budget 會在約 150K 報假 T2（v2.36.89 的 `statusline-live-tee.js` 可以修）。
+- 工頭停下來後不會被自己的背景工作叫醒。depth-0 要自己設 dead-man 計時器，時間到先去 git 查狀態，再用 `SendMessage` 叫醒它（記憶：background-dispatch-pickup-gate）。
+- exec-boundary 會攔下出現在 heredoc 或字串裡的破壞性字樣，這類腳本要先寫成檔案再跑（記憶：exec-boundary-literal-text-trap）。
+- `pgrep -f` 會比對到自己（記憶：pkill-self-match-trap）。
+- 停放中、等 owner 決定的事項：`origin/main` 大幅落後 develop。
+- 1M 的 session 在修好第 1 項之前，還是可能收到假 T2。T1 和其他提醒從 v2.36.98 起已經看得到了。

@@ -7,7 +7,12 @@
 - BACKLOG 是佇列：有 plan 或已出貨就刪列。plan 要登記在 INDEX（`active`）。🔵 不進 BACKLOG。
 - rail 有缺陷時，一律先出 Fix 版再重派，或依文件降級。
 
-## 現況（HEAD = v2.36.98 + closeout commit，已 push）
+## 現況（HEAD = v2.36.99 + CHANGELOG 更正 commit `43b53a76`，已 push）
+00. **測試再也不能寫進操作者真實的 capability store（v2.36.99，`441fafe9`）**：`hooks/tests/run.sh` 設 `AUTOPILOT_TEST_RUN_GUARD=1`，
+   `engine-capability-state.js` 的寫入指令在這個旗標下，只要會落到真實帳號 home 底下的預設 store，就拒絕並印出路徑和父行程。
+   2026-09-26 的「污染」在 2026-09-28 用絆線 clone 跑兩次完整套件（parallel 8、parallel 1），**零命中**：那筆資料較可能是真實的被動紀錄，
+   v2.36.98 的工頭誤刪了它（下次真實派工會自然補回）。`441fafe9` 的 QC trailer 誤帶字面 `<id>`，真實審查編號記在 CHANGELOG v2.36.99。
+   **教訓**：發版 clone 一定要 `git config core.hooksPath .githooks`，否則 pre-push 的 qc-gate 不會跑。
 0. **hook advisories 現在會送到模型（v2.36.98，`5a838b2d` + closeout commit）**：origin
    `docs/backlog/hook-stderr-advisories-invisible.md` 那批「stderr + exit 0 模型看不到」的建議
    （cost-fuse、context-budget T1、depth0-delegate-gate、reload-watch、dispatch-model-guard warn 等）
@@ -18,7 +23,7 @@
    human-UI-only、故意不進佇列。兩輪 combined-diff review（fable）分別抓到 multiplexer 誤丟
    deny/ask、exit-1 路徑被吞、queue race、`tsc` 沒排進 relay（round 1），以及一則過時文件字句
    （round 2）——**單列 review 抓不到的東西，combined review 抓到了**。落地時 land-phase 全套重跑
-   出現一次 REAL-STORE POLLUTION（見下方候選 1），已手動清乾淨，歸因未證實。evidence 全在
+   出現一次疑似 REAL-STORE POLLUTION，已在 v2.36.99 查清（見 00）。evidence 全在
    `docs/plans/evidence/2026-09-26-hook-channel-probe/landing/README.md`。
 1. **foreman-guard 角色感知上限 + close-out reserve 已出貨（v2.36.97，`edc0e9cc`）**：`docs/backlog/foreman-guard-role-aware-caps.md` 那個候選（B1 落地後即可排入的觸發條件已滿足）做完了——角色感知 Bash 上限（`Role: worker`/`Role: reviewer` 120、工頭與未宣告角色 40）、收尾前保留額度（close-out reserve）、無 marker 的 `Engine:` 派工子代理改一律不擋＋每 40 次建議。落地前複審抓到一個 🟠 allow-bypass（`emitAllowContext()` 誤帶 `permissionDecision:"allow"`，等於幫每則建議自動放行底下的指令）並已修正——**這是本輪的關鍵教訓：advisory hook 絕不能帶 `permissionDecision:"allow"`**，只有真拒絕才設這個欄位。收尾 pass（本 session）修了三個已知後續：CHANGELOG v2.36.97 段落的簡體字 `没`→`沒`、`hooks/README.md` foreman-guard 行的過時措辭（「depth-0 and plain sessions are untouched」與新的無 marker 建議路徑矛盾）、`foreman-guard-roles.test.sh` 的 TMPDIR-unset 案例在沒有 `/dev/shm` 的主機上改成印 SKIP 而不是 fail。全套 evidence 在
    `docs/plans/evidence/2026-09-25-foreman-guard-roles/landing/README.md`。
@@ -26,10 +31,6 @@
    `docs/plans/_archive/2026/09/`，evidence 見 `docs/plans/evidence/2026-09-25-backlog-b1/README.md`。
    其餘 5 個 bundle 的 plan 也都已歸檔到 `docs/plans/_archive/2026/09/`。
 1b. **下一輪候選**：
-   - `docs/backlog/suite-pollutes-real-capability-store.md`（S，已 FIRED 2026-09-26：`run.sh --parallel 8`
-     時一列 cc-shim/MiniMax-M3 的被動 capture 寫進了操作者真的
-     `~/.autopilot/engine-capability/capability.jsonl`，已手動清除；懷疑是 engine-qualify /
-     dispatch-review 被動 capture 沒有 guarded HOME，歸因未證實，需要找出那個套件並做成 hermetic）；
    - `docs/backlog/dispatch-hetero-grok-timeout-not-applied.md`（S，grok 的兩個分支沒把 `$TIMEOUT` 轉給
      `run_worker`，manifest 卻照樣記 `timeout_seconds`）；
    - `docs/backlog/foreman-guard-cost-shaped-gate.md`（cost-shaped gate 尚未觸發，仍是 shadow-only）。

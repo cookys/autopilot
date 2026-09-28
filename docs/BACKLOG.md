@@ -806,3 +806,11 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: 2026-09-23 CI repair, dispatch cluster (620ef6ed fallback order: task_surface → round changed files → park)
 - **Pointer**: docs/backlog/ci-repair-2026-09-23-followups.md
 - **Context**: add a probe where both fallbacks are empty and assert the occurrence count is unchanged after park.
+
+### context-budget reads a different live dir than statusline writes → false T2 at ~150k in 1M sessions
+- **Status**: open
+- **Trigger**: FIRED — reported by local peer session 308-d1 (session 67899ee7): false T2 at 150k/164k/174k/195k in 1M-window sessions; the controlling depth-0 session (ee9eb17b) also received false T2 at 152k/164k/186k on 2026-09-24/25 in a 1M session
+- **Effort**: S
+- **Source**: reported by local peer session 308-d1 (session 67899ee7); depth-0 session (ee9eb17b) also hit false T2 at 152k/164k/186k on 2026-09-24/25 in a 1M session
+- **Pointer**: docs/backlog/context-budget-live-dir-mismatch.md
+- **Context**: statusline writes /run/user/<uid>/autopilot/context/<sid>.json (1M window); hook's resolveLiveDir() picks /dev/shm/autopilot-<uid>/ (empty context/) → 200K fallback, so T2 fires at 150k+ and v2.36.22 window memory never engages

@@ -989,3 +989,89 @@ two hops from the cause.
   suite itself; `bash <file>` cannot see the mode bit.
 - **The rail's own runner (`run.sh <filter>`) is the verify command for a new suite**, because
   it enforces the rules `bash <file>` does not — mode, name pattern, registration.
+
+## 42. An advisory channel existing is not evidence the message arrives
+
+**v2.36.97–v2.36.98.** 15 hooks (6 default-on) printed model-facing warnings to stderr with
+exit 0; the model never saw any of them for months, because Claude Code's own docs say stderr
+on exit 0 goes to the debug log only. A channel that has never been probed for reachability is
+an assumption wearing the shape of a mitigation.
+
+- **The detector is a nonce probe per event** — emit a unique marker on the channel under test
+  and confirm the model can quote it back, not that the hook ran without error.
+- Preventing artifacts: `hooks/README.md` § Hook Output Channels, `hooks/tests/hook-advisory-channel.test.sh`,
+  and the probe evidence dirs.
+
+## 43. A per-row review cannot replace the combined review
+
+**v2.36.97–v2.36.98.** The v2.36.97 combined `origin/develop..HEAD` review caught
+`permissionDecision:"allow"` silently auto-approving a tool call — invisible to any review scoped
+to one hunk. The v2.36.98 combined review caught five things that per-row SHIP-AS-IS reviews had
+already passed: the multiplexer dropping deny/ask, exit-2 paths touched, exit-1 dropped, a
+queue race, and `tsc` not queued. One of the five (the mcp-health exit-2 hunk) had been explicitly
+judged a non-issue by the same reviewer in its own row review — the reviewer did not lack the
+finding, the framing hid it.
+
+- **Every landing brief runs a full `origin/develop..HEAD` review**, never a per-file or per-row
+  substitute.
+- **A foreman may not refute a 🔴/🟠 itself; depth-0 re-derives** (ADR-0001) — self-refutation by
+  the party being reviewed is not verification.
+- Evidence: `docs/plans/evidence/2026-09-25-foreman-guard-roles/landing/` and
+  `docs/plans/evidence/2026-09-26-hook-channel-probe/landing/`.
+
+## 44. A diff in a real store during a test run is not proof of test pollution
+
+**v2.36.98.** A `capability.jsonl` row appeared mid-suite and was deleted as "pollution" on
+sight. A tripwire clone instrumented to refuse and log any test write later ran two full suites
+with zero writes recorded — the row was most likely a genuine concurrent operator capture, and
+the delete had most likely destroyed real data on an assumption.
+
+- **Verify the writer before deleting operator data** — an instrumented clone that refuses and
+  logs is cheap; a deleted row is not recoverable.
+- Preventing artifact: `AUTOPILOT_TEST_RUN_GUARD` (v2.36.99, `hooks/tests/capability-store-test-guard.test.sh`).
+- Evidence: `docs/backlog/suite-pollutes-real-capability-store.md`.
+
+## 45. A capability a tool's docs claim is not a capability it has — probe with the unenumerated case
+
+A third-party CLI's documentation (or a prior adapter's comment) is a claim, not evidence, that the
+tool can do what you need — especially for a *containment* capability, where being wrong exposes the
+host. 2026-08-29, wiring exam-transport adapters that must guarantee the exam child cannot run tools
+or touch the filesystem: grok's `--tools ""` *looked* like it disabled tools but a live probe ran
+`hostname` and leaked the real host — only a catch-all `--deny "*"` actually held. cursor-agent's
+docs advertised `permissions.deny` + `--sandbox` + `--mode ask`; live-probed, its deny is an
+enumerated allow-by-omission list (TodoWrite and WebSearch — a real outbound call — ran under the
+full documented deny + `--force`), a wildcard `["*"]` silently no-ops, `--sandbox` is AppArmor-gated
+and unavailable, and `--mode ask` is overridden by the `--force` that headless mode requires — so it
+is genuinely NOT-containable, and the honest adapter refuses rather than spawn it uncontained.
+
+The verification is not "does the documented flag exist / exit 0" — it is a **planted-negative probe
+using a capability the deny list does not enumerate**: ask the model to invoke a novel tool
+(`todo_write`, `spawn_subagent`, `WebSearch`, a fabricated tool name) and confirm it is actually
+blocked with no real side effect (no real hostname, no real network result), not merely that a known
+name was refused. An enumerated denylist that passes on the five names you thought of is
+allow-by-omission (§17's uncounted copies, in tool-surface form); only a proven catch-all — or a
+refusal — is containment. This is the same shape as the whole family: a documentation claim and a
+working capability produce the same observation until you plant the case the claim did not cover.
+
+**Related**: `docs/plans/evidence/2026-08-29-cursor-containment-probe/` (19 receipts), the grok/qoderclicn
+containment probes under `docs/plans/evidence/2026-08-28-consult-discuss-qualify/administration/`.
+
+## 46. Re-grading old outputs is not re-measuring — a fixed prompt changes what the subject does
+
+When an evaluation's grader OR its prompt is corrected, re-scoring the *already-collected responses*
+under the new grader answers a different question than re-administering under the new prompt. The old
+responses were produced under the old stimulus; the subject's behavior is a function of that stimulus.
+2026-08-29: after fixing a consult exam's aside-channel contradiction (the prompt had invited asides
+the grader forbade), an offline re-grade of the prior MiniMax/GLM responses predicted they would still
+fail (6→7, 8→8). But re-administering under the *corrected prompt* scored 19/20 and 18/20 — the engines
+stopped misusing the aside channel once the instruction was clear. The offline preview systematically
+under-predicted because it re-scored old behavior, not new behavior.
+
+Rule: an offline re-grade is valid only for a **grader-logic-only** change whose stimulus (envelope,
+prompt, case content) is byte-identical to what the responses answered — and even then, verify that
+invariant before trusting it. Any change to the *instruction the subject reads* invalidates the old
+responses as a sample; you must re-run to measure. Re-grading a changed-prompt exam records the old
+run's ghost, not the current instrument's result — a §12-adjacent trap where the artifact looks
+current but measures a superseded stimulus.
+
+**Related**: `docs/plans/evidence/2026-08-28-consult-discuss-qualify/ADMINISTRATION-LEDGER.md`.

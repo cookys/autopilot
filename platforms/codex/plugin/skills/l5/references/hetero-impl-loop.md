@@ -277,7 +277,13 @@ is what lets hands run without a sealed campaign — and it also means the marke
 degrade it (`set --level l3 --entry-level l5 --fallback precondition_failed`) and clear. Engine units must add cases in NEW
 suite files (not appended to a shared suite — three EOF appends = a certain cherry-pick conflict) and the brief's Verify must
 include `test -x` on each new `*.test.sh` and every consumer suite of a changed output contract (evidence-discipline §39–41).
-Receipts: `docs/plans/evidence/2026-09-19-parallel-sonnet-foremen/`.
+The clone-local "PARALLEL-RUN LOCAL ONLY … enforcement_mode shadow" commit is created by depth-0 and stated IN the brief; a foreman
+correctly refuses a governance downgrade that arrives as a later message instead. A landing clone sets `git config core.hooksPath
+.githooks`, otherwise the pre-push qc-gate is skipped (v2.36.99 shipped a literal `<id>` trailer this way) — fill the QC trailer's
+review id from the review manifest, never a placeholder. The landing foreman runs one full combined `origin/develop..HEAD` review
+and STOPS on any 🔴/🟠; refuting a finding is depth-0's job, done by re-derivation (ADR-0001), not the foreman's.
+Receipts: `docs/plans/evidence/2026-09-19-parallel-sonnet-foremen/`, `docs/plans/evidence/2026-09-24-backlog-wave-1b/README.md`,
+`docs/plans/evidence/2026-09-25-foreman-guard-roles/landing/`, `docs/plans/evidence/2026-09-26-hook-channel-probe/landing/`.
 
 ## Degradation
 

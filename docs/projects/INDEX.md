@@ -259,6 +259,7 @@ Small batches that bump the version but don't warrant a project README. Source o
 
 | Date | Ship | Version | Merge |
 |------|------|---------|-------|
+| 2026-09-28 | context-budget live-dir fix（無 project dir — Fix）— hooks 無 `XDG_RUNTIME_DIR` 時讀 `/dev/shm`、statusline 寫 `/run/user/<uid>`，1M session 在 ~100–200k 誤報 T1/T2；resolver 改成推斷 `/run/user/<uid>/autopilot`，並在父目錄私有時把自建目錄從 0775 收緊到 0700；三輪複審（🟠 遮罩太鬆→🔴 遮罩太嚴，反轉同一行）後由 depth-0 裁定私有父目錄規則 | v2.36.100 | — | [CHANGELOG](../../CHANGELOG.md) |
 | 2026-09-28 | test-run guard for the real capability store（無 project dir — Fix）— `AUTOPILOT_TEST_RUN_GUARD` 讓測試不能再寫進操作者真實的 `~/.autopilot/engine-capability/capability.jsonl`；承接 `docs/backlog/suite-pollutes-real-capability-store.md`，tripwire 重跑兩次零命中，判定原本那筆「污染」較可能是真實 passive capture | v2.36.99 | — | [CHANGELOG](../../CHANGELOG.md) |
 | 2026-09-24 | wave-1b：10 個維護列整合（rlr 131/136/137、hlsm 139/140、dlrm 93/109/122/123、mrce 15）；整合後追加 3 個修補 commit（row 122 ×2、row 15 ×1） | v2.36.95 | 41f1bff6 | [CHANGELOG](../../CHANGELOG.md) |
 | 2026-07-25 | plan-review-stop-loss — future-plan readiness 從 parity audit／手工 reviewer loop 分流到 durable repo+ticket controller：frozen rubric、POC blocker admission、主席＋deep 同代 union、最多 2 generations／7200s、1.25× warn／>1.50× STOP；explicit runner blank/unknown 改 fail-loud，`claude-native` 正式成為 reviewer/author transport；`research-to-ship` 移除 loop-until-converges。 | v2.32.58 | (this ship) |

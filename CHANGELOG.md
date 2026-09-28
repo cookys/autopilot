@@ -1,5 +1,56 @@
 # Changelog
 
+## v2.36.100 — context-budget reads the same live dir the statusline writes
+
+- **1M-context sessions got false context-budget T1/T2 at ~100–200k** because hooks (which run
+  without `XDG_RUNTIME_DIR` in their env) read `/dev/shm` while the statusline (which does inherit
+  the session's `XDG_RUNTIME_DIR`) writes `/run/user/<uid>`. `resolveLiveDir` now infers
+  `/run/user/<uid>/autopilot` when `XDG_RUNTIME_DIR` is absent, and tightens a self-owned runtime
+  dir to 0700 when its parent is private to the user (the codeforge-created dir is 0775).
+- **Rule (revised once after review)**: a pre-existing candidate directory, owned by the current uid
+  and not a symlink, with any group/other permission bits set, is chmod'd to 0700 and accepted if and
+  only if its parent directory is owned by the current uid, is a real directory (not a symlink), and
+  has no group/other bits of its own. The candidate's own bits don't matter once the parent is
+  private — nothing could have been planted there by another user. Every other case (parent not
+  private, foreign uid, symlink, not a directory) keeps reject-and-fall-through. The first landed
+  version of this rule excluded any candidate with other-bits set at all (`(mode & 0o007) === 0`),
+  which review round 3 found still rejected the real production case — codeforge's own 0775
+  directory — because round 2's real-host proof had run against a dir already tightened to 0700 by
+  round 1 and never exercised a fresh 0775 directory. Depth-0 adjudicated round 3's finding as real
+  and the rule above replaces it.
+- **Migration note**: hook-owned state in `/dev/shm/autopilot-<uid>/` (advisory-queue,
+  context-budget, depth0-gate, dirty-tree-reminder) is orphaned once — all advisory/rebuildable;
+  queued advisories and window memory reset once.
+- **Landing verification**: `hooks/tests/run.sh --parallel 8` (380 test files; 2 pre-existing red —
+  `engine-qualify-verdict-stability` D6 honest/parity grader-hash-drift, `migrate-backlog-entries`
+  (real `docs/BACKLOG.md` migratable-entry count one short of its ≥100 gate) — both confirmed red at
+  `origin/develop` base, not introduced by this change); `check-js-syntax` / `sync-codex-plugin-skills
+  --check` / `validate.sh` all green; `node scripts/lib/live-state-dir.test.js` /
+  `node hooks/context-budget.test.js` / `node scripts/statusline-live-tee.test.js` all green.
+  Real-host proof: with `XDG_RUNTIME_DIR` unset and `/run/user/<uid>/autopilot` forced to 0775,
+  `resolveLiveDir` resolves `xdg-inferred` at that path and tightens it to 0700; a live
+  `hooks/context-budget.js` run against a genuine 1M-window session then reads
+  `lastLive.present:true`, `knownWindow:1000000`, silent (no false T1/T2).
+  `claude-fable-5-1` high-effort review on the full `origin/develop..HEAD` diff went through three
+  rounds: round 1 `FIX-THEN-SHIP` (🟠 tighten-mask too loose, `0o002` → `0o007`); round 2's
+  `SHIP-AS-IS` was reopened when the combined range was re-reviewed and returned `FIX-THEN-SHIP`
+  (🔴 the `0o007` guard rejects the real 0775 production case); round 3, against the private-parent
+  rule above and both spec files concatenated, `SHIP-AS-IS`
+  (`review-1790571747-63755-152a`, 🟡/🔵 CUT/FOLLOW-UP only).
+- **Known follow-ups (review 🟡/🔵 CUT/FOLLOW-UP)**: `hooks/tests/hooks-live-state-misc.test.sh` was
+  edited outside the brief's literal allowed-files list — forced by the rule change breaking its
+  pre-existing row-132 pin, judged in-scope by two separate review rounds; `scripts/lib/live-state-dir.test.js`
+  gained only positive tightening cases (0770/0775/0777 under a private parent) with no
+  `0775 under a 0755 (public) parent ⇒ rejected` mirror — that negative case is covered by the shell
+  suite and the symlink reject in the misc suite, so the JS twin is optional hardening, not a gap.
+
+prose-justification: this version fixes a real user-visible bug (false T1/T2 in 1M-context sessions)
+whose private-parent tightening rule was revised once mid-landing after review found the first rule
+still rejected the real production case; the prose growth is the explanation of that rule, the
+revision itself, and the three-round review history needed to justify shipping it, not padding —
+the pre-existing gap against the v2.35.2 baseline is inherited from earlier versions, this line only
+brings the v2.36.100 section itself under the north-star gate.
+
 ## v2.36.99 — 測試不能再寫進操作者真實的 capability store
 
 Plan: 承接 `docs/backlog/suite-pollutes-real-capability-store.md`（2026-09-26 v2.36.98 落地時觀察到一筆疑似污染的紀錄）。

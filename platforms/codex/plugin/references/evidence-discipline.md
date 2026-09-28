@@ -1091,3 +1091,16 @@ Round 1 also wrote a synthetic `livedir-proof-*.json` into the real context dir 
 Rule: a real-host proof must restore its precondition before each run (here: `chmod 0775` the
 target and `stat` it to confirm) and never write into a real store. A test suite for a permission
 rule must name the actual production case, not only synthetic ones.
+
+## 48. A stub suite that never takes the production path proves the stub
+
+2026-09-29, v2.36.101 (`dispatch-hetero.sh` wall-timeout watchdog): all stub cases in the round-3
+suite went green while every real dispatch runs through the detached child, whose `declare -f`
+serialisation list lacked `normalize_timeout_seconds` — the watchdog was silently never armed on
+that path. The brief's mandatory real-rail proof (`--timeout 20s`, the agent told to `sleep 300`)
+ran 322 s and exposed it; the preventing artifact is the detached-path test case plus the real-rail
+proof clause in the brief, not the stub suite, which never took that path.
+
+The same closeout's combined review also found a 🟠 (bare-pid fallback) on a diff byte-identical to
+one a per-row review had already passed — reviewer verdicts are samples, which is why the combined
+review is not optional (§43).

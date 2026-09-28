@@ -7,17 +7,24 @@
 //
 // Contract (plan §2.5, docs/plans/_archive/2026/09/2026-09-05-statusline-live-context-feed.md):
 //   - resolveLiveDir() tries, in order: $AUTOPILOT_LIVE_DIR (override) → $XDG_RUNTIME_DIR/autopilot
-//     (xdg) → /dev/shm/autopilot-<uid> (shm) → /tmp/autopilot-<uid> (tmp). A candidate is accepted
-//     ONLY if `findmnt -T <dir> -o FSTYPE -n` prints tmpfs or ramfs; if findmnt is not on PATH,
-//     fall back to a longest-prefix match against /proc/mounts; if neither settles it the
-//     candidate is rejected. findmnt is given 2000 ms (`timeout: 2000`) — a hung probe must not
-//     hold a PreToolUse hook; on timeout the candidate is rejected like any other failure and only
-//     ENOENT (findmnt not on PATH) opens the /proc/mounts fallback. A ram-backed candidate is
-//     created with mkdirSync(dir, {mode:0o700}) when absent; a pre-existing candidate is rejected
-//     (fall through) if lstat shows a symlink, foreign uid, or mode & 0o077. A rejected override
-//     is skipped, not fatal — later candidates are still tried. If every candidate is rejected, the
-//     base is ~/.autopilot (SSD) and exactly one warning line is printed. resolveLiveDir() returns
-//     a BASE only — every consumer appends its own purpose segment (`context/`, `context-budget/`, …).
+//     (xdg, only if XDG_RUNTIME_DIR is set) → <runUserRoot>/<uid>/autopilot (xdg-inferred, only if
+//     XDG_RUNTIME_DIR is unset/empty AND <runUserRoot>/<uid> already exists; runUserRoot defaults
+//     to /run/user, injectable via opts.runUserRoot) → /dev/shm/autopilot-<uid> (shm) →
+//     /tmp/autopilot-<uid> (tmp). A candidate is accepted ONLY if `findmnt -T <dir> -o FSTYPE -n`
+//     prints tmpfs or ramfs; if findmnt is not on PATH, fall back to a longest-prefix match
+//     against /proc/mounts; if neither settles it the candidate is rejected. findmnt is given
+//     2000 ms (`timeout: 2000`) — a hung probe must not hold a PreToolUse hook; on timeout the
+//     candidate is rejected like any other failure and only ENOENT (findmnt not on PATH) opens
+//     the /proc/mounts fallback. A ram-backed candidate is created with mkdirSync(dir, {mode:0o700})
+//     when absent; a pre-existing candidate is rejected (fall through) if lstat shows a symlink,
+//     foreign uid, or mode & 0o077, except the parent-private tightening in isOwnedMode700Dir
+//     (any group/other bits on the candidate; only a private parent gates chmod-and-accept —
+//     see that function). A rejected override is skipped, not
+//     fatal — later candidates are still tried. If every candidate is rejected, the base is
+//     ~/.autopilot (SSD) and exactly one warning line is printed. resolveLiveDir() returns a BASE
+//     only — every consumer appends its own purpose segment (`context/`, `context-budget/`, …).
+//     Rust twin (codeforge src/live.rs): no path-resolution change (statusline-writer always has
+//     XDG_RUNTIME_DIR); file a backlog item that codeforge should mkdir the runtime dir as 0700.
 //   - sanitizeSessionId(s): replace every Unicode scalar not in [A-Za-z0-9_-] with one `_` (per
 //     scalar — a multi-byte character yields exactly one `_`), keep the first 64 scalars, empty
 //     input ⇒ 'unknown'. This is the writer/reader contract for the live-file name.
@@ -148,27 +155,52 @@ function isOwnedMode700Dir(dir) {
   try {
     if (typeof process.getuid === 'function' && st.uid !== process.getuid()) return false;
   } catch { /* platform without getuid */ }
-  // Pre-existing candidate: reject if group/other bits are set (mode & 0o077).
-  // Do not chmod-and-accept — a same-group plant under 0o750/0o770 survives chmod.
-  if ((st.mode & 0o077) !== 0) return false;
+  if ((st.mode & 0o077) !== 0) {
+    // With a private parent (mode & 0o077 === 0, owned by the current uid), no
+    // other user could ever have traversed into the parent to plant or tamper
+    // with the candidate, regardless of what permission bits the candidate
+    // itself carries. The candidate's own mode therefore carries no information
+    // once the parent is known to be private, so chmod 0700 and accept for any
+    // group/other leftover (0775, 0777, 0750, 0705, 0755, …).
+    try {
+      const parent = path.dirname(path.resolve(dir));
+      const pst = fs.lstatSync(parent);
+      let parentUidOk = true;
+      try {
+        if (typeof process.getuid === 'function' && pst.uid !== process.getuid()) parentUidOk = false;
+      } catch { /* platform without getuid */ }
+      if (parentUidOk && !pst.isSymbolicLink() && pst.isDirectory() && (pst.mode & 0o077) === 0) {
+        fs.chmodSync(dir, 0o700);
+        st = fs.lstatSync(dir);
+        if (!st.isSymbolicLink() && st.isDirectory() && (st.mode & 0o077) === 0) return true;
+      }
+    } catch {
+      return false;
+    }
+    // When the parent is NOT private, a same-uid-or-foreign-group plant is still
+    // possible and chmod-and-accept must not happen.
+    return false;
+  }
   return true;
 }
 
 /**
  * Resolve the live-state base directory. Returns {base, source} where source is one of
- * 'override' | 'xdg' | 'shm' | 'tmp' | 'ssd-fallback'.
+ * 'override' | 'xdg' | 'xdg-inferred' | 'shm' | 'tmp' | 'ssd-fallback'.
  *
  * @param {object} [opts]
  * @param {NodeJS.ProcessEnv} [opts.env] — defaults to process.env
  * @param {Function} [opts.execFile] — (file, args, options) => stdout string; defaults to
  *   child_process.execFileSync (injectable for tests). Argv-based, never shell-interpolated.
  * @param {string} [opts.procMountsPath] — defaults to /proc/mounts (injectable for tests)
+ * @param {string} [opts.runUserRoot] — defaults to /run/user (injectable for tests)
  * @param {Function} [opts.warn] — defaults to a single process.stderr.write call
  */
 function resolveLiveDir(opts = {}) {
   const env = opts.env || process.env;
   const execFile = opts.execFile || nodeExecFileSync;
   const procMountsPath = opts.procMountsPath;
+  const runUserRoot = opts.runUserRoot || '/run/user';
   const warn = typeof opts.warn === 'function'
     ? opts.warn
     : (msg) => { try { process.stderr.write(`${msg}\n`); } catch { /* ignore */ } };
@@ -177,7 +209,16 @@ function resolveLiveDir(opts = {}) {
 
   const candidates = [];
   if (env.AUTOPILOT_LIVE_DIR) candidates.push({ dir: env.AUTOPILOT_LIVE_DIR, source: 'override' });
-  if (env.XDG_RUNTIME_DIR) candidates.push({ dir: path.join(env.XDG_RUNTIME_DIR, 'autopilot'), source: 'xdg' });
+  if (env.XDG_RUNTIME_DIR) {
+    candidates.push({ dir: path.join(env.XDG_RUNTIME_DIR, 'autopilot'), source: 'xdg' });
+  } else {
+    const inferredParent = path.join(runUserRoot, String(uid()));
+    try {
+      if (fs.lstatSync(inferredParent).isDirectory()) {
+        candidates.push({ dir: path.join(inferredParent, 'autopilot'), source: 'xdg-inferred' });
+      }
+    } catch { /* parent missing — skip; never mkdir <runUserRoot>/<uid> */ }
+  }
   candidates.push({ dir: `/dev/shm/autopilot-${uid()}`, source: 'shm' });
   candidates.push({ dir: `/tmp/autopilot-${uid()}`, source: 'tmp' });
 

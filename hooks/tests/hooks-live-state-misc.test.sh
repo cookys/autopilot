@@ -156,7 +156,9 @@ assert_r79_cc_shim_framing_chro
 
 # assert_r132_live_state_base_on_w
 # Row 132: resolveLiveDir() must not accept a pre-existing ram-backed base that
-# is a symlink or has mode & 0o077. Absent dirs are mkdirSync(mode 0o700).
+# is a symlink. Any group/other bits under a private parent are chmod'd to 0700
+# and accepted (including 0777). Non-private-parent leftovers stay rejected.
+# Absent dirs are mkdirSync(mode 0o700).
 #
 # # RED before fix: world-writable and symlink AUTOPILOT_LIVE_DIR overrides were
 # accepted as source=override (recorded 2026-09-21 on this worktree).
@@ -193,10 +195,11 @@ EOF
 
   local OUT
   OUT="$(run_probe "$WORLD")"
-  if printf '%s' "$OUT" | grep -q '"source":"override"'; then
-    bad "0o777 candidate must be rejected, got $OUT"
+  MODE="$(stat -c '%a' "$WORLD" 2>/dev/null || echo missing)"
+  if printf '%s' "$OUT" | grep -q '"source":"override"' && printf '%s' "$OUT" | grep -qF "$WORLD" && [ "$MODE" = "700" ]; then
+    ok "0o777 under private parent tightened to 0700 and accepted (got $OUT)"
   else
-    ok "0o777 candidate rejected (got $OUT)"
+    bad "0o777 candidate expected chmod-accept override mode 700, mode=$MODE out=$OUT"
   fi
 
   OUT="$(run_probe "$LINK")"
@@ -207,10 +210,11 @@ EOF
   fi
 
   OUT="$(run_probe "$GROUP")"
-  if printf '%s' "$OUT" | grep -q '"source":"override"'; then
-    bad "0o750 candidate must be rejected (not chmod-accepted), got $OUT"
+  MODE="$(stat -c '%a' "$GROUP" 2>/dev/null || echo missing)"
+  if printf '%s' "$OUT" | grep -q '"source":"override"' && printf '%s' "$OUT" | grep -qF "$GROUP" && [ "$MODE" = "700" ]; then
+    ok "0o750 candidate tightened to 0700 and accepted (private parent) (got $OUT)"
   else
-    ok "0o750 candidate rejected (got $OUT)"
+    bad "0o750 candidate expected chmod-accept override mode 700, mode=$MODE out=$OUT"
   fi
 
   OUT="$(run_probe "$GOOD")"

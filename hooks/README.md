@@ -296,7 +296,8 @@ program writes each tick:
 | `<base>/context/<sid>.tasks.json` — one row per running subagent: `id` (= hook `agent_id`), `model`, `contextWindowSize`, `tokenCount`, … | `subagentStatusLine` command | `foreman-guard` (foreman's own context ceiling) |
 
 `<base>` is resolved by [`scripts/lib/live-state-dir.js`](../scripts/lib/live-state-dir.js): `$AUTOPILOT_LIVE_DIR` →
-`$XDG_RUNTIME_DIR/autopilot` → `/dev/shm/autopilot-<uid>` → `/tmp/autopilot-<uid>`, every candidate probed with
+`$XDG_RUNTIME_DIR/autopilot` (xdg) → `/run/user/<uid>/autopilot` (xdg-inferred, only when `XDG_RUNTIME_DIR` is
+unset/empty and `/run/user/<uid>` already exists) → `/dev/shm/autopilot-<uid>` → `/tmp/autopilot-<uid>`, every candidate probed with
 `findmnt` (or `/proc/mounts`) and accepted only when it is `tmpfs`/`ramfs`; if none is RAM-backed the base falls back to
 `~/.autopilot` with one warning. Readers accept `schema_version` 1 only, treat a file older than 120 s as absent, and (v2.36.2) treat a
 window size that is not > 0 as no window signal.

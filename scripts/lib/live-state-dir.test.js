@@ -70,8 +70,9 @@ test('resolveLiveDir: tmpfs candidate is chosen (shm)', () => {
   makeFakeFindmnt(bindir, { '*': 'tmpfs' });
   const warnings = [];
   const r = resolveLiveDir({
-    env: {}, // no override, no XDG_RUNTIME_DIR ⇒ falls to /dev/shm/autopilot-<uid>
+    env: {}, // no override, no XDG_RUNTIME_DIR; runUserRoot has no <uid> so xdg-inferred is skipped
     execFile: execFileWithPath(bindir),
+    runUserRoot: mkTmp('run-user-absent-'),
     warn: (m) => warnings.push(m),
   });
   assert.strictEqual(r.source, 'shm');
@@ -86,6 +87,7 @@ test('resolveLiveDir: ext4 everywhere ⇒ ~/.autopilot fallback + exactly one wa
   const r = resolveLiveDir({
     env: {},
     execFile: execFileWithPath(bindir),
+    runUserRoot: mkTmp('run-user-ext4-'),
     warn: (m) => warnings.push(m),
   });
   assert.strictEqual(r.source, 'ssd-fallback');
@@ -106,6 +108,7 @@ test('resolveLiveDir: findmnt absent ⇒ falls back to /proc/mounts fixture (lon
     env: {},
     execFile: execFileNoFindmnt(),
     procMountsPath: procMounts,
+    runUserRoot: mkTmp('run-user-proc-'),
     warn: () => {},
   });
   assert.strictEqual(r.source, 'shm');
@@ -123,6 +126,7 @@ test('resolveLiveDir: findmnt absent + /proc/mounts fixture with no RAM mounts �
     env: {},
     execFile: execFileNoFindmnt(),
     procMountsPath: procMounts,
+    runUserRoot: mkTmp('run-user-noram-'),
     warn: (m) => warnings.push(m),
   });
   assert.strictEqual(r.source, 'ssd-fallback');
@@ -174,6 +178,7 @@ test('resolveLiveDir: findmnt PRESENT but rejecting every candidate ⇒ ssd-fall
     env: {},
     execFile: execFileWithPath(bindir),
     procMountsPath: procMounts,
+    runUserRoot: mkTmp('run-user-reject-'),
     warn: (m) => warnings.push(m),
   });
   assert.strictEqual(r.source, 'ssd-fallback', 'findmnt ran and rejected ⇒ /proc/mounts must not be consulted');
@@ -323,6 +328,83 @@ test('readLive: tasks kind reads the .tasks.json file, independent freshness', (
 });
 
 // ---- modelFamily ----
+
+test('resolveLiveDir: XDG unset + existing <runUserRoot>/<uid> ⇒ xdg-inferred before shm', () => {
+  const bindir = mkTmp('findmnt-inferred-');
+  makeFakeFindmnt(bindir, { '*': 'tmpfs' });
+  const runUserRoot = mkTmp('run-user-inferred-');
+  const parent = path.join(runUserRoot, String(process.getuid()));
+  fs.mkdirSync(parent, { mode: 0o700 });
+  fs.chmodSync(parent, 0o700);
+  const r = resolveLiveDir({
+    env: {},
+    execFile: execFileWithPath(bindir),
+    runUserRoot,
+    warn: () => {},
+  });
+  assert.strictEqual(r.source, 'xdg-inferred');
+  assert.strictEqual(r.base, path.join(parent, 'autopilot'));
+});
+
+test('resolveLiveDir: group bits on private parent are tightened to 0700', () => {
+  const bindir = mkTmp('findmnt-group-');
+  makeFakeFindmnt(bindir, { '*': 'tmpfs' });
+  const runUserRoot = mkTmp('run-user-group-');
+  const parent = path.join(runUserRoot, String(process.getuid()));
+  const cand = path.join(parent, 'autopilot');
+  fs.mkdirSync(parent, { mode: 0o700 });
+  fs.chmodSync(parent, 0o700);
+  fs.mkdirSync(cand, { mode: 0o770 });
+  fs.chmodSync(cand, 0o770);
+  const r = resolveLiveDir({
+    env: {},
+    execFile: execFileWithPath(bindir),
+    runUserRoot,
+    warn: () => {},
+  });
+  assert.strictEqual(r.source, 'xdg-inferred');
+  assert.strictEqual(fs.statSync(cand).mode & 0o777, 0o700);
+});
+
+test('resolveLiveDir: production 0775 under private parent accepted and chmod 0700', () => {
+  const bindir = mkTmp('findmnt-prod775-');
+  makeFakeFindmnt(bindir, { '*': 'tmpfs' });
+  const runUserRoot = mkTmp('run-user-prod775-');
+  const parent = path.join(runUserRoot, String(process.getuid()));
+  const cand = path.join(parent, 'autopilot');
+  fs.mkdirSync(parent, { mode: 0o700 });
+  fs.chmodSync(parent, 0o700);
+  fs.mkdirSync(cand, { mode: 0o775 });
+  fs.chmodSync(cand, 0o775);
+  const r = resolveLiveDir({
+    env: {},
+    execFile: execFileWithPath(bindir),
+    runUserRoot,
+    warn: () => {},
+  });
+  assert.strictEqual(r.source, 'xdg-inferred');
+  assert.strictEqual(fs.statSync(cand).mode & 0o777, 0o700);
+});
+
+test('resolveLiveDir: 0777 under private parent accepted and chmod 0700', () => {
+  const bindir = mkTmp('findmnt-other-');
+  makeFakeFindmnt(bindir, { '*': 'tmpfs' });
+  const runUserRoot = mkTmp('run-user-other-');
+  const parent = path.join(runUserRoot, String(process.getuid()));
+  const cand = path.join(parent, 'autopilot');
+  fs.mkdirSync(parent, { mode: 0o700 });
+  fs.chmodSync(parent, 0o700);
+  fs.mkdirSync(cand, { mode: 0o777 });
+  fs.chmodSync(cand, 0o777);
+  const r = resolveLiveDir({
+    env: {},
+    execFile: execFileWithPath(bindir),
+    runUserRoot,
+    warn: () => {},
+  });
+  assert.strictEqual(r.source, 'xdg-inferred');
+  assert.strictEqual(fs.statSync(cand).mode & 0o777, 0o700);
+});
 
 test('modelFamily: positive vectors', () => {
   assert.strictEqual(modelFamily('claude-fable-5-1'), 'fable');

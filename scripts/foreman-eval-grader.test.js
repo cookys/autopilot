@@ -2,7 +2,7 @@
 'use strict';
 
 // One fixture per §6 check, plus campaigns the spec calls correct.
-// The b1 script-gap assertion lives in foreman-eval-grader-b1-gap.test.js
+// The b1 script-gap assertion lives in hooks/tests/foreman-eval-b1-gap.probe.js
 // and is expected to fail. This file must stay green.
 
 const assert = require('assert');

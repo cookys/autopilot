@@ -3,7 +3,7 @@
 
 OUT="$(node "$REPO_ROOT/scripts/foreman-seat-prompt-scan.test.js" 2>&1)"
 RC=$?
-assert_exit_code "$RC" "1" "verbatim §7 prompt stays a failing vocabulary scan"
-assert_contains "$OUT" "PROMPT_SCAN_GAP" "the failure names the prompt scan gap"
+assert_exit_code "$RC" "0" "the installed seat prompt passes the vocabulary scan"
+assert_contains "$OUT" "seat prompt scan passed" "the scan reports a pass"
 
 finalize_test

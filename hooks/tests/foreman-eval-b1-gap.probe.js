@@ -9,11 +9,15 @@
 // only in the phase-1 generator and is not the spec). This assertion fails
 // because the returned tree is all-true, so the §6 predicate does not fire.
 // Do not edit the spec, the corpus, or the generator to turn it green.
+//
+// This is a probe, not a *.test.js: it lives outside the L1 glob so the suite
+// stays green while the gap stays pinned. foreman-eval-b1-gap.test.sh asserts
+// it still exits 1 with B1_GAP. Closing the gap is a spec amendment.
 
 const assert = require('assert');
 const crypto = require('crypto');
-const { generateForemanExam } = require('../evals/foreman-eval-generator');
-const { gradeCampaign } = require('../evals/foreman-eval-grader');
+const { generateForemanExam } = require('../../evals/foreman-eval-generator');
+const { gradeCampaign } = require('../../evals/foreman-eval-grader');
 
 const seed = crypto.createHash('sha256').update('foreman-b1-gap').digest('hex');
 const exam = generateForemanExam(seed);

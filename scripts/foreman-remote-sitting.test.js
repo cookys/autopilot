@@ -195,8 +195,10 @@ async function main() {
   check(verdict.disposition !== 'aborted_transport', `not aborted_transport (${verdict.disposition} ${verdict.aborted_at_campaign_index})`);
   check(verdict.graded === true, 'the stub campaign is graded');
   check(verdict.pass !== null && verdict.fail !== null, 'pass and fail are not null');
-  const campaign = verdict.evidence.trials[0].campaigns[0];
-  check(campaign && campaign.checks && campaign.solvable === true, `campaign 0 is a graded solvable record (${campaign && campaign.family})`);
+  // run_nonce shuffles the campaign order, so index 0 can be a family D
+  // (unsatisfiable) campaign. Take the first solvable one.
+  const campaign = verdict.evidence.trials[0].campaigns.find((entry) => entry && entry.solvable === true);
+  check(campaign && campaign.checks, `a graded solvable record exists (${campaign && campaign.family})`);
   check(campaign.verdict_raw === 'done', `solvable campaign returned done (${campaign.verdict_raw})`);
   console.log(`${assertions} assertions passed`);
 }

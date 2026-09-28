@@ -132,6 +132,11 @@
 #     "branch": "...", "base": "...", "commit": "...|null",
 #     "files_changed": N, "insertions": N, "deletions": N,
 #     "worktree": "...|null", "agent_log": "..." , "error": "...|null",
+#     "timed_out": true|false, "timeout_enforced": true|false,
+#     "timeout_source": "default"|"caller"|"contract_wall"|"caller_within_wall"
+#       (when present; caller = no-contract --timeout, caller_within_wall = within
+#        a Mission contract wall, contract_wall = contract-supplied, default =
+#        unenforced built-in),
 #     "skill_mode_effective": "...", "skills_injected": [...],
 #     "orphan_worktree": "...|null" }          # non-null iff remove failed and dir remains
 # --gc OUTPUT: { "reaped":[…], "skipped_live":n, "skipped_fresh":n,
@@ -175,6 +180,7 @@ BASE_SUPPLIED=0
 RUNNER_SUPPLIED=0
 TIMEOUT_SUPPLIED=0
 TIMEOUT_SOURCE=""
+WORKER_TIMED_OUT=0
 AGY_BIN="agy"
 GROK_BIN="grok"
 CODEX_BIN="codex"    # test seam / explicit pin — resolve a specific codex (PATH ambiguity: a
@@ -908,9 +914,13 @@ emit() { # status commit files ins del worktree error
   fi
   local timeout_fields=""
   local emit_timeout_secs=""
+  local timed_out_json="false" timeout_enforced_json="false"
+  [ "${WORKER_TIMED_OUT:-0}" -eq 1 ] && timed_out_json="true"
+  [ -n "${TIMEOUT_SOURCE:-}" ] && timeout_enforced_json="true"
   emit_timeout_secs="$(normalize_timeout_seconds "${TIMEOUT:-}" 2>/dev/null || true)"
+  timeout_fields=", \"timed_out\": $timed_out_json, \"timeout_enforced\": $timeout_enforced_json"
   if [ -n "${TIMEOUT_SOURCE:-}" ] && [ -n "$emit_timeout_secs" ]; then
-    timeout_fields=", \"timeout_seconds\": $emit_timeout_secs, \"timeout_source\": \"$(_flat_json_escape "$TIMEOUT_SOURCE")\""
+    timeout_fields="$timeout_fields, \"timeout_seconds\": $emit_timeout_secs, \"timeout_source\": \"$(_flat_json_escape "$TIMEOUT_SOURCE")\""
   fi
   local dispatcher_called_json="true" zero_diff_receipt_json="null"
   [ "${OUTCOME_DISPATCHER_CALLED:-1}" -eq 0 ] && dispatcher_called_json="false"
@@ -1734,13 +1744,21 @@ write_manifest() {
   if [ "${STRIKE_WRITER_SUPPRESSED:-}" = "1" ]; then
     strike_suppressed_fields=", \"strike_writer_suppressed\": true, \"strike_writer_suppressed_seat\": \"$(_flat_json_escape "$STRIKE_WRITER_SUPPRESSED_SEAT")\""
   fi
+  local mf_timeout_secs="" mf_timeout_source="default" mf_timeout_enforced="false"
+  mf_timeout_secs="$(normalize_timeout_seconds "${TIMEOUT:-}" 2>/dev/null || true)"
+  [ -n "$mf_timeout_secs" ] || mf_timeout_secs="null"
+  if [ -n "${TIMEOUT_SOURCE:-}" ]; then
+    mf_timeout_source="$TIMEOUT_SOURCE"
+    mf_timeout_enforced="true"
+  fi
   {
-    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "scaffold_tier": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s%s%s }\n' \
+    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "scaffold_tier": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, "timeout_seconds": %s, "timeout_source": "%s", "timeout_enforced": %s%s%s }\n' \
       "$(_flat_json_escape "$DISPATCH_RUN_ID")" "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
       "${BASE_SHA:-}" "$(_flat_json_escape "${WT:-}")" "$(_flat_json_escape "${WT:-}/.autopilot-worktree.lock")" "$(_flat_json_escape "${LOG:-}")" \
       "$log_format" "$duplex_json" "$pid_json" "$scope_json" "${MANIFEST_CONTAINMENT:-plain}" \
       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${DISPATCH_STARTED_EPOCH:-null}" "$(_flat_json_escape "${PROMPT_FILE:-}")" "${SCAFFOLD_TIER_EFFECTIVE:-off}" \
-      "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$parent_json" "$root_json" "$depth_json" "$strict_manifest_fields" "$strike_suppressed_fields" > "$tmp"
+      "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$parent_json" "$root_json" "$depth_json" \
+      "$mf_timeout_secs" "$(_flat_json_escape "$mf_timeout_source")" "$mf_timeout_enforced" "$strict_manifest_fields" "$strike_suppressed_fields" > "$tmp"
   } 2>/dev/null && mv -f "$tmp" "$MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
   return 0
 }
@@ -2057,6 +2075,9 @@ if [ -n "$CAMPAIGN_CONTRACT_FILE" ]; then
 fi
 if [ "$STRICT_CONTRACT" -eq 1 ]; then
   run_strict_contract_preflight
+fi
+if [ "$TIMEOUT_SUPPLIED" -eq 1 ] && [ -z "${TIMEOUT_SOURCE:-}" ]; then
+  TIMEOUT_SOURCE="caller"
 fi
 if [ -n "$CAMPAIGN_CONTRACT_FILE" ]; then
   run_campaign_projection_preflight
@@ -3242,33 +3263,213 @@ cleanup_managed_codex_home() {
   MANAGED_CODEX_HOME=""
 }
 
+WATCHDOG_PID=""
+WATCHDOG_TOKEN_FILE=""
+
+_self_pgid() {
+  ps -o pgid= -p $$ 2>/dev/null | tr -d ' '
+}
+
+_cancel_worker_watchdog() {
+  local tok="${WATCHDOG_TOKEN_FILE:-}"
+  local tag="" sp=""
+  [ -n "$tok" ] && tag="${tok##*/}"
+  if [ -n "$tok" ]; then
+    rm -f "$tok" "${tok}.fired" 2>/dev/null || true
+    if [ -f "${tok}.sleeppid" ]; then
+      sp="$(cat "${tok}.sleeppid" 2>/dev/null || true)"
+      if [ -n "$sp" ]; then
+        kill "$sp" 2>/dev/null || true
+        wait "$sp" 2>/dev/null || true
+      fi
+    fi
+  fi
+  if [ -n "${WATCHDOG_PID:-}" ]; then
+    kill "$WATCHDOG_PID" 2>/dev/null || true
+    wait "$WATCHDOG_PID" 2>/dev/null || true
+    WATCHDOG_PID=""
+  fi
+  if [ -n "$tok" ] && [ -f "${tok}.sleeppid" ]; then
+    sp="$(cat "${tok}.sleeppid" 2>/dev/null || true)"
+    if [ -n "$sp" ]; then
+      kill "$sp" 2>/dev/null || true
+    fi
+    rm -f "${tok}.sleeppid" 2>/dev/null || true
+  fi
+  if [ -n "$tag" ]; then
+    pkill -f "hetero-wall-watchdog-${tag}" 2>/dev/null || true
+  fi
+  WATCHDOG_TOKEN_FILE=""
+}
+
+# After backgrounding `setsid --wait`, either:
+# - no-fork: `$rp` already is the session/group leader (sid==pid), or
+# - fork: a child of `$rp` is itself a session leader.
+# Do not treat an arbitrary child/grandchild as the worker.
+_setsid_wait_worker_sid() {
+  local rp="$1"
+  local child="" attempt="" f sid="" c
+  for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    sid="$(ps -o sid= -p "$rp" 2>/dev/null | tr -d '[:space:]')"
+    if [ -n "$sid" ] && [ "$sid" = "$rp" ]; then
+      printf '%s\n' "$rp"
+      return 0
+    fi
+    child=""
+    while read -r c; do
+      [ -n "$c" ] || continue
+      sid="$(ps -o sid= -p "$c" 2>/dev/null | tr -d '[:space:]')"
+      if [ -n "$sid" ] && [ "$sid" = "$c" ]; then
+        child="$c"
+        break
+      fi
+    done < <(ps -o pid= --ppid "$rp" 2>/dev/null | tr -d ' ')
+    if [ -z "$child" ]; then
+      for f in /proc/"$rp"/task/*/children; do
+        [ -r "$f" ] || continue
+        while read -r c; do
+          [ -n "$c" ] || continue
+          sid="$(ps -o sid= -p "$c" 2>/dev/null | tr -d '[:space:]')"
+          if [ -n "$sid" ] && [ "$sid" = "$c" ]; then
+            child="$c"
+            break
+          fi
+        done < <(tr -s '[:space:]' '\n' < "$f")
+        [ -n "$child" ] && break
+      done
+    fi
+    if [ -n "$child" ]; then
+      printf '%s\n' "$child"
+      return 0
+    fi
+    kill -0 "$rp" 2>/dev/null || break
+    sleep 0.05
+  done
+  printf '%s\n' "$rp"
+}
+
+_watchdog_signal_worker() {
+  local sig="$1"
+  if [ -n "${SCOPE_UNIT:-}" ]; then
+    systemctl --user kill "$SCOPE_UNIT" --signal="$sig" >/dev/null 2>&1 || true
+    return 0
+  fi
+  local target="${WORKER_SID:-}"
+  [ -n "$target" ] || return 0
+  local selfpg
+  selfpg="$(_self_pgid)"
+  [ "$target" = "$$" ] && return 0
+  [ -n "$selfpg" ] && [ "$target" = "$selfpg" ] && return 0
+  # Group-kill only. A failed group-kill (kill -SIG -$target) means that
+  # process group is already gone. r5 guarantees WORKER_SID is always a
+  # session/process-group leader, so a bare-pid fallback here could only ever
+  # hit a dead or recycled pid — never the live worker.
+  kill "-$sig" "-$target" 2>/dev/null || true
+}
+
+_arm_worker_watchdog() {
+  local secs="$1"
+  WATCHDOG_TOKEN_FILE="$(mktemp -t hetero-wdog-tok-XXXXXX)"
+  : > "$WATCHDOG_TOKEN_FILE"
+  local tok="$WATCHDOG_TOKEN_FILE"
+  local tag="${tok##*/}"
+  (
+    sp=""
+    trap 'kill "${sp:-}" 2>/dev/null; exit 0' TERM
+    if command -v setsid >/dev/null 2>&1; then
+      setsid bash -c 'exec -a "hetero-wall-watchdog-'"$tag"'" sleep "$1"' bash "$secs" &
+    else
+      sleep "$secs" &
+    fi
+    sp=$!
+    echo "$sp" > "${tok}.sleeppid"
+    wait "$sp" 2>/dev/null || true
+    [ -f "$tok" ] || exit 0
+    : > "${tok}.fired"
+    _watchdog_signal_worker TERM
+    local i=0
+    while [ "$i" -lt 10 ]; do
+      [ -f "$tok" ] || exit 0
+      sleep 1
+      i=$((i + 1))
+    done
+    [ -f "$tok" ] || exit 0
+    _watchdog_signal_worker KILL
+  ) >/dev/null 2>&1 &
+  WATCHDOG_PID=$!
+}
+
+_wait_worker_with_watchdog() {
+  local rp="$1"
+  local secs=""
+  if [ -n "${TIMEOUT_SOURCE:-}" ]; then
+    secs="$(normalize_timeout_seconds "${TIMEOUT:-}" 2>/dev/null || true)"
+    [ -n "$secs" ] && _arm_worker_watchdog "$secs"
+  fi
+  wait "$rp"
+  AGENT_EXIT=$?
+  if [ -n "${WATCHDOG_TOKEN_FILE:-}" ] && [ -f "${WATCHDOG_TOKEN_FILE}.fired" ]; then
+    WORKER_TIMED_OUT=1
+    rm -f "${WATCHDOG_TOKEN_FILE}" 2>/dev/null || true
+    wait "${WATCHDOG_PID}" 2>/dev/null || true
+    WATCHDOG_PID=""
+    rm -f "${WATCHDOG_TOKEN_FILE}" "${WATCHDOG_TOKEN_FILE}.fired" "${WATCHDOG_TOKEN_FILE}.sleeppid" 2>/dev/null || true
+    WATCHDOG_TOKEN_FILE=""
+  else
+    _cancel_worker_watchdog
+  fi
+}
+
 run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + CONTAINMENT
+  WORKER_TIMED_OUT=0
+  WATCHDOG_PID=""
+  WATCHDOG_TOKEN_FILE=""
+  local rp=""
   if [ "${IN_DETACHED_CHILD:-0}" -eq 1 ]; then
-    # In the detached child we already ARE the surviving `setsid` session (created at launch),
-    # so run the worker plainly IN-session — its descendants share our session and die/finish
-    # with us; there is no nested container to reap on this path.
+    # Detached child is already a setsid session; still put the worker in its own
+    # group so the watchdog never signals the dispatcher session.
     CONTAINMENT="setsid"
-    env "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1
-    AGENT_EXIT=$?
+    if command -v setsid >/dev/null 2>&1; then
+      setsid env "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 &
+      rp=$!
+      WORKER_SID="$rp"
+    else
+      set -m 2>/dev/null || true
+      env "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 &
+      rp=$!
+      WORKER_SID="$(ps -o pgid= -p "$rp" 2>/dev/null | tr -d ' ')"
+      [ -z "$WORKER_SID" ] && WORKER_SID="$rp"
+    fi
+    _wait_worker_with_watchdog "$rp"
     return 0
   fi
   if [ "$HAVE_CGROUP" -eq 1 ]; then
     SCOPE_UNIT="hetero-${BRANCH//\//-}-$$.scope"
     CONTAINMENT="cgroup"
     systemd-run --user --scope --quiet --unit="$SCOPE_UNIT" -- env "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 &
-    local rp=$!; wait "$rp"; AGENT_EXIT=$?
+    rp=$!
+    _wait_worker_with_watchdog "$rp"
   elif [ "$HAVE_SETSID" -eq 1 ]; then
     CONTAINMENT="setsid"
     setsid --wait env "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 &
-    local rp=$!
-    # the setsid'd worker is its own session leader; capture its sid (= the child pgid)
-    WORKER_SID="$(ps -o pid= --ppid "$rp" 2>/dev/null | tr -d ' ' | head -1)"
+    rp=$!
+    WORKER_SID="$(_setsid_wait_worker_sid "$rp")"
     [ -z "$WORKER_SID" ] && WORKER_SID="$rp"
-    wait "$rp"; AGENT_EXIT=$?
+    _wait_worker_with_watchdog "$rp"
   else
     CONTAINMENT="plain"
-    env "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1
-    AGENT_EXIT=$?
+    if command -v setsid >/dev/null 2>&1; then
+      setsid env "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 &
+      rp=$!
+      WORKER_SID="$rp"
+    else
+      set -m 2>/dev/null || true
+      env "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 &
+      rp=$!
+      WORKER_SID="$(ps -o pgid= -p "$rp" 2>/dev/null | tr -d ' ')"
+      [ -z "$WORKER_SID" ] && WORKER_SID="$rp"
+    fi
+    _wait_worker_with_watchdog "$rp"
   fi
   reap_container   # reap on the NORMAL exit path too (catch escaped survivors), set CONTAINED
 }
@@ -4359,6 +4560,13 @@ classify_outcome() {
       fi
     fi
   fi
+  if [ "${WORKER_TIMED_OUT:-0}" -eq 1 ]; then
+    local __wt_secs
+    __wt_secs="$(normalize_timeout_seconds "${TIMEOUT:-}" 2>/dev/null || true)"
+    OUTCOME_STATUS="failure"
+    OUTCOME_EXIT=1
+    OUTCOME_ERR="wall timeout (${__wt_secs}s) exceeded — worker terminated"
+  fi
   # Observability: stamp the manifest so post-mortem status reads phase:"exited" with the
   # final status even after processes/locks are gone (both inline and detached paths).
   manifest_finalize "$OUTCOME_STATUS"
@@ -4479,7 +4687,8 @@ dispatch_detached_run() {
       ORPHAN_LOG OUTCOME_ORPHAN WT_LOCK_FD LINEAGE_PARENT LINEAGE_ROOT WORKTREE_ROOT_RUN_ID LINEAGE_DEPTH \
       STRICT_SCOPE_ALLOW_PATHS STRICT_SCOPE_DENY_PATHS STRICT_SCOPE_GENERATED_MIRROR_ALLOW_PATHS STRICT_SCOPE_MAX_FILES STRICT_SCOPE_MAX_DIFF_LINES STRICT_OUTPUT_PATHS STRICT_REQUIRED_CHANGE_PATHS STRICT_POSTCHECK_OK STRICT_POSTCHECK_STATUS STRICT_POSTCHECK_ERROR \
       DISPATCH_RUN_ID DISPATCH_STARTED_EPOCH MANIFEST_DIR_PATH MANIFEST_FILE MANIFEST_CONTAINMENT \
-      MANIFEST_SCOPE_UNIT MANIFEST_PID_RECORDED MANIFEST_ENDED_AT MANIFEST_ENDED_EPOCH MANIFEST_FINAL_STATUS 2>/dev/null
+      MANIFEST_SCOPE_UNIT MANIFEST_PID_RECORDED MANIFEST_ENDED_AT MANIFEST_ENDED_EPOCH MANIFEST_FINAL_STATUS \
+      TIMEOUT_SOURCE TIMEOUT_SUPPLIED WORKER_TIMED_OUT 2>/dev/null
     # Hands boundary gates (item (E)): the pre-hands main-checkout fingerprint MUST cross the
     # detach boundary as the parent measured it, and the push-blocking env with it.
     declare -p MAIN_CHECKOUT MAIN_CHECKOUT_BEFORE HANDS_GIT_ENV HANDS_BOUNDARY_ERROR HANDS_BOUNDARY_CODE 2>/dev/null || true
@@ -4495,7 +4704,7 @@ dispatch_detached_run() {
     # Preserve pi supervisor poll/stall bounds across setsid detach.
     declare -p PI_RPC_DIRECTIVE_POLL_SECS PI_RPC_STALL_PROBE_SECS PI_RPC_MAX_SECS PI_RPC_PROVIDER PI_MODELS_JSON 2>/dev/null || true
     declare -p STRIKE_DETECTOR_VERSION 2>/dev/null || true
-    declare -f json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home run_worker run_agent compute_artifacts passive_capture \
+    declare -f json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_signal_worker _arm_worker_watchdog _wait_worker_with_watchdog normalize_timeout_seconds run_worker run_agent compute_artifacts passive_capture \
       _is_engine_unavailable _hetero_runner_token seat_strike_capture classify_outcome heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks _fp_unverifiable main_checkout_fingerprint check_main_checkout_boundary run_hands_content_gate \
       _cont_terminal_on_exit _cont_finalize_or_die \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \

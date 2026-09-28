@@ -2,6 +2,7 @@
 'use strict';
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const process = require('process');
 const { expandTilde, ensureDir, sleepMs, acquireLock, releaseLock, withWriteLock, appendRow, writeSnapshot, toEventId, maxEventId } = require('./lib/jsonl-store');
@@ -311,6 +312,7 @@ function validateEvent(event) {
 function resolveStoreConfig(options) {
   let storeFile = process.env.ENGINE_CAPABILITY_FILE;
   let storeDir = process.env.ENGINE_CAPABILITY_DIR;
+  const usedDefaultFallback = !options.store && !storeDir && !storeFile;
 
   if (options.store) {
     const resolvedPath = path.resolve(expandTilde(options.store));
@@ -358,7 +360,48 @@ function resolveStoreConfig(options) {
   // Operator pin store (plan 2026-09-11-operator-pin-supersedes-qualification KR6):
   // snapshot of active rows only, same directory, same lock as capability/strikes.
   const pinsFile = path.join(storeDir, 'pins.jsonl');
-  return { storeDir, storeFile, evidenceFile, strikesFile, pinsFile, lockFile };
+  return { storeDir, storeFile, evidenceFile, strikesFile, pinsFile, lockFile, usedDefaultFallback };
+}
+
+function pathEqualsOrIsUnder(candidate, root) {
+  const resolvedCandidate = path.resolve(candidate);
+  const resolvedRoot = path.resolve(root);
+  if (resolvedCandidate === resolvedRoot) return true;
+  const prefix = resolvedRoot.endsWith(path.sep) ? resolvedRoot : resolvedRoot + path.sep;
+  return resolvedCandidate.startsWith(prefix);
+}
+
+function enforceTestRunGuard(config, operation) {
+  if (process.env.AUTOPILOT_TEST_RUN_GUARD !== '1') return;
+  if (!config.usedDefaultFallback) return;
+
+  // AUTOPILOT_TEST_REAL_HOME_OVERRIDE exists only so the capability-store-test-guard
+  // suite can simulate "the real home" without writing there. This file must not
+  // read it for any purpose other than this guard comparison.
+  const realHome = process.env.AUTOPILOT_TEST_REAL_HOME_OVERRIDE || os.userInfo().homedir;
+  const protectedDir = path.resolve(path.join(realHome, '.autopilot', 'engine-capability'));
+  const storeDir = path.resolve(config.storeDir);
+  const storeFileDir = path.resolve(path.dirname(config.storeFile));
+  if (!pathEqualsOrIsUnder(storeDir, protectedDir) && !pathEqualsOrIsUnder(storeFileDir, protectedDir)) {
+    return;
+  }
+
+  let parentCmd = '';
+  try {
+    parentCmd = fs.readFileSync(`/proc/${process.ppid}/cmdline`, 'utf8')
+      .split('\0')
+      .filter(Boolean)
+      .join(' ');
+  } catch {
+    parentCmd = '';
+  }
+
+  const parts = [storeDir, String(operation), process.cwd()];
+  if (parentCmd) parts.push(parentCmd);
+  parts.push('set ENGINE_CAPABILITY_DIR (hooks/tests/lib.sh does this)');
+  process.stderr.write(`${parts.join(' ')}\n`);
+  // Exit 1: guard refusal (distinct from failValidation's usage of other codes).
+  process.exit(1);
 }
 
 function readStoreRows(storeFile, silentWarn = false) {
@@ -2040,7 +2083,9 @@ function main() {
 
     validateEvent(event);
 
-    const { storeDir, storeFile, lockFile } = resolveStoreConfig(options);
+    const config = resolveStoreConfig(options);
+    enforceTestRunGuard(config, 'record');
+    const { storeDir, storeFile, lockFile } = config;
 
     const storedRow = { ...event };
     delete storedRow.event_id;
@@ -2080,6 +2125,7 @@ function main() {
       );
     }
     const config = resolveStoreConfig(options);
+    enforceTestRunGuard(config, 'record-evidence');
     let written;
     try {
       written = appendEvidenceRecord(config, evidence, 'operator-record-v1');
@@ -2096,6 +2142,7 @@ function main() {
     }
     const identity = readJsonObject(options['identity-file'], 'identity file');
     const config = resolveStoreConfig(options);
+    enforceTestRunGuard(config, 'strike');
     let row;
     try {
       row = appendStrikeRecord(config, {
@@ -2131,6 +2178,7 @@ function main() {
       if (!options[key]) failUsage(`strike-seat requires --${key}`);
     }
     const config = resolveStoreConfig(options);
+    enforceTestRunGuard(config, 'strike-seat');
     let result;
     try {
       result = appendStrikeSeatRecord(config, {
@@ -2165,6 +2213,7 @@ function main() {
       if (!options[key]) failUsage(`invalidate-strike requires --${key}`);
     }
     const config = resolveStoreConfig(options);
+    enforceTestRunGuard(config, 'invalidate-strike');
     let row;
     try {
       row = appendStrikeInvalidation(config, {
@@ -2231,6 +2280,7 @@ function main() {
       failValidation('expires must be JSON null');
     }
     const config = resolveStoreConfig(options);
+    enforceTestRunGuard(config, 'pin-seat');
     let row;
     try {
       row = pinSeat(config, {
@@ -2254,6 +2304,7 @@ function main() {
       failUsage('unpin-seat requires --role');
     }
     const config = resolveStoreConfig(options);
+    enforceTestRunGuard(config, 'unpin-seat');
     let result;
     const hasSelector = ['engine', 'runner', 'endpoint']
       .some((key) => Object.prototype.hasOwnProperty.call(options, key));
@@ -2483,7 +2534,9 @@ function main() {
   }
 
   if (command === 'prune') {
-    const { storeDir, storeFile, lockFile } = resolveStoreConfig(options);
+    const config = resolveStoreConfig(options);
+    enforceTestRunGuard(config, 'prune');
+    const { storeDir, storeFile, lockFile } = config;
     if (!fs.existsSync(storeFile)) {
       process.stdout.write(`Pruned 0 events (store file does not exist)\n`);
       process.exit(0);

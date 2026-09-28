@@ -57,6 +57,10 @@ cd "$REPO_ROOT"
 # shellcheck source=lib/suite-oracle-lock.sh
 [ -r "$TESTS_DIR/lib/suite-oracle-lock.sh" ] && . "$TESTS_DIR/lib/suite-oracle-lock.sh"
 
+# Refuse writes to the operator's real ~/.autopilot/engine-capability store
+# from L1 (node --test) and L2 (bash suite) children of this runner.
+export AUTOPILOT_TEST_RUN_GUARD=1
+
 # Global; set by the parallel branch, cleared after its own successful rm -rf.
 # The EXIT trap also removes it (belt-and-suspenders on an interrupted run).
 PARALLEL_TMP=""

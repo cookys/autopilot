@@ -689,6 +689,13 @@ function interpretForemanModelObject(message) {
   if (message.schema === 'foreman-verdict/1') {
     return { tool: 'return_verdict', input: message };
   }
+  // Spec §7 says "call dispatch with exactly" these keys. The model returns
+  // that object itself. The prompt does not ask for a {tool, input} wrapper.
+  if ((message.role === 'implementer' || message.role === 'reviewer')
+    && typeof message.agent_id === 'string'
+    && Array.isArray(message.paths)) {
+    return { tool: 'dispatch', input: message };
+  }
   const nested = message.function && typeof message.function === 'object' ? message.function : null;
   const name = typeof message.tool === 'string' ? message.tool
     : typeof message.name === 'string' ? message.name
@@ -741,26 +748,43 @@ function callForemanProvider(options, payload) {
     maxBuffer: 8 * 1024 * 1024,
   });
   if (result.error && (result.error.code === 'ETIMEDOUT' || /timed out/iu.test(result.error.message || ''))) {
-    throw new Error('model_turn_timeout');
+    throw tagged('model_turn_timeout', 'model_turn_timeout');
   }
-  if (result.signal === 'SIGTERM' || result.signal === 'SIGKILL') throw new Error('model_turn_timeout');
-  if (result.error) throw new Error(`transport_error: ${result.error.message}`);
+  if (result.signal === 'SIGTERM' || result.signal === 'SIGKILL') throw tagged('model_turn_timeout', 'model_turn_timeout');
+  if (result.error) throw tagged('transport_error', `transport_error: ${result.error.message}`);
   if (result.status !== 0) {
-    throw new Error(`transport_error: adapter exited ${result.status}`);
+    const detail = String(result.stderr || '').trim().slice(0, 300);
+    throw tagged('transport_error', `transport_error: adapter exited ${result.status}${detail ? `: ${detail}` : ''}`);
   }
   let envelope;
   try {
     envelope = JSON.parse(result.stdout);
   } catch {
-    throw new Error('no parseable tool');
+    throw tagged('model_prose', 'no parseable tool');
   }
   const output = envelope && envelope.output;
-  if (typeof output !== 'string') throw new Error('no parseable tool');
+  if (typeof output !== 'string') throw tagged('model_prose', 'no parseable tool');
   try {
     return JSON.parse(output);
   } catch {
-    throw new Error('no parseable tool');
+    throw tagged('model_prose', 'no parseable tool');
   }
+}
+
+function tagged(code, message) {
+  const error = new Error(message);
+  error.code = code;
+  return error;
+}
+
+// The model spoke, but the words are not a tool slip. That spends one prose
+// turn. A dead socket, a timeout, or the adapter crashing still aborts.
+function isUnparsedModelTurn(error) {
+  if (!error || error.code === 'model_turn_timeout') return false;
+  const message = String(error.message || '');
+  if (/^model_turn_timeout\b/iu.test(message)) return false;
+  if (error.code === 'model_prose') return true;
+  return /no parseable JSON object|no parseable tool|no output_text part/iu.test(message);
 }
 
 function budgetSpent(session) {
@@ -785,44 +809,61 @@ function createRemoteForeman(options) {
       try {
         message = callForemanProvider(options, payload);
       } catch (error) {
+        if (isUnparsedModelTurn(error)) {
+          session.proseTurns += 1;
+          session.turns.push({ role: 'assistant', text: String(error.message || '') });
+          progress(`prose ${session.proseTurns} ${campaign.campaign_id || ''} no-json`);
+          continue;
+        }
         const wrapped = new Error(error.message || 'foreman transport failed');
-        wrapped.code = 'transport_error';
+        wrapped.code = error.code === 'model_turn_timeout' ? 'model_turn_timeout' : 'transport_error';
         throw wrapped;
       }
       session.tokens += Math.ceil(Buffer.byteLength(JSON.stringify(payload)) / 4);
       session.tokens += Math.ceil(Buffer.byteLength(JSON.stringify(message === undefined ? null : message)) / 4);
       const interpreted = interpretForemanModelObject(message);
       if (interpreted.dead) {
-        const error = new Error(interpreted.reason);
-        error.code = 'transport_error';
-        throw error;
+        session.proseTurns += 1;
+        session.turns.push({ role: 'assistant', text: interpreted.reason || 'no parseable tool' });
+        progress(`prose ${session.proseTurns} ${campaign.campaign_id || ''} unparsed`);
+        continue;
       }
       if (!interpreted.tool) {
         session.proseTurns += 1;
         session.turns.push({ role: 'assistant', text: interpreted.raw });
+        progress(`prose ${session.proseTurns} ${campaign.campaign_id || ''} not-a-tool`);
         continue;
       }
       if (interpreted.tool === 'dispatch') {
         session.remoteDispatches += 1;
         const before = session.sessionIndex;
         const result = session.dispatch(interpreted.input || {});
+        progress(`dispatch ${session.remoteDispatches} ${campaign.campaign_id || ''} role=${interpreted.input && interpreted.input.role || '?'} status=${result && result.status || '?'}`);
         if (session.sessionIndex !== before) return;
         toolResult = result;
       } else if (interpreted.tool === 'request_capability') {
         const name = typeof interpreted.input === 'string' ? interpreted.input : interpreted.input.name;
         const result = session.requestCapability(name);
         session.turns.push({ tool: 'request_capability', result });
+        progress(`capability ${campaign.campaign_id || ''} name=${name || '?'}`);
         toolResult = result;
       } else {
         const result = session.returnVerdict(interpreted.input);
         session.turns.push({ tool: 'return_verdict', result });
+        progress(`verdict ${campaign.campaign_id || ''} ${interpreted.input && interpreted.input.verdict || '?'} ok=${result && result.ok}`);
         toolResult = result;
       }
     }
   };
 }
 
-function driveCampaign(campaign, foreman, index, priorCritical) {
+function progress(line) {
+  fs.writeSync(2, `foreman ${line}\n`);
+}
+
+function driveCampaign(campaign, foreman, index, total, priorCritical) {
+  const label = `${index + 1}/${total} trial=${campaign.trial_id || '?'} family=${campaign.family || '?'}${campaign.variant ? '/' + campaign.variant : ''} id=${campaign.campaign_id || '?'}`;
+  progress(`start ${label}`);
   if (typeof foreman !== 'function') {
     throw new ForemanTransportError('foreman transport produced no turn', index, priorCritical);
   }
@@ -841,7 +882,10 @@ function driveCampaign(campaign, foreman, index, priorCritical) {
     }
   }
   const { gradeCampaign } = require('./foreman-eval-grader');
-  return gradeCampaign(campaign, session.host());
+  const grade = gradeCampaign(campaign, session.host());
+  const codes = Object.values(grade.checks || {}).flatMap((check) => check.codes || []);
+  progress(`done ${index + 1}/${total} ${campaign.campaign_id || ''} correct=${grade.correct === true} critical=${grade.critical === true}${codes.length ? ' codes=' + codes.join(',') : ''}`);
+  return grade;
 }
 
 function criticalEventsOf(grade) {
@@ -877,6 +921,8 @@ function runForemanSitting(options, decision) {
   const { generateForemanExam } = require('./foreman-eval-generator');
   const { trialFromGrades } = require('./foreman-harness-conformance');
   const exam = generateForemanExam(masterSeed(runNonce, identity.asset_hashes.generator));
+  const total = exam.trials.reduce((sum, trial) => sum + trial.campaigns.length, 0);
+  progress(`sitting start campaigns=${total} trials=${exam.trials.length}`);
   const trials = [];
   const priorCritical = [];
   let campaignIndex = 0;
@@ -884,7 +930,7 @@ function runForemanSitting(options, decision) {
     for (const trial of exam.trials) {
       const grades = [];
       for (const campaign of trial.campaigns) {
-        const grade = driveCampaign(campaign, options.foreman, campaignIndex, priorCritical.slice());
+        const grade = driveCampaign(campaign, options.foreman, campaignIndex, total, priorCritical.slice());
         grades.push(grade);
         if (grade.critical) priorCritical.push(...criticalEventsOf(grade).filter((event) => event.code));
         campaignIndex += 1;
@@ -892,11 +938,12 @@ function runForemanSitting(options, decision) {
       trials.push(trialFromGrades(trial, grades));
     }
   } catch (error) {
-    if (error instanceof ForemanTransportError || error.code === 'transport_error') {
+    if (error instanceof ForemanTransportError || error.code === 'transport_error' || error.code === 'model_turn_timeout') {
       const abort = transportAbortRecord({
         aborted_at_campaign_index: error.aborted_at_campaign_index,
         critical_events_before_abort: error.critical_events_before_abort || priorCritical,
       });
+      progress(`abort campaign=${(error.aborted_at_campaign_index == null ? campaignIndex : error.aborted_at_campaign_index) + 1}/${total} ${error.message || ''}`);
       return {
         qualified: false,
         verdict: {
@@ -910,6 +957,7 @@ function runForemanSitting(options, decision) {
           evidence: null,
           resit_locked: abort.resit_locked,
           aborted_at_campaign_index: abort.aborted_at_campaign_index,
+          transport_reason: error.message || null,
         },
       };
     }
@@ -983,5 +1031,6 @@ module.exports = {
   runForemanQualification,
   createRemoteForeman,
   foremanTurnPayload,
+  interpretForemanModelObject,
   REMOTE_CAMPAIGN_BUDGET,
 };

@@ -10,6 +10,7 @@ const {
   evaluateForemanPreconditions,
   diskForemanPreconditionContext,
   runForemanQualification,
+  interpretForemanModelObject,
   SCHEMA_MISMATCH,
 } = require('../evals/foreman-eval-runner');
 
@@ -149,5 +150,26 @@ check(plan.mode === 'plan' && plan.harness_hash === disk.current_harness_hash, '
 check(!JSON.stringify(plan).includes('missing a hash'), 'plan path does not report a missing hash');
 check(!JSON.stringify(plan).includes('foreman sitting was not started'), 'plan path starts past the sitting stub');
 check(!JSON.stringify(plan).includes(SCHEMA_MISMATCH), 'schema mismatch is not reached once §9 pins match');
+
+const bareDispatch = {
+  role: 'implementer',
+  agent_id: 'implementer_id_6b3a4dbd5eca',
+  base_sha: 'a5b11803962b73ab',
+  head_sha: 'a5b11803962b73ab',
+  paths: ['fence_prefix_d51215af6b7d/'],
+  finding_ids: [],
+  permissions: ['child_permission_0_d92b10910f70'],
+  allow_subdispatch: false,
+  instructions: 'report only',
+};
+const recognised = interpretForemanModelObject(bareDispatch);
+check(recognised.tool === 'dispatch' && recognised.input === bareDispatch,
+  'a dispatch object with the §7 keys is a dispatch, without a tool wrapper');
+check(interpretForemanModelObject({ tool: 'dispatch', input: { role: 'implementer' } }).tool === 'dispatch',
+  'a wrapped dispatch is still a dispatch');
+check(interpretForemanModelObject({ schema: 'foreman-verdict/1', verdict: 'blocked' }).tool === 'return_verdict',
+  'a verdict object is still a verdict');
+check(interpretForemanModelObject({ note: 'not a tool' }).tool === null,
+  'an ordinary object is not a tool');
 
 console.log(`${assertions} assertions passed`);

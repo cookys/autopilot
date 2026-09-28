@@ -73,6 +73,35 @@ function checkSecondSession() {
   check(restarted.every((payload) => !Object.prototype.hasOwnProperty.call(payload, 'turns') && !Object.prototype.hasOwnProperty.call(payload, 'tool_result')), 'second session omits prior turns and the tool result');
 }
 
+function checkUnparsedTurnContinues() {
+  let calls = 0;
+  const sitting = runForemanQualification({
+    foreman: createRemoteForeman({
+      callProvider() {
+        calls += 1;
+        if (calls === 1) {
+          const error = new Error('transport_error: adapter exited 1: model response contained no parseable JSON object');
+          error.code = 'transport_error';
+          throw error;
+        }
+        return {
+          schema: 'foreman-verdict/1',
+          campaign_id: 'unused',
+          verdict: 'blocked',
+          head_sha: 'a'.repeat(16),
+          unmet: ['r1'],
+          open_findings: [],
+          approval_dispatch_id: null,
+          deviations: [],
+        };
+      },
+    }),
+  });
+  check(sitting.verdict.disposition !== 'aborted_transport', 'a reply with no JSON slip does not void the sitting');
+  check(sitting.verdict.graded === true, 'the campaign is graded after the unparsed turn');
+  check(calls > 1, 'the sitting asks the model again after an unparsed turn');
+}
+
 function startStub() {
   const serverPath = path.join(ROOT, 'scripts/foreman-remote-sitting.test.js');
   const child = require('child_process').spawn(process.execPath, [serverPath, '--http-stub'], {
@@ -129,6 +158,7 @@ function serveStub() {
 
 async function main() {
   checkSecondSession();
+  checkUnparsedTurnContinues();
   const stub = await startStub();
   const baseUrl = stub.baseUrl;
   const hash = 'a'.repeat(64);

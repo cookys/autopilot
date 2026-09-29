@@ -3359,6 +3359,34 @@ _setsid_wait_worker_sid() {
   printf '%s\n' "$rp"
 }
 
+# Alive iff some process in the worker target is not a zombie. kill -0 is
+# insufficient: an unreaped natural exit is still a pid (state Z).
+_watchdog_worker_alive() {
+  local st="" line=""
+  if [ -n "${SCOPE_UNIT:-}" ]; then
+    local rp="${WORKER_RP:-}"
+    [ -n "$rp" ] || return 1
+    st="$(ps -o state= -p "$rp" 2>/dev/null | tr -d '[:space:]' || true)"
+    [ -n "$st" ] || return 1
+    case "$st" in
+      Z*) return 1 ;;
+      *) return 0 ;;
+    esac
+  fi
+  local target="${WORKER_SID:-}"
+  [ -n "$target" ] || target="${WORKER_FALLBACK_PGID:-}"
+  [ -n "$target" ] || return 1
+  while IFS= read -r line; do
+    st="$(printf '%s' "$line" | tr -d '[:space:]')"
+    [ -n "$st" ] || continue
+    case "$st" in
+      Z*) continue ;;
+      *) return 0 ;;
+    esac
+  done < <(ps -o state= -g "$target" 2>/dev/null || true)
+  return 1
+}
+
 _watchdog_signal_worker() {
   local sig="$1"
   if [ -n "${SCOPE_UNIT:-}" ]; then
@@ -3370,28 +3398,36 @@ _watchdog_signal_worker() {
     else
       systemctl --user kill "$SCOPE_UNIT" --signal="$sig" >/dev/null 2>&1 || sc=$?
     fi
-    if [ "$sc" -ne 0 ]; then
-      local target="${WORKER_FALLBACK_PGID:-}"
-      local selfpg=""
-      selfpg="$(_self_pgid)" || selfpg=""
-      if [ -n "$target" ] && [ "$target" != "$$" ] \
-         && [ -n "$selfpg" ] && [ "$target" != "$selfpg" ]; then
-        kill "-$sig" "-$target" 2>/dev/null || true
-      fi
+    if [ "$sc" -eq 0 ]; then
+      return 0
     fi
-    return 0
+    local target="${WORKER_FALLBACK_PGID:-}"
+    local selfpg=""
+    selfpg="$(_self_pgid)" || selfpg=""
+    if [ -n "$target" ] && [ "$target" != "$$" ] \
+       && [ -n "$selfpg" ] && [ "$target" != "$selfpg" ]; then
+      if kill "-$sig" "-$target" 2>/dev/null; then
+        return 0
+      fi
+      return 1
+    fi
+    return 1
   fi
   local target="${WORKER_SID:-}"
-  [ -n "$target" ] || return 0
-  local selfpg
-  selfpg="$(_self_pgid)"
-  [ "$target" = "$$" ] && return 0
-  [ -n "$selfpg" ] && [ "$target" = "$selfpg" ] && return 0
+  [ -n "$target" ] || return 1
+  local selfpg=""
+  selfpg="$(_self_pgid)" || selfpg=""
+  if [ "$target" = "$$" ]; then
+    return 1
+  fi
+  if [ -n "$selfpg" ] && [ "$target" = "$selfpg" ]; then
+    return 1
+  fi
   # Group-kill only. A failed group-kill (kill -SIG -$target) means that
   # process group is already gone. r5 guarantees WORKER_SID is always a
   # session/process-group leader, so a bare-pid fallback here could only ever
   # hit a dead or recycled pid — never the live worker.
-  kill "-$sig" "-$target" 2>/dev/null || true
+  kill "-$sig" "-$target" 2>/dev/null
 }
 
 _arm_worker_watchdog() {
@@ -3413,8 +3449,14 @@ _arm_worker_watchdog() {
     echo "$sp" > "${tok}.sleeppid"
     wait "$sp" 2>/dev/null || true
     [ -f "$tok" ] || exit 0
-    : > "${tok}.fired"
-    _watchdog_signal_worker TERM
+    if ! _watchdog_worker_alive; then
+      exit 0
+    fi
+    if _watchdog_signal_worker TERM; then
+      : > "${tok}.fired"
+    else
+      exit 0
+    fi
     local i=0
     while [ "$i" -lt 10 ]; do
       [ -f "$tok" ] || exit 0
@@ -3422,7 +3464,7 @@ _arm_worker_watchdog() {
       i=$((i + 1))
     done
     [ -f "$tok" ] || exit 0
-    _watchdog_signal_worker KILL
+    _watchdog_signal_worker KILL || true
   ) >/dev/null 2>&1 &
   WATCHDOG_PID=$!
 }
@@ -3430,6 +3472,7 @@ _arm_worker_watchdog() {
 _wait_worker_with_watchdog() {
   local rp="$1"
   local secs=""
+  WORKER_RP="$rp"
   if [ -n "${TIMEOUT_SOURCE:-}" ]; then
     secs="$(normalize_timeout_seconds "${TIMEOUT:-}" 2>/dev/null || true)"
     if [ -n "$secs" ] && [ "${WATCHDOG_DISARMED:-0}" -ne 1 ]; then
@@ -3478,6 +3521,7 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
   WATCHDOG_TOKEN_FILE=""
   WATCHDOG_DISARMED=0
   WORKER_FALLBACK_PGID=""
+  WORKER_RP=""
   # test-only: HETERO_TEST_NO_SETSID=1 pretends setsid is missing for run_worker
   # branch selection and HAVE_SETSID (watchdog sleeper checks the same env).
   if [ "${HETERO_TEST_NO_SETSID:-}" = "1" ]; then
@@ -4777,7 +4821,7 @@ dispatch_detached_run() {
     # Preserve pi supervisor poll/stall bounds across setsid detach.
     declare -p PI_RPC_DIRECTIVE_POLL_SECS PI_RPC_STALL_PROBE_SECS PI_RPC_MAX_SECS PI_RPC_PROVIDER PI_MODELS_JSON 2>/dev/null || true
     declare -p STRIKE_DETECTOR_VERSION 2>/dev/null || true
-    declare -f json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _watchdog_sleeppid_cmdline_has_tag _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_signal_worker _arm_worker_watchdog _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts passive_capture \
+    declare -f json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _watchdog_sleeppid_cmdline_has_tag _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_worker_alive _watchdog_signal_worker _arm_worker_watchdog _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts passive_capture \
       _is_engine_unavailable _hetero_runner_token seat_strike_capture classify_outcome heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks _fp_unverifiable main_checkout_fingerprint check_main_checkout_boundary run_hands_content_gate \
       _cont_terminal_on_exit _cont_finalize_or_die \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \

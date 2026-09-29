@@ -405,6 +405,150 @@ assert_r6_cancel_kills_when_cmdline_has_tag() {
   wait "$helper" 2>/dev/null || true
 }
 
+# RED at 39264663
+# FAIL [dispatch-hetero-watchdog-followups] assert_r3_zombie_worker_not_stamped_timed_out: fired marker exists for zombie worker
+# FAIL [dispatch-hetero-watchdog-followups] 0 passed, 1 failed
+#       - assert_r3_zombie_worker_not_stamped_timed_out: fired marker exists for zombie worker
+# EXIT:1
+assert_r3_zombie_worker_not_stamped_timed_out() {
+  set +e
+  unset SCOPE_UNIT WORKER_FALLBACK_PGID WORKER_SID WORKER_RP
+  eval "$(sed -n '/^_self_pgid() {/,/^}$/p' "$SCRIPT")"
+  eval "$(sed -n '/^_watchdog_worker_alive() {/,/^}$/p' "$SCRIPT")"
+  eval "$(sed -n '/^_watchdog_signal_worker() {/,/^}$/p' "$SCRIPT")"
+  eval "$(sed -n '/^_arm_worker_watchdog() {/,/^}$/p' "$SCRIPT")"
+  local zpid="" holder="" zfile="$TEST_TMP/r3-zombie.pid"
+  : > "$zfile"
+  # Holder stays alive and does not wait; child is its own session/group then exits.
+  bash -c 'setsid bash -c "exit 0" & echo $! > "'"$zfile"'"; exec sleep 30' &
+  holder=$!
+  local n=0 st=""
+  while [ "$n" -lt 50 ]; do
+    zpid="$(tr -d '[:space:]' < "$zfile" 2>/dev/null || true)"
+    if [ -n "$zpid" ]; then
+      st="$(ps -o state= -p "$zpid" 2>/dev/null | tr -d '[:space:]')"
+      case "$st" in
+        Z*) break ;;
+      esac
+    fi
+    sleep 0.05
+    n=$((n + 1))
+  done
+  case "$st" in
+    Z*) ;;
+    *) reap_pid "$holder"; fail "assert_r3_zombie_worker_not_stamped_timed_out: pid ${zpid:-unset} never became zombie (state='${st:-gone}')"; return ;;
+  esac
+  WORKER_SID="$zpid"
+  WORKER_RP="$zpid"
+  _arm_worker_watchdog 1
+  local tok="$WATCHDOG_TOKEN_FILE"
+  sleep 3
+  if [ -f "${tok}.fired" ]; then
+    fail "assert_r3_zombie_worker_not_stamped_timed_out: fired marker exists for zombie worker"
+    rm -f "$tok" "${tok}.fired" "${tok}.sleeppid" 2>/dev/null || true
+    reap_pid "$holder"
+    return
+  fi
+  rm -f "$tok" "${tok}.fired" "${tok}.sleeppid" 2>/dev/null || true
+  [ -n "${WATCHDOG_PID:-}" ] && wait "${WATCHDOG_PID}" 2>/dev/null || true
+  reap_pid "$holder"
+
+  unset SCOPE_UNIT WORKER_FALLBACK_PGID
+  local live=""
+  setsid /bin/sleep 30 &
+  live=$!
+  WORKER_SID="$live"
+  WORKER_RP="$live"
+  _arm_worker_watchdog 1
+  tok="$WATCHDOG_TOKEN_FILE"
+  local i=0
+  while [ "$i" -lt 40 ]; do
+    [ -f "${tok}.fired" ] && break
+    sleep 0.1
+    i=$((i + 1))
+  done
+  [ -f "${tok}.fired" ] || fail "assert_r3_zombie_worker_not_stamped_timed_out: live worker did not produce fired marker"
+  i=0
+  while [ "$i" -lt 40 ]; do
+    st="$(ps -o state= -p "$live" 2>/dev/null | tr -d '[:space:]')"
+    case "$st" in
+      Z*|"") break ;;
+    esac
+    sleep 0.1
+    i=$((i + 1))
+  done
+  st="$(ps -o state= -p "$live" 2>/dev/null | tr -d '[:space:]')"
+  case "$st" in
+    S|R|D|T) fail "assert_r3_zombie_worker_not_stamped_timed_out: live worker $live still running after TERM (state='$st')" ;;
+  esac
+  rm -f "$tok" "${tok}.fired" "${tok}.sleeppid" 2>/dev/null || true
+  [ -n "${WATCHDOG_PID:-}" ] && wait "${WATCHDOG_PID}" 2>/dev/null || true
+  wait "$live" 2>/dev/null || true
+}
+
+_r3_assert_no_leftover_watchdog() {
+  local tmpdir="$1" label="$2"
+  local f tag sp cmd
+  for f in "$tmpdir"/hetero-wdog-tok-*.sleeppid; do
+    [ -e "$f" ] || continue
+    tag="$(basename "${f%.sleeppid}")"
+    sp="$(cat "$f" 2>/dev/null || true)"
+    if [ -n "$sp" ] && [ -r "/proc/${sp}/cmdline" ]; then
+      cmd="$(tr '\0' ' ' < "/proc/${sp}/cmdline" 2>/dev/null || true)"
+      if [[ "$cmd" == *"hetero-wall-watchdog-${tag}"* ]]; then
+        fail "${label}: leftover watchdog sleeper pid $sp tag $tag"
+        return 1
+      fi
+    fi
+  done
+  return 0
+}
+
+assert_r3_natural_exit_before_deadline_not_timed_out_real_path() {
+  set +e
+  local hide="$TEST_TMP/hide-cgroup-r3"
+  hide_cgroup_dir "$hide"
+  local stub="$TEST_TMP/grok-r3-nat" runs="$TEST_TMP/runs-r3-nat"
+  local wdtmp="$TEST_TMP/wdog-r3-nat"
+  mkdir -p "$runs" "$wdtmp"
+  install_sleep_stub "$stub"
+  local out json
+  out="$(cd "$SBX" && env PATH="$hide:$PATH" TMPDIR="$wdtmp" AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
+    HETERO_TEST_SLEEP=0 \
+    "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+    --branch feat/wdog-r3-nat --prompt-file "$PROMPT" --timeout 30s 2>&1)" || true
+  json="$(last_json "$out")"
+  [ -n "$json" ] || fail "assert_r3_natural_exit_before_deadline_not_timed_out_real_path: missing JSON: $out"
+  assert_eq "false" "$(json_get "$json" timed_out)" "inline natural-exit timed_out"
+  _r3_assert_no_leftover_watchdog "$wdtmp" "assert_r3_natural_exit_before_deadline_not_timed_out_real_path inline"
+
+  local stubd="$TEST_TMP/grok-r3-nat-d"
+  local runsd="$TEST_TMP/runs-r3-nat-d" ledger="$TEST_TMP/r3-nat-d/ledger.jsonl"
+  local wdtmpd="$TEST_TMP/wdog-r3-nat-d"
+  local result="${ledger}.results/wdog-r3-nat.implement.result.json"
+  mkdir -p "$runsd" "$(dirname "$ledger")" "$wdtmpd"
+  bash "$LEDGER_SH" init --ledger "$ledger" >/dev/null
+  install_sleep_stub "$stubd"
+  (
+    cd "$SBX" && env PATH="$hide:$PATH" TMPDIR="$wdtmpd" AUTOPILOT_DISPATCH_RUNS_DIR="$runsd" \
+      HETERO_TEST_SLEEP=0 \
+      "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stubd" \
+      --branch feat/wdog-r3-nat-d --prompt-file "$PROMPT" --timeout 30s \
+      --ledger "$ledger" --run-id wdog-r3-nat --stage implement
+  ) >/dev/null 2>&1 &
+  local wrap=$!
+  if ! poll_until 55 test -f "$result"; then
+    reap_pid "$wrap"
+    fail "assert_r3_natural_exit_before_deadline_not_timed_out_real_path: detached result not available within 55s"
+    return
+  fi
+  json="$(cat "$result")"
+  [ -n "$json" ] || fail "assert_r3_natural_exit_before_deadline_not_timed_out_real_path: empty detached result"
+  assert_eq "false" "$(json_get "$json" timed_out)" "detached natural-exit timed_out"
+  wait "$wrap" 2>/dev/null || true
+  _r3_assert_no_leftover_watchdog "$wdtmpd" "assert_r3_natural_exit_before_deadline_not_timed_out_real_path detached"
+}
+
 assert_r1_nojobcontrol_reports_unenforced
 assert_r1_nojobcontrol_detached_real_path
 assert_r1_nosetsid_with_jobcontrol_still_enforces
@@ -414,5 +558,7 @@ assert_r2_cgroup_kill_failure_detached_real_path
 assert_r2_cgroup_worker_stdin_is_devnull
 assert_r6_cancel_skips_kill_when_cmdline_lacks_tag
 assert_r6_cancel_kills_when_cmdline_has_tag
+assert_r3_zombie_worker_not_stamped_timed_out
+assert_r3_natural_exit_before_deadline_not_timed_out_real_path
 
 finalize_test

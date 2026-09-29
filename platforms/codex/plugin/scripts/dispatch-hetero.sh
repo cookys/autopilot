@@ -3181,6 +3181,13 @@ reap_container() { # reaps the worker container on ANY exit path; sets CONTAINED
     cg="$(systemctl --user show "$SCOPE_UNIT" -p ControlGroup --value 2>/dev/null)"
     if [ -n "$cg" ] && [ -s "/sys/fs/cgroup${cg}/cgroup.procs" ]; then CONTAINED=0; fi
   elif [ -n "$WORKER_SID" ]; then
+    # Group/session kill only (negative sid). Never the dispatcher pid or our
+    # own pgid — including the detached child's session on IN_DETACHED_CHILD=1.
+    local selfpg=""
+    selfpg="$(_self_pgid)" || selfpg=""
+    if [ "$WORKER_SID" = "$$" ] || { [ -n "$selfpg" ] && [ "$WORKER_SID" = "$selfpg" ]; }; then
+      return 0
+    fi
     kill -TERM "-$WORKER_SID" 2>/dev/null || true
     local i
     for i in 1 2 3 4 5; do kill -0 "-$WORKER_SID" 2>/dev/null || break; sleep 0.3; done
@@ -3560,9 +3567,7 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
       set +m 2>/dev/null || true
     fi
     _wait_worker_with_watchdog "$rp"
-    return 0
-  fi
-  if [ "$HAVE_CGROUP" -eq 1 ]; then
+  elif [ "$HAVE_CGROUP" -eq 1 ]; then
     SCOPE_UNIT="hetero-${BRANCH//\//-}-$$.scope"
     CONTAINMENT="cgroup"
     # Isolate the systemd-run job so its pgid can be a safe fallback if

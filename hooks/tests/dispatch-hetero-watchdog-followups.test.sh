@@ -686,4 +686,95 @@ assert_r10_result_json_never_default_timeout_source() {
 
 assert_r10_result_json_never_default_timeout_source
 
+install_descendant_stub() {
+  local dest="$1"
+  cat > "$dest" <<'EOF'
+#!/usr/bin/env bash
+if [ "${1:-}" = "--list-models" ]; then
+  cat <<'MODELS'
+Available models
+
+cursor-grok-4.6-low - Grok 4.6 (low)
+gpt-5.3-codex-low - GPT-5.3 Codex (low)
+MODELS
+  exit 0
+fi
+case " $* " in *" __autopilot_probe__ "*)
+  echo "Error: --effort/--reasoning-effort: unknown effort level '__autopilot_probe__'; use one of: high, medium, low" >&2
+  exit 1 ;;
+esac
+sleep 120 >/dev/null 2>&1 </dev/null &
+if [ -n "${HETERO_TEST_PIDFILE:-}" ]; then
+  echo "$!" > "$HETERO_TEST_PIDFILE"
+fi
+exit 0
+EOF
+  chmod +x "$dest"
+}
+
+# RED at 4543f5f1
+# FAIL [dispatch-hetero-watchdog-followups] assert_r8_detached_reaps_worker_session_descendants: sleeper pid 1005381 still alive after result
+# FAIL [dispatch-hetero-watchdog-followups] detached contained: expected 'false', got 'true'
+assert_r8_detached_reaps_worker_session_descendants() {
+  local hide="$TEST_TMP/hide-cgroup-r8"
+  hide_cgroup_dir "$hide"
+  local stub="$TEST_TMP/grok-r8-d" pidfile="$TEST_TMP/r8-d.pid"
+  local runs="$TEST_TMP/runs-r8-d" ledger="$TEST_TMP/r8-d/ledger.jsonl"
+  local result="${ledger}.results/wdog-r8-d.implement.result.json"
+  mkdir -p "$runs" "$(dirname "$ledger")"
+  bash "$LEDGER_SH" init --ledger "$ledger" >/dev/null
+  install_descendant_stub "$stub"
+  : > "$pidfile"
+  local sleeper="" json wrap
+  (
+    cd "$SBX" && env PATH="$hide:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
+      HETERO_TEST_PIDFILE="$pidfile" \
+      "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+      --branch feat/wdog-r8-d --prompt-file "$PROMPT" \
+      --ledger "$ledger" --run-id wdog-r8-d --stage implement
+  ) >/dev/null 2>&1 &
+  wrap=$!
+  if ! poll_until 55 test -f "$result"; then
+    sleeper="$(tr -d '[:space:]' < "$pidfile" 2>/dev/null || true)"
+    reap_pid "$sleeper"
+    reap_pid "$wrap"
+    fail "assert_r8_detached_reaps_worker_session_descendants: result not available within 55s"
+    return
+  fi
+  json="$(cat "$result")"
+  sleeper="$(tr -d '[:space:]' < "$pidfile" 2>/dev/null || true)"
+  [ -n "$sleeper" ] || fail "assert_r8_detached_reaps_worker_session_descendants: sleeper pidfile empty"
+  if [ -n "$sleeper" ] && ! wait_pid_dead "$sleeper" 8; then
+    fail "assert_r8_detached_reaps_worker_session_descendants: sleeper pid $sleeper still alive after result"
+  fi
+  if [ -n "$(json_get "$json" contained)" ]; then
+    assert_eq "true" "$(json_get "$json" contained)" "detached contained"
+  fi
+  reap_pid "$sleeper"
+  wait "$wrap" 2>/dev/null || true
+
+  # Inline control: same descendant stub; reap_container already runs on this path.
+  local stubi="$TEST_TMP/grok-r8-i" pidfilei="$TEST_TMP/r8-i.pid" runsi="$TEST_TMP/runs-r8-i"
+  mkdir -p "$runsi"
+  install_descendant_stub "$stubi"
+  : > "$pidfilei"
+  local outi jsoni sleeperi
+  outi="$(cd "$SBX" && env PATH="$hide:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$runsi" \
+    HETERO_TEST_PIDFILE="$pidfilei" \
+    "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stubi" \
+    --branch feat/wdog-r8-i --prompt-file "$PROMPT" 2>&1)" || true
+  jsoni="$(last_json "$outi")"
+  sleeperi="$(tr -d '[:space:]' < "$pidfilei" 2>/dev/null || true)"
+  [ -n "$sleeperi" ] || fail "assert_r8 inline: sleeper pidfile empty"
+  if [ -n "$sleeperi" ] && ! wait_pid_dead "$sleeperi" 8; then
+    fail "assert_r8 inline: sleeper pid $sleeperi still alive"
+  fi
+  if [ -n "$(json_get "$jsoni" contained)" ]; then
+    assert_eq "true" "$(json_get "$jsoni" contained)" "inline contained"
+  fi
+  reap_pid "$sleeperi"
+}
+
+assert_r8_detached_reaps_worker_session_descendants
+
 finalize_test

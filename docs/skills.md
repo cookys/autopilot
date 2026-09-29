@@ -50,7 +50,7 @@ The catalog is layered by how central a skill is to the daily loop — **core** 
 | **audit** | Systematic comparison between implementations | — (no equivalent) |
 | **test-strategy** | Test pyramid, baseline 守則, failure investigation funnel — **not** TDD (orthogonal scope) | `superpowers:test-driven-development` (coding loop, complementary not equivalent) |
 | **team** | Team allocation decisions: when to組隊, role selection, dependency analysis | `superpowers:dispatching-parallel-agents` (dispatch mechanism — the verb to autopilot:team's noun) |
-| **agent-call** | Exact-target messaging to an already-running persistent peer. Prefers Claude native messaging when available; otherwise calls the separately installed Agent Call CLI and fails closed without spawning a worker | Agent Call (transport; optional external install) |
+| **agent-call** | Exact-target messaging to an already-running persistent peer. Prefers Claude native messaging when available; otherwise sends through fleet messaging v2 (`fleet` CLI / MCP) and fails closed without spawning a worker | fleet messaging v2 (transport) |
 | **profiling** | Evidence-first performance profiling (only methodology entry point in the ecosystem) | — (no superpowers equivalent) |
 
 ---

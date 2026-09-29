@@ -17,6 +17,8 @@ that binds any skill sending peer traffic. (The hangar-bridge relay, `send_to_pe
 - `member` is one session or pane: `<project>--<harness>` for Claude and tmux panes, a plain
   name for services (`chatgpt`, `trinity`). A collision gets `-2`, `-3`.
 - There are no wildcards. `@channel` is the only broadcast.
+- An optional `@generation` suffix (`.../member@01M…`) pins one incarnation of a member; omit
+  it unless you have seen `target_replaced` and mean the old one.
 
 `fleet peers` (MCP `directory`) lists the exact addresses; copy from it, do not guess.
 
@@ -40,10 +42,12 @@ are a poster, and only members who joined receive it.
 The receipt is the highest level reached, with evidence: `accepted` → `delivered` →
 `injected_unverified` → `read`. Pasting into a pane or notifying a Claude channel never
 proves the model read it, so `injected_unverified` is the ceiling for those. Read the
-receipt; a refusal names a code (`unknown_message`, `pane_not_registered`, `name_collision`,
-...). A send to a courier that is offline is held by the hub and delivered when it
-reconnects, but one on a half-open link can be marked delivered and lost — when it matters,
-ask for an answer instead of assuming.
+receipt; a refusal names a code (`does_not_exist`, `address_invalid`, `unknown_message`,
+`pane_not_registered`, `name_collision`, ...). A send to a courier that is offline is held by
+the hub and delivered when it reconnects. On a half-open link, heartbeat-capable couriers
+notice within about 45 s and reconnect; a message written into the dead link inside that
+window can still be marked delivered and lost until ack-based delivery lands — when it
+matters, ask for an answer instead of assuming.
 
 **An `@channel` send is a fan-out, not a message.** Every member of the channel receives
 it and each decides whether it is addressed, so one broadcast costs the channel many times

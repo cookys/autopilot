@@ -13,7 +13,7 @@ Use this skill only when the intended recipient is an **already-running persiste
 2. Otherwise send through fleet messaging v2. Find the exact member, then send with the one send verb:
    ```bash
    fleet peers                                   # exact address: namespace/courier/member
-   fleet send cookys/<courier>/<member> "$MESSAGE"
+   fleet send <namespace>/<courier>/<member> "$MESSAGE"
    ```
    Inside a Claude Code session the fleet MCP server offers the same operations as tools: `directory` (list members), `send` (address or `@channel`), `reply` (answer a received `message_id`), `state` (report idle/busy/needs_human). Your own namespace may be omitted from the address; the sending courier fills it in.
 3. Preserve the receipt ceiling. `accepted`, `delivered` and `injected_unverified` are transport receipts (only `read` is stronger, and pane/Claude delivery never reaches it), not proof that the peer model observed the message.

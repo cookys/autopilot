@@ -777,4 +777,78 @@ assert_r8_detached_reaps_worker_session_descendants() {
 
 assert_r8_detached_reaps_worker_session_descendants
 
+# RED at bec1ba916360f1ccb106601ed677ffe3f5a556e6:
+# FAIL [dispatch-hetero-watchdog-followups] plain empty-ps helper should return alive (fail open): expected '0', got '1'
+# FAIL [dispatch-hetero-watchdog-followups] SCOPE_UNIT empty-ps helper should return alive (fail open): expected '0', got '1'
+# FAIL [dispatch-hetero-watchdog-followups] 14 passed, 2 failed
+#       - plain empty-ps helper should return alive (fail open): expected '0', got '1'
+#       - SCOPE_UNIT empty-ps helper should return alive (fail open): expected '0', got '1'
+# EXIT:1
+assert_r6_alive_check_fails_open_to_firing() {
+  set +e
+  unset SCOPE_UNIT WORKER_FALLBACK_PGID WORKER_SID WORKER_RP
+  eval "$(sed -n '/^_watchdog_pgid_has_live() {/,/^}$/p' "$SCRIPT")"
+  eval "$(sed -n '/^_watchdog_worker_alive() {/,/^}$/p' "$SCRIPT")"
+
+  local stubdir="$TEST_TMP/r6-ps-stub"
+  mkdir -p "$stubdir"
+  cat > "$stubdir/ps" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+  chmod +x "$stubdir/ps"
+
+  local rc="" saved_path="$PATH"
+  PATH="$stubdir:$PATH"
+  unset SCOPE_UNIT
+  WORKER_SID="12345"
+  WORKER_FALLBACK_PGID="12345"
+  _watchdog_worker_alive
+  rc=$?
+  PATH="$saved_path"
+  assert_eq "$rc" "0" "plain empty-ps helper should return alive (fail open)"
+
+  PATH="$stubdir:$PATH"
+  SCOPE_UNIT="scope-unit.service"
+  WORKER_RP="12345"
+  WORKER_FALLBACK_PGID="12345"
+  unset WORKER_SID
+  _watchdog_worker_alive
+  rc=$?
+  PATH="$saved_path"
+  unset SCOPE_UNIT WORKER_RP
+  assert_eq "$rc" "0" "SCOPE_UNIT empty-ps helper should return alive (fail open)"
+
+  local holder="" zfile="$TEST_TMP/r6-zombie.pid"
+  : > "$zfile"
+  bash -c 'setsid bash -c "exit 0" & echo $! > "'"$zfile"'"; exec sleep 30' &
+  holder=$!
+  local n=0 zpid="" st=""
+  while [ "$n" -lt 50 ]; do
+    zpid="$(tr -d '[:space:]' < "$zfile" 2>/dev/null || true)"
+    if [ -n "$zpid" ]; then
+      st="$(ps -o state= -p "$zpid" 2>/dev/null | tr -d '[:space:]')"
+      case "$st" in
+        Z*) break ;;
+      esac
+    fi
+    sleep 0.05
+    n=$((n + 1))
+  done
+  case "$st" in
+    Z*) ;;
+    *) reap_pid "$holder"
+       fail "assert_r6_alive_check_fails_open_to_firing: pid ${zpid:-unset} never became zombie (state='${st:-gone}')"; return ;;
+  esac
+  unset SCOPE_UNIT WORKER_RP
+  WORKER_SID="$zpid"
+  WORKER_FALLBACK_PGID="$zpid"
+  _watchdog_worker_alive
+  rc=$?
+  reap_pid "$holder"
+  assert_eq "$rc" "1" "zombie-only group should still be dead"
+}
+
+assert_r6_alive_check_fails_open_to_firing
+
 finalize_test

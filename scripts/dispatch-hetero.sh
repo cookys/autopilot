@@ -3370,18 +3370,24 @@ _setsid_wait_worker_sid() {
 # insufficient: an unreaped natural exit is still a pid (state Z).
 # procps `ps -g N` matches session leaders / group *names*, not PGID.
 _watchdog_pgid_has_live() {
-  local target="$1" pgid="" st=""
+  local target="$1" pgid="" st="" out="" ps_rc=0
   [ -n "$target" ] || return 1
+  out="$(ps -e -o pgid=,state= 2>/dev/null)" || ps_rc=$?
+  # Unknown (ps failed or produced no rows) counts as alive so the watchdog
+  # still fires; a false fire is un-stamped on ESRCH.
+  if [ "$ps_rc" -ne 0 ] || [ -z "$out" ]; then
+    return 0
+  fi
   while read -r pgid st || [ -n "${pgid:-}" ]; do
-    pgid="$(printf '%s' "${pgid:-}" | tr -d '[:space:]')"
-    st="$(printf '%s' "${st:-}" | tr -d '[:space:]')"
     [ -n "$pgid" ] || continue
     [ "$pgid" = "$target" ] || continue
     case "$st" in
       Z*) continue ;;
       *) return 0 ;;
     esac
-  done < <(ps -e -o pgid=,state= 2>/dev/null || true)
+  done <<EOF
+$out
+EOF
   return 1
 }
 
@@ -3390,9 +3396,13 @@ _watchdog_worker_alive() {
   if [ -n "${SCOPE_UNIT:-}" ]; then
     local rp="${WORKER_RP:-}"
     if [ -n "$rp" ]; then
-      st="$(ps -o state= -p "$rp" 2>/dev/null | tr -d '[:space:]' || true)"
+      st="$(ps -o state= -p "$rp" 2>/dev/null || true)"
+      st="${st#"${st%%[![:space:]]*}"}"
+      st="${st%"${st##*[![:space:]]}"}"
+      # Empty state is unknown (ps produced no usable output) — fall through
+      # to the group check rather than treating the worker as dead.
       case "$st" in
-        Z*|"" ) ;;
+        ""|Z*) ;;
         *) return 0 ;;
       esac
     fi

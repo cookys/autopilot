@@ -30,9 +30,15 @@
 - on_family_conflict: fallback
 - reviewer_fallback_preference: GLM-5.2
 - reviewer_fallback_preference_low_risk: GLM-5.2
-- implementer_engine: cursor-grok-4.6-low
+- implementer_engine: grok-4.7
 - implementer_effort: low
-- implementer_runner: cursor
+- implementer_runner: grok
+
+<!-- 2026-09-29 使用者裁定：implementer 由 cursor-grok-4.6-low @ cursor 改回 grok 直連，模型升到 grok-4.7 @ grok low。
+     原因：cursor 那席沒有未過期的 qualification override（revival3d 那筆 9/17 到期），
+     resolve-review-loop.sh 因此每個欄位都拒答，hetero-review-loop finalize 也跟著卡住。
+     改前實測：`grok --model grok-4.7 --effort low -p` 回 PONG（402 付費牆已解除）；
+     用暫存 config 探 resolver，low/medium/high 三檔都 rc=0。implementer_family 仍是 xai。 -->
 
 <!-- 2026-09-12 使用者裁定：implementer 由 grok-4.5 @ grok 改為 cursor-grok-4.6-low @ cursor low。
      model id 要寫 runner 認得的完整字串：readiness probe 原樣把它送進 `cursor-agent --model`，

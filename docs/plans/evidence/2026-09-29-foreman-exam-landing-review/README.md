@@ -43,11 +43,26 @@ All 8 s0 findings were re-derived against the code and the spec and are
 - Tree ids are 16 hex characters, and `verdictShape` accepts any
   `head_sha`.
 
-Verdict: **FIX-THEN-SHIP**. `hetero-review-loop.js finalize` did not run. It
-calls `resolve-review-loop.sh`, which exits non-zero because the dogfood
-roster's implementer seat (`cursor-grok-4.6-low/cursor`) has no unexpired
-qualification override. That gate was not bypassed, so generation 1 stays
-`pending` in `chain.json` with its dispositions file written.
+Verdict: **FIX-THEN-SHIP** (s0). The first `hetero-review-loop.js finalize` call
+exited 2 because `resolve-review-loop.sh` refused the dogfood roster's
+unqualified implementer seat. Before that it had already written:
+
+- `chain.json` status `finalized`,
+- `g1/dispositions.json` (pinned by `dispositions_sha256`),
+- `g1/hands-brief.md`.
+
+The resolver is only asked for `resolved_from` after the chain write, so
+`receipt-foreman-exam.json` was never written. A re-run refuses with "not
+pending". This was first recorded here as "stays pending", which was wrong. The
+ordering defect is a backlog row. No receipt was hand-written.
+
+The pinned `g1/dispositions.json` carries an earlier rationale for the
+wire-validation finding ("accepted on the reviewer's cited evidence").
+`g1-dispositions.json` in this directory holds the depth-0 re-derivation
+(`generator.js:76`, `grader.js:139`). Both mark it `verified`.
+
+The roster was fixed the same day. The implementer is now `grok-4.7@grok`
+low, probed live with PONG.
 
 ## Consequence for existing evidence
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.36.102 — hetero-review-loop finalize 不會再因 resolver 失敗把 chain 卡死
+
+- **症狀**：`finalize` 先把 chain 標成 `finalized`、寫出 dispositions 快照與 `hands-brief.md`，最後才問 resolver 要 `resolved_from`。resolver 一失敗（`runResolver` 直接 `process.exit(2)`），receipt 就不會寫出，重跑又被「not pending」拒絕，整個 phase 就此卡死。2026-09-29 foreman 考場落地複審真的遇到：dogfood roster 的 implementer 席不合格，resolver 拒答，第 1 代的 receipt 至今補不回來。
+- **新規則**：`resolved_from` 改在 finalize 做任何寫入之前解析。resolver 失敗時 chain 維持 `pending`，這一代不會寫出任何檔案；換上可用的 resolver 重跑 finalize 就能正常產出 receipt。receipt schema 與訊息文字不變。
+- **測試**：`hetero-review-loop.test.sh` 新增 case 7e（fin）。反向對照：把修正退回舊版時是 212 passed、7 failed，修正後 219 全過。depth-0 另外自己重跑過一次，結果相同。
+- **沒有追溯**：已經卡住的 2026-09-29 那一代不會自己恢復，也沒有人手補 receipt，詳見 `docs/plans/evidence/2026-09-29-foreman-exam-landing-review/README.md`。
+
+prose-justification: 本版只修 finalize 的寫入順序（一段搬移加一段程式註解）與新增一個測試案例，沒有新增 skill 或 reference 文字；相對 v2.35.2 基線的既有文字量增加是先前版本累積的，這裡只讓本版區段本身通過 north-star 閘門。
+
 ## v2.36.101 — dispatch-hetero 的 --timeout 現在每條 rail 都真的擋得住
 
 - **症狀**：`--timeout` 在每條 rail 都會被接受、驗證並寫進 manifest，但只有 agy rail 真的會去強制執行——一個 `--timeout 20m` 的 grok 派工實際活了 22 分鐘以上,呼叫端以為有的邊界並不存在。

@@ -20,14 +20,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/foreman-exam-harness-spec-conformance.md
 - **Context**: no `shell` tool, wrong budgets, and tip-anchored grading; the muse-spark sitting on develop is non-conformant.
 
-### hetero-review-loop finalize marks the chain finalized before the resolver call, so a resolver failure strands it
-- **Status**: open
-- **Trigger**: FIRED — 2026-09-29 foreman landing review lost its receipt
-- **Effort**: Fix
-- **Source**: foreman landing review 2026-09-29
-- **Pointer**: docs/plans/evidence/2026-09-29-foreman-exam-landing-review/README.md
-- **Context**: scripts/hetero-review-loop.js:1232 writes chain before :1241 resolveField; exit 2 leaves no receipt and a re-run refuses.
-
 ### foreman-guard needs a cost-shaped gate (cache-read tokens or lifetime); covers clone foremen w/ INACTIVE marker
 - **Status**: open
 - **Trigger**: a hook-readable cumulative per-agent token feed exists, or a clone-based foreman is measured running away

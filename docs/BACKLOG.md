@@ -28,14 +28,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/foreman-guard-cost-shaped-gate.md
 - **Context**: role/call-count caps say nothing about cost; a clone-based foreman whose l4-l6 marker is INACTIVE is invisible to both today.
 
-### dispatch-hetero watchdog: review 🔵 follow-ups (setsid degrade, cgroup fallback, deadline mislabel, dup keys)
-- **Status**: open
-- **Trigger**: next dispatch-hetero containment change
-- **Effort**: S
-- **Source**: v2.36.101 review 🔵 follow-ups
-- **Pointer**: docs/backlog/dispatch-hetero-watchdog-followups.md
-- **Context**: v2.36.101's watchdog closed the `--timeout`-unenforced gap; rounds 5-6 left non-blocking follow-ups, collected in the pointer.
-
 ### OpenCode Go needs a Responses-protocol transport and an `x-opencode-session` header
 - **Status**: open
 - **Trigger**: the next attempt to administer ANY non-implementer seat on an `opencode-go` model

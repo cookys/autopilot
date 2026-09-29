@@ -1,5 +1,24 @@
 # Changelog
 
+## v2.36.104 — dispatch-hetero 的 wall-timeout watchdog 補完：不再在 `ps` 不可用時靜默放棄
+
+- **症狀**：v2.36.101 的 watchdog 留下一批 review 後續項目。最嚴重的是，watchdog 在到期時先確認 worker 還活著才開火；`ps` 失敗（fork 失敗、非 procps 的 `ps`）時「無法證明活著」被當成「已死」，watchdog 靜默退出，run 無限期掛著，manifest 卻寫 `timeout_enforced: true`。
+- **新規則**：
+  - `_watchdog_worker_alive` 改成單一 fail-open 規則：只有「被正向證明已死」才算死，其餘一律當作活著，讓 watchdog 照常開火（對已死 group 開火無害）。涵蓋 plain、SCOPE_UNIT 有無 `WORKER_FALLBACK_PGID`、`WORKER_RP` 為空等所有形狀，並有矩陣測試。
+  - watchdog 的 cancel 與 kill 路徑不再對裸 pid 發訊號：先確認 cmdline 帶 `hetero-wall-watchdog-<tag>` 才動手；detached 路徑改為 fall through 到 `reap_container`，並有真實（非 stub）的 detached 測試。
+  - cgroup worker 加 `set -m` 之後改由 `</dev/null` 接 stdin，避免繼承呼叫端的 stdin；detached watchdog 有自己的 process group；fired marker 只在確認目標仍存活後才寫。
+  - `platforms/codex/plugin` 鏡像已同步。
+- **驗證**：每一輪 review 的 🟠 都由 depth-0 對照程式碼重新確認為真，並以 hands 補修；最終合併 review（claude-fable-5-1）為 SHIP-AS-IS。全套 382 個測試檔通過。
+- **已驗證非缺陷（sidecar 第 4、7 項）**：`strict_manifest_fields` 只帶 `unit_id`/`contract_sha256`/`go`，沒有重複的 timeout 鍵；`TIMEOUT_SOURCE=caller` 的指派有空值守衛，campaign preflight 從不指派它。
+- **已知後續（review 🔵/🟡 CUT/FOLLOW-UP）**：
+  - `_watchdog_pgid_has_live` 已無呼叫者，可刪除或讓 alive-check 委派給它；其 `printf|tr` 子 shell 可省。
+  - 無 setsid 時 watchdog 的 sleeper 沒有 `hetero-wall-watchdog-<tag>` argv0，cancel 只靠 TERM trap；`exec -a` 可補。
+  - 既有的 `kill "${sp:-}"` trap 在 `wait "$sp"` 之後可能打到已回收的 pid（`sp=""` 可解）。
+  - cgroup 路徑在 `set -m` 沒隔離且 `systemctl --user kill` 暫時失敗的雙重失敗下仍不受 wall 約束（可重試一次）。
+  - 測試：`reap_pid` 在 `wait_pid_dead` 之後仍裸 `kill -KILL`；`assert_eq` 引數順序顛倒（只影響失敗訊息）；r6 測試的 `set -e -o pipefail` 洩漏；`HETERO_TEST_*` 旋鈕在正式腳本中無條件生效；`set -m` 在有 tty 時 worker 讀 `/dev/tty` 會吃 SIGTTIN。
+
+prose-justification: 本版修 watchdog 的真實邊界落空（alive-check 在 `ps` 失敗時靜默不強制 timeout），只動 `scripts/dispatch-hetero.sh`、其 codex 鏡像與新測試，沒有新增 skill 或 reference 文字。
+
 ## v2.36.103 — 測試套件不會再改掉真正 clone 的 git 身分
 
 - **症狀**：從 2026-09-04 起，origin/develop 上有 631 個 commit 的作者和 committer 都是 `Test User <test@example.com>`，最新一筆是 2026-09-29 的 `ab00b82e`。來源是另一台機器上的主 clone，它的 local `user.name`/`user.email` 被測試改掉了。

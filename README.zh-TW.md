@@ -193,7 +193,7 @@ local runtime 或 agentic local runner。
 
 ### 🔗 聯絡 persistent peer
 
-`agent-call` 只聯絡已經在跑、可用名字精確定址的 session。Claude↔Claude 可精確定址時優先走原生 `ListAgents`／`SendMessage`；其他本機 harness 組合呼叫另外安裝的 Agent Call CLI。目標離線會明確失敗，不會靜默轉成 worker spawn。
+`agent-call` 只聯絡已經在跑、可用名字精確定址的 session。Claude↔Claude 可精確定址時優先走原生 `ListAgents`／`SendMessage`；其他目標走 fleet messaging v2(`fleet` CLI 或 `fleet` MCP 工具)。目標離線會明確失敗，不會靜默轉成 worker spawn。
 
 > **Try saying：** *「問正在跑的 codex session 目前狀態」* · *「把這段送給 persistent reviewer」*
 

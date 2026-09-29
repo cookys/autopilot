@@ -193,7 +193,7 @@ Claude alone is enough. But point autopilot at a **second engine family** and it
 
 ### 🔗 Contact a persistent peer
 
-`agent-call` contacts an already-running named session. Claude↔Claude uses native `ListAgents` / `SendMessage` when the target is exact; other local harness combinations use the separately installed Agent Call CLI. An offline target fails explicitly and never turns into a worker spawn.
+`agent-call` contacts an already-running named session. Claude↔Claude uses native `ListAgents` / `SendMessage` when the target is exact; other targets go through fleet messaging v2 (the `fleet` CLI, or the `fleet` MCP tools). An offline target fails explicitly and never turns into a worker spawn.
 
 > **Try saying:** *"ask the running codex session for its status"* · *"send this to the persistent reviewer"*
 

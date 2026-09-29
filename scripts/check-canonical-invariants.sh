@@ -144,10 +144,15 @@ check_no_relative_links() {
 # (verdict-bytes preservation, v2.34.33): content-verified but transport-unratified
 # data exists ONLY for human adjudication — no consumer may derive authority from it,
 # and the cheapest durable enforcement is "any new file that mentions the token must
-# be explicitly allowlisted here" (g1 disposition 2162610231 + 6d7fb3b4). Scans the
-# whole tree (tracked or not) so a rogue consumer is caught before it ever lands.
+# be explicitly allowlisted here" (g1 disposition 2162610231 + 6d7fb3b4). Scans tracked
+# files (the index included), so a staged rogue consumer is caught at commit; outside a
+# git checkout the check is skipped out loud, never passed vacuously.
 check_reader_allowlist() {
   local label="$1"; local token="$2"; shift 2
+  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "  - reader-allowlist[$label]: SKIPPED — not inside a git checkout (tracked-file scan impossible)"
+    return 0
+  fi
   local allowed=("$@")
   local file hit candidate bad_found=0
   while IFS= read -r file; do
@@ -162,10 +167,12 @@ check_reader_allowlist() {
       bad "reader-allowlist[$label]: $file mentions '$token' but is not in the closed reader allowlist — unratified data is HUMAN-adjudication-only, never authority (docs/plans/_archive/2026/08/2026-08-21-verdict-bytes-preservation.md §2). If this file is a legitimate producer/display/test, add it to the seed in the SAME commit."
       bad_found=1
     fi
-  done < <(grep -rIl \
-      --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=.claude \
-      --exclude-dir=.autopilot --exclude-dir=worktrees \
-      -- "$token" . 2>/dev/null | sed 's|^\./||')
+  # Tracked files only: the invariant is about repo content. A recursive grep of
+  # the working tree also read gitignored local state (e.g. .codeforge/) and
+  # blocked unrelated commits (2026-09-29).
+  done < <(git ls-files -z -- . ':(exclude,glob)**/node_modules/**' ':(exclude,glob)**/.claude/**' \
+      ':(exclude,glob)**/.autopilot/**' ':(exclude,glob)**/worktrees/**' 2>/dev/null \
+      | xargs -0 grep -Il -- "$token" 2>/dev/null)
   [ "$bad_found" = "0" ] && ok "reader-allowlist[$label]: every '$token' mention is allowlisted"
 }
 

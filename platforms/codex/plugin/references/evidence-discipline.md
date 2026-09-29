@@ -1104,3 +1104,19 @@ proof clause in the brief, not the stub suite, which never took that path.
 The same closeout's combined review also found a 🟠 (bare-pid fallback) on a diff byte-identical to
 one a per-row review had already passed — reviewer verdicts are samples, which is why the combined
 review is not optional (§43).
+
+## 49. Fixing a fail-open one shape per review round does not converge — enumerate the shape matrix and rewrite as one rule
+
+2026-09-29, v2.36.104 (`dispatch-hetero.sh` watchdog alive-check): the gate answered "is the worker
+still alive?" and treated "cannot tell" as "dead", so the watchdog exited silently and the run went
+unbounded while the manifest still said `timeout_enforced: true`. The combined review found it three
+rounds running, each time in a different input shape — `ps` unusable (round 1), SCOPE_UNIT with an
+empty fallback pgid (round 2), `WORKER_RP` and fallback both empty (round 3). Each repair closed the
+shape the reviewer named and left its siblings; three per-shape repairs did not converge. What
+converged was a single-rule rewrite: dead only when positively proven dead, every other outcome
+(including unknown) is alive, plus a matrix test over every combination.
+
+Rule: when the same defect class recurs in a second review round, stop patching the named shape.
+Enumerate the input-shape matrix, state the one rule that covers all cells (for a guard whose failure
+disables enforcement, unknown must resolve toward enforcing), rewrite to it, and pin it with a test
+that walks the matrix. A reviewer names an instance; the repair must cover the class (§17).

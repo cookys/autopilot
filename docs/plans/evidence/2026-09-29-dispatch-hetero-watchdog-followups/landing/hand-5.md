@@ -1,0 +1,22 @@
+Engine: cursor-grok-4.6-low
+
+# Hand 5 (R5) — the detached path must reap the worker's own session after the worker returns
+
+You are working in the git clone you were launched in. Background: docs/backlog/dispatch-hetero-watchdog-followups.md item 8. Foreman premise check: before the wall-timeout watchdog landed, the detached child ran the worker in its own (detached) session, so the worker's descendants shared the session of the detached child. Now run_worker's detached branch (IN_DETACHED_CHILD equals 1) launches the worker with setsid in its OWN session (or its own job-control group on the no-setsid fallback), waits via the watchdog helper and then returns before reaching the reap_container call that the other branches run. So a descendant that the worker leaves behind in that new session or group after the worker itself exits survives on the detached path, and CONTAINED stays 0, whereas the inline paths reap and report contained. Hygiene: never run pkill or pgrep -f matching hetero-wall-watchdog while a dispatch is under test; clean leftovers by pid only.
+
+## Product
+In scripts/dispatch-hetero.sh run_worker, make the detached branch fall through to the same reap_container call as the other branches instead of returning early (remove the early return, keeping the branch structure valid), so the worker's own session/group is TERM then KILL swept after the wait and CONTAINED is set when it is empty. reap_container must only ever signal the negative worker session id (it already does; never a bare pid, and never the detached child's own group: confirm the self-pgid guard also covers this path, and add the same guards to reap_container's group kills if they are missing: refuse when the target equals the dispatcher pid or its own pgid). Make sure nothing in the detached child's later flow depends on the early return. Keep working under set -e and pipefail.
+
+## Tests (RED-first)
+Append to hooks/tests/dispatch-hetero-watchdog-followups.test.sh, registered in the main call list, a case assert_r8_detached_reaps_worker_session_descendants: through the REAL detached dispatch (ledger, run-id and stage passed together to scripts/dispatch-hetero.sh; poll the durable result file like the existing detached cases in the wall-timeout suite) with a stub worker that starts a background sleeper (sleep 120, output redirected so it does not hold the log open), writes the sleeper's pid to a pidfile and exits immediately with success. After the result file appears, assert the sleeper pid is dead within a few seconds (poll by pid; do not use pkill or pgrep -f), and assert the result JSON reports contained true if the field is present. Also an inline (non-detached) control that already passes today. Before fixing, run the case on the unmodified base and record the red output as a comment: a line reading RED at 4543f5f1 followed by the failing lines. Clean the sleeper by pid at the end of the case even when it failed.
+Existing detached tests may assert contained false or depend on the old early return: find them (grep for contained in hooks/tests/dispatch-hetero*.test.sh and any detached suite) and update only assertions that were pinned to the old behavior, with a comment saying why.
+
+If, after implementing the repro test, you find the leak does NOT reproduce on this host (the sleeper is already dead on the unmodified base), do not change scripts: commit nothing and end with a final message beginning SKIP-R5 and the evidence.
+
+## Verify
+Foreground, one at a time, with the prefix env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID and stdin from /dev/null: the new suite; hooks/tests/dispatch-hetero-wall-timeout.test.sh; hooks/tests/dispatch-hetero-gc.test.sh; hooks/tests/dispatch-hetero-contract.test.sh; hooks/tests/dispatch-hetero.test.sh; hooks/tests/dispatch-hetero-cursor-routing.test.sh; every other suite grep -l finds for IN_DETACHED_CHILD, reap_container, or contained; node scripts/check-js-syntax.js; run bash scripts/sync-codex-plugin-skills.sh then bash scripts/sync-codex-plugin-skills.sh --check.
+
+## Allowed files
+scripts/dispatch-hetero.sh, platforms/codex/plugin/scripts/dispatch-hetero.sh (via sync), hooks/tests/dispatch-hetero-watchdog-followups.test.sh, and only the existing dispatch-hetero test files whose assertions were pinned to the old early-return behavior.
+
+Commit ONE commit; touch no other file; run every Verify command in the foreground before committing.

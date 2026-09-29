@@ -807,3 +807,9 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/ci-repair-2026-09-23-followups.md
 - **Context**: add a probe where both fallbacks are empty and assert the occurrence count is unchanged after park.
 
+### dispatch-hetero watchdog round-2 cleanups: dead _watchdog_pgid_has_live, test-helper hygiene, HETERO_TEST_* knobs
+- **Status**: open
+- **Trigger**: next dispatch-hetero containment change
+- **Effort**: S
+- **Source**: v2.36.104 landing review rounds 1-4
+- **Pointer**: docs/backlog/dispatch-hetero-watchdog-round2-cleanups.md

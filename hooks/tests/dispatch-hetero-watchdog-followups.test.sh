@@ -914,4 +914,106 @@ EOF
 
 assert_r7_scope_unknown_state_no_fallback_fires
 
+# RED at e8c13c6bdffca6941d73b487138e54c0b7d0cbfe:
+# FAIL [dispatch-hetero-watchdog-followups] ps unusable plain-neither: expected '0', got '1'
+# FAIL [dispatch-hetero-watchdog-followups] ps unusable scope-neither: expected '0', got '1'
+# FAIL [dispatch-hetero-watchdog-followups] 26 passed, 2 failed
+#       - ps unusable plain-neither: expected '0', got '1'
+#       - ps unusable scope-neither: expected '0', got '1'
+# EXIT:1
+assert_r8_alive_check_matrix() {
+  set +e
+  unset SCOPE_UNIT WORKER_FALLBACK_PGID WORKER_SID WORKER_RP
+  eval "$(sed -n '/^_watchdog_pgid_has_live() {/,/^}$/p' "$SCRIPT")"
+  eval "$(sed -n '/^_watchdog_worker_alive() {/,/^}$/p' "$SCRIPT")"
+
+  local stubdir="$TEST_TMP/r8-ps-stub"
+  mkdir -p "$stubdir"
+  cat > "$stubdir/ps" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+  chmod +x "$stubdir/ps"
+
+  local rc="" saved_path="$PATH" label="" sid="" fpg="" rp="" scope=""
+  PATH="$stubdir:$PATH"
+  while IFS='|' read -r label sid fpg rp scope; do
+    [ -n "$label" ] || continue
+    unset SCOPE_UNIT WORKER_FALLBACK_PGID WORKER_SID WORKER_RP
+    [ -n "$sid" ] && WORKER_SID="$sid"
+    [ -n "$fpg" ] && WORKER_FALLBACK_PGID="$fpg"
+    [ -n "$rp" ] && WORKER_RP="$rp"
+    [ -n "$scope" ] && SCOPE_UNIT="$scope"
+    _watchdog_worker_alive
+    rc=$?
+    assert_eq "$rc" "0" "ps unusable $label"
+  done <<'ROWS'
+plain-sid|12345|||
+plain-fallback||12345||
+plain-neither||||
+scope-rp-only|||12345|scope-unit.service
+scope-fallback-only||12345||scope-unit.service
+scope-both||12345|12345|scope-unit.service
+scope-neither||||scope-unit.service
+ROWS
+  PATH="$saved_path"
+  unset SCOPE_UNIT WORKER_FALLBACK_PGID WORKER_SID WORKER_RP
+
+  local live="" live_pg=""
+  setsid /bin/sleep 30 &
+  live=$!
+  live_pg="$(ps -o pgid= -p "$live" 2>/dev/null || true)"
+  live_pg="${live_pg#"${live_pg%%[![:space:]]*}"}"
+  live_pg="${live_pg%"${live_pg##*[![:space:]]}"}"
+  [ -n "$live_pg" ] || { reap_pid "$live"; fail "assert_r8_alive_check_matrix: live pgid empty"; return; }
+  WORKER_SID="$live_pg"
+  _watchdog_worker_alive
+  rc=$?
+  reap_pid "$live"
+  unset WORKER_SID
+  assert_eq "$rc" "0" "live process in target group"
+
+  local holder="" zfile="$TEST_TMP/r8-zombie.pid"
+  : > "$zfile"
+  bash -c 'setsid bash -c "exit 0" & echo $! > "'"$zfile"'"; exec sleep 30' &
+  holder=$!
+  local n=0 zpid="" st=""
+  while [ "$n" -lt 50 ]; do
+    zpid="$(cat "$zfile" 2>/dev/null || true)"
+    zpid="${zpid#"${zpid%%[![:space:]]*}"}"
+    zpid="${zpid%"${zpid##*[![:space:]]}"}"
+    if [ -n "$zpid" ]; then
+      st="$(ps -o state= -p "$zpid" 2>/dev/null || true)"
+      st="${st#"${st%%[![:space:]]*}"}"
+      st="${st%"${st##*[![:space:]]}"}"
+      case "$st" in
+        Z*) break ;;
+      esac
+    fi
+    sleep 0.05
+    n=$((n + 1))
+  done
+  case "$st" in
+    Z*) ;;
+    *) reap_pid "$holder"
+       fail "assert_r8_alive_check_matrix: pid ${zpid:-unset} never became zombie (state='${st:-gone}')"; return ;;
+  esac
+  unset SCOPE_UNIT WORKER_RP WORKER_FALLBACK_PGID
+  WORKER_SID="$zpid"
+  _watchdog_worker_alive
+  rc=$?
+  reap_pid "$holder"
+  unset WORKER_SID
+  assert_eq "$rc" "1" "zombie-only group"
+
+  unset SCOPE_UNIT WORKER_SID WORKER_FALLBACK_PGID
+  WORKER_RP="999999999"
+  _watchdog_worker_alive
+  rc=$?
+  unset WORKER_RP
+  assert_eq "$rc" "1" "gone worker pid with empty group"
+}
+
+assert_r8_alive_check_matrix
+
 finalize_test

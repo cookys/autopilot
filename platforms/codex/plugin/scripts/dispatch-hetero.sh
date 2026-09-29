@@ -3366,19 +3366,21 @@ _setsid_wait_worker_sid() {
   printf '%s\n' "$rp"
 }
 
-# Alive iff some process in the worker target is not a zombie. kill -0 is
-# insufficient: an unreaped natural exit is still a pid (state Z).
+# Alive unless the process table positively proves the worker dead.
+# kill -0 is insufficient: an unreaped natural exit is still a pid (state Z).
 # procps `ps -g N` matches session leaders / group *names*, not PGID.
 _watchdog_pgid_has_live() {
-  local target="$1" pgid="" st="" out="" ps_rc=0
-  [ -n "$target" ] || return 1
-  out="$(ps -e -o pgid=,state= 2>/dev/null)" || ps_rc=$?
-  # Unknown (ps failed or produced no rows) counts as alive so the watchdog
-  # still fires; a false fire is un-stamped on ESRCH.
+  local target="$1" pid="" pgid="" st="" out="" ps_rc=0
+  [ -n "$target" ] || return 0
+  out="$(ps -e -o pid=,pgid=,state= 2>/dev/null)" || ps_rc=$?
   if [ "$ps_rc" -ne 0 ] || [ -z "$out" ]; then
     return 0
   fi
-  while read -r pgid st || [ -n "${pgid:-}" ]; do
+  while read -r pid pgid st || [ -n "${pid:-}" ]; do
+    pgid="${pgid#"${pgid%%[![:space:]]*}"}"
+    pgid="${pgid%"${pgid##*[![:space:]]}"}"
+    st="${st#"${st%%[![:space:]]*}"}"
+    st="${st%"${st##*[![:space:]]}"}"
     [ -n "$pgid" ] || continue
     [ "$pgid" = "$target" ] || continue
     case "$st" in
@@ -3392,34 +3394,48 @@ EOF
 }
 
 _watchdog_worker_alive() {
-  local st=""
+  local pid="" pgid="" st="" out="" ps_rc=0
+  local rp="${WORKER_RP:-}"
+  local target=""
+  local rp_dead=1 group_dead=1
   if [ -n "${SCOPE_UNIT:-}" ]; then
-    local rp="${WORKER_RP:-}"
-    if [ -n "$rp" ]; then
-      st="$(ps -o state= -p "$rp" 2>/dev/null || true)"
-      st="${st#"${st%%[![:space:]]*}"}"
-      st="${st%"${st##*[![:space:]]}"}"
-      # Empty state is unknown (ps produced no usable output). With a
-      # fallback pgid, fall through to the group check; with none, unknown
-      # counts as alive so the watchdog still fires the scope kill.
-      case "$st" in
-        "")
-          if [ -z "${WORKER_FALLBACK_PGID:-}" ]; then
-            return 0
-          fi
-          ;;
-        Z*) ;;
-        *) return 0 ;;
-      esac
+    target="${WORKER_FALLBACK_PGID:-}"
+  else
+    target="${WORKER_SID:-}"
+    [ -n "$target" ] || target="${WORKER_FALLBACK_PGID:-}"
+  fi
+  # Neither identifier: unknown, hence alive.
+  if [ -z "$rp" ] && [ -z "$target" ]; then
+    return 0
+  fi
+  out="$(ps -e -o pid=,pgid=,state= 2>/dev/null)" || ps_rc=$?
+  if [ "$ps_rc" -ne 0 ] || [ -z "$out" ]; then
+    return 0
+  fi
+  while read -r pid pgid st || [ -n "${pid:-}" ]; do
+    pid="${pid#"${pid%%[![:space:]]*}"}"
+    pid="${pid%"${pid##*[![:space:]]}"}"
+    pgid="${pgid#"${pgid%%[![:space:]]*}"}"
+    pgid="${pgid%"${pgid##*[![:space:]]}"}"
+    st="${st#"${st%%[![:space:]]*}"}"
+    st="${st%"${st##*[![:space:]]}"}"
+    [ -n "$pid" ] || continue
+    case "$st" in
+      Z*) continue ;;
+    esac
+    if [ -n "$rp" ] && [ "$pid" = "$rp" ]; then
+      rp_dead=0
     fi
-    if _watchdog_pgid_has_live "${WORKER_FALLBACK_PGID:-}"; then
-      return 0
+    if [ -n "$target" ] && [ "$pgid" = "$target" ]; then
+      group_dead=0
     fi
+  done <<EOF
+$out
+EOF
+  if [ "$rp_dead" -eq 1 ] && [ "$group_dead" -eq 1 ]; then
     return 1
   fi
-  local target="${WORKER_SID:-}"
-  [ -n "$target" ] || target="${WORKER_FALLBACK_PGID:-}"
-  _watchdog_pgid_has_live "$target"
+  return 0
 }
 
 _watchdog_signal_worker() {

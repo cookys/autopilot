@@ -20,6 +20,12 @@
 **Problem**: `git worktree` 的 local config 預設**共用主 repo 的 `.git/config`**（除非啟用 `extensions.worktreeConfig`）。在 worktree 裡執行裸 `git config user.name X` 等同直接改主 clone 身分——隔離 worktree 擋得住檔案寫入，擋不住 config 寫穿。事故鏈：oracle fixture 用裸 `git config`（教壞 worker）→ worker 在 worktree 根實驗 → 寫穿 → 主 clone 之後所有 commit 換人。
 **Solution**: 立即：`git config user.name/user.email` 修回真實身分（歷史不重寫）。系統性（BACKLOG）：(a) dispatch-hetero/author 在 run 前快照主 repo 的 `user.name`/`user.email`，teardown 比對，變動 → 修回 + 大聲警告（containment 類防線）；(b) oracle fixture 一律 `git -C "$MINI_REPO" config` 或 subshell `-c user.name=... -c user.email=...` inline，絕不裸寫；(c) worker prompt 紀律已含「不得在 worktree 根建 fixture repo / 跑 git init/config」。
 **Related**: wrapper commit 已用 `-c` inline identity（不受污染影響）；worker 自行 commit 的路徑才中招。commit 前 identity 校驗可考慮進 pre-commit（`autopilot-distill-skills:git-identity` 的機械化版）。
+**第二條路徑（2026-09-29）**：git 在 linked worktree 裡跑 hook 時會 export `GIT_DIR=<main>/.git/worktrees/<wt>`，所有子行程都會繼承。這時測試在暫存目錄裡 `git init -q` 不會建出新的 `.git`，接著裸跑 `git config user.name` 就寫進主 clone 共用的 config。自 2026-09-04 起另一台機器的主 clone 因此產生 631 個 `Test User <test@example.com>` commit；在暫存 clone 裡帶著 `GIT_DIR` 跑舊版 `review-loop-resolver-b.test.sh` 可以重現。07-16 補的 identity containment 只包住派工，擋不到測試套件這條路。v2.36.103 修正：`hooks/tests/run.sh`/`lib.sh` 先 `unset $(git rev-parse --local-env-vars)`，run.sh 加上真 repo 身分 drift guard（還原並讓整套測試失敗），另加 `.mailmap`。查同類事故時，先看 commit 作者是從哪個時間點開始換人，再找那段時間在跑的測試。
+
+## `resolve-dispatch-topology.js` 預設會寫檔
+**Date**: 2026-09-29 | **Context**: 想唯讀查 reviewer ladder
+**Problem**: 不帶 `--json`/`--out` 直接跑 `node scripts/resolve-dispatch-topology.js`，它的預設行為是重新推導拓撲並寫進 `~/.autopilot/topology.json`（或 `$AUTOPILOT_TOPOLOGY_FILE`），stdout 什麼都不印，看起來像沒動作。
+**Solution**: 只想看結果時用 `--json --out /dev/null`（可再加 `--role reviewer`）；要確認磁碟上的檔案跟重算結果一致，用 `--check`（不一致會回 non-zero）。
 
 ## Edit/Write tool parameters decode `\uNNNN` escapes before they reach the file
 **Date**: 2026-08-17 | **Context**: fixing a report group-key line in `engine-capability-state.js` that used a backslash-`u`-`0000` (NUL) escape sequence as a template-literal join separator

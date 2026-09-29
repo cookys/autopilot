@@ -8,6 +8,8 @@
 
 | 日期 | 類別 | 簡述 | 文件 |
 |------|------|------|------|
+| 2026-09-29 | debug | worktree 身分寫穿的第二條路徑：git 在 worktree 跑 hook 時會 export `GIT_DIR`，測試在暫存目錄 `git init`+裸 `git config` 會寫進主 clone 共用的 config（631 個 Test User commit），v2.36.103 在 run.sh/lib.sh unset 並加 drift guard | [debug-patterns.md](debug-patterns.md) |
+| 2026-09-29 | debug | `resolve-dispatch-topology.js` 不帶旗標會寫 `~/.autopilot/topology.json`；唯讀用 `--json --out /dev/null`，比對用 `--check` | [debug-patterns.md](debug-patterns.md) |
 | 2026-08-27 | arch | 訂閱不等於便宜:同一個 CLI、同一組登入,指向 first-party 模型走「大方的池」,指向第三方模型走「按 API 價計費的池」,差一個數量級;`auto` 沒有獨立額度(是母池的子項),`-fast` 是進出各 2 倍、只買延遲不省錢;CLI 查不到用量,只有互動模式的 slash command 有 | [vendor-quota-shapes.md](vendor-quota-shapes.md) |
 | 2026-08-25 | arch | 驗證一份「描述環境」的文件要獨立重畫地圖再 diff,不是逐句查證——逐句查不出它少畫了一整條通道;三位審查者全過,且其中一人據以推理的前提本身就是漏掉的那條 | [architecture.md](architecture.md) |
 | 2026-08-25 | arch | 讀斷言不等於測斷言:一席讀了「改鬆會變紅」的註解判 Verified Clean,另一席突變後發現全綠、真實語料 5→2;panel 合成必須 union-on-verified-critical,多數決會壓掉盲點catch | [architecture.md](architecture.md) |
@@ -16,8 +18,6 @@
 | 2026-07-31 | arch | Persistent implementer transcript 只保證上下文連續，不會自動產生 ICC/WLB/LSM lifecycle evidence；L5/L6 fallback 必須在第一次 effect 前接上 canonical adapter，事後不得偽造 `can_close` receipt | [architecture.md](architecture.md) |
 | 2026-07-29 | debug | CLI `--help` 只證明 option 存在，不證明可組合：Kimi 0.28.0 的 non-interactive `--prompt` 與 interactive `--plan` 互斥；hermetic fixture 若照抄錯誤 argv 也會假綠，需 live smoke | [debug-patterns.md](debug-patterns.md) |
 | 2026-07-27 | arch | Absence 不等於 zero：先用 repo registry admission 記住資源曾存在，再以 Git-ref CAS authority 防 ordinary-file rollback、anchor/registry forward-repair 防 torn write；先凍結 attack matrix、穩定 diff 後才跑昂貴外審 | [architecture.md](architecture.md) |
-| 2026-07-26 | arch | Severity 不等於當票修復權；同模型新 context 是 peer、不是 Heto；主席不可用時改走全部合格異質席聯審，逐票排除 implementation lineage／能力與 context 不足席 | [architecture.md](architecture.md) |
-| 2026-07-24 | arch | Merge 完成後 cleanup 是 terminal invariant：驗證 worktree inactive/clean 與 branch containment，移除 worktree，再用 preserve-first reaper 或 `git branch -d`，最後重新列舉確認零殘留 | [git-ref-lifecycle-races.md](git-ref-lifecycle-races.md) |
 | 2026-07-16 | debug | Silent-retry 假死（CLI×z.ai 確定性 529）— 分層診斷四步 + logging proxy 定位；readiness 探針要同傳輸同 payload | [debug-patterns.md](debug-patterns.md) |
 
 ## 知識分類

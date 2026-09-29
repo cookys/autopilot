@@ -917,6 +917,7 @@ emit() { # status commit files ins del worktree error
   local timed_out_json="false" timeout_enforced_json="false"
   [ "${WORKER_TIMED_OUT:-0}" -eq 1 ] && timed_out_json="true"
   [ -n "${TIMEOUT_SOURCE:-}" ] && timeout_enforced_json="true"
+  [ "${WATCHDOG_DISARMED:-0}" -eq 1 ] && timeout_enforced_json="false"
   emit_timeout_secs="$(normalize_timeout_seconds "${TIMEOUT:-}" 2>/dev/null || true)"
   timeout_fields=", \"timed_out\": $timed_out_json, \"timeout_enforced\": $timeout_enforced_json"
   if [ -n "${TIMEOUT_SOURCE:-}" ] && [ -n "$emit_timeout_secs" ]; then
@@ -1751,6 +1752,7 @@ write_manifest() {
     mf_timeout_source="$TIMEOUT_SOURCE"
     mf_timeout_enforced="true"
   fi
+  [ "${WATCHDOG_DISARMED:-0}" -eq 1 ] && mf_timeout_enforced="false"
   {
     printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "scaffold_tier": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, "timeout_seconds": %s, "timeout_source": "%s", "timeout_enforced": %s%s%s }\n' \
       "$(_flat_json_escape "$DISPATCH_RUN_ID")" "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
@@ -3265,6 +3267,7 @@ cleanup_managed_codex_home() {
 
 WATCHDOG_PID=""
 WATCHDOG_TOKEN_FILE=""
+WATCHDOG_DISARMED=0
 
 _self_pgid() {
   ps -o pgid= -p $$ 2>/dev/null | tr -d ' '
@@ -3376,7 +3379,8 @@ _arm_worker_watchdog() {
   (
     sp=""
     trap 'kill "${sp:-}" 2>/dev/null; exit 0' TERM
-    if command -v setsid >/dev/null 2>&1; then
+    # test-only: HETERO_TEST_NO_SETSID=1 pretends setsid is missing (watchdog sleeper too).
+    if [ "${HETERO_TEST_NO_SETSID:-}" != "1" ] && command -v setsid >/dev/null 2>&1; then
       setsid bash -c 'exec -a "hetero-wall-watchdog-'"$tag"'" sleep "$1"' bash "$secs" &
     else
       sleep "$secs" &
@@ -3404,7 +3408,9 @@ _wait_worker_with_watchdog() {
   local secs=""
   if [ -n "${TIMEOUT_SOURCE:-}" ]; then
     secs="$(normalize_timeout_seconds "${TIMEOUT:-}" 2>/dev/null || true)"
-    [ -n "$secs" ] && _arm_worker_watchdog "$secs"
+    if [ -n "$secs" ] && [ "${WATCHDOG_DISARMED:-0}" -ne 1 ]; then
+      _arm_worker_watchdog "$secs"
+    fi
   fi
   wait "$rp"
   AGENT_EXIT=$?
@@ -3420,16 +3426,44 @@ _wait_worker_with_watchdog() {
   fi
 }
 
+# After no-setsid fallback launch: job control must actually isolate the worker
+# pgid, else the watchdog cannot signal without hitting the dispatcher group.
+_verify_no_setsid_watchdog_or_disarm() {
+  local selfpg=""
+  local monitor_ok=1
+  # test-only: HETERO_TEST_NO_JOBCONTROL=1 forces the job-control check to fail.
+  if [ "${HETERO_TEST_NO_JOBCONTROL:-}" = "1" ]; then
+    monitor_ok=0
+  else
+    case "$-" in
+      *m*) ;;
+      *) monitor_ok=0 ;;
+    esac
+  fi
+  selfpg="$(_self_pgid)" || selfpg=""
+  if [ "$monitor_ok" -eq 0 ] || [ -z "${WORKER_SID:-}" ] \
+     || [ "$WORKER_SID" = "$selfpg" ] || [ "$WORKER_SID" = "$$" ]; then
+    WATCHDOG_DISARMED=1
+    echo "dispatch-hetero: wall timeout could not be enforced on this host" >&2 || true
+  fi
+}
+
 run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + CONTAINMENT
   WORKER_TIMED_OUT=0
   WATCHDOG_PID=""
   WATCHDOG_TOKEN_FILE=""
+  WATCHDOG_DISARMED=0
+  # test-only: HETERO_TEST_NO_SETSID=1 pretends setsid is missing for run_worker
+  # branch selection and HAVE_SETSID (watchdog sleeper checks the same env).
+  if [ "${HETERO_TEST_NO_SETSID:-}" = "1" ]; then
+    HAVE_SETSID=0
+  fi
   local rp=""
   if [ "${IN_DETACHED_CHILD:-0}" -eq 1 ]; then
     # Detached child is already a setsid session; still put the worker in its own
     # group so the watchdog never signals the dispatcher session.
     CONTAINMENT="setsid"
-    if command -v setsid >/dev/null 2>&1; then
+    if [ "${HETERO_TEST_NO_SETSID:-}" != "1" ] && command -v setsid >/dev/null 2>&1; then
       setsid env "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 &
       rp=$!
       WORKER_SID="$rp"
@@ -3437,8 +3471,10 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
       set -m 2>/dev/null || true
       env "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 &
       rp=$!
-      WORKER_SID="$(ps -o pgid= -p "$rp" 2>/dev/null | tr -d ' ')"
+      WORKER_SID="$(ps -o pgid= -p "$rp" 2>/dev/null | tr -d ' ' || true)"
       [ -z "$WORKER_SID" ] && WORKER_SID="$rp"
+      _verify_no_setsid_watchdog_or_disarm
+      set +m 2>/dev/null || true
     fi
     _wait_worker_with_watchdog "$rp"
     return 0
@@ -3458,7 +3494,7 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
     _wait_worker_with_watchdog "$rp"
   else
     CONTAINMENT="plain"
-    if command -v setsid >/dev/null 2>&1; then
+    if [ "${HETERO_TEST_NO_SETSID:-}" != "1" ] && command -v setsid >/dev/null 2>&1; then
       setsid env "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 &
       rp=$!
       WORKER_SID="$rp"
@@ -3466,8 +3502,10 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
       set -m 2>/dev/null || true
       env "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 &
       rp=$!
-      WORKER_SID="$(ps -o pgid= -p "$rp" 2>/dev/null | tr -d ' ')"
+      WORKER_SID="$(ps -o pgid= -p "$rp" 2>/dev/null | tr -d ' ' || true)"
       [ -z "$WORKER_SID" ] && WORKER_SID="$rp"
+      _verify_no_setsid_watchdog_or_disarm
+      set +m 2>/dev/null || true
     fi
     _wait_worker_with_watchdog "$rp"
   fi
@@ -4704,7 +4742,7 @@ dispatch_detached_run() {
     # Preserve pi supervisor poll/stall bounds across setsid detach.
     declare -p PI_RPC_DIRECTIVE_POLL_SECS PI_RPC_STALL_PROBE_SECS PI_RPC_MAX_SECS PI_RPC_PROVIDER PI_MODELS_JSON 2>/dev/null || true
     declare -p STRIKE_DETECTOR_VERSION 2>/dev/null || true
-    declare -f json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_signal_worker _arm_worker_watchdog _wait_worker_with_watchdog normalize_timeout_seconds run_worker run_agent compute_artifacts passive_capture \
+    declare -f json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_signal_worker _arm_worker_watchdog _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts passive_capture \
       _is_engine_unavailable _hetero_runner_token seat_strike_capture classify_outcome heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks _fp_unverifiable main_checkout_fingerprint check_main_checkout_boundary run_hands_content_gate \
       _cont_terminal_on_exit _cont_finalize_or_die \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \

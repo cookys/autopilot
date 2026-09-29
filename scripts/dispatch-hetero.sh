@@ -3160,7 +3160,7 @@ fi
 # attestation. It does NOT (and must not) unlock the L1 block-mode override — closing
 # that needs a real isolation boundary (separate UID / sandbox / no user systemd bus).
 # See BACKLOG "dispatch-hetero descendant-containment".
-SCOPE_UNIT=""; WORKER_SID=""
+SCOPE_UNIT=""; WORKER_SID=""; WORKER_FALLBACK_PGID=""
 HAVE_CGROUP=0
 if command -v systemd-run >/dev/null 2>&1 \
    && systemd-run --user --scope --quiet -- true >/dev/null 2>&1; then
@@ -3273,6 +3273,14 @@ _self_pgid() {
   ps -o pgid= -p $$ 2>/dev/null | tr -d ' '
 }
 
+_watchdog_sleeppid_cmdline_has_tag() {
+  local sp="$1" tag="$2" cmd=""
+  [ -n "$sp" ] && [ -n "$tag" ] || return 1
+  [ -r "/proc/${sp}/cmdline" ] || return 1
+  cmd="$(tr '\0' ' ' < "/proc/${sp}/cmdline" 2>/dev/null || true)"
+  [[ "$cmd" == *"hetero-wall-watchdog-${tag}"* ]]
+}
+
 _cancel_worker_watchdog() {
   local tok="${WATCHDOG_TOKEN_FILE:-}"
   local tag="" sp=""
@@ -3281,7 +3289,7 @@ _cancel_worker_watchdog() {
     rm -f "$tok" "${tok}.fired" 2>/dev/null || true
     if [ -f "${tok}.sleeppid" ]; then
       sp="$(cat "${tok}.sleeppid" 2>/dev/null || true)"
-      if [ -n "$sp" ]; then
+      if [ -n "$sp" ] && _watchdog_sleeppid_cmdline_has_tag "$sp" "$tag"; then
         kill "$sp" 2>/dev/null || true
         wait "$sp" 2>/dev/null || true
       fi
@@ -3294,7 +3302,7 @@ _cancel_worker_watchdog() {
   fi
   if [ -n "$tok" ] && [ -f "${tok}.sleeppid" ]; then
     sp="$(cat "${tok}.sleeppid" 2>/dev/null || true)"
-    if [ -n "$sp" ]; then
+    if [ -n "$sp" ] && _watchdog_sleeppid_cmdline_has_tag "$sp" "$tag"; then
       kill "$sp" 2>/dev/null || true
     fi
     rm -f "${tok}.sleeppid" 2>/dev/null || true
@@ -3354,7 +3362,23 @@ _setsid_wait_worker_sid() {
 _watchdog_signal_worker() {
   local sig="$1"
   if [ -n "${SCOPE_UNIT:-}" ]; then
-    systemctl --user kill "$SCOPE_UNIT" --signal="$sig" >/dev/null 2>&1 || true
+    local sc=0
+    # test-only: HETERO_TEST_SYSTEMCTL_KILL_FAIL=1 skips systemctl kill and
+    # takes the failure / pgid-fallback branch.
+    if [ "${HETERO_TEST_SYSTEMCTL_KILL_FAIL:-}" = "1" ]; then
+      sc=1
+    else
+      systemctl --user kill "$SCOPE_UNIT" --signal="$sig" >/dev/null 2>&1 || sc=$?
+    fi
+    if [ "$sc" -ne 0 ]; then
+      local target="${WORKER_FALLBACK_PGID:-}"
+      local selfpg=""
+      selfpg="$(_self_pgid)" || selfpg=""
+      if [ -n "$target" ] && [ "$target" != "$$" ] \
+         && [ -n "$selfpg" ] && [ "$target" != "$selfpg" ]; then
+        kill "-$sig" "-$target" 2>/dev/null || true
+      fi
+    fi
     return 0
   fi
   local target="${WORKER_SID:-}"
@@ -3453,6 +3477,7 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
   WATCHDOG_PID=""
   WATCHDOG_TOKEN_FILE=""
   WATCHDOG_DISARMED=0
+  WORKER_FALLBACK_PGID=""
   # test-only: HETERO_TEST_NO_SETSID=1 pretends setsid is missing for run_worker
   # branch selection and HAVE_SETSID (watchdog sleeper checks the same env).
   if [ "${HETERO_TEST_NO_SETSID:-}" = "1" ]; then
@@ -3482,8 +3507,18 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
   if [ "$HAVE_CGROUP" -eq 1 ]; then
     SCOPE_UNIT="hetero-${BRANCH//\//-}-$$.scope"
     CONTAINMENT="cgroup"
+    # Isolate the systemd-run job so its pgid can be a safe fallback if
+    # systemctl --user kill fails (must not share the dispatcher group).
+    set -m 2>/dev/null || true
     systemd-run --user --scope --quiet --unit="$SCOPE_UNIT" -- env "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 &
     rp=$!
+    local selfpg="" pg=""
+    selfpg="$(_self_pgid)" || selfpg=""
+    pg="$(ps -o pgid= -p "$rp" 2>/dev/null | tr -d '[:space:]' || true)"
+    if [ -n "$pg" ] && [ "$pg" != "$$" ] && [ -n "$selfpg" ] && [ "$pg" != "$selfpg" ]; then
+      WORKER_FALLBACK_PGID="$pg"
+    fi
+    set +m 2>/dev/null || true
     _wait_worker_with_watchdog "$rp"
   elif [ "$HAVE_SETSID" -eq 1 ]; then
     CONTAINMENT="setsid"
@@ -4714,7 +4749,7 @@ dispatch_detached_run() {
   {
   declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN QODER_BIN CURSOR_BIN OPENCODE_BIN KIMI_BIN KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER EFFORT \
       SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_QODER IS_CURSOR IS_OPENCODE IS_KIMI RUNNER_RESOLVED CURSOR_FAST PI_BIN MANAGED_CODEX_HOME CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
-      WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE QODER_PROMPT_FILE CURSOR_PROMPT_FILE OPENCODE_PROMPT_FILE KIMI_PROMPT_FILE KIMI_EDIT_ONLY \
+      WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID WORKER_FALLBACK_PGID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE QODER_PROMPT_FILE CURSOR_PROMPT_FILE OPENCODE_PROMPT_FILE KIMI_PROMPT_FILE KIMI_EDIT_ONLY \
       AGY_ENVELOPE AGY_STDERR AGY_PARSED AGY_USAGE_JSON \
       PACKED_PROMPT_TEMP LEDGER RUN_ID STAGE RESULTS_DIR RESULT_FILE EXIT_FILE HEARTBEAT_SECS \
       STRICT_CONTRACT STRICT_CONTRACT_RESULT_FIELDS STRICT_UNIT_ID STRICT_CONTRACT_SHA STRICT_SPEC_SHA STRICT_GO STRICT_ENGINE_ASSURANCE CONSUMING_REPO_ROOT CONTRACT_FILE_SUPPLIED CONTRACT_FILE \
@@ -4742,7 +4777,7 @@ dispatch_detached_run() {
     # Preserve pi supervisor poll/stall bounds across setsid detach.
     declare -p PI_RPC_DIRECTIVE_POLL_SECS PI_RPC_STALL_PROBE_SECS PI_RPC_MAX_SECS PI_RPC_PROVIDER PI_MODELS_JSON 2>/dev/null || true
     declare -p STRIKE_DETECTOR_VERSION 2>/dev/null || true
-    declare -f json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_signal_worker _arm_worker_watchdog _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts passive_capture \
+    declare -f json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _watchdog_sleeppid_cmdline_has_tag _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_signal_worker _arm_worker_watchdog _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts passive_capture \
       _is_engine_unavailable _hetero_runner_token seat_strike_capture classify_outcome heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks _fp_unverifiable main_checkout_fingerprint check_main_checkout_boundary run_hands_content_gate \
       _cont_terminal_on_exit _cont_finalize_or_die \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \

@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+# RED at 51def4fb
+# FAIL [dispatch-hetero-watchdog-followups] assert_r6_cancel_skips_kill_when_cmdline_lacks_tag: unrelated helper 3033051 was killed
+# FAIL [dispatch-hetero-watchdog-followups] 7 passed, 1 failed
+#       - assert_r6_cancel_skips_kill_when_cmdline_lacks_tag: unrelated helper 3033051 was killed
+# EXIT:1
+#
 # RED at a1ca251e:
 # FAIL [dispatch-hetero-watchdog-followups] plain nojobcontrol timeout_enforced: expected 'true', got 'false'
 # FAIL [dispatch-hetero-watchdog-followups] manifest timeout_enforced: expected 'true', got 'false'
@@ -200,9 +206,154 @@ assert_r9_no_job_notices_on_stderr() {
   fi
 }
 
+host_has_user_scope() {
+  command -v systemd-run >/dev/null 2>&1 \
+    && systemd-run --user --scope --quiet -- true >/dev/null 2>&1
+}
+
+wait_pid_dead() {
+  local pid="$1" limit="$2" n=0
+  while [ "$n" -lt "$limit" ]; do
+    pid_alive "$pid" || return 0
+    sleep 1
+    n=$((n + 1))
+  done
+  pid_alive "$pid" && return 1
+  return 0
+}
+
+reap_pid() {
+  local pid="$1"
+  [ -n "$pid" ] || return 0
+  kill -KILL "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+}
+
+assert_r2_cgroup_kill_failure_falls_back_to_pgid() {
+  if ! host_has_user_scope; then
+    echo "SKIP assert_r2_cgroup_kill_failure_falls_back_to_pgid: no working systemd-run --user --scope on this host"
+    return 0
+  fi
+  local stub="$TEST_TMP/grok-r2" pidfile="$TEST_TMP/r2.pid" runs="$TEST_TMP/runs-r2"
+  local outf="$TEST_TMP/r2.out"
+  mkdir -p "$runs"
+  install_sleep_stub "$stub"
+  : > "$pidfile"
+  local stubpid="" dispid="" json
+  (
+    cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
+      HETERO_TEST_PIDFILE="$pidfile" HETERO_TEST_SLEEP=120 \
+      HETERO_TEST_SYSTEMCTL_KILL_FAIL=1 \
+      "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+      --branch feat/wdog-r2 --prompt-file "$PROMPT" --timeout 3s
+  ) >"$outf" 2>&1 &
+  dispid=$!
+  if ! poll_until 15 test -s "$pidfile"; then
+    reap_pid "$dispid"
+    fail "assert_r2_cgroup_kill_failure_falls_back_to_pgid: stub pidfile empty"
+    return
+  fi
+  stubpid="$(cat "$pidfile" 2>/dev/null || true)"
+  if ! wait_pid_dead "$stubpid" 30; then
+    reap_pid "$stubpid"
+    reap_pid "$dispid"
+    fail "assert_r2_cgroup_kill_failure_falls_back_to_pgid: stub pid $stubpid still alive after 30s"
+    return
+  fi
+  wait "$dispid" 2>/dev/null || true
+  json="$(last_json "$(cat "$outf")")"
+  [ -n "$json" ] || fail "assert_r2_cgroup_kill_failure_falls_back_to_pgid: missing JSON: $(cat "$outf")"
+  assert_eq "true" "$(json_get "$json" timed_out)" "r2 cgroup fallback timed_out"
+}
+
+assert_r2_cgroup_kill_failure_detached_real_path() {
+  if ! host_has_user_scope; then
+    echo "SKIP assert_r2_cgroup_kill_failure_detached_real_path: no working systemd-run --user --scope on this host"
+    return 0
+  fi
+  local stub="$TEST_TMP/grok-r2-d" pidfile="$TEST_TMP/r2-d.pid"
+  local runs="$TEST_TMP/runs-r2-d" ledger="$TEST_TMP/r2-d/ledger.jsonl"
+  local result="${ledger}.results/wdog-r2-d.implement.result.json"
+  mkdir -p "$runs" "$(dirname "$ledger")"
+  bash "$LEDGER_SH" init --ledger "$ledger" >/dev/null
+  install_sleep_stub "$stub"
+  : > "$pidfile"
+  local stubpid="" json
+  (
+    cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
+      HETERO_TEST_PIDFILE="$pidfile" HETERO_TEST_SLEEP=120 \
+      HETERO_TEST_SYSTEMCTL_KILL_FAIL=1 \
+      "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+      --branch feat/wdog-r2-d --prompt-file "$PROMPT" --timeout 3s \
+      --ledger "$ledger" --run-id wdog-r2-d --stage implement
+  ) >/dev/null 2>&1 &
+  local wrap=$!
+  if ! poll_until 55 test -f "$result"; then
+    stubpid="$(cat "$pidfile" 2>/dev/null || true)"
+    reap_pid "$stubpid"
+    reap_pid "$wrap"
+    fail "assert_r2_cgroup_kill_failure_detached_real_path: result not available within 55s"
+    return
+  fi
+  json="$(cat "$result")"
+  [ -n "$json" ] || fail "assert_r2_cgroup_kill_failure_detached_real_path: empty result"
+  assert_eq "true" "$(json_get "$json" timed_out)" "r2 detached timed_out"
+  stubpid="$(cat "$pidfile" 2>/dev/null || true)"
+  [ -n "$stubpid" ] || fail "assert_r2_cgroup_kill_failure_detached_real_path: no pidfile"
+  if ! wait_pid_dead "$stubpid" 30; then
+    reap_pid "$stubpid"
+    fail "assert_r2_cgroup_kill_failure_detached_real_path: stub pid $stubpid still alive"
+  fi
+  wait "$wrap" 2>/dev/null || true
+}
+
+assert_r6_cancel_skips_kill_when_cmdline_lacks_tag() {
+  eval "$(sed -n '/^_watchdog_sleeppid_cmdline_has_tag() {/,/^}$/p' "$SCRIPT")"
+  eval "$(sed -n '/^_cancel_worker_watchdog() {/,/^}$/p' "$SCRIPT")"
+  local tok="$TEST_TMP/hetero-wdog-tok-r6neg"
+  : > "$tok"
+  WATCHDOG_TOKEN_FILE="$tok"
+  WATCHDOG_PID=""
+  /bin/sleep 120 &
+  local helper=$!
+  echo "$helper" > "${tok}.sleeppid"
+  set -e -o pipefail
+  _cancel_worker_watchdog
+  if ! pid_alive "$helper"; then
+    fail "assert_r6_cancel_skips_kill_when_cmdline_lacks_tag: unrelated helper $helper was killed"
+    return
+  fi
+  reap_pid "$helper"
+}
+
+assert_r6_cancel_kills_when_cmdline_has_tag() {
+  eval "$(sed -n '/^_watchdog_sleeppid_cmdline_has_tag() {/,/^}$/p' "$SCRIPT")"
+  eval "$(sed -n '/^_cancel_worker_watchdog() {/,/^}$/p' "$SCRIPT")"
+  local tok="$TEST_TMP/hetero-wdog-tok-r6pos"
+  : > "$tok"
+  local tag="${tok##*/}"
+  WATCHDOG_TOKEN_FILE="$tok"
+  WATCHDOG_PID=""
+  bash -c 'exec -a "hetero-wall-watchdog-'"$tag"'" /bin/sleep 120' &
+  local helper=$!
+  echo "$helper" > "${tok}.sleeppid"
+  set -e -o pipefail
+  _cancel_worker_watchdog
+  if pid_alive "$helper"; then
+    reap_pid "$helper"
+    fail "assert_r6_cancel_kills_when_cmdline_has_tag: tagged sleeper $helper still alive"
+    return
+  fi
+  wait "$helper" 2>/dev/null || true
+}
+
 assert_r1_nojobcontrol_reports_unenforced
 assert_r1_nojobcontrol_detached_real_path
 assert_r1_nosetsid_with_jobcontrol_still_enforces
 assert_r9_no_job_notices_on_stderr
+assert_r2_cgroup_kill_failure_falls_back_to_pgid
+assert_r2_cgroup_kill_failure_detached_real_path
+assert_r6_cancel_skips_kill_when_cmdline_lacks_tag
+assert_r6_cancel_kills_when_cmdline_has_tag
 
 finalize_test

@@ -26,8 +26,8 @@
 1. ~~context-budget 讀錯 live dir~~ 已完成，v2.36.100 出貨（見上）。回報這件事的本機 session 308-d1 只要求「修好後告訴 owner」——owner 已經知會，不需要回覆 308-d1。
 2. ~~`docs/backlog/dispatch-hetero-grok-timeout-not-applied.md`~~ 已完成，v2.36.101 出貨（見上），該 row 及其 sidecar 已刪。
 3. 候選（依序）：
-   - 兩筆 pre-existing-red 列（S 級，`docs/backlog/preexisting-reds-2026-09-28.md`）：`engine-qualify-verdict-stability.test.sh` 仍紅（D6 honest/parity grader-hash drift，尚未修）；`migrate-backlog-entries.test.sh` 在 `27b2e583` 上目前是綠的——再確認一次（跟這次 BACKLOG 編輯無關的獨立跑法)後這列可能可以直接關閉。
-   - codeforge 0700 列：`docs/backlog/context-budget-live-dir-mismatch.md` 原位置已刪，新內容併入 v2.36.100 CHANGELOG——codeforge 建立 `$XDG_RUNTIME_DIR/autopilot` 時目前是 0775，應該一開始就 mkdir 0700。
+   - ~~兩筆 pre-existing-red 列~~ 已完成（docs/tests-only，未出貨版號）：`engine-qualify-verdict-stability` 的 KR7 base 從 `b24d900a` 前進到 `dbf0e123`（implementer grader 在 09-24 重釘，舊 base 的 pin 比對必紅）；`migrate-backlog-entries` 的 `>=100` 下限隨 BACKLOG 變 queue 必然衰減（fixture 量到刪列後恰為 100、貼著下限，再出貨一列就會變無 FAIL 行的靜默紅），改 `>=20`。兩列與 sidecar 已刪。
+   - ~~codeforge 0700 列~~ 已完成：codeforge `1b388ed`（DirBuilder mode 0700，新建的上層目錄也是 0700；BACKLOG 列已關）。原說明：`docs/backlog/context-budget-live-dir-mismatch.md` 原位置已刪，新內容併入 v2.36.100 CHANGELOG——codeforge 建立 `$XDG_RUNTIME_DIR/autopilot` 時目前是 0775，應該一開始就 mkdir 0700。
    - 新的 watchdog follow-ups 列：`docs/backlog/dispatch-hetero-watchdog-followups.md`（v2.36.101 combined review 抓到、與本次修復不重疊的其餘項目）。
 4. `docs/backlog/foreman-guard-cost-shaped-gate.md`（觸發條件還沒成立，不要先做）。
 

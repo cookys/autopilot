@@ -28,22 +28,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-09-29-foreman-exam-landing-review/README.md
 - **Context**: scripts/hetero-review-loop.js:1232 writes chain before :1241 resolveField; exit 2 leaves no receipt and a re-run refuses.
 
-### `engine-qualify-verdict-stability.test.sh` is red at origin/develop — D6 honest/parity grader-hash drift
-- **Status**: open
-- **Trigger**: FIRED — red at origin/develop 2026-09-28
-- **Effort**: S
-- **Source**: v2.36.100 landing gate
-- **Pointer**: docs/backlog/preexisting-reds-2026-09-28.md
-- **Context**: `Error: impl evaluation grader drifted from its pinned hash`; confirmed red at `origin/develop` base before and after the v2.36.100 diff, unrelated to it.
-
-### `migrate-backlog-entries.test.sh` is red at origin/develop — real BACKLOG.md migratable count below the ≥100 gate
-- **Status**: open
-- **Trigger**: FIRED — red at origin/develop 2026-09-28
-- **Effort**: S
-- **Source**: v2.36.100 landing gate
-- **Pointer**: docs/backlog/preexisting-reds-2026-09-28.md
-- **Context**: a test that reads the real `docs/BACKLOG.md` store; count may move with row churn (incl. this landing's own net-zero row change).
-
 ### foreman-guard needs a cost-shaped gate (cache-read tokens or lifetime); covers clone foremen w/ INACTIVE marker
 - **Status**: open
 - **Trigger**: a hook-readable cumulative per-agent token feed exists, or a clone-based foreman is measured running away
@@ -839,10 +823,3 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/ci-repair-2026-09-23-followups.md
 - **Context**: add a probe where both fallbacks are empty and assert the occurrence count is unchanged after park.
 
-### codeforge statusline creates `$XDG_RUNTIME_DIR/autopilot` 0775 — should mkdir 0700
-- **Status**: open
-- **Trigger**: next codeforge release touching src/live.rs
-- **Effort**: S
-- **Source**: v2.36.100 live-dir fix
-- **Pointer**: none
-- **Context**: autopilot's resolver now tightens a self-owned group-bit dir under a private parent, so this is hygiene, not a live defect; the writer should still create 0700 so a host where /run/user/<uid> is not 0700 does not fall back to shm.

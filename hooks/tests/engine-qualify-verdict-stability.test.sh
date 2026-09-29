@@ -3292,16 +3292,18 @@ for (const role of ['consult', 'discuss']) {
 
 fs.rmSync(shortTmpBase, { recursive: true, force: true });
 
-// KR7 — other-role parity vs base b24d900a.
+// KR7 — other-role parity vs base dbf0e123.
 // Base advanced 4e204137 -> b24d900a (2026-09-23): runBrainQualification and
 // runQualification changed deliberately, NOT via a consult/discuss leak —
 // 27483f8e/cf49bf27 (brain + reviewer/owner abort on transport failure),
 // a2b8b95f (brain campaign-state open_findings + plant attribution fields),
-// b24d900a (brain-trial-order.json join map). b24d900a is the last commit to
+// b24d900a (brain-trial-order.json join map), then dbf0e123 (2026-09-24, chat completions /
+// claude effort / unparsed-tool warning — also re-pinned the implementer grader, which is why
+// the implementer pin comparison went red against b24d900a). dbf0e123 is the last commit to
 // touch scripts/engine-qualify.js and is on origin/develop; the guard still
 // catches any FUTURE consult/discuss change that leaks into these bodies.
 {
-  const baseSha = 'b24d900a581195ceefb998f6f7ddc06c366fd9fe';
+  const baseSha = 'dbf0e12303b9f77e2e26d5311d30199fe615eef2';
   const parityPath = path.join(root, 'scripts', '.d6-parity-engine-qualify-' + process.pid + '.js');
   const cleanup = () => {
     try { fs.unlinkSync(parityPath); } catch { /* already gone */ }

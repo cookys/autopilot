@@ -203,15 +203,18 @@ assert_eq "$rc" "1" "(h) unwritable out-dir exit 1"
 cmp -s "$H/docs/BACKLOG.md" "$H/docs/BACKLOG.md.before"
 assert_eq "$?" "0" "(h) backlog byte-identical after failed apply"
 
-# ── (i) real docs/BACKLOG.md dry-run ≥ 100 entries to migrate ──
+# ── (i) real docs/BACKLOG.md dry-run finds a non-trivial number of entries to migrate ──
+# BACKLOG is a queue (v2.36.78): rows leave as they ship, so an absolute floor near the historical
+# 100 decays into a silent red (the node -e gate prints no FAIL line). 20 still proves the parser
+# is reading the real store rather than an empty one.
 I="$(repo i-real)"
 cp "$REPO_ROOT/docs/BACKLOG.md" "$I/docs/BACKLOG.md"
 out="$(node "$MIG" --backlog "$I/docs/BACKLOG.md" --out-dir "$I/docs/backlog" --json)" || true
 rc_i=$?
 assert_eq "$rc_i" "0" "(i) real backlog dry-run exit 0"
 mig="$(json_field "$(first_json "$out")" totals.migrate)"
-node -e 'process.exit(Number(process.argv[1])>=100?0:1)' "$mig"
-assert_eq "$?" "0" "(i) migrate count >= 100 (got $mig)"
+node -e 'process.exit(Number(process.argv[1])>=20?0:1)' "$mig"
+assert_eq "$?" "0" "(i) migrate count >= 20 (got $mig)"
 assert_eq "$(json_field "$(first_json "$out")" preserved)" "null" "(i) preserved null"
 assert_file_absent "$I/docs/backlog" "(i) dry-run did not create out-dir"
 

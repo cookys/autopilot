@@ -1,5 +1,20 @@
 # Changelog
 
+## v2.36.103 — 測試套件不會再改掉真正 clone 的 git 身分
+
+- **症狀**：從 2026-09-04 起，origin/develop 上有 631 個 commit 的作者和 committer 都是 `Test User <test@example.com>`，最新一筆是 2026-09-29 的 `ab00b82e`。來源是另一台機器上的主 clone，它的 local `user.name`/`user.email` 被測試改掉了。
+- **成因（已重現）**：在 worktree 裡跑 hook 時，git 會 export `GIT_DIR=<main>/.git/worktrees/<wt>`，所有子行程都會繼承。不少測試在暫存目錄 `git init -q` 之後直接 `git config user.name "Test User"`。只要 `GIT_DIR` 在環境裡，init 就不會建新的 `.git`，config 會寫進主 clone 共用的 `.git/config`。反向對照：在暫存 clone 裡帶著 `GIT_DIR` 跑舊版的 `review-loop-resolver-b.test.sh`，主 clone 的身分就變成 `Test User <test@example.com>`，跟那些 commit 完全相同。這和 2026-07-16 的「Test Bot」事故是同一個機制。當時的身分防護只包住派工，擋不到測試套件。
+- **新規則**：
+  - `hooks/tests/run.sh` 和 `lib.sh` 一開始先 `unset $(git rev-parse --local-env-vars)`，和 git 自己的測試套件做法一樣，並附一份固定清單作為備援。
+  - `run.sh` 在跑之前記下真正 repo 的 local `user.name`/`user.email`（「沒設」也算一種狀態）。在跑完後以及 EXIT trap 裡比對，如果被改了就還原、大聲警告（只列出 key 名稱，不印值），並讓整套測試失敗。EXIT trap 改用 `exit "$status"`，因為 trap 裡的 `return` 改不了結束碼。
+  - 新增 `git-env-hygiene.test.sh`，內含反向對照。
+  - `.mailmap` 把 `Test User <test@example.com>` 對應回 `cookys`，歷史不改寫。
+- **depth-0 驗證**：帶著真正的 `GIT_DIR` 跑 `review-loop-resolver-b`，49 個 assertion 全過，真 repo 身分沒被改。故意寫一個會改真 repo 身分的探針測試，guard 抓到並還原，整套測試 exit 1。
+- **取捨**：`--local-env-vars` 也會清掉 `GIT_CONFIG_COUNT`/`GIT_CONFIG_PARAMETERS`。這是必要的，因為 `git -c user.name=…` 就是透過它傳給子行程的。代價是 fleet 設的 git protocol 封鎖，在測試子行程裡不會生效。
+- **不在本版範圍**：被改掉的那台機器的 clone 要由它的操作者自己 unset；已經問過對方的 session。
+
+prose-justification: 本版修真實的身分寫穿事故並補上反向對照，說明機制、驗證與取捨是必要事實；相對 v2.35.2 基線的既有文字量增加是先前版本累積的，本版只新增這一段。
+
 ## v2.36.102 — hetero-review-loop finalize 不會再因 resolver 失敗把 chain 卡死
 
 - **症狀**：`finalize` 先把 chain 標成 `finalized`、寫出 dispositions 快照與 `hands-brief.md`，最後才問 resolver 要 `resolved_from`。resolver 一失敗（`runResolver` 直接 `process.exit(2)`），receipt 就不會寫出，重跑又被「not pending」拒絕，整個 phase 就此卡死。2026-09-29 foreman 考場落地複審真的遇到：dogfood roster 的 implementer 席不合格，resolver 拒答，第 1 代的 receipt 至今補不回來。

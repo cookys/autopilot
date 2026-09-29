@@ -182,8 +182,8 @@ assert_r1_nosetsid_with_jobcontrol_still_enforces() {
   now="$(date +%s)"; elapsed=$((now - start))
   json="$(last_json "$out")"
   if [ "$(json_get "$json" timeout_enforced)" != "true" ]; then
-    echo "SKIP assert_r1_nosetsid_with_jobcontrol_still_enforces: job control did not isolate worker pgid on this host (timeout_enforced=$(json_get "$json" timeout_enforced))"
-    return 0
+    fail "assert_r1_nosetsid_with_jobcontrol_still_enforces: expected timeout_enforced=true (got $(json_get "$json" timeout_enforced)); liveness must see the job-control worker pgid. json=$json"
+    return
   fi
   [ "$elapsed" -lt 30 ] || fail "assert_r1_nosetsid_with_jobcontrol_still_enforces: took ${elapsed}s"
   assert_eq "true" "$(json_get "$json" timed_out)" "nosetsid+jobcontrol timed_out"
@@ -414,6 +414,7 @@ assert_r3_zombie_worker_not_stamped_timed_out() {
   set +e
   unset SCOPE_UNIT WORKER_FALLBACK_PGID WORKER_SID WORKER_RP
   eval "$(sed -n '/^_self_pgid() {/,/^}$/p' "$SCRIPT")"
+  eval "$(sed -n '/^_watchdog_pgid_has_live() {/,/^}$/p' "$SCRIPT")"
   eval "$(sed -n '/^_watchdog_worker_alive() {/,/^}$/p' "$SCRIPT")"
   eval "$(sed -n '/^_watchdog_signal_worker() {/,/^}$/p' "$SCRIPT")"
   eval "$(sed -n '/^_arm_worker_watchdog() {/,/^}$/p' "$SCRIPT")"
@@ -558,7 +559,72 @@ assert_r2_cgroup_kill_failure_detached_real_path
 assert_r2_cgroup_worker_stdin_is_devnull
 assert_r6_cancel_skips_kill_when_cmdline_lacks_tag
 assert_r6_cancel_kills_when_cmdline_has_tag
+assert_r3_alive_helper_matches_exact_pgid() {
+  set +e
+  unset SCOPE_UNIT WORKER_FALLBACK_PGID WORKER_SID WORKER_RP
+  eval "$(sed -n '/^_watchdog_pgid_has_live() {/,/^}$/p' "$SCRIPT")"
+  eval "$(sed -n '/^_watchdog_worker_alive() {/,/^}$/p' "$SCRIPT")"
+  local live="" other="" holder="" zfile="$TEST_TMP/r3-pgid-z.pid"
+  : > "$zfile"
+  setsid /bin/sleep 30 &
+  live=$!
+  setsid /bin/sleep 30 &
+  other=$!
+  local live_pg="" other_pg=""
+  live_pg="$(ps -o pgid= -p "$live" 2>/dev/null | tr -d '[:space:]')"
+  other_pg="$(ps -o pgid= -p "$other" 2>/dev/null | tr -d '[:space:]')"
+  [ -n "$live_pg" ] || { wait "$live" 2>/dev/null || true; wait "$other" 2>/dev/null || true; fail "assert_r3_alive_helper_matches_exact_pgid: live pgid empty"; return; }
+  [ -n "$other_pg" ] || { wait "$live" 2>/dev/null || true; wait "$other" 2>/dev/null || true; fail "assert_r3_alive_helper_matches_exact_pgid: other pgid empty"; return; }
+  [ "$live_pg" != "$other_pg" ] || { wait "$live" 2>/dev/null || true; wait "$other" 2>/dev/null || true; fail "assert_r3_alive_helper_matches_exact_pgid: live and other share pgid $live_pg"; return; }
+  WORKER_SID="$live_pg"
+  if ! _watchdog_worker_alive; then
+    wait "$live" 2>/dev/null || true
+    wait "$other" 2>/dev/null || true
+    fail "assert_r3_alive_helper_matches_exact_pgid: live group $live_pg judged not alive"
+    return
+  fi
+  bash -c 'setsid bash -c "exit 0" & echo $! > "'"$zfile"'"; exec sleep 30' &
+  holder=$!
+  local n=0 zpid="" st=""
+  while [ "$n" -lt 50 ]; do
+    zpid="$(tr -d '[:space:]' < "$zfile" 2>/dev/null || true)"
+    if [ -n "$zpid" ]; then
+      st="$(ps -o state= -p "$zpid" 2>/dev/null | tr -d '[:space:]')"
+      case "$st" in
+        Z*) break ;;
+      esac
+    fi
+    sleep 0.05
+    n=$((n + 1))
+  done
+  case "$st" in
+    Z*) ;;
+    *) wait "$live" 2>/dev/null || true; wait "$other" 2>/dev/null || true; reap_pid "$holder"
+       fail "assert_r3_alive_helper_matches_exact_pgid: pid ${zpid:-unset} never became zombie (state='${st:-gone}')"; return ;;
+  esac
+  WORKER_SID="$zpid"
+  if _watchdog_worker_alive; then
+    wait "$live" 2>/dev/null || true
+    wait "$other" 2>/dev/null || true
+    reap_pid "$holder"
+    fail "assert_r3_alive_helper_matches_exact_pgid: zombie-only group judged alive (helper always-alive would pass this)"
+    return
+  fi
+  WORKER_SID="999999999"
+  if _watchdog_worker_alive; then
+    wait "$live" 2>/dev/null || true
+    wait "$other" 2>/dev/null || true
+    reap_pid "$holder"
+    fail "assert_r3_alive_helper_matches_exact_pgid: missing pgid judged alive"
+    return
+  fi
+  reap_pid "$holder"
+  reap_pid "$live"
+  reap_pid "$other"
+}
+
 assert_r3_zombie_worker_not_stamped_timed_out
+assert_r3_alive_helper_matches_exact_pgid
 assert_r3_natural_exit_before_deadline_not_timed_out_real_path
 
 finalize_test

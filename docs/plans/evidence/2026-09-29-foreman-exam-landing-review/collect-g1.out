@@ -1,0 +1,23 @@
+{
+  "phase": "foreman-exam",
+  "generation": 1,
+  "base": "2b226e0a35a34ab2581e394dea5c6cf8adeb7091",
+  "head": "8560efcf690867e2e7f859270ddd0404f47747ee",
+  "seats": [
+    "s0",
+    "s1"
+  ],
+  "findings_count": 8,
+  "status": "pending",
+  "seat_summaries": {
+    "s0": {
+      "findings_count": 8,
+      "proof_present": false
+    },
+    "s1": {
+      "findings_count": 0,
+      "proof_present": true
+    }
+  }
+}
+exit=0

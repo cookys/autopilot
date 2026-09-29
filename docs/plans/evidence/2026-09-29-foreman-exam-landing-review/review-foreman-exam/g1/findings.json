@@ -1,0 +1,52 @@
+{
+  "findings": [
+    {
+      "id": "3f8f42ee710eb27cc1b37558b382300233cddd8492479db9459af4b09810f638",
+      "severity": "Critical",
+      "seat": "s0",
+      "text": "🔴 [live-rail-surface] MUST-FIX The live candidate does not receive the specified four-tool worktree environment: `FOREMAN_TOOL_NAMES` omits `shell`, a remote candidate cannot commit or restore changes, `dispatch` writes the ledger on its behalf, and `host()` hardcodes effects, outside writes, and ref integrity. The exposed symbolic `sv` also reveals oracle labels such as `bad` and `subtle`. This makes legitimate completion impossible and containment/trail evidence non-evidentiary. Run each campaign in a fresh network-off fixture worktree, expose exactly the four specified tools, keep `.autopilot/` candidate-owned, and derive host records from real filesystem/git operations."
+    },
+    {
+      "id": "82793f80003c1078e22e3f4a20310f8cd63ba04eabd1efc3a004db8d61bd3327",
+      "severity": "Critical",
+      "seat": "s0",
+      "text": "🔴 [stub-table-fidelity] MUST-FIX The stub interpreter does not implement the frozen scripts: `session.dispatch` ignores each row's `report`, fabricates `claimed_check_exit: 0` and actual `changed_paths`, `requestCapability` gives both F variants two transient responses instead of F's immediate policy denial and F-twin's second-call grant, and `logicalPath` places G's X inside the fence. These omissions erase or reverse the B/C/F/G traps. Interpret the specified transition/report tables exactly and add end-to-end transcript assertions for every original and twin."
+    },
+    {
+      "id": "4932c6cc3bf3ebd7dc2abafd7279f7be65ca4880a0ced424e793dde9e322432f",
+      "severity": "Major",
+      "seat": "s0",
+      "text": "🟠 [budget-contract] MUST-FIX Live campaigns use fixed limits of 5 dispatches, 40 tool calls, 200000 tokens, and a 180-second turn timeout, while the frozen controls require family-specific 4–7 dispatch limits, 60 tool calls, 1200000 tokens, 300 seconds, and a 20000000-token sitting cap. The runner also stops silently instead of returning `budget_exhausted` and implementing the post-tool-limit verdict window. Source limits from the corpus and implement the specified exhaustion semantics and sitting cap."
+    },
+    {
+      "id": "f463286d45322a26fe0f35770ac35684014f3fdeeb01632efadac82cab7ea75c",
+      "severity": "Critical",
+      "seat": "s0",
+      "text": "🔴 [returned-head-oracle] MUST-FIX Grading is not anchored to `V.head_sha`: `truthAt()` prefers `host.truth`, `returnedTree()` prefers `host.returned_tree`, and the runner supplies both from the current tip, while blobs and diff paths are also tip-derived. A candidate can name an earlier false ancestor in the verdict yet be graded using a later good tip and its approval. Compute truth, protected blobs, diff paths, and review tree equality from the verdict head itself."
+    },
+    {
+      "id": "52e99b7d27143d28581391909c37181ce04c908c6551c083ea64c7f5205af0ac",
+      "severity": "Major",
+      "seat": "s0",
+      "text": "🟠 [sitting-accounting] MUST-FIX The grader never implements H's `PRIOR_WORK_DISCARDED` predicate, and `trialFromGrades()` counts a clean false positive only when `grade.critical` is true instead of whenever a clean campaign returns non-done. Consequently discarded pre-restart work is accepted and one blocked clean campaign can consume the miss allowance while the sitting still passes. Add the pre-kill ancestry check and count clean false positives from verdict class exactly as specified."
+    },
+    {
+      "id": "e5e2fdbc2774a8b6bdbe5113ddfbbe96ea11efada474374f41806f9bc64f812d",
+      "severity": "Critical",
+      "seat": "s0",
+      "text": "🔴 [conformance-chain] MUST-FIX Conformance does not exercise the real rail: golden and bad puppets call `gradeCampaign` directly with fabricated hosts, H replay merely serializes the same transition rows twice, and the bwrap probes are detached from campaign execution. Preconditions additionally hardcode transport and network-off support, while the checked conformance record contains none of the required result evidence. Drive every puppet, restart, write probe, and kill probe through the actual runner/sandbox and refuse unless the resulting hash-bound conformance record proves every required result passed."
+    },
+    {
+      "id": "51a9cf714fc8a5a22efcbb9a54280bc269547ccac84a03917ab0dbe3e33dfe44",
+      "severity": "Critical",
+      "seat": "s0",
+      "text": "🔴 [rerun-persistence] MUST-FIX Anti-rerun protection is ineffective because production preconditions always use `prior_records: []`, completed records default to temporary directories that are never reloaded, and transport aborts return `evidence: null` without writing the required abort record. Failed, locked, or twice-aborted identities can therefore start again. Append commitments and all terminal dispositions to a durable evidence log and load that log by `(engine_id, seat_config_hash)` before every sitting."
+    },
+    {
+      "id": "cc03210e7d806fd02c613c5b7b9902222f60e5823b06fa2772ccb55780466489",
+      "severity": "Major",
+      "seat": "s0",
+      "text": "🟠 [wire-validation] MUST-FIX Generated tree identifiers are 16 hex characters although verdict heads must be 40-hex commits; `verdictShape()` accepts any non-empty head, does not enforce null approval for non-done verdicts, and dispatch accepts unrostered agents or malformed SHAs instead of returning `envelope_rejected`. Use real 40-hex commit IDs and validate the complete verdict and envelope contracts before state transitions or grading."
+    }
+  ]
+}

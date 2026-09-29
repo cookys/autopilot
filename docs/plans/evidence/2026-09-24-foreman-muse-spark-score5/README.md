@@ -17,3 +17,13 @@ Earlier attempts in the same morning were transport voids, not scores:
 | `…-score4` | killed (exit 143) so progress lines could be unbuffered |
 
 Those directories were diagnostic. The grade is score5 only.
+
+## Note added 2026-09-29: not a spec-conformant sitting
+
+The 2026-09-29 landing review of the harness that produced this run
+(`../2026-09-29-foreman-exam-landing-review/`) verified eight deviations from
+the frozen spec. The candidate had no `shell` tool. The dispatch, tool-call,
+and token budgets were smaller than the spec's. Grading read the session tip
+instead of the verdict's head. Read the 0/28 below as a record of what this
+harness did, not as a judgement of muse-spark as a foreman. The runner that
+produced it is committed on `hetero/foreman-phase-5` at `b3037d6e`.

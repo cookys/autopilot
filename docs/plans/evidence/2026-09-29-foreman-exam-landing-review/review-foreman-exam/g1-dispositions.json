@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "phase": "foreman-exam",
+  "generation": 1,
+  "findings": [
+    {
+      "id": "3f8f42ee710eb27cc1b37558b382300233cddd8492479db9459af4b09810f638",
+      "disposition": "verified",
+      "rationale": "evals/foreman-eval-runner.js:52 FOREMAN_TOOL_NAMES = {dispatch, request_capability, return_verdict}; spec A1 (SPEC.md:25-26) requires four tools including shell(cmd) in a network-off worktree."
+    },
+    {
+      "id": "82793f80003c1078e22e3f4a20310f8cd63ba04eabd1efc3a004db8d61bd3327",
+      "disposition": "verified",
+      "rationale": "runner.js:598 claimed_check_exit is 0 for every completed dispatch regardless of the row report; runner.js:416-418 logicalPath always returns fence[0]+key, so G's out-of-fence X cannot be expressed."
+    },
+    {
+      "id": "4932c6cc3bf3ebd7dc2abafd7279f7be65ca4880a0ced424e793dde9e322432f",
+      "disposition": "verified",
+      "rationale": "runner.js:45-49 REMOTE_CAMPAIGN_BUDGET = 5 dispatches / 40 tool calls / 200000 tokens; spec controls (SPEC.md:82-83,119-120) are 1200000 tokens per campaign and 20000000 per sitting; budget_exhausted status (SPEC.md:434,608) is not returned."
+    },
+    {
+      "id": "f463286d45322a26fe0f35770ac35684014f3fdeeb01632efadac82cab7ea75c",
+      "disposition": "verified",
+      "rationale": "runner.js:656 host.returned_tree = session.tip and runner.js:661 host.truth is computed for the tip; grader truthAt (grader.js:75-76) and returnedTree (grader.js:188-189) prefer those host fields over V.head_sha."
+    },
+    {
+      "id": "52e99b7d27143d28581391909c37181ce04c908c6551c083ea64c7f5205af0ac",
+      "disposition": "verified",
+      "rationale": "PRIOR_WORK_DISCARDED appears in SPEC.md:388 and in a generator description string (generator.js:534) but in no grader predicate; conformance.js:550 counts a clean false positive only when grade.critical, while SPEC.md:110 defines it as any non-done verdict on a clean campaign."
+    },
+    {
+      "id": "e5e2fdbc2774a8b6bdbe5113ddfbbe96ea11efada474374f41806f9bc64f812d",
+      "disposition": "verified",
+      "rationale": "foreman-harness-conformance.js:476,499,635 call gradeCampaign directly with goldenHost/puppet.host; no puppet is driven through driveCampaign/runForemanQualification."
+    },
+    {
+      "id": "51a9cf714fc8a5a22efcbb9a54280bc269547ccac84a03917ab0dbe3e33dfe44",
+      "disposition": "verified",
+      "rationale": "runner.js:275 passes prior_records: [] to the precondition check, so antiRerunDecision (runner.js:168) never sees a prior failed/locked/aborted record."
+    },
+    {
+      "id": "cc03210e7d806fd02c613c5b7b9902222f60e5823b06fa2772ccb55780466489",
+      "disposition": "verified",
+      "rationale": "evals/foreman-eval-generator.js:76 tree ids are derive(...).slice(0,16), not 40-hex commits; evals/foreman-eval-grader.js:139 verdictShape accepts any non-empty head_sha and does not require approval_dispatch_id null for a non-done verdict."
+    }
+  ]
+}

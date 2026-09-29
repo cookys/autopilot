@@ -1,0 +1,31 @@
+[
+  {
+    "generation": 1,
+    "base": "2b226e0a35a34ab2581e394dea5c6cf8adeb7091",
+    "head": "8560efcf690867e2e7f859270ddd0404f47747ee",
+    "seats": [
+      {
+        "id": "s0",
+        "status": "reviewed"
+      },
+      {
+        "id": "s1",
+        "status": "reviewed"
+      }
+    ],
+    "reviewed_seats": 2,
+    "total_seats": 2,
+    "reviewed_seats_count": 2,
+    "total_seats_count": 2,
+    "status": "finalized",
+    "diff_sha256": "ec0230175a11be2129f449e7c80b7a1b1741587116b52c02030486fb4164d006",
+    "full_range_sha256": "ec0230175a11be2129f449e7c80b7a1b1741587116b52c02030486fb4164d006",
+    "findings_sha256": "8a6cb7500899d8e4530f74ace71b5dfdeaf1ae283bef82e54b70bb338188281b",
+    "seat_artifact_sha256": {
+      "s0": "866bbe11b664d8a5ce5a0e947f0656263e9c757d573f465d2fe6077a36f1d408",
+      "s1": "3170710719b3aae5da52255dbd3c8cfce175142c34a636165c517a0735b829eb"
+    },
+    "dispositions_path": "review-foreman-exam/g1/dispositions.json",
+    "dispositions_sha256": "d560f6131b184f16a2c22c1836ae89849167b43353cea62cf74ed71fb1cb6820"
+  }
+]

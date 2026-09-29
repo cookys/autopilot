@@ -12,6 +12,22 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 4. ~~foreman rail Shape B~~ v2.36.34 · 5. ~~`308-db` (a) residue sweep~~ v2.36.35 · 6. ~~2026-09-12 dogfood four defects~~ v2.36.36 ·
 7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41 · 9. ~~ledger flag burns a grant~~ v2.36.42 · 10. ~~reviewer no_verdict releases the claim~~ v2.36.43. Next: operator-named work, or the 308-8f dispatch-hetero reports.
 
+### Foreman exam harness deviates from its frozen spec; the branch is parked unmerged
+- **Status**: open
+- **Trigger**: FIRED — landing review 2026-09-29 verdict FIX-THEN-SHIP
+- **Effort**: L
+- **Source**: hetero review g1 (gpt-5.6-sol), depth-0 verified 8/8
+- **Pointer**: docs/backlog/foreman-exam-harness-spec-conformance.md
+- **Context**: no `shell` tool, wrong budgets, and tip-anchored grading; the muse-spark sitting on develop is non-conformant.
+
+### Dogfood review roster names an unqualified implementer, so resolve-review-loop refuses every field
+- **Status**: open
+- **Trigger**: FIRED — 2026-09-29, blocks hetero-review-loop finalize
+- **Effort**: S
+- **Source**: foreman landing review 2026-09-29
+- **Pointer**: none
+- **Context**: `cursor-grok-4.6-low/cursor` in .claude/review-loop-config.md has no unexpired override; operator picks revert or re-qualify.
+
 ### `engine-qualify-verdict-stability.test.sh` is red at origin/develop — D6 honest/parity grader-hash drift
 - **Status**: open
 - **Trigger**: FIRED — red at origin/develop 2026-09-28

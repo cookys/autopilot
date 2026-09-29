@@ -935,6 +935,76 @@ assert_eq "$SNAPSHOT_SHA" "$CHAIN_SHA" "case 7d (fin): snapshot sha256 matches d
 CHAIN_DISP_PATH=$(node -e 'const chain = JSON.parse(fs.readFileSync(process.argv[1])); console.log(chain[0].dispositions_path);' "$LEDGER/review-p_fin7d/chain.json")
 assert_eq "$CHAIN_DISP_PATH" "review-p_fin7d/g1/dispositions.json" "case 7d (fin): chain entry references ledger-relative dispositions path"
 
+# Case 7e (finalize): a resolver failure for hetero_review_resolved_from must not strand the phase.
+# finalize exits non-zero with the chain entry still pending and nothing written for the
+# generation; re-running with a working resolver then succeeds and writes the receipt.
+mkdir -p "$LEDGER/review-p_fin7e/g1"
+cat << 'EOF' > "$LEDGER/review-p_fin7e/chain.json"
+[
+  {
+    "generation": 1,
+    "base": "sha_base7e",
+    "head": "sha_head7e",
+    "seats": ["s0"],
+    "status": "pending"
+  }
+]
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin7e/g1/range.json"
+{
+  "base": "sha_base7e",
+  "head": "sha_head7e"
+}
+EOF
+cat << 'EOF' > "$LEDGER/review-p_fin7e/g1/findings.json"
+{
+  "findings": [
+    { "id": "f_rf", "severity": "Critical", "seat": "s0", "text": "Resolver-failure ordering finding" }
+  ]
+}
+EOF
+cat << 'EOF' > "$TEST_TMP/disp_fin7e.json"
+{
+  "schema_version": 1,
+  "phase": "p_fin7e",
+  "generation": 1,
+  "findings": [
+    { "id": "f_rf", "disposition": "verified", "rationale": "forces FIX-THEN-SHIP so hands-brief.md would be written" }
+  ]
+}
+EOF
+cat << 'EOF' > "$TEST_TMP/bin/resolve-review-loop-fail.sh"
+#!/usr/bin/env bash
+if [ "$1" = "--field" ] && [ "$2" = "hetero_review_resolved_from" ]; then
+  echo "stub resolver failure" >&2
+  exit 3
+fi
+echo ""
+exit 0
+EOF
+chmod +x "$TEST_TMP/bin/resolve-review-loop-fail.sh"
+FIN7E_CHAIN_BEFORE=$(cat "$LEDGER/review-p_fin7e/chain.json")
+FIN7E_FAIL_OUT=$(AUTOPILOT_REVIEW_LOOP_RESOLVER="$TEST_TMP/bin/resolve-review-loop-fail.sh" node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_fin7e --generation 1 --branch work --dispositions "$TEST_TMP/disp_fin7e.json" 2>&1); FIN7E_FAIL_RC=$?
+assert_exit_code "$FIN7E_FAIL_RC" "2" "case 7e (fin): resolver failure makes finalize exit 2"
+assert_contains "$FIN7E_FAIL_OUT" "Review-loop resolver failed" "case 7e (fin): stderr names the resolver failure"
+assert_contains "$(cat "$LEDGER/review-p_fin7e/chain.json")" '"status": "pending"' "case 7e (fin): chain entry still pending after resolver failure"
+assert_eq "$(cat "$LEDGER/review-p_fin7e/chain.json")" "$FIN7E_CHAIN_BEFORE" "case 7e (fin): chain.json untouched after resolver failure"
+assert_file_absent "$LEDGER/receipt-p_fin7e.json" "case 7e (fin): no receipt after resolver failure"
+assert_file_absent "$LEDGER/review-p_fin7e/g1/dispositions.json" "case 7e (fin): no dispositions.json snapshot after resolver failure"
+assert_file_absent "$LEDGER/review-p_fin7e/g1/hands-brief.md" "case 7e (fin): no hands-brief.md after resolver failure"
+# Recovery: same finalize with a working resolver now succeeds
+cat << 'EOF' > "$TEST_TMP/bin/resolve-review-loop-ok.sh"
+#!/usr/bin/env bash
+if [ "$1" = "--field" ]; then echo "test-stub-source"; exit 0; fi
+echo "{}"
+EOF
+chmod +x "$TEST_TMP/bin/resolve-review-loop-ok.sh"
+FIN7E_OK_OUT=$(AUTOPILOT_REVIEW_LOOP_RESOLVER="$TEST_TMP/bin/resolve-review-loop-ok.sh" node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_fin7e --generation 1 --branch work --dispositions "$TEST_TMP/disp_fin7e.json" 2>&1); FIN7E_OK_RC=$?
+assert_exit_code "$FIN7E_OK_RC" "0" "case 7e (fin): re-run with working resolver exits 0"
+assert_file_exists "$LEDGER/receipt-p_fin7e.json" "case 7e (fin): receipt written on recovery"
+assert_contains "$(cat "$LEDGER/receipt-p_fin7e.json")" '"resolved_from": "test-stub-source"' "case 7e (fin): receipt carries resolved_from"
+assert_contains "$(cat "$LEDGER/review-p_fin7e/chain.json")" '"status": "finalized"' "case 7e (fin): chain entry finalized after recovery"
+
 # Case 8 (opt-out): config file containing line configuring knob to off -> receipt kind: opt-out, configured_value: off
 mkdir -p "$SCRATCH_REPO/.claude"
 echo "- hetero_review: off" > "$SCRATCH_REPO/.claude/review-loop-config.md"

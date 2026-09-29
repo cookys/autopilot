@@ -1096,6 +1096,15 @@ async function handleFinalize(flags) {
     }
   }
 
+  // Resolve provenance before any finalize-side write: the resolver exits the process on
+  // failure, and a failure after the chain is marked finalized would strand the phase
+  // (finalized chain, no receipt, re-run refused as "not pending").
+  const resolverPath = getResolverPath(repoRoot);
+  let resolvedFrom = resolveField(resolverPath, repoRoot, 'hetero_review_resolved_from');
+  if (!resolvedFrom) {
+    resolvedFrom = 'unknown';
+  }
+
   // Snapshot dispositions file into the generation's ledger directory as dispositions.json
   const snapshotRelPath = path.join(`review-${phase}`, `g${generation}`, 'dispositions.json');
   const snapshotAbsPath = path.join(gDir, 'dispositions.json');
@@ -1236,12 +1245,6 @@ async function handleFinalize(flags) {
   const gen1Entry = chain.find((c) => c && c.generation === 1);
   if (gen1Entry && gen1Entry.base) {
     phaseBaseSha = gen1Entry.base;
-  }
-
-  const resolverPath = getResolverPath(repoRoot);
-  let resolvedFrom = resolveField(resolverPath, repoRoot, 'hetero_review_resolved_from');
-  if (!resolvedFrom) {
-    resolvedFrom = 'unknown';
   }
 
   const receipt = {

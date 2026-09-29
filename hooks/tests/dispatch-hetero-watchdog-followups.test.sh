@@ -851,4 +851,67 @@ EOF
 
 assert_r6_alive_check_fails_open_to_firing
 
+# RED at 77c371cc:
+# FAIL [dispatch-hetero-watchdog-followups] SCOPE_UNIT unknown state with no fallback pgid should return alive: expected '0', got '1'
+# FAIL [dispatch-hetero-watchdog-followups] 17 passed, 1 failed
+#       - SCOPE_UNIT unknown state with no fallback pgid should return alive: expected '0', got '1'
+# EXIT:1
+assert_r7_scope_unknown_state_no_fallback_fires() {
+  set +e
+  unset SCOPE_UNIT WORKER_FALLBACK_PGID WORKER_SID WORKER_RP
+  eval "$(sed -n '/^_watchdog_pgid_has_live() {/,/^}$/p' "$SCRIPT")"
+  eval "$(sed -n '/^_watchdog_worker_alive() {/,/^}$/p' "$SCRIPT")"
+
+  local stubdir="$TEST_TMP/r7-ps-stub"
+  mkdir -p "$stubdir"
+  cat > "$stubdir/ps" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+  chmod +x "$stubdir/ps"
+
+  local rc="" saved_path="$PATH"
+  PATH="$stubdir:$PATH"
+  SCOPE_UNIT="scope-unit.service"
+  WORKER_RP="12345"
+  unset WORKER_FALLBACK_PGID WORKER_SID
+  _watchdog_worker_alive
+  rc=$?
+  PATH="$saved_path"
+  unset SCOPE_UNIT WORKER_RP
+  assert_eq "$rc" "0" "SCOPE_UNIT unknown state with no fallback pgid should return alive"
+
+  local holder="" zfile="$TEST_TMP/r7-zombie.pid"
+  : > "$zfile"
+  bash -c 'setsid bash -c "exit 0" & echo $! > "'"$zfile"'"; exec sleep 30' &
+  holder=$!
+  local n=0 zpid="" st=""
+  while [ "$n" -lt 50 ]; do
+    zpid="$(tr -d '[:space:]' < "$zfile" 2>/dev/null || true)"
+    if [ -n "$zpid" ]; then
+      st="$(ps -o state= -p "$zpid" 2>/dev/null | tr -d '[:space:]')"
+      case "$st" in
+        Z*) break ;;
+      esac
+    fi
+    sleep 0.05
+    n=$((n + 1))
+  done
+  case "$st" in
+    Z*) ;;
+    *) reap_pid "$holder"
+       fail "assert_r7_scope_unknown_state_no_fallback_fires: pid ${zpid:-unset} never became zombie (state='${st:-gone}')"; return ;;
+  esac
+  SCOPE_UNIT="scope-unit.service"
+  unset WORKER_RP WORKER_SID
+  WORKER_FALLBACK_PGID="$zpid"
+  _watchdog_worker_alive
+  rc=$?
+  reap_pid "$holder"
+  unset SCOPE_UNIT WORKER_FALLBACK_PGID
+  assert_eq "$rc" "1" "SCOPE_UNIT zombie-only fallback pgid should still be dead"
+}
+
+assert_r7_scope_unknown_state_no_fallback_fires
+
 finalize_test

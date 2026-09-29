@@ -3399,10 +3399,16 @@ _watchdog_worker_alive() {
       st="$(ps -o state= -p "$rp" 2>/dev/null || true)"
       st="${st#"${st%%[![:space:]]*}"}"
       st="${st%"${st##*[![:space:]]}"}"
-      # Empty state is unknown (ps produced no usable output) — fall through
-      # to the group check rather than treating the worker as dead.
+      # Empty state is unknown (ps produced no usable output). With a
+      # fallback pgid, fall through to the group check; with none, unknown
+      # counts as alive so the watchdog still fires the scope kill.
       case "$st" in
-        ""|Z*) ;;
+        "")
+          if [ -z "${WORKER_FALLBACK_PGID:-}" ]; then
+            return 0
+          fi
+          ;;
+        Z*) ;;
         *) return 0 ;;
       esac
     fi

@@ -133,10 +133,10 @@
 #     "files_changed": N, "insertions": N, "deletions": N,
 #     "worktree": "...|null", "agent_log": "..." , "error": "...|null",
 #     "timed_out": true|false, "timeout_enforced": true|false,
-#     "timeout_source": "default"|"caller"|"contract_wall"|"caller_within_wall"
+#     "timeout_source": "caller"|"contract_wall"|"caller_within_wall"
 #       (when present; caller = no-contract --timeout, caller_within_wall = within
-#        a Mission contract wall, contract_wall = contract-supplied, default =
-#        unenforced built-in),
+#        a Mission contract wall, contract_wall = contract-supplied). The run
+#        manifest additionally uses default for an unenforced run.
 #     "skill_mode_effective": "...", "skills_injected": [...],
 #     "orphan_worktree": "...|null" }          # non-null iff remove failed and dir remains
 # --gc OUTPUT: { "reaped":[…], "skipped_live":n, "skipped_fresh":n,

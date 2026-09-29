@@ -627,4 +627,63 @@ assert_r3_zombie_worker_not_stamped_timed_out
 assert_r3_alive_helper_matches_exact_pgid
 assert_r3_natural_exit_before_deadline_not_timed_out_real_path
 
+# RED at a9973f44
+# FAIL [dispatch-hetero-watchdog-followups] assert_r10_result_json_never_default_timeout_source: OUTPUT timeout_source line still lists quoted default before parenthetical: #     "timeout_source": "default"|"caller"|"contract_wall"|"caller_within_wall"
+# FAIL [dispatch-hetero-watchdog-followups] 0 passed, 1 failed
+#       - assert_r10_result_json_never_default_timeout_source: OUTPUT timeout_source line still lists quoted default before parenthetical: #     "timeout_source": "default"|"caller"|"contract_wall"|"caller_within_wall"
+# EXIT:1
+assert_r10_result_json_never_default_timeout_source() {
+  local src_line pre
+  src_line="$(awk '/^# OUTPUT:/{p=1} p && /timeout_source/{print; exit}' "$SCRIPT")"
+  [ -n "$src_line" ] || fail "assert_r10_result_json_never_default_timeout_source: missing OUTPUT timeout_source line"
+  pre="${src_line%%\(*}"
+  if printf '%s' "$pre" | grep -q '"default"'; then
+    fail "assert_r10_result_json_never_default_timeout_source: OUTPUT timeout_source line still lists quoted default before parenthetical: $src_line"
+    return
+  fi
+
+  assert_r10_result_ok() {
+    local json="$1" label="$2"
+    local src
+    src="$(json_get "$json" timeout_source)"
+    if [ -n "$src" ]; then
+      case "$src" in
+        caller|contract_wall|caller_within_wall) ;;
+        *) fail "assert_r10_result_json_never_default_timeout_source: $label timeout_source='$src' not allowed" ;;
+      esac
+      [ "$src" != "default" ] || fail "assert_r10_result_json_never_default_timeout_source: $label result JSON has default"
+    fi
+  }
+
+  local hide="$TEST_TMP/hide-cgroup-r10"
+  hide_cgroup_dir "$hide"
+  local stub="$TEST_TMP/grok-r10" runs="$TEST_TMP/runs-r10"
+  mkdir -p "$runs"
+  install_sleep_stub "$stub"
+  local out json mf
+  out="$(cd "$SBX" && env PATH="$hide:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
+    HETERO_TEST_SLEEP=0 \
+    "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+    --branch feat/wdog-r10-none --prompt-file "$PROMPT" 2>&1)" || true
+  json="$(last_json "$out")"
+  [ -n "$json" ] || fail "assert_r10_result_json_never_default_timeout_source: missing no-timeout JSON: $out"
+  assert_r10_result_ok "$json" "no-timeout"
+  mf="$(find "$runs" -name '*.manifest.json' | head -1)"
+  [ -n "$mf" ] || fail "assert_r10_result_json_never_default_timeout_source: no manifest"
+  assert_eq "default" "$(json_get "$(cat "$mf")" timeout_source)" "no-timeout manifest timeout_source"
+
+  local stubt="$TEST_TMP/grok-r10-t" runst="$TEST_TMP/runs-r10-t"
+  mkdir -p "$runst"
+  install_sleep_stub "$stubt"
+  out="$(cd "$SBX" && env PATH="$hide:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$runst" \
+    HETERO_TEST_SLEEP=0 \
+    "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stubt" \
+    --branch feat/wdog-r10-to --prompt-file "$PROMPT" --timeout 8s 2>&1)" || true
+  json="$(last_json "$out")"
+  [ -n "$json" ] || fail "assert_r10_result_json_never_default_timeout_source: missing timeout JSON: $out"
+  assert_r10_result_ok "$json" "short-timeout"
+}
+
+assert_r10_result_json_never_default_timeout_source
+
 finalize_test

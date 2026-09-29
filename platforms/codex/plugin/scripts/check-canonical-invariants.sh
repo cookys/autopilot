@@ -162,10 +162,11 @@ check_reader_allowlist() {
       bad "reader-allowlist[$label]: $file mentions '$token' but is not in the closed reader allowlist — unratified data is HUMAN-adjudication-only, never authority (docs/plans/_archive/2026/08/2026-08-21-verdict-bytes-preservation.md §2). If this file is a legitimate producer/display/test, add it to the seed in the SAME commit."
       bad_found=1
     fi
-  done < <(grep -rIl \
-      --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=.claude \
-      --exclude-dir=.autopilot --exclude-dir=worktrees \
-      -- "$token" . 2>/dev/null | sed 's|^\./||')
+  # Tracked files only: the invariant is about repo content. A recursive grep of
+  # the working tree also read gitignored local state (e.g. .codeforge/) and
+  # blocked unrelated commits (2026-09-29).
+  done < <(git ls-files -z -- . ':!:node_modules' ':!:.claude' ':!:.autopilot' ':!:worktrees' 2>/dev/null \
+      | xargs -0 grep -Il -- "$token" 2>/dev/null)
   [ "$bad_found" = "0" ] && ok "reader-allowlist[$label]: every '$token' mention is allowlisted"
 }
 

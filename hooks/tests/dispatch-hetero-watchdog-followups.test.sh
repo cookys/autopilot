@@ -15,6 +15,12 @@
 #       - detached nojobcontrol timeout_enforced: expected 'true', got 'false'
 # EXIT:1
 #
+# RED at b9fbc8fc
+# FAIL [dispatch-hetero-watchdog-followups] worker stdin target: expected '/dev/null', got 'pipe:[716059804]'
+# FAIL [dispatch-hetero-watchdog-followups] 7 passed, 1 failed
+#       - worker stdin target: expected '/dev/null', got 'pipe:[716059804]'
+# EXIT:1
+#
 # Follow-ups 1/9: no-setsid / no-job-control degrade + set +m scoping.
 . "$(dirname "$0")/lib.sh"
 
@@ -326,6 +332,58 @@ assert_r6_cancel_skips_kill_when_cmdline_lacks_tag() {
   reap_pid "$helper"
 }
 
+assert_r2_cgroup_worker_stdin_is_devnull() {
+  local hide="$TEST_TMP/hide-cgroup-stdin" wrap="$TEST_TMP/wrap-systemd-run"
+  local stub="$TEST_TMP/grok-stdin" runs="$TEST_TMP/runs-stdin"
+  local rec="$TEST_TMP/worker-stdin.target"
+  mkdir -p "$runs" "$wrap"
+  : > "$rec"
+  cat > "$stub" <<EOF
+#!/usr/bin/env bash
+if [ "\${1:-}" = "--list-models" ]; then
+  cat <<'MODELS'
+Available models
+
+cursor-grok-4.6-low - Grok 4.6 (low)
+MODELS
+  exit 0
+fi
+case " \$* " in *" __autopilot_probe__ "*)
+  echo "Error: --effort/--reasoning-effort: unknown effort level '__autopilot_probe__'; use one of: high, medium, low" >&2
+  exit 1 ;;
+esac
+readlink /proc/self/fd/0 > "$rec" || true
+exit 0
+EOF
+  chmod +x "$stub"
+  local out="" real_sr
+  real_sr="$(command -v systemd-run || true)"
+  if host_has_user_scope && [ -n "$real_sr" ]; then
+    cat > "$wrap/systemd-run" <<WRAP
+#!/usr/bin/env bash
+readlink /proc/self/fd/0 > "$rec" || true
+exec "$real_sr" "\$@"
+WRAP
+    chmod +x "$wrap/systemd-run"
+    out="$(cd "$SBX" && env PATH="$wrap:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
+      "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+      --branch feat/wdog-stdin-cg --prompt-file "$PROMPT" --timeout 8s \
+      < <(printf 'dispatcher-stdin-is-not-null\n') 2>&1)" || true
+  else
+    echo "SKIP assert_r2_cgroup_worker_stdin_is_devnull: no working systemd-run --user --scope; exercising plain path"
+    hide_cgroup_dir "$hide"
+    out="$(cd "$SBX" && env PATH="$hide:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
+      HETERO_TEST_NO_SETSID=1 \
+      "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+      --branch feat/wdog-stdin-plain --prompt-file "$PROMPT" --timeout 8s \
+      < <(printf 'dispatcher-stdin-is-not-null\n') 2>&1)" || true
+  fi
+  [ -s "$rec" ] || fail "assert_r2_cgroup_worker_stdin_is_devnull: worker did not record fd0: $out"
+  local target
+  target="$(cat "$rec")"
+  assert_eq "$target" "/dev/null" "worker stdin target"
+}
+
 assert_r6_cancel_kills_when_cmdline_has_tag() {
   eval "$(sed -n '/^_watchdog_sleeppid_cmdline_has_tag() {/,/^}$/p' "$SCRIPT")"
   eval "$(sed -n '/^_cancel_worker_watchdog() {/,/^}$/p' "$SCRIPT")"
@@ -353,6 +411,7 @@ assert_r1_nosetsid_with_jobcontrol_still_enforces
 assert_r9_no_job_notices_on_stderr
 assert_r2_cgroup_kill_failure_falls_back_to_pgid
 assert_r2_cgroup_kill_failure_detached_real_path
+assert_r2_cgroup_worker_stdin_is_devnull
 assert_r6_cancel_skips_kill_when_cmdline_lacks_tag
 assert_r6_cancel_kills_when_cmdline_has_tag
 

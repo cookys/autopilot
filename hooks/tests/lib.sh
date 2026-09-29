@@ -16,6 +16,15 @@
 
 set -uo pipefail   # NOT -e — we want to handle assertion failures explicitly
 
+# Environment hygiene (see run.sh): git exports GIT_DIR etc. to hooks, and a
+# test's scratch `git init` + `git config` would then rewrite the REAL repo's
+# shared config. REPO_ROOT below is path-derived, so unsetting is safe here.
+__git_local_vars="$(git rev-parse --local-env-vars 2>/dev/null)" || __git_local_vars=""
+[ -n "$__git_local_vars" ] || __git_local_vars="GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_CONFIG GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT GIT_PREFIX GIT_NAMESPACE GIT_SHALLOW_FILE GIT_GRAFT_FILE GIT_IMPLICIT_WORK_TREE GIT_INTERNAL_SUPER_PREFIX GIT_NO_REPLACE_OBJECTS GIT_REPLACE_REF_BASE"
+# shellcheck disable=SC2086
+unset $__git_local_vars
+unset __git_local_vars
+
 # Fake-runner prompt + nonce-frame helpers (generic over AUTOPILOT-REVIEW /
 # AUTOPILOT-AUTHOR). Lifted from hooks/tests/dispatch-review.test.sh so consumer
 # suites do not duplicate the parser. Source with AUTOPILOT_TEST_LIB_HELPERS_ONLY=1

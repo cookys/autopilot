@@ -31,6 +31,17 @@
 
 set -uo pipefail
 
+# Environment hygiene: git exports GIT_DIR (etc.) to hooks; in a linked worktree
+# that is <main>/.git/worktrees/<wt>, and every child inherits it. A test's
+# `git init` in a scratch dir then creates nothing and its bare `git config
+# user.name ...` rewrites the REAL clone's shared .git/config. Drop git's own
+# list of repo-local vars (what git's test suite does) before any git call.
+__git_local_vars="$(git rev-parse --local-env-vars 2>/dev/null)" || __git_local_vars=""
+[ -n "$__git_local_vars" ] || __git_local_vars="GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_CONFIG GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT GIT_PREFIX GIT_NAMESPACE GIT_SHALLOW_FILE GIT_GRAFT_FILE GIT_IMPLICIT_WORK_TREE GIT_INTERNAL_SUPER_PREFIX GIT_NO_REPLACE_OBJECTS GIT_REPLACE_REF_BASE"
+# shellcheck disable=SC2086
+unset $__git_local_vars
+unset __git_local_vars
+
 # Job control (finding suite-residue-reap-4): with it OFF (the script default),
 # a `&` background job shares THIS script's own process group — measured via
 # `ps -o pgid` on both the job and $$ — so a killed worker's own children
@@ -61,6 +72,45 @@ cd "$REPO_ROOT"
 # from L1 (node --test) and L2 (bash suite) children of this runner.
 export AUTOPILOT_TEST_RUN_GUARD=1
 
+# ── Real-repo git identity guard ─────────────────────────────────────────────
+# Belt and braces to the unset above: snapshot the REAL repo's LOCAL identity
+# (absent is a state), compare at the end and in the EXIT trap, restore on
+# drift, complain loudly (key name only, never the injected value) and fail.
+# Never touches --global.
+__ID_KEYS=(user.name user.email)
+# One line per key: "<key>=set:<value>" or "<key>=absent"
+__id_snapshot() {
+  local k v out=""
+  for k in "${__ID_KEYS[@]}"; do
+    if v="$(git -C "$REPO_ROOT" config --local --get "$k" 2>/dev/null)"; then
+      out="$out$k=set:$v"$'\n'
+    else
+      out="$out$k=absent"$'\n'
+    fi
+  done
+  printf '%s' "$out"
+}
+IDENTITY_BEFORE="$(__id_snapshot)"
+__id_check_restore() {
+  local k now line_b line_a v drift=0
+  now="$(__id_snapshot)"
+  [ "$now" = "$IDENTITY_BEFORE" ] && return 0
+  for k in "${__ID_KEYS[@]}"; do
+    line_b="$(printf '%s' "$IDENTITY_BEFORE" | grep -F "$k=" | head -n1)"
+    line_a="$(printf '%s' "$now" | grep -F "$k=" | head -n1)"
+    [ "$line_a" = "$line_b" ] && continue
+    drift=1
+    echo "❌ REAL-REPO IDENTITY DRIFT: a test changed the real repo's local git config key $k (restored)." >&2
+    if [ "$line_b" = "$k=absent" ]; then
+      git -C "$REPO_ROOT" config --local --unset-all "$k" >/dev/null 2>&1 || true
+    else
+      v="${line_b#"$k=set:"}"
+      git -C "$REPO_ROOT" config --local "$k" "$v" >/dev/null 2>&1 || true
+    fi
+  done
+  [ "$drift" -eq 0 ]
+}
+
 # Global; set by the parallel branch, cleared after its own successful rm -rf.
 # The EXIT trap also removes it (belt-and-suspenders on an interrupted run).
 PARALLEL_TMP=""
@@ -68,6 +118,9 @@ declare -a PARALLEL_CHILD_PIDS=()
 
 __suite_on_exit() {
   local status=$?
+  if ! __id_check_restore && [ "$status" -eq 0 ]; then
+    status=1
+  fi
   if [ -n "$PARALLEL_TMP" ]; then
     rm -rf "$PARALLEL_TMP"
   fi
@@ -80,7 +133,8 @@ __suite_on_exit() {
   if command -v suite_oracle_lock_release >/dev/null 2>&1; then
     suite_oracle_lock_release || true
   fi
-  return "$status"
+  # `return` in an EXIT trap cannot change the exit status; `exit` can.
+  exit "$status"
 }
 trap __suite_on_exit EXIT
 
@@ -657,6 +711,12 @@ if [ "$REAL_STORE_BEFORE" != "$REAL_STORE_AFTER" ]; then
     | sed -n 's/^[<>] /   /p' >&2
   FAILED=$((FAILED + 1))
   FAILED_TESTS+=("REAL-STORE POLLUTION (see above)")
+fi
+
+# ── Real-repo identity guard: after ──────────────────────────────────────────
+if ! __id_check_restore; then
+  FAILED=$((FAILED + 1))
+  FAILED_TESTS+=("REAL-REPO IDENTITY DRIFT (see above)")
 fi
 
 # ── Summary ──

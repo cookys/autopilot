@@ -36,6 +36,11 @@ const VALID_ROLES = Object.freeze([
   'implementer', 'plan_reviewer', 'reviewer', 'consult', 'discuss',
 ]);
 
+// Roles --resolve-live can resolve: the topology roles plus verification_author, whose
+// standing pin must reach dispatch-author's strict-contract check. Kept apart from
+// VALID_ROLES, which also seeds the default topology derivation (no new ladder there).
+const LIVE_ROLES = Object.freeze([...VALID_ROLES, 'verification_author']);
+
 const EFFORT_RANK = Object.freeze({
   low: 1,
   medium: 2,
@@ -995,9 +1000,9 @@ function main() {
       process.exit(2);
     }
     const liveRole = liveRoles[0];
-    if (!VALID_ROLES.includes(liveRole)) {
+    if (!LIVE_ROLES.includes(liveRole)) {
       process.stderr.write(
-        `Invalid --role for --resolve-live: ${liveRole} (expected one of ${VALID_ROLES.join(', ')})\n`
+        `Invalid --role for --resolve-live: ${liveRole} (expected one of ${LIVE_ROLES.join(', ')})\n`
       );
       process.exit(2);
     }

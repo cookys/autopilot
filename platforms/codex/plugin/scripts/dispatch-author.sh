@@ -545,8 +545,32 @@ run_strict_contract_preflight() {
   [ -d "$REPO_ROOT" ] || die_precondition "--repo-root must point to an existing directory"
   REPO_ROOT="$(cd "$REPO_ROOT" && pwd -P)"
 
-  contract_check_out="$(node "$_AUTHOR_SELF_DIR/dispatch-contract.js" check --contract "$CONTRACT_FILE" --repo "$REPO_ROOT" --json 2>&1)"
+  local contract_check_args=(check --contract "$CONTRACT_FILE" --repo "$REPO_ROOT" --json)
+  # A standing operator pin reaches the checker ONLY through a --resolved-live document
+  # (dispatch-contract.js never opens the pin store). Same shape as dispatch-hetero.sh: the
+  # document is handed over only when it carries a pin; any resolver failure proceeds
+  # without it, byte-identical to the pre-pin behaviour.
+  local live_file="" live_note=""
+  if [ "${AUTOPILOT_RESOLVED_LIVE:-auto}" != "off" ]; then
+    live_file="$(mktemp -t 'dispatch-author-resolved-live-XX''XX''XX')" || live_file=""
+    if [ -n "$live_file" ] \
+      && node "$_AUTHOR_SELF_DIR/resolve-dispatch-topology.js" --resolve-live --role verification_author >"$live_file" 2>"$live_file.err"; then
+      if node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.exit(j&&j.operator_pin&&typeof j.operator_pin==="object"?0:1)' "$live_file" 2>/dev/null; then
+        contract_check_args+=(--resolved-live "$live_file")
+        live_note="resolved-live: verification_author via resolve-dispatch-topology.js (standing pin present)"
+      else
+        live_note="resolved-live: no standing pin for verification_author; contract checked without the document"
+        rm -f "$live_file" "$live_file.err"; live_file=""
+      fi
+    else
+      live_note="resolved-live unavailable ($(tr '\n' ' ' < "${live_file:-/dev/null}.err" 2>/dev/null | cut -c1-200)); contract checked without it"
+      rm -f "${live_file:+$live_file}" "${live_file:+$live_file.err}" 2>/dev/null; live_file=""
+    fi
+  fi
+  [ -n "$live_note" ] && printf 'dispatch-author: %s\n' "$live_note" >&2
+  contract_check_out="$(node "$_AUTHOR_SELF_DIR/dispatch-contract.js" "${contract_check_args[@]}" 2>&1)"
   contract_check_rc=$?
+  rm -f "${live_file:+$live_file}" "${live_file:+$live_file.err}" 2>/dev/null
 
   contract_check_json="$(printf '%s' "$contract_check_out" | extract_last_json)"
   if [ "$contract_check_rc" -ne 0 ] || [ -z "$contract_check_json" ]; then

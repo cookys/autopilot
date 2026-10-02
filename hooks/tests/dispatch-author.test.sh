@@ -863,6 +863,28 @@ assert_eq "5" "$EXIT" "foreign nonce exits 5"
 assert_contains "$OUT" '"status": "truncated"' "foreign nonce maps to truncated"
 assert_contains "$OUT" "frame_missing" "foreign nonce truncated reason is frame_missing"
 
+# Both nonce markers present but on ONE line (not separate lines) → named frame_format,
+# not frame_missing; the general author path still rejects it (exit 5, never authored).
+STUB_ONELINE="$TEST_TMP/runner-oneline-frame"
+cat > "$STUB_ONELINE" <<'EOS'
+#!/usr/bin/env bash
+pf=""; prev=""
+for a in "$@"; do
+  if [ "$prev" = "--prompt-file" ]; then pf="$a"; fi
+  prev="$a"
+done
+[ -n "$pf" ] || pf="$(printf '%s\n' "$@" | grep -m1 -E 'dispatch-author-wrap-' || true)"
+begin=$(cat "$pf" 2>/dev/null | grep -E '^<<<AUTOPILOT-AUTHOR-[0-9a-f]{32}>>>$' | head -n1)
+end=$(cat "$pf" 2>/dev/null | grep -E '^<<<AUTOPILOT-END-[0-9a-f]{32}>>>$' | head -n1)
+printf '%sOK%s\n' "$begin" "$end"
+EOS
+chmod +x "$STUB_ONELINE"
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner grok --model grok-build --prompt-file "$PROMPT" --bin "$STUB_ONELINE" 2>&1)"; EXIT=$?
+assert_eq "5" "$EXIT" "single-line frame exits 5 on the general author path"
+assert_contains "$OUT" '"status": "truncated"' "single-line frame is still truncated for authors"
+assert_contains "$OUT" '"error": "frame_format"' "single-line frame is named frame_format, not frame_missing"
+assert_contains "$OUT" '"frame_derived": "' "frame_format result carries the run's derived marker id"
+
 # Exported AUTOPILOT_ROOT_RUN_ID appears in the manifest (hetero-style lineage).
 LINEAGE_RUNS="$TEST_TMP/author-lineage-runs"
 mkdir -p "$LINEAGE_RUNS"

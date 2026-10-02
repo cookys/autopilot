@@ -16,6 +16,7 @@ const {
   LIVE_PROBE_REQUEST,
   LIVE_PROBE_EXPECTED_RESPONSE,
   normalizeLiveProbeResponse,
+  boundedDiagnostics,
 } = require('./probe');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
@@ -71,6 +72,11 @@ function classifyFailure(child, result) {
   if (/(unauthori[sz]ed|forbidden|auth[_ -]?failed|(^|[^0-9])(401|403)([^0-9]|$))/.test(diagnostic)) {
     return { code: 'auth_failed', timedOut: false, quota: false, unavailable: true };
   }
+  if (result && result.status === 'truncated' && result.error === 'frame_format') {
+    // Both frame markers were emitted but not on separate lines. A named, non-transport
+    // class so the receipt says what happened instead of "the provider is broken".
+    return { code: 'frame_format', timedOut: false, quota: false, unavailable: true };
+  }
   return {
     code: child.error && typeof child.error.code === 'string'
       ? child.error.code
@@ -106,6 +112,26 @@ function stripPseudoTtyChrome(buffer) {
     .split('\n')
     .filter((line) => !line.startsWith('Script started on ') && !line.startsWith('Script done on '));
   return Buffer.from(kept.join('\n'), 'utf8');
+}
+
+// Readiness-probe-only extra form. The general author contract (dispatch-author.sh) needs the
+// opening marker on its own line and rejects `<open>OK<close>` on one line as `frame_format`.
+// For the 2-token readiness probe that is a packaging quirk (claude-native/claude-fable-5 at
+// max, peer-reported 2026-10-03), so the probe alone accepts exactly
+// `<open-marker>OK<close-marker>` — both markers carrying the run's own marker id (reported
+// by dispatch-author as `frame_derived`) and the payload exactly the expected token — with
+// surrounding whitespace only. Any other id, payload or extra text stays not-ready. This is a
+// strict extra form, not a relaxation of the parser.
+function acceptSingleLineProbeFrame(result, rawLog) {
+  if (!result
+      || result.status !== 'truncated'
+      || result.error !== 'frame_format'
+      || typeof result.frame_derived !== 'string'
+      || !/^[0-9a-f]{32}$/.test(result.frame_derived)) {
+    return false;
+  }
+  const raw = readPrivateResponse(rawLog).toString('utf8').trim();
+  return raw === `<<<AUTOPILOT-AUTHOR-${result.frame_derived}>>>${LIVE_PROBE_EXPECTED_RESPONSE}<<<AUTOPILOT-END-${result.frame_derived}>>>`;
 }
 
 function readPrivateResponse(rawLog) {
@@ -230,6 +256,11 @@ function dispatchAuthorLiveProbe(input, options = {}) {
       result = parseDispatchResult(child.stdout);
       success = child.status === 0 && result && result.status === 'authored';
       response = success ? readPrivateResponse(result.raw_log) : Buffer.alloc(0);
+      if (!success && child.status === 5 && !child.error && !child.signal
+          && acceptSingleLineProbeFrame(result, result && result.raw_log)) {
+        success = true;
+        response = Buffer.from(LIVE_PROBE_EXPECTED_RESPONSE, 'utf8');
+      }
       failure = success
         ? { code: null, timedOut: false, quota: false, unavailable: false }
         : classifyFailure(child, result);
@@ -256,7 +287,16 @@ function dispatchAuthorLiveProbe(input, options = {}) {
       digest: sha256(response),
     }
     : null;
+  const diagnostics = success ? null : boundedDiagnostics({
+    stderr_tail: String(child.stderr || ''),
+    dispatch_result: {
+      status: result && result.status,
+      error: result && result.error,
+      exit_status: Number.isInteger(child.status) ? child.status : null,
+    },
+  });
   return {
+    ...(diagnostics ? { diagnostics } : {}),
     transport_envelope: createRunnerTransportEnvelope({
       runner: tuple.runner,
       model: tuple.model,

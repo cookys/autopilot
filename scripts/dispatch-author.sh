@@ -101,7 +101,8 @@
 #   containment_breach with exit code 4.
 # EXIT: 0 = authored (non-empty raw output), 1 = empty_output, 2 = precondition_failed, 3 = runner_failed, 4 = containment_breach, 5 = truncated
 #   (non-codex: missing/incomplete AUTHOR/END frame or tool-narration inside the frame;
-#   error is one of frame_missing / end_missing / tool_narration). Codex transport is
+#   error is one of frame_missing / frame_format / end_missing / tool_narration;
+#   frame_format = both derived markers present but not on separate lines, result adds frame_derived). Codex transport is
 #   unchanged and never emits truncated.
 # Follow-up: AUTHOR/END locator awk is duplicated from dispatch-review.sh (v2.36.4
 # grok glued-preamble split + v2.36.70 duplicate-BEGIN handling). Extract a shared
@@ -1423,6 +1424,17 @@ if [[ "$RUNNER" != "codex" ]]; then
   if [ "$PARSE_RC" -ne 0 ]; then
     case "$PARSE_RC" in
       5) emit_result "truncated" "$RAW_LOG" "end_missing" 5 ;;
+      2|7)
+        # Both derived markers are present in the model output but no line IS the opening
+        # marker: the model emitted the frame, just not on separate lines (e.g. the whole
+        # `BEGIN<payload>END` on one line). Name it instead of folding it into frame_missing.
+        # Still truncated/5 — the author path never accepts it. frame_derived is the run's
+        # marker id (visible in the model's own output; not a secret) so a caller with a
+        # stricter, caller-specific contract (the readiness probe) can verify the nonce.
+        if grep -qF -- "$BEGIN" "$AUTHOR_PARSE_FILE" && grep -qF -- "$END" "$AUTHOR_PARSE_FILE"; then
+          emit_result "truncated" "$RAW_LOG" "frame_format" 5 ", \"frame_derived\": \"${DERIVED}\""
+        fi
+        emit_result "truncated" "$RAW_LOG" "frame_missing" 5 ;;
       *) emit_result "truncated" "$RAW_LOG" "frame_missing" 5 ;;
     esac
   fi

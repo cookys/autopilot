@@ -30,6 +30,7 @@ const INPUT_KEYS = new Set(['tuple', 'now', 'ttl_seconds', 'store']);
 const DEPENDENCY_KEYS = new Set(['safeProbe', 'liveProbe']);
 const SAFE_RESULT_KEYS = new Set(['status', 'evidence_class', 'reason']);
 const LIVE_RESULT_KEYS = new Set(['transport_envelope', 'response_text']);
+const LIVE_RESULT_OPTIONAL_KEYS = new Set(['diagnostics']);
 const SAFE_STATUSES = new Set(['ready', 'blocked', 'unknown']);
 const LIVE_OUTCOMES = new Set([
   'success',
@@ -39,6 +40,7 @@ const LIVE_OUTCOMES = new Set([
   'quota_exhausted',
   'rate_limited',
   'malformed_response',
+  'frame_format',
   'unavailable',
   'interrupted',
 ]);
@@ -51,6 +53,8 @@ const ERROR_OUTCOMES = new Map([
   ['quota_exhausted', 'quota_exhausted'],
   ['rate_limited', 'rate_limited'],
   ['429', 'rate_limited'],
+  // dispatch-author: both derived frame markers present but not on separate lines.
+  ['frame_format', 'frame_format'],
 ]);
 // The runner -> version-binary map has ONE owner (scripts/lib/runner-binary.js). This
 // file used to carry its own copy; so did scripts/qualification-sweep.sh, and the sweep's
@@ -63,6 +67,7 @@ const OUTCOME_POLICY = Object.freeze({
   quota_exhausted: { readiness: 'blocked', capability: 'exhausted', confidence: 'high' },
   rate_limited: { readiness: 'blocked', capability: 'limited', confidence: 'high' },
   malformed_response: { readiness: 'unknown', capability: 'unknown', confidence: 'high' },
+  frame_format: { readiness: 'unknown', capability: 'unknown', confidence: 'medium' },
   timeout: { readiness: 'unknown', capability: 'unknown', confidence: 'medium' },
   transport_failure: { readiness: 'unknown', capability: 'unknown', confidence: 'medium' },
   unavailable: { readiness: 'unknown', capability: 'unknown', confidence: 'medium' },
@@ -156,6 +161,58 @@ const LIVE_PROBE_REQUEST = deepFreeze({
   ...LIVE_PROBE_REQUEST_BODY,
   request_digest: digest(LIVE_PROBE_REQUEST_BODY),
 });
+
+// Failure diagnostics for the receipt: the operator needs to SEE why a probe was not ready
+// (the dispatch-result envelope and the tail of the runner's stderr), but a receipt must stay
+// bounded and secret-free. Whitelisted fields only, redacted, hard byte caps. Applied both
+// where the adapter builds them and where the receipt embeds them (never trust the adapter).
+const DIAGNOSTICS_STDERR_TAIL_BYTES = 512;
+const DIAGNOSTICS_FIELD_BYTES = 128;
+const DIAGNOSTICS_SECRET_PATTERNS = [
+  /Bearer\s+\S+/gi,
+  /\b(?:authorization|api[_-]?key|token|secret|password|passwd)\b\s*[=:]\s*\S+/gi,
+  /\b(?:sk|pk|rk|ghp|gho|ghs|xox[abp])[-_][A-Za-z0-9_-]{8,}/g,
+  /\b[A-Za-z0-9_-]{32,}\b/g,
+];
+
+function redactDiagnosticText(value) {
+  let text = String(value === undefined || value === null ? '' : value)
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, ' ');
+  for (const pattern of DIAGNOSTICS_SECRET_PATTERNS) text = text.replace(pattern, '[redacted]');
+  return text;
+}
+
+function tailBytes(text, limit) {
+  const buffer = Buffer.from(text, 'utf8');
+  if (buffer.length <= limit) return text;
+  return buffer.subarray(buffer.length - limit).toString('utf8').replace(/^\uFFFD+/, '');
+}
+
+function headBytes(text, limit) {
+  const buffer = Buffer.from(text, 'utf8');
+  if (buffer.length <= limit) return text;
+  return buffer.subarray(0, limit).toString('utf8').replace(/\uFFFD+$/, '');
+}
+
+function boundedDiagnostics(value) {
+  if (!isRecord(value)) return null;
+  const dispatch = isRecord(value.dispatch_result) ? value.dispatch_result : {};
+  const field = (item) => (typeof item === 'string'
+    ? headBytes(redactDiagnosticText(item), DIAGNOSTICS_FIELD_BYTES)
+    : null);
+  return {
+    stderr_tail: tailBytes(
+      redactDiagnosticText(typeof value.stderr_tail === 'string' ? value.stderr_tail : ''),
+      DIAGNOSTICS_STDERR_TAIL_BYTES,
+    ),
+    dispatch_result: {
+      status: field(dispatch.status),
+      error: field(dispatch.error),
+      exit_status: Number.isInteger(dispatch.exit_status) ? dispatch.exit_status : null,
+    },
+  };
+}
 
 function parseInstant(value, label) {
   if (typeof value !== 'string' || !Number.isFinite(Date.parse(value))) {
@@ -308,7 +365,12 @@ function probeSafeSurface({ tuple }) {
 
 function classifyLiveProbeResult(tupleValue, value) {
   const tuple = normalizeProviderTuple(tupleValue);
-  exactShape(value, LIVE_RESULT_KEYS, [...LIVE_RESULT_KEYS], 'live probe result');
+  exactShape(
+    value,
+    new Set([...LIVE_RESULT_KEYS, ...LIVE_RESULT_OPTIONAL_KEYS]),
+    [...LIVE_RESULT_KEYS],
+    'live probe result',
+  );
   const envelope = validateRunnerTransportEnvelope(value.transport_envelope);
   if (envelope.request_binding.runner !== tuple.runner
       || envelope.request_binding.model !== tuple.model
@@ -628,6 +690,9 @@ function runProviderProbe(value, dependencies = {}) {
         outcome,
         request_digest: LIVE_PROBE_REQUEST.request_digest,
         transport_receipt_digest: envelope.receipt_digest,
+        ...(outcome !== 'success' && boundedDiagnostics(liveResult.diagnostics)
+          ? { diagnostics: boundedDiagnostics(liveResult.diagnostics) }
+          : {}),
       },
       persistence,
     );
@@ -637,6 +702,7 @@ function runProviderProbe(value, dependencies = {}) {
 module.exports = {
   LIVE_PROBE_EXPECTED_RESPONSE,
   normalizeLiveProbeResponse,
+  boundedDiagnostics,
   LIVE_PROBE_REQUEST,
   MAX_PROBE_TTL_SECONDS,
   classifyLiveProbeResult,

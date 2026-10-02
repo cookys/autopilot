@@ -52,13 +52,20 @@ for c in dev-flow quality-pipeline survey think-tank; do
   cp "$REPO_ROOT/references/model-routing.md" "$SBX/skills/$c/references/model-routing.md"
 done
 
+# RED at 63c4caeb: FAIL [check-canonical-invariants] rogue unratified consumer exit code: expected '0', got '1'; FAIL [check-canonical-invariants] rogue consumer names the offending file: 'src/engine/rogue-consumer.js' not found in output
+git -C "$SBX" init -q
+git -C "$SBX" add -A
+
 SCRIPT="$SBX/scripts/check-canonical-invariants.sh"
 SEVERITY="🔴 Critical / 🟠 Major / 🟡 Minor / 🔵 Suggestion"
 
 # 1. aligned tree → exit 0 (positive)
+# NC: sandbox with no rogue consumer still passes reader-allowlist after git init + add
 OUT="$("$SCRIPT" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "aligned tree exit code"
 assert_contains "$OUT" "all canonical invariants hold" "aligned tree message"
+assert_eq "0" "$EXIT" "no-rogue sandbox reader-allowlist exit code"
+assert_contains "$OUT" "reader-allowlist[unratified-columns]" "no-rogue sandbox still runs reader-allowlist"
 
 # 1b. reference-size negative: oversized reference file → exit 1 naming reference-size
 python3 -c "print(('x' * 40 + '\n') * 1300, end='')" > "$SBX/skills/ceo-agent/references/oversized.md"
@@ -163,6 +170,7 @@ cat > "$SBX/src/engine/rogue-consumer.js" <<'ROGUE'
 // synthetic authority leak: promotes salvage data to a verdict
 const verdict = result.unratified_verdict || result.verdict;
 ROGUE
+git -C "$SBX" add -A
 OUT="$("$SCRIPT" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "rogue unratified consumer exit code"
 assert_contains "$OUT" "reader-allowlist[unratified-columns]" "rogue consumer names the invariant"

@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "final-panel-kimi-agy-isolation-2026-10-02",
+  "generation": 1,
+  "findings": [
+    {
+      "fingerprint": "ad4b862696e6fb5436dcca0339b7b227d3af0b0552748a52ec42e34a4085f1b7",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct: contradiction. Fold: kimi/agy are cleanroom only; remove the \"packet seats are not probed\" wording; every new seat tier is reached only via the fail-closed host probe."
+    },
+    {
+      "fingerprint": "eccb8cdcde005b6c73ad63ebbdccbbb60431a73bbd9d867e997d6f0185236228",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct. Fold: phase 1 and 3 acceptance enumerate every §2.5 audit void condition (missing wire/transcript/log, unknown record type, any tool call, non-empty tool snapshot, agent fallback, exit 0 not proof), each with a RED fixture."
+    },
+    {
+      "fingerprint": "5a44daf6df05bec6c91e311c1172601040f23adaad2f3e27463f908ad4200c02",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct. Fold: explicit regression acceptance for non-blind kimi/agy dispatch and codex cleanroom (existing suites named + a byte-compare of argv/env for the unchanged paths)."
+    },
+    {
+      "fingerprint": "84349ad7af381251a0a1a39c045cb7ba5a0d119e345a7e5bc94c9954fc295385",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct. Fold: live-fire canary lives in a scratch dir outside any checkout; acceptance also asserts the main checkout status/config is unchanged and nothing was written outside the seat HOME + receipt dir."
+    },
+    {
+      "fingerprint": "28404c59d9e4224333306c737a7f05362af88ecdbd548e6a01b2568ff380bb43",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct. Fold: phase 2 states the bind list as a design to be proven by its own probe test; §0.1 claims only what the spike recorded (PONG/NOTOOLS + seat contents)."
+    },
+    {
+      "fingerprint": "eb5d6f3e30f6d38afef68f90afbe9a8aa71a68a8e2636762fb0a8fd6d5962136",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct. Fold: the pre-spend probe runs with an empty HOME and no credential binds; launch-time credential/HOME injection happens only after the probe passes; test asserts the probe argv/env carries neither."
+    },
+    {
+      "fingerprint": "4b77eaccacf4cb53c5a6a11c3d4bfa15378a5e7c38b0cd58d380b1638dd00a62",
+      "disposition": "accepted_blocker",
+      "rationale": "Duplicate in substance of finding 1 (same fold); accepted as blocker because candidate."
+    },
+    {
+      "fingerprint": "8e78a1ad5e7e8bceb13e82b21ad7dd74cd477717f0133a6abde3df1537646f7d",
+      "disposition": "accepted_blocker",
+      "rationale": "Duplicate in substance of finding 2 (same fold); accepted as blocker because candidate."
+    },
+    {
+      "fingerprint": "be2ec1efd26e8271f695d4c919298316e2ada5f7d4e33bfa9fdab9a2b64344a3",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct. Fold: the \"no --no-tools flag\" sentence is backed by the --help excerpts already in spike-log (quoted in §0.1) or labelled \"Spike candidate, unverified\" and not used to choose the tier; the tier choice rests on the agy silent-fallback evidence."
+    },
+    {
+      "fingerprint": "bc96f5755f9ffb9d6b49a9d8fa9e398792250bf96c42c713d40c03c261fc26f5",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Fold: §2.5 line — live-fire and tests never touch the real ~/.kimi-code or ~/.gemini stores; receipts go to the evidence dir only."
+    },
+    {
+      "fingerprint": "c24695ab94dc515beb5ba7219f8922cf8c6383e0a2c53e534e00914ba1481ee4",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Same fold as finding 2."
+    }
+  ]
+}

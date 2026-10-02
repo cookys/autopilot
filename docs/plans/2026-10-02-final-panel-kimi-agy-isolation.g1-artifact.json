@@ -1,0 +1,438 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "kimi-agy-iso-g1",
+  "logical_plan_id": "final-panel-kimi-agy-isolation-2026-10-02",
+  "session_id": "7236b3c6-6662-4434-ab03-07d7d2a66500",
+  "session_key": "e03030617a0e7827a729d1bfdac7b14702196f632e18de69cba96d9b5c9b62eb",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "10c75e9b58c846031ce3957f7f0862c3814dc0f0361808b68f10c8158d739a89",
+  "manifest_sha256": "4d2be2614cbce6584a80e103a1b5949a624be2c6e724641a0755d03240fde314",
+  "plan_sha256": "93e16db07e72f17efcfc659086c3d5dd694d5636e9f7c61d24945fa13d30dad8",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "b40a41a551f8a4d9a030a6923e843a6cc7cbcb6f80ee72c71a13d0bb554427fa"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "462a712cb24c9def834d4254f8bafb276280211a1c666fcefff38201fbfc47b5",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-6nLIDC/stdout",
+          "digest": "462a712cb24c9def834d4254f8bafb276280211a1c666fcefff38201fbfc47b5"
+        },
+        "receipt_digest": "8a2a6e3f36a57c989565586e634cb8d7f581957ec47bc9d79468ae057b3fc05f"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "grok_deep",
+      "target_id": "grok_deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.6",
+          "operation": "plan-review",
+          "request_digest": "d5d4fb94539d264261e2d264c74d5e24125d214aba79f030a3cdebef6c439b67"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "3428479358b072db69bc326610d0493de3f7a8c622ca3bb977773990f782df26",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-xAKuvH",
+          "digest": "3428479358b072db69bc326610d0493de3f7a8c622ca3bb977773990f782df26"
+        },
+        "receipt_digest": "9ab655348d89a1dae26ea0aa337400be5207c2c3fe5246ebfec1944b81294231"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_consult",
+      "target_id": "minimax_consult",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "92727bd029e8be47a0af7cc04e6d6bdddc6492d216fe6195eccfc39946066a4b"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "545ca34b97baf33dfd75dc8b252a7de8db2f70a64d3530e3d422eba73b2bdf05",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-rPgQeZ",
+          "digest": "545ca34b97baf33dfd75dc8b252a7de8db2f70a64d3530e3d422eba73b2bdf05"
+        },
+        "receipt_digest": "496f0b22ba5b98ad2b9410e748bcaf6bfe16bd919aec51f9d4d089578dfe7619"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "family": "openai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "grok_deep",
+      "target_id": "grok_deep",
+      "family": "xai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "minimax_consult",
+      "target_id": "minimax_consult",
+      "family": "minimax",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Tier admission semantics in §0 and §2.5",
+      "claim": "The plan contradicts its mandatory pre-spend rule by stating that packet seats are not probed before spend while also stating that every packet or cleanroom seat reaches its tier only through a fail-closed host probe.",
+      "evidence": "Section 0 describes packet as not probed before spend. Section 2.5 says a runner is packet or cleanroom only through a pre-spend probe proving isolation on this host. No phase adds probes for the existing packet runners.",
+      "evidence_reference": "§0 packet guarantee; §2.5 bullets 1-2; §4 phases 1-5",
+      "repair": "Reconcile the invariant before implementation: add model-free, fail-closed pre-spend isolation probes and acceptance tests for every packet seat, or keep any unproved seat at tier none. Remove the statement that packet seats remain unprobed.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "ad4b862696e6fb5436dcca0339b7b227d3af0b0552748a52ec42e34a4085f1b7"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Kimi and agy post-run auditors and their acceptance tests",
+      "claim": "The phases do not operationalize or test every fail-closed audit condition required by the plan, so an incomplete auditor could satisfy the stated phase acceptance.",
+      "evidence": "Phase 1 tests K1/K2, an added tool.call, and a deleted tools_snapshot. Phase 3 tests a tool call, missing transcript, and fallback. Neither acceptance set independently exercises an unknown record type, a non-empty snapshot without a tool call, all tool_calls encodings, or a breach accompanied by process exit code 0. The file map also proposes reusing agy-containment.js as-is without demonstrating that it enforces the complete list.",
+      "evidence_reference": "§2.5 post-run audit bullet; §3 containment-library rows; §4 phases 1 and 3; §5 validation",
+      "repair": "Define the accepted record schemas for each runner and add fail-closed fixtures for every R5 condition: missing file, malformed record, unknown record type, every tool-call representation, non-empty tool snapshot, and detectable agent fallback. Run each breach with exit code 0 and assert that dispatch still produces no_verdict.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "eccb8cdcde005b6c73ad63ebbdccbbb60431a73bbd9d867e997d6f0185236228"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Non-blind kimi and agy dispatch plus the existing codex cleanroom profile",
+      "claim": "The plan asserts that these paths remain unchanged but does not include explicit regression acceptance for either promise.",
+      "evidence": "Section 2.5 requires byte-identical non-blind kimi and agy behavior, and the file map says the codex profile is unchanged. Phase 3 only validates blind kimi and agy outcomes; phase 2 only specifies new kimi and agy profiles. Section 5 names no baseline or regression test for non-blind dispatch or codex cleanroom launch and preflight behavior.",
+      "evidence_reference": "§2.5 non-blind constraint; §3 cleanroom-launch.sh row; §4 phases 2-3; §5 validation",
+      "repair": "Add baseline-preserving tests that compare non-blind kimi and agy argv, cwd, environment, prompt handling, and result handling with base behavior. Add codex cleanroom preflight and launch regression tests proving that profile routing, mounts, denial behavior, and failure codes remain unchanged.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "5a44daf6df05bec6c91e311c1172601040f23adaad2f3e27463f908ad4200c02"
+    },
+    {
+      "rubric_id": "R10",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Phase 5 live-fire isolation and write-safety procedure",
+      "claim": "The live-fire recipe places a canary in the repository directory, conflicting with the requirement that live-fire never write to the main checkout, and its acceptance checks only canary disclosure rather than forbidden writes.",
+      "evidence": "The plan header says the main checkout is frozen, but phase 5 calls for a canary in the repo dir. Its done condition records only that the canary is absent. Section 5 restricts test fixtures to temporary directories but does not provide equivalent pre-run and post-run checks for the live-fire against the checkout and real kimi or Gemini stores.",
+      "evidence_reference": "Plan header; §4 phase 5; §5 Test and validation",
+      "repair": "Create the live-fire canary in a disposable temporary directory outside the checkout and add that directory to the denied paths alongside the real repository. Require before-and-after evidence that the main checkout and real ~/.kimi-code and ~/.gemini stores are unchanged, while all session output exists only under the disposable seat HOME.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "84349ad7af381251a0a1a39c045cb7ba5a0d119e345a7e5bc94c9954fc295385"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Plan §0.1 K4/A3 table and classification; Plan §4 phase 2 cleanroom-launch.sh argv",
+      "claim": "Phase 2 treats a full bwrap argv and bind list as kimi/agy spike evidence from K4/A3, while §0.1 only records that those seats returned PONG/NOTOOLS.",
+      "evidence": "§0.1 tells reviewers to rely on that summary. K4 records kimi in a bwrap seat with no repo, no real HOME, and only .kimi-code config/credentials/oauth, result works PONG/NOTOOLS. A3 records agy in a repo-less seat with no --ro-bind / /, oauth token plus agent, NOTOOLS, audit rc=0. Phase 2 then names --unshare-all, --share-net, --die-with-parent, --new-session, --hostname review, ro /usr, node dir ro for kimi, agent bind, and --clearenv as argv shapes proven in K4/A3. Those flags are absent from the §0.1 probe rows and are unlabelled as Spike candidate, unverified, yet they are the launch spec for the next slice.",
+      "evidence_reference": "Plan §0.1 spike table rows K4 and A3 and the Classification paragraph; Plan §4 phase 2 Launcher profiles",
+      "repair": "Paste the K4 and A3 command-plus-output excerpts into §0.1 for every flag and bind phase 2 will ship. Attribute flags that come from the existing codex path in cleanroom-launch.sh to that script. Label any remaining unquoted kimi/agy platform fact as Spike candidate, unverified, and drop it from phase 2.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "28404c59d9e4224333306c737a7f05362af88ecdbd548e6a01b2568ff380bb43"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Plan §2.5 pre-spend probe constraint; Plan §4 phase 2 --preflight --profile kimi|agy; scripts/lib/cleanroom-launch.sh",
+      "claim": "The plan leaves the model-free pre-spend probe able to inherit launch credential and HOME injection, so phase 2 can violate the probe-input rule while still looking green.",
+      "evidence": "§2.5 requires that the pre-spend probe never calls a model and never receives the repo, HOME, credentials, or the packet, and §8 decision 1 keeps the probe model-free with only the filesystem/process boundary proven pre-spend. §0 describes launch as copying the credential into a private seat HOME via cleanroom-launch.sh:170-250. §3 gives that same script both launch and model-free profile preflight. §4 phase 2 requires (agy) agy agents inside the seat and never states that preflight omits credential copy, real HOME, repo, and packet.",
+      "evidence_reference": "Plan §2.5 bullet The pre-spend probe never calls a model...; Plan §0 cleanroom seat env; Plan §3 cleanroom-launch.sh row; Plan §4 phase 2; Plan §8 operator decision 1",
+      "repair": "In phase 2, split preflight from launch. Preflight binds only CLI resolvability, the kimi node dir/entry, and the agent file; it copies no credential, and it is given no repo, packet, or real HOME. Keep deny-path readable as exit 3 and missing binary/launcher as refuse. Leave credential/config copy on the launch path only. State that tools-off remains a post-run audit guarantee.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "eb5d6f3e30f6d38afef68f90afbe9a8aa71a68a8e2636762fb0a8fd6d5962136"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Plan §4 phase 1 scripts/lib/kimi-containment.js audit; Plan §4 phase 3 dispatch-review.sh post-run audit",
+      "claim": "Fail-closed audit rules in §2.5 are only partly copied into phase 1 and phase 3 acceptance, so the audit slice can ship without unknown-record-type coverage and without treating exit code 0 as non-proof.",
+      "evidence": "§2.5 voids the verdict on a missing log/transcript/wire file, an unknown record type, any tool.call/tool_calls, a non-empty tool snapshot, or an agent fallback, and says the exit code never decides containment. KR2 repeats tool call, tool-snapshot entry, missing/unparseable transcript, and agent fallback, and omits unknown record type. Phase 1 breaches on tool.call, a non-empty llm.tools_snapshot.tools, no wire file, or an unparseable line; its negative controls append a tool.call line and delete tools_snapshot. Phase 3 done-when drops the verdict on a tool call, a missing transcript, and an agent fallback. Unknown record type has no phase done-when, and phase 3 never requires a stub that exits 0 with a breach to yield no_verdict.",
+      "evidence_reference": "Plan §2.5 audit/exit-code bullets; Plan §2 KR2; Plan §4 phase 1 Containment libs; Plan §4 phase 3 Dispatch rail",
+      "repair": "Name a known-type allowlist from the captured K1/K2 wire files. Extend phase 1 done-when and negative controls so an unknown record type, a missing wire file, a non-empty tools snapshot, and any tool.call each give audit rc=1. Extend phase 3 so a stub that exits 0 with a tool.call, a non-empty tool snapshot, an unknown record type, an agent fallback, or a missing transcript each yields no_verdict, and say in that done-when that exit code 0 is never proof of containment.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "4b77eaccacf4cb53c5a6a11c3d4bfa15378a5e7c38b0cd58d380b1638dd00a62"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "scripts/dispatch-review.sh non-blind kimi/agy branches; scripts/lib/cleanroom-launch.sh codex profile",
+      "claim": "Non-blind kimi/agy dispatch and codex cleanroom behavior are declared byte-identical to base, and no phase acceptance actually tests those rails.",
+      "evidence": "§2.5 requires non-blind dispatch behaviour for kimi/agy to be byte-identical to base. KR3 says non-blind paths unchanged. §3 says dispatch-review.sh non-blind branches stay unchanged and the codex profile in cleanroom-launch.sh stays unchanged. Phase 2 RED, done-when, and negative controls cover --profile kimi|agy only. Phase 3 RED, done-when, and negative controls cover blind kimi/agy plus invalid --runner. Extending dispatch-review.test.sh is named in §3 with no goldens for non-blind kimi/agy argv or for codex preflight exits 0/2/3 at base.",
+      "evidence_reference": "Plan §2 KR3; Plan §2.5 Non-blind dispatch bullet; Plan §3 file-structure map rows for cleanroom-launch.sh and dispatch-review.sh; Plan §4 phases 2 and 3",
+      "repair": "Add to phase 2 a done-when that codex --preflight/--profile exits 0/2/3 and argv match base, with a negative control that a kimi/agy bind must leave the codex argv unchanged. Add to phase 3 a done-when that non-blind kimi and agy argv, cwd, and env match base byte-for-byte, with a negative control that the blind launcher wrap is absent from the non-blind branch.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "8e78a1ad5e7e8bceb13e82b21ad7dd74cd477717f0133a6abde3df1537646f7d"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Plan §0.1 Classification paragraph",
+      "claim": "The classification states as fact that neither CLI has a --no-tools flag, with no command-plus-output excerpt, no official doc URL, and no Spike candidate, unverified label, and that sentence is used to choose cleanroom over packet.",
+      "evidence": "§0.1 Classification opens with Neither CLI has a --no-tools flag, but both honour a custom agent that is a tool allowlist (tools: []). Probes K1-K4 and A1-A3 exercise default agent, --agent-file with tools: [], missing description, bwrap seats, and agy agents. No probe row or URL shows a --help/flag scan for --no-tools. Packet is then rejected in the same paragraph and again in §7, so the unlabelled flag claim is in the path that sets the achievable tier.",
+      "evidence_reference": "Plan §0.1 Classification; Plan §0.1 probe table K1-K4 and A1-A3; Plan §7 Packet tier for kimi/agy",
+      "repair": "Either paste a spike-log --help (or equivalent) excerpt that shows the flag is absent, or relabel that sentence Spike candidate, unverified and rest the packet rejection only on facts already in the table: packet has no pre-spend probe, and A2 silent fallback makes a flag-only tools-off claim unsafe.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "be2ec1efd26e8271f695d4c919298316e2ada5f7d4e33bfa9fdab9a2b64344a3"
+    },
+    {
+      "rubric_id": "R10",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Plan §5 Test / validation; Plan §4 phase 5 live-fire receipts",
+      "claim": "Session landing in seat HOME is stated, while live-fire receipt writes and a ban on touching the real ~/.kimi-code and ~/.gemini stores during the operator run are left implicit.",
+      "evidence": "§5 requires tests to write fixtures only under a temp dir, never the real ~/.kimi-code / ~/.gemini stores, and says the seat HOME is the only place a session may land. Phase 5 done-when is receipts show canary absent, with no path for those receipts and no sentence that the operator-approved real-host run is forbidden from writing the real CLI stores or the main checkout. Sections 0-8 and the Review log are present.",
+      "evidence_reference": "Plan §5 Test / validation; Plan §4 phase 5 Docs + live-fire + closeout; Plan sections 0 through 8 and Review log",
+      "repair": "Add one sentence to §5 and phase 5: live-fire launches only through the seat HOME, writes receipts under a temp dir, and leaves the real ~/.kimi-code and ~/.gemini stores and the main checkout untouched. Keep the existing test temp-dir rule.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "bc96f5755f9ffb9d6b49a9d8fa9e398792250bf96c42c713d40c03c261fc26f5"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "scripts/dispatch-review.sh non-blind kimi/agy branches; scripts/lib/cleanroom-launch.sh codex profile; hooks/tests/dispatch-review.test.sh",
+      "claim": "R8 requires that non-blind dispatch behaviour for kimi/agy and codex cleanroom behaviour be stated as unchanged AND tested as such. The plan states both as unchanged in §2.5 and §3, but no phase adds an explicit phase-level test asserting that the non-blind kimi/agy code path and the codex cleanroom profile remain unchanged after the changes land.",
+      "evidence": "§2.5 line 'Non-blind dispatch behaviour for kimi/agy is byte-identical to base.'; §3 file map entries 'non-blind unchanged' on dispatch-review.sh and 'codex profile unchanged' on cleanroom-launch.sh; §3 and §5 reference the existing hooks/tests/dispatch-review.test.sh parity test and state it is 'extended', but the extension scope for non-blind unchanged assertions is not specified; none of the five phases list a 'non-blind kimi/agy unchanged' or 'codex cleanroom unchanged' regression assertion in its 'Done when' clause or negative control.",
+      "evidence_reference": "Plan §2.5; §3 file map; §5 test/validation block; Phases 1 through 5 'Done when' clauses and negative controls all reference new blind behaviour, missing an explicit non-blind unchanged assertion.",
+      "repair": "No current change; follow-up only. Add a one-line 'Done when' clause to Phase 3 or 4 stating that the existing non-blind kimi/agy and codex cleanroom test cases in hooks/tests/dispatch-review.test.sh continue to pass without modification, asserting byte-identical non-blind dispatch behaviour. This is a small follow-up; the existing test, if it covers non-blind paths, already provides coverage, so the addition is belt-and-braces rather than a fix.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_consult",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c24695ab94dc515beb5ba7219f8922cf8c6383e0a2c53e534e00914ba1481ee4"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "bc96f5755f9ffb9d6b49a9d8fa9e398792250bf96c42c713d40c03c261fc26f5",
+      "rubric_id": "R10",
+      "affected_surface": "Plan §5 Test / validation; Plan §4 phase 5 live-fire receipts",
+      "claim": "Session landing in seat HOME is stated, while live-fire receipt writes and a ban on touching the real ~/.kimi-code and ~/.gemini stores during the operator run are left implicit.",
+      "evidence_reference": "Plan §5 Test / validation; Plan §4 phase 5 Docs + live-fire + closeout; Plan sections 0 through 8 and Review log",
+      "disposition": null
+    },
+    {
+      "fingerprint": "c24695ab94dc515beb5ba7219f8922cf8c6383e0a2c53e534e00914ba1481ee4",
+      "rubric_id": "R8",
+      "affected_surface": "scripts/dispatch-review.sh non-blind kimi/agy branches; scripts/lib/cleanroom-launch.sh codex profile; hooks/tests/dispatch-review.test.sh",
+      "claim": "R8 requires that non-blind dispatch behaviour for kimi/agy and codex cleanroom behaviour be stated as unchanged AND tested as such. The plan states both as unchanged in §2.5 and §3, but no phase adds an explicit phase-level test asserting that the non-blind kimi/agy code path and the codex cleanroom profile remain unchanged after the changes land.",
+      "evidence_reference": "Plan §2.5; §3 file map; §5 test/validation block; Phases 1 through 5 'Done when' clauses and negative controls all reference new blind behaviour, missing an explicit non-blind unchanged assertion.",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-10-02T12:46:34.865Z"
+}

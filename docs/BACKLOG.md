@@ -744,6 +744,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/peer-addressing-md-says-message-rows-live-forever-a-spec-says-7-days.md
 - **Context**: `hangar-bridge/SUBJECT_ROUTING_SPEC.md:516,614` records an accepted 7-day retention/replay bound for subjected `@team` chat that was never built.
 
+### dispatch-author kimi: `--timeout` never reaches the adapter (hard 300 s cap)
+- **Status**: open
+- **Trigger**: FIRED — peer report 2026-10-02; queued after the test-suite repo write containment release; reproduce locally first
+- **Effort**: S
+- **Source**: PEER-REPORTED cuda/chatgpt-tunnel (fleet), re-verified by reading code, not yet by running it
+- **Pointer**: docs/backlog/dispatch-author-kimi-timeout-not-forwarded.md
+- **Context**: `dispatch-author-kimi.js` calls `runKimiAuthor` without `timeoutMs`; the adapter default 300000 ms caps a `--timeout 10m` run at 5 min.
+
 ### context-budget fires a directive T2 at 150k on a 1M session when no live file exists (window unknown)
 - **Status**: open
 - **Trigger**: FIRED — peer report 2026-10-02; queued after the test-suite repo write containment release; reproduce locally first

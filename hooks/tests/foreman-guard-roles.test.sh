@@ -13,11 +13,26 @@ set_marker() { node "$REPO_ROOT/scripts/session-mode.js" set --level "$1" --repo
 clear_marker() { rm -f "$AUTOPILOT_SESSION_MODE_DIR"/*.json; }
 reset_state() { rm -f "$AUTOPILOT_FOREMAN_GUARD_DIR"/*.json; }
 
+json_str() { # pure-bash JSON string escaper (no node spawn); sets REPLY to the quoted string
+  local s="$1" out="" i c n
+  s="${s//\\/\\\\}"; s="${s//\"/\\\"}"
+  s="${s//$'\n'/\\n}"; s="${s//$'\r'/\\r}"; s="${s//$'\t'/\\t}"
+  s="${s//$'\b'/\\b}"; s="${s//$'\f'/\\f}"
+  if [[ "$s" == *[$'\001'-$'\037']* ]]; then
+    for ((i=0; i<${#s}; i++)); do
+      c="${s:i:1}"
+      if [[ "$c" == [$'\001'-$'\037'] ]]; then printf -v n '\\u%04x' "'$c"; out+="$n"; else out+="$c"; fi
+    done
+    s="$out"
+  fi
+  REPLY="\"$s\""
+}
 bash_payload() { # <agent_id|""> <command> [background]
   local agent="$1" cmd="$2" bg="${3:-false}" aid=""
   [ -n "$agent" ] && aid="\"agent_id\":\"$agent\","
+  json_str "$cmd"
   printf '{"tool_name":"Bash",%s"session_id":"fg-test-session","tool_input":{"command":%s,"run_in_background":%s},"hook_event_name":"PreToolUse","cwd":"%s"}' \
-    "$aid" "$(node -e 'process.stdout.write(JSON.stringify(process.argv[1]))' "$cmd")" "$bg" "$REPO"
+    "$aid" "$REPLY" "$bg" "$REPO"
 }
 monitor_payload() { printf '{"tool_name":"Monitor","agent_id":"%s","session_id":"fg-test-session","tool_input":{"command":"tail -f x"},"hook_event_name":"PreToolUse"}' "$1"; }
 
@@ -119,10 +134,10 @@ mkdir -p "$TRANSCRIPT_ROOT"
 printf '%s\n' '{}' > "$TRANSCRIPT_PATH"
 
 bash_payload_tx() { # <agent_id> <command> [background]
-  local agent="$1" cmd="$2" bg="${3:-false}"
+  local agent="$1" cmd="$2" bg="${3:-false}" tp
+  json_str "$TRANSCRIPT_PATH"; tp="$REPLY"; json_str "$cmd"
   printf '{"tool_name":"Bash","agent_id":"%s","session_id":"fg-test-session","transcript_path":%s,"tool_input":{"command":%s,"run_in_background":%s},"hook_event_name":"PreToolUse","cwd":"%s"}' \
-    "$agent" "$(node -e 'process.stdout.write(JSON.stringify(process.argv[1]))' "$TRANSCRIPT_PATH")" \
-    "$(node -e 'process.stdout.write(JSON.stringify(process.argv[1]))' "$cmd")" "$bg" "$REPO"
+    "$agent" "$tp" "$REPLY" "$bg" "$REPO"
 }
 
 write_child_transcript() { # <agent_id> <content-string>
@@ -605,8 +620,9 @@ assert_contains "$__RUN_STDOUT" 'Close-out reserve' "P3 rm /tmp/: reserve deny"
 engine_content() { printf 'Engine: sonnet\nRole: worker\nDo the work.\n'; }
 
 monitor_payload_tx() {
+  json_str "$TRANSCRIPT_PATH"
   printf '{"tool_name":"Monitor","agent_id":"%s","session_id":"fg-test-session","transcript_path":%s,"tool_input":{"command":"tail -f x"},"hook_event_name":"PreToolUse"}' \
-    "$1" "$(node -e 'process.stdout.write(JSON.stringify(process.argv[1]))' "$TRANSCRIPT_PATH")"
+    "$1" "$REPLY"
 }
 
 state_for() { printf '%s/%s-%s.json' "$AUTOPILOT_FOREMAN_GUARD_DIR" "fg-test-session" "$1"; }

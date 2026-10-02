@@ -259,6 +259,7 @@ Small batches that bump the version but don't warrant a project README. Source o
 
 | Date | Ship | Version | Merge |
 |------|------|---------|-------|
+| 2026-10-03 | wave-B S 修復（無 project dir — Fix）— context-budget unknown-window advisory、kimi --timeout 轉送、verification_author pin、readiness 診斷、opencode/run.sh/watchdog 測試 flake；SHIP-AS-IS | v2.36.107 | — | [CHANGELOG](../../CHANGELOG.md) |
 | 2026-10-02 | test suite speedup（無 project dir — Fix）— resolve-review-loop／engine-qualify／dispatch-review 分片、移除 14 個重跑 L1 的 L2 wrapper、foreman-guard-roles 純 bash JSON 逸出；SHIP-AS-IS | v2.36.106 | — | [CHANGELOG](../../CHANGELOG.md) |
 | 2026-10-02 | test suite repo write containment（無 project dir — Fix）— 整套測試改在拋棄式快照 repo 內執行，並加上外層 config/refs/status 守衛、測試身分 inventory 與 pre-commit/pre-merge-commit/pre-push 身分守門；兩輪 hetero review，最終 SHIP-AS-IS | v2.36.105 | — | [CHANGELOG](../../CHANGELOG.md) |
 | 2026-09-29 | dispatch-hetero watchdog follow-ups（無 project dir — Fix）— v2.36.101 review 後續：alive-check 在 `ps` 不可用時靜默不開火（run 無限掛著卻報 `timeout_enforced`），改成單一 fail-open 規則；cancel/kill 路徑不再裸 pid 發訊號、detached 路徑補真實測試；sidecar 第 4、7 項驗證為非缺陷。四輪 hetero review，每輪 🟠 都由 depth-0 重新確認並補修，最終 SHIP-AS-IS | v2.36.104 | — | [CHANGELOG](../../CHANGELOG.md) |

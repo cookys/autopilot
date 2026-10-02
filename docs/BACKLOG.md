@@ -744,14 +744,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/peer-addressing-md-says-message-rows-live-forever-a-spec-says-7-days.md
 - **Context**: `hangar-bridge/SUBJECT_ROUTING_SPEC.md:516,614` records an accepted 7-day retention/replay bound for subjected `@team` chat that was never built.
 
-### A full in-place suite run rewrites `.opencode/package.json` and its lock
-- **Status**: open
-- **Trigger**: next touch of the opencode tests or the opencode install/sync scripts
-- **Effort**: S
-- **Source**: depth-0 probe + v2.36.105 landing (opt-out run), 2026-10-02
-- **Pointer**: docs/backlog/opencode-package-json-test-drift.md
-- **Context**: a test updates the opencode plugin dependency with cwd = repo; snapshot mode hides it, `AUTOPILOT_TEST_SNAPSHOT=0` does not.
-
 ### No supported review-only entry: the managed final panel cannot adopt an externally produced candidate range
 - **Status**: open
 - **Trigger**: FIRED as a peer request — needs owner prioritization and a plan before code
@@ -759,30 +751,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: PEER-REPORTED cuda/chatgpt-tunnel (fleet, 2026-10-03), verified by reading code
 - **Pointer**: docs/backlog/review-only-adoption-of-external-candidate.md
 - **Context**: the final panel is reachable only through managed `implement-review` (writer stage always runs); intake only resumes candidates minted by the same campaign.
-
-### verification_author: a standing operator pin can never reach dispatch-author
-- **Status**: open
-- **Trigger**: FIRED — peer report 2026-10-02; queued after the test-suite repo write containment release; reproduce locally first
-- **Effort**: S
-- **Source**: PEER-REPORTED cuda/chatgpt-tunnel (fleet), re-verified by reading code, not yet by running it
-- **Pointer**: docs/backlog/verification-author-pin-unreachable.md
-- **Context**: `dispatch-author.sh` never passes `--resolved-live`, and the resolver that would build it rejects role `verification_author`.
-
-### dispatch-author kimi: `--timeout` never reaches the adapter (hard 300 s cap)
-- **Status**: open
-- **Trigger**: FIRED — peer report 2026-10-02; queued after the test-suite repo write containment release; reproduce locally first
-- **Effort**: S
-- **Source**: PEER-REPORTED cuda/chatgpt-tunnel (fleet), re-verified by reading code, not yet by running it
-- **Pointer**: docs/backlog/dispatch-author-kimi-timeout-not-forwarded.md
-- **Context**: `dispatch-author-kimi.js` calls `runKimiAuthor` without `timeoutMs`; the adapter default 300000 ms caps a `--timeout 10m` run at 5 min.
-
-### context-budget fires a directive T2 at 150k on a 1M session when no live file exists (window unknown)
-- **Status**: open
-- **Trigger**: FIRED — peer report 2026-10-02; queued after the test-suite repo write containment release; reproduce locally first
-- **Effort**: S
-- **Source**: PEER-REPORTED gentoo/mple2 (fleet), reader path re-verified by reading code, not yet by running it
-- **Pointer**: docs/backlog/context-budget-unknown-window-t2-on-1m-without-live-file.md
-- **Context**: the no-live-file inference path still applies 200K tiers below 200K observed; T2 (exit 2, STOP + /clear) interrupted a 1M session at 16%.
 
 ### context-budget falls back to inference after a long foreground tool call — live tick starves under the 120 s freshness cap
 - **Status**: open
@@ -853,3 +821,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: v2.36.104 landing review rounds 1-4
 - **Pointer**: docs/backlog/dispatch-hetero-watchdog-round2-cleanups.md
+
+### run.sh: a group INT is deferred until the running test file finishes (timeout puts each file in its own process group)
+- **Status**: open
+- **Trigger**: next run.sh touch
+- **Effort**: S
+- **Source**: tsflake hand 2026-10-03
+- **Pointer**: docs/backlog/run-sh-a-group-int-is-deferred-until-the-running-test-file-finishes.md
+- **Context**: with `timeout` giving each test file its own process group, a group INT reaches the file only after bash finishes the foreground child, so interrupt latency is bounded by the longest running file.
+

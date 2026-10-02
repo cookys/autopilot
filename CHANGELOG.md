@@ -1,5 +1,24 @@
 # Changelog
 
+## v2.36.107 — wave-B S 修復：七個小缺陷（context-budget、dispatch-author、readiness、測試 flake）
+
+- **context-budget（row 1）**：沒有 live 檔、視窗未知的 1M session 會在 150k 被當成 200K 視窗，噴出 STOP + `/clear` 的 T2 指令。改為視窗未知時 T2 降為 advisory；明確設定的 t2 仍維持指令。
+- **opencode 測試（row 2）**：`opencode-v2-plugin` 測試在真實 repo 內更新依賴，會改寫 `.opencode/package.json` 與 lock。改為在 scratch 複本內執行。
+- **dispatch-author kimi（row 3）**：`--timeout` 沒傳到 kimi adapter，固定 300 秒上限。改為轉送 `--timeout-seconds`，adapter 逾時設為 N*1000-5000 ms（下限 1000），讓 `kimi_timeout` 先於 shell kill 回報。
+- **dispatch-author verification_author（row 4）**：常設的 operator pin 永遠到不了 strict-contract 檢查。改為 live-resolve 並傳 `--resolved-live`；沒有 pin 時，原本被拒絕的仍然被拒絕。
+- **test-snapshot（row 5）**：偶發 SIGINT 130 案例失敗。根因：內層 run.sh 用 `setsid(1)` 啟動，而 setsid 無法還原進入時就被忽略的 SIGINT，bash 因此丟掉 INT trap。改為先用 python3 helper（SIG_DFL 重設 + 原地 setsid），`setsid(1)` 作後備，並新增決定性案例。
+- **readiness（row 6）**：`strict_l5_provider_not_ready` 只說「沒準備好」。現在帶經過清洗的逐席位診斷（seat、runner、model、status、axis、reason），不含 endpoint 或祕密。
+- **dispatch-hetero watchdog 測試（row 7）**：偶發 zombie 案例失敗。根因是測試 fixture 的競態（子行程在 holder exec 前就被 reap），產品行為未變；fixture 改為等 holder 的 comm 變成 sleep 才結束子行程。
+- **測試對齊（`test:` commit）**：context-budget L1 案例對齊新的 unknown-window advisory；`reviewer_engine` 檔案數界線 45→46、7→8（新增 va-pin 測試所致）。
+- **驗證**：整套 `--parallel 16` 一次；紅燈 `grok-effort`（負載 flake，單跑綠）；其餘兩處紅燈由上述測試對齊修復，重跑為綠。最終 review claude-fable-5-1：SHIP-AS-IS。
+- **已知後續（review 🔵 CUT/FOLLOW-UP）**：
+  - vapin：`run_strict_contract_preflight` 呼叫 resolver 時沒帶 `--repo-root`，依呼叫端 cwd 解析；可改在 `"$REPO_ROOT"` 下執行。
+  - vapin：`dispatch-author: resolved-live…` stderr 行在 `DISPATCH_QUIET=1` 時仍會印出（stdout JSON 契約不變）。
+  - rdydiag：`providerReadinessDiagnostics` 對 `axis.axis` 沒有 null 防護；`failing_axes` 含 null 時會 TypeError（引擎 catch 仍 fail-closed）。可改 `axis && axis.axis`。
+  - 新 BACKLOG 項：run.sh 的 group INT 要等執行中的測試檔結束才生效（`timeout` 讓每個檔自成 process group）。
+
+prose-justification: 本版只動程式碼、測試與 BACKLOG，沒有新增或修改 skill、reference 文字。
+
 ## v2.36.106 — 測試套件提速：重資源測試分片、移除重複的 L2 wrapper
 
 - **症狀**：整套測試在 `--parallel 8` 約需 25 分鐘；`resolve-review-loop`（600–823 秒，負載下會撞每檔 600 秒上限）、`engine-qualify`、`dispatch-review` 三個單檔拖住整體時間，另有 14 個 L2 wrapper 只是重跑 L1 已在跑的 `scripts/*.test.js`。

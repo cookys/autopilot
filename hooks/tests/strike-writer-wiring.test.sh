@@ -25,6 +25,7 @@
 #     before/after the whole suite and asserts it never changed.
 
 set -uo pipefail
+. "$(dirname "$0")/lib.sh"
 unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
   AUTOPILOT_PARENT_RUN_ID AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID \
   AUTOPILOT_DISPATCH_DEPTH AUTOPILOT_STRIKE_WRITER 2>/dev/null || true
@@ -36,7 +37,7 @@ TESTDIR="$(mktemp -d)"
 export ENGINE_CAPABILITY_DIR="$TESTDIR"
 SBX="$(mktemp -d)"
 PROMPT="$(mktemp)"
-trap 'chmod -R u+rwx "$TESTDIR" 2>/dev/null || true; rm -rf "$TESTDIR" "$SBX" "$PROMPT"' EXIT
+trap 'chmod -R u+rwx "$TESTDIR" 2>/dev/null || true; rm -rf "$TESTDIR" "$SBX" "$PROMPT"; cleanup_test_tmp' EXIT
 
 ok()  { PASS=$((PASS+1)); printf 'PASS: %s\n' "$1"; }
 bad() { FAIL=$((FAIL+1)); printf 'FAIL: %s\n' "$1"; }
@@ -189,7 +190,7 @@ fi
 # holds for what this session leaves in the working tree.
 UNWIRED_SCRIPT="$ROOT/scripts/.strike-writer-wiring-unwired-test.sh"
 rm -f "$UNWIRED_SCRIPT"
-trap 'rm -f "$UNWIRED_SCRIPT"; chmod -R u+rwx "$TESTDIR" 2>/dev/null || true; rm -rf "$TESTDIR" "$SBX" "$PROMPT"' EXIT
+trap 'rm -f "$UNWIRED_SCRIPT"; chmod -R u+rwx "$TESTDIR" 2>/dev/null || true; rm -rf "$TESTDIR" "$SBX" "$PROMPT"; cleanup_test_tmp' EXIT
 cp "$SCRIPT" "$UNWIRED_SCRIPT"
 chmod +x "$UNWIRED_SCRIPT"
 # The call site is a single standalone line "  seat_strike_capture" right

@@ -18,6 +18,7 @@
 # => red, reverted => green) is pasted in the dispatching session's report,
 # not re-run automatically here (mutating shipped source mid-suite is unsafe).
 set -uo pipefail
+. "$(dirname "$0")/lib.sh"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ESC="$ROOT/scripts/engine-scorecard.js"
@@ -35,7 +36,7 @@ CAPABILITY_DIR="$TESTDIR/capability"
 mkdir -p "$SCORECARD_DIR" "$CAPABILITY_DIR"
 export ENGINE_SCORECARD_DIR="$SCORECARD_DIR"
 export ENGINE_CAPABILITY_DIR="$CAPABILITY_DIR"
-trap 'rm -rf "$TESTDIR"' EXIT
+trap 'rm -rf "$TESTDIR"; cleanup_test_tmp' EXIT
 
 # Snapshot the operator's REAL stores (if any) BEFORE this suite touches
 # anything, so the landing assertion at the bottom is a real before/after

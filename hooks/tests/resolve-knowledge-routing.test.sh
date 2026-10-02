@@ -8,6 +8,7 @@
 # resolve from a foreign cwd would hand that project a directory it does not have.
 
 set -uo pipefail
+. "$(dirname "$0")/lib.sh"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 RESOLVER="$REPO_ROOT/scripts/resolve-knowledge-routing.sh"
@@ -18,7 +19,7 @@ no() { FAIL=$((FAIL+1)); printf 'FAIL — %s\n     want: %s\n     got:  %s\n' "$
 eq() { [ "$2" = "$3" ] && ok "$1" || no "$1" "$2" "$3"; }
 
 TMP="$(mktemp -d)"
-cleanup() { rm -rf "$TMP"; }
+cleanup() { rm -rf "$TMP"; cleanup_test_tmp; }
 trap cleanup EXIT
 
 # --- a consuming project: a real git repo, no autopilot layout at all ---

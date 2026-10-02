@@ -98,7 +98,7 @@ mkdir -p "$MINI_REPO"
 cd "$MINI_REPO"
 git init -qb main >/dev/null 2>&1
 git config user.name "Test" >/dev/null 2>&1
-git config user.email "test@test.com" >/dev/null 2>&1
+git config user.email "test@example.invalid" >/dev/null 2>&1
 echo "dep" > dep.txt
 git add dep.txt >/dev/null 2>&1
 git commit -m "A" >/dev/null 2>&1

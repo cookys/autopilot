@@ -13,12 +13,13 @@
 # that merely look like SHAs are not mistaken for commits, and a repo with no
 # mission state is a clean no-op rather than an error.
 set -uo pipefail
+. "$(dirname "$0")/lib.sh"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SCRIPT="$ROOT/scripts/pin-evidence-anchors.js"
 PASS=0; FAIL=0
 TESTDIR="$(mktemp -d)"
-trap 'rm -rf "$TESTDIR"' EXIT
+trap 'rm -rf "$TESTDIR"; cleanup_test_tmp' EXIT
 
 ok()  { PASS=$((PASS+1)); printf 'PASS: %s\n' "$1"; }
 bad() { FAIL=$((FAIL+1)); printf 'FAIL: %s\n' "$1"; }

@@ -7,6 +7,7 @@
 # consumption path so the block cannot go write-only again.
 
 set -uo pipefail
+. "$(dirname "$0")/lib.sh"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 R="$REPO_ROOT/scripts/resolve-project-paths.sh"
@@ -16,7 +17,7 @@ ok() { PASS=$((PASS+1)); printf 'ok — %s\n' "$1"; }
 no() { FAIL=$((FAIL+1)); printf 'FAIL — %s\n     want: %s\n     got:  %s\n' "$1" "$2" "$3"; }
 eq() { [ "$2" = "$3" ] && ok "$1" || no "$1" "$2" "$3"; }
 
-TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"; cleanup_test_tmp' EXIT
 P="$TMP/proj"; mkdir -p "$P"; git -C "$P" init -q
 f() { bash "$R" --target "$P" --field "$1"; }
 

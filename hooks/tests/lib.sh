@@ -25,6 +25,15 @@ __git_local_vars="$(git rev-parse --local-env-vars 2>/dev/null)" || __git_local_
 unset $__git_local_vars
 unset __git_local_vars
 
+# G9: scratch dirs without their own .git must not discover a repo above them.
+__g9_td="${TMPDIR:-/tmp}"
+if [ -n "${GIT_CEILING_DIRECTORIES:-}" ]; then
+  export GIT_CEILING_DIRECTORIES="${GIT_CEILING_DIRECTORIES}:${__g9_td}:/tmp"
+else
+  export GIT_CEILING_DIRECTORIES="${__g9_td}:/tmp"
+fi
+unset __g9_td
+
 # Fake-runner prompt + nonce-frame helpers (generic over AUTOPILOT-REVIEW /
 # AUTOPILOT-AUTHOR). Lifted from hooks/tests/dispatch-review.test.sh so consumer
 # suites do not duplicate the parser. Source with AUTOPILOT_TEST_LIB_HELPERS_ONLY=1
@@ -117,6 +126,7 @@ mkdir -p "$HOOK_TMPDIR"
 # export) and the EXIT trap cleans everything under it. A test that needs a
 # different TMPDIR can still export its own after sourcing lib.sh.
 export TMPDIR="$HOOK_TMPDIR"
+export GIT_CEILING_DIRECTORIES="${GIT_CEILING_DIRECTORIES}:${TMPDIR}"
 
 # Same class of leak, one layer up (2026-08-22 incident). HOOK_HOME above exists
 # precisely because "~/.autopilot/* writes must be isolated", but HOME is only

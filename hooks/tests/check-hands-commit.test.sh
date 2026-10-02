@@ -7,6 +7,7 @@
 # the commit replaces the real ignored directory with a link. Every path is in scope.
 
 set -uo pipefail
+. "$(dirname "$0")/lib.sh"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 G="$REPO_ROOT/scripts/check-hands-commit.js"
@@ -17,7 +18,7 @@ no() { FAIL=$((FAIL+1)); printf 'FAIL — %s\n     want: %s\n     got:  %s\n' "$
 eq() { [ "$2" = "$3" ] && ok "$1" || no "$1" "$2" "$3"; }
 jf() { node -e 'const j=JSON.parse(require("fs").readFileSync(0,"utf8"));const v=process.argv[1].split(".").reduce((a,k)=>a==null?a:a[k],j);process.stdout.write(Array.isArray(v)?String(v.length):String(v))' "$1"; }
 
-TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"; cleanup_test_tmp' EXIT
 R="$TMP/repo"; mkdir -p "$R"; git -C "$R" init -q; git -C "$R" config user.email t@t; git -C "$R" config user.name t
 printf 'node_modules/\n.venv/\n*.log\n' > "$R/.gitignore"
 mkdir -p "$R/src"; echo 'x' > "$R/src/a.txt"

@@ -64,7 +64,7 @@ mkdir -p "$CC_REPO"
 (
   cd "$CC_REPO"
   git init -q
-  git config user.email t@t.t
+  git config user.email t@example.invalid
   git config user.name t
   printf 'const a = 1;\n' > app.js
   git add app.js

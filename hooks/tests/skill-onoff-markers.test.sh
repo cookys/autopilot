@@ -8,12 +8,11 @@
 # Also: prompt-hygiene leakage grep over every task.md (with a recorded ALLOW list).
 
 set -euo pipefail
+. "$(dirname "$0")/lib.sh"
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 BASE="$REPO_ROOT/evals/skill-onoff"
 QUERY="$BASE/lib/transcript-query.js"
-TEST_TMP=$(mktemp -d -t "skill-onoff-markers-test-XXXXXX")
-trap 'rm -rf "$TEST_TMP"' EXIT
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 

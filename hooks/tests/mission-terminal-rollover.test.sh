@@ -32,6 +32,7 @@
 # of this work (scripts/verify-preexisting.sh: head=fail, base=fail), so it cannot
 # serve as the oracle here.
 set -uo pipefail
+. "$(dirname "$0")/lib.sh"
 
 LIVE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 RECONCILE="$LIVE_ROOT/scripts/mission-terminal-reconcile.js"
@@ -56,7 +57,7 @@ fi
 LIVE_STORE_HASH_BEFORE="$( [ -f "$LIVE_STORE" ] && sha256sum "$LIVE_STORE" | awk '{print $1}' || echo "absent" )"
 
 SCRATCH_HOME="$(mktemp -d "${TMPDIR:-/tmp}/mission-terminal-rollover-scratch.XXXXXX")"
-cleanup_scratch() { rm -rf "$SCRATCH_HOME"; }
+cleanup_scratch() { rm -rf "$SCRATCH_HOME"; cleanup_test_tmp; }
 trap cleanup_scratch EXIT
 
 if ! git clone --quiet --no-hardlinks -- "$LIVE_ROOT" "$SCRATCH_HOME/repo" >/dev/null 2>&1; then

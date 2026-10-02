@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+. "$(dirname "$0")/lib.sh"
 
 # Ensure scripts directory exists
 cd "$(dirname "$0")/../.."
@@ -10,7 +11,7 @@ echo "Pass: Syntax check"
 
 # Create a temporary directory for sandbox repo and findings store
 TEST_DIR=$(mktemp -d)
-trap 'rm -rf "$TEST_DIR"' EXIT
+trap 'rm -rf "$TEST_DIR"; cleanup_test_tmp' EXIT
 
 SANDBOX_REPO="$TEST_DIR/sandbox"
 mkdir -p "$SANDBOX_REPO"

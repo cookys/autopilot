@@ -221,7 +221,7 @@ export AUTOPILOT_HOOK_BRANCH_PROTECTION=1
 BP_REPO="$TEST_TMP/bp-repo"
 mkdir -p "$BP_REPO"
 git -C "$BP_REPO" init -b main >/dev/null
-git -C "$BP_REPO" config user.email "t@t.t"
+git -C "$BP_REPO" config user.email "t@example.invalid"
 git -C "$BP_REPO" config user.name "t"
 echo x > "$BP_REPO/f"
 git -C "$BP_REPO" add f

@@ -4,10 +4,11 @@
 #  session-id keying, atomic overwrite).
 # Run: bash hooks/tests/session-mode.test.sh
 set -u
+. "$(dirname "$0")/lib.sh"
 
 SOURCE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
+trap 'rm -rf "$TMP"; cleanup_test_tmp' EXIT
 git clone -q --no-local "$SOURCE_ROOT" "$TMP/hermetic-repo"
 git -C "$SOURCE_ROOT" diff --binary HEAD | git -C "$TMP/hermetic-repo" apply
 REPO_ROOT="$TMP/hermetic-repo"

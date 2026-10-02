@@ -15,7 +15,7 @@ REAPER_SCOPE="marker-only"
 
 setup_repo() { # <repo> — init a scratch repo with one commit
   git init -q "$1"
-  git -C "$1" config user.email t@e.c
+  git -C "$1" config user.email t@example.invalid
   git -C "$1" config user.name t
   git -C "$1" commit -q --allow-empty -m init
 }

@@ -1,6 +1,6 @@
 # Rubric — 2026-10-02-test-suite-repo-write-containment.md
 
-> Source plan: docs/plans/2026-10-02-test-suite-repo-write-containment.md
+> Source plan: docs/plans/_archive/2026/10/2026-10-02-test-suite-repo-write-containment.md
 
 R1: Containment claim is honest: the plan never claims the snapshot makes a real-repo write fail; every residual route to the real repo (absolute path, inherited GIT_DIR, standalone test run) is named with the layer that covers it.
 R2: Snapshot write-through safety: no construction step can make a write inside the snapshot modify the real repo (no hardlinked working-tree files, no shared object dir, no worktree of the real repo, origin neutered).

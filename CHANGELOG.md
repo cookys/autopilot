@@ -1,5 +1,25 @@
 # Changelog
 
+## v2.36.105 — 測試套件不再寫穿真實 repo：快照執行、身分守門、測試身分 hook
+
+- **症狀**：整套測試直接跑在真實 checkout 上，個別測試的 `git init`/`git config`/commit 會漏寫到主 repo（Test User 身分 commit、被改掉的 config 與 tracked 檔），先前只靠事後的 drift guard 還原。
+- **新規則**：
+  - `hooks/tests/run.sh` 預設在拋棄式快照 repo（`${TMPDIR}/autopilot-test-snapshot.*/repo`）裡跑整套測試，結束、中斷或失敗都會連 worktree 與 lock 一併清掉；`AUTOPILOT_TEST_SNAPSHOT=0` 可退回原地執行（會印 `test-snapshot: disabled`）。外層守衛在套件前後比對真實 repo 的 config、refs、status，漂移就還原並讓整套失敗。
+  - 測試身分規則集中在 `test-identity.sh`（不得重述）；新增兩份 inventory：git-invoking 測試的 email 語法與 `lib.sh` sourcing。
+  - 新增 `.githooks/pre-commit`、`pre-merge-commit`、`pre-push` 身分守門：帶測試身分的 commit、merge、push 範圍一律拒絕；push 的 commit 集合只相對目標 remote 計算。
+  - 內層套件跑在自己的 process group；外層在任何離開路徑（正常、INT/TERM、HUP）都先 TERM 該 group 並等它消失，才移除快照。
+  - `check-canonical-invariants` 測試的 sandbox 改為真實 git repo。
+- **驗證**：計畫 `2026-10-02-test-suite-repo-write-containment` 的每個 row 都經 hands 實作與 review；整合後完整 suite 通過（唯一紅燈為已知的 `resolve-review-loop` 負載逾時，單獨執行綠燈）；最終合併 review（claude-fable-5-1，兩輪）為 SHIP-AS-IS。
+- **已知後續（review 🔵/🟡 CUT/FOLLOW-UP）**：
+  - setsid 分支無法重設被忽略的訊號；無 setsid 的 fallback 沒有自己的 process group；catch-all inventory 略過結尾帶點的網域；reaper 測試假設主機有 flock。
+  - `P4 pgid` 的 `expected 130, got 0` 在 implement 階段紅過一次，判斷為測試端時序（readiness loop 逾時後不斷言 marker）；可改為只保留 PGID 斷言。
+  - `__ts_child_shutdown` 在子行程 `setsid` 前的短窗內收到訊號時不會對 group 補送；可在升級後重複 kill 與等待。
+  - pre-push：remote 沒有本地追蹤 ref 且舊 tip 未知時直接拒絕（比 G8 嚴格，fail-closed）；`done <<< "$__PUSH_STDIN"` 對空 push 多一筆空 record，可在迴圈頭加 `continue` 守衛。
+  - KR5 email inventory 只掃 `hooks/tests/*.test.sh` 與 `scripts/**`，漏掉 `*.test.js` 與 helper lib；`platforms/codex/plugin/scripts/lib/test-identity.sh` 為 sync 產生的鏡像（`sync-codex-plugin-skills.sh --check` 通過）。
+  - `AUTOPILOT_TEST_SNAPSHOT=0` 原地執行仍會弄髒 `.opencode/package.json`（BACKLOG 由收尾登記）。
+
+prose-justification: 本版只動測試基礎設施與 `.githooks` 守門腳本及其測試，沒有新增 skill 或 reference 文字。
+
 ## v2.36.104 — dispatch-hetero 的 wall-timeout watchdog 補完：不再在 `ps` 不可用時靜默放棄
 
 - **症狀**：v2.36.101 的 watchdog 留下一批 review 後續項目。最嚴重的是，watchdog 在到期時先確認 worker 還活著才開火；`ps` 失敗（fork 失敗、非 procps 的 `ps`）時「無法證明活著」被當成「已死」，watchdog 靜默退出，run 無限期掛著，manifest 卻寫 `timeout_enforced: true`。

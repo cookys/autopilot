@@ -262,3 +262,33 @@ ts_snapshot_remove() {
   rm -rf "$container"
   return 0
 }
+
+# Wait until process group $1 (and its session) is gone. Escalate to KILL after ~5s.
+ts_wait_pgid_gone() {
+  local pgid="$1"
+  local n=0
+  [ -n "$pgid" ] || return 0
+  _ts_signal_session() {
+    local sig="$1" id="$2"
+    kill -s "$sig" -- "-$id" >/dev/null 2>&1 || true
+    kill -s "$sig" "$id" >/dev/null 2>&1 || true
+    pkill "-$sig" -s "$id" >/dev/null 2>&1 || true
+  }
+  while kill -0 -- "-$pgid" 2>/dev/null || pkill -0 -s "$pgid" >/dev/null 2>&1; do
+    if [ "$n" -ge 50 ]; then
+      _ts_signal_session KILL "$pgid"
+      break
+    fi
+    if [ "$n" -eq 0 ]; then
+      :
+    fi
+    sleep 0.1
+    n=$((n + 1))
+  done
+  n=0
+  while kill -0 -- "-$pgid" 2>/dev/null || pkill -0 -s "$pgid" >/dev/null 2>&1; do
+    [ "$n" -ge 40 ] && break
+    sleep 0.05
+    n=$((n + 1))
+  done
+}

@@ -563,4 +563,556 @@ EOF
   esac
 }
 
+# --- P4b (append). RED at 5d5785fb: inner SIGPIPE inherited ignored; no G5
+# group wait / construction-TERM cleanup; reaper glob swallowed live snapshots. ---
+
+assert_no_snap_dirs() {
+  local priv="$1" leftover=0
+  shopt -s nullglob
+  for _d in "$priv"/autopilot-test-snapshot.*; do
+    leftover=1
+  done
+  shopt -u nullglob
+  assert_eq "$leftover" 0 "no autopilot-test-snapshot.* under $priv"
+}
+
+p4b_outer_env() {
+  env -u AUTOPILOT_SESSION_ID -u AUTOPILOT_TEST_SNAPSHOT_ROOT -u AUTOPILOT_TEST_SNAPSHOT "$@"
+}
+
+# RED at 5d5785fb: PIPESTATUS writer is 1/EPIPE because SIGPIPE stays ignored
+{
+  fx="$TEST_TMP/p4b-sigpipe"
+  make_fixture "$fx"
+  git -C "$fx" config --local user.email "owner@stranity.com"
+  printf 'base\n' >"$fx/tracked.txt"
+  git -C "$fx" add tracked.txt
+  git -C "$fx" commit -q -m init
+  copy_runner_into_fixture "$fx"
+  cat >"$fx/hooks/tests/zz-fixture-one.test.sh" <<'EOF'
+#!/usr/bin/env bash
+. "$(dirname "$0")/lib.sh"
+set +o pipefail
+yes P4B_SIGPIPE_WRITER 2>/dev/null | head -n 1 >/dev/null
+printf '%s\n' "${PIPESTATUS[0]}" >"${FIXTURE_MARKER}"
+finalize_test
+EOF
+  chmod +x "$fx/hooks/tests/zz-fixture-one.test.sh"
+  git -C "$fx" add hooks scripts tracked.txt
+  git -C "$fx" commit -q -m runner
+  priv="$TEST_TMP/p4b-sigpipe-tmp"
+  mkdir -p "$priv"
+  marker="$TEST_TMP/p4b-sigpipe.marker"
+  rc=0
+  p4b_outer_env TMPDIR="$priv" FIXTURE_MARKER="$marker" \
+    bash "$fx/hooks/tests/run.sh" zz-fixture-one </dev/null >/dev/null 2>&1 || rc=$?
+  assert_exit_code "$rc" 0 "P4b SIGPIPE outer exit 0"
+  assert_eq "$(cat "$marker")" "141" "P4b inner writer status 141 (SIGPIPE default)"
+  assert_no_snap_dirs "$priv"
+}
+
+# RED at 5d5785fb: INT leaves delayed descendant / snapshot container
+{
+  fx="$TEST_TMP/p4b-int"
+  make_fixture "$fx"
+  git -C "$fx" config --local user.email "owner@stranity.com"
+  printf 'base\n' >"$fx/tracked.txt"
+  git -C "$fx" add tracked.txt
+  git -C "$fx" commit -q -m init
+  copy_runner_into_fixture "$fx"
+  cat >"$fx/hooks/tests/zz-fixture-one.test.sh" <<'EOF'
+#!/usr/bin/env bash
+. "$(dirname "$0")/lib.sh"
+sleep 120 &
+echo $! >"${DESCENDANT_PIDFILE}"
+printf 'ready\n' >"${FIXTURE_MARKER}"
+wait
+finalize_test
+EOF
+  chmod +x "$fx/hooks/tests/zz-fixture-one.test.sh"
+  git -C "$fx" add hooks scripts tracked.txt
+  git -C "$fx" commit -q -m runner
+  priv="$TEST_TMP/p4b-int-tmp"
+  mkdir -p "$priv"
+  marker="$TEST_TMP/p4b-int.marker"
+  dpidf="$TEST_TMP/p4b-int.descendant"
+  wt_before="$(git -C "$fx" worktree list --porcelain)"
+  set -m
+  (
+    unset AUTOPILOT_SESSION_ID AUTOPILOT_TEST_SNAPSHOT_ROOT AUTOPILOT_TEST_SNAPSHOT
+    export TMPDIR="$priv" FIXTURE_MARKER="$marker" DESCENDANT_PIDFILE="$dpidf"
+    exec python3 -c 'import os, signal, sys
+for name in ("SIGINT", "SIGTERM", "SIGQUIT", "SIGPIPE", "SIGXFSZ"):
+    s = getattr(signal, name, None)
+    if s is not None:
+        signal.signal(s, signal.SIG_DFL)
+os.execvp("bash", ["bash"] + sys.argv[1:])
+' "$fx/hooks/tests/run.sh" zz-fixture-one </dev/null >/dev/null 2>&1
+  ) &
+  outer=$!
+  set +m
+  for _i in $(seq 1 100); do
+    [ -s "$dpidf" ] && [ -f "$marker" ] && break
+    sleep 0.1
+  done
+  kill -s INT "$outer" >/dev/null 2>&1 || true
+  rc=0
+  wait "$outer" || rc=$?
+  assert_exit_code "$rc" 130 "P4b INT mid-run => 130"
+  dpid="$(tr -d '[:space:]' <"$dpidf" 2>/dev/null || true)"
+  if [ -n "$dpid" ] && kill -0 "$dpid" 2>/dev/null; then
+    fail "P4b INT descendant $dpid still alive"
+  else
+    assert_eq 0 0 "P4b INT descendant gone"
+  fi
+  assert_no_snap_dirs "$priv"
+  wt_after="$(git -C "$fx" worktree list --porcelain)"
+  assert_eq "$wt_after" "$wt_before" "P4b INT fixture worktree list unchanged"
+}
+
+# RED at 5d5785fb: TERM mid-run leaves residue
+{
+  fx="$TEST_TMP/p4b-term"
+  make_fixture "$fx"
+  git -C "$fx" config --local user.email "owner@stranity.com"
+  printf 'base\n' >"$fx/tracked.txt"
+  git -C "$fx" add tracked.txt
+  git -C "$fx" commit -q -m init
+  copy_runner_into_fixture "$fx"
+  cat >"$fx/hooks/tests/zz-fixture-one.test.sh" <<'EOF'
+#!/usr/bin/env bash
+. "$(dirname "$0")/lib.sh"
+sleep 120 &
+echo $! >"${DESCENDANT_PIDFILE}"
+printf 'ready\n' >"${FIXTURE_MARKER}"
+wait
+finalize_test
+EOF
+  chmod +x "$fx/hooks/tests/zz-fixture-one.test.sh"
+  git -C "$fx" add hooks scripts tracked.txt
+  git -C "$fx" commit -q -m runner
+  priv="$TEST_TMP/p4b-term-tmp"
+  mkdir -p "$priv"
+  marker="$TEST_TMP/p4b-term.marker"
+  dpidf="$TEST_TMP/p4b-term.descendant"
+  set -m
+  (
+    unset AUTOPILOT_SESSION_ID AUTOPILOT_TEST_SNAPSHOT_ROOT AUTOPILOT_TEST_SNAPSHOT
+    export TMPDIR="$priv" FIXTURE_MARKER="$marker" DESCENDANT_PIDFILE="$dpidf"
+    exec python3 -c 'import os, signal, sys
+for name in ("SIGINT", "SIGTERM", "SIGQUIT", "SIGPIPE", "SIGXFSZ"):
+    s = getattr(signal, name, None)
+    if s is not None:
+        signal.signal(s, signal.SIG_DFL)
+os.execvp("bash", ["bash"] + sys.argv[1:])
+' "$fx/hooks/tests/run.sh" zz-fixture-one </dev/null >/dev/null 2>&1
+  ) &
+  outer=$!
+  set +m
+  for _i in $(seq 1 100); do
+    [ -s "$dpidf" ] && [ -f "$marker" ] && break
+    sleep 0.1
+  done
+  kill -s TERM "$outer" >/dev/null 2>&1 || true
+  rc=0
+  wait "$outer" || rc=$?
+  assert_exit_code "$rc" 143 "P4b TERM mid-run => 143"
+  dpid="$(tr -d '[:space:]' <"$dpidf" 2>/dev/null || true)"
+  if [ -n "$dpid" ] && kill -0 "$dpid" 2>/dev/null; then
+    fail "P4b TERM descendant $dpid still alive"
+  else
+    assert_eq 0 0 "P4b TERM descendant gone"
+  fi
+  assert_no_snap_dirs "$priv"
+}
+
+# RED at 5d5785fb: TERM mid-construction leaves container
+{
+  fx="$TEST_TMP/p4b-term-ctor"
+  make_fixture "$fx"
+  git -C "$fx" config --local user.email "owner@stranity.com"
+  printf 'base\n' >"$fx/tracked.txt"
+  git -C "$fx" add tracked.txt
+  git -C "$fx" commit -q -m init
+  copy_runner_into_fixture "$fx"
+  cat >"$fx/hooks/tests/zz-fixture-one.test.sh" <<'EOF'
+#!/usr/bin/env bash
+. "$(dirname "$0")/lib.sh"
+finalize_test
+EOF
+  chmod +x "$fx/hooks/tests/zz-fixture-one.test.sh"
+  git -C "$fx" add hooks scripts tracked.txt
+  git -C "$fx" commit -q -m init2
+  wrap="$TEST_TMP/p4b-rsync-wrap"
+  mkdir -p "$wrap"
+  cat >"$wrap/rsync" <<'EOF'
+#!/usr/bin/env bash
+sleep 20
+exec /usr/bin/rsync "$@"
+EOF
+  chmod +x "$wrap/rsync"
+  priv="$TEST_TMP/p4b-term-ctor-tmp"
+  mkdir -p "$priv"
+  set -m
+  (
+    unset AUTOPILOT_SESSION_ID AUTOPILOT_TEST_SNAPSHOT_ROOT AUTOPILOT_TEST_SNAPSHOT
+    export PATH="$wrap:$PATH" TMPDIR="$priv"
+    exec python3 -c 'import os, signal, sys
+for name in ("SIGINT", "SIGTERM", "SIGQUIT", "SIGPIPE", "SIGXFSZ"):
+    s = getattr(signal, name, None)
+    if s is not None:
+        signal.signal(s, signal.SIG_DFL)
+os.execvp("bash", ["bash"] + sys.argv[1:])
+' "$fx/hooks/tests/run.sh" zz-fixture-one </dev/null >/dev/null 2>&1
+  ) &
+  outer=$!
+  set +m
+  for _i in $(seq 1 50); do
+    shopt -s nullglob
+    found=0
+    for _d in "$priv"/autopilot-test-snapshot.*; do found=1; done
+    shopt -u nullglob
+    [ "$found" -eq 1 ] && break
+    sleep 0.1
+  done
+  kill -s TERM "$outer" >/dev/null 2>&1 || true
+  wait "$outer" 2>/dev/null || true
+  assert_no_snap_dirs "$priv"
+}
+
+# RED at 5d5785fb: snapshot-registered worktree survives outer exit
+{
+  fx="$TEST_TMP/p4b-wt"
+  make_fixture "$fx"
+  git -C "$fx" config --local user.email "owner@stranity.com"
+  printf 'base\n' >"$fx/tracked.txt"
+  git -C "$fx" add tracked.txt
+  git -C "$fx" commit -q -m init
+  copy_runner_into_fixture "$fx"
+  cat >"$fx/hooks/tests/zz-fixture-one.test.sh" <<'EOF'
+#!/usr/bin/env bash
+. "$(dirname "$0")/lib.sh"
+git -C "$REPO_ROOT" worktree add -q "$REPO_ROOT/../extra-wt" -b p4b-extra
+printf 'ok\n' >"${FIXTURE_MARKER}"
+finalize_test
+EOF
+  chmod +x "$fx/hooks/tests/zz-fixture-one.test.sh"
+  git -C "$fx" add hooks scripts tracked.txt
+  git -C "$fx" commit -q -m runner
+  priv="$TEST_TMP/p4b-wt-tmp"
+  mkdir -p "$priv"
+  marker="$TEST_TMP/p4b-wt.marker"
+  wt_before="$(git -C "$fx" worktree list --porcelain)"
+  rc=0
+  p4b_outer_env TMPDIR="$priv" FIXTURE_MARKER="$marker" \
+    bash "$fx/hooks/tests/run.sh" zz-fixture-one </dev/null >/dev/null 2>&1 || rc=$?
+  assert_exit_code "$rc" 0 "P4b worktree normal exit 0"
+  assert_no_snap_dirs "$priv"
+  wt_after="$(git -C "$fx" worktree list --porcelain)"
+  assert_eq "$wt_after" "$wt_before" "P4b worktree fixture list unchanged after normal"
+}
+
+{
+  fx="$TEST_TMP/p4b-wt-int"
+  make_fixture "$fx"
+  git -C "$fx" config --local user.email "owner@stranity.com"
+  printf 'base\n' >"$fx/tracked.txt"
+  git -C "$fx" add tracked.txt
+  git -C "$fx" commit -q -m init
+  copy_runner_into_fixture "$fx"
+  cat >"$fx/hooks/tests/zz-fixture-one.test.sh" <<'EOF'
+#!/usr/bin/env bash
+. "$(dirname "$0")/lib.sh"
+git -C "$REPO_ROOT" worktree add -q "$REPO_ROOT/../extra-wt" -b p4b-extra-int
+printf 'ready\n' >"${FIXTURE_MARKER}"
+sleep 30
+finalize_test
+EOF
+  chmod +x "$fx/hooks/tests/zz-fixture-one.test.sh"
+  git -C "$fx" add hooks scripts tracked.txt
+  git -C "$fx" commit -q -m runner
+  priv="$TEST_TMP/p4b-wt-int-tmp"
+  mkdir -p "$priv"
+  marker="$TEST_TMP/p4b-wt-int.marker"
+  wt_before="$(git -C "$fx" worktree list --porcelain)"
+  set -m
+  (
+    unset AUTOPILOT_SESSION_ID AUTOPILOT_TEST_SNAPSHOT_ROOT AUTOPILOT_TEST_SNAPSHOT
+    export TMPDIR="$priv" FIXTURE_MARKER="$marker"
+    exec python3 -c 'import os, signal, sys
+for name in ("SIGINT", "SIGTERM", "SIGQUIT", "SIGPIPE", "SIGXFSZ"):
+    s = getattr(signal, name, None)
+    if s is not None:
+        signal.signal(s, signal.SIG_DFL)
+os.execvp("bash", ["bash"] + sys.argv[1:])
+' "$fx/hooks/tests/run.sh" zz-fixture-one </dev/null >/dev/null 2>&1
+  ) &
+  outer=$!
+  set +m
+  for _i in $(seq 1 100); do
+    [ -f "$marker" ] && break
+    sleep 0.1
+  done
+  kill -s INT "$outer" >/dev/null 2>&1 || true
+  rc=0
+  wait "$outer" || rc=$?
+  assert_exit_code "$rc" 130 "P4b worktree INT => 130"
+  assert_no_snap_dirs "$priv"
+  wt_after="$(git -C "$fx" worktree list --porcelain)"
+  assert_eq "$wt_after" "$wt_before" "P4b worktree fixture list unchanged after INT"
+}
+
+# RED at 5d5785fb: inversion (c) — guard in child misses absolute fixture write
+{
+  fx="$TEST_TMP/p4b-inv"
+  make_fixture "$fx"
+  git -C "$fx" config --local user.email "owner@stranity.com"
+  printf 'base\n' >"$fx/tracked.txt"
+  git -C "$fx" add tracked.txt
+  git -C "$fx" commit -q -m init
+  copy_runner_into_fixture "$fx"
+  cat >"$fx/hooks/tests/zz-fixture-one.test.sh" <<'EOF'
+#!/usr/bin/env bash
+. "$(dirname "$0")/lib.sh"
+git -C "$FIXTURE_REAL" config --local core.inv 1
+finalize_test
+EOF
+  chmod +x "$fx/hooks/tests/zz-fixture-one.test.sh"
+  git -C "$fx" add hooks scripts tracked.txt
+  git -C "$fx" commit -q -m runner
+  priv="$TEST_TMP/p4b-inv-tmp"
+  mkdir -p "$priv"
+  out=""
+  rc=0
+  out="$(p4b_outer_env TMPDIR="$priv" FIXTURE_REAL="$fx" \
+    bash "$fx/hooks/tests/run.sh" zz-fixture-one </dev/null 2>&1)" || rc=$?
+  assert_neq "$rc" 0 "P4b inversion outer fails"
+  assert_contains "$out" "core.inv" "P4b inversion names core.inv"
+  if git -C "$fx" config --local --get core.inv >/dev/null 2>&1; then
+    fail "P4b inversion core.inv should be restored"
+  else
+    assert_eq 0 0 "P4b inversion core.inv restored"
+  fi
+  assert_no_snap_dirs "$priv"
+}
+
+{
+  fx="$TEST_TMP/p4b-inv-neg"
+  make_fixture "$fx"
+  git -C "$fx" config --local user.email "owner@stranity.com"
+  printf 'base\n' >"$fx/tracked.txt"
+  git -C "$fx" add tracked.txt
+  git -C "$fx" commit -q -m init
+  copy_runner_into_fixture "$fx"
+  cat >"$fx/hooks/tests/zz-fixture-one.test.sh" <<'EOF'
+#!/usr/bin/env bash
+. "$(dirname "$0")/lib.sh"
+git -C "$REPO_ROOT" config --local core.inv 1
+finalize_test
+EOF
+  chmod +x "$fx/hooks/tests/zz-fixture-one.test.sh"
+  git -C "$fx" add hooks scripts tracked.txt
+  git -C "$fx" commit -q -m runner
+  priv="$TEST_TMP/p4b-inv-neg-tmp"
+  mkdir -p "$priv"
+  rc=0
+  p4b_outer_env TMPDIR="$priv" \
+    bash "$fx/hooks/tests/run.sh" zz-fixture-one </dev/null >/dev/null 2>&1 || rc=$?
+  assert_exit_code "$rc" 0 "P4b negative sentinel: snapshot-local config stays green"
+  if git -C "$fx" config --local --get core.inv >/dev/null 2>&1; then
+    fail "P4b negative fixture must not carry core.inv"
+  else
+    assert_eq 0 0 "P4b negative fixture config clean"
+  fi
+  assert_no_snap_dirs "$priv"
+}
+
+# Reaper cases — same functions as suite-residue-reaper.test.sh
+# shellcheck source=../../scripts/lib/worktree-reap.sh
+. "$REPO_ROOT/scripts/lib/worktree-reap.sh"
+# shellcheck source=../../scripts/lib/prune-tmp-residue.sh
+. "$REPO_ROOT/scripts/lib/prune-tmp-residue.sh"
+# shellcheck source=lib/suite-residue-reap.sh
+. "$REPO_ROOT/hooks/tests/lib/suite-residue-reap.sh"
+
+extract_json_field() {
+  printf '%s' "$1" | grep -o "\"$2\":[0-9]*" | head -1 | grep -o '[0-9]*$'
+}
+
+# RED at 5d5785fb: live snapshot container reaped by autopilot-test-* glob
+{
+  priv="$TEST_TMP/p4b-reap-live"
+  mkdir -p "$priv"
+  snap="$(mktemp -d "$priv/autopilot-test-snapshot.XXXXXX")"
+  : >"$snap/.autopilot-live.lock"
+  flock "$snap/.autopilot-live.lock" sleep 30 &
+  holder=$!
+  poll_until 5 bash -c "flock -n '$snap/.autopilot-live.lock' -c true 2>/dev/null; [ \$? -eq 1 ]" \
+    || fail "P4b reaper live: lock never held"
+  out=""
+  out="$(TMPDIR="$priv" suite_residue_reap)"
+  kill "$holder" >/dev/null 2>&1 || true
+  wait "$holder" 2>/dev/null || true
+  assert_file_exists "$snap/.autopilot-live.lock" "P4b reaper skips live container"
+  sl="$(extract_json_field "$out" skipped_live)"
+  [ "${sl:-0}" -ge 1 ] || fail "P4b reaper live skipped_live>=1 got $sl"
+  assert_eq 0 0 "P4b reaper live skipped_live"
+}
+
+{
+  priv="$TEST_TMP/p4b-reap-free"
+  mkdir -p "$priv"
+  snap="$(mktemp -d "$priv/autopilot-test-snapshot.XXXXXX")"
+  make_fixture "$snap/repo"
+  git -C "$snap/repo" commit --allow-empty -q -m init
+  git -C "$snap/repo" worktree add -q "$snap/inner-wt" -b p4b-reap-wt
+  : >"$snap/.autopilot-live.lock"
+  touch -d '2 minutes ago' "$snap/.autopilot-live.lock"
+  out=""
+  out="$(TMPDIR="$priv" suite_residue_reap)"
+  assert_file_absent "$snap" "P4b reaper reclaims free-lock container"
+  assert_file_absent "$snap/inner-wt" "P4b reaper pruned inner worktree"
+  assert_eq "$(extract_json_field "$out" reaped)" "1" "P4b reaper free reaped=1"
+}
+
+{
+  priv="$TEST_TMP/p4b-reap-missing"
+  mkdir -p "$priv"
+  snap="$(mktemp -d "$priv/autopilot-test-snapshot.XXXXXX")"
+  mkdir -p "$snap/repo"
+  out=""
+  out="$(TMPDIR="$priv" suite_residue_reap)"
+  assert_file_exists "$snap" "P4b reaper missing lock fail-closed skip"
+  sl="$(extract_json_field "$out" skipped_live)"
+  [ "${sl:-0}" -ge 1 ] || fail "P4b missing-lock skipped_live>=1 got $sl"
+  assert_eq 0 0 "P4b missing-lock counted live"
+}
+
+{
+  priv="$TEST_TMP/p4b-reap-generic"
+  mkdir -p "$priv"
+  snap="$(mktemp -d "$priv/autopilot-test-snapshot.XXXXXX")"
+  : >"$snap/.autopilot-live.lock"
+  flock "$snap/.autopilot-live.lock" sleep 30 &
+  holder=$!
+  poll_until 5 bash -c "flock -n '$snap/.autopilot-live.lock' -c true 2>/dev/null; [ \$? -eq 1 ]" \
+    || fail "P4b generic: lock never held"
+  out=""
+  out="$(TMPDIR="$priv" suite_residue_reap)"
+  kill "$holder" >/dev/null 2>&1 || true
+  wait "$holder" 2>/dev/null || true
+  assert_file_exists "$snap" "P4b generic glob does not reap live snapshot"
+}
+
+# hide_flock_path <shim-dir> — PATH whose first dir has every needed tool except flock.
+hide_flock_path() {
+  local shim="$1" cmd src
+  mkdir -p "$shim"
+  for cmd in bash sh git rsync env mkdir mktemp rm cp mv chmod cat sed grep awk \
+    ps kill pkill setsid python3 python true false date uname sleep touch ln ls \
+    dirname basename realpath readlink head tr cut sort uniq tee xargs find stat \
+    id timeout wc comm cmp diff which hostname getent stdbuf nice nohup expr \
+    install od printf test getopt column jq perl awk gawk mawk busybox dash \
+    logger tee; do
+    src="$(command -v "$cmd" 2>/dev/null || true)"
+    if [ -n "$src" ] && [ -x "$src" ]; then
+      ln -sfn "$src" "$shim/$cmd"
+    fi
+  done
+  printf '%s\n' "$shim"
+}
+
+# RED at 8b222da3: test-snapshot: construction failed: flock missing (exit 1)
+{
+  fx="$TEST_TMP/p4-noflock"
+  make_fixture "$fx"
+  git -C "$fx" config --local user.email "owner@stranity.com"
+  printf 'base\n' >"$fx/tracked.txt"
+  git -C "$fx" add tracked.txt
+  git -C "$fx" commit -q -m init
+  copy_runner_into_fixture "$fx"
+  cat >"$fx/hooks/tests/zz-fixture-one.test.sh" <<'EOF'
+#!/usr/bin/env bash
+. "$(dirname "$0")/lib.sh"
+printf 'SNAPSHOT_ROOT=%s\n' "$REPO_ROOT" >"${FIXTURE_MARKER}"
+finalize_test
+EOF
+  chmod +x "$fx/hooks/tests/zz-fixture-one.test.sh"
+  git -C "$fx" add hooks scripts tracked.txt
+  git -C "$fx" commit -q -m runner
+  priv="$TEST_TMP/p4-noflock-tmp"
+  mkdir -p "$priv"
+  shim="$TEST_TMP/p4-noflock-bin"
+  noflock_path="$(hide_flock_path "$shim")"
+  marker="$TEST_TMP/p4-noflock.marker"
+  out=""
+  rc=0
+  out="$(env -u AUTOPILOT_SESSION_ID -u AUTOPILOT_TEST_SNAPSHOT_ROOT -u AUTOPILOT_TEST_SNAPSHOT \
+    PATH="$noflock_path" TMPDIR="$priv" FIXTURE_MARKER="$marker" \
+    bash "$fx/hooks/tests/run.sh" zz-fixture-one </dev/null 2>&1)" || rc=$?
+  assert_exit_code "$rc" 0 "P4 no-flock in-place exit 0"
+  assert_contains "$out" "test-snapshot: disabled (flock missing)" "P4 no-flock disabled line"
+  got_root="$(sed -n 's/^SNAPSHOT_ROOT=//p' "$marker")"
+  assert_eq "$got_root" "$fx" "P4 no-flock marker is fixture ROOT"
+}
+
+{
+  fx="$TEST_TMP/p4-noflock-guard"
+  make_fixture "$fx"
+  git -C "$fx" config --local user.email "owner@stranity.com"
+  printf 'base\n' >"$fx/tracked.txt"
+  git -C "$fx" add tracked.txt
+  git -C "$fx" commit -q -m init
+  copy_runner_into_fixture "$fx"
+  cat >"$fx/hooks/tests/zz-fixture-one.test.sh" <<'EOF'
+#!/usr/bin/env bash
+. "$(dirname "$0")/lib.sh"
+git -C "$REPO_ROOT" config --local zz.touched 1
+finalize_test
+EOF
+  chmod +x "$fx/hooks/tests/zz-fixture-one.test.sh"
+  git -C "$fx" add hooks scripts tracked.txt
+  git -C "$fx" commit -q -m runner
+  priv="$TEST_TMP/p4-noflock-guard-tmp"
+  mkdir -p "$priv"
+  shim="$TEST_TMP/p4-noflock-guard-bin"
+  noflock_path="$(hide_flock_path "$shim")"
+  out=""
+  rc=0
+  out="$(env -u AUTOPILOT_SESSION_ID -u AUTOPILOT_TEST_SNAPSHOT_ROOT -u AUTOPILOT_TEST_SNAPSHOT \
+    PATH="$noflock_path" TMPDIR="$priv" \
+    bash "$fx/hooks/tests/run.sh" zz-fixture-one </dev/null 2>&1)" || rc=$?
+  assert_neq "$rc" 0 "P4 no-flock guard fails"
+  assert_contains "$out" "test-snapshot: disabled (flock missing)" "P4 no-flock guard disabled line"
+  assert_contains "$out" "zz.touched" "P4 no-flock guard names zz.touched"
+  if git -C "$fx" config --local --get zz.touched >/dev/null 2>&1; then
+    fail "P4 no-flock zz.touched should be restored/absent"
+  else
+    assert_eq 0 0 "P4 no-flock zz.touched absent after guard"
+  fi
+}
+
+{
+  src="$REPO_ROOT/hooks/tests/run.sh"
+  grep -q 'test-snapshot: disabled (suite-oracle-lock parent)' "$src" \
+    || fail "oracle-lock parent branch must print G3 disabled line"
+  assert_eq 0 0 "P4 oracle-lock parent disabled line in source"
+}
+
+{
+  priv="$TEST_TMP/p4-reap-noflock"
+  mkdir -p "$priv"
+  snap="$(mktemp -d "$priv/autopilot-test-snapshot.XXXXXX")"
+  : >"$snap/.autopilot-live.lock"
+  touch -d '2 minutes ago' "$snap/.autopilot-live.lock"
+  shim="$TEST_TMP/p4-reap-noflock-bin"
+  noflock_path="$(hide_flock_path "$shim")"
+  out=""
+  out="$(PATH="$noflock_path" TMPDIR="$priv" suite_residue_reap)"
+  assert_file_exists "$snap" "P4 reaper no-flock skips container"
+  sl="$(extract_json_field "$out" skipped_live)"
+  [ "${sl:-0}" -ge 1 ] || fail "P4 reaper no-flock skipped_live>=1 got $sl"
+  assert_eq 0 0 "P4 reaper no-flock treated live"
+}
+
 finalize_test

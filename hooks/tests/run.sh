@@ -83,6 +83,8 @@ TS_SNAP=""
 TS_LOCK_FD=""
 TS_REAL_ROOT=""
 TS_CHILD_STATUS=""
+TS_CHILD_PID=""
+TS_SHUTDOWN_STARTED=""
 
 __suite_on_exit() {
   local status=$?
@@ -140,13 +142,40 @@ elif [ "${AUTOPILOT_TEST_SNAPSHOT:-}" = "0" ]; then
 elif ! command -v rsync >/dev/null 2>&1; then
   echo "test-snapshot: disabled (rsync missing)" >&2
   __ts_inplace_wrap
+elif ! command -v flock >/dev/null 2>&1; then
+  echo "test-snapshot: disabled (flock missing)" >&2
+  __ts_inplace_wrap
+elif [[ "$(ps -o args= -p "$PPID" 2>/dev/null || true)" == *suite-oracle-lock.test.sh* ]]; then
+  # case10 asserts start_one wrappers are direct children of THIS pid and that
+  # SIGKILL of this pid frees the oracle lock. A snapshot child would own both.
+  echo "test-snapshot: disabled (suite-oracle-lock parent)" >&2
+  __ts_inplace_wrap
 else
   TS_REAL_ROOT="$REPO_ROOT"
+  __ts_outer_on_interrupt() {
+    local sig="$1"
+    if [ -n "${TS_SHUTDOWN_STARTED:-}" ]; then
+      return 0
+    fi
+    TS_SHUTDOWN_STARTED=1
+    trap '' INT TERM
+    if [ -n "${TS_CHILD_PID:-}" ]; then
+      kill -s "$sig" -- "-$TS_CHILD_PID" >/dev/null 2>&1 || true
+      kill -s "$sig" "$TS_CHILD_PID" >/dev/null 2>&1 || true
+      pkill "-$sig" -s "$TS_CHILD_PID" >/dev/null 2>&1 || true
+      ts_wait_pgid_gone "$TS_CHILD_PID"
+      wait "$TS_CHILD_PID" 2>/dev/null || true
+    fi
+    if [ "$sig" = "INT" ]; then
+      TS_CHILD_STATUS=130
+    else
+      TS_CHILD_STATUS=143
+    fi
+    exit "$TS_CHILD_STATUS"
+  }
+  trap '__ts_outer_on_interrupt INT' INT
+  trap '__ts_outer_on_interrupt TERM' TERM
   if ! ts_baseline_check "$TS_REAL_ROOT"; then
-    exit 1
-  fi
-  if ! command -v flock >/dev/null 2>&1; then
-    echo "test-snapshot: construction failed: flock missing" >&2
     exit 1
   fi
   TS_SNAP="$(mktemp -d "${TMPDIR:-/tmp}/autopilot-test-snapshot.XXXXXX")"
@@ -161,42 +190,30 @@ else
   if ! ts_snapshot_build "$TS_REAL_ROOT" "$TS_SNAP"; then
     exit 1
   fi
-  set -m
+  # Job-control OFF so the background job is not already a PG leader; setsid
+  # can then become session leader in-place (same PID) instead of forking.
+  set +m
   (
     unset PWD OLDPWD
     export AUTOPILOT_TEST_SNAPSHOT_ROOT="$TS_SNAP"
     cd "$TS_SNAP/repo" || exit 1
-    # Restore SIG_DFL so inner run.sh can trap INT/TERM even when this outer
-    # was itself started as an async job (bash then inherits SIG_IGN).
-    if command -v python3 >/dev/null 2>&1; then
+    trap - INT TERM QUIT PIPE XFSZ 2>/dev/null || true
+    if command -v setsid >/dev/null 2>&1; then
+      exec setsid bash "$TS_SNAP/repo/hooks/tests/run.sh" "$@"
+    elif command -v python3 >/dev/null 2>&1; then
       exec python3 -c 'import os, signal, sys
-for s in (signal.SIGINT, signal.SIGTERM, signal.SIGQUIT):
-    signal.signal(s, signal.SIG_DFL)
+for name in ("SIGINT", "SIGTERM", "SIGQUIT", "SIGPIPE", "SIGXFSZ"):
+    s = getattr(signal, name, None)
+    if s is not None:
+        signal.signal(s, signal.SIG_DFL)
+os.setsid()
 os.execvp("bash", ["bash"] + sys.argv[1:])
 ' "$TS_SNAP/repo/hooks/tests/run.sh" "$@"
     else
-      trap - INT TERM QUIT 2>/dev/null || true
       exec bash "$TS_SNAP/repo/hooks/tests/run.sh" "$@"
     fi
   ) &
   TS_CHILD_PID=$!
-  set +m
-  __ts_outer_on_interrupt() {
-    local sig="$1"
-    if [ -n "${TS_CHILD_PID:-}" ]; then
-      kill -s "$sig" -- "-$TS_CHILD_PID" >/dev/null 2>&1 || true
-      kill -s "$sig" "$TS_CHILD_PID" >/dev/null 2>&1 || true
-      wait "$TS_CHILD_PID" 2>/dev/null || true
-    fi
-    if [ "$sig" = "INT" ]; then
-      TS_CHILD_STATUS=130
-    else
-      TS_CHILD_STATUS=143
-    fi
-    exit "$TS_CHILD_STATUS"
-  }
-  trap '__ts_outer_on_interrupt INT' INT
-  trap '__ts_outer_on_interrupt TERM' TERM
   wait "$TS_CHILD_PID"
   TS_CHILD_STATUS=$?
   exit "$TS_CHILD_STATUS"

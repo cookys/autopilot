@@ -193,6 +193,8 @@ pipe the payload, so the extraction path only exercises there. (Empirical source
 miss".) To exercise extraction deterministically, prefer the unit test
 (`state-checkpoint` JSONL parser) over a manual `/compact`.
 
+`hooks/tests/run.sh` defaults to a disposable git snapshot of the clone (`TMPDIR/autopilot-test-snapshot.*`) so a full suite cannot persist writes into the operator repo: the child runs inside the copy with origin neutered. That protects working-tree and object mutation by isolation; it does not prevent a child that writes the real repo by absolute path — G6's outer config-drift guard detects and restores local config drift (failing the suite) and only warns on refs/worktrees/status, while G7's polluted-baseline check refuses a test-identity `user.email` without editing it. Identity-gate hooks (`pre-commit` / `pre-merge-commit` / `pre-push`) still judge author/committer ident against the canonical email rule. Opt out of snapshotting with `AUTOPILOT_TEST_SNAPSHOT=0` (one stderr line), when `rsync` is missing (in-place with the same line plus reason), when `flock` is missing (same line plus reason), when the parent command line is `suite-oracle-lock.test.sh` (same line plus reason), or by running a single `*.test.sh` file which is never snapshotted.
+
 ### Self-Disable Recovery (intent-capture)
 
 If `intent-capture.js` hits 10 consecutive failures, it writes `~/.autopilot/intent-capture.disabled` and subsequent runs silently skip. The flag is **automatically cleared** by:

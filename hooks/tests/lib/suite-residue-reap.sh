@@ -188,6 +188,9 @@ suite_run_lock_release() {
 _srr_probe_generic_lock() {
   local lock="$1" probe frc
   _SRR_PROBE_FD=""
+  if ! command -v flock >/dev/null 2>&1; then
+    return 1
+  fi
   _wt_open_lock_fd "$lock" || return 2
   probe="$_WT_SAFE_LOCK_FD"
   flock -n "$probe"
@@ -207,6 +210,7 @@ _srr_probe_generic_lock() {
 }
 
 _SRR_PATTERNS=(
+  'autopilot-test-snapshot.*'
   'hetero-*'
   'autopilot-test-*'
   'hooks-run-parallel.*'
@@ -217,6 +221,10 @@ _SRR_PATTERNS=(
 # _srr_pattern_match <basename> → 0 if basename matches one of the fixed patterns.
 _srr_pattern_match() {
   local base="$1" pat
+  case "$base" in
+    autopilot-test-snapshot.*) return 0 ;;
+    autopilot-test-*) return 0 ;;
+  esac
   for pat in "${_SRR_PATTERNS[@]}"; do
     # shellcheck disable=SC2254
     case "$base" in $pat) return 0 ;; esac
@@ -314,6 +322,77 @@ suite_residue_reap() {
       if ! _srr_pattern_match "$base"; then
         continue
       fi
+      # Generic autopilot-test-* must not swallow snapshot containers (a live
+      # outer run holds .autopilot-live.lock; an unconditional glob match
+      # would treat a lockless/missing-lock snapshot as lockless residue).
+      if [ "$pat" = 'autopilot-test-*' ]; then
+        case "$base" in
+          autopilot-test-snapshot.*) continue ;;
+        esac
+      fi
+
+      case "$base" in
+        autopilot-test-snapshot.*)
+          live_lock="$entry/.autopilot-live.lock"
+          if [ ! -e "$live_lock" ]; then
+            skipped_live=$((skipped_live + 1))
+            continue
+          fi
+          _srr_probe_generic_lock "$live_lock"
+          live_rc=$?
+          probe_fd="${_SRR_PROBE_FD:-}"
+          if [ "$live_rc" -eq 1 ]; then
+            skipped_live=$((skipped_live + 1))
+            continue
+          elif [ "$live_rc" -eq 2 ]; then
+            skipped_lock_unsupported=$((skipped_lock_unsupported + 1))
+            continue
+          fi
+          if ! _srr_lock_is_stale "$live_lock"; then
+            skipped_unknown=$((skipped_unknown + 1))
+            if [ -n "$probe_fd" ]; then
+              { exec {probe_fd}>&-; } 2>/dev/null || true
+            fi
+            _SRR_PROBE_FD=""
+            continue
+          fi
+          if [ "$dry_run" -eq 0 ]; then
+            local snap_repo="$entry/repo" snap_main="" snap_path snap_line did_remove=0
+            if [ -d "$snap_repo/.git/worktrees" ]; then
+              git -C "$snap_repo" worktree prune >/dev/null 2>&1 || true
+              while IFS= read -r snap_line; do
+                case "$snap_line" in
+                  worktree\ *)
+                    snap_path="${snap_line#worktree }"
+                    if [ -z "$snap_main" ]; then
+                      snap_main="$snap_path"
+                    else
+                      git -C "$snap_repo" worktree remove --force "$snap_path" >/dev/null 2>&1 || true
+                    fi
+                    ;;
+                esac
+              done < <(git -C "$snap_repo" worktree list --porcelain 2>/dev/null || true)
+            fi
+            if rm -rf -- "$entry" 2>/dev/null; then
+              did_remove=1
+            else
+              errors+=("remove failed: $entry")
+            fi
+            if [ "$did_remove" -eq 1 ]; then
+              reaped=$((reaped + 1))
+              [ "${#reaped_paths[@]}" -lt 50 ] && reaped_paths+=("$entry")
+            fi
+          else
+            reaped=$((reaped + 1))
+            [ "${#reaped_paths[@]}" -lt 50 ] && reaped_paths+=("$entry")
+          fi
+          if [ -n "$probe_fd" ]; then
+            { exec {probe_fd}>&-; } 2>/dev/null || true
+          fi
+          _SRR_PROBE_FD=""
+          continue
+          ;;
+      esac
 
       marker="$entry/.autopilot-worktree"
       lock="$entry/.autopilot-worktree.lock"

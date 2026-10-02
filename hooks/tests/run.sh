@@ -232,9 +232,13 @@ else
     export AUTOPILOT_TEST_SNAPSHOT_ROOT="$TS_SNAP"
     cd "$TS_SNAP/repo" || exit 1
     trap - INT TERM QUIT PIPE XFSZ 2>/dev/null || true
-    if command -v setsid >/dev/null 2>&1; then
-      exec setsid bash "$TS_SNAP/repo/hooks/tests/run.sh" "$@"
-    elif command -v python3 >/dev/null 2>&1; then
+    # python3 first: bash cannot reset a signal that was IGNORED ON ENTRY (an
+    # async/background launch, nohup-style wrapper or --parallel worker hands
+    # SIGINT=SIG_IGN down), so `trap - INT` above is a no-op there and the
+    # inner run.sh would swallow the outer's group INT (outer exit 0, not 130).
+    # os.signal(SIG_DFL) + os.setsid() in-place fixes both; setsid(1) is the
+    # fallback when python3 is absent (cannot undo an inherited ignore).
+    if command -v python3 >/dev/null 2>&1; then
       exec python3 -c 'import os, signal, sys
 for name in ("SIGINT", "SIGTERM", "SIGQUIT", "SIGPIPE", "SIGXFSZ"):
     s = getattr(signal, name, None)
@@ -243,6 +247,8 @@ for name in ("SIGINT", "SIGTERM", "SIGQUIT", "SIGPIPE", "SIGXFSZ"):
 os.setsid()
 os.execvp("bash", ["bash"] + sys.argv[1:])
 ' "$TS_SNAP/repo/hooks/tests/run.sh" "$@"
+    elif command -v setsid >/dev/null 2>&1; then
+      exec setsid bash "$TS_SNAP/repo/hooks/tests/run.sh" "$@"
     else
       exec bash "$TS_SNAP/repo/hooks/tests/run.sh" "$@"
     fi

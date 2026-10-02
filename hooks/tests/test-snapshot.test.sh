@@ -531,6 +531,67 @@ EOF
   fi
 }
 
+# --- P4 inherited-ignored SIGINT: a runner started as an async/background job
+# inherits SIGINT=SIG_IGN (non-interactive bash `&`, nohup-style launchers, the
+# --parallel pool's own workers). Bash cannot trap or reset a signal that was
+# ignored on entry, so the inner run.sh must be launched with default signal
+# dispositions or a group INT is silently swallowed (outer exits 0, not 130).
+# This was the intermittent "expected 130, got 0" in the case above, which only
+# went red when the suite itself ran inside a --parallel worker.
+# RED at 53ddc02f: expected exit 130, got 0
+{
+  fx="$TEST_TMP/p4-ign"
+  make_fixture "$fx"
+  git -C "$fx" config --local user.email "cookys@stranity.com"
+  printf 'base\n' >"$fx/tracked.txt"
+  git -C "$fx" add tracked.txt
+  git -C "$fx" commit -q -m init
+  copy_runner_into_fixture "$fx"
+  cat >"$fx/hooks/tests/zz-fixture-one.test.sh" <<'EOF'
+#!/usr/bin/env bash
+. "$(dirname "$0")/lib.sh"
+printf 'ready\n' >"${FIXTURE_MARKER}"
+sleep 3
+finalize_test
+EOF
+  chmod +x "$fx/hooks/tests/zz-fixture-one.test.sh"
+  git -C "$fx" add hooks scripts tracked.txt
+  git -C "$fx" commit -q -m runner
+  priv="$TEST_TMP/p4-ign-tmp"
+  mkdir -p "$priv"
+  marker="$TEST_TMP/p4-ign.marker"
+  set -m
+  (
+    trap '' INT
+    exec env -u AUTOPILOT_SESSION_ID -u AUTOPILOT_TEST_SNAPSHOT_ROOT -u AUTOPILOT_TEST_SNAPSHOT \
+      TMPDIR="$priv" FIXTURE_MARKER="$marker" \
+      bash "$fx/hooks/tests/run.sh" zz-fixture-one </dev/null >/dev/null 2>&1
+  ) &
+  outer=$!
+  set +m
+  inner=""
+  for _i in $(seq 1 100); do
+    inner="$(ps -o pid= --ppid "$outer" 2>/dev/null | awk 'NF{print $1; exit}')"
+    if [ -n "$inner" ] && [ -f "$marker" ]; then
+      break
+    fi
+    sleep 0.1
+  done
+  if [ -z "$inner" ] || [ ! -f "$marker" ]; then
+    kill "$outer" 2>/dev/null || true
+    wait "$outer" 2>/dev/null || true
+    fail "P4 ign: readiness not reached (inner='${inner}', marker present=$([ -f "$marker" ] && echo yes || echo no))"
+  else
+    inner="$(printf '%s' "$inner" | tr -d '[:space:]')"
+    inner_pgid="$(ps -o pgid= -p "$inner" 2>/dev/null | tr -d '[:space:]')"
+    assert_eq "$inner_pgid" "$inner" "P4 ign: inner PGID equals inner PID"
+    kill -s INT -- "-$inner_pgid" >/dev/null 2>&1 || true
+    rc=0
+    wait "$outer" || rc=$?
+    assert_exit_code "$rc" 130 "P4 ign: group INT is trapped (130) although the runner started with SIGINT ignored"
+  fi
+}
+
 # --- P4 --parallel one-file filter still uses snapshot ---
 {
   fx="$TEST_TMP/p4-par"

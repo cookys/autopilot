@@ -26,11 +26,19 @@
  * the artifact is then removed, because on this path `$RAW_LOG` is the record
  * that survives and a second 0600 copy in the temp dir is pure residue.
  *
- * Usage: dispatch-author-kimi.js --model <id> --prompt-file <path>
+ * Usage: dispatch-author-kimi.js --model <id> --prompt-file <path> [--timeout-seconds <n>]
+ *
+ * `--timeout-seconds` is the shell-side deadline `dispatch-author.sh` enforces with
+ * `timeout`. The adapter's own limit is set KIMI_TIMEOUT_MARGIN_MS (5 s) under it so the
+ * adapter reports `kimi_timeout` before the shell kill (floor 1000 ms). Absent flag =
+ * the adapter default (300000 ms).
  */
 
 const fs = require('fs');
 const path = require('path');
+
+const KIMI_TIMEOUT_MARGIN_MS = 5000;
+const KIMI_TIMEOUT_FLOOR_MS = 1000;
 
 const { runKimiAuthor } = require(path.join(__dirname, '..', 'src', 'runners', 'kimi.js'));
 
@@ -40,12 +48,17 @@ function fail(message, code = 1) {
 }
 
 function parseArgs(argv) {
-  const out = { model: null, promptFile: null };
+  const out = { model: null, promptFile: null, timeoutMs: null };
   for (let i = 0; i < argv.length; i += 1) {
     const key = argv[i];
     const value = argv[i + 1];
     if (key === '--model') { out.model = value; i += 1; continue; }
     if (key === '--prompt-file') { out.promptFile = value; i += 1; continue; }
+    if (key === '--timeout-seconds') {
+      if (!/^[1-9][0-9]*$/.test(String(value))) fail(`--timeout-seconds must be a positive integer (got: ${value})`, 2);
+      out.timeoutMs = Math.max(KIMI_TIMEOUT_FLOOR_MS, Number(value) * 1000 - KIMI_TIMEOUT_MARGIN_MS);
+      i += 1; continue;
+    }
     fail(`unknown argument: ${key}`, 2);
   }
   if (!out.model) fail('--model is required', 2);
@@ -117,7 +130,11 @@ try {
   fail(`prompt file unreadable: ${error.message}`, 2);
 }
 
-const result = runKimiAuthor({ model: args.model, prompt });
+const result = runKimiAuthor({
+  model: args.model,
+  prompt,
+  ...(args.timeoutMs === null ? {} : { timeoutMs: args.timeoutMs }),
+});
 
 const locator = result
   && result.private_raw_reference

@@ -1122,9 +1122,18 @@ elif [[ "$RUNNER" = "kimi" ]]; then
   # STDERR is appended to $RAW_LOG rather than discarded — unlike qoder there is
   # no known benign chatter to filter, and a swallowed adapter error would
   # surface downstream as the unfalsifiable `empty_output`.
+  #
+  # The resolved deadline is also forwarded to the shim (`--timeout-seconds`) so the adapter
+  # honours --timeout instead of its fixed 300 s cap; the shim keeps it 5 s under the shell
+  # kill so the adapter reports `kimi_timeout`. A TIMEOUT normalize_timeout_seconds cannot
+  # parse (e.g. `1h`, which `timeout` accepts) forwards nothing = adapter default.
+  KIMI_TIMEOUT_ARGS=()
+  if KIMI_TIMEOUT_S="$(normalize_timeout_seconds "$TIMEOUT" 2>/dev/null)" && [[ "$KIMI_TIMEOUT_S" -gt 0 ]]; then
+    KIMI_TIMEOUT_ARGS=(--timeout-seconds "$KIMI_TIMEOUT_S")
+  fi
   set +e
   timeout "$TIMEOUT" node "$KIMI_JS" --model "$MODEL" --prompt-file "$PROMPT_FILE" \
-    > "$RAW_LOG" 2>>"$RAW_LOG"
+    ${KIMI_TIMEOUT_ARGS[@]+"${KIMI_TIMEOUT_ARGS[@]}"} > "$RAW_LOG" 2>>"$RAW_LOG"
   RUNNER_EXIT=$?
   set -e
 elif [[ "$RUNNER" = "cc-shim" ]]; then

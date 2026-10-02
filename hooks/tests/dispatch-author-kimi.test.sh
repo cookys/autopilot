@@ -238,4 +238,61 @@ NODE
     "opt-in live Kimi smoke executes outside the repository"
 fi
 
+# --- timeout forwarding (backlog: dispatch-author-kimi-timeout-not-forwarded) ---
+# dispatch-author.sh wraps dispatch-author-kimi.js in shell `timeout "$TIMEOUT"`, but the
+# adapter used to be called without timeoutMs and so capped every run at 300000 ms. A
+# sleeping stub past 300 s is too slow, so a --require preload records the `timeout`
+# option the adapter hands to spawnSync for the real (--prompt) kimi invocation.
+# Margin contract: effective = max(1000, N*1000 - 5000) ms, i.e. the adapter reports
+# kimi_timeout 5 s before the shell kill. No flag = adapter default 300000.
+# RED at 53ddc02f: 4 FAIL (8 passed) --
+#   kimi shim --timeout-seconds 600 forwards 595000 ms: expected '595000', got ''
+#   kimi shim tiny --timeout-seconds floors at 1000 ms: expected '1000', got ''
+#   dispatch-author.sh --timeout 10m ... 595000 ms: expected '595000', got '300000'
+#   dispatch-author.sh default 5m timeout ... 295000 ms: expected '295000', got '300000'
+TF_PRELOAD="$TEST_TMP/record-timeout.js"
+cat >"$TF_PRELOAD" <<'PRELOAD'
+'use strict';
+const cp = require('child_process');
+const fs = require('fs');
+const orig = cp.spawnSync;
+cp.spawnSync = function (bin, argv, options) {
+  if (Array.isArray(argv) && argv.includes('--prompt')) {
+    fs.appendFileSync(process.env.TF_RECORD, `${options && options.timeout}\n`);
+  }
+  return orig.apply(this, arguments);
+};
+PRELOAD
+TF_PROMPT="$TEST_TMP/tf-prompt.txt"
+printf 'say hi\n' >"$TF_PROMPT"
+TF_BINDIR="$TEST_TMP/tf-bin"
+mkdir -p "$TF_BINDIR"
+cp "$FAKE_KIMI" "$TF_BINDIR/kimi"
+
+tf_recorded() { # args: label, then command via env; prints recorded timeout
+  rm -f "$TEST_TMP/tf-record"
+  "$@" >/dev/null 2>&1
+  tr -d '\n' <"$TEST_TMP/tf-record" 2>/dev/null
+}
+tf_env() {
+  env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID \
+    PATH="$TF_BINDIR:$PATH" KIMI_CAPTURE_DIR="$CAPTURE_DIR" TF_RECORD="$TEST_TMP/tf-record" \
+    NODE_OPTIONS="--require $TF_PRELOAD" "$@" </dev/null
+}
+JS="$REPO_ROOT/scripts/dispatch-author-kimi.js"
+assert_eq "$(tf_recorded tf_env node "$JS" --model kimi-code/k3 --prompt-file "$TF_PROMPT")" "300000" \
+  "kimi shim without --timeout-seconds keeps the adapter default 300000 ms"
+assert_eq "$(tf_recorded tf_env node "$JS" --model kimi-code/k3 --prompt-file "$TF_PROMPT" --timeout-seconds 600)" "595000" \
+  "kimi shim --timeout-seconds 600 forwards 595000 ms (5 s margin)"
+assert_eq "$(tf_recorded tf_env node "$JS" --model kimi-code/k3 --prompt-file "$TF_PROMPT" --timeout-seconds 3)" "1000" \
+  "kimi shim tiny --timeout-seconds floors at 1000 ms"
+tf_env node "$JS" --model kimi-code/k3 --prompt-file "$TF_PROMPT" --timeout-seconds abc >/dev/null 2>&1
+assert_exit_code "$?" "2" "kimi shim rejects a non-numeric --timeout-seconds"
+
+AUTHOR="$REPO_ROOT/scripts/dispatch-author.sh"
+assert_eq "$(tf_recorded tf_env env DISPATCH_DETACH=0 DISPATCH_QUIET=1 bash "$AUTHOR" --runner kimi --model kimi-code/k3 --prompt-file "$TF_PROMPT" --timeout 10m)" "595000" \
+  "dispatch-author.sh --timeout 10m reaches the kimi adapter as 595000 ms"
+assert_eq "$(tf_recorded tf_env env DISPATCH_DETACH=0 DISPATCH_QUIET=1 bash "$AUTHOR" --runner kimi --model kimi-code/k3 --prompt-file "$TF_PROMPT")" "295000" \
+  "dispatch-author.sh default 5m timeout reaches the kimi adapter as 295000 ms"
+
 finalize_test

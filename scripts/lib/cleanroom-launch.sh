@@ -36,7 +36,7 @@
 #            `agy agents` lists the tool-less agent. Credentials are copied on
 #            the launch path only. --hostname review is proven by the preflight
 #            itself running with it for both CLIs (probe 2026-10-03).
-#   --bin: kimi entry (main.mjs, must sit under --node-dir) or the agy ELF.
+#   --bin: kimi entry (main.mjs under --node-dir, or the standalone kimi ELF, detected by magic) or the agy ELF.
 #   --node-dir: node install root (bin/node + lib/...); default from PATH.
 #   --cred-dir: kimi ~/.kimi-code or agy ~/.gemini/antigravity-cli (launch only).
 #
@@ -349,6 +349,13 @@ run_bwrap() {
 # ---- kimi / agy profiles (final-panel isolation phase 2) -------------------
 AGY_AGENT_NAME_FIXED="autopilot-toolless-reviewer"
 RUNNER_NODE_REL=""
+# kimi ships two layouts: a Node package (main.mjs run by a node dir) and the standalone kimi-code
+# install (an ELF executable, run like agy's). Detected from the resolved file's magic bytes.
+KIMI_LAYOUT="node"
+
+is_elf_file() {
+  [ "$(LC_ALL=C head -c 4 "$1" 2>/dev/null | od -An -tx1 | tr -d ' \n')" = "7f454c46" ]
+}
 
 runner_fail() {
   printf '%s\n' "$1" >&2
@@ -380,6 +387,13 @@ resolve_runner_inputs() {
     resolved="$(readlink -f "$RUNNER_BIN")"
     [ -f "$resolved" ] || runner_fail "kimi entry not found: $RUNNER_BIN"
     RUNNER_BIN="$resolved"
+    if is_elf_file "$RUNNER_BIN"; then
+      # Standalone ELF install: copied-in read-only at /opt/kimibin; only /usr libs (same rule as agy:
+      # a binary needing libs elsewhere fails the in-seat --version probe and is refused).
+      KIMI_LAYOUT="elf"
+      [ -x "$RUNNER_BIN" ] || runner_fail "kimi binary not executable: $RUNNER_BIN"
+      return 0
+    fi
     if [ -z "$NODE_DIR" ]; then
       nd="$(command -v node 2>/dev/null || true)"
       [ -n "$nd" ] || runner_fail "node not found for the kimi seat"
@@ -474,9 +488,15 @@ write_runner_args() {
   append "$SEAT_ROOT/home"
   append /home/review
   if [ "$RUNNER" = "kimi" ]; then
-    append --ro-bind
-    append "$NODE_DIR"
-    append /opt/node
+    if [ "$KIMI_LAYOUT" = "elf" ]; then
+      append --ro-bind
+      append "$RUNNER_BIN"
+      append /opt/kimibin
+    else
+      append --ro-bind
+      append "$NODE_DIR"
+      append /opt/node
+    fi
     append --ro-bind
     append "$SEAT_ROOT/agent.md"
     append /home/review/agent.md
@@ -506,7 +526,7 @@ write_runner_args() {
   append /home/review
   append --setenv
   append PATH
-  if [ "$RUNNER" = "kimi" ]; then
+  if [ "$RUNNER" = "kimi" ] && [ "$KIMI_LAYOUT" = "node" ]; then
     append /opt/node/bin:/usr/bin
   else
     append /usr/bin
@@ -535,7 +555,11 @@ write_runner_probe() {
     # empty-HOME proof: no credential/config store may exist before the CLI runs
     if [ "$RUNNER" = "kimi" ]; then
       printf '[ -e /home/review/.kimi-code ] && reason "kimi credential store present in preflight seat"\n'
-      printf 'v=$(/opt/node/bin/node /opt/node/%q --version 2>/dev/null) || reason "kimi --version failed in the seat"\n' "$RUNNER_NODE_REL"
+      if [ "$KIMI_LAYOUT" = "elf" ]; then
+        printf 'v=$(/opt/kimibin --version 2>/dev/null) || reason "kimi --version failed in the seat"\n'
+      else
+        printf 'v=$(/opt/node/bin/node /opt/node/%q --version 2>/dev/null) || reason "kimi --version failed in the seat"\n' "$RUNNER_NODE_REL"
+      fi
       printf '[ -n "$v" ] || reason "kimi --version printed nothing"\n'
       printf 'printf "%%s\\n" "$v" > /home/review/work/preflight.version\n'
       printf 'grep -q "^description: ..*" /home/review/agent.md && grep -q "^tools: \\[\\]$" /home/review/agent.md || reason "kimi agent file not intact in the seat"\n'
@@ -586,6 +610,11 @@ run_runner_bwrap() {
     if [ "$PREFLIGHT" -eq 1 ]; then
       timeout "$TIMEOUT" "$BWRAP_BIN" --args 9 -- /bin/sh /home/review/probe.sh \
         9< "$SEAT_ROOT/bwrap.args"
+    elif [ "$RUNNER" = "kimi" ] && [ "$KIMI_LAYOUT" = "elf" ]; then
+      timeout "$TIMEOUT" "$BWRAP_BIN" --args 9 -- /bin/sh -c 'p=$(cat /home/review/prompt); exec "$@" -p "$p"' \
+        _ /opt/kimibin -m "$MODEL" --output-format text \
+        --agent-file /home/review/agent.md \
+        9< "$SEAT_ROOT/bwrap.args" > "$OUT_FILE" 2> "$ERR_FILE"
     elif [ "$RUNNER" = "kimi" ]; then
       timeout "$TIMEOUT" "$BWRAP_BIN" --args 9 -- /bin/sh -c 'p=$(cat /home/review/prompt); exec "$@" -p "$p"' \
         _ /opt/node/bin/node "/opt/node/$RUNNER_NODE_REL" -m "$MODEL" --output-format text \

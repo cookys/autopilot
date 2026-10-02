@@ -11,6 +11,11 @@
 #   FAIL kimi preflight JSON names the runner: '"runner": "kimi"' not found in output
 #   FAIL kimi preflight inner rc 3 is refused with exit 3: expected '2', got '3'
 #   FAIL kimi launch with fake bwrap exits 0: expected '2', got '0'  (then aborts: no args captured)
+#
+# RED at 1a3865d2 (kimi standalone ELF layout; run aborts at the first failure under set -e):
+#   FAIL kimi ELF layout preflight is green (kimi entry is not under the node dir (...)): expected '2', got '0'
+#   FAIL kimi ELF is bound at /opt/kimibin
+#   FAIL kimi ELF is bound read-only
 . "$(dirname "$0")/lib.sh"
 
 LAUNCHER="${CLEANROOM_LAUNCHER_UNDER_TEST:-$REPO_ROOT/scripts/lib/cleanroom-launch.sh}"
@@ -128,6 +133,58 @@ run_fake "$TEST_TMP/pf-outside" 0 "$LAUNCHER" --preflight --profile kimi "${DENY
   --bin "$STUBS/agy" --node-dir "$STUBS/nodedir" >/dev/null 2> "$TEST_TMP/pf-outside.err"
 assert_eq "2" "$?" "kimi entry outside node dir exits 2"
 set -e
+
+# ---------- Part A: kimi standalone ELF layout (peer-reported on v2.36.108) ----------
+# The standalone kimi-code install is an ELF executable (no node dir). Fixture: a real system ELF (bwrap) renamed,
+# placed OUTSIDE any node dir. Node layout above must stay unchanged (asserted by the existing cases).
+mkdir -p "$STUBS/kimielf/bin"
+# bwrap is a real, non-multicall ELF that answers --version (uutils coreutils are multicall: argv0-dependent)
+cp "$(command -v bwrap)" "$STUBS/kimielf/bin/kimi"
+printf 'sibling\n' > "$STUBS/kimielf/sibling-secret"
+ELF_BIN="$(readlink -f "$STUBS/kimielf/bin/kimi")"
+argv_pair() { # args-file first second: succeed when first is immediately followed by second
+  args_lines "$1" | awk -v a="$2" -v b="$3" 'prev==a && $0==b {f=1} {prev=$0} END{exit !f}'
+}
+set +e
+run_fake "$TEST_TMP/pf-elf" 0 "$LAUNCHER" --preflight --profile kimi "${DENY_ARGS[@]}" \
+  --bin "$STUBS/kimielf/bin/kimi" > "$TEST_TMP/pf-elf.json" 2> "$TEST_TMP/pf-elf.err"
+RC=$?
+set -e
+assert_eq "0" "$RC" "kimi ELF layout preflight is green ($(head -c 200 "$TEST_TMP/pf-elf.err"))"
+if argv_pair "$TEST_TMP/pf-elf/args.bin" "$ELF_BIN" /opt/kimibin; then :; else fail "kimi ELF is bound at /opt/kimibin"; fi
+if argv_pair "$TEST_TMP/pf-elf/args.bin" --ro-bind "$ELF_BIN"; then :; else fail "kimi ELF is bound read-only"; fi
+A="$(args_lines "$TEST_TMP/pf-elf/args.bin")"
+assert_not_contains "$A" "/opt/node" "kimi ELF layout binds no node dir"
+assert_not_contains "$A" "$STUBS/kimielf/sibling-secret" "kimi ELF layout binds nothing next to the binary"
+assert_not_contains "$A" "$STUBS/hostrepo" "kimi ELF layout argv has no repo path"
+assert_contains "$(cat "$TEST_TMP/pf-elf/inner.txt")" "probe.sh" "kimi ELF preflight runs the model-free probe"
+# an ELF given together with an unrelated --node-dir still takes the ELF layout
+set +e
+run_fake "$TEST_TMP/pf-elf2" 0 "$LAUNCHER" --preflight --profile kimi "${DENY_ARGS[@]}" \
+  --bin "$STUBS/kimielf/bin/kimi" --node-dir "$STUBS/nodedir" >/dev/null 2>&1
+assert_eq "0" "$?" "kimi ELF layout ignores a supplied node dir"
+set -e
+assert_not_contains "$(args_lines "$TEST_TMP/pf-elf2/args.bin")" "/opt/node" "kimi ELF layout with --node-dir still binds no node"
+# launch path: ELF is exec'd directly from the fixed seat path
+set +e
+run_fake "$TEST_TMP/l-elf" 0 "$LAUNCHER" --profile kimi --prompt-file "$STUBS/prompt.txt" \
+  --out "$TEST_TMP/l-elf.out" --err "$TEST_TMP/l-elf.err" --timeout 20s --model kimi-code/k3 \
+  --bin "$STUBS/kimielf/bin/kimi" --cred-dir "$STUBS/credkimi" > "$TEST_TMP/l-elf.json"
+assert_eq "0" "$?" "kimi ELF launch with fake bwrap exits 0"
+set -e
+I="$(cat "$TEST_TMP/l-elf/inner.txt")"
+assert_contains "$I" "/opt/kimibin" "kimi ELF inner argv execs /opt/kimibin"
+assert_not_contains "$I" "/opt/node" "kimi ELF inner argv has no node"
+assert_contains "$I" "--agent-file" "kimi ELF inner argv keeps the tool-less agent"
+assert_not_contains "$I" "PROMPT-BODY" "kimi ELF prompt text is not in host-visible argv"
+assert_not_contains "$(args_lines "$TEST_TMP/l-elf/args.bin")" "$STUBS/credkimi" "kimi ELF launch argv never names the credential source"
+# Node layout PATH/argv unchanged
+set +e
+run_fake "$TEST_TMP/pf-node" 0 "$LAUNCHER" --preflight --profile kimi "${DENY_ARGS[@]}" \
+  --bin "$STUBS/nodedir/lib/kimi/main.mjs" --node-dir "$STUBS/nodedir" >/dev/null 2>&1
+set -e
+if argv_pair "$TEST_TMP/pf-node/args.bin" "$STUBS/nodedir" /opt/node; then :; else fail "node layout still binds the node dir at /opt/node"; fi
+assert_contains "$(args_lines "$TEST_TMP/pf-node/args.bin")" "/opt/node/bin:/usr/bin" "node layout PATH unchanged"
 
 # ---------- Part A: launch path (credentials copied here only; prompt never in argv) ----------
 set +e
@@ -319,6 +376,19 @@ for R in kimi agy; do
 done
 assert_contains "$(cat "$TEST_TMP/rb-kimi.out")" "HOMEDIR=.kimi-code agent.md" "kimi seat HOME holds only .kimi-code and the agent"
 assert_contains "$(cat "$TEST_TMP/rb-agy.out")" "HOMEDIR=.gemini" "agy seat HOME holds only .gemini"
+
+# kimi ELF layout in a real seat: a real system ELF (bwrap) renamed outside any node dir; preflight is model-free
+set +e
+"$LAUNCHER" --preflight --profile kimi --deny-path "$REPO_ABS" --deny-path "$HOME_ABS" \
+  --bin "$STUBS/kimielf/bin/kimi" > "$TEST_TMP/rb-elf.json" 2> "$TEST_TMP/rb-elf.err"
+RC=$?
+set -e
+assert_eq "0" "$RC" "kimi ELF layout preflight is green in a real seat ($(head -c 200 "$TEST_TMP/rb-elf.err"))"
+set +e
+"$LAUNCHER" --preflight --profile kimi --deny-path /usr/bin/sh --bin "$STUBS/kimielf/bin/kimi" \
+  > /dev/null 2> "$TEST_TMP/rb-elf-deny.err"
+assert_eq "3" "$?" "kimi ELF layout preflight with a readable deny path exits 3"
+set -e
 
 # real binaries, MODEL-FREE: preflight only (--version / `agy agents`); never a prompt
 for R in kimi agy; do

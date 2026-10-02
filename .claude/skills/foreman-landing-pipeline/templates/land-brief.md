@@ -18,8 +18,8 @@ If a pick conflicts, stop and report the files; do not resolve product conflicts
 
 ## 2. Gates
 Run the WHOLE suite when the change touches a widely-consumed contract — do not scope the gate to just the touched suites.
-- `bash hooks/tests/run.sh --parallel 8 > RUN/full.log 2>&1; echo rc=$?`. Read the summary section and every `FAIL [` line. The parallel section's "ALL TESTS PASSED" line does not cover the serial tail, so check that too.
-- Rerun every red solo. Anything still red gets run at `origin/develop` in a throwaway worktree (`git worktree add RUN/base origin/develop`).
+- `bash hooks/tests/run.sh --parallel 16 > RUN/full.log 2>&1; echo rc=$?` — ONCE per release. Read the summary section and every `FAIL [` line. The parallel section's "ALL TESTS PASSED" line does not cover the serial tail, so check that too.
+- Rerun only the reds, solo (never rerun the whole suite after a repair — rerun the touched suites plus former reds). Anything still red gets run at `origin/develop` in a throwaway worktree (`git worktree add RUN/base origin/develop`).
   Red at base too means pre-existing: record it. Red only on your branch: bisect it (`git bisect run`) and STOP; report the first-bad commit and the failing assertions. Do not repair anything yourself.
 - `node scripts/check-js-syntax.js`, `bash scripts/sync-codex-plugin-skills.sh --check`, `bash scripts/validate.sh`.
 

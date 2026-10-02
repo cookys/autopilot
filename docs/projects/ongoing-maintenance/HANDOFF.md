@@ -24,6 +24,7 @@
    - `docs/backlog/review-seat-max-tokens-exhausted-by-thinking.md`（S）：先找出 4096 在哪設。
    - `docs/backlog/final-panel-resume-reruns-all-seats.md`（M）：resume 重跑所有 QC 席，有效判決被丟掉。
    - run.sh group INT 要等目前測試檔結束才生效（S，v2.36.107 新增列）。
+   - 小狀況（未登 BACKLOG，先複現）：cuda 驗 v2.36.110 時，`provider-readiness-single-line-frame` 和 `dispatch-author` 測試前兩次因 TMPDIR 正規化失敗，改用合法私有 `/tmp` 路徑後才 44/44、144/144 通過（未改測試或 source；證據在 cuda `/data/rw3d-evidence/2026-10-02/ea-delivery/SDK110-PROBE/`）。疑似測試對 `$TMPDIR` 的形狀（symlink、尾斜線或非 `/tmp` 前綴）有假設；在本機用非預設 `TMPDIR` 跑這兩支複現，確認後再決定登列或直接修。
 2. 要 owner 排優先序才動：`docs/backlog/review-only-adoption-of-external-candidate.md`（L，要先寫 plan＋review）。
 3. 跨 session 的派工 clone 在 scratchpad，新 session 用不到；需要時從 `origin/develop` 開新 clone。
 

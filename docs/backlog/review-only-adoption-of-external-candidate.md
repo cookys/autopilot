@@ -1,0 +1,7 @@
+# No supported review-only entry: the managed final panel cannot adopt an externally produced candidate range
+
+Source: PEER-REPORTED by cuda/chatgpt-tunnel (Revival /root), fleet 2026-10-03 (message 01M3YYC9XN6AFRSSKJ4KVEPBDG); verified by reading code at 53ddc02f.
+
+- **Trigger**: FIRED as a peer request — needs this repo's owner prioritization and a design (plan + review) before code.
+- **Context**: `bin/autopilot.js` `engine` has only `review-loop` and `implement-review` (no `--review-only/--adopt/--candidate/--replay`). `performFinalPanel` (`src/engine/autopilot-engine.js:5853`) is an internal closure reached only from managed `implement-review`, which always runs an implement stage and mints readiness/intake (`:9636`, `:9940`). `reviewDiff` (`:3083`) and `dispatch-review` take no host admission. `verifyResumeCandidate` (`src/engine/campaign-intake.js:~960-1000`) only accepts a `git_candidate` minted by the same campaign (campaign_id, writer fence, repair lineage), so an external implementer's commit range cannot be adopted. Note: the managed final panel already reviews the cumulative `base..candidate` diff (`review_input_mode: full_diff_generation`, `:4753/:5392`), so a "1-line phase" is a scope/contract choice, not an engine limit. Requested: a host-admitted final panel (readiness bundle, intake, QC roster snapshot) over a whole external range with zero writer / VA / model repair. Needs a candidate-adoption intake that binds the range by git evidence (ADR-0001: re-derivation, no attestation).
+- **Effort**: L

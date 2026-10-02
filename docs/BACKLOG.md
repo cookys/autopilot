@@ -752,6 +752,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/opencode-package-json-test-drift.md
 - **Context**: a test updates the opencode plugin dependency with cwd = repo; snapshot mode hides it, `AUTOPILOT_TEST_SNAPSHOT=0` does not.
 
+### No supported review-only entry: the managed final panel cannot adopt an externally produced candidate range
+- **Status**: open
+- **Trigger**: FIRED as a peer request — needs owner prioritization and a plan before code
+- **Effort**: L
+- **Source**: PEER-REPORTED cuda/chatgpt-tunnel (fleet, 2026-10-03), verified by reading code
+- **Pointer**: docs/backlog/review-only-adoption-of-external-candidate.md
+- **Context**: the final panel is reachable only through managed `implement-review` (writer stage always runs); intake only resumes candidates minted by the same campaign.
+
 ### verification_author: a standing operator pin can never reach dispatch-author
 - **Status**: open
 - **Trigger**: FIRED — peer report 2026-10-02; queued after the test-suite repo write containment release; reproduce locally first

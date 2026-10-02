@@ -1,5 +1,22 @@
 # Changelog
 
+## v2.36.108 — 最終 panel 的 kimi／agy 席位改走可證明的 cleanroom 隔離
+
+- **問題**：managed final panel 的 `kimi` 與 `agy` 審查席位沒有可證明的盲審隔離，intake 只能拒收。**改了什麼**：兩個 runner 都經 cleanroom launcher（repo-less bwrap seat、私有 HOME、`--clearenv`）執行，並加上 post-run audit（fail-closed 的 void 清單與無工具 agent 標記）；dispatch-review 新增盲審 kimi/agy rail；intake 在每 runner 的 host probe 綠燈後才把這兩種席位視為 cleanroom tier（unknown 一律拒收）；非盲審的 kimi/agy 與 codex 路徑不變。
+- **版本警告**：kimi/agy 的 CLI 版本與探測時不同時，dispatch 時只印 advisory 警告，不擋、不改 verdict。
+- **兩處由真實證據決定、與 plan 文字不同的做法**：（1）agy 從不記錄 agent 名稱，所以 cleanroom 標記改為 `agent=true` + `agentScript=true` + 無 fallback + agents 目錄中恰有一個 agent；（2）agy 1.2.15 會用絕對 symlink 把 `antigravity-cli/agents` 遷移到 `config/agents`，第一次 live-fire 因此 fail-closed，launcher 現在兩處都播種、audit 取聯集，重跑得到 reviewed 裁決。兩個 runner 的 live-fire 收據在 `docs/plans/evidence/2026-10-02-final-panel-kimi-agy-isolation/live-fire/`。
+- **工具自動更新**：工作期間 agy 由 1.2.14 自動更新到 1.2.15，正是上述 layout 變動的來源。
+- **同版修復測試**：v2.36.107 的 context-budget 變更（視窗未知 → T2 advisory）讓 `statusline-live-tee` 的對照案例轉紅而漏網；本版把該案例的斷言改為新的 advisory 行為（exit 0、「context window is unknown」、無 STOP／clear）。另 `reviewer_engine` 檔案數界線 46→47（新增 kimi/agy intake 測試）。
+- **驗證**：整套 `--parallel 16` 一次、整個 L1 層重跑 408/408；kimi/agy cleanroom 真 bwrap gate 96 條斷言綠。review 兩輪：第一輪 FIX-THEN-SHIP（🟠 測試把 base 複本寫進 checkout、portability 文件過時，已修）；第二輪 claude-fable-5-1 SHIP-AS-IS。
+- **已知後續（review 🔵 CUT/FOLLOW-UP）**：
+  - dispatch-review：盲審 kimi/agy 的不完整 packet 只靠既有 `cleanroom)` case 拒收；可在分支內加 `blind && BLIND_RUNNER_CLEANROOM=0` 守衛與測試。
+  - 缺 engine 層測試證明 intake 產出的 control 真的產生 `AUTOPILOT_CLEANROOM_EXPECTED_VERSION`，以及 `prepareReviewLaunch` 對 kimi/agy 匯出 packet dir 環境變數。
+  - agy audit 不對額外的 `agent=false`／`agentScript=false` 行判 breach；kimi audit 只取最後一個 `profile.bind` 且忽略非空 `activeToolNames`。
+  - cleanroom-launch 對 node 目錄的唯讀 bind 在非常規安裝下範圍偏大；可在 NODE_DIR 等於或包含 deny path 時拒絕。
+  - 憑證 bind 的負向對照只確認 mutation 植入 token，未對 mutant 重跑 Part A 斷言；phase-5 的 sabotaged-agent live 負向對照沒有已提交收據；k1/k2 wire fixture 與 kimi live-fire raw_log 仍留真實 run 識別碼（非憑證、非 host 路徑）。
+
+prose-justification: 本版新增的 reference 文字是 portability 與 blind-dispatch 事實段（附 live-fire 收據），不新增 skill。
+
 ## v2.36.107 — wave-B S 修復：七個小缺陷（context-budget、dispatch-author、readiness、測試 flake）
 
 - **context-budget（row 1）**：沒有 live 檔、視窗未知的 1M session 會在 150k 被當成 200K 視窗，噴出 STOP + `/clear` 的 T2 指令。改為視窗未知時 T2 降為 advisory；明確設定的 t2 仍維持指令。

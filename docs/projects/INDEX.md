@@ -259,6 +259,7 @@ Small batches that bump the version but don't warrant a project README. Source o
 
 | Date | Ship | Version | Merge |
 |------|------|---------|-------|
+| 2026-10-03 | 最終 panel kimi/agy 席位 cleanroom 隔離（plan `2026-10-02-final-panel-kimi-agy-isolation`，5 rows）— launcher、post-run audit、盲審 rail、intake tier、版本警告；另修 `statusline-live-tee` 測試；SHIP-AS-IS | v2.36.108 | — | [CHANGELOG](../../CHANGELOG.md) |
 | 2026-10-03 | wave-B S 修復（無 project dir — Fix）— context-budget unknown-window advisory、kimi --timeout 轉送、verification_author pin、readiness 診斷、opencode/run.sh/watchdog 測試 flake；SHIP-AS-IS | v2.36.107 | — | [CHANGELOG](../../CHANGELOG.md) |
 | 2026-10-02 | test suite speedup（無 project dir — Fix）— resolve-review-loop／engine-qualify／dispatch-review 分片、移除 14 個重跑 L1 的 L2 wrapper、foreman-guard-roles 純 bash JSON 逸出；SHIP-AS-IS | v2.36.106 | — | [CHANGELOG](../../CHANGELOG.md) |
 | 2026-10-02 | test suite repo write containment（無 project dir — Fix）— 整套測試改在拋棄式快照 repo 內執行，並加上外層 config/refs/status 守衛、測試身分 inventory 與 pre-commit/pre-merge-commit/pre-push 身分守門；兩輪 hetero review，最終 SHIP-AS-IS | v2.36.105 | — | [CHANGELOG](../../CHANGELOG.md) |
@@ -373,7 +374,7 @@ Small batches that bump the version but don't warrant a project README. Source o
 | 2026-09-18 | [Blind review redesign — cut 2-C: the panel is the review station, and one packet per candidate](../plans/2026-09-18-blind-review-panel-station.md) | active | — | [plan](../plans/2026-09-18-blind-review-panel-station.md) |
 | 2026-09-19 | [Blind review redesign — cut 2-D: the post-review suite runs alongside the panel, and the panel snapshot is a contract](../plans/2026-09-19-blind-review-2d-overlap.md) | active | — | [plan](../plans/2026-09-19-blind-review-2d-overlap.md) |
 | 2026-09-19 | [roundtable: a moderated, multi-harness discussion the operator sits in](../plans/2026-09-19-roundtable.md) | active | — | [plan](../plans/2026-09-19-roundtable.md) |
-| 2026-10-02 | [Managed final panel: provable blind isolation for `kimi` and `agy` reviewer seats](../plans/2026-10-02-final-panel-kimi-agy-isolation.md) | active | — | [plan](../plans/2026-10-02-final-panel-kimi-agy-isolation.md) |
+| 2026-10-02 | [Managed final panel: provable blind isolation for `kimi` and `agy` reviewer seats](../plans/_archive/2026/10/2026-10-02-final-panel-kimi-agy-isolation.md) | v2.36.108 | — | [plan](../plans/_archive/2026/10/2026-10-02-final-panel-kimi-agy-isolation.md) |
 | 2026-10-02 | [test suite repo write containment](../plans/_archive/2026/10/2026-10-02-test-suite-repo-write-containment.md) | v2.36.105 | — | [plan](../plans/_archive/2026/10/2026-10-02-test-suite-repo-write-containment.md) |
 | 2026-09-26 | [hook advisories reach the model: additionalContext for tool events, a deferred relay for Stop](../plans/_archive/2026/09/2026-09-26-hook-advisories-reach-model.md) | v2.36.98 | — | [plan](../plans/_archive/2026/09/2026-09-26-hook-advisories-reach-model.md) |
 | 2026-09-25 | [foreman-guard: role-aware caps, a close-out reserve, and advisories the model can see](../plans/_archive/2026/09/2026-09-25-foreman-guard-role-caps-reserve.md) | v2.36.97 | — | [plan](../plans/_archive/2026/09/2026-09-25-foreman-guard-role-caps-reserve.md) |

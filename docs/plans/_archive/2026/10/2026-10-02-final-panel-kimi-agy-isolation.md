@@ -2,7 +2,7 @@
 
 > Status: DRAFT (spike-backed, not yet registered/reviewed) · Owner: depth-0 · Size: L · Base: `d979f2dc` · Branch: not yet created (main checkout frozen)
 > Source: BACKLOG row the former BACKLOG row "Managed final panel: cleanroom/packet isolation profiles for kimi and agy reviewer seats" (removed when this plan was registered; git history `d979f2dc`) (peer-requested, cuda/chatgpt-tunnel). Reopens the out-of-scope line at `docs/plans/2026-09-17-blind-review-cleanroom-intake.md:219-224` ("Other cleanroom profiles").
-> Spike log (raw command output): `docs/plans/evidence/2026-10-02-final-panel-kimi-agy-isolation/spike-log.md` (§0.1 is the self-contained summary reviewers rely on). Frame: the request is NOT a waiver of tier `none`; each runner earns a tier only by a host probe.
+> Spike log (raw command output): `docs/plans/_archive/2026/10/evidence/2026-10-02-final-panel-kimi-agy-isolation/spike-log.md` (§0.1 is the self-contained summary reviewers rely on). Frame: the request is NOT a waiver of tier `none`; each runner earns a tier only by a host probe.
 
 ## 0. Context / thesis
 

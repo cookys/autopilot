@@ -463,8 +463,8 @@ in **1b-B**.
 
 ### kimi and agy cleanroom profiles (final-panel isolation plan)
 
-Plan: `docs/plans/2026-10-02-final-panel-kimi-agy-isolation.md`; spike log and
-live-fire receipts: `docs/plans/evidence/2026-10-02-final-panel-kimi-agy-isolation/` (`spike-log.md`, `live-fire/`).
+Plan: `docs/plans/_archive/2026/10/2026-10-02-final-panel-kimi-agy-isolation.md`; spike log and
+live-fire receipts: `docs/plans/_archive/2026/10/evidence/2026-10-02-final-panel-kimi-agy-isolation/` (`spike-log.md`, `live-fire/`).
 
 - **Why cleanroom, not packet.** Neither CLI has a tools-off flag (kimi 2.1.1 has
   no `--sandbox`/`--tools`; agy's `--sandbox` semantics are unprobed). Both honour

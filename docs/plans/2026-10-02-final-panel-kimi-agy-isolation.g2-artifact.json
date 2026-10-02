@@ -248,7 +248,7 @@
       "rubric_id": "R10",
       "class": "decision-now",
       "severity": "blocking",
-      "affected_surface": "docs/plans/2026-10-02-final-panel-kimi-agy-isolation.md (sections 0-8 plus Review log)",
+      "affected_surface": "docs/plans/_archive/2026/10/2026-10-02-final-panel-kimi-agy-isolation.md (sections 0-8 plus Review log)",
       "claim": "The plan is over the 14 KB budget required by R10.",
       "evidence": "The submitted plan body from the title through the Review log is 17083 UTF-8 bytes (119 lines, 2425 words). R10 allows 14 KB (14336 bytes). The document is 2747 bytes over budget. Sections 0-8 and the Review log are present; the miss is size, not missing sections.",
       "evidence_reference": "Plan title through Review log G1 dispositions paragraph; R10 14 KB budget",

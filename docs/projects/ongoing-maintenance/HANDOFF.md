@@ -5,7 +5,7 @@
 - 分支 `develop`。2026-10-02 出貨兩版：v2.36.105（測試套件寫入防護，`a8e4045c`）、v2.36.106（測試加速，`d15a45a5`；完整套件 `--parallel 16` 實測 19.4 分鐘，主機負載約 40 時）。HEAD 以 `git log --oneline -1` 為準。
 - 主 checkout 的 local git 身分已清；`/tmp/.git` 已刪。三層防護見 `docs/plans/evidence/2026-10-02-test-suite-repo-write-containment/README.md`。
 - landing 範本已改（`d5b7eae2`）：完整套件每次發版只跑一次、`--parallel 16`，之後只重跑紅的與改到的。
-- **下一個要做 — kimi/agy final-panel 隔離**：plan 已凍結 `docs/plans/2026-10-02-final-panel-kimi-agy-isolation.md`（G1/G2 artifacts + dispositions 在旁邊；spike 證據在 `docs/plans/evidence/2026-10-02-final-panel-kimi-agy-isolation/spike-log.md`）。5 個 phase；兩者都只到 cleanroom，工具關閉靠 post-run audit 加每 runner 的正向標記。operator 三題預設寫在 §8。實作照「派工規模」記憶：互不相依的 phase 平行、碰 bwrap/audit 的 phase 用 sonnet hand。
+- **下一個要做 — kimi/agy final-panel 隔離**：plan 已凍結 `docs/plans/_archive/2026/10/2026-10-02-final-panel-kimi-agy-isolation.md`（G1/G2 artifacts + dispositions 在旁邊；spike 證據在 `docs/plans/_archive/2026/10/evidence/2026-10-02-final-panel-kimi-agy-isolation/spike-log.md`）。5 個 phase；兩者都只到 cleanroom，工具關閉靠 post-run audit 加每 runner 的正向標記。operator 三題預設寫在 §8。實作照「派工規模」記憶：互不相依的 phase 平行、碰 bwrap/audit 的 phase 用 sonnet hand。
 - 已觸發、排在 kimi/agy 之後或可平行的 S 級：`verification-author-pin-unreachable`、`dispatch-author-kimi-timeout-not-forwarded`、`context-budget-unknown-window-t2-on-1m-without-live-file`、`opencode-package-json-test-drift`。
 - 已知偶發紅：`test-snapshot` 的 `P4 pgid` SIGINT 案例、`dispatch-hetero-watchdog-followups` 的 zombie 時序案例（都單跑綠）。
 

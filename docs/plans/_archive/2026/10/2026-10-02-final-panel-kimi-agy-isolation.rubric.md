@@ -1,6 +1,6 @@
 # Rubric — 2026-10-02-final-panel-kimi-agy-isolation.md
 
-> Source plan: docs/plans/2026-10-02-final-panel-kimi-agy-isolation.md
+> Source plan: docs/plans/_archive/2026/10/2026-10-02-final-panel-kimi-agy-isolation.md
 
 R1: Every platform fact about kimi or agy in the plan is backed by a command-plus-output excerpt in spike-log.md or an official doc URL; anything else is labelled "Spike candidate, unverified" and is not relied on by a phase.
 R2: §2.5 states, as flat quotable lines, that tier `none` is never waived, that a seat reaches packet/cleanroom only through a pre-spend probe that proves isolation on this host and fails closed, that pins/overrides cannot bypass containment, and that no trust machinery is added (ADR-0001).

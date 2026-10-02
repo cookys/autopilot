@@ -1120,3 +1120,19 @@ Rule: when the same defect class recurs in a second review round, stop patching 
 Enumerate the input-shape matrix, state the one rule that covers all cells (for a guard whose failure
 disables enforcement, unknown must resolve toward enforcing), rewrite to it, and pin it with a test
 that walks the matrix. A reviewer names an instance; the repair must cover the class (§17).
+
+## 50. A parity test keyed on a name both sides share compares a file to itself
+
+2026-10-03, v2.36.108 → `24c97d2b`. `dispatch-review-blind-kimi-agy.test.sh` claimed the non-blind
+kimi/agy branch was byte-identical to base: it ran the base copy and the head script against a
+recording stub and compared the records. Both scripts were named `dispatch-review.sh` and the stub
+keyed its record file on the script name, so both runs appended to ONE file and the compare read it
+against itself — green for any drift. It also pinned the base to `47a0e1c6`, a SHA that existed only
+in a private work clone, so every fresh clone went red once the "unreachable base fails loudly" fix
+landed. A deliberately injected argv token passing the suite exposed the first defect.
+
+Rule: a parity/equivalence test must (a) key each side's evidence on an identity the sides do NOT
+share (`base`/`head`), with an assertion that each side actually produced a record, (b) derive its
+baseline from history every clone has (e.g. the parent of the commit that introduced the feature),
+never a SHA from a scratch clone, and (c) be shown to fail on an injected drift before it is trusted
+(§48: a check that cannot fail proves nothing).

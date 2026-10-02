@@ -351,7 +351,7 @@ EOF
 {
   fx="$TEST_TMP/p4a-outer"
   make_fixture "$fx"
-  git -C "$fx" config --local user.email "owner@stranity.com"
+  git -C "$fx" config --local user.email "cookys@stranity.com"
   printf 'base\n' >"$fx/tracked.txt"
   git -C "$fx" add tracked.txt
   git -C "$fx" commit -q -m init
@@ -402,7 +402,7 @@ EOF
 {
   fx="$TEST_TMP/p4a-outer-fail"
   make_fixture "$fx"
-  git -C "$fx" config --local user.email "owner@stranity.com"
+  git -C "$fx" config --local user.email "cookys@stranity.com"
   printf 'base\n' >"$fx/tracked.txt"
   git -C "$fx" add tracked.txt
   git -C "$fx" commit -q -m init
@@ -440,7 +440,7 @@ EOF
 {
   fx="$TEST_TMP/p4a-nc"
   make_fixture "$fx"
-  git -C "$fx" config --local user.email "owner@stranity.com"
+  git -C "$fx" config --local user.email "cookys@stranity.com"
   printf 'base\n' >"$fx/tracked.txt"
   git -C "$fx" add tracked.txt
   git -C "$fx" commit -q -m init
@@ -480,7 +480,7 @@ EOF
 {
   fx="$TEST_TMP/p4-pgid"
   make_fixture "$fx"
-  git -C "$fx" config --local user.email "owner@stranity.com"
+  git -C "$fx" config --local user.email "cookys@stranity.com"
   printf 'base\n' >"$fx/tracked.txt"
   git -C "$fx" add tracked.txt
   git -C "$fx" commit -q -m init
@@ -532,7 +532,7 @@ EOF
 {
   fx="$TEST_TMP/p4-par"
   make_fixture "$fx"
-  git -C "$fx" config --local user.email "owner@stranity.com"
+  git -C "$fx" config --local user.email "cookys@stranity.com"
   printf 'base\n' >"$fx/tracked.txt"
   git -C "$fx" add tracked.txt
   git -C "$fx" commit -q -m init
@@ -584,7 +584,7 @@ p4b_outer_env() {
 {
   fx="$TEST_TMP/p4b-sigpipe"
   make_fixture "$fx"
-  git -C "$fx" config --local user.email "owner@stranity.com"
+  git -C "$fx" config --local user.email "cookys@stranity.com"
   printf 'base\n' >"$fx/tracked.txt"
   git -C "$fx" add tracked.txt
   git -C "$fx" commit -q -m init
@@ -615,7 +615,7 @@ EOF
 {
   fx="$TEST_TMP/p4b-int"
   make_fixture "$fx"
-  git -C "$fx" config --local user.email "owner@stranity.com"
+  git -C "$fx" config --local user.email "cookys@stranity.com"
   printf 'base\n' >"$fx/tracked.txt"
   git -C "$fx" add tracked.txt
   git -C "$fx" commit -q -m init
@@ -674,7 +674,7 @@ os.execvp("bash", ["bash"] + sys.argv[1:])
 {
   fx="$TEST_TMP/p4b-term"
   make_fixture "$fx"
-  git -C "$fx" config --local user.email "owner@stranity.com"
+  git -C "$fx" config --local user.email "cookys@stranity.com"
   printf 'base\n' >"$fx/tracked.txt"
   git -C "$fx" add tracked.txt
   git -C "$fx" commit -q -m init
@@ -730,7 +730,7 @@ os.execvp("bash", ["bash"] + sys.argv[1:])
 {
   fx="$TEST_TMP/p4b-term-ctor"
   make_fixture "$fx"
-  git -C "$fx" config --local user.email "owner@stranity.com"
+  git -C "$fx" config --local user.email "cookys@stranity.com"
   printf 'base\n' >"$fx/tracked.txt"
   git -C "$fx" add tracked.txt
   git -C "$fx" commit -q -m init
@@ -784,7 +784,7 @@ os.execvp("bash", ["bash"] + sys.argv[1:])
 {
   fx="$TEST_TMP/p4b-wt"
   make_fixture "$fx"
-  git -C "$fx" config --local user.email "owner@stranity.com"
+  git -C "$fx" config --local user.email "cookys@stranity.com"
   printf 'base\n' >"$fx/tracked.txt"
   git -C "$fx" add tracked.txt
   git -C "$fx" commit -q -m init
@@ -815,7 +815,7 @@ EOF
 {
   fx="$TEST_TMP/p4b-wt-int"
   make_fixture "$fx"
-  git -C "$fx" config --local user.email "owner@stranity.com"
+  git -C "$fx" config --local user.email "cookys@stranity.com"
   printf 'base\n' >"$fx/tracked.txt"
   git -C "$fx" add tracked.txt
   git -C "$fx" commit -q -m init
@@ -866,7 +866,7 @@ os.execvp("bash", ["bash"] + sys.argv[1:])
 {
   fx="$TEST_TMP/p4b-inv"
   make_fixture "$fx"
-  git -C "$fx" config --local user.email "owner@stranity.com"
+  git -C "$fx" config --local user.email "cookys@stranity.com"
   printf 'base\n' >"$fx/tracked.txt"
   git -C "$fx" add tracked.txt
   git -C "$fx" commit -q -m init
@@ -899,7 +899,7 @@ EOF
 {
   fx="$TEST_TMP/p4b-inv-neg"
   make_fixture "$fx"
-  git -C "$fx" config --local user.email "owner@stranity.com"
+  git -C "$fx" config --local user.email "cookys@stranity.com"
   printf 'base\n' >"$fx/tracked.txt"
   git -C "$fx" add tracked.txt
   git -C "$fx" commit -q -m init
@@ -1026,7 +1026,7 @@ hide_flock_path() {
 {
   fx="$TEST_TMP/p4-noflock"
   make_fixture "$fx"
-  git -C "$fx" config --local user.email "owner@stranity.com"
+  git -C "$fx" config --local user.email "cookys@stranity.com"
   printf 'base\n' >"$fx/tracked.txt"
   git -C "$fx" add tracked.txt
   git -C "$fx" commit -q -m init
@@ -1059,7 +1059,7 @@ EOF
 {
   fx="$TEST_TMP/p4-noflock-guard"
   make_fixture "$fx"
-  git -C "$fx" config --local user.email "owner@stranity.com"
+  git -C "$fx" config --local user.email "cookys@stranity.com"
   printf 'base\n' >"$fx/tracked.txt"
   git -C "$fx" add tracked.txt
   git -C "$fx" commit -q -m init

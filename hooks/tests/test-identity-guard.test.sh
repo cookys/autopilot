@@ -88,27 +88,51 @@ if (root === '--files') {
 }
 const identRe = [
   /\bconfig(?:\s+-C\s+\S+)?\s+user\.email(?:\s+|=)(?:"([^"]*)"|'([^']*)'|([^\s;|&]+))/g,
-  /['"]?user\.email=([^\s"';|&,\]\)]*)/g,
+  /['"]?user\.email=(?:"([^"]*)"|'([^']*)'|([^\s"';|&,\]\)]*))/g,
   /\bGIT_AUTHOR_EMAIL=(?:"([^"]*)"|'([^']*)'|([^\s;|&]+))/g,
   /\bGIT_COMMITTER_EMAIL=(?:"([^"]*)"|'([^']*)'|([^\s;|&]+))/g,
   /(?:^|[^\w])EMAIL=(?:"([^"]*)"|'([^']*)'|([^\s;|&]+))/g,
   /['"]user\.email['"]\s*,\s*['"]([^'"]*)['"]/g,
 ];
+const catchAllRe = /[A-Za-z0-9.%+\-_]+@[A-Za-z0-9.\-]+/g;
+const gitInvokingRe = /(^|[\s;|&])git[\s]/;
 const skipSelf = root !== '--files';
 for (const file of files) {
   if (skipSelf && path.resolve(file) === path.resolve(self)) continue;
   let text;
   try { text = fs.readFileSync(file, 'utf8'); } catch { continue; }
+  const gitInvoking = gitInvokingRe.test(text);
+  const hooksTest = /(?:^|\/)hooks\/tests\/[^/]+\.test\.sh$/.test(file.replace(/\\/g, '/'));
+  const applyCatchAll = gitInvoking && (root === '--files' || hooksTest);
   const lines = text.split(/\n/);
   lines.forEach((line, i) => {
+    const seen = new Set();
     for (const re of identRe) {
       re.lastIndex = 0;
       let m;
       while ((m = re.exec(line))) {
         const email = m[1] ?? m[2] ?? m[3] ?? '';
         if (email.startsWith('$') || email.startsWith('${')) continue;
+        seen.add(email);
         process.stdout.write(`${file}:${i + 1}:${email}\n`);
       }
+    }
+    const trimmed = line.replace(/^[ \t]+/, '');
+    if (trimmed.startsWith('#')) return;
+    if (!applyCatchAll) return;
+    catchAllRe.lastIndex = 0;
+    let cm;
+    while ((cm = catchAllRe.exec(line))) {
+      const email = cm[0];
+      if (email.includes('$')) continue;
+      const idx = cm.index;
+      if (idx > 0 && line[idx - 1] === '@') continue;
+      const domain = email.slice(email.indexOf('@') + 1);
+      if (!/[A-Za-z]/.test(domain)) continue;
+      if (domain.endsWith('.')) continue;
+      if (domain.startsWith('pytest.')) continue;
+      if (seen.has(email)) continue;
+      process.stdout.write(`${file}:${i + 1}:${email}\n`);
     }
   });
 }
@@ -140,11 +164,17 @@ SCAN_FIXTURE="$TEST_TMP/ident-scan-syntax.sh"
   printf '%s\n' 'git -c "user.email=quoted-scan@github.com"'
   printf '%s\n' "const args = ['-c', 'user.email=jsargv-scan@github.com'];"
   printf '%s\n' 'git -c user.email=bare-scan@github.com'
+  printf '%s\n' 'git -c user.email="dq-scan@github.com" commit'
+  printf '%s\n' "git -c user.email='sq-scan@github.com' commit"
+  printf '%s\n' 'git commit --author "Scan User <catchall-scan@github.com>"'
 } > "$SCAN_FIXTURE"
 SCAN_OUT="$(extract_emails_node --files "$SCAN_FIXTURE")"
 assert_contains "$SCAN_OUT" "quoted-scan@github.com" "scanner extracts quoted -c user.email"
 assert_contains "$SCAN_OUT" "jsargv-scan@github.com" "scanner extracts JS argv user.email="
 assert_contains "$SCAN_OUT" "bare-scan@github.com" "scanner extracts bare -c user.email="
+assert_contains "$SCAN_OUT" "dq-scan@github.com" "scanner extracts double-quoted -c user.email="
+assert_contains "$SCAN_OUT" "sq-scan@github.com" "scanner extracts single-quoted -c user.email="
+assert_contains "$SCAN_OUT" "catchall-scan@github.com" "catch-all flags --author outside listed syntaxes"
 
 # --- 4. Inventory two: git-invoking tests source lib.sh ---
 HOOKS_TESTS="$REPO_ROOT/hooks/tests"

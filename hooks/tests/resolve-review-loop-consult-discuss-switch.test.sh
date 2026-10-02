@@ -244,13 +244,40 @@ assert_eq "parity-ok" "$PARITY_OUT" "default-off parity: pre-existing keys byte-
 # "consult_dispatch:" etc., and once committed a naive git-grep would count
 # itself as a 27th population member, permanently breaking the pinned counts.
 SELF="hooks/tests/resolve-review-loop-consult-discuss-switch.test.sh"
-POP_A_RAW_COUNT="$(
+# RED at 78840430 (old exact-count pins, a harmless tracked fixture containing `- reviewer_engine: x` added in a scratch worktree):
+#   FAIL [resolve-review-loop-consult-discuss-switch] Population B file bound is pinned at 46 ...  -> 59 passed, 1 failed
+# New invariants: same fixture unlisted -> FAIL naming hooks/tests/zz-harmless-fixture.test.sh; pinned or allowlisted -> PASS 60 assertions.
+# Population A: INVARIANT, not a count. Every file the extractor matches must be a
+# named member of this reviewed allowlist (path|reason). A new matching file FAILS
+# with its path named until someone reviews it and adds a line here (it must either
+# feed a complete roster object through validateReviewLoopConfig and be widened with
+# the consult/discuss keys, or be a frozen/derived false positive). Adding a member
+# never requires editing a number.
+POP_A_ALLOW='evals/clean/11-review-loop-tier-fields.diff|frozen v2.32.23 diff snapshot, clean-corpus scan input only (see NOTE above)
+hooks/tests/autopilot-cli.test.sh|builds its roster via the live CLI, inherits parity
+hooks/tests/autopilot-engine.test.sh|validPayload JS literal, widened and asserted above
+hooks/tests/contract-parity.test.sh|direct validateReviewLoopConfig caller on live resolver output
+hooks/tests/fixtures/pre-consult-discuss-resolve-review-loop.sh|frozen pre-D6 resolver copy (printf literal)
+hooks/tests/fixtures/pre-d7-resolve-review-loop.sh|frozen pre-D7 resolver copy (printf literal)
+hooks/tests/hetero-review-loop.test.sh|matches the JSON-literal extractor, roster built via live resolver
+hooks/tests/resolve-review-loop-a.test.sh|resolver shard, quoted "reviewer_engine" literals
+hooks/tests/resolve-review-loop-b.test.sh|resolver shard, quoted "reviewer_engine" literals and EXPECTED_KEYS
+hooks/tests/review-loop-runner.test.sh|payload JS literal, widened and asserted above'
+POP_A_MATCHED="$(
   { git -C "$REPO_ROOT" grep -l "validateReviewLoopConfig" -- hooks/ ":!$SELF" 2>/dev/null;
     git -C "$REPO_ROOT" grep -l '"reviewer_engine"' -- hooks/ evals/ ":!$SELF" 2>/dev/null; } \
-    | sort -u | wc -l | tr -d '[:space:]'
+    | sort -u
 )"
-# Test-suite speedup split: resolve-review-loop.test.sh became shards a..d. Raw bound 9 -> 10 (a and b hold the quoted "reviewer_engine" literals).
-assert_eq "10" "$POP_A_RAW_COUNT" "Population A raw extractor union is pinned at 10 files (direct callers + JSON-literal grep, incl. the frozen pre-D6 and pre-D7 resolver fixtures and hetero-review-loop.test.sh)"
+POP_A_UNLISTED="$(printf '%s\n' "$POP_A_MATCHED" | grep -vxF -f <(printf '%s\n' "$POP_A_ALLOW" | cut -d'|' -f1) | grep -v '^$')"
+assert_eq "" "$POP_A_UNLISTED" "Population A: every extractor match is a named member of POP_A_ALLOW (an unlisted path above is a new roster consumer needing consult/discuss review)"
+# Reverse: an allowlisted file that still exists but no longer matches the extractor
+# is a stale entry. A path absent from the tree is tolerated (member landing on another branch).
+POP_A_STALE=""
+while IFS='|' read -r p _; do
+  [ -f "$REPO_ROOT/$p" ] || continue
+  printf '%s\n' "$POP_A_MATCHED" | grep -qxF "$p" || POP_A_STALE="$POP_A_STALE $p"
+done <<< "$POP_A_ALLOW"
+assert_eq "" "$POP_A_STALE" "Population A: no allowlisted file exists without matching the extractor (stale entries listed)"
 
 # Per-object parity subset: files whose roster literal is genuinely fed through
 # validateReviewLoopConfig, either directly (JS payload) or via the live
@@ -315,10 +342,70 @@ assert_eq "validated-ok" "$CONTRACT_PARITY_OUT" "contract-parity.test.sh's real 
 # fixture carries a genuine `- reviewer_engine: claude-opus` line — a real
 # Population B member (cleanroom/rail behavior, not a frozen-fixture false
 # positive and not this suite). Bound moves 42 -> 43.
-# RECOUNTED 2026-10-03 (kimi/agy isolation row 4): +1 final-panel-kimi-agy-intake.test.sh,
-# whose roster fixture carries a genuine `reviewer_engine:` line. Bound moves 46 -> 47.
-POP_B_COUNT="$(git -C "$REPO_ROOT" grep -l 'reviewer_engine:' -- hooks/ ":!$SELF" 2>/dev/null | wc -l | tr -d '[:space:]')"
-assert_eq "47" "$POP_B_COUNT" "Population B file bound is pinned at 47 (git grep -l 'reviewer_engine:' -- hooks/, incl. the round-1 frozen pre-D6 template fixture, campaign-boundary-receipt-e2e.test.sh added 2026-08-30, dispatch-contract-pin.test.sh added 2026-09-11, pending-revocation-fold.test.sh added 2026-09-12, the ten paths enumerated in the 2026-09-23 recount, resolve-dispatch-topology.test.sh Case 17 and resolve-review-loop-pins-per-role.test.sh added 2026-09-24, dispatch-lifecycle-residue-mission.test.sh added 2026-09-24, resolve-review-loop.test.sh split into four shards a..d for wall time: A +1, B +2, dispatch-author-va-pin.test.sh added 2026-10-03 (wave-B row 4): +1, +1 final-panel-kimi-agy-intake.test.sh (kimi/agy isolation row 4, 2026-10-03))"
+# 2026-10-03: the exact-count pins that lived here (A raw 10, B 46, explicit-switch 8) were replaced by the
+# named-member invariants below; the RECOUNTED history above explains what each count guarded.
+# Population B: INVARIANT, not a count. Every file matching 'reviewer_engine:' under hooks/
+# must either (a) pin consult_dispatch/discuss_dispatch explicitly (a `- consult_dispatch:` or
+# `- discuss_dispatch:` roster line, so it never rides a changed default), or (b) be a named
+# member of POP_B_DEFAULT_ALLOW (path|reason) — reviewed as resolving via the default. A new
+# matching file that does neither FAILS with its path named; adding a compliant or listed
+# file never requires editing a number.
+POP_B_DEFAULT_ALLOW='hooks/tests/autopilot-cli.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/autopilot-engine-boundary-resume.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/autopilot-engine-park-reserve.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/autopilot-engine-repair-branch.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/autopilot-engine-wall-expiry.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/autopilot-engine.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/calendar-teeth-negative.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/campaign-boundary-receipt-e2e.test.sh|bridge-fixture roster literal
+hooks/tests/campaign-dispatch-projection.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/campaign-intake-rejection-release.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/contract-parity.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/controller-boundary-budget-bridge.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/controller-execution-independent.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/dispatch-contract-artifact.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/dispatch-detach.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/dispatch-detached-campaign-authority.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/dispatch-hetero-contract.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/engine-lifecycle-observation.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/final-panel-kimi-agy-intake.test.sh|kimi/agy final-panel intake fixture roster (lands with the in-flight release)
+hooks/tests/fixtures/implementation-campaign/probe-red-baseline.js|campaign probe fixture roster literal
+hooks/tests/fixtures/pre-consult-discuss-review-loop-config.md|frozen pre-D6 shipped-template copy
+hooks/tests/fixtures/review-loop-config.frozen-2026-09-13.md|frozen 2026-09-13 review-loop config fixture
+hooks/tests/implementation-campaign-dogfood.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/implementation-campaign-routing.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/implementation-campaign-state-snapshot-contract.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/implementation-campaign-state.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/lib.sh|write_d4_strict_roster_fixture helper roster
+hooks/tests/managed-rail-core-engine.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/mission-routing-campaign-bridge.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/mission-runtime-v2.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/p6d-gates-manifest.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/provider-readiness-consumer.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/qc-panel-honesty.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/resolve-dispatch-topology.test.sh|Case 17 partial roster pinning the topology judge
+hooks/tests/resolve-review-loop-a.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/resolve-review-loop-b.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/resolve-review-loop-d.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/resolve-review-loop-pins-per-role.test.sh|two-role pin fixture config
+hooks/tests/resolve-review-loop-standing-pin.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/review-loop-runner.test.sh|partial roster fixture, resolves consult/discuss via the default'
+POP_B_MATCHED="$(git -C "$REPO_ROOT" grep -l 'reviewer_engine:' -- hooks/ ":!$SELF" 2>/dev/null | sort -u)"
+POP_B_PINNED="$(git -C "$REPO_ROOT" grep -lE '^\s*-\s*(consult|discuss)_dispatch\s*:' -- hooks/ ":!$SELF" 2>/dev/null | sort -u)"
+POP_B_UNREVIEWED=""
+while IFS= read -r p; do
+  [ -n "$p" ] || continue
+  printf '%s\n' "$POP_B_PINNED" | grep -qxF "$p" && continue
+  printf '%s\n' "$POP_B_DEFAULT_ALLOW" | cut -d'|' -f1 | grep -qxF "$p" && continue
+  POP_B_UNREVIEWED="$POP_B_UNREVIEWED $p"
+done <<< "$POP_B_MATCHED"
+assert_eq "" "$POP_B_UNREVIEWED" "Population B: every 'reviewer_engine:' file pins the switches explicitly or is a named POP_B_DEFAULT_ALLOW member (unreviewed paths listed)"
+POP_B_STALE=""
+while IFS='|' read -r p _; do
+  [ -f "$REPO_ROOT/$p" ] || continue
+  printf '%s\n' "$POP_B_MATCHED" | grep -qxF "$p" || POP_B_STALE="$POP_B_STALE $p"
+done <<< "$POP_B_DEFAULT_ALLOW"
+assert_eq "" "$POP_B_STALE" "Population B: no allowlisted file exists without matching 'reviewer_engine:' (stale entries listed)"
 # Markdown-list-style declaration only (`- consult_dispatch: on`) — NOT a bare
 # substring match, which would also hit Population A's JS object-literal keys
 # (`consult_dispatch: 'off',`, no leading dash) that legitimately reference the
@@ -373,8 +460,7 @@ assert_eq "47" "$POP_B_COUNT" "Population B file bound is pinned at 47 (git grep
 DISPATCH_CONSULT_TEST="hooks/tests/dispatch-consult.test.sh"
 DISPATCH_DISCUSS_TEST="hooks/tests/dispatch-discuss.test.sh"
 ROLE_ADMISSION_TEST="hooks/tests/resolve-review-loop-role-admission.test.sh"
-POP_B_EXPLICIT_SWITCH="$(git -C "$REPO_ROOT" grep -lE '^\s*-\s*(consult|discuss)_dispatch\s*:' -- hooks/ ":!$SELF" ":!$DISPATCH_CONSULT_TEST" ":!$DISPATCH_DISCUSS_TEST" ":!$ROLE_ADMISSION_TEST" 2>/dev/null | wc -l | tr -d '[:space:]')"
-assert_eq "8" "$POP_B_EXPLICIT_SWITCH" "eight hooks/ roster configs (seven of Population B's 46, plus context-window's hermetic roster) set consult_dispatch/discuss_dispatch explicitly — the rest resolve via the default"
+# Explicit-switch pinning is now part of the Population B invariant above (a file that pins is compliant); no count remains.
 
 # ── 4b. Schema three-way equality ───────────────────────────────────────────
 SCHEMA_3WAY_OUT="$(node <<'NODE'

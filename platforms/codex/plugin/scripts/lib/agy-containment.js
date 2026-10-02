@@ -53,6 +53,40 @@ const DENY_RULES = ['command(*)', 'write_file(*)', 'read_file(*)', 'read_url(*)'
 // unknown step type is a breach, not a pass.
 const CLEAN_STEP_TYPES = new Set(['USER_INPUT', 'PLANNER_RESPONSE']);
 
+// Any tool-call encoding anywhere in a record, at any depth. Shared with
+// kimi-containment.js: both runners are judged by the same "no tool call, however
+// encoded" rule. Returns a short description of the first hit, or null.
+const TOOL_TYPE_RE = /^(tool[._ -]?(call|calls|use|result|response)|function[._ -]?call)$/i;
+function findToolEncoding(value, depth = 0) {
+  if (depth > 40 || value === null || typeof value !== 'object') return null;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const hit = findToolEncoding(item, depth + 1);
+      if (hit) return hit;
+    }
+    return null;
+  }
+  for (const [key, val] of Object.entries(value)) {
+    if ((key === 'tool_calls' || key === 'toolCalls') && val && !(Array.isArray(val) && val.length === 0)) {
+      return `${key} present`;
+    }
+    if ((key === 'tools' || key === 'tools_snapshot' || key === 'toolsSnapshot') && Array.isArray(val) && val.length > 0) {
+      return `non-empty ${key}`;
+    }
+    if (key === 'tools_snapshot' || key === 'toolsSnapshot') {
+      const inner = val && val.tools;
+      if (Array.isArray(inner) && inner.length > 0) return `non-empty ${key}.tools`;
+    }
+    if (key === 'toolCallId' || key === 'tool_call_id') return `${key} present`;
+    if ((key === 'type' || key === 'finishReason' || key === 'finish_reason') && typeof val === 'string' && TOOL_TYPE_RE.test(val)) {
+      return `${key}=${JSON.stringify(val)}`;
+    }
+    const hit = findToolEncoding(val, depth + 1);
+    if (hit) return hit;
+  }
+  return null;
+}
+
 function writeToollessAgent(agentsDir) {
   const agentPath = path.join(agentsDir, AGENT_NAME, 'agent.md');
   fs.mkdirSync(path.dirname(agentPath), { recursive: true });
@@ -67,7 +101,20 @@ function writeToollessAgent(agentsDir) {
 
 // Returns a breach description, or null when the run provably used no tools.
 // Fail closed: a missing log or transcript means containment is UNVERIFIED.
-function auditAgyRun({ logDir, brainDir }) {
+//
+// Two modes. Default (non-blind dispatch, qualification): the audit is exactly what it
+// was before final-panel isolation phase 1 — plan §2.5, no behaviour change there.
+// `cleanroom: true` (blind/cleanroom audit only, needs `agentsDir`) adds the positive
+// agent marker and the stricter transcript rules below.
+//
+// agy 1.2.14 never writes the selected agent's NAME anywhere (verified with real calls):
+// a selected custom agent logs `Starting new conversation (agent=true)` and
+// `Creating new cascade trajectory (agentScript=true)`; a wrong name logs
+// `Agent "<n>" not found, falling back to default` with agent=false/agentScript=false.
+// So the marker is all of: agent=true, agentScript=true, no not-found line, and exactly
+// one agent in the seat's agents dir (the tool-less one) — then agent=true can only
+// mean that agent.
+function auditAgyRun({ logDir, brainDir, cleanroom = false, agentsDir = null }) {
   let logText = '';
   try {
     for (const name of fs.readdirSync(logDir)) {
@@ -80,6 +127,25 @@ function auditAgyRun({ logDir, brainDir }) {
   }
   const invalid = logText.match(/ignoring invalid deny entry "[^"]*"/);
   if (invalid) return `agy rejected a forced deny rule (${invalid[0]}) — tool vocabulary drifted`;
+
+  if (cleanroom) {
+    const notFound = logText.match(/Agent "([^"]*)" not found/);
+    if (notFound) return `agy fell back to its default (fully tooled) agent: "${notFound[1]}" not found`;
+    if (!logText.includes('Starting new conversation (agent=true)')) {
+      return 'agy log lacks "Starting new conversation (agent=true)" — agent selection unverified';
+    }
+    if (!logText.includes('agentScript=true')) {
+      return 'agy log lacks "agentScript=true" — agent selection unverified';
+    }
+    let agents = null;
+    try {
+      agents = agentsDir ? fs.readdirSync(agentsDir).filter((n) => !n.startsWith('.')) : null;
+    } catch { /* unverified below */ }
+    if (!agents) return `cannot list the seat agents dir ${agentsDir} — agent selection unverified`;
+    if (agents.length !== 1 || agents[0] !== AGENT_NAME) {
+      return `seat agents dir must hold exactly the tool-less agent "${AGENT_NAME}", found [${agents.join(', ')}]`;
+    }
+  }
 
   const transcripts = [];
   const walk = (dir, depth) => {
@@ -94,24 +160,40 @@ function auditAgyRun({ logDir, brainDir }) {
   };
   walk(brainDir, 0);
   if (transcripts.length === 0) return `no agy transcript.jsonl under ${brainDir} — containment unverified`;
+  let stepCount = 0;
   for (const file of transcripts) {
-    const lines = fs.readFileSync(file, 'utf8').split('\n').filter((line) => line.trim());
+    let text;
+    if (cleanroom) {
+      try { text = fs.readFileSync(file, 'utf8'); } catch { return `unreadable agy transcript ${file} — containment unverified`; }
+    } else {
+      text = fs.readFileSync(file, 'utf8');
+    }
+    const lines = text.split('\n').filter((line) => line.trim());
     for (const line of lines) {
       let step;
       try { step = JSON.parse(line); } catch { return `unparseable agy transcript line in ${file}`; }
+      if (cleanroom) {
+        if (step === null || typeof step !== 'object' || Array.isArray(step)) return `non-object agy transcript line in ${file}`;
+        stepCount += 1;
+      }
       if (Array.isArray(step.tool_calls) && step.tool_calls.length > 0) {
         const names = step.tool_calls.map((call) => (call && call.name) || '?').join(', ');
         return `the model called tool(s) [${names}] (step ${step.step_index})`;
+      }
+      if (cleanroom) {
+        const encoded = findToolEncoding(step);
+        if (encoded) return `tool-call encoding in agy transcript: ${encoded} (step ${step.step_index})`;
       }
       if (!CLEAN_STEP_TYPES.has(step.type)) {
         return `unexpected agy transcript step type ${JSON.stringify(step.type)} (step ${step.step_index})`;
       }
     }
   }
+  if (cleanroom && stepCount === 0) return `agy transcript under ${brainDir} holds no steps — containment unverified`;
   return null;
 }
 
-module.exports = { AGENT_NAME, AGENT_MD, DENY_RULES, writeToollessAgent, auditAgyRun };
+module.exports = { AGENT_NAME, AGENT_MD, DENY_RULES, writeToollessAgent, auditAgyRun, findToolEncoding };
 
 if (require.main === module) {
   const [cmd, a, b] = process.argv.slice(2);
@@ -121,13 +203,18 @@ if (require.main === module) {
     } else if (cmd === 'write' && a && !b) {
       writeToollessAgent(a);
     } else if (cmd === 'audit' && a && b) {
-      const breach = auditAgyRun({ logDir: a, brainDir: b });
+      // optional: --cleanroom <agents-dir> (blind/cleanroom audit); default = non-blind audit
+      const extra = process.argv.slice(5);
+      let opts = {};
+      if (extra.length === 2 && extra[0] === '--cleanroom') opts = { cleanroom: true, agentsDir: extra[1] };
+      else if (extra.length !== 0) { process.stderr.write('audit: unexpected arguments\n'); process.exit(2); }
+      const breach = auditAgyRun({ logDir: a, brainDir: b, ...opts });
       if (breach) {
         process.stderr.write(`agy containment breach: ${breach}\n`);
         process.exit(1);
       }
     } else {
-      process.stderr.write('usage: agy-containment.js name | write <agents-dir> | audit <log-dir> <brain-dir>\n');
+      process.stderr.write('usage: agy-containment.js name | write <agents-dir> | audit <log-dir> <brain-dir> [--cleanroom <agents-dir>]\n');
       process.exit(2);
     }
   } catch (err) {

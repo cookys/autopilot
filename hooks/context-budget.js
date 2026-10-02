@@ -47,7 +47,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const {
-  readContextTokens, readContextUsage, budgetDecision, inferWindowTokens, scaleTiers, tiersForKnownWindow,
+  readContextTokens, readContextUsage, budgetDecision, inferWindowTokens, scaleTiers, tiersForKnownWindow, BASE_WINDOW,
 } = require('./context-budget-lib.js');
 const { resolveLiveDir, sanitizeSessionId, readLive } = require('../scripts/lib/live-state-dir.js');
 
@@ -230,10 +230,15 @@ function saveState(file, st) {
             : scaleTiers(cfg, inferWindowTokens(st.observedMax));
           const d = budgetDecision(
             { contextTokens: tokens, calls: st.calls, lastT1Call: st.lastT1Call, lastT2Call: st.lastT2Call },
-            rememberedWindow !== null ? { ...liveCfg, windowSource: 'session-window' } : liveCfg,
+            rememberedWindow !== null
+              ? { ...liveCfg, windowSource: 'session-window' }
+              // Unknown window: no live file, nothing remembered, and observedMax < 200K (200K and
+              // 1M are indistinguishable). A user-explicit T2 keeps today's directive behaviour.
+              : { ...liveCfg, windowUnknown: !cfg.explicitT2 && st.observedMax < BASE_WINDOW },
           );
-          if (d.tier === 't1') {
-            st.lastT1Call = st.calls;
+          if (d.tier === 't1' || (d.tier === 't2' && d.advisory)) {
+            if (d.tier === 't2') st.lastT2Call = st.calls;
+            else st.lastT1Call = st.calls;
             process.stderr.write(`${d.message}\n`);
             process.stdout.write(`${JSON.stringify({
               hookSpecificOutput: {

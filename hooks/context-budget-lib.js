@@ -210,6 +210,21 @@ function budgetDecision(state, cfg) {
   if (cfg.t2 > 0 && contextTokens >= cfg.t2) {
     // lastT2Call 0 = never fired ⇒ always eligible (first crossing must not be throttled)
     if (lastT2Call > 0 && calls - lastT2Call < T2_THROTTLE_CALLS) return { tier: null, message: null };
+    // Window genuinely unknown (no live file, no remembered window, observedMax < 200K):
+    // 200K and 1M are indistinguishable, so a directive STOP would be a guess. Degrade to an
+    // advisory — tier 't2' keeps the T2 throttle/counter, `advisory` tells the hook to deliver
+    // it like T1 (exit 0, additionalContext).
+    if (cfg.windowUnknown === true) {
+      return {
+        tier: 't2',
+        advisory: true,
+        message:
+          `Context budget T2 (advisory): context is ${k}k tokens; the context window is unknown ` +
+          '(no statusline live file, so 200K and 1M cannot be told apart). ' +
+          'If this is a 200K window, plan a handoff at the next phase boundary; ' +
+          'on a 1M window this is early and no action is needed.',
+      };
+    }
     return {
       tier: 't2',
       message:

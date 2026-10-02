@@ -744,6 +744,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/peer-addressing-md-says-message-rows-live-forever-a-spec-says-7-days.md
 - **Context**: `hangar-bridge/SUBJECT_ROUTING_SPEC.md:516,614` records an accepted 7-day retention/replay bound for subjected `@team` chat that was never built.
 
+### Final-panel resume after a seat transport failure re-runs every seat, discarding valid verdicts
+- **Status**: open
+- **Trigger**: next touch of the final-panel resume path, or the next run blocked by a single failing QC seat
+- **Effort**: M
+- **Source**: PEER-REPORTED cuda/chatgpt-tunnel (fleet, 2026-10-03), verified by reading code
+- **Pointer**: docs/backlog/final-panel-resume-reruns-all-seats.md
+- **Context**: `runPanel` re-dispatches all seats on resume; panel reuse needs a fully reviewed previous panel, so valid per-seat verdicts are thrown away.
+
 ### No supported review-only entry: the managed final panel cannot adopt an externally produced candidate range
 - **Status**: open
 - **Trigger**: FIRED as a peer request — needs owner prioritization and a plan before code

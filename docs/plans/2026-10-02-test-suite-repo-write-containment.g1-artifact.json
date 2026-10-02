@@ -1,0 +1,734 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "test-repo-write-g1",
+  "logical_plan_id": "test-suite-repo-write-containment-2026-10-02",
+  "session_id": "7236b3c6-6662-4434-ab03-07d7d2a66500",
+  "session_key": "f6e84f3da56764f4ca5e3dc276cf95efa17c0840cba8155dae0d30ebd8ff7777",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "0e91689417e97b062cbc380c87286b5f1d2fbf3ecd1c3df1e1df6b92b73d2242",
+  "manifest_sha256": "25d462ff1482823cf682afb818636e35c8f82a705bc1cb588357b328e86a2ef3",
+  "plan_sha256": "945091d778ac0b55c7b6020a1d3d0cbda728759bde19f82aa22d8a675fe3e6e6",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "bebb8c6ac1de7f0d0927c879578cd0c4d1ca2a5bc9373763cb8072ac1b491d18"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "32f1fea42070c4b4ba5e6a2d866a042e3c7d9b14026d8b598d7075aa5f4e5c29",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-lObIBu/stdout",
+          "digest": "32f1fea42070c4b4ba5e6a2d866a042e3c7d9b14026d8b598d7075aa5f4e5c29"
+        },
+        "receipt_digest": "d4ffbe990bfb7f5d6d56835a5ee8326d8bc31e4c1dd45e3a0a38d9fec9034080"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "grok_deep",
+      "target_id": "grok_deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.6",
+          "operation": "plan-review",
+          "request_digest": "67fcb873e4bd15a9886880303d9c11bc2a5239779ece3266540a9430db561add"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "01fcdf9dd383d0dd49fdb0935bff3db258c7e6600450de8b73c3b8a75f6e7299",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-1wqGbl",
+          "digest": "01fcdf9dd383d0dd49fdb0935bff3db258c7e6600450de8b73c3b8a75f6e7299"
+        },
+        "receipt_digest": "a3ea0aec206c16c001717961eeb515526f93ff215576e35c83176fcc2a9c219e"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_consult",
+      "target_id": "minimax_consult",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "bc4f77d8d4e548067974413edcd59d0233ec998bd3c2f53b3233bbe778b4027b"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "dedf32fa796a7f2e362fd8bc77d85152756f8ef03ab99d91da6a21d4c1a86f88",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-Yyscgq",
+          "digest": "dedf32fa796a7f2e362fd8bc77d85152756f8ef03ab99d91da6a21d4c1a86f88"
+        },
+        "receipt_digest": "a69419986d4205831156276a83351cb1757b4c512cd005b3905edd883a327511"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "family": "openai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "grok_deep",
+      "target_id": "grok_deep",
+      "family": "xai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "minimax_consult",
+      "target_id": "minimax_consult",
+      "family": "minimax",
+      "verdict": "STOP"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Plan §1 honest scope, G5-G6, and standalone test execution",
+      "claim": "The plan names absolute-path and standalone routes but assigns layers that do not cover the writes those routes can perform.",
+      "evidence": "Section 1 says an absolute path is caught by the outer config diff and commit/push identity gate, and says a standalone test relies on lib.sh hygiene plus the identity gate. G6 observes only local config, while the hooks observe commit or push identities. None of those layers detects an absolute or standalone edit to the real worktree, index, refs, hook files, or ignored local state; §7 even defers the known .opencode/package.json working-tree drift class.",
+      "evidence_reference": "PLAN §1; §2.5 G5-G6; §7",
+      "repair": "Define a continuous layer for each residual real-repo state class, or narrow the scope without claiming coverage. At minimum, deny ordinary children access to the real-root capability and add outer and standalone canaries for real config, tracked worktree, index, refs, and ignored-state writes, with a fail-and-report policy.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "3c1be4ad0ba8f2cb3699a7658c07f4feee409999ee695c169e3e84024579b8f8"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Plan G4 snapshot construction and test-snapshot.test.sh",
+      "claim": "The mandated local clone still shares object-file inodes with the real repository, so a write inside the snapshot can modify real-repo storage.",
+      "evidence": "The §0.1 probe explicitly calls the clone hardlinked, and G4 mandates a default local clone rather than --no-hardlinks or --no-local. Local clone hardlinks files under .git/objects; a content write or metadata write through the snapshot path reaches the same inode in the real repository. The proposed link-count assertion covers only a working-tree file.",
+      "evidence_reference": "PLAN §0.1 clone-cost probe; §2.5 G4; §3 test-snapshot.test.sh; §6 inversion",
+      "repair": "Use git clone --no-hardlinks --no-checkout, or --no-local, and assert that corresponding source and snapshot object files do not share device-and-inode identity and that no alternates file exists. Retain the working-tree no-hardlink and dead-origin assertions.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "12bc765cb02b84e5b88c14953de03c8d2e6f9bcb2430c3e265999482110ef412"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Snapshot fidelity statement in G4 and §6",
+      "claim": "The plan names staged-index divergence but does not name or justify ref-namespace divergence from a normal clone.",
+      "evidence": "A normal clone does not reproduce source reflogs, refs/stash, replace refs, arbitrary custom refs, and all source remote-tracking state. Section 6 discusses only staged-only index state, while §0.1 reports a green clone run without recording which non-cloned ref classes were inventoried or why tests cannot depend on them.",
+      "evidence_reference": "PLAN §0.1; §2.5 G4; §6",
+      "repair": "Add an explicit ref-fidelity decision tied to the §0.1 probe: inventory every test that reads refs, state which namespaces are absent or remapped, justify that none is required, and require any future test needing such state to create it in its fixture. Copy a required namespace explicitly if the inventory finds one.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "26903abad7afd85d308e895119c04cf71dd16b1096e803284ed89338bb986b6b"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P1 fixture-identity inventory and KR5",
+      "claim": "The proposed grep inventory cannot enumerate every fixture identity syntax already present in the tree.",
+      "evidence": "The pattern user\\.email followed by a space misses forms such as git -c user.email=t@t in hooks/tests/dispatch-lineage.test.sh. The GIT_AUTHOR_EMAIL or GIT_COMMITTER_EMAIL pattern does not cover JavaScript argv forms such as execFileSync with config, user.email, and r123@example.invalid in hooks/tests/dispatch-lifecycle-residue-mission.test.sh. Those identities therefore never reach the canonical classifier, so KR5 can pass with unclassified fixtures.",
+      "evidence_reference": "PLAN P1; hooks/tests/dispatch-lineage.test.sh:43; hooks/tests/dispatch-lifecycle-residue-mission.test.sh:622",
+      "repair": "Replace the two ad hoc greps with one deterministic inventory tool that recognizes every supported shell, -c, environment, config-file, and JavaScript argv identity assignment; fail on an unclassified identity-writing syntax; and add extractor fixtures for each syntax. Feed all extracted emails to scripts/lib/test-identity.sh so the domain rule remains single-copy.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "9b46a42e2a31bd06f38a4934304a98ef3a0fcfa8ff8fb223c383763acb6a8f77"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "G8 identity-gate bypass",
+      "claim": "AUTOPILOT_ALLOW_TEST_IDENT=1 is inherited along the same process and Git-environment path that a leaking test would use, so it can disable the real-repo gate.",
+      "evidence": "G8 permits the variable inline on a command. Inline environment assignments are inherited by git and its hooks. If that command resolves the real repository because of the very GIT_DIR leak under test, the real hook receives the bypass too; limiting the assignment to one command does not bind it to a disposable repository.",
+      "evidence_reference": "PLAN §2.5 G8; R6 bypass requirement",
+      "repair": "Make the bypass repository-bound: the hook must ignore it when the active Git common directory is the repository that owns the hook, and may honor it only in a verified disposable fixture repository. Add a negative test that combines the bypass with a leaked protected-repo GIT_DIR and proves the commit and push remain blocked.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "fcc1aa447ee90692ea15dc82024e8c164932433483bd91dfbd58c0c66417c6e0"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P3 pre-push range semantics",
+      "claim": "The push gate has no defined commit-set algorithm that both excludes the acknowledged polluted history and catches a newly made test-identity commit.",
+      "evidence": "The context records 632 origin/develop commits with test@example.com, G2 classifies that address as test identity, and §7 excludes history rewriting. KR4 nevertheless says a pushed range containing one is refused. For a new branch or tag, scanning full ancestry blocks ordinary pushes forever; subtracting an unspecified baseline can instead omit a newly introduced bad commit. P3 gives no rules for existing refs, new refs, tags, force pushes, deletions, or fallback when the remote base is unavailable.",
+      "evidence_reference": "PLAN §0; KR4; G2; P3; §7",
+      "repair": "Specify the exact per-ref introduced-commit set and failure behavior before implementation. Cover existing updates, new branches, new tags, force pushes, deletions, and missing remote-base data; scan actual author and committer emails for every introduced object; and test that the 632 reachable historical commits are tolerated while a new hook-bypassed bad commit is rejected.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "16e958f85057a57f911721ff5705e7f774654aee5a3e872ebf0903cb96044f13"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Phase acceptance design for P0-P4",
+      "claim": "The phases do not each carry an explicit RED-first case and explicit negative control as required.",
+      "evidence": "P0 describes a revert-sensitive assertion and P2 labels RED cases, but P1 only says to add an inventory test, P3 only says to verify existing suites, and P4 lists property checks. The owner-email examples are global and do not supply a named control for every phase; P4 also does not deliberately demonstrate that its hardlink, live-origin, and wrong-repository detectors go red. The §0.1 comparison is present, but it does not fill the missing per-phase controls.",
+      "evidence_reference": "PLAN §3; §4 P0-P4; §5",
+      "repair": "Add a phase table naming, for every P0-P4 row, the pre-fix RED command, the exact expected failure, one explicit allowed-case control, one deliberate broken-variant control, and the GREEN command. Keep the P4 red-set comparison to the §0.1 baseline and define how known timeout cases are solo-retested.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "eb74d128a069fc5410383ef50acab964bf8c56caaeedc106c3190a20dd962860"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "G5 snapshot lifetime and suite-residue-reap.sh interaction",
+      "claim": "G5 does not provide a liveness and cleanup protocol compatible with the existing reaper, so live snapshots can be selected and fresh external worktrees can remain after cleanup.",
+      "evidence": "The snapshot basename autopilot-test-snapshot.* matches suite-residue-reap.sh's autopilot-test-* pattern, but G5 does not require a held .autopilot-live.lock. The reaper excludes its own suite-run lock when authorizing lockless deletion, so safety depends on an unspecified separate outer lock whose acquisition is currently best-effort. The same reaper treats a released worktree lock younger than AUTOPILOT_SUITE_REAP_MIN_AGE, currently 60 seconds, as unknown; removing the snapshot afterward can therefore strand the external hetero worktree directory and its fresh lock.",
+      "evidence_reference": "PLAN §2.5 G5; §6 residue risk; hooks/tests/lib/suite-residue-reap.sh _SRR_PATTERNS, _srr_other_live_run, and stale-lock gate",
+      "repair": "Define a dedicated snapshot live lock held by the outer process from construction through inner reaping, and make generic reaping unable to select the live snapshot even if suite-run registration fails. After workers are killed and waited, deterministically enumerate and remove worktrees registered to the snapshot, prune its worktree metadata, verify no owned paths or locks remain, then release the live lock and remove the snapshot. Add normal-exit, child-failure, INT, and TERM tests.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "83ab0a4fb693f37e5ce773ff8dd3219d2685df32db92ca9884736c16434839b2"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "§1 residual routes vs G5 AUTOPILOT_TEST_REAL_ROOT and the absolute-path covering layers",
+      "claim": "The plan creates a new residual path to the real repo by exporting AUTOPILOT_TEST_REAL_ROOT into the inner suite, and it treats absolute-path writes as caught by layers that only see local config keys and test-identity commits.",
+      "evidence": "Thesis: stop relying on every test writing correctly. §1 names three leftovers: absolute path, inherited GIT_DIR, standalone run. It says the absolute-path route is caught by the outer config diff and the commit/push identity gate. KR2 only diffs local config keys outside branch.* and remote.*; KR4 only refuses test-identity commits and pushes. A working-tree write at the real absolute path (already seen as .opencode/package.json) has no runtime layer. G5 then exports AUTOPILOT_TEST_REAL_ROOT for the guard and the KR1 test only, with an honor-system line that no other test may read it. That export is present in every L1/L2 child; a child can run git -C \"$AUTOPILOT_TEST_REAL_ROOT\" config --local and reproduce the 2026-09-04 write class. KR2 would catch that config write after the fact; the pointer itself is omitted from the §1 residual list.",
+      "evidence_reference": "plan §0 thesis; §1 residual-route paragraph; §2 KR2/KR4; §2.5 G5; §7 .opencode working-tree drift",
+      "repair": "Keep REAL_ROOT in the outer runner only; do not export it into the inner test env. Implement KR1 as a runner-side before/after comparison on REAL_ROOT plus a probe that writes through REPO_ROOT. Amend §1 so the absolute-path leftover is split: config keys covered by G6, test-identity commits/pushes covered by KR4, working-tree files covered only by the P4 porcelain check and listed as accepted residue. If a test file must see the real root, pass it through an allowlisted channel that lib.sh unsets for every other test.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "bae81071d6727c22363571aba6748e176df2b26bc9b20586f38ae79846ea2891"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "G4 snapshot construction vs the §0.1 clone probe",
+      "claim": "G4 checks out a detached SHA after clone --no-checkout, and the snapshot's local git config is a fresh clone config; those fidelity gaps versus an in-place run and versus the §0.1 probe are unnamed except for staged-only index state.",
+      "evidence": "§0.1: a full suite in a fresh git clone at 6bdd1a38 had zero clone-induced reds. A default clone attaches a local branch and uses clone-local config. G4: git clone --quiet --no-checkout REAL_ROOT SNAP, then git -C SNAP checkout --quiet of the real HEAD sha, then rsync of the working tree. That leaves detached HEAD. Tests that read git branch --show-current, refuse detached HEAD, or merge against a named branch can go red in ways the probe never measured. Clone config also omits the real repo's core.hooksPath, user.*, and other local keys; .githooks exists in the rsynced tree but git will not run it unless hooksPath is set. §6 names only staged-only index state and says none was found in §0.1. Stash, notes, replace refs, and local branch names are omitted.",
+      "evidence_reference": "plan §0.1 clone probe; §2.5 G4; §6 staged-only index paragraph",
+      "repair": "Name every fidelity gap versus in-place: HEAD kind (attached vs detached), missing stash/notes/replace/worktree refs, fresh clone local config including hooksPath, staged-only index. Match the probe unless a named justification says otherwise: clone so HEAD kind matches the real repo (checkout -B on the real branch name when attached; SHA when detached), then rsync -a --delete with exclude of /.git. Re-bind the P4 red-set comparison to that construction, not to an unnamed detached checkout.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "52b13f4cb41179783a06c6b4b2eab24a3baadb39eaada81aa0cafe0a708dd51f"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "hooks/tests/run.sh G3 re-exec versus G6/G7 outer real-repo measurements",
+      "claim": "G3's re-exec and G6's after-the-inner-run-returns outer process cannot both be true, so the drift guard can end up measuring the snapshot; G7 on the inner invocation can also treat a fresh clone's unset user.email as a polluted baseline.",
+      "evidence": "G3: re-exec happens at most once, keyed on AUTOPILOT_TEST_SNAPSHOT_ROOT, argv preserved. G6: the config drift guard runs in the OUTER process against the REAL repo, git -C REAL_ROOT config --local --list, before the re-exec and after the inner run returns, ignoring keys matching branch.* or remote.*. Literal exec never returns to an outer process. An after-list implemented post-re-exec with git config --local in cwd measures SNAP, which is the R4 failure mode. The ignore list leaves user.name and user.email visible, so a correctly targeted list would catch the 2026-09-04 identity write; the targeting is what G3/G6 leave ambiguous. G7 runs first and KR3 matches G2, which includes empty email. A fresh clone has local user.email unset. If G7 runs again after re-exec against SNAP, snapshot-on runs can refuse to start on every host.",
+      "evidence_reference": "plan §2 KR3; §2.5 G2 empty-email clause; §2.5 G3; §2.5 G6; §2.5 G7",
+      "repair": "Drop literal exec. Have the outer process, still cwd'd on REAL_ROOT, build SNAP, then run a child bash with the original argv, AUTOPILOT_TEST_SNAPSHOT_ROOT set, and cwd/REPO_ROOT at SNAP. Pin G7 and both G6 lists to git -C REAL_ROOT and to the pre-child invocation only; the child skips G7 and G3. State in G6 that a config write inside SNAP must not fail the outer guard.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "ad1df86af7f946051686103526b5d7175e513c7b4211c30292e1715bfc021c46"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "scripts/lib/test-identity.sh plus the P1 fixture inventory in hooks/tests and scripts",
+      "claim": "G1/G2 are a single email-only reserved-domain rule with owner-email negative controls, but the P1 grep set can miss fixture identities, and the plan never requires tests to call is_test_identity_email rather than copy G2.",
+      "evidence": "G1 puts the sole copy in scripts/lib/test-identity.sh. G2 matches example, example.com|org|net, suffixes .invalid/.test/.example/.local/.localhost, dotless domains, and empty; names are ignored. Negative controls 2537196+cookys@users.noreply.github.com and cookys@stranity.com sit outside that set. P1 enumerates with git grep -hoE of 'user.email' plus a following token, and GIT_AUTHOR_EMAIL= / GIT_COMMITTER_EMAIL=, under hooks/tests and scripts. That misses user.email=value, --author/--committer forms, author.email/committer.email, and quoted env assignments. A missed non-G2 fixture stays in tree and KR5 is false. G2 also omits case folding; EXAMPLE.COM is the same identity git will write. G1 forbids a second copy of the pattern, yet test-identity-guard.test.sh is free to re-embed the regex.",
+      "evidence_reference": "plan §2 KR5; §2.5 G1; §2.5 G2; §3 test-identity-guard.test.sh row; §4 P1 grep lines",
+      "repair": "Widen P1 to all email-bearing git identity forms under hooks/tests and scripts, match emails case-insensitively, and rewrite misses to a G2 address such as user@example.invalid. State that run.sh, the three hooks, and test-identity-guard.test.sh source is_test_identity_email and contain no second regex. Keep the two owner-email cases as assertions that must return false.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "18e1f0c6d8c15d8403902eb5491effe05e323a159406b90c271b7d46546a7b28"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": ".githooks/pre-commit, .githooks/pre-merge-commit, .githooks/pre-push, and AUTOPILOT_ALLOW_TEST_IDENT",
+      "claim": "KR4 names commit, merge-commit, and push hooks but does not pin them to the identity git will actually write, and G8's bypass is inheritable by any leaking test that exports the env var.",
+      "evidence": "KR4: git commit and a merge commit with a test author/committer email are refused by pre-commit and pre-merge-commit; git push of a range containing one is refused by pre-push. The plan never says pre-commit/pre-merge-commit resolve GIT_AUTHOR_EMAIL, GIT_COMMITTER_EMAIL, then author/committer config, then user.email, and never says pre-push reads author/committer on commit objects in the pushed range. P1 already inventories GIT_AUTHOR_EMAIL and GIT_COMMITTER_EMAIL fixtures. A hook that only reads git config user.email allows an env-only test identity commit in the real repo. G8: AUTOPILOT_ALLOW_TEST_IDENT=1 bypasses the check and may be set inline on that single command; there is no inventory that the var is never exported, so a leaking test can export it and every later git commit in that process tree inherits the bypass. commit --no-verify and push --no-verify are unnamed holes around the same hooks.",
+      "evidence_reference": "plan §2 KR4; §2.5 G8; §4 P1 GIT_AUTHOR|COMMITTER_EMAIL inventory; §4 P3",
+      "repair": "Specify hook inputs: pre-commit and pre-merge-commit refuse when the resolved author or committer email matches G2; pre-push walks each commit in the pushed range and refuses on author or committer email matching G2. Inventory-forbid export of AUTOPILOT_ALLOW_TEST_IDENT and keep the inline prefix as the only legal form. Name --no-verify as an operator hole whose test-side backstop is G6 plus the P4 porcelain check, or forbid --no-verify in hooks/tests and scripts.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "cd51178db714b6c73b182cfc1ff231b4d2fb32509fdffa08796b1032cec1c641"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "§4 phase exit criteria for P1, P3, and P4",
+      "claim": "P0 and P2 have RED-plus-negative-control shape, but P1 has no explicit negative control, P3's RED is a cross-phase file rather than a phase-local failing test, and P4 compares red sets to a §0.1 baseline whose construction differs from G4.",
+      "evidence": "P0: suite green and rogue-consumer assertions fail if the gate is reverted to skip. P2: RED child sets core.foo in the real root; baseline user.email t@t. P1: inventory plus five lib.sh sources plus G9; no inverted control (a real owner email that must remain unmatched, or a git-invoking test that must fail the inventory when the source line is removed). P3: verify qc-gate.test.sh, mission-terminal-rollover.test.sh, codex-plugin-package.test.sh; test-identity-guard.test.sh is mapped to KR2-KR5 spanning P2 and P3, so P3 has no phase-local RED that is red before the hooks exist. P4: full run.sh --parallel 16 with snapshot on and AUTOPILOT_TEST_SNAPSHOT=0; red sets compared to §0.1. That comparison is only valid after G4 matches the probe (see R3).",
+      "evidence_reference": "plan §4 P0–P4; §3 test-identity-guard.test.sh row; §0.1 probe; §5 test/validation",
+      "repair": "Give P1 an inverted inventory assertion (owner emails stay unmatched; removing a lib.sh source from one of the five tests fails the inventory). Split test-identity-guard so P2 lands G6/G7 RED and P3 lands hook RED plus the two owner-email negative controls, each red before its production code. State P4's baseline as the G4-constructed snapshot, or change G4 to the §0.1 clone and then compare.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "cee4f0af0cff998b9275bcca5fd01c93d4d3e54eed79796fff3545eff915bf59"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "G5 EXIT/INT/TERM trap vs hooks/tests/lib/suite-residue-reap.sh liveness and lock residue",
+      "claim": "G5 orders reap-then-rm of SNAP but never binds that order to the reaper's liveness predicate, and lock residue is absent from the lifecycle story.",
+      "evidence": "G5: SNAP lives under TMPDIR/autopilot-test-snapshot.XXXXXX; the EXIT/INT/TERM trap removes it AFTER the residue reaper has run inside it. File map: verify suite-residue-reap.sh reaps the snapshot's own worktrees before removal. §6: snapshot removal before reaping would orphan hetero worktrees, so G5 orders reap first. None of those lines state what the reaper treats as live, or what the trap does when a live hetero worktree is skipped and rm then deletes SNAP's git dir, which orphans that worktree. HUP is untrapped. Lock files (index.lock, gc.lock, suite flocks, hetero locks) do not appear in G5, §3, or §6, even though R8 requires no lock leaks after normal exit, interrupt, or failure.",
+      "evidence_reference": "plan §2.5 G5; §3 suite-residue-reap.sh row; §6 snapshot-removal sentence",
+      "repair": "Quote the reaper liveness rule in G5 and match trap behavior to it: when the reaper skips a live worktree, keep SNAP until it is gone or fail the suite after recording paths for a later reap; do not rm a git dir that still has live registered worktrees. Trap HUP with INT/TERM. Name git/suite/hetero locks and assert they live only inside SNAP so removal covers them, or reap them by path. Add a test that sends INT to run.sh and asserts TMPDIR has no leftover snapshot dir, hetero worktree, or lock.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "7858cd354e27daa155972b9512655cd3ffeb94ae56ebeacfeed2ad5c23ed7cca"
+    },
+    {
+      "rubric_id": "R9",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "§6 inversion items vs named tests in test-snapshot.test.sh and test-identity-guard.test.sh",
+      "claim": "Hardlinked working tree, live origin, and over-broad identity each have a G-line and a named assertion; guard-on-the-wrong-repo has G6 but no named test that still holds when the snapshot is on.",
+      "evidence": "§6 (a) hardlinked working-tree copy: G4 forbids cp -al/--link-dest; test-snapshot.test.sh asserts stat link count 1. (b) live origin: G4 sets origin to /nonexistent/autopilot-test-snapshot-origin; the same test asserts the URL. Over-broad identity: G2 reserved-domain only; test-identity-guard.test.sh negative-controls owner emails. (c) guard measuring the snapshot: G6 pins the outer process and REAL_ROOT. The named RED for KR2 is P2 with snapshot off (child sets core.foo in the real root). test-snapshot.test.sh lists KR1, G3 opt-out, G4 origin, and link count; it does not assert that a config write inside SNAP leaves the outer guard quiet while a write inside REAL_ROOT fails the suite. That on-snapshot pair is the inversion R9 names.",
+      "evidence_reference": "plan §2.5 G2/G4/G6; §3 test-snapshot.test.sh and test-identity-guard.test.sh rows; §4 P2 RED; §6 inversion bullets",
+      "repair": "Add two assertions to test-snapshot.test.sh (or the outer runner probe): git config --local in REPO_ROOT/SNAP does not fail G6; the same write via REAL_ROOT does fail G6 and names the key. Keep the existing link-count, origin-URL, and owner-email negative controls. Optionally assert SNAP/.git/objects/info/alternates is absent so a --shared construction cannot silently satisfy the other checks.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "184d4b3becd618dc58108315adeae966c18049a291d20a0b1422d6408dee38d0"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Plan §1 containment claim; absolute-path residual route",
+      "claim": "Section 1 asserts the absolute-path route is caught by the outer config diff and the commit/push identity gate, but the config diff only watches `git config --local --list` keys (G6) and the identity gate only fires on commit/merge-commit/push (KR4). An uncommitted, non-config file write aimed at the real repo's absolute path (the exact `.opencode/package.json` vector named in §0 and Section 7) is neither listed as a separate residual in §1 nor properly named in the Section 7 out-of-scope list, so the containment claim is overstated for that sub-route.",
+      "evidence": "Plan §1 second paragraph: 'the absolute-path route is caught by the outer config diff and by the commit/push identity gate.' G6 scopes the guard to 'git -C $REAL_ROOT config --local --list'. KR4 scopes the identity gate to commit/merge-commit/push. Section 7 lists '.opencode/package.json drift' as BACKLOG but does not re-cast absolute-path non-config non-committed file writes as a named residual route alongside absolute-path, inherited GIT_DIR, and standalone test run.",
+      "evidence_reference": "plan §1 Scope paragraph, G6, KR4, Section 7 out-of-scope list",
+      "repair": "Either (a) extend G6 to hash- or mtime-scan working-tree files under $REAL_ROOT so the guard catches uncommitted non-config writes, or (b) add a fourth named residual in §1 ('absolute-path non-config, non-committed file writes') and re-list it in Section 7 as the BACKLOG item already implied by '.opencode/package.json' drift, with an explicit note that only the config-diff and identity-gate sub-routes are covered. R1's honest-containment bar is not met until one of these is in place.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_consult",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "5a5b4cb9d5a4e2a72a3400e15c6585a78d24a31110ce72365799315485bc2fe2"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Snapshot fidelity; divergence list and §0.1 baseline",
+      "claim": "The plan names 'staged-only index state' as the only working-state divergence and treats §0.1's fresh `git clone` (presumably clean) as the baseline. But `clone --no-checkout` followed by `checkout <real HEAD sha>` (G4) also drops any unstaged modifications to tracked files, and the rubric's fidelity standard is the in-place run, not a fresh clone. The plan does not name this divergence nor justify it against an in-place run that may carry unstaged changes.",
+      "evidence": "G4: '`git -C $SNAP checkout --quiet <real HEAD sha>`' resets the working tree to HEAD. §6 names staged-only index state as the only divergence, claims 'rsync copies ignored files,' and does not mention unstaged-tracked divergence. §0.1 baseline is a fresh `git clone` of a clean tree, not an in-place run that may carry unstaged modifications.",
+      "evidence_reference": "plan G4 construction steps, §0.1 second bullet, §6 fourth paragraph",
+      "repair": "Add to §6: 'Unstaged modifications to tracked files in the real repo are not carried; tests that depend on them must stage them first. None observed in §0.1, which used a clean fresh clone as the baseline.' Either re-frame §0.1 as 'fresh-clone baseline, equivalent to in-place when the working tree is clean' or document in §1 that the real repo is assumed clean at suite start and surface that assumption. R3 cannot be claimed met until the divergence is named.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_consult",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "a022bd77615db3b1051b93d8ff9359ecdf4cdf0aa8bee1faae639e47415d2e02"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "G8 bypass mechanism and hook coverage (commit, merge-commit, push)",
+      "claim": "G8 specifies the bypass env var AUTOPILOT_ALLOW_TEST_IDENT=1 'inline on that single command' but provides no enforcement that a leaking test cannot `export` it and silently bypass subsequent real commits in the same shell. Additionally, the plan does not address `git commit --no-verify` and `git push --no-verify`, which skip client-side hooks entirely. R6 requires the bypass to be uninheritable by a leaking test.",
+      "evidence": "G8: 'AUTOPILOT_ALLOW_TEST_IDENT=1 bypasses the commit/push check; only a test that deliberately drives .githooks/* with a fixture identity may set it, inline on that single command.' No hook-side check distinguishes inline-set from exported env (impossible from inside the hook), and no process-side guard is described. KR4 and P3 do not mention --no-verify.",
+      "evidence_reference": "plan G8, KR4, P3 phase description",
+      "repair": "Add to G8: a process-side guard in the test runner that exports AUTOPILOT_ALLOW_TEST_IDENT for one child command and unsets it before continuing, so a leaking test cannot inherit the bypass. For --no-verify, either (a) add a server-side pre-receive hook as a defense-in-depth backstop, or (b) document --no-verify as operator-trust-only and add a core.hooksPath-integrity test in P3. R6 cannot be claimed as met until the bypass is uninheritable and the --no-verify gap is acknowledged.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_consult",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d3eede812592b17cf0e9954b2ea134fba46ae51e358a0ec8a56f704f786fb062"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P3 phase RED-first requirement",
+      "claim": "P3 reads 'Verify qc-gate.test.sh, mission-terminal-rollover.test.sh, codex-plugin-package.test.sh and any other test that runs .githooks/*' which is post-implementation verification of existing test plumbing, not a RED-first test for the three new hooks (pre-commit, pre-merge-commit, pre-push). P0, P2, and P4 each carry an explicit RED or negative control; P3 does not. R7 requires every phase to be independently shippable with a RED-first test and an explicit negative control.",
+      "evidence": "Phase row P3 (S) under §4: 'pre-commit + pre-merge-commit + pre-push (KR4, G8). Verify qc-gate.test.sh, mission-terminal-rollover.test.sh, codex-plugin-package.test.sh and any other test that runs .githooks/*.' Compare P0 (RED + negative control), P2 (RED: 'a child test sets core.foo in the real root; a baseline with user.email t@t'), P4 (verification compared to §0.1).",
+      "evidence_reference": "plan §4 phase table, P0/P2/P3/P4 rows",
+      "repair": "Add to P3: 'RED: in a scratch clone, `git commit --allow-empty -m t --author=Test User <test@example.invalid>` exits non-zero with the hook message; the same with `AUTOPILOT_ALLOW_TEST_IDENT=1` inline exits zero. Repeat for merge-commit and for `git push` of a local range containing a test-identity commit. Negative control: same with `cookys@stranity.com` author, hook allows.' The existing verify line then becomes a check that the new REDs still hold under the existing test infra, not the primary RED.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_consult",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0776f620b9d48acd900a118607a753083a9b523c28c4a0f412e8f96d3880a1bc"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Residue lifecycle coverage in P4 and §5",
+      "claim": "G5 orders `suite-residue-reap.sh` to run before the trap removes $SNAP, and §3 names 'verify it reaps the snapshot's own worktrees' as a file responsibility. P4 and §5, however, only verify config status (`git status --porcelain`, `--local --list`) and a full green run; there is no explicit RED test that after a normal exit, an INT during the inner run, or a TERM during snapshot construction, $SNAP, its hetero worktrees, and any `*.lock` files are gone. R8 requires no leak across all three exit paths.",
+      "evidence": "G5 last sentence: 'the EXIT/INT/TERM trap removes it AFTER the residue reaper has run inside it.' P4 verify bullets do not include a residue check. §5 (Test/validation) lists the new suites and the depth-0-gated replay, neither of which asserts cleanup on the non-exit paths.",
+      "evidence_reference": "plan G5, P4 verify bullets, §5 Test/validation",
+      "repair": "Add three RED tests under P4 or a new test-snapshot-residue.test.sh: (a) run the inner suite to completion, assert the autopilot-test-snapshot.* directory is empty and $REAL_ROOT/.git/worktrees is unchanged; (b) run the inner suite and `kill -INT $inner_pid`, assert the same; (c) `kill -TERM $outer_pid` during `git clone` or `rsync`, assert the same plus no `*.lock` left in .git/. Also assert suite-residue-reap.sh exits 0 on a snapshot that itself contains a registered hetero worktree, to lock down G5's ordering claim.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_consult",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "2c9b88543be1da3063333d2bdcf657ebbe60065a8207b3d2a3bca2e0e579a979"
+    },
+    {
+      "rubric_id": "R9",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "Inversion assertion (c) 'guard measures the snapshot, not the real repo'",
+      "claim": "Section 6 names (a) hardlinked copy, (b) live origin, (c) guard on the wrong repo, and (d) over-broad identity as the four inversions. (a), (b), and (d) are each pointed at a named test in §3 or §4. (c) is only stated as a design constraint ('G6 pins it to the outer process'); no test name is given that would fail if the guard were moved into the inner process.",
+      "evidence": "§6 third bullet for (c): 'The guard measuring the snapshot instead of the real repo; G6 pins it to the outer process.' No test is named. The closest candidate is P2's RED 'a child test sets core.foo in the real root' but that RED is not labeled as the inversion test for R9(c).",
+      "evidence_reference": "plan §6 Risks + inversion, §3 file-structure map, §4 P2",
+      "repair": "Label P2's 'child sets core.foo in the real root' RED as the explicit inversion test for R9(c), and add the dual assertion: if the guard were moved inside the inner process (i.e. against the snapshot), the same child write would not be detected and the assertion would fail. No code change required, just a one-line cross-reference in the test and a matching 'asserted by' bullet under §6.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_consult",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0e532b6b7e549cf3843ef3491f94f27b0826e2faab3d47fb93a9fb48397fb2ca"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "52b13f4cb41179783a06c6b4b2eab24a3baadb39eaada81aa0cafe0a708dd51f",
+      "rubric_id": "R3",
+      "affected_surface": "G4 snapshot construction vs the §0.1 clone probe",
+      "claim": "G4 checks out a detached SHA after clone --no-checkout, and the snapshot's local git config is a fresh clone config; those fidelity gaps versus an in-place run and versus the §0.1 probe are unnamed except for staged-only index state.",
+      "evidence_reference": "plan §0.1 clone probe; §2.5 G4; §6 staged-only index paragraph",
+      "disposition": null
+    },
+    {
+      "fingerprint": "18e1f0c6d8c15d8403902eb5491effe05e323a159406b90c271b7d46546a7b28",
+      "rubric_id": "R5",
+      "affected_surface": "scripts/lib/test-identity.sh plus the P1 fixture inventory in hooks/tests and scripts",
+      "claim": "G1/G2 are a single email-only reserved-domain rule with owner-email negative controls, but the P1 grep set can miss fixture identities, and the plan never requires tests to call is_test_identity_email rather than copy G2.",
+      "evidence_reference": "plan §2 KR5; §2.5 G1; §2.5 G2; §3 test-identity-guard.test.sh row; §4 P1 grep lines",
+      "disposition": null
+    },
+    {
+      "fingerprint": "cee4f0af0cff998b9275bcca5fd01c93d4d3e54eed79796fff3545eff915bf59",
+      "rubric_id": "R7",
+      "affected_surface": "§4 phase exit criteria for P1, P3, and P4",
+      "claim": "P0 and P2 have RED-plus-negative-control shape, but P1 has no explicit negative control, P3's RED is a cross-phase file rather than a phase-local failing test, and P4 compares red sets to a §0.1 baseline whose construction differs from G4.",
+      "evidence_reference": "plan §4 P0–P4; §3 test-identity-guard.test.sh row; §0.1 probe; §5 test/validation",
+      "disposition": null
+    },
+    {
+      "fingerprint": "7858cd354e27daa155972b9512655cd3ffeb94ae56ebeacfeed2ad5c23ed7cca",
+      "rubric_id": "R8",
+      "affected_surface": "G5 EXIT/INT/TERM trap vs hooks/tests/lib/suite-residue-reap.sh liveness and lock residue",
+      "claim": "G5 orders reap-then-rm of SNAP but never binds that order to the reaper's liveness predicate, and lock residue is absent from the lifecycle story.",
+      "evidence_reference": "plan §2.5 G5; §3 suite-residue-reap.sh row; §6 snapshot-removal sentence",
+      "disposition": null
+    },
+    {
+      "fingerprint": "184d4b3becd618dc58108315adeae966c18049a291d20a0b1422d6408dee38d0",
+      "rubric_id": "R9",
+      "affected_surface": "§6 inversion items vs named tests in test-snapshot.test.sh and test-identity-guard.test.sh",
+      "claim": "Hardlinked working tree, live origin, and over-broad identity each have a G-line and a named assertion; guard-on-the-wrong-repo has G6 but no named test that still holds when the snapshot is on.",
+      "evidence_reference": "plan §2.5 G2/G4/G6; §3 test-snapshot.test.sh and test-identity-guard.test.sh rows; §4 P2 RED; §6 inversion bullets",
+      "disposition": null
+    },
+    {
+      "fingerprint": "0e532b6b7e549cf3843ef3491f94f27b0826e2faab3d47fb93a9fb48397fb2ca",
+      "rubric_id": "R9",
+      "affected_surface": "Inversion assertion (c) 'guard measures the snapshot, not the real repo'",
+      "claim": "Section 6 names (a) hardlinked copy, (b) live origin, (c) guard on the wrong repo, and (d) over-broad identity as the four inversions. (a), (b), and (d) are each pointed at a named test in §3 or §4. (c) is only stated as a design constraint ('G6 pins it to the outer process'); no test name is given that would fail if the guard were moved into the inner process.",
+      "evidence_reference": "plan §6 Risks + inversion, §3 file-structure map, §4 P2",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-10-02T06:16:13.098Z"
+}

@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "test-suite-repo-write-containment-2026-10-02",
+  "generation": 1,
+  "findings": [
+    {
+      "fingerprint": "3c1be4ad0ba8f2cb3699a7658c07f4feee409999ee695c169e3e84024579b8f8",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct: §1 overclaims. Folded: §1 lists residual routes per write class (config key, ref, working-tree file, commit) with the layer that covers each; working-tree writes by absolute path are detected by an outer real-repo `git status --porcelain` diff that WARNS (names paths), and are otherwise an accepted residual."
+    },
+    {
+      "fingerprint": "12bc765cb02b84e5b88c14953de03c8d2e6f9bcb2430c3e265999482110ef412",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted (git never rewrites object files in place, but the cost of removing the doubt is ~0.9 s measured). Folded: G4 uses `git clone --no-hardlinks`."
+    },
+    {
+      "fingerprint": "26903abad7afd85d308e895119c04cf71dd16b1096e803284ed89338bb986b6b",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct. Folded: G4 names ref divergence (only the real current branch + remote-tracking heads + tags; no refs/autopilot/*, no other local branches, fresh local config) and justifies it by §0.1 (zero clone-induced reds); the snapshot checks out the real branch name with `checkout -B`."
+    },
+    {
+      "fingerprint": "9b46a42e2a31bd06f38a4934304a98ef3a0fcfa8ff8fb223c383763acb6a8f77",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct. Folded: P1 inventory enumerates every syntax: `config user.email`, `-c user.email=`, `GIT_AUTHOR_EMAIL=`, `GIT_COMMITTER_EMAIL=`, `EMAIL=`, and JS argv arrays containing user.email; any unmatched syntax found by a broad `@` scan in git-invoking tests fails the inventory with the line."
+    },
+    {
+      "fingerprint": "fcc1aa447ee90692ea15dc82024e8c164932433483bd91dfbd58c0c66417c6e0",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct. Folded: the env bypass is removed. A fixture repo opts out with its own local config key `autopilot.testIdentityGate=off`; it is never inherited through the environment, and G6 would flag it if a leak wrote it into the real repo."
+    },
+    {
+      "fingerprint": "16e958f85057a57f911721ff5705e7f774654aee5a3e872ebf0903cb96044f13",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct. Folded: pre-push checks author and committer email of `git rev-list <remote_sha>..<local_sha>` (new ref: `<local_sha> --not --remotes`), so history already on the remote is excluded."
+    },
+    {
+      "fingerprint": "eb74d128a069fc5410383ef50acab964bf8c56caaeedc106c3190a20dd962860",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct. Folded: §4 states, per phase, a RED case and a negative control."
+    },
+    {
+      "fingerprint": "83ab0a4fb693f37e5ce773ff8dd3219d2685df32db92ca9884736c16434839b2",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct. Folded: G5 binds the snapshot to the reaper: the outer run holds flock on `$SNAP/.autopilot-live.lock` for its lifetime; the reaper treats `autopilot-test-snapshot.*` as residue only when that lock is free; inner worktree reaping runs inside $SNAP before removal."
+    },
+    {
+      "fingerprint": "bae81071d6727c22363571aba6748e176df2b26bc9b20586f38ae79846ea2891",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct. Folded: AUTOPILOT_TEST_REAL_ROOT is dropped; the real root stays in a non-exported outer variable. KR1/R9(c) tests drive the snapshot functions against a fixture \"real\" repo."
+    },
+    {
+      "fingerprint": "52b13f4cb41179783a06c6b4b2eab24a3baadb39eaada81aa0cafe0a708dd51f",
+      "disposition": "duplicate",
+      "rationale": "Same defect as 26903abad7 (ref/config divergence), same fold."
+    },
+    {
+      "fingerprint": "ad1df86af7f946051686103526b5d7175e513c7b4211c30292e1715bfc021c46",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct: exec forecloses the after-check. Folded: G3 runs the inner run.sh as a waited CHILD, never exec; G6/G7 run only in the outer process (skipped when AUTOPILOT_TEST_SNAPSHOT_ROOT is set)."
+    },
+    {
+      "fingerprint": "18e1f0c6d8c15d8403902eb5491effe05e323a159406b90c271b7d46546a7b28",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded with 9b46a42e2a: tests call is_test_identity_email, never restate G2."
+    },
+    {
+      "fingerprint": "cd51178db714b6c73b182cfc1ff231b4d2fb32509fdffa08796b1032cec1c641",
+      "disposition": "duplicate",
+      "rationale": "Same as fcc1aa447e (inheritable bypass); identity pinning folded: pre-commit/pre-merge-commit read `git var GIT_AUTHOR_IDENT`/`GIT_COMMITTER_IDENT`, which resolve env+config exactly as git writes them."
+    },
+    {
+      "fingerprint": "cee4f0af0cff998b9275bcca5fd01c93d4d3e54eed79796fff3545eff915bf59",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded with eb74d128a0. §0.1 baseline construction difference is named; P4 compares red sets by file name."
+    },
+    {
+      "fingerprint": "7858cd354e27daa155972b9512655cd3ffeb94ae56ebeacfeed2ad5c23ed7cca",
+      "disposition": "duplicate",
+      "rationale": "Same as 83ab0a4fb6, same fold; lock residue is named in G5."
+    },
+    {
+      "fingerprint": "184d4b3becd618dc58108315adeae966c18049a291d20a0b1422d6408dee38d0",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: a named test for inversion (c)."
+    },
+    {
+      "fingerprint": "5a5b4cb9d5a4e2a72a3400e15c6585a78d24a31110ce72365799315485bc2fe2",
+      "disposition": "duplicate",
+      "rationale": "Same as 3c1be4ad0b, same fold."
+    },
+    {
+      "fingerprint": "a022bd77615db3b1051b93d8ff9359ecdf4cdf0aa8bee1faae639e47415d2e02",
+      "disposition": "rejected",
+      "rationale": "Refuted: G4 rsyncs the real working tree AFTER the checkout, so unstaged modifications to tracked files are carried. Wording clarified in G4 anyway."
+    },
+    {
+      "fingerprint": "d3eede812592b17cf0e9954b2ea134fba46ae51e358a0ec8a56f704f786fb062",
+      "disposition": "duplicate",
+      "rationale": "Same as fcc1aa447e for the bypass. `--no-verify` is a deliberate operator act, named as an accepted residual in §1; pre-push still catches a --no-verify commit unless push is also --no-verify."
+    },
+    {
+      "fingerprint": "0776f620b9d48acd900a118607a753083a9b523c28c4a0f412e8f96d3880a1bc",
+      "disposition": "duplicate",
+      "rationale": "Same as eb74d128a0, same fold: P3 has its own RED cases for all three hooks."
+    },
+    {
+      "fingerprint": "2c9b88543be1da3063333d2bdcf657ebbe60065a8207b3d2a3bca2e0e579a979",
+      "disposition": "duplicate",
+      "rationale": "Same as 83ab0a4fb6; folded: P4 adds exit-path tests (normal, INT during inner run, TERM during construction) asserting no $SNAP, worktree or lock residue."
+    },
+    {
+      "fingerprint": "0e532b6b7e549cf3843ef3491f94f27b0826e2faab3d47fb93a9fb48397fb2ca",
+      "disposition": "duplicate",
+      "rationale": "Same as 184d4b3bec, same fold."
+    }
+  ]
+}

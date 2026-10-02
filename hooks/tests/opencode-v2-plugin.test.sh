@@ -6,6 +6,10 @@ if ! command -v opencode >/dev/null 2>&1; then
   exit 0
 fi
 
+# The repo's own .opencode package files must survive this suite untouched: opencode
+# installs/updates @opencode-ai/plugin into whichever .opencode dir it finds from cwd.
+OC_PKG_BEFORE="$(cat "$REPO_ROOT/.opencode/package.json" "$REPO_ROOT/.opencode/package-lock.json" | sha256sum)"
+
 # Regenerate the .opencode/plugin-package mirror that the opencode loader reads.
 "$REPO_ROOT/scripts/sync-opencode-plugin.sh" >/dev/null
 
@@ -15,7 +19,15 @@ fi
 # applies. Drive plugin load deterministically through `debug config`, which loads plugins
 # (running the plugin's documented `server()` setup) and, with AUTOPILOT_PLUGIN_SMOKE=1,
 # exercises the intent-capture path — the same observable behaviors, without the removed API.
-REPO_REAL="$(cd "$REPO_ROOT" && pwd -P)"
+# Run opencode in a scratch copy of the project (never cwd = repo) so its dependency
+# install cannot rewrite the repo's .opencode/package.json or package-lock.json.
+SCRATCH_PROJECT="$TEST_TMP/project"
+mkdir -p "$SCRATCH_PROJECT"
+cp -R "$REPO_ROOT/.claude-plugin" "$SCRATCH_PROJECT/.claude-plugin"
+mkdir -p "$SCRATCH_PROJECT/.opencode"
+( cd "$REPO_ROOT/.opencode" && for f in * .gitignore; do [ "$f" = node_modules ] || cp -R "$f" "$SCRATCH_PROJECT/.opencode/$f"; done )
+[ -d "$REPO_ROOT/.agents" ] && ln -s "$REPO_ROOT/.agents" "$SCRATCH_PROJECT/.agents"
+REPO_REAL="$(cd "$SCRATCH_PROJECT" && pwd -P)"
 mkdir -p "$HOOK_HOME"
 LOG="$TEST_TMP/debug-config.log"
 ( cd "$REPO_REAL" && HOME="$HOOK_HOME" AUTOPILOT_PLUGIN_SMOKE=1 \
@@ -49,5 +61,8 @@ assert_contains "$PLUGIN_SRC" 'hookInput.sessionID' \
   "tool.execute.after maps hookInput.sessionID into capture"
 assert_contains "$PLUGIN_SRC" 'captureIntent(hookInput.tool, hookInput.args, hookInput.sessionID)' \
   "tool.execute.after passes hook fields to captureIntent"
+
+OC_PKG_AFTER="$(cat "$REPO_ROOT/.opencode/package.json" "$REPO_ROOT/.opencode/package-lock.json" | sha256sum)"
+assert_eq "$OC_PKG_AFTER" "$OC_PKG_BEFORE" "repo .opencode package.json + lock byte-identical after suite"
 
 finalize_test

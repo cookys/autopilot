@@ -744,6 +744,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/peer-addressing-md-says-message-rows-live-forever-a-spec-says-7-days.md
 - **Context**: `hangar-bridge/SUBJECT_ROUTING_SPEC.md:516,614` records an accepted 7-day retention/replay bound for subjected `@team` chat that was never built.
 
+### context-budget fires a directive T2 at 150k on a 1M session when no live file exists (window unknown)
+- **Status**: open
+- **Trigger**: FIRED — peer report 2026-10-02; queued after the test-suite repo write containment release; reproduce locally first
+- **Effort**: S
+- **Source**: PEER-REPORTED gentoo/mple2 (fleet), reader path re-verified by reading code, not yet by running it
+- **Pointer**: docs/backlog/context-budget-unknown-window-t2-on-1m-without-live-file.md
+- **Context**: the no-live-file inference path still applies 200K tiers below 200K observed; T2 (exit 2, STOP + /clear) interrupted a 1M session at 16%.
+
 ### context-budget falls back to inference after a long foreground tool call — live tick starves under the 120 s freshness cap
 - **Status**: open
 - **Trigger**: the next observed T2/T1 message without "(statusline)" on a host that has the live writer; or before shortening/lengthening `DEFAULT_MAX_AGE_MS`.

@@ -1,5 +1,22 @@
 # Changelog
 
+## v2.36.106 — 測試套件提速：重資源測試分片、移除重複的 L2 wrapper
+
+- **症狀**：整套測試在 `--parallel 8` 約需 25 分鐘；`resolve-review-loop`（600–823 秒，負載下會撞每檔 600 秒上限）、`engine-qualify`、`dispatch-review` 三個單檔拖住整體時間，另有 14 個 L2 wrapper 只是重跑 L1 已在跑的 `scripts/*.test.js`。
+- **改了什麼**（只動測試，無產品程式碼變更，無任何斷言被刪減）：
+  - `resolve-review-loop` 拆成 4 個分片（共用設定在 `hooks/tests/lib/rrl-common.sh`），441 條斷言原數保留；`consult-discuss-switch` 的檔案數界線 9→10、43→45 只因分片而調整。
+  - `engine-qualify` 拆成 a/b/badmode 三片（16+45+9=70 條）；`dispatch-review` 拆成 a/b/c 三片（runtime 568 條）。
+  - 移除 14 個只重跑 L1 `scripts/*.test.js` 的 wrapper 與 consult/discuss 的重複 live 重跑；它們的精確斷言數釘值移到各 `.js` 檔尾，L1 照樣強制。
+  - `foreman-guard-roles` 的 JSON 逸出改為純 bash，不再每筆 payload 起一個 node（953 條斷言原數保留）。
+- **驗證**：整套 `--parallel 16` 一次，總時間 1164 秒（約 19.4 分，--parallel 16；先前約 25 分鐘 --parallel 8）；唯一紅燈 `dispatch-hetero-watchdog-followups` 的 zombie 案例為負載下的時序問題，單獨重跑兩次皆 28/28 通過。最終整包審查 claude-fable-5-1 SHIP-AS-IS。最慢 10 檔（秒）：engine-qualify-badmode 205, resolve-review-loop-d 186, autopilot-engine 184, engine-qualify-a 181, resolve-review-loop-b 179, engine-qualify-b 165, dispatch-plan-review 161, review-runner 159, resolve-review-loop-c 153, resolve-review-loop-a 147。
+- **已知後續（review 🔵 CUT/FOLLOW-UP）**：
+  - `scripts/engine-qualify-va.test.js` 的 29 條釘值在檔尾，原 wrapper 容許無 bwrap 主機的 SKIP 行；需在無 bwrap 主機確認 skip 分支不會先於釘值結束。
+  - 已移除 wrapper 的 L1 glob 成員資格與舊檔名的殘留引用只以路徑檢查，未在 diff 內重驗。
+  - `consult-discuss-switch` 的 Population A 抽取器只有 JSON literal 那半在 diff 內，另半（direct-caller）的 10 界線依作者實跑。
+  - `review-loop-resolver-a` 的 r41 檢查改成 grep 分片 glob 且吞錯誤，日後改名會空過；可加「應命中 4 檔」斷言。
+
+prose-justification: 本版只動測試檔與測試 helper，沒有新增或修改 skill、reference 文字。
+
 ## v2.36.105 — 測試套件不再寫穿真實 repo：快照執行、身分守門、測試身分 hook
 
 - **症狀**：整套測試直接跑在真實 checkout 上，個別測試的 `git init`/`git config`/commit 會漏寫到主 repo（Test User 身分 commit、被改掉的 config 與 tracked 檔），先前只靠事後的 drift guard 還原。

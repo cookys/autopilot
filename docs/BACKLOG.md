@@ -744,6 +744,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/peer-addressing-md-says-message-rows-live-forever-a-spec-says-7-days.md
 - **Context**: `hangar-bridge/SUBJECT_ROUTING_SPEC.md:516,614` records an accepted 7-day retention/replay bound for subjected `@team` chat that was never built.
 
+### A full in-place suite run rewrites `.opencode/package.json` and its lock
+- **Status**: open
+- **Trigger**: next touch of the opencode tests or the opencode install/sync scripts
+- **Effort**: S
+- **Source**: depth-0 probe + v2.36.105 landing (opt-out run), 2026-10-02
+- **Pointer**: docs/backlog/opencode-package-json-test-drift.md
+- **Context**: a test updates the opencode plugin dependency with cwd = repo; snapshot mode hides it, `AUTOPILOT_TEST_SNAPSHOT=0` does not.
+
 ### verification_author: a standing operator pin can never reach dispatch-author
 - **Status**: open
 - **Trigger**: FIRED — peer report 2026-10-02; queued after the test-suite repo write containment release; reproduce locally first

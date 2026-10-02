@@ -1,0 +1,5 @@
+# trwc landing REPORT (LANDED v2.36.105, pushed a8e4045c)
+Picks (13 -> 7 squashed, then repair, then release), SHAs after final rebase onto d979f2dc: rows 0,1,2,3,4a,4b,1-r3 (18cae772 1d8b0c47 fb014d8b 58d629ba b1a5f072 3fc22c50 0a4760ce pre-rebase), 8th = round-1 repair 1aea60d3 -> 89e3409a, release a8e4045c.
+Gates: full suite x2 pre-repair + x1 post-repair (snapshot on): 385 files, only resolve-review-loop TIMEOUT (known, solo green); real-repo state identical, no leftover snapshot dir. SNAPSHOT=0 run: same red, dirtied .opencode/package*.json (restored). test-snapshot solo x6 rc=0 (pre-repair); post-repair: run.sh test-snapshot 35 files green, test-identity-guard 42 assertions, js-syntax, sync --check, validate (pre-repair) green. preflight-release rc=0 after commit; check-plan-graduation exit 0 (plan archived).
+Review r1: FIX-THEN-SHIP (2 orange) -> repaired. r2 (whole range): SHIP-AS-IS, id sgz8VH (raw_log /tmp/dispatch-review-log-sgz8VH), 🟡/🔵 only, listed in CHANGELOG.
+V=2.36.105, pushed a8e4045c3e0e79aa8cce27af2260f0dc3e762cad (ls-remote == HEAD).

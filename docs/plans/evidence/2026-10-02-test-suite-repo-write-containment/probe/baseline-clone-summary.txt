@@ -1,0 +1,4 @@
+════════ Summary ════════
+❌ 6 / 383 test files FAILED:
+   - L1 unit suite
+   - hooks/tests/qualification-feed-adopt.test.sh

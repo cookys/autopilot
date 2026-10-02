@@ -1,0 +1,7 @@
+fix(cleanroom): kimi profile supports the standalone ELF install (kimi ELF + file-count invariant row 1)
+
+The kimi cleanroom profile now detects a standalone ELF install by magic and
+binds the binary read-only at /opt/kimibin with no node dir; Node layout argv
+is unchanged. Peer-reported defect in v2.36.108; fixture ELF only.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

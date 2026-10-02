@@ -33,3 +33,18 @@
 **Solution**: To edit a line containing such an escape, anchor `old_string` on an adjacent line that contains no escape, or edit by line number with `sed -i '<N>s/…//'` / `perl` (literal backslashes need doubling inside a single-quoted shell argument). To *mention* such a sequence in written content, spell it with a placeholder (`uNNNN`) or a full-width backslash rather than the real escape, then verify with `cat -v` that no `^@` (NUL) appears. Any file freshly produced by `Write` should be sanity-checked with `file <path>` to confirm it is still plain text before trusting it; a join/delimiter character in generated code should be a printable character (e.g. `|`), never an escape sequence.
 **Failed attempts**: Retrying the same `old_string` match with cosmetic changes (four times) before realizing the mismatch was at the parameter-decoding layer, not the text itself; describing the fix afterward by writing the same escape sequence into prose, reproducing a literal NUL a second time in the same investigation.
 **Related**: `scripts/identifier-scan.js`'s key-shape pattern class is unrelated but adjacent — both are "the tool layer sees something different from what a human reading the file sees."
+
+## bwrap 不能巢狀（AppArmor userns 限制）
+**Date**: 2026-10-02 | **Context**: 想用 bwrap 把測試套件的 `.git` 掛唯讀
+**Problem**: 這台 `kernel.apparmor_restrict_unprivileged_userns=1`。單層 bwrap 可用，但 bwrap 裡再開 bwrap 會 `No permissions to create a new namespace`；Ubuntu 的 `bwrap-userns-restrict` profile 是刻意禁止。suite 有 10 支測試和正式 reviewer sandbox 自己用 bwrap，所以「把整個 suite 包進 bwrap」不可行；Landlock 也禁止 domain 內 mount。
+**Solution**: 改用拋棄式快照（v2.36.105：`git clone --no-hardlinks` + rsync 工作樹 + origin 改指向不存在路徑），不靠 namespace。
+
+## agy 1.2.15：agent 名稱不進 log，agents 目錄會被遷移成絕對 symlink
+**Date**: 2026-10-03 | **Context**: kimi/agy final-panel cleanroom（v2.36.108）
+**Problem**: (1) agy 選用自訂 agent 時，log／transcript／stdout 都不寫 agent 名稱，只有 `Starting new conversation (agent=true)` 和 `agentScript=true`；找不到 agent 時寫 `Agent "<x>" not found, falling back to default` 並 `agent=false`，exit 照樣 0。(2) 1.2.15 會把 `<HOME>/.gemini/antigravity-cli/agents` 搬到 `<HOME>/.gemini/config/agents`，原位置換成**絕對路徑** symlink；在 bwrap seat 裡 HOME=/home/review，主機上 audit 讀這個 symlink 就讀不到。(3) agy 會自動更新（同兩天內 1.2.14→1.2.15）。
+**Solution**: cleanroom 標記用 `agent=true`＋`agentScript=true`＋無 not-found＋agents 目錄只有那一個；launcher 兩個位置都放 agent，audit 看兩者聯集，symlink 只接受指向 `config/agents`。版本差異只警告。
+
+## `setsid(1)` 無法解除啟動時就被忽略的 SIGINT
+**Date**: 2026-10-03 | **Context**: `test-snapshot` 的 SIGINT→130 案例偶發紅
+**Problem**: 背景啟動（`&`、`--parallel` worker）的非互動 shell 會把 SIGINT 設成 ignored；`exec setsid bash …` 不會重設，bash 也不准 trap 啟動時就 ignored 的訊號（`trap - INT` 無效）。內層吞掉 INT，外層回 0 不是 130。單獨前景跑永遠重現不了；看 `/proc/<pid>/status` 的 SigIgn/SigCgt 位元可證。
+**Solution**: 啟動前用能 reset 訊號處置的程式（python3 `signal.signal(..., SIG_DFL)` 後 `os.setsid()`+exec）；測試要有一個「以 INT ignored 狀態啟動」的確定性案例。

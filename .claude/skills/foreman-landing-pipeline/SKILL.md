@@ -26,6 +26,14 @@ Dispatch a background sonnet foreman (`Engine: sonnet` header — `dispatch-mode
 - **Per-row review** happens here, but treat it as necessary and not sufficient — see §2's combined review.
 - Rail failures (quota, 402, readiness, "Cannot use this model") are `RAIL-FAIL`, not a reason for the foreman to author code itself.
 
+### 1b. Size the shape before dispatch (2026-10-02/03)
+
+- **Independent rows run in parallel**, not stacked: one sonnet hand per row in its own worktree of one clone, from `templates/hand-brief-common.md`. Stack only true dependencies. Seven parallel S rows landed in ~1 h; a stacked cheap-hand bundle of the same size took ~3 h.
+- **Hand choice**: rows that are large or touch signals/traps/sandboxing get a sonnet hand (`Agent`, model sonnet), not a cheap rail hand — 6/7 cheap-hand rows needed a repair round.
+- **Never skip per-row review to save time**: v2.36.108 skipped it and three issues surfaced only at the combined review, each costing a landing round.
+- **Consumer sweep incl. L1** is part of every hand's Verify (the template says how); a hand that runs only its bash suite pushes the failure to the landing gate.
+- Tell the operator the estimated wall time at dispatch.
+
 ## 2. Landing foreman
 
 Fresh brief from `templates/land-brief.md`, dispatched only after depth-0 has accepted every implement-foreman row from git evidence (diff, not self-report). Judgment for the brief:

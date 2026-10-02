@@ -1,0 +1,6 @@
+release(v2.36.107): wave-B S fixes — context-budget advisory, kimi timeout, VA pin, readiness diagnostics, test flakes
+
+Seven small fixes plus a test-alignment commit; BACKLOG rows resolved and one new row added.
+
+QC-Verdict: PASS (reviewer claude-fable-5-1 review-1790967017-3226506-8bac plus depth-0 row acceptance, 2026-10-03)
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

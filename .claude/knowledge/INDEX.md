@@ -19,6 +19,9 @@
 | 2026-07-29 | debug | CLI `--help` 只證明 option 存在，不證明可組合：Kimi 0.28.0 的 non-interactive `--prompt` 與 interactive `--plan` 互斥；hermetic fixture 若照抄錯誤 argv 也會假綠，需 live smoke | [debug-patterns.md](debug-patterns.md) |
 | 2026-07-27 | arch | Absence 不等於 zero：先用 repo registry admission 記住資源曾存在，再以 Git-ref CAS authority 防 ordinary-file rollback、anchor/registry forward-repair 防 torn write；先凍結 attack matrix、穩定 diff 後才跑昂貴外審 | [architecture.md](architecture.md) |
 | 2026-07-16 | debug | Silent-retry 假死（CLI×z.ai 確定性 529）— 分層診斷四步 + logging proxy 定位；readiness 探針要同傳輸同 payload | [debug-patterns.md](debug-patterns.md) |
+| 2026-10-02 | debug | bwrap 不能巢狀（apparmor_restrict_unprivileged_userns=1），suite 隔離改用拋棄式快照 | [debug-patterns.md](debug-patterns.md) |
+| 2026-10-03 | debug | agy 1.2.15：agent 名稱不進 log（用 agent=true 判）、agents 目錄被遷成絕對 symlink、會自動更新 | [debug-patterns.md](debug-patterns.md) |
+| 2026-10-03 | debug | setsid(1) 解不開啟動時被忽略的 SIGINT；背景啟動的 runner 會吞 INT | [debug-patterns.md](debug-patterns.md) |
 
 ## 知識分類
 

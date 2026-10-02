@@ -1,0 +1,10 @@
+205 hooks/tests/engine-qualify-badmode.test.sh
+186 hooks/tests/resolve-review-loop-d.test.sh
+184 hooks/tests/autopilot-engine.test.sh
+181 hooks/tests/engine-qualify-a.test.sh
+179 hooks/tests/resolve-review-loop-b.test.sh
+165 hooks/tests/engine-qualify-b.test.sh
+161 hooks/tests/dispatch-plan-review.test.sh
+159 hooks/tests/review-runner.test.sh
+153 hooks/tests/resolve-review-loop-c.test.sh
+147 hooks/tests/resolve-review-loop-a.test.sh

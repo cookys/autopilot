@@ -1,0 +1,5 @@
+# Evidence — v2.36.109 (`524c547a`), test fix `24c97d2b`, v2.36.110 (`f2eb115d`)
+
+- v2.36.109: kimi cleanroom supports the standalone ELF install (peer cuda: v108 preflight failed `kimi entry is not under the node dir`). This host only has the Node kimi, so it was proven with a fixture ELF; cuda then confirmed on their host: standalone ELF kimi 2.1.1 and agy 1.2.15 model-free preflight exit 0. Same release: `resolve-review-loop-consult-discuss-switch` exact file-count pins (bumped three times in two days by unrelated tests) replaced by named-member allowlists + a "pins the switch" property.
+- `24c97d2b` (`fix-basesha.*`): the blind kimi/agy suite's base is derived from origin history; the record keying bug that made the parity compare vacuous is fixed (§50).
+- v2.36.110 (`v110/`): readiness probe accepts only the nonce-exact single-line `<open>OK<close>` frame; `frame_format` is a named failure with bounded stderr/envelope diagnostics (peer cuda: Fable probe returned the frame on one line). Full suite 387/387 green; review SHIP-AS-IS (`PArVzi`).

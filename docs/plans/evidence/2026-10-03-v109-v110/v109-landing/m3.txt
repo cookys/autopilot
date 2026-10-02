@@ -1,0 +1,4 @@
+release(v2.36.109): kimi cleanroom standalone ELF install support, file-count pins replaced by named-member invariant
+
+QC-Verdict: PASS (reviewer claude-fable-5-1 review-1790972019-1960701-9d70 plus depth-0 row acceptance, 2026-10-03)
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

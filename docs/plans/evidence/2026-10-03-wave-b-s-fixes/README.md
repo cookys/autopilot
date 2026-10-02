@@ -1,0 +1,5 @@
+# Evidence — wave-B S fixes (v2.36.107, `2b312c35`)
+
+Seven parallel sonnet hands (`hand-common.md`), one commit each: context-budget unknown window → T2 advisory (peer gentoo); `.opencode` test drift (`opencode-v2-plugin` ran `opencode debug config` in the repo); kimi author `--timeout` forwarded (peer cuda); `verification_author` pin reaches dispatch-author (peer cuda); run.sh SIGINT race (setsid(1) cannot un-ignore a SIGINT ignored at start — 20/20 → 0/20 under background launch); readiness per-seat diagnostics (peer cuda); watchdog fixture race (holder exec vs child exit; product unchanged; 4/20 → 0/20).
+
+Landing (`landing/`): the full suite caught two consumer tests the hands never ran (`hooks/context-budget.test.js` L1, a pinned file count) → one `test:` repair commit, review SHIP-AS-IS. Miss: only the one L1 file was rerun after the repair, so `scripts/statusline-live-tee.test.js` shipped red and was fixed in v2.36.108. Rules added: hand brief mandatory consumer sweep incl. L1; landing reruns the whole L1 layer after any L1 red.

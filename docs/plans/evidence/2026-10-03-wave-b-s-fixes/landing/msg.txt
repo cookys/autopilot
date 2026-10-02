@@ -1,0 +1,10 @@
+fix(dispatch-hetero): reap race in the zombie fixture behind the intermittent watchdog zombie case (wave-B S fixes row 7)
+
+The five zombie fixtures in dispatch-hetero-watchdog-followups.test.sh used a bash
+holder that backgrounds a child and then execs sleep. Under CPU load the child exits
+before the exec, bash reaps it, and no zombie ever exists ("never became zombie
+(state='gone')"). The watchdog (dispatch-hetero.sh) was behaving correctly. The child
+now exits only after the holder's comm is sleep, so the zombie is deterministic.
+20 contended runs: 4/20 failed before, 0/20 after.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

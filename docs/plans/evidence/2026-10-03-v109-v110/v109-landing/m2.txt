@@ -1,0 +1,8 @@
+test(resolve-review-loop): replace file-count pins with a named-member invariant (kimi ELF + file-count invariant row 2)
+
+Population A / Population B / explicit-switch exact file counts are replaced by
+allowlist invariants: every match must be a named, reasoned member (or, for B,
+pin consult/discuss explicitly); an unlisted match fails naming its path. Seeds
+final-panel-kimi-agy-intake.test.sh so the in-flight release needs no bump.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

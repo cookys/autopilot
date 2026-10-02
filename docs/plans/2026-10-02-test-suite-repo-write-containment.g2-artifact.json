@@ -1,0 +1,534 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "test-repo-write-g1",
+  "logical_plan_id": "test-suite-repo-write-containment-2026-10-02",
+  "session_id": "7236b3c6-6662-4434-ab03-07d7d2a66500",
+  "session_key": "f6e84f3da56764f4ca5e3dc276cf95efa17c0840cba8155dae0d30ebd8ff7777",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "0e91689417e97b062cbc380c87286b5f1d2fbf3ecd1c3df1e1df6b92b73d2242",
+  "manifest_sha256": "25d462ff1482823cf682afb818636e35c8f82a705bc1cb588357b328e86a2ef3",
+  "plan_sha256": "97617b0feae5dad602dfa3db72bbfbf9b5deb998627f8f4adac2775b942aafc5",
+  "growth_ratio": {
+    "numerator": 16587,
+    "denominator": 12971
+  },
+  "growth_warning": true,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "9dd2d764bdfacc5f0b36a7de09f9f63bf2f711b12cd7b733c138837dadbd8289"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "819fd9bfdffb1084c930c36c099f3a514be01df4de8e736347118fc0efcaef01",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-Zjj9bs/stdout",
+          "digest": "819fd9bfdffb1084c930c36c099f3a514be01df4de8e736347118fc0efcaef01"
+        },
+        "receipt_digest": "03593c79c937b5612b276dce0e27b6b74bf64746cb340ecdb4036e5150b28f6f"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "grok_deep",
+      "target_id": "grok_deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.6",
+          "operation": "plan-review",
+          "request_digest": "6870fb6e6fa246d543641ab32c63ec9e969493098f8b1eb3b9e840b92032937f"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "42de06a2182e02159574548bb6f4538e721a9270e73702f533ee5982becfcc7c",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-b0jJPC",
+          "digest": "42de06a2182e02159574548bb6f4538e721a9270e73702f533ee5982becfcc7c"
+        },
+        "receipt_digest": "d5f347f8a09444a936050dc46a6bf7e7ac127b5150bd4df0cd0b6d143c5ba17f"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_consult",
+      "target_id": "minimax_consult",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "96e4522cb8a6a0897f6e014b01073dbe88efa8ebb3436341bc6e3ea66472c70e"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-HelXmW",
+          "digest": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d"
+        },
+        "receipt_digest": "322ceefa1dc45baf50d4630c727edae114d0309f889643cf4d7d7a9f1f8c9a0c"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "family": "openai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "grok_deep",
+      "target_id": "grok_deep",
+      "family": "xai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "minimax_consult",
+      "target_id": "minimax_consult",
+      "family": "minimax",
+      "verdict": "READY"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Full-suite child launch and cwd containment",
+      "claim": "The plan does not guarantee that relative cwd writes occur inside the snapshot.",
+      "evidence": "Section 1 promises that writes aimed at cwd land in the disposable copy. G3 only invokes $SNAP/hooks/tests/run.sh by pathname, which does not change the child cwd. Neither G3 nor P4 requires the child cwd to be $SNAP, sanitizes OLDPWD, or tests a relative cwd write; KR1 tests writes through $REPO_ROOT only.",
+      "evidence_reference": "Section 1; Section 2 KR1; Section 2.5 G3; Section 4 P4",
+      "repair": "Require the inner child to start with cwd set to the snapshot, sanitize inherited cwd-revealing variables, and add a fixture test proving a relative tracked-file write changes only the snapshot.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "dce32d64e312576ff2c366402a538ca29f5521f991bdb37ee76f78c48764ca8f"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Absolute-path and standalone residual-write accounting",
+      "claim": "The residual-route inventory omits real-repo mutations that have no covering layer.",
+      "evidence": "A directly invoked test receives only lib.sh hygiene and the identity hooks, which do not contain ordinary working-tree or non-identity config writes. G6 is outer-run-only, ignores branch.* and remote.*, and its warning snapshots cannot detect reflog-only, unreachable-object, hook, or info-file changes. These routes are absent from the purported write-class inventory.",
+      "evidence_reference": "Section 1 final bullet; Section 2.5 G6 and G9",
+      "repair": "Route standalone tests through an equivalent snapshot or guard, and enumerate every remaining absolute-path metadata class with an explicit fail, warn, or unprotected disposition. Add controls for standalone file and config writes and an otherwise invisible Git-metadata write.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "9fd394533bb6c791635988fe7aba146f3c6ae78ce3fcc5d29dd18e4f3b99b8bc"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Snapshot working-tree materialization",
+      "claim": "Archive-mode rsync can preserve path aliases that let a lexically snapshot-local write reach the real repository.",
+      "evidence": "G4 copies all untracked and ignored state with rsync -a while excluding only the root .git directory. Archive mode preserves symbolic links, and nested .git indirection files are not excluded. An absolute or escaping symlink, submodule gitfile, or linked-worktree gitfile can therefore resolve outside $SNAP; the proposed link-count assertion does not detect this.",
+      "evidence_reference": "Section 2.5 G4; Section 4 P4; Section 6 inversion item a",
+      "repair": "Preflight and reject or safely remap every copied symlink and nested Git indirection that resolves outside the snapshot. Fail closed rather than falling back in place, name any resulting fidelity divergence, and test escaping symlink and gitfile fixtures.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "f2b78a7cecd1aa235628ed9a13bef13f2833161a3835d0643951a3b187026fc0"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Snapshot object-database isolation",
+      "claim": "No-hardlinks and link-count checks do not prove that the snapshot has no shared object directory.",
+      "evidence": "G4 performs a local clone with --no-hardlinks, but neither construction nor P4 rejects .git/objects/info/alternates. A source clone that already borrows objects can propagate an external alternate path, while every copied object file still has link count one.",
+      "evidence_reference": "Section 2.5 G4; Section 4 P4; frozen rubric R2",
+      "repair": "Use a clone or materialization mode that copies all reachable objects without retaining source alternates, assert that no alternate object directory remains, and test cloning from a fixture repository that itself uses alternates.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "dd0dd067b3d288fec9d1334dd0c86ffd9f9f740b1727bc309eb9c44e964ffc5f"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Fixture-identity inventory and owner negative controls",
+      "claim": "The fixture inventory and required negative controls are mutually inconsistent as written.",
+      "evidence": "KR5 requires every fixture identity email to match the test-identity rule, and P1 says any other address in a Git-invoking test fails inventory. P3 simultaneously requires a fixture repository whose owner identity does not match the rule and successfully commits. No explicit negative-control classification or inventory exemption reconciles these requirements.",
+      "evidence_reference": "Section 2 KR5; Section 4 P1 and P3",
+      "repair": "Define fixture identities to exclude explicitly tagged gate-negative controls, centralize those control values without duplicating the matching rule, and make the inventory reject every unexpected nonmatching identity assignment while accepting only the declared controls.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "41966e1e8a166e850f97abb173778abe94f6f30281245b70e15bbe91eb9af777"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Pre-push commit enumeration for new refs",
+      "claim": "The new-ref algorithm can omit a test-identity commit that is new to the target remote.",
+      "evidence": "G8 specifies local_sha --not --remotes for a new ref. That subtracts commits reachable from every remote-tracking namespace. If a bad commit is reachable from backup/main but absent from the target origin, a new-ref push to origin excludes that commit from inspection and can transmit it.",
+      "evidence_reference": "Section 2.5 G8; Section 4 P3",
+      "repair": "Subtract only history known on the target remote, with a fail-safe rule when the target cannot be mapped, and add a two-remote negative test where the bad commit exists only on the unrelated remote.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0bbe45994c7d4af0c64410cce83ae7eef4cc9d27bcac2f0b88d8d3b04326102e"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P0 RED-first and negative-control contract",
+      "claim": "P0 has no negative control that stays green.",
+      "evidence": "The phase preamble defines NC as a negative control that must stay green, but P0 states that forcing the gate skip branch makes the assertions fail again. That is another RED or positive failure control, not the required NC.",
+      "evidence_reference": "Section 4 phase preamble and P0",
+      "repair": "Relabel the forced-skip case as a second RED control and add an explicit unaffected case that is green both before and after P0.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "aa3e1438ec2b92dde660804d047aff18ba3c3ce1de8e5e46f88392262e8532f9"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Snapshot lock placement and construction ordering",
+      "claim": "The required lock makes the specified clone destination nonempty, so G4 and G5 cannot both be implemented.",
+      "evidence": "G5 requires the outer process to hold $SNAP/.autopilot-live.lock for its whole life. G4 then clones directly into $SNAP. Acquiring the named lock first makes the destination nonempty and git clone refuses it; acquiring it after cloning leaves an unlocked construction window in which the reaper can delete the directory.",
+      "evidence_reference": "Section 2.5 G4 and G5",
+      "repair": "Use a uniquely created container directory holding the lock and clone into an initially absent child directory, then update reaper discovery and worktree cleanup paths. Test construction concurrently with the reaper.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "1cdffdea545cd22a4d127306baf38c76e64157c703c525d46c4836cc0359536b"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Interrupt and failure cleanup ordering",
+      "claim": "The cleanup contract does not guarantee that the inner child and its descendants are quiescent before worktrees and the snapshot are removed.",
+      "evidence": "G3 creates a waited child, while G5 says the signal trap immediately reaps registered worktrees and removes $SNAP. It specifies no signal forwarding, descendant termination, wait-before-reap step, inherited-lock-fd handling, or idempotent trap protocol. A surviving child can create residue after the one-time reap or keep the liveness lock held.",
+      "evidence_reference": "Section 2.5 G3 and G5; Section 4 P4",
+      "repair": "Specify an idempotent shutdown sequence that stops the child process group, waits for all descendants to terminate, keeps only the outer lock holder alive, then reaps worktrees and removes the container while preserving the correct exit or signal status. Test a delayed descendant and a nonzero child failure.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "5bbed9289e5eb18045835a54ed981776bc6be97e3782035e2b09a25291838f04"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "G5 live-lock path versus G4 rsync --delete and suite-residue-reap.sh liveness",
+      "claim": "The snapshot live-lock cannot both survive G4 construction and mark an autopilot-test-snapshot.* directory live for the whole outer lifetime.",
+      "evidence": "G5 holds flock on $SNAP/.autopilot-live.lock, a working-tree path, for the outer process's whole life, and suite-residue-reap.sh treats autopilot-test-snapshot.* as residue only when that lock is free. G4 then runs rsync -a --delete --exclude /.git of the real working tree onto $SNAP. The real tree has no .autopilot-live.lock, so if the lockfile is created before rsync, --delete unlinks the path; the outer process may still hold an inode lock, but the reaper looks up the path and will treat a missing lockfile as free. If the lockfile is created only after rsync, clone/checkout/rsync leave a glob-visible snapshot directory with no lock, and the same reaper can delete a live construction. P4's TERM mid-construction path exercises the outer trap, not a concurrent reaper during that window.",
+      "evidence_reference": "Plan G4 rsync construction; Plan G5 lock path, flock lifetime, and reaper rule; Plan P4 exit-path RED",
+      "repair": "Place the lock inside $SNAP/.git/ so G4 rsync cannot delete it; create and flock it immediately after git clone returns, before any other work. Make suite-residue-reap.sh fail-closed when the lockfile is absent (treat as live), matching other lock-gated entries. P4 must assert the lock path still exists after rsync and that a concurrent reaper does not remove a live SNAP.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "6693718ff74fbcf0eaf0a58f1b40deaa3ab563d0d88bbd21469b8bbfdff2998d"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "G5 trap teardown versus suite-residue-reap.sh; inner child lifetime",
+      "claim": "Hetero worktrees and the snapshot directory can leak on the reaper path, and the outer trap can remove $SNAP under a still-running inner suite.",
+      "evidence": "G5 orders the outer EXIT/INT/TERM trap to reap worktrees registered in $SNAP/.git/worktrees from inside $SNAP and only then remove $SNAP. After SIGKILL or a failed trap the flock is released and suite-residue-reap.sh is told only that a matching directory with a free lock is residue; it is not required to run that same worktree-first sequence, so rm of SNAP drops the registrations and orphans worktree directories outside SNAP. G3 runs $SNAP/hooks/tests/run.sh as a waited child and never exec, but the trap does not kill and wait that child before unlink. P4 names normal exit, INT mid-run, and TERM mid-construction; it does not name TERM mid-run or a reaper pass after the outer lock is gone. SNAP lives under ${TMPDIR:-/tmp}, and the reaper scan roots are unspecified, so a TMPDIR other than /tmp is another leak.",
+      "evidence_reference": "Plan G5 trap order and reaper sentence; Plan G3 child-not-exec; Plan G5 SNAP path; Plan P4 exit-path RED",
+      "repair": "Require suite-residue-reap.sh, when reclaiming autopilot-test-snapshot.*, to reap/prune worktrees from inside that SNAP first, then delete SNAP, and to scan the same TMPDIR used to create SNAP. Outer trap must signal and wait the inner child before worktree reap and rm. Extend P4 with TERM mid-run and with a reaper pass after the outer process is gone (lock released) asserting zero leftover SNAP, worktree, or lock.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "79965577fd2554cc19b67134e273ed6bbcc48efa4b7bec016fd292dede2e3aed"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "G8 identity-gate bypass for pre-commit, pre-merge-commit, and pre-push",
+      "claim": "The identity-gate bypass can be inherited by a leaking test and is not restricted to the target repo's on-disk local config.",
+      "evidence": "G8 states the only bypass is the TARGET repo's local config autopilot.testIdentityGate=off and that there is no env-var bypass, but it does not pin the read to the on-disk config file. git config --get honors git -c and GIT_CONFIG / GIT_CONFIG_COUNT overlays, so a child can disable commit/merge/push hooks without a local key G6 would restore. A leaking test that runs git config autopilot.testIdentityGate=off against the real repo (cwd at the real root on a standalone run, inherited GIT_DIR before unset, or an absolute path) writes the same key the operator's later hooks will honor. G6 restores non-branch/remote keys only after a full outer run.sh; a standalone run never restores them. P3's negative control only shows AUTOPILOT_ALLOW_TEST_IDENT=1 does not bypass, which does not cover overlays or a leaked local key on the real root. That is the same inheritance class as the 2026-09-04 local config write.",
+      "evidence_reference": "Plan G8 bypass paragraph; Plan P3 NC on the env var; Plan G6 restore timing; Plan §1 standalone residual; Plan KR4",
+      "repair": "G8 must read the bypass only from the target repo's on-disk config file (git config --file with git-path config), ignoring overlays. Honor off only when the target git common-dir is under TMPDIR or an explicit fixture path; never honor it for the operator clone. G7/G6 refuse or restore if the real repo has the key set. P3 NC: git -c autopilot.testIdentityGate=off still refuses; a GIT_CONFIG_COUNT overlay still refuses; setting the key on the real-root fixture still refuses a test-identity commit there.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "fb4801c0eb45716ac951c07b6dbfcc5c34f6329f6164b23bd9e4faa0ed74e4c5"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "G4 rsync working-tree copy",
+      "claim": "Snapshot construction can copy nested gitdir pointer files so a write inside the snapshot modifies the real repo.",
+      "evidence": "G4 forbids --shared, git worktree add, working-tree hardlinks, and a live origin, and P4 asserts object/file link count 1 plus a neutered origin URL. The same G4 step runs rsync -a --delete --exclude /.git, which copies nested .git files. Submodule checkouts, nested gitfiles, and leftover worktree gitfiles are gitdir: pointers to the real repo's .git/modules/* or .git/worktrees/*. Git in that subdirectory uses that gitdir, so config, index, refs, and commits write through to the real repo. Link-count 1 still passes because this is redirection through a gitdir file, not a hardlink, and origin set-url does not cover it.",
+      "evidence_reference": "Plan G4 rsync, NEVER --shared, NEVER git worktree add; Plan P4 link-count and origin assertions; Plan R2 write-through constraints",
+      "repair": "After rsync, fail construction or rewrite any .git file/dir under SNAP other than SNAP/.git whose gitdir is outside SNAP. Exclude nested .git paths from rsync or rewrite gitdir lines to stay inside SNAP. P4: plant a gitdir file in the fixture real working tree pointing at the fixture real git dir; after build, a write via that path must leave the fixture real repo unchanged.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "34a6eae4d81780915d67b3ebb446822965f6af18f748244b990966177fd8c0dd"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "§1 residual-route inventory",
+      "claim": "In-place full-suite modes are residual routes to the real repo that §1 does not name with a covering layer.",
+      "evidence": "§1 says writes during a full run.sh land in a disposable copy and then names inherited GIT_DIR, absolute-path local config, absolute-path refs/worktree/working-tree, test-identity commit including --no-verify, and standalone tests. G3 AUTOPILOT_TEST_SNAPSHOT=0 and G10 rsync-missing both run the full suite in place on the real repo. Those paths are covered only by G6/G7, KR4, and lib.sh, which §1 does not attach to a full run.sh. The post-plan containment sentence for a full run.sh is therefore stronger than G3/G10 allow.",
+      "evidence_reference": "Plan §1 residual list and redirection claim; Plan G3 opt-out; Plan G10 rsync-missing fallback",
+      "repair": "Add G3 opt-out and G10 rsync-missing to the §1 residual table with covering layer G6 restore+fail on local config, WARN on refs/working-tree, KR4 identity gate, and lib.sh env unset. Keep the G3 stderr line as the operator-visible signal.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "b9158c5746d48c9e9b5f3de12546ea4bee7c5a6655a1ae7a11d8eab18c18c58e"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "P0 negative control",
+      "claim": "P0 does not include a stay-green negative control as the phase contract defines NC.",
+      "evidence": "Section 4 defines NC as a negative control that must stay green. P0's NC is that with the gate's skip branch forced, the rogue-consumer assertions fail again. That is a second red characterization of the skip path, not a green control. RED-first is present (assertions fail at base without git init). A shippable P0 row still needs a case that stays green.",
+      "evidence_reference": "Plan §4 NC definition sentence; Plan P0 NC sentence",
+      "repair": "Keep the skip-forced failure as a second RED/characterization. Add a stay-green NC: when the sandbox is already a git repo with a HEAD, the rogue-consumer assertions pass at P0's base.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d5bfcc8647a095702e91478fcb3873680a2357e46109e42c0ac73023a62fef95"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "b9158c5746d48c9e9b5f3de12546ea4bee7c5a6655a1ae7a11d8eab18c18c58e",
+      "rubric_id": "R1",
+      "affected_surface": "§1 residual-route inventory",
+      "claim": "In-place full-suite modes are residual routes to the real repo that §1 does not name with a covering layer.",
+      "evidence_reference": "Plan §1 residual list and redirection claim; Plan G3 opt-out; Plan G10 rsync-missing fallback",
+      "disposition": null
+    },
+    {
+      "fingerprint": "d5bfcc8647a095702e91478fcb3873680a2357e46109e42c0ac73023a62fef95",
+      "rubric_id": "R7",
+      "affected_surface": "P0 negative control",
+      "claim": "P0 does not include a stay-green negative control as the phase contract defines NC.",
+      "evidence_reference": "Plan §4 NC definition sentence; Plan P0 NC sentence",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-10-02T06:39:10.207Z"
+}

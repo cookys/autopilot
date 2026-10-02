@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "test-suite-repo-write-containment-2026-10-02",
+  "generation": 2,
+  "findings": [
+    {
+      "fingerprint": "dce32d64e312576ff2c366402a538ca29f5521f991bdb37ee76f78c48764ca8f",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct to pin. Folded: G3 starts the child with cwd=$SNAP/repo (the inner run.sh already cds to its own REPO_ROOT derived from $0, i.e. the snapshot) and unsets PWD/OLDPWD; P4 adds a relative tracked-file write fixture."
+    },
+    {
+      "fingerprint": "9fd394533bb6c791635988fe7aba146f3c6ae78ce3fcc5d29dd18e4f3b99b8bc",
+      "disposition": "accepted_blocker",
+      "rationale": "Folded as honest scope: §1 lists standalone runs and every absolute-path metadata class with its disposition (config=fail, refs/worktrees/working tree=warn, hooks/, info/, objects=unprotected residual). Snapshotting standalone runs is out of scope."
+    },
+    {
+      "fingerprint": "f2b78a7cecd1aa235628ed9a13bef13f2833161a3835d0643951a3b187026fc0",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct. Folded: after rsync, construction fails closed if any symlink under $SNAP/repo resolves into $REAL_ROOT; P4 fixture with an absolute symlink into the fixture real repo."
+    },
+    {
+      "fingerprint": "dd0dd067b3d288fec9d1334dd0c86ffd9f9f740b1727bc309eb9c44e964ffc5f",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct. Folded: construction fails closed if $SNAP/repo/.git/objects/info/alternates exists; P4 fixture source repo with alternates."
+    },
+    {
+      "fingerprint": "41966e1e8a166e850f97abb173778abe94f6f30281245b70e15bbe91eb9af777",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct. Folded: the inventory accepts non-matching emails only from one declared control list in test-identity-guard.test.sh; the rule itself is never restated."
+    },
+    {
+      "fingerprint": "0bbe45994c7d4af0c64410cce83ae7eef4cc9d27bcac2f0b88d8d3b04326102e",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct. Folded: a new ref subtracts `--remotes=<pushed remote name>` (pre-push argv $1); unmappable target ⇒ judge `<local_sha> --not --remotes=<name>` falling back to all of `<local_sha>`'s commits not on that remote; P3 two-remote NC."
+    },
+    {
+      "fingerprint": "aa3e1438ec2b92dde660804d047aff18ba3c3ce1de8e5e46f88392262e8532f9",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct. Folded: P0 NC — a sandbox without a rogue consumer still passes."
+    },
+    {
+      "fingerprint": "1cdffdea545cd22a4d127306baf38c76e64157c703c525d46c4836cc0359536b",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct (clone needs an empty destination). Folded: $SNAP is a container `autopilot-test-snapshot.XXXXXX/` holding `.autopilot-live.lock` and `repo/` (the clone target, absent until clone)."
+    },
+    {
+      "fingerprint": "5bbed9289e5eb18045835a54ed981776bc6be97e3782035e2b09a25291838f04",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct. Folded: G5 shutdown sequence — TERM the child process group, wait for it and descendants, then reap worktrees from inside $SNAP/repo, then remove $SNAP; preserve the child exit/signal status; idempotent."
+    },
+    {
+      "fingerprint": "6693718ff74fbcf0eaf0a58f1b40deaa3ab563d0d88bbd21469b8bbfdff2998d",
+      "disposition": "accepted_blocker",
+      "rationale": "Same as 1cdffdea54, same fold (lock lives in the container, outside rsync --delete scope)."
+    },
+    {
+      "fingerprint": "79965577fd2554cc19b67134e273ed6bbcc48efa4b7bec016fd292dede2e3aed",
+      "disposition": "accepted_blocker",
+      "rationale": "Same as 5bbed9289e for ordering; reaper part folded: when the reaper reclaims a stale container it prunes worktrees from inside repo/ first, scanning the same TMPDIR."
+    },
+    {
+      "fingerprint": "fb4801c0eb45716ac951c07b6dbfcc5c34f6329f6164b23bd9e4faa0ed74e4c5",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct (git config honours env overlays). Folded: G8 reads the bypass with `git config --file <git-path config>` only, and honours it only when the target common dir is under ${TMPDIR:-/tmp}."
+    },
+    {
+      "fingerprint": "34a6eae4d81780915d67b3ebb446822965f6af18f748244b990966177fd8c0dd",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct (.claude/worktrees/* carry .git files pointing at the real repo). Folded: rsync excludes every nested `.git` (file or dir), not only the top one."
+    },
+    {
+      "fingerprint": "b9158c5746d48c9e9b5f3de12546ea4bee7c5a6655a1ae7a11d8eab18c18c58e",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded into §1 residual list: snapshot opt-out and rsync-missing in-place runs are covered by G6/warn/KR4/env unset only."
+    },
+    {
+      "fingerprint": "d5bfcc8647a095702e91478fcb3873680a2357e46109e42c0ac73023a62fef95",
+      "disposition": "duplicate",
+      "rationale": "Same as aa3e1438ec."
+    }
+  ]
+}

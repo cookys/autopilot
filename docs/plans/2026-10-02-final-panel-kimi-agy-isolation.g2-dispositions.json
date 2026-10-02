@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "final-panel-kimi-agy-isolation-2026-10-02",
+  "generation": 2,
+  "findings": [
+    {
+      "fingerprint": "43e319a2b43558e2e889380c87e8502c0b9b5e37c5ad1aa4f56afe70d21013fa",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct. Fold: K4/A3 argv is the baseline; `--hostname review` is added only after a phase-2 model-free seat probe proves it per runner, else omitted for that runner."
+    },
+    {
+      "fingerprint": "d61f2704ad0cb1af665e0b1f38643bfb7a47ed8b4b36bbae06c76a11ac85dceb",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct. Fold: the §2.5 pre-spend-probe line is scoped to the runners this plan adds (kimi, agy); existing packet runners keep their current admission unchanged."
+    },
+    {
+      "fingerprint": "57e52289bedc1d9fff2c6a74756317debe561ba045c31ec07de8d88401361712",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct. Fold: each runner's audit requires a positive marker of the selected tool-less agent (kimi: wire tool snapshot present and == []; agy: the containment log names the tool-less agent); missing or mismatched marker is a breach; phase 1 RED fixture for each."
+    },
+    {
+      "fingerprint": "2b7f15783ef4d1d58a95c0fb81901d571ccbc55abdc732dbec0a4fc37a377287",
+      "disposition": "rejected",
+      "rationale": "The 14 KB figure in R10 is the drafting target the plan author set; the canonical size control for a plan under review is the bounded-repair growth gate (≤1.25× R0, here 17.1/14.2 = 1.20, inside). R10's intent — a complete, focused plan — is met; deleting adjudicated constraints to hit a byte count would weaken it. No closeout byte assertion is added."
+    },
+    {
+      "fingerprint": "0b04ea5964c7672d281a8d985059fbaaa53dfac335d348e41a786c45393cd085",
+      "disposition": "rejected",
+      "rationale": "Same as the other budget finding: refuted on the same grounds."
+    },
+    {
+      "fingerprint": "e89eccb8c03d439527d6e62e51d9646d56b529aa8758f9f158853f0bc552073c",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Fold: `agy agents` listing in an empty-HOME, credential-free preflight becomes a phase-2 probe; if it does not list the agent, it is dropped from preflight and the post-run marker (finding 2) carries the check."
+    },
+    {
+      "fingerprint": "1a27499d07d941e14600ce0cda54d4f9102e848d5b82937507c93b4b9dad4878",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Same fold as the --hostname finding."
+    },
+    {
+      "fingerprint": "6f301068a9a842a0f10de4f82c06def794d3ff81b930110ff25ec5ae707c1ef8",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Fold: one §2.5 line — under enforcing intake a kimi/agy probe result `unknown` refuses with `final_panel_seat_cleanroom_unavailable`, same as red; codex shadow-unknown behaviour is unchanged and not extended."
+    },
+    {
+      "fingerprint": "9aafc191e7a9070110f6f26146bb08cf0baa187695ac04883f3994994de2c230",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Fold: §3 row says extend `agy-containment.js` until the phase-1 fail-closed list is green on RED fixtures, exporting a seat-dir audit helper if dispatch needs it."
+    }
+  ]
+}

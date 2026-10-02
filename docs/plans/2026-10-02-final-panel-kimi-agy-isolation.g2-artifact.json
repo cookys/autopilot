@@ -1,0 +1,406 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "kimi-agy-iso-g1",
+  "logical_plan_id": "final-panel-kimi-agy-isolation-2026-10-02",
+  "session_id": "7236b3c6-6662-4434-ab03-07d7d2a66500",
+  "session_key": "e03030617a0e7827a729d1bfdac7b14702196f632e18de69cba96d9b5c9b62eb",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "10c75e9b58c846031ce3957f7f0862c3814dc0f0361808b68f10c8158d739a89",
+  "manifest_sha256": "4d2be2614cbce6584a80e103a1b5949a624be2c6e724641a0755d03240fde314",
+  "plan_sha256": "b281609dc796ea661d41c5dd60838f43f40fc380b795d15b3e0a48941ca15f79",
+  "growth_ratio": {
+    "numerator": 17083,
+    "denominator": 14192
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "b5d812ad2a7d281b51f4830f7921b1139dedf42f69a546d31b4e033bd28ff7d1"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "5bac27892efa55c978442020661ff287024df429f29bec4aafed9bb48d80212c",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-dcnWED/stdout",
+          "digest": "5bac27892efa55c978442020661ff287024df429f29bec4aafed9bb48d80212c"
+        },
+        "receipt_digest": "4b42a84c0114ba1a6c5f41c09458ac60a8738531cde35b605839c950035b91a1"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "grok_deep",
+      "target_id": "grok_deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.6",
+          "operation": "plan-review",
+          "request_digest": "e81efd9ddeca0a57373d55cfda4fd5238c72843d8f689072362472c0cee0afe9"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "9cfe781b71cab7b18031a0aa8a94fe02d32258263c5a0ac75ff138ae284a34f2",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-5fMRK1",
+          "digest": "9cfe781b71cab7b18031a0aa8a94fe02d32258263c5a0ac75ff138ae284a34f2"
+        },
+        "receipt_digest": "ab8c924fb29355284a7ab20f7c4f0071e8095cb46ded7fa2cc764b4738cebdba"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_consult",
+      "target_id": "minimax_consult",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "ef62887f6aff1cffebe31c92eccee37b300bdb5ea720d9fae400e1b5eae132e1"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-H9Agjl",
+          "digest": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d"
+        },
+        "receipt_digest": "8772bca9f68821914b050f2fd33e38b29a20846a0bd3d4ebbe27377ffb88e223"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "family": "openai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "grok_deep",
+      "target_id": "grok_deep",
+      "family": "xai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "minimax_consult",
+      "target_id": "minimax_consult",
+      "family": "minimax",
+      "verdict": "READY"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "§0.1 spike evidence and §4 phase 2 launcher profiles",
+      "claim": "The planned '--hostname review' input is relied upon for both runner profiles without runner-specific spike evidence.",
+      "evidence": "The plan explicitly says '--hostname review' was not present in K4 or A3, yet phase 2 makes it part of the required kimi and agy launch argv. It is neither labelled 'Spike candidate, unverified' and excluded from implementation nor backed by a command-plus-output probe using the planned argv.",
+      "evidence_reference": "§0.1 paragraph following the spike table; §4 phase 2",
+      "repair": "Before implementation, rerun K4 and A3 with the exact planned bwrap argv including '--hostname review' and record command-plus-output excerpts in spike-log.md, or remove that option from the kimi and agy profiles.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "43e319a2b43558e2e889380c87e8502c0b9b5e37c5ad1aa4f56afe70d21013fa"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "§0 tier definitions, §0.1 classification, §2.5 global constraints, and phases 2-4",
+      "claim": "The universal pre-spend-probe invariant in §2.5 contradicts the plan's stated and preserved packet-tier behavior.",
+      "evidence": "Section 0 says packet admission is the static table, and §0.1 expressly says packet has no pre-spend probe. Section 2.5 nevertheless says a runner reaches packet or cleanroom only through such a probe. No phase adds a model-free host-isolation probe for existing packet runners, so the required flat line is not an enforceable invariant in this plan.",
+      "evidence_reference": "§0 packet definition; §0.1 Classification; §2.5 second constraint; §4 phases 2-4",
+      "repair": "Make the invariant operationally consistent: specify and test the required pre-spend probe for every packet admission, or revise the plan scope and frozen rubric together before execution. Do not retain a universal constraint contradicted by the preserved implementation.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d61f2704ad0cb1af665e0b1f38643bfb7a47ed8b4b36bbae06c76a11ac85dceb"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "§0.1 A2 evidence, §3 containment libraries, and §4 phases 1 and 3",
+      "claim": "Agent fallback is not independently detectable under the specified audit contract.",
+      "evidence": "A2 proves only a fallback that also leaked a canary and hostname and was therefore caught as a general tool breach. Phase 1 promises rejection of a 'detectable agent fallback' without naming a mandatory wire or transcript field that proves the requested agent was selected, while phase 3 merely asks a stub to emit an unspecified fallback case. A fallback run with no tool call and an empty tool snapshot could therefore lack a defined fallback-specific rejection condition.",
+      "evidence_reference": "§0.1 row A2; §3 scripts/lib/kimi-containment.js and scripts/lib/agy-containment.js rows; §4 phases 1 and 3",
+      "repair": "Define a mandatory, spike-backed per-runner transcript or wire marker that positively identifies the selected tool-less agent; treat a missing or mismatched marker as a breach. If either runner exposes no auditable identity marker, scope that runner out as required by R3.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "57e52289bedc1d9fff2c6a74756317debe561ba045c31ec07de8d88401361712"
+    },
+    {
+      "rubric_id": "R10",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Entire plan document and phase 5 closeout acceptance",
+      "claim": "The submitted plan exceeds the frozen 14 KB budget and has no acceptance check enforcing that ceiling.",
+      "evidence": "The text from the plan title through the Review log is over 14 KB. Phase 5 and §5 contain no byte-count acceptance despite R10 making the size limit part of the required deliverable.",
+      "evidence_reference": "Entire PLAN_UNDER_REVIEW; §4 phase 5; §5 Test / validation",
+      "repair": "Trim the plan to at most 14 KB while retaining sections 0-8 and the Review log, and add a closeout assertion that measures the plan file's byte count against the agreed 14 KB interpretation.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "2b7f15783ef4d1d58a95c0fb81901d571ccbc55abdc732dbec0a4fc37a377287"
+    },
+    {
+      "rubric_id": "R10",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "docs/plans/2026-10-02-final-panel-kimi-agy-isolation.md (sections 0-8 plus Review log)",
+      "claim": "The plan is over the 14 KB budget required by R10.",
+      "evidence": "The submitted plan body from the title through the Review log is 17083 UTF-8 bytes (119 lines, 2425 words). R10 allows 14 KB (14336 bytes). The document is 2747 bytes over budget. Sections 0-8 and the Review log are present; the miss is size, not missing sections.",
+      "evidence_reference": "Plan title through Review log G1 dispositions paragraph; R10 14 KB budget",
+      "repair": "Cut at least 2747 bytes without dropping sections 0-8 or the Review log: point at spike-log.md instead of restating K1-A3 rows, fold duplicate isolation sentences that already appear in section 2.5 out of the phase bodies, and replace the G1 meta paragraph with a one-line pointer to the dispositions file.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0b04ea5964c7672d281a8d985059fbaaa53dfac335d348e41a786c45393cd085"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "cleanroom-launch.sh --preflight --profile agy (plan section 0.1 A2b and phase 2)",
+      "claim": "Phase 2 relies on agy agents listing the tool-less agent inside a credential-free empty-HOME preflight, but A2b does not prove that setting.",
+      "evidence": "Section 0.1 A2b only records that agy agents with the agent dir bound lists a valid agent and makes no model call. It does not say empty HOME or no credentials. Phase 2 still requires preflight with empty HOME and no credential, repo, or packet bind, and also requires that agy agents inside the seat lists the agent. That combined fact is not labelled Spike candidate, unverified, and is relied on by phase 2 and by the section 6 mitigation for A2 silent fallback.",
+      "evidence_reference": "Plan section 0.1 row A2b; section 2.5 pre-spend probe bullet; phase 2 preflight checks; section 6 silent-fallback bullet",
+      "repair": "Spike agy agents with empty HOME and no credentials, paste command plus output into spike-log.md, and keep the check only if it still lists the agent. If it does not, drop agy agents from preflight and use the same model-free agent-file read-back already specified for kimi, leaving tools-off to the post-run audit.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "e89eccb8c03d439527d6e62e51d9646d56b529aa8758f9f158853f0bc552073c"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "cleanroom-launch.sh kimi and agy profile argv (--hostname review)",
+      "claim": "Phase 2 treats --hostname review as required kimi/agy launch argv even though it was not in the K4/A3 probes.",
+      "evidence": "Section 0.1 states --hostname review was not in the K4/A3 probe lines and comes from the codex launcher. Phase 2 then lists it in the required argv (--unshare-all --share-net --die-with-parent --new-session --hostname review) while saying the bind list is a design each element of which this phase will prove. Kimi/agy behaviour with that hostname is not in spike-log.md and is not labelled Spike candidate, unverified.",
+      "evidence_reference": "Plan section 0.1 hostname paragraph; phase 2 bind-list sentence",
+      "repair": "Make K4/A3 argv the baseline. Add --hostname review only after a model-free seat probe (PONG/NOTOOLS, session still in the seat) is pasted into spike-log.md. If that probe fails, omit the flag for kimi/agy and leave it on the codex profile.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "1a27499d07d941e14600ce0cda54d4f9102e848d5b82937507c93b4b9dad4878"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "campaign-intake.js kimi/agy probe result handling (plan KR1 vs section 2.5)",
+      "claim": "KR1 admits a kimi/agy seat only when the host probe is green, but section 2.5 still allows probe result unknown under shadow enforcement.",
+      "evidence": "KR1 says a kimi or agy qc seat passes intake only when the host probe is green, and names red/timeout as final_panel_seat_cleanroom_unavailable. The second section 2.5 bullet says the pre-spend probe fails closed, then adds unknown only under shadow enforcement, as for codex. Phase 4 done-when names ready vs rejected vs none and does not say what intake does with unknown for these new runners. Section 2.5 does state the four required quotable lines (none never waived; packet/cleanroom only through a fail-closed host probe; pins/overrides cannot bypass containment; no trust machinery, ADR-0001).",
+      "evidence_reference": "Plan section 2 KR1; section 2.5 bullets 1, 2, 8, and 9; phase 4 done-when",
+      "repair": "Add one quotable line: under enforcing intake, kimi/agy unknown is refuse with final_panel_seat_cleanroom_unavailable, same as red. State that codex shadow-unknown is unchanged and is not extended to a green KR1 for these runners. Update phase 4 done-when with that case.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "6f301068a9a842a0f10de4f82c06def794d3ff81b930110ff25ec5ae707c1ef8"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "scripts/lib/agy-containment.js (plan section 3 vs phase 1)",
+      "claim": "The file map says reuse agy-containment.js as is, which conflicts with the fail-closed audit list that R5 and phase 1 require.",
+      "evidence": "Section 3 says scripts/lib/agy-containment.js is reuse as is, adding only an exported seat-dir audit helper if needed. Phase 1 says the agy audit is checked against the same fail-closed list as kimi: any tool.call/tool_calls, non-empty tools snapshot, no wire/transcript, unparseable line, unknown record type, or agent fallback. Section 2.5 already requires that list and says exit code never proves containment. If the current agy auditor is reused unchanged and is missing unknown-type or snapshot handling, phase 1 tests would have to be weakened to match the file map.",
+      "evidence_reference": "Plan section 3 agy-containment.js row; phase 1 audit list and RED fixtures; section 2.5 exit-code/audit bullet",
+      "repair": "Change the section 3 row to: extend agy-containment.js until the phase 1 fail-closed list is green on RED fixtures, and export a seat-dir audit helper if dispatch needs it. Do not reuse as is if any listed breach still returns 0.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "9aafc191e7a9070110f6f26146bb08cf0baa187695ac04883f3994994de2c230"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "e89eccb8c03d439527d6e62e51d9646d56b529aa8758f9f158853f0bc552073c",
+      "rubric_id": "R1",
+      "affected_surface": "cleanroom-launch.sh --preflight --profile agy (plan section 0.1 A2b and phase 2)",
+      "claim": "Phase 2 relies on agy agents listing the tool-less agent inside a credential-free empty-HOME preflight, but A2b does not prove that setting.",
+      "evidence_reference": "Plan section 0.1 row A2b; section 2.5 pre-spend probe bullet; phase 2 preflight checks; section 6 silent-fallback bullet",
+      "disposition": null
+    },
+    {
+      "fingerprint": "1a27499d07d941e14600ce0cda54d4f9102e848d5b82937507c93b4b9dad4878",
+      "rubric_id": "R1",
+      "affected_surface": "cleanroom-launch.sh kimi and agy profile argv (--hostname review)",
+      "claim": "Phase 2 treats --hostname review as required kimi/agy launch argv even though it was not in the K4/A3 probes.",
+      "evidence_reference": "Plan section 0.1 hostname paragraph; phase 2 bind-list sentence",
+      "disposition": null
+    },
+    {
+      "fingerprint": "6f301068a9a842a0f10de4f82c06def794d3ff81b930110ff25ec5ae707c1ef8",
+      "rubric_id": "R2",
+      "affected_surface": "campaign-intake.js kimi/agy probe result handling (plan KR1 vs section 2.5)",
+      "claim": "KR1 admits a kimi/agy seat only when the host probe is green, but section 2.5 still allows probe result unknown under shadow enforcement.",
+      "evidence_reference": "Plan section 2 KR1; section 2.5 bullets 1, 2, 8, and 9; phase 4 done-when",
+      "disposition": null
+    },
+    {
+      "fingerprint": "9aafc191e7a9070110f6f26146bb08cf0baa187695ac04883f3994994de2c230",
+      "rubric_id": "R5",
+      "affected_surface": "scripts/lib/agy-containment.js (plan section 3 vs phase 1)",
+      "claim": "The file map says reuse agy-containment.js as is, which conflicts with the fail-closed audit list that R5 and phase 1 require.",
+      "evidence_reference": "Plan section 3 agy-containment.js row; phase 1 audit list and RED fixtures; section 2.5 exit-code/audit bullet",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-10-02T13:02:46.525Z"
+}

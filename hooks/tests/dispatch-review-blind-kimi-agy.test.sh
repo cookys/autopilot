@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# RED at 92455ca3: migrated layout (config/agents + dangling alias) reviewed -> expected 0 got 1 (2 FAIL); launcher seeds config/agents -> file missing (1 FAIL)
 # dispatch-review-blind-kimi-agy.test.sh — final-panel isolation phase 3: the BLIND kimi/agy rail.
 #
 # Stub kimi/agy binaries and a stub launcher that fabricates the kept seat. No model call, no real
@@ -34,6 +35,10 @@ printf '%s\n' "$*" >> "$LAUNCH_LOG"
 if printf '%s\n' "$@" | grep -qx -- '--preflight'; then
   printf '%s\n' "$@" > "$PF_ARGV"
   if [ "${PF_RC:-0}" != 0 ]; then echo "${PF_ERR:-preflight red}" >&2; exit "$PF_RC"; fi
+  # real launcher shape: one JSON line, runner_version only for kimi/agy preflight
+  if [ -n "${PF_VER:-}" ]; then
+    printf '{ "schema_version": 1, "artifact_type": "cleanroom_launch", "profile": "x", "runner": "x", "runner_version": "%s", "exit_status": 0 }\n' "$PF_VER"
+  fi
   exit 0
 fi
 printf '%s\n' "$@" > "$LAUNCH_ARGV"
@@ -78,6 +83,16 @@ Starting new conversation (agent=false) agentScript=false'
   [ "$S" = no-marker ] && log='I0924 x.go:1] Starting new conversation (agent=false)'
   [ "$S" = no-log ] || printf '%s\n' "$log" > "$app/log/a.log"
   [ "$S" = second-agent ] && mkdir -p "$app/agents/other"
+  # agy 1.2.15 layout: the agent lives in config/agents and antigravity-cli/agents is an ABSOLUTE symlink
+  # that dangles on the host (target is the in-seat /home/review path).
+  case "$S" in migrated|migrated-second-agent|migrated-empty)
+    rm -r "$app/agents"; mkdir -p "$seat/home/.gemini/config"
+    node "$LIB_DIR/agy-containment.js" write "$seat/home/.gemini/config/agents"
+    ln -s /home/review/.gemini/config/agents "$app/agents"
+    [ "$S" = migrated-second-agent ] && mkdir -p "$seat/home/.gemini/config/agents/other"
+    [ "$S" = migrated-empty ] && rm -r "$seat/home/.gemini/config/agents/autopilot-toolless-reviewer"
+    ;;
+  esac
   if [ "$S" != no-transcript ]; then
     {
       printf '%s\n' '{"step_index":0,"type":"USER_INPUT"}'
@@ -149,6 +164,17 @@ for C in tool-call unknown-step unparseable no-transcript no-log fallback no-mar
   assert_not_contains "$OUT" '"status": "reviewed"' "blind agy [$C] never reviewed"
 done
 
+# ---- agy 1.2.15 migrated layout (phase-5 live-fire repair) ----
+MODEL_ARG=gemini-3.6-flash-high
+OUT="$(run_blind agy migrated)"; EXIT=$?
+assert_eq "0" "$EXIT" "blind agy migrated layout (config/agents + dangling alias) is reviewed"
+assert_contains "$OUT" '"status": "reviewed"' "blind agy migrated layout status"
+for C in migrated-second-agent migrated-empty; do
+  OUT="$(run_blind agy "$C")"; EXIT=$?
+  assert_eq "1" "$EXIT" "blind agy [$C] is no_verdict"
+  assert_contains "$OUT" 'fail-closed' "blind agy [$C] is a fail-closed void"
+done
+
 # ---- launcher non-zero / preflight red / missing pieces ----
 MODEL_ARG=fixture
 OUT="$(LAUNCH_RC=124 run_blind kimi clean)"; EXIT=$?
@@ -178,7 +204,8 @@ assert_eq "2" "$EXIT" "blind kimi with a missing binary refuses"
 # ---- preserved refusals ----
 OUT="$(AUTOPILOT_BLIND_DISCOVERY=1 DISPATCH_QUIET=1 "$SCRIPT" --runner kimi --model fixture --diff-file "$DIFF" --bin "$STUB_KIMI" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "blind kimi without a packet keeps the tier-table refusal"
-assert_contains "$OUT" 'enforceable no-tools runner profile (got: kimi)' "blind kimi without a packet: message unchanged"
+# phase 4 made kimi cleanroom tier, so the no-packet refusal is now the cleanroom one (was the tier-table text at phase 3)
+assert_contains "$OUT" 'cleanroom seat requires a review packet' "blind kimi without a packet: refused as cleanroom seat"
 OUT="$(AUTOPILOT_BLIND_DISCOVERY=1 AUTOPILOT_REVIEW_PACKET_DIR="$PKT" AUTOPILOT_CLEANROOM_BWRAP="$FAKE_BWRAP" \
   AUTOPILOT_CLEANROOM_LAUNCHER="$LAUNCHER" DISPATCH_QUIET=1 "$SCRIPT" --runner grok --model fixture --diff-file "$DIFF" --bin "$STUB_KIMI" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "blind grok with a packet is still refused (rail is kimi/agy only)"
@@ -241,5 +268,31 @@ EOF
   done
   rm -f "$BASE_COPY"
 fi
+
+# ---- dispatch-time version warning (plan §8.3): advisory only, never blocks, never changes the verdict ----
+# RED at 033750f9 (no warning code): the mismatch cases below FAIL on assert_contains 'WARNING'.
+for R in kimi agy; do
+  M=fixture; [ "$R" = agy ] && M=gemini-3.6-flash-high
+  MODEL_ARG="$M"
+  OUT_MATCH="$(PF_VER=1.2.15 AUTOPILOT_CLEANROOM_EXPECTED_VERSION=1.2.15 run_blind "$R" clean)"; EXIT=$?
+  assert_eq "0" "$EXIT" "version match: blind $R reviewed"
+  assert_not_contains "$OUT_MATCH" 'WARNING' "version match: blind $R is silent"
+  OUT_MIS="$(PF_VER=1.2.15 AUTOPILOT_CLEANROOM_EXPECTED_VERSION=1.2.14 run_blind "$R" clean)"; EXIT=$?
+  assert_eq "0" "$EXIT" "version mismatch: blind $R still reviewed (never blocks)"
+  assert_contains "$OUT_MIS" 'WARNING' "version mismatch: blind $R warns"
+  assert_contains "$OUT_MIS" '1.2.14' "version mismatch: warning names the recorded version ($R)"
+  assert_contains "$OUT_MIS" '1.2.15' "version mismatch: warning names the observed version ($R)"
+  assert_eq "$(printf '%s\n' "$OUT_MATCH" | grep -v WARNING | sed -E 's/[0-9a-f]{32}/N/g; s/review-[0-9a-f-]+/RUNID/g; s/dispatch-review-log-[A-Za-z0-9]+/LOG/g')" \
+    "$(printf '%s\n' "$OUT_MIS" | grep -v WARNING | sed -E 's/[0-9a-f]{32}/N/g; s/review-[0-9a-f-]+/RUNID/g; s/dispatch-review-log-[A-Za-z0-9]+/LOG/g')" \
+    "version mismatch: blind $R output identical apart from the warning line"
+  OUT_ABS="$(PF_VER=1.2.15 run_blind "$R" clean)"; EXIT=$?
+  assert_eq "0" "$EXIT" "no expected version: blind $R reviewed"
+  assert_not_contains "$OUT_ABS" 'WARNING' "no expected version: blind $R is silent"
+  OUT_NOV="$(AUTOPILOT_CLEANROOM_EXPECTED_VERSION=1.2.14 run_blind "$R" clean)"; EXIT=$?
+  assert_eq "0" "$EXIT" "expected but preflight reports no version: blind $R reviewed"
+  assert_not_contains "$OUT_NOV" 'WARNING' "expected but preflight reports no version: blind $R is silent"
+  OUT_VOID="$(PF_VER=1.2.15 AUTOPILOT_CLEANROOM_EXPECTED_VERSION=1.2.14 run_blind "$R" tool-call)"; EXIT=$?
+  assert_eq "1" "$EXIT" "version mismatch never rescues a breach: blind $R tool-call is still no_verdict"
+done
 
 finalize_test

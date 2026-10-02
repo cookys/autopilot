@@ -426,9 +426,11 @@ exactly one **seat tier** (`review_seat_tier`):
 
 - **packet** — `anthropic-compatible`, `cc-shim`, `claude-native`, `qoderclicn`
   (prompt-only; same path as v2.36.61).
-- **cleanroom** — `codex` (tool-capable; runs only inside
-  `scripts/lib/cleanroom-launch.sh` when `AUTOPILOT_BLIND_DISCOVERY=1`).
-- **none** — `agy`, `grok`, `kimi`, `cursor`, `opencode` (refused under blind
+- **cleanroom** — `codex`, `kimi`, `agy` (tool-capable; run only inside
+  `scripts/lib/cleanroom-launch.sh` when `AUTOPILOT_BLIND_DISCOVERY=1`; kimi and
+  agy joined in the final-panel isolation plan, see "kimi and agy cleanroom
+  profiles" below).
+- **none** — `grok`, `cursor`, `opencode` (refused under blind
   with the unchanged no-tools message).
 
 Without blind mode, every runner is unchanged. Non-blind codex keeps
@@ -458,6 +460,50 @@ a hostile stub `codex` (`hooks/tests/cleanroom-launch.test.sh` under
 (provider quota exhausted through 2026-09-19). Intake still refuses a codex
 seat (`final-panel-qualification.js` / `campaign-intake.js`); that table moves
 in **1b-B**.
+
+### kimi and agy cleanroom profiles (final-panel isolation plan)
+
+Plan: `docs/plans/2026-10-02-final-panel-kimi-agy-isolation.md`; spike log and
+live-fire receipts: `docs/plans/evidence/2026-10-02-final-panel-kimi-agy-isolation/` (`spike-log.md`, `live-fire/`).
+
+- **Why cleanroom, not packet.** Neither CLI has a tools-off flag (kimi 2.1.1 has
+  no `--sandbox`/`--tools`; agy's `--sandbox` semantics are unprobed). Both honour
+  a custom agent that is a tool allowlist (`tools: []`), and agy silently falls
+  back to its tooled default agent when that agent file is invalid (spike A2).
+  Tools-off is therefore provable only from the run's own transcript.
+- **Rail.** Under `AUTOPILOT_BLIND_DISCOVERY=1` the seat runs through
+  `cleanroom-launch.sh --profile kimi|agy`: bwrap `--unshare-all`, no repo, no real
+  HOME, no `--ro-bind / /`, `--clearenv`, a private seat HOME holding only that
+  CLI's credential/config (copied on the launch path only). The seat is kept, then
+  audited (`scripts/lib/kimi-containment.js`, `agy-containment.js --cleanroom`),
+  then deleted. Any tool call, non-empty tool snapshot, unknown record, missing
+  transcript/wire/log, wrong or fallback agent voids the verdict (`no_verdict`);
+  the exit code never decides.
+- **Admission.** Intake runs `--preflight --profile <runner>` (model-free, empty
+  HOME, no credential) once per runner and refuses with
+  `final_panel_seat_cleanroom_unavailable` on red, timeout or `unknown`; the probe
+  records the observed CLI `runner_version`.
+- **Version drift is advisory.** The engine passes the recorded version to the rail
+  as `AUTOPILOT_CLEANROOM_EXPECTED_VERSION` (`cleanroomExpectedVersions` in
+  `autopilot-engine.js`, `prepareReviewLaunch` in `src/runners/review.js`). When the
+  dispatch-time preflight reports a different `runner_version`, `dispatch-review.sh`
+  prints one `WARNING:` line to stderr; it never blocks and never changes the
+  verdict. It matters: agy auto-updated 1.2.14 to 1.2.15 on the probe host within a
+  day. Test: `hooks/tests/dispatch-review-blind-kimi-agy.test.sh`,
+  `hooks/tests/review-runner-expected-version.test.sh`.
+- **Live-fire (2026-10-03, this host, one real blind review per runner, canary in a
+  scratch git repo that is the deny-pathed toplevel, kimi 2.1.1 / agy 1.2.15).**
+  kimi `kimi-code/k3`: rc 0, `status: reviewed`, `SHIP-AS-IS`, canary and host
+  hostname absent from every output, main checkout / `~/.kimi-code` / `~/.gemini`
+  listings byte-identical before and after. agy `gemini-3.8-flash-high`: rc 1,
+  `status: no_verdict`, `agy containment breach: cannot list the seat agents dir
+  <seat>/home/.gemini/antigravity-cli/agents - agent selection unverified`; the
+  rail failed closed (canary absent, stores untouched) but did not produce a
+  verdict; receipts in `live-fire/agy/`. Cause: agy 1.2.15 migrates
+  `antigravity-cli/agents` to `<HOME>/.gemini/config/agents` and leaves an absolute
+  symlink that dangles on the host. Repair: the launcher seeds both dirs and the audit
+  judges the union of the recognised dirs (exactly the tool-less agent, at least one
+  listable, else breach). Rerun: `reviewed`, `SHIP-AS-IS`, receipts in `live-fire/agy-rerun/`.
 
 ## Nested dispatch (subagents spawning subagents)
 

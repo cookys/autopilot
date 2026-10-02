@@ -417,6 +417,13 @@ prepare_runner_seat() {
     chmod 0700 "$SEAT_ROOT/home/.gemini" "$SEAT_ROOT/home/.gemini/antigravity-cli"
     node "$_SELF/agy-containment.js" write "$SEAT_ROOT/home/.gemini/antigravity-cli/agents" >/dev/null \
       || runner_fail "could not write the tool-less agy agent"
+    # agy 1.2.15 reads agents from <HOME>/.gemini/config/agents (it migrates the legacy dir there and leaves
+    # an absolute symlink, dangling on the host). Seed both: 1.2.15 keeps the config copy and its legacy
+    # rename fails harmlessly; older agy still finds the legacy dir.
+    mkdir -p "$SEAT_ROOT/home/.gemini/config"
+    chmod 0700 "$SEAT_ROOT/home/.gemini/config"
+    node "$_SELF/agy-containment.js" write "$SEAT_ROOT/home/.gemini/config/agents" >/dev/null \
+      || runner_fail "could not write the tool-less agy agent (config/agents)"
     mkdir -p "$SEAT_ROOT/home/.gemini/antigravity-cli/brain" \
       "$SEAT_ROOT/home/.gemini/antigravity-cli/log" \
       "$SEAT_ROOT/home/.gemini/antigravity-cli/crashes"

@@ -1,0 +1,20 @@
+SECTION main checkout: IDENTICAL (3 lines)
+SECTION ~/.kimi-code: IDENTICAL (2461 lines)
+SECTION ~/.gemini: IDENTICAL (29255 lines)
+SECTION /tmp top level (shared, noisy host dir): entries ADDED by this run that are rail/seat-related:
+> /tmp/dispatch-review-log-wDpTXR
+SECTION /tmp top level: entries REMAINING after run matching cleanroom-seat/kimicwd/agycwd (seat dirs must be gone):
+  (none)
+
+sha256 of each section listing (path size mtime per file; full listings not committed: 22 MB and other projects' paths)
+main checkout before: 1341a70457328f11 lines=3
+main checkout after : 1341a70457328f11 lines=3
+~/.kimi-code before: 47d11ff27c5336ad lines=2461
+~/.kimi-code after : 47d11ff27c5336ad lines=2461
+~/.gemini before: cffcf158702b4095 lines=29255
+~/.gemini after : cffcf158702b4095 lines=29255
+
+main checkout (before == after):
+53ddc02f515ea027d5667a0a9e83fcbe9661146b
+?? docs/plans/evidence/2026-10-01-gpt6-low-sweep/
+?? docs/plans/evidence/2026-10-01-grok-4.7-low-seats/

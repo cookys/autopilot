@@ -112,9 +112,9 @@ function writeToollessAgent(agentsDir) {
 // `Creating new cascade trajectory (agentScript=true)`; a wrong name logs
 // `Agent "<n>" not found, falling back to default` with agent=false/agentScript=false.
 // So the marker is all of: agent=true, agentScript=true, no not-found line, and exactly
-// one agent in the seat's agents dir (the tool-less one) — then agent=true can only
+// one agent across the seat's agents dirs (the tool-less one; agy 1.2.15 keeps them in config/agents, older in antigravity-cli/agents) — then agent=true can only
 // mean that agent.
-function auditAgyRun({ logDir, brainDir, cleanroom = false, agentsDir = null }) {
+function auditAgyRun({ logDir, brainDir, cleanroom = false, agentsDir = null, agentsDirs = null }) {
   let logText = '';
   try {
     for (const name of fs.readdirSync(logDir)) {
@@ -137,11 +137,40 @@ function auditAgyRun({ logDir, brainDir, cleanroom = false, agentsDir = null }) 
     if (!logText.includes('agentScript=true')) {
       return 'agy log lacks "agentScript=true" — agent selection unverified';
     }
-    let agents = null;
-    try {
-      agents = agentsDir ? fs.readdirSync(agentsDir).filter((n) => !n.startsWith('.')) : null;
-    } catch { /* unverified below */ }
-    if (!agents) return `cannot list the seat agents dir ${agentsDir} — agent selection unverified`;
+    // agy 1.2.15 migrates <HOME>/.gemini/antigravity-cli/agents to <HOME>/.gemini/config/agents and leaves
+    // an ABSOLUTE symlink behind; inside the bwrap seat HOME is /home/review, so on the host that symlink
+    // dangles. Judge the UNION of every agy-recognised agents dir: each is listed, an absent one is skipped,
+    // a symlink is tolerated only as the alias of a config/agents dir, anything else unreadable is a breach,
+    // and at least one dir must be listable. Exactly the tool-less agent must remain across them.
+    const dirs = agentsDirs || (agentsDir ? [agentsDir] : []);
+    const names = new Set();
+    let listed = 0;
+    for (const dir of dirs) {
+      let st = null;
+      try { st = fs.lstatSync(dir); } catch (e) {
+        if (e && e.code === 'ENOENT') continue;
+        return `cannot list the seat agents dir ${dir} — agent selection unverified`;
+      }
+      if (st.isSymbolicLink()) {
+        let target = '';
+        try { target = fs.readlinkSync(dir); } catch { /* unverified below */ }
+        if (/\/\.gemini\/config\/agents\/?$/.test(target)) {
+          // alias of the migrated dir: its contents are judged through the config dir itself, never here
+          let reachable = true;
+          try { fs.readdirSync(dir); } catch { reachable = false; }
+          if (!reachable) continue;
+        } else {
+          return `seat agents dir ${dir} is a symlink to ${JSON.stringify(target)} — agent selection unverified`;
+        }
+      }
+      let entries = null;
+      try { entries = fs.readdirSync(dir).filter((n) => !n.startsWith('.')); } catch { /* unverified below */ }
+      if (!entries) return `cannot list the seat agents dir ${dir} — agent selection unverified`;
+      listed += 1;
+      for (const n of entries) names.add(n);
+    }
+    if (listed === 0) return `cannot list the seat agents dir ${dirs.join(' | ')} — agent selection unverified`;
+    const agents = [...names];
     if (agents.length !== 1 || agents[0] !== AGENT_NAME) {
       return `seat agents dir must hold exactly the tool-less agent "${AGENT_NAME}", found [${agents.join(', ')}]`;
     }
@@ -206,7 +235,7 @@ if (require.main === module) {
       // optional: --cleanroom <agents-dir> (blind/cleanroom audit); default = non-blind audit
       const extra = process.argv.slice(5);
       let opts = {};
-      if (extra.length === 2 && extra[0] === '--cleanroom') opts = { cleanroom: true, agentsDir: extra[1] };
+      if (extra.length >= 2 && extra[0] === '--cleanroom') opts = { cleanroom: true, agentsDirs: extra.slice(1) };
       else if (extra.length !== 0) { process.stderr.write('audit: unexpected arguments\n'); process.exit(2); }
       const breach = auditAgyRun({ logDir: a, brainDir: b, ...opts });
       if (breach) {
@@ -214,7 +243,7 @@ if (require.main === module) {
         process.exit(1);
       }
     } else {
-      process.stderr.write('usage: agy-containment.js name | write <agents-dir> | audit <log-dir> <brain-dir> [--cleanroom <agents-dir>]\n');
+      process.stderr.write('usage: agy-containment.js name | write <agents-dir> | audit <log-dir> <brain-dir> [--cleanroom <agents-dir>...]\n');
       process.exit(2);
     }
   } catch (err) {

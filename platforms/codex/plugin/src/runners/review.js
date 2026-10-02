@@ -283,6 +283,9 @@ function prepareReviewLaunch(args, options = {}) {
   const launchEnv = { ...(options.env || process.env) };
   delete launchEnv.AUTOPILOT_REVIEW_PACKET_DIR;
   delete launchEnv.AUTOPILOT_REVIEW_PACKET_HASH;
+  // Advisory only: the CLI version intake probed for this runner, so the blind kimi/agy rail can
+  // warn when the dispatch-time version differs. Never inherited from the ambient env.
+  delete launchEnv.AUTOPILOT_CLEANROOM_EXPECTED_VERSION;
   try {
     if (options.blindDiscovery === true) {
       blindCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-review-blind-'));
@@ -346,6 +349,14 @@ function prepareReviewLaunch(args, options = {}) {
       }
       launchCwd = blindCwd;
       launchEnv.AUTOPILOT_BLIND_DISCOVERY = '1';
+      const runnerIndex = launchArgs.indexOf('--runner');
+      const expectedVersions = options.cleanroomExpectedVersions;
+      if (runnerIndex >= 0 && expectedVersions && typeof expectedVersions === 'object') {
+        const expected = expectedVersions[launchArgs[runnerIndex + 1]];
+        if (typeof expected === 'string' && expected !== '') {
+          launchEnv.AUTOPILOT_CLEANROOM_EXPECTED_VERSION = expected;
+        }
+      }
     }
     return {
       scriptPath,

@@ -1,0 +1,2 @@
+canary (value withheld) absent from every receipt file incl. raw_log
+host_hostname_in_output=absent

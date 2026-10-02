@@ -140,6 +140,15 @@ A three-probe spike (`agy -p --dangerously-skip-permissions`, Gemini 3.5 Flash (
 - **Recipe to make agy run+verify build/test/E2E**: one synchronous foreground command (no `&` / `nohup` / cross-call poll) + `--print-timeout` above the expected duration + still verify-by-artifact (self-report remains untrustworthy — Invariant 2 / the 1.0.5 "claimed success without printing the commit hash" observation stands).
 - **Honest bound (not yet proven)**: only `sleep` (IO-idle) was tested, not a real CPU-bound `cargo test` with heavy stdout. The mechanism (auto-managed-task + wait) should generalise but the multi-minute real-build case is unverified. The earlier "agy only made cosmetic edits on multi-minute tasks" was most likely an older-version cap (the 1.0.5 spike era) or the model electing to background-and-abandon — not a hard 10s limit on 1.0.14.
 
+### kimi / agy tool-less cleanroom seats — verified current host (kimi 2.1.1, agy 1.2.14 spike, agy 1.2.15 live-fire, 2026-10-02/03)
+
+Evidence: `docs/plans/evidence/2026-10-02-final-panel-kimi-agy-isolation/spike-log.md` (probes K1-K4, A1-A3) and `docs/plans/evidence/2026-10-02-final-panel-kimi-agy-isolation/live-fire/`.
+
+- kimi: a custom agent file (`--agent-file`, frontmatter `description` required, `tools: []`) leaves the model with an empty tool snapshot in the session's `wire.jsonl`; a default-agent run leaked a canary through a shell tool call. A missing `description` fails closed (rc 1). kimi has no `--sandbox`/`--tools`/`--no-tools` flag. Doc: https://moonshotai.github.io/kimi-code/en/customization/agents.
+- agy: a tool-less agent works, but an invalid agent file silently falls back to the tooled default agent with exit 0 (leaked canary + hostname, spike A2); containment is decided by the post-run log/transcript audit, never the exit code. `agy --sandbox` semantics remain unprobed.
+- Both run inside a repo-less bwrap seat with a private HOME and `--clearenv`; the launcher copies only the CLI's credential/config. The kimi live-fire returned a reviewed verdict with the canary absent and the real `~/.kimi-code`, `~/.gemini` and main checkout unchanged. The agy live-fire (1.2.15) was voided by the audit (`cannot list the seat agents dir`) and produced no verdict; cause not yet diagnosed.
+- agy auto-updates (1.2.14 to 1.2.15 within a day on this host), so the dispatch rail warns, advisory only, when the CLI version differs from the one intake probed.
+
 ### Codex native child lifecycle — verified current host (codex-cli 0.146.0, 2026-08-02)
 
 The default `collaboration.spawn_agent` schema now exposes five fields:

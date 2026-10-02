@@ -1,0 +1,3 @@
+runner=kimi model=kimi-code/k3
+kimi 2.1.1 agy 1.2.15
+AUTOPILOT_BLIND_DISCOVERY=1 AUTOPILOT_REVIEW_PACKET_DIR=<packet> AUTOPILOT_CLEANROOM_EXPECTED_VERSION=2.1.1 (kimi probed version == observed) (cwd=<scratch git repo holding canary>) scripts/dispatch-review.sh --runner kimi --model kimi-code/k3 --diff-file diff.patch --spec-file spec.md --timeout 600s

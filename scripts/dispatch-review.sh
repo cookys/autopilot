@@ -337,18 +337,28 @@ fi
 # Model-free launcher preflight for a blind kimi/agy seat. Fail closed: any non-zero rc
 # (red, timeout, missing binary/bwrap/launcher) refuses before a model is called.
 blind_runner_preflight() { # <runner> [extra launcher args...]
-  local _runner="$1" _pf_err _pf_rc=0 _pf_first
+  local _runner="$1" _pf_err _pf_out _pf_rc=0 _pf_first _pf_ver
   shift
   _CLEANROOM_LAUNCHER="${AUTOPILOT_CLEANROOM_LAUNCHER:-$_REVIEW_SELF_DIR/lib/cleanroom-launch.sh}"
   _pf_err="$(mktemp -t dispatch-review-cleanroom-preflight-XXXXXX)"
+  _pf_out="$(mktemp -t dispatch-review-cleanroom-preflight-out-XXXXXX)"
   "$_CLEANROOM_LAUNCHER" --preflight --profile "$_runner" "${BLIND_RUNNER_DENY[@]}" \
-    --bwrap "$CLEANROOM_BWRAP" "$@" >/dev/null 2>"$_pf_err" || _pf_rc=$?
+    --bwrap "$CLEANROOM_BWRAP" "$@" >"$_pf_out" 2>"$_pf_err" || _pf_rc=$?
   if [ "$_pf_rc" -ne 0 ]; then
     _pf_first="$(head -n 1 "$_pf_err" 2>/dev/null || true)"
-    rm -f "$_pf_err"
+    rm -f "$_pf_err" "$_pf_out"
     die_precondition "cleanroom runtime unusable: ${_pf_first:-$_runner preflight rc=$_pf_rc}"
   fi
-  rm -f "$_pf_err"
+  # Advisory only (plan §8.3): intake recorded the probed CLI version and the engine passes it in
+  # AUTOPILOT_CLEANROOM_EXPECTED_VERSION. A different version now warns; it never blocks and never
+  # touches the verdict (the post-run audit alone decides containment). Absent either side = silent.
+  if [ -n "${AUTOPILOT_CLEANROOM_EXPECTED_VERSION:-}" ]; then
+    _pf_ver="$(sed -n 's/.*"runner_version": *"\([^"]*\)".*/\1/p' "$_pf_out" 2>/dev/null | head -n 1)"
+    if [ -n "$_pf_ver" ] && [ "$_pf_ver" != "$AUTOPILOT_CLEANROOM_EXPECTED_VERSION" ]; then
+      echo "WARNING: $_runner version changed since intake (intake probed $AUTOPILOT_CLEANROOM_EXPECTED_VERSION, dispatch sees $_pf_ver); advisory only, the post-run audit still decides containment" >&2
+    fi
+  fi
+  rm -f "$_pf_err" "$_pf_out"
 }
 if [ "${AUTOPILOT_BLIND_DISCOVERY:-0}" = "1" ] && [ "$BLIND_RUNNER_CLEANROOM" -eq 0 ]; then
   case "$(review_seat_tier "$RUNNER")" in
@@ -1606,7 +1616,7 @@ else
     AGY_SEAT_APP="$AGY_CWD/seat/home/.gemini/antigravity-cli"
     AGY_AUDIT_RC=0
     AGY_BREACH="$(node "$AGY_CONTAIN_JS" audit "$AGY_SEAT_APP/log" "$AGY_SEAT_APP/brain" \
-      --cleanroom "$AGY_SEAT_APP/agents" 2>&1)" || AGY_AUDIT_RC=$?
+      --cleanroom "${AGY_SEAT_APP%/antigravity-cli}/config/agents" "$AGY_SEAT_APP/agents" 2>&1)" || AGY_AUDIT_RC=$?
     if [ "$AGY_AUDIT_RC" -ne 0 ] && [ -z "$AGY_BREACH" ]; then
       AGY_BREACH="agy containment audit failed (rc=$AGY_AUDIT_RC) — containment unverified"
     fi

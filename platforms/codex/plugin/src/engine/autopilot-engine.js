@@ -63,6 +63,23 @@ const {
 } = require('./controller-execution');
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const isStr = (v) => typeof v === 'string' && v.length > 0;
+// Advisory (final-panel isolation plan §8.3): the kimi/agy CLI version each intake cleanroom probe
+// observed, keyed by runner. dispatch-review.sh warns (never blocks) when the dispatch-time version
+// differs. An absent map or a runner without a recorded version means no warning.
+function cleanroomExpectedVersions(campaignControl) {
+  const out = {};
+  const steps = campaignControl && Array.isArray(campaignControl.steps) ? campaignControl.steps : [];
+  for (const step of steps) {
+    if (!step || step.owner !== 'cleanroom_probe' || step.status !== 'ready') continue;
+    const lj = step.launcher_json;
+    const runner = lj && typeof lj.runner === 'string' ? lj.runner : null;
+    if (runner && typeof step.runner_version === 'string' && step.runner_version !== '') {
+      out[runner] = step.runner_version;
+    }
+  }
+  return out;
+}
+
 function packetHashOf(value) {
   if (!isObj(value) || typeof value.packet_hash !== 'string') return null;
   return /^[0-9a-f]{64}$/.test(value.packet_hash) ? value.packet_hash : null;
@@ -5214,6 +5231,7 @@ class AutopilotEngine {
           ...(input.reviewOptions || {}),
           cwd: loopCwd,
           blindDiscovery: true,
+          cleanroomExpectedVersions: cleanroomExpectedVersions(campaignControl),
         },
         requireQualifiedReviewer: scope === 'final' && typeof input.reviewerQualificationWaived !== 'string'
           ? true : requireQualifiedReviewer,
@@ -10830,6 +10848,7 @@ class AutopilotEngine {
           ...(input.reviewOptions || {}),
           cwd: loopCwd,
           blindDiscovery: true,
+          cleanroomExpectedVersions: cleanroomExpectedVersions(campaignControl),
         },
         requireQualifiedReviewer,
         reviewerQualificationWaived: input.reviewerQualificationWaived,
@@ -11041,6 +11060,7 @@ module.exports = {
   buildReviewArgs,
   campaignWallBudgetStatus,
   campaignWallRemainingSeconds,
+  cleanroomExpectedVersions,
   implementationResultBlocked,
   reviewLoopResultBlocked,
   reviewResultBlocked,

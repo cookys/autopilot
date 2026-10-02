@@ -159,3 +159,65 @@ for (const [label, opts] of Object.entries(cleanroomOnly)) {
     assert.ok(r.breach);
   });
 }
+
+// Phase-5 repair (agy 1.2.15 layout). Real behaviour observed model-free with a scratch seat HOME:
+// agy 1.2.15 migrates <HOME>/.gemini/antigravity-cli/agents -> <HOME>/.gemini/config/agents and leaves an
+// ABSOLUTE symlink antigravity-cli/agents -> <HOME>/.gemini/config/agents. Inside the bwrap seat HOME is
+// /home/review, so on the host that symlink dangles and the legacy-only audit "cannot list the seat agents dir".
+// The audit takes every agy-recognised agents dir and judges the union.
+// RED at 92455ca3 (audit takes one dir; 8 of 40 failed, every layout case): the multi-dir cases below fail (dangling alias breach / config dir unread).
+function layoutRun({ legacy, config, log = CLEAN_LOG, extraDirs = [] } = {}) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agy-layout-'));
+  tmpDirs.push(root);
+  const app = path.join(root, 'home', '.gemini', 'antigravity-cli');
+  const cfg = path.join(root, 'home', '.gemini', 'config', 'agents');
+  fs.mkdirSync(path.join(app, 'log'), { recursive: true });
+  fs.mkdirSync(path.join(app, 'brain', 'c1'), { recursive: true });
+  fs.writeFileSync(path.join(app, 'log', 'agy.log'), log);
+  fs.writeFileSync(path.join(app, 'brain', 'c1', 'transcript.jsonl'), CLEAN_STEPS.join('\n') + '\n');
+  const legacyDir = path.join(app, 'agents');
+  const mk = (dir, spec) => {
+    if (spec === 'absent') return;
+    if (spec === 'dangling-alias') { fs.symlinkSync('/home/review/.gemini/config/agents', dir); return; }
+    if (spec === 'foreign-alias') { fs.symlinkSync('/somewhere/else', dir); return; }
+    fs.mkdirSync(dir, { recursive: true });
+    for (const n of spec) fs.mkdirSync(path.join(dir, n), { recursive: true });
+  };
+  mk(legacyDir, legacy);
+  mk(cfg, config);
+  const dirs = [cfg, legacyDir, ...extraDirs];
+  const r = spawnSync(process.execPath, [LIB, 'audit', path.join(app, 'log'), path.join(app, 'brain'), '--cleanroom', ...dirs], { encoding: 'utf8' });
+  return { status: r.status, stderr: r.stderr, breach: auditAgyRun({ logDir: path.join(app, 'log'), brainDir: path.join(app, 'brain'), cleanroom: true, agentsDirs: dirs }) };
+}
+test('layout 1.2.15 after migration: config/agents holds the agent, legacy path is a dangling alias -> rc=0', () => {
+  const r = layoutRun({ legacy: 'dangling-alias', config: [AGENT_NAME] });
+  assert.strictEqual(r.status, 0, r.stderr);
+  assert.strictEqual(r.breach, null);
+});
+test('layout 1.2.15 config-only: legacy dir absent -> rc=0', () => {
+  const r = layoutRun({ legacy: 'absent', config: [AGENT_NAME] });
+  assert.strictEqual(r.status, 0, r.stderr);
+});
+test('layout legacy-only (agy <= 1.2.14): config dir absent -> rc=0', () => {
+  const r = layoutRun({ legacy: [AGENT_NAME], config: 'absent' });
+  assert.strictEqual(r.status, 0, r.stderr);
+});
+test('layout both real dirs, same single agent (write-both seat, rename failed) -> rc=0', () => {
+  const r = layoutRun({ legacy: [AGENT_NAME], config: [AGENT_NAME] });
+  assert.strictEqual(r.status, 0, r.stderr);
+});
+test('layout: a second agent in EITHER location -> rc=1', () => {
+  assert.strictEqual(layoutRun({ legacy: [AGENT_NAME, 'x'], config: [AGENT_NAME] }).status, 1);
+  assert.strictEqual(layoutRun({ legacy: [AGENT_NAME], config: [AGENT_NAME, 'x'] }).status, 1);
+  assert.strictEqual(layoutRun({ legacy: ['x'], config: [AGENT_NAME] }).status, 1);
+});
+test('layout fail-closed: no listable agents dir at all (both absent / only an alias) -> rc=1', () => {
+  assert.strictEqual(layoutRun({ legacy: 'absent', config: 'absent' }).status, 1);
+  assert.strictEqual(layoutRun({ legacy: 'dangling-alias', config: 'absent' }).status, 1);
+});
+test('layout fail-closed: legacy symlink that points anywhere but a config/agents dir -> rc=1', () => {
+  assert.strictEqual(layoutRun({ legacy: 'foreign-alias', config: [AGENT_NAME] }).status, 1);
+});
+test('layout: empty config/agents (agent not there) -> rc=1', () => {
+  assert.strictEqual(layoutRun({ legacy: 'absent', config: [] }).status, 1);
+});

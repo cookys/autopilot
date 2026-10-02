@@ -171,6 +171,8 @@ assert_not_contains "$I" "PROMPT-BODY" "agy prompt text is not in host-visible a
 assert_file_exists "$TEST_TMP/seat-l-agy/home/.gemini/antigravity-cli/antigravity-oauth-token" "agy token copied on launch path"
 assert_file_exists "$TEST_TMP/seat-l-agy/home/.gemini/antigravity-cli/agents/autopilot-toolless-reviewer/agent.md" \
   "agy tool-less agent written into the seat"
+assert_file_exists "$TEST_TMP/seat-l-agy/home/.gemini/config/agents/autopilot-toolless-reviewer/agent.md" \
+  "agy 1.2.15 reads agents from config/agents: tool-less agent written there too"
 assert_file_exists "$TEST_TMP/seat-l-agy/home/.gemini/antigravity-cli/log" "agy log dir exists for the audit"
 rm -rf "$TEST_TMP/seat-l-agy"
 

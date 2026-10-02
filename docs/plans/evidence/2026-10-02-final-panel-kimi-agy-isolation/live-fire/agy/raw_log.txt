@@ -1,0 +1,3 @@
+[dispatch-review: context-window UNKNOWN_WINDOW] {"model":"gemini-3.8-flash-high","model_normalized":"gemini-3.8-flash-high","window":null,"window_source":"unknown","input_bytes":383,"estimated_tokens":110,"divisor":3.5,"ratio":0.7,"threshold_tokens":null,"headroom_tokens":null,"verdict":"UNKNOWN_WINDOW","blocked":false,"reason":"no context window known for model 'gemini-3.8-flash-high'; pass --window, record a context_window capability observation, or add the model to the observed table"}
+
+[dispatch-review: agy containment breach: cannot list the seat agents dir /tmp/dispatch-review-agycwd-Q7DWMq/seat/home/.gemini/antigravity-cli/agents — agent selection unverified — agy response NOT parsed]

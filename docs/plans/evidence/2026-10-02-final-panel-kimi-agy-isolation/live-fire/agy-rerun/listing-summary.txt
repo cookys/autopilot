@@ -1,0 +1,11 @@
+SECTION main checkout: IDENTICAL lines=3 sha256 before=254f20a08516d8be after=254f20a08516d8be
+SECTION ~/.kimi-code: IDENTICAL lines=2461 sha256 before=47d11ff27c5336ad after=47d11ff27c5336ad
+SECTION ~/.gemini: IDENTICAL lines=29255 sha256 before=cffcf158702b4095 after=cffcf158702b4095
+main checkout (before):
+2de9759de6b37d0be7e95c6d312b83130ab4d920
+?? docs/plans/evidence/2026-10-01-gpt6-low-sweep/
+?? docs/plans/evidence/2026-10-01-grok-4.7-low-seats/
+/tmp top level: the only dispatch-review-log entry belonging to this run is /tmp/dispatch-review-log-l9MXnW (its raw_log); the other
+  dispatch-review-log-* names in a raw before/after diff are sort-order noise or other sessions on this busy host dir.
+REMAINING seat dirs after run:
+  (none)

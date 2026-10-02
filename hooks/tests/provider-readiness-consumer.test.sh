@@ -1164,6 +1164,37 @@ rejectsBeforeDispatch(
   ),
   'strict_l5_provider_not_ready',
 );
+// not_ready names the failing seat and its reason; no endpoint/secret leaks.
+// RED at 53ddc02f: AssertionError: diagnostics cover every seat; FAIL ... 'not_ready_diagnostics=true' not found in output (32 passed, 5 failed)
+{
+  let caught = null;
+  try {
+    consumeStrictL5ProviderReadiness(
+      missingQualification.providerReadinessAuthority,
+      missingQualificationBundle,
+      { roster: missingQualification.roster, now: NOW },
+    );
+  } catch (error) { caught = error; }
+  assert.ok(caught && caught.code === 'strict_l5_provider_not_ready');
+  assert.strictEqual(caught.message, 'strict /l5 provider readiness is not usable now');
+  assert.ok(Array.isArray(caught.diagnostics) && caught.diagnostics.length >= 4,
+    'diagnostics cover every seat');
+  const failing = caught.diagnostics.filter((seat) => seat.status !== 'usable');
+  assert.strictEqual(failing.length, 1, 'exactly one failing seat is named');
+  const failedSeat = failing[0];
+  assert.strictEqual(failedSeat.seat_id, missingQualificationBundle.roster[0].seat_id);
+  assert.ok(failedSeat.runner && failedSeat.model && failedSeat.role);
+  assert.ok(failedSeat.reasons.some((r) => r.reason === 'missing_qualification_observation'),
+    'reason code names the missing qualification');
+  const serialized = JSON.stringify(caught.diagnostics);
+  for (const seat of missingQualificationBundle.roster) {
+    if (seat.tuple && seat.tuple.endpoint) {
+      assert.ok(!serialized.includes(String(seat.tuple.endpoint)), 'no endpoint in diagnostics');
+    }
+  }
+  assert.ok(!/sk-|https?:|api[_-]?key/i.test(serialized), 'no secret-shaped content');
+  console.log('not_ready_diagnostics=true');
+}
 
 assert.strictEqual(dispatcherCalls, 0);
 console.log('strict_policy_exact=true');
@@ -1176,6 +1207,8 @@ assert_contains "$STRICT_BOOTSTRAP_OUT" "strict_policy_exact=true" \
   "strict /l5 policy is the exact frozen six-claim contract"
 assert_contains "$STRICT_BOOTSTRAP_OUT" "strict_positive_ready=true" \
   "strict /l5 accepts a fresh host-owned exact-roster readiness bundle"
+assert_contains "$STRICT_BOOTSTRAP_OUT" "not_ready_diagnostics=true" \
+  "strict_l5_provider_not_ready carries sanitized per-seat diagnostics"
 assert_contains "$STRICT_BOOTSTRAP_OUT" "strict_negative_matrix_zero_dispatch=true" \
   "strict /l5 negative matrix rejects before workflow dispatch"
 assert_contains "$STRICT_BOOTSTRAP_OUT" "strict_l4_profile=true" \

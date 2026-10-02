@@ -31,15 +31,44 @@ const SHA256_RE = /^[0-9a-f]{64}$/;
 const SORT_EQUAL = 0;
 
 class StrictL5ProviderBootstrapError extends Error {
-  constructor(code, message) {
+  constructor(code, message, diagnostics) {
     super(message);
     this.name = 'StrictL5ProviderBootstrapError';
     this.code = code;
+    if (diagnostics !== undefined) this.diagnostics = diagnostics;
   }
 }
 
-function fail(code, message) {
-  throw new StrictL5ProviderBootstrapError(code, message);
+function fail(code, message, diagnostics) {
+  throw new StrictL5ProviderBootstrapError(code, message, diagnostics);
+}
+
+function safeCode(value) {
+  return typeof value === 'string' && CODE_RE.test(value) ? value : null;
+}
+
+/** Sanitized per-seat view of the receipt the consumer already decided on.
+ * Only bounded-code fields; never endpoints, keys, or raw transport output. */
+function providerReadinessDiagnostics(receipt) {
+  const seats = receipt && Array.isArray(receipt.seats) ? receipt.seats : [];
+  return seats.map((seat) => {
+    const tuple = seat && seat.decision && seat.decision.tuple
+      ? seat.decision.tuple : {};
+    return {
+      seat_id: safeCode(seat && seat.seat_id),
+      role: safeCode(tuple.role),
+      runner: safeCode(tuple.runner),
+      model: safeCode(tuple.model),
+      required: !!(seat && seat.required),
+      status: safeCode(seat && seat.status),
+      reasons: (seat && Array.isArray(seat.failing_axes) ? seat.failing_axes : [])
+        .map((axis) => ({
+          axis: safeCode(axis.axis),
+          status: safeCode(axis.status),
+          reason: safeCode(axis.reason),
+        })),
+    };
+  });
 }
 
 function isRecord(value) {
@@ -703,7 +732,11 @@ function consumeStrictL5ProviderReadiness(authority, bundle, context = {}) {
     qualificationProvider: state.qualificationProvider,
   });
   if (result.status !== 'ready') {
-    fail('strict_l5_provider_not_ready', 'strict /l5 provider readiness is not usable now');
+    fail(
+      'strict_l5_provider_not_ready',
+      'strict /l5 provider readiness is not usable now',
+      providerReadinessDiagnostics(bundle.receipt),
+    );
   }
   return deepFreeze({
     ...result,
@@ -726,5 +759,6 @@ module.exports = {
   createStrictL5ProviderBootstrap,
   deriveStrictL5InvocationPolicy,
   isStrictL5ProviderReadinessAuthority,
+  providerReadinessDiagnostics,
   validateStrictL5ProviderPolicy,
 };

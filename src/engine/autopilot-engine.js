@@ -9642,11 +9642,13 @@ class AutopilotEngine {
       } catch (error) {
         ledger.push(this.ledgerEntry('strict_l5_provider_readiness', 'blocked', startedAt, {
           rejection_code: error.code || 'strict_l5_provider_readiness_invalid',
+          ...(error.diagnostics ? { provider_readiness_diagnostics: error.diagnostics } : {}),
         }));
         return finish({
           status: 'blocked',
           phase: 'provider_readiness',
           reason: error.message || String(error),
+          ...(error.diagnostics ? { provider_readiness_diagnostics: error.diagnostics } : {}),
           rounds: 0,
           verdict: null,
           roster,

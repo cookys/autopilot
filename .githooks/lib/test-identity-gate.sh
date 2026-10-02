@@ -64,7 +64,7 @@ test_identity_refuse_commit_idents() {
 test_identity_refuse_push_range() {
   local remote="${1-}"
   local local_ref local_sha remote_ref remote_sha
-  local sha short ae ce set_out zero
+  local sha short ae ce set_out zero has_remote_refs have_tip
   zero='^0+$'
   if [ "$__tig_lib_ok" != 1 ]; then
     return 0
@@ -72,10 +72,29 @@ test_identity_refuse_push_range() {
   while read -r local_ref local_sha remote_ref remote_sha; do
     [ -z "${local_sha:-}" ] && continue
     echo "$local_sha" | grep -qE "$zero" && continue
-    if echo "${remote_sha:-}" | grep -qE "$zero"; then
-      set_out="$(git rev-list "$local_sha" --not --remotes="$remote" 2>/dev/null || true)"
+    # Judge only what the remote does not already have: everything reachable
+    # from the pushed sha minus every ref of THIS remote (and its old tip when
+    # that object exists locally). Never a silent pass on missing knowledge.
+    has_remote_refs="$(git for-each-ref --count=1 --format='x' "refs/remotes/${remote}/" 2>/dev/null || true)"
+    have_tip=0
+    if [ -n "${remote_sha:-}" ] && ! echo "$remote_sha" | grep -qE "$zero" \
+       && git cat-file -e "${remote_sha}^{commit}" 2>/dev/null; then
+      have_tip=1
+    fi
+    if [ -n "$has_remote_refs" ] && [ "$have_tip" = 1 ]; then
+      set_out="$(git rev-list "$local_sha" --not --remotes="$remote" "$remote_sha" 2>/dev/null)" || set_out="__ERR__"
+    elif [ -n "$has_remote_refs" ]; then
+      set_out="$(git rev-list "$local_sha" --not --remotes="$remote" 2>/dev/null)" || set_out="__ERR__"
+    elif [ "$have_tip" = 1 ]; then
+      set_out="$(git rev-list "$local_sha" --not "$remote_sha" 2>/dev/null)" || set_out="__ERR__"
     else
-      set_out="$(git rev-list "${remote_sha}..${local_sha}" 2>/dev/null || true)"
+      echo "test-identity-gate: cannot tell what remote '${remote}' already has (no local remote-tracking refs, old tip unknown)." >&2
+      echo "Fix: git fetch ${remote}, then push again." >&2
+      return 1
+    fi
+    if [ "$set_out" = "__ERR__" ]; then
+      echo "test-identity-gate: could not enumerate commits for ${local_ref}; refusing (fail closed). Try: git fetch ${remote}" >&2
+      return 1
     fi
     while IFS= read -r sha; do
       [ -z "$sha" ] && continue

@@ -334,7 +334,7 @@ OUT="$(GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=autopilot.testIdentityGate GIT_CONFIG
 assert_eq "$EX" "1" "P3 NC: GIT_CONFIG_COUNT overlay does not bypass"
 
 # NC: key off outside TMPDIR does not bypass
-P3X_ROOT="${XDG_CACHE_HOME:-$HOME/.cache}/autopilot-p3-ident-$$"
+P3X_ROOT="$TEST_TMP/p3-outside"
 rm -rf "$P3X_ROOT"
 mkdir -p "$P3X_ROOT"
 P3X="$P3X_ROOT/repo"
@@ -395,6 +395,59 @@ git -C "$P3U" update-ref refs/remotes/other/main "$TIPU"
 git -C "$P3U" config --unset autopilot.testIdentityGate || true
 OUT="$(p3_run_pre_push "$P3U" origin "$TIPU" "$ZERO_SHA" 2>&1)"; EX=$?
 assert_eq "$EX" "1" "P3 NC: new ref with bad commit only on unrelated remote refused"
+
+# --- P3 landing round 1: remote-scoped pre-push commit set ---
+# RED at e0cf0511: (a) existing branch merging on-remote test-identity base
+# expected '0', got '1' (two-dot remote_sha..local_sha swept the base in);
+# (c) unknown old tip: expected '1', got '0'; (c2) never-fetched remote:
+# expected '1', got '0' and 'git fetch' not found in output (silent pass).
+p3_bad_commit() {
+  local dest="$1" msg="$2"
+  printf '%s\n' "$msg" >> "$dest/f.txt"
+  ( cd "$dest" && git add -A && GIT_AUTHOR_EMAIL="$P3_TEST_EMAIL" GIT_AUTHOR_NAME=t \
+    GIT_COMMITTER_EMAIL="$P3_OWNER_EMAIL" GIT_COMMITTER_NAME=o git commit -q --no-verify -m "$msg" )
+}
+P3M="$TEST_TMP/p3-merge-base"
+p3_init_repo "$P3M"
+printf 'm0\n' > "$P3M/f.txt"
+p3_try_commit "$P3M" -m m0
+C0M="$(git -C "$P3M" rev-parse HEAD)"
+git -C "$P3M" checkout -q -b feature
+git -C "$P3M" checkout -q -b main2 "$C0M"
+p3_bad_commit "$P3M" mbad
+BADM="$(git -C "$P3M" rev-parse HEAD)"
+git -C "$P3M" update-ref refs/remotes/origin/main "$BADM"
+git -C "$P3M" update-ref refs/remotes/origin/feature "$C0M"
+git -C "$P3M" checkout -q feature
+( cd "$P3M" && git merge -q --no-ff --no-verify -m 'merge base' main2 >/dev/null 2>&1 )
+TIPM="$(git -C "$P3M" rev-parse HEAD)"
+OUT="$(p3_run_pre_push "$P3M" origin "$TIPM" "$C0M" refs/heads/feature refs/heads/feature 2>&1)"; EX=$?
+assert_eq "$EX" "0" "P3 landing(a): existing branch merging on-remote test-identity base passes"
+# (b) a new test-identity commit on top is refused
+p3_bad_commit "$P3M" mtop
+TOPM="$(git -C "$P3M" rev-parse HEAD)"
+OUT="$(p3_run_pre_push "$P3M" origin "$TOPM" "$C0M" refs/heads/feature refs/heads/feature 2>&1)"; EX=$?
+assert_eq "$EX" "1" "P3 landing(b): new test-identity commit on top refused"
+# (c) old tip absent locally: remote has refs -> new bad commit still judged
+UNKNOWN_SHA='1111111111111111111111111111111111111111'
+OUT="$(p3_run_pre_push "$P3M" origin "$TOPM" "$UNKNOWN_SHA" refs/heads/feature refs/heads/feature 2>&1)"; EX=$?
+assert_eq "$EX" "1" "P3 landing(c): unknown old tip does not silently pass a bad commit"
+# (c2) remote never fetched (no refs, tip unknown): fail closed with fetch hint
+OUT="$(p3_run_pre_push "$P3M" ghost "$TIPM" "$UNKNOWN_SHA" refs/heads/feature refs/heads/feature 2>&1)"; EX=$?
+assert_eq "$EX" "1" "P3 landing(c2): never-fetched remote refused"
+assert_contains "$OUT" "git fetch" "P3 landing(c2): tells operator to fetch"
+# (d) two-remote: bad commit only on other remote, existing origin ref -> refused
+P3T="$TEST_TMP/p3-two-remote"
+p3_init_repo "$P3T"
+printf 't0\n' > "$P3T/f.txt"
+p3_try_commit "$P3T" -m t0
+C0T="$(git -C "$P3T" rev-parse HEAD)"
+p3_bad_commit "$P3T" tbad
+TIPT="$(git -C "$P3T" rev-parse HEAD)"
+git -C "$P3T" update-ref refs/remotes/other/main "$TIPT"
+git -C "$P3T" update-ref refs/remotes/origin/main "$C0T"
+OUT="$(p3_run_pre_push "$P3T" origin "$TIPT" "$C0T" 2>&1)"; EX=$?
+assert_eq "$EX" "1" "P3 landing(d): bad commit only on unrelated remote refused (existing ref)"
 
 finalize_test
 

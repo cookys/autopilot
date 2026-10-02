@@ -512,20 +512,23 @@ EOF
     fi
     sleep 0.1
   done
-  if [ -z "$inner" ]; then
+  if [ -z "$inner" ] || [ ! -f "$marker" ]; then
     kill "$outer" 2>/dev/null || true
     wait "$outer" 2>/dev/null || true
-    fail "P4 pgid: no inner child of outer"
+    fail "P4 pgid: readiness not reached (inner='${inner}', marker present=$([ -f "$marker" ] && echo yes || echo no))"
+    inner=""
   fi
-  inner_pgid="$(ps -o pgid= -p "$inner" 2>/dev/null | tr -d '[:space:]')"
-  outer_pgid="$(ps -o pgid= -p "$outer" 2>/dev/null | tr -d '[:space:]')"
-  inner="$(printf '%s' "$inner" | tr -d '[:space:]')"
-  assert_eq "$inner_pgid" "$inner" "P4 pgid: inner PGID equals inner PID"
-  assert_neq "$inner_pgid" "$outer_pgid" "P4 pgid: inner PGID differs from outer"
-  kill -s INT -- "-$inner_pgid" >/dev/null 2>&1 || true
-  rc=0
-  wait "$outer" || rc=$?
-  assert_exit_code "$rc" 130 "P4 pgid: SIGINT to inner group is trapped (130)"
+  if [ -n "$inner" ]; then
+    inner_pgid="$(ps -o pgid= -p "$inner" 2>/dev/null | tr -d '[:space:]')"
+    outer_pgid="$(ps -o pgid= -p "$outer" 2>/dev/null | tr -d '[:space:]')"
+    inner="$(printf '%s' "$inner" | tr -d '[:space:]')"
+    assert_eq "$inner_pgid" "$inner" "P4 pgid: inner PGID equals inner PID"
+    assert_neq "$inner_pgid" "$outer_pgid" "P4 pgid: inner PGID differs from outer"
+    kill -s INT -- "-$inner_pgid" >/dev/null 2>&1 || true
+    rc=0
+    wait "$outer" || rc=$?
+    assert_exit_code "$rc" 130 "P4 pgid: SIGINT to inner group is trapped (130)"
+  fi
 }
 
 # --- P4 --parallel one-file filter still uses snapshot ---
@@ -1113,6 +1116,89 @@ EOF
   sl="$(extract_json_field "$out" skipped_live)"
   [ "${sl:-0}" -ge 1 ] || fail "P4 reaper no-flock skipped_live>=1 got $sl"
   assert_eq 0 0 "P4 reaper no-flock treated live"
+}
+
+# --- Landing round 1: outer shutdown on EVERY exit path ---
+# RED at e0cf0511:
+#   FAIL [test-snapshot] L1 normal exit: descendant still alive after outer returned
+#   FAIL [test-snapshot] L1 HUP: descendant <pid> still alive
+l1_fixture() {
+  local name="$1" body="$2" fx
+  fx="$TEST_TMP/$name"
+  make_fixture "$fx"
+  git -C "$fx" config --local user.email "cookys@stranity.com"
+  printf 'base\n' >"$fx/tracked.txt"
+  git -C "$fx" add tracked.txt
+  git -C "$fx" commit -q -m init
+  copy_runner_into_fixture "$fx"
+  printf '%s\n' '#!/usr/bin/env bash' '. "$(dirname "$0")/lib.sh"' "$body" 'finalize_test' \
+    >"$fx/hooks/tests/zz-fixture-one.test.sh"
+  chmod +x "$fx/hooks/tests/zz-fixture-one.test.sh"
+  git -C "$fx" add hooks scripts tracked.txt
+  git -C "$fx" commit -q -m runner
+  printf '%s' "$fx"
+}
+
+{
+  fx="$(l1_fixture l1-normal 'sleep 120 </dev/null >/dev/null 2>&1 &
+echo $! >"${DESCENDANT_PIDFILE}"')"
+  priv="$TEST_TMP/l1-normal-tmp"
+  mkdir -p "$priv"
+  dpidf="$TEST_TMP/l1-normal.descendant"
+  rc=0
+  p4b_outer_env TMPDIR="$priv" DESCENDANT_PIDFILE="$dpidf" \
+    bash "$fx/hooks/tests/run.sh" zz-fixture-one </dev/null >/dev/null 2>&1 || rc=$?
+  assert_exit_code "$rc" 0 "L1 normal exit rc 0"
+  dpid="$(tr -d '[:space:]' <"$dpidf" 2>/dev/null || true)"
+  if [ -z "$dpid" ]; then
+    fail "L1 normal exit: descendant pid not recorded"
+  elif kill -0 "$dpid" 2>/dev/null; then
+    kill -s KILL "$dpid" >/dev/null 2>&1 || true
+    fail "L1 normal exit: descendant still alive after outer returned"
+  else
+    assert_eq 0 0 "L1 normal exit: descendant gone"
+  fi
+  assert_no_snap_dirs "$priv"
+}
+
+{
+  fx="$(l1_fixture l1-hup 'sleep 120 </dev/null >/dev/null 2>&1 &
+echo $! >"${DESCENDANT_PIDFILE}"
+printf "ready\n" >"${FIXTURE_MARKER}"
+wait')"
+  priv="$TEST_TMP/l1-hup-tmp"
+  mkdir -p "$priv"
+  dpidf="$TEST_TMP/l1-hup.descendant"
+  marker="$TEST_TMP/l1-hup.marker"
+  set -m
+  # Direct env (not the p4b_outer_env function): $! must be the outer bash itself.
+  env -u AUTOPILOT_SESSION_ID -u AUTOPILOT_TEST_SNAPSHOT_ROOT -u AUTOPILOT_TEST_SNAPSHOT \
+    TMPDIR="$priv" DESCENDANT_PIDFILE="$dpidf" FIXTURE_MARKER="$marker" \
+    bash "$fx/hooks/tests/run.sh" zz-fixture-one </dev/null >/dev/null 2>&1 &
+  outer=$!
+  set +m
+  for _i in $(seq 1 150); do
+    [ -s "$dpidf" ] && [ -f "$marker" ] && break
+    sleep 0.1
+  done
+  if [ ! -f "$marker" ]; then
+    kill -s KILL "$outer" >/dev/null 2>&1 || true
+    wait "$outer" 2>/dev/null || true
+    fail "L1 HUP: readiness marker never appeared"
+  else
+    kill -s HUP "$outer" >/dev/null 2>&1 || true
+    rc=0
+    wait "$outer" || rc=$?
+    assert_exit_code "$rc" 129 "L1 HUP => 129"
+    dpid="$(tr -d '[:space:]' <"$dpidf" 2>/dev/null || true)"
+    if [ -n "$dpid" ] && kill -0 "$dpid" 2>/dev/null; then
+      kill -s KILL "$dpid" >/dev/null 2>&1 || true
+      fail "L1 HUP: descendant $dpid still alive"
+    else
+      assert_eq 0 0 "L1 HUP: descendant gone"
+    fi
+    assert_no_snap_dirs "$priv"
+  fi
 }
 
 finalize_test

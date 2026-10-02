@@ -85,9 +85,44 @@ TS_REAL_ROOT=""
 TS_CHILD_STATUS=""
 TS_CHILD_PID=""
 TS_SHUTDOWN_STARTED=""
+TS_CHILD_SHUTDOWN_DONE=""
+
+# Idempotent child shutdown used by EVERY exit path of the outer runner:
+# signal the child's process group, wait (bounded, then KILL) until the group
+# is gone, reap the child. Must complete BEFORE any snapshot removal.
+# $1 = signal to deliver (INT|TERM|HUP); empty means TERM.
+__ts_child_shutdown() {
+  local sig="${1:-TERM}" pid
+  [ -z "${TS_CHILD_SHUTDOWN_DONE:-}" ] || return 0
+  trap '' INT TERM HUP
+  # Child pid: $! once recorded, else the shell's only job (a signal can land
+  # between `( ... ) &` and `TS_CHILD_PID=$!`).
+  pid="${TS_CHILD_PID:-}"
+  [ -n "$pid" ] || pid="$(jobs -p 2>/dev/null | head -n 1)"
+  if [ -z "$pid" ]; then
+    return 0
+  fi
+  TS_CHILD_SHUTDOWN_DONE=1
+  kill -s "$sig" -- "-$pid" >/dev/null 2>&1 || true
+  kill -s "$sig" "$pid" >/dev/null 2>&1 || true
+  pkill "-$sig" -s "$pid" >/dev/null 2>&1 || true
+  ts_wait_pgid_gone "$pid"
+  # The child may still be pre-setsid (INT ignored by an async subshell):
+  # escalate to TERM, then KILL, so the wait below can never hang.
+  if kill -0 "$pid" 2>/dev/null; then
+    kill -s TERM "$pid" >/dev/null 2>&1 || true
+    sleep 0.2
+    kill -0 "$pid" 2>/dev/null && kill -s KILL "$pid" >/dev/null 2>&1
+  fi
+  wait "$pid" 2>/dev/null || true
+  return 0
+}
 
 __suite_on_exit() {
   local status=$?
+  if [ -n "${TS_REAL_ROOT:-}" ]; then
+    __ts_child_shutdown TERM
+  fi
   if [ -n "${TS_CHILD_STATUS:-}" ]; then
     status="$TS_CHILD_STATUS"
   fi
@@ -153,28 +188,27 @@ elif [[ "$(ps -o args= -p "$PPID" 2>/dev/null || true)" == *suite-oracle-lock.te
 else
   TS_REAL_ROOT="$REPO_ROOT"
   __ts_outer_on_interrupt() {
-    local sig="$1"
+    local sig="$1" deliver="$1"
     if [ -n "${TS_SHUTDOWN_STARTED:-}" ]; then
       return 0
     fi
     TS_SHUTDOWN_STARTED=1
-    trap '' INT TERM
-    if [ -n "${TS_CHILD_PID:-}" ]; then
-      kill -s "$sig" -- "-$TS_CHILD_PID" >/dev/null 2>&1 || true
-      kill -s "$sig" "$TS_CHILD_PID" >/dev/null 2>&1 || true
-      pkill "-$sig" -s "$TS_CHILD_PID" >/dev/null 2>&1 || true
-      ts_wait_pgid_gone "$TS_CHILD_PID"
-      wait "$TS_CHILD_PID" 2>/dev/null || true
-    fi
-    if [ "$sig" = "INT" ]; then
-      TS_CHILD_STATUS=130
-    else
-      TS_CHILD_STATUS=143
-    fi
+    trap '' INT TERM HUP
+    [ "$sig" = HUP ] && deliver=TERM
+    # No child yet (still constructing): nothing to signal; the EXIT trap
+    # removes the half-built snapshot. A signal between `&` and `$!` finds the
+    # child via `jobs -p` inside __ts_child_shutdown.
+    __ts_child_shutdown "$deliver"
+    case "$sig" in
+      INT) TS_CHILD_STATUS=130 ;;
+      HUP) TS_CHILD_STATUS=129 ;;
+      *) TS_CHILD_STATUS=143 ;;
+    esac
     exit "$TS_CHILD_STATUS"
   }
   trap '__ts_outer_on_interrupt INT' INT
   trap '__ts_outer_on_interrupt TERM' TERM
+  trap '__ts_outer_on_interrupt HUP' HUP
   if ! ts_baseline_check "$TS_REAL_ROOT"; then
     exit 1
   fi

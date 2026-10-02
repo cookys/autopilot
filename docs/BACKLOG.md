@@ -760,14 +760,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/verification-author-pin-unreachable.md
 - **Context**: `dispatch-author.sh` never passes `--resolved-live`, and the resolver that would build it rejects role `verification_author`.
 
-### Managed final panel: cleanroom/packet isolation profiles for kimi and agy reviewer seats
-- **Status**: open
-- **Trigger**: FIRED as a peer operator request — needs this repo's owner prioritization (reopens a 2026-09-17 out-of-scope decision)
-- **Effort**: L
-- **Source**: PEER-REQUESTED cuda/chatgpt-tunnel (Revival /root operator), facts re-verified by reading code
-- **Pointer**: docs/backlog/final-panel-kimi-agy-cleanroom-profiles.md
-- **Context**: `reviewSeatTier` makes kimi/agy tier `none`, which campaign intake refuses before qualification; real isolation + pre-spend probes are needed, not a waiver.
-
 ### dispatch-author kimi: `--timeout` never reaches the adapter (hard 300 s cap)
 - **Status**: open
 - **Trigger**: FIRED — peer report 2026-10-02; queued after the test-suite repo write containment release; reproduce locally first

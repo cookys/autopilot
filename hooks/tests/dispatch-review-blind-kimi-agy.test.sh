@@ -241,16 +241,21 @@ NB_REFS="$(awk '/elif \[\[ "\$RUNNER" = "kimi" \]\]/{k=1} /elif \[\[ "\$RUNNER" 
 assert_eq "0" "$NB_REFS" "negative control: kimi launcher references exist only under the blind guard"
 
 # ---- NON-BLIND argv/cwd/env byte-compare against the phase-2 base script (nonces/run ids normalised) ----
-BASE_SHA=47a0e1c6
+# Base = the parent of the first commit that introduced the blind kimi/agy rail (its blind_runner_preflight
+# helper) into scripts/dispatch-review.sh. Derived from history every clone carries, never a private-clone SHA.
+BASE_SHA=""
+_intro="$(git -C "$REPO_ROOT" log --reverse --format=%H -S'blind_runner_preflight' -- scripts/dispatch-review.sh 2>/dev/null | head -1)"
+[ -n "$_intro" ] && BASE_SHA="$(git -C "$REPO_ROOT" rev-parse --verify -q "$_intro^" 2>/dev/null)"
 # The base copy lives under $TEST_TMP (never the checkout): a scripts/ dir whose siblings are symlinks
-# to the real ones, so the base script resolves its lib/ relative to itself.
+# to the real ones, so the base script resolves its lib/ relative to itself (its ../docs receipt path does
+# not exist under $TEST_TMP, so the loop below pins the same receipt for both runs).
 BASE_DIR="$TEST_TMP/base-scripts"; mkdir -p "$BASE_DIR"
 for _f in "$REPO_ROOT"/scripts/* "$REPO_ROOT"/scripts/.[!.]*; do
   [ -e "$_f" ] && [ "$(basename "$_f")" != dispatch-review.sh ] && ln -s "$_f" "$BASE_DIR/$(basename "$_f")"
 done
 BASE_COPY="$BASE_DIR/dispatch-review.sh"
-BASE_OK=1; git -C "$REPO_ROOT" show "$BASE_SHA:scripts/dispatch-review.sh" > "$BASE_COPY" 2>/dev/null || BASE_OK=0
-assert_eq "1" "$BASE_OK" "base script $BASE_SHA is reachable for the non-blind byte-compare (a skip would make the proof vacuous)"
+BASE_OK=1; [ -n "$BASE_SHA" ] && git -C "$REPO_ROOT" show "$BASE_SHA:scripts/dispatch-review.sh" > "$BASE_COPY" 2>/dev/null || BASE_OK=0
+assert_eq "1" "$BASE_OK" "base script (parent of the commit introducing blind_runner_preflight) is derivable from history and reachable for the non-blind byte-compare (a skip would make the proof vacuous)"
 if [ "$BASE_OK" = 1 ]; then
   chmod +x "$BASE_COPY"
   CMP_REC="$TEST_TMP/cmp-rec"
@@ -266,14 +271,19 @@ EOF
   export CMP_REC_OUT
   for CR in kimi agy; do
     CM=kimi-code/k3; [ "$CR" = agy ] && CM=gemini-3.6-flash-high
-    for WHO in "$BASE_COPY" "$SCRIPT"; do
-      CMP_REC_OUT="$TEST_TMP/cmp-$CR-$(basename "$WHO").rec" HOME="$TEST_TMP/cmp-home" DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 \
+    # Distinct labels: both scripts are named dispatch-review.sh, so keying the record on basename made
+    # base and head append to ONE file and the compare read it against itself (vacuous pass).
+    for WHO_LABEL in base head; do
+      WHO="$SCRIPT"; [ "$WHO_LABEL" = base ] && WHO="$BASE_COPY"
+      CMP_REC_OUT="$TEST_TMP/cmp-$CR-$WHO_LABEL.rec" HOME="$TEST_TMP/cmp-home" DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 \
+        AUTOPILOT_PLATFORM_CAPABILITY_RECEIPT="$REPO_ROOT/docs/projects/_archive/2026/08/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json" \
         bash "$WHO" --runner "$CR" --model "$CM" --diff-file "$DIFF" --bin "$CMP_REC" >/dev/null 2>&1 < /dev/null
     done
     NORM='s/[0-9a-f]{32}/N/g; s/review-[0-9a-f-]+/RUNID/g'
-    assert_eq "$(sed -E "$NORM" "$TEST_TMP/cmp-$CR-$(basename "$BASE_COPY").rec")" "$(sed -E "$NORM" "$TEST_TMP/cmp-$CR-$(basename "$SCRIPT").rec")" \
-      "non-blind $CR argv/cwd-shape/env are byte-identical to base $BASE_SHA"
-    assert_contains "$(cat "$TEST_TMP/cmp-$CR-$(basename "$SCRIPT").rec")" 'ARGV:' "non-blind $CR byte-compare actually ran the recorder"
+    assert_eq "$(sed -E "$NORM" "$TEST_TMP/cmp-$CR-base.rec")" "$(sed -E "$NORM" "$TEST_TMP/cmp-$CR-head.rec")" \
+      "non-blind $CR argv/cwd-shape/env are byte-identical to base ${BASE_SHA:0:8}"
+    assert_contains "$(cat "$TEST_TMP/cmp-$CR-base.rec")" 'ARGV:' "non-blind $CR byte-compare base run actually ran the recorder"
+    assert_contains "$(cat "$TEST_TMP/cmp-$CR-head.rec")" 'ARGV:' "non-blind $CR byte-compare head run actually ran the recorder"
   done
 fi
 assert_eq "$SCRIPTS_PORCELAIN_BEFORE" "$(git -C "$REPO_ROOT" status --porcelain scripts/)" "this suite leaves git status --porcelain scripts/ unchanged"

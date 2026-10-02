@@ -1,0 +1,7 @@
+# `campaign resume` refuses a final-panel retry: REVIEWING is not a resumable phase, and a zero-write resume is blocked by the changed-files cap
+
+Source: PEER-REPORTED by cuda/chatgpt-tunnel via fleet, 2026-10-03 (message 01M3Z081JVCKEEWJW2SSG5V4CT); verified by reading `src/campaign/cli.js:885-905` at ab76a7af, not by running it.
+
+- **Trigger**: FIRED — queued next; reproduce first with a fixture campaign whose final panel had a seat transport failure.
+- **Context**: the engine classifies `final_panel_seat_transport_failed` as gate_transient (`retry_full_diff_review`, durable_wait, resumable), but the ICC projection the peer saw reads phase REVIEWING, and `resumePhaseSupported` (`src/campaign/cli.js:889-897`) lists PREPARED, VERTICAL_VERIFICATION(+candidate), ADJUDICATING(+candidate+bound review), BOUNDARY_REJECTED, AWAITING_DISPOSITION, AWAITING_CONVERGENCE_ADJUDICATION — not REVIEWING → `campaign_resume_phase_unsupported` (:902). Second: `usage.changed_files >= limits.max_changed_files` (:905) blocks even a resume that only re-runs review (zero writes). Fix shape: (a) reconcile the controller's resumable state with the ICC projection (either project the transient review failure back to VERTICAL_VERIFICATION or admit REVIEWING with a bound candidate), (b) apply write budgets only to resumes that can write. Tests for both, plus a negative control that a writing resume at the cap stays blocked.
+- **Effort**: S

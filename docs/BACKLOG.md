@@ -744,6 +744,22 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/peer-addressing-md-says-message-rows-live-forever-a-spec-says-7-days.md
 - **Context**: `hangar-bridge/SUBJECT_ROUTING_SPEC.md:516,614` records an accepted 7-day retention/replay bound for subjected `@team` chat that was never built.
 
+### `campaign resume` refuses a final-panel retry: REVIEWING unsupported; zero-write resume hits file cap
+- **Status**: open
+- **Trigger**: FIRED — peer report 2026-10-03; queued next; reproduce locally first
+- **Effort**: S
+- **Source**: PEER-REPORTED cuda/chatgpt-tunnel (fleet), verified by reading code
+- **Pointer**: docs/backlog/campaign-resume-reviewing-phase-and-zero-write-budget.md
+- **Context**: controller says resumable after a transient final-panel failure, but `campaign resume` rejects phase REVIEWING and applies the write cap to a review-only resume.
+
+### Reviewer seats at max effort can spend the whole 4096-token output budget on thinking and return no text
+- **Status**: open
+- **Trigger**: FIRED — peer report 2026-10-03; locate the cap and reproduce locally first
+- **Effort**: S
+- **Source**: PEER-REPORTED cuda/chatgpt-tunnel (fleet), not yet verified locally
+- **Pointer**: docs/backlog/review-seat-max-tokens-exhausted-by-thinking.md
+- **Context**: GLM seat returned `stop_reason: max_tokens` with only thinking; needs a larger output budget at max effort and a named failure class, never a parser relaxation.
+
 ### Final-panel resume after a seat transport failure re-runs every seat, discarding valid verdicts
 - **Status**: open
 - **Trigger**: next touch of the final-panel resume path, or the next run blocked by a single failing QC seat

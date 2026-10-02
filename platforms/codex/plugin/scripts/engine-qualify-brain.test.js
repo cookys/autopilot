@@ -507,6 +507,7 @@ function main() {
     'the second trial never runs once transport is known dead');
 
   fs.rmSync(tempRoot, { recursive: true, force: true });
+  if (assertions !== 64) throw new Error(`engine-qualify-brain: expected exactly 64 assertions (count pin moved here from hooks/tests/engine-qualify-brain.test.sh so the L1 run enforces it), got ${assertions}`);
   process.stdout.write(`brain qualifier: ${assertions} assertions passed\n`);
 }
 

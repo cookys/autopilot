@@ -595,4 +595,5 @@ require('fs').writeFileSync(${JSON.stringify(sentinelPath)}, 'module-top-level-c
     'planted negative: with closed_label_set stripped from the envelope again, the envelope-only stub flips red (proves test 13 is load-bearing)');
 }
 
+if (assertions !== 56) throw new Error(`engine-qualify-consult: expected exactly 56 assertions (count pin moved here from hooks/tests/engine-qualify-consult.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);

@@ -197,4 +197,5 @@ for (let index = 0; index < 50; index += 1) {
 }
 check(sweepOk === 50, '50-seed sweep: every seed generates, validates, and replays byte-identically');
 
+if (assertions !== 51) throw new Error(`brain-eval-generator: expected exactly 51 assertions (count pin moved here from hooks/tests/brain-eval-generator.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`brain generator: ${assertions} assertions passed\n`);

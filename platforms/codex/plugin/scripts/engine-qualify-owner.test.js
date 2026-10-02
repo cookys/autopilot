@@ -339,6 +339,7 @@ function main() {
   check(!fs.existsSync(path.join(deadStoreDir, 'qualification-evidence.jsonl')),
     'owner transport_fail appends NO row admitting the role');
 
+  if (assertions !== 31) throw new Error(`engine-qualify-owner: expected exactly 31 assertions (count pin moved here from hooks/tests/engine-qualify-owner.test.sh so the L1 run enforces it), got ${assertions}`);
   process.stdout.write(`owner qualifier: ${assertions} assertions passed\n`);
 }
 

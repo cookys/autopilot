@@ -1634,4 +1634,5 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(${JSON.stringify(ssePortFil
 }
 
 fs.rmSync(tempRoot, { recursive: true, force: true });
+if (assertions !== 264) throw new Error(`qualification-review-provider: expected exactly 264 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);

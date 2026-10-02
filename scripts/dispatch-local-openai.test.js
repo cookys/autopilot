@@ -582,6 +582,7 @@ async function main() {
     'dispatch CLI invalid arguments emit a stable reason',
   );
 
+  if (assertions !== 63) throw new Error(`dispatch-local-openai: expected exactly 63 assertions (count pin moved here from hooks/tests/dispatch-local-openai.test.sh so the L1 run enforces it), got ${assertions}`);
   process.stdout.write(`local OpenAI dispatch: ${assertions} assertions passed\n`);
 }
 

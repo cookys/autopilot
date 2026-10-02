@@ -458,6 +458,7 @@ async function main() {
     'generic CLI result does not fabricate a reusable identity',
   );
 
+  if (assertions !== 50) throw new Error(`local-engine-probe: expected exactly 50 assertions (count pin moved here from hooks/tests/local-engine-probe.test.sh so the L1 run enforces it), got ${assertions}`);
   process.stdout.write(`local engine probe: ${assertions} assertions passed\n`);
 }
 

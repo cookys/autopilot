@@ -401,5 +401,6 @@ process.stdout.write(JSON.stringify({
   assertions += 1;
 }
 
+if (assertions !== 29) throw new Error(`engine-qualify-va: expected exactly 29 assertions (count pin moved here from hooks/tests/engine-qualify-va.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);
 fs.rmSync(tempRoot, { recursive: true, force: true });

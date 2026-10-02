@@ -224,4 +224,5 @@ const adminJson = (admin) => g.canonicalJson({
     'plan contract states the constant budget');
 }
 
+if (assertions !== 445) throw new Error(`va-eval-generator: expected exactly 445 assertions (count pin moved here from hooks/tests/va-eval-generator.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);

@@ -333,4 +333,5 @@ check(twinRound !== undefined, 'a verified-but-unclosed control exists in trial 
 check(twinRound.oracle.expected_flags.every((p) => p.plant_kind !== 'reversal'),
   'the verified-but-unclosed control carries no reversal plant');
 
+if (assertions !== 51) throw new Error(`brain-eval-grader: expected exactly 51 assertions (count pin moved here from hooks/tests/brain-eval-grader.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`brain grader: ${assertions} assertions passed\n`);

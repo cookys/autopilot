@@ -213,4 +213,5 @@ const stateCase = trial.cases.find((c) => c.family === 'state-residue');
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 
+if (assertions !== 29) throw new Error(`va-eval-grader: expected exactly 29 assertions (count pin moved here from hooks/tests/va-eval-grader.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);

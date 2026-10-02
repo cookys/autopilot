@@ -74,30 +74,36 @@ cd "$REPO_ROOT"
 # from L1 (node --test) and L2 (bash suite) children of this runner.
 export AUTOPILOT_TEST_RUN_GUARD=1
 
-# KR3: polluted local user.email on the real repo refuses the suite (G7).
-# Never edits the config. Never touches --global.
-if ! ts_baseline_check "$REPO_ROOT"; then
-  exit 1
-fi
-
-# G6: snapshot local config (minus branch./remote.) plus refs/worktrees/status.
-# Snapshot mode itself stays off this row; the guard wraps the in-place run.
-TS_GUARD_STATE="$(mktemp -d "${TMPDIR:-/tmp}/ts-guard.XXXXXX")"
-ts_guard_before "$REPO_ROOT" "$TS_GUARD_STATE"
-
 # Global; set by the parallel branch, cleared after its own successful rm -rf.
 # The EXIT trap also removes it (belt-and-suspenders on an interrupted run).
 PARALLEL_TMP=""
 declare -a PARALLEL_CHILD_PIDS=()
+TS_GUARD_STATE=""
+TS_SNAP=""
+TS_LOCK_FD=""
+TS_REAL_ROOT=""
+TS_CHILD_STATUS=""
 
 __suite_on_exit() {
   local status=$?
+  if [ -n "${TS_CHILD_STATUS:-}" ]; then
+    status="$TS_CHILD_STATUS"
+  fi
+  local guard_root="${TS_REAL_ROOT:-$REPO_ROOT}"
   if [ -n "${TS_GUARD_STATE:-}" ]; then
-    if ! ts_guard_after "$REPO_ROOT" "$TS_GUARD_STATE" && [ "$status" -eq 0 ]; then
+    if ! ts_guard_after "$guard_root" "$TS_GUARD_STATE" && [ "$status" -eq 0 ]; then
       status=1
     fi
     rm -rf "$TS_GUARD_STATE"
     TS_GUARD_STATE=""
+  fi
+  if [ -n "${TS_SNAP:-}" ]; then
+    ts_snapshot_remove "$TS_SNAP" || true
+    TS_SNAP=""
+  fi
+  if [ -n "${TS_LOCK_FD:-}" ]; then
+    eval "exec ${TS_LOCK_FD}>&-" 2>/dev/null || true
+    TS_LOCK_FD=""
   fi
   if [ -n "$PARALLEL_TMP" ]; then
     rm -rf "$PARALLEL_TMP"
@@ -115,6 +121,86 @@ __suite_on_exit() {
   exit "$status"
 }
 trap __suite_on_exit EXIT
+
+__ts_inplace_wrap() {
+  if ! ts_baseline_check "$REPO_ROOT"; then
+    exit 1
+  fi
+  TS_GUARD_STATE="$(mktemp -d "${TMPDIR:-/tmp}/ts-guard.XXXXXX")"
+  ts_guard_before "$REPO_ROOT" "$TS_GUARD_STATE"
+}
+
+# G3: inner / opt-out / missing rsync / outer snapshot. Snapshot is default for
+# every run, including --parallel; original argv is passed through unchanged.
+if [ -n "${AUTOPILOT_TEST_SNAPSHOT_ROOT:-}" ]; then
+  : # INNER: skip baseline, guard, and snapshot.
+elif [ "${AUTOPILOT_TEST_SNAPSHOT:-}" = "0" ]; then
+  echo "test-snapshot: disabled" >&2
+  __ts_inplace_wrap
+elif ! command -v rsync >/dev/null 2>&1; then
+  echo "test-snapshot: disabled (rsync missing)" >&2
+  __ts_inplace_wrap
+else
+  TS_REAL_ROOT="$REPO_ROOT"
+  if ! ts_baseline_check "$TS_REAL_ROOT"; then
+    exit 1
+  fi
+  if ! command -v flock >/dev/null 2>&1; then
+    echo "test-snapshot: construction failed: flock missing" >&2
+    exit 1
+  fi
+  TS_SNAP="$(mktemp -d "${TMPDIR:-/tmp}/autopilot-test-snapshot.XXXXXX")"
+  : >"$TS_SNAP/.autopilot-live.lock"
+  exec {TS_LOCK_FD}>"$TS_SNAP/.autopilot-live.lock"
+  if ! flock "$TS_LOCK_FD"; then
+    echo "test-snapshot: construction failed: flock" >&2
+    exit 1
+  fi
+  TS_GUARD_STATE="$(mktemp -d "${TMPDIR:-/tmp}/ts-guard.XXXXXX")"
+  ts_guard_before "$TS_REAL_ROOT" "$TS_GUARD_STATE"
+  if ! ts_snapshot_build "$TS_REAL_ROOT" "$TS_SNAP"; then
+    exit 1
+  fi
+  set -m
+  (
+    unset PWD OLDPWD
+    export AUTOPILOT_TEST_SNAPSHOT_ROOT="$TS_SNAP"
+    cd "$TS_SNAP/repo" || exit 1
+    # Restore SIG_DFL so inner run.sh can trap INT/TERM even when this outer
+    # was itself started as an async job (bash then inherits SIG_IGN).
+    if command -v python3 >/dev/null 2>&1; then
+      exec python3 -c 'import os, signal, sys
+for s in (signal.SIGINT, signal.SIGTERM, signal.SIGQUIT):
+    signal.signal(s, signal.SIG_DFL)
+os.execvp("bash", ["bash"] + sys.argv[1:])
+' "$TS_SNAP/repo/hooks/tests/run.sh" "$@"
+    else
+      trap - INT TERM QUIT 2>/dev/null || true
+      exec bash "$TS_SNAP/repo/hooks/tests/run.sh" "$@"
+    fi
+  ) &
+  TS_CHILD_PID=$!
+  set +m
+  __ts_outer_on_interrupt() {
+    local sig="$1"
+    if [ -n "${TS_CHILD_PID:-}" ]; then
+      kill -s "$sig" -- "-$TS_CHILD_PID" >/dev/null 2>&1 || true
+      kill -s "$sig" "$TS_CHILD_PID" >/dev/null 2>&1 || true
+      wait "$TS_CHILD_PID" 2>/dev/null || true
+    fi
+    if [ "$sig" = "INT" ]; then
+      TS_CHILD_STATUS=130
+    else
+      TS_CHILD_STATUS=143
+    fi
+    exit "$TS_CHILD_STATUS"
+  }
+  trap '__ts_outer_on_interrupt INT' INT
+  trap '__ts_outer_on_interrupt TERM' TERM
+  wait "$TS_CHILD_PID"
+  TS_CHILD_STATUS=$?
+  exit "$TS_CHILD_STATUS"
+fi
 
 __suite_on_interrupt() {
   local sig="$1"

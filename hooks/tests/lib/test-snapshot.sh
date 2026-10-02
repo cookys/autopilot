@@ -201,3 +201,64 @@ ts_guard_after() {
 
   [ "$drift" -eq 0 ]
 }
+
+ts_snapshot_build() {
+  local real_root="$1" container="$2"
+  if ! command -v rsync >/dev/null 2>&1; then
+    echo "test-snapshot: rsync missing" >&2
+    return 1
+  fi
+  local real_abs sha branch
+  real_abs="$(realpath "$real_root")"
+  mkdir -p "$container"
+  GIT_CONFIG_COUNT=0 GIT_ALLOW_PROTOCOL=file \
+    git clone --quiet --no-hardlinks --no-checkout "$real_root" "$container/repo" || return 1
+  sha="$(git -C "$real_root" rev-parse HEAD)"
+  if branch="$(git -C "$real_root" symbolic-ref --quiet --short HEAD 2>/dev/null)"; then
+    git -C "$container/repo" checkout --quiet -B "$branch" "$sha" || return 1
+  else
+    git -C "$container/repo" checkout --quiet --detach "$sha" || return 1
+  fi
+  rsync -a --delete --exclude='.git' "${real_root}/" "$container/repo/" || return 1
+  git -C "$container/repo" remote set-url origin /nonexistent/autopilot-test-snapshot-origin || return 1
+  if [ -e "$container/repo/.git/objects/info/alternates" ]; then
+    echo "test-snapshot: construction failed: alternates" >&2
+    return 1
+  fi
+  local link dest
+  while IFS= read -r -d '' link; do
+    dest="$(readlink -f "$link" 2>/dev/null || true)"
+    [ -z "${dest:-}" ] && continue
+    case "$dest" in
+      "$real_abs"|"$real_abs"/*)
+        echo "test-snapshot: construction failed: symlink" >&2
+        return 1
+        ;;
+    esac
+  done < <(find "$container/repo" -type l -print0)
+  return 0
+}
+
+ts_snapshot_remove() {
+  local container="$1"
+  [ -e "$container" ] || return 0
+  local repo="$container/repo"
+  if [ -d "$repo/.git/worktrees" ]; then
+    git -C "$repo" worktree prune >/dev/null 2>&1 || true
+    local main="" path line
+    while IFS= read -r line; do
+      case "$line" in
+        worktree\ *)
+          path="${line#worktree }"
+          if [ -z "$main" ]; then
+            main="$path"
+          else
+            git -C "$repo" worktree remove --force "$path" >/dev/null 2>&1 || true
+          fi
+          ;;
+      esac
+    done < <(git -C "$repo" worktree list --porcelain 2>/dev/null || true)
+  fi
+  rm -rf "$container"
+  return 0
+}

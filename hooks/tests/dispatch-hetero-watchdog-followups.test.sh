@@ -421,7 +421,9 @@ assert_r3_zombie_worker_not_stamped_timed_out() {
   local zpid="" holder="" zfile="$TEST_TMP/r3-zombie.pid"
   : > "$zfile"
   # Holder stays alive and does not wait; child is its own session/group then exits.
-  bash -c 'setsid bash -c "exit 0" & echo $! > "'"$zfile"'"; exec sleep 30' &
+  # The child exits only after the holder has exec'd sleep (comm=sleep): a bash holder
+  # reaps a child that exits before the exec, and the zombie would never exist.
+  bash -c 'setsid bash -c '"'"'c=; until [ "$c" = sleep ]; do read -r c < /proc/$PPID/comm 2>/dev/null || exit 0; done; exit 0'"'"' & echo $! > "'"$zfile"'"; exec sleep 30' &
   holder=$!
   local n=0 st=""
   while [ "$n" -lt 50 ]; do
@@ -583,7 +585,9 @@ assert_r3_alive_helper_matches_exact_pgid() {
     fail "assert_r3_alive_helper_matches_exact_pgid: live group $live_pg judged not alive"
     return
   fi
-  bash -c 'setsid bash -c "exit 0" & echo $! > "'"$zfile"'"; exec sleep 30' &
+  # The child exits only after the holder has exec'd sleep (comm=sleep): a bash holder
+  # reaps a child that exits before the exec, and the zombie would never exist.
+  bash -c 'setsid bash -c '"'"'c=; until [ "$c" = sleep ]; do read -r c < /proc/$PPID/comm 2>/dev/null || exit 0; done; exit 0'"'"' & echo $! > "'"$zfile"'"; exec sleep 30' &
   holder=$!
   local n=0 zpid="" st=""
   while [ "$n" -lt 50 ]; do
@@ -821,7 +825,9 @@ EOF
 
   local holder="" zfile="$TEST_TMP/r6-zombie.pid"
   : > "$zfile"
-  bash -c 'setsid bash -c "exit 0" & echo $! > "'"$zfile"'"; exec sleep 30' &
+  # The child exits only after the holder has exec'd sleep (comm=sleep): a bash holder
+  # reaps a child that exits before the exec, and the zombie would never exist.
+  bash -c 'setsid bash -c '"'"'c=; until [ "$c" = sleep ]; do read -r c < /proc/$PPID/comm 2>/dev/null || exit 0; done; exit 0'"'"' & echo $! > "'"$zfile"'"; exec sleep 30' &
   holder=$!
   local n=0 zpid="" st=""
   while [ "$n" -lt 50 ]; do
@@ -883,7 +889,9 @@ EOF
 
   local holder="" zfile="$TEST_TMP/r7-zombie.pid"
   : > "$zfile"
-  bash -c 'setsid bash -c "exit 0" & echo $! > "'"$zfile"'"; exec sleep 30' &
+  # The child exits only after the holder has exec'd sleep (comm=sleep): a bash holder
+  # reaps a child that exits before the exec, and the zombie would never exist.
+  bash -c 'setsid bash -c '"'"'c=; until [ "$c" = sleep ]; do read -r c < /proc/$PPID/comm 2>/dev/null || exit 0; done; exit 0'"'"' & echo $! > "'"$zfile"'"; exec sleep 30' &
   holder=$!
   local n=0 zpid="" st=""
   while [ "$n" -lt 50 ]; do
@@ -975,7 +983,9 @@ ROWS
 
   local holder="" zfile="$TEST_TMP/r8-zombie.pid"
   : > "$zfile"
-  bash -c 'setsid bash -c "exit 0" & echo $! > "'"$zfile"'"; exec sleep 30' &
+  # The child exits only after the holder has exec'd sleep (comm=sleep): a bash holder
+  # reaps a child that exits before the exec, and the zombie would never exist.
+  bash -c 'setsid bash -c '"'"'c=; until [ "$c" = sleep ]; do read -r c < /proc/$PPID/comm 2>/dev/null || exit 0; done; exit 0'"'"' & echo $! > "'"$zfile"'"; exec sleep 30' &
   holder=$!
   local n=0 zpid="" st=""
   while [ "$n" -lt 50 ]; do

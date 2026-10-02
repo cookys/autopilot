@@ -67,49 +67,23 @@ cd "$REPO_ROOT"
 [ -r "$TESTS_DIR/lib/suite-residue-reap.sh" ] && . "$TESTS_DIR/lib/suite-residue-reap.sh"
 # shellcheck source=lib/suite-oracle-lock.sh
 [ -r "$TESTS_DIR/lib/suite-oracle-lock.sh" ] && . "$TESTS_DIR/lib/suite-oracle-lock.sh"
+# shellcheck source=lib/test-snapshot.sh
+. "$TESTS_DIR/lib/test-snapshot.sh"
 
 # Refuse writes to the operator's real ~/.autopilot/engine-capability store
 # from L1 (node --test) and L2 (bash suite) children of this runner.
 export AUTOPILOT_TEST_RUN_GUARD=1
 
-# ── Real-repo git identity guard ─────────────────────────────────────────────
-# Belt and braces to the unset above: snapshot the REAL repo's LOCAL identity
-# (absent is a state), compare at the end and in the EXIT trap, restore on
-# drift, complain loudly (key name only, never the injected value) and fail.
-# Never touches --global.
-__ID_KEYS=(user.name user.email)
-# One line per key: "<key>=set:<value>" or "<key>=absent"
-__id_snapshot() {
-  local k v out=""
-  for k in "${__ID_KEYS[@]}"; do
-    if v="$(git -C "$REPO_ROOT" config --local --get "$k" 2>/dev/null)"; then
-      out="$out$k=set:$v"$'\n'
-    else
-      out="$out$k=absent"$'\n'
-    fi
-  done
-  printf '%s' "$out"
-}
-IDENTITY_BEFORE="$(__id_snapshot)"
-__id_check_restore() {
-  local k now line_b line_a v drift=0
-  now="$(__id_snapshot)"
-  [ "$now" = "$IDENTITY_BEFORE" ] && return 0
-  for k in "${__ID_KEYS[@]}"; do
-    line_b="$(printf '%s' "$IDENTITY_BEFORE" | grep -F "$k=" | head -n1)"
-    line_a="$(printf '%s' "$now" | grep -F "$k=" | head -n1)"
-    [ "$line_a" = "$line_b" ] && continue
-    drift=1
-    echo "❌ REAL-REPO IDENTITY DRIFT: a test changed the real repo's local git config key $k (restored)." >&2
-    if [ "$line_b" = "$k=absent" ]; then
-      git -C "$REPO_ROOT" config --local --unset-all "$k" >/dev/null 2>&1 || true
-    else
-      v="${line_b#"$k=set:"}"
-      git -C "$REPO_ROOT" config --local "$k" "$v" >/dev/null 2>&1 || true
-    fi
-  done
-  [ "$drift" -eq 0 ]
-}
+# KR3: polluted local user.email on the real repo refuses the suite (G7).
+# Never edits the config. Never touches --global.
+if ! ts_baseline_check "$REPO_ROOT"; then
+  exit 1
+fi
+
+# G6: snapshot local config (minus branch./remote.) plus refs/worktrees/status.
+# Snapshot mode itself stays off this row; the guard wraps the in-place run.
+TS_GUARD_STATE="$(mktemp -d "${TMPDIR:-/tmp}/ts-guard.XXXXXX")"
+ts_guard_before "$REPO_ROOT" "$TS_GUARD_STATE"
 
 # Global; set by the parallel branch, cleared after its own successful rm -rf.
 # The EXIT trap also removes it (belt-and-suspenders on an interrupted run).
@@ -118,8 +92,12 @@ declare -a PARALLEL_CHILD_PIDS=()
 
 __suite_on_exit() {
   local status=$?
-  if ! __id_check_restore && [ "$status" -eq 0 ]; then
-    status=1
+  if [ -n "${TS_GUARD_STATE:-}" ]; then
+    if ! ts_guard_after "$REPO_ROOT" "$TS_GUARD_STATE" && [ "$status" -eq 0 ]; then
+      status=1
+    fi
+    rm -rf "$TS_GUARD_STATE"
+    TS_GUARD_STATE=""
   fi
   if [ -n "$PARALLEL_TMP" ]; then
     rm -rf "$PARALLEL_TMP"
@@ -711,12 +689,6 @@ if [ "$REAL_STORE_BEFORE" != "$REAL_STORE_AFTER" ]; then
     | sed -n 's/^[<>] /   /p' >&2
   FAILED=$((FAILED + 1))
   FAILED_TESTS+=("REAL-STORE POLLUTION (see above)")
-fi
-
-# ── Real-repo identity guard: after ──────────────────────────────────────────
-if ! __id_check_restore; then
-  FAILED=$((FAILED + 1))
-  FAILED_TESTS+=("REAL-REPO IDENTITY DRIFT (see above)")
 fi
 
 # ── Summary ──

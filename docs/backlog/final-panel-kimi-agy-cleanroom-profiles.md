@@ -1,0 +1,7 @@
+# Managed final panel: cleanroom/packet isolation profiles for kimi and agy reviewer seats
+
+Source: PEER-REQUESTED by cuda/chatgpt-tunnel (Revival /root) via fleet, 2026-10-02 (messages 01M3Y2Z9WN7NDHCNAZJRM80J2Q, 01M3Y41KSKP3Y30YJRH3Z0ZXMC); their operator asked for the upstream implementation. Facts re-verified by reading code at 06087bdd.
+
+- **Trigger**: FIRED as a request — needs THIS repo's owner prioritization before work starts (it reopens an explicit out-of-scope decision in `docs/plans/2026-09-17-blind-review-cleanroom-intake.md:219-224`).
+- **Context**: `src/engine/final-panel-qualification.js:9-27` (`reviewSeatTier`) gives packet tier to anthropic-compatible/cc-shim/claude-native/qoderclicn and cleanroom tier to codex only; every other runner is `none`, and `src/engine/campaign-intake.js:1921-1926` refuses a `none` seat with `final_panel_seat_blind_incompatible` before any qualification check (pins/overrides cannot bypass). Same table in `scripts/dispatch-review.sh:139-141` and `scripts/resolve-review-loop.sh:2225-2232`. Requested: real blind packet or cleanroom isolation for `kimi` (kimi-code/k3*) and `agy` (Gemini) review seats, with pre-spend isolation probes and the no-tools/isolation hard gates kept — not a waiver of tier `none`. Needs a probe first (does kimi/agy support a no-tools / sandboxed mode that a probe can prove, the way codex cleanroom proves bwrap?); unprovable isolation stays `none`.
+- **Effort**: L

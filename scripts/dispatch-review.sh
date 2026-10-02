@@ -303,7 +303,7 @@ case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qode
 review_seat_tier() {
   case "$1" in
     anthropic-compatible|cc-shim|claude-native|qoderclicn) printf '%s\n' packet ;;
-    codex) printf '%s\n' cleanroom ;;
+    codex|kimi|agy) printf '%s\n' cleanroom ;;
     *) printf '%s\n' none ;;
   esac
 }

@@ -577,6 +577,12 @@ function firstStderrLine(stderr) {
   return '';
 }
 
+// kimi and agy earn cleanroom tier only through this per-runner host probe and are never
+// shadow-admitted: a missing/unknown probe answer refuses (plan 2026-10-02 §2.5).
+function isRunnerProbeProfile(runner) {
+  return runner === 'kimi' || runner === 'agy';
+}
+
 function defaultCleanroomProbe(input = {}, opts = {}) {
   const repo = path.resolve(input.repo || process.cwd());
   const contractPath = input.contractPath ? path.resolve(input.contractPath) : null;
@@ -615,6 +621,9 @@ function defaultCleanroomProbe(input = {}, opts = {}) {
   if (contractPath) addDeny(path.dirname(contractPath));
 
   const args = ['--preflight'];
+  // kimi/agy: per-runner model-free probe (final-panel isolation phase 4). codex keeps the
+  // profile-less preflight byte for byte.
+  if (isRunnerProbeProfile(runner)) args.push('--profile', runner);
   for (const deny of denyPaths) {
     args.push('--deny-path', deny);
   }
@@ -642,6 +651,14 @@ function defaultCleanroomProbe(input = {}, opts = {}) {
 
   if (result.error) {
     if (result.error.code === 'ENOENT' && result.status == null) {
+      if (isRunnerProbeProfile(runner)) {
+        return rejected(
+          'cleanroom_probe',
+          'final_panel_seat_cleanroom_unavailable',
+          `${runner} cleanroom launcher not present at ${launcher}`,
+          { ...detail, exit_status: null, launcher_json: null },
+        );
+      }
       return step('cleanroom_probe', 'unknown', {
         enforcement: 'shadow',
         reason: `launcher not present at ${launcher}`,
@@ -673,6 +690,21 @@ function defaultCleanroomProbe(input = {}, opts = {}) {
   }
 
   if (result.status === 0) {
+    if (isRunnerProbeProfile(runner)) {
+      const lj = detail.launcher_json;
+      if (!lj || lj.runner !== runner) {
+        return rejected(
+          'cleanroom_probe',
+          'final_panel_seat_cleanroom_unavailable',
+          `${runner} probe did not answer for this runner`,
+          { ...detail, launcher_json: null },
+        );
+      }
+      return step('cleanroom_probe', 'ready', {
+        ...detail,
+        runner_version: typeof lj.runner_version === 'string' ? lj.runner_version : null,
+      });
+    }
     if (detail.launcher_json) {
       return step('cleanroom_probe', 'ready', detail);
     }
@@ -1921,7 +1953,7 @@ function runCampaignIntake(input = {}, adapters = {}) {
       const tier = reviewSeatTier(seat && seat.runner);
       if (tier === 'none') {
         blindFailures.push(
-          `qc_panel[${i}] ${model}/${runner}@${endpoint} cannot execute a managed blind-discovery review (runner is not in the enforceable no-tools set anthropic-compatible, cc-shim, claude-native, qoderclicn); replace it with a blind-capable seat or use a cleanroom-tier runner — pins and overrides do not bypass containment`,
+          `qc_panel[${i}] ${model}/${runner}@${endpoint} cannot execute a managed blind-discovery review (runner is not in the enforceable no-tools set anthropic-compatible, cc-shim, claude-native, qoderclicn, nor a cleanroom-tier runner codex, kimi, agy); replace it with a blind-capable seat — pins and overrides do not bypass containment`,
         );
         continue;
       }
@@ -1929,7 +1961,8 @@ function runCampaignIntake(input = {}, adapters = {}) {
         if (!probedRunners.has(runner)) {
           const injected = typeof adapters.cleanroomProbe === 'function';
           const probeFn = injected ? adapters.cleanroomProbe : defaultCleanroomProbe;
-          const allowed = injected
+          // kimi/agy may answer `unknown` (refused below); codex keeps its existing contract.
+          const allowed = injected && !isRunnerProbeProfile(runner)
             ? new Set(['ready', 'rejected'])
             : new Set(['ready', 'rejected', 'unknown']);
           let decision;
@@ -1966,6 +1999,11 @@ function runCampaignIntake(input = {}, adapters = {}) {
         const decision = probedRunners.get(runner);
         if (decision.status === 'rejected') {
           cleanroomUnavailable.push(decision.reason);
+        } else if (decision.status === 'unknown' && isRunnerProbeProfile(runner)) {
+          // Not extended from codex: no shadow-unknown for kimi/agy, in any mission mode.
+          cleanroomUnavailable.push(
+            `qc_panel[${i}] ${model}/${runner}: ${runner} cleanroom probe returned unknown; fail closed`,
+          );
         }
       }
     }

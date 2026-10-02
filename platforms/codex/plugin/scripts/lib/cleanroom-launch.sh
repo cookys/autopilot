@@ -232,6 +232,11 @@ emit_json() {
   if [ -n "$RUNNER" ]; then
     runner_field=", \"runner\": \"$(json_escape "$RUNNER")\""
   fi
+  # kimi/agy preflight only: the CLI version the in-seat probe observed (recorded by intake;
+  # a different version at dispatch time is advisory, never a block).
+  if [ -n "$RUNNER" ] && [ "$PREFLIGHT" -eq 1 ] && [ -s "$SEAT_ROOT/work/preflight.version" ]; then
+    runner_field="$runner_field, \"runner_version\": \"$(json_escape "$(head -n 1 "$SEAT_ROOT/work/preflight.version")")\""
+  fi
   printf '{ "schema_version": 1, "artifact_type": "cleanroom_launch", "profile": "%s"%s, "exit_status": %s, "timed_out": %s, "seat_root_removed": %s, "seat_root": "%s" }\n' \
     "$(json_escape "$PROFILE")" "$runner_field" "$rc" "$timed_out" "$removed" "$(json_escape "$SEAT_ROOT")"
 }
@@ -525,11 +530,13 @@ write_runner_probe() {
       printf '[ -e /home/review/.kimi-code ] && reason "kimi credential store present in preflight seat"\n'
       printf 'v=$(/opt/node/bin/node /opt/node/%q --version 2>/dev/null) || reason "kimi --version failed in the seat"\n' "$RUNNER_NODE_REL"
       printf '[ -n "$v" ] || reason "kimi --version printed nothing"\n'
+      printf 'printf "%%s\\n" "$v" > /home/review/work/preflight.version\n'
       printf 'grep -q "^description: ..*" /home/review/agent.md && grep -q "^tools: \\[\\]$" /home/review/agent.md || reason "kimi agent file not intact in the seat"\n'
     else
       printf '[ -e /home/review/.gemini/antigravity-cli/antigravity-oauth-token ] && reason "agy credential present in preflight seat"\n'
       printf 'v=$(/opt/agybin --version 2>/dev/null) || reason "agy --version failed in the seat"\n'
       printf '[ -n "$v" ] || reason "agy --version printed nothing"\n'
+      printf 'printf "%%s\\n" "$v" > /home/review/work/preflight.version\n'
       printf 'a=$(/opt/agybin agents 2>/dev/null) || reason "agy agents failed in the seat"\n'
       printf 'case "$a" in *%q*) ;; *) reason "agy agents does not list the tool-less agent" ;; esac\n' "$AGY_AGENT_NAME_FIXED"
     fi

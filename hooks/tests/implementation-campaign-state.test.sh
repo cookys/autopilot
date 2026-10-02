@@ -5584,8 +5584,10 @@ const cursorSeat = {
 const nativeSeat = {
   role: 'qc', runner: 'claude-native', model: 'claude-opus', effort: 'high', endpoint: null, family: 'anthropic',
 };
+// Phase 4 (final-panel isolation): kimi is cleanroom tier now (covered by
+// final-panel-kimi-agy-intake.test.sh); opencode takes its place as a still-`none` runner here.
 const kimiSeat = {
-  role: 'qc', runner: 'kimi', model: 'kimi-code/k3', effort: 'high', endpoint: null, family: 'moonshot',
+  role: 'qc', runner: 'opencode', model: 'opencode/fixture', effort: 'high', endpoint: null, family: 'opencode',
 };
 const codexSeat = {
   role: 'qc', runner: 'codex', model: 'gpt-5.6-sol', effort: 'high', endpoint: null, family: 'openai',

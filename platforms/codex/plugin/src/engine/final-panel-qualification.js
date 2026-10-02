@@ -13,7 +13,7 @@ const REVIEW_SEAT_TIERS = Object.freeze({
     'claude-native',
     'qoderclicn',
   ]),
-  cleanroom: Object.freeze(['codex']),
+  cleanroom: Object.freeze(['codex', 'kimi', 'agy']),
 });
 
 // Deprecated alias: packet-tier runners only (the historical allow-list).

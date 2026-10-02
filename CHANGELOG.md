@@ -1,5 +1,18 @@
 # Changelog
 
+## v2.36.109 — kimi cleanroom 支援獨立 ELF 安裝；測試的檔案數釘值改為具名成員不變式
+
+- **kimi 獨立 ELF 安裝**：v2.36.108 的 kimi cleanroom profile 只認 Node 安裝佈局，peer 主機的 kimi 是獨立 ELF 執行檔，無法進 cleanroom。**改了什麼**：launcher 以 ELF magic 偵測獨立安裝，將該執行檔唯讀綁到 `/opt/kimibin`、不綁 node 目錄、PATH 僅 `/usr/bin`；Node 佈局的 argv 不變，deny-path 與 audit 未動。**驗證範圍**：僅以 fixture ELF 驗證（本機沒有真實獨立 kimi）；真實執行檔的確認待回報主機執行。
+- **檔案數釘值改為具名成員不變式**：`resolve-review-loop-consult-discuss-switch` 測試原本釘死 Population A／B／explicit-switch 的檔案數，每加一個測試檔就要改數字且會漏。**改了什麼**：改為具名且附理由的 allowlist 加「釘住 switch」性質；未列名的新匹配、掉了釘值的檔、過期的 allowlist 條目都會失敗並指出路徑。
+- **驗證**：整套 `--parallel 16` 一次；唯一紅燈 `dispatch-review-blind-kimi-agy` 在 origin/develop 同樣紅（測試引用的 base SHA `47a0e1c6` 只存在於某工作 clone，不在 origin），屬既有問題。review：SHIP-AS-IS。
+- **已知後續（review 🔵 CUT/FOLLOW-UP）**：
+  - `resolve_runner_inputs` 對 ELF 佈局提早 `return 0`；建議改為 if/else 包住 node-dir 區塊，或補一個不帶 `--cred-dir` 的 ELF 啟動案例。
+  - fake-bwrap 的 ELF 區段無守衛地 `cp "$(command -v bwrap)"`，沒有真 bwrap 的主機會中止；建議缺 bwrap 時略過該區塊。
+  - allowlist 容許列名路徑不存在，且不再追蹤「明設 switch 卻無 `reviewer_engine:` 行」的檔案。
+  - 既有紅燈：`dispatch-review-blind-kimi-agy` 的 base SHA 在 origin 取不到，需改為可從 origin 取得的錨點。
+
+prose-justification: 本版不新增 skill 或 reference 文字；north-star 的 prose 增幅是自 v2.35.2 基線累積而來，本版僅改 launcher 與測試。
+
 ## v2.36.108 — 最終 panel 的 kimi／agy 席位改走可證明的 cleanroom 隔離
 
 - **問題**：managed final panel 的 `kimi` 與 `agy` 審查席位沒有可證明的盲審隔離，intake 只能拒收。**改了什麼**：兩個 runner 都經 cleanroom launcher（repo-less bwrap seat、私有 HOME、`--clearenv`）執行，並加上 post-run audit（fail-closed 的 void 清單與無工具 agent 標記）；dispatch-review 新增盲審 kimi/agy rail；intake 在每 runner 的 host probe 綠燈後才把這兩種席位視為 cleanroom tier（unknown 一律拒收）；非盲審的 kimi/agy 與 codex 路徑不變。

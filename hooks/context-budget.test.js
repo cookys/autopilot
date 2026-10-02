@@ -110,6 +110,21 @@ function runHook(stdinObj, env) {
   });
 }
 
+// Wave-B row 1: with no usable live file, no remembered window, observedMax < 200K and no
+// user-explicit t2, the window is UNKNOWN to the hook, so T2 is an advisory (exit 0,
+// additionalContext, no STOP/clear directive) instead of the directive exit-2 T2.
+function assertUnknownWindowAdvisory(r, kTokens, why) {
+  assert.strictEqual(r.status, 0, `${why}: unknown window ⇒ advisory exit 0 (stderr: ${r.stderr})`);
+  assert.match(r.stderr, /Context budget T2 \(advisory\)/);
+  assert.match(r.stderr, new RegExp(`context is ${kTokens}k tokens`));
+  assert.match(r.stderr, /context window is unknown/);
+  assert.doesNotMatch(r.stderr, /STOP|\/clear/, `${why}: no STOP/clear directive`);
+  assert.doesNotMatch(r.stderr, /\(statusline\)/);
+  const out = JSON.parse(r.stdout);
+  assert.match(out.hookSpecificOutput.additionalContext, /context window is unknown/);
+  assert.doesNotMatch(r.stdout, /permissionDecision/);
+}
+
 function freshEnv(extra = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ctxbud-state-'));
   return {
@@ -161,11 +176,10 @@ test('wrapper: t1 crossing ⇒ exit 0 with nudge on stderr', () => {
   assert.match(r.stderr, /context/i);
 });
 
-test('wrapper: t2 crossing ⇒ exit 2 with handoff directive on stderr (model-visible)', () => {
-  const p = tmpFile([usageLine(80_000, 80_000, 1_000, 10)]); // 161k ≥ 150k default t2
+test('wrapper: t2 crossing, unknown window ⇒ exit 0 advisory on stderr (model-visible), no directive', () => {
+  const p = tmpFile([usageLine(80_000, 80_000, 1_000, 10)]); // 161k ≥ 150k default t2, window unknown
   const r = runHook({ transcript_path: p }, freshEnv());
-  assert.strictEqual(r.status, 2);
-  assert.match(r.stderr, /handoff/i);
+  assertUnknownWindowAdvisory(r, 161, 'no live file');
 });
 
 test('wrapper: corrupt state file ⇒ reset-and-continue, exit 0/2 not crash', () => {
@@ -276,11 +290,10 @@ test('wrapper end-to-end: 1M-scale context does not emit T2 (exit 0, no stderr)'
   assert.strictEqual(r.stderr.trim(), '', 'must not nudge at 22% of window');
 });
 
-test('wrapper: 200K-window session still gets its T2 (no regression for small windows)', () => {
-  const p = tmpFile([usageLine(6_000, 150_000, 4_000, 10)]); // 160k ⇒ fits 200K
+test('wrapper: 160k with no live file/remembered window ⇒ unknown-window advisory (not a directive T2)', () => {
+  const p = tmpFile([usageLine(6_000, 150_000, 4_000, 10)]); // 160k, window unknown to the hook
   const r = runHook({ transcript_path: p }, freshEnv());
-  assert.strictEqual(r.status, 2, '200K sessions must keep the escalated advisory');
-  assert.match(r.stderr, /Context budget T2/);
+  assertUnknownWindowAdvisory(r, 160, '160k unknown');
 });
 
 // --- v2.36.1 (P2): consume the statusline live file instead of inferring the window ---
@@ -481,8 +494,8 @@ test('stale live file (>120s) ⇒ falls back to the inference path', () => {
     { transcript_path: p, session_id: sid },
     freshEnv({ AUTOPILOT_LIVE_DIR: liveDir }),
   );
-  assert.strictEqual(r.status, 2, 'a stale live file must not suppress the inference-path T2');
-  assert.doesNotMatch(r.stderr, /\(statusline\)/, 'a stale live file must not be attributed as the window source');
+  // A stale live file is unusable ⇒ window unknown ⇒ advisory T2 (row 1), never attributed to the statusline.
+  assertUnknownWindowAdvisory(r, 153, 'stale live file');
 });
 
 test('schema_version 2 ⇒ treated as absent, inference path used', () => {
@@ -494,7 +507,7 @@ test('schema_version 2 ⇒ treated as absent, inference path used', () => {
     { transcript_path: p, session_id: sid },
     freshEnv({ AUTOPILOT_LIVE_DIR: liveDir }),
   );
-  assert.strictEqual(r.status, 2, 'unusable schema_version ⇒ inference path fires its own T2');
+  assertUnknownWindowAdvisory(r, 153, 'unusable schema_version ⇒ window unknown');
 });
 
 test('missing live file ⇒ inference path used (no crash)', () => {
@@ -505,7 +518,7 @@ test('missing live file ⇒ inference path used (no crash)', () => {
     { transcript_path: p, session_id: sid },
     freshEnv({ AUTOPILOT_LIVE_DIR: liveDir }),
   );
-  assert.strictEqual(r.status, 2, 'no live file at all ⇒ old inference path still fires T2 for a 153k transcript');
+  assertUnknownWindowAdvisory(r, 153, 'no live file at all ⇒ window unknown for a 153k transcript');
 });
 
 test('malformed live file (invalid JSON) ⇒ inference path used', () => {
@@ -519,7 +532,7 @@ test('malformed live file (invalid JSON) ⇒ inference path used', () => {
     { transcript_path: p, session_id: sid },
     freshEnv({ AUTOPILOT_LIVE_DIR: liveDir }),
   );
-  assert.strictEqual(r.status, 2, 'malformed live file ⇒ old inference path still fires T2');
+  assertUnknownWindowAdvisory(r, 153, 'malformed live file ⇒ window unknown');
 });
 
 test('state file lands under the tmpfs live base when no AUTOPILOT_CONTEXT_BUDGET_DIR override is set', () => {
@@ -559,10 +572,8 @@ test('absent live (no AUTOPILOT_LIVE_DIR override, no live file) ⇒ exit/stdout
 
   const t2P = tmpFile([usageLine(80_000, 80_000, 1_000, 10)]);
   const t2R = runHook({ transcript_path: t2P }, freshEnv());
-  assert.strictEqual(t2R.status, 2);
-  assert.match(t2R.stderr, /Context budget T2/);
-  assert.match(t2R.stderr, /handoff/i);
-  assert.doesNotMatch(t2R.stderr, /\(statusline\)/, 'no live file ⇒ never attributed to the statusline');
+  // Row 1: the pre-P2 directive T2 is now an unknown-window advisory (exit 0, no STOP/clear).
+  assertUnknownWindowAdvisory(t2R, 161, 'no live file, 161k');
 
   // 216k on a genuinely 1M window (via the RATCHET, not a live file) must still say
   // "inferred from observed usage" — that phrasing is reserved for the inference path.

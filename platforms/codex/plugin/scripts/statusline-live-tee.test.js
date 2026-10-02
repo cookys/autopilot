@@ -83,10 +83,12 @@ test('end-to-end: 1M session at ~160k ⇒ T2 without the tee, silent after one t
   const sid = 'tee-e2e-sid';
   const t = transcriptAt(159_000);
 
-  // Control: no live file ⇒ inference path ⇒ the spurious T2 this script exists to remove.
+  // Control: no live file ⇒ window unknown ⇒ since v2.36.107 an advisory T2 (exit 0, no STOP/clear),
+  // no longer the directive exit-2 misfire; still noisy, which the tee removes.
   const before = runHook({ transcript_path: t, session_id: sid }, liveDir);
-  assert.strictEqual(before.status, 2, 'control must reproduce the misfire, or this test proves nothing');
-  assert.match(before.stderr, /Context budget T2/);
+  assert.strictEqual(before.status, 0, `unknown window ⇒ advisory exit 0 (stderr: ${before.stderr})`);
+  assert.match(before.stderr, /context window is unknown/);
+  assert.doesNotMatch(before.stderr, /STOP|clear/);
 
   const tee = runTee(statuslinePayload(sid), liveDir);
   assert.strictEqual(tee.status, 0, tee.stderr);

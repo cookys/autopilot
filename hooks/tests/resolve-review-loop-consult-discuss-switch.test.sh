@@ -315,8 +315,10 @@ assert_eq "validated-ok" "$CONTRACT_PARITY_OUT" "contract-parity.test.sh's real 
 # fixture carries a genuine `- reviewer_engine: claude-opus` line — a real
 # Population B member (cleanroom/rail behavior, not a frozen-fixture false
 # positive and not this suite). Bound moves 42 -> 43.
+# RECOUNTED 2026-10-03 (kimi/agy isolation row 4): +1 final-panel-kimi-agy-intake.test.sh,
+# whose roster fixture carries a genuine `reviewer_engine:` line. Bound moves 46 -> 47.
 POP_B_COUNT="$(git -C "$REPO_ROOT" grep -l 'reviewer_engine:' -- hooks/ ":!$SELF" 2>/dev/null | wc -l | tr -d '[:space:]')"
-assert_eq "46" "$POP_B_COUNT" "Population B file bound is pinned at 46 (git grep -l 'reviewer_engine:' -- hooks/, incl. the round-1 frozen pre-D6 template fixture, campaign-boundary-receipt-e2e.test.sh added 2026-08-30, dispatch-contract-pin.test.sh added 2026-09-11, pending-revocation-fold.test.sh added 2026-09-12, the ten paths enumerated in the 2026-09-23 recount, resolve-dispatch-topology.test.sh Case 17 and resolve-review-loop-pins-per-role.test.sh added 2026-09-24, dispatch-lifecycle-residue-mission.test.sh added 2026-09-24, resolve-review-loop.test.sh split into four shards a..d for wall time: A +1, B +2, dispatch-author-va-pin.test.sh added 2026-10-03 (wave-B row 4): +1)"
+assert_eq "47" "$POP_B_COUNT" "Population B file bound is pinned at 47 (git grep -l 'reviewer_engine:' -- hooks/, incl. the round-1 frozen pre-D6 template fixture, campaign-boundary-receipt-e2e.test.sh added 2026-08-30, dispatch-contract-pin.test.sh added 2026-09-11, pending-revocation-fold.test.sh added 2026-09-12, the ten paths enumerated in the 2026-09-23 recount, resolve-dispatch-topology.test.sh Case 17 and resolve-review-loop-pins-per-role.test.sh added 2026-09-24, dispatch-lifecycle-residue-mission.test.sh added 2026-09-24, resolve-review-loop.test.sh split into four shards a..d for wall time: A +1, B +2, dispatch-author-va-pin.test.sh added 2026-10-03 (wave-B row 4): +1, +1 final-panel-kimi-agy-intake.test.sh (kimi/agy isolation row 4, 2026-10-03))"
 # Markdown-list-style declaration only (`- consult_dispatch: on`) — NOT a bare
 # substring match, which would also hit Population A's JS object-literal keys
 # (`consult_dispatch: 'off',`, no leading dash) that legitimately reference the

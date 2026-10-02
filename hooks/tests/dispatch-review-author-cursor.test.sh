@@ -19,7 +19,7 @@
 #   - Fail-closed on non-zero exit / empty stdout / missing verdict block.
 #
 # 🔴 NEVER invokes the real cursor-agent — every case below shadows it with a stub
-# on an explicit --bin path (never PATH), matching hooks/tests/dispatch-review.test.sh's
+# on an explicit --bin path (never PATH), matching hooks/tests/dispatch-review-{a,b,c}.test.sh's
 # STUB_MARKER convention (extract the review nonce markers straight out of the prompt
 # text the script already wrote — see "how the review verdict format was derived" in
 # the worker report; the format is NOT guessed).

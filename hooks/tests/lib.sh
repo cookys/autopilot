@@ -35,7 +35,7 @@ fi
 unset __g9_td
 
 # Fake-runner prompt + nonce-frame helpers (generic over AUTOPILOT-REVIEW /
-# AUTOPILOT-AUTHOR). Lifted from hooks/tests/dispatch-review.test.sh so consumer
+# AUTOPILOT-AUTHOR). Lifted from hooks/tests/dispatch-review-{a,b,c}.test.sh so consumer
 # suites do not duplicate the parser. Source with AUTOPILOT_TEST_LIB_HELPERS_ONLY=1
 # from a --bin stub so this file does not create a nested TEST_TMP / EXIT trap.
 read_fake_runner_prompt() {

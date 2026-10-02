@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.36.110 — readiness probe 接受 nonce 完全相符的單行 frame；frame_format 成為具名失敗並保留診斷
+
+- **問題**（peer 回報，cuda/chatgpt-tunnel，2026-10-03）：claude-native／claude-fable-5／max 以「開頭 marker＋`OK`＋結尾 marker」寫在同一行回應 readiness probe。dispatch-author 要求 marker 各自獨立成行，回報 `truncated/frame_missing`，coordinator 再把它併成 `transport_failure`，receipt 也沒留下任何能解釋的線索。
+- **改了什麼**：（a）**只有 readiness probe** 多接受一種嚴格形式：`<open-marker>OK<close-marker>` 單行，兩個 marker 必須帶本次執行自己的 marker id、payload 必須恰為 `OK`，前後只容許空白；id 不符、其他 payload、多餘文字一律仍判未就緒。一般 author／review 的 parser 未動，單行 frame 對 author 仍是 truncated/exit 5。（b）兩個 marker 都在、但不在獨立行時，dispatch-author 改回報具名的 `frame_format`（仍為 truncated/5，並附 `frame_derived`），不再是 `frame_missing`；probe 新增 `frame_format` outcome（readiness 為 unknown，不是 blocked）；失敗的 probe 在 `live_probe.diagnostics` 保留有界且去除密鑰的 stderr 尾端與 dispatch-result 摘要。真正的 transport／quota／auth 失敗狀態不變。
+- **驗證**：新增 `provider-readiness-single-line-frame`（44 條，先紅後綠）與 dispatch-author 單行案例；consumer sweep 全綠、L1 層 408/408、整套 `--parallel 16` 387 檔全綠。review：claude-fable-5-1 SHIP-AS-IS。
+- **已知後續（review 🔵 CUT/FOLLOW-UP）**：(1) 版本外若有字串比對 `frame_missing` 的呼叫端，遇到兩 marker 都在的輸出會改見 `frame_format`（本 repo 內僅測試引用）；(2) probe 接受形式用 `.trim()`，略寬於字面 `^…$`，nonce／payload／無多餘文字仍精確；(3) diagnostics 僅留 `status`／`error`／`exit_status` 與 512 byte stderr 尾端。
+
+prose-justification: 本版不新增 skill 或 reference 文字；僅改 dispatch-author、readiness probe 與測試。
+
 ## v2.36.109 — kimi cleanroom 支援獨立 ELF 安裝；測試的檔案數釘值改為具名成員不變式
 
 - **kimi 獨立 ELF 安裝**：v2.36.108 的 kimi cleanroom profile 只認 Node 安裝佈局，peer 主機的 kimi 是獨立 ELF 執行檔，無法進 cleanroom。**改了什麼**：launcher 以 ELF magic 偵測獨立安裝，將該執行檔唯讀綁到 `/opt/kimibin`、不綁 node 目錄、PATH 僅 `/usr/bin`；Node 佈局的 argv 不變，deny-path 與 audit 未動。**驗證範圍**：僅以 fixture ELF 驗證（本機沒有真實獨立 kimi）；真實執行檔的確認待回報主機執行。

@@ -744,13 +744,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/peer-addressing-md-says-message-rows-live-forever-a-spec-says-7-days.md
 - **Context**: `hangar-bridge/SUBJECT_ROUTING_SPEC.md:516,614` records an accepted 7-day retention/replay bound for subjected `@team` chat that was never built.
 
-### Readiness probe: a nonce-exact single-line frame is reported as frame_missing → transport_failure
-- **Status**: open
-- **Trigger**: FIRED — peer report 2026-10-03; queued; reproduce locally first
-- **Effort**: S
-- **Source**: PEER-REPORTED cuda/chatgpt-tunnel (fleet), code path verified by reading
-- **Pointer**: docs/backlog/readiness-probe-single-line-frame.md
-- **Context**: Fable returned open marker + OK + close marker on one line; parser needs separate lines; failure is generalized to transport_failure and stderr/envelope are not kept.
 
 ### `campaign resume` refuses a final-panel retry: REVIEWING unsupported; zero-write resume hits file cap
 - **Status**: open

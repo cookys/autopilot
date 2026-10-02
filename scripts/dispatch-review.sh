@@ -310,7 +310,47 @@ review_seat_tier() {
 CLEANROOM_BIN_DIR=""
 CLEANROOM_AUTH=""
 CLEANROOM_BWRAP=""
-if [ "${AUTOPILOT_BLIND_DISCOVERY:-0}" = "1" ]; then
+# Blind kimi/agy cleanroom rail (final-panel isolation phase 3). Reached ONLY when a review packet is
+# supplied (the cleanroom intake's evidence); without one the tier-table refusal below is unchanged.
+# The tier table above is not consulted here: the rail itself is fail-closed (launcher preflight,
+# then a post-run audit that decides, never the exit code).
+BLIND_RUNNER_CLEANROOM=0
+BLIND_RUNNER_DENY=()
+if [ "${AUTOPILOT_BLIND_DISCOVERY:-0}" = "1" ] && { [ "$RUNNER" = "kimi" ] || [ "$RUNNER" = "agy" ]; } \
+  && [ -n "${AUTOPILOT_REVIEW_PACKET_DIR:-}" ] \
+  && [ -d "${AUTOPILOT_REVIEW_PACKET_DIR}/tree" ] \
+  && [ -f "${AUTOPILOT_REVIEW_PACKET_DIR}/MANIFEST.json" ]; then
+  BLIND_RUNNER_CLEANROOM=1
+  if [ -n "${AUTOPILOT_CLEANROOM_BWRAP:-}" ]; then
+    [ -x "${AUTOPILOT_CLEANROOM_BWRAP}" ] || die_precondition "bwrap not found"
+    CLEANROOM_BWRAP="${AUTOPILOT_CLEANROOM_BWRAP}"
+  else
+    command -v bwrap >/dev/null 2>&1 || die_precondition "bwrap not found"
+    CLEANROOM_BWRAP="$(command -v bwrap)"
+  fi
+  BLIND_RUNNER_DENY=(--deny-path "$AUTOPILOT_REVIEW_PACKET_DIR")
+  [ -n "${HOME:-}" ] && [ -e "$HOME" ] && BLIND_RUNNER_DENY+=(--deny-path "$HOME")
+  _blind_top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  [ -n "$_blind_top" ] && [ -e "$_blind_top" ] && BLIND_RUNNER_DENY+=(--deny-path "$_blind_top")
+  unset _blind_top
+fi
+# Model-free launcher preflight for a blind kimi/agy seat. Fail closed: any non-zero rc
+# (red, timeout, missing binary/bwrap/launcher) refuses before a model is called.
+blind_runner_preflight() { # <runner> [extra launcher args...]
+  local _runner="$1" _pf_err _pf_rc=0 _pf_first
+  shift
+  _CLEANROOM_LAUNCHER="${AUTOPILOT_CLEANROOM_LAUNCHER:-$_REVIEW_SELF_DIR/lib/cleanroom-launch.sh}"
+  _pf_err="$(mktemp -t dispatch-review-cleanroom-preflight-XXXXXX)"
+  "$_CLEANROOM_LAUNCHER" --preflight --profile "$_runner" "${BLIND_RUNNER_DENY[@]}" \
+    --bwrap "$CLEANROOM_BWRAP" "$@" >/dev/null 2>"$_pf_err" || _pf_rc=$?
+  if [ "$_pf_rc" -ne 0 ]; then
+    _pf_first="$(head -n 1 "$_pf_err" 2>/dev/null || true)"
+    rm -f "$_pf_err"
+    die_precondition "cleanroom runtime unusable: ${_pf_first:-$_runner preflight rc=$_pf_rc}"
+  fi
+  rm -f "$_pf_err"
+}
+if [ "${AUTOPILOT_BLIND_DISCOVERY:-0}" = "1" ] && [ "$BLIND_RUNNER_CLEANROOM" -eq 0 ]; then
   case "$(review_seat_tier "$RUNNER")" in
     packet) ;;
     none)
@@ -1253,15 +1293,45 @@ elif [[ "$RUNNER" = "kimi" ]]; then
   KIMI_OUT="$(mktemp -t dispatch-review-kimi-out-XXXXXX)"
   KIMI_ERR="$(mktemp -t dispatch-review-kimi-err-XXXXXX)"
   KIMI_CWD="$(mktemp -d -t dispatch-review-kimicwd-XXXXXX)"
+  KIMI_BREACH=""
+  if [ "$BLIND_RUNNER_CLEANROOM" -eq 1 ]; then
+    # BLIND cleanroom rail (final-panel isolation phase 3): the seat runs inside the launcher's
+    # bwrap seat (no repo, no real HOME, --clearenv) under the tool-less agent from
+    # lib/kimi-containment.js (one source of truth). The seat is KEPT, audited, then deleted with
+    # KIMI_CWD. The audit decides — kimi exiting 0 is never proof of containment.
+    KIMI_CONTAIN_JS="$_REVIEW_SELF_DIR/lib/kimi-containment.js"
+    KIMI_AGENT_FILE="$(node "$KIMI_CONTAIN_JS" write "$KIMI_CWD/agent-src")" \
+      || die_precondition "could not write the tool-less kimi agent"
+    KIMI_CR_ARGS=(--bin "$KIMI_BIN" --agent-file "$KIMI_AGENT_FILE")
+    [ -z "${AUTOPILOT_CLEANROOM_KIMI_NODE_DIR:-}" ] || KIMI_CR_ARGS+=(--node-dir "$AUTOPILOT_CLEANROOM_KIMI_NODE_DIR")
+    blind_runner_preflight kimi "${KIMI_CR_ARGS[@]}"
+    [ -z "${AUTOPILOT_CLEANROOM_KIMI_CRED_DIR:-}" ] || KIMI_CR_ARGS+=(--cred-dir "$AUTOPILOT_CLEANROOM_KIMI_CRED_DIR")
+    "$_CLEANROOM_LAUNCHER" --profile kimi \
+      --prompt-file "$PROMPT_FILE" --out "$KIMI_OUT" --err "$KIMI_ERR" \
+      --timeout "$TIMEOUT" --model "$MODEL" \
+      "${KIMI_CR_ARGS[@]}" --bwrap "$CLEANROOM_BWRAP" \
+      --seat-root "$KIMI_CWD/seat" --keep-seat > "$KIMI_CWD/launch.json"
+    KIMI_RC=$?
+    KIMI_AUDIT_RC=0
+    KIMI_BREACH="$(node "$KIMI_CONTAIN_JS" audit "$KIMI_CWD/seat/home" 2>&1)" || KIMI_AUDIT_RC=$?
+    if [ "$KIMI_AUDIT_RC" -ne 0 ] && [ -z "$KIMI_BREACH" ]; then
+      KIMI_BREACH="kimi containment audit failed (rc=$KIMI_AUDIT_RC) — containment unverified"
+    fi
+  else
   # -p requires the prompt as an argument (no --prompt-file); size guarded above.
   timeout "$TIMEOUT" bash -c 'cd "$1" && exec "$2" -p "$(cat "$3")" -m "$4" --output-format text' \
       _ "$KIMI_CWD" "$KIMI_BIN" "$PROMPT_FILE" "$MODEL" > "$KIMI_OUT" 2> "$KIMI_ERR"
   KIMI_RC=$?
+  fi
   wait_output_quiescent "$KIMI_OUT" "${AUTOPILOT_SETTLE_MS:-60000}" || true
   rm -rf "$KIMI_CWD"; KIMI_CWD=""
   cat "$KIMI_OUT" > "$RAW_LOG"
   printf '\n--- kimi stderr (chrome, not parsed) ---\n' >> "$RAW_LOG"
   cat "$KIMI_ERR" >> "$RAW_LOG"
+  if [ -n "$KIMI_BREACH" ]; then
+    printf '\n[dispatch-review: %s — kimi response NOT parsed]\n' "$KIMI_BREACH" >> "$RAW_LOG"
+    emit_no_verdict "$KIMI_BREACH — fail-closed"
+  fi
   # kimi-code often prefixes a thinking bullet ("• ") before the nonce block; extract
   # the first AUTOPILOT-REVIEW…END span so the shared parser sees a clean start.
   # Runs BEFORE the rc check (pre-merge review round-1 MUST-FIX, 2026-08-21): the
@@ -1487,7 +1557,7 @@ elif [[ "$RUNNER" = "anthropic-compatible" ]]; then
 else
   AGY_BIN="${BIN:-agy}"
   command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN"
-  command -v bwrap >/dev/null 2>&1 \
+  [ "$BLIND_RUNNER_CLEANROOM" -eq 1 ] || command -v bwrap >/dev/null 2>&1 \
     || die_precondition "agy reviewer requires bwrap filesystem/process isolation"
   validate_d2_agy_claims
   # `|| die` in the PARENT — the resolver never dies inside `$( )`, where die_precondition's JSON
@@ -1511,6 +1581,37 @@ else
       "narrow --diff (fewer files / smaller range) or send this review to a runner that reads a prompt file (codex, grok, qoderclicn, cursor, opencode)")"; then
     emit_no_verdict "$AGY_CEILING_REASON"
   fi
+  AGY_BREACH=""
+  if [ "$BLIND_RUNNER_CLEANROOM" -eq 1 ]; then
+    # BLIND cleanroom rail (final-panel isolation phase 3): bwrap seat with no repo, no real HOME
+    # and no --ro-bind / /; tool-less agent written by the launcher from lib/agy-containment.js.
+    # The seat is KEPT, audited in --cleanroom mode (positive agent marker), then deleted with
+    # AGY_CWD. The audit decides — agy exiting 0 is never proof of containment.
+    AGY_CONTAIN_JS="$_REVIEW_SELF_DIR/lib/agy-containment.js"
+    AGY_EFFORT="$(agy_effort_for_model "$MODEL" "$EFFORT")"
+    AGY_CLAMPED="$(agy_effort_clamp "$EFFORT")"
+    if [ "$AGY_EFFORT" != "$AGY_CLAMPED" ]; then
+      printf 'agy effort %s (clamped %s) folded to %s: model id encodes the tier\n' \
+        "$EFFORT" "$AGY_CLAMPED" "$AGY_EFFORT" >&2
+    fi
+    AGY_CR_ARGS=(--bin "$(command -v "$AGY_BIN")")
+    blind_runner_preflight agy "${AGY_CR_ARGS[@]}"
+    [ -z "${AUTOPILOT_CLEANROOM_AGY_CRED_DIR:-}" ] || AGY_CR_ARGS+=(--cred-dir "$AUTOPILOT_CLEANROOM_AGY_CRED_DIR")
+    "$_CLEANROOM_LAUNCHER" --profile agy \
+      --prompt-file "$PROMPT_FILE" --out "$AGY_OUT" --err "$AGY_ERR" \
+      --timeout "$TIMEOUT" --model "$MODEL" --effort "$AGY_EFFORT" \
+      "${AGY_CR_ARGS[@]}" --bwrap "$CLEANROOM_BWRAP" \
+      --seat-root "$AGY_CWD/seat" --keep-seat > "$AGY_CWD/launch.json"
+    AGY_RC=$?
+    AGY_SEAT_APP="$AGY_CWD/seat/home/.gemini/antigravity-cli"
+    AGY_AUDIT_RC=0
+    AGY_BREACH="$(node "$AGY_CONTAIN_JS" audit "$AGY_SEAT_APP/log" "$AGY_SEAT_APP/brain" \
+      --cleanroom "$AGY_SEAT_APP/agents" 2>&1)" || AGY_AUDIT_RC=$?
+    if [ "$AGY_AUDIT_RC" -ne 0 ] && [ -z "$AGY_BREACH" ]; then
+      AGY_BREACH="agy containment audit failed (rc=$AGY_AUDIT_RC) — containment unverified"
+    fi
+  else
+  # NON-BLIND (unchanged from base): bwrap --ro-bind / / with scratch brain/log/agents.
   AGY_BWRAP_ARGS=(--ro-bind / / --dev /dev --proc /proc)
   for AGY_APP_SUBDIR in crashes; do
     AGY_APP_TARGET="${HOME:-}/.gemini/antigravity-cli/$AGY_APP_SUBDIR"
@@ -1556,6 +1657,7 @@ else
   AGY_BREACH=""
   if [ "$AGY_RC" -eq 0 ]; then
     AGY_BREACH="$(node "$AGY_CONTAIN_JS" audit "$AGY_CWD/log" "$AGY_CWD/brain" 2>&1)" || true
+  fi
   fi
   rm -rf "$AGY_CWD"; AGY_CWD=""
   if [ -n "$AGY_BREACH" ]; then

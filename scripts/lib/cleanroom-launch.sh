@@ -342,7 +342,6 @@ run_bwrap() {
 }
 
 # ---- kimi / agy profiles (final-panel isolation phase 2) -------------------
-KIMI_AGENT_NAME="autopilot-toolless-reviewer"
 AGY_AGENT_NAME_FIXED="autopilot-toolless-reviewer"
 RUNNER_NODE_REL=""
 
@@ -354,10 +353,12 @@ runner_fail() {
   exit 2
 }
 
-# Same text the phase-1 kimi-containment lib writes; used only when --agent-file is absent.
+# One source of truth: the phase-1 kimi-containment lib owns the tool-less agent (name,
+# text). Used only when --agent-file is absent; the audit's agent marker is that name.
 write_default_kimi_agent() {
-  printf -- '---\nname: %s\ndescription: Text-only reviewer with no tools; answers from the prompt alone.\ntools: []\n---\nYou are a text-only assistant with no tools. Answer from the prompt alone.\n' \
-    "$KIMI_AGENT_NAME" > "$1"
+  local written
+  written="$(node "$_SELF/kimi-containment.js" write "$SEAT_ROOT/agent-src")" || return 1
+  cp "$written" "$1"
 }
 
 kimi_agent_intact() {
@@ -400,7 +401,8 @@ prepare_runner_seat() {
       [ -f "$AGENT_FILE" ] || runner_fail "agent file not found: $AGENT_FILE"
       cp "$AGENT_FILE" "$SEAT_ROOT/agent.md"
     else
-      write_default_kimi_agent "$SEAT_ROOT/agent.md"
+      write_default_kimi_agent "$SEAT_ROOT/agent.md" \
+        || runner_fail "could not write the tool-less kimi agent"
     fi
     chmod 0400 "$SEAT_ROOT/agent.md"
     kimi_agent_intact "$SEAT_ROOT/agent.md" \

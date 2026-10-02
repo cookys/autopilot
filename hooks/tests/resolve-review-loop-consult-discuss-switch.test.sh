@@ -249,7 +249,8 @@ POP_A_RAW_COUNT="$(
     git -C "$REPO_ROOT" grep -l '"reviewer_engine"' -- hooks/ evals/ ":!$SELF" 2>/dev/null; } \
     | sort -u | wc -l | tr -d '[:space:]'
 )"
-assert_eq "9" "$POP_A_RAW_COUNT" "Population A raw extractor union is pinned at 9 files (direct callers + JSON-literal grep, incl. the frozen pre-D6 and pre-D7 resolver fixtures and hetero-review-loop.test.sh)"
+# Test-suite speedup split: resolve-review-loop.test.sh became shards a..d. Raw bound 9 -> 10 (a and b hold the quoted "reviewer_engine" literals).
+assert_eq "10" "$POP_A_RAW_COUNT" "Population A raw extractor union is pinned at 10 files (direct callers + JSON-literal grep, incl. the frozen pre-D6 and pre-D7 resolver fixtures and hetero-review-loop.test.sh)"
 
 # Per-object parity subset: files whose roster literal is genuinely fed through
 # validateReviewLoopConfig, either directly (JS payload) or via the live
@@ -264,9 +265,9 @@ assert_contains "$(cat "$REPO_ROOT/hooks/tests/autopilot-engine.test.sh")" \
 assert_contains "$(cat "$REPO_ROOT/hooks/tests/review-loop-runner.test.sh")" \
   $'  consult_dispatch: \'off\',\n  consult_resolved_from: \'off\',\n  discuss_dispatch: \'off\',' \
   "review-loop-runner.test.sh payload literal carries consult_dispatch/consult_resolved_from/discuss_dispatch: off"
-assert_contains "$(cat "$REPO_ROOT/hooks/tests/resolve-review-loop.test.sh")" \
+assert_contains "$(cat "$REPO_ROOT/hooks/tests/resolve-review-loop-b.test.sh")" \
   '"discuss_endpoint":"consult_dispatch":"consult_resolved_from":"discuss_dispatch":"unknown_escalation":"unknown_budget_u1":"unknown_budget_u2":"unknown_budget_u3":"unknown_resolved_from":"allow_same_runner_dual_seat"' \
-  "resolve-review-loop.test.sh EXPECTED_KEYS pins consult_dispatch/consult_resolved_from/discuss_dispatch in schema order"
+  "resolve-review-loop-b.test.sh EXPECTED_KEYS pins consult_dispatch/consult_resolved_from/discuss_dispatch in schema order"
 
 # contract-parity.test.sh and autopilot-cli.test.sh build their roster object
 # by calling the LIVE resolver/CLI (never a static literal), so they inherit
@@ -315,7 +316,7 @@ assert_eq "validated-ok" "$CONTRACT_PARITY_OUT" "contract-parity.test.sh's real 
 # Population B member (cleanroom/rail behavior, not a frozen-fixture false
 # positive and not this suite). Bound moves 42 -> 43.
 POP_B_COUNT="$(git -C "$REPO_ROOT" grep -l 'reviewer_engine:' -- hooks/ ":!$SELF" 2>/dev/null | wc -l | tr -d '[:space:]')"
-assert_eq "43" "$POP_B_COUNT" "Population B file bound is pinned at 43 (git grep -l 'reviewer_engine:' -- hooks/, incl. the round-1 frozen pre-D6 template fixture, campaign-boundary-receipt-e2e.test.sh added 2026-08-30, dispatch-contract-pin.test.sh added 2026-09-11, pending-revocation-fold.test.sh added 2026-09-12, the ten paths enumerated in the 2026-09-23 recount, resolve-dispatch-topology.test.sh Case 17 and resolve-review-loop-pins-per-role.test.sh added 2026-09-24, dispatch-lifecycle-residue-mission.test.sh added 2026-09-24)"
+assert_eq "45" "$POP_B_COUNT" "Population B file bound is pinned at 45 (git grep -l 'reviewer_engine:' -- hooks/, incl. the round-1 frozen pre-D6 template fixture, campaign-boundary-receipt-e2e.test.sh added 2026-08-30, dispatch-contract-pin.test.sh added 2026-09-11, pending-revocation-fold.test.sh added 2026-09-12, the ten paths enumerated in the 2026-09-23 recount, resolve-dispatch-topology.test.sh Case 17 and resolve-review-loop-pins-per-role.test.sh added 2026-09-24, dispatch-lifecycle-residue-mission.test.sh added 2026-09-24, resolve-review-loop.test.sh split into four shards a..d for wall time: A +1, B +2)"
 # Markdown-list-style declaration only (`- consult_dispatch: on`) — NOT a bare
 # substring match, which would also hit Population A's JS object-literal keys
 # (`consult_dispatch: 'off',`, no leading dash) that legitimately reference the

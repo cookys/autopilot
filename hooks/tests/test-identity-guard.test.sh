@@ -156,4 +156,215 @@ for f in "$HOOKS_TESTS"/*.test.sh; do
   fi
 done
 
+# --- P3: identity gate hooks ---
+# RED at 183c6e9e: unmodified .githooks allow test-identity commit/merge (exit 0);
+# no pre-merge-commit; pre-push identity not judged (file transport 128 here).
+# Failures: author/committer/merge RED expected 1 got 0; env/overlay/outside-TMPDIR
+# NC expected 1 got 0.
+
+P3_OWNER_EMAIL='cookys@stranity.com'
+P3_TEST_EMAIL='p3-author@example.invalid'
+P3_TEST_COMMITTER='p3-committer@example.invalid'
+
+p3_seed_hooks() {
+  local dest="$1"
+  mkdir -p "$dest/.githooks/lib" "$dest/scripts/lib" "$dest/references"
+  cp -a "$REPO_ROOT/.githooks/." "$dest/.githooks/"
+  chmod +x "$dest/.githooks/pre-commit" "$dest/.githooks/pre-push" 2>/dev/null || true
+  [ -f "$dest/.githooks/pre-merge-commit" ] && chmod +x "$dest/.githooks/pre-merge-commit"
+  cp "$REPO_ROOT/scripts/lib/test-identity.sh" "$dest/scripts/lib/test-identity.sh"
+  cp "$REPO_ROOT/references/blind-dispatch.md" "$dest/references/blind-dispatch.md"
+  printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$dest/scripts/sync-all.sh"
+  chmod +x "$dest/scripts/sync-all.sh"
+}
+
+p3_init_repo() {
+  local dest="$1"
+  mkdir -p "$dest"
+  p3_seed_hooks "$dest"
+  git -C "$dest" init -q
+  git -C "$dest" config core.hooksPath .githooks
+  mkdir -p "$dest/.claude"
+  printf -- '- mode: off\n' > "$dest/.claude/qc-gate-config.md"
+  git -C "$dest" config user.name 'P3 Owner'
+  git -C "$dest" config user.email "$P3_OWNER_EMAIL"
+  git -C "$dest" config protocol.file.allow always
+}
+
+p3_run_pre_push() {
+  local dest="$1"
+  local remote="$2"
+  local local_sha="$3"
+  local remote_sha="$4"
+  local local_ref="${5:-refs/heads/main}"
+  local remote_ref="${6:-refs/heads/main}"
+  echo "$local_ref $local_sha $remote_ref $remote_sha" | ( cd "$dest" && bash .githooks/pre-push "$remote" )
+}
+
+ZERO_SHA='0000000000000000000000000000000000000000'
+
+p3_try_commit() {
+  local dest="$1"
+  shift
+  ( cd "$dest" && git add -A && git commit -q "$@" )
+}
+
+# RED: test-identity author refused
+P3A="$TEST_TMP/p3-author"
+p3_init_repo "$P3A"
+printf 'a\n' > "$P3A/f.txt"
+OUT="$(GIT_AUTHOR_EMAIL="$P3_TEST_EMAIL" GIT_AUTHOR_NAME=t \
+  GIT_COMMITTER_EMAIL="$P3_OWNER_EMAIL" GIT_COMMITTER_NAME=o \
+  p3_try_commit "$P3A" -m author-bad 2>&1)"; EX=$?
+assert_eq "$EX" "1" "P3 RED: test-identity author commit refused"
+assert_contains "$OUT" "author" "P3 RED: names author"
+
+# RED: test-identity committer only refused
+P3C="$TEST_TMP/p3-committer"
+p3_init_repo "$P3C"
+printf 'c\n' > "$P3C/f.txt"
+OUT="$(GIT_AUTHOR_EMAIL="$P3_OWNER_EMAIL" GIT_AUTHOR_NAME=o \
+  GIT_COMMITTER_EMAIL="$P3_TEST_COMMITTER" GIT_COMMITTER_NAME=t \
+  p3_try_commit "$P3C" -m committer-bad 2>&1)"; EX=$?
+assert_eq "$EX" "1" "P3 RED: test-identity committer-only refused"
+assert_contains "$OUT" "committer" "P3 RED: names committer"
+
+# NC: owner identity passes
+P3O="$TEST_TMP/p3-owner"
+p3_init_repo "$P3O"
+printf 'o\n' > "$P3O/f.txt"
+OUT="$(p3_try_commit "$P3O" -m owner-ok 2>&1)"; EX=$?
+assert_eq "$EX" "0" "P3 NC: owner identity commit passes"
+
+# RED: merge commit with test-identity committer refused by pre-merge-commit
+P3M="$TEST_TMP/p3-merge"
+p3_init_repo "$P3M"
+printf 'base\n' > "$P3M/m.txt"
+p3_try_commit "$P3M" -m base
+git -C "$P3M" checkout -q -b side
+printf 'side\n' > "$P3M/side.txt"
+p3_try_commit "$P3M" -m side
+git -C "$P3M" checkout -q -
+printf 'mainline\n' >> "$P3M/m.txt"
+p3_try_commit "$P3M" -m mainline
+OUT="$(cd "$P3M" && GIT_COMMITTER_EMAIL="$P3_TEST_COMMITTER" GIT_COMMITTER_NAME=t \
+  GIT_AUTHOR_EMAIL="$P3_OWNER_EMAIL" GIT_AUTHOR_NAME=o \
+  git merge --no-ff --no-edit side 2>&1)"; EX=$?
+assert_eq "$EX" "1" "P3 RED: test-identity merge commit refused"
+assert_contains "$OUT" "committer" "P3 RED: merge names committer"
+
+# G8 bypass requires the fixture common dir under ${TMPDIR:-/tmp} (after lib.sh
+# that is HOOK_TMPDIR, so TEST_TMP itself is the parent, not a child).
+_p3_host_tmp="${TMPDIR:-/tmp}"
+_p3_real_host="$(cd "$_p3_host_tmp" && pwd -P)"
+_p3_real_test="$(cd "$TEST_TMP" && pwd -P)"
+_p3_fx="$TEST_TMP"
+case "$_p3_real_test" in
+  "$_p3_real_host"|"$_p3_real_host"/*) ;;
+  *)
+    _p3_fx="$(mktemp -d "${TMPDIR:-/tmp}/autopilot-p3-XXXXXX")"
+    ;;
+esac
+p3_cleanup_extras() {
+  [ "$BASHPID" = "${__TEST_TOP_BASHPID:-}" ] || return 0
+  [ -n "${P3X_ROOT:-}" ] && rm -rf "$P3X_ROOT"
+  if [ -n "${_p3_fx:-}" ] && [ "$_p3_fx" != "$TEST_TMP" ]; then
+    rm -rf "$_p3_fx"
+  fi
+}
+trap 'p3_cleanup_extras; cleanup_test_tmp' EXIT
+
+# NC: gate-off under TMPDIR allows test identity
+P3B="$_p3_fx/p3-bypass"
+p3_init_repo "$P3B"
+git -C "$P3B" config autopilot.testIdentityGate off
+printf 'b\n' > "$P3B/f.txt"
+OUT="$(GIT_AUTHOR_EMAIL="$P3_TEST_EMAIL" GIT_AUTHOR_NAME=t \
+  GIT_COMMITTER_EMAIL="$P3_TEST_EMAIL" GIT_COMMITTER_NAME=t \
+  p3_try_commit "$P3B" -m bypass-ok 2>&1)"; EX=$?
+assert_eq "$EX" "0" "P3 NC: autopilot.testIdentityGate=off under TMPDIR allows"
+
+# NC: AUTOPILOT_ALLOW_TEST_IDENT=1 does not bypass
+P3E="$TEST_TMP/p3-env"
+p3_init_repo "$P3E"
+printf 'e\n' > "$P3E/f.txt"
+OUT="$(AUTOPILOT_ALLOW_TEST_IDENT=1 GIT_AUTHOR_EMAIL="$P3_TEST_EMAIL" GIT_AUTHOR_NAME=t \
+  GIT_COMMITTER_EMAIL="$P3_OWNER_EMAIL" GIT_COMMITTER_NAME=o \
+  p3_try_commit "$P3E" -m env-no 2>&1)"; EX=$?
+assert_eq "$EX" "1" "P3 NC: AUTOPILOT_ALLOW_TEST_IDENT=1 does not bypass"
+
+# NC: GIT_CONFIG_COUNT overlay does not bypass
+P3L="$TEST_TMP/p3-leak"
+p3_init_repo "$P3L"
+printf 'l\n' > "$P3L/f.txt"
+OUT="$(GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=autopilot.testIdentityGate GIT_CONFIG_VALUE_0=off \
+  GIT_AUTHOR_EMAIL="$P3_TEST_EMAIL" GIT_AUTHOR_NAME=t \
+  GIT_COMMITTER_EMAIL="$P3_OWNER_EMAIL" GIT_COMMITTER_NAME=o \
+  p3_try_commit "$P3L" -m leak-no 2>&1)"; EX=$?
+assert_eq "$EX" "1" "P3 NC: GIT_CONFIG_COUNT overlay does not bypass"
+
+# NC: key off outside TMPDIR does not bypass
+P3X_ROOT="${XDG_CACHE_HOME:-$HOME/.cache}/autopilot-p3-ident-$$"
+rm -rf "$P3X_ROOT"
+mkdir -p "$P3X_ROOT"
+P3X="$P3X_ROOT/repo"
+p3_init_repo "$P3X"
+git -C "$P3X" config autopilot.testIdentityGate off
+printf 'x\n' > "$P3X/f.txt"
+OUT="$(TMPDIR="$TEST_TMP/other-tmp" mkdir -p "$TEST_TMP/other-tmp"
+  TMPDIR="$TEST_TMP/other-tmp" GIT_AUTHOR_EMAIL="$P3_TEST_EMAIL" GIT_AUTHOR_NAME=t \
+  GIT_COMMITTER_EMAIL="$P3_OWNER_EMAIL" GIT_COMMITTER_NAME=o \
+  p3_try_commit "$P3X" -m outside-no 2>&1)"; EX=$?
+rm -rf "$P3X_ROOT"
+assert_eq "$EX" "1" "P3 NC: gate-off outside TMPDIR does not bypass"
+
+# RED: push of range containing test-identity commit refused
+P3P="$TEST_TMP/p3-push"
+p3_init_repo "$P3P"
+printf 'p0\n' > "$P3P/f.txt"
+p3_try_commit "$P3P" -m p0
+BASEP="$(git -C "$P3P" rev-parse HEAD)"
+printf 'pbad\n' > "$P3P/f.txt"
+GIT_AUTHOR_EMAIL="$P3_TEST_EMAIL" GIT_AUTHOR_NAME=t \
+  GIT_COMMITTER_EMAIL="$P3_OWNER_EMAIL" GIT_COMMITTER_NAME=o \
+  p3_try_commit "$P3P" --no-verify -m pbad
+TIPP="$(git -C "$P3P" rev-parse HEAD)"
+OUT="$(p3_run_pre_push "$P3P" origin "$TIPP" "$BASEP" 2>&1)"; EX=$?
+assert_eq "$EX" "1" "P3 RED: push of test-identity range refused"
+assert_contains "$OUT" "author" "P3 RED: push names author"
+
+# NC: test-identity already on target remote, new owner commit pushes
+P3R="$_p3_fx/p3-remote-ok"
+p3_init_repo "$P3R"
+git -C "$P3R" config autopilot.testIdentityGate off
+printf 'r0\n' > "$P3R/f.txt"
+GIT_AUTHOR_EMAIL="$P3_TEST_EMAIL" GIT_AUTHOR_NAME=t \
+  GIT_COMMITTER_EMAIL="$P3_TEST_EMAIL" GIT_COMMITTER_NAME=t \
+  p3_try_commit "$P3R" -m rbad
+BADR="$(git -C "$P3R" rev-parse HEAD)"
+git -C "$P3R" update-ref refs/remotes/origin/main "$BADR"
+git -C "$P3R" config --unset autopilot.testIdentityGate || true
+printf 'r1\n' > "$P3R/f.txt"
+p3_try_commit "$P3R" -m rowner
+TIPR="$(git -C "$P3R" rev-parse HEAD)"
+OUT="$(p3_run_pre_push "$P3R" origin "$TIPR" "$BADR" 2>&1)"; EX=$?
+assert_eq "$EX" "0" "P3 NC: test-identity already on target remote, owner tip pushes"
+
+# NC: new ref whose bad commit exists only on unrelated remote is refused
+P3U="$_p3_fx/p3-unrelated"
+p3_init_repo "$P3U"
+git -C "$P3U" config autopilot.testIdentityGate off
+printf 'u0\n' > "$P3U/f.txt"
+p3_try_commit "$P3U" -m u0
+printf 'ubad\n' > "$P3U/f.txt"
+GIT_AUTHOR_EMAIL="$P3_TEST_EMAIL" GIT_AUTHOR_NAME=t \
+  GIT_COMMITTER_EMAIL="$P3_OWNER_EMAIL" GIT_COMMITTER_NAME=o \
+  p3_try_commit "$P3U" -m ubad
+TIPU="$(git -C "$P3U" rev-parse HEAD)"
+git -C "$P3U" update-ref refs/remotes/other/main "$TIPU"
+git -C "$P3U" config --unset autopilot.testIdentityGate || true
+OUT="$(p3_run_pre_push "$P3U" origin "$TIPU" "$ZERO_SHA" 2>&1)"; EX=$?
+assert_eq "$EX" "1" "P3 NC: new ref with bad commit only on unrelated remote refused"
+
 finalize_test
+

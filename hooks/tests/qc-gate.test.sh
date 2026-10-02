@@ -40,6 +40,7 @@ cp "$REPO_ROOT/scripts/lib/resolve-config.sh" "$SBX/scripts/lib/resolve-config.s
 cp "$HOOK" "$SBX/.githooks/pre-push"; chmod +x "$SBX/.githooks/pre-push"
 git -C "$SBX" init -q
 git -C "$SBX" config user.email t@local; git -C "$SBX" config user.name t
+git -C "$SBX" config autopilot.testIdentityGate off
 
 commit() { # <path> <content> <msg...>
   local p="$1" c="$2"; shift 2

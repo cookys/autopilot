@@ -15,6 +15,18 @@
 set -uo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+__PUSH_STDIN="$(cat || true)"
+__PUSH_REMOTE="${1-}"
+
+__TIG_LIB="$REPO_ROOT/.githooks/lib/test-identity-gate.sh"
+if [ -r "$__TIG_LIB" ]; then
+  # shellcheck disable=SC1090
+  . "$__TIG_LIB"
+  if ! test_identity_gate_bypassed; then
+    printf '%s\n' "$__PUSH_STDIN" | test_identity_refuse_push_range "$__PUSH_REMOTE" || exit 1
+  fi
+fi
+
 RESOLVE="$REPO_ROOT/scripts/resolve-qc-gate.sh"
 [ -x "$RESOLVE" ] || exit 0   # no resolver → don't block (degrade open)
 
@@ -82,7 +94,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       violations="${violations}  • ${local_ref:-HEAD} (${range}) touches a protected path with no QC-Verdict evidence\n"
     fi
   fi
-done
+done <<< "$__PUSH_STDIN"
 
 [ -z "$violations" ] && exit 0
 

@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# autopilot pre-merge-commit — test-identity gate only (KR4 / G8).
+#
+# Activated by:  scripts/install-hooks.sh  (sets core.hooksPath=.githooks)
+
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+__TIG_LIB="$REPO_ROOT/.githooks/lib/test-identity-gate.sh"
+if [ -r "$__TIG_LIB" ]; then
+  # shellcheck disable=SC1090
+  . "$__TIG_LIB"
+  if ! test_identity_gate_bypassed; then
+    test_identity_refuse_commit_idents || exit 1
+  fi
+fi
+exit 0

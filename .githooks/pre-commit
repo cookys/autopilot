@@ -17,6 +17,17 @@ set -euo pipefail
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
+# --- test-identity gate (KR4 / G8); first, before slower checks ---
+__TIG_LIB="$(git rev-parse --show-toplevel)/.githooks/lib/test-identity-gate.sh"
+if [ -r "$__TIG_LIB" ]; then
+  # shellcheck disable=SC1090
+  . "$__TIG_LIB"
+  if ! test_identity_gate_bypassed; then
+    test_identity_refuse_commit_idents || exit 1
+  fi
+fi
+unset __TIG_LIB
+
 # --- blind-dispatch.md issue-ref anti-rot grep (always) ---
 # The "Clarifying questions survive auto-approve" subsection cites the two codex
 # issues that establish the auto-approve-vs-question distinction. If a reword

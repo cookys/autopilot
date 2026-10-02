@@ -15,6 +15,7 @@
 # Negative controls run: audit calls disabled -> 73 FAILs; non-blind kimi argv + "--x" -> byte-compare FAILs.
 . "$(dirname "$0")/lib.sh"
 . "$(dirname "$0")/lib/dispatch-review-fixtures.sh"
+SCRIPTS_PORCELAIN_BEFORE="$(git -C "$REPO_ROOT" status --porcelain scripts/)"
 
 PKT="$TEST_TMP/pkt"; mkdir -p "$PKT/tree"; printf '{}\n' > "$PKT/MANIFEST.json"; printf 'x\n' > "$PKT/tree/README.md"
 FAKE_BWRAP="$TEST_TMP/fake-bwrap"; printf '#!/usr/bin/env bash\nexit 0\n' > "$FAKE_BWRAP"; chmod +x "$FAKE_BWRAP"
@@ -241,8 +242,16 @@ assert_eq "0" "$NB_REFS" "negative control: kimi launcher references exist only 
 
 # ---- NON-BLIND argv/cwd/env byte-compare against the phase-2 base script (nonces/run ids normalised) ----
 BASE_SHA=47a0e1c6
-BASE_COPY="$REPO_ROOT/scripts/.dispatch-review-base-$$.sh"
-if git -C "$REPO_ROOT" show "$BASE_SHA:scripts/dispatch-review.sh" > "$BASE_COPY" 2>/dev/null; then
+# The base copy lives under $TEST_TMP (never the checkout): a scripts/ dir whose siblings are symlinks
+# to the real ones, so the base script resolves its lib/ relative to itself.
+BASE_DIR="$TEST_TMP/base-scripts"; mkdir -p "$BASE_DIR"
+for _f in "$REPO_ROOT"/scripts/* "$REPO_ROOT"/scripts/.[!.]*; do
+  [ -e "$_f" ] && [ "$(basename "$_f")" != dispatch-review.sh ] && ln -s "$_f" "$BASE_DIR/$(basename "$_f")"
+done
+BASE_COPY="$BASE_DIR/dispatch-review.sh"
+BASE_OK=1; git -C "$REPO_ROOT" show "$BASE_SHA:scripts/dispatch-review.sh" > "$BASE_COPY" 2>/dev/null || BASE_OK=0
+assert_eq "1" "$BASE_OK" "base script $BASE_SHA is reachable for the non-blind byte-compare (a skip would make the proof vacuous)"
+if [ "$BASE_OK" = 1 ]; then
   chmod +x "$BASE_COPY"
   CMP_REC="$TEST_TMP/cmp-rec"
   cat > "$CMP_REC" <<'EOF'
@@ -266,8 +275,8 @@ EOF
       "non-blind $CR argv/cwd-shape/env are byte-identical to base $BASE_SHA"
     assert_contains "$(cat "$TEST_TMP/cmp-$CR-$(basename "$SCRIPT").rec")" 'ARGV:' "non-blind $CR byte-compare actually ran the recorder"
   done
-  rm -f "$BASE_COPY"
 fi
+assert_eq "$SCRIPTS_PORCELAIN_BEFORE" "$(git -C "$REPO_ROOT" status --porcelain scripts/)" "this suite leaves git status --porcelain scripts/ unchanged"
 
 # ---- dispatch-time version warning (plan §8.3): advisory only, never blocks, never changes the verdict ----
 # RED at 033750f9 (no warning code): the mismatch cases below FAIL on assert_contains 'WARNING'.

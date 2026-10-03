@@ -17,7 +17,10 @@ eq() { assert_eq "$2" "$1" "$3"; }  # eq <expected> <actual> <msg>
 # Isolation: fake HOME/config/live dirs; manifests only under TEST_TMP.
 export HOME="$TEST_TMP/home"; mkdir -p "$HOME"
 export CLAUDE_CONFIG_DIR="$TEST_TMP/claude-config"; mkdir -p "$CLAUDE_CONFIG_DIR"
-export AUTOPILOT_LIVE_DIR="$TEST_TMP/live"; mkdir -p "$AUTOPILOT_LIVE_DIR"
+# Live dir must be tmpfs and mode 0700 or live-state-dir.js silently ignores the override and falls through to
+# the real /run/user/<uid>/autopilot ($TEST_TMP is ext4 and mkdir -p gives 0755). mktemp -d gives 0700.
+export AUTOPILOT_LIVE_DIR="$(mktemp -d -p /dev/shm autopilot-test-mri-XXXXXX)"
+trap 'rm -rf "$AUTOPILOT_LIVE_DIR"; cleanup_test_tmp' EXIT
 export AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/session-mode"; mkdir -p "$AUTOPILOT_SESSION_MODE_DIR"
 export ENGINE_CAPABILITY_DIR="$TEST_TMP/engine-capability"; mkdir -p "$ENGINE_CAPABILITY_DIR"
 export AUTOPILOT_GROK_EFFORT_PROBE=0

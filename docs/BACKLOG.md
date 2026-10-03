@@ -870,3 +870,11 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: w113 hand I review
 - **Pointer**: docs/backlog/cost-fuse-dispatch-exemption-prefix-and-session-id-collisions.md
 - **Context**: exemption prefix admits an env assignment or any path prefix of the rail (warn-mode, advisory); safe() may collide distinct session ids.
+
+### Sealed-campaign review-station migration
+- **Status**: open
+- **Trigger**: next peer/operator campaign needing per-repair single review plus a terminal panel inside one already-sealed campaign
+- **Effort**: M
+- **Source**: peer-reported cuda/chatgpt-tunnel 2026-10-03
+- **Pointer**: docs/backlog/sealed-campaign-review-station-migration.md
+- **Context**: single+terminal panel works at intake; only in-place migration of a sealed campaign's review_station is missing.

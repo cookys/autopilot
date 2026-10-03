@@ -1,0 +1,17 @@
+# Bundle w113 — v2.36.113 (cost-tracker context signal + cost-fuse scoping)
+
+One row I: d8de05d2, e3ae206f, b408b4b3. Investigation: ctx-signal-dogfood.md (same dir).
+
+# Unit I — cost-tracker stops calling a cost sum "context"; cost-fuse scopes its number
+Worktree `wt-I`, branch `hands/w113/I`, base = default BASE_SHA.
+Read first: `<SCRATCH>/run3/ctx-signal-dogfood.md` (SCRATCH = parent of the clone) — a read-only investigation with path:line findings. Re-derive each finding before changing code.
+
+Defect (🟠): `hooks/cost-tracker.js` (~:134, default-on) warns "has read N cache tokens cumulatively … a long-lived context is being re-read on every call; write a handoff and /clear … (docs/ironlaw-to-gate-map.md #6)". N is the SUM of `cache_read_tokens` over every call of the session (calls × window), not window fill. On 2026-10-03 it fired at 51M while the real window was 33% (`/run/user/<uid>/autopilot/context/<sid>.json`, `used_percentage`), and the model relayed "context is very heavy" to the owner. The `#6` pointer is wrong (that row is "foreman no polling").
+
+Ship as TWO commits on your branch (depth-0 ruling: correcting a false claim and surfacing a real number is a mechanism/bug fix; the conditional recommendation is a separate commit so each can be judged on its own):
+Commit 1 — truth + data (mechanism): the message names what it counted ("this session has re-read N cache tokens cumulatively across K calls, ~$X ≈ Y% of this session's spend" — use the ledger's own pricing; if a model has no price row, say "cost unknown" rather than guessing), drops the false "long-lived context" claim, prints the real window fill read the same way `context-budget` reads the live file ("context now P% (T of W tokens)") or "context % unknown" when no fresh live file, and fixes the doc pointer (point at the real cost section, or drop it). Keep the existing threshold/doubling behaviour.
+Commit 2 — recommendation: recommend handoff + /clear ONLY when P ≥ a configurable threshold (default 50%, config key next to `cost_tracker.cache_read_warn_tokens`); below it, say the window is fine and the cost comes from calls × window (suggest splitting work / dispatching mechanical work to cheaper hands). Unknown P → no /clear advice.
+cost-fuse (🟡, same commit 2 or a third commit — your call, say which): show "this session $a / host today $b" instead of only the host figure, and do not fire on the Bash command that itself dispatches to hands if that is cheaply detectable (re-derive whether it actually fires there; if not, skip). Do not change its thresholds.
+Hook rule: add one short line to `hooks/README.md` — a model-facing advisory must name what it counted and carry the contradicting-axis number when it is cheaply available.
+Tests (RED first; new suite `hooks/tests/cost-tracker-context-signal.test.sh`): fixture costs ledger over threshold + live file 33% → message contains "33%", names cumulative calls, has NO "/clear"; live 70% → contains handoff/clear advice; no live file → "unknown", no /clear; wrong pointer gone. Mutation: revert the live-file read → the 33% case fails. cost-fuse: two sessions in the ledger → both figures shown. Hooks stay fail-open. Consumer sweep: every suite/L1 test that greps `cost-tracker`, `cost-fuse`, `cache_read_warn_tokens`, `context-budget`.
+Commit messages: (1) `fix(hooks): cost-tracker names the cumulative cache-read sum it counts and reports the real context %` (2) `fix(hooks): cost-tracker recommends /clear only above a real context-% threshold; cost-fuse shows session and host spend`.

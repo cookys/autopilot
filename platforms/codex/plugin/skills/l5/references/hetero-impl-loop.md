@@ -219,6 +219,9 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
    repair round costs implement + verify + panel (60 + 21 + 9 min measured 2026-09-18) and the
    pocket covers only the panel — when the remainder cannot hold that, do not resume (the attempt
    burns at `WALL_BUDGET_EXCEEDED` mid-round); degrade to l3 and repair in the retained worktree.
+   `in_rail_review: auto` resolves to `panel` whenever the QC panel seats are complete, and the station is sealed
+   at intake: set `in_rail_review: single` before the first intake if you want one reviewer per repair round with
+   the full panel only at terminal (an already-sealed campaign cannot be migrated in place; see BACKLOG).
    A campaign parked in `REVIEWING` with a bound git candidate is resumable (review-only; the
    changed-file cap does not apply). The final panel keeps one artifact per seat under
    `<git-common-dir>/autopilot/final-panel-seats/<campaign>/<station>-<binding>/seat-N.json`: a resume

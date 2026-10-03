@@ -1152,3 +1152,20 @@ piped command's status with `${PIPESTATUS[0]}` or run it to a file first.
 
 Preventing artifact: `hooks/tests/test-suite-finalize-gate.test.sh` — every lib.sh suite must finalize
 (a bare `[ "$FAIL" -eq 0 ]` counts only as the last command); the allowlist can only shrink.
+
+## 52. A hook's advisory is a proxy until re-derived from the harness's own number
+
+2026-10-03, v2.36.113. The cost-tracker hook told the model "context is heavy" while the statusline
+read 33% of a 1M window. The hook summed `cache_read` tokens over every API call of the session
+(calls x window), which grows without bound and says nothing about window fill; the hook's
+message carried no percentage, and it cited a doc pointer for an unrelated rule. The model relayed
+the claim to the owner twice without checking; the owner caught the contradiction. The real figure
+was already on disk in the live context file the whole time.
+
+Rule: an advisory author must ship the contradicting-axis figure in the message (here the real
+context %, now enforced by the hooks/README wording rule), and a model must re-derive a size or cost
+claim from the harness's own number (read the live context file) before relaying it to the owner.
+A hook's sentence is a proxy for the quantity it names, not the quantity.
+
+Preventing artifact: v2.36.113 cost-tracker reads the live % and recommends /clear only at >= 50%;
+evidence in `docs/plans/evidence/2026-10-03-v113-cost-tracker-context-signal/`.

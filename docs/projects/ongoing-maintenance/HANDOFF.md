@@ -1,8 +1,8 @@
 ## 目標
-接續 autopilot 維護。2026-10-02～03 這個 session 出了 v2.36.105 到 v2.36.112 八版，另有測試修正、知識落地和一份 mods 調研。下一步先讓 owner 回答 mods 的四個開放問題，再從 BACKLOG 已觸發的列接著做。
+接續 autopilot 維護。2026-10-02～03 這個 session 出了 v2.36.105 到 v2.36.112 八版，另有測試修正、知識落地和一份 mods 調研。下一步先讓 owner 回答 mods／cockpit 的開放問題，再從 BACKLOG 已觸發的列接著做。
 
 ## 現況
-- 分支 `develop`，最新 release 是 v2.36.112（`dabdd20e`）；本檔所在的 closeout commit 疊在上面，HEAD 以 `git log --oneline -1` 為準。工作區只剩兩個別的 session 留下的未追蹤目錄（`docs/plans/evidence/2026-10-01-*`），不是這個 session 的，不要動。
+- 分支 `develop`，最新 release 是 v2.36.113（`b02cb94f`）；本檔所在的 closeout commit 疊在上面，HEAD 以 `git log --oneline -1` 為準。工作區只剩兩個別的 session 留下的未追蹤目錄（`docs/plans/evidence/2026-10-01-*`），不是這個 session 的，不要動。
 - v2.36.105 到 v2.36.110 的出貨內容證據都在 `docs/plans/evidence/` 底下，各有 README；細節看 `CHANGELOG.md`。
 - v2.36.111（證據 `docs/plans/evidence/2026-10-03-v111-resume-and-review-budget/`）：
   - A：campaign resume 在三個入口收 REVIEWING，REVIEWING 的 resume 不受 changed-file 上限限制。
@@ -14,8 +14,10 @@
   - F：lib.sh suite finalize gate 認頂層 finalizer、trap 形式、`|| exit 1` 後的 `exit 0`；allowlist 縮到 3 支；`mission-terminal-rollover` 空轉時印 `SKIP [` 行。
   - G：final-panel 逐席 artifact 在終態被 reap（`reapCampaignSeats`、ledger unit `final_panel_seat_reap`），`repo-residue-sweep.js` 的 seat arm 有 14 天下限與 decision 欄位，reader 跟隨 `RUN_LEDGER_MAX_ROTATIONS`。
   - H：openai rail 的 `finish_reason=length` 無內容是具名失敗 `output_budget_exhausted`，另含 v2.36.111 審查的後續修正。
-- 教訓已落地：`references/evidence-discipline.md` §51；`foreman-landing-pipeline` 範本改成 noreply 作者 email、加 Population B 註記，v2.36.112 closeout 再把 Population B 規則放進 hand 範本。
-- mods 調研：`docs/plans/research/2026-10-03-claude-code-mods-integration.md`（研究，不是 plan，沒有任何實作）。
+- v2.36.113（證據 `docs/plans/evidence/2026-10-03-v113-cost-tracker-context-signal/`，README 講流程）：cost-tracker 報真實 context %（來自 statusline live 檔）、只在 ≥50% 建議 /clear；cost-fuse 分開顯示 session 與 host 花費；dispatch 豁免只在 warn 模式生效（審查找到 `&`／process substitution 繞過，depth-0 裁定 regex 做不到防繞過）。
+- 教訓已落地：`references/evidence-discipline.md` §51、§52；`foreman-landing-pipeline` 範本改成 noreply 作者 email、加 Population B 註記，v2.36.112 closeout 再把 Population B 規則放進 hand 範本。
+- 研究文件（都在 `docs/plans/research/`，研究不是 plan，沒有任何實作）：`2026-10-03-claude-code-mods-integration.md`、`2026-10-03-wake-mechanism-design.md`、`2026-10-03-fleet-cockpit-boundary-study.md`、`2026-10-03-cost-tracker-context-signal-dogfood.md`（已在 v2.36.113 修掉）、`2026-10-03-repair-review-cadence-query.md`。
+- peer 備註：cuda 的 Q01 campaign 封存成 `review_station: panel`，原因是 `in_rail_review: auto` 遇到完整 panel 就解成 panel；支援的路線是 intake 前設 `single`（已寫進 l5 的 `hetero-impl-loop.md`）；已封存 campaign 的就地遷移登在 BACKLOG（Sealed-campaign review-station migration）。
 
 ## 已決事項（不重議）
 - depth-0 只讀報告、下裁決、派工；落地前一定有一次 `origin/develop..HEAD` 的 combined review；🔴/🟠 只有 depth-0 能在複驗後駁回（ADR-0001）。
@@ -29,7 +31,7 @@
 - mods 只是 Claude Code 專屬的增強層，永遠不是唯一路徑；既有 hook 與腳本照舊保留。
 
 ## 下一步
-1. mods spike：owner 先回答調研文件裡的四個開放問題（封裝方式、`$.prompt.submit` 自動喚醒可不可接受、terminal 或 desktop、版本號怎麼升），再從文件列的前三個候選（live dispatch band、成本帶、`statusline-live-tee` 換成 `session.measure`）挑一個做 spike。
+1. mods／cockpit 設計討論的現況（沒有任何決定是新發明的）：owner 已決定 mods 放進 autopilot；wake 是開關，預設只通知、只在 idle 時、不是優先項。depth-0 提議的優先序：P1 可見度（dispatch pane/band、成本加真實 context band、toast）→ P2 hook 延遲量測 → P3 事件核心＋明確的 idle 宣告（等 owner 與無事可做要分開）→ P4 replanner＋版本化 `progress.json` 快照（schema 草案 `autopilot.progress/1` 在 fleet 研究文件裡）。gantt、跨專案排程與配額屬於獨立的 cockpit，不屬於 autopilot；fleet 目前沒有 cockpit（`fleet-cockpit` 是已退役的 v1 courier，避免用這個名字），fuchikoma 是最接近的 meta／scheduler 層。開放的 owner 問題：cockpit 放哪（fuchikoma／fleet／新 repo）、叫什麼名字、要不要現在就寫 autopilot 側 P1–P4 的 plan 並先和 fuchikoma 對齊 progress 契約。
 2. v2.36.112 審查留下的 🔵 後續（S）：`docs/backlog/v2-36-112-review-follow-ups.md`，含 run.sh 要浮出 `SKIP [` 行。
 3. dispatch-plan-review 重用已終態 ticket 時是靜默 0 call（S，peer 回報，low）：`docs/backlog/dispatch-plan-review-terminal-ticket-visibility.md`。
 4. run.sh 的 group INT 要等目前測試檔結束才生效（S，觸發條件未到）。
@@ -39,13 +41,13 @@
 ## 驗證方式
 - `git status --short` 只剩那兩個不屬於本 session 的未追蹤目錄。
 - `git config --local --get user.email` 沒有值。
-- `bash scripts/preflight-release.sh` 回報 v2.36.112 一致。
+- `bash scripts/preflight-release.sh` 回報 v2.36.113 一致。
 - `node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md` exit 0。
 
 ## Read-order
 1. `.claude/skills/foreman-landing-pipeline/SKILL.md`（含 §1b）與 `templates/`：派工到發版。
 2. 上面「下一步」前三項的文件與 sidecar。
-3. `references/evidence-discipline.md` §47–§51。
+3. `references/evidence-discipline.md` §47–§52。
 4. `docs/plans/evidence/2026-10-03-v112-boundary-terminal-and-test-hygiene/README.md`。
 5. `docs/plans/research/2026-10-03-claude-code-mods-integration.md`（mods 開放問題）。
 

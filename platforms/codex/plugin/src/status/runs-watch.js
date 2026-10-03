@@ -1,7 +1,7 @@
 'use strict';
 // src/status/runs-watch.js — the per-project runs watcher (mods plan P1a R4a).
 //
-//   autopilot status runs --watch --project <key> [--interval 10] [--idle-exit 3600]
+//   autopilot status runs --watch --project <key> [--interval 10] [--idle-exit 3600] [--render [<out-root>]]
 //   autopilot status runs --stop  --project <key>
 //
 // One watcher process per project is the ONLY writer of the live projection:
@@ -9,6 +9,10 @@
 //   <live>/runs/<project_key>--<root_run_id>.json     one per observed execution root
 //   <autopilot_home>/review/<project_key>/live/runs.<scope_key>.json   SSD fallback copies
 //   <live>/runs/paths/<project_key>.json              worktree realpath -> project (own project only)
+// --render (mods plan P1b B3): the same process also republishes the owner review page of every execution root
+// (job id = root_run_id; runs with no root go to the per-project `unbound` job) through render-review-page's publish(),
+// debounced 5 s, when one of exactly four sources changes: the manifest set, an .exit file landing, a
+// receipt-<phase>.json appearing or changing mtime, or the task_status_receipt digest.
 // Every file is written tmp + rename. A reader MUST check envelope.scope against the scope it
 // wants (readEnvelope does) — a mismatch is treated as a missing file.
 //
@@ -37,6 +41,10 @@ const DEFAULT_IDLE_EXIT_S = 3600;
 const RECENT_SESSION_MS = 24 * 3600 * 1000;
 const LOCK_BUSY_RC = 75;
 const LOCKED_ENV = 'AUTOPILOT_RUNS_WATCH_LOCKED';
+const RENDER_DEBOUNCE_MS = 5000;
+const RENDER_RETRY_MS = 60000;
+const TASK_SETTLED_POLL_MS = 60000; // an all-exited root re-checks its task receipt this often; a root with a live run, every tick
+const UNBOUND = '\u0000unbound';
 // Fields that change on every observation even when nothing happened; they do not make a payload "changed".
 const VOLATILE_ROW_FIELDS = ['observed_at', 'probe_age_s', 'elapsed_s', 'last_event_age_s'];
 
@@ -229,7 +237,7 @@ function signatureOf(runs) {
  */
 function createWatcher({
   key, env = process.env, cwd = process.cwd(), collect, now = Date.now,
-  interval = DEFAULT_INTERVAL_S, enrichCap = 8, pid = process.pid, idleExitS = null,
+  interval = DEFAULT_INTERVAL_S, enrichCap = 8, pid = process.pid, idleExitS = null, render = null,
 }) {
   const live = liveBaseOf(env);
   const runsDir = path.join(live, 'runs');
@@ -247,6 +255,8 @@ function createWatcher({
     lastSignature: null, lastPublishMs: null, lastRuns: null, lastObservedAt: null, lastPaths: null,
     roots: new Set(), lastCounts: new Map(), lastCost: { sessions: {}, host_today_usd: null, host_today_as_of: null },
     idleSince: null,
+    // --render: last-seen signature per root, roots awaiting a publish, the debounce deadline, cached task receipts
+    render: { seen: new Map(), dirty: new Set(), dueAt: null, task: new Map() },
   };
 
   function log(message) {
@@ -293,6 +303,119 @@ function createWatcher({
     if (!force && text === state.lastPaths) return;
     writeAtomic(path.join(runsDir, 'paths', `${key}.json`), text);
     state.lastPaths = text;
+  }
+
+
+  // --- --render: the four-event republish (plan P1b B3) ----------------------------------------------
+  const isExitedRow = (r) => r.phase === 'exited' || Boolean(r.ended_at) || Boolean(r.final_status);
+  const mtimeOf = (file) => { try { return String(fs.statSync(file).mtimeMs); } catch (_error) { return '-'; } };
+
+  function groupByRoot(rows) {
+    const groups = new Map();
+    for (const r of rows) {
+      const k = r.root_run_id ? r.root_run_id : UNBOUND;
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(r);
+    }
+    return groups;
+  }
+
+  // The same injectable `status task` call the renderer uses; one call per poll, cached for the publish.
+  function taskDigest(root, rows, nowMs) {
+    const cache = state.render.task.get(root);
+    const live = rows.some((r) => !isExitedRow(r));
+    if (cache && !live && nowMs - cache.at < TASK_SETTLED_POLL_MS) return cache.digest;
+    const { callTaskStatus } = require('../../scripts/render-review-page');
+    const res = callTaskStatus(root, cwd, env);
+    if (!res) {
+      if (cache) return cache.digest; // a transient failure must not flip the signature twice
+      state.render.task.set(root, { at: nowMs, digest: 'unavailable', value: null });
+      return 'unavailable';
+    }
+    const v = res.value;
+    const digest = v && typeof v.receipt_digest === 'string' && v.receipt_digest ? v.receipt_digest : res.sha256;
+    state.render.task.set(root, { at: nowMs, digest, value: res });
+    return digest;
+  }
+
+  function renderSignature(k, rows, nowMs) {
+    const root = k === UNBOUND ? null : k;
+    const { discoverReviewReceipts } = require('../../scripts/render-review-page');
+    const manifests = rows.map((r) => `${r.run_id}@${(r.source && r.source.manifest) || r.manifest || ''}`).sort();
+    const exits = rows.map((r) => (r.source && r.source.exit_file ? `${r.source.exit_file}:${mtimeOf(r.source.exit_file)}` : '')).sort();
+    const receipts = discoverReviewReceipts(rows, root).map((e) => `${e.file}:${mtimeOf(e.file)}`);
+    const task = root ? taskDigest(root, rows, nowMs) : null;
+    return JSON.stringify({ manifests, exits, receipts, task });
+  }
+
+  function publishRoot(k, rows, nowMs) {
+    const root = k === UNBOUND ? null : k;
+    const mod = require('../../scripts/render-review-page');
+    const job = root ? safeSegment(root) : 'unbound';
+    const started = rows.map((r) => Date.parse(r.started_at)).filter(Number.isFinite).sort((a, b) => a - b);
+    const date = new Date(started.length ? started[0] : nowMs).toISOString().slice(0, 10);
+    const envelope = {
+      schema: SCHEMA, scope: { project_key: key, repo_identity: identity, root_run_id: root },
+      published_at: new Date(nowMs).toISOString(), observed_at: state.lastObservedAt, valid_for_s: VALID_FOR_S,
+      runs: rows, counts: computeCounts(rows, interval, enrichCap, freshBoundOf(state.lastRuns || rows, interval, enrichCap)),
+    };
+    const envText = JSON.stringify(envelope);
+    const sources = [{ role: 'runs', path: `runs-live:${key}${root ? `--${safeSegment(root)}` : ' (unbound runs)'} (watcher snapshot)`, sha256: require('crypto').createHash('sha256').update(envText).digest('hex') }];
+    const cached = root ? state.render.task.get(root) : null;
+    const task = cached && cached.value ? cached.value : null;
+    if (task) sources.push({ role: 'task_status_receipt', path: `status task --root-run-id ${root} --json`, sha256: task.sha256 });
+    const { model } = mod.assemble({
+      runsValue: envelope, rows, root, job, date, project: key, now: nowMs, commit: null, repo: cwd,
+      task, progress: null, decision: null, planned: null, compare: [], sources,
+    });
+    const r = mod.publish({
+      model, html: mod.renderJobHtml(model), compare: [], outRoot: render.outRoot, home: autopilotHome,
+      liveReview: path.join(live, 'review'), project: key, displayName: mod.displayNameOf(cwd, key), env,
+    });
+    if (r.rc !== 0) {
+      // publish() leaves its candidate dir for the next publish; this process is alive, so nothing would ever
+      // reap it as stale: drop our own leftovers here so a retry loop cannot pile them up.
+      const jobDir = path.join(render.outRoot, date, job);
+      try {
+        for (const n of fs.readdirSync(jobDir)) if (n.endsWith(`.cand-${process.pid}`)) fs.rmSync(path.join(jobDir, n), { recursive: true, force: true });
+      } catch (_error) { /* best effort */ }
+      throw new Error(r.message);
+    }
+    for (const w of (r.result && r.result.warnings) || []) log(`render ${job}: published; warning: ${w}`);
+    return job;
+  }
+
+  // Called once per tick with the freshly collected rows. Debounce = a fixed window from the first change.
+  function renderPass(rows, nowMs) {
+    const rs = state.render;
+    const groups = groupByRoot(rows);
+    for (const [k, g] of groups) {
+      let sig;
+      try { sig = renderSignature(k, g, nowMs); } catch (error) { log(`render signature failed for ${k === UNBOUND ? 'unbound' : k}: ${error.message}`); continue; }
+      if (rs.seen.get(k) !== sig) { rs.seen.set(k, sig); rs.dirty.add(k); }
+    }
+    for (const k of [...rs.dirty]) if (!groups.has(k)) rs.dirty.delete(k);
+    if (rs.dirty.size === 0) { rs.dueAt = null; return; }
+    if (rs.dueAt === null) rs.dueAt = nowMs + RENDER_DEBOUNCE_MS;
+    if (nowMs < rs.dueAt) return;
+    let failed = false;
+    for (const k of [...rs.dirty]) {
+      try {
+        publishRoot(k, groups.get(k), nowMs);
+        rs.dirty.delete(k);
+      } catch (error) {
+        failed = true;
+        log(`render failed for ${k === UNBOUND ? 'unbound' : k}: ${error.message}`);
+      }
+    }
+    rs.dueAt = failed ? nowMs + RENDER_RETRY_MS : null;
+  }
+
+  // ms until the watcher should observe again: sooner than the interval when a debounce is about to expire.
+  function nextDelayMs() {
+    const due = state.render.dueAt;
+    if (due === null) return interval * 1000;
+    return Math.max(250, Math.min(interval * 1000, due - now()));
   }
 
   const writerInfo = () => ({ pid, session_id: sessionId, started_at: startedAt });
@@ -345,6 +468,9 @@ function createWatcher({
       state.lastPublishMs = nowMs;
       published = true;
     }
+    if (render) {
+      try { renderPass(rows, nowMs); } catch (error) { log(`render pass failed: ${error.message}`); }
+    }
     // Idle exit: N consecutive seconds with nothing confirmed live and nothing unknown, and no
     // unexpired session-mode marker of this project (a live session keeps the watcher up).
     const total = counts.get(null);
@@ -375,7 +501,7 @@ function createWatcher({
     log(`start pid=${pid} project=${key} interval=${interval}s`);
   }
 
-  return { tick, start, finalPublish, log, state, get scope() { return { ...scope, repo_identity: identity }; } };
+  return { tick, start, finalPublish, log, state, nextDelayMs, get scope() { return { ...scope, repo_identity: identity }; } };
 }
 
 // --- start wrapper (lock form ii) ----------------------------------------------------------
@@ -443,7 +569,7 @@ function sleepMs(ms) {
  */
 function runWatchCli(opts) {
   const {
-    watch, stop, project, interval = DEFAULT_INTERVAL_S, idleExit = DEFAULT_IDLE_EXIT_S, enrichCap = null, binPath, collect,
+    watch, stop, project, interval = DEFAULT_INTERVAL_S, idleExit = DEFAULT_IDLE_EXIT_S, enrichCap = null, binPath, collect, render = null,
     cwd = process.cwd(), env = process.env, stdout = process.stdout, stderr = process.stderr,
   } = opts;
   const key = resolveKey(project, cwd);
@@ -478,16 +604,18 @@ function runWatchCli(opts) {
     return 2;
   }
 
-  if (env[LOCKED_ENV] !== '1') return launchUnderLock({ key, interval, idleExit, enrichCap, binPath, cwd, env, stdout, stderr });
-  return runWriter({ key, interval, idleExit, enrichCap, collect, cwd, env, stderr });
+  if (env[LOCKED_ENV] !== '1') return launchUnderLock({ key, interval, idleExit, enrichCap, binPath, render, cwd, env, stdout, stderr });
+  return runWriter({ key, interval, idleExit, enrichCap, collect, render, cwd, env, stderr });
 }
 
 // THE launch definition (lock form ii): `sh -c <WRAPPER> sh <lock> node <bin> status runs --watch ...`.
 // launchUnderLock (foreground `--watch`) and startWatcherDetached (session-mode `set`) both use it;
 // there is no second copy of this command line.
-function watchLaunchArgv({ lock, key, interval, idleExit, enrichCap, binPath }) {
+// render: null/false = off; true = default out-root; a string = that out-root.
+function watchLaunchArgv({ lock, key, interval, idleExit, enrichCap, binPath, render = null }) {
   const inner = [process.execPath, binPath, 'status', 'runs', '--watch', '--project', key, '--interval', String(interval), '--idle-exit', String(idleExit)];
   if (enrichCap !== null && enrichCap !== undefined) inner.push('--enrich-cap', String(enrichCap));
+  if (render) inner.push('--render', ...(typeof render === 'string' ? [render] : []));
   return ['-c', WRAPPER, 'sh', lock, ...inner];
 }
 
@@ -502,7 +630,7 @@ const DEFAULT_BIN_PATH = path.join(__dirname, '..', '..', 'bin', 'autopilot.js')
  */
 function startWatcherDetached({
   key, cwd = process.cwd(), env = process.env, binPath = DEFAULT_BIN_PATH,
-  interval = DEFAULT_INTERVAL_S, idleExit = DEFAULT_IDLE_EXIT_S, enrichCap = null,
+  interval = DEFAULT_INTERVAL_S, idleExit = DEFAULT_IDLE_EXIT_S, enrichCap = null, render = null,
 }) {
   try {
     const lock = lockPathOf(env, key);
@@ -515,7 +643,7 @@ function startWatcherDetached({
     fs.mkdirSync(path.dirname(logFile), { recursive: true });
     const fd = fs.openSync(logFile, 'a');
     try {
-      const child = spawn('nohup', ['sh', ...watchLaunchArgv({ lock, key, interval, idleExit, enrichCap, binPath })], {
+      const child = spawn('nohup', ['sh', ...watchLaunchArgv({ lock, key, interval, idleExit, enrichCap, binPath, render })], {
         cwd, env, detached: true, stdio: ['ignore', fd, fd],
       });
       child.on('error', () => { /* a spawn failure is reported by the caller via the missing envelope */ });
@@ -529,7 +657,7 @@ function startWatcherDetached({
   }
 }
 
-function launchUnderLock({ key, interval, idleExit, enrichCap, binPath, cwd, env, stdout, stderr }) {
+function launchUnderLock({ key, interval, idleExit, enrichCap, binPath, render, cwd, env, stdout, stderr }) {
   let lock;
   try {
     lock = lockPathOf(env, key);
@@ -538,7 +666,7 @@ function launchUnderLock({ key, interval, idleExit, enrichCap, binPath, cwd, env
     stderr.write(`watcher startup failed: live dir not writable: ${error.message}\n`);
     return 1;
   }
-  const r = spawnSync('sh', watchLaunchArgv({ lock, key, interval, idleExit, enrichCap, binPath }), { cwd, env, stdio: 'inherit' });
+  const r = spawnSync('sh', watchLaunchArgv({ lock, key, interval, idleExit, enrichCap, binPath, render }), { cwd, env, stdio: 'inherit' });
   if (r.error) {
     stderr.write(`watcher startup failed: ${r.error.message}\n`);
     return 1;
@@ -552,7 +680,7 @@ function launchUnderLock({ key, interval, idleExit, enrichCap, binPath, cwd, env
   return r.status === null ? 1 : r.status;
 }
 
-function runWriter({ key, interval, idleExit, enrichCap, collect, cwd, env, stderr }) {
+function runWriter({ key, interval, idleExit, enrichCap, collect, render, cwd, env, stderr }) {
   const fail = (message) => {
     stderr.write(`watcher startup failed: ${message}\n`);
     return 1;
@@ -565,7 +693,10 @@ function runWriter({ key, interval, idleExit, enrichCap, collect, cwd, env, stde
     const runsDir = path.join(liveBaseOf(env), 'runs');
     fs.mkdirSync(path.join(runsDir, 'paths'), { recursive: true, mode: 0o700 });
     fs.accessSync(runsDir, fs.constants.W_OK);
-    watcher = createWatcher({ key, env, cwd, collect, interval, enrichCap: enrichCap || 8, idleExitS: idleExit });
+    const renderOpt = render ? {
+      outRoot: path.resolve(typeof render === 'string' ? render : path.join(autopilotHomeOf(env), 'review', key)),
+    } : null;
+    watcher = createWatcher({ key, env, cwd, collect, interval, enrichCap: enrichCap || 8, idleExitS: idleExit, render: renderOpt });
     watcher.start();
     const first = watcher.tick();
     if (first.error) return fail(first.error);
@@ -600,7 +731,7 @@ function runWriter({ key, interval, idleExit, enrichCap, collect, cwd, env, stde
         if (r && r.exit) { stopWith(r.exit); return; }
       } catch (error) { watcher.log(`tick failed: ${error.message}`); }
       loop();
-    }, interval * 1000);
+    }, watcher.nextDelayMs());
   };
   loop();
   return null; // the process stays alive; it exits from stopWith

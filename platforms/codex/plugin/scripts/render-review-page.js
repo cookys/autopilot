@@ -211,7 +211,8 @@ th,td{border-bottom:1px solid var(--line);padding:4px 8px;text-align:left;font-s
 .chip{display:inline-block;border:1px solid var(--line);border-radius:10px;padding:0 8px;font-size:.78rem;margin:0 4px 0 0}
 .chip-running,.chip-info{color:var(--info)}.chip-accepted,.chip-match{color:var(--ok)}.chip-rejected,.chip-conflict,.chip-unverified{color:var(--bad)}
 .chip-pending,.chip-unknown,.chip-warn{color:var(--warn)}.muted{color:var(--mute)}figure{margin:0;display:inline-block;vertical-align:top;max-width:100%}
-figure img{max-width:100%;height:auto;border:1px solid var(--line)}code{font-size:.85em;word-break:break-all}`;
+figure img{max-width:100%;height:auto;border:1px solid var(--line)}code{font-size:.85em;word-break:break-all}
+section>p,li{overflow-wrap:anywhere}@media (max-width:640px){th,td{white-space:normal;overflow-wrap:normal}main{padding:12px}}`;
 
 function page(title, body) {
   return `<!doctype html>\n<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">\n<title>${esc(title)}</title>\n<style>${CSS}</style></head>\n<body><main>\n${body}\n</main></body></html>\n`;
@@ -612,9 +613,14 @@ function projectStep(p) {
       if (VERSION.test(n) && n !== version && n !== curTarget) rmTree(path.join(jobDir, n));
     }
   }
-  regenProjectIndex({ outRoot, project: p.project, displayName: p.displayName });
-  hostStep(p);
-  return { status: 'published', version };
+  // The switch has happened: a failure from here on is a warning, never "current unchanged".
+  const warnings = [];
+  try {
+    if (process.env.AUTOPILOT_REVIEW_FAIL_AT === 'after-switch') throw new Error('injected failure after switch (AUTOPILOT_REVIEW_FAIL_AT)');
+    regenProjectIndex({ outRoot, project: p.project, displayName: p.displayName });
+  } catch (e) { warnings.push(`project index step failed: ${e.message}`); }
+  try { hostStep(p); } catch (e) { warnings.push(`host root index step failed: ${e.message}`); }
+  return warnings.length ? { status: 'published', version, warnings } : { status: 'published', version };
 }
 
 function reapStep(p) {
@@ -690,7 +696,10 @@ function copyAssets(compare, jobDir) {
     for (const im of Object.values(c.images || {})) {
       if (!im || im.missing) continue;
       const dest = path.join(dir, path.basename(im.rel_path));
-      if (!fs.existsSync(dest)) fs.copyFileSync(im.source, dest);
+      if (fs.existsSync(dest)) continue;
+      // temp copy then rename: a reader (the review server) never sees a truncated asset
+      const tmp = `${dest}.tmp-${process.pid}`;
+      try { fs.copyFileSync(im.source, tmp); fs.renameSync(tmp, dest); } catch (e) { try { fs.unlinkSync(tmp); } catch (_e) { /* none */ } throw e; }
     }
   }
 }
@@ -738,6 +747,29 @@ function publish({ model, html, compare, outRoot, home, liveReview, project, dis
   }, 'publish');
   if (!r.ok) return { rc: 1, message: `publish failed, current unchanged: ${r.message}` };
   return { rc: 0, result: { ...r.result, current: path.join(jobDir, 'current', 'index.html') } };
+}
+
+// The one path from loaded inputs to a model (the CLI and the watcher's --render both go through it):
+// discovers the review receipts next to the manifests' ledgers, resolves the candidate commit, builds the model.
+// `sources` is the caller's list so far (runs / task / progress / decision / planned / compare); receipts are appended.
+function assemble(o) {
+  const sources = o.sources || [];
+  const reviewReceipts = discoverReviewReceipts(o.rows, o.root);
+  for (const e of reviewReceipts) sources.push({ role: 'review_receipt', path: e.file, sha256: e.sha256 });
+  for (const c of o.compare || []) if (c.sha256) sources.push({ role: 'compare_record', path: c.file, sha256: c.sha256 });
+  let commit = o.commit || null;
+  if (!commit) {
+    const r = cp.spawnSync('git', ['-C', o.repo, 'rev-parse', 'HEAD'], { encoding: 'utf8' });
+    commit = r.status === 0 ? r.stdout.trim() : null;
+  }
+  const model = buildJobModel({
+    runs: o.runsValue, root: o.root, job: o.job, date: o.date, project: o.project,
+    now: o.now, commit,
+    taskReceipt: o.task ? o.task.value : null, progressReceipt: o.progress ? o.progress.value : null,
+    reviewReceipts, compare: o.compare || [], decision: o.decision ? o.decision.value : null, planned: o.planned ? o.planned.value : null,
+    isAncestor: gitIsAncestor(o.repo), sources,
+  });
+  return { model, reviewReceipts };
 }
 
 function parseArgs(argv) {
@@ -814,22 +846,10 @@ function main(argv, env) {
   if (decision) sources.push({ role: 'decision', path: path.resolve(flags.decision), sha256: decision.sha256 });
   const planned = flags.planned ? readExplicit('planned', flags.planned, Array.isArray) : null;
   if (planned) sources.push({ role: 'planned', path: path.resolve(flags.planned), sha256: planned.sha256 });
-  const reviewReceipts = discoverReviewReceipts(rows, root);
-  for (const e of reviewReceipts) sources.push({ role: 'review_receipt', path: e.file, sha256: e.sha256 });
   const compare = flags.compare ? loadCompare(flags.compare) : [];
-  for (const c of compare) if (c.sha256) sources.push({ role: 'compare_record', path: c.file, sha256: c.sha256 });
-
-  let commit = flags.commit || null;
-  if (!commit) {
-    const r = cp.spawnSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf8' });
-    commit = r.status === 0 ? r.stdout.trim() : null;
-  }
-  const model = buildJobModel({
-    runs: runs.value, root, job: flags.job, date: flags.date, project: flags.project,
-    now: clock.ms, commit,
-    taskReceipt: task ? task.value : null, progressReceipt: progress ? progress.value : null,
-    reviewReceipts, compare, decision: decision ? decision.value : null, planned: planned ? planned.value : null,
-    isAncestor: gitIsAncestor(repo), sources,
+  const { model } = assemble({
+    runsValue: runs.value, rows, root, job: flags.job, date: flags.date, project: flags.project, now: clock.ms, commit: flags.commit || null, repo,
+    task, progress, decision, planned, compare, sources,
   });
   const html = renderJobHtml(model);
   if (flags.print) { writeAll(html); return 0; }
@@ -837,6 +857,7 @@ function main(argv, env) {
   const outRoot = flags['out-root'] ? path.resolve(flags['out-root']) : path.join(ep.home, 'review', flags.project);
   const r = publish({ model, html, compare, outRoot, home: ep.home, liveReview: ep.liveReview, project: flags.project, displayName: displayNameOf(repo, flags.project), env });
   if (r.rc !== 0) { process.stderr.write(`render-review-page: ${r.message}\n`); return r.rc; }
+  for (const w of r.result.warnings || []) process.stderr.write(`render-review-page: published; warning: ${w}\n`);
   writeAll(`${JSON.stringify(r.result)}\n`);
   return 0;
 }
@@ -864,6 +885,7 @@ function reapMain(flags, env, clock) {
 
 module.exports = {
   buildJobModel, renderJobHtml, renderProjectIndex, renderRootIndex, discoverReviewReceipts, loadCompare, publish, smokeDir, esc,
+  assemble, callTaskStatus, displayNameOf, envPaths,
 };
 
 if (require.main === module) {

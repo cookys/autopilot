@@ -432,6 +432,15 @@ function runStatusCli(argv, {
     since: takeValue('--since'), enrichCap: takeValue('--enrich-cap'),
     interval: takeValue('--interval'), idleExit: takeValue('--idle-exit'),
   };
+  // --render [<out-root>]: the value is optional (a following non-flag token is the out-root).
+  let render = null;
+  const renderIndex = args.indexOf('--render');
+  if (renderIndex !== -1) {
+    const next = args[renderIndex + 1];
+    const hasValue = next !== undefined && !next.startsWith('--');
+    render = hasValue ? next : true;
+    args.splice(renderIndex, hasValue ? 2 : 1);
+  }
   const watch = sub === 'runs' && args.includes('--watch');
   const stop = sub === 'runs' && args.includes('--stop');
   for (const a of args) {
@@ -442,6 +451,10 @@ function runStatusCli(argv, {
     }
   }
 
+  if (render !== null && !watch) {
+    stderr.write('--render is only valid with status runs --watch\n');
+    return 2;
+  }
   for (const [name, sel] of Object.entries(selectors)) {
     if (!sel.present) continue;
     const flag = name === 'enrichCap' ? '--enrich-cap' : (name === 'idleExit' ? '--idle-exit' : `--${name}`);
@@ -521,7 +534,7 @@ function runStatusCli(argv, {
     }
     const { runWatchCli } = require('./runs-watch');
     return runWatchCli({
-      watch, stop, project: selectors.project.value, interval, idleExit,
+      watch, stop, project: selectors.project.value, interval, idleExit, render,
       enrichCap: selectors.enrichCap.present ? enrichCap : null,
       binPath: path.join(ROOT, 'bin', 'autopilot.js'),
       collect: ({ enrichCap: cap, project }) => collectRuns({ enrichCap: cap, env, project }),

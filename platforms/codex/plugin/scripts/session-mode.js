@@ -427,7 +427,7 @@ function startProjectWatcher(marker, repoRoot) {
   if (!marker.project_key || process.env.AUTOPILOT_RUNS_WATCH_AUTOSTART === '0') return;
   try {
     const { startWatcherDetached } = require('../src/status/runs-watch');
-    const r = startWatcherDetached({ key: marker.project_key, cwd: repoRoot, env: process.env });
+    const r = startWatcherDetached({ key: marker.project_key, cwd: repoRoot, env: process.env, render: true });
     if (r.status === 'busy') {
       process.stderr.write(`session-mode: watcher already running for project ${marker.project_key} (pid ${r.holder === null || r.holder === undefined ? 'unknown' : r.holder}); not starting another\n`);
     } else if (r.status === 'flock_unavailable') {

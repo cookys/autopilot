@@ -28,7 +28,13 @@ mk_ctx() { # $1 name, $2 failModel
 J
   echo "$d"
 }
-drive() { node "$DRIVER" "$1" "$2/ctx.json" < /dev/null 2>"$2/$1.err" | tail -1 > "$2/$1.json"; echo $?; }
+# node's own exit code (not tail's): run to a file first, then take the last line.
+drive() {
+  node "$DRIVER" "$1" "$2/ctx.json" < /dev/null >"$2/$1.out" 2>"$2/$1.err"
+  local rc=$?
+  tail -1 "$2/$1.out" > "$2/$1.json"
+  echo "$rc"
+}
 field() { node -e "const j=JSON.parse(require('fs').readFileSync('$1','utf8'));process.stdout.write(String(j['$2']))"; }
 setfield() { node -e "const f='$1/ctx.json';const j=JSON.parse(require('fs').readFileSync(f,'utf8'));j['$2']=$3;require('fs').writeFileSync(f,JSON.stringify(j))"; }
 models() { sort "$1/log" | tr '\n' ','; }  # sorted: the fanout dispatches seats concurrently

@@ -9,12 +9,14 @@
 # ledger (scripts/run-ledger.sh) and the REAL reducer, reaching REVIEWING the way
 # production does (BOUNDARY_REJECTED -> vertical_verified).
 #
-# RED at f197fc09 (before the fix), 8 FAIL:
-#   a_reviewing_with_candidate=campaign_resume_phase_unsupported   (want resumable)
-#   a_reviewing_at_cap=campaign_resume_phase_unsupported           (want resumable)
-#   b_cli_eligibility=campaign_resume_phase_unsupported            (real REVIEWING ledger)
-#   b_intake_status=rejected code=campaign_resume_phase_unsupported (want claimed)
-#   c_status=blocked reason=campaign_completion_failed; c_review_calls=false; c_journal_terminal=true
+# RED (measured, with finalize_test in place): src/campaign/cli.js:889 temporarily made
+# `false && projection.state.phase === REVIEWING` -> suite exits 1:
+#   FAIL REVIEWING + bound git candidate is resumable: 'a_reviewing_with_candidate=resumable' not found
+#   FAIL REVIEWING at the changed-file cap resumes (review cannot write): 'a_reviewing_at_cap=resumable' not found
+#   FAIL churn cap still blocks a REVIEWING resume: 'a_reviewing_churn_cap=campaign_churn_budget_exhausted' not found
+#   FAIL real REVIEWING projection is cli-resumable: 'b_cli_eligibility=resumable' not found
+#   FAIL [campaign-resume-reviewing-phase] 20 passed, 4 failed
+# (Before this commit the suite never called finalize_test, so it exited 0 whatever failed.)
 TEST_NAME="campaign-resume-reviewing-phase"
 . "$(dirname "$0")/lib.sh"
 unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
@@ -31,9 +33,20 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const [root, testTmp, diff] = process.argv.slice(2);
+const reviewRunner = require(path.join(root, 'src', 'runners', 'review'));
+const realBatch = reviewRunner.dispatchReviewJsonBatch;
+const stub = path.join(root, 'hooks', 'tests', 'lib', 'final-panel-seat-xproc-stub-review.sh');
+// Patch BEFORE the engine is required: it binds the batch dispatcher at load time.
+const reviewLog = path.join(testTmp, 'review-calls.log');
+process.env.FP_LOG = reviewLog;
+process.env.FP_FAIL_MODEL = '';
+reviewRunner.dispatchReviewJsonBatch = (list, opts) => realBatch(
+  list.map((item) => ({ ...item, scriptPath: stub })), opts,
+);
 const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
 const icc = require(path.join(root, 'src', 'engine', 'implementation-campaign'));
 const intake = require(path.join(root, 'src', 'engine', 'campaign-intake'));
+const { runCampaignIntake, compileCampaignDispositionPolicy } = require(path.join(root, 'src', 'engine'));
 const campaignCli = require(path.join(root, 'src', 'campaign', 'cli'));
 const {
   campaignLedgerContract,
@@ -80,16 +93,18 @@ console.log(`a_terminal_stop=${code({
 })}`);
 
 // ---- shared fixture -----------------------------------------------------------------
+const seats = [
+  { role: 'qc', runner: 'cc-shim', model: 'claude-opus-4-6', effort: 'high', endpoint: null, family: 'anthropic' },
+  { role: 'qc', runner: 'cc-shim', model: 'gpt-5.4', effort: 'high', endpoint: null, family: 'openai' },
+  { role: 'qc', runner: 'cc-shim', model: 'glm-4.7', effort: 'high', endpoint: null, family: 'zai' },
+];
 const roster = {
-  reviewer_engine: 'fixture-reviewer', reviewer_effort: 'high', reviewer_runner: 'fixture',
-  reviewer_qualified: true, min_panel_size: 1, qc_panel_seats_complete: true,
-  qc_panel_seats: [{
-    role: 'qc', runner: 'fixture', model: 'fixture-reviewer', effort: 'high',
-    endpoint: null, family: 'fixture',
-  }],
-  implementer_engine: 'fixture-implementer', implementer_effort: 'high',
-  implementer_runner: 'fixture', loop_max_rounds: 2, loop_convergence_verdict: 'SHIP-AS-IS',
-  cross_family_required: false,
+  reviewer_engine: seats[0].model, reviewer_effort: 'high', reviewer_runner: 'cc-shim',
+  reviewer_qualified: true, implementer_engine: 'fixture-implementer',
+  implementer_effort: 'high', implementer_runner: 'fixture',
+  loop_max_rounds: 3, loop_convergence_verdict: 'SHIP-AS-IS', min_panel_size: 3,
+  qc_panel_seats_complete: true, qc_panel_seats: seats, in_rail_review: 'panel',
+  override_admitted_seats: ['qc_panel[0]', 'qc_panel[1]', 'qc_panel[2]'],
 };
 function git(repo, args) {
   return execFileSync('git', ['-C', repo, ...args], {
@@ -106,7 +121,18 @@ function reviewingFixture(name, { maxChangedFiles = null, usageFiles = null } = 
   git(repo, ['config', 'user.name', 'Reviewing Resume']);
   fs.writeFileSync(path.join(repo, 'src', 'seed.txt'), `${name}\n`);
   fs.writeFileSync(path.join(repo, 'fixture.js'), 'process.exit(0);\n');
-  git(repo, ['add', 'src/seed.txt', 'fixture.js']);
+  // shadow-mode mission governance so the real campaign seal (used by the real intake) verifies
+  const gov = JSON.parse(fs.readFileSync(path.join(root, '.claude', 'owner-kernel-governance.json'), 'utf8'));
+  gov.mission_convergence = {
+    schema_version: 1, enforcement_mode: 'shadow', max_campaigns: 8, max_wall_seconds: 7200,
+    max_tool_calls: 1000, max_engine_attempts: 100, max_external_wait_seconds: 600,
+    max_canonical_changed_files: 100, max_output_bytes: 1000000, max_deliverables: 8,
+    max_parallel: 3, max_batches: 4, max_graph_depth: 4, max_gate_attempts: 16, closure_ratio: 1,
+    max_stagnant_campaigns: 2,
+  };
+  fs.mkdirSync(path.join(repo, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(repo, '.claude', 'owner-kernel-governance.json'), `${JSON.stringify(gov, null, 2)}\n`);
+  git(repo, ['add', 'src/seed.txt', 'fixture.js', '.claude/owner-kernel-governance.json']);
   git(repo, ['commit', '-qm', 'fixture']);
   const baseSha = git(repo, ['rev-parse', 'HEAD']);
   const commonRaw = git(repo, ['rev-parse', '--git-common-dir']);
@@ -123,8 +149,15 @@ function reviewingFixture(name, { maxChangedFiles = null, usageFiles = null } = 
   const contractPath = path.join(testTmp, name, 'campaign.json');
   const sealPath = path.join(testTmp, name, 'campaign.seal.json');
   const promptFile = path.join(testTmp, name, 'prompt.txt');
-  fs.writeFileSync(contractPath, `${JSON.stringify(contract, null, 2)}\n`);
-  fs.writeFileSync(sealPath, '{}\n');
+  // The real intake keys the campaign by sha256(contract file bytes); the ledger fixture keys
+  // it by canonicalDigest(contract). Writing the canonical compact form makes them one identity.
+  const canon = (v) => (Array.isArray(v) ? v.map(canon) : (v && typeof v === 'object'
+    ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, canon(v[k])])) : v));
+  fs.writeFileSync(contractPath, JSON.stringify(canon(contract)));
+  execFileSync(process.execPath, [
+    path.join(root, 'scripts', 'implementation-campaign-check.js'),
+    'seal', '--contract', contractPath, '--repo', repo, '--mission-mode', 'shadow', '--out', sealPath,
+  ], { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] });
   fs.writeFileSync(promptFile, 'bounded implementation\n');
   const opened = openCampaignLedger({
     root, repo,
@@ -154,6 +187,7 @@ function boundaryResult(fx) {
     containment: 'plain', contained: true, branch: fx.branch, base: fx.base,
     commit: fx.candidate, files_changed: 1, insertions: 1, deletions: 0,
     worktree: fx.worktree, agent_log: null,
+    run_id: `run-${fx.campaignId.slice(0, 8)}`, dispatch_id: `d-${fx.campaignId.slice(0, 8)}`,
     error: "boundary_rejected: changed path 'docs/leak.md' is outside sealed output surface",
     boundary: 'rejected', boundary_code: 'unauthorized_output_path',
     boundary_reason: "boundary_rejected: changed path 'docs/leak.md' is outside sealed output surface",
@@ -262,45 +296,72 @@ const resumeCandidate = {
   repair_lineage: lineage, scope_implementation_sha: commit,
 };
 let implCalls = 0;
-let reviewCalls = 0;
 const journal = [];
 const resumed = new AutopilotEngine({
   cwd: fxC.repo,
   clock: () => '2026-08-30T00:00:06.000Z',
-  campaignIntake() {
-    return {
-      ...fxC.control,
-      initial_state: { ...stateC, live_lease: null },
-      generation_claim: {
-        ...fxC.control.generation_claim, durable_journal: true,
-        resume_candidate: resumeCandidate, resume_review_digest: null,
-      },
-    };
+  campaignDispositionProvider: compileCampaignDispositionPolicy('acceptance-bound'),
+  // REAL intake claim + REAL journal + REAL completion over the real REVIEWING ledger.
+  campaignIntake(input) {
+    return runCampaignIntake(input, {
+      readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
+      contextGate: () => ({ owner: 'context_window', status: 'ready' }),
+      occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
+    });
   },
-  campaignAdmissionReleaser() { return { status: 'released' }; },
   campaignEventAppender(input) {
     journal.push(input.eventType);
-    return {
-      status: 'appended',
-      event: { event_type: input.eventType, timestamp: '2026-08-30T00:00:06.000Z' },
-      state: {
-        ...input.campaignControl.initial_state,
-        phase: input.eventType === 'review_completed' ? 'ADJUDICATING'
-          : input.campaignControl.initial_state.phase,
-      },
-    };
+    return intake.appendCampaignEvent(input);
+  },
+  campaignScopeChecker() {
+    return { passed: true, changed_files: ['src/out.txt'], total_churn: 1, receipt_digest: 'd'.repeat(64) };
+  },
+  // Production's cleanup re-derives the retained worktree's filesystem-instance id and
+  // checks a lease marker this fixture does not build; inject the transaction (as the
+  // final-panel-seat-xproc driver does) so the resumed run is not blocked by fixture shape.
+  repairLineageCleanupTransaction({ record }) {
+    if (record && record.worktree) {
+      execFileSync('git', ['-C', fxC.repo, 'worktree', 'remove', '--force', record.worktree],
+        { stdio: ['ignore', 'pipe', 'pipe'] });
+    }
+    return { error: null, status: 0, signal: null, stdout: '', stderr: '' };
   },
   implementationDispatcher() { implCalls += 1; throw new Error('must not re-dispatch'); },
-  diffProvider() { return diff; },
-  reviewDispatcher() {
-    reviewCalls += 1;
+  // Production's cleanup re-derives the retained worktree's filesystem-instance id and
+  // checks a lease marker this fixture does not build; inject the transaction (as the
+  // final-panel-seat-xproc driver does) so the resumed run is not blocked by fixture shape.
+  repairLineageCleanupTransaction({ record }) {
+    if (record && record.worktree) {
+      execFileSync('git', ['-C', fxC.repo, 'worktree', 'remove', '--force', record.worktree],
+        { stdio: ['ignore', 'pipe', 'pipe'] });
+    }
+    return { error: null, status: 0, signal: null, stdout: '', stderr: '' };
+  },
+  diffProvider() {
+    // the packet builder requires the byte-exact canonical diff of the bound range
+    const diffFile = path.join(testTmp, 'engine-reviewing', 'range.diff');
+    fs.writeFileSync(diffFile, execFileSync('git', [
+      '-C', fxC.repo, 'diff', '--no-ext-diff', '--no-textconv', `${fxC.base}..${commit}`,
+    ]));
+    return diffFile;
+  },
+  gitWorktreeAdd({ commit: c } = {}) {
+    const useCommit = c || commit;
+    const verifyWt = path.join(testTmp, `engine-reviewing-verify-${String(useCommit).slice(0, 12)}`);
+    try { git(fxC.repo, ['worktree', 'remove', '--force', verifyWt]); } catch (_e) {}
+    git(fxC.repo, ['worktree', 'add', '-q', '--detach', verifyWt, useCommit]);
     return {
-      error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
-      result: {
-        runner: 'fixture', model: 'fixture-reviewer', status: 'reviewed',
-        verdict: 'SHIP-AS-IS', findings: '[]', raw_log: '/tmp/l', error: null,
-      },
+      error: null, status: 0, signal: null, stdout: '', stderr: '', worktree: verifyWt, parent: null,
+      commit: useCommit, observed_commit: useCommit,
+      observed_tree_sha: git(verifyWt, ['rev-parse', 'HEAD^{tree}']), detached: true,
     };
+  },
+  gitWorktreeRemove({ worktree: wt } = {}) {
+    if (wt) { try { git(fxC.repo, ['worktree', 'remove', '--force', wt]); } catch (_e) {} }
+    return { error: null, status: 0, signal: null, stdout: '', stderr: '' };
+  },
+  verifyCommandRunner() {
+    return { error: null, status: 0, signal: null, stdout: '', stderr: '', executed_argv: ['/bin/sh', '-c', 'node fixture.js'] };
   },
 }).runImplementationReviewLoop({
   promptFile: fxC.promptFile, branch: fxC.branch, base: fxC.base, roster,
@@ -308,7 +369,10 @@ const resumed = new AutopilotEngine({
 });
 console.log(`c_status=${resumed.status} reason=${resumed.reason || ''}`);
 console.log(`c_impl_calls=${implCalls}`);
+console.log(`c_phase=${resumed.phase || ''}`);
+const reviewCalls = fs.existsSync(reviewLog) ? fs.readFileSync(reviewLog, 'utf8').split('\n').filter(Boolean).length : 0;
 console.log(`c_review_calls=${reviewCalls > 0}`);
+console.log(`c_seat_dispatches=${reviewCalls}`);
 console.log(`c_journal_vertical_verified=${journal.includes('vertical_verified')}`);
 console.log(`c_journal_terminal=${journal.includes('terminal_stop')}`);
 NODE
@@ -347,3 +411,15 @@ assert_contains "$OUT" "c_review_calls=true" "REVIEWING resume re-runs the revie
 assert_contains "$OUT" "c_journal_vertical_verified=false" \
   "REVIEWING resume does not re-journal vertical_verified (reducer would reject it)"
 assert_contains "$OUT" "c_journal_terminal=false" "REVIEWING resume journals no terminal_stop"
+assert_contains "$OUT" "c_seat_dispatches=3" "REVIEWING resume dispatches the 3-seat final panel (real batch dispatcher, stubbed script)"
+# The resumed run must get past the old fixture-shape blocks: the repair-lineage cleanup
+# (git worktree command) and the completion/seat-admission blocks.
+C_STATUS_LINE="$(printf '%s\n' "$OUT" | grep '^c_status=')"
+assert_not_contains "$C_STATUS_LINE" "git worktree command" "resumed run is not blocked at the repair-lineage cleanup"
+assert_not_contains "$C_STATUS_LINE" "campaign_completion_failed" "resumed run is not blocked at campaign completion"
+assert_not_contains "$C_STATUS_LINE" "managed blind-discovery" "resumed run is not blocked at seat admission"
+assert_not_contains "$C_STATUS_LINE" "families_below_minimum" "resumed run reached a real quorum"
+# KNOWN GAP (see commit report): the run still ends blocked at controller_work_order_terminalize
+# ("controller transcript audit blocks terminal"), so the converged status is NOT asserted here.
+echo "c_final: $C_STATUS_LINE" >&2
+finalize_test

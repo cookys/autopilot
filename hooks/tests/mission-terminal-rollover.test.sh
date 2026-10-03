@@ -308,11 +308,12 @@ fi
 
 # Byte-identity proof: the entire harness ran against the scratch clone's own
 # common dir, so the LIVE host's store must be untouched.
+# Body assertions only: the live-store check below always ok/bad-s, so it must not count.
+[ "$PASS" -gt 0 ] || bad "no body assertion executed (a run past the preconditions must assert something)"
 LIVE_STORE_HASH_AFTER="$( [ -f "$LIVE_STORE" ] && sha256sum "$LIVE_STORE" | awk '{print $1}' || echo "absent" )"
 [ "$LIVE_STORE_HASH_BEFORE" = "$LIVE_STORE_HASH_AFTER" ] \
   && ok "live host mission-terminal-rollovers.json is byte-identical before/after (scratch clone never touched it)" \
   || bad "live host mission-terminal-rollovers.json CHANGED (before=$LIVE_STORE_HASH_BEFORE after=$LIVE_STORE_HASH_AFTER)"
 
-[ "$PASS" -gt 0 ] || bad "no assertion executed (a run past the preconditions must assert something)"
 printf '\n%s: %d passed, %d failed\n' "$(basename "$0")" "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

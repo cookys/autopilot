@@ -5653,6 +5653,19 @@ class AutopilotEngine {
       const seatAttempts = new Map();
       const preparedSeats = [];
       const outcomes = seats.map((seat, index) => {
+        // Qualification is re-checked on every run BEFORE a stored verdict is consulted: a
+        // seat that lost qualification since the first run (e.g. an immediately enforced
+        // critical strike) must not contribute its old verdict.
+        if (!snapshot && !finalPanelSeatQualified(roster, seat, index)) {
+          return {
+            seat,
+            outcome: {
+              reviewed: false,
+              phase: 'reviewer_qualification',
+              reason: 'final panel seat is not an exact qualified reviewer tuple',
+            },
+          };
+        }
         let storeCtx = null;
         if (seatStoreCtx) {
           storeCtx = { ...seatStoreCtx, seat, seatIndex: index };
@@ -5684,16 +5697,6 @@ class AutopilotEngine {
             ? true
             : finalPanelSeatQualified(roster, seat, index),
         };
-        if (!snapshot && !finalPanelSeatQualified(roster, seat, index)) {
-          return {
-            seat,
-            outcome: {
-              reviewed: false,
-              phase: 'reviewer_qualification',
-              reason: 'final panel seat is not an exact qualified reviewer tuple',
-            },
-          };
-        }
         if (storeCtx) finalPanelSeatStore.recordAttempt(storeCtx, seatAttempts.get(index) - 1);
         const outcome = performReview({
           ...reviewInput,

@@ -240,14 +240,16 @@ function noDispatchContradictions(mutation) {
 function classifyFullDiffReviewFault(fullDiff) {
   if (!isObj(fullDiff)) return 'terminal';
   if (fullDiff.phase === 'product_review_normalization') return 'gate_transient';
-  if (typeof fullDiff.reason === 'string'
-      && /^final_panel_seat_(no_verdict|transport_failed|parser_failed)$/.test(fullDiff.reason)) {
-    return 'gate_transient';
-  }
+  // A seat that spent its attempt budget is terminal even when a sibling seat's reason is
+  // transient: checked first so a retry loop cannot outlive the budget.
   if (Array.isArray(fullDiff.final_panel_seat_receipts)
       && fullDiff.final_panel_seat_receipts.some((seat) => (
         seat && seat.status === 'attempt_budget_exhausted'))) {
     return 'terminal';
+  }
+  if (typeof fullDiff.reason === 'string'
+      && /^final_panel_seat_(no_verdict|transport_failed|parser_failed)$/.test(fullDiff.reason)) {
+    return 'gate_transient';
   }
   if (Array.isArray(fullDiff.final_panel_seat_receipts)) {
     const seatFault = fullDiff.final_panel_seat_receipts.some((seat) => seat && (

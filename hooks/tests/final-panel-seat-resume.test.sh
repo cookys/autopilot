@@ -1,9 +1,24 @@
 #!/usr/bin/env bash
 # Final-panel panel re-run (the resume path) re-dispatches only failed seats: verdicts are re-derived
 # from per-seat artifacts bound to the same packet; negative controls and the attempt budget.
-# RED at f197fc09: AssertionError: only the failed seat is re-dispatched:
-#   ["claude-opus-4-6","gpt-5.4","glm-4.7"]   (actual: all three seats; expected: ["gpt-5.4"])
-#   -> FAIL final-panel seat resume: expected exit 0, got 1
+# RED at f197fc09 (no seat store), every assertion that was red:
+#   MEASURED (soft-assert run of this file at f197fc09; the first replay at base leaves the
+#   sandbox so later scenarios cannot run, which is itself a red run):
+#     seat-reuse: "only the failed seat is re-dispatched" (actual: all three seats,
+#       ["claude-opus-4-6","gpt-5.4","glm-4.7"]; expected ["gpt-5.4"])
+#     seat-reuse: "one artifact per dispatched seat" (actual 0 artifacts; expected 3)
+#     seat-garbled: the replay never completes (controller_execution_authority block)
+#   RED BY CONSTRUCTION (they assert store behaviour that does not exist at base):
+#     seat-wrong-id / seat-swapped / seat-forged / seat-flag-only (artifact tampering is
+#       re-dispatched: needs artifacts), seat-over-budget (attempt_budget_exhausted terminal
+#       reason), seat-requalify (a disqualified seat is not reused), the classifier-order case
+#       (exhausted seat terminal beside a transient sibling reason).
+#   GREEN at base (negative control): seat-diff-changed (changed packet re-runs every seat).
+#   The last two cases were added with the repair; their red-ness was confirmed by reverting
+#   only src/engine/{autopilot-engine,campaign-composition}.js at dffca782:
+#     AssertionError: disqualified seat is not reused: ["reviewed","reviewed","reviewed"]
+#     (expected 'precondition_failed'); the exit-1 also leaves exhausted_seat_classifies_terminal
+#     unreached.
 . "$(dirname "$0")/lib.sh"
 
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP" <<'NODE'
@@ -108,6 +123,8 @@ function runStation(tag, opts) {
   let panelCalls = 0;
   let finalPanelCalls = 0;
   let replay = null;
+  let rosterRef = null;
+  let controlRef = null;
   let reviewCalls = 0;
   let nowMs = Date.parse('2026-09-18T00:00:05.000Z');
   const engine = new AutopilotEngine({
@@ -117,11 +134,12 @@ function runStation(tag, opts) {
       campaignDispositionProvider: compileCampaignDispositionPolicy(opts.policy || 'acceptance-bound'),
     }),
     campaignIntake(input) {
-      return runCampaignIntake(input, {
+      controlRef = runCampaignIntake(input, {
         readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
         contextGate: () => ({ owner: 'context_window', status: 'ready' }),
         occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
       });
+      return controlRef;
     },
     campaignScopeChecker() {
       return { passed: true, changed_files: ['src/value.txt'], total_churn: 1, receipt_digest: 'd'.repeat(64) };
@@ -139,7 +157,7 @@ function runStation(tag, opts) {
         // The resume path re-runs the same panel for the same candidate/packet: replay it
         // in-process (admission of a REVIEWING campaign is the campaign CLI's concern).
         const written = allSeatFiles().filter((p) => !filesBefore.has(p));
-        opts.afterFirst({ firstReceipt, written, modelsBefore: reviewModels.slice() });
+        opts.afterFirst({ firstReceipt, written, modelsBefore: reviewModels.slice(), roster: rosterRef, control: controlRef });
         const mark = reviewModels.length;
         opts.failSeat = null;
         const secondReceipt = innerPanel(reviewInput);
@@ -281,6 +299,7 @@ function runStation(tag, opts) {
     in_rail_review: opts.station || 'panel',
     override_admitted_seats: ['qc_panel[0]', 'qc_panel[1]', 'qc_panel[2]'],
   };
+  rosterRef = roster;
   const result = engine.runImplementationReviewLoop({
     promptFile, branch, base, roster,
     campaignContract: contractPath, campaignSeal: sealPath,
@@ -363,11 +382,44 @@ assert.strictEqual(orc.final_panel_seat_receipts[1].status, 'attempt_budget_exha
 assert.notStrictEqual(over.result.durable_wait, true, 'a seat over budget must not park for another retry');
 assert.strictEqual(over.result.reason, 'final_panel_seat_attempt_budget_exhausted', JSON.stringify(over.result).slice(0, 600));
 console.log('over_budget_seat_not_redispatched=true');
+
+// Re-qualification: seat 3 returned a valid stored verdict, then lost its admission before the
+// replay. A stored verdict must not outlive qualification: it is handled as an unqualified seat.
+const requal = run('seat-requalify', {
+  // Without a sealed snapshot the live roster is the qualification authority (with one, the
+  // resume intake re-checks it); drop the snapshot so the engine consults the live roster.
+  afterFirst: ({ roster: live, control }) => {
+    assert.ok(control && control.qc_panel_snapshot, 'fixture campaign carries a sealed snapshot');
+    control.qc_panel_snapshot = null;
+    live.override_admitted_seats = ['qc_panel[0]', 'qc_panel[1]'];
+  },
+});
+assert.deepStrictEqual(requal.replay.replayModels, [names[1]], JSON.stringify(requal.replay.replayModels));
+const qrc = requal.replay.secondReceipt;
+assert.strictEqual(qrc.final_panel_seat_receipts[2].status, 'precondition_failed',
+  `disqualified seat is not reused: ${JSON.stringify(qrc.final_panel_seat_receipts.map((r) => r.status))}`);
+assert.strictEqual(qrc.reviewed, false);
+assert.ok(traceOf(qrc).includes('final_panel_seat_reused:1'), JSON.stringify(traceOf(qrc)));
+assert.ok(!traceOf(qrc).includes('final_panel_seat_reused:3'), JSON.stringify(traceOf(qrc)));
+console.log('disqualified_seat_not_reused=true');
+
+// Classifier order: an exhausted seat is terminal even when a sibling's reason is transient.
+const { classifyFullDiffReviewFault } = require(path.join(root, 'src', 'engine', 'campaign-composition'));
+assert.strictEqual(classifyFullDiffReviewFault({
+  reason: 'final_panel_seat_transport_failed',
+  final_panel_seat_receipts: [{ status: 'attempt_budget_exhausted' }, { status: 'transport_failed' }],
+}), 'terminal');
+assert.strictEqual(classifyFullDiffReviewFault({
+  reason: 'final_panel_seat_transport_failed',
+  final_panel_seat_receipts: [{ status: 'reviewed' }, { status: 'transport_failed' }],
+}), 'gate_transient');
+console.log('exhausted_seat_classifies_terminal=true');
 NODE
 )"
 assert_exit_code "$?" "0" "final-panel seat resume: $OUT"
 for key in resume_dispatches_only_failed_seat unparseable_artifact_redispatched wrong_seat_artifact_not_reused \
-  forged_verdict_not_reused changed_packet_reruns_every_seat over_budget_seat_not_redispatched; do
+  forged_verdict_not_reused changed_packet_reruns_every_seat over_budget_seat_not_redispatched \
+  disqualified_seat_not_reused exhausted_seat_classifies_terminal; do
   assert_contains "$OUT" "$key=true" "seat resume proves $key"
 done
 finalize_test

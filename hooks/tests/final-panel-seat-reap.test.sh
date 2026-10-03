@@ -12,6 +12,7 @@
 #   FAIL scan: every row carries a keep/reap decision / the floor is stated / young unknown kept for the floor reason
 #   FAIL reap: young unknown subtree kept by the default age floor
 #   FAIL reap: report.after carries final_panel_seats
+# RED at f1b8985e: unsafe-name / unverifiable rows have decision_reason '' (kept entries why: "").
 . "$(dirname "$0")/lib.sh"
 
 SCRIPT="$REPO_ROOT/scripts/repo-residue-sweep.js"
@@ -180,4 +181,21 @@ OUT="$(node "$SCRIPT" reap --repo "$SBX" --yes --older-than-days 0)"
 assert_contains "$(field "$OUT" after.final_panel_seats)" 'active' "reap: report.after carries final_panel_seats"
 [ -d "$ROOTD/campaign-v1-parked" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "reap: parked campaign still kept"
 assert_file_exists "$COMMON/autopilot/victim/f" "reap: victim still intact"
+
+# ---------------------------------------------------------------- early-continue rows keep a named reason
+OUT="$(node "$SCRIPT" scan --repo "$SBX")"
+node -e 'const j=JSON.parse(process.argv[1]);const r=j.final_panel_seats.filter(x=>x.class==="unsafe-name");if(!r.length||r.some(x=>x.decision!=="keep"||!x.decision_reason))process.exit(1)' "$OUT"
+assert_exit_code "$?" "0" "scan: unsafe-name rows carry decision keep and a non-empty reason"
+OUT="$(node "$SCRIPT" reap --repo "$SBX" --yes)"
+node -e 'const k=JSON.parse(process.argv[1]).actions.final_panel_seats_kept.filter(x=>x.class==="unsafe-name");if(!k.length||k.some(x=>!x.why))process.exit(1)' "$OUT"
+assert_exit_code "$?" "0" "reap: unsafe-name kept entries carry a non-empty why"
+SB2="$TEST_TMP/repo2"; mkdir -p "$SB2"; git -C "$SB2" init -q -b develop; git -C "$SB2" -c user.email=t@t -c user.name=t commit -q --allow-empty -m b
+C2="$(cd "$SB2/.git" && pwd -P)"; mkdir -p "$C2/autopilot/final-panel-seats/campaign-v1-x" "$C2/autopilot/implementation-campaign.jsonl"
+OUT="$(node "$SCRIPT" scan --repo "$SB2")"
+node -e 'const r=JSON.parse(process.argv[1]).final_panel_seats.filter(x=>x.class==="unverifiable");if(r.length!==1||r[0].decision!=="keep"||!r[0].decision_reason)process.exit(1)' "$OUT"
+assert_exit_code "$?" "0" "scan: unverifiable row carries decision keep and a non-empty reason"
+OUT="$(node "$SCRIPT" reap --repo "$SB2" --yes)"
+node -e 'const k=JSON.parse(process.argv[1]).actions.final_panel_seats_kept;if(k.length!==1||!k[0].why)process.exit(1)' "$OUT"
+assert_exit_code "$?" "0" "reap: unverifiable kept entry carries a non-empty why"
+[ -d "$C2/autopilot/final-panel-seats/campaign-v1-x" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "unverifiable subtree kept"
 finalize_test

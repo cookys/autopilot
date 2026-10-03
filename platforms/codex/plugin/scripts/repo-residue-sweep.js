@@ -229,8 +229,8 @@ function classifyFinalPanelSeats(mainPath, worktrees, olderThanDays) {
     const p = path.join(root, name);
     let st; try { st = fs.lstatSync(p); } catch { continue; }
     const row = { campaign_id: name, path: p, class: null, age_days: Math.round((now - (st.isDirectory() ? newestMtimeMs(p) : st.mtimeMs)) / 864000) / 100, lock_held_elsewhere: lockUnknown, unknown_min_age_days: UNKNOWN_SEAT_MIN_AGE_DAYS, decision: 'keep', decision_reason: '', reason: '' };
-    if (!st.isDirectory() || !seatStore.isPlainCampaignToken(name)) { row.class = 'unsafe-name'; row.reason = 'not a plain campaign-token directory'; rows.push(row); continue; }
-    if (events === null) { row.class = 'unverifiable'; row.reason = 'campaign journal unreadable'; rows.push(row); continue; }
+    if (!st.isDirectory() || !seatStore.isPlainCampaignToken(name)) { row.class = 'unsafe-name'; row.reason = 'not a plain campaign-token directory'; row.decision_reason = row.reason; rows.push(row); continue; }
+    if (events === null) { row.class = 'unverifiable'; row.reason = 'campaign journal unreadable'; row.decision_reason = row.reason; rows.push(row); continue; }
     const type = events.get(name);
     if (type === undefined) { row.class = 'unknown'; row.reason = 'campaign not journaled'; }
     else if (seatStore.TERMINAL_EVENT_TYPES.has(type)) { row.class = 'terminal'; row.reason = `last event ${type}`; }

@@ -202,7 +202,10 @@ function applySelectors(rows, { project = null, root = null, since = null } = {}
   if (project === null && since === null) return out;
   const result = {};
   if (since !== null) result.filter = { since };
-  if (project !== null) result.project = project;
+  if (project !== null) {
+    result.project = project;
+    result.project_key = /^[0-9a-f]{16}$/.test(project) ? project : projectKey(project);
+  }
   result.runs = out;
   if (unscoped) result.unscoped = unscoped;
   return result;

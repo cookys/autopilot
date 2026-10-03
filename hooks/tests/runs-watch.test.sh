@@ -108,6 +108,7 @@ eq "null" "$(jq_file "$LIVE/runs/$KEY_A.json" 'j.scope.root_run_id')" "project-w
 eq "no" "$([ -e "$LIVE/runs/$KEY_B.json" ] && echo yes || echo no)" "the other repo's run created no file for its project"
 eq "yes" "$([ -s "$AHOME/review/$KEY_A/live/watcher.log" ] && echo yes || echo no)" "watcher.log written under review/<key>/live"
 eq "yes" "$([ -f "$AHOME/live-pointer.json" ] && echo yes || echo no)" "live pointer written at watcher start (isolated home)"
+cp "$LIVE/runs/$KEY_A.json" "$SB/sample-live.json"; cp "$LIVE/runs/$KEY_A--root-1.json" "$SB/sample-scope.json"
 stop_watcher "$KEY_A" "$REPO_A"
 
 # --- 3. startup failure: manifest dir missing -> non-zero, one stderr line, lock free ------------------------
@@ -439,5 +440,54 @@ eq "null" "$(cj "$RE" 'j.atExpiry')" "first tick after the marker expires does n
 eq "null" "$(cj "$RE" 'j.plus3')" "3 s after expiry (N = 5) still does not exit"
 eq "idle_exit" "$(cj "$RE" 'j.plus6')" "N s after expiry the watcher idle-exits"
 rm -f "$AHOME/session-mode/rearm.json"
+
+# --- R6 review repair -------------------------------------------------------------------------------
+# RED at 367affdd (R6 cases): --stop --project <repo_identity>: expected '0', got '2' (stderr names the 16-hex rule);
+#   --watch --project <repo_identity>: rc 2 instead of a normal start; envelope validates against
+#   schemas/runs-live.schema.json: validator rc 2 (schema file absent); failed `git worktree list` keeps the paths
+#   file: expected '1 entries', got '0 entries' (map overwritten with {}).
+(cd "$REPO_A" && wenv "$NODE" "$CLI" status runs --stop --project "$IDENT_A" > "$SB/si.out" 2> "$SB/si.err" < /dev/null)
+eq "0" "$?" "--stop --project <repo_identity> is accepted (normalised to the project key)"
+eq "yes" "$(grep -q "for project $KEY_A" "$SB/si.out" && echo yes || echo no)" "--stop <repo_identity> reports the normalised project key"
+(cd "$REPO_A" && wenv AUTOPILOT_DISPATCH_RUNS_DIR="$SB/does-not-exist" "$NODE" "$CLI" status runs --watch --project "$IDENT_A" --interval 1 > "$SB/wi.out" 2> "$SB/wi.err" < /dev/null)
+eq "yes" "$(grep -q 'must be a 16-hex' "$SB/wi.err" && echo no || echo yes)" "--watch --project <repo_identity> is not rejected as a bad key"
+(cd "$REPO_A" && wenv "$NODE" "$CLI" status runs --stop --project "not-a-key" > /dev/null 2> "$SB/sb.err" < /dev/null)
+eq "2" "$?" "--stop --project <garbage> is still rejected"
+eq "yes" "$(grep -q '16-hex' "$SB/sb.err" && echo yes || echo no)" "garbage rejection keeps the 16-hex message"
+
+# envelope schema: real envelopes validate; a mutated one does not
+VS="$REPO_ROOT/scripts/validate-json-schema.js"; RS="$REPO_ROOT/schemas/runs-live.schema.json"
+"$NODE" "$VS" --schema "$RS" --document "$SB/sample-live.json" > "$SB/v1.out" 2>&1; eq "0" "$?" "project envelope validates against schemas/runs-live.schema.json"
+"$NODE" "$VS" --schema "$RS" --document "$SB/sample-scope.json" > "$SB/v2.out" 2>&1; eq "0" "$?" "per-root envelope validates against schemas/runs-live.schema.json"
+node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));delete j.counts;require("fs").writeFileSync(process.argv[2],JSON.stringify(j))' "$SB/sample-live.json" "$SB/sample-bad.json"
+"$NODE" "$VS" --schema "$RS" --document "$SB/sample-bad.json" > "$SB/v3.out" 2>&1; eq "1" "$?" "an envelope missing counts fails validation"
+
+# writePaths: a failing `git worktree list` must keep the previous paths file
+cat > "$SB/gitfail.js" <<'JS'
+const R = process.argv[2];
+const { createWatcher } = require(`${R}/src/status/runs-watch.js`);
+const fs = require('fs');
+const path = require('path');
+const [key, cwd, fakeBin] = process.argv.slice(3);
+const file = path.join(process.env.AUTOPILOT_LIVE_DIR, 'runs', 'paths', `${key}.json`);
+let t = Date.parse('2026-10-04T00:00:00Z');
+const w = createWatcher({ key, cwd, collect: () => [], now: () => t, interval: 10 });
+w.start(); w.tick();
+const before = fs.readFileSync(file, 'utf8');
+const entries = (txt) => Object.keys(JSON.parse(txt)).length;
+const realPath = process.env.PATH;
+process.env.PATH = `${fakeBin}:${realPath}`;
+t += 60000; w.tick();
+process.env.PATH = realPath;
+const after = fs.readFileSync(file, 'utf8');
+process.stdout.write(JSON.stringify({ before: entries(before), after: entries(after), same: before === after }));
+JS
+mkdir -p "$SB/fakebin"
+printf '#!/bin/sh\nif [ "$1" = worktree ] && [ "$2" = list ]; then exit 1; fi\nexec %s "$@"\n' "$(command -v git)" > "$SB/fakebin/git"
+chmod +x "$SB/fakebin/git"
+rm -f "$LIVE/runs/paths/$KEY_A.json" "$AHOME/review/$KEY_A/live/watcher.log"
+GF="$(wenv AUTOPILOT_COSTS_FILE="$SB/absent-costs.jsonl" "$NODE" "$SB/gitfail.js" "$REPO_ROOT" "$KEY_A" "$REPO_A" "$SB/fakebin")"
+eq "true" "$(cj "$GF" 'j.before>=1 && j.after===j.before && j.same')" "failed git worktree list keeps the previous paths file ($GF)"
+eq "yes" "$(grep -q 'git worktree list failed' "$AHOME/review/$KEY_A/live/watcher.log" && echo yes || echo no)" "the failure is logged once to watcher.log"
 
 finalize_test

@@ -132,6 +132,20 @@ mkdir -p "$HOOK_TMPDIR"
 export TMPDIR="$HOOK_TMPDIR"
 export GIT_CEILING_DIRECTORIES="${GIT_CEILING_DIRECTORIES}:${TMPDIR}"
 
+# Live-state leak (mods P1a review, 2026-10-04): `autopilot status runs` wrote
+# /run/user/<uid>/autopilot/runs-enrich-cursor.json from a suite that never set a live
+# dir. Default every suite to its own tmpfs live dir; a caller that already exports
+# AUTOPILOT_LIVE_DIR (suites that assert on it) keeps theirs untouched. Removed by
+# cleanup_test_tmp. resolveLiveDir only accepts tmpfs, hence /dev/shm (skipped when absent).
+__TEST_OWN_LIVE_DIR=""
+if [ -z "${AUTOPILOT_LIVE_DIR:-}" ] && [ -d /dev/shm ] && [ -w /dev/shm ]; then
+  __TEST_OWN_LIVE_DIR="$(mktemp -d -p /dev/shm "autopilot-test-live-${TEST_NAME}-XXXXXX" 2>/dev/null || true)"
+  if [ -n "$__TEST_OWN_LIVE_DIR" ]; then
+    chmod 700 "$__TEST_OWN_LIVE_DIR"
+    export AUTOPILOT_LIVE_DIR="$__TEST_OWN_LIVE_DIR"
+  fi
+fi
+
 # Same class of leak, one layer up (2026-08-22 incident). HOOK_HOME above exists
 # precisely because "~/.autopilot/* writes must be isolated", but HOME is only
 # handed to hook children — a test that invokes scripts/*.sh directly still lets
@@ -273,6 +287,7 @@ cleanup_test_tmp() {
   if [ -n "$__TEST_LIVE_LOCK_FD" ]; then
     { exec {__TEST_LIVE_LOCK_FD}>&-; } 2>/dev/null || true
   fi
+  [ -n "$__TEST_OWN_LIVE_DIR" ] && rm -rf "$__TEST_OWN_LIVE_DIR"
   rm -rf "$TEST_TMP"
 }
 trap cleanup_test_tmp EXIT

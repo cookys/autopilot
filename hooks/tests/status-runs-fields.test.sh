@@ -133,6 +133,10 @@ eq "legacy-run" "$(jget "j.unscoped.map(r=>r.run_id).join(',')")" "rows without 
 eq "false" "$(jget "j.runs.some(r=>r.run_id==='repo-b-run'||r.run_id==='legacy-run')")" "other repo and unscoped rows are not in the project's runs"
 run_runs --json --project "$KEY_A"
 eq "true" "$(jget "j.runs.length===4 && j.runs.every(r=>r.project==='$IDENT_A')")" "--project <16-hex key> matches by sha256-16"
+eq "$KEY_A" "$(jget "j.project_key")" "--project <16-hex key> header carries project_key"
+run_runs --json --project "$IDENT_A"
+eq "$KEY_A" "$(jget "j.project_key")" "--project <repo_identity> header carries the normalised project_key"
+# RED at 367affdd (R6): header project_key: expected '<key>', got ''.
 run_runs --json --project "0000000000000000"
 eq "0" "$(jget "j.runs.length")" "unknown key matches nothing"
 

@@ -202,7 +202,7 @@ function worktreePaths({ cwd, scope }) {
   const out = {};
   if (!scope.repo_identity) return out;
   const r = spawnSync('git', ['worktree', 'list', '--porcelain'], { cwd, encoding: 'utf8', timeout: 10000 });
-  if (r.status !== 0) return out;
+  if (r.status !== 0) return null; // unknown: the caller keeps the previous map
   for (const line of String(r.stdout).split('\n')) {
     if (!line.startsWith('worktree ')) continue;
     try {
@@ -287,6 +287,7 @@ function createWatcher({
 
   function writePaths(force) {
     const map = worktreePaths({ cwd, scope });
+    if (map === null) { log(`git worktree list failed; keeping the previous paths file for ${key}`); return; }
     const text = `${JSON.stringify(map, null, 2)}\n`;
     if (!force && text === state.lastPaths) return;
     writeAtomic(path.join(runsDir, 'paths', `${key}.json`), text);
@@ -422,7 +423,11 @@ function isWatcherFor(pid, key) {
 }
 
 function resolveKey(projectArg, cwd) {
-  if (projectArg) return /^[0-9a-f]{16}$/.test(projectArg) ? projectArg : null;
+  if (projectArg) {
+    if (/^[0-9a-f]{16}$/.test(projectArg)) return projectArg;
+    if (projectArg.startsWith('git-common-dir:') && projectArg.length > 'git-common-dir:'.length) return projectKey(projectArg);
+    return null;
+  }
   return scopeFromCwd(cwd).project_key;
 }
 

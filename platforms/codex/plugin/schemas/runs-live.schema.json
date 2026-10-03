@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/runs-live.schema.json",
+  "title": "runs-live-envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "scope",
+    "published_at",
+    "observed_at",
+    "valid_for_s",
+    "writer",
+    "runs",
+    "counts",
+    "sessions",
+    "host_today_usd",
+    "host_today_as_of"
+  ],
+  "properties": {
+    "schema": {
+      "const": "autopilot.runs-live/1"
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "project_key",
+        "repo_identity",
+        "root_run_id"
+      ],
+      "properties": {
+        "project_key": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{16}$"
+        },
+        "repo_identity": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "root_run_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "published_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "observed_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "valid_for_s": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "writer": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "pid",
+            "session_id",
+            "started_at"
+          ],
+          "properties": {
+            "pid": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "session_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "started_at": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "exit_reason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "runs": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "confirmed_live",
+        "exited",
+        "unknown",
+        "fresh_bound_s"
+      ],
+      "properties": {
+        "confirmed_live": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "exited": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unknown": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fresh_bound_s": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "sessions": {
+      "type": "object"
+    },
+    "host_today_usd": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "host_today_as_of": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    }
+  }
+}

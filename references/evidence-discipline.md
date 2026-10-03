@@ -1169,3 +1169,20 @@ A hook's sentence is a proxy for the quantity it names, not the quantity.
 
 Preventing artifact: v2.36.113 cost-tracker reads the live % and recommends /clear only at >= 50%;
 evidence in `docs/plans/evidence/2026-10-03-v113-cost-tracker-context-signal/`.
+
+## 53. An isolation env var the code silently rejects still writes the real store
+
+2026-10-04, mods P1a. `resolveLiveDir` accepts `AUTOPILOT_LIVE_DIR` only when it is RAM-backed and
+mode 0700; anything else is skipped and resolution continues to `$XDG_RUNTIME_DIR`, the operator's real
+live store. Three kinds of suite went green while doing exactly that: the R1 manifest suite set the override on
+`/tmp` (ext4 here), so `status runs` wrote its enrich cursor into `/run/user/1000/autopilot/`; two
+suites isolated only `AUTOPILOT_SESSION_MODE_DIR` while the new code wrote the live pointer under
+`$HOME`; and the pre-existing `session-mode-null-admission` suite had no isolation at all and wrote real
+markers. The combined review and a before/after store diff caught them, not the suites.
+
+Rule: setting an isolation variable is not isolation until something checks the code accepted it. Diff
+the real store before and after a suite run, and prefer a path the validator cannot reject over `/tmp`.
+
+Preventing artifact: `hooks/tests/lib.sh` defaults `AUTOPILOT_LIVE_DIR` to a 0700 dir under `/dev/shm`;
+the live pointer location follows the session-mode dir; the remaining fall-through is BACKLOG row
+"A rejected AUTOPILOT_LIVE_DIR override silently falls through to the real live dir".

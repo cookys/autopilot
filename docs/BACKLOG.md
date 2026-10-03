@@ -934,3 +934,19 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: mods plan G1+G2 reviews
 - **Pointer**: docs/backlog/plan-review-roster-resolves-to-a-single-family-on-this-repo.md
 - **Context**: seats were hand-picked from qc_panel; make plan review heterogeneous by default.
+
+### A rejected AUTOPILOT_LIVE_DIR override silently falls through to the real live dir
+- **Status**: open
+- **Trigger**: next touch of scripts/lib/live-state-dir.js, or the next suite that writes the live store
+- **Effort**: M
+- **Source**: mods P1a R1/R4/R6, 2026-10-04
+- **Pointer**: docs/backlog/a-rejected-autopilot-live-dir-override-silently-falls-through-to-the-real-live-dir.md
+- **Context**: resolveLiveDir skips a non-RAM or non-0700 override and continues to XDG, so suites on /tmp write the real store.
+
+### mods P1a known follow-ups (hardening)
+- **Status**: open
+- **Trigger**: P1b start
+- **Effort**: M
+- **Source**: mods P1a row and combined reviews, 2026-10-04
+- **Pointer**: docs/backlog/mods-p1a-known-follow-ups.md
+- **Context**: unfixed hardening items from the P1a reviews: cursor-file lock, spawn errors, autostart gate, repo-identity edge cases.

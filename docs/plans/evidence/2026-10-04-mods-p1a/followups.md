@@ -1,0 +1,10 @@
+- R2 blue: markerRepoIdentity vs scopeFromCwd dual source → R5 (touches session-mode)
+- R4a blue: --stop returns 0 even if writer still alive → R5
+- R4a blue: flock --version probe → R5 (use flock -n tmp true)
+- R4 hand: AUTOPILOT_LIVE_DIR override rejected when not tmpfs → silently falls back to real XDG live dir (test-pollution trap) → BACKLOG at closeout
+- R4a/R4b blue items stop-unverified-exit, flock-version-probe, idle-exit-rearm: folded into R4 repair (not R5)
+- R1 blue: repo-identity diag misattributes non-repo; json escape control chars; manifest test lacks PID trap → BACKLOG candidates
+- R5 blue: spawn error swallowed in startWatcherDetached; watcher suite orphan window; autostart honours only "0"
+- Pre-existing scripts/tests/session-mode-null-admission.test.sh wrote real ~/.autopilot markers (fixed in R5) — evidence-discipline candidate
+- live-state-dir.js: a rejected AUTOPILOT_LIVE_DIR override (not RAM-backed, or not mode 700 e.g. mkdir -p) silently falls through to the real XDG live dir → test pollution (R1 suite + R4 debug run) → BACKLOG
+- dispatch-review blind-evidence K1 rejected a spec containing a depth-0 ruling narrative; specs must state requirements only (lesson)

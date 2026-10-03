@@ -1,0 +1,6 @@
+════════ Summary ════════
+❌ 3 / 405 test files FAILED:
+   - L1 unit suite
+   - hooks/tests/qualification-feed-adopt.test.sh
+   - hooks/tests/qualification-scorecard-tools.test.sh
+SUITE-RC=1

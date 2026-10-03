@@ -1,0 +1,8 @@
+R3 edbc1c69 (9a145232 + repair) review FIX-THEN-SHIP→delta SHIP-AS-IS
+R2 ce5398b1 review SHIP-AS-IS (3 blue follow-ups)
+R4a cab0e6ed review SHIP-AS-IS (blue: stop-unverified-exit → fold into R5; roots-set-unbounded → P3; flock-version-probe)
+R4 95634d0c (cab0e6ed R4a + 7caa7e17 R4b + repair) review R4a SHIP, R4b FIX-THEN-SHIP→delta SHIP-AS-IS
+R1 b6199c18 review SHIP-AS-IS (blue: json escape ctrl chars, misleading diag on non-repo, test lacks PID trap)
+R5 367affdd review SHIP-AS-IS (blue: spawn error swallowed, suite orphan window, autostart string-only)
+R6 5bd2cca3 review SHIP-AS-IS; R1fix fec41d15 test-only
+R7 cf54fc74 review SHIP-AS-IS (first attempt precondition_failed K1 — narrative in spec)

@@ -11,7 +11,7 @@
 //                             # AUTOPILOT_MINIMAX_BASE_URL, or https://api.minimax.io/anthropic
 //       [--prompt-file <file>] # optional: exact message body to send instead of --diff-file
 //       [--raw]               # when present, output raw model response text only
-//       [--max-tokens <n>]    # response token cap (default 4096; large authoring
+//       [--max-tokens <n>]    # response token cap (default 16384; thinking + verdict; large authoring
 //                             # payloads need more — a truncated response fail-closes)
 //
 // AUTH (env only — never accepted as a CLI argument):
@@ -53,7 +53,14 @@ const RUNNER = 'anthropic-compatible';
 // https://api.minimax.io/anthropic/v1/messages for MiniMax-M3.
 const DEFAULT_BASE_URL = 'https://api.minimax.io/anthropic';
 const DEFAULT_TIMEOUT_MS = 300000;
-const DEFAULT_MAX_TOKENS = 4096;
+// Output budget covers thinking PLUS the verdict. A max-effort reviewer seat (GLM, MiniMax, ...)
+// can spend a 4096 cap entirely on thinking and return HTTP 200 / stop_reason=max_tokens with no
+// text block (peer-reported 2026-10-03). This runner sends no effort/thinking field (effort is
+// encoded in the model id), so the one cap serves every effort tier; the budget is sized for the
+// highest. Override per call with --max-tokens.
+const DEFAULT_MAX_TOKENS = 16384;
+// Named failure: stop_reason=max_tokens with no text block. Still a failure (never a verdict).
+const OUTPUT_BUDGET_EXHAUSTED = 'output_budget_exhausted';
 const MAX_RESPONSE_BYTES = 1024 * 1024;
 
 function printHelp() {
@@ -646,6 +653,14 @@ async function main() {
   }
 
   const text = extractResponseText(responseBody);
+  if (!text && isTruncatedResponse(responseBody)) {
+    const msg = `${OUTPUT_BUDGET_EXHAUSTED}: stop_reason=max_tokens with no text block `
+      + `(output budget ${args.maxTokens} consumed by thinking) — fail-closed, NOT a pass; raise --max-tokens`;
+    appendRawLog(rawLog, `\n[dispatch-anthropic-review: ${msg}]\n`);
+    // Raw mode (the dispatch-review.sh transport) has no JSON channel: stderr is captured by the shell.
+    if (rawMode) process.stderr.write(`${msg}\n`);
+    failNoVerdict(rawLog, msg);
+  }
   if (!text) {
     appendRawLog(rawLog, '\n[dispatch-anthropic-review: empty or unparseable model text]\n');
     failNoVerdict(rawLog, 'empty or unparseable model response text');

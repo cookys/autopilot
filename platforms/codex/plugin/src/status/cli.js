@@ -429,7 +429,7 @@ function runStatusCli(argv, {
   const selectors = {
     project: takeValue('--project'), root: takeValue('--root'),
     since: takeValue('--since'), enrichCap: takeValue('--enrich-cap'),
-    interval: takeValue('--interval'),
+    interval: takeValue('--interval'), idleExit: takeValue('--idle-exit'),
   };
   const watch = sub === 'runs' && args.includes('--watch');
   const stop = sub === 'runs' && args.includes('--stop');
@@ -443,9 +443,9 @@ function runStatusCli(argv, {
 
   for (const [name, sel] of Object.entries(selectors)) {
     if (!sel.present) continue;
-    const flag = name === 'enrichCap' ? '--enrich-cap' : `--${name}`;
-    if (name === 'interval' && !watch) {
-      stderr.write('--interval is only valid with status runs --watch\n');
+    const flag = name === 'enrichCap' ? '--enrich-cap' : (name === 'idleExit' ? '--idle-exit' : `--${name}`);
+    if ((name === 'interval' || name === 'idleExit') && !watch) {
+      stderr.write(`${flag} is only valid with status runs --watch\n`);
       return 2;
     }
     if (sub !== 'runs') {
@@ -510,9 +510,17 @@ function runStatusCli(argv, {
       }
       interval = Number(selectors.interval.value);
     }
+    let idleExit;
+    if (selectors.idleExit.present) {
+      if (!/^[1-9][0-9]*$/.test(selectors.idleExit.value)) {
+        stderr.write('--idle-exit must be a positive integer (seconds)\n');
+        return 2;
+      }
+      idleExit = Number(selectors.idleExit.value);
+    }
     const { runWatchCli } = require('./runs-watch');
     return runWatchCli({
-      watch, stop, project: selectors.project.value, interval,
+      watch, stop, project: selectors.project.value, interval, idleExit,
       enrichCap: selectors.enrichCap.present ? enrichCap : null,
       binPath: path.join(ROOT, 'bin', 'autopilot.js'),
       collect: ({ enrichCap: cap }) => collectRuns({ enrichCap: cap, env }),

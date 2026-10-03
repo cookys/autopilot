@@ -1562,7 +1562,10 @@ elif [[ "$RUNNER" = "anthropic-compatible" ]]; then
     printf '\n[dispatch-review: anthropic-compatible transport exited non-zero (rc=%s) — partial output NOT parsed]\n' \
       "$ANTHROPIC_RC" >> "$RAW_LOG"
     SALVAGE_CAPTURE="$RAW_LOG"
-    if grep -q '^output_budget_exhausted:' "$RAW_LOG" 2>/dev/null; then
+    # Match the bracketed raw-log line the JS appends (`[dispatch-anthropic-review: output_budget_exhausted: …]`)
+    # as well as the bare stderr line: stdout and stderr share RAW_LOG, so the stderr line is not
+    # guaranteed to land at the start of a line.
+    if grep -qE '^(\[dispatch-anthropic-review: )?output_budget_exhausted:' "$RAW_LOG" 2>/dev/null; then
       emit_no_verdict "output_budget_exhausted: reviewer spent the whole output budget on thinking (stop_reason=max_tokens, no text) — fail-closed; raise --max-tokens"
     fi
     emit_no_verdict "anthropic-compatible transport exited non-zero (rc=$ANTHROPIC_RC) — fail-closed, raw output not parsed"

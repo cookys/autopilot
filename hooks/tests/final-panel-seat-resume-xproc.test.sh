@@ -9,6 +9,14 @@
 # between two separate processes (stored packet_hash == live packet_hash, so reuse fires), so no
 # binding change was needed; case B (a tampered stored packet_hash is never reused) proves the
 # stored-vs-live comparison is exercised rather than skipped, and case C is the changed-input control.
+# RED measured at f197fc09 (engine WITHOUT the seat store; this suite and its driver/stub copied in):
+#   7 passed, 6 failed:
+#   A run1 stored the live packet hash with the seat verdict: '"packet_hash":"' not found
+#   A run2 dispatches ONLY the failed seat: expected '', got 'gpt-5.4,'
+#   A run2 final resumed status is converged (no post-review block): expected 'blocked', got 'converged'
+#   A run2 has no block reason: expected 'campaign resume from REVIEWING is unavailable ...', got 'null'
+#   B a seat whose stored packet_hash differs ... is re-dispatched: expected '', got 'claude-opus-4-6,gpt-5.4,'
+#   C changed review input re-dispatches all seats: expected '', got 'claude-opus-4-6,glm-4.7,gpt-5.4,'
 . "$(dirname "$0")/lib.sh"
 TEST_NAME="final-panel-seat-resume-xproc"
 unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID AUTOPILOT_PARENT_RUN_ID \

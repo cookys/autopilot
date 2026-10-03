@@ -1357,8 +1357,12 @@ function defaultGenerationClaim({
       existing.resume_candidate.repair_lineage = reviewReference.repair_lineage;
       existing.resume_review_digest = reviewReference.digest;
     }
-    // REVIEWING re-runs review only (cannot write); mutations re-check the cap themselves.
-    if (existing.state.phase !== CAMPAIGN_STATES.REVIEWING
+    // REVIEWING with a resolved candidate re-runs review only (cannot write); mutations
+    // re-check the cap themselves. Same predicate as campaignResumeEligibility's
+    // reviewingResumable (src/campaign/cli.js).
+    const reviewingResumable = existing.state.phase === CAMPAIGN_STATES.REVIEWING
+      && Boolean(existing.resume_candidate);
+    if (!reviewingResumable
         && existing.state.usage.changed_files >= existing.state.limits.max_changed_files) {
       return rejected(
         'campaign_generation',

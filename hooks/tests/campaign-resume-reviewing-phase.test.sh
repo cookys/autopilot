@@ -53,7 +53,6 @@ reviewRunner.dispatchReviewJsonBatch = (list, opts) => realBatch(
 const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
 const icc = require(path.join(root, 'src', 'engine', 'implementation-campaign'));
 const intake = require(path.join(root, 'src', 'engine', 'campaign-intake'));
-const { runCampaignIntake, compileCampaignDispositionPolicy } = require(path.join(root, 'src', 'engine'));
 const campaignCli = require(path.join(root, 'src', 'campaign', 'cli'));
 const {
   campaignLedgerContract,
@@ -120,7 +119,7 @@ function git(repo, args) {
 }
 // A real ledger whose campaign reaches REVIEWING through BOUNDARY_REJECTED (committed
 // candidate bound) -> vertical_verified, exactly the reducer edge production uses.
-function reviewingFixture(name, { maxChangedFiles = null, usageFiles = null } = {}) {
+function reviewingFixture(name, { usageFiles = null } = {}) {
   const repo = path.join(testTmp, name, 'repo');
   fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
   git(repo, ['init', '-q']);
@@ -185,7 +184,7 @@ function reviewingFixture(name, { maxChangedFiles = null, usageFiles = null } = 
   return {
     repo, base: baseSha, branch, candidate, worktree, contract, contractPath, sealPath,
     promptFile, control, ledger: opened.ledger, campaignId: opened.campaignId, commonDir,
-    maxChangedFiles, usageFiles,
+    usageFiles,
   };
 }
 function boundaryResult(fx) {
@@ -232,6 +231,7 @@ function toReviewing(fx) {
     stageIdentity: 'campaign-verification:fixture',
     payload: { passed: true, evidence_digest: evidence },
     artifactReference: { kind: 'verification_receipt', digest: evidence },
+    ...(fx.usageFiles === null ? {} : { usage: { changed_files: fx.usageFiles } }),
   });
   assert.strictEqual(appended.state.phase, icc.CAMPAIGN_STATES.REVIEWING);
   execFileSync('bash', [
@@ -266,6 +266,20 @@ const claimedB = claim(fxB, reviewingState);
 console.log(`b_intake_status=${claimedB.status} code=${claimedB.code || claimedB.reason_code || ''}`);
 console.log(`b_resume_candidate=${Boolean(claimedB.resume_candidate)}`);
 
+// ---- B2/B3. intake applies the SAME cap predicate as the cli (REVIEWING with a resolved candidate) ----
+const fxB2 = reviewingFixture('intake-reviewing-cap', { usageFiles: 4 });
+const stateB2 = toReviewing(fxB2);
+console.log(`b2_usage_files=${stateB2.usage.changed_files}`);
+const claimedB2 = claim(fxB2, stateB2);
+console.log(`b2_intake_at_cap status=${claimedB2.status} code=${claimedB2.code || claimedB2.reason_code || ''}`);
+// REVIEWING at the cap WITHOUT a resolvable candidate (branch + worktree gone) must stay blocked.
+const fxB3 = reviewingFixture('intake-reviewing-cap-nocand', { usageFiles: 4 });
+const stateB3 = toReviewing(fxB3);
+git(fxB3.repo, ['worktree', 'remove', '--force', fxB3.worktree]);
+git(fxB3.repo, ['branch', '-D', fxB3.branch]);
+const claimedB3 = claim(fxB3, stateB3);
+console.log(`b3_intake_nocand_at_cap status=${claimedB3.status} resume_candidate=${Boolean(claimedB3.resume_candidate)}`);
+
 NODE
 )"; EXIT=$?
 assert_eq "0" "$EXIT" "reviewing-resume suite process exits 0"
@@ -297,6 +311,10 @@ assert_contains "$OUT" "b_projection_phase=REVIEWING" "fixture really reaches RE
 assert_contains "$OUT" "b_cli_eligibility=resumable" "real REVIEWING projection is cli-resumable"
 assert_contains "$OUT" "b_intake_status=claimed" "intake claims a REVIEWING resume"
 assert_contains "$OUT" "b_resume_candidate=true" "intake binds the resume candidate"
+assert_contains "$OUT" "b2_usage_files=4" "fixture really sits at the changed-file cap"
+assert_contains "$OUT" "b2_intake_at_cap status=claimed" "intake claims a REVIEWING resume at the changed-file cap (same predicate as cli)"
+assert_not_contains "$OUT" "b3_intake_nocand_at_cap status=claimed" "REVIEWING at the cap without a resolved candidate is not claimed at intake"
+assert_contains "$OUT" "b3_intake_nocand_at_cap status=rejected resume_candidate=false" "REVIEWING at the cap without a resolved candidate stays rejected at intake"
 # ---- C. engine: REVIEWING reached through a final-panel transient seat fault ----------------
 # Same lineage as final-panel-seat-resume-xproc run 1 (seat 2 transport fault -> gate_transient
 # -> durable_wait, ledger parked in REVIEWING) and a real --resume in a SEPARATE process, with the

@@ -304,6 +304,27 @@ test_verify_cmd_dirname_plain_file() {
     assert_contains "$err" "verify-cmd" "plain-file dirname error names verify-cmd"
 }
 
+# 11. Negative control: a symlink planted INSIDE the repo that points OUTSIDE it
+#     ($REPO/link -> /outside, --verify-cmd $REPO/link/x.sh). The pwd -P resolution of the
+#     command's directory must classify it external: it is not mapped to a worktree-relative
+#     path and executes from its real outside location.
+test_symlink_into_outside_is_external() {
+    local repo="$TEST_TMP/repo_symlink_ext" outside="$TEST_TMP/outside_ext"
+    local shas; shas=$(create_test_repo "$repo" "echo 3" "echo 5" '[ "$(bash calc.sh)" = "5" ]')
+    local base head; base=${shas%% *}; head=${shas##* }
+    mkdir -p "$outside"
+    create_verify_cmd "$outside/x.sh"
+    # the real location is recorded so the test can see WHERE the command ran from
+    sed -i '2i printf "%s\n" "$0" >> "'"$TEST_TMP"'/symlink_ext_ran_from"' "$outside/x.sh"
+    ln -s "$outside" "$repo/link"
+    local out; out=$("$SCRIPT" --range "$base..$head" --verify-cmd "$repo/link/x.sh" --repo "$repo" 2>&1); local ec=$?
+    local ran; ran=$(sort -u "$TEST_TMP/symlink_ext_ran_from" 2>/dev/null)
+    assert_eq "$ran" "$(cd "$outside" && pwd -P)/x.sh" "symlink-into-outside command runs from its real outside path only (external)"
+    assert_not_contains "$out" "NOT_RED_ON_BASE" "symlink-into-outside external command is still judged by its own exit codes"
+    # Measured: the external command is judged normally (VALIDATED here), not INCONCLUSIVE.
+    assert_eq "$(json_field "$out" verdict):$ec" "VALIDATED:0" "symlink-into-outside external command validates on its own exit codes"
+}
+
 test_validated
 test_validated_nested
 test_repo_owned_verify_cmd_uses_worktree_copy
@@ -317,5 +338,6 @@ test_missing_verify_cmd
 test_relative_verify_cmd
 test_json_escape_control_chars
 test_verify_cmd_dirname_plain_file
+test_symlink_into_outside_is_external
 
 finalize_test

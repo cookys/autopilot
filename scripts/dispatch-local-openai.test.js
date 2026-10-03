@@ -164,6 +164,10 @@ const server = http.createServer(async (request, response) => {
         if (state.mode === 'malformed-tool-call') {
           message.tool_calls = { name: 'unexpected' };
         }
+        if (['length-empty', 'stop-empty', 'length-reasoning-only'].includes(state.mode)) {
+          message.content = '';
+          if (state.mode === 'length-reasoning-only') message.reasoning_content = 'thinking '.repeat(40);
+        }
         json(response, 200, {
           id: 'generation-1',
           request_id: body.metadata.autopilot_request_id,
@@ -171,7 +175,8 @@ const server = http.createServer(async (request, response) => {
           choices: [{
             index: 0,
             message,
-            finish_reason: 'stop',
+            finish_reason: ['length-empty', 'length-reasoning-only'].includes(state.mode)
+              ? 'length' : 'stop',
           }],
           usage: {
             prompt_tokens: 17,
@@ -458,6 +463,27 @@ async function main() {
     'quarantined',
   );
 
+  // A response that spent the whole output cap (finish_reason=length) without any content is the
+  // NAMED failure output_budget_exhausted; still a failure (never a pass, parser not relaxed).
+  // RED at 8a338ccb: GENERATION_PROTOCOL_ERROR instead of output_budget_exhausted (both length cases).
+  for (const mode of ['length-empty', 'length-reasoning-only']) {
+    reset(mode);
+    await expectCode(
+      () => runLocalDispatch(options()),
+      'output_budget_exhausted',
+      `finish_reason=length with no content (${mode}) is the named budget failure`,
+      'failed',
+    );
+  }
+  // negative control: empty content that did NOT stop on length keeps the protocol error.
+  reset('stop-empty');
+  await expectCode(
+    () => runLocalDispatch(options()),
+    'GENERATION_PROTOCOL_ERROR',
+    'empty content with finish_reason=stop stays a protocol error',
+    'quarantined',
+  );
+
   reset('timeout');
   const cancelled = await expectCode(
     () => runLocalDispatch(options()),
@@ -582,7 +608,7 @@ async function main() {
     'dispatch CLI invalid arguments emit a stable reason',
   );
 
-  if (assertions !== 63) throw new Error(`dispatch-local-openai: expected exactly 63 assertions (count pin moved here from hooks/tests/dispatch-local-openai.test.sh so the L1 run enforces it), got ${assertions}`);
+  if (assertions !== 72) throw new Error(`dispatch-local-openai: expected exactly 72 assertions (count pin moved here from hooks/tests/dispatch-local-openai.test.sh so the L1 run enforces it), got ${assertions}`);
   process.stdout.write(`local OpenAI dispatch: ${assertions} assertions passed\n`);
 }
 

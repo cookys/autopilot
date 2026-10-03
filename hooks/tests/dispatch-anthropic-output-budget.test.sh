@@ -58,6 +58,36 @@ OUT="$(env -u AUTOPILOT_SESSION_ID ANTHROPIC_COMPATIBLE_BASE_URL="http://127.0.0
 assert_eq "1" "$EXIT" "dispatch-review.sh: thinking-only max_tokens exit 1"
 assert_contains "$OUT" '"status": "no_verdict"' "dispatch-review.sh: thinking-only max_tokens is no_verdict"
 assert_contains "$OUT" 'output_budget_exhausted' "dispatch-review.sh surfaces the named failure"
+assert_contains "$(cat "$LOG")" '[call=4 max_tokens=16384]' "dispatch-review.sh rail also sends the thinking-sized budget (16384)"
+
+# Detection must not depend on the stderr line landing at line start: stdout and stderr share RAW_LOG, so
+# the bracketed raw-log line the JS appends is matched too, and the bare stderr line still works.
+# A copy of scripts/ with a stub transport drives each raw-log shape.
+SB="$TEST_TMP/scripts-copy"; cp -r "$REPO_ROOT/scripts" "$SB"
+cat > "$SB/dispatch-anthropic-review.js" <<'STUB'
+'use strict';
+const mode = process.env.STUB_MODE;
+if (mode === 'bracketed') {
+  process.stdout.write('partial text without newline[dispatch-anthropic-review: x]\n');
+  process.stdout.write('\n[dispatch-anthropic-review: output_budget_exhausted: stop_reason=max_tokens with no text block]\n');
+} else if (mode === 'stderr') {
+  process.stderr.write('output_budget_exhausted: stop_reason=max_tokens with no text block\n');
+} else {
+  process.stdout.write('\n[dispatch-anthropic-review: request failed — boom]\n');
+}
+process.exit(1);
+STUB
+stub_run() { STUB_MODE="$1" env -u AUTOPILOT_SESSION_ID ANTHROPIC_COMPATIBLE_BASE_URL="http://127.0.0.1:$PORT" ANTHROPIC_COMPATIBLE_AUTH_TOKEN="$TOK" \
+  bash "$SB/dispatch-review.sh" --runner anthropic-compatible --model GLM-5 --diff-file "$DIFF" 2>&1 < /dev/null; }
+# RED at 8a338ccb: FAIL bracketed raw-log line is detected as the named failure: 'output_budget_exhausted: reviewer spent' not found in output
+OUT="$(stub_run bracketed)"
+assert_contains "$OUT" '"status": "no_verdict"' "bracketed-only raw log is no_verdict"
+assert_contains "$OUT" 'output_budget_exhausted: reviewer spent' "bracketed raw-log line is detected as the named failure"
+OUT="$(stub_run stderr)"
+assert_contains "$OUT" 'output_budget_exhausted: reviewer spent' "bare stderr line still detected as the named failure"
+OUT="$(stub_run other)"
+assert_contains "$OUT" '"status": "no_verdict"' "other transport failure is no_verdict"
+assert_not_contains "$OUT" 'output_budget_exhausted' "other transport failure keeps the generic message"
 
 kill "$MPID" 2>/dev/null
 finalize_test

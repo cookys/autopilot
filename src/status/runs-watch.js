@@ -27,6 +27,7 @@ const { resolveLiveDir } = require('../../scripts/lib/live-state-dir');
 const { projectKey, scopeFromCwd } = require('./project-key');
 const { pointerPath, writeLivePointer } = require('./live-pointer');
 const { applySelectors } = require('./runs-fields');
+const { ensureReviewServer } = require('./review-server');
 
 const SCHEMA = 'autopilot.runs-live/1';
 const VALID_FOR_S = 180;
@@ -569,6 +570,15 @@ function runWriter({ key, interval, idleExit, enrichCap, collect, cwd, env, stde
     const first = watcher.tick();
     if (first.error) return fail(first.error);
     firstExit = first.exit || null;
+    // One review server per host (plan R4.1): ensure it fail-open; it is detached, not our child.
+    if (env.AUTOPILOT_REVIEW_SERVER_AUTOSTART !== '0') {
+      try {
+        const rs = ensureReviewServer({ env, stderr: { write: () => {} } });
+        if (!['started', 'running'].includes(rs.status)) {
+          watcher.log(`review server: ${rs.status === 'port_busy' ? 'port busy' : rs.status}${rs.message ? ` (${rs.message})` : ''}`);
+        }
+      } catch (error) { watcher.log(`review server ensure failed: ${error.message}`); }
+    }
   } catch (error) {
     return fail(error.message);
   }

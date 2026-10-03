@@ -31,7 +31,7 @@ STUB="$REPO_ROOT/hooks/tests/lib/final-panel-seat-xproc-stub-review.sh"
 mk_ctx() { # $1 name, $2 boundaryPhase ("" = none), $3 tamper ("" = none)
   local d="$TEST_TMP/$1"; mkdir -p "$d/repo"
   cat > "$d/ctx.json" <<J
-{"root":"$REPO_ROOT","tmp":"$d","sbx":"$d/repo","tag":"bt-$1","stub":"$STUB","log":"$d/log","failModel":"","boundaryPhase":"$2","tamper":"$3",
+{"root":"$REPO_ROOT","tmp":"$d","sbx":"$d/repo","tag":"bt-$1","stub":"$STUB","log":"$d/log","failModel":"","boundaryPhase":"$2","tamper":"$3","boundaryNoCandidate":${4:-false},
 "seats":[{"role":"qc","runner":"cc-shim","model":"claude-opus-4-6","effort":"high","endpoint":null,"family":"anthropic"},
 {"role":"qc","runner":"cc-shim","model":"gpt-5.4","effort":"high","endpoint":null,"family":"openai"},
 {"role":"qc","runner":"cc-shim","model":"glm-4.7","effort":"high","endpoint":null,"family":"zai"}]}
@@ -90,4 +90,17 @@ assert_contains "$(problems "$E")" "lacks exact run/provider/resource/result-rec
 F=$(mk_ctx f run1 digest)
 drive run1 "$F" > /dev/null; drive run2 "$F" > /dev/null
 assert_eq "$(field "$F/run2.json" status)" "blocked" "F a malformed dispatch receipt digest still blocks"
+
+# --- G. a boundary mutation WITHOUT a candidate_ref (the receipt's candidate is then engine/git-derived): the dispatch record's result_receipt_digest and
+# the receipt's dispatch_result_digest still come from one derivation and are equal -----------------
+G=$(mk_ctx g run1 "" true)
+drive run1 "$G" > /dev/null
+GCP="$(find "$G/repo/.git/autopilot/controller-authority" -name controller-checkpoint.json | sort | tr '\n' ':')"
+assert_eq "$(node -e "
+const fs=require('fs');let rec,disp=[];
+for(const f of '$GCP'.split(':').filter(Boolean)){const c=JSON.parse(fs.readFileSync(f,'utf8'));const ctl=c.controller||c;
+const r=(ctl.audit_events||[]).find(e=>e.artifact_type==='campaign_boundary_receipt');
+if(r){rec=r;disp=(ctl.dispatch_records||[]).filter(d=>d.result_receipt_digest===r.dispatch_result_digest);}}
+process.stdout.write(String(Boolean(rec)&&/^[0-9a-f]{40,64}$/.test(String(rec.candidate_ref))&&disp.length>=1));
+")" "true" "G candidate-less boundary: dispatch receipt digest == receipt dispatch_result_digest"
 finalize_test

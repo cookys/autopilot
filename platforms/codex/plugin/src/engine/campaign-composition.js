@@ -1637,6 +1637,13 @@ function runCampaignComposition(input = {}, adapters = {}) {
         resource_inventory: [...resources.values()].filter(Boolean),
       });
     }
+    // ONE classification and ONE digest for a boundary_rejected outcome, derived
+    // before the dispatch record is written: the dispatch record's
+    // result_receipt_digest and the boundary receipt's dispatch_result_digest are
+    // this same value, so a later candidate resolution cannot make them diverge.
+    const boundary = classifyBoundaryRejected(mutation);
+    const boundaryResultDigest = boundary
+      ? boundaryDispatchResultDigest(mutation, boundary) : null;
     // Count spend only when the effect was actually invoked.
     // dispatcher_called === false (precondition / zero-effect) consumes zero.
     if (mutation.dispatcher_called !== false
@@ -1691,9 +1698,7 @@ function runCampaignComposition(input = {}, adapters = {}) {
         // digest the boundary receipt journals as dispatch_result_digest.
         result_receipt_digest: mutation.writer_fence
           && mutation.writer_fence.receipt_digest
-          || (classifyBoundaryRejected(mutation)
-            ? boundaryDispatchResultDigest(mutation, classifyBoundaryRejected(mutation))
-            : null),
+          || boundaryResultDigest,
       };
       const dispatchAuditBody = {
         event: 'controller_effect_invoked',
@@ -1780,7 +1785,6 @@ function runCampaignComposition(input = {}, adapters = {}) {
       };
     }
     trace.push(kind === 'initial' ? 'implement' : 'repair');
-    const boundary = classifyBoundaryRejected(mutation);
     if (boundary) {
       if (mutation.committed === true || boundary.candidate_ref) {
         candidate = mutation.committed === true ? mutation : {
@@ -1828,7 +1832,7 @@ function runCampaignComposition(input = {}, adapters = {}) {
         offending_paths: offendingPaths,
         // The dispatcher outcome this rejection was derived from, projected onto
         // its stable decision fields (the raw result carries clocks and paths).
-        dispatch_result_digest: boundaryDispatchResultDigest(mutation, bound),
+        dispatch_result_digest: boundaryResultDigest,
       };
       const boundaryReceiptDigest = reducerCanonicalDigest(boundaryReceiptBody);
       // Exact code + first offending path; the raw rail sentence stays on `reason`.

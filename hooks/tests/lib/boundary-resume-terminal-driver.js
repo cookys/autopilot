@@ -170,7 +170,8 @@ engine.implementTask = () => {
     return {
       status: 'boundary_rejected', phase: 'boundary_rejected', reason: 'scope boundary',
       boundary_reason: 'scope boundary', boundary_code: 'scope_or_budget_boundary',
-      candidate_ref: candidate, possibly_effectful: true, mutation_failed: false,
+      candidate_ref: ctx.boundaryNoCandidate ? null : candidate,
+      possibly_effectful: !ctx.boundaryNoCandidate, mutation_failed: false,
       unknown_status: false, dispatcher_called: true, model_calls: 1,
       implementation: {
         commit: candidate, worktree, run_id: `run-${tag}`, dispatch_id: `d-${tag}`, provider: 'fixture',

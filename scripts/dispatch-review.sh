@@ -163,6 +163,9 @@ ORIG_ARGS=("$@")
 _REVIEW_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=/dev/null
 [ -r "$_REVIEW_SELF_DIR/load-endpoints-env.sh" ] && . "$_REVIEW_SELF_DIR/load-endpoints-env.sh" && autopilot_load_endpoints_env || true
+# shellcheck source=lib/repo-identity.sh
+# Fail-open: a missing helper only degrades the manifest to repo_identity null (telemetry sidecar).
+[ -r "$_REVIEW_SELF_DIR/lib/repo-identity.sh" ] && . "$_REVIEW_SELF_DIR/lib/repo-identity.sh" || true
 # Startup retention prune of OUR OWN aged ${TMPDIR} residue (raw logs, prompt/out/err
 # temps, scratch cwds). Best-effort; AUTOPILOT_TMP_LOG_RETENTION_DAYS=0 disables.
 # shellcheck source=/dev/null
@@ -927,13 +930,16 @@ write_review_manifest() {
   local parent_json="null"; [ -n "${LINEAGE_PARENT:-}" ] && parent_json="\"$(json_escape "$LINEAGE_PARENT")\""
   local root_json="null"; [ -n "${LINEAGE_ROOT:-}" ] && root_json="\"$(json_escape "$LINEAGE_ROOT")\""
   local depth_json="${LINEAGE_DEPTH:-0}"; case "$depth_json" in *[!0-9]*|"") depth_json=0 ;; esac; depth_json=$((10#$depth_json))
+  # repo_identity (mods P1a R1): this rail has no --repo-root, so only the cwd's toplevel applies.
+  if declare -F repo_identity_resolve_fields >/dev/null 2>&1; then repo_identity_resolve_fields "" "" || true; fi
+  [ -n "${REPO_IDENTITY_FIELDS:-}" ] || REPO_IDENTITY_FIELDS='"repo_identity": null, "repo_identity_source": null'
   {
-    printf '{ "schema": 1, "run_id": "%s", "role": "reviewer", "allow_narrative": %s, "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "log_format": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "diff_file": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s }\n' \
+    printf '{ "schema": 1, "run_id": "%s", "role": "reviewer", "allow_narrative": %s, "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "log_format": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "diff_file": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, %s }\n' \
       "$(json_escape "$REVIEW_RUN_ID")" "$( if [[ -n "$ALLOW_NARRATIVE" ]]; then json_escape "$ALLOW_NARRATIVE"; else printf null; fi )" "$RUNNER" "$(json_escape "$MODEL")" \
       "$(json_escape "$live_log")" "$log_format" "$aux_json" "$$" \
       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$REVIEW_STARTED_EPOCH" \
       "$(json_escape "$PROMPT_FILE")" "$(json_escape "$DIFF_FILE")" \
-      "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$parent_json" "$root_json" "$depth_json" > "$tmp"
+      "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$parent_json" "$root_json" "$depth_json" "$REPO_IDENTITY_FIELDS" > "$tmp"
   } 2>/dev/null && mv -f "$tmp" "$REVIEW_MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
   return 0
 }

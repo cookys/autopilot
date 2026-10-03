@@ -18,6 +18,8 @@
 #   FAIL recognizer rejects the ownxheredoc look-alike: expected '0', got '1'
 #   FAIL recognizer rejects the ownxfunc look-alike / ownxecho look-alike (same)
 #   FAIL [test-suite-finalize-gate] 14 passed, 6 failed
+# RED at 1a19afd3 (ownexit0 fixture vs the exit-0-stripping recognizer):
+#   FAIL recognizer rejects the ownexit0 look-alike: expected '0', got '1'
 TEST_NAME="test-suite-finalize-gate"
 . "$(dirname "$0")/lib.sh"
 
@@ -51,10 +53,18 @@ finalizes() {
   # own summary as the LAST command (only then does its status propagate): the bare
   # `[ "$FAIL" -eq 0 ]` or `[ "$FAIL" -eq 0 ] || exit 1`. The same text inside a heredoc stub
   # or an uncalled function is not at the end of the suite, so it never counts.
-  # A trailing bare `exit 0` after the `|| exit 1` form is harmless (strike-writer-wiring), so
-  # it is dropped before looking at the last command.
-  grep -avE '^[[:space:]]*$' "$code" | { grep -avE '^[[:space:]]*exit 0[[:space:]]*$' || true; } | tail -n 1 \
-    | grep -qE '^[[:space:]]*\[ "\$\{?FAIL\}?" -eq 0 \]([[:space:]]*\|\|[[:space:]]*exit 1)?[[:space:]]*$' && return 0
+  # L = last command, P = the one before it. L may be the bare or `|| exit 1` form; a trailing
+  # `exit 0` is accepted only after the `|| exit 1` form (strike-writer-wiring) — after the bare
+  # form it would mask the failure.
+  local L P
+  L="$(grep -avE '^[[:space:]]*$' "$code" | tail -n 1)"
+  P="$(grep -avE '^[[:space:]]*$' "$code" | tail -n 2 | head -n 1)"
+  local bare='^[[:space:]]*\[ "\$\{?FAIL\}?" -eq 0 \][[:space:]]*$'
+  local orx='^[[:space:]]*\[ "\$\{?FAIL\}?" -eq 0 \][[:space:]]*\|\|[[:space:]]*exit 1[[:space:]]*$'
+  printf '%s\n' "$L" | grep -qE "$bare|$orx" && return 0
+  if printf '%s\n' "$L" | grep -qE '^[[:space:]]*exit 0[[:space:]]*$'; then
+    printf '%s\n' "$P" | grep -qE "$orx" && return 0
+  fi
   # a fail() that itself exits nonzero
   grep -aqE '^fail\(\)[[:space:]]*\{.*exit 1' "$code" && return 0
   return 1
@@ -110,6 +120,8 @@ exit 0'
 mk ownxecho '[ "$FAIL" -eq 0 ] || exit 1
 echo done
 exit 0'
+mk ownexit0 '[ "$FAIL" -eq 0 ]
+exit 0'
 mk ownxheredoc 'cat > stub.sh <<EOF
 [ "$FAIL" -eq 0 ] || exit 1
 EOF
@@ -121,7 +133,7 @@ assert_eq 1 1 "accumulates"'
 for n in fin own ownx ownxexit0 failexit trapbare trapsq trapdq; do
   finalizes "$TEST_TMP/$n.sh"; assert_eq "0" "$?" "recognizer accepts the $n shape"
 done
-for n in bare commented printonly ownmid stubexit traponother trapcomment ownxecho ownxheredoc ownxfunc; do
+for n in bare commented printonly ownmid stubexit traponother trapcomment ownexit0 ownxecho ownxheredoc ownxfunc; do
   finalizes "$TEST_TMP/$n.sh"; assert_eq "1" "$?" "recognizer rejects the $n look-alike"
 done
 finalize_test

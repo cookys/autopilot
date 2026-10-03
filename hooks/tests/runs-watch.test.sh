@@ -368,4 +368,76 @@ rm -f "$AHOME/session-mode/s-live.json" "$LIVE/runs/$KEY_A.json"
   "$NODE" "$CLI" status runs --watch --project "$KEY_A" --interval 1 --idle-exit 1 > /dev/null 2>&1 < /dev/null)
 eq "0" "$?" "another project's marker does not keep this watcher alive"
 
+# ===== repair (R4 review): shared fresh bound, --stop confirms exit, idle re-arm ==============================
+# RED at 7caa7e17: root files carried their own fresh_bound_s (40, not the project-wide 60), so a row at
+#   probe age 50 was confirmed_live in <key>.json but unknown in <key>--<root>.json; --stop on a writer that
+#   ignores SIGTERM exited 0 without "still running"; the idle clock kept running while a marker held the
+#   watcher open, so it exited at the first tick after the marker expired.
+cat > "$SB/bound.js" <<'JS'
+const R = process.argv[2];
+const { createWatcher } = require(`${R}/src/status/runs-watch.js`);
+const fs = require('fs');
+const path = require('path');
+const [key, cwd, ident] = process.argv.slice(3);
+const t = Date.parse('2026-10-04T12:00:00Z');
+const mk = (id, root) => ({ run_id: id, root_run_id: root, project: ident, phase: 'running', alive: true, probe_age_s: 50, ended_at: null, final_status: null });
+const rows = [];
+for (let i = 0; i < 6; i += 1) { rows.push(mk(`a${i}`, 'root-a')); rows.push(mk(`b${i}`, 'root-b')); }
+const w = createWatcher({ key, cwd, collect: () => rows, now: () => t, interval: 10, enrichCap: 4 });
+w.start(); w.tick();
+const rd = (f) => JSON.parse(fs.readFileSync(path.join(process.env.AUTOPILOT_LIVE_DIR, 'runs', f), 'utf8'));
+const all = rd(`${key}.json`); const ra = rd(`${key}--root-a.json`); const rb = rd(`${key}--root-b.json`);
+process.stdout.write(JSON.stringify({
+  bounds: [all.counts.fresh_bound_s, ra.counts.fresh_bound_s, rb.counts.fresh_bound_s],
+  confirmed: [all.counts.confirmed_live, ra.counts.confirmed_live, rb.counts.confirmed_live],
+  sums: [all, ra, rb].map((e) => e.counts.confirmed_live + e.counts.exited + e.counts.unknown === e.runs.length),
+}));
+JS
+rm -f "$LIVE/runs/$KEY_A.json" "$LIVE/runs/$KEY_A--root-a.json" "$LIVE/runs/$KEY_A--root-b.json"
+BND="$(wenv AUTOPILOT_COSTS_FILE="$SB/absent-costs.jsonl" "$NODE" "$SB/bound.js" "$REPO_ROOT" "$KEY_A" "$REPO_A" "$IDENT_A")"
+eq "60,60,60" "$(cj "$BND" 'j.bounds.join(",")')" "every scope file carries the project-wide fresh_bound_s (12 candidates, cap 4, interval 10)"
+eq "12,6,6" "$(cj "$BND" 'j.confirmed.join(",")')" "the same rows are confirmed_live in the project file and in the root files"
+eq "true,true,true" "$(cj "$BND" 'j.sums.join(",")')" "per-scope counts still sum to runs.length"
+
+# --stop must confirm the exit: a writer that ignores SIGTERM -> stderr 'still running pid N', exit 1
+mkdir -p "$LIVE/runs"
+"$NODE" -e 'process.on("SIGTERM",()=>{});setInterval(()=>{},1000)' status runs --watch --project "$KEY_A" < /dev/null > /dev/null 2>&1 &
+STUBBORN=$!; KILL_PIDS="$KILL_PIDS $STUBBORN"
+sleep 0.5
+printf '{"schema":"autopilot.runs-live/1","scope":{"project_key":"%s","repo_identity":null,"root_run_id":null},"published_at":"%s","valid_for_s":180,"writer":{"pid":%s,"session_id":null,"started_at":"x"},"runs":[]}\n' \
+  "$KEY_A" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$STUBBORN" > "$LIVE/runs/$KEY_A.json"
+(cd "$REPO_A" && wenv "$NODE" "$CLI" status runs --stop --project "$KEY_A" > "$SB/st.out" 2> "$SB/st.err" < /dev/null)
+eq "1" "$?" "--stop on a writer that ignores SIGTERM exits 1"
+eq "yes" "$(grep -q "still running pid $STUBBORN" "$SB/st.err" && echo yes || echo no)" "--stop says 'still running pid N' on stderr"
+eq "no" "$(grep -q 'stopped watcher' "$SB/st.out" && echo yes || echo no)" "--stop does not claim it stopped"
+kill -9 "$STUBBORN"
+
+# --idle-exit re-arm: a marker holding the watcher open resets the idle clock
+cat > "$SB/rearm.js" <<'JS'
+const R = process.argv[2];
+const { createWatcher } = require(`${R}/src/status/runs-watch.js`);
+const fs = require('fs');
+const path = require('path');
+const [key, cwd] = process.argv.slice(3);
+let t = Date.parse('2026-10-04T12:00:00Z');
+const dir = process.env.AUTOPILOT_SESSION_MODE_DIR;
+fs.mkdirSync(dir, { recursive: true });
+fs.writeFileSync(path.join(dir, 'rearm.json'), JSON.stringify({ session_id: 'rearm', project_key: key, expires_at: new Date(t + 100000).toISOString() }));
+const w = createWatcher({ key, cwd, collect: () => [], now: () => t, interval: 1, idleExitS: 5 });
+w.start();
+const out = {};
+for (let i = 0; i < 99; i += 1) { if (w.tick().exit) out.earlyExit = true; t += 1000; }
+t = Date.parse('2026-10-04T12:00:00Z') + 101000; // marker expired a second ago
+out.atExpiry = w.tick().exit || null;
+t += 3000; out.plus3 = w.tick().exit || null;
+t += 3000; out.plus6 = w.tick().exit || null;
+process.stdout.write(JSON.stringify(out));
+JS
+RE="$(wenv AUTOPILOT_COSTS_FILE="$SB/absent-costs.jsonl" "$NODE" "$SB/rearm.js" "$REPO_ROOT" "$KEY_A" "$REPO_A")"
+eq "undefined" "$(cj "$RE" 'String(j.earlyExit)')" "no idle exit while the marker is unexpired"
+eq "null" "$(cj "$RE" 'j.atExpiry')" "first tick after the marker expires does not exit"
+eq "null" "$(cj "$RE" 'j.plus3')" "3 s after expiry (N = 5) still does not exit"
+eq "idle_exit" "$(cj "$RE" 'j.plus6')" "N s after expiry the watcher idle-exits"
+rm -f "$AHOME/session-mode/rearm.json"
+
 finalize_test

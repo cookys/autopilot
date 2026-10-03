@@ -150,4 +150,13 @@ eq "null" "$(node -e 'const e=JSON.parse(require("fs").readFileSync(process.argv
 eq "stopped" "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).exit_reason)' "$ENV_FILE")" "final publish exit_reason is stopped"
 eq "0" "$(lock_free_within 1)" "lock is free after --stop"
 
+# --- 7. flock probe takes a real lock: a flock that answers --version but cannot lock -> flock_unavailable ----------
+BADFLOCK="$SB/badflock-bin"; mkdir -p "$BADFLOCK"
+for t in node sh git; do ln -sf "$(command -v $t)" "$BADFLOCK/$t"; done
+printf '#!/bin/sh\n[ "$1" = "--version" ] && { echo "flock fake"; exit 0; }\nexit 1\n' > "$BADFLOCK/flock"; chmod +x "$BADFLOCK/flock"
+rm -f "$LOCK" "$ENV_FILE"
+(cd "$REPO" && wenv PATH="$BADFLOCK" "$NODE" "$CLI" status runs --watch --project "$KEY" --interval 1 > "$SB/bf.out" 2> "$SB/bf.err" < /dev/null)
+eq "2" "$?" "flock that cannot take a lock -> exit 2"
+eq "yes" "$(grep -q flock_unavailable "$SB/bf.err" && echo yes || echo no)" "...and names flock_unavailable"
+
 finalize_test

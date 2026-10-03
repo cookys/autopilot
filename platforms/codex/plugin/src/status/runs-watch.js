@@ -100,9 +100,14 @@ function readEnvelope({ file, scope, nowMs = Date.now() }) {
 // unknown       = everything else (an unprobed row is unknown, never confirmed)
 // fresh_bound_s = 2 x interval x ceil(live_candidates / enrich_cap); live candidates = rows with no
 //                 manifest end state (the rows the bounded rotation has to cover).
-function computeCounts(rows, interval, enrichCap) {
+function freshBoundOf(rows, interval, enrichCap) {
   const candidates = rows.filter((r) => !(r.ended_at || r.final_status)).length;
-  const freshBound = 2 * interval * Math.ceil(candidates / Math.max(1, enrichCap));
+  return 2 * interval * Math.ceil(candidates / Math.max(1, enrichCap));
+}
+// bound: the rotation covers the WHOLE project's candidate set, so every scope file shares the
+// project-wide bound (computed once per tick); it defaults to this row set's own bound.
+function computeCounts(rows, interval, enrichCap, bound = null) {
+  const freshBound = bound === null ? freshBoundOf(rows, interval, enrichCap) : bound;
   const counts = { confirmed_live: 0, exited: 0, unknown: 0, fresh_bound_s: freshBound };
   for (const r of rows) {
     if (r.phase === 'exited' || r.ended_at || r.final_status) counts.exited += 1;
@@ -133,7 +138,7 @@ function unexpiredMarkers(env, key, nowMs) {
   return out;
 }
 
-// --- cost aggregation from costs.jsonl (same path resolution as hooks/cost-fuse.js) -------------------
+// --- cost aggregation from costs.jsonl (same path resolution as hooks/cost-tracker.js, which writes it, and hooks/cost-fuse.js) -------------------
 // Incremental: costs.jsonl is append-only, so only bytes past the last complete line are parsed.
 function createCostReader(env) {
   const file = env.AUTOPILOT_COSTS_FILE || path.join(env.HOME || os.homedir(), '.claude', 'metrics', 'costs.jsonl');
@@ -260,7 +265,7 @@ function createWatcher({
       writer: extra.writer,
       ...(extra.exit_reason ? { exit_reason: extra.exit_reason } : {}),
       runs,
-      counts: state.lastCounts.get(rootRunId) || computeCounts(runs, interval, enrichCap),
+      counts: state.lastCounts.get(rootRunId) || computeCounts(runs, interval, enrichCap, freshBoundOf(state.lastRuns || runs, interval, enrichCap)),
       sessions: state.lastCost.sessions,
       host_today_usd: state.lastCost.host_today_usd,
       host_today_as_of: state.lastCost.host_today_as_of,
@@ -315,8 +320,9 @@ function createWatcher({
     const cost = costs.summary(nowMs, markers.map((m) => m.session_id).filter(Boolean));
     const roots = new Set(state.roots);
     for (const r of rows) if (r.root_run_id) roots.add(r.root_run_id);
-    const counts = new Map([[null, computeCounts(rows, interval, enrichCap)]]);
-    for (const root of roots) counts.set(root, computeCounts(scopeRows(rows, root), interval, enrichCap));
+    const bound = freshBoundOf(rows, interval, enrichCap);
+    const counts = new Map([[null, computeCounts(rows, interval, enrichCap, bound)]]);
+    for (const root of roots) counts.set(root, computeCounts(scopeRows(rows, root), interval, enrichCap, bound));
     const costSignature = JSON.stringify({ s: Object.entries(cost.sessions).map(([k, v]) => [k, v.session_usd]), t: cost.host_today_usd });
     const signature = `${signatureOf(rows)}|${JSON.stringify([...counts])}|${costSignature}`;
     const changed = signature !== state.lastSignature;
@@ -340,7 +346,9 @@ function createWatcher({
     // Idle exit: N consecutive seconds with nothing confirmed live and nothing unknown, and no
     // unexpired session-mode marker of this project (a live session keeps the watcher up).
     const total = counts.get(null);
-    if (total.confirmed_live === 0 && total.unknown === 0) {
+    if (markers.length > 0) {
+      state.idleSince = null; // a live session holds the watcher open; the clock restarts when it ends
+    } else if (total.confirmed_live === 0 && total.unknown === 0) {
       if (state.idleSince === null) state.idleSince = nowMs;
     } else {
       state.idleSince = null;
@@ -372,9 +380,19 @@ function createWatcher({
 const WRAPPER = 'exec 9>"$1" || exit 1; flock -n 9 || exit 75; shift; export '
   + `${LOCKED_ENV}=1; exec "$@"`;
 
-function flockAvailable() {
-  const r = spawnSync('flock', ['--version'], { encoding: 'utf8', timeout: 5000 });
-  return !r.error && r.status === 0;
+// Probe by actually taking a lock: a flock(1) that answers --version but cannot lock is unusable.
+function flockAvailable(env) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-watch-flock-'));
+  const probe = path.join(dir, 'probe.lock');
+  try {
+    fs.writeFileSync(probe, '');
+    const r = spawnSync('flock', ['-n', probe, 'true'], { encoding: 'utf8', timeout: 5000, env });
+    return !r.error && r.status === 0;
+  } catch (_error) {
+    return false;
+  } finally {
+    try { fs.unlinkSync(probe); fs.rmdirSync(dir); } catch (_cleanup) { /* best effort */ }
+  }
 }
 
 function holderFromEnvelope(env, key) {
@@ -437,11 +455,15 @@ function runWatchCli(opts) {
       return 1;
     }
     for (let i = 0; i < 50 && cmdlineOf(pid); i += 1) sleepMs(100);
+    if (isWatcherFor(pid, key)) {
+      stderr.write(`still running pid ${pid} after SIGTERM (watcher for project ${key})\n`);
+      return 1;
+    }
     stdout.write(`stopped watcher pid ${pid} for project ${key}\n`);
     return 0;
   }
 
-  if (!flockAvailable()) {
+  if (!flockAvailable(env)) {
     stderr.write('flock_unavailable: flock(1) (util-linux) is required on PATH; no lockfile fallback\n');
     return 2;
   }

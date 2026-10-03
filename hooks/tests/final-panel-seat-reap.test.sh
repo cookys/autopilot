@@ -7,6 +7,11 @@
 #   FAIL reap: terminal campaign subtree removed / terminal_stop campaign subtree removed
 #   FAIL scan: two terminal campaigns: expected '2', got '<undef>' (and the other scan classes)
 #   FAIL reap: orphan with no live lease removed
+# RED at bf81332c (reader hard-codes .1-.4; unknown subtrees reaped with no age floor):
+#   AssertionError: reader follows the writer: l.jsonl.5 (actual undefined, expected 'terminal_ready')
+#   FAIL scan: every row carries a keep/reap decision / the floor is stated / young unknown kept for the floor reason
+#   FAIL reap: young unknown subtree kept by the default age floor
+#   FAIL reap: report.after carries final_panel_seats
 . "$(dirname "$0")/lib.sh"
 
 SCRIPT="$REPO_ROOT/scripts/repo-residue-sweep.js"
@@ -82,6 +87,50 @@ assert_exit_code "$?" "0" "store helpers: $OUT"
 assert_contains "$OUT" "traversal_refused=true" "store: traversal refused"
 assert_contains "$OUT" "terminal_removed_parked_kept=true" "store: terminal removed, parked kept"
 
+# ---------------------------------------------------------------- reader follows the REAL ledger writer's rotation
+OUT="$(RUN_LEDGER_MAX_BYTES=1200 RUN_LEDGER_MAX_ROTATIONS=6 node - "$REPO_ROOT" "$TEST_TMP/rot" <<'NODE'
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const { spawnSync } = require('child_process');
+const [root, dir] = process.argv.slice(2);
+fs.mkdirSync(dir, { recursive: true });
+const ledger = path.join(dir, 'l.jsonl');
+const rl = (...a) => {
+  const r = spawnSync('bash', [path.join(root, 'scripts', 'run-ledger.sh'), ...a], { encoding: 'utf8' });
+  assert.strictEqual(r.status, 0, `${a[0]}: ${r.stderr}`);
+  return r.stdout.trim().split('\n').map((l) => { try { return JSON.parse(l); } catch (_e) { return null; } }).filter(Boolean).pop();
+};
+rl('init', '--ledger', ledger);
+let n = 0;
+const add = (id, lease, event) => rl('journal-add', '--ledger', ledger, '--run-id', id, '--stage', 'campaign',
+  '--generation', String(lease.generation), '--nonce', lease.nonce, '--idempotency-key', `k-${n += 1}`,
+  '--op', 'campaign_event', '--payload', JSON.stringify({ campaign_id: id, event: { event_type: event } }));
+const lifecycle = (id, events) => {
+  const lease = rl('stage-acquire', '--ledger', ledger, '--run-id', id, '--stage', 'campaign', '--resources', `campaign:${id}`);
+  for (const e of events) add(id, lease, e);
+  rl('stage-transition', '--ledger', ledger, '--run-id', id, '--stage', 'campaign', '--generation', String(lease.generation),
+    '--nonce', lease.nonce, '--to-state', 'dead', '--idempotency-key', `dead-${id}`);
+};
+lifecycle('rot-old', ['implementation_started', 'terminal_ready']);
+// filler campaigns push rot-old's rows out of the live file, through several rotations
+for (let i = 0; i < 40 && !fs.existsSync(`${ledger}.5`); i += 1) lifecycle(`rot-fill-${i}`, ['implementation_started', 'review_completed']);
+assert.ok(fs.existsSync(`${ledger}.5`), 'writer rotated past .4 under RUN_LEDGER_MAX_ROTATIONS=6');
+assert.ok(!fs.existsSync(`${ledger}.7`), 'writer never exceeds RUN_LEDGER_MAX_ROTATIONS');
+const gens = [ledger, ...[1, 2, 3, 4, 5, 6].map((k) => `${ledger}.${k}`)].filter((f) => fs.existsSync(f));
+const holders = gens.filter((f) => fs.readFileSync(f, 'utf8').includes('rot-old'));
+assert.ok(holders.length > 0 && !holders.includes(ledger), `rot-old lives only in rotated files: ${holders}`);
+const store = require(path.join(root, 'src', 'engine', 'final-panel-seat-store'));
+const last = store.campaignLastEvents(ledger);
+assert.strictEqual(last.get('rot-old'), 'terminal_ready', `reader follows the writer: ${holders.map((h) => path.basename(h))}`);
+assert.strictEqual(last.get('rot-fill-0') === undefined, false);
+console.log('reader_follows_writer_rotation=true');
+NODE
+)"
+assert_exit_code "$?" "0" "rotation pin: $OUT"
+assert_contains "$OUT" "reader_follows_writer_rotation=true" "reader matches run-ledger rotation (suffixes, count, order)"
+
 # ---------------------------------------------------------------- sweep: scan classifies, touches nothing
 mkdir -p "$ROOTD/..tricky" "$ROOTD/bad name"
 exec 9>"$TEST_TMP/lock-holder"  # (no worktree lock yet)
@@ -94,6 +143,14 @@ assert_eq "$(field "$OUT" summary.final_panel_seats.unsafe-name)" "2" "scan: non
 [ -d "$ROOTD/campaign-v1-term" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "scan is read-only"
 
 # ---------------------------------------------------------------- sweep: a held worktree lock protects an UNKNOWN campaign
+# an OLD unknown subtree (newest mtime 30 days back) beside the young orphan
+mkdir -p "$ROOTD/campaign-v1-old/panel-x"; echo '{}' > "$ROOTD/campaign-v1-old/panel-x/seat-1.json"
+touch -d '30 days ago' "$ROOTD/campaign-v1-old/panel-x/seat-1.json" "$ROOTD/campaign-v1-old/panel-x" "$ROOTD/campaign-v1-old"
+OUT="$(node "$SCRIPT" scan --repo "$SBX")"
+assert_contains "$OUT" '"campaign_id":"campaign-v1-old"' "scan lists the old unknown subtree"
+assert_contains "$OUT" '"decision":"keep"' "scan: every row carries a keep/reap decision"
+assert_contains "$OUT" 'younger than the 14-day unknown-subtree floor' "scan: a young unknown subtree is kept for the floor reason"
+assert_contains "$OUT" '"unknown_min_age_days":14' "scan: the floor is stated"
 G worktree add -q "$TEST_TMP/wt-live" -b live-one 2>/dev/null
 exec 8>"$TEST_TMP/wt-live/.autopilot-worktree.lock"; flock -n 8
 OUT="$(node "$SCRIPT" reap --repo "$SBX" --yes)"; RC=$?
@@ -106,16 +163,21 @@ assert_eq "$RC" "0" "reap exit 0"
 [ -d "$ROOTD/bad name" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "reap: unsafe-name entry kept"
 [ -d "$ROOTD/..tricky" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "reap: dotted entry kept"
 assert_file_exists "$COMMON/autopilot/victim/f" "reap: nothing outside the seat root touched"
+[ -d "$ROOTD/campaign-v1-old" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "reap: old unknown subtree kept while a lock is held"
 assert_contains "$(field "$OUT" actions.final_panel_seats_kept)" 'live_lock_held' "reap: unknown kept for a named live-lock reason"
 assert_contains "$(field "$OUT" actions.final_panel_seats_removed)" 'campaign-v1-term' "reap: removal reported"
 
 # ---------------------------------------------------------------- sweep: no live lock -> the orphan goes; --older-than-days narrows
 flock -u 8; exec 8>&-; rm -f "$TEST_TMP/wt-live/.autopilot-worktree.lock"
 OUT="$(node "$SCRIPT" reap --repo "$SBX" --yes --older-than-days 3650)"; RC=$?
-[ -d "$ROOTD/campaign-v1-orphan" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "reap: --older-than-days keeps a young orphan"
+[ -d "$ROOTD/campaign-v1-old" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "reap: --older-than-days 3650 keeps a 30-day-old unknown subtree"
 OUT="$(node "$SCRIPT" reap --repo "$SBX" --yes)"; RC=$?
 assert_eq "$RC" "0" "reap exit 0 (no lock)"
-[ -d "$ROOTD/campaign-v1-orphan" ] && fail "reap: orphan with no live lease removed" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
+[ -d "$ROOTD/campaign-v1-old" ] && fail "reap: old unknown subtree with no lock removed" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
+[ -d "$ROOTD/campaign-v1-orphan" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "reap: young unknown subtree kept by the default age floor"
+OUT="$(node "$SCRIPT" reap --repo "$SBX" --yes --older-than-days 0)"
+[ -d "$ROOTD/campaign-v1-orphan" ] && fail "reap: --older-than-days 0 overrides the floor" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
+assert_contains "$(field "$OUT" after.final_panel_seats)" 'active' "reap: report.after carries final_panel_seats"
 [ -d "$ROOTD/campaign-v1-parked" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "reap: parked campaign still kept"
 assert_file_exists "$COMMON/autopilot/victim/f" "reap: victim still intact"
 finalize_test

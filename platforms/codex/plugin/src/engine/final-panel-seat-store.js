@@ -209,8 +209,13 @@ function isPlainCampaignToken(value) {
 // provably terminal).
 function campaignLastEvents(ledgerPath) {
   const last = new Map();
+  // Mirrors scripts/run-ledger.sh ledger_scan_files (:2814-2827) and the writer's rotation
+  // (:3284-3303): `<ledger>.1` is the newest rotated segment, `<ledger>.N` the oldest, N up to
+  // RUN_LEDGER_MAX_ROTATIONS (default 4); read oldest first, live ledger last.
+  const parsedRot = Number.parseInt(process.env.RUN_LEDGER_MAX_ROTATIONS || '', 10);
+  const maxRotations = Number.isSafeInteger(parsedRot) && parsedRot >= 1 ? parsedRot : 4;
   const files = [];
-  for (let n = 4; n >= 1; n -= 1) files.push(`${ledgerPath}.${n}`);
+  for (let n = maxRotations; n >= 1; n -= 1) files.push(`${ledgerPath}.${n}`);
   files.push(ledgerPath);
   for (const file of files) {
     if (!fs.existsSync(file)) continue;

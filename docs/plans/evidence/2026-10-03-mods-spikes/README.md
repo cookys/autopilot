@@ -13,7 +13,7 @@ S3, S4). Every child `claude` ran with a dedicated `CLAUDE_CONFIG_DIR` + fake `H
 | S5(b) detached watcher launch | **yes** | envelope lands; 2nd launch no 2nd writer; kill → lock free; relaunch new writer (`artifacts/S5/s5b-direct.txt`); watcher launched from a child claude's Bash tool still writing 24 s after claude exit (`artifacts/S5/s5b-child-envelope-final.json` at 15:21:09 vs exit 15:20:45) | `S5b.md` |
 | S6 benchmark selector coverage | **no** | selector covers 4 of 24 `hooks.json` commands (opt-in multiplexer only); `tool_name` hard-coded | `S6.md` |
 | S3 desktop `Svg` cap | **yes** | 40-row gantt SVG = 11,182 chars (8.5% of 131,072) | `S3.md` |
-| S4 terminal `Image` | **needs-owner** | mod validates + `plugin test` passes; owner runs `claude --plugin-dir docs/plans/evidence/2026-10-03-mods-spikes/artifacts/S4` then `/spike-image` | `S4.md` |
+| S4 terminal `Image` | **no** (owner env) | mod validates + `plugin test` passes, but the owner works over ssh → tmux: the client-side terminal cannot read a server-side `file`, and tmux drops the graphics protocol — in-terminal images are not a route for this owner | `S4.md` |
 
 ## depth-0 re-derivation (ADR-0001)
 

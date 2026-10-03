@@ -9,7 +9,7 @@
   - v2.36.113：cost-tracker 報真實 context %、cost-fuse 分開 session 與 host 花費。
   - v2.36.114：campaign 第一輪已碰滿 changed-file 上限時仍可修復（peer 回報）。
 - mods 計畫 `docs/plans/2026-10-03-mods-visible-dispatch.md` 已凍結（G1、G2 皆 CONDITIONAL，depth-0 全數處置；依規則最多到 G2，不再開 G3）。凍結後有兩次有界修補：R4.1 回寫 owner 對 D1／D2 的裁決，R4.2 回寫 P0 spike 結果。INDEX 列維持 `active`。
-- P0 spike（`docs/plans/evidence/2026-10-03-mods-spikes/README.md`）：S1 yes（modules 與 classic 能共載，D4 結案）、S2 partial、S5(a) partial（desktop 這台跑不到）、S5(b) yes、S6 no（P2 要新寫量測儀器）、S3 yes、S4 needs-owner。depth-0 從原始檔複驗了 S1、S5(a)、S5(b)，並推翻計畫一處事實：`flock(1)` 是 fork 不是 exec，P1a 的鎖驗收不能拿 `/proc/locks` 的 pid 比 `writer.pid`。
+- P0 spike（`docs/plans/evidence/2026-10-03-mods-spikes/README.md`）：S1 yes（modules 與 classic 能共載，D4 結案）、S2 partial、S5(a) partial（desktop 這台跑不到）、S5(b) yes、S6 no（P2 要新寫量測儀器）、S3 yes、S4 no（owner 經 ssh 進 tmux，終端內圖片不可行）。depth-0 從原始檔複驗了 S1、S5(a)、S5(b)，並推翻計畫一處事實：`flock(1)` 是 fork 不是 exec，P1a 的鎖驗收不能拿 `/proc/locks` 的 pid 比 `writer.pid`。
 - peer 備註：cuda 的 Q01 campaign 封存成 `review_station: panel`，因為 `in_rail_review: auto` 遇完整 panel 就解成 panel；支援的路線是 intake 前設 `single`（已寫進 l5 的 `hetero-impl-loop.md`）；已封存 campaign 的就地遷移登在 BACKLOG。
 - 研究文件在 `docs/plans/research/`（研究不是 plan）。
 
@@ -35,7 +35,7 @@
 
 ## 下一步
 1. P1a（L）：repo-identity shell 函式、`project-key.js`、`status runs` 加欄、runs-watch 唯一 writer、session-mode marker／pointer、`references/mods.md`。用 foreman-landing-pipeline：sonnet hands、互不相依的列平行、逐列 review、落地前一次 combined review。鎖的寫法照計畫 P1a「鎖的前提」的 R4.2 更正二擇一。
-2. owner 待辦：S4 要 owner 自己看一次。在終端跑 `claude --plugin-dir docs/plans/evidence/2026-10-03-mods-spikes/artifacts/S4`，再打 `/spike-image`，看圖是否出現（kitty 協定終端會顯示四色方塊，其他終端只有 alt 文字）。
+2. owner 的工作環境是 ssh 進 tmux：任何「在終端裡顯示圖片」的設計都不適用，圖一律走瀏覽器 review 頁（反向代理）。
 3. BACKLOG 已觸發的列：plan-review 席位沒有 source 存取、plan-review roster 單一家族、import-aa 測試綁死主機、Population B flake。
 4. peer 的列：review-fanout 有界並行、sealed-campaign review-station 遷移、plan-review terminal-ticket 可見性。
 5. owner 排序才動：`docs/backlog/review-only-adoption-of-external-candidate.md`（L，要先寫 plan＋review）。

@@ -14,7 +14,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const crypto = require('crypto');
+const { projectKey } = require('./project-key');
 
 const DEFAULT_ENRICH_CAP = 8;
 const CURSOR_FILE = 'runs-enrich-cursor.json';
@@ -49,14 +49,10 @@ function readRc(exitFile) {
 }
 
 // --- project selector ----------------------------------------------------------
-// R4 will switch this to projectKey() from src/status/project-key.js (R2 owns it).
-function keyOf(repoIdentity) {
-  return crypto.createHash('sha256').update(String(repoIdentity)).digest('hex').slice(0, 16);
-}
 function matchesProject(selector, repoIdentity) {
   if (typeof repoIdentity !== 'string' || repoIdentity === '') return false;
   if (selector === repoIdentity) return true;
-  return /^[0-9a-f]{16}$/.test(selector) && selector === keyOf(repoIdentity);
+  return /^[0-9a-f]{16}$/.test(selector) && selector === projectKey(repoIdentity);
 }
 
 // --- rotation state (cursor + last probe values) --------------------------------

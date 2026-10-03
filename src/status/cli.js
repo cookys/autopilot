@@ -429,9 +429,13 @@ function runStatusCli(argv, {
   const selectors = {
     project: takeValue('--project'), root: takeValue('--root'),
     since: takeValue('--since'), enrichCap: takeValue('--enrich-cap'),
+    interval: takeValue('--interval'),
   };
+  const watch = sub === 'runs' && args.includes('--watch');
+  const stop = sub === 'runs' && args.includes('--stop');
   for (const a of args) {
-    if (a !== '--json' && a !== '--probe' && !(a === '--tree' && sub === 'runs')) {
+    if (a !== '--json' && a !== '--probe' && !(a === '--tree' && sub === 'runs')
+      && !((a === '--watch' || a === '--stop') && sub === 'runs')) {
       stderr.write(`unknown status argument: ${a}\n`);
       return 2;
     }
@@ -440,6 +444,10 @@ function runStatusCli(argv, {
   for (const [name, sel] of Object.entries(selectors)) {
     if (!sel.present) continue;
     const flag = name === 'enrichCap' ? '--enrich-cap' : `--${name}`;
+    if (name === 'interval' && !watch) {
+      stderr.write('--interval is only valid with status runs --watch\n');
+      return 2;
+    }
     if (sub !== 'runs') {
       stderr.write(`${flag} is only valid for status runs\n`);
       return 2;
@@ -488,6 +496,28 @@ function runStatusCli(argv, {
     if (json) stdout.write(`${JSON.stringify(rows, null, 2)}\n`);
     else quotaHuman(rows, stdout);
     return 0;
+  }
+  if (sub === 'runs' && (watch || stop)) {
+    if (watch && stop) {
+      stderr.write('--watch and --stop are mutually exclusive\n');
+      return 2;
+    }
+    let interval = 10;
+    if (selectors.interval.present) {
+      if (!/^[1-9][0-9]*$/.test(selectors.interval.value)) {
+        stderr.write('--interval must be a positive integer (seconds)\n');
+        return 2;
+      }
+      interval = Number(selectors.interval.value);
+    }
+    const { runWatchCli } = require('./runs-watch');
+    return runWatchCli({
+      watch, stop, project: selectors.project.value, interval,
+      enrichCap: selectors.enrichCap.present ? enrichCap : null,
+      binPath: path.join(ROOT, 'bin', 'autopilot.js'),
+      collect: ({ enrichCap: cap }) => collectRuns({ enrichCap: cap, env }),
+      cwd, env, stdout, stderr,
+    });
   }
   if (sub === 'runs') {
     const { applySelectors } = require('./runs-fields');
@@ -566,4 +596,4 @@ function runStatusCli(argv, {
   return 2;
 }
 
-module.exports = { runStatusCli, taskHuman };
+module.exports = { runStatusCli, taskHuman, collectRuns };

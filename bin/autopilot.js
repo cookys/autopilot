@@ -322,7 +322,11 @@ if (args.length === 0 || args[0] === '-h' || args[0] === '--help' || args[0] ===
 }
 
 if (args[0] === 'status') {
-  process.exit(runStatusCli(args.slice(1), { cwd: process.cwd() }));
+  const statusRc = runStatusCli(args.slice(1), { cwd: process.cwd() });
+  // null = a long-lived watcher (status runs --watch) that exits from its own signal handler;
+  // return so the dispatch below does not run and fail the usage check.
+  if (statusRc !== null) process.exit(statusRc);
+  return;
 }
 
 if (args[0] === 'campaign') {

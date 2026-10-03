@@ -8,7 +8,7 @@ S3, S4). Every child `claude` ran with a dedicated `CLAUDE_CONFIG_DIR` + fake `H
 | Spike | Verdict | Key raw fact | File |
 |---|---|---|---|
 | S1 modules + classic co-load | **yes** | same sid `…5556` in the mod line (`artifacts/S1/s1-mod-line.jsonl`) and the classic cost-tracker row (`artifacts/S1/costs.jsonl`); broken `register.ts` → `hooks module did not load: … does not parse`, classic row still written (`artifacts/S1/neg/`) | `S1.md` |
-| S2 mod data-supply paths | **partial** | terminal: every P1c path readable; `$.fs` relative = `$.session.cwd()`, no project-root confinement; `~` not expanded; errors carry no `code`. Desktop unverified | `S2.md` |
+| S2 mod data-supply paths | **partial** | `claude -p` only: every P1c path readable (interactive terminal not exercised for fs/env); `$.fs` relative = `$.session.cwd()`, no project-root confinement; `~` not expanded; errors carry no `code`. Desktop unverified | `S2.md` |
 | S5(a) mod lifecycle | **partial** | 3 timer generations, handover gaps 533/718 ms (no overlap), ~1 tick/s each, 0 ticks after `session.end` (`artifacts/S5/analysis.out`). Desktop and `/clear` unverified | `S5a.md` |
 | S5(b) detached watcher launch | **yes** | envelope lands; 2nd launch no 2nd writer; kill → lock free; relaunch new writer (`artifacts/S5/s5b-direct.txt`); watcher launched from a child claude's Bash tool still writing 24 s after claude exit (`artifacts/S5/s5b-child-envelope-final.json` at 15:21:09 vs exit 15:20:45) | `S5b.md` |
 | S6 benchmark selector coverage | **no** | selector covers 4 of 24 `hooks.json` commands (opt-in multiplexer only); `tool_name` hard-coded | `S6.md` |
@@ -32,6 +32,6 @@ pid, the node writer holds the lock through the inherited open file description.
 
 ## Not proved here
 
-Any desktop / vscode / mobile surface; CC sandbox enabled; interactive `/exit` or desktop close for the detached watcher;
+S2's fs/env paths in an interactive terminal session (only `-p` ran them; Hand B's interactive runs proved module loading and timers, not these reads); any desktop / vscode / mobile surface; CC sandbox enabled; interactive `/exit` or desktop close for the detached watcher;
 `/clear` behaviour of a `session.start` timer (P1c's first commit tests it); the real `session-mode.js set` / runs-watch
 (they do not exist yet — a stub with the same launch shape was used).

@@ -10,3 +10,9 @@ Plan: `docs/plans/2026-10-03-mods-visible-dispatch.md`, R3 reviewed by G2 (two s
 - Verification: depth-0 read R4 §2.8, §2.7, P1a and S2 and confirmed the repair is bounded.
 - S2 spike now also covers `$.env.get("HOME")`, the pointer file and `$.fs.list`; a fallback is defined if the spike fails.
 - Status: plan frozen at R4; implementation starts at the P0 spikes S1-S6.
+
+## Post-freeze bounded amendments (2026-10-03)
+
+- R4.1: owner rulings D1 (default) and D2 (single-port host review server, root index, localhost-only, reverse proxy documented). No G1/G2 item reopened.
+- R4.2: P0 spike results written back (`docs/plans/evidence/2026-10-03-mods-spikes/`): D4 closed (S1 yes), P1a lock wording corrected (`flock(1)` forks, does not exec), P1c `/clear` and interactive S2 re-probe, P2 new instrument (S6 no). No rubric change, no new generation.
+- No script pins the R4 digest; the freeze record is this file plus the plan's Review log.

@@ -401,6 +401,26 @@ function boundaryGitCandidate({ mutation, input, campaignId }) {
   }
 }
 
+// The stable projection of a boundary_rejected dispatcher outcome. Its digest
+// is both the boundary receipt's dispatch_result_digest and the dispatch
+// record's result_receipt_digest (the dispatch record is written before the
+// boundary classification, so the digest is derived from the same fields in
+// both places).
+function boundaryDispatchResultDigest(mutation, boundary) {
+  return reducerCanonicalDigest({
+    status: isStr(mutation.status) ? mutation.status : null,
+    phase: isStr(mutation.phase) ? mutation.phase : null,
+    reason: isStr(mutation.reason) ? mutation.reason : null,
+    boundary_code: boundary.boundary_code,
+    boundary_reason: boundary.boundary_reason,
+    candidate_ref: boundary.candidate_ref,
+    possibly_effectful: boundary.possibly_effectful === true,
+    dispatcher_called: mutation.dispatcher_called === true,
+    model_calls: Number.isSafeInteger(mutation.model_calls)
+      ? mutation.model_calls : null,
+  });
+}
+
 function boundaryRejected(boundary, trace, detail = {}) {
   return {
     status: BOUNDARY_REJECTED,
@@ -1665,8 +1685,15 @@ function runCampaignComposition(input = {}, adapters = {}) {
           rawImplementation && rawImplementation.provider_session_id || null,
         resource_id: rawImplementation
           && (rawImplementation.resource_id || rawImplementation.worktree) || null,
+        // A committed mutation is receipted by its writer fence; a
+        // boundary_rejected one carries no fence, so its receipt is the digest of
+        // the dispatcher outcome the rejection is derived from -- the same
+        // digest the boundary receipt journals as dispatch_result_digest.
         result_receipt_digest: mutation.writer_fence
-          && mutation.writer_fence.receipt_digest || null,
+          && mutation.writer_fence.receipt_digest
+          || (classifyBoundaryRejected(mutation)
+            ? boundaryDispatchResultDigest(mutation, classifyBoundaryRejected(mutation))
+            : null),
       };
       const dispatchAuditBody = {
         event: 'controller_effect_invoked',
@@ -1787,24 +1814,21 @@ function runCampaignComposition(input = {}, adapters = {}) {
         schema_version: 1,
         artifact_type: 'campaign_boundary_receipt',
         campaign_id: input.rootRunId || null,
+        // The controller tuple the transcript audit requires of every persisted
+        // audit_events row. It sits INSIDE the digest body on purpose: the persisted
+        // row is `{...body, at, digest}` and is re-derivable by dropping at/digest
+        // (campaign-boundary-receipt-e2e), so a stamp outside the body would make the
+        // stored row unverifiable. boundary_receipt_digest and the reducer's
+        // output_artifact_digest are both derived from this body at write time.
+        root_run_id: input.rootRunId || null,
+        work_order_id: input.workOrderId || null,
         base: input.baseSha || null,
         candidate_ref: bound.candidate_ref,
         boundary_code: bound.boundary_code,
         offending_paths: offendingPaths,
         // The dispatcher outcome this rejection was derived from, projected onto
         // its stable decision fields (the raw result carries clocks and paths).
-        dispatch_result_digest: reducerCanonicalDigest({
-          status: isStr(mutation.status) ? mutation.status : null,
-          phase: isStr(mutation.phase) ? mutation.phase : null,
-          reason: isStr(mutation.reason) ? mutation.reason : null,
-          boundary_code: bound.boundary_code,
-          boundary_reason: bound.boundary_reason,
-          candidate_ref: bound.candidate_ref,
-          possibly_effectful: bound.possibly_effectful === true,
-          dispatcher_called: mutation.dispatcher_called === true,
-          model_calls: Number.isSafeInteger(mutation.model_calls)
-            ? mutation.model_calls : null,
-        }),
+        dispatch_result_digest: boundaryDispatchResultDigest(mutation, bound),
       };
       const boundaryReceiptDigest = reducerCanonicalDigest(boundaryReceiptBody);
       // Exact code + first offending path; the raw rail sentence stays on `reason`.

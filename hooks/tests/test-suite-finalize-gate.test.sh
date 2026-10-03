@@ -19,7 +19,6 @@ TEST_NAME="test-suite-finalize-gate"
 # through their own harness (a last-command `[ "$FAIL" -eq 0 ]`, `... || exit 1`, or an exiting
 # fail()) left this list: `finalizes()` below recognizes those shapes.
 ALLOWLIST="
-autopilot-engine-boundary-resume.test.sh
 autopilot-engine-repair-branch.test.sh
 codex-postcompact-production-live-driver.test.sh
 implementation-campaign-state-boundary.test.sh

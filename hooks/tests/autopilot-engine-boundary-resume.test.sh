@@ -159,7 +159,34 @@ const commit = git(worktree, ['rev-parse', 'HEAD']);
 const tree = git(worktree, ['rev-parse', 'HEAD^{tree}']);
 const { createWriterFence } = require(path.join(root, 'src', 'engine', 'campaign-verification'));
 const { canonicalDigest } = require(path.join(root, 'src', 'engine', 'implementation-campaign'));
-const instanceId = require('crypto').createHash('sha256').update(worktree).digest('hex');
+const crypto = require('crypto');
+// The filesystem-instance id src/engine/repair-lineage-cleanup.js re-derives before it removes a
+// retained worktree (NOT sha256(path)), plus the .autopilot-worktree marker it requires.
+const wtStat = fs.statSync(worktree, { bigint: true });
+const instanceId = crypto.createHash('sha256').update(JSON.stringify({
+  birthtime_ns: wtStat.birthtimeNs.toString(),
+  device: wtStat.dev.toString(),
+  inode: wtStat.ino.toString(),
+  schema: 1,
+  worktree: path.resolve(worktree),
+})).digest('hex');
+const RETENTION_REASON = 'implementation-campaign-repair-lineage';
+const RETENTION_EXPIRES = 2000000000;
+fs.writeFileSync(path.join(worktree, '.autopilot-worktree'), [
+  'schema=2',
+  `branch=${fxGreen.branch}`,
+  `root_run_id=${fxGreen.opened.campaignId}`,
+  'retention=lease',
+  `retention_owner=${fxGreen.opened.campaignId}`,
+  `retention_reason_sha256=${crypto.createHash('sha256').update(RETENTION_REASON).digest('hex')}`,
+  `retention_expires_at=${RETENTION_EXPIRES}`,
+  `base_sha=${fxGreen.base}`,
+  'created_at=1',
+  'loop_id=boundary-resume-loop',
+  'run_id=boundary-resume-run',
+].join('\n') + '\n');
+// the marker + lock are untracked (dispatch-hetero.sh excludes both names): exclude them so the retained worktree is clean for cleanup
+fs.appendFileSync(path.join(fxGreen.commonDir, 'info', 'exclude'), '\n.autopilot-worktree\n.autopilot-worktree.lock\n');
 const lineage = {
   lineage_id: fxGreen.opened.campaignId,
   branch: fxGreen.branch,
@@ -175,8 +202,8 @@ const lineage = {
   inherited_churn: 0,
   delta_churn: 2,
   retention_owner: fxGreen.opened.campaignId,
-  retention_reason: 'implementation-campaign-repair-lineage',
-  retention_expires_at: 2000000000,
+  retention_reason: RETENTION_REASON,
+  retention_expires_at: RETENTION_EXPIRES,
   terminal_worktree_disposition: 'active',
   transcript_reused: false,
   transcript_source_digest: 'a'.repeat(64),
@@ -274,6 +301,7 @@ console.log(`green_impl_calls=${implCallsGreen}`);
 console.log(`green_review_calls=${reviewCalls}`);
 console.log(`green_terminal_stop=${journalEvents.includes('terminal_stop')}`);
 console.log(`green_reason=${green.reason || ''}`);
+console.log(`green_phase=${green.phase || ''}`);
 NODE
 )"; EXIT=$?
 assert_eq "0" "$EXIT" "boundary resume engine suite process exits 0"
@@ -285,4 +313,11 @@ assert_contains "$OUT" "red_impl_calls=0" "no-candidate path dispatches nothing"
 assert_contains "$OUT" "green_impl_calls=0" "recorded candidate resume does not re-dispatch implementation"
 assert_contains "$OUT" "green_review_calls=2" "recorded candidate resume runs review"
 assert_contains "$OUT" "green_terminal_stop=false" "recorded candidate resume journals no TERMINAL_STOP"
+# The green stage's final status is asserted explicitly (no tolerated `blocked`): the realistic
+# fixture lets the real repair-lineage cleanup transaction run (RED before the fixture fix:
+# green_status=blocked, green_reason=git worktree command exited with status 1).
+assert_contains "$OUT" "green_status=converged" "recorded candidate resume ends converged"
+assert_contains "$OUT" "green_phase=campaign_terminal_ready" "recorded candidate resume reaches campaign_terminal_ready"
+assert_eq "$(printf '%s\n' "$OUT" | grep -c '^green_reason=$')" "1" "recorded candidate resume has no block reason"
 echo "$OUT"
+finalize_test

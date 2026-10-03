@@ -1,0 +1,35 @@
+┌─────────┬──────────────────────┬───────────────────────────────────────────────────────────┬────────────────────────────┬──────────────────────┬───────┬──────────┐
+│ (index) │ ev                   │ matcher                                                   │ script                     │ args                 │ optin │ selected │
+├─────────┼──────────────────────┼───────────────────────────────────────────────────────────┼────────────────────────────┼──────────────────────┼───────┼──────────┤
+│ 0       │ 'PreCompact'         │ '*'                                                       │ 'state-checkpoint.js'      │ ''                   │ false │ false    │
+│ 1       │ 'SessionStart'       │ 'startup|clear|compact'                                   │ 'session-start.js'         │ ''                   │ false │ false    │
+│ 2       │ 'SessionStart'       │ 'startup|clear|compact'                                   │ 'version-drift-check.js'   │ ''                   │ false │ false    │
+│ 3       │ 'SessionEnd'         │ ''                                                        │ 'session-handoff.js'       │ ''                   │ false │ false    │
+│ 4       │ 'UserPromptSubmit'   │ ''                                                        │ 'advisory-relay.js'        │ ''                   │ false │ false    │
+│ 5       │ 'PreToolUse'         │ '.*'                                                      │ 'opt-in-multiplexer.js'    │ 'PreToolUse'         │ false │ true     │
+│ 6       │ 'PreToolUse'         │ 'Bash|Monitor'                                            │ 'foreman-guard.js'         │ ''                   │ false │ false    │
+│ 7       │ 'PreToolUse'         │ 'Bash|Edit|Write|MultiEdit|NotebookEdit'                  │ 'cost-fuse.js'             │ ''                   │ false │ false    │
+│ 8       │ 'PreToolUse'         │ 'Task|Agent'                                              │ 'dispatch-model-guard.js'  │ ''                   │ false │ false    │
+│ 9       │ 'PreToolUse'         │ 'Task|Agent'                                              │ 'run-approval-gate.js'     │ 'PreToolUse'         │ false │ false    │
+│ 10      │ 'PreToolUse'         │ 'WebFetch|WebSearch|Read|Grep|Glob|Bash|Agent|Task|Skill' │ 'depth0-delegate-gate.js'  │ ''                   │ false │ false    │
+│ 11      │ 'PostToolUse'        │ '.*'                                                      │ 'intent-capture.js'        │ ''                   │ false │ false    │
+│ 12      │ 'PostToolUse'        │ '.*'                                                      │ 'reload-watch.js'          │ ''                   │ false │ false    │
+│ 13      │ 'PostToolUse'        │ '.*'                                                      │ 'audit-log.js'             │ ''                   │ false │ false    │
+│ 14      │ 'PostToolUse'        │ '.*'                                                      │ 'log-error.js'             │ ''                   │ false │ false    │
+│ 15      │ 'PostToolUse'        │ '.*'                                                      │ 'failure-escalation.js'    │ ''                   │ false │ false    │
+│ 16      │ 'PostToolUse'        │ '.*'                                                      │ 'opt-in-multiplexer.js'    │ 'PostToolUse'        │ false │ true     │
+│ 17      │ 'PostToolUse'        │ '.*'                                                      │ 'context-budget.js'        │ ''                   │ false │ false    │
+│ 18      │ 'PostToolUse'        │ 'Write|Edit'                                              │ 'suggest-compact.js'       │ ''                   │ false │ false    │
+│ 19      │ 'PostToolUse'        │ 'Task|Agent'                                              │ 'run-approval-gate.js'     │ 'PostToolUse'        │ false │ false    │
+│ 20      │ 'PostToolUseFailure' │ '.*'                                                      │ 'opt-in-multiplexer.js'    │ 'PostToolUseFailure' │ false │ true     │
+│ 21      │ 'Stop'               │ ''                                                        │ 'opt-in-multiplexer.js'    │ 'Stop'               │ false │ true     │
+│ 22      │ 'Stop'               │ ''                                                        │ 'cost-tracker.js'          │ ''                   │ false │ false    │
+│ 23      │ 'Stop'               │ ''                                                        │ 'dirty-protected-paths.js' │ ''                   │ false │ false    │
+└─────────┴──────────────────────┴───────────────────────────────────────────────────────────┴────────────────────────────┴──────────────────────┴───────┴──────────┘
+total 24 selected 4 non-selected 20
+selected scripts: [
+  'opt-in-multiplexer.js PreToolUse',
+  'opt-in-multiplexer.js PostToolUse',
+  'opt-in-multiplexer.js PostToolUseFailure',
+  'opt-in-multiplexer.js Stop'
+]

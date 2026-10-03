@@ -1,0 +1,20 @@
+1791036386911 v3 grsu9zd session.start surface=terminal
+1791036387926 v3 grsu9zd tick 1
+1791036388927 v3 grsu9zd tick 2
+1791036389930 v3 grsu9zd tick 3
+1791036390937 v3 grsu9zd tick 4
+1791036391939 v3 grsu9zd tick 5
+1791036392942 v3 grsu9zd tick 6
+1791036393943 v3 grsu9zd tick 7
+1791036394945 v3 grsu9zd tick 8
+1791036395946 v3 grsu9zd tick 9
+1791036396948 v3 grsu9zd tick 10
+1791036397950 v3 grsu9zd tick 11
+1791036398953 v3 grsu9zd tick 12
+1791036399954 v3 grsu9zd tick 13
+1791036400956 v3 grsu9zd tick 14
+1791036401957 v3 grsu9zd tick 15
+1791036402962 v3 grsu9zd tick 16
+1791036403963 v3 grsu9zd tick 17
+1791036404965 v3 grsu9zd tick 18
+1791036405264 v3 grsu9zd session.end reason=prompt_input_exit cancelled

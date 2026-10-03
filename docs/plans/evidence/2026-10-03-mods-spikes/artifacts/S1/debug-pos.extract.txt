@@ -1,0 +1,18 @@
+2026-10-03T14:02:48.707Z [ERROR] autopilot: hooks.json: unknown keys "//" in hooks.SessionEnd[0], "//" in hooks.UserPromptSubmit[0], "//" in hooks.PreToolUse[0], "//" in hooks.PreToolUse[1], "//" in hooks.PreToolUse[2] and 6 more ignored
+2026-10-03T14:02:48.999Z [DEBUG] hooks module autopilot@inline loaded (worker, environment 1, tier user); events: session.start
+2026-10-03T14:02:49.001Z [DEBUG] hooks module cc-plugin-agents-md@builtin loaded (native, environment 2, tier builtin); events: session.start,prompt.context,agent.spawn,tool.call
+2026-10-03T14:02:49.003Z [DEBUG] hooks module cc-plugin-telemetry@builtin loaded (native, environment 3, tier builtin); events: telemetry.*,telemetry.log,telemetry.mark,session.start,session.end,engine.create
+2026-10-03T14:02:49.006Z [DEBUG] hooks module cc-plugin-telemetry@builtin engine.create settled in 2.1ms (native hop, next() included)
+2026-10-03T14:02:49.446Z [DEBUG] "Hook SessionStart:startup (SessionStart) success:\n{\n  \"hookSpecificOutput\": {\n    \"hookEventName\": \"SessionStart\",\n    \"additionalContext\": \"\"\n  }\n}"
+2026-10-03T14:02:49.449Z [DEBUG] "Hook SessionStart:startup (SessionStart) success:\n{\n  \"hookSpecificOutput\": {\n    \"hookEventName\": \"SessionStart\",\n    \"additionalContext\": \"You have **Autopilot** lifecycle skills. Before starting any task, check if one applies:\\n\\n| Trigger | Skill 
+2026-10-03T14:02:49.449Z [DEBUG] Hook SessionStart (node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start.js) provided additionalContext (1259 chars)
+2026-10-03T14:02:49.790Z [DEBUG] hooks module cc-plugin-telemetry@builtin (native): telemetry.log nested in cc-plugin-agents-md#0
+2026-10-03T14:02:49.791Z [DEBUG] hooks module cc-plugin-telemetry@builtin session.start settled in 2.2ms (native link, next() included)
+2026-10-03T14:02:49.792Z [DEBUG] hooks module cc-plugin-agents-md@builtin session.start settled in 2.8ms (native link, next() included)
+2026-10-03T14:02:49.797Z [DEBUG] hooks module autopilot@inline session.start settled in 63.5ms (worker hop, next() included)
+2026-10-03T14:02:50.110Z [DEBUG] hooks module cc-plugin-telemetry@builtin (native): telemetry.log nested in cc-plugin-agents-md#1
+2026-10-03T14:02:50.110Z [DEBUG] hooks module cc-plugin-telemetry@builtin (native): telemetry.mark nested in cc-plugin-agents-md#1
+2026-10-03T14:02:50.111Z [DEBUG] hooks module cc-plugin-telemetry@builtin telemetry.mark settled in 0.3ms (native link, next() included)
+2026-10-03T14:02:50.111Z [DEBUG] hooks module cc-plugin-agents-md@builtin prompt.context settled in 21.9ms (native link, next() included)
+2026-10-03T14:02:52.564Z [DEBUG] "Hook Stop (Stop) success:\nstdout:\n{\"systemMessage\":\"autopilot dirty-tree reminder: 4 uncommitted file(s), ~4 line(s) under the working tree (no .claude/qc-gate-config.md protected_paths; whole tree counted) in proj — link-to-outside, marker.txt, sub/marker.tx
+2026-10-03T14:02:52.925Z [DEBUG] hooks module cc-plugin-telemetry@builtin session.end settled in 239.9ms (native link, next() included)

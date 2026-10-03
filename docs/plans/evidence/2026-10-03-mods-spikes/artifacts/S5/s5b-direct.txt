@@ -1,0 +1,31 @@
+== (1) launch
+launched wrapper pid 572781
+{"writer_pid":572783,"at":"2026-10-03T14:03:48.536Z"}
+writer_pid=572783
+== (2) lock holder
+lock inode=8813764
+proc/locks: 20: FLOCK  ADVISORY  WRITE 572782 fc:00:8813764 0 EOF
+fd-holder pid=572782 cmd=flock -n /tmp/claude-1000/-home-cookys-projects-autopilot/74f6f85f-f806-4317-a6c7-5e4417df8093/scratchpad/spike-a/s5/pro
+fd-holder pid=572783 cmd=node /tmp/claude-1000/-home-cookys-projects-autopilot/74f6f85f-f806-4317-a6c7-5e4417df8093/scratchpad/spike-a/s5/stub-wa
+cmd of writer_pid: node /tmp/claude-1000/-home-cookys-projects-autopilot/74f6f85f-f806-4317-a6c7-5e4417df8093/scratchpad/spike-a/s5/stub-watcher.js spikeproj   ppid=572782 sid= 572782
+== (3) second launch while held
+launched wrapper pid 577240
+writer_pid after 2nd launch: 572783
+direct foreground flock -n (what 'set' can use to detect holder):
+flock rc=1 (1 = held)
+s5/run-s5b.sh: line 16: /proc/574282/cmdline: No such file or directory
+s5/run-s5b.sh: line 16: /proc/574301/cmdline: No such file or directory
+s5/run-s5b.sh: line 16: /proc/577277/cmdline: No such file or directory
+node processes running stub: "572753 ""572782 ""572783 "
+== (4) kill writer
+lock acquired after kill rc=0
+flock rc=0
+lock inode=8813764
+== (5) relaunch
+launched wrapper pid 583009
+new writer_pid=583011 (old 572783)
+lock inode=8813764
+proc/locks: 1: FLOCK  ADVISORY  WRITE 583010 fc:00:8813764 0 EOF
+fd-holder pid=583010 cmd=flock -n /tmp/claude-1000/-home-cookys-projects-autopilot/74f6f85f-f806-4317-a6c7-5e4417df8093/scratchpad/spike-a/s5/pro
+fd-holder pid=583011 cmd=node /tmp/claude-1000/-home-cookys-projects-autopilot/74f6f85f-f806-4317-a6c7-5e4417df8093/scratchpad/spike-a/s5/stub-wa
+cleanup flock rc=0

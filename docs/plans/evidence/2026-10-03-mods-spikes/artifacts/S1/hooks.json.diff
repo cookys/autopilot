@@ -1,0 +1,13 @@
+diff --git a/hooks/hooks.json b/hooks/hooks.json
+index ac7e422f..1461855e 100644
+--- a/hooks/hooks.json
++++ b/hooks/hooks.json
+@@ -1,5 +1,8 @@
+ {
+   "description": "Autopilot hooks. Tool-event hooks recover data from the session transcript (transcript-reader-lib) since the upstream stdin pipe is broken (#6305); see hooks/README.md. Opt-in hooks (hooks/opt-in-manifest.json) are wired via the per-event opt-in-multiplexer (D6) — default-off, enabled per ~/.autopilot/config.json {\"hooks\":{\"<stem>\":true}} or AUTOPILOT_HOOK_<STEM>=1. _transcript-timing-probe.js is an opt-in diagnostic (not wired).",
++  "modules": [
++    "../mods/spike/register.ts"
++  ],
+   "hooks": {
+     "PreCompact": [
+       {

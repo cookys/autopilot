@@ -1,0 +1,2 @@
+child start 2026-10-03T15:20:36Z
+child exit rc=0 at 2026-10-03T15:20:45Z

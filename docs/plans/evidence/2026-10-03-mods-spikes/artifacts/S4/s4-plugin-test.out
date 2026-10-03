@@ -1,0 +1,9 @@
+desktop: Image found = false | first Text = "You should see a 4-quadrant picture: red/blue top, green/yellow bottom, white diagonal."
+
+hooks/image.test.tsx:
+(pass) terminal pane draws an Image whose source is the PNG file [78.18ms]
+(pass) desktop surface: what does mounting the Image tree do? [34.44ms]
+
+ 2 pass
+ 0 fail
+Ran 2 tests across 1 file. [0.31s]

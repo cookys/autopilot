@@ -895,6 +895,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/import-aa-capabilities-test-host-pinned-tmp-in-worktree.md
 - **Context**: `/tmp/.git` exists, so the "AA cache directory must be outside a Git worktree" check fires.
 
+### `hooks.json` `"//"` comment keys log an ERROR line on every Claude Code start
+- **Status**: open
+- **Trigger**: P1d of the mods plan (adding `modules` to `hooks/hooks.json`)
+- **Effort**: S
+- **Source**: mods plan P0 spike S1, 2026-10-03
+- **Pointer**: docs/backlog/hooks-json-comment-keys-log-error-on-every-start.md
+- **Context**: CC 2.1.288 logs `[ERROR] … unknown keys "//" … ignored` for the 15 comment keys inside hook entries; behaviour unchanged, noise.
+
 ### Final review panel fans out all seats at once — no bounded concurrency
 - **Status**: open
 - **Trigger**: next peer/operator campaign on a host that cannot run every panel seat at once

@@ -1,0 +1,11 @@
+10 rows -> 3909 chars 3.0% of cap
+20 rows -> 6334 chars 4.8% of cap
+40 rows -> 11182 chars 8.5% of cap
+80 rows -> 21006 chars 16.0% of cap
+160 rows -> 40760 chars 31.1% of cap
+320 rows -> 80354 chars 61.3% of cap
+640 rows -> 160121 chars 122.2% of cap
+1000 rows -> 250289 chars 191.0% of cap
+max rows fitting under 131072 = 524 (len 131066 ) ; first over = 525 131316
+per-row chars (40 vs 41 delta): 242
+40-row margin:  119890 chars free; 11.7x headroom

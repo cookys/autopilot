@@ -1,0 +1,1 @@
+{ "name": "spike-lifecycle", "version": "0.0.1", "description": "S5a throwaway: clock.every lifecycle across hot reload and session.end" }

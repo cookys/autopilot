@@ -1,0 +1,24 @@
+Validating plugin manifest: /tmp/claude-1000/-home-cookys-projects-autopilot/74f6f85f-f806-4317-a6c7-5e4417df8093/scratchpad/spike-a/repo/.claude-plugin/plugin.json
+
+Validating plugin: /tmp/claude-1000/-home-cookys-projects-autopilot/74f6f85f-f806-4317-a6c7-5e4417df8093/scratchpad/spike-a/repo/CLAUDE.md
+
+⚠ Found 1 warning:
+
+  ❯ root: CLAUDE.md at the plugin root is not loaded as project context. To ship context with your plugin, use a skill (skills/<name>/SKILL.md) instead.
+
+Validating agent: /tmp/claude-1000/-home-cookys-projects-autopilot/74f6f85f-f806-4317-a6c7-5e4417df8093/scratchpad/spike-a/repo/agents/README.md
+
+⚠ Found 1 warning:
+
+  ❯ frontmatter: No frontmatter block found. Add YAML frontmatter between --- delimiters at the top of the file to set description and other metadata.
+
+Validating hooks: /tmp/claude-1000/-home-cookys-projects-autopilot/74f6f85f-f806-4317-a6c7-5e4417df8093/scratchpad/spike-a/repo/hooks/hooks.json
+
+✘ Found 1 error:
+
+  ❯ modules.../mods/spike/register.ts: repo: /tmp/claude-1000/-home-cookys-projects-autopilot/74f6f85f-f806-4317-a6c7-5e4417df8093/scratchpad/spike-a/repo/mods/spike/register.ts does not parse: Unexpected ; (line 3, column 11)
+
+⚠ Found 24 warnings:
+
+
+✘ Validation failed

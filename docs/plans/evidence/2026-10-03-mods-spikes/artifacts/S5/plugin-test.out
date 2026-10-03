@@ -1,0 +1,8 @@
+
+hooks/lifecycle.test.ts:
+(pass) clock.every ticks once per period, stops after session.end (surface=terminal) [94.71ms]
+(pass) clock.every ticks once per period, stops after session.end (surface=desktop) [36.61ms]
+
+ 2 pass
+ 0 fail
+Ran 2 tests across 1 file. [0.34s]

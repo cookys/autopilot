@@ -1,5 +1,5 @@
 ## 目標
-接續 autopilot 維護。2026-10-02～03 出了 v2.36.105 到 v2.36.114 十版，mods 計畫已凍結在 R4。下一步是照凍結的計畫從 P0 spike 開始實作，並讓 owner 回答 D1／D2；BACKLOG 已觸發的列穿插處理。
+接續 autopilot 維護。2026-10-02～03 出了 v2.36.105 到 v2.36.114 十版。mods 計畫凍結在 R4.2：P0 spike 已跑完並回寫，D1／D2／D4 都已決。下一步是 P1a（L），走 foreman-landing-pipeline；BACKLOG 已觸發的列穿插處理。
 
 ## 現況
 - 分支 `develop`，HEAD 以 `git log --oneline -1` 為準（本檔所在的 closeout commit 疊在 v2.36.114 `9ebea928` 之上）。工作區只剩兩個別的 session 留下的未追蹤目錄（`docs/plans/evidence/2026-10-01-*`），不是這個 session 的，不要動。
@@ -8,7 +8,8 @@
   - v2.36.112：boundary-rejected 能到終態成功、suite 恆綠修正、seat artifact 在終態被 reap。
   - v2.36.113：cost-tracker 報真實 context %、cost-fuse 分開 session 與 host 花費。
   - v2.36.114：campaign 第一輪已碰滿 changed-file 上限時仍可修復（peer 回報）。
-- mods 計畫 `docs/plans/2026-10-03-mods-visible-dispatch.md` 已凍結在 R4（G1、G2 皆 CONDITIONAL，depth-0 全數處置；依規則最多到 G2，不再開 G3）。INDEX 列維持 `active`。
+- mods 計畫 `docs/plans/2026-10-03-mods-visible-dispatch.md` 已凍結（G1、G2 皆 CONDITIONAL，depth-0 全數處置；依規則最多到 G2，不再開 G3）。凍結後有兩次有界修補：R4.1 回寫 owner 對 D1／D2 的裁決，R4.2 回寫 P0 spike 結果。INDEX 列維持 `active`。
+- P0 spike（`docs/plans/evidence/2026-10-03-mods-spikes/README.md`）：S1 yes（modules 與 classic 能共載，D4 結案）、S2 partial、S5(a) partial（desktop 這台跑不到）、S5(b) yes、S6 no（P2 要新寫量測儀器）、S3 yes、S4 needs-owner。depth-0 從原始檔複驗了 S1、S5(a)、S5(b)，並推翻計畫一處事實：`flock(1)` 是 fork 不是 exec，P1a 的鎖驗收不能拿 `/proc/locks` 的 pid 比 `writer.pid`。
 - peer 備註：cuda 的 Q01 campaign 封存成 `review_station: panel`，因為 `in_rail_review: auto` 遇完整 panel 就解成 panel；支援的路線是 intake 前設 `single`（已寫進 l5 的 `hetero-impl-loop.md`）；已封存 campaign 的就地遷移登在 BACKLOG。
 - 研究文件在 `docs/plans/research/`（研究不是 plan）。
 
@@ -26,11 +27,15 @@
 - cockpit／radar／gantt／排程／quota 不是 autopilot：由獨立的唯讀 fleet 成員負責（可能是 fuchikoma，名稱待定）；autopilot 只發佈 `autopilot.progress/1`。
 - 第一個 mod = MINOR 2.37.0。
 - D3 已定案：一個 job 一個執行根。
+- D1 已定案：原圖與 bundle 留 `~/.autopilot/review/<project_key>/`，git 只收 compare-record 與 ≤200 KB 預覽。
+- D2 已定案：整台機器一個 review server、一個 port，只綁 127.0.0.1；各專案頁在 `/<project_key>/…` 底下，根目錄有靜態專案索引（不是 cockpit）；遠端看走 owner 自己的反向代理（tailscale serve／caddy／ssh -L），autopilot 只寫文件、不內建，也不做 auth／TLS。
+- D4 結案：S1 = yes，不需要第二個 plugin。
+- `references/mods.md`（spike 結果與 surface 降級表）跟 P1a 一起出，P0 本身不升版。
 - plan review 的 findings 由 depth-0 裁決，最多到 G2。
 
 ## 下一步
-1. 實作凍結的 mods 計畫，從 P0 spikes S1–S6 開始（S1：modules 與 classic 能否共載，決定 D4；S2 現在也涵蓋 `$.env.get("HOME")`、pointer 檔與 `$.fs.list`）。用 foreman-landing-pipeline、sonnet hands、逐列 review、每版一次 combined review。
-2. owner 仍待決定：D1 截圖存放（建議：原檔放 `~/.autopilot`，git 只留 compare-record 與 ≤200 KB 的合成圖）；D2 Artifact 預設（建議：local-only）。
+1. P1a（L）：repo-identity shell 函式、`project-key.js`、`status runs` 加欄、runs-watch 唯一 writer、session-mode marker／pointer、`references/mods.md`。用 foreman-landing-pipeline：sonnet hands、互不相依的列平行、逐列 review、落地前一次 combined review。鎖的寫法照計畫 P1a「鎖的前提」的 R4.2 更正二擇一。
+2. owner 待辦：S4 要 owner 自己看一次。在終端跑 `claude --plugin-dir docs/plans/evidence/2026-10-03-mods-spikes/artifacts/S4`，再打 `/spike-image`，看圖是否出現（kitty 協定終端會顯示四色方塊，其他終端只有 alt 文字）。
 3. BACKLOG 已觸發的列：plan-review 席位沒有 source 存取、plan-review roster 單一家族、import-aa 測試綁死主機、Population B flake。
 4. peer 的列：review-fanout 有界並行、sealed-campaign review-station 遷移、plan-review terminal-ticket 可見性。
 5. owner 排序才動：`docs/backlog/review-only-adoption-of-external-candidate.md`（L，要先寫 plan＋review）。
@@ -43,7 +48,7 @@
 
 ## 驗證方式
 - `git status --short` 只剩那兩個不屬於本 session 的未追蹤目錄。
-- `bash scripts/preflight-release.sh` 回報 v2.36.114 一致。
+- `bash scripts/preflight-release.sh` 回報 v2.36.114 一致（P0 未升版）。
 - `node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md` exit 0。
 - `node scripts/check-plan-graduation.js --repo-root . --json` exit 0。
 
@@ -65,3 +70,6 @@
 - hook 的 cost／context 提示只是代理值：告訴 owner 視窗滿了之前，先讀 live context 檔（v2.36.113 修過 cost-tracker 字樣）。
 - 新的含 `reviewer_engine:` 的 fixture 要登記到 Population B gate（`resolve-review-loop-consult-discuss-switch.test.sh`），並先 `git add`，switch suite 才看得到；逐列 Verify 不會跑它。
 - 這台 shell 的 `ls` 可能卡住（alias），改用 `wc` 或 `find`。
+- 平行派 hand 寫證據檔時，brief 要給每個 hand 互不重疊的檔名；這次兩個 hand 都寫 `S5.md`，後寫的蓋掉先寫的。
+- 隔離的 `CLAUDE_CONFIG_DIR` 只放 `.credentials.json` 的話，互動 session 會卡在登入精靈，要另外 seed `.claude.json`；跑完要刪掉 scratch 裡的憑證副本。`claude plugin test` 對真的 `~/.claude` 會拒跑。
+- 當 classic 見證用的 `cost-tracker` 需要持久化的 transcript，`--no-session-persistence` 下不會寫列。

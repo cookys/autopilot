@@ -1,0 +1,3 @@
+  ❯ ./register.tsx calls: $.command.register, $.ui.open, $.ui.resolve
+
+✔ Validation passed

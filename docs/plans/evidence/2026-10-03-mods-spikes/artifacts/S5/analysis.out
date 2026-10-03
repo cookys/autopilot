@@ -1,0 +1,6 @@
+g3bihah v1 first 1791036337544 session.start surface=terminal | ticks 27 first tick 1791036338561 last 1791036364599 | gap ms min/max/mean 1001 1003 1001 | events: session.start surface=terminal
+gtiizdr v2 first 1791036365132 session.start surface=terminal | ticks 21 first tick 1791036366151 last 1791036386193 | gap ms min/max/mean 1001 1010 1002 | events: session.start surface=terminal
+grsu9zd v3 first 1791036386911 session.start surface=terminal | ticks 18 first tick 1791036387926 last 1791036404965 | gap ms min/max/mean 1001 1007 1002 | events: session.start surface=terminal;session.end reason=prompt_input_exit cancelled
+handover g3bihah -> gtiizdr : last old tick 1791036364599 first new line 1791036365132 delta ms 533 (neg = overlap)
+handover gtiizdr -> grsu9zd : last old tick 1791036386193 first new line 1791036386911 delta ms 718 (neg = overlap)
+ticks in last 5s across all gens: 0 by gen {}

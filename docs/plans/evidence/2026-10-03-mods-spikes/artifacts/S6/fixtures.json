@@ -1,0 +1,22 @@
+{
+ "fixtures": [
+  {
+   "id": "trial-Stop",
+   "event": "Stop",
+   "mode": "direct",
+   "enabled": false,
+   "expected_child_count": 0,
+   "enabled_hook_ids": [],
+   "payload_sha256": "0df8533570aa2fa73d15c6e6e89f9d422847aa4b754c908624fa0f8f4e3cec4f"
+  },
+  {
+   "id": "trial-PreToolUse",
+   "event": "PreToolUse",
+   "mode": "direct",
+   "enabled": false,
+   "expected_child_count": 0,
+   "enabled_hook_ids": [],
+   "payload_sha256": "435e0dbbf63e7598caf2e2c8ea2e372ac7b37031ecb5d3521d8d9494a1be5150"
+  }
+ ]
+}

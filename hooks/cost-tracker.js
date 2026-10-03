@@ -23,11 +23,29 @@ const os = require('os');
 const path = require('path');
 // default-on since v2.35.15 (was opt-in); opt out with AUTOPILOT_COST_TRACKER=false.
 
-const { parseAssistantTurns, aggregateSince } = require('./cost-tracker-lib');
+const { parseAssistantTurns, aggregateSince, getRate, hasPriceRow, CACHE_READ_MULT } = require('./cost-tracker-lib');
 const { resolveTranscriptPath } = require('./transcript-reader-lib');
 
 function sanitizeSession(s) {
   return String(s || 'unknown').replace(/[^A-Za-z0-9._-]/g, '_') || 'unknown';
+}
+
+// Real window fill, read the way context-budget reads it: the statusline live file
+// (<live-dir>/context/<sid>.json), fresh <=120s and schema-valid, else null (unknown).
+// Never throws.
+function readContextNow(sid) {
+  try {
+    const { resolveLiveDir, sanitizeSessionId, readLive } = require('../scripts/lib/live-state-dir.js');
+    const live = readLive(resolveLiveDir().base, sanitizeSessionId(sid), { kind: 'main' });
+    const cw = live && live.context_window;
+    if (!cw) return null;
+    const window = Number(cw.context_window_size);
+    const tokens = Number(cw.total_input_tokens);
+    if (!(window > 0) || !Number.isFinite(tokens)) return null;
+    const pct = Number.isFinite(Number(cw.used_percentage))
+      ? Math.round(Number(cw.used_percentage)) : Math.round((tokens / window) * 100);
+    return { pct, tokens, window };
+  } catch { return null; }
 }
 
 try {
@@ -122,19 +140,44 @@ try {
     } catch { /* default */ }
     const envT = Number(process.env.AUTOPILOT_COST_TRACKER_CACHE_READ_WARN);
     if (Number.isFinite(envT) && envT > 0) threshold = envT;
+    // What this counts: the SUM of cache_read_tokens over every call of this session
+    // (calls x window) — a spend figure, NOT how full the window is. Alongside it we gather
+    // the call count and its dollar share, so the message can say so.
     let cacheRead = 0;
+    let calls = 0;
+    let readUsd = 0;
+    let totalUsd = 0;
+    let priced = true;
     for (const line of fs.readFileSync(costsFile, 'utf8').split('\n')) {
       if (!line.trim()) continue;
-      try { const r = JSON.parse(line); if (r.session === session) cacheRead += Number(r.cache_read_tokens) || 0; } catch { /* skip */ }
+      try {
+        const r = JSON.parse(line);
+        if (r.session !== session) continue;
+        const cr = Number(r.cache_read_tokens) || 0;
+        cacheRead += cr;
+        calls += Number(r.turns) || 0;
+        totalUsd += Number(r.cost_usd) || 0;
+        if (!hasPriceRow(r.model)) priced = false;
+        else readUsd += (cr * getRate(r.model).input * CACHE_READ_MULT) / 1_000_000;
+      } catch { /* skip */ }
     }
     const warned = Number(cursor.cache_read_warned) || 0;
     let next = warned ? warned * 2 : threshold;
     if (cacheRead >= next) {
       while (cacheRead >= next * 2) next *= 2;
-      process.stderr.write(`cost-tracker: session ${session} has read ${cacheRead.toLocaleString('en-US')} cache tokens cumulatively (threshold ${next.toLocaleString('en-US')}) — a long-lived context is being re-read on every call; write a handoff and /clear, or split the work (docs/ironlaw-to-gate-map.md #6).\n`);
+      const fmt = (n) => n.toLocaleString('en-US');
+      const spend = priced && totalUsd > 0
+        ? `~$${readUsd.toFixed(2)} ≈ ${Math.round((readUsd / totalUsd) * 100)}% of this session's spend, at ledger rates`
+        : 'cost unknown (a model in this session has no price row)';
+      const ctx = readContextNow(input.session_id || session);
+      const ctxText = ctx
+        ? `context now ${ctx.pct}% (${fmt(ctx.tokens)} of ${fmt(ctx.window)} tokens)`
+        : 'context % unknown (no fresh statusline live file)';
+      const msg = `cost-tracker: session ${session} has read ${fmt(cacheRead)} cache tokens cumulatively across ${fmt(calls)} calls (threshold ${fmt(next)}) — ${spend}; this is a cost sum (calls × window), not window fill. ${ctxText}. Write a handoff and /clear, or split the work.`;
+      process.stderr.write(`${msg}\n`);
       try {
         const sid = input.session_id;
-        const qtext = `cost-tracker: session ${session} has read ${cacheRead.toLocaleString('en-US')} cache tokens cumulatively (threshold ${next.toLocaleString('en-US')}) — a long-lived context is being re-read on every call; write a handoff and /clear, or split the work (docs/ironlaw-to-gate-map.md #6).`;
+        const qtext = msg;
         if (typeof sid === 'string' && sid.length > 0) {
           const { resolveLiveDir, sanitizeSessionId } = require('../scripts/lib/live-state-dir.js');
           const qdir = path.join(resolveLiveDir().base, 'advisory-queue');

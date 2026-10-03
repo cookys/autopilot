@@ -40,6 +40,13 @@ function getRate(model) {
   return PRICING.sonnet; // default (incl. unknown/sonnet)
 }
 
+// True when the model has its OWN price row (getRate's sonnet fallback is not a price row).
+// Callers that print dollars use this to say "cost unknown" instead of presenting a guess.
+function hasPriceRow(model) {
+  const m = String(model || '').toLowerCase();
+  return m.includes('haiku') || m.includes('opus') || m.includes('sonnet');
+}
+
 // Parse transcript JSONL text → ordered list of assistant-turn usage records.
 // Each: { model, input, output, cacheRead, cacheWrite }. Order = file order
 // (append-only), which the cursor relies on.
@@ -105,5 +112,5 @@ function aggregateSince(turns, startIndex) {
 
 module.exports = {
   PRICING, CACHE_READ_MULT, CACHE_WRITE_MULT,
-  getRate, parseAssistantTurns, costOf, aggregateSince,
+  getRate, hasPriceRow, parseAssistantTurns, costOf, aggregateSince,
 };

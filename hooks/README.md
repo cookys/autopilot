@@ -148,6 +148,8 @@ Event support (probe evidence: [`docs/plans/evidence/2026-09-26-hook-channel-pro
 
 The queue/relay path uses `additionalContext` on UserPromptSubmit: it is the same channel group T already uses, and it stays out of human-facing `-p` stdout.
 
+**Wording rule:** a model-facing advisory must name what it counted (a cumulative sum is not a level) and carry the contradicting-axis number when it is cheaply available (e.g. cost-tracker's cache-read sum prints the real context % from the live file) — a bare proxy gets relayed to the operator as fact.
+
 ## Tier A — Default-On (19 hooks)
 
 Registered in `hooks.json`. Active for all autopilot users. All are non-destructive and safe for any project. (Three are wired here but **inert by default** — `session-handoff` no-ops unless handoff is enabled, `version-drift-check` is silent outside a behind-upstream dev clone, `run-approval-gate` does nothing until `run_approval.mode` is set — yet they MUST be wired in `hooks.json` because `${CLAUDE_PLUGIN_ROOT}` does not expand in a user's `settings.json`.)

@@ -846,3 +846,27 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: PEER-REPORTED cuda/chatgpt-tunnel 2026-10-03, msg 01M406CPGN828NHBQJJMAD01M9
 - **Pointer**: docs/backlog/dispatch-plan-review-terminal-ticket-visibility.md
 - **Context**: a reused ticket whose session is terminal returns the old verdict with 0 seat calls; emit a named ticket_session_already_terminal message.
+
+### Population B switch suite flakes with a stale entry under parallel runs
+- **Status**: open
+- **Trigger**: FIRED 2026-10-03 — seen twice (w112 G check, w113 hand I); green on solo rerun
+- **Effort**: S
+- **Source**: w112 row G check and w113 hand I
+- **Pointer**: docs/backlog/population-b-switch-suite-flakes-with-a-stale-entry-under-parallel-runs.md
+- **Context**: stale-entry report from the Population B switch suite is intermittent under --parallel; find the race (tree another suite mutates, shared temp path).
+
+### cost-tracker/cost-fuse pricing table has no fable row and opus-5.x rates are hard-coded unverified
+- **Status**: open
+- **Trigger**: next touch of hooks/cost-tracker-lib.js
+- **Effort**: S
+- **Source**: w113 hand I review
+- **Pointer**: docs/backlog/cost-tracker-cost-fuse-pricing-table-has-no-fable-row-and-opus-5-x-rates-a.md
+- **Context**: verify rates against official Anthropic pricing with URL; until then fable spend is undercounted in both hooks.
+
+### cost-fuse dispatch exemption prefix and session-id collisions
+- **Status**: open
+- **Trigger**: next touch of hooks/cost-fuse.js
+- **Effort**: S
+- **Source**: w113 hand I review
+- **Pointer**: docs/backlog/cost-fuse-dispatch-exemption-prefix-and-session-id-collisions.md
+- **Context**: exemption prefix admits an env assignment or any path prefix of the rail (warn-mode, advisory); safe() may collide distinct session ids.

@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.36.113 — cost-tracker 警告顯示真實 context %；cost-fuse 顯示 session／全主機花費且派工豁免只在 warn 模式
+
+- **問題與改動（逐列）**：
+  - （I）cost-tracker 的 50M 警告把累積 cache read（呼叫數 × window）說成 context 很重，並指向無關的 gate-map 列。現在它說明所計的是「K 次呼叫累計」與以帳本費率換算的金額占比（無價格列的模型顯示 cost unknown），並附上 statusline live 檔的真實 context %（讀不到則顯示 context % unknown）；只有 context % ≥ 50（可用 `cost_tracker.context_clear_pct` 或 `AUTOPILOT_COST_TRACKER_CLEAR_PCT` 調整）才建議 handoff 與 /clear。cost-fuse 警告顯示本 session 與全主機當日花費（門檻不變）；單一 `scripts/dispatch-*` 派工命令的豁免只在 warn 模式生效，且拒絕背景化串接與 process substitution。
+- **驗證**：整套 `--parallel 16` 395 檔全過；check-js-syntax、codex 鏡像、validate.sh 通過。review：claude-fable-5-1 SHIP-AS-IS（review-1791012999-2445836-3521）。
+- **已知後續（review 🔵）**：見 `docs/BACKLOG.md` 新增三列；另有 `hasPriceRow` 重複 getRate 的子字串比對（應改由 `PRICING` 鍵推導）、無 session id 時 cost-fuse 顯示 `$0.00` 而非 unknown、`readContextNow` 在 `total_input_tokens` 非數值時丟掉可用的 `used_percentage`。
+
+prose-justification: 本版不新增 skill 或 reference 文字；僅改 cost-tracker／cost-fuse hook 訊息與其測試。
+
 ## v2.36.112 — 經過 BOUNDARY_REJECTED 的 campaign 可到 terminal success；五個恆綠套件改為會 finalize；final panel 席位 artifact 會被回收；v2.36.111 後續修補
 
 - **問題與改動（逐列）**：

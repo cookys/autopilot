@@ -1,5 +1,5 @@
 ## 目標
-接續 autopilot 維護。2026-10-02～03 這個 session 出了 v2.36.105 到 v2.36.112 八版，另有測試修正、知識落地和一份 mods 調研。下一步先讓 owner 回答 mods／cockpit 的開放問題，再從 BACKLOG 已觸發的列接著做。
+接續 autopilot 維護。2026-10-02～03 這個 session 出了 v2.36.105 到 v2.36.113 九版，另有測試修正、知識落地，以及 mods、喚醒機制、fleet cockpit 邊界三份調研。下一步先讓 owner 回答 mods／cockpit 的開放問題，再從 BACKLOG 已觸發的列接著做。
 
 ## 現況
 - 分支 `develop`，最新 release 是 v2.36.113（`b02cb94f`）；本檔所在的 closeout commit 疊在上面，HEAD 以 `git log --oneline -1` 為準。工作區只剩兩個別的 session 留下的未追蹤目錄（`docs/plans/evidence/2026-10-01-*`），不是這個 session 的，不要動。

@@ -261,12 +261,17 @@ function resolveSessionModel(payload, costsFile) {
  * A single dispatch-rail invocation (`[bash|node] .../scripts/dispatch-*.{sh,js}`, optional
  * trailing redirects / `&`): that command IS the move the fuse asks for (hand the work to a
  * cheaper engine), so it must not trip the fuse. Anything chained (`;`, `&&`, `||`, pipes,
- * substitution, newlines) is not exempt.
+ * substitution, a bare `&`, newlines) is not exempt. Applied in WARN mode only (see main):
+ * shell grammar cannot be made bypass-proof by regex, so block mode exempts nothing.
  */
 function isDispatchBash(cmd) {
   if (typeof cmd !== 'string') return false;
   const t = cmd.trim();
-  if (!t || /[;`|\n]|&&|\$\(/.test(t)) return false;
+  if (!t || /[;`|\n]|&&|\$\(|[<>]\(/.test(t)) return false;
+  // A bare `&` chains a second command; only redirect forms (`2>&1`, `&>`) and ONE trailing
+  // backgrounding `&` are tolerated.
+  const noRedir = t.replace(/\d*>&\d+/g, '').replace(/&>>?/g, '').replace(/\s*&\s*$/, '');
+  if (noRedir.includes('&')) return false;
   return /^(?:(?:bash|node)\s+)?\S*scripts\/dispatch-[A-Za-z0-9._-]+\.(?:sh|js)(?:\s|$)/.test(t);
 }
 
@@ -287,7 +292,7 @@ function sumTodayTierSpend(costsFile, tiersSet, onlySession) {
         if (!ts.startsWith(todayPrefix)) continue;
         const model = row.model;
         if (!model) continue;
-        if (onlySession && row.session !== onlySession) continue;
+        if (onlySession && safe(row.session) !== safe(onlySession)) continue;
         const tier = tierOf(model);
         if (tiersSet.has(tier)) {
           const cost = Number(row.cost_usd);
@@ -351,7 +356,7 @@ function sumTodayTierSpend(costsFile, tiersSet, onlySession) {
     // Over threshold! Check if tool is read-only Bash
     const toolName = payload.tool_name || '';
     const toolInput = payload.tool_input || {};
-    if (toolName === 'Bash' && (isReadOnlyBash(toolInput.command) || isDispatchBash(toolInput.command))) {
+    if (toolName === 'Bash' && (isReadOnlyBash(toolInput.command) || (cfg.mode === 'warn' && isDispatchBash(toolInput.command)))) {
       process.exit(0);
     }
 

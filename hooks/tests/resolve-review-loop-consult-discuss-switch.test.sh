@@ -372,6 +372,7 @@ hooks/tests/engine-lifecycle-observation.test.sh|partial roster fixture, resolve
 hooks/tests/final-panel-kimi-agy-intake.test.sh|kimi/agy final-panel intake fixture roster (lands with the in-flight release)
 hooks/tests/final-panel-seat-resume.test.sh|in-process roster object literal for a seat-resume fixture, never resolved from config; consult/discuss not involved
 hooks/tests/lib/final-panel-seat-xproc-driver.js|in-process roster object literal for a seat-resume fixture, never resolved from config; consult/discuss not involved
+hooks/tests/lib/boundary-resume-terminal-driver.js|in-process roster object literal for a seat-resume fixture, never resolved from config; consult/discuss not involved
 hooks/tests/fixtures/implementation-campaign/probe-red-baseline.js|campaign probe fixture roster literal
 hooks/tests/fixtures/pre-consult-discuss-review-loop-config.md|frozen pre-D6 shipped-template copy
 hooks/tests/fixtures/review-loop-config.frozen-2026-09-13.md|frozen 2026-09-13 review-loop config fixture

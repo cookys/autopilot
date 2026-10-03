@@ -163,7 +163,7 @@ O：owner 不用問「怎麼這麼慢」就知道誰在跑、跑多久、最後 
 ## 5. Test / validation
 - 腳本閘：各 `hooks/tests/*.test.sh`；`claude plugin test mods/live`；`sync-all.sh`；`validate-json-schema.js`；grep 閘（`prompt.submit`、`asUser`、`process.spawn`）。
 - 真跑（evidence）：P1 `/l5` 一回合＋band 時戳＋四個觸發各一次 refresh 截圖；P3 三環境 `--once`；P4 一次 managed campaign 的投影與 `progress.json` heartbeat 紀錄。
-- human-gated：owner 經反向代理在手機實機看頁面版型一次；D1／D2 已於 2026-10-03 裁決、D4 由 S1 結案。
+- human-gated：owner 經反向代理在手機實機看頁面版型一次；D1／D2／D3 已於 2026-10-03 裁決、D4 由 S1 結案。
 - 不算證據：綠燈 suite 沒真跑派工、mod 在 `claude -p` 的沉默、`State.summary`、「腳本存在」、peer 自述（revival.3d 的系統未經本次核驗）。
 
 ## 6. Risks + inversion
@@ -199,7 +199,7 @@ O：owner 不用問「怎麼這麼慢」就知道誰在跑、跑多久、最後 
 |---|---|---|---|---|
 | D1 | 里程碑匯出的圖放哪、留多久 | **已決（owner 2026-10-03，採預設）**：原圖與 bundle 留 `~/.autopilot/review/<project_key>/`（durable，預設 90 天後才 reap）；git 只收 `compare-record.json`＋≤ 200 KB 預覽 | 全進 git（上限或 LFS） | 圖量大（8460 一回合 135 張）；sha256 可比對但不能重建 bytes，所以 served root 要當 durable 存放處 |
 | D2 | review 頁預設公開發佈？ | **已決（owner 2026-10-03）**：整台機器一個 server、一個 port，只綁 127.0.0.1，所有專案在 `/<project_key>/…` 底下、根目錄有專案索引；遠端看走使用者自己的反向代理（文件化，不內建）；不做 LAN bind 預設；Artifact 不在本 plan | 預設發 Artifact；LAN bind | owner 要「一個 port 看很多專案、可以 rp 回 localhost」；頁含內部路徑與 commit，只綁 localhost 加代理比 LAN bind 安全 |
-| D3 | 回合邊界 | 一個 job = 一個執行根 `root_run_id`；campaign 兩 id 並列顯示、不當同義詞；無 root 的 dev-flow 回合 `unbound`，要有 job 就在 `session-mode.js set` 配 `AUTOPILOT_ROOT_RUN_ID` | dev-flow 每 phase 一 job | astra A01；`branch@start-sha` 會把同起點兩次執行合併 |
+| D3 | 回合邊界 | **已決（owner 2026-10-03，採預設）**：一個 job = 一個執行根 `root_run_id`；campaign 兩 id 並列顯示、不當同義詞；無 root 的 dev-flow 回合 `unbound`，要有 job 就在 `session-mode.js set` 配 `AUTOPILOT_ROOT_RUN_ID` | dev-flow 每 phase 一 job | astra A01；`branch@start-sha` 會把同起點兩次執行合併 |
 | D4 | **結案（S1 = yes，2026-10-03）**：S1 = no 時要不要同 repo 第二個 plugin | 不要；classic 完整、mod `unavailable` | 第二 plugin（要實測一次安裝） | owner 要一次安裝；資料夾同 repo ≠ 同 plugin |
 
 ## Review log

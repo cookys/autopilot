@@ -244,6 +244,11 @@ function classifyFullDiffReviewFault(fullDiff) {
       && /^final_panel_seat_(no_verdict|transport_failed|parser_failed)$/.test(fullDiff.reason)) {
     return 'gate_transient';
   }
+  if (Array.isArray(fullDiff.final_panel_seat_receipts)
+      && fullDiff.final_panel_seat_receipts.some((seat) => (
+        seat && seat.status === 'attempt_budget_exhausted'))) {
+    return 'terminal';
+  }
   if (Array.isArray(fullDiff.final_panel_seat_receipts)) {
     const seatFault = fullDiff.final_panel_seat_receipts.some((seat) => seat && (
       seat.status === 'no_verdict'
@@ -435,6 +440,7 @@ const FINAL_PANEL_FAILURE_STATUSES = new Set([
   'transport_failed',
   'parser_failed',
   'precondition_failed',
+  'attempt_budget_exhausted',
 ]);
 
 function hasFinalPanelSeatKeys(seat) {
@@ -472,6 +478,7 @@ function validateFinalPanelReceipt(receipt, expectedMinimum) {
   }
   const tuples = new Set();
   let firstFailure = null;
+  let budgetFailure = null;
   for (const seat of receipt.final_panel_seat_receipts) {
     if (!hasFinalPanelSeatKeys(seat)
         || seat.schema_version !== 1
@@ -512,10 +519,14 @@ function validateFinalPanelReceipt(receipt, expectedMinimum) {
         && seat.review_digest === null
         && seat.reason === `final_panel_seat_${seat.status}`) {
       firstFailure ||= seat.reason;
+      if (seat.status === 'attempt_budget_exhausted') budgetFailure ||= seat.reason;
     } else {
       return { passed: false, reason: 'final_panel_metadata_incomplete', ...detail };
     }
   }
+  // A seat that spent its attempt budget is the named terminal reason; it outranks the
+  // transient faults of its siblings so the campaign does not retry forever.
+  if (budgetFailure) firstFailure = budgetFailure;
   for (const seat of receipt.final_panel_seat_receipts) {
     if (Object.prototype.hasOwnProperty.call(seat, 'packet_hash')) {
       if (typeof seat.packet_hash !== 'string' || !/^[0-9a-f]{64}$/u.test(seat.packet_hash)

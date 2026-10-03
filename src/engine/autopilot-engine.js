@@ -21,6 +21,7 @@ const { dispatchReviewJson, dispatchReviewJsonBatch, buildPacketOnce } = require
 const { dispatchImplementJson } = require('../runners/implementer');
 const { createEngineLifecycleObservationSession } = require('./engine-lifecycle-observation');
 const { finalPanelSeatQualified } = require('./final-panel-qualification');
+const finalPanelSeatStore = require('./final-panel-seat-store');
 const {
   consumeStrictL5ProviderReadiness,
   isStrictL5ProviderReadinessAuthority,
@@ -5435,6 +5436,9 @@ class AutopilotEngine {
         outcome.phase === 'reviewer_qualification' || outcome.phase === 'precondition_failed'
       )) {
         status = 'precondition_failed';
+      } else if (!isReviewed && outcome
+          && outcome.phase === finalPanelSeatStore.FINAL_PANEL_SEAT_BUDGET_PHASE) {
+        status = finalPanelSeatStore.FINAL_PANEL_SEAT_BUDGET_STATUS;
       }
       const body = {
         schema_version: 1,
@@ -5608,8 +5612,68 @@ class AutopilotEngine {
         }
       }
       try {
+      // Per-seat resume reuse (ADR-0001: re-derived from the stored seat artifact bound to
+      // this exact packet, never from a flag). Fail-open: any error leaves the store off.
+      const seatStoreCtx = (() => {
+        try {
+          if (!reviewInput || !reviewInput.candidate || !isStr(reviewInput.candidate.commit)
+              || !isStr(loopCwd) || !isStr(base)) return null;
+          const commonForStore = workOrder.resolveGitCommonDir(loopCwd);
+          if (!commonForStore) return null;
+          const bindingPrepared = prepareReview({
+            candidate: reviewInput.candidate,
+            verification: reviewInput.verification,
+            scope: 'final',
+            repair_generation: reviewInput.repair_generation,
+            review_input_mode: reviewInput.review_input_mode,
+            vertical_failed: reviewInput.vertical_failed,
+          });
+          if (!bindingPrepared || bindingPrepared.prepared !== true) return null;
+          const a = bindingPrepared.authority;
+          return {
+            root: path.join(commonForStore, 'autopilot', 'final-panel-seats'),
+            campaignId: campaignControl.campaign_id,
+            station: stationKind,
+            treeSha: reviewInput.candidate.tree_sha,
+            packetHash: sharedPacket && isStr(sharedPacket.packet_hash)
+              ? sharedPacket.packet_hash : null,
+            inputBinding: campaignCanonicalDigest({
+              candidate_tree_sha: a.candidate_tree_sha,
+              base_sha: a.base_sha,
+              diff_digest: a.diff_digest,
+              spec_digest: a.spec_digest,
+              review_input_digest: a.review_input_digest,
+            }),
+          };
+        } catch (_error) {
+          return null;
+        }
+      })();
+      const seatTrace = [];
+      const seatAttempts = new Map();
       const preparedSeats = [];
       const outcomes = seats.map((seat, index) => {
+        let storeCtx = null;
+        if (seatStoreCtx) {
+          storeCtx = { ...seatStoreCtx, seat, seatIndex: index };
+          const looked = finalPanelSeatStore.lookupSeat(storeCtx, campaignCanonicalDigest);
+          if (looked.action === 'reuse') {
+            seatTrace.push(`final_panel_seat_reused:${index + 1}`);
+            return { seat, outcome: looked.outcome };
+          }
+          if (looked.action === 'exhausted') {
+            seatTrace.push(`final_panel_seat_attempt_budget_exhausted:${index + 1}`);
+            return {
+              seat,
+              outcome: {
+                reviewed: false,
+                phase: finalPanelSeatStore.FINAL_PANEL_SEAT_BUDGET_PHASE,
+                reason: finalPanelSeatStore.FINAL_PANEL_SEAT_BUDGET_REASON,
+              },
+            };
+          }
+          seatAttempts.set(index, looked.attempts + 1);
+        }
         const reviewRoster = {
           ...roster,
           reviewer_runner: seat.runner,
@@ -5630,6 +5694,7 @@ class AutopilotEngine {
             },
           };
         }
+        if (storeCtx) finalPanelSeatStore.recordAttempt(storeCtx, seatAttempts.get(index) - 1);
         const outcome = performReview({
           ...reviewInput,
           scope: 'final',
@@ -5644,6 +5709,9 @@ class AutopilotEngine {
         if (outcome && outcome.deferred === true) {
           preparedSeats.push({ seat, index, deferred: outcome });
           return { seat, outcome: null, deferred: true, index };
+        }
+        if (storeCtx && outcome && outcome.reviewed === true) {
+          finalPanelSeatStore.recordVerdict(storeCtx, seatAttempts.get(index), outcome);
         }
         return { seat, outcome };
       });
@@ -5675,6 +5743,13 @@ class AutopilotEngine {
             sharedPacket,
           });
           outcomes[entry.index] = { seat: entry.seat, outcome: finished };
+          if (seatStoreCtx && finished && finished.reviewed === true) {
+            finalPanelSeatStore.recordVerdict(
+              { ...seatStoreCtx, seat: entry.seat, seatIndex: entry.index },
+              seatAttempts.get(entry.index),
+              finished,
+            );
+          }
         }
       }
       const panelEndedAt = this.now();
@@ -5818,7 +5893,8 @@ class AutopilotEngine {
         budget_source: budgetSource,
         seat_timeout_seconds: seatTimeoutSeconds,
         ...(stationKind === 'panel' && packetHash ? { packet_hash: packetHash } : {}),
-        ...(driftTrace.length > 0 ? { trace: driftTrace } : {}),
+        ...(driftTrace.length + seatTrace.length > 0
+          ? { trace: [...driftTrace, ...seatTrace] } : {}),
       };
       if (!panelReviewed && stationKind === 'panel') {
         const validation = validateFinalPanelReceipt(receipt, minPanelSize);

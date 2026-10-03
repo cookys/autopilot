@@ -287,7 +287,7 @@
         "family": { "type": "string", "minLength": 1 },
         "status": {
           "type": "string",
-          "enum": ["reviewed", "no_verdict", "transport_failed", "parser_failed", "precondition_failed"]
+          "enum": ["reviewed", "no_verdict", "transport_failed", "parser_failed", "precondition_failed", "attempt_budget_exhausted"]
         },
         "verdict": { "type": ["string", "null"] },
         "review_digest": { "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },

@@ -1,5 +1,5 @@
 ## 目標
-接續 autopilot 維護。2026-10-02～03 這個 session 出了 v2.36.105 到 v2.36.113 九版，另有測試修正、知識落地，以及 mods、喚醒機制、fleet cockpit 邊界三份調研。下一步先讓 owner 回答 mods／cockpit 的開放問題，再從 BACKLOG 已觸發的列接著做。
+接續 autopilot 維護。2026-10-02～03 這個 session 出了 v2.36.105 到 v2.36.114 十版，另有測試修正、知識落地，以及 mods、喚醒機制、fleet cockpit 邊界三份調研。下一步先讓 owner 回答 mods／cockpit 的開放問題，再從 BACKLOG 已觸發的列接著做。
 
 ## 現況
 - v2.36.114（證據 `docs/plans/evidence/2026-10-03-v114-repair-at-file-cap/`）：campaign 第一輪已碰滿 scope 路徑時仍可修復（12/12 同路徑 repair at the file cap，peer 回報）。
@@ -32,7 +32,7 @@
 - mods 只是 Claude Code 專屬的增強層，永遠不是唯一路徑；既有 hook 與腳本照舊保留。
 
 ## 下一步
-1. mods 計畫 `docs/plans/2026-10-03-mods-visible-dispatch.md`（R2）正在跑 hetero plan review：下個 session 先讀審查結果，把 findings 交給 fable（session `autopilot--claude-2`）改 R3，再做 P0 spikes，然後 P1。owner 仍待決定：D1 截圖存放位置、D2 Artifact 預設、D4 若 modules 無法與 classic hook 共載是否另開第二個 plugin；D3 已由 astra 定案（一個 job 一個執行根）。
+1. mods 計畫 `docs/plans/2026-10-03-mods-visible-dispatch.md`（R2，be21eac1）的 G1 plan review 已經跑完（ticket `mods-g1`，logical id `mods-visible-dispatch-2026-10-03`）。兩席都判 CONDITIONAL：claude-fable-5-1 架構席 13 條、glm-5.2 rails 席 2 條，原始輸出在 `docs/plans/evidence/2026-10-03-mods-visible-dispatch-design/plan-review-g1/`。depth-0 已經裁決：接受 3 條 blocking（R1 `project_key` 沒有定義、R2 三個 dispatcher 的 shell 版 repo_identity 和 `repoIdentity()` 的一致性沒有被釘住、R5 flock 的前提和退路）和 9 條 non-blocking，並交給 fable（fleet `autopilot--claude-2`）修 R3。下一步：等 fable 回 R3 的路徑，落地進 repo，然後跑 G2（最多到 G2，dispositions 的 generation=1）。G2 要沿用同一個 state 目錄，原本在上一個 session 的 scratchpad，路徑是 `/tmp/claude-1000/-home-cookys-projects-autopilot/76c98aac-1838-4acb-bedd-e36d6bed7724/scratchpad/mods-plan/review/state/`；如果那個目錄已經不在，就依 dispatch-plan-review 的規則用新的 logical id 和 ticket 重開。注意：`resolve-review-loop.sh` 對 plan review 只解析出單一家族（native-fallback），這次 G1 的兩席是從 `.claude/review-loop-config.md` 的 qc_panel 挑出來的；架構席的 checkout 裡沒有被引用的 source，所以和 rail 相關的論點只有 glm 席看過。owner 仍待決定：D1 截圖存放位置、D2 Artifact 預設、D4（modules 若不能和 classic hook 一起載入，是否另開第二個 plugin）；D3 已定案（一個 job 一個執行根）。astra 是 fleet 上的 `fleet-cli`（GPT-6-Astra），回給她的訊息會落在這台主機共用的 fleet-cli 收件匣。
 2. v2.36.112 審查留下的 🔵 後續（S）：`docs/backlog/v2-36-112-review-follow-ups.md`，含 run.sh 要浮出 `SKIP [` 行。
 3. dispatch-plan-review 重用已終態 ticket 時是靜默 0 call（S，peer 回報，low）：`docs/backlog/dispatch-plan-review-terminal-ticket-visibility.md`。
 4. run.sh 的 group INT 要等目前測試檔結束才生效（S，觸發條件未到）。

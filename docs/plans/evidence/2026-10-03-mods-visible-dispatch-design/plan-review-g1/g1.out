@@ -1,0 +1,655 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "mods-g1",
+  "logical_plan_id": "mods-visible-dispatch-2026-10-03",
+  "session_id": "mods-g1",
+  "session_key": "e83ad58235fc410656abe9d0d9c2e21173a5ae2d8872aa30fc481fc0d5b82e27",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "1540330d955a8eed7afe09fd9d1bd329a65696fde23bbdc1f2deca3c236f19c1",
+  "manifest_sha256": "cb9739fc41a74717fd0c4fe07f86784d0f785ea3ee7bd6c2e69851f881b1dbb3",
+  "plan_sha256": "10feaa98c181670f039ddabca3303bf2cec40946c8debcb171276261a715bf4a",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "claude_architecture",
+      "target_id": "claude_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "claude-native",
+          "model": "claude-fable-5-1",
+          "operation": "plan-review",
+          "request_digest": "229095ea31185900f3af433f972fb78aff63695eb9a1a3c20c6ae7e2893ee03c"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 5,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "7afb7691ffe6ca6df3ab53f8fae5b16375fd8274962ed0f841a6e4c38422f791",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-y2lkcz",
+          "digest": "7afb7691ffe6ca6df3ab53f8fae5b16375fd8274962ed0f841a6e4c38422f791"
+        },
+        "receipt_digest": "62a0b84c03fb5322a78ce75d8194b1a60b1a69797e9da85637da865927e97d29"
+      },
+      "transport_status": "exit_failure",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "claude_architecture",
+      "target_id": "claude_architecture",
+      "attempt": 2,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "claude-native",
+          "model": "claude-fable-5-1",
+          "operation": "plan-review",
+          "request_digest": "df671af6abfd52cd023f5da36822a4ad1d2f71588bc5d6bdeee42141b837358d"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "13814927b5c2c447870c54e7a5801dee6582aec0f87bdcd4563beeae9aa05922",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-ukpCTo",
+          "digest": "13814927b5c2c447870c54e7a5801dee6582aec0f87bdcd4563beeae9aa05922"
+        },
+        "receipt_digest": "f7049d2c8de587e43a893c629d747785eeacff5318b7b0c94a59647949b182a3"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "glm_rails",
+      "target_id": "glm_rails",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "eee7309bd1b04c7e00081bd3bdadb3a9c27c8e53f4e0a02b5a32706a51ffad3b"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 5,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-xuwdUc",
+          "digest": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050"
+        },
+        "receipt_digest": "1133ddc46fdf1a9c4f142799a4db2dec66e270f7d3b0582e2300d8011d281170"
+      },
+      "transport_status": "exit_failure",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "available",
+      "unratified": {
+        "payload": {
+          "verdict": "READY",
+          "findings": []
+        },
+        "parser_status": "strict",
+        "attempt": 1,
+        "target_id": "glm_rails",
+        "family": "zhipu",
+        "request_digest": "eee7309bd1b04c7e00081bd3bdadb3a9c27c8e53f4e0a02b5a32706a51ffad3b",
+        "raw_digest": "2838c7ce70da252a0f648fbdb3e50c32d2b94096779a357af84a91efd3bb8050"
+      }
+    },
+    {
+      "seat_id": "glm_rails",
+      "target_id": "glm_rails",
+      "attempt": 2,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "b0bac6fb0f61cfac73c0c81fa9c7d80f298c3fb60764b29fa79f01a9d3847f28"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "76c17584f79818734bc13fc6251e9c05a0a36c5acec522dc55b3496e474506c2",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-hUvIJt",
+          "digest": "76c17584f79818734bc13fc6251e9c05a0a36c5acec522dc55b3496e474506c2"
+        },
+        "receipt_digest": "016a0a354f5e4cdc6ca651a4f8737f0ca520452136180498da5c902420b5b578"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "claude_architecture",
+      "target_id": "claude_architecture",
+      "family": "anthropic",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "glm_rails",
+      "target_id": "glm_rails",
+      "family": "zhipu",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "section 2.7 join table; P1a runs-watch.js scope file names and lock name; P1c register.ts scope derivation; scripts/session-mode.js marker",
+      "claim": "The plan uses project_key as the join segment in every file name (runs/<project_key>.lock, runs/<project_key>--<root_run_id>.json, review/<project_key>.index.lock, ~/.autopilot/review/<project_key>/) but never defines how project_key is derived from repo_identity, and the mod cannot derive it at all: P1c says scope is inferred from the session-mode marker's repo_root plus AUTOPILOT_ROOT_RUN_ID, yet repo_identity is git-common-dir:<realpath>, which requires running git (forbidden by section 2.5: no process spawn, no Node, no repo lib) and which differs from repo_root in a linked worktree. Env var access from the mod sandbox is also not among the verified API surfaces.",
+      "evidence": "Section 2.5 defines project = repo_identity = git-common-dir:<realpath> and forbids $.process in the mod. Section 2.7 lists repo_identity as the canonical key but no project_key row. P1a names files by <project_key> and uses '--' as a scope separator without stating that the key cannot contain '--' or path characters (repo_identity contains ':' and '/'). P1c: 'scope 由 ~/.autopilot/session-mode/<sid>.json 的 repo_root + AUTOPILOT_ROOT_RUN_ID 推'. No step writes repo_identity or root_run_id into the marker.",
+      "evidence_reference": "plan sections 2.5 (身分), 2.7, 3 (file map rows for runs-watch.js and session-mode.js), 4 P1a watcher paragraph, 4 P1c register.ts bullet",
+      "repair": "Add a project_key row to section 2.7: project_key = a fixed, filesystem-safe digest of repo_identity (for example first 16 hex of sha256) computed by one shared function in scripts/lib (used by runs-watch.js, render-review-page.js, session-mode.js, portfolio-replan.js). Have scripts/session-mode.js set write repo_identity, project_key, root_run_id (from AUTOPILOT_ROOT_RUN_ID) and session_id into the marker, and specify that the mod reads only the marker (via $.fs.read) and never computes identity or reads env. Extend S2 to read the marker from both terminal and desktop.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "claude_architecture",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "571c60e4d5027832b427bd723f2e597f3a5402877d1309722c5ef4ad1ae20205"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "scripts/dispatch-hetero.sh, scripts/dispatch-review.sh, scripts/dispatch-author.sh manifest field repo_identity; hooks/tests/manifest-repo-identity.test.sh",
+      "claim": "The shell derivation of repo_identity is underspecified and the named test does not pin parity with repoIdentity(): the file map says the value is computed from CONSUMING_REPO_ROOT / REPO_ROOT without stating precedence or whether all three scripts export both, and git rev-parse --git-common-dir returns a relative '.git' in a main worktree but an absolute path in a linked worktree, so a shell port that does not realpath the result relative to that root will produce a different string from the Node implementation and every --project filter will silently miss.",
+      "evidence": "Section 3 row: 'manifest 加 repo_identity（由 CONSUMING_REPO_ROOT／REPO_ROOT 算 git-common-dir:<realpath>）'. P1a: 'manifest-repo-identity.test.sh 斷言三種 role 都寫、舊 manifest 缺欄不炸' — no assertion that the written value equals repoIdentity(root) for a main checkout and a linked worktree, and no assertion for the case where CONSUMING_REPO_ROOT differs from REPO_ROOT. The cited task-runtime.js L36–46 is not present in this review checkout, so the exact normalisation it performs could not be compared.",
+      "evidence_reference": "plan section 3 (dispatch-*.sh row), section 4 P1a second bullet, section 2.6 compatibility impact",
+      "repair": "State the rule once in section 2.5 or 2.7: root = CONSUMING_REPO_ROOT if set, else REPO_ROOT; value = 'git-common-dir:' + realpath(git -C root rev-parse --git-common-dir resolved against root). Make manifest-repo-identity.test.sh assert, for each of the three roles, that the manifest value byte-equals node -e output of repoIdentity(root) in (a) a main checkout, (b) a git worktree add linked checkout, (c) CONSUMING_REPO_ROOT pointing at a different repo than REPO_ROOT. Also confirm no manifest JSON schema with additionalProperties false exists under schemas/ (not listed in the file map) before adding the field.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "claude_architecture",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "5b205f5d4681010769a57a18583f46a70291aa6da34b1e945cc02c3440c97f53"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "src/status/runs-watch.js writer lock; scripts/render-review-page.js index lock; scripts/session-mode.js set; --stop pid verification",
+      "claim": "The single-writer guarantee and the crash-recovery property both rest on flock semantics (lock released when the fd closes), but section 2.5 restricts implementation to Node built-ins, and Node has no flock. A plain lockfile does not release on crash, which would break the R-A04 recovery story (next session-mode set re-acquires after a crash). The plan also says --stop verifies the lock holder pid, but flock exposes no holder query.",
+      "evidence": "Section 2.5: 'Node ≥ 20.10，只用 built-ins'. P1a: 'flock -n <live-base>/runs/<project_key>.lock'; lifecycle: 'crash：lock 由 OS 釋放'; '--stop（核對 lock 持有者 pid 後送 SIGTERM）'. P1b: 'flock project 級 <live-base>/review/<project_key>.index.lock（手動跑 renderer 也要拿）'. No mechanism named for either lock that is reachable from Node built-ins.",
+      "evidence_reference": "plan sections 2.5 (Node built-ins), 4 P1a watcher and lifecycle paragraphs, 4 P1b 發佈 paragraph, section 6 row 'watcher 死了沒人重起'",
+      "repair": "Decide the mechanism explicitly: either (a) session-mode.js and the manual --watch path launch the watcher as flock -n <lock> node src/status/runs-watch.js ... (util-linux flock(1), documented as a platform dependency under section 2.6 like python3), with runs-watch.js writing writer.pid into the envelope immediately after start so --stop reads the pid from the envelope and signals it; or (b) runs-watch.js self-re-execs under flock(1) when not already wrapped. Apply the same choice to the index lock in render-review-page.js. Add a negative control: kill -9 the watcher, assert flock -n on the lock succeeds within one tick.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "claude_architecture",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0a671af5e9650f8b9dc0ab6b46484e14b87f1acdc8531342f8092c1c9a9d5bb7"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "scripts/render-review-page.js job publish (v-<ts>/ and current symlink); watcher --render vs manual renderer",
+      "claim": "The index publish is serialised by the project index lock, but the per-job current pointer switch is not: the watcher's debounced --render and a manual render-review-page.js run on the same job can each build a v-<ts>/ and rename current, and the slower process may win with an older published_at, leaving current pointing at the older version. The plan names only the index lock.",
+      "evidence": "P1b: '手動 render-review-page.js 同一路徑'; publish steps describe tmp symlink then rename(current.tmp, current) with no job-level lock and no monotonic check against the current target; the project index.lock is described as covering index.html only.",
+      "evidence_reference": "plan section 4 P1b 發佈 and 觸發 paragraphs",
+      "repair": "Hold the project index lock for the whole job publish (build, smoke, switch, index update) rather than only the index step, or before the rename compare the target of current with the new v-<ts> and skip the switch if the existing target is newer. Add this as a fourth publish scenario in render-review-page.test.sh.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_architecture",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "94c71c8efc913f81df12bfbfdecce4c7a57efd50496f4ecb6306039eaed910e9"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "future",
+      "severity": "non-blocking",
+      "affected_surface": "review page relative asset URLs under /<date>/<job>/current/",
+      "claim": "Because pages are served via the current symlink and reference assets relatively, a browser that loaded the old index.html and fetches assets after a switch resolves them in the new version directory; content-hashed names make this safe only while the asset still exists in the new version, otherwise the old page shows a broken image during that window.",
+      "evidence": "P1b: URL fixed at /<date>/<job>/current/index.html; bundle copies assets to <job>/assets/<sha256 前 12>.<ext> per version; previous version retained one generation but not reachable through current.",
+      "evidence_reference": "plan section 4 P1b bundle paragraph and 發佈 paragraph",
+      "repair": "No current change; follow-up only. If this is observed, link assets by version path (../v-<ts>/assets/...) or keep assets in a shared per-job assets/ pool reaped with the version directories.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_architecture",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "ecddcb60d98743c81d1de19917918242bdd2e1a3c86c16fee74037b0ac0ec0b8"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "P1c band field 'stalled K'; P1a runs --json field list",
+      "claim": "The band shows a 'stalled K' count but no P1a field produces it; the only stall notion in the plan is P3 liveness.stall (report-only), which lands after P1c. A datum without a stated source violates section 2.5's per-datum source rule and risks being derived from the process monitor.",
+      "evidence": "P1c band string: 'running N · oldest HH:MM · stalled K · last rc ...'. P1a new columns: elapsed_s, rc, final_status, project, source, fact_at, observed_at, probe_age_s, alive — no stalled. P3 source list includes liveness.stall (report-only).",
+      "evidence_reference": "plan section 4 P1c band bullet; section 4 P1a runs --json bullet; section 4 P3 來源 list",
+      "repair": "Either drop 'stalled' from the P1c band until P3, or define it in P1a as a pure execution-axis telemetry value (for example probe_age_s greater than 2 ticks or no manifest change for N seconds) with its source and as_of, and add it to status-runs-fields.test.sh. Label it as execution state in references/review-page.md.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_architecture",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "19ecc787639a446e6f4fa01cc25f0223867316171950a7b9b64282c1abcc4c08"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "P1b gate result table candidate matching (舊候選 / CONFLICT)",
+      "claim": "Review receipts are labelled 舊候選 when their chain head does not match the job's candidate_commit, but candidate_commit comes from task_status_receipt; when no task receipt exists yet (the common mid-round state), the comparison has no reference and the plan does not say what label applies, so an implementation could either hide live gate results or mislabel them as stale.",
+      "evidence": "Section 2.7 candidate row: 'receipt 顯示前必須與 job 的 candidate 相符，否則標「舊候選」' with source task_status_receipt. P1b ②: no receipt → fixed sentence; gate table ⑦ defines 舊候選 and CONFLICT only.",
+      "evidence_reference": "plan section 2.7 candidate row; section 4 P1b 版型 items ② and ⑦",
+      "repair": "Add a third label in the chip mapping: when no task_status_receipt exists, show the review receipt with candidate 'unverified' (head sha displayed) rather than 舊候選, and add a negative control to render-review-page.test.sh: PASS review receipt with no task receipt → row present, chip unverified, conclusion sentence still the fixed no-verdict sentence.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_architecture",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "fc180f0fa4ad9bbc5da2655ae195dd9fdc0f5433d1d3b9b424fd487084db9515"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "P0 S2 scope; P1c band cost and context sources",
+      "claim": "S2 verifies the mod data path only for the runs-live envelope and its SSD fallback, but P1c also reads ~/.claude/metrics/costs.jsonl, <live-base>/context/<sid>.json and the session-mode marker, and needs its own session id to filter costs. Whether $.fs.read can reach the home directory and how the mod learns its sid are unverified, so P1c silently depends on unverified claims.",
+      "evidence": "S2 row: '$.fs.read 讀 <live-base>/runs/<scope>.json ... 與 SSD 退路 ~/.autopilot/review/<project_key>/live/runs.json'. P1c band: 'cost 讀 ~/.claude/metrics/costs.jsonl 依 session 與日期加總、context 讀 <live-base>/context/<sid>.json ... 按 sid 取'. No spike covers these paths or the sid source.",
+      "evidence_reference": "plan section 4 P0 S2 row; section 4 P1c band bullet",
+      "repair": "Extend S2 to read all four paths (runs envelope, costs.jsonl, context/<sid>.json, session-mode marker) from both terminal and desktop and record the API member that yields the session id; if any path is unreadable, P1c must show '—' for that datum and the plan should say so.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_architecture",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "7832a433e2c986299a3bb18a5d0a41e5984f5208c37a6c1a26c76636045c8652"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "KR1 latency target vs P1a watcher --interval 10 and P1c $.clock.every(10000)",
+      "claim": "KR1 requires the band to show live run count within 15 s, but the producer polls every 10 s and the mod polls every 10 s, so worst-case end-to-end latency is about 20 s plus enrich time; the acceptance as written can fail on timing alone.",
+      "evidence": "KR1: 'band 在 ≤ 15 s 內顯示 live run 數'. P1a: 'autopilot status runs --watch --project <key> --interval 10'. P1c: 'session.start → $.clock.every(10000)'.",
+      "evidence_reference": "plan section 2 KR1; section 4 P1a watcher command; section 4 P1c register.ts bullet",
+      "repair": "Either set the watcher default --interval to 5 and keep the mod at 10 s (worst case about 15 s), or restate KR1 as ≤ 25 s. Record the chosen budget in references/review-page.md.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_architecture",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "ac016ba682e31265f767240596abf92cc74c2bd31cbda331582b08568f667d9f"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "P1d sync-version.js --hook-count 33; P3 hooks/idle-observe.js (default-on classic Stop hook)",
+      "claim": "P1d freezes the hook count at 33 for 2.37.0, but P3 adds a new default-on classic hook, which changes the inventory and requires another sync-version run and version bump; the plan schedules neither, so sync-all.sh will fail after P3 or the count will be wrong.",
+      "evidence": "P1d: 'sync-version.js --version 2.37.0 --hook-count 33'. Section 3 row: 'hooks/idle-observe.js（新，default-on）... P3'. No P3 bullet mentions hook-count, CHANGELOG or version.",
+      "evidence_reference": "plan section 3 (hooks/idle-observe.js row); section 4 P1d 順序; section 4 P3",
+      "repair": "Add to P3 acceptance: register idle-observe in hooks/hooks.json and check-hook-inventory baseline, run sync-version.js with the incremented hook count and a MINOR or PATCH bump per CLAUDE.md, update CHANGELOG. Alternatively move idle-observe.js into P1d so the count is set once.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_architecture",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "b0cb015b8cf5c1aa5c2440b4ab9d4e6444d4e1ec9e7d47a0280b8e0b8f2b2920"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "P1a --idle-exit condition on session-mode markers",
+      "claim": "The idle-exit rule depends on 'no unexpired ~/.autopilot/session-mode/<sid>.json marker', but the plan never defines marker expiry (TTL field, mtime age, or process liveness of the sid), so a dead session's marker can keep a watcher alive forever or a live session's marker could be treated as expired.",
+      "evidence": "P1a lifecycle (2): '該 repo 沒有任何未過期的 ~/.autopilot/session-mode/<sid>.json marker'. No definition of 未過期 elsewhere in the plan; session-mode.js is an existing script whose marker format is not shown.",
+      "evidence_reference": "plan section 4 P1a watcher 生命週期 item (2); section 3 session-mode.js row",
+      "repair": "State the expiry rule in P1a (for example marker carries pid and the watcher treats it as expired when the pid is gone or the marker is older than N hours), and add a fixture to runs-watch.test.sh with one expired and one fresh marker.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_architecture",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "4a3af791273606fcb25f232b95d653be2e715c1deec7e2c339ee5d130d6a9b5c"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "[V-file] citations: src/status/task-runtime.js L36–46 and L98–99, src/engine/controller-execution.js ~L1626 and L451–499, src/status/cli.js L152–174 and L432–445, dispatch-status.js L897–911, check-hook-inventory.js L103",
+      "claim": "The checkout supplied to this review seat contains none of the cited source files, so the line-level claims about repoIdentity(), the Work Order triple, the campaign namespaces and the task receipt schema could not be independently re-verified here; the review above checks the plan's internal consistency against those claims as stated.",
+      "evidence": "Directory listing and file search of the review working tree returned no src/, scripts/ or hooks/ paths. The plan pins astra R0 at repo HEAD 9ebea928 but does not pin each [V-file] mark to a commit.",
+      "evidence_reference": "plan sections 2.5, 2.7, 4 P1a, 4 P4, Review log (astra R0 repo HEAD)",
+      "repair": "No current change; follow-up only. When registering the plan, pin the [V-file] marks to the HEAD commit in the header so later reviewers can diff line references after the code moves.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_architecture",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c9c01a59d84bcb0d68a5a04e291e391c794a27baa1aa4e2e37a34b0ddc8262a1"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "future",
+      "severity": "non-blocking",
+      "affected_surface": "scripts/portfolio-replan.js cross-project read of ~/projects/*/.autopilot/progress.json",
+      "claim": "The replanner is the only autopilot component that reads other projects' state; it stays within the owner's dom-depth-0 decision (proposal only, no dispatch), but the hard-coded ~/projects/* glob and the absence of an explicit boundary statement make it easy for a later change to grow into the cross-project scheduler the plan excludes.",
+      "evidence": "P4: 'scripts/portfolio-replan.js：讀 ~/projects/*/.autopilot/progress.json ... 不派工、不寫 BACKLOG、不送 fleet'. Section 0: 跨專案 cockpit／排程／quota 不是 autopilot. Section 7 lists radar as the consumer of progress.json.",
+      "evidence_reference": "plan section 0 owner decisions; section 4 P4 replanner bullet; section 7",
+      "repair": "No current change; follow-up only. Make the project root list a CLI argument or config value and add one sentence to section 2.5 naming portfolio-replan.js as the sole cross-project reader, limited to progress/1 files.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_architecture",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "2f4b45eaa1b83eba73b0a085e90691b8cbb311c4b9db9fb827232694e99a6b3e"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Section 4 (Phases P0-P4) and Section 2 (OKR/KRs)",
+      "claim": "Phases and acceptance are largely executable (dependencies P0→P1a→P1b→P1c→P1d→(P2∥P3)→P4 are explicit, KR2/KR4/KR5 negative controls are concrete, version policy MINOR 2.37.0 and section 8 defaults are stated), but no phase carries an explicit size estimate or slice boundary, so 'each phase has a size' is only partially satisfied.",
+      "evidence": "Section 4 lists per-phase acceptance tests and negative controls in detail, but nowhere in the plan is a size (lines, days, or commit-count budget) attached to any phase; P1 is further split a/b/c/d without sizes, and the dependency line names ordering only.",
+      "evidence_reference": "docs/plans/2026-10-03-mods-visible-dispatch.md, Section 4 header line and P1a-P1d subsections",
+      "repair": "No current change to the design; at graduation/registration time add a one-line size annotation per phase (e.g. P1a ≈ N files/commits) so the controller can slice P1a-P1d independently. Follow-up only.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_rails",
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "081d28c746f73f8a3692ea5ea0a448d1a6721ffc15402d3e2e4b0424b119298d"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "P1b publish path (render-review-page.js) and project index.html publication",
+      "claim": "The single-writer design is substantially correct (project-level flock watcher, scope-split files, reader scope verification, separate index.lock also taken by the manual renderer, tmp→rename symlink switch with three failure-scenario tests), but the plan does not name one residual window it otherwise promises to name: a reader that resolved the old version directory just before the symlink switch can still be reading a version directory that the retention rule deletes in the same publish cycle (keep one previous version, delete older), i.e. an open-page refresh vs. reap race between deletion and the reader's next fetch.",
+      "evidence": "P1b states '保留前一版本目錄一代、刪更舊的與殘留候選' immediately after the tmp→rename switch, and the risk table row '發佈切換做不到原子' claims the design leaves no window the plan does not name; a browser holding a URL into a v-<ts>/ directory older than one generation can hit ENOENT after the next publish's cleanup.",
+      "evidence_reference": "docs/plans/2026-10-03-mods-visible-dispatch.md, P1b paragraph beginning '發佈（A05／N01）' and Section 6 risk row '發佈切換做不到原子'",
+      "repair": "No current change; follow-up only. Either document that only '…/<job>/current/index.html' URLs are stable and per-version URLs are best-effort, or delay deletion of superseded version directories by one publish interval (delete versions older than the previous-previous one on the following publish), and record the choice in references/review-page.md.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_rails",
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "378336e8bbce4ab84b5c8a727aecc9c204cff594bda3231fc97a270e2690c44f"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "94c71c8efc913f81df12bfbfdecce4c7a57efd50496f4ecb6306039eaed910e9",
+      "rubric_id": "R5",
+      "affected_surface": "scripts/render-review-page.js job publish (v-<ts>/ and current symlink); watcher --render vs manual renderer",
+      "claim": "The index publish is serialised by the project index lock, but the per-job current pointer switch is not: the watcher's debounced --render and a manual render-review-page.js run on the same job can each build a v-<ts>/ and rename current, and the slower process may win with an older published_at, leaving current pointing at the older version. The plan names only the index lock.",
+      "evidence_reference": "plan section 4 P1b 發佈 and 觸發 paragraphs",
+      "disposition": null
+    },
+    {
+      "fingerprint": "ecddcb60d98743c81d1de19917918242bdd2e1a3c86c16fee74037b0ac0ec0b8",
+      "rubric_id": "R5",
+      "affected_surface": "review page relative asset URLs under /<date>/<job>/current/",
+      "claim": "Because pages are served via the current symlink and reference assets relatively, a browser that loaded the old index.html and fetches assets after a switch resolves them in the new version directory; content-hashed names make this safe only while the asset still exists in the new version, otherwise the old page shows a broken image during that window.",
+      "evidence_reference": "plan section 4 P1b bundle paragraph and 發佈 paragraph",
+      "disposition": null
+    },
+    {
+      "fingerprint": "19ecc787639a446e6f4fa01cc25f0223867316171950a7b9b64282c1abcc4c08",
+      "rubric_id": "R3",
+      "affected_surface": "P1c band field 'stalled K'; P1a runs --json field list",
+      "claim": "The band shows a 'stalled K' count but no P1a field produces it; the only stall notion in the plan is P3 liveness.stall (report-only), which lands after P1c. A datum without a stated source violates section 2.5's per-datum source rule and risks being derived from the process monitor.",
+      "evidence_reference": "plan section 4 P1c band bullet; section 4 P1a runs --json bullet; section 4 P3 來源 list",
+      "disposition": null
+    },
+    {
+      "fingerprint": "fc180f0fa4ad9bbc5da2655ae195dd9fdc0f5433d1d3b9b424fd487084db9515",
+      "rubric_id": "R3",
+      "affected_surface": "P1b gate result table candidate matching (舊候選 / CONFLICT)",
+      "claim": "Review receipts are labelled 舊候選 when their chain head does not match the job's candidate_commit, but candidate_commit comes from task_status_receipt; when no task receipt exists yet (the common mid-round state), the comparison has no reference and the plan does not say what label applies, so an implementation could either hide live gate results or mislabel them as stale.",
+      "evidence_reference": "plan section 2.7 candidate row; section 4 P1b 版型 items ② and ⑦",
+      "disposition": null
+    },
+    {
+      "fingerprint": "7832a433e2c986299a3bb18a5d0a41e5984f5208c37a6c1a26c76636045c8652",
+      "rubric_id": "R4",
+      "affected_surface": "P0 S2 scope; P1c band cost and context sources",
+      "claim": "S2 verifies the mod data path only for the runs-live envelope and its SSD fallback, but P1c also reads ~/.claude/metrics/costs.jsonl, <live-base>/context/<sid>.json and the session-mode marker, and needs its own session id to filter costs. Whether $.fs.read can reach the home directory and how the mod learns its sid are unverified, so P1c silently depends on unverified claims.",
+      "evidence_reference": "plan section 4 P0 S2 row; section 4 P1c band bullet",
+      "disposition": null
+    },
+    {
+      "fingerprint": "ac016ba682e31265f767240596abf92cc74c2bd31cbda331582b08568f667d9f",
+      "rubric_id": "R6",
+      "affected_surface": "KR1 latency target vs P1a watcher --interval 10 and P1c $.clock.every(10000)",
+      "claim": "KR1 requires the band to show live run count within 15 s, but the producer polls every 10 s and the mod polls every 10 s, so worst-case end-to-end latency is about 20 s plus enrich time; the acceptance as written can fail on timing alone.",
+      "evidence_reference": "plan section 2 KR1; section 4 P1a watcher command; section 4 P1c register.ts bullet",
+      "disposition": null
+    },
+    {
+      "fingerprint": "b0cb015b8cf5c1aa5c2440b4ab9d4e6444d4e1ec9e7d47a0280b8e0b8f2b2920",
+      "rubric_id": "R6",
+      "affected_surface": "P1d sync-version.js --hook-count 33; P3 hooks/idle-observe.js (default-on classic Stop hook)",
+      "claim": "P1d freezes the hook count at 33 for 2.37.0, but P3 adds a new default-on classic hook, which changes the inventory and requires another sync-version run and version bump; the plan schedules neither, so sync-all.sh will fail after P3 or the count will be wrong.",
+      "evidence_reference": "plan section 3 (hooks/idle-observe.js row); section 4 P1d 順序; section 4 P3",
+      "disposition": null
+    },
+    {
+      "fingerprint": "4a3af791273606fcb25f232b95d653be2e715c1deec7e2c339ee5d130d6a9b5c",
+      "rubric_id": "R5",
+      "affected_surface": "P1a --idle-exit condition on session-mode markers",
+      "claim": "The idle-exit rule depends on 'no unexpired ~/.autopilot/session-mode/<sid>.json marker', but the plan never defines marker expiry (TTL field, mtime age, or process liveness of the sid), so a dead session's marker can keep a watcher alive forever or a live session's marker could be treated as expired.",
+      "evidence_reference": "plan section 4 P1a watcher 生命週期 item (2); section 3 session-mode.js row",
+      "disposition": null
+    },
+    {
+      "fingerprint": "c9c01a59d84bcb0d68a5a04e291e391c794a27baa1aa4e2e37a34b0ddc8262a1",
+      "rubric_id": "R1",
+      "affected_surface": "[V-file] citations: src/status/task-runtime.js L36–46 and L98–99, src/engine/controller-execution.js ~L1626 and L451–499, src/status/cli.js L152–174 and L432–445, dispatch-status.js L897–911, check-hook-inventory.js L103",
+      "claim": "The checkout supplied to this review seat contains none of the cited source files, so the line-level claims about repoIdentity(), the Work Order triple, the campaign namespaces and the task receipt schema could not be independently re-verified here; the review above checks the plan's internal consistency against those claims as stated.",
+      "evidence_reference": "plan sections 2.5, 2.7, 4 P1a, 4 P4, Review log (astra R0 repo HEAD)",
+      "disposition": null
+    },
+    {
+      "fingerprint": "2f4b45eaa1b83eba73b0a085e90691b8cbb311c4b9db9fb827232694e99a6b3e",
+      "rubric_id": "R7",
+      "affected_surface": "scripts/portfolio-replan.js cross-project read of ~/projects/*/.autopilot/progress.json",
+      "claim": "The replanner is the only autopilot component that reads other projects' state; it stays within the owner's dom-depth-0 decision (proposal only, no dispatch), but the hard-coded ~/projects/* glob and the absence of an explicit boundary statement make it easy for a later change to grow into the cross-project scheduler the plan excludes.",
+      "evidence_reference": "plan section 0 owner decisions; section 4 P4 replanner bullet; section 7",
+      "disposition": null
+    },
+    {
+      "fingerprint": "081d28c746f73f8a3692ea5ea0a448d1a6721ffc15402d3e2e4b0424b119298d",
+      "rubric_id": "R6",
+      "affected_surface": "Section 4 (Phases P0-P4) and Section 2 (OKR/KRs)",
+      "claim": "Phases and acceptance are largely executable (dependencies P0→P1a→P1b→P1c→P1d→(P2∥P3)→P4 are explicit, KR2/KR4/KR5 negative controls are concrete, version policy MINOR 2.37.0 and section 8 defaults are stated), but no phase carries an explicit size estimate or slice boundary, so 'each phase has a size' is only partially satisfied.",
+      "evidence_reference": "docs/plans/2026-10-03-mods-visible-dispatch.md, Section 4 header line and P1a-P1d subsections",
+      "disposition": null
+    },
+    {
+      "fingerprint": "378336e8bbce4ab84b5c8a727aecc9c204cff594bda3231fc97a270e2690c44f",
+      "rubric_id": "R5",
+      "affected_surface": "P1b publish path (render-review-page.js) and project index.html publication",
+      "claim": "The single-writer design is substantially correct (project-level flock watcher, scope-split files, reader scope verification, separate index.lock also taken by the manual renderer, tmp→rename symlink switch with three failure-scenario tests), but the plan does not name one residual window it otherwise promises to name: a reader that resolved the old version directory just before the symlink switch can still be reading a version directory that the retention rule deletes in the same publish cycle (keep one previous version, delete older), i.e. an open-page refresh vs. reap race between deletion and the reader's next fetch.",
+      "evidence_reference": "docs/plans/2026-10-03-mods-visible-dispatch.md, P1b paragraph beginning '發佈（A05／N01）' and Section 6 risk row '發佈切換做不到原子'",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-10-03T11:45:52.948Z"
+}

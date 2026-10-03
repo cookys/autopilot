@@ -1,0 +1,11 @@
+# Rubric — 2026-10-03-mods-visible-dispatch.md
+
+> Source plan: docs/plans/2026-10-03-mods-visible-dispatch.md
+
+R1: Identity and join keys are sound: every cross-surface join in section 2.7 uses an existing key (repo_identity, root_run_id, Work Order triple, the two campaign namespaces), name/branch/time-window is never used as identity, and the plan's claims about those keys match the code it cites (src/status/task-runtime.js, src/engine/controller-execution.js, cli.js).
+R2: The additive repo_identity field on the manifests of scripts/dispatch-hetero.sh, dispatch-review.sh and dispatch-author.sh is safe: old manifests without the field and every existing consumer keep working, the value is derived the same way as repoIdentity() in all three rails (including worktrees and CONSUMING_REPO_ROOT vs REPO_ROOT), and the named test pins all three roles.
+R3: The two status axes (execution vs acceptance) never mix, unknown is always null never 0, and no progress percentage comes from a process monitor: the plan states where each datum comes from and each claim is checkable against the cited receipt schemas.
+R4: Mod runtime assumptions are verified or explicitly marked SPIKE: sandbox without Node, read-only mod in P1, no process spawn, hot-reload and desktop Code tab degradation; P0 spikes are the true prerequisites and P1 does not silently depend on an unverified claim.
+R5: The single-writer design is correct: one watcher per project holding a flock, tmpfs live state, durable export only at milestones, atomic publish (candidate, smoke, rename, .prev) and the separate index lock leave no race, torn read or stale-page window the plan does not name.
+R6: Phasing and acceptance are executable: each phase has a size, concrete acceptance and negative controls (KR2, KR4, KR5), dependencies between P0..P4 are explicit, the version policy (first mod = MINOR) and Change-policy section agree with CLAUDE.md, and no phase requires a decision the owner has not made (section 8 defaults are safe).
+R7: Scope and safety boundaries hold: autopilot only publishes autopilot.progress/1 (no cross-project cockpit, scheduler or quota), wake-self is off by default and never injects prompts, no trust machinery (ADR-0001) is introduced, and the risks section names what would guarantee failure with a mitigation each.

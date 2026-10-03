@@ -839,3 +839,10 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/v2-36-112-review-follow-ups.md
 - **Context**: run.sh hides SKIP lines, seat-sweep terminal/abandoned vocabulary, sweep env knob, verify-red-green in-repo symlink escape, B3 rejection code, whitespace-only finish_reason=length, E digest-body placement, stale finalize-gate comment.
 
+### dispatch-plan-review: terminal-ticket reuse is a silent 0-call run
+- **Status**: open
+- **Trigger**: next touch of scripts/dispatch-plan-review.js
+- **Effort**: S
+- **Source**: PEER-REPORTED cuda/chatgpt-tunnel 2026-10-03, msg 01M406CPGN828NHBQJJMAD01M9
+- **Pointer**: docs/backlog/dispatch-plan-review-terminal-ticket-visibility.md
+- **Context**: a reused ticket whose session is terminal returns the old verdict with 0 seat calls; emit a named ticket_session_already_terminal message.

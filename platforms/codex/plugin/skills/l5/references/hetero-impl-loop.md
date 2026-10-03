@@ -224,6 +224,12 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
    `<git-common-dir>/autopilot/final-panel-seats/<campaign>/<station>-<binding>/seat-N.json`: a resume
    re-derives each stored verdict and re-qualifies the seat, so only faulted seats rerun. A seat that
    faults `FINAL_PANEL_SEAT_ATTEMPT_BUDGET` (3) times ends `attempt_budget_exhausted` — terminal, not transient.
+   When the journal proves the campaign terminal the engine reaps its seat subtree (ledger unit
+   `final_panel_seat_reap`, fail-open); `repo-residue-sweep.js` covers the rest. A `BOUNDARY_REJECTED`
+   dispatch record carries `result_receipt_digest` (the boundary `dispatch_result_digest`) and the
+   boundary receipt body carries `root_run_id` / `work_order_id`, so that campaign resumes to terminal
+   success; one parked in `BOUNDARY_REJECTED` before v2.36.112 stays blocked (immutable, digest-bound
+   rows) — rerun it.
 9b. The rail runs the engine of the MAIN checkout at the sealed base; a candidate that changes the
     engine or a runner runs only inside the verify station's suites. A plan §5 "live proof" of such a
     change is first observable on the NEXT campaign after its merge — record it as "not producible

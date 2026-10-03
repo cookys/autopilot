@@ -36,7 +36,8 @@ adapter. It sends one bounded author/reviewer prompt with no repository tools, u
 roster, deny-by-default egress, pre/post identity binding, a one-slot lease, capacity checks, and
 cancellation/recovery checks. It is not a `dispatch-hetero.sh --runner`, implementer, owner, or
 agentic harness. The generic transport contract has fake-server coverage; no live local runtime
-row or local agentic runner is claimed in this release.
+row or local agentic runner is claimed in this release. A `finish_reason=length` reply with no
+content fails closed as `output_budget_exhausted`, the same name as the anthropic-compatible rail.
 
 ## Context-window gate
 

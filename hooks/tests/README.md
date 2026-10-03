@@ -68,7 +68,7 @@ finalize_test
 ```
 
 Each test file MUST call `finalize_test` at the end — it prints `PASS [name] N assertions` or `FAIL [name] …` and exits with the right code so the umbrella runner can aggregate.
-`test-suite-finalize-gate.test.sh` enforces it for every lib.sh suite (8 allowlisted always-green suites; the allowlist can only shrink).
+`test-suite-finalize-gate.test.sh` enforces it for every lib.sh suite (3 allowlisted suites with their own harness; the allowlist can only shrink). A suite counts as finalizing when it calls `finalize_test` at top level (not inside a function), uses `trap finalize_test EXIT` (bare or quoted), or ends in `[ "$FAIL" -eq 0 ] || exit 1` (an `exit 0` may follow only that `|| exit 1` form; a bare `[ "$FAIL" -eq 0 ]` followed by `exit 0` does not count). `mission-terminal-rollover` prints `SKIP [mission-terminal-rollover] VACUOUS RUN` and exits 0 when no Mission registry exists.
 
 ## Writing an L1 unit test
 

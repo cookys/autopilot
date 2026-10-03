@@ -6,29 +6,46 @@
 # The allowlist below is the set of pre-existing violators at the time this gate landed. They
 # are listed, not fixed, here (each needs its own review that its assertions can go red); the
 # list may only shrink. A new suite must not be added to it.
+# RED at 4c3b7a71: with the old 18-entry allowlist (session-mode, calendar-teeth-negative restored)
+#   FAIL allowlist holds no suite that now finalizes (shrink the list): expected 'calendar-teeth-negative.test.sh session-mode.test.sh', got ''
+#   FAIL [test-suite-finalize-gate] 9 passed, 1 failed
 TEST_NAME="test-suite-finalize-gate"
 . "$(dirname "$0")/lib.sh"
 
+# Measured 2026-10-03 at 4c3b7a71 (every suite run, tails read). The 13 suites that finalize
+# through their own harness (a final `[ "$FAIL" -eq 0 ]`, an exiting fail(), or a node driver that
+# sets process.exitCode = 1) left this list: `finalizes()` below recognizes those shapes.
 ALLOWLIST="
 autopilot-engine-boundary-resume.test.sh
 autopilot-engine-repair-branch.test.sh
-calendar-teeth-negative.test.sh
-check-hands-commit.test.sh
-codex-postcompact-production-live-driver.test.sh
 implementation-campaign-state-boundary.test.sh
 load-endpoints-env.test.sh
-mission-terminal-rollover.test.sh
 orchestration-eval.test.sh
-pin-evidence-anchors.test.sh
 probe-mutation.test.sh
-qualify-scorecard-vocabulary.test.sh
-resolve-knowledge-routing.test.sh
-resolve-project-paths.test.sh
 review-mvp-portfolio.test.sh
-session-mode.test.sh
-skill-onoff-markers.test.sh
-strike-writer-wiring.test.sh
 "
+# ALWAYS-GREEN — needs finalize_test (assertions accumulate, no nonzero exit path):
+#   autopilot-engine-boundary-resume   (prints green_reason=git worktree command exited with status 1
+#                                       and asserts nothing on it)
+#   autopilot-engine-repair-branch     implementation-campaign-state-boundary
+#   load-endpoints-env (prints "all assertions passed" unconditionally)   review-mvp-portfolio
+# own harness, set -e + explicit `exit 1` on each check, no summary line the gate can match:
+#   orchestration-eval (exit 1 at its check sites, e.g. lines 627-734)   probe-mutation (exit 1 at 129-202)
+
+# A suite finalizes if it calls finalize_test, or ends in its own nonzero-on-failure path.
+# Comment lines never count.
+finalizes() {
+  local code="$TEST_TMP/finalizes.code"
+  grep -avE '^[[:space:]]*#' "$1" > "$code"
+  grep -aqE '^[[:space:]]*finalize_test([[:space:]]|$)' "$code" && return 0
+  # own summary: a bare `[ "$FAIL" -eq 0 ]` (last command, or `|| exit 1`)
+  grep -aqE '^[[:space:]]*\[ "\$\{?FAIL\}?" -eq 0 \]([[:space:]]*\|\|[[:space:]]*exit 1)?[[:space:]]*$' "$code" && return 0
+  # a fail() that itself exits nonzero
+  grep -aqE '^fail\(\)[[:space:]]*\{.*exit 1' "$code" && return 0
+  # a node driver whose failure path sets a nonzero exit code
+  grep -aqE 'process\.exitCode[[:space:]]*=[[:space:]]*1' "$code" && return 0
+  return 1
+}
 
 violators=""
 stale=""
@@ -38,7 +55,7 @@ for f in "$REPO_ROOT"/hooks/tests/*.test.sh; do
   # sources lib.sh (non-comment line) ...
   grep -avE '^[[:space:]]*#' "$f" | grep -qE '(^|[;&[:space:]])(\.|source)[[:space:]]+.*lib\.sh' || continue
   # ... and calls finalize_test as a command (non-comment line)
-  if grep -avE '^[[:space:]]*#' "$f" | grep -qE '^[[:space:]]*finalize_test([[:space:]]|$)'; then
+  if finalizes "$f"; then
     printf '%s\n' "$ALLOWLIST" | grep -qx "$name" && stale="$stale $name"
     continue
   fi
@@ -46,5 +63,24 @@ for f in "$REPO_ROOT"/hooks/tests/*.test.sh; do
 done
 
 assert_eq "" "${violators# }" "every lib.sh suite calls finalize_test (or is on the frozen allowlist)"
-assert_eq "" "${stale# }" "allowlist holds no suite that now calls finalize_test (shrink the list)"
+assert_eq "" "${stale# }" "allowlist holds no suite that now finalizes (shrink the list)"
+
+# --- the recognizer itself: shapes that finalize, and look-alikes that do not -------------
+mk() { printf '%s\n' "$2" > "$TEST_TMP/$1.sh"; }
+mk fin 'finalize_test'
+mk own '[ "$FAIL" -eq 0 ]'
+mk ownx '[ "$FAIL" -eq 0 ] || exit 1'
+mk failexit 'fail() { echo "FAIL: $*" >&2; exit 1; }'
+mk nodeexit 'process.exitCode = 1;'
+mk bare 'assert_eq 1 1 "only accumulates"
+echo "all assertions passed"'
+mk commented '# finalize_test
+#   [ "$FAIL" -eq 0 ]'
+mk printonly 'printf "%d passed, %d failed\n" "$PASS" "$FAIL"'
+for n in fin own ownx failexit nodeexit; do
+  finalizes "$TEST_TMP/$n.sh"; assert_eq "0" "$?" "recognizer accepts the $n shape"
+done
+for n in bare commented printonly; do
+  finalizes "$TEST_TMP/$n.sh"; assert_eq "1" "$?" "recognizer rejects the $n look-alike"
+done
 finalize_test

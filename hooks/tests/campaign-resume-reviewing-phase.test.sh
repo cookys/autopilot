@@ -7,7 +7,8 @@
 #
 # Fixtures: the eligibility table is pure; the intake and engine blocks run a REAL
 # ledger (scripts/run-ledger.sh) and the REAL reducer, reaching REVIEWING the way
-# production does (BOUNDARY_REJECTED -> vertical_verified).
+# production does (BOUNDARY_REJECTED -> vertical_verified) for stages a/b; the engine stage c
+# reaches REVIEWING through a final-panel transient seat fault (the xproc driver) and resumes to converged.
 #
 # RED (measured, with finalize_test in place): src/campaign/cli.js:889 temporarily made
 # `false && projection.state.phase === REVIEWING` -> suite exits 1:
@@ -17,6 +18,12 @@
 #   FAIL real REVIEWING projection is cli-resumable: 'b_cli_eligibility=resumable' not found
 #   FAIL [campaign-resume-reviewing-phase] 20 passed, 4 failed
 # (Before this commit the suite never called finalize_test, so it exited 0 whatever failed.)
+# RED at 4c3b7a71 (stage c): leaving the seat fault in place across --resume (failModel not cleared)
+# makes the resumed run end blocked:
+#   c_status=blocked reason=final_panel_seat_transport_failed
+#   FAIL resumed REVIEWING run converges (real terminalize + transcript audit): 'c_status=converged' not found in output
+#   FAIL resumed REVIEWING run is not blocked: unexpected 'c_status=blocked' in output
+#   FAIL [campaign-resume-reviewing-phase] 24 passed, 2 failed
 TEST_NAME="campaign-resume-reviewing-phase"
 . "$(dirname "$0")/lib.sh"
 unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
@@ -259,122 +266,6 @@ const claimedB = claim(fxB, reviewingState);
 console.log(`b_intake_status=${claimedB.status} code=${claimedB.code || claimedB.reason_code || ''}`);
 console.log(`b_resume_candidate=${Boolean(claimedB.resume_candidate)}`);
 
-// ---- C. engine resume from REVIEWING: review-only, no implementer, no vertical_verified
-const fxC = reviewingFixture('engine-reviewing');
-const stateC = toReviewing(fxC);
-const worktreeC = fxC.worktree;
-const commit = fxC.candidate;
-const tree = git(worktreeC, ['rev-parse', 'HEAD^{tree}']);
-const { createWriterFence } = require(path.join(root, 'src', 'engine', 'campaign-verification'));
-const lineage = {
-  lineage_id: fxC.campaignId, branch: fxC.branch, worktree: worktreeC,
-  provider_session_id: null, provider_session_reused: false,
-  provider_session_non_reuse_reason: 'runner_resume_not_verified:fixture',
-  worktree_reused: false,
-  worktree_instance_id: require('crypto').createHash('sha256').update(worktreeC).digest('hex'),
-  cleanup_epoch: 1, cleanup_receipt_id: null, generation: 0, inherited_churn: 0, delta_churn: 2,
-  retention_owner: fxC.campaignId, retention_reason: 'implementation-campaign-repair-lineage',
-  retention_expires_at: 2000000000, terminal_worktree_disposition: 'active',
-  transcript_reused: false, transcript_source_digest: 'a'.repeat(64),
-  review_input_mode: 'full_diff_generation', new_input_bytes: 17, new_input_tokens: 23,
-  input_token_measurement: 'provider_reported', finding_occurrences: [],
-  accepted_invariant_ids: [], accepted_invariants: [], accepted_invariants_source_commit: null,
-  accepted_invariants_digest: null, prior_review_finding_ids: [],
-  previous_repair_finding_count: null, non_reduction_rounds: 0,
-  repair_scope_paths: ['src/out.txt'], repair_scope_seal: null,
-};
-const fence = createWriterFence({
-  campaignId: fxC.campaignId, stageIdentity: 'campaign-implementation',
-  candidateCommit: commit, candidateTreeSha: tree,
-  implementationResult: {
-    status: 'committed', implementation: { commit },
-    implementationResult: { error: null, signal: null, status: 0 },
-  },
-});
-const resumeCandidate = {
-  committed: true, commit, tree_sha: tree, branch: fxC.branch, writer_fence: fence,
-  repair_lineage: lineage, scope_implementation_sha: commit,
-};
-let implCalls = 0;
-const journal = [];
-const resumed = new AutopilotEngine({
-  cwd: fxC.repo,
-  clock: () => '2026-08-30T00:00:06.000Z',
-  campaignDispositionProvider: compileCampaignDispositionPolicy('acceptance-bound'),
-  // REAL intake claim + REAL journal + REAL completion over the real REVIEWING ledger.
-  campaignIntake(input) {
-    return runCampaignIntake(input, {
-      readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
-      contextGate: () => ({ owner: 'context_window', status: 'ready' }),
-      occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
-    });
-  },
-  campaignEventAppender(input) {
-    journal.push(input.eventType);
-    return intake.appendCampaignEvent(input);
-  },
-  campaignScopeChecker() {
-    return { passed: true, changed_files: ['src/out.txt'], total_churn: 1, receipt_digest: 'd'.repeat(64) };
-  },
-  // Production's cleanup re-derives the retained worktree's filesystem-instance id and
-  // checks a lease marker this fixture does not build; inject the transaction (as the
-  // final-panel-seat-xproc driver does) so the resumed run is not blocked by fixture shape.
-  repairLineageCleanupTransaction({ record }) {
-    if (record && record.worktree) {
-      execFileSync('git', ['-C', fxC.repo, 'worktree', 'remove', '--force', record.worktree],
-        { stdio: ['ignore', 'pipe', 'pipe'] });
-    }
-    return { error: null, status: 0, signal: null, stdout: '', stderr: '' };
-  },
-  implementationDispatcher() { implCalls += 1; throw new Error('must not re-dispatch'); },
-  // Production's cleanup re-derives the retained worktree's filesystem-instance id and
-  // checks a lease marker this fixture does not build; inject the transaction (as the
-  // final-panel-seat-xproc driver does) so the resumed run is not blocked by fixture shape.
-  repairLineageCleanupTransaction({ record }) {
-    if (record && record.worktree) {
-      execFileSync('git', ['-C', fxC.repo, 'worktree', 'remove', '--force', record.worktree],
-        { stdio: ['ignore', 'pipe', 'pipe'] });
-    }
-    return { error: null, status: 0, signal: null, stdout: '', stderr: '' };
-  },
-  diffProvider() {
-    // the packet builder requires the byte-exact canonical diff of the bound range
-    const diffFile = path.join(testTmp, 'engine-reviewing', 'range.diff');
-    fs.writeFileSync(diffFile, execFileSync('git', [
-      '-C', fxC.repo, 'diff', '--no-ext-diff', '--no-textconv', `${fxC.base}..${commit}`,
-    ]));
-    return diffFile;
-  },
-  gitWorktreeAdd({ commit: c } = {}) {
-    const useCommit = c || commit;
-    const verifyWt = path.join(testTmp, `engine-reviewing-verify-${String(useCommit).slice(0, 12)}`);
-    try { git(fxC.repo, ['worktree', 'remove', '--force', verifyWt]); } catch (_e) {}
-    git(fxC.repo, ['worktree', 'add', '-q', '--detach', verifyWt, useCommit]);
-    return {
-      error: null, status: 0, signal: null, stdout: '', stderr: '', worktree: verifyWt, parent: null,
-      commit: useCommit, observed_commit: useCommit,
-      observed_tree_sha: git(verifyWt, ['rev-parse', 'HEAD^{tree}']), detached: true,
-    };
-  },
-  gitWorktreeRemove({ worktree: wt } = {}) {
-    if (wt) { try { git(fxC.repo, ['worktree', 'remove', '--force', wt]); } catch (_e) {} }
-    return { error: null, status: 0, signal: null, stdout: '', stderr: '' };
-  },
-  verifyCommandRunner() {
-    return { error: null, status: 0, signal: null, stdout: '', stderr: '', executed_argv: ['/bin/sh', '-c', 'node fixture.js'] };
-  },
-}).runImplementationReviewLoop({
-  promptFile: fxC.promptFile, branch: fxC.branch, base: fxC.base, roster,
-  campaignContract: fxC.contractPath, campaignSeal: fxC.sealPath, resume: true,
-});
-console.log(`c_status=${resumed.status} reason=${resumed.reason || ''}`);
-console.log(`c_impl_calls=${implCalls}`);
-console.log(`c_phase=${resumed.phase || ''}`);
-const reviewCalls = fs.existsSync(reviewLog) ? fs.readFileSync(reviewLog, 'utf8').split('\n').filter(Boolean).length : 0;
-console.log(`c_review_calls=${reviewCalls > 0}`);
-console.log(`c_seat_dispatches=${reviewCalls}`);
-console.log(`c_journal_vertical_verified=${journal.includes('vertical_verified')}`);
-console.log(`c_journal_terminal=${journal.includes('terminal_stop')}`);
 NODE
 )"; EXIT=$?
 assert_eq "0" "$EXIT" "reviewing-resume suite process exits 0"
@@ -406,20 +297,47 @@ assert_contains "$OUT" "b_projection_phase=REVIEWING" "fixture really reaches RE
 assert_contains "$OUT" "b_cli_eligibility=resumable" "real REVIEWING projection is cli-resumable"
 assert_contains "$OUT" "b_intake_status=claimed" "intake claims a REVIEWING resume"
 assert_contains "$OUT" "b_resume_candidate=true" "intake binds the resume candidate"
-assert_contains "$OUT" "c_impl_calls=0" "REVIEWING resume never re-dispatches the implementer"
-assert_contains "$OUT" "c_review_calls=true" "REVIEWING resume re-runs the review"
-assert_contains "$OUT" "c_journal_vertical_verified=false" \
-  "REVIEWING resume does not re-journal vertical_verified (reducer would reject it)"
-assert_contains "$OUT" "c_journal_terminal=false" "REVIEWING resume journals no terminal_stop"
-assert_contains "$OUT" "c_seat_dispatches=3" "REVIEWING resume dispatches the 3-seat final panel (real batch dispatcher, stubbed script)"
-# The resumed run must get past the old fixture-shape blocks: the repair-lineage cleanup
-# (git worktree command) and the completion/seat-admission blocks.
-C_STATUS_LINE="$(printf '%s\n' "$OUT" | grep '^c_status=')"
-assert_not_contains "$C_STATUS_LINE" "git worktree command" "resumed run is not blocked at the repair-lineage cleanup"
-assert_not_contains "$C_STATUS_LINE" "campaign_completion_failed" "resumed run is not blocked at campaign completion"
-assert_not_contains "$C_STATUS_LINE" "managed blind-discovery" "resumed run is not blocked at seat admission"
-assert_not_contains "$C_STATUS_LINE" "families_below_minimum" "resumed run reached a real quorum"
-# KNOWN GAP (see commit report): the run still ends blocked at controller_work_order_terminalize
-# ("controller transcript audit blocks terminal"), so the converged status is NOT asserted here.
-echo "c_final: $C_STATUS_LINE" >&2
+# ---- C. engine: REVIEWING reached through a final-panel transient seat fault ----------------
+# Same lineage as final-panel-seat-resume-xproc run 1 (seat 2 transport fault -> gate_transient
+# -> durable_wait, ledger parked in REVIEWING) and a real --resume in a SEPARATE process, with the
+# REAL terminalize / transcript audit (the driver injects neither). The resumed run must converge.
+DRIVER="$REPO_ROOT/hooks/tests/lib/final-panel-seat-xproc-driver.js"
+STUB="$REPO_ROOT/hooks/tests/lib/final-panel-seat-xproc-stub-review.sh"
+CD="$TEST_TMP/c"; mkdir -p "$CD/repo"
+cat > "$CD/ctx.json" <<J
+{"root":"$REPO_ROOT","tmp":"$CD","sbx":"$CD/repo","tag":"rv-c","stub":"$STUB","log":"$CD/log","failModel":"gpt-5.4",
+"seats":[{"role":"qc","runner":"cc-shim","model":"claude-opus-4-6","effort":"high","endpoint":null,"family":"anthropic"},
+{"role":"qc","runner":"cc-shim","model":"gpt-5.4","effort":"high","endpoint":null,"family":"openai"},
+{"role":"qc","runner":"cc-shim","model":"glm-4.7","effort":"high","endpoint":null,"family":"zai"}]}
+J
+drive_c() { node "$DRIVER" "$1" "$CD/ctx.json" < /dev/null >"$CD/$1.out" 2>"$CD/$1.err"; echo "$?"; }
+cfield() { node -e "const j=JSON.parse(require('fs').readFileSync('$CD/$1.out','utf8').trim().split('\n').pop());process.stdout.write(String(j['$2']))"; }
+LEDGER="$CD/repo/.git/autopilot/implementation-campaign.jsonl"
+cevents() { node -e "
+const rows=require('fs').readFileSync('$LEDGER','utf8').trim().split('\n').map(JSON.parse).filter(r=>r.op==='campaign_event');
+console.log(rows.map(r=>JSON.parse(r.payload).event).join(','))"; }
+cphase() { node -e "
+const cli=require('$REPO_ROOT/src/campaign/cli');const rows=cli.loadRows('$LEDGER');
+const id=rows.find(r=>r.op==='campaign_intake').run_id;
+console.log(cli.projectCampaign(rows,id).state.phase)"; }
+
+assert_eq "0" "$(drive_c run1)" "c run1 process exits 0"
+assert_eq "final_panel_seat_transport_failed" "$(cfield run1 reason)" "c run1 parks on the transient final-panel seat fault"
+assert_eq "REVIEWING" "$(cphase)" "c run1 leaves the real ledger in REVIEWING"
+EV1="$(cevents)"
+: > "$CD/log"
+node -e "const f='$CD/ctx.json';const j=JSON.parse(require('fs').readFileSync(f,'utf8'));j.failModel='';require('fs').writeFileSync(f,JSON.stringify(j))"
+assert_eq "0" "$(drive_c run2)" "c run2 (--resume) process exits 0"
+C_STATUS="c_status=$(cfield run2 status) reason=$(cfield run2 reason)"
+echo "$C_STATUS"
+assert_contains "$C_STATUS" "c_status=converged" "resumed REVIEWING run converges (real terminalize + transcript audit)"
+assert_not_contains "$C_STATUS" "c_status=blocked" "resumed REVIEWING run is not blocked"
+assert_contains "$(printf 'c_impl_calls=%s' "$(cfield run2 impl)")" "c_impl_calls=0" "REVIEWING resume never re-dispatches the implementer"
+SEATS="$(wc -l < "$CD/log" | tr -d ' ')"
+assert_contains "$(printf 'c_review_calls=%s' "$([ "$SEATS" -gt 0 ] && echo true || echo false)")" "c_review_calls=true" "REVIEWING resume re-runs the review"
+assert_contains "c_seat_dispatches=$SEATS" "c_seat_dispatches=1" "REVIEWING resume re-dispatches only the failed seat (real batch dispatcher, stubbed script)"
+EV2="$(cevents)"
+NEW_EV="${EV2#"$EV1"}"
+assert_not_contains "$NEW_EV" "vertical_verified" "REVIEWING resume does not re-journal vertical_verified (reducer would reject it)"
+assert_not_contains "$EV2" "terminal_stop" "REVIEWING resume journals no terminal_stop"
 finalize_test

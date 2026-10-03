@@ -7,9 +7,11 @@ Do NOT work in `{{REPO}}` (the main checkout). Run every long command in the FOR
 Prefix every suite, rail, and review command with `env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID` and suffix it with `< /dev/null`.
 
 ## 1. Setup and picks
-`git clone -q {{REPO}} $B/land && cd $B/land && git remote set-url origin "$(git -C {{REPO}} remote get-url origin)" && git fetch -q origin && git checkout -q -B {{RELEASE_BRANCH}} origin/develop && git config core.hooksPath .githooks && git remote add unit $B/clone && git fetch -q unit 'refs/heads/hands/*:refs/remotes/unit/hands/*'`
+`git clone -q {{REPO}} $B/land && cd $B/land && git remote set-url origin "$(git -C {{REPO}} remote get-url origin)" && git fetch -q origin && git checkout -q -B {{RELEASE_BRANCH}} origin/develop && git config core.hooksPath .githooks && git config user.name cookys && git config user.email 2537196+cookys@users.noreply.github.com && git remote add unit $B/clone && git fetch -q unit 'refs/heads/hands/*:refs/remotes/unit/hands/*'`
 
 **`git config core.hooksPath .githooks` must run in this same setup line, before any pick or commit.** A landing clone without it never runs the pre-push qc-gate, and a release can ship with a broken trailer unnoticed (this happened once — see the skill's Rules learned).
+
+**Author email is the GitHub noreply address `2537196+cookys@users.noreply.github.com` (name `cookys`)**: GitHub's email-privacy setting rejects a push authored as the gmail address (the v2.36.111 landing had to rewrite 10 commits). Never a test identity, never `--no-verify`.
 
 Cherry-pick in order: {{PICK_LIST}}.
 NEVER pick `{{SHADOW_SHA}}` (PARALLEL-RUN LOCAL ONLY shadow). After every pick, `grep enforcement_mode .claude/owner-kernel-governance.json` must still show `enforce`.
@@ -21,6 +23,7 @@ Run the WHOLE suite when the change touches a widely-consumed contract — do no
 - `bash hooks/tests/run.sh --parallel 16 > RUN/full.log 2>&1; echo rc=$?` — ONCE per release. Read the summary section and every `FAIL [` line. The parallel section's "ALL TESTS PASSED" line does not cover the serial tail, so check that too.
 - Rerun only the reds, solo (never rerun the whole suite after a repair — rerun the touched suites plus former reds). A red "L1 unit suite" is ONE line for every `*.test.js`: after a repair rerun the whole L1 layer (`node --test hooks/*.test.js scripts/*.test.js scripts/lib/*.test.js`), never just the one file you fixed — v2.36.107 shipped a red `statusline-live-tee.test.js` that way. Anything still red gets run at `origin/develop` in a throwaway worktree (`git worktree add RUN/base origin/develop`).
   Red at base too means pre-existing: record it. Red only on your branch: bisect it (`git bisect run`) and STOP; report the first-bad commit and the failing assertions. Do not repair anything yourself.
+- New test fixtures that contain `reviewer_engine:` must be registered with the Population B gate (`hooks/tests/resolve-review-loop-consult-discuss-switch.test.sh`); no per-row Verify runs it, only the full suite does (v2.36.111). Hands run that suite in their consumer sweep when they add such a fixture.
 - `node scripts/check-js-syntax.js`, `bash scripts/sync-codex-plugin-skills.sh --check`, `bash scripts/validate.sh`.
 
 ## 3. Final review

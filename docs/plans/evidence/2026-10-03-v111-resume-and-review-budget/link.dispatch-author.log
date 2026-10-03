@@ -1,0 +1,61 @@
+FAIL [dispatch-author] independently observed polarity receipt permits dispatch: expected '2', got '0'
+FAIL [dispatch-author] dispatch result carries polarity receipt digest: '"polarity_receipt_digest": "' not found in output
+node:fs:441
+    return binding.readFileUtf8(path, stringToFlags(options.flag));
+                   ^
+
+Error: ENOENT: no such file or directory, open '/tmp/claude-1000/-home-cookys-projects-autopilot/76c98aac-1838-4acb-bedd-e36d6bed7724/scratchpad/tdlink/autopilot-test-dispatch-author-C82ILt/polarity-valid.json'
+    at Object.readFileSync (node:fs:441:20)
+    at [stdin]:3:30
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [stdin]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_stdin:51:5
+    at Socket.<anonymous> (node:internal/process/execution:205:5) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/tmp/claude-1000/-home-cookys-projects-autopilot/76c98aac-1838-4acb-bedd-e36d6bed7724/scratchpad/tdlink/autopilot-test-dispatch-author-C82ILt/polarity-valid.json'
+}
+
+Node.js v24.16.0
+FAIL [dispatch-author] forged polarity rejection names observed transition: 'red-before/green-after' not found in output
+FAIL [dispatch-author] agy path with script wrapper exits 0: expected '3', got '0'
+FAIL [dispatch-author] agy path returns authored: '"status": "authored"' not found in output
+FAIL [dispatch-author] agy -p payload still contains the original authoring prompt: 'CONTAINS_ORIGINAL=1' not found in output
+FAIL [dispatch-author] agy raw_log contains stub output: 'ok from agy' not found in output
+FAIL [dispatch-author] agy generic alias exits 0: expected '3', got '0'
+FAIL [dispatch-author] agy runner receives the resolved canonical model: 'ARG=gemini-3.6-flash-high' not found in output
+FAIL [dispatch-author] agy runner_failed includes exit code: '"error": "runner exited 7"' not found in output
+FAIL [dispatch-author] agy empty-output exit 1: expected '3', got '1'
+FAIL [dispatch-author] agy empty-output maps to empty_output: '"status": "empty_output"' not found in output
+FAIL [dispatch-author] author gemini-flash-medium default effort exit 0: expected '3', got '0'
+FAIL [dispatch-author] author alias gemini-flash-medium default effort reaches stub as --effort medium: expected '', got 'medium'
+FAIL [dispatch-author] author gemini-flash-high --effort low exit 0: expected '3', got '0'
+FAIL [dispatch-author] author gemini-flash-high --effort low reaches stub as --effort high: expected '', got 'high'
+FAIL [dispatch-author] author gemini-flash-high --effort high stays --effort high: expected '', got 'high'
+FAIL [dispatch-author] author gemini-flash-high default xhigh reaches stub as --effort high: expected '', got 'high'
+FAIL [dispatch-author] author bare agy id under default effort reaches stub as --effort high: expected '', got 'high'
+FAIL [dispatch-author] 125 passed, 19 failed
+      - independently observed polarity receipt permits dispatch: expected '2', got '0'
+      - dispatch result carries polarity receipt digest: '"polarity_receipt_digest": "' not found in output
+      - forged polarity rejection names observed transition: 'red-before/green-after' not found in output
+      - agy path with script wrapper exits 0: expected '3', got '0'
+      - agy path returns authored: '"status": "authored"' not found in output
+      - agy -p payload still contains the original authoring prompt: 'CONTAINS_ORIGINAL=1' not found in output
+      - agy raw_log contains stub output: 'ok from agy' not found in output
+      - agy generic alias exits 0: expected '3', got '0'
+      - agy runner receives the resolved canonical model: 'ARG=gemini-3.6-flash-high' not found in output
+      - agy runner_failed includes exit code: '"error": "runner exited 7"' not found in output
+      - agy empty-output exit 1: expected '3', got '1'
+      - agy empty-output maps to empty_output: '"status": "empty_output"' not found in output
+      - author gemini-flash-medium default effort exit 0: expected '3', got '0'
+      - author alias gemini-flash-medium default effort reaches stub as --effort medium: expected '', got 'medium'
+      - author gemini-flash-high --effort low exit 0: expected '3', got '0'
+      - author gemini-flash-high --effort low reaches stub as --effort high: expected '', got 'high'
+      - author gemini-flash-high --effort high stays --effort high: expected '', got 'high'
+      - author gemini-flash-high default xhigh reaches stub as --effort high: expected '', got 'high'
+      - author bare agy id under default effort reaches stub as --effort high: expected '', got 'high'

@@ -1136,3 +1136,19 @@ share (`base`/`head`), with an assertion that each side actually produced a reco
 baseline from history every clone has (e.g. the parent of the commit that introduced the feature),
 never a SHA from a scratch clone, and (c) be shown to fail on an injected drift before it is trusted
 (§48: a check that cannot fail proves nothing).
+
+## 51. A lib.sh suite that never calls finalize_test is green by construction
+
+2026-10-03, v2.36.111. A new suite (`campaign-resume-reviewing-phase`) shipped through its hand's
+rc-0 report and a per-row fable review. It sourced `lib.sh` and never called `finalize_test`;
+`fail()` only appends and prints to stderr, so the suite exited 0 whatever it asserted. A sibling
+hand noticed it printed no PASS/FAIL line. The gate written in response then found five older suites
+with the same shape. Same family, same day: `echo $?` after `node … | tail -1` reports tail's status,
+not node's (the xproc suite's `drive()`).
+
+Rule: a shell suite's own summary line must exist, and a deliberately broken product line must turn it
+red before the suite is trusted. An rc of 0 from a suite that printed nothing is not a pass. Capture a
+piped command's status with `${PIPESTATUS[0]}` or run it to a file first.
+
+Preventing artifact: `hooks/tests/test-suite-finalize-gate.test.sh` — every lib.sh suite must finalize
+(a bare `[ "$FAIL" -eq 0 ]` counts only as the last command); the allowlist can only shrink.

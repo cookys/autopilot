@@ -68,6 +68,7 @@ finalize_test
 ```
 
 Each test file MUST call `finalize_test` at the end — it prints `PASS [name] N assertions` or `FAIL [name] …` and exits with the right code so the umbrella runner can aggregate.
+`test-suite-finalize-gate.test.sh` enforces it for every lib.sh suite (8 allowlisted always-green suites; the allowlist can only shrink).
 
 ## Writing an L1 unit test
 

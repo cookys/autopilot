@@ -1,0 +1,9 @@
+default provider-readiness-single-line-frame rc=0 0 PASS [provider-readiness-single-line-frame] 44 assertions
+default dispatch-author rc=0 0 PASS [dispatch-author] 144 assertions
+slash provider-readiness-single-line-frame rc=0 0 PASS [provider-readiness-single-line-frame] 44 assertions
+slash dispatch-author rc=0 0 PASS [dispatch-author] 144 assertions
+link provider-readiness-single-line-frame rc=0 0 PASS [provider-readiness-single-line-frame] 44 assertions
+link dispatch-author rc=1 20       - author bare agy id under default effort reaches stub as --effort high: expected '', got 'high'
+nontmp provider-readiness-single-line-frame rc=0 0 PASS [provider-readiness-single-line-frame] 44 assertions
+nontmp dispatch-author rc=0 0 PASS [dispatch-author] 144 assertions
+DONE

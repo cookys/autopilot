@@ -1,0 +1,8 @@
+# Unit R1 — landing repair: Population B gate flags the bundle's new reviewer_engine fixtures
+Branch `hands/w111/R1`, base = `a4cb63605dd74304f5fa4193089d3da892fb2ed7` (branch w111-stack = origin/develop + the 8 accepted w111 picks). Worktree: `git -C $C worktree add -q $C/../wt-R1 -b hands/w111/R1 a4cb63605dd74304f5fa4193089d3da892fb2ed7`.
+
+Red only on the bundle (green at origin/develop): `hooks/tests/resolve-review-loop-consult-discuss-switch.test.sh` — "Population B: every 'reviewer_engine:' file pins the switches explicitly or is a named POP_B_DEFAULT_ALLOW member". Flagged files (new in this bundle): `hooks/tests/campaign-resume-reviewing-phase.test.sh`, `hooks/tests/final-panel-seat-resume.test.sh`, `hooks/tests/lib/final-panel-seat-xproc-driver.js`.
+
+Do: read the Population B comment block (around the POP_B_DEFAULT_ALLOW definition) and decide, per file, the policy the block prescribes: if the file's roster fixture is a partial roster that resolves consult/discuss via the default (like its siblings), add it to POP_B_DEFAULT_ALLOW with the matching reason string; if the block says new members should instead pin the switches explicitly, pin them in the fixture. Follow whatever the comment block says new members must do (it may also require bumping a pinned bound or noting the change). Do NOT edit the gate logic or weaken it. Only that suite file (or the three fixture files, if pinning) may change.
+RED: the suite's current failing output on the base is the RED. Verify: the switch suite passes; if you edited fixtures, rerun campaign-resume-reviewing-phase, final-panel-seat-resume, final-panel-seat-resume-xproc too.
+Commit message: `fix(tests): register the w111 reviewer_engine fixtures with the Population B consult/discuss switch gate`

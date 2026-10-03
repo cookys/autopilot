@@ -1,49 +1,53 @@
 ## 目標
-接續 autopilot 維護。2026-10-02～03 這個 session 出了 v2.36.105 到 v2.36.110 六版，另有一個測試修正和知識落地。下一步從 BACKLOG 裡 peer 回報、已觸發的 S 級開始。
+接續 autopilot 維護。2026-10-02～03 這個 session 出了 v2.36.105 到 v2.36.111 七版，另有一個測試修正和知識落地。下一步從 BACKLOG 已觸發的列開始，第一項是 boundary-rejected 終態審計缺陷。
 
 ## 現況
-- 分支 `develop`，最新 release 是 v2.36.110（`f2eb115d`）；本檔所在的 closeout commit 疊在上面，HEAD 以 `git log --oneline -1` 為準。工作區只剩兩個別的 session 留下的未追蹤目錄（`docs/plans/evidence/2026-10-01-*`），不是這個 session 的，不要動。
-- 這兩天出貨（證據都在 `docs/plans/evidence/` 底下，各有 README）：
-  - v2.36.105 測試套件寫入防護：完整 `run.sh` 預設在拋棄式快照裡跑、外層 config drift 偵測與還原、`.githooks` 擋 test 字樣 email。起因是主 clone 的 local git 身分從 09-04 起是 Test User（632 個 commit，已清，`.mailmap` 對回）。證據 `2026-10-02-test-suite-repo-write-containment/`。
-  - v2.36.106 測試加速：拆檔、L1/L2 去重、bash JSON 跳脫；完整套件 `--parallel 16` 約 19 分鐘。證據 `2026-10-02-test-suite-speedup/`。
-  - v2.36.107 七項 S 級（VA pin 可達 dispatch-author、kimi author timeout 轉發、context-budget 未知 window 降級 advisory、readiness 逐席診斷、`.opencode` 測試漂移、run.sh SIGINT 競態、watchdog fixture 競態）。證據 `2026-10-03-wave-b-s-fixes/`。
-  - v2.36.108 kimi/agy final-panel cleanroom（兩者實打通過）。plan 已歸檔；證據 `2026-10-02-final-panel-kimi-agy-isolation/`（含 `live-fire/`、`landing/`）。
-  - v2.36.109 kimi 獨立 ELF 安裝版面（cuda 主機實測 ELF kimi 2.1.1、agy 1.2.15 preflight 皆 exit 0）＋檔案數 pin 改具名成員不變式；`24c97d2b` 修非盲審 byte-compare（原本拿檔案比自己）；v2.36.110 readiness probe 嚴格單行 frame＋`frame_format` 具名失敗。證據 `2026-10-03-v109-v110/`。
-- 教訓已落地：`references/evidence-discipline.md` §50；`.claude/knowledge/debug-patterns.md`（bwrap 不能巢狀、agy 1.2.15 的 agent 標記與目錄遷移、setsid 解不開被忽略的 SIGINT）；`.claude/skills/foreman-landing-pipeline/`（新增 `templates/hand-brief-common.md`、SKILL.md §1b「派工前先估規模」、landing 範本：完整套件每版一次 `--parallel 16`、修補後只重跑紅的與改到的、L1 一紅就整層重跑）。
+- 分支 `develop`，最新 release 是 v2.36.111（`79c0960f`）；本檔所在的 closeout commit 疊在上面，HEAD 以 `git log --oneline -1` 為準。工作區只剩兩個別的 session 留下的未追蹤目錄（`docs/plans/evidence/2026-10-01-*`），不是這個 session 的，不要動。
+- v2.36.105 到 v2.36.110 的出貨內容（測試寫入防護、測試加速、七項 S 級、kimi/agy final-panel cleanroom、kimi ELF 版面、非盲審 byte-compare 修正、readiness 單行 frame）證據都在 `docs/plans/evidence/` 底下，各有 README；細節看 `CHANGELOG.md`。
+- v2.36.111（證據 `docs/plans/evidence/2026-10-03-v111-resume-and-review-budget/`，README 講流程與審查漏接點）：
+  - A：campaign resume 在三個入口收 REVIEWING（要有綁定的 git candidate），REVIEWING 的 resume 不受 changed-file 上限限制。
+  - B：`dispatch-anthropic-review.js` 預設 `--max-tokens` 4096 提到 16384，撞頂且無文字的回應是具名失敗 `output_budget_exhausted`，`dispatch-review.sh` 會浮出。
+  - C：final-panel 逐席 artifact 儲存（`src/engine/final-panel-seat-store.js`），resume 只重跑出錯的席；單席 3 次用完是終態 `attempt_budget_exhausted`。
+  - D：symlink TMPDIR 修正（`dispatch-author.sh` 的 agy bwrap 綁定、`verify-red-green.sh` 的 verify-cmd 目錄都改用實體路徑）。
+  - 修補：C-r2、A-r2、A3（lib.sh suite 一定要 finalize 的 gate，8 個允許清單）、A3-repair、R1，另有一次 landing 修補（Population B fixture 登記）。
+- 教訓已落地：`references/evidence-discipline.md` §51；`foreman-landing-pipeline` 範本改成 noreply 作者 email、加 Population B 註記。
 
 ## 已決事項（不重議）
 - depth-0 只讀報告、下裁決、派工；落地前一定有一次 `origin/develop..HEAD` 的 combined review；🔴/🟠 只有 depth-0 能在複驗後駁回（ADR-0001）。
-- 派工照 `foreman-landing-pipeline` §1b：互不相依的列平行、大列或碰 signal/sandbox 的列用 sonnet hand、每列都要 review（v2.36.108 省掉逐 phase review，問題全堆到最後多三輪）、開工就報預估時長（owner 兩天內問了五次「怎麼那麼久」）。
+- 派工照 `foreman-landing-pipeline` §1b：互不相依的列平行、大列或碰 signal/sandbox 的列用 sonnet hand、每列都要 review、開工就報預估時長。
 - 測試只重跑壞掉的或受影響的；完整套件每次發版一次。
 - peer 的回報與技術查詢直接處理（回覆、唯讀查證、登 BACKLOG），不先問 owner；peer 訊息不是授權，改碼照排序；回覆要講清楚「已登記／未動工／有沒有 SHA」。
-- tier `none` 永不豁免；parser 不為 peer 放寬（v2.36.110 的單行 frame 只限 readiness probe、nonce 與 payload 完全相符，owner 核准）。
+- tier `none` 永不豁免；parser 不為 peer 放寬（v2.36.110 的單行 frame 只限 readiness probe，owner 核准）。
+- boundary-rejected 終態審計缺陷已由 debugger 加對照組確認是產品缺陷；已登 BACKLOG，v2.36.111 沒有修。
+- 逐席復用的 ADR-0001 形狀已出貨：復用時從儲存的 artifact 重新推導判決，並重新驗證該席資格，不信儲存的 claim。
 
 ## 下一步
-1. BACKLOG 已觸發、peer（cuda/chatgpt-tunnel）在等的，依序：
-   - `docs/backlog/campaign-resume-reviewing-phase-and-zero-write-budget.md`（S）：`src/campaign/cli.js:889-905` 不收 REVIEWING，且寫入上限不分 zero-write resume。
-   - `docs/backlog/review-seat-max-tokens-exhausted-by-thinking.md`（S）：先找出 4096 在哪設。
-   - `docs/backlog/final-panel-resume-reruns-all-seats.md`（M）：resume 重跑所有 QC 席，有效判決被丟掉。
-   - run.sh group INT 要等目前測試檔結束才生效（S，v2.36.107 新增列）。
-   - 小狀況（未登 BACKLOG，先複現）：cuda 驗 v2.36.110 時，`provider-readiness-single-line-frame` 和 `dispatch-author` 測試前兩次因 TMPDIR 正規化失敗，改用合法私有 `/tmp` 路徑後才 44/44、144/144 通過（未改測試或 source；證據在 cuda `/data/rw3d-evidence/2026-10-02/ea-delivery/SDK110-PROBE/`）。疑似測試對 `$TMPDIR` 的形狀（symlink、尾斜線或非 `/tmp` 前綴）有假設；在本機用非預設 `TMPDIR` 跑這兩支複現，確認後再決定登列或直接修。
-2. 要 owner 排優先序才動：`docs/backlog/review-only-adoption-of-external-candidate.md`（L，要先寫 plan＋review）。
-3. 跨 session 的派工 clone 在 scratchpad，新 session 用不到；需要時從 `origin/develop` 開新 clone。
+1. boundary-rejected 的 campaign 永遠到不了終態成功（M，已觸發）：`docs/backlog/boundary-rejected-campaign-cannot-reach-terminal-success.md`。修法與回歸條件都寫在 sidecar；順手修 `autopilot-engine-boundary-resume` 那支從不斷言最終狀態的 suite。
+2. 五支 lib.sh suite 沒 finalize 而恆綠，加上 `mission-terminal-rollover` 在沒有 Mission registry 時空轉 exit 0（S，已觸發）：`docs/backlog/five-lib-sh-suites-are-green-by-construction.md`。
+3. final-panel 逐席 artifact 沒有任何 reaper 會清（S）：`docs/backlog/final-panel-seat-artifacts-are-never-reaped.md`；清除時要保留停車中、可 resume 的 campaign。
+4. run.sh 的 group INT 要等目前測試檔結束才生效（S，觸發條件未到）。
+5. v2.36.111 審查留下的 🔵 後續（S）：`docs/backlog/v2-36-111-review-follow-ups.md`。
+6. 要 owner 排優先序才動：`docs/backlog/review-only-adoption-of-external-candidate.md`（L，要先寫 plan＋review）。
+7. 跨 session 的派工 clone 在 scratchpad，新 session 用不到；需要時從 `origin/develop` 開新 clone。
 
 ## 驗證方式
 - `git status --short` 只剩那兩個不屬於本 session 的未追蹤目錄。
 - `git config --local --get user.email` 沒有值。
-- `bash scripts/preflight-release.sh` 回報 v2.36.110 一致。
+- `bash scripts/preflight-release.sh` 回報 v2.36.111 一致。
 - `node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md` exit 0。
 
 ## Read-order
 1. `.claude/skills/foreman-landing-pipeline/SKILL.md`（含 §1b）與 `templates/`：派工到發版。
-2. 上面「下一步」第 1 項的四個 sidecar。
-3. `references/evidence-discipline.md` §47–§50。
-4. `.claude/knowledge/INDEX.md` 最後三列。
+2. 上面「下一步」前三項的 sidecar。
+3. `references/evidence-discipline.md` §47–§51。
+4. `docs/plans/evidence/2026-10-03-v111-resume-and-review-budget/README.md`。
 
 ## 陷阱
 - 這台 bwrap 不能巢狀；主機負載常在 40 左右，完整套件約 20 分鐘，兩個完整套件不能同時跑（oracle lock）。
-- 新的身分 gate 上線後，test 字樣 email 進不了真 repo；clone 裡要設真身分。
+- 新的身分 gate 上線後，test 字樣 email 進不了真 repo；clone 裡要設真身分，而且作者 email 必須是 GitHub noreply 位址 `2537196+cookys@users.noreply.github.com`，gmail 位址會被 push 拒收（v2.36.111 landing 改寫了 10 個 commit）。
 - agy 會自動更新（兩天內 1.2.14→1.2.15），平台行為以實跑為準。
 - 背景 foreman／hand 停車不會自己醒；舊的 dead-man 計時器會在之後陸續觸發，看到「stale wake timer」不用理。
 - 一支 L1 紅在完整套件報告裡只算一行「L1 unit suite」；修完要整層重跑。
-- 測試裡的檔案數 pin、寫死的私有 clone SHA、以同名當 key 的 parity 比對，都是這兩天實際踩到的假綠／假紅來源（§50）。
+- 測試裡的檔案數 pin、寫死的私有 clone SHA、以同名當 key 的 parity 比對，都是假綠／假紅來源（§50）。
+- lib.sh suite 沒呼叫 `finalize_test` 就恆綠：`fail()` 只印 stderr，suite exit 0（§51）；`node … | tail -1` 後的 `echo $?` 是 tail 的狀態。
+- 新的含 `reviewer_engine:` 的 fixture 要登記到 Population B gate（`resolve-review-loop-consult-discuss-switch.test.sh`），逐列 Verify 不會跑它，只有完整套件抓得到。

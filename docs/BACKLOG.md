@@ -847,3 +847,27 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/run-sh-a-group-int-is-deferred-until-the-running-test-file-finishes.md
 - **Context**: with `timeout` giving each test file its own process group, a group INT reaches the file only after bash finishes the foreground child, so interrupt latency is bounded by the longest running file.
 
+
+### Final-panel seat artifacts under the git common dir are never reaped
+- **Status**: open
+- **Trigger**: next touch of campaign terminal cleanup or `repo-residue-sweep.js`
+- **Effort**: S
+- **Source**: v2.36.111 closeout residue check (no reaper references `final-panel-seats`)
+- **Pointer**: docs/backlog/final-panel-seat-artifacts-are-never-reaped.md
+- **Context**: `<git-common-dir>/autopilot/final-panel-seats/<campaign>/` is written per seat and no sweeper or terminal cleanup removes it.
+
+### Five lib.sh suites are green by construction (never finalize)
+- **Status**: fired 2026-10-03
+- **Trigger**: FIRED — the finalize gate allowlists them as ALWAYS-GREEN; next test-hygiene wave
+- **Effort**: S
+- **Source**: v2.36.111 finalize-gate probe (hooks/tests/test-suite-finalize-gate.test.sh)
+- **Pointer**: docs/backlog/five-lib-sh-suites-are-green-by-construction.md
+- **Context**: add `finalize_test` to each, shrink the allowlist; `mission-terminal-rollover` also exits 0 vacuously without a Mission registry.
+
+### v2.36.111 review follow-ups (test-hardening and predicate-alignment nits)
+- **Status**: open
+- **Trigger**: next touch of the respective file (finalize gate, campaign-intake/cli, verify-red-green tests)
+- **Effort**: S
+- **Source**: v2.36.111 per-row and landing reviews (🔵)
+- **Pointer**: docs/backlog/v2-36-111-review-follow-ups.md
+- **Context**: finalize-gate shape gaps, intake/cli cap predicate asymmetry, xproc suite RED-at-base and `$?` after a pipe, a verify-red-green symlink negative control.

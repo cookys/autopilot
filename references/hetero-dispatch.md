@@ -217,6 +217,10 @@ its existing default and the review JSON schema is unchanged. Truncation never a
 Anthropic `stop_reason=max_tokens` and a Qoder exit-0 response missing the complete wrapped block
 both remain `no_verdict`; a partial `SHIP-AS-IS` is not parsed.
 
+The direct `anthropic-compatible` adapter's own default is `--max-tokens 16384` (thinking plus
+verdict; v2.36.111, was 4096). A response that stops at `max_tokens` with no text block is the named
+failure `output_budget_exhausted` (surfaced by `dispatch-review.sh`): fail-closed, never a verdict.
+
 ## Script
 
 ```bash

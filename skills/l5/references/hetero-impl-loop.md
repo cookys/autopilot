@@ -219,6 +219,11 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
    repair round costs implement + verify + panel (60 + 21 + 9 min measured 2026-09-18) and the
    pocket covers only the panel — when the remainder cannot hold that, do not resume (the attempt
    burns at `WALL_BUDGET_EXCEEDED` mid-round); degrade to l3 and repair in the retained worktree.
+   A campaign parked in `REVIEWING` with a bound git candidate is resumable (review-only; the
+   changed-file cap does not apply). The final panel keeps one artifact per seat under
+   `<git-common-dir>/autopilot/final-panel-seats/<campaign>/<station>-<binding>/seat-N.json`: a resume
+   re-derives each stored verdict and re-qualifies the seat, so only faulted seats rerun. A seat that
+   faults `FINAL_PANEL_SEAT_ATTEMPT_BUDGET` (3) times ends `attempt_budget_exhausted` — terminal, not transient.
 9b. The rail runs the engine of the MAIN checkout at the sealed base; a candidate that changes the
     engine or a runner runs only inside the verify station's suites. A plan §5 "live proof" of such a
     change is first observable on the NEXT campaign after its merge — record it as "not producible

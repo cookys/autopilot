@@ -1,0 +1,19 @@
+autopilot-engine-boundary-resume rc=0 fail_lines=0 last=green_reason=git worktree command exited with status 1
+autopilot-engine-repair-branch rc=0 fail_lines=0 last=repair_branch_suite=true
+calendar-teeth-negative rc=0 fail_lines=0 last=calendar-teeth-negative harness: 27 passed, 0 failed
+check-hands-commit rc=0 fail_lines=0 last=37 passed, 0 failed
+codex-postcompact-production-live-driver rc=0 fail_lines=0 last=PASS [codex-postcompact-production-live-driver] 110 assertions
+implementation-campaign-state-boundary rc=0 fail_lines=0 last=vertical_verified_refusals=INVALID_TRANSITION,INVALID_TRANSITION
+load-endpoints-env rc=0 fail_lines=0 last=load-endpoints-env: all assertions passed
+mission-terminal-rollover rc=0 fail_lines=0 last=mission-terminal-rollover.test.sh: 0 passed, 0 failed
+orchestration-eval rc=0 fail_lines=0 last=All tests passed successfully!
+pin-evidence-anchors rc=0 fail_lines=0 last=pin-evidence-anchors.test.sh: 25 passed, 0 failed
+probe-mutation rc=0 fail_lines=0 last=ALL TESTS PASSED!
+qualify-scorecard-vocabulary rc=0 fail_lines=0 last=qualify-scorecard-vocabulary: 37 passed, 0 failed
+resolve-knowledge-routing rc=0 fail_lines=0 last=15 passed, 0 failed
+resolve-project-paths rc=0 fail_lines=0 last=31 passed, 0 failed
+review-mvp-portfolio rc=0 fail_lines=0 last=All review MVP portfolio tests passed.
+session-mode rc=0 fail_lines=0 last=pass=48 fail=0
+skill-onoff-markers rc=0 fail_lines=0 last=PASS: skill-onoff markers three-way probes
+strike-writer-wiring rc=0 fail_lines=0 last=strike-writer-wiring: 44 passed, 0 failed
+DONE

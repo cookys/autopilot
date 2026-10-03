@@ -1264,6 +1264,7 @@ function defaultGenerationClaim({
     }
     const resumableCandidatePhase = new Set([
       CAMPAIGN_STATES.VERTICAL_VERIFICATION,
+      CAMPAIGN_STATES.REVIEWING,
       CAMPAIGN_STATES.ADJUDICATING,
       CAMPAIGN_STATES.BOUNDARY_REJECTED,
       CAMPAIGN_STATES.AWAITING_DISPOSITION,
@@ -1356,7 +1357,9 @@ function defaultGenerationClaim({
       existing.resume_candidate.repair_lineage = reviewReference.repair_lineage;
       existing.resume_review_digest = reviewReference.digest;
     }
-    if (existing.state.usage.changed_files >= existing.state.limits.max_changed_files) {
+    // REVIEWING re-runs review only (cannot write); mutations re-check the cap themselves.
+    if (existing.state.phase !== CAMPAIGN_STATES.REVIEWING
+        && existing.state.usage.changed_files >= existing.state.limits.max_changed_files) {
       return rejected(
         'campaign_generation',
         'campaign_file_budget_exhausted',

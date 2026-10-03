@@ -4932,6 +4932,9 @@ class AutopilotEngine {
           && campaignControl.initial_state.phase === CAMPAIGN_STATES.ADJUDICATING) {
         return;
       }
+      // Resume from REVIEWING: vertical_verified is already journaled and the reducer
+      // admits it only from VERTICAL_VERIFICATION / BOUNDARY_REJECTED.
+      if (campaignControl.initial_state.phase === CAMPAIGN_STATES.REVIEWING) return;
       recordCampaignEvent({
         eventType: CAMPAIGN_EVENTS.VERTICAL_VERIFIED,
         generation: repairGeneration,
@@ -10190,6 +10193,7 @@ class AutopilotEngine {
     // Durable controller wait phases are resumable without re-implementation.
     const durableResumablePhases = new Set([
       CAMPAIGN_STATES.VERTICAL_VERIFICATION,
+      CAMPAIGN_STATES.REVIEWING,
       CAMPAIGN_STATES.ADJUDICATING,
       CAMPAIGN_STATES.AWAITING_DISPOSITION,
       CAMPAIGN_STATES.AWAITING_CONVERGENCE_ADJUDICATION,

@@ -886,8 +886,13 @@ function campaignResumeEligibility(projection, observedAt) {
   const dispositionResumable = projection.state.phase === CAMPAIGN_STATES.AWAITING_DISPOSITION
     && Boolean(projection.state.awaiting_disposition
       && projection.state.awaiting_disposition.findings_digest);
+  const reviewingResumable = projection.state.phase === CAMPAIGN_STATES.REVIEWING
+    && Boolean(hasCandidate);
   const resumePhaseSupported = projection.state.phase === CAMPAIGN_STATES.PREPARED
     || (projection.state.phase === CAMPAIGN_STATES.VERTICAL_VERIFICATION && hasCandidate)
+    // A transient final-panel review failure leaves vertical_verified journaled and
+    // review_completed not: REVIEWING with the bound candidate resumes the review.
+    || reviewingResumable
     || (projection.state.phase === CAMPAIGN_STATES.ADJUDICATING
       && hasCandidate
       && hasBoundReview)
@@ -902,7 +907,11 @@ function campaignResumeEligibility(projection, observedAt) {
       reason_code: 'campaign_resume_phase_unsupported',
     };
   }
-  if (projection.state.usage.changed_files >= projection.state.limits.max_changed_files) {
+  // A REVIEWING resume only re-runs review and cannot write; every mutation re-checks the
+  // changed-file cap itself (campaignMutationBudgetStatus), so the cap gates writing
+  // resumes only.
+  if (!reviewingResumable
+      && projection.state.usage.changed_files >= projection.state.limits.max_changed_files) {
     return {
       status: 'blocked',
       reason: 'campaign changed-file budget is exhausted',

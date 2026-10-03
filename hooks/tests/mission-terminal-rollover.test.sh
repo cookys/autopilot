@@ -41,7 +41,17 @@ PASS=0; FAIL=0
 
 ok()  { PASS=$((PASS+1)); printf 'PASS: %s\n' "$1"; }
 bad() { FAIL=$((FAIL+1)); printf 'FAIL: %s\n' "$1"; }
-skip() { printf 'SKIP: %s\n' "$1"; }
+skip() { printf 'SKIP: %s\n' "$1"; SKIP_REASON="$1"; }
+# A precondition-less run asserts NOTHING. It must not look like "0 passed, 0 failed" (a green
+# summary): print an explicit, greppable SKIP [suite] line on stdout and stderr, and exit 0 only
+# because a clean CI checkout legitimately has no Mission registry (hermetic setup is not
+# possible: a Mission state needs ~20 validator predicates bound to the real git common dir).
+vacuous_exit() {
+  printf '\nSKIP [mission-terminal-rollover] VACUOUS RUN - no assertion executed: %s\n' "${SKIP_REASON:-unknown}"
+  printf 'SKIP [mission-terminal-rollover] VACUOUS RUN - no assertion executed: %s\n' "${SKIP_REASON:-unknown}" >&2
+  exit 0
+}
+SKIP_REASON=""
 
 LIVE_COMMON="$(git -C "$LIVE_ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
 LIVE_MROOT="$LIVE_COMMON/autopilot/mission"
@@ -49,7 +59,7 @@ LIVE_STORE="$LIVE_MROOT/terminal-rollovers.json"
 
 if [ ! -f "$LIVE_MROOT/registry.json" ]; then
   skip "no Mission registry in this clone — rollover has nothing to act on"
-  printf '\n%s: %d passed, %d failed\n' "$(basename "$0")" "$PASS" "$FAIL"; exit 0
+  vacuous_exit
 fi
 
 # Byte-identity baseline on the LIVE store, taken before any scratch-clone
@@ -62,7 +72,7 @@ trap cleanup_scratch EXIT
 
 if ! git clone --quiet --no-hardlinks -- "$LIVE_ROOT" "$SCRATCH_HOME/repo" >/dev/null 2>&1; then
   skip "could not clone the repo into a scratch dir — rollover has nothing safe to act on"
-  printf '\n%s: %d passed, %d failed\n' "$(basename "$0")" "$PASS" "$FAIL"; exit 0
+  vacuous_exit
 fi
 ROOT="$SCRATCH_HOME/repo"
 
@@ -167,7 +177,7 @@ EOF
 
 if [ -z "${GRAPH:-}" ] || [ -z "${INTEGRATED:-}" ]; then
   skip "no graph with multiple COMPLETE adoptions and integration evidence — nothing to roll over"
-  printf '\n%s: %d passed, %d failed\n' "$(basename "$0")" "$PASS" "$FAIL"; exit 0
+  vacuous_exit
 fi
 
 roll() { node "$RECONCILE" rollover --repo-root "$ROOT" --graph-digest "$GRAPH" --canonical-adoption "$1" 2>&1; }

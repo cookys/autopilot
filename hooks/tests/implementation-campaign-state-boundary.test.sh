@@ -301,3 +301,6 @@ assert_contains "$PURE_OUT" "boundary_vertical_verified=REVIEWING" \
   "BOUNDARY_REJECTED + vertical_verified advances to REVIEWING"
 assert_contains "$PURE_OUT" "vertical_verified_refusals=INVALID_TRANSITION,INVALID_TRANSITION" \
   "vertical_verified from PREPARED and IMPLEMENTING is still refused"
+# RED at 8a338ccb (expected "boundary_vertical_verified=NOPE"; before finalize_test this exited 0):
+#   FAIL [implementation-campaign-state-boundary] 5 passed, 1 failed   (rc=1)
+finalize_test

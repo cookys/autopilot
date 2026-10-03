@@ -12,6 +12,12 @@
 # RED at 4c3b7a71: with the old 18-entry allowlist (session-mode, calendar-teeth-negative restored)
 #   FAIL allowlist holds no suite that now finalizes (shrink the list): expected 'calendar-teeth-negative.test.sh session-mode.test.sh', got ''
 #   FAIL [test-suite-finalize-gate] 9 passed, 1 failed
+# RED at 8a338ccb (new fixtures against the old recognizer):
+#   FAIL recognizer accepts the trapbare shape: expected '1', got '0'
+#   FAIL recognizer accepts the trapsq shape / trapdq shape (same)
+#   FAIL recognizer rejects the ownxheredoc look-alike: expected '0', got '1'
+#   FAIL recognizer rejects the ownxfunc look-alike / ownxecho look-alike (same)
+#   FAIL [test-suite-finalize-gate] 14 passed, 6 failed
 TEST_NAME="test-suite-finalize-gate"
 . "$(dirname "$0")/lib.sh"
 
@@ -19,24 +25,18 @@ TEST_NAME="test-suite-finalize-gate"
 # through their own harness (a last-command `[ "$FAIL" -eq 0 ]`, `... || exit 1`, or an exiting
 # fail()) left this list: `finalizes()` below recognizes those shapes.
 ALLOWLIST="
-autopilot-engine-repair-branch.test.sh
 codex-postcompact-production-live-driver.test.sh
-implementation-campaign-state-boundary.test.sh
-load-endpoints-env.test.sh
 orchestration-eval.test.sh
 probe-mutation.test.sh
-review-mvp-portfolio.test.sh
 "
 # ALWAYS-GREEN — needs finalize_test (assertions accumulate, no nonzero exit path):
 #   autopilot-engine-boundary-resume   (prints green_reason=git worktree command exited with status 1
 #                                       and asserts nothing on it)
-#   autopilot-engine-repair-branch     implementation-campaign-state-boundary
-#   load-endpoints-env (prints "all assertions passed" unconditionally)   review-mvp-portfolio
 # own harness, exits nonzero at its last line (a node driver whose catch sets process.exitCode = 1,
 # the suite's final command) — the gate does not try to prove that shape:
 #   codex-postcompact-production-live-driver
 # mission-terminal-rollover finalizes, but exits 0 early (vacuous) when there is no Mission
-# registry — a green here can mean nothing ran.
+# registry; it now prints `SKIP [mission-terminal-rollover] VACUOUS RUN` instead of a green summary.
 # own harness, set -e + explicit `exit 1` on each check, no summary line the gate can match:
 #   orchestration-eval (exit 1 at its check sites, e.g. lines 627-734)   probe-mutation (exit 1 at 129-202)
 
@@ -46,11 +46,15 @@ finalizes() {
   local code="$TEST_TMP/finalizes.code"
   grep -avE '^[[:space:]]*#' "$1" > "$code"
   grep -aqE '^[[:space:]]*finalize_test([[:space:]]|$)' "$code" && return 0
-  # own summary: `[ "$FAIL" -eq 0 ] || exit 1` anywhere ...
-  grep -aqE '^[[:space:]]*\[ "\$\{?FAIL\}?" -eq 0 \][[:space:]]*\|\|[[:space:]]*exit 1[[:space:]]*$' "$code" && return 0
-  # ... or a bare `[ "$FAIL" -eq 0 ]` as the LAST command (only then does its status propagate)
-  grep -avE '^[[:space:]]*$' "$code" | tail -n 1 \
-    | grep -qE '^[[:space:]]*\[ "\$\{?FAIL\}?" -eq 0 \][[:space:]]*$' && return 0
+  # `trap finalize_test EXIT` (quoted or not) finalizes whenever the suite exits
+  grep -aqE "^[[:space:]]*trap[[:space:]]+(finalize_test|'finalize_test'|\"finalize_test\")[[:space:]]+EXIT([[:space:]]|\$)" "$code" && return 0
+  # own summary as the LAST command (only then does its status propagate): the bare
+  # `[ "$FAIL" -eq 0 ]` or `[ "$FAIL" -eq 0 ] || exit 1`. The same text inside a heredoc stub
+  # or an uncalled function is not at the end of the suite, so it never counts.
+  # A trailing bare `exit 0` after the `|| exit 1` form is harmless (strike-writer-wiring), so
+  # it is dropped before looking at the last command.
+  grep -avE '^[[:space:]]*$' "$code" | { grep -avE '^[[:space:]]*exit 0[[:space:]]*$' || true; } | tail -n 1 \
+    | grep -qE '^[[:space:]]*\[ "\$\{?FAIL\}?" -eq 0 \]([[:space:]]*\|\|[[:space:]]*exit 1)?[[:space:]]*$' && return 0
   # a fail() that itself exits nonzero
   grep -aqE '^fail\(\)[[:space:]]*\{.*exit 1' "$code" && return 0
   return 1
@@ -91,10 +95,33 @@ echo "all assertions passed"'
 mk commented '# finalize_test
 #   [ "$FAIL" -eq 0 ]'
 mk printonly 'printf "%d passed, %d failed\n" "$PASS" "$FAIL"'
-for n in fin own ownx failexit; do
+mk trapbare 'trap finalize_test EXIT
+assert_eq 1 1 "accumulates"'
+mk trapsq "trap 'finalize_test' EXIT
+assert_eq 1 1 \"accumulates\""
+mk trapdq 'trap "finalize_test" EXIT
+assert_eq 1 1 "accumulates"'
+mk traponother 'trap cleanup EXIT
+assert_eq 1 1 "accumulates"'
+mk trapcomment '# trap finalize_test EXIT
+assert_eq 1 1 "accumulates"'
+mk ownxexit0 '[ "$FAIL" -eq 0 ] || exit 1
+exit 0'
+mk ownxecho '[ "$FAIL" -eq 0 ] || exit 1
+echo done
+exit 0'
+mk ownxheredoc 'cat > stub.sh <<EOF
+[ "$FAIL" -eq 0 ] || exit 1
+EOF
+assert_eq 1 1 "accumulates"'
+mk ownxfunc 'never_called() {
+  [ "$FAIL" -eq 0 ] || exit 1
+}
+assert_eq 1 1 "accumulates"'
+for n in fin own ownx ownxexit0 failexit trapbare trapsq trapdq; do
   finalizes "$TEST_TMP/$n.sh"; assert_eq "0" "$?" "recognizer accepts the $n shape"
 done
-for n in bare commented printonly ownmid stubexit; do
+for n in bare commented printonly ownmid stubexit traponother trapcomment ownxecho ownxheredoc ownxfunc; do
   finalizes "$TEST_TMP/$n.sh"; assert_eq "1" "$?" "recognizer rejects the $n look-alike"
 done
 finalize_test

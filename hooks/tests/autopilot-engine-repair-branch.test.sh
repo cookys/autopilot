@@ -696,3 +696,6 @@ EXIT=$?
 echo "$OUT"
 assert_exit_code "$EXIT" "0" "repair-branch suite process exits 0: $OUT"
 assert_contains "$OUT" "repair_branch_suite=true" "repair-branch suite completed"
+# RED at 8a338ccb (expected value broken: "repair_branch_suite=nope"; before finalize_test this exited 0):
+#   FAIL [autopilot-engine-repair-branch] 1 passed, 1 failed   (rc=1)
+finalize_test

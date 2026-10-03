@@ -174,4 +174,6 @@ run_invalid "follow-up-drift" \
   "input.reviewers[0].assessments.find((x) => x.item_id === 'docs').follow_up.trigger = 'different';" \
   "follow_up metadata mismatch"
 
-echo "All review MVP portfolio tests passed."
+# RED at 8a338ccb (valid-panel expected exit 7; the old unconditional "All ... passed" line exited 0):
+#   FAIL [review-mvp-portfolio] 14 passed, 1 failed   (rc=1)
+finalize_test

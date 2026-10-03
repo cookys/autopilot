@@ -267,4 +267,6 @@ jsout="$(node -e '
 assert_contains "$jsout" '"tr":"plaintext-private"' "js twin allowlists _TRANSPORT"
 assert_contains "$jsout" '"trx":""' "js twin rejects near-miss suffixes"
 
-echo "load-endpoints-env: all assertions passed"
+# RED at 8a338ccb (--help expected exit 9; the old unconditional "all assertions passed" line exited 0):
+#   FAIL [load-endpoints-env] 67 passed, 1 failed   (rc=1)
+finalize_test

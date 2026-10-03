@@ -745,22 +745,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: `hangar-bridge/SUBJECT_ROUTING_SPEC.md:516,614` records an accepted 7-day retention/replay bound for subjected `@team` chat that was never built.
 
 
-### A campaign that passed through BOUNDARY_REJECTED can never reach terminal success (transcript audit blocks it)
-- **Status**: open
-- **Trigger**: FIRED — product defect confirmed 2026-10-03 with a control run; next wave
-- **Effort**: M
-- **Source**: v2.36.111 landing — unit A-r2 hand observation + read-only debugger repro at f197fc09
-- **Pointer**: docs/backlog/boundary-rejected-campaign-cannot-reach-terminal-success.md
-- **Context**: boundary dispatch record has a null `result_receipt_digest` and the boundary receipt audit event has no controller tuple, so `requireCompleteTranscript` blocks every boundary→resume→ready campaign.
-
-### Reviewer output budget: follow-ups from v2.36.111
-- **Status**: open
-- **Trigger**: next touch of `dispatch-anthropic-review.js` / `dispatch-local-openai.js`, or the first thinking-capable openai-compatible seat run at max effort
-- **Effort**: S
-- **Source**: v2.36.111 per-row review (🔵)
-- **Pointer**: none
-- **Context**: `dispatch-local-openai.js` has no thinking-sized budget or named `output_budget_exhausted` failure; `dispatch-review.sh` should match the bracketed raw-log line, not a line-start stderr line.
-
 ### No supported review-only entry: the managed final panel cannot adopt an externally produced candidate range
 - **Status**: open
 - **Trigger**: FIRED as a peer request — needs owner prioritization and a plan before code
@@ -847,27 +831,11 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/run-sh-a-group-int-is-deferred-until-the-running-test-file-finishes.md
 - **Context**: with `timeout` giving each test file its own process group, a group INT reaches the file only after bash finishes the foreground child, so interrupt latency is bounded by the longest running file.
 
-
-### Final-panel seat artifacts under the git common dir are never reaped
+### v2.36.112 review follow-ups
 - **Status**: open
-- **Trigger**: next touch of campaign terminal cleanup or `repo-residue-sweep.js`
+- **Trigger**: next touch of the respective file
 - **Effort**: S
-- **Source**: v2.36.111 closeout residue check (no reaper references `final-panel-seats`)
-- **Pointer**: docs/backlog/final-panel-seat-artifacts-are-never-reaped.md
-- **Context**: `<git-common-dir>/autopilot/final-panel-seats/<campaign>/` is written per seat and no sweeper or terminal cleanup removes it.
+- **Source**: v2.36.112 per-row and landing reviews (🔵)
+- **Pointer**: docs/backlog/v2-36-112-review-follow-ups.md
+- **Context**: run.sh hides SKIP lines, seat-sweep terminal/abandoned vocabulary, sweep env knob, verify-red-green in-repo symlink escape, B3 rejection code, whitespace-only finish_reason=length, E digest-body placement, stale finalize-gate comment.
 
-### Five lib.sh suites are green by construction (never finalize)
-- **Status**: fired 2026-10-03
-- **Trigger**: FIRED — the finalize gate allowlists them as ALWAYS-GREEN; next test-hygiene wave
-- **Effort**: S
-- **Source**: v2.36.111 finalize-gate probe (hooks/tests/test-suite-finalize-gate.test.sh)
-- **Pointer**: docs/backlog/five-lib-sh-suites-are-green-by-construction.md
-- **Context**: add `finalize_test` to each, shrink the allowlist; `mission-terminal-rollover` also exits 0 vacuously without a Mission registry.
-
-### v2.36.111 review follow-ups (test-hardening and predicate-alignment nits)
-- **Status**: open
-- **Trigger**: next touch of the respective file (finalize gate, campaign-intake/cli, verify-red-green tests)
-- **Effort**: S
-- **Source**: v2.36.111 per-row and landing reviews (🔵)
-- **Pointer**: docs/backlog/v2-36-111-review-follow-ups.md
-- **Context**: finalize-gate shape gaps, intake/cli cap predicate asymmetry, xproc suite RED-at-base and `$?` after a pipe, a verify-red-green symlink negative control.

@@ -1,5 +1,19 @@
 # Changelog
 
+## v2.36.112 — 經過 BOUNDARY_REJECTED 的 campaign 可到 terminal success；五個恆綠套件改為會 finalize；final panel 席位 artifact 會被回收；v2.36.111 後續修補
+
+- **問題與改動（逐列）**：
+  - （E）經過 BOUNDARY_REJECTED 的 campaign 在 resume 並帶 candidate 後，仍被 controller transcript audit 擋下而無法到 terminal success。現在 boundary dispatch 與 audit 列帶 receipt digest 與 controller tuple，receipt digest 與 `dispatch_result_digest` 共用同一個推導。
+  - （F）五個 lib.sh 測試套件恆綠（從不 finalize）。現在四個已 finalize，`mission-terminal-rollover` 在零斷言時失敗而非空轉通過，finalize 閘只計頂層 finalizer、裸 `FAIL` 後接 `exit 0` 不算。
+  - （G）`<git-common-dir>/autopilot/final-panel-seats/` 下的席位 artifact 從不被回收。現在 campaign terminal 與 residue sweep 會回收，可續跑的 campaign 絕不回收；讀取跟隨 ledger 輪替，未知子樹須過年齡下限才回收，不安全名稱與無法驗證的列保留具名原因。
+  - （H）v2.36.111 後續：REVIEWING 上限判斷式對齊、openai rail 具名 `output_budget_exhausted`、bracketed raw-log 偵測、補負向對照。
+  - 登記 boundary-resume 終態 driver fixture 到 Population B 開關閘（landing 修補）。
+- **注意**：v2.36.112 之前已停在 BOUNDARY_REJECTED 的 campaign 仍維持封鎖（列為不可變，不做 migration）。
+- **驗證**：整套 `--parallel 16` 394 檔；唯一紅燈（Population B 登記）已修並單獨重跑 60/60。review：claude-fable-5-1 SHIP-AS-IS（review-1791009315-986223-583f）。
+- **已知後續（review 🔵）**：見 `docs/backlog/v2-36-112-review-follow-ups.md`（run.sh 不顯示 SKIP、rollover 零斷言守衛、席位 sweep 的 terminal／abandoned 詞彙、`RUN_LEDGER_MAX_ROTATIONS` 來源、verify-red-green symlink、B3 拒絕碼、whitespace-only `finish_reason=length`、E digest body 位置、過時註解）。
+
+prose-justification: 本版不新增 skill 或 reference 文字；僅改 campaign boundary、seat 回收、dispatch-review 與測試。
+
 ## v2.36.111 — final panel 暫時性故障可續跑並沿用有效席位判決；max effort reviewer 輸出預算；symlink TMPDIR；finalize 閘
 
 - **問題與改動（逐列）**：

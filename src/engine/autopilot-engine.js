@@ -11185,6 +11185,7 @@ module.exports = {
   bindCampaignScopeReceipt,
   buildImplementationArgs,
   buildReviewArgs,
+  campaignMutationBudgetStatus,
   campaignWallBudgetStatus,
   campaignWallRemainingSeconds,
   cleanroomExpectedVersions,

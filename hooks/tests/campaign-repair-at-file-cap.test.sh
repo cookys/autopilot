@@ -402,4 +402,79 @@ assert_contains "$OUT" "d_cap_below_paths_repairs=campaign_file_cap_no_first_pas
 assert_contains "$OUT" "d_headroom=none" "no advisory with headroom"
 assert_contains "$OUT" "d_no_repairs=none" "no advisory without repair generations"
 assert_contains "$OUT" "d_no_strict_dispatch=0" "no advisory when the contract carries no output_paths"
+
+# ---- E. REAL sealed contract through the real runCampaignIntake: the advisory reads the field a
+# sealed contract actually carries (strict_dispatch.output_paths; mission_runtime + strict_dispatch
+# travel together, so this is a shadow-mission contract sealed by the real `seal` command). -------
+ADV_REPO="$TEST_TMP/adv-repo"
+mkdir -p "$ADV_REPO/docs/plans" "$ADV_REPO/.claude"
+git -C "$ADV_REPO" init -q -b main
+git -C "$ADV_REPO" config user.email "advisory@example.invalid"
+git -C "$ADV_REPO" config user.name "Advisory Test"
+write_mission_governance "$ADV_REPO/.claude/owner-kernel-governance.json" shadow
+printf '## Strict bridge\nx\n' > "$ADV_REPO/docs/plans/spec.md"
+printf 'r\n' > "$ADV_REPO/required.txt"
+git -C "$ADV_REPO" add .
+git -C "$ADV_REPO" commit -qm base
+ADV_OUT="$(node - "$REPO_ROOT" "$ADV_REPO" "$TEST_TMP" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const cp = require('child_process');
+const [root, repo, tmp] = process.argv.slice(2);
+const { runCampaignIntake } = require(path.join(root, 'src', 'engine'));
+const g = (a) => cp.execFileSync('git', ['-C', repo, ...a], { encoding: 'utf8' }).trim();
+const base = g(['rev-parse', 'HEAD']);
+const common = fs.realpathSync(path.resolve(repo, g(['rev-parse', '--git-common-dir'])));
+const adapters = {
+  readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
+  contextGate: () => ({ owner: 'context_window', status: 'ready' }),
+  occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
+};
+function contract(cap, outs, repairs, tag) {
+  return {
+    schema_version: 1, ticket: `adv-${tag}`, profile: 'poc', mission_grant_ref: '1'.repeat(64),
+    repo_identity: `git-common-dir:${common}`, base_sha: base, branch: `feat/adv-${tag}`,
+    vertical_acceptance: ['advisory'], allowed_path_prefixes: ['docs', 'required.txt', 'src'],
+    max_changed_files: cap, baseline_churn: 10, max_growth_ratio: 1.5, max_extra_churn: 5,
+    max_repair_generations: repairs, max_wall_seconds: 120, verify_cmd: 'true', rubric_ids: ['R1'],
+    mission_runtime: {
+      schema_version: 1, root_run_id: 'mission-root-adv', mission_lineage_id: `lineage-v1-${'a'.repeat(64)}`,
+      mission_policy_digest: '2'.repeat(64), mission_graph_digest: '3'.repeat(64),
+      graph_node_id: 'n', graph_node_digest: '4'.repeat(64),
+    },
+    strict_dispatch: {
+      schema_version: 1, spec: { path: 'docs/plans/spec.md', section: 'Strict bridge' },
+      required_paths: ['docs/plans/spec.md', 'required.txt'], output_paths: outs,
+      allowed_path_prefixes: ['docs', 'required.txt', 'src'],
+      budget: { max_changed_files: cap, max_wall_seconds: 120, max_output_bytes: 4096, max_tool_calls: 10, max_engine_attempts: 2 },
+      verification_commands: ['true'],
+    },
+  };
+}
+fs.writeFileSync(path.join(tmp, 'adv-prompt.txt'), 'do\n');
+const outs = ['src/a.txt', 'src/b.txt'];
+for (const [tag, cap, repairs] of [['eq', 2, 2], ['gt', 3, 2], ['norep', 2, 0]]) {
+  const c = contract(cap, outs, repairs, tag);
+  const cpath = path.join(tmp, `adv-${tag}.json`);
+  fs.writeFileSync(cpath, `${JSON.stringify(c, null, 2)}\n`);
+  const spath = path.join(tmp, `adv-${tag}.seal.json`);
+  cp.execFileSync(process.execPath, [
+    path.join(root, 'scripts', 'implementation-campaign-check.js'), 'seal',
+    '--contract', cpath, '--repo', repo, '--mission-mode', 'shadow', '--out', spath,
+  ], { encoding: 'utf8' });
+  const r = runCampaignIntake({
+    repo, contractPath: cpath, sealPath: spath, promptFile: path.join(tmp, 'adv-prompt.txt'),
+    branch: c.branch, base, roster: { implementer_engine: 'fixture-implementer' },
+    observedAt: '2026-07-27T00:00:00.000Z',
+  }, adapters);
+  const codes = Array.isArray(r.advisories) ? r.advisories.map((a) => a.code).join('|') || 'none' : 'missing';
+  console.log(`e_${tag}=${r.status} advisories=${codes}`);
+}
+NODE
+)"
+echo "$ADV_OUT"
+assert_contains "$ADV_OUT" "e_eq=admitted advisories=campaign_file_cap_no_first_pass_headroom" "real intake: cap == output_paths with repairs carries the advisory on the admitted control"
+assert_contains "$ADV_OUT" "e_gt=admitted advisories=none" "real intake: cap > output_paths carries no advisory"
+assert_contains "$ADV_OUT" "e_norep=admitted advisories=none" "real intake: repairs disabled carries no advisory"
 finalize_test

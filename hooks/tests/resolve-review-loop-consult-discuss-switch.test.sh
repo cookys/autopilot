@@ -360,6 +360,7 @@ hooks/tests/calendar-teeth-negative.test.sh|partial roster fixture, resolves con
 hooks/tests/campaign-boundary-receipt-e2e.test.sh|bridge-fixture roster literal
 hooks/tests/campaign-dispatch-projection.test.sh|partial roster fixture, resolves consult/discuss via the default
 hooks/tests/campaign-intake-rejection-release.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/campaign-repair-engine-at-file-cap.test.sh|in-process roster object literal for an engine fixture, never resolved from config; consult/discuss not involved
 hooks/tests/campaign-repair-at-file-cap.test.sh|in-process roster object literal for a seat-resume fixture, never resolved from config; consult/discuss not involved
 hooks/tests/campaign-resume-reviewing-phase.test.sh|in-process roster object literal for a seat-resume fixture, never resolved from config; consult/discuss not involved
 hooks/tests/contract-parity.test.sh|partial roster fixture, resolves consult/discuss via the default

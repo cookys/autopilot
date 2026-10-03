@@ -1,5 +1,27 @@
 # Changelog
 
+## v2.36.115 — `autopilot status runs` 回報耗時／rc／scope／新鮮度；per-project watcher 發布 scoped 即時快照（mods P1a）
+
+- **問題與改動（逐列）**：
+  - （R1）dispatch run manifest 帶 `repo_identity`（由共用 shell 函式推導，三條 rail 一致）。
+  - （R2）`project_key`、`session-mode` marker 的 scope 欄位與 live pointer：mod 能由 pointer 找到該專案的即時快照。
+  - （R3）`autopilot status runs` 回報 elapsed、rc、scope、新鮮度，並以有界輪替（bounded rotation）探測存活；未探測的列保持 unknown，不會被誤報為 running。
+  - （R4）`autopilot status runs --watch --project <key>`：每專案一個 watcher，在單一 flock writer 下把 scoped `autopilot.runs-live/1` 快照發布到 tmpfs live dir；`--stop` 確認 writer 結束；`--project` 同時接受 16 位 hex key 與完整 `repo_identity`；輪替與 cursor 限縮到被監看的專案，使新鮮度界限在其他專案有 live run 時仍成立。
+  - （R5）`session-mode.js set` 啟動該 watcher（開關 `AUTOPILOT_RUNS_WATCH_AUTOSTART`，設 `0` 關閉）；`references/mods.md` 為第一個 mod（P1c）預備。另新增 `schemas/runs-live.schema.json`；`writePaths` 在 git 失敗時保留前一份檔；測試預設把 `AUTOPILOT_LIVE_DIR` 隔離到 `/dev/shm`。
+  - 文件：mods 計畫記錄 D3 已決定（§5、§8）。
+- **驗證**：整套 `--parallel 16` 405 檔跑兩次（lib.sh 修補後重跑），皆只有三個 pre-existing 紅：L1 unit suite（`import-aa-capabilities` 22 項，與 origin/develop 失敗清單相同）、`qualification-feed-adopt`、`qualification-scorecard-tools`（於 origin/develop 同樣紅）；最後一次修補後重跑相關 solo 套件與 L1，L1 失敗清單與 base 相同；check-js-syntax、codex 鏡像、validate.sh、CLAUDE.md inventory 通過。review：claude-fable-5-1 第三輪 SHIP-AS-IS（review-1791061184-1469822-cdb4；前兩輪各有一個 MUST-FIX 已修補）。
+- **已知後續（review 🔵 與落地備註）**：
+  - heartbeat 重發凍結的 per-row `elapsed_s`／`probe_age_s`／`observed_at`；讀者應由 `started_at` 推導。
+  - cursor 檔 `runs-enrich-cursor.json` 無鎖（last writer wins）；`REPO_IDENTITY_FIELDS` 環境殘值快取與 `dispatch_detached_run` 的 `declare -p` 未初始化。
+  - `startWatcherDetached` 的非同步 spawn 錯誤被吞；前景 launcher 不轉送 SIGTERM；`writePaths` 在 cwd 與 `--project` 不符時寫 `{}`。
+  - `flockAvailable` 把 tmpdir 不可寫誤報為 `flock_unavailable`；probe `observed_at` 用真實時鐘；autostart 只認 `"0"`；任何未設 `AUTOPILOT_RUNS_WATCH_AUTOSTART=0` 呼叫 `session-mode.js set` 的 JS 測試都會啟動真 watcher（需 repo-wide grep gate）。
+  - R2 `markerRepoIdentity` 與 `scopeFromCwd` 雙來源；R1 repo-identity 診斷把非 repo 誤歸因、JSON 跳脫控制字元、manifest 測試缺 PID trap；watcher suite 孤兒視窗。
+  - `live-state-dir.js` 拒絕的 `AUTOPILOT_LIVE_DIR` override（非 RAM-backed 或非 mode 700）靜默落回真實 XDG live dir（測試污染陷阱）。
+  - 先前的 `scripts/tests/session-mode-null-admission.test.sh` 曾寫真實 `~/.autopilot` marker（R5 已修；evidence-discipline 候選）；dispatch-review 的 blind-evidence K1 會拒絕含 depth-0 裁決敘事的 spec（spec 只寫需求）。
+  - CHANGELOG 版本接線依計畫屬 P1d；本版已先寫入。
+
+prose-justification: 本版新增 status／watcher 程式與 reference（references/mods.md）、schema；不改既有 skill 的要求文字。
+
 ## v2.36.114 — 第一輪就改滿所有 scope 路徑的 campaign 現在能修補
 
 - **問題與改動（逐列）**：

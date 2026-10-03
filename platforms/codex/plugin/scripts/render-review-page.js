@@ -7,15 +7,20 @@
 // no network, no image library. Everything printed is HTML-escaped; unknown is printed as "unknown",
 // never 0; manifest free-text fields are never read into the model.
 //
-// CLI (B1a prints to stdout; versioned publish, locks, assets copy, server are later rows):
+// B1b adds publish(): versioned job dirs, atomic `current` switch, project + host indexes, content-addressed
+// assets, --reap, --serve-stop (see the "publishing" section). Publishing runs its switch under flock(1).
+//
+// CLI (no --print publishes under --out-root; --print prints the page to stdout):
 //   render-review-page.js --runs <runs-live.json|status-runs.json> [--root <root_run_id>]
 //     [--task-receipt <file|none>] [--progress-receipt <file>] [--compare <dir>] [--decision <file>]
 //     [--planned <file>] --job <id> --date <YYYY-MM-DD> --project <project_key>
-//     [--repo <dir>] [--commit <sha>] [--now <iso>] --print
+//     [--repo <dir>] [--commit <sha>] [--now <iso>] [--out-root <dir>] [--print]
+//   render-review-page.js --reap [--days N] --project <project_key> [--out-root <dir>] [--now <iso>]
+//   render-review-page.js --serve-stop
 // The acceptance axis comes only from `autopilot status task --root-run-id <id> --json`. With --root and no
 // --task-receipt the renderer calls it itself; AUTOPILOT_RENDER_TASK_STATUS_BIN replaces the
 // `node bin/autopilot.js` prefix (tests inject a fixture there). `--task-receipt none` skips the call.
-// Exit: 0 printed, 2 usage / unreadable --runs.
+// Exit: 0 printed/published, 1 publish failed (current unchanged), 2 usage / unreadable --runs / bad --now.
 
 const fs = require('fs');
 const path = require('path');
@@ -351,6 +356,13 @@ function readJsonFile(file) {
 function tryReadJson(file) {
   try { return readJsonFile(file); } catch (_e) { return null; }
 }
+// An explicitly passed input that is missing or malformed: one stderr line naming it; the page still renders.
+function readExplicit(flag, file, accept) {
+  const rec = tryReadJson(file);
+  if (!rec) { process.stderr.write(`render-review-page: --${flag} ${file} is missing or not valid JSON; ignored\n`); return null; }
+  if (accept && !accept(rec.value)) { process.stderr.write(`render-review-page: --${flag} ${file} is malformed; ignored\n`); return null; }
+  return rec;
+}
 function gitIsAncestor(repo) {
   return (a, b) => {
     if (!OID.test(a) || !OID.test(b)) return null;
@@ -399,7 +411,7 @@ function loadCompare(dir) {
     const file = path.join(dir, n);
     const rec = tryReadJson(file);
     if (!rec) { out.push({ file, error: 'unreadable JSON', sha256: null }); continue; }
-    let valid = isObject(rec.value) && rec.value.schema === 'compare-record/1';
+    let valid = isObject(rec.value) && rec.value.schema === 'compare-record/1' && isObject(rec.value.before) && isObject(rec.value.after);
     if (valid && validate && schema) { try { valid = validate(schema, rec.value).valid === true; } catch (_e) { valid = false; } }
     if (!valid) { out.push({ file, error: 'not a valid compare-record/1', sha256: rec.sha256 }); continue; }
     out.push(compareEntry(file, rec, dir));
@@ -446,12 +458,295 @@ function callTaskStatus(root, repo, env) {
   }
 }
 
+// ---- publishing (row B1b) --------------------------------------------------------------------------------------
+// Layout:  <out-root>/<date>/<job>/v-<compact published_at>/{index.html,model.json}   immutable versions
+//          <out-root>/<date>/<job>/current -> v-...                                      atomic symlink
+//          <out-root>/<date>/<job>/assets/<sha256[0:12]>.<ext>                           shared by all versions
+//          <out-root>/index.html, <out-root>/project.json                                project index + its row data
+//          <autopilot_home>/review/index.html                                            host root index
+// Locks (flock(1), same `exec 9>lock; flock 9` form as src/status/runs-watch.js): project
+// <live>/review/<project_key>.index.lock, then host <live>/review/root-index.lock (order is always project, host).
+// The switch + index regeneration run in a child process started under the lock (Node has no flock).
+const SEGMENT = /^[A-Za-z0-9._-]+$/;
+const VERSION = /^v-(\d{8})T(\d{6})\.(\d{3})Z$/;
+const LOCK_WAIT_S = 60;
+// Same shape as WRAPPER in src/status/runs-watch.js but a blocking wait: $1 lock, $2 wait seconds.
+const LOCK_WRAPPER = 'exec 9>"$1" || exit 1; flock -w "$2" 9 || exit 75; shift 2; exec "$@"';
+
+function compactOf(isoText) { return isoText.replace(/[-:]/g, ''); }
+function versionMs(name) {
+  const m = VERSION.exec(name);
+  if (!m) return null;
+  const d = m[1]; const t = m[2];
+  return Date.parse(`${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}T${t.slice(0, 2)}:${t.slice(2, 4)}:${t.slice(4, 6)}.${m[3]}Z`);
+}
+function sleepMs(ms) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); }
+function pidAlive(pid) { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } }
+function rmTree(p) { fs.rmSync(p, { recursive: true, force: true }); }
+function writeFileAtomic(file, text) {
+  const tmp = `${file}.tmp-${process.pid}`;
+  fs.writeFileSync(tmp, text);
+  fs.renameSync(tmp, file);
+}
+
+function smokeDir(dir, { requireSections }) {
+  let html;
+  try { html = fs.readFileSync(path.join(dir, 'index.html'), 'utf8'); } catch (e) { return `index.html unreadable (${e.code || e.message})`; }
+  if (!/<html[\s>]/.test(html) || !/<\/html>\s*$/.test(html)) return 'HTML does not parse (no <html>…</html>)';
+  if (requireSections) {
+    for (let n = 1; n <= 9; n += 1) if (!html.includes(`<section data-section="${n}"`)) return `section marker ${n} missing`;
+  }
+  for (const m of html.matchAll(/\b(?:src|href)="([^"]*)"/g)) {
+    const url = m[1].replace(/&amp;/g, '&');
+    if (url === '' || url.startsWith('#')) continue;
+    if (url.startsWith('/') || /^[A-Za-z][A-Za-z0-9+.-]*:/.test(url)) return `non-relative URL ${url}`;
+    const target = path.resolve(dir, decodeURIComponent(url.split('#')[0].split('?')[0]));
+    if (!fs.existsSync(target)) return `referenced file missing: ${url}`;
+  }
+  return null;
+}
+
+function renderRootIndex(projects) {
+  const list = [...(projects || [])].sort((a, b) => String(a.display_name).localeCompare(String(b.display_name)) || String(a.project_key).localeCompare(String(b.project_key)));
+  const rows = list.map((p) => `<tr>${td(`<a href="${esc(p.project_key)}/index.html">${esc(p.display_name || p.project_key)}</a>`)}${td(`<code>${esc(p.project_key)}</code>`)}${td(show(p.last_published_at))}${td(Number.isInteger(p.decisions_needed) ? esc(p.decisions_needed) : unknownSpan())}</tr>`);
+  const body = `<h1>Review projects</h1>\n${list.length ? table(['project', 'project_key', 'last published_at', '需要你決定'], rows) : '<p class="muted">沒有 project。</p>'}`;
+  return page('Review projects', body);
+}
+
+function readModelOf(jobDir) {
+  try {
+    const m = JSON.parse(fs.readFileSync(path.join(jobDir, 'current', 'model.json'), 'utf8'));
+    return isObject(m) && isObject(m.axes) ? m : null;
+  } catch (_e) { return null; }
+}
+function listJobs(outRoot) {
+  const jobs = [];
+  let dates = [];
+  try { dates = fs.readdirSync(outRoot).filter((n) => /^\d{4}-\d{2}-\d{2}$/.test(n)).sort(); } catch (_e) { return jobs; }
+  for (const date of dates) {
+    let names = [];
+    try { names = fs.readdirSync(path.join(outRoot, date)).sort(); } catch (_e) { continue; }
+    for (const job of names) jobs.push({ date, job, dir: path.join(outRoot, date, job) });
+  }
+  return jobs;
+}
+
+function regenProjectIndex({ outRoot, project, displayName }) {
+  const models = [];
+  for (const j of listJobs(outRoot)) { const m = readModelOf(j.dir); if (m) models.push(m); }
+  const html = renderProjectIndex(models, { project });
+  // candidate -> smoke -> tmp -> rename; links are relative to outRoot
+  let problem = null;
+  if (!/<html[\s>]/.test(html) || !html.includes('data-counts="two-axis"')) problem = 'two-axis count line missing';
+  else for (const m of html.matchAll(/\bhref="([^"]*)"/g)) if (!fs.existsSync(path.join(outRoot, m[1]))) problem = `index link target missing: ${m[1]}`;
+  if (problem) throw new Error(`project index smoke failed: ${problem}`);
+  writeFileAtomic(path.join(outRoot, 'index.html'), html);
+  const published = models.map((m) => m.published_at).filter(Boolean).sort();
+  writeFileAtomic(path.join(outRoot, 'project.json'), `${JSON.stringify({
+    schema: 'review-project/1', project_key: project, display_name: displayName || project,
+    last_published_at: published.length ? published[published.length - 1] : null,
+    decisions_needed: models.filter((m) => m.needs_decision).length,
+  })}\n`);
+}
+
+function regenRootIndex({ home }) {
+  const root = path.join(home, 'review');
+  const projects = [];
+  let names = [];
+  try { names = fs.readdirSync(root); } catch (_e) { /* no projects yet */ }
+  for (const n of names.sort()) {
+    try {
+      const v = JSON.parse(fs.readFileSync(path.join(root, n, 'project.json'), 'utf8'));
+      if (isObject(v) && v.schema === 'review-project/1' && typeof v.project_key === 'string' && SEGMENT.test(v.project_key) && v.project_key === n) projects.push(v);
+    } catch (_e) { /* not a project dir */ }
+  }
+  const html = renderRootIndex(projects);
+  for (const m of html.matchAll(/\bhref="([^"]*)"/g)) if (!fs.existsSync(path.join(root, m[1]))) throw new Error(`root index smoke failed: link target missing: ${m[1]}`);
+  fs.mkdirSync(root, { recursive: true });
+  writeFileAtomic(path.join(root, 'index.html'), html);
+}
+
+function cleanStaleCandidates(jobDir) {
+  let names = [];
+  try { names = fs.readdirSync(jobDir); } catch (_e) { return; }
+  for (const n of names) {
+    const m = /^v-.*\.cand-(\d+)$/.exec(n) || /^current\.tmp-(\d+)$/.exec(n);
+    if (m && !pidAlive(Number(m[1]))) rmTree(path.join(jobDir, n));
+  }
+}
+
+// The locked project step (runs in a child under the project lock).
+function projectStep(p) {
+  const { jobDir, outRoot, version, publishedAt } = p;
+  cleanStaleCandidates(jobDir);
+  const cand = p.cand;
+  const current = path.join(jobDir, 'current');
+  let curTarget = null;
+  try { curTarget = fs.readlinkSync(current); } catch (_e) { /* first publish */ }
+  let curMs = null;
+  if (curTarget) {
+    try { curMs = Date.parse(JSON.parse(fs.readFileSync(path.join(jobDir, curTarget, 'model.json'), 'utf8')).published_at); } catch (_e) { curMs = versionMs(curTarget); }
+    if (!fs.existsSync(path.join(jobDir, curTarget))) { curTarget = null; curMs = null; }
+  }
+  if (curMs !== null && Number.isFinite(curMs) && curMs >= Date.parse(publishedAt)) {
+    rmTree(cand);
+    return { status: 'not_newer', current: curTarget };
+  }
+  const hold = Number(process.env.AUTOPILOT_REVIEW_HOLD_MS);
+  if (Number.isFinite(hold) && hold > 0) sleepMs(hold);
+  if (process.env.AUTOPILOT_REVIEW_FAIL_AT === 'before-switch') throw new Error('injected failure before switch (AUTOPILOT_REVIEW_FAIL_AT)');
+  let oldSwitchMs = null;
+  try { oldSwitchMs = fs.lstatSync(current).mtimeMs; } catch (_e) { /* none */ }
+  const finalDir = path.join(jobDir, version);
+  if (cand !== finalDir) { rmTree(finalDir); fs.renameSync(cand, finalDir); }
+  const tmp = path.join(jobDir, `current.tmp-${process.pid}`);
+  try { fs.unlinkSync(tmp); } catch (_e) { /* none */ }
+  fs.symlinkSync(version, tmp);
+  fs.renameSync(tmp, current);
+  // keep new + previous; older ones only once >= retain ms after the switch that superseded them
+  const retain = Number.isFinite(Number(process.env.AUTOPILOT_REVIEW_RETAIN_MS)) && process.env.AUTOPILOT_REVIEW_RETAIN_MS !== undefined && process.env.AUTOPILOT_REVIEW_RETAIN_MS !== ''
+    ? Number(process.env.AUTOPILOT_REVIEW_RETAIN_MS) : 10 * 60 * 1000;
+  const windowPassed = oldSwitchMs === null || Date.now() - oldSwitchMs >= retain;
+  if (windowPassed) {
+    for (const n of fs.readdirSync(jobDir)) {
+      if (VERSION.test(n) && n !== version && n !== curTarget) rmTree(path.join(jobDir, n));
+    }
+  }
+  regenProjectIndex({ outRoot, project: p.project, displayName: p.displayName });
+  hostStep(p);
+  return { status: 'published', version };
+}
+
+function reapStep(p) {
+  const { outRoot, nowMs, days } = p;
+  const cutoff = nowMs - days * 86400000;
+  const out = { removed_jobs: 0, removed_versions: 0, removed_assets: 0 };
+  for (const j of listJobs(outRoot)) {
+    let names = [];
+    try { names = fs.readdirSync(j.dir); } catch (_e) { continue; }
+    cleanStaleCandidates(j.dir);
+    const versions = names.filter((n) => VERSION.test(n));
+    let target = null;
+    try { target = fs.readlinkSync(path.join(j.dir, 'current')); } catch (_e) { /* none */ }
+    const old = (n) => versionMs(n) < cutoff;
+    if (versions.every(old)) { rmTree(j.dir); out.removed_jobs += 1; continue; }
+    for (const n of versions) if (old(n) && n !== target) { rmTree(path.join(j.dir, n)); out.removed_versions += 1; }
+    const referenced = new Set();
+    for (const n of versions) {
+      if (!fs.existsSync(path.join(j.dir, n))) continue;
+      let html = '';
+      try { html = fs.readFileSync(path.join(j.dir, n, 'index.html'), 'utf8'); } catch (_e) { continue; }
+      for (const m of html.matchAll(/\.\.\/assets\/([A-Za-z0-9._-]+)/g)) referenced.add(m[1]);
+    }
+    let assets = [];
+    try { assets = fs.readdirSync(path.join(j.dir, 'assets')); } catch (_e) { /* no assets */ }
+    for (const a of assets) if (!referenced.has(a)) { rmTree(path.join(j.dir, 'assets', a)); out.removed_assets += 1; }
+  }
+  for (const date of fs.readdirSync(outRoot).filter((n) => /^\d{4}-\d{2}-\d{2}$/.test(n))) {
+    try { fs.rmdirSync(path.join(outRoot, date)); } catch (_e) { /* not empty */ }
+  }
+  regenProjectIndex({ outRoot, project: p.project, displayName: p.displayName });
+  hostStep(p);
+  return { status: 'reaped', ...out };
+}
+
+function lockedArgv(lock, inner) {
+  return ['-c', LOCK_WRAPPER, 'sh', lock, String(LOCK_WAIT_S), ...inner];
+}
+function hostStep(p) {
+  const r = cp.spawnSync('sh', lockedArgv(p.hostLock, [process.execPath, __filename, '--internal', 'host']), {
+    encoding: 'utf8', env: { ...process.env, AUTOPILOT_RRP_PAYLOAD: JSON.stringify({ home: p.home }) }, timeout: (LOCK_WAIT_S + 30) * 1000,
+  });
+  if (r.status !== 0) throw new Error(`host index step failed (rc ${r.status === null ? 'signal' : r.status}): ${(r.stderr || '').trim().split('\n').pop()}`);
+}
+function runLocked(p, op) {
+  const r = cp.spawnSync('sh', lockedArgv(p.projectLock, [process.execPath, __filename, '--internal', op]), {
+    encoding: 'utf8', env: { ...process.env, AUTOPILOT_RRP_PAYLOAD: JSON.stringify(p) }, timeout: (LOCK_WAIT_S * 2 + 60) * 1000,
+  });
+  if (r.status !== 0) {
+    const last = ((r.stderr || '').trim().split('\n').pop()) || (r.status === 75 ? `lock wait timed out (${p.projectLock})` : `rc ${r.status}`);
+    return { ok: false, message: last };
+  }
+  try { return { ok: true, result: JSON.parse(r.stdout) }; } catch (_e) { return { ok: false, message: 'locked step printed no result' }; }
+}
+
+function internalMain(op, env) {
+  try {
+    const payload = JSON.parse(env.AUTOPILOT_RRP_PAYLOAD);
+    if (op === 'host') { regenRootIndex(payload); return 0; }
+    const result = op === 'reap' ? reapStep(payload) : projectStep(payload);
+    process.stdout.write(`${JSON.stringify(result)}\n`);
+    return 0;
+  } catch (e) {
+    process.stderr.write(`render-review-page: ${e.message}\n`);
+    return 1;
+  }
+}
+
+function copyAssets(compare, jobDir) {
+  const dir = path.join(jobDir, 'assets');
+  fs.mkdirSync(dir, { recursive: true });
+  for (const c of compare) {
+    for (const im of Object.values(c.images || {})) {
+      if (!im || im.missing) continue;
+      const dest = path.join(dir, path.basename(im.rel_path));
+      if (!fs.existsSync(dest)) fs.copyFileSync(im.source, dest);
+    }
+  }
+}
+
+function displayNameOf(repo, projectKey) {
+  const r = cp.spawnSync('git', ['-C', repo, 'rev-parse', '--path-format=absolute', '--git-common-dir'], { encoding: 'utf8' });
+  if (r.status !== 0) return projectKey;
+  const common = r.stdout.trim().replace(/\/+$/, '');
+  const base = path.basename(common) === '.git' ? path.basename(path.dirname(common)) : path.basename(common);
+  return base || projectKey;
+}
+
+function envPaths(env) {
+  const { pointerPath } = require('../src/status/live-pointer');
+  const { resolveLiveDir } = require('./lib/live-state-dir');
+  const home = path.dirname(pointerPath(env));
+  const live = resolveLiveDir({ env, warn: () => {} }).base;
+  return { home, liveReview: path.join(live, 'review') };
+}
+
+function publish({ model, html, compare, outRoot, home, liveReview, project, displayName, env }) {
+  if (!SEGMENT.test(model.job || '') || !SEGMENT.test(model.date || '') || !SEGMENT.test(project || '')) {
+    return { rc: 2, message: '--job, --date and --project must match [A-Za-z0-9._-]+' };
+  }
+  const { flockAvailable } = require('../src/status/runs-watch');
+  if (!flockAvailable(env)) return { rc: 1, message: 'flock_unavailable: flock(1) (util-linux) is required on PATH; no lockfile fallback' };
+  const jobDir = path.join(outRoot, model.date, model.job);
+  const version = `v-${compactOf(model.published_at)}`;
+  const cand = path.join(jobDir, `${version}.cand-${process.pid}`);
+  try {
+    fs.mkdirSync(liveReview, { recursive: true, mode: 0o700 });
+    copyAssets(compare, jobDir);
+    rmTree(cand);
+    fs.mkdirSync(cand, { recursive: true });
+    fs.writeFileSync(path.join(cand, 'index.html'), html);
+    fs.writeFileSync(path.join(cand, 'model.json'), `${JSON.stringify(model)}\n`);
+    const problem = smokeDir(cand, { requireSections: true });
+    if (problem) return { rc: 1, message: `smoke failed, current unchanged: ${problem}` };
+  } catch (e) {
+    return { rc: 1, message: `build failed, current unchanged: ${e.message}` };
+  }
+  const r = runLocked({
+    jobDir, outRoot, cand, version, publishedAt: model.published_at, project, displayName, home,
+    projectLock: path.join(liveReview, `${project}.index.lock`), hostLock: path.join(liveReview, 'root-index.lock'),
+  }, 'publish');
+  if (!r.ok) return { rc: 1, message: `publish failed, current unchanged: ${r.message}` };
+  return { rc: 0, result: { ...r.result, current: path.join(jobDir, 'current', 'index.html') } };
+}
+
 function parseArgs(argv) {
   const flags = {};
-  const valued = new Set(['runs', 'root', 'task-receipt', 'progress-receipt', 'compare', 'decision', 'planned', 'job', 'date', 'project', 'repo', 'commit', 'now']);
+  const valued = new Set(['runs', 'root', 'task-receipt', 'progress-receipt', 'compare', 'decision', 'planned', 'job', 'date', 'project', 'repo', 'commit', 'now', 'out-root', 'days']);
+  const bool = new Set(['print', 'reap', 'serve-stop']);
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
-    if (a === '--print') flags.print = true;
+    if (a.startsWith('--') && bool.has(a.slice(2))) flags[a.slice(2)] = true;
     else if (a.startsWith('--') && valued.has(a.slice(2))) {
       if (i + 1 >= argv.length) throw new Error(`${a} requires a value`);
       flags[a.slice(2)] = argv[i + 1];
@@ -470,13 +765,31 @@ function writeAll(text) {
   }
 }
 
+function resolveNow(flags, env) {
+  const raw = flags.now || (env.AUTOPILOT_REVIEW_NOW ? env.AUTOPILOT_REVIEW_NOW : null);
+  if (raw === null) return { ms: Date.now() };
+  const ms = Date.parse(raw);
+  if (!Number.isFinite(ms)) return { error: `unparseable time ${JSON.stringify(raw)} (${flags.now ? '--now' : 'AUTOPILOT_REVIEW_NOW'}); expected an ISO-8601 timestamp` };
+  return { ms, raw };
+}
+
 function main(argv, env) {
+  if (argv[0] === '--internal') return internalMain(argv[1], env);
   let flags;
   try { flags = parseArgs(argv); } catch (e) { process.stderr.write(`render-review-page: ${e.message}\n`); return 2; }
+  if (flags['serve-stop']) {
+    const { stopReviewServer } = require('../src/status/review-server');
+    const r = stopReviewServer({ env });
+    if (r.status === 'stopped' || r.status === 'not_running') { writeAll(`${JSON.stringify(r)}\n`); return 0; }
+    process.stderr.write(`render-review-page: ${r.message || r.status}\n`);
+    return 1;
+  }
+  const clock = resolveNow(flags, env);
+  if (clock.error) { process.stderr.write(`render-review-page: ${clock.error}\n`); return 2; }
+  if (flags.reap) return reapMain(flags, env, clock);
   for (const req of ['runs', 'job', 'date', 'project']) {
     if (!flags[req]) { process.stderr.write(`render-review-page: --${req} is required\n`); return 2; }
   }
-  if (!flags.print) { process.stderr.write('render-review-page: publishing is not available yet; pass --print\n'); return 2; }
   const runs = tryReadJson(flags.runs);
   if (!runs) { process.stderr.write(`render-review-page: cannot read --runs ${flags.runs}\n`); return 2; }
   const repo = flags.repo ? path.resolve(flags.repo) : process.cwd();
@@ -486,7 +799,7 @@ function main(argv, env) {
 
   let task = null;
   if (flags['task-receipt'] && flags['task-receipt'] !== 'none') {
-    task = tryReadJson(flags['task-receipt']);
+    task = readExplicit('task-receipt', flags['task-receipt'], isObject);
     if (task) sources.push({ role: 'task_status_receipt', path: path.resolve(flags['task-receipt']), sha256: task.sha256 });
   } else if (!flags['task-receipt'] && root) {
     task = callTaskStatus(root, repo, env);
@@ -494,12 +807,12 @@ function main(argv, env) {
   }
   let progress = null;
   if (flags['progress-receipt']) {
-    progress = tryReadJson(flags['progress-receipt']);
+    progress = readExplicit('progress-receipt', flags['progress-receipt'], isObject);
     if (progress) sources.push({ role: 'controller_progress_receipt', path: path.resolve(flags['progress-receipt']), sha256: progress.sha256 });
   }
-  const decision = flags.decision ? tryReadJson(flags.decision) : null;
+  const decision = flags.decision ? readExplicit('decision', flags.decision, (v) => isObject(v) && typeof v.question === 'string') : null;
   if (decision) sources.push({ role: 'decision', path: path.resolve(flags.decision), sha256: decision.sha256 });
-  const planned = flags.planned ? tryReadJson(flags.planned) : null;
+  const planned = flags.planned ? readExplicit('planned', flags.planned, Array.isArray) : null;
   if (planned) sources.push({ role: 'planned', path: path.resolve(flags.planned), sha256: planned.sha256 });
   const reviewReceipts = discoverReviewReceipts(rows, root);
   for (const e of reviewReceipts) sources.push({ role: 'review_receipt', path: e.file, sha256: e.sha256 });
@@ -513,16 +826,45 @@ function main(argv, env) {
   }
   const model = buildJobModel({
     runs: runs.value, root, job: flags.job, date: flags.date, project: flags.project,
-    now: flags.now || env.AUTOPILOT_REVIEW_NOW || Date.now(), commit,
+    now: clock.ms, commit,
     taskReceipt: task ? task.value : null, progressReceipt: progress ? progress.value : null,
     reviewReceipts, compare, decision: decision ? decision.value : null, planned: planned ? planned.value : null,
     isAncestor: gitIsAncestor(repo), sources,
   });
-  writeAll(renderJobHtml(model));
+  const html = renderJobHtml(model);
+  if (flags.print) { writeAll(html); return 0; }
+  const ep = envPaths(env);
+  const outRoot = flags['out-root'] ? path.resolve(flags['out-root']) : path.join(ep.home, 'review', flags.project);
+  const r = publish({ model, html, compare, outRoot, home: ep.home, liveReview: ep.liveReview, project: flags.project, displayName: displayNameOf(repo, flags.project), env });
+  if (r.rc !== 0) { process.stderr.write(`render-review-page: ${r.message}\n`); return r.rc; }
+  writeAll(`${JSON.stringify(r.result)}\n`);
   return 0;
 }
 
-module.exports = { buildJobModel, renderJobHtml, renderProjectIndex, discoverReviewReceipts, loadCompare, esc };
+function reapMain(flags, env, clock) {
+  if (!flags.project) { process.stderr.write('render-review-page: --project is required\n'); return 2; }
+  if (!SEGMENT.test(flags.project)) { process.stderr.write('render-review-page: --project must match [A-Za-z0-9._-]+\n'); return 2; }
+  const days = flags.days === undefined ? 90 : Number(flags.days);
+  if (!Number.isFinite(days) || days < 0) { process.stderr.write(`render-review-page: --days must be a non-negative number, got ${flags.days}\n`); return 2; }
+  const { flockAvailable } = require('../src/status/runs-watch');
+  if (!flockAvailable(env)) { process.stderr.write('render-review-page: flock_unavailable: flock(1) (util-linux) is required on PATH\n'); return 1; }
+  const ep = envPaths(env);
+  const outRoot = flags['out-root'] ? path.resolve(flags['out-root']) : path.join(ep.home, 'review', flags.project);
+  if (!fs.existsSync(outRoot)) { writeAll(`${JSON.stringify({ status: 'reaped', removed_jobs: 0, removed_versions: 0, removed_assets: 0 })}\n`); return 0; }
+  fs.mkdirSync(ep.liveReview, { recursive: true, mode: 0o700 });
+  const repo = flags.repo ? path.resolve(flags.repo) : process.cwd();
+  const r = runLocked({
+    outRoot, nowMs: clock.ms, days, project: flags.project, displayName: displayNameOf(repo, flags.project), home: ep.home,
+    projectLock: path.join(ep.liveReview, `${flags.project}.index.lock`), hostLock: path.join(ep.liveReview, 'root-index.lock'),
+  }, 'reap');
+  if (!r.ok) { process.stderr.write(`render-review-page: reap failed: ${r.message}\n`); return 1; }
+  writeAll(`${JSON.stringify(r.result)}\n`);
+  return 0;
+}
+
+module.exports = {
+  buildJobModel, renderJobHtml, renderProjectIndex, renderRootIndex, discoverReviewReceipts, loadCompare, publish, smokeDir, esc,
+};
 
 if (require.main === module) {
   process.exitCode = main(process.argv.slice(2), process.env);

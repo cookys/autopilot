@@ -190,7 +190,114 @@ function recordVerdict(ctx, attempts, outcome) {
   return writeJson(file, baseBody(ctx, attempts, result));
 }
 
+// ---- Reaping -------------------------------------------------------------------------
+// A campaign's seat subtree is read only by a resume, so it is dead weight once the
+// campaign is terminal. Only the journal says which: a parked campaign (durable wait,
+// BOUNDARY_REJECTED, AWAITING_DISPOSITION, REVIEWING ...) has a non-terminal last event and
+// MUST keep its artifacts.
+const TERMINAL_EVENT_TYPES = new Set(['terminal_ready', 'terminal_follow_up', 'terminal_stop']);
+const CAMPAIGN_TOKEN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+function isPlainCampaignToken(value) {
+  return typeof value === 'string' && value.length > 0 && value.length <= 200
+    && CAMPAIGN_TOKEN.test(value) && !value.includes('..');
+}
+
+// Last journaled campaign event per campaign id, in append order, across the live ledger
+// and its rotated generations. Returns Map(campaign_id -> event_type), or null when a
+// ledger file exists but cannot be read (callers then treat every campaign as not
+// provably terminal).
+function campaignLastEvents(ledgerPath) {
+  const last = new Map();
+  const files = [];
+  for (let n = 4; n >= 1; n -= 1) files.push(`${ledgerPath}.${n}`);
+  files.push(ledgerPath);
+  for (const file of files) {
+    if (!fs.existsSync(file)) continue;
+    let text;
+    try { text = fs.readFileSync(file, 'utf8'); } catch (_error) { return null; }
+    for (const line of text.split('\n')) {
+      if (!line.trim()) continue;
+      let row;
+      try { row = JSON.parse(line); } catch (_error) { continue; }
+      if (!row || row.kind !== 'journal'
+          || (row.op !== 'campaign_event' && row.op !== 'campaign_intake')
+          || typeof row.payload !== 'string') continue;
+      let payload;
+      try { payload = JSON.parse(row.payload); } catch (_error) { continue; }
+      if (!payload || typeof payload.campaign_id !== 'string') continue;
+      const type = payload.event && typeof payload.event.event_type === 'string'
+        ? payload.event.event_type : 'intake';
+      last.set(payload.campaign_id, type);
+    }
+  }
+  return last;
+}
+
+// Remove <root>/<campaignId>/ and nothing else. Refuses a non-token id, a root that is not
+// a `final-panel-seats` directory, and any target that does not resolve directly under the
+// root. Never throws. Returns { status: 'removed'|'absent'|'refused'|'failed', reason, path }.
+function reapCampaignSeats({ root, campaignId }) {
+  try {
+    if (typeof root !== 'string' || root.length === 0
+        || path.basename(path.resolve(root)) !== 'final-panel-seats') {
+      return { status: 'refused', reason: 'seat_root_invalid', path: null };
+    }
+    if (!isPlainCampaignToken(campaignId)) {
+      return { status: 'refused', reason: 'campaign_id_not_a_plain_token', path: null };
+    }
+    const absRoot = path.resolve(root);
+    const target = path.resolve(absRoot, campaignId);
+    if (path.dirname(target) !== absRoot) {
+      return { status: 'refused', reason: 'path_escapes_seat_root', path: target };
+    }
+    let st;
+    try { st = fs.lstatSync(target); } catch (error) {
+      if (error && error.code === 'ENOENT') return { status: 'absent', reason: null, path: target };
+      throw error;
+    }
+    if (!st.isDirectory()) {
+      return { status: 'refused', reason: 'target_is_not_a_directory', path: target };
+    }
+    fs.rmSync(target, { recursive: true, force: true });
+    return { status: 'removed', reason: null, path: target };
+  } catch (error) {
+    return {
+      status: 'failed',
+      reason: `reap_failed: ${error && error.message ? error.message : String(error)}`,
+      path: null,
+    };
+  }
+}
+
+// Terminal-time reap: only when the journal proves the campaign is terminal. Fail-open.
+function reapIfCampaignTerminal({ root, campaignId, ledgerPath }) {
+  try {
+    if (typeof ledgerPath !== 'string' || ledgerPath.length === 0) {
+      return { status: 'kept', reason: 'campaign_ledger_unknown', path: null };
+    }
+    const events = campaignLastEvents(ledgerPath);
+    if (!events) return { status: 'kept', reason: 'campaign_ledger_unreadable', path: null };
+    const type = events.get(campaignId);
+    if (!TERMINAL_EVENT_TYPES.has(type)) {
+      return { status: 'kept', reason: `campaign_not_terminal:${type || 'unjournaled'}`, path: null };
+    }
+    return reapCampaignSeats({ root, campaignId });
+  } catch (error) {
+    return {
+      status: 'failed',
+      reason: `reap_failed: ${error && error.message ? error.message : String(error)}`,
+      path: null,
+    };
+  }
+}
+
 module.exports = {
+  TERMINAL_EVENT_TYPES,
+  isPlainCampaignToken,
+  campaignLastEvents,
+  reapCampaignSeats,
+  reapIfCampaignTerminal,
   ARTIFACT_TYPE,
   FINAL_PANEL_SEAT_ATTEMPT_BUDGET,
   FINAL_PANEL_SEAT_BUDGET_PHASE,

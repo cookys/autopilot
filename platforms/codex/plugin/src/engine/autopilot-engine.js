@@ -9499,6 +9499,39 @@ class AutopilotEngine {
       bestCommit: null,
     };
     const finish = (result) => {
+      // Terminal campaign: reap its final-panel seat artifacts (a resume is the only reader).
+      // Fail-open, but the outcome is recorded in the ledger with a named reason.
+      if (campaignControl && isStr(campaignControl.campaign_id)) {
+        try {
+          const reapStartedAt = this.now();
+          const common = workOrder.resolveGitCommonDir(loopCwd);
+          const reaped = common
+            ? finalPanelSeatStore.reapIfCampaignTerminal({
+              root: path.join(common, 'autopilot', 'final-panel-seats'),
+              campaignId: campaignControl.campaign_id,
+              ledgerPath: isStr(input.campaignLedger)
+                ? input.campaignLedger
+                : path.join(common, 'autopilot', 'implementation-campaign.jsonl'),
+            })
+            : { status: 'kept', reason: 'git_common_dir_unresolved', path: null };
+          if (reaped.status !== 'absent'
+              && !(reaped.status === 'kept' && /^campaign_not_terminal:/.test(reaped.reason || ''))) {
+            ledger.push(this.ledgerEntry(
+              'final_panel_seat_reap',
+              reaped.status === 'removed' ? 'removed' : 'blocked',
+              reapStartedAt,
+              { campaign_id: campaignControl.campaign_id, reason: reaped.reason, path: reaped.path },
+            ));
+          }
+        } catch (reapError) {
+          try {
+            ledger.push(this.ledgerEntry('final_panel_seat_reap', 'blocked', this.now(), {
+              campaign_id: campaignControl.campaign_id,
+              reason: `reap_failed: ${reapError && reapError.message ? reapError.message : String(reapError)}`,
+            }));
+          } catch (_ledgerError) { /* fail-open */ }
+        }
+      }
       const withStrictReadiness = strictL5ProviderReadiness
         ? { ...result, strict_l5_provider_readiness: strictL5ProviderReadiness }
         : result;

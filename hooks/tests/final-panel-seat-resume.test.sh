@@ -19,6 +19,8 @@
 #     AssertionError: disqualified seat is not reused: ["reviewed","reviewed","reviewed"]
 #     (expected 'precondition_failed'); the exit-1 also leaves exhausted_seat_classifies_terminal
 #     unreached.
+# RED at 8a338ccb for the reap scenarios (converged_seats_reaped, parked_seats_kept):
+#   AssertionError [ERR_ASSERTION]: converged campaign seat subtree is reaped
 . "$(dirname "$0")/lib.sh"
 
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP" <<'NODE'
@@ -414,12 +416,32 @@ assert.strictEqual(classifyFullDiffReviewFault({
   final_panel_seat_receipts: [{ status: 'reviewed' }, { status: 'transport_failed' }],
 }), 'gate_transient');
 console.log('exhausted_seat_classifies_terminal=true');
+// Reaping: a converged campaign's seat subtree is gone at terminal; a parked (resumable)
+// campaign keeps its artifacts.
+{
+  const campaignId = reuse.result.campaign_control && reuse.result.campaign_control.campaign_id;
+  assert.ok(campaignId, 'campaign id is on the result');
+  assert.strictEqual(reuse.result.status, 'converged', JSON.stringify(reuse.result).slice(0, 400));
+  assert.ok(!fs.existsSync(path.join(storeRoot, campaignId)), 'converged campaign seat subtree is reaped');
+  const reaped = (reuse.result.ledger || []).find((e) => e.unit === 'final_panel_seat_reap');
+  assert.ok(reaped, `terminal cleanup records the reap outcome: ${JSON.stringify((reuse.result.ledger || []).map((e) => e.unit))}`);
+  console.log('converged_seats_reaped=true');
+  const parkedRun = runStation('seat-parked', {
+    station: 'panel', fixFirst: false, withPacketHash: true, failSeat: names[1], replay: false,
+  });
+  const parkedId = parkedRun.result.campaign_control && parkedRun.result.campaign_control.campaign_id;
+  assert.ok(parkedId && parkedRun.result.status !== 'converged', JSON.stringify(parkedRun.result).slice(0, 500));
+  assert.ok(fs.existsSync(path.join(storeRoot, parkedId)),
+    `parked campaign (${parkedRun.result.status}/${parkedRun.result.phase}) keeps its seat subtree`);
+  console.log('parked_seats_kept=true');
+}
+
 NODE
 )"
 assert_exit_code "$?" "0" "final-panel seat resume: $OUT"
 for key in resume_dispatches_only_failed_seat unparseable_artifact_redispatched wrong_seat_artifact_not_reused \
   forged_verdict_not_reused changed_packet_reruns_every_seat over_budget_seat_not_redispatched \
-  disqualified_seat_not_reused exhausted_seat_classifies_terminal; do
+  disqualified_seat_not_reused exhausted_seat_classifies_terminal converged_seats_reaped parked_seats_kept; do
   assert_contains "$OUT" "$key=true" "seat resume proves $key"
 done
 finalize_test

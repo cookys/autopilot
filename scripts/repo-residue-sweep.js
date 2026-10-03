@@ -39,6 +39,14 @@
 //   --older-than-days narrows the candidate set (age from the marker's created_at, else the
 //   branch's last commit date, else the directory mtime); it never widens it.
 //
+// FINAL-PANEL SEATS: `<git-common-dir>/autopilot/final-panel-seats/<campaign_id>/` (resume
+// artifacts, read only by a --resume). Class from the campaign journal, never from the
+// directory: terminal (last journaled event is terminal_ready|terminal_follow_up|terminal_stop)
+// | active (any other journaled event: parked or running, kept) | unknown (not journaled) |
+// unsafe-name (not a plain token; never touched) | unverifiable (journal unreadable). reap
+// removes terminal, and unknown ONLY while no linked worktree lock is held (a held or
+// unmeasurable lock may be a rail whose journal lives elsewhere). --older-than-days applies.
+//
 // OUTPUT: one JSON object; `scan` is read-only. EXIT: 0 ok · 1 reap left something it was asked
 // to remove (named) · 2 usage / cannot run. A scan finding is not an error.
 //
@@ -50,6 +58,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
+const seatStore = require('../src/engine/final-panel-seat-store');
 
 function usage(msg) {
   if (msg) process.stderr.write(`repo-residue-sweep: ${msg}\n`);
@@ -188,6 +197,32 @@ function classifyBranches(repo, worktrees, integrationSha, integrationBranch) {
   return rows;
 }
 
+function classifyFinalPanelSeats(mainPath, worktrees) {
+  const common = git(mainPath, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
+  if (!common.ok) return { root: null, rows: [] };
+  const root = path.join(common.out, 'autopilot', 'final-panel-seats');
+  if (!fs.existsSync(root)) return { root, rows: [] };
+  const events = seatStore.campaignLastEvents(path.join(common.out, 'autopilot', 'implementation-campaign.jsonl'));
+  const lockUnknown = worktrees.some((w) => w.lock_held === true || w.lock_held === null);
+  const now = Date.now();
+  const rows = [];
+  let names;
+  try { names = fs.readdirSync(root).sort(); } catch { return { root, rows: [] }; }
+  for (const name of names) {
+    const p = path.join(root, name);
+    let st; try { st = fs.lstatSync(p); } catch { continue; }
+    const row = { campaign_id: name, path: p, class: null, age_days: Math.round((now - st.mtimeMs) / 864000) / 100, lock_held_elsewhere: lockUnknown, reason: '' };
+    if (!st.isDirectory() || !seatStore.isPlainCampaignToken(name)) { row.class = 'unsafe-name'; row.reason = 'not a plain campaign-token directory'; rows.push(row); continue; }
+    if (events === null) { row.class = 'unverifiable'; row.reason = 'campaign journal unreadable'; rows.push(row); continue; }
+    const type = events.get(name);
+    if (type === undefined) { row.class = 'unknown'; row.reason = 'campaign not journaled'; }
+    else if (seatStore.TERMINAL_EVENT_TYPES.has(type)) { row.class = 'terminal'; row.reason = `last event ${type}`; }
+    else { row.class = 'active'; row.reason = `last event ${type}: resumable, artifacts kept`; }
+    rows.push(row);
+  }
+  return { root, rows };
+}
+
 function sha256File(p) { return crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex'); }
 function safeName(p) { const n = p.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^_+/, '').slice(-120); return n || crypto.createHash('sha256').update(p).digest('hex').slice(0, 16); }
 
@@ -319,7 +354,8 @@ function main() {
   const worktrees = classifyWorktrees(mainPath, mainPath, integrationSha.out);
   const branches = classifyBranches(mainPath, listWorktrees(mainPath).map((w) => ({ branch: w.branch, path: path.resolve(w.path) })), integrationSha.out, integrationBranch);
   const count = (rows, key) => rows.reduce((acc, r) => { acc[r[key]] = (acc[r[key]] || 0) + 1; return acc; }, {});
-  const report = { command: o.cmd, repo: mainPath, integration_ref: integrationRef, integration_sha: integrationSha.out, worktrees, branches, summary: { worktrees: count(worktrees, 'class'), branches: count(branches, 'class') } };
+  const seats = classifyFinalPanelSeats(mainPath, worktrees);
+  const report = { command: o.cmd, repo: mainPath, integration_ref: integrationRef, integration_sha: integrationSha.out, worktrees, branches, final_panel_seats: seats.rows, summary: { worktrees: count(worktrees, 'class'), branches: count(branches, 'class'), final_panel_seats: count(seats.rows, 'class') } };
 
   if (o.cmd === 'scan') { process.stdout.write(`${JSON.stringify(report)}\n`); return 0; }
 
@@ -334,7 +370,7 @@ function main() {
 
   // reap
   const tooYoung = (ageDays) => o.olderThanDays !== null && (ageDays === null || ageDays < o.olderThanDays);
-  const actions = { worktrees_removed: [], worktrees_kept: [], branches_deleted: [], branches_kept: [], anchors: null };
+  const actions = { worktrees_removed: [], worktrees_kept: [], branches_deleted: [], branches_kept: [], final_panel_seats_removed: [], final_panel_seats_kept: [], anchors: null };
   for (const w of worktrees) {
     if (w.class === 'live' || w.class === 'unverifiable' || w.class === 'clean-unintegrated') { actions.worktrees_kept.push({ path: w.path, class: w.class, why: w.reason }); continue; }
     if (tooYoung(w.age_days)) { actions.worktrees_kept.push({ path: w.path, class: w.class, why: `younger than ${o.olderThanDays} days` }); continue; }
@@ -368,11 +404,22 @@ function main() {
       }
     }
   }
+  // final-panel seat subtrees: terminal always; unknown only with no live/unmeasurable lock
+  for (const r of seats.rows) {
+    const keep = (why) => actions.final_panel_seats_kept.push({ campaign_id: r.campaign_id, class: r.class, why });
+    if (r.class !== 'terminal' && r.class !== 'unknown') { keep(r.reason); continue; }
+    if (r.class === 'unknown' && r.lock_held_elsewhere) { keep('live_lock_held: a rail may own this campaign; journal not found'); continue; }
+    if (tooYoung(r.age_days)) { keep(`younger than ${o.olderThanDays} days`); continue; }
+    const res = seatStore.reapCampaignSeats({ root: seats.root, campaignId: r.campaign_id });
+    if (res.status === 'removed') actions.final_panel_seats_removed.push({ campaign_id: r.campaign_id, class: r.class, path: res.path });
+    else keep(`reap ${res.status}: ${res.reason}`);
+  }
   report.actions = actions;
   const after = classifyWorktrees(mainPath, mainPath, integrationSha.out);
   report.after = { worktrees: count(after, 'class'), branches: count(classifyBranches(mainPath, listWorktrees(mainPath).map((w) => ({ branch: w.branch, path: path.resolve(w.path) })), integrationSha.out, integrationBranch), 'class') };
   process.stdout.write(`${JSON.stringify(report)}\n`);
-  const leftover = actions.worktrees_kept.filter((k) => ['missing-dir', 'clean-integrated'].includes(k.class));
+  const leftover = actions.worktrees_kept.filter((k) => ['missing-dir', 'clean-integrated'].includes(k.class))
+    .concat(actions.final_panel_seats_kept.filter((k) => /^reap (failed|refused)/.test(k.why)));
   return leftover.length > 0 ? 1 : 0;
 }
 

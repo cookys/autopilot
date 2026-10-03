@@ -360,6 +360,7 @@ hooks/tests/calendar-teeth-negative.test.sh|partial roster fixture, resolves con
 hooks/tests/campaign-boundary-receipt-e2e.test.sh|bridge-fixture roster literal
 hooks/tests/campaign-dispatch-projection.test.sh|partial roster fixture, resolves consult/discuss via the default
 hooks/tests/campaign-intake-rejection-release.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/campaign-resume-reviewing-phase.test.sh|in-process roster object literal for a seat-resume fixture, never resolved from config; consult/discuss not involved
 hooks/tests/contract-parity.test.sh|partial roster fixture, resolves consult/discuss via the default
 hooks/tests/controller-boundary-budget-bridge.test.sh|partial roster fixture, resolves consult/discuss via the default
 hooks/tests/controller-execution-independent.test.sh|partial roster fixture, resolves consult/discuss via the default
@@ -369,6 +370,8 @@ hooks/tests/dispatch-detached-campaign-authority.test.sh|partial roster fixture,
 hooks/tests/dispatch-hetero-contract.test.sh|partial roster fixture, resolves consult/discuss via the default
 hooks/tests/engine-lifecycle-observation.test.sh|partial roster fixture, resolves consult/discuss via the default
 hooks/tests/final-panel-kimi-agy-intake.test.sh|kimi/agy final-panel intake fixture roster (lands with the in-flight release)
+hooks/tests/final-panel-seat-resume.test.sh|in-process roster object literal for a seat-resume fixture, never resolved from config; consult/discuss not involved
+hooks/tests/lib/final-panel-seat-xproc-driver.js|in-process roster object literal for a seat-resume fixture, never resolved from config; consult/discuss not involved
 hooks/tests/fixtures/implementation-campaign/probe-red-baseline.js|campaign probe fixture roster literal
 hooks/tests/fixtures/pre-consult-discuss-review-loop-config.md|frozen pre-D6 shipped-template copy
 hooks/tests/fixtures/review-loop-config.frozen-2026-09-13.md|frozen 2026-09-13 review-loop config fixture

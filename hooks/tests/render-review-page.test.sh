@@ -14,6 +14,7 @@
 #   FAIL [render-review-page] gate cells carry data-label (match status chip): 'data-label="匹配狀態"' not found in output
 #   FAIL [render-review-page] the decision question is folded into the conclusion section: 'DECISION-QUESTION-1' not found in output
 #   FAIL [render-review-page] project index one-line summary (no decision needed): '需要你決定：0' not found in output
+# B4b addition RED at ef287d9d: needs_decision with a null decision threw 'Cannot read properties of null (reading 'question')'.
 # Pure fixtures: fake HOME / CLAUDE_CONFIG_DIR / AUTOPILOT_LIVE_DIR (/dev/shm) / costs file; the renderer
 # is never allowed to call the real `autopilot status task` (a fixture receipt or a fake bin is always given).
 . "$(dirname "$0")/lib.sh"
@@ -467,5 +468,12 @@ assert_contains "$IDX2" "需要你決定：2" "project index summary counts the 
 ROOTIDX="$(node -e 'process.stdout.write(require(process.argv[1]).renderRootIndex([{schema:"review-project/1",project_key:"aaaa000000000001",display_name:"repo",last_published_at:"2026-10-04T02:00:00.000Z",decisions_needed:1}]))' "$R")"
 assert_contains "$ROOTIDX" 'data-label="project_key"' "root index cells carry data-label"
 assert_contains "$ROOTIDX" 'href="aaaa000000000001/index.html"' "root index lists a published project"
+
+NULLDEC="$(node -e '
+const r = require(process.argv[1]);
+const m = r.buildJobModel({ runs: [], root: null, job: "J", date: "2026-10-04", project: "abcdef0123456789", now: 0, commit: null, sources: [] });
+m.needs_decision = true; m.decision = null;
+try { process.stdout.write(r.renderJobHtml(m).includes("unknown") ? "unknown" : "no-unknown"); } catch (e) { process.stdout.write("threw " + e.message); }' "${NULLDEC_R:-$R}")"
+assert_eq "$NULLDEC" "unknown" "needs_decision with a null decision renders unknown (never throws)"
 
 finalize_test

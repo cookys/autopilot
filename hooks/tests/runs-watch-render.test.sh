@@ -25,6 +25,11 @@
 #   FAIL S10 no second date directory appears: expected '0', got '1'
 #   FAIL CLI --render "" is treated as default-on (publishes under the default root): expected 'yes', got 'no'
 #   (the real-collector .exit assertion passes on the base: it is a guard against a field-name mismatch)
+# B4b additions RED at ef287d9d: 59 passed, 10 failed:
+#   FAIL S10b after a watcher restart the job still publishes into its existing date dir: expected '3', got '2'
+#   FAIL S10b a restart creates no second date directory: expected '0', got '1'
+#   FAIL settled-root poll interval is 15 s (strictly between one and two default ticks): expected '15000', got ''
+#   FAIL tick jitter just under 20 s: every tick re-polls: expected '1', got ''   (taskPollDue not exported)
 
 eq() { assert_eq "$2" "$1" "$3"; } # eq <expected> <actual> <msg>
 CLI="$REPO_ROOT/bin/autopilot.js"
@@ -86,7 +91,8 @@ const collect = () => world.rows.map((r) => {
 });
 fs.mkdirSync(path.join(D, 'led1'), { recursive: true }); W(path.join(D, 'led1', 'ledger.jsonl'), '');
 W(path.join(D, 'task.json'), '{}');
-const watcher = createWatcher({ key, env: process.env, cwd: path.join(D, '..', 'repo'), collect, now: () => T, interval: 10, enrichCap: 8, render: { outRoot } });
+const mkWatcher = () => createWatcher({ key, env: process.env, cwd: path.join(D, '..', 'repo'), collect, now: () => T, interval: 10, enrichCap: 8, render: { outRoot } });
+let watcher = mkWatcher();
 const tick = (dt) => { T += dt * 1000; try { watcher.tick(); return true; } catch (e) { out('tick_threw', e.message); return false; } };
 let DATE = '2026-10-04';
 const jobDir = (job) => path.join(outRoot, DATE, job);
@@ -185,7 +191,7 @@ W(path.join(D, 'exits', 'run-five.exit'), '0'); task('accepted', '6'.repeat(64))
 tick(10); tick(6); tick(10);
 out('s9b_versions', versions('R1') - v9c); out('s9b_fresh_task', has('R1', 'ACCEPTED'));
 // S10: the job date is pinned at first observation; a reaped oldest manifest does not move the job to another date dir
-const keep = world.rows; world.rows = [mkRow('r3-old', 'R3', { started_at: '2026-10-03T23:00:00.000Z' }), mkRow('r3-new', 'R3', { started_at: '2026-10-04T01:00:00.000Z' })];
+const keepRows = world.rows; world.rows = [mkRow('r3-old', 'R3', { started_at: '2026-10-03T23:00:00.000Z' }), mkRow('r3-new', 'R3', { started_at: '2026-10-04T01:00:00.000Z' })];
 W(path.join(D, 'exits', 'r3-old.exit'), '0'); W(path.join(D, 'exits', 'r3-new.exit'), '0');
 tick(10); tick(6);
 DATE = '2026-10-03'; out('s10_first_date_dir', versions('R3'));
@@ -193,7 +199,12 @@ world.rows = [world.rows[1]]; // the oldest manifest is gone
 tick(10); tick(6);
 out('s10_same_dir_republished', versions('R3'));
 DATE = '2026-10-04'; out('s10_no_second_dir', versions('R3'));
-DATE = '2026-10-04';
+// S10b: a watcher restart (fresh state) after the oldest manifest was reaped keeps the job in its existing date dir
+watcher.finalPublish('stopped'); watcher = mkWatcher(); watcher.start();
+tick(0); tick(6);
+DATE = '2026-10-03'; out('s10b_restart_same_dir', versions('R3'));
+DATE = '2026-10-04'; out('s10b_restart_no_second_dir', versions('R3'));
+world.rows = keepRows;
 watcher.finalPublish('stopped');
 JS
 export AUTOPILOT_RENDER_TASK_STATUS_BIN="$SB/task-bin.sh"
@@ -245,6 +256,37 @@ eq yes "$(dv s9b_fresh_task)" "S9b the .exit-triggered republish carries the fre
 eq 1 "$(dv s10_first_date_dir)" "S10 job first observed under the date of its oldest manifest"
 eq 2 "$(dv s10_same_dir_republished)" "S10 after the oldest manifest is gone the job still republishes into the same date dir"
 eq 0 "$(dv s10_no_second_dir)" "S10 no second date directory appears"
+eq 3 "$(dv s10b_restart_same_dir)" "S10b after a watcher restart the job still publishes into its existing date dir"
+eq 0 "$(dv s10b_restart_no_second_dir)" "S10b a restart creates no second date directory"
+
+# ---- 1b. the task re-poll decision holds the 30 s bound at the boundary --------------------------------------
+cat > "$SB/poll.js" <<'JS'
+const { taskPollDue, TASK_SETTLED_POLL_MS } = require(process.argv[2] + '/src/status/runs-watch.js');
+const r = {};
+r.interval = TASK_SETTLED_POLL_MS;
+r.just_under = taskPollDue(0, TASK_SETTLED_POLL_MS - 1, false);
+r.at_bound = taskPollDue(0, TASK_SETTLED_POLL_MS, false);
+r.live = taskPollDue(0, 1, true);
+// worst case: the poll happens at the tick right before the change. Ticks are `step` ms apart; count ticks until a re-poll.
+for (const step of [10000, 14999, 19999]) {
+  let age = 0; let n = 0;
+  do { age += step; n += 1; } while (!taskPollDue(0, age, false) && n < 10);
+  r[`ticks_${step}`] = n;
+}
+// default 10 s tick: change right after a poll -> re-polled at tick 2 (20 s), armed, due 5 s later = 25 s < 30 s
+r.default_detect_plus_debounce_ms = (2 * 10000) + 5000;
+for (const k of Object.keys(r)) process.stdout.write(`${k}=${r[k]}\n`);
+JS
+POLL="$(wenv "$NODE" "$SB/poll.js" "$REPO_ROOT" 2> "$SB/poll.err" < /dev/null)"
+pv() { printf '%s\n' "$POLL" | sed -n "s/^$1=//p" | head -1; }
+eq 15000 "$(pv interval)" "settled-root poll interval is 15 s (strictly between one and two default ticks)"
+eq false "$(pv just_under)" "age 14.999 s: no re-poll yet"
+eq true "$(pv at_bound)" "age 15 s: re-poll"
+eq true "$(pv live)" "a root with a live run re-polls every tick"
+eq 2 "$(pv ticks_10000)" "10 s ticks: the second tick after a poll re-polls"
+eq 2 "$(pv ticks_14999)" "tick jitter 14.999 s: the second tick after a poll re-polls"
+eq 1 "$(pv ticks_19999)" "tick jitter just under 20 s: every tick re-polls"
+eq 25000 "$(pv default_detect_plus_debounce_ms)" "default tick: re-poll at 20 s + 5 s debounce = 25 s < 30 s"
 
 # ---- 2. the real CLI: --render [<out-root>] (explicit and default) -------------------------------------
 NOW=$(date +%s)

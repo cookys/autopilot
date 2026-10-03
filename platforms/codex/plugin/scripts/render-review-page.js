@@ -324,7 +324,7 @@ function renderJobHtml(model) {
   const accCls = m.axes.acceptance === 'unknown' ? 'pending' : m.axes.acceptance;
   const dd = m.decision;
   const s1 = `<h1>${esc(m.job)} <span class="muted">· ${esc(m.project)}</span></h1>\n<p class="updated muted">updated ${esc(m.published_at)} @ ${m.commit ? esc(m.commit) : 'unknown'}</p>`;
-  const s2 = `<p>${chip(acceptanceChip(m.axes.acceptance, m.axes.can_close), accCls)}${m.needs_decision ? chip('需要你決定', 'warn') : chip('知會', 'info')}</p>\n<p><strong>${esc(m.conclusion)}</strong></p>\n<p>${m.needs_decision ? `需要你決定：${esc(dd.question)}` : '知會：目前沒有待你決定的事項。'}</p>`;
+  const s2 = `<p>${chip(acceptanceChip(m.axes.acceptance, m.axes.can_close), accCls)}${m.needs_decision ? chip('需要你決定', 'warn') : chip('知會', 'info')}</p>\n<p><strong>${esc(m.conclusion)}</strong></p>\n<p>${m.needs_decision ? `需要你決定：${dd && typeof dd.question === 'string' ? esc(dd.question) : unknownSpan()}` : '知會：目前沒有待你決定的事項。'}</p>`;
   const d = m.decision;
   const s3 = d
     ? `<p><strong>${esc(d.question)}</strong></p>\n<ol>${d.options.map((x) => `<li>${esc(x.label)} — ${esc(x.consequence)}</li>`).join('')}</ol>\n<p>這份裁決不授權的事：${d.not_authorized ? esc(d.not_authorized) : unknownSpan()}</p>`

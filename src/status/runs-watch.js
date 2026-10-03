@@ -43,9 +43,7 @@ const LOCK_BUSY_RC = 75;
 const LOCKED_ENV = 'AUTOPILOT_RUNS_WATCH_LOCKED';
 const RENDER_DEBOUNCE_MS = 5000;
 const RENDER_RETRY_MS = 60000;
-const TASK_SETTLED_POLL_MS = 20000; // an all-exited root re-checks its task receipt this often (poll + 5 s debounce < 30 s); a root with a live run, every tick
-const TASK_OLD_POLL_MS = 300000; // roots with no activity for TASK_RECENT_MS are polled this rarely (bounds the spawn cost of old roots)
-const TASK_RECENT_MS = 6 * 3600 * 1000;
+const TASK_SETTLED_POLL_MS = 15000; // strictly between one and two default ticks: the 2nd tick after a poll always re-polls (poll <= 20 s + 5 s debounce < 30 s)
 const UNBOUND = '\u0000unbound';
 // Fields that change on every observation even when nothing happened; they do not make a payload "changed".
 const VOLATILE_ROW_FIELDS = ['observed_at', 'probe_age_s', 'elapsed_s', 'last_event_age_s'];
@@ -224,6 +222,11 @@ function worktreePaths({ cwd, scope }) {
   return out;
 }
 
+// Task-receipt re-poll decision: a root with a live run polls every tick; a settled root once its cache is TASK_SETTLED_POLL_MS old.
+function taskPollDue(cacheAtMs, nowMs, live) {
+  return live || nowMs - cacheAtMs >= TASK_SETTLED_POLL_MS;
+}
+
 function signatureOf(runs) {
   return JSON.stringify(runs.map((row) => {
     const copy = { ...row };
@@ -340,12 +343,7 @@ function createWatcher({
 
   function taskDigest(root, rows, nowMs) {
     const cache = state.render.task.get(root);
-    if (cache) {
-      const live = rows.some((r) => !isExitedRow(r));
-      const last = rows.map((r) => Date.parse(r.ended_at || r.started_at)).filter(Number.isFinite).sort((a, b) => b - a)[0];
-      const recent = live || (Number.isFinite(last) ? nowMs - last < TASK_RECENT_MS : true);
-      if (!live && nowMs - cache.at < (recent ? TASK_SETTLED_POLL_MS : TASK_OLD_POLL_MS)) return cache.digest;
-    }
+    if (cache && !taskPollDue(cache.at, nowMs, rows.some((r) => !isExitedRow(r)))) return cache.digest;
     return pollTask(root, nowMs);
   }
 
@@ -366,8 +364,18 @@ function createWatcher({
     // The job's date directory is pinned at its first observation: a reaped oldest manifest must not move it.
     let date = state.render.dates.get(k);
     if (!date) {
-      const started = rows.map((r) => Date.parse(r.started_at)).filter(Number.isFinite).sort((a, b) => a - b);
-      date = new Date(started.length ? started[0] : nowMs).toISOString().slice(0, 10);
+      // A restarted watcher has no pin: an existing <outRoot>/<date>/<job>/ wins over the oldest started_at.
+      let existing = [];
+      try {
+        existing = fs.readdirSync(render.outRoot).filter((n) => /^\d{4}-\d{2}-\d{2}$/.test(n) && fs.existsSync(path.join(render.outRoot, n, job))).sort();
+      } catch (_error) { /* no root yet */ }
+      if (existing.length) {
+        date = existing[0];
+        if (existing.length > 1) log(`render ${job}: job exists under ${existing.length} date dirs (${existing.join(', ')}); pinned the earliest ${date}`);
+      } else {
+        const started = rows.map((r) => Date.parse(r.started_at)).filter(Number.isFinite).sort((a, b) => a - b);
+        date = new Date(started.length ? started[0] : nowMs).toISOString().slice(0, 10);
+      }
       state.render.dates.set(k, date);
     }
     if (root) pollTask(root, nowMs); // the page carries the task verdict as of the publish, not as of the last poll
@@ -764,6 +772,6 @@ function runWriter({ key, interval, idleExit, enrichCap, collect, render, cwd, e
 }
 
 module.exports = {
-  SCHEMA, VALID_FOR_S, HEARTBEAT_S, LOCK_BUSY_RC, DEFAULT_IDLE_EXIT_S, createWatcher, readEnvelope, runWatchCli,
+  taskPollDue, TASK_SETTLED_POLL_MS, SCHEMA, VALID_FOR_S, HEARTBEAT_S, LOCK_BUSY_RC, DEFAULT_IDLE_EXIT_S, createWatcher, readEnvelope, runWatchCli,
   lockPathOf, isWatcherFor, flockAvailable, startWatcherDetached, watchLaunchArgv, worktreePaths, computeCounts, unexpiredMarkers, createCostReader,
 };

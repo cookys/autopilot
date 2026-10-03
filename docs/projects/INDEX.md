@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-10-03 | [Mods 進 autopilot 本體：看得見的派工、owner review 網頁、事件核心、`autopilot.progress/1` 快照](../plans/2026-10-03-mods-visible-dispatch.md) | active | — | [plan](../plans/2026-10-03-mods-visible-dispatch.md) |
 | 2026-09-02 | [Qualification feed: adopt `--from <url\|path>`, effort in the seat, environment ≠ exam identity](../plans/_archive/2026/09/2026-09-02-qualification-feed-adopt.md) | v2.35.5 | — | [plan](../plans/_archive/2026/09/2026-09-02-qualification-feed-adopt.md) |
 | 2026-08-02 | [Foreman-depth-0 coordination R6](../plans/_archive/2026/08/2026-08-02-foreman-depth0-coordination-r6.md) | dropped-never-built | — | [plan](../plans/_archive/2026/08/2026-08-02-foreman-depth0-coordination-r6.md) |
 | 2026-08-10 | [Owner Kernel promotion: from observer to authority](../plans/_archive/2026/08/2026-08-10-owner-kernel-promotion.md) | superseded-by-2026-08-16-owner-kernel-retirement | — | [plan](../plans/_archive/2026/08/2026-08-10-owner-kernel-promotion.md) |

@@ -2,7 +2,8 @@
 接續 autopilot 維護。2026-10-02～03 這個 session 出了 v2.36.105 到 v2.36.113 九版，另有測試修正、知識落地，以及 mods、喚醒機制、fleet cockpit 邊界三份調研。下一步先讓 owner 回答 mods／cockpit 的開放問題，再從 BACKLOG 已觸發的列接著做。
 
 ## 現況
-- 分支 `develop`，最新 release 是 v2.36.113（`b02cb94f`）；本檔所在的 closeout commit 疊在上面，HEAD 以 `git log --oneline -1` 為準。工作區只剩兩個別的 session 留下的未追蹤目錄（`docs/plans/evidence/2026-10-01-*`），不是這個 session 的，不要動。
+- v2.36.114（證據 `docs/plans/evidence/2026-10-03-v114-repair-at-file-cap/`）：campaign 第一輪已碰滿 scope 路徑時仍可修復（12/12 同路徑 repair at the file cap，peer 回報）。
+- 分支 `develop`，最新 release 是 v2.36.114（`9ebea928`）；本檔所在的 closeout commit 疊在上面，HEAD 以 `git log --oneline -1` 為準。工作區只剩兩個別的 session 留下的未追蹤目錄（`docs/plans/evidence/2026-10-01-*`），不是這個 session 的，不要動。
 - v2.36.105 到 v2.36.110 的出貨內容證據都在 `docs/plans/evidence/` 底下，各有 README；細節看 `CHANGELOG.md`。
 - v2.36.111（證據 `docs/plans/evidence/2026-10-03-v111-resume-and-review-budget/`）：
   - A：campaign resume 在三個入口收 REVIEWING，REVIEWING 的 resume 不受 changed-file 上限限制。
@@ -31,7 +32,7 @@
 - mods 只是 Claude Code 專屬的增強層，永遠不是唯一路徑；既有 hook 與腳本照舊保留。
 
 ## 下一步
-1. mods／cockpit 設計討論的現況（沒有任何決定是新發明的）：owner 已決定 mods 放進 autopilot；wake 是開關，預設只通知、只在 idle 時、不是優先項。depth-0 提議的優先序：P1 可見度（dispatch pane/band、成本加真實 context band、toast）→ P2 hook 延遲量測 → P3 事件核心＋明確的 idle 宣告（等 owner 與無事可做要分開）→ P4 replanner＋版本化 `progress.json` 快照（schema 草案 `autopilot.progress/1` 在 fleet 研究文件裡）。gantt、跨專案排程與配額屬於獨立的 cockpit，不屬於 autopilot；fleet 目前沒有 cockpit（`fleet-cockpit` 是已退役的 v1 courier，避免用這個名字），fuchikoma 是最接近的 meta／scheduler 層。開放的 owner 問題：cockpit 放哪（fuchikoma／fleet／新 repo）、叫什麼名字、要不要現在就寫 autopilot 側 P1–P4 的 plan 並先和 fuchikoma 對齊 progress 契約。
+1. mods 計畫 `docs/plans/2026-10-03-mods-visible-dispatch.md`（R2）正在跑 hetero plan review：下個 session 先讀審查結果，把 findings 交給 fable（session `autopilot--claude-2`）改 R3，再做 P0 spikes，然後 P1。owner 仍待決定：D1 截圖存放位置、D2 Artifact 預設、D4 若 modules 無法與 classic hook 共載是否另開第二個 plugin；D3 已由 astra 定案（一個 job 一個執行根）。
 2. v2.36.112 審查留下的 🔵 後續（S）：`docs/backlog/v2-36-112-review-follow-ups.md`，含 run.sh 要浮出 `SKIP [` 行。
 3. dispatch-plan-review 重用已終態 ticket 時是靜默 0 call（S，peer 回報，low）：`docs/backlog/dispatch-plan-review-terminal-ticket-visibility.md`。
 4. run.sh 的 group INT 要等目前測試檔結束才生效（S，觸發條件未到）。
@@ -41,7 +42,7 @@
 ## 驗證方式
 - `git status --short` 只剩那兩個不屬於本 session 的未追蹤目錄。
 - `git config --local --get user.email` 沒有值。
-- `bash scripts/preflight-release.sh` 回報 v2.36.113 一致。
+- `bash scripts/preflight-release.sh` 回報 v2.36.114 一致。
 - `node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md` exit 0。
 
 ## Read-order

@@ -886,3 +886,11 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: peer-reported cuda/chatgpt-tunnel 2026-10-03
 - **Pointer**: docs/backlog/sealed-campaign-review-station-migration.md
 - **Context**: single+terminal panel works at intake; only in-place migration of a sealed campaign's review_station is missing.
+
+### import-aa-capabilities test is host-pinned: fails when /tmp is inside a git worktree
+- **Status**: fired 2026-10-03
+- **Trigger**: fired 2026-10-03 — 22 failures on aimax395 at origin/develop
+- **Effort**: S
+- **Source**: foreman landing run of v2.36.114 (aimax395)
+- **Pointer**: docs/backlog/import-aa-capabilities-test-host-pinned-tmp-in-worktree.md
+- **Context**: `/tmp/.git` exists, so the "AA cache directory must be outside a Git worktree" check fires.

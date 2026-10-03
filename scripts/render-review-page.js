@@ -201,27 +201,36 @@ function buildJobModel(inputs) {
 }
 
 // ---- HTML ------------------------------------------------------------------------------------------------
-const CSS = `:root{--bg:#fafaf8;--fg:#1d1d1b;--mute:#6b6b66;--line:#d8d8d2;--card:#fff;--ok:#1a7f37;--bad:#b42318;--warn:#9a6700;--info:#0b5cad}
+const CSS = `:root{--bg:#fafaf8;--fg:#1d1d1b;--mute:#6b6b66;--line:#d8d8d2;--card:#fff;--ok:#1a7f37;--bad:#b42318;--warn:#8a5a00;--info:#0b5cad}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#161615;--fg:#ecece8;--mute:#9a9a94;--line:#3a3a36;--card:#1f1f1d;--ok:#4cc26a;--bad:#ff7b72;--warn:#e3b341;--info:#6cb6ff}}
 :root[data-theme="dark"]{--bg:#161615;--fg:#ecece8;--mute:#9a9a94;--line:#3a3a36;--card:#1f1f1d;--ok:#4cc26a;--bad:#ff7b72;--warn:#e3b341;--info:#6cb6ff}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,sans-serif}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,sans-serif}a{color:var(--info)}
 main{max-width:980px;margin:0 auto;padding:16px}section{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px 16px;margin:12px 0}
-h1{font-size:1.4rem;margin:.2rem 0}h2{font-size:1.05rem;margin:.1rem 0 .5rem}table{border-collapse:collapse;width:100%;display:block;overflow-x:auto}
-th,td{border-bottom:1px solid var(--line);padding:4px 8px;text-align:left;font-size:.9rem;white-space:nowrap}.unknown{color:var(--mute);font-style:italic}
-.chip{display:inline-block;border:1px solid var(--line);border-radius:10px;padding:0 8px;font-size:.78rem;margin:0 4px 0 0}
+section.head{background:none;border:0;padding:0;margin:4px 0 8px}section.head h2{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}section.head p{margin:.1rem 0}
+h1{font-size:1.4rem;margin:.2rem 0}h2{font-size:1.05rem;margin:.1rem 0 .5rem}h3{font-size:1rem;margin:.6rem 0 .3rem}
+table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid var(--line);padding:4px 6px;text-align:left;font-size:.85rem;overflow-wrap:break-word}.nb{white-space:nowrap}.unknown{color:var(--mute);font-style:italic}
+.chip{display:inline-block;border:1px solid var(--line);border-radius:10px;padding:0 8px;font-size:.84rem;margin:0 4px 2px 0}
 .chip-running,.chip-info{color:var(--info)}.chip-accepted,.chip-match{color:var(--ok)}.chip-rejected,.chip-conflict,.chip-unverified{color:var(--bad)}
-.chip-pending,.chip-unknown,.chip-warn{color:var(--warn)}.muted{color:var(--mute)}figure{margin:0;display:inline-block;vertical-align:top;max-width:100%}
-figure img{max-width:100%;height:auto;border:1px solid var(--line)}code{font-size:.85em;word-break:break-all}
-section>p,li{overflow-wrap:anywhere}@media (max-width:640px){th,td{white-space:normal;overflow-wrap:normal}main{padding:12px}}`;
+.chip-pending,.chip-unknown,.chip-warn{color:var(--warn)}.muted{color:var(--mute)}figure{margin:0 8px 8px 0;display:inline-block;vertical-align:top;max-width:100%}
+figcaption{font-size:.8rem;color:var(--mute);overflow-wrap:anywhere}figure img{max-width:100%;height:auto;border:1px solid var(--line)}code{font-size:.85em;word-break:break-all}
+.counts{word-break:keep-all}.summary{font-weight:600;margin:.2rem 0 .6rem}section>p,li,dd{overflow-wrap:anywhere}
+@media (max-width:640px){main{padding:8px}section{padding:8px 12px;margin:6px 0}section p{margin:.25rem 0}section ol,section ul{margin:.25rem 0}h1{font-size:1.2rem}h2{font-size:1rem;margin:0 0 .25rem}h3{margin:.3rem 0 .15rem}.updated{font-size:.75rem}th,td{padding:2px 6px}
+table.cards,table.cards thead,table.cards tbody,table.cards tr,table.cards td{display:block;width:100%}
+table.cards thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+table.cards tr{border:1px solid var(--line);border-radius:6px;margin:6px 0;padding:2px 8px}
+table.cards td{display:flex;justify-content:space-between;gap:12px;border:0;padding:2px 0;text-align:right}
+table.cards td::before{content:attr(data-label);color:var(--mute);text-align:left;flex:none}}`;
 
 function page(title, body) {
   return `<!doctype html>\n<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">\n<title>${esc(title)}</title>\n<style>${CSS}</style></head>\n<body><main>\n${body}\n</main></body></html>\n`;
 }
-function section(n, heading, inner) {
-  return `<section data-section="${n}" id="s${n}"><h2>${esc(heading)}</h2>\n${inner}\n</section>`;
+function section(n, heading, inner, cls) {
+  return `<section data-section="${n}" id="s${n}"${cls ? ` class="${cls}"` : ''}><h2>${esc(heading)}</h2>\n${inner}\n</section>`;
 }
-function table(head, bodyRows) {
-  return `<table><thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>\n${bodyRows.join('\n')}\n</tbody></table>`;
+// cards = the table collapses to one stacked card per row under 640 px (cells carry data-label); compact tables stay tables.
+function table(head, bodyRows, kind = 'cards') {
+  const rows = bodyRows.map((row) => { let i = 0; return row.replace(/<td>/g, () => `<td data-label="${esc(head[i++] === undefined ? '' : head[i - 1])}">`); });
+  return `<table class="${kind}"><thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>\n${rows.join('\n')}\n</tbody></table>`;
 }
 function td(html) { return `<td>${html}</td>`; }
 function shortSha(s) { return typeof s === 'string' && s ? s.slice(0, 12) : null; }
@@ -238,7 +247,7 @@ function renderProgress(model) {
     counts = p && p.done !== null ? `<p>完成 ${esc(p.done)} · 未完成 ${unknownSpan()}</p>` : `<p>完成 ${unknownSpan()} · 未完成 ${unknownSpan()}</p>`;
   }
   const per = p && p.per_deliverable.length
-    ? table(['deliverable', '完成度', '狀態'], p.per_deliverable.map((d) => `<tr>${td(esc(d.id))}${td(d.percent === null ? unknownSpan() : `${esc(d.percent)}%`)}${td(d.state === 'done' ? '完成' : '未完成')}</tr>`))
+    ? table(['deliverable', '完成度', '狀態'], p.per_deliverable.map((d) => `<tr>${td(esc(d.id))}${td(d.percent === null ? unknownSpan() : `${esc(d.percent)}%`)}${td(d.state === 'done' ? '完成' : '未完成')}</tr>`), 'compact')
     : '<p class="muted">沒有 controller_progress_receipt 的 deliverable 清單。</p>';
   const planned = model.planned.length
     ? `<ul>${model.planned.map((x) => `<li>${esc(x.id)}${x.title ? ` — ${esc(x.title)}` : ''}</li>`).join('')}</ul>`
@@ -273,7 +282,7 @@ ${metrics}\n${review}${c.observer_note ? `<p class="muted">observer: ${esc(c.obs
 
 function renderDispatch(model) {
   if (!model.dispatch.length) return '<p class="muted">這個 root 沒有 dispatch run。</p>';
-  const rows = model.dispatch.map((d) => `<tr>${td(esc(d.run_id))}${td(show(d.role))}${td(`${show(d.runner)} / ${show(d.model)}`)}${td(show(d.started_at))}${td(fmtElapsed(d.elapsed_s))}${td(show(d.phase))}${td(d.rc === null ? unknownSpan() : esc(d.rc))}${td(show(d.final_status))}${td(d.probe_age_s === null ? unknownSpan() : `${esc(d.probe_age_s)}s`)}${td(chip(EXEC_CHIP[d.execution], d.execution === 'exited' ? 'info' : d.execution) + (d.unverified ? chip('UNVERIFIED', 'unverified') : ''))}</tr>`);
+  const rows = model.dispatch.map((d) => `<tr>${td(esc(d.run_id))}${td(show(d.role))}${td(`${show(d.runner)} / ${show(d.model)}`)}${td(`<span class="nb">${show(d.started_at)}</span>`)}${td(fmtElapsed(d.elapsed_s))}${td(show(d.phase))}${td(d.rc === null ? unknownSpan() : esc(d.rc))}${td(show(d.final_status))}${td(d.probe_age_s === null ? unknownSpan() : `${esc(d.probe_age_s)}s`)}${td(chip(EXEC_CHIP[d.execution], d.execution === 'exited' ? 'info' : d.execution) + (d.unverified ? chip('UNVERIFIED', 'unverified') : ''))}</tr>`);
   return `<p class="muted">執行狀態，不是進度</p>\n${table(['run_id', 'role', 'runner / model', 'started', 'elapsed', 'phase', 'rc', 'final_status', 'probe_age_s', 'axis'], rows)}`;
 }
 
@@ -313,8 +322,9 @@ function renderDetails(model) {
 function renderJobHtml(model) {
   const m = model;
   const accCls = m.axes.acceptance === 'unknown' ? 'pending' : m.axes.acceptance;
-  const s1 = `<h1>${esc(m.job)} <span class="muted">· ${esc(m.project)}</span></h1>\n<p class="updated">updated ${esc(m.published_at)} @ ${m.commit ? esc(m.commit) : 'unknown'}</p>`;
-  const s2 = `<p>${chip(acceptanceChip(m.axes.acceptance, m.axes.can_close), accCls)}${m.needs_decision ? chip('需要你決定', 'warn') : chip('知會', 'info')}</p>\n<p><strong>${esc(m.conclusion)}</strong></p>\n<p>${m.needs_decision ? '需要你決定：見下一段。' : '知會：目前沒有待你決定的事項。'}</p>`;
+  const dd = m.decision;
+  const s1 = `<h1>${esc(m.job)} <span class="muted">· ${esc(m.project)}</span></h1>\n<p class="updated muted">updated ${esc(m.published_at)} @ ${m.commit ? esc(m.commit) : 'unknown'}</p>`;
+  const s2 = `<p>${chip(acceptanceChip(m.axes.acceptance, m.axes.can_close), accCls)}${m.needs_decision ? chip('需要你決定', 'warn') : chip('知會', 'info')}</p>\n<p><strong>${esc(m.conclusion)}</strong></p>\n<p>${m.needs_decision ? `需要你決定：${esc(dd.question)}` : '知會：目前沒有待你決定的事項。'}</p>`;
   const d = m.decision;
   const s3 = d
     ? `<p><strong>${esc(d.question)}</strong></p>\n<ol>${d.options.map((x) => `<li>${esc(x.label)} — ${esc(x.consequence)}</li>`).join('')}</ol>\n<p>這份裁決不授權的事：${d.not_authorized ? esc(d.not_authorized) : unknownSpan()}</p>`
@@ -322,9 +332,9 @@ function renderJobHtml(model) {
   const sources = m.sources.length
     ? `<ul>${m.sources.map((s) => `<li>${esc(s.role)} · <code>${esc(s.path)}</code> · sha256 <code>${esc(s.sha256)}</code></li>`).join('')}</ul>`
     : '<p class="muted">沒有來源輸入。</p>';
-  const s9 = `<p>commit：<code>${m.commit ? esc(m.commit) : 'unknown'}</code></p>\n${sources}\n<p class="muted">這頁不主張的事：不判定轉換、不產生 verdict、不提升層級；派工表是執行狀態不是進度；review receipt 只代表該 gate 的結果；未知值顯示為 unknown，不補 0。</p>`;
+  const s9 = `<p>commit：<code>${m.commit ? esc(m.commit) : 'unknown'}</code></p>\n<details><summary>來源（${m.sources.length}）</summary>${sources}</details>\n<p class="muted">這頁不主張的事：不判定轉換、不產生 verdict、不提升層級；派工表是執行狀態不是進度；review receipt 只代表該 gate 的結果；未知值顯示為 unknown，不補 0。</p>`;
   return page(`${m.job} · ${m.project}`, [
-    section(1, '標題', s1), section(2, '結論', s2), section(3, '待決事項', s3),
+    section(1, '標題', s1, 'head'), section(2, '結論', s2), section(3, '待決事項', s3),
     section(4, '進度', renderProgress(m)), section(5, '證據', renderCompare(m)),
     section(6, '派工表', renderDispatch(m)), section(7, 'gate 結果', renderGates(m)),
     section(8, '工程細節', renderDetails(m)), section(9, '來源與聲明', s9),
@@ -342,10 +352,10 @@ function renderProjectIndex(models, opts = {}) {
   const counts = `執行 RUNNING ${ex.running} · EXITED ${ex.exited} · UNKNOWN ${ex.unknown} ｜ 驗收 ACCEPTED ${acc.accepted} · REJECTED ${acc.rejected} · PENDING ${acc.unknown}`;
   const rows = list.map((m) => {
     const e = m.axes.execution;
-    return `<tr>${td(`<a href="${esc(m.date)}/${esc(m.job)}/current/index.html">${esc(m.job)}</a>`)}${td(esc(m.date))}${td(show(m.published_at))}${td(`${esc(`${EXEC_CHIP.running} ${e.running}`)} · ${esc(`${EXEC_CHIP.exited} ${e.exited}`)} · ${esc(`${EXEC_CHIP.unknown} ${e.unknown}`)}`)}${td(chip(acceptanceChip(m.axes.acceptance, m.axes.can_close), m.axes.acceptance === 'unknown' ? 'pending' : m.axes.acceptance))}${td(m.needs_decision ? chip('需要你決定', 'warn') : '—')}</tr>`;
+    return `<tr>${td(`<a href="${esc(m.date)}/${esc(m.job)}/current/index.html">${esc(m.job)}</a>`)}${td(esc(m.date))}${td(`<span class="nb">${show(m.published_at)}</span>`)}${td(`${esc(`${EXEC_CHIP.running} ${e.running}`)} · ${esc(`${EXEC_CHIP.exited} ${e.exited}`)} · ${esc(`${EXEC_CHIP.unknown} ${e.unknown}`)}`)}${td(chip(acceptanceChip(m.axes.acceptance, m.axes.can_close), m.axes.acceptance === 'unknown' ? 'pending' : m.axes.acceptance))}${td(m.needs_decision ? chip('需要你決定', 'warn') : '—')}</tr>`;
   });
   const project = opts.project || (list[0] && list[0].project) || null;
-  const body = `<h1>Review index <span class="muted">· ${show(project)}</span></h1>\n<p class="counts" data-counts="two-axis">${esc(counts)}</p>\n${list.length ? table(['job', 'date', 'published_at', '執行', '驗收', '需要決定'], rows) : '<p class="muted">沒有 job。</p>'}`;
+  const body = `<h1>Review index <span class="muted">· ${show(project)}</span></h1>\n<p class="summary" data-summary="decisions">需要你決定：${list.filter((m) => m.needs_decision).length}</p>\n<p class="counts" data-counts="two-axis">${esc(counts)}</p>\n${list.length ? table(['job', 'date', 'published_at', '執行', '驗收', '需要決定'], rows) : '<p class="muted">沒有 job。</p>'}`;
   return page(`Review index · ${project || 'unknown'}`, body);
 }
 

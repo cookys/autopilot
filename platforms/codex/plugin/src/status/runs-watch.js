@@ -43,7 +43,9 @@ const LOCK_BUSY_RC = 75;
 const LOCKED_ENV = 'AUTOPILOT_RUNS_WATCH_LOCKED';
 const RENDER_DEBOUNCE_MS = 5000;
 const RENDER_RETRY_MS = 60000;
-const TASK_SETTLED_POLL_MS = 60000; // an all-exited root re-checks its task receipt this often; a root with a live run, every tick
+const TASK_SETTLED_POLL_MS = 20000; // an all-exited root re-checks its task receipt this often (poll + 5 s debounce < 30 s); a root with a live run, every tick
+const TASK_OLD_POLL_MS = 300000; // roots with no activity for TASK_RECENT_MS are polled this rarely (bounds the spawn cost of old roots)
+const TASK_RECENT_MS = 6 * 3600 * 1000;
 const UNBOUND = '\u0000unbound';
 // Fields that change on every observation even when nothing happened; they do not make a payload "changed".
 const VOLATILE_ROW_FIELDS = ['observed_at', 'probe_age_s', 'elapsed_s', 'last_event_age_s'];
@@ -256,7 +258,7 @@ function createWatcher({
     roots: new Set(), lastCounts: new Map(), lastCost: { sessions: {}, host_today_usd: null, host_today_as_of: null },
     idleSince: null,
     // --render: last-seen signature per root, roots awaiting a publish, the debounce deadline, cached task receipts
-    render: { seen: new Map(), dirty: new Set(), dueAt: null, task: new Map() },
+    render: { seen: new Map(), dirty: new Set(), dueAt: null, task: new Map(), dates: new Map() },
   };
 
   function log(message) {
@@ -321,10 +323,8 @@ function createWatcher({
   }
 
   // The same injectable `status task` call the renderer uses; one call per poll, cached for the publish.
-  function taskDigest(root, rows, nowMs) {
+  function pollTask(root, nowMs) {
     const cache = state.render.task.get(root);
-    const live = rows.some((r) => !isExitedRow(r));
-    if (cache && !live && nowMs - cache.at < TASK_SETTLED_POLL_MS) return cache.digest;
     const { callTaskStatus } = require('../../scripts/render-review-page');
     const res = callTaskStatus(root, cwd, env);
     if (!res) {
@@ -336,6 +336,17 @@ function createWatcher({
     const digest = v && typeof v.receipt_digest === 'string' && v.receipt_digest ? v.receipt_digest : res.sha256;
     state.render.task.set(root, { at: nowMs, digest, value: res });
     return digest;
+  }
+
+  function taskDigest(root, rows, nowMs) {
+    const cache = state.render.task.get(root);
+    if (cache) {
+      const live = rows.some((r) => !isExitedRow(r));
+      const last = rows.map((r) => Date.parse(r.ended_at || r.started_at)).filter(Number.isFinite).sort((a, b) => b - a)[0];
+      const recent = live || (Number.isFinite(last) ? nowMs - last < TASK_RECENT_MS : true);
+      if (!live && nowMs - cache.at < (recent ? TASK_SETTLED_POLL_MS : TASK_OLD_POLL_MS)) return cache.digest;
+    }
+    return pollTask(root, nowMs);
   }
 
   function renderSignature(k, rows, nowMs) {
@@ -352,8 +363,14 @@ function createWatcher({
     const root = k === UNBOUND ? null : k;
     const mod = require('../../scripts/render-review-page');
     const job = root ? safeSegment(root) : 'unbound';
-    const started = rows.map((r) => Date.parse(r.started_at)).filter(Number.isFinite).sort((a, b) => a - b);
-    const date = new Date(started.length ? started[0] : nowMs).toISOString().slice(0, 10);
+    // The job's date directory is pinned at its first observation: a reaped oldest manifest must not move it.
+    let date = state.render.dates.get(k);
+    if (!date) {
+      const started = rows.map((r) => Date.parse(r.started_at)).filter(Number.isFinite).sort((a, b) => a - b);
+      date = new Date(started.length ? started[0] : nowMs).toISOString().slice(0, 10);
+      state.render.dates.set(k, date);
+    }
+    if (root) pollTask(root, nowMs); // the page carries the task verdict as of the publish, not as of the last poll
     const envelope = {
       schema: SCHEMA, scope: { project_key: key, repo_identity: identity, root_run_id: root },
       published_at: new Date(nowMs).toISOString(), observed_at: state.lastObservedAt, valid_for_s: VALID_FOR_S,
@@ -403,6 +420,15 @@ function createWatcher({
       try {
         publishRoot(k, groups.get(k), nowMs);
         rs.dirty.delete(k);
+        // The publish polled the task receipt afresh: fold only that part into the seen signature (the other three
+        // parts must stay as observed at the tick, or an event that landed during the publish would be swallowed).
+        if (k !== UNBOUND && state.render.task.has(k)) {
+          try {
+            const seenSig = JSON.parse(rs.seen.get(k));
+            seenSig.task = state.render.task.get(k).digest;
+            rs.seen.set(k, JSON.stringify(seenSig));
+          } catch (_error) { /* the next tick recomputes it */ }
+        }
       } catch (error) {
         failed = true;
         log(`render failed for ${k === UNBOUND ? 'unbound' : k}: ${error.message}`);
@@ -615,7 +641,7 @@ function runWatchCli(opts) {
 function watchLaunchArgv({ lock, key, interval, idleExit, enrichCap, binPath, render = null }) {
   const inner = [process.execPath, binPath, 'status', 'runs', '--watch', '--project', key, '--interval', String(interval), '--idle-exit', String(idleExit)];
   if (enrichCap !== null && enrichCap !== undefined) inner.push('--enrich-cap', String(enrichCap));
-  if (render) inner.push('--render', ...(typeof render === 'string' ? [render] : []));
+  if (render !== null && render !== undefined && render !== false) inner.push('--render', ...(typeof render === 'string' && render !== '' ? [render] : []));
   return ['-c', WRAPPER, 'sh', lock, ...inner];
 }
 
@@ -693,8 +719,8 @@ function runWriter({ key, interval, idleExit, enrichCap, collect, render, cwd, e
     const runsDir = path.join(liveBaseOf(env), 'runs');
     fs.mkdirSync(path.join(runsDir, 'paths'), { recursive: true, mode: 0o700 });
     fs.accessSync(runsDir, fs.constants.W_OK);
-    const renderOpt = render ? {
-      outRoot: path.resolve(typeof render === 'string' ? render : path.join(autopilotHomeOf(env), 'review', key)),
+    const renderOpt = render !== null && render !== undefined && render !== false ? {
+      outRoot: path.resolve(typeof render === 'string' && render !== '' ? render : path.join(autopilotHomeOf(env), 'review', key)),
     } : null;
     watcher = createWatcher({ key, env, cwd, collect, interval, enrichCap: enrichCap || 8, idleExitS: idleExit, render: renderOpt });
     watcher.start();

@@ -9,6 +9,11 @@
 #   FAIL [render-review-page] first publish creates current -> v-<compact published_at>: expected 'v-20261004T020000.000Z', got ''
 #   FAIL [render-review-page] project index lists the job with a relative link: 'href="2026-10-04/J1/current/index.html"' not found in output
 #   FAIL [render-review-page] unparseable --now: rc 2: expected '2', got '0'
+# B4 additions (cards / summary / folded decision) RED at dec22b4b: 148 passed, 19 failed, e.g.
+#   FAIL [render-review-page] dispatch cells carry data-label (phase): 'data-label="phase"' not found in output
+#   FAIL [render-review-page] gate cells carry data-label (match status chip): 'data-label="匹配狀態"' not found in output
+#   FAIL [render-review-page] the decision question is folded into the conclusion section: 'DECISION-QUESTION-1' not found in output
+#   FAIL [render-review-page] project index one-line summary (no decision needed): '需要你決定：0' not found in output
 # Pure fixtures: fake HOME / CLAUDE_CONFIG_DIR / AUTOPILOT_LIVE_DIR (/dev/shm) / costs file; the renderer
 # is never allowed to call the real `autopilot status task` (a fixture receipt or a fake bin is always given).
 . "$(dirname "$0")/lib.sh"
@@ -431,5 +436,36 @@ node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1]));r.befor
 render "$SB/fu7.html" --runs "$F/runs.json" --root R1 --task-receipt none --compare "$F/compare-bad" "${COMMON[@]}"
 assert_eq "$RC" "0" "compare record whose before is not an object does not crash the renderer"
 assert_contains "$(sec "$SB/fu7.html" 5)" "not a valid compare-record" "compare record whose before is not an object is reported unusable"
+
+# ---- B4 (mobile-first layout, summary line, decision folded into the conclusion) ----------------------------
+S6B="$(sec "$P1" 6)"; S7B="$(sec "$P1" 7)"; S4B="$(sec "$P1" 4)"
+assert_contains "$S6B" 'class="cards"' "dispatch table is a stacked-card table under 640 px"
+assert_contains "$S6B" 'data-label="phase"' "dispatch cells carry data-label (phase)"
+assert_contains "$S6B" 'data-label="final_status"' "dispatch cells carry data-label (final_status)"
+assert_contains "$S6B" 'data-label="axis"' "dispatch cells carry data-label (axis)"
+assert_contains "$S7B" 'class="cards"' "gate table is a stacked-card table under 640 px"
+assert_contains "$S7B" 'data-label="verdict"' "gate cells carry data-label (verdict)"
+assert_contains "$S7B" 'data-label="匹配狀態"' "gate cells carry data-label (match status chip)"
+assert_contains "$(sec "$P1" 5)" 'data-label="delta"' "evidence metric cells carry data-label (delta)"
+assert_contains "$(sec "$P1" 1)" 'class="head"' "section 1 is the compact page head (still section 1)"
+assert_contains "$(sec "$P1" 2)" "DECISION-QUESTION-1" "the decision question is folded into the conclusion section"
+assert_not_contains "$(sec "$P1" 2)" "見下一段" "the conclusion no longer points at the next paragraph"
+assert_contains "$(sec "$P1" 9)" "<details" "source list is collapsed in a details block"
+POS="$(printf '%s' "$S4B" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const a=s.indexOf("總進度"),b=s.indexOf("deliverable"),c=s.indexOf("執行軸");process.stdout.write(a>=0&&b>a&&c>b?"ordered":"bad "+[a,b,c])})')"
+assert_eq "$POS" "ordered" "section 4: total % -> per-deliverable % -> two-axis line"
+assert_contains "$(cat "$P1")" "@media (max-width:640px)" "page has the 640 px stacked-card media query"
+assert_contains "$(cat "$P1")" "attr(data-label)" "card labels come from data-label"
+assert_not_contains "$(cat "$P1")" "display:block;overflow-x:auto" "tables no longer hide columns behind horizontal scroll"
+assert_contains "$IDX" 'data-label="需要決定"' "index cells carry data-label (需要決定)"
+assert_contains "$IDX" 'class="cards"' "project index is a stacked-card table under 640 px"
+assert_contains "$IDX" "需要你決定：0" "project index one-line summary (no decision needed)"
+IDX2="$(node -e '
+const r = require(process.argv[1]);
+const mk = (job, d) => ({ job, date: "2026-10-04", project: "abcdef0123456789", published_at: "2026-10-04T02:00:00.000Z", axes: { execution: { running: 0, exited: 1, unknown: 0 }, acceptance: "unknown" }, needs_decision: d });
+process.stdout.write(r.renderProjectIndex([mk("a", true), mk("b", true), mk("c", false)]));' "$R")"
+assert_contains "$IDX2" "需要你決定：2" "project index summary counts the jobs that need a decision"
+ROOTIDX="$(node -e 'process.stdout.write(require(process.argv[1]).renderRootIndex([{schema:"review-project/1",project_key:"aaaa000000000001",display_name:"repo",last_published_at:"2026-10-04T02:00:00.000Z",decisions_needed:1}]))' "$R")"
+assert_contains "$ROOTIDX" 'data-label="project_key"' "root index cells carry data-label"
+assert_contains "$ROOTIDX" 'href="aaaa000000000001/index.html"' "root index lists a published project"
 
 finalize_test

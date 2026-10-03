@@ -18,6 +18,13 @@
 # AUTOPILOT_SESSION_MODE_DIR, AUTOPILOT_COSTS_FILE and the manifest dir all under a mktemp dir; no port is bound
 # (AUTOPILOT_REVIEW_SERVER_AUTOSTART=0 from lib.sh); every background process is killed BY PID in the cleanup trap.
 . "$(dirname "$0")/lib.sh"
+# B4 additions RED at dec22b4b: 53 passed, 6 failed:
+#   FAIL S9a settled root: a second task digest change is also republished within 30 s: expected '1', got '0'
+#   FAIL S9b the .exit-triggered republish carries the fresh task verdict: expected 'yes', got 'no'
+#   FAIL S10 after the oldest manifest is gone the job still republishes into the same date dir: expected '2', got '1'
+#   FAIL S10 no second date directory appears: expected '0', got '1'
+#   FAIL CLI --render "" is treated as default-on (publishes under the default root): expected 'yes', got 'no'
+#   (the real-collector .exit assertion passes on the base: it is a guard against a field-name mismatch)
 
 eq() { assert_eq "$2" "$1" "$3"; } # eq <expected> <actual> <msg>
 CLI="$REPO_ROOT/bin/autopilot.js"
@@ -35,7 +42,7 @@ cleanup_rwr() {
   for p in $KILL_PIDS; do kill -9 "$p" 2> /dev/null; done
   rm -rf "$LIVE"
 }
-trap 'cleanup_rwr; cleanup_test_tmp' EXIT
+trap 'cleanup_rwr; [ -n "${KEEP:-}" ] || cleanup_test_tmp' EXIT
 git -C "$REPO" init -q
 git -C "$REPO" -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m init
 KEY="$(cd "$REPO" && node -e 'process.stdout.write(require(process.argv[1]).scopeFromCwd(process.cwd()).project_key)' "$REPO_ROOT/src/status/project-key.js")"
@@ -81,7 +88,8 @@ fs.mkdirSync(path.join(D, 'led1'), { recursive: true }); W(path.join(D, 'led1', 
 W(path.join(D, 'task.json'), '{}');
 const watcher = createWatcher({ key, env: process.env, cwd: path.join(D, '..', 'repo'), collect, now: () => T, interval: 10, enrichCap: 8, render: { outRoot } });
 const tick = (dt) => { T += dt * 1000; try { watcher.tick(); return true; } catch (e) { out('tick_threw', e.message); return false; } };
-const jobDir = (job) => path.join(outRoot, '2026-10-04', job);
+let DATE = '2026-10-04';
+const jobDir = (job) => path.join(outRoot, DATE, job);
 const versions = (job) => { try { return fs.readdirSync(jobDir(job)).filter((n) => /^v-\d{8}T\d{6}\.\d{3}Z$/.test(n)).length; } catch (_e) { return 0; } };
 const cur = (job) => { try { return fs.readlinkSync(path.join(jobDir(job), 'current')); } catch (_e) { return ''; } };
 const page = (job) => { try { return fs.readFileSync(path.join(jobDir(job), 'current', 'index.html'), 'utf8'); } catch (_e) { return ''; } };
@@ -154,6 +162,38 @@ tick(10); tick(6);
 out('s8_unbound_versions', versions('unbound')); out('s8_unbound_has', has('unbound', 'run-loose'));
 out('s8_unbound_lacks_rooted', page('unbound').includes('run-one') ? 'no' : 'yes');
 out('s8_r1_untouched', versions('R1') === r1v ? 'yes' : 'no');
+// S9a (KR1, event d on a SETTLED root): every run exited, then the task digest changes twice -> each change is
+// republished within 30 fake seconds at the default 10 s tick.
+for (const r of world.rows) W(r.source.exit_file, '0');
+tick(10); tick(6);
+for (let i = 0; i < 4; i += 1) tick(10); // settle: nothing pending
+const v9 = versions('R1');
+task('accepted', '4'.repeat(64));
+tick(10); tick(10); tick(10);
+out('s9a_first_within_30s', versions('R1') - v9); out('s9a_first_page', has('R1', 'ACCEPTED'));
+for (let i = 0; i < 4; i += 1) tick(10);
+const v9b = versions('R1');
+task('rejected', '5'.repeat(64));
+tick(10); tick(10); tick(10);
+out('s9a_second_within_30s', versions('R1') - v9b); out('s9a_second_page', has('R1', 'REJECTED'));
+// S9b: the republish caused by the last .exit uses a FRESH task value (one publish, page shows the new verdict)
+for (let i = 0; i < 4; i += 1) tick(10);
+world.rows.push(mkRow('run-five', 'R1')); tick(10); tick(6);
+for (let i = 0; i < 4; i += 1) tick(10);
+const v9c = versions('R1');
+W(path.join(D, 'exits', 'run-five.exit'), '0'); task('accepted', '6'.repeat(64));
+tick(10); tick(6); tick(10);
+out('s9b_versions', versions('R1') - v9c); out('s9b_fresh_task', has('R1', 'ACCEPTED'));
+// S10: the job date is pinned at first observation; a reaped oldest manifest does not move the job to another date dir
+const keep = world.rows; world.rows = [mkRow('r3-old', 'R3', { started_at: '2026-10-03T23:00:00.000Z' }), mkRow('r3-new', 'R3', { started_at: '2026-10-04T01:00:00.000Z' })];
+W(path.join(D, 'exits', 'r3-old.exit'), '0'); W(path.join(D, 'exits', 'r3-new.exit'), '0');
+tick(10); tick(6);
+DATE = '2026-10-03'; out('s10_first_date_dir', versions('R3'));
+world.rows = [world.rows[1]]; // the oldest manifest is gone
+tick(10); tick(6);
+out('s10_same_dir_republished', versions('R3'));
+DATE = '2026-10-04'; out('s10_no_second_dir', versions('R3'));
+DATE = '2026-10-04';
 watcher.finalPublish('stopped');
 JS
 export AUTOPILOT_RENDER_TASK_STATUS_BIN="$SB/task-bin.sh"
@@ -196,12 +236,21 @@ eq 1 "$(dv s8_unbound_versions)" "S8 unbound run gets its own unbound job"
 eq yes "$(dv s8_unbound_has)" "S8 unbound page shows the unbound run"
 eq yes "$(dv s8_unbound_lacks_rooted)" "S8 unbound page lacks rooted runs"
 eq yes "$(dv s8_r1_untouched)" "S8 the rooted job was not republished"
+eq 1 "$(dv s9a_first_within_30s)" "S9a settled root: a task digest change is republished within 30 s (exactly once)"
+eq yes "$(dv s9a_first_page)" "S9a the republished page shows the new verdict"
+eq 1 "$(dv s9a_second_within_30s)" "S9a settled root: a second task digest change is also republished within 30 s"
+eq yes "$(dv s9a_second_page)" "S9a the second page shows the new verdict"
+eq 1 "$(dv s9b_versions)" "S9b last .exit + task change together: exactly one publish"
+eq yes "$(dv s9b_fresh_task)" "S9b the .exit-triggered republish carries the fresh task verdict"
+eq 1 "$(dv s10_first_date_dir)" "S10 job first observed under the date of its oldest manifest"
+eq 2 "$(dv s10_same_dir_republished)" "S10 after the oldest manifest is gone the job still republishes into the same date dir"
+eq 0 "$(dv s10_no_second_dir)" "S10 no second date directory appears"
 
 # ---- 2. the real CLI: --render [<out-root>] (explicit and default) -------------------------------------
 NOW=$(date +%s)
 mk_manifest() { # id root
-  printf '{"schema":1,"run_id":"%s","role":"implementer","runner":"codex","model":"m","started_at":"%s","started_epoch":%s,"ended_at":null,"ended_epoch":null,"final_status":null,"log_path":"/nonexistent","lock_path":null,"pid":null,"scope_unit":null,"log_format":"plain","ledger":null,"stage":null,"repo_identity":"%s","root_run_id":"%s","parent_run_id":null,"depth":0}\n' \
-    "$1" "$(date -u -d "@$((NOW - 60))" +%Y-%m-%dT%H:%M:%SZ)" "$((NOW - 60))" "$IDENT" "$2" > "$RUNS/$1.manifest.json"
+  printf '{"schema":1,"run_id":"%s","role":"implementer","runner":"codex","model":"m","started_at":"%s","started_epoch":%s,"ended_at":null,"ended_epoch":null,"final_status":null,"log_path":"/nonexistent","lock_path":null,"pid":null,"scope_unit":null,"log_format":"plain","ledger":"%s","stage":"impl","repo_identity":"%s","root_run_id":"%s","parent_run_id":null,"depth":0}\n' \
+    "$1" "$(date -u -d "@$((NOW - 60))" +%Y-%m-%dT%H:%M:%SZ)" "$((NOW - 60))" "$SB/ledger-$1/ledger.jsonl" "$IDENT" "$2" > "$RUNS/$1.manifest.json"
 }
 mk_manifest cli-run-1 CLIROOT
 printf '{"schema_version":1,"artifact_type":"task_status_receipt","root_run_id":"CLIROOT","acceptance_verdict":"unknown","receipt_digest":"%s","can_close":null}\n' "$(printf 'd%.0s' $(seq 1 64))" > "$D/task.json"
@@ -219,8 +268,21 @@ waitcur() { # <out-root>: waits for <out-root>/<date>/CLIROOT/current
   echo no
 }
 eq yes "$(waitcur "$EXPLICIT")" "CLI --render <out-root>: a job page appears under the explicit root within 30 s (stderr: $(head -c 200 "$SB/w1.err"))"
+countv() { find "$1" -maxdepth 4 -path '*/CLIROOT/v-*' -name 'v-*Z' 2> /dev/null | wc -l | tr -d ' '; }
+V1="$(countv "$EXPLICIT")"
+mkdir -p "$SB/ledger-cli-run-1/ledger.jsonl.results"
+echo 0 > "$SB/ledger-cli-run-1/ledger.jsonl.results/cli-run-1.impl.exit"
+for i in $(seq 1 300); do [ "$(countv "$EXPLICIT")" -gt "$V1" ] && break; sleep 0.1; done
+eq yes "$([ "$(countv "$EXPLICIT")" -gt "$V1" ] && echo yes || echo no)" "real collector: an .exit landing republishes the page (source.exit_file field name matches status runs)"
 (cd "$REPO" && wenv "$NODE" "$CLI" status runs --stop --project "$KEY" > /dev/null 2>&1 < /dev/null)
 sleep 1
+(cd "$REPO" && wenv "$NODE" "$CLI" status runs --watch --project "$KEY" --interval 1 --render "" \
+  > "$SB/w4.out" 2> "$SB/w4.err" < /dev/null & echo $! > "$SB/w4.launcher")
+KILL_PIDS="$KILL_PIDS $(cat "$SB/w4.launcher")"
+eq yes "$(waitcur "$AH/review/$KEY")" "CLI --render \"\" is treated as default-on (publishes under the default root)"
+(cd "$REPO" && wenv "$NODE" "$CLI" status runs --stop --project "$KEY" > /dev/null 2>&1 < /dev/null)
+sleep 1
+rm -rf "$AH/review/$KEY"
 (cd "$REPO" && wenv "$NODE" "$CLI" status runs --watch --project "$KEY" --interval 1 --render \
   > "$SB/w2.out" 2> "$SB/w2.err" < /dev/null & echo $! > "$SB/w2.launcher")
 KILL_PIDS="$KILL_PIDS $(cat "$SB/w2.launcher")"

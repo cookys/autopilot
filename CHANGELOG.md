@@ -1,5 +1,19 @@
 # Changelog
 
+## v2.36.111 — final panel 暫時性故障可續跑並沿用有效席位判決；max effort reviewer 輸出預算；symlink TMPDIR；finalize 閘
+
+- **問題與改動（逐列）**：
+  - （A）final panel 遇到暫時性故障後，`campaign resume` 因 phase 為 REVIEWING 而拒絕續跑；僅審查的續跑也被「changed-file 上限」擋下。現在 REVIEWING 可續跑，changed-file 上限只套用在會寫檔的續跑。
+  - （C）final panel 續跑會重跑每個席位、丟掉已有效的判決。現在只重派失敗席位；沿用的判決必須由儲存的 artifact 重新推導、綁定同一個 packet、重新通過席位資格，且每席嘗試預算為 3。
+  - （B）max effort 的 reviewer 席位會把 4096 token 輸出預算全花在 thinking、不回任何文字。現在預算為 16384，且只有 thinking 的 `max_tokens` 是具名失敗 `output_budget_exhausted`，不放寬 parser。
+  - （D）symlink 的 TMPDIR 會讓 agy author 派工的 bwrap scratch bind 與 polarity receipt 的 verify 指令失效。scratch 目錄與指令目錄現在都以 `pwd -P` 解析；repo 外的指令仍視為外部（有負向對照）。
+  - （A／A3）新增閘門：拒絕從不呼叫 finalize 的 lib.sh 測試套件（7 個已知恆綠套件列入 allowlist）；裸 `FAIL` 測試只在最後一個指令時算，node `exitCode` 不再算 finalizer。
+  - 登記三個新 fixture 到 Population B consult/discuss 開關閘（landing 修補）。
+- **驗證**：整套 `--parallel 16` 392 檔；唯一紅燈（Population B 登記）已修並單獨重跑 60/60。review：claude-fable-5-1 SHIP-AS-IS。
+- **已知後續**：（1）BACKLOG 新列：曾經過 BOUNDARY_REJECTED 的 campaign 無法到達 terminal success（controller transcript audit 擋下）；（2）review 🔵：dispatch-review.sh 的 rail 案例未斷言 16384 預算上線；（3）review 🔵：campaign-resume-reviewing-phase.test.sh 有未使用的 fixture 設定；（4）review 🔵：finalize 閘只認行首 `finalize_test`，`trap finalize_test EXIT` 會被誤報。
+
+prose-justification: 本版不新增 skill 或 reference 文字；僅改 campaign resume、final panel、reviewer 輸出預算、dispatch-author 與測試。
+
 ## v2.36.110 — readiness probe 接受 nonce 完全相符的單行 frame；frame_format 成為具名失敗並保留診斷
 
 - **問題**（peer 回報，cuda/chatgpt-tunnel，2026-10-03）：claude-native／claude-fable-5／max 以「開頭 marker＋`OK`＋結尾 marker」寫在同一行回應 readiness probe。dispatch-author 要求 marker 各自獨立成行，回報 `truncated/frame_missing`，coordinator 再把它併成 `transport_failure`，receipt 也沒留下任何能解釋的線索。

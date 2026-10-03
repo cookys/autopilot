@@ -745,29 +745,21 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: `hangar-bridge/SUBJECT_ROUTING_SPEC.md:516,614` records an accepted 7-day retention/replay bound for subjected `@team` chat that was never built.
 
 
-### `campaign resume` refuses a final-panel retry: REVIEWING unsupported; zero-write resume hits file cap
+### A campaign that passed through BOUNDARY_REJECTED can never reach terminal success (transcript audit blocks it)
 - **Status**: open
-- **Trigger**: FIRED — peer report 2026-10-03; queued next; reproduce locally first
-- **Effort**: S
-- **Source**: PEER-REPORTED cuda/chatgpt-tunnel (fleet), verified by reading code
-- **Pointer**: docs/backlog/campaign-resume-reviewing-phase-and-zero-write-budget.md
-- **Context**: controller says resumable after a transient final-panel failure, but `campaign resume` rejects phase REVIEWING and applies the write cap to a review-only resume.
-
-### Reviewer seats at max effort can spend the whole 4096-token output budget on thinking and return no text
-- **Status**: open
-- **Trigger**: FIRED — peer report 2026-10-03; locate the cap and reproduce locally first
-- **Effort**: S
-- **Source**: PEER-REPORTED cuda/chatgpt-tunnel (fleet), not yet verified locally
-- **Pointer**: docs/backlog/review-seat-max-tokens-exhausted-by-thinking.md
-- **Context**: GLM seat returned `stop_reason: max_tokens` with only thinking; needs a larger output budget at max effort and a named failure class, never a parser relaxation.
-
-### Final-panel resume after a seat transport failure re-runs every seat, discarding valid verdicts
-- **Status**: open
-- **Trigger**: next touch of the final-panel resume path, or the next run blocked by a single failing QC seat
+- **Trigger**: FIRED — product defect confirmed 2026-10-03 with a control run; next wave
 - **Effort**: M
-- **Source**: PEER-REPORTED cuda/chatgpt-tunnel (fleet, 2026-10-03), verified by reading code
-- **Pointer**: docs/backlog/final-panel-resume-reruns-all-seats.md
-- **Context**: `runPanel` re-dispatches all seats on resume; panel reuse needs a fully reviewed previous panel, so valid per-seat verdicts are thrown away.
+- **Source**: v2.36.111 landing — unit A-r2 hand observation + read-only debugger repro at f197fc09
+- **Pointer**: docs/backlog/boundary-rejected-campaign-cannot-reach-terminal-success.md
+- **Context**: boundary dispatch record has a null `result_receipt_digest` and the boundary receipt audit event has no controller tuple, so `requireCompleteTranscript` blocks every boundary→resume→ready campaign.
+
+### Reviewer output budget: follow-ups from v2.36.111
+- **Status**: open
+- **Trigger**: next touch of `dispatch-anthropic-review.js` / `dispatch-local-openai.js`, or the first thinking-capable openai-compatible seat run at max effort
+- **Effort**: S
+- **Source**: v2.36.111 per-row review (🔵)
+- **Pointer**: none
+- **Context**: `dispatch-local-openai.js` has no thinking-sized budget or named `output_budget_exhausted` failure; `dispatch-review.sh` should match the bracketed raw-log line, not a line-start stderr line.
 
 ### No supported review-only entry: the managed final panel cannot adopt an externally produced candidate range
 - **Status**: open

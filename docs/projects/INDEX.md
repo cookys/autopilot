@@ -260,6 +260,7 @@ Small batches that bump the version but don't warrant a project README. Source o
 | Date | Ship | Version | Merge |
 |------|------|---------|-------|
 | 2026-10-03 | kimi cleanroom 支援獨立 ELF 安裝（peer 回報之 v2.36.108 缺陷，fixture 驗證）；檔案數釘值改為具名成員不變式；SHIP-AS-IS | v2.36.109 | — | [CHANGELOG](../../CHANGELOG.md) |
+| 2026-10-03 | final panel 暫時性故障可續跑並沿用有效席位判決；max effort reviewer 輸出預算；symlink TMPDIR；finalize 閘；SHIP-AS-IS | v2.36.111 | — | [CHANGELOG](../../CHANGELOG.md) |
 | 2026-10-03 | readiness probe 接受 nonce 完全相符的單行 frame（peer 回報）；frame_format 成為具名失敗並保留診斷；SHIP-AS-IS | v2.36.110 | — | [CHANGELOG](../../CHANGELOG.md) |
 | 2026-10-03 | 最終 panel kimi/agy 席位 cleanroom 隔離（plan `2026-10-02-final-panel-kimi-agy-isolation`，5 rows）— launcher、post-run audit、盲審 rail、intake tier、版本警告；另修 `statusline-live-tee` 測試；SHIP-AS-IS | v2.36.108 | — | [CHANGELOG](../../CHANGELOG.md) |
 | 2026-10-03 | wave-B S 修復（無 project dir — Fix）— context-budget unknown-window advisory、kimi --timeout 轉送、verification_author pin、readiness 診斷、opencode/run.sh/watchdog 測試 flake；SHIP-AS-IS | v2.36.107 | — | [CHANGELOG](../../CHANGELOG.md) |

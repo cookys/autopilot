@@ -27,6 +27,9 @@ const {
   collectProviderReadiness,
 } = require('../readiness/status');
 const { collectTaskStatus } = require('./task-runtime');
+// runs-fields is required lazily (inside the runs paths): hooks/tests/status-finish-followup
+// copies cli.js alone into a hermetic repo and only exercises `status task`.
+const DEFAULT_ENRICH_CAP = 8;
 
 const ROOT = path.resolve(__dirname, '..', '..');
 
@@ -149,28 +152,22 @@ function quotaHuman(rows, stdout) {
 
 // --- runs ---------------------------------------------------------------------
 
-function collectRuns() {
+function collectRuns({ enrichCap = DEFAULT_ENRICH_CAP, env = process.env } = {}) {
   const dispatch = path.join(ROOT, 'scripts', 'dispatch-status.js');
   const list = parseJsonSafe(sh('node', [dispatch, '--list']).stdout);
   const runs = Array.isArray(list) ? list : (list && Array.isArray(list.runs) ? list.runs : []);
-  const out = [];
-  let enriched = 0;
-  for (const run of runs) {
-    const entry = { ...run };
-    const live = !(run.ended_at || run.final_status);
-    if (live && run.run_id && enriched < 8) { // cap enrichment: each is a liveness probe
-      enriched += 1;
-      const s = parseJsonSafe(sh('node', [dispatch, '--run', String(run.run_id)]).stdout);
-      if (s) {
-        entry.phase = s.phase;
-        entry.alive = s.alive;
-        entry.stall = s.stall;
-        entry.last_event_age_s = s.last_event_age_s;
-      }
-    }
-    out.push(entry);
-  }
-  return out;
+  // Each probe is a liveness check, so enrichment is capped per call with bounded
+  // rotation (src/status/runs-fields.js): the next call resumes where this one stopped.
+  const dir = process.env.AUTOPILOT_DISPATCH_RUNS_DIR
+    || path.join(process.env.TMPDIR || '/tmp', 'autopilot-dispatch-runs');
+  const { buildRunRows } = require('./runs-fields');
+  return buildRunRows({
+    list: runs,
+    enrichCap,
+    dir,
+    env,
+    probeRun: (runId) => parseJsonSafe(sh('node', [dispatch, '--run', runId, '--stall-secs', '180']).stdout),
+  });
 }
 
 function runsHuman(runs, stdout) {
@@ -179,7 +176,7 @@ function runsHuman(runs, stdout) {
   stdout.write(`RUNS (${live.length} live, ${done} finished manifests)\n`);
   for (const r of live) {
     const stall = r.stall ? ' STALL(report-only — cross-check before reacting)' : '';
-    stdout.write(`  LIVE ${r.run_id} role=${r.role || '?'} ${r.runner || '?'}/${r.model || '?'} phase=${r.phase || '?'} alive=${r.alive}${stall}\n`);
+    stdout.write(`  LIVE ${r.run_id} role=${r.role || '?'} ${r.runner || '?'}/${r.model || '?'} phase=${r.phase || '?'} alive=${r.probe_age_s === null && r.alive === null ? undefined : r.alive}${stall}\n`);
   }
   if (live.length === 0) stdout.write('  (none live)\n');
 }
@@ -422,11 +419,47 @@ function runStatusCli(argv, {
     rootRunId = args[rootRunIndex + 1] || null;
     args.splice(rootRunIndex, 2);
   }
+  const takeValue = (flag) => {
+    const i = args.indexOf(flag);
+    if (i === -1) return { present: false, value: null };
+    const value = args[i + 1];
+    args.splice(i, value === undefined ? 1 : 2);
+    return { present: true, value: value === undefined ? null : value };
+  };
+  const selectors = {
+    project: takeValue('--project'), root: takeValue('--root'),
+    since: takeValue('--since'), enrichCap: takeValue('--enrich-cap'),
+  };
   for (const a of args) {
     if (a !== '--json' && a !== '--probe' && !(a === '--tree' && sub === 'runs')) {
       stderr.write(`unknown status argument: ${a}\n`);
       return 2;
     }
+  }
+
+  for (const [name, sel] of Object.entries(selectors)) {
+    if (!sel.present) continue;
+    const flag = name === 'enrichCap' ? '--enrich-cap' : `--${name}`;
+    if (sub !== 'runs') {
+      stderr.write(`${flag} is only valid for status runs\n`);
+      return 2;
+    }
+    if (sel.value === null || sel.value === '') {
+      stderr.write(`${flag} requires a value\n`);
+      return 2;
+    }
+  }
+  let enrichCap = DEFAULT_ENRICH_CAP;
+  if (selectors.enrichCap.present) {
+    if (!/^[1-9][0-9]*$/.test(selectors.enrichCap.value)) {
+      stderr.write('--enrich-cap must be a positive integer\n');
+      return 2;
+    }
+    enrichCap = Number(selectors.enrichCap.value);
+  }
+  if (selectors.since.present && !Number.isFinite(Date.parse(selectors.since.value))) {
+    stderr.write('--since must be an ISO timestamp\n');
+    return 2;
   }
 
   if (sub === 'task') {
@@ -457,9 +490,17 @@ function runStatusCli(argv, {
     return 0;
   }
   if (sub === 'runs') {
-    const runs = collectRuns();
-    if (json) stdout.write(`${JSON.stringify(tree ? runsTree(runs) : runs, null, 2)}\n`);
-    else if (tree) runsTreeHuman(runsTree(runs), stdout);
+    const { applySelectors } = require('./runs-fields');
+    const selected = applySelectors(collectRuns({ enrichCap, env }), {
+      project: selectors.project.value,
+      root: selectors.root.value,
+      since: selectors.since.value,
+    });
+    const runs = Array.isArray(selected) ? selected : selected.runs;
+    if (json) {
+      const body = tree ? runsTree(runs) : selected;
+      stdout.write(`${JSON.stringify(tree && !Array.isArray(selected) ? { ...selected, runs: body } : body, null, 2)}\n`);
+    } else if (tree) runsTreeHuman(runsTree(runs), stdout);
     else runsHuman(runs, stdout);
     return 0;
   }

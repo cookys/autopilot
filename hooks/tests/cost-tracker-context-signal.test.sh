@@ -73,4 +73,43 @@ run_hook cost-tracker.js "$(payload ct-sig-bad)"
 assert_eq 0 "$__RUN_EXIT" "corrupt live file: exit 0"
 assert_contains "$__RUN_STDERR" 'context % unknown' "corrupt live file: unknown"
 
+# == commit 2: /clear is recommended only above a real context-% threshold ==
+# RED at d8de05d2: every message carried the unconditional 'write a handoff and /clear'.
+fresh_session; over; live ct-sig-lo 33
+run_hook cost-tracker.js "$(payload ct-sig-lo)"
+assert_not_contains "$__RUN_STDERR" '/clear' "33%: no clear advice"
+assert_contains "$__RUN_STDERR" 'window is fine' "33%: says the window is fine"
+assert_contains "$__RUN_STDERR" 'calls × window' "33%: attributes the cost to calls x window"
+assert_contains "$__RUN_STDERR" 'cheaper' "33%: suggests cheaper hands for mechanical work"
+
+fresh_session; over; live ct-sig-hi 70
+run_hook cost-tracker.js "$(payload ct-sig-hi)"
+assert_contains "$__RUN_STDERR" 'context now 70%' "70%: carries the %"
+assert_contains "$__RUN_STDERR" 'handoff' "70%: recommends a handoff"
+assert_contains "$__RUN_STDERR" '/clear' "70%: recommends clear"
+
+fresh_session; over; rm -f "$LIVE_DIR/context/ct-sig-unk.json"
+run_hook cost-tracker.js "$(payload ct-sig-unk)"
+assert_not_contains "$__RUN_STDERR" '/clear' "unknown %: no clear advice"
+assert_contains "$__RUN_STDERR" 'context % unknown' "unknown %: says so"
+
+# exactly at the threshold counts as above; the env knob moves it
+fresh_session; over; live ct-sig-50 50
+run_hook cost-tracker.js "$(payload ct-sig-50)"
+assert_contains "$__RUN_STDERR" '/clear' "P == threshold (default 50): recommends clear"
+fresh_session; over; live ct-sig-env 33
+AUTOPILOT_COST_TRACKER_CLEAR_PCT=20 run_hook cost-tracker.js "$(payload ct-sig-env)"
+assert_contains "$__RUN_STDERR" '/clear' "env knob 20: 33% now recommends clear"
+fresh_session; over; live ct-sig-env2 70
+AUTOPILOT_COST_TRACKER_CLEAR_PCT=90 run_hook cost-tracker.js "$(payload ct-sig-env2)"
+assert_not_contains "$__RUN_STDERR" '/clear' "env knob 90: 70% no clear"
+
+# config key next to cache_read_warn_tokens
+mkdir -p "$HOOK_HOME/.autopilot"
+printf '{"cost_tracker":{"context_clear_pct":25}}' > "$HOOK_HOME/.autopilot/config.json"
+fresh_session; over; live ct-sig-cfg 33
+run_hook cost-tracker.js "$(payload ct-sig-cfg)"
+assert_contains "$__RUN_STDERR" '/clear' "config cost_tracker.context_clear_pct=25: 33% recommends clear"
+rm -f "$HOOK_HOME/.autopilot/config.json"
+
 finalize_test

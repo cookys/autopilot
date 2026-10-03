@@ -173,7 +173,27 @@ try {
       const ctxText = ctx
         ? `context now ${ctx.pct}% (${fmt(ctx.tokens)} of ${fmt(ctx.window)} tokens)`
         : 'context % unknown (no fresh statusline live file)';
-      const msg = `cost-tracker: session ${session} has read ${fmt(cacheRead)} cache tokens cumulatively across ${fmt(calls)} calls (threshold ${fmt(next)}) — ${spend}; this is a cost sum (calls × window), not window fill. ${ctxText}. Write a handoff and /clear, or split the work.`;
+      // Recommend handoff + /clear ONLY when the real window fill is at/above the threshold.
+      // Below it the window is healthy and the money is calls x window (so split the work or
+      // push mechanical work to cheaper hands); with no fresh live file there is no % to act on,
+      // so no /clear advice at all.
+      let clearPct = 50;
+      try {
+        const cfg = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.autopilot', 'config.json'), 'utf8'));
+        const c = cfg && cfg.cost_tracker && Number(cfg.cost_tracker.context_clear_pct);
+        if (Number.isFinite(c) && c > 0) clearPct = c;
+      } catch { /* default */ }
+      const envC = Number(process.env.AUTOPILOT_COST_TRACKER_CLEAR_PCT);
+      if (Number.isFinite(envC) && envC > 0) clearPct = envC;
+      let advice;
+      if (ctx && ctx.pct >= clearPct) {
+        advice = `The window is ${ctx.pct}% full (≥ ${clearPct}%): write a handoff and /clear, or split the work.`;
+      } else if (ctx) {
+        advice = 'The window is fine; the cost comes from calls × window — consider splitting the work or dispatching mechanical work to cheaper hands.';
+      } else {
+        advice = 'No window reading is available, so the window itself is not judged; if the work is mechanical, consider splitting it or dispatching it to cheaper hands.';
+      }
+      const msg = `cost-tracker: session ${session} has read ${fmt(cacheRead)} cache tokens cumulatively across ${fmt(calls)} calls (threshold ${fmt(next)}) — ${spend}; this is a cost sum (calls × window), not window fill. ${ctxText}. ${advice}`;
       process.stderr.write(`${msg}\n`);
       try {
         const sid = input.session_id;

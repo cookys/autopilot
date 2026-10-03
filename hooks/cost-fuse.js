@@ -257,7 +257,20 @@ function resolveSessionModel(payload, costsFile) {
   return null;
 }
 
-function sumTodayTierSpend(costsFile, tiersSet) {
+/**
+ * A single dispatch-rail invocation (`[bash|node] .../scripts/dispatch-*.{sh,js}`, optional
+ * trailing redirects / `&`): that command IS the move the fuse asks for (hand the work to a
+ * cheaper engine), so it must not trip the fuse. Anything chained (`;`, `&&`, `||`, pipes,
+ * substitution, newlines) is not exempt.
+ */
+function isDispatchBash(cmd) {
+  if (typeof cmd !== 'string') return false;
+  const t = cmd.trim();
+  if (!t || /[;`|\n]|&&|\$\(/.test(t)) return false;
+  return /^(?:(?:bash|node)\s+)?\S*scripts\/dispatch-[A-Za-z0-9._-]+\.(?:sh|js)(?:\s|$)/.test(t);
+}
+
+function sumTodayTierSpend(costsFile, tiersSet, onlySession) {
   if (!costsFile || !fs.existsSync(costsFile)) return 0;
   const todayPrefix = new Date().toISOString().slice(0, 10);
   let total = 0;
@@ -274,6 +287,7 @@ function sumTodayTierSpend(costsFile, tiersSet) {
         if (!ts.startsWith(todayPrefix)) continue;
         const model = row.model;
         if (!model) continue;
+        if (onlySession && row.session !== onlySession) continue;
         const tier = tierOf(model);
         if (tiersSet.has(tier)) {
           const cost = Number(row.cost_usd);
@@ -324,6 +338,9 @@ function sumTodayTierSpend(costsFile, tiersSet) {
     }
 
     const todaySpend = sumTodayTierSpend(costsFile, tiersSet);
+    const thisSessionId = payload.session_id || process.env.AUTOPILOT_SESSION_ID
+      || process.env.CLAUDE_CODE_SESSION_ID || process.env.CLAUDE_SESSION_ID || '';
+    const sessionSpend = thisSessionId ? sumTodayTierSpend(costsFile, tiersSet, thisSessionId) : 0;
     const threshold = cfg.daily_usd_brain;
 
     if (todaySpend < threshold) {
@@ -334,11 +351,11 @@ function sumTodayTierSpend(costsFile, tiersSet) {
     // Over threshold! Check if tool is read-only Bash
     const toolName = payload.tool_name || '';
     const toolInput = payload.tool_input || {};
-    if (toolName === 'Bash' && isReadOnlyBash(toolInput.command)) {
+    if (toolName === 'Bash' && (isReadOnlyBash(toolInput.command) || isDispatchBash(toolInput.command))) {
       process.exit(0);
     }
 
-    const reason = `cost-fuse: brain-tier spend today $${todaySpend.toFixed(2)} ≥ $${threshold} on this host — brief the change and dispatch it to hands (model: sonnet|haiku, or the hetero ladder); read-only commands stay allowed; AUTOPILOT_COST_FUSE_MODE=off to override`;
+    const reason = `cost-fuse: brain-tier spend today: this session $${sessionSpend.toFixed(2)} / host today $${todaySpend.toFixed(2)} (≥ $${threshold} on this host) — brief the change and dispatch it to hands (model: sonnet|haiku, or the hetero ladder); read-only commands stay allowed; AUTOPILOT_COST_FUSE_MODE=off to override`;
 
     if (cfg.mode === 'block') {
       emit('deny', reason);

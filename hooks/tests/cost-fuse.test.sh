@@ -202,4 +202,29 @@ rm -f "$TMP_HOOK"
 # (already asserted in each case above, add explicit check)
 assert_not_contains "$MUTANT_OUT" '"permissionDecision":"ask"' "case8: mutant never ask"
 
+# ── 8. Warn text scopes the number: this session vs the host total ───────
+unset AUTOPILOT_COST_FUSE_MODE
+rm -rf "$AUTOPILOT_COST_FUSE_DIR"
+write_transcript "claude-fable-5-1"
+cat > "$AUTOPILOT_COSTS_FILE" <<EOF
+{"ts":"${TODAY}T01:00:00.000Z","session":"fuse-session-1","model":"claude-fable-5-1","cost_usd":60}
+{"ts":"${TODAY}T02:00:00.000Z","session":"other-brain-session","model":"claude-fable-5-1","cost_usd":120}
+EOF
+run_hook cost-fuse.js "$(make_payload Edit '' 'fuse-session-1')"
+assert_contains "$__RUN_STDERR" 'this session $60.00' "case8: names this session's own spend"
+assert_contains "$__RUN_STDERR" 'host today $180.00' "case8: names the host-wide total"
+
+# ── 9. The Bash command that itself dispatches to hands does not trip the fuse ──
+rm -rf "$AUTOPILOT_COST_FUSE_DIR"
+export AUTOPILOT_COST_FUSE_MODE=block
+run_hook cost-fuse.js "$(make_payload Bash 'bash scripts/dispatch-hetero.sh --brief b.md > /tmp/out.log 2>&1' 'fuse-session-1')"
+assert_eq "" "$__RUN_STDOUT" "case9: a plain dispatch-rail command is allowed over the fuse"
+run_hook cost-fuse.js "$(make_payload Bash 'node scripts/dispatch-review.js --x' 'fuse-session-1')"
+assert_eq "" "$__RUN_STDOUT" "case9b: node dispatch-*.js allowed"
+run_hook cost-fuse.js "$(make_payload Bash 'bash scripts/dispatch-hetero.sh --brief b.md; git push origin x' 'fuse-session-1')"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case9c: a dispatch command chained with another command is still fused"
+run_hook cost-fuse.js "$(make_payload Bash 'git push origin x' 'fuse-session-1')"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case9d: an ordinary mutating Bash is still fused"
+unset AUTOPILOT_COST_FUSE_MODE
+
 finalize_test

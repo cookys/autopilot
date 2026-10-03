@@ -9,6 +9,7 @@ const {
   NON_SUCCESS_DURABLE_STATES,
   campaignClockElapsedSeconds,
   canonicalDigest,
+  changedFilesPreSpendBlocked,
   resolveCampaignEventLeaseIdentity,
   normalizeCampaignArtifactReference,
   reduceCampaignState,
@@ -909,9 +910,13 @@ function campaignResumeEligibility(projection, observedAt) {
   }
   // A REVIEWING resume only re-runs review and cannot write; every mutation re-checks the
   // changed-file cap itself (campaignMutationBudgetStatus), so the cap gates writing
-  // resumes only.
-  if (!reviewingResumable
-      && projection.state.usage.changed_files >= projection.state.limits.max_changed_files) {
+  // resumes only. Repair-type phases block only above the cap (changedFilesPreSpendBlocked,
+  // the same predicate campaign-intake.js and campaignMutationBudgetStatus use).
+  if (!reviewingResumable && changedFilesPreSpendBlocked({
+    phase: projection.state.phase,
+    usage: projection.state.usage,
+    limits: projection.state.limits,
+  })) {
     return {
       status: 'blocked',
       reason: 'campaign changed-file budget is exhausted',

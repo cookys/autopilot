@@ -51,6 +51,28 @@ const NON_SUCCESS_DURABLE_STATES = new Set([
   CAMPAIGN_STATES.AWAITING_DISPOSITION,
   CAMPAIGN_STATES.AWAITING_CONVERGENCE_ADJUDICATION,
 ]);
+// usage.changed_files is the CUMULATIVE DISTINCT path count vs the campaign base (SET on each
+// completion, never summed) and the reducer's ceiling is `usage > max` (FILE_BUDGET_EXCEEDED).
+// A repair confined to already-counted paths leaves usage unchanged, so a repair-type resume at
+// `usage == max` cannot exceed the ceiling: its pre-spend check blocks only at `usage > max`
+// (a repair that adds a new path is still refused at write time by the scope check + reducer).
+// The first pass (PREPARED / IMPLEMENTING) keeps `>=`: nothing is written yet, so a spent budget
+// leaves no room for a first write. ONE predicate for src/campaign/cli.js, campaign-intake.js and
+// campaignMutationBudgetStatus so the three cannot drift again.
+const REPAIR_RESUME_PHASES = new Set([
+  CAMPAIGN_STATES.BOUNDARY_REJECTED,
+  CAMPAIGN_STATES.VERTICAL_VERIFICATION,
+  CAMPAIGN_STATES.ADJUDICATING,
+  CAMPAIGN_STATES.AWAITING_DISPOSITION,
+  CAMPAIGN_STATES.REPAIRING,
+]);
+// `repair` overrides the phase-derived choice (the engine knows the dispatch kind).
+function changedFilesPreSpendBlocked({ phase, usage, limits, repair } = {}) {
+  const used = usage && usage.changed_files;
+  const max = limits && limits.max_changed_files;
+  const isRepair = typeof repair === 'boolean' ? repair : REPAIR_RESUME_PHASES.has(phase);
+  return isRepair ? used > max : used >= max;
+}
 // The durable wall clock pauses while the campaign is parked here: a resume
 // after a long real-world wait must not be refused for exceeding the budget
 // it never actively consumed.
@@ -1383,7 +1405,9 @@ module.exports = {
   CAMPAIGN_STATES,
   NON_SUCCESS_DURABLE_STATES,
   WALL_CLOCK_PAUSED_STATES,
+  REPAIR_RESUME_PHASES,
   CampaignStateError,
+  changedFilesPreSpendBlocked,
   campaignClockElapsedSeconds,
   estimateRepairRoundSeconds,
   formatRepairRoundBudgetShortfall,

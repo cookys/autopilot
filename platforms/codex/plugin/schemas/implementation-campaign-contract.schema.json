@@ -79,6 +79,7 @@
       "items": { "type": "string", "minLength": 1, "maxLength": 1024 }
     },
     "max_changed_files": {
+      "description": "Ceiling on the CUMULATIVE count of DISTINCT paths changed versus base_sha, repairs included (a set, not a per-round or per-generation sum: re-touching a counted path adds nothing). Exceeding it is FILE_BUDGET_EXCEEDED. A repair confined to already-counted paths runs even when the first pass used the whole budget; a repair that adds a path beyond the cap is refused. The first pass (before any write) is blocked once the count reaches the cap. Size it to output_paths plus headroom when max_repair_generations >= 1; admission warns (campaign_file_cap_no_first_pass_headroom) when the cap is not above output_paths.",
       "type": "integer",
       "minimum": 1,
       "maximum": 4096
@@ -99,6 +100,7 @@
       "maximum": 5000000
     },
     "max_repair_generations": {
+      "description": "Repair rounds allowed after the first pass. Each repair counts toward max_changed_files only through NEW distinct paths (cumulative-distinct-path semantics), so repairs confined to the first pass's paths do not consume file budget.",
       "type": "integer",
       "minimum": 0,
       "maximum": 5

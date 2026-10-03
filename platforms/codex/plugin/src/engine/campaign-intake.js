@@ -17,6 +17,7 @@ const {
   campaignClockElapsedSeconds,
   campaignIdFor,
   canonicalDigest,
+  changedFilesPreSpendBlocked,
   estimateRepairRoundSeconds,
   formatRepairRoundBudgetShortfall,
   boundCampaignArtifactDigest,
@@ -1362,8 +1363,11 @@ function defaultGenerationClaim({
     // reviewingResumable (src/campaign/cli.js).
     const reviewingResumable = existing.state.phase === CAMPAIGN_STATES.REVIEWING
       && Boolean(existing.resume_candidate);
-    if (!reviewingResumable
-        && existing.state.usage.changed_files >= existing.state.limits.max_changed_files) {
+    if (!reviewingResumable && changedFilesPreSpendBlocked({
+      phase: existing.state.phase,
+      usage: existing.state.usage,
+      limits: existing.state.limits,
+    })) {
       return rejected(
         'campaign_generation',
         'campaign_file_budget_exhausted',
@@ -1584,6 +1588,29 @@ function defaultGenerationClaim({
       ? 0
       : undefined,
   });
+}
+
+// Non-blocking admission advice. changed_files counts DISTINCT paths cumulatively, so a cap equal
+// to the declared output paths can be consumed by the first pass alone; a repair still works at
+// the cap (it may not add a path), but the operator should know the budget has no slack.
+function campaignAdmissionAdvisories(contract) {
+  const advisories = [];
+  const outputPaths = contract && contract.strict_dispatch
+    && contract.strict_dispatch.output_paths;
+  if (Array.isArray(outputPaths)
+      && Number.isSafeInteger(contract.max_repair_generations)
+      && contract.max_repair_generations >= 1
+      && Number.isSafeInteger(contract.max_changed_files)
+      && contract.max_changed_files <= outputPaths.length) {
+    advisories.push({
+      code: 'campaign_file_cap_no_first_pass_headroom',
+      message: `max_changed_files ${contract.max_changed_files} <= output_paths ${outputPaths.length} `
+        + 'with repairs allowed: changed_files counts distinct paths cumulatively, so the first '
+        + 'pass may consume the whole budget (a repair confined to those paths still runs; '
+        + 'one that adds a path is refused)',
+    });
+  }
+  return advisories;
 }
 
 function buildNoEffectReceipt({ missionClaim, rejection, campaignDigest, now }) {
@@ -2826,6 +2853,7 @@ function runCampaignIntake(input = {}, adapters = {}) {
     full_enforcement: shadowAxes.length === 0,
     shadow_axes: shadowAxes,
     steps,
+    advisories: campaignAdmissionAdvisories(contract),
     qc_panel_snapshot: qcPanelSnapshot,
     pre_spend_no_effect_receipt: null,
   };
@@ -2838,6 +2866,7 @@ module.exports = {
   strandedClaimForSealedGrant,
   withStrandedClaim,
   buildNoEffectReceipt,
+  campaignAdmissionAdvisories,
   buildQcPanelSnapshot,
   resolveReviewStation,
   qcPanelSnapshotIdentityBody,

@@ -113,6 +113,7 @@ const {
   CAMPAIGN_STATES,
   campaignClockElapsedSeconds,
   campaignIdFor,
+  changedFilesPreSpendBlocked,
   estimateRepairRoundSeconds,
   repairLineageCleanupId,
   resolveCampaignEventLeaseIdentity,
@@ -1557,7 +1558,10 @@ function campaignWallRemainingSeconds(control, observedAt, options = {}) {
     : { exhausted: true, seconds: null };
 }
 
-function campaignMutationBudgetStatus(control, observedAt) {
+// `options.repair` (the dispatch kind is known to the caller) selects the repair-type changed-file
+// predicate (block only above the cap); otherwise the first-pass `>=` applies. Same predicate as
+// the pre-spend resume checks (changedFilesPreSpendBlocked).
+function campaignMutationBudgetStatus(control, observedAt, options = {}) {
   const wall = campaignWallBudgetStatus(control, observedAt);
   if (wall.exhausted || !control || control.status !== 'admitted') return wall;
   const state = control.initial_state;
@@ -1566,7 +1570,12 @@ function campaignMutationBudgetStatus(control, observedAt) {
   if (!usage || !limits) {
     return { exhausted: true, elapsed_seconds: wall.elapsed_seconds, axis: 'state' };
   }
-  if (usage.changed_files >= limits.max_changed_files) {
+  if (changedFilesPreSpendBlocked({
+    phase: state.phase,
+    usage,
+    limits,
+    repair: options.repair === true,
+  })) {
     return { exhausted: true, elapsed_seconds: wall.elapsed_seconds, axis: 'changed_files' };
   }
   if (usage.churn >= limits.max_churn) {
@@ -7574,7 +7583,9 @@ class AutopilotEngine {
           };
         }
         const budgetAt = this.now();
-        const budget = campaignMutationBudgetStatus(campaignControl, budgetAt);
+        const budget = campaignMutationBudgetStatus(campaignControl, budgetAt, {
+          repair: kind !== 'initial',
+        });
         const remain = campaignWallRemainingSeconds(campaignControl, budgetAt);
         if (budget.exhausted && budget.axis && budget.axis !== 'wall') {
           return {

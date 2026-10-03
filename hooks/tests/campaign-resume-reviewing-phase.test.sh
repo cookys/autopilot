@@ -82,8 +82,10 @@ console.log(`a_reviewing_non_git_candidate=${code({
 console.log(`a_prepared_at_cap=${code({
   ...base, state: withUsage({ ...state, phase: 'PREPARED' }, 4),
 })}`);
+// A repair-type phase blocks pre-spend only ABOVE the cap since the cumulative-distinct-path
+// alignment (campaign-repair-at-file-cap.test.sh); at the cap it is resumable.
 console.log(`a_vertical_at_cap=${code({
-  ...base, state: withUsage({ ...state, phase: 'VERTICAL_VERIFICATION' }, 4),
+  ...base, state: withUsage({ ...state, phase: 'VERTICAL_VERIFICATION' }, 5),
 })}`);
 console.log(`a_adjudicating_at_cap_unbound=${code({
   ...base, state: withUsage({ ...state, phase: 'ADJUDICATING' }, 4),
@@ -298,7 +300,7 @@ assert_contains "$OUT" "a_reviewing_non_git_candidate=campaign_resume_phase_unsu
 assert_contains "$OUT" "a_prepared_at_cap=campaign_file_budget_exhausted" \
   "a writing resume (PREPARED) at the cap stays campaign_file_budget_exhausted"
 assert_contains "$OUT" "a_vertical_at_cap=campaign_file_budget_exhausted" \
-  "a writing resume (VERTICAL_VERIFICATION) at the cap stays blocked"
+  "a writing resume (VERTICAL_VERIFICATION) over the cap stays blocked"
 assert_contains "$OUT" "a_adjudicating_at_cap_unbound=campaign_resume_phase_unsupported" \
   "ADJUDICATING without a bound review stays blocked"
 assert_contains "$OUT" "a_reviewing_churn_cap=campaign_churn_budget_exhausted" \

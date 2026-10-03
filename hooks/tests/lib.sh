@@ -34,6 +34,10 @@ else
 fi
 unset __g9_td
 
+# `session-mode.js set` starts a detached project watcher unless this is 0; no suite may leave one alive.
+# A suite that wants a watcher (session-mode-watcher.test.sh) re-exports 1 itself.
+export AUTOPILOT_RUNS_WATCH_AUTOSTART=0
+
 # Fake-runner prompt + nonce-frame helpers (generic over AUTOPILOT-REVIEW /
 # AUTOPILOT-AUTHOR). Lifted from hooks/tests/dispatch-review-{a,b,c}.test.sh so consumer
 # suites do not duplicate the parser. Source with AUTOPILOT_TEST_LIB_HELPERS_ONLY=1

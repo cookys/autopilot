@@ -419,6 +419,27 @@ function parseArgs(argv) {
   return args;
 }
 
+// Start the project watcher (mods plan P1a "誰起 watcher"). Fail-open: every outcome is at most one
+// stderr line; the marker is already written and `set`'s exit code never depends on this.
+// AUTOPILOT_RUNS_WATCH_AUTOSTART=0 disables it (hooks/tests/lib.sh exports 0 for every suite).
+// stderr, not stdout: stdout is the marker JSON that callers parse.
+function startProjectWatcher(marker, repoRoot) {
+  if (!marker.project_key || process.env.AUTOPILOT_RUNS_WATCH_AUTOSTART === '0') return;
+  try {
+    const { startWatcherDetached } = require('../src/status/runs-watch');
+    const r = startWatcherDetached({ key: marker.project_key, cwd: repoRoot, env: process.env });
+    if (r.status === 'busy') {
+      process.stderr.write(`session-mode: watcher already running for project ${marker.project_key} (pid ${r.holder === null || r.holder === undefined ? 'unknown' : r.holder}); not starting another\n`);
+    } else if (r.status === 'flock_unavailable') {
+      process.stderr.write('session-mode: watcher not started: flock(1) (util-linux) is not available on PATH\n');
+    } else if (r.status === 'error') {
+      process.stderr.write(`session-mode: watcher not started: ${r.message}\n`);
+    }
+  } catch (error) {
+    process.stderr.write(`session-mode: watcher not started: ${error.message}\n`);
+  }
+}
+
 function cmdSet(args) {
   const level = args.level;
   if (!LEVELS.has(level)) {
@@ -518,21 +539,17 @@ function cmdSet(args) {
   fs.writeFileSync(tmp, `${JSON.stringify(marker, null, 2)}\n`);
   fs.renameSync(tmp, markerPath()); // atomic on same fs
   try { writeLivePointer(); } catch (_error) { /* fail-open: pointer is advisory for the mod */ }
+  startProjectWatcher(marker, repoRoot);
   process.stdout.write(`${JSON.stringify({ ok: true, marker_path: markerPath(), ...marker }, null, 2)}\n`);
   return 0;
 }
 
+// One source for repo identity: scopeFromCwd() (task-runtime.js repoIdentity underneath). The former
+// inline copy ran the same `git -C <dir> rev-parse --path-format=absolute --git-common-dir` + realpath,
+// so main worktree, linked worktree and symlinked cwd derive identical values (pinned by
+// hooks/tests/session-mode-watcher.test.sh); null for a non-repo directory.
 function markerRepoIdentity(repoRoot) {
-  try {
-    const common = execFileSync(
-      'git',
-      ['-C', repoRoot, 'rev-parse', '--path-format=absolute', '--git-common-dir'],
-      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
-    ).trim();
-    return `git-common-dir:${fs.realpathSync(common)}`;
-  } catch (_error) {
-    return null;
-  }
+  return scopeFromCwd(repoRoot).repo_identity;
 }
 
 function validateCloseReceipt(file, rootRunId, marker = readMarker()) {

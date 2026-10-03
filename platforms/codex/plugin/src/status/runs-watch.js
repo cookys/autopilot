@@ -22,7 +22,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { spawnSync } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const { resolveLiveDir } = require('../../scripts/lib/live-state-dir');
 const { projectKey, scopeFromCwd } = require('./project-key');
 const { pointerPath, writeLivePointer } = require('./live-pointer');
@@ -382,16 +382,20 @@ const WRAPPER = 'exec 9>"$1" || exit 1; flock -n 9 || exit 75; shift; export '
 
 // Probe by actually taking a lock: a flock(1) that answers --version but cannot lock is unusable.
 function flockAvailable(env) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-watch-flock-'));
-  const probe = path.join(dir, 'probe.lock');
+  let dir = null;
   try {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-watch-flock-'));
+    const probe = path.join(dir, 'probe.lock');
     fs.writeFileSync(probe, '');
     const r = spawnSync('flock', ['-n', probe, 'true'], { encoding: 'utf8', timeout: 5000, env });
     return !r.error && r.status === 0;
   } catch (_error) {
     return false;
   } finally {
-    try { fs.unlinkSync(probe); fs.rmdirSync(dir); } catch (_cleanup) { /* best effort */ }
+    if (dir) {
+      try { fs.unlinkSync(path.join(dir, 'probe.lock')); } catch (_cleanup) { /* best effort */ }
+      try { fs.rmdirSync(dir); } catch (_cleanup) { /* best effort */ }
+    }
   }
 }
 
@@ -472,6 +476,53 @@ function runWatchCli(opts) {
   return runWriter({ key, interval, idleExit, enrichCap, collect, cwd, env, stderr });
 }
 
+// THE launch definition (lock form ii): `sh -c <WRAPPER> sh <lock> node <bin> status runs --watch ...`.
+// launchUnderLock (foreground `--watch`) and startWatcherDetached (session-mode `set`) both use it;
+// there is no second copy of this command line.
+function watchLaunchArgv({ lock, key, interval, idleExit, enrichCap, binPath }) {
+  const inner = [process.execPath, binPath, 'status', 'runs', '--watch', '--project', key, '--interval', String(interval), '--idle-exit', String(idleExit)];
+  if (enrichCap !== null && enrichCap !== undefined) inner.push('--enrich-cap', String(enrichCap));
+  return ['-c', WRAPPER, 'sh', lock, ...inner];
+}
+
+const DEFAULT_BIN_PATH = path.join(__dirname, '..', '..', 'bin', 'autopilot.js');
+
+/**
+ * Start the project watcher detached (used by `session-mode.js set`). Never throws.
+ *   -> { status: 'started'|'busy'|'flock_unavailable'|'error', holder?, message? }
+ * Foreground probe first: `flock -n <lock> true` (a detached `flock -n` that loses is silent, so it
+ * could not name the holder). Held -> 'busy' with the holder pid from the envelope. Free -> spawn
+ * `nohup sh -c <WRAPPER> ...` in its own session (detached), stdio to the watcher log, unref'd.
+ */
+function startWatcherDetached({
+  key, cwd = process.cwd(), env = process.env, binPath = DEFAULT_BIN_PATH,
+  interval = DEFAULT_INTERVAL_S, idleExit = DEFAULT_IDLE_EXIT_S, enrichCap = null,
+}) {
+  try {
+    const lock = lockPathOf(env, key);
+    fs.mkdirSync(path.dirname(lock), { recursive: true, mode: 0o700 });
+    const probe = spawnSync('flock', ['-n', lock, 'true'], { encoding: 'utf8', timeout: 5000, env });
+    if (probe.error) return { status: 'flock_unavailable', message: probe.error.message };
+    if (probe.status === 1) return { status: 'busy', holder: holderFromEnvelope(env, key) };
+    if (probe.status !== 0) return { status: 'error', message: `flock probe exited ${probe.status}` };
+    const logFile = path.join(autopilotHomeOf(env), 'review', key, 'live', 'watcher.log');
+    fs.mkdirSync(path.dirname(logFile), { recursive: true });
+    const fd = fs.openSync(logFile, 'a');
+    try {
+      const child = spawn('nohup', ['sh', ...watchLaunchArgv({ lock, key, interval, idleExit, enrichCap, binPath })], {
+        cwd, env, detached: true, stdio: ['ignore', fd, fd],
+      });
+      child.on('error', () => { /* a spawn failure is reported by the caller via the missing envelope */ });
+      child.unref();
+    } finally {
+      fs.closeSync(fd);
+    }
+    return { status: 'started' };
+  } catch (error) {
+    return { status: 'error', message: error.message };
+  }
+}
+
 function launchUnderLock({ key, interval, idleExit, enrichCap, binPath, cwd, env, stdout, stderr }) {
   let lock;
   try {
@@ -481,9 +532,7 @@ function launchUnderLock({ key, interval, idleExit, enrichCap, binPath, cwd, env
     stderr.write(`watcher startup failed: live dir not writable: ${error.message}\n`);
     return 1;
   }
-  const inner = [process.execPath, binPath, 'status', 'runs', '--watch', '--project', key, '--interval', String(interval), '--idle-exit', String(idleExit)];
-  if (enrichCap !== null) inner.push('--enrich-cap', String(enrichCap));
-  const r = spawnSync('sh', ['-c', WRAPPER, 'sh', lock, ...inner], { cwd, env, stdio: 'inherit' });
+  const r = spawnSync('sh', watchLaunchArgv({ lock, key, interval, idleExit, enrichCap, binPath }), { cwd, env, stdio: 'inherit' });
   if (r.error) {
     stderr.write(`watcher startup failed: ${r.error.message}\n`);
     return 1;
@@ -544,5 +593,5 @@ function runWriter({ key, interval, idleExit, enrichCap, collect, cwd, env, stde
 
 module.exports = {
   SCHEMA, VALID_FOR_S, HEARTBEAT_S, LOCK_BUSY_RC, DEFAULT_IDLE_EXIT_S, createWatcher, readEnvelope, runWatchCli,
-  lockPathOf, isWatcherFor, worktreePaths, computeCounts, unexpiredMarkers, createCostReader,
+  lockPathOf, isWatcherFor, flockAvailable, startWatcherDetached, watchLaunchArgv, worktreePaths, computeCounts, unexpiredMarkers, createCostReader,
 };

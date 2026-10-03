@@ -56,6 +56,12 @@ git -C "$REPO" add -A >/dev/null 2>&1 || true
 git -C "$REPO" commit -qm init >/dev/null 2>&1 || true
 
 export AUTOPILOT_SESSION_ID="null-admission-test-$$"
+# `session-mode.js set` must not start a detached project watcher from a test.
+export AUTOPILOT_RUNS_WATCH_AUTOSTART=0
+# Isolation: marker + live pointer land under TEST_TMP, never in the real ~/.autopilot.
+export HOME="$TEST_TMP/home"
+mkdir -p "$HOME"
+export AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/autopilot/session-mode"
 
 set +e
 OUT="$(node "$SCRIPT" set --level l5 --repo-root "$REPO" 2>&1)"

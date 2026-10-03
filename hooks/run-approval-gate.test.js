@@ -31,6 +31,8 @@ function freshEnv(extra = {}) {
     CLAUDE_SESSION_ID: SID,
     AUTOPILOT_SESSION_ID: SID,
     AUTOPILOT_SESSION_MODE_DIR: path.join(home, 'session-mode'),
+    // `session-mode.js set` must not start a detached project watcher from a unit test.
+    AUTOPILOT_RUNS_WATCH_AUTOSTART: '0',
     AUTOPILOT_RUN_APPROVAL_DIR: path.join(live, 'run-approval'),
     // Do not inherit a real developer machine's knob into the fixture.
     AUTOPILOT_RUN_APPROVAL_MODE: '',

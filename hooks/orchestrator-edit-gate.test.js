@@ -185,6 +185,7 @@ function setupCodexGate() {
       USERPROFILE: home,
       PLUGIN_ROOT: CODEX_PLUGIN_ROOT,
       AUTOPILOT_SESSION_MODE_DIR: markers,
+      AUTOPILOT_RUNS_WATCH_AUTOSTART: '0', // `session-mode.js set` must not start a detached watcher
       AUTOPILOT_SESSION_ID: 'codex-live-session',
       CODEX_THREAD_ID: 'codex-live-session',
     },
@@ -354,6 +355,7 @@ function setup() {
     USERPROFILE: home,
     AUTOPILOT_HOOK_ORCHESTRATOR_EDIT_GATE: '1',
     AUTOPILOT_SESSION_MODE_DIR: markers,
+    AUTOPILOT_RUNS_WATCH_AUTOSTART: '0', // `session-mode.js set` must not start a detached watcher
     AUTOPILOT_ORCH_EDIT_GATE_MODE: 'block',
     CLAUDE_CODE_SESSION_ID: sid,
   };

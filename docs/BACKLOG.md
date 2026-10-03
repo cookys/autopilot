@@ -895,6 +895,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/import-aa-capabilities-test-host-pinned-tmp-in-worktree.md
 - **Context**: `/tmp/.git` exists, so the "AA cache directory must be outside a Git worktree" check fires.
 
+### Final panel with non-empty findings terminal-stops instead of parking for depth-0 disposition
+- **Status**: open
+- **Trigger**: next managed campaign whose final panel returns any finding (peer cuda hit it 2026-10-03)
+- **Effort**: M
+- **Source**: PEER-REPORTED cuda/chatgpt-tunnel 2026-10-03, msg 01M416P22N8XA90FX5YC8AQ3GV
+- **Pointer**: docs/backlog/final-panel-nonempty-findings-terminal-stop-instead-of-parking.md
+- **Context**: campaign-composition.js:3166 blocks final_adjudication with no durable wait; only in-loop adjudication parks; terminal campaigns cannot resume.
+
 ### `hooks.json` `"//"` comment keys log an ERROR line on every Claude Code start
 - **Status**: open
 - **Trigger**: P1d of the mods plan (adding `modules` to `hooks/hooks.json`)

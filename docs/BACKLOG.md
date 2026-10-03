@@ -847,13 +847,21 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/dispatch-plan-review-terminal-ticket-visibility.md
 - **Context**: a reused ticket whose session is terminal returns the old verdict with 0 seat calls; emit a named ticket_session_already_terminal message.
 
+### v2.36.114 review follow-ups
+- **Status**: open
+- **Trigger**: next touch of src/engine/implementation-campaign.js / campaign-intake.js
+- **Effort**: S
+- **Source**: v2.36.114 landing reviews (🔵)
+- **Pointer**: docs/backlog/v2-36-114-review-follow-ups.md
+- **Context**: keep AWAITING_CONVERGENCE_ADJUDICATION on `>=` pending evidence; surface `control.advisories` in intake output; rename `a_vertical_at_cap` fixture key; cli.js/campaign-intake.js predicate parity test.
+
 ### Population B switch suite flakes with a stale entry under parallel runs
 - **Status**: open
 - **Trigger**: FIRED 2026-10-03 — seen twice (w112 G check, w113 hand I); green on solo rerun
 - **Effort**: S
 - **Source**: w112 row G check and w113 hand I
 - **Pointer**: docs/backlog/population-b-switch-suite-flakes-with-a-stale-entry-under-parallel-runs.md
-- **Context**: stale-entry report from the Population B switch suite is intermittent under --parallel; find the race (tree another suite mutates, shared temp path).
+- **Context**: stale-entry report from the Population B switch suite is intermittent under --parallel; likely cause (w114 hand J): the suite uses `git grep`, which sees only tracked files — see the sidecar.
 
 ### cost-tracker/cost-fuse pricing table has no fable row and opus-5.x rates are hard-coded unverified
 - **Status**: open

@@ -259,6 +259,7 @@ Small batches that bump the version but don't warrant a project README. Source o
 
 | Date | Ship | Version | Merge |
 |------|------|---------|-------|
+| 2026-10-03 | 第一輪就改滿所有 scope 路徑的 campaign 可修補（peer 回報＋第二次發生）；file-cap admission 提醒；SHIP-AS-IS | v2.36.114 | — | [CHANGELOG](../../CHANGELOG.md) |
 | 2026-10-03 | kimi cleanroom 支援獨立 ELF 安裝（peer 回報之 v2.36.108 缺陷，fixture 驗證）；檔案數釘值改為具名成員不變式；SHIP-AS-IS | v2.36.109 | — | [CHANGELOG](../../CHANGELOG.md) |
 | 2026-10-03 | final panel 暫時性故障可續跑並沿用有效席位判決；max effort reviewer 輸出預算；symlink TMPDIR；finalize 閘；SHIP-AS-IS | v2.36.111 | — | [CHANGELOG](../../CHANGELOG.md) |
 | 2026-10-03 | 經過 BOUNDARY_REJECTED 的 campaign 可到 terminal success；恆綠套件 finalize；seat artifact 回收；SHIP-AS-IS | v2.36.112 | — | [CHANGELOG](../../CHANGELOG.md) |

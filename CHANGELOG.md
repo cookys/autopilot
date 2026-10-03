@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.36.114 — 第一輪就改滿所有 scope 路徑的 campaign 現在能修補
+
+- **問題與改動（逐列）**：
+  - （J）第一輪就改滿所有 scope 路徑的 campaign 無法修補（第二次發生；第一次見 v2.36 CHANGELOG 約 :1195）：修補類 resume 的寫入預算檢查用 `>=`，與 reducer 的 `>` 不一致。現在修補類 resume 的預算檢查改用與 reducer 一致的 `>`（累計不重複路徑），新增路徑超出仍擋；admission 對 cap ≤ scope 路徑數且有修補輪的 campaign 發出 `campaign_file_cap_no_first_pass_headroom` 提醒；schema 補欄位說明。Peer-reported（cuda）＋第二次發生。
+  - 修補輪：review 兩個 🟡 已修——提醒經真實 intake 驗證（斷言 `control.advisories`）；引擎修補閘以行為測試加 mutation check 驗證（新增 `campaign-repair-engine-at-file-cap` 套件，匯出 `campaignMutationBudgetStatus`）。
+- **驗證**：整套 `--parallel 16` 396 檔全過（第一輪 diff）；修補後重跑相關套件與 L1：`scripts/import-aa-capabilities.test.js` 22 項在本機紅，於 origin/develop 同樣紅（pre-existing，/tmp 內有 `.git` 使「cache 在 git worktree 內」檢查觸發）；check-js-syntax、codex 鏡像、validate.sh 通過。review：claude-fable-5-1 第二輪 SHIP-AS-IS（review-1791024600-335312-08ba）。
+- **已知後續（review 🔵）**：見 `docs/BACKLOG.md`「v2.36.114 review follow-ups」；含第二個 `campaignMutationBudgetStatus` 呼叫點（約 :10458）角色、fixture 用 N=4/1 而非 12、`control.advisories` 新鍵的 consumer deep-equal 快照。
+
+prose-justification: 本版僅改 campaign 預算判斷、admission 提醒、schema 說明與測試；一行 hetero-impl-loop reference 補述。
+
 ## v2.36.113 — cost-tracker 警告顯示真實 context %；cost-fuse 顯示 session／全主機花費且派工豁免只在 warn 模式
 
 - **問題與改動（逐列）**：

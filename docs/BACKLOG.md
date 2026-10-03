@@ -903,14 +903,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/final-panel-nonempty-findings-terminal-stop-instead-of-parking.md
 - **Context**: campaign-composition.js:3166 blocks final_adjudication with no durable wait; only in-loop adjudication parks; terminal campaigns cannot resume.
 
-### `hooks.json` `"//"` comment keys log an ERROR line on every Claude Code start
-- **Status**: open
-- **Trigger**: P1d of the mods plan (adding `modules` to `hooks/hooks.json`)
-- **Effort**: S
-- **Source**: mods plan P0 spike S1, 2026-10-03
-- **Pointer**: docs/backlog/hooks-json-comment-keys-log-error-on-every-start.md
-- **Context**: CC 2.1.288 logs `[ERROR] … unknown keys "//" … ignored` for the 15 comment keys inside hook entries; behaviour unchanged, noise.
-
 ### Final review panel fans out all seats at once — no bounded concurrency
 - **Status**: open
 - **Trigger**: next peer/operator campaign on a host that cannot run every panel seat at once

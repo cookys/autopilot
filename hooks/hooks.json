@@ -21,14 +21,12 @@
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start.js"
           },
           {
-            "//": "version-drift-check: dev-clone-only advisory (silent no-op for release/marketplace users). Wired here — NOT in settings.example.json — because ${CLAUDE_PLUGIN_ROOT} only expands inside the plugin's own hooks.json, never in a user's settings.json.",
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/version-drift-check.js"
           }
         ]
       },
       {
-        "//": "runs-watch-autostart (mods P1W W1c): default-on. Writes the live pointer and ensures the ONE project watcher (flock -n probe, same launch path as session-mode.js set) so dev-flow and plain sessions get a live band. No-op outside a git repo; fail-open; never blocks. AUTOPILOT_RUNS_WATCH_AUTOSTART=0 to opt out.",
         "matcher": "startup|resume|clear|compact",
         "hooks": [
           {
@@ -41,7 +39,6 @@
     ],
     "SessionEnd": [
       {
-        "//": "session-handoff (writer): OPT-IN behaviour gated at runtime — no-ops unless handoff is enabled (env AUTOPILOT_HANDOFF_INJECT=1 OR ~/.autopilot/config.json {\"handoff_inject\":true}); the SAME switch enables the session-start reader/inject half. Wired here — NOT in settings.example.json — because ${CLAUDE_PLUGIN_ROOT} only expands inside the plugin's own hooks.json, never in a user's settings.json (so the old copy-into-settings.json instruction produced a literal unresolved path).",
         "matcher": "",
         "hooks": [
           {
@@ -62,7 +59,6 @@
     ],
     "UserPromptSubmit": [
       {
-        "//": "advisory-relay: deferred-relay half of the group-S Stop advisory queue (cost-tracker / check-console / batch-format). Default-on; AUTOPILOT_ADVISORY_RELAY=off to opt out. Inert on an absent/empty queue (safe default-on). mods P1W PERF: this process ALSO hosts awaiting-owner's UserPromptSubmit work and the runs-watch-autostart ensure (hooks/awaiting-owner.js onUserPromptSubmit; zero-spawn fast path while the watcher is alive); AUTOPILOT_AWAITING_OWNER=off / AUTOPILOT_RUNS_WATCH_AUTOSTART=0 still disable those parts independently of AUTOPILOT_ADVISORY_RELAY. timeout 10 is the autostart entry's former bound.",
         "matcher": "",
         "hooks": [
           {
@@ -75,7 +71,6 @@
     ],
     "PreToolUse": [
       {
-        "//": "D6: single per-event opt-in multiplexer. Spawns only enabled opt-in handlers (branch-protection, exec-boundary, commit-secret-scan, large-file-warner, config-protection, mcp-health pre, orchestrator-edit-gate). Disabled stems start zero children.",
         "matcher": ".*",
         "hooks": [
           {
@@ -85,7 +80,6 @@
         ]
       },
       {
-        "//": "mods P1W HOOKQ: depth-0 asking the owner (AskUserQuestion, exact matcher so no other tool pays) opens the scope's decision/1 file; the answer closes it from audit-log.js's PostToolUse process and SessionEnd from awaiting-owner.js. AUTOPILOT_ASK_DECISION=off to opt out.",
         "matcher": "AskUserQuestion",
         "hooks": [
           {
@@ -95,7 +89,6 @@
         ]
       },
       {
-        "//": "v2.35.15 default-on: foreman-guard (ironlaw #6 in the loop — Bash cap / polling deny / Monitor deny for l4-l6 subagents; inert elsewhere; AUTOPILOT_FOREMAN_GUARD_MODE=off to opt out) + dispatch-model-guard (was opt-in; AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=off to opt out).",
         "matcher": "Bash|Monitor",
         "hooks": [
           {
@@ -105,7 +98,6 @@
         ]
       },
       {
-        "//": "v2.35.16 default-on: cost-fuse — brain-tier (fable/opus) daily spend fuse, warn-mode default; AUTOPILOT_COST_FUSE_MODE=off to opt out.",
         "matcher": "Bash|Edit|Write|MultiEdit|NotebookEdit",
         "hooks": [
           {
@@ -122,14 +114,12 @@
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-model-guard.js"
           },
           {
-            "//": "v2.36.17 wired default-on but INERT until configured: run-approval-gate — one confirmation per /l3-/l6 run, then autonomous to the end of it. Fires only at depth-0 (skipped when payload.agent_id is present) with an active session-mode marker and run_approval.mode=ask-once; the PostToolUse half records the approval receipt (the tool ran ⇒ the human allowed it). Default off; ~/.autopilot/config.json {\"run_approval\":{\"mode\":\"ask-once\"}} or AUTOPILOT_RUN_APPROVAL_MODE to enable.",
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/run-approval-gate.js PreToolUse"
           }
         ]
       },
       {
-        "//": "v2.36.1 default-on: depth0-delegate-gate — nudges depth-0 (never a subagent; skipped when payload.agent_id is present) away from long read bursts toward delegating to an Explore/survey subagent; warns by default, denies only in block mode against a fresh guarded-model live file. AUTOPILOT_DEPTH0_DELEGATE_GATE_MODE=off to opt out.",
         "matcher": "WebFetch|WebSearch|Read|Grep|Glob|Bash|Agent|Task|Skill",
         "hooks": [
           {
@@ -164,17 +154,14 @@
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/failure-escalation.js"
           },
           {
-            "//": "D6: PostToolUse opt-in multiplexer (accumulator, test-runner, design-quality).",
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/opt-in-multiplexer.js PostToolUse"
           },
           {
-            "//": "v2.35.15 default-on (was opt-in): context-budget — real context size, T1 100k nudge / T2 150k handoff directive; AUTOPILOT_CONTEXT_BUDGET_MODE=off or config context_budget.mode=off to opt out.",
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/context-budget.js"
           }
-        ],
-        "//": "mods P1W PERF+STAMP: audit-log also hosts awaiting-owner's PostToolUse end signal and the subagent last-tool stamp (no extra node spawn per tool call); knobs AUTOPILOT_AWAITING_OWNER / AUTOPILOT_AGENT_ACTIVITY."
+        ]
       },
       {
         "matcher": "Write|Edit",
@@ -186,7 +173,6 @@
         ]
       },
       {
-        "//": "v2.36.17: run-approval-gate PostToolUse half — the approval RECEIPT. A Task/Agent that reached PostToolUse was allowed by the human at the PreToolUse ask, so this records the run as approved and the gate stays silent for the rest of it. Inert unless run_approval.mode=ask-once.",
         "matcher": "Task|Agent",
         "hooks": [
           {
@@ -196,7 +182,6 @@
         ]
       },
       {
-        "//": "mods P1W W1d default-on: session-tasks — folds the task-tool events into <live>/tasks/<sid>.json; AUTOPILOT_SESSION_TASKS=off to opt out. Exact tool-name matcher (never Task/Agent). Task tools need CLAUDE_CODE_ENABLE_TODO_TOOLS=1 for sonnet/opus.",
         "matcher": "TaskCreate|TaskUpdate|TaskList",
         "hooks": [
           {
@@ -208,7 +193,6 @@
     ],
     "PostToolUseFailure": [
       {
-        "//": "D6: PostToolUseFailure opt-in multiplexer (mcp-health failure).",
         "matcher": ".*",
         "hooks": [
           {
@@ -220,7 +204,6 @@
     ],
     "Stop": [
       {
-        "//": "D6: Stop opt-in multiplexer (session-summary, check-console, batch-format).",
         "matcher": "",
         "hooks": [
           {
@@ -230,7 +213,6 @@
         ]
       },
       {
-        "//": "v2.35.15 default-on (was opt-in): cost-tracker — per-session cost rows + cumulative cache-read warning; AUTOPILOT_COST_TRACKER=false to opt out.",
         "matcher": "",
         "hooks": [
           {
@@ -240,7 +222,6 @@
         ]
       },
       {
-        "//": "v2.36.11 default-on: dirty-protected-paths — turn-end reminder when uncommitted work under protected_paths passes min_files/min_lines; systemMessage only, never a Stop decision; AUTOPILOT_DIRTY_TREE_REMINDER=false to opt out.",
         "matcher": "",
         "hooks": [
           {
@@ -261,7 +242,6 @@
     ],
     "TaskCreated": [
       {
-        "//": "mods P1W W1d default-on: session-tasks — folds the task-tool events into <live>/tasks/<sid>.json; AUTOPILOT_SESSION_TASKS=off to opt out. Exact tool-name matcher (never Task/Agent). Task tools need CLAUDE_CODE_ENABLE_TODO_TOOLS=1 for sonnet/opus.",
         "matcher": "",
         "hooks": [
           {
@@ -284,7 +264,6 @@
     ],
     "PermissionRequest": [
       {
-        "//": "mods P1W W1e default-on: awaiting-owner — maintains <live>/attention/<sid>.json while Claude Code waits on the human (permission / question / idle); AUTOPILOT_AWAITING_OWNER=off to opt out.",
         "matcher": "",
         "hooks": [
           {

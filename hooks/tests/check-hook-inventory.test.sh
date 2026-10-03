@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+# RED at 0a642f8f (new modules cases, before the implementation): 27 passed, 11 failed, e.g.
+#   FAIL modules: default print reports mods: 1: 'mods: 1' not found in output
+#   FAIL modules: missing module file fails --check: expected '0', got '1'
+#   FAIL modules: module outside mods/ fails --check: expected '0', got '1'
+#   FAIL hooks.json has no comment keys: expected '15', got '0'
+# (codex-plugin-package.test.sh: 2 failed — "codex --check ignores a modules key", "baseline mirror has the modules key stripped")
 # check-hook-inventory.js test — green path + COUNT and MEMBERSHIP drift detection.
 #
 # Sandbox pattern (the script resolves REPO via dirname/.. → the sandbox): copy the
@@ -89,5 +95,73 @@ restore "hooks/README.md"
 # 8. post-restore clean re-check → exit 0 (restores held)
 node "$SCRIPT" --check >/dev/null 2>&1
 assert_eq "0" "$?" "post-restore clean --check exit 0"
+
+# ---- P1d D1: top-level `modules` array (mods tier) ----
+# Classic tally of the unmodified sandbox, for "classic counts unchanged" comparisons.
+CLASSIC_BASE="$(node "$SCRIPT" 2>&1 | grep -v '^  mods')"
+add_modules() { # $1 = JSON array literal for the modules key
+  node -e 'const fs=require("fs");const p=process.argv[1];const j=JSON.parse(fs.readFileSync(p,"utf8"));j.modules=JSON.parse(process.argv[2]);fs.writeFileSync(p,JSON.stringify(j,null,2)+"\n")' "$SBX/hooks/hooks.json" "$1"
+}
+
+# 9. valid modules entry -> `mods: 1` as its own tier; classic counts unchanged; --check green
+mkdir -p "$SBX/mods/live"; : > "$SBX/mods/live/register.ts"
+add_modules '["../mods/live/register.ts"]'
+OUT="$(node "$SCRIPT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "modules: default print exit 0"
+assert_contains "$OUT" "mods: 1" "modules: default print reports mods: 1"
+assert_eq "$CLASSIC_BASE" "$(echo "$OUT" | grep -v '^  mods')" "modules: classic hook tally unchanged by modules key"
+OUT="$(node "$SCRIPT" --check 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "modules: --check green with a valid module"
+assert_contains "$OUT" "mods: 1" "modules: --check summary reports the mods tier"
+
+# 10. missing module file -> --check fails
+restore "hooks/hooks.json"; add_modules '["../mods/live/missing.ts"]'
+OUT="$(node "$SCRIPT" --check 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "modules: missing module file fails --check"
+assert_contains "$OUT" "missing.ts" "modules: failure names the missing module"
+
+# 11. module outside mods/ -> fails
+: > "$SBX/hooks/rogue.ts"
+restore "hooks/hooks.json"; add_modules '["./rogue.ts"]'
+OUT="$(node "$SCRIPT" --check 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "modules: module outside mods/ fails --check"
+assert_contains "$OUT" "mods/" "modules: failure explains the mods/ rule"
+
+# 12. wrong extension and non-array are rejected
+: > "$SBX/mods/live/register.js"
+restore "hooks/hooks.json"; add_modules '["../mods/live/register.js"]'
+node "$SCRIPT" --check >/dev/null 2>&1
+assert_eq "1" "$?" "modules: non-.ts module fails --check"
+restore "hooks/hooks.json"; add_modules '"../mods/live/register.ts"'
+node "$SCRIPT" --check >/dev/null 2>&1
+assert_eq "1" "$?" "modules: non-array modules fails --check"
+
+# 13. a directory named *.ts is not a regular file
+mkdir -p "$SBX/mods/live/dir.ts"
+restore "hooks/hooks.json"; add_modules '["../mods/live/dir.ts"]'
+node "$SCRIPT" --check >/dev/null 2>&1
+assert_eq "1" "$?" "modules: directory entry fails --check"
+
+# 14. no modules key -> mods: 0; classic path identical
+restore "hooks/hooks.json"
+OUT="$(node "$SCRIPT" 2>&1)"
+assert_contains "$OUT" "mods: 0" "modules: absent key reports mods: 0"
+assert_eq "$CLASSIC_BASE" "$(echo "$OUT" | grep -v '^  mods')" "modules: absent key leaves classic tally identical"
+
+# 15. hooks.json carries no "//" comment keys inside hook entries (CC 2.1.288 logs an ERROR per key)
+COMMENT_KEYS="$(node -e 'const j=require(process.argv[1]);let n=0;(function w(o){if(Array.isArray(o))o.forEach(w);else if(o&&typeof o==="object"){if("//" in o)n++;Object.values(o).forEach(w);}})(j);console.log(n)' "$REPO_ROOT/hooks/hooks.json")"
+assert_eq "0" "$COMMENT_KEYS" "hooks.json has no comment keys"
+node "$REPO_ROOT/scripts/check-hook-inventory.js" --check >/dev/null 2>&1
+assert_eq "0" "$?" "real repo --check green"
+
+# 16. mirrors never carry mods/ or the modules key (real sync --check + real mirror trees)
+bash "$REPO_ROOT/scripts/sync-codex-plugin-skills.sh" --check >/dev/null 2>&1
+assert_eq "0" "$?" "codex sync --check rc 0"
+bash "$REPO_ROOT/scripts/sync-opencode-plugin.sh" --check >/dev/null 2>&1
+assert_eq "0" "$?" "opencode sync --check rc 0"
+MODS_IN_MIRRORS="$(find "$REPO_ROOT/platforms/codex/plugin" "$REPO_ROOT/.opencode/plugin-package" -type d -name mods 2>/dev/null | wc -l)"
+assert_eq "0" "$MODS_IN_MIRRORS" "no mods/ directory inside either mirror"
+MODULES_IN_BASELINE="$(grep -c '"modules"' "$REPO_ROOT/platforms/codex/plugin/profiles/baselines/claude-hooks.json")"
+assert_eq "0" "$MODULES_IN_BASELINE" "codex hook baseline carries no modules key"
 
 finalize_test

@@ -215,8 +215,15 @@ const hookSource = path.join(root, 'hooks', 'hooks.json');
 const hookBaseline = path.join(pluginDir, 'profiles', 'baselines', 'claude-hooks.json');
 if (!fs.existsSync(hookBaseline)) {
   failures.push('missing profiles/baselines/claude-hooks.json');
-} else if (!fs.readFileSync(hookSource).equals(fs.readFileSync(hookBaseline))) {
-  failures.push('content profiles/baselines/claude-hooks.json');
+} else {
+  // The baseline is hooks/hooks.json minus the Claude-only top-level `modules` key (P1d).
+  const src = fs.readFileSync(hookSource, 'utf8');
+  const parsed = JSON.parse(src);
+  const expected = Object.prototype.hasOwnProperty.call(parsed, 'modules')
+    ? (delete parsed.modules, JSON.stringify(parsed, null, 2) + '\n') : src;
+  if (expected !== fs.readFileSync(hookBaseline, 'utf8')) {
+    failures.push('content profiles/baselines/claude-hooks.json');
+  }
 }
 const hookEntries = fs.existsSync(path.join(pluginDir, 'hooks'))
   ? fs.readdirSync(path.join(pluginDir, 'hooks')).sort() : [];
@@ -458,6 +465,26 @@ assert_contains "$NEGATIVE_CONTROL_OUT" "$NEGATIVE_CONTROL_ASSET" "sync-codex-pl
 cp "$SYNC_SANDBOX/$NEGATIVE_CONTROL_ASSET" "$SYNC_SANDBOX/platforms/codex/plugin/$NEGATIVE_CONTROL_ASSET"
 OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "0" "sync-codex-plugin-skills --check exits 0 after negative-control asset is restored"
+
+# P1d D1: a top-level `modules` array in hooks/hooks.json is ignored by the codex hook
+# baseline (stripped from the mirror, never a --check drift), and mods/ is never copied.
+cp "$SYNC_SANDBOX/hooks/hooks.json" "$SYNC_SANDBOX/hooks.json.orig"
+mkdir -p "$SYNC_SANDBOX/mods/live"; : > "$SYNC_SANDBOX/mods/live/register.ts"
+printf '{"hooks":{},"modules":["../mods/live/register.ts"]}\n' > "$SYNC_SANDBOX/hooks/hooks.json"
+OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "0" "codex --check ignores a modules key on the source hooks.json"
+bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" >/dev/null
+assert_eq "$(grep -c modules "$SYNC_SANDBOX/platforms/codex/plugin/profiles/baselines/claude-hooks.json")" "0" \
+  "codex hook baseline mirror has the modules key stripped"
+assert_eq "$(find "$SYNC_SANDBOX/platforms/codex/plugin" -name mods | wc -l)" "0" "codex mirror contains no mods/"
+OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "0" "codex --check green after syncing a source with modules"
+printf '{"hooks":{"Stop":[]},"modules":["../mods/live/register.ts"]}\n' > "$SYNC_SANDBOX/hooks/hooks.json"
+OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "1" "codex --check still flags a real classic-hooks change beside modules"
+cp "$SYNC_SANDBOX/hooks.json.orig" "$SYNC_SANDBOX/hooks/hooks.json"
+bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" >/dev/null
+rm -rf "$SYNC_SANDBOX/mods" "$SYNC_SANDBOX/hooks.json.orig"
 
 rm "$SYNC_SANDBOX/platforms/codex/plugin/hooks/hooks.json" \
   "$SYNC_SANDBOX/platforms/codex/plugin/hooks/pre-effect.js" \

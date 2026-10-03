@@ -420,6 +420,60 @@ check_mapped_file() {
   fi
 }
 
+# The Claude hooks.json may carry a top-level `modules` array (P1d, Claude Code mod surface).
+# Codex has no mod runtime: the baseline mirror strips that key. A source without `modules`
+# is copied byte-for-byte; mods/ itself is never in any copied tree.
+hook_baseline_stripped() { # $1 = source file; prints the baseline bytes to stdout
+  node -e '
+const fs = require("fs");
+const text = fs.readFileSync(process.argv[1], "utf8");
+let j; try { j = JSON.parse(text); } catch (e) { process.stdout.write(text); process.exit(0); }
+if (j && typeof j === "object" && !Array.isArray(j) && Object.prototype.hasOwnProperty.call(j, "modules")) {
+  delete j.modules;
+  process.stdout.write(JSON.stringify(j, null, 2) + "\n");
+} else process.stdout.write(text);
+' "$1"
+}
+
+copy_hook_baseline() {
+  local src="$REPO/$HOOK_BASELINE_SOURCE"
+  local dst="$PLUGIN/$HOOK_BASELINE_DEST"
+  if [ ! -f "$src" ]; then
+    echo "error: source file missing: $src" >&2
+    exit 1
+  fi
+  mkdir -p "$(dirname "$dst")"
+  hook_baseline_stripped "$src" > "$dst"
+}
+
+check_hook_baseline() {
+  local src="$REPO/$HOOK_BASELINE_SOURCE"
+  local dst="$PLUGIN/$HOOK_BASELINE_DEST"
+  if [ ! -f "$src" ]; then
+    echo "error: source file missing: $src" >&2
+    exit 1
+  fi
+  if [ ! -f "$dst" ]; then
+    echo "drift: missing file platforms/codex/plugin/$HOOK_BASELINE_DEST"
+    return 1
+  fi
+  # Source without `modules`: byte-exact. With `modules`: the mirror must equal the source
+  # minus that key (structural compare, so formatting alone is never drift).
+  if ! node -e '
+const fs = require("fs");
+const src = fs.readFileSync(process.argv[1], "utf8");
+const dst = fs.readFileSync(process.argv[2], "utf8");
+let j; try { j = JSON.parse(src); } catch (e) { process.exit(src === dst ? 0 : 1); }
+if (!(j && typeof j === "object" && !Array.isArray(j) && Object.prototype.hasOwnProperty.call(j, "modules"))) process.exit(src === dst ? 0 : 1);
+delete j.modules;
+let d; try { d = JSON.parse(dst); } catch (e) { process.exit(1); }
+process.exit(JSON.stringify(j) === JSON.stringify(d) ? 0 : 1);
+' "$src" "$dst"; then
+    echo "drift: content differs platforms/codex/plugin/$HOOK_BASELINE_DEST"
+    return 1
+  fi
+}
+
 check_exact_directory_entries() (
   local rel="$1"
   shift
@@ -544,7 +598,7 @@ if [ "$MODE" = "check" ]; then
   for rel in "${SUPPORT_FILES[@]}"; do
     check_file "$rel" || STATUS=1
   done
-  check_mapped_file "$HOOK_BASELINE_SOURCE" "$HOOK_BASELINE_DEST" || STATUS=1
+  check_hook_baseline || STATUS=1
   check_mapped_file "$CODEX_HOOK_MANIFEST_SOURCE" "$CODEX_HOOK_MANIFEST_DEST" || STATUS=1
   check_mapped_file "$CODEX_PREEFFECT_SOURCE" "$CODEX_PREEFFECT_DEST" || STATUS=1
   check_mapped_file "$CODEX_POSTCOMPACT_SOURCE" "$CODEX_POSTCOMPACT_DEST" || STATUS=1
@@ -579,7 +633,7 @@ done
 for rel in "${SUPPORT_FILES[@]}"; do
   copy_file "$rel"
 done
-copy_mapped_file "$HOOK_BASELINE_SOURCE" "$HOOK_BASELINE_DEST"
+copy_hook_baseline
 clean_hooks_root
 copy_mapped_file "$CODEX_HOOK_MANIFEST_SOURCE" "$CODEX_HOOK_MANIFEST_DEST"
 copy_mapped_file "$CODEX_PREEFFECT_SOURCE" "$CODEX_PREEFFECT_DEST"

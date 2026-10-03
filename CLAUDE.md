@@ -92,7 +92,7 @@ The version (canonical in `.claude-plugin/plugin.json`, mirrored by `scripts/syn
 | Bump | When | Examples |
 |------|------|----------|
 | **MAJOR** (`X.0.0`) | Breaking / incompatible change to a surface consumers rely on | Removed or renamed skill; a skill `description:` change that shifts routing incompatibly; config-schema break; removed hook/script a consumer depends on |
-| **MINOR** (`x.Y.0`) | A **new user-facing milestone**: a new **skill** or a new **agent** | New `skills/<name>/` skill; new `agents/<role>.md` methodology agent |
+| **MINOR** (`x.Y.0`) | A **new user-facing milestone**: a new **skill**, a new **agent**, or a new **mod surface** | New `skills/<name>/` skill; new `agents/<role>.md` methodology agent; new mod surface (first module under `mods/`) |
 | **PATCH** (`x.y.Z`) | **Everything else that changes shipped code**: new **script**, new **hook**, new **reference doc**, a bug fix or hardening of existing behavior (**including fixes to release tooling like `sync-version.js`**), a regex/contract tweak | `check-dispatch-suppression.sh` (new script) → patch; re-enabling a hook → patch; a reviewer-prompt fix → patch |
 | **(no bump)** | Changes touching **only docs or tests** — no shipped code behavior changes. Fold into the next release | Adding a `hooks/tests/*.test.sh`; a `docs/BACKLOG.md` / `docs/projects/` edit; a typo/wording fix in a doc |
 

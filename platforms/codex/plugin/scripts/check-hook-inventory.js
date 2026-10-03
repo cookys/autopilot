@@ -25,6 +25,11 @@
  *              default-on while omitting the 5 actually-wired ones — a count-only
  *              guard would have passed it green).
  *
+ * Top-level `modules` (hooks/hooks.json, P1d): an array of paths relative to hooks/hooks.json,
+ * each a regular .ts/.tsx file under mods/. Reported as its own `mods: <n>` tier, never mixed
+ * into the classic hook counts (stemsFromHookBlock walks only hooksJson.hooks); `--check`
+ * fails on a missing or invalid module path.
+ *
  * Exit: 0 = in sync (or default print) / 1 = drift found / 2 = usage / env error.
  *
  * Wired into scripts/preflight-portability.sh. When you add/remove/move a hook,
@@ -95,9 +100,32 @@ function stemsFromHookBlock(eventMap) {
   return out;
 }
 
+// Validate hooks.json top-level `modules`: array of strings, each relative to hooks/, resolving
+// to an existing regular .ts/.tsx file under <repo>/mods/. Returns a list of error strings.
+function validateModules(modules) {
+  if (modules === undefined) return [];
+  if (!Array.isArray(modules)) return ['hooks/hooks.json: "modules" must be an array of paths'];
+  const errs = [];
+  const modsRoot = path.join(REPO, 'mods') + path.sep;
+  for (const m of modules) {
+    if (typeof m !== 'string' || !m) { errs.push(`hooks/hooks.json: modules entry is not a non-empty string: ${JSON.stringify(m)}`); continue; }
+    const abs = path.resolve(HOOKS_DIR, m);
+    if (!abs.startsWith(modsRoot)) { errs.push(`hooks/hooks.json: module "${m}" must live under mods/`); continue; }
+    if (!/\.tsx?$/.test(abs)) { errs.push(`hooks/hooks.json: module "${m}" must end in .ts or .tsx`); continue; }
+    let st = null;
+    try { st = fs.statSync(abs); } catch (e) { /* missing */ }
+    if (!st) errs.push(`hooks/hooks.json: module "${m}" does not exist`);
+    else if (!st.isFile()) errs.push(`hooks/hooks.json: module "${m}" is not a regular file`);
+  }
+  return errs;
+}
+
 function deriveInventory() {
   const hooksJson = readJson('hooks/hooks.json');
   const manifest = readJson('hooks/opt-in-manifest.json');
+
+  const modules = hooksJson.modules;
+  const modErrors = validateModules(modules);
 
   // Everything actually wired in hooks.json.
   const wired = stemsFromHookBlock(hooksJson.hooks);
@@ -128,6 +156,8 @@ function deriveInventory() {
     defaultOn: [...defaultOn].sort(),
     optIn: [...optIn].sort(),
     disabled: [...disabled].sort(),
+    mods: Array.isArray(modules) ? modules.length : 0,
+    modErrors,
     get total() { return this.defaultOn.length + this.optIn.length + this.disabled.length; },
   };
 }
@@ -138,6 +168,7 @@ function printInventory(inv) {
   console.log(`  default-on (${inv.defaultOn.length}) : ${inv.defaultOn.join(', ')}`);
   console.log(`  opt-in     (${inv.optIn.length}) : ${inv.optIn.join(', ')}`);
   console.log(`  disabled   (${inv.disabled.length}) : ${inv.disabled.join(', ')}`);
+  console.log(`  mods: ${inv.mods}   (top-level modules in hooks.json; separate from the hook tiers)`);
 }
 
 // ---- --check ----
@@ -236,7 +267,7 @@ function checkTierBMembership(errors, rel, inv) {
 }
 
 function runCheck(inv) {
-  const errors = [];
+  const errors = [...inv.modErrors];
   // Canonical description lines (numbers).
   checkTally(errors, '.claude-plugin/plugin.json', /"description"/, inv, ['total', 'defaultOn', 'optIn', 'disabled']);
   checkTally(errors, 'plugin.json', /"description"/, inv, ['total', 'defaultOn', 'optIn', 'disabled']);
@@ -264,7 +295,7 @@ function runCheck(inv) {
     printInventory(inv);
     process.exit(1);
   }
-  console.log(`✓ hook inventory in sync: ${inv.total} hooks (${inv.defaultOn.length} default-on, ${inv.optIn.length} opt-in, ${inv.disabled.length} disabled)`);
+  console.log(`✓ hook inventory in sync: ${inv.total} hooks (${inv.defaultOn.length} default-on, ${inv.optIn.length} opt-in, ${inv.disabled.length} disabled); mods: ${inv.mods}`);
 }
 
 function main() {

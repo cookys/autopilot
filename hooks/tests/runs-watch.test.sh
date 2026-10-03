@@ -490,4 +490,34 @@ GF="$(wenv AUTOPILOT_COSTS_FILE="$SB/absent-costs.jsonl" "$NODE" "$SB/gitfail.js
 eq "true" "$(cj "$GF" 'j.before>=1 && j.after===j.before && j.same')" "failed git worktree list keeps the previous paths file ($GF)"
 eq "yes" "$(grep -q 'git worktree list failed' "$AHOME/review/$KEY_A/live/watcher.log" && echo yes || echo no)" "the failure is logged once to watcher.log"
 
+# ===== repair 2: the enrich rotation is scoped to the watched project ======================================================
+# RED at 5bd2cca3: with 6 foreign live runs and cap 2 the rotation covered all 10 live runs, so each own run was
+#   re-probed every 5 ticks against a bound that assumes ceil(4/2) = 2 -> own rows flapped to unknown.
+FRUNS="$SB/foreign-runs"; mkdir -p "$FRUNS"; RUNS_SAVE="$RUNS"; RUNS="$FRUNS"
+for i in 1 2 3 4; do
+  : > "$SB/own$i.lock"; flock "$SB/own$i.lock" sleep 300 < /dev/null > /dev/null 2>&1 &
+  KILL_PIDS="$KILL_PIDS $!"
+  mk_manifest "own-$i" root-f "$IDENT_A" "$SB/own$i.lock" no
+done
+for i in 1 2 3 4 5 6; do
+  : > "$SB/for$i.lock"; flock "$SB/for$i.lock" sleep 300 < /dev/null > /dev/null 2>&1 &
+  KILL_PIDS="$KILL_PIDS $!"
+  mk_manifest "foreign-$i" root-g "$IDENT_B" "$SB/for$i.lock" no
+done
+sleep 0.5
+rm -f "$LIVE/runs/$KEY_A.json" "$LIVE/runs-enrich-cursor.$KEY_A.json" "$LIVE/runs-enrich-cursor.json"
+(cd "$REPO_A" && wenv "$NODE" "$CLI" status runs --watch --project "$KEY_A" --interval 2 --enrich-cap 2 > /dev/null 2>&1 < /dev/null & echo $! > "$SB/f.launcher")
+KILL_PIDS="$KILL_PIDS $(cat "$SB/f.launcher")"
+eq "yes" "$(wait_for 30 'e.counts&&e.counts.confirmed_live===4' "$LIVE/runs/$KEY_A.json")" "all 4 own live rows become confirmed_live"
+sleep 7
+BAD=0
+for i in 1 2 3 4 5 6; do
+  [ "$(jq_file "$LIVE/runs/$KEY_A.json" 'j.counts.confirmed_live')" = 4 ] || BAD=$((BAD + 1))
+  sleep 2.5
+done
+eq "0" "$BAD" "steady state: confirmed_live stays 4 in every sample with 6 foreign live runs present (no flapping)"
+eq "own-1,own-2,own-3,own-4" "$(node -e 'process.stdout.write(Object.keys(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).probes).sort().join(","))' "$LIVE/runs-enrich-cursor.$KEY_A.json")" "this watcher probed none of the foreign runs"
+stop_watcher "$KEY_A" "$REPO_A"
+RUNS="$RUNS_SAVE"
+
 finalize_test

@@ -223,7 +223,7 @@ function signatureOf(runs) {
 
 /**
  * The watcher core. Pure of timers and process signals so tests drive it with a fake clock.
- *   collect({enrichCap}) -> enriched run rows (injected; cli.js passes collectRuns)
+ *   collect({enrichCap, project}) -> enriched run rows (injected; cli.js passes collectRuns)
  *   now() -> epoch ms
  */
 function createWatcher({
@@ -306,7 +306,7 @@ function createWatcher({
     const nowMs = now();
     let rows;
     try {
-      const all = collect({ enrichCap });
+      const all = collect({ enrichCap, project: key });
       const selected = applySelectors(all, { project: key });
       rows = Array.isArray(selected) ? selected : selected.runs;
     } catch (error) {

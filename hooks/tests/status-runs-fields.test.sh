@@ -178,6 +178,26 @@ run_runs --json --enrich-cap abc
 eq "2" "$__RUN_EXIT" "--enrich-cap abc rejected"
 RUNS="$RUNS_SAVE"
 
+# --- 8b. rotation is scoped per project: foreign live runs neither enter nor disturb a project's cursor -------------
+KEY_B="$(printf '%s' "$IDENT_B" | sha256sum | cut -c1-16)"
+PROJ="$SB/proj"; mkdir -p "$PROJ"; RUNS_SAVE="$RUNS"; RUNS="$PROJ"
+for i in 1 2 3; do mk_manifest "pa-$i" "$((EPOCH_NOW - 400 + i))" null null null "$IDENT_A" null null null; done
+for i in 1 2 3 4; do mk_manifest "pb-$i" "$((EPOCH_NOW - 300 + i))" null null null "$IDENT_B" null null null; done
+run_runs --json --project "$KEY_A" --enrich-cap 2
+run_runs --json --project "$KEY_A" --enrich-cap 2
+eq "3" "$(jget "j.runs.filter(r=>r.probe_age_s!==null).length")" "project A: all 3 own live runs probed within ceil(3/2) calls despite 4 foreign live runs"
+CUR_A="$LIVE/runs-enrich-cursor.$KEY_A.json"
+assert_file_exists "$CUR_A" "project A has its own cursor file"
+eq "pa-1,pa-2,pa-3" "$(node -e 'process.stdout.write(Object.keys(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).probes).sort().join(","))' "$CUR_A")" "project A's probe cache holds only A's runs (no foreign probes)"
+SUM_A="$(cksum < "$CUR_A")"
+run_runs --json --project "$KEY_B" --enrich-cap 2
+eq "2" "$(jget "j.runs.filter(r=>r.probe_age_s!==null).length")" "project B call 1 probes exactly cap rows of B"
+eq "$SUM_A" "$(cksum < "$CUR_A")" "project B's call leaves project A's cursor file untouched"
+assert_file_exists "$LIVE/runs-enrich-cursor.$KEY_B.json" "project B has its own cursor file"
+run_runs --json --enrich-cap 2
+assert_file_exists "$LIVE/runs-enrich-cursor.json" "a call without --project keeps the host-wide cursor file"
+RUNS="$RUNS_SAVE"
+
 # --- 9. selectors are only valid for runs ---------------------------------------------
 __RUN_STDOUT=$(env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID HOME="$FAKE_HOME" CLAUDE_CONFIG_DIR="$FAKE_CLAUDE" XDG_RUNTIME_DIR="$FAKE_XDG" AUTOPILOT_LIVE_DIR="$LIVE" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" ENGINE_CAPABILITY_DIR="$SB/cap" node "$CLI" status quota --project x 2>&1 < /dev/null); __RUN_EXIT=$?
 eq "2" "$__RUN_EXIT" "--project on a non-runs subcommand exits 2"

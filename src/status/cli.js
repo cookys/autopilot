@@ -152,7 +152,7 @@ function quotaHuman(rows, stdout) {
 
 // --- runs ---------------------------------------------------------------------
 
-function collectRuns({ enrichCap = DEFAULT_ENRICH_CAP, env = process.env } = {}) {
+function collectRuns({ enrichCap = DEFAULT_ENRICH_CAP, env = process.env, project = null } = {}) {
   const dispatch = path.join(ROOT, 'scripts', 'dispatch-status.js');
   const list = parseJsonSafe(sh('node', [dispatch, '--list']).stdout);
   const runs = Array.isArray(list) ? list : (list && Array.isArray(list.runs) ? list.runs : []);
@@ -166,6 +166,7 @@ function collectRuns({ enrichCap = DEFAULT_ENRICH_CAP, env = process.env } = {})
     enrichCap,
     dir,
     env,
+    project,
     probeRun: (runId) => parseJsonSafe(sh('node', [dispatch, '--run', runId, '--stall-secs', '180']).stdout),
   });
 }
@@ -523,13 +524,13 @@ function runStatusCli(argv, {
       watch, stop, project: selectors.project.value, interval, idleExit,
       enrichCap: selectors.enrichCap.present ? enrichCap : null,
       binPath: path.join(ROOT, 'bin', 'autopilot.js'),
-      collect: ({ enrichCap: cap }) => collectRuns({ enrichCap: cap, env }),
+      collect: ({ enrichCap: cap, project }) => collectRuns({ enrichCap: cap, env, project }),
       cwd, env, stdout, stderr,
     });
   }
   if (sub === 'runs') {
     const { applySelectors } = require('./runs-fields');
-    const selected = applySelectors(collectRuns({ enrichCap, env }), {
+    const selected = applySelectors(collectRuns({ enrichCap, env, project: selectors.project.value }), {
       project: selectors.project.value,
       root: selectors.root.value,
       since: selectors.since.value,

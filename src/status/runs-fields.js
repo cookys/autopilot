@@ -56,12 +56,15 @@ function matchesProject(selector, repoIdentity) {
 }
 
 // --- rotation state (cursor + last probe values) --------------------------------
-function resolveStateFile(env) {
+// A project-scoped call keeps its own cursor/probe-cache file so projects never disturb each
+// other's rotation; a call without a project keeps the host-wide file.
+function resolveStateFile(env, scopeKey = null) {
   try {
     const { resolveLiveDir } = require('../../scripts/lib/live-state-dir');
     const resolved = resolveLiveDir({ env, warn: () => {} });
     const base = resolved && resolved.base;
-    return base ? path.join(base, CURSOR_FILE) : null;
+    if (!base) return null;
+    return path.join(base, scopeKey ? CURSOR_FILE.replace(/\.json$/, `.${scopeKey}.json`) : CURSOR_FILE);
   } catch (_e) { return null; }
 }
 function loadState(file, dir) {
@@ -110,13 +113,18 @@ function rotationPick(liveIds, cursor, cap, prevOrder = []) {
  *   list      rows from dispatch-status.js --list (each has .manifest path)
  *   probeRun  (runId) => dispatch-status --run JSON | null   (injected by cli.js)
  */
-function buildRunRows({ list, probeRun, enrichCap = DEFAULT_ENRICH_CAP, dir = '', env = process.env, nowMs = Date.now() }) {
+function buildRunRows({ list, probeRun, enrichCap = DEFAULT_ENRICH_CAP, dir = '', env = process.env, nowMs = Date.now(), project = null }) {
   const manifests = list.map((row) => (row && row.manifest ? readManifestSafe(row.manifest) : null) || {});
   const isLive = (row, m) => !(row.ended_at || row.final_status || m.ended_at || m.final_status);
   const liveIds = [];
-  list.forEach((row, i) => { if (isLive(row, manifests[i]) && row.run_id) liveIds.push(String(row.run_id)); });
+  // With a project, the rotation covers only that project's live runs (the watcher's fresh bound
+  // assumes exactly that set); without one it covers every live run in the manifest dir.
+  const inScope = (m) => project === null || matchesProject(project, m.repo_identity);
+  list.forEach((row, i) => { if (isLive(row, manifests[i]) && row.run_id && inScope(manifests[i])) liveIds.push(String(row.run_id)); });
 
-  const stateFile = resolveStateFile(env);
+  let scopeKey = null;
+  if (project !== null) scopeKey = /^[0-9a-f]{16}$/.test(project) ? project : projectKey(project);
+  const stateFile = resolveStateFile(env, scopeKey);
   const state = loadState(stateFile, dir);
   const nowIso = new Date(nowMs).toISOString();
 

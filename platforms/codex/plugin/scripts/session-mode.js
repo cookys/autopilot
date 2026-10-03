@@ -6,7 +6,9 @@
  * and context-budget hooks. One marker file per session id:
  *   ${AUTOPILOT_SESSION_MODE_DIR:-~/.autopilot/session-mode}/<session-id>.json
  *   { session_id, level, repo_root, started_at, expires_at, entry_level?, fallback_reason?,
- *     mission_routing? }
+ *     mission_routing?, repo_identity?, project_key?, root_run_id? }
+ *   (repo_identity/project_key/root_run_id are additive, null when underivable; `set` also writes
+ *   ~/.autopilot/live-pointer.json — src/status/live-pointer.js)
  *
  * Design notes (see docs/plans/2026-07-14-context-budget-orchestrator-gate.md):
  * - Host-stable path (~/.autopilot, NOT $TMPDIR) — docker-exec contexts see the
@@ -50,6 +52,8 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const { canonicalDigest } = require('../src/engine/campaign-verification');
 const { admitMissionRouting } = require('./mission-routing-admission');
+const { scopeFromCwd } = require('../src/status/project-key');
+const { writeLivePointer } = require('../src/status/live-pointer');
 
 const LEVELS = new Set(['l3', 'l4', 'l5', 'l6']);
 const DEFAULT_TTL_HOURS = 24;
@@ -456,6 +460,12 @@ function cmdSet(args) {
     started_at: new Date(now).toISOString(),
     expires_at: new Date(now + ttlHours * 3600 * 1000).toISOString(),
   };
+  // Additive scope fields (mods plan §2.8 write (2)); null when identity cannot be derived.
+  let scope = { repo_identity: null, project_key: null };
+  try { scope = scopeFromCwd(repoRoot); } catch (_error) { /* fail-open: fields stay null */ }
+  marker.repo_identity = scope.repo_identity;
+  marker.project_key = scope.project_key;
+  marker.root_run_id = process.env.AUTOPILOT_ROOT_RUN_ID || null;
   if (missionRouting.status !== 'LEGACY') {
     marker.entry_level = missionRouting.route.entry_level;
     marker.fallback_reason = missionRouting.route.fallback_reason;
@@ -507,6 +517,7 @@ function cmdSet(args) {
   const tmp = `${markerPath()}.tmp-${process.pid}`;
   fs.writeFileSync(tmp, `${JSON.stringify(marker, null, 2)}\n`);
   fs.renameSync(tmp, markerPath()); // atomic on same fs
+  try { writeLivePointer(); } catch (_error) { /* fail-open: pointer is advisory for the mod */ }
   process.stdout.write(`${JSON.stringify({ ok: true, marker_path: markerPath(), ...marker }, null, 2)}\n`);
   return 0;
 }

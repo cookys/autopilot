@@ -1,0 +1,60 @@
+1791067081285 govvsl6 EVENT classic.SessionStart source=startup
+1791067081851 govvsl6 EVENT session.start surface=terminal
+1791067082090 govvsl6 EVENT ui.render AbovePrompt #2 timerHeld=no tickCount=0
+1791067082245 govvsl6 armed (session.start)
+1791067083244 govvsl6 tick 1
+1791067084245 govvsl6 tick 2
+1791067085248 govvsl6 tick 3
+1791067086249 govvsl6 tick 4
+1791067087251 govvsl6 tick 5
+1791067088253 govvsl6 tick 6
+1791067089254 govvsl6 tick 7
+1791067090260 govvsl6 tick 8
+1791067091259 govvsl6 tick 9
+1791067092259 govvsl6 tick 10
+1791067093262 govvsl6 tick 11
+1791067094264 govvsl6 tick 12
+1791067095267 govvsl6 tick 13
+1791067096268 govvsl6 tick 14
+1791067097270 govvsl6 tick 15
+1791067098273 govvsl6 tick 16
+1791067099085 govvsl6 EVENT prompt.submit
+1791067099196 govvsl6 EVENT turn.start
+1791067099273 govvsl6 tick 17
+1791067100296 govvsl6 tick 18
+1791067101292 govvsl6 tick 19
+1791067102292 govvsl6 tick 20
+1791067103296 govvsl6 tick 21
+1791067104297 govvsl6 tick 22
+1791067105299 govvsl6 tick 23
+1791067106302 govvsl6 tick 24
+1791067107303 govvsl6 tick 25
+1791067108305 govvsl6 tick 26
+1791067109308 govvsl6 tick 27
+1791067110308 govvsl6 tick 28
+1791067111313 govvsl6 tick 29
+1791067112316 govvsl6 tick 30
+1791067112598 govvsl6 EVENT classic.SessionEnd reason=clear
+1791067112603 govvsl6 EVENT session.end reason=clear (timer NOT cancelled by us)
+1791067112701 govvsl6 EVENT classic.SessionStart source=clear
+1791067113315 govvsl6 tick 31
+1791067114316 govvsl6 tick 32
+1791067115318 govvsl6 tick 33
+1791067116318 govvsl6 tick 34
+1791067117320 govvsl6 tick 35
+1791067118321 govvsl6 tick 36
+1791067119322 govvsl6 tick 37
+1791067120325 govvsl6 tick 38
+1791067121332 govvsl6 tick 39
+1791067122329 govvsl6 tick 40
+1791067123330 govvsl6 tick 41
+1791067124332 govvsl6 tick 42
+1791067125333 govvsl6 tick 43
+1791067126334 govvsl6 tick 44
+1791067127336 govvsl6 tick 45
+1791067128339 govvsl6 tick 46
+1791067129338 govvsl6 tick 47
+1791067130344 govvsl6 tick 48
+1791067131342 govvsl6 tick 49
+1791067132344 govvsl6 tick 50
+1791067133345 govvsl6 tick 51

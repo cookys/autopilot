@@ -1,0 +1,92 @@
+{
+ "sid": "f1697a46-1ed2-486e-ac5b-685b5f19f607",
+ "tag": "after-clear-gs6ou5e-t24",
+ "results": [
+  {
+   "label": "session.id",
+   "ok": true,
+   "length": 36,
+   "value": "f1697a46-1ed2-486e-ac5b-685b5f19f607"
+  },
+  {
+   "label": "session.cwd",
+   "ok": true,
+   "length": 112,
+   "value": "/tmp/claude-1000/-home-cookys-projects-autopilot/74f6f85f-f806-4317-a6c7-5e4417df8093/scratchpad/p1c/c1/proj/sub"
+  },
+  {
+   "label": "session.root",
+   "ok": true,
+   "length": 112,
+   "value": "/tmp/claude-1000/-home-cookys-projects-autopilot/74f6f85f-f806-4317-a6c7-5e4417df8093/scratchpad/p1c/c1/proj/sub"
+  },
+  {
+   "label": "fs.stat(cwd,resolve).realPath",
+   "ok": true,
+   "length": 112,
+   "value": "/tmp/claude-1000/-home-cookys-projects-autopilot/74f6f85f-f806-4317-a6c7-5e4417df8093/scratchpad/p1c/c1/proj/sub"
+  },
+  {
+   "label": "env.HOME",
+   "ok": true,
+   "length": 108,
+   "value": "/tmp/claude-1000/-home-cookys-projects-autopilot/74f6f85f-f806-4317-a6c7-5e4417df8093/scratchpad/p1c/c1/home"
+  },
+  {
+   "label": "env.XDG_RUNTIME_DIR",
+   "ok": true,
+   "length": 14,
+   "value": "/run/user/1000"
+  },
+  {
+   "label": "read HOME/.autopilot/live-pointer.json",
+   "ok": true,
+   "length": 72,
+   "value": "{\"schema\":\"autopilot.live-pointer/1\",\"live_base\":\"/dev/shm/s7-fixture\"}\n"
+  },
+  {
+   "label": "read /dev/shm/s7-fixture/live.json",
+   "ok": true,
+   "length": 21,
+   "value": "{\"envelope\":\"tmpfs\"}\n"
+  },
+  {
+   "label": "read HOME/.autopilot/session-mode/<sid>.json",
+   "ok": false,
+   "errno": null,
+   "name": "HooksError",
+   "message": "s7-probe: $.fs.read(/tmp/claude-1000/-home-cookys-projects-autopilot/74f6f85f-f806-4317-a6c7-5e4417df8093/scratchpad/p1c/c1/home/.autopilot/session-mode/f1697a46-1ed2-486e-ac5b-685b5f19f607.json) fail"
+  },
+  {
+   "label": "read HOME/.autopilot/review/projkey/live/runs.k1.json",
+   "ok": true,
+   "length": 19,
+   "value": "{\"envelope\":\"ssd\"}\n"
+  },
+  {
+   "label": "list /dev/shm/s7-fixture/runs/paths",
+   "ok": true,
+   "length": 253,
+   "value": "[{\"name\":\"a.json\",\"kind\":\"file\",\"size\":8,\"mtimeMs\":1791067048768.403,\"isLink\":false},{\"name\":\"b.json\",\"kind\":\"file\",\"size\":8,\"mtimeMs\":1791067048768.403,\"isLink\":false},{\"name\":\"c.json\",\"kind\":\"file\","
+  },
+  {
+   "label": "list HOME/.autopilot/livefix/runs/paths",
+   "ok": true,
+   "length": 253,
+   "value": "[{\"name\":\"a.json\",\"kind\":\"file\",\"size\":8,\"mtimeMs\":1791067048761.403,\"isLink\":false},{\"name\":\"b.json\",\"kind\":\"file\",\"size\":8,\"mtimeMs\":1791067048761.403,\"isLink\":false},{\"name\":\"c.json\",\"kind\":\"file\","
+  },
+  {
+   "label": "read tilde ~/.autopilot/live-pointer.json",
+   "ok": false,
+   "errno": null,
+   "name": "HooksError",
+   "message": "s7-probe: $.fs.read(/tmp/claude-1000/-home-cookys-projects-autopilot/74f6f85f-f806-4317-a6c7-5e4417df8093/scratchpad/p1c/c1/proj/sub/~/.autopilot/live-pointer.json) failed: ENOENT"
+  },
+  {
+   "label": "read abs /etc/hostname",
+   "ok": true,
+   "length": 16,
+   "value": "cookys-aimax395\n"
+  }
+ ]
+}

@@ -1240,6 +1240,9 @@ else
   # so capture through pseudo-TTY and strip CR to preserve exactness.
   RUN_SH="$(mktemp -t dispatch-author-agy-XXXXXX)"
   AGY_CWD="$(mktemp -d -t dispatch-author-agycwd-XXXXXX)"
+  # bwrap cannot create a bind destination that traverses a symlink ("Can't mkdir ...: No such file
+  # or directory"), so a symlinked TMPDIR made every agy dispatch runner_failed. Bind the real path.
+  AGY_CWD="$(cd "$AGY_CWD" && pwd -P)"
   # agy opens its own log + crash files under ~/.gemini/antigravity-cli. Under
   # `--ro-bind / /` those opens fail, and agy does NOT degrade quietly: it
   # redirects the whole language-server diagnostic stream to stdout instead

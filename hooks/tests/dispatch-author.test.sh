@@ -903,4 +903,37 @@ assert_contains "$(cat "$MANIFEST")" '"root_run_id": "root-run-xyz"' "exported A
 assert_contains "$(cat "$MANIFEST")" '"parent_run_id": "parent-run-abc"' "exported AUTOPILOT_PARENT_RUN_ID appears in the manifest"
 assert_contains "$(cat "$MANIFEST")" '"depth": 2' "exported AUTOPILOT_DISPATCH_DEPTH appears in the manifest"
 
+# --- symlinked TMPDIR: the agy bwrap scratch cwd must be bound by its real path ---
+# bwrap cannot mkdir a bind destination that traverses a symlink ("Can't mkdir ...: No such file or
+# directory"), so a legitimately symlinked TMPDIR made every agy dispatch a runner_failed.
+# RED at f197fc09: FAIL agy dispatch under a symlinked TMPDIR exits 0: expected '3', got '0' (assert_eq arg order: it exited 3); FAIL ... returns authored: '"status": "authored"' not found
+if command -v bwrap >/dev/null 2>&1 && [ -n "${STUB_AGY_OK:-}" ] && [ -x "$STUB_AGY_OK" ]; then
+  SYM_REAL="$TEST_TMP/symlink-tmp-real"; SYM_LINK="$TEST_TMP/symlink-tmp-link"
+  mkdir -p "$SYM_REAL"; ln -s "$SYM_REAL" "$SYM_LINK"
+  OUT="$(TMPDIR="$SYM_LINK" DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model gemini-3.6-flash-high --prompt-file "$PROMPT" --bin "$STUB_AGY_OK" 2>&1)"; EXIT=$?
+  assert_eq "0" "$EXIT" "agy dispatch under a symlinked TMPDIR exits 0"
+  assert_contains "$OUT" '"status": "authored"' "agy dispatch under a symlinked TMPDIR returns authored"
+  # Negative control: a prompt file / scratch genuinely unreadable is still refused (containment unchanged).
+  OUT="$(TMPDIR="$SYM_LINK" DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model gemini-3.6-flash-high --prompt-file "$TEST_TMP/no-such-prompt.txt" --bin "$STUB_AGY_OK" 2>&1)"; EXIT=$?
+  assert_eq "2" "$EXIT" "symlinked TMPDIR does not loosen precondition checks (missing prompt still refused)"
+fi
+
+# --- symlinked TMPDIR: a tracked verify command reached through a symlink is still the in-repo command ---
+# verify-red-green resolves REPO with pwd -P; a --verify-cmd spelled through a symlink never matched it,
+# so the command was treated as external and no receipt was produced (polarity group then failed).
+# RED at f197fc09: FAIL verify-red-green through a symlinked repo path writes a receipt: file not found
+POL_LINK="$TEST_TMP/polarity-repo-link"
+ln -s "$POL_REPO" "$POL_LINK"
+POL_RECEIPT_LINK="$TEST_TMP/polarity-link.json"
+"$REPO_ROOT/scripts/verify-red-green.sh" --base "$POL_BASE" --head "$POL_HEAD" \
+  --verify-cmd "$POL_LINK/calc.test.sh" --repo "$POL_LINK" --assertion-artifact calc.test.sh --receipt-out "$POL_RECEIPT_LINK" >/dev/null 2>&1
+assert_file_exists "$POL_RECEIPT_LINK" "verify-red-green through a symlinked repo path writes a receipt"
+# Negative control: an executable outside the repo is still external, never bound as the assertion.
+POL_OUTSIDE="$TEST_TMP/outside-verify.sh"
+printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$POL_OUTSIDE"; chmod +x "$POL_OUTSIDE"
+OUT="$("$REPO_ROOT/scripts/verify-red-green.sh" --base "$POL_BASE" --head "$POL_HEAD" \
+  --verify-cmd "$POL_OUTSIDE" --repo "$POL_LINK" --assertion-artifact calc.test.sh 2>&1)"; EXIT=$?
+assert_eq "3" "$EXIT" "an out-of-repo verify command is still INCONCLUSIVE under a symlinked repo path"
+assert_contains "$OUT" 'verification-command-does-not-execute-bound-assertion' "out-of-repo verify command is named as not binding the assertion"
+
 finalize_test

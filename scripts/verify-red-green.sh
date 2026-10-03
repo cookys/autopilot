@@ -462,6 +462,16 @@ fi
 REPO="$(git -C "$REPO" rev-parse --show-toplevel 2>/dev/null)" || err_usage "not a git repository: $REPO"
 REPO="$(cd "$REPO" && pwd -P)" || err_usage "repository path unresolvable: $REPO"
 
+# REPO is physical (pwd -P). Resolve the verify command's DIRECTORY the same way, or a caller whose
+# path runs through a symlink (e.g. a symlinked TMPDIR) never matches "$REPO"/* below and a tracked
+# in-repo command is misclassified as external. Only the directory is resolved; a path genuinely
+# outside REPO stays outside it.
+if [[ "$VERIFY_CMD" == /* && -e "$VERIFY_CMD" ]]; then
+  if _vc_dir="$(cd "$(dirname "$VERIFY_CMD")" 2>/dev/null && pwd -P)"; then
+    VERIFY_CMD="$_vc_dir/$(basename "$VERIFY_CMD")"
+  fi
+fi
+
 if [[ "$VALIDATE_ONLY" -eq 1 ]]; then
   validate_receipt "$RECEIPT_FILE" "$REPO" "$BASE_REF" "$HEAD_REF" "$VERIFY_CMD" "${ASSERTION_ARTIFACT_PATHS[@]}"
   exit $?
@@ -485,7 +495,7 @@ if [[ "$VERIFY_CMD" != /* ]]; then
   if [[ -e "$VERIFY_CMD" ]]; then
     # Wrap the cd in a conditional: a non-directory dirname or a cd failure
     # (permissions, races) must exit 2 with a named error, not abort via set -e.
-    if ! VERIFY_CMD_DIR="$(cd "$(dirname "$VERIFY_CMD")" 2>/dev/null && pwd)"; then
+    if ! VERIFY_CMD_DIR="$(cd "$(dirname "$VERIFY_CMD")" 2>/dev/null && pwd -P)"; then
       err_usage "verify-cmd dirname unresolvable: $VERIFY_CMD"
     fi
     VERIFY_CMD="$VERIFY_CMD_DIR/$(basename "$VERIFY_CMD")"

@@ -36,6 +36,12 @@ STATUS="$REPO_ROOT/scripts/dispatch-status.js"
 WF="$REPO_ROOT/scripts/watch-foreman.js"
 CLI="$REPO_ROOT/bin/autopilot.js"
 
+# Isolate the status-runs enrich cursor (src/status/runs-fields.js) from the real live dir.
+LIVE_FIX="$(mktemp -d -p /dev/shm autopilot-test-lineage-XXXXXX)"
+chmod 700 "$LIVE_FIX"
+export AUTOPILOT_LIVE_DIR="$LIVE_FIX"
+trap 'rm -rf "$LIVE_FIX"; cleanup_test_tmp' EXIT
+
 # --- sandbox git repo (never touch the real repo) ---
 SBX="$TEST_TMP/repo"
 mkdir -p "$SBX"

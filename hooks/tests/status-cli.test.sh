@@ -5,6 +5,12 @@
 . "$(dirname "$0")/lib.sh"
 
 CLI="$REPO_ROOT/bin/autopilot.js"
+
+# Isolate the status-runs enrich cursor (src/status/runs-fields.js) from the real live dir.
+LIVE_FIX="$(mktemp -d -p /dev/shm autopilot-test-statuscli-XXXXXX)"
+chmod 700 "$LIVE_FIX"
+export AUTOPILOT_LIVE_DIR="$LIVE_FIX"
+trap 'rm -rf "$LIVE_FIX"; cleanup_test_tmp' EXIT
 SB="$TEST_TMP/status"
 mkdir -p "$SB/cap" "$SB/runs"
 CFG="$SB/rl.md"; : > "$CFG"

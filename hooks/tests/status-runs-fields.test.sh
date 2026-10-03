@@ -110,6 +110,12 @@ eq "exited" "$(jget "j.find(r=>r.run_id==='live-gone').phase")" "free lock → p
 eq "null" "$(jget "j.find(r=>r.run_id==='live-gone').rc")" "no .exit file → rc null (not guessed)"
 eq "null" "$(jget "j.find(r=>r.run_id==='live-gone').final_status")" "no terminal state → final_status null"
 
+# --- 3b. NEGATIVE: terminal state but no end time → elapsed_s null (never 0) ----------
+mk_manifest no-end "$((EPOCH_NOW - 80))" null null null "$IDENT_A" root-1 null reviewed
+run_runs --json
+eq "null" "$(jget "j.find(r=>r.run_id==='no-end').elapsed_s")" "finished run without end time: elapsed_s null, not 0"
+rm -f "$RUNS/no-end.manifest.json"
+
 # --- 4. --root keeps only that tree --------------------------------------------------
 mk_manifest other-root "$((EPOCH_NOW - 50))" "$((EPOCH_NOW - 10))" null null "$IDENT_A" root-2 null reviewed
 run_runs --json --root root-2

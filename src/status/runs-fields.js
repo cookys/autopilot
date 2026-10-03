@@ -69,30 +69,40 @@ function resolveStateFile(env) {
   } catch (_e) { return null; }
 }
 function loadState(file, dir) {
-  if (!file) return { cursor: null, probes: {} };
+  if (!file) return { cursor: null, order: [], probes: {} };
   try {
     const s = JSON.parse(fs.readFileSync(file, 'utf8'));
     if (s && s.dir === dir && s.probes && typeof s.probes === 'object') {
-      return { cursor: typeof s.cursor === 'string' ? s.cursor : null, probes: s.probes };
+      return {
+        cursor: typeof s.cursor === 'string' ? s.cursor : null,
+        order: Array.isArray(s.order) ? s.order : [],
+        probes: s.probes,
+      };
     }
   } catch (_e) { /* absent or corrupt → start over */ }
-  return { cursor: null, probes: {} };
+  return { cursor: null, order: [], probes: {} };
 }
 function saveState(file, dir, state) {
   if (!file) return;
   try {
     const tmp = `${file}.tmp.${process.pid}`;
-    fs.writeFileSync(tmp, JSON.stringify({ schema: 1, dir, cursor: state.cursor, probes: state.probes }), { mode: 0o600 });
+    fs.writeFileSync(tmp, JSON.stringify({ schema: 1, dir, cursor: state.cursor, order: state.order, probes: state.probes }), { mode: 0o600 });
     fs.renameSync(tmp, file);
   } catch (_e) { /* fail-open: rotation restarts from the top next call */ }
 }
 
 // Pick up to `cap` live run ids, resuming after the cursor and wrapping around, so
 // every live run is probed within ceil(live/cap) calls.
-function rotationPick(liveIds, cursor, cap) {
+function rotationPick(liveIds, cursor, cap, prevOrder = []) {
   if (liveIds.length === 0 || cap <= 0) return [];
   const at = cursor === null ? -1 : liveIds.indexOf(cursor);
-  const start = at === -1 ? 0 : (at + 1) % liveIds.length;
+  let start = at === -1 ? 0 : (at + 1) % liveIds.length;
+  if (at === -1 && cursor !== null) {
+    // Cursor run is gone: resume at the first still-live id after it in the last call's order.
+    const was = prevOrder.indexOf(cursor);
+    const next = was === -1 ? undefined : prevOrder.slice(was + 1).find((id) => liveIds.includes(id));
+    if (next !== undefined) start = liveIds.indexOf(next);
+  }
   const n = Math.min(cap, liveIds.length);
   const out = [];
   for (let i = 0; i < n; i += 1) out.push(liveIds[(start + i) % liveIds.length]);
@@ -118,7 +128,7 @@ function buildRunRows({ list, probeRun, enrichCap = DEFAULT_ENRICH_CAP, dir = ''
   const kept = {};
   for (const id of liveIds) if (state.probes[id]) kept[id] = state.probes[id];
   state.probes = kept;
-  const picked = rotationPick(liveIds, state.cursor, enrichCap);
+  const picked = rotationPick(liveIds, state.cursor, enrichCap, state.order);
   for (const id of picked) {
     const s = probeRun(id);
     if (s) {
@@ -132,6 +142,7 @@ function buildRunRows({ list, probeRun, enrichCap = DEFAULT_ENRICH_CAP, dir = ''
     }
     state.cursor = id;
   }
+  state.order = liveIds;
   saveState(stateFile, dir, state);
 
   return list.map((row, i) => {
@@ -151,9 +162,8 @@ function buildRunRows({ list, probeRun, enrichCap = DEFAULT_ENRICH_CAP, dir = ''
     const terminal = Boolean(m.ended_at || m.final_status || row.ended_at || row.final_status);
     const exitFile = exitFileOf(m, id);
     const probeMs = probe ? Date.parse(probe.observed_at) : NaN;
-    entry.elapsed_s = startedEpoch === null ? null
-      : Math.max(0, (terminal ? (endedEpoch === null ? null : endedEpoch) : Math.floor(nowMs / 1000)) - startedEpoch);
-    if (Number.isNaN(entry.elapsed_s)) entry.elapsed_s = null;
+    const endEpoch = terminal ? endedEpoch : Math.floor(nowMs / 1000);
+    entry.elapsed_s = startedEpoch === null || endEpoch === null ? null : Math.max(0, endEpoch - startedEpoch);
     entry.rc = readRc(exitFile);
     entry.final_status = m.final_status || row.final_status || null;
     entry.project = typeof m.repo_identity === 'string' && m.repo_identity ? m.repo_identity : null;

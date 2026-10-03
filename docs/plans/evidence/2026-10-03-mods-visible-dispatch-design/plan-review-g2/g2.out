@@ -1,0 +1,432 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "mods-g1",
+  "logical_plan_id": "mods-visible-dispatch-2026-10-03",
+  "session_id": "mods-g1",
+  "session_key": "e83ad58235fc410656abe9d0d9c2e21173a5ae2d8872aa30fc481fc0d5b82e27",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "1540330d955a8eed7afe09fd9d1bd329a65696fde23bbdc1f2deca3c236f19c1",
+  "manifest_sha256": "cb9739fc41a74717fd0c4fe07f86784d0f785ea3ee7bd6c2e69851f881b1dbb3",
+  "plan_sha256": "f7685420d42be492e605e8d21604019fde5c3633879cf43e78bcaab545db27f4",
+  "growth_ratio": {
+    "numerator": 56578,
+    "denominator": 43397
+  },
+  "growth_warning": true,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "claude_architecture",
+      "target_id": "claude_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "claude-native",
+          "model": "claude-fable-5-1",
+          "operation": "plan-review",
+          "request_digest": "1317c0fa212886ec888c7631aa7c106859df3f97aa617e4cf23add66c67a72d4"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 5,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "fbc6bfa4f7e14bbfa5faee7ee351a86df4c5996e366380d13e307a7daee6ebf6",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-TPrmg4",
+          "digest": "fbc6bfa4f7e14bbfa5faee7ee351a86df4c5996e366380d13e307a7daee6ebf6"
+        },
+        "receipt_digest": "da0cf6ede021aa0bd31fcf9bb4365fb8501d5833438fe512cc51845a0c3394aa"
+      },
+      "transport_status": "exit_failure",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "claude_architecture",
+      "target_id": "claude_architecture",
+      "attempt": 2,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "claude-native",
+          "model": "claude-fable-5-1",
+          "operation": "plan-review",
+          "request_digest": "6fb37ff8861cdcf0536e0d9593af6d56ccd03c68158cadd18d6bfa0d54806569"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "34a0d354ae136ccc877e9bf057f3e3db09ce2c3f9349e0ecbd743c706a1030f2",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-OwoC7z",
+          "digest": "34a0d354ae136ccc877e9bf057f3e3db09ce2c3f9349e0ecbd743c706a1030f2"
+        },
+        "receipt_digest": "a828d7098c1640a150e3bbcfdcd1a3cdb6886774b60546bbbb4cb861c7fe1813"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "glm_rails",
+      "target_id": "glm_rails",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2",
+          "operation": "plan-review",
+          "request_digest": "5b5363da5fdbb510f71c77aa0e18cd061893fc840061615b6dbb5ac41b17fc8e"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "3b15c02a174f8e44cb9d04b853aaca2282a554a5cb2b131080e58db06fce7ccc",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-3eGApy",
+          "digest": "3b15c02a174f8e44cb9d04b853aaca2282a554a5cb2b131080e58db06fce7ccc"
+        },
+        "receipt_digest": "58e5c37386d524fac0769f2d5590eaa1e5298ad73402b4732828c5b2935e9aad"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "claude_architecture",
+      "target_id": "claude_architecture",
+      "family": "anthropic",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "glm_rails",
+      "target_id": "glm_rails",
+      "family": "zhipu",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "section 2.8 item (3) and P1a watcher: '<live-base>/runs/paths.json' rewritten every heartbeat by each project watcher",
+      "claim": "paths.json is a cross-project file but the single-writer design is per project, so two concurrent project watchers overwrite each other's entries on every heartbeat; the plan does not name this race and the mod's cwd-to-project_key resolution (step b) silently fails for whichever project heartbeated earlier.",
+      "evidence": "Section 2.8 says the watcher 'rewrites <live-base>/runs/paths.json from git worktree list --porcelain each heartbeat' with the map keyed by that repo's worktree roots only; P1a says writer granularity is project and the lock is 'runs/<project_key>.lock'; nothing in section 2.5, P1a, or the runs-watch tests covers two watchers of different projects sharing paths.json. The runs-watch.test.sh case list has 'two watchers same project -> writer_busy' and 'two roots same repo' but no 'two projects, two watchers' case.",
+      "evidence_reference": "section 2.8 (3); section 4 P1a 'watcher src/status/runs-watch.js' and '驗收'; section 6 row '多 session／多 root 互相覆蓋'",
+      "repair": "Pick one and write it into section 2.8 and P1a: (a) per-project file 'runs/paths.<project_key>.json' written under the existing project lock, with the mod listing 'runs/paths.*.json' and taking the longest prefix across all of them (add '$.fs readdir available?' to S2); or (b) keep one global paths.json but make every rewrite a read-merge-write under a separate '<live-base>/runs/paths.lock' flock, keyed by realpath so stale entries for the same root are replaced not duplicated. Add a runs-watch.test.sh case: two fixture repos, two watchers, both heartbeat, then paths.json (or the file set) still resolves cwd of both repos to the correct project_key. Add a row to section 6.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "claude_architecture",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "97a17fd717512e1c539b0f4ab962d17d11d628dbc5468c4f595de683bc5a61a1"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "section 2.8 mod resolution order and P1c register.ts: how the sandboxed mod locates '<live-base>' and '~'",
+      "claim": "P1c silently depends on the mod being able to resolve the tmpfs base ('/run/user/<uid>/autopilot', uid dependent) and the home directory ('~/.autopilot/session-mode/<sid>.json', '~/.autopilot/review/...') while section 2.8 forbids the mod from reading env or running git; no spike asks how that discovery happens, so the whole band can be 'no project' on a host where the sandbox does not expose XDG_RUNTIME_DIR or HOME.",
+      "evidence": "Section 2.8 states the mod resolution 'does not run git, does not read env, does not compute hash' and starts from '$.session.id()' then reads '~/.autopilot/session-mode/<sid>.json'; live-state-dir.js is described in section 2.5 as resolving the base to '/run/user/1000/autopilot' [V-run] which is uid specific. S2 asks whether these paths are readable and their sizes but not how the mod obtains the two base paths. Only '$.session.id()' and '$.session.cwd()' are marked [V-file].",
+      "evidence_reference": "section 2.8 'mod 解析順序'; section 4 P0 row S2; section 2.5 live-base bullet",
+      "repair": "Add to S2 an explicit question: which API gives the mod HOME and the live base (env accessor, '$.session.cwd()' only, or nothing). Add a design fallback to section 2.8 that does not need env: the CLI ('session-mode.js set' and the watcher) writes a small pointer file at a location derivable from cwd alone, e.g. '<realpath(worktree root)>/.autopilot/live-pointer.json' (gitignored, additive) containing live_base, review_root and project_key; the mod walks up from '$.fs.stat(cwd,{resolve:true}).realPath' to find it. State that if S2 shows the API exposes env, the pointer file is dropped. Mark the current assumption [SPIKE] until S2 lands.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_architecture",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "2c75f2a903d81803bcce9b37e18f4b2db2daa3ec9420068baaf9363d48a9324d"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "P1a '--project' selector, SSD fallback filename 'runs.<scope_key>.json', P3 idle paths 'idle/<repo_key>/'",
+      "claim": "Three key spellings are used without definition or with conflicting value types: 'runs --project <repo_identity>' versus 'runs --watch --project <key>' and the band hint 'run: autopilot status runs --watch --project <key>'; 'scope_key' is never defined; P3 uses 'repo_key' which exists nowhere in section 2.7.",
+      "evidence": "P1a selectors: '--project <repo_identity>（只匹配有欄的 manifest）'; P1a watcher: '--watch --project <key>'; P1c: 'run: autopilot status runs --watch --project <key>'; SSD fallback: '~/.autopilot/review/<project_key>/live/runs.<scope_key>.json'; P3: 'idle/<repo_key>/<sid>.observed.json' and 'idle/<repo_key>/<sid>.declared.json'; section 2.7 lists only repo_identity and project_key for the project entity.",
+      "evidence_reference": "section 4 P1a '選擇器' and 'watcher'; section 4 P1c first bullet; section 4 P3 '閒置兩種分欄'; section 2.7 rows 1-2",
+      "repair": "In section 2.7 define scope_key = project_key when root is null, otherwise project_key + '--' + root_run_id; replace every 'repo_key' with project_key and state that hooks/idle-observe.js derives it in Node via project-key.js (hooks are not sandboxed). State that '--project' accepts either the full repo_identity string or a 16-hex project_key and normalises to project_key internally, or pick one form and use it in all three places.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_architecture",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "8aff2b36b4f741a4822d510f9a2a3042f13736f61502c4e69c2354642481c6b5"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "P1b gate-result matching rule (MATCH / 舊候選 / LIVE GATE)",
+      "claim": "The MATCH rule makes branch equality a conjunct of the receipt-to-job join, which edges toward using branch as identity; the plan already locates receipts via the manifest ledger directory (a root-scoped key), so branch should be stated as a display filter only.",
+      "evidence": "P1b: 'review receipt 從 manifest ledger 旁的 receipt-<phase>.json 發現' establishes the root-scoped join; then '匹配規則（G1 R3）：receipt 的 branch 等於 job 的 branch（manifest branch）且其最後一個 finalized chain[].head 是 candidate_commit 的祖先或相等 → MATCH'. Section 2.5 says branch may only be a display filter and must be labelled as such.",
+      "evidence_reference": "section 4 P1b '輸入' and '匹配規則（G1 R3）'; section 2.5 identity bullet",
+      "repair": "Reword: the join is ledger-directory membership plus the merge-base ancestor test against candidate_commit; branch mismatch is shown as a 'branch differs' chip on the row and never hides or demotes a receipt. Keep the LIVE GATE label as is. No code change beyond the renderer wording.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_architecture",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "b55921fb595c5860e222e83498dff7a50bac4012f1185da7d0cd0a4a37abe01a"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "scripts/lib/repo-identity.sh and the three dispatch rails' manifest write path",
+      "claim": "The shell derivation relies on 'git rev-parse --path-format=absolute', which needs git 2.31 or newer; on older git both shell and Node print nothing and every manifest silently becomes 'project: null' with no diagnostic. The plan also assumes each rail already has a 'write_manifest' test seam, which this review checkout cannot confirm (no source tree present).",
+      "evidence": "P1a: 'common=$(git -C \"$dir\" rev-parse --path-format=absolute --git-common-dir)' then '任一步失敗印空、manifest 寫 null'; manifest-repo-identity.test.sh is said to '用各 rail 的 test seam 跑到 write_manifest'. The review working directory contains only plan.md, so src/status/task-runtime.js and the three rails could not be inspected.",
+      "evidence_reference": "section 4 P1a 'manifest 加 repo_identity（G1 R2）'; section 3 file map row 1",
+      "repair": "Add to repo-identity.sh a one-line stderr diagnostic when rev-parse fails (so null is distinguishable from an old git), state the git minimum (2.31) in section 2.5 constraints, and add a parity fixture that stubs an old git to assert both sides yield null together. In the first P1a PR confirm whether dispatch-author.sh actually has a seam reaching manifest write; if not, add it as part of the same PR (small). No plan change needed otherwise.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_architecture",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "1b341e7d540fb62fa948c3221811e448332e3da070d02a45bc95527b7d6648a7"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "runs-live/1 envelope and consumers: band 'running N', '--idle-exit', idle.live_runs",
+      "claim": "'confirmed_live' and 'unknown' counts drive the band, the idle-exit condition and idle.state, but the envelope schema in P1a lists only 'runs:[...]' and never defines how confirmed_live is computed from per-run 'alive' and 'probe_age_s', so the execution axis could be derived differently by the three consumers.",
+      "evidence": "P1a envelope: '{schema: autopilot.runs-live/1, scope:{...}, published_at, valid_for_s:180, writer:{...}, runs:[...], sessions:{...}, host_today_usd, host_today_as_of}' has no counts field; P1c: 'N = confirmed_live'; P1a exit condition: 'confirmed_live = 0 且 unknown = 0'; P3: 'idle.live_runs = {confirmed_live, exited, unknown}（unknown = 從未探測或 alive: null 的 run）'. P1a states 'probe_age_s 從未探測 → null 且 alive: null' but gives no max probe age for a run to count as confirmed.",
+      "evidence_reference": "section 4 P1a envelope bullet and 'watcher 生命週期' (2); section 4 P1c band bullet; section 4 P3 'project 層聚合（N02）'",
+      "repair": "Add 'counts: {confirmed_live, exited, unknown}' to the runs-live/1 envelope, computed once by the watcher: confirmed_live = alive === true and probe_age_s <= 2 * interval * ceil(live / enrich_cap); unknown = alive === null or probe_age_s above that bound; exited = phase exited. Put the field into schemas/runs-live.schema.json and have band, idle-exit and idle.live_runs read it instead of recomputing.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_architecture",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "8bb6bd47ae12c872a17568f8c80837fcfcfd3e75abee852ac5b9a2a9d6fc2579"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "P3 'idle/<key>/<sid>.declared.json': declare-idle CLI writes, watcher writes superseded_by, --clear writes",
+      "claim": "The declaration file has three writers (declare-idle CLI, the project watcher setting superseded_by, and --clear or session-mode set/retire), so a declare racing a supersede can lose one update; the single-writer rule in section 2.5 covers scope files and progress.json but this file is outside it and the plan does not name the race.",
+      "evidence": "P3: 'autopilot status declare-idle ... → idle/<repo_key>/<sid>.declared.json {..., superseded_by: null}'; '解除：watcher 看到該 repo_identity 新 manifest → 寫 superseded_by: <run_id>；session-mode.js set／retire → superseded_by: session-mode:<level|retire>；--clear 手動'. Section 2.5 names a single writer only for scope files, progress.json and heartbeat.",
+      "evidence_reference": "section 4 P3 '宣告' and '解除' bullets; section 2.5 live-projection bullet",
+      "repair": "Make supersession append-only: writers other than the declarer never modify '.declared.json'; the watcher and session-mode write a sibling '<sid>.superseded.json' {by, at}, and the N02 aggregation treats a declaration as superseded when the sibling exists with at >= declared_at. All writes via tmp then rename. Add one declare-idle.test.sh case for declare and supersede within the same second.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_architecture",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "ac22287551f8270c82939c78def01351ca74d35bf4c1eb3b18d551fd65d68891"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "future",
+      "severity": "non-blocking",
+      "affected_surface": "P3 packaging line 'sync-version.js --version 2.37.<n> --hook-count 33' and section 4 size line",
+      "claim": "The version policy is explicit for the first mod (MINOR to 2.37.0) but P3 adds a new classic hook with an unspecified bump level ('2.37.<n>'), and P1a is labelled 'S→L' inline while the section 4 size line says L; neither blocks work but both are decisions the owner may expect to be fixed in the plan rather than at PR time.",
+      "evidence": "P3 '包裝（G1 R6）': 'sync-version.js --version 2.37.<n> --hook-count 33'; section 4 header: 'P0 S、P1a L、P1b L ...'; P1a heading: '單一 writer watcher（S→L）'. CLAUDE.md is not present in this checkout so the hook-add level could not be checked against the semver table.",
+      "evidence_reference": "section 4 P3 '包裝（G1 R6）'; section 4 dependency and size line; section 4 P1a heading",
+      "repair": "No current change required for P1. Before P3 opens, replace '2.37.<n>' with the level CLAUDE.md assigns to 'new classic hook' (MINOR 2.38.0 or PATCH 2.37.x) and drop the 'S→L' annotation so P1a reads L once.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "claude_architecture",
+          "runner": "claude-native",
+          "model": "claude-fable-5-1"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "cc03b480fff20a70313545d152f4279b2bb533eb32377f942fbc613eaacd2777"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "docs/plans/2026-10-03-mods-visible-dispatch.md section 4 phase sizing for P1a",
+      "claim": "The stated dev-flow size of P1a is internally inconsistent: the dependency line and per-phase list in section 4 give the sizes P0 S, P1a L, P1b L, P1c L, P1d S, P2 S, P3 L, P4 L, but the P1a heading itself reads 'P1a 生產者…（S→L）', leaving ambiguous whether P1a is scoped as S growing to L or fixed at L, which weakens the executability of the size commitment R6 requires.",
+      "evidence": "Section 4 dependency/sizing line lists 'P1a L' while the P1a sub-heading inside P1 states '（S→L）'; no rule is given for which value governs slice planning.",
+      "evidence_reference": "PLAN_UNDER_REVIEW section 4, dependency line and P1a heading",
+      "repair": "No current change; follow-up only. Pick one value for P1a (recommend 'L' given the watcher, shell parity, and lock-test scope) and drop the 'S→L' annotation from the heading, or state explicitly that P1a ships as two slices (S then L) with the acceptance split accordingly.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_rails",
+          "runner": "anthropic-compatible",
+          "model": "glm-5.2"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "3d51fe64d3a4482fbf58df9ef066931f78a5a97ddf5ac65b7d1a6993494b4a11"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "2c75f2a903d81803bcce9b37e18f4b2db2daa3ec9420068baaf9363d48a9324d",
+      "rubric_id": "R4",
+      "affected_surface": "section 2.8 mod resolution order and P1c register.ts: how the sandboxed mod locates '<live-base>' and '~'",
+      "claim": "P1c silently depends on the mod being able to resolve the tmpfs base ('/run/user/<uid>/autopilot', uid dependent) and the home directory ('~/.autopilot/session-mode/<sid>.json', '~/.autopilot/review/...') while section 2.8 forbids the mod from reading env or running git; no spike asks how that discovery happens, so the whole band can be 'no project' on a host where the sandbox does not expose XDG_RUNTIME_DIR or HOME.",
+      "evidence_reference": "section 2.8 'mod 解析順序'; section 4 P0 row S2; section 2.5 live-base bullet",
+      "disposition": null
+    },
+    {
+      "fingerprint": "8aff2b36b4f741a4822d510f9a2a3042f13736f61502c4e69c2354642481c6b5",
+      "rubric_id": "R1",
+      "affected_surface": "P1a '--project' selector, SSD fallback filename 'runs.<scope_key>.json', P3 idle paths 'idle/<repo_key>/'",
+      "claim": "Three key spellings are used without definition or with conflicting value types: 'runs --project <repo_identity>' versus 'runs --watch --project <key>' and the band hint 'run: autopilot status runs --watch --project <key>'; 'scope_key' is never defined; P3 uses 'repo_key' which exists nowhere in section 2.7.",
+      "evidence_reference": "section 4 P1a '選擇器' and 'watcher'; section 4 P1c first bullet; section 4 P3 '閒置兩種分欄'; section 2.7 rows 1-2",
+      "disposition": null
+    },
+    {
+      "fingerprint": "b55921fb595c5860e222e83498dff7a50bac4012f1185da7d0cd0a4a37abe01a",
+      "rubric_id": "R1",
+      "affected_surface": "P1b gate-result matching rule (MATCH / 舊候選 / LIVE GATE)",
+      "claim": "The MATCH rule makes branch equality a conjunct of the receipt-to-job join, which edges toward using branch as identity; the plan already locates receipts via the manifest ledger directory (a root-scoped key), so branch should be stated as a display filter only.",
+      "evidence_reference": "section 4 P1b '輸入' and '匹配規則（G1 R3）'; section 2.5 identity bullet",
+      "disposition": null
+    },
+    {
+      "fingerprint": "1b341e7d540fb62fa948c3221811e448332e3da070d02a45bc95527b7d6648a7",
+      "rubric_id": "R2",
+      "affected_surface": "scripts/lib/repo-identity.sh and the three dispatch rails' manifest write path",
+      "claim": "The shell derivation relies on 'git rev-parse --path-format=absolute', which needs git 2.31 or newer; on older git both shell and Node print nothing and every manifest silently becomes 'project: null' with no diagnostic. The plan also assumes each rail already has a 'write_manifest' test seam, which this review checkout cannot confirm (no source tree present).",
+      "evidence_reference": "section 4 P1a 'manifest 加 repo_identity（G1 R2）'; section 3 file map row 1",
+      "disposition": null
+    },
+    {
+      "fingerprint": "8bb6bd47ae12c872a17568f8c80837fcfcfd3e75abee852ac5b9a2a9d6fc2579",
+      "rubric_id": "R3",
+      "affected_surface": "runs-live/1 envelope and consumers: band 'running N', '--idle-exit', idle.live_runs",
+      "claim": "'confirmed_live' and 'unknown' counts drive the band, the idle-exit condition and idle.state, but the envelope schema in P1a lists only 'runs:[...]' and never defines how confirmed_live is computed from per-run 'alive' and 'probe_age_s', so the execution axis could be derived differently by the three consumers.",
+      "evidence_reference": "section 4 P1a envelope bullet and 'watcher 生命週期' (2); section 4 P1c band bullet; section 4 P3 'project 層聚合（N02）'",
+      "disposition": null
+    },
+    {
+      "fingerprint": "ac22287551f8270c82939c78def01351ca74d35bf4c1eb3b18d551fd65d68891",
+      "rubric_id": "R5",
+      "affected_surface": "P3 'idle/<key>/<sid>.declared.json': declare-idle CLI writes, watcher writes superseded_by, --clear writes",
+      "claim": "The declaration file has three writers (declare-idle CLI, the project watcher setting superseded_by, and --clear or session-mode set/retire), so a declare racing a supersede can lose one update; the single-writer rule in section 2.5 covers scope files and progress.json but this file is outside it and the plan does not name the race.",
+      "evidence_reference": "section 4 P3 '宣告' and '解除' bullets; section 2.5 live-projection bullet",
+      "disposition": null
+    },
+    {
+      "fingerprint": "cc03b480fff20a70313545d152f4279b2bb533eb32377f942fbc613eaacd2777",
+      "rubric_id": "R6",
+      "affected_surface": "P3 packaging line 'sync-version.js --version 2.37.<n> --hook-count 33' and section 4 size line",
+      "claim": "The version policy is explicit for the first mod (MINOR to 2.37.0) but P3 adds a new classic hook with an unspecified bump level ('2.37.<n>'), and P1a is labelled 'S→L' inline while the section 4 size line says L; neither blocks work but both are decisions the owner may expect to be fixed in the plan rather than at PR time.",
+      "evidence_reference": "section 4 P3 '包裝（G1 R6）'; section 4 dependency and size line; section 4 P1a heading",
+      "disposition": null
+    },
+    {
+      "fingerprint": "3d51fe64d3a4482fbf58df9ef066931f78a5a97ddf5ac65b7d1a6993494b4a11",
+      "rubric_id": "R6",
+      "affected_surface": "docs/plans/2026-10-03-mods-visible-dispatch.md section 4 phase sizing for P1a",
+      "claim": "The stated dev-flow size of P1a is internally inconsistent: the dependency line and per-phase list in section 4 give the sizes P0 S, P1a L, P1b L, P1c L, P1d S, P2 S, P3 L, P4 L, but the P1a heading itself reads 'P1a 生產者…（S→L）', leaving ambiguous whether P1a is scoped as S growing to L or fixed at L, which weakens the executability of the size commitment R6 requires.",
+      "evidence_reference": "PLAN_UNDER_REVIEW section 4, dependency line and P1a heading",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-10-03T11:59:06.506Z"
+}

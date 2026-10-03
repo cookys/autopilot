@@ -1,0 +1,72 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "mods-visible-dispatch-2026-10-03",
+ "generation": 1,
+ "findings": [
+  {
+   "fingerprint": "571c60e4d5027832b427bd723f2e597f3a5402877d1309722c5ef4ad1ae20205",
+   "disposition": "accepted_blocker",
+   "rationale": "depth-0 accepts: project_key undefined; fold into R3."
+  },
+  {
+   "fingerprint": "5b205f5d4681010769a57a18583f46a70291aa6da34b1e945cc02c3440c97f53",
+   "disposition": "accepted_blocker",
+   "rationale": "depth-0 accepts: shell repo_identity parity with repoIdentity() unpinned."
+  },
+  {
+   "fingerprint": "0a671af5e9650f8b9dc0ab6b46484e14b87f1acdc8531342f8092c1c9a9d5bb7",
+   "disposition": "accepted_blocker",
+   "rationale": "depth-0 accepts: single-writer and crash recovery rest on unstated flock semantics."
+  },
+  {
+   "fingerprint": "94c71c8efc913f81df12bfbfdecce4c7a57efd50496f4ecb6306039eaed910e9",
+   "disposition": "accepted_nonblocking",
+   "rationale": "depth-0 accepts (non-blocking): per-job current switch not serialised."
+  },
+  {
+   "fingerprint": "ecddcb60d98743c81d1de19917918242bdd2e1a3c86c16fee74037b0ac0ec0b8",
+   "disposition": "accepted_nonblocking",
+   "rationale": "depth-0 accepts (non-blocking, future): relative assets after switch."
+  },
+  {
+   "fingerprint": "19ecc787639a446e6f4fa01cc25f0223867316171950a7b9b64282c1abcc4c08",
+   "disposition": "accepted_nonblocking",
+   "rationale": "depth-0 accepts (non-blocking): band stalled K has no producing field."
+  },
+  {
+   "fingerprint": "fc180f0fa4ad9bbc5da2655ae195dd9fdc0f5433d1d3b9b424fd487084db9515",
+   "disposition": "accepted_nonblocking",
+   "rationale": "depth-0 accepts (non-blocking): stale-candidate matching rule unclear."
+  },
+  {
+   "fingerprint": "7832a433e2c986299a3bb18a5d0a41e5984f5208c37a6c1a26c76636045c8652",
+   "disposition": "accepted_nonblocking",
+   "rationale": "depth-0 accepts (non-blocking): S2 covers only runs-live while P1c reads ~/.claude files."
+  },
+  {
+   "fingerprint": "ac016ba682e31265f767240596abf92cc74c2bd31cbda331582b08568f667d9f",
+   "disposition": "accepted_nonblocking",
+   "rationale": "depth-0 accepts (non-blocking): KR1 15 s vs two stacked 10 s polls."
+  },
+  {
+   "fingerprint": "b0cb015b8cf5c1aa5c2440b4ab9d4e6444d4e1ec9e7d47a0280b8e0b8f2b2920",
+   "disposition": "accepted_nonblocking",
+   "rationale": "depth-0 accepts (non-blocking): P1d hook count vs P3 Stop hook."
+  },
+  {
+   "fingerprint": "4a3af791273606fcb25f232b95d653be2e715c1deec7e2c339ee5d130d6a9b5c",
+   "disposition": "accepted_nonblocking",
+   "rationale": "depth-0 accepts (non-blocking): --idle-exit depends on undefined marker expiry."
+  },
+  {
+   "fingerprint": "c9c01a59d84bcb0d68a5a04e291e391c794a27baa1aa4e2e37a34b0ddc8262a1",
+   "disposition": "rejected",
+   "rationale": "Not a plan defect: the seat checkout lacked the cited source; R3 still converted citations to file:symbol."
+  },
+  {
+   "fingerprint": "2f4b45eaa1b83eba73b0a085e90691b8cbb311c4b9db9fb827232694e99a6b3e",
+   "disposition": "accepted_nonblocking",
+   "rationale": "depth-0 accepts (non-blocking, future): portfolio-replan cross-project read boundary."
+  }
+ ]
+}

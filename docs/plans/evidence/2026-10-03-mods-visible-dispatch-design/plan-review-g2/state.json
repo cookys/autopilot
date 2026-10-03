@@ -1,0 +1,68 @@
+{
+  "version": 2,
+  "session_key": "e83ad58235fc410656abe9d0d9c2e21173a5ae2d8872aa30fc481fc0d5b82e27",
+  "repo_identity": "git-common-dir:<home>/projects/autopilot/.git",
+  "logical_plan_id": "mods-visible-dispatch-2026-10-03",
+  "ticket": "mods-g1",
+  "rubric_sha256": "1540330d955a8eed7afe09fd9d1bd329a65696fde23bbdc1f2deca3c236f19c1",
+  "manifest_sha256": "cb9739fc41a74717fd0c4fe07f86784d0f785ea3ee7bd6c2e69851f881b1dbb3",
+  "baseline_plan_sha256": "10feaa98c181670f039ddabca3303bf2cec40946c8debcb171276261a715bf4a",
+  "baseline_plan_bytes": 43397,
+  "started_at": "2026-10-03T11:33:38.620Z",
+  "deadline_at": "2026-10-03T13:33:38.620Z",
+  "max_generations": 2,
+  "max_wall_seconds": 7200,
+  "growth_warn_ratio": 1.25,
+  "growth_stop_ratio": 1.5,
+  "next_generation": 2,
+  "active_claim": null,
+  "terminal": true,
+  "terminal_verdict": "CONDITIONAL",
+  "repair_authorized": true,
+  "claims": [
+    {
+      "claim_id": "70cd65e8ba701ecf0c356181769dc01b",
+      "generation": 1,
+      "session_id": "mods-g1",
+      "claimed_at": "2026-10-03T11:33:38.620Z",
+      "plan_sha256": "10feaa98c181670f039ddabca3303bf2cec40946c8debcb171276261a715bf4a",
+      "manifest_sha256": "cb9739fc41a74717fd0c4fe07f86784d0f785ea3ee7bd6c2e69851f881b1dbb3",
+      "owner": {
+        "pid": 415115,
+        "process_start": "468002976",
+        "nonce": "70cd65e8ba701ecf0c356181769dc01b",
+        "session_inode": "8806409"
+      },
+      "status": "complete",
+      "artifact": "/tmp/claude-1000/-home-cookys-projects-autopilot/76c98aac-1838-4acb-bedd-e36d6bed7724/scratchpad/mods-plan/review/state/e83ad58235fc410656abe9d0d9c2e21173a5ae2d8872aa30fc481fc0d5b82e27/generation-01.json",
+      "attempt_count": 4
+    },
+    {
+      "claim_id": "30641f41449812634a959eb8a6ffb9d2",
+      "generation": 2,
+      "session_id": "mods-g1",
+      "claimed_at": "2026-10-03T11:54:58.854Z",
+      "plan_sha256": "f7685420d42be492e605e8d21604019fde5c3633879cf43e78bcaab545db27f4",
+      "manifest_sha256": "cb9739fc41a74717fd0c4fe07f86784d0f785ea3ee7bd6c2e69851f881b1dbb3",
+      "owner": {
+        "pid": 440399,
+        "process_start": "468131000",
+        "nonce": "30641f41449812634a959eb8a6ffb9d2",
+        "session_inode": "8806409"
+      },
+      "status": "complete",
+      "artifact": "/tmp/claude-1000/-home-cookys-projects-autopilot/76c98aac-1838-4acb-bedd-e36d6bed7724/scratchpad/mods-plan/review/state/e83ad58235fc410656abe9d0d9c2e21173a5ae2d8872aa30fc481fc0d5b82e27/generation-02.json",
+      "attempt_count": 3
+    }
+  ],
+  "artifacts": [
+    "/tmp/claude-1000/-home-cookys-projects-autopilot/76c98aac-1838-4acb-bedd-e36d6bed7724/scratchpad/mods-plan/review/state/e83ad58235fc410656abe9d0d9c2e21173a5ae2d8872aa30fc481fc0d5b82e27/generation-01.json",
+    "/tmp/claude-1000/-home-cookys-projects-autopilot/76c98aac-1838-4acb-bedd-e36d6bed7724/scratchpad/mods-plan/review/state/e83ad58235fc410656abe9d0d9c2e21173a5ae2d8872aa30fc481fc0d5b82e27/generation-02.json"
+  ],
+  "accepted_blocker_fingerprints": [
+    "571c60e4d5027832b427bd723f2e597f3a5402877d1309722c5ef4ad1ae20205",
+    "5b205f5d4681010769a57a18583f46a70291aa6da34b1e945cc02c3440c97f53",
+    "0a671af5e9650f8b9dc0ab6b46484e14b87f1acdc8531342f8092c1c9a9d5bb7"
+  ],
+  "terminal_reason": "generation_cap_requires_depth_0_adjudication"
+}

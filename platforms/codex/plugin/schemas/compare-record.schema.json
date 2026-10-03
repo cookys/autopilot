@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/compare-record.schema.json",
+  "title": "compare-record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "id",
+    "scene",
+    "fixture",
+    "capture_method",
+    "before",
+    "after",
+    "metrics",
+    "images"
+  ],
+  "properties": {
+    "schema": { "const": "compare-record/1" },
+    "id": { "type": "string", "minLength": 1 },
+    "scene": { "type": "string", "minLength": 1 },
+    "viewport": { "type": "string", "minLength": 1 },
+    "camera": { "type": "string", "minLength": 1 },
+    "renderer": { "type": "string", "minLength": 1 },
+    "browser": { "type": "string", "minLength": 1 },
+    "fixture": { "type": "string", "minLength": 1 },
+    "capture_method": { "type": "string", "minLength": 1 },
+    "before": { "$ref": "#/$defs/side" },
+    "after": { "$ref": "#/$defs/side" },
+    "metrics": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/metric" }
+    },
+    "images": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["before", "after"],
+      "properties": {
+        "before": { "type": "string", "minLength": 1 },
+        "after": { "type": "string", "minLength": 1 },
+        "overlay": { "type": "string", "minLength": 1 }
+      }
+    },
+    "image_review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["by", "at", "notes"],
+      "properties": {
+        "by": { "type": "string", "minLength": 1 },
+        "at": { "type": "string", "format": "date-time" },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "observer_note": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "by"],
+      "properties": {
+        "text": { "type": "string" },
+        "by": { "type": "string", "minLength": 1 }
+      }
+    }
+  },
+  "$defs": {
+    "side": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit", "dirty", "path", "sha256", "taken_at"],
+      "properties": {
+        "commit": { "type": "string", "minLength": 1 },
+        "dirty": { "type": "boolean" },
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "taken_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "kind", "before", "after", "delta", "unit"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string", "minLength": 1 },
+        "before": { "type": ["number", "null"] },
+        "after": { "type": ["number", "null"] },
+        "delta": { "type": ["number", "null"] },
+        "unit": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

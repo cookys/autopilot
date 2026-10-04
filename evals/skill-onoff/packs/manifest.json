@@ -23,6 +23,54 @@
       "companions/finish-flow/SKILL.md": "1796285bac9223a91f70ed528a03380bdca874a1bfe4a5bb7713dd669afc897c",
       "companions/learn/SKILL.md": "64e2b6226be2c5a59c0a14210e09988c44319829830e096d1d5ef334519b2144",
       "companions/quality-pipeline/SKILL.md": "a5a4de8874d4e6165fa93c8c85935debb8b75008c8a986972a93292af4e62a2e"
+    },
+    "fixture-scripts-base": {
+      "fixture-scripts-base/scripts/decision-ledger.js": "1bc1083db0c859a2e6285a24f1f24fb24e39d9de47d1ebcdce49162651a48974",
+      "fixture-scripts-base/scripts/lib/jsonl-store.js": "cd22086da91ec46a94feac05513bef26010c04e4ced9bf35b6df4aa99f9d5076",
+      "fixture-scripts-base/scripts/run-ledger.sh": "74028be8f06bd187caa1afa8dac6bc219ebbb831b1386d051a56add0aecac2d8",
+      "fixture-scripts-base/scripts/validate-json-schema.js": "a8c5c90f18a97082151b529d3b2bdd28c4f57389293b588f47008996ccbd0169"
+    },
+    "ceo-agent-base": {
+      "ceo-agent-base/SKILL.md": "7a1e6cf348f409dd11784286805d88f8e48fb93aaf4758df2cdae25c256b8695",
+      "ceo-agent-base/references/decision-matrix.md": "3bd75c299500374e730759fa919b539259b98188d4fed9a22e7b47c90d851e5c",
+      "ceo-agent-base/references/depth0-control-loop.md": "935e821805e8fc381c0128203d2fecb426c7e7de7aeb104b5fbdbf86e6b8bf47",
+      "ceo-agent-base/references/doa-and-templates.md": "2f39bd6d509ee37868835548c3eda7cdd8cbde8d9906e7cd81471c3091e792aa",
+      "ceo-agent-base/references/level-front-door.md": "e8980e06ef724edabb14b0b990297e3e99a087857770675b53bca09bca1f714a",
+      "ceo-agent-base/references/task-prompt-templates.md": "45319e203a428a64fb1c1db2748d8202bb7b5ea755443d84333cc6c8046c9fa0",
+      "ceo-agent-base/references/tree-adapter.md": "0a95d351aada7bc331ab0cab69dff57af5537fb910b991b789a0fd310da123c9"
+    },
+    "finish-flow-base": {
+      "finish-flow-base/SKILL.md": "ac524f576cbba37613d4c1611e5e2bc902140db77df30eab03dfb5b445e9ce89"
+    },
+    "dev-flow-base": {
+      "dev-flow-base/SKILL.md": "673fda38f064e2a5ad25a830998bec640eae3bae68780c8229b8334f1aba7b88",
+      "dev-flow-base/references/context-continuation.md": "76ca43b304b64bc164d3ceafa25c5ac6218f0c1ecf8b4dce1cd31c1f7f02b9c7",
+      "dev-flow-base/references/hetero-loops.md": "6fe6240fc1054e8db2c0871d838e13f0ffd783c0edf14c4f5f2c57727f6b8cef",
+      "dev-flow-base/references/historical-rationale.md": "985e7476c110b9a3425d01c7d7a5d8e2b3e9a3e76b92e6f7e791ff78415cca9c",
+      "dev-flow-base/references/model-routing.md": "0bb68abe770c34f070a18968c1f2d4ab2cace49d5fb826d2e5bd511c71271e9d",
+      "dev-flow-base/references/post-feature-doc-sync.md": "f036506025ae240ee1f87ba44682179237ee4192cef387ed275285657ea46a94"
+    }
+  },
+  "pack_meta": {
+    "fixture-scripts-base": {
+      "kind": "scripts",
+      "source": "scripts/validate-json-schema.js,scripts/decision-ledger.js,scripts/run-ledger.sh",
+      "ref": "4641b5d742bc52272485530db8aa2e0eacee2604"
+    },
+    "ceo-agent-base": {
+      "kind": "skill",
+      "source": "ceo-agent",
+      "ref": "4641b5d742bc52272485530db8aa2e0eacee2604"
+    },
+    "finish-flow-base": {
+      "kind": "skill",
+      "source": "finish-flow",
+      "ref": "4641b5d742bc52272485530db8aa2e0eacee2604"
+    },
+    "dev-flow-base": {
+      "kind": "skill",
+      "source": "dev-flow",
+      "ref": "4641b5d742bc52272485530db8aa2e0eacee2604"
     }
   }
 }

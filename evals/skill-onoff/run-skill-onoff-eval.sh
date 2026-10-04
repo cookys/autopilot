@@ -11,13 +11,32 @@
 #   run-skill-onoff-eval.sh --task d1-s-tiny-feature --arm full|card|off \
 #     --model <model> [--out <dir>] [--rep <n>] [--runner cc|stub]
 #
+# Generic arms (mods P1W E1-E5; the dev-flow full|card|off arms above stay byte-identical):
+#   run-skill-onoff-eval.sh --task <id> --skill <name> --arm base|change \
+#     [--pack-base <packs/ dir name>] [--pack-change <packs/ dir name>] \
+#     [--with-pack <skill>=<packs/ dir name>]... [--fixture-scripts <packs/ dir name>] \
+#     [--check-skill <name>] --model <m> ...
+#   --skill/--arm base|change  the ONLY variable is skills/<name>/ = the digest-verified pack
+#                              (default dir names <skill>-base / <skill>-change; manifest key = dir name).
+#                              Companions are copied except <skill> and any --with-pack skill.
+#   --with-pack s=dir          also load skill s from pack dir, identically in both arms.
+#   --fixture-scripts dir      pack root copied onto the fixture repo root BEFORE the frozen base
+#                              commit, identically in both arms (helpers under test; E3).
+#   --check-skill name         manipulation check (E5): row carries "skill_invoked" for <name>
+#                              instead of the dev-flow-only skill_invoked_devflow field
+#                              (implied by --skill).
+# Per-cell isolation (E4, every run; state root on tmpfs, see below): AUTOPILOT_LIVE_DIR / AUTOPILOT_TASK_STATUS_DIR
+# point under a per-cell temp dir (the decision ledger default lives in the fixture repo git-common-dir); copied to $OUT/state/ for evidence.
+#
 # Env: ONOFF_TIMEOUT (default 10m) · ONOFF_STUB_BIN (required for --runner stub)
+#      ONOFF_PACKS_DIR (override packs dir; tests) · ONOFF_STATE_BASE (tmpfs base for per-cell state; none writable = exit 2) · ONOFF_SHM_DIR (default /dev/shm)
 # Emits: $OUT/result.json (single-line JSONL row), $OUT/transcript.jsonl, $OUT/prompt.md
 # Exit: 0 = row emitted (marker outcomes live IN the row) · 2 = harness/config error
 
 set -euo pipefail
 
 TASK_ID=""; ARM=""; MODEL=""; OUT_DIR=""; REP="1"; RUNNER="cc"
+SKILL=""; PACK_BASE=""; PACK_CHANGE=""; FIXTURE_SCRIPTS=""; CHECK_SKILL=""; WITH_PACKS=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --task) TASK_ID="$2"; shift 2 ;;
@@ -26,6 +45,12 @@ while [ $# -gt 0 ]; do
     --out) OUT_DIR="$2"; shift 2 ;;
     --rep) REP="$2"; shift 2 ;;
     --runner) RUNNER="$2"; shift 2 ;;
+    --skill) SKILL="$2"; shift 2 ;;
+    --pack-base) PACK_BASE="$2"; shift 2 ;;
+    --pack-change) PACK_CHANGE="$2"; shift 2 ;;
+    --with-pack) WITH_PACKS+=("$2"); shift 2 ;;
+    --fixture-scripts) FIXTURE_SCRIPTS="$2"; shift 2 ;;
+    --check-skill) CHECK_SKILL="$2"; shift 2 ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -33,13 +58,22 @@ if [ -z "$TASK_ID" ] || [ -z "$ARM" ] || [ -z "$MODEL" ]; then
   echo "Usage: $0 --task <id> --arm full|card|off --model <m> [--out <dir>] [--rep <n>] [--runner cc|stub]" >&2
   exit 2
 fi
-case "$ARM" in full|card|off) ;; *) echo "ERROR: arm must be full|card|off" >&2; exit 2 ;; esac
+if [ -n "$SKILL" ]; then
+  case "$ARM" in base|change) ;; *) echo "ERROR: with --skill the arm must be base|change" >&2; exit 2 ;; esac
+  case "$SKILL" in *[!a-z0-9-]*|"") echo "ERROR: bad --skill name: $SKILL" >&2; exit 2 ;; esac
+else
+  case "$ARM" in full|card|off) ;; *) echo "ERROR: arm must be full|card|off (base|change need --skill)" >&2; exit 2 ;; esac
+  if [ -n "$PACK_BASE$PACK_CHANGE" ] || [ "${#WITH_PACKS[@]}" -gt 0 ]; then
+    echo "ERROR: --pack-base/--pack-change/--with-pack need --skill" >&2; exit 2
+  fi
+fi
+[ -z "$SKILL" ] || [ -n "$CHECK_SKILL" ] || CHECK_SKILL="$SKILL"
 case "$RUNNER" in cc|stub) ;; *) echo "ERROR: runner must be cc|stub" >&2; exit 2 ;; esac
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BASE_DIR="$REPO_ROOT/evals/skill-onoff"
 TASK_DIR="$BASE_DIR/tasks/$TASK_ID"
-PACKS_DIR="$BASE_DIR/packs"
+PACKS_DIR="${ONOFF_PACKS_DIR:-$BASE_DIR/packs}"
 [ -d "$TASK_DIR" ] || { echo "ERROR: task dir not found: $TASK_DIR" >&2; exit 2; }
 [ -f "$TASK_DIR/task.md" ] || { echo "ERROR: task.md missing: $TASK_DIR" >&2; exit 2; }
 [ -f "$TASK_DIR/markers.sh" ] || { echo "ERROR: markers.sh missing: $TASK_DIR" >&2; exit 2; }
@@ -47,20 +81,30 @@ PACKS_DIR="$BASE_DIR/packs"
 if [ -z "$OUT_DIR" ]; then OUT_DIR=$(mktemp -d -t "onoff-out-${TASK_ID}-${ARM}-XXXXXX"); fi
 mkdir -p "$OUT_DIR"
 
+pack_name() { # $1 = packs/ dir name (no path separators; must exist)
+  case "$1" in */*|*..*|"") echo "ERROR: pack name must be a bare packs/ dir name: $1" >&2; exit 2 ;; esac
+  [ -d "$PACKS_DIR/$1" ] || { echo "ERROR: pack dir not found: $PACKS_DIR/$1" >&2; exit 2; }
+  printf '%s' "$1"
+}
+
 # ── digest integrity: every pack file consumed must match the frozen manifest ──
-verify_pack() { # $1 = pack key (e.g. dev-flow-card)
+verify_pack() { # $1 = pack key (e.g. dev-flow-card) · $2 = "exact": also reject files the manifest does not list
   node -e '
     const fs=require("fs"),crypto=require("crypto"),path=require("path");
     const [packsDir,key]=process.argv.slice(1);
     const man=JSON.parse(fs.readFileSync(path.join(packsDir,"manifest.json"),"utf8"));
     const files=(man.packs||{})[key];
     if(!files){console.error(`manifest has no pack: ${key}`);process.exit(2);}
+    if(process.argv[3]==="exact"){
+      const walk=(d,pre)=>fs.readdirSync(d,{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(path.join(d,e.name),pre+e.name+"/"):[pre+e.name]);
+      for(const f of walk(path.join(packsDir,key),key+"/")) if(!(f in files)){console.error(`unlisted file in pack ${key}: ${f}`);process.exit(2);}
+    }
     for(const [rel,digest] of Object.entries(files)){
       const p=path.join(packsDir,rel);
       const got=crypto.createHash("sha256").update(fs.readFileSync(p)).digest("hex");
       if(got!==digest){console.error(`digest mismatch: ${rel}`);process.exit(2);}
     }
-  ' "$PACKS_DIR" "$1"
+  ' "$PACKS_DIR" "$1" "${2:-}"
 }
 
 # ── temp repo with per-task branch topology (frozen fixture: repo/ + init-repo.sh) ──
@@ -68,10 +112,33 @@ TEMP_REPO=$(mktemp -d -t "onoff-repo-${TASK_ID}-XXXXXX")
 SCRATCH_HOME=$(mktemp -d -t "onoff-home-XXXXXX")
 SCRATCH_CONFIG="$SCRATCH_HOME/.claude-config"
 SCRATCH_PLUGIN=$(mktemp -d -t "onoff-plugin-XXXXXX")
-cleanup() { rm -rf "$TEMP_REPO" "$SCRATCH_HOME" "$SCRATCH_PLUGIN"; }
+# E4: per-cell live/task-status/ledger dirs. scripts/lib/live-state-dir.js ACCEPTS an
+# $AUTOPILOT_LIVE_DIR override only when it is tmpfs/ramfs, owned, mode 0700 — otherwise it silently
+# falls through to the REAL $XDG_RUNTIME_DIR/autopilot. So the state root goes on tmpfs when one exists.
+STATE_BASE=""
+for cand in "${ONOFF_STATE_BASE:-}" "${XDG_RUNTIME_DIR:-}" "${ONOFF_SHM_DIR:-/dev/shm}"; do
+  if [ -n "$cand" ] && [ -d "$cand" ] && [ -w "$cand" ]; then
+    case "$(stat -f -c %T "$cand" 2>/dev/null)" in tmpfs|ramfs) STATE_BASE="$cand"; break ;; esac
+  fi
+done
+if [ -z "$STATE_BASE" ]; then
+  # fail closed: without a tmpfs base the resolver rejects the override and would write the REAL live dir
+  echo "ERROR: no writable tmpfs base for the per-cell live dir (tried ONOFF_STATE_BASE, XDG_RUNTIME_DIR, /dev/shm); set ONOFF_STATE_BASE to a tmpfs dir" >&2
+  exit 2
+fi
+CELL_STATE=$(mktemp -d -p "$STATE_BASE" "onoff-state-XXXXXX")
+chmod 700 "$CELL_STATE"
+mkdir -m 700 "$CELL_STATE/live"; mkdir -p "$CELL_STATE/task-status"
+export AUTOPILOT_LIVE_DIR="$CELL_STATE/live" AUTOPILOT_TASK_STATUS_DIR="$CELL_STATE/task-status"
+cleanup() { rm -rf "$TEMP_REPO" "$SCRATCH_HOME" "$SCRATCH_PLUGIN" "$CELL_STATE"; }
 trap cleanup EXIT
 
 cp -r "$TASK_DIR/repo"/. "$TEMP_REPO"/
+if [ -n "$FIXTURE_SCRIPTS" ]; then  # E3: identical frozen helper set in BOTH arms, before the base commit
+  FS_NAME=$(pack_name "$FIXTURE_SCRIPTS")
+  verify_pack "$FS_NAME" exact
+  cp -r "$PACKS_DIR/$FS_NAME"/. "$TEMP_REPO"/
+fi
 (
   cd "$TEMP_REPO"
   git init -q
@@ -87,13 +154,30 @@ FROZEN_BASE_SHA="$(git -C "$TEMP_REPO" rev-parse HEAD)"
 mkdir -p "$SCRATCH_PLUGIN/.claude-plugin"
 printf '{"name":"autopilot","version":"0.0.1","description":"skill-onoff eval plugin"}\n' \
   > "$SCRATCH_PLUGIN/.claude-plugin/plugin.json"
+WITH_NAMES=" "
+for wp in "${WITH_PACKS[@]+"${WITH_PACKS[@]}"}"; do WITH_NAMES="$WITH_NAMES${wp%%=*} "; done
 for comp in "$PACKS_DIR/companions"/*/; do
   [ -d "$comp" ] || continue
   name=$(basename "$comp")
+  if [ -n "$SKILL" ] && { [ "$name" = "$SKILL" ] || [[ "$WITH_NAMES" == *" $name "* ]]; }; then continue; fi
   mkdir -p "$SCRATCH_PLUGIN/skills/$name"
   cp -r "$comp". "$SCRATCH_PLUGIN/skills/$name/"
 done
 verify_pack "companions"
+if [ -n "$SKILL" ]; then
+  # E1/E2: generic arms — the target skill is the digest-verified pack; nothing else varies.
+  if [ "$ARM" = "base" ]; then PK=$(pack_name "${PACK_BASE:-$SKILL-base}"); else PK=$(pack_name "${PACK_CHANGE:-$SKILL-change}"); fi
+  verify_pack "$PK" exact
+  mkdir -p "$SCRATCH_PLUGIN/skills/$SKILL"
+  cp -r "$PACKS_DIR/$PK"/. "$SCRATCH_PLUGIN/skills/$SKILL/"
+  for wp in "${WITH_PACKS[@]+"${WITH_PACKS[@]}"}"; do
+    wskill="${wp%%=*}"; wpack="${wp#*=}"
+    [ "$wskill" != "$wp" ] && [ "$wskill" != "$SKILL" ] || { echo "ERROR: bad --with-pack (want other-skill=packdir): $wp" >&2; exit 2; }
+    WK=$(pack_name "$wpack"); verify_pack "$WK" exact
+    mkdir -p "$SCRATCH_PLUGIN/skills/$wskill"
+    cp -r "$PACKS_DIR/$WK"/. "$SCRATCH_PLUGIN/skills/$wskill/"
+  done
+else
 case "$ARM" in
   full)
     verify_pack "dev-flow-full"
@@ -105,6 +189,7 @@ case "$ARM" in
     cp -r "$PACKS_DIR/dev-flow-card"/. "$SCRATCH_PLUGIN/skills/dev-flow/" ;;
   off) : ;; # dev-flow absent — plugin + companion catalog still present
 esac
+fi
 
 # ── scratch HOME + scratch CLAUDE_CONFIG_DIR, credentials-only seeding ──
 # NEVER point CLAUDE_CONFIG_DIR at the real ~/.claude (it gets reset); an UNSET
@@ -159,15 +244,21 @@ set +e
 (
   cd "$TEMP_REPO"
   TRANSCRIPT="$TRANSCRIPT" FROZEN_BASE_SHA="$FROZEN_BASE_SHA" \
-  QUERY="$BASE_DIR/lib/transcript-query.js" \
+  QUERY="$BASE_DIR/lib/transcript-query.js" ONOFF_LIB="$BASE_DIR/lib" \
     bash "$TASK_DIR/markers.sh"
+  # optional second marker file (P1W rows add markers to a task without touching its markers.sh)
+  if [ -f "$TASK_DIR/markers-extra.sh" ]; then
+    TRANSCRIPT="$TRANSCRIPT" FROZEN_BASE_SHA="$FROZEN_BASE_SHA" \
+    QUERY="$BASE_DIR/lib/transcript-query.js" ONOFF_LIB="$BASE_DIR/lib" \
+      bash "$TASK_DIR/markers-extra.sh"
+  fi
 ) > "$MARKERS_OUT" 2>> "$RAW_ERR"
 MARKERS_EXIT=$?
 set -e
 
 # ── manipulation check: dev-flow Skill invocation observed in transcript ──
 skill_invoked_devflow="false"
-if node "$BASE_DIR/lib/transcript-query.js" "$TRANSCRIPT" skill-invoked dev-flow >/dev/null 2>&1; then
+if node "$BASE_DIR/lib/transcript-query.js" "$TRANSCRIPT" skill-invoked "${CHECK_SKILL:-dev-flow}" >/dev/null 2>&1; then
   skill_invoked_devflow="true"
 fi
 
@@ -205,10 +296,19 @@ markers_json=$(node -e '
   process.stdout.write(JSON.stringify(out));
 ' "$MARKERS_OUT")
 
+cp -r "$CELL_STATE"/. "$OUT_DIR/state/" 2>/dev/null || true
+
+# E5: legacy rows keep the dev-flow-only field byte-identically; --check-skill/--skill rows carry
+# "skill_invoked" + "check_skill" for the target skill instead.
+if [ -n "$CHECK_SKILL" ]; then
+  INVOKED_FIELDS=$(printf '"skill_invoked":%s,"check_skill":"%s"' "$skill_invoked_devflow" "$CHECK_SKILL")
+else
+  INVOKED_FIELDS=$(printf '"skill_invoked_devflow":%s' "$skill_invoked_devflow")
+fi
 RESULT_JSON="$OUT_DIR/result.json"
-printf '{"task_id":"%s","arm":"%s","model":"%s","runner":"%s","runner_version":"%s","rep":%s,"duration_s":%s,"frozen_base_sha":"%s","markers":%s,"skill_invoked_devflow":%s,"failure_class":%s,"failure_cause":%s}\n' \
+printf '{"task_id":"%s","arm":"%s","model":"%s","runner":"%s","runner_version":"%s","rep":%s,"duration_s":%s,"frozen_base_sha":"%s","markers":%s,%s,"failure_class":%s,"failure_cause":%s}\n' \
   "$TASK_ID" "$ARM" "$MODEL" "$RUNNER" "$runner_version_clean" "$REP" \
   "$((END_TIME - START_TIME))" "$FROZEN_BASE_SHA" "$markers_json" \
-  "$skill_invoked_devflow" "$failure_class" "$failure_cause" > "$RESULT_JSON"
+  "$INVOKED_FIELDS" "$failure_class" "$failure_cause" > "$RESULT_JSON"
 
 cat "$RESULT_JSON"

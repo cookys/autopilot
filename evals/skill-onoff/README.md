@@ -41,6 +41,39 @@ Spend-free regression: `hooks/tests/skill-onoff-{eval,markers,score}.test.sh` (s
 `ONOFF_STUB_BIN`; planted red cases — the vacuous FULL==OFF fixture can never reach
 SHIP-GATE-MET).
 
+## Generic arms for any skill (mods P1W EVALX)
+
+The `full|card|off` dev-flow arms above are unchanged (regression-pinned byte-for-byte). For a
+base-vs-change comparison of ANY skill text (spend-free harness; no live cell is run by the tests):
+
+```bash
+# freeze the arms (a frozen pack is never mutated: a changed arm = a NEW pack id)
+node evals/skill-onoff/freeze-pack.js --id ceo-agent-base   --skill ceo-agent --ref <pre-change-sha>
+node evals/skill-onoff/freeze-pack.js --id ceo-agent-change --skill ceo-agent --ref <post-edit-sha>
+# frozen helper scripts (+ transitive relative requires) copied into BOTH arms' fixture repo
+node evals/skill-onoff/freeze-pack.js --id fixture-scripts-<row> --scripts scripts/<helper>.js,… --ref <sha>
+# campaign (arms default to base,change; resume-by-cell as above)
+bash evals/skill-onoff/run-skill-onoff-matrix.sh --model sonnet --reps 5 --results results/<row>.jsonl \
+  --tasks <fixtures> --skill <name> --fixture-scripts fixture-scripts-<row> [--with-pack dev-flow=dev-flow-base]
+# mechanical verdict from the FROZEN pre-registration (prereg/<row>.json; digests in prereg/FROZEN.json)
+node evals/skill-onoff/score-p1w.js --prereg evals/skill-onoff/prereg/<row>.json --results results/<row>.jsonl
+```
+
+- `--skill <name> --arm base|change`: the ONLY variable is `skills/<name>/` = the digest-verified
+  pack (`<name>-base` / `<name>-change`, or `--pack-base/--pack-change <packs/ dir name>`; an unlisted
+  file in a pack is a hard error). Companions are copied except the target. Live freezes shipped:
+  `ceo-agent-base`, `finish-flow-base`, `dev-flow-base` (all @ 4641b5d7; `dev-flow-full` stays the
+  historical freeze) and `fixture-scripts-base`.
+- Per-cell isolation: `AUTOPILOT_LIVE_DIR` / `AUTOPILOT_TASK_STATUS_DIR`
+  point under a per-cell state dir on tmpfs (the live-dir resolver REJECTS a non-tmpfs override and
+  silently falls through to the real store, so a cell with no writable tmpfs base exits 2 instead of running; the decision-ledger default lives in each fixture repo's git-common-dir); copied to `$OUT/state/`.
+- Manipulation check: rows carry `skill_invoked` + `check_skill` (`--skill` implies it).
+- Row markers (`lib/p1w-markers.sh`, three-way probed by `hooks/tests/skill-onoff-p1w-markers.test.sh`):
+  `a_decision_file` (a1, a1b; control `a_overtrigger` on a2), `b_phase_seq` (d8; d2 via
+  `markers-extra.sh`), `c_status_input` (f1, f1b). The helpers under test do not exist on develop yet:
+  freeze them into a fixture-scripts pack when their rows land; the decision-file / bundle locations are
+  pluggable env knobs documented in the lib header.
+
 ## Honesty rails
 
 - **V2 sensitivity gate**: a family where FULL≈OFF is demoted (not counted); if <4 of 5

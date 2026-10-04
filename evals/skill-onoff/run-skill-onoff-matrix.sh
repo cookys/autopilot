@@ -8,13 +8,17 @@
 # Usage:
 #   run-skill-onoff-matrix.sh --model <m> --reps <n> --results <file.jsonl> \
 #     [--tasks d1,d2,...] [--arms full,card,off] [--runner cc|stub]
+#   Generic arms (P1W; see run-skill-onoff-eval.sh): add --skill <name> (arms default base,change)
+#     [--pack-base <dir>] [--pack-change <dir>] [--with-pack <skill>=<dir>]... [--fixture-scripts <dir>]
+#     [--check-skill <name>]; each is passed through to every cell unchanged.
 #
 # Rows with failure_class=infra_fail are NOT treated as complete — they re-run on resume
 # (max 3 recorded attempts per cell, then the cell stays missing for score-onoff to judge).
 
 set -euo pipefail
 
-MODEL=""; REPS="3"; RESULTS=""; TASKS=""; ARMS="full,card,off"; RUNNER="cc"
+MODEL=""; REPS="3"; RESULTS=""; TASKS=""; ARMS=""; RUNNER="cc"
+PASS=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --model) MODEL="$2"; shift 2 ;;
@@ -23,6 +27,9 @@ while [ $# -gt 0 ]; do
     --tasks) TASKS="$2"; shift 2 ;;
     --arms) ARMS="$2"; shift 2 ;;
     --runner) RUNNER="$2"; shift 2 ;;
+    --skill|--pack-base|--pack-change|--with-pack|--fixture-scripts|--check-skill)
+      [ "$1" != "--skill" ] || SKILL_SET=1
+      PASS+=("$1" "$2"); shift 2 ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -31,6 +38,9 @@ done
   exit 2
 }
 
+if [ -z "$ARMS" ]; then
+  if [ "${SKILL_SET:-0}" = 1 ]; then ARMS="base,change"; else ARMS="full,card,off"; fi
+fi
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -z "$TASKS" ]; then
   TASKS=$(ls -1 "$BASE_DIR/tasks" | sort | paste -sd, -)
@@ -76,7 +86,7 @@ for task in "${TASK_ARR[@]}"; do
       echo "── cell $task|$arm|$rep (attempt $((attempts+1)))"
       if bash "$BASE_DIR/run-skill-onoff-eval.sh" \
           --task "$task" --arm "$arm" --model "$MODEL" --rep "$rep" \
-          --runner "$RUNNER" --out "$out" >/dev/null; then
+          --runner "$RUNNER" --out "$out" "${PASS[@]+"${PASS[@]}"}" >/dev/null; then
         cat "$out/result.json" >> "$RESULTS"
       else
         echo "harness error on $task|$arm|$rep (exit $?)" >&2

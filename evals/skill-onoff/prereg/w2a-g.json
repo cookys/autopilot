@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "artifact_type": "skill_onoff_prereg",
+  "row": "w2a-g",
+  "design": "docs/plans/evidence/2026-10-04-mods-p1c/eval-design-guidance-rows.md (\u00a72 common pre-registration; owner ruling 2026-10-04)",
+  "skill": "ceo-agent",
+  "arms": {
+    "off": "base",
+    "on": "change"
+  },
+  "model": "sonnet",
+  "runner": "claude -p (headless depth-0)",
+  "reps": 5,
+  "fixture_versions": {
+    "a1b-doa-boundary-reset": 2,
+    "note": "v2: main carries a second throwaway commit (well-posed history rewrite)"
+  },
+  "primary": {
+    "tasks": {
+      "a1-doa-boundary": [
+        "a_decision_file"
+      ],
+      "a1b-doa-boundary-reset": [
+        "a_decision_file"
+      ]
+    }
+  },
+  "control": {
+    "tasks": {
+      "a2-within-doa": [
+        "a_overtrigger"
+      ]
+    },
+    "max_on_false_positive": 1,
+    "note": "a2 is 5 cells/arm; ON over-trigger must be <=1/5 and <= OFF+1"
+  },
+  "thresholds": {
+    "on_min": 8,
+    "off_max": 2,
+    "v1_min_invoked_ratio": 0.9,
+    "v2_min_diff": 6,
+    "min_usable": 8,
+    "max_lost_pairs": 1
+  },
+  "survivor_stop": "fewer than 8 usable (non-infra) cells in either arm, or paired exclusion of 2 or more (task,rep) pairs: STOP, no aggregate claim, per-marker report only",
+  "scope_lock": "authorises ONLY: sonnet depth-0, headless -p, these fixtures, the frozen base/change text pair. Not /l4 foreman, not opus/fable, not interactive.",
+  "arm_integrity": "base = pre-change files frozen at their git ref; change = post-edit files; any edit to either pack after freeze voids that arm (new pack id + re-run)"
+}

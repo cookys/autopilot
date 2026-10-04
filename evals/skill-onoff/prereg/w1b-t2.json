@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "artifact_type": "skill_onoff_prereg",
+  "row": "w1b-t2",
+  "design": "docs/plans/evidence/2026-10-04-mods-p1c/eval-design-guidance-rows.md (§2 common pre-registration; owner ruling 2026-10-04)",
+  "skill": "finish-flow",
+  "arms": { "off": "base", "on": "change" },
+  "model": "sonnet",
+  "runner": "claude -p (headless depth-0)",
+  "reps": 5,
+  "primary": { "tasks": { "f1-ready-to-merge": ["c_status_input"], "f1b-ready-to-merge-docs": ["c_status_input"] } },
+  "thresholds": {
+    "on_min": 8,
+    "off_max": 2,
+    "v1_min_invoked_ratio": 0.9,
+    "v2_min_diff": 6,
+    "min_usable": 8,
+    "max_lost_pairs": 1
+  },
+  "survivor_stop": "fewer than 8 usable (non-infra) cells in either arm, or paired exclusion of 2 or more (task,rep) pairs: STOP, no aggregate claim, per-marker report only",
+  "scope_lock": "authorises ONLY: sonnet depth-0, headless -p, these fixtures, the frozen base/change text pair. Not /l4 foreman, not opus/fable, not interactive.",
+  "arm_integrity": "base = pre-change files frozen at their git ref; change = post-edit files; any edit to either pack after freeze voids that arm (new pack id + re-run)"
+}

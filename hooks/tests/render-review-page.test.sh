@@ -15,6 +15,9 @@
 #   FAIL [render-review-page] the decision question is folded into the conclusion section: 'DECISION-QUESTION-1' not found in output
 #   FAIL [render-review-page] project index one-line summary (no decision needed): '需要你決定：0' not found in output
 # B4b addition RED at ef287d9d: needs_decision with a null decision threw 'Cannot read properties of null (reading 'question')'.
+# C3b-R addition (job phase) RED at 1b549997: 168 passed, 24 failed, e.g.
+#   FAIL [render-review-page] phase: campaign state REVIEWING maps to its zh-TW label: '"state-REVIEWING":true' not found in output
+#   FAIL [render-review-page] phase: no campaign -> first open deliverable, label 做 <id>: '"deliverable":true' not found in output
 # Pure fixtures: fake HOME / CLAUDE_CONFIG_DIR / AUTOPILOT_LIVE_DIR (/dev/shm) / costs file; the renderer
 # is never allowed to call the real `autopilot status task` (a fixture receipt or a fake bin is always given).
 . "$(dirname "$0")/lib.sh"
@@ -475,5 +478,50 @@ const m = r.buildJobModel({ runs: [], root: null, job: "J", date: "2026-10-04", 
 m.needs_decision = true; m.decision = null;
 try { process.stdout.write(r.renderJobHtml(m).includes("unknown") ? "unknown" : "no-unknown"); } catch (e) { process.stdout.write("threw " + e.message); }' "${NULLDEC_R:-$R}")"
 assert_eq "$NULLDEC" "unknown" "needs_decision with a null decision renders unknown (never throws)"
+
+# ---- 16. job phase (mods P1c C3b-R): campaign terminal phase > open deliverable > null --------------------------
+cat > "$SB/phase.js" <<'JS'
+const r = require(process.argv[2]);
+const out = {};
+const task = (campaigns, o = {}) => ({ artifact_type: 'task_status_receipt', root_run_id: 'R1', acceptance_verdict: 'accepted', evidence: { campaigns }, ...o });
+const camp = (phase, status = 'valid') => ({ status, phase, campaign_id: 'c' });
+const prog = { artifact_type: 'controller_progress_receipt', root_run_id: 'R1', completed_deliverables: ['a'], remaining_deliverables: ['c', 'd'], deliverable_count: 3, frozen_denominator_digest: 'd'.repeat(64) };
+const model = (t, p) => r.buildJobModel({ runs: [], root: 'R1', job: 'J', date: '2026-10-04', project: 'abcdef0123456789', now: 0, commit: null, sources: [], taskReceipt: t, progressReceipt: p });
+const LABELS = { PREPARED: '準備', IMPLEMENTING: '實作', VERTICAL_VERIFICATION: '垂直驗證', REVIEWING: '審查', ADJUDICATING: '裁定', AWAITING_DISPOSITION: '等待處置', REPAIRING: '修復', TERMINAL_READY: '收尾', TERMINAL_FOLLOW_UP: '收尾（有後續）', TERMINAL_STOP: '已停止', BOUNDARY_REJECTED: '邊界被拒', AWAITING_CONVERGENCE_ADJUDICATION: '等待收斂裁定' };
+for (const [code, label] of Object.entries(LABELS)) out[`state-${code}`] = JSON.stringify(model(task([camp(code)]), null).phase) === JSON.stringify({ code, label, source: 'campaign' });
+out.unknown = JSON.stringify(model(task([camp('WEIRD_STATE')]), null).phase) === JSON.stringify({ code: 'WEIRD_STATE', label: 'WEIRD_STATE', source: 'campaign' });
+out.deliverable = JSON.stringify(model(null, prog).phase) === JSON.stringify({ code: 'c', label: '做 c', source: 'deliverable' });
+out.none = model(null, null).phase === null;
+out.nonePrefrozen = model(task([]), { ...prog, remaining_deliverables: [] }).phase === null;
+out.campaignWins = model(task([camp('REVIEWING')]), prog).phase.source === 'campaign';
+out.invalidCampaignFallsBack = model(task([camp('REVIEWING', 'invalid')]), prog).phase.source === 'deliverable';
+out.wrongRootReceipt = model(task([camp('REVIEWING')], { root_run_id: 'R2' }), null).phase === null;
+const html = r.renderJobHtml(model(task([camp('REVIEWING')]), prog));
+out.htmlLabel = /階段：審查/.test(html);
+const sec2 = html.match(/<section data-section="2"[\s\S]*?<\/section>/)[0];
+out.htmlFirstScreen = /階段：審查/.test(sec2);
+out.htmlNone = !/階段：/.test(r.renderJobHtml(model(null, null)));
+const old = model(null, null); delete old.phase;
+out.oldModel = r.renderJobHtml(old).includes('data-section="9"') && !/階段：/.test(r.renderJobHtml(old));
+process.stdout.write(JSON.stringify(out));
+JS
+PH="$(node "$SB/phase.js" "$R")"
+for k in PREPARED IMPLEMENTING VERTICAL_VERIFICATION REVIEWING ADJUDICATING AWAITING_DISPOSITION REPAIRING TERMINAL_READY TERMINAL_FOLLOW_UP TERMINAL_STOP BOUNDARY_REJECTED AWAITING_CONVERGENCE_ADJUDICATION; do
+  assert_contains "$PH" "\"state-$k\":true" "phase: campaign state $k maps to its zh-TW label"
+done
+assert_contains "$PH" '"unknown":true' "phase: an unknown state string keeps the raw code as label"
+assert_contains "$PH" '"deliverable":true' "phase: no campaign -> first open deliverable, label 做 <id>"
+assert_contains "$PH" '"none":true' "phase: no sources -> null"
+assert_contains "$PH" '"nonePrefrozen":true' "phase: no open deliverable and no campaign -> null"
+assert_contains "$PH" '"campaignWins":true' "phase: campaign wins over the deliverable fallback"
+assert_contains "$PH" '"invalidCampaignFallsBack":true' "phase: a non-valid campaign entry is ignored (falls back)"
+assert_contains "$PH" '"wrongRootReceipt":true' "phase: a task receipt of another root gives null"
+assert_contains "$PH" '"htmlLabel":true' "phase: the page shows the label"
+assert_contains "$PH" '"htmlFirstScreen":true' "phase: the label sits next to the conclusion (section 2)"
+assert_contains "$PH" '"htmlNone":true' "phase: null phase draws no phase chip"
+assert_contains "$PH" '"oldModel":true' "phase: an old model without a phase field still renders"
+JSON_PHASE_MODEL="$SB/phase-model.html"
+render "$JSON_PHASE_MODEL" --runs "$F/runs.json" --root R1 --task-receipt none --progress-receipt "$F/progress-frozen.json" "${COMMON[@]}"
+assert_contains "$(sec "$JSON_PHASE_MODEL" 2)" "階段：做 c" "phase: CLI with a frozen progress receipt shows the first open deliverable"
 
 finalize_test

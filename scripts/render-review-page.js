@@ -91,6 +91,26 @@ function buildProgress(receipt, root) {
     remaining: frozen ? count - done : null, per_deliverable: per, denominator_digest: digest,
   };
 }
+// The job's current phase, from sources the renderer already holds (never invented):
+//   1. a VALID campaign entry of the task_status_receipt (`evidence.campaigns[].phase`; the receipt only validates TERMINAL campaigns,
+//      so a campaign phase here is always a terminal one) -> source 'campaign', zh-TW label;
+//   2. else the first still-open deliverable of the controller_progress_receipt -> source 'deliverable', `做 <id>`;
+//   3. else null. A live (non-terminal) campaign state is not reachable from here: no root_run_id -> campaign id mapping exists.
+const PHASE_LABEL = {
+  PREPARED: '準備', IMPLEMENTING: '實作', VERTICAL_VERIFICATION: '垂直驗證', REVIEWING: '審查', ADJUDICATING: '裁定',
+  AWAITING_DISPOSITION: '等待處置', REPAIRING: '修復', TERMINAL_READY: '收尾', TERMINAL_FOLLOW_UP: '收尾（有後續）',
+  TERMINAL_STOP: '已停止', BOUNDARY_REJECTED: '邊界被拒', AWAITING_CONVERGENCE_ADJUDICATION: '等待收斂裁定',
+};
+function buildPhase(task, progress) {
+  const camps = task && isObject(task.evidence) && Array.isArray(task.evidence.campaigns) ? task.evidence.campaigns : [];
+  for (const c of camps) {
+    if (!isObject(c) || c.status !== 'valid' || typeof c.phase !== 'string' || !c.phase) continue;
+    return { code: c.phase, label: Object.prototype.hasOwnProperty.call(PHASE_LABEL, c.phase) ? PHASE_LABEL[c.phase] : c.phase, source: 'campaign' };
+  }
+  const open = progress && Array.isArray(progress.per_deliverable) ? progress.per_deliverable.find((d) => d.state === 'open') : null;
+  if (open && typeof open.id === 'string' && open.id) return { code: open.id, label: `做 ${open.id}`, source: 'deliverable' };
+  return null;
+}
 // MATCH / 舊候選 / LIVE GATE · 未綁定候選 / UNVERIFIED — plan 7 (join = ledger-dir membership + head ancestry).
 function gateRow(entry, candidate, isAncestor) {
   const r = entry.receipt;
@@ -188,7 +208,7 @@ function buildJobModel(inputs) {
       failed_predicates: Array.isArray(task.failed_predicates) ? task.failed_predicates.map(String) : [],
     } : null,
     conclusion, needs_decision: Boolean(decision), decision,
-    progress, planned, compare: o.compare || [], dispatch, gates,
+    phase: buildPhase(task, progress), progress, planned, compare: o.compare || [], dispatch, gates,
     scope: envelope && isObject(envelope.scope) ? {
       project_key: envelope.scope.project_key || null, repo_identity: envelope.scope.repo_identity || null,
     } : null,
@@ -324,7 +344,8 @@ function renderJobHtml(model) {
   const accCls = m.axes.acceptance === 'unknown' ? 'pending' : m.axes.acceptance;
   const dd = m.decision;
   const s1 = `<h1>${esc(m.job)} <span class="muted">· ${esc(m.project)}</span></h1>\n<p class="updated muted">updated ${esc(m.published_at)} @ ${m.commit ? esc(m.commit) : 'unknown'}</p>`;
-  const s2 = `<p>${chip(acceptanceChip(m.axes.acceptance, m.axes.can_close), accCls)}${m.needs_decision ? chip('需要你決定', 'warn') : chip('知會', 'info')}</p>\n<p><strong>${esc(m.conclusion)}</strong></p>\n<p>${m.needs_decision ? `需要你決定：${dd && typeof dd.question === 'string' ? esc(dd.question) : unknownSpan()}` : '知會：目前沒有待你決定的事項。'}</p>`;
+  const ph = isObject(m.phase) && typeof m.phase.label === 'string' ? m.phase : null;
+  const s2 = `<p>${chip(acceptanceChip(m.axes.acceptance, m.axes.can_close), accCls)}${m.needs_decision ? chip('需要你決定', 'warn') : chip('知會', 'info')}${ph ? chip(`階段：${ph.label}`, 'info') : ''}</p>\n<p><strong>${esc(m.conclusion)}</strong></p>\n<p>${m.needs_decision ? `需要你決定：${dd && typeof dd.question === 'string' ? esc(dd.question) : unknownSpan()}` : '知會：目前沒有待你決定的事項。'}</p>`;
   const d = m.decision;
   const s3 = d
     ? `<p><strong>${esc(d.question)}</strong></p>\n<ol>${d.options.map((x) => `<li>${esc(x.label)} — ${esc(x.consequence)}</li>`).join('')}</ol>\n<p>這份裁決不授權的事：${d.not_authorized ? esc(d.not_authorized) : unknownSpan()}</p>`

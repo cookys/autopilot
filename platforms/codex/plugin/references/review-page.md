@@ -24,6 +24,16 @@ directory page, not a cockpit. `project_key` is `sha256(repo_identity)[0:16]`, c
 - Pages are generated only from JSON by `scripts/render-review-page.js`; HTML is self-contained with relative URLs;
   unknown values render as unknown, never 0. **[renderer contract]**
 
+## Job phase (`model.json` `phase`)
+
+Additive field of `review-job-model/1`: `phase: { code, label, source } | null`. **[renderer contract]** Sources, in order:
+(1) a valid campaign entry of the `task_status_receipt` (`evidence.campaigns[].phase`; the receipt validates only terminal
+campaigns, so this is always a terminal phase) -> `source: "campaign"`, `label` = the zh-TW word for the `CAMPAIGN_STATES`
+value (unknown value -> the raw code); (2) else the first still-open deliverable of the `controller_progress_receipt` ->
+`source: "deliverable"`, `label` = `做 <id>`; (3) else `null`. Nothing is invented: a live (non-terminal) campaign phase is
+not reachable by the renderer (no `root_run_id` -> campaign id mapping), so an in-progress run with no frozen progress
+receipt has `phase: null`. The page shows `階段：<label>` as a chip next to the conclusion; consumers (the live band) read `phase.label`.
+
 ## Two-axis chips (A12)
 
 The execution axis and the acceptance axis never merge. **[renderer contract]**

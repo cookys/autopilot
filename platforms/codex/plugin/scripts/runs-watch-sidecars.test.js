@@ -193,6 +193,10 @@ test('D6 a ledger row appended later shows on the next tick; an unchanged tick l
 test('D7 writers_wired is derived from the shipped files and listed (engine installed)', () => {
   const s = buildDecisionsSidecar({ scope: { project_key: 'k', repo_identity: 'i', root_run_id: null }, ledgers: [], runs: [] });
   assert.ok(Array.isArray(s.writers_wired) && s.writers_wired.includes('engine'));
+  // INT2: PICK is on the integrated tree, and the marker is the CODE read (process.env.AUTOPILOT_ROOT_RUN_ID), not only a comment
+  assert.ok(s.writers_wired.includes('next-pick'), 'next-pick writer reads wired on the integrated tree');
+  const np = fs.readFileSync(path.join(__dirname, 'next-pick.js'), 'utf8');
+  assert.ok(/process\.env\.AUTOPILOT_ROOT_RUN_ID/.test(np), 'the grepped marker is a code read, not just a comment');
   const s2 = buildDecisionsSidecar({ scope: { project_key: 'k', repo_identity: 'i', root_run_id: null }, ledgers: [], runs: [], wired: [] });
   assert.deepEqual(s2.writers_wired, []);
 });

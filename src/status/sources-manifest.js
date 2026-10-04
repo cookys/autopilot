@@ -34,11 +34,21 @@ function buildSourcesManifest({ pluginRoot, env = process.env, autopilotHome, sc
   const hooksText = readText(path.join(pluginRoot, 'hooks', 'hooks.json')) || '';
   const config = autopilotHome ? readJson(path.join(autopilotHome, 'config.json')) : null;
   const hookInstalled = (file) => hooksText.includes(`/hooks/${file}`) && exists(path.join(pluginRoot, 'hooks', file));
+  // A hook module's work can run inside ANOTHER hook process (mods P1W PERF: audit-log.js and advisory-relay.js host
+  // awaiting-owner's handlers). The hosts are derived from the code: every hooks/*.js that `require('./<file>')`s it.
+  const hostsOf = (file) => {
+    let names = [];
+    try { names = fs.readdirSync(path.join(pluginRoot, 'hooks')); } catch (_error) { return []; }
+    const needle = new RegExp(`require\\(\\s*['"]\\./${file.replace(/\./g, '\\.')}['"]\\s*\\)`);
+    return names.filter((n) => n.endsWith('.js') && !n.endsWith('.test.js') && n !== file && needle.test(readText(path.join(pluginRoot, 'hooks', n)) || ''));
+  };
+  // installed = hooks.json wires the module itself OR a process that hosts it
+  const hookRuns = (file) => hookInstalled(file) || hostsOf(file).some((h) => hookInstalled(h));
   const fileHas = (rel, needle) => (readText(path.join(pluginRoot, rel)) || '').includes(needle);
   const out = {};
 
   const hookSource = (name, file, knob, stem, extra) => {
-    const installed = hookInstalled(file);
+    const installed = hookRuns(file) && exists(path.join(pluginRoot, 'hooks', file));
     out[name] = { installed, enabled: installed && !knobIsOff(knob, stem, env, config), how: `hook hooks/${file} (knob ${knob})${extra || ''}` };
   };
   hookSource('tasks', 'session-tasks.js', 'AUTOPILOT_SESSION_TASKS', 'session-tasks', '');
@@ -61,7 +71,7 @@ function buildSourcesManifest({ pluginRoot, env = process.env, autopilotHome, sc
   const tsInstalled = exists(path.join(pluginRoot, 'src', 'status', 'task-status-input.js')) && exists(path.join(pluginRoot, 'scripts', 'write-task-status-input.js'));
   out.task_status_input = { installed: tsInstalled, enabled: tsInstalled && !knobIsOff('AUTOPILOT_TASK_STATUS_INPUT', null, env, config), how: 'engine writes the task-status input at managed-campaign terminals (knob AUTOPILOT_TASK_STATUS_INPUT=0)' };
 
-  const ctxInstalled = hookInstalled('context-budget.js');
+  const ctxInstalled = hookRuns('context-budget.js') && exists(path.join(pluginRoot, 'hooks', 'context-budget.js'));
   out.context = { installed: ctxInstalled, enabled: ctxInstalled && !knobIsOff('AUTOPILOT_CONTEXT_BUDGET_LIVE_WRITE', null, env, config)
     && !(config && config.context_budget && config.context_budget.live_write === false), how: 'hook hooks/context-budget.js live write (knob AUTOPILOT_CONTEXT_BUDGET_LIVE_WRITE)' };
 

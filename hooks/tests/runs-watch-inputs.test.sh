@@ -335,6 +335,31 @@ out('u_hook_present_tasks', `${m2.sources.tasks.installed}/${m2.sources.tasks.en
 out('u_script_present_decision', m2.sources.decision.installed);
 const m3 = buildSourcesManifest({ pluginRoot: plug, env: { AUTOPILOT_SESSION_TASKS: 'off' }, autopilotHome: tmp, scope: { project_key: 'k', root_run_id: null } });
 out('u_knob_off', `${m3.sources.tasks.installed}/${m3.sources.tasks.enabled}`);
+// INT2: attention/tasks/context installed derives from the REAL wiring (hooks.json on a temp copy of the real hooks dir)
+const real = (extra) => { // copy of the real plugin hooks + hooks.json, hooks.json filtered by `drop(command)`
+  const pl = fs.mkdtempSync(path.join(tmp, 'real-')); fs.mkdirSync(path.join(pl, 'hooks'), { recursive: true }); fs.mkdirSync(path.join(pl, 'scripts'), { recursive: true });
+  for (const f of fs.readdirSync(path.join(root, 'hooks'))) if (f.endsWith('.js') && !f.endsWith('.test.js')) fs.copyFileSync(path.join(root, 'hooks', f), path.join(pl, 'hooks', f));
+  const hj = JSON.parse(fs.readFileSync(path.join(root, 'hooks', 'hooks.json'), 'utf8'));
+  for (const ev of Object.keys(hj.hooks)) hj.hooks[ev] = hj.hooks[ev].map((g) => ({ ...g, hooks: (g.hooks || []).filter((h) => !extra(h.command)) })).filter((g) => g.hooks.length);
+  fs.writeFileSync(path.join(pl, 'hooks', 'hooks.json'), JSON.stringify(hj));
+  return buildSourcesManifest({ pluginRoot: pl, env: {}, autopilotHome: tmp, scope: { project_key: 'k', root_run_id: null } }).sources;
+};
+const st = (m, k) => `${m[k].installed}/${m[k].enabled}`;
+const OWN = (c) => /\/hooks\/awaiting-owner\.js/.test(c); const HOST = (c) => /\/hooks\/(audit-log|advisory-relay)\.js/.test(c);
+let rm = real(() => false); out('i_real_attention', st(rm, 'attention')); out('i_real_tasks', st(rm, 'tasks')); out('i_real_context', st(rm, 'context'));
+rm = real(HOST); out('i_no_hosts_attention', st(rm, 'attention'));
+rm = real(OWN); out('i_no_own_attention', st(rm, 'attention'));
+rm = real((c) => OWN(c) || HOST(c)); out('i_none_attention', st(rm, 'attention'));
+rm = real((c) => /\/hooks\/session-tasks\.js/.test(c)); out('i_no_tasks_wiring', st(rm, 'tasks'));
+rm = real((c) => /\/hooks\/context-budget\.js/.test(c)); out('i_no_context_wiring', st(rm, 'context'));
+// a hook file that merely NAMES awaiting-owner (comment) is not a host
+fs.writeFileSync(path.join(plug, 'hooks', 'awaiting-owner.js'), ''); fs.writeFileSync(path.join(plug, 'hooks', 'chatty.js'), '// see awaiting-owner.js\n');
+fs.writeFileSync(path.join(plug, 'hooks', 'hooks.json'), JSON.stringify({ hooks: { Stop: [{ hooks: [{ command: 'node ${CLAUDE_PLUGIN_ROOT}/hooks/chatty.js' }] }] } }));
+out('i_comment_not_host', st(buildSourcesManifest({ pluginRoot: plug, env: {}, autopilotHome: tmp, scope: { project_key: 'k', root_run_id: null } }).sources, 'attention'));
+fs.writeFileSync(path.join(plug, 'hooks', 'chatty.js'), "require('./awaiting-owner.js').handle({});\n");
+out('i_require_is_host', st(buildSourcesManifest({ pluginRoot: plug, env: {}, autopilotHome: tmp, scope: { project_key: 'k', root_run_id: null } }).sources, 'attention'));
+// item 3: decisions sidecar writers_wired on the integrated tree
+out('i_ledger_depth0', buildSourcesManifest({ pluginRoot: root, env: {}, autopilotHome: tmp, scope: {} }).sources.ledger_depth0.installed);
 // renderer: manifest drives wired
 const base = { runs: { runs: [], scope: {} }, root: null, job: 'j', date: '2026-10-04', project: 'p', now: 0, reviewReceipts: [] };
 const man = (o) => ({ schema: 'autopilot.sources/1', sources: o });
@@ -387,6 +412,17 @@ eq '{"code":"TERMINAL_READY","label":"收尾","source":"campaign"}' "$(uv u_phas
 eq '{"code":"mk","label":"mk","source":"session"}' "$(uv u_phase_marker_over_deliverable)" "phase precedence: marker over the first open deliverable"
 eq '{"code":"d9","label":"做 d9","source":"deliverable"}' "$(uv u_phase_deliverable_when_no_marker)" "phase precedence: deliverable when no marker"
 eq null "$(uv u_phase_invalid_marker_ignored)" "phase: a non-string marker phase is ignored"
+eq 'true/true' "$(uv i_real_attention)" "INT2 attention: real hooks.json wiring -> installed"
+eq 'true/true' "$(uv i_no_hosts_attention)" "INT2 attention: host wiring removed, own entries remain -> still installed"
+eq 'true/true' "$(uv i_no_own_attention)" "INT2 attention: own entries removed, hosts remain -> installed (the PERF layout)"
+eq 'false/false' "$(uv i_none_attention)" "INT2 attention: hosts AND own entries removed -> not installed (mutation flips it)"
+eq 'false/false' "$(uv i_comment_not_host)" "INT2 attention: a hook file that only names awaiting-owner in a comment is no host"
+eq 'true/true' "$(uv i_require_is_host)" "INT2 attention: a wired hook that require()s awaiting-owner is a host"
+eq 'true/true' "$(uv i_real_tasks)" "INT2 tasks: real wiring -> installed"
+eq 'false/false' "$(uv i_no_tasks_wiring)" "INT2 tasks: wiring removed -> not installed"
+eq 'true/true' "$(uv i_real_context)" "INT2 context: real wiring -> installed"
+eq 'false/false' "$(uv i_no_context_wiring)" "INT2 context: wiring removed -> not installed"
+eq true "$(uv i_ledger_depth0)" "INT2 ledger_depth0: next-pick writer present on the integrated tree"
 eq '' "$(head -c 200 "$SB/units.err")" "units: no stderr"
 
 finalize_test

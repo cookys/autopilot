@@ -1,0 +1,468 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "mods-p1w-g1",
+  "logical_plan_id": "mods-visible-dispatch-2026-10-03-p1w",
+  "session_id": "mods-p1w-g1",
+  "session_key": "c214c8f95f73fd0db3d5d841ac5ce5f87ee953fdcbc20afedab44afe6821d0c9",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "032a709305484b65c177ef004956f5fca3d460202bab5e78cc2e69d35534af2b",
+  "manifest_sha256": "3b75b5eedfd5a8a412c12dd8ba0de77beb824e2bb981845bff723e1b63f60d5b",
+  "plan_sha256": "95497a6f5ea8ae1a2a27050b69ce55b9ad97ed3762c2b2dda2cd298eda0c4130",
+  "growth_ratio": {
+    "numerator": 21353,
+    "denominator": 20505
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "opus_chair",
+      "target_id": "opus_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "claude-native",
+          "model": "opus",
+          "operation": "plan-review",
+          "request_digest": "6080111fb5af9c2c9f56e4592ed75f5299b97b33c3ed134d2663220a05f70f1b"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "78e8105ffde72243567539ddce87f85b9110a581f1f9ec6abbf7d75f9ac3dba4",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-8dhBp4",
+          "digest": "78e8105ffde72243567539ddce87f85b9110a581f1f9ec6abbf7d75f9ac3dba4"
+        },
+        "receipt_digest": "98ce0c01c493f449cda5471c669686e5ecb12ef72a11f1b8a5ec1d39b58a53fb"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "opus_chair",
+      "target_id": "opus_chair",
+      "family": "anthropic",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P1W dependency table (依賴 column) vs G1 處置 text",
+      "claim": "The dependency table that dispatchers will copy was not updated to match the accepted G1 fixes. The table and the disposition now contradict each other, and several rows referenced in the disposition do not exist in the table.",
+      "evidence": "The table still shows these edges: W2a depends on W1e, W2c depends on W1c, and W3a depends only on W1a,W1d,W1e,W1f,W2d. The G1 處置 says the opposite: W2a must not depend on W1e, W2c must not depend on W1c, and W3a also depends on W1b, W1c, W1g and W1i. The disposition introduces W2g (depth-0 proxy-decision writer) and W2a-m/W2a-g, but none of these appear as table rows. It also references a row 'W1de' that does not exist (the table has W1d and W1e). W2a and W2e now also edit the watcher (assemble decision/compare), but no edge to W1a is recorded, even though W1a is the sole owner of runs-watch.js. W4 still says '全部', which includes guidance rows and the spike-pending W3b.",
+      "evidence_reference": "docs/plans/2026-10-03-mods-visible-dispatch.md §4 P1W dependency table; §4 P1W 'G1 處置（R5.1）' bullets 依賴修正 / 第 1 波共用檔 / 分類",
+      "repair": "Regenerate the table from the disposition and make it the single authority. Required changes: (1) remove the W2a→W1e and W2c→W1c edges; (2) add W1b, W1c, W1g and W1i to W3a; (3) add rows W2a-m (機制), W2a-g (指引, eval) and W2g (指引, eval) with their edges; (4) add W1a as a dependency of every row that edits runs-watch.js (W1g, W2a, W2c, W2d, W2e); (5) either define W1de as a merged row or replace it with W1d/W1e in the landing order; (6) set W4 to depend on the mechanism rows + W3a only, per the ship rule. Then delete or mark as superseded the edge statements in the disposition prose.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "opus_chair",
+          "runner": "claude-native",
+          "model": "opus"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c4e40f4ead98f26ad47bcec7929d70f90178bb84724b9b8f75bea0d7b0f1fc42"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Wave 1 row W1f vs W1a and W1d",
+      "claim": "W1f is scheduled in wave 1 but is not independent of the other rows.",
+      "evidence": "W1f changes how elapsed is computed. Elapsed is assembled in the watcher publish path (runs-watch.js:394 area), but the G1 處置 assigns runs-watch.js exclusively to W1a in wave 1. W1f's session-mode anchor also reads 'tasks 檔 first_created_at'. That file is created by W1d, which is not in wave 1 because it waits on W0b. As written, W1f either edits a file owned by another row in the same wave, or reads a file whose writer does not exist yet.",
+      "evidence_reference": "§4 P1W table rows W1f, W1a, W1d; 平行派法 bullet; G1 處置 第 1 波共用檔 bullet ('runs-watch.js 只歸 W1a')",
+      "repair": "Split W1f into two rows. W1f-rail (wave 1): the rail export/propagation of AUTOPILOT_ROOT_RUN_ID/PARENT only, touching dispatch-*.sh. W1f-elapsed (after W1a and W1d): the elapsed anchor in the watcher/assemble path, with an explicit fallback to marker started_at while the tasks file is absent. Add the corresponding edges and a slot in the landing order.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "opus_chair",
+          "runner": "claude-native",
+          "model": "opus"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "001c602f76bfe5d93c4838fdb7221daa1c68bce1aa50992ba40bf270b0e818fb"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "W1b task-status input bundle writer",
+      "claim": "W1b auto-writes the input bundle that feeds 'autopilot status task' (and therefore acceptance_verdict) when a campaign reaches a terminal state. The plan does not say which bundle fields W1b fills or from which certified source. This risks making a mechanical trigger a second verdict source, which violates the two-axis rule.",
+      "evidence": "§2.5 limits the acceptance axis to task_status_receipt and says the projection never produces a verdict. The W1b row says only 'shape follows the task-runtime.js reader' with triggers 'campaign 終態、merge 後'. Nothing forbids deriving acceptance-relevant fields from rc, campaign terminal phase, or merge success. The G1 處置 adds a schema for the bundle, but does not name the owner or source of each acceptance-related field. Wiring fact (b) says finish-flow L-5.3 and session-mode clear already consume this file, so a wrong value propagates immediately.",
+      "evidence_reference": "§2.5 兩條狀態軸 bullet; §4 P1W row W1b; G1 處置 契約 bullet; rubric fact (b)",
+      "repair": "Specify W1b's field map in the new bundle schema. Each field must cite its certified source (depth-0 acceptance record, candidate_commit/tree from git, campaign binding from task-runtime). W1b must never set or infer an acceptance verdict from rc, terminal phase or merge success; when the certified source is absent, it writes the field as null. Add a negative control: a campaign at terminal state with no depth-0 acceptance record yields a bundle whose status-task output is acceptance unknown/PENDING, never ACCEPTED.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "opus_chair",
+          "runner": "claude-native",
+          "model": "opus"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0092e7aa5433cdf319daf6e5a9b455ed9eb63d5f466b20bab78870fb39c4bf8e"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "W1b classification (機制) and trigger points",
+      "claim": "W1b is labelled 機制 and placed in wave 1, but its trigger points are still unnamed. If 'merge 後' is fired by a finish-flow skill step, that part is guidance.",
+      "evidence": "The row lists triggers 'campaign 終態、merge 後' without naming the code location. The G1 處置 says W1b must name auto-firing points, otherwise the writer ships with the guidance rows. That decision has not been made, yet the row remains 機制 in wave 1 and counts toward the v2.37.0 mechanism gate. The claim that finish-flow already requires the file is plausible given fact (b).",
+      "evidence_reference": "§4 P1W row W1b; G1 處置 分類 bullet; rubric fact (b) and (e)",
+      "repair": "Name the mechanism trigger before dispatching wave 1. For example, the engine campaign terminal transition in controller-execution, or an existing post-merge hook. Move any trigger that needs a skill step into a separate 指引(eval) row. If no mechanism trigger exists, reclassify W1b and take it out of wave 1 and the v2.37.0 gate.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_chair",
+          "runner": "claude-native",
+          "model": "opus"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "ed0e685ada4e13a5429dceb79a0cb8e9dcfbb63e21b8d50ec3035273aa703ea5"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "W2b and W2e row composition",
+      "claim": "W2b and W2e each mix mechanism code and skill-text guidance in one row. This invites the single-commit mix that CLAUDE.md forbids. W2a was split for this reason, but these two were not.",
+      "evidence": "W2b combines a new CLI flag ('session-mode.js set --phase L-n', mechanism) with dev-flow steps calling it (guidance). W2e combines the 審圖席 program producing compare-record.json (script) with a skill instruction (指引). The rule 'eval 與實作同一列內先後做' keeps both in one row.",
+      "evidence_reference": "§4 P1W rows W2b, W2e; 規則 bullet; G1 處置 分類 bullet (W2a split only); rubric fact (e)",
+      "repair": "Split W2b and W2e into -m (mechanism: flag/script with tests) and -g (skill text, gated on eval ON/OFF) rows, as was done for W2a. Require separate commits and land -m with the mechanism set.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_chair",
+          "runner": "claude-native",
+          "model": "opus"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "1c93edab972c978f5e48b2728f178fe9fb1c2c1a6d166cbc2457dc6e0afdf23f"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "W4 release gate",
+      "claim": "The release gate is internally inconsistent and does not define 'true value' for most band cells.",
+      "evidence": "The W4 row lists dev-flow, /l3, /l4 and /l5, but the G1 處置 lists dev-flow, /l3, /l4, /l5, /l6 and ceo-agent without /lN. The 規則 bullet says test-kit trees do not count, yet the gate forces '完成待驗收' with a 'fixture campaign'. Forced pass/fail scenarios are defined only for three verdict words. 進行中, 待命, phase, progress, elapsed, planned, the decisions count and the context hint have no oracle. It is also undefined whether '任務工具未開' (CLAUDE_CODE_ENABLE_TODO_TOOLS unset on the owner machine) passes a dev-flow phase/progress cell.",
+      "evidence_reference": "§4 P1W row W4; 規則 bullet; G1 處置 發版規則 bullet",
+      "repair": "Write one gate matrix: modes × cells, each cell with an oracle. Examples: elapsed within one interval of the root/tasks start; progress equals controller_progress_receipt counts; phase equals the latest receipt phase case-insensitively; '來源未接' is accepted only for cells whose writer is an unlanded guidance row. Make the W4 row and the disposition mode lists identical. State that the fixture campaign must run on the owner's real machine through the real engine, not a test-kit tree. State the required value of the TODO-tools env var for the run.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_chair",
+          "runner": "claude-native",
+          "model": "opus"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "6dca98b49e9b1ab8cc28c848735b50660a15a1a4ae2682b8ec891fad8dcfea35"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "W1c SessionStart + UserPromptSubmit hooks; hook-count bump",
+      "claim": "The UserPromptSubmit restart probe spawns 'flock -n' in the foreground on every prompt, which is a per-call process spawn the plan does not bound. The final hook count and per-hook latency budget are not stated, although P1W adds several new default-on hooks.",
+      "evidence": "The G1 處置 says 'UserPromptSubmit 也以前景 flock -n 探測補啟'. P1W adds SessionStart, UserPromptSubmit, TaskCreated/TaskCompleted, PostToolUse TaskUpdate and the attention hooks. P1d fixed the hook count at 32 and P3 at 33, and 'all rows do not touch version/CHANGELOG', so no row owns the final --hook-count. No numeric latency budget is given relative to the P2 baseline.",
+      "evidence_reference": "G1 處置 W1c and 新 hook bullets; P1d sync-version bullet; P3 包裝 bullet; §4 P2",
+      "repair": "Gate the UserPromptSubmit probe on an in-process freshness check: read the envelope published_at and spawn flock only when it is stale beyond valid_for_s. State a per-hook p95 budget, measured with the P2 instrument. Assign the final --hook-count computation and the hooks/README rows to W4, enumerating every new hook with its knob and hook-classes entry.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_chair",
+          "runner": "claude-native",
+          "model": "opus"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "863f3fe87465ad09756c84da6af237973ba4b797efd42e273ea77a290de5d5f5"
+    },
+    {
+      "rubric_id": "R9",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "W1c autostart opt-in and liveness",
+      "claim": "Two conditions that control autostart and shutdown are undefined, and the non-git case is not stated.",
+      "evidence": "Autostart depends on '已接 autopilot 的 repo（專案設定、marker 或旋鈕＝1）', but no config key or path is named for 專案設定. The extended idle-exit condition 'near-term tasks/attention files' has no time window. Behaviour for cwd outside a git repo (no project_key) is not stated. The interaction with the session-mode set start is covered by flock, and worktrees share the key.",
+      "evidence_reference": "G1 處置 W1c bullet; P1a watcher 生命週期 bullet; table row W1c",
+      "repair": "Name the opt-in key, for example in ~/.autopilot/config.json or a repo file. Define the recency window, for example tasks/attention mtime within idle-exit N. State that the hook exits 0 silently when project_key cannot be computed. Add tests for these three cases plus a concurrent SessionStart burst (N sessions, one watcher).",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_chair",
+          "runner": "claude-native",
+          "model": "opus"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "cb813c191c53b55159aecef969599578cc0337d6e25029e7be2d2095cd38b3a4"
+    },
+    {
+      "rubric_id": "R10",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "W0b/W1d task-tools dependence",
+      "claim": "The table still describes W1d with the pre-spike payload assumption. The fallback for task-file consumers other than the band text is incomplete.",
+      "evidence": "Row W1d says 'PostToolUse（Task 工具）', but the G1 處置 records W0b's answer as TaskCreated/TaskCompleted + PostToolUse TaskUpdate, gated by CLAUDE_CODE_ENABLE_TODO_TOOLS. No evidence path for the W0b answer is cited. W1f elapsed and W1g non-campaign planned also read the tasks file, and their behaviour when the tools are off is not stated (W1f has marker started_at only under /lN).",
+      "evidence_reference": "§4 P1W rows W0b, W1d, W1f, W1g; G1 處置 W0b bullet",
+      "repair": "Update the W1d row to the confirmed events and cite the S11 evidence file. State the fallback for elapsed and planned when the tasks file is absent: elapsed null with '任務工具未開', planned shown as '來源未接'. Never use 0.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_chair",
+          "runner": "claude-native",
+          "model": "opus"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c843b98ec571dbc6f2053dabb5494196b9cf82900718e865710453fc4f70af13"
+    },
+    {
+      "rubric_id": "R11",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "W1f campaign elapsed anchor",
+      "claim": "W1f's campaign anchor 'root 最早 work-order' does not say how work-orders are selected. If it relies on the directory name equalling root_run_id (5/5 sample), it is weaker than W1a's in-file binding.",
+      "evidence": "W1a binds by the in-file root_run_id with an explicit sort key and goes unbound on mismatch. W1f does not state its binding rule. Fact (d) observes directory-name equality in only 5 of 5 cases.",
+      "evidence_reference": "§4 P1W row W1f; G1 處置 W1a bullet; rubric fact (d)",
+      "repair": "State that W1f reuses W1a's in-file root binding to select work-orders, and that it yields elapsed null/unbound on mismatch rather than falling back to directory name or the oldest project manifest.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_chair",
+          "runner": "claude-native",
+          "model": "opus"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "93133e6bf6e5a6ad2f69d170cc8698ab739a00011f98da0c23ab334c1cb17411"
+    },
+    {
+      "rubric_id": "R12",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "W4 landing scope vs ship split",
+      "claim": "W4's 'one landing' and 'depends on all' conflict with the ship rule that v2.37.0 needs only the mechanism rows + W3a + the W4 gate, with guidance rows following as PATCH.",
+      "evidence": "The W4 row includes W1–W3 and depends on 全部, which includes the eval-gated W2a/b/c/e and the spike-pending W3b. The 出貨切分 bullet and the G1 發版規則 bullet say those rows follow later.",
+      "evidence_reference": "§4 P1W row W4; 出貨切分 bullet; G1 處置 發版規則 bullet",
+      "repair": "Redefine W4 as the landing of the mechanism set (W1*, W2a-m, W2d, W2f, W3a plus split -m rows) and the owner gate. List the guidance rows and W3b explicitly as post-2.37.0 PATCH rows, each with its own eval evidence and per-row review.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_chair",
+          "runner": "claude-native",
+          "model": "opus"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "875e305f7bbaed5cfaca8ecc5b5bebeba5c519c910c09be6b56d10bbe8b9f4e8"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "W2c and W3b interim display",
+      "claim": "Two deferred rows do not state what their surface shows in the meantime.",
+      "evidence": "The 'meanwhile 來源未接' rule names W2a/W2b/W2c-guidance/W2e. W3b (ack, pending spike) has no interim text: unacknowledged items are presumably always shown, but this is not stated. For /l4 foreman visibility before W2c lands, the band content for native-Agent foremen is not stated.",
+      "evidence_reference": "§4 P1W rows W2c, W3b; 出貨切分 bullet; G1 處置 來源是否接上 bullet",
+      "repair": "Add one line each. Before W3b, every proxy decision is shown with no ack filter and the pane notes 'ack 未接'. Before W2c, /l4 foreman runs show '來源未接' in the dispatch cells rather than an empty table.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_chair",
+          "runner": "claude-native",
+          "model": "opus"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "b3edbfc0644c646a7ad20f636c6dfbeeb248a4735c31e4722d168b8c4743d7af"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "context hint field",
+      "claim": "The context % value has no P1W writer that is guaranteed to fire. W2f only prompts the user to install statusline-live-tee.js, so on hosts without it the field depends on a user action.",
+      "evidence": "Row W2f says: when the host status line does not write context, the pane hints statusline-live-tee.js. No row installs or registers the tee as a mechanism.",
+      "evidence_reference": "§4 P1W row W2f; P1c band bullet (context from <live-base>/context/<sid>.json)",
+      "repair": "Either accept this explicitly as a user-opt-in field, with W4 gate cells for context marked pass when the hint is shown, or add a mechanism row that wires the tee by default.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_chair",
+          "runner": "claude-native",
+          "model": "opus"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "9cd5d3046f6f20352765f0d6e349d6c9af04070f97342ff6d399a585bd0db947"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "ed0e685ada4e13a5429dceb79a0cb8e9dcfbb63e21b8d50ec3035273aa703ea5",
+      "rubric_id": "R5",
+      "affected_surface": "W1b classification (機制) and trigger points",
+      "claim": "W1b is labelled 機制 and placed in wave 1, but its trigger points are still unnamed. If 'merge 後' is fired by a finish-flow skill step, that part is guidance.",
+      "evidence_reference": "§4 P1W row W1b; G1 處置 分類 bullet; rubric fact (b) and (e)",
+      "disposition": null
+    },
+    {
+      "fingerprint": "1c93edab972c978f5e48b2728f178fe9fb1c2c1a6d166cbc2457dc6e0afdf23f",
+      "rubric_id": "R5",
+      "affected_surface": "W2b and W2e row composition",
+      "claim": "W2b and W2e each mix mechanism code and skill-text guidance in one row. This invites the single-commit mix that CLAUDE.md forbids. W2a was split for this reason, but these two were not.",
+      "evidence_reference": "§4 P1W rows W2b, W2e; 規則 bullet; G1 處置 分類 bullet (W2a split only); rubric fact (e)",
+      "disposition": null
+    },
+    {
+      "fingerprint": "6dca98b49e9b1ab8cc28c848735b50660a15a1a4ae2682b8ec891fad8dcfea35",
+      "rubric_id": "R6",
+      "affected_surface": "W4 release gate",
+      "claim": "The release gate is internally inconsistent and does not define 'true value' for most band cells.",
+      "evidence_reference": "§4 P1W row W4; 規則 bullet; G1 處置 發版規則 bullet",
+      "disposition": null
+    },
+    {
+      "fingerprint": "863f3fe87465ad09756c84da6af237973ba4b797efd42e273ea77a290de5d5f5",
+      "rubric_id": "R7",
+      "affected_surface": "W1c SessionStart + UserPromptSubmit hooks; hook-count bump",
+      "claim": "The UserPromptSubmit restart probe spawns 'flock -n' in the foreground on every prompt, which is a per-call process spawn the plan does not bound. The final hook count and per-hook latency budget are not stated, although P1W adds several new default-on hooks.",
+      "evidence_reference": "G1 處置 W1c and 新 hook bullets; P1d sync-version bullet; P3 包裝 bullet; §4 P2",
+      "disposition": null
+    },
+    {
+      "fingerprint": "cb813c191c53b55159aecef969599578cc0337d6e25029e7be2d2095cd38b3a4",
+      "rubric_id": "R9",
+      "affected_surface": "W1c autostart opt-in and liveness",
+      "claim": "Two conditions that control autostart and shutdown are undefined, and the non-git case is not stated.",
+      "evidence_reference": "G1 處置 W1c bullet; P1a watcher 生命週期 bullet; table row W1c",
+      "disposition": null
+    },
+    {
+      "fingerprint": "c843b98ec571dbc6f2053dabb5494196b9cf82900718e865710453fc4f70af13",
+      "rubric_id": "R10",
+      "affected_surface": "W0b/W1d task-tools dependence",
+      "claim": "The table still describes W1d with the pre-spike payload assumption. The fallback for task-file consumers other than the band text is incomplete.",
+      "evidence_reference": "§4 P1W rows W0b, W1d, W1f, W1g; G1 處置 W0b bullet",
+      "disposition": null
+    },
+    {
+      "fingerprint": "93133e6bf6e5a6ad2f69d170cc8698ab739a00011f98da0c23ab334c1cb17411",
+      "rubric_id": "R11",
+      "affected_surface": "W1f campaign elapsed anchor",
+      "claim": "W1f's campaign anchor 'root 最早 work-order' does not say how work-orders are selected. If it relies on the directory name equalling root_run_id (5/5 sample), it is weaker than W1a's in-file binding.",
+      "evidence_reference": "§4 P1W row W1f; G1 處置 W1a bullet; rubric fact (d)",
+      "disposition": null
+    },
+    {
+      "fingerprint": "875e305f7bbaed5cfaca8ecc5b5bebeba5c519c910c09be6b56d10bbe8b9f4e8",
+      "rubric_id": "R12",
+      "affected_surface": "W4 landing scope vs ship split",
+      "claim": "W4's 'one landing' and 'depends on all' conflict with the ship rule that v2.37.0 needs only the mechanism rows + W3a + the W4 gate, with guidance rows following as PATCH.",
+      "evidence_reference": "§4 P1W row W4; 出貨切分 bullet; G1 處置 發版規則 bullet",
+      "disposition": null
+    },
+    {
+      "fingerprint": "b3edbfc0644c646a7ad20f636c6dfbeeb248a4735c31e4722d168b8c4743d7af",
+      "rubric_id": "R2",
+      "affected_surface": "W2c and W3b interim display",
+      "claim": "Two deferred rows do not state what their surface shows in the meantime.",
+      "evidence_reference": "§4 P1W rows W2c, W3b; 出貨切分 bullet; G1 處置 來源是否接上 bullet",
+      "disposition": null
+    },
+    {
+      "fingerprint": "9cd5d3046f6f20352765f0d6e349d6c9af04070f97342ff6d399a585bd0db947",
+      "rubric_id": "R1",
+      "affected_surface": "context hint field",
+      "claim": "The context % value has no P1W writer that is guaranteed to fire. W2f only prompts the user to install statusline-live-tee.js, so on hosts without it the field depends on a user action.",
+      "evidence_reference": "§4 P1W row W2f; P1c band bullet (context from <live-base>/context/<sid>.json)",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-10-04T15:53:41.864Z"
+}

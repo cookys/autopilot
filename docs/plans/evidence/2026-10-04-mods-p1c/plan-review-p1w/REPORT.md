@@ -8,3 +8,8 @@ Commands: plan-rubric-scaffold.js (scaffold, then rubric rewritten to 12 P1W ite
 - Seat: opus_chair success, parser strict, semantic available. Verdict CONDITIONAL, policy depth_0_adjudication_required, next_generation 2, growth ratio 1/1 (no growth stop), accepted_blocker_count 0, 8 backlog_candidates in artifact.
 - Findings: 13 total = 5 blocking, 8 non-blocking. Details in G1-findings.md.
 - Nothing stopped the run. Did not commit, edit the plan, write dispositions, or touch state.
+
+## G2
+Command: run2.sh = same as G1 plus --generation 2 --disposition-file dispositions-g1.json --timeout 20m (same ticket/session so same lineage; detached). rc=0, no policy stop or seal mismatch. Artifact: artifact-g2.json (also generation-02.json in the state dir); log run2.log; findings G2-findings.md.
+- Verdict CONDITIONAL, terminal true, next_generation null, accepted_blocker_count 0. Findings 13: 3 blocking, 10 non-blocking.
+- check-phase-review-receipt.js --plan-artifact artifact-g2.json --dispositions dispositions-g1.json: prints "Dispositions generation mismatch: expected 2, got 1", exit code 1 (as run above). The disposition file adjudicates G1 (generation 1); the receipt check wants dispositions for the G2 artifact. Depth-0 must adjudicate G2 findings with a generation-2 disposition file. Did not alter anything.

@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "mods-visible-dispatch-2026-10-03-p1w",
+  "generation": 2,
+  "findings": [
+    {
+      "fingerprint": "c4e40f4ead98f26ad47bcec7929d70f90178bb84724b9b8f75bea0d7b0f1fc42",
+      "disposition": "accepted_blocker",
+      "rationale": "Folded: the dependency table is rewritten as the single source and absorbs every G1 fold (W1de merged row, W2a/W2b/W2e m/g splits, W2g, deps, interim displays)."
+    },
+    {
+      "fingerprint": "001c602f76bfe5d93c4838fdb7221daa1c68bce1aa50992ba40bf270b0e818fb",
+      "disposition": "accepted_blocker",
+      "rationale": "Folded: W1f no longer touches runs-watch.js or elapsed; elapsed moved to W3a which depends on W1a and W1de."
+    },
+    {
+      "fingerprint": "0092e7aa5433cdf319daf6e5a9b455ed9eb63d5f466b20bab78870fb39c4bf8e",
+      "disposition": "accepted_blocker",
+      "rationale": "Folded: W1b writes only identity and receipt pointers; status task recomputes every verdict fact; forged verdict fields must not change the verdict (negative control)."
+    },
+    {
+      "fingerprint": "ed0e685ada4e13a5429dceb79a0cb8e9dcfbb63e21b8d50ec3035273aa703ea5",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: W1b names every trigger; any trigger needing a skill step is classified guidance."
+    },
+    {
+      "fingerprint": "1c93edab972c978f5e48b2728f178fe9fb1c2c1a6d166cbc2457dc6e0afdf23f",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: W2b and W2e split into -m (mechanism) and -g (guidance, eval) rows."
+    },
+    {
+      "fingerprint": "6dca98b49e9b1ab8cc28c848735b50660a15a1a4ae2682b8ec891fad8dcfea35",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: W4 gate defines a true value per cell as text re-derivable from the same-instant source files by a script; pending-guidance cells pass on 來源未接; forced triggers listed."
+    },
+    {
+      "fingerprint": "863f3fe87465ad09756c84da6af237973ba4b797efd42e273ea77a290de5d5f5",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: UserPromptSubmit checks writer.pid with kill -0 first and spawns flock only when the writer is gone; hook count and p95 budget recorded against the P2 baseline."
+    },
+    {
+      "fingerprint": "cb813c191c53b55159aecef969599578cc0337d6e25029e7be2d2095cd38b3a4",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: opt-in conditions named (project config file, marker, knob=1; non-git does nothing); liveness window = idle window over tasks/attention updated_at."
+    },
+    {
+      "fingerprint": "c843b98ec571dbc6f2053dabb5494196b9cf82900718e865710453fc4f70af13",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: W1de row states the spike-verified events; consumers of an absent tasks file (band, planned, elapsed) fall back to marker/started_at or 來源未接 with the env hint."
+    },
+    {
+      "fingerprint": "93133e6bf6e5a6ad2f69d170cc8698ab739a00011f98da0c23ab334c1cb17411",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: campaign elapsed anchor uses W1a in-file binding (earliest bound receipt), not the directory name."
+    },
+    {
+      "fingerprint": "875e305f7bbaed5cfaca8ecc5b5bebeba5c519c910c09be6b56d10bbe8b9f4e8",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: W4 lands the mechanism rows and W3a only; guidance rows land later as PATCH after eval."
+    },
+    {
+      "fingerprint": "b3edbfc0644c646a7ad20f636c6dfbeeb248a4735c31e4722d168b8c4743d7af",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: W2c interim pane shows 工頭狀態：來源未接; W3b shows no unseen count until built."
+    },
+    {
+      "fingerprint": "9cd5d3046f6f20352765f0d6e349d6c9af04070f97342ff6d399a585bd0db947",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: W2f becomes a writer: probe whether hook-visible transcript usage yields context %, write the context file when the host status line does not; else 來源未接 with the hint."
+    }
+  ]
+}

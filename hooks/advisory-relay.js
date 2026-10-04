@@ -7,6 +7,12 @@
  * Inert when the queue file is absent or empty.
  *
  * Never emits permissionDecision. Fail-open: any error → exit 0, no stdout.
+ *
+ * Also the UserPromptSubmit HOST (mods P1W PERF): awaiting-owner's end-of-wait work and the
+ * runs-watch-autostart ensure run in THIS process (hooks/awaiting-owner.js onUserPromptSubmit), so a
+ * prompt costs no extra node spawn for them. They run before, and independent of, the relay's own knob;
+ * their opt-outs are AUTOPILOT_AWAITING_OWNER / AUTOPILOT_RUNS_WATCH_AUTOSTART=0. Their failures never
+ * change this hook's output.
  */
 
 'use strict';
@@ -15,13 +21,17 @@ const fs = require('fs');
 const path = require('path');
 
 try {
-  if (process.env.AUTOPILOT_ADVISORY_RELAY === 'off') process.exit(0);
-
   let raw;
   try { raw = fs.readFileSync(0, 'utf8'); }
-  catch { raw = fs.readFileSync('/dev/stdin', 'utf8'); }
+  catch { try { raw = fs.readFileSync('/dev/stdin', 'utf8'); } catch { raw = ''; } }
   let payload;
   try { payload = JSON.parse(raw); } catch { process.exit(0); }
+  try {
+    if (payload && typeof payload === 'object') require('./awaiting-owner.js').onUserPromptSubmit(payload);
+  } catch (e) {
+    process.stderr.write(`advisory-relay: live-state hosting fail-open: ${e && e.message ? e.message : e}\n`);
+  }
+  if (process.env.AUTOPILOT_ADVISORY_RELAY === 'off') process.exit(0);
   const sid = payload && payload.session_id;
   if (typeof sid !== 'string' || sid.length === 0) {
     process.stderr.write('advisory-relay: debug missing/empty session_id; queue not drained\n');

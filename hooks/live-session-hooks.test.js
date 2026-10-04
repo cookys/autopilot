@@ -338,8 +338,14 @@ test('wiring: hooks.json registers both hooks with exact matchers, never Task/Ag
   const pt = find('PostToolUse', 'session-tasks');
   assert.strictEqual(pt.length, 1);
   assert.strictEqual(pt[0].matcher, 'TaskCreate|TaskUpdate|TaskList');
-  for (const ev of ['PermissionRequest', 'Notification', 'Stop', 'PostToolUse', 'UserPromptSubmit', 'SessionEnd']) {
+  for (const ev of ['PermissionRequest', 'Notification', 'Stop', 'SessionEnd']) {
     assert.strictEqual(find(ev, 'awaiting-owner').length, 1, ev);
   }
+  // mods P1W PERF: the PostToolUse work is hosted by audit-log.js and the UserPromptSubmit work by
+  // advisory-relay.js (no own process per tool call / prompt).
+  assert.strictEqual(find('UserPromptSubmit', 'awaiting-owner').length, 0, 'UserPromptSubmit awaiting-owner is hosted, not spawned');
+  assert.strictEqual(find('UserPromptSubmit', 'advisory-relay').length, 1, 'UserPromptSubmit host wired');
+  assert.strictEqual(find('PostToolUse', 'awaiting-owner').length, 0, 'PostToolUse awaiting-owner is hosted, not spawned');
+  assert.strictEqual(find('PostToolUse', 'audit-log').length, 1, 'host hook wired');
   for (const g of [...pt, ...find('PermissionRequest', 'awaiting-owner')]) assert.ok(!/(^|\|)(Task|Agent)(\||$)/.test(g.matcher || ''));
 });

@@ -79,15 +79,54 @@ function optedIn(cwd, key, root) {
   }
 }
 
-function main() {
+// Zero-spawn fast path (UserPromptSubmit runs this inside advisory-relay.js's process (via awaiting-owner.js onUserPromptSubmit); mods P1W PERF): a
+// per-cwd cache `<live>/autostart/<sha1(cwd)>.json` {cwd, project_key} written after the opt-in check
+// passed once. With it, "is the watcher alive" is: envelope writer.pid + /proc/<pid>/cmdline naming
+// `status runs --watch --project <key>` — no git, no flock, no runs-watch require. Anything doubtful
+// (no cache, no envelope, dead pid, other cmdline) falls through to the full path below.
+function cacheFile(base, cwd) {
+  return path.join(base, 'autostart', `${require('crypto').createHash('sha1').update(cwd).digest('hex').slice(0, 16)}.json`);
+}
+
+function watcherAliveFast(base, cwd) {
+  try {
+    const cached = JSON.parse(fs.readFileSync(cacheFile(base, cwd), 'utf8'));
+    if (!cached || cached.cwd !== cwd || !/^[0-9a-f]{16}$/.test(cached.project_key)) return false;
+    const env = JSON.parse(fs.readFileSync(path.join(base, 'runs', `${cached.project_key}.json`), 'utf8'));
+    const pid = env && env.writer && env.writer.pid;
+    if (!Number.isInteger(pid) || pid <= 0) return false;
+    const argv = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0').filter(Boolean);
+    const at = argv.indexOf('--project');
+    return ` ${argv.join(' ')} `.includes(' status runs --watch ') && at !== -1 && argv[at + 1] === cached.project_key;
+  } catch (_error) {
+    return false;
+  }
+}
+
+function writeCache(base, cwd, key) {
+  try {
+    const file = cacheFile(base, cwd);
+    fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+    const tmp = `${file}.tmp-${process.pid}`;
+    fs.writeFileSync(tmp, JSON.stringify({ cwd, project_key: key }), { mode: 0o600 });
+    fs.renameSync(tmp, file);
+  } catch (_error) { /* cache is an optimisation only */ }
+}
+
+function run(payload) {
   if (process.env.AUTOPILOT_RUNS_WATCH_AUTOSTART === '0') return;
-  const payload = readPayload();
   const cwd = path.resolve(typeof payload.cwd === 'string' && payload.cwd ? payload.cwd : process.cwd());
   const root = path.resolve(__dirname, '..');
+  let base = null;
+  try { base = require('./live-session-lib.js').liveBase(); } catch (_error) { /* no fast path */ }
+  // The pointer must still exist too (a deleted pointer is restored by the full path).
+  if (base && watcherAliveFast(base, cwd)
+    && fs.existsSync(require(path.join(root, 'src/status/live-pointer')).pointerPath())) return;
   const { scopeFromCwd } = require(path.join(root, 'src/status/project-key'));
   const scope = scopeFromCwd(cwd);
   if (!scope.project_key) return; // not a git repo: nothing to watch
   if (!optedIn(cwd, scope.project_key, root)) return; // not an autopilot project: never start a watcher for it
+  if (base) writeCache(base, cwd, scope.project_key);
   try {
     require(path.join(root, 'src/status/live-pointer')).writeLivePointer();
   } catch (error) {
@@ -109,9 +148,13 @@ function main() {
   // 'busy' (a watcher already holds the lock) and 'started' are both silent: the normal outcomes.
 }
 
-try {
-  main();
-} catch (error) {
-  process.stderr.write(`${TAG}: ${error.message}\n`);
+module.exports = { run };
+
+if (require.main === module) {
+  try {
+    run(readPayload());
+  } catch (error) {
+    process.stderr.write(`${TAG}: ${error.message}\n`);
+  }
+  process.exit(0);
 }
-process.exit(0);

@@ -14,7 +14,6 @@
 const fs = require('fs');
 const path = require('path');
 const { resolveLiveDir, sanitizeSessionId } = require('../scripts/lib/live-state-dir.js');
-const { withWriteLock } = require('../scripts/lib/jsonl-store.js');
 
 function readStdinJson() {
   try {
@@ -38,8 +37,23 @@ function knobOff(envName) {
 function sessionFile(payload, purpose) {
   const raw = payload && typeof payload.session_id === 'string' ? payload.session_id : '';
   if (!raw) return null;
-  const { base } = resolveLiveDir();
-  return path.join(base, purpose, `${sanitizeSessionId(raw)}.json`);
+  return path.join(liveBase(), purpose, `${sanitizeSessionId(raw)}.json`);
+}
+
+// Live base WITHOUT the `findmnt` fork (~4 ms per call, paid on every tool call). resolveLiveDir()'s own
+// documented fallback for "findmnt not on PATH" is the /proc/mounts longest-prefix match; injecting an
+// execFile that reports ENOENT selects exactly that branch through the public API, so the candidate order,
+// ownership/mode checks and the SSD fallback are unchanged. Memoised per process. Parity with the findmnt
+// answer is asserted in hook-hosting.test.js.
+function noFindmnt() {
+  const e = new Error('findmnt skipped (hot path uses /proc/mounts)');
+  e.code = 'ENOENT';
+  throw e;
+}
+let baseMemo = null;
+function liveBase() {
+  if (baseMemo === null) baseMemo = resolveLiveDir({ execFile: noFindmnt }).base;
+  return baseMemo;
 }
 
 function readJsonFile(file) {
@@ -56,6 +70,7 @@ function readJsonFile(file) {
 // arrive ~0.1 s apart) must not lose each other's read-modify-write. A lock timeout throws; the
 // caller's fail-open catch turns that into one stderr line + exit 0.
 function withLock(file, fn) {
+  const { withWriteLock } = require('../scripts/lib/jsonl-store.js'); // lazy: only the locked (rare) paths
   const dir = path.dirname(file);
   return withWriteLock({ storeDir: dir, lockFile: `${file}.lock`, name: path.basename(file), timeoutMs: 3000 }, fn);
 }
@@ -87,6 +102,40 @@ function projectKeyFor(cwd) {
   }
 }
 
+// Subagent liveness stamp (mods P1W STAMP): a tool call that carries `agent_id` rewrites
+// <live>/agents/<sid>/<agent_id>.json (tmp + rename, no lock, last writer wins). Liveness only — tool-call
+// age, never a stage. Knob AUTOPILOT_AGENT_ACTIVITY=off. No write without agent_id or session_id.
+function stampAgentActivity(p) {
+  if (knobOff('AUTOPILOT_AGENT_ACTIVITY')) return false;
+  if (!p || typeof p.agent_id !== 'string' || !p.agent_id) return false;
+  if (typeof p.session_id !== 'string' || !p.session_id) return false;
+  const dir = path.join(liveBase(), 'agents', sanitizeSessionId(p.session_id));
+  const file = path.join(dir, `${sanitizeSessionId(p.agent_id)}.json`);
+  const body = `${JSON.stringify({
+    schema: 'autopilot.agent-activity/1',
+    session_id: p.session_id,
+    agent_id: p.agent_id,
+    agent_type: typeof p.agent_type === 'string' && p.agent_type ? p.agent_type : null,
+    last_tool_at: new Date().toISOString(),
+    last_tool_name: typeof p.tool_name === 'string' && p.tool_name ? p.tool_name : null,
+  })}\n`;
+  const tmp = `${file}.tmp-${process.pid}`;
+  try {
+    fs.writeFileSync(tmp, body, { mode: 0o600 });
+  } catch (e) {
+    if (!e || e.code !== 'ENOENT') throw e;
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    fs.writeFileSync(tmp, body, { mode: 0o600 });
+  }
+  fs.renameSync(tmp, file);
+  return true;
+}
+
+function removeAgentActivity(p) {
+  if (!p || typeof p.session_id !== 'string' || !p.session_id) return;
+  fs.rmSync(path.join(liveBase(), 'agents', sanitizeSessionId(p.session_id)), { recursive: true, force: true });
+}
+
 function failOpen(name, e) {
   try { process.stderr.write(`${name}: fail-open: ${e && e.message ? e.message : e}\n`); } catch { /* ignore */ }
 }
@@ -95,6 +144,9 @@ module.exports = {
   readStdinJson,
   knobOff,
   sessionFile,
+  liveBase,
+  stampAgentActivity,
+  removeAgentActivity,
   readJsonFile,
   withLock,
   atomicWriteJson,

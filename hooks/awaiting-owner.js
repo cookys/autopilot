@@ -23,7 +23,12 @@
 'use strict';
 
 const L = require('./live-session-lib.js');
-const { redact } = require('./_shared/secret-patterns.js');
+
+let redactFn = null;
+function redact(s) { // lazy: only the summary-building (PermissionRequest) path needs it
+  if (redactFn === null) redactFn = require('./_shared/secret-patterns.js').redact;
+  return redactFn(s);
+}
 
 const MAX = 120;
 
@@ -47,17 +52,26 @@ function summarize(p) {
   return flat(detail ? `${tool}: ${detail}` : tool);
 }
 
-function main() {
-  if (L.knobOff('AUTOPILOT_AWAITING_OWNER')) return;
-  const p = L.readStdinJson();
+// One event, already parsed. Exported so the default-on hosts (audit-log.js for PostToolUse, advisory-relay.js
+// for UserPromptSubmit) run this work in THEIR process instead of spawning another node per tool call /
+// prompt (mods P1W PERF).
+function handle(p) {
   const ev = p.hook_event_name;
   const notifType = p.notification_type;
+  // STAMP (own knob, no lock, fail-open on its own): a subagent's tool call refreshes its liveness file;
+  // SessionEnd drops the session's stamp dir.
+  try {
+    if (ev === 'PostToolUse') L.stampAgentActivity(p);
+    else if (ev === 'SessionEnd') L.removeAgentActivity(p);
+  } catch (e) { L.failOpen('awaiting-owner/agent-activity', e); }
+  if (L.knobOff('AUTOPILOT_AWAITING_OWNER')) return;
   const file = L.sessionFile(p, 'attention');
   if (!file) return;
   const now = new Date().toISOString();
 
-  if (ev === 'PostToolUse') {
-    // Hot path (every tool call): bail before the lock when nothing is pending.
+  if (ev === 'PostToolUse' || ev === 'UserPromptSubmit' || ev === 'Stop' || ev === 'SessionEnd') {
+    // Hot path (every tool call / prompt): one stat, no lock when nothing is pending. Removing a
+    // missing file is a no-op, so skipping the lock for the end events is behaviour-identical.
     if (!require('fs').existsSync(file)) return;
   }
 
@@ -104,5 +118,25 @@ function main() {
   });
 }
 
-try { main(); } catch (e) { L.failOpen('awaiting-owner', e); }
-process.exit(0);
+// UserPromptSubmit work for the host process (advisory-relay.js, default-on): end any pending wait, then
+// ensure the project watcher. The ensure sits outside the awaiting-owner knob (it has its own
+// AUTOPILOT_RUNS_WATCH_AUTOSTART switch) and never lets one job's failure stop the other.
+function onUserPromptSubmit(p) {
+  try { handle(p); } catch (e) { L.failOpen('awaiting-owner', e); }
+  try { require('./runs-watch-autostart.js').run(p); } catch (e) { L.failOpen('runs-watch-autostart', e); }
+}
+
+function main() {
+  const p = L.readStdinJson();
+  handle(p);
+  if (p.hook_event_name === 'UserPromptSubmit') {
+    try { require('./runs-watch-autostart.js').run(p); } catch (e) { L.failOpen('runs-watch-autostart', e); }
+  }
+}
+
+module.exports = { handle, onUserPromptSubmit };
+
+if (require.main === module) {
+  try { main(); } catch (e) { L.failOpen('awaiting-owner', e); }
+  process.exit(0);
+}

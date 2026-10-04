@@ -62,32 +62,13 @@
     ],
     "UserPromptSubmit": [
       {
-        "//": "runs-watch-autostart (mods P1W W1c): re-ensure the project watcher on each prompt (flock -n probe only; spawns only when the lock is free) because a dev-flow session holds no marker and SessionStart does not re-fire. Same opt-in rule and AUTOPILOT_RUNS_WATCH_AUTOSTART=0 knob as the SessionStart entry.",
+        "//": "advisory-relay: deferred-relay half of the group-S Stop advisory queue (cost-tracker / check-console / batch-format). Default-on; AUTOPILOT_ADVISORY_RELAY=off to opt out. Inert on an absent/empty queue (safe default-on). mods P1W PERF: this process ALSO hosts awaiting-owner's UserPromptSubmit work and the runs-watch-autostart ensure (hooks/awaiting-owner.js onUserPromptSubmit; zero-spawn fast path while the watcher is alive); AUTOPILOT_AWAITING_OWNER=off / AUTOPILOT_RUNS_WATCH_AUTOSTART=0 still disable those parts independently of AUTOPILOT_ADVISORY_RELAY. timeout 10 is the autostart entry's former bound.",
         "matcher": "",
         "hooks": [
           {
             "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/runs-watch-autostart.js",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/advisory-relay.js",
             "timeout": 10
-          }
-        ]
-      },
-      {
-        "//": "advisory-relay: deferred-relay half of the group-S Stop advisory queue (cost-tracker / check-console / batch-format). Default-on; AUTOPILOT_ADVISORY_RELAY=off to opt out. Inert on an absent/empty queue (safe default-on).",
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/advisory-relay.js"
-          }
-        ]
-      },
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/awaiting-owner.js"
           }
         ]
       }
@@ -182,7 +163,8 @@
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/context-budget.js"
           }
-        ]
+        ],
+        "//": "mods P1W PERF+STAMP: audit-log also hosts awaiting-owner's PostToolUse end signal and the subagent last-tool stamp (no extra node spawn per tool call); knobs AUTOPILOT_AWAITING_OWNER / AUTOPILOT_AGENT_ACTIVITY."
       },
       {
         "matcher": "Write|Edit",
@@ -210,16 +192,6 @@
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-tasks.js"
-          }
-        ]
-      },
-      {
-        "//": "mods P1W W1e: end signal (approve / answer) — returns before any lock unless a pending attention file exists.",
-        "matcher": ".*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/awaiting-owner.js"
           }
         ]
       }

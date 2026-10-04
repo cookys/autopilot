@@ -1,0 +1,357 @@
+/**
+ * Tests for the PERF + STAMP row (mods P1W): the live-state PostToolUse / UserPromptSubmit work runs inside
+ * an existing default-on process (audit-log.js hosts awaiting-owner's PostToolUse + the subagent stamp;
+ * advisory-relay.js hosts awaiting-owner's UserPromptSubmit work and the runs-watch-autostart ensure)
+ * instead of spawning its own.
+ *
+ * RED record (base w/int 8666aba4, this file copied into that tree): see the report (run-w/perf/red.txt).
+ *
+ * Run: node --test hooks/hook-hosting.test.js      (HOSTING_ROOT=<tree> to aim it at another tree)
+ */
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert');
+const crypto = require('crypto');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { spawn, spawnSync, execFileSync } = require('child_process');
+
+const ROOT = process.env.HOSTING_ROOT || path.join(__dirname, '..');
+const AUDIT = path.join(ROOT, 'hooks', 'audit-log.js');
+const ATTN = path.join(ROOT, 'hooks', 'awaiting-owner.js');
+const RELAY = path.join(ROOT, 'hooks', 'advisory-relay.js');
+const SID = 'host-session-0001';
+const HOOKS = JSON.parse(fs.readFileSync(path.join(ROOT, 'hooks', 'hooks.json'), 'utf8')).hooks;
+
+function shm(prefix) {
+  const d = fs.mkdtempSync(path.join(fs.existsSync('/dev/shm') ? '/dev/shm' : os.tmpdir(), prefix));
+  fs.chmodSync(d, 0o700);
+  return d;
+}
+function mk(extra = {}) {
+  const live = shm('hh-live-');
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'hh-home-'));
+  return { live, home, env: { ...process.env, HOME: home, AUTOPILOT_LIVE_DIR: live, ...extra } };
+}
+function run(script, payload, env) {
+  const r = spawnSync('node', [script], { input: JSON.stringify(payload), encoding: 'utf8', env });
+  assert.strictEqual(r.status, 0, `exit 0 expected, got ${r.status}: ${r.stderr}`);
+  return r;
+}
+const post = (over = {}) => ({
+  session_id: SID, hook_event_name: 'PostToolUse', tool_name: 'Bash', cwd: os.tmpdir(),
+  tool_input: { command: 'ls' }, tool_response: { stdout: 'ok' }, ...over,
+});
+const agentsDir = (live) => path.join(live, 'agents', SID);
+const readJ = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
+function seedAttention(live, tool = 'Bash') {
+  fs.mkdirSync(path.join(live, 'attention'), { recursive: true });
+  fs.writeFileSync(path.join(live, 'attention', `${SID}.json`), JSON.stringify({
+    schema: 'autopilot.attention/1', session_id: SID, project_key: null, kind: 'permission', tool_name: tool,
+    summary: `${tool}: ls`, since: new Date().toISOString(), updated_at: new Date().toISOString(),
+  }));
+}
+const attnFile = (live) => path.join(live, 'attention', `${SID}.json`);
+const entries = (event, tool) => {
+  const out = [];
+  for (const g of HOOKS[event] || []) {
+    const m = g.matcher;
+    if (!m || m === '*' || new RegExp(`^(?:${m})$`).test(tool || '')) for (const h of g.hooks) out.push(h.command);
+  }
+  return out;
+};
+
+// ---------- wiring: process counts ----------
+
+test('wiring: PostToolUse(Bash) spawns no awaiting-owner process; audit-log is the default-on host', () => {
+  const cmds = entries('PostToolUse', 'Bash');
+  assert.ok(!cmds.some((c) => c.includes('/hooks/awaiting-owner.js')), 'awaiting-owner must not be a PostToolUse process');
+  assert.ok(cmds.some((c) => c.includes('/hooks/audit-log.js')), 'host hook stays wired on PostToolUse .*');
+  assert.strictEqual(cmds.length, 7, `7 default-on PostToolUse processes (was 8 with awaiting-owner): ${cmds.join(' | ')}`);
+});
+
+test('wiring: UserPromptSubmit spawns ONE process (advisory-relay, timeout 10); autostart + awaiting-owner are hosted; SessionStart keeps its own autostart', () => {
+  const ups = entries('UserPromptSubmit', null);
+  assert.deepStrictEqual(ups.map((c) => path.basename(c.split(' ')[1])), ['advisory-relay.js']);
+  const g = HOOKS.UserPromptSubmit.find((x) => x.hooks.some((h) => h.command.includes('/hooks/advisory-relay.js')));
+  assert.strictEqual(g.hooks[0].timeout, 10);
+  assert.ok(HOOKS.SessionStart.some((x) => x.hooks.some((h) => h.command.includes('/hooks/runs-watch-autostart.js'))));
+});
+
+// ---------- hosted PostToolUse: awaiting-owner behaviour identical ----------
+
+test('host: audit-log ends a pending permission wait for the SAME tool, leaves a different tool, knob off keeps it', () => {
+  const a = mk();
+  seedAttention(a.live, 'Bash');
+  run(AUDIT, post({ tool_name: 'Read' }), a.env);
+  assert.ok(fs.existsSync(attnFile(a.live)), 'a different tool must not end the wait');
+  run(AUDIT, post(), { ...a.env, AUTOPILOT_AWAITING_OWNER: 'off' });
+  assert.ok(fs.existsSync(attnFile(a.live)), 'AUTOPILOT_AWAITING_OWNER=off disables the hosted work');
+  run(AUDIT, post(), a.env);
+  assert.ok(!fs.existsSync(attnFile(a.live)), 'same tool ends the wait');
+});
+
+test('host: no attention pending -> no lock, no file of any kind is created (hot path is one stat)', () => {
+  const a = mk();
+  run(AUDIT, post(), a.env);
+  assert.deepStrictEqual(fs.readdirSync(a.live), [], 'nothing written for a depth-0 call with no pending wait');
+});
+
+test('host: another session\'s attention file is untouched', () => {
+  const a = mk();
+  seedAttention(a.live, 'Bash');
+  run(AUDIT, post({ session_id: 'other-session-9999' }), a.env);
+  assert.ok(fs.existsSync(attnFile(a.live)));
+});
+
+test('host: garbage / empty stdin and missing session_id exit 0 silently', () => {
+  const a = mk();
+  for (const input of ['', 'not json', '{}', JSON.stringify({ hook_event_name: 'PostToolUse', tool_name: 'Bash' })]) {
+    const r = spawnSync('node', [AUDIT], { input, encoding: 'utf8', env: a.env });
+    assert.strictEqual(r.status, 0);
+    assert.strictEqual(r.stdout, '');
+  }
+  assert.deepStrictEqual(fs.readdirSync(a.live), []);
+});
+
+test('standalone awaiting-owner.js still handles PostToolUse (direct invocation unchanged)', () => {
+  const a = mk();
+  seedAttention(a.live, 'Bash');
+  run(ATTN, post(), a.env);
+  assert.ok(!fs.existsSync(attnFile(a.live)));
+});
+
+// ---------- STAMP ----------
+
+test('stamp: subagent tool call writes agents/<sid>/<agent_id>.json with the exact shape', () => {
+  const a = mk();
+  const before = Date.now();
+  run(AUDIT, post({ agent_id: 'agent-abc', agent_type: 'general-purpose', tool_name: 'Grep' }), a.env);
+  const f = path.join(agentsDir(a.live), 'agent-abc.json');
+  const j = readJ(f);
+  assert.deepStrictEqual(Object.keys(j).sort(), ['agent_id', 'agent_type', 'last_tool_at', 'last_tool_name', 'schema', 'session_id']);
+  assert.strictEqual(j.schema, 'autopilot.agent-activity/1');
+  assert.strictEqual(j.session_id, SID);
+  assert.strictEqual(j.agent_id, 'agent-abc');
+  assert.strictEqual(j.agent_type, 'general-purpose');
+  assert.strictEqual(j.last_tool_name, 'Grep');
+  assert.ok(Date.parse(j.last_tool_at) >= before - 1000 && Date.parse(j.last_tool_at) <= Date.now() + 1000);
+  assert.deepStrictEqual(fs.readdirSync(agentsDir(a.live)), ['agent-abc.json'], 'no tmp residue, no lock');
+});
+
+test('stamp: absent agent_type is null; no agent_id -> no write', () => {
+  const a = mk();
+  run(AUDIT, post({ agent_id: 'agent-x' }), a.env);
+  assert.strictEqual(readJ(path.join(agentsDir(a.live), 'agent-x.json')).agent_type, null);
+  const b = mk();
+  run(AUDIT, post(), b.env);
+  assert.ok(!fs.existsSync(path.join(b.live, 'agents')));
+  run(AUDIT, post({ agent_id: '' }), b.env);
+  assert.ok(!fs.existsSync(path.join(b.live, 'agents')));
+});
+
+test('stamp: last writer wins; separate agents get separate files; sessions are separate dirs', () => {
+  const a = mk();
+  run(AUDIT, post({ agent_id: 'a1', tool_name: 'Read' }), a.env);
+  run(AUDIT, post({ agent_id: 'a1', tool_name: 'Edit' }), a.env);
+  run(AUDIT, post({ agent_id: 'a2', tool_name: 'Bash' }), a.env);
+  run(AUDIT, post({ agent_id: 'a1', session_id: 'other-session-9999' }), a.env);
+  assert.strictEqual(readJ(path.join(agentsDir(a.live), 'a1.json')).last_tool_name, 'Edit');
+  assert.deepStrictEqual(fs.readdirSync(agentsDir(a.live)).sort(), ['a1.json', 'a2.json']);
+  assert.ok(fs.existsSync(path.join(a.live, 'agents', 'other-session-9999', 'a1.json')));
+});
+
+test('stamp: AUTOPILOT_AGENT_ACTIVITY=off writes nothing but the attention end still works', () => {
+  const a = mk({ AUTOPILOT_AGENT_ACTIVITY: 'off' });
+  seedAttention(a.live, 'Bash');
+  run(AUDIT, post({ agent_id: 'a1' }), a.env);
+  assert.ok(!fs.existsSync(path.join(a.live, 'agents')));
+  assert.ok(!fs.existsSync(attnFile(a.live)), 'awaiting-owner work is independent of the stamp knob');
+});
+
+test('stamp: AUTOPILOT_AWAITING_OWNER=off does not disable the stamp (separate knobs)', () => {
+  const a = mk({ AUTOPILOT_AWAITING_OWNER: 'off' });
+  run(AUDIT, post({ agent_id: 'a1' }), a.env);
+  assert.ok(fs.existsSync(path.join(agentsDir(a.live), 'a1.json')));
+});
+
+test('stamp: a subagent\'s Task/Agent-named tool event is stamped as liveness only, never as attention', () => {
+  const a = mk();
+  run(AUDIT, post({ agent_id: 'a1', tool_name: 'Task' }), a.env);
+  assert.strictEqual(readJ(path.join(agentsDir(a.live), 'a1.json')).last_tool_name, 'Task');
+  assert.ok(!fs.existsSync(path.join(a.live, 'attention')));
+});
+
+test('stamp: unsafe ids are sanitised into the file name (no path traversal)', () => {
+  const a = mk();
+  run(AUDIT, post({ agent_id: '../../evil/x' }), a.env);
+  assert.deepStrictEqual(fs.readdirSync(agentsDir(a.live)), ['______evil_x.json']);
+  assert.ok(!fs.existsSync(path.join(a.live, 'evil')));
+});
+
+test('stamp: fail-open when the live dir is unwritable (exit 0, <= 1 stderr line each)', () => {
+  const a = mk();
+  fs.writeFileSync(path.join(a.live, 'agents'), 'a file where the dir should be');
+  const r = run(AUDIT, post({ agent_id: 'a1' }), a.env);
+  assert.ok(r.stderr.split('\n').filter(Boolean).length <= 2, r.stderr);
+  assert.strictEqual(r.stdout, '');
+});
+
+test('stamp: SessionEnd removes the session\'s stamp dir', () => {
+  const a = mk();
+  run(AUDIT, post({ agent_id: 'a1' }), a.env);
+  assert.ok(fs.existsSync(agentsDir(a.live)));
+  run(ATTN, { session_id: SID, hook_event_name: 'SessionEnd', cwd: os.tmpdir() }, a.env);
+  assert.ok(!fs.existsSync(agentsDir(a.live)));
+});
+
+// ---------- UserPromptSubmit fast path ----------
+
+function shimBin(dir, names) {
+  const bin = path.join(dir, 'bin');
+  fs.mkdirSync(bin, { recursive: true });
+  const real = (n) => execFileSync('sh', ['-c', `command -v ${n}`], { encoding: 'utf8' }).trim();
+  for (const n of names) {
+    fs.writeFileSync(path.join(bin, n), `#!/bin/sh\necho ${n} >> "${path.join(dir, 'calls.log')}"\nexec ${real(n)} "$@"\n`, { mode: 0o755 });
+  }
+  return bin;
+}
+const calls = (dir) => { try { return fs.readFileSync(path.join(dir, 'calls.log'), 'utf8').split('\n').filter(Boolean); } catch { return []; } };
+const KEY = 'abcdef0123456789';
+
+function fakeWatcher() {
+  // argv carries `status runs --watch --project <KEY>`, exactly what isWatcherFor() checks
+  const p = spawn(process.execPath, ['-e', 'setTimeout(()=>{},120000)', 'status', 'runs', '--watch', '--project', KEY], { stdio: 'ignore', detached: true });
+  p.unref();
+  return p;
+}
+function seedAutostart(live, cwd, pid) {
+  const name = crypto.createHash('sha1').update(cwd).digest('hex').slice(0, 16);
+  fs.mkdirSync(path.join(live, 'autostart'), { recursive: true });
+  fs.writeFileSync(path.join(live, 'autostart', `${name}.json`), JSON.stringify({ cwd, project_key: KEY }));
+  fs.mkdirSync(path.join(live, 'runs'), { recursive: true });
+  fs.writeFileSync(path.join(live, 'runs', `${KEY}.json`), JSON.stringify({ schema: 'x', writer: { pid } }));
+}
+const ups = (cwd) => ({ session_id: SID, hook_event_name: 'UserPromptSubmit', cwd, prompt: 'hi' });
+
+function upsFixture() {
+  const a = mk();
+  const cwd = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'hh-repo-')));
+  execFileSync('git', ['-C', cwd, 'init', '-q']);
+  const bin = shimBin(a.live, ['git', 'flock']); // installed AFTER the repo is set up: only hook calls are logged
+  fs.rmSync(path.join(a.live, 'calls.log'), { force: true });
+  a.env.PATH = `${bin}:${process.env.PATH}`;
+  // the pointer file lives under the autopilot home derived from the marker dir
+  a.env.AUTOPILOT_SESSION_MODE_DIR = path.join(a.home, '.autopilot', 'session-mode');
+  fs.mkdirSync(path.join(a.home, '.autopilot'), { recursive: true });
+  fs.writeFileSync(path.join(a.home, '.autopilot', 'live-pointer.json'), '{}');
+  return { a, cwd };
+}
+
+test('ups fast path (advisory-relay host): watcher alive + cached scope -> no git, no flock, no start (one process)', () => {
+  const { a, cwd } = upsFixture();
+  const w = fakeWatcher();
+  try {
+    seedAutostart(a.live, cwd, w.pid);
+    const r = run(RELAY, ups(cwd), a.env);
+    assert.deepStrictEqual(calls(a.live), [], 'neither git nor flock may run on the fast path');
+    assert.strictEqual(r.stdout, '');
+    assert.strictEqual(r.stderr, '');
+  } finally {
+    try { process.kill(w.pid, 'SIGKILL'); } catch { /* gone */ }
+  }
+});
+
+test('ups fast path falls through to the full path when the pid is dead, the cmdline differs, or the pointer is gone', () => {
+  const { a, cwd } = upsFixture();
+  // dead pid
+  seedAutostart(a.live, cwd, 2 ** 22 + 12345);
+  run(RELAY, ups(cwd), { ...a.env, AUTOPILOT_RUNS_WATCH_AUTOSTART: '0' });
+  assert.deepStrictEqual(calls(a.live), [], 'knob 0 never reaches git/flock');
+  run(RELAY, ups(cwd), a.env);
+  assert.ok(calls(a.live).includes('git'), 'dead watcher pid -> full path (git runs)');
+  // pid alive but not a watcher for this key
+  fs.rmSync(path.join(a.live, 'calls.log'), { force: true });
+  const other = spawn(process.execPath, ['-e', 'setTimeout(()=>{},120000)', 'status', 'runs', '--watch', '--project', 'ffffffffffffffff'], { stdio: 'ignore', detached: true });
+  other.unref();
+  try {
+    seedAutostart(a.live, cwd, other.pid);
+    run(RELAY, ups(cwd), a.env);
+    assert.ok(calls(a.live).includes('git'), 'foreign cmdline -> full path');
+  } finally {
+    try { process.kill(other.pid, 'SIGKILL'); } catch { /* gone */ }
+  }
+  // pointer deleted
+  fs.rmSync(path.join(a.live, 'calls.log'), { force: true });
+  const w = fakeWatcher();
+  try {
+    seedAutostart(a.live, cwd, w.pid);
+    fs.rmSync(path.join(a.home, '.autopilot', 'live-pointer.json'));
+    run(RELAY, ups(cwd), a.env);
+    assert.ok(calls(a.live).includes('git'), 'missing live pointer -> full path');
+  } finally {
+    try { process.kill(w.pid, 'SIGKILL'); } catch { /* gone */ }
+  }
+});
+
+test('ups: awaiting-owner knob off still runs the autostart ensure; autostart knob 0 still ends attention', () => {
+  const { a, cwd } = upsFixture();
+  seedAttention(a.live, 'Bash');
+  run(RELAY, ups(cwd), { ...a.env, AUTOPILOT_AWAITING_OWNER: 'off', AUTOPILOT_RUNS_WATCH_AUTOSTART: '0' });
+  assert.ok(fs.existsSync(attnFile(a.live)), 'awaiting-owner off keeps attention');
+  run(RELAY, ups(cwd), { ...a.env, AUTOPILOT_RUNS_WATCH_AUTOSTART: '0' });
+  assert.ok(!fs.existsSync(attnFile(a.live)), 'UserPromptSubmit ends attention');
+  // knob off for awaiting-owner, autostart enabled: the full path is reached (git runs)
+  fs.rmSync(path.join(a.live, 'calls.log'), { force: true });
+  run(RELAY, ups(cwd), { ...a.env, AUTOPILOT_AWAITING_OWNER: 'off' });
+  assert.ok(calls(a.live).includes('git'));
+});
+
+test('ups host: relay still drains its queue; hosted work runs even when the relay knob is off; a hosted failure never changes the output', () => {
+  const { a, cwd } = upsFixture();
+  seedAttention(a.live, 'Bash');
+  fs.mkdirSync(path.join(a.live, 'advisory-queue'), { recursive: true });
+  const q = path.join(a.live, 'advisory-queue', `${SID}.jsonl`);
+  fs.writeFileSync(q, `${JSON.stringify({ ts: new Date().toISOString(), text: 'queued advice' })}\n`);
+  const off = run(RELAY, ups(cwd), { ...a.env, AUTOPILOT_ADVISORY_RELAY: 'off', AUTOPILOT_RUNS_WATCH_AUTOSTART: '0' });
+  assert.strictEqual(off.stdout, '', 'relay off emits nothing');
+  assert.ok(fs.existsSync(q), 'relay off leaves the queue untouched');
+  assert.ok(!fs.existsSync(attnFile(a.live)), 'hosted awaiting-owner work still ended the wait');
+  const on = run(RELAY, ups(cwd), { ...a.env, AUTOPILOT_RUNS_WATCH_AUTOSTART: '0' });
+  assert.match(JSON.parse(on.stdout).hookSpecificOutput.additionalContext, /queued advice/);
+  // hosted job fails (live dir is a file) -> relay output unchanged, exit 0
+  const b = mk();
+  fs.rmSync(b.live, { recursive: true });
+  fs.writeFileSync(b.live, 'not a dir');
+  const r = run(RELAY, ups(cwd), { ...b.env, AUTOPILOT_RUNS_WATCH_AUTOSTART: '0' });
+  assert.strictEqual(r.stdout, '');
+});
+
+test('ups: non-git cwd stays a silent no-op through the host', () => {
+  const a = mk();
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'hh-nogit-'));
+  const r = run(RELAY, ups(cwd), a.env);
+  assert.strictEqual(r.stdout, '');
+  assert.strictEqual(r.stderr, '');
+  assert.ok(!fs.existsSync(path.join(a.live, 'autostart')));
+});
+
+// ---------- liveBase parity ----------
+
+test('liveBase() (no findmnt fork) resolves to the same base as resolveLiveDir()', () => {
+  const a = mk();
+  const code = (envOverride) => {
+    const r = spawnSync('node', ['-e', `
+      const lib=require(${JSON.stringify(path.join(ROOT, 'hooks', 'live-session-lib.js'))});
+      const {resolveLiveDir}=require(${JSON.stringify(path.join(ROOT, 'scripts', 'lib', 'live-state-dir.js'))});
+      process.stdout.write(JSON.stringify([lib.liveBase(), resolveLiveDir({warn(){}}).base]));`], { encoding: 'utf8', env: envOverride });
+    assert.strictEqual(r.status, 0, r.stderr);
+    return JSON.parse(r.stdout);
+  };
+  for (const env of [{ ...process.env }, { ...process.env, AUTOPILOT_LIVE_DIR: a.live }, { ...process.env, AUTOPILOT_LIVE_DIR: '/nonexistent-root-xyz/live' }]) {
+    const [fast, slow] = code(env);
+    assert.strictEqual(fast, slow);
+  }
+});

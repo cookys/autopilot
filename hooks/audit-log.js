@@ -4,6 +4,14 @@
  * Logs bash commands to ~/.claude/bash-commands.log with auto secret redaction.
  * Uses _shared/secret-patterns.js for consistent redaction.
  * Runs on PostToolUse for all tools and no-ops (exit 0) when the event carries no bash command.
+ *
+ * Also the PostToolUse HOST for the live-state writers (mods P1W PERF+STAMP): awaiting-owner's
+ * PostToolUse work (end a permission/question wait) and the subagent last-tool stamp run in THIS
+ * process, so a tool call costs no extra node spawn for them. Picked because it is default-on, has no
+ * early gate or knob of its own, is invariant_effect (kept by every execution profile) and already
+ * parses the payload. Their opt-outs (AUTOPILOT_AWAITING_OWNER, AUTOPILOT_AGENT_ACTIVITY) are read inside
+ * hooks/awaiting-owner.js handle() / hooks/live-session-lib.js, not here. Fail-open and independent of
+ * the audit logging below.
  */
 
 'use strict';
@@ -22,6 +30,16 @@ try {
     stdin = fs.readFileSync(0, 'utf8');
   } catch {
     try { stdin = fs.readFileSync('/dev/stdin', 'utf8'); } catch { /* ENXIO → transcript */ }
+  }
+  try {
+    if (stdin.trim()) {
+      const p = JSON.parse(stdin);
+      if (p && typeof p === 'object' && p.hook_event_name === 'PostToolUse') {
+        require('./awaiting-owner.js').handle(p);
+      }
+    }
+  } catch (e) {
+    process.stderr.write(`audit-log: live-state hosting fail-open: ${e && e.message ? e.message : e}\n`);
   }
   const ev = getToolEvent({ stdin, env: process.env });
   const command = (ev.tool_input && ev.tool_input.command) || '';

@@ -199,12 +199,28 @@ eq "1" "$(count_watchers)" "exactly one watcher after repeated prompts"
 kill -9 "$UPS_PID" 2> /dev/null
 eq "0" "$(lock_free_within 3)" "lock free after killing the prompt-case watcher"
 
+# --- 6e. the production UserPromptSubmit path: advisory-relay.js hosts the ensure (mods P1W PERF) --------------------
+HOST="$REPO_ROOT/hooks/advisory-relay.js"
+rm -f "$ENV_FILE"
+(cd "$SB" && printf '{"hook_event_name":"UserPromptSubmit","session_id":"hostsess","cwd":"%s"}' "$REPO" | wenv "$NODE" "$HOST" > "$SB/h.out" 2> "$SB/h.err")
+wait_writer
+eq "yes" "$([ -n "$W_PID" ] && echo yes || echo no)" "hosted UserPromptSubmit (advisory-relay.js) starts the watcher when the lock is free"
+eq "1" "$(ls "$LIVE/autostart" 2> /dev/null | wc -l | tr -d ' ')" "full path wrote the per-cwd fast-path cache"
+HOST_PID="$W_PID"
+(cd "$SB" && printf '{"hook_event_name":"UserPromptSubmit","session_id":"hostsess","cwd":"%s"}' "$REPO" | wenv "$NODE" "$HOST" > "$SB/h.out" 2> "$SB/h.err")
+eq "" "$(cat "$SB/h.err")" "hosted UserPromptSubmit with the watcher alive is silent"
+eq "$HOST_PID" "$(envelope_pid)" "hosted fast path starts nothing (same writer.pid)"
+eq "1" "$(count_watchers)" "exactly one watcher after hosted prompts"
+kill -9 "$HOST_PID" 2> /dev/null
+eq "0" "$(lock_free_within 3)" "lock free after killing the hosted-case watcher"
+
 # --- 7. wiring ------------------------------------------------------------------------------------------------
 eq "yes" "$(node -e '
-  const h = require(process.argv[1] + "/hooks/hooks.json").hooks.SessionStart || [];
-  const u = require(process.argv[1] + "/hooks/hooks.json").hooks.UserPromptSubmit || [];
-  const w = (a) => a.some((g) => (g.hooks || []).some((x) => /hooks\/runs-watch-autostart\.js/.test(x.command || "")));
-  process.stdout.write(w(h) && w(u) ? "yes" : "no");' "$REPO_ROOT")" "hooks.json wires runs-watch-autostart under SessionStart and UserPromptSubmit"
+  const hk = require(process.argv[1] + "/hooks/hooks.json").hooks;
+  const w = (a, stem) => (a || []).some((g) => (g.hooks || []).some((x) => new RegExp("hooks/" + stem + "\\.js").test(x.command || "")));
+  // mods P1W PERF: SessionStart keeps its own process; the UserPromptSubmit ensure is hosted by advisory-relay.js
+  // (no runs-watch-autostart process per prompt).
+  process.stdout.write(w(hk.SessionStart, "runs-watch-autostart") && !w(hk.UserPromptSubmit, "runs-watch-autostart") && w(hk.UserPromptSubmit, "advisory-relay") ? "yes" : "no");' "$REPO_ROOT")" "hooks.json: runs-watch-autostart under SessionStart; its UserPromptSubmit ensure hosted by advisory-relay"
 eq "yes" "$(node -e '
   const c = require(process.argv[1] + "/profiles/hook-classes.json");
   process.stdout.write(JSON.stringify(c).includes("\"runs-watch-autostart\"") ? "yes" : "no");' "$REPO_ROOT")" "hook-classes classifies runs-watch-autostart"

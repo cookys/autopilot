@@ -34,6 +34,8 @@ const { pointerPath, writeLivePointer } = require('./live-pointer');
 const { applySelectors } = require('./runs-fields');
 const { latestProgress } = require('./work-order-progress');
 const { ensureReviewServer } = require('./review-server');
+const { createDecisionsPublisher } = require('./decisions-sidecar');
+const { createForemanPublisher } = require('./foreman-activity');
 
 const SCHEMA = 'autopilot.runs-live/1';
 const VALID_FOR_S = 180;
@@ -280,6 +282,9 @@ function createWatcher({
   let identity = scope.repo_identity;
 
   const costs = createCostReader(env);
+  const sidecarArgs = { runsDir, key, getIdentity: () => identity, writeAtomic, safeSegment, log: (m) => log(m) };
+  const decisionsSidecar = createDecisionsPublisher(sidecarArgs); // WATCH-B: <scope>.decisions.json
+  const foremanSidecar = createForemanPublisher({ ...sidecarArgs, live, dispatchRunsDir: manifestDirOf(env) }); // WATCH-B: <scope>.foreman.json
   const state = {
     lastSignature: null, lastPublishMs: null, lastRuns: null, lastObservedAt: null, lastPaths: null,
     roots: new Set(), lastCounts: new Map(), lastCost: { sessions: {}, host_today_usd: null, host_today_as_of: null },
@@ -537,6 +542,7 @@ function createWatcher({
       state.lastPublishMs = nowMs;
       published = true;
     }
+    try { decisionsSidecar.publish({ runs: rows, roots: state.roots }); foremanSidecar.publish({ roots: state.roots, markers, nowMs }); } catch (error) { log(`sidecar publish failed: ${error.message}`); }
     if (render) {
       try { renderPass(rows, nowMs); } catch (error) { log(`render pass failed: ${error.message}`); }
     }

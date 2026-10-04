@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/foreman-activity.schema.json",
+  "title": "foreman-activity",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "scope", "binding", "stall_s", "agents", "stage", "stage_source", "stage_at", "stage_age_s"],
+  "properties": {
+    "schema": { "const": "autopilot.foreman-activity/1" },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["project_key", "repo_identity", "root_run_id"],
+      "properties": {
+        "project_key": { "type": "string", "minLength": 1 },
+        "repo_identity": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }] },
+        "root_run_id": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }] }
+      }
+    },
+    "binding": { "const": "session" },
+    "stall_s": { "type": "integer", "minimum": 1 },
+    "agents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["agent_id", "description", "label", "last_activity_at", "age_s", "stale", "source", "session_id", "binding"],
+        "properties": {
+          "agent_id": { "type": "string", "minLength": 1 },
+          "description": { "oneOf": [{ "type": "string" }, { "type": "null" }] },
+          "label": { "oneOf": [{ "type": "string" }, { "type": "null" }] },
+          "last_activity_at": { "type": "string", "minLength": 1 },
+          "age_s": { "type": "integer", "minimum": 0 },
+          "stale": { "type": "boolean" },
+          "source": { "enum": ["context_tasks", "stamp"] },
+          "session_id": { "type": "string", "minLength": 1 },
+          "binding": { "const": "session" }
+        }
+      }
+    },
+    "stage": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }] },
+    "stage_source": { "oneOf": [{ "enum": ["run_ledger:tmp", "run_ledger:common"] }, { "type": "null" }] },
+    "stage_at": { "oneOf": [{ "type": "string" }, { "type": "null" }] },
+    "stage_age_s": { "oneOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }] }
+  }
+}

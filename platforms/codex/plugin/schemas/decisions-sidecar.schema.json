@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/decisions-sidecar.schema.json",
+  "title": "decisions-sidecar",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "scope", "rows", "count", "irreversible_count", "writers_wired", "undocumented_dispatches"],
+  "properties": {
+    "schema": { "const": "autopilot.decisions-sidecar/1" },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["project_key", "repo_identity", "root_run_id"],
+      "properties": {
+        "project_key": { "type": "string", "minLength": 1 },
+        "repo_identity": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }] },
+        "root_run_id": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }] }
+      }
+    },
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["round", "decision", "irreversible", "at", "writer", "kind", "decision_id", "source"],
+        "properties": {
+          "round": { "oneOf": [{ "type": "integer" }, { "type": "null" }] },
+          "decision": { "type": "string" },
+          "irreversible": { "type": "boolean" },
+          "at": { "oneOf": [{ "type": "string" }, { "type": "null" }] },
+          "writer": { "type": "string", "minLength": 1 },
+          "kind": { "enum": ["decision", "dispatch", "pick", "refreeze"] },
+          "decision_id": { "oneOf": [{ "type": "string" }, { "type": "null" }] },
+          "source": { "enum": ["ledger_default", "ledger_root"] }
+        }
+      }
+    },
+    "count": { "type": "integer", "minimum": 0 },
+    "irreversible_count": { "type": "integer", "minimum": 0 },
+    "writers_wired": { "type": "array", "uniqueItems": true, "items": { "enum": ["engine", "next-pick"] } },
+    "undocumented_dispatches": { "type": "integer", "minimum": 0 }
+  }
+}

@@ -68,7 +68,7 @@ S5a, S5b, S7, S8; `README.md` there is the verdict table). A mod is CC-only; non
   the `hooks.json` `modules` key alone.
 - Reads only: `$HOME/.autopilot/live-pointer.json`, the session marker, `<live_base>/runs/paths/*.json`, the scoped envelope
   (SSD copy as fallback), `<live_base>/context/<sid>.json`, `<live_base>/review/server.json` (port, default 8787) and the job
-  page's `model.json` (acceptance axis, gate rows, `needs_decision` / `decision`, `progress`, `phase`). It never writes, never starts a program, never sends a prompt.
+  page's `model.json` (acceptance axis, gate rows, `needs_decision` / `decision` incl. `stale` / `age_s`, `progress`, `phase`). It never writes, never starts a program, never sends a prompt.
 - **Band contract (P1c C3)**: for a person who left the computer, the band says which project, which phase, how long it has
   run and how far along, led by one of five verdict words. One entry, two lines: line 1 is `<mark> <verdict> <project> · <phase> ·
   <elapsed> · <progress>`, line 2 one short reason sentence (zh-TW, built from fields only). The state texts `no pointer`,
@@ -95,6 +95,34 @@ S5a, S5b, S7, S8; `README.md` there is the verdict table). A mod is CC-only; non
     ctx 37%`, same sources and `—` rules as before). When `needs_decision`, the first section under the header lists
     what is awaited from the model's `decision` object (question, then `n. label — consequence` for each option that
     exists); the execution-status table, the gate rows and the review Link stay.
+- **Every wired source (W3a)**: besides the above the mod reads, all through the live pointer's `live_base` (never computed
+  in the mod): `tasks/<sid>.json` (`autopilot.session-tasks/1`) and `attention/<sid>.json` (`autopilot.attention/1`), both
+  named by the *sanitised* sid (`[A-Za-z0-9_-]`, else `_`, 64 scalars; the context file too); the scope-checked sidecars
+  `runs/<scope>.decisions.json` (`autopilot.decisions-sidecar/1`), `runs/<scope>.foreman.json`
+  (`autopilot.foreman-activity/1`) and `runs/sources/<scope>.json` (`autopilot.sources/1`, fallback: the job model's
+  `sources_manifest`); and, for a campaign root, `<git-common-dir>/autopilot/work-orders/<root>/*.json` (the common dir is the
+  envelope's published `scope.repo_identity`; a root that is not a plain `[A-Za-z0-9._-]` segment is never joined into a path).
+  A sidecar whose `scope` is not this project / root is an absent file.
+  - Verdict precedence now: `要你決定` (attention `permission` / `question`, or an open decision; reason `等你批准：…（等了 N 分）`,
+    `等你回答：…`, or the question plus `（已等 N 天）` when the model marks it stale and a whole day has passed) > `疑似卡住` >
+    `完成待驗收` (frozen done = total, or every session task completed; both need nothing live and acceptance undecided; the
+    campaign-terminal phase codes are not a separate rule) > `進行中` > `待命` (attention `idle` appends `停在等你指示 N 分`).
+    `awaiting_disposition` is never `要你決定`.
+  - elapsed = start of this piece of work: campaign (marker has a root) = earliest progress receipt bound to the root (the
+    receipt's own `root_run_id`; a file with a different file-level root is unbound), else the earliest run; session = tasks
+    `first_created_at`, else marker `started_at`, else the earliest run. Plain sessions (`level: null` marker) resolve like any other.
+  - Line 2 tail, only when non-zero: `代你決定 m 件（k 件不可逆）`, then `僅 <writers_wired> 自動裁決` (or `決策寫入端未接` for an empty list;
+    no label when `next-pick`, the depth-0 writer, is wired), then `n 件派工無決策紀錄`.
+  - Not wired vs empty (sources manifest; no manifest = the old inference, an em dash): phase slot `來源未接` only when
+    `phase`, `progress` and `task_status_input` writers are all off; progress slot (when the job model has none and there are no
+    tasks) `來源未接` when `progress` and `tasks` are off, else `—`; with no tasks file the pane says `任務工具未開 · 設
+    CLAUDE_CODE_ENABLE_TODO_TOOLS=1 …` (writer live) or `任務：來源未接`; `代你決定：來源未接` (both ledger writers off, no
+    sidecar); `等待狀態：來源未接`; `ctx 來源未接` (no usable context value and `context` off). A value the data really carries
+    is always shown. Unknown is never 0. A task count with no frozen denominator reads `n done*` (dim).
+  - Pane sections after the gate rows: tasks (`任務 m/n 完成 · 進行中 k`, current, up to 8 rows), decisions (one row each plus the
+    real veto verb `decision-ledger.js veto --ledger <ledger> --id <decision_id>`, no id = no veto), foreman activity (description,
+    label, age from `last_activity_at` against now; `stale` dimmed and marked `久未動`; `binding: session` stated; stage line), or
+    `工頭狀態：來源未接` when the sidecar is absent. An attention awaiting the human is the first section.
   Toasts compare consecutive fresh snapshots of one scope: the execution axis from the envelope `counts`, the
   acceptance axis from the job model.
 - **Band time budget (S8, KR1)**: the band shows a new run <= 20 s after its manifest drops. Chain: watcher tick 10 s + mod

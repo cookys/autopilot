@@ -3,6 +3,9 @@
 // published: counts, cost, context, the progress numbers and the decision are copied from the envelope / context
 // file / job model. The selections made here: the verdict word (a precedence over fields the producers already
 // published), the project short name, the earliest start and the quietest stalled run.
+// W3a: the per-session files (tasks, attention), the watcher sidecars (decisions, foreman, sources manifest) and the
+// campaign progress receipts are parsed here too; every sidecar carries its scope and a scope that is not the one
+// wanted is an absent file (same rule as checkEnvelope).
 
 
 // ---- the snapshot the tick builds and the band / pane draw (module state in register.ts) ----
@@ -26,7 +29,13 @@ export type LiveGateRow = {
   status: string | null
 }
 
-export type LiveDecision = { question: string; options: { label: string; consequence: string }[] }
+export type LiveDecision = { question: string; options: { label: string; consequence: string }[]; stale: boolean; age_s: number | null }
+
+// one pane line: plain text plus how it is drawn
+export type PaneLine = { text: string; dim?: boolean; bold?: boolean; warn?: boolean }
+// attention = something awaits the human (drawn first); waiting = idle / source-not-wired note; the rest follow the gate rows
+export type PaneSections = { attention: PaneLine[]; waiting: PaneLine[]; tasks: PaneLine[]; decisions: PaneLine[]; foreman: PaneLine[] }
+export const NO_SECTIONS: PaneSections = { attention: [], waiting: [], tasks: [], decisions: [], foreman: [] }
 
 // The two band lines of an ok snapshot. Every ok band carries one of five words; the fifth, 待命, is the idle word.
 export type BandView = {
@@ -55,6 +64,8 @@ export type LiveSnapshot = {
   // pane data, copied from the envelope / the review job model; null = not published
   rows: LivePaneRow[] | null
   gates: LiveGateRow[] | null
+  // W3a pane sections, text already built from the sources (empty = nothing to say)
+  sections: PaneSections
   published_at: string | null
   session_as_of: string | null
   host_as_of: string | null
@@ -155,19 +166,35 @@ export function projectName(identity: unknown, projectKey: string): string {
   return name ? name : fallback
 }
 
-// "38m" / "2h14m" / "1d3h": now minus the earliest start among the scope's runs; none -> an em dash.
-export function elapsedText(env: Json, nowMs: number): string {
+// "38m" / "2h14m" / "1d3h": now minus the start of this piece of work; no start -> an em dash.
+export function elapsedFrom(startMs: number | null, nowMs: number): string {
+  if (startMs === null || !Number.isFinite(startMs) || !Number.isFinite(nowMs) || nowMs < startMs) return '—'
+  const minutes = Math.floor((nowMs - startMs) / 60000)
+  if (minutes < 60) return minutes + 'm'
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return hours + 'h' + (minutes % 60) + 'm'
+  return Math.floor(hours / 24) + 'd' + (hours % 24) + 'h'
+}
+
+// the earliest start among the scope's runs (null: none has one)
+export function earliestRunMs(env: Json): number | null {
   let earliest = Infinity
   for (const r of rowsOf(env) || []) {
     const ms = Date.parse(String(r.started_at || ''))
     if (Number.isFinite(ms) && ms < earliest) earliest = ms
   }
-  if (earliest === Infinity || !Number.isFinite(nowMs) || nowMs < earliest) return '—'
-  const minutes = Math.floor((nowMs - earliest) / 60000)
-  if (minutes < 60) return minutes + 'm'
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return hours + 'h' + (minutes % 60) + 'm'
-  return Math.floor(hours / 24) + 'd' + (hours % 24) + 'h'
+  return earliest === Infinity ? null : earliest
+}
+
+// "seconds ago" in the same shorthand as the band: 45s / 20m / 3h5m / 2d1h
+export function ageText(s: number): string {
+  if (!Number.isFinite(s) || s < 0) return '—'
+  if (s < 60) return Math.floor(s) + 's'
+  const m = Math.floor(s / 60)
+  if (m < 60) return m + 'm'
+  const h = Math.floor(m / 60)
+  if (h < 24) return h + 'h' + (m % 60) + 'm'
+  return Math.floor(h / 24) + 'd' + (h % 24) + 'h'
 }
 
 export type JobProgress = { frozen: boolean; percent: number | null; done: number | null; total: number | null }
@@ -189,43 +216,284 @@ export function stalledReason(env: Json): string | null {
   return '最久的派工 ' + Math.floor(Math.max(...ages) / 60) + 'm 沒有輸出'
 }
 
-// Precedence: 1 needs a decision, 2 stalled, 3 complete and waiting acceptance, 4 running, 5 idle (none of the four).
-export function bandView(env: Json, jobModel: JobModel | null, projectKey: string, nowMs: number): BandView {
+// ---- W3a: the sources the band and pane read besides the envelope and the job model ----
+export const TASKS_SCHEMA = 'autopilot.session-tasks/1'
+export const ATTENTION_SCHEMA = 'autopilot.attention/1'
+export const DECISIONS_SCHEMA = 'autopilot.decisions-sidecar/1'
+export const FOREMAN_SCHEMA = 'autopilot.foreman-activity/1'
+export const SOURCES_SCHEMA = 'autopilot.sources/1'
+export const NOT_WIRED = '來源未接'
+export const TODO_TOOLS_HINT = '任務工具未開 · 設 CLAUDE_CODE_ENABLE_TODO_TOOLS=1 後才會記錄任務'
+
+// scripts/lib/live-state-dir.js sanitizeSessionId: every scalar outside [A-Za-z0-9_-] becomes one "_", first 64 scalars, empty -> unknown.
+export function sanitizeSid(raw: string): string {
+  if (raw.length === 0) return 'unknown'
+  const kept = Array.from(raw).slice(0, 64).map(ch => (/^[A-Za-z0-9_-]$/.test(ch) ? ch : '_')).join('')
+  return kept.length > 0 ? kept : 'unknown'
+}
+
+export type ScopeWant = { project_key: string; root_run_id: string | null }
+
+// a sidecar names the scope it was built for; any other scope is an absent file (the checkEnvelope rule)
+function scopeMatches(v: Json, want: ScopeWant): boolean {
+  const s = v.scope
+  if (!isObject(s)) return false
+  const root = typeof s.root_run_id === 'string' && s.root_run_id ? s.root_run_id : null
+  return s.project_key === want.project_key && root === want.root_run_id
+}
+
+const isCount = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0
+const str = (v: unknown): string | null => (typeof v === 'string' && v ? v : null)
+
+export type TasksView = {
+  total: number; completed: number; in_progress: number
+  current: string | null
+  first_created_ms: number | null
+  rows: { subject: string; status: string }[]
+}
+
+// <live>/tasks/<sid>.json (W1d). Counts are the writer's own (deleted tasks excluded there); another session's file is absent.
+export function readTasks(text: string | null, sid: string): TasksView | null {
+  if (text === null) return null
+  const parsed = parseJson(text)
+  if (!parsed.ok || !isObject(parsed.value) || parsed.value.schema !== TASKS_SCHEMA) return null
+  const v = parsed.value
+  if (typeof v.session_id === 'string' && v.session_id !== sid) return null
+  const c = v.counts
+  if (!isObject(c) || !isCount(c.total) || !isCount(c.completed) || !isCount(c.in_progress)) return null
+  const first = typeof v.first_created_at === 'string' ? Date.parse(v.first_created_at) : NaN
+  const rows = (Array.isArray(v.tasks) ? v.tasks : []).filter(isObject)
+    .map(t => ({ subject: str(t.subject) || '—', status: str(t.status) || 'pending' }))
+    .filter(t => t.status !== 'deleted')
+  return {
+    total: c.total, completed: c.completed, in_progress: c.in_progress,
+    current: isObject(v.current) ? str(v.current.subject) : null,
+    first_created_ms: Number.isFinite(first) ? first : null,
+    rows,
+  }
+}
+
+export type AttentionView = { kind: 'permission' | 'question' | 'idle'; summary: string; since_ms: number | null }
+
+// <live>/attention/<sid>.json (W1e): present only while the session waits. A file of another session / schema is absent.
+export function readAttention(text: string | null, sid: string): AttentionView | null {
+  if (text === null) return null
+  const parsed = parseJson(text)
+  if (!parsed.ok || !isObject(parsed.value) || parsed.value.schema !== ATTENTION_SCHEMA) return null
+  const v = parsed.value
+  if (typeof v.session_id === 'string' && v.session_id !== sid) return null
+  const kind = v.kind
+  if (kind !== 'permission' && kind !== 'question' && kind !== 'idle') return null
+  const since = typeof v.since === 'string' ? Date.parse(v.since) : NaN
+  return { kind, summary: str(v.summary) || '', since_ms: Number.isFinite(since) ? since : null }
+}
+
+export type Manifest = Record<string, { installed: boolean; enabled: boolean } | undefined>
+
+// autopilot.sources/1 (WATCH-A): sidecar `<live>/runs/sources/<scope_key>.json`, or the job model's own copy.
+export function readManifest(value: unknown, want: ScopeWant): Manifest | null {
+  if (!isObject(value) || value.schema !== SOURCES_SCHEMA || !isObject(value.sources) || !scopeMatches(value, want)) return null
+  const out: Manifest = {}
+  for (const k of Object.keys(value.sources)) {
+    const e = value.sources[k]
+    if (isObject(e) && typeof e.installed === 'boolean' && typeof e.enabled === 'boolean') out[k] = { installed: e.installed, enabled: e.enabled }
+  }
+  return out
+}
+
+// true / false = the writer is / is not installed AND enabled; null = no manifest, or it does not name this source
+export function liveSource(m: Manifest | null, name: string): boolean | null {
+  if (m === null) return null
+  const e = m[name]
+  return e === undefined ? null : e.installed && e.enabled
+}
+
+// the manifest says none of these writers is live (every one is named, and every one is off)
+export function notWired(m: Manifest | null, names: string[]): boolean {
+  return names.every(n => liveSource(m, n) === false)
+}
+
+export type DecisionRow = { round: number | null; decision: string; irreversible: boolean; writer: string | null; decision_id: string | null; source: string | null }
+export type DecisionsView = { rows: DecisionRow[]; count: number; irreversible: number; writers: string[]; undocumented: number; identity: string | null; root: string | null }
+
+// <live>/runs/<scope_key>.decisions.json (WATCH-B). The counts are the publisher's own.
+export function readDecisions(text: string | null, want: ScopeWant): DecisionsView | null {
+  if (text === null) return null
+  const parsed = parseJson(text)
+  if (!parsed.ok || !isObject(parsed.value) || parsed.value.schema !== DECISIONS_SCHEMA || !scopeMatches(parsed.value, want)) return null
+  const v = parsed.value
+  if (!isCount(v.count) || !isCount(v.irreversible_count) || !isCount(v.undocumented_dispatches) || !Array.isArray(v.writers_wired)) return null
+  const rows = (Array.isArray(v.rows) ? v.rows : []).filter(isObject).map(r => ({
+    round: Number.isInteger(r.round) ? (r.round as number) : null,
+    decision: str(r.decision) || '—',
+    irreversible: r.irreversible === true,
+    writer: str(r.writer), decision_id: str(r.decision_id), source: str(r.source),
+  }))
+  const scope = v.scope as Json
+  return {
+    rows, count: v.count, irreversible: v.irreversible_count, writers: v.writers_wired.filter((w): w is string => typeof w === 'string'),
+    undocumented: v.undocumented_dispatches, identity: str(scope.repo_identity), root: want.root_run_id,
+  }
+}
+
+export type ForemanView = {
+  binding: string
+  agents: { id: string; description: string | null; label: string | null; at_ms: number | null; age_s: number | null; stale: boolean }[]
+  stage: string | null; stage_source: string | null; stage_at_ms: number | null; stage_age_s: number | null
+}
+
+// <live>/runs/<scope_key>.foreman.json (WATCH-B): liveness ages only, never a verdict. Absent file = not wired.
+export function readForeman(text: string | null, want: ScopeWant): ForemanView | null {
+  if (text === null) return null
+  const parsed = parseJson(text)
+  if (!parsed.ok || !isObject(parsed.value) || parsed.value.schema !== FOREMAN_SCHEMA || !scopeMatches(parsed.value, want)) return null
+  const v = parsed.value
+  const ms = (x: unknown): number | null => { const n = typeof x === 'string' ? Date.parse(x) : NaN; return Number.isFinite(n) ? n : null }
+  const agents = (Array.isArray(v.agents) ? v.agents : []).filter(isObject).map(a => ({
+    id: str(a.agent_id) || '?', description: str(a.description), label: str(a.label),
+    at_ms: ms(a.last_activity_at), age_s: finite(a.age_s) ? a.age_s : null, stale: a.stale === true,
+  }))
+  return {
+    binding: str(v.binding) || 'session', agents,
+    stage: str(v.stage), stage_source: str(v.stage_source), stage_at_ms: ms(v.stage_at), stage_age_s: finite(v.stage_age_s) ? v.stage_age_s : null,
+  }
+}
+
+// `git-common-dir:<abs path>` -> the path (only an absolute one); anything else -> null
+export function commonDirOf(identity: unknown): string | null {
+  if (typeof identity !== 'string' || !identity.startsWith('git-common-dir:')) return null
+  const dir = identity.slice('git-common-dir:'.length).replace(/\/+$/, '')
+  return dir.startsWith('/') && !dir.split('/').includes('..') ? dir : null
+}
+
+// the same root-name rule as src/status/work-order-progress.js: a root names a directory, so it must be a plain segment
+export const isPlainRoot = (root: string): boolean => /^[A-Za-z0-9._-]+$/.test(root) && root !== '.' && root !== '..'
+
+// Earliest `issued_at` of the controller progress receipts bound to `root` (W1a's binding rule: the receipt's own
+// root_run_id equals the root; a work-order file whose own top-level root_run_id is present and different is unbound).
+export function earliestReceiptMs(texts: string[], root: string): number | null {
+  let best = Infinity
+  for (const text of texts) {
+    const parsed = parseJson(text)
+    if (!parsed.ok || !isObject(parsed.value)) continue
+    const file = parsed.value
+    if (typeof file.root_run_id === 'string' && file.root_run_id !== root) continue
+    const list = isObject(file.controller) && Array.isArray(file.controller.progress_receipts) ? file.controller.progress_receipts : []
+    for (const r of list) {
+      if (!isObject(r) || r.artifact_type !== 'controller_progress_receipt' || r.root_run_id !== root) continue
+      const ms = typeof r.issued_at === 'string' ? Date.parse(r.issued_at) : NaN
+      if (Number.isFinite(ms) && ms < best) best = ms
+    }
+  }
+  return best === Infinity ? null : best
+}
+
+// Start of this piece of work. Campaign (a root): the earliest bound progress receipt, else the earliest run. Session
+// (no root): the tasks file's first_created_at, else the marker's started_at, else the earliest run.
+export function startMsOf(root: string | null, env: Json, tasks: TasksView | null, markerStartedAt: unknown, receiptMs: number | null): number | null {
+  const run = earliestRunMs(env)
+  if (root !== null) return receiptMs !== null ? receiptMs : run
+  if (tasks !== null && tasks.first_created_ms !== null) return tasks.first_created_ms
+  const m = typeof markerStartedAt === 'string' ? Date.parse(markerStartedAt) : NaN
+  return Number.isFinite(m) ? m : run
+}
+
+export type Sources = {
+  tasks: TasksView | null
+  attention: AttentionView | null
+  decisions: DecisionsView | null
+  manifest: Manifest | null
+  startMs: number | null
+}
+export const NO_SOURCES: Sources = { tasks: null, attention: null, decisions: null, manifest: null, startMs: null }
+
+const waitingMinutes = (sinceMs: number | null, nowMs: number): number | null => (sinceMs === null ? null : Math.max(0, Math.floor((nowMs - sinceMs) / 60000)))
+
+// what the human is being waited on for, from the attention file (permission / question only)
+export function attentionReason(a: AttentionView, nowMs: number): string {
+  const n = waitingMinutes(a.since_ms, nowMs)
+  return (a.kind === 'permission' ? '等你批准：' : '等你回答：') + a.summary + (n === null ? '' : '（等了 ' + n + ' 分）')
+}
+
+// 「（已等 N 天）」: only the model's stale flag, only when a whole day has passed
+export function staleSuffix(d: LiveDecision | null): string {
+  if (d === null || !d.stale || d.age_s === null || d.age_s < 86400) return ''
+  return '（已等 ' + Math.floor(d.age_s / 86400) + ' 天）'
+}
+
+// 僅自動裁決, worded from the writers the sidecar says are wired; next-pick is the depth-0 writer
+export function writersLabel(writers: string[]): string | null {
+  if (writers.includes('next-pick')) return null
+  return writers.length === 0 ? '決策寫入端未接' : '僅 ' + writers.join('、') + ' 自動裁決'
+}
+
+// band line 2 tail: the proxy decisions (only when non-zero) and the dispatches nobody wrote down
+export function proxySegments(d: DecisionsView | null): string[] {
+  if (d === null) return []
+  const out: string[] = []
+  if (d.count > 0) {
+    out.push('代你決定 ' + d.count + ' 件（' + d.irreversible + ' 件不可逆）')
+    const label = writersLabel(d.writers)
+    if (label !== null) out.push(label)
+  }
+  if (d.undocumented > 0) out.push(d.undocumented + ' 件派工無決策紀錄')
+  return out
+}
+
+// Precedence: 1 needs a decision (attention permission / question, or an open decision), 2 stalled, 3 complete and
+// waiting acceptance (frozen progress done = total, or every session task completed), 4 running, 5 idle.
+export function bandView(env: Json, jobModel: JobModel | null, projectKey: string, nowMs: number, src: Sources = NO_SOURCES): BandView {
   const counts = countsOf(env)
   const progress = jobModel === null ? null : jobModel.progress
   const stalled = stalledReason(env)
-  const waiting = counts !== null && counts.confirmed_live === 0 && progress !== null && progress.frozen
-    && progress.done !== null && progress.total !== null && progress.done === progress.total
-    && jobModel !== null && jobModel.acceptance !== 'accepted' && jobModel.acceptance !== 'rejected'
+  const noneLive = counts !== null && counts.confirmed_live === 0
+  const undecided = jobModel === null || (jobModel.acceptance !== 'accepted' && jobModel.acceptance !== 'rejected')
+  const frozenDone = progress !== null && progress.frozen && progress.done !== null && progress.total !== null && progress.done === progress.total
+  const tasksDone = src.tasks !== null && src.tasks.total > 0 && src.tasks.completed === src.tasks.total
+  const waiting = noneLive && undecided && ((frozenDone && jobModel !== null) || tasksDone)
+  const awaiting = src.attention !== null && src.attention.kind !== 'idle' ? src.attention : null
   let pick: { mark: string; word: string }
   let reason: string | null = null
-  if (jobModel !== null && jobModel.needs_decision) {
+  if (awaiting !== null || (jobModel !== null && jobModel.needs_decision)) {
     pick = VERDICT.decide
-    reason = jobModel.decision !== null ? jobModel.decision.question : (jobModel.conclusion || '等你決定')
+    if (awaiting !== null) reason = attentionReason(awaiting, nowMs)
+    else if (jobModel !== null && jobModel.decision !== null) reason = jobModel.decision.question + staleSuffix(jobModel.decision)
+    else reason = (jobModel !== null && jobModel.conclusion) || '等你決定'
   } else if (stalled !== null) {
     pick = VERDICT.stalled
     reason = stalled
   } else if (waiting) {
     pick = VERDICT.waiting
-    reason = '驗收結論尚未出'
+    reason = frozenDone ? '驗收結論尚未出' : '任務 ' + (src.tasks as TasksView).completed + '/' + (src.tasks as TasksView).total + ' 都完成，等你驗收'
   } else if (counts !== null && counts.confirmed_live > 0) {
     pick = VERDICT.running
     reason = counts.confirmed_live + ' 個派工在跑'
   } else {
     pick = VERDICT.idle
     reason = '沒有派工在跑'
+    if (src.attention !== null && src.attention.kind === 'idle') {
+      const n = waitingMinutes(src.attention.since_ms, nowMs)
+      if (n !== null) reason += ' · 停在等你指示 ' + n + ' 分'
+    }
   }
+  const tail = proxySegments(src.decisions)
+  const line2 = [reason, ...tail].join(' · ')
   const identity = isObject(env.scope) ? env.scope.repo_identity : null
-  // the phase is the job model's `phase.label` (campaign state or open deliverable); absent / malformed: an em dash, never the process phase
-  const phase = jobModel !== null && jobModel.phase !== null ? jobModel.phase.label : '—'
-  const prog = progressView(progress)
+  // the phase is the job model's `phase.label` (campaign state or open deliverable); absent / malformed: an em dash, never the process phase.
+  // No writer of a phase live per the sources manifest: 來源未接 (a phase the model really carries is shown whatever the manifest says).
+  const phase = jobModel !== null && jobModel.phase !== null ? jobModel.phase.label : notWired(src.manifest, ['phase', 'progress', 'task_status_input']) ? NOT_WIRED : '—'
+  let prog = progressView(progress)
+  if (prog.text === '—') {
+    if (src.tasks !== null && src.tasks.total > 0) prog = { text: src.tasks.completed + ' done*', dim: true } // task counts have no frozen denominator
+    else if (notWired(src.manifest, ['progress', 'tasks'])) prog = { text: NOT_WIRED, dim: false }
+  }
   return {
     mark: pick.mark,
     verdict: pick.word,
-    head: projectName(identity, projectKey) + ' · ' + phase + ' · ' + elapsedText(env, nowMs) + ' · ',
+    head: projectName(identity, projectKey) + ' · ' + phase + ' · ' + elapsedFrom(src.startMs, nowMs) + ' · ',
     progress: prog.text,
     progressDim: prog.dim,
-    reason,
+    reason: line2,
   }
 }
 
@@ -250,6 +518,11 @@ export function ctxText(text: string | null, nowMs: number): string {
   const cw = parsed.value.context_window
   const pct = isObject(cw) ? cw.used_percentage : undefined
   return finite(pct) ? Math.round(pct) + '%' : '—'
+}
+
+// no usable context value and no writer live per the manifest: 來源未接 (a value that exists is shown whatever the manifest says)
+export function ctxShown(ctx: string, manifest: Manifest | null): string {
+  return ctx === '—' && notWired(manifest, ['context']) ? NOT_WIRED : ctx
 }
 
 // pane header row: what left the band. Session cost and context are this sid's own; host cost is the day's total.
@@ -278,6 +551,7 @@ export type JobModel = {
   decision: LiveDecision | null
   progress: JobProgress | null
   phase: { code: string | null; label: string } | null
+  sources_manifest: unknown
 }
 
 // The job page's model.json (review-job-model/1): acceptance axis, gate rows, the decision awaited, the progress
@@ -303,6 +577,8 @@ export function readJobModel(text: string | null): JobModel | null {
           label: typeof o.label === 'string' ? o.label : '',
           consequence: typeof o.consequence === 'string' ? o.consequence : '',
         })).filter(o => o.label !== ''),
+        stale: d.stale === true,
+        age_s: finite(d.age_s) ? d.age_s : null,
       }
     : null
   const p = m.progress
@@ -316,7 +592,7 @@ export function readJobModel(text: string | null): JobModel | null {
     : null
   const ph = m.phase
   const phase = isObject(ph) && typeof ph.label === 'string' && ph.label ? { code: typeof ph.code === 'string' ? ph.code : null, label: ph.label } : null
-  return { acceptance, gates, needs_decision: m.needs_decision === true, conclusion: typeof m.conclusion === 'string' && m.conclusion ? m.conclusion : null, decision, progress, phase }
+  return { acceptance, gates, needs_decision: m.needs_decision === true, conclusion: typeof m.conclusion === 'string' && m.conclusion ? m.conclusion : null, decision, progress, phase, sources_manifest: m.sources_manifest }
 }
 
 // Axis words follow the review page's chip mapping (plan A12).
@@ -373,4 +649,79 @@ export const STATE_TEXT = {
   unreadable: 'unreadable',
   stale: (key: string, publishedAt: string | null) => 'stale' + (publishedAt ? ' · last published ' + publishedAt : '') + ' · run: ' + RUNS_HINT + ' --project ' + key,
   unavailable: (key: string) => 'unavailable · run: ' + RUNS_HINT + ' --project ' + key,
+}
+
+// ---- W3a pane sections: text built from the sources, drawn by pane.tsx ----
+const ledgerPath = (source: string | null, common: string | null, root: string | null): string | null => {
+  if (common === null) return null
+  if (source === 'ledger_root') return root === null ? null : common + '/autopilot/work-orders/' + root + '/decision-ledger.jsonl'
+  return common + '/autopilot/ledger/decisions.jsonl'
+}
+
+// the veto verb is decision-ledger.js `veto --ledger <ledger> --id <decision_id>` (its own round report prints the same line)
+export function vetoLine(r: DecisionRow, common: string | null, root: string | null): string {
+  if (r.decision_id === null) return '  （沒有 decision_id，無法 veto）'
+  const path = ledgerPath(r.source, common, root)
+  if (path === null && r.source === 'ledger_root') return '  （找不到 ledger 路徑，無法組出 veto 指令）'
+  return '  veto: decision-ledger.js veto ' + (path === null ? '' : '--ledger ' + path + ' ') + '--id ' + r.decision_id
+}
+
+const MAX_DECISION_ROWS = 12
+const MAX_TASK_ROWS = 8
+
+export function buildSections(src: Sources, foreman: ForemanView | null, identity: unknown, nowMs: number): PaneSections {
+  const m = src.manifest
+  const a = src.attention
+  const attention: PaneLine[] = a !== null && a.kind !== 'idle'
+    ? [{ text: '要你決定', bold: true, warn: true }, { text: attentionReason(a, nowMs) }]
+    : []
+  const waiting: PaneLine[] = []
+  if (a !== null && a.kind === 'idle') {
+    const n = waitingMinutes(a.since_ms, nowMs)
+    waiting.push({ text: n === null ? '停在等你指示' : '停在等你指示 ' + n + ' 分', dim: true })
+  } else if (a === null && liveSource(m, 'attention') === false) {
+    waiting.push({ text: '等待狀態：' + NOT_WIRED, dim: true })
+  }
+
+  const tasks: PaneLine[] = []
+  const t = src.tasks
+  if (t !== null) {
+    if (t.total === 0) tasks.push({ text: '沒有任務', dim: true })
+    else {
+      tasks.push({ text: '任務 ' + t.completed + '/' + t.total + ' 完成 · 進行中 ' + t.in_progress, bold: true })
+      if (t.current !== null) tasks.push({ text: '目前：' + t.current })
+      for (const r of t.rows.slice(0, MAX_TASK_ROWS)) tasks.push({ text: (r.status === 'completed' ? '[x] ' : r.status === 'in_progress' ? '[~] ' : '[ ] ') + r.subject, dim: r.status === 'completed' })
+    }
+  } else if (liveSource(m, 'tasks') === true) tasks.push({ text: TODO_TOOLS_HINT, dim: true })
+  else if (liveSource(m, 'tasks') === false) tasks.push({ text: '任務：' + NOT_WIRED, dim: true })
+
+  const decisions: PaneLine[] = []
+  const d = src.decisions
+  if (d !== null) {
+    const common = commonDirOf(identity)
+    if (d.count > 0) {
+      decisions.push({ text: '代你決定 ' + d.count + ' 件（' + d.irreversible + ' 件不可逆）', bold: true })
+      const label = writersLabel(d.writers)
+      if (label !== null) decisions.push({ text: label, dim: true })
+      for (const r of d.rows.slice(-MAX_DECISION_ROWS)) {
+        decisions.push({ text: '[' + (r.decision_id === null ? '—' : r.decision_id) + '] ' + r.decision + ' · ' + (r.irreversible ? '不可逆' : '可逆') + ' · ' + (r.writer === null ? '—' : r.writer) + (r.round === null ? '' : ' · 第 ' + r.round + ' 輪') })
+        decisions.push({ text: vetoLine(r, common, d.root), dim: true })
+      }
+      if (d.rows.length > MAX_DECISION_ROWS) decisions.push({ text: '…另有 ' + (d.rows.length - MAX_DECISION_ROWS) + ' 件較早的決定', dim: true })
+    }
+    if (d.undocumented > 0) decisions.push({ text: d.undocumented + ' 件派工無決策紀錄', dim: true })
+  } else if (notWired(m, ['ledger_engine', 'ledger_depth0'])) decisions.push({ text: '代你決定：' + NOT_WIRED, dim: true })
+
+  const fm: PaneLine[] = []
+  if (foreman === null) fm.push({ text: '工頭狀態：' + NOT_WIRED, dim: true })
+  else {
+    fm.push({ text: foreman.binding === 'session' ? '工頭活動（依 session 綁定：同一 session 的多個工作會看到同一批）' : '工頭活動（綁定：' + foreman.binding + '）', bold: true })
+    const age = (at: number | null, published: number | null) => ageText(at !== null ? (nowMs - at) / 1000 : published === null ? NaN : published)
+    for (const g of foreman.agents) {
+      fm.push({ text: (g.description || g.id) + ' · ' + (g.label || '—') + ' · ' + age(g.at_ms, g.age_s) + ' 前' + (g.stale ? ' · 久未動' : ''), dim: g.stale })
+    }
+    if (foreman.stage !== null) fm.push({ text: '階段 ' + foreman.stage + ' · ' + age(foreman.stage_at_ms, foreman.stage_age_s) + ' 前' + (foreman.stage_source === null ? '' : '（' + foreman.stage_source + '）') })
+    if (foreman.agents.length === 0 && foreman.stage === null) fm.push({ text: '沒有活動紀錄', dim: true })
+  }
+  return { attention, waiting, tasks, decisions, foreman: fm }
 }

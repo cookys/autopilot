@@ -1,3 +1,13 @@
+// P1W W3a (the mod reads tasks, attention, phase, decisions sidecar, foreman sidecar, sources manifest, receipts; 21 cases + 1 traversal case x terminal + desktop):
+// RED at e227528e+C1..C3b (64 tests): 64 pass / 42 fail (all 21 W3a cases x 2). GREEN: 108 pass / 0 fail (incl. the root-traversal case).
+// W3a mutation controls (each red, then reverted; run-w/w3a/mut-*.txt): attention not decide / idle attention is decide / stale flag ignored /
+//   stale under a day shown / idle append missing / tasks-done ignored / empty tasks is done / done ignores acceptance / tasks progress overrides
+//   model / no dim / sid not sanitised / campaign ignores receipt / latest receipt / file-level root unbound ignored / receipt root ignored /
+//   traversal guard off / session tasks start ignored / marker start ignored / decisions project scope off / root scope off / zero decisions shown /
+//   writers label constant / next-pick still labelled / undocumented dropped / veto without id / root ledger path / foreman stale not dim /
+//   foreman absent silent / foreman scope off / manifest scope off / phase-only-phase / progress-only-progress / model manifest fallback off /
+//   disabled counts as wired / tasks hint without manifest / tasks not-wired silent / attention not-wired silent / ctx not-wired ignored /
+//   manifest beats data / line-2 tail dropped / pane stale suffix dropped / attention section dropped.
 // P1c C3b-M (job phase from the job model's `phase.label`; fifth verdict word 待命 for idle; run with `claude plugin test <wrapper>`):
 // RED at 48be3ecd (64 tests): 56 pass / 8 fail (4 cases x terminal + desktop): (fail) verdict 待命 ..., (fail) phase: the job model phase label is shown ..., (fail) verdict precedence
 //   (the idle step), (fail) verdict 完成待驗收 (its 'none' cases now expect ['待命'] instead of no word). GREEN: 64 pass / 0 fail.
@@ -115,12 +125,13 @@ type World = {
   opens: { id: string; title?: string }[]
   writes: string[]
   reads: string[]
+  lists: string[]
   clock: ReturnType<typeof mock.clock>
 }
 
 // Registers the bottom hooks (what the engine would answer) for one test.
 function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A): World {
-  const w: World = { files, sid: { value: sid }, cwdReal: { value: CWD }, toasts: [], opens: [], writes: [], reads: [], clock: undefined as never }
+  const w: World = { files, sid: { value: sid }, cwdReal: { value: CWD }, toasts: [], opens: [], writes: [], reads: [], lists: [], clock: undefined as never }
   w.clock = mock.clock(on, { now: nowMs })
   mock.env(on, { HOME })
   on('fs.read', ($, e) => {
@@ -132,6 +143,7 @@ function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A): World {
   on('fs.exists', ($, e) => ({ value: w.files[e.path] !== undefined }))
   on('fs.write', ($, e) => { w.writes.push(e.path); return { value: undefined } })
   on('fs.list', ($, e) => {
+    w.lists.push(e.path)
     const prefix = e.path.replace(/\/$/, '') + '/'
     const seen = new Map<string, 'file' | 'dir'>()
     for (const p of Object.keys(w.files)) {
@@ -736,6 +748,450 @@ for (const surface of SURFACES) {
     pane = await paneParts($, surface)
     expect(pane.texts).not.toContain('要你決定')
     expect(pane.texts[1]).toContain('execution status, not progress')
+  })
+}
+
+// ---- mods P1W W3a: the mod reads every wired source (tasks, attention, phase, decisions sidecar, foreman, manifest) ----
+const DECISION_W = { question: '要合併 plan 還是拆開？', options: [{ label: '合併', consequence: '一次驗收' }, { label: '拆開', consequence: '兩次驗收' }], not_authorized: null }
+const SID_RAW = 'sid/with:odd chars'
+const SID_FILE = 'sid_with_odd_chars' // sanitizeSessionId: every scalar outside [A-Za-z0-9_-] becomes one "_"
+const SCOPE_KEY = KEY + '--' + ROOT
+const P_TASKS = (sid = SID_A) => LIVE + '/tasks/' + sid + '.json'
+const P_ATT = (sid = SID_A) => LIVE + '/attention/' + sid + '.json'
+const P_DEC = LIVE + '/runs/' + SCOPE_KEY + '.decisions.json'
+const P_FOREMAN = LIVE + '/runs/' + SCOPE_KEY + '.foreman.json'
+const P_SOURCES = LIVE + '/runs/sources/' + SCOPE_KEY + '.json'
+const W_MODEL = AHOME + '/review/' + KEY + '/2026-10-04/' + ROOT + '/current/model.json'
+const W_ENV = LIVE + '/runs/' + SCOPE_KEY + '.json'
+const COMMON = '/work/repo/.git'
+
+function tasksFile(over: Record<string, unknown> = {}, sid = SID_A) {
+  return {
+    schema: 'autopilot.session-tasks/1', session_id: sid, cwd: CWD, project_key: KEY, updated_at: '2026-10-04T10:00:10.000Z',
+    first_created_at: '2026-10-04T09:30:00.000Z',
+    tasks: [{ id: '1', subject: '寫測試', status: 'completed', started_seq: 1 }, { id: '2', subject: '接線', status: 'in_progress', started_seq: 2 }, { id: '3', subject: '收尾', status: 'pending', started_seq: null }],
+    counts: { total: 3, completed: 1, in_progress: 1 }, current: { id: '2', subject: '接線' },
+    ...over,
+  }
+}
+const allDone = () => tasksFile({
+  tasks: [{ id: '1', subject: 'a', status: 'completed', started_seq: 1 }, { id: '2', subject: 'b', status: 'completed', started_seq: 2 }],
+  counts: { total: 2, completed: 2, in_progress: 0 }, current: null,
+})
+function attention(kind: string, over: Record<string, unknown> = {}, sid = SID_A) {
+  return { schema: 'autopilot.attention/1', session_id: sid, project_key: KEY, kind, tool_name: kind === 'permission' ? 'Bash' : null, summary: kind === 'idle' ? 'waiting for your input' : 'Bash: rm -rf build', since: '2026-10-04T09:55:30.000Z', updated_at: '2026-10-04T09:55:30.000Z', ...over }
+}
+function decisionsSidecar(over: Record<string, unknown> = {}, scope: Record<string, unknown> = {}) {
+  return {
+    schema: 'autopilot.decisions-sidecar/1', scope: { project_key: KEY, repo_identity: 'git-common-dir:' + COMMON, root_run_id: ROOT, ...scope },
+    rows: [
+      { round: 1, decision: '先拆 plan 再實作', irreversible: false, at: '2026-10-04T09:40:00.000Z', writer: 'engine', kind: 'decision', decision_id: 'd-1', source: 'ledger_default' },
+      { round: 2, decision: '刪掉舊分支', irreversible: true, at: '2026-10-04T09:45:00.000Z', writer: 'engine', kind: 'decision', decision_id: 'd-2', source: 'ledger_root' },
+    ],
+    count: 2, irreversible_count: 1, writers_wired: ['engine', 'next-pick'], undocumented_dispatches: 0, ...over,
+  }
+}
+function foremanSidecar(over: Record<string, unknown> = {}, scope: Record<string, unknown> = {}) {
+  return {
+    schema: 'autopilot.foreman-activity/1', scope: { project_key: KEY, repo_identity: 'git-common-dir:' + COMMON, root_run_id: ROOT, ...scope },
+    binding: 'session', stall_s: 600,
+    agents: [
+      { agent_id: 'a1', description: '修 parser', label: 'running', last_activity_at: '2026-10-04T10:00:00.000Z', age_s: 30, stale: false, source: 'context_tasks', session_id: SID_A, binding: 'session' },
+      { agent_id: 'a2', description: null, label: 'last tool: Bash', last_activity_at: '2026-10-04T09:40:00.000Z', age_s: 1230, stale: true, source: 'stamp', session_id: SID_A, binding: 'session' },
+    ],
+    stage: 'implement', stage_source: 'run_ledger:tmp', stage_at: '2026-10-04T09:59:00.000Z', stage_age_s: 90, ...over,
+  }
+}
+type SrcState = Record<string, { installed: boolean; enabled: boolean }>
+const ALL_ON: SrcState = Object.fromEntries(['tasks', 'attention', 'decision', 'ledger_engine', 'ledger_depth0', 'phase', 'compare', 'task_status_input', 'context', 'progress'].map(k => [k, { installed: true, enabled: true }]))
+function manifest(over: SrcState = {}, scope: Record<string, unknown> = {}) {
+  const sources: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries({ ...ALL_ON, ...over })) sources[k] = { ...v, how: 'x' }
+  return { schema: 'autopilot.sources/1', scope: { project_key: KEY, root_run_id: ROOT, ...scope }, sources }
+}
+const OFF = { installed: false, enabled: false }
+const REC = (root: string, issued: string, top: Record<string, unknown> = {}) => ({
+  root_run_id: root, controller: { progress_receipts: [{ artifact_type: 'controller_progress_receipt', root_run_id: root, issued_at: issued, generation: 1 }] }, ...top,
+})
+const VERDICTS5 = ['要你決定', '疑似卡住', '完成待驗收', '進行中', '待命']
+const verdicts = (t: string) => VERDICTS5.filter(v => t.includes(v))
+const quiet = (live: number) => ({ confirmed_live: live, exited: 1, unknown: 0, fresh_bound_s: 30 })
+const exitedRun = () => row({ run_id: 'r9', phase: 'exited', alive: false, rc: 0, final_status: 'done' })
+const quietWorld = (): Tree => { const f = base(); f[W_ENV] = j(envelope({ runs: [exitedRun()], counts: quiet(0) })); return f }
+
+for (const surface of SURFACES) {
+  test('W3a attention: permission / question is 要你決定 over a stalled run; idle is not; the age comes from since (' + surface + ')', async ($, on) => {
+    const files = base() // base() has a stalled row
+    files[P_ATT()] = j(attention('permission'))
+    const w = world(on, files)
+    await start($, surface)
+    let p = await bandParts($, surface)
+    expect(p.line1).toBe('▲ 要你決定 repo · — · 10m · —')
+    expect(p.line2).toBe('等你批准：Bash: rm -rf build（等了 5 分）')
+    files[P_ATT()] = j(attention('question', { tool_name: 'AskUserQuestion', summary: '要拆開嗎？' }))
+    await w.clock.advance(5000)
+    p = await bandParts($, surface)
+    expect(p.line2).toBe('等你回答：要拆開嗎？（等了 5 分）')
+    // idle never means 要你決定: the stalled run speaks again
+    files[P_ATT()] = j(attention('idle'))
+    await w.clock.advance(5000)
+    expect(verdicts(await bandText($, surface))).toEqual(['疑似卡住'])
+    // another session's attention file never reaches this band
+    delete files[P_ATT()]
+    files[P_ATT(SID_B)] = j(attention('permission', {}, SID_B))
+    await w.clock.advance(5000)
+    expect(verdicts(await bandText($, surface))).toEqual(['疑似卡住'])
+    // a file of a different schema is absent
+    files[P_ATT()] = j({ ...attention('permission'), schema: 'other/1' })
+    await w.clock.advance(5000)
+    expect(verdicts(await bandText($, surface))).toEqual(['疑似卡住'])
+  })
+
+  test('W3a attention: an idle session in a quiet world is 待命 with 停在等你指示 N 分 appended; a live run keeps 進行中 without it (' + surface + ')', async ($, on) => {
+    const files = quietWorld()
+    files[P_ATT()] = j(attention('idle', { since: '2026-10-04T09:57:30.000Z' }))
+    const w = world(on, files)
+    await start($, surface)
+    const p = await bandParts($, surface)
+    expect(p.line1).toBe('◌ 待命 repo · — · 10m · —')
+    expect(p.line2).toBe('沒有派工在跑 · 停在等你指示 3 分')
+    files[W_ENV] = j(envelope({ runs: [row({ run_id: 'r1' })], counts: quiet(1) }))
+    await w.clock.advance(5000)
+    expect((await bandParts($, surface)).line2).toBe('1 個派工在跑')
+  })
+
+  test('W3a attention in the pane: the awaited thing is listed before the dispatch table (' + surface + ')', async ($, on) => {
+    const files = base()
+    files[P_ATT()] = j(attention('permission'))
+    world(on, files)
+    await start($, surface)
+    const pane = await paneParts($, surface)
+    expect(pane.texts[1]).toBe('要你決定')
+    expect(pane.texts[2]).toBe('等你批准：Bash: rm -rf build（等了 5 分）')
+    expect(pane.texts.findIndex(t => t.includes('execution status, not progress'))).toBeGreaterThan(2)
+  })
+
+  test('W3a decision age: a stale open decision shows 已等 N 天 in band and pane; a fresh one does not (' + surface + ')', async ($, on) => {
+    const files = base()
+    files[W_MODEL] = j(model({ needs_decision: true, decision: { ...DECISION_W, stale: true, age_s: 3 * 86400 + 5 } }))
+    const w = world(on, files)
+    await start($, surface)
+    expect((await bandParts($, surface)).line2).toBe('要合併 plan 還是拆開？（已等 3 天）')
+    expect((await paneParts($, surface)).texts[2]).toBe('要合併 plan 還是拆開？（已等 3 天）')
+    files[W_MODEL] = j(model({ needs_decision: true, decision: { ...DECISION_W, stale: false, age_s: 40 } }))
+    await w.clock.advance(5000)
+    expect((await bandParts($, surface)).line2).toBe('要合併 plan 還是拆開？')
+    files[W_MODEL] = j(model({ needs_decision: true, decision: { ...DECISION_W, stale: true, age_s: 3600 } })) // stale but under a day
+    await w.clock.advance(5000)
+    expect((await bandParts($, surface)).line2).toBe('要合併 plan 還是拆開？')
+  })
+
+  test('W3a tasks: counts feed an unfrozen progress, the pane lists them, all completed is 完成待驗收, a frozen model progress wins (' + surface + ')', async ($, on) => {
+    const files = quietWorld()
+    files[P_TASKS()] = j(tasksFile())
+    const w = world(on, files)
+    await start($, surface)
+    let p = await bandParts($, surface)
+    expect(p.line1).toBe('◌ 待命 repo · — · 10m · 1 done*') // campaign scope: elapsed is the earliest run, progress unfrozen
+    const last = p.last as Node
+    expect(last.props?.dimColor).toBe(true)
+    const pane = await paneParts($, surface)
+    expect(pane.texts).toContain('任務 1/3 完成 · 進行中 1')
+    expect(pane.texts).toContain('目前：接線')
+    expect(pane.texts).toContain('[x] 寫測試')
+    files[P_TASKS()] = j(allDone())
+    await w.clock.advance(5000)
+    p = await bandParts($, surface)
+    expect(p.line1).toBe('✓ 完成待驗收 repo · — · 10m · 2 done*')
+    expect(p.line2).toBe('任務 2/2 都完成，等你驗收')
+    // a live run beats "tasks all done"
+    files[W_ENV] = j(envelope({ runs: [row({ run_id: 'r1' })], counts: quiet(1) }))
+    await w.clock.advance(5000)
+    expect(verdicts(await bandText($, surface))).toEqual(['進行中'])
+    // acceptance already decided is not waiting
+    files[W_ENV] = j(envelope({ runs: [exitedRun()], counts: quiet(0) }))
+    files[W_MODEL] = j(model({ axes: { execution: { running: 0, exited: 1, unknown: 0 }, acceptance: 'accepted', can_close: true } }))
+    await w.clock.advance(5000)
+    expect(verdicts(await bandText($, surface))).toEqual(['待命'])
+    // an empty task list is not "all done", and a frozen job progress wins over the task counts
+    files[P_TASKS()] = j(tasksFile({ tasks: [], counts: { total: 0, completed: 0, in_progress: 0 }, current: null }))
+    files[W_MODEL] = j(model())
+    await w.clock.advance(5000)
+    expect(verdicts(await bandText($, surface))).toEqual(['待命'])
+    expect((await bandParts($, surface)).line1.endsWith('· —')).toBe(true)
+    expect((await paneParts($, surface)).texts).toContain('沒有任務')
+    files[P_TASKS()] = j(tasksFile())
+    files[W_MODEL] = j(model({ progress: { frozen: true, percent: 62.5, done: 5, total: 8 } }))
+    await w.clock.advance(5000)
+    expect((await bandParts($, surface)).line1.endsWith('62.5%（5/8）')).toBe(true)
+  })
+
+  test('W3a tasks: the file is found under the sanitised session id; another session\'s file and a wrong schema are ignored (' + surface + ')', async ($, on) => {
+    const files = quietWorld()
+    files[AHOME + '/session-mode/' + SID_RAW + '.json'] = j({ session_id: SID_RAW, level: null, project_key: KEY, root_run_id: ROOT, expires_at: '2026-10-05T10:00:00.000Z' })
+    files[P_TASKS(SID_FILE)] = j(tasksFile({}, SID_RAW))
+    files[P_TASKS(SID_A)] = j(tasksFile({ counts: { total: 9, completed: 7, in_progress: 0 } }))
+    files[LIVE + '/context/' + SID_FILE + '.json'] = j(context(55))
+    const w = world(on, files, NOW_FRESH, SID_RAW)
+    await start($, surface)
+    expect((await bandParts($, surface)).line1.endsWith('1 done*')).toBe(true)
+    expect(await paneHeader($, surface)).toContain('ctx 55%') // the context file name is sanitised too
+    files[P_TASKS(SID_FILE)] = j({ ...tasksFile({}, SID_RAW), schema: 'other/1' })
+    // wrong schema: the file is absent, so no manifest means no task section at all
+    await w.clock.advance(5000)
+    expect((await paneParts($, surface)).texts.some(x => x.includes('任務'))).toBe(false)
+    expect((await bandParts($, surface)).line1.endsWith('· —')).toBe(true)
+  })
+
+  test('W3a elapsed: campaign = earliest progress receipt bound to the root; session = tasks first_created_at, else marker started_at, else the earliest run (' + surface + ')', async ($, on) => {
+    const files = quietWorld()
+    const dir = COMMON + '/autopilot/work-orders/' + ROOT + '/'
+    files[dir + 'n2-a1.json'] = j(REC('other-root', '2026-10-04T08:00:00.000Z', { root_run_id: undefined })) // a foreign receipt inside a file with no file-level root: the receipt's own root decides
+    files[dir + 'n3-a1.json'] = j(REC(ROOT, '2026-10-04T07:00:00.000Z', { root_run_id: 'other-root' })) // file-level root differs: unbound as a whole
+    files[dir + 'n4-a1.json'] = '{not json'
+    const w = world(on, files)
+    await start($, surface)
+    expect((await bandParts($, surface)).line1).toBe('◌ 待命 repo · — · 10m · —') // no receipt is bound to this root: the earliest run start (09:50)
+    files[dir + 'n1-a1.json'] = j(REC(ROOT, '2026-10-04T09:10:00.000Z', {}))
+    files[dir + 'n1-a2.json'] = j(REC(ROOT, '2026-10-04T09:20:00.000Z', {}))
+    await w.clock.advance(5000)
+    expect((await bandParts($, surface)).line1).toBe('◌ 待命 repo · — · 50m · —') // earliest bound receipt 09:10
+    // session scope (the marker has no root; the project-level envelope is read)
+    files[AHOME + '/session-mode/' + SID_A + '.json'] = j({ session_id: SID_A, level: null, project_key: KEY, root_run_id: null, started_at: '2026-10-04T09:00:00.000Z', expires_at: '2026-10-05T10:00:00.000Z' })
+    files[LIVE + '/runs/' + KEY + '.json'] = j(envelope({ runs: [exitedRun()], counts: quiet(0) }, null))
+    files[P_TASKS()] = j(tasksFile())
+    await w.clock.advance(5000)
+    expect((await bandParts($, surface)).line1.split(' · ')[2]).toBe('30m') // tasks first_created_at 09:30
+    delete files[P_TASKS()]
+    await w.clock.advance(5000)
+    expect((await bandParts($, surface)).line1.split(' · ')[2]).toBe('1h0m') // marker started_at 09:00
+    files[AHOME + '/session-mode/' + SID_A + '.json'] = j({ session_id: SID_A, level: null, project_key: KEY, root_run_id: null, expires_at: '2026-10-05T10:00:00.000Z' })
+    await w.clock.advance(5000)
+    expect((await bandParts($, surface)).line1.split(' · ')[2]).toBe('10m') // earliest run
+  })
+
+  test('W3a elapsed: a root that is not a plain segment (traversal, spaces) never reaches the work-orders path (' + surface + ')', async ($, on) => {
+    const evil = 'bad root'
+    const files = quietWorld()
+    files[AHOME + '/session-mode/' + SID_A + '.json'] = j({ session_id: SID_A, level: 'l5', project_key: KEY, root_run_id: evil, expires_at: '2026-10-05T10:00:00.000Z' })
+    files[LIVE + '/runs/' + KEY + '--bad_root.json'] = j(envelope({ runs: [exitedRun()], counts: quiet(0) }, evil))
+    files[COMMON + '/autopilot/work-orders/' + evil + '/n1-a1.json'] = j(REC(evil, '2026-10-04T08:00:00.000Z', {}))
+    const w = world(on, files)
+    await start($, surface)
+    expect((await bandParts($, surface)).line1).toBe('◌ 待命 repo · — · 10m · —') // the 08:00 receipt behind the traversal is never read
+    expect(w.reads.concat(w.lists).some(p => p.includes('work-orders'))).toBe(false)
+  })
+
+  test('W3a marker contract: a plain session (level null) still resolves its scope (' + surface + ')', async ($, on) => {
+    const files = base()
+    files[AHOME + '/session-mode/' + SID_A + '.json'] = j({ session_id: SID_A, level: null, project_key: KEY, root_run_id: null, started_at: '2026-10-04T09:40:00.000Z', phase: 'review', phase_set_at: PUBLISHED, expires_at: '2026-10-05T10:00:00.000Z' })
+    world(on, files)
+    await start($, surface)
+    const text = await bandText($, surface)
+    expect(text).toContain(FOUND)
+    expect(text.split('\n')[0]?.split(' · ')[2]).toBe('20m')
+  })
+
+  test('W3a decisions sidecar: line 2 carries 代你決定 m 件（k 件不可逆）, only when non-zero (' + surface + ')', async ($, on) => {
+    const files = quietWorld()
+    files[P_DEC] = j(decisionsSidecar())
+    const w = world(on, files)
+    await start($, surface)
+    expect((await bandParts($, surface)).line2).toBe('沒有派工在跑 · 代你決定 2 件（1 件不可逆）')
+    files[P_DEC] = j(decisionsSidecar({ count: 0, irreversible_count: 0, rows: [] }))
+    await w.clock.advance(5000)
+    expect((await bandParts($, surface)).line2).toBe('沒有派工在跑')
+    files[P_DEC] = j(decisionsSidecar({ count: 1, irreversible_count: 0, rows: [] }))
+    await w.clock.advance(5000)
+    expect((await bandParts($, surface)).line2).toBe('沒有派工在跑 · 代你決定 1 件（0 件不可逆）')
+  })
+
+  test('W3a decisions sidecar: 僅自動裁決 is worded from the actual writers_wired list; no depth-0 writer = label (' + surface + ')', async ($, on) => {
+    const files = quietWorld()
+    files[P_DEC] = j(decisionsSidecar({ writers_wired: ['engine'] }))
+    const w = world(on, files)
+    await start($, surface)
+    expect((await bandParts($, surface)).line2).toBe('沒有派工在跑 · 代你決定 2 件（1 件不可逆） · 僅 engine 自動裁決')
+    files[P_DEC] = j(decisionsSidecar({ writers_wired: [] }))
+    await w.clock.advance(5000)
+    expect((await bandParts($, surface)).line2).toBe('沒有派工在跑 · 代你決定 2 件（1 件不可逆） · 決策寫入端未接')
+    files[P_DEC] = j(decisionsSidecar({ writers_wired: ['next-pick'] }))
+    await w.clock.advance(5000)
+    expect((await bandParts($, surface)).line2).toBe('沒有派工在跑 · 代你決定 2 件（1 件不可逆）') // a depth-0 writer is wired: no label
+    files[P_DEC] = j(decisionsSidecar({ writers_wired: ['engine', 'next-pick'] }))
+    await w.clock.advance(5000)
+    expect((await bandParts($, surface)).line2).toBe('沒有派工在跑 · 代你決定 2 件（1 件不可逆）')
+  })
+
+  test('W3a decisions sidecar: undocumented dispatches are counted on line 2, on their own or after the decisions (' + surface + ')', async ($, on) => {
+    const files = quietWorld()
+    files[P_DEC] = j(decisionsSidecar({ count: 0, irreversible_count: 0, rows: [], undocumented_dispatches: 3 }))
+    const w = world(on, files)
+    await start($, surface)
+    expect((await bandParts($, surface)).line2).toBe('沒有派工在跑 · 3 件派工無決策紀錄')
+    files[P_DEC] = j(decisionsSidecar({ undocumented_dispatches: 3 }))
+    await w.clock.advance(5000)
+    expect((await bandParts($, surface)).line2).toBe('沒有派工在跑 · 代你決定 2 件（1 件不可逆） · 3 件派工無決策紀錄')
+  })
+
+  test('W3a decisions pane: one row per decision with the real veto command; no id means no veto (' + surface + ')', async ($, on) => {
+    const files = quietWorld()
+    const rows = decisionsSidecar().rows as Record<string, unknown>[]
+    files[P_DEC] = j(decisionsSidecar({ rows: [...rows, { round: 3, decision: '沒有編號的決定', irreversible: false, at: '2026-10-04T09:50:00.000Z', writer: 'engine', kind: 'pick', decision_id: null, source: 'ledger_default' }], count: 3 }))
+    world(on, files)
+    await start($, surface)
+    const t = (await paneParts($, surface)).texts
+    expect(t).toContain('代你決定 3 件（1 件不可逆）')
+    expect(t.some(x => x.includes('先拆 plan 再實作') && x.includes('d-1') && x.includes(' · 可逆 · '))).toBe(true)
+    expect(t.some(x => x.includes('刪掉舊分支') && x.includes('不可逆'))).toBe(true)
+    expect(t).toContain('  veto: decision-ledger.js veto --ledger ' + COMMON + '/autopilot/ledger/decisions.jsonl --id d-1')
+    expect(t).toContain('  veto: decision-ledger.js veto --ledger ' + COMMON + '/autopilot/work-orders/' + ROOT + '/decision-ledger.jsonl --id d-2')
+    const noId = t.findIndex(x => x.includes('沒有編號的決定'))
+    expect(noId).toBeGreaterThan(0)
+    expect(t[noId + 1]).toBe('  （沒有 decision_id，無法 veto）')
+  })
+
+  test('W3a decisions sources: both ledger writers not installed and no sidecar = 來源未接 in the pane; installed = nothing (' + surface + ')', async ($, on) => {
+    const files = quietWorld()
+    files[P_SOURCES] = j(manifest({ ledger_engine: OFF, ledger_depth0: OFF }))
+    const w = world(on, files)
+    await start($, surface)
+    expect((await paneParts($, surface)).texts).toContain('代你決定：來源未接')
+    expect((await bandParts($, surface)).line2).toBe('沒有派工在跑')
+    files[P_SOURCES] = j(manifest({ ledger_engine: OFF })) // one writer installed: wired, currently empty
+    await w.clock.advance(5000)
+    expect((await paneParts($, surface)).texts.some(x => x.startsWith('代你決定'))).toBe(false)
+  })
+
+  test('W3a foreman: rows with description, label and age; stale rows dim; binding stated; stage line (' + surface + ')', async ($, on) => {
+    const files = base()
+    files[P_FOREMAN] = j(foremanSidecar())
+    world(on, files)
+    await start($, surface)
+    const pane = await paneParts($, surface)
+    const t = pane.texts
+    expect(t).toContain('工頭活動（依 session 綁定：同一 session 的多個工作會看到同一批）')
+    expect(t).toContain('修 parser · running · 30s 前')
+    expect(t).toContain('a2 · last tool: Bash · 20m 前 · 久未動')
+    expect(t).toContain('階段 implement · 1m 前（run_ledger:tmp）')
+    const nodes = walkTexts(pane.tree)
+    expect(nodes.find(n => textOf(n) === 'a2 · last tool: Bash · 20m 前 · 久未動')?.props?.dimColor).toBe(true)
+    expect(nodes.find(n => textOf(n) === '修 parser · running · 30s 前')?.props?.dimColor).not.toBe(true)
+  })
+
+  test('W3a foreman: an absent sidecar reads 工頭狀態：來源未接 (' + surface + ')', async ($, on) => {
+    world(on, base())
+    await start($, surface)
+    expect((await paneParts($, surface)).texts).toContain('工頭狀態：來源未接')
+  })
+
+  test('W3a scope guards: a sidecar at the right path with another project / root is an absent file (' + surface + ')', async ($, on) => {
+    const files = quietWorld()
+    files[P_DEC] = j(decisionsSidecar({}, { project_key: OTHER_KEY }))
+    files[P_FOREMAN] = j(foremanSidecar({}, { project_key: OTHER_KEY }))
+    files[P_SOURCES] = j(manifest({ ledger_engine: OFF, ledger_depth0: OFF, tasks: OFF }, { project_key: OTHER_KEY }))
+    const w = world(on, files)
+    await start($, surface)
+    expect((await bandParts($, surface)).line2).toBe('沒有派工在跑')
+    let t = (await paneParts($, surface)).texts
+    expect(t.some(x => x.startsWith('代你決定'))).toBe(false)
+    expect(t).toContain('工頭狀態：來源未接') // the foreign foreman rows are not shown
+    expect(t.some(x => x.includes('修 parser'))).toBe(false)
+    expect(t.some(x => x.includes('來源未接') && x !== '工頭狀態：來源未接')).toBe(false) // the foreign manifest is not obeyed
+    files[P_DEC] = j(decisionsSidecar({}, { root_run_id: 'other-root' }))
+    files[P_FOREMAN] = j(foremanSidecar({}, { root_run_id: 'other-root' }))
+    await w.clock.advance(5000)
+    t = (await paneParts($, surface)).texts
+    expect((await bandParts($, surface)).line2).toBe('沒有派工在跑')
+    expect(t.some(x => x.includes('修 parser'))).toBe(false)
+    files[P_DEC] = j({ ...decisionsSidecar(), schema: 'other/1' })
+    await w.clock.advance(5000)
+    expect((await bandParts($, surface)).line2).toBe('沒有派工在跑')
+  })
+
+  test('W3a sources manifest: phase / progress slots read 來源未接 only when no writer for them is live; no manifest = an em dash (' + surface + ')', async ($, on) => {
+    const files = quietWorld()
+    files[P_SOURCES] = j(manifest({ phase: OFF, progress: OFF, task_status_input: OFF, tasks: OFF }))
+    const w = world(on, files)
+    await start($, surface)
+    expect((await bandParts($, surface)).line1).toBe('◌ 待命 repo · 來源未接 · 10m · 來源未接')
+    files[P_SOURCES] = j(manifest({ phase: OFF, task_status_input: OFF })) // the campaign progress receipt writer still feeds the phase
+    await w.clock.advance(5000)
+    expect((await bandParts($, surface)).line1).toBe('◌ 待命 repo · — · 10m · —')
+    files[P_SOURCES] = j(manifest({ progress: OFF, tasks: { installed: true, enabled: false } })) // installed but switched off = not wired
+    await w.clock.advance(5000)
+    expect((await bandParts($, surface)).line1).toBe('◌ 待命 repo · — · 10m · 來源未接')
+    files[P_SOURCES] = j(manifest({ progress: OFF })) // the task hook still feeds the progress slot: wired, empty
+    await w.clock.advance(5000)
+    expect((await bandParts($, surface)).line1).toBe('◌ 待命 repo · — · 10m · —')
+    delete files[P_SOURCES]
+    await w.clock.advance(5000)
+    expect((await bandParts($, surface)).line1).toBe('◌ 待命 repo · — · 10m · —')
+    // data beats the manifest: a phase / progress the model really carries is shown even when the manifest says not installed
+    files[P_SOURCES] = j(manifest({ phase: OFF, progress: OFF, task_status_input: OFF, tasks: OFF }))
+    files[W_MODEL] = j(model({ phase: { code: 'IMPLEMENTING', label: '實作', source: 'campaign' }, progress: { frozen: true, percent: 50, done: 4, total: 8 } }))
+    await w.clock.advance(5000)
+    expect((await bandParts($, surface)).line1).toBe('◌ 待命 repo · 實作 · 10m · 50%（4/8）')
+  })
+
+  test('W3a sources manifest: the model\'s own sources_manifest is the fallback when the sidecar file is absent (' + surface + ')', async ($, on) => {
+    const files = quietWorld()
+    files[W_MODEL] = j(model({ sources_manifest: manifest({ phase: OFF, progress: OFF, task_status_input: OFF, tasks: OFF }) }))
+    world(on, files)
+    await start($, surface)
+    expect((await bandParts($, surface)).line1).toBe('◌ 待命 repo · 來源未接 · 10m · 來源未接')
+  })
+
+  test('W3a tasks pane: no file + writer installed = 任務工具未開 with the env hint; not installed = 來源未接; no manifest = silent (' + surface + ')', async ($, on) => {
+    const files = quietWorld()
+    const w = world(on, files)
+    await start($, surface)
+    let t = (await paneParts($, surface)).texts
+    expect(t.some(x => x.includes('任務'))).toBe(false)
+    files[P_SOURCES] = j(manifest())
+    await w.clock.advance(5000)
+    t = (await paneParts($, surface)).texts
+    expect(t).toContain('任務工具未開 · 設 CLAUDE_CODE_ENABLE_TODO_TOOLS=1 後才會記錄任務')
+    files[P_SOURCES] = j(manifest({ tasks: OFF }))
+    await w.clock.advance(5000)
+    t = (await paneParts($, surface)).texts
+    expect(t).toContain('任務：來源未接')
+    expect(t.some(x => x.includes('CLAUDE_CODE_ENABLE_TODO_TOOLS'))).toBe(false)
+    // a file that exists is shown whatever the manifest says
+    files[P_TASKS()] = j(tasksFile())
+    await w.clock.advance(5000)
+    t = (await paneParts($, surface)).texts
+    expect(t).toContain('任務 1/3 完成 · 進行中 1')
+    expect(t).not.toContain('任務：來源未接')
+  })
+
+  test('W3a attention source not installed: the pane says so, the band stays silent (' + surface + ')', async ($, on) => {
+    const files = quietWorld()
+    files[P_SOURCES] = j(manifest({ attention: OFF }))
+    world(on, files)
+    await start($, surface)
+    expect((await paneParts($, surface)).texts).toContain('等待狀態：來源未接')
+    expect(verdicts(await bandText($, surface))).toEqual(['待命'])
+  })
+
+  test('W3a context header: not installed + no file = 來源未接; installed + unknown window (W2f shape) = an em dash; observed percent shown (' + surface + ')', async ($, on) => {
+    const files = base()
+    delete files[LIVE + '/context/' + SID_A + '.json']
+    files[P_SOURCES] = j(manifest({ context: OFF }))
+    const w = world(on, files)
+    await start($, surface)
+    expect(await paneHeader($, surface)).toBe('session $0.42 · host $3.10 · ctx 來源未接')
+    files[P_SOURCES] = j(manifest())
+    files[LIVE + '/context/' + SID_A + '.json'] = j({ schema_version: 1, session_id: SID_A, written_at: '2026-10-04T10:00:20.000Z', writer: 'context-budget', window_source: 'unknown', model: {}, context_window: { context_window_size: null, used_percentage: null, total_input_tokens: 90000, current_usage: {} } })
+    await w.clock.advance(5000)
+    expect(await paneHeader($, surface)).toBe('session $0.42 · host $3.10 · ctx —')
+    files[LIVE + '/context/' + SID_A + '.json'] = j({ schema_version: 1, session_id: SID_A, written_at: '2026-10-04T10:00:20.000Z', writer: 'context-budget', window_source: 'observed', model: {}, context_window: { context_window_size: 1000000, used_percentage: 9, total_input_tokens: 90000, current_usage: {} } })
+    await w.clock.advance(5000)
+    expect(await paneHeader($, surface)).toBe('session $0.42 · host $3.10 · ctx 9%')
+    // data beats the manifest
+    files[P_SOURCES] = j(manifest({ context: OFF }))
+    await w.clock.advance(5000)
+    expect(await paneHeader($, surface)).toBe('session $0.42 · host $3.10 · ctx 9%')
   })
 }
 

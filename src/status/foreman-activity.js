@@ -15,7 +15,7 @@
 //                      -> stage + max(heartbeat_ts, ts). Same age-only rule as watch-foreman.js.
 //   (c) stamp          <live>/agents/<sid>/<agent_id>.json  (autopilot.agent-activity/1, the PostToolUse stamp written by the
 //                      PERF/STAMP hand): last_tool_at / last_tool_name. Tool-call age only, never a stage.
-// Binding: (a) and (c) are per SESSION (sessions holding an unexpired marker of this project whose root_run_id equals the
+// Binding: (a) and (c) are per SESSION (sessions holding an unexpired marker of THIS project_key (re-checked here, W3a) whose root_run_id equals the
 // scope's; null equals null). With two jobs in one session both jobs see the rows: `binding: "session"` says so and no
 // per-agent root is ever invented. (b) binds by run_id == root (the front-door text makes the foreman run-id the root).
 // Nothing found -> no sidecar (an old one is removed); the sources manifest then reads `foreman: not wired`.
@@ -147,7 +147,7 @@ function buildForemanActivity({ scope, markers, live, dispatchRunsDir, nowMs }) 
   const root = scope.root_run_id || null;
   const common = commonDirOf(scope.repo_identity);
   const sids = [...new Set(markers
-    .filter((m) => m && typeof m.session_id === 'string' && m.session_id && (m.root_run_id || null) === root)
+    .filter((m) => m && m.project_key === scope.project_key && typeof m.session_id === 'string' && m.session_id && (m.root_run_id || null) === root)
     .map((m) => sanitizeSessionId(m.session_id)))].sort();
   let rows = [];
   for (const sid of sids) rows = rows.concat(fromContextTasks(live, sid, nowMs), fromStamps(live, sid, nowMs));

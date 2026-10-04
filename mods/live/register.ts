@@ -7,8 +7,12 @@
 //   pointer  $HOME/.autopilot/live-pointer.json            (the only path built from $.env.get("HOME"))
 //   project  session marker <autopilot_home>/session-mode/<sid>.json  ->  <live_base>/runs/paths/*.json longest prefix
 //   snapshot <live_base>/runs/<project_key>[--<root>].json, else the SSD copy <autopilot_home>/review/<key>/live/runs.<scope>.json
-//   context  <live_base>/context/<sid>.json                (this sid only)
+//   context  <live_base>/context/<sanitised sid>.json      (this sid only)
 //   job page <autopilot_home>/review/<key>/<date>/<job>/current/model.json   (acceptance axis + gate rows, optional)
+//   W3a      <live_base>/tasks/<sid>.json, attention/<sid>.json              (this sid only)
+//            <live_base>/runs/<scope>.decisions.json, <scope>.foreman.json, sources/<scope>.json   (scope-checked sidecars)
+//            <git-common-dir>/autopilot/work-orders/<root>/*.json   (campaign start = earliest bound progress receipt;
+//            the common dir comes from the envelope's scope.repo_identity, a published path, never a computed live base)
 //
 // $.session.id() is read on EVERY tick: /clear gives the session a new id while the timer keeps running (S7).
 // Every clock comparison uses $.clock.now(), so a test with a mocked clock decides fresh / stale.
@@ -18,16 +22,17 @@ import type { EngineInterface, Register } from 'claude-code'
 import { Band } from './band'
 import { Pane } from './pane'
 import {
-  acceptanceToast, bandLine1, bandView, checkEnvelope, countsOf, ctxText, executionToast, headerText, hhmm, isKey, isObject, jobOf,
-  longestPrefixKey, paneRows, parseJson, portOf, readJobModel, reviewLink, scopeKeyOf, sessionUsd, STATE_TEXT,
-  POINTER_SCHEMA,
+  acceptanceToast, bandLine1, bandView, buildSections, checkEnvelope, commonDirOf, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
+  headerText, hhmm, isKey, isObject, isPlainRoot, jobOf, longestPrefixKey, NO_SECTIONS, paneRows, parseJson, portOf, readAttention, readDecisions,
+  readForeman, readJobModel, readManifest, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd, startMsOf, STATE_TEXT, POINTER_SCHEMA,
 } from './model'
-import type { Counts, EnvelopeCheck, JobModel, Json, LiveSnapshot } from './model'
+import type { Counts, EnvelopeCheck, JobModel, Json, LiveSnapshot, Manifest, Sources } from './model'
 
 const TICK_MS = 5000
 const PANE_ID = 'autopilot-live'
 const PANE_MIN_COLUMNS = 144
 const MAX_PATH_FILES = 256
+const MAX_RECEIPT_FILES = 64
 
 // Module state. A hot reload drops it and session.start rebuilds it (the first tick refills the snapshot at once).
 // It is a module variable and not $.state on purpose: a $.state ref needs the plugin manifest to name a types
@@ -38,6 +43,8 @@ let viewport: { columns: number; isFullscreen?: boolean } | null = null
 let paneAttempted = false
 let previous: { scope: string; counts: Counts | null; acceptance: string | null } | null = null
 const jobDates = new Map<string, string>()
+// earliest bound progress receipt per root: receipts only accumulate, so a found start never moves earlier
+const receiptStarts = new Map<string, number>()
 
 async function readText($: EngineInterface, path: string): Promise<string | null> {
   try {
@@ -58,17 +65,19 @@ async function readObject($: EngineInterface, path: string): Promise<Json | null
 function plain(state: LiveSnapshot['state'], text: string, over: Partial<LiveSnapshot> = {}): LiveSnapshot {
   return {
     state, text, band: null, header: text, decision: null, project_key: null, root_run_id: null, link: null, rows: null, gates: null,
-    published_at: null, session_as_of: null, host_as_of: null, ...over,
+    sections: NO_SECTIONS, published_at: null, session_as_of: null, host_as_of: null, ...over,
   }
 }
 
 // Which project / root does this session belong to? marker first (an unexpired one with a project_key), then the
 // longest path-boundary prefix of the real cwd among the watchers' runs/paths files. Never git, never a hash.
-async function resolveScope($: EngineInterface, autopilotHome: string, liveBase: string, sid: string, nowMs: number): Promise<{ key: string; root: string | null } | null> {
+type Scope = { key: string; root: string | null; marker: Json | null }
+
+async function resolveScope($: EngineInterface, autopilotHome: string, liveBase: string, sid: string, nowMs: number): Promise<Scope | null> {
   if (sid) {
     const marker = await readObject($, autopilotHome + '/session-mode/' + sid + '.json')
     if (marker && isKey(marker.project_key) && typeof marker.expires_at === 'string' && Date.parse(marker.expires_at) > nowMs) {
-      return { key: marker.project_key, root: typeof marker.root_run_id === 'string' && marker.root_run_id ? marker.root_run_id : null }
+      return { key: marker.project_key, root: typeof marker.root_run_id === 'string' && marker.root_run_id ? marker.root_run_id : null, marker }
     }
   }
   const cwd = await $.session.cwd()
@@ -88,11 +97,11 @@ async function resolveScope($: EngineInterface, autopilotHome: string, liveBase:
     if (map) maps.push(map)
   }
   const key = longestPrefixKey(real, maps)
-  return key === null ? null : { key, root: null }
+  return key === null ? null : { key, root: null, marker: null }
 }
 
 // The envelope of one scope: the tmpfs file, then the SSD copy; a fresh one beats a stale one.
-async function findEnvelope($: EngineInterface, autopilotHome: string, liveBase: string, scope: { key: string; root: string | null }, nowMs: number): Promise<EnvelopeCheck> {
+async function findEnvelope($: EngineInterface, autopilotHome: string, liveBase: string, scope: Scope, nowMs: number): Promise<EnvelopeCheck> {
   const scopeKey = scopeKeyOf(scope.key, scope.root)
   const want = { project_key: scope.key, root_run_id: scope.root }
   const paths = [liveBase + '/runs/' + scopeKey + '.json', autopilotHome + '/review/' + scope.key + '/live/runs.' + scopeKey + '.json']
@@ -128,6 +137,28 @@ async function findJobDate($: EngineInterface, autopilotHome: string, key: strin
     } catch (_e) { /* not a readable date dir */ }
   }
   return null
+}
+
+// The earliest bound progress receipt of a campaign root (W3a elapsed). The root names a directory, so only a plain
+// segment is used; an unreadable / absent directory is "no receipt" and the earliest run start takes over.
+async function receiptStart($: EngineInterface, identity: unknown, root: string): Promise<number | null> {
+  const cached = receiptStarts.get(root)
+  if (cached !== undefined) return cached
+  const common = commonDirOf(identity)
+  if (common === null || !isPlainRoot(root)) return null
+  const dir = common + '/autopilot/work-orders/' + root
+  let names: string[] = []
+  try {
+    names = (await $.fs.list(dir)).filter(entry => entry.kind === 'file' && entry.name.endsWith('.json')).map(entry => entry.name).sort().slice(0, MAX_RECEIPT_FILES)
+  } catch (_e) { return null }
+  const texts: string[] = []
+  for (const name of names) {
+    const text = await readText($, dir + '/' + name)
+    if (text !== null) texts.push(text)
+  }
+  const ms = earliestReceiptMs(texts, root)
+  if (ms !== null) receiptStarts.set(root, ms)
+  return ms
 }
 
 async function buildSnapshot($: EngineInterface, nowMs: number): Promise<{ snap: LiveSnapshot; counts: Counts | null; acceptance: string | null }> {
@@ -177,11 +208,27 @@ async function buildSnapshot($: EngineInterface, nowMs: number): Promise<{ snap:
     const at = published !== null && Number.isFinite(Date.parse(published)) ? hhmm(Date.parse(published)) : null
     return { snap: plain('stale', STATE_TEXT.stale(scope.key, at), common), counts: null, acceptance: null }
   }
-  const ctx = ctxText(await readText($, liveBase + '/context/' + sid + '.json'), nowMs)
-  const band = bandView(env, jobModel, scope.key, nowMs)
+  // W3a sources. The per-session files are named by the sanitised sid; every sidecar is read for THIS scope only.
+  const fileSid = sanitizeSid(sid)
+  const scopeKey = scopeKeyOf(scope.key, scope.root)
+  const want = { project_key: scope.key, root_run_id: scope.root }
+  const manifestText = await readText($, liveBase + '/runs/sources/' + scopeKey + '.json')
+  const manifestParsed = manifestText === null ? null : parseJson(manifestText)
+  const manifest: Manifest | null = (manifestParsed !== null && manifestParsed.ok ? readManifest(manifestParsed.value, want) : null)
+    || (jobModel === null ? null : readManifest(jobModel.sources_manifest, want))
+  const tasks = readTasks(await readText($, liveBase + '/tasks/' + fileSid + '.json'), sid)
+  const attention = readAttention(await readText($, liveBase + '/attention/' + fileSid + '.json'), sid)
+  const decisions = readDecisions(await readText($, liveBase + '/runs/' + scopeKey + '.decisions.json'), want)
+  const foreman = readForeman(await readText($, liveBase + '/runs/' + scopeKey + '.foreman.json'), want)
+  const identity = isObject(env.scope) ? env.scope.repo_identity : null
+  const receiptMs = scope.root === null ? null : await receiptStart($, identity, scope.root)
+  const src: Sources = { tasks, attention, decisions, manifest, startMs: startMsOf(scope.root, env, tasks, scope.marker === null ? null : scope.marker.started_at, receiptMs) }
+  const ctx = ctxShown(ctxText(await readText($, liveBase + '/context/' + fileSid + '.json'), nowMs), manifest)
+  const band = bandView(env, jobModel, scope.key, nowMs, src)
   return {
     snap: plain('ok', bandLine1(band) + (band.reason === null ? '' : '\n' + band.reason), {
       ...common, band, header: headerText(env, sid, ctx), decision: jobModel === null || !jobModel.needs_decision ? null : jobModel.decision,
+      sections: buildSections(src, foreman, identity, nowMs),
     }),
     counts: countsOf(env),
     acceptance: jobModel === null ? null : jobModel.acceptance,

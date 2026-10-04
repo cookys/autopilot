@@ -22,6 +22,7 @@ const { spawnSync } = require('child_process');
 const { createWatcher } = require('../src/status/runs-watch');
 const { scopeFromCwd } = require('../src/status/project-key');
 const { buildDecisionsSidecar } = require('../src/status/decisions-sidecar');
+const { buildForemanActivity } = require('../src/status/foreman-activity');
 
 const REPO_ROOT = path.join(__dirname, '..');
 const VALIDATE = path.join(REPO_ROOT, 'scripts', 'validate-json-schema.js');
@@ -266,6 +267,21 @@ test('F2 negative controls: session without a marker, marker of another root, ex
     c.tick();
     assert.equal(c.sidecar('foreman', 'R1'), null, 'nothing found for R1 -> no sidecar');
     assert.deepEqual(c.sidecar('foreman', 'R2').agents.map((a) => a.agent_id), ['x2']);
+  } finally { c.cleanup(); }
+});
+
+// mods P1W W3a (WATCH-B follow-up): the reader itself drops a marker of another project_key, whatever the caller passed.
+test('F9 a marker of another project_key never lends its tasks / stamps to this scope (negative control at the reader)', () => {
+  const c = mk();
+  try {
+    marker(c, 'sOther', { project_key: 'ffffffffffffffff' });
+    marker(c, 'sMine');
+    tasksFile(c, 'sOther', NOW - 1000, [trow('foreign')]);
+    stamp(c, 'sOther', 'stampForeign', NOW - 1000);
+    tasksFile(c, 'sMine', NOW - 1000, [trow('mine')]);
+    const markers = ['sOther', 'sMine'].map((sid) => JSON.parse(fs.readFileSync(path.join(c.env.AUTOPILOT_SESSION_MODE_DIR, `${sid}.json`), 'utf8')));
+    const s = buildForemanActivity({ scope: { project_key: c.scope.project_key, repo_identity: c.scope.repo_identity, root_run_id: 'R1' }, markers, live: c.live, dispatchRunsDir: path.join(c.base, 'none'), nowMs: NOW });
+    assert.deepEqual(s.agents.map((a) => a.agent_id), ['mine']);
   } finally { c.cleanup(); }
 });
 

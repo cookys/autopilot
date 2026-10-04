@@ -1,8 +1,9 @@
 # mods P1b → P1c/P1d → P5 — state of play (2026-10-04)
 
 > ## IN FLIGHT (2026-10-05, session df52a188)
-> - Step 1 INT: sonnet hand building `w/int` in `$OLD/p1c/wt-int` per `briefs-p1w/int.md`; report `$OLD/p1c/run-w/int/REPORT.md`. Not yet accepted.
-> - Wave-2 briefs ready (owner rulings R5.5 folded): `briefs-p1w/w-rows-wave2.md` — four hands WATCH-A, WATCH-B, PHASE+PICK, PERF+STAMP off `w/int` after INT is accepted. Probe done (`$OLD/p1c/run-w/probe-w2d-rows/REPORT.md`). Eval smoke (step 3) runs after the INT suite, not concurrently (memory pressure).
+> - Step 1 INT **accepted**: `w/int` 8666aba4 (see `accepted-heads-p1w.txt`); bundle refreshed with `w/int` and the wave-2 branches.
+> - Step 2 wave 2 dispatched off `w/int` (owner rulings R5.5 folded into `briefs-p1w/w-rows-wave2.md`): four sonnet hands WATCH-A (`wt-watch-a`), WATCH-B (`wt-watch-b`), PHASE+PICK (`wt-phase`), PERF+STAMP (`wt-perf`); reports `$OLD/p1c/run-w/<row>/REPORT.md`. Acceptance per row = `accept-row.sh` pattern with base `w/int`, then INT2 merges WATCH-A/B hookups.
+> - Step 3 eval smoke not started (waits for wave-2 suites, memory pressure).
 
 > ## HANDOFF (2026-10-05) — read this block first
 > Plan `docs/plans/2026-10-03-mods-visible-dispatch.md` R5.4, §4 P1W table is the single source (FROZEN after G1+G2; later rulings R5.3/R5.4 in Review log).

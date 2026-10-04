@@ -1,5 +1,10 @@
 # mods P1b → P1c/P1d → P5 — state of play (2026-10-04)
 
+> ## IN FLIGHT (2026-10-05, session df52a188)
+> - Step 1 INT: sonnet hand building `w/int` in `$OLD/p1c/wt-int` per `briefs-p1w/int.md`; report `$OLD/p1c/run-w/int/REPORT.md`. Not yet accepted.
+> - Probe for MECH-G rows (W2g/W2c/W2e-g mechanisms, read-only): report `$OLD/p1c/run-w/probe-w2d-rows/REPORT.md`.
+> - Wave-2 briefs drafted: `briefs-p1w/w-rows-wave2.md` (WATCH, PHASE, PERF; MECH-G + compare location pending the probe). Dispatch off `w/int` after INT is accepted. Eval smoke (step 3) runs after the INT suite, not concurrently (memory pressure).
+
 > ## HANDOFF (2026-10-05) — read this block first
 > Plan `docs/plans/2026-10-03-mods-visible-dispatch.md` R5.4, §4 P1W table is the single source (FROZEN after G1+G2; later rulings R5.3/R5.4 in Review log).
 > **Accepted (wave 1, per-row reviewed, depth-0 re-checked)**: see `accepted-heads-p1w.txt` — W1a `5118dcfd`, W1i `c6af5401` (both on `p1c/r`), W1b `250b2576`, W1c `fcdfa106`, W1de `7713fbed`, W1f `1b5a3af4`, W1h `9a98e993`, W2f `4cc9933f`; earlier C1–C3b on `p1c/c` (`734365c1`), D1 `p1c/d1` (`14e44b46`), C3b-R `p1c/r` (`6e40bcc4`). EVALX `ebb70af3` (`w/evalx`, harness E1–E5, fail-closed tmpfs) accepted.

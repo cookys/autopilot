@@ -135,4 +135,80 @@ BS_OK="$(node "$SCRIPT" pick --candidates "$TEST_TMP/candidates.json" --preferen
   --brain-status "$TEST_TMP/brain-status-ok.json" --seat-class incumbent 2>/dev/null)"
 assert_contains "$BS_OK" '"admission": "admitted"' "standing pass admits cleanly"
 
+# ── implicit default-ledger append (mods P1W PICK, plan R5.5 W2g (a)) ──
+# With no --ledger, a pick is ledgered through decision-ledger.js's default per-repo ledger ONLY when an
+# active session-mode marker of this session or AUTOPILOT_ROOT_RUN_ID exists; plain /next writes nothing.
+# RED (before implementation, 2026-10-05): 9 assertions failed (marker / env picks never reached the default ledger).
+IMP_REAL_HOME="$HOME"
+IMP_REAL_COMMON="$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-common-dir)"
+imp_real_snapshot() {
+  { find "$IMP_REAL_HOME/.autopilot/session-mode" -type f -printf '%p %s %T@\n' 2>/dev/null
+    stat -c '%n %s %Y' "$IMP_REAL_COMMON/autopilot/ledger/decisions.jsonl" 2>/dev/null
+  } | sort | sha256sum
+}
+IMP_REAL_BEFORE="$(imp_real_snapshot)"
+IMP_REPO="$TEST_TMP/imp-repo"; mkdir -p "$IMP_REPO"
+git -C "$IMP_REPO" init -q -b develop
+git -C "$IMP_REPO" -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
+IMP_LEDGER="$IMP_REPO/.git/autopilot/ledger/decisions.jsonl"
+IMP_MARKERS="$TEST_TMP/imp-markers"; mkdir -p "$IMP_MARKERS"
+imp_pick() { # extra env via caller; cwd = imp repo
+  ( cd "$IMP_REPO" && env -u AUTOPILOT_ROOT_RUN_ID -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID \
+      HOME="$TEST_TMP/imp-home" AUTOPILOT_SESSION_MODE_DIR="$IMP_MARKERS" "$@" \
+      node "$SCRIPT" pick --candidates "$TEST_TMP/candidates.json" --preferences "$TEST_TMP/prefs.json" ); }
+imp_rows() { [ -f "$IMP_LEDGER" ] && grep -c '"kind":"pick"' "$IMP_LEDGER" || echo 0; }
+write_marker() { # sid expires_offset_ms
+  node -e 'const now=Date.now();require("fs").writeFileSync(process.argv[1],JSON.stringify({session_id:process.argv[2],level:"l3",repo_root:process.argv[3],started_at:new Date(now-1000).toISOString(),expires_at:new Date(now+Number(process.argv[4])).toISOString(),root_run_id:"job-marker-1"}))' "$IMP_MARKERS/$1.json" "$1" "$IMP_REPO" "$2"; }
+
+# plain /next: no marker, no env -> nothing written
+imp_pick >/dev/null 2>&1; assert_exit_code "$?" "0" "no marker/env: pick exits 0"
+assert_file_absent "$IMP_LEDGER" "no marker/env: nothing is written to the default ledger"
+# expired marker, no env -> nothing written
+write_marker sess-expired -1000
+imp_pick AUTOPILOT_SESSION_ID=sess-expired >/dev/null 2>&1
+assert_file_absent "$IMP_LEDGER" "expired marker: nothing is written"
+# another session's marker does not count
+write_marker sess-live 3600000
+imp_pick AUTOPILOT_SESSION_ID=sess-other >/dev/null 2>&1
+assert_file_absent "$IMP_LEDGER" "marker of another session: nothing is written"
+# active marker for this session -> one pick row, root/repo stamped, dedupe on replay
+IMP_OUT="$(imp_pick AUTOPILOT_SESSION_ID=sess-live 2>"$TEST_TMP/imp-err")"; assert_eq "0" "$?" "marker: pick exits 0"
+assert_eq "1" "$(imp_rows)" "marker: one kind:pick row lands in the default ledger"
+IMP_ROW="$(grep '"kind":"pick"' "$IMP_LEDGER" | head -1)"
+assert_contains "$IMP_ROW" '"root_run_id":"job-marker-1"' "marker: row carries the marker's root_run_id"
+assert_contains "$IMP_ROW" "\"repo_identity\":\"git-common-dir:" "marker: row carries repo_identity"
+assert_contains "$IMP_ROW" '"decision_id":"pick-' "marker: row has a deterministic pick- decision_id"
+assert_contains "$IMP_ROW" '"candidates_digest"' "marker: row carries the materialized pick record"
+assert_contains "$IMP_OUT" '"pick"' "marker: stdout result unchanged"
+imp_pick AUTOPILOT_SESSION_ID=sess-live >/dev/null 2>&1
+assert_eq "1" "$(imp_rows)" "marker: replaying the same pick is deduped (still one row)"
+# AUTOPILOT_ROOT_RUN_ID alone (no marker)
+rm -f "$IMP_LEDGER"
+imp_pick AUTOPILOT_ROOT_RUN_ID=root-env-7 >/dev/null 2>&1
+assert_eq "1" "$(imp_rows)" "env root: one pick row lands in the default ledger"
+assert_contains "$(cat "$IMP_LEDGER")" '"root_run_id":"root-env-7"' "env root: row carries AUTOPILOT_ROOT_RUN_ID"
+# explicit --ledger wins and the default ledger stays untouched
+rm -f "$IMP_LEDGER"
+( cd "$IMP_REPO" && AUTOPILOT_ROOT_RUN_ID=root-env-7 HOME="$TEST_TMP/imp-home" AUTOPILOT_SESSION_MODE_DIR="$IMP_MARKERS" \
+  node "$SCRIPT" pick --candidates "$TEST_TMP/candidates.json" --preferences "$TEST_TMP/prefs.json" --ledger "$TEST_TMP/explicit.jsonl" >/dev/null 2>&1 )
+assert_file_exists "$TEST_TMP/explicit.jsonl" "explicit --ledger still receives the row"
+assert_file_absent "$IMP_LEDGER" "explicit --ledger: the default ledger is not also written"
+# no eligible candidate -> nothing written even with a marker
+imp_pick_none() { ( cd "$IMP_REPO" && AUTOPILOT_ROOT_RUN_ID=root-env-7 HOME="$TEST_TMP/imp-home" AUTOPILOT_SESSION_MODE_DIR="$IMP_MARKERS" \
+  node "$SCRIPT" pick --candidates "$TEST_TMP/only-big.json" --preferences "$TEST_TMP/prefs.json" ); }
+imp_pick_none >/dev/null 2>&1
+assert_file_absent "$IMP_LEDGER" "null pick: nothing is written"
+# implicit failure never blocks a pick: outside any git repo there is no default ledger
+NOGIT="$TEST_TMP/nogit"; mkdir -p "$NOGIT"
+IMP_FAIL_OUT="$(cd "$NOGIT" && AUTOPILOT_ROOT_RUN_ID=root-env-7 HOME="$TEST_TMP/imp-home" AUTOPILOT_SESSION_MODE_DIR="$IMP_MARKERS" \
+  node "$SCRIPT" pick --candidates "$TEST_TMP/candidates.json" --preferences "$TEST_TMP/prefs.json" 2>"$TEST_TMP/imp-fail-err")"; IMP_FAIL_RC=$?
+assert_exit_code "$IMP_FAIL_RC" "0" "implicit append failure: pick still exits 0"
+assert_contains "$IMP_FAIL_OUT" '"pick"' "implicit append failure: stdout result still emitted"
+assert_contains "$(cat "$TEST_TMP/imp-fail-err")" "next-pick: ledger append failed" "implicit append failure: warns on stderr"
+# explicit --ledger failure keeps today's exit 1
+( cd "$IMP_REPO" && node "$SCRIPT" pick --candidates "$TEST_TMP/candidates.json" --preferences "$TEST_TMP/prefs.json" --ledger "$TEST_TMP/candidates.json/ledger.jsonl" >/dev/null 2>&1 )
+assert_exit_code "$?" "1" "explicit --ledger append failure keeps exit 1"
+# negative control: the real ledger and real marker dir were never touched
+assert_eq "$IMP_REAL_BEFORE" "$(HOME="$IMP_REAL_HOME" imp_real_snapshot)" "real repo ledger and ~/.autopilot/session-mode untouched"
+
 finalize_test

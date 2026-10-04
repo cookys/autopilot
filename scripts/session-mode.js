@@ -6,9 +6,11 @@
  * and context-budget hooks. One marker file per session id:
  *   ${AUTOPILOT_SESSION_MODE_DIR:-~/.autopilot/session-mode}/<session-id>.json
  *   { session_id, level, repo_root, started_at, expires_at, entry_level?, fallback_reason?,
- *     mission_routing?, repo_identity?, project_key?, root_run_id? }
+ *     mission_routing?, repo_identity?, project_key?, root_run_id?, phase?, phase_set_at? }
  *   (repo_identity/project_key/root_run_id are additive, null when underivable; `set` also writes
  *   ~/.autopilot/live-pointer.json — src/status/live-pointer.js)
+ *   phase/phase_set_at (mods P1W PHASE): free-text work phase (1-64 chars, trimmed, no control
+ *   chars) + ISO-8601 stamp, read by the project watcher; absent = no phase.
  *
  * Design notes (see docs/plans/2026-07-14-context-budget-orchestrator-gate.md):
  * - Host-stable path (~/.autopilot, NOT $TMPDIR) — docker-exec contexts see the
@@ -22,7 +24,12 @@
  *
  * Usage:
  *   node scripts/session-mode.js set --level l3|l4|l5|l6 [--entry-level l3|l4|l5|l6]
- *     [--fallback none|solo|precondition_failed] [--repo-root <dir>] [--ttl-hours N]
+ *     [--fallback none|solo|precondition_failed] [--repo-root <dir>] [--ttl-hours N] [--phase <name>]
+ *   node scripts/session-mode.js set --phase <name>     (no --level: update ONLY phase/phase_set_at of this
+ *     session's active marker — lock + atomic rename, every other field unchanged; `--phase ''` clears the
+ *     phase. Exit 2 when there is no active marker: a level-less marker is never created, because
+ *     dispatch-hetero.sh treats a marker without a valid level as invalid and refuses all dispatch.
+ *     Exit 1 when the marker lock stays held past AUTOPILOT_SESSION_MODE_LOCK_TIMEOUT_MS, default 8000.)
  *   node scripts/session-mode.js clear [--task-status-receipt <file> --root-run-id <id>]
  *   node scripts/session-mode.js retire --session <id> --integration-receipt <file>
  *     [--integration-ref <ref>] [--lineage <adoption-key>] [--repo-root <dir>]
@@ -54,9 +61,12 @@ const { canonicalDigest } = require('../src/engine/campaign-verification');
 const { admitMissionRouting } = require('./mission-routing-admission');
 const { scopeFromCwd } = require('../src/status/project-key');
 const { writeLivePointer } = require('../src/status/live-pointer');
+const { withWriteLock } = require('./lib/jsonl-store');
 
 const LEVELS = new Set(['l3', 'l4', 'l5', 'l6']);
 const DEFAULT_TTL_HOURS = 24;
+const PHASE_MAX = 64;
+const PHASE_LOCK_TIMEOUT_MS = 8000;
 const SHA256 = /^[a-f0-9]{64}$/u;
 const DEV_FLOW_ADMISSION_REJECTION_CODE = 'DEV_FLOW_ADMISSION_REQUIRED_OR_STALE';
 const ROUTING_KEYS = Object.freeze([
@@ -440,7 +450,74 @@ function startProjectWatcher(marker, repoRoot) {
   }
 }
 
+// Phase names (mods P1W PHASE): 1-64 chars after trim, no control characters. An explicit empty
+// string is the clear request; whitespace-only is a mistake, not a clear.
+// Returns {value} (value === null means clear) or {error}.
+function parsePhase(raw) {
+  if (typeof raw !== 'string') return { error: '--phase needs a value (use --phase \'\' to clear)' };
+  if (raw === '') return { value: null };
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return { error: 'invalid --phase: whitespace only (use --phase \'\' to clear)' };
+  if ([...trimmed].length > PHASE_MAX) return { error: `invalid --phase: longer than ${PHASE_MAX} characters` };
+  if (/[\u0000-\u001f\u007f-\u009f]/u.test(trimmed)) return { error: 'invalid --phase: control characters are not allowed' };
+  return { value: trimmed };
+}
+
+// `set --phase <name>` without --level: update only phase/phase_set_at of the active marker.
+function cmdSetPhase(phase) {
+  if (!readMarker()) {
+    process.stderr.write(
+      'session-mode: no active marker for this session; --phase alone updates an existing marker. ' +
+      'Run `set --level l3|l4|l5|l6 --phase <name>` first (a level-less marker is never created: ' +
+      'dispatch-hetero.sh refuses every dispatch while one exists)\n',
+    );
+    return 2;
+  }
+  const timeoutMs = Number(process.env.AUTOPILOT_SESSION_MODE_LOCK_TIMEOUT_MS) > 0
+    ? Number(process.env.AUTOPILOT_SESSION_MODE_LOCK_TIMEOUT_MS) : PHASE_LOCK_TIMEOUT_MS;
+  let updated = null;
+  try {
+    withWriteLock({
+      storeDir: markerDir(), lockFile: `${markerPath()}.lock`, name: 'session-mode marker', timeoutMs,
+    }, () => {
+      // Re-read under the lock: the marker may have been cleared or replaced while we waited.
+      const current = readMarker();
+      if (!current) return;
+      const next = { ...current };
+      delete next.phase;
+      delete next.phase_set_at;
+      if (phase !== null) {
+        next.phase = phase;
+        next.phase_set_at = new Date().toISOString();
+      }
+      const tmp = `${markerPath()}.tmp-${process.pid}`;
+      fs.writeFileSync(tmp, `${JSON.stringify(next, null, 2)}\n`);
+      fs.renameSync(tmp, markerPath()); // atomic on same fs
+      updated = next;
+    });
+  } catch (error) {
+    process.stderr.write(`session-mode: phase not written: ${error.message}\n`);
+    return 1;
+  }
+  if (!updated) {
+    process.stderr.write('session-mode: marker disappeared while waiting for the lock; phase not written\n');
+    return 2;
+  }
+  process.stdout.write(`${JSON.stringify({ ok: true, marker_path: markerPath(), ...updated }, null, 2)}\n`);
+  return 0;
+}
+
 function cmdSet(args) {
+  const hasPhase = Object.prototype.hasOwnProperty.call(args, 'phase');
+  let phase;
+  if (hasPhase) {
+    phase = parsePhase(args.phase);
+    if (phase.error) {
+      process.stderr.write(`session-mode: ${phase.error}\n`);
+      return 2;
+    }
+    if (args.level === undefined) return cmdSetPhase(phase.value);
+  }
   const level = args.level;
   if (!LEVELS.has(level)) {
     process.stderr.write(`session-mode: invalid --level "${level}" (want l3|l4|l5|l6)\n`);
@@ -493,6 +570,10 @@ function cmdSet(args) {
     ? args['root-run-id'] : '';
   marker.root_run_id = explicitRoot || process.env.AUTOPILOT_ROOT_RUN_ID
     || `job-${Math.floor(now / 1000)}-${require('crypto').randomBytes(4).toString('hex')}`;
+  if (phase && phase.value !== null) {
+    marker.phase = phase.value;
+    marker.phase_set_at = new Date(now).toISOString();
+  }
   if (missionRouting.status !== 'LEGACY') {
     marker.entry_level = missionRouting.route.entry_level;
     marker.fallback_reason = missionRouting.route.fallback_reason;
@@ -820,8 +901,8 @@ function main() {
     default:
       process.stderr.write(
         'Usage: session-mode.js set --level l3|l4|l5|l6 [--entry-level l3|l4|l5|l6] ' +
-        '[--fallback none|solo|precondition_failed] [--repo-root <dir>] [--ttl-hours N] [--root-run-id <id>] | ' +
-        'clear | retire --session <id> --integration-receipt <file> [--integration-ref <ref>] | status | root\n',
+        '[--fallback none|solo|precondition_failed] [--repo-root <dir>] [--ttl-hours N] [--root-run-id <id>] [--phase <name>] | ' +
+        'set --phase <name|\'\'> (update the active marker) | clear | retire --session <id> --integration-receipt <file> [--integration-ref <ref>] | status | root\n',
       );
       return 2;
   }

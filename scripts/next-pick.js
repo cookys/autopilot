@@ -37,6 +37,10 @@
  *     preferences: {class_weights: {<class>: <number>}}
  *     Emits {pick, ask_first_queue, pick_record}; with --ledger, appends the
  *     kind:pick row (decision-ledger.js contract) carrying the full record.
+ *     Without --ledger the same row goes to the default per-repo ledger (decision-ledger.js
+ *     --dedupe, root/repo stamped) when an active session-mode marker exists for this session or
+ *     AUTOPILOT_ROOT_RUN_ID is set; otherwise nothing is written. An implicit append failure
+ *     warns on stderr and exits 0; only the explicit --ledger path exits 1.
  *
  * Exit: 0 ok (also when no candidate is auto-eligible — pick is null) · 2 usage.
  * Node >= 20.10 built-ins.
@@ -239,7 +243,12 @@ function pick(opts) {
   };
   process.stdout.write(`${JSON.stringify(result, null, 1)}\n`);
 
-  if (opts.ledger && chosen) {
+  // Explicit --ledger: today's contract (append failure exits 1). Without it, a pick made by a session
+  // that is on a job (active session-mode marker, or AUTOPILOT_ROOT_RUN_ID) lands in the default
+  // per-repo ledger (mods P1W PICK, plan R5.5 W2g (a)); plain /next with neither writes nothing, and the
+  // implicit path never blocks a pick (warn, exit 0).
+  const explicitLedger = Boolean(opts.ledger);
+  if (chosen && (explicitLedger || onAJob())) {
     const row = {
       decision_id: opts.decisionId || `pick-${sha256(JSON.stringify([pickRecord, chosen.title])).slice(0, 12)}`,
       round: Number.isFinite(opts.round) ? opts.round : null,
@@ -247,14 +256,26 @@ function pick(opts) {
       pick_record: pickRecord,
       rationale: `top auto-eligible by class weight ${weights[chosen.class] || 0} (${chosen.class}), age ${chosen.age_days || 0}d, effort ${chosen.effort}`,
     };
-    const append = spawnSync('node', [
-      path.join(__dirname, 'decision-ledger.js'),
-      'append', '--ledger', opts.ledger, '--kind', 'pick', '--json', JSON.stringify(row),
-    ], { encoding: 'utf8' });
+    const argv = [path.join(__dirname, 'decision-ledger.js'), 'append'];
+    if (explicitLedger) argv.push('--ledger', opts.ledger);
+    else argv.push('--dedupe');
+    argv.push('--kind', 'pick', '--json', JSON.stringify(row));
+    const append = spawnSync('node', argv, { encoding: 'utf8' });
     if (append.status !== 0) {
       process.stderr.write(`next-pick: ledger append failed: ${append.stderr}`);
-      process.exit(1);
+      if (explicitLedger) process.exit(1);
     }
+  }
+}
+
+// True when this process runs on behalf of a job: AUTOPILOT_ROOT_RUN_ID is set, or this session holds an
+// active (unexpired, valid-level) session-mode marker. Fail-open to false.
+function onAJob() {
+  if (process.env.AUTOPILOT_ROOT_RUN_ID) return true;
+  try {
+    return Boolean(require('./session-mode').readMarker());
+  } catch (_error) {
+    return false;
   }
 }
 

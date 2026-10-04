@@ -6,3 +6,4 @@ W2f 4cc9933f (w/w2f on 0bd04df4) SHIP-AS-IS review-1791130159-1514527-162d; W3a 
 W1c fcdfa106 (w/w1c) SHIP-AS-IS review-1791130295-1591617-f2e8 (after repair of review-1791130044-1433288-b9ce); UserPromptSubmit fast path 120 ms median -> perf row
 W1b 250b2576 (w/w1b) SHIP-AS-IS review-1791132009-2129439-c0a1 (after 3 repair rounds)
 W1f 1b5a3af4 (w/w1f) ACCEPTED by depth-0 ruling over review-1791131325-1914788-2e4d 🟡: hetero child lineage root == worktree budget/claim root (dispatch-hetero.sh:1928-1946, 2286, 3003) so the split is a claim-semantics change -> row W1f-b; tainted suites re-run alone, all green
+EVALX ebb70af3 (w/evalx on 4641b5d7) SHIP-AS-IS review-1791134893-2539625-3e83 (after repair of review-1791134312-2456925-ca3e)

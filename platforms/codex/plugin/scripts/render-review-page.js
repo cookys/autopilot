@@ -28,6 +28,7 @@ const cp = require('child_process');
 const crypto = require('crypto');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
+const NOT_WIRED = '來源未接'; // an input that was never provided: not the same as one that was provided and is empty
 const NO_VERDICT_SENTENCE = '本回合尚無驗收 verdict；下表是執行狀態，不是進度';
 const EXEC_CHIP = { running: 'RUNNING', exited: 'EXITED', unknown: 'UNKNOWN' };
 const ACC_CHIP = { accepted: 'ACCEPTED', rejected: 'REJECTED', unknown: 'PENDING' };
@@ -183,7 +184,12 @@ function buildJobModel(inputs) {
   const candidate = task && typeof task.candidate_commit === 'string' && OID.test(task.candidate_commit) ? task.candidate_commit : null;
   const canClose = task && typeof task.can_close === 'boolean' ? task.can_close : null;
   let conclusion;
-  if (!task) conclusion = NO_VERDICT_SENTENCE;
+  const wired = {
+    task: isObject(o.taskReceipt), progress: isObject(o.progressReceipt), decision: isObject(o.decision),
+    planned: Array.isArray(o.planned), compare: Array.isArray(o.compare) && (o.compare.length > 0 || o.compareProvided === true),
+  };
+  if (!wired.task) conclusion = `驗收結論：${NOT_WIRED}（沒有 task_status_receipt 輸入）`;
+  else if (!task) conclusion = NO_VERDICT_SENTENCE;
   else if (verdict === 'unknown') conclusion = '驗收結論：unknown（task_status_receipt 沒有 verdict）';
   else conclusion = `驗收結論：${verdict}（來源 task_status_receipt）`;
 
@@ -215,7 +221,7 @@ function buildJobModel(inputs) {
       issued_at: task.issued_at || null,
       failed_predicates: Array.isArray(task.failed_predicates) ? task.failed_predicates.map(String) : [],
     } : null,
-    conclusion, needs_decision: Boolean(decision), decision,
+    conclusion, needs_decision: Boolean(decision), decision, wired,
     phase: buildPhase(task, progress), progress, planned, compare: o.compare || [], dispatch, gates,
     scope: envelope && isObject(envelope.scope) ? {
       project_key: envelope.scope.project_key || null, repo_identity: envelope.scope.repo_identity || null,
@@ -263,30 +269,39 @@ function table(head, bodyRows, kind = 'cards') {
 function td(html) { return `<td>${html}</td>`; }
 function shortSha(s) { return typeof s === 'string' && s ? s.slice(0, 12) : null; }
 
+// An old model.json has no `wired` block: treat every source as wired (that is what it was rendered as).
+function isWired(model, key) { return !(isObject(model.wired) && model.wired[key] === false); }
+function notWired(what) { return `<p class="muted"><span class="chip chip-warn">${NOT_WIRED}</span> ${esc(what)}</p>`; }
+
 function renderProgress(model) {
   const p = model.progress;
   let head;
   let counts;
-  if (p && p.frozen) {
+  if (!isWired(model, 'progress') && !p) {
+    head = `<p><strong>總進度：${NOT_WIRED}</strong>（沒有 controller_progress_receipt 輸入）</p>`;
+    counts = '';
+  } else if (p && p.frozen) {
     head = `<p><strong>總進度 ${esc(p.percent)}%</strong>（分母已凍結：${esc(p.total)}）</p>`;
     counts = `<p>完成 ${esc(p.done)} · 未完成 ${esc(p.remaining)}</p>`;
   } else {
     head = `<p><strong>總進度：分母未凍結 · ${p && p.done !== null ? esc(p.done) : 'done 未知'}${p && p.done !== null ? ' done' : ''}</strong></p>`;
     counts = p && p.done !== null ? `<p>完成 ${esc(p.done)} · 未完成 ${unknownSpan()}</p>` : `<p>完成 ${unknownSpan()} · 未完成 ${unknownSpan()}</p>`;
   }
-  const per = p && p.per_deliverable.length
+  const per = !isWired(model, 'progress') && !p
+    ? ''
+    : p && p.per_deliverable.length
     ? table(['deliverable', '完成度', '狀態'], p.per_deliverable.map((d) => `<tr>${td(esc(d.id))}${td(d.percent === null ? unknownSpan() : `${esc(d.percent)}%`)}${td(d.state === 'done' ? '完成' : '未完成')}</tr>`), 'compact')
     : '<p class="muted">沒有 controller_progress_receipt 的 deliverable 清單。</p>';
   const planned = model.planned.length
     ? `<ul>${model.planned.map((x) => `<li>${esc(x.id)}${x.title ? ` — ${esc(x.title)}` : ''}</li>`).join('')}</ul>`
-    : '<p class="muted">沒有規劃清單輸入。</p>';
+    : (isWired(model, 'planned') ? '<p class="muted">沒有規劃清單輸入。</p>' : `<p class="muted">規劃清單：${NOT_WIRED}（沒有規劃輸入）</p>`);
   const ex = model.axes.execution;
   const axes = `<p>執行軸 ${chip(`RUNNING ${ex.running}`, 'running')}${chip(`EXITED ${ex.exited}`, 'info')}${chip(`UNKNOWN ${ex.unknown}`, 'unknown')} ｜ 驗收軸 ${chip(acceptanceChip(model.axes.acceptance, model.axes.can_close), model.axes.acceptance === 'unknown' ? 'pending' : model.axes.acceptance)}</p>`;
   return `<h3>實際（receipt）</h3>\n${head}\n${counts}\n${per}\n${axes}\n<h3>規劃（graph／README，display-only，不進分母）</h3>\n${planned}`;
 }
 
 function renderCompare(model) {
-  if (!model.compare.length) return '<p class="muted">沒有 compare-record。</p>';
+  if (!model.compare.length) return isWired(model, 'compare') ? '<p class="muted">沒有 compare-record。</p>' : notWired('沒有 compare 輸入，這一段不代表沒有證據圖');
   return model.compare.map((c) => {
     if (c.error) return `<div><p>${chip('UNVERIFIED', 'unverified')} compare-record 無法使用：${esc(c.file)}（${esc(c.error)}）</p></div>`;
     const dirty = c.before_dirty !== false || c.after_dirty !== false;
@@ -352,12 +367,13 @@ function renderJobHtml(model) {
   const accCls = m.axes.acceptance === 'unknown' ? 'pending' : m.axes.acceptance;
   const dd = m.decision;
   const s1 = `<h1>${esc(m.job)} <span class="muted">· ${esc(m.project)}</span></h1>\n<p class="updated muted">updated ${esc(m.published_at)} @ ${m.commit ? esc(m.commit) : 'unknown'}</p>`;
+  const decWired = isWired(m, 'decision');
   const ph = isObject(m.phase) && typeof m.phase.label === 'string' ? m.phase : null;
-  const s2 = `<p>${chip(acceptanceChip(m.axes.acceptance, m.axes.can_close), accCls)}${m.needs_decision ? chip('需要你決定', 'warn') : chip('知會', 'info')}${ph ? chip(`階段：${ph.label}`, 'info') : ''}</p>\n<p><strong>${esc(m.conclusion)}</strong></p>\n<p>${m.needs_decision ? `需要你決定：${dd && typeof dd.question === 'string' ? esc(dd.question) : unknownSpan()}` : '知會：目前沒有待你決定的事項。'}</p>`;
+  const s2 = `<p>${chip(acceptanceChip(m.axes.acceptance, m.axes.can_close), accCls)}${m.needs_decision ? chip('需要你決定', 'warn') : (decWired ? chip('知會', 'info') : chip(NOT_WIRED, 'warn'))}${ph ? chip(`階段：${ph.label}`, 'info') : ''}</p>\n<p><strong>${esc(m.conclusion)}</strong></p>\n<p>${m.needs_decision ? `需要你決定：${dd && typeof dd.question === 'string' ? esc(dd.question) : unknownSpan()}` : (decWired ? '知會：目前沒有待你決定的事項。' : `決定：${NOT_WIRED}（沒有 decision 輸入；不代表沒有待決事項）`)}</p>`;
   const d = m.decision;
   const s3 = d
     ? `<p><strong>${esc(d.question)}</strong></p>\n<ol>${d.options.map((x) => `<li>${esc(x.label)} — ${esc(x.consequence)}</li>`).join('')}</ol>\n<p>這份裁決不授權的事：${d.not_authorized ? esc(d.not_authorized) : unknownSpan()}</p>`
-    : '<p class="muted">本回合沒有待決事項。</p>';
+    : (decWired ? '<p class="muted">本回合沒有待決事項。</p>' : notWired('沒有 decision 輸入，不代表沒有待決事項'));
   const sources = m.sources.length
     ? `<ul>${m.sources.map((s) => `<li>${esc(s.role)} · <code>${esc(s.path)}</code> · sha256 <code>${esc(s.sha256)}</code></li>`).join('')}</ul>`
     : '<p class="muted">沒有來源輸入。</p>';
@@ -381,10 +397,14 @@ function renderProjectIndex(models, opts = {}) {
   const counts = `執行 RUNNING ${ex.running} · EXITED ${ex.exited} · UNKNOWN ${ex.unknown} ｜ 驗收 ACCEPTED ${acc.accepted} · REJECTED ${acc.rejected} · PENDING ${acc.unknown}`;
   const rows = list.map((m) => {
     const e = m.axes.execution;
-    return `<tr>${td(`<a href="${esc(m.date)}/${esc(m.job)}/current/index.html">${esc(m.job)}</a>`)}${td(esc(m.date))}${td(`<span class="nb">${show(m.published_at)}</span>`)}${td(`${esc(`${EXEC_CHIP.running} ${e.running}`)} · ${esc(`${EXEC_CHIP.exited} ${e.exited}`)} · ${esc(`${EXEC_CHIP.unknown} ${e.unknown}`)}`)}${td(chip(acceptanceChip(m.axes.acceptance, m.axes.can_close), m.axes.acceptance === 'unknown' ? 'pending' : m.axes.acceptance))}${td(m.needs_decision ? chip('需要你決定', 'warn') : '—')}</tr>`;
+    const decCell = m.needs_decision ? chip('需要你決定', 'warn') : (isWired(m, 'decision') ? '—' : NOT_WIRED);
+    return `<tr>${td(`<a href="${esc(m.date)}/${esc(m.job)}/current/index.html">${esc(m.job)}</a>`)}${td(esc(m.date))}${td(`<span class="nb">${show(m.published_at)}</span>`)}${td(`${esc(`${EXEC_CHIP.running} ${e.running}`)} · ${esc(`${EXEC_CHIP.exited} ${e.exited}`)} · ${esc(`${EXEC_CHIP.unknown} ${e.unknown}`)}`)}${td(chip(acceptanceChip(m.axes.acceptance, m.axes.can_close), m.axes.acceptance === 'unknown' ? 'pending' : m.axes.acceptance))}${td(decCell)}</tr>`;
   });
+  const unwired = list.filter((m) => !m.needs_decision && !isWired(m, 'decision')).length;
+  const decisionsLine = list.length && unwired === list.length ? `需要你決定：${NOT_WIRED}`
+    : `需要你決定：${list.filter((m) => m.needs_decision).length}${unwired ? `（另有 ${unwired} 個 job 的決定來源未接）` : ''}`;
   const project = opts.project || (list[0] && list[0].project) || null;
-  const body = `<h1>Review index <span class="muted">· ${show(project)}</span></h1>\n<p class="summary" data-summary="decisions">需要你決定：${list.filter((m) => m.needs_decision).length}</p>\n<p class="counts" data-counts="two-axis">${esc(counts)}</p>\n${list.length ? table(['job', 'date', 'published_at', '執行', '驗收', '需要決定'], rows) : '<p class="muted">沒有 job。</p>'}`;
+  const body = `<h1>Review index <span class="muted">· ${show(project)}</span></h1>\n<p class="summary" data-summary="decisions">${decisionsLine}</p>\n<p class="counts" data-counts="two-axis">${esc(counts)}</p>\n${list.length ? table(['job', 'date', 'published_at', '執行', '驗收', '需要決定'], rows) : '<p class="muted">沒有 job。</p>'}`;
   return page(`Review index · ${project || 'unknown'}`, body);
 }
 
@@ -548,7 +568,7 @@ function smokeDir(dir, { requireSections }) {
 
 function renderRootIndex(projects) {
   const list = [...(projects || [])].sort((a, b) => String(a.display_name).localeCompare(String(b.display_name)) || String(a.project_key).localeCompare(String(b.project_key)));
-  const rows = list.map((p) => `<tr>${td(`<a href="${esc(p.project_key)}/index.html">${esc(p.display_name || p.project_key)}</a>`)}${td(`<code>${esc(p.project_key)}</code>`)}${td(show(p.last_published_at))}${td(Number.isInteger(p.decisions_needed) ? esc(p.decisions_needed) : unknownSpan())}</tr>`);
+  const rows = list.map((p) => `<tr>${td(`<a href="${esc(p.project_key)}/index.html">${esc(p.display_name || p.project_key)}</a>`)}${td(`<code>${esc(p.project_key)}</code>`)}${td(show(p.last_published_at))}${td(Number.isInteger(p.decisions_needed) ? esc(p.decisions_needed) : (p.decisions_source_wired === false ? NOT_WIRED : unknownSpan()))}</tr>`);
   const body = `<h1>Review projects</h1>\n${list.length ? table(['project', 'project_key', 'last published_at', '需要你決定'], rows) : '<p class="muted">沒有 project。</p>'}`;
   return page('Review projects', body);
 }
@@ -581,11 +601,13 @@ function regenProjectIndex({ outRoot, project, displayName }) {
   else for (const m of html.matchAll(/\bhref="([^"]*)"/g)) if (!fs.existsSync(path.join(outRoot, m[1]))) problem = `index link target missing: ${m[1]}`;
   if (problem) throw new Error(`project index smoke failed: ${problem}`);
   writeFileAtomic(path.join(outRoot, 'index.html'), html);
+  const decisionsUnwired = models.length > 0 && models.every((m) => !m.needs_decision && !isWired(m, 'decision'));
   const published = models.map((m) => m.published_at).filter(Boolean).sort();
   writeFileAtomic(path.join(outRoot, 'project.json'), `${JSON.stringify({
     schema: 'review-project/1', project_key: project, display_name: displayName || project,
     last_published_at: published.length ? published[published.length - 1] : null,
-    decisions_needed: models.filter((m) => m.needs_decision).length,
+    decisions_needed: decisionsUnwired ? null : models.filter((m) => m.needs_decision).length,
+    decisions_source_wired: !decisionsUnwired,
   })}\n`);
 }
 
@@ -805,7 +827,7 @@ function assemble(o) {
     runs: o.runsValue, root: o.root, job: o.job, date: o.date, project: o.project,
     now: o.now, commit,
     taskReceipt: o.task ? o.task.value : null, progressReceipt: o.progress ? o.progress.value : null,
-    reviewReceipts, compare: o.compare || [], decision: o.decision ? o.decision.value : null, planned: o.planned ? o.planned.value : null,
+    reviewReceipts, compare: o.compare || [], compareProvided: o.compareProvided === true, decision: o.decision ? o.decision.value : null, planned: o.planned ? o.planned.value : null,
     isAncestor: gitIsAncestor(o.repo), sources,
   });
   return { model, reviewReceipts };
@@ -888,7 +910,7 @@ function main(argv, env) {
   const compare = flags.compare ? loadCompare(flags.compare) : [];
   const { model } = assemble({
     runsValue: runs.value, rows, root, job: flags.job, date: flags.date, project: flags.project, now: clock.ms, commit: flags.commit || null, repo,
-    task, progress, decision, planned, compare, sources,
+    task, progress, decision, planned, compare, compareProvided: Boolean(flags.compare), sources,
   });
   const html = renderJobHtml(model);
   if (flags.print) { writeAll(html); return 0; }

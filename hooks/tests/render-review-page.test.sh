@@ -18,6 +18,10 @@
 # C3b-R addition (job phase) RED at 1b549997: 168 passed, 24 failed, e.g.
 #   FAIL [render-review-page] phase: campaign state REVIEWING maps to its zh-TW label: '"state-REVIEWING":true' not found in output
 #   FAIL [render-review-page] phase: no campaign -> first open deliverable, label 做 <id>: '"deliverable":true' not found in output
+# W1i (mods P1W) addition RED at 6e40bcc4: 204 passed, 12 failed, e.g.
+#   FAIL [render-review-page] W1i wired-state: dec0_s2: '"dec0_s2":true' not found in output
+#   FAIL [render-review-page] W1i wired-state: idxNone: '"idxNone":true' not found in output
+#   FAIL [render-review-page] CLI with no decision input: never says there is nothing to decide: unexpected '目前沒有待你決定' in output
 # Pure fixtures: fake HOME / CLAUDE_CONFIG_DIR / AUTOPILOT_LIVE_DIR (/dev/shm) / costs file; the renderer
 # is never allowed to call the real `autopilot status task` (a fixture receipt or a fake bin is always given).
 . "$(dirname "$0")/lib.sh"
@@ -196,8 +200,8 @@ assert_eq "$RC" "0" "rc=0 run, no receipt: renders"
 assert_contains "$(sec "$P_A" 6)" "EXITED" "rc=0 + no receipt: execution axis EXITED"
 assert_contains "$(sec "$P_A" 2)" "PENDING" "rc=0 + no receipt: acceptance axis PENDING"
 assert_not_contains "$(cat "$P_A")" "ACCEPTED" "rc=0 + no receipt: never ACCEPTED anywhere"
-assert_contains "$(sec "$P_A" 2)" "本回合尚無驗收 verdict；下表是執行狀態，不是進度" "no receipt: fixed sentence"
-assert_contains "$(sec "$P_A" 4)" "分母未凍結" "no progress receipt: denominator not frozen"
+assert_contains "$(sec "$P_A" 2)" "驗收結論：來源未接" "no task input (W1i): the conclusion says 來源未接, not the no-verdict sentence"
+assert_contains "$(sec "$P_A" 4)" "總進度：來源未接" "no progress input (W1i): 來源未接, not a denominator claim"
 assert_not_contains "$(sec "$P_A" 4)" "0%" "no progress receipt: percent never filled with 0"
 
 P_B="$SB/pb.html"
@@ -539,5 +543,72 @@ assert_contains "$PH" '"oldModel":true' "phase: an old model without a phase fie
 JSON_PHASE_MODEL="$SB/phase-model.html"
 render "$JSON_PHASE_MODEL" --runs "$F/runs.json" --root R1 --task-receipt none --progress-receipt "$F/progress-frozen.json" "${COMMON[@]}"
 assert_contains "$(sec "$JSON_PHASE_MODEL" 2)" "階段：做 c" "phase: CLI with a frozen progress receipt shows the first open deliverable"
+
+# ---- 17. honest "source not wired" text (mods P1W W1i): not provided != provided-and-empty ---------------------
+cat > "$SB/wired.js" <<'JS'
+const r = require(process.argv[2]);
+const out = {};
+const base = { runs: [], root: 'R1', job: 'J', date: '2026-10-04', project: 'abcdef0123456789', now: 0, commit: null, sources: [] };
+const sec = (html, n) => (html.match(new RegExp(`<section data-section="${n}"[\\s\\S]*?</section>`)) || [''])[0];
+const NW = '來源未接';
+const task = { artifact_type: 'task_status_receipt', root_run_id: 'R1', acceptance_verdict: 'unknown' };
+const progE = { artifact_type: 'controller_progress_receipt', root_run_id: 'R1', completed_deliverables: [], remaining_deliverables: [], deliverable_count: null, frozen_denominator_digest: null };
+// nothing provided
+const h0 = r.renderJobHtml(r.buildJobModel(base));
+out.dec0_s2 = sec(h0, 2).includes(NW) && !sec(h0, 2).includes('目前沒有待你決定');
+out.dec0_s3 = sec(h0, 3).includes(NW) && !sec(h0, 3).includes('本回合沒有待決事項');
+out.task0 = sec(h0, 2).includes('驗收結論：來源未接') && !sec(h0, 2).includes('本回合尚無驗收 verdict');
+out.prog0 = sec(h0, 4).includes('總進度：來源未接') && !sec(h0, 4).includes('分母未凍結');
+out.planned0 = sec(h0, 4).includes('規劃清單：來源未接') && !sec(h0, 4).includes('沒有規劃清單輸入');
+out.compare0 = sec(h0, 5).includes(NW) && !sec(h0, 5).includes('沒有 compare-record');
+// provided and empty
+const hE = r.renderJobHtml(r.buildJobModel({ ...base, taskReceipt: task, progressReceipt: progE, decision: {}, planned: [], compare: [], compareProvided: true }));
+out.decE_s2 = sec(hE, 2).includes('知會：目前沒有待你決定的事項') && !sec(hE, 2).includes(NW);
+out.decE_s3 = sec(hE, 3).includes('本回合沒有待決事項') && !sec(hE, 3).includes(NW);
+out.taskE = sec(hE, 2).includes('驗收結論：unknown') && !sec(hE, 2).includes(NW);
+out.progE = sec(hE, 4).includes('總進度：分母未凍結') && !sec(hE, 4).includes('總進度：來源未接');
+out.plannedE = sec(hE, 4).includes('沒有規劃清單輸入') && !sec(hE, 4).includes('規劃清單：來源未接');
+out.compareE = sec(hE, 5).includes('沒有 compare-record') && !sec(hE, 5).includes(NW);
+// watcher-style compare: [] without compareProvided is NOT wired
+out.compareWatcher = sec(r.renderJobHtml(r.buildJobModel({ ...base, compare: [] })), 5).includes(NW);
+// a provided-but-other-root task receipt is "provided": the no-verdict sentence stays
+const hW = r.renderJobHtml(r.buildJobModel({ ...base, taskReceipt: { ...task, root_run_id: 'R2' } }));
+out.taskWrongRoot = sec(hW, 2).includes('本回合尚無驗收 verdict') && !sec(hW, 2).includes('驗收結論：來源未接');
+// a real decision / planned / compare still render as before
+const hD = r.renderJobHtml(r.buildJobModel({ ...base, decision: { question: 'Q-1', options: [] } }));
+out.decReal = sec(hD, 2).includes('需要你決定') && !sec(hD, 2).includes('決定：' + NW) && !sec(hD, 3).includes(NW) && sec(hD, 3).includes('Q-1');
+// project index
+const mk = (job, wired, nd) => ({ job, date: '2026-10-04', project: 'p', published_at: '2026-10-04T02:00:00.000Z', axes: { execution: { running: 0, exited: 0, unknown: 0 }, acceptance: 'unknown' }, needs_decision: nd, wired: { decision: wired } });
+const none = r.renderProjectIndex([mk('a', false, false), mk('b', false, false)]);
+out.idxNone = none.includes('需要你決定：來源未接') && !none.includes('需要你決定：0');
+out.idxNoneRow = (none.match(/來源未接/g) || []).length >= 3;
+const some = r.renderProjectIndex([mk('a', true, true), mk('b', false, false), mk('c', true, false)]);
+out.idxSome = some.includes('需要你決定：1') && some.includes('1 個 job 的決定來源未接');
+const all = r.renderProjectIndex([mk('a', true, false)]);
+out.idxAll = all.includes('需要你決定：0') && !all.includes('來源未接');
+const legacy = r.renderProjectIndex([{ ...mk('a', true, false), wired: undefined }]);
+out.idxLegacy = legacy.includes('需要你決定：0') && !legacy.includes('來源未接');
+// root index
+out.rootNone = r.renderRootIndex([{ schema: 'review-project/1', project_key: 'aaaa000000000001', display_name: 'r', last_published_at: null, decisions_needed: null, decisions_source_wired: false }]).includes('來源未接');
+out.rootZero = !r.renderRootIndex([{ schema: 'review-project/1', project_key: 'aaaa000000000001', display_name: 'r', last_published_at: null, decisions_needed: 0, decisions_source_wired: true }]).includes('來源未接');
+process.stdout.write(JSON.stringify(out));
+JS
+WI="$(node "$SB/wired.js" "$R")"
+for k in dec0_s2 dec0_s3 task0 prog0 planned0 compare0 decE_s2 decE_s3 taskE progE plannedE compareE taskWrongRoot decReal idxNone idxNoneRow idxSome idxAll idxLegacy compareWatcher rootNone rootZero; do
+  assert_contains "$WI" "\"$k\":true" "W1i wired-state: $k"
+done
+# publish writes project.json: no wired decision source -> decisions_needed null + decisions_source_wired false
+pubr abcdef0123456789 JW1 "$T1" --out-root "$SB/w1i-out"
+assert_eq "$RC" "0" "W1i: publish with no decision input succeeds"
+assert_eq "$(node -e 'const p=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(p.decisions_needed)+"/"+p.decisions_source_wired)' "$SB/w1i-out/project.json")" "null/false" "W1i: project.json says the decision source is not wired (not 0)"
+assert_contains "$(cat "$SB/w1i-out/index.html")" "需要你決定：來源未接" "W1i: the published project index does not count 0 decisions"
+# CLI end to end: a watcher-style render (nothing wired) vs a fully wired one
+P_NW="$SB/pnw.html"
+render "$P_NW" --runs "$F/runs.json" --root R1 --task-receipt none "${COMMON[@]}"
+assert_contains "$(sec "$P_NW" 2)" "來源未接" "CLI with no decision input: the conclusion section says 來源未接"
+assert_not_contains "$(sec "$P_NW" 2)" "目前沒有待你決定" "CLI with no decision input: never says there is nothing to decide"
+printf '[]' > "$SB/planned-empty.json"
+render "$SB/pnw2.html" --runs "$F/runs.json" --root R1 --task-receipt "$F/task-accepted.json" --progress-receipt "$F/progress-frozen.json" --decision "$F/decision.json" --compare "$F/compare" --planned "$SB/planned-empty.json" "${COMMON[@]}"
+assert_not_contains "$(cat "$SB/pnw2.html")" "來源未接" "CLI with every input wired: no 來源未接 anywhere"
 
 finalize_test

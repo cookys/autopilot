@@ -1,0 +1,8 @@
+W1i c6af5401 (w/w1i on p1c/r) SHIP-AS-IS review-1791129616-967422-8bcb; note: watcher sources-manifest half of W1i not built (runs-watch.js owned by W1a this wave) -> moves to W3a
+W1de 7713fbed (w/w1de) SHIP-AS-IS review-1791129707-1032987-0b90; trailer says Sonnet 5.5 (engine that ran) - keep; REQUIRED before landing: W1de-perf (awaiting-owner PostToolUse .* costs ~63 ms/tool call: fold into existing multiplexer or zero-spawn bail; exclude Task/Agent; skip lock when nothing pending) - dispatch after W1c lands (hooks.json)
+W1a 5118dcfd (w/w1a on p1c/r) SHIP-AS-IS review-1791129964-1363474-1457
+W1h 9a98e993 (w/w1h) SHIP-AS-IS review-1791130044-1433152-e9cb (after repair of review-1791129273-686856-50f0)
+W2f 4cc9933f (w/w2f on 0bd04df4) SHIP-AS-IS review-1791130159-1514527-162d; W3a must round-trip the hook-written context file (model: {}) through the mod reader
+W1c fcdfa106 (w/w1c) SHIP-AS-IS review-1791130295-1591617-f2e8 (after repair of review-1791130044-1433288-b9ce); UserPromptSubmit fast path 120 ms median -> perf row
+W1b 250b2576 (w/w1b) SHIP-AS-IS review-1791132009-2129439-c0a1 (after 3 repair rounds)
+W1f 1b5a3af4 (w/w1f) ACCEPTED by depth-0 ruling over review-1791131325-1914788-2e4d 🟡: hetero child lineage root == worktree budget/claim root (dispatch-hetero.sh:1928-1946, 2286, 3003) so the split is a claim-semantics change -> row W1f-b; tainted suites re-run alone, all green

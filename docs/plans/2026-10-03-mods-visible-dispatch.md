@@ -150,6 +150,7 @@ O：owner 不用問「怎麼這麼慢」就知道誰在跑、跑多久、最後 
 | **W1c** watcher 自動啟動 | SessionStart＋UserPromptSubmit hook；只在已接 autopilot 的 repo（專案設定檔、marker、或旋鈕＝1；非 git 目錄不動作）；UserPromptSubmit 先讀 `writer.pid`＋`kill -0`，死了才 `flock -n` 探測與啟動（不每次 spawn）；存活另看該專案 idle 窗內更新過的 tasks／attention 檔；結束靠 idle-exit | 發佈 | — | M | 機制 |
 | **W1de** 任務清單＋等你回應 | 精確 matcher（TaskCreated、TaskCompleted、PostToolUse TaskUpdate；PermissionRequest、Notification、Stop、UserPromptSubmit；不含 `Task`／`Agent` 子代理）→ `<live>/tasks/<sid>.json`（`session-tasks/1`）、`<live>/attention/<sid>.json`（`attention/1`）；每檔加鎖＋原子 rename；結束訊號移除 attention | 寫入 | W0a、W0b | M | 機制 |
 | **W1f** session 共用 job root | `session-mode.js set` 產生 root（§2.7）；三條 rail 只傳遞 marker／env 的 root，絕不自創；campaign root 不動；**不碰 `runs-watch.js` 與 elapsed** | 寫入 | — | S–M | 機制 |
+| **W1f-b** hetero 子任務掛 job root | hetero 子任務的血緣 root 與 worktree 預算／work-order 認領 root 是同一變數（`dispatch-hetero.sh:1928-1946`、`:2286`、`:3003`）；要讓子任務 manifest 也記 job root，須另設 worktree-root env 並重訂認領／預算語意；先設計再審 | 寫入 | W1f | M | 機制（認領語意變更，需設計審查） |
 | **W1g** 規劃清單 | campaign：execution graph／controller receipt 的 deliverable 清單；非 campaign：session 任務清單；watcher 傳 `planned` | 發佈 | W1a、W1de | S | 機制 |
 | **W1h** 代決策 ledger 寫入端（engine） | 預設 `<git-common-dir>/autopilot/ledger/decisions.jsonl`；append 蓋 `repo_identity`、`root_run_id`；engine 自動裁決處寫 `decision` 列（呼叫點 try/catch、不擋裁決） | 寫入 | — | M | 機制 |
 | **W1i** 誠實文字＋sources 清單 | watcher 發佈 sources 清單（哪些寫入者已裝且啟用）；renderer／band：寫入者不存在→「來源未接」，接上但空→原空狀態文字 | 發佈＋讀取 | — | S | 機制 |
@@ -262,6 +263,7 @@ O：owner 不用問「怎麼這麼慢」就知道誰在跑、跑多久、最後 
 | D4 | **結案（S1 = yes，2026-10-03）**：S1 = no 時要不要同 repo 第二個 plugin | 不要；classic 完整、mod `unavailable` | 第二 plugin（要實測一次安裝） | owner 要一次安裝；資料夾同 repo ≠ 同 plugin |
 
 ## Review log
+- R5.4 2026-10-04 depth-0 裁決：W1f 接受現狀（hetero 只在自己 manifest 記 job root；review／author 子任務繼承），hetero 子任務掛 job root 拆為 W1f-b（認領／預算語意變更，另行設計審查）。
 - R5.3 2026-10-04 owner 裁決（eval 設計 `evidence/2026-10-04-mods-p1c/eval-design-guidance-rows.md` 之後）：W2g（`depth0-control-loop.md:400-410`）、W2c（`level-front-door.md:269-272`）、W2e-g（`review-page.md:80-84`）現行文字已要求，依 CLAUDE.md「機制 vs 指引」改列**機制**——以程式讓既有要求真的發生，不改 skill 文字、不需 eval。W2a-g、W2b-g、W1b 觸發點 2 維持指引，**現在**先擴 harness（E1–E5）再跑 eval，v2.37.0 等它們完成。
 - R5.2 2026-10-04 P1W G2（終代，CONDITIONAL，13 條：3 擋 10 不擋）全數 accept-and-fold：依賴表改寫成唯一正本（吸收 G1 處置），W1f 不再碰 watcher／elapsed（移入 W3a），W1b 只放身分與指標、判定由 `status task` 重算，W2b／W2e 拆 m／g，W2f 改為先探測的 context 寫入端，W4 門檻逐格定義「真值」。凍結。
 - R5.1 2026-10-04 P1W G1（單席 opus_chair，CONDITIONAL，13 條：5 擋 8 不擋）全數 accept-and-fold，見 §4 P1W「G1 處置」；R11 部分駁回（`session-mode set` 產生 root 是 §2.7 的做法，只禁止 rail 自創）。裁決檔與 artifact 在 evidence `2026-10-04-mods-p1c/plan-review-p1w/`。

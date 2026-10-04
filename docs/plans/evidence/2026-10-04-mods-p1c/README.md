@@ -3,7 +3,7 @@
 > ## IN FLIGHT (2026-10-05, session df52a188)
 > - INT `w/int` 8666aba4 accepted. Wave 2 accepted: PHASE+PICK 441243e2, PERF+STAMP 291cfa96, WATCH-B c13270aa, WATCH-A 23148e78 (see `accepted-heads-p1w.txt`, incl. follow-ups).
 > - INT2 **accepted**: `w/int2` e227528e (bundle refreshed). Not-opted-in UserPromptSubmit +47 ms (git spawn) to fix inside the MARKER row (same file).
-> - PENDING OWNER: MARKER row (holistic fix for phase in plain sessions): `level: null` = plain session; dispatch-hetero.sh classifier + campaign bridge skip it; SessionStart *ensures* (never overwrites, compact-safe) a marker in opted-in repos with `root_run_id: null`; every reader gets a level-null test. Owner rejected the sidecar workaround ("不能 workaround，整套處理修正"); proposal sent, awaiting go.
+> - MARKER row dispatched (owner go 2026-10-05, plan R5.6; worktree `$OLD/p1c/wt-marker` off `w/int2`, report `$OLD/p1c/run-w/marker/REPORT.md`). Was: MARKER row (holistic fix for phase in plain sessions): `level: null` = plain session; dispatch-hetero.sh classifier + campaign bridge skip it; SessionStart *ensures* (never overwrites, compact-safe) a marker in opted-in repos with `root_run_id: null`; every reader gets a level-null test. Owner rejected the sidecar workaround ("不能 workaround，整套處理修正"); proposal sent, awaiting go.
 > - Next after INT2 + MARKER: eval step 3 (freeze packs from the post-MARKER sha; change texts for W2a-g/W2b-g/W1b-t2 still to draft), W3a mod integration (rebase `p1c/c` onto int head), W1f-b design, W4 landing.
 
 > ## HANDOFF (2026-10-05) — read this block first

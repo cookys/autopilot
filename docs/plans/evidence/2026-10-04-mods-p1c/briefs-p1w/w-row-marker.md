@@ -1,4 +1,4 @@
-# P1W row MARKER — the session-mode marker becomes the per-session record (DRAFT, dispatch only after owner go)
+# P1W row MARKER — the session-mode marker becomes the per-session record (owner go 2026-10-05, R5.6)
 
 Read `w-common.md` first. Base: `w/int2` (e227528e). Worktree `$P/wt-marker`, branch `w/marker`.
 

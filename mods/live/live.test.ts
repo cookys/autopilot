@@ -1,3 +1,8 @@
+// P1c C3b-M (job phase from the job model's `phase.label`; fifth verdict word 待命 for idle; run with `claude plugin test <wrapper>`):
+// RED at 48be3ecd (64 tests): 56 pass / 8 fail (4 cases x terminal + desktop): (fail) verdict 待命 ..., (fail) phase: the job model phase label is shown ..., (fail) verdict precedence
+//   (the idle step), (fail) verdict 完成待驗收 (its 'none' cases now expect ['待命'] instead of no word). GREEN: 64 pass / 0 fail.
+// C3b mutation controls (each red, then reverted): idle not last / idle over running / old glyph / wrong reason / idle bold /
+//   phase ignored / code shown instead of label / bare string accepted / empty label accepted / process phase shown.
 // P1c C3 (band redesign: verdict word, project, phase, elapsed, progress; cost and context in the pane header):
 // RED at 2279e6d0 (C2 implementation, this suite's C3 cases + the C2 cases rewritten for the new band, 62 tests):
 //   24 pass / 38 fail (19 cases x terminal + desktop), e.g.
@@ -447,7 +452,7 @@ for (const surface of SURFACES) {
   // ---- mods P1c C3: the band answers project / phase / elapsed / progress with a verdict word ----
   const ENV_PATH = LIVE + '/runs/' + KEY + '--' + ROOT + '.json'
   const MODEL_PATH = AHOME + '/review/' + KEY + '/2026-10-04/' + ROOT + '/current/model.json'
-  const VERDICTS = ['要你決定', '疑似卡住', '完成待驗收', '進行中']
+  const VERDICTS = ['要你決定', '疑似卡住', '完成待驗收', '進行中', '待命']
   const verdictsIn = (t: string) => VERDICTS.filter(v => t.includes(v))
   const quietCounts = (live: number) => ({ confirmed_live: live, exited: 1, unknown: 0, fresh_bound_s: 30 })
   const exitedRow = () => row({ run_id: 'r9', phase: 'exited', alive: false, rc: 0, final_status: 'done' })
@@ -497,7 +502,7 @@ for (const surface of SURFACES) {
     const none = async (why: string) => {
       await w.clock.advance(5000)
       const t = await bandText($, surface)
-      expect(verdictsIn(t), why).toEqual([])
+      expect(verdictsIn(t), why).toEqual(['待命'])
     }
     put(w.files, null, { progress: FROZEN_DONE, axes: { execution: { running: 0, exited: 1, unknown: 0 }, acceptance: 'accepted', can_close: true } })
     await none('accepted is not waiting')
@@ -542,6 +547,39 @@ for (const surface of SURFACES) {
     put(w.files, { runs: [row({ run_id: 'r1' })], counts: quietCounts(1) }, null) // a run is live
     await w.clock.advance(5000)
     expect(verdictsIn(await bandText($, surface))).toEqual(['進行中'])
+    put(w.files, { runs: [exitedRow()], counts: quietCounts(0) }, { progress: null }) // nothing live, awaited or complete
+    await w.clock.advance(5000)
+    expect(verdictsIn(await bandText($, surface))).toEqual(['待命']) // the idle word comes last
+  })
+
+  test('verdict 待命: nothing live, nothing awaited, not frozen-complete; the fifth word, last in precedence (' + surface + ')', async ($, on) => {
+    const files = base()
+    put(files, { runs: [exitedRow()], counts: quietCounts(0) }, { progress: { frozen: true, percent: 62.5, done: 5, total: 8 } })
+    const w = world(on, files)
+    await start($, surface)
+    const p = await bandParts($, surface)
+    expect(p.line1).toBe('◌ 待命 repo · — · 10m · 62.5%（5/8）')
+    expect(p.line2).toBe('沒有派工在跑')
+    expect(p.line1).not.toContain('○')
+    const lead = walkTexts(p.tree)[0] as Node
+    expect(lead.props?.bold).not.toBe(true) // idle is drawn plain
+    // no job page at all: still the idle word, with an em dash progress
+    delete w.files[MODEL_PATH]
+    await w.clock.advance(5000)
+    expect((await bandParts($, surface)).line1).toBe('◌ 待命 repo · — · 10m · —')
+    // every other word beats it, one at a time
+    put(w.files, { runs: [row({ run_id: 'r1' })], counts: quietCounts(1) }, null)
+    await w.clock.advance(5000)
+    expect(verdictsIn(await bandText($, surface))).toEqual(['進行中'])
+    put(w.files, { runs: [row({ run_id: 'r2', stall: true })], counts: quietCounts(0) }, null)
+    await w.clock.advance(5000)
+    expect(verdictsIn(await bandText($, surface))).toEqual(['疑似卡住'])
+    put(w.files, { runs: [exitedRow()], counts: quietCounts(0) }, { needs_decision: true, decision: DECISION })
+    await w.clock.advance(5000)
+    expect(verdictsIn(await bandText($, surface))).toEqual(['要你決定'])
+    put(w.files, null, { needs_decision: false, decision: null, progress: FROZEN_DONE })
+    await w.clock.advance(5000)
+    expect(verdictsIn(await bandText($, surface))).toEqual(['完成待驗收'])
   })
 
   test('progress: frozen shows the percent and the done/total; unfrozen shows "n done*", dim, never a percent (' + surface + ')', async ($, on) => {
@@ -592,14 +630,27 @@ for (const surface of SURFACES) {
     expect(p.line1).not.toContain('*')
   })
 
-  test('phase: no human phase in the job model, so an em dash; the process phase is never shown as a phase (' + surface + ')', async ($, on) => {
+  test('phase: the job model phase label is shown; absent or malformed is an em dash; the process phase is never shown (' + surface + ')', async ($, on) => {
     const files = base() // rows carry phase "running" / "exited"
     put(files, null, { progress: { frozen: true, percent: 62.5, done: 5, total: 8 } })
-    world(on, files)
+    const w = world(on, files)
     await start($, surface)
-    const p = await bandParts($, surface)
-    const phase = p.line1.split(' · ')[1]
-    expect(phase).toBe('—')
+    let p = await bandParts($, surface)
+    expect(p.line1.split(' · ')[1]).toBe('—') // no phase field: an em dash
+    expect(p.line1).not.toMatch(/running|exited/)
+    const shown = async (phase: unknown) => {
+      put(w.files, null, { progress: { frozen: true, percent: 62.5, done: 5, total: 8 }, phase })
+      await w.clock.advance(5000)
+      return (await bandParts($, surface)).line1.split(' · ')[1]
+    }
+    expect(await shown({ code: 'REVIEWING', label: '審查', source: 'campaign' })).toBe('審查')
+    expect(await shown({ code: 'c', label: '做 c', source: 'deliverable' })).toBe('做 c')
+    expect(await shown(null)).toBe('—')
+    expect(await shown('審查')).toBe('—') // a bare string is not the published shape
+    expect(await shown({ code: 'X' })).toBe('—') // no label
+    expect(await shown({ label: 5 })).toBe('—') // label is not a string
+    expect(await shown({ label: '' })).toBe('—')
+    p = await bandParts($, surface)
     expect(p.line1).not.toMatch(/running|exited/)
   })
 

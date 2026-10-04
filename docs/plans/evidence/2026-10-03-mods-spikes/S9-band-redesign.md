@@ -90,6 +90,37 @@ r1 · implementer · codex/gpt · started 17:50 · elapsed 600s · phase running
 ## What this does not prove
 
 - The drawn trees come from the test kit, not from a real interactive session (no tmux capture of this redesign).
-- A nothing-live, nothing-awaited scope (no verdict word) renders `○ <project> · …` by the implementer's reading of
-  "exactly four verdict words"; the owner has not seen that variant.
-- The `phase` slot stays `—` until the job model publishes a human phase.
+- (Superseded by S9b below) A nothing-live, nothing-awaited scope drew `○ <project> · …` with no word; it now draws `◌ 待命`.
+- (Superseded by S9b below) The `phase` slot stayed `—` until the job model published a human phase; it now reads `phase.label`.
+
+
+# S9b — the idle word 待命 and the job phase (mods P1c C3b-M)
+
+The same `claude plugin test` kit and fixture world as above (terminal surface, mocked clock 2026-10-04T10:00:30Z, earliest
+run start 09:50:00Z); a capture-only test (not committed) printed `bandParts`. The job model now carries
+`phase: { code, label, source }` (renderer commit C3b-R) and the band slot shows `phase.label`.
+
+Nothing live, nothing awaited, progress not complete, no phase published (the idle word, the fifth; the old `○` variant is gone):
+
+```
+◌ 待命 repo · — · 10m · 62.5%（5/8）
+沒有派工在跑
+```
+
+The same scope with `phase: { code: 'TERMINAL_READY', label: '收尾', source: 'campaign' }`:
+
+```
+◌ 待命 repo · 收尾 · 10m · 62.5%（5/8）
+沒有派工在跑
+```
+
+One run live and `phase: { code: 'c', label: '做 c', source: 'deliverable' }`:
+
+```
+● 進行中 repo · 做 c · 10m · 62.5%（5/8）
+1 個派工在跑
+```
+
+Limits: the renderer can only see a terminal campaign phase (task receipt) or the first open deliverable (progress receipt),
+so a run in progress with no frozen progress receipt still shows `—`; the live campaign phase is a follow-up. Text trees from
+the test kit, not a real interactive session.

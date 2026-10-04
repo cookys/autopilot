@@ -68,21 +68,24 @@ S5a, S5b, S7, S8; `README.md` there is the verdict table). A mod is CC-only; non
   the `hooks.json` `modules` key alone.
 - Reads only: `$HOME/.autopilot/live-pointer.json`, the session marker, `<live_base>/runs/paths/*.json`, the scoped envelope
   (SSD copy as fallback), `<live_base>/context/<sid>.json`, `<live_base>/review/server.json` (port, default 8787) and the job
-  page's `model.json` (acceptance axis, gate rows, `needs_decision` / `decision`, `progress`). It never writes, never starts a program, never sends a prompt.
+  page's `model.json` (acceptance axis, gate rows, `needs_decision` / `decision`, `progress`, `phase`). It never writes, never starts a program, never sends a prompt.
 - **Band contract (P1c C3)**: for a person who left the computer, the band says which project, which phase, how long it has
-  run and how far along, led by a verdict word. One entry, two lines: line 1 is `<mark> <verdict> <project> · <phase> ·
+  run and how far along, led by one of five verdict words. One entry, two lines: line 1 is `<mark> <verdict> <project> · <phase> ·
   <elapsed> · <progress>`, line 2 one short reason sentence (zh-TW, built from fields only). The state texts `no pointer`,
   `no project`, `stale`, `unavailable · run: …`, `unreadable` are unchanged and replace the whole entry.
   - Verdict words, first match wins: `▲ 要你決定` (job model `needs_decision === true`; reason = the decision question) >
     `⏸ 疑似卡住` (any envelope row with `stall: true`, reason = the quietest stalled row's `last_event_age_s` in minutes,
     no new threshold) > `✓ 完成待驗收` (envelope `confirmed_live === 0`, progress frozen with done = total, acceptance axis
-    neither accepted nor rejected; reason `驗收結論尚未出`) > `● 進行中` (`confirmed_live > 0`; reason `<n> 個派工在跑`).
-    None of the four holds (e.g. nothing live and nothing awaited): the line carries `○` and no word. A decision awaited is
-    drawn bold in the warning color, the other words plain.
+    neither accepted nor rejected; reason `驗收結論尚未出`) > `● 進行中` (`confirmed_live > 0`; reason `<n> 個派工在跑`) >
+    `◌ 待命` (the idle word, last: none of the four holds, i.e. nothing live, nothing awaited, not frozen-complete; reason
+    `沒有派工在跑`). A decision awaited is drawn bold in the warning color, the other words bold, `待命` plain.
   - project: `scope.repo_identity` minus `git-common-dir:`, minus a trailing `/.git`, last path segment; a bare repo or any
     other shape falls back to the first 8 hex of the project key. Pure string work, never git.
-  - phase: the job model publishes no human phase, so the slot is `—` today; the process phase (`running` / `exited`) is
-    never used as a phase.
+  - phase: the job model's `phase.label` (an object `{ code, label, source }`; only a non-empty string `label` counts). The
+    renderer fills it from a terminal campaign state of the task receipt (`source: campaign`) or else the first open
+    deliverable (`source: deliverable`, `做 <id>`). Absent or malformed: `—`. A run still in progress with no frozen
+    progress receipt shows `—` (the live campaign phase is not reachable by the renderer: follow-up). The process phase
+    (`running` / `exited`) is never used as a phase.
   - elapsed: now minus the earliest `started_at` among the scope's envelope rows; `38m`, `2h14m`, `1d3h`, `—` when no row
     has a start.
   - progress: from the job model `progress`. Frozen: `62.5%（5/8）` (the model's percent verbatim). Not frozen: `3 done*`,

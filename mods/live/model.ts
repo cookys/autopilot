@@ -28,11 +28,10 @@ export type LiveGateRow = {
 
 export type LiveDecision = { question: string; options: { label: string; consequence: string }[] }
 
-// The two band lines of an ok snapshot. `verdict` null = none of the four words applies (nothing live, nothing
-// awaited): the band then says project / phase / elapsed / progress without a word.
+// The two band lines of an ok snapshot. Every ok band carries one of five words; the fifth, 待命, is the idle word.
 export type BandView = {
   mark: string
-  verdict: string | null
+  verdict: string
   head: string // "<project> · <phase> · <elapsed> · " (the progress follows it)
   progress: string
   progressDim: boolean // an unfrozen denominator is drawn dim
@@ -141,8 +140,8 @@ const VERDICT = {
   stalled: { mark: '⏸', word: '疑似卡住' },
   waiting: { mark: '✓', word: '完成待驗收' },
   running: { mark: '●', word: '進行中' },
+  idle: { mark: '◌', word: '待命' },
 } as const
-const NO_VERDICT_MARK = '○'
 
 // "<project>": the last directory of a normal repo's git common dir. Any other shape (bare repo, no prefix, a path
 // inside .git, empty) falls back to the first 8 hex of the project key. Pure string work: never git, never a hash.
@@ -190,7 +189,7 @@ export function stalledReason(env: Json): string | null {
   return '最久的派工 ' + Math.floor(Math.max(...ages) / 60) + 'm 沒有輸出'
 }
 
-// Precedence: 1 needs a decision, 2 stalled, 3 complete and waiting acceptance, 4 running. None of them: no word.
+// Precedence: 1 needs a decision, 2 stalled, 3 complete and waiting acceptance, 4 running, 5 idle (none of the four).
 export function bandView(env: Json, jobModel: JobModel | null, projectKey: string, nowMs: number): BandView {
   const counts = countsOf(env)
   const progress = jobModel === null ? null : jobModel.progress
@@ -198,7 +197,7 @@ export function bandView(env: Json, jobModel: JobModel | null, projectKey: strin
   const waiting = counts !== null && counts.confirmed_live === 0 && progress !== null && progress.frozen
     && progress.done !== null && progress.total !== null && progress.done === progress.total
     && jobModel !== null && jobModel.acceptance !== 'accepted' && jobModel.acceptance !== 'rejected'
-  let pick: { mark: string; word: string } | null = null
+  let pick: { mark: string; word: string }
   let reason: string | null = null
   if (jobModel !== null && jobModel.needs_decision) {
     pick = VERDICT.decide
@@ -212,14 +211,17 @@ export function bandView(env: Json, jobModel: JobModel | null, projectKey: strin
   } else if (counts !== null && counts.confirmed_live > 0) {
     pick = VERDICT.running
     reason = counts.confirmed_live + ' 個派工在跑'
+  } else {
+    pick = VERDICT.idle
+    reason = '沒有派工在跑'
   }
   const identity = isObject(env.scope) ? env.scope.repo_identity : null
-  // the phase is a human phase of the job, and the job model publishes none: an em dash, never the process phase
-  const phase = '—'
+  // the phase is the job model's `phase.label` (campaign state or open deliverable); absent / malformed: an em dash, never the process phase
+  const phase = jobModel !== null && jobModel.phase !== null ? jobModel.phase.label : '—'
   const prog = progressView(progress)
   return {
-    mark: pick === null ? NO_VERDICT_MARK : pick.mark,
-    verdict: pick === null ? null : pick.word,
+    mark: pick.mark,
+    verdict: pick.word,
     head: projectName(identity, projectKey) + ' · ' + phase + ' · ' + elapsedText(env, nowMs) + ' · ',
     progress: prog.text,
     progressDim: prog.dim,
@@ -228,7 +230,7 @@ export function bandView(env: Json, jobModel: JobModel | null, projectKey: strin
 }
 
 export function bandLine1(v: BandView): string {
-  return v.mark + ' ' + (v.verdict === null ? '' : v.verdict + ' ') + v.head + v.progress
+  return v.mark + ' ' + v.verdict + ' ' + v.head + v.progress
 }
 
 export function sessionUsd(env: Json, sid: string): { text: string; as_of: string | null } {
@@ -275,10 +277,11 @@ export type JobModel = {
   conclusion: string | null
   decision: LiveDecision | null
   progress: JobProgress | null
+  phase: { code: string | null; label: string } | null
 }
 
-// The job page's model.json (review-job-model/1): acceptance axis, gate rows, the decision awaited and the progress
-// numbers. Absent / malformed -> null. `needs_decision` is true only when the model says exactly true.
+// The job page's model.json (review-job-model/1): acceptance axis, gate rows, the decision awaited, the progress
+// numbers and the phase (`{code, label, source}`; only a string `label` counts). Absent / malformed -> null. `needs_decision` is true only when the model says exactly true.
 export function readJobModel(text: string | null): JobModel | null {
   if (text === null) return null
   const parsed = parseJson(text)
@@ -311,7 +314,9 @@ export function readJobModel(text: string | null): JobModel | null {
         total: Number.isInteger(p.total) ? (p.total as number) : null,
       }
     : null
-  return { acceptance, gates, needs_decision: m.needs_decision === true, conclusion: typeof m.conclusion === 'string' && m.conclusion ? m.conclusion : null, decision, progress }
+  const ph = m.phase
+  const phase = isObject(ph) && typeof ph.label === 'string' && ph.label ? { code: typeof ph.code === 'string' ? ph.code : null, label: ph.label } : null
+  return { acceptance, gates, needs_decision: m.needs_decision === true, conclusion: typeof m.conclusion === 'string' && m.conclusion ? m.conclusion : null, decision, progress, phase }
 }
 
 // Axis words follow the review page's chip mapping (plan A12).

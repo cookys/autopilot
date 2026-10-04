@@ -52,7 +52,9 @@ assert_eq "$(mf project_key)" "$K_MAIN" "marker.project_key"
 assert_eq "$(mf repo_identity)" "$EXPECT" "marker.repo_identity"
 assert_eq "$(mf root_run_id)" "root-xyz" "marker.root_run_id from AUTOPILOT_ROOT_RUN_ID"
 node "$CLI" set --level l3 --repo-root "$MAIN" >/dev/null 2>&1 < /dev/null
-assert_eq "$(mf root_run_id)" "null" "marker.root_run_id null when env unset"
+# mods P1W W1f: unset env now mints a job root (job-<ts>-<rand>) instead of null.
+MINTED="no"; case "$(mf root_run_id)" in job-[0-9]*-[0-9a-f]*) MINTED="yes" ;; esac
+assert_eq "$MINTED" "yes" "marker.root_run_id minted job-<ts>-<rand> when env unset"
 
 # note: `set` on a non-repo dir is rejected earlier by Mission routing (pre-existing), so the null-field
 # fail-open path is covered at the scopeFromCwd level above (non-repo cwd -> null key).

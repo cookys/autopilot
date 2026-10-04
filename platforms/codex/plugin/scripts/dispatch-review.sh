@@ -882,6 +882,14 @@ if [ -n "${AUTOPILOT_PARENT_RUN_ID:-}" ]; then
   case "$LINEAGE_DEPTH" in *[!0-9]*|"") LINEAGE_DEPTH=1 ;; esac
 else
   LINEAGE_ROOT="$REVIEW_RUN_ID"
+  # Job root (mods P1W W1f): no parent and no explicit ROOT env => adopt the session marker's job
+  # root so ad-hoc dispatches from one session share one root. ROOT-without-parent
+  # (campaign / rehydration re-attach) is deliberately left on the old behaviour.
+  if [ -z "${AUTOPILOT_ROOT_RUN_ID:-}" ]; then
+    _job_root="$(node "$_REVIEW_SELF_DIR/session-mode.js" root 2>/dev/null | head -n1 || true)"
+    case "$_job_root" in ""|*[!A-Za-z0-9._-]*) ;; *) LINEAGE_ROOT="$_job_root" ;; esac
+    unset _job_root
+  fi
   LINEAGE_DEPTH=0
 fi
 # Sanitize inherited lineage ids (control chars would corrupt the manifest JSON —

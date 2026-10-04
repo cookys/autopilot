@@ -486,7 +486,13 @@ function cmdSet(args) {
   try { scope = scopeFromCwd(repoRoot); } catch (_error) { /* fail-open: fields stay null */ }
   marker.repo_identity = scope.repo_identity;
   marker.project_key = scope.project_key;
-  marker.root_run_id = process.env.AUTOPILOT_ROOT_RUN_ID || null;
+  // Job root (mods P1W W1f): explicit --root-run-id > AUTOPILOT_ROOT_RUN_ID (campaign/mission roots
+  // stay untouched) > a freshly minted `job-<ts>-<rand>`. The dispatch rails read it back via
+  // `session-mode.js root` so ad-hoc dispatches from one session share one lineage root.
+  const explicitRoot = typeof args['root-run-id'] === 'string' && /^[A-Za-z0-9._-]+$/.test(args['root-run-id'])
+    ? args['root-run-id'] : '';
+  marker.root_run_id = explicitRoot || process.env.AUTOPILOT_ROOT_RUN_ID
+    || `job-${Math.floor(now / 1000)}-${require('crypto').randomBytes(4).toString('hex')}`;
   if (missionRouting.status !== 'LEGACY') {
     marker.entry_level = missionRouting.route.entry_level;
     marker.fallback_reason = missionRouting.route.fallback_reason;
@@ -794,6 +800,14 @@ function cmdStatus() {
   return 0;
 }
 
+// Prints the active marker's job root (empty when no live marker / no root). Rails call this
+// to pick the lineage root for an ad-hoc dispatch; always exit 0 so a missing marker is silent.
+function cmdRoot() {
+  const m = readMarker();
+  process.stdout.write(m && typeof m.root_run_id === 'string' ? `${m.root_run_id}\n` : '\n');
+  return 0;
+}
+
 function main() {
   const [cmd, ...rest] = process.argv.slice(2);
   const args = parseArgs(rest);
@@ -802,11 +816,12 @@ function main() {
     case 'clear': return cmdClear(args);
     case 'retire': return cmdRetire(args);
     case 'status': return cmdStatus();
+    case 'root': return cmdRoot();
     default:
       process.stderr.write(
         'Usage: session-mode.js set --level l3|l4|l5|l6 [--entry-level l3|l4|l5|l6] ' +
-        '[--fallback none|solo|precondition_failed] [--repo-root <dir>] [--ttl-hours N] | ' +
-        'clear | retire --session <id> --integration-receipt <file> [--integration-ref <ref>] | status\n',
+        '[--fallback none|solo|precondition_failed] [--repo-root <dir>] [--ttl-hours N] [--root-run-id <id>] | ' +
+        'clear | retire --session <id> --integration-receipt <file> [--integration-ref <ref>] | status | root\n',
       );
       return 2;
   }

@@ -1735,7 +1735,7 @@ write_manifest() {
   [ -n "${MANIFEST_ENDED_EPOCH:-}" ] && endep_json="$MANIFEST_ENDED_EPOCH"
   [ -n "${MANIFEST_FINAL_STATUS:-}" ] && final_json="\"$(_flat_json_escape "$MANIFEST_FINAL_STATUS")\""
   local parent_json="null"; [ -n "${LINEAGE_PARENT:-}" ] && parent_json="\"$(_flat_json_escape "$LINEAGE_PARENT")\""
-  local root_json="null"; [ -n "${LINEAGE_ROOT:-}" ] && root_json="\"$(_flat_json_escape "$LINEAGE_ROOT")\""
+  local root_json="null"; [ -n "${LINEAGE_JOB_ROOT:-${LINEAGE_ROOT:-}}" ] && root_json="\"$(_flat_json_escape "${LINEAGE_JOB_ROOT:-$LINEAGE_ROOT}")\""
   local depth_json="${LINEAGE_DEPTH:-0}"; case "$depth_json" in *[!0-9]*|"") depth_json=0 ;; esac; depth_json=$((10#$depth_json))
   # repo_identity (mods P1a R1): this rail has no --repo-root; CONSUMING_REPO_ROOT (set on the
   # strict-contract paths) else the cwd's toplevel. Cached in REPO_IDENTITY_FIELDS, which
@@ -1880,6 +1880,7 @@ else
 fi
 LINEAGE_PARENT="${AUTOPILOT_PARENT_RUN_ID:-}"
 LINEAGE_ROOT=""
+LINEAGE_JOB_ROOT=""
 WORKTREE_ROOT_RUN_ID=""
 LINEAGE_DEPTH=0
 if [ -n "${AUTOPILOT_PARENT_RUN_ID:-}" ]; then
@@ -1905,6 +1906,15 @@ else
   # The sealed-campaign rail is the case that needs BOTH — see
   # references/hetero-dispatch.md § Trace lineage contract.
   LINEAGE_ROOT="$DISPATCH_RUN_ID"
+  # Job root (mods P1W W1f) — MANIFEST ONLY (LINEAGE_JOB_ROOT feeds the manifest root_run_id, nothing
+  # else): LINEAGE_ROOT keeps keying worktree budgets, the campaign projection and the
+  # continuation work-order claim, so a shared root cannot make two ad-hoc dispatches see each
+  # other's work orders. Adopted only with no parent and no explicit ROOT env.
+  if [ -z "${AUTOPILOT_ROOT_RUN_ID:-}" ]; then
+    _job_root="$(node "$SELF_DIR/session-mode.js" root 2>/dev/null | head -n1 || true)"
+    case "$_job_root" in ""|*[!A-Za-z0-9._-]*) ;; *) LINEAGE_JOB_ROOT="$_job_root" ;; esac
+    unset _job_root
+  fi
   LINEAGE_DEPTH=0
 fi
 # Sanitize inherited lineage ids (a hostile/odd env value with control chars would
@@ -4860,7 +4870,7 @@ dispatch_detached_run() {
       OUTCOME_STATUS OUTCOME_COMMIT OUTCOME_FILES OUTCOME_INS OUTCOME_DEL OUTCOME_WT OUTCOME_ERR OUTCOME_EXIT \
       OUTCOME_DISPATCHER_CALLED OUTCOME_MODEL_CALLS OUTCOME_MUTATION_ATTEMPTS OUTCOME_GATE_ATTEMPTS OUTCOME_RESOURCES_CREATED OUTCOME_ZERO_DIFF_RECEIPT_DIGEST \
       CLASSIFIED_ERROR \
-      ORPHAN_LOG OUTCOME_ORPHAN WT_LOCK_FD LINEAGE_PARENT LINEAGE_ROOT WORKTREE_ROOT_RUN_ID LINEAGE_DEPTH \
+      ORPHAN_LOG OUTCOME_ORPHAN WT_LOCK_FD LINEAGE_PARENT LINEAGE_ROOT LINEAGE_JOB_ROOT WORKTREE_ROOT_RUN_ID LINEAGE_DEPTH \
       STRICT_SCOPE_ALLOW_PATHS STRICT_SCOPE_DENY_PATHS STRICT_SCOPE_GENERATED_MIRROR_ALLOW_PATHS STRICT_SCOPE_MAX_FILES STRICT_SCOPE_MAX_DIFF_LINES STRICT_OUTPUT_PATHS STRICT_REQUIRED_CHANGE_PATHS STRICT_POSTCHECK_OK STRICT_POSTCHECK_STATUS STRICT_POSTCHECK_ERROR \
       DISPATCH_RUN_ID DISPATCH_STARTED_EPOCH MANIFEST_DIR_PATH MANIFEST_FILE MANIFEST_CONTAINMENT \
       MANIFEST_SCOPE_UNIT MANIFEST_PID_RECORDED MANIFEST_ENDED_AT MANIFEST_ENDED_EPOCH MANIFEST_FINAL_STATUS \

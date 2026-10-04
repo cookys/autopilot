@@ -49,6 +49,15 @@
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-handoff.js"
           }
         ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/awaiting-owner.js"
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
@@ -70,6 +79,15 @@
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/advisory-relay.js"
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/awaiting-owner.js"
           }
         ]
       }
@@ -184,6 +202,26 @@
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/run-approval-gate.js PostToolUse"
           }
         ]
+      },
+      {
+        "//": "mods P1W W1d default-on: session-tasks — folds the task-tool events into <live>/tasks/<sid>.json; AUTOPILOT_SESSION_TASKS=off to opt out. Exact tool-name matcher (never Task/Agent). Task tools need CLAUDE_CODE_ENABLE_TODO_TOOLS=1 for sonnet/opus.",
+        "matcher": "TaskCreate|TaskUpdate|TaskList",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-tasks.js"
+          }
+        ]
+      },
+      {
+        "//": "mods P1W W1e: end signal (approve / answer) — returns before any lock unless a pending attention file exists.",
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/awaiting-owner.js"
+          }
+        ]
       }
     ],
     "PostToolUseFailure": [
@@ -226,6 +264,61 @@
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/dirty-protected-paths.js"
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/awaiting-owner.js"
+          }
+        ]
+      }
+    ],
+    "TaskCreated": [
+      {
+        "//": "mods P1W W1d default-on: session-tasks — folds the task-tool events into <live>/tasks/<sid>.json; AUTOPILOT_SESSION_TASKS=off to opt out. Exact tool-name matcher (never Task/Agent). Task tools need CLAUDE_CODE_ENABLE_TODO_TOOLS=1 for sonnet/opus.",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-tasks.js"
+          }
+        ]
+      }
+    ],
+    "TaskCompleted": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-tasks.js"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "//": "mods P1W W1e default-on: awaiting-owner — maintains <live>/attention/<sid>.json while Claude Code waits on the human (permission / question / idle); AUTOPILOT_AWAITING_OWNER=off to opt out.",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/awaiting-owner.js"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/awaiting-owner.js"
           }
         ]
       }

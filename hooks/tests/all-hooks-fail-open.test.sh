@@ -36,6 +36,8 @@ HOOK_FILES=(
   hooks/session-start.js
   hooks/context-budget.js
   hooks/orchestrator-edit-gate.js
+  hooks/session-tasks.js
+  hooks/awaiting-owner.js
 )
 
 for hook in "${HOOK_FILES[@]}"; do

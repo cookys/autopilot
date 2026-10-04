@@ -68,10 +68,31 @@ S5a, S5b, S7, S8; `README.md` there is the verdict table). A mod is CC-only; non
   the `hooks.json` `modules` key alone.
 - Reads only: `$HOME/.autopilot/live-pointer.json`, the session marker, `<live_base>/runs/paths/*.json`, the scoped envelope
   (SSD copy as fallback), `<live_base>/context/<sid>.json`, `<live_base>/review/server.json` (port, default 8787) and the job
-  page's `model.json` (acceptance axis, gate rows). It never writes, never starts a program, never sends a prompt.
-- Band text is built only from the envelope / context file by the session's own sid; `running` is `counts.confirmed_live`,
-  `—` marks anything missing, and the state words are `no pointer`, `no project`, `stale`, `unavailable · run: …`,
-  `unreadable`. Toasts compare consecutive fresh snapshots of one scope: the execution axis from the envelope `counts`, the
+  page's `model.json` (acceptance axis, gate rows, `needs_decision` / `decision`, `progress`). It never writes, never starts a program, never sends a prompt.
+- **Band contract (P1c C3)**: for a person who left the computer, the band says which project, which phase, how long it has
+  run and how far along, led by a verdict word. One entry, two lines: line 1 is `<mark> <verdict> <project> · <phase> ·
+  <elapsed> · <progress>`, line 2 one short reason sentence (zh-TW, built from fields only). The state texts `no pointer`,
+  `no project`, `stale`, `unavailable · run: …`, `unreadable` are unchanged and replace the whole entry.
+  - Verdict words, first match wins: `▲ 要你決定` (job model `needs_decision === true`; reason = the decision question) >
+    `⏸ 疑似卡住` (any envelope row with `stall: true`, reason = the quietest stalled row's `last_event_age_s` in minutes,
+    no new threshold) > `✓ 完成待驗收` (envelope `confirmed_live === 0`, progress frozen with done = total, acceptance axis
+    neither accepted nor rejected; reason `驗收結論尚未出`) > `● 進行中` (`confirmed_live > 0`; reason `<n> 個派工在跑`).
+    None of the four holds (e.g. nothing live and nothing awaited): the line carries `○` and no word. A decision awaited is
+    drawn bold in the warning color, the other words plain.
+  - project: `scope.repo_identity` minus `git-common-dir:`, minus a trailing `/.git`, last path segment; a bare repo or any
+    other shape falls back to the first 8 hex of the project key. Pure string work, never git.
+  - phase: the job model publishes no human phase, so the slot is `—` today; the process phase (`running` / `exited`) is
+    never used as a phase.
+  - elapsed: now minus the earliest `started_at` among the scope's envelope rows; `38m`, `2h14m`, `1d3h`, `—` when no row
+    has a start.
+  - progress: from the job model `progress`. Frozen: `62.5%（5/8）` (the model's percent verbatim). Not frozen: `3 done*`,
+    drawn dim, no percent. No model or no count: `—`, never 0. Execution (runs) and progress (deliverables) are separate
+    axes: progress never comes from run counts.
+  - Moved to the pane: session cost, host cost and context % are the pane's header row (`session $0.42 · host $3.10 ·
+    ctx 37%`, same sources and `—` rules as before). When `needs_decision`, the first section under the header lists
+    what is awaited from the model's `decision` object (question, then `n. label — consequence` for each option that
+    exists); the execution-status table, the gate rows and the review Link stay.
+  Toasts compare consecutive fresh snapshots of one scope: the execution axis from the envelope `counts`, the
   acceptance axis from the job model.
 - **Band time budget (S8, KR1)**: the band shows a new run <= 20 s after its manifest drops. Chain: watcher tick 10 s + mod
   tick 5 s + publish; measured 11.5 s, 4.2 s and 12.5 s in a real interactive session with a real watcher.

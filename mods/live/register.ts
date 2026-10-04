@@ -18,11 +18,11 @@ import type { EngineInterface, Register } from 'claude-code'
 import { Band } from './band'
 import { Pane } from './pane'
 import {
-  acceptanceToast, bandText, checkEnvelope, countsOf, ctxText, executionToast, hhmm, isKey, isObject, jobOf,
+  acceptanceToast, bandLine1, bandView, checkEnvelope, countsOf, ctxText, executionToast, headerText, hhmm, isKey, isObject, jobOf,
   longestPrefixKey, paneRows, parseJson, portOf, readJobModel, reviewLink, scopeKeyOf, sessionUsd, STATE_TEXT,
   POINTER_SCHEMA,
 } from './model'
-import type { Counts, EnvelopeCheck, Json, LiveSnapshot } from './model'
+import type { Counts, EnvelopeCheck, JobModel, Json, LiveSnapshot } from './model'
 
 const TICK_MS = 5000
 const PANE_ID = 'autopilot-live'
@@ -57,7 +57,7 @@ async function readObject($: EngineInterface, path: string): Promise<Json | null
 
 function plain(state: LiveSnapshot['state'], text: string, over: Partial<LiveSnapshot> = {}): LiveSnapshot {
   return {
-    state, text, project_key: null, root_run_id: null, link: null, rows: null, gates: null,
+    state, text, band: null, header: text, decision: null, project_key: null, root_run_id: null, link: null, rows: null, gates: null,
     published_at: null, session_as_of: null, host_as_of: null, ...over,
   }
 }
@@ -158,7 +158,7 @@ async function buildSnapshot($: EngineInterface, nowMs: number): Promise<{ snap:
   // pane data: the job page's model.json when it exists (acceptance axis, gate rows), a Link either way
   const job = jobOf(env, scope.root)
   const date = await findJobDate($, autopilotHome, scope.key, job)
-  let jobModel: ReturnType<typeof readJobModel> = null
+  let jobModel: JobModel | null = null
   if (date !== null) {
     jobModel = readJobModel(await readText($, autopilotHome + '/review/' + scope.key + '/' + date + '/' + job + '/current/model.json'))
     if (jobModel === null) jobDates.delete(scope.key + '/' + job)
@@ -178,8 +178,11 @@ async function buildSnapshot($: EngineInterface, nowMs: number): Promise<{ snap:
     return { snap: plain('stale', STATE_TEXT.stale(scope.key, at), common), counts: null, acceptance: null }
   }
   const ctx = ctxText(await readText($, liveBase + '/context/' + sid + '.json'), nowMs)
+  const band = bandView(env, jobModel, scope.key, nowMs)
   return {
-    snap: plain('ok', bandText(env, sid, ctx), common),
+    snap: plain('ok', bandLine1(band) + (band.reason === null ? '' : '\n' + band.reason), {
+      ...common, band, header: headerText(env, sid, ctx), decision: jobModel === null || !jobModel.needs_decision ? null : jobModel.decision,
+    }),
     counts: countsOf(env),
     acceptance: jobModel === null ? null : jobModel.acceptance,
   }
@@ -237,7 +240,7 @@ export const register: Register = on => {
   on('ui.render', { component: 'AbovePrompt' }, ($, e, next) => {
     viewport = e.viewport ? { columns: e.viewport.columns, isFullscreen: e.viewport.isFullscreen } : null
     if (e.props.hasSurvey) return next(e)
-    return Band($.ui.resolve(e), snapshot === null ? 'live · waiting for the first snapshot' : snapshot.text)
+    return Band($.ui.resolve(e), snapshot === null ? 'live · waiting for the first snapshot' : snapshot.text, snapshot === null ? null : snapshot.band)
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, ($, e) => Pane($.ui.resolve(e), snapshot))

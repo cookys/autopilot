@@ -1,4 +1,5 @@
-// mods/live/pane.tsx — the dispatch / gate pane (plan P1c). Pure view over the snapshot; `el` comes from
+// mods/live/pane.tsx — the dispatch / gate pane (plan P1c; C3: the header row carries cost / context, an awaited
+// decision comes first). Pure view over the snapshot; `el` comes from
 // $.ui.resolve(e). Tables are Text lines (Box/Text/Link exist on every surface; no Image anywhere).
 
 import { hhmm } from './model'
@@ -34,7 +35,10 @@ export function Pane(el: { Box: El; Text: El; Link: El }, snap: LiveSnapshot | n
   const gates = snap.gates
   return (
     <Box flexDirection="column">
-      <Text bold>{snap.text}</Text>
+      <Text bold>{snap.header}</Text>
+      {snap.decision === null ? null : <Text bold color="warning">要你決定</Text>}
+      {snap.decision === null ? null : <Text>{snap.decision.question}</Text>}
+      {snap.decision === null ? null : snap.decision.options.map((o, i) => <Text wrap="truncate">{(i + 1) + '. ' + o.label + (o.consequence ? ' — ' + o.consequence : '')}</Text>)}
       {rows === null ? null : <Text dimColor>dispatch · execution status, not progress (執行狀態，不是進度)</Text>}
       {rows === null ? null : rows.length === 0 ? <Text dimColor>no runs in this scope</Text> : rows.map(r => <Text wrap="truncate">{dispatchLine(r)}</Text>)}
       {rows === null ? null : <Text dimColor>gates · review receipts of this job</Text>}

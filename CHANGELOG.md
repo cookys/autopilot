@@ -1,5 +1,26 @@
 # Changelog
 
+## v2.36.116 — review 頁面可發布：版本化 job 頁、每主機一個 localhost review server、watcher 依事件重發（mods P1b）
+
+- **問題與改動（逐列）**：
+  - （B1a）`scripts/render-review-page.js` 由 JSON 渲染 job review 頁與專案索引（九個固定區段、兩條狀態軸分開、unknown 照實顯示）。
+  - （B2）每台主機一個 localhost review server（只綁 127.0.0.1），由專案 watcher 啟動；idempotent ensure、單一 flock 持有者、port 被占用時明確回報。
+  - （B1b）版本化 job 頁：先發 candidate、通過 smoke 後以原子 symlink 切換 `current`；專案與主機索引；`--reap` 清舊版本；content-addressed 資產共用。
+  - （B3）per-project watcher 在 dispatch、exit、review、task 事件時重發 job 頁（5 秒視窗 debounce，失敗保留 current 並重試）。
+  - （B4／B4b）task 事件 30 秒內重發；mobile-first 頁面與索引版型；root 索引列出專案；已 settled 的 root 在單一 debounce 視窗內嚴格重 poll，job 日期在 watcher 重啟後保持不變。
+- **驗證**：整套 `--parallel 16` 408 檔，只有三個 pre-existing 紅：L1 unit suite（`import-aa-capabilities`）、`qualification-feed-adopt`、`qualification-scorecard-tools`（於乾淨 origin/develop 重跑同樣紅）；check-js-syntax、codex 鏡像、validate.sh 通過。review：claude-fable-5-1 SHIP-AS-IS（review-1791066906-1806905-925d）。
+- **已知後續（review 🟡/🔵）**：
+  - 🟡 `docs/scripts-inventory.md` 的 render-review-page.js 列仍寫發布與 server 屬後續 P1b 列（本版已更正）。
+  - 🔵 compare 記錄的 `images.*` 以 `path.resolve` 解析但未限制在 compare 目錄內（owner 自撰輸入、僅 127.0.0.1，應拒絕逃出路徑）。
+  - 🔵 review-server wrapper 以 `printf %s` 把 root 路徑寫入 `server.json` 未做 JSON 跳脫（HOME 含引號或反斜線時 ensure 誤報 error）。
+  - 🔵 `server.log` 位於被服務的 document root 內，access log 本身可被讀取（僅 127.0.0.1）。
+  - 🔵 retention 為全有或全無：兩次切換間隔 < 10 分鐘時 version 目錄累積到有安靜間隙；可改為逐版本老化。
+  - 🔵 `--render` 下有 live run 的 root 每 tick spawn `status task`，無 receipt 時每 10 秒一行 stderr；可加 dedupe 或 quiet 旗標。
+  - 🔵 compare-record schema 未要求 viewport|camera 與 renderer|browser 至少各一個。
+  - CHANGELOG／版本接線其餘部分依計畫屬 P1d；P1c／P1d 未出貨。
+
+prose-justification: 本版新增 render／server／watcher 程式、reference（references/review-page.md）與 schema；不改既有 skill 的要求文字。
+
 ## v2.36.115 — `autopilot status runs` 回報耗時／rc／scope／新鮮度；per-project watcher 發布 scoped 即時快照（mods P1a）
 
 - **問題與改動（逐列）**：

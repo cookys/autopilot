@@ -1,5 +1,5 @@
 # Plan — Mods 進 autopilot 本體：看得見的派工、owner review 網頁、事件核心、`autopilot.progress/1` 快照
-> Status: R4.3 — FROZEN 2026-10-03; R4.3 = P1a 出貨（v2.36.115）後的事實更正，只改 P1a 二擇一 (ii) 的錯誤句；R4.2 = P0 spike 結果回寫（S1 yes → D4 結案；`flock(1)` 是 fork 不是 exec；P2 先擴 selector；`/clear` 後 timer 待驗），只改被實測推翻或確認的事實；R4.1 = owner D1／D2 裁決後的有界修補（單一 port 的 host review server＋根目錄索引，反向代理文件化），不重開已處置項目 (R4: G1+G2 CONDITIONAL; depth-0 accepted both G2 blockers and verified the bounded repair: per-project `runs/paths/<project_key>.json`, CLI-written `$HOME/.autopilot/live-pointer.json` read via `$.env.get("HOME")`, S2 spike + fallback) / Owner: cookys / Branch: `feat/mods-visible-dispatch`（未建）/ Frame: autopilot 這一半；radar（跨專案）另案
+> Status: R4.4 — FROZEN 2026-10-03; R4.4 = owner 2026-10-04 裁決：P1c band 改為「專案·phase·已跑·進度」加結論詞（C3）、新增 P5（代決策提醒，寫入先於讀取），不動 rubric；R4.3 = P1a 出貨（v2.36.115）後的事實更正，只改 P1a 二擇一 (ii) 的錯誤句；R4.2 = P0 spike 結果回寫（S1 yes → D4 結案；`flock(1)` 是 fork 不是 exec；P2 先擴 selector；`/clear` 後 timer 待驗），只改被實測推翻或確認的事實；R4.1 = owner D1／D2 裁決後的有界修補（單一 port 的 host review server＋根目錄索引，反向代理文件化），不重開已處置項目 (R4: G1+G2 CONDITIONAL; depth-0 accepted both G2 blockers and verified the bounded repair: per-project `runs/paths/<project_key>.json`, CLI-written `$HOME/.autopilot/live-pointer.json` read via `$.env.get("HOME")`, S2 spike + fallback) / Owner: cookys / Branch: `feat/mods-visible-dispatch`（未建）/ Frame: autopilot 這一半；radar（跨專案）另案
 > 日期 2026-10-03。R0 SHA256 `6f43308d…`；astra R0 審查 `4a46589b…`（9 🟠 3 🟡）；R1 SHA256 `e5192f1e…`；astra R1 確認 `4e35c87a…`（7 到位、5 部分到位、新 N01／N02）。R2 只動 R-A03／R-A04／R-A06／N01／N02 五處。R3 處理 G1：3 條 blocking＋9 條 non-blocking；引用改為「檔案:符號」。R4 只處理 G2：2 條 blocking（R5 `paths` 跨專案互蓋、R4 mod 找路徑的機制）＋ 6 條便宜 non-blocking，不重開已處置項目。證據標記：[V-file] 讀檔、[V-run] 本機跑過、[peer] 機隊自述未獨立查證、[SPIKE] 未驗證。
 > 落地程序：複製到 `docs/plans/2026-10-03-mods-visible-dispatch.md` → `node scripts/check-plan-graduation.js --register-template 2026-10-03-mods-visible-dispatch` → 列貼進 `docs/projects/INDEX.md`（Version `active`）→ 寫 `plan-review-manifest` → 才能送 `dispatch-plan-review.js`。
 
@@ -160,6 +160,16 @@ O：owner 不用問「怎麼這麼慢」就知道誰在跑、跑多久、最後 
 - 驗收：`work-round.test.sh` fixture 投影過 schema；缺來源 fixture → 對應欄 `null`、有效零 fixture → `0`（A11）；KR5 的三個斷言；重排器測試用假 `child_process` 與 PATH 上的假 `fleet`／`dispatch-*` 記錄 argv，斷言零呼叫（grep 只當輔助）。
 - 負對照：同 deliverable 兩 attempts 分母不變；Mission 與 ICC id 不同時兩欄並列；README 改標題後 execution id／分母／歸屬不變；`blocked`／`unknown` 專案不進重排且輸出寫明原因；fake clock：idle 專案而 watcher 活著推進 600 s → `progress.json` fresh；watcher 停 → 300 s 後 stale；缺 receipt → `results: []` 且 `round.status.source='manifest_only'`。
 
+### P5 代決策提醒：先寫入、再發佈、最後顯示（M，owner 2026-10-04 加入）
+- 動機：owner 離開電腦回來，要第一眼看到「等你決定」與「我替你決定了」。前者來自 review 頁的 `--decision` 檔（開放問題：`question`／`options`／`not_authorized`），由 P1c C3 顯示；後者是 decision ledger 的 `decision` 列（已做的選擇，可 veto）。兩者是不同資料，不得混成一個計數。
+- 查證（`docs/plans/evidence/2026-10-04-mods-p1c/c4-proxy-decision-research.md`）：這台機器 0 份現行 ledger；`skills/ceo-agent/references/depth0-control-loop.md:406` 的寫入點從未產生過檔案；列沒有 `root_run_id`／`repo_identity`，`round` 只在同一檔內有意義；ledger 沒有固定位置（`<campaign>/decision-ledger.jsonl`、`<project>/ledger/decisions.jsonl`、`~/.autopilot/ladder/<hash>.jsonl` 並存）；全 repo 沒有「已看過」機制。
+- 順序（寫入在前、讀取在後；各自出貨）：
+  1. 寫入端：depth-0 真的 append `decision` 列；固定位置 `<project>/ledger/decisions.jsonl`；`decision-ledger.js append` 蓋 `root_run_id`、`repo_identity`。驗收：一次 `/l5` 後檔案存在、列帶兩欄。
+  2. 發佈端：watcher 在 scoped envelope 旁發 `decisions` sidecar（`runs-live/1` 為 `additionalProperties:false`，用 sidecar 不動契約）；沒有 ledger → 沒有檔，不是空檔。
+  3. 顯示端：mod 讀 sidecar，band 第二行顯示「等你決定 n 件・代你決定 m 件（k 件不可逆）」，pane 逐件列決定、理由、可逆性、veto 指令；沒有 sidecar 顯示 `—`，絕不 0。
+  4. 已看過（之後另做 spike）：`ack` 列、cursor 檔、review 頁按鈕三擇一。
+- 不做：改 `runs-live/1`、讓 mod 寫檔。BACKLOG 追蹤列：「mods P5 proxy-decision reminders (writer first)」。
+
 ## 5. Test / validation
 - 腳本閘：各 `hooks/tests/*.test.sh`；`claude plugin test mods/live`；`sync-all.sh`；`validate-json-schema.js`；grep 閘（`prompt.submit`、`asUser`、`process.spawn`）。
 - 真跑（evidence）：P1 `/l5` 一回合＋band 時戳＋四個觸發各一次 refresh 截圖；P3 三環境 `--once`；P4 一次 managed campaign 的投影與 `progress.json` heartbeat 紀錄。
@@ -203,6 +213,7 @@ O：owner 不用問「怎麼這麼慢」就知道誰在跑、跑多久、最後 
 | D4 | **結案（S1 = yes，2026-10-03）**：S1 = no 時要不要同 repo 第二個 plugin | 不要；classic 完整、mod `unavailable` | 第二 plugin（要實測一次安裝） | owner 要一次安裝；資料夾同 repo ≠ 同 plugin |
 
 ## Review log
+- R4.4 2026-10-04 owner 裁決（選項 B）：P1c band 改為結論詞（要你決定／疑似卡住／完成待驗收／進行中）＋專案・phase・已跑・進度；未凍結分母顯示「n done*」淡色、不顯示 %；花費與 context 移到 pane；「等你決定」進 C3，「代你決定」拆成 P5（見 §4 P5，寫入先於讀取）。只動 P1c 顯示與讀取、不動已出貨契約。不動 rubric、不另開 generation。狀態與證據：`docs/plans/evidence/2026-10-04-mods-p1c/README.md`。
 - R0 2026-10-03 fable 起草（SHA256 `6f43308d…`）；未註冊。
 - astra R0 advisory review（SHA256 `4a46589b…`，repo HEAD `9ebea928`）處置：
   - A01 🟠 **接受**：新增 §2.7 關聯表；§2.5 身分條改寫；D3 改執行根；`branch@start-sha` 移除；README 表 display-only；P4 `--branch` 只當 selector。

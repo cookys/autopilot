@@ -1,0 +1,176 @@
+<title>Autopilot 2.37 預覽</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one narrow reading column; each section = plain-language lead, then a drawing, then a short list. */
+:root{
+  --bg:#f5f7fa; --surface:#ffffff; --fg:#17202e; --muted:#5b6678; --line:#d9e0ea;
+  --accent:#0d6e8c; --accent-soft:#dff0f6; --ok:#1f7a4d; --warn:#9a5b00; --warn-soft:#fbefd6;
+  --term-bg:#101722; --term-fg:#d5deea; --term-dim:#7d8aa0; --term-ok:#5fd39a; --term-warn:#f2b45a;
+  --f-body:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0e141d; --surface:#161e2a; --fg:#e4eaf2; --muted:#9aa6b8; --line:#283343;
+  --accent:#5cc0de; --accent-soft:#17323d; --ok:#5fd39a; --warn:#f2b45a; --warn-soft:#3a2d12;
+  --term-bg:#0a0f17; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e141d; --surface:#161e2a; --fg:#e4eaf2; --muted:#9aa6b8; --line:#283343;
+  --accent:#5cc0de; --accent-soft:#17323d; --ok:#5fd39a; --warn:#f2b45a; --warn-soft:#3a2d12;
+  --term-bg:#0a0f17; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);line-height:1.75;padding-inline:16px;padding-block:28px 64px}
+main{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:40px}
+h1{font-size:clamp(1.7rem,5vw,2.3rem);line-height:1.25;margin:0;text-wrap:balance;letter-spacing:-.01em}
+h2{font-size:1.3rem;line-height:1.35;margin:0 0 6px;text-wrap:balance}
+p{margin:0}
+.eyebrow{font-family:var(--f-mono);font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+.lead{font-size:1.08rem;color:var(--fg)}
+.muted{color:var(--muted)}
+section{display:flex;flex-direction:column;gap:14px;min-width:0}
+.fig{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;overflow-x:auto}
+.fig svg{display:block;width:100%;min-width:560px;height:auto}
+.cap{font-size:.84rem;color:var(--muted);margin-top:8px}
+ul{margin:0;padding-left:1.2em;display:flex;flex-direction:column;gap:6px}
+code{font-family:var(--f-mono);font-size:.88em;background:var(--accent-soft);padding:1px 5px;border-radius:4px}
+.t{fill:var(--fg);font-family:var(--f-body);font-size:14px}
+.tm{fill:var(--muted);font-family:var(--f-body);font-size:12.5px}
+.tb{fill:var(--fg);font-family:var(--f-body);font-size:14px;font-weight:700}
+.box{fill:var(--bg);stroke:var(--line);stroke-width:1.5}
+.boxa{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.5}
+.arrow{stroke:var(--muted);stroke-width:1.6;fill:none}
+.term{background:var(--term-bg);color:var(--term-fg);border-radius:10px;padding:14px 16px;font-family:var(--f-mono);font-size:.84rem;line-height:1.7;overflow-x:auto;white-space:pre}
+.term .d{color:var(--term-dim)} .term .o{color:var(--term-ok)} .term .w{color:var(--term-warn)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;min-width:0}
+.card h3{margin:0 0 4px;font-size:1rem}
+.pill{display:inline-block;font-size:.75rem;padding:1px 9px;border-radius:99px;font-weight:500}
+.pill.in{background:var(--accent-soft);color:var(--accent)}
+.pill.out{background:var(--warn-soft);color:var(--warn)}
+table{border-collapse:collapse;width:100%;font-size:.92rem}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-weight:500;color:var(--muted);font-size:.8rem}
+.tablewrap{overflow-x:auto}
+.ask{background:var(--warn-soft);border:1px solid var(--warn);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.ask h2{color:var(--warn);margin:0}
+.ask ol{margin:0;padding-left:1.3em;display:flex;flex-direction:column;gap:8px}
+@media (prefers-reduced-motion:no-preference){.fig,.card{transition:border-color .15s}.card:hover{border-color:var(--accent)}}
+</style>
+
+<main>
+<header style="display:flex;flex-direction:column;gap:10px">
+  <span class="eyebrow">Autopilot · v2.37.0 · 改版提案（待你確認）</span>
+  <h1>離開電腦的人回來，10 秒內該知道什麼</h1>
+  <p class="lead">你說得對。我上一版列的「幾個在跑、花多少錢、context 幾成」是機器的忙碌程度，人回來不會先問這些。人回來先問三件事：<b>現在到哪了？要不要我處理？不用處理的話大概多久好？</b>下面把狀態列改成回答這三件事，細節放到點開之後。</p>
+</header>
+
+<section>
+  <h2>第一眼：一行回答「專案 · 階段 · 多久 · 幾 %」</h2>
+  <p class="muted">以下是版面示意，不是實機截圖。最左邊的符號和第一個詞，是整條狀態列最重要的資訊：要不要你介入。</p>
+  <div class="term" role="img" aria-label="三種狀態的示意"><span class="w">▲ 要你決定</span>  autopilot · <span class="d">phase</span> 合併審查 · <span class="d">已跑</span> 2h14m · <span class="d">進度</span> 62%（5/8）
+<span class="d">   驗收 REJECT：1 個 🟠 未處理 → 點開看哪一條</span>
+<span class="w">   等你決定 1 件</span> <span class="d">·</span> 代你決定 3 件（<span class="w">1 件不可逆</span>）
+
+<span class="o">● 進行中</span>  autopilot · <span class="d">phase</span> 實作 · <span class="d">已跑</span> 38m · <span class="d">進度</span> 25%（2/8）
+<span class="d">   2 個派工在跑，無異常</span>
+<span class="d">   等你決定 0 件 · 代你決定 2 件（皆可逆）</span>
+
+<span class="w">⏸ 疑似卡住</span>  scriptorium · <span class="d">phase</span> 全套測試 · <span class="d">已跑</span> 1h52m · <span class="d">進度</span> 分母未凍結 · 3 done
+<span class="d">   最久的派工 41m 沒有輸出</span>
+
+<span class="o">✓ 完成待驗收</span>  autopilot · <span class="d">phase</span> 收尾 · <span class="d">已跑</span> 3h05m · <span class="d">進度</span> 100%（8/8）
+<span class="d">   驗收結論尚未出：等 depth-0 核證</span></div>
+  <ul>
+    <li><b>第一個詞是結論</b>：要你決定、進行中、疑似卡住、完成待驗收。四種就夠，人不必讀數字就知道急不急。</li>
+    <li><b>專案名</b>：多個專案同時在跑時，一眼分得出是哪個。</li>
+    <li><b>phase、已跑多久、進度 %</b>：就是你要的那三個。</li>
+    <li><b>第二行是原因</b>：一句話說「為什麼是這個狀態」，不用點開就知道要不要點。</li>
+  </ul>
+</section>
+
+<section>
+  <h2>兩種提醒：「等你決定」和「我替你決定了」</h2>
+  <p>這兩種要分開，因為處理方式不同。前者你不處理，工作就停在那裡；後者工作已經往前走了，你回來是要決定「認不認這個決定」。</p>
+  <div class="grid">
+    <div class="card"><span class="pill out">等你決定</span><h3 style="margin-top:8px">卡在你身上</h3><p class="muted">狀態列第一個詞變成「▲ 要你決定」，排在其他狀態之前。面板列出每一件：問題一句話、選項、預設會怎麼走。</p></div>
+    <div class="card"><span class="pill in">代你決定</span><h3 style="margin-top:8px">已替你做了</h3><p class="muted">每一件列出：決定了什麼、理由、<b>可不可逆</b>。不可逆的標黃，排在最前面。你可以逐件 veto，之後建立在它上面的回合會被擋下。</p></div>
+  </div>
+  <div class="term" role="img" aria-label="面板示意"><span class="d">面板 · 代你決定（本回合 3 件）</span>
+<span class="w">不可逆</span>  選 v2.37.0 而不是 v2.36.117   <span class="d">理由：新增 mod 屬於 MINOR</span>      <span class="d">[點開 / veto]</span>
+<span class="o">可逆</span>    codex 鏡像保留 mods.md 修改    <span class="d">理由：不同步會破壞鏡像一致</span>  <span class="d">[點開 / veto]</span>
+<span class="o">可逆</span>    D1 採納 SHIP-AS-IS            <span class="d">理由：審查無 🔴/🟠</span>           <span class="d">[點開 / veto]</span></div>
+  <ul>
+    <li><b>資料來源已經存在</b>：autopilot 本來就有一份「代決策紀錄」（decision ledger），每筆決定都寫了理由和可逆性，也有 veto 機制。現在只有事後的回合報告會用到它，狀態列和面板還沒讀它。</li>
+    <li><b>要補的一件事</b>：目前沒有「你已經看過」的標記。狀態列是唯讀的，不能自己記。第一版先顯示「本回合內的全部件數」，不分看過沒看過；要做「只顯示新的」，得有一個你能按的地方（review 網頁上的確認鈕或一條指令），這是額外的功能，我先不放進這次。</li>
+    <li><b>原則</b>：不可逆的代決策，即使在「進行中」狀態下也要在第二行出現，不等你點開才發現。</li>
+  </ul>
+</section>
+
+<section>
+  <h2>點開之後：三層，一層比一層細</h2>
+  <div class="fig">
+    <svg viewBox="0 0 700 170" role="img" aria-label="三層鑽取">
+      <rect class="boxa" x="8" y="20" width="200" height="110" rx="10"/>
+      <text class="tb" x="108" y="46" text-anchor="middle">① 狀態列</text>
+      <text class="tm" x="108" y="70" text-anchor="middle">一行結論</text>
+      <text class="tm" x="108" y="90" text-anchor="middle">專案 · phase · 多久 · %</text>
+      <text class="tm" x="108" y="112" text-anchor="middle">永遠看得到</text>
+      <path class="arrow" d="M208 75 H246"/><path class="arrow" d="M240 69 l7 6 -7 6"/>
+      <rect class="box" x="248" y="20" width="200" height="110" rx="10"/>
+      <text class="tb" x="348" y="46" text-anchor="middle">② 面板</text>
+      <text class="tm" x="348" y="70" text-anchor="middle">每個專案一列</text>
+      <text class="tm" x="348" y="90" text-anchor="middle">每個 deliverable 的 %</text>
+      <text class="tm" x="348" y="112" text-anchor="middle">花費、context 放這裡</text>
+      <path class="arrow" d="M448 75 H486"/><path class="arrow" d="M480 69 l7 6 -7 6"/>
+      <rect class="box" x="488" y="20" width="204" height="110" rx="10"/>
+      <text class="tb" x="590" y="46" text-anchor="middle">③ review 網頁</text>
+      <text class="tm" x="590" y="70" text-anchor="middle">結論、驗收、gate、證據</text>
+      <text class="tm" x="590" y="90" text-anchor="middle">手機也能開</text>
+      <text class="tm" x="590" y="112" text-anchor="middle">（2.36.116 已出貨）</text>
+    </svg>
+  </div>
+  <p class="muted">第 ③ 層已經存在，而且它的首屏本來就是「一句結論＋要不要你決定 → 總進度 % → 狀態計數」。這次要做的是讓第 ① 層跟它講同一件事，不是另做一套。</p>
+</section>
+
+<section>
+  <h2>這些資料現在拿得到嗎</h2>
+  <p>答案是：有一部分拿不到。我先講清楚，免得你以為改了就都有。</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>要顯示的</th><th>來源</th><th>現況</th></tr></thead>
+    <tbody>
+      <tr><td>專案名</td><td>repo 身分，取目錄名</td><td><span class="pill in">拿得到</span></td></tr>
+      <tr><td>已跑多久</td><td>派工紀錄的開始時間</td><td><span class="pill in">拿得到</span></td></tr>
+      <tr><td>要不要你決定</td><td>review 頁的 decision 檔</td><td><span class="pill in">拿得到</span> 現在的 mod 已經在讀同一個 model.json</td></tr>
+      <tr><td>代你決定的件數、理由、可逆性</td><td>decision ledger（既有）</td><td><span class="pill in">拿得到</span> 狀態列和面板還沒讀它，要新增讀取；「你是否看過」沒有，見上一節</td></tr>
+      <tr><td>驗收結論</td><td>task_status_receipt</td><td><span class="pill in">拿得到</span> 沒有 receipt 時顯示 unknown</td></tr>
+      <tr><td>進度 %</td><td>controller_progress_receipt（分母凍結後才有）</td><td><span class="pill out">有條件</span> 沒有凍結分母就只能顯示「分母未凍結 · n done」，不編數字</td></tr>
+      <tr><td>phase（階段名）</td><td>campaign 的 phase</td><td><span class="pill out">有條件</span> 派工紀錄裡的 phase 只有 running／exited，是程序狀態，不是「實作」「審查」這種階段。階段名要從 receipt 來</td></tr>
+    </tbody>
+  </table></div>
+  <ul>
+    <li><b>進度 % 為什麼不能從「跑了多久」或「幾個派工結束」算</b>：那是機器的動作量，不是工作完成度。計畫早就規定 % 只能來自 depth-0 核證過的 receipt，我同意這條。</li>
+    <li><b>代價</b>：還沒走到「凍結分母」那一步的回合，這一格會顯示「分母未凍結」。這是誠實，不是缺陷，但你會常看到。</li>
+    <li><b>花費與 context</b>：不丟掉，移到面板。它們是「要不要擔心」的資訊，不是「到哪了」的資訊。</li>
+  </ul>
+</section>
+
+<section>
+  <h2>三個做法，我的建議是 B</h2>
+  <div class="grid">
+    <div class="card"><h3>A　照現狀出 2.37.0</h3><p class="muted">狀態列維持「幾個在跑、花費、context」。快，但就是你說的樣子，也不回答人回來的問題。</p></div>
+    <div class="card"><h3>B　先改狀態列再出（建議）</h3><p class="muted">只重做 mod 的顯示與讀取：結論詞、專案、phase、已跑、%、一句原因、兩種決策提醒，花費與 context 退到面板。資料多半已在 model.json 與 decision ledger。2.37.0 延後，約再一輪 foreman。</p></div>
+    <div class="card"><h3>C　B 加上補生產端</h3><p class="muted">連 watcher 的快照也加欄位（專案名、階段、% 直接進快照），mod 不必再去讀 review 頁的檔。較乾淨，但動到已發版的 2.36.115 契約，範圍最大。</p></div>
+  </div>
+  <p class="muted">我傾向 B：不動已發版的契約，且你要的四樣都來自已經存在的檔。若實作時發現 phase 名稱抓不到，再升到 C，不先做。</p>
+</section>
+
+<section class="ask">
+  <h2>需要你確認</h2>
+  <ol>
+    <li><b>狀態列改成上面那個樣子嗎？</b>第一個詞用「要你決定／進行中／疑似卡住／完成待驗收」四種，可以嗎？</li>
+    <li><b>分母沒凍結時顯示「分母未凍結 · n done」可以接受嗎？</b>還是你寧可那一格直接空白？</li>
+    <li><b>兩種提醒這樣分可以嗎？</b>第一版「代你決定」只顯示本回合件數與不可逆標示，「只看新的」先不做，行嗎？</li>
+    <li><b>做法選 B 嗎？</b>2.37.0 會因此延後；已完成的 C2 實作不浪費，view 層重做，資料讀取那層保留。</li>
+  </ol>
+</section>
+</main>

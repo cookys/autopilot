@@ -950,3 +950,11 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: mods P1a row and combined reviews, 2026-10-04
 - **Pointer**: docs/backlog/mods-p1a-known-follow-ups.md
 - **Context**: unfixed hardening items from the P1a reviews: cursor-file lock, spawn errors, autostart gate, repo-identity edge cases.
+
+### mods P5 proxy-decision reminders (writer first)
+- **Status**: open
+- **Trigger**: after mods v2.37.0 ships
+- **Effort**: M
+- **Source**: owner request and C4 research, 2026-10-04
+- **Pointer**: docs/backlog/mods-p5-proxy-decision-reminders.md
+- **Context**: no live decision ledger exists and nothing writes proxy-decision rows, so the live band cannot show them yet; writer, then watcher sidecar, then display.

@@ -1,0 +1,54 @@
+# C4 research: surfacing proxy decisions in the `live` mod
+
+Paths are relative to /home/cookys/projects/autopilot unless noted. P1b code: `$L` = /tmp/claude-1000/-home-cookys-projects-autopilot/74f6f85f-f806-4317-a6c7-5e4417df8093/scratchpad/p1b/land.
+Note: `mods/live` does not exist yet in the repo (ls fails); `scripts/render-review-page.js` is only in `$L`, not in the repo checkout.
+
+## Q1. Where ledgers live
+Call sites that pass `--ledger` to the DECISION ledger (decision-ledger.js / probe-unknown.js / next-pick.js / check-blueprint-conformance.js). Every one takes a caller-supplied path; no default exists in decision-ledger.js (`--ledger` is required, scripts/decision-ledger.js:42-45, `ensureDir(dirname(ledger))` at :160).
+- skills/ceo-agent/references/depth0-control-loop.md:406,416 : `<campaign>/decision-ledger.jsonl` (the only place the proxy `decision` kind is documented as written, :406-410).
+- skills/dev-flow/SKILL.md:66-67 and skills/debug/SKILL.md:53,59 : `<project>/ledger/decisions.jsonl`; probe default `~/.autopilot/ladder/<repo-hash>.jsonl` (scripts/probe-unknown.js:62, hash = first 12 hex of sha256(git common dir)).
+- skills/think-tank/SKILL.md:150-151, skills/ceo-agent/SKILL.md:341, skills/finish-flow/SKILL.md:130, references/hetero-dispatch.md:744-747 : `<ledger>` placeholder only (ladder telemetry: hypothesis/unknown/ladder kinds).
+- scripts/next-pick.js:35-39 : optional `--ledger`, appends a `pick` row. scripts/check-blueprint-conformance.js:14,105,188-208 : reads vetoes + dispatch rows from `--ledger`.
+NOT decision ledgers (same flag name, different file): `run-ledger.sh` (scripts/run-ledger.sh:609 etc.), `dispatch-foreman/author/review.sh --ledger` (dispatch-foreman.sh:15,118; dispatch-author.sh:174; dispatch-review.sh:270), `check-phase-review-receipt.js --ledger <dir>` (:6,52), `watch-foreman.js --ledger`. The manifest `ledger` field read by src/status/runs-fields.js:37-41 is the RUN-ledger (`<ledger>.results/...exit`), so it cannot locate a decision ledger.
+
+On this machine (find over ~/.autopilot, /tmp, whole fs minus node_modules):
+- `~/.autopilot/ladder/` does not exist. No `decision-ledger.jsonl` anywhere. No `ledger/` dir in the repo root.
+- Only file found: docs/projects/_archive/2026/09/2026-09-07-unknown-escalation-ladder/ledger/dogfood/decisions.jsonl : 5 rows, all `kind:"ladder"` (U1,U1,U2,...; ts 2026-09-07). It is archived dogfood evidence, not live; identical copies exist in ~/projects/autopilot-par/*/, ~/.claude/plugins/{cache,marketplaces}/..., ~/.grok/marketplace-cache/..., and a /tmp scratchpad worktree (all copies of the same archived file).
+- Conclusion: zero live decision ledgers exist today; zero `decision|dispatch|pick|refreeze|veto` rows exist anywhere on disk. The proxy-decision path (depth0-control-loop.md:406) has never produced a file here.
+
+## Q2. Round / root_run_id linkage
+- Row shape has `round` (an integer) and `decision_id`, `class`, `rationale`, `reversibility`, `refs[]` (scripts/decision-ledger.js:22-31). `append` stamps only `schema_version, ts, kind` onto the row (:162). No `root_run_id`, `project_key`, `repo_identity`, or `campaign_id` field exists in the writer or in probe-unknown.js (grep: zero hits in both files). `dispatch` rows carry `run_id` (:23), which is the only join key to a run.
+- `round` is not a global key: it filters within one ledger file (`--round`, :116,197,214). Two campaigns can both have round 1.
+- Tie options for the watcher: (i) file location: ledger path under `<campaign>/` or `<project>/ledger/` implies project via git-common-dir/ledger dir ownership (the plan already uses "ledger dir ownership + merge-base ancestor" as the join, docs/plans/2026-10-03-mods-visible-dispatch.md:248); (ii) `dispatch` rows' `run_id` join to manifests that carry `root_run_id` (plan :46); (iii) additive optional fields `root_run_id`/`repo_identity` on `append` (extra fields already pass through untouched, decision-ledger.js:60-62 comment), filled from `AUTOPILOT_ROOT_RUN_ID` / session-mode marker. (iii) is the only one that ties a non-dispatch `decision` row, since those have no run_id.
+- Scope model the watcher already has: `scope {project_key, repo_identity, root_run_id|null}` (src/status/runs-watch.js:261), files `runs.<project_key>[--<root>].json` (:279; plan :45).
+
+## Q3. Review page `decision` file vs ledger `decision` row
+- `--decision <file>` (`$L/scripts/render-review-page.js:15,855`) is read by `readExplicit` and must be a JSON object with a string `question` (:855). Model shape `{question, options[{label,consequence}], not_authorized}` (:166-171); sets `needs_decision` (:190), chip "需要你決定" (:327), and project index counter `decisions_needed` (:359,559).
+- Writer: nobody in code. grep for writers of that file in skills/references/scripts finds only the test fixture (`$L/hooks/tests/render-review-page.test.sh:115,157`); it is hand-authored by the publisher (depth-0) per publish, one per job.
+- Ledger `decision` row: a record of a choice ALREADY MADE by the agent (rationale, reversibility), reported after the fact, human can veto (decision-ledger.js:5-13).
+- Difference: review-page decision = open question, blocks on the human, one per job, no id, no persistence beyond the page (this is "awaiting the human"). Ledger decision = closed choice, append-only, has `decision_id`, human acts retroactively via `veto`. The only ledger analogue of "awaiting" is `class: ask-first` rows rendered as the "ask-first queue" in `report` (decision-ledger.js:40-48 comment; next-pick.js:38 `ask_first_queue`). So "(a) awaiting" = review `decision` file OR ledger `class=ask-first` (not vetoed); "(b) made on behalf" = ledger decision/dispatch/pick/refreeze rows of the round. Two sources, two counts.
+
+## Q4. Mechanism options
+Shared constraint: runs-live schema is `additionalProperties:false` at root (schemas/runs-live.schema.json:6), so even an "additive" envelope key needs a schema edit (and the plan's KR5 canonical-payload compare); mod reads via `$.fs` only.
+
+(a) Watcher scans known locations, publishes `decisions` summary.
+ - Files: src/status/runs-watch.js (scan + compute counts in tick; it already computes per-scope counts :299-326), schemas/runs-live.schema.json (+ optional `decisions` object), mod reader. Candidate sources are enumerated at watch start: `<project>/ledger/decisions.jsonl` under each worktree from `worktreePaths` (:201-211), `~/.autopilot/ladder/<hash>.jsonl`, and campaign dirs found via the live-pointer/session-mode marker.
+ - Contract: additive optional field on `autopilot.runs-live/1`; schema bump of fields only; or sidecar `runs.<scope>.decisions.json` (new schema, no impact on runs-live). Sidecar avoids touching KR5 compare and the freshness rules.
+ - No-ledger failure: summary absent/`{ledgers:0}`; mod shows nothing (must not read as "zero decisions", so include `sources_scanned`).
+ - Weakness: discovery of `<campaign>/decision-ledger.jsonl` is still a guess (campaign dir has no registry). Effort M.
+(b) Pointer file written on first append.
+ - Files: scripts/decision-ledger.js `append` (write `$XDG_RUNTIME_DIR` or `~/.autopilot/state/decision-ledgers/<project_key>.json` listing ledger paths), new schema, mod reader, plus mirrors (hooks/skills sync). Must know project_key inside the ledger writer (needs repo identity; src/status/project-key.js exists).
+ - Contract: new file, no change to runs-live or review-job-model. Failure: no pointer = no ledger = quiet; stale pointers need a liveness check. Solves discovery at the source, but the watcher/mod still must parse the JSONL (mod has only `$.fs`; ledger can be large, so a summarizer is still needed => in practice (b) feeds (a)). Effort M.
+(c) Review job model carries `proxy_decisions[]`, renderer fills from a ledger passed at publish.
+ - Files: `$L/scripts/render-review-page.js` (new `--decision-ledger <file> [--round n]` flag, model field, page section, schema `review-job-model/1` additive), publisher call sites. Contract: additive on `review-job-model/1` (renderer builds the model at :177, no JSON schema file found in schemas/ for it). Failure: no flag = no section. Weakness: only refreshes when someone republishes the page; the band (mod) does not read review pages, only the runs-live envelope; so it does not reach the sandboxed mod live. Effort S for the page, but fails the stated goal. Useful as a complement (human reads detail on the page).
+
+Recommendation: (a) with a SIDECAR file, plus a minimal write-side fix: make `append` stamp optional `root_run_id`/`repo_identity` (from AUTOPILOT_ROOT_RUN_ID / session-mode marker) so the watcher can attribute rows, and standardize one canonical location, `<project>/ledger/decisions.jsonl` (already named by dev-flow/debug skills), with the campaign ledger required to live there or to write a pointer. Watcher reads only that path set (project worktrees) and emits `{awaiting, made, irreversible, items[{decision_id, rationale≤200, reversibility, round}], sources_scanned}` (counts + cap of N items so the mod only reads a small file). Veto handle shown as the literal command `decision-ledger.js veto --ledger <path> --id <id>` (the report already formats it, decision-ledger.js:231). Effort M. (c) can be added later at S.
+Caveat: since no live ledger exists on this machine, the summary will be empty until depth-0 actually writes rows at `depth0-control-loop.md:406`; verify that call is executed in real campaigns before building (CLAUDE.md "script existing is not evidence it runs").
+
+## Q5. Seen/ack mechanism
+- None found. grep for `ack|acknowledg|seen_by|read_receipt` in src/status, scripts/decision-ledger.js, scripts/session-mode.js returns no hits. The only "seen" hits are unrelated (dispatch-author-codex-transport.sh seen-set pids). Ledger kinds are fixed (`KINDS`, decision-ledger.js:58); `veto` is the only human-authored kind (:27). session-mode marker carries no read cursor. The plan's idle-declaration (plan :147) is agent-authored, not a human ack.
+- Smallest options (not recommending to build now): (1) new kind `seen` / CLI `decision-ledger.js ack --ledger <f> --through <decision_id|round>` appending `{kind:"ack", through, ts}` (one more KIND; the watcher counts decisions after the last ack); (2) per-viewer cursor file `~/.autopilot/state/decisions-seen.<project_key>.json` written by a CLI or by the mod itself (mod is read-only `$.fs`, so needs CLI); (3) review-page button, but the page is static HTML served by python http.server (plan :40-42), so it needs a POST endpoint: largest.
+
+## Gaps I could not verify
+- Whether depth0 actually writes `<campaign>/decision-ledger.jsonl` in real runs (no instance on disk).
+- `review-job-model/1` has no standalone schema file in schemas/ (only runs-live, compare-record planned); its additive-ness is by renderer code, not a validator.

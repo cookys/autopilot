@@ -4,6 +4,7 @@
 > - INT `w/int` 8666aba4 accepted. Wave 2 accepted: PHASE+PICK 441243e2, PERF+STAMP 291cfa96, WATCH-B c13270aa, WATCH-A 23148e78 (see `accepted-heads-p1w.txt`, incl. follow-ups).
 > - INT2 **accepted**: `w/int2` e227528e (bundle refreshed). Not-opted-in UserPromptSubmit +47 ms (git spawn) to fix inside the MARKER row (same file).
 > - MARKER row dispatched (owner go 2026-10-05, plan R5.6; worktree `$OLD/p1c/wt-marker` off `w/int2`, report `$OLD/p1c/run-w/marker/REPORT.md`). Was: MARKER row (holistic fix for phase in plain sessions): `level: null` = plain session; dispatch-hetero.sh classifier + campaign bridge skip it; SessionStart *ensures* (never overwrites, compact-safe) a marker in opted-in repos with `root_run_id: null`; every reader gets a level-null test. Owner rejected the sidecar workaround ("不能 workaround，整套處理修正"); proposal sent, awaiting go.
+> - 2026-10-05 both hands were cut by the sonnet weekly limit mid-verification; WIP saved as refs/wip/marker 087a2a95 and refs/wip/w3a 29f7ff5f in the clone + bundle; the same sonnet hands resumed once quota returned.
 > - W3a dispatched in parallel with MARKER (brief `briefs-p1w/w-row-w3a.md`; `$OLD/p1c/wt-w3a` off `w/int2`: cherry-pick p1c/c C1–C3b-M, then one W3a commit; report `$OLD/p1c/run-w/w3a/REPORT.md`).
 > - Next: eval step 3 (freeze packs from the post-MARKER sha; change texts for W2a-g/W2b-g/W1b-t2 still to draft), W1f-b design, W4 landing (p1c/d1 joins there).
 

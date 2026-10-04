@@ -366,6 +366,7 @@ hooks/tests/campaign-resume-reviewing-phase.test.sh|in-process roster object lit
 hooks/tests/contract-parity.test.sh|partial roster fixture, resolves consult/discuss via the default
 hooks/tests/controller-boundary-budget-bridge.test.sh|partial roster fixture, resolves consult/discuss via the default
 hooks/tests/controller-execution-independent.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/decision-ledger-engine-adjudicate.test.sh|in-process roster object literal for an engine fixture, never resolved from config; consult/discuss not involved
 hooks/tests/dispatch-contract-artifact.test.sh|partial roster fixture, resolves consult/discuss via the default
 hooks/tests/dispatch-detach.test.sh|partial roster fixture, resolves consult/discuss via the default
 hooks/tests/dispatch-detached-campaign-authority.test.sh|partial roster fixture, resolves consult/discuss via the default

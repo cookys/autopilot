@@ -57,3 +57,8 @@ L1 `scripts/import-aa-capabilities.test.js` (22/23 fail on a clean base), `hooks
 - dev-flow stages (L-1…L-5) and the plan's own phases (P0…P4) are prose only; nothing records "currently at X". Adding a writer means editing dev-flow `SKILL.md`, a guidance change that needs eval evidence first (CLAUDE.md scorecard-first). Not done.
 - Fifth verdict word `待命` (idle), last in precedence.
 - Mutation outputs: `$OLD/p1c/c3/mut-b-*.txt` (10 for M) and the renderer's five in the hand report.
+
+### Probe outcomes (2026-10-04, classification per the frozen table)
+- W2c: **guidance** — no code path writes /l4 foreman liveness; only prose (`level-front-door.md:270-272`). Needs eval before a writer step. Interim pane text: 工頭狀態：來源未接. Evidence `probe-w2c-w2f.md`.
+- W2f: **mechanism** — hook payloads carry `transcript_path`; last-usage tokens equal the status-line file (delta 0, one sample); extend `hooks/context-budget.js` (PostToolUse, ~0.75 ms tail read) to write `<live>/context/<sid>.json` when the status line does not, with `window_source`; percent withheld when the window is unknown. Evidence `probe-w2c-w2f.md`.
+- W0a/W0b spike report: `spike-s10-s11.md`.

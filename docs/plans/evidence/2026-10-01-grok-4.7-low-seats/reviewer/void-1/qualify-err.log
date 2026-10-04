@@ -1,0 +1,2 @@
+{"engine":"grok-4.7","model":"grok-4.7","runner":"grok","role":"reviewer","outcome":"transport_fail","cases_attempted":1,"reason":"transport failure on trial-1 case clean-13 — administration aborted, no verdict recorded","evaluation_passed":false,"admitted":false,"authority_status":"untrusted_telemetry"}
+QUALIFY_EXIT=1

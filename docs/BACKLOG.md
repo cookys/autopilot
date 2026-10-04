@@ -958,3 +958,11 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: owner request and C4 research, 2026-10-04
 - **Pointer**: docs/backlog/mods-p5-proxy-decision-reminders.md
 - **Context**: no live decision ledger exists and nothing writes proxy-decision rows, so the live band cannot show them yet; writer, then watcher sidecar, then display.
+
+### mods live band shows no phase for an in-progress campaign
+- **Status**: open
+- **Trigger**: after mods v2.37.0 ships
+- **Effort**: M
+- **Source**: mods P1c C3b, 2026-10-04
+- **Pointer**: docs/backlog/mods-live-campaign-phase.md
+- **Context**: the live campaign phase is not reachable from the renderer (no root_run_id to campaign id mapping); dev-flow L-stages and plan phases have no writer.

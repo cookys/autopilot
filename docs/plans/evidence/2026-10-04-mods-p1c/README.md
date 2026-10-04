@@ -11,12 +11,13 @@ Plan: `docs/plans/2026-10-03-mods-visible-dispatch.md` (R4.4). Read this first a
 | P1c C1 (interactive `/clear` + data-supply probes) | committed `2680228c`, branch `p1c/c` | `../2026-10-03-mods-spikes/S7-*` |
 | P1c C2 (`mods/live` first version: runs-oriented band, pane, toast) | committed `2279e6d0`, SHIP-AS-IS `review-1791075406-3480737-bd5c` | `accepted-heads-p1c.txt` |
 | P1c **C3** (band redesign, this document's owner decision) | committed `48be3ecd` on `p1c/c`, SHIP-AS-IS `review-1791114987-3893506-5b74`; depth-0 re-checked scope (8 files, all allowed), trailer, negative grep, 17/17 mutation outputs red | `hand-c3-brief.md`, `accepted-heads-p1c.txt` |
+| P1c **C3b** (phase + 待命) | **R** `6e40bcc4` on branch `p1c/r` (renderer, based on `origin/develop` 1b549997) and **M** `734365c1` on `p1c/c`; both SHIP-AS-IS | `accepted-heads-p1c.txt` |
 | P1d D1 (inventory + mirrors understand `modules`; hooks.json comment keys removed) | committed `14e44b46`, branch `p1c/d1`, SHIP-AS-IS `review-1791067635-2965625-21f6` | `accepted-heads-p1c.txt` |
-| v2.37.0 | **not shipped.** Lands P1c (C1+C2+C3) + P1d (D1 + the `modules` key). C3 is accepted; next is the landing foreman (fresh clone off `origin/develop`, full suite, ONE combined review, release, push). | — |
+| v2.37.0 | **not shipped.** Lands P1c (C1+C2+C3+C3b-M) + the renderer commit C3b-R from `p1c/r` + P1d (D1 + the `modules` key). C3 is accepted; next is the landing foreman (fresh clone off `origin/develop`, full suite, ONE combined review, release, push). | — |
 | P5 proxy-decision reminders | **not started**, tracked in the plan §P5 and BACKLOG | `c4-proxy-decision-research.md` |
 
 Unpushed work lives in a throwaway clone (scratchpad of session `74f6f85f`):
-`/tmp/claude-1000/-home-cookys-projects-autopilot/74f6f85f-f806-4317-a6c7-5e4417df8093/scratchpad/p1c/clone` (worktrees `wt-c` = `p1c/c`, `wt-d1` = `p1c/d1`; base `0a642f8f`). A git bundle of `p1c/c` and `p1c/d1` (verified) is at `~/.autopilot/handoff/mods-p1c.bundle`; `git clone`/`git fetch` from it recovers both branches if the scratchpad is gone.
+`/tmp/claude-1000/-home-cookys-projects-autopilot/74f6f85f-f806-4317-a6c7-5e4417df8093/scratchpad/p1c/clone` (worktrees `wt-c` = `p1c/c`, `wt-d1` = `p1c/d1`; base `0a642f8f`). A git bundle of `p1c/c`, `p1c/d1` and `p1c/r` (verified) is at `~/.autopilot/handoff/mods-p1c.bundle`; `git clone`/`git fetch` from it recovers both branches if the scratchpad is gone.
 
 ## Owner decisions 2026-10-04 (binding)
 
@@ -45,3 +46,10 @@ L1 `scripts/import-aa-capabilities.test.js` (22/23 fail on a clean base), `hooks
 - Idle case (nothing live, nothing awaited, nothing frozen-complete) draws `○ <project> · …` with no verdict word; the four-word list does not cover it.
 - `needs_decision: true` with a decision object lacking a string `question`: the band says `要你決定`, the pane omits the awaited section.
 - No real tmux capture of the redesign exists (S9 uses test-kit trees); a real-session look is part of landing acceptance.
+
+### C3b (accepted 2026-10-04): phase and idle word
+- Phase source, in order: terminal campaign phase from a VALID `task_status_receipt` campaign entry, else the first open deliverable of the progress receipt (`做 <id>`), else `—`. zh-TW labels live in `scripts/render-review-page.js` (`PHASE_LABEL`). The renderer change is additive (`model.json` `phase`, review-page chip `階段：…`) and ships in the same release as the mod.
+- **Live campaign phase is unreachable**: the live state sits in `<git-common-dir>/autopilot/implementation-campaign.jsonl`, keyed by a hash campaign id; no `root_run_id` → campaign id mapping exists and the task receipt validates only terminal campaigns. A run in progress with no frozen progress receipt therefore shows `—`. Follow-up in BACKLOG.
+- dev-flow stages (L-1…L-5) and the plan's own phases (P0…P4) are prose only; nothing records "currently at X". Adding a writer means editing dev-flow `SKILL.md`, a guidance change that needs eval evidence first (CLAUDE.md scorecard-first). Not done.
+- Fifth verdict word `待命` (idle), last in precedence.
+- Mutation outputs: `$OLD/p1c/c3/mut-b-*.txt` (10 for M) and the renderer's five in the hand report.

@@ -1,0 +1,6 @@
+QUALIFICATION-SWEEP START 18:21:34Z (4 seats)
+SEAT gpt-6.1-sol DONE: qualified 24/24 score=1.000 wall=1083s event=193
+SEAT gpt-6-astra DONE: qualified 24/24 score=1.000 wall=755s event=195
+SEAT gpt-6-sol DONE: qualified 24/24 score=1.000 wall=715s event=196
+SEAT gpt-6-luna DONE: failed 23/24 score=0.958 wall=567s event=198
+QUALIFICATION-SWEEP COMPLETE 19:15:19Z

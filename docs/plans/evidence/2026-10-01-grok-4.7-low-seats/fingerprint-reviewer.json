@@ -1,0 +1,22 @@
+{
+  "prompt_config_hash": "3cbe203c5958ec413269d63e2d5d1841336394d15f3c4a3ab4285ea3e73e3530",
+  "prompt_source": "SYSTEM_PROMPT in scripts/qualification-review-provider.js",
+  "harness_version": "engine-qualify-a89579de",
+  "runner_version": "grok-1.0.44-5b807183dd79",
+  "semantic_surface": {
+    "kind": "reviewer-semantic-surface-v1",
+    "model": "grok-4.7",
+    "transport": "grok-cli-prompt-file",
+    "reasoning_effort": "low",
+    "endpoint": "@none"
+  },
+  "semantic_fingerprint": "f6a08da9fc32742192b0d76b2be88c83708490091bc1f5c6fdc1473dcb0b02ef",
+  "containment_surface": {
+    "kind": "reviewer-containment-surface-v1",
+    "exam_transport": "qualification-case-broker-networkless-bwrap",
+    "cli_posture": "grok --prompt-file --permission-mode dontAsk --no-subagents --deny *",
+    "credential_isolation": "qrp-cli-home-credential-only-seed"
+  },
+  "containment_fingerprint": "93bf920ee1377cee7b8e5c27c3a59400f9b2d54f320d4a8d9a1addfd5b3341e3",
+  "canonicalJson": "src/engine/owner-kernel/canonical.js"
+}

@@ -1,0 +1,2 @@
+ERROR: missing required field(s): engine, runner, family, role, model_version, version_source, corpus_version, harness_version, runner_version, prompt_config_hash, date, quality, capability_score, cost, latency, qualified_at, expires
+RECORD_EXIT=1

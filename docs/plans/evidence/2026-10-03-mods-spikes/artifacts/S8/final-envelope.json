@@ -1,0 +1,117 @@
+{
+  "schema": "autopilot.runs-live/1",
+  "scope": {
+    "project_key": "2b55919cb4ad4d0d",
+    "repo_identity": "git-common-dir:$P/c3/repo/.git",
+    "root_run_id": null
+  },
+  "published_at": "2026-10-03T23:02:53.804Z",
+  "observed_at": "2026-10-03T23:02:06.276Z",
+  "valid_for_s": 180,
+  "writer": null,
+  "exit_reason": "stopped",
+  "runs": [
+    {
+      "run_id": "kr1-run",
+      "role": "implementer",
+      "runner": "codex",
+      "model": "m",
+      "started_at": "2026-10-03T23:00:47Z",
+      "ended_at": null,
+      "parent_run_id": null,
+      "root_run_id": "root-kr1",
+      "depth": 0,
+      "manifest": "$P/c3/runs/kr1-run.manifest.json",
+      "phase": "running",
+      "alive": true,
+      "stall": null,
+      "last_event_age_s": null,
+      "elapsed_s": 79,
+      "rc": null,
+      "final_status": null,
+      "project": "git-common-dir:$P/c3/repo/.git",
+      "source": {
+        "manifest": "$P/c3/runs/kr1-run.manifest.json",
+        "status_probe": "dispatch-status.js --run kr1-run --stall-secs 180",
+        "exit_file": null
+      },
+      "fact_at": "2026-10-03T23:00:47Z",
+      "observed_at": "2026-10-03T23:02:06.691Z",
+      "probe_age_s": 0
+    },
+    {
+      "run_id": "kr1-run2",
+      "role": "implementer",
+      "runner": "codex",
+      "model": "m",
+      "started_at": "2026-10-03T23:01:45Z",
+      "ended_at": null,
+      "parent_run_id": null,
+      "root_run_id": "root-kr1",
+      "depth": 0,
+      "manifest": "$P/c3/runs/kr1-run2.manifest.json",
+      "phase": "running",
+      "alive": true,
+      "stall": null,
+      "last_event_age_s": null,
+      "elapsed_s": 21,
+      "rc": null,
+      "final_status": null,
+      "project": "git-common-dir:$P/c3/repo/.git",
+      "source": {
+        "manifest": "$P/c3/runs/kr1-run2.manifest.json",
+        "status_probe": "dispatch-status.js --run kr1-run2 --stall-secs 180",
+        "exit_file": null
+      },
+      "fact_at": "2026-10-03T23:01:45Z",
+      "observed_at": "2026-10-03T23:02:06.485Z",
+      "probe_age_s": 0
+    },
+    {
+      "run_id": "kr1-run3",
+      "role": "implementer",
+      "runner": "codex",
+      "model": "m",
+      "started_at": "2026-10-03T23:01:56Z",
+      "ended_at": null,
+      "parent_run_id": null,
+      "root_run_id": "root-kr1",
+      "depth": 0,
+      "manifest": "$P/c3/runs/kr1-run3.manifest.json",
+      "phase": "running",
+      "alive": true,
+      "stall": null,
+      "last_event_age_s": null,
+      "elapsed_s": 10,
+      "rc": null,
+      "final_status": null,
+      "project": "git-common-dir:$P/c3/repo/.git",
+      "source": {
+        "manifest": "$P/c3/runs/kr1-run3.manifest.json",
+        "status_probe": "dispatch-status.js --run kr1-run3 --stall-secs 180",
+        "exit_file": null
+      },
+      "fact_at": "2026-10-03T23:01:56Z",
+      "observed_at": "2026-10-03T23:02:06.579Z",
+      "probe_age_s": 0
+    }
+  ],
+  "counts": {
+    "confirmed_live": 3,
+    "exited": 0,
+    "unknown": 0,
+    "fresh_bound_s": 20
+  },
+  "sessions": {
+    "22222222-3333-4444-8555-6666666666k1": {
+      "session_usd": 0.0123,
+      "as_of": "2026-10-03T23:02:06.276Z"
+    },
+    "22222222-3333-4444-8555-6666666666a1": {
+      "session_usd": 0.0123,
+      "as_of": "2026-10-03T23:02:06.276Z"
+    }
+  },
+  "host_today_usd": 0.0246,
+  "host_today_as_of": "2026-10-03T23:02:06.276Z"
+}

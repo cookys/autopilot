@@ -1,0 +1,6 @@
+{
+  "schema": "autopilot.live-pointer/1",
+  "live_base": "/dev/shm/autopilot-kr1-XXXXXX",
+  "autopilot_home": "$P/c3/home/.autopilot",
+  "written_at": "2026-10-03T22:59:23.833Z"
+}

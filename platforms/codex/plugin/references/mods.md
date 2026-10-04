@@ -2,8 +2,8 @@
 
 Index-shaped reference for the Claude Code mod surface autopilot ships (live band / pane / toast fed by the
 project watcher). Canonical design: `docs/plans/2026-10-03-mods-visible-dispatch.md` (§2.8 pointer, §4 P1a/P1c).
-Every fact below was measured in the P0 spikes: `docs/plans/evidence/2026-10-03-mods-spikes/` (S1, S2, S4, S5a,
-S5b; `README.md` there is the verdict table). A mod is CC-only; non-Claude-Code harnesses ignore all of this.
+Every fact below was measured in the P0 spikes and the P1c probes: `docs/plans/evidence/2026-10-03-mods-spikes/` (S1, S2, S4,
+S5a, S5b, S7, S8; `README.md` there is the verdict table). A mod is CC-only; non-Claude-Code harnesses ignore all of this.
 
 ## Packaging (S1)
 
@@ -22,7 +22,7 @@ S5b; `README.md` there is the verdict table). A mod is CC-only; non-Claude-Code 
 
 | Surface | Band / status line | Pane | Toast | Image | Verified |
 |---------|--------------------|------|-------|-------|----------|
-| terminal | yes | yes (auto-open only fullscreen and >= 144 cols) | yes | **no for the owner**: `Image {file}` is read by the terminal on the client machine, so over ssh + tmux it draws a blank box and tmux drops the graphics protocol; screenshot comparison goes through the browser review page | `claude -p` and `plugin test` only; interactive terminal fs/env unverified |
+| terminal | yes | yes (auto-open only fullscreen and >= 144 cols) | yes | **no for the owner**: `Image {file}` is read by the terminal on the client machine, so over ssh + tmux it draws a blank box and tmux drops the graphics protocol; screenshot comparison goes through the browser review page | `claude -p`, `plugin test` and an interactive tmux session (S7: fs/env/pointer reads; S8: band, pane and toast drawn by the `live` mod) |
 | desktop (Code tab) | yes | same content, no `Image` in the tree | yes | not used | not reachable from the dev host; unverified |
 | `claude -p` | read-only data path works | not drawn | not drawn | n/a | S2 ran here |
 
@@ -41,6 +41,10 @@ S5b; `README.md` there is the verdict table). A mod is CC-only; non-Claude-Code 
 - **`$.fs` semantics**: relative paths resolve against `$.session.cwd()` with **no project-root confinement**;
   `~` is **not** expanded (build paths from `$.env.get("HOME")`); a failed read is a `HooksError` with **no
   `code`** (errno only in the message), so a mod distinguishes "missing" by catching, not by code.
+- **`$.session.id()` changes on `/clear`** (S7): the session-mode marker is keyed by sid, so after a `/clear` the marker for the
+  new sid does not exist (ENOENT) while the mod's timer keeps running. A mod reads the sid on **every tick** (never caches it),
+  falls back to the cwd longest-prefix route when the marker is missing, and shows `—` for per-sid numbers it cannot find
+  (never the old sid's, never 0).
 - Envelopes (`runs/<project_key>.json`, per-root `runs/<project_key>--<root>.json`) are `autopilot.runs-live/1`;
   a reader checks `scope` and `published_at`/`valid_for_s` (`readEnvelope` in `src/status/runs-watch.js`).
 
@@ -48,9 +52,41 @@ S5b; `README.md` there is the verdict table). A mod is CC-only; non-Claude-Code 
 
 - Editing a module file hot-reloads it: the old `clock.every` timer stops (about 126 ms), exactly one new timer
   runs, and the reload **re-fires `session.start`**. `session.end` cancels timers; nothing survives `/exit`.
-- `/clear` is **unverified** (types say it emits `session.end` with no following `session.start`); plan P1c
-  measures it first and falls back to an idempotent timer rebuild from `ui.render` if needed.
+- **`/clear` (S7, interactive terminal)**: a `$.clock.every` timer started in `session.start` **survives** it: one timer, the
+  tick counter never restarts, no duplicate. The events are `classic.SessionEnd reason=clear` -> `session.end reason=clear`
+  (+8 ms) -> `classic.SessionStart source=clear` (+142 ms); **no `session.start` fires**. So no re-arm from `ui.render` is
+  needed; the `live` mod only cancels its timer on a `session.end` whose reason is not `clear`, and keeps an "arm only when no
+  timer is held" guard because a hot reload re-fires `session.start` in a fresh environment.
 - Desktop lifecycle is unverified.
+
+## The `live` mod (mods/live, plan P1c)
+
+- Files: `register.ts` (all `$` calls: pointer, marker / paths resolution, envelope, context, job model, tick, toast, pane
+  open), `model.ts` (pure parsing / formatting, no `$`), `band.tsx` and `pane.tsx` (pure views over the surface's element
+  table), `live.test.ts`. State between a tick and a render is a module variable plus `$.ui.invalidate('ui.render')`: a
+  `$.state` ref makes `claude plugin validate` demand a `types` contract named in the plugin manifest, and the mod is wired by
+  the `hooks.json` `modules` key alone.
+- Reads only: `$HOME/.autopilot/live-pointer.json`, the session marker, `<live_base>/runs/paths/*.json`, the scoped envelope
+  (SSD copy as fallback), `<live_base>/context/<sid>.json`, `<live_base>/review/server.json` (port, default 8787) and the job
+  page's `model.json` (acceptance axis, gate rows). It never writes, never starts a program, never sends a prompt.
+- Band text is built only from the envelope / context file by the session's own sid; `running` is `counts.confirmed_live`,
+  `—` marks anything missing, and the state words are `no pointer`, `no project`, `stale`, `unavailable · run: …`,
+  `unreadable`. Toasts compare consecutive fresh snapshots of one scope: the execution axis from the envelope `counts`, the
+  acceptance axis from the job model.
+- **Band time budget (S8, KR1)**: the band shows a new run <= 20 s after its manifest drops. Chain: watcher tick 10 s + mod
+  tick 5 s + publish; measured 11.5 s, 4.2 s and 12.5 s in a real interactive session with a real watcher.
+- **Validate constraints**: a helper that is passed `$` must be declared at the top level of the file that calls it (declared
+  inside `register`, `claude plugin validate` refuses); keep every `$.` call in `register.ts` and give the `.tsx` views the
+  element table, not `$`. A `key` prop on a `Text` is not kept in the drawn tree (a `Button` keeps it): tests find a `Text` by
+  `type` and shown text.
+- **Testing**: `claude plugin test <plugin dir>` finds `*.test.ts` under `mods/` too. The kit has no fs, so a test serves the
+  mod's reads with bottom `on('fs.read' | 'fs.list' | 'fs.stat')` hooks over an in-memory tree: a bottom hook that throws is a
+  rejected read to the mod (message `no implementation for fs.read`), which is how a fixture says "file missing". The bottom
+  also needs `on('session.start')` (`{ cwd }`), `on('session.end')`, `on('ui.toast' | 'ui.open' | 'ui.invalidate')`;
+  `mock.clock` and `mock.env` do time and `$HOME`. A plugin named `autopilot` is required for the repo's own module name.
+- **Loading it before it is wired**: `claude plugin validate` refuses a module path that leaves the plugin directory and a
+  symlink that resolves outside it, so a scratch wrapper plugin (name `autopilot`, `hooks/hooks.json` =
+  `{"modules": ["../mods/live/register.ts"]}`) holds a **copy** of `mods/`; re-copy after each edit.
 
 ## Watcher launch (S5b, plan §4 P1a "鎖的前提", R4/R5)
 

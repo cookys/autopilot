@@ -9279,6 +9279,25 @@ class AutopilotEngine {
           };
         }
         refreshExactMissionAuthority();
+        // Mods P1W W1b: the only moment the exact terminal receipt body exists is here (the ledger
+        // keeps its digest). Persist the `status task` input bundle from real state so the acceptance
+        // verdict is computable without a skill step. Telemetry-grade: a failed write leaves
+        // `status task` at TASK_STATUS_INPUT_UNAVAILABLE, never blocks the campaign.
+        // Opt-out: AUTOPILOT_TASK_STATUS_INPUT=0.
+        if (process.env.AUTOPILOT_TASK_STATUS_INPUT !== '0') {
+          const taskRuntime = campaignControl.contract && campaignControl.contract.mission_runtime;
+          if (taskRuntime && typeof taskRuntime.root_run_id === 'string') {
+            require('../status/task-status-input').refreshTaskStatusInputBestEffort({
+              repo: loopCwd,
+              rootRunId: taskRuntime.root_run_id,
+              terminalReceipts: { [campaignControl.campaign_id]: composition },
+              contractFiles: typeof campaignControl.contract_path === 'string'
+                ? [path.resolve(loopCwd, campaignControl.contract_path)] : [],
+              ledgerPath: campaignControl.generation_claim
+                ? campaignControl.generation_claim.ledger : null,
+            });
+          }
+        }
         missionTerminalOutcomeCompleted = completed.status === 'completed';
         missionTerminalCompleted = composition.status === 'ready'
           && completed.status === 'completed';

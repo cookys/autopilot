@@ -1,9 +1,10 @@
 # mods P1b → P1c/P1d → P5 — state of play (2026-10-04)
 
 > ## IN FLIGHT (2026-10-05, session df52a188)
-> - Step 1 INT **accepted**: `w/int` 8666aba4 (see `accepted-heads-p1w.txt`); bundle refreshed with `w/int` and the wave-2 branches.
-> - Step 2 wave 2 dispatched off `w/int` (owner rulings R5.5 folded into `briefs-p1w/w-rows-wave2.md`): four sonnet hands WATCH-A (`wt-watch-a`), WATCH-B (`wt-watch-b`), PHASE+PICK (`wt-phase`), PERF+STAMP (`wt-perf`); reports `$OLD/p1c/run-w/<row>/REPORT.md`. Acceptance per row = `accept-row.sh` pattern with base `w/int`, then INT2 merges WATCH-A/B hookups.
-> - Step 3 eval smoke not started (waits for wave-2 suites, memory pressure).
+> - INT `w/int` 8666aba4 accepted. Wave 2 accepted: PHASE+PICK 441243e2, PERF+STAMP 291cfa96, WATCH-B c13270aa, WATCH-A 23148e78 (see `accepted-heads-p1w.txt`, incl. follow-ups).
+> - INT2 in flight: sonnet hand building `w/int2` (`$OLD/p1c/wt-int2`) per `briefs-p1w/int2.md` — cherry-pick the four, reconcile the sources-manifest attention probe after PERF's hosting move, latency re-measure. Report `$OLD/p1c/run-w/int2/REPORT.md`.
+> - PENDING OWNER: MARKER row (holistic fix for phase in plain sessions): `level: null` = plain session; dispatch-hetero.sh classifier + campaign bridge skip it; SessionStart *ensures* (never overwrites, compact-safe) a marker in opted-in repos with `root_run_id: null`; every reader gets a level-null test. Owner rejected the sidecar workaround ("不能 workaround，整套處理修正"); proposal sent, awaiting go.
+> - Next after INT2 + MARKER: eval step 3 (freeze packs from the post-MARKER sha; change texts for W2a-g/W2b-g/W1b-t2 still to draft), W3a mod integration (rebase `p1c/c` onto int head), W1f-b design, W4 landing.
 
 > ## HANDOFF (2026-10-05) — read this block first
 > Plan `docs/plans/2026-10-03-mods-visible-dispatch.md` R5.4, §4 P1W table is the single source (FROZEN after G1+G2; later rulings R5.3/R5.4 in Review log).

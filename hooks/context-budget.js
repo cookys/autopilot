@@ -50,6 +50,7 @@ const {
   readContextTokens, readContextUsage, budgetDecision, inferWindowTokens, scaleTiers, tiersForKnownWindow, BASE_WINDOW,
 } = require('./context-budget-lib.js');
 const { resolveLiveDir, sanitizeSessionId, readLive } = require('../scripts/lib/live-state-dir.js');
+const { writeLiveRecord } = require('../scripts/statusline-live-tee.js');
 
 const PARSE_EVERY_BELOW_T1 = 5;
 
@@ -67,7 +68,7 @@ function loadConfig() {
   // explicitT1/T2 track whether the value came from the USER (config/env) or is
   // still the 200K-calibrated default. Window inference may rescale defaults;
   // it must never override a value the user set by hand. (v2.32.56)
-  const cfg = { t1: 100_000, t2: 150_000, mode: 'warn', explicitT1: false, explicitT2: false };
+  const cfg = { t1: 100_000, t2: 150_000, mode: 'warn', explicitT1: false, explicitT2: false, liveWrite: true };
   try {
     const file = path.join(os.homedir(), '.autopilot', 'config.json');
     const user = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -76,6 +77,7 @@ function loadConfig() {
       if (Number.isFinite(cb.t1)) { cfg.t1 = cb.t1; cfg.explicitT1 = true; }
       if (Number.isFinite(cb.t2)) { cfg.t2 = cb.t2; cfg.explicitT2 = true; }
       if (cb.mode === 'off' || cb.mode === 'warn') cfg.mode = cb.mode;
+      if (cb.live_write === false) cfg.liveWrite = false;
     }
   } catch { /* absent/corrupt config → defaults */ }
   const envT1 = Number(process.env.AUTOPILOT_CONTEXT_BUDGET_T1);
@@ -83,7 +85,54 @@ function loadConfig() {
   if (Number.isFinite(envT1) && envT1 > 0) { cfg.t1 = envT1; cfg.explicitT1 = true; }
   if (Number.isFinite(envT2) && envT2 > 0) { cfg.t2 = envT2; cfg.explicitT2 = true; }
   if (process.env.AUTOPILOT_CONTEXT_BUDGET_MODE === 'off') cfg.mode = 'off';
+  // v2.37 (mods P1W W2f) opt-out for the live-context-file writer only (the hook keeps nudging).
+  const lw = process.env.AUTOPILOT_CONTEXT_BUDGET_LIVE_WRITE;
+  if (lw === 'off' || lw === '0' || lw === 'false') cfg.liveWrite = false;
   return cfg;
+}
+
+const WRITER_ID = 'context-budget';
+const BASE_WINDOW_TOKENS = 200_000;
+const ONE_M = 1_000_000;
+
+// Mods P1W W2f: when the host status line does not keep `<live>/context/<sid>.json` fresh,
+// derive it from the transcript's last usage row (same schema as scripts/statusline-live-tee.js,
+// plus `writer` / `window_source`). `fresh` is readLive's verdict (<=120 s, schema 1). A fresh
+// file that this writer did not author is the status line's: never overwritten. Window: a
+// status-line window ever seen for this session (st.knownWindow, or a stale status-line file
+// still on disk) > observed context above 200K (so 1M) > unknown (pct null; tokens still written).
+function maybeWriteLive(base, sid, tpath, st, fresh) {
+  if (fresh && fresh.writer !== WRITER_ID) return;
+  const usage = readContextUsage(tpath);
+  if (usage === null) return;
+  let window = Number.isFinite(st.knownWindow) && st.knownWindow > 0 ? st.knownWindow : null;
+  if (window === null) {
+    try {
+      const old = JSON.parse(fs.readFileSync(path.join(base, 'context', `${sid}.json`), 'utf8'));
+      const w = old && old.writer !== WRITER_ID && old.context_window && old.context_window.context_window_size;
+      if (Number.isFinite(w) && w > 0) { window = w; st.knownWindow = w; }
+    } catch { /* absent/corrupt ⇒ no earlier status-line window */ }
+  }
+  let windowSource = 'statusline';
+  if (window === null) {
+    const peak = Math.max(usage.tokens, Number.isFinite(st.observedMax) ? st.observedMax : 0);
+    if (peak > BASE_WINDOW_TOKENS) { window = ONE_M; windowSource = 'observed'; } else windowSource = 'unknown';
+  }
+  const record = {
+    schema_version: 1,
+    session_id: sid,
+    written_at: new Date().toISOString(),
+    writer: WRITER_ID,
+    window_source: windowSource,
+    model: {},
+    context_window: {
+      context_window_size: window,
+      used_percentage: window ? Math.round((usage.tokens / window) * 100) : null,
+      total_input_tokens: usage.tokens,
+      current_usage: usage.parts,
+    },
+  };
+  writeLiveRecord(base, record);
 }
 
 function loadState(file) {
@@ -127,7 +176,10 @@ function saveState(file, st) {
     const st = loadState(stateFile);
     st.calls += 1;
 
-    const liveMain = readLive(live.base, sid, { kind: 'main' });
+    const liveRaw = readLive(live.base, sid, { kind: 'main' });
+    // A file this hook wrote itself (W2f) is a derived echo of the transcript, not a status-line
+    // window: it must never drive the "(statusline)" path.
+    const liveMain = liveRaw && liveRaw.writer !== WRITER_ID ? liveRaw : null;
     // v2.36.2 diagnostic (state only, no behaviour): record how old the live file was at
     // hook time, so a T1/T2 that arrives WITHOUT "(statusline)" on a host that has the
     // writer can be attributed (stale tick vs absent file) after the fact. 2026-09-05:
@@ -253,6 +305,9 @@ function saveState(file, st) {
           }
         }
       }
+    }
+    if (cfg.liveWrite) {
+      try { maybeWriteLive(live.base, sid, tpath, st, liveRaw); } catch { /* the writer never breaks the hook */ }
     }
     saveState(stateFile, st);
   } catch (e) {

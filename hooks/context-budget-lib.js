@@ -116,7 +116,16 @@ function usageRowOf(line) {
   }
   const total = sumOf(src);
   if (total <= 0) return null;
-  return { tokens: total, timestamp: typeof obj.timestamp === 'string' ? obj.timestamp : null };
+  return {
+    tokens: total,
+    timestamp: typeof obj.timestamp === 'string' ? obj.timestamp : null,
+    // The three components of `tokens` (live-file `current_usage` shape; W2f writer).
+    parts: {
+      input_tokens: n(src.input_tokens),
+      cache_creation_input_tokens: n(src.cache_creation_input_tokens),
+      cache_read_input_tokens: n(src.cache_read_input_tokens),
+    },
+  };
 }
 
 function isCompactBoundary(line) {

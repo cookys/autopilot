@@ -138,6 +138,9 @@ function freshEnv(extra = {}) {
     HOME: dir,
     AUTOPILOT_HOOK_CONTEXT_BUDGET: '1',
     AUTOPILOT_CONTEXT_BUDGET_DIR: dir,
+    // W2f: the hook now WRITES <live>/context/<sid>.json when no status line does, so a test
+    // that omits an override would drop fixture rows into the host's real live dir.
+    AUTOPILOT_LIVE_DIR: shmTmp('ctxbud-hermetic-live-'),
     CLAUDE_CODE_SESSION_ID: `t-${path.basename(dir)}`,
     ...extra,
   };

@@ -48,11 +48,21 @@
  *     auto-picks, ask-first queue (rows with class=ask-first), experience-critic
  *     findings (--critic JSON), stall status (--stall JSON from check-stall-fuse).
  *
+ * Default ledger (mods P1W W1h): when --ledger is omitted every mode uses
+ * <git-common-dir>/autopilot/ledger/decisions.jsonl of the cwd's repo — shared by every
+ * worktree of the repo, never inside the work tree. Not in a git repo and no --ledger → exit 2.
+ * `append` stamps repo_identity (`git-common-dir:<realpath>`, same value as
+ * src/status/task-runtime.js repoIdentity) and root_run_id (AUTOPILOT_ROOT_RUN_ID, else the
+ * session-mode marker's root_run_id, else null — never invented); a caller-supplied value wins.
+ * `append --dedupe` skips (exit 0, prints the existing row) when a row with the same kind and
+ * decision_id is already in the ledger, so a replayed engine step cannot double-record.
+ *
  * Exit: 0 ok · 1 refused/invalid · 2 usage. Node >= 20.10 built-ins + lib/jsonl-store.
  */
 
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 const { appendRow, ensureDir, withWriteLock } = require('./lib/jsonl-store');
 
 const KINDS = new Set(['decision', 'dispatch', 'pick', 'refreeze', 'veto', 'note', 'hypothesis', 'unknown', 'ladder']);
@@ -106,6 +116,7 @@ function parseArgs(argv) {
   for (let i = 1; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--json' && mode === 'query') { opts.json = true; continue; }
+    if (arg === '--dedupe' && mode === 'append') { opts.dedupe = true; continue; }
     const value = argv[i + 1];
     if (value === undefined) usage(`${arg} needs a value`);
     if (arg === '--ledger') opts.ledger = value;
@@ -119,8 +130,41 @@ function parseArgs(argv) {
     else usage(`unknown argument: ${arg}`);
     i += 1;
   }
-  if (!opts.ledger) usage('--ledger is required');
+  if (!opts.ledger) {
+    opts.ledger = defaultLedgerPath();
+    if (!opts.ledger) usage('--ledger is required (not inside a git repository, so there is no default ledger)');
+  }
   return opts;
+}
+
+function gitCommonDir() {
+  const r = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { encoding: 'utf8' });
+  if (r.status !== 0 || !r.stdout.trim()) return null;
+  try {
+    return fs.realpathSync(r.stdout.trim());
+  } catch (err) {
+    return null;
+  }
+}
+
+function defaultLedgerPath() {
+  const common = gitCommonDir();
+  return common ? path.join(common, 'autopilot', 'ledger', 'decisions.jsonl') : null;
+}
+
+// Attribution stamp. null = underivable; never a guess.
+function stampFields() {
+  const common = gitCommonDir();
+  let root = process.env.AUTOPILOT_ROOT_RUN_ID || null;
+  if (!root) {
+    try {
+      const marker = require('./session-mode').readMarker();
+      if (marker && typeof marker.root_run_id === 'string' && marker.root_run_id) root = marker.root_run_id;
+    } catch (err) {
+      root = null;
+    }
+  }
+  return { repo_identity: common ? `git-common-dir:${common}` : null, root_run_id: root };
 }
 
 function readRows(ledger) {
@@ -159,12 +203,26 @@ function append(opts) {
       process.exit(1);
     }
   }
-  const full = { schema_version: 1, ts: new Date().toISOString(), kind: opts.kind, ...row };
+  const full = { schema_version: 1, ts: new Date().toISOString(), kind: opts.kind, ...stampFields(), ...row };
   ensureDir(path.dirname(path.resolve(opts.ledger)));
+  // The dedupe read happens INSIDE the write lock so two concurrent appends of one decision_id
+  // cannot both pass the check.
+  let duplicate = null;
   withWriteLock(
     { storeDir: path.dirname(path.resolve(opts.ledger)), lockFile: `${path.resolve(opts.ledger)}.lock`, name: 'decision-ledger' },
-    () => appendRow(opts.ledger, full),
+    () => {
+      if (opts.dedupe && isNonEmptyString(row.decision_id)) {
+        duplicate = readRows(opts.ledger).find((r) => r && r.kind === opts.kind && r.decision_id === row.decision_id) || null;
+        if (duplicate) return;
+      }
+      appendRow(opts.ledger, full);
+    },
   );
+  if (duplicate) {
+    process.stderr.write(`decision-ledger: duplicate decision_id '${row.decision_id}' skipped (--dedupe)\n`);
+    process.stdout.write(`${JSON.stringify(duplicate)}\n`);
+    return;
+  }
   process.stdout.write(`${JSON.stringify(full)}\n`);
 }
 
@@ -181,6 +239,7 @@ function veto(opts) {
     schema_version: 1,
     ts: new Date().toISOString(),
     kind: 'veto',
+    ...stampFields(),
     target_decision_id: opts.id,
     reason: opts.reason || 'operator veto',
   };

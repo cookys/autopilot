@@ -1912,6 +1912,64 @@ function bindCampaignScopeReceipt({
   };
 }
 
+// Mods P1W W1h: every finding the engine adjudicates on the owner's behalf (depth-0 disposition
+// authority or deterministic policy) is a proxy decision — append exactly one `decision` row per
+// finding to the per-repo ledger so the owner can see and veto it. Plain telemetry (ADR-0001): a
+// failed append never blocks adjudication; replay-safe via decision-ledger.js `--dedupe`.
+// Opt-out: AUTOPILOT_PROXY_DECISION_LEDGER=0. Returns the number of rows newly appended.
+const DECISION_LEDGER_SCRIPT = path.resolve(__dirname, '..', '..', 'scripts', 'decision-ledger.js');
+
+function recordAdjudicationProxyDecisions({
+  adjudication,
+  repairGeneration = null,
+  cwd,
+  env = process.env,
+}) {
+  if (env.AUTOPILOT_PROXY_DECISION_LEDGER === '0') return 0;
+  if (!adjudication || adjudication.registry_complete !== true) return 0;
+  const digest = typeof adjudication.registry_digest === 'string'
+    ? adjudication.registry_digest.slice(0, 12) : 'nodigest';
+  const round = Number.isSafeInteger(repairGeneration) ? repairGeneration : 0;
+  const groups = [
+    adjudication.must_fix_now,
+    adjudication.follow_up,
+    adjudication.rejected,
+  ];
+  let appended = 0;
+  for (const group of groups) {
+    for (const finding of Array.isArray(group) ? group : []) {
+      if (!finding || typeof finding.id !== 'string') continue;
+      const disposition = finding.disposition && finding.disposition.disposition;
+      const detail = finding.disposition
+        && (finding.disposition.deferral_harm || finding.disposition.rationale
+          || finding.disposition.context);
+      const authority = finding.adjudication_authority || {};
+      const outcome = disposition
+        || (finding.evidence && finding.evidence.classification === 'refuted' ? 'refuted-by-evidence' : 'adjudicated');
+      const rationale = `${authority.authority || 'engine'} adjudicated finding ${finding.id} `
+        + `(${finding.severity || '?'}) as ${outcome}: ${detail || finding.claim || '(no claim recorded)'}`
+          .slice(0, 400);
+      const row = {
+        decision_id: `adj-${digest}-${finding.id}`,
+        round,
+        class: 'adjudication',
+        rationale,
+        reversibility: 'two-way',
+        refs: [finding.id, authority.review_digest].filter((ref) => typeof ref === 'string'),
+      };
+      try {
+        const child = spawnSync(process.execPath, [
+          DECISION_LEDGER_SCRIPT, 'append', '--dedupe', '--kind', 'decision', '--json', JSON.stringify(row),
+        ], { cwd, env, encoding: 'utf8', timeout: 15000, stdio: ['ignore', 'pipe', 'pipe'] });
+        if (child.status === 0 && !/duplicate decision_id/.test(child.stderr || '')) appended += 1;
+      } catch (_error) {
+        // telemetry only
+      }
+    }
+  }
+  return appended;
+}
+
 function defaultCampaignAdjudicator({
   review,
   convergenceVerdict,
@@ -8670,6 +8728,17 @@ class AutopilotEngine {
           now: this.now(),
         });
         latestAdjudication = adjudication;
+        try {
+          recordAdjudicationProxyDecisions({
+            adjudication,
+            repairGeneration,
+            cwd: loopCwd,
+            env: process.env,
+          });
+        } catch (error) {
+          // Telemetry only: a failed proxy-decision append never blocks adjudication.
+          process.stderr.write(`autopilot-engine: proxy-decision ledger append failed: ${error && error.message ? error.message : error}\n`);
+        }
         return adjudication;
       },
       convergence: ({
@@ -11202,6 +11271,7 @@ module.exports = {
   _defaultRemediationChecker: defaultRemediationChecker,
   _runRemediationCheckerBoundary: runRemediationCheckerBoundary,
   bindCampaignScopeReceipt,
+  recordAdjudicationProxyDecisions,
   buildImplementationArgs,
   buildReviewArgs,
   campaignMutationBudgetStatus,

@@ -262,6 +262,7 @@ O：owner 不用問「怎麼這麼慢」就知道誰在跑、跑多久、最後 
 | D4 | **結案（S1 = yes，2026-10-03）**：S1 = no 時要不要同 repo 第二個 plugin | 不要；classic 完整、mod `unavailable` | 第二 plugin（要實測一次安裝） | owner 要一次安裝；資料夾同 repo ≠ 同 plugin |
 
 ## Review log
+- R5.3 2026-10-04 owner 裁決（eval 設計 `evidence/2026-10-04-mods-p1c/eval-design-guidance-rows.md` 之後）：W2g（`depth0-control-loop.md:400-410`）、W2c（`level-front-door.md:269-272`）、W2e-g（`review-page.md:80-84`）現行文字已要求，依 CLAUDE.md「機制 vs 指引」改列**機制**——以程式讓既有要求真的發生，不改 skill 文字、不需 eval。W2a-g、W2b-g、W1b 觸發點 2 維持指引，**現在**先擴 harness（E1–E5）再跑 eval，v2.37.0 等它們完成。
 - R5.2 2026-10-04 P1W G2（終代，CONDITIONAL，13 條：3 擋 10 不擋）全數 accept-and-fold：依賴表改寫成唯一正本（吸收 G1 處置），W1f 不再碰 watcher／elapsed（移入 W3a），W1b 只放身分與指標、判定由 `status task` 重算，W2b／W2e 拆 m／g，W2f 改為先探測的 context 寫入端，W4 門檻逐格定義「真值」。凍結。
 - R5.1 2026-10-04 P1W G1（單席 opus_chair，CONDITIONAL，13 條：5 擋 8 不擋）全數 accept-and-fold，見 §4 P1W「G1 處置」；R11 部分駁回（`session-mode set` 產生 root 是 §2.7 的做法，只禁止 rail 自創）。裁決檔與 artifact 在 evidence `2026-10-04-mods-p1c/plan-review-p1w/`。
 - R5 2026-10-04 wiring inventory 後 owner 裁決：不拿掉欄位，所有缺口排進 §4 P1W（依賴圖、平行波次、機制／指引分類、真機驗收門檻）；v2.37.0 等 P1W 機制列完成。P1W 為新設計，送一輪計畫審查（新 rubric），不重開 P1a–P1d 已裁決項。

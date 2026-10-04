@@ -33,6 +33,7 @@ const { projectKey, scopeFromCwd } = require('./project-key');
 const { pointerPath, writeLivePointer } = require('./live-pointer');
 const { applySelectors } = require('./runs-fields');
 const { latestProgress } = require('./work-order-progress');
+const { readWatchInputs } = require('./watch-inputs');
 const { ensureReviewServer } = require('./review-server');
 const { createDecisionsPublisher } = require('./decisions-sidecar');
 const { createForemanPublisher } = require('./foreman-activity');
@@ -382,6 +383,11 @@ function createWatcher({
     return m ? latestProgress({ commonDir: m[1], root }) : null;
   }
 
+  // WATCH-A inputs of one scope (planned / decision / compare / marker phase / sources manifest): src/status/watch-inputs.js
+  function watchInputs(root, nowMs, wo) {
+    return readWatchInputs({ env, key, identity, root, nowMs, liveBase: live, autopilotHome, markers: unexpiredMarkers(env, key, nowMs), progressReceipt: wo ? wo.value : null });
+  }
+
   function renderSignature(k, rows, nowMs) {
     const root = k === UNBOUND ? null : k;
     const { discoverReviewReceipts } = require('../../scripts/render-review-page');
@@ -391,7 +397,7 @@ function createWatcher({
     const task = root ? taskDigest(root, rows, nowMs) : null;
     const wo = readProgress(root);
     const progress = wo ? crypto.createHash('sha256').update(JSON.stringify(wo.value)).digest('hex') : null;
-    return JSON.stringify({ manifests, exits, receipts, task, progress });
+    return JSON.stringify({ manifests, exits, receipts, task, progress, watch: watchInputs(root, nowMs, wo).signature });
   }
 
   function publishRoot(k, rows, nowMs) {
@@ -429,12 +435,15 @@ function createWatcher({
     const wo = readProgress(root);
     const progress = wo ? { value: wo.value, sha256: crypto.createHash('sha256').update(JSON.stringify(wo.value)).digest('hex') } : null;
     if (progress) sources.push({ role: 'controller_progress_receipt', path: wo.file, sha256: progress.sha256 });
+    const wi = watchInputs(root, nowMs, wo);
+    sources.push(...wi.sources);
+    wi.writeSidecar(runsDir, root ? `${key}--${safeSegment(root)}` : key);
     const { model } = mod.assemble({
       runsValue: envelope, rows, root, job, date, project: key, now: nowMs, commit: null, repo: cwd,
-      task, progress, decision: null, planned: null, compare: [], sources,
+      task, progress, ...wi.assemble, sources,
     });
     const r = mod.publish({
-      model, html: mod.renderJobHtml(model), compare: [], outRoot: render.outRoot, home: autopilotHome,
+      model, html: mod.renderJobHtml(model), compare: wi.assemble.compare, outRoot: render.outRoot, home: autopilotHome,
       liveReview: path.join(live, 'review'), project: key, displayName: mod.displayNameOf(cwd, key), env,
     });
     if (r.rc !== 0) {

@@ -91,3 +91,23 @@ Images shown to the owner are screenshotted and looked at by the implementer bef
 compare page is first viewed by an independent image-review seat (`model: sonnet`), one image at a time, with a
 written record in `compare-record.json` `image_review` (lesson: a leaf once accepted an all-black frame). The seat
 is a procedure, not a gate; the page lists the record and renders no verdict. **[renderer contract]**
+
+## Watcher inputs (mods P1W WATCH-A)
+
+The project watcher feeds the page and the band five inputs beyond runs / task / progress, each in its own module under
+`src/status/` and each "not provided" on any mismatch (wrong root, wrong repo, stale, corrupt). **[renderer contract]**
+
+- planned (`planned-input.js`): campaign scope = the controller receipt's deliverable list (`deliverable_titles[id]` when
+  present); other scopes = the union of `<live>/tasks/<sid>.json` of this project's sessions whose unexpired marker root equals
+  the scope root (no marker = unbound), within 24 h, by `first_created_at`. Display-only: never a denominator.
+- decision (`decision-input.js`): `<git-common-dir>/autopilot/decisions/<scope_key>.json`, schema `autopilot.decision/1`,
+  written by `scripts/open-decision.js open|close|show` (depth-0 opens it at a DOA question; `show --json` exits 0 when open,
+  1 when none). Ignored when project_key / repo_identity / root differ or `opened_at` is in the future beyond a small slack. Older than 7 days it is still shown, with `stale:true` and 「已等 N 天」: age never hides a question, only `close` removes it.
+- compare (`compare-input.js`): `<git-common-dir>/autopilot/compare/<root>/*.json` through the renderer's `loadCompare`;
+  the unbound scope reads nothing; the writer is a guidance row (W2e-g), so the manifest says `installed:false`.
+- marker phase (`phase-input.js`): `phase` / `phase_set_at` of unexpired markers of this scope; newest wins. Precedence:
+  campaign live phase > valid campaign receipt phase > marker phase > first open deliverable.
+- sources manifest (`sources-manifest.js`): `<live>/runs/sources/<scope_key>.json`, `autopilot.sources/1`, one
+  `{installed, enabled, how}` per source, derived from `hooks/hooks.json`, script presence and knobs (env and
+  `~/.autopilot/config.json`). Renderer: input present = wired; installed and enabled with no input = the original empty
+  text; not installed or disabled = 來源未接. Without a manifest (old `model.json`) the old inference holds.

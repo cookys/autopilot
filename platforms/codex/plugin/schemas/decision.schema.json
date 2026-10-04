@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/decision.schema.json",
+  "title": "autopilot-decision-1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "question",
+    "options",
+    "context",
+    "root_run_id",
+    "repo_identity",
+    "project_key",
+    "opened_at",
+    "opened_by_session"
+  ],
+  "properties": {
+    "schema": {
+      "const": "autopilot.decision/1"
+    },
+    "question": {
+      "type": "string",
+      "minLength": 1
+    },
+    "options": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 2
+    },
+    "context": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "not_authorized": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "root_run_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "repo_identity": {
+      "type": "string",
+      "minLength": 1
+    },
+    "project_key": {
+      "type": "string",
+      "minLength": 1
+    },
+    "opened_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "opened_by_session": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

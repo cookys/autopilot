@@ -1,0 +1,257 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/sources.schema.json",
+  "title": "autopilot-sources-1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "scope",
+    "sources"
+  ],
+  "properties": {
+    "schema": {
+      "const": "autopilot.sources/1"
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "project_key",
+        "root_run_id"
+      ],
+      "properties": {
+        "project_key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "root_run_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "sources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tasks",
+        "attention",
+        "decision",
+        "ledger_engine",
+        "ledger_depth0",
+        "phase",
+        "compare",
+        "task_status_input",
+        "context",
+        "progress"
+      ],
+      "properties": {
+        "tasks": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "installed",
+            "enabled",
+            "how"
+          ],
+          "properties": {
+            "installed": {
+              "type": "boolean"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "how": {
+              "type": "string"
+            }
+          }
+        },
+        "attention": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "installed",
+            "enabled",
+            "how"
+          ],
+          "properties": {
+            "installed": {
+              "type": "boolean"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "how": {
+              "type": "string"
+            }
+          }
+        },
+        "decision": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "installed",
+            "enabled",
+            "how"
+          ],
+          "properties": {
+            "installed": {
+              "type": "boolean"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "how": {
+              "type": "string"
+            }
+          }
+        },
+        "ledger_engine": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "installed",
+            "enabled",
+            "how"
+          ],
+          "properties": {
+            "installed": {
+              "type": "boolean"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "how": {
+              "type": "string"
+            }
+          }
+        },
+        "ledger_depth0": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "installed",
+            "enabled",
+            "how"
+          ],
+          "properties": {
+            "installed": {
+              "type": "boolean"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "how": {
+              "type": "string"
+            }
+          }
+        },
+        "phase": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "installed",
+            "enabled",
+            "how"
+          ],
+          "properties": {
+            "installed": {
+              "type": "boolean"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "how": {
+              "type": "string"
+            }
+          }
+        },
+        "compare": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "installed",
+            "enabled",
+            "how"
+          ],
+          "properties": {
+            "installed": {
+              "type": "boolean"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "how": {
+              "type": "string"
+            }
+          }
+        },
+        "task_status_input": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "installed",
+            "enabled",
+            "how"
+          ],
+          "properties": {
+            "installed": {
+              "type": "boolean"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "how": {
+              "type": "string"
+            }
+          }
+        },
+        "context": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "installed",
+            "enabled",
+            "how"
+          ],
+          "properties": {
+            "installed": {
+              "type": "boolean"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "how": {
+              "type": "string"
+            }
+          }
+        },
+        "progress": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "installed",
+            "enabled",
+            "how"
+          ],
+          "properties": {
+            "installed": {
+              "type": "boolean"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "how": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

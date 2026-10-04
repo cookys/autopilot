@@ -98,6 +98,7 @@ function buildProgress(receipt, root) {
 //      string kept as code) -> source 'campaign'. `awaiting_disposition` waits on depth-0, so it keeps the plain 等待處置 label.
 //   1. a VALID campaign entry of the task_status_receipt (`evidence.campaigns[].phase`; the receipt only validates TERMINAL campaigns,
 //      so a campaign phase here is always a terminal one) -> source 'campaign', zh-TW label;
+//   1b. (W2b-m) else the phase a session declared on its session-mode marker (`markerPhase.phase`) -> source 'session', label = the name;
 //   2. else the first still-open deliverable of the controller_progress_receipt -> source 'deliverable', `做 <id>`;
 //   3. else null. A live (non-terminal) campaign state is not reachable from here: no root_run_id -> campaign id mapping exists.
 const PHASE_LABEL = {
@@ -105,7 +106,7 @@ const PHASE_LABEL = {
   AWAITING_DISPOSITION: '等待處置', REPAIRING: '修復', TERMINAL_READY: '收尾', TERMINAL_FOLLOW_UP: '收尾（有後續）',
   TERMINAL_STOP: '已停止', BOUNDARY_REJECTED: '邊界被拒', AWAITING_CONVERGENCE_ADJUDICATION: '等待收斂裁定',
 };
-function buildPhase(task, progress) {
+function buildPhase(task, progress, markerPhase) {
   if (progress && typeof progress.live_phase === 'string' && progress.live_phase) {
     const code = progress.live_phase;
     const upper = code.toUpperCase();
@@ -115,6 +116,9 @@ function buildPhase(task, progress) {
   for (const c of camps) {
     if (!isObject(c) || c.status !== 'valid' || typeof c.phase !== 'string' || !c.phase) continue;
     return { code: c.phase, label: Object.prototype.hasOwnProperty.call(PHASE_LABEL, c.phase) ? PHASE_LABEL[c.phase] : c.phase, source: 'campaign' };
+  }
+  if (isObject(markerPhase) && typeof markerPhase.phase === 'string' && markerPhase.phase) {
+    return { code: markerPhase.phase, label: markerPhase.phase, source: 'session' };
   }
   const open = progress && Array.isArray(progress.per_deliverable) ? progress.per_deliverable.find((d) => d.state === 'open') : null;
   if (open && typeof open.id === 'string' && open.id) return { code: open.id, label: `做 ${open.id}`, source: 'deliverable' };
@@ -184,9 +188,16 @@ function buildJobModel(inputs) {
   const candidate = task && typeof task.candidate_commit === 'string' && OID.test(task.candidate_commit) ? task.candidate_commit : null;
   const canClose = task && typeof task.can_close === 'boolean' ? task.can_close : null;
   let conclusion;
+  // `wired`: an input that was provided is wired. With a sources manifest (autopilot.sources/1, W1i) a source whose writer is
+  // installed AND enabled is wired too (provided-but-empty -> the original empty-state text); not installed -> 來源未接.
+  // Without a manifest (old model.json / CLI) keep the pure inference from the inputs.
+  const msrc = isObject(o.sourcesManifest) && isObject(o.sourcesManifest.sources) ? o.sourcesManifest.sources : null;
+  const writerLive = (name) => Boolean(msrc && isObject(msrc[name]) && msrc[name].installed === true && msrc[name].enabled === true);
   const wired = {
-    task: isObject(o.taskReceipt), progress: isObject(o.progressReceipt), decision: isObject(o.decision),
-    planned: Array.isArray(o.planned), compare: Array.isArray(o.compare) && (o.compare.length > 0 || o.compareProvided === true),
+    task: isObject(o.taskReceipt) || writerLive('task_status_input'), progress: isObject(o.progressReceipt) || writerLive('progress'),
+    decision: isObject(o.decision) || writerLive('decision'),
+    planned: Array.isArray(o.planned) || writerLive('tasks') || writerLive('progress'),
+    compare: (Array.isArray(o.compare) && (o.compare.length > 0 || o.compareProvided === true)) || writerLive('compare'),
   };
   if (!wired.task) conclusion = `驗收結論：${NOT_WIRED}（沒有 task_status_receipt 輸入）`;
   else if (!task) conclusion = NO_VERDICT_SENTENCE;
@@ -202,6 +213,7 @@ function buildJobModel(inputs) {
     options: (Array.isArray(o.decision.options) ? o.decision.options : []).filter(isObject)
       .map((x) => ({ label: String(x.label == null ? '' : x.label), consequence: String(x.consequence == null ? '' : x.consequence) })),
     not_authorized: o.decision.not_authorized == null ? null : String(o.decision.not_authorized),
+    stale: o.decision.stale === true, age_s: Number.isFinite(o.decision.age_s) ? o.decision.age_s : null,
   } : null;
 
   const progress = buildProgress(o.progressReceipt, root);
@@ -222,7 +234,7 @@ function buildJobModel(inputs) {
       failed_predicates: Array.isArray(task.failed_predicates) ? task.failed_predicates.map(String) : [],
     } : null,
     conclusion, needs_decision: Boolean(decision), decision, wired,
-    phase: buildPhase(task, progress), progress, planned, compare: o.compare || [], dispatch, gates,
+    phase: buildPhase(task, progress, o.markerPhase), progress, planned, compare: o.compare || [], dispatch, gates,
     scope: envelope && isObject(envelope.scope) ? {
       project_key: envelope.scope.project_key || null, repo_identity: envelope.scope.repo_identity || null,
     } : null,
@@ -231,6 +243,7 @@ function buildJobModel(inputs) {
       counts: isObject(envelope.counts) ? envelope.counts : null,
     } : null,
     sources: o.sources || [],
+    sources_manifest: isObject(o.sourcesManifest) ? o.sourcesManifest : null,
   };
 }
 
@@ -369,10 +382,10 @@ function renderJobHtml(model) {
   const s1 = `<h1>${esc(m.job)} <span class="muted">· ${esc(m.project)}</span></h1>\n<p class="updated muted">updated ${esc(m.published_at)} @ ${m.commit ? esc(m.commit) : 'unknown'}</p>`;
   const decWired = isWired(m, 'decision');
   const ph = isObject(m.phase) && typeof m.phase.label === 'string' ? m.phase : null;
-  const s2 = `<p>${chip(acceptanceChip(m.axes.acceptance, m.axes.can_close), accCls)}${m.needs_decision ? chip('需要你決定', 'warn') : (decWired ? chip('知會', 'info') : chip(NOT_WIRED, 'warn'))}${ph ? chip(`階段：${ph.label}`, 'info') : ''}</p>\n<p><strong>${esc(m.conclusion)}</strong></p>\n<p>${m.needs_decision ? `需要你決定：${dd && typeof dd.question === 'string' ? esc(dd.question) : unknownSpan()}` : (decWired ? '知會：目前沒有待你決定的事項。' : `決定：${NOT_WIRED}（沒有 decision 輸入；不代表沒有待決事項）`)}</p>`;
+  const s2 = `<p>${chip(acceptanceChip(m.axes.acceptance, m.axes.can_close), accCls)}${m.needs_decision ? chip('需要你決定', 'warn') : (decWired ? chip('知會', 'info') : chip(NOT_WIRED, 'warn'))}${ph ? chip(`階段：${ph.label}`, 'info') : ''}</p>\n<p><strong>${esc(m.conclusion)}</strong></p>\n<p>${m.needs_decision ? `需要你決定：${dd && typeof dd.question === 'string' ? esc(dd.question) : unknownSpan()}${dd && dd.stale && dd.age_s !== null ? `（已等 ${Math.floor(dd.age_s / 86400)} 天）` : ''}` : (decWired ? '知會：目前沒有待你決定的事項。' : `決定：${NOT_WIRED}（沒有 decision 輸入；不代表沒有待決事項）`)}</p>`;
   const d = m.decision;
   const s3 = d
-    ? `<p><strong>${esc(d.question)}</strong></p>\n<ol>${d.options.map((x) => `<li>${esc(x.label)} — ${esc(x.consequence)}</li>`).join('')}</ol>\n<p>這份裁決不授權的事：${d.not_authorized ? esc(d.not_authorized) : unknownSpan()}</p>`
+    ? `<p><strong>${esc(d.question)}</strong></p>\n<ol>${d.options.map((x) => `<li>${esc(x.label)}${x.consequence ? ` — ${esc(x.consequence)}` : ''}</li>`).join('')}</ol>\n<p>這份裁決不授權的事：${d.not_authorized ? esc(d.not_authorized) : unknownSpan()}</p>`
     : (decWired ? '<p class="muted">本回合沒有待決事項。</p>' : notWired('沒有 decision 輸入，不代表沒有待決事項'));
   const sources = m.sources.length
     ? `<ul>${m.sources.map((s) => `<li>${esc(s.role)} · <code>${esc(s.path)}</code> · sha256 <code>${esc(s.sha256)}</code></li>`).join('')}</ul>`
@@ -828,6 +841,7 @@ function assemble(o) {
     now: o.now, commit,
     taskReceipt: o.task ? o.task.value : null, progressReceipt: o.progress ? o.progress.value : null,
     reviewReceipts, compare: o.compare || [], compareProvided: o.compareProvided === true, decision: o.decision ? o.decision.value : null, planned: o.planned ? o.planned.value : null,
+    markerPhase: o.markerPhase || null, sourcesManifest: o.sourcesManifest || null,
     isAncestor: gitIsAncestor(o.repo), sources,
   });
   return { model, reviewReceipts };

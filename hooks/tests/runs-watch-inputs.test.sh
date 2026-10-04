@@ -1,0 +1,392 @@
+#!/usr/bin/env bash
+# hooks/tests/runs-watch-inputs.test.sh — mods P1W WATCH-A: the watcher's own inputs reach the published model.json
+# (planned W1g, decision W2a-m, compare W2e-m, sources manifest W1i, marker phase W2b-m read side) plus the
+# scripts/open-decision.js helper (decision/1) and the pure modules behind them.
+# Each item drives the real createWatcher (fake clock, real publish()) and asserts the published model.json field,
+# the sources row, and one negative control (stale file, file of another root, file of another repo, file left after the end signal).
+# RED at 8666aba4 (base: runs-watch.js passes decision/planned/compare = null/null/[]; no open-decision.js, no src/status/watch-inputs.js):
+#   23 passed, 73 failed (e.g. FAIL planned (campaign): ...: expected '[{"id":"d1",...}]', got 'nomodel'/'null'; FAIL open writes a decision; FAIL manifest ... Cannot find module src/status/sources-manifest.js)
+# Mutation controls (outputs in the run evidence dir, mut-*.txt): each guard below turns the suite red when broken.
+. "$(dirname "$0")/lib.sh"
+
+eq() { assert_eq "$2" "$1" "$3"; } # eq <expected> <actual> <msg>
+NODE="$(command -v node)"
+OD="$REPO_ROOT/scripts/open-decision.js"
+SB="$TEST_TMP/rwi"
+FAKE_HOME="$SB/home"; FAKE_CLAUDE="$SB/claude"; FAKE_XDG="$SB/xdg"; RUNS="$SB/runs"; REPO="$SB/repo"; D="$SB/world"; REPO2="$SB/repo2"
+AH="$FAKE_HOME/.autopilot"
+mkdir -p "$AH/session-mode" "$FAKE_CLAUDE/metrics" "$FAKE_XDG" "$RUNS" "$REPO" "$REPO2" "$D"
+LIVE="$(mktemp -d -p /dev/shm autopilot-test-rwi-XXXXXX)"; chmod 700 "$LIVE"
+cleanup_rwi() { rm -rf "$LIVE"; }
+trap 'cleanup_rwi; [ -n "${KEEP:-}" ] || cleanup_test_tmp' EXIT
+for r in "$REPO" "$REPO2"; do
+  git -C "$r" init -q
+  git -C "$r" -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m init
+done
+sk() { (cd "$1" && node -e 'const s=require(process.argv[1]).scopeFromCwd(process.cwd());process.stdout.write(s[process.argv[2]])' "$REPO_ROOT/src/status/project-key.js" "$2"); }
+KEY="$(sk "$REPO" project_key)"; IDENT="$(sk "$REPO" repo_identity)"; IDENT2="$(sk "$REPO2" repo_identity)"
+
+wenv() {
+  env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u AUTOPILOT_ROOT_RUN_ID \
+    HOME="$FAKE_HOME" CLAUDE_CONFIG_DIR="$FAKE_CLAUDE" XDG_RUNTIME_DIR="$FAKE_XDG" \
+    AUTOPILOT_LIVE_DIR="$LIVE" AUTOPILOT_SESSION_MODE_DIR="$AH/session-mode" AUTOPILOT_COSTS_FILE="$SB/costs.jsonl" \
+    AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" ENGINE_CAPABILITY_DIR="$SB/cap" "$@"
+}
+cat > "$SB/task-bin.sh" <<SH
+#!/bin/sh
+cat "$D/task.json"
+SH
+chmod +x "$SB/task-bin.sh"
+export AUTOPILOT_RENDER_TASK_STATUS_BIN="$SB/task-bin.sh"
+export AUTOPILOT_REVIEW_RETAIN_MS=999999999
+
+# ---- A. open-decision.js helper (decision/1) --------------------------------------------------------------
+odo() { (cd "$REPO" && wenv "$NODE" "$OD" "$@" 2> "$SB/od.err" < /dev/null); }
+COMMON="$REPO/.git"
+odo open --question 'Q one?' --option 'A' --option 'B' --not-authorized 'DOA boundary' --context 'ctx' --root-run-id R1 > "$SB/od.out"; eq 0 "$?" "open writes a decision (stderr: $(head -c 200 "$SB/od.err"))"
+F1="$COMMON/autopilot/decisions/${KEY}--R1.json"
+assert_file_exists "$F1" "decision file at <git-common-dir>/autopilot/decisions/<project_key>--<root>.json"
+eq 'autopilot.decision/1|Q one?|A,B|DOA boundary|R1|ctx' "$(node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write([v.schema,v.question,(v.options||[]).join(","),v.not_authorized,v.root_run_id,v.context].join("|"))' "$F1")" "decision/1 fields (question, options, not_authorized, root_run_id, context)"
+eq "$IDENT|$KEY" "$(node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(v.repo_identity+"|"+v.project_key)' "$F1")" "decision carries repo_identity and project_key"
+odo open --question 'Q two?' --root-run-id R1 > /dev/null; eq 3 "$?" "open refuses to overwrite an open question (exit 3)"
+eq 'Q one?' "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).question)' "$F1")" "refused open left the file untouched"
+odo open --question 'Q two?' --root-run-id R1 --replace > /dev/null; eq 0 "$?" "open --replace overwrites"
+eq 'Q two?|null|null' "$(node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write([v.question,JSON.stringify(v.options),JSON.stringify(v.not_authorized)].join("|"))' "$F1")" "no --option -> options null; no --not-authorized -> null"
+odo open --question 'Q3' --option only-one --root-run-id R1 --replace > /dev/null; eq 2 "$?" "a single --option is a usage error (exit 2)"
+eq 'Q two?' "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).question)' "$F1")" "usage error left the file untouched"
+odo open --root-run-id R1 --replace > /dev/null; eq 2 "$?" "open without --question is a usage error"
+odo show --root-run-id R1 --json > "$SB/show.out"; eq 0 "$?" "show --json exits 0 when a question is open"
+eq 'Q two?' "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).question)' "$SB/show.out")" "show --json prints the open file"
+odo show --root-run-id R-none --json > "$SB/show2.out"; eq 1 "$?" "show --json exits 1 when none is open (other root)"
+odo close --root-run-id R1 > /dev/null; eq 0 "$?" "close removes the file"
+assert_file_absent "$F1" "closed decision file is gone"
+odo close --root-run-id R1 > /dev/null; eq 0 "$?" "close is idempotent"
+odo show --root-run-id R1 --json > /dev/null; eq 1 "$?" "show exits 1 after close"
+# six concurrent opens: exactly one wins, the rest are refused, the file is intact JSON
+rm -f "$SB"/c*.rc
+for i in 1 2 3 4 5 6; do ( odo open --question "P$i" --root-run-id RC > /dev/null; echo $? > "$SB/c$i.rc" ) & done; wait
+eq '0 3 3 3 3 3' "$(cat "$SB"/c?.rc | sort | tr '\n' ' ' | sed 's/ $//')" "concurrent open x6: one wins (0), five are refused (3)"
+eq yes "$(node -e 'try{JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write("yes")}catch(e){process.stdout.write("no")}' "$COMMON/autopilot/decisions/${KEY}--RC.json")" "concurrent open leaves one intact file"
+odo close --root-run-id RC > /dev/null
+# unbound scope file name = project_key
+odo open --question 'unbound?' > /dev/null; eq 0 "$?" "open without a root targets the unbound scope"
+assert_file_exists "$COMMON/autopilot/decisions/${KEY}.json" "unbound decision file is <project_key>.json"
+odo close > /dev/null
+# schema file validates a written file
+odo open --question 'S?' --option a --option b --not-authorized x --root-run-id RS > /dev/null
+eq yes "$(node -e 'const {validateJsonSchema}=require(process.argv[1]+"/scripts/validate-json-schema.js");const s=JSON.parse(require("fs").readFileSync(process.argv[1]+"/schemas/decision.schema.json","utf8"));const v=JSON.parse(require("fs").readFileSync(process.argv[2],"utf8"));process.stdout.write(validateJsonSchema(s,v).valid?"yes":"no")' "$REPO_ROOT" "$COMMON/autopilot/decisions/${KEY}--RS.json" 2>&1 | tail -1)" "schemas/decision.schema.json validates the helper's output"
+eq no "$(node -e 'const {validateJsonSchema}=require(process.argv[1]+"/scripts/validate-json-schema.js");const s=JSON.parse(require("fs").readFileSync(process.argv[1]+"/schemas/decision.schema.json","utf8"));process.stdout.write(validateJsonSchema(s,{schema:"autopilot.decision/1",question:5}).valid?"yes":"no")' "$REPO_ROOT" 2>&1 | tail -1)" "schema rejects a non-string question"
+rm -f "$COMMON/autopilot/decisions/${KEY}--RS.json"
+node -e 'const fs=require("fs");const v={schema:"autopilot.decision/1",question:"Q",options:null,context:null,root_run_id:"RS",repo_identity:"x",project_key:"y",opened_at:"2026-10-05T00:00:00.000Z",opened_by_session:null};fs.writeFileSync(process.argv[1],JSON.stringify(v))' "$SB/no-na.json"
+eq yes "$(node -e 'const {validateJsonSchema}=require(process.argv[1]+"/scripts/validate-json-schema.js");const s=JSON.parse(require("fs").readFileSync(process.argv[1]+"/schemas/decision.schema.json","utf8"));process.stdout.write(validateJsonSchema(s,JSON.parse(require("fs").readFileSync(process.argv[2],"utf8"))).valid?"yes":"no")' "$REPO_ROOT" "$SB/no-na.json" 2>&1 | tail -1)" "schema: a brief-shape file WITHOUT not_authorized validates"
+
+# ---- B. watcher driver ------------------------------------------------------------------------------------
+cat > "$SB/driver.js" <<'JS'
+const fs = require('fs'); const path = require('path'); const cp = require('child_process');
+const [, , repoRoot, key, ident, ident2, D, outRoot, repo, repo2, sessDir, live, home] = process.argv;
+const { createWatcher } = require(path.join(repoRoot, 'src/status/runs-watch.js'));
+let T = Date.parse('2026-10-04T03:00:00.000Z');
+const world = { rows: [] };
+const out = (k, v) => process.stdout.write(`${k}=${v}\n`);
+const W = (p, v) => { fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, typeof v === 'string' ? v : JSON.stringify(v)); };
+const common = path.join(repo, '.git');
+const mkRow = (id, root) => {
+  const mf = path.join(D, 'manifests', `${id}.manifest.json`);
+  W(mf, { run_id: id, root_run_id: root, ledger: path.join(D, 'led', 'ledger.jsonl'), branch: 'w/x' });
+  return { run_id: id, role: 'hand', runner: 'claude', model: 'sonnet', started_at: '2026-10-04T01:00:00.000Z', ended_at: null, parent_run_id: null, root_run_id: root, depth: 1, manifest: mf,
+    project: ident, source: { manifest: mf, status_probe: null, exit_file: path.join(D, 'exits', `${id}.exit`) }, fact_at: '2026-10-04T01:00:00.000Z', observed_at: '2026-10-04T01:00:00.000Z', probe_age_s: null, rc: null, final_status: null, elapsed_s: 5, alive: null };
+};
+const collect = () => world.rows.map((r) => ({ ...r, phase: 'running' }));
+fs.mkdirSync(path.join(D, 'led'), { recursive: true }); W(path.join(D, 'led', 'ledger.jsonl'), ''); W(path.join(D, 'task.json'), '{}');
+const watcher = createWatcher({ key, env: process.env, cwd: repo, collect, now: () => T, interval: 10, enrichCap: 8, render: { outRoot } });
+const tick = (dt) => { T += dt * 1000; try { watcher.tick(); } catch (e) { out('tick_threw', e.message); } };
+const settle = () => { tick(10); tick(6); tick(10); };
+const jobDir = (job) => path.join(outRoot, '2026-10-04', job);
+const versions = (job) => { try { return fs.readdirSync(jobDir(job)).filter((n) => /^v-/.test(n) && !n.includes('.cand-')).length; } catch (_e) { return 0; } };
+const model = (job) => { try { return JSON.parse(fs.readFileSync(path.join(jobDir(job), 'current', 'model.json'), 'utf8')); } catch (_e) { return null; } };
+const html = (job) => { try { return fs.readFileSync(path.join(jobDir(job), 'current', 'index.html'), 'utf8'); } catch (_e) { return ''; } };
+const J = (v) => JSON.stringify(v);
+const iso = (ms) => new Date(ms).toISOString();
+const scopeKey = (root) => (root ? `${key}--${root}` : key);
+const sidecar = (root) => { try { return JSON.parse(fs.readFileSync(path.join(live, 'runs', 'sources', `${scopeKey(root)}.json`), 'utf8')); } catch (_e) { return null; } };
+const srcRoles = (m) => (m ? m.sources.map((s) => s.role).join(',') : 'nomodel');
+const tasksFile = (sid, o) => W(path.join(live, 'tasks', `${sid}.json`), { schema: 'autopilot.session-tasks/1', session_id: sid, cwd: repo, project_key: key, updated_at: iso(T), first_created_at: iso(T), tasks: [], counts: { total: 0, completed: 0, in_progress: 0 }, current: null, ...o });
+const marker = (sid, o) => W(path.join(sessDir, `${sid}.json`), { session_id: sid, level: 'l3', repo_root: repo, started_at: iso(T), expires_at: iso(T + 3600e3), repo_identity: ident, project_key: key, root_run_id: null, ...o });
+const wrec = (extra = {}) => ({ schema_version: 1, artifact_type: 'controller_progress_receipt', project_id: 'm', deliverable_id: 'n', generation: 0, active_process: null, completed_deliverables: ['d1'], remaining_deliverables: ['d2'], deliverable_count: 2, frozen_denominator_digest: 'f'.repeat(64), blocked_reason: null, eta_basis: 'x', gate_state: { entries: [] }, resource_debt_state: { open: [], released: [] }, phase: 'IMPLEMENTING', work_order_id: 'wo', root_run_id: 'R1', issued_at: '2026-10-04T02:00:00.000Z', digest: 'e'.repeat(64), deliverable_titles: { d1: 'First deliverable' }, ...extra });
+const decisionFile = (root, o) => W(path.join(common, 'autopilot', 'decisions', `${scopeKey(root)}.json`), { schema: 'autopilot.decision/1', question: 'DQ?', options: ['yes', 'no'], context: null, not_authorized: 'NA-reason', root_run_id: root, repo_identity: ident, project_key: key, opened_at: iso(T - 60e3), opened_by_session: null, ...o });
+const cmpDir = (root) => path.join(common, 'autopilot', 'compare', root);
+const sha = (b) => require('crypto').createHash('sha256').update(b).digest('hex');
+const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
+const cmpRec = (id) => ({ schema: 'compare-record/1', id, scene: 'SCENE-1', viewport: '390x844', browser: 'chromium', fixture: 'fx', capture_method: 'page.screenshot',
+  before: { commit: 'a'.repeat(40), dirty: false, path: 'before.png', sha256: sha(png), taken_at: '2026-10-04T01:00:00.000Z' },
+  after: { commit: 'b'.repeat(40), dirty: false, path: 'after.png', sha256: sha(png), taken_at: '2026-10-04T01:05:00.000Z' },
+  metrics: [], images: { before: 'before.png', after: 'after.png' } });
+
+watcher.start();
+// ---- item 1: planned ---------------------------------------------------------------------------------------
+world.rows = [mkRow('r-c', 'R1')];
+const woDir = path.join(common, 'autopilot', 'work-orders', 'R1');
+W(path.join(woDir, 'n-a1.json'), { artifact_type: 'work_order', root_run_id: 'R1', attempt: 1, controller: { progress_receipts: [wrec()] } });
+settle();
+let m = model('R1');
+out('p1_campaign_planned', m ? J(m.planned) : 'nomodel');
+out('p1_campaign_wired', m ? m.wired.planned : 'nomodel');
+out('p1_campaign_source', srcRoles(m).includes('planned') ? 'yes' : 'no');
+// unbound / non-campaign scope: tasks files of this project, no marker -> unbound
+world.rows = [mkRow('r-u', null)];
+const t0 = T;
+tasksFile('s-a', { first_created_at: iso(t0 - 20e3), tasks: [{ id: '1', subject: 'alpha', status: 'pending', started_seq: null }, { id: '2', subject: 'gone', status: 'deleted', started_seq: null }] });
+tasksFile('s-b', { project_key: 'otherproject0000', first_created_at: iso(t0 - 30e3), tasks: [{ id: '1', subject: 'FOREIGN-PROJECT', status: 'pending', started_seq: null }] });
+tasksFile('s-c', { updated_at: iso(t0 - 3 * 86400e3), first_created_at: iso(t0 - 3 * 86400e3), tasks: [{ id: '1', subject: 'STALE-FILE', status: 'pending', started_seq: null }] });
+tasksFile('s-d', { first_created_at: iso(t0 - 10e3), tasks: [{ id: '1', subject: 'OTHER-ROOT', status: 'pending', started_seq: null }] });
+marker('s-d', { root_run_id: 'R9' });
+tasksFile('s-e', { first_created_at: iso(t0 - 5e3), tasks: [{ id: '1', subject: 'beta', status: 'in_progress', started_seq: 1 }] });
+settle();
+m = model('unbound');
+out('p1_unbound_planned', m ? m.planned.map((p) => p.title).join('|') : 'nomodel');
+out('p1_unbound_has_foreign', m && J(m.planned).includes('FOREIGN') ? 'yes' : 'no');
+out('p1_unbound_has_stale', m && J(m.planned).includes('STALE') ? 'yes' : 'no');
+out('p1_unbound_has_otherroot', m && J(m.planned).includes('OTHER-ROOT') ? 'yes' : 'no');
+const v1 = versions('unbound');
+tasksFile('s-e', { first_created_at: iso(t0 - 5e3), tasks: [{ id: '1', subject: 'beta', status: 'in_progress', started_seq: 1 }, { id: '2', subject: 'gamma', status: 'pending', started_seq: null }] });
+settle();
+out('p1_signature_republish', versions('unbound') - v1);
+out('p1_signature_new_item', model('unbound') && J(model('unbound').planned).includes('gamma') ? 'yes' : 'no');
+// bound non-campaign scope: tasks of the session whose marker root = R2; expired marker (end signal) drops it
+world.rows = [mkRow('r-u', null), mkRow('r-2', 'R2')];
+tasksFile('s-f', { first_created_at: iso(t0 - 1e3), tasks: [{ id: '1', subject: 'bound-task', status: 'pending', started_seq: null }] });
+marker('s-f', { root_run_id: 'R2' });
+settle();
+out('p1_bound_planned', model('R2') ? model('R2').planned.map((p) => p.title).join('|') : 'nomodel');
+marker('s-f', { root_run_id: 'R2', expires_at: iso(T - 1000) });
+settle();
+out('p1_after_end_signal', model('R2') ? model('R2').planned.length : 'nomodel');
+out('p1_after_end_signal_not_unbound', model('unbound') && J(model('unbound').planned).includes('bound-task') ? 'yes' : 'no');
+
+// ---- item 2: decision --------------------------------------------------------------------------------------
+world.rows = [mkRow('r-c', 'R1')];
+settle();
+out('d_before_needs', model('R1').needs_decision);
+decisionFile('R1', {});
+const vd = versions('R1'); settle();
+m = model('R1');
+out('d_needs', m.needs_decision); out('d_question', m.decision && m.decision.question);
+out('d_options', m.decision ? m.decision.options.map((o) => o.label).join(',') : '-');
+out('d_not_authorized', m.decision && m.decision.not_authorized);
+out('d_source', srcRoles(m).includes('decision') ? 'yes' : 'no');
+out('d_republish', versions('R1') - vd);
+decisionFile('R1', { root_run_id: 'R9' }); settle(); out('d_other_root', model('R1').needs_decision);
+decisionFile('R1', { repo_identity: ident2 }); settle(); out('d_other_repo', model('R1').needs_decision);
+decisionFile('R1', { opened_at: iso(T - 30 * 86400e3) }); settle(); out('d_stale', model('R1').needs_decision); out('d_stale_flag', model('R1').decision && `${model('R1').decision.stale}:${model('R1').decision.age_s >= 30 * 86400}`); out('d_stale_text', html('R1').includes('（已等 30 天）') ? 'yes' : 'no');
+decisionFile('R1', { opened_at: iso(T + 3600e3) }); settle(); out('d_future', model('R1').needs_decision);
+decisionFile('R1', {}); settle(); out('d_fresh_flag', model('R1').decision && String(model('R1').decision.stale));
+W(path.join(common, 'autopilot', 'decisions', `${scopeKey('R1')}.json`), '{ nope'); settle(); out('d_corrupt', model('R1').needs_decision);
+decisionFile('R1', {}); settle(); out('d_back', model('R1').needs_decision);
+fs.unlinkSync(path.join(common, 'autopilot', 'decisions', `${scopeKey('R1')}.json`)); settle(); out('d_after_close', model('R1').needs_decision);
+
+// ---- item 3: compare ---------------------------------------------------------------------------------------
+out('c_absent_wired', model('R1').wired.compare);
+fs.mkdirSync(cmpDir('R1'), { recursive: true }); fs.writeFileSync(path.join(cmpDir('R1'), 'before.png'), png); fs.writeFileSync(path.join(cmpDir('R1'), 'after.png'), png);
+W(path.join(cmpDir('R1'), 'rec.json'), cmpRec('cmp-r1'));
+const vc = versions('R1'); settle();
+m = model('R1');
+out('c_present', m.compare.map((c) => c.id).join(',')); out('c_present_wired', m.wired.compare);
+out('c_source', srcRoles(m).includes('compare_record') ? 'yes' : 'no'); out('c_republish', versions('R1') - vc);
+const later = new Date(T + 90000); fs.utimesSync(path.join(cmpDir('R1'), 'rec.json'), later, later);
+const vc2 = versions('R1'); settle(); out('c_mtime_republish', versions('R1') - vc2);
+W(path.join(cmpDir('R9'), 'rec.json'), cmpRec('cmp-r9')); fs.mkdirSync(path.join(cmpDir('R9')), { recursive: true });
+settle(); out('c_other_root_not_read', J(model('R1').compare).includes('cmp-r9') ? 'no' : 'yes');
+W(path.join(common, 'autopilot', 'compare', 'rec-unbound.json'), cmpRec('cmp-unb'));
+world.rows = [mkRow('r-u', null)]; settle();
+out('c_unbound_reads_nothing', model('unbound').compare.length);
+out('c_unbound_wired', model('unbound').wired.compare);
+
+// ---- item 5: sources manifest ------------------------------------------------------------------------------
+world.rows = [mkRow('r-c', 'R1')]; settle();
+let sc = sidecar('R1');
+out('s_schema', sc && sc.schema); out('s_scope', sc && `${sc.scope.project_key}|${sc.scope.root_run_id}`);
+out('s_tasks', sc && J(sc.sources.tasks)); out('s_attention', sc && `${sc.sources.attention.installed}/${sc.sources.attention.enabled}`);
+out('s_compare', sc && `${sc.sources.compare.installed}|${sc.sources.compare.how}`);
+out('s_keys', sc && Object.keys(sc.sources).sort().join(','));
+out('s_model_has_manifest', model('R1').sources_manifest ? 'yes' : 'no');
+world.rows = [mkRow('r-c', 'R1'), mkRow('r-5', 'R5')]; settle();
+out('s_compare_text_unwired', html('R5').includes('來源未接') ? 'yes' : 'no');
+process.env.AUTOPILOT_SESSION_TASKS = 'off';
+W(path.join(home, 'config.json'), { hooks: { 'awaiting-owner': false } });
+tasksFile('s-g', { tasks: [{ id: '1', subject: 'x', status: 'pending', started_seq: null }] }); // force a republish
+settle(); sc = sidecar('R1');
+out('s_tasks_off', sc && `${sc.sources.tasks.installed}/${sc.sources.tasks.enabled}`);
+out('s_attention_cfg_off', sc && `${sc.sources.attention.installed}/${sc.sources.attention.enabled}`);
+delete process.env.AUTOPILOT_SESSION_TASKS; fs.unlinkSync(path.join(home, 'config.json'));
+
+// ---- item 6: marker phase (read side) ------------------------------------------------------------------------
+world.rows = [mkRow('r-3', 'R3'), mkRow('r-4', 'R4'), mkRow('r-c', 'R1')];
+settle();
+out('ph_none', J(model('R3').phase));
+marker('ph-a', { root_run_id: 'R3', phase: 'design', phase_set_at: iso(T - 50e3) });
+settle(); out('ph_single', J(model('R3').phase));
+marker('ph-b', { root_run_id: 'R3', phase: 'implement', phase_set_at: iso(T - 10e3) });
+settle(); out('ph_newest_wins', model('R3').phase && model('R3').phase.code);
+marker('ph-c', { root_run_id: 'R3', phase: 'WRONGPROJECT', phase_set_at: iso(T), project_key: 'other0000000000' });
+marker('ph-d', { root_run_id: 'R4', phase: 'WRONGROOT', phase_set_at: iso(T) });
+settle(); out('ph_foreign_ignored', model('R3').phase && model('R3').phase.code);
+out('ph_other_root_scope', model('R4').phase && model('R4').phase.code);
+marker('ph-b', { root_run_id: 'R3', phase: 'implement', phase_set_at: iso(T - 10e3), expires_at: iso(T - 1000) });
+settle(); out('ph_expired_falls_back', model('R3').phase && model('R3').phase.code);
+marker('ph-e', { root_run_id: 'R1', phase: 'MARKERPHASE', phase_set_at: iso(T) });
+settle(); out('ph_campaign_beats_marker', model('R1').phase && `${model('R1').phase.source}:${model('R1').phase.code}`);
+// daily refresh: the whole-days age of an open decision is in the change signature
+// isolate the decision age: nothing else may change with the day (tasks files and markers are time-windowed too)
+fs.rmSync(path.join(live, 'tasks'), { recursive: true, force: true }); fs.rmSync(sessDir, { recursive: true, force: true }); fs.mkdirSync(sessDir, { recursive: true });
+decisionFile('R1', { opened_at: iso(T - 60e3) }); settle(); settle();
+const vday = versions('R1'); settle(); const vday2 = versions('R1');
+tick(86400 + 10); settle();
+out('sig_idle_no_republish', vday2 - vday); out('sig_day_republish', versions('R1') - vday2);
+watcher.finalPublish('stopped');
+JS
+export AUTOPILOT_REVIEW_SERVER_AUTOSTART=0
+OUT_ROOT="$AH/review/$KEY"
+DRV="$(wenv "$NODE" "$SB/driver.js" "$REPO_ROOT" "$KEY" "$IDENT" "$IDENT2" "$D" "$OUT_ROOT" "$REPO" "$REPO2" "$AH/session-mode" "$LIVE" "$AH" 2> "$SB/driver.err" < /dev/null)"; DRC=$?
+eq 0 "$DRC" "driver exits 0 (stderr: $(head -c 400 "$SB/driver.err"))"
+dv() { printf '%s\n' "$DRV" | sed -n "s/^$1=//p" | head -1; }
+eq '' "$(dv tick_threw)" "no tick threw"
+
+# item 1
+eq '[{"id":"d1","title":"First deliverable"},{"id":"d2","title":null}]' "$(dv p1_campaign_planned)" "planned (campaign): deliverable list from the controller receipt, id + title when present"
+eq true "$(dv p1_campaign_wired)" "planned (campaign): wired"
+eq yes "$(dv p1_campaign_source)" "planned (campaign): source role planned recorded"
+eq 'alpha|beta' "$(dv p1_unbound_planned)" "planned (unbound): union of this project's unbound sessions' tasks, creation order, deleted dropped"
+eq no "$(dv p1_unbound_has_foreign)" "planned negative: a tasks file of another project is ignored"
+eq no "$(dv p1_unbound_has_stale)" "planned negative: a stale tasks file is ignored"
+eq no "$(dv p1_unbound_has_otherroot)" "planned negative: a session bound to another root is not in the unbound scope"
+eq 1 "$(dv p1_signature_republish)" "planned: a tasks change republishes exactly once (digest in the change signature)"
+eq yes "$(dv p1_signature_new_item)" "planned: the new task is on the page"
+eq 'bound-task' "$(dv p1_bound_planned)" "planned (bound non-campaign): tasks of the session whose marker root matches"
+eq 0 "$(dv p1_after_end_signal)" "planned negative: after the marker expires (end signal) the session's tasks leave the bound scope"
+eq yes "$(dv p1_after_end_signal_not_unbound)" "planned: a session whose marker ended is a plain session again (unbound scope), and only while its tasks file is recent"
+# item 2
+eq false "$(dv d_before_needs)" "decision: none before the file exists"
+eq true "$(dv d_needs)" "decision: an open file makes needs_decision"
+eq 'DQ?' "$(dv d_question)" "decision: question on the model"
+eq 'yes,no' "$(dv d_options)" "decision: string options reach the renderer as labels"
+eq 'NA-reason' "$(dv d_not_authorized)" "decision: not_authorized reaches the model"
+eq yes "$(dv d_source)" "decision: source role decision recorded"
+eq 1 "$(dv d_republish)" "decision: appearing republishes once"
+eq false "$(dv d_other_root)" "decision negative: a file of another root is ignored"
+eq false "$(dv d_other_repo)" "decision negative: a file of another repo is ignored"
+eq true "$(dv d_stale)" "decision: a stale file (opened 30 days ago) is still shown (expiry warns, never hides)"
+eq 'true:true' "$(dv d_stale_flag)" "decision: stale file carries stale:true and age_s"
+eq yes "$(dv d_stale_text)" "decision: the page says （已等 30 天）"
+eq false "$(dv d_future)" "decision negative: a file dated in the future is rejected"
+eq false "$(dv d_fresh_flag)" "decision: a fresh file has stale:false"
+eq false "$(dv d_corrupt)" "decision negative: a corrupt file is ignored"
+eq true "$(dv d_back)" "decision: a valid file is honoured again"
+eq false "$(dv d_after_close)" "decision: after close the page clears"
+# item 3
+eq false "$(dv c_absent_wired)" "compare: directory absent -> not provided, not wired (writer is a guidance row)"
+eq 'cmp-r1' "$(dv c_present)" "compare: records of <common>/autopilot/compare/<root>/ reach the model"
+eq true "$(dv c_present_wired)" "compare: provided -> wired"
+eq yes "$(dv c_source)" "compare: compare_record source row"
+eq 1 "$(dv c_republish)" "compare: appearing republishes once"
+eq 1 "$(dv c_mtime_republish)" "compare: an mtime change republishes (file:mtime in the signature)"
+eq yes "$(dv c_other_root_not_read)" "compare negative: another root's directory is not read"
+eq 0 "$(dv c_unbound_reads_nothing)" "compare negative: the unbound scope reads nothing"
+eq false "$(dv c_unbound_wired)" "compare: unbound scope stays unwired"
+# item 5
+eq 'autopilot.sources/1' "$(dv s_schema)" "sources: sidecar schema"
+eq "$KEY|R1" "$(dv s_scope)" "sources: scope"
+eq '{"installed":true,"enabled":true,"how":"hook hooks/session-tasks.js (knob AUTOPILOT_SESSION_TASKS)"}' "$(dv s_tasks)" "sources: tasks installed+enabled derived from hooks.json and knob"
+eq 'true/true' "$(dv s_attention)" "sources: attention"
+eq 'false|writer is a guidance row' "$(dv s_compare)" "sources: compare not installed, says why"
+eq 'attention,compare,context,decision,ledger_depth0,ledger_engine,phase,progress,task_status_input,tasks' "$(dv s_keys)" "sources: the ten sources the band reads"
+eq yes "$(dv s_model_has_manifest)" "sources: the model carries the manifest"
+eq yes "$(dv s_compare_text_unwired)" "sources: the page says 來源未接 for the uninstalled compare writer"
+eq 'true/false' "$(dv s_tasks_off)" "sources: env knob off -> installed but not enabled"
+eq 'true/false' "$(dv s_attention_cfg_off)" "sources: config.json knob off -> installed but not enabled"
+# item 6
+eq null "$(dv ph_none)" "phase: no marker phase and no deliverable -> null"
+eq '{"code":"design","label":"design","source":"session"}' "$(dv ph_single)" "phase: marker phase reaches the model with source session"
+eq implement "$(dv ph_newest_wins)" "phase: two markers on one scope -> newest phase_set_at"
+eq implement "$(dv ph_foreign_ignored)" "phase negative: markers of another project / another root are ignored"
+eq WRONGROOT "$(dv ph_other_root_scope)" "phase: the other root's own scope reads its own marker"
+eq design "$(dv ph_expired_falls_back)" "phase negative: an expired marker (end signal) drops out"
+eq 0 "$(dv sig_idle_no_republish)" "signature: no input change, no republish"
+eq 1 "$(dv sig_day_republish)" "signature: a day passing refreshes the open decision's age (已等 N 天) once"
+eq 'campaign:IMPLEMENTING' "$(dv ph_campaign_beats_marker)" "phase: campaign live phase beats the marker phase"
+
+# ---- C. pure units ------------------------------------------------------------------------------------------
+cat > "$SB/units.js" <<'JS'
+const fs = require('fs'); const path = require('path'); const os = require('os');
+const root = process.argv[2];
+const out = (k, v) => process.stdout.write(`${k}=${v}\n`);
+const { buildSourcesManifest } = require(path.join(root, 'src/status/sources-manifest.js'));
+const R = require(path.join(root, 'scripts/render-review-page.js'));
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rwi-units-'));
+const plug = path.join(tmp, 'plugin'); fs.mkdirSync(path.join(plug, 'hooks'), { recursive: true }); fs.mkdirSync(path.join(plug, 'scripts'), { recursive: true });
+fs.writeFileSync(path.join(plug, 'hooks', 'hooks.json'), JSON.stringify({ hooks: {} }));
+const m1 = buildSourcesManifest({ pluginRoot: plug, env: {}, autopilotHome: tmp, scope: { project_key: 'k', root_run_id: null } });
+out('u_empty_plugin_tasks', `${m1.sources.tasks.installed}/${m1.sources.tasks.enabled}`);
+out('u_empty_plugin_decision', m1.sources.decision.installed);
+fs.writeFileSync(path.join(plug, 'hooks', 'session-tasks.js'), '');
+fs.writeFileSync(path.join(plug, 'hooks', 'hooks.json'), JSON.stringify({ hooks: { PostToolUse: [{ hooks: [{ command: 'node ${CLAUDE_PLUGIN_ROOT}/hooks/session-tasks.js' }] }] } }));
+fs.writeFileSync(path.join(plug, 'scripts', 'open-decision.js'), '');
+const m2 = buildSourcesManifest({ pluginRoot: plug, env: {}, autopilotHome: tmp, scope: { project_key: 'k', root_run_id: null } });
+out('u_hook_present_tasks', `${m2.sources.tasks.installed}/${m2.sources.tasks.enabled}`);
+out('u_script_present_decision', m2.sources.decision.installed);
+const m3 = buildSourcesManifest({ pluginRoot: plug, env: { AUTOPILOT_SESSION_TASKS: 'off' }, autopilotHome: tmp, scope: { project_key: 'k', root_run_id: null } });
+out('u_knob_off', `${m3.sources.tasks.installed}/${m3.sources.tasks.enabled}`);
+// renderer: manifest drives wired
+const base = { runs: { runs: [], scope: {} }, root: null, job: 'j', date: '2026-10-04', project: 'p', now: 0, reviewReceipts: [] };
+const man = (o) => ({ schema: 'autopilot.sources/1', sources: o });
+const on = { installed: true, enabled: true, how: 'x' }; const off = { installed: false, enabled: false, how: 'y' };
+let model = R.buildJobModel({ ...base, sourcesManifest: man({ decision: on, tasks: on, progress: on, compare: on }) });
+out('u_manifest_on_decision', model.wired.decision); out('u_manifest_on_planned', model.wired.planned); out('u_manifest_on_compare', model.wired.compare);
+let page = R.renderJobHtml(model);
+out('u_manifest_on_text', page.includes('本回合沒有待決事項') ? 'yes' : 'no');
+model = R.buildJobModel({ ...base, sourcesManifest: man({ decision: off, tasks: off, progress: off, compare: off }) });
+out('u_manifest_off_decision', model.wired.decision); out('u_manifest_off_planned', model.wired.planned);
+out('u_manifest_off_text', R.renderJobHtml(model).includes('決定：來源未接') ? 'yes' : 'no');
+model = R.buildJobModel({ ...base, decision: { question: 'q' }, sourcesManifest: man({ decision: off }) });
+out('u_input_beats_manifest', model.wired.decision);
+model = R.buildJobModel({ ...base });
+model = R.buildJobModel({ ...base, sourcesManifest: man({ task_status_input: on }) });
+out('u_task_manifest_on', model.wired.task); out('u_task_manifest_on_text', model.conclusion.includes('來源未接') ? 'no' : 'yes');
+model = R.buildJobModel({ ...base, sourcesManifest: man({ task_status_input: off }) });
+out('u_task_manifest_off', model.wired.task);
+out('u_no_manifest_infers', `${model.wired.decision}/${model.wired.planned}/${model.wired.compare}`);
+// buildPhase precedence: campaign valid receipt > marker > first open deliverable
+const task = { artifact_type: 'task_status_receipt', root_run_id: 'R', evidence: { campaigns: [{ status: 'valid', phase: 'TERMINAL_READY' }] } };
+const prog = { artifact_type: 'controller_progress_receipt', root_run_id: 'R', completed_deliverables: [], remaining_deliverables: ['d9'], deliverable_count: 1, frozen_denominator_digest: 'a' };
+const mk = (o) => R.buildJobModel({ ...base, root: 'R', ...o }).phase;
+out('u_phase_campaign_receipt_over_marker', JSON.stringify(mk({ taskReceipt: task, progressReceipt: prog, markerPhase: { phase: 'mk' } })));
+out('u_phase_marker_over_deliverable', JSON.stringify(mk({ progressReceipt: prog, markerPhase: { phase: 'mk' } })));
+out('u_phase_deliverable_when_no_marker', JSON.stringify(mk({ progressReceipt: prog })));
+out('u_phase_invalid_marker_ignored', JSON.stringify(mk({ markerPhase: { phase: 5 } })));
+fs.rmSync(tmp, { recursive: true, force: true });
+JS
+UN="$(wenv "$NODE" "$SB/units.js" "$REPO_ROOT" 2> "$SB/units.err" < /dev/null)"
+uv() { printf '%s\n' "$UN" | sed -n "s/^$1=//p" | head -1; }
+eq 'false/false' "$(uv u_empty_plugin_tasks)" "manifest: a plugin without the hook entry reports tasks not installed"
+eq false "$(uv u_empty_plugin_decision)" "manifest: no open-decision.js -> decision not installed"
+eq 'true/true' "$(uv u_hook_present_tasks)" "manifest: hook entry present -> installed and enabled"
+eq true "$(uv u_script_present_decision)" "manifest: script present -> decision installed"
+eq 'true/false' "$(uv u_knob_off)" "manifest: knob off -> installed, not enabled"
+eq true "$(uv u_manifest_on_decision)" "renderer: installed+enabled decision with no input -> wired (original empty text)"
+eq true "$(uv u_manifest_on_planned)" "renderer: planned follows the tasks source"
+eq true "$(uv u_manifest_on_compare)" "renderer: compare follows the manifest"
+eq yes "$(uv u_manifest_on_text)" "renderer: wired + empty -> 本回合沒有待決事項"
+eq false "$(uv u_manifest_off_decision)" "renderer: not installed -> not wired"
+eq false "$(uv u_manifest_off_planned)" "renderer: planned not wired when tasks not installed"
+eq yes "$(uv u_manifest_off_text)" "renderer: not installed -> 來源未接 text"
+eq true "$(uv u_input_beats_manifest)" "renderer: an input that was provided is wired whatever the manifest says"
+eq true "$(uv u_task_manifest_on)" "renderer: task_status_input writer installed+enabled -> task wired (original empty-state sentence, not 來源未接)"
+eq yes "$(uv u_task_manifest_on_text)" "renderer: wired task with no receipt does not say 來源未接"
+eq false "$(uv u_task_manifest_off)" "renderer: task_status_input not installed -> task not wired"
+eq 'false/false/false' "$(uv u_no_manifest_infers)" "renderer: without a manifest the old inference holds"
+eq '{"code":"TERMINAL_READY","label":"收尾","source":"campaign"}' "$(uv u_phase_campaign_receipt_over_marker)" "phase precedence: valid campaign receipt phase over marker"
+eq '{"code":"mk","label":"mk","source":"session"}' "$(uv u_phase_marker_over_deliverable)" "phase precedence: marker over the first open deliverable"
+eq '{"code":"d9","label":"做 d9","source":"deliverable"}' "$(uv u_phase_deliverable_when_no_marker)" "phase precedence: deliverable when no marker"
+eq null "$(uv u_phase_invalid_marker_ignored)" "phase: a non-string marker phase is ignored"
+eq '' "$(head -c 200 "$SB/units.err")" "units: no stderr"
+
+finalize_test

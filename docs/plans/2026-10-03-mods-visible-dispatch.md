@@ -166,6 +166,17 @@ O：owner 不用問「怎麼這麼慢」就知道誰在跑、跑多久、最後 
 
 - 平行派法：第 0 波 W0a＋W0b；第 1 波 W1a、W1b、W1c、W1f、W1h、W1i 立即平行（不依賴 spike），W1d／W1e 等對應 spike，W1g 等 W1a；第 2 波 W2*（指引列先 eval）；W3a 等其依賴；W4 最後。每列 RED-first、mutation 驗證、消費端套件含 L1；每列 per-row review，落地前一次 combined review。
 - 出貨切分：機制列（W1*、W2d、W2f、W3a）齊後即可出 v2.37.0；指引列（W2a、W2b、W2c 的指引部分、W2e）各自 eval 有證據後以 PATCH 跟上，未到前 band 對應欄位顯示「來源未接」而不是空白。
+- **G1 處置（R5.1，13 條全接受；`plan-review` lineage `mods-visible-dispatch-2026-10-03-p1w`）**：
+  - 依賴修正：W2a、W2e 各自負責 watcher 讀檔進 `assemble({decision})`／`assemble({compare})`；W3a 另依賴 W1b、W1c、W1g、W1i；W2c 不依賴 W1c；W2a 不依賴 W1e。
+  - 第 1 波共用檔：`runs-watch.js` 只歸 W1a；`render-review-page.js` 分 W1a（`buildPhase`）與 W1i（文字路徑）；`hooks.json`／hook-classes 由 W1c、W1de 各加不重疊的項；所有列不動版號與 CHANGELOG；落地依 W1a→W1i→W1c→W1de→W1b→W1f→W1h 的固定順序機械解衝突。
+  - 分類：W2a 拆成 W2a-m（helper script，機制）與 W2a-g（skill 步驟，指引，先 eval）；W2c 先探測現行 run-ledger 是否已寫，再分類；W1b 必須指名會自動觸發的點，否則寫入器隨指引列上線；W1f 是機制，因為 root 由 `session-mode.js set` 產生（§2.7 指定的做法），rail 只傳遞、絕不自創。新增 W2g：depth-0 代決策寫入（指引，先 eval）；未上線前「代你決定」標示「僅 engine 自動裁決」。
+  - 契約：新增 `session-tasks/1`、`attention/1`、`decision/1`、decisions sidecar、task-status bundle 的 schema；讀改寫的寫入者每檔加鎖＋原子 rename；null 與 0 分開；新 `assemble` 輸入不擴 `runs-live/1`（只用 sidecar）。
+  - 來源是否接上：watcher 發佈 sources 清單（哪些寫入者已安裝且啟用）；讀者在寫入者不存在時寫「來源未接」，接上但目前為空時寫原本的空狀態文字。
+  - W1c：watcher 存活另看該專案近期的 tasks／attention 檔；UserPromptSubmit 也以前景 `flock -n` 探測補啟；只在已接 autopilot 的 repo（專案設定、marker 或旋鈕＝1）自動啟動；結束靠 idle-exit。
+  - 新 hook：各自指名旋鈕、hook-classes、inventory 計數、實測每次延遲；matcher 用精確工具名，絕不含 `Task`／`Agent` 子代理工具。
+  - W0b 已答：TaskCreated／TaskCompleted＋PostToolUse TaskUpdate；sonnet／opus 需 `CLAUDE_CODE_ENABLE_TODO_TOOLS`。沒有 tasks 檔時顯示「任務工具未開」與環境變數提示。非 campaign 模式的規劃清單用 session 任務清單。
+  - W1a：以檔內 `root_run_id` 綁定、明確排序鍵選最新 attempt，不符即 unbound；`awaiting_disposition`（不分大小寫）＝等待處置，永不等於「要你決定」。
+  - 發版規則（取代上一條）：v2.37.0＝全部機制列＋W3a＋W4 門檻；指引列 eval 後以 PATCH 跟上，期間顯示「來源未接」（欄位保留不移除）。W4 門檻為各模式（dev-flow、/l3、/l4、/l5、/l6、無 /lN 的 ceo-agent）的腳本化情境，每格有 pass／fail：強制觸發「要你決定」（權限提示）、「疑似卡住」（卡住的派工）、「完成待驗收」（fixture campaign 跑到終態）；寫入者屬待做指引列的格子，以顯示「來源未接」為通過條件。每個新寫入者都要負對照：過期檔、結束訊號後殘留、別的 root 的檔。
 
 ### P2 hook 延遲先量（S）— 只量不搬
 - S6 = no（R4.2）：現有 selector 只挑 opt-in multiplexer 那 4 個 command，20 個 default-on classic hook 全漏、`tool_name` 寫死使 Task／Agent 與 session 事件 matcher 永遠不中——P2 新寫 `scripts/benchmark-hook-latency.js`，不擴充舊 selector（`S6.md` 列了最小改法供參考）。
@@ -247,6 +258,7 @@ O：owner 不用問「怎麼這麼慢」就知道誰在跑、跑多久、最後 
 | D4 | **結案（S1 = yes，2026-10-03）**：S1 = no 時要不要同 repo 第二個 plugin | 不要；classic 完整、mod `unavailable` | 第二 plugin（要實測一次安裝） | owner 要一次安裝；資料夾同 repo ≠ 同 plugin |
 
 ## Review log
+- R5.1 2026-10-04 P1W G1（單席 opus_chair，CONDITIONAL，13 條：5 擋 8 不擋）全數 accept-and-fold，見 §4 P1W「G1 處置」；R11 部分駁回（`session-mode set` 產生 root 是 §2.7 的做法，只禁止 rail 自創）。裁決檔與 artifact 在 evidence `2026-10-04-mods-p1c/plan-review-p1w/`。
 - R5 2026-10-04 wiring inventory 後 owner 裁決：不拿掉欄位，所有缺口排進 §4 P1W（依賴圖、平行波次、機制／指引分類、真機驗收門檻）；v2.37.0 等 P1W 機制列完成。P1W 為新設計，送一輪計畫審查（新 rubric），不重開 P1a–P1d 已裁決項。
 - R4.4 2026-10-04 owner 裁決（選項 B）：P1c band 改為結論詞（要你決定／疑似卡住／完成待驗收／進行中）＋專案・phase・已跑・進度；未凍結分母顯示「n done*」淡色、不顯示 %；花費與 context 移到 pane；「等你決定」進 C3，「代你決定」拆成 P5（見 §4 P5，寫入先於讀取）。只動 P1c 顯示與讀取、不動已出貨契約。不動 rubric、不另開 generation。狀態與證據：`docs/plans/evidence/2026-10-04-mods-p1c/README.md`。
 - R0 2026-10-03 fable 起草（SHA256 `6f43308d…`）；未註冊。

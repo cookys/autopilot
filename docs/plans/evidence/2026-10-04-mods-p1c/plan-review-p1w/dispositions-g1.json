@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "mods-visible-dispatch-2026-10-03-p1w",
+  "generation": 1,
+  "findings": [
+    {
+      "fingerprint": "cf854b831d9d45ef9e236f9f2d26d298f1bea42292fc03ff6832d1c32b3c78b7",
+      "disposition": "accepted_blocker",
+      "rationale": "Folded: W2a and W2e now each own the watcher change that reads their file into assemble({decision}) / assemble({compare}); W3a depends on them."
+    },
+    {
+      "fingerprint": "199cf562fd84ac06112abb4ac1c27b9742c1b2acfc37739a316615ca4d0da5ef",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: planned for non-campaign modes falls back to the session task list (W1d) and the row states it; depth-0 proxy decisions get guidance row W2g (eval first); until then the band labels the count as engine-only."
+    },
+    {
+      "fingerprint": "b5ce15106eea54c7dad9d7c6cf63bf09fadfbbf518c191d4c4f36db9ab986a3a",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: the watcher publishes a sources manifest (which writers are installed and enabled); readers render 來源未接 only when the writer is absent, and the current empty-state text when it is wired."
+    },
+    {
+      "fingerprint": "d5944866f5687271d4131f8fd1fa7082aea5413d0d68b9f805086c772addb6b2",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: W3a deps add W1b, W1c, W1g, W1i; W2c no longer depends on W1c; W2a dep on W1e removed (ordering only)."
+    },
+    {
+      "fingerprint": "a9078ca5029042452da6cdbc0eda550409d680001ba320147ddff4be9084f6f3",
+      "disposition": "accepted_blocker",
+      "rationale": "Folded: shared-file table for wave 1 (runs-watch.js: W1a only; render-review-page.js: W1a buildPhase/watcher vs W1i text paths; hooks.json/hook-classes: W1c, W1de); no row bumps version or edits CHANGELOG; landing integrates in a fixed order with mechanical conflict resolution."
+    },
+    {
+      "fingerprint": "150826cb4ddb763d51cabc8b9004fe146744a93dc3e8d720ffaa844e90399d43",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: W2a split into W2a-m (helper script, mechanism) and W2a-g (skill step, guidance, eval); W2c starts with a probe and is classified after it; W1b must name a firing trigger or ship the writer with its trigger as guidance; W1f is mechanism only because session-mode set mints the root (allowed by §2.7) and rails only propagate."
+    },
+    {
+      "fingerprint": "a1ccc836ae6df8a463e9ee4db32195d731214b47a86d6129f38fbba5f5346cc7",
+      "disposition": "accepted_blocker",
+      "rationale": "Folded: W4 gate becomes a scripted scenario per mode incl. /l6 and ceo-agent without /lN, with per-cell pass/fail; forced triggers for 要你決定 (permission prompt), 疑似卡住 (stalled dispatch), 完成待驗收 (fixture campaign to terminal); cells whose writer is a pending guidance row must show 來源未接 and that is the pass condition."
+    },
+    {
+      "fingerprint": "4c1a71c7433d7a33b6239ba1f35723f12643e486a75d829ad42663b5d4e2425c",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: each new hook names its knob, hook-classes entry, inventory count, measured per-call latency; matchers are exact tool names, never Task/Agent; W1c probes flock -n in the foreground before any spawn."
+    },
+    {
+      "fingerprint": "d24561c55f8e16227d29b209b2dd8dfe5a0bfa5ebbee92bf5998dabd9d652f95",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: schemas for session-tasks/1, attention/1, decision/1, decisions sidecar and the task-status bundle; per-file lock + atomic rename for RMW writers; null-vs-0 stated; new assemble inputs do not extend runs-live/1 (sidecars only)."
+    },
+    {
+      "fingerprint": "a50b091bd74f5fdd48d917bdf579e2e7a07816a80d71594267b8e925a86b0428",
+      "disposition": "accepted_blocker",
+      "rationale": "Folded: watcher liveness also counts recent tasks/attention files of the project; UserPromptSubmit re-ensures with a foreground flock probe; autostart only in opted-in repos (autopilot config, marker, or knob=1); idle-exit handles cleanup."
+    },
+    {
+      "fingerprint": "4bd84d7ae0e67f6f6a20c1988d5e8d4e07d9864e97b627ca1926256c6b7df85e",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: W0b answered (TaskCreated/TaskCompleted + PostToolUse TaskUpdate; tools gated by CLAUDE_CODE_ENABLE_TODO_TOOLS for sonnet/opus); fallback: absent tasks file shows 任務工具未開 with the env hint."
+    },
+    {
+      "fingerprint": "d0276cac2213c99157419e12eac9c0a5661c5097b0ebc4e216f427440f2b7ea9",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: W1a binds by the in-file root_run_id and an explicit ordering key, unbound on mismatch; awaiting_disposition maps to 等待處置 and never to 要你決定. Partly refuted: session-mode set minting a job root is what §2.7 prescribes for dev-flow; only rails must never mint."
+    },
+    {
+      "fingerprint": "43a507defc3804b5cd05ba680bebfd03c29f32d7efe97713ec42adb0dfa413a2",
+      "disposition": "accepted_blocker",
+      "rationale": "Folded: one release rule: v2.37.0 = all mechanism rows + W3a + W4 gate; guidance rows follow as PATCH after eval, showing 來源未接 meanwhile (owner ruling: fields stay, nothing removed); W1d/W1e are post-spike mechanism rows; negative controls required for every new writer (stale file, file left after end signal, wrong-root file)."
+    }
+  ]
+}

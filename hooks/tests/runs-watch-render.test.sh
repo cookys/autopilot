@@ -30,6 +30,8 @@
 #   FAIL S10b a restart creates no second date directory: expected '0', got '1'
 #   FAIL settled-root poll interval is 15 s (strictly between one and two default ticks): expected '15000', got ''
 #   FAIL tick jitter just under 20 s: every tick re-polls: expected '1', got ''   (taskPollDue not exported)
+# W1a addition (S11, work-order progress reaches the page) RED at 6e40bcc4: 70 passed, 5 failed, e.g.
+#   FAIL S11 the page shows the progress percent from the work-order receipt: expected 'yes', got 'no'
 
 eq() { assert_eq "$2" "$1" "$3"; } # eq <expected> <actual> <msg>
 CLI="$REPO_ROOT/bin/autopilot.js"
@@ -190,6 +192,18 @@ const v9c = versions('R1');
 W(path.join(D, 'exits', 'run-five.exit'), '0'); task('accepted', '6'.repeat(64));
 tick(10); tick(6); tick(10);
 out('s9b_versions', versions('R1') - v9c); out('s9b_fresh_task', has('R1', 'ACCEPTED'));
+// S11 (W1a): the campaign work-order progress receipt reaches the page: % section + live phase; a phase change republishes
+const woDir = path.join(D, '..', 'repo', '.git', 'autopilot', 'work-orders', 'R1');
+const wrec = (phase, issued) => ({ schema_version: 1, artifact_type: 'controller_progress_receipt', project_id: 'm', deliverable_id: 'n', generation: 0, active_process: null, completed_deliverables: ['d1'], remaining_deliverables: ['d2', 'd3'], deliverable_count: 3, frozen_denominator_digest: 'f'.repeat(64), phase, work_order_id: 'wo', root_run_id: 'R1', issued_at: issued, digest: 'e'.repeat(64) });
+const wo = (phase, issued) => W(path.join(woDir, 'n-a1.json'), { artifact_type: 'work_order', root_run_id: 'R1', controller: { progress_receipts: [wrec(phase, issued)] } });
+out('s11_before_no_progress', has('R1', '總進度 33.3%'));
+wo('IMPLEMENTING', '2026-10-04T02:00:00.000Z');
+const v11 = versions('R1');
+tick(10); tick(6); tick(10);
+out('s11_republished', versions('R1') - v11); out('s11_has_percent', has('R1', '總進度 33.3%')); out('s11_has_phase', has('R1', '階段：實作'));
+wo('awaiting_disposition', '2026-10-04T02:05:00.000Z');
+tick(10); tick(6); tick(10);
+out('s11_phase_republished', versions('R1') - v11); out('s11_phase_changed', has('R1', '階段：等待處置'));
 // S10: the job date is pinned at first observation; a reaped oldest manifest does not move the job to another date dir
 const keepRows = world.rows; world.rows = [mkRow('r3-old', 'R3', { started_at: '2026-10-03T23:00:00.000Z' }), mkRow('r3-new', 'R3', { started_at: '2026-10-04T01:00:00.000Z' })];
 W(path.join(D, 'exits', 'r3-old.exit'), '0'); W(path.join(D, 'exits', 'r3-new.exit'), '0');
@@ -258,6 +272,12 @@ eq 2 "$(dv s10_same_dir_republished)" "S10 after the oldest manifest is gone the
 eq 0 "$(dv s10_no_second_dir)" "S10 no second date directory appears"
 eq 3 "$(dv s10b_restart_same_dir)" "S10b after a watcher restart the job still publishes into its existing date dir"
 eq 0 "$(dv s10b_restart_no_second_dir)" "S10b a restart creates no second date directory"
+eq no "$(dv s11_before_no_progress)" "S11 no work-order progress: the page has no % section"
+eq 1 "$(dv s11_republished)" "S11 a work-order progress receipt appearing republishes the page once"
+eq yes "$(dv s11_has_percent)" "S11 the page shows the progress percent from the work-order receipt"
+eq yes "$(dv s11_has_phase)" "S11 the page shows the live phase from the work-order receipt"
+eq 2 "$(dv s11_phase_republished)" "S11 a live phase change republishes the page"
+eq yes "$(dv s11_phase_changed)" "S11 the page shows the new live phase"
 
 # ---- 1b. the task re-poll decision holds the 30 s bound at the boundary --------------------------------------
 cat > "$SB/poll.js" <<'JS'

@@ -88,10 +88,13 @@ function buildProgress(receipt, root) {
   for (const id of remaining || []) per.push({ id, state: 'open', percent: null });
   return {
     frozen, percent, done, total: frozen ? count : null,
+    live_phase: typeof receipt.phase === 'string' && receipt.phase ? receipt.phase : null,
     remaining: frozen ? count - done : null, per_deliverable: per, denominator_digest: digest,
   };
 }
 // The job's current phase, from sources the renderer already holds (never invented):
+//   0. (W1a) the LIVE phase of the controller_progress_receipt (`progress.live_phase`, case-insensitive PHASE_LABEL lookup, raw
+//      string kept as code) -> source 'campaign'. `awaiting_disposition` waits on depth-0, so it keeps the plain 等待處置 label.
 //   1. a VALID campaign entry of the task_status_receipt (`evidence.campaigns[].phase`; the receipt only validates TERMINAL campaigns,
 //      so a campaign phase here is always a terminal one) -> source 'campaign', zh-TW label;
 //   2. else the first still-open deliverable of the controller_progress_receipt -> source 'deliverable', `做 <id>`;
@@ -102,6 +105,11 @@ const PHASE_LABEL = {
   TERMINAL_STOP: '已停止', BOUNDARY_REJECTED: '邊界被拒', AWAITING_CONVERGENCE_ADJUDICATION: '等待收斂裁定',
 };
 function buildPhase(task, progress) {
+  if (progress && typeof progress.live_phase === 'string' && progress.live_phase) {
+    const code = progress.live_phase;
+    const upper = code.toUpperCase();
+    return { code, label: Object.prototype.hasOwnProperty.call(PHASE_LABEL, upper) ? PHASE_LABEL[upper] : code, source: 'campaign' };
+  }
   const camps = task && isObject(task.evidence) && Array.isArray(task.evidence.campaigns) ? task.evidence.campaigns : [];
   for (const c of camps) {
     if (!isObject(c) || c.status !== 'valid' || typeof c.phase !== 'string' || !c.phase) continue;

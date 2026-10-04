@@ -39,6 +39,8 @@ SCHEMA_CHECK="$REPO_ROOT/scripts/validate-json-schema.js"
 F="$SB/fx"; mkdir -p "$F"
 
 # ---- fixture generator (written to a file; run once) ------------------------------------------------------
+# W1a addition (live phase from the progress receipt) RED at 6e40bcc4: 193 passed, 7 failed, e.g.
+#   FAIL phase (W1a live): liveWins: '"liveWins":true' not found in output   (also liveLower/liveMixed/liveAwaiting/liveBoundary/liveUnknown/livePhaseInModel)
 cat > "$SB/gen.js" <<'JS'
 const fs = require('fs'); const path = require('path'); const cp = require('child_process'); const crypto = require('crypto');
 const F = process.argv[2];
@@ -496,6 +498,17 @@ out.nonePrefrozen = model(task([]), { ...prog, remaining_deliverables: [] }).pha
 out.campaignWins = model(task([camp('REVIEWING')]), prog).phase.source === 'campaign';
 out.invalidCampaignFallsBack = model(task([camp('REVIEWING', 'invalid')]), prog).phase.source === 'deliverable';
 out.wrongRootReceipt = model(task([camp('REVIEWING')], { root_run_id: 'R2' }), null).phase === null;
+// W1a: the LIVE phase of the progress receipt wins over a valid terminal campaign and over the open deliverable
+const lp = (phase) => ({ ...prog, phase });
+out.liveWins = JSON.stringify(model(task([camp('TERMINAL_READY')]), lp('IMPLEMENTING')).phase) === JSON.stringify({ code: 'IMPLEMENTING', label: '實作', source: 'campaign' });
+out.liveLower = JSON.stringify(model(null, lp('repairing')).phase) === JSON.stringify({ code: 'repairing', label: '修復', source: 'campaign' });
+out.liveMixed = JSON.stringify(model(null, lp('Prepared')).phase) === JSON.stringify({ code: 'Prepared', label: '準備', source: 'campaign' });
+out.liveAwaiting = JSON.stringify(model(null, lp('awaiting_disposition')).phase) === JSON.stringify({ code: 'awaiting_disposition', label: '等待處置', source: 'campaign' });
+out.liveBoundary = model(null, lp('boundary_rejected')).phase.label === '邊界被拒';
+out.liveUnknown = JSON.stringify(model(null, lp('weird_state')).phase) === JSON.stringify({ code: 'weird_state', label: 'weird_state', source: 'campaign' });
+out.liveEmptyFallsBack = model(task([camp('REVIEWING')]), lp('')).phase.code === 'REVIEWING' && model(null, lp(null)).phase.source === 'deliverable';
+out.awaitingNotOwner = ['awaiting_disposition', 'AWAITING_DISPOSITION', 'Awaiting_Disposition'].every((c) => { const m = model(null, lp(c)); return m.needs_decision === false && m.decision === null && m.phase.label === '等待處置' && m.phase.source === 'campaign'; });
+out.livePhaseInModel = model(null, lp('REVIEWING')).progress.live_phase === 'REVIEWING';
 const html = r.renderJobHtml(model(task([camp('REVIEWING')]), prog));
 out.htmlLabel = /階段：審查/.test(html);
 const sec2 = html.match(/<section data-section="2"[\s\S]*?<\/section>/)[0];
@@ -516,6 +529,9 @@ assert_contains "$PH" '"nonePrefrozen":true' "phase: no open deliverable and no 
 assert_contains "$PH" '"campaignWins":true' "phase: campaign wins over the deliverable fallback"
 assert_contains "$PH" '"invalidCampaignFallsBack":true' "phase: a non-valid campaign entry is ignored (falls back)"
 assert_contains "$PH" '"wrongRootReceipt":true' "phase: a task receipt of another root gives null"
+for k in liveWins liveLower liveMixed liveAwaiting liveBoundary liveUnknown liveEmptyFallsBack awaitingNotOwner livePhaseInModel; do
+  assert_contains "$PH" "\"$k\":true" "phase (W1a live): $k"
+done
 assert_contains "$PH" '"htmlLabel":true' "phase: the page shows the label"
 assert_contains "$PH" '"htmlFirstScreen":true' "phase: the label sits next to the conclusion (section 2)"
 assert_contains "$PH" '"htmlNone":true' "phase: null phase draws no phase chip"

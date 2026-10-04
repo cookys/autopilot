@@ -24,6 +24,7 @@
 // spawned by Node, which only hands stdio 0-2 to them, so they never inherit fd 9.
 
 const fs = require('fs');
+const crypto = require('crypto');
 const os = require('os');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
@@ -31,6 +32,7 @@ const { resolveLiveDir } = require('../../scripts/lib/live-state-dir');
 const { projectKey, scopeFromCwd } = require('./project-key');
 const { pointerPath, writeLivePointer } = require('./live-pointer');
 const { applySelectors } = require('./runs-fields');
+const { latestProgress } = require('./work-order-progress');
 const { ensureReviewServer } = require('./review-server');
 
 const SCHEMA = 'autopilot.runs-live/1';
@@ -347,6 +349,12 @@ function createWatcher({
     return pollTask(root, nowMs);
   }
 
+  // The campaign's newest progress receipt (live phase + frozen-denominator %), from <git-common-dir>/autopilot/work-orders/<root>/.
+  function readProgress(root) {
+    const m = root && typeof identity === 'string' ? /^git-common-dir:(.+)$/.exec(identity) : null;
+    return m ? latestProgress({ commonDir: m[1], root }) : null;
+  }
+
   function renderSignature(k, rows, nowMs) {
     const root = k === UNBOUND ? null : k;
     const { discoverReviewReceipts } = require('../../scripts/render-review-page');
@@ -354,7 +362,9 @@ function createWatcher({
     const exits = rows.map((r) => (r.source && r.source.exit_file ? `${r.source.exit_file}:${mtimeOf(r.source.exit_file)}` : '')).sort();
     const receipts = discoverReviewReceipts(rows, root).map((e) => `${e.file}:${mtimeOf(e.file)}`);
     const task = root ? taskDigest(root, rows, nowMs) : null;
-    return JSON.stringify({ manifests, exits, receipts, task });
+    const wo = readProgress(root);
+    const progress = wo ? crypto.createHash('sha256').update(JSON.stringify(wo.value)).digest('hex') : null;
+    return JSON.stringify({ manifests, exits, receipts, task, progress });
   }
 
   function publishRoot(k, rows, nowMs) {
@@ -389,9 +399,12 @@ function createWatcher({
     const cached = root ? state.render.task.get(root) : null;
     const task = cached && cached.value ? cached.value : null;
     if (task) sources.push({ role: 'task_status_receipt', path: `status task --root-run-id ${root} --json`, sha256: task.sha256 });
+    const wo = readProgress(root);
+    const progress = wo ? { value: wo.value, sha256: crypto.createHash('sha256').update(JSON.stringify(wo.value)).digest('hex') } : null;
+    if (progress) sources.push({ role: 'controller_progress_receipt', path: wo.file, sha256: progress.sha256 });
     const { model } = mod.assemble({
       runsValue: envelope, rows, root, job, date, project: key, now: nowMs, commit: null, repo: cwd,
-      task, progress: null, decision: null, planned: null, compare: [], sources,
+      task, progress, decision: null, planned: null, compare: [], sources,
     });
     const r = mod.publish({
       model, html: mod.renderJobHtml(model), compare: [], outRoot: render.outRoot, home: autopilotHome,

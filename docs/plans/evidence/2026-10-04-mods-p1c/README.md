@@ -1,12 +1,10 @@
 # mods P1b → P1c/P1d → P5 — state of play (2026-10-04)
 
 > ## IN FLIGHT (2026-10-05, session df52a188)
-> - INT `w/int` 8666aba4 accepted. Wave 2 accepted: PHASE+PICK 441243e2, PERF+STAMP 291cfa96, WATCH-B c13270aa, WATCH-A 23148e78 (see `accepted-heads-p1w.txt`, incl. follow-ups).
-> - INT2 **accepted**: `w/int2` e227528e (bundle refreshed). Not-opted-in UserPromptSubmit +47 ms (git spawn) to fix inside the MARKER row (same file).
-> - MARKER row dispatched (owner go 2026-10-05, plan R5.6; worktree `$OLD/p1c/wt-marker` off `w/int2`, report `$OLD/p1c/run-w/marker/REPORT.md`). Was: MARKER row (holistic fix for phase in plain sessions): `level: null` = plain session; dispatch-hetero.sh classifier + campaign bridge skip it; SessionStart *ensures* (never overwrites, compact-safe) a marker in opted-in repos with `root_run_id: null`; every reader gets a level-null test. Owner rejected the sidecar workaround ("不能 workaround，整套處理修正"); proposal sent, awaiting go.
-> - 2026-10-05 both hands were cut by the sonnet weekly limit mid-verification; WIP saved as refs/wip/marker 087a2a95 and refs/wip/w3a 29f7ff5f in the clone + bundle; the same sonnet hands resumed once quota returned.
-> - W3a dispatched in parallel with MARKER (brief `briefs-p1w/w-row-w3a.md`; `$OLD/p1c/wt-w3a` off `w/int2`: cherry-pick p1c/c C1–C3b-M, then one W3a commit; report `$OLD/p1c/run-w/w3a/REPORT.md`).
-> - Next: eval step 3 (freeze packs from the post-MARKER sha; change texts for W2a-g/W2b-g/W1b-t2 still to draft), W1f-b design, W4 landing (p1c/d1 joins there).
+> - Accepted (see `accepted-heads-p1w.txt`): INT `w/int` 8666aba4 → wave 2 (PHASE+PICK, PERF+STAMP, WATCH-A, WATCH-B) → INT2 `w/int2` e227528e → MARKER `w/marker` 9a94ffbf (plan R5.6) and W3a `w/w3a` 18db7c55 (p1c/c C1–C3b-M picked onto w/int2 + W3a).
+> - INT3 in flight: `w/int3` (`$OLD/p1c/wt-int3`) = w/marker + the 5 mod commits, brief `briefs-p1w/int3.md`, report `$OLD/p1c/run-w/int3/REPORT.md`.
+> - Next: (1) eval step 3 off `w/int3` — draft the change texts (W2a-g ceo-agent → `open-decision.js` at the DOA boundary; W2b-g dev-flow → `session-mode.js set --phase`; W1b-t2 finish-flow → `write-task-status-input.js` after merge), freeze packs per EVALX REPORT, smoke 2 cells per row, then batches per `eval-design-guidance-rows.md` §4; W2e-g (back to guidance, R5.5) needs its own eval design later. (2) W1f-b design. (3) W4 landing: fresh clone off origin/develop, cherry-pick int3 chain + p1c/d1 (hooks.json comment keys vs the new hooks: reconcile), full suite, ONE combined review, release v2.37.0 (check origin version first), then owner ssh+tmux real-run gate.
+> - Open follow-ups: clear of an l3–l6 marker deletes the session record until next SessionStart; not-opted-in UPS now ~63 ms total host (git spawn gone); PERF host +10–12 ms vs ≤5 ms target (measured under load 33–38).
 
 > ## HANDOFF (2026-10-05) — read this block first
 > Plan `docs/plans/2026-10-03-mods-visible-dispatch.md` R5.4, §4 P1W table is the single source (FROZEN after G1+G2; later rulings R5.3/R5.4 in Review log).

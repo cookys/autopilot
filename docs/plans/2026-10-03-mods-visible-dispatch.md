@@ -1,5 +1,5 @@
 # Plan — Mods 進 autopilot 本體：看得見的派工、owner review 網頁、事件核心、`autopilot.progress/1` 快照
-> Status: R4.4 — FROZEN 2026-10-03; R4.4 = owner 2026-10-04 裁決：P1c band 改為「專案·phase·已跑·進度」加結論詞（C3）、新增 P5（代決策提醒，寫入先於讀取），不動 rubric；R4.3 = P1a 出貨（v2.36.115）後的事實更正，只改 P1a 二擇一 (ii) 的錯誤句；R4.2 = P0 spike 結果回寫（S1 yes → D4 結案；`flock(1)` 是 fork 不是 exec；P2 先擴 selector；`/clear` 後 timer 待驗），只改被實測推翻或確認的事實；R4.1 = owner D1／D2 裁決後的有界修補（單一 port 的 host review server＋根目錄索引，反向代理文件化），不重開已處置項目 (R4: G1+G2 CONDITIONAL; depth-0 accepted both G2 blockers and verified the bounded repair: per-project `runs/paths/<project_key>.json`, CLI-written `$HOME/.autopilot/live-pointer.json` read via `$.env.get("HOME")`, S2 spike + fallback) / Owner: cookys / Branch: `feat/mods-visible-dispatch`（未建）/ Frame: autopilot 這一半；radar（跨專案）另案
+> Status: R5 — P1W 新增（接線補完，待審）；R4.4 = owner 2026-10-04 裁決：P1c band 改為「專案·phase·已跑·進度」加結論詞（C3）、新增 P5（代決策提醒，寫入先於讀取），不動 rubric；R4.3 = P1a 出貨（v2.36.115）後的事實更正，只改 P1a 二擇一 (ii) 的錯誤句；R4.2 = P0 spike 結果回寫（S1 yes → D4 結案；`flock(1)` 是 fork 不是 exec；P2 先擴 selector；`/clear` 後 timer 待驗），只改被實測推翻或確認的事實；R4.1 = owner D1／D2 裁決後的有界修補（單一 port 的 host review server＋根目錄索引，反向代理文件化），不重開已處置項目 (R4: G1+G2 CONDITIONAL; depth-0 accepted both G2 blockers and verified the bounded repair: per-project `runs/paths/<project_key>.json`, CLI-written `$HOME/.autopilot/live-pointer.json` read via `$.env.get("HOME")`, S2 spike + fallback) / Owner: cookys / Branch: `feat/mods-visible-dispatch`（未建）/ Frame: autopilot 這一半；radar（跨專案）另案
 > 日期 2026-10-03。R0 SHA256 `6f43308d…`；astra R0 審查 `4a46589b…`（9 🟠 3 🟡）；R1 SHA256 `e5192f1e…`；astra R1 確認 `4e35c87a…`（7 到位、5 部分到位、新 N01／N02）。R2 只動 R-A03／R-A04／R-A06／N01／N02 五處。R3 處理 G1：3 條 blocking＋9 條 non-blocking；引用改為「檔案:符號」。R4 只處理 G2：2 條 blocking（R5 `paths` 跨專案互蓋、R4 mod 找路徑的機制）＋ 6 條便宜 non-blocking，不重開已處置項目。證據標記：[V-file] 讀檔、[V-run] 本機跑過、[peer] 機隊自述未獨立查證、[SPIKE] 未驗證。
 > 落地程序：複製到 `docs/plans/2026-10-03-mods-visible-dispatch.md` → `node scripts/check-plan-graduation.js --register-template 2026-10-03-mods-visible-dispatch` → 列貼進 `docs/projects/INDEX.md`（Version `active`）→ 寫 `plan-review-manifest` → 才能送 `dispatch-plan-review.js`。
 
@@ -133,6 +133,40 @@ O：owner 不用問「怎麼這麼慢」就知道誰在跑、跑多久、最後 
 - 順序：`check-hook-inventory.js` 認得 `modules`（印 `mods: 1`，`--check` 獨立 tier）→ codex hook baseline 比對忽略 `modules` → `sync-opencode-plugin.sh` 排除 `mods/` → `hooks/hooks.json` 加鍵 → `sync-version.js --version 2.37.0 --hook-count 32`（P1 不加 classic hook；`idle-observe` 在 P3 自己 bump） → CLAUDE.md semver 表加列 → plugin.json description → CHANGELOG → INDEX。
 - 驗收：`scripts/sync-all.sh` 全綠；`grep -r mods platforms/codex/plugin platforms/opencode/plugin` 空；`preflight-release.sh` 過。負對照：`modules` 指到不存在的檔 → `claude plugin validate` 失敗。
 
+### P1W 接線補完（R5，owner 2026-10-04）— 每個顯示欄位都要有會動的寫入端
+- 起因：`docs/plans/evidence/2026-10-04-mods-p1c/wiring-inventory.md`。P1a–P1c 讀取端齊了，寫入端多半不存在：watcher 發佈時 `progress/decision/planned/compare` 寫死 null（`src/status/runs-watch.js:394`）；`--decision`、`--planned`、`--compare`、task-status 輸入檔都沒有寫入者；watcher 只由 `/l3`–`/l6` 的 `session-mode.js set` 啟動。照現狀出貨，五個結論詞四個不亮、phase／進度全空、dev-flow 只見 `no project`。
+- owner 裁決（2026-10-04）：**不拿掉欄位**；每個缺口排進本計畫，可平行就平行；v2.37.0 等 P1W 完成後才出。
+- 規則：寫入端優先；寫入端能用 hook／script 就用（機制）；需要 skill 步驟去呼叫的寫入端是指引變更，先跑 eval ON/OFF（CLAUDE.md 成績單前置），eval 與實作同一列內先後做；**發版門檻 = owner 的 ssh＋tmux 真機，各工作模式各跑一次，band 每格是真值**（測試 kit 的樹不算）。
+- 已確認事實：campaign 子任務 manifest 的 `root_run_id` 與 `<git-common-dir>/autopilot/work-orders/` 目錄名逐字相同（5/5）；work-order 的 `controller.progress_receipts[].phase` 大小寫混用（`IMPLEMENTING`、`awaiting_disposition`、`boundary_rejected`），比對一律不分大小寫；`awaiting_disposition` 是等 depth-0，不是等 owner。
+
+依賴圖（同一波內互相獨立，平行派；`→` 表示依賴）：
+
+| 列 | 內容 | 側 | 依賴 | 大小 | 類別 |
+|---|---|---|---|---|---|
+| **W0a** spike S10 | owner 被等待時（權限、AskUserQuestion、閒置）各發哪個 hook 事件、起訖訊號 | 探測 | — | S | 探測 |
+| **W0b** spike S11 | TaskCreate／TaskUpdate 的 hook payload（subject／status／id）、task 工具 pin 是否生效 | 探測 | — | S | 探測 |
+| **W1a** 進度／phase 取出器 | `src/status/` 新函式：依 root 讀最新 work-order 的 `progress_receipts[-1]`（phase、凍結分母、完成／剩餘）；watcher 傳 `progress` 與 `phase` 給 `assemble`；renderer `buildPhase` 改用它（C3b-R 改源）；P4 `work-round` 共用 | 發佈 | — | M | 機制 |
+| **W1b** 驗收輸入檔產生者 | 寫 `${AUTOPILOT_TASK_STATUS_DIR:-$TMPDIR/autopilot-task-status}/<root>.json`（形狀照 `task-runtime.js` 讀取端）；觸發點：campaign 終態、merge 後；同時解 BACKLOG「two-l5-deliverables…」與 finish-flow L-5.3、`session-mode clear` | 寫入 | — | M | 機制（finish-flow 已要求此檔，讓它真的產生） |
+| **W1c** watcher 自動啟動 | SessionStart hook：專案有 `project_key` 就確保 watcher（`flock -n`，已有一支即不動；閒置自退）；寫 live pointer；default-on＋關閉旋鈕；進 hook-classes | 發佈 | — | M | 機制 |
+| **W1d** 任務清單寫入端 | PostToolUse（Task 工具）hook → `<live>/tasks/<sid>.json`（subject、status、counts、current in_progress、first_created_at）；未凍結進度 `n done*`、phase＝目前任務 | 寫入 | W0b | S | 機制 |
+| **W1e** 等你回應寫入端 | hook → `<live>/attention/<sid>.json`（kind＝permission／question／idle、since、摘要）；結束訊號清除；「要你決定」主來源 | 寫入 | W0a | S–M | 機制 |
+| **W1f** 範圍與時間 | elapsed＝這件工作的開始（campaign：root 最早 work-order；session：tasks 檔 first_created_at 或 marker started_at），不再用專案最舊 manifest；depth-0 臨時派工帶同一 `AUTOPILOT_ROOT_RUN_ID`／`PARENT` 避免一派一頁（rail 端 export 機制） | 讀取＋寫入 | — | S–M | 機制 |
+| **W1g** 規劃清單寫入端 | watcher 由 campaign execution graph／controller receipt 的 deliverable 清單產生 `planned`（plan 檔僅 display） | 發佈 | W1a | S | 機制 |
+| **W1h** P5 寫入端（機制部分） | ledger 固定 `<project>/ledger/decisions.jsonl`；`decision-ledger.js append` 蓋 `root_run_id`、`repo_identity`；engine 自動裁決（adjudication／disposition 由 brain 自決的那些）直接 append | 寫入 | — | M | 機制 |
+| **W1i** 誠實文字 | review 頁與 band：來源未接時寫「來源未接」，不寫「目前沒有待你決定」「尚無 verdict」 | 讀取 | — | S | 機制 |
+| **W2a** 待決定檔與指引 | 單一 `decision.json`（open question：question／options／default／not_authorized）helper script；depth-0 在 DOA 邊界問 owner 時寫；指引變更 → 先 eval | 寫入 | W1e | M | 指引（eval） |
+| **W2b** dev-flow 階段寫入端 | `session-mode.js set --phase L-n` 由 dev-flow 各步呼叫；指引變更 → 先 eval；在此之前 phase 用 W1d 目前任務名 | 寫入 | W1d | M | 指引（eval） |
+| **W2c** 工頭可見性 | `/l4` native Agent 工頭寫 run-ledger heartbeat／stage（`scripts/run-ledger.sh`、`watch-foreman.js` 已讀）；watcher 併入 envelope | 寫入＋發佈 | W1c | L | 先查現行是否已寫；缺的部分為指引（eval） |
+| **W2d** P5 發佈＋顯示 | watcher `decisions` sidecar；band 第二行「代你決定 m 件（k 件不可逆）」、pane 逐件＋veto 指令 | 發佈＋讀取 | W1h | M | 機制 |
+| **W2e** 比對圖寫入端 | 審圖席程序產出 `compare-record.json`（schema 已有）；指引 → eval | 寫入 | — | M | 指引（eval） |
+| **W2f** context 提示 | 主機 status line 不寫 context 時，pane 提示 `statusline-live-tee.js` | 讀取 | — | S | 機制 |
+| **W3a** mod 整合 | `mods/live` 改讀 tasks／attention／work-order phase／decisions sidecar；結論詞優先序不變（要你決定＞疑似卡住＞完成待驗收＞進行中＞待命）；完成待驗收改看 campaign 終態或任務全完成 | 讀取 | W1a,W1d,W1e,W1f,W2d | M | 機制 |
+| **W3b** 已看過 | spike 後選 `ack` 列／cursor／review 頁按鈕 | 讀取＋寫入 | W2d | S | 待 spike |
+| **W4** 落地＋真機驗收 | 一次 landing（含 C1–C3b、D1、`modules` key、W1–W3）；owner tmux 真機：dev-flow、/l3、/l4、/l5 各一次，記錄 band 文字；v2.37.0 | — | 全部 | L | — |
+
+- 平行派法：第 0 波 W0a＋W0b；第 1 波 W1a、W1b、W1c、W1f、W1h、W1i 立即平行（不依賴 spike），W1d／W1e 等對應 spike，W1g 等 W1a；第 2 波 W2*（指引列先 eval）；W3a 等其依賴；W4 最後。每列 RED-first、mutation 驗證、消費端套件含 L1；每列 per-row review，落地前一次 combined review。
+- 出貨切分：機制列（W1*、W2d、W2f、W3a）齊後即可出 v2.37.0；指引列（W2a、W2b、W2c 的指引部分、W2e）各自 eval 有證據後以 PATCH 跟上，未到前 band 對應欄位顯示「來源未接」而不是空白。
+
 ### P2 hook 延遲先量（S）— 只量不搬
 - S6 = no（R4.2）：現有 selector 只挑 opt-in multiplexer 那 4 個 command，20 個 default-on classic hook 全漏、`tool_name` 寫死使 Task／Agent 與 session 事件 matcher 永遠不中——P2 新寫 `scripts/benchmark-hook-latency.js`，不擴充舊 selector（`S6.md` 列了最小改法供參考）。
 - 儀器（A08）：依 S6 決定沿用或新寫 `scripts/benchmark-hook-latency.js`（detached checkout、N = 30、固定 20 個 tool call 的 `claude -p` 工作負載、`--debug` 時戳取**每個 hook 區間**）。三臂：enabled（現狀）、positive-control（同 checkout 多掛一個 `sleep 0.2` 的 marker hook）、zero（配置後用 `--debug` 的 hook 行數確認實際執行 hook 數 = 0）。
@@ -213,6 +247,7 @@ O：owner 不用問「怎麼這麼慢」就知道誰在跑、跑多久、最後 
 | D4 | **結案（S1 = yes，2026-10-03）**：S1 = no 時要不要同 repo 第二個 plugin | 不要；classic 完整、mod `unavailable` | 第二 plugin（要實測一次安裝） | owner 要一次安裝；資料夾同 repo ≠ 同 plugin |
 
 ## Review log
+- R5 2026-10-04 wiring inventory 後 owner 裁決：不拿掉欄位，所有缺口排進 §4 P1W（依賴圖、平行波次、機制／指引分類、真機驗收門檻）；v2.37.0 等 P1W 機制列完成。P1W 為新設計，送一輪計畫審查（新 rubric），不重開 P1a–P1d 已裁決項。
 - R4.4 2026-10-04 owner 裁決（選項 B）：P1c band 改為結論詞（要你決定／疑似卡住／完成待驗收／進行中）＋專案・phase・已跑・進度；未凍結分母顯示「n done*」淡色、不顯示 %；花費與 context 移到 pane；「等你決定」進 C3，「代你決定」拆成 P5（見 §4 P5，寫入先於讀取）。只動 P1c 顯示與讀取、不動已出貨契約。不動 rubric、不另開 generation。狀態與證據：`docs/plans/evidence/2026-10-04-mods-p1c/README.md`。
 - R0 2026-10-03 fable 起草（SHA256 `6f43308d…`）；未註冊。
 - astra R0 advisory review（SHA256 `4a46589b…`，repo HEAD `9ebea928`）處置：

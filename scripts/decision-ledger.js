@@ -158,7 +158,7 @@ function stampFields() {
   let root = process.env.AUTOPILOT_ROOT_RUN_ID || null;
   if (!root) {
     try {
-      const marker = require('./session-mode').readMarker();
+      const marker = require('./session-mode').readSessionRecord(); // l3-l6 or plain: only root_run_id is read
       if (marker && typeof marker.root_run_id === 'string' && marker.root_run_id) root = marker.root_run_id;
     } catch (err) {
       root = null;

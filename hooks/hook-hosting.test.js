@@ -240,6 +240,10 @@ function upsFixture() {
   const a = mk();
   const cwd = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'hh-repo-')));
   execFileSync('git', ['-C', cwd, 'init', '-q']);
+  // Opted in (mods P1W MARKER): a repo that is not opted in is now rejected WITHOUT spawning git, so tests that
+  // exercise the full path (git runs) need the project config the opt-in rule looks for.
+  fs.mkdirSync(path.join(cwd, '.claude'));
+  fs.writeFileSync(path.join(cwd, '.claude', 'dispatch-config.md'), '# cfg\n');
   const bin = shimBin(a.live, ['git', 'flock']); // installed AFTER the repo is set up: only hook calls are logged
   fs.rmSync(path.join(a.live, 'calls.log'), { force: true });
   a.env.PATH = `${bin}:${process.env.PATH}`;

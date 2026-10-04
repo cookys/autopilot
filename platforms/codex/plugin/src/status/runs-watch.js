@@ -152,6 +152,14 @@ function unexpiredMarkers(env, key, nowMs) {
   return out;
 }
 
+// An orchestrator marker (l3-l6) as opposed to a plain-session record (explicit level null, mods P1W MARKER).
+// Plain records feed project_key / phase / root (watch inputs get ALL unexpired markers); they are NOT orchestrator
+// sessions, so they never count toward watcher liveness, the cost session list or foreman activity — exactly as if
+// the file were absent. Only an explicit null is excluded: a marker without a level keeps its old treatment.
+function isOrchestratorMarker(m) {
+  return !(m && m.level === null);
+}
+
 // Session liveness beyond markers (mods P1W W1c / G1 R9): dev-flow and plain sessions hold no session-mode
 // marker, so the per-session files `<live>/tasks/<sid>.json` (autopilot.session-tasks/1) and
 // `<live>/attention/<sid>.json` (autopilot.attention/1) are the signal. Read defensively by two fields only:
@@ -524,7 +532,7 @@ function createWatcher({
       const known = rows.find((r) => typeof r.project === 'string' && r.project && projectKey(r.project) === key);
       if (known) identity = known.project;
     }
-    const markers = unexpiredMarkers(env, key, nowMs);
+    const markers = unexpiredMarkers(env, key, nowMs).filter(isOrchestratorMarker);
     const cost = costs.summary(nowMs, markers.map((m) => m.session_id).filter(Boolean));
     const roots = new Set(state.roots);
     for (const r of rows) if (r.root_run_id) roots.add(r.root_run_id);
@@ -824,5 +832,5 @@ function runWriter({ key, interval, idleExit, enrichCap, collect, render, cwd, e
 
 module.exports = {
   taskPollDue, TASK_SETTLED_POLL_MS, SCHEMA, VALID_FOR_S, HEARTBEAT_S, LOCK_BUSY_RC, DEFAULT_IDLE_EXIT_S, createWatcher, readEnvelope, runWatchCli,
-  lockPathOf, recentSessionFiles, isWatcherFor, flockAvailable, startWatcherDetached, watchLaunchArgv, worktreePaths, computeCounts, unexpiredMarkers, createCostReader,
+  lockPathOf, recentSessionFiles, isWatcherFor, flockAvailable, startWatcherDetached, watchLaunchArgv, worktreePaths, computeCounts, unexpiredMarkers, isOrchestratorMarker, createCostReader,
 };

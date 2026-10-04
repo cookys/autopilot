@@ -984,6 +984,12 @@ for (const file of files) {
     if (!data || typeof data !== 'object' || Array.isArray(data)) {
       throw new TypeError('marker must be an object');
     }
+    if (data.level === null) {
+      // A plain-session record (mods P1W MARKER): no orchestrator mode — skipped exactly as if absent.
+      // Only an explicit null; a missing or malformed level is still an invalid marker.
+      process.stdout.write('OK\0INACTIVE\0');
+      continue;
+    }
     if (!new Set(['l3', 'l4', 'l5', 'l6']).has(data.level)) {
       throw new TypeError('marker level is invalid');
     }
@@ -1443,6 +1449,11 @@ try {
   const data = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
     throw new TypeError('marker must be an object');
+  }
+  if (data.level === null) {
+    // Plain-session record (mods P1W MARKER): not an orchestrator marker — skipped as if absent.
+    process.stdout.write('INACTIVE');
+    process.exit(0);
   }
   if (!new Set(['l3', 'l4', 'l5', 'l6']).has(data.level)) {
     throw new TypeError('marker level is invalid');

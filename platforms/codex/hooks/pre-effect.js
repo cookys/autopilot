@@ -219,6 +219,10 @@ function findMarker(repoRoot, payloadSessionId, sessionMode) {
   } catch (error) {
     return { status: 'malformed', reason: `session marker malformed: ${error.message}`, marker: null };
   }
+  if (marker && typeof marker === 'object' && !Array.isArray(marker) && marker.level === null) {
+    // Plain-session record (mods P1W MARKER, level null): not a lifecycle marker — same as absent.
+    return { status: 'absent', reason: 'session marker absent', marker: null };
+  }
   const result = validateMarker(marker, repoRoot, payloadSessionId, sessionMode, Date.now());
   return result.valid
     ? { status: 'valid', reason: null, marker }

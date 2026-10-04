@@ -172,6 +172,10 @@ function observeMarker(markerFile, repoIdentity) {
       status: error.code === 'ENOENT' ? 'absent' : 'corrupt',
     };
   }
+  // A plain-session record (level null, mods P1W MARKER) is not an orchestrator marker: observed as absent.
+  if (value && typeof value === 'object' && !Array.isArray(value) && value.level === null) {
+    return { status: 'absent' };
+  }
   if (!value || typeof value !== 'object' || Array.isArray(value)
       || !LEVELS.has(value.level)
       || typeof value.expires_at !== 'string'

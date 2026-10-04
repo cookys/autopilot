@@ -3,8 +3,9 @@
 # Marker gains `phase` (1-64 chars, trimmed, no control chars) + `phase_set_at` (ISO-8601).
 # Contracts under test: update-in-place leaves every other field byte-identical; `--phase ''` clears
 # both fields; invalid names exit 2 with the marker untouched; an expired/absent marker is never
-# resurrected or created level-less (dispatch-hetero.sh check_session_mode_gate classifies a marker
-# without a valid `level` as "marker is invalid" and refuses EVERY dispatch in the repo — pinned below);
+# resurrected or created by the phase-only form (a marker WITHOUT a `level` key stays invalid for
+# dispatch-hetero.sh check_session_mode_gate — pinned below; a plain-session marker is an explicit
+# `level: null`, written by `set` without --level and covered by hooks/plain-session-marker.test.js);
 # concurrent writers serialise on <marker>.lock; the real ~/.autopilot stores are untouched.
 # RED (before implementation, 2026-10-05): 36 passed / 21 failed (the 36 are negative and untouched-marker checks that hold vacuously while `--phase` is ignored).
 . "$(dirname "$0")/lib.sh"
@@ -86,12 +87,12 @@ cmp -s "$MARKER" "$TEST_TMP/before.json" && assert_eq ok ok "set --level with in
 node "$CLI" set --phase "$(printf 'x%.0s' $(seq 1 64))" >/dev/null 2>&1
 assert_exit_code "$?" "0" "64-char phase is accepted"
 
-# 6. no active marker: never created level-less (STOP finding), exit 2, nothing written
+# 6. no active marker: the phase-only form never creates one, exit 2, nothing written
 rm -f "$MARKER"
 node "$CLI" set --phase orphan >/dev/null 2>"$TEST_TMP/err"; RC=$?
 assert_exit_code "$RC" "2" "set --phase with no marker exits 2"
-assert_contains "$(cat "$TEST_TMP/err")" "level" "no-marker refusal says --level is needed"
-assert_file_absent "$MARKER" "no level-less marker is created"
+assert_contains "$(cat "$TEST_TMP/err")" "level" "no-marker refusal names how to create one (--level)"
+assert_file_absent "$MARKER" "the phase-only form creates no marker"
 # expired marker: not resurrected, bytes untouched
 node "$CLI" set --level l5 --ttl-hours 0 --repo-root "$REPO" >/dev/null 2>&1
 sleep 1
@@ -135,12 +136,12 @@ node "$CLI" set --phase afterdead >/dev/null 2>&1
 assert_exit_code "$?" "0" "dead lock holder is stolen"
 assert_eq "afterdead" "$(jget phase)" "write lands after stealing a dead holder's lock"
 
-# 8. level-less marker would break dispatch: pin WHY set --phase refuses to create one
+# 8. a marker with NO level key is still an invalid marker for dispatch (only an explicit null is a plain session)
 LL="$TEST_TMP/levelless"; mkdir -p "$LL"
 node -e 'const now=Date.now();require("fs").writeFileSync(process.argv[1],JSON.stringify({session_id:"ll",repo_root:process.argv[2],started_at:new Date(now).toISOString(),expires_at:new Date(now+36e5).toISOString(),phase:"x"}))' "$LL/ll.json" "$REPO"
 echo "p" > "$TEST_TMP/prompt.txt"
 OUT="$(cd "$REPO" && AUTOPILOT_SESSION_MODE_DIR="$LL" "$REPO_ROOT/scripts/dispatch-hetero.sh" --branch feat/levelless --prompt-file "$TEST_TMP/prompt.txt" --agy-bin /bin/true 2>&1)"; RC=$?
-assert_exit_code "$RC" "2" "a level-less marker makes dispatch-hetero fail closed (why PHASE refuses to create one)"
+assert_exit_code "$RC" "2" "a marker with no level key still makes dispatch-hetero fail closed"
 assert_contains "$OUT" "authoritative session-mode marker is invalid" "dispatch-hetero names the level-less marker as invalid"
 
 # 9. negative control: the real stores were never touched

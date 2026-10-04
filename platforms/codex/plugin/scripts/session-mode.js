@@ -3,11 +3,18 @@
  * session-mode.js — orchestrator-mode marker CLI (A1/A2 support, v2.32.27).
  *
  * Written by depth-0 at /l3 /l4 /l5 /l6 entry; read by the orchestrator-edit-gate
- * and context-budget hooks. One marker file per session id:
+ * and context-budget hooks. One marker file per session id. The marker is the per-session RECORD
+ * (mods P1W MARKER, plan R5.6): `level: null` is a PLAIN session (no orchestrator mode) — written by the
+ * SessionStart ensure in hooks/runs-watch-autostart.js for opted-in repos and by `set` without --level.
+ * Every mode reader treats level:null exactly like an absent marker (readMarker() returns null for it);
+ * the fields meant to be read from a plain record are project_key, root_run_id, phase, started_at.
+ * level ∈ {l3,l4,l5,l6} is unchanged; any other non-null level is still an invalid marker:
  *   ${AUTOPILOT_SESSION_MODE_DIR:-~/.autopilot/session-mode}/<session-id>.json
  *   { session_id, level, repo_root, started_at, expires_at, entry_level?, fallback_reason?,
  *     mission_routing?, repo_identity?, project_key?, root_run_id?, phase?, phase_set_at? }
- *   (repo_identity/project_key/root_run_id are additive, null when underivable; `set` also writes
+ *   (level is null for a plain session; root_run_id stays null for it unless --root-run-id or
+ *   AUTOPILOT_ROOT_RUN_ID is given — job roots are not assigned to plain sessions.
+ *   repo_identity/project_key/root_run_id are additive, null when underivable; `set` also writes
  *   ~/.autopilot/live-pointer.json — src/status/live-pointer.js)
  *   phase/phase_set_at (mods P1W PHASE): free-text work phase (1-64 chars, trimmed, no control
  *   chars) + ISO-8601 stamp, read by the project watcher; absent = no phase.
@@ -25,11 +32,14 @@
  * Usage:
  *   node scripts/session-mode.js set --level l3|l4|l5|l6 [--entry-level l3|l4|l5|l6]
  *     [--fallback none|solo|precondition_failed] [--repo-root <dir>] [--ttl-hours N] [--phase <name>]
- *   node scripts/session-mode.js set --phase <name>     (no --level: update ONLY phase/phase_set_at of this
- *     session's active marker — lock + atomic rename, every other field unchanged; `--phase ''` clears the
- *     phase. Exit 2 when there is no active marker: a level-less marker is never created, because
- *     dispatch-hetero.sh treats a marker without a valid level as invalid and refuses all dispatch.
- *     Exit 1 when the marker lock stays held past AUTOPILOT_SESSION_MODE_LOCK_TIMEOUT_MS, default 8000.)
+ *   node scripts/session-mode.js set [--level none] [--repo-root <dir>] [--ttl-hours N] [--root-run-id <id>] [--phase <name>]
+ *     (no --level, or --level none: write a PLAIN-session marker, level null, replacing this session's plain or
+ *     expired marker — exit 2 when an unexpired l3-l6 marker exists (use `clear`); no Mission routing, no entry_level. `status` prints it as level "none" with active:false.)
+ *   node scripts/session-mode.js set --phase <name>     (--phase WITHOUT any --level flag: update ONLY
+ *     phase/phase_set_at of this session's unexpired marker — l3-l6 or plain — lock + atomic rename, every other
+ *     field unchanged; `--phase ''` clears the phase. Exit 2 when there is no unexpired marker (fail-closed:
+ *     this form never creates one). Exit 1 when the marker lock stays held past
+ *     AUTOPILOT_SESSION_MODE_LOCK_TIMEOUT_MS, default 8000.)
  *   node scripts/session-mode.js clear [--task-status-receipt <file> --root-run-id <id>]
  *   node scripts/session-mode.js retire --session <id> --integration-receipt <file>
  *     [--integration-ref <ref>] [--lineage <adoption-key>] [--repo-root <dir>]
@@ -149,10 +159,20 @@ function markerPath() {
   return path.join(markerDir(), `${getSessionId()}.json`);
 }
 
+// The ORCHESTRATOR marker: null for absent, expired, corrupt, and for a plain-session record (level null).
+// Every mode gate reads this one, so "plain session" == "no marker" for them by construction.
 function readMarker() {
+  const m = readSessionRecord();
+  return m && m.level !== null ? m : null;
+}
+
+// The per-session record: an orchestrator marker (l3-l6) OR a plain-session marker (level null), unexpired.
+// For callers that read the record's own fields (phase, root_run_id, project_key) rather than the mode.
+function readSessionRecord() {
   try {
     const m = JSON.parse(fs.readFileSync(markerPath(), 'utf8'));
-    if (!m || typeof m !== 'object' || !LEVELS.has(m.level)) return null;
+    if (!m || typeof m !== 'object') return null;
+    if (m.level !== null && !LEVELS.has(m.level)) return null;
     if (!m.expires_at || Date.parse(m.expires_at) <= Date.now()) return null; // expired ⇒ fail-open
     return m;
   } catch {
@@ -359,6 +379,9 @@ function validateManagedDevFlowAdmission({
   } catch (error) {
     return reject(`session marker malformed: ${error.message}`);
   }
+  if (marker && typeof marker === 'object' && !Array.isArray(marker) && marker.level === null) {
+    return reject('session marker absent'); // a plain-session record is not an orchestrator marker
+  }
   if (!marker || typeof marker !== 'object' || Array.isArray(marker)
       || !LEVELS.has(marker.level)
       || typeof marker.session_id !== 'string'
@@ -463,13 +486,13 @@ function parsePhase(raw) {
   return { value: trimmed };
 }
 
-// `set --phase <name>` without --level: update only phase/phase_set_at of the active marker.
+// `set --phase <name>` without any --level flag: update only phase/phase_set_at of the session's unexpired
+// record (an orchestrator marker or a plain-session marker).
 function cmdSetPhase(phase) {
-  if (!readMarker()) {
+  if (!readSessionRecord()) {
     process.stderr.write(
-      'session-mode: no active marker for this session; --phase alone updates an existing marker. ' +
-      'Run `set --level l3|l4|l5|l6 --phase <name>` first (a level-less marker is never created: ' +
-      'dispatch-hetero.sh refuses every dispatch while one exists)\n',
+      'session-mode: no unexpired session marker for this session; --phase alone updates an existing marker ' +
+      '(l3-l6 or plain) and never creates one. Run `set [--level none|l3|l4|l5|l6] --phase <name>` to create it\n',
     );
     return 2;
   }
@@ -481,7 +504,7 @@ function cmdSetPhase(phase) {
       storeDir: markerDir(), lockFile: `${markerPath()}.lock`, name: 'session-mode marker', timeoutMs,
     }, () => {
       // Re-read under the lock: the marker may have been cleared or replaced while we waited.
-      const current = readMarker();
+      const current = readSessionRecord();
       if (!current) return;
       const next = { ...current };
       delete next.phase;
@@ -507,8 +530,105 @@ function cmdSetPhase(phase) {
   return 0;
 }
 
+// A plain-session marker (level null): the per-session record without orchestrator mode. No Mission routing,
+// no entry_level. root_run_id is the caller's explicit value or null — never minted (job roots are not assigned
+// to plain sessions).
+function buildPlainMarker({ sessionId, repoRoot, scope, now, ttlHours = DEFAULT_TTL_HOURS, rootRunId = null, phase = null }) {
+  const marker = {
+    session_id: sessionId,
+    level: null,
+    repo_root: repoRoot,
+    started_at: new Date(now).toISOString(),
+    expires_at: new Date(now + ttlHours * 3600 * 1000).toISOString(),
+    repo_identity: scope && scope.repo_identity ? scope.repo_identity : null,
+    project_key: scope && scope.project_key ? scope.project_key : null,
+    root_run_id: rootRunId || null,
+  };
+  if (phase) {
+    marker.phase = phase;
+    marker.phase_set_at = new Date(now).toISOString();
+  }
+  return marker;
+}
+
+function writeMarkerFile(file, marker) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = `${file}.tmp-${process.pid}`;
+  fs.writeFileSync(tmp, `${JSON.stringify(marker, null, 2)}\n`);
+  fs.renameSync(tmp, file); // atomic on same fs
+}
+
+// SessionStart ensure (hooks/runs-watch-autostart.js). Rule: create a plain marker for `sessionId` ONLY when no
+// unexpired marker of any kind exists for it; NEVER overwrite one (compact / resume / startup with a live l3-l6
+// or plain marker leave the bytes alone). An EXPIRED marker (parseable, expires_at in the past) is replaced;
+// an unreadable or malformed one is left untouched (not ours to destroy; fail-open). Takes the same
+// <marker>.lock as `set --phase` so a concurrent writer cannot interleave.
+// -> 'created' | 'replaced_expired' | 'kept' | 'kept_unreadable' | 'skipped' (no usable session id).
+function ensurePlainMarker({ sessionId, repoRoot, scope, now = Date.now(), dir = markerDir() }) {
+  const sid = normalizeSessionId(sessionId);
+  if (!sid) return 'skipped';
+  const file = path.join(dir, `${sid}.json`);
+  let result = 'kept';
+  fs.mkdirSync(dir, { recursive: true });
+  withWriteLock({ storeDir: dir, lockFile: `${file}.lock`, name: 'session-mode marker', timeoutMs: 2000 }, () => {
+    let state = 'absent';
+    try {
+      const m = JSON.parse(fs.readFileSync(file, 'utf8'));
+      const valid = m && typeof m === 'object' && !Array.isArray(m) && (m.level === null || LEVELS.has(m.level));
+      const exp = valid ? Date.parse(m.expires_at) : NaN;
+      state = !valid || !Number.isFinite(exp) ? 'unreadable' : (exp <= now ? 'expired' : 'live');
+    } catch (error) {
+      state = error.code === 'ENOENT' ? 'absent' : 'unreadable';
+    }
+    if (state === 'live') { result = 'kept'; return; }
+    if (state === 'unreadable') { result = 'kept_unreadable'; return; }
+    const rootRunId = process.env.AUTOPILOT_ROOT_RUN_ID || null;
+    writeMarkerFile(file, buildPlainMarker({ sessionId: sid, repoRoot, scope, now, rootRunId }));
+    result = state === 'expired' ? 'replaced_expired' : 'created';
+  });
+  return result;
+}
+
+function cmdSetPlain(args, phase) {
+  // A plain `set` is a record, not an exit from orchestrator mode: it never replaces this session's unexpired
+  // l3-l6 marker (that would drop an l5/l6 session's mode without its close evidence). `clear` is the exit.
+  const live = readMarker();
+  if (live) {
+    process.stderr.write(
+      `session-mode: refusing plain \`set\`: this session has an unexpired ${live.level} marker; ` +
+      'run `clear` (with its close-evidence rules) to leave orchestrator mode first\n',
+    );
+    return 2;
+  }
+  const ttlHours = args['ttl-hours'] !== undefined ? Number(args['ttl-hours']) : DEFAULT_TTL_HOURS;
+  if (!Number.isFinite(ttlHours) || ttlHours < 0) {
+    process.stderr.write(`session-mode: invalid --ttl-hours "${args['ttl-hours']}"\n`);
+    return 2;
+  }
+  const repoRoot = path.resolve(args['repo-root'] || gitToplevel());
+  let scope = { repo_identity: null, project_key: null };
+  try { scope = scopeFromCwd(repoRoot); } catch (_error) { /* fail-open: fields stay null */ }
+  const explicitRoot = typeof args['root-run-id'] === 'string' && /^[A-Za-z0-9._-]+$/.test(args['root-run-id'])
+    ? args['root-run-id'] : '';
+  const marker = buildPlainMarker({
+    sessionId: getSessionId(),
+    repoRoot,
+    scope,
+    now: Date.now(),
+    ttlHours,
+    rootRunId: explicitRoot || process.env.AUTOPILOT_ROOT_RUN_ID || null,
+    phase: phase && phase.value !== null ? phase.value : null,
+  });
+  writeMarkerFile(markerPath(), marker);
+  try { writeLivePointer(); } catch (_error) { /* fail-open: pointer is advisory for the mod */ }
+  startProjectWatcher(marker, repoRoot);
+  process.stdout.write(`${JSON.stringify({ ok: true, marker_path: markerPath(), ...marker }, null, 2)}\n`);
+  return 0;
+}
+
 function cmdSet(args) {
   const hasPhase = Object.prototype.hasOwnProperty.call(args, 'phase');
+  const hasLevel = Object.prototype.hasOwnProperty.call(args, 'level');
   let phase;
   if (hasPhase) {
     phase = parsePhase(args.phase);
@@ -516,11 +636,12 @@ function cmdSet(args) {
       process.stderr.write(`session-mode: ${phase.error}\n`);
       return 2;
     }
-    if (args.level === undefined) return cmdSetPhase(phase.value);
+    if (!hasLevel) return cmdSetPhase(phase.value);
   }
+  if (!hasLevel || args.level === 'none') return cmdSetPlain(args, phase);
   const level = args.level;
   if (!LEVELS.has(level)) {
-    process.stderr.write(`session-mode: invalid --level "${level}" (want l3|l4|l5|l6)\n`);
+    process.stderr.write(`session-mode: invalid --level "${level}" (want l3|l4|l5|l6, or none for a plain session)\n`);
     return 2;
   }
   const ttlHours = args['ttl-hours'] !== undefined ? Number(args['ttl-hours']) : DEFAULT_TTL_HOURS;
@@ -873,10 +994,13 @@ function cmdRetire(args) {
 }
 
 function cmdStatus() {
-  const m = readMarker();
-  const out = m
-    ? { active: true, marker_path: markerPath(), ...m }
-    : { active: false, marker_path: markerPath() };
+  const m = readSessionRecord();
+  // A plain-session record is not an orchestrator mode: active:false, level "none" (the file keeps null).
+  const out = !m
+    ? { active: false, marker_path: markerPath() }
+    : (m.level === null
+      ? { active: false, marker_path: markerPath(), ...m, level: 'none' }
+      : { active: true, marker_path: markerPath(), ...m });
   process.stdout.write(`${JSON.stringify(out, null, 2)}\n`);
   return 0;
 }
@@ -884,7 +1008,7 @@ function cmdStatus() {
 // Prints the active marker's job root (empty when no live marker / no root). Rails call this
 // to pick the lineage root for an ad-hoc dispatch; always exit 0 so a missing marker is silent.
 function cmdRoot() {
-  const m = readMarker();
+  const m = readSessionRecord();
   process.stdout.write(m && typeof m.root_run_id === 'string' ? `${m.root_run_id}\n` : '\n');
   return 0;
 }
@@ -900,7 +1024,8 @@ function main() {
     case 'root': return cmdRoot();
     default:
       process.stderr.write(
-        'Usage: session-mode.js set --level l3|l4|l5|l6 [--entry-level l3|l4|l5|l6] ' +
+        'Usage: session-mode.js set [--level none] [--root-run-id <id>] [--phase <name>] (plain session) | ' +
+        'set --level l3|l4|l5|l6 [--entry-level l3|l4|l5|l6] ' +
         '[--fallback none|solo|precondition_failed] [--repo-root <dir>] [--ttl-hours N] [--root-run-id <id>] [--phase <name>] | ' +
         'set --phase <name|\'\'> (update the active marker) | clear | retire --session <id> --integration-receipt <file> [--integration-ref <ref>] | status | root\n',
       );
@@ -913,6 +1038,8 @@ module.exports = {
   DEV_FLOW_ADMISSION_REJECTION_CODE,
   devFlowAdmissionRejection,
   readMarker,
+  readSessionRecord,
+  ensurePlainMarker,
   getSessionId,
   normalizeSessionId,
   markerPath,

@@ -32,7 +32,9 @@ S5b; `README.md` there is the verdict table). A mod is CC-only; non-Claude-Code 
   autopilot_home, written_at}`, written atomically by `src/status/live-pointer.js:writeLivePointer()` (called by
   `session-mode.js set` and by the watcher start). The mod knows only `$HOME`; every other path comes from here.
 - **Resolution order** for project and root: (1) the session marker `<autopilot_home>/session-mode/<sid>.json`
-  (`project_key`, `root_run_id`, `expires_at`; `sid` from `$.session.id()`); (2) else longest prefix of the real
+  (`project_key`, `root_run_id`, `expires_at`; `sid` from `$.session.id()`). The marker is the per-session record:
+  `level` is `l3`-`l6` for an orchestrator session and `null` for a plain session (no orchestrator mode, `root_run_id`
+  null); every mode gate reads `level: null` exactly like an absent marker; (2) else longest prefix of the real
   cwd against `<live_base>/runs/paths/*.json`; (3) else none (the band shows no data, it never borrows another
   session). `project_key` = first 16 hex of sha256(`repo_identity`), computed only in
   `src/status/project-key.js`.
@@ -74,9 +76,12 @@ S5b; `README.md` there is the verdict table). A mod is CC-only; non-Claude-Code 
   `hooks/tests/session-mode-watcher.test.sh` turns it on.
 - **Hook autostart (W1c)**: `hooks/runs-watch-autostart.js` (SessionStart + UserPromptSubmit) starts the same watcher for
   dev-flow and plain sessions, only in an opted-in repo (`.claude/*-config.md` present, or an unexpired marker, or
-  `AUTOPILOT_RUNS_WATCH_AUTOSTART=1`; `=0` disables). The idle-exit also treats a session as live while
-  `<live>/tasks/<sid>.json` or `<live>/attention/<sid>.json` of the project has `updated_at` inside the idle window.
-  SessionEnd does not stop the watcher; idle-exit does.
+  `AUTOPILOT_RUNS_WATCH_AUTOSTART=1`; `=0` disables). On SessionStart in an opted-in repo it also ENSURES this session's plain
+  marker (`level: null`; created only when no unexpired marker exists, never overwritten, so `compact`/`resume` keep an
+  active l3-l6 marker byte-for-byte; an expired one is replaced). On UserPromptSubmit the opt-in is read without
+  spawning git (knob, config files, this session's marker), so a repo that is not opted in costs no process per prompt. The idle-exit also treats a session as live while
+  `<live>/tasks/<sid>.json` or `<live>/attention/<sid>.json` of the project has `updated_at` inside the idle window;
+  plain-session markers do not count as live sessions. SessionEnd does not stop the watcher; idle-exit does.
 - A watcher launched from CC's Bash tool outlived `claude -p` (S5b). CC sandbox on, interactive `/exit`, and
   desktop are unverified.
 - Stop: `autopilot status runs --stop --project <key>` (checks `/proc/<pid>/cmdline` before signalling).

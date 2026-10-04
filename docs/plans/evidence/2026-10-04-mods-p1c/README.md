@@ -2,8 +2,8 @@
 
 > ## IN FLIGHT (2026-10-05, session df52a188)
 > - Step 1 INT: sonnet hand building `w/int` in `$OLD/p1c/wt-int` per `briefs-p1w/int.md`; report `$OLD/p1c/run-w/int/REPORT.md`. Not yet accepted.
-> - Probe for MECH-G rows (W2g/W2c/W2e-g mechanisms, read-only): report `$OLD/p1c/run-w/probe-w2d-rows/REPORT.md`.
-> - Wave-2 briefs drafted: `briefs-p1w/w-rows-wave2.md` (WATCH, PHASE, PERF; MECH-G + compare location pending the probe). Dispatch off `w/int` after INT is accepted. Eval smoke (step 3) runs after the INT suite, not concurrently (memory pressure).
+
+> - Wave-2 briefs ready (owner rulings R5.5 folded): `briefs-p1w/w-rows-wave2.md` — four hands WATCH-A, WATCH-B, PHASE+PICK, PERF+STAMP off `w/int` after INT is accepted. Probe done (`$OLD/p1c/run-w/probe-w2d-rows/REPORT.md`). Eval smoke (step 3) runs after the INT suite, not concurrently (memory pressure).
 
 > ## HANDOFF (2026-10-05) — read this block first
 > Plan `docs/plans/2026-10-03-mods-visible-dispatch.md` R5.4, §4 P1W table is the single source (FROZEN after G1+G2; later rulings R5.3/R5.4 in Review log).

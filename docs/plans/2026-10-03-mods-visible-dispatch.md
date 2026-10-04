@@ -263,6 +263,7 @@ O：owner 不用問「怎麼這麼慢」就知道誰在跑、跑多久、最後 
 | D4 | **結案（S1 = yes，2026-10-03）**：S1 = no 時要不要同 repo 第二個 plugin | 不要；classic 完整、mod `unavailable` | 第二 plugin（要實測一次安裝） | owner 要一次安裝；資料夾同 repo ≠ 同 plugin |
 
 ## Review log
+- R5.5 2026-10-05 owner 裁決（探測 `evidence/2026-10-04-mods-p1c/briefs-p1w/w-rows-wave2.md` 引用的 probe：三列都只有部分能機制化）：**W2g** 機制部分＝next-pick 有 marker／`AUTOPILOT_ROOT_RUN_ID` 時自動寫預設 ledger；W2d 顯示「n 件派工無決策紀錄」（manifest 對 `kind:dispatch` 列，絕不自動寫 dispatch 列）；`<campaign>` 定義為 `<git-common-dir>/autopilot/work-orders/<root>/`，reader 一併讀；裁決理由仍只靠現有文字。**W2c**＝讀 codeforge `subagentStatusLine` 的 `tasks.json`＋慣例路徑的 foreman run-ledger，再加既有 PostToolUse 程序內的 subagent `last_tool_at` 戳記（只代表存活、不代表 stage；與 PERF 同一 hand）。**W2e-g** 改回指引列（eval 後以 PATCH 跟上）；W2e-m 讀檔位置定為 `<git-common-dir>/autopilot/compare/<root>/*.json`。
 - R5.4 2026-10-04 depth-0 裁決：W1f 接受現狀（hetero 只在自己 manifest 記 job root；review／author 子任務繼承），hetero 子任務掛 job root 拆為 W1f-b（認領／預算語意變更，另行設計審查）。
 - R5.3 2026-10-04 owner 裁決（eval 設計 `evidence/2026-10-04-mods-p1c/eval-design-guidance-rows.md` 之後）：W2g（`depth0-control-loop.md:400-410`）、W2c（`level-front-door.md:269-272`）、W2e-g（`review-page.md:80-84`）現行文字已要求，依 CLAUDE.md「機制 vs 指引」改列**機制**——以程式讓既有要求真的發生，不改 skill 文字、不需 eval。W2a-g、W2b-g、W1b 觸發點 2 維持指引，**現在**先擴 harness（E1–E5）再跑 eval，v2.37.0 等它們完成。
 - R5.2 2026-10-04 P1W G2（終代，CONDITIONAL，13 條：3 擋 10 不擋）全數 accept-and-fold：依賴表改寫成唯一正本（吸收 G1 處置），W1f 不再碰 watcher／elapsed（移入 W3a），W1b 只放身分與指標、判定由 `status task` 重算，W2b／W2e 拆 m／g，W2f 改為先探測的 context 寫入端，W4 門檻逐格定義「真值」。凍結。

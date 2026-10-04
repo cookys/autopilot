@@ -1,5 +1,7 @@
 # mods P1b → P1c/P1d → P5 — state of play (2026-10-04)
 
+> **v2.37.0 is BLOCKED (2026-10-04, after the wiring inventory).** `wiring-inventory.md` shows the band's sources are mostly unwired: the watcher publishes `progress/decision/planned/compare` as null (`src/status/runs-watch.js:394`), nothing writes a decision file or the task-status input bundle, the watcher starts only from `/l3`–`/l6`. Landing as built would ship a band where `要你決定` and `完成待驗收` never fire, phase and progress are always empty, and dev-flow shows `no project`. Owner asked for one holistic design first; the proposal (page copy `v237-band-redesign-proposal.html`) awaits the owner's answers. Depth-0 verified: campaign manifest roots equal work-order dir names 5/5; work-order `controller.progress_receipts[].phase` mixes casing (`IMPLEMENTING`, `awaiting_disposition`, `boundary_rejected`). The C3b "live campaign phase unreachable" conclusion was wrong for `/l5`/`/l6`: the root IS the campaign id.
+
 Plan: `docs/plans/2026-10-03-mods-visible-dispatch.md` (R4.4). Read this first after a context clear.
 
 ## What shipped / what is where

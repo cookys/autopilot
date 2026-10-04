@@ -56,121 +56,144 @@ th{font-weight:500;color:var(--muted);font-size:.8rem}
 .ask ol{margin:0;padding-left:1.3em;display:flex;flex-direction:column;gap:8px}
 @media (prefers-reduced-motion:no-preference){.fig,.card{transition:border-color .15s}.card:hover{border-color:var(--accent)}}
 </style>
+<style>
+.mx td,.mx th{text-align:center;white-space:nowrap}
+.mx td:first-child,.mx th:first-child{text-align:left;white-space:normal;min-width:7.5em}
+.c-real{background:color-mix(in srgb,var(--ok) 16%,transparent);color:var(--fg)}
+.c-never{background:color-mix(in srgb,#d0453b 18%,transparent);color:var(--fg)}
+.c-part{background:var(--warn-soft);color:var(--fg)}
+.c-rm{color:var(--muted);text-decoration:line-through}
+.legend{display:flex;flex-wrap:wrap;gap:8px;font-size:.82rem}
+.legend span{padding:1px 8px;border-radius:4px}
+.chain{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.chain div{border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--surface);font-size:.9rem;min-width:0}
+.chain b{display:block;font-size:.78rem;color:var(--muted);font-weight:500;letter-spacing:.04em}
+.bad{border-color:#d0453b !important}
+.stop{border:2px solid #d0453b;border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:6px;background:var(--surface)}
+.stop h2{color:#d0453b;margin:0}
+</style>
 
 <main>
 <header style="display:flex;flex-direction:column;gap:10px">
-  <span class="eyebrow">Autopilot · v2.37.0 · 改版提案（待你確認）</span>
-  <h1>離開電腦的人回來，10 秒內該知道什麼</h1>
-  <p class="lead">你說得對。我上一版列的「幾個在跑、花多少錢、context 幾成」是機器的忙碌程度，人回來不會先問這些。人回來先問三件事：<b>現在到哪了？要不要我處理？不用處理的話大概多久好？</b>下面把狀態列改成回答這三件事，細節放到點開之後。</p>
+  <span class="eyebrow">Autopilot · mods 狀態列 · 盤點與整體設計（待你確認）</span>
+  <h1>先接通每一條線，再談畫面</h1>
+  <p class="lead">你說得對，我前幾輪是一塊一塊補。這次先把「誰寫資料 → 存在哪 → 誰轉交 → 畫面讀什麼」整條盤點完，結果是：<b>目前做好的狀態列，資料幾乎全是空的</b>。下面是現況、原因、整體設計，以及要你決定的四件事。</p>
 </header>
 
-<section>
-  <h2>第一眼：一行回答「專案 · 階段 · 多久 · 幾 %」</h2>
-  <p class="muted">以下是版面示意，不是實機截圖。最左邊的符號和第一個詞，是整條狀態列最重要的資訊：要不要你介入。</p>
-  <div class="term" role="img" aria-label="三種狀態的示意"><span class="w">▲ 要你決定</span>  autopilot · <span class="d">phase</span> 合併審查 · <span class="d">已跑</span> 2h14m · <span class="d">進度</span> 62%（5/8）
-<span class="d">   驗收 REJECT：1 個 🟠 未處理 → 點開看哪一條</span>
-<span class="w">   等你決定 1 件</span> <span class="d">·</span> 代你決定 3 件（<span class="w">1 件不可逆</span>）
-
-<span class="o">● 進行中</span>  autopilot · <span class="d">phase</span> 實作 · <span class="d">已跑</span> 38m · <span class="d">進度</span> 25%（2/8）
-<span class="d">   2 個派工在跑，無異常</span>
-<span class="d">   等你決定 0 件 · 代你決定 2 件（皆可逆）</span>
-
-<span class="w">⏸ 疑似卡住</span>  scriptorium · <span class="d">phase</span> 全套測試 · <span class="d">已跑</span> 1h52m · <span class="d">進度</span> 分母未凍結 · 3 done
-<span class="d">   最久的派工 41m 沒有輸出</span>
-
-<span class="o">✓ 完成待驗收</span>  autopilot · <span class="d">phase</span> 收尾 · <span class="d">已跑</span> 3h05m · <span class="d">進度</span> 100%（8/8）
-<span class="d">   驗收結論尚未出：等 depth-0 核證</span></div>
-  <ul>
-    <li><b>第一個詞是結論</b>：要你決定、進行中、疑似卡住、完成待驗收。四種就夠，人不必讀數字就知道急不急。</li>
-    <li><b>專案名</b>：多個專案同時在跑時，一眼分得出是哪個。</li>
-    <li><b>phase、已跑多久、進度 %</b>：就是你要的那三個。</li>
-    <li><b>第二行是原因</b>：一句話說「為什麼是這個狀態」，不用點開就知道要不要點。</li>
-  </ul>
+<section class="stop">
+  <h2>現在不能發 v2.37.0</h2>
+  <p>若照目前的程式落地：五個結論詞裡，「要你決定」和「完成待驗收」永遠不會亮；phase 和進度在所有模式下都是空的；你最常用的 dev-flow 模式，狀態列只會顯示 <code>no project</code>。這台機器上這套管道從來沒有產生過一份真實的 review 頁。</p>
 </section>
 
 <section>
-  <h2>兩種提醒：「等你決定」和「我替你決定了」</h2>
-  <p>這兩種要分開，因為處理方式不同。前者你不處理，工作就停在那裡；後者工作已經往前走了，你回來是要決定「認不認這個決定」。</p>
-  <div class="grid">
-    <div class="card"><span class="pill out">等你決定</span><h3 style="margin-top:8px">卡在你身上</h3><p class="muted">狀態列第一個詞變成「▲ 要你決定」，排在其他狀態之前。面板列出每一件：問題一句話、選項、預設會怎麼走。</p></div>
-    <div class="card"><span class="pill in">代你決定</span><h3 style="margin-top:8px">已替你做了</h3><p class="muted">每一件列出：決定了什麼、理由、<b>可不可逆</b>。不可逆的標黃，排在最前面。你可以逐件 veto，之後建立在它上面的回合會被擋下。</p></div>
-  </div>
-  <div class="term" role="img" aria-label="面板示意"><span class="d">面板 · 代你決定（本回合 3 件）</span>
-<span class="w">不可逆</span>  選 v2.37.0 而不是 v2.36.117   <span class="d">理由：新增 mod 屬於 MINOR</span>      <span class="d">[點開 / veto]</span>
-<span class="o">可逆</span>    codex 鏡像保留 mods.md 修改    <span class="d">理由：不同步會破壞鏡像一致</span>  <span class="d">[點開 / veto]</span>
-<span class="o">可逆</span>    D1 採納 SHIP-AS-IS            <span class="d">理由：審查無 🔴/🟠</span>           <span class="d">[點開 / veto]</span></div>
-  <ul>
-    <li><b>資料來源已經存在</b>：autopilot 本來就有一份「代決策紀錄」（decision ledger），每筆決定都寫了理由和可逆性，也有 veto 機制。現在只有事後的回合報告會用到它，狀態列和面板還沒讀它。</li>
-    <li><b>要補的一件事</b>：目前沒有「你已經看過」的標記。狀態列是唯讀的，不能自己記。第一版先顯示「本回合內的全部件數」，不分看過沒看過；要做「只顯示新的」，得有一個你能按的地方（review 網頁上的確認鈕或一條指令），這是額外的功能，我先不放進這次。</li>
-    <li><b>原則</b>：不可逆的代決策，即使在「進行中」狀態下也要在第二行出現，不等你點開才發現。</li>
-  </ul>
-</section>
-
-<section>
-  <h2>點開之後：三層，一層比一層細</h2>
-  <div class="fig">
-    <svg viewBox="0 0 700 170" role="img" aria-label="三層鑽取">
-      <rect class="boxa" x="8" y="20" width="200" height="110" rx="10"/>
-      <text class="tb" x="108" y="46" text-anchor="middle">① 狀態列</text>
-      <text class="tm" x="108" y="70" text-anchor="middle">一行結論</text>
-      <text class="tm" x="108" y="90" text-anchor="middle">專案 · phase · 多久 · %</text>
-      <text class="tm" x="108" y="112" text-anchor="middle">永遠看得到</text>
-      <path class="arrow" d="M208 75 H246"/><path class="arrow" d="M240 69 l7 6 -7 6"/>
-      <rect class="box" x="248" y="20" width="200" height="110" rx="10"/>
-      <text class="tb" x="348" y="46" text-anchor="middle">② 面板</text>
-      <text class="tm" x="348" y="70" text-anchor="middle">每個專案一列</text>
-      <text class="tm" x="348" y="90" text-anchor="middle">每個 deliverable 的 %</text>
-      <text class="tm" x="348" y="112" text-anchor="middle">花費、context 放這裡</text>
-      <path class="arrow" d="M448 75 H486"/><path class="arrow" d="M480 69 l7 6 -7 6"/>
-      <rect class="box" x="488" y="20" width="204" height="110" rx="10"/>
-      <text class="tb" x="590" y="46" text-anchor="middle">③ review 網頁</text>
-      <text class="tm" x="590" y="70" text-anchor="middle">結論、驗收、gate、證據</text>
-      <text class="tm" x="590" y="90" text-anchor="middle">手機也能開</text>
-      <text class="tm" x="590" y="112" text-anchor="middle">（2.36.116 已出貨）</text>
-    </svg>
-  </div>
-  <p class="muted">第 ③ 層已經存在，而且它的首屏本來就是「一句結論＋要不要你決定 → 總進度 % → 狀態計數」。這次要做的是讓第 ① 層跟它講同一件事，不是另做一套。</p>
-</section>
-
-<section>
-  <h2>這些資料現在拿得到嗎</h2>
-  <p>答案是：有一部分拿不到。我先講清楚，免得你以為改了就都有。</p>
-  <div class="tablewrap"><table>
-    <thead><tr><th>要顯示的</th><th>來源</th><th>現況</th></tr></thead>
+  <h2>現況：各種工作模式下，狀態列實際會顯示什麼</h2>
+  <div class="legend"><span class="c-real">有真值</span><span class="c-part">部分情況有</span><span class="c-never">永遠空白</span></div>
+  <div class="tablewrap"><table class="mx">
+    <thead><tr><th>工作模式</th><th>有狀態列</th><th>結論詞</th><th>專案</th><th>phase</th><th>已跑多久</th><th>進度</th><th>要你決定</th></tr></thead>
     <tbody>
-      <tr><td>專案名</td><td>repo 身分，取目錄名</td><td><span class="pill in">拿得到</span></td></tr>
-      <tr><td>已跑多久</td><td>派工紀錄的開始時間</td><td><span class="pill in">拿得到</span></td></tr>
-      <tr><td>要不要你決定</td><td>review 頁的 decision 檔</td><td><span class="pill in">拿得到</span> 現在的 mod 已經在讀同一個 model.json</td></tr>
-      <tr><td>代你決定的件數、理由、可逆性</td><td>decision ledger（既有）</td><td><span class="pill in">拿得到</span> 狀態列和面板還沒讀它，要新增讀取；「你是否看過」沒有，見上一節</td></tr>
-      <tr><td>驗收結論</td><td>task_status_receipt</td><td><span class="pill in">拿得到</span> 沒有 receipt 時顯示 unknown</td></tr>
-      <tr><td>進度 %</td><td>controller_progress_receipt（分母凍結後才有）</td><td><span class="pill out">有條件</span> 沒有凍結分母就只能顯示「分母未凍結 · n done」，不編數字</td></tr>
-      <tr><td>phase（階段名）</td><td>campaign 的 phase</td><td><span class="pill out">有條件</span> 派工紀錄裡的 phase 只有 running／exited，是程序狀態，不是「實作」「審查」這種階段。階段名要從 receipt 來</td></tr>
+      <tr><td>dev-flow（最常用）</td><td class="c-never">否</td><td class="c-never">無</td><td class="c-never">無</td><td class="c-never">無</td><td class="c-never">無</td><td class="c-never">無</td><td class="c-never">無</td></tr>
+      <tr><td>/l3 直接做</td><td class="c-real">有</td><td class="c-part">只有「待命」</td><td class="c-real">有</td><td class="c-never">無</td><td class="c-never">無</td><td class="c-never">無</td><td class="c-never">無</td></tr>
+      <tr><td>/l4 工頭</td><td class="c-real">有</td><td class="c-part">工頭本身看不到，多半「待命」</td><td class="c-real">有</td><td class="c-never">無</td><td class="c-part">算錯（整個專案最舊的紀錄）</td><td class="c-never">無</td><td class="c-never">無</td></tr>
+      <tr><td>/l5、/l6 campaign</td><td class="c-real">有</td><td class="c-part">進行中／疑似卡住</td><td class="c-real">有</td><td class="c-never">無</td><td class="c-part">算錯</td><td class="c-never">無</td><td class="c-never">無</td></tr>
     </tbody>
   </table></div>
+</section>
+
+<section>
+  <h2>原因：讀取端做好了，寫入端不存在</h2>
+  <p>每個欄位都要走四段。斷掉的那一段標紅框。</p>
+  <div class="chain">
+    <div class="bad"><b>要你決定</b>寫入端：沒有任何流程寫「待決定」檔；轉交端：watcher 寫死傳 null</div>
+    <div class="bad"><b>進度 %／n done*</b>engine 有算（藏在 work-order 檔裡），但沒人取出來，watcher 寫死傳 null</div>
+    <div class="bad"><b>phase</b>engine 有即時階段（同一個 work-order 檔），沒人取；dev-flow 的階段只存在文字裡</div>
+    <div class="bad"><b>完成待驗收</b>依賴驗收 receipt，而它的輸入檔全 repo 沒有人寫（這也卡住 finish-flow，是既有問題）</div>
+    <div class="bad"><b>dev-flow 有狀態列</b>只有 /l3–/l6 會啟動 watcher，dev-flow 從不啟動</div>
+    <div><b>疑似卡住／進行中</b>派工紀錄 → watcher → 狀態列，這條真的通</div>
+    <div><b>花費、context</b>既有 hook 和你的 status line 在寫，這條通</div>
+  </div>
+  <p class="muted">另外：review 頁在沒有來源時會寫「知會：目前沒有待你決定的事項」，這句話會讓人誤以為沒事。要改。</p>
+</section>
+
+<section>
+  <h2>設計原則（三條）</h2>
   <ul>
-    <li><b>進度 % 為什麼不能從「跑了多久」或「幾個派工結束」算</b>：那是機器的動作量，不是工作完成度。計畫早就規定 % 只能來自 depth-0 核證過的 receipt，我同意這條。</li>
-    <li><b>代價</b>：還沒走到「凍結分母」那一步的回合，這一格會顯示「分母未凍結」。這是誠實，不是缺陷，但你會常看到。</li>
-    <li><b>花費與 context</b>：不丟掉，移到面板。它們是「要不要擔心」的資訊，不是「到哪了」的資訊。</li>
+    <li><b>只顯示有寫入端在運作的欄位。</b>做不出寫入端的欄位，這一版直接拿掉，不留空格假裝會有。</li>
+    <li><b>寫入端優先，而且只用「機制」。</b>寫入端用 hook 或 script 自動寫，不靠在 SKILL.md 裡叫我記得去呼叫（那種改法依規則要先有 eval 證據，而且會忘）。</li>
+    <li><b>發版門檻是真機實跑。</b>在你的 ssh＋tmux 環境，各模式真的跑一次，狀態列每一格都看到真值，才算通過。測試套件裡的假資料不算。</li>
   </ul>
 </section>
 
 <section>
-  <h2>三個做法，我的建議是 B</h2>
-  <div class="grid">
-    <div class="card"><h3>A　照現狀出 2.37.0</h3><p class="muted">狀態列維持「幾個在跑、花費、context」。快，但就是你說的樣子，也不回答人回來的問題。</p></div>
-    <div class="card"><h3>B　先改狀態列再出（建議）</h3><p class="muted">只重做 mod 的顯示與讀取：結論詞、專案、phase、已跑、%、一句原因、兩種決策提醒，花費與 context 退到面板。資料多半已在 model.json 與 decision ledger。2.37.0 延後，約再一輪 foreman。</p></div>
-    <div class="card"><h3>C　B 加上補生產端</h3><p class="muted">連 watcher 的快照也加欄位（專案名、階段、% 直接進快照），mod 不必再去讀 review 頁的檔。較乾淨，但動到已發版的 2.36.115 契約，範圍最大。</p></div>
-  </div>
-  <p class="muted">我傾向 B：不動已發版的契約，且你要的四樣都來自已經存在的檔。若實作時發現 phase 名稱抓不到，再升到 C，不先做。</p>
+  <h2>資料來源：用已經在跑的東西，補兩個新 hook</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>來源</th><th>提供什麼</th><th>現況</th></tr></thead>
+    <tbody>
+      <tr><td>A 派工紀錄</td><td>在跑幾個、疑似卡住</td><td><span class="pill in">已通</span></td></tr>
+      <tr><td>B engine 的 work-order 檔</td><td>/l5、/l6 的即時階段（實作、修復、等待處置…）、凍結分母的進度 %、收尾狀態</td><td><span class="pill in">資料在</span> 我驗過：campaign 的 root 和 work-order 目錄名逐字相同（5/5）。要寫一個取出器，之後 P4 也共用</td></tr>
+      <tr><td>C 新 hook：Task 工具</td><td>dev-flow／/l3／/l4 的任務清單：完成幾個（顯示為 <code>n done*</code>）、目前進行中的任務名稱當 phase</td><td><span class="pill out">要 spike</span> dev-flow 本來就靠 TaskCreate 跑收尾流程；要確認 hook 拿得到任務名稱與狀態，且 task 工具在你的 session 有開</td></tr>
+      <tr><td>D 新 hook：等你回應</td><td>「要你決定」：Claude 在等你核准權限、等你回答問題、或停下來等你下指令</td><td><span class="pill out">要 spike</span> 我還沒驗證 Claude Code 對這三種情況各發出哪個 hook 事件，不能先當事實</td></tr>
+      <tr><td>E 花費、context</td><td>移到面板</td><td><span class="pill in">已通</span></td></tr>
+      <tr><td>F 自動啟動 watcher</td><td>每個 session 開始時確保該專案有一支 watcher，dev-flow 也有狀態列</td><td><span class="pill out">新 hook</span> 每專案只會有一支（有鎖），閒置會自己退出</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2>目標：做完後各模式顯示什麼</h2>
+  <div class="tablewrap"><table class="mx">
+    <thead><tr><th>工作模式</th><th>結論詞</th><th>phase</th><th>已跑多久</th><th>進度</th><th>要你決定</th></tr></thead>
+    <tbody>
+      <tr><td>dev-flow、/l3</td><td class="c-part">五種都可能；「疑似卡住」只在有派工時</td><td class="c-real">目前任務名稱</td><td class="c-real">本 session 這件事開始至今</td><td class="c-real">任務 <code>3 done*</code></td><td class="c-real">等你回應時</td></tr>
+      <tr><td>/l4 工頭</td><td class="c-part">五種都可能；工頭內部卡住看不到</td><td class="c-part">主 session 的任務名稱（工頭內部看不到）</td><td class="c-real">同上</td><td class="c-real">任務 <code>n done*</code></td><td class="c-real">等你回應時</td></tr>
+      <tr><td>/l5、/l6 campaign</td><td class="c-real">全部五種</td><td class="c-real">實作／修復／等待處置…</td><td class="c-real">campaign 開始至今</td><td class="c-real"><code>62.5%（5/8）</code></td><td class="c-real">等你回應時</td></tr>
+    </tbody>
+  </table></div>
+  <p class="muted">「等待處置」是 campaign 在等 depth-0（我），不是等你，所以它不會觸發「要你決定」。完成待驗收改看 campaign 的收尾狀態，不依賴那份沒人寫的驗收輸入檔。</p>
+</section>
+
+<section>
+  <h2>已經做好的東西怎麼處理</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>項目</th><th>處理</th></tr></thead>
+    <tbody>
+      <tr><td>C1 探測、D1 包裝閘門</td><td>保留，不改</td></tr>
+      <tr><td>C2／C3／C3b 狀態列與面板</td><td>保留畫面與結論詞邏輯，改讀新來源（任務、等你回應、work-order）</td></tr>
+      <tr><td>C3b review 頁的 phase</td><td>保留欄位，來源改成 work-order 的即時階段，大小寫不分（實際資料大小寫混用）</td></tr>
+      <tr><td>review 頁的「規劃清單」「比對圖」區塊</td><td>沒有寫入端，這一版隱藏</td></tr>
+      <tr><td>「知會：目前沒有待你決定」「尚無驗收 verdict」</td><td>改成「來源未接」，不再假裝沒事</td></tr>
+      <tr><td>「已跑多久」</td><td>改成這件事本身的時間，不是整個專案最舊的紀錄</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2>這一版不做（各自已有追蹤）</h2>
+  <ul>
+    <li><b>代你決定</b>（P5）：沒有寫入端，順序是寫入 → 發佈 → 顯示。</li>
+    <li><b>驗收輸入檔的產生者</b>：既有缺口，也卡住 finish-flow 收尾，另案處理。</li>
+    <li><b>dev-flow 明確的階段（L-1…L-5）</b>：要改 SKILL.md，需要 eval 證據。這一版先用「目前任務名稱」頂替。</li>
+    <li><b>臨時派工每次各自成一頁</b>：review 頁會碎成很多頁，後續處理。</li>
+  </ul>
+</section>
+
+<section>
+  <h2>做事的順序</h2>
+  <ol style="margin:0;padding-left:1.3em;display:flex;flex-direction:column;gap:6px">
+    <li>把這份設計寫進計畫（P1c／P1d 改版），跑一輪計畫審查。</li>
+    <li>spike：等你回應的 hook 事件、Task 工具 hook 拿得到什麼、task 工具有沒有開。結果不如預期就回頭改設計，不硬做。</li>
+    <li>實作：取出器、三個新 hook、狀態列改讀、review 頁誠實化。</li>
+    <li>真機驗收：你的 ssh＋tmux，各模式各跑一次，截下狀態列文字。</li>
+    <li>落地 v2.37.0。</li>
+  </ol>
 </section>
 
 <section class="ask">
-  <h2>需要你確認</h2>
+  <h2>需要你決定</h2>
   <ol>
-    <li><b>狀態列改成上面那個樣子嗎？</b>第一個詞用「要你決定／進行中／疑似卡住／完成待驗收」四種，可以嗎？</li>
-    <li><b>分母沒凍結時顯示「分母未凍結 · n done」可以接受嗎？</b>還是你寧可那一格直接空白？</li>
-    <li><b>兩種提醒這樣分可以嗎？</b>第一版「代你決定」只顯示本回合件數與不可逆標示，「只看新的」先不做，行嗎？</li>
-    <li><b>做法選 B 嗎？</b>2.37.0 會因此延後；已完成的 C2 實作不浪費，view 層重做，資料讀取那層保留。</li>
+    <li><b>方向同意嗎？</b>先接寫入端、拿掉沒有來源的欄位、真機實跑才發版。</li>
+    <li><b>三個新 hook 預設開啟可以嗎？</b>Task 工具、等你回應、自動啟動 watcher。各自有關閉旋鈕。</li>
+    <li><b>計畫審查要再跑一輪嗎？</b>原計畫已經用完兩代審查。這次改動是新設計、不是小修，我建議當成 P1c／P1d 的重新規劃，跑一輪新的審查。</li>
+    <li><b>dev-flow 的 phase 先用「目前任務名稱」可以嗎？</b>還是你要等真正的 L-1…L-5 寫入端（要先做 eval）？</li>
   </ol>
 </section>
 </main>

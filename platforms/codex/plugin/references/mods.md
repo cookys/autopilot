@@ -72,6 +72,11 @@ S5b; `README.md` there is the verdict table). A mod is CC-only; non-Claude-Code 
 - **Autostart switch**: `AUTOPILOT_RUNS_WATCH_AUTOSTART=0` disables the start. `hooks/tests/lib.sh` exports it
   for every suite; any test that runs `session-mode.js set` without sourcing lib.sh sets it itself. Only
   `hooks/tests/session-mode-watcher.test.sh` turns it on.
+- **Hook autostart (W1c)**: `hooks/runs-watch-autostart.js` (SessionStart + UserPromptSubmit) starts the same watcher for
+  dev-flow and plain sessions, only in an opted-in repo (`.claude/*-config.md` present, or an unexpired marker, or
+  `AUTOPILOT_RUNS_WATCH_AUTOSTART=1`; `=0` disables). The idle-exit also treats a session as live while
+  `<live>/tasks/<sid>.json` or `<live>/attention/<sid>.json` of the project has `updated_at` inside the idle window.
+  SessionEnd does not stop the watcher; idle-exit does.
 - A watcher launched from CC's Bash tool outlived `claude -p` (S5b). CC sandbox on, interactive `/exit`, and
   desktop are unverified.
 - Stop: `autopilot status runs --stop --project <key>` (checks `/proc/<pid>/cmdline` before signalling).

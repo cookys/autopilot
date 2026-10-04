@@ -149,6 +149,28 @@ function unexpiredMarkers(env, key, nowMs) {
   return out;
 }
 
+// Session liveness beyond markers (mods P1W W1c / G1 R9): dev-flow and plain sessions hold no session-mode
+// marker, so the per-session files `<live>/tasks/<sid>.json` (autopilot.session-tasks/1) and
+// `<live>/attention/<sid>.json` (autopilot.attention/1) are the signal. Read defensively by two fields only:
+// `project_key` equal to this watcher's key and `updated_at` within `windowS` seconds. Anything else is ignored.
+function recentSessionFiles(env, key, nowMs, windowS) {
+  const base = liveBaseOf(env);
+  let n = 0;
+  for (const sub of ['tasks', 'attention']) {
+    let names = [];
+    try { names = fs.readdirSync(path.join(base, sub)); } catch (_error) { continue; }
+    for (const name of names) {
+      if (!name.endsWith('.json')) continue;
+      try {
+        const v = JSON.parse(fs.readFileSync(path.join(base, sub, name), 'utf8'));
+        const at = Date.parse(v && v.updated_at);
+        if (v && v.project_key === key && Number.isFinite(at) && nowMs - at < windowS * 1000) n += 1;
+      } catch (_error) { /* unreadable / foreign shape: not a live session */ }
+    }
+  }
+  return n;
+}
+
 // --- cost aggregation from costs.jsonl (same path resolution as hooks/cost-tracker.js, which writes it, and hooks/cost-fuse.js) -------------------
 // Incremental: costs.jsonl is append-only, so only bytes past the last complete line are parsed.
 function createCostReader(env) {
@@ -521,14 +543,15 @@ function createWatcher({
     // Idle exit: N consecutive seconds with nothing confirmed live and nothing unknown, and no
     // unexpired session-mode marker of this project (a live session keeps the watcher up).
     const total = counts.get(null);
-    if (markers.length > 0) {
+    const sessionLive = markers.length > 0 || recentSessionFiles(env, key, nowMs, idleExitS || DEFAULT_IDLE_EXIT_S) > 0;
+    if (sessionLive) {
       state.idleSince = null; // a live session holds the watcher open; the clock restarts when it ends
     } else if (total.confirmed_live === 0 && total.unknown === 0) {
       if (state.idleSince === null) state.idleSince = nowMs;
     } else {
       state.idleSince = null;
     }
-    if (idleExitS && state.idleSince !== null && nowMs - state.idleSince >= idleExitS * 1000 && markers.length === 0) {
+    if (idleExitS && state.idleSince !== null && nowMs - state.idleSince >= idleExitS * 1000 && !sessionLive) {
       return { published, changed, exit: 'idle_exit' };
     }
     return { published, changed, heartbeat: published && !changed };
@@ -786,5 +809,5 @@ function runWriter({ key, interval, idleExit, enrichCap, collect, render, cwd, e
 
 module.exports = {
   taskPollDue, TASK_SETTLED_POLL_MS, SCHEMA, VALID_FOR_S, HEARTBEAT_S, LOCK_BUSY_RC, DEFAULT_IDLE_EXIT_S, createWatcher, readEnvelope, runWatchCli,
-  lockPathOf, isWatcherFor, flockAvailable, startWatcherDetached, watchLaunchArgv, worktreePaths, computeCounts, unexpiredMarkers, createCostReader,
+  lockPathOf, recentSessionFiles, isWatcherFor, flockAvailable, startWatcherDetached, watchLaunchArgv, worktreePaths, computeCounts, unexpiredMarkers, createCostReader,
 };

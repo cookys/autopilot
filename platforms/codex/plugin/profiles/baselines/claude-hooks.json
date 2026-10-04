@@ -26,6 +26,17 @@
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/version-drift-check.js"
           }
         ]
+      },
+      {
+        "//": "runs-watch-autostart (mods P1W W1c): default-on. Writes the live pointer and ensures the ONE project watcher (flock -n probe, same launch path as session-mode.js set) so dev-flow and plain sessions get a live band. No-op outside a git repo; fail-open; never blocks. AUTOPILOT_RUNS_WATCH_AUTOSTART=0 to opt out.",
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/runs-watch-autostart.js",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "SessionEnd": [
@@ -41,6 +52,17 @@
       }
     ],
     "UserPromptSubmit": [
+      {
+        "//": "runs-watch-autostart (mods P1W W1c): re-ensure the project watcher on each prompt (flock -n probe only; spawns only when the lock is free) because a dev-flow session holds no marker and SessionStart does not re-fire. Same opt-in rule and AUTOPILOT_RUNS_WATCH_AUTOSTART=0 knob as the SessionStart entry.",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/runs-watch-autostart.js",
+            "timeout": 10
+          }
+        ]
+      },
       {
         "//": "advisory-relay: deferred-relay half of the group-S Stop advisory queue (cost-tracker / check-console / batch-format). Default-on; AUTOPILOT_ADVISORY_RELAY=off to opt out. Inert on an absent/empty queue (safe default-on).",
         "matcher": "",

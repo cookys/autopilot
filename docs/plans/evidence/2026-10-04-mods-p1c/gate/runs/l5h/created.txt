@@ -1,0 +1,10 @@
+l5h (2026-10-05, gate-sandbox3, live 435d49d2 / FF8)
+session id: 809740b0-0b2d-428d-94b2-1b5b334fe59a (fresh, marker ~/.autopilot/session-mode/809740b0-0b2d-428d-94b2-1b5b334fe59a.json, level l5, remains)
+watcher pid 177257 (status runs --watch --project b117859bc6b398f8 --interval 10 --idle-exit 3600), still alive at end
+marker root_run_id job-1791212203-645d7584 ; campaign_roots ["mission-5f6b03d6560e2d82ad09a2af"] ; contract root mission-5f6b03d6560e2d82ad09a2af
+engine/ICC campaign id campaign-v1-3d77cc649f075adb3a76e911dc3d0017cb1e6f90acd5e0bea5343c0accf43aa0 (work-order root, NOT in campaign_roots)
+envelope also seen: b117859bc6b398f8--job-1791212146-d7da5f59 (session scope before /l5 set)
+contract/seal: /home/cookys/projects/gate-sandbox3/.git/autopilot/mission/artifacts/5f6b03d6560e2d82a... (see grant-sb3.json)
+prepared: /tmp/claude-1000/-home-cookys-projects-autopilot/34a5c748-efec-4871-874c-e4eccde96bac/scratchpad/l5prep2/prepared-sb3.json ; grant-sb3.json ; brief-hand.md ; implement-review-sb3.out/.err
+branch kept: mission/5f6b03d6560e/gate-readme-line-v2-2026-10-05-a1 commit 18f390fa (not merged); no extra worktrees; sandbox develop e1316d0, origin e1316d0
+captures: runs/l5h-done/20261005T150122Z

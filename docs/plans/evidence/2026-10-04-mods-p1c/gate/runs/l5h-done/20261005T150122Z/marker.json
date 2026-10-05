@@ -1,0 +1,56 @@
+{
+  "session_id": "809740b0-0b2d-428d-94b2-1b5b334fe59a",
+  "level": "l5",
+  "repo_root": "/home/cookys/projects/gate-sandbox3",
+  "started_at": "2026-10-05T14:56:43.874Z",
+  "expires_at": "2026-10-06T14:56:43.874Z",
+  "repo_identity": "git-common-dir:/home/cookys/projects/gate-sandbox3/.git",
+  "project_key": "b117859bc6b398f8",
+  "root_run_id": "job-1791212203-645d7584",
+  "entry_level": "l5",
+  "fallback_reason": "none",
+  "mission_routing": {
+    "status": "READY",
+    "admitted": true,
+    "would_block": false,
+    "prior_marker_status": "absent",
+    "admission": {
+      "schema_version": 1,
+      "artifact_type": "mission_routing_admission",
+      "authority_status": "enforce",
+      "repo_identity": "git-common-dir:/home/cookys/projects/gate-sandbox3/.git",
+      "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+      "mission_graph_digest": "beb0e5cd14f5a2531254c4b589c0d77b616b982244ce2a522441dc1bd4193053",
+      "sources_digest": "c90fd08261712ab651d590069bff48c8ad0b06521923ba776e99a901f054f227",
+      "deliverable_count": 1,
+      "source_authoring_unit_count": 0,
+      "critical_path": 1,
+      "batch_count": 1,
+      "reservation_totals": {
+        "campaigns": 1,
+        "wall_seconds": 3600,
+        "tool_calls": 100,
+        "engine_attempts": 2,
+        "external_wait_seconds": 900,
+        "canonical_changed_files": 1,
+        "output_bytes": 100000
+      },
+      "admission_digest": "7069dfd4779c73f23056d0f7bbab8117a40ba7a393db7ff6f524ddc5a8af9b7b"
+    }
+  },
+  "mission_noop": {
+    "schema_version": 1,
+    "artifact_type": "mission_noop_adoption_set",
+    "admission_digest": "7069dfd4779c73f23056d0f7bbab8117a40ba7a393db7ff6f524ddc5a8af9b7b",
+    "noop_adoptions": [],
+    "noop_short_circuit": false,
+    "dispatcher_called": null,
+    "mutation_attempts": null,
+    "gate_attempts": null,
+    "resources_created": null,
+    "digest": "2d41bc1ce9ebfdc1b6f516ee9001ebedce03b2e0f53996798b296e6bb75b9cdb"
+  },
+  "campaign_roots": [
+    "mission-5f6b03d6560e2d82ad09a2af"
+  ]
+}

@@ -6,14 +6,14 @@
 
 ## 0. 準備（做一次）
 
-1. 你要有一份裝好落地版 autopilot（含 `live` mod）的 Claude Code。落地 clone 用 `claude --plugin-dir <落地 clone>` 載入。
-2. 你要有一個已接 autopilot 的測試 repo（根目錄下有 `.claude/*-config.md`）。下面稱它為「測試 repo」。
+1. 落地版已經是這台機器的 live plugin（主 checkout `/home/cookys/projects/autopilot` 在 2160351c，Claude Code 透過 dev symlink 載入它），直接開 `claude` 就是新版，不需要 `--plugin-dir`。
+2. 測試 repo 用 `~/projects/gate-sandbox`（已接 autopilot、預設分支 develop、origin 是本機 bare repo `~/projects/gate-sandbox-origin.git`，可以放心改、merge、刪）。**不要拿 autopilot 本身當測試 repo**：它就是正在運作的 plugin。
 3. 用 sonnet 或 opus 時，你要在啟動 `claude` 前設 `CLAUDE_CODE_ENABLE_TODO_TOOLS=1`，否則任務清單那一格不會有資料。
 4. 你要開兩個 tmux 視窗：視窗 A 跑 Claude Code，視窗 B 跑下面的 capture 與 check 指令。
 5. 下面的指令都假設你先設好這個變數（路徑換成你的 clone）：
 
 ```bash
-G=<落地 clone>/docs/plans/evidence/2026-10-04-mods-p1c/gate
+G=/home/cookys/projects/autopilot/docs/plans/evidence/2026-10-04-mods-p1c/gate
 ```
 
 ## 1. 每一格怎麼做

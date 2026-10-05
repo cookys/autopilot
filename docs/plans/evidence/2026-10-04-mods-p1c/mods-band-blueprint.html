@@ -371,7 +371,7 @@ sequenceDiagram
           <path d="M580,65 C630,65 630,150 658,150"/>
           <path d="M580,212 C620,212 630,200 658,200"/>
         </g>
-        <text x="20" y="318" font-size="11.5" fill="var(--wait-fg)">橘色虛線＝PLAINROOT 列進行中（R5.7）：一般 session 也是一件工作，有自己的 root；watcher 會清掉閒置太久的 root scope。</text>
+        <text x="20" y="318" font-size="11.5" fill="var(--wait-fg)">橘色虛線＝PLAINROOT（R5.7，已採納，整合中）：一般 session 也是一件工作，有自己的 root；watcher 會清掉閒置太久的 root scope。</text>
       </svg>
     </div>
     <figcaption>root 只能由兩個地方產生：<code>session-mode.js</code>，或 campaign。dispatch rail 和 skill 文字一律只「讀」root（<code>session-mode.js root</code>），絕不用分支名或其他東西自己湊一個。這條規則是 W1b 被退回改寫的原因。</figcaption>
@@ -415,7 +415,7 @@ sequenceDiagram
         <tr><td>工頭活動（pane）</td><td>subagent 戳記、run-ledger、codeforge 狀態列</td><td><code>.foreman.json</code></td><td>W2c、STAMP</td><td><span class="pill p-ok">已接</span>（只代表存活，不代表 stage）</td></tr>
         <tr><td>任務清單（pane）</td><td>hook session-tasks</td><td><code>tasks/&lt;sid&gt;.json</code></td><td>W1de</td><td><span class="pill p-ok">已接</span>（sonnet／opus 需開 <code>CLAUDE_CODE_ENABLE_TODO_TOOLS</code>）</td></tr>
         <tr><td>context %（pane）</td><td>status line，或 hook context-budget 補寫</td><td><code>context/&lt;sid&gt;.json</code></td><td>W2f</td><td><span class="pill p-ok">已接</span></td></tr>
-        <tr><td>驗收結論（review 頁）</td><td>finish-flow merge 後寫輸入檔</td><td><code>task-status/&lt;root&gt;.json</code></td><td>W1b ＋ W1b-t2</td><td><span class="pill p-fly">等 PLAINROOT</span> <span class="pill p-guide">呼叫：指引 eval</span></td></tr>
+        <tr><td>驗收結論（review 頁）</td><td>finish-flow merge 後寫輸入檔</td><td><code>task-status/&lt;root&gt;.json</code></td><td>W1b ＋ W1b-t2</td><td><span class="pill p-ok">寫入器已接</span> <span class="pill p-guide">呼叫：指引 eval</span></td></tr>
         <tr><td>比對圖（review 頁）</td><td>審圖席</td><td><code>compare/&lt;root&gt;/*.json</code></td><td>W2e-m ＋ W2e-g</td><td><span class="pill p-ok">讀取已接</span> <span class="pill p-guide">寫入：指引 eval</span></td></tr>
       </tbody>
     </table>
@@ -432,7 +432,7 @@ sequenceDiagram
     <span class="n ok">w/int（wave 1）</span><span class="arr">→</span>
     <span class="n ok">w/int2（wave 2）</span><span class="arr">→</span>
     <span class="n ok">w/int3（MARKER＋W3a）</span><span class="arr">→</span>
-    <span class="n fly">w/int4（PLAINROOT＋LIVEDIR）</span><span class="arr">→</span>
+    <span class="n fly">w/int4（PLAINROOT＋LIVEDIR，進行中）</span><span class="arr">→</span>
     <span class="n next">W4 落地 → v2.37.0</span><span class="arr">→</span>
     <span class="n next">你的 ssh＋tmux 真機驗收</span>
   </div>
@@ -455,20 +455,20 @@ sequenceDiagram
         <li><b>MARKER</b> <code>level: null</code> 一般 session</li>
         <li><b>W3a</b> mod 讀齊所有來源</li>
         <li><b>EVALX</b> eval harness 擴充</li>
+        <li><b>PLAINROOT</b> 一般 session 配 job root；watcher 清閒置 scope</li>
+        <li><b>LIVEDIR</b> 指定的 live 目錄一律照用</li>
       </ul>
     </div>
     <div class="lane fly">
       <h3><span class="pill p-fly">進行中</span></h3>
       <ul>
-        <li><b>PLAINROOT</b> 一般 session 配 job root；watcher 清閒置 scope</li>
-        <li><b>LIVEDIR</b> 指定的 live 目錄一律照用</li>
+        <li><b>INT4</b> 疊 PLAINROOT＋LIVEDIR，修 hook-hosting 測試殘留，全套測試</li>
         <li><b>EVAL 修正 2</b> 題目明確叫出 skill，重跑 smoke</li>
       </ul>
     </div>
     <div class="lane wait">
       <h3><span class="pill p-wait">接下來</span></h3>
       <ul>
-        <li><b>INT4</b> 疊 PLAINROOT＋LIVEDIR，全套測試</li>
         <li><b>W1b 文字</b> 改讀 <code>session-mode.js root</code></li>
         <li><b>W1f-b</b> hetero 子任務掛 job root：要不要進 2.37.0，待你決定</li>
         <li><b>W4</b> 乾淨 clone 落地＋D1（hooks.json）＋一次合併 review＋發版</li>
@@ -506,7 +506,8 @@ sequenceDiagram
     <ul class="plain">
       <li>第一次 smoke（4 格）模型都沒載入要測的 skill：ceo-agent 題目直接強推了 main，dev-flow 題目被當成小修改。題目要改成開頭明確叫出 skill（prereg 修正 2，門檻不動）。</li>
       <li>計分規則原本找錯待決定檔的位置，已在任何一格開跑前修正並留紀錄（修正 1）。</li>
-      <li>原設計估約 120 格、4,000 萬 tokens；新題目跑完 smoke 後重估。</li>
+      <li>修正 2 之後：dev-flow 題目完整跑完 L 流程，但載入新文字的那組沒有呼叫 <code>set --phase</code>；計分還要接受 <code>_archive/</code> 底下的 README（待你決定）。ceo-agent 題目仍沒載入 skill，下一步改成「Invoke the ceo-agent skill:」（待你決定）。</li>
+      <li>重估批次花費：W2b-g 約 45 分鐘、11～12 USD；W2a-g 約 3～15 USD。</li>
     </ul>
   </div>
 </section>

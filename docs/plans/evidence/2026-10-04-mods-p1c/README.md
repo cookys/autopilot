@@ -3,7 +3,7 @@
 > ## IN FLIGHT (2026-10-05, session df52a188)
 > - Accepted chain (see `accepted-heads-p1w.txt`): `w/int` → wave 2 → `w/int2` e227528e → MARKER 9a94ffbf + W3a 18db7c55 → **`w/int3` 297ab2e0** (current integration head; bundle refreshed).
 > - Owner rulings R5.7 (plan): v2.37.0 no longer waits for guidance-row eval; plain sessions get a job root (PLAINROOT); explicit live-dir override always honoured (LIVEDIR).
-> - In flight off `w/int3`: PLAINROOT (`briefs-p1w/w-row-plainroot.md`, `$OLD/p1c/wt-plainroot`), LIVEDIR (`briefs-p1w/w-row-livedir.md`, `$OLD/p1c/wt-livedir`); EVAL-PREP on `w/eval` (texts f6379a10/8e3d9511/ee055a2e, packs 472a5c07, marker amend-1 37880c71; now amend-2 = prompts that explicitly invoke the skill, re-smoke W2a a1 + W2b d2; W1b on hold until PLAINROOT; report `$OLD/p1c/run-w/eval/REPORT.md`).
+> - Accepted off `w/int3`: LIVEDIR 28a54b5d, PLAINROOT e0a139f0. INT4 in flight (`briefs-p1w/int4.md`, `$OLD/p1c/wt-int4`): both rows + hook-hosting residue fix. EVAL-PREP `w/eval` up to amend-2 5b311731; awaiting owner on amend-3 (W2a "Invoke the ceo-agent skill:") and amend-4 (W2b work_done accepts `_archive/` README). Blueprint page https://claude.ai/artifact/6GwARh7XpbLsMSy7BwG6tE (copy in evidence).
 > - Then: INT4 (int3 + PLAINROOT + LIVEDIR), W1b text → `session-mode.js root`, W1f-b decision (in or out of 2.37.0), W4 landing (+ p1c/d1), owner ssh+tmux gate.
 > - Leak 2026-10-05 09:24 cleaned (see accepted-heads LEAK line); LIVEDIR is its fix.
 

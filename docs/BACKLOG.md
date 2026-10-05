@@ -90,6 +90,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/projects/ongoing-maintenance/HANDOFF.md
 - **Context**: ruling relayed by openclaw 2026-09-17 (`msg_01M2PWEZ8WAVJ8S4F032MFTVGQ`): (a)=B no seat exemption — ship mask-line print + brief linter; (b) same refusal twice → ladder stop. Peer relay only; operator confirms in-session first.
 
+### PEER-REPORTED (hangar): register preview/review servers with lab-ingress instead of ad-hoc 0.0.0.0 ports
+- **Status**: open
+- **Trigger**: v2.37.0 shipped AND hangar lab-ingress v2 `lab preview` decided
+- **Effort**: M
+- **Source**: fleet `01M45R3JWAVVZ5WDTQ4M89A503` from hangar--claude-2 (2026-10-05, on cookys' request); replied `01M45R4M3V0999MB5HEV8E7R84`
+- **Pointer**: docs/backlog/lab-ingress-preview-integration.md
+- **Context**: review server self-registers; a PreToolUse hook (not skill text) routes ad-hoc previews to `lab preview` with a LAN-bound registered fallback; registry format co-defined with hangar.
+
 ### Managed rail: codex containment (bwrap) qualification spike so a codex seat can serve the blind final panel
 - **Status**: open
 - **Trigger**: operator wants a pinned codex qc seat to survive managed blind discovery without replacing the seat

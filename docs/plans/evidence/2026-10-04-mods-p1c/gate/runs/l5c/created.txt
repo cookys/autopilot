@@ -1,0 +1,8 @@
+l4i/ts session: 0650d532-910f-4383-89e5-3431347d3031 (marker level null), agents a00f5311afc2503b2 (first), a65fdf0549990ae5d (second)
+l5c session: 1d09c530-b00e-4913-8ca7-ce455ca28ce6 (marker level null, root job-1791206374-e35386b9)
+repo-scoped l5 marker created by session-mode.js set (env -u session ids): ~/.autopilot/session-mode/_home_cookys_projects_gate-sandbox.json (level l5, root_run_id job-1791206430-b3ed51d6, mission_routing READY admitted)
+mission root (from env AUTOPILOT_ROOT_RUN_ID): mission-6c52a9b242660250f30f19b1 ; lineage lineage-v1-6c52a9b2...3886 ; campaign_id campaign-v2-f40505c51973768030a344c0695d17c97d434f6663d55ddc0015e2a86eacc644 ; graph_attempt 1 (grant status claimed)
+contract: /home/cookys/projects/gate-sandbox/.git/autopilot/mission/artifacts/6c52a9b242660250f30f19b1e5d70ba336f5f22c41520b6ac1c04093291ee886/gate-readme-line-2026-10-05/attempt-1/campaign.json (+ campaign.seal.json, qc_panel_snapshot.json)
+prepared/grant/brief/out/err: /tmp/claude-1000/-home-cookys-projects-autopilot/34a5c748-efec-4871-874c-e4eccde96bac/scratchpad/l5prep/{prepared.json,grant.json,brief-hand.md,implement-review.out,implement-review.err}
+watcher pid (pre-existing, not ours): 2831473 (and 2926632); no hetero hand, no worktree, no mission branch created
+sandbox worktrees left (all pre-existing): /tmp/hetero-gate-stall-ZX2MeD, /tmp/hetero-gate-stall2-sq74Fe, /tmp/hetero-gate-stall3-TXRyeq, /tmp/hetero-gate2-stall-1-c9zviD

@@ -12,6 +12,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 4. ~~foreman rail Shape B~~ v2.36.34 · 5. ~~`308-db` (a) residue sweep~~ v2.36.35 · 6. ~~2026-09-12 dogfood four defects~~ v2.36.36 ·
 7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41 · 9. ~~ledger flag burns a grant~~ v2.36.42 · 10. ~~reviewer no_verdict releases the claim~~ v2.36.43. Next: operator-named work, or the 308-8f dispatch-hetero reports.
 
+### Mission graph checker passes verification commands that campaign intake rejects, burning the grant
+- **Status**: open
+- **Trigger**: FIRED — mods P1W W4 gate run l5c, 2026-10-05
+- **Effort**: S
+- **Source**: depth-0 verified (runtime.js:1368 joins with ' && '; implementation-campaign-check.js:298 admits plain argv segments only)
+- **Pointer**: docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/RESULTS.md
+- **Context**: a graph whose verification command has a pipe or quotes checks READY, prepares and grants, then intake rejects verify_cmd and the attempt is spent; the graph check should apply the same argv rule.
+
 ### Foreman exam harness deviates from its frozen spec; the branch is parked unmerged
 - **Status**: open
 - **Trigger**: FIRED — landing review 2026-09-29 verdict FIX-THEN-SHIP

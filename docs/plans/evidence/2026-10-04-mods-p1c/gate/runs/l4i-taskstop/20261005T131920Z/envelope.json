@@ -1,0 +1,105 @@
+{
+  "schema": "autopilot.runs-live/1",
+  "scope": {
+    "project_key": "51de403da82a23f0",
+    "repo_identity": "git-common-dir:/home/cookys/projects/gate-sandbox/.git",
+    "root_run_id": "job-1791206040-ad37066b"
+  },
+  "published_at": "2026-10-05T13:18:18.319Z",
+  "observed_at": "2026-10-05T13:18:18.319Z",
+  "valid_for_s": 180,
+  "writer": {
+    "pid": 2831473,
+    "session_id": "e628cb02-2ce6-4763-84ad-6d21249a6bdd",
+    "started_at": "2026-10-05T11:57:26.070Z",
+    "plugin_root": "/home/cookys/projects/autopilot",
+    "plugin_version": "2.36.116"
+  },
+  "runs": [],
+  "counts": {
+    "confirmed_live": 0,
+    "exited": 0,
+    "unknown": 0,
+    "fresh_bound_s": 20
+  },
+  "sessions": {
+    "25298c65-eec4-41f0-9ec8-d04360cb1303": {
+      "session_usd": 201.95181,
+      "as_of": "2026-10-05T13:18:18.319Z"
+    },
+    "df52a188-d763-4372-8a90-560abfbd4008": {
+      "session_usd": 549.194618,
+      "as_of": "2026-10-05T13:18:18.319Z"
+    },
+    "3ceb2799-5528-4390-91f4-91412ddda7d9": {
+      "session_usd": 1.062503,
+      "as_of": "2026-10-05T13:18:18.319Z"
+    },
+    "1b2044ca-d0d9-4984-b0bf-1c1aed519a0b": {
+      "session_usd": 0.116527,
+      "as_of": "2026-10-05T13:18:18.319Z"
+    },
+    "c40f2a0c-8d9c-4936-b201-0910bf2feaba": {
+      "session_usd": 0.691956,
+      "as_of": "2026-10-05T13:18:18.319Z"
+    },
+    "5e21d90e-07b3-4c13-b43a-20c491fc9f88": {
+      "session_usd": 0.264301,
+      "as_of": "2026-10-05T13:18:18.319Z"
+    },
+    "c4841c60-1b5d-4cc6-97da-b59f4c2dc080": {
+      "session_usd": 0.506436,
+      "as_of": "2026-10-05T13:18:18.319Z"
+    },
+    "765d9799-e0bf-4591-93fd-52d872e39d6b": {
+      "session_usd": 0.398125,
+      "as_of": "2026-10-05T13:18:18.319Z"
+    },
+    "46c7e0c0-c07d-466e-bc38-9164b8fad60e": {
+      "session_usd": 0.163156,
+      "as_of": "2026-10-05T13:18:18.319Z"
+    },
+    "14006793-7b34-480b-b35e-eea8b9e803b0": {
+      "session_usd": 3.717439,
+      "as_of": "2026-10-05T13:18:18.319Z"
+    },
+    "46295021-1f8d-4f30-85b5-8529a8372f5e": {
+      "session_usd": 1.643968,
+      "as_of": "2026-10-05T13:18:18.319Z"
+    },
+    "34a5c748-efec-4871-874c-e4eccde96bac": {
+      "session_usd": 79.879976,
+      "as_of": "2026-10-05T13:18:18.319Z"
+    },
+    "5ebc8042-7fa0-4ccb-8ad7-55233068b644": {
+      "session_usd": 0.419478,
+      "as_of": "2026-10-05T13:18:18.319Z"
+    },
+    "1ad6b7a9-92b6-4070-979b-73062b48b91b": {
+      "session_usd": 0.586708,
+      "as_of": "2026-10-05T13:18:18.319Z"
+    },
+    "dd942e31-f1eb-48cd-970b-121e815f8d20": {
+      "session_usd": 0.50011,
+      "as_of": "2026-10-05T13:18:18.319Z"
+    },
+    "e628cb02-2ce6-4763-84ad-6d21249a6bdd": {
+      "session_usd": 0.820457,
+      "as_of": "2026-10-05T13:18:18.319Z"
+    },
+    "8a938a99-38d9-4821-8ada-a866b7276c60": {
+      "session_usd": 0.170325,
+      "as_of": "2026-10-05T13:18:18.319Z"
+    },
+    "7be684e2-aab6-4266-bf0b-cc77cf3136de": {
+      "session_usd": 1.271544,
+      "as_of": "2026-10-05T13:18:18.319Z"
+    },
+    "0650d532-910f-4383-89e5-3431347d3031": {
+      "session_usd": 0.247154,
+      "as_of": "2026-10-05T13:18:18.319Z"
+    }
+  },
+  "host_today_usd": 532.938168,
+  "host_today_as_of": "2026-10-05T13:18:18.319Z"
+}

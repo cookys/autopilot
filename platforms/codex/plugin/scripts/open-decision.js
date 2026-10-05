@@ -17,6 +17,8 @@
  * --option may repeat; none -> options null, one -> usage error (a choice needs at least two). --not-authorized is why
  * depth-0 may not decide this itself (the DOA boundary reason); optional. Writes take a lock and rename atomically.
  * Node built-ins only. This script writes nothing outside the decisions directory.
+ * The library functions openDecision / closeDecisionIf are also called by hooks/ask-decision.js (depth-0 AskUserQuestion opens
+ * a file with `source: "ask_user_question"`; mods P1W HOOKQ).
  *
  * Exit: 0 ok (show: an open question exists) | 1 show: none open | 2 usage / not a git repo | 3 open: a question is
  * already open (use --replace) | 4 write failure.
@@ -109,31 +111,67 @@ function main(argv) {
   if (typeof args.question !== 'string' || !args.question.trim()) return usage('open needs a non-empty --question');
   if (args.option.length === 1) return usage('--option needs at least two options (or none)');
   if (args.option.some((o) => !o.trim())) return usage('--option values must be non-empty');
+  const r = openDecision({
+    cwd: args.cwd || process.cwd(), root: root || null, session: sess.session, question: args.question,
+    options: args.option.length ? args.option : null, context: args.context,
+    notAuthorized: args['not-authorized'], replace: !!args.replace,
+  });
+  if (r.status === 'ok') { process.stdout.write(`${JSON.stringify({ ok: true, file: r.file, scope_key: r.scope_key })}\n`); return 0; }
+  if (r.status === 'exists') { process.stderr.write('open-decision: a question is already open for this scope; close it or pass --replace\n'); return 3; }
+  process.stderr.write(`open-decision: ${r.message}\n`);
+  return 4;
+}
+
+// Library entry (also used by hooks/ask-decision.js — mods P1W HOOKQ): write the decision file of a scope through the
+// same lock + atomic-rename path as `open`. `source` (optional, e.g. "ask_user_question") marks who opened the file;
+// the CLI never sets it, so a hand-opened file has no `source`. `mayReplace(existing)` lets a caller overwrite a file it
+// owns without --replace. Returns { status: 'ok'|'exists'|'declined'|'error', file, scope_key, message }.
+function openDecision({ cwd, root, session, question, options, context, notAuthorized, source, replace, mayReplace }) {
+  const scope = scopeFromCwd(path.resolve(cwd || process.cwd()));
+  const commonDir = commonDirOf(scope.repo_identity);
+  if (!scope.project_key || !commonDir) return { status: 'error', message: 'not inside a git repository' };
+  const dir = path.join(commonDir, 'autopilot', 'decisions');
+  const key = scopeKeyOf(scope.project_key, root || null);
+  const file = path.join(dir, `${key}.json`);
   const record = {
-    schema: SCHEMA, question: args.question, options: args.option.length ? args.option : null,
-    context: args.context === undefined ? null : args.context,
-    not_authorized: args['not-authorized'] === undefined || !args['not-authorized'].trim() ? null : args['not-authorized'],
+    schema: SCHEMA, question, options: Array.isArray(options) && options.length ? options : null,
+    context: context === undefined ? null : context,
+    not_authorized: typeof notAuthorized !== 'string' || !notAuthorized.trim() ? null : notAuthorized,
     root_run_id: root || null, repo_identity: scope.repo_identity, project_key: scope.project_key,
-    opened_at: new Date().toISOString(), opened_by_session: sess.session,
+    opened_at: new Date().toISOString(), opened_by_session: session || null,
   };
+  if (source) record.source = source;
   try {
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
     return withWriteLock({ storeDir: dir, lockFile: `${file}.lock`, name: path.basename(file), timeoutMs: 5000 }, () => {
-      if (readOpen(file) && !args.replace) {
-        process.stderr.write('open-decision: a question is already open for this scope; close it or pass --replace\n');
-        return 3;
+      const existing = readOpen(file);
+      if (existing && !replace) {
+        if (!mayReplace) return { status: 'exists', file, scope_key: key };
+        if (!mayReplace(existing)) return { status: 'declined', file, scope_key: key };
       }
       const tmp = `${file}.tmp-${process.pid}`;
       fs.writeFileSync(tmp, `${JSON.stringify(record, null, 2)}\n`, { mode: 0o600 });
       fs.renameSync(tmp, file);
-      process.stdout.write(`${JSON.stringify({ ok: true, file, scope_key: scopeKeyOf(scope.project_key, root || null) })}\n`);
-      return 0;
+      return { status: 'ok', file, scope_key: key };
     });
   } catch (error) {
-    process.stderr.write(`open-decision: ${error.message}\n`);
-    return 4;
+    return { status: 'error', message: error.message };
+  }
+}
+
+// Remove `file` under the same lock when `isOurs(parsedFile)` says so. Idempotent; never throws.
+function closeDecisionIf(file, isOurs) {
+  try {
+    return withWriteLock({ storeDir: path.dirname(file), lockFile: `${file}.lock`, name: path.basename(file), timeoutMs: 3000 }, () => {
+      const v = readOpen(file);
+      if (!v || !isOurs(v)) return false;
+      fs.unlinkSync(file);
+      return true;
+    });
+  } catch (_error) {
+    return false;
   }
 }
 
 if (require.main === module) process.exitCode = main(process.argv.slice(2));
-module.exports = { main };
+module.exports = { main, openDecision, closeDecisionIf, SAFE_ROOT };

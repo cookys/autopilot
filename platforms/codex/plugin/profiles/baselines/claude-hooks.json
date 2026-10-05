@@ -85,6 +85,16 @@
         ]
       },
       {
+        "//": "mods P1W HOOKQ: depth-0 asking the owner (AskUserQuestion, exact matcher so no other tool pays) opens the scope's decision/1 file; the answer closes it from audit-log.js's PostToolUse process and SessionEnd from awaiting-owner.js. AUTOPILOT_ASK_DECISION=off to opt out.",
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/ask-decision.js"
+          }
+        ]
+      },
+      {
         "//": "v2.35.15 default-on: foreman-guard (ironlaw #6 in the loop — Bash cap / polling deny / Monitor deny for l4-l6 subagents; inert elsewhere; AUTOPILOT_FOREMAN_GUARD_MODE=off to opt out) + dispatch-model-guard (was opt-in; AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=off to opt out).",
         "matcher": "Bash|Monitor",
         "hooks": [

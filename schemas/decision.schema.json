@@ -46,6 +46,11 @@
         "null"
       ]
     },
+    "source": {
+      "enum": [
+        "ask_user_question"
+      ]
+    },
     "root_run_id": {
       "type": [
         "string",

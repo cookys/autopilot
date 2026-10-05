@@ -64,6 +64,10 @@ function handle(p) {
     if (ev === 'PostToolUse') L.stampAgentActivity(p);
     else if (ev === 'SessionEnd') L.removeAgentActivity(p);
   } catch (e) { L.failOpen('awaiting-owner/agent-activity', e); }
+  // HOOKQ (mods P1W): the session ending closes the decision file its AskUserQuestion opened (knob AUTOPILOT_ASK_DECISION).
+  if (ev === 'SessionEnd') {
+    try { require('./ask-decision.js').onSessionEnd(p); } catch (e) { L.failOpen('awaiting-owner/ask-decision', e); }
+  }
   if (L.knobOff('AUTOPILOT_AWAITING_OWNER')) return;
   const file = L.sessionFile(p, 'attention');
   if (!file) return;

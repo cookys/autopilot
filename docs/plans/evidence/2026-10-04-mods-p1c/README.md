@@ -3,7 +3,7 @@
 > ## IN FLIGHT (2026-10-05, session df52a188)
 > - Accepted chain (see `accepted-heads-p1w.txt`): `w/int` → wave 2 → `w/int2` e227528e → MARKER 9a94ffbf + W3a 18db7c55 → **`w/int3` 297ab2e0** (current integration head; bundle refreshed).
 > - Owner rulings R5.7 (plan): v2.37.0 no longer waits for guidance-row eval; plain sessions get a job root (PLAINROOT); explicit live-dir override always honoured (LIVEDIR).
-> - Accepted off `w/int3`: LIVEDIR 28a54b5d, PLAINROOT e0a139f0. INT4 in flight (`briefs-p1w/int4.md`, `$OLD/p1c/wt-int4`): both rows + hook-hosting residue fix. EVAL-PREP `w/eval` up to amend-2 5b311731; owner approved amend-3 (W2a prefix "Invoke the ceo-agent skill:") + amend-4 (W2b work_done accepts `_archive/` README) and the batches (W2a only if smoke shows ceo-agent invoked in both cells), cap 30 USD — running. Blueprint page https://claude.ai/artifact/6GwARh7XpbLsMSy7BwG6tE (copy in evidence).
+> - INT4 accepted `w/int4` 15966420 (LIVEDIR + PLAINROOT + hook-hosting residue fix). Eval done (R5.8: both texts 0/10, not shipped). In flight off w/int4: HOOKQ (`briefs-p1w/w-row-hookq.md`) and PHASE-TASK (`briefs-p1w/w-row-phasetask.md`). Then INT5 → W1f-b decision → W4. Blueprint https://claude.ai/artifact/6GwARh7XpbLsMSy7BwG6tE.
 > - Then: INT4 (int3 + PLAINROOT + LIVEDIR), W1b text → `session-mode.js root`, W1f-b decision (in or out of 2.37.0), W4 landing (+ p1c/d1), owner ssh+tmux gate.
 > - Leak 2026-10-05 09:24 cleaned (see accepted-heads LEAK line); LIVEDIR is its fix.
 

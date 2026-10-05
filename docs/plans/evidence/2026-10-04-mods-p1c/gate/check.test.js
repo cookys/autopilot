@@ -11,6 +11,10 @@
 
 // TURN (mods P1W): +4 tests (an active turn is 進行中 with 回合進行中, ended / absent / stale = 待命, permission attention outranks, planted reds). Mutation controls: run-w/land/mut-turn-check-*.txt.
 
+// SCOPE (mods P1W, gate run l5g): +10 tests (43 -> 53), the band follows the campaigns the marker names (marker.campaign_roots + envelope--<root>.json /
+// decisions-sidecar--<root>.json / model--<root>.json / campaign-work-orders/<root>/): live, terminal, job-root review after terminal, stall, stale / missing
+// extra envelope, summed decisions, newest-root progress / phase / elapsed, unsafe roots, planted reds. RED before the change: 53 tests, 46 pass / 7 fail
+// (run-w/land/scope-check-red.txt; the 3 negative cases hold vacuously); GREEN 53 / 53. Mutation controls: run-w/land/scope-mut-check-*.txt.
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -319,4 +323,95 @@ test('FOREMAN2: a started-only stamp (last_tool_name null) is 進行中 under 18
   assert.strictEqual(v({ 'agents/f1.json': agentF('f1', 40, { last_tool_name: null }) }), '進行中');
   assert.strictEqual(v({ 'agents/f1.json': agentF('f1', 200, { last_tool_name: null }) }), '疑似卡住');
   assert.strictEqual(v({ 'agents/f1.json': agentF('f1', 40, { last_tool_name: null, ended_at: iso(0) }) }), '待命');
+});
+
+// ---- P1W SCOPE: the root set (marker root + campaign_roots) ----
+const CAMP = 'mission-1';
+const CAMP0 = 'mission-0';
+const PK = 'abcdef0123456789';
+const markerWith = (roots, extra) => ({ session_id: SID, level: 'l5', repo_identity: IDENT, project_key: PK, root_run_id: ROOT, started_at: iso(30), expires_at: iso(-600), campaign_roots: roots, ...(extra || {}) });
+const env = (root, over) => ({ schema: 'autopilot.runs-live/1', scope: { project_key: PK, repo_identity: IDENT, root_run_id: root }, published_at: iso(0), valid_for_s: 180, runs: [], counts: { confirmed_live: 0, exited: 0, unknown: 0 }, ...(over || {}) });
+const liveRow = (id, over) => ({ run_id: id, alive: true, stall: false, started_at: iso(30), ...(over || {}) });
+const frozenReceipt = (root, extra) => ({ root_run_id: root, controller: { progress_receipts: [{ artifact_type: 'controller_progress_receipt', root_run_id: root, issued_at: iso(20), generation: 1, frozen_denominator_digest: 'sha', deliverable_count: 4, completed_deliverables: ['a', 'b', 'c', 'd'], remaining_deliverables: [], ...(extra || {}) }] } });
+const camp = (files, roots) => ({ 'marker.json': markerWith(roots || [CAMP]), ...files });
+
+test('SCOPE: a live run under the campaign root is 進行中 although the job root is quiet', () => {
+  const dir = capture(camp({ [`envelope--${CAMP}.json`]: env(CAMP, { runs: [liveRow('c1')], counts: { confirmed_live: 1, exited: 0, unknown: 0 } }) }),
+    ['● 進行中 demo · — · 30m · —', '1 個派工在跑']);
+  const r = run(dir);
+  assert.strictEqual(r.derived.verdict, '進行中'); assert.strictEqual(status(r, 'verdict'), 'PASS');
+});
+
+test('SCOPE: campaign terminal (frozen 4/4, no live run) is 完成待驗收 with the frozen progress and the campaign\'s own elapsed start', () => {
+  const dir = capture(camp({ [`envelope--${CAMP}.json`]: env(CAMP), [`campaign-work-orders/${CAMP}/n1-a1.json`]: frozenReceipt(CAMP, { phase: 'TERMINAL_READY' }) }),
+    ['✓ 完成待驗收 demo · 收尾 · 20m · 100%（4/4）', '驗收結論尚未出']);
+  const r = run(dir);
+  assert.strictEqual(r.derived.verdict, '完成待驗收');
+  for (const n of ['verdict', 'phase', 'progress', 'elapsed']) assert.strictEqual(status(r, n), 'PASS', n);
+});
+
+test('SCOPE: the job root live review after the campaign is terminal is 進行中 (the union, not a switch)', () => {
+  const dir = capture(camp({
+    'envelope.json': env(ROOT, { runs: [liveRow('j1')], counts: { confirmed_live: 1, exited: 0, unknown: 0 } }),
+    [`envelope--${CAMP}.json`]: env(CAMP), [`campaign-work-orders/${CAMP}/n1-a1.json`]: frozenReceipt(CAMP),
+  }), ['● 進行中 demo · — · 20m · 100%（4/4）', '1 個派工在跑']);
+  assert.strictEqual(derive(dir).verdict, '進行中');
+});
+
+test('SCOPE: a stalled run under the campaign root is 疑似卡住', () => {
+  const dir = capture(camp({ [`envelope--${CAMP}.json`]: env(CAMP, { runs: [liveRow('c1', { stall: true })], counts: { confirmed_live: 1, exited: 0, unknown: 0 } }) }), []);
+  assert.strictEqual(derive(dir).verdict, '疑似卡住');
+});
+
+test('SCOPE: a stale or missing extra envelope contributes nothing and never hides the marker root\'s', () => {
+  const live5 = { runs: [liveRow('c1'), liveRow('c2')], counts: { confirmed_live: 5, exited: 0, unknown: 0 } };
+  assert.strictEqual(derive(capture(camp({ [`envelope--${CAMP}.json`]: env(CAMP, { ...live5, published_at: iso(60) }) }), [])).verdict, '待命', 'stale extra');
+  assert.strictEqual(derive(capture(camp({ [`envelope--${CAMP}.json`]: env(CAMP, { ...live5, published_at: undefined }) }), [])).verdict, '待命', 'no published_at is not fresh');
+  assert.strictEqual(derive(capture(camp({}), [])).verdict, '待命', 'missing extra');
+  const job = capture(camp({ 'envelope.json': env(ROOT, { runs: [liveRow('j1', { stall: true })], counts: { confirmed_live: 1, exited: 0, unknown: 0 } }), [`envelope--${CAMP}.json`]: env(CAMP, { ...live5, published_at: iso(60) }) }), []);
+  assert.strictEqual(derive(job).verdict, '疑似卡住', 'the marker root still speaks');
+  const onlyCamp = capture(camp({ 'envelope.json': null, [`envelope--${CAMP}.json`]: env(CAMP, live5) }), []);
+  assert.strictEqual(derive(onlyCamp).verdict, '進行中', 'marker root envelope absent, campaign fresh');
+});
+
+test('SCOPE: proxy decisions are summed across the sidecars of the root set', () => {
+  const sc = (count, irr, undoc) => ({ schema: 'autopilot.decisions-sidecar/1', count, irreversible_count: irr, undocumented_dispatches: undoc });
+  const dir = capture(camp({ 'decisions-sidecar.json': sc(1, 0, 0), [`decisions-sidecar--${CAMP}.json`]: sc(2, 1, 3) }),
+    ['◌ 待命 demo · — · 30m · —', '沒有派工在跑 · 代你決定 3 件（1 件不可逆） · 3 件派工無決策紀錄']);
+  const r = run(dir);
+  assert.strictEqual(status(r, 'decisions'), 'PASS'); assert.strictEqual(status(r, 'undocumented'), 'PASS');
+});
+
+test('SCOPE: progress, phase and elapsed come from the NEWEST campaign root that has them', () => {
+  const dir = capture(camp({
+    [`envelope--${CAMP0}.json`]: env(CAMP0), [`envelope--${CAMP}.json`]: env(CAMP),
+    [`campaign-work-orders/${CAMP0}/n1-a1.json`]: frozenReceipt(CAMP0, { deliverable_count: 8, completed_deliverables: ['a', 'b', 'c', 'd'], remaining_deliverables: ['e'], phase: 'IMPLEMENTING', issued_at: iso(50) }),
+    [`campaign-work-orders/${CAMP}/n2-a1.json`]: frozenReceipt(CAMP, { deliverable_count: 8, completed_deliverables: ['a', 'b', 'c', 'd', 'e'], remaining_deliverables: ['f'], phase: 'REVIEWING', issued_at: iso(10) }),
+  }, [CAMP0, CAMP]), ['● 進行中 demo · 審查 · 10m · 62.5%（5/8）', '']);
+  const r = run(dir);
+  for (const n of ['phase', 'progress', 'elapsed']) assert.strictEqual(status(r, n), 'PASS', n);
+  // the newest has no frozen progress yet: the older campaign's is the one shown
+  const older = run(capture(camp({
+    [`envelope--${CAMP0}.json`]: env(CAMP0), [`envelope--${CAMP}.json`]: env(CAMP),
+    [`campaign-work-orders/${CAMP0}/n1-a1.json`]: frozenReceipt(CAMP0, { deliverable_count: 8, completed_deliverables: ['a', 'b', 'c', 'd'], remaining_deliverables: ['e'], phase: 'IMPLEMENTING', issued_at: iso(50) }),
+    [`campaign-work-orders/${CAMP}/n2-a1.json`]: { root_run_id: CAMP, controller: { progress_receipts: [{ artifact_type: 'controller_progress_receipt', root_run_id: CAMP, issued_at: iso(10), generation: 1 }] } },
+  }, [CAMP0, CAMP]), ['● 進行中 demo · 實作 · 10m · 50%（4/8）', '']));
+  assert.strictEqual(status(older, 'progress'), 'PASS');
+});
+
+test('SCOPE: unsafe, repeated and non-string campaign roots are ignored (never turned into a path)', () => {
+  const dir = capture(camp({ 'envelope--../x.json': env('x', { counts: { confirmed_live: 9, exited: 0, unknown: 0 } }) }, ['../x', 42, '', ROOT, 'a/b']), []);
+  assert.strictEqual(derive(dir).verdict, '待命');
+});
+
+test('SCOPE PLANTED RED: a band that ignores the campaign (待命) against a live campaign run FAILS; so does 完成待驗收 over a live job-root review', () => {
+  const live = camp({ [`envelope--${CAMP}.json`]: env(CAMP, { runs: [liveRow('c1')], counts: { confirmed_live: 1, exited: 0, unknown: 0 } }) });
+  assert.strictEqual(run(capture(live, ['◌ 待命 demo · — · 30m · —', '沒有派工在跑'])).ok, false);
+  const jobLive = camp({ 'envelope.json': env(ROOT, { runs: [liveRow('j1')], counts: { confirmed_live: 1, exited: 0, unknown: 0 } }), [`envelope--${CAMP}.json`]: env(CAMP), [`campaign-work-orders/${CAMP}/n1-a1.json`]: frozenReceipt(CAMP) });
+  assert.strictEqual(run(capture(jobLive, ['✓ 完成待驗收 demo · — · 20m · 100%（4/4）', '驗收結論尚未出'])).ok, false);
+});
+
+test('SCOPE: a marker without campaign_roots derives exactly as before (existing captures still check)', () => {
+  const dir = capture({ [`envelope--${CAMP}.json`]: env(CAMP, { counts: { confirmed_live: 9, exited: 0, unknown: 0 } }) }, ['◌ 待命 demo · — · 30m · —', '沒有派工在跑']);
+  assert.strictEqual(derive(dir).verdict, '待命');
 });

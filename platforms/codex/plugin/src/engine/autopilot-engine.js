@@ -163,6 +163,9 @@ const {
   devFlowAdmissionRejection,
   validateManagedDevFlowAdmission,
   campaignCarriesMissionProjection,
+  campaignRootRunId,
+  bindCampaignRoot,
+  hasExplicitSessionId,
 } = require('../../scripts/session-mode');
 const {
   admitContinuation,
@@ -9566,6 +9569,20 @@ class AutopilotEngine {
     };
   }
 
+  // Fail-open: never throws, never blocks, never alters the campaign. No session id in the environment, no sealed
+  // root, or a refusal from bindCampaignRoot (marker below l5, other repository, ...) -> nothing is bound.
+  _bindCampaignRootFailOpen(campaignContract, repoRoot, repoIdentity) {
+    try {
+      if (!hasExplicitSessionId()) return;
+      const root = campaignRootRunId(campaignContract, repoRoot);
+      if (!root) return;
+      const bound = bindCampaignRoot({ root, repoIdentity });
+      if (!bound.ok) process.stderr.write(`engine: campaign root not bound to the session marker: ${bound.reason}\n`);
+    } catch (error) {
+      try { process.stderr.write(`engine: campaign root not bound to the session marker: ${error && error.message ? error.message : String(error)}\n`); } catch (_e) { /* fail-open */ }
+    }
+  }
+
   _runImplementationReviewLoop(input = {}) {
     // Risk-triggered dynamic review is OPT-IN in the loop (default off): the review step
     // reuses the already-resolved roster and stays byte-compatible with the pre-R5 contract
@@ -9759,6 +9776,9 @@ class AutopilotEngine {
           ledger,
         });
       }
+      // Admission passed: record the sealed Mission root on THIS session's marker so the band can follow the campaign
+      // (mods P1W SCOPE). Display only: a bind that fails or is refused logs one line and changes nothing.
+      this._bindCampaignRootFailOpen(input.campaignContract, loopCwd, admission.repo_identity);
     }
     if (verifyCmdProvided && (typeof verifyCmd !== 'string' || verifyCmd.length === 0)) {
       const startedAt = this.now();

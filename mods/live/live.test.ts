@@ -1,3 +1,6 @@
+// P1W SCOPE (the band follows the campaign an /l5-/l6 session launched: marker `campaign_roots` + the marker root are read as one set,
+//   live counts / stall rows / proxy decisions summed, frozen progress + phase from the newest campaign root that has them; 12 cases x terminal + desktop):
+// RED before the change (146 tests incl. 11 SCOPE cases x2): 128 pass / 18 fail: run-w/land/scope-mod-red.txt. GREEN: 148 pass / 0 fail (the 12th case, a decision awaited under a campaign root, was added after a mutation survivor). Mutation controls: run-w/land/scope-mut-mod-*.txt.
 // P1W FOREMAN (the band reads the foreman sidecar's stamp rows: an un-ended agent quiet < 180 s = 進行中 工頭在跑, >= 180 s = 疑似卡住 工頭 N 分沒有動作; ended / over-TTL / unstamped ignored; precedence; 2 cases x terminal + desktop):
 // RED before the change: see run-w/land/foreman-mod-red.txt. Mutation controls: run-w/land/mut-foreman-*.txt.
 // P1W TURN (the band knows a turn is in progress: <live>/turn/<sid>.json active -> 進行中 with 「回合進行中（N 分）」, ended / absent -> 待命, stale (> 24h) ignored; one case x terminal + desktop):
@@ -1510,3 +1513,172 @@ test('read-only: the mod never writes a file', async ($, on) => {
   await band.unmount()
   expect(w.writes).toEqual([])
 })
+
+// ---- P1W SCOPE: the session's band follows the campaigns it launched ----
+const CAMP = 'mission-1'
+const CAMP0 = 'mission-0'
+const campEnvPath = (r: string) => LIVE + '/runs/' + KEY + '--' + r + '.json'
+const jobEnvPath = campEnvPath(ROOT)
+const modelPathOf = (r: string) => AHOME + '/review/' + KEY + '/2026-10-04/' + r + '/current/model.json'
+const scopeQuiet = { confirmed_live: 0, exited: 0, unknown: 0, fresh_bound_s: 30 }
+const counts = (live: number) => ({ confirmed_live: live, exited: 0, unknown: 0, fresh_bound_s: 30 })
+const liveRows = (n: number, prefix: string) => Array.from({ length: n }, (_x, i) => row({ run_id: prefix + i, root_run_id: prefix }))
+const FROZEN8 = { frozen: true, percent: 100, done: 8, total: 8 }
+const markerWith = (roots: unknown) => j({ session_id: SID_A, level: 'l5', project_key: KEY, root_run_id: ROOT, expires_at: '2026-10-05T10:00:00.000Z', campaign_roots: roots })
+const scopeDecisions = (root: string, count: number, irreversible: number, undocumented = 0) => j({
+  schema: 'autopilot.decisions-sidecar/1', scope: { project_key: KEY, repo_identity: 'git-common-dir:/work/repo/.git', root_run_id: root },
+  count, irreversible_count: irreversible, undocumented_dispatches: undocumented, writers_wired: ['next-pick'],
+  rows: Array.from({ length: count }, (_x, i) => ({ round: 1, decision: 'd' + root + i, irreversible: i < irreversible, writer: 'next-pick', decision_id: 'id-' + root + '-' + i, source: 'ledger_root' })),
+})
+
+// A session whose marker names one campaign root. The job root is scopeQuiet by default; the campaign root is whatever the test puts.
+function campaignWorld(campaignEnv: Record<string, unknown> | null, roots: unknown = [CAMP], jobEnv: Record<string, unknown> = { runs: [], counts: scopeQuiet }): Tree {
+  const files = base()
+  files[AHOME + '/session-mode/' + SID_A + '.json'] = markerWith(roots)
+  files[jobEnvPath] = j(envelope(jobEnv, ROOT))
+  if (campaignEnv !== null) files[campEnvPath(CAMP)] = j(envelope(campaignEnv, CAMP))
+  return files
+}
+const scopeVerdicts = (t: string) => ['要你決定', '疑似卡住', '完成待驗收', '進行中', '待命'].filter(v => t.includes(v))
+
+for (const surface of SURFACES) {
+  test('SCOPE: a live run under the campaign root reads 進行中 although the job root is quiet (' + surface + ')', async ($, on) => {
+    world(on, campaignWorld({ runs: liveRows(2, CAMP), counts: counts(2) }))
+    await start($, surface)
+    const p = await bandParts($, surface)
+    expect(p.line1.startsWith('● 進行中 repo')).toBe(true)
+    expect(p.line2).toBe('2 個派工在跑')
+  })
+
+  test('SCOPE: live counts are summed across the root set (job root 1 + campaign 2) (' + surface + ')', async ($, on) => {
+    world(on, campaignWorld({ runs: liveRows(2, CAMP), counts: counts(2) }, [CAMP], { runs: liveRows(1, ROOT), counts: counts(1) }))
+    await start($, surface)
+    expect((await bandParts($, surface)).line2).toBe('3 個派工在跑')
+    expect((await paneParts($, surface)).texts.join('\n')).toContain(CAMP + '0') // the pane lists the campaign's runs too
+  })
+
+  test('SCOPE: campaign terminal (frozen done = total, no live run anywhere) reads 完成待驗收 with the frozen progress (' + surface + ')', async ($, on) => {
+    const files = campaignWorld({ runs: [], counts: scopeQuiet })
+    files[modelPathOf(CAMP)] = j(model({ root_run_id: CAMP, job: CAMP, progress: FROZEN8, phase: { code: 'TERMINAL_READY', label: '收尾', source: 'campaign' } }))
+    world(on, files)
+    await start($, surface)
+    const p = await bandParts($, surface)
+    expect(p.line1.startsWith('✓ 完成待驗收 repo · 收尾 · ')).toBe(true)
+    expect(p.line1.endsWith('100%（8/8）')).toBe(true)
+    expect(p.line2).toBe('驗收結論尚未出')
+  })
+
+  test('SCOPE: depth-0\'s own review under the JOB root after the campaign is terminal reads 進行中, then 完成待驗收 again (' + surface + ')', async ($, on) => {
+    const files = campaignWorld({ runs: [], counts: scopeQuiet }, [CAMP], { runs: liveRows(1, ROOT), counts: counts(1) })
+    files[modelPathOf(CAMP)] = j(model({ root_run_id: CAMP, job: CAMP, progress: FROZEN8 }))
+    const w = world(on, files)
+    await start($, surface)
+    expect(scopeVerdicts(await bandText($, surface))).toEqual(['進行中'])
+    w.files[jobEnvPath] = j(envelope({ runs: [], counts: scopeQuiet, published_at: '2026-10-04T10:00:25.000Z' }, ROOT))
+    w.files[campEnvPath(CAMP)] = j(envelope({ runs: [], counts: scopeQuiet, published_at: '2026-10-04T10:00:25.000Z' }, CAMP))
+    await w.clock.advance(5000)
+    expect(scopeVerdicts(await bandText($, surface))).toEqual(['完成待驗收'])
+  })
+
+  test('SCOPE: a stalled run under the campaign root reads 疑似卡住 (' + surface + ')', async ($, on) => {
+    world(on, campaignWorld({ runs: [row({ run_id: 'c1', root_run_id: CAMP, stall: true, last_event_age_s: 300 })], counts: counts(1) }))
+    await start($, surface)
+    const p = await bandParts($, surface)
+    expect(p.line1.startsWith('⏸ 疑似卡住 repo')).toBe(true)
+    expect(p.line2).toBe('最久的派工 5m 沒有輸出')
+  })
+
+  test('SCOPE: proxy decisions are summed across the root set (' + surface + ')', async ($, on) => {
+    const files = campaignWorld({ runs: liveRows(1, CAMP), counts: counts(1) })
+    files[LIVE + '/runs/' + KEY + '--' + ROOT + '.decisions.json'] = scopeDecisions(ROOT, 1, 0)
+    files[LIVE + '/runs/' + KEY + '--' + CAMP + '.decisions.json'] = scopeDecisions(CAMP, 2, 1, 3)
+    world(on, files)
+    await start($, surface)
+    expect((await bandParts($, surface)).line2).toBe('1 個派工在跑 · 代你決定 3 件（1 件不可逆） · 3 件派工無決策紀錄')
+  })
+
+  test('SCOPE: progress and phase come from the NEWEST campaign root that has them (' + surface + ')', async ($, on) => {
+    const files = campaignWorld({ runs: [], counts: scopeQuiet }, [CAMP0, CAMP])
+    files[campEnvPath(CAMP0)] = j(envelope({ runs: [], counts: scopeQuiet }, CAMP0))
+    files[modelPathOf(CAMP0)] = j(model({ root_run_id: CAMP0, job: CAMP0, progress: { frozen: true, percent: 50, done: 4, total: 8 }, phase: { code: 'IMPLEMENTING', label: '實作', source: 'campaign' } }))
+    files[modelPathOf(CAMP)] = j(model({ root_run_id: CAMP, job: CAMP, progress: { frozen: true, percent: 62.5, done: 5, total: 8 }, phase: { code: 'REVIEWING', label: '審查', source: 'campaign' } }))
+    const w = world(on, files)
+    await start($, surface)
+    let p = await bandParts($, surface)
+    expect(p.line1).toContain(' · 審查 · ')
+    expect(p.line1.endsWith('62.5%（5/8）')).toBe(true)
+    // the newest has no phase / progress yet: the older campaign's are the ones shown, never an em dash
+    w.files[modelPathOf(CAMP)] = j(model({ root_run_id: CAMP, job: CAMP, progress: null, phase: null }))
+    await w.clock.advance(5000)
+    p = await bandParts($, surface)
+    expect(p.line1).toContain(' · 實作 · ')
+    expect(p.line1.endsWith('50%（4/8）')).toBe(true)
+  })
+
+  test('SCOPE: a missing or stale envelope of one root never hides the others (' + surface + ')', async ($, on) => {
+    // campaign envelope absent: the job root still speaks (base world has a stalled run)
+    const files = base()
+    files[AHOME + '/session-mode/' + SID_A + '.json'] = markerWith([CAMP])
+    const w = world(on, files)
+    await start($, surface)
+    expect(await bandText($, surface)).toBe(FRESH_TEXT())
+    // job root envelope absent, campaign fresh: the campaign speaks
+    delete w.files[jobEnvPath]
+    delete w.files[LIVE + '/runs/' + KEY + '.json']
+    w.files[campEnvPath(CAMP)] = j(envelope({ runs: liveRows(2, CAMP), counts: counts(2), published_at: '2026-10-04T10:00:25.000Z' }, CAMP))
+    await w.clock.advance(5000)
+    expect((await bandParts($, surface)).line2).toBe('2 個派工在跑')
+    // campaign stale (5 live runs published long ago), job root fresh and scopeQuiet: the stale one contributes nothing
+    w.files[jobEnvPath] = j(envelope({ runs: [], counts: scopeQuiet, published_at: '2026-10-04T10:00:28.000Z' }, ROOT))
+    w.files[campEnvPath(CAMP)] = j(envelope({ runs: liveRows(5, CAMP), counts: counts(5), published_at: '2026-10-04T09:00:00.000Z' }, CAMP))
+    await w.clock.advance(5000)
+    expect(scopeVerdicts(await bandText($, surface))).toEqual(['待命'])
+  })
+
+  test('SCOPE: every root of the set stale reads stale, none found reads unavailable (' + surface + ')', async ($, on) => {
+    const w = world(on, campaignWorld({ runs: [], counts: scopeQuiet }), NOW_STALE)
+    await start($, surface)
+    expect(await bandText($, surface)).toContain('stale')
+    for (const k of Object.keys(w.files)) if (k.startsWith(LIVE + '/runs/' + KEY)) delete w.files[k]
+    await w.clock.advance(5000)
+    expect(await bandText($, surface)).toContain('unavailable')
+  })
+
+  test('SCOPE: unsafe or non-string campaign roots are never turned into a path; a duplicate of the marker root is read once (' + surface + ')', async ($, on) => {
+    const files = campaignWorld(null, ['../../etc/passwd', 42, '', ROOT, 'a/b'])
+    const w = world(on, files)
+    await start($, surface)
+    expect(w.reads.some(p => p.includes('..') || p.includes('passwd') || p.includes('a/b'))).toBe(false)
+    expect(w.reads.filter(p => p === jobEnvPath).length).toBe(1)
+  })
+
+  test('SCOPE: a decision awaited under the campaign root reads 要你決定 with its question (' + surface + ')', async ($, on) => {
+    const files = campaignWorld({ runs: liveRows(1, CAMP), counts: counts(1) })
+    files[modelPathOf(ROOT)] = j(model())
+    files[modelPathOf(CAMP)] = j(model({ root_run_id: CAMP, job: CAMP, needs_decision: true, decision: { question: '要合併 campaign 分支嗎？', options: [{ label: '合併', consequence: '進 develop' }], stale: false, age_s: 5 } }))
+    world(on, files)
+    await start($, surface)
+    const p = await bandParts($, surface)
+    expect(p.line1.startsWith('▲ 要你決定 repo')).toBe(true)
+    expect(p.line2).toBe('要合併 campaign 分支嗎？')
+  })
+
+  test('SCOPE: a marker without campaign_roots reads exactly the marker root, as before (' + surface + ')', async ($, on) => {
+    const files = base()
+    files[campEnvPath(CAMP)] = j(envelope({ runs: liveRows(9, CAMP), counts: counts(9) }, CAMP))
+    const w = world(on, files)
+    await start($, surface)
+    expect(await bandText($, surface)).toBe(FRESH_TEXT())
+    expect(w.reads.includes(campEnvPath(CAMP))).toBe(false)
+  })
+
+  test('SCOPE: a campaign root of the set sets the elapsed start from its own progress receipt (' + surface + ')', async ($, on) => {
+    const files = campaignWorld({ runs: liveRows(1, CAMP), counts: counts(1) })
+    files[COMMON + '/autopilot/work-orders/' + CAMP + '/n1-a1.json'] = j({
+      artifact_type: 'work_order', root_run_id: CAMP, controller: { progress_receipts: [{ artifact_type: 'controller_progress_receipt', root_run_id: CAMP, issued_at: '2026-10-04T08:00:30.000Z' }] },
+    })
+    world(on, files)
+    await start($, surface)
+    expect((await bandParts($, surface)).line1).toContain(' · 2h0m · ')
+  })
+}

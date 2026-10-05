@@ -830,6 +830,20 @@ const positive = dispatch();
 check('positive_l6_marker_reaches_runner_once',
   positive.status === 0 && positive.effects === 1);
 
+// mods P1W SCOPE: `bind-campaign-root` adds a top-level campaign_roots to the session's own marker (and `set --phase` adds phase /
+// phase_set_at). Neither the session's own admission nor the bridge that scans EVERY marker may treat those additive fields as a
+// malformed marker: the second dispatch of a campaign (repair round, resume) runs against the bound marker.
+clearMarkers();
+writeMarker(BRIDGE_SESSION_ID, {
+  ...validSessionMarker(),
+  campaign_roots: ['mission-bound-1', 'mission-bound-2'],
+  phase: 'review',
+  phase_set_at: '2026-07-28T00:00:01.000Z',
+});
+const boundMarker = dispatch();
+check('bound_marker_with_campaign_roots_reaches_runner_once',
+  boundMarker.status === 0 && boundMarker.effects === 1);
+
 // Off/shadow compatibility: with no managed marker, a sealed non-strict
 // campaign remains dispatchable when authoritative policy is off.
 const offRepo = path.join(temp, 'off-repo');
@@ -976,7 +990,7 @@ assert_eq "$FAIL_COUNT" "0" "bridge oracle has zero failures (pass=$PASS_COUNT)"
 for key in \
   prepare_created mission_seal_is_v2 icc_id_is_v1_distinct intake_admitted_dual_identity \
   strict_projection_uses_icc_v1 engine_rejects_mission_v2_as_run_id terminal_binds_both_identities \
-  positive_l6_marker_reaches_runner_once \
+  positive_l6_marker_reaches_runner_once bound_marker_with_campaign_roots_reaches_runner_once \
   negative_graph_mismatch_zero_runner negative_policy_mismatch_zero_runner \
   negative_repo_mismatch_zero_runner negative_missing_admission_zero_runner \
   negative_malformed_admission_zero_runner negative_legacy_l3_fallback_zero_runner \

@@ -163,6 +163,14 @@ function unexpiredMarkers(env, key, nowMs) {
   return out;
 }
 
+// The Mission roots a session marker links to the campaigns it launched (additive `campaign_roots`, written by
+// `session-mode.js bind-campaign-root`; mods P1W SCOPE). The marker's own root_run_id is a job root and can never equal the
+// engine's sealed Mission root, so without this the watcher would stop publishing a campaign once its runs end.
+function campaignRootsOf(marker) {
+  if (!marker || !Array.isArray(marker.campaign_roots)) return [];
+  return marker.campaign_roots.filter((r) => typeof r === 'string' && r.length > 0 && r.length <= 128 && /^[A-Za-z0-9._-]+$/.test(r));
+}
+
 // An orchestrator marker (l3-l6) as opposed to a plain-session record (explicit level null, mods P1W MARKER).
 // Plain records feed project_key / phase / root (watch inputs get ALL unexpired markers); they are NOT orchestrator
 // sessions, so they never count toward watcher liveness, the cost session list or foreman activity — exactly as if
@@ -556,7 +564,10 @@ function createWatcher({
   // recent tasks/attention update of one of its sessions).
   function activeRootsOf(candidates, allMarkers, rows, nowMs, windowS) {
     const active = new Set();
-    for (const m of allMarkers) if (typeof m.root_run_id === 'string' && m.root_run_id) active.add(m.root_run_id);
+    for (const m of allMarkers) {
+      if (typeof m.root_run_id === 'string' && m.root_run_id) active.add(m.root_run_id);
+      for (const r of campaignRootsOf(m)) active.add(r);
+    }
     for (const r of rows) if (r.root_run_id && !isExitedRow(r)) active.add(r.root_run_id);
     const common = commonDirOf(identity);
     if (common) {
@@ -635,7 +646,10 @@ function createWatcher({
     const cost = costs.summary(nowMs, markers.map((m) => m.session_id).filter(Boolean));
     const candidates = new Set(state.roots);
     for (const r of rows) if (r.root_run_id) candidates.add(r.root_run_id);
-    for (const m of allMarkers) if (typeof m.root_run_id === 'string' && m.root_run_id) candidates.add(m.root_run_id); // plain sessions too
+    for (const m of allMarkers) {
+      if (typeof m.root_run_id === 'string' && m.root_run_id) candidates.add(m.root_run_id); // plain sessions too
+      for (const r of campaignRootsOf(m)) candidates.add(r); // the campaigns a session launched (P1W SCOPE)
+    }
     // Orphans of an earlier watcher: THIS project's envelopes on disk (`<key>--<segment>.json`, not the sidecars) enter the
     // retention clock too, so a restart cannot leave a root's files behind forever. Another project's key never matches.
     for (const seg of rootSegmentsOnDisk()) {

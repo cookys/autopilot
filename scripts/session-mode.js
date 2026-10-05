@@ -11,13 +11,17 @@
  * level ∈ {l3,l4,l5,l6} is unchanged; any other non-null level is still an invalid marker:
  *   ${AUTOPILOT_SESSION_MODE_DIR:-~/.autopilot/session-mode}/<session-id>.json
  *   { session_id, level, repo_root, started_at, expires_at, entry_level?, fallback_reason?,
- *     mission_routing?, repo_identity?, project_key?, root_run_id?, phase?, phase_set_at? }
+ *     mission_routing?, repo_identity?, project_key?, root_run_id?, phase?, phase_set_at?, campaign_roots? }
  *   (level is null for a plain session. A plain session is ONE JOB like any other (mods P1W PLAINROOT, plan R5.7):
  *   `set` and the SessionStart ensure assign root_run_id with the same rule as `set --level` — explicit --root-run-id
  *   > AUTOPILOT_ROOT_RUN_ID > a minted `job-<ts>-<rand>` (resolveJobRoot, the only minting site). The ensure never
  *   overwrites, so compact/resume keep the root; an EXPIRED marker is replaced by a new marker with a NEW root.
  *   repo_identity/project_key/root_run_id are additive, null when underivable; `set` also writes
  *   ~/.autopilot/live-pointer.json — src/status/live-pointer.js)
+ *   campaign_roots (mods P1W SCOPE, `bind-campaign-root`): the Mission roots of the campaigns this /l5-/l6 session
+ *   launched (<= 8, newest last). The engine's sealed Mission root can never equal the marker's job root (the marker is
+ *   set before prepare/grant mint the mission), so this is the only link from a session to the campaign it runs; the
+ *   watcher and the band read the union {root_run_id} + campaign_roots.
  *   phase/phase_set_at (mods P1W PHASE): free-text work phase (1-64 chars, trimmed, no control
  *   chars) + ISO-8601 stamp, read by the project watcher; absent = no phase.
  *
@@ -42,6 +46,10 @@
  *     field unchanged; `--phase ''` clears the phase. Exit 2 when there is no unexpired marker (fail-closed:
  *     this form never creates one). Exit 1 when the marker lock stays held past
  *     AUTOPILOT_SESSION_MODE_LOCK_TIMEOUT_MS, default 8000.)
+ *   node scripts/session-mode.js bind-campaign-root --root <id> (--repo-identity <git-common-dir:...> | --repo-root <dir>)
+ *     (record <id> in THIS session's own marker `campaign_roots`: locked, atomic, idempotent, newest last, <= 8. Refuses
+ *     (exit 3, one stderr line, marker untouched) unless the marker exists, is unexpired, is level l5/l6 and its repo
+ *     identity equals the given one; exit 2 for a usage error or an unsafe id. Never creates or scans other markers.)
  *   node scripts/session-mode.js clear [--task-status-receipt <file> --root-run-id <id>]
  *   node scripts/session-mode.js retire --session <id> --integration-receipt <file>
  *     [--integration-ref <ref>] [--lineage <adoption-key>] [--repo-root <dir>]
@@ -79,6 +87,8 @@ const LEVELS = new Set(['l3', 'l4', 'l5', 'l6']);
 const DEFAULT_TTL_HOURS = 24;
 const PHASE_MAX = 64;
 const PHASE_LOCK_TIMEOUT_MS = 8000;
+const CAMPAIGN_ROOTS_MAX = 8;
+const CAMPAIGN_ROOT_ID = /^[A-Za-z0-9._-]{1,128}$/u;
 const SHA256 = /^[a-f0-9]{64}$/u;
 const DEV_FLOW_ADMISSION_REJECTION_CODE = 'DEV_FLOW_ADMISSION_REQUIRED_OR_STALE';
 const ROUTING_KEYS = Object.freeze([
@@ -327,6 +337,21 @@ function readCampaignAuthority(campaignContract, repoRoot) {
   };
 }
 
+// The sealed Mission root of a campaign contract (path or object), or null when it carries none / an unsafe one.
+// Kept apart from readCampaignAuthority on purpose: verifyMissionRoutingProjection demands that object's EXACT key set.
+function campaignRootRunId(campaignContract, repoRoot) {
+  let contract = campaignContract;
+  if (typeof campaignContract === 'string') {
+    try {
+      contract = JSON.parse(fs.readFileSync(path.resolve(repoRoot || process.cwd(), campaignContract), 'utf8'));
+    } catch { return null; }
+  }
+  if (!contract || typeof contract !== 'object' || Array.isArray(contract)) return null;
+  const runtime = contract.mission_runtime || contract.campaign_projection;
+  const root = runtime && typeof runtime === 'object' ? runtime.root_run_id : null;
+  return isSafeCampaignRoot(root) ? root : null;
+}
+
 // Where managed admission applies at all.
 //
 // Admission binds a sealed session marker to the campaign's Mission projection,
@@ -480,6 +505,74 @@ function startProjectWatcher(marker, repoRoot) {
 // Phase names (mods P1W PHASE): 1-64 chars after trim, no control characters. An explicit empty
 // string is the clear request; whitespace-only is a mistake, not a clear.
 // Returns {value} (value === null means clear) or {error}.
+// True only when the environment names a session. getSessionId() falls back to the cwd for an unbound caller, which
+// is fine for reading but must never decide that a marker belongs to this process when something WRITES to it.
+function hasExplicitSessionId(env = process.env) {
+  return Boolean(env.AUTOPILOT_SESSION_ID || env.CLAUDE_CODE_SESSION_ID || env.CLAUDE_SESSION_ID || env.CODEX_THREAD_ID);
+}
+
+function isSafeCampaignRoot(root) {
+  return typeof root === 'string' && CAMPAIGN_ROOT_ID.test(root) && root !== '.' && root !== '..';
+}
+
+// Record a campaign's Mission root in the calling session's OWN marker (mods P1W SCOPE). Everything is judged under
+// the marker lock on a fresh read, so a concurrent writer cannot make a refused bind land. -> { ok, ... } | { ok:false, code, reason }.
+function bindCampaignRoot({ root, repoIdentity, now = Date.now() } = {}) {
+  const refuse = (code, reason) => ({ ok: false, code, reason });
+  if (!isSafeCampaignRoot(root)) return refuse(2, 'invalid --root: want 1-128 characters of [A-Za-z0-9._-]');
+  if (typeof repoIdentity !== 'string' || !repoIdentity) return refuse(2, 'bind-campaign-root needs --repo-identity or --repo-root');
+  if (!hasExplicitSessionId()) return refuse(3, 'no session id in the environment; nothing bound');
+  const file = markerPath();
+  const timeoutMs = Number(process.env.AUTOPILOT_SESSION_MODE_LOCK_TIMEOUT_MS) > 0
+    ? Number(process.env.AUTOPILOT_SESSION_MODE_LOCK_TIMEOUT_MS) : PHASE_LOCK_TIMEOUT_MS;
+  if (!fs.existsSync(file)) return refuse(3, 'no session marker for this session; nothing bound');
+  let outcome = null;
+  try {
+    withWriteLock({ storeDir: markerDir(), lockFile: `${file}.lock`, name: 'session-mode marker', timeoutMs }, () => {
+      let current;
+      try { current = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { outcome = refuse(3, 'session marker unreadable; nothing bound'); return; }
+      if (!current || typeof current !== 'object' || Array.isArray(current)) { outcome = refuse(3, 'session marker malformed; nothing bound'); return; }
+      if (current.session_id !== getSessionId()) { outcome = refuse(3, 'session marker belongs to another session; nothing bound'); return; }
+      const expires = Date.parse(current.expires_at);
+      if (!Number.isFinite(expires) || expires <= now) { outcome = refuse(3, 'session marker expired; nothing bound'); return; }
+      if (current.level !== 'l5' && current.level !== 'l6') { outcome = refuse(3, `session marker level ${current.level === null ? 'none' : current.level} is below l5; nothing bound`); return; }
+      const markerIdentity = typeof current.repo_identity === 'string' && current.repo_identity
+        ? current.repo_identity
+        : (typeof current.repo_root === 'string' && path.isAbsolute(current.repo_root) ? markerRepoIdentity(current.repo_root) : null);
+      if (!markerIdentity || markerIdentity !== repoIdentity) { outcome = refuse(3, 'session marker repository differs from the campaign repository; nothing bound'); return; }
+      if (root === current.root_run_id) { outcome = { ok: true, changed: false, campaign_roots: Array.isArray(current.campaign_roots) ? current.campaign_roots : [] }; return; }
+      const prior = Array.isArray(current.campaign_roots) ? current.campaign_roots.filter(isSafeCampaignRoot) : [];
+      if (prior.length > 0 && prior[prior.length - 1] === root && prior.length === (current.campaign_roots || []).length) {
+        outcome = { ok: true, changed: false, campaign_roots: prior };
+        return;
+      }
+      const roots = [...prior.filter((r) => r !== root), root].slice(-CAMPAIGN_ROOTS_MAX);
+      const next = { ...current, campaign_roots: roots };
+      const tmp = `${file}.tmp-${process.pid}`;
+      fs.writeFileSync(tmp, `${JSON.stringify(next, null, 2)}\n`);
+      fs.renameSync(tmp, file);
+      outcome = { ok: true, changed: true, campaign_roots: roots };
+    });
+  } catch (error) {
+    return refuse(1, `campaign root not bound: ${error.message}`);
+  }
+  return outcome || refuse(3, 'session marker unavailable; nothing bound');
+}
+
+function cmdBindCampaignRoot(args) {
+  let repoIdentity = typeof args['repo-identity'] === 'string' ? args['repo-identity'] : '';
+  if (!repoIdentity && typeof args['repo-root'] === 'string' && args['repo-root']) {
+    try { repoIdentity = markerRepoIdentity(path.resolve(args['repo-root'])) || ''; } catch { repoIdentity = ''; }
+  }
+  const result = bindCampaignRoot({ root: args.root, repoIdentity });
+  if (!result.ok) {
+    process.stderr.write(`session-mode: bind-campaign-root: ${result.reason}\n`);
+    return result.code;
+  }
+  process.stdout.write(`${JSON.stringify({ ok: true, changed: result.changed, marker_path: markerPath(), campaign_roots: result.campaign_roots })}\n`);
+  return 0;
+}
+
 function parsePhase(raw) {
   if (typeof raw !== 'string') return { error: '--phase needs a value (use --phase \'\' to clear)' };
   if (raw === '') return { value: null };
@@ -1029,6 +1122,7 @@ function main() {
     case 'set': return cmdSet(args);
     case 'clear': return cmdClear(args);
     case 'retire': return cmdRetire(args);
+    case 'bind-campaign-root': return cmdBindCampaignRoot(args);
     case 'status': return cmdStatus();
     case 'root': return cmdRoot();
     default:
@@ -1036,7 +1130,7 @@ function main() {
         'Usage: session-mode.js set [--level none] [--root-run-id <id>] [--phase <name>] (plain session) | ' +
         'set --level l3|l4|l5|l6 [--entry-level l3|l4|l5|l6] ' +
         '[--fallback none|solo|precondition_failed] [--repo-root <dir>] [--ttl-hours N] [--root-run-id <id>] [--phase <name>] | ' +
-        'set --phase <name|\'\'> (update the active marker) | clear | retire --session <id> --integration-receipt <file> [--integration-ref <ref>] | status | root\n',
+        'set --phase <name|\'\'> (update the active marker) | clear | retire --session <id> --integration-receipt <file> [--integration-ref <ref>] | bind-campaign-root --root <id> (--repo-identity <id> | --repo-root <dir>) | status | root\n',
       );
       return 2;
   }
@@ -1056,6 +1150,9 @@ module.exports = {
   markerRepoIdentity,
   validateManagedDevFlowAdmission,
   campaignCarriesMissionProjection,
+  campaignRootRunId,
+  bindCampaignRoot,
+  hasExplicitSessionId,
   validateCloseReceipt,
   verifyMissionRoutingProjection,
   LEVELS,

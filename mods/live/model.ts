@@ -341,7 +341,7 @@ export function notWired(m: Manifest | null, names: string[]): boolean {
   return names.every(n => liveSource(m, n) === false)
 }
 
-export type DecisionRow = { round: number | null; decision: string; irreversible: boolean; writer: string | null; decision_id: string | null; source: string | null }
+export type DecisionRow = { round: number | null; decision: string; irreversible: boolean; writer: string | null; decision_id: string | null; source: string | null; root: string | null }
 export type DecisionsView = { rows: DecisionRow[]; count: number; irreversible: number; writers: string[]; undocumented: number; identity: string | null; root: string | null }
 
 // <live>/runs/<scope_key>.decisions.json (WATCH-B). The counts are the publisher's own.
@@ -355,12 +355,73 @@ export function readDecisions(text: string | null, want: ScopeWant): DecisionsVi
     round: Number.isInteger(r.round) ? (r.round as number) : null,
     decision: str(r.decision) || '—',
     irreversible: r.irreversible === true,
-    writer: str(r.writer), decision_id: str(r.decision_id), source: str(r.source),
+    writer: str(r.writer), decision_id: str(r.decision_id), source: str(r.source), root: want.root_run_id,
   }))
   const scope = v.scope as Json
   return {
     rows, count: v.count, irreversible: v.irreversible_count, writers: v.writers_wired.filter((w): w is string => typeof w === 'string'),
     undocumented: v.undocumented_dispatches, identity: str(scope.repo_identity), root: want.root_run_id,
+  }
+}
+
+// ---- P1W SCOPE: one session, several roots (the marker's job root + the campaigns it launched) ----
+// The band reads every root of the set and merges. Live counts, stall rows and proxy decisions are summed; the frozen
+// progress and the phase come from the NEWEST campaign root that has them (campaign roots are ordered oldest -> newest).
+
+// base's scope / sessions / host cost, every fresh envelope's runs concatenated and counts summed (an envelope with no
+// readable counts adds none; when no envelope has counts the base's are kept).
+export function mergeEnvelopes(base: Json, others: Json[]): Json {
+  if (others.length === 0) return base
+  const all = [base, ...others]
+  const runs: Json[] = []
+  let sum: Counts | null = null
+  for (const env of all) {
+    runs.push(...(rowsOf(env) || []))
+    const c = countsOf(env)
+    if (c !== null) sum = sum === null ? { ...c } : { confirmed_live: sum.confirmed_live + c.confirmed_live, exited: sum.exited + c.exited, unknown: sum.unknown + c.unknown }
+  }
+  const merged: Json = { ...base, runs }
+  if (sum !== null) merged.counts = { ...(isObject(base.counts) ? base.counts : {}), ...sum }
+  return merged
+}
+
+const isFrozenProgress = (p: JobProgress | null): p is JobProgress => p !== null && p.frozen && p.done !== null && p.total !== null
+
+// primary = the marker root's job model (or null), campaigns = the campaign roots' job models, oldest -> newest (absent ones left out).
+// Acceptance, gates and sources come from the primary (else the newest campaign); a decision awaited under ANY root is awaited;
+// progress = the newest campaign's frozen progress, phase = the newest campaign's phase, each falling back to the base's own.
+export function mergeJobModels(primary: JobModel | null, campaigns: JobModel[]): JobModel | null {
+  const newestFirst = [...campaigns].reverse()
+  const base: JobModel | null = primary !== null ? primary : (newestFirst[0] ?? null)
+  if (base === null) return null
+  const all = primary !== null ? [primary, ...campaigns] : campaigns
+  const asking = all.find(m => m.needs_decision)
+  const frozen = newestFirst.find(m => isFrozenProgress(m.progress))
+  const phased = newestFirst.find(m => m.phase !== null)
+  return {
+    ...base,
+    needs_decision: asking !== undefined,
+    decision: asking !== undefined ? asking.decision : base.decision,
+    conclusion: asking !== undefined ? asking.conclusion : base.conclusion,
+    progress: frozen !== undefined ? frozen.progress : base.progress,
+    phase: phased !== undefined ? phased.phase : base.phase,
+  }
+}
+
+export function mergeDecisions(views: DecisionsView[]): DecisionsView | null {
+  const first = views[0]
+  if (first === undefined) return null
+  if (views.length === 1) return first
+  const writers: string[] = []
+  for (const v of views) for (const w of v.writers) if (!writers.includes(w)) writers.push(w)
+  return {
+    rows: views.flatMap(v => v.rows),
+    count: views.reduce((n, v) => n + v.count, 0),
+    irreversible: views.reduce((n, v) => n + v.irreversible, 0),
+    writers,
+    undocumented: views.reduce((n, v) => n + v.undocumented, 0),
+    identity: views.map(v => v.identity).find(i => i !== null) || null,
+    root: first.root,
   }
 }
 
@@ -727,7 +788,7 @@ const ledgerPath = (source: string | null, common: string | null, root: string |
 // the veto verb is decision-ledger.js `veto --ledger <ledger> --id <decision_id>` (its own round report prints the same line)
 export function vetoLine(r: DecisionRow, common: string | null, root: string | null): string {
   if (r.decision_id === null) return '  （沒有 decision_id，無法 veto）'
-  const path = ledgerPath(r.source, common, root)
+  const path = ledgerPath(r.source, common, r.root !== null ? r.root : root) // a merged view carries rows of several roots: each names its own
   if (path === null && r.source === 'ledger_root') return '  （找不到 ledger 路徑，無法組出 veto 指令）'
   return '  veto: decision-ledger.js veto ' + (path === null ? '' : '--ledger ' + path + ' ') + '--id ' + r.decision_id
 }

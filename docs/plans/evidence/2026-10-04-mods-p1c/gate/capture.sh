@@ -14,6 +14,8 @@
 # Capture layout (what check.js reads):
 #   meta.json pane.txt band.txt panel.txt marker.json attention.json tasks.json turn.json context.json envelope.json decisions-sidecar.json
 #   foreman.json sources.json model.json decision-file.json work-orders/*.json agents/*.json marker-dir-ls.txt ps-watchers.txt
+#   Root set (mods P1W SCOPE): for each root in marker.campaign_roots (<= 8, plain names only) also envelope--<root>.json,
+#   decisions-sidecar--<root>.json, model--<root>.json and campaign-work-orders/<root>/*.json (the campaign root's progress receipts).
 #   (agents/*.json = <live>/agents/<sid>/*.json, the per-subagent activity stamps with ended_at; check.js derives the foreman verdict from them)
 # A file that does not exist is simply absent (listed under "missing" in meta.json): absence is itself evidence.
 set -u
@@ -140,6 +142,32 @@ if (common && scope) {
     if (!names.length) missing.push(`work-orders (${wd})`);
   }
 } else if (!common) missing.push('decision-file / work-orders (no git-common-dir identity)');
+
+// --- campaign roots (marker.campaign_roots, mods P1W SCOPE): the same files for every extra root of the set
+const croots = (marker && Array.isArray(marker.campaign_roots) ? marker.campaign_roots : [])
+  .filter((r) => typeof r === 'string' && /^[A-Za-z0-9._-]{1,128}$/.test(r) && r !== '.' && r !== '..' && r !== root).slice(-8);
+for (const r of croots) {
+  if (live && pkey) {
+    const sk = `${pkey}--${safeSeg(r)}`;
+    copy(path.join(live, 'runs', `${sk}.json`), `envelope--${r}.json`);
+    copy(path.join(live, 'runs', `${sk}.decisions.json`), `decisions-sidecar--${r}.json`);
+  }
+  if (pkey) {
+    const base = path.join(E.GATE_AHOME, 'review', pkey);
+    let dates = [];
+    try { dates = fs.readdirSync(base).filter((n) => /^\d{4}-\d{2}-\d{2}$/.test(n)).sort().reverse(); } catch (_e) { /* none */ }
+    const hit = dates.map((d) => path.join(base, d, safeSeg(r), 'current', 'model.json')).find((f) => fs.existsSync(f));
+    if (hit) copy(hit, `model--${r}.json`); else missing.push(`model--${r}.json (${base}/<date>/${safeSeg(r)}/current/model.json)`);
+  }
+  if (common) {
+    const wd = path.join(common, 'autopilot', 'work-orders', r);
+    let names = [];
+    try { names = fs.readdirSync(wd).filter((n) => n.endsWith('.json')); } catch (_e) { /* none */ }
+    if (names.length) fs.mkdirSync(path.join(out, 'campaign-work-orders', r), { recursive: true });
+    for (const n of names) copy(path.join(wd, n), path.join('campaign-work-orders', r, n));
+    if (!names.length) missing.push(`campaign-work-orders/${r} (${wd})`);
+  }
+}
 
 // --- band.txt: the last line with a verdict mark + the line after it
 const pane = fs.readFileSync(path.join(out, 'pane.txt'), 'utf8').split('\n');

@@ -8,6 +8,13 @@
 // cell -> source table, from the capture's own copies of the source files (see capture.sh for the layout).
 // A disagreement between this checker and the band is a FINDING. Never tune a rule here to make a band pass.
 //
+// Root set (mods P1W SCOPE, gate run l5g): the session's band follows the root of its marker AND every root in marker.json
+//   `campaign_roots` (the Mission roots of campaigns it launched; oldest -> newest). capture.sh copies envelope--<root>.json,
+//   decisions-sidecar--<root>.json, model--<root>.json and campaign-work-orders/<root>/*.json per extra root. This checker
+//   re-derives the union by its own code: live counts / stall rows / proxy decisions summed over the marker root's envelope and
+//   every FRESH extra envelope (published_at within valid_for_s, default 180, of the capture instant); frozen progress and phase from the
+//   newest campaign root that has them; the elapsed start from the newest campaign root with a bound receipt. A missing or stale
+//   extra envelope contributes nothing and never hides the others.
 // Expected values are derived from files only; the captured pane is read last and only compared.
 //   verdict   attention kind permission|question OR an open decision file -> 要你決定
 //             else any envelope run with stall:true                        -> 疑似卡住
@@ -76,12 +83,12 @@ function parseElapsedMin(s) {
 }
 
 // newest controller_progress_receipt among work-orders/*.json (issued_at, then generation)
-function newestReceipt(dir, root) {
+function newestReceipt(dir, root, sub = 'work-orders') {
   let best = null;
   let names = [];
-  try { names = fs.readdirSync(path.join(dir, 'work-orders')).filter((n) => n.endsWith('.json')).sort(); } catch (_e) { return null; }
+  try { names = fs.readdirSync(path.join(dir, sub)).filter((n) => n.endsWith('.json')).sort(); } catch (_e) { return null; }
   for (const n of names) {
-    const f = readJson(path.join(dir, 'work-orders', n));
+    const f = readJson(path.join(dir, sub, n));
     if (!isObj(f)) continue;
     if (typeof f.root_run_id === 'string' && root && f.root_run_id !== root) continue;
     const list = isObj(f.controller) && Array.isArray(f.controller.progress_receipts) ? f.controller.progress_receipts : [];
@@ -89,18 +96,18 @@ function newestReceipt(dir, root) {
       if (!isObj(r) || r.artifact_type !== 'controller_progress_receipt') continue;
       if (root && r.root_run_id !== root) continue;
       const key = [ms(r.issued_at) === null ? -Infinity : ms(r.issued_at), Number.isInteger(r.generation) ? r.generation : 0];
-      if (!best || key[0] > best.key[0] || (key[0] === best.key[0] && key[1] >= best.key[1])) best = { key, r, file: `work-orders/${n}` };
+      if (!best || key[0] > best.key[0] || (key[0] === best.key[0] && key[1] >= best.key[1])) best = { key, r, file: `${sub}/${n}` };
     }
   }
   return best;
 }
 
-function receiptStartMs(dir, root) {
+function receiptStartMs(dir, root, sub = 'work-orders') {
   let best = Infinity;
   let names = [];
-  try { names = fs.readdirSync(path.join(dir, 'work-orders')).filter((n) => n.endsWith('.json')); } catch (_e) { return null; }
+  try { names = fs.readdirSync(path.join(dir, sub)).filter((n) => n.endsWith('.json')); } catch (_e) { return null; }
   for (const n of names) {
-    const f = readJson(path.join(dir, 'work-orders', n));
+    const f = readJson(path.join(dir, sub, n));
     if (!isObj(f) || (typeof f.root_run_id === 'string' && f.root_run_id !== root)) continue;
     const list = isObj(f.controller) && Array.isArray(f.controller.progress_receipts) ? f.controller.progress_receipts : [];
     for (const r of list) {
@@ -108,6 +115,21 @@ function receiptStartMs(dir, root) {
     }
   }
   return best === Infinity ? null : best;
+}
+
+// marker.campaign_roots: plain strings only (they name files), not the marker's own root, no repeats, at most 8, oldest -> newest
+function campaignRootsOf(marker, root) {
+  const raw = marker && Array.isArray(marker.campaign_roots) ? marker.campaign_roots : [];
+  const out = [];
+  for (const r of raw) if (typeof r === 'string' && /^[A-Za-z0-9._-]{1,128}$/.test(r) && r !== '.' && r !== '..' && r !== root && !out.includes(r)) out.push(r);
+  return out.slice(-8);
+}
+// an extra root's envelope counts only while fresh: published_at parses and is within valid_for_s (default 180) of the capture instant
+function freshEnvelope(env, nowMs) {
+  if (!isObj(env)) return false;
+  const at = ms(env.published_at);
+  const validS = Number.isFinite(env.valid_for_s) ? env.valid_for_s : 180;
+  return at !== null && nowMs !== null && nowMs - at <= validS * 1000;
 }
 
 function derive(dir) {
@@ -155,28 +177,53 @@ function derive(dir) {
   }
   const foremanFresh = foremen.fresh.length > 0;
   const foremanStalled = foremen.stalled.length > 0;
-  const runs = envelope && Array.isArray(envelope.runs) ? envelope.runs.filter(isObj) : [];
+  // ---- root set: the marker root + the campaign roots (oldest -> newest)
+  const campaignRoots = campaignRootsOf(marker, root);
+  const extras = [];
+  for (const r of campaignRoots) {
+    const e = J(`envelope--${r}.json`);
+    if (freshEnvelope(e, nowMs)) extras.push({ root: r, envelope: e });
+  }
+  const envelopes = [envelope, ...extras.map((x) => x.envelope)].filter(isObj);
+  const runs = envelopes.flatMap((e) => (Array.isArray(e.runs) ? e.runs.filter(isObj) : []));
   const stalled = runs.some((r) => r.stall === true);
-  const liveRun = envelope && isObj(envelope.counts) && Number.isFinite(envelope.counts.confirmed_live)
-    ? envelope.counts.confirmed_live > 0
+  const withCounts = envelopes.filter((e) => isObj(e.counts) && Number.isFinite(e.counts.confirmed_live));
+  const liveRun = withCounts.length > 0
+    ? withCounts.reduce((n, e) => n + e.counts.confirmed_live, 0) > 0
     : runs.some((r) => r.alive === true && r.phase !== 'exited' && !r.ended_at && !r.final_status);
 
-  // ---- progress
+  // ---- progress: the newest campaign root with a FROZEN progress, else the marker root's, else the newest campaign root's
+  const progressOf = (rec, mdl) => {
+    if (rec) {
+      const r = rec.r;
+      const done = Array.isArray(r.completed_deliverables) ? r.completed_deliverables : null;
+      const rem = Array.isArray(r.remaining_deliverables) ? r.remaining_deliverables : null;
+      const frozen = Boolean(typeof r.frozen_denominator_digest === 'string' && r.frozen_denominator_digest && Number.isInteger(r.deliverable_count) && r.deliverable_count > 0 && done);
+      return {
+        frozen, done: done ? done.length : null, total: frozen ? r.deliverable_count : null,
+        pct: frozen ? Math.round((done.length / r.deliverable_count) * 1000) / 10 : null,
+        source: rec.file, openId: rem && rem.length ? String(rem[0]) : null, phaseCode: typeof r.phase === 'string' && r.phase ? r.phase : null,
+      };
+    }
+    if (mdl && isObj(mdl.progress) && mdl.progress.frozen === true && Number.isFinite(mdl.progress.done) && Number.isFinite(mdl.progress.total) && mdl.progress.total > 0) {
+      return { frozen: true, done: mdl.progress.done, total: mdl.progress.total, pct: Math.round((mdl.progress.done / mdl.progress.total) * 1000) / 10, source: mdl.__file || 'model.json', openId: null, phaseCode: null };
+    }
+    return null;
+  };
   const rec = newestReceipt(dir, root);
-  let progress = null; // {frozen, done, total, pct, source, openId, phaseCode}
-  if (rec) {
-    const r = rec.r;
-    const done = Array.isArray(r.completed_deliverables) ? r.completed_deliverables : null;
-    const rem = Array.isArray(r.remaining_deliverables) ? r.remaining_deliverables : null;
-    const frozen = Boolean(typeof r.frozen_denominator_digest === 'string' && r.frozen_denominator_digest && Number.isInteger(r.deliverable_count) && r.deliverable_count > 0 && done);
-    progress = {
-      frozen, done: done ? done.length : null, total: frozen ? r.deliverable_count : null,
-      pct: frozen ? Math.round((done.length / r.deliverable_count) * 1000) / 10 : null,
-      source: rec.file, openId: rem && rem.length ? String(rem[0]) : null, phaseCode: typeof r.phase === 'string' && r.phase ? r.phase : null,
-    };
-  } else if (model && isObj(model.progress) && model.progress.frozen === true && Number.isFinite(model.progress.done) && Number.isFinite(model.progress.total) && model.progress.total > 0) {
-    progress = { frozen: true, done: model.progress.done, total: model.progress.total, pct: Math.round((model.progress.done / model.progress.total) * 1000) / 10, source: 'model.json', openId: null, phaseCode: null };
-  }
+  const own = progressOf(rec, model);
+  const campaignViews = campaignRoots.map((r) => {
+    const cm = J(`model--${r}.json`);
+    const crec = newestReceipt(dir, r, path.join('campaign-work-orders', r));
+    return { root: r, model: isObj(cm) ? { ...cm, __file: `model--${r}.json` } : null, rec: crec, progress: progressOf(crec, isObj(cm) ? { ...cm, __file: `model--${r}.json` } : null) };
+  }).reverse(); // newest first
+  const frozenCampaign = campaignViews.find((v) => v.progress && v.progress.frozen);
+  const anyCampaign = campaignViews.find((v) => v.progress);
+  const progress = frozenCampaign ? frozenCampaign.progress : (own || (anyCampaign ? anyCampaign.progress : null));
+  // phase code: the newest campaign root whose receipt carries one, else the marker root's receipt
+  const campaignPhase = campaignViews.find((v) => v.progress && v.progress.phaseCode);
+  const phaseProgress = campaignPhase ? campaignPhase.progress : (own && own.phaseCode ? own : null);
+  const campaignModelPhase = campaignViews.find((v) => v.model && isObj(v.model.phase) && v.model.phase.source === 'campaign' && typeof v.model.phase.label === 'string' && v.model.phase.label);
 
   // ---- sources manifest
   const srcs = isObj(sourcesFile) && isObj(sourcesFile.sources) ? sourcesFile.sources : null;
@@ -206,16 +253,19 @@ function derive(dir) {
   put('verdict', verdict, verdictSource, { exact: true });
 
   // ---- project
-  const identity = (envelope && envelope.scope && envelope.scope.repo_identity) || (marker && marker.repo_identity) || null;
-  const pkey = (envelope && envelope.scope && envelope.scope.project_key) || (marker && marker.project_key) || meta.project_key || '';
-  put('project', projectNameOf(identity, pkey), envelope ? 'envelope.json scope.repo_identity' : 'marker.json repo_identity');
+  const baseEnv = envelope || (envelopes[0] || null);
+  const identity = (baseEnv && baseEnv.scope && baseEnv.scope.repo_identity) || (marker && marker.repo_identity) || null;
+  const pkey = (baseEnv && baseEnv.scope && baseEnv.scope.project_key) || (marker && marker.project_key) || meta.project_key || '';
+  put('project', projectNameOf(identity, pkey), baseEnv ? 'envelope.json scope.repo_identity' : 'marker.json repo_identity');
 
   // ---- phase
   let phaseAlts = null; let phaseSource = '';
   const taskNow = tasks && tasks.inProgress.length
     ? tasks.inProgress.slice().sort((a, b) => (b.started_seq || 0) - (a.started_seq || 0))[0] : null;
-  if (progress && progress.phaseCode) {
-    phaseAlts = [progress.phaseCode, PHASE_ZH[progress.phaseCode.toUpperCase()]].filter(Boolean); phaseSource = `${progress.source} phase`;
+  if (phaseProgress) {
+    phaseAlts = [phaseProgress.phaseCode, PHASE_ZH[phaseProgress.phaseCode.toUpperCase()]].filter(Boolean); phaseSource = `${phaseProgress.source} phase`;
+  } else if (campaignModelPhase) {
+    phaseAlts = [campaignModelPhase.model.phase.label]; phaseSource = `${campaignModelPhase.model.__file} phase (campaign)`;
   } else if (model && isObj(model.phase) && model.phase.source === 'campaign' && typeof model.phase.label === 'string' && model.phase.label) {
     phaseAlts = [model.phase.label]; phaseSource = 'model.json phase (campaign)';
   } else if (marker && typeof marker.phase === 'string' && marker.phase) {
@@ -242,13 +292,15 @@ function derive(dir) {
   } else put('progress', ['—'], 'no progress source has data');
 
   // ---- decisions line + reason
-  if (isObj(sidecar)) {
-    const m = Number.isInteger(sidecar.count) ? sidecar.count : 0;
-    const k = Number.isInteger(sidecar.irreversible_count) ? sidecar.irreversible_count : 0;
-    const n = Number.isInteger(sidecar.undocumented_dispatches) ? sidecar.undocumented_dispatches : 0;
-    if (m > 0) put('decisions', [`代你決定 ${m} 件（${k} 件不可逆）`], 'decisions-sidecar.json count/irreversible_count', { line2: true });
-    if (n > 0) put('undocumented', [`${n} 件派工無決策紀錄`], 'decisions-sidecar.json undocumented_dispatches', { line2: true });
-    if (m === 0 && n === 0) put('no-decisions-line', null, 'decisions-sidecar.json counts zero', { absent: ['代你決定', '件派工無決策紀錄'] });
+  const sidecars = [sidecar, ...campaignRoots.map((r) => J(`decisions-sidecar--${r}.json`))].filter(isObj);
+  if (sidecars.length > 0) {
+    const sum = (k) => sidecars.reduce((n, sc) => n + (Number.isInteger(sc[k]) ? sc[k] : 0), 0);
+    const m = sum('count');
+    const k = sum('irreversible_count');
+    const n = sum('undocumented_dispatches');
+    if (m > 0) put('decisions', [`代你決定 ${m} 件（${k} 件不可逆）`], 'decisions-sidecar*.json count/irreversible_count', { line2: true });
+    if (n > 0) put('undocumented', [`${n} 件派工無決策紀錄`], 'decisions-sidecar*.json undocumented_dispatches', { line2: true });
+    if (m === 0 && n === 0) put('no-decisions-line', null, 'decisions-sidecar*.json counts zero', { absent: ['代你決定', '件派工無決策紀錄'] });
   } else {
     exp.notes.push('no decisions sidecar in the capture: decisions line not checked');
   }
@@ -264,7 +316,9 @@ function derive(dir) {
   // ---- elapsed
   // campaign root with a bound receipt: earliest receipt; otherwise the session's own start (tasks, then marker); last the earliest run
   let start = null; let startSource = '';
-  const rs = root ? receiptStartMs(dir, root) : null;
+  let rs = null;
+  for (const v of campaignViews) { rs = receiptStartMs(dir, v.root, path.join('campaign-work-orders', v.root)); if (rs !== null) break; }
+  if (rs === null && root) rs = receiptStartMs(dir, root);
   if (rs !== null) { start = rs; startSource = 'work-orders earliest receipt'; }
   else if (tasks && tasks.first !== null) { start = tasks.first; startSource = 'tasks.json first_created_at'; }
   else if (marker && ms(marker.started_at) !== null) { start = ms(marker.started_at); startSource = 'marker.json started_at'; }

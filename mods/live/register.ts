@@ -6,6 +6,8 @@
 //
 //   pointer  $HOME/.autopilot/live-pointer.json            (the only path built from $.env.get("HOME"))
 //   project  session marker <autopilot_home>/session-mode/<sid>.json  ->  <live_base>/runs/paths/*.json longest prefix
+//   roots    the marker's root_run_id + its `campaign_roots` (the Mission roots of the campaigns the session launched; P1W SCOPE):
+//            every root of the set is read like the marker root, one band is merged from them
 //   snapshot <live_base>/runs/<project_key>[--<root>].json, else the SSD copy <autopilot_home>/review/<key>/live/runs.<scope>.json
 //   context  <live_base>/context/<sanitised sid>.json      (this sid only)
 //   job page <autopilot_home>/review/<key>/<date>/<job>/current/model.json   (acceptance axis + gate rows, optional)
@@ -23,16 +25,17 @@ import { Band } from './band'
 import { Pane } from './pane'
 import {
   acceptanceToast, bandLine1, bandView, buildSections, checkEnvelope, commonDirOf, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
-  headerText, hhmm, isKey, isObject, isPlainRoot, jobOf, longestPrefixKey, NO_SECTIONS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
+  headerText, hhmm, isKey, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
   readForeman, readJobModel, readManifest, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd, startMsOf, STATE_TEXT, POINTER_SCHEMA,
 } from './model'
-import type { Counts, EnvelopeCheck, JobModel, Json, LiveSnapshot, Manifest, Sources } from './model'
+import type { Counts, DecisionsView, EnvelopeCheck, JobModel, Json, LiveSnapshot, Manifest, Sources } from './model'
 
 const TICK_MS = 5000
 const PANE_ID = 'autopilot-live'
 const PANE_MIN_COLUMNS = 144
 const MAX_PATH_FILES = 256
 const MAX_RECEIPT_FILES = 64
+const MAX_CAMPAIGN_ROOTS = 8 // session-mode.js CAMPAIGN_ROOTS_MAX
 
 // Module state. A hot reload drops it and session.start rebuilds it (the first tick refills the snapshot at once).
 // It is a module variable and not $.state on purpose: a $.state ref needs the plugin manifest to name a types
@@ -69,15 +72,26 @@ function plain(state: LiveSnapshot['state'], text: string, over: Partial<LiveSna
   }
 }
 
+// The marker's campaign roots, oldest -> newest: plain path segments only (a root names files), not the marker's own root, no repeats.
+function campaignRootsOf(marker: Json, markerRoot: string | null): string[] {
+  const raw = Array.isArray(marker.campaign_roots) ? marker.campaign_roots : []
+  const out: string[] = []
+  for (const r of raw) {
+    if (typeof r === 'string' && isPlainRoot(r) && r !== markerRoot && !out.includes(r)) out.push(r)
+  }
+  return out.slice(-MAX_CAMPAIGN_ROOTS)
+}
+
 // Which project / root does this session belong to? marker first (an unexpired one with a project_key), then the
 // longest path-boundary prefix of the real cwd among the watchers' runs/paths files. Never git, never a hash.
-type Scope = { key: string; root: string | null; marker: Json | null }
+type Scope = { key: string; root: string | null; marker: Json | null; campaign: string[] }
 
 async function resolveScope($: EngineInterface, autopilotHome: string, liveBase: string, sid: string, nowMs: number): Promise<Scope | null> {
   if (sid) {
     const marker = await readObject($, autopilotHome + '/session-mode/' + sid + '.json')
     if (marker && isKey(marker.project_key) && typeof marker.expires_at === 'string' && Date.parse(marker.expires_at) > nowMs) {
-      return { key: marker.project_key, root: typeof marker.root_run_id === 'string' && marker.root_run_id ? marker.root_run_id : null, marker }
+      const root = typeof marker.root_run_id === 'string' && marker.root_run_id ? marker.root_run_id : null
+      return { key: marker.project_key, root, marker, campaign: campaignRootsOf(marker, root) }
     }
   }
   const cwd = await $.session.cwd()
@@ -97,7 +111,7 @@ async function resolveScope($: EngineInterface, autopilotHome: string, liveBase:
     if (map) maps.push(map)
   }
   const key = longestPrefixKey(real, maps)
-  return key === null ? null : { key, root: null, marker: null }
+  return key === null ? null : { key, root: null, marker: null, campaign: [] }
 }
 
 // The envelope of one scope: the tmpfs file, then the SSD copy; a fresh one beats a stale one.
@@ -178,52 +192,96 @@ async function buildSnapshot($: EngineInterface, nowMs: number): Promise<{ snap:
   const scope = await resolveScope($, autopilotHome, liveBase, sid, nowMs)
   if (scope === null) return none(plain('no-project', STATE_TEXT.noProject))
 
-  const found = await findEnvelope($, autopilotHome, liveBase, scope, nowMs)
+  // The root set: the marker root first, then the campaign roots (oldest -> newest). Each root is read like the marker root alone
+  // used to be; a root whose envelope is missing / stale / malformed is left out and never hides the others.
+  const primaryFind = { scope, found: await findEnvelope($, autopilotHome, liveBase, scope, nowMs) }
+  const finds: { scope: Scope; found: EnvelopeCheck }[] = [primaryFind]
+  for (const root of scope.campaign) {
+    const member: Scope = { key: scope.key, root, marker: null, campaign: [] }
+    finds.push({ scope: member, found: await findEnvelope($, autopilotHome, liveBase, member, nowMs) })
+  }
+  const fresh = finds.filter(f => f.found.status === 'fresh')
+  // the base envelope: the marker root's when fresh, else the first fresh campaign root's; with none fresh, the marker root's (stale /
+  // unavailable / unreadable exactly as before), else the first member that has any envelope
+  const baseFind = fresh[0] ?? (primaryFind.found.envelope !== null ? primaryFind : (finds.find(f => f.found.envelope !== null) ?? primaryFind))
+  const found = baseFind.found
   const keyed = { project_key: scope.key, root_run_id: scope.root }
   if (found.envelope === null) {
-    return none(found.status === 'malformed' ? plain('unreadable', STATE_TEXT.unreadable, keyed) : plain('unavailable', STATE_TEXT.unavailable(scope.key), keyed))
+    const malformed = finds.some(f => f.found.status === 'malformed')
+    return none(malformed ? plain('unreadable', STATE_TEXT.unreadable, keyed) : plain('unavailable', STATE_TEXT.unavailable(scope.key), keyed))
   }
-  const env = found.envelope
-  const published = typeof env.published_at === 'string' ? env.published_at : null
+  const published = typeof found.envelope.published_at === 'string' ? found.envelope.published_at : null
 
-  // pane data: the job page's model.json when it exists (acceptance axis, gate rows), a Link either way
-  const job = jobOf(env, scope.root)
-  const date = await findJobDate($, autopilotHome, scope.key, job)
-  let jobModel: JobModel | null = null
-  if (date !== null) {
-    jobModel = readJobModel(await readText($, autopilotHome + '/review/' + scope.key + '/' + date + '/' + job + '/current/model.json'))
-    if (jobModel === null) jobDates.delete(scope.key + '/' + job)
+  // pane data: the job page's model.json of each fresh root when it exists (acceptance axis, gate rows, progress, phase), a Link either way
+  const jobModelOf = async (root: string | null, env: Json): Promise<{ date: string | null; job: string; model: JobModel | null }> => {
+    const jobName = jobOf(env, root)
+    const jobDate = await findJobDate($, autopilotHome, scope.key, jobName)
+    let m: JobModel | null = null
+    if (jobDate !== null) {
+      m = readJobModel(await readText($, autopilotHome + '/review/' + scope.key + '/' + jobDate + '/' + jobName + '/current/model.json'))
+      if (m === null) jobDates.delete(scope.key + '/' + jobName)
+    }
+    return { date: jobDate, job: jobName, model: m }
   }
+  const baseJob = await jobModelOf(baseFind.scope.root, found.envelope)
+  const primaryFresh = primaryFind.found.status === 'fresh'
+  // the marker root's own job model, kept apart: the sources-manifest fallback and the review Link belong to the marker root
+  const primaryJob = baseFind.scope === scope ? baseJob : null
+  const campaignJobs: JobModel[] = []
+  for (const f of fresh) {
+    if (f.scope === scope) continue
+    const cj = f.scope === baseFind.scope ? baseJob : await jobModelOf(f.scope.root, f.found.envelope as Json)
+    if (cj.model !== null) campaignJobs.push(cj.model)
+  }
+  const jobModel: JobModel | null = fresh.length > 0
+    ? mergeJobModels(primaryFresh && primaryJob !== null ? primaryJob.model : null, campaignJobs)
+    : baseJob.model
+  const env: Json = fresh.length > 0
+    ? mergeEnvelopes(found.envelope, fresh.filter(f => f !== baseFind).map(f => f.found.envelope as Json))
+    : found.envelope
   const port = portOf(await readText($, liveBase + '/review/server.json'))
   const common = {
     ...keyed,
-    link: reviewLink(port, scope.key, date, job),
+    link: reviewLink(port, scope.key, baseJob.date, baseJob.job),
     rows: paneRows(env),
     gates: jobModel === null ? null : jobModel.gates,
     published_at: published,
     session_as_of: sessionUsd(env, sid).as_of,
     host_as_of: typeof env.host_today_as_of === 'string' ? env.host_today_as_of : null,
   }
-  if (found.status === 'stale') {
+  if (fresh.length === 0) {
     const at = published !== null && Number.isFinite(Date.parse(published)) ? hhmm(Date.parse(published)) : null
     return { snap: plain('stale', STATE_TEXT.stale(scope.key, at), common), counts: null, acceptance: null }
   }
   // W3a sources. The per-session files are named by the sanitised sid; every sidecar is read for THIS scope only.
   const fileSid = sanitizeSid(sid)
-  const scopeKey = scopeKeyOf(scope.key, scope.root)
   const want = { project_key: scope.key, root_run_id: scope.root }
+  const scopeKey = scopeKeyOf(scope.key, scope.root)
   const manifestText = await readText($, liveBase + '/runs/sources/' + scopeKey + '.json')
   const manifestParsed = manifestText === null ? null : parseJson(manifestText)
   const manifest: Manifest | null = (manifestParsed !== null && manifestParsed.ok ? readManifest(manifestParsed.value, want) : null)
-    || (jobModel === null ? null : readManifest(jobModel.sources_manifest, want))
+    || (primaryJob === null || primaryJob.model === null ? null : readManifest(primaryJob.model.sources_manifest, want))
   const tasks = readTasks(await readText($, liveBase + '/tasks/' + fileSid + '.json'), sid)
   const attention = readAttention(await readText($, liveBase + '/attention/' + fileSid + '.json'), sid)
   const turn = readTurn(await readText($, liveBase + '/turn/' + fileSid + '.json'), sid, nowMs, await readText($, liveBase + '/turn-effective/' + fileSid + '.json'))
-  const decisions = readDecisions(await readText($, liveBase + '/runs/' + scopeKey + '.decisions.json'), want)
+  // decisions: the proxy decisions of every fresh root of the set, summed; the foreman sidecar of the marker root (it is bound by session)
+  const decisionViews: DecisionsView[] = []
+  for (const f of fresh) {
+    const ds = f.scope.root === null ? scopeKey : scopeKeyOf(scope.key, f.scope.root)
+    const view = readDecisions(await readText($, liveBase + '/runs/' + ds + '.decisions.json'), { project_key: scope.key, root_run_id: f.scope.root })
+    if (view !== null) decisionViews.push(view)
+  }
+  const decisions = mergeDecisions(decisionViews)
   const foreman = readForeman(await readText($, liveBase + '/runs/' + scopeKey + '.foreman.json'), want)
   const identity = isObject(env.scope) ? env.scope.repo_identity : null
-  const receiptMs = scope.root === null ? null : await receiptStart($, identity, scope.root)
-  const src: Sources = { tasks, attention, turn, decisions, manifest, foreman, startMs: startMsOf(scope.root, env, tasks, scope.marker === null ? null : scope.marker.started_at, receiptMs) }
+  // elapsed: the newest campaign root's bound receipt, else the marker root's
+  let receiptMs: number | null = null
+  let receiptRoot: string | null = null
+  for (const r of [...scope.campaign].reverse().concat(scope.root === null ? [] : [scope.root])) {
+    receiptMs = await receiptStart($, identity, r)
+    if (receiptMs !== null) { receiptRoot = r; break }
+  }
+  const src: Sources = { tasks, attention, turn, decisions, manifest, foreman, startMs: startMsOf(receiptRoot, env, tasks, scope.marker === null ? null : scope.marker.started_at, receiptMs) }
   const ctx = ctxShown(ctxText(await readText($, liveBase + '/context/' + fileSid + '.json'), nowMs), manifest)
   const band = bandView(env, jobModel, scope.key, nowMs, src)
   return {

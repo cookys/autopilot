@@ -93,11 +93,14 @@ const post = (over = {}) => ({
 });
 const agentsDir = (live) => path.join(live, 'agents', SID);
 const readJ = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
-function seedAttention(live, tool = 'Bash') {
+function seedAttention(live, tool = 'Bash', agentId = null) {
   fs.mkdirSync(path.join(live, 'attention'), { recursive: true });
+  const now = new Date().toISOString();
+  // agentId set -> a new-shape file holding that subagent's entry (FOREMAN2: a PostToolUse only ends its own agent's entry)
   fs.writeFileSync(path.join(live, 'attention', `${SID}.json`), JSON.stringify({
     schema: 'autopilot.attention/1', session_id: SID, project_key: null, kind: 'permission', tool_name: tool,
-    summary: `${tool}: ls`, since: new Date().toISOString(), updated_at: new Date().toISOString(),
+    summary: `${tool}: ls`, since: now, updated_at: now,
+    ...(agentId ? { pending: [{ agent_id: agentId, tool_name: tool, input_digest: null, kind: 'permission', summary: `${tool}: ls`, since: now, updated_at: now }] } : {}),
   }));
 }
 const attnFile = (live) => path.join(live, 'attention', `${SID}.json`);
@@ -212,7 +215,7 @@ test('stamp: last writer wins; separate agents get separate files; sessions are 
 
 test('stamp: AUTOPILOT_AGENT_ACTIVITY=off writes nothing but the attention end still works', () => {
   const a = mk({ AUTOPILOT_AGENT_ACTIVITY: 'off' });
-  seedAttention(a.live, 'Bash');
+  seedAttention(a.live, 'Bash', 'a1');
   run(AUDIT, post({ agent_id: 'a1' }), a.env);
   assert.ok(!fs.existsSync(path.join(a.live, 'agents')));
   assert.ok(!fs.existsSync(attnFile(a.live)), 'awaiting-owner work is independent of the stamp knob');

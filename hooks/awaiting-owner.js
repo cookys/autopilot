@@ -4,18 +4,26 @@
  * SubagentStop | SessionEnd. Default-on (mods P1W W1e). Maintains <live>/attention/<sid>.json while Claude Code
  * waits on the human. Opt-out: AUTOPILOT_AWAITING_OWNER=off.
  *
- * File shape (schema "autopilot.attention/1"), present ONLY while waiting:
- *   { schema, session_id, project_key|null, kind: "permission"|"question"|"idle",
- *     tool_name|null, summary, since, updated_at }
+ * File shape (schema "autopilot.attention/1"), present ONLY while something is pending. ONE ENTRY PER PENDING DIALOG (mods P1W
+ * FOREMAN2, additive): { schema, session_id, project_key|null, kind, tool_name|null, summary, since, updated_at,
+ *   pending: [{ agent_id|null, tool_name|null, input_digest|null, kind: "permission"|"question"|"idle", summary, since, updated_at }] }
+ * The top-level kind/tool_name/summary/since keep their old meaning (mods/live/model.ts and the gate kit read them): they are the OLDEST
+ * permission/question entry, "idle" only when no permission/question entry exists. A file without `pending` (older writer) is read as one
+ * main-thread entry and rewritten in the new shape on the next event.
  *
- * Start / end signals (spike S10, Claude Code 2.1.289):
- *   PermissionRequest                 -> start permission (AskUserQuestion => question)
- *   Notification idle_prompt          -> start idle (NOT Stop: idle_prompt is the +60 s confirmation)
- *   Notification permission_prompt    -> heartbeat only (updated_at) on an existing permission/question
- *                                        file; never creates one, so a late Notification cannot resurrect
- *   PostToolUse of the SAME tool_name -> end permission/question (approve / answer)
- *   Stop | UserPromptSubmit | SessionEnd -> end everything (UserPromptSubmit is the ONLY end for a
- *                                        human deny/Esc; the file lingers until then, `since` = age)
+ * Start / end signals (spike S10, Claude Code 2.1.289). agent_id is the payload's (a subagent's tool call carries it: the base hook
+ * input is built with `agent_id: toolUseContext.agentId` for every event incl. PermissionRequest); the main thread is agent_id null.
+ *   PermissionRequest                 -> add / refresh the entry keyed (agent_id, tool_name, input_digest) (AskUserQuestion => question);
+ *                                        input_digest = sha256 of the canonical JSON of tool_input, 16 hex; idle entries are dropped
+ *   Notification idle_prompt          -> add idle (NOT Stop: idle_prompt is the +60 s confirmation) only when no permission/question entry
+ *   Notification permission_prompt    -> heartbeat (updated_at) only; never creates a file, so a late Notification cannot resurrect
+ *   PostToolUse                       -> end the exact (agent_id, tool_name, digest) entry; else the OLDEST permission/question entry of
+ *                                        the same (agent_id, tool_name) (Tab-to-amend changes the input); NEVER another agent's entry
+ *   Stop | UserPromptSubmit           -> end main-thread entries (agent_id null) and idle; subagent entries survive
+ *                                        (UserPromptSubmit is the ONLY end for a human deny/Esc of a main-thread dialog)
+ *   SubagentStop(agent_id)            -> end that agent's entries (the only end for a human-denied subagent dialog)
+ *   SessionEnd                        -> end everything
+ * Consequence: an approved subagent dialog keeps showing until that agent's PostToolUse (the main-thread limitation, now for subagents).
  * Also maintains <live>/turn/<sid>.json (schema "autopilot.session-turn/1", mods P1W TURN, same knob):
  * UserPromptSubmit -> state "active"; Stop -> "ended" (since = now); SessionEnd -> removed. Payloads with
  * agent_id (subagents) never touch it. See live-session-lib.js recordTurn().
@@ -59,6 +67,56 @@ function summarize(p) {
   return flat(detail ? `${tool}: ${detail}` : tool);
 }
 
+const bySince = (x, y) => Date.parse(x.since) - Date.parse(y.since);
+const agentOf = (p) => (typeof p.agent_id === 'string' && p.agent_id ? p.agent_id : null);
+
+function inputDigest(input) {
+  const canon = (v) => (Array.isArray(v) ? v.map(canon)
+    : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, canon(v[k])])) : v);
+  return require('crypto').createHash('sha256').update(JSON.stringify(canon(input === undefined ? null : input))).digest('hex').slice(0, 16);
+}
+
+// The entries of a parsed attention file; an old-shape file (no `pending`) is one main-thread entry.
+function entriesOf(cur) {
+  if (Array.isArray(cur.pending)) {
+    return cur.pending.filter((e) => e && typeof e === 'object' && ['permission', 'question', 'idle'].includes(e.kind) && Number.isFinite(Date.parse(e.since)))
+      .map((e) => ({ agent_id: typeof e.agent_id === 'string' && e.agent_id ? e.agent_id : null, tool_name: e.tool_name || null, input_digest: e.input_digest || null, kind: e.kind, summary: String(e.summary || ''), since: e.since, updated_at: e.updated_at || e.since }));
+  }
+  if (!['permission', 'question', 'idle'].includes(cur.kind) || !Number.isFinite(Date.parse(cur.since))) return [];
+  return [{ agent_id: null, tool_name: cur.tool_name || null, input_digest: null, kind: cur.kind, summary: String(cur.summary || ''), since: cur.since, updated_at: cur.updated_at || cur.since }];
+}
+
+// Write the file from its entries (top-level = oldest permission/question entry, else idle) or remove it when none are left.
+function writeEntries(file, p, entries, projectKey, now) {
+  if (entries.length === 0) { L.removeFile(file); return; }
+  const live = entries.filter((e) => e.kind !== 'idle').sort(bySince);
+  const top = live[0] || entries[0];
+  L.atomicWriteJson(file, {
+    schema: 'autopilot.attention/1',
+    session_id: p.session_id,
+    project_key: projectKey === undefined ? L.projectKeyFor(p.cwd) : projectKey,
+    kind: top.kind,
+    tool_name: top.tool_name,
+    summary: top.summary,
+    since: top.since,
+    updated_at: now,
+    pending: entries,
+  });
+}
+
+// SubagentStop: drop one agent's entries.
+function endEntries(p, agentId) {
+  const file = L.sessionFile(p, 'attention');
+  if (!file || !require('fs').existsSync(file)) return;
+  L.withLock(file, () => {
+    const cur = L.readJsonFile(file);
+    if (!cur || cur.schema !== 'autopilot.attention/1') return;
+    const entries = entriesOf(cur);
+    const next = entries.filter((e) => e.agent_id !== agentId);
+    if (next.length !== entries.length) writeEntries(file, p, next, cur.project_key, new Date().toISOString());
+  });
+}
+
 // One event, already parsed. Exported so the default-on hosts (audit-log.js for PostToolUse, advisory-relay.js
 // for UserPromptSubmit) run this work in THEIR process instead of spawning another node per tool call /
 // prompt (mods P1W PERF).
@@ -73,7 +131,12 @@ function handle(p) {
     else if (ev === 'SubagentStop') L.endAgentActivity(p); // FOREMAN: the agent is done (ended_at)
     else if (ev === 'SessionEnd') L.removeAgentActivity(p);
   } catch (e) { L.failOpen('awaiting-owner/agent-activity', e); }
-  if (ev === 'SubagentStart' || ev === 'SubagentStop') return; // nothing else here concerns a subagent's stop (turn and attention are the main thread's)
+  if (ev === 'SubagentStart') return; // a start concerns nothing but the stamp
+  if (ev === 'SubagentStop') { // attention: end that agent's entries (own knob); turn and decisions are the main thread's
+    if (L.knobOff('AUTOPILOT_AWAITING_OWNER')) return;
+    if (typeof p.agent_id === 'string' && p.agent_id) endEntries(p, p.agent_id);
+    return;
+  }
   // HOOKQ (mods P1W): the session ending closes the decision file its AskUserQuestion opened (knob AUTOPILOT_ASK_DECISION).
   if (ev === 'SessionEnd') {
     try { require('./ask-decision.js').onSessionEnd(p); } catch (e) { L.failOpen('awaiting-owner/ask-decision', e); }
@@ -84,52 +147,50 @@ function handle(p) {
   const file = L.sessionFile(p, 'attention');
   if (!file) return;
   const now = new Date().toISOString();
+  const agent = agentOf(p);
 
   if (ev === 'PostToolUse' || ev === 'UserPromptSubmit' || ev === 'Stop' || ev === 'SessionEnd') {
     // Hot path (every tool call / prompt): one stat, no lock when nothing is pending. Removing a
     // missing file is a no-op, so skipping the lock for the end events is behaviour-identical.
     if (!require('fs').existsSync(file)) return;
   }
+  if (ev === 'SessionEnd') { L.removeFile(file); return; }
 
   L.withLock(file, () => {
     const cur = L.readJsonFile(file);
-    const pending = cur && cur.schema === 'autopilot.attention/1' ? cur : null;
-    if (ev === 'UserPromptSubmit' || ev === 'Stop' || ev === 'SessionEnd') {
-      L.removeFile(file);
+    const hasFile = cur && cur.schema === 'autopilot.attention/1';
+    const entries = hasFile ? entriesOf(cur) : [];
+    const projectKey = hasFile ? cur.project_key : undefined;
+    const commit = (next) => writeEntries(file, p, next, projectKey, now);
+    if (ev === 'UserPromptSubmit' || ev === 'Stop') {
+      commit(entries.filter((e) => e.agent_id !== null));
     } else if (ev === 'PostToolUse') {
-      if (pending && (pending.kind === 'permission' || pending.kind === 'question')
-        && pending.tool_name === p.tool_name) L.removeFile(file);
+      const live = (e) => e.kind === 'permission' || e.kind === 'question';
+      const digest = inputDigest(p.tool_input);
+      let hit = entries.find((e) => live(e) && e.agent_id === agent && e.tool_name === p.tool_name && e.input_digest === digest);
+      if (!hit) hit = entries.filter((e) => live(e) && e.agent_id === agent && e.tool_name === p.tool_name).sort(bySince)[0];
+      if (hit) commit(entries.filter((e) => e !== hit));
     } else if (ev === 'PermissionRequest') {
       const tool = typeof p.tool_name === 'string' && p.tool_name ? p.tool_name : null;
-      const kind = tool === 'AskUserQuestion' ? 'question' : 'permission';
-      const summary = summarize(p);
-      const same = pending && pending.kind === kind && pending.tool_name === tool && pending.summary === summary;
-      L.atomicWriteJson(file, {
-        schema: 'autopilot.attention/1',
-        session_id: p.session_id,
-        project_key: same ? pending.project_key : L.projectKeyFor(p.cwd),
-        kind,
-        tool_name: tool,
-        summary,
-        since: same ? pending.since : now,
-        updated_at: now,
-      });
-    } else if (ev === 'Notification' && notifType === 'permission_prompt') {
-      if (pending && (pending.kind === 'permission' || pending.kind === 'question')) {
-        L.atomicWriteJson(file, { ...pending, updated_at: now });
+      const digest = inputDigest(p.tool_input);
+      const rest = entries.filter((e) => e.kind !== 'idle'); // a real prompt outranks (and replaces) idle
+      const same = rest.find((e) => e.agent_id === agent && e.tool_name === tool && e.input_digest === digest);
+      if (same) {
+        commit(rest.map((e) => (e === same ? { ...e, updated_at: now } : e)));
+      } else {
+        commit([...rest, {
+          agent_id: agent, tool_name: tool, input_digest: digest, kind: tool === 'AskUserQuestion' ? 'question' : 'permission',
+          summary: summarize(p), since: now, updated_at: now,
+        }]);
       }
+    } else if (ev === 'Notification' && notifType === 'permission_prompt') {
+      if (entries.some((e) => e.kind !== 'idle')) commit(entries.map((e) => ({ ...e })));
     } else if (ev === 'Notification' && notifType === 'idle_prompt') {
-      if (pending && pending.kind !== 'idle') return; // a real prompt outranks idle
-      L.atomicWriteJson(file, {
-        schema: 'autopilot.attention/1',
-        session_id: p.session_id,
-        project_key: pending ? pending.project_key : L.projectKeyFor(p.cwd),
-        kind: 'idle',
-        tool_name: null,
-        summary: 'waiting for your input',
-        since: pending ? pending.since : now,
-        updated_at: now,
-      });
+      if (entries.some((e) => e.kind !== 'idle')) return; // a real prompt outranks idle
+      const idle = entries.find((e) => e.kind === 'idle');
+      commit([idle ? { ...idle, updated_at: now } : {
+        agent_id: null, tool_name: null, input_digest: null, kind: 'idle', summary: 'waiting for your input', since: now, updated_at: now,
+      }]);
     }
   });
 }

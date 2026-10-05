@@ -2,7 +2,7 @@
 
 > ## IN FLIGHT (2026-10-05, session df52a188)
 > - Accepted (see `accepted-heads-p1w.txt`): INT `w/int` 8666aba4 → wave 2 (PHASE+PICK, PERF+STAMP, WATCH-A, WATCH-B) → INT2 `w/int2` e227528e → MARKER `w/marker` 9a94ffbf (plan R5.6) and W3a `w/w3a` 18db7c55 (p1c/c C1–C3b-M picked onto w/int2 + W3a).
-> - INT3 in flight: `w/int3` (`$OLD/p1c/wt-int3`) = w/marker + the 5 mod commits, brief `briefs-p1w/int3.md`, report `$OLD/p1c/run-w/int3/REPORT.md`.
+> - INT3 **accepted** `w/int3` 297ab2e0. EVAL-PREP in flight: `w/eval` (`$OLD/p1c/wt-eval`), brief `briefs-p1w/w-row-evalprep.md` (change texts + packs + 2-cell smoke per row, no batches), report `$OLD/p1c/run-w/eval/REPORT.md`.
 > - Next: (1) eval step 3 off `w/int3` — draft the change texts (W2a-g ceo-agent → `open-decision.js` at the DOA boundary; W2b-g dev-flow → `session-mode.js set --phase`; W1b-t2 finish-flow → `write-task-status-input.js` after merge), freeze packs per EVALX REPORT, smoke 2 cells per row, then batches per `eval-design-guidance-rows.md` §4; W2e-g (back to guidance, R5.5) needs its own eval design later. (2) W1f-b design. (3) W4 landing: fresh clone off origin/develop, cherry-pick int3 chain + p1c/d1 (hooks.json comment keys vs the new hooks: reconcile), full suite, ONE combined review, release v2.37.0 (check origin version first), then owner ssh+tmux real-run gate.
 > - Open follow-ups: clear of an l3–l6 marker deletes the session record until next SessionStart; not-opted-in UPS now ~63 ms total host (git spawn gone); PERF host +10–12 ms vs ≤5 ms target (measured under load 33–38).
 

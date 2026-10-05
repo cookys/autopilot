@@ -218,7 +218,7 @@ async function buildSnapshot($: EngineInterface, nowMs: number): Promise<{ snap:
     || (jobModel === null ? null : readManifest(jobModel.sources_manifest, want))
   const tasks = readTasks(await readText($, liveBase + '/tasks/' + fileSid + '.json'), sid)
   const attention = readAttention(await readText($, liveBase + '/attention/' + fileSid + '.json'), sid)
-  const turn = readTurn(await readText($, liveBase + '/turn/' + fileSid + '.json'), sid, nowMs)
+  const turn = readTurn(await readText($, liveBase + '/turn/' + fileSid + '.json'), sid, nowMs, await readText($, liveBase + '/turn-effective/' + fileSid + '.json'))
   const decisions = readDecisions(await readText($, liveBase + '/runs/' + scopeKey + '.decisions.json'), want)
   const foreman = readForeman(await readText($, liveBase + '/runs/' + scopeKey + '.foreman.json'), want)
   const identity = isObject(env.scope) ? env.scope.repo_identity : null

@@ -169,6 +169,7 @@ function recordTurn(p) {
   const now = new Date().toISOString();
   let projectKey = null;
   let rootRunId = null;
+  let transcriptPath = typeof p.transcript_path === 'string' && p.transcript_path ? p.transcript_path : null;
   if (ev === 'UserPromptSubmit') {
     ({ projectKey, rootRunId } = turnScope(p));
   } else {
@@ -176,8 +177,10 @@ function recordTurn(p) {
     if (cur && cur.schema === 'autopilot.session-turn/1') {
       projectKey = typeof cur.project_key === 'string' ? cur.project_key : null;
       rootRunId = typeof cur.root_run_id === 'string' ? cur.root_run_id : null;
+      if (transcriptPath === null && typeof cur.transcript_path === 'string') transcriptPath = cur.transcript_path;
     }
   }
+  // transcript_path (GATEFIX2): lets the watcher notice an Escape interrupt (no Stop fires) from the transcript tail.
   atomicWriteJson(file, {
     schema: 'autopilot.session-turn/1',
     session_id: p.session_id,
@@ -185,6 +188,7 @@ function recordTurn(p) {
     since: now,
     project_key: projectKey,
     root_run_id: rootRunId,
+    ...(transcriptPath === null ? {} : { transcript_path: transcriptPath }),
   });
 }
 

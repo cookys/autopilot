@@ -110,6 +110,7 @@ function derive(dir) {
   const marker = J('marker.json');
   const attention = J('attention.json');
   const turnFile = J('turn.json');
+  const turnEff = J('turn-effective.json');
   const tasksFile = J('tasks.json');
   const envelope = J('envelope.json');
   const sidecar = J('decisions-sidecar.json');
@@ -165,7 +166,9 @@ function derive(dir) {
   const frozenDone = progress && progress.frozen && progress.done === progress.total;
   // turn.json (hooks/awaiting-owner.js): active while a prompt is being worked; older than the 24 h marker TTL = a crashed session's leftover
   const turnActive = isObj(turnFile) && turnFile.schema === 'autopilot.session-turn/1' && turnFile.state === 'active'
-    && ms(turnFile.since) !== null && nowMs - ms(turnFile.since) <= 24 * 3600 * 1000;
+    && ms(turnFile.since) !== null && nowMs - ms(turnFile.since) <= 24 * 3600 * 1000
+    // turn-effective.json (watcher-owned, GATEFIX2): an Escape interrupt fires no Stop; the watcher publishes `ended` for that ONE turn (same `since`).
+    && !(isObj(turnEff) && turnEff.schema === 'autopilot.session-turn-effective/1' && turnEff.state === 'ended' && turnEff.turn_since === turnFile.since);
   const tasksDone = tasks && tasks.total > 0 && tasks.completed === tasks.total;
   let verdict; let verdictSource;
   if (attKind === 'permission' || attKind === 'question') { verdict = '要你決定'; verdictSource = 'attention.json kind=' + attKind; }

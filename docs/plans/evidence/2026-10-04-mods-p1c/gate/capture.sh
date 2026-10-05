@@ -99,6 +99,7 @@ if (live) {
   copy(path.join(live, 'attention', `${ssid}.json`), 'attention.json');
   copy(path.join(live, 'tasks', `${ssid}.json`), 'tasks.json');
   copy(path.join(live, 'turn', `${ssid}.json`), 'turn.json');
+  copy(path.join(live, 'turn-effective', `${ssid}.json`), 'turn-effective.json');
   copy(path.join(live, 'context', `${ssid}.json`), 'context.json');
   if (scope) {
     copy(path.join(live, 'runs', `${scope}.json`), 'envelope.json');

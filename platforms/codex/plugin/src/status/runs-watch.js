@@ -39,6 +39,7 @@ const { pointerPath, writeLivePointer } = require('./live-pointer');
 const { applySelectors } = require('./runs-fields');
 const { latestProgress } = require('./work-order-progress');
 const { commonDirOf } = require('./scope-key');
+const { publishTurnEffective } = require('./turn-effective');
 const { readWatchInputs } = require('./watch-inputs');
 const { ensureReviewServer } = require('./review-server');
 const { createDecisionsPublisher } = require('./decisions-sidecar');
@@ -509,9 +510,13 @@ function createWatcher({
   }
 
   // Called once per tick with the freshly collected rows. Debounce = a fixed window from the first change.
-  function renderPass(rows, nowMs) {
+  // `roots` = the root scopes the watcher tracks this tick (runs' roots AND unexpired markers' roots, plain sessions included):
+  // each gets its job page + sources sidecar even with no runs at all (GATEFIX2); a root dropped by retention gets none.
+  function renderPass(rows, nowMs, roots = new Set()) {
     const rs = state.render;
     const groups = groupByRoot(rows);
+    for (const k of [...groups.keys()]) if (k !== UNBOUND && state.droppedRoots.has(k)) groups.delete(k);
+    for (const root of roots) if (!groups.has(root) && !state.droppedRoots.has(root)) groups.set(root, []);
     for (const [k, g] of groups) {
       let sig;
       try { sig = renderSignature(k, g, nowMs); } catch (error) { log(`render signature failed for ${k === UNBOUND ? 'unbound' : k}: ${error.message}`); continue; }
@@ -641,7 +646,7 @@ function createWatcher({
     }
     if (dropped.length) {
       state.roots = new Set([...state.roots].filter((r) => !dropped.includes(r)));
-      for (const root of dropped) removeRootFiles(root);
+      for (const root of dropped) { removeRootFiles(root); state.render.seen.delete(root); state.render.dirty.delete(root); }
     }
     const bound = freshBoundOf(rows, interval, enrichCap);
     const counts = new Map([[null, computeCounts(rows, interval, enrichCap, bound)]]);
@@ -667,8 +672,9 @@ function createWatcher({
       published = true;
     }
     try { decisionsSidecar.publish({ runs: rows, roots: state.roots }); foremanSidecar.publish({ roots: state.roots, markers, nowMs }); } catch (error) { log(`sidecar publish failed: ${error.message}`); }
+    try { publishTurnEffective({ liveBase: live, key, nowMs, log }); } catch (error) { log(`turn-effective failed: ${error.message}`); }
     if (render) {
-      try { renderPass(rows, nowMs); } catch (error) { log(`render pass failed: ${error.message}`); }
+      try { renderPass(rows, nowMs, roots); } catch (error) { log(`render pass failed: ${error.message}`); }
     }
     // Idle exit: N consecutive seconds with nothing confirmed live and nothing unknown, and no
     // unexpired session-mode marker of this project (a live session keeps the watcher up).

@@ -780,6 +780,7 @@ const SID_FILE = 'sid_with_odd_chars' // sanitizeSessionId: every scalar outside
 const SCOPE_KEY = KEY + '--' + ROOT
 const P_TASKS = (sid = SID_A) => LIVE + '/tasks/' + sid + '.json'
 const P_TURN = (sid = SID_A) => LIVE + '/turn/' + sid + '.json'
+const P_TURN_EFF = (sid = SID_A) => LIVE + '/turn-effective/' + sid + '.json'
 const P_ATT = (sid = SID_A) => LIVE + '/attention/' + sid + '.json'
 const P_DEC = LIVE + '/runs/' + SCOPE_KEY + '.decisions.json'
 const P_FOREMAN = LIVE + '/runs/' + SCOPE_KEY + '.foreman.json'
@@ -979,6 +980,37 @@ for (const surface of SURFACES) {
     files[P_TURN(SID_B)] = j(turn('active', {}, SID_B))
     await w.clock.advance(5000)
     expect(verdicts(await bandText($, surface))).toEqual(['待命'])
+  })
+
+  test('GATEFIX2: an interrupted turn (watcher-owned turn-effective file, same since) reads 待命; a new turn, a foreign or malformed file does not (' + surface + ')', async ($, on) => {
+    const files = quietWorld()
+    const w = world(on, files)
+    await start($, surface)
+    const T = turn('active')
+    const eff = (over: Record<string, unknown> = {}) => j({ schema: 'autopilot.session-turn-effective/1', session_id: SID_A, state: 'ended', reason: 'interrupted', turn_since: T.since, ...over })
+    files[P_TURN()] = j(T)
+    await w.clock.advance(5000)
+    expect((await bandParts($, surface)).line2).toBe('回合進行中（3 分）')
+    files[P_TURN_EFF()] = eff()
+    await w.clock.advance(5000)
+    expect(verdicts(await bandText($, surface))).toEqual(['待命'])
+    // the user typed again: the hook's new active turn (new since) wins before the watcher cleans up
+    files[P_TURN()] = j(turn('active', { since: '2026-10-04T10:00:00.000Z' }))
+    await w.clock.advance(5000)
+    expect((await bandParts($, surface)).line1.startsWith('● 進行中 repo')).toBe(true)
+    files[P_TURN()] = j(T)
+    files[P_TURN_EFF()] = eff({ session_id: SID_B })
+    await w.clock.advance(5000)
+    expect(verdicts(await bandText($, surface))).toEqual(['進行中'])
+    files[P_TURN_EFF()] = eff({ schema: 'other/1' })
+    await w.clock.advance(5000)
+    expect(verdicts(await bandText($, surface))).toEqual(['進行中'])
+    files[P_TURN_EFF()] = eff({ state: 'active' })
+    await w.clock.advance(5000)
+    expect(verdicts(await bandText($, surface))).toEqual(['進行中'])
+    files[P_TURN_EFF()] = '{not json'
+    await w.clock.advance(5000)
+    expect(verdicts(await bandText($, surface))).toEqual(['進行中'])
   })
 
   test('W3a attention in the pane: the awaited thing is listed before the dispatch table (' + surface + ')', async ($, on) => {

@@ -220,6 +220,7 @@ export function stalledReason(env: Json): string | null {
 export const TASKS_SCHEMA = 'autopilot.session-tasks/1'
 export const ATTENTION_SCHEMA = 'autopilot.attention/1'
 export const TURN_SCHEMA = 'autopilot.session-turn/1'
+export const TURN_EFFECTIVE_SCHEMA = 'autopilot.session-turn-effective/1'
 export const DECISIONS_SCHEMA = 'autopilot.decisions-sidecar/1'
 export const FOREMAN_SCHEMA = 'autopilot.foreman-activity/1'
 export const SOURCES_SCHEMA = 'autopilot.sources/1'
@@ -295,7 +296,10 @@ export const TURN_TTL_MS = 24 * 3600 * 1000
 
 // <live>/turn/<sid>.json (TURN): active while a prompt is being worked, ended after Stop. Another session / schema, no `since`
 // that parses, or one older than the marker TTL is absent (stale).
-export function readTurn(text: string | null, sid: string, nowMs: number): TurnView | null {
+// effectiveText = <live>/turn-effective/<sid>.json (GATEFIX2, watcher-owned): an Escape interrupt fires no Stop, so the watcher reads it
+// from the transcript and publishes `ended` for ONE turn (its `turn_since`). It ends an `active` turn only while the turn file's `since`
+// is that same value, so a newer UserPromptSubmit wins at once. Anything unreadable / foreign leaves the turn as the hook wrote it.
+export function readTurn(text: string | null, sid: string, nowMs: number, effectiveText: string | null = null): TurnView | null {
   if (text === null) return null
   const parsed = parseJson(text)
   if (!parsed.ok || !isObject(parsed.value) || parsed.value.schema !== TURN_SCHEMA) return null
@@ -304,6 +308,11 @@ export function readTurn(text: string | null, sid: string, nowMs: number): TurnV
   if (v.state !== 'active' && v.state !== 'ended') return null
   const since = typeof v.since === 'string' ? Date.parse(v.since) : NaN
   if (!Number.isFinite(since) || nowMs - since > TURN_TTL_MS) return null
+  if (v.state === 'active' && effectiveText !== null) {
+    const eff = parseJson(effectiveText)
+    if (eff.ok && isObject(eff.value) && eff.value.schema === TURN_EFFECTIVE_SCHEMA && eff.value.state === 'ended'
+      && (typeof eff.value.session_id !== 'string' || eff.value.session_id === sid) && eff.value.turn_since === v.since) return { state: 'ended', since_ms: since }
+  }
   return { state: v.state, since_ms: since }
 }
 

@@ -236,6 +236,17 @@ test('TURN: ended, absent, or older than 24 h is 待命; permission attention ou
   assert.strictEqual(derive(capture({ 'turn.json': { ...turnF('active'), schema: 'x/1' } }, [])).verdict, '待命');
   assert.strictEqual(derive(capture({ 'turn.json': turnF('active'), 'attention.json': { kind: 'permission', summary: 'Bash: ls' } }, [])).verdict, '要你決定');
 });
+test('GATEFIX2: an interrupted turn (turn-effective.json with the same since) is 待命; another since / schema / state keeps it 進行中', () => {
+  const T = turnF('active');
+  const eff = (extra) => ({ schema: 'autopilot.session-turn-effective/1', session_id: SID, state: 'ended', reason: 'interrupted', turn_since: T.since, ...extra });
+  assert.strictEqual(derive(capture({ 'turn.json': T, 'turn-effective.json': eff() }, [])).verdict, '待命');
+  assert.strictEqual(derive(capture({ 'turn.json': T, 'turn-effective.json': eff({ turn_since: iso(1) }) }, [])).verdict, '進行中');
+  assert.strictEqual(derive(capture({ 'turn.json': T, 'turn-effective.json': eff({ schema: 'x/1' }) }, [])).verdict, '進行中');
+  assert.strictEqual(derive(capture({ 'turn.json': T, 'turn-effective.json': eff({ state: 'active' }) }, [])).verdict, '進行中');
+  const r = run(capture({ 'turn.json': T, 'turn-effective.json': eff() }, ['◌ 待命 demo · — · 30m · —', '沒有派工在跑']));
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(run(capture({ 'turn.json': T, 'turn-effective.json': eff() }, ['● 進行中 demo · — · 30m · —', '回合進行中（3 分）'])).ok, false, 'band still 進行中 after an interrupt -> FAIL');
+});
 test('TURN PLANTED RED: band says 待命 while the turn is active -> FAIL; band says 進行中 with an ended turn -> FAIL', () => {
   assert.strictEqual(run(capture({ 'turn.json': turnF('active') }, ['◌ 待命 demo · — · 30m · —', '沒有派工在跑'])).ok, false);
   assert.strictEqual(run(capture({ 'turn.json': turnF('ended') }, ['● 進行中 demo · — · 30m · —', '回合進行中（3 分）'])).ok, false);

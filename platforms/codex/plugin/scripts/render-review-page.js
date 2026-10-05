@@ -106,7 +106,15 @@ const PHASE_LABEL = {
   PREPARED: '準備', IMPLEMENTING: '實作', VERTICAL_VERIFICATION: '垂直驗證', REVIEWING: '審查', ADJUDICATING: '裁定',
   AWAITING_DISPOSITION: '等待處置', REPAIRING: '修復', TERMINAL_READY: '收尾', TERMINAL_FOLLOW_UP: '收尾（有後續）',
   TERMINAL_STOP: '已停止', BOUNDARY_REJECTED: '邊界被拒', AWAITING_CONVERGENCE_ADJUDICATION: '等待收斂裁定',
+  // (mods P1W LABEL) the progress-receipt / controller phases the campaign producers emit beyond the CAMPAIGN_STATES:
+  COMPLETED: '完成', FOLLOW_UP: '收尾（有後續）', TERMINAL: '已結束', SEALED_ZERO_DIFF: '零差異封存',
+  AWAITING_EFFECT_RECONCILIATION: '等待效果對帳', ADOPTED_ORPHAN: '接手孤兒',
 };
+// One lookup for both paths: case-insensitive on the producer's code, the raw string kept as `code`, an unknown code keeps itself as the label.
+function phaseLabel(code) {
+  const upper = code.toUpperCase();
+  return Object.prototype.hasOwnProperty.call(PHASE_LABEL, upper) ? PHASE_LABEL[upper] : code;
+}
 function taskPhaseLabel(subject) {
   const s = subject.replace(/\s+/g, ' ').trim();
   return `做：${s.length > 40 ? `${s.slice(0, 39)}…` : s}`;
@@ -114,13 +122,12 @@ function taskPhaseLabel(subject) {
 function buildPhase(task, progress, markerPhase, taskPhase) {
   if (progress && typeof progress.live_phase === 'string' && progress.live_phase) {
     const code = progress.live_phase;
-    const upper = code.toUpperCase();
-    return { code, label: Object.prototype.hasOwnProperty.call(PHASE_LABEL, upper) ? PHASE_LABEL[upper] : code, source: 'campaign' };
+    return { code, label: phaseLabel(code), source: 'campaign' };
   }
   const camps = task && isObject(task.evidence) && Array.isArray(task.evidence.campaigns) ? task.evidence.campaigns : [];
   for (const c of camps) {
     if (!isObject(c) || c.status !== 'valid' || typeof c.phase !== 'string' || !c.phase) continue;
-    return { code: c.phase, label: Object.prototype.hasOwnProperty.call(PHASE_LABEL, c.phase) ? PHASE_LABEL[c.phase] : c.phase, source: 'campaign' };
+    return { code: c.phase, label: phaseLabel(c.phase), source: 'campaign' };
   }
   if (isObject(markerPhase) && typeof markerPhase.phase === 'string' && markerPhase.phase) {
     return { code: markerPhase.phase, label: markerPhase.phase, source: 'session' };

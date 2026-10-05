@@ -51,6 +51,8 @@ const PHASE_ZH = {
   PREPARED: '準備', IMPLEMENTING: '實作', VERTICAL_VERIFICATION: '垂直驗證', REVIEWING: '審查', ADJUDICATING: '裁定',
   AWAITING_DISPOSITION: '等待處置', REPAIRING: '修復', TERMINAL_READY: '收尾', TERMINAL_FOLLOW_UP: '收尾（有後續）',
   TERMINAL_STOP: '已停止', BOUNDARY_REJECTED: '邊界被拒', AWAITING_CONVERGENCE_ADJUDICATION: '等待收斂裁定',
+  COMPLETED: '完成', FOLLOW_UP: '收尾（有後續）', TERMINAL: '已結束', SEALED_ZERO_DIFF: '零差異封存',
+  AWAITING_EFFECT_RECONCILIATION: '等待效果對帳', ADOPTED_ORPHAN: '接手孤兒',
 };
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -263,7 +265,9 @@ function derive(dir) {
   const taskNow = tasks && tasks.inProgress.length
     ? tasks.inProgress.slice().sort((a, b) => (b.started_seq || 0) - (a.started_seq || 0))[0] : null;
   if (phaseProgress) {
-    phaseAlts = [phaseProgress.phaseCode, PHASE_ZH[phaseProgress.phaseCode.toUpperCase()]].filter(Boolean); phaseSource = `${phaseProgress.source} phase`;
+    const zh = Object.prototype.hasOwnProperty.call(PHASE_ZH, phaseProgress.phaseCode.toUpperCase()) ? PHASE_ZH[phaseProgress.phaseCode.toUpperCase()] : null;
+    // a mapped code must be drawn as its label (the raw code is a FAIL); an unmapped one stays raw
+    phaseAlts = [zh || phaseProgress.phaseCode]; phaseSource = `${phaseProgress.source} phase`;
   } else if (campaignModelPhase) {
     phaseAlts = [campaignModelPhase.model.phase.label]; phaseSource = `${campaignModelPhase.model.__file} phase (campaign)`;
   } else if (model && isObj(model.phase) && model.phase.source === 'campaign' && typeof model.phase.label === 'string' && model.phase.label) {
@@ -367,7 +371,10 @@ function compare(derived, band) {
     if (!band) { r.detail = 'no band or panel verdict found in the pane'; results.push(r); continue; }
     if (band.surface === 'dialog' && t.name !== 'verdict') { r.status = 'SKIP'; r.detail = 'a dialog hides the band and the panel'; results.push(r); continue; }
     if (band.surface === 'panel' && t.name !== 'verdict' && t.name !== 'reason') { r.status = 'SKIP'; r.detail = 'not shown on the panel'; results.push(r); continue; }
-    const text = t.line2 ? band.line2 : band.line1;
+    // the phase is judged in its own slot (line 1 = "<mark> <verdict> <project> · <phase> · <elapsed> · ..."), never anywhere on the line:
+    // the verdict word 完成待驗收 would otherwise satisfy a phase label 完成
+    let text = t.line2 ? band.line2 : band.line1;
+    if (t.name === 'phase' && !t.line2) { const segs = band.line1.split(' · '); text = segs.length >= 2 ? segs[1].trim() : ''; }
     if (t.exact) {
       r.status = band.verdict === t.expected ? 'PASS' : 'FAIL';
       r.detail = `band shows ${band.verdict}`;

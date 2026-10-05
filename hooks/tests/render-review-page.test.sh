@@ -22,6 +22,11 @@
 #   FAIL [render-review-page] W1i wired-state: dec0_s2: '"dec0_s2":true' not found in output
 #   FAIL [render-review-page] W1i wired-state: idxNone: '"idxNone":true' not found in output
 #   FAIL [render-review-page] CLI with no decision input: never says there is nothing to decide: unexpected '目前沒有待你決定' in output
+# LABEL (mods P1W) addition (section 16b, phase labels) RED at 430ff70a: 232 passed, 4 failed, e.g.
+#   FAIL [render-review-page] phase labels: completed: '"completed":true' not found in output
+#   FAIL [render-review-page] phase labels: evidenceLower: '"evidenceLower":true' not found in output
+#   FAIL [render-review-page] phase labels: every enumerated producer value ... has a zh-TW label: '"noRaw":true' not found in output
+# Mutation controls (run-w/land/mut-label-*.txt): no-completed, evidence-case-sensitive, drop-orphan, raw-fallback-changed, new-producer (a new appendRoundProgress literal) each go red; GREEN 236.
 # Pure fixtures: fake HOME / CLAUDE_CONFIG_DIR / AUTOPILOT_LIVE_DIR (/dev/shm) / costs file; the renderer
 # is never allowed to call the real `autopilot status task` (a fixture receipt or a fake bin is always given).
 . "$(dirname "$0")/lib.sh"
@@ -543,6 +548,56 @@ assert_contains "$PH" '"oldModel":true' "phase: an old model without a phase fie
 JSON_PHASE_MODEL="$SB/phase-model.html"
 render "$JSON_PHASE_MODEL" --runs "$F/runs.json" --root R1 --task-receipt none --progress-receipt "$F/progress-frozen.json" "${COMMON[@]}"
 assert_contains "$(sec "$JSON_PHASE_MODEL" 2)" "階段：做 c" "phase: CLI with a frozen progress receipt shows the first open deliverable"
+
+# ---- 16b. every campaign phase a producer can emit has a zh-TW label (mods P1W LABEL) -----------------------------
+# The list below is the enumeration of what reaches buildPhase: progress receipt `phase` (campaign-composition appendRoundProgress args +
+# the initial receipt's controller phase = CAMPAIGN_STATES + controller-only phases) and task_status campaign `phase` (TERMINAL_*).
+# A guard re-derives the producer literals from source, so a producer value added without a label goes red here.
+cat > "$SB/phase-labels.js" <<'JS'
+const fs = require('fs'); const path = require('path');
+const r = require(process.argv[2]); const root = process.argv[3];
+const out = {};
+const ENUM = ['PREPARED', 'IMPLEMENTING', 'VERTICAL_VERIFICATION', 'REVIEWING', 'ADJUDICATING', 'AWAITING_DISPOSITION', 'REPAIRING',
+  'TERMINAL_READY', 'TERMINAL_FOLLOW_UP', 'TERMINAL_STOP', 'BOUNDARY_REJECTED', 'AWAITING_CONVERGENCE_ADJUDICATION',
+  'COMPLETED', 'FOLLOW_UP', 'TERMINAL', 'SEALED_ZERO_DIFF', 'AWAITING_EFFECT_RECONCILIATION', 'ADOPTED_ORPHAN'];
+// producers re-derived from source
+const comp = fs.readFileSync(path.join(root, 'src/engine/campaign-composition.js'), 'utf8');
+const derived = new Set();
+for (const m of comp.matchAll(/appendRoundProgress\(([^;]*?)\);/g)) for (const q of m[1].matchAll(/'([A-Z_]+)'/g)) derived.add(q[1]);
+for (const m of comp.matchAll(/^\s+phase: '([A-Z_]+)',/gm)) derived.add(m[1]);
+const ic = fs.readFileSync(path.join(root, 'src/engine/implementation-campaign.js'), 'utf8');
+for (const m of ic.matchAll(/^\s+([A-Z_]+): '([A-Z_]+)',$/gm)) if (m[1] === m[2]) derived.add(m[1]);
+const eng = fs.readFileSync(path.join(root, 'src/engine/autopilot-engine.js'), 'utf8');
+for (const m of eng.matchAll(/terminalStatus === 'success' \? '([A-Z_]+)' : '([A-Z_]+)'/g)) { derived.add(m[1]); derived.add(m[2]); }
+const ce = fs.readFileSync(path.join(root, 'src/engine/controller-execution.js'), 'utf8');
+for (const m of ce.matchAll(/^\s+phase: '([A-Z_]+)',$/gm)) derived.add(m[1]);
+for (const m of ce.matchAll(/^const (AWAITING_CONVERGENCE|AWAITING_DISPOSITION|BOUNDARY_REJECTED) = '([a-z_]+)'/gm)) derived.add(m[2].toUpperCase());
+out.derivedCount = derived.size;
+out.derivedCovered = [...derived].filter((c) => !ENUM.includes(c)); // must be empty
+const task = (c) => ({ artifact_type: 'task_status_receipt', root_run_id: 'R1', acceptance_verdict: 'accepted', evidence: { campaigns: [{ status: 'valid', phase: c, campaign_id: 'c' }] } });
+const prog = (p) => ({ artifact_type: 'controller_progress_receipt', root_run_id: 'R1', completed_deliverables: ['a'], remaining_deliverables: ['c'], deliverable_count: 2, frozen_denominator_digest: 'd'.repeat(64), phase: p });
+const model = (t, p) => r.buildJobModel({ runs: [], root: 'R1', job: 'J', date: '2026-10-04', project: 'abcdef0123456789', now: 0, commit: null, sources: [], taskReceipt: t, progressReceipt: p });
+const bad = [];
+for (const code of ENUM) for (const form of [code, code.toLowerCase()]) {
+  for (const [path_, m] of [['live', model(null, prog(form))], ['evidence', model(task(form), null)]]) {
+    const ph = m.phase;
+    if (!ph || ph.code !== form || ph.label === form || ph.label === code || !/[一-鿿]/.test(ph.label)) bad.push(`${path_}:${form}`);
+  }
+}
+out.noRaw = bad.length === 0; out.badList = bad.join(',');
+out.completed = JSON.stringify(model(null, prog('COMPLETED')).phase) === JSON.stringify({ code: 'COMPLETED', label: '完成', source: 'campaign' });
+out.evidenceLower = JSON.stringify(model(task('terminal_ready'), null).phase) === JSON.stringify({ code: 'terminal_ready', label: '收尾', source: 'campaign' });
+out.evidenceMixed = model(task('Boundary_Rejected'), null).phase.label === '邊界被拒';
+out.unknownStill = JSON.stringify(model(task('weird_future'), null).phase) === JSON.stringify({ code: 'weird_future', label: 'weird_future', source: 'campaign' });
+out.protoKey = model(null, prog('constructor')).phase.label === 'constructor' && model(task('__proto__'), null).phase.label === '__proto__';
+process.stdout.write(JSON.stringify(out));
+JS
+PL="$(node "$SB/phase-labels.js" "$R" "$(cd "$(dirname "$R")/.." && pwd)")"
+assert_contains "$PL" '"derivedCovered":[]' "phase labels: every producer literal derived from src is in the enumerated list"
+assert_contains "$PL" '"noRaw":true' "phase labels: every enumerated producer value, upper and lower case, live and evidence path, has a zh-TW label ($PL)"
+for k in completed evidenceLower evidenceMixed unknownStill protoKey; do
+  assert_contains "$PL" "\"$k\":true" "phase labels: $k"
+done
 
 # ---- 17. honest "source not wired" text (mods P1W W1i): not provided != provided-and-empty ---------------------
 cat > "$SB/wired.js" <<'JS'

@@ -3,6 +3,8 @@
 // gate/check.test.js — unit tests of check.js on hand-made capture dirs (node --test gate/check.test.js).
 // Each verdict word, 來源未接, frozen / unfrozen progress, the decisions line, elapsed, plus PLANTED-RED cases: a capture
 // whose band shows the wrong verdict / progress / project must FAIL.
+// LABEL (mods P1W): +4 tests (the 4th: phase judged in its own slot, RED before: run-w/land/label-slot-red.txt; mutation whole-line includes: mut-label-whole-line-includes.txt)
+// LABEL first 3: +3 tests (a mapped phase code must show its zh-TW label, never the raw code; COMPLETED -> 完成; lower-case code maps; an unmapped code stays raw). RED before: 2 of the 3 fail.
 // GATEFIX (mods P1W): +8 tests (completion needs no live run, panel surface under a dialog, band preferred, planted reds). RED before the change: 31 tests, 23 pass / 8 fail; GREEN: 31 / 31.
 // GATEFIX mutation controls (run-w/land/mut-check-*.txt): done-ignores-live, panel-never, panel-free-pass, band-not-preferred, panel-substring, each red then restored.
 // Result before GATEFIX: 23 tests, 23 pass. Mutation controls (each breaks one rule in check.js, the suite goes red, restored):
@@ -434,4 +436,30 @@ test('SCOPE2: the same shape with a live run under either root is 進行中; wit
   assert.strictEqual(derive(capture(camp({ [`envelope--${CAMP}.json`]: env(CAMP, liveC), [`envelope--${ICC}.json`]: env(ICC), ...wo }, [CAMP, ICC]), [])).verdict, '進行中', 'live under the mission root');
   assert.strictEqual(derive(capture(camp({ [`envelope--${CAMP}.json`]: env(CAMP), [`envelope--${ICC}.json`]: env(ICC, liveC), ...wo }, [CAMP, ICC]), [])).verdict, '進行中', 'live under the ICC root');
   assert.strictEqual(derive(capture(camp({ [`envelope--${CAMP}.json`]: env(CAMP), ...wo }, [CAMP]), [])).verdict, '待命', 'the pre-SCOPE2 marker (mission root only) never sees the receipt');
+});
+
+// ---- P1W LABEL: a phase code the table maps must be drawn as its zh-TW label, not the raw code ----
+test('LABEL: COMPLETED is drawn as 完成; the raw code on the band FAILS the phase item', () => {
+  const ok = capture({ 'work-orders/n.json': receipt({ phase: 'COMPLETED' }), 'tasks.json': tasksFile([t(2, 'x', 'in_progress', 1)]) }, ['● 進行中 demo · 完成 · 20m · 0 done*', '']);
+  assert.strictEqual(status(run(ok), 'phase'), 'PASS');
+  const raw = capture({ 'work-orders/n.json': receipt({ phase: 'COMPLETED' }), 'tasks.json': tasksFile([t(2, 'x', 'in_progress', 1)]) }, ['● 進行中 demo · COMPLETED · 20m · 0 done*', '']);
+  assert.strictEqual(status(run(raw), 'phase'), 'FAIL');
+});
+test('LABEL: a lower-case receipt phase maps like the upper-case one', () => {
+  const ok = capture({ 'work-orders/n.json': receipt({ phase: 'awaiting_disposition' }), 'tasks.json': tasksFile([t(2, 'x', 'in_progress', 1)]) }, ['● 進行中 demo · 等待處置 · 20m · 0 done*', '']);
+  assert.strictEqual(status(run(ok), 'phase'), 'PASS');
+});
+test('LABEL: an unmapped future code stays raw and passes only raw', () => {
+  const ok = capture({ 'work-orders/n.json': receipt({ phase: 'WEIRD_FUTURE' }), 'tasks.json': tasksFile([t(2, 'x', 'in_progress', 1)]) }, ['● 進行中 demo · WEIRD_FUTURE · 20m · 0 done*', '']);
+  assert.strictEqual(status(run(ok), 'phase'), 'PASS');
+});
+// ---- P1W LABEL (review fix): the phase is judged in its own slot (segment 2 of band line 1), never anywhere on the line ----
+// RED before the slot fix: the verdict word 完成待驗收 contains 完成, so a band showing the raw COMPLETED passed.
+test('LABEL: the phase label must be in the phase slot, not inside the verdict word', () => {
+  const files = { 'work-orders/n.json': receipt({ phase: 'COMPLETED' }), 'tasks.json': tasksFile([t(2, 'x', 'completed', 1)]) };
+  const raw = run(capture(files, ['✓ 完成待驗收 demo · COMPLETED · 4m · 0 done*', '']));
+  assert.strictEqual(raw.derived.verdict, '完成待驗收');
+  assert.strictEqual(status(raw, 'phase'), 'FAIL');
+  const ok = run(capture(files, ['✓ 完成待驗收 demo · 完成 · 4m · 0 done*', '']));
+  assert.strictEqual(status(ok, 'phase'), 'PASS');
 });

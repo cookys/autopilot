@@ -1,0 +1,25 @@
+{
+  "schema": "autopilot.gate-capture/1",
+  "cell": "l3-perm",
+  "captured_at": "2026-10-05T09:01:09.519Z",
+  "captured_at_ms": 1791190869519,
+  "session_id": "c4841c60-1b5d-4cc6-97da-b59f4c2dc080",
+  "session_id_how": "argument",
+  "sanitised_session_id": "c4841c60-1b5d-4cc6-97da-b59f4c2dc080",
+  "project_key": "51de403da82a23f0",
+  "root_run_id": "job-1791190828-903b5a78",
+  "scope_key": "51de403da82a23f0--job-1791190828-903b5a78",
+  "live_base": "/run/user/1000/autopilot",
+  "autopilot_home": "/home/cookys/.autopilot",
+  "pane_cwd": "/home/cookys/projects/gate-sandbox",
+  "git_common_dir": "/home/cookys/projects/gate-sandbox/.git",
+  "missing": [
+    "tasks.json (/run/user/1000/autopilot/tasks/c4841c60-1b5d-4cc6-97da-b59f4c2dc080.json)",
+    "foreman.json (/run/user/1000/autopilot/runs/51de403da82a23f0--job-1791190828-903b5a78.foreman.json)",
+    "sources.json (/run/user/1000/autopilot/runs/sources/51de403da82a23f0--job-1791190828-903b5a78.json)",
+    "model.json (/home/cookys/.autopilot/review/51de403da82a23f0/<date>/job-1791190828-903b5a78/current/model.json)",
+    "decision-file.json (/home/cookys/projects/gate-sandbox/.git/autopilot/decisions/51de403da82a23f0--job-1791190828-903b5a78.json)",
+    "work-orders (/home/cookys/projects/gate-sandbox/.git/autopilot/work-orders/job-1791190828-903b5a78)",
+    "band row hidden (a dialog is open?): the panel verdict is recorded in panel.txt"
+  ]
+}

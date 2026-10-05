@@ -1,0 +1,10 @@
+{
+  "schema": "autopilot.attention/1",
+  "session_id": "765d9799-e0bf-4591-93fd-52d872e39d6b",
+  "project_key": "51de403da82a23f0",
+  "kind": "permission",
+  "tool_name": "Bash",
+  "summary": "Bash: printf '\\n測試字：hello gate-sandbox\\n' >> README.md && git add README.md && git commit -q -m \"docs: add test line to…",
+  "since": "2026-10-05T09:10:58.522Z",
+  "updated_at": "2026-10-05T09:11:04.507Z"
+}

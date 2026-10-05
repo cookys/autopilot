@@ -1,0 +1,10 @@
+{
+  "schema": "autopilot.attention/1",
+  "session_id": "c4841c60-1b5d-4cc6-97da-b59f4c2dc080",
+  "project_key": "51de403da82a23f0",
+  "kind": "permission",
+  "tool_name": "Bash",
+  "summary": "Bash: node /home/cookys/.claude/plugins/cache/autopilot/autopilot/dev/scripts/session-mode.js set --level l3 --repo-roo…",
+  "since": "2026-10-05T09:00:44.761Z",
+  "updated_at": "2026-10-05T09:00:50.797Z"
+}

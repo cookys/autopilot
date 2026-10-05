@@ -46,3 +46,13 @@ df-perm / df-ask (band.txt empty) - top-right panel text instead:
   要你決定 / 等你批准：Bash: touch /tmp/gate-perm-test（等了 0 分）
   要你決定 / 等你回答：請選擇 A 還是 B？（等了 0 分）
 Readability: all lines readable at 200 cols; the side panel truncates long run lines with an ellipsis.
+
+## dev-flow redo (2026-10-05, live 4868c1e1)
+- helpers: cc() = capture.sh + check.js in one call (parse "capture done:" line); sleeps kept <110 s per Bash call.
+- Natural permission prompt appeared on the first dev-flow turn (printf>>README && node test.js); captured as perm cell, panel surface PASS.
+- dispatch-hetero --runner codex now REQUIRES --model (precondition_failed exit 2); `--model gpt-6-astra` worked.
+- Stall: SIGSTOP codex exec at 08:56:32, band went ⏸ 疑似卡住 by ~08:59:56 (3m 沒有輸出). Capture it in a foreground poll.
+- /clear gives a new session id (5e21d90e...) and fresh tasks, needed for a real 待命 (tasks 2/2 keep 完成待驗收).
+- Escape: pane shows "Interrupted", turn.json stays state=active and band 進行中 for at least 5 min; a next normal prompt ends it (ended -> 待命).
+- Band lines: 進行中(task) "任務進行中：任務A"; (g) "回合進行中（0 分）"; stall "最久的派工 3m 沒有輸出 · 1 件派工無決策紀錄"; idle "沒有派工在跑 · 停在等你指示 0 分".
+- check.js FAIL on df2-running: phase expects "做：任務A", band phase slot is "—".

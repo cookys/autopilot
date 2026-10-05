@@ -1,0 +1,50 @@
+                                                                                                              │                                                                                       ✕
+ ▐▛███▛█   Claude Code v2.1.289                                                                               │session $— · host $347.77 · ctx 5%
+▝▜██████▀  Sonnet 5.5 · Claude Max                                                                            │要你決定
+ ▝▝   ▝▝   ~/projects/gate-sandbox                                                                            │等你批准：Bash: node /home/cookys/.claude/plugins/cache/autopilot/autopilot/dev/scripts/…
+                                                                                                              │dispatch · execution status, not progress (執行狀態，不是進度)
+⚠ Your login expires in 3 days · run /login to renew                                                          │no runs in this scope
+                                                                                                              │gates · review receipts of this job
+❯ /autopilot:l3 在 README 加一行測試字                                                                        │no review page published yet · gate rows —
+                                                                                                              │工頭狀態：來源未接
+● Setting session mode l3 and inspecting repo                                                                 │open the review page
+  ⎿  $ node /home/cookys/.claude/plugins/cache/autopilot/autopilot/dev/scripts/session-mode.js set --level l3 │snapshot published 2026-10-05T09:00:35.906Z · host cost as of 2026-10-05T09:00:35.906Z
+     --repo-root /home/cookys/projects/gate-sandbox; ls; git branch --show-current                            │
+                                                                                                              │
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────│
+ Bash command                                                                                                 │
+ Tip: auto mode handles these prompts for you — choose "switch to auto mode" below                            │
+ Set session mode l3 and inspect repo                                                                         │
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌│
+ │ node /home/cookys/.claude/plugins/cache/autopilot/autopilot/dev/scripts/session-mode.js set --level l3     │
+ │ --repo-root /home/cookys/projects/gate-sandbox; ls; git branch --show-current                              │
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌│
+ This command requires approval                                                                               │
+                                                                                                              │
+ Do you want to proceed?                                                                                      │
+ ❯ 1. Yes                                                                                                     │
+   2. Yes, and don’t ask again for: node                                                                      │
+      /home/cookys/.claude/plugins/cache/autopilot/autopilot/dev/scripts/session-mode.js set --level l3       │
+      --repo-root /home/cookys/projects/gate-sandbox                                                          │
+   3. Yes, and switch to auto mode · auto mode handles these prompts for you                                  │
+   4. No                                                                                                      │
+                                                                                                              │
+ Esc to cancel · Tab to amend                                                                                 │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │

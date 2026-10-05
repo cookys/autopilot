@@ -1,0 +1,20 @@
+{
+  "schema": "autopilot.gate-capture/1",
+  "cell": "l3-stall",
+  "captured_at": "2026-10-05T09:10:22.686Z",
+  "captured_at_ms": 1791191422686,
+  "session_id": "c4841c60-1b5d-4cc6-97da-b59f4c2dc080",
+  "session_id_how": "argument",
+  "sanitised_session_id": "c4841c60-1b5d-4cc6-97da-b59f4c2dc080",
+  "project_key": "51de403da82a23f0",
+  "root_run_id": "job-1791190873-43e376d9",
+  "scope_key": "51de403da82a23f0--job-1791190873-43e376d9",
+  "live_base": "/run/user/1000/autopilot",
+  "autopilot_home": "/home/cookys/.autopilot",
+  "pane_cwd": "/home/cookys/projects/gate-sandbox",
+  "git_common_dir": "/home/cookys/projects/gate-sandbox/.git",
+  "missing": [
+    "decision-file.json (/home/cookys/projects/gate-sandbox/.git/autopilot/decisions/51de403da82a23f0--job-1791190873-43e376d9.json)",
+    "work-orders (/home/cookys/projects/gate-sandbox/.git/autopilot/work-orders/job-1791190873-43e376d9)"
+  ]
+}

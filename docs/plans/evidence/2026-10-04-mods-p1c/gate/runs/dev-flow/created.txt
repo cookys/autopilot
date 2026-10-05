@@ -7,3 +7,4 @@ scratch repo /tmp/gate-scratch-repo removed; claude transcript dir ~/.claude/pro
 dev-flow redo: session c40f2a0c-8d9c-4936-b201-0910bf2feaba (tmux gate:df)
 dev-flow redo: session 5e21d90e-07b3-4c13-b43a-20c491fc9f88 (after /clear, same tmux gate:df)
 dev-flow redo: STOP pid 1263513 (codex exec, cwd /tmp/hetero-gate2-stall-1-c9zviD, branch gate2-stall-1 in gate-sandbox) at 08:56:32; needs kill -CONT/kill
+dev-flow redo done: sessions c40f2a0c-8d9c-4936-b201-0910bf2feaba, 5e21d90e-07b3-4c13-b43a-20c491fc9f88; branch gate2-stall-1 + worktree /tmp/hetero-gate2-stall-1-*; README commit eab854b on gate-sandbox develop (reset)

@@ -1,0 +1,10 @@
+{
+  "schema": "autopilot.attention/1",
+  "session_id": "765d9799-e0bf-4591-93fd-52d872e39d6b",
+  "project_key": "51de403da82a23f0",
+  "kind": "question",
+  "tool_name": "AskUserQuestion",
+  "summary": "請選擇 A 還是 B？",
+  "since": "2026-10-05T09:13:09.399Z",
+  "updated_at": "2026-10-05T09:13:15.384Z"
+}

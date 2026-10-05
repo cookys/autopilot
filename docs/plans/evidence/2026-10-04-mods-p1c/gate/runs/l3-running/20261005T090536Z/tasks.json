@@ -1,0 +1,31 @@
+{
+  "schema": "autopilot.session-tasks/1",
+  "session_id": "c4841c60-1b5d-4cc6-97da-b59f4c2dc080",
+  "cwd": "/home/cookys/projects/gate-sandbox",
+  "project_key": "51de403da82a23f0",
+  "updated_at": "2026-10-05T09:05:02.868Z",
+  "first_created_at": "2026-10-05T09:05:01.082Z",
+  "tasks": [
+    {
+      "id": "1",
+      "subject": "任務A",
+      "status": "in_progress",
+      "started_seq": 1
+    },
+    {
+      "id": "2",
+      "subject": "任務B",
+      "status": "pending",
+      "started_seq": null
+    }
+  ],
+  "counts": {
+    "total": 2,
+    "completed": 0,
+    "in_progress": 1
+  },
+  "current": {
+    "id": "1",
+    "subject": "任務A"
+  }
+}

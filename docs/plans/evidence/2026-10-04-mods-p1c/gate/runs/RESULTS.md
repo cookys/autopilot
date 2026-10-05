@@ -13,3 +13,24 @@
 | dev-flow | (e) dispatch-author from plain session | PASS | runs/df-author/20261005T081017Z | codex/gpt-6-astra, status authored, exit 0, manifest role=author root_run_id=job-1791186062-55b7eca3 == marker root_run_id; band count went 3 -> 4 件派工無決策紀錄; check.js 6/6 |
 
 CORRECTION (late background-poll result, task b043e0dwn): a polling loop I thought had failed did match during the first sleep-420 hand (stall2, near its end ~07:59Z) and printed `⏸ 疑似卡住 gate-sandbox · — · 15m · —` / `最久的派工 3m 沒有輸出 · 1 件派工無決策紀錄`. So the stall verdict does render, after ~3 min of hand silence. No capture.sh/check.js run exists for it (the 疑似卡住 row above is therefore UNCAPTURED, not PASS), and my stall3 retry missed the window. The earlier claim 'stall never appeared' in DRIVING.md item 7 and the BLOCKED reasoning are wrong; the tmux server also was gone by the time that loop finished, so its other output lines are noise. A re-run needs a foreground poll that calls capture.sh the moment the band shows ⏸.
+| dev-flow redo | 要你決定 (權限) | PASS | runs/df2-perm/20261005T083748Z | surface: panel; check.js PASS (verdict+reason); natural prompt (printf>>README && node test.js)
+| dev-flow redo | 要你決定 (AskUserQuestion) | PASS | runs/df2-ask/20261005T083959Z | surface: panel; decision-file.json source=ask_user_question, options [A,B] (cell a also PASS)
+| dev-flow redo | 進行中 (task in_progress, no run) | verdict PASS / check.js FAIL (phase token) | runs/df2-running/20261005T084119Z | band "● 進行中 … 0 done*" reason "任務進行中：任務A" (verdict fixed vs pilot); check.js expects phase "做：任務A" but band phase slot shows "—": check.js/band phase disagreement for task-driven 進行中. turn.json state=ended (turn was idle)
+| dev-flow redo | 完成待驗收 (2 tasks completed, no run) | PASS | runs/df2-done/20261005T084232Z | check.js all PASS
+| dev-flow redo | 待命 (attempt, tasks 2/2 left) | PASS as 完成待驗收 (not a 待命 cell) | runs/df2-idle/20261005T084326Z | idle 70s after completed tasks correctly reads 完成待驗收; 待命 redone after /clear
+| dev-flow redo | (g) 進行中 no task no dispatch, mid-turn | PASS | runs/df2-midturn/20261005T084625Z | band "● 進行中 … 回合進行中（0 分）"; turn.json state=active; mid-turn during 2nd slow Bash (first call needed approval) 
+| dev-flow redo | (h) Escape mid-turn, +20 s | FINDING: band stays 進行中 | runs/df2-escape/20261005T084653Z | pane shows "Interrupted · What should Claude do instead?" (Claude idle) yet turn.json state=active (since unchanged) and band "● 進行中 回合進行中". check.js PASS (it derives the same from turn.json). Sampled every ~22 s to +5 min (08:46:30 esc -> 08:51:53): still active/進行中, never returned to 待命. Stop does not fire on interrupt; no staleness expiry within 5 min
+| dev-flow redo | 待命 | PASS | runs/df2-idle2/20261005T085331Z | after /clear + simple Q, 65 s after Stop; check.js PASS
+| dev-flow redo | 疑似卡住 | PASS | runs/df2-stall/20261005T085959Z | kill -STOP on codex exec pid 1263513 (cwd/environ checked) at 08:56:32; band ⏸ 疑似卡住 "最久的派工 3m 沒有輸出" seen ~08:59:56 (3.5 min); check.js PASS. Hand killed after capture
+| l3 | 要你決定 (權限) | PASS | runs/l3-perm/20261005T090109Z | surface: panel; natural prompt: session-mode.js set --level l3
+| l3 | 待命 | PASS | runs/l3-idle/20261005T090409Z | marker level l3; check.js PASS
+| l3 | 要你決定 (AskUserQuestion) | PASS | runs/l3-ask/20261005T090439Z | surface: panel; decision-file.json source=ask_user_question
+| l3 | 進行中 (task in_progress, no run) | verdict PASS / check.js FAIL (phase token) | runs/l3-running/20261005T090536Z | same phase-slot "—" vs expected "做：任務A" as dev-flow; reason 任務進行中：任務A
+| l3 | 完成待驗收 | PASS | runs/l3-done/20261005T090626Z | check.js all PASS
+| l3 | 疑似卡住 | PASS | runs/l3-stall/20261005T091022Z | kill -STOP codex exec 1292456 at 09:07:19 (cwd/environ checked); ⏸ "最久的派工 3m 沒有輸出" by 09:10:19; hand killed after capture. marker level l3 throughout
+| ceo-agent | 要你決定 (權限) | PASS | runs/ceo-perm/20261005T091127Z | surface: panel; marker level null; natural prompt (printf>>README && git commit)
+| ceo-agent | 待命 | PASS | runs/ceo-idle/20261005T091301Z | check.js PASS
+| ceo-agent | 要你決定 (AskUserQuestion) | PASS | runs/ceo-ask/20261005T091333Z | surface: panel; decision-file source=ask_user_question
+| ceo-agent | 進行中 (task in_progress, no run) | verdict PASS / check.js FAIL (phase token) | runs/ceo-running/20261005T091427Z | same phase-slot "—" vs expected "做：任務A"
+| ceo-agent | 完成待驗收 | PASS | runs/ceo-done/20261005T091518Z | check.js PASS
+| ceo-agent | 疑似卡住 | PASS | runs/ceo-stall/20261005T091901Z | kill -STOP codex exec 1315587 at 09:16:02 (cwd/environ checked), ⏸ by 09:19:01; hand killed. marker level null throughout; note the ceo-agent skill was not visibly loaded (plain session did the work)

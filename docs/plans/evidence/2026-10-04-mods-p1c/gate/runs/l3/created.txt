@@ -1,0 +1,3 @@
+l3: session c4841c60-1b5d-4cc6-97da-b59f4c2dc080 (tmux gate:l3)
+l3: STOP pid 1292456 codex exec (gate2-stall-2) 09:07:19
+l3 done: session c4841c60-1b5d-4cc6-97da-b59f4c2dc080; branch gate2-stall-2 + worktree /tmp/hetero-gate2-stall-2-*; README edit uncommitted in gate-sandbox (reset)

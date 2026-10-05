@@ -1,0 +1,8 @@
+{
+  "schema": "autopilot.session-turn/1",
+  "session_id": "765d9799-e0bf-4591-93fd-52d872e39d6b",
+  "state": "ended",
+  "since": "2026-10-05T09:14:36.769Z",
+  "project_key": "51de403da82a23f0",
+  "root_run_id": "job-1791191445-36f79054"
+}

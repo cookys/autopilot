@@ -326,4 +326,18 @@ for (const row of ["w2a-g","w2b-g"]) {
 if(a.no_counted_cell_had_run!==true) bad("flag");
 ' "$BASE"
 
+echo "=== amendment 3: ceo-agent invocation prefix record ==="
+node -e '
+const fs=require("fs"),c=require("crypto"),p=require("path");const b=process.argv[1];
+const sha=(f)=>c.createHash("sha256").update(fs.readFileSync(p.join(b,f))).digest("hex");
+const a=JSON.parse(fs.readFileSync(p.join(b,"prereg/amend-3-invocation.json"),"utf8"));
+const fz=JSON.parse(fs.readFileSync(p.join(b,"prereg/FROZEN.json"),"utf8"));
+const bad=(m)=>{console.error("amend-3: "+m);process.exit(1)};
+const e=(fz.amendments||{})["amend-3-invocation"]; if(!e||e.files["prereg/amend-3-invocation.json"]!==sha("prereg/amend-3-invocation.json")) bad("FROZEN entry missing/drifted");
+if(a.thresholds_sha256!==sha("prereg/w2a-g.json")||fz.files["prereg/w2a-g.json"]!==sha("prereg/w2a-g.json")) bad("w2a-g prereg edited");
+if(JSON.stringify(a.thresholds)!==JSON.stringify(JSON.parse(fs.readFileSync(p.join(b,"prereg/w2a-g.json"),"utf8")).thresholds)) bad("thresholds differ");
+const pre=a.prefixes["w2a-g"].ONOFF_PROMPT_PREFIX; if(pre!=="Invoke the ceo-agent skill:") bad("prefix text");
+for (const t of ["decision","session-mode","phase","open-","DOA","AUTOPILOT","helper","marker","script"]) if (pre.includes(t)) bad("vocabulary leak: "+t);
+' "$BASE"
+
 echo "PASS: skill-onoff P1W markers three-way probes"

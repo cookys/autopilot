@@ -69,6 +69,13 @@
       "files": {
         "prereg/amend-2-invocation.json": "69fa124e18ce6f1e93e45346cd04fcd9abfed258295e351576dc4c3b5666fc07"
       }
+    },
+    "amend-3-invocation": {
+      "date": "2026-10-05",
+      "no_counted_cell_had_run": true,
+      "files": {
+        "prereg/amend-3-invocation.json": "70541f92f0453ab31cb377850b122fbdaa263b8255ffa55d75eb478ecbd66107"
+      }
     }
   }
 }

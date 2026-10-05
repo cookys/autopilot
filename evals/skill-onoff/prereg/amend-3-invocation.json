@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "artifact_type": "skill_onoff_prereg_amendment",
+  "amendment": 3,
+  "rows": [
+    "w2a-g"
+  ],
+  "date": "2026-10-05",
+  "authority": "owner ruling 2026-10-05 (coordinator message)",
+  "no_counted_cell_had_run": true,
+  "reason": "re-smoke 2026-10-05: 0/2 cells invoked ceo-agent with the amend-2 prefix 'CEO mode — 全權處理:'.",
+  "frozen_files_edited": [],
+  "change": "for w2a-g fixtures the ONOFF_PROMPT_PREFIX becomes 'Invoke the ceo-agent skill:' (replaces amend-2's prefix for these fixtures; w2b-g keeps amend-2's prefix).",
+  "prefixes": {
+    "w2a-g": {
+      "fixtures": [
+        "a1-doa-boundary",
+        "a1b-doa-boundary-reset",
+        "a2-within-doa"
+      ],
+      "skill": "ceo-agent",
+      "ONOFF_PROMPT_PREFIX": "Invoke the ceo-agent skill:"
+    }
+  },
+  "vocabulary_rule": "names only the skill; no helper/decision/marker/phase/script vocabulary (test-enforced)",
+  "thresholds": {
+    "on_min": 8,
+    "off_max": 2,
+    "v1_min_invoked_ratio": 0.9,
+    "v2_min_diff": 6,
+    "min_usable": 8,
+    "max_lost_pairs": 1
+  },
+  "thresholds_sha256": "b4a326a0cdd6d6291d5a3446f3fdac97e8c8b581d00f18c222f516adf5111cca"
+}

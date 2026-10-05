@@ -1,0 +1,60 @@
+{
+  "schema": "autopilot.foreman-activity/1",
+  "scope": {
+    "project_key": "51de403da82a23f0",
+    "repo_identity": "git-common-dir:/home/cookys/projects/gate-sandbox/.git",
+    "root_run_id": "job-1791193372-a0ca186d"
+  },
+  "binding": "session",
+  "stall_s": 600,
+  "agents": [
+    {
+      "agent_id": "a47d7cc26e2d0bbf3",
+      "description": "qc lens: completeness/edge",
+      "label": "qc lens: completeness/edge",
+      "last_activity_at": "2026-10-05T09:44:30.327Z",
+      "age_s": 76,
+      "stale": false,
+      "source": "context_tasks",
+      "session_id": "14006793-7b34-480b-b35e-eea8b9e803b0",
+      "binding": "session"
+    },
+    {
+      "agent_id": "a20d8cd7580d80dad",
+      "description": null,
+      "label": "last tool: Bash",
+      "last_activity_at": "2026-10-05T09:43:47.394Z",
+      "age_s": 119,
+      "stale": false,
+      "source": "stamp",
+      "session_id": "14006793-7b34-480b-b35e-eea8b9e803b0",
+      "binding": "session"
+    },
+    {
+      "agent_id": "ad8e3faa81b8d8fb9",
+      "description": null,
+      "label": "last tool: Bash",
+      "last_activity_at": "2026-10-05T09:43:47.188Z",
+      "age_s": 120,
+      "stale": false,
+      "source": "stamp",
+      "session_id": "14006793-7b34-480b-b35e-eea8b9e803b0",
+      "binding": "session"
+    },
+    {
+      "agent_id": "abe1b2bc13c549a79",
+      "description": null,
+      "label": "last tool: Bash",
+      "last_activity_at": "2026-10-05T09:43:34.338Z",
+      "age_s": 132,
+      "stale": false,
+      "source": "stamp",
+      "session_id": "14006793-7b34-480b-b35e-eea8b9e803b0",
+      "binding": "session"
+    }
+  ],
+  "stage": null,
+  "stage_source": null,
+  "stage_at": null,
+  "stage_age_s": null
+}

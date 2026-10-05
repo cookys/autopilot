@@ -1,0 +1,27 @@
+{
+  "schema": "autopilot.foreman-activity/1",
+  "scope": {
+    "project_key": "51de403da82a23f0",
+    "repo_identity": "git-common-dir:/home/cookys/projects/gate-sandbox/.git",
+    "root_run_id": "job-1791193915-aefadc5a"
+  },
+  "binding": "session",
+  "stall_s": 600,
+  "agents": [
+    {
+      "agent_id": "a2c1ba56041c291e1",
+      "description": "Foreman: csv parser",
+      "label": "Foreman: csv parser",
+      "last_activity_at": "2026-10-05T09:52:43.630Z",
+      "age_s": 1,
+      "stale": false,
+      "source": "context_tasks",
+      "session_id": "46295021-1f8d-4f30-85b5-8529a8372f5e",
+      "binding": "session"
+    }
+  ],
+  "stage": null,
+  "stage_source": null,
+  "stage_at": null,
+  "stage_age_s": null
+}

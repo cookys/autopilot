@@ -1,0 +1,126 @@
+{
+  "schema": "autopilot.foreman-activity/1",
+  "scope": {
+    "project_key": "51de403da82a23f0",
+    "repo_identity": "git-common-dir:/home/cookys/projects/gate-sandbox/.git",
+    "root_run_id": "job-1791193590-b4af70c5"
+  },
+  "binding": "session",
+  "stall_s": 600,
+  "agents": [
+    {
+      "agent_id": "a68505f393256ca4a",
+      "description": "Fix slugify transliteration defect",
+      "label": "Fix slugify transliteration defect",
+      "last_activity_at": "2026-10-05T09:49:21.427Z",
+      "age_s": 126,
+      "stale": false,
+      "source": "context_tasks",
+      "session_id": "14006793-7b34-480b-b35e-eea8b9e803b0",
+      "binding": "session"
+    },
+    {
+      "agent_id": "a338450673bc0d052",
+      "description": null,
+      "label": "last tool: Bash",
+      "last_activity_at": "2026-10-05T09:48:28.336Z",
+      "age_s": 179,
+      "stale": false,
+      "source": "stamp",
+      "session_id": "14006793-7b34-480b-b35e-eea8b9e803b0",
+      "binding": "session"
+    },
+    {
+      "agent_id": "aacc0426886cbe05f",
+      "description": null,
+      "label": "last tool: Bash",
+      "last_activity_at": "2026-10-05T09:47:33.335Z",
+      "age_s": 234,
+      "stale": false,
+      "source": "stamp",
+      "session_id": "14006793-7b34-480b-b35e-eea8b9e803b0",
+      "binding": "session"
+    },
+    {
+      "agent_id": "a95869fad4bcef1fb",
+      "description": null,
+      "label": "last tool: Bash",
+      "last_activity_at": "2026-10-05T09:47:27.148Z",
+      "age_s": 240,
+      "stale": false,
+      "source": "stamp",
+      "session_id": "14006793-7b34-480b-b35e-eea8b9e803b0",
+      "binding": "session"
+    },
+    {
+      "agent_id": "a2c0f030108b8ae72",
+      "description": null,
+      "label": "last tool: Bash",
+      "last_activity_at": "2026-10-05T09:47:23.078Z",
+      "age_s": 244,
+      "stale": false,
+      "source": "stamp",
+      "session_id": "14006793-7b34-480b-b35e-eea8b9e803b0",
+      "binding": "session"
+    },
+    {
+      "agent_id": "a46f1ca220c657616",
+      "description": null,
+      "label": "last tool: Bash",
+      "last_activity_at": "2026-10-05T09:47:06.118Z",
+      "age_s": 261,
+      "stale": false,
+      "source": "stamp",
+      "session_id": "14006793-7b34-480b-b35e-eea8b9e803b0",
+      "binding": "session"
+    },
+    {
+      "agent_id": "a47d7cc26e2d0bbf3",
+      "description": null,
+      "label": "last tool: Bash",
+      "last_activity_at": "2026-10-05T09:43:55.384Z",
+      "age_s": 452,
+      "stale": false,
+      "source": "stamp",
+      "session_id": "14006793-7b34-480b-b35e-eea8b9e803b0",
+      "binding": "session"
+    },
+    {
+      "agent_id": "a20d8cd7580d80dad",
+      "description": null,
+      "label": "last tool: Bash",
+      "last_activity_at": "2026-10-05T09:43:47.394Z",
+      "age_s": 460,
+      "stale": false,
+      "source": "stamp",
+      "session_id": "14006793-7b34-480b-b35e-eea8b9e803b0",
+      "binding": "session"
+    },
+    {
+      "agent_id": "ad8e3faa81b8d8fb9",
+      "description": null,
+      "label": "last tool: Bash",
+      "last_activity_at": "2026-10-05T09:43:47.188Z",
+      "age_s": 460,
+      "stale": false,
+      "source": "stamp",
+      "session_id": "14006793-7b34-480b-b35e-eea8b9e803b0",
+      "binding": "session"
+    },
+    {
+      "agent_id": "abe1b2bc13c549a79",
+      "description": null,
+      "label": "last tool: Bash",
+      "last_activity_at": "2026-10-05T09:43:34.338Z",
+      "age_s": 473,
+      "stale": false,
+      "source": "stamp",
+      "session_id": "14006793-7b34-480b-b35e-eea8b9e803b0",
+      "binding": "session"
+    }
+  ],
+  "stage": null,
+  "stage_source": null,
+  "stage_at": null,
+  "stage_age_s": null
+}

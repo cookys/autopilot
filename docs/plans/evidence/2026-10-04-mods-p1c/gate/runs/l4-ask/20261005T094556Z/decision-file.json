@@ -1,0 +1,16 @@
+{
+  "schema": "autopilot.decision/1",
+  "question": "README 測試字已 merge 到本地 develop（5370bb3）。接下來選 A 還是 B？",
+  "options": [
+    "A",
+    "B"
+  ],
+  "context": null,
+  "not_authorized": null,
+  "root_run_id": "job-1791193372-a0ca186d",
+  "repo_identity": "git-common-dir:/home/cookys/projects/gate-sandbox/.git",
+  "project_key": "51de403da82a23f0",
+  "opened_at": "2026-10-05T09:45:37.865Z",
+  "opened_by_session": "14006793-7b34-480b-b35e-eea8b9e803b0",
+  "source": "ask_user_question"
+}

@@ -1,0 +1,24 @@
+{
+  "schema": "autopilot.gate-capture/1",
+  "cell": "l4-perm",
+  "captured_at": "2026-10-05T09:42:40.300Z",
+  "captured_at_ms": 1791193360300,
+  "session_id": "14006793-7b34-480b-b35e-eea8b9e803b0",
+  "session_id_how": "argument",
+  "sanitised_session_id": "14006793-7b34-480b-b35e-eea8b9e803b0",
+  "project_key": "51de403da82a23f0",
+  "root_run_id": "job-1791193329-13e10779",
+  "scope_key": "51de403da82a23f0--job-1791193329-13e10779",
+  "live_base": "/run/user/1000/autopilot",
+  "autopilot_home": "/home/cookys/.autopilot",
+  "pane_cwd": "/home/cookys/projects/gate-sandbox",
+  "git_common_dir": "/home/cookys/projects/gate-sandbox/.git",
+  "missing": [
+    "tasks.json (/run/user/1000/autopilot/tasks/14006793-7b34-480b-b35e-eea8b9e803b0.json)",
+    "turn-effective.json (/run/user/1000/autopilot/turn-effective/14006793-7b34-480b-b35e-eea8b9e803b0.json)",
+    "foreman.json (/run/user/1000/autopilot/runs/51de403da82a23f0--job-1791193329-13e10779.foreman.json)",
+    "decision-file.json (/home/cookys/projects/gate-sandbox/.git/autopilot/decisions/51de403da82a23f0--job-1791193329-13e10779.json)",
+    "work-orders (/home/cookys/projects/gate-sandbox/.git/autopilot/work-orders/job-1791193329-13e10779)",
+    "band row hidden (a dialog is open?): the panel verdict is recorded in panel.txt"
+  ]
+}

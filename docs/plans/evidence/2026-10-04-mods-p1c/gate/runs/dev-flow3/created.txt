@@ -1,0 +1,1 @@
+df3 sessions 46c7e0c0-c07d-466e-bc38-9164b8fad60e, 73d5ecae-c5c7-42a2-a1d8-415ca951f87d (tmux gate:df3); killed stale watcher 878704, new watcher 1467371 for project 51de403da82a23f0 (left running); jobs roots job-1791192958-ec241354 etc.

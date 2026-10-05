@@ -1,0 +1,10 @@
+{
+  "schema": "autopilot.attention/1",
+  "session_id": "46295021-1f8d-4f30-85b5-8529a8372f5e",
+  "project_key": "51de403da82a23f0",
+  "kind": "permission",
+  "tool_name": "Bash",
+  "summary": "Bash: git reset -q --hard e8cefde && git log --oneline | head -1; cat lib/slugify.js test.js README.md package.json; ls",
+  "since": "2026-10-05T09:52:45.908Z",
+  "updated_at": "2026-10-05T09:52:45.908Z"
+}

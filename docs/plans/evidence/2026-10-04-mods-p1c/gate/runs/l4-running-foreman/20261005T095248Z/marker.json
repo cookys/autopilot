@@ -1,0 +1,10 @@
+{
+  "session_id": "46295021-1f8d-4f30-85b5-8529a8372f5e",
+  "level": "l4",
+  "repo_root": "/home/cookys/projects/gate-sandbox",
+  "started_at": "2026-10-05T09:51:55.162Z",
+  "expires_at": "2026-10-06T09:51:55.162Z",
+  "repo_identity": "git-common-dir:/home/cookys/projects/gate-sandbox/.git",
+  "project_key": "51de403da82a23f0",
+  "root_run_id": "job-1791193915-aefadc5a"
+}

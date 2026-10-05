@@ -1,0 +1,10 @@
+{
+  "schema": "autopilot.attention/1",
+  "session_id": "14006793-7b34-480b-b35e-eea8b9e803b0",
+  "project_key": "51de403da82a23f0",
+  "kind": "permission",
+  "tool_name": "Bash",
+  "summary": "Bash: P=/home/cookys/.claude/plugins/cache/autopilot/autopilot/dev; ls $P/scripts | head -50; wc -l $P/skills/ceo-agent…",
+  "since": "2026-10-05T09:42:20.621Z",
+  "updated_at": "2026-10-05T09:42:26.617Z"
+}

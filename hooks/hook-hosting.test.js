@@ -6,11 +6,16 @@
  *
  * RED record (base w/int 8666aba4, this file copied into that tree): see the report (run-w/perf/red.txt).
  *
+ * INT4 hygiene: every temp dir carries a per-run tag; autostart is OFF unless a case drives it; afterEach/after kill the
+ * watchers of this run (environ AUTOPILOT_LIVE_DIR check) and rm its dirs; the LAST test fails if anything survives
+ * (mutation: teardown dropped -> that test red, run-w/int4/mut-no-teardown.txt).
+ *
  * Run: node --test hooks/hook-hosting.test.js      (HOSTING_ROOT=<tree> to aim it at another tree)
  */
 'use strict';
 
 const test = require('node:test');
+const { afterEach, after } = require('node:test');
 const assert = require('node:assert');
 const crypto = require('crypto');
 const fs = require('fs');
@@ -25,15 +30,57 @@ const RELAY = path.join(ROOT, 'hooks', 'advisory-relay.js');
 const SID = 'host-session-0001';
 const HOOKS = JSON.parse(fs.readFileSync(path.join(ROOT, 'hooks', 'hooks.json'), 'utf8')).hooks;
 
+// Per-run tag in every temp name: teardown and the final self-check key on it (mods P1W INT4). Before this, each run left
+// one detached `status runs --watch --render --idle-exit 3600` plus hh-live/hh-home/hh-repo dirs behind (~1,000 runs/day).
+const RUN = crypto.randomBytes(4).toString('hex');
+const SHM = fs.existsSync('/dev/shm') ? '/dev/shm' : os.tmpdir();
+const LIVE_PREFIX = path.join(SHM, `hh-live-${RUN}-`);
+const created = [];   // every temp dir this run made, removed by teardown
+const track = (d) => { created.push(d); return d; };
 function shm(prefix) {
-  const d = fs.mkdtempSync(path.join(fs.existsSync('/dev/shm') ? '/dev/shm' : os.tmpdir(), prefix));
+  const d = track(fs.mkdtempSync(path.join(SHM, `${prefix}${RUN}-`)));
   fs.chmodSync(d, 0o700);
   return d;
 }
+function tmp(prefix) { return track(fs.mkdtempSync(path.join(os.tmpdir(), `${prefix}${RUN}-`))); }
+// Watchers this run's cases started: every process whose environ AUTOPILOT_LIVE_DIR is one of OUR live dirs. The environ
+// check is the safety rule (never signal a pid we cannot tie to this run); it covers both the nohup sh wrapper and node.
+function ownPids(prefix = LIVE_PREFIX) {
+  const out = [];
+  for (const name of fs.readdirSync('/proc')) {
+    if (!/^\d+$/.test(name) || Number(name) === process.pid) continue;
+    try {
+      const env = fs.readFileSync(`/proc/${name}/environ`, 'utf8').split('\0');
+      const l = env.find((e) => e.startsWith('AUTOPILOT_LIVE_DIR='));
+      if (l && l.slice('AUTOPILOT_LIVE_DIR='.length).startsWith(prefix)) out.push(Number(name));
+    } catch { /* gone or not ours to read */ }
+  }
+  return out;
+}
+function stopWatchers(prefix = LIVE_PREFIX) {
+  let pids = ownPids(prefix);
+  for (let i = 0; i < 20 && pids.length; i++) {
+    for (const pid of pids) { try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ } }
+    pids = ownPids(prefix);
+    if (pids.length) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+  }
+}
+function teardown() {
+  stopWatchers();
+  while (created.length) fs.rmSync(created.pop(), { recursive: true, force: true });
+}
+afterEach(teardown);
+after(teardown);   // safety net: a failing self-check still leaves nothing behind
+
+// Autostart is OFF for every case unless it drives autostart itself (mk({ autostart: true }) / upsFixture): a hook run
+// that reaches the full path starts a real detached watcher.
 function mk(extra = {}) {
+  const { autostart, ...rest } = extra;
   const live = shm('hh-live-');
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'hh-home-'));
-  return { live, home, env: { ...process.env, HOME: home, AUTOPILOT_LIVE_DIR: live, ...extra } };
+  const home = tmp('hh-home-');
+  const env = { ...process.env, HOME: home, AUTOPILOT_LIVE_DIR: live, ...rest };
+  if (autostart) delete env.AUTOPILOT_RUNS_WATCH_AUTOSTART; else env.AUTOPILOT_RUNS_WATCH_AUTOSTART = '0';
+  return { live, home, env };
 }
 function run(script, payload, env) {
   const r = spawnSync('node', [script], { input: JSON.stringify(payload), encoding: 'utf8', env });
@@ -237,8 +284,8 @@ function seedAutostart(live, cwd, pid) {
 const ups = (cwd) => ({ session_id: SID, hook_event_name: 'UserPromptSubmit', cwd, prompt: 'hi' });
 
 function upsFixture() {
-  const a = mk();
-  const cwd = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'hh-repo-')));
+  const a = mk({ autostart: true });
+  const cwd = fs.realpathSync(tmp('hh-repo-'));
   execFileSync('git', ['-C', cwd, 'init', '-q']);
   // Opted in (mods P1W MARKER): a repo that is not opted in is now rejected WITHOUT spawning git, so tests that
   // exercise the full path (git runs) need the project config the opt-in rule looks for.
@@ -287,7 +334,10 @@ test('ups fast path falls through to the full path when the pid is dead, the cmd
   } finally {
     try { process.kill(other.pid, 'SIGKILL'); } catch { /* gone */ }
   }
-  // pointer deleted
+  // pointer deleted. The two full-path runs above started REAL watchers (`--render`), and every watcher tick rewrites
+  // the live pointer: left running, one could restore the pointer between the rm below and the relay run (the
+  // load-only flake of this case). Stop this case's watchers first so nothing can race the deletion.
+  stopWatchers(a.live);
   fs.rmSync(path.join(a.live, 'calls.log'), { force: true });
   const w = fakeWatcher();
   try {
@@ -334,8 +384,8 @@ test('ups host: relay still drains its queue; hosted work runs even when the rel
 });
 
 test('ups: non-git cwd stays a silent no-op through the host', () => {
-  const a = mk();
-  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'hh-nogit-'));
+  const a = mk({ autostart: true });   // drives the autostart path (a non-git cwd must never start anything)
+  const cwd = tmp('hh-nogit-');
   const r = run(RELAY, ups(cwd), a.env);
   assert.strictEqual(r.stdout, '');
   assert.strictEqual(r.stderr, '');
@@ -365,4 +415,14 @@ test('liveBase() (no findmnt fork) resolves to the same base as resolveLiveDir()
   const [fast, slow] = code({ ...base, AUTOPILOT_LIVE_DIR: '/nonexistent-root-xyz/live' });
   assert.strictEqual(fast, 'refused:LIVE_DIR_REFUSED');
   assert.strictEqual(slow, 'refused:LIVE_DIR_REFUSED');
+});
+
+// ---------- residue self-check (mods P1W INT4): keep this LAST ----------
+
+test('residue: no watcher of this run survives and none of this run\'s temp dirs remain', () => {
+  // afterEach has torn down every earlier case; whatever is left here was leaked by a case.
+  assert.deepStrictEqual(ownPids(), [], 'a watcher whose AUTOPILOT_LIVE_DIR is under this run\'s prefix survived');
+  assert.deepStrictEqual(created, [], 'temp dirs were not removed by teardown');
+  const left = [...fs.readdirSync(SHM), ...fs.readdirSync(os.tmpdir())].filter((n) => n.includes(`-${RUN}-`));
+  assert.deepStrictEqual(left, [], 'this run\'s temp dirs remain on disk');
 });

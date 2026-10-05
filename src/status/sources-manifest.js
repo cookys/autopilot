@@ -56,6 +56,8 @@ function buildSourcesManifest({ pluginRoot, env = process.env, autopilotHome, sc
   };
   hookSource('tasks', 'session-tasks.js', 'AUTOPILOT_SESSION_TASKS', 'session-tasks', '');
   hookSource('attention', 'awaiting-owner.js', 'AUTOPILOT_AWAITING_OWNER', 'awaiting-owner', '');
+  // the session-turn file is written by the same hook module, behind the same knob (mods P1W TURN)
+  hookSource('turn', 'awaiting-owner.js', 'AUTOPILOT_AWAITING_OWNER', 'awaiting-owner', '');
 
   const decisionInstalled = exists(path.join(pluginRoot, 'scripts', 'open-decision.js'));
   out.decision = { installed: decisionInstalled, enabled: decisionInstalled, how: 'script scripts/open-decision.js open|close|show (depth-0 writes it at a DOA question)' };

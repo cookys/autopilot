@@ -16,6 +16,9 @@
  *   PostToolUse of the SAME tool_name -> end permission/question (approve / answer)
  *   Stop | UserPromptSubmit | SessionEnd -> end everything (UserPromptSubmit is the ONLY end for a
  *                                        human deny/Esc; the file lingers until then, `since` = age)
+ * Also maintains <live>/turn/<sid>.json (schema "autopilot.session-turn/1", mods P1W TURN, same knob):
+ * UserPromptSubmit -> state "active"; Stop -> "ended" (since = now); SessionEnd -> removed. Payloads with
+ * agent_id (subagents) never touch it. See live-session-lib.js recordTurn().
  * summary: question text for AskUserQuestion; else "<tool>: <command|file_path>" run through
  * hooks/_shared/secret-patterns redact(), newlines flattened, truncated to 120 chars.
  * Fail-open: any error -> one stderr line, exit 0.
@@ -69,6 +72,8 @@ function handle(p) {
     try { require('./ask-decision.js').onSessionEnd(p); } catch (e) { L.failOpen('awaiting-owner/ask-decision', e); }
   }
   if (L.knobOff('AUTOPILOT_AWAITING_OWNER')) return;
+  // TURN (mods P1W): the session-turn file, same knob, no lock (tmp + rename), fail-open on its own.
+  try { L.recordTurn(p); } catch (e) { L.failOpen('awaiting-owner/turn', e); }
   const file = L.sessionFile(p, 'attention');
   if (!file) return;
   const now = new Date().toISOString();

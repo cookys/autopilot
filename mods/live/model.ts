@@ -219,6 +219,7 @@ export function stalledReason(env: Json): string | null {
 // ---- W3a: the sources the band and pane read besides the envelope and the job model ----
 export const TASKS_SCHEMA = 'autopilot.session-tasks/1'
 export const ATTENTION_SCHEMA = 'autopilot.attention/1'
+export const TURN_SCHEMA = 'autopilot.session-turn/1'
 export const DECISIONS_SCHEMA = 'autopilot.decisions-sidecar/1'
 export const FOREMAN_SCHEMA = 'autopilot.foreman-activity/1'
 export const SOURCES_SCHEMA = 'autopilot.sources/1'
@@ -286,6 +287,24 @@ export function readAttention(text: string | null, sid: string): AttentionView |
   if (kind !== 'permission' && kind !== 'question' && kind !== 'idle') return null
   const since = typeof v.since === 'string' ? Date.parse(v.since) : NaN
   return { kind, summary: str(v.summary) || '', since_ms: Number.isFinite(since) ? since : null }
+}
+
+export type TurnView = { state: 'active' | 'ended'; since_ms: number | null }
+// the session marker's TTL (scripts/session-mode.js DEFAULT_TTL_HOURS): a turn file older than that is a crashed session's leftover
+export const TURN_TTL_MS = 24 * 3600 * 1000
+
+// <live>/turn/<sid>.json (TURN): active while a prompt is being worked, ended after Stop. Another session / schema, no `since`
+// that parses, or one older than the marker TTL is absent (stale).
+export function readTurn(text: string | null, sid: string, nowMs: number): TurnView | null {
+  if (text === null) return null
+  const parsed = parseJson(text)
+  if (!parsed.ok || !isObject(parsed.value) || parsed.value.schema !== TURN_SCHEMA) return null
+  const v = parsed.value
+  if (typeof v.session_id === 'string' && v.session_id !== sid) return null
+  if (v.state !== 'active' && v.state !== 'ended') return null
+  const since = typeof v.since === 'string' ? Date.parse(v.since) : NaN
+  if (!Number.isFinite(since) || nowMs - since > TURN_TTL_MS) return null
+  return { state: v.state, since_ms: since }
 }
 
 export type Manifest = Record<string, { installed: boolean; enabled: boolean } | undefined>
@@ -401,11 +420,12 @@ export function startMsOf(root: string | null, env: Json, tasks: TasksView | nul
 export type Sources = {
   tasks: TasksView | null
   attention: AttentionView | null
+  turn: TurnView | null
   decisions: DecisionsView | null
   manifest: Manifest | null
   startMs: number | null
 }
-export const NO_SOURCES: Sources = { tasks: null, attention: null, decisions: null, manifest: null, startMs: null }
+export const NO_SOURCES: Sources = { tasks: null, attention: null, turn: null, decisions: null, manifest: null, startMs: null }
 
 const waitingMinutes = (sinceMs: number | null, nowMs: number): number | null => (sinceMs === null ? null : Math.max(0, Math.floor((nowMs - sinceMs) / 60000)))
 
@@ -442,7 +462,7 @@ export function proxySegments(d: DecisionsView | null): string[] {
 
 // Precedence: 1 needs a decision (attention permission / question, or an open decision), 2 stalled, 3 complete and
 // waiting acceptance (frozen progress done = total, or every session task completed; and NO live run in scope), 4 running
-// (a live run, or a session task in progress), 5 idle (the turn ended: nothing live, no task in progress).
+// (a live run, a session task in progress, or an active turn), 5 idle (the turn ended: nothing live, no task in progress).
 export function bandView(env: Json, jobModel: JobModel | null, projectKey: string, nowMs: number, src: Sources = NO_SOURCES): BandView {
   const counts = countsOf(env)
   const progress = jobModel === null ? null : jobModel.progress
@@ -453,6 +473,7 @@ export function bandView(env: Json, jobModel: JobModel | null, projectKey: strin
   const tasksDone = src.tasks !== null && src.tasks.total > 0 && src.tasks.completed === src.tasks.total
   const waiting = noneLive && undecided && ((frozenDone && jobModel !== null) || tasksDone)
   const taskRunning = src.tasks !== null && src.tasks.in_progress > 0
+  const turnActive = src.turn !== null && src.turn.state === 'active'
   const awaiting = src.attention !== null && src.attention.kind !== 'idle' ? src.attention : null
   let pick: { mark: string; word: string }
   let reason: string | null = null
@@ -467,12 +488,14 @@ export function bandView(env: Json, jobModel: JobModel | null, projectKey: strin
   } else if (waiting) {
     pick = VERDICT.waiting
     reason = frozenDone ? '驗收結論尚未出' : '任務 ' + (src.tasks as TasksView).completed + '/' + (src.tasks as TasksView).total + ' 都完成，等你驗收'
-  } else if ((counts !== null && counts.confirmed_live > 0) || taskRunning) {
-    // GATEFIX: a live run, or a session task in progress (the session is mid-work); the live run names itself first.
+  } else if ((counts !== null && counts.confirmed_live > 0) || taskRunning || turnActive) {
+    // GATEFIX / TURN: a live run, a session task in progress, or an active turn (the session is mid-work); the live run names itself first, then the task.
     pick = VERDICT.running
     reason = counts !== null && counts.confirmed_live > 0
       ? counts.confirmed_live + ' 個派工在跑'
-      : '任務進行中：' + (src.tasks !== null && src.tasks.current ? src.tasks.current : (src.tasks as TasksView).in_progress + ' 件')
+      : taskRunning
+        ? '任務進行中：' + (src.tasks !== null && src.tasks.current ? src.tasks.current : (src.tasks as TasksView).in_progress + ' 件')
+        : '回合進行中' + (() => { const n = waitingMinutes((src.turn as TurnView).since_ms, nowMs); return n === null ? '' : '（' + n + ' 分）' })()
   } else {
     pick = VERDICT.idle
     reason = '沒有派工在跑'

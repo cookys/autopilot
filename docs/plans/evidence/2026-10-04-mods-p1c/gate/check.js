@@ -12,7 +12,7 @@
 //   verdict   attention kind permission|question OR an open decision file -> 要你決定
 //             else any envelope run with stall:true                        -> 疑似卡住
 //             else (frozen done==total OR every session task done) AND no live run -> 完成待驗收
-//             else a live run OR a task in progress                        -> 進行中
+//             else a live run OR a task in progress OR an active turn (turn.json state active, since within 24 h) -> 進行中
 //             else                                                         -> 待命
 //   project   repo identity, last directory of the git common dir's parent (else first 8 hex of the project key)
 //   phase     campaign receipt phase > campaign phase kept by the job model > marker phase > task in progress > first open deliverable > —
@@ -109,6 +109,7 @@ function derive(dir) {
   const meta = J('meta.json') || {};
   const marker = J('marker.json');
   const attention = J('attention.json');
+  const turnFile = J('turn.json');
   const tasksFile = J('tasks.json');
   const envelope = J('envelope.json');
   const sidecar = J('decisions-sidecar.json');
@@ -162,13 +163,19 @@ function derive(dir) {
   const attKind = isObj(attention) ? attention.kind : null;
   const decisionOpen = isObj(decisionFile) && typeof decisionFile.question === 'string' && decisionFile.question !== '';
   const frozenDone = progress && progress.frozen && progress.done === progress.total;
+  // turn.json (hooks/awaiting-owner.js): active while a prompt is being worked; older than the 24 h marker TTL = a crashed session's leftover
+  const turnActive = isObj(turnFile) && turnFile.schema === 'autopilot.session-turn/1' && turnFile.state === 'active'
+    && ms(turnFile.since) !== null && nowMs - ms(turnFile.since) <= 24 * 3600 * 1000;
   const tasksDone = tasks && tasks.total > 0 && tasks.completed === tasks.total;
   let verdict; let verdictSource;
   if (attKind === 'permission' || attKind === 'question') { verdict = '要你決定'; verdictSource = 'attention.json kind=' + attKind; }
   else if (decisionOpen) { verdict = '要你決定'; verdictSource = 'decision-file.json (open)'; }
   else if (stalled) { verdict = '疑似卡住'; verdictSource = 'envelope.json run stall:true'; }
   else if ((frozenDone || tasksDone) && !liveRun) { verdict = '完成待驗收'; verdictSource = frozenDone ? `${progress.source} frozen ${progress.done}/${progress.total}` : 'tasks.json all completed'; }
-  else if (liveRun || (tasks && tasks.inProgress.length > 0)) { verdict = '進行中'; verdictSource = liveRun ? 'envelope.json live run' : 'tasks.json in_progress'; }
+  else if (liveRun || (tasks && tasks.inProgress.length > 0) || turnActive) {
+    verdict = '進行中';
+    verdictSource = liveRun ? 'envelope.json live run' : (tasks && tasks.inProgress.length > 0) ? 'tasks.json in_progress' : 'turn.json active';
+  }
   else { verdict = '待命'; verdictSource = 'nothing live, awaited or complete'; }
   put('verdict', verdict, verdictSource, { exact: true });
 
@@ -223,6 +230,8 @@ function derive(dir) {
     if (attKind === 'permission' || attKind === 'question') put('reason', [String(attention.summary || '').slice(0, 30)], 'attention.json summary', { line2: true });
     else put('reason', [String(decisionFile.question).slice(0, 30)], 'decision-file.json question', { line2: true });
   }
+
+  if (verdict === '進行中' && !liveRun && !(tasks && tasks.inProgress.length > 0)) put('reason', ['回合進行中'], 'turn.json active (no live run, no task in progress)', { line2: true });
 
   // ---- elapsed
   // campaign root with a bound receipt: earliest receipt; otherwise the session's own start (tasks, then marker); last the earliest run

@@ -9,6 +9,8 @@
 // compare-always-pass 2 red, decision-ignored 1, stall-ignored 1, deleted-counted 1, idle-attention-decides 1,
 // frozen-needs-digest 1 (after the unfrozen receipt case carried a count), notwired-always 2.
 
+// TURN (mods P1W): +4 tests (an active turn is 進行中 with 回合進行中, ended / absent / stale = 待命, permission attention outranks, planted reds). Mutation controls: run-w/land/mut-turn-check-*.txt.
+
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -218,4 +220,27 @@ test('GATEFIX PLANTED RED: attention open but neither band nor panel shows a ver
 test('GATEFIX: the panel finder ignores a bare verdict word that is not alone in its panel cell', () => {
   const dir = capture({}, [SIDE('x') + '會議記錄：要你決定 的事項', SIDE('y') + '無']);
   assert.strictEqual(run(dir).surface, null);
+});
+
+const turnF = (state, offMin, extra) => ({ schema: 'autopilot.session-turn/1', session_id: SID, state, since: iso(offMin === undefined ? 3 : offMin), project_key: null, root_run_id: null, ...extra });
+test('TURN: an active turn with nothing else is 進行中 and the reason names the turn', () => {
+  const dir = capture({ 'turn.json': turnF('active') }, ['● 進行中 demo · — · 30m · —', '回合進行中（3 分）']);
+  assert.strictEqual(derive(dir).verdict, '進行中');
+  const r = run(dir);
+  assert.strictEqual(status(r, 'verdict'), 'PASS'); assert.strictEqual(status(r, 'reason'), 'PASS'); assert.strictEqual(r.ok, true);
+});
+test('TURN: ended, absent, or older than 24 h is 待命; permission attention outranks an active turn', () => {
+  assert.strictEqual(derive(capture({ 'turn.json': turnF('ended') }, [])).verdict, '待命');
+  assert.strictEqual(derive(capture({}, [])).verdict, '待命');
+  assert.strictEqual(derive(capture({ 'turn.json': turnF('active', 25 * 60) }, [])).verdict, '待命');
+  assert.strictEqual(derive(capture({ 'turn.json': { ...turnF('active'), schema: 'x/1' } }, [])).verdict, '待命');
+  assert.strictEqual(derive(capture({ 'turn.json': turnF('active'), 'attention.json': { kind: 'permission', summary: 'Bash: ls' } }, [])).verdict, '要你決定');
+});
+test('TURN PLANTED RED: band says 待命 while the turn is active -> FAIL; band says 進行中 with an ended turn -> FAIL', () => {
+  assert.strictEqual(run(capture({ 'turn.json': turnF('active') }, ['◌ 待命 demo · — · 30m · —', '沒有派工在跑'])).ok, false);
+  assert.strictEqual(run(capture({ 'turn.json': turnF('ended') }, ['● 進行中 demo · — · 30m · —', '回合進行中（3 分）'])).ok, false);
+});
+test('TURN PLANTED RED: active turn, band 進行中 but line 2 does not name the turn -> FAIL on reason', () => {
+  const r = run(capture({ 'turn.json': turnF('active') }, ['● 進行中 demo · — · 30m · —', '沒有派工在跑']));
+  assert.strictEqual(status(r, 'reason'), 'FAIL'); assert.strictEqual(r.ok, false);
 });

@@ -1,3 +1,5 @@
+// P1W TURN (the band knows a turn is in progress: <live>/turn/<sid>.json active -> 進行中 with 「回合進行中（N 分）」, ended / absent -> 待命, stale (> 24h) ignored; one case x terminal + desktop):
+// RED at 2e84fd03 (114 tests): see run-w/land/turn-mod-red.txt. Mutation controls: run-w/land/mut-turn-*.txt.
 // P1W GATEFIX (a task in progress is 進行中; 完成待驗收 needs no live run; one new case x terminal + desktop, the W3a tasks case's first line 待命 -> 進行中):
 // RED at 2160351c (112 tests): 108 pass / 4 fail (2 cases x 2 surfaces). GREEN: 114 pass / 0 fail. Mutation controls (run-w/land/mut-*.txt): task not running (4 red),
 //   completion ignores a live run (8 red), a task in progress outranks completion (2 red); each restored.
@@ -777,6 +779,7 @@ const SID_RAW = 'sid/with:odd chars'
 const SID_FILE = 'sid_with_odd_chars' // sanitizeSessionId: every scalar outside [A-Za-z0-9_-] becomes one "_"
 const SCOPE_KEY = KEY + '--' + ROOT
 const P_TASKS = (sid = SID_A) => LIVE + '/tasks/' + sid + '.json'
+const P_TURN = (sid = SID_A) => LIVE + '/turn/' + sid + '.json'
 const P_ATT = (sid = SID_A) => LIVE + '/attention/' + sid + '.json'
 const P_DEC = LIVE + '/runs/' + SCOPE_KEY + '.decisions.json'
 const P_FOREMAN = LIVE + '/runs/' + SCOPE_KEY + '.foreman.json'
@@ -798,6 +801,9 @@ const allDone = () => tasksFile({
   tasks: [{ id: '1', subject: 'a', status: 'completed', started_seq: 1 }, { id: '2', subject: 'b', status: 'completed', started_seq: 2 }],
   counts: { total: 2, completed: 2, in_progress: 0 }, current: null,
 })
+function turn(state: string, over: Record<string, unknown> = {}, sid = SID_A) {
+  return { schema: 'autopilot.session-turn/1', session_id: sid, state, since: '2026-10-04T09:57:30.000Z', project_key: KEY, root_run_id: null, ...over }
+}
 function attention(kind: string, over: Record<string, unknown> = {}, sid = SID_A) {
   return { schema: 'autopilot.attention/1', session_id: sid, project_key: KEY, kind, tool_name: kind === 'permission' ? 'Bash' : null, summary: kind === 'idle' ? 'waiting for your input' : 'Bash: rm -rf build', since: '2026-10-04T09:55:30.000Z', updated_at: '2026-10-04T09:55:30.000Z', ...over }
 }
@@ -919,6 +925,60 @@ for (const surface of SURFACES) {
     files[P_TASKS()] = j(tasksFile())
     await w.clock.advance(5000)
     expect(verdicts(await bandText($, surface))).toEqual(['完成待驗收'])
+  })
+
+  test('TURN: an active turn is 進行中 with 回合進行中（N 分）; ended or no file is 待命; permission outranks it; a stale or foreign file is ignored (' + surface + ')', async ($, on) => {
+    const files = quietWorld()
+    const w = world(on, files)
+    await start($, surface)
+    expect(verdicts(await bandText($, surface))).toEqual(['待命']) // no turn file, nothing going on
+    files[P_TURN()] = j(turn('active')) // since 09:57:30, now 10:00:30 -> 3 min
+    await w.clock.advance(5000)
+    let p = await bandParts($, surface)
+    expect(p.line1.startsWith('● 進行中 repo')).toBe(true)
+    expect(p.line2).toBe('回合進行中（3 分）')
+    files[P_TURN()] = j(turn('ended'))
+    await w.clock.advance(5000)
+    expect(verdicts(await bandText($, surface))).toEqual(['待命'])
+    // an active turn with a task in progress: the task names itself; with a live run the run does
+    files[P_TURN()] = j(turn('active'))
+    files[P_TASKS()] = j(tasksFile())
+    await w.clock.advance(5000)
+    expect((await bandParts($, surface)).line2).toBe('任務進行中：接線')
+    delete files[P_TASKS()]
+    files[W_ENV] = j(envelope({ runs: [row({ run_id: 'r1' })], counts: quiet(1) }))
+    await w.clock.advance(5000)
+    expect((await bandParts($, surface)).line2).toBe('1 個派工在跑')
+    files[W_ENV] = j(envelope({ runs: [exitedRun()], counts: quiet(0) }))
+    // permission attention outranks an active turn (precedence unchanged)
+    files[P_ATT()] = j(attention('permission'))
+    await w.clock.advance(5000)
+    p = await bandParts($, surface)
+    expect(verdicts(await bandText($, surface))).toEqual(['要你決定'])
+    delete files[P_ATT()]
+    // an idle attention (written after Stop) with an active turn: the later prompt makes it 進行中 without the idle suffix
+    files[P_ATT()] = j(attention('idle'))
+    await w.clock.advance(5000)
+    p = await bandParts($, surface)
+    expect(p.line2).toBe('回合進行中（3 分）')
+    delete files[P_ATT()]
+    // stale (older than the 24 h marker TTL): ignored -> 待命
+    files[P_TURN()] = j(turn('active', { since: '2026-10-03T09:00:00.000Z' }))
+    await w.clock.advance(5000)
+    expect(verdicts(await bandText($, surface))).toEqual(['待命'])
+    // another session's file / another schema / bad state: absent
+    files[P_TURN()] = j(turn('active', {}, SID_B))
+    await w.clock.advance(5000)
+    expect(verdicts(await bandText($, surface))).toEqual(['待命'])
+    files[P_TURN()] = j({ ...turn('active'), schema: 'other/1' })
+    await w.clock.advance(5000)
+    expect(verdicts(await bandText($, surface))).toEqual(['待命'])
+    files[P_TURN()] = j(turn('weird'))
+    await w.clock.advance(5000)
+    expect(verdicts(await bandText($, surface))).toEqual(['待命'])
+    files[P_TURN(SID_B)] = j(turn('active', {}, SID_B))
+    await w.clock.advance(5000)
+    expect(verdicts(await bandText($, surface))).toEqual(['待命'])
   })
 
   test('W3a attention in the pane: the awaited thing is listed before the dispatch table (' + surface + ')', async ($, on) => {

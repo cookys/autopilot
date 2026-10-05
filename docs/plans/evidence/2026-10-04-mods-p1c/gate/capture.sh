@@ -12,7 +12,7 @@
 #   GATE_TMUX_SOCKET         tmux -L <name> (a private server); default = the tmux server you are attached to
 #   GATE_OUT                 output base, default <this dir>/runs
 # Capture layout (what check.js reads):
-#   meta.json pane.txt band.txt panel.txt marker.json attention.json tasks.json context.json envelope.json decisions-sidecar.json
+#   meta.json pane.txt band.txt panel.txt marker.json attention.json tasks.json turn.json context.json envelope.json decisions-sidecar.json
 #   foreman.json sources.json model.json decision-file.json work-orders/*.json marker-dir-ls.txt ps-watchers.txt
 # A file that does not exist is simply absent (listed under "missing" in meta.json): absence is itself evidence.
 set -u
@@ -98,6 +98,7 @@ const scope = pkey ? (root ? `${pkey}--${safeSeg(root)}` : pkey) : null;
 if (live) {
   copy(path.join(live, 'attention', `${ssid}.json`), 'attention.json');
   copy(path.join(live, 'tasks', `${ssid}.json`), 'tasks.json');
+  copy(path.join(live, 'turn', `${ssid}.json`), 'turn.json');
   copy(path.join(live, 'context', `${ssid}.json`), 'context.json');
   if (scope) {
     copy(path.join(live, 'runs', `${scope}.json`), 'envelope.json');

@@ -97,7 +97,9 @@ S5a, S5b, S7, S8; `README.md` there is the verdict table). A mod is CC-only; non
     what is awaited from the model's `decision` object (question, then `n. label — consequence` for each option that
     exists); the execution-status table, the gate rows and the review Link stay.
 - **Every wired source (W3a)**: besides the above the mod reads, all through the live pointer's `live_base` (never computed
-  in the mod): `tasks/<sid>.json` (`autopilot.session-tasks/1`) and `attention/<sid>.json` (`autopilot.attention/1`), both
+  in the mod): `tasks/<sid>.json` (`autopilot.session-tasks/1`), `attention/<sid>.json` (`autopilot.attention/1`) and `turn/<sid>.json`
+  (`autopilot.session-turn/1`, mods P1W TURN: `state` `active` from the UserPromptSubmit, `ended` from Stop, removed at SessionEnd; written by
+  `hooks/awaiting-owner.js` behind `AUTOPILOT_AWAITING_OWNER`, never by a subagent payload; ignored when its `since` is older than the 24 h marker TTL), all
   named by the *sanitised* sid (`[A-Za-z0-9_-]`, else `_`, 64 scalars; the context file too); the scope-checked sidecars
   `runs/<scope>.decisions.json` (`autopilot.decisions-sidecar/1`), `runs/<scope>.foreman.json`
   (`autopilot.foreman-activity/1`) and `runs/sources/<scope>.json` (`autopilot.sources/1`, fallback: the job model's
@@ -107,10 +109,9 @@ S5a, S5b, S7, S8; `README.md` there is the verdict table). A mod is CC-only; non
   - Verdict precedence now: `要你決定` (attention `permission` / `question`, or an open decision; reason `等你批准：…（等了 N 分）`,
     `等你回答：…`, or the question plus `（已等 N 天）` when the model marks it stale and a whole day has passed) > `疑似卡住` >
     `完成待驗收` (frozen done = total, or every session task completed; both need nothing live and acceptance undecided; the
-    campaign-terminal phase codes are not a separate rule) > `進行中` (a live run, or a session task in progress) > `待命` (attention `idle` appends `停在等你指示 N 分`).
-    `待命` means the turn ended and nothing else is going on. No hook event marks "the turn is active" (attention is written only
-    while waiting; `idle` arrives with the `idle_prompt` notification about 60 s after Stop; `hooks/awaiting-owner.js:13,85`), so a
-    session mid-turn with no task and no run reads `待命` until a task starts: the one gap of this rule.
+    campaign-terminal phase codes are not a separate rule) > `進行中` (a live run, a session task in progress, or an active turn; reason: the run, else the task, else `回合進行中（N 分）`) > `待命` (attention `idle` appends `停在等你指示 N 分`).
+    `待命` means the turn ended (or no turn file) and nothing else is going on. The turn file closes the former gap (a mid-turn session with no
+    task and no run read `待命`): an `active` turn is `進行中` until Stop. A crashed session's leftover `active` file is ignored after 24 h.
     `awaiting_disposition` is never `要你決定`.
   - elapsed = start of this piece of work, chosen by campaign-vs-session rather than by whether the marker has a root (every
     plain session has one): the earliest progress receipt bound to the root (the receipt's own `root_run_id`; a file with a

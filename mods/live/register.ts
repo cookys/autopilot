@@ -23,7 +23,7 @@ import { Band } from './band'
 import { Pane } from './pane'
 import {
   acceptanceToast, bandLine1, bandView, buildSections, checkEnvelope, commonDirOf, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
-  headerText, hhmm, isKey, isObject, isPlainRoot, jobOf, longestPrefixKey, NO_SECTIONS, paneRows, parseJson, portOf, readAttention, readDecisions,
+  headerText, hhmm, isKey, isObject, isPlainRoot, jobOf, longestPrefixKey, NO_SECTIONS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
   readForeman, readJobModel, readManifest, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd, startMsOf, STATE_TEXT, POINTER_SCHEMA,
 } from './model'
 import type { Counts, EnvelopeCheck, JobModel, Json, LiveSnapshot, Manifest, Sources } from './model'
@@ -218,11 +218,12 @@ async function buildSnapshot($: EngineInterface, nowMs: number): Promise<{ snap:
     || (jobModel === null ? null : readManifest(jobModel.sources_manifest, want))
   const tasks = readTasks(await readText($, liveBase + '/tasks/' + fileSid + '.json'), sid)
   const attention = readAttention(await readText($, liveBase + '/attention/' + fileSid + '.json'), sid)
+  const turn = readTurn(await readText($, liveBase + '/turn/' + fileSid + '.json'), sid, nowMs)
   const decisions = readDecisions(await readText($, liveBase + '/runs/' + scopeKey + '.decisions.json'), want)
   const foreman = readForeman(await readText($, liveBase + '/runs/' + scopeKey + '.foreman.json'), want)
   const identity = isObject(env.scope) ? env.scope.repo_identity : null
   const receiptMs = scope.root === null ? null : await receiptStart($, identity, scope.root)
-  const src: Sources = { tasks, attention, decisions, manifest, startMs: startMsOf(scope.root, env, tasks, scope.marker === null ? null : scope.marker.started_at, receiptMs) }
+  const src: Sources = { tasks, attention, turn, decisions, manifest, startMs: startMsOf(scope.root, env, tasks, scope.marker === null ? null : scope.marker.started_at, receiptMs) }
   const ctx = ctxShown(ctxText(await readText($, liveBase + '/context/' + fileSid + '.json'), nowMs), manifest)
   const band = bandView(env, jobModel, scope.key, nowMs, src)
   return {

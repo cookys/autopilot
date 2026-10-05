@@ -136,6 +136,58 @@ function removeAgentActivity(p) {
   fs.rmSync(path.join(liveBase(), 'agents', sanitizeSessionId(p.session_id)), { recursive: true, force: true });
 }
 
+// Turn state (mods P1W TURN): <live>/turn/<sid>.json {schema:"autopilot.session-turn/1", session_id, state:"active"|"ended",
+// since, project_key|null, root_run_id|null}. UserPromptSubmit -> active, Stop -> ended (scope kept), SessionEnd -> removed.
+// A payload with agent_id is a subagent's and never touches it. No lock (one writer per session, tmp + rename). No git:
+// project_key comes from the per-cwd autostart cache (null when absent), root_run_id from this session's own marker.
+function turnScope(p) {
+  let projectKey = null;
+  let rootRunId = null;
+  try {
+    if (typeof p.cwd === 'string' && p.cwd) {
+      const cwd = path.resolve(p.cwd);
+      const h = require('crypto').createHash('sha1').update(cwd).digest('hex').slice(0, 16);
+      const c = JSON.parse(fs.readFileSync(path.join(liveBase(), 'autostart', `${h}.json`), 'utf8'));
+      if (c && c.cwd === cwd && /^[0-9a-f]{16}$/.test(c.project_key)) projectKey = c.project_key;
+    }
+  } catch { /* no cache: null */ }
+  try {
+    const dir = process.env.AUTOPILOT_SESSION_MODE_DIR || path.join(require('os').homedir(), '.autopilot', 'session-mode');
+    const m = JSON.parse(fs.readFileSync(path.join(dir, `${sanitizeSessionId(p.session_id)}.json`), 'utf8'));
+    if (m && typeof m.root_run_id === 'string' && m.root_run_id && Date.parse(m.expires_at) > Date.now()) rootRunId = m.root_run_id;
+  } catch { /* no marker: null */ }
+  return { projectKey, rootRunId };
+}
+
+function recordTurn(p) {
+  const ev = p && p.hook_event_name;
+  if (ev !== 'UserPromptSubmit' && ev !== 'Stop' && ev !== 'SessionEnd') return;
+  if (typeof p.agent_id === 'string' && p.agent_id) return;
+  const file = sessionFile(p, 'turn');
+  if (!file) return;
+  if (ev === 'SessionEnd') { removeFile(file); return; }
+  const now = new Date().toISOString();
+  let projectKey = null;
+  let rootRunId = null;
+  if (ev === 'UserPromptSubmit') {
+    ({ projectKey, rootRunId } = turnScope(p));
+  } else {
+    const cur = readJsonFile(file);
+    if (cur && cur.schema === 'autopilot.session-turn/1') {
+      projectKey = typeof cur.project_key === 'string' ? cur.project_key : null;
+      rootRunId = typeof cur.root_run_id === 'string' ? cur.root_run_id : null;
+    }
+  }
+  atomicWriteJson(file, {
+    schema: 'autopilot.session-turn/1',
+    session_id: p.session_id,
+    state: ev === 'Stop' ? 'ended' : 'active',
+    since: now,
+    project_key: projectKey,
+    root_run_id: rootRunId,
+  });
+}
+
 function failOpen(name, e) {
   try { process.stderr.write(`${name}: fail-open: ${e && e.message ? e.message : e}\n`); } catch { /* ignore */ }
 }
@@ -147,6 +199,7 @@ module.exports = {
   liveBase,
   stampAgentActivity,
   removeAgentActivity,
+  recordTurn,
   readJsonFile,
   withLock,
   atomicWriteJson,

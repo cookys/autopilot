@@ -1,0 +1,7 @@
+# l5 driving notes (2026-10-05)
+- Cell 0 (FF6): TaskStop gave no dialog; stamp ended_at set 4 s after TaskStop (12:22:08 vs stop 12:22:04). BUT the band stayed 要你決定 (stale permission attention for the agent's gate-wait Bash approved at 12:21; attention.json pending[1] for agent a4aee... never cleared, updated_at 12:22:10) instead of 待命. check.js PASS only because attention.json says pending.
+- First Agent dispatch is rejected by dispatch-model-guard; depth-0 retries with Engine header. The agent's Bash was `...gate-wait.sh; echo "exit=$?"` so a dialog appears; approved by text match.
+- /l5 with "不要讀 plugin 內部檔案": depth-0 only ran session-mode.js set --level l5 and edited README directly, skipping the L5 flow. After AskUserQuestion answer B it read the l5 refs, ran `status readiness --probe` (all 6 seats probe-needed), then stopped: engine implement-review needs a campaign contract from mission prepare/grant (plan, rubric, sources manifest, execution graph, .claude/mission-routing-config.json, .claude/owner-kernel-governance.json with attestations); sandbox has none. Offered: degrade to l3, supply governance file, or run in autopilot repo. I did none (kept marker l5).
+- Ghost suggestions at the prompt ("commit 這個改動", "選 1，降級 l3 完成", "降級 l3 完成 README 那一行"): never pressed Enter on an empty prompt.
+- Permission dialog for the session-mode.js command doubled as the l5-perm capture (panel surface).
+- Tasks route used for running/done; /compact kept marker identical.

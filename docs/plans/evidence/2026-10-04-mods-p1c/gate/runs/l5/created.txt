@@ -1,0 +1,11 @@
+mode l5 (2026-10-05, live /run/user/1000/autopilot)
+sessions: Cell 0 (tmux ts) 8a938a99-38d9-4821-8ada-a866b7276c60 ; /l5 (tmux l5) 7be684e2-aab6-4266-bf0b-cc77cf3136de
+markers: ~/.autopilot/session-mode/8a938a99-....json , 7be684e2-....json (level l5, root_run_id job-1791203101-e4d1bb25, project_key 51de403da82a23f0)
+watchers seen (not started by hand): pid 2831473, 2926632 (status runs --watch)
+agents: a4aee842ac77aa8e0 (Cell 0 gate-wait agent, stamp ended_at 12:22:08.314Z after TaskStop), a68317190287c4b0d (first dispatch rejected by dispatch-model-guard)
+tasks file: /run/user/1000/autopilot/tasks/7be684e2-....json
+decision file (opened and closed by AskUserQuestion): ~/projects/gate-sandbox/.git/autopilot/decisions/51de403da82a23f0--job-1791203101-e4d1bb25.json
+campaign root/ids: none (rail never reached; BLOCKED at mission scaffold)
+worktrees/branches left by this run: none (the gate-stall*, gate2-stall-1 worktrees under /tmp/hetero-* predate this run)
+copied config: /home/cookys/projects/autopilot/.claude/review-loop-config.md -> ~/projects/gate-sandbox/.claude/review-loop-config.md (untracked, still present)
+origin gate-sandbox-origin.git develop = 490bbea at start and end

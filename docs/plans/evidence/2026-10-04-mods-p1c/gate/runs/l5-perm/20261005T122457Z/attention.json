@@ -1,0 +1,21 @@
+{
+  "schema": "autopilot.attention/1",
+  "session_id": "7be684e2-aab6-4266-bf0b-cc77cf3136de",
+  "project_key": "51de403da82a23f0",
+  "kind": "permission",
+  "tool_name": "Bash",
+  "summary": "Bash: ls && cat README.md 2>/dev/null; node /home/cookys/.claude/plugins/cache/autopilot/autopilot/dev/scripts/session-…",
+  "since": "2026-10-05T12:24:29.214Z",
+  "updated_at": "2026-10-05T12:24:35.204Z",
+  "pending": [
+    {
+      "agent_id": null,
+      "tool_name": "Bash",
+      "input_digest": "a4ad18b89bdf48f6",
+      "kind": "permission",
+      "summary": "Bash: ls && cat README.md 2>/dev/null; node /home/cookys/.claude/plugins/cache/autopilot/autopilot/dev/scripts/session-…",
+      "since": "2026-10-05T12:24:29.214Z",
+      "updated_at": "2026-10-05T12:24:29.214Z"
+    }
+  ]
+}

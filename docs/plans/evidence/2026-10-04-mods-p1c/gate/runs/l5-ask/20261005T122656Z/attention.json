@@ -1,0 +1,21 @@
+{
+  "schema": "autopilot.attention/1",
+  "session_id": "7be684e2-aab6-4266-bf0b-cc77cf3136de",
+  "project_key": "51de403da82a23f0",
+  "kind": "question",
+  "tool_name": "AskUserQuestion",
+  "summary": "接下來要選哪一個?(你沒說明 A/B 的內容,我先依目前情況擬定)",
+  "since": "2026-10-05T12:26:29.707Z",
+  "updated_at": "2026-10-05T12:26:35.693Z",
+  "pending": [
+    {
+      "agent_id": null,
+      "tool_name": "AskUserQuestion",
+      "input_digest": "33724b15abef8ffb",
+      "kind": "question",
+      "summary": "接下來要選哪一個?(你沒說明 A/B 的內容,我先依目前情況擬定)",
+      "since": "2026-10-05T12:26:29.707Z",
+      "updated_at": "2026-10-05T12:26:29.707Z"
+    }
+  ]
+}

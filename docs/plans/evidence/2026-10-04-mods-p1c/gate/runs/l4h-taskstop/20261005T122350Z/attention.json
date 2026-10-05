@@ -1,0 +1,21 @@
+{
+  "schema": "autopilot.attention/1",
+  "session_id": "8a938a99-38d9-4821-8ada-a866b7276c60",
+  "project_key": "51de403da82a23f0",
+  "kind": "permission",
+  "tool_name": "Bash",
+  "summary": "Bash: bash /home/cookys/projects/gate-wait.sh; echo \"exit=$?\"",
+  "since": "2026-10-05T12:21:14.796Z",
+  "updated_at": "2026-10-05T12:22:10.121Z",
+  "pending": [
+    {
+      "agent_id": "a4aee842ac77aa8e0",
+      "tool_name": "Bash",
+      "input_digest": "264c7c3c0fc24f0c",
+      "kind": "permission",
+      "summary": "Bash: bash /home/cookys/projects/gate-wait.sh; echo \"exit=$?\"",
+      "since": "2026-10-05T12:21:14.796Z",
+      "updated_at": "2026-10-05T12:21:14.796Z"
+    }
+  ]
+}

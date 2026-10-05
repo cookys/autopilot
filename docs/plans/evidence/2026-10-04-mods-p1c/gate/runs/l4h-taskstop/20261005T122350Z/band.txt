@@ -1,0 +1,2 @@
+▲ 要你決定 gate-sandbox · — · 2m · —                                                                      [-] │
+等你批准：Bash: bash /home/cookys/projects/gate-wait.sh; echo "exit=$?"（等了 2 分）                          │

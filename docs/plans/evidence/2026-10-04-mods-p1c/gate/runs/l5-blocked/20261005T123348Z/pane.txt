@@ -1,0 +1,50 @@
+                                                                                                              │                                                                                       ✕
+● User answered Claude's questions:                                                                           │session $0.88 · host $507.42 · ctx 8%
+  ⎿  · 接下來要選哪一個?(你沒說明 A/B 的內容,我先依目前情況擬定) → B:重跑完整 L5                              │dispatch · execution status, not progress (執行狀態，不是進度)
+                                                                                                              │no runs in this scope
+  Read 1 file, ran 3 shell commands                                                                           │gates · review receipts of this job
+                                                                                                              │no review receipt
+● User answered Claude's questions:                                                                           │停在等你指示 0 分
+  ⎿  · 完整 L5 前置條件不足:6 個席位(implementer/reviewer/VA/qc×4)全是 probe-needed,且 sandbox 沒有 mission   │任務工具未開 · 設 CLAUDE_CODE_ENABLE_TODO_TOOLS=1 後才會記錄任務
+     圖、plan、rubric、sources manifest。要怎麼繼續? → 探測席位再建鷹架 (Recommended)                         │工頭活動（依 session 綁定：同一 session 的多個工作會看到同一批）
+                                                                                                              │a569fd8c47042eb27 · — · 1m 前
+  Ran 3 shell commands                                                                                        │a8386277c75f0a845 · — · 8m 前
+                                                                                                              │open the review page
+● 完整 L5 在這個 sandbox 跑不起來，我停在建鷹架這一步，README 沒有任何改動。                                  │snapshot published 2026-10-05T12:33:17.033Z · session cost as of 2026-10-05T12:32:13.815Z
+                                                                                                              │· host cost as of 2026-10-05T12:32:13.815Z
+  已完成                                                                                                      │
+  - 已還原先前直接加在 README.md 的那一行，git status 只剩 .claude/review-loop-config.md（untracked）。       │
+  - status readiness --probe 真實探測過了，7 個席位全部 usable：grok-4.7 實作者、MiniMax-M3 reviewer、Qwen3.8 │
+    驗證作者，以及 qc 的 Fable、GLM-5.2、MiniMax-M3、Qwen。                                                   │
+  - 這次探測有花外部額度。探測回執約 5 分鐘過期（12:34 UTC），現在已過期，真要派工得重探一次。                │
+                                                                                                              │
+  卡住的原因                                                                                                  │
+  - 唯一入口 engine implement-review 要一份由 mission prepare/grant 簽出的 campaign contract。                │
+  - 簽 contract 需要 plan、rubric、sources manifest、execution                                                │
+    graph、.claude/mission-routing-config.json，還有 .claude/owner-kernel-governance.json。                   │
+  - sandbox 這些都沒有。我看了 plugin 裡的範例，governance 檔含 owner、challenger、runner 三組帶 attestation  │
+    與 sha256 的 roster，是 autopilot 自我託管用的設定。我不能在這個 sandbox 偽造那些 attestation。           │
+  - 這套 recipe 的流程也很長：plan 與 rubric 的 hetero review、凍結                                           │
+    authority、grant、背景派工配死人開關、panel 驗證、merge 與 record-integration。這些全做一遍才改一行       │
+    README。                                                                                                  │
+                                                                                                              │
+  接下來怎麼走，由你決定                                                                                      │
+  1. 降級 l3 完成。 照 skill 規定用 session-mode set --level l3 --entry-level l5 --fallback                   │
+     precondition_failed 記錄降級，由 hands 子代理改 README 那一行。這是 skill                                │
+     裡寫明的降級路徑，不再花外部額度。                                                                       │
+  2. 你提供 governance 檔。 如果你有這個 sandbox 該用的 owner-kernel-governance.json，或是想沿用 autopilot    │
+     的那份，給我檔案或明說可以複製，我再往下建 plan、graph 與 authority。                                    │
+  3. 在 autopilot 自己的 repo 做完整 L5。 那裡鷹架現成，這個 sandbox 只拿來做 mods band 的 gate 驗證。        │
+                                                                                                              │
+  l5 的 session 標記目前仍有效，到 2026-10-06 12:25 UTC 過期。                                                │
+                                                                                                              │
+✻ Brewed for 2m 50s · done 8:32 PM                                                                            │
+◌ 待命 gate-sandbox · — · 8m · —                                                                          [-] │
+沒有派工在跑 · 停在等你指示 0 分                                                                              │
+                                                                                                              │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 選 1，降級 l3 完成
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Sonnet 5.5 ── ~/projects/gate-sandbox develop ──────────────────────────────────────────── v2.1.289
+  5h ▮▮▯▯▯▯ 45% 27m   7d ▮▯▯▯▯▯ 31% 2d15h   ctx ▯▯▯▯▯▯ 8%                          → codeforge adopt
+  ⏵⏵ accept edits on (shift+tab to cycle) · ← 6 agents

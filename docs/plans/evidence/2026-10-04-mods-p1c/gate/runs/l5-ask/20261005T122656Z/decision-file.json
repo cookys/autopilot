@@ -1,0 +1,16 @@
+{
+  "schema": "autopilot.decision/1",
+  "question": "接下來要選哪一個?(你沒說明 A/B 的內容,我先依目前情況擬定)",
+  "options": [
+    "A:維持現狀",
+    "B:重跑完整 L5"
+  ],
+  "context": null,
+  "not_authorized": null,
+  "root_run_id": "job-1791203101-e4d1bb25",
+  "repo_identity": "git-common-dir:/home/cookys/projects/gate-sandbox/.git",
+  "project_key": "51de403da82a23f0",
+  "opened_at": "2026-10-05T12:26:29.590Z",
+  "opened_by_session": "7be684e2-aab6-4266-bf0b-cc77cf3136de",
+  "source": "ask_user_question"
+}

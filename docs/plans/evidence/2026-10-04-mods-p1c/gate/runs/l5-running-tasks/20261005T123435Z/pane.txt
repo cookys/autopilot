@@ -1,0 +1,50 @@
+                                                                                                              │                                                                                       ✕
+● 完整 L5 在這個 sandbox 跑不起來，我停在建鷹架這一步，README 沒有任何改動。                                  │session $1.16 · host $507.69 · ctx 9%
+                                                                                                              │dispatch · execution status, not progress (執行狀態，不是進度)
+  已完成                                                                                                      │no runs in this scope
+  - 已還原先前直接加在 README.md 的那一行，git status 只剩 .claude/review-loop-config.md（untracked）。       │gates · review receipts of this job
+  - status readiness --probe 真實探測過了，7 個席位全部 usable：grok-4.7 實作者、MiniMax-M3 reviewer、Qwen3.8 │no review receipt
+    驗證作者，以及 qc 的 Fable、GLM-5.2、MiniMax-M3、Qwen。                                                   │任務 0/2 完成 · 進行中 1
+  - 這次探測有花外部額度。探測回執約 5 分鐘過期（12:34 UTC），現在已過期，真要派工得重探一次。                │目前：任務一
+                                                                                                              │[~] 任務一
+  卡住的原因                                                                                                  │[ ] 任務二
+  - 唯一入口 engine implement-review 要一份由 mission prepare/grant 簽出的 campaign contract。                │工頭活動（依 session 綁定：同一 session 的多個工作會看到同一批）
+  - 簽 contract 需要 plan、rubric、sources manifest、execution                                                │ace6cbb37a4ef0469 · — · 37s 前
+    graph、.claude/mission-routing-config.json，還有 .claude/owner-kernel-governance.json。                   │a569fd8c47042eb27 · — · 2m 前
+  - sandbox 這些都沒有。我看了 plugin 裡的範例，governance 檔含 owner、challenger、runner 三組帶 attestation  │a8386277c75f0a845 · — · 9m 前
+    與 sha256 的 roster，是 autopilot 自我託管用的設定。我不能在這個 sandbox 偽造那些 attestation。           │open the review page
+  - 這套 recipe 的流程也很長：plan 與 rubric 的 hetero review、凍結                                           │snapshot published 2026-10-05T12:34:04.556Z · session cost as of 2026-10-05T12:34:04.556Z
+    authority、grant、背景派工配死人開關、panel 驗證、merge 與 record-integration。這些全做一遍才改一行       │· host cost as of 2026-10-05T12:34:04.556Z
+    README。                                                                                                  │
+                                                                                                              │
+  接下來怎麼走，由你決定                                                                                      │
+  1. 降級 l3 完成。 照 skill 規定用 session-mode set --level l3 --entry-level l5 --fallback                   │
+     precondition_failed 記錄降級，由 hands 子代理改 README 那一行。這是 skill                                │
+     裡寫明的降級路徑，不再花外部額度。                                                                       │
+  2. 你提供 governance 檔。 如果你有這個 sandbox 該用的 owner-kernel-governance.json，或是想沿用 autopilot    │
+     的那份，給我檔案或明說可以複製，我再往下建 plan、graph 與 authority。                                    │
+  3. 在 autopilot 自己的 repo 做完整 L5。 那裡鷹架現成，這個 sandbox 只拿來做 mods band 的 gate 驗證。        │
+                                                                                                              │
+  l5 的 session 標記目前仍有效，到 2026-10-06 12:25 UTC 過期。                                                │
+                                                                                                              │
+✻ Brewed for 2m 50s · done 8:32 PM                                                                            │
+                                                                                                              │
+❯ 不要降級，保持 l5 標記。請用 TaskCreate 建立兩個任務：「任務一」「任務二」，把任務一設成                    │
+  in_progress，任務二維持 pending，然後結束回合，什麼都不要再做。                                             │
+                                                                                                              │
+● 已建立「任務一」（in_progress）和「任務二」（pending）。l5 標記保持不變，沒有降級。                         │
+                                                                                                              │
+✻ Crunched for 6s · done 8:33 PM                                                                              │
+                                                                                                              │
+  2 tasks (0 done, 1 in progress, 1 open)                                                                     │
+  ◼ 任務一                                                                                                    │
+  ◻ 任務二                                                                                                    │
+● 進行中 gate-sandbox · 做：任務一 · 0m · 0 done*                                                         [-] │
+任務進行中：任務一                                                                                            │
+                                                                                                              │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 把任務一標成 completed
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Sonnet 5.5 ── ~/projects/gate-sandbox develop ──────────────────────────────────────────── v2.1.289
+  5h ▮▮▯▯▯▯ 46% 26m   7d ▮▯▯▯▯▯ 32% 2d15h   ctx ▯▯▯▯▯▯ 9%                          → codeforge adopt
+  ⏵⏵ accept edits on (shift+tab to cycle) · ← 6 agents

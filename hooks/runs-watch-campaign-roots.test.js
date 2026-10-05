@@ -118,3 +118,40 @@ test('negative: another project\'s marker, a marker without campaign_roots, and 
   assert.ok(!fs.existsSync(envelopeOf(f, 'mission-foreign')));
   assert.ok(!fs.existsSync(envelopeOf(f, 'mission-notarray')));
 });
+
+// ---- SCOPE2 (gate run l5h): the campaign's ICC id is a root scope of its own, and the frozen progress receipt lives under it ----
+// l5h shape: marker.campaign_roots = [mission root, ICC id]; work-orders/<ICC id>/<node>-a1.json holds the receipt (its own
+// root_run_id = the ICC id, project_id = the mission root); the mission root has NO receipts. The watcher must publish BOTH
+// envelopes and a job model for the ICC root that carries the frozen progress, and none for the mission root.
+// Verification of existing behaviour (the watcher reads work-orders/<root>/ for every published root): green before and after the
+// SCOPE2 engine change; mutation control: run-w/land/scope2-mut-watch-*.txt.
+const ICC = 'campaign-v1-' + '3d'.repeat(32);
+function jobModelOf(outRoot, job) {
+  for (const d of fs.existsSync(outRoot) ? fs.readdirSync(outRoot) : []) {
+    const file = path.join(outRoot, d, job, 'current', 'model.json');
+    if (fs.existsSync(file)) return JSON.parse(fs.readFileSync(file, 'utf8'));
+  }
+  return null;
+}
+test('SCOPE2: the ICC campaign id is published as a root and its work-order receipt becomes that root\'s frozen progress', () => {
+  const f = fx('icc');
+  writeMarker(f, 'a', { campaign_roots: ['mission-m1', ICC] });
+  const common = f.identity.replace(/^git-common-dir:/, '');
+  const woDir = path.join(common, 'autopilot', 'work-orders', ICC);
+  fs.mkdirSync(woDir, { recursive: true });
+  const receipt = { schema_version: 1, artifact_type: 'controller_progress_receipt', project_id: 'mission-m1', deliverable_id: 'd1', generation: 0, active_process: null,
+    completed_deliverables: ['d1'], remaining_deliverables: [], deliverable_count: 1, frozen_denominator_digest: 'c'.repeat(64), blocked_reason: null, eta_basis: 'frozen_graph_remaining',
+    gate_state: { entries: [] }, resource_debt_state: { open: [], released: [] }, phase: 'DONE', work_order_id: 'wo', root_run_id: ICC, issued_at: '2026-10-05T14:58:58.451Z', digest: 'e'.repeat(64) };
+  fs.writeFileSync(path.join(woDir, 'gate-a1.json'), JSON.stringify({ artifact_type: 'work_order', root_run_id: ICC, attempt: 1, controller: { progress_receipts: [receipt] } }));
+  const outRoot = path.join(f.base, 'review-out');
+  const clock = { t: Date.now() };
+  const w = createWatcher({ key: f.key, env: { ...f.env }, cwd: f.repo, collect: () => [], now: () => clock.t, interval: 10, enrichCap: 8, idleExitS: WINDOW_S, render: { outRoot } });
+  for (const dt of [10, 6, 10, 10]) { clock.t += dt * 1000; w.tick(); }
+  assert.ok(fs.existsSync(envelopeOf(f, ICC)), 'the ICC root envelope is published');
+  assert.ok(fs.existsSync(envelopeOf(f, 'mission-m1')), 'the mission root envelope is published');
+  const icc = jobModelOf(outRoot, ICC);
+  assert.ok(icc, 'a job model exists for the ICC root');
+  assert.ok(icc.progress && icc.progress.frozen === true && icc.progress.done === 1 && icc.progress.total === 1, 'frozen progress 1/1 from work-orders/<ICC id>: ' + JSON.stringify(icc.progress));
+  const mission = jobModelOf(outRoot, 'mission-m1');
+  assert.ok(mission && !(mission.progress && mission.progress.frozen), 'the mission root (no receipts) carries no frozen progress');
+});

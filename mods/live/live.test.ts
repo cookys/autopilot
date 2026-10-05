@@ -1682,3 +1682,41 @@ for (const surface of SURFACES) {
     expect((await bandParts($, surface)).line1).toContain(' · 2h0m · ')
   })
 }
+
+// ---- P1W SCOPE2 (gate run l5h): the marker names the Mission root AND the campaign's ICC id; the frozen progress lives under the ICC id ----
+const ICC = 'campaign-v1-' + '3d'.repeat(32)
+function l5hWorld(missionEnv: Record<string, unknown>, iccEnv: Record<string, unknown>): Tree {
+  const files = campaignWorld(missionEnv, [CAMP, ICC])
+  files[campEnvPath(ICC)] = j(envelope(iccEnv, ICC))
+  // the Mission root has no receipts (its job model carries no progress); the ICC root's job model carries the frozen done = total
+  files[modelPathOf(CAMP)] = j(model({ root_run_id: CAMP, job: CAMP, progress: null, phase: null }))
+  files[modelPathOf(ICC)] = j(model({ root_run_id: ICC, job: ICC, progress: FROZEN8, phase: { code: 'TERMINAL_READY', label: '收尾', source: 'campaign' } }))
+  return files
+}
+for (const surface of SURFACES) {
+  test('SCOPE2: l5h shape, terminal (Mission root without receipts + ICC root with frozen 8/8, no live run) reads 完成待驗收 (' + surface + ')', async ($, on) => {
+    world(on, l5hWorld({ runs: [], counts: scopeQuiet }, { runs: [], counts: scopeQuiet }))
+    await start($, surface)
+    const p = await bandParts($, surface)
+    expect(p.line1.startsWith('✓ 完成待驗收 repo · 收尾 · ')).toBe(true)
+    expect(p.line1.endsWith('100%（8/8）')).toBe(true)
+  })
+
+  test('SCOPE2: l5h shape, a live run under the Mission root or under the ICC root reads 進行中 (' + surface + ')', async ($, on) => {
+    const w = world(on, l5hWorld({ runs: liveRows(1, CAMP), counts: counts(1) }, { runs: [], counts: scopeQuiet }))
+    await start($, surface)
+    expect(scopeVerdicts(await bandText($, surface))).toEqual(['進行中'])
+    w.files[campEnvPath(CAMP)] = j(envelope({ runs: [], counts: scopeQuiet, published_at: '2026-10-04T10:00:25.000Z' }, CAMP))
+    w.files[campEnvPath(ICC)] = j(envelope({ runs: liveRows(1, ICC), counts: counts(1), published_at: '2026-10-04T10:00:25.000Z' }, ICC))
+    await w.clock.advance(5000)
+    expect(scopeVerdicts(await bandText($, surface))).toEqual(['進行中'])
+  })
+
+  test('SCOPE2: with only the Mission root bound (the pre-SCOPE2 marker) the frozen progress is not found and the band reads 待命 (' + surface + ')', async ($, on) => {
+    const files = l5hWorld({ runs: [], counts: scopeQuiet }, { runs: [], counts: scopeQuiet })
+    files[AHOME + '/session-mode/' + SID_A + '.json'] = markerWith([CAMP])
+    world(on, files)
+    await start($, surface)
+    expect(scopeVerdicts(await bandText($, surface))).toEqual(['待命'])
+  })
+}

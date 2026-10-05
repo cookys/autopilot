@@ -9569,15 +9569,39 @@ class AutopilotEngine {
     };
   }
 
+  // The campaign's ICC id (campaign-v1-...: names its work-order dir, runs and receipts), derived the way
+  // deriveCampaignLifecycleRoot / campaign-intake derive it: repo identity + ticket + sha256 of the RAW contract bytes.
+  // It is knowable as soon as admission passes (the contract file is on disk), long before campaign intake returns it.
+  // Only a contract file path carries those bytes; anything else -> null.
+  _campaignIccIdFor(campaignContract, repoRoot, repoIdentity) {
+    if (typeof campaignContract !== 'string' || !campaignContract) return null;
+    try {
+      const bytes = fs.readFileSync(path.resolve(repoRoot || process.cwd(), campaignContract));
+      const contract = JSON.parse(bytes.toString('utf8'));
+      if (!contract || typeof contract !== 'object' || Array.isArray(contract)) return null;
+      return campaignIdFor(repoIdentity, contract.ticket, crypto.createHash('sha256').update(bytes).digest('hex'));
+    } catch (_error) {
+      return null;
+    }
+  }
+
   // Fail-open: never throws, never blocks, never alters the campaign. No session id in the environment, no sealed
   // root, or a refusal from bindCampaignRoot (marker below l5, other repository, ...) -> nothing is bound.
+  // Binds the sealed Mission root, then the ICC campaign id (newest last): the Mission root carries the live runs, the
+  // ICC id carries the frozen work-order progress that makes the band read 完成待驗收 (mods P1W SCOPE2). A refusal on
+  // the first bind stops the second (one logged line, same marker, same verdict).
   _bindCampaignRootFailOpen(campaignContract, repoRoot, repoIdentity) {
     try {
       if (!hasExplicitSessionId()) return;
-      const root = campaignRootRunId(campaignContract, repoRoot);
-      if (!root) return;
-      const bound = bindCampaignRoot({ root, repoIdentity });
-      if (!bound.ok) process.stderr.write(`engine: campaign root not bound to the session marker: ${bound.reason}\n`);
+      const roots = [campaignRootRunId(campaignContract, repoRoot), this._campaignIccIdFor(campaignContract, repoRoot, repoIdentity)];
+      for (const root of roots) {
+        if (!root) continue;
+        const bound = bindCampaignRoot({ root, repoIdentity });
+        if (!bound.ok) {
+          process.stderr.write(`engine: campaign root not bound to the session marker: ${bound.reason}\n`);
+          return;
+        }
+      }
     } catch (error) {
       try { process.stderr.write(`engine: campaign root not bound to the session marker: ${error && error.message ? error.message : String(error)}\n`); } catch (_e) { /* fail-open */ }
     }

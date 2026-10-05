@@ -415,3 +415,23 @@ test('SCOPE: a marker without campaign_roots derives exactly as before (existing
   const dir = capture({ [`envelope--${CAMP}.json`]: env(CAMP, { counts: { confirmed_live: 9, exited: 0, unknown: 0 } }) }, ['◌ 待命 demo · — · 30m · —', '沒有派工在跑']);
   assert.strictEqual(derive(dir).verdict, '待命');
 });
+
+// ---- P1W SCOPE2 (gate run l5h): marker.campaign_roots = [mission root, ICC id]; the frozen receipt is under work-orders/<ICC id>/ ----
+// Verification of the existing union (check.js / capture.sh are generic over campaign_roots); mutation controls: run-w/land/scope2-mut-check-*.txt.
+const ICC = 'campaign-v1-' + '3d'.repeat(32);
+test('SCOPE2: mission root without receipts + ICC root with a frozen done = total receipt, no live run -> 完成待驗收', () => {
+  const dir = capture(camp({
+    [`envelope--${CAMP}.json`]: env(CAMP), [`envelope--${ICC}.json`]: env(ICC),
+    [`campaign-work-orders/${ICC}/gate-a1.json`]: frozenReceipt(ICC, { phase: 'TERMINAL_READY' }),
+  }, [CAMP, ICC]), ['✓ 完成待驗收 demo · 收尾 · 20m · 100%（4/4）', '驗收結論尚未出']);
+  const r = run(dir);
+  assert.strictEqual(r.derived.verdict, '完成待驗收');
+  for (const n of ['verdict', 'phase', 'progress', 'elapsed']) assert.strictEqual(status(r, n), 'PASS', n);
+});
+test('SCOPE2: the same shape with a live run under either root is 進行中; with the ICC id unbound it is 待命', () => {
+  const wo = { [`campaign-work-orders/${ICC}/gate-a1.json`]: frozenReceipt(ICC) };
+  const liveC = { runs: [liveRow('c1')], counts: { confirmed_live: 1, exited: 0, unknown: 0 } };
+  assert.strictEqual(derive(capture(camp({ [`envelope--${CAMP}.json`]: env(CAMP, liveC), [`envelope--${ICC}.json`]: env(ICC), ...wo }, [CAMP, ICC]), [])).verdict, '進行中', 'live under the mission root');
+  assert.strictEqual(derive(capture(camp({ [`envelope--${CAMP}.json`]: env(CAMP), [`envelope--${ICC}.json`]: env(ICC, liveC), ...wo }, [CAMP, ICC]), [])).verdict, '進行中', 'live under the ICC root');
+  assert.strictEqual(derive(capture(camp({ [`envelope--${CAMP}.json`]: env(CAMP), ...wo }, [CAMP]), [])).verdict, '待命', 'the pre-SCOPE2 marker (mission root only) never sees the receipt');
+});

@@ -9,6 +9,11 @@
 //   <live>/runs/<project_key>--<root_run_id>.json     one per observed execution root
 //   <autopilot_home>/review/<project_key>/live/runs.<scope_key>.json   SSD fallback copies
 //   <live>/runs/paths/<project_key>.json              worktree realpath -> project (own project only)
+// Root scopes are retained, not forever (mods P1W PLAINROOT): every unexpired session marker's root (plain sessions
+// included) and every run root is a scope; a root with no unexpired marker, no live run, no open decision file and no
+// tasks/attention update for ROOT_RETENTION_S (the idle-exit window) is dropped from state.roots and its live files
+// (envelope, .decisions.json, .foreman.json, sources/<scope>.json, the review/<key>/live fallback copy) are removed.
+// Review pages under <autopilot_home>/review/ are durable and never touched here.
 // --render (mods plan P1b B3): the same process also republishes the owner review page of every execution root
 // (job id = root_run_id; runs with no root go to the per-project `unbound` job) through render-review-page's publish(),
 // debounced 5 s, when one of exactly four sources changes: the manifest set, an .exit file landing, a
@@ -33,6 +38,7 @@ const { projectKey, scopeFromCwd } = require('./project-key');
 const { pointerPath, writeLivePointer } = require('./live-pointer');
 const { applySelectors } = require('./runs-fields');
 const { latestProgress } = require('./work-order-progress');
+const { commonDirOf } = require('./scope-key');
 const { readWatchInputs } = require('./watch-inputs');
 const { ensureReviewServer } = require('./review-server');
 const { createDecisionsPublisher } = require('./decisions-sidecar');
@@ -43,6 +49,7 @@ const VALID_FOR_S = 180;
 const HEARTBEAT_S = 60;
 const DEFAULT_INTERVAL_S = 10;
 const DEFAULT_IDLE_EXIT_S = 3600;
+const ROOT_RETENTION_S = DEFAULT_IDLE_EXIT_S; // idle window after which a root scope with no live signal is dropped
 const RECENT_SESSION_MS = 24 * 3600 * 1000;
 const LOCK_BUSY_RC = 75;
 const LOCKED_ENV = 'AUTOPILOT_RUNS_WATCH_LOCKED';
@@ -182,6 +189,39 @@ function recentSessionFiles(env, key, nowMs, windowS) {
   return n;
 }
 
+// Roots whose session left a tasks/attention file of this project updated within `windowS`. The session -> root map
+// reads this project's markers of ANY expiry (an expired marker still says which root its session worked on).
+function recentSessionRoots(env, key, nowMs, windowS) {
+  const rootOf = new Map();
+  try {
+    const dir = markerDirOf(env);
+    for (const name of fs.readdirSync(dir)) {
+      if (!name.endsWith('.json')) continue;
+      try {
+        const m = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8'));
+        if (m && m.project_key === key && typeof m.root_run_id === 'string' && m.root_run_id) rootOf.set(name.replace(/\.json$/, ''), m.root_run_id);
+      } catch (_error) { /* unreadable marker: no root */ }
+    }
+  } catch (_error) { return new Set(); }
+  const base = liveBaseOf(env);
+  const out = new Set();
+  for (const sub of ['tasks', 'attention']) {
+    let names = [];
+    try { names = fs.readdirSync(path.join(base, sub)); } catch (_error) { continue; }
+    for (const name of names) {
+      if (!name.endsWith('.json')) continue;
+      const root = rootOf.get(name.replace(/\.json$/, '').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64));
+      if (!root) continue;
+      try {
+        const v = JSON.parse(fs.readFileSync(path.join(base, sub, name), 'utf8'));
+        const at = Date.parse(v && v.updated_at);
+        if (v && v.project_key === key && Number.isFinite(at) && nowMs - at < windowS * 1000) out.add(root);
+      } catch (_error) { /* unreadable / foreign shape */ }
+    }
+  }
+  return out;
+}
+
 // --- cost aggregation from costs.jsonl (same path resolution as hooks/cost-tracker.js, which writes it, and hooks/cost-fuse.js) -------------------
 // Incremental: costs.jsonl is append-only, so only bytes past the last complete line are parsed.
 function createCostReader(env) {
@@ -298,6 +338,7 @@ function createWatcher({
     lastSignature: null, lastPublishMs: null, lastRuns: null, lastObservedAt: null, lastPaths: null,
     roots: new Set(), lastCounts: new Map(), lastCost: { sessions: {}, host_today_usd: null, host_today_as_of: null },
     idleSince: null,
+    rootActiveAt: new Map(), droppedRoots: new Set(), // root retention (ROOT_RETENTION_S)
     // --render: last-seen signature per root, roots awaiting a publish, the debounce deadline, cached task receipts
     render: { seen: new Map(), dirty: new Set(), dueAt: null, task: new Map(), dates: new Map() },
   };
@@ -502,6 +543,48 @@ function createWatcher({
     rs.dueAt = failed ? nowMs + RENDER_RETRY_MS : null;
   }
 
+  // Root retention: which roots have a live signal right now (unexpired marker, run not exited, open decision file,
+  // recent tasks/attention update of one of its sessions).
+  function activeRootsOf(candidates, allMarkers, rows, nowMs, windowS) {
+    const active = new Set();
+    for (const m of allMarkers) if (typeof m.root_run_id === 'string' && m.root_run_id) active.add(m.root_run_id);
+    for (const r of rows) if (r.root_run_id && !isExitedRow(r)) active.add(r.root_run_id);
+    const common = commonDirOf(identity);
+    if (common) {
+      for (const root of candidates) {
+        if (fs.existsSync(path.join(common, 'autopilot', 'decisions', `${key}--${safeSegment(root)}.json`))) active.add(root);
+      }
+    }
+    for (const root of recentSessionRoots(env, key, nowMs, windowS)) active.add(root);
+    return active;
+  }
+
+  function rootSegmentsOnDisk() {
+    const out = [];
+    const prefix = `${key}--`;
+    let names = [];
+    try { names = fs.readdirSync(runsDir); } catch (_error) { return out; }
+    for (const n of names) {
+      if (!n.startsWith(prefix) || !n.endsWith('.json') || n.endsWith('.decisions.json') || n.endsWith('.foreman.json')) continue;
+      const seg = n.slice(prefix.length, -'.json'.length);
+      if (seg && safeSegment(seg) === seg) out.push(seg);
+    }
+    return out;
+  }
+
+  function removeRootFiles(root) {
+    const scopeKey = `${key}--${safeSegment(root)}`;
+    const files = [
+      path.join(runsDir, `${scopeKey}.json`), path.join(runsDir, `${scopeKey}.decisions.json`),
+      path.join(runsDir, `${scopeKey}.foreman.json`), path.join(runsDir, 'sources', `${scopeKey}.json`),
+      path.join(autopilotHome, 'review', key, 'live', `runs.${scopeKey}.json`),
+    ];
+    for (const f of files) {
+      try { fs.unlinkSync(f); } catch (error) { if (!error || error.code !== 'ENOENT') log(`root drop: cannot remove ${f}: ${error.message}`); }
+    }
+    log(`dropped idle root scope ${root}`);
+  }
+
   // ms until the watcher should observe again: sooner than the interval when a debounce is about to expire.
   function nextDelayMs() {
     const due = state.render.dueAt;
@@ -532,10 +615,34 @@ function createWatcher({
       const known = rows.find((r) => typeof r.project === 'string' && r.project && projectKey(r.project) === key);
       if (known) identity = known.project;
     }
-    const markers = unexpiredMarkers(env, key, nowMs).filter(isOrchestratorMarker);
+    const allMarkers = unexpiredMarkers(env, key, nowMs);
+    const markers = allMarkers.filter(isOrchestratorMarker);
     const cost = costs.summary(nowMs, markers.map((m) => m.session_id).filter(Boolean));
-    const roots = new Set(state.roots);
-    for (const r of rows) if (r.root_run_id) roots.add(r.root_run_id);
+    const candidates = new Set(state.roots);
+    for (const r of rows) if (r.root_run_id) candidates.add(r.root_run_id);
+    for (const m of allMarkers) if (typeof m.root_run_id === 'string' && m.root_run_id) candidates.add(m.root_run_id); // plain sessions too
+    // Orphans of an earlier watcher: THIS project's envelopes on disk (`<key>--<segment>.json`, not the sidecars) enter the
+    // retention clock too, so a restart cannot leave a root's files behind forever. Another project's key never matches.
+    for (const seg of rootSegmentsOnDisk()) {
+      if (![...candidates].some((c) => safeSegment(c) === seg)) candidates.add(seg);
+    }
+    for (const r of [...state.droppedRoots]) if (!candidates.has(r)) state.droppedRoots.delete(r); // gone everywhere: forget it
+    const retentionS = idleExitS || ROOT_RETENTION_S;
+    const activeRoots = activeRootsOf(candidates, allMarkers, rows, nowMs, retentionS);
+    const roots = new Set();
+    const dropped = [];
+    for (const root of candidates) {
+      if (activeRoots.has(root)) { state.rootActiveAt.set(root, nowMs); state.droppedRoots.delete(root); roots.add(root); continue; }
+      if (state.droppedRoots.has(root)) continue; // stays dropped until a live signal returns (exited rows do not resurrect it)
+      if (!state.rootActiveAt.has(root)) state.rootActiveAt.set(root, nowMs);
+      if (nowMs - state.rootActiveAt.get(root) >= retentionS * 1000) {
+        state.droppedRoots.add(root); state.rootActiveAt.delete(root); dropped.push(root);
+      } else roots.add(root);
+    }
+    if (dropped.length) {
+      state.roots = new Set([...state.roots].filter((r) => !dropped.includes(r)));
+      for (const root of dropped) removeRootFiles(root);
+    }
     const bound = freshBoundOf(rows, interval, enrichCap);
     const counts = new Map([[null, computeCounts(rows, interval, enrichCap, bound)]]);
     for (const root of roots) counts.set(root, computeCounts(scopeRows(rows, root), interval, enrichCap, bound));

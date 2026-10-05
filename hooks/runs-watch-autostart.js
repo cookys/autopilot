@@ -21,7 +21,7 @@
  *   - SessionStart with the watcher already alive (zero-spawn fast path) still ensures the plain marker; the
  *     per-cwd cache carries project_key, repo_identity and repo_root for that.
  *   - Plain-session marker (mods P1W MARKER, plan R5.6): on SessionStart in an opted-in repo this hook ENSURES
- *     `<session-mode dir>/<session_id>.json` exists (`level: null`, root_run_id null; see
+ *     `<session-mode dir>/<session_id>.json` exists (`level: null`, a minted job root_run_id; see
  *     scripts/session-mode.js ensurePlainMarker). Rule: create only when no unexpired marker exists for the
  *     session id; NEVER overwrite (compact / resume / startup with a live l3-l6 or plain marker leave the bytes
  *     alone); an expired marker is replaced; an unreadable one is left untouched. UserPromptSubmit and payloads

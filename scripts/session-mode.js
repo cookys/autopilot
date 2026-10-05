@@ -12,8 +12,10 @@
  *   ${AUTOPILOT_SESSION_MODE_DIR:-~/.autopilot/session-mode}/<session-id>.json
  *   { session_id, level, repo_root, started_at, expires_at, entry_level?, fallback_reason?,
  *     mission_routing?, repo_identity?, project_key?, root_run_id?, phase?, phase_set_at? }
- *   (level is null for a plain session; root_run_id stays null for it unless --root-run-id or
- *   AUTOPILOT_ROOT_RUN_ID is given — job roots are not assigned to plain sessions.
+ *   (level is null for a plain session. A plain session is ONE JOB like any other (mods P1W PLAINROOT, plan R5.7):
+ *   `set` and the SessionStart ensure assign root_run_id with the same rule as `set --level` — explicit --root-run-id
+ *   > AUTOPILOT_ROOT_RUN_ID > a minted `job-<ts>-<rand>` (resolveJobRoot, the only minting site). The ensure never
+ *   overwrites, so compact/resume keep the root; an EXPIRED marker is replaced by a new marker with a NEW root.
  *   repo_identity/project_key/root_run_id are additive, null when underivable; `set` also writes
  *   ~/.autopilot/live-pointer.json — src/status/live-pointer.js)
  *   phase/phase_set_at (mods P1W PHASE): free-text work phase (1-64 chars, trimmed, no control
@@ -530,9 +532,15 @@ function cmdSetPhase(phase) {
   return 0;
 }
 
+// The one job-root rule (mods P1W W1f + PLAINROOT): explicit --root-run-id > AUTOPILOT_ROOT_RUN_ID (campaign / mission
+// roots stay untouched) > a freshly minted `job-<ts>-<rand>`. Used by `set --level`, plain `set` and the SessionStart ensure.
+function resolveJobRoot({ explicit = '', now = Date.now(), env = process.env } = {}) {
+  return explicit || env.AUTOPILOT_ROOT_RUN_ID
+    || `job-${Math.floor(now / 1000)}-${require('crypto').randomBytes(4).toString('hex')}`;
+}
+
 // A plain-session marker (level null): the per-session record without orchestrator mode. No Mission routing,
-// no entry_level. root_run_id is the caller's explicit value or null — never minted (job roots are not assigned
-// to plain sessions).
+// no entry_level. root_run_id is decided by the caller through resolveJobRoot (every plain marker has a job root).
 function buildPlainMarker({ sessionId, repoRoot, scope, now, ttlHours = DEFAULT_TTL_HOURS, rootRunId = null, phase = null }) {
   const marker = {
     session_id: sessionId,
@@ -582,7 +590,7 @@ function ensurePlainMarker({ sessionId, repoRoot, scope, now = Date.now(), dir =
     }
     if (state === 'live') { result = 'kept'; return; }
     if (state === 'unreadable') { result = 'kept_unreadable'; return; }
-    const rootRunId = process.env.AUTOPILOT_ROOT_RUN_ID || null;
+    const rootRunId = resolveJobRoot({ now });
     writeMarkerFile(file, buildPlainMarker({ sessionId: sid, repoRoot, scope, now, rootRunId }));
     result = state === 'expired' ? 'replaced_expired' : 'created';
   });
@@ -616,7 +624,7 @@ function cmdSetPlain(args, phase) {
     scope,
     now: Date.now(),
     ttlHours,
-    rootRunId: explicitRoot || process.env.AUTOPILOT_ROOT_RUN_ID || null,
+    rootRunId: resolveJobRoot({ explicit: explicitRoot, now: Date.now() }),
     phase: phase && phase.value !== null ? phase.value : null,
   });
   writeMarkerFile(markerPath(), marker);
@@ -689,8 +697,7 @@ function cmdSet(args) {
   // `session-mode.js root` so ad-hoc dispatches from one session share one lineage root.
   const explicitRoot = typeof args['root-run-id'] === 'string' && /^[A-Za-z0-9._-]+$/.test(args['root-run-id'])
     ? args['root-run-id'] : '';
-  marker.root_run_id = explicitRoot || process.env.AUTOPILOT_ROOT_RUN_ID
-    || `job-${Math.floor(now / 1000)}-${require('crypto').randomBytes(4).toString('hex')}`;
+  marker.root_run_id = resolveJobRoot({ explicit: explicitRoot, now });
   if (phase && phase.value !== null) {
     marker.phase = phase.value;
     marker.phase_set_at = new Date(now).toISOString();
@@ -1040,6 +1047,7 @@ module.exports = {
   readMarker,
   readSessionRecord,
   ensurePlainMarker,
+  resolveJobRoot,
   getSessionId,
   normalizeSessionId,
   markerPath,

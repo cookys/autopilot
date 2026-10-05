@@ -3,8 +3,9 @@
  * no orchestrator mode". Run: node --test hooks/plain-session-marker.test.js
  *
  * Contract under test
- *   - writer: `session-mode.js set` without --level (or --level none) writes level:null; root_run_id stays null
- *     unless --root-run-id / AUTOPILOT_ROOT_RUN_ID; `status` prints level "none"; `set --phase` updates it in place.
+ *   - writer: `session-mode.js set` without --level (or --level none) writes level:null; root_run_id is a job root
+ *     (explicit --root-run-id > AUTOPILOT_ROOT_RUN_ID > minted; mods P1W PLAINROOT, tests in plain-session-root.test.js);
+ *     `status` prints level "none"; `set --phase` updates it in place.
  *   - every marker reader treats level:null exactly like "no marker" (readers table in
  *     <scratchpad>/p1c/run-w/marker/REPORT.md), while a malformed level (not null, not l3-l6) stays invalid.
  *   - fields that are meant to be read from a plain marker (project_key, root_run_id, phase, started_at) are read.
@@ -113,14 +114,14 @@ function setLevel(f, level) {
 
 // ---------------------------------------------------------------- writer / CLI
 
-test('writer: bare `set` writes level:null with a null root, a project key and no mission fields', () => {
+test('writer: bare `set` writes level:null with a job root, a project key and no mission fields', () => {
   const f = fx();
   const r = cli(f, ['set', '--repo-root', f.repo]);
   assert.strictEqual(r.status, 0, r.stderr);
   const m = readJson(f.marker);
   assert.strictEqual(m.level, null);
   assert.strictEqual(m.session_id, 'smp-session');
-  assert.strictEqual(m.root_run_id, null);
+  assert.match(m.root_run_id, /^job-\d+-[0-9a-f]{8}$/);
   assert.strictEqual(m.repo_root, fs.realpathSync(f.repo));
   assert.match(m.project_key, /^[0-9a-f]{16}$/);
   assert.strictEqual(Object.prototype.hasOwnProperty.call(m, 'mission_routing'), false);
@@ -139,14 +140,14 @@ test('writer: --level none --phase X writes the phase on a plain marker', () => 
   assert.ok(Number.isFinite(Date.parse(m.phase_set_at)));
 });
 
-test('writer: root_run_id is null unless --root-run-id or AUTOPILOT_ROOT_RUN_ID is given', () => {
+test('writer: root_run_id is --root-run-id, else AUTOPILOT_ROOT_RUN_ID, else minted', () => {
   const f = fx();
   cli(f, ['set', '--root-run-id', 'job-explicit', '--repo-root', f.repo]);
   assert.strictEqual(readJson(f.marker).root_run_id, 'job-explicit');
   cli(f, ['set', '--repo-root', f.repo], { AUTOPILOT_ROOT_RUN_ID: 'job-from-env' });
   assert.strictEqual(readJson(f.marker).root_run_id, 'job-from-env');
   cli(f, ['set', '--repo-root', f.repo]);
-  assert.strictEqual(readJson(f.marker).root_run_id, null);
+  assert.match(readJson(f.marker).root_run_id, /^job-\d+-[0-9a-f]{8}$/);
 });
 
 test('writer: invalid --level is still refused (only absent / none mean plain)', () => {
@@ -494,7 +495,7 @@ test('dev-flow plain marker: the watcher inputs resolve the session project and 
   assert.strictEqual(markers.length, 1, 'the plain marker carries this project key');
   assert.strictEqual(markers[0].project_key, key);
   const inputs = readWatchInputs({
-    env: watcherEnv(f), key, identity: scopeFromCwd(f.repo).repo_identity, root: null, nowMs: Date.now(),
+    env: watcherEnv(f), key, identity: scopeFromCwd(f.repo).repo_identity, root: markers[0].root_run_id, nowMs: Date.now(),
     liveBase: f.live, autopilotHome: path.dirname(f.markers), markers, progressReceipt: null,
   });
   assert.strictEqual(inputs.assemble.markerPhase.phase, '實作 W1');
@@ -519,13 +520,13 @@ function optIn(f) {
 // tests that reach the watcher launch set an enormous interval and a 1 s idle exit.
 const quiet = { env: { AUTOPILOT_RUNS_WATCH_IDLE_EXIT_S: '1', AUTOPILOT_RUNS_WATCH_INTERVAL_S: '1', PATH: `${process.env.PATH}` } };
 
-test('ensure: startup in an opted-in repo creates a plain marker (level null, null root, project key)', () => {
+test('ensure: startup in an opted-in repo creates a plain marker (level null, minted root, project key)', () => {
   const f = fx(); optIn(f);
   const r = startHook(f, 'SessionStart', 'startup', quiet);
   assert.strictEqual(r.status, 0, r.stderr);
   const m = readJson(f.marker);
   assert.strictEqual(m.level, null);
-  assert.strictEqual(m.root_run_id, null);
+  assert.match(m.root_run_id, /^job-\d+-[0-9a-f]{8}$/);
   assert.strictEqual(m.session_id, 'smp-session');
   assert.strictEqual(m.project_key, scopeFromCwd(f.repo).project_key);
   assert.strictEqual(m.repo_root, fs.realpathSync(f.repo));

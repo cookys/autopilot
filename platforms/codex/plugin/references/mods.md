@@ -166,7 +166,10 @@ S5a, S5b, S7, S8; `README.md` there is the verdict table). A mod is CC-only; non
   dev-flow and plain sessions, only in an opted-in repo (`.claude/*-config.md` present, or an unexpired marker, or
   `AUTOPILOT_RUNS_WATCH_AUTOSTART=1`; `=0` disables). On SessionStart in an opted-in repo it also ENSURES this session's plain
   marker (`level: null`; created only when no unexpired marker exists, never overwritten, so `compact`/`resume` keep an
-  active l3-l6 marker byte-for-byte; an expired one is replaced). On UserPromptSubmit the opt-in is read without
+  active l3-l6 marker byte-for-byte; an expired one is replaced with a NEW root). A plain session is one job: its marker
+  carries a `root_run_id` minted by the same rule as `set --level` (explicit > `AUTOPILOT_ROOT_RUN_ID` > `job-<ts>-<rand>`), and
+  the watcher keeps that root as a scope while it has a live signal (unexpired marker, live run, open decision file, tasks/attention
+  update inside the idle window) and drops it with its live files (not the review pages) after one idle window. On UserPromptSubmit the opt-in is read without
   spawning git (knob, config files, this session's marker), so a repo that is not opted in costs no process per prompt. The idle-exit also treats a session as live while
   `<live>/tasks/<sid>.json` or `<live>/attention/<sid>.json` of the project has `updated_at` inside the idle window;
   plain-session markers do not count as live sessions. SessionEnd does not stop the watcher; idle-exit does.

@@ -357,6 +357,20 @@ for (const surface of SURFACES) {
     expect(await paneHeader($, surface)).toContain('host $1.25')
   })
 
+  test('PLAINROOT band: a plain marker (level null) carrying a job root reads that root scope, not the project scope (' + surface + ')', async ($, on) => {
+    const files = base()
+    const PLAIN_ROOT = 'job-1790000000-ab12cd34'
+    files[AHOME + '/session-mode/' + SID_A + '.json'] = j({ session_id: SID_A, level: null, project_key: KEY, root_run_id: PLAIN_ROOT, started_at: '2026-10-04T09:00:00.000Z', expires_at: '2026-10-05T10:00:00.000Z' })
+    delete files[LIVE + '/runs/' + KEY + '--' + ROOT + '.json']
+    files[LIVE + '/runs/' + KEY + '.json'] = j(envelope({ host_today_usd: 7.77 }, null))
+    files[LIVE + '/runs/' + KEY + '--' + PLAIN_ROOT + '.json'] = j(envelope({ host_today_usd: 1.25, runs: [], counts: { confirmed_live: 0, exited: 0, unknown: 0, fresh_bound_s: 30 } }, PLAIN_ROOT))
+    world(on, files)
+    await start($, surface)
+    const header = await paneHeader($, surface)
+    expect(header).toContain('host $1.25')
+    expect(header).not.toContain('7.77')
+  })
+
   test('band: the running count comes from the envelope counts, not from the rows (' + surface + ')', async ($, on) => {
     const files = base()
     files[LIVE + '/runs/' + KEY + '--' + ROOT + '.json'] = j(envelope({ runs: [row({ run_id: 'r1' })], counts: { confirmed_live: 5, exited: 0, unknown: 0, fresh_bound_s: 30 } }))

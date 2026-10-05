@@ -1,0 +1,319 @@
+{
+  "schema_version": 2,
+  "artifact_type": "work_order",
+  "work_order_id": "wo-campaign-v1-4a5e14cac4772d28101249f7a452b6f5e546f26f64923d5c2da0341889e207c1-gate-readme-line-v2-2026-10-05-a1",
+  "root_run_id": "campaign-v1-4a5e14cac4772d28101249f7a452b6f5e546f26f64923d5c2da0341889e207c1",
+  "graph_node": "gate-readme-line-v2-2026-10-05",
+  "attempt": 1,
+  "role": "controller",
+  "generation": 2,
+  "owner": {
+    "pid": 670384,
+    "process_start_time": 1791215236,
+    "pgid": 670384,
+    "sid": 670382,
+    "kind": "controller"
+  },
+  "runner": {
+    "pid": null,
+    "process_start_time": null,
+    "pgid": null,
+    "sid": null
+  },
+  "branch": "develop",
+  "base_sha": "e1316d0a60e0468314c34a1e882fb7ffac7f947a",
+  "worktree": "/home/cookys/projects/gate-sandbox5",
+  "paths": {
+    "manifest": "/home/cookys/projects/gate-sandbox5/.git/autopilot/controller-authority/eb13ea1bcb904bc26e7fafb4bac06f7172f27701a66b86f77c70451d432b7572/g2-9cfec38aecda52a7ece66ee52ad94af65df8ff27f9266bf65ae12bad0b237f81/controller-dispatch-manifests.json",
+    "ledger": "/home/cookys/projects/gate-sandbox5/.git/autopilot/controller-authority/eb13ea1bcb904bc26e7fafb4bac06f7172f27701a66b86f77c70451d432b7572/g2-9cfec38aecda52a7ece66ee52ad94af65df8ff27f9266bf65ae12bad0b237f81/controller-ledger.jsonl",
+    "receipt": "/home/cookys/projects/gate-sandbox5/.git/autopilot/controller-authority/eb13ea1bcb904bc26e7fafb4bac06f7172f27701a66b86f77c70451d432b7572/g2-9cfec38aecda52a7ece66ee52ad94af65df8ff27f9266bf65ae12bad0b237f81/controller-dispatch-results.json",
+    "mission": "/home/cookys/projects/gate-sandbox5/.git/autopilot/mission/states/31493d52a09f0f323ec80d5c0b40ce8828d65cb6fd9ba7106c6302f783b1a861.json",
+    "checkpoint": "/home/cookys/projects/gate-sandbox5/.git/autopilot/controller-authority/eb13ea1bcb904bc26e7fafb4bac06f7172f27701a66b86f77c70451d432b7572/g2-9cfec38aecda52a7ece66ee52ad94af65df8ff27f9266bf65ae12bad0b237f81/controller-checkpoint.json",
+    "durable": "/home/cookys/projects/gate-sandbox5/.git/autopilot/controller-authority/eb13ea1bcb904bc26e7fafb4bac06f7172f27701a66b86f77c70451d432b7572/g2-9cfec38aecda52a7ece66ee52ad94af65df8ff27f9266bf65ae12bad0b237f81/controller-durable.json"
+  },
+  "artifact_digests": {
+    "mission": "45e957a2f5104a738447e73b56c8362d552ab89194ed45601ebc4993eb93a533",
+    "manifest": "2bd4817e39291c160602f28a7735af7d22a794523af9e2d7e1cbc8543a71cc45",
+    "receipt": "011c047eaeddfb4125fc51765a133d32ff68479c95ebe1cf4cac949980797f53",
+    "ledger": "83d267d70bdab957ea499a3f7277972c7887645e906e1dd8192512ddbfdd4489",
+    "ledger_history": "c075203304c7adc02790ffb783ae1add7ed4f07e25d7c48e218ecb2d9e0e0290",
+    "durable": "b92f0d5843c11a699f21aa2191fa5f6afa1b7c3ad8a63a47fb4bac064e8828d4",
+    "checkpoint": "4fd0e0432788de4b637e452c11f1ae3a96235e351f0ae5d236c659f825e3fb1e"
+  },
+  "phase_cursor": "CONTROLLER",
+  "campaign_phase": null,
+  "accepted_commit": null,
+  "next_action": "continue",
+  "heartbeat_at": "2026-10-05T15:50:25.841Z",
+  "created_at": "2026-10-05T15:50:25.752Z",
+  "updated_at": "2026-10-05T15:50:25.841Z",
+  "terminal_status": null,
+  "disposition": null,
+  "expected_receipt": null,
+  "cas_token": "1a7cd09550087ac36e73c6be6bb0b1cf",
+  "sealed_scope": {
+    "allow_paths": [
+      "README.md",
+      "docs"
+    ],
+    "max_files": 3,
+    "max_diff_lines": 120
+  },
+  "controller": {
+    "schema_version": 1,
+    "frozen_denominator": {
+      "schema_version": 1,
+      "project_id": "mission-31493d52a09f0f323ec80d5c",
+      "graph_digest": "beb0e5cd14f5a2531254c4b589c0d77b616b982244ce2a522441dc1bd4193053",
+      "deliverable_ids": [
+        "gate-readme-line-v2-2026-10-05"
+      ],
+      "deliverable_count": 1,
+      "active_node_id": "gate-readme-line-v2-2026-10-05",
+      "digest": "8617902df8d6b192a9d177ab94b437c0900af50d4532556912f2e2369715309d"
+    },
+    "original_dispatch_run": "campaign-v1-4a5e14cac4772d28101249f7a452b6f5e546f26f64923d5c2da0341889e207c1",
+    "provider_session": null,
+    "unresolved_findings": [],
+    "review_verdict": null,
+    "expires_at": null,
+    "resource_inventory": [],
+    "process_parentage": {
+      "schema_version": 1,
+      "owner": {
+        "pid": 670384,
+        "process_start_time": 1791215236,
+        "pgid": 670384,
+        "sid": 670382
+      },
+      "relationships": [
+        {
+          "child": {
+            "pid": 670384,
+            "process_start_time": 1791215236,
+            "pgid": 670384,
+            "sid": 670382
+          },
+          "parent": {
+            "pid": 670382,
+            "process_start_time": 1791215236,
+            "pgid": 670382,
+            "sid": 670382
+          }
+        },
+        {
+          "child": {
+            "pid": 670382,
+            "process_start_time": 1791215236,
+            "pgid": 670382,
+            "sid": 670382
+          },
+          "parent": {
+            "pid": 634809,
+            "process_start_time": 1791214822,
+            "pgid": 634809,
+            "sid": 634771
+          }
+        },
+        {
+          "child": {
+            "pid": 634809,
+            "process_start_time": 1791214822,
+            "pgid": 634809,
+            "sid": 634771
+          },
+          "parent": {
+            "pid": 634771,
+            "process_start_time": 1791214821,
+            "pgid": 634771,
+            "sid": 634771
+          }
+        },
+        {
+          "child": {
+            "pid": 634771,
+            "process_start_time": 1791214821,
+            "pgid": 634771,
+            "sid": 634771
+          },
+          "parent": {
+            "pid": 634770,
+            "process_start_time": 1791214821,
+            "pgid": 634770,
+            "sid": 634770
+          }
+        },
+        {
+          "child": {
+            "pid": 634770,
+            "process_start_time": 1791214821,
+            "pgid": 634770,
+            "sid": 634770
+          },
+          "parent": {
+            "pid": 1,
+            "process_start_time": 1786347188,
+            "pgid": 1,
+            "sid": 1
+          }
+        }
+      ],
+      "observed_at": "2026-10-05T15:50:25.742Z",
+      "digest": "9b9a5aaaed1a846dfdd018cc0ac1f92b106aa04b6cc908c1a1f58765dc246ca2"
+    },
+    "repair_tickets": [],
+    "audit_events": [
+      {
+        "event": "progress_receipt_appended",
+        "root_run_id": "campaign-v1-4a5e14cac4772d28101249f7a452b6f5e546f26f64923d5c2da0341889e207c1",
+        "work_order_id": "wo-campaign-v1-4a5e14cac4772d28101249f7a452b6f5e546f26f64923d5c2da0341889e207c1-gate-readme-line-v2-2026-10-05-a1",
+        "at": "2026-10-05T15:50:25.720Z",
+        "digest": "09aa6d52e35ebb6524d5ba34eca7a648361ece3b5a35f90fe5976d63bf750482",
+        "phase": "PREPARED"
+      }
+    ],
+    "gate_journal": {
+      "schema_version": 1,
+      "artifact_type": "controller_gate_journal",
+      "entries": []
+    },
+    "repair_budget_usage": {
+      "model_calls": 0,
+      "fresh_input_bytes": 0,
+      "fresh_input_tokens": null,
+      "elapsed_wall_ms": 0,
+      "owned_worktrees": 0,
+      "finding_recurrence": 0,
+      "observable_axes": [
+        "model_calls",
+        "fresh_input_bytes",
+        "elapsed_wall_ms",
+        "owned_worktrees",
+        "finding_recurrence"
+      ],
+      "unobserved_axes": [
+        "fresh_input_tokens"
+      ]
+    },
+    "repair_budget_limits": {
+      "model_calls": 9,
+      "fresh_input_bytes": 50000000,
+      "fresh_input_tokens": null,
+      "elapsed_wall_ms": 3600000,
+      "owned_worktrees": 4,
+      "finding_recurrence": 2
+    },
+    "resource_debt": {
+      "schema_version": 1,
+      "artifact_type": "controller_resource_debt",
+      "open": [],
+      "released": [],
+      "blocks_dispatch": false,
+      "digest": "c03d4a3a887db40376e1752c7de53327f7802228c685e66805dab8dffae3c416"
+    },
+    "full_diff_barriers": {},
+    "progress_receipts": [
+      {
+        "schema_version": 1,
+        "artifact_type": "controller_progress_receipt",
+        "project_id": "mission-31493d52a09f0f323ec80d5c",
+        "deliverable_id": "gate-readme-line-v2-2026-10-05",
+        "generation": 0,
+        "active_process": {
+          "pid": 670384
+        },
+        "completed_deliverables": [],
+        "remaining_deliverables": [
+          "gate-readme-line-v2-2026-10-05"
+        ],
+        "deliverable_count": 1,
+        "frozen_denominator_digest": "8617902df8d6b192a9d177ab94b437c0900af50d4532556912f2e2369715309d",
+        "blocked_reason": null,
+        "eta_basis": "frozen_graph_remaining",
+        "gate_state": {
+          "schema_version": 1,
+          "artifact_type": "controller_gate_journal",
+          "entries": []
+        },
+        "resource_debt_state": {
+          "open": [],
+          "released": []
+        },
+        "phase": "PREPARED",
+        "work_order_id": "wo-campaign-v1-4a5e14cac4772d28101249f7a452b6f5e546f26f64923d5c2da0341889e207c1-gate-readme-line-v2-2026-10-05-a1",
+        "root_run_id": "campaign-v1-4a5e14cac4772d28101249f7a452b6f5e546f26f64923d5c2da0341889e207c1",
+        "issued_at": "2026-10-05T15:50:25.720Z",
+        "digest": "09aa6d52e35ebb6524d5ba34eca7a648361ece3b5a35f90fe5976d63bf750482"
+      }
+    ],
+    "historical_outputs": null,
+    "historical_outputs_digest": null,
+    "noop_receipt": null,
+    "adoption_receipts": [],
+    "phase": null,
+    "next_action": null,
+    "started_at_ms": 1791215425719,
+    "dispatch_records": [],
+    "transcript_audit": {
+      "root_run_id": "campaign-v1-4a5e14cac4772d28101249f7a452b6f5e546f26f64923d5c2da0341889e207c1",
+      "work_order_id": "wo-campaign-v1-4a5e14cac4772d28101249f7a452b6f5e546f26f64923d5c2da0341889e207c1-gate-readme-line-v2-2026-10-05-a1",
+      "rows": [
+        {
+          "at": "2026-10-05T15:50:25.720Z",
+          "digest": "09aa6d52e35ebb6524d5ba34eca7a648361ece3b5a35f90fe5976d63bf750482",
+          "event": "progress_receipt_appended",
+          "phase": "PREPARED",
+          "root_run_id": "campaign-v1-4a5e14cac4772d28101249f7a452b6f5e546f26f64923d5c2da0341889e207c1",
+          "work_order_id": "wo-campaign-v1-4a5e14cac4772d28101249f7a452b6f5e546f26f64923d5c2da0341889e207c1-gate-readme-line-v2-2026-10-05-a1",
+          "kind": "audit_event",
+          "identity": "09aa6d52e35ebb6524d5ba34eca7a648361ece3b5a35f90fe5976d63bf750482",
+          "observed_root_run_id": "campaign-v1-4a5e14cac4772d28101249f7a452b6f5e546f26f64923d5c2da0341889e207c1",
+          "observed_work_order_id": "wo-campaign-v1-4a5e14cac4772d28101249f7a452b6f5e546f26f64923d5c2da0341889e207c1-gate-readme-line-v2-2026-10-05-a1"
+        }
+      ],
+      "explains_all": true,
+      "expected_counts": {
+        "dispatches": 0,
+        "resources": 0,
+        "gates": 0,
+        "repairs": 0,
+        "dispositions": 0,
+        "resumes": 0,
+        "terminals": 0,
+        "effect_results": 0
+      },
+      "counted": {
+        "dispatches": 0,
+        "resources": 0,
+        "gates": 0,
+        "repairs": 0,
+        "dispositions": 0,
+        "resumes": 0,
+        "terminals": 0,
+        "effect_results": 0
+      },
+      "problems": [],
+      "blocks_next_dispatch": false,
+      "blocks_terminal": false,
+      "open_debt": [],
+      "authority_sources_checked": [],
+      "digest": "5905a75e74cc78574625af55cefe958eb1359addd7d995ad961812d0dde2bc59"
+    },
+    "accepted_commit": null,
+    "branch": null,
+    "worktree": null,
+    "provider_lineage": null,
+    "verification_receipt": null,
+    "review_payload": null,
+    "findings_snapshot": null,
+    "candidate": null,
+    "completed_deliverables": [],
+    "inventory_observation_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "recovery_receipts": [],
+    "resume_receipts": [],
+    "convergence_adjudication_receipt": null,
+    "temp_capacity_limit": null,
+    "controller_digest": "9cfec38aecda52a7ece66ee52ad94af65df8ff27f9266bf65ae12bad0b237f81"
+  },
+  "digest": "699df93e1eb3d4399206b95ade6737ceb89f6ea35f4127857f42a4b2067a63cb"
+}

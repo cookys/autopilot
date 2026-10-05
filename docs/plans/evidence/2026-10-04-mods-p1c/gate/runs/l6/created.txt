@@ -1,0 +1,8 @@
+l6 (2026-10-05, gate-sandbox5, live FF9 SCOPE+SCOPE2)
+session id: 77e32751-d0cb-486c-8029-59c9ad9bf124 ; marker ~/.autopilot/session-mode/77e32751-d0cb-486c-8029-59c9ad9bf124.json (level l6, remains; only new marker file)
+watcher pid 636810 (pre-existing for project 7b58821dcc9cdc24, not started by this run)
+marker root_run_id job-1791214894-125d3d13 ; campaign_roots [mission-31493d52a09f0f323ec80d5c, campaign-v1-4a5e14cac4772d28101249f7a452b6f5e546f26f64923d5c2da0341889e207c1]
+contract root mission-31493d52a09f0f323ec80d5c ; mission_campaign_id campaign-v2-42d4aab4...660b
+unit contract /tmp/claude-1000/-home-cookys-projects-autopilot/34a5c748-efec-4871-874c-e4eccde96bac/scratchpad/l5prep2/unit-verify-sb5.json ; prepared /tmp/claude-1000/-home-cookys-projects-autopilot/34a5c748-efec-4871-874c-e4eccde96bac/scratchpad/l5prep2/prepared-sb5.json ; grant /tmp/claude-1000/-home-cookys-projects-autopilot/34a5c748-efec-4871-874c-e4eccde96bac/scratchpad/l5prep2/grant-sb5.json ; brief /tmp/claude-1000/-home-cookys-projects-autopilot/34a5c748-efec-4871-874c-e4eccde96bac/scratchpad/l5prep2/brief-hand-l6.md ; out/err /tmp/claude-1000/-home-cookys-projects-autopilot/34a5c748-efec-4871-874c-e4eccde96bac/scratchpad/l5prep2/implement-review-sb5.out/.err
+branch kept: mission/31493d52a09f/gate-readme-line-v2-2026-10-05-a1 commit 3536435605faa421a31ecd4667e503a52d3e92b5 (not merged); no extra worktrees; sandbox develop e1316d0, origin e1316d0
+captures: l6-perm/20261005T154130Z l6-ask/20261005T154255Z l6-idle/20261005T154348Z l6-idle2/20261005T154421Z l6-author-running/20261005T154443Z (turn-in-progress, not dispatch) l6-running/20261005T155047Z l6-done/20261005T155311Z

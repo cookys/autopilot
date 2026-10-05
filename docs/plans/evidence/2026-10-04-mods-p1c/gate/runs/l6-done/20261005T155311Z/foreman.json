@@ -1,0 +1,81 @@
+{
+  "schema": "autopilot.foreman-activity/1",
+  "scope": {
+    "project_key": "7b58821dcc9cdc24",
+    "repo_identity": "git-common-dir:/home/cookys/projects/gate-sandbox5/.git",
+    "root_run_id": "job-1791214894-125d3d13"
+  },
+  "binding": "session",
+  "stall_s": 600,
+  "agents": [
+    {
+      "agent_id": "a06127fc0781057f8",
+      "description": null,
+      "label": null,
+      "last_activity_at": "2026-10-05T15:52:35.437Z",
+      "age_s": 3,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-05T15:52:35.437Z",
+      "source": "stamp",
+      "session_id": "77e32751-d0cb-486c-8029-59c9ad9bf124",
+      "binding": "session"
+    },
+    {
+      "agent_id": "a212b3ebf2ac9dfe1",
+      "description": null,
+      "label": null,
+      "last_activity_at": "2026-10-05T15:47:23.685Z",
+      "age_s": 314,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-05T15:47:23.685Z",
+      "source": "stamp",
+      "session_id": "77e32751-d0cb-486c-8029-59c9ad9bf124",
+      "binding": "session"
+    },
+    {
+      "agent_id": "ae8df7a59b5c3dde7",
+      "description": null,
+      "label": null,
+      "last_activity_at": "2026-10-05T15:45:57.555Z",
+      "age_s": 401,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-05T15:45:57.555Z",
+      "source": "stamp",
+      "session_id": "77e32751-d0cb-486c-8029-59c9ad9bf124",
+      "binding": "session"
+    },
+    {
+      "agent_id": "afbb41f195dbd2ec5",
+      "description": null,
+      "label": null,
+      "last_activity_at": "2026-10-05T15:43:10.200Z",
+      "age_s": 568,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-05T15:43:10.200Z",
+      "source": "stamp",
+      "session_id": "77e32751-d0cb-486c-8029-59c9ad9bf124",
+      "binding": "session"
+    },
+    {
+      "agent_id": "ab31c0d395a5d5261",
+      "description": null,
+      "label": null,
+      "last_activity_at": "2026-10-05T15:41:40.174Z",
+      "age_s": 658,
+      "stale": true,
+      "stamped": true,
+      "ended_at": "2026-10-05T15:41:40.174Z",
+      "source": "stamp",
+      "session_id": "77e32751-d0cb-486c-8029-59c9ad9bf124",
+      "binding": "session"
+    }
+  ],
+  "stage": null,
+  "stage_source": null,
+  "stage_at": null,
+  "stage_age_s": null
+}

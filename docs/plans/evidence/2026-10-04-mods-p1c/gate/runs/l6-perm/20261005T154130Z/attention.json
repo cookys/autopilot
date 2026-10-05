@@ -1,0 +1,21 @@
+{
+  "schema": "autopilot.attention/1",
+  "session_id": "77e32751-d0cb-486c-8029-59c9ad9bf124",
+  "project_key": "7b58821dcc9cdc24",
+  "kind": "permission",
+  "tool_name": "Bash",
+  "summary": "Bash: node /home/cookys/projects/autopilot/scripts/session-mode.js set --level l6 --repo-root /home/cookys/projects/gat…",
+  "since": "2026-10-05T15:41:03.255Z",
+  "updated_at": "2026-10-05T15:41:09.324Z",
+  "pending": [
+    {
+      "agent_id": null,
+      "tool_name": "Bash",
+      "input_digest": "1277c183d821c303",
+      "kind": "permission",
+      "summary": "Bash: node /home/cookys/projects/autopilot/scripts/session-mode.js set --level l6 --repo-root /home/cookys/projects/gat…",
+      "since": "2026-10-05T15:41:03.255Z",
+      "updated_at": "2026-10-05T15:41:03.255Z"
+    }
+  ]
+}

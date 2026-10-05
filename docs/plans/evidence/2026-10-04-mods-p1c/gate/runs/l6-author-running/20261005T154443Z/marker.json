@@ -1,0 +1,53 @@
+{
+  "session_id": "77e32751-d0cb-486c-8029-59c9ad9bf124",
+  "level": "l6",
+  "repo_root": "/home/cookys/projects/gate-sandbox5",
+  "started_at": "2026-10-05T15:41:34.266Z",
+  "expires_at": "2026-10-06T15:41:34.266Z",
+  "repo_identity": "git-common-dir:/home/cookys/projects/gate-sandbox5/.git",
+  "project_key": "7b58821dcc9cdc24",
+  "root_run_id": "job-1791214894-125d3d13",
+  "entry_level": "l6",
+  "fallback_reason": "none",
+  "mission_routing": {
+    "status": "READY",
+    "admitted": true,
+    "would_block": false,
+    "prior_marker_status": "absent",
+    "admission": {
+      "schema_version": 1,
+      "artifact_type": "mission_routing_admission",
+      "authority_status": "enforce",
+      "repo_identity": "git-common-dir:/home/cookys/projects/gate-sandbox5/.git",
+      "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+      "mission_graph_digest": "beb0e5cd14f5a2531254c4b589c0d77b616b982244ce2a522441dc1bd4193053",
+      "sources_digest": "c90fd08261712ab651d590069bff48c8ad0b06521923ba776e99a901f054f227",
+      "deliverable_count": 1,
+      "source_authoring_unit_count": 0,
+      "critical_path": 1,
+      "batch_count": 1,
+      "reservation_totals": {
+        "campaigns": 1,
+        "wall_seconds": 3600,
+        "tool_calls": 100,
+        "engine_attempts": 2,
+        "external_wait_seconds": 900,
+        "canonical_changed_files": 1,
+        "output_bytes": 100000
+      },
+      "admission_digest": "9e76e5cf1fb6ed9f8519b7846dbdfbcff9fdce6a00f747cc90969a423d5580ca"
+    }
+  },
+  "mission_noop": {
+    "schema_version": 1,
+    "artifact_type": "mission_noop_adoption_set",
+    "admission_digest": "9e76e5cf1fb6ed9f8519b7846dbdfbcff9fdce6a00f747cc90969a423d5580ca",
+    "noop_adoptions": [],
+    "noop_short_circuit": false,
+    "dispatcher_called": null,
+    "mutation_attempts": null,
+    "gate_attempts": null,
+    "resources_created": null,
+    "digest": "8ee0c11a701739046a60cdb929ac1245e381de26afcc9f84622ced2c642f30d9"
+  }
+}

@@ -1,0 +1,50 @@
+  - Mission routing：狀態 READY，已 admit，would_block 為 false。有 1 個 deliverable、1 個 batch，預算為 1 個 │                                                                                       ✕
+    campaign、3600 秒、100 次工具呼叫、2 次引擎嘗試。                                                         │session $0.15 · host $650.37 · ctx 5%
+  - admission_digest：9e76e5cf…580ca                                                                          │dispatch · execution status, not progress (執行狀態，不是進度)
+  - Noop adoption：沒有 noop adoption。                                                                       │no runs in this scope
+                                                                                                              │gates · review receipts of this job
+  指令輸出一行提示：這個專案已有 watcher 在跑（project 7b58821dcc9cdc24，pid 636810），所以沒有再啟動新的。   │no review receipt
+                                                                                                              │任務工具未開 · 設 CLAUDE_CODE_ENABLE_TODO_TOOLS=1 後才會記錄任務
+  我沒做其他事，也沒開始任何工作，等你的下一步指示。                                                          │工頭活動（依 session 綁定：同一 session 的多個工作會看到同一批）
+                                                                                                              │afbb41f195dbd2ec5 · — · 1m 前
+✻ Cooked for 7s · done 11:41 PM                                                                               │ab31c0d395a5d5261 · — · 3m 前
+                                                                                                              │open the review page
+❯ 先用 AskUserQuestion 問我選 A 還是 B，我答了你再繼續。                                                      │snapshot published 2026-10-05T15:44:14.252Z · session cost as of 2026-10-05T15:43:06.524Z
+                                                                                                              │· host cost as of 2026-10-05T15:43:06.524Z
+● User answered Claude's questions:                                                                           │
+  ⎿  · 請選擇 A 還是 B？ → A                                                                                  │
+                                                                                                              │
+● 收到，你選 A。                                                                                              │
+                                                                                                              │
+  不過你還沒說 A 代表什麼，我手上也沒有其他指示，所以先不動作。你下一步要我做什麼，請直接告訴我。             │
+                                                                                                              │
+✻ Churned for 5s · done 11:43 PM                                                                              │
+                                                                                                              │
+❯ /l6 在 README 加一行測試字。這個 repo 已經有凍結好的 mission：graph                                         │
+  docs/mission-gate-readme-line-v2-execution-graph.json（node gate-readme-line-v2-2026-10-05），task          │
+  authority 在 /tmp/claude-1000/-home-cookys-projects-autopilot/34a5c748-efec-4871-874c-e4eccde96bac/scratchp │
+  ad/l5prep2/task-authority-sb5.json。照 /l6 的流程：session-mode set --level l6 已經做過（marker             │
+  在，不用重做、不要加 env -u）；驗證腳本交給 verification author（照                                         │
+  /home/cookys/projects/autopilot/skills/l6/SKILL.md 與 references/full-dispatch-pipeline.md 凍結 unit        │
+  contract、dispatch-contract check 要 GO、dispatch-author --strict-contract；unit                            │
+  contract、prompt、產物都放在 /tmp/claude-1000/-home-cookys-projects-autopilot/34a5c748-efec-4871-874c-e4ecc │
+  de96bac/scratchpad/l5prep2，不要寫進 sandbox）；實作照                                                      │
+  /home/cookys/projects/autopilot/skills/l5/references/hetero-impl-loop.md 第 6 步之後與 /tmp/claude-1000/-ho │
+  me-cookys-projects-autopilot/34a5c748-efec-4871-874c-e4eccde96bac/scratchpad/l5prep2/REPORT.md（mission     │
+  prepare --out /tmp/claude-1000/-home-cookys-projects-autopilot/34a5c748-efec-4871-874c-e4eccde96bac/scratch │
+  pad/l5prep2/prepared-sb5.json → grant → brief 到 /tmp/claude-1000/-home-cookys-projects-autopilot/34a5c748- │
+  efec-4871-874c-e4eccde96bac/scratchpad/l5prep2/brief-hand-l6.md → engine                                    │
+  implement-review，AUTOPILOT_LEVEL=l6，只 env -u AUTOPILOT_SESSION_ID，用 run_in_background                  │
+  背景執行，送出後結束回合等通知）。--repo-root/--cwd 用 /home/cookys/projects/gate-sandbox5。不要 push、不要 │
+  merge。                                                                                                     │
+                                                                                                              │
+✢ Gallivanting… (2s · thinking)                                                                               │
+● 進行中 gate-sandbox5 · — · 3m · —                                                                       [-] │
+回合進行中（0 分）                                                                                            │
+                                                                                                              │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Sonnet 5.5 ── ~/projects/gate-sandbox5 develop ─────────────────────────────────────────── v2.1.289
+  5h ▮▯▯▯▯▯ 31% 2h16m   7d ▮▮▯▯▯▯ 40% 2d12h   ctx ▯▯▯▯▯▯ 5%                        → codeforge adopt
+  paste again to expand

@@ -6,7 +6,8 @@
 // model id into a "family" for guarded-model comparisons.
 //
 // Contract (plan §2.5, docs/plans/_archive/2026/09/2026-09-05-statusline-live-context-feed.md):
-//   - resolveLiveDir() tries, in order: $AUTOPILOT_LIVE_DIR (override) → $XDG_RUNTIME_DIR/autopilot
+//   - resolveLiveDir() has two modes.
+//     (1) NO override ($AUTOPILOT_LIVE_DIR unset/empty): it tries, in order: $XDG_RUNTIME_DIR/autopilot
 //     (xdg, only if XDG_RUNTIME_DIR is set) → <runUserRoot>/<uid>/autopilot (xdg-inferred, only if
 //     XDG_RUNTIME_DIR is unset/empty AND <runUserRoot>/<uid> already exists; runUserRoot defaults
 //     to /run/user, injectable via opts.runUserRoot) → /dev/shm/autopilot-<uid> (shm) →
@@ -17,11 +18,26 @@
 //     candidate is rejected like any other failure and only ENOENT (findmnt not on PATH) opens
 //     the /proc/mounts fallback. A ram-backed candidate is created with mkdirSync(dir, {mode:0o700})
 //     when absent; a pre-existing candidate is rejected (fall through) if lstat shows a symlink,
-//     foreign uid, or mode & 0o077, except the parent-private tightening in isOwnedMode700Dir
+//     foreign uid, or mode & 0o077, except the parent-private tightening in dirRefusal
 //     (any group/other bits on the candidate; only a private parent gates chmod-and-accept —
-//     see that function). A rejected override is skipped, not
-//     fatal — later candidates are still tried. If every candidate is rejected, the base is
-//     ~/.autopilot (SSD) and exactly one warning line is printed. resolveLiveDir() returns a BASE
+//     see that function). If every candidate is rejected, the base is ~/.autopilot (SSD) and
+//     exactly one warning line is printed.
+//     (2) An explicit override ($AUTOPILOT_LIVE_DIR set) is an isolation request and is NEVER
+//     replaced by another directory (a rejected override used to fall through to the real
+//     /run/user/<uid>/autopilot — the 2026-10-05 probe leak). Each rejection reason is classified:
+//       - PERFORMANCE (the override is used anyway; one stderr warning per process per path naming
+//         the path and the filesystem type): not tmpfs/ramfs, or the mount cannot be resolved
+//         (findmnt/proc-mounts give no answer). RAM-backing is a speed preference, not a safety
+//         property.
+//       - SAFETY (FAIL CLOSED: resolveLiveDir throws LiveDirRefusedError, code LIVE_DIR_REFUSED,
+//         message names the path and the reason; nothing is written anywhere): the entry is a
+//         symlink (dangling or not), is not a directory, is owned by another uid, cannot be
+//         stat'ed/created, or has group/other bits that cannot be tightened (parent not private).
+//         The parent-private chmod-0700 tightening still applies to an owned directory. A missing
+//         override (and its missing parents) is created, the leaf with mode 0700.
+//     Callers own the failure: hooks catch it and do nothing (fail-open), writers that would
+//     otherwise pick another dir do not start (the watcher), session-mode `set` still writes its
+//     marker and skips the watcher with one message. resolveLiveDir() returns a BASE
 //     only — every consumer appends its own purpose segment (`context/`, `context-budget/`, …).
 //     Rust twin (codeforge src/live.rs): no path-resolution change (statusline-writer always has
 //     XDG_RUNTIME_DIR); file a backlog item that codeforge should mkdir the runtime dir as 0700.
@@ -123,37 +139,42 @@ function fstypeViaProcMounts(dir, procMountsPath) {
   return best;
 }
 
-function isRamBacked(dir, ctx) {
+// The filesystem type of dir (findmnt, else /proc/mounts when findmnt is not on PATH), or null.
+function fstypeOf(dir, ctx) {
   const { fstype, notFound } = fstypeViaFindmnt(dir, ctx.execFile);
-  if (notFound) {
-    const fallback = fstypeViaProcMounts(dir, ctx.procMountsPath);
-    return !!fallback && RAM_FSTYPES.has(fallback);
-  }
+  return notFound ? fstypeViaProcMounts(dir, ctx.procMountsPath) : fstype;
+}
+
+function isRamBacked(dir, ctx) {
+  const fstype = fstypeOf(dir, ctx);
   return !!fstype && RAM_FSTYPES.has(fstype);
 }
 
 // Reader-side ownership/mode check: a hostile local user can pre-create the
 // world-writable tmpfs candidate. Reject rather than consume it.
-function isOwnedMode700Dir(dir) {
+// dirRefusal returns null when the directory is acceptable (created 0700 when absent) or a short
+// reason string; `mkdirOpts` lets the explicit-override path create missing parents too.
+function dirRefusal(dir, mkdirOpts) {
   let st;
   try {
     st = fs.lstatSync(dir);
   } catch (err) {
-    if (!err || err.code !== 'ENOENT') return false;
+    if (!err || err.code !== 'ENOENT') return 'cannot stat it';
     try {
-      fs.mkdirSync(dir, { mode: 0o700 });
+      fs.mkdirSync(dir, { mode: 0o700, ...(mkdirOpts || {}) });
     } catch (mkdirErr) {
-      if (!mkdirErr || mkdirErr.code !== 'EEXIST') return false;
+      if (!mkdirErr || mkdirErr.code !== 'EEXIST') return 'cannot create it';
     }
     try {
       st = fs.lstatSync(dir);
     } catch {
-      return false;
+      return 'cannot stat it after creating it';
     }
   }
-  if (st.isSymbolicLink() || !st.isDirectory()) return false;
+  if (st.isSymbolicLink()) return 'it is a symlink';
+  if (!st.isDirectory()) return 'it is not a directory';
   try {
-    if (typeof process.getuid === 'function' && st.uid !== process.getuid()) return false;
+    if (typeof process.getuid === 'function' && st.uid !== process.getuid()) return 'it is owned by another user';
   } catch { /* platform without getuid */ }
   if ((st.mode & 0o077) !== 0) {
     // With a private parent (mode & 0o077 === 0, owned by the current uid), no
@@ -172,21 +193,40 @@ function isOwnedMode700Dir(dir) {
       if (parentUidOk && !pst.isSymbolicLink() && pst.isDirectory() && (pst.mode & 0o077) === 0) {
         fs.chmodSync(dir, 0o700);
         st = fs.lstatSync(dir);
-        if (!st.isSymbolicLink() && st.isDirectory() && (st.mode & 0o077) === 0) return true;
+        if (!st.isSymbolicLink() && st.isDirectory() && (st.mode & 0o077) === 0) return null;
       }
     } catch {
-      return false;
+      return 'unsafe permissions (group/other bits, parent not private)';
     }
     // When the parent is NOT private, a same-uid-or-foreign-group plant is still
     // possible and chmod-and-accept must not happen.
-    return false;
+    return 'unsafe permissions (group/other bits, parent not private)';
   }
-  return true;
+  return null;
 }
+
+function isOwnedMode700Dir(dir) {
+  return dirRefusal(dir) === null;
+}
+
+// Thrown when an explicit AUTOPILOT_LIVE_DIR fails a SAFETY check. The resolver never answers
+// with a different directory in that case (the caller asked to be isolated).
+class LiveDirRefusedError extends Error {
+  constructor(dir, reason) {
+    super(`autopilot: AUTOPILOT_LIVE_DIR=${dir} refused: ${reason}; not falling back to another live directory`);
+    this.name = 'LiveDirRefusedError';
+    this.code = 'LIVE_DIR_REFUSED';
+    this.dir = dir;
+    this.reason = reason;
+  }
+}
+
+const warnedOverrides = new Set(); // once per process per override path
 
 /**
  * Resolve the live-state base directory. Returns {base, source} where source is one of
- * 'override' | 'xdg' | 'xdg-inferred' | 'shm' | 'tmp' | 'ssd-fallback'.
+ * 'override' | 'xdg' | 'xdg-inferred' | 'shm' | 'tmp' | 'ssd-fallback'. Throws LiveDirRefusedError
+ * when an explicit override fails a safety check (see the header).
  *
  * @param {object} [opts]
  * @param {NodeJS.ProcessEnv} [opts.env] — defaults to process.env
@@ -207,8 +247,24 @@ function resolveLiveDir(opts = {}) {
 
   const ctx = { execFile, procMountsPath };
 
+  // An explicit override is an isolation request: it is honoured or refused, never replaced by
+  // another directory (a silent fall-through wrote the REAL store, 2026-10-05).
+  //   performance rejection (not RAM-backed / mount unresolvable) -> use it anyway + one warning;
+  //   safety rejection (symlink, not a directory, foreign owner, unsafe perms) -> throw.
+  if (env.AUTOPILOT_LIVE_DIR) {
+    const dir = env.AUTOPILOT_LIVE_DIR;
+    const refusal = dirRefusal(dir, { recursive: true });
+    if (refusal !== null) throw new LiveDirRefusedError(dir, refusal);
+    const fstype = fstypeOf(dir, ctx);
+    if (!(fstype && RAM_FSTYPES.has(fstype)) && !warnedOverrides.has(dir)) {
+      warnedOverrides.add(dir);
+      warn(`autopilot: AUTOPILOT_LIVE_DIR=${dir} is not RAM-backed (${fstype || 'filesystem type unresolved'}); `
+        + 'using it as asked (slower, survives reboot).');
+    }
+    return { base: dir, source: 'override' };
+  }
+
   const candidates = [];
-  if (env.AUTOPILOT_LIVE_DIR) candidates.push({ dir: env.AUTOPILOT_LIVE_DIR, source: 'override' });
   if (env.XDG_RUNTIME_DIR) {
     candidates.push({ dir: path.join(env.XDG_RUNTIME_DIR, 'autopilot'), source: 'xdg' });
   } else {
@@ -228,8 +284,7 @@ function resolveLiveDir(opts = {}) {
     }
   }
 
-  // Every candidate rejected (a rejected override is skipped, not fatal — we simply fall
-  // through to here like any other all-rejected run). Never assume a path is RAM.
+  // Every candidate rejected. Never assume a path is RAM.
   warn('autopilot: no RAM-backed live-state directory found (findmnt/proc-mounts rejected every '
     + 'candidate); falling back to ~/.autopilot (SSD). Set AUTOPILOT_LIVE_DIR to override.');
   return { base: path.join(os.homedir(), '.autopilot'), source: 'ssd-fallback' };
@@ -299,6 +354,7 @@ function modelFamily(id) {
 
 module.exports = {
   resolveLiveDir,
+  LiveDirRefusedError,
   sanitizeSessionId,
   readLive,
   modelFamily,

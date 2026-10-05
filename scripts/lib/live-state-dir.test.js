@@ -133,20 +133,149 @@ test('resolveLiveDir: findmnt absent + /proc/mounts fixture with no RAM mounts �
   assert.strictEqual(warnings.length, 1);
 });
 
-test('resolveLiveDir: rejected ext4 override + tmpfs XDG ⇒ XDG chosen (override skipped, not fatal)', () => {
+// ---- explicit override is honoured or refused, never silently replaced (mods P1W LIVEDIR) ----
+// RED before the fix (recorded 2026-10-05 on w/livedir@297ab2e0): the five tests below this
+// banner that mention the override fell through to XDG/shm/ssd instead of honouring/refusing it.
+
+test('resolveLiveDir: ext4 override + tmpfs XDG ⇒ override USED anyway, one warning naming path and reason', () => {
   const bindir = mkTmp('findmnt-mixed-');
   makeFakeFindmnt(bindir, { 'override-dir': 'ext4', 'xdg-dir': 'tmpfs', '*': 'ext4' });
   const overrideDir = mkTmp('override-dir-');
   const xdgParent = mkTmp('xdg-dir-');
   const warnings = [];
+  const env = { AUTOPILOT_LIVE_DIR: overrideDir, XDG_RUNTIME_DIR: xdgParent };
+  const r = resolveLiveDir({ env, execFile: execFileWithPath(bindir), warn: (m) => warnings.push(m) });
+  assert.strictEqual(r.source, 'override');
+  assert.strictEqual(r.base, overrideDir);
+  assert.strictEqual(warnings.length, 1, 'exactly one warning');
+  assert.ok(warnings[0].includes(overrideDir), 'warning names the path');
+  assert.match(warnings[0], /not RAM-backed/);
+  assert.match(warnings[0], /ext4/, 'warning names the reason (the fstype)');
+  assert.deepStrictEqual(fs.readdirSync(xdgParent), [], 'XDG dir untouched');
+  // once per process: the same override again does not warn again
+  resolveLiveDir({ env, execFile: execFileWithPath(bindir), warn: (m) => warnings.push(m) });
+  assert.strictEqual(warnings.length, 1, 'warning is once per process per path');
+});
+
+test('resolveLiveDir: override whose mount cannot be resolved ⇒ used + warned (performance, not safety)', () => {
+  const bindir = mkTmp('findmnt-none-');
+  makeFakeFindmnt(bindir, {}); // exit 1 for every target
+  const overrideDir = mkTmp('override-unresolved-');
+  const warnings = [];
+  const r = resolveLiveDir({
+    env: { AUTOPILOT_LIVE_DIR: overrideDir },
+    execFile: execFileWithPath(bindir),
+    runUserRoot: mkTmp('ru-'),
+    warn: (m) => warnings.push(m),
+  });
+  assert.strictEqual(r.source, 'override');
+  assert.strictEqual(r.base, overrideDir);
+  assert.strictEqual(warnings.length, 1);
+  assert.match(warnings[0], /not RAM-backed/);
+});
+
+test('resolveLiveDir: tmpfs override ⇒ used, no warning', () => {
+  const bindir = mkTmp('findmnt-tmpfs-ov-');
+  makeFakeFindmnt(bindir, { '*': 'tmpfs' });
+  const overrideDir = mkTmp('override-tmpfs-');
+  const warnings = [];
+  const r = resolveLiveDir({
+    env: { AUTOPILOT_LIVE_DIR: overrideDir },
+    execFile: execFileWithPath(bindir),
+    runUserRoot: mkTmp('ru-'),
+    warn: (m) => warnings.push(m),
+  });
+  assert.strictEqual(r.source, 'override');
+  assert.strictEqual(warnings.length, 0);
+});
+
+test('resolveLiveDir: REAL findmnt, override under os.tmpdir() ⇒ used (skips when tmpdir is RAM-backed)', (t) => {
+  let fstype = '';
+  try { fstype = execFileSync('findmnt', ['-T', os.tmpdir(), '-o', 'FSTYPE', '-n'], { encoding: 'utf8' }).trim(); } catch { /* no findmnt */ }
+  if (fstype === 'tmpfs' || fstype === 'ramfs') { t.skip(`os.tmpdir() is ${fstype} here; the ext4 case needs a disk-backed tmp`); return; }
+  const overrideDir = path.join(mkTmp('override-real-'), 'live');
+  const xdgParent = mkTmp('xdg-real-');
+  const warnings = [];
   const r = resolveLiveDir({
     env: { AUTOPILOT_LIVE_DIR: overrideDir, XDG_RUNTIME_DIR: xdgParent },
-    execFile: execFileWithPath(bindir),
     warn: (m) => warnings.push(m),
+  });
+  assert.strictEqual(r.source, 'override');
+  assert.strictEqual(r.base, overrideDir);
+  assert.ok(fs.statSync(overrideDir).isDirectory(), 'absent override is created');
+  assert.strictEqual(fs.statSync(overrideDir).mode & 0o777, 0o700);
+  assert.strictEqual(warnings.length, 1);
+  assert.deepStrictEqual(fs.readdirSync(xdgParent), [], 'XDG dir untouched');
+});
+
+function assertRefused(fn, dirFragment, reasonRe) {
+  assert.throws(fn, (e) => {
+    assert.strictEqual(e.name, 'LiveDirRefusedError');
+    assert.strictEqual(e.code, 'LIVE_DIR_REFUSED');
+    assert.ok(e.message.includes(dirFragment), `message names the path: ${e.message}`);
+    assert.match(e.message, reasonRe);
+    return true;
+  });
+}
+
+test('resolveLiveDir: symlink override ⇒ FAIL CLOSED (throws), nothing written anywhere else', () => {
+  const bindir = mkTmp('findmnt-sym-');
+  makeFakeFindmnt(bindir, { '*': 'tmpfs' }); // even on tmpfs, a symlink is a safety rejection
+  const root = mkTmp('sym-');
+  const real = path.join(root, 'real');
+  fs.mkdirSync(real, { mode: 0o700 });
+  const link = path.join(root, 'link');
+  fs.symlinkSync(real, link);
+  const xdgParent = mkTmp('xdg-sym-');
+  assertRefused(() => resolveLiveDir({
+    env: { AUTOPILOT_LIVE_DIR: link, XDG_RUNTIME_DIR: xdgParent },
+    execFile: execFileWithPath(bindir),
+    warn: () => {},
+  }), link, /symlink/);
+  assert.deepStrictEqual(fs.readdirSync(xdgParent), [], 'XDG dir untouched');
+  assert.deepStrictEqual(fs.readdirSync(real), [], 'symlink target untouched');
+});
+
+test('resolveLiveDir: dangling-symlink override ⇒ throws too', () => {
+  const root = mkTmp('dangling-');
+  const link = path.join(root, 'link');
+  fs.symlinkSync(path.join(root, 'nowhere'), link);
+  assertRefused(() => resolveLiveDir({ env: { AUTOPILOT_LIVE_DIR: link }, runUserRoot: mkTmp('ru-'), warn: () => {} }), link, /symlink/);
+  assert.strictEqual(fs.existsSync(path.join(root, 'nowhere')), false, 'nothing created through the link');
+});
+
+test('resolveLiveDir: group/other-writable override under a NON-private parent ⇒ throws (unsafe perms)', () => {
+  const bindir = mkTmp('findmnt-perm-');
+  makeFakeFindmnt(bindir, { '*': 'tmpfs' });
+  const parent = mkTmp('perm-parent-');
+  fs.chmodSync(parent, 0o755);
+  const cand = path.join(parent, 'live');
+  fs.mkdirSync(cand);
+  fs.chmodSync(cand, 0o777);
+  assertRefused(() => resolveLiveDir({
+    env: { AUTOPILOT_LIVE_DIR: cand }, execFile: execFileWithPath(bindir), runUserRoot: mkTmp('ru-'), warn: () => {},
+  }), cand, /unsafe permissions/);
+  assert.strictEqual(fs.statSync(cand).mode & 0o777, 0o777, 'mode left as found');
+});
+
+test('resolveLiveDir: override that is a file, not a directory ⇒ throws', () => {
+  const root = mkTmp('notdir-');
+  const f = path.join(root, 'f');
+  fs.writeFileSync(f, 'x');
+  assertRefused(() => resolveLiveDir({ env: { AUTOPILOT_LIVE_DIR: f }, runUserRoot: mkTmp('ru-'), warn: () => {} }), f, /not a directory/);
+});
+
+test('resolveLiveDir: no override ⇒ chain unchanged (xdg tmpfs wins, ext4 override variable empty string is "no override")', () => {
+  const bindir = mkTmp('findmnt-noov-');
+  makeFakeFindmnt(bindir, { 'xdg-dir': 'tmpfs', '*': 'ext4' });
+  const xdgParent = mkTmp('xdg-dir-');
+  const r = resolveLiveDir({
+    env: { AUTOPILOT_LIVE_DIR: '', XDG_RUNTIME_DIR: xdgParent },
+    execFile: execFileWithPath(bindir),
+    warn: () => {},
   });
   assert.strictEqual(r.source, 'xdg');
   assert.strictEqual(r.base, path.join(xdgParent, 'autopilot'));
-  assert.strictEqual(warnings.length, 0);
 });
 
 test('resolveLiveDir: accepted tmpfs override wins over everything else', () => {

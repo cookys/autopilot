@@ -928,7 +928,8 @@ function main(argv, env) {
   });
   const html = renderJobHtml(model);
   if (flags.print) { writeAll(html); return 0; }
-  const ep = envPaths(env);
+  let ep;
+  try { ep = envPaths(env); } catch (error) { process.stderr.write(`render-review-page: ${error.message}\n`); return 1; }
   const outRoot = flags['out-root'] ? path.resolve(flags['out-root']) : path.join(ep.home, 'review', flags.project);
   const r = publish({ model, html, compare, outRoot, home: ep.home, liveReview: ep.liveReview, project: flags.project, displayName: displayNameOf(repo, flags.project), env });
   if (r.rc !== 0) { process.stderr.write(`render-review-page: ${r.message}\n`); return r.rc; }
@@ -944,7 +945,8 @@ function reapMain(flags, env, clock) {
   if (!Number.isFinite(days) || days < 0) { process.stderr.write(`render-review-page: --days must be a non-negative number, got ${flags.days}\n`); return 2; }
   const { flockAvailable } = require('../src/status/runs-watch');
   if (!flockAvailable(env)) { process.stderr.write('render-review-page: flock_unavailable: flock(1) (util-linux) is required on PATH\n'); return 1; }
-  const ep = envPaths(env);
+  let ep;
+  try { ep = envPaths(env); } catch (error) { process.stderr.write(`render-review-page: ${error.message}\n`); return 1; }
   const outRoot = flags['out-root'] ? path.resolve(flags['out-root']) : path.join(ep.home, 'review', flags.project);
   if (!fs.existsSync(outRoot)) { writeAll(`${JSON.stringify({ status: 'reaped', removed_jobs: 0, removed_versions: 0, removed_assets: 0 })}\n`); return 0; }
   fs.mkdirSync(ep.liveReview, { recursive: true, mode: 0o700 });

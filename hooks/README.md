@@ -318,8 +318,11 @@ program writes each tick:
 | `<base>/context/<sid>.json` — `model.id`, `context_window.{context_window_size,used_percentage,total_input_tokens,current_usage}` | `statusLine` command | `context-budget` (real window instead of inference), `depth0-delegate-gate` (model family for `block`) |
 | `<base>/context/<sid>.tasks.json` — one row per running subagent: `id` (= hook `agent_id`), `model`, `contextWindowSize`, `tokenCount`, … | `subagentStatusLine` command | `foreman-guard` (foreman's own context ceiling) |
 
-`<base>` is resolved by [`scripts/lib/live-state-dir.js`](../scripts/lib/live-state-dir.js): `$AUTOPILOT_LIVE_DIR` →
-`$XDG_RUNTIME_DIR/autopilot` (xdg) → `/run/user/<uid>/autopilot` (xdg-inferred, only when `XDG_RUNTIME_DIR` is
+`<base>` is resolved by [`scripts/lib/live-state-dir.js`](../scripts/lib/live-state-dir.js). An explicit `$AUTOPILOT_LIVE_DIR` is
+always honoured or refused, never replaced: a disk-backed override is used with one stderr warning per process (naming the path and
+filesystem); an override that is a symlink, not a directory, owned by another user or has unsafe permissions makes the resolver throw
+`LiveDirRefusedError` (hooks do nothing; the watcher does not start; `session-mode.js set` still writes its marker and reports
+`watcher not started: … refused …`). With no override: `$XDG_RUNTIME_DIR/autopilot` (xdg) → `/run/user/<uid>/autopilot` (xdg-inferred, only when `XDG_RUNTIME_DIR` is
 unset/empty and `/run/user/<uid>` already exists) → `/dev/shm/autopilot-<uid>` → `/tmp/autopilot-<uid>`, every candidate probed with
 `findmnt` (or `/proc/mounts`) and accepted only when it is `tmpfs`/`ramfs`; if none is RAM-backed the base falls back to
 `~/.autopilot` with one warning. Readers accept `schema_version` 1 only, treat a file older than 120 s as absent, and (v2.36.2) treat a

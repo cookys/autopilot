@@ -670,6 +670,8 @@ function runWatchCli(opts) {
     stderr.write(project ? '--project must be a 16-hex project key\n' : 'status runs --watch|--stop requires --project <key> (or run inside a git repo)\n');
     return 2;
   }
+  // An explicit AUTOPILOT_LIVE_DIR that fails a safety check is refused (never replaced): report it, do nothing.
+  try { liveBaseOf(env); } catch (error) { stderr.write(`${error.message}\n`); return 1; }
 
   if (stop) {
     const pid = holderFromEnvelope(env, key);

@@ -350,12 +350,19 @@ test('liveBase() (no findmnt fork) resolves to the same base as resolveLiveDir()
     const r = spawnSync('node', ['-e', `
       const lib=require(${JSON.stringify(path.join(ROOT, 'hooks', 'live-session-lib.js'))});
       const {resolveLiveDir}=require(${JSON.stringify(path.join(ROOT, 'scripts', 'lib', 'live-state-dir.js'))});
-      process.stdout.write(JSON.stringify([lib.liveBase(), resolveLiveDir({warn(){}}).base]));`], { encoding: 'utf8', env: envOverride });
+      const one=(f)=>{try{return f();}catch(e){return 'refused:'+e.code;}};
+      process.stdout.write(JSON.stringify([one(()=>lib.liveBase()), one(()=>resolveLiveDir({warn(){}}).base)]));`], { encoding: 'utf8', env: envOverride });
     assert.strictEqual(r.status, 0, r.stderr);
     return JSON.parse(r.stdout);
   };
-  for (const env of [{ ...process.env }, { ...process.env, AUTOPILOT_LIVE_DIR: a.live }, { ...process.env, AUTOPILOT_LIVE_DIR: '/nonexistent-root-xyz/live' }]) {
+  // XDG_RUNTIME_DIR pinned to a scratch dir: the no-override case must not touch the real store.
+  const base = { ...process.env, XDG_RUNTIME_DIR: a.live };
+  for (const env of [{ ...base }, { ...base, AUTOPILOT_LIVE_DIR: a.live }]) {
     const [fast, slow] = code(env);
     assert.strictEqual(fast, slow);
   }
+  // An override that cannot be honoured is refused by BOTH (never a different directory): mods P1W LIVEDIR.
+  const [fast, slow] = code({ ...base, AUTOPILOT_LIVE_DIR: '/nonexistent-root-xyz/live' });
+  assert.strictEqual(fast, 'refused:LIVE_DIR_REFUSED');
+  assert.strictEqual(slow, 'refused:LIVE_DIR_REFUSED');
 });

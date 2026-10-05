@@ -1,0 +1,24 @@
+{
+  "schema": "autopilot.gate-capture/1",
+  "cell": "df-running-2",
+  "captured_at": "2026-10-05T07:47:57.415Z",
+  "captured_at_ms": 1791186477415,
+  "session_id": "3ceb2799-5528-4390-91f4-91412ddda7d9",
+  "session_id_how": "argument",
+  "sanitised_session_id": "3ceb2799-5528-4390-91f4-91412ddda7d9",
+  "project_key": "51de403da82a23f0",
+  "root_run_id": "job-1791186062-55b7eca3",
+  "scope_key": "51de403da82a23f0--job-1791186062-55b7eca3",
+  "live_base": "/run/user/1000/autopilot",
+  "autopilot_home": "/home/cookys/.autopilot",
+  "pane_cwd": "/home/cookys/projects/gate-sandbox",
+  "git_common_dir": "/home/cookys/projects/gate-sandbox/.git",
+  "missing": [
+    "attention.json (/run/user/1000/autopilot/attention/3ceb2799-5528-4390-91f4-91412ddda7d9.json)",
+    "foreman.json (/run/user/1000/autopilot/runs/51de403da82a23f0--job-1791186062-55b7eca3.foreman.json)",
+    "sources.json (/run/user/1000/autopilot/runs/sources/51de403da82a23f0--job-1791186062-55b7eca3.json)",
+    "model.json (/home/cookys/.autopilot/review/51de403da82a23f0/<date>/job-1791186062-55b7eca3/current/model.json)",
+    "decision-file.json (/home/cookys/projects/gate-sandbox/.git/autopilot/decisions/51de403da82a23f0--job-1791186062-55b7eca3.json)",
+    "work-orders (/home/cookys/projects/gate-sandbox/.git/autopilot/work-orders/job-1791186062-55b7eca3)"
+  ]
+}

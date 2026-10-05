@@ -1,0 +1,10 @@
+{
+  "schema": "autopilot.attention/1",
+  "session_id": "3ceb2799-5528-4390-91f4-91412ddda7d9",
+  "project_key": "51de403da82a23f0",
+  "kind": "permission",
+  "tool_name": "Bash",
+  "summary": "Bash: touch /tmp/gate-perm-test",
+  "since": "2026-10-05T07:43:06.417Z",
+  "updated_at": "2026-10-05T07:43:12.454Z"
+}

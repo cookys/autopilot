@@ -1,0 +1,6 @@
+session 3ceb2799-5528-4390-91f4-91412ddda7d9 (df tmux)
+worktree /tmp/hetero-gate-stall-ZX2MeD, branch gate-stall in gate-sandbox, run hetero-1791186647-903653-6977 (failed codex model)
+worktree /tmp/hetero-gate-stall2-sq74Fe, branch gate-stall2, log /tmp/hetero-gate-stall2-log-wnA8pZ
+branch gate-stall3 (+worktree under /tmp/hetero-gate-stall3-*), dispatched ~08:02Z
+scratch repo /tmp/gate-scratch-repo removed; claude transcript dir ~/.claude/projects/-tmp-gate-scratch-repo (owner may remove)
+/home/cookys/projects/gate-author-prompt.txt, gate-hand-prompt.txt; manifests /tmp/autopilot-dispatch-runs/{hetero-1791186647-903653-6977,hetero-1791186695-906856-efe5,hetero-1791187303-930594-c53a,author-1791187770-950914}*

@@ -1,0 +1,148 @@
+{
+  "schema": "autopilot.runs-live/1",
+  "scope": {
+    "project_key": "51de403da82a23f0",
+    "repo_identity": "git-common-dir:/home/cookys/projects/gate-sandbox/.git",
+    "root_run_id": "job-1791186062-55b7eca3"
+  },
+  "published_at": "2026-10-05T08:09:51.940Z",
+  "observed_at": "2026-10-05T08:09:51.940Z",
+  "valid_for_s": 180,
+  "writer": {
+    "pid": 878704,
+    "session_id": "3ceb2799-5528-4390-91f4-91412ddda7d9",
+    "started_at": "2026-10-05T07:41:03.137Z"
+  },
+  "runs": [
+    {
+      "run_id": "hetero-1791186647-903653-6977",
+      "role": "implementer",
+      "runner": "codex",
+      "model": "gpt-5.5-codex",
+      "started_at": "2026-10-05T07:50:53Z",
+      "ended_at": "2026-10-05T07:50:53Z",
+      "parent_run_id": null,
+      "root_run_id": "job-1791186062-55b7eca3",
+      "depth": 0,
+      "manifest": "/tmp/autopilot-dispatch-runs/hetero-1791186647-903653-6977.manifest.json",
+      "elapsed_s": 6,
+      "rc": null,
+      "final_status": "question_suspected",
+      "project": "git-common-dir:/home/cookys/projects/gate-sandbox/.git",
+      "stall": null,
+      "alive": null,
+      "source": {
+        "manifest": "/tmp/autopilot-dispatch-runs/hetero-1791186647-903653-6977.manifest.json",
+        "status_probe": null,
+        "exit_file": null
+      },
+      "fact_at": "2026-10-05T07:50:53Z",
+      "observed_at": "2026-10-05T08:09:52.000Z",
+      "probe_age_s": null
+    },
+    {
+      "run_id": "hetero-1791186695-906856-efe5",
+      "role": "implementer",
+      "runner": "codex",
+      "model": "gpt-6-astra",
+      "started_at": "2026-10-05T07:59:03Z",
+      "ended_at": "2026-10-05T07:59:03Z",
+      "parent_run_id": null,
+      "root_run_id": "job-1791186062-55b7eca3",
+      "depth": 0,
+      "manifest": "/tmp/autopilot-dispatch-runs/hetero-1791186695-906856-efe5.manifest.json",
+      "elapsed_s": 448,
+      "rc": null,
+      "final_status": "no_op",
+      "project": "git-common-dir:/home/cookys/projects/gate-sandbox/.git",
+      "stall": null,
+      "alive": null,
+      "source": {
+        "manifest": "/tmp/autopilot-dispatch-runs/hetero-1791186695-906856-efe5.manifest.json",
+        "status_probe": null,
+        "exit_file": null
+      },
+      "fact_at": "2026-10-05T07:59:03Z",
+      "observed_at": "2026-10-05T08:09:52.000Z",
+      "probe_age_s": null
+    },
+    {
+      "run_id": "author-1791187770-950914",
+      "role": "author",
+      "runner": "codex",
+      "model": "gpt-6-astra",
+      "started_at": "2026-10-05T08:09:30Z",
+      "ended_at": "2026-10-05T08:09:41Z",
+      "parent_run_id": null,
+      "root_run_id": "job-1791186062-55b7eca3",
+      "depth": 0,
+      "manifest": "/tmp/autopilot-dispatch-runs/author-1791187770-950914.manifest.json",
+      "elapsed_s": 11,
+      "rc": null,
+      "final_status": "authored",
+      "project": "git-common-dir:/home/cookys/projects/gate-sandbox/.git",
+      "stall": null,
+      "alive": null,
+      "source": {
+        "manifest": "/tmp/autopilot-dispatch-runs/author-1791187770-950914.manifest.json",
+        "status_probe": null,
+        "exit_file": null
+      },
+      "fact_at": "2026-10-05T08:09:41Z",
+      "observed_at": "2026-10-05T08:09:52.000Z",
+      "probe_age_s": null
+    },
+    {
+      "run_id": "hetero-1791187303-930594-c53a",
+      "role": "implementer",
+      "runner": "codex",
+      "model": "gpt-6-astra",
+      "started_at": "2026-10-05T08:09:36Z",
+      "ended_at": "2026-10-05T08:09:36Z",
+      "parent_run_id": null,
+      "root_run_id": "job-1791186062-55b7eca3",
+      "depth": 0,
+      "manifest": "/tmp/autopilot-dispatch-runs/hetero-1791187303-930594-c53a.manifest.json",
+      "elapsed_s": 473,
+      "rc": null,
+      "final_status": "no_op",
+      "project": "git-common-dir:/home/cookys/projects/gate-sandbox/.git",
+      "stall": null,
+      "alive": null,
+      "source": {
+        "manifest": "/tmp/autopilot-dispatch-runs/hetero-1791187303-930594-c53a.manifest.json",
+        "status_probe": null,
+        "exit_file": null
+      },
+      "fact_at": "2026-10-05T08:09:36Z",
+      "observed_at": "2026-10-05T08:09:52.000Z",
+      "probe_age_s": null
+    }
+  ],
+  "counts": {
+    "confirmed_live": 0,
+    "exited": 4,
+    "unknown": 0,
+    "fresh_bound_s": 0
+  },
+  "sessions": {
+    "25298c65-eec4-41f0-9ec8-d04360cb1303": {
+      "session_usd": 201.95181,
+      "as_of": "2026-10-05T08:09:51.940Z"
+    },
+    "df52a188-d763-4372-8a90-560abfbd4008": {
+      "session_usd": 406.262358,
+      "as_of": "2026-10-05T08:09:51.940Z"
+    },
+    "3ceb2799-5528-4390-91f4-91412ddda7d9": {
+      "session_usd": 1.062503,
+      "as_of": "2026-10-05T08:09:51.940Z"
+    },
+    "1b2044ca-d0d9-4984-b0bf-1c1aed519a0b": {
+      "session_usd": 0.116527,
+      "as_of": "2026-10-05T08:09:51.940Z"
+    }
+  },
+  "host_today_usd": 298.724775,
+  "host_today_as_of": "2026-10-05T08:09:51.940Z"
+}

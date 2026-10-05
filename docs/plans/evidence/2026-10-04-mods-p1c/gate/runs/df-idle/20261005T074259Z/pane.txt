@@ -1,0 +1,50 @@
+                                                                                                              │                                                                                       ✕
+ ▐▛███▛█   Claude Code v2.1.289                                                                               │session $— · host $297.55 · ctx 5%
+▝▜██████▀  Sonnet 5.5 · Claude Max                                                                            │dispatch · execution status, not progress (執行狀態，不是進度)
+ ▝▝   ▝▝   ~/projects/gate-sandbox                                                                            │no runs in this scope
+                                                                                                              │gates · review receipts of this job
+⚠ Your login expires in 3 days · run /login to renew                                                          │no review page published yet · gate rows —
+                                                                                                              │停在等你指示 0 分
+❯ 用 dev-flow 的角度簡單回答：這個 repo 的預設分支是什麼？只回答一句話，不要改任何檔案。                      │工頭狀態：來源未接
+                                                                                                              │open the review page
+● 預設（主）分支是 main，PR 都該以它為目標；目前你所在的 develop 是工作用的整合分支，不是預設分支。           │snapshot published 2026-10-05T07:42:03.755Z · host cost as of 2026-10-05T07:41:03.147Z
+                                                                                                              │
+✻ Cooked for 3s · done 3:41 PM                                                                                │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+◌ 待命 gate-sandbox · — · 1m · —                                                                          [-] │
+沒有派工在跑 · 停在等你指示 0 分                                                                              │
+                                                                                                              │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Sonnet 5.5 ── ~/projects/gate-sandbox develop ──────────────────────────────────────────── v2.1.289
+  5h ▮▮▯▯▯▯ 41% 18m   7d ▮▯▯▯▯▯ 18% 2d20h   ctx ▯▯▯▯▯▯ 5%                          → codeforge adopt
+  ⏵⏵ accept edits on (shift+tab to cycle) · ← 6 agents

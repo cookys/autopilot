@@ -1,0 +1,35 @@
+{
+  "schema": "autopilot.runs-live/1",
+  "scope": {
+    "project_key": "51de403da82a23f0",
+    "repo_identity": "git-common-dir:/home/cookys/projects/gate-sandbox/.git",
+    "root_run_id": "job-1791186062-55b7eca3"
+  },
+  "published_at": "2026-10-05T07:42:03.755Z",
+  "observed_at": "2026-10-05T07:41:03.147Z",
+  "valid_for_s": 180,
+  "writer": {
+    "pid": 878704,
+    "session_id": "3ceb2799-5528-4390-91f4-91412ddda7d9",
+    "started_at": "2026-10-05T07:41:03.137Z"
+  },
+  "runs": [],
+  "counts": {
+    "confirmed_live": 0,
+    "exited": 0,
+    "unknown": 0,
+    "fresh_bound_s": 0
+  },
+  "sessions": {
+    "25298c65-eec4-41f0-9ec8-d04360cb1303": {
+      "session_usd": 201.95181,
+      "as_of": "2026-10-05T07:41:03.147Z"
+    },
+    "df52a188-d763-4372-8a90-560abfbd4008": {
+      "session_usd": 406.262358,
+      "as_of": "2026-10-05T07:41:03.147Z"
+    }
+  },
+  "host_today_usd": 297.545745,
+  "host_today_as_of": "2026-10-05T07:41:03.147Z"
+}

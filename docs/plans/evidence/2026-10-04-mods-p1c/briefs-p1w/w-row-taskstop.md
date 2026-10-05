@@ -1,0 +1,13 @@
+# P1W row TASKSTOP — a stopped background foreman is ended (gate run l4g)
+
+Read `w-common.md` (P, isolation, RED-first, mutations, consumer sweep, commit rules), the FOREMAN2 report `$P/run-w/land/FOREMAN2.md`, and the l4 (FF5) rows + DEPTH-0 ADJUDICATION at the end of `../gate/runs/RESULTS.md`. Work in `$P/land` on `land/v2.37.0` (head 67b6747e = live code; verify clean). Never touch the main checkout. ONE commit `fix(hooks): a TaskStop of a background agent ends its activity stamp (mods P1W W4 gate)`. Report `$P/run-w/land/TASKSTOP.md`, outputs `$P/run-w/land/taskstop-*`.
+
+## Evidence
+`../gate/runs/l4g-taskstop*/`: depth-0 called `TaskStop {"task_id":"aea2d90a1607067b4"}` on its background foreman; the foreman's process died but SubagentStop never fired, so `<live>/agents/<sid>/aea2d90a1607067b4.json` stayed un-ended and the band read 工頭在跑, then 疑似卡住 after 180 s, for a foreman that no longer exists. The TaskStop `task_id` equals the agent's `agent_id` (same transcript also has a TaskStop of a shell, `task_id: "be67q70p8"`, which has no stamp).
+
+## Fix
+In the PostToolUse path of `hooks/awaiting-owner.js` `handle()` (it already calls `L.stampAgentActivity` there; same knob `AUTOPILOT_AGENT_ACTIVITY`, same fail-open, no lock on the hot path beyond what endAgentActivity already takes): when `tool_name === 'TaskStop'` and `tool_input.task_id` is a safe id string AND `<live>/agents/<sid>/<task_id>.json` EXISTS, mark it ended (`ended_at` = now, never moved if already set). Never create a file (a shell task id has no stamp). Reuse `L.endAgentActivity` with an existence guard or add a small `L.endAgentActivityIfPresent`; do not duplicate the write logic. PostToolUse fires only on a successful tool call, so a failed TaskStop ends nothing. Check whether the PostToolUse host (audit-log.js) has any tool_name matcher/filter that would skip TaskStop; if so, report it. Update the awaiting-owner header comment and the hooks/README.md line that describes the stamp's end signals.
+
+## Tests (RED-first + mutation controls)
+TaskStop of a stamped agent → ended_at set; TaskStop of an unknown id (shell) → no file created; already-ended → ended_at unchanged; unsafe id (`../x`, empty, non-string) → nothing; another session's same agent id untouched; knob off → nothing; a later PostToolUse stamp of that agent still does not resurrect it (existing rule). Run the touched suites + hook-hosting, subagent-stop, subagent-start, attention-pending, live-session-hooks, all-hooks-fail-open, check-hook-inventory (counts must stay 36/23/13), codex sync --check, check-js-syntax, L1.
+Final message: report path, SHA, 5-line summary.

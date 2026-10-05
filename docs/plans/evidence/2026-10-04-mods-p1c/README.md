@@ -1,10 +1,11 @@
 # mods P1b → P1c/P1d → P5 — state of play (2026-10-04)
 
 > ## IN FLIGHT (2026-10-05, session df52a188)
-> - Accepted (see `accepted-heads-p1w.txt`): INT `w/int` 8666aba4 → wave 2 (PHASE+PICK, PERF+STAMP, WATCH-A, WATCH-B) → INT2 `w/int2` e227528e → MARKER `w/marker` 9a94ffbf (plan R5.6) and W3a `w/w3a` 18db7c55 (p1c/c C1–C3b-M picked onto w/int2 + W3a).
-> - INT3 **accepted** `w/int3` 297ab2e0. EVAL-PREP in flight: `w/eval` (`$OLD/p1c/wt-eval`), brief `briefs-p1w/w-row-evalprep.md` (change texts + packs + 2-cell smoke per row, no batches), report `$OLD/p1c/run-w/eval/REPORT.md`.
-> - Next: (1) eval step 3 off `w/int3` — draft the change texts (W2a-g ceo-agent → `open-decision.js` at the DOA boundary; W2b-g dev-flow → `session-mode.js set --phase`; W1b-t2 finish-flow → `write-task-status-input.js` after merge), freeze packs per EVALX REPORT, smoke 2 cells per row, then batches per `eval-design-guidance-rows.md` §4; W2e-g (back to guidance, R5.5) needs its own eval design later. (2) W1f-b design. (3) W4 landing: fresh clone off origin/develop, cherry-pick int3 chain + p1c/d1 (hooks.json comment keys vs the new hooks: reconcile), full suite, ONE combined review, release v2.37.0 (check origin version first), then owner ssh+tmux real-run gate.
-> - Open follow-ups: clear of an l3–l6 marker deletes the session record until next SessionStart; not-opted-in UPS now ~63 ms total host (git spawn gone); PERF host +10–12 ms vs ≤5 ms target (measured under load 33–38).
+> - Accepted chain (see `accepted-heads-p1w.txt`): `w/int` → wave 2 → `w/int2` e227528e → MARKER 9a94ffbf + W3a 18db7c55 → **`w/int3` 297ab2e0** (current integration head; bundle refreshed).
+> - Owner rulings R5.7 (plan): v2.37.0 no longer waits for guidance-row eval; plain sessions get a job root (PLAINROOT); explicit live-dir override always honoured (LIVEDIR).
+> - In flight off `w/int3`: PLAINROOT (`briefs-p1w/w-row-plainroot.md`, `$OLD/p1c/wt-plainroot`), LIVEDIR (`briefs-p1w/w-row-livedir.md`, `$OLD/p1c/wt-livedir`); EVAL-PREP on `w/eval` (texts f6379a10/8e3d9511/ee055a2e, packs 472a5c07, marker amend-1 37880c71; now amend-2 = prompts that explicitly invoke the skill, re-smoke W2a a1 + W2b d2; W1b on hold until PLAINROOT; report `$OLD/p1c/run-w/eval/REPORT.md`).
+> - Then: INT4 (int3 + PLAINROOT + LIVEDIR), W1b text → `session-mode.js root`, W1f-b decision (in or out of 2.37.0), W4 landing (+ p1c/d1), owner ssh+tmux gate.
+> - Leak 2026-10-05 09:24 cleaned (see accepted-heads LEAK line); LIVEDIR is its fix.
 
 > ## HANDOFF (2026-10-05) — read this block first
 > Plan `docs/plans/2026-10-03-mods-visible-dispatch.md` R5.4, §4 P1W table is the single source (FROZEN after G1+G2; later rulings R5.3/R5.4 in Review log).

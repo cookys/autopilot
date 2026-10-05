@@ -108,9 +108,10 @@ S5a, S5b, S7, S8; `README.md` there is the verdict table). A mod is CC-only; non
     `完成待驗收` (frozen done = total, or every session task completed; both need nothing live and acceptance undecided; the
     campaign-terminal phase codes are not a separate rule) > `進行中` > `待命` (attention `idle` appends `停在等你指示 N 分`).
     `awaiting_disposition` is never `要你決定`.
-  - elapsed = start of this piece of work: campaign (marker has a root) = earliest progress receipt bound to the root (the
-    receipt's own `root_run_id`; a file with a different file-level root is unbound), else the earliest run; session = tasks
-    `first_created_at`, else marker `started_at`, else the earliest run. Plain sessions (`level: null` marker) resolve like any other.
+  - elapsed = start of this piece of work, chosen by campaign-vs-session rather than by whether the marker has a root (every
+    plain session has one): the earliest progress receipt bound to the root (the receipt's own `root_run_id`; a file with a
+    different file-level root is unbound), else the tasks `first_created_at`, else the marker `started_at`, else the earliest
+    run, else `—`. A dev-flow or fresh /l3–/l4 session with no dispatch and no receipt therefore shows its session age.
   - Line 2 tail, only when non-zero: `代你決定 m 件（k 件不可逆）`, then `僅 <writers_wired> 自動裁決` (or `決策寫入端未接` for an empty list;
     no label when `next-pick`, the depth-0 writer, is wired), then `n 件派工無決策紀錄`.
   - Not wired vs empty (sources manifest; no manifest = the old inference, an em dash): phase slot `來源未接` only when

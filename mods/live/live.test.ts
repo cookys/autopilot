@@ -1,3 +1,6 @@
+// P1W ELAPSED (start = bound receipt, else tasks first_created_at, else marker started_at, else earliest run, else an em dash; one case x terminal + desktop):
+// RED at w/int5 2fbd2b87 (112 tests): 110 pass / 2 fail (the ELAPSED case x 2). GREEN: 112 pass / 0 fail (the W3a tasks case's 10m became 30m: the old rule's assertion).
+// ELAPSED mutation controls: run-w/elapsed/mut-*.txt.
 // P1W W3a (the mod reads tasks, attention, phase, decisions sidecar, foreman sidecar, sources manifest, receipts; 21 cases + 1 traversal case x terminal + desktop):
 // RED at e227528e+C1..C3b (64 tests): 64 pass / 42 fail (all 21 W3a cases x 2). GREEN: 108 pass / 0 fail (incl. the root-traversal case).
 // W3a mutation controls (each red, then reverted; run-w/w3a/mut-*.txt): attention not decide / idle attention is decide / stale flag ignored /
@@ -906,7 +909,7 @@ for (const surface of SURFACES) {
     const w = world(on, files)
     await start($, surface)
     let p = await bandParts($, surface)
-    expect(p.line1).toBe('◌ 待命 repo · — · 10m · 1 done*') // campaign scope: elapsed is the earliest run, progress unfrozen
+    expect(p.line1).toBe('◌ 待命 repo · — · 30m · 1 done*') // root scope with tasks and no receipt: tasks first_created_at (09:30), progress unfrozen
     const last = p.last as Node
     expect(last.props?.dimColor).toBe(true)
     const pane = await paneParts($, surface)
@@ -916,7 +919,7 @@ for (const surface of SURFACES) {
     files[P_TASKS()] = j(allDone())
     await w.clock.advance(5000)
     p = await bandParts($, surface)
-    expect(p.line1).toBe('✓ 完成待驗收 repo · — · 10m · 2 done*')
+    expect(p.line1).toBe('✓ 完成待驗收 repo · — · 30m · 2 done*')
     expect(p.line2).toBe('任務 2/2 都完成，等你驗收')
     // a live run beats "tasks all done"
     files[W_ENV] = j(envelope({ runs: [row({ run_id: 'r1' })], counts: quiet(1) }))
@@ -982,6 +985,39 @@ for (const surface of SURFACES) {
     files[AHOME + '/session-mode/' + SID_A + '.json'] = j({ session_id: SID_A, level: null, project_key: KEY, root_run_id: null, expires_at: '2026-10-05T10:00:00.000Z' })
     await w.clock.advance(5000)
     expect((await bandParts($, surface)).line1.split(' · ')[2]).toBe('10m') // earliest run
+  })
+
+  test('ELAPSED: a session with a root (plain or fresh l3/l4) starts at tasks first_created_at, else marker started_at; a bound receipt wins over an older marker; nothing at all is an em dash (' + surface + ')', async ($, on) => {
+    const R = 'job-1790000000-ab12cd34'
+    const files = base()
+    const marker = (extra: Record<string, unknown>, level: string | null = null) =>
+      j({ session_id: SID_A, level, project_key: KEY, root_run_id: R, expires_at: '2026-10-05T10:00:00.000Z', ...extra })
+    delete files[LIVE + '/runs/' + KEY + '--' + ROOT + '.json']
+    files[LIVE + '/runs/' + KEY + '--' + R + '.json'] = j(envelope({ runs: [], counts: { confirmed_live: 0, exited: 0, unknown: 0, fresh_bound_s: 30 } }, R))
+    files[AHOME + '/session-mode/' + SID_A + '.json'] = marker({ started_at: '2026-10-04T09:00:00.000Z' })
+    files[P_TASKS()] = j(tasksFile())
+    const w = world(on, files)
+    await start($, surface)
+    const elapsed = async () => (await bandParts($, surface)).line1.split(' · ')[2]
+    expect(await elapsed()).toBe('30m') // root, no runs, no receipt: tasks first_created_at 09:30 (not an em dash)
+    delete files[P_TASKS()]
+    await w.clock.advance(5000)
+    expect(await elapsed()).toBe('1h0m') // no tasks: marker started_at 09:00
+    files[AHOME + '/session-mode/' + SID_A + '.json'] = marker({ started_at: '2026-10-04T09:00:00.000Z' }, 'l4')
+    await w.clock.advance(5000)
+    expect(await elapsed()).toBe('1h0m') // a fresh /l4 marker with a root and no dispatch behaves the same
+    const dir = COMMON + '/autopilot/work-orders/' + R + '/'
+    files[dir + 'n1-a1.json'] = j(REC(R, '2026-10-04T09:10:00.000Z', {}))
+    files[P_TASKS()] = j(tasksFile())
+    await w.clock.advance(5000)
+    expect(await elapsed()).toBe('50m') // campaign: the bound receipt (09:10) beats both the older marker (09:00) and the tasks (09:30)
+    delete files[dir + 'n1-a1.json']
+    delete files[P_TASKS()]
+    const R2 = 'job-1790000001-ee55ff66' // a new root: a found receipt is cached per root, so the empty case needs its own
+    files[LIVE + '/runs/' + KEY + '--' + R2 + '.json'] = j(envelope({ runs: [], counts: { confirmed_live: 0, exited: 0, unknown: 0, fresh_bound_s: 30 } }, R2))
+    files[AHOME + '/session-mode/' + SID_A + '.json'] = j({ session_id: SID_A, level: null, project_key: KEY, root_run_id: R2, expires_at: '2026-10-05T10:00:00.000Z' })
+    await w.clock.advance(5000)
+    expect(await elapsed()).toBe('—') // no receipt, no tasks, no marker start, no run
   })
 
   test('W3a elapsed: a root that is not a plain segment (traversal, spaces) never reaches the work-orders path (' + surface + ')', async ($, on) => {

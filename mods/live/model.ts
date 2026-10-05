@@ -388,14 +388,14 @@ export function earliestReceiptMs(texts: string[], root: string): number | null 
   return best === Infinity ? null : best
 }
 
-// Start of this piece of work. Campaign (a root): the earliest bound progress receipt, else the earliest run. Session
-// (no root): the tasks file's first_created_at, else the marker's started_at, else the earliest run.
+// Start of this piece of work, chosen by campaign-vs-session, not by "has a root" (every plain session carries a root since
+// PLAINROOT): the earliest bound progress receipt (a campaign has one; a session never does), else the tasks file's
+// first_created_at, else the marker's started_at, else the earliest run, else null (shown as an em dash).
 export function startMsOf(root: string | null, env: Json, tasks: TasksView | null, markerStartedAt: unknown, receiptMs: number | null): number | null {
-  const run = earliestRunMs(env)
-  if (root !== null) return receiptMs !== null ? receiptMs : run
+  if (root !== null && receiptMs !== null) return receiptMs
   if (tasks !== null && tasks.first_created_ms !== null) return tasks.first_created_ms
   const m = typeof markerStartedAt === 'string' ? Date.parse(markerStartedAt) : NaN
-  return Number.isFinite(m) ? m : run
+  return Number.isFinite(m) ? m : earliestRunMs(env)
 }
 
 export type Sources = {

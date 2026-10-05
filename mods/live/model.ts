@@ -479,7 +479,7 @@ export function bandView(env: Json, jobModel: JobModel | null, projectKey: strin
   const tail = proxySegments(src.decisions)
   const line2 = [reason, ...tail].join(' · ')
   const identity = isObject(env.scope) ? env.scope.repo_identity : null
-  // the phase is the job model's `phase.label` (campaign state or open deliverable); absent / malformed: an em dash, never the process phase.
+  // the phase is the job model's `phase.label` (campaign > receipt > marker > task in progress > deliverable); absent / malformed: an em dash, never the process phase.
   // No writer of a phase live per the sources manifest: 來源未接 (a phase the model really carries is shown whatever the manifest says).
   const phase = jobModel !== null && jobModel.phase !== null ? jobModel.phase.label : notWired(src.manifest, ['phase', 'progress', 'task_status_input']) ? NOT_WIRED : '—'
   let prog = progressView(progress)

@@ -5,8 +5,8 @@
 //   planned-input.js (W1g)   decision-input.js (W2a-m)   compare-input.js (W2e-m)   phase-input.js (W2b-m)   sources-manifest.js (W1i)
 // plus the task in progress (planned-input.js readInProgressTask, PHASE-TASK) as the phase fallback
 // Returns
-//   assemble : { decision, planned, compare, compareProvided, markerPhase, sourcesManifest }   (spread into assemble())
-//   sources  : source rows to append (roles planned / decision / session_phase; compare rows are added by assemble)
+//   assemble : { decision, planned, compare, compareProvided, markerPhase, taskPhase, sourcesManifest }   (spread into assemble())
+//   sources  : source rows to append (roles planned / decision / session_phase / session_task_phase; compare rows are added by assemble)
 //   signature: one string that changes exactly when any of these inputs changes (folded into the render change signature)
 //   writeSidecar(runsDir, scopeKey): `<runsDir>/sources/<scope_key>.json` (autopilot.sources/1), tmp + rename
 

@@ -33,17 +33,13 @@ function normSession(raw) {
   return String(raw || '').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
 }
 
-// This session's unexpired marker record (orchestrator OR plain; hook payload carries the session id, so the
-// env-keyed readers in session-mode.js are not used). Returns root_run_id or null.
+// This session's unexpired marker record (orchestrator OR plain), read through the shared reader
+// scripts/session-mode.js readSessionRecord(sessionId): the hook payload carries the session id, so the env-keyed
+// form is not used. Returns root_run_id or null.
 function markerRoot(sessionId) {
   try {
-    const fs = require('fs');
-    const os = require('os');
-    const path = require('path');
-    const dir = process.env.AUTOPILOT_SESSION_MODE_DIR || path.join(os.homedir(), '.autopilot', 'session-mode');
-    const m = JSON.parse(fs.readFileSync(path.join(dir, `${normSession(sessionId)}.json`), 'utf8'));
-    if (!m || typeof m !== 'object' || !(Date.parse(m.expires_at) > Date.now())) return null;
-    const root = m.root_run_id;
+    const m = require('../scripts/session-mode.js').readSessionRecord(String(sessionId || ''));
+    const root = m && m.root_run_id;
     return typeof root === 'string' && /^[A-Za-z0-9._-]+$/.test(root) && root !== '.' && root !== '..' ? root : null;
   } catch {
     return null;

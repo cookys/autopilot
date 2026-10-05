@@ -170,9 +170,11 @@ function readMarker() {
 
 // The per-session record: an orchestrator marker (l3-l6) OR a plain-session marker (level null), unexpired.
 // For callers that read the record's own fields (phase, root_run_id, project_key) rather than the mode.
-function readSessionRecord() {
+// No argument: the env-keyed session (getSessionId). A hook, which gets the session id in its payload, passes it.
+function readSessionRecord(sessionId) {
   try {
-    const m = JSON.parse(fs.readFileSync(markerPath(), 'utf8'));
+    const file = sessionId === undefined ? markerPath() : path.join(markerDir(), `${normalizeSessionId(sessionId)}.json`);
+    const m = JSON.parse(fs.readFileSync(file, 'utf8'));
     if (!m || typeof m !== 'object') return null;
     if (m.level !== null && !LEVELS.has(m.level)) return null;
     if (!m.expires_at || Date.parse(m.expires_at) <= Date.now()) return null; // expired ⇒ fail-open

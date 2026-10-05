@@ -11,6 +11,9 @@
  * written) and hygiene, which pass trivially without the feature; every positive path is red. The negatives are proven by
  * the mutation controls (run-w/hookq/mut-*.txt).
  *
+ * INT5 follow-ups (mods P1W INT5): +2 tests (audit-log in the `.*` PostToolUse group + README matcher; markerRoot parity with the
+ * shared readSessionRecord). RED before the change: 25 passed / 2 failed of 27 (run-w/int5/red.txt); GREEN 27/27.
+ *
  * Hygiene: every temp dir carries a per-run tag under /dev/shm (XDG_RUNTIME_DIR, AUTOPILOT_LIVE_DIR,
  * AUTOPILOT_TASK_STATUS_DIR) or the OS tmp dir (HOME, AUTOPILOT_SESSION_MODE_DIR, repos); teardown removes them and
  * waits for the detached writers this run started (environ AUTOPILOT_TASK_STATUS_DIR check); the LAST test fails when
@@ -425,6 +428,46 @@ test('B: the audit log still records the command and the hosted legs never fail 
   assert.strictEqual(r.status, 0);
   const log = path.join(e.home, '.claude', 'bash-commands.log');
   assert.ok(fs.existsSync(log) && fs.readFileSync(log, 'utf8').includes('git merge feat'));
+});
+
+test('wiring: audit-log.js sits in the `.*` PostToolUse group (the AskUserQuestion close leg is hosted there); README matcher wording agrees', () => {
+  const g = HOOKS.PostToolUse.filter((x) => x.hooks.some((h) => h.command.endsWith('/hooks/audit-log.js')));
+  assert.strictEqual(g.length, 1, 'audit-log.js appears in exactly one PostToolUse group');
+  assert.strictEqual(g[0].matcher, '.*', 'the close leg needs every tool, AskUserQuestion included');
+  const readme = fs.readFileSync(path.join(ROOT, 'hooks', 'README.md'), 'utf8');
+  const row = readme.split('\n').find((l) => /^\| audit-log \| PostToolUse \|/.test(l));
+  assert.ok(row, 'audit-log row in the Tier A table');
+  assert.ok(/^\| audit-log \| PostToolUse \| \.\* \|/.test(row), 'README matcher column is `.*`, as in hooks.json');
+});
+
+test('A: markerRoot reads the marker through the shared plain-inclusive reader (expiry, normalised id, level validity decided there)', () => {
+  const e = mkEnv();
+  const wr = (name, rec) => fs.writeFileSync(path.join(e.markers, `${name}.json`), JSON.stringify(rec));
+  const future = new Date(Date.now() + 3600e3).toISOString();
+  const past = new Date(Date.now() - 1000).toISOString();
+  wr('mr-live', { level: null, root_run_id: 'job-live', expires_at: future });
+  wr('mr-exp', { level: null, root_run_id: 'job-exp', expires_at: past });
+  wr('mr_odd_id', { level: null, root_run_id: 'job-odd', expires_at: future });
+  wr('mr-orch', { level: 'l5', root_run_id: 'job-orch', expires_at: future });
+  wr('mr-badlevel', { level: 'zz', root_run_id: 'job-bad', expires_at: future });
+  wr('mr-badroot', { level: null, root_run_id: '../x', expires_at: future });
+  const shared = (sid) => {
+    // the shared reader's own decision for this session, env-keyed, in a child (so this process env stays clean)
+    const code = "const m=require(process.argv[1]).readSessionRecord();process.stdout.write(JSON.stringify(m&&typeof m.root_run_id==='string'&&/^[A-Za-z0-9._-]+$/.test(m.root_run_id)&&m.root_run_id!=='.'&&m.root_run_id!=='..'?m.root_run_id:null))";
+    return JSON.parse(execFileSync('node', ['-e', code, path.join(ROOT, 'scripts', 'session-mode.js')], { env: { ...e.env, AUTOPILOT_SESSION_ID: sid }, encoding: 'utf8' }));
+  };
+  const prev = process.env.AUTOPILOT_SESSION_MODE_DIR;
+  process.env.AUTOPILOT_SESSION_MODE_DIR = e.markers;
+  try {
+    const { markerRoot } = require(path.join(ROOT, 'hooks', 'ask-decision.js'));
+    const cases = [['mr-live', 'job-live'], ['mr-exp', null], ['mr/odd id', 'job-odd'], ['mr-orch', 'job-orch'], ['mr-badlevel', null], ['mr-badroot', null], ['mr-absent', null]];
+    for (const [sid, want] of cases) {
+      assert.strictEqual(markerRoot(sid), want, `markerRoot(${sid})`);
+      assert.strictEqual(markerRoot(sid), shared(sid), `parity with the shared reader for ${sid}`);
+    }
+  } finally {
+    if (prev === undefined) delete process.env.AUTOPILOT_SESSION_MODE_DIR; else process.env.AUTOPILOT_SESSION_MODE_DIR = prev;
+  }
 });
 
 test('hygiene: nothing of this run survives teardown (detached writers stopped, dirs removed)', () => {

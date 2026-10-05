@@ -1,0 +1,519 @@
+<title>mods 即時 band 藍圖</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: one reading column (~70ch) with full-width figure bands; a terminal strip opens the page because the band IS the product. */
+:root {
+  --bg: #f3f5f7; --panel: #ffffff; --ink: #18212b; --muted: #5b6876; --rule: #d5dce3;
+  --accent: #0f7c86; --accent-soft: #d8eef0;
+  --term-bg: #121a22; --term-fg: #d7e1ea; --term-dim: #7f8e9c;
+  --v-decide: #c2410c; --v-stuck: #b7791f; --v-done: #2f855a; --v-run: #2b6cb0; --v-idle: #718096;
+  --ok-bg: #e3f3ea; --ok-fg: #22663f; --fly-bg: #e6eef9; --fly-fg: #23538f; --wait-bg: #fbeedd; --wait-fg: #8a4b0f; --guide-bg: #ece9f6; --guide-fg: #4b3d8f;
+  --f-body: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f151b; --panel: #161f28; --ink: #e2e8ee; --muted: #9aa8b5; --rule: #2a3742;
+  --accent: #4fc1cb; --accent-soft: #163a3f;
+  --term-bg: #070b0f; --term-fg: #d7e1ea; --term-dim: #7f8e9c;
+  --v-decide: #f08a4b; --v-stuck: #e0b04f; --v-done: #63c58c; --v-run: #6aa6e8; --v-idle: #9aa8b5;
+  --ok-bg: #173325; --ok-fg: #8fdcae; --fly-bg: #172a43; --fly-fg: #9cc2f0; --wait-bg: #3a2814; --wait-fg: #f2c08a; --guide-bg: #262046; --guide-fg: #bfb3f2;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0f151b; --panel: #161f28; --ink: #e2e8ee; --muted: #9aa8b5; --rule: #2a3742;
+  --accent: #4fc1cb; --accent-soft: #163a3f;
+  --term-bg: #070b0f; --term-fg: #d7e1ea; --term-dim: #7f8e9c;
+  --v-decide: #f08a4b; --v-stuck: #e0b04f; --v-done: #63c58c; --v-run: #6aa6e8; --v-idle: #9aa8b5;
+  --ok-bg: #173325; --ok-fg: #8fdcae; --fly-bg: #172a43; --fly-fg: #9cc2f0; --wait-bg: #3a2814; --wait-fg: #f2c08a; --guide-bg: #262046; --guide-fg: #bfb3f2;
+  color-scheme: dark;
+}
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 16px; line-height: 1.75; }
+.wrap { max-width: 1080px; margin: 0 auto; padding-inline: 20px; padding-block: 32px 64px; display: grid; gap: 56px; }
+.col { max-width: 70ch; }
+h1, h2, h3 { text-wrap: balance; line-height: 1.3; margin: 0; }
+h1 { font-size: clamp(28px, 4.2vw, 42px); font-weight: 900; letter-spacing: 0.01em; }
+h2 { font-size: 24px; font-weight: 900; }
+h3 { font-size: 17px; font-weight: 700; }
+p { margin: 0; }
+section { display: grid; gap: 18px; }
+.eyebrow { font-family: var(--f-mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+.lede { color: var(--muted); font-size: 17px; }
+code, .mono { font-family: var(--f-mono); font-size: 0.86em; }
+code { background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+a { color: var(--accent); }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 13px; color: var(--muted); font-family: var(--f-mono); }
+
+/* terminal band */
+.term { background: var(--term-bg); color: var(--term-fg); border-radius: 10px; padding: 18px 20px; font-family: var(--f-mono); font-size: 14px; line-height: 1.7; overflow-x: auto; }
+.term .dim { color: var(--term-dim); }
+.term .prompt { color: var(--term-dim); border-top: 1px solid #2a3742; margin-top: 10px; padding-top: 8px; }
+.term .w { font-weight: 600; }
+.term-label { font-size: 13px; color: var(--muted); }
+
+/* verdict ladder */
+.ladder { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+.rung { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 12px 14px; display: grid; gap: 6px; align-content: start; min-width: 0; }
+.rung .word { font-weight: 900; font-size: 18px; }
+.rung .rank { font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+.rung p { font-size: 13.5px; line-height: 1.6; color: var(--muted); }
+.rung.decide { border-top: 4px solid var(--v-decide); } .rung.decide .word { color: var(--v-decide); }
+.rung.stuck { border-top: 4px solid var(--v-stuck); } .rung.stuck .word { color: var(--v-stuck); }
+.rung.done { border-top: 4px solid var(--v-done); } .rung.done .word { color: var(--v-done); }
+.rung.run { border-top: 4px solid var(--v-run); } .rung.run .word { color: var(--v-run); }
+.rung.idle { border-top: 4px solid var(--v-idle); } .rung.idle .word { color: var(--v-idle); }
+@media (max-width: 760px) { .ladder { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 440px) { .ladder { grid-template-columns: 1fr; } }
+
+/* figures */
+figure { margin: 0; display: grid; gap: 10px; }
+.fig { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 16px; overflow-x: auto; }
+.fig svg { display: block; width: 100%; height: auto; min-width: 760px; color: var(--ink); }
+.fig.narrow svg { min-width: 560px; }
+figcaption { font-size: 14px; color: var(--muted); max-width: 80ch; }
+.mermaid { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 16px; overflow-x: auto; margin: 0; font-family: var(--f-body); }
+
+/* tables */
+.tbl { overflow-x: auto; background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; line-height: 1.55; }
+th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--rule); }
+th { font-size: 12px; letter-spacing: 0.06em; color: var(--muted); font-weight: 700; white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+td code { white-space: nowrap; }
+.pill { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.p-ok { background: var(--ok-bg); color: var(--ok-fg); }
+.p-fly { background: var(--fly-bg); color: var(--fly-fg); }
+.p-wait { background: var(--wait-bg); color: var(--wait-fg); }
+.p-guide { background: var(--guide-bg); color: var(--guide-fg); }
+
+/* progress map */
+.lanes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.lane { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 14px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.lane h3 { display: flex; align-items: center; gap: 8px; }
+.lane ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.lane li { font-size: 13.5px; line-height: 1.5; border-left: 3px solid var(--rule); padding-left: 10px; }
+.lane li b { font-family: var(--f-mono); font-size: 12.5px; }
+.lane.ok li { border-left-color: var(--ok-fg); }
+.lane.fly li { border-left-color: var(--fly-fg); }
+.lane.wait li { border-left-color: var(--wait-fg); }
+.lane.guide li { border-left-color: var(--guide-fg); }
+@media (max-width: 900px) { .lanes { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 480px) { .lanes { grid-template-columns: 1fr; } }
+
+.chain { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 4px; font-family: var(--f-mono); font-size: 13px; }
+.chain span.n { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 4px 9px; }
+.chain span.n.ok { border-color: var(--ok-fg); color: var(--ok-fg); }
+.chain span.n.fly { border-color: var(--fly-fg); color: var(--fly-fg); border-style: dashed; }
+.chain span.n.next { color: var(--muted); border-style: dotted; }
+.chain .arr { color: var(--muted); }
+
+.callout { background: var(--accent-soft); border-radius: 10px; padding: 14px 16px; display: grid; gap: 6px; font-size: 15px; }
+ul.plain { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; }
+.two { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 16px; }
+@media (max-width: 760px) { .two { grid-template-columns: 1fr; } }
+.card { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; display: grid; gap: 8px; min-width: 0; }
+.card p { font-size: 14.5px; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<div class="wrap">
+
+<header style="display:grid;gap:14px">
+  <div class="eyebrow">autopilot · mods 計畫 · P1W 接線補完</div>
+  <h1>mods 即時 band 藍圖</h1>
+  <p class="lede col">這頁把 plan <code>docs/plans/2026-10-03-mods-visible-dispatch.md</code>（R5.7）畫成圖：band 要回答什麼、每一格的值從哪個程式寫出來、session 和派工之間怎麼互動，以及 P1W 各列做到哪裡。文字規則以 plan 為正本，這頁是它的圖解。</p>
+  <div class="meta"><span>狀態截至 2026-10-05</span><span>整合 head：w/int3 297ab2e0</span><span>版本：2.36.116（2.37.0 尚未出貨）</span></div>
+</header>
+
+<!-- 1. what you see -->
+<section>
+  <div class="eyebrow">你離開電腦回來時看到的</div>
+  <h2>band：一行結論，一行理由</h2>
+  <p class="col">band 釘在 Claude Code 輸入框上方。它回答的問題是「這個專案現在在做什麼、做到哪、要不要我」。第一個字一定是結論詞，第二行說為什麼。成本和 context 放進 pane，不擠在 band 上。</p>
+  <div class="term" role="img" aria-label="band 示意：第一行是結論詞、專案、階段、經過時間、進度；第二行是理由與代決策數">
+    <div><span class="w" style="color:var(--v-decide)">● 要你決定</span>  autopilot · L-4 實作 · 1 時 12 分 · 5/8（62.5%）</div>
+    <div class="dim">  理由：要不要強推 main？（已等 2 天） · 代你決定 3 件（1 件不可逆） · 1 件派工無決策紀錄</div>
+    <div class="prompt">&gt; _</div>
+  </div>
+  <p class="term-label">示意畫面，實際字樣以 <code>mods/live/model.ts</code> 為準。進度只有在分母凍結時才顯示百分比；分母沒凍結時顯示 <code>3 done*</code>（暗色、帶星號）。</p>
+
+  <h3 style="margin-top:8px">五個結論詞，由左到右優先</h3>
+  <div class="ladder">
+    <div class="rung decide"><span class="rank">1 · 最高</span><span class="word">要你決定</span><p>Claude Code 在等你核准權限或回答問題（attention 檔），或者有一個待決定檔還沒關。</p></div>
+    <div class="rung stuck"><span class="rank">2</span><span class="word">疑似卡住</span><p>某個派工超過 stall 門檻沒有新事件，watcher 在 envelope 上標了 <code>stall</code>。</p></div>
+    <div class="rung done"><span class="rank">3</span><span class="word">完成待驗收</span><p>campaign 的凍結進度 done = total，或這個 session 的任務全部完成。</p></div>
+    <div class="rung run"><span class="rank">4</span><span class="word">進行中</span><p>有活著的派工或未完成的任務。</p></div>
+    <div class="rung idle"><span class="rank">5 · 最低</span><span class="word">待命</span><p>什麼都沒在跑。附上「停在等你指示 N 分」。</p></div>
+  </div>
+  <p class="col" style="font-size:14.5px;color:var(--muted)"><code>awaiting_disposition</code> 是工頭在等 depth-0 處置，永遠不算「要你決定」。每一格的來源如果還沒接上，band 寫「來源未接」，不會寫成 0 或空白。</p>
+</section>
+
+<!-- 2. architecture -->
+<section>
+  <div class="eyebrow">架構</div>
+  <h2>四層：寫入端 → 檔案 → watcher → 讀取端</h2>
+  <p class="col">band 本身不算任何東西。它只讀檔案。所以 P1W 的核心工作是「每一格都要有會動的寫入端」：hook 在 session 裡自動寫、depth-0 照 skill 呼叫 CLI 寫、engine 在裁決時寫。每個專案只有一個 watcher，它定時把這些檔案組成一份快照，交給 band 和 review 頁。</p>
+  <figure>
+    <div class="fig">
+      <svg viewBox="0 0 1000 600" role="img" aria-label="架構圖：左邊三類寫入端寫入三個儲存位置的檔案；每個專案一個 watcher 每 tick 讀取並發佈 envelope、sidecar 和 model.json；mod 讀 live 檔與快照畫 band，瀏覽器透過 localhost review server 看 job 頁">
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+          <marker id="ahA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker>
+        </defs>
+        <!-- column headers -->
+        <g font-family="var(--f-mono)" font-size="12" fill="var(--muted)" letter-spacing="1">
+          <text x="20" y="22">寫入端</text><text x="300" y="22">檔案（三個儲存位置）</text><text x="640" y="22">發佈</text><text x="830" y="22">讀取端</text>
+        </g>
+        <!-- writers -->
+        <g font-size="12.5" fill="currentColor">
+          <rect x="20" y="36" width="240" height="196" rx="8" fill="var(--panel)" stroke="currentColor" stroke-opacity=".35"/>
+          <text x="34" y="58" font-weight="700" font-size="13.5">Hook（session 內自動）</text>
+          <text x="34" y="82">SessionStart：確保 marker＋watcher</text>
+          <text x="34" y="104">Task 事件 → 任務清單</text>
+          <text x="34" y="126">PermissionRequest／Notification／</text>
+          <text x="34" y="144">Stop／UserPromptSubmit → attention</text>
+          <text x="34" y="166">PostToolUse → context %</text>
+          <text x="34" y="188">PostToolUse（subagent）→ 存活戳記</text>
+          <text x="34" y="214" fill="var(--muted)" font-size="11.5">新工作併進既有程序，不多開 node</text>
+
+          <rect x="20" y="248" width="240" height="160" rx="8" fill="var(--panel)" stroke="currentColor" stroke-opacity=".35"/>
+          <text x="34" y="270" font-weight="700" font-size="13.5">CLI（depth-0 照 skill 呼叫）</text>
+          <text x="34" y="294">session-mode set／--phase／root</text>
+          <text x="34" y="316">open-decision open／close</text>
+          <text x="34" y="338">next-pick（自動選題記帳）</text>
+          <text x="34" y="360">write-task-status-input</text>
+          <text x="34" y="388" fill="var(--muted)" font-size="11.5">紫框：要等 eval 才寫進 skill</text>
+          <rect x="28" y="304" width="224" height="62" rx="4" fill="none" stroke="var(--guide-fg)" stroke-dasharray="4 3"/>
+
+          <rect x="20" y="424" width="240" height="150" rx="8" fill="var(--panel)" stroke="currentColor" stroke-opacity=".35"/>
+          <text x="34" y="446" font-weight="700" font-size="13.5">Engine 與派工 rail</text>
+          <text x="34" y="470">裁決 finding → 代決策 ledger</text>
+          <text x="34" y="492">campaign controller → work-order</text>
+          <text x="34" y="514">dispatch rail → run manifest</text>
+          <text x="34" y="536">（共用 session 的 job root）</text>
+        </g>
+        <!-- stores -->
+        <g font-size="12" fill="currentColor">
+          <rect x="300" y="36" width="290" height="196" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-opacity=".6"/>
+          <text x="314" y="58" font-weight="700" font-size="13.5">live（tmpfs）</text>
+          <text x="314" y="76" fill="var(--muted)" font-size="11">/run/user/1000/autopilot</text>
+          <text x="314" y="100" font-family="var(--f-mono)">tasks/&lt;sid&gt;.json</text>
+          <text x="314" y="120" font-family="var(--f-mono)">attention/&lt;sid&gt;.json</text>
+          <text x="314" y="140" font-family="var(--f-mono)">context/&lt;sid&gt;.json</text>
+          <text x="314" y="160" font-family="var(--f-mono)">agents/&lt;sid&gt;/&lt;agent&gt;.json</text>
+          <text x="314" y="180" font-family="var(--f-mono)">runs/&lt;scope&gt;.json＋sidecar</text>
+          <text x="314" y="208" fill="var(--muted)" font-size="11">重開機就清空：只放「現在」的狀態</text>
+
+          <rect x="300" y="248" width="290" height="160" rx="8" fill="var(--panel)" stroke="currentColor" stroke-opacity=".35"/>
+          <text x="314" y="270" font-weight="700" font-size="13.5">~/.autopilot</text>
+          <text x="314" y="294" font-family="var(--f-mono)">session-mode/&lt;sid&gt;.json（marker）</text>
+          <text x="314" y="314" font-family="var(--f-mono)">live-pointer.json</text>
+          <text x="314" y="334" font-family="var(--f-mono)">review/&lt;project&gt;/…（job 頁）</text>
+          <text x="314" y="354" font-family="var(--f-mono)">$TMPDIR/…/task-status/&lt;root&gt;</text>
+          <text x="314" y="388" fill="var(--muted)" font-size="11">marker＝每個 session 的身分紀錄</text>
+
+          <rect x="300" y="424" width="290" height="150" rx="8" fill="var(--panel)" stroke="currentColor" stroke-opacity=".35"/>
+          <text x="314" y="446" font-weight="700" font-size="13.5">&lt;git-common-dir&gt;/autopilot</text>
+          <text x="314" y="470" font-family="var(--f-mono)">ledger/decisions.jsonl</text>
+          <text x="314" y="490" font-family="var(--f-mono)">decisions/&lt;scope&gt;.json</text>
+          <text x="314" y="510" font-family="var(--f-mono)">work-orders/&lt;root&gt;/</text>
+          <text x="314" y="530" font-family="var(--f-mono)">compare/&lt;root&gt;/*.json</text>
+          <text x="314" y="556" fill="var(--muted)" font-size="11">跟著 repo 走，所有 worktree 共用</text>
+        </g>
+        <!-- writer -> store arrows -->
+        <g stroke="currentColor" stroke-width="1.4" fill="none" marker-end="url(#ah)">
+          <line x1="260" y1="134" x2="298" y2="134"/>
+          <line x1="260" y1="328" x2="298" y2="328"/>
+          <path d="M260,316 C280,316 280,480 298,480"/>
+          <line x1="260" y1="498" x2="298" y2="498"/>
+        </g>
+        <text x="263" y="126" font-size="10.5" fill="var(--muted)">寫檔</text>
+        <!-- watcher -->
+        <g>
+          <rect x="626" y="200" width="170" height="210" rx="10" fill="var(--panel)" stroke="var(--accent)" stroke-width="2"/>
+          <text x="711" y="226" text-anchor="middle" font-weight="900" font-size="15" fill="currentColor">watcher</text>
+          <text x="711" y="246" text-anchor="middle" font-size="11.5" fill="var(--muted)">每個專案一個（flock）</text>
+          <g font-size="12" fill="currentColor">
+            <text x="640" y="276">每 tick：</text>
+            <text x="640" y="298">· 組 envelope（runs-live/1）</text>
+            <text x="640" y="318">· sidecar：代決策、工頭</text>
+            <text x="640" y="338">　活動、sources 清單</text>
+            <text x="640" y="358">· 呼叫 renderer 出</text>
+            <text x="640" y="378">　model.json＋job 頁</text>
+          </g>
+        </g>
+        <g stroke="var(--accent)" stroke-width="1.6" fill="none" marker-end="url(#ahA)">
+          <line x1="590" y1="150" x2="624" y2="230"/>
+          <line x1="590" y1="320" x2="624" y2="310"/>
+          <line x1="590" y1="490" x2="624" y2="390"/>
+        </g>
+        <text x="598" y="186" font-size="10.5" fill="var(--accent)">讀</text>
+        <!-- watcher -> live publish -->
+        <path d="M711,200 C711,170 640,190 592,184" stroke="var(--accent)" stroke-width="1.6" fill="none" marker-end="url(#ahA)"/>
+        <text x="650" y="168" font-size="10.5" fill="var(--accent)">發佈快照</text>
+        <!-- readers -->
+        <g font-size="12.5" fill="currentColor">
+          <rect x="830" y="60" width="150" height="150" rx="8" fill="var(--panel)" stroke="currentColor" stroke-opacity=".35"/>
+          <text x="844" y="84" font-weight="700" font-size="13.5">mod（live）</text>
+          <text x="844" y="108">band：2 行</text>
+          <text x="844" y="128">pane：細節、代決策、</text>
+          <text x="844" y="146">工頭活動、成本</text>
+          <text x="844" y="170" fill="var(--muted)" font-size="11">沙箱內只讀檔，</text>
+          <text x="844" y="186" fill="var(--muted)" font-size="11">不跑 git、不算 hash</text>
+
+          <rect x="830" y="300" width="150" height="120" rx="8" fill="var(--panel)" stroke="currentColor" stroke-opacity=".35"/>
+          <text x="844" y="324" font-weight="700" font-size="13.5">review 頁</text>
+          <text x="844" y="348">瀏覽器開</text>
+          <text x="844" y="366" font-family="var(--f-mono)" font-size="11.5">localhost:8787</text>
+          <text x="844" y="392" fill="var(--muted)" font-size="11">ssh＋tmux 時看圖用這個</text>
+        </g>
+        <g stroke="currentColor" stroke-width="1.4" fill="none" marker-end="url(#ah)">
+          <path d="M592,120 C700,120 760,110 828,120"/>
+          <line x1="796" y1="330" x2="828" y2="350"/>
+        </g>
+        <text x="690" y="104" font-size="10.5" fill="var(--muted)">直接讀 live 檔＋快照</text>
+        <text x="796" y="318" font-size="10.5" fill="var(--muted)">serve</text>
+        <text x="844" y="250" font-size="11" fill="var(--muted)">先讀 live-pointer</text>
+        <text x="844" y="266" font-size="11" fill="var(--muted)">找到 live 目錄</text>
+      </svg>
+    </div>
+    <figcaption>寫入端只寫檔，從不直接改 band；watcher 只組合、不判斷；mod 只讀。這三段任何一段壞了，band 會顯示「來源未接」，而不是一個看起來正常的 0。sources 清單由 watcher 從 hooks.json、旋鈕和腳本是否存在推導出來，不寫死。</figcaption>
+  </figure>
+</section>
+
+<!-- 3. interaction flow -->
+<section>
+  <div class="eyebrow">agent 互動流程</div>
+  <h2>一個 session 從開始到驗收，各角色誰寫了什麼</h2>
+  <p class="col">下面是一次 L-size 工作（例如 <code>/l5</code>）的時間線。左邊是你和 depth-0（你正在對話的這條主 thread），中間是 hook 和派出去的工頭與 hands，右邊是 watcher 和 band。每一條箭頭上寫的是「寫了哪個檔」。一般 dev-flow session 走同一條線，只是沒有工頭那一段。</p>
+  <pre class="mermaid">
+sequenceDiagram
+    autonumber
+    actor Owner as 你
+    participant D0 as depth-0 session
+    participant Hook as Hook
+    participant Hands as 工頭／hands（rail）
+    participant Eng as Engine
+    participant W as watcher
+    participant Band as band／pane
+
+    Note over D0,Hook: SessionStart
+    Hook->>Hook: 確保 marker（一般 session：level null＋job root）
+    Hook->>W: 這個專案沒有 watcher 就啟動一個
+    Owner->>D0: /l5 目標
+    D0->>D0: session-mode set --level l5（root＝campaign id）
+    D0->>Hands: 派工（rail 讀 session-mode root，共用 job root）
+    Hands->>Eng: implement → review → adjudicate
+    Eng-->>Eng: 每個裁決寫一列代決策 ledger
+    Hands-->>Hook: subagent 每次工具呼叫 → 存活戳記
+    W->>Band: 每 tick：envelope＋sidecar＋model.json
+    Band-->>Owner: 進行中 · 實作 · 23 分 · 2/6（33%）
+    Hands->>Hook: 需要權限 → PermissionRequest
+    Hook->>Hook: 寫 attention/&lt;sid&gt;.json
+    Band-->>Owner: 要你決定 · 等你核准權限
+    Owner->>D0: 核准
+    Hook->>Hook: PostToolUse → 清掉 attention
+    D0->>D0: 碰到 DOA 邊界 → open-decision open（指引列，eval 中）
+    Band-->>Owner: 要你決定 · 要不要強推 main？
+    Owner->>D0: 回答
+    D0->>D0: open-decision close
+    Eng->>Eng: campaign 到終態，進度分母凍結 done = total
+    D0->>D0: merge 後 write-task-status-input（指引列，eval 中）
+    Band-->>Owner: 完成待驗收 · 6/6（100%）
+    Note over W,Band: 回合結束、沒人說話 → 待命 · 停在等你指示 N 分
+  </pre>
+  <p class="term-label">標「指引列，eval 中」的兩步，要等 skill 文字改完、ON/OFF eval 有證據才會真的發生。在那之前，band 對應的那格顯示「來源未接」。v2.37.0 不等它們（R5.7）。</p>
+</section>
+
+<!-- 4. identity -->
+<section>
+  <div class="eyebrow">身分與 scope</div>
+  <h2>band 怎麼知道「這個專案、這件工作」是哪個</h2>
+  <p class="col">所有檔名的前兩段都是同一套身分：專案用 <code>project_key</code>（由 git-common-dir 算出，同一個 repo 的所有 worktree 都一樣），工作用 <code>root_run_id</code>。兩者合起來叫 scope，watcher 依 scope 分檔。session 的 marker 記著這兩個值，mod 讀 marker 就知道該看哪一份。</p>
+  <figure>
+    <div class="fig">
+      <svg viewBox="0 0 1000 330" role="img" aria-label="身分圖：repo 的 git-common-dir 經 sha256 取前 16 碼得到 project_key；三種 session 各自得到 root_run_id；兩者組成 scope_key，對應 live 目錄裡的 envelope 與 sidecar 檔名">
+        <defs><marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+        <g font-size="12.5" fill="currentColor">
+          <rect x="20" y="30" width="250" height="70" rx="8" fill="var(--panel)" stroke="currentColor" stroke-opacity=".35"/>
+          <text x="34" y="56" font-weight="700">repo（任何一個 worktree）</text>
+          <text x="34" y="80" font-family="var(--f-mono)" font-size="11.5">git rev-parse --git-common-dir</text>
+          <rect x="330" y="30" width="250" height="70" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+          <text x="344" y="56" font-weight="700">project_key</text>
+          <text x="344" y="80" font-family="var(--f-mono)" font-size="11.5">sha256(repo_identity)[0:16]</text>
+
+          <rect x="20" y="140" width="250" height="40" rx="8" fill="var(--panel)" stroke="currentColor" stroke-opacity=".35"/>
+          <text x="34" y="165">/l5、/l6 campaign</text>
+          <rect x="20" y="192" width="250" height="40" rx="8" fill="var(--panel)" stroke="currentColor" stroke-opacity=".35"/>
+          <text x="34" y="217">/l3、/l4（session-mode set）</text>
+          <rect x="20" y="244" width="250" height="40" rx="8" fill="var(--wait-bg)" stroke="var(--wait-fg)" stroke-dasharray="4 3"/>
+          <text x="34" y="269">一般 dev-flow session</text>
+
+          <rect x="330" y="140" width="250" height="40" rx="8" fill="var(--panel)" stroke="currentColor" stroke-opacity=".35"/>
+          <text x="344" y="165" font-family="var(--f-mono)" font-size="11.5">root = campaign id</text>
+          <rect x="330" y="192" width="250" height="40" rx="8" fill="var(--panel)" stroke="currentColor" stroke-opacity=".35"/>
+          <text x="344" y="217" font-family="var(--f-mono)" font-size="11.5">root = job-&lt;時間&gt;-&lt;隨機&gt;</text>
+          <rect x="330" y="244" width="250" height="40" rx="8" fill="var(--wait-bg)" stroke="var(--wait-fg)" stroke-dasharray="4 3"/>
+          <text x="344" y="269" font-family="var(--f-mono)" font-size="11.5">SessionStart 鑄同規則 root</text>
+
+          <rect x="660" y="120" width="320" height="120" rx="10" fill="var(--panel)" stroke="var(--accent)" stroke-width="2"/>
+          <text x="676" y="146" font-weight="900" font-size="14">scope_key</text>
+          <text x="676" y="170" font-family="var(--f-mono)" font-size="11.5">&lt;project_key&gt;--&lt;root_run_id&gt;</text>
+          <text x="676" y="194" font-family="var(--f-mono)" font-size="11">runs/&lt;scope&gt;.json · .decisions.json</text>
+          <text x="676" y="212" font-family="var(--f-mono)" font-size="11">.foreman.json · sources/&lt;scope&gt;.json</text>
+          <text x="676" y="230" font-size="11" fill="var(--muted)">沒有 root 時只用 project_key（unbound）</text>
+        </g>
+        <g stroke="currentColor" stroke-width="1.4" fill="none" marker-end="url(#ah2)">
+          <line x1="270" y1="65" x2="328" y2="65"/>
+          <line x1="270" y1="160" x2="328" y2="160"/>
+          <line x1="270" y1="212" x2="328" y2="212"/>
+          <line x1="270" y1="264" x2="328" y2="264"/>
+          <path d="M580,65 C630,65 630,150 658,150"/>
+          <path d="M580,212 C620,212 630,200 658,200"/>
+        </g>
+        <text x="20" y="318" font-size="11.5" fill="var(--wait-fg)">橘色虛線＝PLAINROOT 列進行中（R5.7）：一般 session 也是一件工作，有自己的 root；watcher 會清掉閒置太久的 root scope。</text>
+      </svg>
+    </div>
+    <figcaption>root 只能由兩個地方產生：<code>session-mode.js</code>，或 campaign。dispatch rail 和 skill 文字一律只「讀」root（<code>session-mode.js root</code>），絕不用分支名或其他東西自己湊一個。這條規則是 W1b 被退回改寫的原因。</figcaption>
+  </figure>
+
+  <div class="two">
+    <div class="card">
+      <h3>marker 的兩種角色（MARKER 列）</h3>
+      <p>marker 原本只是「/l3–/l6 模式旗標」。現在它正式是每個 session 的身分紀錄：<code>level: null</code> 代表一般 session。派工 gate 只看有等級的 marker；一般 session 的 marker 只提供專案、root、phase 和開始時間。</p>
+      <p>SessionStart 只在這個 session 沒有 marker 時建立，絕不覆寫；所以 compact 或 resume 不會洗掉正在跑的 <code>/l5</code>。</p>
+    </div>
+    <div class="card">
+      <h3>live 目錄只認明確指定（LIVEDIR 列）</h3>
+      <p>2026-10-05 一個探測把 <code>AUTOPILOT_LIVE_DIR</code> 指到 ext4 的 <code>/tmp</code>，程式拒絕後默默改用真實的 live 目錄，watcher 把測試資料寫進了真的 band 來源（已清掉）。</p>
+      <p>修法：明確指定的路徑一律照用，不在 tmpfs 只印警告；symlink 等安全性問題直接報錯，絕不改寫到別的目錄。</p>
+    </div>
+  </div>
+</section>
+
+<!-- 5. cell sources -->
+<section>
+  <div class="eyebrow">每一格的來源</div>
+  <h2>band 和 pane 上每個值，誰寫、寫在哪</h2>
+  <p class="col">這張表是 W4 真機驗收的對照表：band 上的每一格，都要能從同一時刻的來源檔逐字重推。狀態欄的意思：<span class="pill p-ok">已接</span> 已在整合分支、<span class="pill p-fly">進行中</span> 正在做、<span class="pill p-guide">指引 eval</span> 要等 skill 文字通過 eval（之前顯示「來源未接」）。</p>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>格</th><th>寫入端</th><th>檔案</th><th>P1W 列</th><th>狀態</th></tr></thead>
+      <tbody>
+        <tr><td>結論詞：要你決定（權限／問題）</td><td>hook awaiting-owner</td><td><code>attention/&lt;sid&gt;.json</code></td><td>W1de、PERF</td><td><span class="pill p-ok">已接</span></td></tr>
+        <tr><td>結論詞：要你決定（待決定檔）</td><td>depth-0 呼叫 <code>open-decision</code></td><td><code>decisions/&lt;scope&gt;.json</code></td><td>W2a-m ＋ W2a-g</td><td><span class="pill p-ok">helper 已接</span> <span class="pill p-guide">呼叫：指引 eval</span></td></tr>
+        <tr><td>結論詞：疑似卡住</td><td>watcher（派工無事件超過門檻）</td><td>envelope <code>stall</code></td><td>P1a</td><td><span class="pill p-ok">已接</span></td></tr>
+        <tr><td>結論詞：完成待驗收</td><td>campaign controller／任務全完成</td><td>work-order receipt、tasks 檔</td><td>W1a、W1de</td><td><span class="pill p-ok">已接</span></td></tr>
+        <tr><td>專案名稱</td><td>session-mode／watcher</td><td>marker、<code>runs/paths/</code></td><td>P1a、MARKER</td><td><span class="pill p-ok">已接</span></td></tr>
+        <tr><td>階段（campaign）</td><td>controller progress receipt</td><td><code>work-orders/&lt;root&gt;/</code></td><td>W1a</td><td><span class="pill p-ok">已接</span></td></tr>
+        <tr><td>階段（dev-flow L-1…L-5）</td><td>dev-flow 呼叫 <code>set --phase</code></td><td>marker <code>phase</code></td><td>W2b-m ＋ W2b-g</td><td><span class="pill p-ok">CLI 已接</span> <span class="pill p-guide">呼叫：指引 eval</span></td></tr>
+        <tr><td>經過時間</td><td>receipt／tasks／marker</td><td><code>first_created_at</code>、<code>started_at</code></td><td>W3a</td><td><span class="pill p-ok">已接</span></td></tr>
+        <tr><td>進度（凍結才給 %）</td><td>controller；否則任務數</td><td>receipt、tasks 檔</td><td>W1a、W1g</td><td><span class="pill p-ok">已接</span></td></tr>
+        <tr><td>規劃清單</td><td>execution graph／session 任務</td><td>model.json <code>planned</code></td><td>W1g</td><td><span class="pill p-ok">已接</span></td></tr>
+        <tr><td>代你決定 m 件（k 件不可逆）</td><td>engine 裁決、next-pick</td><td><code>ledger/decisions.jsonl</code> → sidecar</td><td>W1h、W2d、W2g</td><td><span class="pill p-ok">已接</span></td></tr>
+        <tr><td>n 件派工無決策紀錄</td><td>watcher 比對 manifest 與 ledger</td><td><code>.decisions.json</code></td><td>W2g (b)</td><td><span class="pill p-ok">已接</span></td></tr>
+        <tr><td>工頭活動（pane）</td><td>subagent 戳記、run-ledger、codeforge 狀態列</td><td><code>.foreman.json</code></td><td>W2c、STAMP</td><td><span class="pill p-ok">已接</span>（只代表存活，不代表 stage）</td></tr>
+        <tr><td>任務清單（pane）</td><td>hook session-tasks</td><td><code>tasks/&lt;sid&gt;.json</code></td><td>W1de</td><td><span class="pill p-ok">已接</span>（sonnet／opus 需開 <code>CLAUDE_CODE_ENABLE_TODO_TOOLS</code>）</td></tr>
+        <tr><td>context %（pane）</td><td>status line，或 hook context-budget 補寫</td><td><code>context/&lt;sid&gt;.json</code></td><td>W2f</td><td><span class="pill p-ok">已接</span></td></tr>
+        <tr><td>驗收結論（review 頁）</td><td>finish-flow merge 後寫輸入檔</td><td><code>task-status/&lt;root&gt;.json</code></td><td>W1b ＋ W1b-t2</td><td><span class="pill p-fly">等 PLAINROOT</span> <span class="pill p-guide">呼叫：指引 eval</span></td></tr>
+        <tr><td>比對圖（review 頁）</td><td>審圖席</td><td><code>compare/&lt;root&gt;/*.json</code></td><td>W2e-m ＋ W2e-g</td><td><span class="pill p-ok">讀取已接</span> <span class="pill p-guide">寫入：指引 eval</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- 6. progress -->
+<section>
+  <div class="eyebrow">P1W 進度</div>
+  <h2>做到哪了</h2>
+  <p class="col">每一列都由一個 sonnet hand 在獨立 worktree 做完，RED-first 加 mutation 驗證，再經 per-row review 和 depth-0 複查才採納。採納的列依序疊成整合分支，每疊一次跑一次全套測試。</p>
+  <div class="chain" aria-label="整合鏈">
+    <span class="n ok">develop</span><span class="arr">→</span>
+    <span class="n ok">w/int（wave 1）</span><span class="arr">→</span>
+    <span class="n ok">w/int2（wave 2）</span><span class="arr">→</span>
+    <span class="n ok">w/int3（MARKER＋W3a）</span><span class="arr">→</span>
+    <span class="n fly">w/int4（PLAINROOT＋LIVEDIR）</span><span class="arr">→</span>
+    <span class="n next">W4 落地 → v2.37.0</span><span class="arr">→</span>
+    <span class="n next">你的 ssh＋tmux 真機驗收</span>
+  </div>
+  <div class="lanes">
+    <div class="lane ok">
+      <h3><span class="pill p-ok">已採納</span></h3>
+      <ul>
+        <li><b>W1a</b> 進度與 phase 取出器</li>
+        <li><b>W1b</b> 驗收輸入檔寫入器</li>
+        <li><b>W1c</b> watcher 自動啟動</li>
+        <li><b>W1de</b> 任務清單＋等你回應</li>
+        <li><b>W1f</b> 派工共用 job root</li>
+        <li><b>W1h</b> 代決策 ledger</li>
+        <li><b>W1i</b> 「來源未接」誠實文字</li>
+        <li><b>W2f</b> context 補寫</li>
+        <li><b>WATCH-A</b> 規劃、待決定檔、比對圖、phase、sources 清單</li>
+        <li><b>WATCH-B</b> 代決策 sidecar、工頭活動</li>
+        <li><b>PHASE+PICK</b> <code>set --phase</code>、自動選題記帳</li>
+        <li><b>PERF+STAMP</b> hook 不多開程序、存活戳記</li>
+        <li><b>MARKER</b> <code>level: null</code> 一般 session</li>
+        <li><b>W3a</b> mod 讀齊所有來源</li>
+        <li><b>EVALX</b> eval harness 擴充</li>
+      </ul>
+    </div>
+    <div class="lane fly">
+      <h3><span class="pill p-fly">進行中</span></h3>
+      <ul>
+        <li><b>PLAINROOT</b> 一般 session 配 job root；watcher 清閒置 scope</li>
+        <li><b>LIVEDIR</b> 指定的 live 目錄一律照用</li>
+        <li><b>EVAL 修正 2</b> 題目明確叫出 skill，重跑 smoke</li>
+      </ul>
+    </div>
+    <div class="lane wait">
+      <h3><span class="pill p-wait">接下來</span></h3>
+      <ul>
+        <li><b>INT4</b> 疊 PLAINROOT＋LIVEDIR，全套測試</li>
+        <li><b>W1b 文字</b> 改讀 <code>session-mode.js root</code></li>
+        <li><b>W1f-b</b> hetero 子任務掛 job root：要不要進 2.37.0，待你決定</li>
+        <li><b>W4</b> 乾淨 clone 落地＋D1（hooks.json）＋一次合併 review＋發版</li>
+        <li><b>真機驗收</b> dev-flow、/l3、/l4、/l5、/l6、ceo-agent 各跑一次，band 每格對來源檔</li>
+      </ul>
+    </div>
+    <div class="lane guide">
+      <h3><span class="pill p-guide">指引列（2.37.0 之後 PATCH）</span></h3>
+      <ul>
+        <li><b>W2a-g</b> DOA 邊界先開待決定檔</li>
+        <li><b>W2b-g</b> dev-flow 各步寫 phase</li>
+        <li><b>W1b-t2</b> merge 後寫驗收輸入檔</li>
+        <li><b>W2e-g</b> 審圖席寫比對紀錄（另需 eval 設計）</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 7. why guidance rows wait -->
+<section>
+  <div class="eyebrow">為什麼有些格要等 eval</div>
+  <h2>機制列 vs 指引列</h2>
+  <div class="two">
+    <div class="card">
+      <h3>機制列：程式碼自己會發生</h3>
+      <p>hook、watcher、engine、CLI 本身的行為。只要測試證明它會動就可以出貨，不需要 eval。例：awaiting-owner 在權限提示時寫 attention 檔。</p>
+    </div>
+    <div class="card">
+      <h3>指引列：要模型照 skill 文字去做</h3>
+      <p>寫入動作只有模型知道該在什麼時候做（例如「這個問題超出 DOA」）。改 skill 文字前，要先用 ON/OFF eval 證明新文字真的讓模型做到、又沒有副作用（CLAUDE.md「成績單前置」）。</p>
+    </div>
+  </div>
+  <div class="callout">
+    <strong>eval 目前卡在哪</strong>
+    <ul class="plain">
+      <li>第一次 smoke（4 格）模型都沒載入要測的 skill：ceo-agent 題目直接強推了 main，dev-flow 題目被當成小修改。題目要改成開頭明確叫出 skill（prereg 修正 2，門檻不動）。</li>
+      <li>計分規則原本找錯待決定檔的位置，已在任何一格開跑前修正並留紀錄（修正 1）。</li>
+      <li>原設計估約 120 格、4,000 萬 tokens；新題目跑完 smoke 後重估。</li>
+    </ul>
+  </div>
+</section>
+
+<footer class="col" style="font-size:13px;color:var(--muted);display:grid;gap:6px">
+  <p>正本：<code>docs/plans/2026-10-03-mods-visible-dispatch.md</code> §4 P1W 與 Review log R5–R5.7；逐列證據：<code>docs/plans/evidence/2026-10-04-mods-p1c/accepted-heads-p1w.txt</code>。</p>
+  <p>還不在 2.37.0 範圍：P2 hook 延遲基線、P3 事件核心與閒置、P4 work-round 投影、W3b「已看過」。</p>
+</footer>
+
+</div>

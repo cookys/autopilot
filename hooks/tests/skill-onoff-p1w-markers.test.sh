@@ -309,4 +309,21 @@ if(!e.files["lib-r2/p1w-markers.sh"]) bad("lib-r2 not pinned");
 if (fz.files["lib/p1w-markers.sh"]!==sha("lib/p1w-markers.sh")) bad("frozen lib was edited");
 ' "$BASE"
 
+echo "=== amendment 2: invocation prefixes record (no vocabulary leak, thresholds untouched, digest pinned) ==="
+node -e '
+const fs=require("fs"),c=require("crypto"),p=require("path");const b=process.argv[1];
+const sha=(f)=>c.createHash("sha256").update(fs.readFileSync(p.join(b,f))).digest("hex");
+const a=JSON.parse(fs.readFileSync(p.join(b,"prereg/amend-2-invocation.json"),"utf8"));
+const fz=JSON.parse(fs.readFileSync(p.join(b,"prereg/FROZEN.json"),"utf8"));
+const bad=(m)=>{console.error("amend-2: "+m);process.exit(1)};
+const e=(fz.amendments||{})["amend-2-invocation"]; if(!e||e.files["prereg/amend-2-invocation.json"]!==sha("prereg/amend-2-invocation.json")) bad("FROZEN entry missing/drifted");
+for (const row of ["w2a-g","w2b-g"]) {
+  const f="prereg/"+row+".json"; if(a.thresholds_sha256[row]!==sha(f)||fz.files[f]!==sha(f)) bad(row+" prereg edited");
+  if(JSON.stringify(a.thresholds[row])!==JSON.stringify(JSON.parse(fs.readFileSync(p.join(b,f),"utf8")).thresholds)) bad(row+" thresholds differ");
+  const pre=a.prefixes[row].ONOFF_PROMPT_PREFIX;
+  for (const t of ["decision","session-mode","phase","--phase","open-","write-task","task-status","L-1","L-3","L-4","L-5","DOA","AUTOPILOT","helper","marker","script"]) if (pre.includes(t)) bad("vocabulary leak in "+row+" prefix: "+t);
+}
+if(a.no_counted_cell_had_run!==true) bad("flag");
+' "$BASE"
+
 echo "PASS: skill-onoff P1W markers three-way probes"

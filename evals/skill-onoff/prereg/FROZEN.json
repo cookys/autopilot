@@ -62,6 +62,13 @@
         "lib-r2/p1w-markers.sh": "de7a5df66d1e12eeae1032ce74b832a971bee3f76ae7c598e597156f484dc2b5",
         "prereg/w2a-g.amend-1.json": "7ca0ac7e6d6c24488bee5b163480121812237424e379cac4dc7eeac93b0c0256"
       }
+    },
+    "amend-2-invocation": {
+      "date": "2026-10-05",
+      "no_counted_cell_had_run": true,
+      "files": {
+        "prereg/amend-2-invocation.json": "69fa124e18ce6f1e93e45346cd04fcd9abfed258295e351576dc4c3b5666fc07"
+      }
     }
   }
 }

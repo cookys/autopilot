@@ -28,7 +28,7 @@
 # Per-cell isolation (E4, every run; state root on tmpfs, see below): AUTOPILOT_LIVE_DIR / AUTOPILOT_TASK_STATUS_DIR
 # point under a per-cell temp dir (the decision ledger default lives in the fixture repo git-common-dir); copied to $OUT/state/ for evidence.
 #
-# Env: ONOFF_TIMEOUT (default 10m) · ONOFF_STUB_BIN (required for --runner stub)
+# Env: ONOFF_PROMPT_PREFIX (optional preface line before task.md, both arms; amend-2) · ONOFF_TIMEOUT (default 10m) · ONOFF_STUB_BIN (required for --runner stub)
 #      ONOFF_PACKS_DIR (override packs dir; tests) · ONOFF_STATE_BASE (tmpfs base for per-cell state; none writable = exit 2) · ONOFF_SHM_DIR (default /dev/shm)
 # Emits: $OUT/result.json (single-line JSONL row), $OUT/transcript.jsonl, $OUT/prompt.md
 # Exit: 0 = row emitted (marker outcomes live IN the row) · 2 = harness/config error
@@ -204,7 +204,11 @@ printf '{"hasCompletedOnboarding":true}\n' > "$SCRATCH_HOME/.claude.json"
 
 # ── prompt: task.md VERBATIM — byte-identical across arms, no artifacts contract ──
 PROMPT_FILE="$OUT_DIR/prompt.md"
-cp "$TASK_DIR/task.md" "$PROMPT_FILE"
+if [ -n "${ONOFF_PROMPT_PREFIX:-}" ]; then  # prereg amendments (w2a-g/w2b-g amend-2): identical invocation preface in BOTH arms
+  { printf '%s\n\n' "$ONOFF_PROMPT_PREFIX"; cat "$TASK_DIR/task.md"; } > "$PROMPT_FILE"
+else
+  cp "$TASK_DIR/task.md" "$PROMPT_FILE"
+fi
 
 TRANSCRIPT="$OUT_DIR/transcript.jsonl"
 RAW_ERR="$OUT_DIR/stderr.log"

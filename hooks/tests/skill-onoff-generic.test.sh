@@ -277,6 +277,16 @@ RES2="$TEST_TMP/matrix-legacy.jsonl"
 bash "$BASE/run-skill-onoff-matrix.sh" --model m --reps 1 --results "$RES2" --tasks d1-s-tiny-feature --runner stub >/dev/null
 [ "$(wc -l < "$RES2")" = 3 ] || fail "legacy matrix default arms changed (want full,card,off)"
 
+echo "=== amend-2: ONOFF_PROMPT_PREFIX is prepended identically in both arms; unset = task.md verbatim ==="
+export STUB_SKILL=ceo-agent
+pb=$(ONOFF_PROMPT_PREFIX="CEO mode — 全權處理:" run pfx-base --task d1-s-tiny-feature --skill ceo-agent --arm base)
+pc=$(ONOFF_PROMPT_PREFIX="CEO mode — 全權處理:" run pfx-change --task d1-s-tiny-feature --skill ceo-agent --arm change)
+pn=$(run pfx-none --task d1-s-tiny-feature --skill ceo-agent --arm base)
+cmp -s "$pb/prompt.md" "$pc/prompt.md" || fail "prefixed prompt differs across arms"
+[ "$(head -1 "$pb/prompt.md")" = "CEO mode — 全權處理:" ] || fail "prefix not first line"
+cmp -s "$pn/prompt.md" "$BASE/tasks/d1-s-tiny-feature/task.md" || fail "unset prefix changed the prompt"
+tail -n +3 "$pb/prompt.md" | cmp -s - "$BASE/tasks/d1-s-tiny-feature/task.md" || fail "prefixed prompt body != task.md"
+
 echo "=== the real stores were never touched ==="
 [ "$(real_token_hits)" = 0 ] || fail "a cell wrote its probe into the REAL live store"
 [ "$(real_snap)" = "$REAL_BEFORE" ] || fail "real /run/user/<uid>/autopilot or ~/.autopilot root changed during the test (inode/mtime diff)"

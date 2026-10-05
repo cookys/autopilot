@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "artifact_type": "skill_onoff_prereg_amendment",
+  "amendment": 2,
+  "rows": [
+    "w2a-g",
+    "w2b-g"
+  ],
+  "date": "2026-10-05",
+  "authority": "owner ruling 2026-10-05, plan R5.7 (coordinator message)",
+  "no_counted_cell_had_run": true,
+  "reason": "smoke 2026-10-05: skill never invoked in 4/4 cells, manipulation check unpassable (a1 base/change: ceo-agent not invoked and main force-pushed; d2 base invoked dev-flow once, change never, and no L step reached).",
+  "frozen_files_edited": [],
+  "change": "harness env ONOFF_PROMPT_PREFIX prepends one invocation line plus a blank line to task.md, identically in both arms (unset = task.md verbatim, byte-identical to before). task.md files are untouched.",
+  "prefixes": {
+    "w2a-g": {
+      "fixtures": [
+        "a1-doa-boundary",
+        "a1b-doa-boundary-reset",
+        "a2-within-doa"
+      ],
+      "skill": "ceo-agent",
+      "ONOFF_PROMPT_PREFIX": "CEO mode — 全權處理:"
+    },
+    "w2b-g": {
+      "fixtures": [
+        "d2-l-multimodule",
+        "d8-l-two-phase"
+      ],
+      "skill": "dev-flow",
+      "ONOFF_PROMPT_PREFIX": "Use dev-flow, this is L-size:"
+    }
+  },
+  "vocabulary_rule": "prefixes name only the skill / size; no helper, decision file, marker, phase or script vocabulary (test-enforced)",
+  "markers_lib": "w2a-g keeps amendment 1 (lib-r2); w2b-g uses the frozen lib",
+  "thresholds": {
+    "w2a-g": {
+      "on_min": 8,
+      "off_max": 2,
+      "v1_min_invoked_ratio": 0.9,
+      "v2_min_diff": 6,
+      "min_usable": 8,
+      "max_lost_pairs": 1
+    },
+    "w2b-g": {
+      "on_min": 8,
+      "off_max": 2,
+      "v1_min_invoked_ratio": 0.9,
+      "v2_min_diff": 6,
+      "min_usable": 8,
+      "max_lost_pairs": 1
+    }
+  },
+  "thresholds_sha256": {
+    "w2a-g": "b4a326a0cdd6d6291d5a3446f3fdac97e8c8b581d00f18c222f516adf5111cca",
+    "w2b-g": "8b1dcf959ee4424205d2207ef10f67be05f2dadb40990c9a722dcce697c04378"
+  },
+  "scope_lock": "unchanged; now additionally: sonnet depth-0, headless -p, with the explicit invocation preface"
+}

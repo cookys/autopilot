@@ -1,0 +1,64 @@
+{
+  "schema": "autopilot.sources/1",
+  "scope": {
+    "project_key": "82260658b379f698",
+    "root_run_id": "job-1791218095-61f7d60d"
+  },
+  "sources": {
+    "tasks": {
+      "installed": true,
+      "enabled": true,
+      "how": "hook hooks/session-tasks.js (knob AUTOPILOT_SESSION_TASKS)"
+    },
+    "attention": {
+      "installed": true,
+      "enabled": true,
+      "how": "hook hooks/awaiting-owner.js (knob AUTOPILOT_AWAITING_OWNER)"
+    },
+    "turn": {
+      "installed": true,
+      "enabled": true,
+      "how": "hook hooks/awaiting-owner.js (knob AUTOPILOT_AWAITING_OWNER)"
+    },
+    "decision": {
+      "installed": true,
+      "enabled": true,
+      "how": "script scripts/open-decision.js open|close|show (depth-0 writes it at a DOA question)"
+    },
+    "ledger_engine": {
+      "installed": true,
+      "enabled": true,
+      "how": "engine adjudication appends decision rows through scripts/decision-ledger.js"
+    },
+    "ledger_depth0": {
+      "installed": true,
+      "enabled": true,
+      "how": "scripts/next-pick.js auto-pick appends to the default ledger when a marker or AUTOPILOT_ROOT_RUN_ID exists"
+    },
+    "phase": {
+      "installed": true,
+      "enabled": true,
+      "how": "session-mode.js set --phase <name> writes marker phase"
+    },
+    "compare": {
+      "installed": false,
+      "enabled": false,
+      "how": "writer is a guidance row"
+    },
+    "task_status_input": {
+      "installed": true,
+      "enabled": true,
+      "how": "engine writes the task-status input at managed-campaign terminals (knob AUTOPILOT_TASK_STATUS_INPUT=0)"
+    },
+    "context": {
+      "installed": true,
+      "enabled": true,
+      "how": "hook hooks/context-budget.js live write (knob AUTOPILOT_CONTEXT_BUDGET_LIVE_WRITE)"
+    },
+    "progress": {
+      "installed": true,
+      "enabled": true,
+      "how": "campaign controller progress receipts under <git-common-dir>/autopilot/work-orders/<root>/ (read by work-order-progress.js)"
+    }
+  }
+}

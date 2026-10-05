@@ -1,0 +1,11 @@
+# P1W row LABEL — every campaign phase the band can show has a zh-TW label (gate runs l5i, l6)
+
+Read `w-common.md`. Work in `$P/land` on `land/v2.37.0` (head = 430ff70a = live FF9, or a docs-only descendant; verify clean). Never touch the main checkout. ONE commit `fix(status): every campaign phase the band shows has a zh-TW label (mods P1W W4 gate)`. Report `$P/run-w/land/LABEL.md`, outputs `$P/run-w/land/label-*`.
+
+Evidence: `../gate/runs/l5i-done2/20261005T153755Z/band.txt` and `../gate/runs/l6-done/20261005T155311Z/band.txt` print `✓ 完成待驗收 gate-sandbox4 · COMPLETED · …` — the raw code, because `scripts/render-review-page.js` `PHASE_LABEL` (~line 105) has no `COMPLETED` key and `buildPhase` falls back to the code.
+
+Do:
+1. Enumerate EVERY value that can reach `buildPhase` as `progress.live_phase` or a valid campaign evidence `phase` (grep the producers: the campaign controller / work-order progress receipts `live_phase`, `src/status/work-order-progress.js`, the controller state machine in `src/engine/`, task-status campaign evidence). Quote the producer lines in the report. Note mixed casing (earlier evidence saw `IMPLEMENTING`, `awaiting_disposition`, `boundary_rejected`): the live_phase path upper-cases, the campaign-evidence path does not — make both paths normalise the same way.
+2. Add a zh-TW label for every enumerated value missing from `PHASE_LABEL` (e.g. `COMPLETED: '完成'`; keep the existing labels' style; check the narrative glossary in memory is not needed — plain words). Unknown future codes keep the raw fallback (no change to that rule).
+3. If `gate/check.js` or `mods/live` carry their own phase label mapping or compare the phase token, keep them in parity (check.js must derive the label independently — copy the table, do not import). Codex mirror of render-review-page.js if mirrored.
+Tests RED-first + mutation controls: a test that iterates the enumerated producer values and asserts each has a non-raw label (so a new producer value without a label goes red), the COMPLETED case, the lower-case campaign-evidence case. Run render-review-page suites, runs-watch-render, the mod suite (`claude plugin test` + tsc + negative grep) if touched, check.test, codex sync --check, check-js-syntax. Final message: report path, SHA, 5-line summary, the enumerated list.

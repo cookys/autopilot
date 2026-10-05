@@ -1,0 +1,53 @@
+{
+  "session_id": "fa1b0f33-5dcd-42af-a448-84fbe8ee84bc",
+  "level": "l6",
+  "repo_root": "/home/cookys/projects/gate-sandbox6",
+  "started_at": "2026-10-05T16:34:55.451Z",
+  "expires_at": "2026-10-06T16:34:55.451Z",
+  "repo_identity": "git-common-dir:/home/cookys/projects/gate-sandbox6/.git",
+  "project_key": "82260658b379f698",
+  "root_run_id": "job-1791218095-61f7d60d",
+  "entry_level": "l6",
+  "fallback_reason": "none",
+  "mission_routing": {
+    "status": "READY",
+    "admitted": true,
+    "would_block": false,
+    "prior_marker_status": "absent",
+    "admission": {
+      "schema_version": 1,
+      "artifact_type": "mission_routing_admission",
+      "authority_status": "enforce",
+      "repo_identity": "git-common-dir:/home/cookys/projects/gate-sandbox6/.git",
+      "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+      "mission_graph_digest": "beb0e5cd14f5a2531254c4b589c0d77b616b982244ce2a522441dc1bd4193053",
+      "sources_digest": "c90fd08261712ab651d590069bff48c8ad0b06521923ba776e99a901f054f227",
+      "deliverable_count": 1,
+      "source_authoring_unit_count": 0,
+      "critical_path": 1,
+      "batch_count": 1,
+      "reservation_totals": {
+        "campaigns": 1,
+        "wall_seconds": 3600,
+        "tool_calls": 100,
+        "engine_attempts": 2,
+        "external_wait_seconds": 900,
+        "canonical_changed_files": 1,
+        "output_bytes": 100000
+      },
+      "admission_digest": "b1de53d11fbd4dc780e0963222c1e479e8d91d9ad96c5da38439ac88112bad38"
+    }
+  },
+  "mission_noop": {
+    "schema_version": 1,
+    "artifact_type": "mission_noop_adoption_set",
+    "admission_digest": "b1de53d11fbd4dc780e0963222c1e479e8d91d9ad96c5da38439ac88112bad38",
+    "noop_adoptions": [],
+    "noop_short_circuit": false,
+    "dispatcher_called": null,
+    "mutation_attempts": null,
+    "gate_attempts": null,
+    "resources_created": null,
+    "digest": "d0915cb7e8c4220d60878c34fe0acfcdf7e6e89ab5ff68d6f32a593fd3e5e454"
+  }
+}

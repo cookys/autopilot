@@ -1,0 +1,5 @@
+ 177257    6011 /home/cookys/.local/lib/nodejs/node-v24.16.0-linux-x64/bin/node /home/cookys/projects/autopilot/bin/autopilot.js status runs --watch --project b117859bc6b398f8 --interval 10 --idle-exit 3600 --render
+ 575883    3976 /home/cookys/.local/lib/nodejs/node-v24.16.0-linux-x64/bin/node /home/cookys/projects/autopilot/bin/autopilot.js status runs --watch --project 629fcdb8f8b4011a --interval 10 --idle-exit 3600 --render
+ 636810    3311 /home/cookys/.local/lib/nodejs/node-v24.16.0-linux-x64/bin/node /home/cookys/projects/autopilot/bin/autopilot.js status runs --watch --project 7b58821dcc9cdc24 --interval 10 --idle-exit 3600 --render
+ 862368     136 /home/cookys/.local/lib/nodejs/node-v24.16.0-linux-x64/bin/node /home/cookys/projects/autopilot/bin/autopilot.js status runs --watch --project 82260658b379f698 --interval 10 --idle-exit 3600 --render
+ 866419     102 /home/cookys/.local/lib/nodejs/node-v24.16.0-linux-x64/bin/node /home/cookys/projects/autopilot/bin/autopilot.js status runs --watch --project 9dc556b726c078d9 --interval 10 --idle-exit 3600 --render

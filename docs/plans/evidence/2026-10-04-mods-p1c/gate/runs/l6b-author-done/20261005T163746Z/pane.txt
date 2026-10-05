@@ -1,0 +1,50 @@
+  - contract check：回傳 GO，assurance 是 provisional，解析出的引擎是 qoderclicn /                            │                                                                                       ✕
+    Qwen3.8-Max-Preview（alibaba）。                                                                          │session $0.50 · host $672.79 · ctx 6%
+  - dispatch：dispatch-author.sh --strict-contract 已用 run_in_background 送出，prompt 是                     │dispatch · execution status, not progress (執行狀態，不是進度)
+    l5prep2/prompt-verify-sb6.md。                                                                            │author-1791218150-883616 · author · qoderclicn/Qwen3.8-Max-Preview · started 00:35 · ela…
+  - 輸出位置：stdout 在 l5prep2/author-sb6.out（結尾會附 exit=），stderr 在 author-sb6.err。                  │gates · review receipts of this job
+  - 喚醒：另外起了一個 900 秒的背景死人開關，以防完成通知漏送。                                               │no review receipt
+                                                                                                              │任務工具未開 · 設 CLAUDE_CODE_ENABLE_TODO_TOOLS=1 後才會記錄任務
+  所有檔案都放在 l5prep2，沒有寫進 sandbox，也沒有 push。依 GO 的範圍，這個 provisional 產物只是未受信任的 raw│1 件派工無決策紀錄
+  artifact，之後必須由 depth-0 自己執行驗證。現在結束回合，等通知。                                           │工頭活動（依 session 綁定：同一 session 的多個工作會看到同一批）
+                                                                                                              │a012bf4a822a5ef2c · — · 38s 前
+✻ Baked for 23s · done 12:35 AM · 1 shell still running                                                       │a8055f791035b83d1 · — · 1m 前
+                                                                                                              │open the review page
+● Background command                                                                                          │snapshot published 2026-10-05T16:37:03.997Z · session cost as of 2026-10-05T16:37:03.997Z
+"S=/tmp/claude-1000/-home-cookys-projects-autopilot/34a5c748-efec-4871-874c-e4eccde96bac/scratchpad/l5prep2;  │· host cost as of 2026-10-05T16:37:03.997Z
+P=/home/cookys/projects/autopilot; R=/home/cookys/projects/gate-sandbox6                                      │
+cd $R && $P/scripts/dispatch-author.sh --strict-contract --contract-file $S/unit-verify-sb6.json --repo-root  │
+$R --prompt-file $S/prompt-verify-sb6.md > $S/author-sb6.out 2> $S/author-sb6.err; echo "exit=$?" >>          │
+$S/author-sb6.out" completed (exit code 0)                                                                    │
+                                                                                                              │
+  Ran 2 shell commands                                                                                        │
+                                                                                                              │
+● 驗證作者這一段沒有產出任何產物：dispatch 回報 status: truncated、error: frame_missing，結束碼 5。           │
+                                                                                                              │
+  - dispatch：用的是 qoderclicn / Qwen3.8-Max-Preview。run_id 是 author-1791218150-883616，manifest 在        │
+    /tmp/autopilot-dispatch-runs/author-1791218150-883616.manifest.json。                                     │
+  - 原始 log：/tmp/dispatch-author-log-PfEWU7，只有 583 bytes。內容是破損的 tool-call 標記和一大串重複的      │
+    <|>，沒有 artifact frame，所以 frame_missing 是引擎輸出本身壞掉，不是 contract 的問題。                   │
+  - sandbox：git status 是乾淨的，沒有 verify-readme-line.sh，也沒有 containment breach。沒有 push。          │
+  - 未解決的疑點：selection_path 和 verification_author 都是 null，我沒有查這是 truncated                     │
+    的正常現象還是另有原因。                                                                                  │
+                                                                                                              │
+  我沒有自動重跑。contract 的 max_attempts 是 1，而且重跑會花另一次 runner 額度，所以先停在這裡。             │
+                                                                                                              │
+  你可以選一個方向：                                                                                          │
+  - 沿用同一份 contract 另開一次（需要新的 run）。                                                            │
+  - 換 prompt。                                                                                               │
+  - 改走 contract 解析出的其他引擎。                                                                          │
+                                                                                                              │
+  要走哪個，請告訴我。                                                                                        │
+                                                                                                              │
+✻ Crunched for 9s · done 12:37 AM · 1 shell still running                                                     │
+◌ 待命 gate-sandbox6 · — · 2m · —                                                                         [-] │
+沒有派工在跑 · 1 件派工無決策紀錄                                                                             │
+                                                                                                              │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 同一份 contract 再重跑一次
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Sonnet 5.5 ── ~/projects/gate-sandbox6 develop ─────────────────────────────────────────── v2.1.289
+  5h ▮▮▯▯▯▯ 40% 1h22m   7d ▮▮▯▯▯▯ 43% 2d11h   ctx ▯▯▯▯▯▯ 6%                        → codeforge adopt
+  ⏵⏵ accept edits on · 1 shell · ← 6 agents

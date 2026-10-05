@@ -1,0 +1,50 @@
+                                                                  ╭──────────────────────────────────────────╮│                                                                                       ✕
+ ▐▛███▛█   Claude Code v2.1.289                                   │ autopilot                                ││session $0.43 · host $672.72 · ctx 6%
+▝▜██████▀  Sonnet 5.5 · Claude Max                                │ execution axis: RUNNING 0→1 · EXITED 0→0 ││dispatch · execution status, not progress (執行狀態，不是進度)
+ ▝▝   ▝▝   ~/projects/gate-sandbox6                               │  · UNKNOWN 0→0                           ││author-1791218150-883616 · author · qoderclicn/Qwen3.8-Max-Preview · started 00:35 · ela…
+                                                                  ╰──────────────────────────────────────────╯│gates · review receipts of this job
+⚠ Your login expires in 3 days · run /login to renew                                                          │no review receipt
+                                                                                                              │任務工具未開 · 設 CLAUDE_CODE_ENABLE_TODO_TOOLS=1 後才會記錄任務
+❯ /autopilot:l6 只做驗證作者這一段（不做實作 campaign、不做 mission prepare/grant）：session-mode set --level │1 件派工無決策紀錄
+l6（不要加 env -u）；照 /home/cookys/projects/autopilot/skills/l6/SKILL.md 凍結 unit contract（參考           │工頭活動（依 session 綁定：同一 session 的多個工作會看到同一批）
+/tmp/claude-1000/-home-cookys-projects-autopilot/34a5c748-efec-4871-874c-e4eccde96bac/scratchpad/l5prep2/unit │a8055f791035b83d1 · — · 11s 前
+-verify-sb5.json 的形狀，repo 改成 /home/cookys/projects/gate-sandbox6），dispatch-contract check 要 GO，然後 │open the review page
+dispatch-author --strict-contract（用 Bash 的 run_in_background 背景執行，送出後結束回合等通知）。unit        │snapshot published 2026-10-05T16:35:55.875Z · session cost as of 2026-10-05T16:35:55.875Z
+contract、prompt、產物都放在 /tmp/claude-1000/-home-cookys-projects-autopilot/34a5c748-efec-4871-874c-e4eccde │· host cost as of 2026-10-05T16:35:55.875Z
+96bac/scratchpad/l5prep2，不要寫進 sandbox。不要 push。                                                       │
+                                                                                                              │
+  Ran 6 shell commands                                                                                        │
+                                                                                                              │
+● 驗證作者的 dispatch 已經在背景送出，結果還沒回來。                                                          │
+                                                                                                              │
+  - session-mode：set --level l6 已執行，沒有加 env -u。                                                      │
+  - unit contract：已凍結為 l5prep2/unit-verify-sb6.json，形狀沿用 sb5，repo 改為 gate-sandbox6，base_sha 是  │
+    e1316d0。                                                                                                 │
+  - contract check：回傳 GO，assurance 是 provisional，解析出的引擎是 qoderclicn /                            │
+    Qwen3.8-Max-Preview（alibaba）。                                                                          │
+  - dispatch：dispatch-author.sh --strict-contract 已用 run_in_background 送出，prompt 是                     │
+    l5prep2/prompt-verify-sb6.md。                                                                            │
+  - 輸出位置：stdout 在 l5prep2/author-sb6.out（結尾會附 exit=），stderr 在 author-sb6.err。                  │
+  - 喚醒：另外起了一個 900 秒的背景死人開關，以防完成通知漏送。                                               │
+                                                                                                              │
+  所有檔案都放在 l5prep2，沒有寫進 sandbox，也沒有 push。依 GO 的範圍，這個 provisional 產物只是未受信任的 raw│
+  artifact，之後必須由 depth-0 自己執行驗證。現在結束回合，等通知。                                           │
+                                                                                                              │
+✻ Baked for 23s · done 12:35 AM · 2 shells still running                                                      │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+● 進行中 gate-sandbox6 · — · 1m · —                                                                       [-] │
+1 個派工在跑 · 1 件派工無決策紀錄                                                                             │
+                                                                                                              │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 檢查 author-sb6 的結果
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Sonnet 5.5 ── ~/projects/gate-sandbox6 develop ─────────────────────────────────────────── v2.1.289
+  5h ▮▮▯▯▯▯ 39% 1h24m   7d ▮▮▯▯▯▯ 43% 2d11h   ctx ▯▯▯▯▯▯ 6%                        → codeforge adopt
+  ⏵⏵ accept edits on · 2 shells · ← 6 agents

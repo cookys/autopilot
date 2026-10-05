@@ -1,0 +1,10 @@
+l6b (2026-10-05 ~16:32-16:38Z), gate-sandbox6 (e1316d0), FF9
+Probe 1 (safe): probe-engine-capability.sh quota --runner qoderclicn --model Qwen3.8-Max-Preview --role verification-author --effort high
+  -> quota.status unknown, evidence "Binary qoderclicn verified in PATH", event 895
+Probe 2 (--live-spend, same flags): quota available, "Live spend probe succeeded", event 896, but endpoint_binding ambiguous-legacy; check on sb5 contract still NO-GO (quota unavailable)
+Probe 3 (--live-spend --role verification_author --effort high --endpoint @none): available, endpoint_binding exact, event 897 (ttl 3600s)
+  check: node scripts/dispatch-contract.js check --contract /tmp/claude-1000/-home-cookys-projects-autopilot/34a5c748-efec-4871-874c-e4eccde96bac/scratchpad/l5prep2/unit-verify-sb5.json --repo ~/projects/gate-sandbox5 --json -> GO, assurance provisional
+Session id: fa1b0f33-5dcd-42af-a448-84fbe8ee84bc (marker ~/.autopilot/session-mode/fa1b0f33-....json, level l6, root job-1791218095-61f7d60d) - left in place
+Unit contract (depth-0 frozen): /tmp/claude-1000/-home-cookys-projects-autopilot/34a5c748-efec-4871-874c-e4eccde96bac/scratchpad/l5prep2/unit-verify-sb6.json (copy of /tmp/claude-1000/-home-cookys-projects-autopilot/34a5c748-efec-4871-874c-e4eccde96bac/scratchpad/l5prep2/unit-verify-sb6-probe.json I made with sed from sb5); prompt /tmp/claude-1000/-home-cookys-projects-autopilot/34a5c748-efec-4871-874c-e4eccde96bac/scratchpad/l5prep2/prompt-verify-sb6.md; out/err /tmp/claude-1000/-home-cookys-projects-autopilot/34a5c748-efec-4871-874c-e4eccde96bac/scratchpad/l5prep2/author-sb6.out/.err
+Author run: author-1791218150-883616, manifest /tmp/autopilot-dispatch-runs/author-1791218150-883616.manifest.json, raw log /tmp/dispatch-author-log-PfEWU7
+Result: {"status":"truncated","error":"frame_missing","verification_author":null} exit=5

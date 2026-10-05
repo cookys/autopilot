@@ -1,0 +1,29 @@
+{
+  "schema": "autopilot.foreman-activity/1",
+  "scope": {
+    "project_key": "82260658b379f698",
+    "repo_identity": "git-common-dir:/home/cookys/projects/gate-sandbox6/.git",
+    "root_run_id": "job-1791218095-61f7d60d"
+  },
+  "binding": "session",
+  "stall_s": 600,
+  "agents": [
+    {
+      "agent_id": "a8055f791035b83d1",
+      "description": null,
+      "label": null,
+      "last_activity_at": "2026-10-05T16:35:45.769Z",
+      "age_s": 10,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-05T16:35:45.769Z",
+      "source": "stamp",
+      "session_id": "fa1b0f33-5dcd-42af-a448-84fbe8ee84bc",
+      "binding": "session"
+    }
+  ],
+  "stage": null,
+  "stage_source": null,
+  "stage_at": null,
+  "stage_age_s": null
+}

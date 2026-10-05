@@ -1,0 +1,7 @@
+session id: 6bae5b13-c3dc-4541-9504-b6268030a1e9 (tmux l5f, killed)
+marker: ~/.autopilot/session-mode/6bae5b13-c3dc-4541-9504-b6268030a1e9.json (level l5, repo_root /home/cookys/projects/gate-sandbox2, root job-1791208074-91773e8e, mission_routing READY, graph digest beb0e5cd...) -- REMAINS
+watcher pid: not recorded (none checked)
+campaign root / work-order ids: none (mission prepare rejected)
+contract/seal/prepared: none produced (prepared-sb2.json not written)
+worktrees/branches: none created
+capture: runs/l5f-blocked/20261005T135021Z

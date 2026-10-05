@@ -390,7 +390,7 @@ test('decision-ledger stamp: a plain marker without a root stamps null like no m
   assert.strictEqual(stampedRoot(), 'job-plain-2', 'root_run_id is a field meant to be read');
 });
 
-test('next-pick: a plain marker does not count as "on a job" (nothing is written, like no marker)', () => {
+test('next-pick: readMarker stays l3-l6 only, but next-pick\'s activity probe uses the plain-inclusive readSessionRecord (REPAIR-2: a plain session records its picks; behaviour pinned in next-pick.test.sh)', () => {
   const f = fx();
   writePlain(f);
   const r = spawnSync('node', ['-e', 'process.stdout.write(String(Boolean(require(process.argv[1]).readMarker())))', CLI], { env: f.env, encoding: 'utf8' });
@@ -398,8 +398,8 @@ test('next-pick: a plain marker does not count as "on a job" (nothing is written
   // and the real consumer: next-pick's own activity probe
   const np = spawnSync('node', ['-e', `
     const src = require('fs').readFileSync(process.argv[1], 'utf8');
-    process.stdout.write(/readMarker\\(\\)/.test(src) ? 'uses-readMarker' : 'other');`, path.join(ROOT, 'scripts', 'next-pick.js')], { encoding: 'utf8' });
-  assert.strictEqual(np.stdout, 'uses-readMarker');
+    process.stdout.write(/readSessionRecord\\(\\)/.test(src) && !/readMarker\\(\\)/.test(src) ? 'uses-readSessionRecord' : 'other');`, path.join(ROOT, 'scripts', 'next-pick.js')], { encoding: 'utf8' });
+  assert.strictEqual(np.stdout, 'uses-readSessionRecord');
 });
 
 test('mission-routing-admission: a plain marker file is observed as absent (never corrupt)', () => {

@@ -39,8 +39,11 @@ function buildSourcesManifest({ pluginRoot, env = process.env, autopilotHome, sc
   const hostsOf = (file) => {
     let names = [];
     try { names = fs.readdirSync(path.join(pluginRoot, 'hooks')); } catch (_error) { return []; }
-    const needle = new RegExp(`require\\(\\s*['"]\\./${file.replace(/\./g, '\\.')}['"]\\s*\\)`);
-    return names.filter((n) => n.endsWith('.js') && !n.endsWith('.test.js') && n !== file && needle.test(readText(path.join(pluginRoot, 'hooks', n)) || ''));
+    // `require('./awaiting-owner')` and `require('./awaiting-owner.js')`, either quote style; comments never count.
+    const stem = file.replace(/\.js$/, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const needle = new RegExp(`require\\(\\s*(['"])\\./${stem}(?:\\.js)?\\1\\s*\\)`);
+    const code = (text) => text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    return names.filter((n) => n.endsWith('.js') && !n.endsWith('.test.js') && n !== file && needle.test(code(readText(path.join(pluginRoot, 'hooks', n)) || '')));
   };
   // installed = hooks.json wires the module itself OR a process that hosts it
   const hookRuns = (file) => hookInstalled(file) || hostsOf(file).some((h) => hookInstalled(h));

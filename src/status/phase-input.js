@@ -3,11 +3,14 @@
 // src/status/phase-input.js — the phase a session declared on its session-mode marker (mods P1W W2b-m, read side).
 // The writer is `session-mode.js set --phase <name>` (marker fields `phase` + `phase_set_at`). Only markers the caller
 // already filtered as unexpired and of this project count; here the root must also match the scope (null for unbound).
-// Two markers with a phase on one scope: the newest phase_set_at wins. Invalid phase (not a trimmed 1-64 char string
+// Two markers with a phase on one scope: the newest phase_set_at wins. Invalid phase (not a trimmed 1-64 code point string
 // without control characters) is ignored. Returns { phase, phase_set_at, session_id } or null.
 
+// Must stay identical to the writer's rule (scripts/session-mode.js parsePhase): 1-64 CODE POINTS, trimmed, no C0/DEL/C1
+// control characters. hooks/phase-rule-parity.test.js feeds both the same strings.
+const PHASE_MAX = 64;
 function validPhase(p) {
-  return typeof p === 'string' && p.length >= 1 && p.length <= 64 && p === p.trim() && !/[\u0000-\u001f\u007f]/.test(p);
+  return typeof p === 'string' && p.length >= 1 && [...p].length <= PHASE_MAX && p === p.trim() && !/[\u0000-\u001f\u007f-\u009f]/u.test(p);
 }
 
 function readMarkerPhase({ markers, key, root }) {

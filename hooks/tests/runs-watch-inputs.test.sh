@@ -8,6 +8,7 @@
 #   23 passed, 73 failed (e.g. FAIL planned (campaign): ...: expected '[{"id":"d1",...}]', got 'nomodel'/'null'; FAIL open writes a decision; FAIL manifest ... Cannot find module src/status/sources-manifest.js)
 # PHASE-TASK addition (item 7 + units) RED at 15966420 (src/render without the task fallback): 118 passed, 24 failed (e.g. FAIL phase task: the task in progress reaches model.json: expected '{"code":"2",...}', got 'null'; units crash on taskPhase). GREEN: 142 assertions.
 # Mutation controls (outputs in the run evidence dir, mut-*.txt): each guard below turns the suite red when broken.
+# REPAIR-2 addition (host spellings) RED at b8d83789: 144 passed, 3 failed (extensionless require single+double quote not hosts; commented-out require counted as host).
 . "$(dirname "$0")/lib.sh"
 
 eq() { assert_eq "$2" "$1" "$3"; } # eq <expected> <actual> <msg>
@@ -426,6 +427,13 @@ fs.writeFileSync(path.join(plug, 'hooks', 'hooks.json'), JSON.stringify({ hooks:
 out('i_comment_not_host', st(buildSourcesManifest({ pluginRoot: plug, env: {}, autopilotHome: tmp, scope: { project_key: 'k', root_run_id: null } }).sources, 'attention'));
 fs.writeFileSync(path.join(plug, 'hooks', 'chatty.js'), "require('./awaiting-owner.js').handle({});\n");
 out('i_require_is_host', st(buildSourcesManifest({ pluginRoot: plug, env: {}, autopilotHome: tmp, scope: { project_key: 'k', root_run_id: null } }).sources, 'attention'));
+// REPAIR-2 (hosts-regex-suffix): extensionless / double-quoted spellings are hosts too; a commented-out require is not
+const attn = () => st(buildSourcesManifest({ pluginRoot: plug, env: {}, autopilotHome: tmp, scope: { project_key: 'k', root_run_id: null } }).sources, 'attention');
+fs.writeFileSync(path.join(plug, 'hooks', 'chatty.js'), "require('./awaiting-owner').handle({});\n"); out('i_require_noext_single', attn());
+fs.writeFileSync(path.join(plug, 'hooks', 'chatty.js'), 'require("./awaiting-owner").handle({});\n'); out('i_require_noext_double', attn());
+fs.writeFileSync(path.join(plug, 'hooks', 'chatty.js'), 'require("./awaiting-owner.js").handle({});\n'); out('i_require_ext_double', attn());
+fs.writeFileSync(path.join(plug, 'hooks', 'chatty.js'), "// require('./awaiting-owner')\n/* require('./awaiting-owner.js') */\n"); out('i_require_commented', attn());
+fs.writeFileSync(path.join(plug, 'hooks', 'chatty.js'), "require('./awaiting-owner-extra');\n"); out('i_require_other_module', attn());
 // item 3: decisions sidecar writers_wired on the integrated tree
 out('i_ledger_depth0', buildSourcesManifest({ pluginRoot: root, env: {}, autopilotHome: tmp, scope: {} }).sources.ledger_depth0.installed);
 // renderer: manifest drives wired
@@ -502,6 +510,11 @@ eq 'true/true' "$(uv i_no_own_attention)" "INT2 attention: own entries removed, 
 eq 'false/false' "$(uv i_none_attention)" "INT2 attention: hosts AND own entries removed -> not installed (mutation flips it)"
 eq 'false/false' "$(uv i_comment_not_host)" "INT2 attention: a hook file that only names awaiting-owner in a comment is no host"
 eq 'true/true' "$(uv i_require_is_host)" "INT2 attention: a wired hook that require()s awaiting-owner is a host"
+eq 'true/true' "$(uv i_require_noext_single)" "REPAIR-2 attention: require('./awaiting-owner') without .js is a host"
+eq 'true/true' "$(uv i_require_noext_double)" "REPAIR-2 attention: require(\"./awaiting-owner\") double quotes, no .js is a host"
+eq 'true/true' "$(uv i_require_ext_double)" "REPAIR-2 attention: require(\"./awaiting-owner.js\") double quotes is a host"
+eq 'false/false' "$(uv i_require_commented)" "REPAIR-2 attention: commented-out require lines are no host"
+eq 'false/false' "$(uv i_require_other_module)" "REPAIR-2 attention: require of a longer module name is no host"
 eq 'true/true' "$(uv i_real_tasks)" "INT2 tasks: real wiring -> installed"
 eq 'false/false' "$(uv i_no_tasks_wiring)" "INT2 tasks: wiring removed -> not installed"
 eq 'true/true' "$(uv i_real_context)" "INT2 context: real wiring -> installed"

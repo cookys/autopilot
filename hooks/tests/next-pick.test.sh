@@ -3,6 +3,7 @@
 # Proves: deterministic replay from the materialized record, ask-first rows are
 # never auto-picked, user preference outranks system signals among eligible
 # candidates, and BACKLOG parsing extracts machine-readable fields.
+# REPAIR-2 addition (plain session root) RED at b8d83789: 53 passed, 2 failed (plain marker: no pick row).
 . "$(dirname "$0")/lib.sh"
 
 SCRIPT="$REPO_ROOT/scripts/next-pick.js"
@@ -182,6 +183,15 @@ assert_contains "$IMP_ROW" '"candidates_digest"' "marker: row carries the materi
 assert_contains "$IMP_OUT" '"pick"' "marker: stdout result unchanged"
 imp_pick AUTOPILOT_SESSION_ID=sess-live >/dev/null 2>&1
 assert_eq "1" "$(imp_rows)" "marker: replaying the same pick is deduped (still one row)"
+# REPAIR-2 (next-pick-plain-root): a plain session (level null, minted root) records its picks too
+rm -f "$IMP_LEDGER"
+node -e 'const now=Date.now();require("fs").writeFileSync(process.argv[1],JSON.stringify({session_id:"sess-plain",level:null,repo_root:process.argv[2],started_at:new Date(now-1000).toISOString(),expires_at:new Date(now+3600000).toISOString(),root_run_id:"plain-root-9"}))' "$IMP_MARKERS/sess-plain.json" "$IMP_REPO"
+imp_pick AUTOPILOT_SESSION_ID=sess-plain >/dev/null 2>&1
+assert_eq "1" "$(imp_rows)" "plain marker: one pick row lands in the default ledger"
+assert_contains "$(cat "$IMP_LEDGER")" '"root_run_id":"plain-root-9"' "plain marker: row carries the plain session's root"
+rm -f "$IMP_LEDGER" "$IMP_MARKERS/sess-plain.json"
+imp_pick AUTOPILOT_SESSION_ID=sess-plain >/dev/null 2>&1
+assert_file_absent "$IMP_LEDGER" "plain session id with no marker: nothing is written"
 # AUTOPILOT_ROOT_RUN_ID alone (no marker)
 rm -f "$IMP_LEDGER"
 imp_pick AUTOPILOT_ROOT_RUN_ID=root-env-7 >/dev/null 2>&1

@@ -269,11 +269,11 @@ function pick(opts) {
 }
 
 // True when this process runs on behalf of a job: AUTOPILOT_ROOT_RUN_ID is set, or this session holds an
-// active (unexpired, valid-level) session-mode marker. Fail-open to false.
+// active (unexpired) session record — an l3-l6 marker or a plain session's marker. Fail-open to false.
 function onAJob() {
   if (process.env.AUTOPILOT_ROOT_RUN_ID) return true;
   try {
-    return Boolean(require('./session-mode').readMarker());
+    return Boolean(require('./session-mode').readSessionRecord());
   } catch (_error) {
     return false;
   }

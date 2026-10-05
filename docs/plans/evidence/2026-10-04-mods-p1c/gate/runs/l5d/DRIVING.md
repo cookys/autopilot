@@ -1,0 +1,7 @@
+# l5d driving notes (2026-10-05, live c685bc6b / FF7)
+- Driven /l5 ran steps 6-9 unaided: session-mode set (no env -u) READY with the new graph digest beb0e5cd; mission prepare + grant OK (attempt 1, base e1316d0); brief written to scratchpad; engine implement-review backgrounded.
+- engine implement-review returned status blocked, phase dev_flow_admission, DEV_FLOW_ADMISSION_REQUIRED_OR_STALE: "session marker Mission projection mismatch: marker Mission mission_graph_digest does not match campaign projection"; dispatcher_called false, model_calls 0, no worktree/branch.
+- Depth-0's diagnosis (inferred, not experimentally confirmed): the stale repo-keyed marker _home_cookys_projects_gate-sandbox.json (l5, graph digest 95c8c4ed from v1) acts as a concurrent fence; only retire with an integration receipt, not deletable. My own session marker carries the new digest beb0e5cd and matches the contract's mission_graph_digest.
+- Marker root job-1791207052-fd54fc14 vs contract root mission-bf0a9f8a...; band followed the session scope (待命, "no runs in this scope").
+- Depth-0 stopped and asked the owner; ghost prompt "走降級路徑，修好後重新 grant 再送" never accepted. Sandbox untouched since grant; origin e1316d0.
+- Approvals: my first approve helper matched its allowlist loosely (prompt echo), so prepare/grant bash dialogs may have been approved by it; all later dialogs were read before approving. No unexpected dialog was approved (session-mode set, brief write under $S, engine implement-review, read-only inspects).

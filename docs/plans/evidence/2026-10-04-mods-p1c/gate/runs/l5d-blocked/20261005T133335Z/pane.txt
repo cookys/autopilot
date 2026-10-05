@@ -1,0 +1,50 @@
+                                                                                                              │                                                                                       ✕
+                                                                                                              │session $0.77 · host $551.17 · ctx 7%
+● 這次在 intake 被擋下，沒有呼叫 dispatcher，也沒有花任何 model call。我先唯讀查一下 marker 的 digest。       │dispatch · execution status, not progress (執行狀態，不是進度)
+                                                                                                              │no runs in this scope
+  Ran 1 shell command                                                                                         │gates · review receipts of this job
+                                                                                                              │no review receipt
+● Intake 擋下了，這次嘗試沒有送出任何 dispatch，所以沒有 hand 的 commit，mission 分支也沒有建立。             │任務工具未開 · 設 CLAUDE_CODE_ENABLE_TODO_TOOLS=1 後才會記錄任務
+                                                                                                              │工頭活動（依 session 綁定：同一 session 的多個工作會看到同一批）
+  錯誤                                                                                                        │a28bd761d856b5cf4 · — · 34s 前
+  status=blocked  phase=dev_flow_admission                                                                    │ab00eeb1efd62aa88 · — · 1m 前
+  rejection_code=DEV_FLOW_ADMISSION_REQUIRED_OR_STALE                                                         │open the review page
+  reason=session marker Mission projection mismatch: marker Mission mission_graph_digest does not match       │snapshot published 2026-10-05T13:33:03.566Z · session cost as of 2026-10-05T13:33:03.566Z
+  campaign projection                                                                                         │· host cost as of 2026-10-05T13:33:03.566Z
+  dispatcher_called=false  model_calls=0  mutation_attempts=0  resources_created=0                            │
+                                                                                                              │
+  原因（唯讀檢查的結果）                                                                                      │
+  - ~/.autopilot/session-mode/ 裡有兩個 marker 都指向 gate-sandbox，而且都是 level l5。                       │
+    - c5ce705f-….json 是本 session 剛設定的 marker，graph digest 是新的 beb0e5cd…。                           │
+    - _home_cookys_projects_gate-sandbox.json 是 repo-keyed marker（到期時間 2026-10-06T13:20Z），graph digest│
+      還是舊的 v1 95c8c4ed…。我的 set 沒有更新它。                                                            │
+  - recipe 第 6 步說，另一個 active marker 若 graph digest 不同，bridge 會把它當作並行 fence 而阻擋           │
+    intake。我判斷這個舊 repo-keyed marker 就是擋住的原因。這是由 digest 對不上推出來的，還沒有用實驗證實。   │
+  - REPORT 裡的 7be684e2-… 這個 marker 也還在，但它沒有 mission_routing，應該不是原因。                       │
+                                                                                                              │
+  我沒有動的部分                                                                                              │
+  - 依 recipe，這個舊 marker 只能用 session-mode.js retire --session <id> --integration-receipt               │
+    <record-integration receipt> 退役，而且不能手動刪除。                                                     │
+  - 這個 marker 的 v1 deliverable 並沒有整合，我手上也沒有 integration receipt。                              │
+  - 改用 set --level l3 --fallback … 降級，或強制清掉 marker，都會改變你指定的 l5 路徑和 gate                 │
+    的測試意義，所以我先停下來。                                                                              │
+                                                                                                              │
+  目前狀態                                                                                                    │
+  - grant attempt 1 已被這次 intake 消耗（lineage bf0a9f8a…）。                                               │
+  - sandbox 工作樹是乾淨的，沒有 push。                                                                       │
+                                                                                                              │
+  需要你決定                                                                                                  │
+  1. 要不要由你清掉或處理那個舊 repo-keyed marker？                                                           │
+  2. 或者要我走 recipe 的降級路徑（--level l3 --entry-level l5 --fallback precondition_failed）？             │
+  3. 清掉之後，我需要重新 mission grant（attempt 2）再送一次，這樣可以嗎？                                    │
+                                                                                                              │
+✻ Cogitated for 18s · done 9:32 PM                                                                            │
+◌ 待命 gate-sandbox · — · 2m · —                                                                          [-] │
+沒有派工在跑                                                                                                  │
+                                                                                                              │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 走降級路徑，修好後重新 grant 再送
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Sonnet 5.5 ── ~/projects/gate-sandbox develop ──────────────────────────────────────────── v2.1.289
+  5h ▯▯▯▯▯▯ 12% 4h27m   7d ▮▮▯▯▯▯ 36% 2d14h   ctx ▯▯▯▯▯▯ 7%                        → codeforge adopt
+  ⏵⏵ accept edits on (shift+tab to cycle) · ← 6 agents

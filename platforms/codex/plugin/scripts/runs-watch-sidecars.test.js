@@ -387,3 +387,44 @@ test('F8 age-only refresh: an unchanged source is rewritten at most once a minut
     assert.ok(c.sidecar('foreman', 'R1').agents[0].age_s >= age1 + 70, 'a minute later the file is refreshed with the new age');
   } finally { c.cleanup(); }
 });
+
+// mods P1W FOREMAN: the stamp rows say `stamped: true` and carry `ended_at` (SubagentStop), so the band can tell a quiet running
+// foreman from a finished one. Only stamp rows can say ended; a tasks row merged with an ended stamp keeps the end.
+test('F10 FOREMAN: stamp rows carry stamped + ended_at (null while running); a tasks-only row carries neither; schema valid', () => {
+  const c = mk();
+  try {
+    marker(c, 's1');
+    stamp(c, 's1', 'run1', NOW - 5000);
+    stamp(c, 's1', 'done1', NOW - 9000, { ended_at: iso(NOW - 2000) });
+    stamp(c, 's1', 'junk', NOW - 7000, { ended_at: 'not a time' });
+    tasksFile(c, 's1', NOW - 3000, [trow('only-tasks')]);
+    c.runs = [row('a', 'R1')];
+    c.tick();
+    const s = c.sidecar('foreman', 'R1');
+    const by = Object.fromEntries(s.agents.map((a) => [a.agent_id, a]));
+    assert.equal(by.run1.stamped, true);
+    assert.equal(by.run1.ended_at, null);
+    assert.equal(by.done1.stamped, true);
+    assert.equal(by.done1.ended_at, iso(NOW - 2000));
+    assert.equal(by.junk.ended_at, null, 'an unparseable ended_at is not an end');
+    assert.equal('stamped' in by['only-tasks'], false);
+    assert.equal('ended_at' in by['only-tasks'], false);
+    assert.equal(validate('foreman-activity', s, c.base), '');
+  } finally { c.cleanup(); }
+});
+
+test('F11 FOREMAN: a tasks row newer than an ended stamp of the same agent keeps the end (merge propagates ended_at)', () => {
+  const c = mk();
+  try {
+    marker(c, 's1');
+    stamp(c, 's1', 'ag1', NOW - 20000, { ended_at: iso(NOW - 15000) });
+    tasksFile(c, 's1', NOW - 1000, [trow('ag1')]); // the statusline file still lists the finished agent, fresher than its last tool call
+    c.runs = [row('a', 'R1')];
+    c.tick();
+    const a = c.sidecar('foreman', 'R1').agents.find((x) => x.agent_id === 'ag1');
+    assert.equal(a.source, 'context_tasks', 'the newer row wins the activity time');
+    assert.equal(a.stamped, true);
+    assert.equal(a.ended_at, iso(NOW - 15000));
+    assert.equal(a.description, 'desc ag1');
+  } finally { c.cleanup(); }
+});

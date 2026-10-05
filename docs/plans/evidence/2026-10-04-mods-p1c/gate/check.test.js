@@ -255,3 +255,60 @@ test('TURN PLANTED RED: active turn, band 進行中 but line 2 does not name the
   const r = run(capture({ 'turn.json': turnF('active') }, ['● 進行中 demo · — · 30m · —', '沒有派工在跑']));
   assert.strictEqual(status(r, 'reason'), 'FAIL'); assert.strictEqual(r.ok, false);
 });
+
+// ---- P1W FOREMAN (mods): foremen = agents/*.json stamps; dialog surface ----
+// RED before the change: see run-w/land/foreman-red-check.txt. Mutation controls: run-w/land/mut-foreman-check-*.txt.
+const agentF = (id, ageS, extra) => ({ schema: 'autopilot.agent-activity/1', session_id: SID, agent_id: id, agent_type: 'general-purpose', last_tool_at: new Date(NOW - ageS * 1000).toISOString(), last_tool_name: 'Bash', ...extra });
+test('FOREMAN: an un-ended agent quiet < 180 s is 進行中 and the reason names the foreman; >= 180 s is 疑似卡住 with 工頭 N 分沒有動作', () => {
+  const run1 = run(capture({ 'agents/f1.json': agentF('f1', 40) }, ['● 進行中 demo · — · 30m · —', '工頭在跑：last tool: Bash（0 分前有動作）']));
+  assert.strictEqual(status(run1, 'verdict'), 'PASS'); assert.strictEqual(status(run1, 'reason'), 'PASS');
+  assert.strictEqual(derive(capture({ 'agents/f1.json': agentF('f1', 179) }, [])).verdict, '進行中');
+  const stalled = run(capture({ 'agents/f1.json': agentF('f1', 200) }, ['⏸ 疑似卡住 demo · — · 30m · —', '工頭 3 分沒有動作']));
+  assert.strictEqual(status(stalled, 'verdict'), 'PASS'); assert.strictEqual(status(stalled, 'reason'), 'PASS'); assert.strictEqual(stalled.ok, true);
+  assert.strictEqual(derive(capture({ 'agents/f1.json': agentF('f1', 180) }, [])).verdict, '疑似卡住');
+});
+test('FOREMAN: ended, older than 24 h, foreign schema, or no last_tool_at are ignored (待命)', () => {
+  const v = (files) => derive(capture(files, [])).verdict;
+  assert.strictEqual(v({ 'agents/f1.json': agentF('f1', 40, { ended_at: iso(0) }) }), '待命');
+  assert.strictEqual(v({ 'agents/f1.json': agentF('f1', 25 * 3600) }), '待命');
+  assert.strictEqual(v({ 'agents/f1.json': agentF('f1', 40, { schema: 'x/1' }) }), '待命');
+  assert.strictEqual(v({ 'agents/f1.json': agentF('f1', 40, { last_tool_at: 'nope' }) }), '待命');
+  assert.strictEqual(v({}), '待命');
+});
+test('FOREMAN: precedence — attention > envelope stall > foreman stall > 完成待驗收; a fresh foreman blocks 完成待驗收; a live run still wins the reason', () => {
+  const done = { 'tasks.json': tasksFile([t('1', 'a', 'completed'), t('2', 'b', 'completed')]) };
+  assert.strictEqual(derive(capture({ ...done }, [])).verdict, '完成待驗收');
+  assert.strictEqual(derive(capture({ ...done, 'agents/f1.json': agentF('f1', 40) }, [])).verdict, '進行中');
+  assert.strictEqual(derive(capture({ ...done, 'agents/f1.json': agentF('f1', 40, { ended_at: iso(0) }) }, [])).verdict, '完成待驗收');
+  assert.strictEqual(derive(capture({ ...done, 'agents/f1.json': agentF('f1', 400) }, [])).verdict, '疑似卡住');
+  assert.strictEqual(derive(capture({ 'agents/f1.json': agentF('f1', 400), 'attention.json': { kind: 'permission', summary: 'Bash: ls' } }, [])).verdict, '要你決定');
+  const env = { schema: 'autopilot.runs-live/1', scope: { project_key: 'abcdef0123456789', repo_identity: IDENT, root_run_id: ROOT }, runs: [{ run_id: 'r', alive: true, stall: true, started_at: iso(30) }], counts: { confirmed_live: 1 } };
+  const r = run(capture({ 'envelope.json': env, 'agents/f1.json': agentF('f1', 400) }, ['⏸ 疑似卡住 demo · — · 30m · —', '最久的派工 4m 沒有輸出']));
+  assert.strictEqual(r.derived.verdict, '疑似卡住'); assert.strictEqual(status(r, 'reason'), undefined, 'the envelope stall owns the reason, no foreman reason token');
+  const live = run(capture({ 'envelope.json': { ...env, runs: [{ run_id: 'r', alive: true, started_at: iso(30) }] }, 'agents/f1.json': agentF('f1', 40) }, ['● 進行中 demo · — · 30m · —', '1 個派工在跑']));
+  assert.strictEqual(status(live, 'verdict'), 'PASS'); assert.strictEqual(status(live, 'reason'), undefined);
+});
+test('FOREMAN PLANTED RED: band says 待命 while a foreman works -> FAIL; band 進行中 but the reason does not name the foreman -> FAIL; band 進行中 for a stalled foreman -> FAIL', () => {
+  assert.strictEqual(run(capture({ 'agents/f1.json': agentF('f1', 40) }, ['◌ 待命 demo · — · 30m · —', '沒有派工在跑'])).ok, false);
+  assert.strictEqual(status(run(capture({ 'agents/f1.json': agentF('f1', 40) }, ['● 進行中 demo · — · 30m · —', '回合進行中（3 分）'])), 'reason'), 'FAIL');
+  assert.strictEqual(run(capture({ 'agents/f1.json': agentF('f1', 400) }, ['● 進行中 demo · — · 30m · —', '工頭在跑：x（0 分前有動作）'])).ok, false);
+  assert.strictEqual(status(run(capture({ 'agents/f1.json': agentF('f1', 400) }, ['⏸ 疑似卡住 demo · — · 30m · —', '最久的派工 3m 沒有輸出'])), 'reason'), 'FAIL');
+});
+
+const DIALOG = ['● Foreman: csv parser', '', ' Bash command · from the general-purpose agent', ' This command requires approval', '', ' Do you want to proceed?', ' ❯ 1. Yes', '   4. No', ' Esc to cancel · Tab to amend'];
+test('DIALOG: neither band nor panel visible but a permission dialog on screen -> judged from attention.json only; surface: dialog', () => {
+  const dir = capture({ 'attention.json': { schema: 'autopilot.attention/1', kind: 'permission', summary: 'Bash: git reset -q --hard', since: iso(0) } }, DIALOG);
+  const r = run(dir);
+  assert.strictEqual(r.surface, 'dialog'); assert.strictEqual(status(r, 'verdict'), 'PASS'); assert.strictEqual(r.ok, true);
+  assert.strictEqual(status(r, 'project'), 'SKIP'); assert.strictEqual(status(r, 'reason'), 'SKIP');
+  const q = run(capture({ 'attention.json': { schema: 'autopilot.attention/1', kind: 'question', summary: '選哪個？', since: iso(0) } }, DIALOG));
+  assert.strictEqual(q.surface, 'dialog'); assert.strictEqual(q.ok, true);
+});
+test('DIALOG PLANTED RED: a dialog on screen but attention.json is absent, idle, or the verdict is not 要你決定 -> FAIL; the band / panel still win when present', () => {
+  const none = run(capture({}, DIALOG));
+  assert.strictEqual(none.surface, 'dialog'); assert.strictEqual(none.ok, false);
+  assert.strictEqual(run(capture({ 'attention.json': { schema: 'autopilot.attention/1', kind: 'idle', summary: 'waiting' } }, DIALOG)).ok, false);
+  const withBand = run(capture({ 'attention.json': { schema: 'autopilot.attention/1', kind: 'permission', summary: 'Bash: ls', since: iso(0) } }, ['▲ 要你決定 demo · — · 30m · —', '等你批准：Bash: ls（等了 0 分）', ...DIALOG]));
+  assert.strictEqual(withBand.surface, 'band');
+  assert.strictEqual(run(capture({}, ['just some output'])).surface, null, 'no dialog text, no verdict: still no surface');
+});

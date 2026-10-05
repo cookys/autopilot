@@ -14,6 +14,8 @@
 // tasks/attention update for ROOT_RETENTION_S (the idle-exit window) is dropped from state.roots and its live files
 // (envelope, .decisions.json, .foreman.json, sources/<scope>.json, the review/<key>/live fallback copy) are removed.
 // Review pages under <autopilot_home>/review/ are durable and never touched here.
+// A watcher does not outlive a plugin update (mods P1W WATCHVER): code-fingerprint.js fingerprints the modules at start and every tick
+// re-checks; on a content change the tick returns { exit: 'code_changed' } (log `code changed, exiting`) so the next autostart starts a current one.
 // --render (mods plan P1b B3): the same process also republishes the owner review page of every execution root
 // (job id = root_run_id; runs with no root go to the per-project `unbound` job) through render-review-page's publish(),
 // debounced 5 s, when one of exactly four sources changes: the manifest set, an .exit file landing, a
@@ -44,6 +46,7 @@ const { readWatchInputs } = require('./watch-inputs');
 const { ensureReviewServer } = require('./review-server');
 const { createDecisionsPublisher } = require('./decisions-sidecar');
 const { createForemanPublisher } = require('./foreman-activity');
+const { createCodeFingerprint, pluginIdentity } = require('./code-fingerprint');
 
 const SCHEMA = 'autopilot.runs-live/1';
 const VALID_FOR_S = 180;
@@ -319,6 +322,7 @@ function signatureOf(runs) {
 function createWatcher({
   key, env = process.env, cwd = process.cwd(), collect, now = Date.now,
   interval = DEFAULT_INTERVAL_S, enrichCap = 8, pid = process.pid, idleExitS = null, render = null,
+  codeFingerprint = createCodeFingerprint(),
 }) {
   const live = liveBaseOf(env);
   const runsDir = path.join(live, 'runs');
@@ -597,7 +601,8 @@ function createWatcher({
     return Math.max(250, Math.min(interval * 1000, due - now()));
   }
 
-  const writerInfo = () => ({ pid, session_id: sessionId, started_at: startedAt });
+  const identityOfCode = pluginIdentity(); // WATCHVER: read at start, like the fingerprint
+  const writerInfo = () => ({ pid, session_id: sessionId, started_at: startedAt, ...identityOfCode });
 
   function scopeRows(runs, root) {
     return root === null ? runs : runs.filter((r) => r.root_run_id === root);
@@ -619,6 +624,11 @@ function createWatcher({
     if (!identity) {
       const known = rows.find((r) => typeof r.project === 'string' && r.project && projectKey(r.project) === key);
       if (known) identity = known.project;
+    }
+    // WATCHVER: a plugin update leaves this process on old code; exit so the next autostart starts a current one.
+    if (codeFingerprint.changed()) {
+      log('code changed, exiting');
+      return { published: false, exit: 'code_changed' };
     }
     const allMarkers = unexpiredMarkers(env, key, nowMs);
     const markers = allMarkers.filter(isOrchestratorMarker);

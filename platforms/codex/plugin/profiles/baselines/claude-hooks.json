@@ -240,6 +240,17 @@
         ]
       }
     ],
+    "SubagentStop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/awaiting-owner.js"
+          }
+        ]
+      }
+    ],
     "TaskCreated": [
       {
         "matcher": "",

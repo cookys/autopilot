@@ -32,6 +32,8 @@
           "last_activity_at": { "type": "string", "minLength": 1 },
           "age_s": { "type": "integer", "minimum": 0 },
           "stale": { "type": "boolean" },
+          "stamped": { "const": true },
+          "ended_at": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }] },
           "source": { "enum": ["context_tasks", "stamp"] },
           "session_id": { "type": "string", "minLength": 1 },
           "binding": { "const": "session" }

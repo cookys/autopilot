@@ -366,7 +366,7 @@ export function readDecisions(text: string | null, want: ScopeWant): DecisionsVi
 
 export type ForemanView = {
   binding: string
-  agents: { id: string; description: string | null; label: string | null; at_ms: number | null; age_s: number | null; stale: boolean }[]
+  agents: { id: string; description: string | null; label: string | null; at_ms: number | null; age_s: number | null; stale: boolean; stamped: boolean; ended: boolean }[]
   stage: string | null; stage_source: string | null; stage_at_ms: number | null; stage_age_s: number | null
 }
 
@@ -380,6 +380,7 @@ export function readForeman(text: string | null, want: ScopeWant): ForemanView |
   const agents = (Array.isArray(v.agents) ? v.agents : []).filter(isObject).map(a => ({
     id: str(a.agent_id) || '?', description: str(a.description), label: str(a.label),
     at_ms: ms(a.last_activity_at), age_s: finite(a.age_s) ? a.age_s : null, stale: a.stale === true,
+    stamped: a.stamped === true, ended: ms(a.ended_at) !== null,
   }))
   return {
     binding: str(v.binding) || 'session', agents,
@@ -432,9 +433,31 @@ export type Sources = {
   turn: TurnView | null
   decisions: DecisionsView | null
   manifest: Manifest | null
+  foreman: ForemanView | null
   startMs: number | null
 }
-export const NO_SOURCES: Sources = { tasks: null, attention: null, turn: null, decisions: null, manifest: null, startMs: null }
+export const NO_SOURCES: Sources = { tasks: null, attention: null, turn: null, decisions: null, manifest: null, foreman: null, startMs: null }
+
+// P1W FOREMAN: a background foreman (a native subagent) leaves no manifest, task or turn behind, so its tool-call stamp is the only
+// sign it works. THE one stall bound: the same 180 s the dispatch stall uses (scripts/dispatch-status.js DEFAULT_STALL_SECS).
+export const FOREMAN_STALL_S = 180
+export type ForemanNow = { fresh: { name: string; age_s: number } | null; stalled: { age_s: number } | null }
+// Agents of the session that wrote a stamp, not ended (SubagentStop) and not older than the marker TTL. Un-ended and quiet under the
+// bound = fresh (the freshest one is named); un-ended and quiet at/over it = stalled (the quietest one sets the age).
+export function foremanNow(f: ForemanView | null, nowMs: number): ForemanNow {
+  const out: ForemanNow = { fresh: null, stalled: null }
+  if (f === null) return out
+  for (const a of f.agents) {
+    if (!a.stamped || a.ended || a.at_ms === null) continue
+    const ageMs = nowMs - a.at_ms
+    if (ageMs > TURN_TTL_MS) continue
+    const age_s = Math.max(0, Math.floor(ageMs / 1000))
+    if (age_s < FOREMAN_STALL_S) {
+      if (out.fresh === null || age_s < out.fresh.age_s) out.fresh = { name: a.description || a.label || a.id, age_s }
+    } else if (out.stalled === null || age_s > out.stalled.age_s) out.stalled = { age_s }
+  }
+  return out
+}
 
 const waitingMinutes = (sinceMs: number | null, nowMs: number): number | null => (sinceMs === null ? null : Math.max(0, Math.floor((nowMs - sinceMs) / 60000)))
 
@@ -469,9 +492,9 @@ export function proxySegments(d: DecisionsView | null): string[] {
   return out
 }
 
-// Precedence: 1 needs a decision (attention permission / question, or an open decision), 2 stalled, 3 complete and
-// waiting acceptance (frozen progress done = total, or every session task completed; and NO live run in scope), 4 running
-// (a live run, a session task in progress, or an active turn), 5 idle (the turn ended: nothing live, no task in progress).
+// Precedence: 1 needs a decision (attention permission / question, or an open decision), 2 stalled (a dispatch run, or an un-ended foreman quiet >= FOREMAN_STALL_S), 3 complete and
+// waiting acceptance (frozen progress done = total, or every session task completed; NO live run in scope and no un-ended fresh foreman), 4 running
+// (a live run, a fresh foreman, a session task in progress, or an active turn), 5 idle (the turn ended: nothing live, no task in progress).
 export function bandView(env: Json, jobModel: JobModel | null, projectKey: string, nowMs: number, src: Sources = NO_SOURCES): BandView {
   const counts = countsOf(env)
   const progress = jobModel === null ? null : jobModel.progress
@@ -480,7 +503,8 @@ export function bandView(env: Json, jobModel: JobModel | null, projectKey: strin
   const undecided = jobModel === null || (jobModel.acceptance !== 'accepted' && jobModel.acceptance !== 'rejected')
   const frozenDone = progress !== null && progress.frozen && progress.done !== null && progress.total !== null && progress.done === progress.total
   const tasksDone = src.tasks !== null && src.tasks.total > 0 && src.tasks.completed === src.tasks.total
-  const waiting = noneLive && undecided && ((frozenDone && jobModel !== null) || tasksDone)
+  const fm = foremanNow(src.foreman, nowMs)
+  const waiting = noneLive && undecided && ((frozenDone && jobModel !== null) || tasksDone) && fm.fresh === null
   const taskRunning = src.tasks !== null && src.tasks.in_progress > 0
   const turnActive = src.turn !== null && src.turn.state === 'active'
   const awaiting = src.attention !== null && src.attention.kind !== 'idle' ? src.attention : null
@@ -494,14 +518,19 @@ export function bandView(env: Json, jobModel: JobModel | null, projectKey: strin
   } else if (stalled !== null) {
     pick = VERDICT.stalled
     reason = stalled
+  } else if (fm.stalled !== null) {
+    pick = VERDICT.stalled
+    reason = '工頭 ' + Math.floor(fm.stalled.age_s / 60) + ' 分沒有動作'
   } else if (waiting) {
     pick = VERDICT.waiting
     reason = frozenDone ? '驗收結論尚未出' : '任務 ' + (src.tasks as TasksView).completed + '/' + (src.tasks as TasksView).total + ' 都完成，等你驗收'
-  } else if ((counts !== null && counts.confirmed_live > 0) || taskRunning || turnActive) {
+  } else if ((counts !== null && counts.confirmed_live > 0) || fm.fresh !== null || taskRunning || turnActive) {
     // GATEFIX / TURN: a live run, a session task in progress, or an active turn (the session is mid-work); the live run names itself first, then the task.
     pick = VERDICT.running
     reason = counts !== null && counts.confirmed_live > 0
       ? counts.confirmed_live + ' 個派工在跑'
+      : fm.fresh !== null
+        ? '工頭在跑：' + fm.fresh.name + '（' + Math.floor(fm.fresh.age_s / 60) + ' 分前有動作）'
       : taskRunning
         ? '任務進行中：' + (src.tasks !== null && src.tasks.current ? src.tasks.current : (src.tasks as TasksView).in_progress + ' 件')
         : '回合進行中' + (() => { const n = waitingMinutes((src.turn as TurnView).since_ms, nowMs); return n === null ? '' : '（' + n + ' 分）' })()

@@ -107,9 +107,9 @@ S5a, S5b, S7, S8; `README.md` there is the verdict table). A mod is CC-only; non
   envelope's published `scope.repo_identity`; a root that is not a plain `[A-Za-z0-9._-]` segment is never joined into a path).
   A sidecar whose `scope` is not this project / root is an absent file.
   - Verdict precedence now: `要你決定` (attention `permission` / `question`, or an open decision; reason `等你批准：…（等了 N 分）`,
-    `等你回答：…`, or the question plus `（已等 N 天）` when the model marks it stale and a whole day has passed) > `疑似卡住` >
-    `完成待驗收` (frozen done = total, or every session task completed; both need nothing live and acceptance undecided; the
-    campaign-terminal phase codes are not a separate rule) > `進行中` (a live run, a session task in progress, or an active turn; reason: the run, else the task, else `回合進行中（N 分）`) > `待命` (attention `idle` appends `停在等你指示 N 分`).
+    `等你回答：…`, or the question plus `（已等 N 天）` when the model marks it stale and a whole day has passed) > `疑似卡住` (a stalled dispatch run, or a stamped, un-ended subagent quiet >= 180 s: `工頭 N 分沒有動作`; a `SubagentStop` ends it, a stamp older than the 24 h marker TTL is ignored; the 180 s is `FOREMAN_STALL_S`, the dispatch stall bound) >
+    `完成待驗收` (frozen done = total, or every session task completed; both need nothing live, no fresh un-ended foreman, and acceptance undecided; the
+    campaign-terminal phase codes are not a separate rule) > `進行中` (a live run, a fresh foreman, a session task in progress, or an active turn; reason: the run, else `工頭在跑：<描述|標籤>（N 分前有動作）`, else the task, else `回合進行中（N 分）`) > `待命` (attention `idle` appends `停在等你指示 N 分`).
     `待命` means the turn ended (or no turn file) and nothing else is going on. The turn file closes the former gap (a mid-turn session with no
     task and no run read `待命`): an `active` turn is `進行中` until Stop. A crashed session's leftover `active` file is ignored after 24 h.
     `awaiting_disposition` is never `要你決定`.

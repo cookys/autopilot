@@ -89,6 +89,15 @@
             },
             "started_at": {
               "type": "string"
+            },
+            "plugin_root": {
+              "type": "string"
+            },
+            "plugin_version": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           }
         }

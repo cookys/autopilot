@@ -209,8 +209,9 @@ test('B: a large transcript is tailed (8 KB), not read whole; the interrupt row 
   assert.ok(fs.statSync(a.tp).size > 3e6);
   const reads = [];
   const realRead = fs.readSync;
+  const mw = mkWatcher(f); // built before the spy: the WATCHVER code fingerprint hashes the module files at construction
   fs.readSync = function (fd, buf, ...rest) { reads.push(buf.length); return realRead.call(this, fd, buf, ...rest); };
-  try { mkWatcher(f).tick(); } finally { fs.readSync = realRead; }
+  try { mw.tick(); } finally { fs.readSync = realRead; }
   assert.ok(fs.existsSync(effPath(f)), 'found in the tail');
   assert.ok(reads.length > 0 && reads.every((n) => n <= 8192), `transcript read only in <= 8 KB buffers (saw ${Math.max(...reads)})`);
 });

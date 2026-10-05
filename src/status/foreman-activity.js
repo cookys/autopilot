@@ -14,7 +14,9 @@
 //                      `<git-common-dir>/autopilot/dispatch-runs/<root>.ledger.jsonl`: the latest row with run_id == root
 //                      -> stage + max(heartbeat_ts, ts). Same age-only rule as watch-foreman.js.
 //   (c) stamp          <live>/agents/<sid>/<agent_id>.json  (autopilot.agent-activity/1, the PostToolUse stamp written by the
-//                      PERF/STAMP hand): last_tool_at / last_tool_name. Tool-call age only, never a stage.
+//                      PERF/STAMP hand): last_tool_at / last_tool_name. Tool-call age only, never a stage. A SubagentStop
+//                      adds `ended_at` (mods P1W FOREMAN); the row carries `stamped: true` and `ended_at` (iso | null) so a reader
+//                      can tell "still running, quiet for N s" from "done". Only stamp rows can say ended.
 // Binding: (a) and (c) are per SESSION (sessions holding an unexpired marker of THIS project_key (re-checked here, W3a) whose root_run_id equals the
 // scope's; null equals null). With two jobs in one session both jobs see the rows: `binding: "session"` says so and no
 // per-agent root is ever invented. (b) binds by run_id == root (the front-door text makes the foreman run-id the root).
@@ -84,6 +86,8 @@ function fromStamps(live, sid, nowMs) {
       last_activity_at: isoOrNull(at),
       age_s: ageS(nowMs, at),
       stale: nowMs - at > STALL_S * 1000,
+      stamped: true,
+      ended_at: typeof v.ended_at === 'string' && Number.isFinite(Date.parse(v.ended_at)) ? v.ended_at : null,
       source: 'stamp',
       session_id: sid,
       binding: 'session',
@@ -101,8 +105,10 @@ function mergeAgents(rows) {
     if (!cur) { byId.set(k, { ...r }); continue; }
     const newer = Date.parse(r.last_activity_at) > Date.parse(cur.last_activity_at) ? r : cur;
     const older = newer === r ? cur : r;
+    const stamp = r.stamped ? r : cur.stamped ? cur : null;
     byId.set(k, {
       ...newer,
+      ...(stamp ? { stamped: true, ended_at: (r.ended_at || cur.ended_at) || null } : {}),
       description: newer.description || older.description,
       label: newer.label || older.label,
       source: newer.source,

@@ -11,8 +11,9 @@
 // Expected values are derived from files only; the captured pane is read last and only compared.
 //   verdict   attention kind permission|question OR an open decision file -> 要你決定
 //             else any envelope run with stall:true                        -> 疑似卡住
-//             else (frozen done==total OR every session task done) AND no live run -> 完成待驗收
-//             else a live run OR a task in progress OR an active turn (turn.json state active, since within 24 h) -> 進行中
+//             else an un-ended agent (agents/*.json, no ended_at, last_tool_at within 24 h) quiet >= 180 s -> 疑似卡住 (reason 工頭 N 分沒有動作)
+//             else (frozen done==total OR every session task done) AND no live run AND no un-ended agent quiet < 180 s -> 完成待驗收
+//             else a live run OR an un-ended agent quiet < 180 s (reason 工頭在跑) OR a task in progress OR an active turn (turn.json state active, since within 24 h) -> 進行中
 //             else                                                         -> 待命
 //   project   repo identity, last directory of the git common dir's parent (else first 8 hex of the project key)
 //   phase     campaign receipt phase > campaign phase kept by the job model > marker phase > task in progress > first open deliverable > —
@@ -23,7 +24,10 @@
 //   elapsed   start of this piece of work vs the capture instant, +-2 minutes
 // Surface (dialogs): while a permission / AskUserQuestion dialog is open the band row is hidden and only the mod's top-right panel
 //   shows the verdict word alone in its cell, the reason in the cell below. The band is judged when present; else the panel
-//   (verdict + reason only; the other tokens print SKIP). The judged surface is printed as `surface: band|panel`.
+//   (verdict + reason only; the other tokens print SKIP). The judged surface is printed as `surface: band|panel|dialog`.
+//   A dialog raised by a subagent is full-width and hides BOTH the band and the panel (gate run l4-running-foreman): when neither is
+//   visible but the pane shows a permission / question dialog, only the verdict is judged, from attention.json alone
+//   (kind permission|question -> 要你決定); `surface: dialog`. A dialog with no such attention file FAILs.
 // Exit: 0 every token PASS (or 來源未接 as expected), 1 any FAIL, 2 usage / unreadable capture.
 
 const fs = require('fs');
@@ -34,6 +38,8 @@ const VERDICTS = [
   { mark: '●', word: '進行中' }, { mark: '◌', word: '待命' },
 ];
 const NOT_WIRED = '來源未接';
+const FOREMAN_STALL_S = 180; // the dispatch stall bound (dispatch-status.js DEFAULT_STALL_SECS); written here from the plan text, not imported
+const MARKER_TTL_MS = 24 * 3600 * 1000;
 const PHASE_ZH = {
   PREPARED: '準備', IMPLEMENTING: '實作', VERTICAL_VERIFICATION: '垂直驗證', REVIEWING: '審查', ADJUDICATING: '裁定',
   AWAITING_DISPOSITION: '等待處置', REPAIRING: '修復', TERMINAL_READY: '收尾', TERMINAL_FOLLOW_UP: '收尾（有後續）',
@@ -133,6 +139,22 @@ function derive(dir) {
       first: ms(tasksFile.first_created_at),
     };
   }
+  // ---- foremen: capture.sh copies <live>/agents/<sid>/*.json to agents/ (autopilot.agent-activity/1; ended_at set by SubagentStop)
+  const agentsDir = path.join(dir, 'agents');
+  let agentNames = [];
+  try { agentNames = fs.readdirSync(agentsDir).filter((n) => n.endsWith('.json')).sort(); } catch (_e) { agentNames = []; }
+  const foremen = { fresh: [], stalled: [] };
+  for (const n of agentNames) {
+    const a = readJson(path.join(agentsDir, n));
+    if (!isObj(a) || a.schema !== 'autopilot.agent-activity/1' || typeof a.agent_id !== 'string' || !a.agent_id) continue;
+    if (typeof a.ended_at === 'string' && ms(a.ended_at) !== null) continue; // done
+    const at = ms(a.last_tool_at);
+    if (at === null || nowMs - at > MARKER_TTL_MS) continue;
+    const ageS = Math.max(0, Math.floor((nowMs - at) / 1000));
+    (ageS < FOREMAN_STALL_S ? foremen.fresh : foremen.stalled).push({ id: a.agent_id, ageS, file: `agents/${n}` });
+  }
+  const foremanFresh = foremen.fresh.length > 0;
+  const foremanStalled = foremen.stalled.length > 0;
   const runs = envelope && Array.isArray(envelope.runs) ? envelope.runs.filter(isObj) : [];
   const stalled = runs.some((r) => r.stall === true);
   const liveRun = envelope && isObj(envelope.counts) && Number.isFinite(envelope.counts.confirmed_live)
@@ -174,10 +196,11 @@ function derive(dir) {
   if (attKind === 'permission' || attKind === 'question') { verdict = '要你決定'; verdictSource = 'attention.json kind=' + attKind; }
   else if (decisionOpen) { verdict = '要你決定'; verdictSource = 'decision-file.json (open)'; }
   else if (stalled) { verdict = '疑似卡住'; verdictSource = 'envelope.json run stall:true'; }
-  else if ((frozenDone || tasksDone) && !liveRun) { verdict = '完成待驗收'; verdictSource = frozenDone ? `${progress.source} frozen ${progress.done}/${progress.total}` : 'tasks.json all completed'; }
-  else if (liveRun || (tasks && tasks.inProgress.length > 0) || turnActive) {
+  else if (foremanStalled) { verdict = '疑似卡住'; verdictSource = `${foremen.stalled[0].file} un-ended, quiet ${Math.max(...foremen.stalled.map((x) => x.ageS))} s`; }
+  else if ((frozenDone || tasksDone) && !liveRun && !foremanFresh) { verdict = '完成待驗收'; verdictSource = frozenDone ? `${progress.source} frozen ${progress.done}/${progress.total}` : 'tasks.json all completed'; }
+  else if (liveRun || foremanFresh || (tasks && tasks.inProgress.length > 0) || turnActive) {
     verdict = '進行中';
-    verdictSource = liveRun ? 'envelope.json live run' : (tasks && tasks.inProgress.length > 0) ? 'tasks.json in_progress' : 'turn.json active';
+    verdictSource = liveRun ? 'envelope.json live run' : foremanFresh ? `${foremen.fresh[0].file} un-ended, quiet < ${FOREMAN_STALL_S} s` : (tasks && tasks.inProgress.length > 0) ? 'tasks.json in_progress' : 'turn.json active';
   }
   else { verdict = '待命'; verdictSource = 'nothing live, awaited or complete'; }
   put('verdict', verdict, verdictSource, { exact: true });
@@ -234,7 +257,9 @@ function derive(dir) {
     else put('reason', [String(decisionFile.question).slice(0, 30)], 'decision-file.json question', { line2: true });
   }
 
-  if (verdict === '進行中' && !liveRun && !(tasks && tasks.inProgress.length > 0)) put('reason', ['回合進行中'], 'turn.json active (no live run, no task in progress)', { line2: true });
+  if (verdict === '疑似卡住' && !stalled && foremanStalled) put('reason', ['工頭 ', '分沒有動作'], foremen.stalled[0].file, { line2: true, all: true });
+  if (verdict === '進行中' && !liveRun && foremanFresh) put('reason', ['工頭在跑：'], foremen.fresh[0].file, { line2: true });
+  else if (verdict === '進行中' && !liveRun && !(tasks && tasks.inProgress.length > 0)) put('reason', ['回合進行中'], 'turn.json active (no live run, no task in progress)', { line2: true });
 
   // ---- elapsed
   // campaign root with a bound receipt: earliest receipt; otherwise the session's own start (tasks, then marker); last the earliest run
@@ -250,7 +275,7 @@ function derive(dir) {
   if (nowMs !== null && start !== null) put('elapsed', elapsedText(start, nowMs), startSource, { tolerantMin: 2, startMs: start, nowMs });
   else exp.notes.push('elapsed not derivable (no start source or no capture time)');
 
-  return { meta, tokens: exp.tokens, notes: exp.notes, verdict };
+  return { meta, tokens: exp.tokens, notes: exp.notes, verdict, attentionKind: attKind };
 }
 
 // the band = the last line carrying one of the five marks + verdict words, and the line after it
@@ -275,11 +300,18 @@ function findPanel(paneText) {
   return null;
 }
 
+// A permission / question dialog drawn by Claude Code itself (full width: it can hide the band AND the panel). Marker texts of the
+// dialog chrome, nothing the mod draws.
+function findDialog(paneText) {
+  return /This command requires approval|Do you want to (proceed|make this edit|create|run)|❯ 1\. Yes|Esc to cancel · Tab to amend/.test(String(paneText || ''));
+}
+
 function compare(derived, band) {
   const results = [];
   for (const t of derived.tokens) {
     const r = { name: t.name, source: t.source, expected: t.expected, status: 'FAIL', detail: '' };
     if (!band) { r.detail = 'no band or panel verdict found in the pane'; results.push(r); continue; }
+    if (band.surface === 'dialog' && t.name !== 'verdict') { r.status = 'SKIP'; r.detail = 'a dialog hides the band and the panel'; results.push(r); continue; }
     if (band.surface === 'panel' && t.name !== 'verdict' && t.name !== 'reason') { r.status = 'SKIP'; r.detail = 'not shown on the panel'; results.push(r); continue; }
     const text = t.line2 ? band.line2 : band.line1;
     if (t.exact) {
@@ -310,7 +342,12 @@ function run(dir) {
   const derived = derive(dir);
   const pane = readText(path.join(dir, 'pane.txt')) || `${readText(path.join(dir, 'band.txt')) || ''}\n${readText(path.join(dir, 'panel.txt')) || ''}`;
   const bandOnly = findBand(pane);
-  const band = bandOnly ? { ...bandOnly, surface: 'band' } : findPanel(pane);
+  let band = bandOnly ? { ...bandOnly, surface: 'band' } : findPanel(pane);
+  // neither band nor panel, but a permission / question dialog is on screen: the verdict is judged from attention.json alone
+  if (!band && findDialog(pane)) {
+    const kind = derived.attentionKind;
+    band = { verdict: kind === 'permission' || kind === 'question' ? '要你決定' : '(a dialog is shown but attention.json is not permission / question)', line1: '(dialog)', line2: '', surface: 'dialog' };
+  }
   const results = compare(derived, band);
   return {
     derived, band, results, surface: band ? band.surface : null,
@@ -328,7 +365,7 @@ function main(argv) {
   if (argv.includes('--json')) { process.stdout.write(`${JSON.stringify({ ok: out.ok, results: out.results, surface: out.surface, notes: out.derived.notes }, null, 2)}\n`); return out.ok ? 0 : 1; }
   process.stdout.write(`capture ${args[0]}  cell=${out.derived.meta.cell || '?'}\n`);
   process.stdout.write(`surface: ${out.surface || 'none'}\n`);
-  process.stdout.write(`${out.surface === 'panel' ? 'panel' : 'band'}: ${out.band ? `${out.band.line1}\n      ${out.band.line2}` : 'NOT FOUND'}\n`);
+  process.stdout.write(`${out.surface === 'panel' ? 'panel' : out.surface === 'dialog' ? 'dialog' : 'band'}: ${out.band ? `${out.band.line1}\n      ${out.band.line2}` : 'NOT FOUND'}\n`);
   for (const r of out.results) {
     const exp = Array.isArray(r.expected) ? r.expected.join(' + ') : String(r.expected);
     process.stdout.write(`${r.status}  ${r.name.padEnd(12)} expected ${exp}  [${r.source}]${r.detail ? `  (${r.detail})` : ''}\n`);
@@ -338,5 +375,5 @@ function main(argv) {
   return out.ok ? 0 : 1;
 }
 
-module.exports = { derive, compare, findBand, findPanel, run, main };
+module.exports = { derive, compare, findBand, findPanel, findDialog, run, main };
 if (require.main === module) process.exitCode = main(process.argv.slice(2));

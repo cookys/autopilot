@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * awaiting-owner — PermissionRequest | Notification | Stop | PostToolUse | UserPromptSubmit |
+ * awaiting-owner — PermissionRequest | Notification | Stop | PostToolUse | UserPromptSubmit | SubagentStop |
  * SessionEnd. Default-on (mods P1W W1e). Maintains <live>/attention/<sid>.json while Claude Code
  * waits on the human. Opt-out: AUTOPILOT_AWAITING_OWNER=off.
  *
@@ -19,6 +19,8 @@
  * Also maintains <live>/turn/<sid>.json (schema "autopilot.session-turn/1", mods P1W TURN, same knob):
  * UserPromptSubmit -> state "active"; Stop -> "ended" (since = now); SessionEnd -> removed. Payloads with
  * agent_id (subagents) never touch it. See live-session-lib.js recordTurn().
+ * SubagentStop (mods P1W FOREMAN, payload carries agent_id): marks <live>/agents/<sid>/<agent_id>.json `ended_at` (knob
+ * AUTOPILOT_AGENT_ACTIVITY=off); touches nothing else.
  * summary: question text for AskUserQuestion; else "<tool>: <command|file_path>" run through
  * hooks/_shared/secret-patterns redact(), newlines flattened, truncated to 120 chars.
  * Fail-open: any error -> one stderr line, exit 0.
@@ -65,8 +67,10 @@ function handle(p) {
   // SessionEnd drops the session's stamp dir.
   try {
     if (ev === 'PostToolUse') L.stampAgentActivity(p);
+    else if (ev === 'SubagentStop') L.endAgentActivity(p); // FOREMAN: the agent is done (ended_at)
     else if (ev === 'SessionEnd') L.removeAgentActivity(p);
   } catch (e) { L.failOpen('awaiting-owner/agent-activity', e); }
+  if (ev === 'SubagentStop') return; // nothing else here concerns a subagent's stop (turn and attention are the main thread's)
   // HOOKQ (mods P1W): the session ending closes the decision file its AskUserQuestion opened (knob AUTOPILOT_ASK_DECISION).
   if (ev === 'SessionEnd') {
     try { require('./ask-decision.js').onSessionEnd(p); } catch (e) { L.failOpen('awaiting-owner/ask-decision', e); }

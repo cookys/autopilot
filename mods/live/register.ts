@@ -223,7 +223,7 @@ async function buildSnapshot($: EngineInterface, nowMs: number): Promise<{ snap:
   const foreman = readForeman(await readText($, liveBase + '/runs/' + scopeKey + '.foreman.json'), want)
   const identity = isObject(env.scope) ? env.scope.repo_identity : null
   const receiptMs = scope.root === null ? null : await receiptStart($, identity, scope.root)
-  const src: Sources = { tasks, attention, turn, decisions, manifest, startMs: startMsOf(scope.root, env, tasks, scope.marker === null ? null : scope.marker.started_at, receiptMs) }
+  const src: Sources = { tasks, attention, turn, decisions, manifest, foreman, startMs: startMsOf(scope.root, env, tasks, scope.marker === null ? null : scope.marker.started_at, receiptMs) }
   const ctx = ctxShown(ctxText(await readText($, liveBase + '/context/' + fileSid + '.json'), nowMs), manifest)
   const band = bandView(env, jobModel, scope.key, nowMs, src)
   return {

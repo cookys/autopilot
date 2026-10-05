@@ -1,3 +1,5 @@
+// P1W FOREMAN (the band reads the foreman sidecar's stamp rows: an un-ended agent quiet < 180 s = 進行中 工頭在跑, >= 180 s = 疑似卡住 工頭 N 分沒有動作; ended / over-TTL / unstamped ignored; precedence; 2 cases x terminal + desktop):
+// RED before the change: see run-w/land/foreman-mod-red.txt. Mutation controls: run-w/land/mut-foreman-*.txt.
 // P1W TURN (the band knows a turn is in progress: <live>/turn/<sid>.json active -> 進行中 with 「回合進行中（N 分）」, ended / absent -> 待命, stale (> 24h) ignored; one case x terminal + desktop):
 // RED at 2e84fd03 (114 tests): see run-w/land/turn-mod-red.txt. Mutation controls: run-w/land/mut-turn-*.txt.
 // P1W GATEFIX (a task in progress is 進行中; 完成待驗收 needs no live run; one new case x terminal + desktop, the W3a tasks case's first line 待命 -> 進行中):
@@ -1269,6 +1271,104 @@ for (const surface of SURFACES) {
     world(on, base())
     await start($, surface)
     expect((await paneParts($, surface)).texts).toContain('工頭狀態：來源未接')
+  })
+
+  test('FOREMAN: an un-ended stamped agent quiet < 180 s is 進行中 (工頭在跑), >= 180 s is 疑似卡住 (工頭 N 分沒有動作); ended, over-TTL or unstamped rows are ignored (' + surface + ')', async ($, on) => {
+    const files = quietWorld()
+    const w = world(on, files)
+    let t = NOW_FRESH // the mock clock moves 5 s per tick(); agent times are written relative to it
+    const tick = async () => { await w.clock.advance(5000); t += 5000 }
+    const ago = (s: number) => new Date(t + 5000 - s * 1000).toISOString() // the age the NEXT tick() read sees
+    const agent = (over: Record<string, unknown> = {}) => ({ agent_id: 'f1', description: '修 parser', label: 'last tool: Bash', last_activity_at: ago(30), age_s: 30, stale: false, stamped: true, ended_at: null, source: 'stamp', session_id: SID_A, binding: 'session', ...over })
+    const put = (...rows: Record<string, unknown>[]) => { files[P_FOREMAN] = j(foremanSidecar({ agents: rows })) }
+    await start($, surface)
+    expect(verdicts(await bandText($, surface))).toEqual(['待命'])
+    put(agent()) // 30 s quiet
+    await tick()
+    let p = await bandParts($, surface)
+    expect(p.line1.startsWith('● 進行中 repo')).toBe(true)
+    expect(p.line2).toBe('工頭在跑：修 parser（0 分前有動作）')
+    put(agent({ description: null, label: 'last tool: Edit', last_activity_at: ago(120) })) // 120 s, no description: the label
+    await tick()
+    expect((await bandParts($, surface)).line2).toBe('工頭在跑：last tool: Edit（2 分前有動作）')
+    put(agent({ last_activity_at: ago(179) })) // 179 s: still running
+    await tick()
+    expect(verdicts(await bandText($, surface))).toEqual(['進行中'])
+    put(agent({ last_activity_at: ago(180) })) // exactly 180 s: stalled
+    await tick()
+    p = await bandParts($, surface)
+    expect(p.line1.startsWith('⏸ 疑似卡住 repo')).toBe(true)
+    expect(p.line2).toBe('工頭 3 分沒有動作')
+    put(agent({ last_activity_at: ago(600) }), agent({ agent_id: 'f2', last_activity_at: ago(300) })) // the quietest sets the age (10 min)
+    await tick()
+    expect((await bandParts($, surface)).line2).toBe('工頭 10 分沒有動作')
+    put(agent({ last_activity_at: ago(600) }), agent({ agent_id: 'f2' })) // one stalled + one fresh: stalled wins
+    await tick()
+    expect(verdicts(await bandText($, surface))).toEqual(['疑似卡住'])
+    // ended -> ignored (待命); over the 24 h marker TTL -> ignored; not a stamp row (context_tasks) -> ignored
+    put(agent({ ended_at: ago(10) }), agent({ agent_id: 'f2', last_activity_at: ago(400), ended_at: ago(300) }))
+    await tick()
+    expect(verdicts(await bandText($, surface))).toEqual(['待命'])
+    put(agent({ last_activity_at: ago(25 * 3600) }))
+    await tick()
+    expect(verdicts(await bandText($, surface))).toEqual(['待命'])
+    put(agent({ stamped: false, source: 'context_tasks' }), agent({ agent_id: 'f3', stamped: undefined, last_activity_at: ago(1200) }))
+    await tick()
+    expect(verdicts(await bandText($, surface))).toEqual(['待命'])
+    // a sidecar of another scope / no sidecar: nothing
+    files[P_FOREMAN] = j(foremanSidecar({ agents: [agent()] }, { project_key: OTHER_KEY }))
+    await tick()
+    expect(verdicts(await bandText($, surface))).toEqual(['待命'])
+  })
+
+  test('FOREMAN precedence: 要你決定 > the dispatch stall > the foreman stall > 完成待驗收 > 進行中; a fresh foreman blocks 完成待驗收, a live dispatch run names itself first (' + surface + ')', async ($, on) => {
+    const files = quietWorld()
+    const w = world(on, files)
+    let t = NOW_FRESH // the mock clock moves 5 s per tick(); agent times are written relative to it
+    const tick = async () => { await w.clock.advance(5000); t += 5000 }
+    const ago = (s: number) => new Date(t + 5000 - s * 1000).toISOString() // the age the NEXT tick() read sees
+    const agent = (over: Record<string, unknown> = {}) => ({ agent_id: 'f1', description: '修 parser', label: null, last_activity_at: ago(30), age_s: 30, stale: false, stamped: true, ended_at: null, source: 'stamp', session_id: SID_A, binding: 'session', ...over })
+    const stalledAgent = agent({ last_activity_at: ago(600) })
+    await start($, surface)
+    // every task done: a fresh foreman is still working, so not 完成待驗收
+    files[P_TASKS()] = j(allDone())
+    await tick()
+    expect(verdicts(await bandText($, surface))).toEqual(['完成待驗收'])
+    files[P_FOREMAN] = j(foremanSidecar({ agents: [agent()] }))
+    await tick()
+    let p = await bandParts($, surface)
+    expect(p.line1.startsWith('● 進行中 repo')).toBe(true)
+    expect(p.line2).toBe('工頭在跑：修 parser（0 分前有動作）')
+    // the foreman is ended: complete-and-waiting again
+    files[P_FOREMAN] = j(foremanSidecar({ agents: [agent({ ended_at: ago(5) })] }))
+    await tick()
+    expect(verdicts(await bandText($, surface))).toEqual(['完成待驗收'])
+    // a stalled foreman outranks complete-and-waiting
+    files[P_FOREMAN] = j(foremanSidecar({ agents: [stalledAgent] }))
+    await tick()
+    expect(verdicts(await bandText($, surface))).toEqual(['疑似卡住'])
+    // a stalled dispatch run's reason comes before the foreman's
+    delete files[P_TASKS()]
+    files[W_ENV] = j(envelope({ runs: [row({ run_id: 'r1', stall: true, last_event_age_s: 240 })], counts: quiet(1) }))
+    await tick()
+    expect((await bandParts($, surface)).line2).toBe('最久的派工 4m 沒有輸出')
+    // permission attention outranks everything
+    files[P_ATT()] = j(attention('permission'))
+    await tick()
+    expect(verdicts(await bandText($, surface))).toEqual(['要你決定'])
+    delete files[P_ATT()]
+    // a live (not stalled) run names itself before a fresh foreman
+    files[W_ENV] = j(envelope({ runs: [row({ run_id: 'r1' })], counts: quiet(1) }))
+    files[P_FOREMAN] = j(foremanSidecar({ agents: [agent()] }))
+    await tick()
+    expect((await bandParts($, surface)).line2).toBe('1 個派工在跑')
+    // a fresh foreman names itself before a task in progress and an active turn
+    files[W_ENV] = j(envelope({ runs: [exitedRun()], counts: quiet(0) }))
+    files[P_TASKS()] = j(tasksFile())
+    files[P_TURN()] = j(turn('active'))
+    await tick()
+    p = await bandParts($, surface)
+    expect(p.line2).toBe('工頭在跑：修 parser（0 分前有動作）')
   })
 
   test('W3a scope guards: a sidecar at the right path with another project / root is an absent file (' + surface + ')', async ($, on) => {

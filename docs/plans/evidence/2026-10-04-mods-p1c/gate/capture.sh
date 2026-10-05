@@ -13,7 +13,8 @@
 #   GATE_OUT                 output base, default <this dir>/runs
 # Capture layout (what check.js reads):
 #   meta.json pane.txt band.txt panel.txt marker.json attention.json tasks.json turn.json context.json envelope.json decisions-sidecar.json
-#   foreman.json sources.json model.json decision-file.json work-orders/*.json marker-dir-ls.txt ps-watchers.txt
+#   foreman.json sources.json model.json decision-file.json work-orders/*.json agents/*.json marker-dir-ls.txt ps-watchers.txt
+#   (agents/*.json = <live>/agents/<sid>/*.json, the per-subagent activity stamps with ended_at; check.js derives the foreman verdict from them)
 # A file that does not exist is simply absent (listed under "missing" in meta.json): absence is itself evidence.
 set -u
 
@@ -101,6 +102,13 @@ if (live) {
   copy(path.join(live, 'turn', `${ssid}.json`), 'turn.json');
   copy(path.join(live, 'turn-effective', `${ssid}.json`), 'turn-effective.json');
   copy(path.join(live, 'context', `${ssid}.json`), 'context.json');
+  {
+    const ad = path.join(live, 'agents', ssid);
+    let an = [];
+    try { an = fs.readdirSync(ad).filter((n) => n.endsWith('.json')); } catch (_e) { missing.push(`agents (${ad})`); }
+    if (an.length) fs.mkdirSync(path.join(out, 'agents'), { recursive: true });
+    for (const n of an) copy(path.join(ad, n), path.join('agents', n));
+  }
   if (scope) {
     copy(path.join(live, 'runs', `${scope}.json`), 'envelope.json');
     copy(path.join(live, 'runs', `${scope}.decisions.json`), 'decisions-sidecar.json');

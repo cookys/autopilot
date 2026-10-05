@@ -163,16 +163,83 @@ function cacheFile(base, cwd) {
   return path.join(base, 'autostart', `${require('crypto').createHash('sha1').update(cwd).digest('hex').slice(0, 16)}.json`);
 }
 
-function watcherAliveFast(base, cwd) {
+// WATCHVER (mods P1W): the identity of the code THIS hook runs from (realpath of the plugin root + version). A watcher whose
+// envelope writer block (`plugin_root`, `plugin_version`, written by runs-watch.js) names another root or version was started by an
+// older plugin install (a marketplace update lands in a NEW version directory, so the old watcher's files never change and its
+// own code fingerprint cannot see the update): autostart replaces it.
+let ownIdMemo = null;
+function ownIdentity(root) {
+  if (ownIdMemo) return ownIdMemo;
+  let real = root;
+  try { real = fs.realpathSync(root); } catch (_error) { /* as given */ }
+  let version = null;
+  try { const v = JSON.parse(fs.readFileSync(path.join(real, '.claude-plugin', 'plugin.json'), 'utf8')).version; version = typeof v === 'string' && v ? v : null; } catch (_error) { /* unknown */ }
+  ownIdMemo = { root: real, version };
+  return ownIdMemo;
+}
+
+// The plugin root a watcher process runs from, read off its argv: `<root>/bin/autopilot.js status runs --watch ...`.
+function argvRootOf(argv) {
+  const bin = argv.find((a) => /(^|\/)bin\/autopilot\.js$/.test(a));
+  if (!bin) return null;
+  try { return fs.realpathSync(path.resolve(bin, '..', '..')); } catch (_error) { return path.resolve(bin, '..', '..'); }
+}
+
+// One look at the project's watcher: the envelope writer pid, its /proc/<pid>/cmdline (must be `status runs --watch --project <key>`).
+//   null                       no live watcher of this project
+//   { state:'current', pid }   its recorded root + version are ours (a legacy record without them: its argv root is ours)
+//   { state:'stale', pid, argvRoot, recordedRoot }
+function inspectWatcher(base, key, root) {
   try {
-    const cached = JSON.parse(fs.readFileSync(cacheFile(base, cwd), 'utf8'));
-    if (!cached || cached.cwd !== cwd || !/^[0-9a-f]{16}$/.test(cached.project_key)) return null;
-    const env = JSON.parse(fs.readFileSync(path.join(base, 'runs', `${cached.project_key}.json`), 'utf8'));
-    const pid = env && env.writer && env.writer.pid;
+    const env = JSON.parse(fs.readFileSync(path.join(base, 'runs', `${key}.json`), 'utf8'));
+    const w = env && env.writer;
+    const pid = w && w.pid;
     if (!Number.isInteger(pid) || pid <= 0) return null;
     const argv = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0').filter(Boolean);
     const at = argv.indexOf('--project');
-    return ` ${argv.join(' ')} `.includes(' status runs --watch ') && at !== -1 && argv[at + 1] === cached.project_key ? cached : null;
+    if (!(` ${argv.join(' ')} `.includes(' status runs --watch ') && at !== -1 && argv[at + 1] === key)) return null;
+    const own = ownIdentity(root);
+    const recordedRoot = typeof w.plugin_root === 'string' && w.plugin_root ? w.plugin_root : null;
+    const argvRoot = argvRootOf(argv);
+    if (recordedRoot !== null) {
+      if (recordedRoot === own.root && (w.plugin_version || null) === own.version) return { state: 'current', pid };
+    } else if (argvRoot === null || argvRoot === own.root) return { state: 'current', pid }; // legacy writer block: only the argv root can be compared (none named = cannot tell)
+    return { state: 'stale', pid, argvRoot, recordedRoot };
+  } catch (_error) {
+    return null;
+  }
+}
+
+const REAP_WAIT_MS = 2000;
+
+// SIGTERM a stale watcher, then wait (bounded) for it to go. Never signals a pid that is not, RIGHT NOW, a `runs --watch` of this
+// project whose own argv points at the recorded root (a recycled pid, or a record that disagrees with the process, is left alone).
+// Fail-open: any problem returns false and the caller carries on exactly as before.
+function reapStale(stale, key) {
+  try {
+    const argv = fs.readFileSync(`/proc/${stale.pid}/cmdline`, 'utf8').split('\0').filter(Boolean);
+    const at = argv.indexOf('--project');
+    if (!(` ${argv.join(' ')} `.includes(' status runs --watch ') && at !== -1 && argv[at + 1] === key)) return false;
+    const root = argvRootOf(argv);
+    if (root === null || (stale.recordedRoot !== null && root !== stale.recordedRoot)) return false;
+    process.kill(stale.pid, 'SIGTERM');
+    const end = Date.now() + REAP_WAIT_MS;
+    const gone = () => { try { return fs.readFileSync(`/proc/${stale.pid}/cmdline`, 'utf8') === ''; } catch (_error) { return true; } }; // a zombie has an empty cmdline
+    while (Date.now() < end && !gone()) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+    return gone();
+  } catch (_error) {
+    return false;
+  }
+}
+
+function watcherAliveFast(base, cwd, root) {
+  try {
+    const cached = JSON.parse(fs.readFileSync(cacheFile(base, cwd), 'utf8'));
+    if (!cached || cached.cwd !== cwd || !/^[0-9a-f]{16}$/.test(cached.project_key)) return null;
+    const w = inspectWatcher(base, cached.project_key, root);
+    if (!w) return null;
+    if (w.state === 'stale') return { stale: w, key: cached.project_key };
+    return cached;
   } catch (_error) {
     return null;
   }
@@ -197,7 +264,8 @@ function run(payload) {
   const event = payload.hook_event_name;
   const sid = typeof payload.session_id === 'string' ? payload.session_id : '';
   // The pointer must still exist too (a deleted pointer is restored by the full path).
-  const fast = base ? watcherAliveFast(base, cwd) : null;
+  let fast = base ? watcherAliveFast(base, cwd, root) : null;
+  if (fast && fast.stale) { reapStale(fast.stale, fast.key); fast = null; } // WATCHVER: an old install's watcher goes; the full path starts a current one
   if (fast && fs.existsSync(require(path.join(root, 'src/status/live-pointer')).pointerPath())) {
     if (event !== 'SessionStart' || !sid) return;
     // SessionStart still ensures this session's plain marker, still without a spawn: the cache carries the scope.
@@ -231,6 +299,10 @@ function run(payload) {
     require(path.join(root, 'src/status/live-pointer')).writeLivePointer();
   } catch (error) {
     process.stderr.write(`${TAG}: live pointer not written: ${error.message}\n`);
+  }
+  if (base) { // WATCHVER: no cache yet (first SessionStart) or the cache path was skipped: the same check against the lock holder
+    const w = inspectWatcher(base, scope.project_key, root);
+    if (w && w.state === 'stale') reapStale(w, scope.project_key);
   }
   const { startWatcherDetached } = require(path.join(root, 'src/status/runs-watch'));
   const opts = { key: scope.project_key, cwd: topLevel(cwd), env: process.env, render: true };

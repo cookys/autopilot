@@ -105,20 +105,13 @@ function projectKeyFor(cwd) {
 // Subagent liveness stamp (mods P1W STAMP): a tool call that carries `agent_id` rewrites
 // <live>/agents/<sid>/<agent_id>.json (tmp + rename, no lock, last writer wins). Liveness only — tool-call
 // age, never a stage. Knob AUTOPILOT_AGENT_ACTIVITY=off. No write without agent_id or session_id.
-function stampAgentActivity(p) {
-  if (knobOff('AUTOPILOT_AGENT_ACTIVITY')) return false;
-  if (!p || typeof p.agent_id !== 'string' || !p.agent_id) return false;
-  if (typeof p.session_id !== 'string' || !p.session_id) return false;
+function agentFile(p) {
   const dir = path.join(liveBase(), 'agents', sanitizeSessionId(p.session_id));
-  const file = path.join(dir, `${sanitizeSessionId(p.agent_id)}.json`);
-  const body = `${JSON.stringify({
-    schema: 'autopilot.agent-activity/1',
-    session_id: p.session_id,
-    agent_id: p.agent_id,
-    agent_type: typeof p.agent_type === 'string' && p.agent_type ? p.agent_type : null,
-    last_tool_at: new Date().toISOString(),
-    last_tool_name: typeof p.tool_name === 'string' && p.tool_name ? p.tool_name : null,
-  })}\n`;
+  return { dir, file: path.join(dir, `${sanitizeSessionId(p.agent_id)}.json`) };
+}
+
+function writeAgentFile(dir, file, obj) {
+  const body = `${JSON.stringify(obj)}\n`;
   const tmp = `${file}.tmp-${process.pid}`;
   try {
     fs.writeFileSync(tmp, body, { mode: 0o600 });
@@ -128,6 +121,54 @@ function stampAgentActivity(p) {
     fs.writeFileSync(tmp, body, { mode: 0o600 });
   }
   fs.renameSync(tmp, file);
+}
+
+function readAgentFile(file) {
+  try {
+    const v = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return v && v.schema === 'autopilot.agent-activity/1' ? v : null;
+  } catch { return null; }
+}
+
+function stampAgentActivity(p) {
+  if (knobOff('AUTOPILOT_AGENT_ACTIVITY')) return false;
+  if (!p || typeof p.agent_id !== 'string' || !p.agent_id) return false;
+  if (typeof p.session_id !== 'string' || !p.session_id) return false;
+  const { dir, file } = agentFile(p);
+  const cur = readAgentFile(file);
+  // WATCHVER/FOREMAN: an agent that has stopped never runs again; a late stamp (hook ordering) must not resurrect it.
+  const endedAt = cur && typeof cur.ended_at === 'string' && cur.ended_at ? cur.ended_at : null;
+  writeAgentFile(dir, file, {
+    schema: 'autopilot.agent-activity/1',
+    session_id: p.session_id,
+    agent_id: p.agent_id,
+    agent_type: typeof p.agent_type === 'string' && p.agent_type ? p.agent_type : null,
+    last_tool_at: new Date().toISOString(),
+    last_tool_name: typeof p.tool_name === 'string' && p.tool_name ? p.tool_name : null,
+    ...(endedAt ? { ended_at: endedAt } : {}),
+  });
+  return true;
+}
+
+// SubagentStop (mods P1W FOREMAN): the agent is done. Marks its activity file `ended_at` (created when the agent never made a
+// tool call). Same knob as the stamp, same fail-open. Only the first stop counts (ended_at is never moved).
+function endAgentActivity(p) {
+  if (knobOff('AUTOPILOT_AGENT_ACTIVITY')) return false;
+  if (!p || typeof p.agent_id !== 'string' || !p.agent_id) return false;
+  if (typeof p.session_id !== 'string' || !p.session_id) return false;
+  const { dir, file } = agentFile(p);
+  const cur = readAgentFile(file);
+  const now = new Date().toISOString();
+  if (cur && typeof cur.ended_at === 'string' && cur.ended_at) return true;
+  writeAgentFile(dir, file, {
+    schema: 'autopilot.agent-activity/1',
+    session_id: p.session_id,
+    agent_id: p.agent_id,
+    agent_type: (cur && cur.agent_type) || (typeof p.agent_type === 'string' && p.agent_type ? p.agent_type : null),
+    last_tool_at: (cur && cur.last_tool_at) || now,
+    last_tool_name: (cur && cur.last_tool_name) || null,
+    ended_at: now,
+  });
   return true;
 }
 
@@ -202,6 +243,7 @@ module.exports = {
   sessionFile,
   liveBase,
   stampAgentActivity,
+  endAgentActivity,
   removeAgentActivity,
   recordTurn,
   readJsonFile,

@@ -52,3 +52,4 @@ FF5: main 92098562 -> 67b6747e (FOREMAN2 rebased; non-docs diff vs reviewed a7cd
 TASKSTOP b25571c4 (land) SHIP-AS-IS review-1791202758-3071841-7f7b (🔵 existsSync→end TOCTOU vs SessionEnd, teardown only). Depth-0: 4 files (README, awaiting-owner, live-session-lib, new taskstop.test.js); taskstop 8/8 + the hand's two L1 extras (watch-update-replace, dispatch-local-openai) green alone, 26/26.
 FF6: main -> 1e2602e1 (TASKSTOP rebased; non-docs diff vs reviewed b25571c4 = 0). Rollback to FF5 content: reset --hard HEAD~1.
 TASKSTOP2 8c48d7d5 (land) SHIP-AS-IS review-1791205548-3475079-b045 (🔵 README matcher-column lock phrase; mutation outputs off-diff — depth-0 checked 4 mut files all red). Depth-0: 3 files, taskstop2+taskstop+attention-pending 25/25.
+FF7: main -> c685bc6b (TASKSTOP2 rebased; non-docs diff vs reviewed 8c48d7d5 = 0). Rollback to FF6 content: reset --hard HEAD~1.

@@ -12,7 +12,7 @@
 #   GATE_TMUX_SOCKET         tmux -L <name> (a private server); default = the tmux server you are attached to
 #   GATE_OUT                 output base, default <this dir>/runs
 # Capture layout (what check.js reads):
-#   meta.json pane.txt band.txt marker.json attention.json tasks.json context.json envelope.json decisions-sidecar.json
+#   meta.json pane.txt band.txt panel.txt marker.json attention.json tasks.json context.json envelope.json decisions-sidecar.json
 #   foreman.json sources.json model.json decision-file.json work-orders/*.json marker-dir-ls.txt ps-watchers.txt
 # A file that does not exist is simply absent (listed under "missing" in meta.json): absence is itself evidence.
 set -u
@@ -137,7 +137,15 @@ const marks = ['▲ 要你決定', '⏸ 疑似卡住', '✓ 完成待驗收', '�
 let band = '';
 for (let i = pane.length - 1; i >= 0; i -= 1) { if (marks.some((k) => pane[i].includes(k))) { band = `${pane[i]}\n${pane[i + 1] || ''}\n`; break; } }
 fs.writeFileSync(path.join(out, 'band.txt'), band);
-if (!band) missing.push('band lines in the pane (no verdict mark found)');
+// panel.txt: a permission / AskUserQuestion dialog hides the band row, but the mod's top-right panel still shows the verdict
+// word alone in its cell with the reason in the cell below (no mark glyph). The text after the last │ of the line.
+const words = ['要你決定', '疑似卡住', '完成待驗收', '進行中', '待命'];
+const cell = (l) => { const parts = l.split('│').map((p) => p.trim()).filter(Boolean); return l.includes('│') ? (parts[parts.length - 1] || '') : ''; };
+let panel = '';
+for (let i = 0; i < pane.length; i += 1) { if (words.includes(cell(pane[i]))) { panel = `${cell(pane[i])}\n${cell(pane[i + 1] || '')}\n`; break; } }
+fs.writeFileSync(path.join(out, 'panel.txt'), panel);
+if (!band && !panel) missing.push('band lines and panel verdict in the pane (no verdict mark / panel word found)');
+else if (!band) missing.push('band row hidden (a dialog is open?): the panel verdict is recorded in panel.txt');
 
 fs.writeFileSync(path.join(out, 'meta.json'), `${JSON.stringify({
   schema: 'autopilot.gate-capture/1', cell: E.GATE_CELL, captured_at: new Date(Number(E.GATE_NOW_MS)).toISOString(), captured_at_ms: Number(E.GATE_NOW_MS),

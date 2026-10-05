@@ -21,28 +21,51 @@ G=/home/cookys/projects/autopilot/docs/plans/evidence/2026-10-04-mods-p1c/gate
 固定流程：視窗 A 觸發 → 等 20 秒（mod 每 5 秒讀一次、watcher 每 10 秒寫一次）→ 視窗 B 執行 capture → 執行 check。
 
 ```bash
-# 視窗 B。<cell> 是你取的格子名，<target> 是視窗 A 的 tmux 目標（例如 gate-l5）
-bash $G/capture.sh <cell> <target>        # 印出存檔目錄
+# 視窗 B。<cell> 是你取的格子名，<target> 是視窗 A 的 tmux 目標，一律寫成 `<名稱>:`（例如 gate-l5:）
+bash $G/capture.sh <cell> <target>        # 印出存檔目錄（<G 的 runs>/<cell>/<時間>/）
 node $G/check.js <上一行印出的目錄>
 ```
 
+tmux 的細節（兩個 session 同時開時最容易出錯）：
+- 目標一律寫成 `-t <名稱>:`，結尾要有冒號。只寫 `-t c` 時，tmux 會把它當成前綴去配對，另一個叫 `df` 的 session 可能收到你的按鍵（pilot 實際發生過）。不要依賴預設目標。
+- 用私有 tmux server 的話（agent 驅動就是這樣，見 `DRIVER.md`），啟動時設 `GATE_TMUX_SOCKET=gate`：`GATE_TMUX_SOCKET=gate bash $G/capture.sh <cell> gate-l5:`，它會改用 `tmux -L gate`。
+- 第一次在測試 repo 啟動 `claude` 會跳出信任資料夾的對話框，預設選項是「No, exit」：按 Down 再按 Enter 才是信任。
+- 被驅動的 session 裡，Bash 工具會擋掉單獨的前景 `sleep N`。要等就寫成迴圈（`for i in 1 2 3; do echo tick $i; sleep 6; done`），迴圈第一次會問權限，核准即可。
+- 叫 depth-0 派工時，把腳本的絕對路徑一起給它（例如 `/home/cookys/projects/autopilot/scripts/dispatch-hetero.sh`），否則它會自己 `find /` 去找。
+- 這台機器的 ChatGPT 帳號不接受 `--model gpt-5.5-codex`（回 400）。派 codex 時不要帶 `--model`，用 `~/.codex/config.toml` 的預設（目前是 gpt-6-astra）。
+
 `capture.sh` 只讀、不寫 live 目錄和 marker 目錄；它會自己從 pane 的目錄找到最新的 session marker。找錯時，把 session id 當第三個參數傳進去。
 
-`check.js` 的 PASS 長這樣：每個項目一行 `PASS`，最後一行 `RESULT: PASS`。項目包括結論詞（verdict）、專案名、階段、進度、經過時間，以及（有資料時）「代你決定」「n 件派工無決策紀錄」兩個片段和第二行的理由。FAIL 的意思是 band 和來源檔不一致，這是一個發現，不是檢查器的錯：請保留存檔目錄、不要重跑覆蓋，直接記進結果表。
+`check.js` 的 PASS 長這樣：每個項目一行 `PASS`，最後一行 `RESULT: PASS`。項目包括結論詞（verdict）、專案名、階段、進度、經過時間，以及（有資料時）「代你決定」「n 件派工無決策紀錄」兩個片段和第二行的理由。輸出的第二行 `surface: band` 或 `surface: panel` 說明它判斷的是哪個畫面：權限或 AskUserQuestion 的對話框開著時，底下那一列 band 會被蓋住，只剩右上角面板顯示「要你決定」和理由；這時 `capture.sh` 把面板文字存在 `panel.txt`，`check.js` 改判面板，只比對結論詞和理由，其餘項目印 `SKIP`。band 看得到時一律判 band。FAIL 的意思是 band 和來源檔不一致，這是一個發現，不是檢查器的錯：請保留存檔目錄、不要重跑覆蓋，直接記進結果表。
 
 「來源未接」：sources 清單（`sources.json`）說某個寫入端沒裝或被關掉時，band 該格寫「來源未接」就是 PASS，`check.js` 會自己依清單判斷，你不用特別處理。
 
-### 五個結論詞的觸發方式（每個模式都做一遍）
+### 六個結論詞的觸發方式（每個模式都做一遍）
 
 | 格子 | 你在視窗 A 怎麼觸發 | 存檔時機 |
 |------|--------------------|----------|
 | 要你決定（權限） | 用預設權限模式（不要 bypass），叫 Claude 執行一個需要權限的指令，例如「跑 `touch /tmp/gate-perm-test`」。權限提示出現後，你不要回答。 | 提示還開著的時候 |
 | 要你決定（AskUserQuestion） | 對 depth-0 說「先用 AskUserQuestion 問我選 A 還是 B，我答了你再繼續」。問題出現後，你不要回答。這一格會同時有 attention 檔和 decision 檔。 | 問題還開著的時候 |
-| 疑似卡住 | 叫 depth-0 派一個會沉默的派工：「用 dispatch-hetero 派一個 hand，請它在 shell 裡只跑 `sleep 420`，不要輸出任何東西」。派工的 log 超過 180 秒沒有新內容，watcher 就在 envelope 標 `stall: true`（門檻是 `dispatch-status.js --stall-secs 180`）。 | 派出後等 200 秒以上再存 |
-| 完成待驗收 | 兩種擇一。(1) 用 /l4–/l6 跑一個只改一個 docs 檔的小 campaign 到終態，讓凍結進度 done 等於 total。(2) 任何模式：叫 Claude 建立兩個任務，再把兩個都完成（需要第 0 節的 TODO 環境變數）。 | 終態或全部任務完成、沒有派工在跑之後 |
-| 待命 | 讓 Claude 回答完一個簡單問題，然後你什麼都不做，等 60 秒。 | 回合結束後 70 秒以上 |
+| 進行中 | 兩種擇一。(1) 叫 Claude 建立兩個任務，只開始其中一個（狀態 in_progress），然後停在那裡：session 在工作中，沒有派工在跑，band 讀 進行中，理由是「任務進行中：<任務名>」。(2) 派一個會跑一陣子的派工，派工在跑時存檔，理由是「n 個派工在跑」。**不要用長時間的前景 Bash 來造這一格**：核准權限之後，attention 要等那個工具結束才會清掉（已知限制，見下），band 會一直停在 要你決定。 | 任務開始之後、或派工在跑的時候 |
+| 疑似卡住 | 派一個會沉默的派工，然後把它的行程暫停（見下面「疑似卡住怎麼造」）。派工的 log 超過 180 秒沒有新內容，watcher 就在 envelope 標 `stall: true`（門檻是 `dispatch-status.js --stall-secs 180`）。 | 暫停後等 180 秒加兩次 watcher 更新（共約 200 秒以上）再存 |
+| 完成待驗收 | 兩種擇一。(1) 用 /l4–/l6 跑一個只改一個 docs 檔的小 campaign 到終態，讓凍結進度 done 等於 total。(2) 任何模式：叫 Claude 建立兩個任務，再把兩個都完成（需要第 0 節的 TODO 環境變數）。**條件是「沒有派工在跑」**：任務全完成但還有一個派工活著時，band 讀 進行中才是對的，`check.js` 也這樣判。 | 終態或全部任務完成、沒有派工在跑之後 |
+| 待命 | 讓 Claude 回答完一個簡單問題，沒有任務在 in_progress，然後你什麼都不做，等 60 秒。待命的意思是「這回合結束，沒有別的事在進行」：回合結束的信號（attention 的 idle）在 Stop 之後約 60 秒才會寫出來。 | 回合結束後 70 秒以上 |
+
+### 疑似卡住怎麼造
+
+codex 派工會每三分鐘左右自己吐一行旁白，log 不會安靜 180 秒；pilot 試過 `sleep 420` 的 hand，band 全程停在 進行中。要造真的沉默，改成暫停行程：
+
+1. 派一個 hand（絕對路徑的 `dispatch-hetero.sh`，給它一個長工作），從 manifest 的 pid 找到它的行程；manifest 沒有 pid 時，用 `ps -eo pid,args` 在輸出裡找它 worktree 的路徑（不要用 `pgrep -f`，它會比對到自己）。
+2. 動手前先確認這個 pid 真的是那個 hand：`readlink /proc/<pid>/cwd` 是它的 worktree，`tr '\0' '\n' < /proc/<pid>/environ` 看得到它的派工環境。確認完才 `kill -STOP <pid>`，只用 pid，不用名稱比對。
+3. 等 180 秒（stall 門檻）再加兩次 watcher 更新。watcher 的 tick 是 10 秒（`src/status/runs-watch.js` 的 `DEFAULT_INTERVAL_S`），所以約 200 秒就夠；pilot 沒有另外量出逐派工探測的更新間隔，所以請看 capture 裡 envelope 該 run 的 `probe_age_s`：它大於約 30 秒時，探測還沒更新，再等一下。
+4. capture、check，band 該讀 疑似卡住，理由是最安靜那個派工的 `last_event_age_s`。
+5. 結束後 `kill -CONT <pid>`，讓它跑完；不想等就把它殺掉。
 
 如果疑似卡住的派工沒有真的卡住（band 沒變），你可以用同一個探測看看 watcher 看到什麼：`node <clone>/scripts/dispatch-status.js --run <run-id> --stall-secs 180`。這個輸出也請貼進結果表的備註。
+
+### 已知限制：核准權限之後 attention 不會馬上清掉
+
+核准一個權限之後，要到被核准的那個工具跑完（PostToolUse）attention 才會清掉：核准和 PostToolUse 之間沒有任何 hook 事件。所以一個要跑 72 秒的前景工具，band 會在整段時間裡讀 要你決定，而不是 進行中。這是已知限制，不算 FAIL，不要為它改 check.js；造 進行中 的格子請照上面的表。
 
 ### 六個模式怎麼開
 
@@ -57,7 +80,7 @@ node $G/check.js <上一行印出的目錄>
 | /l6 | 啟動 `claude`，輸入 `/l6 在 README 加一行測試字` | 同 /l5 |
 | ceo-agent（沒有 /lN） | 啟動 `claude`，第一句說「CEO mode：在 README 加一行測試字，你全權處理」，不要打任何 /lN | marker 應該是一般 session（level null），不是 l3–l6 |
 
-每個模式做完五個結論詞，共 30 格。同一個 session 可以連續做多格，每格之間讓 session 回到你可以重新觸發的狀態（回答掉問題、核准掉權限）。
+每個模式做完六個結論詞（要你決定分權限和 AskUserQuestion 兩格），共 36 格。同一個 session 可以連續做多格，每格之間讓 session 回到你可以重新觸發的狀態（回答掉問題、核准掉權限）。
 
 ## 2. 三個額外格
 
@@ -115,10 +138,16 @@ ls "$(node -e 'console.log(require(process.env.HOME+"/.autopilot/live-pointer.js
 ls ~/.autopilot/session-mode | sort > /tmp/gate-c-after.txt
 ps -eo pid,etimes,args | awk '/status runs --watch/ && !/awk/' > /tmp/gate-c-ps-after.txt
 ls "$(node -e 'console.log(require(process.env.HOME+"/.autopilot/live-pointer.json").live_base)')/runs" | sort > /tmp/gate-c-runs-after.txt
-diff /tmp/gate-c-before.txt /tmp/gate-c-after.txt; diff /tmp/gate-c-ps-before.txt /tmp/gate-c-ps-after.txt; diff /tmp/gate-c-runs-before.txt /tmp/gate-c-runs-after.txt
+diff /tmp/gate-c-before.txt /tmp/gate-c-after.txt; diff <(awk '{print $1}' /tmp/gate-c-ps-before.txt) <(awk '{print $1}' /tmp/gate-c-ps-after.txt); diff /tmp/gate-c-runs-before.txt /tmp/gate-c-runs-after.txt
 ```
 
-PASS 的條件：三個 `diff` 都沒有輸出，也就是 `~/.autopilot/session-mode/` 沒有新檔、沒有新的 watcher 程序、live 目錄的 `runs/` 沒有新檔。這一格不需要跑 `check.js`。注意：另一個正在跑的、已接 autopilot 的 session 可能造成雜訊；做這一格時，請先關掉其他 session。
+比 watcher 時要比 PID，不要比 `ps` 的整行文字：整行有 `etimes`（已跑秒數）一欄，兩次之間一定不同，直接 `diff` 永遠不會是空的。PASS 的條件：三個 `diff` 都沒有輸出，也就是 `~/.autopilot/session-mode/` 沒有新檔、沒有新的 watcher 程序、live 目錄的 `runs/` 沒有新檔。這一格不需要跑 `check.js`。注意：另一個正在跑的、已接 autopilot 的 session 可能造成雜訊；做這一格時，請先關掉其他 session。
+
+## 2b. 合併 review 加的三格（2026-10-05）
+
+- **(d) /l5 的「代你決定」算在 campaign 那一格**：/l5 跑到 engine 裁決過至少一個 finding 之後，capture 一次。看 band 第二行有沒有「代你決定 m 件」，並在視窗 B 跑 `grep -c . $(git -C ~/projects/gate-sandbox rev-parse --path-format=absolute --git-common-dir)/autopilot/ledger/decisions.jsonl`。ledger 有列、band 卻寫 0 件，就是 FAIL（表示 ledger 列的 root 跟 campaign scope 對不上）。
+- **(e) 一般 session 用 dispatch-author 派工，派工掛在這個 session 底下**：在 dev-flow 模式叫 Claude 用 dispatch-author 派一個小工作，capture 後確認 band 的派工數有算到它；`cat ~/.autopilot/session-mode/<sid>.json` 的 `root_run_id` 要等於該派工 manifest 的 `root_run_id`。
+- **(f) 一般 session 進入 /lN 會換編號（已知行為，記錄就好）**：同一個 session 先做 dev-flow、再打 `/l3 …`，capture 前後各一次。marker 的 `root_run_id` 會變成新的值，band 會換到新的 scope。這是現行規則，不算 FAIL；請記下你覺得 band 的連續性能不能接受。
 
 ## 2b. 合併 review 加的三格（2026-10-05）
 
@@ -130,14 +159,14 @@ PASS 的條件：三個 `diff` 都沒有輸出，也就是 `~/.autopilot/session
 
 每格填 PASS、FAIL 或來源未接，後面寫存檔目錄（`gate/runs/<cell>/<時間>/`）。FAIL 的格子，把 `check.js` 的 FAIL 行抄進備註。
 
-| 模式 | 要你決定（權限） | 要你決定（AskUserQuestion） | 疑似卡住 | 完成待驗收 | 待命 |
-|------|------------------|-----------------------------|----------|------------|------|
-| dev-flow | | | | | |
-| /l3 | | | | | |
-| /l4 | | | | | |
-| /l5 | | | | | |
-| /l6 | | | | | |
-| ceo-agent（無 /lN） | | | | | |
+| 模式 | 要你決定（權限） | 要你決定（AskUserQuestion） | 疑似卡住 | 完成待驗收 | 進行中 | 待命 |
+|------|------------------|-----------------------------|----------|------------|--------|------|
+| dev-flow | | | | | | |
+| /l3 | | | | | | |
+| /l4 | | | | | | |
+| /l5 | | | | | | |
+| /l6 | | | | | | |
+| ceo-agent（無 /lN） | | | | | | |
 
 | 額外格 | 結果 | 證據（輸出或存檔目錄） |
 |--------|------|------------------------|

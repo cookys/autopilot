@@ -3,7 +3,9 @@
 // gate/check.test.js — unit tests of check.js on hand-made capture dirs (node --test gate/check.test.js).
 // Each verdict word, 來源未接, frozen / unfrozen progress, the decisions line, elapsed, plus PLANTED-RED cases: a capture
 // whose band shows the wrong verdict / progress / project must FAIL.
-// Result: 23 tests, 23 pass. Mutation controls (each breaks one rule in check.js, the suite goes red, restored):
+// GATEFIX (mods P1W): +8 tests (completion needs no live run, panel surface under a dialog, band preferred, planted reds). RED before the change: 31 tests, 23 pass / 8 fail; GREEN: 31 / 31.
+// GATEFIX mutation controls (run-w/land/mut-check-*.txt): done-ignores-live, panel-never, panel-free-pass, band-not-preferred, panel-substring, each red then restored.
+// Result before GATEFIX: 23 tests, 23 pass. Mutation controls (each breaks one rule in check.js, the suite goes red, restored):
 // compare-always-pass 2 red, decision-ignored 1, stall-ignored 1, deleted-counted 1, idle-attention-decides 1,
 // frozen-needs-digest 1 (after the unfrozen receipt case carried a count), notwired-always 2.
 
@@ -163,4 +165,57 @@ test('PLANTED RED: no band in the pane -> FAIL', () => {
 });
 test('a fully matching capture is ok overall', () => {
   assert.strictEqual(run(capture({}, ['◌ 待命 demo · — · 30m · —', '沒有派工在跑'])).ok, true);
+});
+
+// ---- GATEFIX (mods P1W W4 gate pilot): completion needs no live run; dialogs hide the band, the panel is judged then
+const liveEnv = { scope: { project_key: 'abcdef0123456789', repo_identity: IDENT }, runs: [{ run_id: 'r', alive: true, stall: false, started_at: iso(30) }], counts: { confirmed_live: 1 } };
+const allDoneTasks = () => tasksFile([t(1, 'a', 'completed'), t(2, 'b', 'completed')]);
+test('GATEFIX: every task completed AND a live run -> 進行中 is expected (not 完成待驗收)', () => {
+  const dir = capture({ 'tasks.json': allDoneTasks(), 'envelope.json': liveEnv }, ['● 進行中 demo · — · 30m · 2 done*', '1 個派工在跑']);
+  const r = run(dir);
+  assert.strictEqual(status(r, 'verdict'), 'PASS'); assert.strictEqual(r.ok, true);
+  const wrong = run(capture({ 'tasks.json': allDoneTasks(), 'envelope.json': liveEnv }, ['✓ 完成待驗收 demo · — · 30m · 2 done*', '任務 2/2 都完成，等你驗收']));
+  assert.strictEqual(status(wrong, 'verdict'), 'FAIL');
+});
+test('GATEFIX: frozen done == total AND a live run -> 進行中; the live run ended -> 完成待驗收', () => {
+  const rc = { 'work-orders/a.json': receipt({ completed_deliverables: ['a', 'b'], remaining_deliverables: [], deliverable_count: 2, frozen_denominator_digest: 'abc' }) };
+  const live = run(capture({ ...rc, 'envelope.json': liveEnv }, ['● 進行中 demo · — · 20m · 100%（2/2）', '1 個派工在跑']));
+  assert.strictEqual(status(live, 'verdict'), 'PASS');
+  const done = run(capture({ ...rc }, ['✓ 完成待驗收 demo · — · 20m · 100%（2/2）', '驗收結論尚未出']));
+  assert.strictEqual(status(done, 'verdict'), 'PASS');
+});
+const SIDE = (l) => `${l.padEnd(60)}│`;
+const panelPane = (word, reason) => [SIDE('● Creating a file'), `${SIDE(' Do you want to proceed?')}${word}`, `${SIDE(' ❯ 1. Yes')}${reason}`, SIDE(' Esc to cancel')];
+test('GATEFIX: a dialog hides the band; the top-right panel verdict + reason are judged and the surface is printed', () => {
+  const dir = capture({ 'attention.json': { schema: 'autopilot.attention/1', kind: 'permission', summary: 'Bash: touch /tmp/gate-perm-test', since: iso(0) } },
+    panelPane('要你決定', '等你批准：Bash: touch /tmp/gate-perm-test（等了 0 分）'));
+  const r = run(dir);
+  assert.strictEqual(r.surface, 'panel');
+  assert.strictEqual(status(r, 'verdict'), 'PASS'); assert.strictEqual(status(r, 'reason'), 'PASS');
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(status(r, 'project'), 'SKIP'); // the panel does not carry project / phase / progress / elapsed
+});
+test('GATEFIX: AskUserQuestion dialog, panel surface', () => {
+  const dir = capture({ 'attention.json': { schema: 'autopilot.attention/1', kind: 'question', summary: '請選擇 A 還是 B？', since: iso(0) } },
+    panelPane('要你決定', '等你回答：請選擇 A 還是 B？（等了 0 分）'));
+  const r = run(dir);
+  assert.strictEqual(r.surface, 'panel'); assert.strictEqual(r.ok, true);
+});
+test('GATEFIX: the band wins over the panel when both are present, and says so', () => {
+  const dir = capture({ 'attention.json': { schema: 'autopilot.attention/1', kind: 'permission', summary: 'Bash: ls', since: iso(0) } },
+    [...panelPane('要你決定', '等你批准：Bash: ls（等了 0 分）'), '▲ 要你決定 demo · — · 30m · —', '等你批准：Bash: ls（等了 0 分）']);
+  const r = run(dir);
+  assert.strictEqual(r.surface, 'band'); assert.strictEqual(status(r, 'project'), 'PASS');
+});
+test('GATEFIX PLANTED RED: panel says 要你決定 but no attention / decision file is open -> FAIL (panel is never a free pass)', () => {
+  const r = run(capture({}, panelPane('要你決定', '等你批准：Bash: x')));
+  assert.strictEqual(r.surface, 'panel'); assert.strictEqual(status(r, 'verdict'), 'FAIL'); assert.strictEqual(r.ok, false);
+});
+test('GATEFIX PLANTED RED: attention open but neither band nor panel shows a verdict -> FAIL', () => {
+  const r = run(capture({ 'attention.json': { kind: 'permission', summary: 'Bash: ls' } }, ['just a dialog']));
+  assert.strictEqual(r.ok, false); assert.strictEqual(r.surface, null);
+});
+test('GATEFIX: the panel finder ignores a bare verdict word that is not alone in its panel cell', () => {
+  const dir = capture({}, [SIDE('x') + '會議記錄：要你決定 的事項', SIDE('y') + '無']);
+  assert.strictEqual(run(dir).surface, null);
 });

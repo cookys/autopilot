@@ -11,7 +11,7 @@
 // Expected values are derived from files only; the captured pane is read last and only compared.
 //   verdict   attention kind permission|question OR an open decision file -> 要你決定
 //             else any envelope run with stall:true                        -> 疑似卡住
-//             else frozen progress done==total OR every session task done  -> 完成待驗收
+//             else (frozen done==total OR every session task done) AND no live run -> 完成待驗收
 //             else a live run OR a task in progress                        -> 進行中
 //             else                                                         -> 待命
 //   project   repo identity, last directory of the git common dir's parent (else first 8 hex of the project key)
@@ -21,6 +21,9 @@
 //   decisions "代你決定 m 件（k 件不可逆）" when m>0, "n 件派工無決策紀錄" when n>0 (sidecar counts)
 //   reason    要你決定: the attention summary or the decision question appears on band line 2
 //   elapsed   start of this piece of work vs the capture instant, +-2 minutes
+// Surface (dialogs): while a permission / AskUserQuestion dialog is open the band row is hidden and only the mod's top-right panel
+//   shows the verdict word alone in its cell, the reason in the cell below. The band is judged when present; else the panel
+//   (verdict + reason only; the other tokens print SKIP). The judged surface is printed as `surface: band|panel`.
 // Exit: 0 every token PASS (or 來源未接 as expected), 1 any FAIL, 2 usage / unreadable capture.
 
 const fs = require('fs');
@@ -164,11 +167,10 @@ function derive(dir) {
   if (attKind === 'permission' || attKind === 'question') { verdict = '要你決定'; verdictSource = 'attention.json kind=' + attKind; }
   else if (decisionOpen) { verdict = '要你決定'; verdictSource = 'decision-file.json (open)'; }
   else if (stalled) { verdict = '疑似卡住'; verdictSource = 'envelope.json run stall:true'; }
-  else if (frozenDone || tasksDone) { verdict = '完成待驗收'; verdictSource = frozenDone ? `${progress.source} frozen ${progress.done}/${progress.total}` : 'tasks.json all completed'; }
+  else if ((frozenDone || tasksDone) && !liveRun) { verdict = '完成待驗收'; verdictSource = frozenDone ? `${progress.source} frozen ${progress.done}/${progress.total}` : 'tasks.json all completed'; }
   else if (liveRun || (tasks && tasks.inProgress.length > 0)) { verdict = '進行中'; verdictSource = liveRun ? 'envelope.json live run' : 'tasks.json in_progress'; }
   else { verdict = '待命'; verdictSource = 'nothing live, awaited or complete'; }
   put('verdict', verdict, verdictSource, { exact: true });
-  if ((frozenDone || tasksDone) && liveRun && verdict === '完成待驗收') exp.notes.push('completion with a live run in the envelope: the plan text lists completion before running, so expected 完成待驗收');
 
   // ---- project
   const identity = (envelope && envelope.scope && envelope.scope.repo_identity) || (marker && marker.repo_identity) || null;
@@ -251,11 +253,22 @@ function findBand(paneText) {
   return null;
 }
 
+// the panel (right-hand column, after the last │): a cell that is exactly one verdict word, the cell on the next line is the reason
+function findPanel(paneText) {
+  const cells = String(paneText || '').split('\n').map((l) => { const parts = l.split('│').map((p) => p.trim()).filter(Boolean); return l.includes('│') ? (parts[parts.length - 1] || '') : l.trim(); });
+  for (let i = 0; i < cells.length; i += 1) {
+    const v = VERDICTS.find((x) => cells[i] === x.word);
+    if (v) return { verdict: v.word, line1: v.word, line2: cells[i + 1] || '', surface: 'panel' };
+  }
+  return null;
+}
+
 function compare(derived, band) {
   const results = [];
   for (const t of derived.tokens) {
     const r = { name: t.name, source: t.source, expected: t.expected, status: 'FAIL', detail: '' };
-    if (!band) { r.detail = 'no band found in the pane'; results.push(r); continue; }
+    if (!band) { r.detail = 'no band or panel verdict found in the pane'; results.push(r); continue; }
+    if (band.surface === 'panel' && t.name !== 'verdict' && t.name !== 'reason') { r.status = 'SKIP'; r.detail = 'not shown on the panel'; results.push(r); continue; }
     const text = t.line2 ? band.line2 : band.line1;
     if (t.exact) {
       r.status = band.verdict === t.expected ? 'PASS' : 'FAIL';
@@ -283,10 +296,14 @@ function compare(derived, band) {
 
 function run(dir) {
   const derived = derive(dir);
-  const pane = readText(path.join(dir, 'pane.txt')) || readText(path.join(dir, 'band.txt'));
-  const band = findBand(pane);
+  const pane = readText(path.join(dir, 'pane.txt')) || `${readText(path.join(dir, 'band.txt')) || ''}\n${readText(path.join(dir, 'panel.txt')) || ''}`;
+  const bandOnly = findBand(pane);
+  const band = bandOnly ? { ...bandOnly, surface: 'band' } : findPanel(pane);
   const results = compare(derived, band);
-  return { derived, band, results, ok: results.length > 0 && results.every((r) => r.status === 'PASS') };
+  return {
+    derived, band, results, surface: band ? band.surface : null,
+    ok: results.length > 0 && results.every((r) => r.status === 'PASS' || r.status === 'SKIP') && results.some((r) => r.status === 'PASS'),
+  };
 }
 
 function main(argv) {
@@ -296,9 +313,10 @@ function main(argv) {
     return 2;
   }
   const out = run(args[0]);
-  if (argv.includes('--json')) { process.stdout.write(`${JSON.stringify({ ok: out.ok, results: out.results, notes: out.derived.notes }, null, 2)}\n`); return out.ok ? 0 : 1; }
+  if (argv.includes('--json')) { process.stdout.write(`${JSON.stringify({ ok: out.ok, results: out.results, surface: out.surface, notes: out.derived.notes }, null, 2)}\n`); return out.ok ? 0 : 1; }
   process.stdout.write(`capture ${args[0]}  cell=${out.derived.meta.cell || '?'}\n`);
-  process.stdout.write(`band: ${out.band ? `${out.band.line1}\n      ${out.band.line2}` : 'NOT FOUND'}\n`);
+  process.stdout.write(`surface: ${out.surface || 'none'}\n`);
+  process.stdout.write(`${out.surface === 'panel' ? 'panel' : 'band'}: ${out.band ? `${out.band.line1}\n      ${out.band.line2}` : 'NOT FOUND'}\n`);
   for (const r of out.results) {
     const exp = Array.isArray(r.expected) ? r.expected.join(' + ') : String(r.expected);
     process.stdout.write(`${r.status}  ${r.name.padEnd(12)} expected ${exp}  [${r.source}]${r.detail ? `  (${r.detail})` : ''}\n`);
@@ -308,5 +326,5 @@ function main(argv) {
   return out.ok ? 0 : 1;
 }
 
-module.exports = { derive, compare, findBand, run, main };
+module.exports = { derive, compare, findBand, findPanel, run, main };
 if (require.main === module) process.exitCode = main(process.argv.slice(2));

@@ -441,7 +441,8 @@ export function proxySegments(d: DecisionsView | null): string[] {
 }
 
 // Precedence: 1 needs a decision (attention permission / question, or an open decision), 2 stalled, 3 complete and
-// waiting acceptance (frozen progress done = total, or every session task completed), 4 running, 5 idle.
+// waiting acceptance (frozen progress done = total, or every session task completed; and NO live run in scope), 4 running
+// (a live run, or a session task in progress), 5 idle (the turn ended: nothing live, no task in progress).
 export function bandView(env: Json, jobModel: JobModel | null, projectKey: string, nowMs: number, src: Sources = NO_SOURCES): BandView {
   const counts = countsOf(env)
   const progress = jobModel === null ? null : jobModel.progress
@@ -451,6 +452,7 @@ export function bandView(env: Json, jobModel: JobModel | null, projectKey: strin
   const frozenDone = progress !== null && progress.frozen && progress.done !== null && progress.total !== null && progress.done === progress.total
   const tasksDone = src.tasks !== null && src.tasks.total > 0 && src.tasks.completed === src.tasks.total
   const waiting = noneLive && undecided && ((frozenDone && jobModel !== null) || tasksDone)
+  const taskRunning = src.tasks !== null && src.tasks.in_progress > 0
   const awaiting = src.attention !== null && src.attention.kind !== 'idle' ? src.attention : null
   let pick: { mark: string; word: string }
   let reason: string | null = null
@@ -465,9 +467,12 @@ export function bandView(env: Json, jobModel: JobModel | null, projectKey: strin
   } else if (waiting) {
     pick = VERDICT.waiting
     reason = frozenDone ? '驗收結論尚未出' : '任務 ' + (src.tasks as TasksView).completed + '/' + (src.tasks as TasksView).total + ' 都完成，等你驗收'
-  } else if (counts !== null && counts.confirmed_live > 0) {
+  } else if ((counts !== null && counts.confirmed_live > 0) || taskRunning) {
+    // GATEFIX: a live run, or a session task in progress (the session is mid-work); the live run names itself first.
     pick = VERDICT.running
-    reason = counts.confirmed_live + ' 個派工在跑'
+    reason = counts !== null && counts.confirmed_live > 0
+      ? counts.confirmed_live + ' 個派工在跑'
+      : '任務進行中：' + (src.tasks !== null && src.tasks.current ? src.tasks.current : (src.tasks as TasksView).in_progress + ' 件')
   } else {
     pick = VERDICT.idle
     reason = '沒有派工在跑'

@@ -1,3 +1,6 @@
+// P1W GATEFIX (a task in progress is 進行中; 完成待驗收 needs no live run; one new case x terminal + desktop, the W3a tasks case's first line 待命 -> 進行中):
+// RED at 2160351c (112 tests): 108 pass / 4 fail (2 cases x 2 surfaces). GREEN: 114 pass / 0 fail. Mutation controls (run-w/land/mut-*.txt): task not running (4 red),
+//   completion ignores a live run (8 red), a task in progress outranks completion (2 red); each restored.
 // P1W ELAPSED (start = bound receipt, else tasks first_created_at, else marker started_at, else earliest run, else an em dash; one case x terminal + desktop):
 // RED at w/int5 2fbd2b87 (112 tests): 110 pass / 2 fail (the ELAPSED case x 2). GREEN: 112 pass / 0 fail (the W3a tasks case's 10m became 30m: the old rule's assertion).
 // ELAPSED mutation controls: run-w/elapsed/mut-*.txt.
@@ -877,6 +880,47 @@ for (const surface of SURFACES) {
     expect((await bandParts($, surface)).line2).toBe('1 個派工在跑')
   })
 
+  test('GATEFIX 進行中: a session task in_progress is 進行中 with no run; 待命 only with no live run and no task in progress; 完成待驗收 needs no live run (' + surface + ')', async ($, on) => {
+    const files = quietWorld()
+    files[P_TASKS()] = j(tasksFile()) // 1 in_progress, no live run
+    const w = world(on, files)
+    await start($, surface)
+    let p = await bandParts($, surface)
+    expect(p.line1.startsWith('● 進行中 repo')).toBe(true)
+    expect(p.line2).toBe('任務進行中：接線')
+    // the idle attention (turn ended) does not turn an in-progress task into 待命: the ruling is task in_progress OR a live run
+    files[P_ATT()] = j(attention('idle'))
+    await w.clock.advance(5000)
+    expect(verdicts(await bandText($, surface))).toEqual(['進行中'])
+    delete files[P_ATT()]
+    // a live run: still 進行中, the reason names the run
+    files[W_ENV] = j(envelope({ runs: [row({ run_id: 'r1' })], counts: quiet(1) }))
+    await w.clock.advance(5000)
+    expect((await bandParts($, surface)).line2).toBe('1 個派工在跑')
+    files[W_ENV] = j(envelope({ runs: [exitedRun()], counts: quiet(0) }))
+    // pending only (nothing started): 待命
+    files[P_TASKS()] = j(tasksFile({ tasks: [{ id: '1', subject: 'a', status: 'pending', started_seq: null }], counts: { total: 1, completed: 0, in_progress: 0 }, current: null }))
+    await w.clock.advance(5000)
+    expect(verdicts(await bandText($, surface))).toEqual(['待命'])
+    // every task completed and a live run in scope: 進行中, not 完成待驗收 (same for a frozen done = total)
+    files[P_TASKS()] = j(allDone())
+    files[W_ENV] = j(envelope({ runs: [row({ run_id: 'r1' })], counts: quiet(1) }))
+    await w.clock.advance(5000)
+    expect(verdicts(await bandText($, surface))).toEqual(['進行中'])
+    files[P_TASKS()] = j(tasksFile({ tasks: [], counts: { total: 0, completed: 0, in_progress: 0 }, current: null }))
+    files[W_MODEL] = j(model({ progress: { frozen: true, percent: 100, done: 8, total: 8 } }))
+    await w.clock.advance(5000)
+    expect(verdicts(await bandText($, surface))).toEqual(['進行中'])
+    // the live run ends: now it is complete and waiting
+    files[W_ENV] = j(envelope({ runs: [exitedRun()], counts: quiet(0) }))
+    await w.clock.advance(5000)
+    expect(verdicts(await bandText($, surface))).toEqual(['完成待驗收'])
+    // an in-progress task never outranks complete-and-waiting (precedence 完成待驗收 > 進行中)
+    files[P_TASKS()] = j(tasksFile())
+    await w.clock.advance(5000)
+    expect(verdicts(await bandText($, surface))).toEqual(['完成待驗收'])
+  })
+
   test('W3a attention in the pane: the awaited thing is listed before the dispatch table (' + surface + ')', async ($, on) => {
     const files = base()
     files[P_ATT()] = j(attention('permission'))
@@ -909,7 +953,7 @@ for (const surface of SURFACES) {
     const w = world(on, files)
     await start($, surface)
     let p = await bandParts($, surface)
-    expect(p.line1).toBe('◌ 待命 repo · — · 30m · 1 done*') // root scope with tasks and no receipt: tasks first_created_at (09:30), progress unfrozen
+    expect(p.line1).toBe('● 進行中 repo · — · 30m · 1 done*') // GATEFIX: a task in progress is 進行中 (was 待命); root scope with tasks and no receipt: tasks first_created_at (09:30), progress unfrozen
     const last = p.last as Node
     expect(last.props?.dimColor).toBe(true)
     const pane = await paneParts($, surface)

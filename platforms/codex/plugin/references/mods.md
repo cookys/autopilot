@@ -76,9 +76,10 @@ S5a, S5b, S7, S8; `README.md` there is the verdict table). A mod is CC-only; non
   - Verdict words, first match wins: `▲ 要你決定` (job model `needs_decision === true`; reason = the decision question) >
     `⏸ 疑似卡住` (any envelope row with `stall: true`, reason = the quietest stalled row's `last_event_age_s` in minutes,
     no new threshold) > `✓ 完成待驗收` (envelope `confirmed_live === 0`, progress frozen with done = total, acceptance axis
-    neither accepted nor rejected; reason `驗收結論尚未出`) > `● 進行中` (`confirmed_live > 0`; reason `<n> 個派工在跑`) >
-    `◌ 待命` (the idle word, last: none of the four holds, i.e. nothing live, nothing awaited, not frozen-complete; reason
-    `沒有派工在跑`). A decision awaited is drawn bold in the warning color, the other words bold, `待命` plain.
+    neither accepted nor rejected; reason `驗收結論尚未出`) > `● 進行中` (`confirmed_live > 0`; reason `<n> 個派工在跑`; since
+    GATEFIX also a session task `in_progress` with no live run, reason `任務進行中：<current>`) >
+    `◌ 待命` (the idle word, last: none of the four holds, i.e. nothing live, nothing awaited, not frozen-complete, no task in
+    progress; reason `沒有派工在跑`). A decision awaited is drawn bold in the warning color, the other words bold, `待命` plain.
   - project: `scope.repo_identity` minus `git-common-dir:`, minus a trailing `/.git`, last path segment; a bare repo or any
     other shape falls back to the first 8 hex of the project key. Pure string work, never git.
   - phase: the job model's `phase.label` (an object `{ code, label, source }`; only a non-empty string `label` counts). The
@@ -106,7 +107,10 @@ S5a, S5b, S7, S8; `README.md` there is the verdict table). A mod is CC-only; non
   - Verdict precedence now: `要你決定` (attention `permission` / `question`, or an open decision; reason `等你批准：…（等了 N 分）`,
     `等你回答：…`, or the question plus `（已等 N 天）` when the model marks it stale and a whole day has passed) > `疑似卡住` >
     `完成待驗收` (frozen done = total, or every session task completed; both need nothing live and acceptance undecided; the
-    campaign-terminal phase codes are not a separate rule) > `進行中` > `待命` (attention `idle` appends `停在等你指示 N 分`).
+    campaign-terminal phase codes are not a separate rule) > `進行中` (a live run, or a session task in progress) > `待命` (attention `idle` appends `停在等你指示 N 分`).
+    `待命` means the turn ended and nothing else is going on. No hook event marks "the turn is active" (attention is written only
+    while waiting; `idle` arrives with the `idle_prompt` notification about 60 s after Stop; `hooks/awaiting-owner.js:13,85`), so a
+    session mid-turn with no task and no run reads `待命` until a task starts: the one gap of this rule.
     `awaiting_disposition` is never `要你決定`.
   - elapsed = start of this piece of work, chosen by campaign-vs-session rather than by whether the marker has a root (every
     plain session has one): the earliest progress receipt bound to the root (the receipt's own `root_run_id`; a file with a
@@ -140,6 +144,15 @@ S5a, S5b, S7, S8; `README.md` there is the verdict table). A mod is CC-only; non
 - **Loading it before it is wired**: `claude plugin validate` refuses a module path that leaves the plugin directory and a
   symlink that resolves outside it, so a scratch wrapper plugin (name `autopilot`, `hooks/hooks.json` =
   `{"modules": ["../mods/live/register.ts"]}`) holds a **copy** of `mods/`; re-copy after each edit.
+
+## Known limitations (W4 gate pilot, 2026-10-05)
+
+- **Attention outlives an approved permission until the tool finishes.** No hook event fires between the human approving a
+  permission and the approved tool's `PostToolUse`, so `attention/<sid>.json` (kind `permission`) stays and the band keeps
+  saying `要你決定` for the whole run of a long foreground tool (observed: 72 s). Not fixable from hooks; to see `進行中` in a
+  gate cell use a live dispatch run or an in-progress task, not a long Bash.
+- **A dialog covers the band row.** While a permission or AskUserQuestion dialog is open only the top-right panel shows the
+  verdict (`要你決定` + reason); the gate kit's `capture.sh` records it in `panel.txt` and `check.js` judges it (`surface: panel`).
 
 ## Watcher launch (S5b, plan §4 P1a "鎖的前提", R4/R5)
 

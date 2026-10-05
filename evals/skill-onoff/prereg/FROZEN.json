@@ -53,5 +53,15 @@
     "tasks/f1b-ready-to-merge-docs/task.md": "088a242cf81259b9982993657d7e797d739eb9047c156f4dba76d0ae293dc48b"
   },
   "refrozen_at": "2026-10-04",
-  "refrozen_reason": "pre-first-live-cell fixes: a1b fixture v2, phase lib-write marker, runner env note (review-1791134312)"
+  "refrozen_reason": "pre-first-live-cell fixes: a1b fixture v2, phase lib-write marker, runner env note (review-1791134312)",
+  "amendments": {
+    "w2a-g.amend-1": {
+      "date": "2026-10-05",
+      "no_live_cell_had_run": true,
+      "files": {
+        "lib-r2/p1w-markers.sh": "de7a5df66d1e12eeae1032ce74b832a971bee3f76ae7c598e597156f484dc2b5",
+        "prereg/w2a-g.amend-1.json": "7ca0ac7e6d6c24488bee5b163480121812237424e379cac4dc7eeac93b0c0256"
+      }
+    }
+  }
 }

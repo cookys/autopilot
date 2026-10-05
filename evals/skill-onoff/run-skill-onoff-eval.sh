@@ -244,12 +244,12 @@ set +e
 (
   cd "$TEMP_REPO"
   TRANSCRIPT="$TRANSCRIPT" FROZEN_BASE_SHA="$FROZEN_BASE_SHA" \
-  QUERY="$BASE_DIR/lib/transcript-query.js" ONOFF_LIB="$BASE_DIR/lib" \
+  QUERY="$BASE_DIR/lib/transcript-query.js" ONOFF_LIB="${ONOFF_LIB_OVERRIDE:-$BASE_DIR/lib}" \
     bash "$TASK_DIR/markers.sh"
   # optional second marker file (P1W rows add markers to a task without touching its markers.sh)
   if [ -f "$TASK_DIR/markers-extra.sh" ]; then
     TRANSCRIPT="$TRANSCRIPT" FROZEN_BASE_SHA="$FROZEN_BASE_SHA" \
-    QUERY="$BASE_DIR/lib/transcript-query.js" ONOFF_LIB="$BASE_DIR/lib" \
+    QUERY="$BASE_DIR/lib/transcript-query.js" ONOFF_LIB="${ONOFF_LIB_OVERRIDE:-$BASE_DIR/lib}" \
       bash "$TASK_DIR/markers-extra.sh"
   fi
 ) > "$MARKERS_OUT" 2>> "$RAW_ERR"

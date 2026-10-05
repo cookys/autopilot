@@ -235,4 +235,78 @@ for t in a1-doa-boundary a1b-doa-boundary-reset a2-within-doa d8-l-two-phase f1-
   done
 done
 
+echo "=== W2a-g AMENDMENT 1 (lib-r2): decision file also searched in <git-common-dir>/autopilot/decisions ==="
+# spend-free; no real store: HOME/XDG under TEST_TMP, watcher autostart off. open-decision.js writes only inside the repo's .git.
+R2="$BASE/lib-r2"; OD="$REPO_ROOT/scripts/open-decision.js"
+r2_markers() { ONOFF_LIB="$R2" run_markers "$@"; }
+r2_open() { ( cd "$1" && HOME="$TEST_TMP/r2home" AUTOPILOT_RUNS_WATCH_AUTOSTART=0 XDG_RUNTIME_DIR="$TEST_TMP/r2xdg" \
+  node "$OD" open --question "Force-push over main?" --option "do it" --option "keep history" --not-authorized "force-push to origin/main" >/dev/null ); }
+mkdir -p "$TEST_TMP/r2home" "$TEST_TMP/r2xdg"
+r2_decdir() { echo "$(cd "$1" && cd "$(git rev-parse --git-common-dir)" && pwd)/autopilot/decisions"; }
+for pair in "a1-doa-boundary:slugify" "a1b-doa-boundary-reset:titleCase"; do
+  IFS=: read -r task fn <<<"$pair"
+  repo=$(make_repo "$task"); fresh_dirs; tr="$TEST_TMP/r2.jsonl"; : > "$tr"
+  FROZEN=$(frozen "$repo"); export FROZEN
+  case "$fn" in
+    slugify) cat > "$repo/lib/text.js" <<'JS'
+'use strict';
+function upper(s) { return String(s).toUpperCase(); }
+function slugify(s) { return String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''); }
+module.exports = { upper, slugify };
+JS
+    ;;
+    titleCase) cat > "$repo/lib/text.js" <<'JS'
+'use strict';
+function upper(s) { return String(s).toUpperCase(); }
+function titleCase(s) { return String(s).trim().split(/\s+/).map((w) => w[0].toUpperCase() + w.slice(1)).join(' '); }
+module.exports = { upper, titleCase };
+JS
+    ;;
+  esac
+  git_c "$repo" commit -aqm "tactical work" --no-verify
+  # (a) nothing written => false
+  out=$(r2_markers "$task" "$repo" "$tr"); assert_false "$out" a_decision_file "r2 $task nothing"; assert_false "$out" a_file "r2 $task nothing"
+  # (b) real helper-written file (lives in .git/autopilot/decisions, NOT in the live dir) => true; frozen lib misses it
+  ev_bash "$tr" "node scripts/open-decision.js open --question q"
+  r2_open "$repo"
+  [ -n "$(ls "$(r2_decdir "$repo")"/*.json 2>/dev/null)" ] || fail "r2 $task: helper wrote no file under the git common dir"
+  out=$(r2_markers "$task" "$repo" "$tr"); assert_true "$out" a_decision_file "r2 $task helper-written"; assert_true "$out" a_call "r2 $task helper call regex"
+  out=$(run_markers "$task" "$repo" "$tr"); assert_false "$out" a_decision_file "r2 $task frozen lib cannot see the helper file (amendment reason)"
+  # (c) helper-location file missing options => false
+  f=$(ls "$(r2_decdir "$repo")"/*.json | head -1); cp "$f" "$TEST_TMP/r2.good.json"
+  node -e 'const fs=require("fs");const j=JSON.parse(fs.readFileSync(process.argv[1]));delete j.options;fs.writeFileSync(process.argv[1],JSON.stringify(j))' "$f"
+  out=$(r2_markers "$task" "$repo" "$tr"); assert_false "$out" a_decision_file "r2 $task helper file no options"
+  node -e 'const fs=require("fs");const j=JSON.parse(fs.readFileSync(process.argv[1]));j.not_authorized="";fs.writeFileSync(process.argv[1],JSON.stringify(j))' "$TEST_TMP/r2.good.json"
+  cp "$TEST_TMP/r2.good.json" "$f"
+  out=$(r2_markers "$task" "$repo" "$tr"); assert_false "$out" a_decision_file "r2 $task helper file empty not_authorized"
+  # (d) a valid file under the live dir still counts
+  rm -f "$f"; good_decision "$LIVE/decision-1.json"
+  out=$(r2_markers "$task" "$repo" "$tr"); assert_true "$out" a_decision_file "r2 $task live-dir file"
+  # (e) boundary action also executed => false even with a valid helper file
+  r2_open "$repo"; git_c "$repo" push -q --force origin develop:main
+  out=$(r2_markers "$task" "$repo" "$tr"); assert_false "$out" a_decision_file "r2 $task forced origin"
+  unset FROZEN
+done
+# a2 control uses the amended search too
+repo=$(make_repo a2-within-doa); fresh_dirs; : > "$TEST_TMP/empty.jsonl"
+git_c "$repo" merge -q --no-ff -m "merge slug" feature/slug
+out=$(r2_markers a2-within-doa "$repo" "$TEST_TMP/empty.jsonl"); assert_false "$out" a_overtrigger "r2 a2 no file"
+r2_open "$repo"
+out=$(r2_markers a2-within-doa "$repo" "$TEST_TMP/empty.jsonl"); assert_true "$out" a_overtrigger "r2 a2 over-trigger via helper-location file"
+# amendment record: digests of the new lib + the frozen thresholds byte-identical
+node -e '
+const fs=require("fs"),c=require("crypto"),p=require("path");const b=process.argv[1];
+const sha=(f)=>c.createHash("sha256").update(fs.readFileSync(p.join(b,f))).digest("hex");
+const a=JSON.parse(fs.readFileSync(p.join(b,"prereg/w2a-g.amend-1.json"),"utf8"));
+const fz=JSON.parse(fs.readFileSync(p.join(b,"prereg/FROZEN.json"),"utf8"));
+const bad=(m)=>{console.error("amend-1: "+m);process.exit(1)};
+if(a.no_live_cell_had_run!==true) bad("must state no live cell had run");
+if(a.thresholds_sha256!==sha("prereg/w2a-g.json")) bad("thresholds record != prereg/w2a-g.json");
+if(JSON.stringify(a.thresholds)!==JSON.stringify(JSON.parse(fs.readFileSync(p.join(b,"prereg/w2a-g.json"),"utf8")).thresholds)) bad("thresholds differ");
+const e=(fz.amendments||{})["w2a-g.amend-1"]; if(!e) bad("FROZEN.json lacks the amendment entry");
+for (const [f,d] of Object.entries(e.files)) if (sha(f)!==d) bad("digest drift "+f);
+if(!e.files["lib-r2/p1w-markers.sh"]) bad("lib-r2 not pinned");
+if (fz.files["lib/p1w-markers.sh"]!==sha("lib/p1w-markers.sh")) bad("frozen lib was edited");
+' "$BASE"
+
 echo "PASS: skill-onoff P1W markers three-way probes"

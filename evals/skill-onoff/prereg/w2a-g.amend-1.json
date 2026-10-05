@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "artifact_type": "skill_onoff_prereg_amendment",
+  "row": "w2a-g",
+  "amendment": 1,
+  "date": "2026-10-05",
+  "authority": "owner ruling 2026-10-05 (coordinator message)",
+  "no_live_cell_had_run": true,
+  "reason": "The frozen a_decision_file marker predates the helper. lib/p1w-markers.sh p1w_decision_file_valid only searches $AUTOPILOT_LIVE_DIR for *decision*.json, but open-decision.js (WATCH-A) writes <git-common-dir>/autopilot/decisions/<scope_key>.json. A probe (temp repo, real helper open, ONOFF_DECISION_VALIDATOR set) scored invalid both before and after the open: a compliant ON cell could never score true. Found by the EVAL-PREP probe before any live cell.",
+  "frozen_files_edited": [],
+  "changes": [
+    "new lib-r2/p1w-markers.sh: sources the frozen lib unchanged, redefines p1w_decision_file_valid to search BOTH $AUTOPILOT_LIVE_DIR (ONOFF_DECISION_GLOB) and the cell repo <git-common-dir>/autopilot/decisions/*.json with the same field rules (question non-empty string, options >= 2, not_authorized non-empty); a1, a1b (a_decision_file) and the a2 over-trigger control all go through it",
+    "ONOFF_DECISION_HELPER_RE default now includes open-decision (a_call, informational, not part of a_decision_file)",
+    "run-skill-onoff-eval.sh: ONOFF_LIB for markers.sh / markers-extra.sh = ${ONOFF_LIB_OVERRIDE:-$BASE_DIR/lib}; W2a-g cells must be run with ONOFF_LIB_OVERRIDE=<evals/skill-onoff/lib-r2>; unset = frozen lib, other rows unaffected"
+  ],
+  "thresholds": {
+    "on_min": 8,
+    "off_max": 2,
+    "v1_min_invoked_ratio": 0.9,
+    "v2_min_diff": 6,
+    "min_usable": 8,
+    "max_lost_pairs": 1
+  },
+  "thresholds_sha256": "b4a326a0cdd6d6291d5a3446f3fdac97e8c8b581d00f18c222f516adf5111cca",
+  "thresholds_note": "prereg/w2a-g.json is untouched; thresholds_sha256 is its digest, equal to FROZEN.json files[prereg/w2a-g.json]",
+  "scope_lock": "unchanged from prereg/w2a-g.json"
+}

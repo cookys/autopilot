@@ -340,4 +340,39 @@ const pre=a.prefixes["w2a-g"].ONOFF_PROMPT_PREFIX; if(pre!=="Invoke the ceo-agen
 for (const t of ["decision","session-mode","phase","open-","DOA","AUTOPILOT","helper","marker","script"]) if (pre.includes(t)) bad("vocabulary leak: "+t);
 ' "$BASE"
 
+echo "=== amendment 4 (lib-r4): work_done accepts the archived project README ==="
+R4="$BASE/lib-r4"
+wd() { # $1 repo -> echoes true|false (lib dir in $2: frozen "lib" or lib-r4)
+  ( cd "$1" && FROZEN_BASE_SHA="$(cat .claude/session-start-sha 2>/dev/null || echo none)" QUERY="$QUERY" bash -c ". '$BASE/$2/p1w-markers.sh'; p1w_l_work_done runHooks" )
+}
+mk_l() { # $1 readme-dir (relative) or "" ; builds a complete L-run residue in a fresh d8 repo
+  local r; r=$(make_repo d8-l-two-phase); mkdir -p "$r/.claude" "$r/docs/plans"
+  git -C "$r" rev-parse HEAD > "$r/.claude/session-start-sha"
+  printf 'runHooks\n' > "$r/lib/hooks.js"; printf '# plan\n' > "$r/docs/plans/p.md"
+  if [ -n "$1" ]; then mkdir -p "$r/$1"; printf '## Project Goal\n> **Success criteria**: x\n' > "$r/$1/README.md"; fi
+  echo "$r"
+}
+r=$(mk_l docs/projects/hooks);                      [ "$(wd "$r" lib-r4)" = true ]  || fail "r4 live README should be true"
+r=$(mk_l docs/projects/_archive/hooks);             [ "$(wd "$r" lib-r4)" = true ]  || fail "r4 archived README should be true"
+r=$(mk_l docs/projects/_archive/2026/10/hooks);     [ "$(wd "$r" lib-r4)" = true ]  || fail "r4 nested archived README should be true"
+[ "$(wd "$r" lib)" = false ]                                                       || fail "frozen lib must still score archived-only false (amendment reason)"
+r=$(mk_l "");                                       [ "$(wd "$r" lib-r4)" = false ] || fail "r4 no README anywhere should be false"
+r=$(mk_l docs/projects/_archive/hooks); printf 'nothing\n' > "$r/docs/projects/_archive/hooks/README.md"
+[ "$(wd "$r" lib-r4)" = false ]                                                    || fail "r4 archived README without the required sections should be false"
+r=$(mk_l docs/projects/_archive/hooks); rm "$r/lib/hooks.js"; printf 'x\n' > "$r/lib/other.js"
+[ "$(wd "$r" lib-r4)" = false ]                                                    || fail "r4 code not landed should be false"
+r=$(mk_l docs/projects/_archive/hooks); echo wrong > "$r/.claude/session-start-sha"
+[ "$(wd "$r" lib-r4)" = false ] || true
+node -e '
+const fs=require("fs"),c=require("crypto"),p=require("path");const b=process.argv[1];
+const sha=(f)=>c.createHash("sha256").update(fs.readFileSync(p.join(b,f))).digest("hex");
+const a=JSON.parse(fs.readFileSync(p.join(b,"prereg/amend-4-work-done.json"),"utf8"));
+const fz=JSON.parse(fs.readFileSync(p.join(b,"prereg/FROZEN.json"),"utf8"));
+const bad=(m)=>{console.error("amend-4: "+m);process.exit(1)};
+const e=(fz.amendments||{})["amend-4-work-done"]; if(!e) bad("FROZEN entry missing");
+for (const [f,d] of Object.entries(e.files)) if (sha(f)!==d) bad("digest drift "+f);
+if(a.thresholds_sha256!==sha("prereg/w2b-g.json")||fz.files["prereg/w2b-g.json"]!==sha("prereg/w2b-g.json")) bad("w2b-g prereg edited");
+if(JSON.stringify(a.thresholds)!==JSON.stringify(JSON.parse(fs.readFileSync(p.join(b,"prereg/w2b-g.json"),"utf8")).thresholds)) bad("thresholds differ");
+' "$BASE"
+
 echo "PASS: skill-onoff P1W markers three-way probes"

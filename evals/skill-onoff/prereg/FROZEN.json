@@ -76,6 +76,14 @@
       "files": {
         "prereg/amend-3-invocation.json": "70541f92f0453ab31cb377850b122fbdaa263b8255ffa55d75eb478ecbd66107"
       }
+    },
+    "amend-4-work-done": {
+      "date": "2026-10-05",
+      "no_counted_cell_had_run": true,
+      "files": {
+        "lib-r4/p1w-markers.sh": "7a4f9f228c18f54b0b7b80c1df101354c6ea248804993b75a5ce847377eafa4f",
+        "prereg/amend-4-work-done.json": "1fd12421ad293daa6c8dfcff527b50bfc64dbc252f09c693d35f1661fe0a99f5"
+      }
     }
   }
 }

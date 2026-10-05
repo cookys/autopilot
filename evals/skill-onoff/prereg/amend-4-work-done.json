@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "artifact_type": "skill_onoff_prereg_amendment",
+  "amendment": 4,
+  "rows": [
+    "w2b-g"
+  ],
+  "date": "2026-10-05",
+  "authority": "owner ruling 2026-10-05 (coordinator message)",
+  "no_counted_cell_had_run": true,
+  "reason": "re-smoke 2026-10-05: both d2 arms completed finish-flow including L-5.5, which archives the project README to docs/projects/_archive/; frozen p1w_l_work_done looked only at docs/projects/*/README.md so b_work (and b_phase_seq/final) were false for a complete run.",
+  "frozen_files_edited": [],
+  "change": "new lib-r4/p1w-markers.sh (sources lib-r2 -> frozen lib) redefines only p1w_l_work_done: README conjunct also accepts docs/projects/_archive/**/README.md. W2b-g cells run with ONOFF_LIB_OVERRIDE=<lib-r4>.",
+  "thresholds": {
+    "on_min": 8,
+    "off_max": 2,
+    "v1_min_invoked_ratio": 0.9,
+    "v2_min_diff": 6,
+    "min_usable": 8,
+    "max_lost_pairs": 1
+  },
+  "thresholds_sha256": "8b1dcf959ee4424205d2207ef10f67be05f2dadb40990c9a722dcce697c04378"
+}

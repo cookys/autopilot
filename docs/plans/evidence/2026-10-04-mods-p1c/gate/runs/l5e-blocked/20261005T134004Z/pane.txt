@@ -1,0 +1,50 @@
+    - 分支是 mission/bf0a9f8afbe2/gate-readme-line-v2-2026-10-05-a1，base 是 e1316d0。                        │                                                                                       ✕
+  - brief：沿用 l5prep2/brief-hand.md，沒有重寫。                                                             │session $1.00 · host $557.50 · ctx 7%
+  - dispatch：實際環境只 env -u AUTOPILOT_SESSION_ID，CLAUDE_CODE_SESSION_ID 保留，沒有傳                     │dispatch · execution status, not progress (執行狀態，不是進度)
+    --campaign-ledger。輸出寫在 l5prep2/implement-review2.out/.err，結束時 .err 末尾會有 rc=。                │no runs in this scope
+                                                                                                              │gates · review receipts of this job
+  sandbox 的 working tree 乾淨，沒有 push。                                                                   │no review receipt
+                                                                                                              │任務工具未開 · 設 CLAUDE_CODE_ENABLE_TODO_TOOLS=1 後才會記錄任務
+✻ Sautéed for 41s · done 9:37 PM                                                                              │工頭活動（依 session 綁定：同一 session 的多個工作會看到同一批）
+                                                                                                              │a3cac72c61405f58d · — · 33s 前
+● Background command "Run engine implement-review in background" completed (exit code 0)                      │a381ba08e9b810402 · — · 2m 前
+                                                                                                              │open the review page
+  Ran 1 shell command                                                                                         │snapshot published 2026-10-05T13:39:30.866Z · session cost as of 2026-10-05T13:39:30.866Z
+                                                                                                              │· host cost as of 2026-10-05T13:39:30.866Z
+● 這次 dispatch 失敗（rc=1），沒有產生任何效果，也沒有 commit。                                               │
+                                                                                                              │
+  失敗原因                                                                                                    │
+  - campaign_pre_effect_blocked，訊息是 marker-to-campaign admission bridge failed: marker Mission routing    │
+    shape is invalid。                                                                                        │
+  - 失敗發生在 pre-spend 階段：model 呼叫 0 次、worktree 0 個、dispatcher_called:false。                      │
+  - 系統已釋放 mission claim claim-v1-f99da…，並開出 pre_spend_no_effect receipt。                            │
+  - sandbox 乾淨，沒有 mission 分支，也沒有 push。                                                            │
+                                                                                                              │
+  和上一次的差異                                                                                              │
+  - 上一次錯誤是 Mission projection mismatch（marker 的 mission_graph_digest 與 campaign 不符）。             │
+  - 這次錯誤變成 Mission routing shape is invalid。                                                           │
+  - 兩次都卡在 session marker 的 Mission 欄位，這次是格式，不是 digest。                                      │
+  - 問題很可能出在 session-mode set 寫出的 marker，不在 brief 或 grant。我還沒查證。                          │
+                                                                                                              │
+  需要你決定的事                                                                                              │
+  - claim 已釋放，所以我不確定現在再 grant 會得到 attempt 2，還是 replay。這由 rail 決定。                    │
+  - 沒有你的指示，我不會手動編輯 marker 或 state。                                                            │
+  - ~/.autopilot/session-mode/ 另有四個未過期的 marker 也指向這個 sandbox（REPORT.md 第 10 行）。它們可能干擾 │
+    bridge，但我沒動它們。                                                                                    │
+                                                                                                              │
+  建議下一步（等你同意）                                                                                      │
+  1. 讀出這個 session 的 marker 內容，看 Mission routing 欄位缺什麼。                                         │
+  2. 重新 mission grant（會是新 attempt 或 replay），再重送一次。                                             │
+                                                                                                              │
+  要我先做第 1 項診斷嗎？                                                                                     │
+                                                                                                              │
+✻ Cooked for 9s · done 9:39 PM                                                                                │
+◌ 待命 gate-sandbox · — · 3m · —                                                                          [-] │
+沒有派工在跑                                                                                                  │
+                                                                                                              │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 先做診斷，讀 marker 看 Mission routing 欄位
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Sonnet 5.5 ── ~/projects/gate-sandbox develop ──────────────────────────────────────────── v2.1.289
+  5h ▯▯▯▯▯▯ 14% 4h20m   7d ▮▮▯▯▯▯ 36% 2d14h   ctx ▯▯▯▯▯▯ 7%                        → codeforge adopt
+  ⏵⏵ accept edits on (shift+tab to cycle) · ← 6 agents

@@ -1,0 +1,10 @@
+l5e (2026-10-05, live c685bc6b / FF7), tmux session l5e (killed), launched 13:35:16Z
+session id: a8fed8df-c838-49dd-858b-6469a26f416b (marker level l5, root_run_id job-1791207387-2d0aaf65, graph digest beb0e5cd...)
+watcher pid: 2831473 (project 51de403da82a23f0, pre-existing)
+contract root_run_id: mission-bf0a9f8afbe2afca9718c4f9 ; campaign id campaign-v2-d4f57f23...; lineage-v1-bf0a9f8a...
+contract: /home/cookys/projects/gate-sandbox/.git/autopilot/mission/artifacts/bf0a9f8afbe2afca9718c4f9a95e9489a858356df0ad39c59346bdb59b0fbd6a/gate-readme-line-v2-2026-10-05/attempt-1/campaign.json (+ campaign.seal.json)
+prepared: /tmp/claude-1000/-home-cookys-projects-autopilot/34a5c748-efec-4871-874c-e4eccde96bac/scratchpad/l5prep2/prepared.json ; grant2.json (status replay, graph_attempt 1) ; implement-review2.out/.err (rc=1)
+branch (never created): mission/bf0a9f8afbe2/gate-readme-line-v2-2026-10-05-a1
+worktrees/branches left by the rail: none (only old hetero-gate-stall* worktrees from earlier modes)
+captures: runs/l5e-blocked/20261005T134004Z
+origin develop: e1316d0a60e0468314c34a1e882fb7ffac7f947a (unchanged); sandbox tree clean

@@ -1,0 +1,2 @@
+▲ 要你決定 gate-sandbox4 · COMPLETED · 2m · 100%（1/1）                                                   [-] │
+等你批准：Bash: git diff --stat e1316d0..a80e1aa && git diff e1316d0..a80e1aa | tail -8 && W=/tmp/claude…     │

@@ -1,0 +1,9 @@
+{
+  "schema": "autopilot.session-turn/1",
+  "session_id": "8756dd52-03e5-4a15-96c5-71ed90a78beb",
+  "state": "ended",
+  "since": "2026-10-05T15:36:56.297Z",
+  "project_key": "629fcdb8f8b4011a",
+  "root_run_id": "job-1791214261-8a0411cc",
+  "transcript_path": "/home/cookys/.claude/projects/-home-cookys-projects-gate-sandbox4/8756dd52-03e5-4a15-96c5-71ed90a78beb.jsonl"
+}

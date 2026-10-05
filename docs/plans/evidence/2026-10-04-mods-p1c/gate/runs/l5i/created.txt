@@ -1,0 +1,8 @@
+l5i (2026-10-05, gate-sandbox4, live FF9 SCOPE2)
+session id: 8756dd52-03e5-4a15-96c5-71ed90a78beb ; marker ~/.autopilot/session-mode/8756dd52-03e5-4a15-96c5-71ed90a78beb.json (level l5, remains; only new marker file)
+watcher pid 575883 (status runs --watch --project 629fcdb8f8b4011a), alive at end
+marker root_run_id job-1791214261-8a0411cc ; campaign_roots [mission-490e369abdd648ade689926c, campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0]
+contract root mission-490e369abdd648ade689926c ; ICC campaign id campaign-v1-86809178...c17bf0 ; mission_campaign_id campaign-v2-92abdb3d...
+lineage lineage-v1-490e369a... ; grant /tmp/claude-1000/-home-cookys-projects-autopilot/34a5c748-efec-4871-874c-e4eccde96bac/scratchpad/l5prep2/grant-sb4.json ; prepared /tmp/claude-1000/-home-cookys-projects-autopilot/34a5c748-efec-4871-874c-e4eccde96bac/scratchpad/l5prep2/prepared-sb4.json ; brief /tmp/claude-1000/-home-cookys-projects-autopilot/34a5c748-efec-4871-874c-e4eccde96bac/scratchpad/l5prep2/brief-hand.md ; out/err /tmp/claude-1000/-home-cookys-projects-autopilot/34a5c748-efec-4871-874c-e4eccde96bac/scratchpad/l5prep2/implement-review-sb4.out/.err
+branch kept: mission/490e369abdd6/gate-readme-line-v2-2026-10-05-a1 commit a80e1aad (not merged); no extra worktrees; sandbox develop e1316d0, origin e1316d0
+captures: runs/l5i-running/20261005T153329Z, runs/l5i-done/20261005T153556Z, runs/l5i-done2/20261005T153755Z

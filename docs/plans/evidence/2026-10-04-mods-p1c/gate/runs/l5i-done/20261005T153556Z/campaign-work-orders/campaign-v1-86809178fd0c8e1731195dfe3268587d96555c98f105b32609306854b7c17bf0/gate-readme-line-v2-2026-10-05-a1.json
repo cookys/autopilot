@@ -1,0 +1,1480 @@
+{
+  "schema_version": 2,
+  "artifact_type": "work_order",
+  "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+  "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+  "graph_node": "gate-readme-line-v2-2026-10-05",
+  "attempt": 1,
+  "role": "controller",
+  "generation": 21,
+  "owner": {
+    "pid": 583983,
+    "process_start_time": 1791214281,
+    "pgid": 583983,
+    "sid": 583980,
+    "kind": "controller"
+  },
+  "runner": {
+    "pid": null,
+    "process_start_time": null,
+    "pgid": null,
+    "sid": null
+  },
+  "branch": "develop",
+  "base_sha": "e1316d0a60e0468314c34a1e882fb7ffac7f947a",
+  "worktree": "/home/cookys/projects/gate-sandbox4",
+  "paths": {
+    "manifest": "/home/cookys/projects/gate-sandbox4/.git/autopilot/controller-authority/9e2d7dc218e81fdd7d33fcb68a70c36639ab4e1d2e79ef02773ec67a806c0234/g21-d601a8e5e0eae0065f8387e2c60b5bfeaa200c0939110d12fa694e7c39f56ff3/controller-dispatch-manifests.json",
+    "ledger": "/home/cookys/projects/gate-sandbox4/.git/autopilot/controller-authority/9e2d7dc218e81fdd7d33fcb68a70c36639ab4e1d2e79ef02773ec67a806c0234/g21-d601a8e5e0eae0065f8387e2c60b5bfeaa200c0939110d12fa694e7c39f56ff3/controller-ledger.jsonl",
+    "receipt": "/home/cookys/projects/gate-sandbox4/.git/autopilot/controller-authority/9e2d7dc218e81fdd7d33fcb68a70c36639ab4e1d2e79ef02773ec67a806c0234/terminal/success-d601a8e5e0eae0065f8387e2c60b5bfeaa200c0939110d12fa694e7c39f56ff3.json",
+    "mission": "/home/cookys/projects/gate-sandbox4/.git/autopilot/mission/states/490e369abdd648ade689926cbf0af891ff5a10f3fc171a405880d2f279388b3d.json",
+    "checkpoint": "/home/cookys/projects/gate-sandbox4/.git/autopilot/controller-authority/9e2d7dc218e81fdd7d33fcb68a70c36639ab4e1d2e79ef02773ec67a806c0234/g21-d601a8e5e0eae0065f8387e2c60b5bfeaa200c0939110d12fa694e7c39f56ff3/controller-checkpoint.json",
+    "durable": "/home/cookys/projects/gate-sandbox4/.git/autopilot/controller-authority/9e2d7dc218e81fdd7d33fcb68a70c36639ab4e1d2e79ef02773ec67a806c0234/g21-d601a8e5e0eae0065f8387e2c60b5bfeaa200c0939110d12fa694e7c39f56ff3/controller-durable.json"
+  },
+  "artifact_digests": {
+    "mission": "305cb16f3247878c15fb71fc438a1f45e1aaca005ac5b87f0ab3c244e3dcd287",
+    "manifest": "85461c56c9f7d7e30647e2fbacce082cb8161692c993908a04f1bed088747d6d",
+    "receipt": "9f6aaeaf8ba541e3669834e4f662a19b0350ae8a565db6d742eb4eb8b693776b",
+    "ledger": "b178aa44d3be403d3c5210ac3a666e61be72974510aaaf455cbb243e2c1e51f6",
+    "ledger_history": "4adfd45e2701ccc91d761386997520299ee63062b9d02d36f0b03192503c46cb",
+    "durable": "0340bd950cdb4cd89510c2c2d5e878825e076d2f69403c11a04d6a12d18c6cc7",
+    "checkpoint": "02015f2d135fa9b75a101abfe09372df260070adac1347be0f24c84b6c27c868",
+    "accepted_commit": "a80e1aadd195aa36300309a12633942eb305c327"
+  },
+  "phase_cursor": "COMPLETED",
+  "campaign_phase": "COMPLETED",
+  "accepted_commit": "a80e1aadd195aa36300309a12633942eb305c327",
+  "next_action": "terminal",
+  "heartbeat_at": "2026-10-05T15:34:27.842Z",
+  "created_at": "2026-10-05T15:33:08.715Z",
+  "updated_at": "2026-10-05T15:34:27.842Z",
+  "terminal_status": "success",
+  "disposition": "consumed",
+  "expected_receipt": {
+    "path": "/home/cookys/projects/gate-sandbox4/.git/autopilot/controller-authority/9e2d7dc218e81fdd7d33fcb68a70c36639ab4e1d2e79ef02773ec67a806c0234/terminal/success-d601a8e5e0eae0065f8387e2c60b5bfeaa200c0939110d12fa694e7c39f56ff3.json",
+    "digest": "e6b3f1b3ba64f7058631af52f4c9e66ecc2394556106efe7241098abc62ec4a7",
+    "artifact_type": "l6_engine_result_receipt"
+  },
+  "cas_token": "f6be60fe5b5625fa017ab502aae3b8a7",
+  "sealed_scope": {
+    "allow_paths": [
+      "README.md",
+      "docs"
+    ],
+    "max_files": 3,
+    "max_diff_lines": 120
+  },
+  "controller": {
+    "schema_version": 1,
+    "frozen_denominator": {
+      "schema_version": 1,
+      "project_id": "mission-490e369abdd648ade689926c",
+      "graph_digest": "beb0e5cd14f5a2531254c4b589c0d77b616b982244ce2a522441dc1bd4193053",
+      "deliverable_ids": [
+        "gate-readme-line-v2-2026-10-05"
+      ],
+      "deliverable_count": 1,
+      "active_node_id": "gate-readme-line-v2-2026-10-05",
+      "digest": "96636afdeeff5fcfa5cefe0570a8cd9f953ae1a782328948080223b30115cabb"
+    },
+    "original_dispatch_run": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+    "provider_session": null,
+    "unresolved_findings": [],
+    "review_verdict": null,
+    "expires_at": null,
+    "resource_inventory": [
+      {
+        "resource_id": "/tmp/hetero-mission-490e369abdd6-gate-readme-line-v2-2026-10-05-a1-OAA51d",
+        "kind": "worktree",
+        "path": "/tmp/hetero-mission-490e369abdd6-gate-readme-line-v2-2026-10-05-a1-OAA51d",
+        "worktree": "/tmp/hetero-mission-490e369abdd6-gate-readme-line-v2-2026-10-05-a1-OAA51d",
+        "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+        "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+        "branch": "mission/490e369abdd6/gate-readme-line-v2-2026-10-05-a1",
+        "tip": "a80e1aadd195aa36300309a12633942eb305c327",
+        "clean": true,
+        "dirty": false,
+        "unique": false,
+        "terminal": false,
+        "identity_known": true,
+        "active": false,
+        "recovery_receipt": {
+          "schema_version": 1,
+          "artifact_type": "controller_resource_recovery_receipt",
+          "resource_id": "/tmp/hetero-mission-490e369abdd6-gate-readme-line-v2-2026-10-05-a1-OAA51d",
+          "path": "/tmp/hetero-mission-490e369abdd6-gate-readme-line-v2-2026-10-05-a1-OAA51d",
+          "branch": "mission/490e369abdd6/gate-readme-line-v2-2026-10-05-a1",
+          "tip": "a80e1aadd195aa36300309a12633942eb305c327",
+          "outcome": {
+            "clean": true,
+            "dirty": false,
+            "unique": false,
+            "terminal": false,
+            "identity_known": true
+          },
+          "evidence_kind": "clean_release",
+          "bundle_path": null,
+          "bundle_content_digest": null,
+          "mechanically_observed": true,
+          "removed": true,
+          "terminal_consumed": false,
+          "terminal_authority": null,
+          "resource_identity_digest": "8e2c4ae7ed0b226191e5e8cb0123c6710db204fda7636dd9015fc94f38fa8428",
+          "digest": "291a3d0ff66d1fc870233f6b1f98e3dc45c230477208b7515e6b713fb96d4131"
+        },
+        "live_observed": false
+      }
+    ],
+    "process_parentage": {
+      "schema_version": 1,
+      "owner": {
+        "pid": 583983,
+        "process_start_time": 1791214281,
+        "pgid": 583983,
+        "sid": 583980
+      },
+      "relationships": [
+        {
+          "child": {
+            "pid": 583983,
+            "process_start_time": 1791214281,
+            "pgid": 583983,
+            "sid": 583980
+          },
+          "parent": {
+            "pid": 583980,
+            "process_start_time": 1791214281,
+            "pgid": 583980,
+            "sid": 583980
+          }
+        },
+        {
+          "child": {
+            "pid": 583980,
+            "process_start_time": 1791214281,
+            "pgid": 583980,
+            "sid": 583980
+          },
+          "parent": {
+            "pid": 574095,
+            "process_start_time": 1791214153,
+            "pgid": 574095,
+            "sid": 574046
+          }
+        },
+        {
+          "child": {
+            "pid": 574095,
+            "process_start_time": 1791214153,
+            "pgid": 574095,
+            "sid": 574046
+          },
+          "parent": {
+            "pid": 574046,
+            "process_start_time": 1791214153,
+            "pgid": 574046,
+            "sid": 574046
+          }
+        },
+        {
+          "child": {
+            "pid": 574046,
+            "process_start_time": 1791214153,
+            "pgid": 574046,
+            "sid": 574046
+          },
+          "parent": {
+            "pid": 574045,
+            "process_start_time": 1791214153,
+            "pgid": 574045,
+            "sid": 574045
+          }
+        },
+        {
+          "child": {
+            "pid": 574045,
+            "process_start_time": 1791214153,
+            "pgid": 574045,
+            "sid": 574045
+          },
+          "parent": {
+            "pid": 1,
+            "process_start_time": 1786347188,
+            "pgid": 1,
+            "sid": 1
+          }
+        }
+      ],
+      "observed_at": "2026-10-05T15:33:08.705Z",
+      "digest": "ea4a2c2fce6419db6b632d9a4fb10b579129a13d1663725b25cf802d0b0883fb"
+    },
+    "repair_tickets": [],
+    "audit_events": [
+      {
+        "event": "progress_receipt_appended",
+        "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+        "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+        "at": "2026-10-05T15:33:08.679Z",
+        "digest": "05345893b93cc1d6cb325e5ac6a1c23bae43f3c5a6b293ab508a55b92b1b10c4",
+        "phase": "PREPARED"
+      },
+      {
+        "event": "controller_effect_invoked",
+        "stage": "implementation",
+        "effect_kind": "dispatch",
+        "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+        "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+        "run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+        "dispatch_id": null,
+        "provider": "grok",
+        "runner": "grok",
+        "model": "grok-4.7",
+        "provider_session_id": "64920f00-07e4-40e8-8518-0af2e3dc3d44",
+        "resource_identity": "/tmp/hetero-mission-490e369abdd6-gate-readme-line-v2-2026-10-05-a1-OAA51d",
+        "result_receipt_digest": "5d6b6cbcb476e9fe980cc9c8b3b651072e1bb307c026801dcce0a4176ebbae92",
+        "model_calls": 1,
+        "fresh_input_bytes": 370,
+        "generation": 0,
+        "effect_identity": "a7c1acbe9852746757b7b990fcd7c279da83efe19f4d513a05192611078fa4e0",
+        "at": "2026-10-05T15:33:58.670Z",
+        "digest": "ab1221a279d6e48f0316d6d63f4e396b86845a08a830371f375be050e1888953"
+      },
+      {
+        "event": "progress_receipt_appended",
+        "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+        "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+        "at": "2026-10-05T15:33:58.697Z",
+        "digest": "0c4073068c06810739c990d74c35632a994b5ceee3276f0eb181aaf9013aa209",
+        "phase": "IMPLEMENTING"
+      },
+      {
+        "event": "controller_effect_invoked",
+        "stage": "focused_verification",
+        "effect_kind": "gate",
+        "effect_identity": "757d7ee884414e98485e9a78706f38006ee2e5077b340d3e7369024c9d74e560",
+        "result_identity": "7b0f5b3f9c35a56366ac801c7b4dfb6b4af6d8eb3c991e521dd3a316096aff88",
+        "invocation_ordinal": 1,
+        "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+        "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+        "model_calls": 0,
+        "fresh_input_bytes": 0,
+        "generation": 0,
+        "at": "2026-10-05T15:33:59.343Z",
+        "digest": "4167dd430017cfa1a3dacc23c8513ff5b3098a30a166fb2d9e9b03f1ad750663"
+      },
+      {
+        "event": "controller_effect_result",
+        "effect_kind": "gate",
+        "effect_identity": "gate-focused_verification-1",
+        "invocation_identity": "757d7ee884414e98485e9a78706f38006ee2e5077b340d3e7369024c9d74e560",
+        "invocation_result_identity": "7b0f5b3f9c35a56366ac801c7b4dfb6b4af6d8eb3c991e521dd3a316096aff88",
+        "effect_result_digest": "87423992068ea2959ca7a3e2c257f40935ab38cc3bd4ebd782f102d05392a26e",
+        "input_digest": "41843f62d84a6ee2a354bcb05da8820f2729022dc1ebbcc921c1cefd92a30e77",
+        "stage": "focused_verification",
+        "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+        "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+        "at": "2026-10-05T15:33:59.372Z",
+        "digest": "e3ba091cb2b50f27f712a608908c623746a505be24ae4bf5f59362fae94a62b6"
+      },
+      {
+        "event": "controller_effect_reserved",
+        "stage": "full_diff_review",
+        "effect_kind": "gate",
+        "input_identity": "4edbf202f3930cb93c2b4802fd0d63c44feda0191e2cd335f1532e555d435d8c",
+        "reservation_identity": "7e6aa8e1a273b18db8a2c6023f19ea65bf475786936b0e8af668398f80b4fa92",
+        "invocation_ordinal": 1,
+        "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+        "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+        "generation": 0,
+        "authority": {
+          "schema_version": 1,
+          "artifact_type": "controller_full_diff_review_input",
+          "candidate_ref": "a80e1aadd195aa36300309a12633942eb305c327",
+          "candidate_tree_sha": "1cc0d530f0cf9fea8d1ce4d1766a2a97e8d6dca5",
+          "base_sha": "e1316d0a60e0468314c34a1e882fb7ffac7f947a",
+          "diff_digest": "f539bbdabf62555548694d464dabd321e1d45be2e031e033ac8bc7dca410459e",
+          "spec_digest": "24feba2cbd4b25119f7439b3d7c97a0f1b70dd53a0e7c3ed64ae919a51b850c1",
+          "review_input_digest": "5b4528bb0551c77054ff108ea1838f7d3deb628d2c3d1e0bf32394ff214553cc",
+          "reviewer": {
+            "runner": "cc-shim",
+            "model": "MiniMax-M3",
+            "effort": "high",
+            "endpoint": "minimax"
+          }
+        },
+        "at": "2026-10-05T15:33:59.478Z",
+        "digest": "53812ed8924f1948a62e31e3f5b62ac30b6d89553f0c2a7a61f323d0d61734ec"
+      },
+      {
+        "event": "controller_effect_invoked",
+        "stage": "full_diff_review",
+        "effect_kind": "gate",
+        "effect_identity": "0aa4fd051fc96ab989db8bb01a7df4c835c259d7f6d4eaf27fc4f1943f3e49fc",
+        "result_identity": "c26fba8b91afb103e904609998678886aa7fb9e5ac964337d06f5da64f360495",
+        "invocation_ordinal": 1,
+        "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+        "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+        "model_calls": 1,
+        "fresh_input_bytes": 746,
+        "generation": 0,
+        "reservation_identity": "7e6aa8e1a273b18db8a2c6023f19ea65bf475786936b0e8af668398f80b4fa92",
+        "at": "2026-10-05T15:34:25.500Z",
+        "digest": "ce58c19e74510863438138c01b6d05b638efc0038b7b061e2688cd034cb46476"
+      },
+      {
+        "event": "controller_effect_result",
+        "effect_kind": "gate",
+        "effect_identity": "gate-full_diff_review-2",
+        "invocation_identity": "0aa4fd051fc96ab989db8bb01a7df4c835c259d7f6d4eaf27fc4f1943f3e49fc",
+        "invocation_result_identity": "c26fba8b91afb103e904609998678886aa7fb9e5ac964337d06f5da64f360495",
+        "effect_result_digest": "9db60d125c6659597b63e29272d0e5340bcce74a5ea0e97ee8cf08ed9d7e5487",
+        "input_digest": "06bc87f65f071e6df765f33056063701e3c73e30913a1ade8c7acaed83719a5a",
+        "stage": "full_diff_review",
+        "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+        "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+        "at": "2026-10-05T15:34:25.541Z",
+        "digest": "25e7b4ea3afb2e64226b4cde4b77030e0095019602c494da16fd900718ad136a"
+      },
+      {
+        "event": "controller_effect_invoked",
+        "stage": "full_suite",
+        "effect_kind": "gate",
+        "effect_identity": "3ac1bd42ab172d40347de99db80b41587e38616c0b9fb2394d3ce3dc5287fe72",
+        "result_identity": "a060af1a13ab07b7776b8a05daf25d4d09db7e3aa3ed332cd2374cd0dd8ade13",
+        "invocation_ordinal": 1,
+        "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+        "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+        "model_calls": 0,
+        "fresh_input_bytes": 0,
+        "generation": 0,
+        "at": "2026-10-05T15:34:25.701Z",
+        "digest": "b087bf41d01945595f922348e8ddf7fb590363c5964035fd1977791d03175da4"
+      },
+      {
+        "event": "controller_effect_result",
+        "effect_kind": "gate",
+        "effect_identity": "gate-full_suite-3",
+        "invocation_identity": "3ac1bd42ab172d40347de99db80b41587e38616c0b9fb2394d3ce3dc5287fe72",
+        "invocation_result_identity": "a060af1a13ab07b7776b8a05daf25d4d09db7e3aa3ed332cd2374cd0dd8ade13",
+        "effect_result_digest": "28e18e969798de1f612e5d198bd0a7a14f65ade7b9430343372532ea0f7e135b",
+        "input_digest": "d943b54a3065054774e3cba8eed4a20582c10184d0edf335f01aee3254390d1c",
+        "stage": "full_suite",
+        "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+        "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+        "at": "2026-10-05T15:34:25.700Z",
+        "digest": "1ccc355876ca3e5e355f9e51652bed08e1495b054a8be4027d70ca1404100fa1"
+      },
+      {
+        "event": "progress_receipt_appended",
+        "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+        "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+        "at": "2026-10-05T15:34:27.675Z",
+        "digest": "39887b8e416be4dc1a81adb5244f401bf0acdbd42f08d58e169dd6bbf7011a9e",
+        "phase": "COMPLETED"
+      },
+      {
+        "event": "controller_terminal_disposition",
+        "at": "2026-10-05T15:34:27.773Z",
+        "terminal_status": "success",
+        "phase": "campaign_terminal_ready",
+        "reason": "campaign acceptance verified",
+        "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+        "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+        "digest": "4db98dc35b8320abd116664a119665574b18ba648743fdb6f51239e4db8106c8"
+      }
+    ],
+    "gate_journal": {
+      "schema_version": 1,
+      "artifact_type": "controller_gate_journal",
+      "entries": [
+        {
+          "gate_id": "gate-focused_verification-1",
+          "kind": "focused_verification",
+          "owner": "depth-0",
+          "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+          "input_digest": "41843f62d84a6ee2a354bcb05da8820f2729022dc1ebbcc921c1cefd92a30e77",
+          "started_at": "2026-10-05T15:33:59.372Z",
+          "finished_at": "2026-10-05T15:33:59.372Z",
+          "result": {
+            "success": true,
+            "receipt_digest": "72dbd7599a3e11f5949b7ea3c8e68085ff47bf7a9161b7a806bc6d168074d329",
+            "candidate_tree_sha": "1cc0d530f0cf9fea8d1ce4d1766a2a97e8d6dca5",
+            "argv_hash": "756bc461fac6a182b3aae487f8e9cae14cedcc0255a3d9d90adbdb119069ae82",
+            "env_fingerprint": "a15787538ad717181bed83fb6b4c8c6b8ccffe2cb56a9ddeb9b9186fd87acd5c",
+            "request_digest": "d67350c74131a2142efe2310e7560783e54c5562760aebccbb3c77d52558083d"
+          },
+          "invalidated": false,
+          "invalidation_reason": null
+        },
+        {
+          "gate_id": "gate-full_diff_review-2",
+          "kind": "full_diff_review",
+          "owner": "depth-0",
+          "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+          "input_digest": "06bc87f65f071e6df765f33056063701e3c73e30913a1ade8c7acaed83719a5a",
+          "started_at": "2026-10-05T15:33:59.527Z",
+          "finished_at": "2026-10-05T15:34:25.541Z",
+          "result": {
+            "success": true,
+            "review_digest": "e4435b1a77b784ed765dfecbd8a7f6554859bfc9a5583eb94781d4623524ba41",
+            "review_authority_digest": "b092aeceeecc9ef76f16e24f28728bb8c53cd536668511ed9ba1a93e489a5ac6",
+            "findings": "[]",
+            "verdict": "SHIP-AS-IS"
+          },
+          "invalidated": false,
+          "invalidation_reason": null
+        },
+        {
+          "gate_id": "gate-full_suite-3",
+          "kind": "full_suite",
+          "owner": "depth-0",
+          "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+          "input_digest": "d943b54a3065054774e3cba8eed4a20582c10184d0edf335f01aee3254390d1c",
+          "started_at": "2026-10-05T15:34:25.700Z",
+          "finished_at": "2026-10-05T15:34:25.700Z",
+          "result": {
+            "success": true,
+            "receipt_digest": "72dbd7599a3e11f5949b7ea3c8e68085ff47bf7a9161b7a806bc6d168074d329",
+            "command_digest": "39374241d7c9f593646ed4fb130e32e4a806006513abcd61665515dc26ded7c6",
+            "candidate_tree_sha": "1cc0d530f0cf9fea8d1ce4d1766a2a97e8d6dca5",
+            "argv_hash": "756bc461fac6a182b3aae487f8e9cae14cedcc0255a3d9d90adbdb119069ae82",
+            "env_fingerprint": "a15787538ad717181bed83fb6b4c8c6b8ccffe2cb56a9ddeb9b9186fd87acd5c",
+            "request_digest": "d67350c74131a2142efe2310e7560783e54c5562760aebccbb3c77d52558083d"
+          },
+          "invalidated": false,
+          "invalidation_reason": null
+        }
+      ],
+      "digest": "4f04e36e7f9f6751c07106c5c4aaa7b52a4dffe565695d10f49be707a7ba21b4"
+    },
+    "repair_budget_usage": {
+      "model_calls": 2,
+      "fresh_input_bytes": 1116,
+      "fresh_input_tokens": null,
+      "elapsed_wall_ms": 77023,
+      "owned_worktrees": 1,
+      "finding_recurrence": 0,
+      "observable_axes": [
+        "model_calls",
+        "fresh_input_bytes",
+        "elapsed_wall_ms",
+        "owned_worktrees",
+        "finding_recurrence"
+      ],
+      "unobserved_axes": [
+        "fresh_input_tokens"
+      ]
+    },
+    "repair_budget_limits": {
+      "model_calls": 9,
+      "fresh_input_bytes": 50000000,
+      "fresh_input_tokens": null,
+      "elapsed_wall_ms": 3600000,
+      "owned_worktrees": 4,
+      "finding_recurrence": 2
+    },
+    "resource_debt": {
+      "schema_version": 1,
+      "artifact_type": "controller_resource_debt",
+      "open": [],
+      "released": [
+        {
+          "resource_id": "/tmp/hetero-mission-490e369abdd6-gate-readme-line-v2-2026-10-05-a1-OAA51d",
+          "kind": "worktree",
+          "path": "/tmp/hetero-mission-490e369abdd6-gate-readme-line-v2-2026-10-05-a1-OAA51d",
+          "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+          "disposition": "released_clean",
+          "blocks_dispatch": false,
+          "recovery_bundle_digest": null,
+          "terminal_receipt_digest": null,
+          "reason": "clean/recoverable residue may be bundled and released",
+          "recovery_identity_digest": "8e2c4ae7ed0b226191e5e8cb0123c6710db204fda7636dd9015fc94f38fa8428",
+          "recovery_receipt_digest": "291a3d0ff66d1fc870233f6b1f98e3dc45c230477208b7515e6b713fb96d4131"
+        }
+      ],
+      "blocks_dispatch": false,
+      "digest": "677497eca9433e839b27661679bdeda50d10920b42336ca00af8c9bad184ac91"
+    },
+    "full_diff_barriers": {
+      "0": {
+        "kind": "full_diff_review",
+        "success": true,
+        "review_digest": "e4435b1a77b784ed765dfecbd8a7f6554859bfc9a5583eb94781d4623524ba41",
+        "candidate_ref": "a80e1aadd195aa36300309a12633942eb305c327",
+        "recorded_at": "2026-10-05T15:34:25.588Z"
+      }
+    },
+    "progress_receipts": [
+      {
+        "schema_version": 1,
+        "artifact_type": "controller_progress_receipt",
+        "project_id": "mission-490e369abdd648ade689926c",
+        "deliverable_id": "gate-readme-line-v2-2026-10-05",
+        "generation": 0,
+        "active_process": {
+          "pid": 583983
+        },
+        "completed_deliverables": [],
+        "remaining_deliverables": [
+          "gate-readme-line-v2-2026-10-05"
+        ],
+        "deliverable_count": 1,
+        "frozen_denominator_digest": "96636afdeeff5fcfa5cefe0570a8cd9f953ae1a782328948080223b30115cabb",
+        "blocked_reason": null,
+        "eta_basis": "frozen_graph_remaining",
+        "gate_state": {
+          "schema_version": 1,
+          "artifact_type": "controller_gate_journal",
+          "entries": []
+        },
+        "resource_debt_state": {
+          "open": [],
+          "released": []
+        },
+        "phase": "PREPARED",
+        "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+        "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+        "issued_at": "2026-10-05T15:33:08.679Z",
+        "digest": "05345893b93cc1d6cb325e5ac6a1c23bae43f3c5a6b293ab508a55b92b1b10c4"
+      },
+      {
+        "schema_version": 1,
+        "artifact_type": "controller_progress_receipt",
+        "project_id": "mission-490e369abdd648ade689926c",
+        "deliverable_id": "gate-readme-line-v2-2026-10-05",
+        "generation": 0,
+        "active_process": {
+          "schema_version": 1,
+          "owner": {
+            "pid": 583983,
+            "process_start_time": 1791214281,
+            "pgid": 583983,
+            "sid": 583980
+          },
+          "relationships": [
+            {
+              "child": {
+                "pid": 583983,
+                "process_start_time": 1791214281,
+                "pgid": 583983,
+                "sid": 583980
+              },
+              "parent": {
+                "pid": 583980,
+                "process_start_time": 1791214281,
+                "pgid": 583980,
+                "sid": 583980
+              }
+            },
+            {
+              "child": {
+                "pid": 583980,
+                "process_start_time": 1791214281,
+                "pgid": 583980,
+                "sid": 583980
+              },
+              "parent": {
+                "pid": 574095,
+                "process_start_time": 1791214153,
+                "pgid": 574095,
+                "sid": 574046
+              }
+            },
+            {
+              "child": {
+                "pid": 574095,
+                "process_start_time": 1791214153,
+                "pgid": 574095,
+                "sid": 574046
+              },
+              "parent": {
+                "pid": 574046,
+                "process_start_time": 1791214153,
+                "pgid": 574046,
+                "sid": 574046
+              }
+            },
+            {
+              "child": {
+                "pid": 574046,
+                "process_start_time": 1791214153,
+                "pgid": 574046,
+                "sid": 574046
+              },
+              "parent": {
+                "pid": 574045,
+                "process_start_time": 1791214153,
+                "pgid": 574045,
+                "sid": 574045
+              }
+            },
+            {
+              "child": {
+                "pid": 574045,
+                "process_start_time": 1791214153,
+                "pgid": 574045,
+                "sid": 574045
+              },
+              "parent": {
+                "pid": 1,
+                "process_start_time": 1786347188,
+                "pgid": 1,
+                "sid": 1
+              }
+            }
+          ],
+          "observed_at": "2026-10-05T15:33:08.705Z",
+          "digest": "ea4a2c2fce6419db6b632d9a4fb10b579129a13d1663725b25cf802d0b0883fb"
+        },
+        "completed_deliverables": [],
+        "remaining_deliverables": [
+          "gate-readme-line-v2-2026-10-05"
+        ],
+        "deliverable_count": 1,
+        "frozen_denominator_digest": "96636afdeeff5fcfa5cefe0570a8cd9f953ae1a782328948080223b30115cabb",
+        "blocked_reason": null,
+        "eta_basis": "frozen_graph_remaining",
+        "gate_state": {
+          "schema_version": 1,
+          "artifact_type": "controller_gate_journal",
+          "entries": []
+        },
+        "resource_debt_state": {
+          "schema_version": 1,
+          "artifact_type": "controller_resource_debt",
+          "open": [],
+          "released": [],
+          "blocks_dispatch": false,
+          "digest": "c03d4a3a887db40376e1752c7de53327f7802228c685e66805dab8dffae3c416"
+        },
+        "phase": "IMPLEMENTING",
+        "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+        "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+        "issued_at": "2026-10-05T15:33:58.697Z",
+        "digest": "0c4073068c06810739c990d74c35632a994b5ceee3276f0eb181aaf9013aa209"
+      },
+      {
+        "schema_version": 1,
+        "artifact_type": "controller_progress_receipt",
+        "project_id": "mission-490e369abdd648ade689926c",
+        "deliverable_id": "gate-readme-line-v2-2026-10-05",
+        "generation": 0,
+        "active_process": {
+          "schema_version": 1,
+          "owner": {
+            "pid": 583983,
+            "process_start_time": 1791214281,
+            "pgid": 583983,
+            "sid": 583980
+          },
+          "relationships": [
+            {
+              "child": {
+                "pid": 583983,
+                "process_start_time": 1791214281,
+                "pgid": 583983,
+                "sid": 583980
+              },
+              "parent": {
+                "pid": 583980,
+                "process_start_time": 1791214281,
+                "pgid": 583980,
+                "sid": 583980
+              }
+            },
+            {
+              "child": {
+                "pid": 583980,
+                "process_start_time": 1791214281,
+                "pgid": 583980,
+                "sid": 583980
+              },
+              "parent": {
+                "pid": 574095,
+                "process_start_time": 1791214153,
+                "pgid": 574095,
+                "sid": 574046
+              }
+            },
+            {
+              "child": {
+                "pid": 574095,
+                "process_start_time": 1791214153,
+                "pgid": 574095,
+                "sid": 574046
+              },
+              "parent": {
+                "pid": 574046,
+                "process_start_time": 1791214153,
+                "pgid": 574046,
+                "sid": 574046
+              }
+            },
+            {
+              "child": {
+                "pid": 574046,
+                "process_start_time": 1791214153,
+                "pgid": 574046,
+                "sid": 574046
+              },
+              "parent": {
+                "pid": 574045,
+                "process_start_time": 1791214153,
+                "pgid": 574045,
+                "sid": 574045
+              }
+            },
+            {
+              "child": {
+                "pid": 574045,
+                "process_start_time": 1791214153,
+                "pgid": 574045,
+                "sid": 574045
+              },
+              "parent": {
+                "pid": 1,
+                "process_start_time": 1786347188,
+                "pgid": 1,
+                "sid": 1
+              }
+            }
+          ],
+          "observed_at": "2026-10-05T15:33:08.705Z",
+          "digest": "ea4a2c2fce6419db6b632d9a4fb10b579129a13d1663725b25cf802d0b0883fb"
+        },
+        "completed_deliverables": [
+          "gate-readme-line-v2-2026-10-05"
+        ],
+        "remaining_deliverables": [],
+        "deliverable_count": 1,
+        "frozen_denominator_digest": "96636afdeeff5fcfa5cefe0570a8cd9f953ae1a782328948080223b30115cabb",
+        "blocked_reason": null,
+        "eta_basis": "frozen_graph_remaining",
+        "gate_state": {
+          "schema_version": 1,
+          "artifact_type": "controller_gate_journal",
+          "entries": [
+            {
+              "gate_id": "gate-focused_verification-1",
+              "kind": "focused_verification",
+              "owner": "depth-0",
+              "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+              "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+              "input_digest": "41843f62d84a6ee2a354bcb05da8820f2729022dc1ebbcc921c1cefd92a30e77",
+              "started_at": "2026-10-05T15:33:59.372Z",
+              "finished_at": "2026-10-05T15:33:59.372Z",
+              "result": {
+                "success": true,
+                "receipt_digest": "72dbd7599a3e11f5949b7ea3c8e68085ff47bf7a9161b7a806bc6d168074d329",
+                "candidate_tree_sha": "1cc0d530f0cf9fea8d1ce4d1766a2a97e8d6dca5",
+                "argv_hash": "756bc461fac6a182b3aae487f8e9cae14cedcc0255a3d9d90adbdb119069ae82",
+                "env_fingerprint": "a15787538ad717181bed83fb6b4c8c6b8ccffe2cb56a9ddeb9b9186fd87acd5c",
+                "request_digest": "d67350c74131a2142efe2310e7560783e54c5562760aebccbb3c77d52558083d"
+              },
+              "invalidated": false,
+              "invalidation_reason": null
+            },
+            {
+              "gate_id": "gate-full_diff_review-2",
+              "kind": "full_diff_review",
+              "owner": "depth-0",
+              "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+              "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+              "input_digest": "06bc87f65f071e6df765f33056063701e3c73e30913a1ade8c7acaed83719a5a",
+              "started_at": "2026-10-05T15:33:59.527Z",
+              "finished_at": "2026-10-05T15:34:25.541Z",
+              "result": {
+                "success": true,
+                "review_digest": "e4435b1a77b784ed765dfecbd8a7f6554859bfc9a5583eb94781d4623524ba41",
+                "review_authority_digest": "b092aeceeecc9ef76f16e24f28728bb8c53cd536668511ed9ba1a93e489a5ac6",
+                "findings": "[]",
+                "verdict": "SHIP-AS-IS"
+              },
+              "invalidated": false,
+              "invalidation_reason": null
+            },
+            {
+              "gate_id": "gate-full_suite-3",
+              "kind": "full_suite",
+              "owner": "depth-0",
+              "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+              "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+              "input_digest": "d943b54a3065054774e3cba8eed4a20582c10184d0edf335f01aee3254390d1c",
+              "started_at": "2026-10-05T15:34:25.700Z",
+              "finished_at": "2026-10-05T15:34:25.700Z",
+              "result": {
+                "success": true,
+                "receipt_digest": "72dbd7599a3e11f5949b7ea3c8e68085ff47bf7a9161b7a806bc6d168074d329",
+                "command_digest": "39374241d7c9f593646ed4fb130e32e4a806006513abcd61665515dc26ded7c6",
+                "candidate_tree_sha": "1cc0d530f0cf9fea8d1ce4d1766a2a97e8d6dca5",
+                "argv_hash": "756bc461fac6a182b3aae487f8e9cae14cedcc0255a3d9d90adbdb119069ae82",
+                "env_fingerprint": "a15787538ad717181bed83fb6b4c8c6b8ccffe2cb56a9ddeb9b9186fd87acd5c",
+                "request_digest": "d67350c74131a2142efe2310e7560783e54c5562760aebccbb3c77d52558083d"
+              },
+              "invalidated": false,
+              "invalidation_reason": null
+            }
+          ],
+          "digest": "4f04e36e7f9f6751c07106c5c4aaa7b52a4dffe565695d10f49be707a7ba21b4"
+        },
+        "resource_debt_state": {
+          "schema_version": 1,
+          "artifact_type": "controller_resource_debt",
+          "open": [
+            {
+              "resource_id": "/tmp/hetero-mission-490e369abdd6-gate-readme-line-v2-2026-10-05-a1-OAA51d",
+              "kind": "worktree",
+              "path": "/tmp/hetero-mission-490e369abdd6-gate-readme-line-v2-2026-10-05-a1-OAA51d",
+              "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+              "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+              "disposition": "active",
+              "blocks_dispatch": false,
+              "recovery_bundle_digest": null,
+              "terminal_receipt_digest": "5d6b6cbcb476e9fe980cc9c8b3b651072e1bb307c026801dcce0a4176ebbae92",
+              "reason": null
+            }
+          ],
+          "released": [],
+          "blocks_dispatch": false,
+          "digest": "2ea7af94c31ac11cf388c685f8d97afcbe29e16ab7d886ce8761872ea28f00cc"
+        },
+        "phase": "COMPLETED",
+        "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+        "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+        "issued_at": "2026-10-05T15:34:27.675Z",
+        "digest": "39887b8e416be4dc1a81adb5244f401bf0acdbd42f08d58e169dd6bbf7011a9e"
+      }
+    ],
+    "historical_outputs": {
+      "schema_version": 1,
+      "artifact_type": "historical_outputs",
+      "accepted_commit": "a80e1aadd195aa36300309a12633942eb305c327",
+      "path_byte_digests": {
+        "README.md": "b346bab54ac775817b5818e82f01a50fa09cf56806016522e467c526c0278301"
+      },
+      "repo_identity": "git-common-dir:/home/cookys/projects/gate-sandbox4/.git",
+      "mission_lineage_id": "lineage-v1-490e369abdd648ade689926cbf0af891ff5a10f3fc171a405880d2f279388b3d",
+      "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+      "mission_graph_digest": "beb0e5cd14f5a2531254c4b589c0d77b616b982244ce2a522441dc1bd4193053",
+      "graph_node_id": "gate-readme-line-v2-2026-10-05",
+      "graph_attempt": 1,
+      "mission_claim_id": "claim-v1-ad304d7c421627ddd1ac8bc3684e579e7f7888cfe03fc9908dcfa0b8c199c6f6",
+      "mission_campaign_id": "campaign-v2-92abdb3d618c401bb8d3ca26a636d7013faeef02ef1c54d7fb624b62b83cc00f",
+      "icc_campaign_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+      "campaign_contract_digest": "8698eb56647f733b60a665f0f46e9c54df5eeff799ed952ac568931a196cdd34",
+      "strict_contract_digest": "f4c5412f13d639cea733f14b557479a4fb32ad4faed6660d8bfd530857ceb895",
+      "base_sha": "e1316d0a60e0468314c34a1e882fb7ffac7f947a",
+      "acceptance_digest": "4de895814e6a3e303802d8456df948fc703e7b53e86676a3b9f8d83bbcaf315d",
+      "verification_digest": "72dbd7599a3e11f5949b7ea3c8e68085ff47bf7a9161b7a806bc6d168074d329"
+    },
+    "historical_outputs_digest": "b4f2961c5dfa61982b1ea3bbca386cc6068fe524dac6484c4e503c86a8af4f6b",
+    "noop_receipt": {
+      "schema_version": 1,
+      "artifact_type": "noop_receipt",
+      "base_sha": "a80e1aadd195aa36300309a12633942eb305c327",
+      "acceptance_digest": "4de895814e6a3e303802d8456df948fc703e7b53e86676a3b9f8d83bbcaf315d",
+      "path_byte_digests": {
+        "README.md": "b346bab54ac775817b5818e82f01a50fa09cf56806016522e467c526c0278301"
+      },
+      "repo_identity": "git-common-dir:/home/cookys/projects/gate-sandbox4/.git",
+      "mission_lineage_id": "lineage-v1-490e369abdd648ade689926cbf0af891ff5a10f3fc171a405880d2f279388b3d",
+      "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+      "mission_graph_digest": "beb0e5cd14f5a2531254c4b589c0d77b616b982244ce2a522441dc1bd4193053",
+      "graph_node_id": "gate-readme-line-v2-2026-10-05",
+      "graph_attempt": 1,
+      "mission_claim_id": "claim-v1-ad304d7c421627ddd1ac8bc3684e579e7f7888cfe03fc9908dcfa0b8c199c6f6",
+      "mission_campaign_id": "campaign-v2-92abdb3d618c401bb8d3ca26a636d7013faeef02ef1c54d7fb624b62b83cc00f",
+      "icc_campaign_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+      "campaign_contract_digest": "8698eb56647f733b60a665f0f46e9c54df5eeff799ed952ac568931a196cdd34",
+      "strict_contract_digest": "f4c5412f13d639cea733f14b557479a4fb32ad4faed6660d8bfd530857ceb895",
+      "accepted_commit": "a80e1aadd195aa36300309a12633942eb305c327",
+      "verification_digest": "72dbd7599a3e11f5949b7ea3c8e68085ff47bf7a9161b7a806bc6d168074d329",
+      "dispatcher_called": false,
+      "mutation_attempts": 0,
+      "gate_attempts": 0,
+      "digest": "61974b32a093ebfd9305a7079a7d413d9d4a0bf0803b5735e2dd08a5831a8499"
+    },
+    "adoption_receipts": [],
+    "phase": "COMPLETED",
+    "next_action": "terminal",
+    "started_at_ms": 1791214388678,
+    "dispatch_records": [
+      {
+        "kind": "implementation",
+        "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+        "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+        "generation": 0,
+        "dispatcher_called": true,
+        "model_calls": 1,
+        "prompt_bytes": 370,
+        "run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+        "dispatch_id": null,
+        "provider": "grok",
+        "runner": "grok",
+        "model": "grok-4.7",
+        "provider_session_id": "64920f00-07e4-40e8-8518-0af2e3dc3d44",
+        "resource_id": "/tmp/hetero-mission-490e369abdd6-gate-readme-line-v2-2026-10-05-a1-OAA51d",
+        "result_receipt_digest": "5d6b6cbcb476e9fe980cc9c8b3b651072e1bb307c026801dcce0a4176ebbae92",
+        "at": "2026-10-05T15:33:58.670Z",
+        "digest": "a7c1acbe9852746757b7b990fcd7c279da83efe19f4d513a05192611078fa4e0"
+      }
+    ],
+    "transcript_audit": {
+      "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+      "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+      "rows": [
+        {
+          "at": "2026-10-05T15:33:58.670Z",
+          "digest": "a7c1acbe9852746757b7b990fcd7c279da83efe19f4d513a05192611078fa4e0",
+          "dispatch_id": null,
+          "dispatcher_called": true,
+          "generation": 0,
+          "kind": "dispatch",
+          "model": "grok-4.7",
+          "model_calls": 1,
+          "prompt_bytes": 370,
+          "provider": "grok",
+          "provider_session_id": "64920f00-07e4-40e8-8518-0af2e3dc3d44",
+          "resource_id": "/tmp/hetero-mission-490e369abdd6-gate-readme-line-v2-2026-10-05-a1-OAA51d",
+          "result_receipt_digest": "5d6b6cbcb476e9fe980cc9c8b3b651072e1bb307c026801dcce0a4176ebbae92",
+          "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "runner": "grok",
+          "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+          "identity": "a7c1acbe9852746757b7b990fcd7c279da83efe19f4d513a05192611078fa4e0",
+          "observed_root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "observed_work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1"
+        },
+        {
+          "active": false,
+          "branch": "mission/490e369abdd6/gate-readme-line-v2-2026-10-05-a1",
+          "clean": true,
+          "dirty": false,
+          "identity_known": true,
+          "kind": "resource_creator",
+          "live_observed": false,
+          "path": "/tmp/hetero-mission-490e369abdd6-gate-readme-line-v2-2026-10-05-a1-OAA51d",
+          "recovery_receipt": {
+            "artifact_type": "controller_resource_recovery_receipt",
+            "branch": "mission/490e369abdd6/gate-readme-line-v2-2026-10-05-a1",
+            "bundle_content_digest": null,
+            "bundle_path": null,
+            "digest": "291a3d0ff66d1fc870233f6b1f98e3dc45c230477208b7515e6b713fb96d4131",
+            "evidence_kind": "clean_release",
+            "mechanically_observed": true,
+            "outcome": {
+              "clean": true,
+              "dirty": false,
+              "identity_known": true,
+              "terminal": false,
+              "unique": false
+            },
+            "path": "/tmp/hetero-mission-490e369abdd6-gate-readme-line-v2-2026-10-05-a1-OAA51d",
+            "removed": true,
+            "resource_id": "/tmp/hetero-mission-490e369abdd6-gate-readme-line-v2-2026-10-05-a1-OAA51d",
+            "resource_identity_digest": "8e2c4ae7ed0b226191e5e8cb0123c6710db204fda7636dd9015fc94f38fa8428",
+            "schema_version": 1,
+            "terminal_authority": null,
+            "terminal_consumed": false,
+            "tip": "a80e1aadd195aa36300309a12633942eb305c327"
+          },
+          "resource_id": "/tmp/hetero-mission-490e369abdd6-gate-readme-line-v2-2026-10-05-a1-OAA51d",
+          "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "terminal": false,
+          "tip": "a80e1aadd195aa36300309a12633942eb305c327",
+          "unique": false,
+          "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+          "worktree": "/tmp/hetero-mission-490e369abdd6-gate-readme-line-v2-2026-10-05-a1-OAA51d",
+          "identity": "/tmp/hetero-mission-490e369abdd6-gate-readme-line-v2-2026-10-05-a1-OAA51d",
+          "observed_root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "observed_work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1"
+        },
+        {
+          "finished_at": "2026-10-05T15:33:59.372Z",
+          "gate_id": "gate-focused_verification-1",
+          "input_digest": "41843f62d84a6ee2a354bcb05da8820f2729022dc1ebbcc921c1cefd92a30e77",
+          "invalidated": false,
+          "invalidation_reason": null,
+          "kind": "gate_return",
+          "owner": "depth-0",
+          "result": {
+            "argv_hash": "756bc461fac6a182b3aae487f8e9cae14cedcc0255a3d9d90adbdb119069ae82",
+            "candidate_tree_sha": "1cc0d530f0cf9fea8d1ce4d1766a2a97e8d6dca5",
+            "env_fingerprint": "a15787538ad717181bed83fb6b4c8c6b8ccffe2cb56a9ddeb9b9186fd87acd5c",
+            "receipt_digest": "72dbd7599a3e11f5949b7ea3c8e68085ff47bf7a9161b7a806bc6d168074d329",
+            "request_digest": "d67350c74131a2142efe2310e7560783e54c5562760aebccbb3c77d52558083d",
+            "success": true
+          },
+          "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "started_at": "2026-10-05T15:33:59.372Z",
+          "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+          "identity": "gate-focused_verification-1",
+          "observed_root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "observed_work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1"
+        },
+        {
+          "finished_at": "2026-10-05T15:34:25.541Z",
+          "gate_id": "gate-full_diff_review-2",
+          "input_digest": "06bc87f65f071e6df765f33056063701e3c73e30913a1ade8c7acaed83719a5a",
+          "invalidated": false,
+          "invalidation_reason": null,
+          "kind": "gate_return",
+          "owner": "depth-0",
+          "result": {
+            "findings": "[]",
+            "review_authority_digest": "b092aeceeecc9ef76f16e24f28728bb8c53cd536668511ed9ba1a93e489a5ac6",
+            "review_digest": "e4435b1a77b784ed765dfecbd8a7f6554859bfc9a5583eb94781d4623524ba41",
+            "success": true,
+            "verdict": "SHIP-AS-IS"
+          },
+          "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "started_at": "2026-10-05T15:33:59.527Z",
+          "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+          "identity": "gate-full_diff_review-2",
+          "observed_root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "observed_work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1"
+        },
+        {
+          "finished_at": "2026-10-05T15:34:25.700Z",
+          "gate_id": "gate-full_suite-3",
+          "input_digest": "d943b54a3065054774e3cba8eed4a20582c10184d0edf335f01aee3254390d1c",
+          "invalidated": false,
+          "invalidation_reason": null,
+          "kind": "gate_return",
+          "owner": "depth-0",
+          "result": {
+            "argv_hash": "756bc461fac6a182b3aae487f8e9cae14cedcc0255a3d9d90adbdb119069ae82",
+            "candidate_tree_sha": "1cc0d530f0cf9fea8d1ce4d1766a2a97e8d6dca5",
+            "command_digest": "39374241d7c9f593646ed4fb130e32e4a806006513abcd61665515dc26ded7c6",
+            "env_fingerprint": "a15787538ad717181bed83fb6b4c8c6b8ccffe2cb56a9ddeb9b9186fd87acd5c",
+            "receipt_digest": "72dbd7599a3e11f5949b7ea3c8e68085ff47bf7a9161b7a806bc6d168074d329",
+            "request_digest": "d67350c74131a2142efe2310e7560783e54c5562760aebccbb3c77d52558083d",
+            "success": true
+          },
+          "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "started_at": "2026-10-05T15:34:25.700Z",
+          "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+          "identity": "gate-full_suite-3",
+          "observed_root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "observed_work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1"
+        },
+        {
+          "at": "2026-10-05T15:33:08.679Z",
+          "digest": "05345893b93cc1d6cb325e5ac6a1c23bae43f3c5a6b293ab508a55b92b1b10c4",
+          "event": "progress_receipt_appended",
+          "phase": "PREPARED",
+          "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+          "kind": "audit_event",
+          "identity": "05345893b93cc1d6cb325e5ac6a1c23bae43f3c5a6b293ab508a55b92b1b10c4",
+          "observed_root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "observed_work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1"
+        },
+        {
+          "at": "2026-10-05T15:33:58.670Z",
+          "digest": "ab1221a279d6e48f0316d6d63f4e396b86845a08a830371f375be050e1888953",
+          "dispatch_id": null,
+          "effect_identity": "a7c1acbe9852746757b7b990fcd7c279da83efe19f4d513a05192611078fa4e0",
+          "effect_kind": "dispatch",
+          "event": "controller_effect_invoked",
+          "fresh_input_bytes": 370,
+          "generation": 0,
+          "model": "grok-4.7",
+          "model_calls": 1,
+          "provider": "grok",
+          "provider_session_id": "64920f00-07e4-40e8-8518-0af2e3dc3d44",
+          "resource_identity": "/tmp/hetero-mission-490e369abdd6-gate-readme-line-v2-2026-10-05-a1-OAA51d",
+          "result_receipt_digest": "5d6b6cbcb476e9fe980cc9c8b3b651072e1bb307c026801dcce0a4176ebbae92",
+          "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "runner": "grok",
+          "stage": "implementation",
+          "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+          "kind": "audit_event",
+          "identity": "ab1221a279d6e48f0316d6d63f4e396b86845a08a830371f375be050e1888953",
+          "observed_root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "observed_work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1"
+        },
+        {
+          "at": "2026-10-05T15:33:58.697Z",
+          "digest": "0c4073068c06810739c990d74c35632a994b5ceee3276f0eb181aaf9013aa209",
+          "event": "progress_receipt_appended",
+          "phase": "IMPLEMENTING",
+          "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+          "kind": "audit_event",
+          "identity": "0c4073068c06810739c990d74c35632a994b5ceee3276f0eb181aaf9013aa209",
+          "observed_root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "observed_work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1"
+        },
+        {
+          "at": "2026-10-05T15:33:59.343Z",
+          "digest": "4167dd430017cfa1a3dacc23c8513ff5b3098a30a166fb2d9e9b03f1ad750663",
+          "effect_identity": "757d7ee884414e98485e9a78706f38006ee2e5077b340d3e7369024c9d74e560",
+          "effect_kind": "gate",
+          "event": "controller_effect_invoked",
+          "fresh_input_bytes": 0,
+          "generation": 0,
+          "invocation_ordinal": 1,
+          "model_calls": 0,
+          "result_identity": "7b0f5b3f9c35a56366ac801c7b4dfb6b4af6d8eb3c991e521dd3a316096aff88",
+          "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "stage": "focused_verification",
+          "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+          "kind": "audit_event",
+          "identity": "4167dd430017cfa1a3dacc23c8513ff5b3098a30a166fb2d9e9b03f1ad750663",
+          "observed_root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "observed_work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1"
+        },
+        {
+          "at": "2026-10-05T15:33:59.372Z",
+          "digest": "e3ba091cb2b50f27f712a608908c623746a505be24ae4bf5f59362fae94a62b6",
+          "effect_identity": "gate-focused_verification-1",
+          "effect_kind": "gate",
+          "effect_result_digest": "87423992068ea2959ca7a3e2c257f40935ab38cc3bd4ebd782f102d05392a26e",
+          "event": "controller_effect_result",
+          "input_digest": "41843f62d84a6ee2a354bcb05da8820f2729022dc1ebbcc921c1cefd92a30e77",
+          "invocation_identity": "757d7ee884414e98485e9a78706f38006ee2e5077b340d3e7369024c9d74e560",
+          "invocation_result_identity": "7b0f5b3f9c35a56366ac801c7b4dfb6b4af6d8eb3c991e521dd3a316096aff88",
+          "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "stage": "focused_verification",
+          "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+          "kind": "audit_event",
+          "identity": "e3ba091cb2b50f27f712a608908c623746a505be24ae4bf5f59362fae94a62b6",
+          "observed_root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "observed_work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1"
+        },
+        {
+          "at": "2026-10-05T15:33:59.478Z",
+          "authority": {
+            "artifact_type": "controller_full_diff_review_input",
+            "base_sha": "e1316d0a60e0468314c34a1e882fb7ffac7f947a",
+            "candidate_ref": "a80e1aadd195aa36300309a12633942eb305c327",
+            "candidate_tree_sha": "1cc0d530f0cf9fea8d1ce4d1766a2a97e8d6dca5",
+            "diff_digest": "f539bbdabf62555548694d464dabd321e1d45be2e031e033ac8bc7dca410459e",
+            "review_input_digest": "5b4528bb0551c77054ff108ea1838f7d3deb628d2c3d1e0bf32394ff214553cc",
+            "reviewer": {
+              "effort": "high",
+              "endpoint": "minimax",
+              "model": "MiniMax-M3",
+              "runner": "cc-shim"
+            },
+            "schema_version": 1,
+            "spec_digest": "24feba2cbd4b25119f7439b3d7c97a0f1b70dd53a0e7c3ed64ae919a51b850c1"
+          },
+          "digest": "53812ed8924f1948a62e31e3f5b62ac30b6d89553f0c2a7a61f323d0d61734ec",
+          "effect_kind": "gate",
+          "event": "controller_effect_reserved",
+          "generation": 0,
+          "input_identity": "4edbf202f3930cb93c2b4802fd0d63c44feda0191e2cd335f1532e555d435d8c",
+          "invocation_ordinal": 1,
+          "reservation_identity": "7e6aa8e1a273b18db8a2c6023f19ea65bf475786936b0e8af668398f80b4fa92",
+          "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "stage": "full_diff_review",
+          "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+          "kind": "audit_event",
+          "identity": "53812ed8924f1948a62e31e3f5b62ac30b6d89553f0c2a7a61f323d0d61734ec",
+          "observed_root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "observed_work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1"
+        },
+        {
+          "at": "2026-10-05T15:34:25.500Z",
+          "digest": "ce58c19e74510863438138c01b6d05b638efc0038b7b061e2688cd034cb46476",
+          "effect_identity": "0aa4fd051fc96ab989db8bb01a7df4c835c259d7f6d4eaf27fc4f1943f3e49fc",
+          "effect_kind": "gate",
+          "event": "controller_effect_invoked",
+          "fresh_input_bytes": 746,
+          "generation": 0,
+          "invocation_ordinal": 1,
+          "model_calls": 1,
+          "reservation_identity": "7e6aa8e1a273b18db8a2c6023f19ea65bf475786936b0e8af668398f80b4fa92",
+          "result_identity": "c26fba8b91afb103e904609998678886aa7fb9e5ac964337d06f5da64f360495",
+          "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "stage": "full_diff_review",
+          "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+          "kind": "audit_event",
+          "identity": "ce58c19e74510863438138c01b6d05b638efc0038b7b061e2688cd034cb46476",
+          "observed_root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "observed_work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1"
+        },
+        {
+          "at": "2026-10-05T15:34:25.541Z",
+          "digest": "25e7b4ea3afb2e64226b4cde4b77030e0095019602c494da16fd900718ad136a",
+          "effect_identity": "gate-full_diff_review-2",
+          "effect_kind": "gate",
+          "effect_result_digest": "9db60d125c6659597b63e29272d0e5340bcce74a5ea0e97ee8cf08ed9d7e5487",
+          "event": "controller_effect_result",
+          "input_digest": "06bc87f65f071e6df765f33056063701e3c73e30913a1ade8c7acaed83719a5a",
+          "invocation_identity": "0aa4fd051fc96ab989db8bb01a7df4c835c259d7f6d4eaf27fc4f1943f3e49fc",
+          "invocation_result_identity": "c26fba8b91afb103e904609998678886aa7fb9e5ac964337d06f5da64f360495",
+          "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "stage": "full_diff_review",
+          "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+          "kind": "audit_event",
+          "identity": "25e7b4ea3afb2e64226b4cde4b77030e0095019602c494da16fd900718ad136a",
+          "observed_root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "observed_work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1"
+        },
+        {
+          "at": "2026-10-05T15:34:25.701Z",
+          "digest": "b087bf41d01945595f922348e8ddf7fb590363c5964035fd1977791d03175da4",
+          "effect_identity": "3ac1bd42ab172d40347de99db80b41587e38616c0b9fb2394d3ce3dc5287fe72",
+          "effect_kind": "gate",
+          "event": "controller_effect_invoked",
+          "fresh_input_bytes": 0,
+          "generation": 0,
+          "invocation_ordinal": 1,
+          "model_calls": 0,
+          "result_identity": "a060af1a13ab07b7776b8a05daf25d4d09db7e3aa3ed332cd2374cd0dd8ade13",
+          "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "stage": "full_suite",
+          "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+          "kind": "audit_event",
+          "identity": "b087bf41d01945595f922348e8ddf7fb590363c5964035fd1977791d03175da4",
+          "observed_root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "observed_work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1"
+        },
+        {
+          "at": "2026-10-05T15:34:25.700Z",
+          "digest": "1ccc355876ca3e5e355f9e51652bed08e1495b054a8be4027d70ca1404100fa1",
+          "effect_identity": "gate-full_suite-3",
+          "effect_kind": "gate",
+          "effect_result_digest": "28e18e969798de1f612e5d198bd0a7a14f65ade7b9430343372532ea0f7e135b",
+          "event": "controller_effect_result",
+          "input_digest": "d943b54a3065054774e3cba8eed4a20582c10184d0edf335f01aee3254390d1c",
+          "invocation_identity": "3ac1bd42ab172d40347de99db80b41587e38616c0b9fb2394d3ce3dc5287fe72",
+          "invocation_result_identity": "a060af1a13ab07b7776b8a05daf25d4d09db7e3aa3ed332cd2374cd0dd8ade13",
+          "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "stage": "full_suite",
+          "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+          "kind": "audit_event",
+          "identity": "1ccc355876ca3e5e355f9e51652bed08e1495b054a8be4027d70ca1404100fa1",
+          "observed_root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "observed_work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1"
+        },
+        {
+          "at": "2026-10-05T15:34:27.675Z",
+          "digest": "39887b8e416be4dc1a81adb5244f401bf0acdbd42f08d58e169dd6bbf7011a9e",
+          "event": "progress_receipt_appended",
+          "phase": "COMPLETED",
+          "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+          "kind": "audit_event",
+          "identity": "39887b8e416be4dc1a81adb5244f401bf0acdbd42f08d58e169dd6bbf7011a9e",
+          "observed_root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "observed_work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1"
+        },
+        {
+          "at": "2026-10-05T15:34:27.773Z",
+          "digest": "4db98dc35b8320abd116664a119665574b18ba648743fdb6f51239e4db8106c8",
+          "event": "controller_terminal_disposition",
+          "phase": "campaign_terminal_ready",
+          "reason": "campaign acceptance verified",
+          "root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "terminal_status": "success",
+          "work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1",
+          "kind": "audit_event",
+          "identity": "4db98dc35b8320abd116664a119665574b18ba648743fdb6f51239e4db8106c8",
+          "observed_root_run_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+          "observed_work_order_id": "wo-campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0-gate-readme-line-v2-2026-10-05-a1"
+        }
+      ],
+      "explains_all": true,
+      "expected_counts": {
+        "dispatches": 1,
+        "resources": 1,
+        "gates": 3,
+        "repairs": 0,
+        "dispositions": 0,
+        "resumes": 0,
+        "terminals": 0,
+        "effect_results": 3
+      },
+      "counted": {
+        "dispatches": 1,
+        "resources": 1,
+        "gates": 3,
+        "repairs": 0,
+        "dispositions": 0,
+        "resumes": 0,
+        "terminals": 0,
+        "effect_results": 3
+      },
+      "problems": [],
+      "blocks_next_dispatch": false,
+      "blocks_terminal": false,
+      "open_debt": [],
+      "authority_sources_checked": [
+        "controller_work_order",
+        "dispatch_manifest_index",
+        "dispatch_result_index",
+        "rotation_aware_controller_ledger",
+        "controller_recovery_receipts"
+      ],
+      "digest": "2b7f5e56edbfa21e0077e075822ae80c5aaedebd0eb7173e472f7e1f8ad2380c"
+    },
+    "accepted_commit": "a80e1aadd195aa36300309a12633942eb305c327",
+    "branch": null,
+    "worktree": null,
+    "provider_lineage": null,
+    "verification_receipt": {
+      "passed": true,
+      "cached": false,
+      "receipt_digest": "72dbd7599a3e11f5949b7ea3c8e68085ff47bf7a9161b7a806bc6d168074d329",
+      "receipt": {
+        "schema_version": 1,
+        "artifact_type": "implementation_campaign_verification",
+        "campaign_id": "campaign-v1-86809178fd0c8e1731195dfe3268587d96555c98f105b32609306854b7c17bf0",
+        "tree_sha": "1cc0d530f0cf9fea8d1ce4d1766a2a97e8d6dca5",
+        "argv_hash": "756bc461fac6a182b3aae487f8e9cae14cedcc0255a3d9d90adbdb119069ae82",
+        "env_fingerprint": "a15787538ad717181bed83fb6b4c8c6b8ccffe2cb56a9ddeb9b9186fd87acd5c",
+        "request_digest": "d67350c74131a2142efe2310e7560783e54c5562760aebccbb3c77d52558083d",
+        "verdict": "GREEN",
+        "exit_status": 0,
+        "writer_lease_closed": true,
+        "detached_checkout": true,
+        "runner_argv_attested": true,
+        "writer_fence_digest": "5d6b6cbcb476e9fe980cc9c8b3b651072e1bb307c026801dcce0a4176ebbae92",
+        "checkout_attestation_digest": "d4d8afe7b614c982a21a885dd238977a3864d2f487fab3b0af48fe5eabc46a48",
+        "stdout_digest": "dc51b8c96c2d745df3bd5590d990230a482fd247123599548e0632fdbf97fc22",
+        "stderr_digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "started_at": "2026-10-05T15:33:59.070Z",
+        "ended_at": "2026-10-05T15:33:59.157Z",
+        "receipt_digest": "72dbd7599a3e11f5949b7ea3c8e68085ff47bf7a9161b7a806bc6d168074d329"
+      }
+    },
+    "review_payload": {
+      "reviewed": true,
+      "success": true,
+      "verdict": "SHIP-AS-IS",
+      "findings": "[]",
+      "review_digest": "e4435b1a77b784ed765dfecbd8a7f6554859bfc9a5583eb94781d4623524ba41",
+      "sealed_min_panel_size": 3,
+      "final_panel_count": 4,
+      "final_panel_seat_receipts": [
+        {
+          "schema_version": 1,
+          "artifact_type": "implementation_campaign_final_panel_seat",
+          "seat_index": 1,
+          "runner": "claude-native",
+          "model": "claude-fable-5-1",
+          "effort": "high",
+          "endpoint": null,
+          "family": "anthropic",
+          "status": "reviewed",
+          "verdict": "SHIP-AS-IS",
+          "review_digest": "2b619d48a4a592d01e2c6e36daf5ebc47460c3604d9ce56b8d381d19868bb5f5",
+          "reason": null,
+          "load_bearing": true,
+          "packet_hash": "57e19fe7b326d5e067d567b634fd02aaf605620b78023219a437cfe47111660d",
+          "receipt_digest": "bf8923d0d034d05ef8620f8674bfc176b5c5d6c03e8d0510efb9c8b0bfb5bae2"
+        },
+        {
+          "schema_version": 1,
+          "artifact_type": "implementation_campaign_final_panel_seat",
+          "seat_index": 2,
+          "runner": "cc-shim",
+          "model": "GLM-5.2",
+          "effort": "high",
+          "endpoint": "glm",
+          "family": "zhipu",
+          "status": "reviewed",
+          "verdict": "SHIP-AS-IS",
+          "review_digest": "2b619d48a4a592d01e2c6e36daf5ebc47460c3604d9ce56b8d381d19868bb5f5",
+          "reason": null,
+          "load_bearing": true,
+          "packet_hash": "57e19fe7b326d5e067d567b634fd02aaf605620b78023219a437cfe47111660d",
+          "receipt_digest": "0ccaee63fc66ebd827b47e5d25ccdc86854e2e61cd454793f341df895d9ba29b"
+        },
+        {
+          "schema_version": 1,
+          "artifact_type": "implementation_campaign_final_panel_seat",
+          "seat_index": 3,
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "effort": "high",
+          "endpoint": "minimax",
+          "family": "minimax",
+          "status": "reviewed",
+          "verdict": "SHIP-AS-IS",
+          "review_digest": "2b619d48a4a592d01e2c6e36daf5ebc47460c3604d9ce56b8d381d19868bb5f5",
+          "reason": null,
+          "load_bearing": true,
+          "packet_hash": "57e19fe7b326d5e067d567b634fd02aaf605620b78023219a437cfe47111660d",
+          "receipt_digest": "a4d4dcc351aaac383d2ddc6b6cdfed3246307de1c68dd6f7c9323b63e4de5155"
+        },
+        {
+          "schema_version": 1,
+          "artifact_type": "implementation_campaign_final_panel_seat",
+          "seat_index": 4,
+          "runner": "qoderclicn",
+          "model": "Qwen3.8-Max-Preview",
+          "effort": "high",
+          "endpoint": null,
+          "family": "alibaba",
+          "status": "reviewed",
+          "verdict": "SHIP-AS-IS",
+          "review_digest": "2b619d48a4a592d01e2c6e36daf5ebc47460c3604d9ce56b8d381d19868bb5f5",
+          "reason": null,
+          "load_bearing": true,
+          "packet_hash": "57e19fe7b326d5e067d567b634fd02aaf605620b78023219a437cfe47111660d",
+          "receipt_digest": "7ccb3563d5a41caed4f6eb1dba1096a2ebfc49e9707171a61a32819abda6f3bf"
+        }
+      ],
+      "final_panel_quorum_met": true,
+      "sealed_required_review_families": 2,
+      "implementer_family": "xai",
+      "started_at": "2026-10-05T15:33:59.527Z",
+      "ended_at": "2026-10-05T15:34:25.282Z",
+      "budget_source": "wall",
+      "seat_timeout_seconds": 3549,
+      "packet_hash": "57e19fe7b326d5e067d567b634fd02aaf605620b78023219a437cfe47111660d",
+      "review_authority_digest": "b092aeceeecc9ef76f16e24f28728bb8c53cd536668511ed9ba1a93e489a5ac6",
+      "station": "panel",
+      "candidate_tree_sha": "1cc0d530f0cf9fea8d1ce4d1766a2a97e8d6dca5",
+      "reviewer_roster_digest": "5631ae97670d4ccc0f283dad1e040fbefb986b0571562bf2b61359b7b73ea8db",
+      "review_input_mode": "full_diff_generation"
+    },
+    "findings_snapshot": null,
+    "candidate": null,
+    "completed_deliverables": [
+      "gate-readme-line-v2-2026-10-05"
+    ],
+    "inventory_observation_digest": "61cb24e5b943bb2d37c18b6eee9c90d6d3ac6cef60dff6f085801c8fb004c691",
+    "recovery_receipts": [
+      {
+        "schema_version": 1,
+        "artifact_type": "controller_resource_recovery_receipt",
+        "resource_id": "/tmp/hetero-mission-490e369abdd6-gate-readme-line-v2-2026-10-05-a1-OAA51d",
+        "path": "/tmp/hetero-mission-490e369abdd6-gate-readme-line-v2-2026-10-05-a1-OAA51d",
+        "branch": "mission/490e369abdd6/gate-readme-line-v2-2026-10-05-a1",
+        "tip": "a80e1aadd195aa36300309a12633942eb305c327",
+        "outcome": {
+          "clean": true,
+          "dirty": false,
+          "unique": false,
+          "terminal": false,
+          "identity_known": true
+        },
+        "evidence_kind": "clean_release",
+        "bundle_path": null,
+        "bundle_content_digest": null,
+        "mechanically_observed": true,
+        "removed": true,
+        "terminal_consumed": false,
+        "terminal_authority": null,
+        "resource_identity_digest": "8e2c4ae7ed0b226191e5e8cb0123c6710db204fda7636dd9015fc94f38fa8428",
+        "digest": "291a3d0ff66d1fc870233f6b1f98e3dc45c230477208b7515e6b713fb96d4131"
+      }
+    ],
+    "resume_receipts": [],
+    "convergence_adjudication_receipt": null,
+    "temp_capacity_limit": null,
+    "controller_digest": "d601a8e5e0eae0065f8387e2c60b5bfeaa200c0939110d12fa694e7c39f56ff3"
+  },
+  "digest": "37beb138e61145cc42ae91a0c1af3c487092a9fe6b812484d2e17b7691aa37b2"
+}

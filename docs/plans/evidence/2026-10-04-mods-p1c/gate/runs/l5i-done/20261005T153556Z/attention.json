@@ -1,0 +1,21 @@
+{
+  "schema": "autopilot.attention/1",
+  "session_id": "8756dd52-03e5-4a15-96c5-71ed90a78beb",
+  "project_key": "629fcdb8f8b4011a",
+  "kind": "permission",
+  "tool_name": "Bash",
+  "summary": "Bash: git diff --stat e1316d0..a80e1aa && git diff e1316d0..a80e1aa | tail -8 && W=/tmp/claude-1000/-home-cookys-projec…",
+  "since": "2026-10-05T15:35:16.936Z",
+  "updated_at": "2026-10-05T15:35:22.920Z",
+  "pending": [
+    {
+      "agent_id": null,
+      "tool_name": "Bash",
+      "input_digest": "b969c533579602f2",
+      "kind": "permission",
+      "summary": "Bash: git diff --stat e1316d0..a80e1aa && git diff e1316d0..a80e1aa | tail -8 && W=/tmp/claude-1000/-home-cookys-projec…",
+      "since": "2026-10-05T15:35:16.936Z",
+      "updated_at": "2026-10-05T15:35:16.936Z"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "schema": "autopilot.attention/1",
+  "session_id": "8756dd52-03e5-4a15-96c5-71ed90a78beb",
+  "project_key": "629fcdb8f8b4011a",
+  "kind": "idle",
+  "tool_name": null,
+  "summary": "waiting for your input",
+  "since": "2026-10-05T15:32:28.194Z",
+  "updated_at": "2026-10-05T15:32:28.194Z",
+  "pending": [
+    {
+      "agent_id": null,
+      "tool_name": null,
+      "input_digest": null,
+      "kind": "idle",
+      "summary": "waiting for your input",
+      "since": "2026-10-05T15:32:28.194Z",
+      "updated_at": "2026-10-05T15:32:28.194Z"
+    }
+  ]
+}

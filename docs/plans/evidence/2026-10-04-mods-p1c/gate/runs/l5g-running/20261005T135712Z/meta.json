@@ -1,0 +1,23 @@
+{
+  "schema": "autopilot.gate-capture/1",
+  "cell": "l5g-running",
+  "captured_at": "2026-10-05T13:57:12.487Z",
+  "captured_at_ms": 1791208632487,
+  "session_id": "6bae5b13-c3dc-4541-9504-b6268030a1e9",
+  "session_id_how": "argument",
+  "sanitised_session_id": "6bae5b13-c3dc-4541-9504-b6268030a1e9",
+  "project_key": "bd9bd5b9221b0b2a",
+  "root_run_id": "job-1791208074-91773e8e",
+  "scope_key": "bd9bd5b9221b0b2a--job-1791208074-91773e8e",
+  "live_base": "/run/user/1000/autopilot",
+  "autopilot_home": "/home/cookys/.autopilot",
+  "pane_cwd": "/home/cookys/projects/gate-sandbox2",
+  "git_common_dir": "/home/cookys/projects/gate-sandbox2/.git",
+  "missing": [
+    "tasks.json (/run/user/1000/autopilot/tasks/6bae5b13-c3dc-4541-9504-b6268030a1e9.json)",
+    "turn-effective.json (/run/user/1000/autopilot/turn-effective/6bae5b13-c3dc-4541-9504-b6268030a1e9.json)",
+    "decision-file.json (/home/cookys/projects/gate-sandbox2/.git/autopilot/decisions/bd9bd5b9221b0b2a--job-1791208074-91773e8e.json)",
+    "work-orders (/home/cookys/projects/gate-sandbox2/.git/autopilot/work-orders/job-1791208074-91773e8e)",
+    "band row hidden (a dialog is open?): the panel verdict is recorded in panel.txt"
+  ]
+}

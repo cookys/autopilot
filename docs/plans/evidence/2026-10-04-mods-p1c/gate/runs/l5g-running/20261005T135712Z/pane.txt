@@ -1,0 +1,50 @@
+● mission prepare 和 grant 都成功了，engine implement-review 已在背景送出，等完成通知。我先不輪詢。           │                                                                                       ✕
+                                                                                                              │session $0.72 · host $572.49 · ctx —
+  - prepare： 用 task-authority-sb2.json，輸出到 prepared-sb2.json。                                          │要你決定
+  - grant： 第 1 次嘗試，分支是 mission/0d79866fc5e3/gate-readme-line-v2-2026-10-05-a1，base 是 e1316d0a。    │等你批准：Bash: P=/tmp/claude-1000/-home-cookys-projects-autopilot/34a5c748-efec-4871-87…
+  - brief： 在 l5prep2/brief-hand.md（385 bytes），放在 sandbox 外面。內容是只改 README.md、附加一行          │dispatch · execution status, not progress (執行狀態，不是進度)
+    gate-l5-test-line、由 harness commit、禁止 stash 和 push，並列出兩條驗證指令。                            │no runs in this scope
+  - dispatch： 照指示只 env -u AUTOPILOT_SESSION_ID，保留 CLAUDE_CODE_SESSION_ID，帶 AUTOPILOT_LEVEL=l5 和    │gates · review receipts of this job
+    AUTOPILOT_ROOT_RUN_ID=mission-0d79866fc5e39773fe6d63e1，沒有帶 --campaign-ledger。輸出寫到                │no review receipt
+    l5prep2/implement-review-sb2.out 和 .err，結尾會附 rc=。sandbox 的工作樹送出前是乾淨的，也沒有 push。     │任務工具未開 · 設 CLAUDE_CODE_ENABLE_TODO_TOOLS=1 後才會記錄任務
+                                                                                                              │工頭活動（依 session 綁定：同一 session 的多個工作會看到同一批）
+  我自己的判斷：output_paths 沒有從 contract 讀到（欄位名稱不同），所以 brief 裡的 README.md 是依你的需求和   │aede5009f325097d6 · — · 3m 前
+  REPORT 寫的，不是從 graph 逐字貼上。如果 hand 被 contract 拒絕，先查這一點。                                │open the review page
+                                                                                                              │snapshot published 2026-10-05T13:56:32.470Z · session cost as of 2026-10-05T13:56:32.470Z
+✻ Baked for 30s · done 9:53 PM                                                                                │· host cost as of 2026-10-05T13:56:32.470Z
+                                                                                                              │
+● Background command "cd /home/cookys/projects/gate-sandbox2; A=/home/cookys/projects/autopilot;              │
+P=/tmp/claude-1000/-home-cookys-projects-autopilot/34a5c748-efec-4871-874c-e4eccde96bac/scratchpad/l5prep2    │
+D=/home/cookys/projects/gate-sandbox2/.git/autopilot/mission/artifacts/0d79866fc5e39773fe6d63e10b8644716987fc2│
+3ff6e0c0604e9b3cb9d2f4d2f/gate-readme-line-v2-2026-10-05/attempt-1                                            │
+env -u AUTOPILOT_SESSION_ID env AUTOPILOT_LEVEL=l5 AUTOPILOT_ROOT_RUN_ID=mission-0d79866fc5e39773fe6d63e1 node│
+$A/bin/autopilot.js engine implement-review --campaign-contract $D/campaign.json --campaign-seal              │
+$D/campaign.seal.json --mission-prepared $P/prepared-sb2.json --prompt-file $P/brief-hand.md --branch         │
+mission/0d79866fc5e3/gate-readme-line-v2-2026-10-05-a1 --base e1316d0a60e0468314c34a1e882fb7ffac7f947a --cwd  │
+/home/cookys/projects/gate-sandbox2 --max-rounds 3 > $P/implement-review-sb2.out 2>                           │
+$P/implement-review-sb2.err; echo "rc=$?" >> $P/implement-review-sb2.err" completed (exit code 0)             │
+                                                                                                              │
+● Running P=/tmp/claude-1000/-home-cookys-projects-autopilo…                                                  │
+  ⎿  $ P=/tmp/claude-1000/-home-cookys-projects-autopilot/34a5c748-efec-4871-874c-e4eccde96bac/scratchpad/l5pr│
+     ep2; tail -c 2500 $P/implement-review-sb2.err; echo ----; tail -c 3000 $P/implement-review-sb2.out; cd   │
+     /home/cookys/projects/gate-sandbox2; git status --short; git log --oneline -3 mission/0d798…             │
+                                                                                                              │
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────│
+ Bash command                                                                                                 │
+ Tip: auto mode handles these prompts for you — choose "switch to auto mode" below                            │
+ Run shell command                                                                                            │
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌│
+ │ P=/tmp/claude-1000/-home-cookys-projects-autopilot/34a5c748-efec-4871-874c-e4eccde96bac/scratchpad/l5prep2 │
+ │ ; tail -c 2500 $P/implement-review-sb2.err; echo ----; tail -c 3000 $P/implement-review-sb2.out; cd        │
+ │ /home/cookys/projects/gate-sandbox2; git status --short; git log --oneline -3                              │
+ │ mission/0d79866fc5e3/gate-readme-line-v2-2026-10-05-a1 2>&1                                                │
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌│
+ Do you want to proceed?                                                                                      │
+ ❯ 1. Yes                                                                                                     │
+   2. Yes, allow reading from                                                                                 │
+      /tmp/claude-1000/-home-cookys-projects-autopilot/34a5c748-efec-4871-874c-e4eccde96bac/scratchpad/l5prep2│
+      from this project                                                                                       │
+   3. Yes, and switch to auto mode · auto mode handles these prompts for you                                  │
+   4. No                                                                                                      │
+                                                                                                              │
+ Esc to cancel · Tab to amend                                                                                 │

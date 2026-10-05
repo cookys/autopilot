@@ -1,0 +1,8 @@
+l5g (2026-10-05, gate-sandbox2, resumed session)
+session id: 6bae5b13-c3dc-4541-9504-b6268030a1e9 (unchanged; marker mtime 21:47 local, no new marker created; session-mode dir count 54 before and after)
+l5 marker remaining: ~/.autopilot/session-mode/6bae5b13-c3dc-4541-9504-b6268030a1e9.json (root job-1791208074-91773e8e, expires 2026-10-06T13:47Z)
+campaign root: mission-0d79866fc5e39773fe6d63e1 ; graph node gate-readme-line-v2-2026-10-05 attempt-1 ; campaign id campaign-v2-e36d14b0... (required) / campaign-v1-ef8a0708... (work-orders dir)
+contract: /home/cookys/projects/gate-sandbox2/.git/autopilot/mission/artifacts/0d79866fc5e39773fe6d63e10b8644716987fc23ff6e0c0604e9b3cb9d2f4d2f/gate-readme-line-v2-2026-10-05/attempt-1/campaign.json (+ campaign.seal.json)
+prepared: <scratchpad>/l5prep2/prepared-sb2.json ; brief: <scratchpad>/l5prep2/brief-hand.md ; out/err: <scratchpad>/l5prep2/implement-review-sb2.{out,err}
+branch: mission/0d79866fc5e3/gate-readme-line-v2-2026-10-05-a1 (commit 07b7c510451e9fc3fb104a804a1cbcaa57f1efd5), kept; no worktrees left (git worktree list: main only)
+watcher: none started by me; no live pids at end

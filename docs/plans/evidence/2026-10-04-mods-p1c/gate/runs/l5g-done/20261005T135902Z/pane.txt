@@ -1,0 +1,50 @@
+  - grant： 第 1 次嘗試，分支是 mission/0d79866fc5e3/gate-readme-line-v2-2026-10-05-a1，base 是 e1316d0a。    │                                                                                       ✕
+  - brief： 在 l5prep2/brief-hand.md（385 bytes），放在 sandbox 外面。內容是只改 README.md、附加一行          │session $0.81 · host $572.58 · ctx 7%
+    gate-l5-test-line、由 harness commit、禁止 stash 和 push，並列出兩條驗證指令。                            │dispatch · execution status, not progress (執行狀態，不是進度)
+  - dispatch： 照指示只 env -u AUTOPILOT_SESSION_ID，保留 CLAUDE_CODE_SESSION_ID，帶 AUTOPILOT_LEVEL=l5 和    │no runs in this scope
+    AUTOPILOT_ROOT_RUN_ID=mission-0d79866fc5e39773fe6d63e1，沒有帶 --campaign-ledger。輸出寫到                │gates · review receipts of this job
+    l5prep2/implement-review-sb2.out 和 .err，結尾會附 rc=。sandbox 的工作樹送出前是乾淨的，也沒有 push。     │no review receipt
+                                                                                                              │停在等你指示 0 分
+  我自己的判斷：output_paths 沒有從 contract 讀到（欄位名稱不同），所以 brief 裡的 README.md 是依你的需求和   │任務工具未開 · 設 CLAUDE_CODE_ENABLE_TODO_TOOLS=1 後才會記錄任務
+  REPORT 寫的，不是從 graph 逐字貼上。如果 hand 被 contract 拒絕，先查這一點。                                │工頭活動（依 session 綁定：同一 session 的多個工作會看到同一批）
+                                                                                                              │a160864f4e8d75a6a · — · 1m 前
+✻ Baked for 30s · done 9:53 PM                                                                                │aede5009f325097d6 · — · 5m 前
+                                                                                                              │open the review page
+● Background command "cd /home/cookys/projects/gate-sandbox2; A=/home/cookys/projects/autopilot;              │snapshot published 2026-10-05T13:58:45.827Z · session cost as of 2026-10-05T13:57:36.138Z
+P=/tmp/claude-1000/-home-cookys-projects-autopilot/34a5c748-efec-4871-874c-e4eccde96bac/scratchpad/l5prep2    │· host cost as of 2026-10-05T13:57:36.138Z
+D=/home/cookys/projects/gate-sandbox2/.git/autopilot/mission/artifacts/0d79866fc5e39773fe6d63e10b8644716987fc2│
+3ff6e0c0604e9b3cb9d2f4d2f/gate-readme-line-v2-2026-10-05/attempt-1                                            │
+env -u AUTOPILOT_SESSION_ID env AUTOPILOT_LEVEL=l5 AUTOPILOT_ROOT_RUN_ID=mission-0d79866fc5e39773fe6d63e1 node│
+$A/bin/autopilot.js engine implement-review --campaign-contract $D/campaign.json --campaign-seal              │
+$D/campaign.seal.json --mission-prepared $P/prepared-sb2.json --prompt-file $P/brief-hand.md --branch         │
+mission/0d79866fc5e3/gate-readme-line-v2-2026-10-05-a1 --base e1316d0a60e0468314c34a1e882fb7ffac7f947a --cwd  │
+/home/cookys/projects/gate-sandbox2 --max-rounds 3 > $P/implement-review-sb2.out 2>                           │
+$P/implement-review-sb2.err; echo "rc=$?" >> $P/implement-review-sb2.err" completed (exit code 0)             │
+                                                                                                              │
+  Ran 2 shell commands                                                                                        │
+                                                                                                              │
+● engine implement-review 跑完了（rc=0），outcome 是 ready，沒有 push。                                       │
+                                                                                                              │
+  - 結果： campaign terminal receipt 的 outcome 是 ready。hand 是                                             │
+    grok/grok-4.7，一輪就完成，沒有修復輪（ratchet_reverted_rounds 為 0，也沒有 advisory findings）。         │
+  - commit： 07b7c51，在 mission/0d79866fc5e3/gate-readme-line-v2-2026-10-05-a1 分支上，base 是 e1316d0。     │
+  - diff： git diff e1316d0 07b7c51 只動 README.md，新增一行，內容正好是 gate-l5-test-line，其他檔案都沒碰。  │
+  - sandbox： 目前 develop 還沒合入這個 commit，工作樹是乾淨的。                                              │
+  - 警告： stderr 反覆出現 strict /l5 POLICY OVERRIDE，說明 implementer、qc:1、qc:4、verification_author      │
+    這幾個 seat 沒有 capability claim，原因是 advisory_default。這是先前就知道的 standing pin                 │
+    狀態，不代表失敗。                                                                                        │
+                                                                                                              │
+  我還沒做的（recipe 第 10 步，驗證在 depth-0）： 我只確認了 diff 內容，沒有在 scratch worktree 上重跑 grep   │
+  -qx gate-l5-test-line README.md && node test.js。receipt 的結論來自 rail                                    │
+  自己的驗證，不是我獨立重跑的。合併和 record-integration.js 也還沒做，你要的話我接著做這幾步。               │
+                                                                                                              │
+✻ Worked for 12s · done 9:57 PM                                                                               │
+◌ 待命 gate-sandbox2 · — · 11m · —                                                                        [-] │
+沒有派工在跑 · 停在等你指示 0 分                                                                              │
+                                                                                                              │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 在 scratch worktree 驗證那個 commit
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Sonnet 5.5 ── ~/projects/gate-sandbox2 develop ─────────────────────────────────────────── v2.1.289
+  5h ▮▯▯▯▯▯ 18% 4h2m   7d ▮▮▯▯▯▯ 37% 2d14h   ctx ▯▯▯▯▯▯ 7%                         → codeforge adopt
+  ⏵⏵ accept edits on (shift+tab to cycle) · ← 6 agents

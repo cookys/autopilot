@@ -68,7 +68,7 @@ if (skill) {
     try { f = readAt(p); } catch { die(`path not in ${ref}: ${p}`); }
     files.set(p, f);
     if (p.endsWith('.js')) {
-      const src = f.data.toString('utf8');
+      const src = f.data.toString('utf8').replace(/^[ \t]*\/\/.*$/gm, '');
       for (const m of src.matchAll(/require\(\s*['"](\.{1,2}\/[^'"]+)['"]\s*\)/g)) {
         const base = path.posix.join(path.posix.dirname(p), m[1]);
         const cands = [base, `${base}.js`, `${base}.json`, `${base}/index.js`];

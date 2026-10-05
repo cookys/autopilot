@@ -115,7 +115,7 @@ export ONOFF_PACKS_DIR="$PK"
 # a CHANGE pack = base + one edited line, frozen through the real freeze tool (--from-dir)
 mkdir -p "$TEST_TMP/chg"; cp -r "$PK/ceo-agent-base"/. "$TEST_TMP/chg/"
 printf '\n<!-- EVAL CHANGE ARM MARKER -->\n' >> "$TEST_TMP/chg/SKILL.md"
-node "$BASE/freeze-pack.js" --id ceo-agent-change --from-dir "$TEST_TMP/chg" >/dev/null
+node "$BASE/freeze-pack.js" --force --id ceo-agent-change --from-dir "$TEST_TMP/chg" >/dev/null
 export STUB_SKILL=ceo-agent
 b=$(run gen-base --task d1-s-tiny-feature --skill ceo-agent --arm base)
 c=$(run gen-change --task d1-s-tiny-feature --skill ceo-agent --arm change)
@@ -155,7 +155,7 @@ RUNNER=(bash "$BASE/run-skill-onoff-eval.sh" --model m --runner stub --task d1-s
 expect_rc 2 "base arm without --skill" "${RUNNER[@]}" --arm base --out "$TEST_TMP/x1"
 expect_rc 2 "full arm with --skill" "${RUNNER[@]}" --skill ceo-agent --arm full --out "$TEST_TMP/x2"
 expect_rc 2 "pack flag without --skill" "${RUNNER[@]}" --arm full --pack-base ceo-agent-base --out "$TEST_TMP/x3"
-expect_rc 2 "missing change pack" "${RUNNER[@]}" --skill finish-flow --arm change --out "$TEST_TMP/x4"
+expect_rc 2 "missing change pack" "${RUNNER[@]}" --skill quality-pipeline --arm change --out "$TEST_TMP/x4"
 expect_rc 2 "path-y pack name" "${RUNNER[@]}" --skill ceo-agent --arm base --pack-base ../packs/ceo-agent-base --out "$TEST_TMP/x5"
 echo tamper >> "$PK/ceo-agent-base/SKILL.md"
 expect_rc 2 "tampered generic pack" "${RUNNER[@]}" --skill ceo-agent --arm base --out "$TEST_TMP/x6"

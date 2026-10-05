@@ -6,6 +6,7 @@
 # the sources row, and one negative control (stale file, file of another root, file of another repo, file left after the end signal).
 # RED at 8666aba4 (base: runs-watch.js passes decision/planned/compare = null/null/[]; no open-decision.js, no src/status/watch-inputs.js):
 #   23 passed, 73 failed (e.g. FAIL planned (campaign): ...: expected '[{"id":"d1",...}]', got 'nomodel'/'null'; FAIL open writes a decision; FAIL manifest ... Cannot find module src/status/sources-manifest.js)
+# PHASE-TASK addition (item 7 + units) RED at 15966420 (src/render without the task fallback): 118 passed, 24 failed (e.g. FAIL phase task: the task in progress reaches model.json: expected '{"code":"2",...}', got 'null'; units crash on taskPhase). GREEN: 142 assertions.
 # Mutation controls (outputs in the run evidence dir, mut-*.txt): each guard below turns the suite red when broken.
 . "$(dirname "$0")/lib.sh"
 
@@ -235,6 +236,53 @@ marker('ph-b', { root_run_id: 'R3', phase: 'implement', phase_set_at: iso(T - 10
 settle(); out('ph_expired_falls_back', model('R3').phase && model('R3').phase.code);
 marker('ph-e', { root_run_id: 'R1', phase: 'MARKERPHASE', phase_set_at: iso(T) });
 settle(); out('ph_campaign_beats_marker', model('R1').phase && `${model('R1').phase.source}:${model('R1').phase.code}`);
+// ---- item 7: PHASE-TASK — the phase falls back to the session task in progress ----------------------------------
+out('pt_unbound_scope', model('unbound') ? J(model('unbound').phase) : 'nomodel'); // s-e (unbound) has beta in progress
+world.rows = [mkRow('r-7', 'R7'), mkRow('r-8', 'R8'), mkRow('r-9', 'R9'), mkRow('r-c', 'R1')];
+const ip = (id, subject, seq) => ({ id, subject, status: 'in_progress', started_seq: seq });
+tasksFile('pt-a', { first_created_at: iso(T - 90e3), tasks: [{ id: '1', subject: 'pending only', status: 'pending', started_seq: null }] });
+marker('pt-a', { root_run_id: 'R8' });
+settle(); out('pt_none_in_progress', model('R8') ? J(model('R8').phase) : 'nomodel');
+tasksFile('pt-b', { first_created_at: iso(T - 80e3), tasks: [ip('2', 'Write the parser', 1)] });
+marker('pt-b', { root_run_id: 'R7' });
+settle(); out('pt_shown', J(model('R7').phase));
+out('pt_source_row', srcRoles(model('R7')).includes('session_task_phase') ? 'yes' : 'no');
+out('pt_other_scope_untouched', J(model('R8').phase));
+// two in progress in one session: the highest started_seq
+tasksFile('pt-b', { first_created_at: iso(T - 80e3), tasks: [ip('2', 'Write the parser', 1), ip('3', 'Wire the watcher', 2), ip('4', 'Older start', 0)] });
+settle(); out('pt_two_same_session_newest', model('R7').phase.code);
+// two sessions on one root: the newer session file wins
+tasksFile('pt-c', { first_created_at: iso(T - 70e3), updated_at: iso(T + 50e3), tasks: [ip('9', 'Newer session task', 1)] });
+marker('pt-c', { root_run_id: 'R7' });
+settle(); out('pt_two_sessions_newest', model('R7').phase.label);
+fs.unlinkSync(path.join(live, 'tasks', 'pt-c.json')); fs.unlinkSync(path.join(sessDir, 'pt-c.json'));
+// another root's task and another project's task are never used
+tasksFile('pt-d', { first_created_at: iso(T - 60e3), tasks: [ip('1', 'OTHER-ROOT-TASK', 9)] });
+marker('pt-d', { root_run_id: 'R9' });
+tasksFile('pt-e', { project_key: 'otherproject0000', first_created_at: iso(T - 50e3), tasks: [ip('1', 'FOREIGN-PROJECT-TASK', 9)] });
+marker('pt-e', { root_run_id: 'R7' });
+settle(); out('pt_foreign_ignored_R7', model('R7').phase.label);
+out('pt_other_root_own_scope', model('R9').phase.label);
+// marker phase beats the task; a campaign live phase beats both
+marker('pt-b', { root_run_id: 'R7', phase: 'design', phase_set_at: iso(T) });
+settle(); out('pt_marker_beats_task', `${model('R7').phase.source}:${model('R7').phase.code}`);
+tasksFile('pt-f', { first_created_at: iso(T - 40e3), tasks: [ip('1', 'TASK-UNDER-CAMPAIGN', 1)] });
+marker('pt-f', { root_run_id: 'R1' });
+settle(); out('pt_campaign_beats_all', `${model('R1').phase.source}:${model('R1').phase.code}`);
+// tick-level: marking a task in_progress republishes with the new phase; completing it drops the phase
+fs.unlinkSync(path.join(sessDir, 'pt-b.json')); // R7 now has no marker phase
+tasksFile('pt-b', { first_created_at: iso(T - 80e3), tasks: [{ id: '2', subject: 'Flip me', status: 'pending', started_seq: null }] });
+settle(); out('pt_flip_before', J(model('R7').phase));
+marker('pt-b', { root_run_id: 'R7' });
+settle(); const vf = versions('R7'); settle(); out('pt_flip_idle_no_republish', versions('R7') - vf);
+tasksFile('pt-b', { first_created_at: iso(T - 80e3), tasks: [{ id: '2', subject: 'Flip me', status: 'in_progress', started_seq: 1 }] });
+settle(); out('pt_flip_after', model('R7').phase.label); out('pt_flip_republish', versions('R7') - vf);
+tasksFile('pt-b', { first_created_at: iso(T - 80e3), tasks: [{ id: '2', subject: 'Flip me', status: 'completed', started_seq: 1 }] });
+settle(); out('pt_flip_done', J(model('R7').phase));
+// long subject: cut at 40 chars with an ellipsis
+tasksFile('pt-b', { first_created_at: iso(T - 80e3), tasks: [ip('2', 'abcdefghij'.repeat(6), 1)] });
+settle(); out('pt_long_label', model('R7').phase.label); out('pt_long_len', model('R7').phase.label.length);
+
 // daily refresh: the whole-days age of an open decision is in the change signature
 // isolate the decision age: nothing else may change with the day (tasks files and markers are time-windowed too)
 fs.rmSync(path.join(live, 'tasks'), { recursive: true, force: true }); fs.rmSync(sessDir, { recursive: true, force: true }); fs.mkdirSync(sessDir, { recursive: true });
@@ -314,6 +362,26 @@ eq 0 "$(dv sig_idle_no_republish)" "signature: no input change, no republish"
 eq 1 "$(dv sig_day_republish)" "signature: a day passing refreshes the open decision's age (已等 N 天) once"
 eq 'campaign:IMPLEMENTING' "$(dv ph_campaign_beats_marker)" "phase: campaign live phase beats the marker phase"
 
+# item 7 PHASE-TASK
+eq '{"code":"1","label":"做：beta","source":"task"}' "$(dv pt_unbound_scope)" "phase task: the unbound scope shows its session's in-progress task"
+eq null "$(dv pt_none_in_progress)" "phase task: nothing in progress -> phase stays null"
+eq '{"code":"2","label":"做：Write the parser","source":"task"}' "$(dv pt_shown)" "phase task: the task in progress reaches model.json (source task, label 做：<subject>)"
+eq yes "$(dv pt_source_row)" "phase task: a session_task_phase source row is recorded"
+eq null "$(dv pt_other_scope_untouched)" "phase task: another root's scope does not borrow it"
+eq 3 "$(dv pt_two_same_session_newest)" "phase task: two in progress in one session -> highest started_seq"
+eq '做：Newer session task' "$(dv pt_two_sessions_newest)" "phase task: two sessions on one root -> the most recently updated session"
+eq '做：Wire the watcher' "$(dv pt_foreign_ignored_R7)" "phase task negative: another project's in-progress task is never used"
+eq '做：OTHER-ROOT-TASK' "$(dv pt_other_root_own_scope)" "phase task: the other root's task shows only in its own scope"
+eq session:design "$(dv pt_marker_beats_task)" "phase task: marker phase beats the task"
+eq campaign:IMPLEMENTING "$(dv pt_campaign_beats_all)" "phase task: campaign live phase beats marker and task"
+eq null "$(dv pt_flip_before)" "phase task tick: pending task -> no phase"
+eq 0 "$(dv pt_flip_idle_no_republish)" "phase task tick: no change -> no republish"
+eq '做：Flip me' "$(dv pt_flip_after)" "phase task tick: marking the task in_progress republishes model.json with the phase"
+eq 1 "$(dv pt_flip_republish)" "phase task tick: exactly one republish for the status change (tasks digest in the signature)"
+eq null "$(dv pt_flip_done)" "phase task tick: completing the task removes the phase"
+eq '做：abcdefghijabcdefghijabcdefghijabcdefghi…' "$(dv pt_long_label)" "phase task: long subject cut to 40 chars with an ellipsis"
+eq 42 "$(dv pt_long_len)" "phase task: label = 做： + 40 chars (39 + ellipsis)"
+
 # ---- C. pure units ------------------------------------------------------------------------------------------
 cat > "$SB/units.js" <<'JS'
 const fs = require('fs'); const path = require('path'); const os = require('os');
@@ -387,6 +455,15 @@ out('u_phase_campaign_receipt_over_marker', JSON.stringify(mk({ taskReceipt: tas
 out('u_phase_marker_over_deliverable', JSON.stringify(mk({ progressReceipt: prog, markerPhase: { phase: 'mk' } })));
 out('u_phase_deliverable_when_no_marker', JSON.stringify(mk({ progressReceipt: prog })));
 out('u_phase_invalid_marker_ignored', JSON.stringify(mk({ markerPhase: { phase: 5 } })));
+// PHASE-TASK precedence at the renderer: marker > task > deliverable
+const tp = { id: '7', subject: 'Task subject' };
+out('u_phase_task_over_deliverable', JSON.stringify(mk({ progressReceipt: prog, taskPhase: tp })));
+out('u_phase_marker_over_task', JSON.stringify(mk({ progressReceipt: prog, markerPhase: { phase: 'mk' }, taskPhase: tp })));
+out('u_phase_campaign_over_task', JSON.stringify(mk({ taskReceipt: task, taskPhase: tp })));
+out('u_phase_task_alone', JSON.stringify(mk({ taskPhase: tp })));
+out('u_phase_task_blank_subject', JSON.stringify(mk({ progressReceipt: prog, taskPhase: { id: '7', subject: '   ' } })));
+out('u_phase_task_trim_exact40', mk({ taskPhase: { id: '1', subject: 'x'.repeat(40) } }).label.length);
+out('u_phase_task_trim_41', mk({ taskPhase: { id: '1', subject: 'x'.repeat(41) } }).label);
 fs.rmSync(tmp, { recursive: true, force: true });
 JS
 UN="$(wenv "$NODE" "$SB/units.js" "$REPO_ROOT" 2> "$SB/units.err" < /dev/null)"
@@ -412,6 +489,13 @@ eq '{"code":"TERMINAL_READY","label":"收尾","source":"campaign"}' "$(uv u_phas
 eq '{"code":"mk","label":"mk","source":"session"}' "$(uv u_phase_marker_over_deliverable)" "phase precedence: marker over the first open deliverable"
 eq '{"code":"d9","label":"做 d9","source":"deliverable"}' "$(uv u_phase_deliverable_when_no_marker)" "phase precedence: deliverable when no marker"
 eq null "$(uv u_phase_invalid_marker_ignored)" "phase: a non-string marker phase is ignored"
+eq '{"code":"7","label":"做：Task subject","source":"task"}' "$(uv u_phase_task_over_deliverable)" "phase precedence: task in progress over the first open deliverable"
+eq '{"code":"mk","label":"mk","source":"session"}' "$(uv u_phase_marker_over_task)" "phase precedence: marker over the task"
+eq '{"code":"TERMINAL_READY","label":"收尾","source":"campaign"}' "$(uv u_phase_campaign_over_task)" "phase precedence: campaign receipt over the task"
+eq '{"code":"7","label":"做：Task subject","source":"task"}' "$(uv u_phase_task_alone)" "phase: task alone"
+eq '{"code":"d9","label":"做 d9","source":"deliverable"}' "$(uv u_phase_task_blank_subject)" "phase: a blank task subject is ignored (falls to the deliverable)"
+eq 42 "$(uv u_phase_task_trim_exact40)" "phase: a 40-char subject is not cut"
+eq "做：$(printf 'x%.0s' $(seq 39))…" "$(uv u_phase_task_trim_41)" "phase: a 41-char subject is cut to 39 + ellipsis"
 eq 'true/true' "$(uv i_real_attention)" "INT2 attention: real hooks.json wiring -> installed"
 eq 'true/true' "$(uv i_no_hosts_attention)" "INT2 attention: host wiring removed, own entries remain -> still installed"
 eq 'true/true' "$(uv i_no_own_attention)" "INT2 attention: own entries removed, hosts remain -> installed (the PERF layout)"

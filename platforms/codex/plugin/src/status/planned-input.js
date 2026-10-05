@@ -28,10 +28,12 @@ function fromReceipt(receipt) {
   return value.length ? { value, sha256: digest(value), label: 'controller_progress_receipt deliverables' } : null;
 }
 
-function fromTasks({ liveBase, key, root, markers, nowMs }) {
+// The sessions of this scope: same project_key, updated within WINDOW_MS, unexpired-marker root equal to the scope root
+// (no unexpired marker = root null). Shared by the planned list and the task-in-progress phase (PHASE-TASK).
+function scopeSessions({ liveBase, key, root, markers, nowMs }) {
   const dir = path.join(liveBase, 'tasks');
   let names = [];
-  try { names = fs.readdirSync(dir).filter((n) => n.endsWith('.json')).sort(); } catch (_error) { return null; }
+  try { names = fs.readdirSync(dir).filter((n) => n.endsWith('.json')).sort(); } catch (_error) { return []; }
   // session id -> marker root (unexpired markers of this project only; the file name is the sanitized session id)
   const markerRoot = new Map();
   for (const m of markers || []) if (m && typeof m.session_id === 'string') markerRoot.set(m.session_id.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64), typeof m.root_run_id === 'string' ? m.root_run_id : null);
@@ -47,9 +49,14 @@ function fromTasks({ liveBase, key, root, markers, nowMs }) {
     const sessionRoot = markerRoot.has(norm) ? markerRoot.get(norm) : null;
     if ((sessionRoot || null) !== (root || null)) continue;
     const created = Date.parse(v.first_created_at);
-    sessions.push({ sid, created: Number.isFinite(created) ? created : Infinity, tasks: v.tasks });
+    sessions.push({ sid, created: Number.isFinite(created) ? created : Infinity, updated, tasks: v.tasks });
   }
   sessions.sort((a, b) => a.created - b.created || a.sid.localeCompare(b.sid));
+  return sessions;
+}
+
+function fromTasks(args) {
+  const sessions = scopeSessions(args);
   const value = [];
   for (const s of sessions) {
     for (const t of s.tasks) {
@@ -59,6 +66,26 @@ function fromTasks({ liveBase, key, root, markers, nowMs }) {
     }
   }
   return value.length ? { value, sha256: digest(value), label: `session-tasks (${sessions.length} session${sessions.length === 1 ? '' : 's'})` } : null;
+}
+
+// The task in progress of this scope (PHASE-TASK): status in_progress with a string subject. Several -> the most recently
+// started: newest session file (updated_at) first, then the highest started_seq inside it (tasks carry no timestamp of their own).
+// Returns { id, subject, session_id } or null.
+function readInProgressTask(args) {
+  try {
+    let best = null;
+    for (const s of scopeSessions(args)) {
+      s.tasks.forEach((t, i) => {
+        if (!isObject(t) || t.status !== 'in_progress' || t.id == null || typeof t.subject !== 'string' || !t.subject.trim()) return;
+        const seq = Number.isFinite(t.started_seq) ? t.started_seq : -Infinity;
+        const better = !best || s.updated > best.updated || (s.updated === best.updated && (seq > best.seq || (seq === best.seq && i > best.i)));
+        if (better) best = { updated: s.updated, seq, i, id: String(t.id), subject: t.subject, session_id: s.sid };
+      });
+    }
+    return best ? { id: best.id, subject: best.subject, session_id: best.session_id } : null;
+  } catch (_error) {
+    return null;
+  }
 }
 
 function readPlanned({ liveBase, key, root, progressReceipt, markers, nowMs }) {
@@ -73,4 +100,4 @@ function readPlanned({ liveBase, key, root, progressReceipt, markers, nowMs }) {
   }
 }
 
-module.exports = { readPlanned, WINDOW_MS };
+module.exports = { readPlanned, readInProgressTask, WINDOW_MS };

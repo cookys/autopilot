@@ -99,6 +99,7 @@ function buildProgress(receipt, root) {
 //   1. a VALID campaign entry of the task_status_receipt (`evidence.campaigns[].phase`; the receipt only validates TERMINAL campaigns,
 //      so a campaign phase here is always a terminal one) -> source 'campaign', zh-TW label;
 //   1b. (W2b-m) else the phase a session declared on its session-mode marker (`markerPhase.phase`) -> source 'session', label = the name;
+//   1c. (PHASE-TASK) else the session task in progress (`taskPhase` {id, subject}) -> source 'task', label `做：<subject>` (subject cut to 40 chars, ellipsis);
 //   2. else the first still-open deliverable of the controller_progress_receipt -> source 'deliverable', `做 <id>`;
 //   3. else null. A live (non-terminal) campaign state is not reachable from here: no root_run_id -> campaign id mapping exists.
 const PHASE_LABEL = {
@@ -106,7 +107,11 @@ const PHASE_LABEL = {
   AWAITING_DISPOSITION: '等待處置', REPAIRING: '修復', TERMINAL_READY: '收尾', TERMINAL_FOLLOW_UP: '收尾（有後續）',
   TERMINAL_STOP: '已停止', BOUNDARY_REJECTED: '邊界被拒', AWAITING_CONVERGENCE_ADJUDICATION: '等待收斂裁定',
 };
-function buildPhase(task, progress, markerPhase) {
+function taskPhaseLabel(subject) {
+  const s = subject.replace(/\s+/g, ' ').trim();
+  return `做：${s.length > 40 ? `${s.slice(0, 39)}…` : s}`;
+}
+function buildPhase(task, progress, markerPhase, taskPhase) {
   if (progress && typeof progress.live_phase === 'string' && progress.live_phase) {
     const code = progress.live_phase;
     const upper = code.toUpperCase();
@@ -119,6 +124,9 @@ function buildPhase(task, progress, markerPhase) {
   }
   if (isObject(markerPhase) && typeof markerPhase.phase === 'string' && markerPhase.phase) {
     return { code: markerPhase.phase, label: markerPhase.phase, source: 'session' };
+  }
+  if (isObject(taskPhase) && taskPhase.id != null && typeof taskPhase.subject === 'string' && taskPhase.subject.trim()) {
+    return { code: String(taskPhase.id), label: taskPhaseLabel(taskPhase.subject), source: 'task' };
   }
   const open = progress && Array.isArray(progress.per_deliverable) ? progress.per_deliverable.find((d) => d.state === 'open') : null;
   if (open && typeof open.id === 'string' && open.id) return { code: open.id, label: `做 ${open.id}`, source: 'deliverable' };
@@ -234,7 +242,7 @@ function buildJobModel(inputs) {
       failed_predicates: Array.isArray(task.failed_predicates) ? task.failed_predicates.map(String) : [],
     } : null,
     conclusion, needs_decision: Boolean(decision), decision, wired,
-    phase: buildPhase(task, progress, o.markerPhase), progress, planned, compare: o.compare || [], dispatch, gates,
+    phase: buildPhase(task, progress, o.markerPhase, o.taskPhase), progress, planned, compare: o.compare || [], dispatch, gates,
     scope: envelope && isObject(envelope.scope) ? {
       project_key: envelope.scope.project_key || null, repo_identity: envelope.scope.repo_identity || null,
     } : null,
@@ -841,7 +849,7 @@ function assemble(o) {
     now: o.now, commit,
     taskReceipt: o.task ? o.task.value : null, progressReceipt: o.progress ? o.progress.value : null,
     reviewReceipts, compare: o.compare || [], compareProvided: o.compareProvided === true, decision: o.decision ? o.decision.value : null, planned: o.planned ? o.planned.value : null,
-    markerPhase: o.markerPhase || null, sourcesManifest: o.sourcesManifest || null,
+    markerPhase: o.markerPhase || null, taskPhase: o.taskPhase || null, sourcesManifest: o.sourcesManifest || null,
     isAncestor: gitIsAncestor(o.repo), sources,
   });
   return { model, reviewReceipts };

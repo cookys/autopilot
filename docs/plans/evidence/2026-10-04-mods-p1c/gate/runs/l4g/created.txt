@@ -1,0 +1,6 @@
+session id: e628cb02-2ce6-4763-84ad-6d21249a6bdd (session-mode marker e628cb02-....json)
+watcher pid at session start: 2831473 (status runs --watch --project 51de403da82a23f0), still alive at end
+foreman 1 agent a5df2fb59a3c9a72d (worktree agent-a5df..., branch worktree-agent-a5df2fb59a3c9a72d, commit 4b3d316, merge 62cfec0 local only; sandbox reset to 490bbea after)
+foreman 2 agent aea2d90a1607067b4 (TaskStop'd; no commit; worktree/branch already gone at end)
+agent stamps: <live>/agents/e628cb02-.../ (15 files; many agent_type null with immediate ended_at)
+capture dirs: runs/l4g-{started,stall,foreman-dialog,subdialog,done,taskstop,taskstop-late}

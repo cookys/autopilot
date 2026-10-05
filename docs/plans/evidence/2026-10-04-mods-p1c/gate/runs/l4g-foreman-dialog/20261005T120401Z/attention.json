@@ -1,0 +1,21 @@
+{
+  "schema": "autopilot.attention/1",
+  "session_id": "e628cb02-2ce6-4763-84ad-6d21249a6bdd",
+  "project_key": "51de403da82a23f0",
+  "kind": "permission",
+  "tool_name": "Bash",
+  "summary": "Bash: echo \"test line\" >> README.md && git add README.md && git commit -q -m \"docs: add test line to README Co-Authored…",
+  "since": "2026-10-05T12:03:33.632Z",
+  "updated_at": "2026-10-05T12:03:39.743Z",
+  "pending": [
+    {
+      "agent_id": "a5df2fb59a3c9a72d",
+      "tool_name": "Bash",
+      "input_digest": "43af49ab28fae19e",
+      "kind": "permission",
+      "summary": "Bash: echo \"test line\" >> README.md && git add README.md && git commit -q -m \"docs: add test line to README Co-Authored…",
+      "since": "2026-10-05T12:03:33.632Z",
+      "updated_at": "2026-10-05T12:03:33.632Z"
+    }
+  ]
+}

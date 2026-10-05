@@ -1,0 +1,30 @@
+{
+  "schema": "autopilot.attention/1",
+  "session_id": "e628cb02-2ce6-4763-84ad-6d21249a6bdd",
+  "project_key": "51de403da82a23f0",
+  "kind": "permission",
+  "tool_name": "Bash",
+  "summary": "Bash: git log --format='%H%n%B---' develop..worktree-agent-a5df2fb59a3c9a72d; git show 4b3d316 | cat -A | head -50; git…",
+  "since": "2026-10-05T12:04:16.517Z",
+  "updated_at": "2026-10-05T12:04:23.941Z",
+  "pending": [
+    {
+      "agent_id": "a4619cae5ff0ca22e",
+      "tool_name": "Bash",
+      "input_digest": "a89a045bb5f7a700",
+      "kind": "permission",
+      "summary": "Bash: git log --format='%H%n%B---' develop..worktree-agent-a5df2fb59a3c9a72d; git show 4b3d316 | cat -A | head -50; git…",
+      "since": "2026-10-05T12:04:16.517Z",
+      "updated_at": "2026-10-05T12:04:16.517Z"
+    },
+    {
+      "agent_id": "ae289f5776ba8dfe8",
+      "tool_name": "Bash",
+      "input_digest": "b3229b9020afba6d",
+      "kind": "permission",
+      "summary": "Bash: B=worktree-agent-a5df2fb59a3c9a72d && git rev-parse develop $B && echo MB=$(git merge-base develop $B) && git mer…",
+      "since": "2026-10-05T12:04:17.851Z",
+      "updated_at": "2026-10-05T12:04:17.851Z"
+    }
+  ]
+}

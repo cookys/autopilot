@@ -1,0 +1,50 @@
+                                                                                                              │                                                                                       ✕
+  這個回合先結束，等通知，不輪詢。通知到了之後，我會做 qc 審查、merge-back 和 worktree 清理，再回報結果。     │session $0.46 · host $492.05 · ctx 5%
+                                                                                                              │要你決定
+✻ Waiting for 1 background agent to finish                                                                    │等你批准：Bash: git log --format='%H%n%B---' develop..worktree-agent-a5df2fb59a3c9a72d; …
+                                                                                                              │dispatch · execution status, not progress (執行狀態，不是進度)
+● Agent "Foreman: README test line" finished · 5m 39s                                                         │no runs in this scope
+                                                                                                              │gates · review receipts of this job
+● 3 background agents launched (↓ to manage)                                                                  │no review receipt
+   ├ qc reviewer 1 (correctness)                                                                              │任務工具未開 · 設 CLAUDE_CODE_ENABLE_TODO_TOOLS=1 後才會記錄任務
+   ├ qc reviewer 2 (commit hygiene)                                                                           │工頭活動（依 session 綁定：同一 session 的多個工作會看到同一批）
+   └ qc reviewer 3 (merge safety)                                                                             │a3a619d7fc457792f · — · 13s 前
+                                                                                                              │a7885180489a2d3bb · — · 15s 前
+● 工頭已經完成。它先跑完 gate-wait.sh（執行到 tick 30，Bash 正常返回，但輸出沒有明確的 exit                   │qc reviewer 3 (merge safety) · qc reviewer 3 (merge safety) · 21s 前
+  code，所以「正常結束」是從返回推斷的）。接著在 README 加了一行 test line，commit 為 4b3d316，分支是         │qc reviewer 1 (correctness) · qc reviewer 1 (correctness) · 21s 前
+  worktree-agent-a5df2fb59a3c9a72d。                                                                          │qc reviewer 2 (commit hygiene) · qc reviewer 2 (commit hygiene) · 22s 前
+                                                                                                              │Foreman: README test line · Waiting on gate-wait.sh · 32s 前
+  現在 qc 由 3 位審查員把關，我沒有自己讀 diff。他們各看一個角度，並行跑在背景：                              │af9e4f93d43337a68 · — · 35s 前
+  - 正確性與範圍                                                                                              │a12a2d615c651bf23 · — · 6m 前
+  - commit 訊息與檔案衛生                                                                                     │open the review page
+  - 併入 develop 的安全性                                                                                     │snapshot published 2026-10-05T12:04:29.451Z · session cost as of 2026-10-05T12:04:29.451Z
+                                                                                                              │· host cost as of 2026-10-05T12:04:29.451Z
+  我會等他們的通知，不輪詢。三位都通過後，我才把分支併入 develop 並清掉                                       │
+  worktree；有人不通過就先修再整合。之前起的 900 秒死人開關還在跑，等一下醒來是正常的，不代表出事。           │
+                                                                                                              │
+✻ Waiting for 3 background agents to finish                                                                   │
+                                                                                                              │
+● Agent "qc reviewer 1 (correctness)" finished · 6s                                                           │
+                                                                                                              │
+● 審查員 1 通過：這次 diff 只有 README.md:4 多一行 test line，沒有其他檔案或多餘變更。審查員 2（commit        │
+  衛生）和 3（併入安全性）還沒回報，我繼續等，三位都通過才做 merge-back 和 worktree 清理。                    │
+                                                                                                              │
+✻ Waiting for 2 background agents to finish                                                                   │
+                                                                                                              │
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────│
+ Bash command · from the autopilot:reviewer agent                                                      1 of 2 │
+ Tip: auto mode handles these prompts for you — choose "switch to auto mode" below                            │
+ Run shell command                                                                                            │
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌│
+ │ git log --format='%H%n%B---' develop..worktree-agent-a5df2fb59a3c9a72d; git show 4b3d316 | cat -A | head   │
+ │ -50; git diff develop...worktree-agent-a5df2fb59a3c9a72d --stat; git diff --check develop                  │
+ │ worktree-agent-a5df2fb59a3c9a72d; echo rc=$?                                                               │
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌│
+ A variable in this command can't be checked before it runs                                                   │
+                                                                                                              │
+ Do you want to proceed?                                                                                      │
+ ❯ 1. Yes                                                                                                     │
+   2. Yes, and switch to auto mode · auto mode handles these prompts for you                                  │
+   3. No                                                                                                      │
+                                                                                                              │
+ Esc to cancel · Tab to amend                                                                                 │

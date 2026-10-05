@@ -1,0 +1,120 @@
+{
+  "schema": "autopilot.foreman-activity/1",
+  "scope": {
+    "project_key": "51de403da82a23f0",
+    "repo_identity": "git-common-dir:/home/cookys/projects/gate-sandbox/.git",
+    "root_run_id": "job-1791201480-42591043"
+  },
+  "binding": "session",
+  "stall_s": 600,
+  "agents": [
+    {
+      "agent_id": "a3a619d7fc457792f",
+      "description": null,
+      "label": null,
+      "last_activity_at": "2026-10-05T12:04:23.080Z",
+      "age_s": 6,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-05T12:04:23.080Z",
+      "source": "stamp",
+      "session_id": "e628cb02-2ce6-4763-84ad-6d21249a6bdd",
+      "binding": "session"
+    },
+    {
+      "agent_id": "a7885180489a2d3bb",
+      "description": null,
+      "label": null,
+      "last_activity_at": "2026-10-05T12:04:20.987Z",
+      "age_s": 8,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-05T12:04:20.987Z",
+      "source": "stamp",
+      "session_id": "e628cb02-2ce6-4763-84ad-6d21249a6bdd",
+      "binding": "session"
+    },
+    {
+      "agent_id": "ae289f5776ba8dfe8",
+      "description": "qc reviewer 3 (merge safety)",
+      "label": "qc reviewer 3 (merge safety)",
+      "last_activity_at": "2026-10-05T12:04:15.290Z",
+      "age_s": 14,
+      "stale": false,
+      "stamped": true,
+      "ended_at": null,
+      "source": "stamp",
+      "session_id": "e628cb02-2ce6-4763-84ad-6d21249a6bdd",
+      "binding": "session"
+    },
+    {
+      "agent_id": "a57c6a9613f77ff3c",
+      "description": "qc reviewer 1 (correctness)",
+      "label": "qc reviewer 1 (correctness)",
+      "last_activity_at": "2026-10-05T12:04:14.585Z",
+      "age_s": 15,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-05T12:04:19.010Z",
+      "source": "stamp",
+      "session_id": "e628cb02-2ce6-4763-84ad-6d21249a6bdd",
+      "binding": "session"
+    },
+    {
+      "agent_id": "a4619cae5ff0ca22e",
+      "description": "qc reviewer 2 (commit hygiene)",
+      "label": "qc reviewer 2 (commit hygiene)",
+      "last_activity_at": "2026-10-05T12:04:13.987Z",
+      "age_s": 15,
+      "stale": false,
+      "stamped": true,
+      "ended_at": null,
+      "source": "stamp",
+      "session_id": "e628cb02-2ce6-4763-84ad-6d21249a6bdd",
+      "binding": "session"
+    },
+    {
+      "agent_id": "a5df2fb59a3c9a72d",
+      "description": "Foreman: README test line",
+      "label": "Waiting on gate-wait.sh",
+      "last_activity_at": "2026-10-05T12:04:04.361Z",
+      "age_s": 25,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-05T12:04:06.787Z",
+      "source": "stamp",
+      "session_id": "e628cb02-2ce6-4763-84ad-6d21249a6bdd",
+      "binding": "session"
+    },
+    {
+      "agent_id": "af9e4f93d43337a68",
+      "description": null,
+      "label": null,
+      "last_activity_at": "2026-10-05T12:04:01.018Z",
+      "age_s": 28,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-05T12:04:01.018Z",
+      "source": "stamp",
+      "session_id": "e628cb02-2ce6-4763-84ad-6d21249a6bdd",
+      "binding": "session"
+    },
+    {
+      "agent_id": "a12a2d615c651bf23",
+      "description": null,
+      "label": null,
+      "last_activity_at": "2026-10-05T11:58:32.836Z",
+      "age_s": 357,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-05T11:58:32.836Z",
+      "source": "stamp",
+      "session_id": "e628cb02-2ce6-4763-84ad-6d21249a6bdd",
+      "binding": "session"
+    }
+  ],
+  "stage": null,
+  "stage_source": null,
+  "stage_at": null,
+  "stage_age_s": null
+}

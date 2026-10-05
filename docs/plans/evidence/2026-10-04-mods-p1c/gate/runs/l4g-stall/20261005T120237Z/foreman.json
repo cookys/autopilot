@@ -1,0 +1,42 @@
+{
+  "schema": "autopilot.foreman-activity/1",
+  "scope": {
+    "project_key": "51de403da82a23f0",
+    "repo_identity": "git-common-dir:/home/cookys/projects/gate-sandbox/.git",
+    "root_run_id": "job-1791201480-42591043"
+  },
+  "binding": "session",
+  "stall_s": 600,
+  "agents": [
+    {
+      "agent_id": "a12a2d615c651bf23",
+      "description": null,
+      "label": null,
+      "last_activity_at": "2026-10-05T11:58:32.836Z",
+      "age_s": 196,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-05T11:58:32.836Z",
+      "source": "stamp",
+      "session_id": "e628cb02-2ce6-4763-84ad-6d21249a6bdd",
+      "binding": "session"
+    },
+    {
+      "agent_id": "a5df2fb59a3c9a72d",
+      "description": "Foreman: README test line",
+      "label": "Foreman: README test line",
+      "last_activity_at": "2026-10-05T11:58:27.880Z",
+      "age_s": 201,
+      "stale": false,
+      "stamped": true,
+      "ended_at": null,
+      "source": "stamp",
+      "session_id": "e628cb02-2ce6-4763-84ad-6d21249a6bdd",
+      "binding": "session"
+    }
+  ],
+  "stage": null,
+  "stage_source": null,
+  "stage_at": null,
+  "stage_age_s": null
+}

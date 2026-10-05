@@ -6,6 +6,7 @@
 # Negative control: `.git/autopilot` is a regular file so the ledger write fails; the engine must
 # still adjudicate and dispatch the repair.
 # RED (before the closure was wrapped/driven): see run-w/w1h/red2.txt.
+# W4 repair (root stamp): RED before the fix = 10 passed, 3 failed (campaign root, job root leak, sidecar count).
 TEST_NAME="decision-ledger-engine-adjudicate"
 . "$(dirname "$0")/lib.sh"
 unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
@@ -188,7 +189,7 @@ NODE
   local OUT1 OUT2
   OUT1="$(node "$DRIVER" "$REPO_ROOT" "$REPO" "$BASE" "$T" 1 < /dev/null 2>&1)"
   if [ "$neg" = 1 ]; then mkdir -p "$REPO/.git/autopilot"; rm -rf "$REPO/.git/autopilot/ledger"; printf 'blocked\n' > "$REPO/.git/autopilot/ledger"; fi
-  OUT2="$(AUTOPILOT_ROOT_RUN_ID=root-w1h node "$DRIVER" "$REPO_ROOT" "$REPO" "$BASE" "$T" 2 < /dev/null 2>&1)"
+  OUT2="$(AUTOPILOT_ROOT_RUN_ID=job-minted-w4 node "$DRIVER" "$REPO_ROOT" "$REPO" "$BASE" "$T" 2 < /dev/null 2>&1)"
   echo "$OUT1"; echo "$OUT2"
   assert_contains "$OUT1" "e1_phase=AWAITING_DISPOSITION" "$name: first pass parks for disposition"
   assert_contains "$OUT2" "e2_repair_dispatched=true" "$name: adjudication completed and the repair was dispatched"
@@ -198,7 +199,19 @@ scenario pos 0
 assert_file_exists "$LEDGER" "engine adjudicate wrote the default per-repo ledger"
 assert_eq "$(grep -c '"kind":"decision"' "$LEDGER" 2>/dev/null)" "1" "exactly one decision row for the single adjudicated finding"
 assert_contains "$(cat "$LEDGER" 2>/dev/null)" '"decision_id":"adj-' "row has an adjudication decision_id"
-assert_contains "$(cat "$LEDGER" 2>/dev/null)" '"root_run_id":"root-w1h"' "row carries the root run"
+# W4 repair: the session/env root (here a minted job root) must NOT win; the campaign root does.
+CAMP_ROOT="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).campaignId)' "$TEST_TMP/pos/sidecar.json")"
+assert_contains "$CAMP_ROOT" "campaign" "fixture campaign id is readable (guards the assertion below)"
+assert_contains "$(cat "$LEDGER" 2>/dev/null)" "\"root_run_id\":\"$CAMP_ROOT\"" "row carries the campaign root, not the session job root"
+assert_eq "$(grep -c 'job-minted-w4' "$LEDGER" 2>/dev/null)" "0" "session job root never reaches the row"
+SIDE_OUT="$(node -e '
+const fs=require("fs");const {buildDecisionsSidecar}=require(process.argv[1]+"/src/status/decisions-sidecar.js");
+const rows=fs.readFileSync(process.argv[2],"utf8").split("\n").filter(Boolean).map(JSON.parse);
+const id=rows[0].repo_identity;
+const s=(root)=>buildDecisionsSidecar({scope:{project_key:"k",repo_identity:id,root_run_id:root},ledgers:[{source:"ledger_default",rows}],runs:[]}).count;
+console.log("campaign_scope="+s(process.argv[3])+" job_scope="+s("job-minted-w4"));
+' "$REPO_ROOT" "$LEDGER" "$CAMP_ROOT")"
+assert_contains "$SIDE_OUT" "campaign_scope=1 job_scope=0" "decisions sidecar for the campaign scope counts the engine row"
 assert_contains "$(cat "$LEDGER" 2>/dev/null)" '"refs":["cap-1"' "row refs the finding"
 scenario neg 1
 assert_file_exists "$LEDGER_DIR_AS_FILE" "negative control: ledger path stayed an unwritable file (write really failed)"

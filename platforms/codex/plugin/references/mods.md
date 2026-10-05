@@ -33,8 +33,8 @@ S5a, S5b, S7, S8; `README.md` there is the verdict table). A mod is CC-only; non
   `session-mode.js set` and by the watcher start). The mod knows only `$HOME`; every other path comes from here.
 - **Resolution order** for project and root: (1) the session marker `<autopilot_home>/session-mode/<sid>.json`
   (`project_key`, `root_run_id`, `expires_at`; `sid` from `$.session.id()`). The marker is the per-session record:
-  `level` is `l3`-`l6` for an orchestrator session and `null` for a plain session (no orchestrator mode, `root_run_id`
-  null); every mode gate reads `level: null` exactly like an absent marker; (2) else longest prefix of the real
+  `level` is `l3`-`l6` for an orchestrator session and `null` for a plain session (no orchestrator mode; it still carries a minted
+  `root_run_id` `job-<ts>-<rand>` (PLAINROOT), and a campaign run stamps its campaign root instead); every mode gate reads `level: null` exactly like an absent marker; (2) else longest prefix of the real
   cwd against `<live_base>/runs/paths/*.json`; (3) else none (the band shows no data, it never borrows another
   session). `project_key` = first 16 hex of sha256(`repo_identity`), computed only in
   `src/status/project-key.js`.

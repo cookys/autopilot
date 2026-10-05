@@ -1924,6 +1924,7 @@ function recordAdjudicationProxyDecisions({
   repairGeneration = null,
   cwd,
   env = process.env,
+  rootRunId = null,
 }) {
   if (env.AUTOPILOT_PROXY_DECISION_LEDGER === '0') return 0;
   if (!adjudication || adjudication.registry_complete !== true) return 0;
@@ -1956,6 +1957,10 @@ function recordAdjudicationProxyDecisions({
         rationale,
         reversibility: 'two-way',
         refs: [finding.id, authority.review_digest].filter((ref) => typeof ref === 'string'),
+        // The campaign/mission root wins over the session marker's root (a plain session carries a
+        // minted job-<ts>-<rand>); the decisions sidecar filters by exact root. Caller value wins in
+        // decision-ledger.js, so only an unknown root falls back to the stamp.
+        ...(typeof rootRunId === 'string' && rootRunId ? { root_run_id: rootRunId } : {}),
       };
       try {
         const child = spawnSync(process.execPath, [
@@ -8734,6 +8739,7 @@ class AutopilotEngine {
             repairGeneration,
             cwd: loopCwd,
             env: process.env,
+            rootRunId: campaignControl.root_run_id || campaignControl.campaign_id,
           });
         } catch (error) {
           // Telemetry only: a failed proxy-decision append never blocks adjudication.

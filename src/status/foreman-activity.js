@@ -14,7 +14,7 @@
 //                      `<git-common-dir>/autopilot/dispatch-runs/<root>.ledger.jsonl`: the latest row with run_id == root
 //                      -> stage + max(heartbeat_ts, ts). Same age-only rule as watch-foreman.js.
 //   (c) stamp          <live>/agents/<sid>/<agent_id>.json  (autopilot.agent-activity/1, the PostToolUse stamp written by the
-//                      PERF/STAMP hand): last_tool_at / last_tool_name. Tool-call age only, never a stage. A SubagentStop
+//                      PERF/STAMP hand): last_tool_at / last_tool_name. Tool-call age only, never a stage. A SubagentStart writes the first stamp (last_tool_name null), a SubagentStop
 //                      adds `ended_at` (mods P1W FOREMAN); the row carries `stamped: true` and `ended_at` (iso | null) so a reader
 //                      can tell "still running, quiet for N s" from "done". Only stamp rows can say ended.
 // Binding: (a) and (c) are per SESSION (sessions holding an unexpired marker of THIS project_key (re-checked here, W3a) whose root_run_id equals the
@@ -96,22 +96,21 @@ function fromStamps(live, sid, nowMs) {
   return out;
 }
 
-// One agent_id seen by both (a) and (b-stamp): keep the newer activity, fill description/label from whichever has them.
+// One agent_id seen by both (a) and (c): the STAMP owns liveness (last_activity_at, age_s, stale, stamped, ended_at, source) because
+// context_tasks `written_at` is the subagentStatusLine rewrite time (age ~1 s for as long as the agent exists, mods P1W FOREMAN2);
+// the tasks row contributes description / label only. A tasks-only row keeps its own activity time.
 function mergeAgents(rows) {
   const byId = new Map();
   for (const r of rows) {
     const k = `${r.session_id}\u0000${r.agent_id}`;
     const cur = byId.get(k);
     if (!cur) { byId.set(k, { ...r }); continue; }
-    const newer = Date.parse(r.last_activity_at) > Date.parse(cur.last_activity_at) ? r : cur;
-    const older = newer === r ? cur : r;
-    const stamp = r.stamped ? r : cur.stamped ? cur : null;
+    const owner = r.source === 'stamp' ? r : cur.source === 'stamp' ? cur : (Date.parse(r.last_activity_at) > Date.parse(cur.last_activity_at) ? r : cur);
+    const other = owner === r ? cur : r;
     byId.set(k, {
-      ...newer,
-      ...(stamp ? { stamped: true, ended_at: (r.ended_at || cur.ended_at) || null } : {}),
-      description: newer.description || older.description,
-      label: newer.label || older.label,
-      source: newer.source,
+      ...owner,
+      description: owner.source === 'stamp' ? (other.description || owner.description) : (owner.description || other.description),
+      label: owner.source === 'stamp' ? (other.label || owner.label) : (owner.label || other.label),
     });
   }
   return [...byId.values()];

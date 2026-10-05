@@ -243,6 +243,17 @@
         ]
       }
     ],
+    "SubagentStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/awaiting-owner.js"
+          }
+        ]
+      }
+    ],
     "SubagentStop": [
       {
         "matcher": "",

@@ -5,6 +5,7 @@
 // Isolation: HOME, AUTOPILOT_LIVE_DIR (/dev/shm tmpdir), AUTOPILOT_SESSION_MODE_DIR, AUTOPILOT_DISPATCH_RUNS_DIR,
 // AUTOPILOT_COSTS_FILE and every fixture repo live under mkdtemp dirs; nothing touches the real stores.
 //
+// FOREMAN2 RED (before the merge change): F11 (rewritten), F12, F13 fail, 19 pass (foreman3-red-merge.txt).
 // RED at 8666aba4 + the two new modules + schemas, runs-watch.js hookups absent: 2 passed, 14 failed (D5 and D7 are
 // module-level and pass without the hookup), e.g.
 //   FAIL D1 default ledger rows of the root reach <scope>.decisions.json (null sidecar: Cannot read properties of null)
@@ -413,18 +414,74 @@ test('F10 FOREMAN: stamp rows carry stamped + ended_at (null while running); a t
   } finally { c.cleanup(); }
 });
 
-test('F11 FOREMAN: a tasks row newer than an ended stamp of the same agent keeps the end (merge propagates ended_at)', () => {
+test('F11 FOREMAN2: a tasks row newer than an ended stamp of the same agent does NOT outrank the stamp: stamp owns liveness, tasks gives description/label only', () => {
   const c = mk();
   try {
     marker(c, 's1');
     stamp(c, 's1', 'ag1', NOW - 20000, { ended_at: iso(NOW - 15000) });
-    tasksFile(c, 's1', NOW - 1000, [trow('ag1')]); // the statusline file still lists the finished agent, fresher than its last tool call
+    tasksFile(c, 's1', NOW - 1000, [trow('ag1')]); // the statusline file still lists the finished agent, rewritten every tick
     c.runs = [row('a', 'R1')];
     c.tick();
     const a = c.sidecar('foreman', 'R1').agents.find((x) => x.agent_id === 'ag1');
-    assert.equal(a.source, 'context_tasks', 'the newer row wins the activity time');
+    assert.equal(a.source, 'stamp');
+    assert.equal(a.last_activity_at, iso(NOW - 20000));
     assert.equal(a.stamped, true);
     assert.equal(a.ended_at, iso(NOW - 15000));
     assert.equal(a.description, 'desc ag1');
+    assert.equal(a.label, 'label ag1');
+  } finally { c.cleanup(); }
+});
+
+// mods P1W FOREMAN2 (gate run l4f-stall-b): context_tasks `written_at` is the subagentStatusLine rewrite time (age ~1 s while the agent
+// exists), so the merged row never aged. With a stamp present the stamp owns last_activity_at / age_s / stale / stamped / ended_at / source.
+test('F12 FOREMAN2: both sources, stamp quiet 205 s while tasks written 1 s ago -> the row ages from the stamp (l4f-stall-b shape)', () => {
+  const c = mk();
+  try {
+    marker(c, 's1');
+    stamp(c, 's1', 'ag1', NOW - 205000);
+    tasksFile(c, 's1', NOW - 1000, [trow('ag1', { description: 'L4 foreman: README test line', label: 'Checking git status' })]);
+    c.runs = [row('a', 'R1')];
+    c.tick();
+    const a = c.sidecar('foreman', 'R1').agents.find((x) => x.agent_id === 'ag1');
+    assert.equal(a.source, 'stamp');
+    assert.equal(a.last_activity_at, iso(NOW - 205000));
+    assert.ok(a.age_s >= 205 && a.age_s < 215, `age_s from the stamp: ${a.age_s}`);
+    assert.equal(a.stamped, true);
+    assert.equal(a.ended_at, null);
+    assert.equal(a.description, 'L4 foreman: README test line');
+    assert.equal(a.label, 'Checking git status');
+    assert.equal(validate('foreman-activity', c.sidecar('foreman', 'R1'), c.base), '');
+  } finally { c.cleanup(); }
+});
+
+test('F13 FOREMAN2: a started-only stamp (last_tool_name null) with a tasks row: stamped, un-ended, started time, tasks description', () => {
+  const c = mk();
+  try {
+    marker(c, 's1');
+    stamp(c, 's1', 'ag1', NOW - 30000, { last_tool_name: null });
+    tasksFile(c, 's1', NOW - 1000, [trow('ag1', { label: null })]);
+    c.runs = [row('a', 'R1')];
+    c.tick();
+    const a = c.sidecar('foreman', 'R1').agents.find((x) => x.agent_id === 'ag1');
+    assert.equal(a.source, 'stamp');
+    assert.equal(a.stamped, true);
+    assert.equal(a.ended_at, null);
+    assert.ok(a.age_s >= 30 && a.age_s < 40);
+    assert.equal(a.description, 'desc ag1');
+  } finally { c.cleanup(); }
+});
+
+test('F14 FOREMAN2: a tasks-only row (no stamp) keeps today\'s behaviour: context_tasks source, no stamped / ended_at', () => {
+  const c = mk();
+  try {
+    marker(c, 's1');
+    tasksFile(c, 's1', NOW - 3000, [trow('only')]);
+    c.runs = [row('a', 'R1')];
+    c.tick();
+    const a = c.sidecar('foreman', 'R1').agents.find((x) => x.agent_id === 'only');
+    assert.equal(a.source, 'context_tasks');
+    assert.equal('stamped' in a, false);
+    assert.equal('ended_at' in a, false);
+    assert.ok(a.age_s <= 5);
   } finally { c.cleanup(); }
 });

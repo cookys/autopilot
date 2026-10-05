@@ -172,6 +172,26 @@ function endAgentActivity(p) {
   return true;
 }
 
+// SubagentStart (mods P1W FOREMAN2): the agent exists. Writes its stamp with last_tool_at = now, last_tool_name null and NO ended_at, so a
+// foreman whose first tool call runs for minutes is visible from its start. The ONE legitimate resurrection: it clears a prior ended_at
+// (a resumed agent); stampAgentActivity still never does. Same knob as the stamp, same fail-open.
+function startAgentActivity(p) {
+  if (knobOff('AUTOPILOT_AGENT_ACTIVITY')) return false;
+  if (!p || typeof p.agent_id !== 'string' || !p.agent_id) return false;
+  if (typeof p.session_id !== 'string' || !p.session_id) return false;
+  const { dir, file } = agentFile(p);
+  const cur = readAgentFile(file);
+  writeAgentFile(dir, file, {
+    schema: 'autopilot.agent-activity/1',
+    session_id: p.session_id,
+    agent_id: p.agent_id,
+    agent_type: typeof p.agent_type === 'string' && p.agent_type ? p.agent_type : (cur && cur.agent_type) || null,
+    last_tool_at: new Date().toISOString(),
+    last_tool_name: null,
+  });
+  return true;
+}
+
 function removeAgentActivity(p) {
   if (!p || typeof p.session_id !== 'string' || !p.session_id) return;
   fs.rmSync(path.join(liveBase(), 'agents', sanitizeSessionId(p.session_id)), { recursive: true, force: true });
@@ -244,6 +264,7 @@ module.exports = {
   liveBase,
   stampAgentActivity,
   endAgentActivity,
+  startAgentActivity,
   removeAgentActivity,
   recordTurn,
   readJsonFile,

@@ -312,3 +312,11 @@ test('DIALOG PLANTED RED: a dialog on screen but attention.json is absent, idle,
   assert.strictEqual(withBand.surface, 'band');
   assert.strictEqual(run(capture({}, ['just some output'])).surface, null, 'no dialog text, no verdict: still no surface');
 });
+
+// ---- P1W FOREMAN2: a started-only stamp (SubagentStart: last_tool_name null) is a foreman too ----
+test('FOREMAN2: a started-only stamp (last_tool_name null) is 進行中 under 180 s and 疑似卡住 from 180 s; started then ended is 待命', () => {
+  const v = (files) => derive(capture(files, [])).verdict;
+  assert.strictEqual(v({ 'agents/f1.json': agentF('f1', 40, { last_tool_name: null }) }), '進行中');
+  assert.strictEqual(v({ 'agents/f1.json': agentF('f1', 200, { last_tool_name: null }) }), '疑似卡住');
+  assert.strictEqual(v({ 'agents/f1.json': agentF('f1', 40, { last_tool_name: null, ended_at: iso(0) }) }), '待命');
+});

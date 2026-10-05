@@ -1,0 +1,10 @@
+{
+  "schema": "autopilot.attention/1",
+  "session_id": "c40f2a0c-8d9c-4936-b201-0910bf2feaba",
+  "project_key": "51de403da82a23f0",
+  "kind": "permission",
+  "tool_name": "Bash",
+  "summary": "Bash: printf '\\n測試字\\n' >> README.md && node test.js && git diff --stat",
+  "since": "2026-10-05T08:35:47.156Z",
+  "updated_at": "2026-10-05T08:35:53.187Z"
+}

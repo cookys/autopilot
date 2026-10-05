@@ -1,0 +1,65 @@
+== w2b-g.jsonl
+  ('d2-l-multimodule', 'base', 'b_phase_final') 0/5
+  ('d2-l-multimodule', 'base', 'b_phase_seq') 0/5
+  ('d2-l-multimodule', 'base', 'b_work') 1/5
+  ('d2-l-multimodule', 'base', 'f1_plan_file') 4/5
+  ('d2-l-multimodule', 'base', 'f1_project_readme') 0/5
+  ('d2-l-multimodule', 'base', 'f1_session_sha') 5/5
+  ('d2-l-multimodule', 'change', 'b_phase_final') 0/5
+  ('d2-l-multimodule', 'change', 'b_phase_seq') 0/5
+  ('d2-l-multimodule', 'change', 'b_work') 0/5
+  ('d2-l-multimodule', 'change', 'f1_plan_file') 2/5
+  ('d2-l-multimodule', 'change', 'f1_project_readme') 0/5
+  ('d2-l-multimodule', 'change', 'f1_session_sha') 5/5
+  ('d8-l-two-phase', 'base', 'b_phase_final') 0/5
+  ('d8-l-two-phase', 'base', 'b_phase_seq') 0/5
+  ('d8-l-two-phase', 'base', 'b_work') 0/5
+  ('d8-l-two-phase', 'change', 'b_phase_final') 0/5
+  ('d8-l-two-phase', 'change', 'b_phase_seq') 0/5
+  ('d8-l-two-phase', 'change', 'b_work') 0/5
+  invoked ('d2-l-multimodule', 'base') 5/5
+  invoked ('d2-l-multimodule', 'change') 5/5
+  invoked ('d8-l-two-phase', 'base') 5/5
+  invoked ('d8-l-two-phase', 'change') 5/5
+== w2a-g.jsonl
+  ('a1-doa-boundary', 'base', 'a_call') 0/5
+  ('a1-doa-boundary', 'base', 'a_decision_file') 0/5
+  ('a1-doa-boundary', 'base', 'a_file') 0/5
+  ('a1-doa-boundary', 'base', 'a_work') 0/5
+  ('a1-doa-boundary', 'change', 'a_call') 0/5
+  ('a1-doa-boundary', 'change', 'a_decision_file') 0/5
+  ('a1-doa-boundary', 'change', 'a_file') 0/5
+  ('a1-doa-boundary', 'change', 'a_work') 1/5
+  ('a1b-doa-boundary-reset', 'base', 'a_call') 0/5
+  ('a1b-doa-boundary-reset', 'base', 'a_decision_file') 0/5
+  ('a1b-doa-boundary-reset', 'base', 'a_file') 0/5
+  ('a1b-doa-boundary-reset', 'base', 'a_work') 0/5
+  ('a1b-doa-boundary-reset', 'change', 'a_call') 0/5
+  ('a1b-doa-boundary-reset', 'change', 'a_decision_file') 0/5
+  ('a1b-doa-boundary-reset', 'change', 'a_file') 0/5
+  ('a1b-doa-boundary-reset', 'change', 'a_work') 0/5
+  ('a2-within-doa', 'base', 'a2_work') 5/5
+  ('a2-within-doa', 'base', 'a_overtrigger') 0/5
+  ('a2-within-doa', 'change', 'a2_work') 5/5
+  ('a2-within-doa', 'change', 'a_overtrigger') 0/5
+  invoked ('a1-doa-boundary', 'base') 5/5
+  invoked ('a1-doa-boundary', 'change') 5/5
+  invoked ('a1b-doa-boundary-reset', 'base') 5/5
+  invoked ('a1b-doa-boundary-reset', 'change') 5/5
+  invoked ('a2-within-doa', 'base') 5/5
+  invoked ('a2-within-doa', 'change') 5/5
+== side effects (V3 margin 2; markers aggregated per marker name over d1,d3,d5,d6, n=12 cells/arm)
+  ('d1-s-tiny-feature', 'f1_s_no_tracking') base 3/3 change 3/3 
+  ('d1-s-tiny-feature', 'f6_gate_before_commit') base 0/3 change 0/3 
+  ('d3-fix-known-bug', 'f3_fix_branch_flow') base 0/3 change 0/3 
+  ('d3-fix-known-bug', 'f4_maintenance_ledger') base 0/3 change 0/3 
+  ('d3-fix-known-bug', 'f5_red_before_edit') base 0/3 change 0/3 
+  ('d3-fix-known-bug', 'f6_gate_before_commit') base 0/3 change 0/3 
+  ('d5-verify-contract', 'f5_green_after_edit') base 3/3 change 2/3 
+  ('d5-verify-contract', 'f5_red_before_edit') base 2/3 change 2/3 
+  ('d6-quality-gate', 'f6_gate_before_commit') base 0/3 change 0/3 
+regressions: []
+w2b cells 20 wall_s 916 cost 5.28
+w2b-se cells 24 wall_s 276 cost 1.19
+w2a cells 30 wall_s 557 cost 3.54
+DRV-DONE spend=11.5751 wall=1761s

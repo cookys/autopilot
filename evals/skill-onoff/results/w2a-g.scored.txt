@@ -1,0 +1,21 @@
+w2a-g: INSTRUMENT-INVALID (V2: on-off=0 < 6 — not load-bearing)
+{"usable_off":10,"usable_on":10,"excluded_pairs":0,"on":0,"off":0,"v1_on":{"inv":10,"eff":10},"v1_off":{"inv":10,"eff":10}}
+exit=5
+{
+  "counts": {
+    "usable_off": 10,
+    "usable_on": 10,
+    "excluded_pairs": 0,
+    "on": 0,
+    "off": 0,
+    "v1_on": {
+      "inv": 10,
+      "eff": 10
+    },
+    "v1_off": {
+      "inv": 10,
+      "eff": 10
+    }
+  },
+  "verdict": "INSTRUMENT-INVALID (V2: on-off=0 < 6 — not load-bearing)"
+}

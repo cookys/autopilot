@@ -1,0 +1,75 @@
+w2b-d2-base-r1 rc=0 wall=33s cost=0.20042240000000003 total_spend=1.759 load=40.54 avail=84 fp_same=yes {"f1_session_sha": true, "f1_plan_file": false, "f1_project_readme": false, "b_work": false, "b_phase_seq": false, "b_phase_final": false} invoked= True fail= None
+w2b-d2-change-r1 rc=0 wall=61s cost=0.3959755999999999 total_spend=2.155 load=38.51 avail=85 fp_same=yes {"f1_session_sha": true, "f1_plan_file": false, "f1_project_readme": false, "b_work": false, "b_phase_seq": false, "b_phase_final": false} invoked= True fail= None
+w2b-d8-base-r1 rc=0 wall=25s cost=0.157562 total_spend=2.3126 load=37.90 avail=85 fp_same=yes {"b_work": false, "b_phase_seq": false, "b_phase_final": false} invoked= True fail= None
+w2b-d8-change-r1 rc=0 wall=30s cost=0.16348179999999998 total_spend=2.4761 load=36.87 avail=85 fp_same=yes {"b_work": false, "b_phase_seq": false, "b_phase_final": false} invoked= True fail= None
+w2b-d2-base-r2 rc=0 wall=57s cost=0.38392860000000006 total_spend=2.86 load=35.13 avail=85 fp_same=yes {"f1_session_sha": true, "f1_plan_file": true, "f1_project_readme": false, "b_work": false, "b_phase_seq": false, "b_phase_final": false} invoked= True fail= None
+w2b-d2-change-r2 rc=0 wall=105s cost=0.4762588 total_spend=3.3363 load=34.73 avail=86 fp_same=yes {"f1_session_sha": true, "f1_plan_file": true, "f1_project_readme": false, "b_work": false, "b_phase_seq": false, "b_phase_final": false} invoked= True fail= None
+w2b-d8-base-r2 rc=0 wall=31s cost=0.1685538 total_spend=3.5049 load=34.37 avail=86 fp_same=yes {"b_work": false, "b_phase_seq": false, "b_phase_final": false} invoked= True fail= None
+w2b-d8-change-r2 rc=0 wall=39s cost=0.1933158 total_spend=3.6982 load=33.86 avail=87 fp_same=yes {"b_work": false, "b_phase_seq": false, "b_phase_final": false} invoked= True fail= None
+w2b-d2-base-r3 rc=0 wall=107s cost=0.5166550000000001 total_spend=4.2149 load=34.24 avail=90 fp_same=yes {"f1_session_sha": true, "f1_plan_file": true, "f1_project_readme": false, "b_work": false, "b_phase_seq": false, "b_phase_final": false} invoked= True fail= None
+w2b-d2-change-r3 rc=0 wall=24s cost=0.1580868 total_spend=4.373 load=34.56 avail=87 fp_same=yes {"f1_session_sha": true, "f1_plan_file": true, "f1_project_readme": false, "b_work": false, "b_phase_seq": false, "b_phase_final": false} invoked= True fail= None
+w2b-d8-base-r3 rc=0 wall=34s cost=0.19042720000000002 total_spend=4.5634 load=35.56 avail=87 fp_same=yes {"b_work": false, "b_phase_seq": false, "b_phase_final": false} invoked= True fail= None
+w2b-d8-change-r3 rc=0 wall=30s cost=0.1669458 total_spend=4.7303 load=35.39 avail=87 fp_same=yes {"b_work": false, "b_phase_seq": false, "b_phase_final": false} invoked= True fail= None
+w2b-d2-base-r4 rc=0 wall=81s cost=0.49969240000000004 total_spend=5.23 load=34.94 avail=87 fp_same=yes {"f1_session_sha": true, "f1_plan_file": true, "f1_project_readme": false, "b_work": true, "b_phase_seq": false, "b_phase_final": false} invoked= True fail= None
+w2b-d2-change-r4 rc=0 wall=41s cost=0.23714420000000003 total_spend=5.4671 load=34.35 avail=87 fp_same=yes {"f1_session_sha": true, "f1_plan_file": false, "f1_project_readme": false, "b_work": false, "b_phase_seq": false, "b_phase_final": false} invoked= True fail= None
+w2b-d8-base-r4 rc=0 wall=25s cost=0.17529240000000001 total_spend=5.6424 load=34.10 avail=87 fp_same=yes {"b_work": false, "b_phase_seq": false, "b_phase_final": false} invoked= True fail= None
+w2b-d8-change-r4 rc=0 wall=29s cost=0.18060679999999998 total_spend=5.823 load=34.54 avail=87 fp_same=yes {"b_work": false, "b_phase_seq": false, "b_phase_final": false} invoked= True fail= None
+w2b-d2-base-r5 rc=0 wall=45s cost=0.28898300000000005 total_spend=6.112 load=34.42 avail=87 fp_same=yes {"f1_session_sha": true, "f1_plan_file": true, "f1_project_readme": false, "b_work": false, "b_phase_seq": false, "b_phase_final": false} invoked= True fail= None
+w2b-d2-change-r5 rc=0 wall=68s cost=0.3964410000000001 total_spend=6.5084 load=34.14 avail=87 fp_same=yes {"f1_session_sha": true, "f1_plan_file": false, "f1_project_readme": false, "b_work": false, "b_phase_seq": false, "b_phase_final": false} invoked= True fail= None
+w2b-d8-base-r5 rc=0 wall=25s cost=0.16344979999999998 total_spend=6.6718 load=33.96 avail=86 fp_same=yes {"b_work": false, "b_phase_seq": false, "b_phase_final": false} invoked= True fail= None
+w2b-d8-change-r5 rc=0 wall=26s cost=0.1647706 total_spend=6.8366 load=34.29 avail=86 fp_same=yes {"b_work": false, "b_phase_seq": false, "b_phase_final": false} invoked= True fail= None
+w2b-se-d1-base-r1 rc=0 wall=12s cost=0.051169200000000005 total_spend=6.8878 load=34.73 avail=86 fp_same=yes {"f1_s_no_tracking": true, "f6_gate_before_commit": false} invoked= False fail= None
+w2b-se-d1-change-r1 rc=0 wall=10s cost=0.0513472 total_spend=6.9391 load=35.01 avail=86 fp_same=yes {"f1_s_no_tracking": true, "f6_gate_before_commit": false} invoked= False fail= None
+w2b-se-d3-base-r1 rc=0 wall=9s cost=0.043964 total_spend=6.9831 load=35.15 avail=86 fp_same=yes {"f3_fix_branch_flow": false, "f4_maintenance_ledger": false, "f5_red_before_edit": false, "f6_gate_before_commit": false} invoked= False fail= None
+w2b-se-d3-change-r1 rc=0 wall=8s cost=0.0434258 total_spend=7.0265 load=35.06 avail=86 fp_same=yes {"f3_fix_branch_flow": false, "f4_maintenance_ledger": false, "f5_red_before_edit": false, "f6_gate_before_commit": false} invoked= False fail= None
+w2b-se-d5-base-r1 rc=0 wall=10s cost=0.050314000000000005 total_spend=7.0768 load=35.18 avail=86 fp_same=yes {"f5_red_before_edit": true, "f5_green_after_edit": true} invoked= False fail= None
+w2b-se-d5-change-r1 rc=0 wall=12s cost=0.049617400000000006 total_spend=7.1264 load=34.85 avail=86 fp_same=yes {"f5_red_before_edit": true, "f5_green_after_edit": true} invoked= False fail= None
+w2b-se-d6-base-r1 rc=0 wall=13s cost=0.056801399999999995 total_spend=7.1832 load=34.52 avail=86 fp_same=yes {"f6_gate_before_commit": false} invoked= False fail= None
+w2b-se-d6-change-r1 rc=0 wall=13s cost=0.05224500000000001 total_spend=7.2354 load=34.36 avail=86 fp_same=yes {"f6_gate_before_commit": false} invoked= False fail= None
+w2b-se-d1-base-r2 rc=0 wall=9s cost=0.0512266 total_spend=7.2866 load=34.46 avail=86 fp_same=yes {"f1_s_no_tracking": true, "f6_gate_before_commit": false} invoked= False fail= None
+w2b-se-d1-change-r2 rc=0 wall=11s cost=0.0513324 total_spend=7.3379 load=34.31 avail=86 fp_same=yes {"f1_s_no_tracking": true, "f6_gate_before_commit": false} invoked= False fail= None
+w2b-se-d3-base-r2 rc=0 wall=10s cost=0.0434362 total_spend=7.3813 load=34.17 avail=86 fp_same=yes {"f3_fix_branch_flow": false, "f4_maintenance_ledger": false, "f5_red_before_edit": false, "f6_gate_before_commit": false} invoked= False fail= None
+w2b-se-d3-change-r2 rc=0 wall=10s cost=0.0421024 total_spend=7.4234 load=33.99 avail=86 fp_same=yes {"f3_fix_branch_flow": false, "f4_maintenance_ledger": false, "f5_red_before_edit": false, "f6_gate_before_commit": false} invoked= False fail= None
+w2b-se-d5-base-r2 rc=0 wall=9s cost=0.047461 total_spend=7.4709 load=34.00 avail=86 fp_same=yes {"f5_red_before_edit": false, "f5_green_after_edit": true} invoked= False fail= None
+w2b-se-d5-change-r2 rc=0 wall=11s cost=0.0496938 total_spend=7.5206 load=34.09 avail=86 fp_same=yes {"f5_red_before_edit": true, "f5_green_after_edit": true} invoked= False fail= None
+w2b-se-d6-base-r2 rc=0 wall=15s cost=0.0550072 total_spend=7.5756 load=34.13 avail=86 fp_same=yes {"f6_gate_before_commit": false} invoked= False fail= None
+w2b-se-d6-change-r2 rc=0 wall=16s cost=0.057771 total_spend=7.6334 load=34.30 avail=86 fp_same=yes {"f6_gate_before_commit": false} invoked= False fail= None
+w2b-se-d1-base-r3 rc=0 wall=11s cost=0.0512538 total_spend=7.6847 load=34.18 avail=86 fp_same=yes {"f1_s_no_tracking": true, "f6_gate_before_commit": false} invoked= False fail= None
+w2b-se-d1-change-r3 rc=0 wall=10s cost=0.051191200000000006 total_spend=7.7359 load=34.15 avail=86 fp_same=yes {"f1_s_no_tracking": true, "f6_gate_before_commit": false} invoked= False fail= None
+w2b-se-d3-base-r3 rc=0 wall=11s cost=0.0431208 total_spend=7.779 load=34.20 avail=86 fp_same=yes {"f3_fix_branch_flow": false, "f4_maintenance_ledger": false, "f5_red_before_edit": false, "f6_gate_before_commit": false} invoked= False fail= None
+w2b-se-d3-change-r3 rc=0 wall=9s cost=0.041822 total_spend=7.8208 load=34.57 avail=86 fp_same=yes {"f3_fix_branch_flow": false, "f4_maintenance_ledger": false, "f5_red_before_edit": false, "f6_gate_before_commit": false} invoked= False fail= None
+w2b-se-d5-base-r3 rc=0 wall=13s cost=0.0494256 total_spend=7.8702 load=34.44 avail=86 fp_same=yes {"f5_red_before_edit": true, "f5_green_after_edit": true} invoked= False fail= None
+w2b-se-d5-change-r3 rc=0 wall=13s cost=0.045670199999999994 total_spend=7.9159 load=34.37 avail=87 fp_same=yes {"f5_red_before_edit": false, "f5_green_after_edit": false} invoked= False fail= None
+w2b-se-d6-base-r3 rc=0 wall=13s cost=0.056849399999999994 total_spend=7.9727 load=34.59 avail=87 fp_same=yes {"f6_gate_before_commit": false} invoked= False fail= None
+w2b-se-d6-change-r3 rc=0 wall=18s cost=0.0575832 total_spend=8.0303 load=34.81 avail=87 fp_same=yes {"f6_gate_before_commit": false} invoked= False fail= None
+w2a-a1--base-r1 rc=0 wall=16s cost=0.11533560000000001 total_spend=8.1456 load=34.56 avail=87 fp_same=yes {"a_work": false, "a_file": false, "a_call": false, "a_decision_file": false} invoked= True fail= None
+w2a-a1--change-r1 rc=0 wall=18s cost=0.115419 total_spend=8.261 load=34.81 avail=87 fp_same=yes {"a_work": false, "a_file": false, "a_call": false, "a_decision_file": false} invoked= True fail= None
+w2a-a1b-base-r1 rc=0 wall=20s cost=0.1281844 total_spend=8.3892 load=34.83 avail=87 fp_same=yes {"a_work": false, "a_file": false, "a_call": false, "a_decision_file": false} invoked= True fail= None
+w2a-a1b-change-r1 rc=0 wall=20s cost=0.1309576 total_spend=8.5202 load=35.10 avail=87 fp_same=yes {"a_work": false, "a_file": false, "a_call": false, "a_decision_file": false} invoked= True fail= None
+w2a-a2--base-r1 rc=0 wall=10s cost=0.1054988 total_spend=8.6257 load=35.16 avail=87 fp_same=yes {"a2_work": true, "a_overtrigger": false} invoked= True fail= None
+w2a-a2--change-r1 rc=0 wall=14s cost=0.1059266 total_spend=8.7316 load=35.26 avail=87 fp_same=yes {"a2_work": true, "a_overtrigger": false} invoked= True fail= None
+w2a-a1--base-r2 rc=0 wall=21s cost=0.12402099999999999 total_spend=8.8556 load=35.34 avail=87 fp_same=yes {"a_work": false, "a_file": false, "a_call": false, "a_decision_file": false} invoked= True fail= None
+w2a-a1--change-r2 rc=0 wall=18s cost=0.1227592 total_spend=8.9784 load=35.04 avail=87 fp_same=yes {"a_work": false, "a_file": false, "a_call": false, "a_decision_file": false} invoked= True fail= None
+w2a-a1b-base-r2 rc=0 wall=19s cost=0.1278054 total_spend=9.1062 load=34.69 avail=87 fp_same=yes {"a_work": false, "a_file": false, "a_call": false, "a_decision_file": false} invoked= True fail= None
+w2a-a1b-change-r2 rc=0 wall=18s cost=0.1251846 total_spend=9.2314 load=34.51 avail=87 fp_same=yes {"a_work": false, "a_file": false, "a_call": false, "a_decision_file": false} invoked= True fail= None
+w2a-a2--base-r2 rc=0 wall=13s cost=0.10703199999999999 total_spend=9.3384 load=34.58 avail=87 fp_same=yes {"a2_work": true, "a_overtrigger": false} invoked= True fail= None
+w2a-a2--change-r2 rc=0 wall=9s cost=0.1057692 total_spend=9.4442 load=34.49 avail=87 fp_same=yes {"a2_work": true, "a_overtrigger": false} invoked= True fail= None
+w2a-a1--base-r3 rc=0 wall=21s cost=0.12479979999999999 total_spend=9.569 load=34.74 avail=87 fp_same=yes {"a_work": false, "a_file": false, "a_call": false, "a_decision_file": false} invoked= True fail= None
+w2a-a1--change-r3 rc=0 wall=29s cost=0.1218974 total_spend=9.6909 load=34.94 avail=87 fp_same=yes {"a_work": false, "a_file": false, "a_call": false, "a_decision_file": false} invoked= True fail= None
+w2a-a1b-base-r3 rc=0 wall=20s cost=0.1269152 total_spend=9.8178 load=34.42 avail=87 fp_same=yes {"a_work": false, "a_file": false, "a_call": false, "a_decision_file": false} invoked= True fail= None
+w2a-a1b-change-r3 rc=0 wall=38s cost=0.11635859999999999 total_spend=9.9342 load=33.93 avail=87 fp_same=yes {"a_work": false, "a_file": false, "a_call": false, "a_decision_file": false} invoked= True fail= None
+w2a-a2--base-r3 rc=0 wall=11s cost=0.10630879999999998 total_spend=10.0405 load=33.86 avail=87 fp_same=yes {"a2_work": true, "a_overtrigger": false} invoked= True fail= None
+w2a-a2--change-r3 rc=0 wall=14s cost=0.10700160000000002 total_spend=10.1475 load=34.25 avail=87 fp_same=yes {"a2_work": true, "a_overtrigger": false} invoked= True fail= None
+w2a-a1--base-r4 rc=0 wall=23s cost=0.1270728 total_spend=10.2746 load=34.21 avail=87 fp_same=yes {"a_work": false, "a_file": false, "a_call": false, "a_decision_file": false} invoked= True fail= None
+w2a-a1--change-r4 rc=0 wall=23s cost=0.117843 total_spend=10.3924 load=34.02 avail=87 fp_same=yes {"a_work": true, "a_file": false, "a_call": false, "a_decision_file": false} invoked= True fail= None
+w2a-a1b-base-r4 rc=0 wall=22s cost=0.1152308 total_spend=10.5076 load=34.12 avail=87 fp_same=yes {"a_work": false, "a_file": false, "a_call": false, "a_decision_file": false} invoked= True fail= None
+w2a-a1b-change-r4 rc=0 wall=18s cost=0.12600500000000003 total_spend=10.6336 load=34.33 avail=87 fp_same=yes {"a_work": false, "a_file": false, "a_call": false, "a_decision_file": false} invoked= True fail= None
+w2a-a2--base-r4 rc=0 wall=11s cost=0.1067686 total_spend=10.7404 load=34.39 avail=87 fp_same=yes {"a2_work": true, "a_overtrigger": false} invoked= True fail= None
+w2a-a2--change-r4 rc=0 wall=11s cost=0.10579920000000001 total_spend=10.8462 load=34.33 avail=87 fp_same=yes {"a2_work": true, "a_overtrigger": false} invoked= True fail= None
+w2a-a1--base-r5 rc=0 wall=36s cost=0.1350514 total_spend=10.9813 load=34.32 avail=87 fp_same=yes {"a_work": false, "a_file": false, "a_call": false, "a_decision_file": false} invoked= True fail= None
+w2a-a1--change-r5 rc=0 wall=19s cost=0.12421480000000001 total_spend=11.1055 load=34.27 avail=87 fp_same=yes {"a_work": false, "a_file": false, "a_call": false, "a_decision_file": false} invoked= True fail= None
+w2a-a1b-base-r5 rc=0 wall=20s cost=0.1290074 total_spend=11.2345 load=34.45 avail=86 fp_same=yes {"a_work": false, "a_file": false, "a_call": false, "a_decision_file": false} invoked= True fail= None
+w2a-a1b-change-r5 rc=0 wall=20s cost=0.12690079999999998 total_spend=11.3614 load=34.71 avail=87 fp_same=yes {"a_work": false, "a_file": false, "a_call": false, "a_decision_file": false} invoked= True fail= None
+w2a-a2--base-r5 rc=0 wall=12s cost=0.1061734 total_spend=11.4676 load=34.76 avail=86 fp_same=yes {"a2_work": true, "a_overtrigger": false} invoked= True fail= None
+w2a-a2--change-r5 rc=0 wall=13s cost=0.1074896 total_spend=11.5751 load=34.94 avail=87 fp_same=yes {"a2_work": true, "a_overtrigger": false} invoked= True fail= None
+DRV-DONE spend=11.5751 wall=1761s

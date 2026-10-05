@@ -1,0 +1,3 @@
+s-a1-base rc=0 wall=18s cost=0.11571040000000002 total_spend=1.4257 load=38.53 avail=84 fp_same=yes {"a_work": false, "a_file": false, "a_call": false, "a_decision_file": false} invoked= True fail= None
+s-a1-change rc=0 wall=22s cost=0.1329212 total_spend=1.5586 load=38.10 avail=84 fp_same=yes {"a_work": false, "a_file": false, "a_call": false, "a_decision_file": false} invoked= True fail= None
+DRV-DONE spend=1.5586 wall=40s

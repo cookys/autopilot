@@ -32,7 +32,7 @@ tmux 的細節（兩個 session 同時開時最容易出錯）：
 - 第一次在測試 repo 啟動 `claude` 會跳出信任資料夾的對話框，預設選項是「No, exit」：按 Down 再按 Enter 才是信任。
 - 被驅動的 session 裡，Bash 工具會擋掉單獨的前景 `sleep N`。要等就寫成迴圈（`for i in 1 2 3; do echo tick $i; sleep 6; done`），迴圈第一次會問權限，核准即可。
 - 叫 depth-0 派工時，把腳本的絕對路徑一起給它（例如 `/home/cookys/projects/autopilot/scripts/dispatch-hetero.sh`），否則它會自己 `find /` 去找。
-- 這台機器的 ChatGPT 帳號不接受 `--model gpt-5.5-codex`（回 400）。派 codex 時不要帶 `--model`，用 `~/.codex/config.toml` 的預設（目前是 gpt-6-astra）。
+- 這台機器的 ChatGPT 帳號不接受 `--model gpt-5.5-codex`（回 400）。派 codex 時要帶 `--model gpt-6-astra`：`dispatch-hetero.sh` 對非 agy 的 runner 不帶 `--model` 會直接拒絕，而且 codex 是用 `--ignore-user-config` 啟動，`~/.codex/config.toml` 的預設不會生效。
 
 `capture.sh` 只讀、不寫 live 目錄和 marker 目錄；它會自己從 pane 的目錄找到最新的 session marker。找錯時，把 session id 當第三個參數傳進去。
 
@@ -142,12 +142,6 @@ diff /tmp/gate-c-before.txt /tmp/gate-c-after.txt; diff <(awk '{print $1}' /tmp/
 ```
 
 比 watcher 時要比 PID，不要比 `ps` 的整行文字：整行有 `etimes`（已跑秒數）一欄，兩次之間一定不同，直接 `diff` 永遠不會是空的。PASS 的條件：三個 `diff` 都沒有輸出，也就是 `~/.autopilot/session-mode/` 沒有新檔、沒有新的 watcher 程序、live 目錄的 `runs/` 沒有新檔。這一格不需要跑 `check.js`。注意：另一個正在跑的、已接 autopilot 的 session 可能造成雜訊；做這一格時，請先關掉其他 session。
-
-## 2b. 合併 review 加的三格（2026-10-05）
-
-- **(d) /l5 的「代你決定」算在 campaign 那一格**：/l5 跑到 engine 裁決過至少一個 finding 之後，capture 一次。看 band 第二行有沒有「代你決定 m 件」，並在視窗 B 跑 `grep -c . $(git -C ~/projects/gate-sandbox rev-parse --path-format=absolute --git-common-dir)/autopilot/ledger/decisions.jsonl`。ledger 有列、band 卻寫 0 件，就是 FAIL（表示 ledger 列的 root 跟 campaign scope 對不上）。
-- **(e) 一般 session 用 dispatch-author 派工，派工掛在這個 session 底下**：在 dev-flow 模式叫 Claude 用 dispatch-author 派一個小工作，capture 後確認 band 的派工數有算到它；`cat ~/.autopilot/session-mode/<sid>.json` 的 `root_run_id` 要等於該派工 manifest 的 `root_run_id`。
-- **(f) 一般 session 進入 /lN 會換編號（已知行為，記錄就好）**：同一個 session 先做 dev-flow、再打 `/l3 …`，capture 前後各一次。marker 的 `root_run_id` 會變成新的值，band 會換到新的 scope。這是現行規則，不算 FAIL；請記下你覺得 band 的連續性能不能接受。
 
 ## 2b. 合併 review 加的三格（2026-10-05）
 

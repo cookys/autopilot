@@ -1,0 +1,103 @@
+{
+  "schema": "autopilot.foreman-activity/1",
+  "scope": {
+    "project_key": "51de403da82a23f0",
+    "repo_identity": "git-common-dir:/home/cookys/projects/gate-sandbox/.git",
+    "root_run_id": "job-1791199281-8b9018ca"
+  },
+  "binding": "session",
+  "stall_s": 600,
+  "agents": [
+    {
+      "agent_id": "a878cff7e519c1ed5",
+      "description": null,
+      "label": null,
+      "last_activity_at": "2026-10-05T11:27:13.532Z",
+      "age_s": 3,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-05T11:27:13.532Z",
+      "source": "stamp",
+      "session_id": "dd942e31-f1eb-48cd-970b-121e815f8d20",
+      "binding": "session"
+    },
+    {
+      "agent_id": "a1ebe68e36df8bf91",
+      "description": "qc reviewer 2 (scope)",
+      "label": "qc reviewer 2 (scope)",
+      "last_activity_at": "2026-10-05T11:27:08.956Z",
+      "age_s": 8,
+      "stale": false,
+      "source": "context_tasks",
+      "session_id": "dd942e31-f1eb-48cd-970b-121e815f8d20",
+      "binding": "session"
+    },
+    {
+      "agent_id": "a3a3f2d7304503b0b",
+      "description": "qc reviewer 1 (correctness)",
+      "label": "qc reviewer 1 (correctness)",
+      "last_activity_at": "2026-10-05T11:27:08.956Z",
+      "age_s": 8,
+      "stale": false,
+      "source": "context_tasks",
+      "session_id": "dd942e31-f1eb-48cd-970b-121e815f8d20",
+      "binding": "session",
+      "stamped": true,
+      "ended_at": "2026-10-05T11:27:12.841Z"
+    },
+    {
+      "agent_id": "a4a45b58dcbec5f33",
+      "description": "L4 foreman: README test line",
+      "label": "Checking git status in worktree",
+      "last_activity_at": "2026-10-05T11:27:08.956Z",
+      "age_s": 8,
+      "stale": false,
+      "source": "context_tasks",
+      "session_id": "dd942e31-f1eb-48cd-970b-121e815f8d20",
+      "binding": "session",
+      "stamped": true,
+      "ended_at": "2026-10-05T11:26:59.252Z"
+    },
+    {
+      "agent_id": "aa2078bd2b3882741",
+      "description": "qc reviewer 3 (merge safety)",
+      "label": "qc reviewer 3 (merge safety)",
+      "last_activity_at": "2026-10-05T11:27:08.956Z",
+      "age_s": 8,
+      "stale": false,
+      "source": "context_tasks",
+      "session_id": "dd942e31-f1eb-48cd-970b-121e815f8d20",
+      "binding": "session"
+    },
+    {
+      "agent_id": "a076a1cf1e5b2b748",
+      "description": null,
+      "label": null,
+      "last_activity_at": "2026-10-05T11:22:06.722Z",
+      "age_s": 310,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-05T11:22:06.722Z",
+      "source": "stamp",
+      "session_id": "dd942e31-f1eb-48cd-970b-121e815f8d20",
+      "binding": "session"
+    },
+    {
+      "agent_id": "a05149d9ac9eb3915",
+      "description": null,
+      "label": null,
+      "last_activity_at": "2026-10-05T11:21:45.723Z",
+      "age_s": 331,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-05T11:21:45.723Z",
+      "source": "stamp",
+      "session_id": "dd942e31-f1eb-48cd-970b-121e815f8d20",
+      "binding": "session"
+    }
+  ],
+  "stage": null,
+  "stage_source": null,
+  "stage_at": null,
+  "stage_age_s": null
+}

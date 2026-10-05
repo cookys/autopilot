@@ -1,0 +1,50 @@
+ ▝▝   ▝▝   ~/projects/gate-sandbox                                                                            │                                                                                       ✕
+                                                                                                              │session $0.30 · host $459.97 · ctx —
+⚠ Your login expires in 3 days · run /login to renew                                                          │dispatch · execution status, not progress (執行狀態，不是進度)
+                                                                                                              │no runs in this scope
+❯ /autopilot:l4 在 README 加一行測試字。工頭的實作步驟：先用 Bash 執行 git status（快速一個指令），然後用     │gates · review receipts of this job
+Bash 前景執行 bash /home/cookys/projects/gate-wait.sh（約 5 分鐘；Bash timeout 設 600000、不要                │no review receipt
+run_in_background），跑完再加那一行。派工頭時不要用 run_in_background，你在前景等它回來，不要輪詢。不要讀     │任務工具未開 · 設 CLAUDE_CODE_ENABLE_TODO_TOOLS=1 後才會記錄任務
+plugin 內部檔案，直接設 session-mode 後派工頭。                                                               │工頭活動（依 session 綁定：同一 session 的多個工作會看到同一批）
+                                                                                                              │L4 foreman: README test line · Checking git status in worktree · 16s 前
+  Ran 1 shell command                                                                                         │a076a1cf1e5b2b748 · — · 3m 前
+                                                                                                              │a05149d9ac9eb3915 · — · 3m 前
+● Session mode 已設定。現在前景派工頭（sonnet、worktree 隔離）。                                              │open the review page
+                                                                                                              │snapshot published 2026-10-05T11:25:08.638Z · session cost as of 2026-10-05T11:21:48.644Z
+● Agent(L4 foreman: README test line)                                                                         │· host cost as of 2026-10-05T11:21:48.644Z
+  ⎿  Initializing…                                                                                            │
+  ⎿  Error: PreToolUse:Agent hook error: dispatch-model-guard: prompt line 1 must be "Engine: <model>…"       │
+     matching model: sonnet (got: Engine: claude)                                                             │
+                                                                                                              │
+● Agent(L4 foreman: README test line)                                                                         │
+  ⎿  Backgrounded agent (↓ to manage · ctrl+o to expand)                                                      │
+                                                                                                              │
+  Ran 1 shell command                                                                                         │
+                                                                                                              │
+● 工頭已派出，現在正在背景執行。這次我沒辦法照你說的在前景等它，因為這個環境不論參數都會讓 Agent 在背景啟動。 │
+                                                                                                              │
+  - 工頭： sonnet、worktree 隔離，只負責「在 README 加一行測試字」這一項。它的步驟是先跑 git                  │
+    status，再前景執行 bash /home/cookys/projects/gate-wait.sh（Bash timeout 600000），跑完才加那一行並       │
+    commit。它不 merge、不 push。                                                                             │
+  - session-mode： 已設為 l4，沒有讀 plugin 內部檔案。                                                        │
+  - 派工被擋一次： 第一次因為 prompt 第 1 行寫成 Engine: claude，沒有對上 model: sonnet，被                   │
+    dispatch-model-guard 擋下。我把它改成 Engine: sonnet 後重派成功。                                         │
+  - 死人開關： 我另外開了 900 秒的背景計時（sleep 900; echo WAKE），防止完成通知沒送到。這是 l4               │
+    規則要求的備援，不是輪詢。                                                                                │
+                                                                                                              │
+  工頭回報後，我會依 l4 規則用 reviewer 對分支 diff 做 qc、再由我 merge 回 develop 並清掉                     │
+  worktree。在那之前，我不知道它的結果。                                                                      │
+                                                                                                              │
+✻ Waiting for 1 background agent to finish                                                                    │
+● 進行中 gate-sandbox · — · 4m · —                                                                        [-] │
+工頭在跑：L4 foreman: README test line（0 分前有動作）                                                        │
+                                                                                                              │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 工頭跑完了嗎
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Sonnet 5.5 ── ~/projects/gate-sandbox develop ──────────────────────────────────────────── v2.1.289
+  5h ▮▯▯▯▯▯ 33% 1h38m   7d ▮▯▯▯▯▯ 28% 2d16h   ctx ▯▯▯▯▯▯ 5%                        → codeforge adopt
+  ⏵⏵ accept edits on · 1 shell · ← 6 agents
+
+  ● main
+  ◯ general-purpose  Checking git status in worktree                                                                                                                           3m 52s · ↓ 35.7k tokens

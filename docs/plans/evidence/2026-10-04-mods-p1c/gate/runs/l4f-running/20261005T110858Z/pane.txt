@@ -1,0 +1,50 @@
+                                                                                                              │                                                                                       ✕
+❯ 不要再讀 plugin 內部檔案或 ls，直接照 /l4 流程：設 session-mode 然後派工頭。                                │session $0.42 · host $459.08 · ctx 5%
+                                                                                                              │dispatch · execution status, not progress (執行狀態，不是進度)
+  Ran 1 shell command                                                                                         │no runs in this scope
+                                                                                                              │gates · review receipts of this job
+● Agent(Foreman: README test line)                                                                            │no review receipt
+  ⎿  Initializing…                                                                                            │任務工具未開 · 設 CLAUDE_CODE_ENABLE_TODO_TOOLS=1 後才會記錄任務
+  ⎿  Error: dispatch-model-guard: prompt line 1 must be "Engine: <model>…" matching model: sonnet (got:       │工頭活動（依 session 綁定：同一 session 的多個工作會看到同一批）
+     Engine: claude)                                                                                          │Foreman: README test line · Foreman: README test line · 12s 前
+                                                                                                              │a0cefba89ea5b5568 · — · 14s 前
+  Ran 1 shell command                                                                                         │afd80879ac0579af1 · — · 17s 前
+                                                                                                              │open the review page
+● Engine 標頭要與 model 相符，改成 Engine: sonnet 重派。                                                      │snapshot published 2026-10-05T11:08:42.608Z · session cost as of 2026-10-05T11:08:42.608Z
+                                                                                                              │· host cost as of 2026-10-05T11:08:42.608Z
+● Agent(Foreman: README test line)                                                                            │
+  ⎿  Backgrounded agent (↓ to manage · ctrl+o to expand)                                                      │
+                                                                                                              │
+● 工頭已派出，在背景 worktree 跑，我結束這回合等通知，不輪詢。                                                │
+                                                                                                              │
+  - session-mode：已設為 l4。                                                                                 │
+  - 工頭：model 用 sonnet，先背景跑一次 gate-wait.sh（約 5 分鐘），跑完才在 README 加一行測試字並 commit。    │
+  - 死人開關：我另起了一個背景 sleep 900; echo WAKE，萬一工頭通知沒送達，它會叫醒我。                         │
+  - 工頭完成後：我會做 qc 審查、merge-back 與 worktree 清理。                                                 │
+                                                                                                              │
+  第一次派工因為 Engine 標頭（claude）和 model: sonnet 不符被 dispatch-model-guard 擋下，已改成 Engine: sonnet│
+  重派，沒有其他影響。                                                                                        │
+                                                                                                              │
+✻ Waiting for 1 background agent to finish                                                                    │
+                                                                                                              │
+● Agent "Foreman: README test line" finished · 4s                                                             │
+                                                                                                              │
+● 這是工頭的中途通知，不是最終結果。工頭已經把 gate-wait.sh 丟到背景（約 5                                    │
+  分鐘），也起了自己的死人開關，現在在等它跑完。通知上寫它還有背景工作在跑，跑完後會再通知一次。              │
+                                                                                                              │
+  README 那一行、commit 和 qc 都還沒做，所以我現在沒有結果可以回報，先結束這回合。我自己的 900                │
+  秒死人開關還在，工頭若沒有再通知，它會叫醒我。                                                              │
+                                                                                                              │
+✻ Churned for 28s · done 7:08 PM · 3 shells still running                                                     │
+◌ 待命 gate-sandbox · — · 0m · —                                                                          [-] │
+沒有派工在跑                                                                                                  │
+                                                                                                              │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 繼續等通知
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Sonnet 5.5 ── ~/projects/gate-sandbox develop ──────────────────────────────────────────── v2.1.289
+  5h ▮▯▯▯▯▯ 33% 1h51m   7d ▮▯▯▯▯▯ 28% 2d16h   ctx ▯▯▯▯▯▯ 5%                        → codeforge adopt
+  ⏵⏵ accept edits on · 3 shells · ← 6 agents
+
+  ● main
+  ◯ general-purpose  Foreman: README test line                                                                                                                                     3s · ↓ 36.3k tokens

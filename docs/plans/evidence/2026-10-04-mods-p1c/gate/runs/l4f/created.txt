@@ -1,0 +1,7 @@
+l4f gate run 2026-10-05 (live 7f14319a), driver: gate hand
+session ids (marker files in ~/.autopilot/session-mode/): 5ebc8042-7fa0-4ccb-8ad7-55233068b644 (run 1), 1ad6b7a9-92b6-4070-979b-73062b48b91b (run 2), dd942e31-f1eb-48cd-970b-121e815f8d20 (run 3)
+watcher: pre-existing pid 2170837 (project 9dc556b726c078d9, etimes ~1635 s at start, not the sandbox); gate-sandbox watcher spawned by session 1 = pid 2334366 (project 51de403da82a23f0), still alive at end
+files: /home/cookys/projects/gate-wait.sh (new); ~/projects/gate-sandbox/.claude/settings.local.json (modified: added Bash(bash /home/cookys/projects/gate-wait.sh) allow; original saved at runs/l4f/settings.local.json.orig; gitignored, survives git clean)
+foreman worktrees/branches left in ~/projects/gate-sandbox: .claude/worktrees/agent-ac2f2217820ad83fb (branch worktree-agent-ac2f2217820ad83fb, locked, 9c5bf49), agent-a21f8f89e7023d1bb (069c3bf), agent-a4a45b58dcbec5f33 (c3daab0)
+leftover processes: none (gate-wait.sh finished, dead-man sleeps gone at end)
+sandbox origin develop: 490bbea at start and at end (unmoved)

@@ -1,0 +1,55 @@
+{
+  "schema": "autopilot.foreman-activity/1",
+  "scope": {
+    "project_key": "51de403da82a23f0",
+    "repo_identity": "git-common-dir:/home/cookys/projects/gate-sandbox/.git",
+    "root_run_id": "job-1791199281-8b9018ca"
+  },
+  "binding": "session",
+  "stall_s": 600,
+  "agents": [
+    {
+      "agent_id": "a4a45b58dcbec5f33",
+      "description": "L4 foreman: README test line",
+      "label": "Checking git status in worktree",
+      "last_activity_at": "2026-10-05T11:24:55.449Z",
+      "age_s": 1,
+      "stale": false,
+      "source": "context_tasks",
+      "session_id": "dd942e31-f1eb-48cd-970b-121e815f8d20",
+      "binding": "session",
+      "stamped": true,
+      "ended_at": null
+    },
+    {
+      "agent_id": "a076a1cf1e5b2b748",
+      "description": null,
+      "label": null,
+      "last_activity_at": "2026-10-05T11:22:06.722Z",
+      "age_s": 170,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-05T11:22:06.722Z",
+      "source": "stamp",
+      "session_id": "dd942e31-f1eb-48cd-970b-121e815f8d20",
+      "binding": "session"
+    },
+    {
+      "agent_id": "a05149d9ac9eb3915",
+      "description": null,
+      "label": null,
+      "last_activity_at": "2026-10-05T11:21:45.723Z",
+      "age_s": 191,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-05T11:21:45.723Z",
+      "source": "stamp",
+      "session_id": "dd942e31-f1eb-48cd-970b-121e815f8d20",
+      "binding": "session"
+    }
+  ],
+  "stage": null,
+  "stage_source": null,
+  "stage_at": null,
+  "stage_age_s": null
+}

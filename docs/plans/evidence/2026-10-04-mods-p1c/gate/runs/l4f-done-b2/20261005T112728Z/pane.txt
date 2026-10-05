@@ -1,0 +1,50 @@
+    規則要求的備援，不是輪詢。                                                                                │                                                                                       ✕
+                                                                                                              │session $0.50 · host $460.17 · ctx 5%
+  工頭回報後，我會依 l4 規則用 reviewer 對分支 diff 做 qc、再由我 merge 回 develop 並清掉                     │dispatch · execution status, not progress (執行狀態，不是進度)
+  worktree。在那之前，我不知道它的結果。                                                                      │no runs in this scope
+                                                                                                              │gates · review receipts of this job
+✻ Waiting for 1 background agent to finish                                                                    │no review receipt
+                                                                                                              │任務工具未開 · 設 CLAUDE_CODE_ENABLE_TODO_TOOLS=1 後才會記錄任務
+● Agent "L4 foreman: README test line" finished · 5m 24s                                                      │工頭活動（依 session 綁定：同一 session 的多個工作會看到同一批）
+                                                                                                              │a878cff7e519c1ed5 · — · 13s 前
+● 3 background agents launched (↓ to manage)                                                                  │qc reviewer 2 (scope) · qc reviewer 2 (scope) · 18s 前
+   ├ qc reviewer 1 (correctness)                                                                              │qc reviewer 1 (correctness) · qc reviewer 1 (correctness) · 18s 前
+   ├ qc reviewer 2 (scope)                                                                                    │L4 foreman: README test line · Checking git status in worktree · 18s 前
+   └ qc reviewer 3 (merge safety)                                                                             │qc reviewer 3 (merge safety) · qc reviewer 3 (merge safety) · 18s 前
+                                                                                                              │a076a1cf1e5b2b748 · — · 5m 前
+● 工頭做完了，我派了 3 位 reviewer 做 qc（正確性、範圍、merge 安全），正在背景執行。                          │a05149d9ac9eb3915 · — · 5m 前
+                                                                                                              │open the review page
+  工頭回報                                                                                                    │snapshot published 2026-10-05T11:27:16.722Z · session cost as of 2026-10-05T11:27:16.722Z
+  - 分支：worktree-agent-a4a45b58dcbec5f33                                                                    │· host cost as of 2026-10-05T11:27:16.722Z
+  - commit：c3daab0，在 README.md 檔尾新增一行「測試字：autopilot l4 gate test」。                            │
+  - gate-wait.sh：前景跑完，exit code 0。                                                                     │
+  - 工頭沒有 merge，也沒有 push。                                                                             │
+                                                                                                              │
+  reviewer 的結果還沒回來，所以還沒有 qc 判定，也還沒 merge。三位都 PASS 後，我才會 merge 回 develop 並清掉   │
+  worktree。                                                                                                  │
+                                                                                                              │
+✻ Waiting for 3 background agents to finish                                                                   │
+                                                                                                              │
+● Agent "qc reviewer 1 (correctness)" finished · 7s                                                           │
+                                                                                                              │
+● reviewer 1（正確性）判定 PASS：diff 只有 README.md:4                                                        │
+  新增一行，內容正確，也沒有多餘變更。另外兩位（範圍、merge 安全）還沒回報，所以還不能 merge。                │
+                                                                                                              │
+✻ Waiting for 2 background agents to finish                                                                   │
+                                                                                                              │
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────│
+ Bash command · from the autopilot:reviewer agent                                                      1 of 2 │
+ Tip: auto mode handles these prompts for you — choose "switch to auto mode" below                            │
+ Run shell command                                                                                            │
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌│
+ │ B=worktree-agent-a4a45b58dcbec5f33 && git diff --stat develop...$B && git diff develop...$B && git log     │
+ │ --format='%H%n%B---' develop..$B && git show $B:README.md | tail -c 100 | xxd | tail -3                    │
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌│
+ zsh $name[expr] / $name:mod in bare concatenation — recursive eval                                           │
+                                                                                                              │
+ Do you want to proceed?                                                                                      │
+ ❯ 1. Yes                                                                                                     │
+   2. Yes, and switch to auto mode · auto mode handles these prompts for you                                  │
+   3. No                                                                                                      │
+                                                                                                              │
+ Esc to cancel · Tab to amend                                                                                 │

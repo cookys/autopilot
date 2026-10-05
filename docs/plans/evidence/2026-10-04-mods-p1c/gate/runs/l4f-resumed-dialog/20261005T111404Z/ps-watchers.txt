@@ -1,0 +1,2 @@
+2170837    2040 /home/cookys/.local/lib/nodejs/node-v24.16.0-linux-x64/bin/node /home/cookys/projects/autopilot/bin/autopilot.js status runs --watch --project 9dc556b726c078d9 --interval 10 --idle-exit 3600 --render
+2334366     404 /home/cookys/.local/lib/nodejs/node-v24.16.0-linux-x64/bin/node /home/cookys/projects/autopilot/bin/autopilot.js status runs --watch --project 51de403da82a23f0 --interval 10 --idle-exit 3600 --render

@@ -1,0 +1,50 @@
+                                                                                                              │                                                                                       ✕
+  Ran 1 shell command                                                                                         │session $0.32 · host $459.40 · ctx 5%
+                                                                                                              │dispatch · execution status, not progress (執行狀態，不是進度)
+● Session-mode 已設定。現在派工頭（背景、worktree 隔離、sonnet）。                                            │no runs in this scope
+                                                                                                              │gates · review receipts of this job
+● Agent(Foreman: README test line)                                                                            │no review receipt
+  ⎿  Initializing…                                                                                            │任務工具未開 · 設 CLAUDE_CODE_ENABLE_TODO_TOOLS=1 後才會記錄任務
+  ⎿  Error: dispatch-model-guard: prompt line 1 must be "Engine: <model>…" matching model: sonnet (got:       │工頭活動（依 session 綁定：同一 session 的多個工作會看到同一批）
+     Engine: claude)                                                                                          │Foreman: README test line · Foreman: README test line · 2s 前
+                                                                                                              │ad03b5c044f3b68c1 · — · 5m 前
+  Ran 1 shell command                                                                                         │open the review page
+                                                                                                              │snapshot published 2026-10-05T11:20:20.695Z · session cost as of 2026-10-05T11:15:06.835Z
+● Engine 標頭要寫 sonnet，重派。                                                                              │· host cost as of 2026-10-05T11:15:06.835Z
+                                                                                                              │
+● Agent(Foreman: README test line)                                                                            │
+  ⎿  Backgrounded agent (↓ to manage · ctrl+o to expand)                                                      │
+                                                                                                              │
+● 工頭已在背景派出（sonnet、worktree 隔離），session-mode 已設為 l4。它會先前景跑一次 gate-wait.sh（約 5      │
+  分鐘），跑完再加 README 那一行並 commit。                                                                   │
+                                                                                                              │
+  我另外起了一個 900 秒的背景死人計時器，萬一完成通知沒送達，它會喚醒我。工頭回報後，我再做 depth-0 的 qc     │
+  審查與 merge-back。                                                                                         │
+                                                                                                              │
+  第一次派工被 dispatch-model-guard 擋下，因為 prompt 第一行的 Engine: 必須和 model: sonnet 一致。我改成      │
+  Engine: sonnet 後重派，沒有其他影響。                                                                       │
+                                                                                                              │
+✻ Waiting for 1 background agent to finish                                                                    │
+                                                                                                              │
+● Agent "Foreman: README test line" finished · 5m 29s                                                         │
+                                                                                                              │
+● Running 1 shell command…                                                                                    │
+  ⎿  $ git diff --stat develop...worktree-agent-a21f8f89e7023d1bb                                             │
+                                                                                                              │
+● autopilot:reviewer(qc reviewer 1 (correctness))                                                             │
+  ⎿  Backgrounded agent (↓ to manage · ctrl+o to expand)                                                      │
+                                                                                                              │
+· Sublimating… (6s · ↓ 512 tokens)                                                                            │
+  ⎿  Tip: Use /memory to view and manage Claude memory                                                        │
+● 進行中 gate-sandbox · — · 5m · —                                                                        [-] │
+回合進行中（0 分）                                                                                            │
+                                                                                          ◐ medium · /effort  │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Sonnet 5.5 ── ~/projects/gate-sandbox develop ──────────────────────────────────────────── v2.1.289
+  5h ▮▯▯▯▯▯ 33% 1h39m   7d ▮▯▯▯▯▯ 28% 2d16h   ctx ▯▯▯▯▯▯ 5%                        → codeforge adopt
+  ⏵⏵ accept edits on · 1 shell · /tasks to see subagents · ← 6 agents
+
+  ● main
+  ◯ autopilot:reviewer  qc reviewer 1 (correctness)                                                                                                                                                 0s

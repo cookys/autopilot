@@ -34,6 +34,8 @@
  * TaskStop (mods P1W TASKSTOP, PostToolUse = a successful call; tool_input.task_id equals the agent's agent_id): ends that agent's
  * EXISTING stamp (ended_at, first end wins), because stopping a background agent fires no SubagentStop. Never creates a file (a shell
  * task id has no stamp); a non-safe id ends nothing. Same knob AUTOPILOT_AGENT_ACTIVITY=off.
+ * TASKSTOP2: the same TaskStop also removes every attention pending[] entry whose agent_id equals task_id (the SubagentStop path, endEntries;
+ * the killed tool never reaches PostToolUse), with or without a stamp, safe ids only, exact equality; knob AUTOPILOT_AWAITING_OWNER=off.
  * summary: question text for AskUserQuestion; else "<tool>: <command|file_path>" run through
  * hooks/_shared/secret-patterns redact(), newlines flattened, truncated to 120 chars.
  * Fail-open: any error -> one stderr line, exit 0.
@@ -134,6 +136,8 @@ function handle(p) {
       // TASKSTOP: a successful TaskStop of a background agent (task_id == agent_id) ends its stamp; SubagentStop never fires for it.
       if (p.tool_name === 'TaskStop' && p.tool_input && typeof p.tool_input === 'object' && typeof p.tool_input.task_id === 'string') {
         L.endAgentActivityIfPresent({ session_id: p.session_id, agent_id: p.tool_input.task_id });
+        // TASKSTOP2: the killed agent's tool never reaches PostToolUse either, so drop its attention entries (the SubagentStop path).
+        if (!L.knobOff('AUTOPILOT_AWAITING_OWNER') && /^[A-Za-z0-9_-]{1,64}$/.test(p.tool_input.task_id)) endEntries(p, p.tool_input.task_id);
       }
     }
     else if (ev === 'SubagentStart') L.startAgentActivity(p); // FOREMAN2: the agent exists (stamp, un-ended)

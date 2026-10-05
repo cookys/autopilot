@@ -120,6 +120,12 @@ diff /tmp/gate-c-before.txt /tmp/gate-c-after.txt; diff /tmp/gate-c-ps-before.tx
 
 PASS 的條件：三個 `diff` 都沒有輸出，也就是 `~/.autopilot/session-mode/` 沒有新檔、沒有新的 watcher 程序、live 目錄的 `runs/` 沒有新檔。這一格不需要跑 `check.js`。注意：另一個正在跑的、已接 autopilot 的 session 可能造成雜訊；做這一格時，請先關掉其他 session。
 
+## 2b. 合併 review 加的三格（2026-10-05）
+
+- **(d) /l5 的「代你決定」算在 campaign 那一格**：/l5 跑到 engine 裁決過至少一個 finding 之後，capture 一次。看 band 第二行有沒有「代你決定 m 件」，並在視窗 B 跑 `grep -c . $(git -C ~/projects/gate-sandbox rev-parse --path-format=absolute --git-common-dir)/autopilot/ledger/decisions.jsonl`。ledger 有列、band 卻寫 0 件，就是 FAIL（表示 ledger 列的 root 跟 campaign scope 對不上）。
+- **(e) 一般 session 用 dispatch-author 派工，派工掛在這個 session 底下**：在 dev-flow 模式叫 Claude 用 dispatch-author 派一個小工作，capture 後確認 band 的派工數有算到它；`cat ~/.autopilot/session-mode/<sid>.json` 的 `root_run_id` 要等於該派工 manifest 的 `root_run_id`。
+- **(f) 一般 session 進入 /lN 會換編號（已知行為，記錄就好）**：同一個 session 先做 dev-flow、再打 `/l3 …`，capture 前後各一次。marker 的 `root_run_id` 會變成新的值，band 會換到新的 scope。這是現行規則，不算 FAIL；請記下你覺得 band 的連續性能不能接受。
+
 ## 3. 結果表
 
 每格填 PASS、FAIL 或來源未接，後面寫存檔目錄（`gate/runs/<cell>/<時間>/`）。FAIL 的格子，把 `check.js` 的 FAIL 行抄進備註。

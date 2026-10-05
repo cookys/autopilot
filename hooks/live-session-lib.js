@@ -172,6 +172,16 @@ function endAgentActivity(p) {
   return true;
 }
 
+// TaskStop (mods P1W TASKSTOP): stopping a background agent fires no SubagentStop. Ends an EXISTING stamp only (a shell task id has no
+// stamp; never creates a file) for a safe id; reuses endAgentActivity (first end wins). Same knob, same fail-open.
+function endAgentActivityIfPresent(p) {
+  if (knobOff('AUTOPILOT_AGENT_ACTIVITY')) return false;
+  if (!p || typeof p.agent_id !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(p.agent_id)) return false;
+  if (typeof p.session_id !== 'string' || !p.session_id) return false;
+  if (!fs.existsSync(agentFile(p).file)) return false;
+  return endAgentActivity(p);
+}
+
 // SubagentStart (mods P1W FOREMAN2): the agent exists. Writes its stamp with last_tool_at = now, last_tool_name null and NO ended_at, so a
 // foreman whose first tool call runs for minutes is visible from its start. The ONE legitimate resurrection: it clears a prior ended_at
 // (a resumed agent); stampAgentActivity still never does. Same knob as the stamp, same fail-open.
@@ -264,6 +274,7 @@ module.exports = {
   liveBase,
   stampAgentActivity,
   endAgentActivity,
+  endAgentActivityIfPresent,
   startAgentActivity,
   removeAgentActivity,
   recordTurn,

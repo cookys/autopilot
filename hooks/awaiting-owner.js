@@ -31,6 +31,9 @@
  * null, no ended_at; the only path that clears an earlier ended_at), same knob; touches nothing else.
  * SubagentStop (mods P1W FOREMAN, payload carries agent_id): marks <live>/agents/<sid>/<agent_id>.json `ended_at` (knob
  * AUTOPILOT_AGENT_ACTIVITY=off); touches nothing else.
+ * TaskStop (mods P1W TASKSTOP, PostToolUse = a successful call; tool_input.task_id equals the agent's agent_id): ends that agent's
+ * EXISTING stamp (ended_at, first end wins), because stopping a background agent fires no SubagentStop. Never creates a file (a shell
+ * task id has no stamp); a non-safe id ends nothing. Same knob AUTOPILOT_AGENT_ACTIVITY=off.
  * summary: question text for AskUserQuestion; else "<tool>: <command|file_path>" run through
  * hooks/_shared/secret-patterns redact(), newlines flattened, truncated to 120 chars.
  * Fail-open: any error -> one stderr line, exit 0.
@@ -126,7 +129,13 @@ function handle(p) {
   // STAMP (own knob, no lock, fail-open on its own): a subagent's tool call refreshes its liveness file;
   // SessionEnd drops the session's stamp dir.
   try {
-    if (ev === 'PostToolUse') L.stampAgentActivity(p);
+    if (ev === 'PostToolUse') {
+      L.stampAgentActivity(p);
+      // TASKSTOP: a successful TaskStop of a background agent (task_id == agent_id) ends its stamp; SubagentStop never fires for it.
+      if (p.tool_name === 'TaskStop' && p.tool_input && typeof p.tool_input === 'object' && typeof p.tool_input.task_id === 'string') {
+        L.endAgentActivityIfPresent({ session_id: p.session_id, agent_id: p.tool_input.task_id });
+      }
+    }
     else if (ev === 'SubagentStart') L.startAgentActivity(p); // FOREMAN2: the agent exists (stamp, un-ended)
     else if (ev === 'SubagentStop') L.endAgentActivity(p); // FOREMAN: the agent is done (ended_at)
     else if (ev === 'SessionEnd') L.removeAgentActivity(p);

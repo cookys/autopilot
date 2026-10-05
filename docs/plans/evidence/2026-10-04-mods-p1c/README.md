@@ -1,11 +1,11 @@
 # mods P1b → P1c/P1d → P5 — state of play (2026-10-04)
 
 > ## IN FLIGHT (2026-10-05, session df52a188)
-> - Accepted chain (see `accepted-heads-p1w.txt`): `w/int` → wave 2 → `w/int2` e227528e → MARKER 9a94ffbf + W3a 18db7c55 → **`w/int3` 297ab2e0** (current integration head; bundle refreshed).
-> - Owner rulings R5.7 (plan): v2.37.0 no longer waits for guidance-row eval; plain sessions get a job root (PLAINROOT); explicit live-dir override always honoured (LIVEDIR).
-> - INT4 accepted `w/int4` 15966420 (LIVEDIR + PLAINROOT + hook-hosting residue fix). Eval done (R5.8: both texts 0/10, not shipped). In flight off w/int4: HOOKQ (`briefs-p1w/w-row-hookq.md`) and PHASE-TASK (`briefs-p1w/w-row-phasetask.md`). Then INT5 → W1f-b decision → W4. Blueprint https://claude.ai/artifact/6GwARh7XpbLsMSy7BwG6tE.
-> - Then: INT4 (int3 + PLAINROOT + LIVEDIR), W1b text → `session-mode.js root`, W1f-b decision (in or out of 2.37.0), W4 landing (+ p1c/d1), owner ssh+tmux gate.
-> - Leak 2026-10-05 09:24 cleaned (see accepted-heads LEAK line); LIVEDIR is its fix.
+> - Integration head **`w/int5` 2fbd2b87** (all mechanism rows + W3a + MARKER + PLAINROOT + LIVEDIR + HOOKQ + PHASE-TASK); see `accepted-heads-p1w.txt`. Plan rulings up to R5.9 (W1f-b deferred; guidance texts failed eval and were replaced by HOOKQ/PHASE-TASK).
+> - W4 LAND in flight: fresh clone `$OLD/p1c/land`, brief `briefs-p1w/w4-land.md` (chain + p1c/d1 + eval evidence, no bump/no push), report `$OLD/p1c/run-w/land/REPORT.md`.
+> - W4 GATE KIT in flight: `w/gate` (`$OLD/p1c/wt-gate`), brief `briefs-p1w/w4-gate-kit.md` (capture.sh + independent check.js + zh-TW RUNBOOK under evidence `gate/`).
+> - Then (depth-0): ONE combined review of D..land (exclusions per brief; give per-row review ids; split by subsystem if diff > ~600 KB, sequential). Then ASK the owner before fast-forwarding the main checkout (it is the live plugin via ~/.claude/plugins/cache/autopilot/autopilot/dev symlink): check `ps` for other Claude sessions / running campaigns first. Then owner gate per RUNBOOK. Then release commit: MINOR 2.37.0 per plan P1d (check `git show origin/develop:.claude-plugin/plugin.json` at that time), CHANGELOG, INDEX, plan graduation (archives the plan; touches profiles chain), preflight-release, ask before push.
+> - Blueprint page https://claude.ai/artifact/6GwARh7XpbLsMSy7BwG6tE (copy in evidence).
 
 > ## HANDOFF (2026-10-05) — read this block first
 > Plan `docs/plans/2026-10-03-mods-visible-dispatch.md` R5.4, §4 P1W table is the single source (FROZEN after G1+G2; later rulings R5.3/R5.4 in Review log).

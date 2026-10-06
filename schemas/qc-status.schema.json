@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/qc-status.schema.json",
+  "title": "qc-status",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "scope", "state", "range", "protected_files_count", "evidence", "mode", "checked_at"],
+  "properties": {
+    "schema": { "const": "autopilot.qc-status/1" },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["project_key", "repo_identity", "root_run_id"],
+      "properties": {
+        "project_key": { "type": "string", "minLength": 1 },
+        "repo_identity": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }] },
+        "root_run_id": { "type": "null" }
+      }
+    },
+    "state": { "enum": ["ok", "owed", "not_needed", "unknown"] },
+    "range": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }] },
+    "protected_files_count": { "type": "integer", "minimum": 0 },
+    "evidence": { "oneOf": [{ "enum": ["trailer", "artifact"] }, { "type": "null" }] },
+    "mode": { "oneOf": [{ "enum": ["block", "warn", "off"] }, { "type": "null" }] },
+    "checked_at": { "type": "string", "minLength": 1 }
+  }
+}

@@ -449,6 +449,29 @@ export function readForeman(text: string | null, want: ScopeWant): ForemanView |
   }
 }
 
+export const QC_SCHEMA = 'autopilot.qc-status/1'
+export type QcView = { state: 'ok' | 'owed' | 'not_needed' | 'unknown'; range: string | null; protected_files_count: number; evidence: 'trailer' | 'artifact' | null }
+
+// <live>/runs/<project_key>.qc.json (stage-graph P7c): the pre-push qc-gate decision for HEAD vs its upstream, re-derived by the watcher
+// (scripts/qc-evidence-status.js). Absent / foreign scope / unknown state = null (nothing to say).
+export function readQc(text: string | null, want: ScopeWant): QcView | null {
+  if (text === null) return null
+  const parsed = parseJson(text)
+  if (!parsed.ok || !isObject(parsed.value) || parsed.value.schema !== QC_SCHEMA || !scopeMatches(parsed.value, { project_key: want.project_key, root_run_id: null })) return null
+  const v = parsed.value
+  if (v.state !== 'ok' && v.state !== 'owed' && v.state !== 'not_needed' && v.state !== 'unknown') return null
+  return {
+    state: v.state, range: str(v.range), protected_files_count: isCount(v.protected_files_count) ? v.protected_files_count : 0,
+    evidence: v.evidence === 'trailer' || v.evidence === 'artifact' ? v.evidence : null,
+  }
+}
+
+// the review-slot chip: `QC ✓` (evidence present), `QC owed` (protected diff, no evidence); nothing owed or unknown = no chip
+export function qcChip(q: QcView | null): string | null {
+  if (q === null) return null
+  return q.state === 'ok' ? 'QC ✓' : q.state === 'owed' ? 'QC owed' : null
+}
+
 // `git-common-dir:<abs path>` -> the path (only an absolute one); anything else -> null
 export function commonDirOf(identity: unknown): string | null {
   if (typeof identity !== 'string' || !identity.startsWith('git-common-dir:')) return null

@@ -37,6 +37,7 @@ cp "$RESOLVE" "$SBX/scripts/resolve-qc-gate.sh"; chmod +x "$SBX/scripts/resolve-
 mkdir -p "$SBX/scripts/lib"
 cp "$REPO_ROOT/scripts/lib/json-emit.sh" "$SBX/scripts/lib/json-emit.sh"
 cp "$REPO_ROOT/scripts/lib/resolve-config.sh" "$SBX/scripts/lib/resolve-config.sh"
+cp "$REPO_ROOT/scripts/lib/qc-evidence.sh" "$SBX/scripts/lib/qc-evidence.sh"
 cp "$HOOK" "$SBX/.githooks/pre-push"; chmod +x "$SBX/.githooks/pre-push"
 git -C "$SBX" init -q
 git -C "$SBX" config user.email t@local; git -C "$SBX" config user.name t

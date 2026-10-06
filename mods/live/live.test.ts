@@ -58,6 +58,7 @@
 // in-memory tree; a missing file makes the bottom hook throw, which the mod sees as a rejected read.
 import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
+import { readQc, qcChip } from './model'
 
 const SURFACES = ['terminal', 'desktop'] as const
 
@@ -1720,3 +1721,24 @@ for (const surface of SURFACES) {
     expect(scopeVerdicts(await bandText($, surface))).toEqual(['待命'])
   })
 }
+
+// ---- stage-graph P7c: the QC chip of the review slot (model level; the band renders it in P7) ----
+const qcFact = (over: Record<string, unknown> = {}, scope: Record<string, unknown> = {}) => ({
+  schema: 'autopilot.qc-status/1', scope: { project_key: KEY, repo_identity: 'git-common-dir:' + COMMON, root_run_id: null, ...scope },
+  state: 'owed', range: 'abc..HEAD', protected_files_count: 2, evidence: null, mode: 'block', checked_at: '2026-10-04T10:00:00.000Z', ...over,
+})
+const QC_WANT = { project_key: KEY, root_run_id: ROOT }
+test('P7c: qc fact -> chip: ok = QC ✓, owed = QC owed, not_needed / unknown / absent = no chip', async () => {
+  expect(qcChip(readQc(JSON.stringify(qcFact({ state: 'ok', evidence: 'trailer' })), QC_WANT))).toBe('QC ✓')
+  expect(qcChip(readQc(JSON.stringify(qcFact({ state: 'owed' })), QC_WANT))).toBe('QC owed')
+  expect(qcChip(readQc(JSON.stringify(qcFact({ state: 'not_needed', protected_files_count: 0 })), QC_WANT))).toBe(null)
+  expect(qcChip(readQc(JSON.stringify(qcFact({ state: 'unknown', range: null })), QC_WANT))).toBe(null)
+  expect(qcChip(readQc(null, QC_WANT))).toBe(null)
+})
+test('P7c: qc fact of another project, another schema, a bad state or broken JSON is absent', async () => {
+  expect(readQc(JSON.stringify(qcFact({}, { project_key: OTHER_KEY })), QC_WANT)).toBe(null)
+  expect(readQc(JSON.stringify(qcFact({ schema: 'autopilot.qc-status/2' })), QC_WANT)).toBe(null)
+  expect(readQc(JSON.stringify(qcFact({ state: 'maybe' })), QC_WANT)).toBe(null)
+  expect(readQc('{nope', QC_WANT)).toBe(null)
+  expect(readQc(JSON.stringify(qcFact({ state: 'ok', evidence: 'trailer' })), QC_WANT)).toEqual({ state: 'ok', range: 'abc..HEAD', protected_files_count: 2, evidence: 'trailer' })
+})

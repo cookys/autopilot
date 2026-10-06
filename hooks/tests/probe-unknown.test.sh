@@ -221,6 +221,7 @@ printf '%s\n' '{"verdict":"TRIP","reasons":["no-progress"]}' > "$TEST_TMP/conv.j
 ISO="$TEST_TMP/iso-repo"; mkdir -p "$ISO"; git -C "$ISO" init -q; printf x > "$ISO/f.txt"; git -C "$ISO" add f.txt
 GPIN=("${PIN[@]}" --repo-root "$ISO")
 norm() { node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);delete j.ledger;console.log(JSON.stringify(j))})'; }
+NORES="$TEST_TMP/nores"; mkdir -p "$NORES"; cp "$PROBE" "$NORES/probe-unknown.js"
 golden_cases() {
   node "$PROBE" classify --ledger "$TEST_TMP/none.jsonl" "${GPIN[@]}" | norm
   node "$PROBE" classify --ledger "$G" --work-unit gw "${GPIN[@]}" | norm
@@ -235,11 +236,13 @@ golden_cases() {
   node "$PROBE" classify --ledger "$G" --work-unit gt --terms "$GT" "${GPIN[@]}" | norm
   node "$PROBE" classify --ledger "$G" --work-unit gdec --consensus LOW --terms "$GT" "${GPIN[@]}" | norm
   node "$PROBE" classify --ledger "$G" --work-unit gw --convergence "$TEST_TMP/conv.json" --stall "$TEST_TMP/stall.json" --terms "$GT" "${GPIN[@]}" | norm
+  # built-in budget defaults: a copy of the probe with no resolver beside it, and no --budget-* flags
+  node "$NORES/probe-unknown.js" classify --ledger "$G" --work-unit gw --knob auto --consult-resolved-from topology --consult-dispatch auto --knowledge-dir "$TEST_TMP/k" --memory-dir "$TEST_TMP/m" --repo-root "$ISO" | norm
 }
 if [ -n "${PROBE_GOLDEN_WRITE:-}" ]; then golden_cases > "$PROBE_GOLDEN_WRITE"; echo "golden written: $PROBE_GOLDEN_WRITE"; fi
 golden_cases > "$TEST_TMP/golden.actual"
-assert_eq "$(cat "$TEST_TMP/golden.actual")" "$(cat "$GOLDEN")" "knob off (default): 12 classify outputs byte-identical to the pre-change golden"
-assert_eq "$(wc -l < "$GOLDEN" | tr -d ' ')" "12" "golden holds 12 cases"
+assert_eq "$(cat "$TEST_TMP/golden.actual")" "$(cat "$GOLDEN")" "knob off (default): 13 classify outputs byte-identical to the pre-change golden"
+assert_eq "$(wc -l < "$GOLDEN" | tr -d ' ')" "13" "golden holds 13 cases"
 assert_not_contains "$(cat "$TEST_TMP/golden.actual")" '"u4"' "knob off: no u4 budget key leaks"
 assert_not_contains "$(cat "$TEST_TMP/golden.actual")" 'ladder_v3' "knob off: no ladder_v3 key leaks"
 # explicit --ladder-v3 off equals default

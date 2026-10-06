@@ -525,3 +525,7 @@ None. Resolved 2026-10-06:
   - per-phase discovery wiring;
   - Train B as one atomic landing.
 - **FROZEN** (2026-10-06). The criterion: after depth-0 adjudication of G2, no construct- or mechanism-level finding is left unanswered (each one is folded or refuted). This is not a zero-findings criterion. Receipt gate: `check-phase-review-receipt.js --plan-artifact ….g2-artifact.json --dispositions ….g2-dispositions.json` rc=0, run against the reviewed R1 text (`git show 7c8a941f:<plan>`, sha256 `18dfc0a2…`), because the artifact binds the plan bytes the panel saw.
+- **Execution deviations** are bookkeeping, not a re-review. They are logged in [`evidence/2026-10-06-stage-graph/README.md`](evidence/2026-10-06-stage-graph/README.md):
+  - **§2.7 E1 bump and `high_risk`** measure `base_ref` against the working tree plus untracked files, instead of `..HEAD`. qc-gate runs before commit, so `..HEAD` would never fire.
+  - **P0 first rung** is `eligible_max`, not `recommend`. `recommend` depends on the host roster.
+  - **`stage-graph.js next` from `research`** needs `--research`. `stage-advance.js` passes it, and P3 rails calling `next` directly must pass it too.

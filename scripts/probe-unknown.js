@@ -17,8 +17,9 @@
  *   S6 self-report                                            — kind:unknown rows (claim: caps at U1 alone)
  *
  * Rungs: U0 local knowledge · U1 consult seat · U2 web research (survey /
- * issue-search) · U3 multi-perspective (think-tank / PUA) · U4 owner.
- * Chains: how U1→U2 · why U1→U2→U3 · whether U1→U3.
+ * issue-search) · U3 multi-perspective panel (dispatch-discuss / think-tank / PUA) · U4 experiment (spike).
+ * Chains: how U1→U2 · why U1→U2→U3 · whether U1→U3 (the experiment rung is appended to each; see Ladder below).
+ * Rung U5 is the owner stop, documented in the Ladder section.
  *
  * Rules (plan §3, frozen rubric R10/R11/R12/R13/R16):
  *   co-signal      S4 alone or S6 alone ⇒ at most U1. U2 needs S4 + one of S1/S2/S3/S5,
@@ -28,8 +29,8 @@
  *   exhaustion     a rung with used ≥ budget is never repeated; a higher rung is
  *                  recommended only when the signals make it eligible — exhaustion never
  *                  buys it. When every eligible rung is spent: recommend none,
- *                  reason budget-exhausted. Never U4 from exhaustion.
- *   U4             classify NEVER emits U4. The owner rung is reached by the caller's own
+ *                  reason budget-exhausted. Never an escalation from exhaustion.
+ *   U5             classify NEVER emits U5. The owner rung is reached by the caller's own
  *                  stop (stall fuse §8 / DOA boundary), which attaches the ladder receipts;
  *                  a spent budget is `none`, never an escalation (G2 R11).
  *   knob           unknown_escalation off ⇒ recommend none, reason knob-off (one knob-off
@@ -63,12 +64,10 @@
  * Knob / budgets / consult fields default to `resolve-review-loop.sh --field …`
  * when present (P2 adds the fields), else auto / 2,1,1 / topology.
  *
- * unknown_ladder_v3 (P4a of docs/plans/2026-10-06-dev-flow-stage-graph.md; default OFF — with the knob
- * off every classify/receipt/report byte is unchanged). Turn it on with `--ladder-v3 on`, env
- * AUTOPILOT_UNKNOWN_LADDER_V3=on, or the resolver field `unknown_ladder_v3: on` (read via
- * resolve-review-loop.sh --field, absent ⇒ off; precedence in that order). When on:
- *   budgets    U1 2 · U2 1 · U3 1 · U4 1 per work unit (`--budget-u4` / resolver `unknown_budget_u4`).
- *   U3 panel   same eligibility as today (why/whether + one of S1/S2/S3/S5; a `how` unknown stays capped at
+ * Ladder (docs/plans/2026-10-06-dev-flow-stage-graph.md P4; v3 is the only behaviour — the P4a knob is gone):
+ *   budgets    U1 2 · U2 1 · U3 1 · U4 1 per work unit (`--budget-u1..4` / resolver `unknown_budget_u1..u4`; an
+ *              absent resolver field falls back to the built-in default).
+ *   U3 panel   eligible iff unknown_type ∈ {why, whether} and one of S1/S2/S3/S5 (a `how` unknown stays capped at
  *              U2). classify names the rail: `dispatch-discuss` when the discuss seat is qualified
  *              (resolver discuss_dispatch=on with a non-empty seat tuple; `--discuss-dispatch on|off`
  *              overrides), else `think-tank` (whether) / `debugger-pua` (why) with heterogeneous:false and
@@ -79,11 +78,16 @@
  *   U4 experiment  recommended last in the chain, only when a U2 climb receipt (no reason) exists for the
  *              work unit AND S4 or S1 is still present. Receipt adds question, criterion and
  *              result pass|fail|inconclusive (`--question --criterion --result`, all required).
- *   owner      the owner rung is U5 under v3; classify never emits U5 (nor U4 as owner).
  *   report     ladder entries carry rail/families/question/criterion/result when the row has them.
- * Exhaustion is unchanged: used ≥ budget is never repeated; all spent ⇒ none, budget-exhausted.
+ * Exhaustion: used ≥ budget is never repeated; all spent ⇒ none, budget-exhausted.
  *
- * Node ≥ 20.10, built-ins only. Exit: 0 ok · 2 usage (or --strict; under v3 also when recommend is U4).
+ * Owner rung (U5): reached only by the caller's own stop; `receipt --rung U5` records it. Rung four is NOT the
+ * owner rung and there is no alias: a new receipt at rung four without question/criterion/result (and without
+ * a skip reason) is refused. Historical ledger rows are READ as-is: a pre-v3 row at rung four (then the owner
+ * meaning) has neither result nor reason, so report lists it but it never counts against the experiment
+ * budget — only rows carrying an experiment result, or a rail-failed reason, consume that budget.
+ *
+ * Node ≥ 20.10, built-ins only. Exit: 0 ok · 2 usage (or --strict when recommend ∈ {U2,U3,U4}).
  */
 
 const fs = require('fs');
@@ -104,7 +108,10 @@ const U4_RESULTS = new Set(['pass', 'fail', 'inconclusive']);
 // it never triggers learn). Found by the P4 dogfood: a consult seat without credentials would otherwise
 // be recommended on every round.
 const SKIP_REASONS = new Set(['knob-off', 'budget-exhausted', 'not-heterogeneous', 'rail-failed']);
-const STRICT_SET = new Set(['U2', 'U3']); // U4 is never emitted by classify
+const STRICT_SET = new Set(['U2', 'U3', 'U4']);
+
+// The terminal rung a caller records when it stops; classify never emits it.
+const OWNER_RUNG = 'U5';
 
 function usage(message) {
   process.stderr.write(`probe-unknown: ${message}\n`);
@@ -141,7 +148,6 @@ function parseArgs(argv) {
       case '--budget-u2': opts.budgetU2 = value; break;
       case '--budget-u3': opts.budgetU3 = value; break;
       case '--budget-u4': opts.budgetU4 = value; break;
-      case '--ladder-v3': opts.ladderV3 = value; break;
       case '--discuss-dispatch': opts.discussDispatch = value; break;
       case '--rail': opts.rail = value; break;
       case '--families': opts.families = value.split(',').map((t) => t.trim()).filter(Boolean); break;
@@ -256,14 +262,6 @@ function resolveKnobProvenance(opts) {
   return resolverField('unknown_resolved_from', opts) || 'default';
 }
 
-// unknown_ladder_v3: --ladder-v3 on|off wins, then env AUTOPILOT_UNKNOWN_LADDER_V3, then the resolver field (absent ⇒ off).
-function resolveLadderV3(opts) {
-  const raw = opts.ladderV3 !== undefined ? opts.ladderV3 : (process.env.AUTOPILOT_UNKNOWN_LADDER_V3 || resolverField('unknown_ladder_v3', opts));
-  const v = raw === null || raw === undefined ? 'off' : String(raw).toLowerCase();
-  if (!['on', 'off'].includes(v)) usage(`--ladder-v3 must be on|off (got ${raw})`);
-  return v === 'on';
-}
-
 // Discuss seat qualification, as dispatch-discuss.js sees it: the resolver admits the seat
 // (exit 0, discuss_dispatch=on, non-empty engine+runner). --discuss-dispatch on|off overrides.
 function discussQualified(opts) {
@@ -275,10 +273,9 @@ function discussQualified(opts) {
   return !!(snap && snap.discuss_dispatch === 'on' && snap.discuss_engine && snap.discuss_runner);
 }
 
-function resolveBudgets(opts, v3) {
+function resolveBudgets(opts) {
   const out = {};
-  const table = [['U1', 'budgetU1', 'unknown_budget_u1'], ['U2', 'budgetU2', 'unknown_budget_u2'], ['U3', 'budgetU3', 'unknown_budget_u3']];
-  if (v3) table.push(['U4', 'budgetU4', 'unknown_budget_u4']);
+  const table = [['U1', 'budgetU1', 'unknown_budget_u1'], ['U2', 'budgetU2', 'unknown_budget_u2'], ['U3', 'budgetU3', 'unknown_budget_u3'], ['U4', 'budgetU4', 'unknown_budget_u4']];
   for (const [rung, flag, field] of table) {
     const raw = opts[flag] !== undefined ? opts[flag] : resolverField(field, opts);
     const n = raw === null || raw === undefined || raw === '' ? DEFAULT_BUDGETS[rung] : Number(raw);
@@ -393,14 +390,17 @@ function classify(opts) {
   }
 
   const knob = resolveKnob(opts);
-  const v3 = resolveLadderV3(opts);
-  const budgets = resolveBudgets(opts, v3);
+  const budgets = resolveBudgets(opts);
   const consult = resolveConsult(opts);
   const heterogeneousU1 = consult.dispatch !== 'off' && consult.resolvedFrom !== 'native-fallback';
 
-  const used = { U1: 0, U2: 0, U3: 0 };
-  if (v3) used.U4 = 0;
-  for (const r of rows) if (r.kind === 'ladder' && (!r.reason || r.reason === 'rail-failed') && used[r.rung] !== undefined) used[r.rung] += 1;
+  const used = { U1: 0, U2: 0, U3: 0, U4: 0 };
+  for (const r of rows) {
+    if (r.kind !== 'ladder' || !(!r.reason || r.reason === 'rail-failed') || used[r.rung] === undefined) continue;
+    // A pre-v3 row at rung four carries neither result nor reason: read as-is, never an experiment spend.
+    if (r.rung === 'U4' && r.result === undefined && r.reason !== 'rail-failed') continue;
+    used[r.rung] += 1;
+  }
 
   const out = {
     schema_version: 1,
@@ -413,15 +413,12 @@ function classify(opts) {
     skipped_rungs: [],
     heterogeneous_u1: heterogeneousU1,
     eligible_max: eligibleMax,
-    budget: { u1: budgets.U1, u2: budgets.U2, u3: budgets.U3, used },
+    budget: { u1: budgets.U1, u2: budgets.U2, u3: budgets.U3, u4: budgets.U4, used },
     knob,
     knob_resolved_from: resolveKnobProvenance(opts),
     terms_hits: termsHits,
+    ladder_v3: true,
   };
-  if (v3) {
-    out.budget = { u1: budgets.U1, u2: budgets.U2, u3: budgets.U3, u4: budgets.U4, used };
-    out.ladder_v3 = true;
-  }
 
   if (knob === 'off') {
     out.reason = 'knob-off';
@@ -434,13 +431,13 @@ function classify(opts) {
     return finish(out, opts);
   }
 
-  const chain = v3 ? [...CHAINS[unknownType], 'U4'] : CHAINS[unknownType];
+  const chain = [...CHAINS[unknownType], 'U4'];
   const hasU2Receipt = rows.some((r) => r.kind === 'ladder' && r.rung === 'U2' && !r.reason);
   const maxIdx = RUNGS.indexOf(eligibleMax);
   let anyEligible = false;
   for (const rung of chain) {
     if (rung === 'U4') {
-      // v3 experiment rung: signal-gated, not position-gated (a U2 receipt plus S4 or S1 still standing).
+      // experiment rung: signal-gated, not position-gated (a U2 receipt plus S4 or S1 still standing).
       if (!(hasU2Receipt && (has('S4') || has('S1')))) continue;
     } else if (RUNGS.indexOf(rung) > maxIdx) break;
     if (rung === 'U1' && !heterogeneousU1) {
@@ -451,14 +448,14 @@ function classify(opts) {
     if (used[rung] < budgets[rung]) {
       out.recommend = rung;
       if (out.skipped_rungs.length) out.reason = 'not-heterogeneous';
-      if (v3 && rung === 'U3') {
+      if (rung === 'U3') {
         if (discussQualified(opts)) { out.rail = 'dispatch-discuss'; out.heterogeneous = true; } else {
           out.rail = unknownType === 'whether' ? 'think-tank' : 'debugger-pua';
           out.heterogeneous = false;
           out.reason = 'not-heterogeneous';
         }
       }
-      if (v3 && rung === 'U4') out.experiment = 'spike in a throwaway worktree; receipt needs --question --criterion --result';
+      if (rung === 'U4') out.experiment = 'spike in a throwaway worktree; receipt needs --question --criterion --result';
       return finish(out, opts);
     }
   }
@@ -469,7 +466,7 @@ function classify(opts) {
     return finish(out, opts);
   }
   // Every signal-eligible rung is spent. The frozen contract (plan §3, G2 R11): exhaustion
-  // is always `none` — never a higher rung, never U4. classify never emits U4 at all; the
+  // is always `none` — never a higher rung. classify never emits the terminal rung; the
   // owner escalation is the stall fuse / DOA boundary the foreman already has, to which it
   // attaches the ladder receipts (depth0-control-loop.md §6).
   out.recommend = 'none';
@@ -489,7 +486,7 @@ function recordKnobOff(ledger, rows, opts, unknownType) {
 
 function finish(out, opts) {
   emit(out);
-  if (opts.strict && (STRICT_SET.has(out.recommend) || (out.ladder_v3 && out.recommend === 'U4'))) process.exit(2);
+  if (opts.strict && STRICT_SET.has(out.recommend)) process.exit(2);
   process.exit(0);
 }
 
@@ -503,7 +500,7 @@ function appendLadderRow(ledger, row, opts) {
 
 function receipt(opts) {
   const ledger = opts.ledger || defaultLedger(opts);
-  if (!RUNGS.includes(opts.rung)) usage('--rung must be U0..U4');
+  if (!RUNGS.includes(opts.rung) && opts.rung !== OWNER_RUNG) usage('--rung must be U0..U5');
   if (!['how', 'why', 'whether', 'none'].includes(opts.unknownType)) usage('--unknown-type must be how|why|whether|none');
   if (!opts.terms) usage('--terms is required (comma-separated; the task nouns the climb was about)');
   if (!opts.signals) usage('--signals is required (comma-separated signal ids, e.g. S1,S3)');
@@ -514,9 +511,6 @@ function receipt(opts) {
     heterogeneous = opts.heterogeneous === 'true';
   }
   const row = { rung: opts.rung, unknown_type: opts.unknownType, terms: opts.terms, signal_ids: opts.signals, heterogeneous };
-  const v3Flags = ['rail', 'families', 'question', 'criterion', 'result'].filter((k) => opts[k] !== undefined);
-  // v3 receipt fields are refused unless the knob is on, so knob-off rows can never carry them.
-  if (v3Flags.length && !resolveLadderV3(opts)) usage(`--${v3Flags[0]} requires unknown_ladder_v3 on (--ladder-v3 on)`);
   if (opts.rail !== undefined) {
     if (opts.rung !== 'U3') usage('--rail/--families apply to --rung U3 only');
     if (!U3_RAILS.has(opts.rail)) usage(`--rail must be one of ${[...U3_RAILS].join('|')}`);
@@ -528,7 +522,7 @@ function receipt(opts) {
     if (!opts.question || !opts.criterion) usage('U4 receipt needs both --question and --criterion');
     if (!U4_RESULTS.has(opts.result)) usage(`--result must be one of ${[...U4_RESULTS].join('|')}`);
     row.question = opts.question; row.criterion = opts.criterion; row.result = opts.result;
-  } else if (opts.rung === 'U4' && !opts.reason && resolveLadderV3(opts)) usage('U4 experiment receipt needs --question --criterion --result');
+  } else if (opts.rung === 'U4' && !opts.reason) usage('an experiment receipt needs --question --criterion --result');
   if (opts.reason) row.reason = opts.reason;
   if (opts.runId) row.dispatch_run_id = opts.runId;
   if (opts.workUnit) row.work_unit = opts.workUnit;

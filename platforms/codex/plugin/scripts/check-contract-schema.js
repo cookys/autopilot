@@ -161,31 +161,13 @@ function main() {
     fail(`references/stage-graph.json fails stage-graph.js validate: ${(sg.stdout || '').trim() || (sg.stderr || '').trim()}`);
   }
 
-  // Session marker (P2a): schemas/session-marker.schema.json must itself be a valid schema, accept every
-  // hooks/tests/fixtures/session-marker/valid-*.json and reject every invalid-*.json.
-  {
-    const { validateJsonSchema } = require('./validate-json-schema.js');
-    const fxDir = path.join(REPO_ROOT, 'hooks', 'tests', 'fixtures', 'session-marker');
-    let markerSchema;
-    try {
-      markerSchema = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'schemas', 'session-marker.schema.json'), 'utf8'));
-    } catch (e) {
-      fail(`schemas/session-marker.schema.json unreadable: ${e.message}`);
-    }
-    const fixtures = fs.existsSync(fxDir) ? fs.readdirSync(fxDir).filter((f) => f.endsWith('.json')).sort() : [];
-    if (!fixtures.some((f) => f.startsWith('valid-')) || !fixtures.some((f) => f.startsWith('invalid-'))) {
-      fail('hooks/tests/fixtures/session-marker needs at least one valid-*.json and one invalid-*.json');
-    }
-    for (const f of fixtures) {
-      const want = f.startsWith('valid-');
-      let verdict;
-      try {
-        verdict = validateJsonSchema(markerSchema, JSON.parse(fs.readFileSync(path.join(fxDir, f), 'utf8'))).valid;
-      } catch (e) {
-        fail(`session-marker schema check threw on ${f}: ${e.message}`);
-      }
-      if (verdict !== want) fail(`session-marker fixture ${f} should be ${want ? 'accepted' : 'rejected'} by schemas/session-marker.schema.json`);
-    }
+  // Session marker (P2a): the shipped schemas/session-marker.schema.json must be readable JSON. The
+  // valid-*/invalid-* fixture checks live in hooks/tests/session-marker-schema.test.sh: fixtures are test
+  // assets that the generated Codex package does not ship, so this gate validates shipped artifacts only.
+  try {
+    JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'schemas', 'session-marker.schema.json'), 'utf8'));
+  } catch (e) {
+    fail(`schemas/session-marker.schema.json unreadable: ${e.message}`);
   }
 
   console.log(`contract-schema-ok (${fieldOrder.length} fields, three-way equality + field-set + enum parity verified)`);

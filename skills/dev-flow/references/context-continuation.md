@@ -1,7 +1,7 @@
 # Context Continuation (Resuming Prior Work)
 
 > On-demand reference for dev-flow. Loaded only when resuming work on an existing
-> feature branch with an active project. Origin: `dev-flow/SKILL.md` Phase 1.
+> feature branch with an active project. Origin: `dev-flow/SKILL.md` Session Start.
 
 When resuming work on an existing feature branch with an active project:
 
@@ -13,15 +13,20 @@ When resuming work on an existing feature branch with an active project:
 2. Refresh session start SHA:
    git rev-parse HEAD > .claude/session-start-sha
 
-3. Branch check + freshness (same as L-size gates 2-3).
+3. Branch check + freshness (dev-flow start-gate table).
 
-4. Identify resume point from project docs or prior task state.
+4. Identify the resume point (node + unit) from project docs, the handoff, or prior task state.
+   Same session: `node scripts/session-mode.js status` shows `stage` and `unit`.
+   New session (the marker is per session): `node scripts/session-mode.js set --size <original size>
+   [--urgent] [--bug]`, then `stage-advance.js --to` each node of the `stage-graph.js nodes` walk up
+   to the resume node — the first write must be the entry node, and each later call is a legal move.
+   Continue with `node scripts/stage-graph.js next --from <stage> --size <size> [flags]`.
    When Mission is active, apply the resume-projection rule below.
 
 5. Skill routing check for the target code area.
 ```
 
-Context continuation never re-evaluates size. It uses the size established in the original session.
+Context continuation never re-evaluates size. It uses the size from the original session; only the E1 bump (`stage-advance.js` exit 4) moves it, and only upward.
 
 ## Resume projection (Mission)
 

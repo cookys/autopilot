@@ -1,7 +1,7 @@
 ---
 name: dev-flow
 description: >
-  Start here before writing any code — sizes task (S/L/H/Fix), sets up branch and session rules.
+  Start here before writing any code — sizes the task (XS/S/M/L/XL, bug, urgent `!`), sets up branch and session rules.
   Use when: "I'm starting on X", "quick fix for Y", "continuing from yesterday", "hotfix needed",
   "let's implement X", "skip to coding", "我要開始做 X", "快速修一下", "接續昨天的進度",
   resuming a feature branch, or any task that touches code. Not for: debugging
@@ -9,7 +9,7 @@ description: >
   exploration (→ brainstorm), or code review (→ quality-pipeline).
 ---
 
-# Development Flow Evaluation
+# Development Flow
 
 ## Project Config (auto-injected)
 !`cat .claude/dev-flow-config.md 2>/dev/null || true`
@@ -26,68 +26,56 @@ If no project config above, autopilot's own fallback skills are primary for meth
 
 ---
 
-## Phase 1: Session Start
+## Session Start
 
-Run before any code changes. Size determines which path executes.
-
-### S-Size Fast Path
-
-Total overhead target: under 5 seconds.
+Run before any code change. The stage graph (`references/stage-graph.json`) is the only definition of which
+nodes run; this skill says what to do inside each node. Script contract and exit handling:
+[references/stage-graph.md](references/stage-graph.md).
 
 ```
-1. Confirm task: restate what will be done in one sentence.
-2. Branch check: `git branch --show-current` -- confirm on expected branch.
-3. Proceed to S Workflow. No further gates.
+1. Size the task (table below), then record it — the flags are separate, never `--size M!`:
+   node scripts/session-mode.js set --size <XS|S|M|L|XL> [--urgent] [--bug]
+2. Read your node sequence (never copy it from prose):
+   node scripts/stage-graph.js nodes --size <size> [--bug] [--urgent]
+3. Run the start gates for your size (gate table below).
+4. Enter the first node: node scripts/stage-advance.js --to <entry from step 2>
 ```
 
-S-size skips: branch freshness, knowledge/digest review, draft plan overlap, risk escalation.
+### Sizing
 
-### L-Size Full Gates
+| Size | Predicate — decide structure first (XL, then L); otherwise the smallest of XS, S, M that holds |
+|------|-----------|
+| **XL** | Several deliverables that are independent of each other and each shippable alone |
+| **L** | One deliverable in multiple phases that build on each other, OR an open design question, a public API change, incompatible data, a feature flag, or the user asks for planning |
+| **M** | One deliverable touching several modules or adding a module, design already clear; fits `stage-graph.js limits --size M` |
+| **S** | One module, one commit, no interface change beyond an additive flag; fits `stage-graph.js limits --size S` |
+| **XS** | One spot (a value, a message, one condition) plus the test that pins it; fits `stage-graph.js limits --size XS` |
 
-All gates must pass before any code changes begin. If any gate is blocked, surface to the decision-maker (user in normal mode, CEO in CEO mode).
+| Modifier | Predicate | Flag |
+|----------|-----------|------|
+| bug | The task is to make existing wrong behavior right. Size it by the fix's footprint (cause not yet located across several modules ⇒ M); module count alone never makes a bug L | `--bug` (entry node `diagnose`) |
+| urgent | Production is broken, or the user says it must ship now / today / within hours | `--urgent` (written `S!` / `S急` in prose and backlog) |
 
-```
-1. Record session start SHA:
-   git rev-parse HEAD > .claude/session-start-sha
+- Between XS, S and M pick the smaller one: the E1 bump (`stage-advance.js` exit 4) moves the size up when the diff
+  outgrows it. L and XL are decided by structure, not by diff size.
+- Risk (money/points, auth/security, production protocol) does not change the size. It raises review strength:
+  `scripts/resolve-review-loop.sh` reads it from `classify-diff-risk.sh` (`review_risk`).
+- Size moves only up (`set --size` refuses a downward move). A resumed session never re-sizes.
 
-2. Branch check:
-   git branch --show-current
+### Start gates
 
-3. Branch freshness:
-   BEHIND=$(git log HEAD..main --oneline 2>/dev/null | wc -l)
-   AHEAD=$(git log main..HEAD --oneline 2>/dev/null | wc -l)
-   Evaluate using the freshness table below.
-   If main does not exist (new repo), skip this gate.
+| Gate | Sizes | How | Enforcer |
+|------|-------|-----|----------|
+| Confirm task | all | Restate what will be done in one sentence (bug: the symptom and, when known, the root cause) | documented-only |
+| Branch check | all | `git branch --show-current`; bug ⇒ `git checkout -b fix/<description>`; production broken ⇒ `git checkout -b hotfix/<description> main` | documented-only |
+| Session start SHA | M, L, XL | `git rev-parse HEAD > .claude/session-start-sha` | documented-only |
+| Branch freshness | M, L, XL | `git log HEAD..main --oneline \| wc -l` (behind) and `git log main..HEAD --oneline \| wc -l` (ahead) → freshness table; no `main` ⇒ skip | documented-only |
+| Knowledge review | M, L, XL | `.claude/knowledge/` for prior learnings; unprocessed session digests; for L/XL also the ladder probe at `intent` | documented-only |
+| Draft plan overlap | M, L, XL | `ls docs/plans/*.md` (or the configured path): same feature / module / user story ⇒ normal mode asks the user whether to adopt the draft; CEO mode decides within DOA | documented-only |
+| Skill routing | all | Project skills for the target code area (CLAUDE.md, `.claude/skill-routing.md`) are invoked before code is written; L/XL via the skill-routing TaskCreate at `intent` | TaskCreate + blockedBy (L/XL); documented-only (XS–M) |
+| TaskCreate tools | all | TaskCreate missing from the tool list (Claude 5-era models are gated off by default since CC 2.1.233) ⇒ warn the user once to set `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` via `.claude/settings.json` `env` and continue — advisory, never a blocker (`references/multi-agent-portability.md`, task-persistence row) | documented-only |
 
-4. Knowledge and digest review:
-   Check .claude/knowledge/ for relevant prior learnings.
-   Check for unprocessed session digests.
-   Ladder probe (unknown-escalation ladder, plan `docs/plans/_archive/2026/09/2026-09-07-unknown-escalation-ladder.md`): run
-   `node scripts/probe-unknown.js classify --ledger <ledger> --work-unit <phase> --terms <key nouns from the task brief>` and act only on `recommend` — U0: read the local hits it lists; U1: `bash scripts/dispatch-consult.sh --question-file <q> --artifact <a> --ladder-receipt <ledger> --ladder-terms <terms> --ladder-unknown-type <unknown_type from classify> --ladder-signals <ids from classify> --ladder-work-unit <phase>`; U2: survey (`issue-search` mode for a `why` unknown), then `node scripts/probe-unknown.js receipt --ledger <ledger> --rung U2 --unknown-type <unknown_type> --terms <terms> --signals <ids> --work-unit <phase>`; U3 (reachable when earlier refuted `hypothesis` rows make the unknown `why`): `autopilot:debugger` PUA for `why`, `autopilot:think-tank` for `whether`, then the same `receipt` with `--rung U3`; none: continue. At L-1 no phase exists yet: use the task id as `<phase>` here; from L-2 on use the phase id (budgets count per phase for L/H).
-   Ledger: `<project>/ledger/decisions.jsonl` (the probe's default when the flag is omitted is `~/.autopilot/ladder/<repo-hash>.jsonl`).
-
-5. Draft plan overlap check:
-   ls docs/plans/*.md 2>/dev/null  (or project-configured path)
-   If draft plans exist, check if the current task overlaps with any draft plan
-   (same feature, same module, or same user story).
-   If overlap found:
-   - Normal mode: surface to user -- confirm whether to proceed or adopt the draft.
-   - CEO mode: CEO decides within DOA (tactical decision).
-   If no draft plans or no overlap: proceed.
-
-6. Skill routing:
-   Check CLAUDE.md (or project config) for code-area-specific skills.
-   If a skill is listed for the target code area, invoke it before writing code.
-   **Active enforcement**: For L-size, this gate is backed by the L-1.6 TaskCreate
-   parent task (see L Workflow → Task tracking). Reading this bullet is NOT enough —
-   the TaskCreate is the forcing function that prevents skipping.
-   If TaskCreate is missing from your tool list (Claude 5-era models are gated off by
-   default since CC 2.1.233), warn the user once to set `CLAUDE_CODE_ENABLE_TODO_TOOLS=1`
-   via `.claude/settings.json` `env` and continue without it — advisory, never a blocker
-   (details: `references/multi-agent-portability.md`, task-persistence row).
-```
-
-### Branch Freshness Table
+Branch freshness:
 
 | Behind | Ahead | Status | Action |
 |--------|-------|--------|--------|
@@ -96,270 +84,34 @@ All gates must pass before any code changes begin. If any gate is blocked, surfa
 | >5 | 0 | Behind, no local work | Warn user, recommend merge |
 | >5 | >0 | DIVERGED | Flag to user before proceeding |
 
-### Fix Path
-
-Same lightweight start as S, plus branch creation:
-
-```
-1. Confirm root cause: restate the bug and known fix in one sentence.
-2. Branch: `git checkout -b fix/<description>`
-3. Skill routing check for the target code area.
-4. Proceed to Fix Workflow.
-```
-
-Fix skips: knowledge/digest review, plan overlap, branch freshness (short-lived branch).
-
 ### Context Continuation (Resuming Prior Work)
 
-Resuming work on an existing feature branch with an active project → follow the 5-step procedure in [references/context-continuation.md](references/context-continuation.md) (uncommitted-changes check, SHA refresh, branch freshness, resume point, skill routing). Context continuation never re-evaluates size — it uses the size from the original session.
+Resuming a feature branch with an active project → the 5-step procedure in
+[references/context-continuation.md](references/context-continuation.md). The size is the original session's;
+the walk resumes at the recorded node, never re-sized.
 
 ---
 
-## Session Rules (persist throughout)
+## Stage protocol
 
-These rules apply to ALL subsequent work in this session, regardless of which skills are invoked.
-They complement (not replace) any built-in skills — providing project-specific context.
+| Situation | Do |
+|-----------|----|
+| Entering any node | `node scripts/stage-advance.js --to <node>` before its work. Rails write `plan-review`, `code-review` and (at /l5–/l6) `implement` themselves; every other node is yours. A skill you hand off to may write the same node again — a repeat write is a harmless same-node update, so write it anyway |
+| Entering `implement` when `nodes` prints a non-null `unit_kind` | Add `--unit <unit_kind>:<i>/<N>:<label>` (`phase:` or `deliverable:`). Same `<i>` = repair of that unit; `<i>+1` = next unit; leaving the loop needs `<i> = <N>` |
+| Choosing the next node | `node scripts/stage-graph.js next --from <stage> --size <size> [--bug] [--urgent] [--research]`. `implement` in that list is the repair / next-unit edge; otherwise take the forward node |
+| Exit 3 | Illegal move: read `legal_next`, go to one of those. Never retry the refused `--to`, never force |
+| Exit 4 | E1 bump: `session-mode.js set --size <bump_to>`, then advance to the forward node of `stage-graph.js next --from <current stage> --size <bump_to>`. Never retry the original `--to` |
+| Exit 2 / 5 | No marker / no size: run Session Start step 1, then retry the same call |
 
-### Config Injection Rules
-
-When performing these activities, FIRST read the corresponding config file if it exists.
-The config provides project-specific tools, commands, known issues, and conventions.
-If the config file does not exist, proceed normally without it.
-
-| Activity | Config File | What It Contains |
-|----------|------------|-----------------|
-| Debugging (bugs, crashes, logic errors) | `.claude/debug-config.md` | Debug tools, Docker commands, known gotchas, layer-by-layer diagnosis |
-| Writing or running tests | `.claude/test-strategy-config.md` | Test framework, commands, coverage thresholds, test pyramid conventions |
-| Parallel task dispatch (team work) | `.claude/team-config.md` | Role templates, tech stack context, team size rules |
-| Performance profiling | `.claude/profiling-config.md` | Profiling tools, metrics collection, baseline commands |
-| Comparison audit (old vs new) | `.claude/audit-config.md` | Known by-design divergences, audit scope definitions |
-| Methodology / reviewer / parallel dispatch routing | `.claude/dispatch-config.md` | Preference chains for debugging / testing / profiling / team / review / parallel dispatch (also auto-injected at top of this skill) |
-
-### Quality Gate Rule
-
-Stated at the step that runs it — S step 2 / Fix step 4 run the project-config gate (default lint + test; the optional finish-flow route runs the stricter `quality-pipeline --size S` at F.1); L / H run `autopilot:quality-pipeline` via finish-flow L-5.2 / H-9.2; for L-size work, quality gate completion also depends on valid L-2.5 and L-4 hetero review receipts. Enforcer: `documented-only`.
-
-### Background Wait Rule
-
-A turn must NEVER end waiting only on a background-task notification. Claude Code delivers
-subagent task-completion notifications best-effort, and they are dropped in practice
-(2026-09-02 field report: 29 of 63 never arrived, 1 arrived 38 min late — a foreman idled on a
-run that had already finished).
-
-| Expected wait | Do this |
-|---------------|---------|
-| ≤ 15 min | Foreground `Bash` with an explicit `timeout`, or the `Monitor` tool. Not `run_in_background`. |
-| > 15 min | `run_in_background` ONLY when paired with both: the leaf's output path written down in the same turn, AND a second background dead-man timer (`sleep <deadline>; echo WAKE`). |
-
-An orchestrator that hands off a long phase starts that phase's dead-man timer before ending its
-turn. Foreman sessions under `/l4`–`/l6` keep their stricter no-polling clause: there the dead-man
-timer must itself be a background task — never foreground `sleep`, never `Monitor`.
-
-### Session End Rule
-
-When the user signals session end (or task completion for S-size):
-- Update project tracking if L-size (`docs/projects/*/README.md` + `INDEX.md`)
-- Record knowledge if something was surprising or took >1 retry (`autopilot:learn`)
+`/l3`–`/l6` decide who implements and who authors verification; they never change which nodes run.
 
 ---
 
-## Quick Decision
+## Nodes
 
-First ask: **what kind of work is this?**
+### intent
 
-| Nature | Criteria | Workflow | Hetero Review Predicate |
-|--------|----------|----------|-------------------------|
-| **Fix** | Bug fix — root cause known, solution clear. No design needed. | Fix (any module count) | qc only |
-| **H** | Production broken — immediate fix needed. | Hotfix | plan loop + per-phase hetero review + qc |
-
-If neither → size the **feature**:
-
-| Size | Criteria | Workflow | Hetero Review Predicate |
-|------|----------|----------|-------------------------|
-| **S** | Single commit (single module, no interface change, self-contained) | Direct commit | no plan loop, one hetero seat + qc |
-| **L** | Multiple commits (3+ modules / public API / incompatible data / Feature Flag / user requests planning) | Plan + Project | plan loop + per-phase hetero review + qc |
-
-Enforcer for all four size predicates is `scripts/hetero-review-loop.js` receipts (details: [references/hetero-loops.md#kr4-size-predicates--rationales](references/hetero-loops.md#kr4-size-predicates--rationales)).
-
-**Fix vs L**: "Do I need to *design* the solution, or just *implement* a known fix?" Design → L. Known fix → Fix.
-
-**Risk Escalation** (force L for features): money/points, auth/security, production protocol changes.
-Risk-escalated bug fixes stay Fix but add PR review before merge.
-
-### 驗證合約(必答)
-
-Mandatory question: **「這個任務做完,跑什麼命令能客觀證明?」**
-
-| 答案 | 機械判定 | 路由 |
-|------|---------|------|
-| 命令,且通過**紅綠驗證** | 見下方紅綠語意 | 紅綠通過 ⇒ **驗證錨定恆成立**(ratchet + 一輪 advisory review)。review 降為**非 gating** 需三條件**同時**:紅綠通過 **且** implementer scorecard-qualified(機械定義:`engine-scorecard.js` status=qualified,由 `engine-qualify.sh` 的 known-bad 零漏放 bar 產生 — 非主觀判斷)**且** risk=low(opus R2:連言架構 — 單靠騙過紅綠拿不掉否決權) |
-| 命令,但未過紅綠(vacuous)或紅無法成立 | 自動降級 | 同「無驗證」列 |
-| 「沒有客觀驗證」(合法誠實答案) | 記入 run summary | **審查 gating 常駐**,不分模型強弱(零機械觀測不可證偽;reviewer 是唯一觀測通道,保留否決權;模型強只降輪數 ≤2,不降為零)。此 gating review **優先派工具可執行的原生 reviewer**(能實跑探索性檢查),而非 diff-text 軌(MiniMax R2) |
-
-紅綠語意:
-- base 定義: dispatcher 釘死的 immutable base SHA(engine `--base`;dev-flow inline = intake 時的 HEAD);dirty tree 不是 base。
-- base-run = base 的產品碼 + diff 中的驗證 artifact 套上去跑,避免純新增 TDD artifact 被誤降級。
-- 紅的資格 = assertion/行為失敗;基礎設施錯誤(檔案不存在、import error、collect 0)不算紅。
-- 紅必須可重現(flaky base-fail 重跑一次確認;不可重現 → 降級)。
-
-Engine wiring: answer flows to `engine implement-review --verify-cmd`;non-gating only per conjunction(紅綠 ∧ scorecard-qualified ∧ risk=low),else keep `--no-verify-first`.
-Campaign identity requires `--campaign-contract <campaign.json>` and automatically owns durable
-ledger/resume.
-Side-effect warning: verify-cmd is dispatcher-authored, isolated-worktree, read-only expectation.
-The campaign contract is the mandatory durable-ledger authority boundary.
-
-### Scope Creep Detection
-
-Size is evaluated once at start, but scope can grow silently. Two escalation paths:
-
-**S → L escalation** is enforced by the `S-scope-gate` TaskCreate (created at S-start — see S
-Workflow). That task stays pending and surfaces before every tool use, forcing an explicit
-check before each commit. Passive self-checks after commits fail because memory is exactly
-what keeps failing.
-
-**L scope expansion** (L work grows beyond its original README scope boundary — new subsystems,
-unplanned API surfaces, additional stakeholder requirements mid-flight):
-
-```
-After every phase completion, ask:
-  "Does the REMAINING scope still match the README's scope boundary?"
-
-Indicators of L-scope expansion:
-  - New subsystem not listed in original README phases
-  - Public API surface larger than original estimate
-  - Estimate doubled (2x+ original effort)
-  - User added requirements beyond original OKR
-
-If expanded:
-  → STOP. This is a Board Decision (user in normal mode, CEO escalates in CEO mode).
-  → Update README scope boundary FIRST.
-  → Only proceed after explicit approval.
-  → Record in project decision log.
-```
-
----
-
-## S Workflow -- Direct Commit
-
-**Scope gate (MANDATORY before any implementation)**: Create this task at S-start:
-
-```
-TaskCreate: "S-scope-gate: Evaluate scope before every commit"
-  description: MANDATORY before every commit. Check all three indicators:
-    (1) Fewer than 3 commits on this task so far?
-    (2) Fewer than 3 different modules touched?
-    (3) No features added beyond original goal?
-  If ANY indicator is NO → STOP. Escalate to L:
-    - Create project dir + README + INDEX (retroactive)
-    - Record prior commits as completed phases
-    - Create L-1.6 and L-5 TaskCreates, then continue with L Workflow tracking
-  Mark this task ONLY when: work is complete AND scope stayed S throughout (all YES),
-  OR L-escalation is complete and project tracking is in place.
-```
-
-This task stays pending and surfaces before every tool use — the forcing function that
-prevents "it was obviously S" from silently becoming a multi-module project without tracking.
-
-0. 驗證合約必答 — 見上
-1. Implement
-2. Quality gate (per project config, or: lint + test)
-3. Evaluate S-scope-gate indicators before committing
-4. Commit to current branch (descriptive message)
-5. Cleanup: if from backlog, delete the item
-
-> Unlike L's multi-task infrastructure, S creates exactly ONE TaskCreate: the S-scope-gate.
-> Intentionally minimal — one pending task that surfaces the scope-creep check without adding L-level overhead.
-
-**S Session End (lite)**:
-
-```
-1. Retry check:
-   "Did I retry any non-trivial operation 2+ times?
-   If yes, invoke `learn` skill to record the finding."
-
-2. Deferred items:
-   If anything was postponed, add one backlog row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence goes to the pointer.
-
-3. Confirm commit:
-   Verify the change landed on the correct branch.
-```
-
-> S does not use TodoWrite -- too few steps to justify tracking overhead.
-
----
-
-## Fix Workflow -- Bug Fix (any module count)
-
-> Bug fix with clear root cause. No plan/project needed. Feature branch for traceability.
-
-0. 驗證合約必答 — 見上
-1. `git checkout -b fix/<description>`
-2. Investigate root cause (read code, trace data flow)
-3. Implement fix
-4. Quality gate (per project config, or: lint + test)
-5. Commit with **detailed message**: root cause + what was wrong + how it's fixed
-6. **Write ongoing-maintenance entry** — append one line to `docs/projects/ongoing-maintenance/YYYY-MM.md` (or the project-configured projects path — e.g. `docs/` plural; check the injected config so you don't create a stray sibling tree):
-   `| MM-DD | commit_hash | fix(area): 根因 → 修法 (跨 N 模組) |`
-7. Merge to develop
-8. Cleanup: delete fix branch
-
-If the fix revealed a non-obvious lesson, invoke `learn` skill.
-
-**Fix does NOT create**: plan, project dir, or PR (unless risk-escalated).
-
----
-
-## L Workflow -- Plan + Project
-
-> **Continuous execution**: proceed between Phases without asking "continue?".
-> **Stop only for**: Staging Gate | Build/test failure | Design decision needed | Context near limit.
-
-**Task tracking (MANDATORY at L-1)**: Create Phase Todos at start (extract p0...pN + completion
-from plan) **AND** create TWO parent tasks. Both are non-optional forcing functions — missing
-either one = failed L-1 gate:
-
-```
-TaskCreate: "L-1.6: Skill routing — invoke required skills for all affected code areas"
-  description: MANDATORY before any implementation phase. Input: the module/surface list
-  produced by L-1.5 Scope Completeness Audit. For each affected area, consult project
-  CLAUDE.md and/or .claude/skill-routing.md for required skills. Invoke each required
-  skill via the Skill tool (reading the file is NOT invoking). Mark this task completed
-  ONLY after:
-    (a) every required skill has been invoked via Skill tool, AND
-    (b) one-line summary of "what this skill told me for this task" is captured in
-        session context (either a note or a TaskCreate subtask).
-  If a module has no skill routing entry, mark N/A with a one-line justification.
-  Phase implementation tasks (P0..PN) MUST be created with blockedBy=[this task] so
-  they cannot start until skill routing is confirmed done.
-
-TaskCreate: "L-5: Invoke autopilot:finish-flow"
-  description: MANDATORY L-size completion. Invoke autopilot:finish-flow which will
-  expand into 7 discrete sub-tasks (Final Goal Review, Pre-Merge Review, Merge,
-  Post-Merge Review, Archive, L Session End, Delete merged branch). Do not mark this
-  completed until the skill has run and all 7 sub-tasks reach completed.
-```
-
-Both parent tasks are forcing functions: they remain pending through every phase and are
-surfaced by system-reminder after each tool use. They cannot be silently skipped because
-marking them completed requires explicit work — L-1.6 requires Skill-tool invocations,
-L-5 requires invoking `autopilot:finish-flow` which itself creates 7 more discrete pending
-tasks.
-
-**Why L-1.6 exists** (historical rationale): see references/historical-rationale.md § Why L-1.6 exists
-
-**Phase task dependency** (mechanical enforcement, not just a reminder): When TaskCreating
-phase tasks P0..PN, each MUST be created with `blockedBy=[L-1.6]`. This means phases
-literally cannot be claimed/started until L-1.6 reaches `completed`. The system-reminder
-surfaces pending L-1.6 after every tool use; the blockedBy dependency makes starting
-implementation impossible without first resolving it. Two layers of defense.
-
-**If either parent task is missing at any point after L-1**: STOP, create it retroactively,
-then continue. For L-1.6 specifically, if implementation has already started without skill
-routing: pause current phase, create L-1.6 now, invoke the missing skills, then resume.
-
-### L-1. Intent Confirmation
-
-Confirm before starting. Record in the project README:
+`node scripts/stage-advance.js --to intent`, then record the goal in the project README; CEO mode skips the confirmation (the OKR was confirmed at CEO startup).
 
 ```markdown
 ## Project Goal
@@ -369,34 +121,45 @@ Confirm before starting. Record in the project README:
 > **Scope boundary**: [explicit include/exclude]
 ```
 
-**Quantifiable** means each criterion must include (a) a measurable threshold (number, percentage, boolean state, or named command output), AND (b) how it will be verified.
+Each success criterion carries (a) a measurable threshold — number, percentage, boolean state, or named command
+output — AND (b) how it will be verified. A criterion without both = incomplete, do not proceed. Pick acceptance
+patterns (ids + evidence incl. negative controls) from [acceptance-patterns.md](../../references/acceptance-patterns.md).
 
-| | Example |
-|------|---------|
-| PASS | "API returns <200ms for 95th percentile (measured by load test)." |
-| FAIL | "Performance is acceptable." |
+**Task tracking (MANDATORY at intent)**: create both parent tasks. Missing either = failed intent gate; if one is
+found missing later, STOP, create it retroactively (skill routing: pause the current unit, invoke the missing
+skills, resume).
 
-Any criterion without a threshold or verification method means the plan is incomplete. Do not proceed until fixed. Select acceptance criteria from [acceptance-patterns.md](../../references/acceptance-patterns.md) for acceptance-pattern selection (referencing pattern ids and evidence including negative controls).
+```
+TaskCreate: "Skill routing — invoke required skills for all affected code areas"
+  description: MANDATORY before any implement node. Input: the module/surface list
+  produced by the Scope Completeness Audit. For each affected area, consult project
+  CLAUDE.md and/or .claude/skill-routing.md for required skills. Invoke each required
+  skill via the Skill tool (reading the file is NOT invoking). Mark this task completed
+  ONLY after:
+    (a) every required skill has been invoked via Skill tool, AND
+    (b) one-line summary of "what this skill told me for this task" is captured in
+        session context (either a note or a TaskCreate subtask).
+  If a module has no skill routing entry, mark N/A with a one-line justification.
+  Unit implementation tasks MUST be created with blockedBy=[this task] so
+  they cannot start until skill routing is confirmed done.
 
-**CEO mode**: SKIP intent confirmation -- CEO already confirmed OKR during Startup. Do not ask the user again.
+TaskCreate: "finish: Invoke autopilot:finish-flow"
+  description: MANDATORY completion. At the finish node invoke autopilot:finish-flow,
+  which expands into its size-keyed sub-tasks. Do not mark this completed until the
+  skill has run and every sub-task reaches completed.
+```
+
+Rationale for both: [references/historical-rationale.md](references/historical-rationale.md).
 
 #### Scope Completeness Audit (MANDATORY before phase TaskCreate)
 
-A correctly-executed phase plan cannot recover from an incomplete scope. Before creating
-phase tasks, run a dimensions audit so the scope boundary reflects every surface this
-change touches, not just the one the task description mentions.
-
-**Create a discrete TaskCreate as the first item**:
-
 ```
-TaskCreate: "L-1.5: Scope completeness audit — enumerate all affected surfaces"
-  description: Before phase TaskCreate. Walk the dimensions checklist below.
-  For each "yes" row, either add a phase task for it OR document in README
+TaskCreate: "Scope completeness audit — enumerate all affected surfaces"
+  description: Before unit TaskCreate. Walk the dimensions checklist below.
+  For each "yes" row, either add a unit task for it OR document in README
   scope boundary why it's explicitly out-of-scope. Do NOT mark this task
   completed without dimension-by-dimension coverage recorded in README.
 ```
-
-**Dimensions checklist** (non-exhaustive starter — add project-specific rows as needed):
 
 | Dimension | Trigger |
 |-----------|---------|
@@ -406,213 +169,228 @@ TaskCreate: "L-1.5: Scope completeness audit — enumerate all affected surfaces
 | Config file templates / examples | Any new or changed config format |
 | CHANGELOG entry | Any release-worthy change to a versioned artifact |
 | Version bump (semver) | Any externally-visible change to a versioned artifact |
-| Version sync verification (grep) | Any version bump — `grep` the old version string across **all tracked files** (don't pre-filter by extension; tomorrow's repo may add `.toml` / `Dockerfile` / `.yaml`). If the grep returns N hits, the edit list must touch all N. Never enumerate the file list from memory |
+| Version sync verification (grep) | Any version bump — `grep` the old version string across **all tracked files** (no extension pre-filter); N hits ⇒ the edit list touches all N. Never enumerate the file list from memory |
 | Migration guide / notes | Any breaking change or schema change |
 | Dependent repos / external consumers | Any interface change with downstream consumers |
-| Credit / attribution | Any feature absorbing external OSS, prior art, or third-party design — README's `Inspired By` / credits / acknowledgements section must list the source(s) |
+| Credit / attribution | Any feature absorbing external OSS, prior art, or third-party design — README's `Inspired By` / credits section lists the source(s) |
 | Dogfood target | Any tooling/infra change (does it apply to itself?) |
 
-**For each "yes" row**, either:
-- Add a phase task covering it, OR
-- Document in `README.md` scope boundary why it's explicitly out-of-scope
+- **User-stated requirements ledger**: list EVERY requirement the user stated (verbatim quote each) → map each to a
+  unit/task. finish-flow's goal review checks every row. An accepted requirement that maps to nothing = audit FAILS.
+- Every "Source code + tests" module found here is cross-referenced against `.claude/skill-routing.md` (or the
+  project equivalent) — it is the skill-routing task's input.
+- CEO mode: the CEO runs the audit and records coverage in the README; it does not ask the user to enumerate.
 
-- **User-stated requirements ledger**: list EVERY requirement the user explicitly stated for this task (features, tests, docs, formats — verbatim-quote each) → map each to a phase/task. This ledger is carried to finish-flow L-5.1. An accepted requirement that maps to nothing = the audit FAILS.
+**Ladder probe** (also at `diagnose` for L/XL bugs): `node scripts/probe-unknown.js classify --ledger <ledger>
+--work-unit <task-id> --terms <key nouns from the task brief>`. Ledger: `<project>/ledger/decisions.jsonl` (omitted ⇒
+`~/.autopilot/ladder/<repo-hash>.jsonl`).
 
-**Feeds into L-1.6**: The module/surface list produced here is the direct input to the
-L-1.6 Skill routing TaskCreate. Every "Source code + tests" module enumerated here must
-have its required project skills invoked before any phase starts. Do not mark L-1.5
-completed without first cross-referencing each module against `.claude/skill-routing.md`
-(or project equivalent).
+| `eligible_max` | Next |
+|----------------|------|
+| `U0` or none | Read the local hits it lists; propose from your own knowledge → `proposal` |
+| `U1`–`U4` | An unknown exists → `research` (with `--research` on `stage-graph.js next`) |
 
-**Historical rationale** (why this gate exists): see references/historical-rationale.md § Why the L-1.5 Scope Completeness Audit exists
+### diagnose
 
-**Why "Version sync verification (grep)" and "Credit / attribution" exist** (historical rationale): see references/historical-rationale.md § Why Version Sync Verification and Credit / Attribution exist
+`node scripts/stage-advance.js --to diagnose`, then invoke `autopilot:debug` unless the root cause is already known; either way, state the
+root cause in one sentence before leaving the node. L/XL bugs also run the intent gates above (goal, audit, both
+parent tasks, ladder probe) here.
 
-**CEO mode**: CEO performs the audit autonomously and records the coverage in the README
-scope boundary. Do not ask the user to enumerate dimensions — that's CEO tactical work.
+### research (only when the probe found an unknown)
 
-### L-2. Plan
-- User provides plan → use it directly, skip Plan Mode.
-- Needs design → EnterPlanMode → design → ExitPlanMode → user approval.
-- Consult before design (receipted; this is the ladder's U1 spawn, not an unconditional call): run `node scripts/probe-unknown.js classify --ledger <ledger> --work-unit <phase> --terms <design nouns>`; call `bash scripts/dispatch-consult.sh --question-file <design-question> --artifact <plan-draft> --ladder-receipt <ledger> --ladder-terms <terms> --ladder-unknown-type <unknown_type from classify> --ladder-signals <ids from classify> --ladder-work-unit <phase>` **only on `recommend: U1`**. If the probe skipped U1 (`reason: not-heterogeneous`, or `consult_dispatch: off`) follow `recommend` instead — U2 survey followed by `node scripts/probe-unknown.js receipt --ledger <ledger> --rung U2 --unknown-type <unknown_type> --terms <terms> --signals <ids> --work-unit <phase>`, U3 as in L-1 step 4, or none — and never invoke `dispatch-consult.sh`. Rail details: [references/hetero-loops.md#consult-before-design](references/hetero-loops.md#consult-before-design).
-- Save plan to: `docs/plans/YYYY-MM-DD-<feature-name>.md`
+`node scripts/stage-advance.js --to research`, then act on `recommend` from the latest `classify`; re-run `classify` after each receipt until it says `U0` / `none`,
+then advance to `proposal`. Budgets per work unit: U1 2 · U2 1 · U3 1 · U4 1 — a spent rung is never repeated.
 
-### L-2.5. Plan hetero loop review
-Invoke the `autopilot:hetero-review` skill with the plan file path (runs the plan loop). The gate is a frozen rubric plus `node scripts/check-phase-review-receipt.js --plan-artifact <file> --dispositions <file>` exiting 0, or a valid opt-out receipt when the plan_review knob resolves to off (enforcer: `scripts/check-phase-review-receipt.js`; details: [references/hetero-loops.md#l-25-plan-hetero-review-gate--frozen-rubrics](references/hetero-loops.md#l-25-plan-hetero-review-gate--frozen-rubrics)).
+| `recommend` | Rail, then receipt |
+|-------------|--------------------|
+| `U1` | `bash scripts/dispatch-consult.sh --question-file <q> --artifact <a> --ladder-receipt <ledger> --ladder-terms <terms> --ladder-unknown-type <unknown_type> --ladder-signals <ids> --ladder-work-unit <unit>` (writes its own receipt) |
+| `U2` | `autopilot:survey` (`issue-search` mode for a `why` unknown), then `node scripts/probe-unknown.js receipt --ledger <ledger> --rung U2 --unknown-type <unknown_type> --terms <terms> --signals <ids> --work-unit <unit>` |
+| `U3` | The `rail` classify names: `dispatch-discuss` (qualified discuss seat), else `autopilot:think-tank` (`whether`) / `autopilot:debugger` PUA (`why`); receipt `--rung U3 --rail <rail> --families <a,b>` (non-heterogeneous rail: add `--heterogeneous false`, no `--reason`) |
+| `U4` | A spike in a throwaway worktree; receipt `--rung U4 --question <q> --criterion <c> --result pass\|fail\|inconclusive` |
+| `none` (rung skipped, e.g. `not-heterogeneous`, or budget spent) | Research with local means (repo, docs, knowledge); record what stays assumed — the proposal lists it |
 
-### L-3. Project Setup (mandatory)
-- Create project directory structure, branch, update project index
-- Per project config for specific bootstrap commands
+U5 (owner) is never recommended: it is reached only by your own stop (DOA boundary, stall fuse), carrying the
+ladder receipts.
 
-### L-4. Per Phase
+### proposal
 
-**Goal verification** -- answer all three before starting each phase:
+`node scripts/stage-advance.js --to proposal`, then publish a web page (Artifact tool) with the assumptions (from research, or your own knowledge at U0) and 2–3
+illustrated options, each with its trade-off and a recommendation; the user picks. Record the pick and the
+assumptions in the plan. No Artifact tool ⇒ write the page as a local `.html` file and list the options in the
+reply. Headless (`-p`) or CEO mode ⇒ take the recommended option within DOA, record it, continue.
+
+### plan
+
+`node scripts/stage-advance.js --to plan`, then:
+
+| Size | Plan |
+|------|------|
+| M | In-session: unit list (one task each), the verify command, acceptance |
+| L, XL | User-provided plan ⇒ use it. Needs design ⇒ EnterPlanMode → design → ExitPlanMode → user approval. Save to `docs/plans/YYYY-MM-DD-<feature-name>.md` per [references/plan-template.md](../../references/plan-template.md). Project setup is mandatory even with a user-provided plan: project directory, branch, project index (bootstrap commands per project config) |
+
+**Consult before design (L, XL; the ladder's U1 at this call site)**: `node scripts/probe-unknown.js classify
+--ledger <ledger> --work-unit <phase> --terms <design nouns>`; call `bash scripts/dispatch-consult.sh --question-file
+<design-question> --artifact <plan-draft> --ladder-receipt <ledger> --ladder-terms <terms> --ladder-unknown-type
+<unknown_type> --ladder-signals <ids> --ladder-work-unit <phase>` **only on `recommend: U1`**. Any other
+`recommend` follows the research table; a skipped U1 (`not-heterogeneous`, `consult_dispatch: off`) never invokes
+`dispatch-consult.sh`. From here on the work unit is the phase id. Rail details:
+[references/hetero-loops.md#consult-before-design](references/hetero-loops.md#consult-before-design).
+
+L/XL unit tasks are created with `blockedBy=[Skill routing]` (Mission routing: one per admitted graph node).
+
+### plan-review (the rail writes the stage)
+
+Invoke `autopilot:hetero-review` with the plan file (plan loop). Gate: a frozen rubric plus `node
+scripts/check-phase-review-receipt.js --plan-artifact <file> --dispositions <file>` exiting 0, or a valid opt-out
+receipt when the `plan_review` knob resolves to off. Enforcer: `scripts/check-phase-review-receipt.js`
+([references/hetero-loops.md#plan-review-gate--frozen-rubrics](references/hetero-loops.md#plan-review-gate--frozen-rubrics)).
+
+### implement
+
+`node scripts/stage-advance.js --to implement [--unit <unit_kind>:<i>/<N>:<label>]` (at /l5–/l6 the engine
+writes it). Before the first implement, answer the verification contract (驗證合約, below). Before each unit
+(M, L, XL):
 
 1. Does this change move us closer to the **final goal**?
-2. Is this phase essential — would skipping it prevent the final goal from being achieved?
+2. Is this unit essential — would skipping it prevent the final goal?
 3. Does my understanding match the user's stated goal?
 
-**Pass threshold**: Q1=yes, Q2=yes (essential), Q3=yes. Any "no" or "unsure" = blocked. Surface to decision-maker before proceeding.
+Any "no" or "unsure" = blocked; surface to the decision-maker. CEO mode answers them itself and escalates to the
+Board only when the answer is "no" AND the response is a strategic pivot (goal change, scope expansion).
 
-**CEO mode**: CEO evaluates the three questions autonomously. Only escalate to user (Board) if the answer is "no" AND the required response is a strategic pivot (goal change, scope expansion) -- per CEO's DOA.
+| Drift signal | Response |
+|--------------|----------|
+| "This unit has low ROI, skip it" | STOP — does it affect the final goal? |
+| "We can do this later" | STOP — any hidden dependencies? |
+| "Project is basically done" | STOP — has the final goal been achieved? |
+| "User probably just wants..." | STOP — ask and confirm directly |
 
-**Drift signals**:
+Continuous execution: proceed between units without asking "continue?". Stop only for: staging gate, build/test
+failure, a design decision, context near limit.
 
-| Signal | Response |
-|--------|----------|
-| "This phase has low ROI, skip it" | STOP -- Does it affect the final goal? |
-| "We can do this later" | STOP -- Any hidden dependencies? |
-| "Project is basically done" | STOP -- Has the final goal been achieved? |
-| "User probably just wants..." | STOP -- Ask and confirm directly. |
+### verify
 
-**Execution**: Implement -> quality gate -> commit -> mark phase done.
+`node scripts/stage-advance.js --to verify` (exit 4 = E1 bump). Each unit is verified by a qualified verifier: a seat `node scripts/engine-scorecard.js current --role verifier`
+reports qualified (at /l6 the verification-author dispatch; in a campaign the engine's per-deliverable review). It
+reads artifacts only (`references/blind-dispatch.md` § Verifier isolation). No qualified seat ⇒ the
+`on_engine_unavailable` policy from `scripts/resolve-review-loop.sh`, never a silent skip.
 
-**Backlog safety** (before deferring anything):
+**驗證合約(必答)** —「這個任務做完,跑什麼命令能客觀證明?」
 
-1. Does this item affect the final goal? If **yes**, do NOT defer.
-2. Can the goal be achieved without it? If **no**, do NOT defer.
-3. Unsure? **Ask the user.**
+| 答案 | 機械判定 | 路由 |
+|------|---------|------|
+| 命令,且通過**紅綠驗證** | 見下方紅綠語意 | 紅綠通過 ⇒ **驗證錨定恆成立**(ratchet + 一輪 advisory review)。review 降為**非 gating** 需三條件**同時**:紅綠通過 **且** implementer scorecard-qualified(`engine-scorecard.js` status=qualified,由 `engine-qualify.sh` 的 known-bad 零漏放 bar 產生)**且** risk=low |
+| 命令,但未過紅綠(vacuous)或紅無法成立 | 自動降級 | 同「無驗證」列 |
+| 「沒有客觀驗證」(合法誠實答案) | 記入 run summary | **審查 gating 常駐**,不分模型強弱(模型強只降輪數 ≤2,不降為零);優先派工具可執行的原生 reviewer,而非 diff-text 軌 |
 
-If deferral passes: add one backlog row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence goes to the pointer; mark phase "Deferred" in project docs.
+紅綠語意:
+- base = dispatcher 釘死的 immutable base SHA(engine `--base`;dev-flow inline = marker `base_ref`);dirty tree 不是 base。
+- base-run = base 的產品碼 + diff 中的驗證 artifact 套上去跑,避免純新增 TDD artifact 被誤降級。
+- 紅的資格 = assertion/行為失敗;基礎設施錯誤(檔案不存在、import error、collect 0)不算紅。
+- 紅必須可重現(flaky base-fail 重跑一次確認;不可重現 → 降級)。
 
-**Phase advance gate** -- all must be true before starting the next phase:
+Engine wiring: the answer flows to `engine implement-review --verify-cmd`; non-gating only per the conjunction,
+else keep `--no-verify-first`. Campaign identity requires `engine implement-review --campaign-contract
+<campaign.json>`, which owns the durable ledger/resume. verify-cmd is dispatcher-authored, isolated-worktree,
+read-only expectation.
+
+**Unit advance gate** (M, L, XL) — TaskCreate these five as discrete sub-tasks of the unit task, named verbatim:
 
 - [ ] Goal check: all three verification questions answered "yes"
 - [ ] Tests pass: zero failures
-- [ ] Completeness scan: no placeholder markers or stub implementations
-- [ ] Hetero review receipt: `node scripts/check-phase-review-receipt.js --ledger <project>/ledger --phase <p> --branch <b> --phase-base "$(cat <project>/ledger/phase-<p>.base)"` exits 0 (SHIP-AS-IS chain or explicit opt-out)
-- [ ] Project docs: progress row updated to reflect phase completion
+- [ ] Completeness scan: `bash scripts/completeness-scan.sh` — no placeholder markers or stub implementations
+- [ ] Verifier verdict: the qualified verifier passed this unit (artifacts, not the implementer's report)
+- [ ] Project docs: progress row updated to reflect unit completion
 
-**Forcing function**: TaskCreate the five items above as discrete sub-tasks of the phase task, named
-verbatim, so an unchecked item is a visible open task instead of a line that was skimmed past. Same
-rationale as L-5: a passive markdown checklist gets skipped, which is the reason `finish-flow` exists
-at all. This changes nothing about what the gate requires — the five items are unchanged — it only
-makes each one individually trackable.
+Then commit the unit. CEO mode verifies the gate itself; no user confirmation for passing gates.
 
-**CEO mode**: CEO verifies all prerequisites. No user confirmation needed for passing gates.
+**Backlog safety** (before deferring anything): affects the final goal ⇒ do NOT defer; goal unreachable without
+it ⇒ do NOT defer; unsure ⇒ ask the user. A passing deferral = one backlog row per
+[`references/backlog-entry.md`](../../references/backlog-entry.md), evidence at the pointer, unit marked "Deferred".
 
-### L-5. Completion (MANDATORY — via finish-flow forcing function)
+**Scope expansion** (L, XL — after every unit): new subsystem not in the README, larger public API, estimate
+doubled, or requirements beyond the OKR ⇒ STOP. Board decision (user; CEO escalates): update the README scope
+boundary first, proceed only after explicit approval, record it in the project decision log.
 
-**Invoke `autopilot:finish-flow`.** That skill owns the L-size closing sequence. On invocation
-it TaskCreates 7 discrete sub-tasks (Final Goal Review → Pre-Merge Review → Merge → Post-Merge
-Review → Archive → L Session End → Delete merged branch), each with an explicit verification
-output. Every sub-task must be individually completed — they cannot be batched or compressed.
+**Leaving the last unit of an urgent session**: advance `--to code-review`. `stage-advance.js` samples the diff risk on
+this move: written ⇒ high risk, normal order. Exit 3 with `qc-gate` in `legal_next` ⇒ urgent-low: go to `qc-gate`;
+code-review runs after `finish` (finish-flow).
 
-Why delegated: Historically L-5 was an inline 6-step list that got mentally compressed into
-"one action" and silently skipped. The `finish-flow` skill replaces passive markdown with
-active TaskCreate reminders that system-reminder surfaces until addressed. See
-`autopilot:finish-flow` for the full size → sub-tasks table.
+### code-review (the rail writes the stage)
 
-**CEO mode**: All 7 sub-tasks are within CEO DOA (tactical, reversible, local git ops). CEO
-does not pause to ask the user between sub-tasks — execute all, then report.
+After all units, invoke `autopilot:hetero-review` (code loop) on the full diff, `--phase full --phase-base
+<base_ref>`. Strength = the distinct model families `bash scripts/resolve-review-loop.sh --field
+required_review_families` resolves from risk and roster — low risk defaults to one family with a fresh-context
+reviewer; a shortfall goes through `on_engine_unavailable`, never silently lowered. Gate: `node
+scripts/check-phase-review-receipt.js --ledger <ledger> --phase full --branch <b> --phase-base "$(cat
+<ledger>/phase-full.base)"` exits 0 (SHIP-AS-IS chain or explicit opt-out). `FIX-THEN-SHIP` ⇒ back to `implement`
+(not on the urgent-low path, where each finding opens a new `S` task instead).
+
+### qc-gate
+
+`node scripts/stage-advance.js --to qc-gate` (exit 4 = E1 bump), then:
+
+| Size | Gate |
+|------|------|
+| XS, S | Project-config gate (default: lint + test); risk flags (money, auth/security, production protocol) ⇒ `autopilot:quality-pipeline` instead. Before committing, check no feature was added beyond the original goal — if one was, stop and ask |
+| M, L, XL | `autopilot:quality-pipeline` (per-size flags from project config), at most 3 fix-review rounds; requires a valid code-review receipt (urgent-low excepted) and, for L/XL, the plan-review receipt |
+
+A failure loops back to `implement`. XS/S commit after the gate (bug: message states root cause + what was wrong +
+how it is fixed).
+
+### finish
+
+`node scripts/stage-advance.js --to finish`, then invoke `autopilot:finish-flow`; it owns the size-keyed closing checklist (merge, archive,
+session end, the urgent-low code-review). Never inline it, never mark the parent task done while its sub-tasks are
+pending. CEO mode: every finish sub-task is within DOA — execute all, then report.
+
+---
+
+## Session Rules (persist throughout)
+
+These apply to all subsequent work in this session, whichever skills are invoked.
+
+| Activity | Read first (if it exists) | Contains |
+|----------|---------------------------|----------|
+| Debugging | `.claude/debug-config.md` | Debug tools, Docker commands, known gotchas |
+| Writing or running tests | `.claude/test-strategy-config.md` | Framework, commands, coverage thresholds |
+| Parallel task dispatch | `.claude/team-config.md` | Role templates, tech stack, team size |
+| Performance profiling | `.claude/profiling-config.md` | Profiling tools, baseline commands |
+| Comparison audit | `.claude/audit-config.md` | By-design divergences, audit scope |
+| Methodology / reviewer / parallel routing | `.claude/dispatch-config.md` | Preference chains (also injected above) |
+
+### Background Wait Rule
+
+A turn must NEVER end waiting only on a background-task notification: Claude Code delivers subagent completion
+notifications best-effort and drops them in practice (2026-09-02: 29 of 63 never arrived).
+
+| Expected wait | Do this |
+|---------------|---------|
+| ≤ 15 min | Foreground `Bash` with an explicit `timeout`, or the `Monitor` tool. Not `run_in_background`. |
+| > 15 min | `run_in_background` ONLY with both: the leaf's output path written down in the same turn, AND a second background dead-man timer (`sleep <deadline>; echo WAKE`). |
+
+An orchestrator handing off a long unit starts its dead-man timer before ending the turn. Foremen under
+`/l4`–`/l6` keep their stricter no-polling clause: the dead-man timer is itself a background task — never
+foreground `sleep`, never `Monitor`.
+
+### Urgent
+
+- Smallest possible change, fastest path to stable. A DB migration ⇒ STOP: `session-mode.js set --size L`.
+- Production broken ⇒ the `hotfix/` branch from `main`; finish-flow merges back to `main` and makes the
+  post-incident `autopilot:learn` mandatory. Rollback: invoke finish-flow once the rollback is verified stable.
 
 ### Staging Gate
 
-**Trigger**: Phase/feature awaiting user review | session ending with undeployed committed changes.
+Trigger: a unit awaits user review, or the session ends with undeployed committed changes. Deploy per project
+config (default: build + restart).
 
-Deploy per project config (default: build + restart).
+### Session End Rule
 
----
-
-## H Workflow -- Hotfix
-
-> **Production is broken. Smallest possible fix, fastest path to stable.**
-
-**Task tracking (MANDATORY at H-1)**: Create a parent closing task at the start:
-
-```
-TaskCreate: "H-9: Invoke autopilot:finish-flow"
-  description: MANDATORY hotfix completion. Invoke autopilot:finish-flow which will
-  expand into 6 discrete sub-tasks (verify fix, quality gate, merge to main, post-incident
-  learn, delete hotfix branch, session end).
-```
-
-1. `git checkout -b hotfix/<description> main`
-2. **Scope check**: if fix requires DB migration -> STOP, re-route to L. Cross-module bug fixes stay as H (or Fix if not production-critical).
-3. Fix the issue (smallest possible change)
-4. Invoke `autopilot:finish-flow` — it expands the remaining closing sequence into 6 discrete
-   sub-tasks (verify fix → quality gate → merge to main `--no-ff` → post-incident `learn`
-   (MANDATORY) → delete hotfix branch → session end). Each must be individually completed.
-
-> H workflow prioritizes speed. The forcing function does not add steps — it only prevents
-> skipping the existing ones. For rollback situations, invoke `finish-flow` after the
-> rollback is verified stable.
-
----
-
-## Session End
-
-> **L-size and H-size**: Session End is a **sub-task inside `autopilot:finish-flow`** (L-5.6 /
-> H-9.6), not a standalone section you run yourself. Do not duplicate the checklist here —
-> `finish-flow` creates the discrete tasks and this section is their reference material.
->
-> **S and Fix**: `finish-flow` is optional. You may either run the inline S-Lite below or invoke
-> `autopilot:finish-flow` in TaskCreate form — whose Fix-size F.1 runs `quality-pipeline --size S`, a stricter gate than step 4's, not the same one.
-
-### S-Lite (S and Fix workflows, inline)
-
-1. **Retry check**: retried a non-trivial operation 2+ times? Invoke `learn`.
-2. **Deferred items**: anything postponed → one backlog row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence at the pointer.
-3. **Confirm commit**: change landed on the correct branch.
-4. **Fix only**: verify ongoing-maintenance entry was written.
-
-### L-Full Reference (invoked by finish-flow L-5.6)
-
-The L Session End sub-task (L-5.6) runs the full checklist below. Create a checklist and
-complete each item before concluding.
-
-```
-1. Verify completion:
-   - User's last request is completed (or user explicitly said pause/stop).
-   - No background work pending.
-   - If on a feature branch: check if branch is merged to main.
-     If not merged, flag to user before proceeding.
-
-2. Update project docs:
-   - Update project progress table and last-updated date.
-   - Sync project index.
-   - If 100% complete + merged: invoke project archival.
-
-3. Knowledge extraction -- ask yourself:
-   - Stepped on a non-obvious landmine?       -> record in .claude/knowledge/
-   - Made an architecture decision?            -> record in project docs
-   - Discovered a process gap?                 -> update relevant skill
-   - Learned something cross-session useful?   -> record in persistent memory
-   - None of the above?                        -> skip, do not force it
-
-4. Deferred items:
-   Anything postponed is one backlog row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at the pointer.
-   Backlog safety: if the item affects the final goal, do NOT defer.
-
-5. Triggered BACKLOG pickup:
-   Check if any BACKLOG items have their trigger condition met by this session's work.
-   Scope "this session" using session-start-sha:
-     git log --oneline $(cat .claude/session-start-sha 2>/dev/null || echo "HEAD~10")..HEAD
-   Surface matches to decision-maker:
-   - Normal mode: present to user for action.
-   - CEO mode: CEO decides autonomously (tactical). Record in CEO Report.
-
-6. Invoke learn skill:
-   Produce a session learning summary covering:
-   - Errors encountered and resolved (root cause + fix)
-   - Key decisions made (rationale)
-   - Surprises or counter-intuitive discoveries
-
-7. Staging verify (if applicable):
-   Confirm staging reflects latest code.
-   Skip if: mid-implementation, only doc changes, or no staging environment.
-
-8. Checklist summary:
-   Output pass/fail for each gate. Include in PR description for L-size tasks.
-```
-
-### Context Health Check (conditional)
-
-If the session was long or context feels degraded, measure token budget: see [references/hetero-loops.md#context-health-check-reference](references/hetero-loops.md#context-health-check-reference).
-
-### Post-Feature Doc Sync
-
-After code changes, verify documentation matches the new state — see the changed→update mapping table in [references/post-feature-doc-sync.md](references/post-feature-doc-sync.md). Skip doc sync for: bug fixes, minor value tweaks, log message changes.
+Work finished ⇒ the `finish` node. Session ends mid-work ⇒ `autopilot:handoff`; record knowledge if something was
+surprising or took more than one retry (`autopilot:learn`). Long or degraded session ⇒
+[Context Health Check](references/hetero-loops.md#context-health-check-reference). After code changes, the
+doc-sync mapping in [references/post-feature-doc-sync.md](references/post-feature-doc-sync.md) applies (skip for bug
+fixes, value tweaks, log messages).
 
 ---
 
@@ -621,53 +399,29 @@ After code changes, verify documentation matches the new state — see the chang
 
 ## Completeness Principle
 
-AI makes the marginal cost of completeness near-zero. When choosing between approaches:
-
-- **Option A** (complete: all edge cases, full test coverage, proper error handling) vs **Option B** (shortcut: happy path only) -- **always choose A**.
-- This applies to: test coverage, error handling, edge cases, documentation, and feature completeness.
+Complete (all edge cases, full test coverage, proper error handling) beats shortcut (happy path only) — always
+choose complete, for tests, error handling, edge cases, docs and features alike.
 
 ## Anti-patterns
 
 | Wrong | Correct |
 |-------|---------|
-| Bug fix escalated to L because it crosses 3 modules | Use Fix -- module count doesn't determine bug fix workflow |
-| Ask "continue?" after Phase | Proceed directly to next Phase |
-| Team commit task says only "commit changes" | Must include quality gate |
-| User provides plan -> skip project setup | Project dir must be created regardless |
-| End session after merge | Must continue: post-merge -> archive -> session end |
-| Skip branch freshness on L-size | Always check before starting L-size work |
-| Force knowledge extraction when nothing happened | Skip -- do not force it |
+| `--size M!` or `!M` | `--size M --urgent`; `!` is written after the letter in prose only |
+| Copying a node sequence into a plan or prompt | Cite `stage-graph.js nodes`; the JSON is the only definition |
+| Retrying the refused `--to` after exit 3 or 4 | Exit 3: a `legal_next` node. Exit 4: bump, then `next` from the current stage |
+| Sizing a bug L because it crosses 3 modules | Size the fix's footprint; L only for design / multi-phase work |
+| Raising the size for a risky change | Risk raises review strength, not size |
+| Ask "continue?" after a unit | Proceed directly to the next unit |
+| Re-sizing on context continuation | Use the marker's size; only the E1 bump moves it |
+| Skipping the skill-routing or finish parent TaskCreate "because I remember" | The task IS the forcing function — memory is what keeps failing |
+| Reading a skill file instead of invoking it | Read ≠ invoke: the Skill tool loads it and records the decision |
+| Unit tasks without `blockedBy=[Skill routing]` | The dependency is the mechanical enforcement |
+| Enumerating units before the Scope Completeness Audit | The audit decides which units exist |
+| Inlining finish-flow steps or batching its sub-tasks | Invoke finish-flow; each sub-task is its own TaskCreate |
+| Scope expansion without Board approval | Doubled estimate or new subsystem = Board decision, never CEO-tactical |
 | Defer work that affects the final goal | Never defer goal-critical items |
-| Re-evaluate size on context continuation | Use size from the original session |
-| Auto-execute context reduction without confirmation | List confirm operations with numbered choices |
-| Skip the L-1 / H-1 parent closing TaskCreate "because I remember the steps" | The parent task IS the forcing function — memory is exactly what keeps failing; always create it |
-| Skip the L-1.6 skill routing TaskCreate "because I already read CLAUDE.md" | Reading ≠ invoking. The TaskCreate exists because passive bullets get mentally compressed into "I know this area". Invoke each required skill via the Skill tool, even if you "remember" it |
-| Create phase tasks without `blockedBy=[L-1.6]` | The dependency is the mechanical enforcement; a pending L-1.6 that doesn't actually block implementation is just another reminder to ignore |
-| Mark L-1.6 completed after "reading" the skill files in knowledge base | Reading skill markdown is not the same as Skill-tool invocation. The invocation loads the skill into the session context and creates the explicit decision record. Read ≠ invoke |
-| Inline L-5 / H-9 steps instead of invoking `finish-flow` | Always invoke `finish-flow`; inlining defeats the TaskCreate forcing mechanism |
-| Mark parent L-5 / H-9 completed while finish-flow sub-tasks still pending | Parent only completes after all sub-tasks reach completed |
-| Batch multiple finish-flow sub-tasks into one TaskCreate call | Each sub-task is its own TaskCreate — batching breaks the surface-per-tool-use mechanism |
-| Enumerate L-size phases before running the L-1.5 Scope Completeness Audit | Scope audit determines WHICH phases should exist — it runs first |
-| Skip the scope audit "because the task is obvious" | Invisible scope holes are the whole reason the audit exists; shipping an incomplete deliverable is always cheaper to prevent than to fix |
-| Skip S-scope-gate TaskCreate "because it's clearly a small task" | Scope creep is invisible at S-start — the gate exists precisely because it grows silently; always create it |
-| Create S-scope-gate but only evaluate it at task end | The task must be created at S-start so system-reminder surfaces it before EVERY commit, not just at completion |
-| L-size scope expands mid-project without Board notification | Any expansion beyond the original README scope boundary is a Board Decision — CEO/user must approve before continuing |
-| Treat L-scope expansion as a tactical decision CEO can make alone | Doubled estimate or new subsystem = Resources 2x+ = requires Board approval per DOA |
-
-## Pre-implementation Checklist
-
-- [ ] Check for existing in-progress projects
-- [ ] S-size: S-scope-gate TaskCreate created (scope-creep forcing function — MANDATORY before any implementation)
-- [ ] Fix: `fix/` branch created, root cause confirmed
-- [ ] Fix: skill routing checked for affected module (passive — Fix stays lightweight, no
-      TaskCreate; see BACKLOG for future Fix-workflow forcing function)
-- [ ] L-size: project structure created (plan + project dir + branch)
-- [ ] L-size: L-1.5 Scope Completeness Audit TaskCreate created
-- [ ] L-size: L-1.6 Skill routing TaskCreate created (parent forcing function, non-optional)
-- [ ] L-size: L-5 finish-flow TaskCreate created (parent forcing function, non-optional)
-- [ ] L-size: Phase tasks (P0..PN) created with `blockedBy=[L-1.6]`
-
----
+| Force knowledge extraction when nothing happened | Skip — do not force it |
+| Auto-execute context reduction without confirmation | List the operations with numbered choices |
 
 ## User Override Protocol
 
@@ -693,19 +447,7 @@ rehashable artifacts, same-process observations, and caller-authored traces cann
 
 ## Mission Routing Override
 
-When project governance configures `mission_convergence`, this section overrides every legacy
-Phase/P0 task-enumeration rule above.
-
-### Available Scripts
-
-| Script | Purpose |
-|---|---|
-| `scripts/mission-routing-admission.js` | Resolve project Mission policy and admit the authoritative bounded graph/source coverage before L-size TaskCreate or execution topology effects. |
-| `scripts/mission-execution-graph-check.js` | Validate graph limits, exact source/rubric coverage, critical path, batches, gate attempts, aggregate reservations, and ICC campaign projection bounds. In a repo with a codex mirror, pass `--mirror-roots <(scripts/sync-codex-plugin-skills.sh --mirror-roots-json)` so an `output_paths` entry under a mirrored dir must name its mirror too. |
-| `scripts/plan-rubric-scaffold.js` | Generate structured rubric markdown skeletons from an input plan document for frozen review rubrics. |
-| `scripts/hetero-review-loop.js` | Drive multi-seat review collection, disposition aggregation, verdict synthesis, and opt-out receipts for review loops. |
-| `scripts/check-phase-review-receipt.js` | Validate phase review receipts against git history and review artifacts or validate plan artifact blocker dispositions. |
-| `scripts/probe-unknown.js` | Unknown-escalation ladder probe: `classify` turns refuted hypotheses / loop non-convergence / stall / zero-hit terms / low consensus into one rung recommendation U0–U3; `receipt` appends the ladder row after a rail returns. Call sites: L-1 step 4 and L-2 consult-before-design (this skill), debug step 4, think-tank Step 5, foreman round end. |
+When project governance configures `mission_convergence`, this section overrides every unit-enumeration rule above.
 
 Before any TaskCreate, branch, worktree, runner, or model effect:
 
@@ -715,22 +457,33 @@ node <autopilot-source>/scripts/mission-routing-admission.js \
 ```
 
 - `READY` is the only enforce-mode admission. Create one implementation TaskCreate per admitted
-  graph node, plus the existing parent forcing-function tasks.
+  graph node, plus the parent forcing-function tasks.
 - `SHADOW` is observation only. Record `admitted`/`would_block` honestly and continue through the
-  legacy workflow without claiming an enforced receipt or grant.
+  unit workflow without claiming an enforced receipt or grant.
 - `LEGACY` means project Mission policy is off.
 - Source `Phase`/`P0..PN` headings, modules, reviewer seats, tests, retries, repairs, and fallbacks
   remain coverage or gates inside a caller-authored bounded deliverable. They never become tasks
   one-for-one.
-- In `READY`, every legacy "phase" above means an admitted graph node, and instructions to extract
-  `P0..PN` from source headings are disabled. Admitted implementation tasks remain blocked by
-  `L-1.6`.
+- In `READY`, every unit above means an admitted graph node, and instructions to extract units from
+  source headings are disabled. Admitted implementation tasks remain blocked by the skill-routing task.
 - Topology fallback reuses the same admission and owning gate-attempt budget; it does not create a
   second graph or reset authority.
 - The project README keeps historical completed phases in a non-executable ledger and reports only
   current admitted deliverables as executable work.
-- **Resume projection**: on resume, Mission nodes are remaining deliverables only. An already
-  integrated deliverable is omitted or satisfied by an authoritative receipt/commit — never
-  redispatched. `output_paths` list required mutations for the new candidate, not historical files
-  already in HEAD. Correct campaign rejection of historical-output replay is not a cue to rewrite
-  those paths. This judgment is methodology until a deterministic gate lands (BACKLOG).
+- **Resume projection**: on resume, Mission nodes are remaining deliverables only — see
+  [references/context-continuation.md](references/context-continuation.md#resume-projection-mission).
+
+## Available Scripts
+
+| Script | Purpose |
+|---|---|
+| `scripts/session-mode.js` | `set --size <XS\|S\|M\|L\|XL> [--urgent] [--bug]` creates or merges the session marker (size moves only up); `status` prints it. Session Start step 1. |
+| `scripts/stage-graph.js` | Queries the canonical graph: `nodes`, `next --from`, `limits`, `validate`. Read the sequence and the next node here, never from prose. |
+| `scripts/stage-advance.js` | Records entry into a node; refuses illegal moves (exit 3, `legal_next`) and requests the E1 size bump (exit 4, `bump_to`). Called on entering every prose-written node. |
+| `scripts/check-stage-vocab.js` | Finds old stage ids, old size names and removed marker fields in shipped text; `--repo <consumer>` lists stale lines in a consumer's `.claude/*.md` and backlog with their replacement. |
+| `scripts/mission-routing-admission.js` | Resolve project Mission policy and admit the authoritative bounded graph/source coverage before L/XL TaskCreate or execution topology effects. |
+| `scripts/mission-execution-graph-check.js` | Validate graph limits, exact source/rubric coverage, critical path, batches, gate attempts, aggregate reservations, and ICC campaign projection bounds. In a repo with a codex mirror, pass `--mirror-roots <(scripts/sync-codex-plugin-skills.sh --mirror-roots-json)` so an `output_paths` entry under a mirrored dir must name its mirror too. |
+| `scripts/plan-rubric-scaffold.js` | Generate structured rubric markdown skeletons from an input plan document for frozen review rubrics. |
+| `scripts/hetero-review-loop.js` | Drive multi-seat review collection, disposition aggregation, verdict synthesis, and opt-out receipts for review loops. |
+| `scripts/check-phase-review-receipt.js` | Validate review receipts against git history and review artifacts or validate plan artifact blocker dispositions. |
+| `scripts/probe-unknown.js` | Unknown-escalation ladder probe: `classify` turns refuted hypotheses / loop non-convergence / stall / zero-hit terms / low consensus into one rung recommendation on the U0–U5 ladder (classify never emits U5 — the owner rung is reached only by the caller's own stop); `receipt` appends the ladder row after a rail returns. Call sites: `intent` / `diagnose` and the `plan` consult (this skill), debug step 4, think-tank Step 5, foreman round end. |

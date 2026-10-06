@@ -41,6 +41,20 @@ Release merges happen in the dedicated worktree `.claude/worktrees/release-3.0.0
 | arm builder | `556ef38a` | Multi-pack arms, change/red freezer, `fixture-scripts-sg`, campaign command. Dry-run: 114 cells, estimated $15–59 (basis: 74 measured sonnet cells at $0.135 mean; stage-graph cells assumed at 2×). |
 | integration | `0f7b3396` | `check-stage-vocab --gate` reports 0 and is wired into canonical invariants. `S-scope-gate` literals were replaced by a `size-bump-command` invariant. Profiles were re-pinned (815 → 654 rules). Pre-commit passes without `--no-verify`. Mutation: planting `L-2.5` in a skill made both gates red. |
 
+## P5 eval run
+
+- **Pre-run** (`c6485a8a`, `78a91c3d`):
+  - prereg amended before any results were seen: guidance files 61 → 65, adding the three references plus the new `skills/dev-flow/references/stage-graph.md`;
+  - change and red packs frozen;
+  - `check-guidance-eval` file half: 43/43 differing files byte-equal to the pack.
+  - The red arm rotates `references/stage-graph.json` in `fixture-scripts-sg-red`. The new dev-flow has no size table to rotate (`--require-text` fails by design). The builder's self-check confirms rotated walks.
+- **First launch was invalid.**
+  - The first 4 cells ran 6–7 s with `skill_invoked:false`, and change and red were identical. The campaign sent the bare task with no invocation preface, so headless sonnet never loaded dev-flow. This is the same failure as P1W amend-2.
+  - The run was stopped after 4 cells (~$0.5). Those rows are instrument-invalid; they were set aside unscored at `scratchpad/eval-invalid/` and are not counted as data.
+  - Fix `3bfce882`: `ONOFF_PROMPT_PREFIX='Use dev-flow:'`, the same in every arm, naming no size or stage vocabulary. It is recorded as `prereg/stage-graph.amend-1-invocation.json`.
+  - Confirming cell: 14 s; `Skill autopilot:dev-flow` → `set --size XS` → `--to implement` → `qc-gate` → `finish`; all markers true.
+- **Relaunched** on release `3bfce882`. First rows: change rep 1 took 19 s and passed; red rep 1 took 32 s and failed.
+
 ## Open items for the alpha.1 cut
 
 1. **Total QC of the protected diff.** This is owed since the no-verify push. It also covers Train B. **Points for the reviewer:**

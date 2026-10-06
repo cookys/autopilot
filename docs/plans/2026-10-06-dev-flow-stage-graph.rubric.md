@@ -1,0 +1,15 @@
+# Frozen rubric — dev-flow stage graph (logical_plan_id: dev-flow-stage-graph-2026-10-06)
+
+Frozen 2026-10-06 before G1. Reviewers judge the plan against these items only; §0 "Settled — do not reopen" items are owner rulings and are out of scope for a blocker unless the plan contradicts them internally.
+
+- R1: [graph-completeness] `references/stage-graph.json` as specified in P1 covers every node, edge, loop-back, size→node mapping, bug entry and urgent rule stated in §0; no node lacks a named writer (rail script or `prose`), and the P1 acceptance examples are consistent with the §0 size table.
+- R2: [axis-orthogonality] No phase conflates size, level (/l3–/l6) and review strength; no node, field or rule encodes one axis in another; no node id contains "hetero"; a review shortfall is never silently lowered.
+- R3: [mechanism-guidance-split] Every phase is labelled mechanism or guidance; mechanism commits never edit requirement text; guidance text (P4 text, P5) ships only after a pre-registered eval verdict; the split is enforceable, not aspirational.
+- R4: [eval-validity] P0 freezes the answer key, metric and ship rule before any changed text exists; a planted-red pack must fail; the metric is mechanically scorable from transcripts; there is no rerun-until-green path.
+- R5: [breaking-change-completeness] Every consumer-visible surface touched by the rename (backlog effort enum and its two scripts, config templates, skill descriptions/routing, ladder rung ids, marker fields) has a migration or removal step; no compatibility alias or dual-read survives (§0.8); rollback and migration notes are stated.
+- R6: [marker-contract] The structured marker fields, their schema gate, `stage-advance.js` legality semantics (first write, illegal jump, missing marker) and the complete removal of `phase` readers/writers are specified concretely enough to test.
+- R7: [rail-coverage] The node→writer table is derivable and verifiable; every rail write is fail-open with a visible diagnostic; each rail has a deterministic test; nodes without a single entry script are honestly recorded as `prose`.
+- R8: [ladder-change] The panel and experiment rungs have concrete eligibility rules, budgets, receipts and exhaustion behaviour; classify never emits the owner rung; the U4→U5 renumber covers every reference; the four call sites are updated.
+- R9: [prerelease-tooling] Pre-release versions are handled by every version consumer (sync, preflight, comparators, badges); the plugin-loader claim is backed by a real CLI probe before it ships.
+- R10: [executability] Each step is concrete enough for a zero-context engineer (named files, commands, expected outputs); every acceptance is testable; the dependency map matches the phase contents and the alpha cut points.
+- R11: [scope-and-risk] Risks and inversions are real and mitigated; out-of-scope items are explicit; phases are independently landable on develop without leaving the tree in a state that breaks existing users before a release.

@@ -323,4 +323,4 @@ None open. Resolved 2026-10-06 (§0.8–§0.9):
 
 ## Review log
 
-- **R0** (2026-10-06, author Claude Opus 5.5 at depth-0): drafted from the owner discussion and the proposal page answers `A2 B1 C2 D2 E1 F2 G1`. The footprint pass that informed §2.6 and §3 was a sonnet Explore run in session e041e8fe. The plan-review manifest and frozen rubric are to be written before review, with `logical_plan_id: dev-flow-stage-graph`.
+- **R0** (2026-10-06, author Claude Opus 5.5 at depth-0): drafted from the owner discussion and the proposal page answers `A2 B1 C2 D2 E1 F2 G1`. The footprint pass that informed §2.6 and §3 was a sonnet Explore run in session e041e8fe. Frozen rubric: `docs/plans/2026-10-06-dev-flow-stage-graph.rubric.md` (R1–R11). Manifest: `docs/plans/2026-10-06-dev-flow-stage-graph.plan-review-manifest.json`, with `logical_plan_id: dev-flow-stage-graph-2026-10-06`, seats sol chair (openai), grok deep (xai) and MiniMax consult, and a minimum of 2 families.

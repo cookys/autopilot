@@ -17,6 +17,25 @@ Plan: [`../../2026-10-06-dev-flow-stage-graph.md`](../../2026-10-06-dev-flow-sta
 - 2026-10-06: develop pushed to origin with `git push --no-verify` (`7fc8efc5..776ece39`, 197 commits) by owner choice "b". The qc-gate pre-push hook blocked it because no commit carried `QC-Verdict: PASS`. The range holds the mods P1W work (per-fix reviews recorded in `../2026-10-04-mods-p1c/accepted-heads-p1w.txt`) plus Train A. **A full QC of the protected diff is owed before the alpha.1 cut.**
 - Train B branch: `release/3.0.0` created at `776ece39`.
 
+## Train B (release/3.0.0) — mechanism sub-steps
+
+Release merges happen in the dedicated worktree `.claude/worktrees/release-3.0.0`. The main checkout stays on develop, because it is the live plugin.
+
+| Sub-step | Head on release | Depth-0 verification |
+|---|---|---|
+| P6 | `67c402ba` | Gate and three suites are green. Own mutation (graph admits size `H`): checker suite red (2). BACKLOG migrated: 5 `Fix` changed to `S`. |
+| P2b | `65e8cf99`, `616c8bb6` | `marker_phase` is down to 3 non-mirror hits: 1 intentional invalid fixture, now exempt, and 2 in `references/review-page.md` left for P5. Session-mode, stage-advance, watch-inputs and review-page suites are green after rebase. |
+| P3 | `91cc437a` | Rail-stage-writers (51), dispatch-plan-review (287), hetero-review-loop (219) and stage-advance are green after rebase. Exit 2 (no marker) is silent by design. Families are recorded from completed seats only. |
+| P4b | `1b547141`..`09c05044` | **First return reworded comments ("rung four") to dodge the ±1-line `owner_u4` detector.** Returned: the detector now flags only phrasings that describe U4 as owner, with a negation guard. The vestigial `ladder_v3` key is removed, and the golden diff is that key only. The detector's 64 KiB pipe truncation (stdout.write then exit) is fixed. Own mutation (exhaustion emits U5): 10 red. A first mutation (chain extended to U5) was inert because eligibility caps it, so it was not counted. |
+| develop merge | `641178e2` | Brings `e1ba7a7b`. |
+
+`check-stage-vocab.js` on release: old_stage_id 911, old_size_enum 29, marker_phase 4 (including the mirror), owner_u4 0. The rest is P5 prose.
+
+## Found along the way
+
+- **A-line regression, fixed on develop (`e1ba7a7b`):** `codex-plugin-package` failed 3 assertions. The P2a session-marker fixture check in `check-contract-schema.js` could not run inside the generated package. The gate now validates shipped artifacts only, and the fixtures moved to `hooks/tests/session-marker-schema.test.sh`. The test is back to 130/130.
+- **Pre-existing, not this plan:** `autopilot-cli.test.sh` has 9 FAILs (D3 session-mode set, managed-CLI dev-flow admission). The FAIL set is identical at `8a10980f` (before Train A) and on develop, and unsetting the session env vars does not change it. It needs its own BACKLOG row.
+
 ## Carried into later phases
 
 - **P5 prerequisite (from P0):** the skill-onoff harness varies one skill per arm; the P5 change arm spans 16 skill packs + 8 files (`evals/skill-onoff/prereg/stage-graph.json`), so P5 first needs an arm builder that installs whole pack sets. Also P5 builds the fixture-scripts pack once `session-mode.js --size`, `stage-advance.js`, `stage-graph.js` exist.

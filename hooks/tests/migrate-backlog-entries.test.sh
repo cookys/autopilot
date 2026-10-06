@@ -303,7 +303,7 @@ cat > "$N/docs/projects/BACKLOG.md" <<'EOB'
 
 | id | 標題 | 狀態 | 體量 | 來源 | spec | 備註 |
 |----|------|------|------|------|------|------|
-| **DONE-x** | 已完成的例子 | **done**（v1.2.3 2026-09-10） | Fix | user | — | — |
+| **DONE-x** | 已完成的例子 | **done**（v1.2.3 2026-09-10） | S | user | — | — |
 | **PIPE-y** | 標題含 a \| b 管線 | **fired**（2026-09-01） | S | user | — | docs/tickets/048/runs/a.md |
 EOB
 cat > "$N/.claude/backlog-config.md" <<'EOC'
@@ -342,7 +342,7 @@ assert_contains "$side" "Section: 換裝線" "(n) sidecar names the ## section"
 rew="$(cat "$N/docs/projects/BACKLOG.md")"
 assert_contains "$rew" "| Id | Title | Status | Trigger | Effort | Source | Pointer | Context |" "(n) tables re-headed to schema columns"
 assert_contains "$rew" "| GC-a | 地被 Rough Meadow Grass 收件登記 | open | see pointer | M | 058 換裝線 | docs/backlog/gc-a.md |" "(n) lossy row points at its sidecar"
-assert_contains "$rew" "| DONE-x | 已完成的例子 | shipped v1.2.3 2026-09-10 | see pointer | Fix | user | none |" "(n) lossless row stays with none and a synthesised shipped status"
+assert_contains "$rew" "| DONE-x | 已完成的例子 | shipped v1.2.3 2026-09-10 | see pointer | S | user | none |" "(n) lossless row stays with none and a synthesised shipped status"
 assert_contains "$rew" '| PIPE-y | 標題含 a \| b 管線 | fired 2026-09-01 | see pointer | S | user | docs/tickets/048/runs/a.md |' "(n) escaped pipe survives and a resolvable evidence cell becomes the Pointer"
 assert_contains "$rew" "## 其他" "(n) non-table lines preserved"
 gout="$(node "$GATE" --backlog "$N/docs/projects/BACKLOG.md" --json --config "$N/.claude/backlog-config.md")"
@@ -578,3 +578,38 @@ assert_eq "$n_err" "0" "(p) fully mapped table (n) still has zero errors"
 
 
 finalize_test
+
+# -- --rename-effort: Fix->S, H->S!, idempotent, dry-run by default (P6) --
+RE="$TEST_TMP/rename-effort"
+mkdir -p "$RE"
+cat > "$RE/BACKLOG.md" <<'EOB'
+# Backlog
+
+### Row fix
+- **Status**: open
+- **Effort**: Fix
+- **Pointer**: none
+
+### Row hard
+- **Status**: open
+- **Effort**: H
+- **Pointer**: none
+
+### Row keep
+- **Effort**: M
+- **Note**: the word Fix here stays
+EOB
+cp "$RE/BACKLOG.md" "$RE/orig.md"
+out="$(node "$SCRIPT" --backlog "$RE/BACKLOG.md" --rename-effort --json)"
+assert_eq "$(json_field "$out" changed)" "2" "rename-effort dry-run counts 2 rows"
+assert_eq "$(cat "$RE/BACKLOG.md")" "$(cat "$RE/orig.md")" "rename-effort dry-run writes nothing"
+node "$SCRIPT" --backlog "$RE/BACKLOG.md" --rename-effort --apply --json >/dev/null
+r="$(cat "$RE/BACKLOG.md")"
+assert_contains "$r" "- **Effort**: S" "Fix became S"
+assert_contains "$r" "- **Effort**: S!" "H became S!"
+assert_contains "$r" "- **Effort**: M" "M unchanged"
+assert_contains "$r" "the word Fix here stays" "prose untouched"
+cp "$RE/BACKLOG.md" "$RE/after1.md"
+out="$(node "$SCRIPT" --backlog "$RE/BACKLOG.md" --rename-effort --apply --json)"
+assert_eq "$(json_field "$out" changed)" "0" "rename-effort second run changes nothing (idempotent)"
+assert_eq "$(cat "$RE/BACKLOG.md")" "$(cat "$RE/after1.md")" "rename-effort second run byte-identical"

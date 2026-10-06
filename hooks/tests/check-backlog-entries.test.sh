@@ -64,8 +64,19 @@ printf '%s\n' '### Bad status row' '- **Status**: pending' '- **Trigger**: when 
 code_case bad_status "$d"
 
 d="$(repo c-eff)"
-printf '%s\n' '### Bad effort row' '- **Status**: open' '- **Trigger**: when tests run' '- **Effort**: XL' '- **Source**: suite' '- **Pointer**: docs/plans/ok.md' > "$d/docs/BACKLOG.md"
+printf '%s\n' '### Bad effort row' '- **Status**: open' '- **Trigger**: when tests run' '- **Effort**: Fix' '- **Source**: suite' '- **Pointer**: docs/plans/ok.md' > "$d/docs/BACKLOG.md"
 code_case bad_effort "$d"
+out="$(node "$GATE" --backlog "$d/docs/BACKLOG.md" --json 2>/dev/null || true)"
+assert_contains "$out" "Fix→S" "Fix rejection names the mapping"
+assert_contains "$out" "migrate-backlog-entries.js" "Fix rejection names the migration command"
+printf '%s\n' '### Bad effort row' '- **Status**: open' '- **Trigger**: when tests run' '- **Effort**: H' '- **Source**: suite' '- **Pointer**: docs/plans/ok.md' > "$d/docs/BACKLOG.md"
+out="$(node "$GATE" --backlog "$d/docs/BACKLOG.md" --json 2>/dev/null || true)"
+assert_contains "$out" "H→S!" "H rejection names the mapping"
+for ev in XS S M L XL 'S!' 'M急' 'XL!'; do
+  printf '%s\n' '### Good effort row' '- **Status**: open' '- **Trigger**: when tests run' "- **Effort**: $ev" '- **Source**: suite' '- **Pointer**: docs/plans/ok.md' > "$d/docs/BACKLOG.md"
+  out="$(node "$GATE" --backlog "$d/docs/BACKLOG.md" --json 2>/dev/null || true)"
+  case "$out" in *bad_effort*) assert_eq "rejected" "accepted" "effort $ev is valid" ;; *) assert_eq "ok" "ok" "effort $ev is valid" ;; esac
+done
 
 d="$(repo c-pm)"
 printf '%s\n' '### No pointer row' '- **Status**: open' '- **Trigger**: when tests run' '- **Effort**: S' '- **Source**: suite' > "$d/docs/BACKLOG.md"
@@ -228,7 +239,9 @@ rc=$?
 set -e
 assert_eq "$rc" "0" "--self-test exits 0"
 
-mut="$TEST_TMP/check-mut.js"
+mkdir -p "$TEST_TMP/mutroot/scripts" "$TEST_TMP/mutroot/references"
+cp "$REPO_ROOT/references/stage-graph.json" "$TEST_TMP/mutroot/references/"
+mut="$TEST_TMP/mutroot/scripts/check-mut.js"
 sed "s/Status: 'pending'/Status: 'open'/" "$GATE" > "$mut"
 set +e
 node "$mut" --self-test >/dev/null 2>/dev/null

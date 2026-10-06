@@ -11,7 +11,7 @@
  * mid-session ideas enter the queue first and compete (anti scope-invention).
  *
  * Ask-first predicate — decidable from data that exists (G2 B10):
- *   at pick time: effort L or H, OR the row carries a `board` tag,
+ *   at pick time: effort L or XL, OR urgent (`!`/`急` suffix), OR the row carries a `board` tag,
  *                 OR class is `hard-problem` (pinned to depth-0, never dispatched).
  *   at preflight: the picked unit's diff-scope declaration touching qc-gate
  *                 protected paths converts the pick to ask-first
@@ -23,14 +23,14 @@
  *   1. user class weight desc (preferences.class_weights — the user's habit
  *      OUTRANKS every system signal among eligible candidates, KR6)
  *   2. staleness desc (age_days)
- *   3. smaller effort first (S > Fix > M)
+ *   3. smaller effort first (XS > S > M, then L, XL)
  *   4. title lexicographic (total order — no ties survive)
  *
  * Modes:
  *   parse --backlog <file>
  *     Mechanically extracts candidate rows from docs/BACKLOG.md active entries:
- *     {title, effort, tags, source}. effort = first S|M|L|H|Fix token of the
- *     Effort field; tags gains "board" when that field mentions Board.
+ *     {title, effort, tags, source}. effort = first size token (read from references/stage-graph.json) of the
+ *     Effort field, with `urgent: true` when it carries the `!`/`急` suffix; tags gains "board" when that field mentions Board.
  *   pick --candidates <file> --preferences <file> [--readiness <file>]
  *        [--ledger <file>] [--decision-id <id>] [--round <n>]
  *     candidates: JSON array [{title, effort, tags[], class, age_days, source}]
@@ -51,7 +51,16 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const EFFORT_RANK = { S: 3, Fix: 2, M: 1 };
+const { loadSizes, parseEffortValue } = require('./check-backlog-entries.js');
+
+// Smaller effort first: XS > S > M, then L, XL. Rank follows the order of the sizes read from
+// references/stage-graph.json (smallest first), so it is never a second hard-coded list.
+const SIZES = loadSizes();
+function effortRank(effort) {
+  const pe = parseEffortValue(effort);
+  const i = SIZES.indexOf(pe ? pe.size : String(effort));
+  return i < 0 ? 0 : SIZES.length - i;
+}
 
 function usage(message) {
   process.stderr.write(`next-pick: ${message}\n`);
@@ -164,12 +173,15 @@ function parseBacklog(opts) {
     const effortMatch = section.match(/\*\*Effort\*\*:\s*([^\n]*)/u);
     const sourceMatch = section.match(/\*\*Source\*\*:\s*([^\n]*)/u);
     const effortText = effortMatch ? effortMatch[1].trim() : '';
-    const tokenMatch = effortText.match(/\b(S|M|L|H|Fix)\b/u);
+    const sizeAlt = SIZES.map((x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+    // size token + optional urgency suffix (! / 急); XS/XL must win over S/L (longest first).
+    const tokenMatch = effortText.match(new RegExp(`(?<![A-Za-z])(${sizeAlt})(!|急)?(?![A-Za-z])`, 'u'));
     const tags = [];
     if (/board/iu.test(effortText)) tags.push('board');
     rows.push({
       title,
       effort: tokenMatch ? tokenMatch[1] : 'unknown',
+      urgent: Boolean(tokenMatch && tokenMatch[2]),
       tags,
       class: 'standard-impl',
       age_days: null,
@@ -184,10 +196,13 @@ function parseBacklog(opts) {
 }
 
 function askFirstReason(row) {
-  if (row.effort === 'L' || row.effort === 'H') return `effort ${row.effort}`;
+  const pe = parseEffortValue(row.effort); // tolerates a suffixed value such as "S!"
+  const size = pe ? pe.size : row.effort;
+  if (size === 'L' || size === 'XL') return `effort ${size}`;
+  if (row.urgent === true || (pe && pe.urgent)) return 'urgent (!)';
   if (Array.isArray(row.tags) && row.tags.includes('board')) return 'board tag';
   if (row.class === 'hard-problem') return 'hard-problem class is pinned to depth-0';
-  if (row.effort === 'unknown') return 'effort not machine-readable';
+  if (!pe) return 'effort not machine-readable';
   return null;
 }
 
@@ -221,8 +236,8 @@ function pick(opts) {
     const sa = Number(a.age_days) || 0;
     const sb = Number(b.age_days) || 0;
     if (sa !== sb) return sb - sa;
-    const ea = EFFORT_RANK[a.effort] || 0;
-    const eb = EFFORT_RANK[b.effort] || 0;
+    const ea = effortRank(a.effort);
+    const eb = effortRank(b.effort);
     if (ea !== eb) return eb - ea;
     return a.title < b.title ? -1 : a.title > b.title ? 1 : 0;
   });

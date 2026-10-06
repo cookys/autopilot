@@ -48,10 +48,43 @@ assert_contains "$ROW" "d-pick-1" "pick row landed in the ledger"
 assert_contains "$ROW" "candidates_digest" "pick-record materialized in the ledger"
 
 # ── zero eligible candidates → pick null, exit 0 (empty queue is not an error) ──
-printf '[{"title":"Only big things","effort":"H","tags":[],"class":"standard-impl","age_days":1,"source":"s"}]\n' > "$TEST_TMP/only-big.json"
+printf '[{"title":"Only big things","effort":"XL","tags":[],"class":"standard-impl","age_days":1,"source":"s"}]\n' > "$TEST_TMP/only-big.json"
 OUT="$(node "$SCRIPT" pick --candidates "$TEST_TMP/only-big.json" --preferences "$TEST_TMP/prefs.json")"
 assert_exit_code "$?" "0" "empty eligible set is not an error"
 assert_contains "$OUT" '"pick": null' "pick is null"
+
+# -- P6: size+urgency gate and XS > S > M tie-break --
+printf '%s\n' '[{"title":"Urgent small","effort":"S!","tags":[],"class":"standard-impl","age_days":1,"source":"s"},{"title":"Urgent flag","effort":"S","urgent":true,"tags":[],"class":"standard-impl","age_days":1,"source":"s"},{"title":"Retired H","effort":"H","tags":[],"class":"standard-impl","age_days":1,"source":"s"}]' > "$TEST_TMP/urgent.json"
+OUT="$(node "$SCRIPT" pick --candidates "$TEST_TMP/urgent.json" --preferences "$TEST_TMP/prefs.json")"
+assert_contains "$OUT" "urgent (!)" "urgent suffix routes to ask-first"
+assert_contains "$OUT" '"pick": null' "nothing auto-eligible when all urgent or unknown"
+printf '%s\n' '[{"title":"B-m","effort":"M","tags":[],"class":"standard-impl","age_days":5,"source":"s"},{"title":"C-s","effort":"S","tags":[],"class":"standard-impl","age_days":5,"source":"s"},{"title":"D-xs","effort":"XS","tags":[],"class":"standard-impl","age_days":5,"source":"s"}]' > "$TEST_TMP/tie.json"
+OUT="$(node "$SCRIPT" pick --candidates "$TEST_TMP/tie.json" --preferences "$TEST_TMP/prefs.json")"
+assert_contains "$OUT" '"title": "D-xs"' "tie-break prefers XS over S over M"
+printf '%s\n' '[{"title":"B-m","effort":"M","tags":[],"class":"standard-impl","age_days":5,"source":"s"},{"title":"C-s","effort":"S","tags":[],"class":"standard-impl","age_days":5,"source":"s"}]' > "$TEST_TMP/tie2.json"
+OUT="$(node "$SCRIPT" pick --candidates "$TEST_TMP/tie2.json" --preferences "$TEST_TMP/prefs.json")"
+assert_contains "$OUT" '"title": "C-s"' "tie-break prefers S over M"
+cat > "$TEST_TMP/sizes-bl.md" <<'EOB'
+### Row xs
+- **Effort**: XS
+- **Source**: s
+
+### Row urgent
+- **Effort**: M急
+- **Source**: s
+
+### Row xl
+- **Effort**: XL!
+- **Source**: s
+
+### Row s bang
+- **Effort**: S!
+- **Source**: s
+EOB
+P="$(node "$SCRIPT" parse --backlog "$TEST_TMP/sizes-bl.md")"
+assert_contains "$P" '"effort": "XS"' "parse reads XS (not S)"
+assert_contains "$P" '"effort": "XL"' "parse reads XL (not L)"
+assert_eq "$(printf '%s' "$P" | grep -c '"urgent": true')" "3" "parse flags urgent for M急, XL!, S!"
 
 # ── parse: BACKLOG fixture → machine fields ──
 cat > "$TEST_TMP/backlog.md" <<'EOF'

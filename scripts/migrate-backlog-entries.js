@@ -8,7 +8,10 @@
  * Usage:
  *   node scripts/migrate-backlog-entries.js --backlog <file>
  *     [--config <file>] [--out-dir docs/backlog] [--apply]
- *     [--allow-unmapped-to-sidecar] [--json]
+ *     [--allow-unmapped-to-sidecar] [--json] [--rename-effort]
+ *
+ * --rename-effort: in-place Effort vocabulary migration (Fix→S, H→S!; S/M/L unchanged, idempotent).
+ * Dry-run by default; --apply writes. Touches only Effort values, no sidecars.
  *
  * Default is dry-run: print the manifest JSON and a unified diff, write nothing.
  * --apply writes only after every sidecar re-read contains moved_sha256 text.
@@ -45,7 +48,7 @@ const {
 function usage(code) {
   process.stderr.write(
     'Usage: node scripts/migrate-backlog-entries.js --backlog <file> ' +
-    '[--config <file>] [--out-dir docs/backlog] [--apply] ' +
+    '[--config <file>] [--out-dir docs/backlog] [--apply] [--rename-effort] ' +
     '[--allow-unmapped-to-sidecar] [--json]\n'
   );
   process.exit(code);
@@ -59,6 +62,7 @@ function parseArgs(argv) {
     apply: false,
     json: false,
     allowUnmappedToSidecar: false,
+    renameEffort: false,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -73,6 +77,7 @@ function parseArgs(argv) {
     else if (a === '--apply') out.apply = true;
     else if (a === '--allow-unmapped-to-sidecar') out.allowUnmappedToSidecar = true;
     else if (a === '--json') out.json = true;
+    else if (a === '--rename-effort') out.renameEffort = true;
     else usage(2);
   }
   if (!out.backlog) usage(2);
@@ -194,10 +199,19 @@ function synthesiseStatus(fields, entryText, when) {
   return 'open';
 }
 
+// Retired sizes map onto the stage-graph sizes (Fix→S, H→S!); everything else is unchanged.
+// Idempotent: a value already in the new vocabulary maps to itself.
+function mapEffort(v) {
+  const m = String(v).trim().match(/^(Fix|H)(!|急)?$/);
+  if (!m) return String(v).trim();
+  const t = gate.LEGACY_EFFORT_MAP[m[1]];
+  return m[2] && !t.endsWith('!') ? t + m[2] : t;
+}
+
 function normaliseEffort(fields, entryText) {
   const src = [fields.Effort, entryText].filter(Boolean).join(' ');
-  const m = src.match(/\b(Fix|S|M|L|H)\b/);
-  return m ? m[1] : 'M';
+  const m = src.match(/(?<![A-Za-z])(XS|XL|Fix|S|M|L|H)(!|急)?(?![A-Za-z])/);
+  return m ? mapEffort(m[1] + (m[2] || '')) : 'M';
 }
 
 // Migrate on ANY gate violation except a lone over-cap Title: a title is the entry's identity
@@ -878,8 +892,65 @@ function applyWrites(backlogPath, newText, sidecars, manifest, outDirAbs, when) 
   }
 }
 
+// --rename-effort: in-place Effort vocabulary migration (Fix→S, H→S!). Touches only the Effort
+// value of heading/checklist field lines and the Effort column of table rows; every other byte is
+// preserved. Idempotent (a migrated value is not Fix/H, so a second run changes nothing).
+function renameEffortText(text) {
+  const by = {};
+  const bump = (v) => { by[v] = (by[v] || 0) + 1; };
+  const lines = text.split('\n');
+  let effortCol = -1;
+  let inTable = false;
+  const out = lines.map((line) => {
+    const fm = line.match(/^(\s*-\s+(?:\*\*Effort\*\*|Effort)\s*:\s*)(Fix|H)(!|急)?(\s*)$/);
+    if (fm) { bump(fm[2]); return fm[1] + mapEffort(fm[2] + (fm[3] || '')) + fm[4]; }
+    if (/^\s*\|/.test(line)) {
+      const cells = line.split('|');
+      if (!inTable) {
+        inTable = true;
+        effortCol = cells.findIndex((c) => c.trim() === 'Effort');
+        return line;
+      }
+      if (effortCol < 0 || /^\s*\|?\s*:?-{2,}/.test(line)) return line;
+      const m = (cells[effortCol] || '').match(/^(\s*(?:\*\*)?)(Fix|H)(!|急)?((?:\*\*)?\s*)$/);
+      if (m) { bump(m[2]); cells[effortCol] = m[1] + mapEffort(m[2] + (m[3] || '')) + m[4]; return cells.join('|'); }
+      return line;
+    }
+    inTable = false;
+    effortCol = -1;
+    return line;
+  });
+  return { text: out.join('\n'), by, changed: Object.values(by).reduce((a, b) => a + b, 0) };
+}
+
+function mainRenameEffort(args) {
+  const backlogPath = path.resolve(args.backlog);
+  let text;
+  try {
+    text = fs.readFileSync(backlogPath, 'utf8');
+  } catch (e) {
+    process.stderr.write(`unreadable backlog: ${e.message}\n`);
+    process.exit(2);
+  }
+  const r = renameEffortText(text);
+  const manifest = { mode: 'rename-effort', backlog: backlogPath, changed: r.changed, by_value: r.by, applied: false };
+  if (args.apply && r.changed > 0) {
+    const tmp = backlogPath + '.rename-effort.tmp';
+    fs.writeFileSync(tmp, r.text);
+    fs.renameSync(tmp, backlogPath);
+    manifest.applied = true;
+  }
+  fs.writeSync(1, JSON.stringify(manifest) + '\n');
+  if (!args.apply && !args.json && r.changed > 0) {
+    const diff = unifiedDiff(text, r.text, backlogPath);
+    if (diff) fs.writeSync(1, diff);
+  }
+  process.exit(0);
+}
+
 function main() {
   const args = parseArgs(process.argv.slice(2));
+  if (args.renameEffort) mainRenameEffort(args);
   const backlogPath = path.resolve(args.backlog);
   let text;
   try {

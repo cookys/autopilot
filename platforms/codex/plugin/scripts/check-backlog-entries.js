@@ -28,7 +28,36 @@ const { execFileSync, spawnSync } = require('child_process');
 const SCRIPT_DIR = __dirname;
 const KNOWN_FIELDS = ['Title', 'Status', 'Trigger', 'Effort', 'Source', 'Pointer', 'Context'];
 const REQUIRED = ['Title', 'Status', 'Trigger', 'Effort', 'Source', 'Pointer'];
-const EFFORTS = new Set(['S', 'Fix', 'M', 'L', 'H']);
+// Effort = a size from references/stage-graph.json (the single canonical definition) plus an
+// optional urgency suffix `!` / `急` written AFTER the size. Sizes are read, never hard-coded.
+const STAGE_GRAPH_FILE = path.join(__dirname, '..', 'references', 'stage-graph.json');
+const URGENT_SUFFIXES = ['!', '急'];
+const LEGACY_EFFORT_MAP = { Fix: 'S', H: 'S!' };
+const MIGRATE_CMD = 'node scripts/migrate-backlog-entries.js --backlog <file> --rename-effort --apply';
+
+function loadSizes(file) {
+  const graph = JSON.parse(fs.readFileSync(file || STAGE_GRAPH_FILE, 'utf8'));
+  return Object.keys(graph.sizes);
+}
+
+// -> {size, urgent} for a valid effort value, else null.
+function parseEffortValue(raw, sizes) {
+  const v = String(raw).trim();
+  const list = sizes || loadSizes();
+  for (const size of list) {
+    if (v === size) return { size, urgent: false };
+    for (const suf of URGENT_SUFFIXES) if (v === size + suf) return { size, urgent: true };
+  }
+  return null;
+}
+
+function badEffortDetail(raw) {
+  const v = String(raw).trim();
+  if (Object.prototype.hasOwnProperty.call(LEGACY_EFFORT_MAP, v)) {
+    return `${v} (retired size: ${Object.entries(LEGACY_EFFORT_MAP).map(([k, t]) => `${k}→${t}`).join(', ')}; migrate with: ${MIGRATE_CMD})`;
+  }
+  return `${v} (valid: ${loadSizes().join('|')} with optional ! or 急 suffix)`;
+}
 const DEFAULT_CAPS = {
   Title: 120,
   Status: 64,
@@ -573,12 +602,12 @@ function checkEntry(entry, cfg, repoRoot, now) {
     }
   }
   if (fields.Effort != null && String(fields.Effort).trim() !== '') {
-    if (!EFFORTS.has(String(fields.Effort).trim())) {
+    if (!parseEffortValue(fields.Effort)) {
       vios.push({
         code: 'bad_effort',
         title,
         field: 'Effort',
-        detail: String(fields.Effort),
+        detail: badEffortDetail(fields.Effort),
       });
     }
   }
@@ -833,7 +862,12 @@ function runSelfTest() {
     add('cap_exceeded', 'heading', miniHeading(longTitle), ['cap_exceeded']);
 
     add('bad_status', 'heading', miniHeading({ ...base, Status: 'pending' }), ['bad_status']);
-    add('bad_effort', 'heading', miniHeading({ ...base, Effort: 'XL' }), ['bad_effort']);
+    add('bad_effort', 'heading', miniHeading({ ...base, Effort: 'Fix' }), ['bad_effort']);
+    add('bad_effort_H', 'heading', miniHeading({ ...base, Effort: 'H' }), ['bad_effort']);
+    add('bad_effort_prefix', 'heading', miniHeading({ ...base, Effort: '!S' }), ['bad_effort']);
+    for (const ok of ['XS', 'XL', 'S!', 'M急', 'XL!']) {
+      add('effort_ok_' + ok, 'heading', miniHeading({ ...base, Effort: ok }), []);
+    }
 
     const noPtr = { ...base };
     delete noPtr.Pointer;
@@ -990,6 +1024,9 @@ if (require.main === module) {
 }
 
 module.exports = {
+  loadSizes,
+  parseEffortValue,
+  LEGACY_EFFORT_MAP,
   collectEntries,
   parseHeadingBlock,
   splitHeadingEntries,

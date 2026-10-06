@@ -300,7 +300,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 ### `finalize` closes an earlier verified finding by absence in a later generation
 - **Status**: open
 - **Trigger**: a future review-policy deliverable, or evidence that a reviewer missed a still-open finding
-- **Effort**: Fix
+- **Effort**: S
 - **Source**: same ledger dir as above
 - **Pointer**: docs/backlog/finalize-closes-an-earlier-verified-finding-by-absence-in-a-later-generation.md
 - **Context**: the plan defines closure as absence-in-later-findings; tightening to "explicitly re-verified" needs a policy decision (MiniMax CUT/FOLLOW-UP)
@@ -316,7 +316,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 ### `src/engine/local-deployment.js` carries its own transport rule (TLS outside loopback) — align with `resolve-endpoint.sh` before it gets a live caller
 - **Status**: open
 - **Trigger**: `dispatch-local-openai.js` / `probe-local-engine.js` gain a caller on a real rail, or a second transport-policy divergence between the two is reported.
-- **Effort**: Fix
+- **Effort**: S
 - **Source**: v2.35.11 (`docs/plans/2026-09-03-endpoint-transport-optin.md` § Out of scope)
 - **Pointer**: docs/backlog/src-engine-local-deployment-js-carries-its-own-transport-rule-tls-outside-loopba.md
 - **Context**: the named-endpoint resolver now owns the transport policy (loopback + disclosed `plaintext-private` for private-range IP literals).
@@ -340,7 +340,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 ### `probe-runner-coverage` parallel-only flake — fork-pressure suspected, residue ruled out
 - **Status**: open
 - **Trigger**: next time it reds in a `--parallel` run (it passes standalone).
-- **Effort**: Fix
+- **Effort**: S
 - **Source**: fix/suite-residue-reaper QC round, depth-0 panel + foreman reproduction logs, 2026-08-28.
 - **Pointer**: docs/backlog/probe-runner-coverage-parallel-only-flake-fork-pressure-suspected-residue-ruled.md
 - **Context**: 2026-08-28 suite-reaper reproduction split the old diagnosis — the residue leak
@@ -364,7 +364,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 ### agy output envelope invalid on create-a-new-file responses (blocks agy implementer qualification)
 - **Status**: open
 - **Trigger**: 下一次要考 agy 家族 implementer 時（v2.35.13 起信封無效只是遙測遺失、狀態看 artifact，且 log 會留信封原文——重考就能同時拿到 row 與重現樣本）;或 agy 更新後 changelog/實測顯示…
-- **Effort**: Fix
+- **Effort**: S
 - **Source**: `docs/plans/evidence/2026-08-22-implementer-qualification-suite/agy-flash-qualify/README.md`。
 - **Pointer**: docs/backlog/agy-output-envelope-invalid-on-create-a-new-file-responses-blocks-agy-implemente.md
 - **Context**: 2026-08-22 implementer 施測(agy 1.1.17):flash-high 6 案、pro(event 147)2 案、flash-medium(event 152)6 案 envelope FAIL + 2 案 stall——envelope 失敗案**全部**是建新檔任務且同簽名(family-wide、發生率隨 tier…
@@ -492,7 +492,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 ### OpenCode `debug skill` truncation — restore portability check 16 to hard-fail
 - **Status**: open
 - **Trigger**: Upstream OpenCode fixes the corpus-volume-dependent `opencode debug skill` output truncation, or a supported OpenCode release changes the plugin/serve discovery surface again.
-- **Effort**: Fix
+- **Effort**: S
 - **Source**: 2026-07-17 OpenCode 1.17 migration run (v2.32.50); current `scripts/preflight-portability.sh` advisory wiring.
 - **Pointer**: docs/backlog/opencode-debug-skill-truncation-restore-portability-check-16-to-hard-fail.md
 - **Context**: `scripts/preflight-portability.sh` check 16 is intentionally advisory while OpenCode 1.17 can omit discovered skills from `debug skill` output.

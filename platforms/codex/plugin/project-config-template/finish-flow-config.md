@@ -11,26 +11,26 @@
 # only when you have project conventions that differ from defaults.
 
 ## Project-specific reinforcement
-# Optional: reference your dev-flow-config.md's L-5 / H-9 section so the rules
+# Optional: reference your dev-flow-config.md's `finish` node section so the rules
 # are reachable even if finish-flow is invoked standalone without going through
 # dev-flow first (e.g., context continuation jumping straight to closing).
 #
 # Example:
-# See .claude/dev-flow-config.md → "L-5 / H-9 Closing Forcing Function"
+# See .claude/dev-flow-config.md → "Finish Node Closing Forcing Function"
 # section for the full project rules.
 
 ## Size-specific tooling
 # Override the defaults for each sub-task where project conventions differ.
 #
 # Common overrides:
-# - Quality gate command during L-5.2 / H-9.2 (e.g., project-specific pipeline script)
-# - Merge target branch for L-5.3 (e.g., `develop` vs `main`)
-# - Merge target branch + flags for H-9.3 (e.g., `main` with `--no-ff`)
-# - Archive procedure during L-5.5 (where to move project dir, how to update INDEX)
+# - Quality gate command during the `finish` node's quality-gate step (e.g., project-specific pipeline script)
+# - Merge target branch for the `finish` node's merge step (e.g., `develop` vs `main`)
+# - Merge target branch + flags for urgent (`!`) work (e.g., `main` with `--no-ff`)
+# - Archive procedure during the `finish` node's archive step (where to move project dir, how to update INDEX)
 
 ## Per-phase quality pipeline
-# If your project runs quality-pipeline at every Phase advance (not only at L-5),
-# state it here so finish-flow understands L-5.2 is the FINAL review, not the only
+# If your project runs quality-pipeline at every unit advance (not only at the final `qc-gate`),
+# state it here so finish-flow understands `qc-gate` is the FINAL review, not the only
 # one. Gaps from skipped per-phase runs should be surfaced in the CEO Final Report.
 
 ## Known pitfalls
@@ -38,7 +38,7 @@
 # Examples:
 # - "Do not archive before merge — rename conflicts in merge commit"
 # - "Merge to develop is within CEO DOA; do not pause for user approval"
-# - "autopilot:learn is evaluated (not auto-skipped) at L-5.6; MANDATORY at H-9.4"
+# - "autopilot:learn is evaluated (not auto-skipped) at the `finish` node; MANDATORY for urgent (`!`) work"
 
 ## Feature flags (optional)
 # - enforce_fix: true   # Require finish-flow invocation for Fix workflow too

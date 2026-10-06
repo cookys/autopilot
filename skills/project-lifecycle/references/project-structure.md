@@ -124,5 +124,5 @@ README.md, ADR.md, dev-info.md, and Phase merging templates: [templates.md](temp
 ## See Also
 
 - `project-lifecycle (bootstrap)` — auto-generates project structure from plan
-- `dev-flow` — invokes project-structure at L-4
+- `dev-flow` — invokes project-structure at the `implement` node
 - `project-lifecycle (archive)` — archiving conventions

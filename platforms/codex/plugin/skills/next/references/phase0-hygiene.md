@@ -87,8 +87,8 @@ require('fs').writeFileSync(f, JSON.stringify(d, null, 2));
 
 ### 6. Categorize for Phase 1
 
-- S-size items → include in recommendation candidates
-- L-size items → list on dashboard only
+- XS/S/M-effort items → include in recommendation candidates
+- L/XL-effort items → list on dashboard only
 
 ## Causal Chain Prediction (B/C level only)
 

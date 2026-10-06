@@ -29,8 +29,8 @@ directory page, not a cockpit. `project_key` is `sha256(repo_identity)[0:16]`, c
 Additive field of `review-job-model/1`: `phase: { code, label, source } | null`. **[renderer contract]** Sources, in order:
 (0) the live phase of the `controller_progress_receipt` and (1) a valid campaign entry of the `task_status_receipt`
 (`evidence.campaigns[].phase`; terminal campaigns only) -> `source: "campaign"`, `label` = the zh-TW word for the
-`CAMPAIGN_STATES` value (unknown value -> the raw code); (1b) the phase a session declared on its session-mode marker
-(`session-mode.js set --phase`) -> `source: "session"`, `label` = the name; (1c) the session task in progress -> `source: "task"`,
+`CAMPAIGN_STATES` value (unknown value -> the raw code); (1b) the stage a session declared on its session-mode marker
+(`stage` set by `stage-advance.js`) -> `source: "session"`, `label` = the stage node id; (1c) the session task in progress -> `source: "task"`,
 `code` = the task id, `label` = `做：<subject>` (subject collapsed to single spaces and cut to 40 characters, the 40th being `…`).
 The task comes from the scope's session-task files (same project, same 24 h window and same marker-root binding as `planned`);
 several in progress -> the newest session file, then the highest `started_seq`; none in progress -> this source is skipped. The
@@ -112,8 +112,8 @@ The project watcher feeds the page and the band five inputs beyond runs / task /
   1 when none). Ignored when project_key / repo_identity / root differ or `opened_at` is in the future beyond a small slack. Older than 7 days it is still shown, with `stale:true` and 「已等 N 天」: age never hides a question, only `close` removes it.
 - compare (`compare-input.js`): `<git-common-dir>/autopilot/compare/<root>/*.json` through the renderer's `loadCompare`;
   the unbound scope reads nothing; the writer is a guidance row (W2e-g), so the manifest says `installed:false`.
-- marker phase (`phase-input.js`): `phase` / `phase_set_at` of unexpired markers of this scope; newest wins. Precedence:
-  campaign live phase > valid campaign receipt phase > marker phase > first open deliverable.
+- marker stage (`phase-input.js`): `size`, `urgent`, `level`, `stage`, `stage_set_at`, `unit` and `review_families` (§2.9 fields; a marker without a valid `stage` is ignored) of unexpired markers of this scope; newest `stage_set_at` wins. Precedence:
+  campaign live phase > valid campaign receipt phase > marker stage > first open deliverable.
 - sources manifest (`sources-manifest.js`): `<live>/runs/sources/<scope_key>.json`, `autopilot.sources/1`, one
   `{installed, enabled, how}` per source, derived from `hooks/hooks.json`, script presence and knobs (env and
   `~/.autopilot/config.json`). Renderer: input present = wired; installed and enabled with no input = the original empty

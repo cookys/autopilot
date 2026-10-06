@@ -65,10 +65,10 @@ Details: [references/phase0-hygiene.md](references/phase0-hygiene.md)
 
 ```
 P1: In-progress project's next Phase (interrupted work is highest priority)
-P2: Backlog S-size with met trigger conditions (quick wins)
+P2: Backlog XS/S/M-effort with met trigger conditions (quick wins)
 P3: Active plans (designed, awaiting implementation)
-P4: Maintenance — improvement-queue + stale knowledge (S-size)
-P5: Backlog L-size with met trigger conditions
+P4: Maintenance — improvement-queue + stale knowledge (XS/S effort)
+P5: Backlog L/XL-effort (human gate) with met trigger conditions
 P6: Proposals (need evaluation first)
 P7: Tech debt / unmet-trigger Backlog (list only)
 ```
@@ -122,10 +122,12 @@ transition), the pick is a proxy decision and goes through
 [`scripts/next-pick.js`](../../scripts/next-pick.js): `parse` extracts
 machine-readable candidate rows from `docs/BACKLOG.md`, `pick` ranks them
 deterministically from a materialized record (user class-weights outrank every
-system signal; L/H-effort, `board`-tagged, and `hard-problem` rows queue
+system signal; L/XL-effort or urgent (`!`/`急`) rows, `board`-tagged, and `hard-problem` rows queue
 ask-first and are NEVER auto-picked) and appends the pick + record to the
 decision ledger for the round-end report. Interactive `/next` keeps this skill's
 judgment flow — the script is the autonomous path's deterministic subset.
+
+Backlog `Effort` values are `XS`–`XL` with an optional `!`/`急` urgent suffix; the retired values `Fix`/`H` are rejected. Migrate a backlog with `node scripts/migrate-backlog-entries.js --rename-effort --apply`.
 
 ## See Also
 

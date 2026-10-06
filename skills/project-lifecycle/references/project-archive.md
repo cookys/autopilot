@@ -1,8 +1,8 @@
 
 # Project Archive
 
-> **Trigger**: L-size project completed (after `finishing-a-development-branch`)
-> **S-size tasks do not use this flow** — S audit trail lives in `docs/projects/ongoing-maintenance/` (or the project-configured projects path — e.g. `docs/` plural)
+> **Trigger**: L/XL project completed (after `finishing-a-development-branch`)
+> **XS/S/M tasks do not use this flow** — S audit trail lives in `docs/projects/ongoing-maintenance/` (or the project-configured projects path — e.g. `docs/` plural)
 
 ## Eligibility Check (before archiving)
 
@@ -147,6 +147,6 @@ If the script fails completely, perform these steps manually:
 
 ## See Also
 
-- `dev-flow` — orchestrates archive at L-5 completion
+- `dev-flow` — orchestrates archive at the `finish` node
 - `next (project-specific)` — auto-invoked after archive for next work recommendation
 - `project-lifecycle (structure)` — project directory conventions

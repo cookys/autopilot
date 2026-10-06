@@ -62,7 +62,7 @@ methodology never crosses the frequency bar, and compound-command rituals are in
 to the tokenizer (scanner recall fixes are a separate BACKLOG item — not this mode's job).
 
 Triggers: 「把剛做完的專案蒸餾成 skill」「趁熱把這套流程收下來」「這個專案的方法論值得留」,
-"distill this project/session" — or arriving from finish-flow L-5.6's evaluation question.
+"distill this project/session" — or arriving from the `finish` node's learn evaluation question.
 
 Steps 1E–2E replace Steps 1–2 ONLY. Everything from Step 3 on (identifier lint, human
 gate, normalize-slug, write + commit-on-approve, pack sync / consolidate) is the SAME

@@ -144,13 +144,13 @@ Examples:
 /learn env Script path wrong — use relative path from project root
 ```
 
-**From a ladder climb** (unknown-escalation ladder, plan `docs/plans/_archive/2026/09/2026-09-07-unknown-escalation-ladder.md` P5): when `finish-flow` L-5.6 / S.1 finds a `learn_required` entry in `node scripts/probe-unknown.js report --ledger <ledger>`, the entry is pre-filled from that row — `terms` become the knowledge entry's title keywords (verbatim, so the next `probe-unknown.js classify --terms …` lookup hits), `unknown_type` picks the category (`how` → the approach and its source; `why` → the root cause and the refuted hypotheses from the ledger; `whether` → the decision and the consensus map), and the row's `dispatch_run_id` / rung is cited as provenance. One climb = one entry; the same terms climbing again in a later session is the KR4 repeat signal that says the entry was not findable.
+**From a ladder climb** (unknown-escalation ladder, plan `docs/plans/_archive/2026/09/2026-09-07-unknown-escalation-ladder.md` P5): when the `finish` node finds a `learn_required` entry in `node scripts/probe-unknown.js report --ledger <ledger>`, the entry is pre-filled from that row — `terms` become the knowledge entry's title keywords (verbatim, so the next `probe-unknown.js classify --terms …` lookup hits), `unknown_type` picks the category (`how` → the approach and its source; `why` → the root cause and the refuted hypotheses from the ledger; `whether` → the decision and the consensus map), and the row's `dispatch_run_id` / rung is cited as provenance. One climb = one entry; the same terms climbing again in a later session is the KR4 repeat signal that says the entry was not findable.
 
 ---
 
-## Session Learning Summary (L-size)
+## Session Learning Summary (L/XL)
 
-At the end of L-size tasks, produce a structured summary before the dev-flow session-end phase:
+At the end of L/XL tasks, produce a structured summary before the dev-flow session-end phase:
 
 ```markdown
 ### Errors Encountered
@@ -168,7 +168,7 @@ At the end of L-size tasks, produce a structured summary before the dev-flow ses
 - [ ] Refresh MEMORY.md (if applicable)
 ```
 
-For S-size tasks: skip the full summary. Instead ask: "Did I retry any operation 2+ times?" If yes, record via standard flow above.
+For XS/S tasks: skip the full summary. Instead ask: "Did I retry any operation 2+ times?" If yes, record via standard flow above.
 
 ## Knowledge Health Audit
 

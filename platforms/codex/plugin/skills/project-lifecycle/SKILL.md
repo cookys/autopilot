@@ -15,6 +15,6 @@ description: >
 
 | Phase | Reference | When |
 |-------|-----------|------|
-| **Bootstrap** | [references/plan-bootstrap.md](references/plan-bootstrap.md) | After plan approval for L-size projects |
+| **Bootstrap** | [references/plan-bootstrap.md](references/plan-bootstrap.md) | After plan approval for L/XL projects |
 | **Structure** | [references/project-structure.md](references/project-structure.md) | Creating project dirs, organizing docs |
 | **Archive** | [references/project-archive.md](references/project-archive.md) | Finishing a development branch, user says "archive" |

@@ -12,7 +12,7 @@ description: >
 
 > Routing overlap? If this intent better matches a sibling skill, redirect per [references/routing-tiebreaks.md](../../references/routing-tiebreaks.md) (prefer pre-merge gate failures over manual debugging).
 
-**Pipeline is a dispatcher. Each step follows its reference doc.**
+**Pipeline is a dispatcher. Each step follows its reference doc.** It is the `qc-gate` node of the dev-flow stage graph, entered via `node scripts/stage-advance.js --to qc-gate`.
 
 ## Project Config (auto-injected)
 !`cat .claude/quality-gate-config.md 2>/dev/null || true`
@@ -86,15 +86,15 @@ See [references/code-review.md](references/code-review.md) "Shadow QC panel" sub
 
 | Size | Route | Steps |
 |------|-------|-------|
-| **S** | scan → completeness → review | completeness (if not skip) + review |
-| **L** | test → scan → completeness → review | all steps |
-| **hotfix** | test → review | skip scan/completeness for speed |
+| **XS / S** | scan → completeness → review | completeness (if not skip) + review |
+| **M / L / XL** | test → scan → completeness → review | all steps |
+| **urgent (`!`)** | test → review | skip scan/completeness for speed |
 
 ## Execution Steps
 
 > **Contract** — the pseudocode blocks below are the **executable dispatch contract** that quality-pipeline reads at runtime: which step runs, which script to invoke, which reference doc owns the rest. They are intentionally minimal. Each step's full spec — rationale, examples, exceptions, prohibitions — lives in the linked reference doc, which is the **canonical source of truth**. Edits to the canonical spec MUST be mirrored here if (and only if) they change the dispatch shape (script name, branching outcome, ordering). Edits to examples/rationale stay in the reference — never duplicate them here.
 
-### Tests (L-size only)
+### Tests (M/L/XL and urgent)
 
 ```
 Follow references/test-policy.md
@@ -168,7 +168,7 @@ After code review, each Suggestion/Minor finding must be dispatched — never ig
 
 ```
 Finding (Suggestion or Minor severity)
-├── (a) S-size fix (< 5 min, self-contained) → fix now, treat as Major
+├── (a) XS/S-size fix (< 5 min, self-contained) → fix now, treat as Major
 ├── (b) False positive / by-design → close with written rationale
 ├── (c) Independent task needing separate analysis → create task with context
 └── (d) Deferred → one backlog row per [`references/backlog-entry.md`](../../references/backlog-entry.md); then `node scripts/check-backlog-entries.js --backlog <resolved backlog>` (warn)
@@ -210,4 +210,4 @@ Step N fails
 **Max retries per step**: 3 (counts step failures, not fix attempts — orthogonal to the 30-fix pipeline cap and the 20-risk threshold above). After 3 step failures, escalate via [references/anti-rationalization.md](references/anti-rationalization.md) (7-point checklist + structured failure report) before declaring inability to solve.
 
 ## See Also
-- `autopilot:dev-flow` — sets session rules and dispatches pipeline
+- `autopilot:dev-flow` — sets session rules and advances the stage graph to `qc-gate`

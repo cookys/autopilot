@@ -63,7 +63,7 @@ finds less, and the system tightens. That is the intended workflow.
 
 | Mode | Cost | When |
 |------|------|------|
-| **scoped** | cheap (~1–3 agents) | **Default.** End of L-size work / post-merge. Audits only the docs describing the modules *this diff* touched. Pass a base ref (default `main`/`develop`). |
+| **scoped** | cheap (~1–3 agents) | **Default.** End of L/XL work / post-merge. Audits only the docs describing the modules *this diff* touched. Pass a base ref (default `main`/`develop`). |
 | **full** | EXPENSIVE (many agents/tokens) | Whole-repo sweep across all domains. OFFER (don't auto-run) when a change touches user-facing behavior OR 3+ modules; or periodically (e.g. >30 days since last). |
 
 Layer 2 is never a blocking per-commit gate — it's a discovery aid, orthogonal to build/test
@@ -131,7 +131,7 @@ Apply fixes as a normal edit + review pass (this skill does not edit for you).
 
 ## Integration
 
-- **dev-flow / finish-flow**: at L-size doc-sync (finish-flow L-5.4 Post-Merge Review),
+- **dev-flow / finish-flow**: at L/XL doc-sync (the `finish` node's post-merge review),
   run **scoped** mode if user-facing behavior / 3+ modules changed; OFFER **full** mode for
   big changes. See [dev-flow `post-feature-doc-sync.md`](../dev-flow/references/post-feature-doc-sync.md).
 - **periodic**: track last full sweep in `.claude/doc-audit-state.json` (`last_full_audit`);

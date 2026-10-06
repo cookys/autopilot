@@ -1,6 +1,6 @@
 # Project Doc Templates + Phase Merging
 
-> Copy-paste skeletons for the L-size project structure described in
+> Copy-paste skeletons for the L/XL project structure described in
 > [project-structure.md](project-structure.md). Keep skeletons minimal —
 > delete optional sections that don't apply.
 

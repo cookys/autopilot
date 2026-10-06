@@ -1,7 +1,7 @@
 
 # Plan Bootstrap (Plan Mode -> Project Setup)
 
-> **Trigger**: L-size project after ExitPlanMode, or after user approves a plan
+> **Trigger**: L/XL project after ExitPlanMode, or after user approves a plan
 > **Input**: Plan file (from system-reminder path or `docs/plans/`)
 
 ## Step 0: Draft Plan Overlap Check
@@ -161,6 +161,6 @@ When bootstrapping or re-admitting after partial integration:
 
 ## See Also
 
-- `dev-flow` — calls plan-bootstrap at L-3
+- `dev-flow` — calls plan-bootstrap at the `plan` node (project setup)
 - `project-lifecycle (structure)` — directory conventions and templates
 - `team (project-specific)` — uses admitted `deliverableDeps`/`parallelGroups` from bootstrap output

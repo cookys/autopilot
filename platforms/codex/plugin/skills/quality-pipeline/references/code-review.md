@@ -302,7 +302,7 @@ For each Suggestion/Minor finding:
 Dispatch Explore agent to analyze impact and effort
     ↓
 Classify into one of four outcomes:
-├── S-size fix (< 5 min) → fix now, treat as Major
+├── XS/S-size fix (< 5 min) → fix now, treat as Major
 ├── False positive / by-design → close with written rationale
 ├── Independent task needing more analysis → create next task with context
 └── Has clear trigger condition → add to docs/BACKLOG.md with trigger

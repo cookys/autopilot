@@ -1218,3 +1218,31 @@ Rule: a claim about how a screen looks needs the colored screen — capture with
 
 Preventing artifact: `docs/plans/evidence/2026-10-06-tui-band/ansi2html.py` + headless chrome screenshot
 (recipe in that README); the band palette uses Claude Code theme keys as text color only.
+
+## 56. A golden that is green only while untracked
+
+The unknown-escalation probe counts repo hits for a term with `git grep` over tracked files. Its golden
+case contained the invented novelty term, so the moment the golden was committed the term became a repo
+hit and the knob-off case went red — green while the file was untracked, red once it was part of the repo
+it measured. Separately, a golden whose every case pins the knob flags cannot see a change of the
+built-in defaults: it proves the flags work, never what happens with none.
+
+Rule: a probe that measures the repo must not be fed fixtures that live in that repo; and a suite that
+pins every input cannot guard a default.
+
+Preventing artifact: golden and zero-hit cases run with `--repo-root` in a throwaway repo, plus one
+flag-free case (`hooks/tests/probe-unknown.test.sh`); depth-0 reruns from the committed state (2026-10-06).
+
+## 57. A pre-commit gate measured on committed history
+
+The E1 size bump was specified as `base_ref..HEAD`. qc-gate runs before the commit, so for XS/S work that
+range would always show about 0 lines and the bump could never fire. The hand implemented the plan text
+faithfully and 140 tests were green — every test fed it committed history, the one place the gate never
+looks at the moment it runs.
+
+Rule: ask when a gate fires and where the data is at that moment, before asking whether the code matches
+the spec.
+
+Preventing artifact: `scripts/stage-advance.js` counts `base_ref` against the working tree plus untracked
+non-ignored files; tests (a)(b)(c) in `hooks/tests/stage-advance.test.sh` pin the uncommitted cases
+(2026-10-06).

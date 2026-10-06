@@ -23,7 +23,11 @@
 //   marker_phase    `phase_set_at` anywhere; `--phase` only on a line that names `session-mode`, or
 //                   anywhere in a session-mode*.js file (`--phase` is also a legitimate flag of
 //                   check-phase-review-receipt.js, which is therefore not flagged).
-//   owner_u4        `U4` within +-1 line of owner|U5|escalat|stop (case-insensitive). Excluded by path:
+//   owner_u4        a line that DESCRIBES U4 as the owner rung, within one clause: `U4 owner`, `U4 = owner`,
+//                   `U4 (owner)`, `U4 · owner`, `owner (U4)`, `owner rung (U4)`, `owner rung is U4`,
+//                   `U4 is the owner`, `U4 as owner`. A negation (not|never|no longer|without|isn't) in the
+//                   same clause clears it (`U4 is NOT the owner`, `never U4 as owner`), and a line such as
+//                   `U4 experiment ... U5 owner` is not a description of U4 as owner. Excluded by path:
 //                   docs/BACKLOG.md, hooks/tests/mission-convergence.test.sh (unrelated U4).
 //
 // --repo <dir> scans a consumer repo's `.claude/*.md` and backlog files (BACKLOG.md, docs/BACKLOG.md,
@@ -65,7 +69,14 @@ const FLOW_LINE = /dev-flow|finish-flow|finish flow/i;
 const RE_EFFORT = /\*\*Effort\*\*:\s*(.*)$/;
 const RE_SIZE_WORD = /(?<![\w.-])(?:Fix|H)(?![\w-])/;
 const RE_U4 = /(?<![\w.])U4(?![\w])/;
-const RE_OWNERISH = /owner|U5|escalat|stop/i;
+// U4 described as the owner rung (see the owner_u4 header note). `U4`-adjacent forms and `owner`-first forms.
+const RE_U4_AS_OWNER = [
+  /(?<![\w.])U4\s*(?:=|·|:|—|–|-|\/)?\s*\(?\s*owner/i,
+  /(?<![\w.])U4\s+(?:is|as)\s+(?:the\s+)?owner/i,
+  /owner(?:\s+rung)?\s*\(\s*U4\s*\)/i,
+  /owner(?:\s+rung)?\s+(?:is|=)\s+U4(?![\w])/i,
+];
+const RE_NEGATION = /\b(?:not|never|no longer|without)\b|n't\b/i;
 
 function norm(p) {
   return p.split(path.sep).join('/');
@@ -100,7 +111,7 @@ function listFiles(root) {
 }
 
 function excluded(rel) {
-  if (SELF_EXCLUDES.includes(rel)) return true;
+  if (SELF_EXCLUDES.includes(rel) || SELF_EXCLUDES.some((x) => rel === `platforms/codex/plugin/${x}`)) return true; // the codex mirror is the same file
   return EXCLUDE_PREFIXES.some((x) => rel === x || rel.startsWith(x));
 }
 
@@ -164,8 +175,9 @@ function scanU4(rel, lines, add) {
   if (U4_EXCLUDE_PATHS.includes(rel)) return;
   lines.forEach((line, i) => {
     if (!RE_U4.test(line)) return;
-    const win = [lines[i - 1], line, lines[i + 1]].filter((x) => x !== undefined).join('\n');
-    if (RE_OWNERISH.test(win)) add('owner_u4', rel, i + 1, line, 'U4');
+    // Clause = the line split at sentence/semicolon boundaries; a negation in the clause clears the match.
+    const hit = line.split(/[.;]\s|;/).some((clause) => RE_U4_AS_OWNER.some((re) => re.test(clause)) && !RE_NEGATION.test(clause));
+    if (hit) add('owner_u4', rel, i + 1, line, 'U4');
   });
 }
 

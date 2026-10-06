@@ -17,9 +17,8 @@
  *   S6 self-report                                            — kind:unknown rows (claim: caps at U1 alone)
  *
  * Rungs: U0 local knowledge · U1 consult seat · U2 web research (survey /
- * issue-search) · U3 multi-perspective panel (dispatch-discuss / think-tank / PUA) · U4 experiment (spike).
- * Chains: how U1→U2 · why U1→U2→U3 · whether U1→U3 (the experiment rung is appended to each; see Ladder below).
- * Rung U5 is the owner stop, documented in the Ladder section.
+ * issue-search) · U3 multi-perspective panel (dispatch-discuss / think-tank / PUA) · U4 experiment (spike) · U5 owner.
+ * Chains: how U1→U2 · why U1→U2→U3 · whether U1→U3 (the U4 experiment is appended to each; see Ladder below).
  *
  * Rules (plan §3, frozen rubric R10/R11/R12/R13/R16):
  *   co-signal      S4 alone or S6 alone ⇒ at most U1. U2 needs S4 + one of S1/S2/S3/S5,
@@ -81,10 +80,9 @@
  *   report     ladder entries carry rail/families/question/criterion/result when the row has them.
  * Exhaustion: used ≥ budget is never repeated; all spent ⇒ none, budget-exhausted.
  *
- * Owner rung (U5): reached only by the caller's own stop; `receipt --rung U5` records it. Rung four is NOT the
- * owner rung and there is no alias: a new receipt at rung four without question/criterion/result (and without
- * a skip reason) is refused. Historical ledger rows are READ as-is: a pre-v3 row at rung four (then the owner
- * meaning) has neither result nor reason, so report lists it but it never counts against the experiment
+ * U5 owner: reached only by the caller's own stop; `receipt --rung U5` records it. U4 is NOT the owner rung
+ * and there is no alias: a new U4 receipt without question/criterion/result (and without a skip reason) is
+ * refused. Historical ledger rows are READ as-is: a pre-v3 U4 row (then the owner meaning) has neither result nor reason, so report lists it but it never counts against the experiment
  * budget — only rows carrying an experiment result, or a rail-failed reason, consume that budget.
  *
  * Node ≥ 20.10, built-ins only. Exit: 0 ok · 2 usage (or --strict when recommend ∈ {U2,U3,U4}).
@@ -110,7 +108,7 @@ const U4_RESULTS = new Set(['pass', 'fail', 'inconclusive']);
 const SKIP_REASONS = new Set(['knob-off', 'budget-exhausted', 'not-heterogeneous', 'rail-failed']);
 const STRICT_SET = new Set(['U2', 'U3', 'U4']);
 
-// The terminal rung a caller records when it stops; classify never emits it.
+// The U5 owner rung a caller records when it stops; classify never emits it.
 const OWNER_RUNG = 'U5';
 
 function usage(message) {
@@ -397,7 +395,7 @@ function classify(opts) {
   const used = { U1: 0, U2: 0, U3: 0, U4: 0 };
   for (const r of rows) {
     if (r.kind !== 'ladder' || !(!r.reason || r.reason === 'rail-failed') || used[r.rung] === undefined) continue;
-    // A pre-v3 row at rung four carries neither result nor reason: read as-is, never an experiment spend.
+    // A pre-v3 U4 row carries neither result nor reason: read as-is, never an experiment spend.
     if (r.rung === 'U4' && r.result === undefined && r.reason !== 'rail-failed') continue;
     used[r.rung] += 1;
   }
@@ -417,7 +415,6 @@ function classify(opts) {
     knob,
     knob_resolved_from: resolveKnobProvenance(opts),
     terms_hits: termsHits,
-    ladder_v3: true,
   };
 
   if (knob === 'off') {
@@ -466,7 +463,7 @@ function classify(opts) {
     return finish(out, opts);
   }
   // Every signal-eligible rung is spent. The frozen contract (plan §3, G2 R11): exhaustion
-  // is always `none` — never a higher rung. classify never emits the terminal rung; the
+  // is always `none` — never a higher rung. classify never emits U5; the
   // owner escalation is the stall fuse / DOA boundary the foreman already has, to which it
   // attaches the ladder receipts (depth0-control-loop.md §6).
   out.recommend = 'none';

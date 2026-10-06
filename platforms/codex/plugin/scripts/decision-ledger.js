@@ -28,9 +28,9 @@
  *   note      {round, text}                          (non-decision telemetry)
  *   hypothesis {hypothesis_id, text, status: open|refuted|confirmed, evidence_refs[], round?, work_unit?}
  *   unknown    {type: how|why|whether, rationale, round?, work_unit?}   (agent self-report — a claim, S6)
- *   ladder     {rung: U0..U4 | the terminal rung, unknown_type, terms[], signal_ids[], heterogeneous, reason?, dispatch_run_id?, round?, work_unit?}
+ *   ladder     {rung: U0..U5 (U4 experiment, U5 owner), unknown_type, terms[], signal_ids[], heterogeneous, reason?, dispatch_run_id?, round?, work_unit?}
  *             The v3 ladder (see probe-unknown.js header) adds, only when present: rail (dispatch-discuss|think-tank|debugger-pua)
- *             + families[] on U3 rows; question + criterion + result (pass|fail|inconclusive) on rung-four rows.
+ *             + families[] on U3 rows; question + criterion + result (pass|fail|inconclusive) on U4 rows.
  * The last three are unknown-escalation-ladder telemetry (plan
  * docs/plans/_archive/2026/09/2026-09-07-unknown-escalation-ladder.md): exempt from decision_id /
  * rationale like `note`, each validated against its own required-field set. A
@@ -71,7 +71,7 @@ const KINDS = new Set(['decision', 'dispatch', 'pick', 'refreeze', 'veto', 'note
 const TELEMETRY_KINDS = new Set(['note', 'hypothesis', 'unknown', 'ladder']);
 const RUNGS = ['U0', 'U1', 'U2', 'U3', 'U4'];
 const UNKNOWN_TYPES = ['how', 'why', 'whether'];
-const OWNER_RUNG = 'U5'; // recorded by a caller that stops; the probe never recommends it
+const OWNER_RUNG = 'U5'; // U5 owner: recorded by a caller that stops; the probe never recommends it
 const SKIP_REASONS = new Set(['knob-off', 'budget-exhausted', 'not-heterogeneous', 'rail-failed']);
 const U3_RAILS = new Set(['dispatch-discuss', 'think-tank', 'debugger-pua']);
 const U4_RESULTS = new Set(['pass', 'fail', 'inconclusive']);
@@ -109,9 +109,9 @@ function validateLadderRow(kind, row) {
       if (!U4_RESULTS.has(row.result)) return `ladder.result must be one of ${[...U4_RESULTS].join('|')}`;
       if (!isNonEmptyString(row.question) || !isNonEmptyString(row.criterion)) return 'ladder.result requires question and criterion';
     }
-    // Rung four is the experiment rung: a new row needs a result unless it is a skip row. No alias for the
-    // old meaning; historical rows are read, never re-validated (validation runs on append only).
-    if (row.rung === 'U4' && row.result === undefined && row.reason === undefined) return 'a ladder row at rung four needs question, criterion and result, or a skip reason';
+    // U4 is the experiment rung (U5 is the owner): a new U4 row needs a result unless it is a skip row. No
+    // alias for the old meaning; historical rows are read, never re-validated (validation runs on append only).
+    if (row.rung === 'U4' && row.result === undefined && row.reason === undefined) return 'a ladder U4 (experiment) row needs question, criterion and result, or a skip reason';
     return null;
   }
   return null;

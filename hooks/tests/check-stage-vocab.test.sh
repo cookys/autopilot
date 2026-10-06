@@ -29,7 +29,16 @@ printf 'node check-phase-review-receipt.js --phase p1\n' > "$R/scripts/receipt-u
 printf 'node scripts/session-mode.js set --phase L-3 # stage-vocab-allow\nnode scripts/session-mode.js set --phase L-4\n' > "$R/scripts/allow-token.js"
 mkdir -p "$R/evals/skill-onoff/lib"; printf 'node scripts/session-mode.js set --phase L-3\n' > "$R/evals/skill-onoff/lib/p1w-markers.sh"
 # owner U4 semantic check
-printf 'The owner is asked at U4 when everything fails.\n' > "$R/scripts/u4-owner.md"
+# positives: phrasings that DESCRIBE U4 as the owner rung (one file each)
+i=0
+for t in 'U4 owner' 'U4 = owner' 'U4 (owner)' 'owner rung (U4)' 'owner (U4)' 'owner rung is U4' 'U4 is the owner' 'U4 · owner' 'U4 as owner'; do
+  i=$((i+1)); printf 'Ladder: %s when everything fails.\n' "$t" > "$R/scripts/u4-pos-$i.md"
+done
+# negatives: U4 experiment next to U5 owner, and negated descriptions
+printf 'U1 consult · U4 experiment (spike) · U5 owner.\n' > "$R/scripts/u4-neg-1.md"
+printf 'U4 is NOT the owner rung; U5 is.\n' > "$R/scripts/u4-neg-2.md"
+printf 'The probe never emits U4 as owner.\n' > "$R/scripts/u4-neg-3.md"
+printf 'U4 experiment.\nThe owner stops here and U5 escalates.\n' > "$R/scripts/u4-neg-4.md"
 printf 'U4 runs an experiment on a branch.\nIt is cheap and fast.\n' > "$R/scripts/u4-experiment.md"
 # excluded paths: each carries a hit that must be ignored
 for f in CHANGELOG.md docs/plans/p.md docs/projects/_archive/x/r.md evals/skill-onoff/packs/p/a.md node_modules/m/i.md; do
@@ -66,7 +75,8 @@ chk "session-mode --phase detected" 'has("marker_phase","scripts/uses-phase.js",
 chk "allow token exempts only its own line" 'has("marker_phase","scripts/allow-token.js","--phase") && !f.some((x) => x.file === "scripts/allow-token.js" && x.category === "marker_phase" && x.line === 1)'
 chk "frozen history path exempt from marker_phase" '!f.some((x) => x.file === "evals/skill-onoff/lib/p1w-markers.sh" && x.category === "marker_phase")'
 chk "--phase of check-phase-review-receipt not flagged" '!f.some((x) => x.file === "scripts/receipt-usage.md")'
-chk "U4 next to owner flagged" 'has("owner_u4","scripts/u4-owner.md","U4")'
+for n in 1 2 3 4 5 6 7 8 9; do chk "U4-as-owner phrasing $n flagged" "has(\"owner_u4\",\"scripts/u4-pos-$n.md\",\"U4\")"; done
+for n in 1 2 3 4; do chk "U4 negative fixture $n not flagged" "!f.some((x) => x.file === \"scripts/u4-neg-$n.md\")"; done
 chk "U4 experiment not flagged" '!f.some((x) => x.file === "scripts/u4-experiment.md")'
 chk "U4 path exclusion (mission-convergence.test.sh)" '!f.some((x) => x.file === "hooks/tests/mission-convergence.test.sh")'
 chk "excluded paths ignored" '!f.some((x) => /^(CHANGELOG\.md|docs\/plans\/|docs\/projects\/_archive\/|evals\/skill-onoff\/packs\/|node_modules\/)/.test(x.file))'

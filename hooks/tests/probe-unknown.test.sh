@@ -261,7 +261,7 @@ for h in a b; do node "$LEDGER" append --ledger "$V" --kind hypothesis --json "{
 vr --rung U1 --unknown-type why --terms x --signals S1 --work-unit vw >/dev/null
 vr --rung U1 --unknown-type why --terms x --signals S1 --work-unit vw >/dev/null
 OUT="$(vc --work-unit vw)"
-assert_eq "$(printf '%s' "$OUT" | field ladder_v3)" "true" "v3 reports ladder_v3"
+assert_not_contains "$OUT" "ladder_v3" "no vestigial ladder_v3 key"
 assert_eq "$(printf '%s' "$OUT" | field budget.u4)" "1" "v3 budget u4 argv 1"
 assert_eq "$(printf '%s' "$OUT" | field budget.used.U4)" "0" "v3 used.U4 present"
 assert_eq "$(printf '%s' "$OUT" | field recommend)" "U2" "v3 why: U1 spent ⇒ U2"
@@ -363,29 +363,29 @@ for site in "--work-unit cs1 --terms $GT" "--work-unit cs2 --consensus LOW --ter
   assert_eq "$(printf '%s\n' "$OUT" | wc -l | tr -d ' ')" "1" "v3 call-site prints one JSON object"
 done
 
-# ── terminal rung is U5 (P4b): no alias from the old numbering ──
+# ── U5 owner (P4b): no alias from the old numbering ──
 OW="$TEST_TMP/owner.jsonl"
 node "$PROBE" receipt --ledger "$OW" --rung U5 --unknown-type why --terms x --signals S1 --work-unit ow >/dev/null 2>&1; RC=$?
 assert_exit_code "$RC" "0" "U5 owner receipt accepted"
 node "$PROBE" receipt --ledger "$OW" --rung U6 --unknown-type why --terms x --signals S1 >/dev/null 2>&1; RC=$?
-assert_exit_code "$RC" "2" "a rung past the terminal one is refused"
+assert_exit_code "$RC" "2" "a rung past U5 is refused"
 node "$PROBE" receipt --ledger "$OW" --rung U4 --unknown-type why --terms x --signals S1 --work-unit ow >/dev/null 2>&1; RC=$?
-assert_exit_code "$RC" "2" "old-meaning rung-four receipt (no question/criterion/result, no reason) refused — no alias"
+assert_exit_code "$RC" "2" "old-meaning U4 receipt (no question/criterion/result, no reason) refused — no alias"
 node "$LEDGER" append --ledger "$OW" --kind ladder --json '{"rung":"U4","unknown_type":"why","terms":[],"signal_ids":["S1"],"heterogeneous":true}' >/dev/null 2>&1; RC=$?
-assert_exit_code "$RC" "2" "decision-ledger refuses a new old-shape rung-four row"
+assert_exit_code "$RC" "2" "decision-ledger refuses a new old-shape U4 row"
 node "$LEDGER" append --ledger "$OW" --kind ladder --json '{"rung":"U4","unknown_type":"why","terms":[],"signal_ids":[],"heterogeneous":false,"reason":"rail-failed"}' >/dev/null 2>&1; RC=$?
 assert_exit_code "$RC" "0" "U4 skip-reason row (rail-failed) is still appendable"
 
 # classify never emits U5 even with the owner row and every signal present
 OUT="$(node "$PROBE" classify --ledger "$OW" --work-unit ow --consensus LOW --stall "$TEST_TMP/stall.json" --convergence "$TEST_TMP/conv.json" "${PIN[@]}" --repo-root "$ISO")"
 assert_not_contains "$OUT" '"recommend":"U5"' "classify never emits U5 with an owner receipt present"
-# Historical ledger (pre-v3 rung-four row, neither result nor reason) is READ as-is: it neither crashes nor spends the experiment budget
+# Historical ledger (pre-v3 U4 row, neither result nor reason) is READ as-is: it neither crashes nor spends the experiment budget
 HL="$TEST_TMP/legacy.jsonl"
 printf '%s\n' '{"kind":"ladder","rung":"U4","unknown_type":"why","terms":[],"signal_ids":["S1"],"heterogeneous":true,"work_unit":"lw","ts":"2026-09-01T00:00:00Z"}' > "$HL"
 for h in a b; do node "$LEDGER" append --ledger "$HL" --kind hypothesis --json "{\"hypothesis_id\":\"l$h\",\"text\":\"t\",\"status\":\"refuted\",\"work_unit\":\"lw\"}" >/dev/null; done
 OUT="$(node "$PROBE" classify --ledger "$HL" --work-unit lw "${PIN[@]}" --repo-root "$ISO")"; RC=$?
-assert_exit_code "$RC" "0" "legacy rung-four row is readable"
-assert_eq "$(printf '%s' "$OUT" | field budget.used.U4)" "0" "legacy rung-four row does not spend the experiment budget"
+assert_exit_code "$RC" "0" "legacy U4 row is readable"
+assert_eq "$(printf '%s' "$OUT" | field budget.used.U4)" "0" "legacy U4 row does not spend the experiment budget"
 OUT="$(node "$PROBE" report --ledger "$HL")"
 assert_eq "$(printf '%s' "$OUT" | field climbs.length)" "1" "report still lists the legacy U4 row as-is"
 # U4 experiment exhaustion: a real experiment receipt spends it, a rail-failed one spends it too

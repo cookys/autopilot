@@ -529,3 +529,75 @@ None. Resolved 2026-10-06:
   - **§2.7 E1 bump and `high_risk`** measure `base_ref` against the working tree plus untracked files, instead of `..HEAD`. qc-gate runs before commit, so `..HEAD` would never fire.
   - **P0 first rung** is `eligible_max`, not `recommend`. `recommend` depends on the host roster.
   - **`stage-graph.js next` from `research`** needs `--research`. `stage-advance.js` passes it, and P3 rails calling `next` directly must pass it too.
+
+## Owner addendum A1 (2026-10-06): band widgets and advisory bridge in 3.0.0
+
+The owner chose "b" on the mods-candidates survey (`scratchpad` report summarised in the execution log). It folds four survey items into 3.0.0, beside P7. This is scope added after freeze, by owner decision. It is not re-reviewed as a plan: the code-review node of each phase reviews it. The §2.5 Global Constraints and the V4a owner decisions in `docs/plans/evidence/2026-10-06-tui-band/README.md` apply unchanged. The phases are mechanism unless stated, and none of them edits advisory wording. Moving a text from model context to a human surface is mechanism; rewording it would be guidance, so it would need eval.
+
+### P7 (expanded): one-line band of side-by-side widgets
+
+V4a, one line, theme-key text colour only, sized to `bodyColumns`. Slots appear in priority order, separated by a `│` drawn in `subtle`:
+
+| Slot | Shows | Example |
+|---|---|---|
+| verdict | the verdict glyph and word | `▲ 要你決定` |
+| position | size·level ▸ stage, plus the `stage_set_at` age | `L·l5 ▸ verify ◷12m` |
+| unit | the unit bar, k/N, and family count | `▰▰▱▱ 2/4 ·3族` |
+| dispatch | live dispatch count and stalled count | `⚙n ⏸n` |
+| review | the review round and QC chip (P7c) | `R2 ⟲ · QC ✓` |
+| decisions | decisions taken for the owner, decisions with no record, and the ladder rung | `◆n ?n U1` |
+| spend | spend against the cap | `$41/150` |
+| hygiene | load source (P7b) and worktree residue | `dev ↓3 · wt 9` |
+| ⓘ | opens the panel | `ⓘ` |
+
+At narrower widths the low-priority slots drop:
+
+| Width | Slots kept |
+|---|---|
+| < 160 | hygiene is dropped |
+| < 140 | spend and decisions are also dropped |
+| < 120 | the age and review are also dropped |
+| < 80 | verdict, dispatch, unit bar and ⓘ |
+
+The ⓘ panel has these tabs: Legend · Now · Graph (current node highlighted) · Dispatch · Review (P7d) · Decisions · Spend · Hygiene.
+
+**Acceptance:**
+- KR1 per-field gate: every rendered slot is checked against its source field.
+- Colored screenshots at 209, 120 and 80 columns.
+
+### P7a: advisory bridge (mechanism)
+
+`cost-tracker` queued advice, `version-drift-check`'s SessionStart text, `context-budget` T1 and `suggest-compact` stop being injected into model context.
+
+- Each one writes the same text, unchanged, to `<live>/advisories/<sid>.jsonl` as `{id, kind, severity, text, at}`.
+- The mod shows it as a toast or a chip.
+- A stderr copy remains, and a per-hook knob restores injection.
+- These stay model-facing: `context-budget` T2, `cost-fuse` warn, `depth0-delegate-gate`, `foreman-guard`, `dispatch-model-guard`, `failure-escalation`, and the SessionStart handoff snapshot.
+
+**Acceptance:**
+- Each moved hook has a test showing no `additionalContext` and one advisory row.
+- With the knob on, injection comes back.
+- The mod renders a toast fixture.
+
+### P7b: plugin load-source chip
+
+The hygiene slot shows the plugin version and its source (`dev` vs a versioned cache dir), plus the commits it is behind upstream. The data comes from `dev-setup.sh --check` facts, published by the watcher.
+
+**Acceptance:** with a planted semver cache dir, the chip shows the cache source; for the real dev tree it shows `dev`.
+
+### P7c: QC chip
+
+A watcher publishes whether HEAD's protected-path diff since the remote carries a `QC-Verdict: PASS` trailer, using the same rule as `.githooks/pre-push`. The band shows `QC ✓` or `QC owed`.
+
+**Acceptance:** fixture repos for each state.
+
+### P7d: review tab
+
+The panel reads `~/.autopilot/plan-review/<session_key>/state.json` for the plan-review generation, seats and verdict. It also reads a published hetero-review-loop round summary, which the loop's `collect` writes as a new small JSON.
+
+**Acceptance:** fixture states render, and a missing state shows "no review".
+
+**Dependencies:**
+- `{P2b, P3} → P7` (already true).
+- `P7a`, `P7b`, `P7c` and `P7d` are independent of each other, and each lands before alpha.2.
+- They are built on `release/3.0.0` in parallel with the P5 eval revision.

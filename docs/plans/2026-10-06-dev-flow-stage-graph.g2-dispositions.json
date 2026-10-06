@@ -1,0 +1,117 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "dev-flow-stage-graph-2026-10-06",
+ "generation": 2,
+ "findings": [
+  {
+   "fingerprint": "d2e326dd680b7f2b7d5eb976539cb7d06bd55e2aee32857b2ca3d4389d8f5b3a",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct: XL per-deliverable code-review contradicted settled item 3. Folded: one full-diff code-review after all units for every size; an l5/l6 engine's per-deliverable review counts as that unit's `verify`. code-review→implement is legal only off the urgent-low path; post-finish code-review is terminal."
+  },
+  {
+   "fingerprint": "23263c86d354dea2edcb8874d6a86dd87e090176552139a435ca69e6029c21fb",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct. Folded: §2.7 keeps base sequences + variant rules (research yes/no for L/XL, units ≥1, urgency × high-risk); P0's expected.json enumerates every cell with walks for units {1,3} and research {yes,no}; P1 acceptance iterates the fixture. Walks live in the fixture, not the plan."
+  },
+  {
+   "fingerprint": "8e9d2949e680bc59e7cca9cbc8f234e8660b6f6fe5275105b002ef39cd345670",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct. Folded: planned families are written nowhere; the review rail writes review_families at completion from successful seat receipts via a same-node `stage-advance --to <current>` update; P3 adds an unavailable-engine test asserting the marker carries only completed families."
+  },
+  {
+   "fingerprint": "c13b5ad5eebb002320974db8065361f8c381de15823ba3fce5de10c69579cbcc",
+   "disposition": "rejected",
+   "rationale": "Partly refuted with rationale. (a) CLAUDE.md group lists and scripts-inventory rows are index metadata, not guidance: by CLAUDE.md's own literal test (list requirements before/after) an inventory row adds no requirement, so they stay out of the manifest and mechanism phases must wire them (G2 R10 grok). (b) A per-commit changed-path gate is redundant: check-guidance-eval.js fails the cut if ANY shipped manifest file differs from the evaluated pack, whichever commit touched it. The valid part — mixed subphases — is folded via 1df45b84f8 (P4b mechanism-only)."
+  },
+  {
+   "fingerprint": "d5bd6fff23bf357737d41ee63f9aa28844870dabc6fcc540aada342f3fe14312",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct. Folded: each answer key carries a frozen `horizon` (last checkpoint reachable in the cell budget) and the expected first rung; a rep must match the expected walk exactly up to the horizon and the rung exactly. Research briefs use zero-hit terms so classify's recommendation is deterministic."
+  },
+  {
+   "fingerprint": "74618676523a11d37f53075170b8d5a94b517307e6182611daa768d84066f6fd",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct (5/12). Folded: the planted-red rotates the size table so only M keeps its sequence; it deterministically invalidates the 9 non-M briefs, and the prereg states that count; red must pass ≤ 4/12."
+  },
+  {
+   "fingerprint": "a0adc31a5f44dcdb30aa2cdb87d97e6020e572e165f8d4839e6c998f9272c27a",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct. Folded: §2.9 states pre-stage state (stage/stage_set_at/review_families/high_risk absent until first write) and unit rules (kind and total fixed once set; index never regresses; index ≤ total; verify→implement keeps or increments index; leaving the unit loop requires index = total); P2a tests each."
+  },
+  {
+   "fingerprint": "028a02f34f8ef60265427fa78b52556b87acbaff22f63e608c6311ab6ff040ee",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct. Folded: after exit 4 the caller runs `set --size <bump_to>` then advances to `stage-graph.js next --from <current stage>` under the new size, never retrying the original --to; P2a tests XS→S at qc-gate, S→M at verify and qc-gate, M→L at verify and qc-gate, each to finish."
+  },
+  {
+   "fingerprint": "8ae7328763948af0bef79b0639fc40eba40a8d5c62ecfe838270e314158415bc",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct. Folded: the four call sites by file (skills/debug/SKILL.md step 4; skills/dev-flow/SKILL.md intent/plan consult; skills/think-tank/SKILL.md Step 5; skills/ceo-agent/references/depth0-control-loop.md round end); U3 predicate frozen in S-signal terms; acceptance = classify fixtures using each site's argv plus grep-zero of owner-rung U4 in those files."
+  },
+  {
+   "fingerprint": "786e82b08047d1d1c7fcd95f3cac9a2744b5c70ce1d1ee6201918b6571a83b8e",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct (BRE grep). Folded with 3c6b4bd4b2: explicit consumer list, one scripts/lib/semver.js, shared fixture matrix (ordering across alpha/beta/rc/final, equality, rejection, badge escaping)."
+  },
+  {
+   "fingerprint": "8bf3d6444e1188df23ed5562ca1dcf453d41c0eb8125267bb335f4b901d1c726",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct. Folded: check-stage-vocab.js is created in P1 (report-only) and becomes a gate in P5; dependency map adds P2a→P7 and alpha.1→P7."
+  },
+  {
+   "fingerprint": "b3b5a21d6b8556c1e36976a43f4dd2b17375495e55304c2ec180e4427b1c1e1f",
+   "disposition": "accepted_blocker",
+   "rationale": "Accepted; Folded as a restatement, not a redesign: 'independently landable' applies to Train A; Train B is ONE atomic landing unit (its sub-steps are build order on release/3.0.0, not landings) whose merge is the alpha.1 cut — the pre-release the owner opts into — so no broken intermediate state reaches develop. Additive prep already sits in Train A (P2a, P4a)."
+  },
+  {
+   "fingerprint": "bf44371c900adf2573be1f1528f4d49fcabed5de1b0fc266afc4e5904d04f7cf",
+   "disposition": "accepted_blocker",
+   "rationale": "Accepted; Same as d2e326dd68 + 23263c86d3 (fixture cells, research dimension, urgent terminal edge) and 028a02f34f (bump resume uses next-from-current under the new size, so a downstream code-review cannot be dropped)."
+  },
+  {
+   "fingerprint": "1df45b84f8677f3f678c72a9a4cdb605b9206413eb55ceb76cfbd8d4ab6058a0",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct. Folded: P4b is mechanism-only (scripts, tests, mirrors of those); every SKILL.md/references rewrite of ladder text moves to P5."
+  },
+  {
+   "fingerprint": "c41a7223317263b25856169badea2f2a152123e470d0a110033f67aa1770533a",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct. Folded: marker `high_risk` (bool) sampled by stage-advance when urgent and leaving the last verify (classify-diff-risk risk_flags → resolve-review-loop review_risk); init is create-if-absent (level null) / merge-if-present (level preserved) under one lock; schema file named (schemas/session-marker.schema.json, registered in check-contract-schema.js); retry after bump per 028a02f34f."
+  },
+  {
+   "fingerprint": "e6fde529891070cd69a8953eb59680e869d877896b10c44bd239ec6537b15d5b",
+   "disposition": "accepted_blocker",
+   "rationale": "Accepted; Same as 8ae7328763; line catalog dropped (P4a shifts it), correct path skills/ceo-agent/references/depth0-control-loop.md, exclusions kept."
+  },
+  {
+   "fingerprint": "3c6b4bd4b25487faad4990c4a1c001889f5089719f2bc76717f5a4df8f59ff3e",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct. Folded: P-R lists sync-version.js (:101, :162 and badge replacers incl. README.zh-TW), preflight-release.sh VERSION grep + `## v$VERSION`, check-optin-changelog.js isValidSemver/compareSemver, hooks/session-start.js parseSemver/headerRe, plus a `grep -rnE` sweep of scripts/ hooks/ src/ bin/; fixture where canonical 3.0.0-alpha.1 makes preflight demand `## v3.0.0-alpha.1`."
+  },
+  {
+   "fingerprint": "7a1e5acb842db07d634991a20d88fca6aaf2359f871f189feafa06431b0b21d2",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct. Folded: every phase that creates a scripts/*.js wires the CLAUDE.md group list and a docs/scripts-inventory.md row in the same phase, in its acceptance (P0 check-guidance-eval.js, P1 stage-graph.js + check-stage-vocab.js, P2a stage-advance.js, P-R lib/semver.js); SKILL.md rows and reference docs land in P5."
+  },
+  {
+   "fingerprint": "89fb761bf62799e77490d66ee97895c54d8d6c0adb708139aafaf33b574da6c6",
+   "disposition": "duplicate",
+   "rationale": "Covered by d5bd6fff23 (horizon includes code-review placement for the high-risk brief)."
+  },
+  {
+   "fingerprint": "129600143ff89162ea26ea1538b00ee927cc4b817304279b35052e65f73c74bd",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Folded: P0 is labelled mechanism (eval infrastructure; it changes no skill text)."
+  },
+  {
+   "fingerprint": "85b2a17f1a19a0df04a92f0a60ce37bc76680c39a606a01ae1221a942a3a250f",
+   "disposition": "duplicate",
+   "rationale": "Same as 8ae7328763."
+  },
+  {
+   "fingerprint": "ccabcedbbdd81acdd0f4d8464c82373c6d97a0fd8cbc9c6ee42281b2cc05c6d8",
+   "disposition": "duplicate",
+   "rationale": "Same as 8bf3d6444e (P2a→P7 added)."
+  }
+ ]
+}

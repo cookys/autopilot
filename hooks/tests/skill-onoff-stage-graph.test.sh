@@ -13,6 +13,8 @@
 #      (d) a walk diverging before the horizon, or stopping short of it, fails; one running past it passes
 #      plus: refused stage writes (is_error) are ignored, wrong size/bug/urgent fail, no-op is all false
 #   3. aggregate verdicts: SHIP / NOT-SHIP (change low, red high, generic regression) / STOP / INVALID
+#   5. amend-3-extractor (prereg/stage-graph.amend-3-extractor.json): loop/variable targets from JSON, hidden stdout = ambiguous,
+#      multi-JSON classify; fixtures are excerpts of the retained v2 cell transcripts (hooks/tests/fixtures/stage-graph/amend3/)
 #   4. amend-2-instrument (prereg/stage-graph.amend-2-instrument.json): chained stage-advance outcome per invocation,
 #      rung consistency (pass + fail cases), l-u0-known brief reachability (real probe -> U0)
 # Env: ONOFF_SG_BASE points the test at a mutated copy of evals/skill-onoff (mutation controls).
@@ -123,8 +125,8 @@ if (rung) use(`node scripts/probe-unknown.js classify --ledger /tmp/l.jsonl --te
 else if (task.endsWith('l-feature')) use('node scripts/probe-unknown.js classify --terms notes', JSON.stringify({ eligible_max: 'U0', recommend: 'U0' }));
 for (let i = 0; i < walk.length; i++) {
   if (mode === 'refused' && i === 1) use(`node scripts/stage-advance.js --to ${walk[i] === 'verify' ? 'qc-gate' : 'finish'}`, '{"allowed":false}', true); // refused write: must be ignored
-  use(`node scripts/stage-advance.js --to ${walk[i]}${i % 3 === 1 ? ' --unit phase:1/1:x' : ''}`, '{"ok":true}');
-  if (i === 0) use(`node scripts/stage-advance.js --to ${walk[i]} --review-families a,b`, '{"ok":true}'); // same-node update: collapsed
+  use(`node scripts/stage-advance.js --to ${walk[i]}${i % 3 === 1 ? ' --unit phase:1/1:x' : ''}`, JSON.stringify({ allowed: true, to: walk[i] })); // amend-3: the written node is read from the invocation's own JSON
+  if (i === 0) use(`node scripts/stage-advance.js --to ${walk[i]} --review-families a,b`, JSON.stringify({ allowed: true, to: walk[i] })); // same-node update: collapsed
 }
 fs.writeFileSync(out, lines.join('\n') + '\n');
 NODE
@@ -216,7 +218,9 @@ cat > "$TEST_TMP/esc.jsonl" <<'EOF'
 {"type":"assistant","message":{"content":[{"type":"tool_use","id":"a2","name":"Bash","input":{"command":"node scripts/probe-unknown.js classify --terms zzz"}}]}}
 {"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"a2","content":[{"type":"text","text":"{\"eligible_max\":\"U1\",\"recommend\":\"none\"}"}]}]}}
 {"type":"assistant","message":{"content":[{"type":"tool_use","id":"a3","name":"Bash","input":{"command":"node scripts/stage-advance.js --to implement"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"a3","content":[{"type":"text","text":"{\"allowed\":true,\"to\":\"implement\"}"}]}]}}
 {"type":"assistant","message":{"content":[{"type":"tool_use","id":"a4","name":"Bash","input":{"command":"node scripts/stage-advance.js --to qc-gate"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"a4","content":[{"type":"text","text":"{\"allowed\":true,\"to\":\"qc-gate\"}"}]}]}}
 EOF
 o=$(run_markers stage-graph-xs-feature "${DIRTY[stage-graph-xs-feature]}" "$TEST_TMP/esc.jsonl")
 [ "$(mval "$o" rung)" = false ] && [ "$(mval "$o" walk)" = true ] && [ "$(mval "$o" pass)" = false ] || fail "(c) escalation on an XS brief must fail on rung only: $o"
@@ -349,7 +353,15 @@ const { SET, W, D, OKJ, SETM, SETW } = process.env;
 const CLS = (t) => `node scripts/probe-unknown.js classify --ledger /tmp/l.jsonl --terms ${t}`;
 const ADV = (n) => `node scripts/stage-advance.js --to ${n}`;
 const spec = eval(process.argv[2]);
-require("fs").writeFileSync(process.argv[1], spec.map(([cmd, res, err], i) => {
+// amend-3: a stage-advance result is read by the node it names, so the W / D templates are re-targeted to each `--to <node>` of the command, in order
+const retarget = (cmd, res) => {
+  if (typeof res !== "string") return res;
+  const tos = [...cmd.matchAll(/--to ([a-z-]+)/g)].map((m) => m[1]);
+  let k = 0;
+  return res.split("\n").map((ln) => ((ln.startsWith(W) || ln.startsWith(D)) && tos[k] ? ln.replace(/"to":"[a-z-]+"/, `"to":"${tos[k++]}"`) : ln)).join("\n");
+};
+require("fs").writeFileSync(process.argv[1], spec.map(([cmd, res0, err], i) => {
+  const res = retarget(cmd, res0);
   const id = `t${i}`;
   const a = JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id, name: "Bash", input: { command: cmd } }] } });
   return res === null ? a : `${a}\n${JSON.stringify({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: id, is_error: !!err, content: res }] } })}`;
@@ -368,10 +380,10 @@ o=$(cellj stage-graph-xs-feature "$TEST_TMP/c2.jsonl")
 mkt "$TEST_TMP/c3.jsonl" '[[SET, OKJ, false], [ADV("finish") + "; " + ADV("implement"), D + "\n" + W, true]]'
 o=$(cellj stage-graph-xs-feature "$TEST_TMP/c3.jsonl")
 [ "$(jq1 "$o" observed.walk)" = '["implement"]' ] && [ "$(jq1 "$o" observed.ambiguous)" = false ] || fail "fix2: per-invocation attribution inside one call: $o"
-# ambiguous (no stage-advance JSON): the old rule applies and ambiguous:true is recorded
+# no stage-advance JSON visible (amend-3-extractor, defect 2): the invocations are ambiguous and are NOT written, whatever the call's is_error
 mkt "$TEST_TMP/c4.jsonl" '[[SET, OKJ, false], [ADV("implement") + " && bash run-tests.sh", "FAIL: red\n", true], [ADV("qc-gate"), "ok", false]]'
 o=$(cellj stage-graph-xs-feature "$TEST_TMP/c4.jsonl")
-[ "$(jq1 "$o" observed.walk)" = '["qc-gate"]' ] && [ "$(jq1 "$o" observed.ambiguous)" = true ] && [ "$(jq1 "$o" observed.stage_calls.0.basis)" = '"is_error"' ] || fail "fix2: ambiguous call must fall back to the call's is_error and be flagged: $o"
+[ "$(jq1 "$o" observed.walk)" = '[]' ] && [ "$(jq1 "$o" observed.ambiguous)" = true ] && [ "$(jq1 "$o" observed.stage_calls.0.basis)" = '"unattributable"' ] || fail "fix2+amend3: an invocation with no visible JSON must be ambiguous and not written: $o"
 # a bump-required output ({bump_to}, exit 4) wrote nothing
 mkt "$TEST_TMP/c5.jsonl" '[[SET, OKJ, false], [ADV("implement"), JSON.stringify({ bump_to: "S", files: 9, lines: 99 }), true]]'
 o=$(cellj stage-graph-xs-feature "$TEST_TMP/c5.jsonl")
@@ -478,5 +490,72 @@ NOUNS=scheduler,retry,queue,attempts,delay,backoff,policy,runner
 for n in ${NOUNS//,/ }; do grep -qi -- "$n" "$BR" || fail "l-u0-known brief should still speak of $n"; done
 real=$(cd "$UR" && HOME="$TEST_TMP/home" node "$REPO_ROOT/scripts/probe-unknown.js" classify --ledger "$TEST_TMP/u0-ledger.jsonl" --terms "$NOUNS" 2>/dev/null) || fail "real classify on l-u0-known failed"
 [ "$(jq1 "$real" eligible_max)" = '"U0"' ] || fail "l-u0-known: the brief's nouns must classify U0 on the fixture repo: $real"
+
+echo "=== 5. amend-3-extractor: loop/variable targets (d1), hidden stdout = ambiguous (d2), multi-JSON classify (d3) ==="
+AMEND3="$BASE/prereg/stage-graph.amend-3-extractor.json"
+FX="$REPO_ROOT/hooks/tests/fixtures/stage-graph/amend3"
+[ -f "$AMEND3" ] || fail "amend-3-extractor.json missing"
+node -e '
+const a = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+if (a.amendment !== 3 || a.v1_rescored !== false || a.v2_rescored !== false || a.made_after_v1_results_seen !== true || a.made_after_v2_results_seen !== true) process.exit(1);
+for (const k of ["loop_variable_target", "hidden_stdout_ambiguous", "multi_json_classify"]) { const f = a.fixes[k]; if (!f || !f.transcript_excerpt || !f.fixture || !f.change) process.exit(2); }
+if (JSON.stringify(a.thresholds_unchanged) !== JSON.stringify(require(process.argv[2]).thresholds)) process.exit(3);
+' "$AMEND3" "$PREREG" || fail "amend-3-extractor.json invariants (rc=$?): amendment 3, v1+v2 not re-scored, 3 defects each with excerpt+fixture+change, thresholds unchanged"
+# the OLD extractor (the commit before amend-3) on the same real excerpts: shows each defect is real
+OLD_BASE_COMMIT=6aef17dc
+OLDLIB="$TEST_TMP/oldlib"; mkdir -p "$OLDLIB"
+cp "$BASE/lib/transcript-query.js" "$OLDLIB/"
+HAVE_OLD=1
+git -C "$REPO_ROOT" show "$OLD_BASE_COMMIT:evals/skill-onoff/lib/stage-graph-cell.js" > "$OLDLIB/stage-graph-cell.js" 2>/dev/null || HAVE_OLD=0
+oldj() { node -e '
+const { extract } = require(process.argv[1]); const o = extract(process.argv[2], null);
+process.stdout.write(JSON.stringify({ observed: o }));' "$OLDLIB/stage-graph-cell.js" "$1"; }
+
+# d1: `for n in verify code-review qc-gate; do ... --to $n | head -c 150` (m-feature r2): every written node, in order
+o=$(cellj stage-graph-m-feature "$FX/d1-loop-var-m-feature-r2.jsonl")
+[ "$(jq1 "$o" observed.walk)" = '["plan","implement","verify","code-review","qc-gate"]' ] || fail "d1: loop over \$n must yield each written node in order: $o"
+[ "$(jq1 "$o" observed.stage_calls.0.outcome)" = '"refused"' ] || fail "d1: the exit-3 intent refusal must stay refused: $o"
+[ "$HAVE_OLD" = 0 ] || [ "$(jq1 "$(oldj "$FX/d1-loop-var-m-feature-r2.jsonl")" observed.walk)" = '["plan","implement"]' ] || fail "d1: old extractor expected to drop the loop nodes"
+# d1 (xl r2): truncated records (head -c 200), loop over intent proposal plan
+o=$(cellj stage-graph-xl-deliverable "$FX/d1-loop-var-xl-r2.jsonl")
+[ "$(jq1 "$o" observed.walk)" = '["intent","proposal","plan"]' ] || fail "d1: truncated loop output still names allowed+to: $o"
+# synthetic: a loop that advances nodes, each record fully visible
+mkt "$TEST_TMP/d1s.jsonl" '[[SET, OKJ, false], ["for n in plan implement; do node scripts/stage-advance.js --to $n; done", "{\"allowed\":true,\"from\":null,\"to\":\"plan\",\"stage\":\"plan\"}\n{\"allowed\":true,\"from\":\"plan\",\"to\":\"implement\",\"stage\":\"implement\"}", false], ["node scripts/stage-advance.js --to $NEXT", "{\"allowed\":true,\"from\":\"implement\",\"to\":\"verify\",\"stage\":\"verify\"}", false]]'
+o=$(cellj stage-graph-xs-feature "$TEST_TMP/d1s.jsonl")
+[ "$(jq1 "$o" observed.walk)" = '["plan","implement","verify"]' ] || fail "d1: loop + a bare --to \$VAR both read from JSON: $o"
+# a loop whose second iteration is refused: that node is not written
+mkt "$TEST_TMP/d1r.jsonl" '[[SET, OKJ, false], ["for n in plan verify; do node scripts/stage-advance.js --to $n; done", "{\"allowed\":true,\"from\":null,\"to\":\"plan\"}\n{\"allowed\":false,\"from\":\"plan\",\"to\":\"verify\",\"legal_next\":[\"implement\"]}", true]]'
+o=$(cellj stage-graph-xs-feature "$TEST_TMP/d1r.jsonl")
+[ "$(jq1 "$o" observed.walk)" = '["plan"]' ] && [ "$(jq1 "$o" observed.stage_calls.1.outcome)" = '"refused"' ] || fail "d1: refused loop iteration must not be written: $o"
+
+# d2: stdout hidden (>/dev/null): not written, ambiguous, not in the walk
+o=$(cellj stage-graph-m-feature "$FX/d2-devnull-m-feature-r3.jsonl")
+[ "$(jq1 "$o" observed.walk)" = '[]' ] && [ "$(jq1 "$o" observed.ambiguous)" = true ] && [ "$(jq1 "$o" observed.stage_calls.0.outcome)" = '"ambiguous"' ] || fail "d2: hidden-stdout loop must be ambiguous, not written: $o"
+[ "$(jq1 "$o" judged.walk)" = false ] || fail "d2: ambiguous nodes must not count as a matched walk: $o"
+o=$(cellj stage-graph-xs-bug "$FX/d2-devnull-xs-bug-r1.jsonl")
+[ "$(jq1 "$o" observed.walk)" = '["diagnose"]' ] || fail "d2: xs-bug r1 (--to implement >/dev/null && ...; --to verify >/dev/null; verify is an exit-3 node) must not count implement/verify: $o"
+[ "$HAVE_OLD" = 0 ] || [ "$(jq1 "$(oldj "$FX/d2-devnull-xs-bug-r1.jsonl")" observed.walk)" = '["diagnose","implement","verify"]' ] || fail "d2: old extractor expected to count the refused verify as written"
+# a visible refusal next to a hidden one: only visible JSON attributed; hidden stays ambiguous
+mkt "$TEST_TMP/d2s.jsonl" '[[SET, OKJ, false], ["node scripts/stage-advance.js --to implement >/dev/null 2>&1; node scripts/stage-advance.js --to qc-gate", "{\"allowed\":true,\"from\":\"implement\",\"to\":\"qc-gate\"}", false]]'
+o=$(cellj stage-graph-xs-feature "$TEST_TMP/d2s.jsonl")
+[ "$(jq1 "$o" observed.walk)" = '["qc-gate"]' ] && [ "$(jq1 "$o" observed.stage_calls.0.outcome)" = '"ambiguous"' ] || fail "d2: hidden + visible in one call: $o"
+# 2>/dev/null hides stderr only; stdout JSON stays visible and attributable
+mkt "$TEST_TMP/d2e.jsonl" '[[SET, OKJ, false], ["node scripts/stage-advance.js --to qc-gate 2>/dev/null", W, false]]'
+o=$(cellj stage-graph-xs-feature "$TEST_TMP/d2e.jsonl")
+[ "$(jq1 "$o" observed.walk)" = '["qc-gate"]' ] && [ "$(jq1 "$o" observed.ambiguous)" = false ] || fail "d2: 2>/dev/null leaves stdout visible: $o"
+
+# d3: classify result with other JSON objects in the same stdout
+o=$(cellj stage-graph-l-research-a "$FX/d3-multijson-research-a-r1.jsonl")
+[ "$(jq1 "$o" observed.rung)" = '"U1"' ] || fail "d3: classify after a chained stage-advance object must read U1: $o"
+[ "$HAVE_OLD" = 0 ] || [ "$(jq1 "$(oldj "$FX/d3-multijson-research-a-r1.jsonl")" observed.rung)" = '"unobserved"' ] || fail "d3: old extractor expected unobserved"
+o=$(cellj stage-graph-l-feature "$FX/d3-multijson-l-feature-r3.jsonl")
+[ "$(jq1 "$o" observed.rung)" = '"U1"' ] || fail "d3: l-feature r3 classify with a leading ls line and stage-advance object: $o"
+[ "$HAVE_OLD" = 0 ] || [ "$(jq1 "$(oldj "$FX/d3-multijson-l-feature-r3.jsonl")" observed.rung)" = '"unobserved"' ] || fail "d3: old extractor expected unobserved (l-feature r3)"
+# truncated classify object (head -c) still names eligible_max
+mkt "$TEST_TMP/d3t.jsonl" '[[SET, OKJ, false], [CLS("scheduler,retry") + " | head -c 120", "{\"schema_version\":1,\"artifact_type\":\"unknown_probe\",\"eligible_max\":\"U0\",\"signals\":[{\"id\":\"S4\",\"va", false]]'
+o=$(cellj stage-graph-l-u0-known "$TEST_TMP/d3t.jsonl")
+[ "$(jq1 "$o" observed.rung)" = '"U0"' ] || fail "d3: truncated classify output read by its eligible_max: $o"
+
+echo "PASS: amend-3 extractor (loop/variable targets, hidden stdout ambiguous, multi-JSON classify)"
 
 echo "PASS: skill-onoff stage-graph instrument (expected.json, keys, (a) 12/12, (b) red $red<=3, (c) rung, (d) walk, verdicts, amend-2 chained advance + rung consistency + brief reachability)"

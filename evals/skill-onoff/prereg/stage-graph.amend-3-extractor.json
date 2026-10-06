@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "artifact_type": "skill_onoff_prereg_amendment",
+  "amendment": 3,
+  "row": "stage-graph",
+  "date": "2026-10-07",
+  "made_after_v1_results_seen": true,
+  "made_after_v2_results_seen": true,
+  "v1_rescored": false,
+  "v2_rescored": false,
+  "v1_status": "NOT-SHIP (change 6/12, red 1/12, generic clean) stays recorded as is.",
+  "v2_status": "NOT-SHIP (change 4/12, red 0/12, generic regression on d2-l-multimodule) stays recorded as is. The amended extractor is never run over the v2 rows to produce a verdict; the retained v2 transcripts are used only as the source of the test fixtures below.",
+  "owner_decision": "option A (instrument amendment, extractor defects only), approved by the owner after the v2 diagnosis",
+  "justification_rule": "each change fixes a defect that is reproducible on a synthetic fixture built from an excerpt of a real retained v2 transcript (hooks/tests/skill-onoff-stage-graph.test.sh section 5); none is justified by 'makes the arm pass'. A verdict under this amendment belongs to a NEW arm/run (v3), not comparable to v1/v2 as 'the same instrument'.",
+  "thresholds_unchanged": {
+    "rep_pass_min": 2,
+    "change_min_tasks": 10,
+    "red_max_tasks": 4
+  },
+  "unchanged": [
+    "ship thresholds",
+    "arms, packs and pack digests",
+    "all briefs and answer.json keys",
+    "expected walks, sizes, bug/urgent flags, research and units",
+    "rung consistency rule (amend-2 fix 3) and walk_follows_rung",
+    "session-mode set attribution (amend-2): its count-mismatch fallback to the call's is_error is NOT changed by this amendment",
+    "the generic non-regression rule",
+    "work_done"
+  ],
+  "ambiguous_node_rule": {
+    "statement": "an ambiguous stage-advance invocation is never written: it is recorded in observed.stage_calls with outcome 'ambiguous' (basis 'hidden' | 'unattributable'), sets observed.ambiguous, and is NOT in observed.walk. The judge compares observed.walk only (the scorer reads the marker rows only and never reads observed.ambiguous), so an ambiguous node can never count as matched, and a walk that needs it fails on `walk`.",
+    "supersedes": "amend-2-instrument fix 2 (chained_stage_advance) fallback 'when the JSON cannot be attributed the call's is_error applies' — for stage-advance only. Under amend-2 an unattributable successful call counted its nodes as written; that is exactly defect 2 below. amend-2's text is otherwise untouched.",
+    "consistency": "the two amendments agree wherever the JSON IS visible (per-invocation JSON outcome); they differ only for invocations whose JSON is not visible, where amend-3 is strictly the stricter reading."
+  },
+  "fixes": {
+    "loop_variable_target": {
+      "defect": "lib/stage-graph-cell.js read the target only from a literal `--to [a-z-]+` in the argv text, so `--to $n` yielded to:null and the node was dropped; a `for n in ...; do ... --to $n; done` is ONE argv site but several invocations, so only the first literal-less site was seen and none of the iterations were attributed.",
+      "transcript_excerpt": {
+        "source": "stage-graph-m-feature/change/2 (v2), tool_use toolu_01TavRzm9JGsmhXQ2p8YebJN",
+        "command": "for n in verify code-review qc-gate; do node scripts/stage-advance.js --to $n | head -c 150; echo; done; ...",
+        "result": "three `{\"allowed\":true,\"from\":\"implement\",\"to\":\"verify\",...` records cut by head -c 150; v2 extractor walk [\"plan\",\"implement\"], true walk plan,implement,verify,code-review,qc-gate"
+      },
+      "change": "stageAdvanceInvocations(): loop bodies (`for VAR in LIST; do ... done`) expand to LIST-length invocations in iteration-major order; each invocation's outcome and target come from its own JSON record in the tool_result (`allowed`, `to`, else `stage`), read tolerantly so a record cut by head -c still names them; the argv literal / loop item is only a fallback name. A refused record (allowed:false, exit 3) is not written. A loop of unknown length, or a record count that does not equal the visible-invocation count, makes the invocations ambiguous (defect 2).",
+      "fixtures": ["hooks/tests/fixtures/stage-graph/amend3/d1-loop-var-m-feature-r2.jsonl", "hooks/tests/fixtures/stage-graph/amend3/d1-loop-var-xl-r2.jsonl"],
+      "synthetic": "section 5 d1s (loop + bare --to $VAR, targets from JSON) and d1r (a refused loop iteration is not written)",
+      "fixture": "excerpt of the retained transcript above (copied verbatim, tool_use + tool_result pairs); old extractor (commit 6aef17dc) walk [\"plan\",\"implement\"], amended walk [\"plan\",\"implement\",\"verify\",\"code-review\",\"qc-gate\"]"
+    },
+    "hidden_stdout_ambiguous": {
+      "defect": "an invocation whose stdout is redirected (>/dev/null) shows no JSON, so a refused advance (exit 3, `{allowed:false}` printed on stdout) is invisible; the v2 extractor then fell back to the call's is_error (false: the shell reported success) and counted the node as written.",
+      "transcript_excerpt": {
+        "source": "stage-graph-xs-bug/change/1 (v2), tool_use toolu_01N2ErjFxg4NbF58CYcGZeeQ",
+        "command": "node scripts/stage-advance.js --to implement >/dev/null && cat > lib/count.js <<'EOF' ... node scripts/stage-advance.js --to verify >/dev/null; bash run-tests.sh; ...",
+        "result": "\"PASS\\n[]\" with is_error false; `verify` is not an XS node (reproduced exit 3 {allowed:false,from:implement,to:verify,legal_next:[qc-gate]}) and was counted as written. Second source: stage-graph-m-feature/change/3 `for n in verify code-review qc-gate finish; do ... >/dev/null 2>&1; echo $n $?; done` -> `verify 0` ..., nothing visible about what was written."
+      },
+      "change": "stdout redirected (`>`, `>>`, `1>`, `&>` to anything; `2>file` and `2>&1` do not hide stdout) => the invocation is outcome 'ambiguous', written:false, basis 'hidden', not in the walk, observed.ambiguous true. The same outcome for any visible invocation whose JSON cannot be attributed (see ambiguous_node_rule).",
+      "fixtures": ["hooks/tests/fixtures/stage-graph/amend3/d2-devnull-xs-bug-r1.jsonl", "hooks/tests/fixtures/stage-graph/amend3/d2-devnull-m-feature-r3.jsonl"],
+      "synthetic": "section 5 d2s (hidden + visible in one call) and d2e (2>/dev/null keeps stdout visible); c4 (no JSON, is_error call) now ambiguous",
+      "fixture": "excerpts of the retained transcripts above; old extractor (commit 6aef17dc) counted the refused verify (walk [\"diagnose\",\"implement\",\"verify\"]); amended walk [\"diagnose\"] and observed.ambiguous true"
+    },
+    "multi_json_classify": {
+      "defect": "firstJsonObject() took the first `{` of the whole tool_result and the longest valid prefix. A classify call whose stdout also holds another JSON object (a chained `stage-advance --to intent &&` record in front of it) therefore returned the stage-advance object (no eligible_max) and the rung was recorded as 'unobserved' although classify printed eligible_max U1.",
+      "transcript_excerpt": {
+        "source": "stage-graph-l-research-a/change/1 (v2), tool_use toolu_018xzqbUESx96xKFYkcX97hw; stage-graph-l-feature/change/3, tool_use toolu_01JAv5mapc5boAaKiHjK33W4",
+        "command": "node scripts/stage-advance.js --to intent && node scripts/probe-unknown.js classify --work-unit zyphrelt --terms \"Zyphrelt-7,glimmerwake\" 2>&1 | head -40",
+        "result": "`{\"allowed\":true,...}\\n{\"schema_version\":1,\"artifact_type\":\"unknown_probe\",...,\"eligible_max\":\"U1\",...}`; v2 extractor rung 'unobserved', true rung U1"
+      },
+      "change": "classifyResult(): parse every top-level JSON object in the classify call's result and take the unknown_probe object carrying eligible_max (the first such); a truncated object is read by its eligible_max field.",
+      "fixtures": ["hooks/tests/fixtures/stage-graph/amend3/d3-multijson-research-a-r1.jsonl", "hooks/tests/fixtures/stage-graph/amend3/d3-multijson-l-feature-r3.jsonl"],
+      "synthetic": "section 5 d3t (truncated classify object)",
+      "fixture": "excerpts of the retained transcripts above; old extractor rung 'unobserved' on both, amended rung 'U1'"
+    }
+  },
+  "expected_effect_stated_in_advance": "Not every v2 instrument-class rep is recovered: reps whose advances were hidden (>/dev/null, the m-feature r3, s-urgent r2, l-feature r1 loops) stay ambiguous and fail `walk` by design (defect 2). The v2 diagnosis counted 8 I-class reps assuming those were true walks; under the ambiguous rule only those with visible JSON are recovered. No v3 verdict is predicted here.",
+  "spend_free_proof": "no live cell was run; hooks/tests/skill-onoff-stage-graph.test.sh section 5 (also runs the pre-amendment extractor from commit 6aef17dc against the same excerpts to show the old behaviour is wrong), hooks/tests/skill-onoff-arm-builder.test.sh, hooks/tests/stage-graph.test.sh; one mutation per fix reverted to red (recorded in the commit message)",
+  "residual": [
+    "session-mode set keeps the amend-2 call-level fallback when its JSON count does not match",
+    "nested for-loops, while/xargs loops and functions are not expanded: such invocations are ambiguous (not written)"
+  ]
+}

@@ -14,9 +14,11 @@
 // stage-advance (amend-2-instrument, fix 2): each INVOCATION's own outcome is read from its JSON stdout in the
 // tool_result ({allowed:true,...} written; {allowed:false,...} exit 3 or {bump_to,...} exit 4 refused), matched to
 // the invocations of the command in order. `stage-advance --to X && bash run-tests.sh` with a red test is_error
-// the whole call but the advance was written, so the call's is_error is NOT the outcome. When the JSON cannot be
-// attributed (fewer/more stage-advance JSON objects than invocations, or none) the pre-amendment rule applies
-// (the call's is_error) and obs.ambiguous is set.
+// the whole call but the advance was written, so the call's is_error is NOT the outcome.
+// amend-3-extractor: the target node is read from that JSON too (`to`/`stage`), so `--to $n` and `for n in ..; do ..--to $n` work;
+// an invocation whose JSON is not visible (stdout redirected, or the records do not match the invocations) is `ambiguous`:
+// never written, not in the walk, obs.ambiguous set (supersedes the amend-2 call-level is_error fallback for stage-advance).
+// classify: the unknown_probe object is picked out of a result holding several JSON objects (see classifyResult).
 //
 // First rung (defined precisely): "none" when no classify call exists; otherwise the `eligible_max`
 // field of the first classify result. eligible_max is signal-determined (S4 zero-hit term -> U1, all
@@ -152,6 +154,75 @@ function queryEventCount(file) {
   return r.stdout.split('\n').filter(Boolean).length;
 }
 
+// amend-3-extractor (defect 3): a classify call's stdout may hold several JSON objects (a chained `stage-advance ... &&`
+// object before it, other commands' output after it). The classify result is the one carrying eligible_max
+// (artifact_type unknown_probe) wherever it sits; a truncated one (| head -c) is read by its eligible_max field.
+function classifyResult(text) {
+  const objs = jsonObjects(text).filter((o) => o && typeof o === 'object' && typeof o.eligible_max === 'string');
+  const probe = objs.find((o) => o.artifact_type === 'unknown_probe') || objs[0];
+  if (probe) return probe;
+  const m = text.match(/"eligible_max"\s*:\s*"(none|U[0-9])"/);
+  return m ? { eligible_max: m[1] } : null;
+}
+
+// amend-3-extractor (defects 1+2): the invocations of stage-advance.js in one Bash command, in EXECUTION order, each with
+// its own outcome. Targets come from the invocation's own JSON stdout (`to`, else `stage`), so `--to $n` and
+// `for n in ...; do ... --to $n; done` (one site, several invocations) yield every written node in order. A literal
+// `--to <node>` is only a fallback name when the outcome is not visible. An invocation whose JSON is not visible is
+// `ambiguous` and NEVER counts as written (nor as matched in a walk): stdout redirected (>/dev/null, > file), or the
+// JSON records in the result do not add up to the visible invocations (cut by tail, a loop of unknown length, a
+// skipped command). A record is read tolerantly (`{"allowed":true,"from":..,"to":".."` cut by `head -c N` still names
+// allowed + to).
+const STDOUT_REDIRECT = /(?:^|\s)(?:1?>>?|&>>?)\s*(?!&)\S/;
+function stageAdvanceRecords(text) {
+  const starts = [...text.matchAll(/\{\s*"(?:allowed|bump_to)"\s*:/g)].map((m) => m.index);
+  return starts.map((st, i) => {
+    const chunk = text.slice(st, i + 1 < starts.length ? starts[i + 1] : text.length);
+    const al = chunk.match(/^\{\s*"allowed"\s*:\s*(true|false)/);
+    const to = chunk.match(/"to"\s*:\s*"([a-z][a-z-]*)"/) || chunk.match(/"stage"\s*:\s*"([a-z][a-z-]*)"/);
+    return { written: !!al && al[1] === 'true', to: to ? to[1] : null };
+  });
+}
+function stageAdvanceInvocations(cmd, res) {
+  const loops = [...cmd.matchAll(/\bfor\s+([A-Za-z_]\w*)\s+in\s+([^;\n]*?)\s*;\s*do\b([\s\S]*?)\bdone\b/g)].map((m) => {
+    const bodyStart = m.index + m[0].length - m[3].length - 4; // "done"
+    const unknown = /[$`()*]/.test(m[2]);
+    return { v: m[1], items: unknown ? null : m[2].trim().split(/\s+/).filter(Boolean), from: bodyStart, to: m.index + m[0].length, sites: [] };
+  });
+  const sites = [];
+  for (const m of cmd.matchAll(/stage-advance\.js["']?((?:[^\n;|&]|&>|(?<=>)&\d)*)/g)) {
+    const toM = m[1].match(/--to(?:=|\s+)(?:["']?([a-z][a-z-]*)["']?(?=\s|$)|["']?\$\{?([A-Za-z_]\w*)\}?["']?(?=\s|$))/);
+    if (!toM) continue; // not an advance invocation (cat/grep of the script, --help, ...)
+    const loop = loops.find((l) => m.index >= l.from && m.index < l.to) || null;
+    const site = { lit: toM[1] || null, vr: toM[2] || null, hidden: STDOUT_REDIRECT.test(m[1]), loop };
+    if (loop) loop.sites.push(site);
+    sites.push(site);
+  }
+  if (!sites.length) return [];
+  const groups = [];
+  for (const s of sites) {
+    if (!s.loop) groups.push({ sites: [s], mult: 1 });
+    else if (!groups.some((g) => g.loop === s.loop)) groups.push({ loop: s.loop, sites: s.loop.sites, mult: s.loop.items ? s.loop.items.length : null });
+  }
+  const countKnown = groups.every((g) => g.mult !== null);
+  const visible = countKnown ? groups.reduce((n, g) => n + g.sites.filter((s) => !s.hidden).length * g.mult, 0) : -1;
+  const recs = res ? stageAdvanceRecords(res.text) : [];
+  const attributable = countKnown && recs.length === visible;
+  const out = [];
+  let k = 0;
+  for (const g of groups) {
+    for (let i = 0; i < (g.mult === null ? 1 : g.mult); i += 1) {
+      for (const s of g.sites) {
+        const argvTo = s.lit || (s.vr && g.loop && s.vr === g.loop.v && g.loop.items ? g.loop.items[i] : null);
+        if (s.hidden) out.push({ to: argvTo, written: false, outcome: 'ambiguous', basis: 'hidden' });
+        else if (attributable) { const r = recs[k]; k += 1; out.push({ to: r.to || argvTo, written: r.written, outcome: r.written ? 'written' : 'refused', basis: 'json' }); }
+        else out.push({ to: argvTo, written: false, outcome: 'ambiguous', basis: 'unattributable' });
+      }
+    }
+  }
+  return out;
+}
+
 const SIZES = ['XS', 'S', 'M', 'L', 'XL'];
 
 function extract(file, ctx) {
@@ -185,24 +256,17 @@ function extract(file, ctx) {
         if (!obs.set) obs.set = { size: sz[1], bug: /(^|\s)--bug(\s|$)/.test(m[2]), urgent: /(^|\s)--urgent(\s|$)/.test(m[2]) };
       });
     }
-    // stage-advance: one outcome per invocation, from its own JSON stdout (see header)
-    const invs = [...cmd.matchAll(/stage-advance\.js["']?([^\n;&|]*)/g)];
-    if (invs.length) {
-      const saJson = res ? jsonObjects(res.text).filter(isStageAdvanceJson) : [];
-      const attributable = saJson.length === invs.length;
-      if (!attributable) obs.ambiguous = true;
-      invs.forEach((m, k) => {
-        const written = attributable ? saJson[k].allowed === true : !refused;
-        const to = m[1].match(/--to(?:=|\s+)["']?([a-z][a-z-]*)["']?(?=\s|$)/);
-        obs.stage_calls.push({ to: to ? to[1] : null, written, basis: attributable ? 'json' : 'is_error' });
-        if (written && to) obs.walk_raw.push(to[1]);
-      });
+    // stage-advance: one outcome per invocation, from its own JSON stdout (header; amend-3 rules in stageAdvanceInvocations)
+    for (const inv of stageAdvanceInvocations(cmd, res)) {
+      if (inv.outcome === 'ambiguous') obs.ambiguous = true;
+      obs.stage_calls.push({ to: inv.to, written: inv.written, basis: inv.basis, outcome: inv.outcome });
+      if (inv.written && inv.to) obs.walk_raw.push(inv.to);
     }
     // first classify
     const cl = cmd.match(/probe-unknown\.js["']?\s+classify\b([^\n;&|]*)/);
     if (!obs.classify_called && cl && !refused) {
       obs.classify_called = true;
-      const j = res ? firstJsonObject(res.text) : null;
+      const j = res ? classifyResult(res.text) : null;
       obs.rung = j && typeof j.eligible_max === 'string' ? j.eligible_max : 'unobserved';
       const pt = parseTerms(cl[1]);
       const fast = /(^|\s)--fast-moving(\s|$)/.test(cl[1]);

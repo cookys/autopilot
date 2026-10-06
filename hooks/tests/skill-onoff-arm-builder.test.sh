@@ -259,7 +259,7 @@ if (ans.first_rung === 'U0') {
   const real = cp.execFileSync('node', ['scripts/probe-unknown.js', 'classify', '--ledger', path.join(require('os').tmpdir(), `sg-stub-${process.pid}.jsonl`), '--terms', 'scheduler,retry'], { encoding: 'utf8' });
   use('node scripts/probe-unknown.js classify --terms scheduler,retry', real);
 } else if (ans.first_rung !== 'none') use('node scripts/probe-unknown.js classify --terms x', JSON.stringify({ eligible_max: ans.first_rung, recommend: ans.first_rung }));
-for (const node of graph.walk.slice(0, ans.horizon_index + 1)) use(`node scripts/stage-advance.js --to ${node}`, '{"ok":true}');
+for (const node of graph.walk.slice(0, ans.horizon_index + 1)) use(`node scripts/stage-advance.js --to ${node}`, JSON.stringify({ allowed: true, to: node })); // amend-3: the written node is read from the invocation's JSON
 fs.writeFileSync('agent-work.txt', 'did work\n');
 if (process.env.SG_PROMPT_LOG && process.argv[2]) fs.appendFileSync(process.env.SG_PROMPT_LOG, `${fs.readFileSync(process.argv[2], 'utf8').split('\n')[0]}\n`);
 process.stdout.write(`${out.join('\n')}\n`);

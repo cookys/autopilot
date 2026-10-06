@@ -168,3 +168,25 @@ Thresholds (10/12, red <= 4/12, generic non-regression), arms, packs, the other 
 
 Spend-free proof: `hooks/tests/skill-onoff-stage-graph.test.sh` section 4 and `hooks/tests/skill-onoff-arm-builder.test.sh` (stub campaign keeps
 the cell artifacts); one mutation per fix goes red.
+
+## Amendment 3 (extractor) 2026-10-07 — made AFTER the v1 and v2 results were seen
+
+Machine-readable record: `prereg/stage-graph.amend-3-extractor.json`. Owner-approved (option A) after the v2 diagnosis. v1 (change 6/12) and v2
+(change 4/12, red 0/12, generic regression on d2-l-multimodule) are **NOT-SHIP and stay NOT-SHIP**; neither is re-scored. The retained v2 transcripts
+are used only as the source of the test fixtures. A verdict under this amendment belongs to a new run (v3). Thresholds, arms, packs, briefs, keys,
+walks, the rung rule and work_done are unchanged. Only `lib/stage-graph-cell.js` (the extractor) changes, for three defects reproduced on excerpts
+of real retained transcripts (`hooks/tests/fixtures/stage-graph/amend3/`, test section 5):
+
+1. **Loop / variable targets.** `--to $n` yielded `to:null` and the node was dropped (m-feature r2:
+   `for n in verify code-review qc-gate; do ... --to $n | head -c 150; done`, v2 walk `plan,implement`, true walk through `qc-gate`). Each invocation
+   (a loop site expands to one per list item) now takes its target and outcome from its own JSON stdout (`to`, else `stage`; tolerant of a record cut by `head -c`).
+2. **Hidden stdout.** `>/dev/null` hides the `{allowed:false}` of an exit 3, so the v2 extractor counted a refused advance as written (xs-bug r1:
+   `--to implement >/dev/null && ...; --to verify >/dev/null`, `verify` is not an XS node). An invocation whose JSON is not visible is now `ambiguous`.
+3. **Multi-JSON classify.** A classify result preceded by another JSON object (`--to intent && classify`, research-a r1 and l-feature r3) was read as
+   `unobserved`; the `unknown_probe` object carrying `eligible_max` is now picked out of the result.
+
+**Ambiguous-node rule.** An ambiguous advance is never written: it is recorded (`stage_calls[].outcome = "ambiguous"`), flags `observed.ambiguous`, and is
+not in `observed.walk`. The judge compares `observed.walk` only, so an ambiguous node cannot count as matched (a walk that needs it fails on `walk`).
+This supersedes, for stage-advance only, the amend-2 fallback "JSON not attributable -> the call's is_error applies"; where the JSON is visible the two
+amendments agree. `session-mode set` keeps the amend-2 rule. Stated in advance: reps whose advances were all hidden (m-feature r3, s-urgent r2,
+l-feature r1 loops) stay ambiguous and fail `walk` by design, so not every v2 instrument-class rep is recovered.

@@ -179,6 +179,31 @@ test('wrapper: t1 crossing ⇒ exit 0 with nudge on stderr', () => {
   assert.match(r.stderr, /context/i);
 });
 
+// P7a advisory bridge: T1 is an owner nudge. Default: no additionalContext, exactly one advisory row (text = the stderr copy);
+// AUTOPILOT_ADVISORY_BRIDGE_CONTEXT_BUDGET=inject restores the injection.
+test('wrapper: t1 bridge default ⇒ no additionalContext, one advisory row with the stderr text', () => {
+  const p = tmpFile([usageLine(50_000, 60_000, 1_000, 10)]);
+  const env = freshEnv();
+  const r = runHook({ transcript_path: p, session_id: 'bridge-t1' }, env);
+  assert.strictEqual(r.status, 0);
+  assert.match(r.stderr, /context/i);
+  assert.strictEqual(r.stdout.trim(), '', 'no stdout JSON / additionalContext');
+  const rows = fs.readFileSync(path.join(env.AUTOPILOT_LIVE_DIR, 'advisories', 'bridge-t1.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
+  assert.strictEqual(rows.length, 1);
+  assert.strictEqual(rows[0].kind, 'context-budget-t1');
+  assert.ok(rows[0].id && rows[0].at && rows[0].severity);
+  assert.strictEqual(rows[0].text, r.stderr.trim());
+});
+
+test('wrapper: t1 knob inject ⇒ additionalContext restored, no advisory row', () => {
+  const p = tmpFile([usageLine(50_000, 60_000, 1_000, 10)]);
+  const env = freshEnv({ AUTOPILOT_ADVISORY_BRIDGE_CONTEXT_BUDGET: 'inject' });
+  const r = runHook({ transcript_path: p, session_id: 'bridge-t1-inj' }, env);
+  assert.strictEqual(r.status, 0);
+  assert.strictEqual(JSON.parse(r.stdout).hookSpecificOutput.additionalContext, r.stderr.trim());
+  assert.ok(!fs.existsSync(path.join(env.AUTOPILOT_LIVE_DIR, 'advisories', 'bridge-t1-inj.jsonl')));
+});
+
 test('wrapper: t2 crossing, unknown window ⇒ exit 0 advisory on stderr (model-visible), no directive', () => {
   const p = tmpFile([usageLine(80_000, 80_000, 1_000, 10)]); // 161k ≥ 150k default t2, window unknown
   const r = runHook({ transcript_path: p }, freshEnv());

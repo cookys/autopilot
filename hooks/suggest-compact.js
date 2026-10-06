@@ -43,9 +43,10 @@ function getSessionId() {
 // returns '' without throwing, so it cannot exercise the ENXIO branch. Prod: /dev/stdin.
 function consumeStdin() {
   try {
-    fs.readFileSync(process.env.AUTOPILOT_SUGGEST_COMPACT_STDIN || '/dev/stdin', 'utf8');
+    return fs.readFileSync(process.env.AUTOPILOT_SUGGEST_COMPACT_STDIN || '/dev/stdin', 'utf8');
   } catch {
     /* ENXIO/parse — broken stdin pipe (#6305). Counting does not need stdin. */
+    return '';
   }
 }
 
@@ -56,7 +57,7 @@ function consumeStdin() {
       process.exit(0);
     }
 
-    consumeStdin();
+    const rawIn = consumeStdin();
 
     const sid = getSessionId();
     const countFile = path.join(os.tmpdir(), `claude-tool-count-${sid}`);
@@ -74,6 +75,17 @@ function consumeStdin() {
     const decision = compactDecision(count);
     if (decision.warn) {
       process.stderr.write(decision.message + '\n');
+      // P7a advisory bridge: also one advisory row for the live mod (needs a real session id: payload, else env).
+      // AUTOPILOT_ADVISORY_BRIDGE_SUGGEST_COMPACT=inject = the old stderr-only behaviour, no row.
+      try {
+        const sink = require('./_shared/advisory-sink.js');
+        let psid = '';
+        try { const p = JSON.parse(rawIn); if (p && typeof p.session_id === 'string') psid = p.session_id; } catch { /* env */ }
+        const sid = psid || process.env.CLAUDE_CODE_SESSION_ID || process.env.CLAUDE_SESSION_ID || '';
+        if (sid && sink.advisoryMode('suggest_compact') === 'sink') {
+          sink.writeAdvisory({ sid, kind: 'suggest-compact', severity: 'info', text: decision.message });
+        }
+      } catch { /* the bridge never breaks the hook */ }
     }
   } catch (e) {
     process.stderr.write(`suggest-compact error: ${e.message}\n`);

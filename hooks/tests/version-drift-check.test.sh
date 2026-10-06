@@ -45,24 +45,45 @@ SEED="$TEST_TMP/seed"; $GIT clone -q "$REMOTE" "$SEED" 2>/dev/null
 )
 ( cd "$WORK"; $GIT fetch -q origin 2>/dev/null; $GIT branch -q --set-upstream-to=origin/main 2>/dev/null )
 
-# ── (3) clone behind upstream → drift warning ──────────────────────────────
-OUT=$(CLAUDE_PLUGIN_ROOT="$WORK" node "$HOOK"); EC=$?
-assert_exit_code "$EC" 0 "behind clone: exit 0"
-assert_contains "$(ctx_of "$OUT")" "behind" "behind clone: drift warning emitted"
-assert_contains "$(ctx_of "$OUT")" "2 commits behind" "behind clone: reports correct count"
-assert_contains "$(ctx_of "$OUT")" "/reload-plugins" "behind clone: names the fix command"
+# P7a advisory bridge: the drift text goes to <live>/advisories/<sid>.jsonl (shown by the live mod), not model context.
+# AUTOPILOT_ADVISORY_BRIDGE_VERSION_DRIFT=inject restores the SessionStart injection. Tests give an empty-HOME sandbox
+# and a payload on stdin (the real hook always gets one).
+export HOME="$TEST_TMP/home"; mkdir -p "$HOME"
+export AUTOPILOT_LIVE_DIR="$TEST_TMP/live"
+PAYLOAD='{"session_id":"vd-sid","hook_event_name":"SessionStart"}'
+ROWS="$AUTOPILOT_LIVE_DIR/advisories/vd-sid.jsonl"
+
+# ── (3) clone behind upstream, knob=inject → old injection ─────────────────
+OUT=$(printf '%s' "$PAYLOAD" | AUTOPILOT_ADVISORY_BRIDGE_VERSION_DRIFT=inject CLAUDE_PLUGIN_ROOT="$WORK" node "$HOOK"); EC=$?
+assert_exit_code "$EC" 0 "behind clone, inject: exit 0"
+assert_contains "$(ctx_of "$OUT")" "behind" "behind clone, inject: drift warning emitted"
+assert_contains "$(ctx_of "$OUT")" "2 commits behind" "behind clone, inject: reports correct count"
+assert_contains "$(ctx_of "$OUT")" "/reload-plugins" "behind clone, inject: names the fix command"
+assert_file_absent "$ROWS" "behind clone, inject: no advisory row"
+
+# ── (3b) clone behind upstream, default (bridge) → no context, exactly one advisory row, text unchanged ──
+OUT=$(printf '%s' "$PAYLOAD" | CLAUDE_PLUGIN_ROOT="$WORK" node "$HOOK" 2>"$TEST_TMP/vd.err"); EC=$?
+assert_exit_code "$EC" 0 "behind clone, bridge: exit 0"
+assert_not_contains "$(ctx_of "$OUT")" "behind" "behind clone, bridge: no drift text in model context"
+assert_file_exists "$ROWS" "behind clone, bridge: advisory file written"
+assert_eq "1" "$(wc -l < "$ROWS" | tr -d ' ')" "behind clone, bridge: exactly one advisory row"
+ROW_TEXT=$(node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8").trim()); if(!r.id||r.kind!=="version-drift"||r.severity!=="warn"||!r.at){process.exit(3)} process.stdout.write(r.text)' "$ROWS"); RC=$?
+assert_exit_code "$RC" 0 "behind clone, bridge: row shape {id, kind, severity, text, at}"
+assert_contains "$ROW_TEXT" "2 commits behind" "behind clone, bridge: row reports correct count"
+assert_contains "$ROW_TEXT" "/reload-plugins" "behind clone, bridge: row names the fix command"
+assert_eq "$ROW_TEXT" "$(grep '^⚠' "$TEST_TMP/vd.err")" "behind clone, bridge: stderr copy equals the row text"
 
 # ── (5) nested subdir of a behind repo → silent (no parent-repo false positive) ─
 # CLAUDE_PLUGIN_ROOT is a subdir, so git top-level != root → must NOT borrow the
 # parent clone's behind-upstream count. (Guards the release-dir-under-a-git-tree case.)
 mkdir -p "$WORK/sub/dir"
-OUT=$(CLAUDE_PLUGIN_ROOT="$WORK/sub/dir" node "$HOOK"); EC=$?
+OUT=$(printf '%s' "$PAYLOAD" | CLAUDE_PLUGIN_ROOT="$WORK/sub/dir" node "$HOOK"); EC=$?
 assert_exit_code "$EC" 0 "nested subdir: exit 0"
 assert_not_contains "$(ctx_of "$OUT")" "behind" "nested subdir: no false parent-repo warning"
 
 # ── (4) up-to-date clone → silent ──────────────────────────────────────────
 ( cd "$WORK"; $GIT merge -q origin/main 2>/dev/null )
-OUT=$(CLAUDE_PLUGIN_ROOT="$WORK" node "$HOOK"); EC=$?
+OUT=$(printf '%s' "$PAYLOAD" | CLAUDE_PLUGIN_ROOT="$WORK" node "$HOOK"); EC=$?
 assert_exit_code "$EC" 0 "up-to-date clone: exit 0"
 assert_not_contains "$(ctx_of "$OUT")" "behind" "up-to-date clone: no drift warning"
 

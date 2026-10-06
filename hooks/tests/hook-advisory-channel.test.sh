@@ -84,10 +84,22 @@ printf '%s\n' '{"type":"assistant","message":{"role":"assistant","usage":{"input
 export AUTOPILOT_CONTEXT_BUDGET_DIR="$TEST_TMP/ctx-budget-state"
 mkdir -p "$AUTOPILOT_CONTEXT_BUDGET_DIR"
 CTX_PAYLOAD=$(printf '{"transcript_path":"%s","session_id":"ctx-t1-sid","hook_event_name":"PostToolUse"}' "$CTX_TRANSCRIPT")
+# P7a advisory bridge (default): T1 is one advisory row for the live mod, no additionalContext; stderr copy stays.
 run_hook context-budget.js "$CTX_PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "context-budget T1: exit 0"
 assert_contains "$__RUN_STDERR" "Context budget T1" "context-budget T1: stderr still has advisory"
-assert_advisory_stdout "PostToolUse" "context-budget T1"
+assert_eq "" "$__RUN_STDOUT" "context-budget T1 bridge: no additionalContext on stdout"
+T1_ROWS="$AUTOPILOT_LIVE_DIR/advisories/ctx-t1-sid.jsonl"
+assert_file_exists "$T1_ROWS" "context-budget T1 bridge: advisory file written"
+assert_eq "1" "$(wc -l < "$T1_ROWS" | tr -d ' ')" "context-budget T1 bridge: exactly one advisory row"
+T1_TEXT="$(node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8").trim()); if(!r.id||r.kind!=="context-budget-t1"||!r.at) process.exit(3); process.stdout.write(r.text)' "$T1_ROWS")"
+assert_eq "$T1_TEXT" "${__RUN_STDERR%$'\n'}" "context-budget T1 bridge: row text byte-identical to stderr"
+# knob restores the injection
+CTX_PAYLOAD_INJ=$(printf '{"transcript_path":"%s","session_id":"ctx-t1-inj","hook_event_name":"PostToolUse"}' "$CTX_TRANSCRIPT")
+AUTOPILOT_ADVISORY_BRIDGE_CONTEXT_BUDGET=inject run_hook context-budget.js "$CTX_PAYLOAD_INJ"
+assert_eq 0 "$__RUN_EXIT" "context-budget T1 inject: exit 0"
+assert_advisory_stdout "PostToolUse" "context-budget T1 (knob=inject)"
+assert_file_absent "$AUTOPILOT_LIVE_DIR/advisories/ctx-t1-inj.jsonl" "context-budget T1 inject: no advisory row"
 
 # ── 3. depth0-delegate-gate nudge at threshold 8 ──────────────────────
 D0_PAYLOAD='{"tool_name":"Read","session_id":"d0-adv-sid","tool_input":{},"hook_event_name":"PreToolUse"}'

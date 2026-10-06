@@ -66,11 +66,12 @@ test('compactDecision: constants match documented behavior', () => {
 // case) and an isolated TMPDIR + fixed session id, proving the counter advances
 // each invocation regardless of stdin — the exact behaviour the ENXIO bug broke.
 
-function runHook(tmpdir, sessionId) {
+function runHook(tmpdir, sessionId, extraEnv = {}) {
   return spawnSync(process.execPath, [SCRIPT], {
     stdio: ['ignore', 'pipe', 'pipe'], // stdin=/dev/null
     encoding: 'utf8',
-    env: { ...process.env, TMPDIR: tmpdir, CLAUDE_CODE_SESSION_ID: sessionId },
+    // AUTOPILOT_LIVE_DIR: the advisory bridge writes a row at the nudge; never into the host's real live dir.
+    env: { ...process.env, TMPDIR: tmpdir, CLAUDE_CODE_SESSION_ID: sessionId, AUTOPILOT_LIVE_DIR: path.join(tmpdir, 'live'), ...extraEnv },
   });
 }
 
@@ -139,5 +140,31 @@ test('wrapper: AUTOPILOT_SUGGEST_COMPACT=false opts out (no counter file written
     assert.equal(fs.existsSync(countFile), false, 'opt-out must skip before writing the counter');
   } finally {
     fs.rmSync(tmpdir, { recursive: true, force: true });
+  }
+});
+
+// P7a advisory bridge: the nudge stays on stderr and is also exactly one advisory row for the live mod.
+// AUTOPILOT_ADVISORY_BRIDGE_SUGGEST_COMPACT=inject is the old behaviour (stderr only, no row).
+test('wrapper: bridge — the 50th call writes one advisory row with the stderr text; knob inject writes none', () => {
+  for (const [mode, expectRow] of [['', true], ['inject', false]]) {
+    const tmpdir = fs.mkdtempSync(path.join(os.tmpdir(), 'suggest-compact-bridge-'));
+    const sessionId = `bridge-${mode || 'default'}`;
+    const rows = path.join(tmpdir, 'live', 'advisories', `${sessionId}.jsonl`);
+    try {
+      fs.writeFileSync(path.join(tmpdir, `claude-tool-count-${sessionId}`), String(FIRST_THRESHOLD - 1));
+      const r = runHook(tmpdir, sessionId, mode ? { AUTOPILOT_ADVISORY_BRIDGE_SUGGEST_COMPACT: mode } : {});
+      assert.equal(r.status, 0);
+      assert.match(r.stderr, /Consider running \/compact/);
+      assert.equal(fs.existsSync(rows), expectRow);
+      if (expectRow) {
+        const lines = fs.readFileSync(rows, 'utf8').trim().split('\n').map(l => JSON.parse(l));
+        assert.equal(lines.length, 1);
+        assert.equal(lines[0].kind, 'suggest-compact');
+        assert.ok(lines[0].id && lines[0].at && lines[0].severity);
+        assert.equal(lines[0].text, r.stderr.split('\n')[0]); // line 1 = the nudge (a non-RAM live dir adds a warning line)
+      }
+    } finally {
+      fs.rmSync(tmpdir, { recursive: true, force: true });
+    }
   }
 });

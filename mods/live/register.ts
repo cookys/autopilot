@@ -21,6 +21,8 @@
 
 import type { EngineInterface, Register } from 'claude-code'
 
+import { newTracker, parseAdvisories, takeNew } from './advisories'
+import type { AdvisoryTracker } from './advisories'
 import { Band } from './band'
 import { Pane } from './pane'
 import {
@@ -45,6 +47,7 @@ let timer: { cancel: () => void } | undefined
 let viewport: { columns: number; isFullscreen?: boolean } | null = null
 let paneAttempted = false
 let previous: { scope: string; counts: Counts | null; acceptance: string | null } | null = null
+const advisories: AdvisoryTracker = newTracker() // P7a: advisory rows seen for the current session; advisories.count feeds a band chip
 const jobDates = new Map<string, string>()
 // earliest bound progress receipt per root: receipts only accumulate, so a found start never moves earlier
 const receiptStarts = new Map<string, number>()
@@ -294,9 +297,26 @@ async function buildSnapshot($: EngineInterface, nowMs: number): Promise<{ snap:
   }
 }
 
+// P7a advisory bridge: the rows the hooks appended to <live_base>/advisories/<sid>.jsonl, each new one a toast.
+async function pollAdvisories($: EngineInterface, nowMs: number): Promise<void> {
+  try {
+    const home = await $.env.get('HOME')
+    if (!home) return
+    const pointer = await readObject($, home + '/.autopilot/live-pointer.json')
+    if (pointer === null || pointer.schema !== POINTER_SCHEMA || typeof pointer.live_base !== 'string' || !pointer.live_base) return
+    const sid = await $.session.id()
+    if (!sid) return
+    const text = await readText($, pointer.live_base.replace(/\/+$/, '') + '/advisories/' + sanitizeSid(sid) + '.jsonl')
+    for (const row of takeNew(advisories, sid, parseAdvisories(text), nowMs)) $.ui.toast(row.text)
+  } catch (_e) {
+    // the bridge never takes the session down
+  }
+}
+
 async function refresh($: EngineInterface): Promise<void> {
   try {
     const nowMs = await $.clock.now()
+    await pollAdvisories($, nowMs)
     const built = await buildSnapshot($, nowMs)
     snapshot = built.snap
     $.ui.invalidate('ui.render')

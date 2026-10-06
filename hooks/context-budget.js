@@ -149,6 +149,23 @@ function saveState(file, st) {
   fs.renameSync(tmp, file);
 }
 
+function emitInjected(message) {
+  process.stdout.write(`${JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName: 'PostToolUse',
+      additionalContext: `${message}`,
+    },
+  })}\n`);
+}
+
+// T1 is an owner nudge, not a model instruction (P7a advisory bridge): one advisory row for the live mod, no
+// additionalContext. AUTOPILOT_ADVISORY_BRIDGE_CONTEXT_BUDGET=inject restores the injection. T2 never comes here.
+function emitT1(sid, message) {
+  const sink = require('./_shared/advisory-sink.js');
+  if (sink.advisoryMode('context_budget') === 'inject') { emitInjected(message); return; }
+  if (!sink.writeAdvisory({ sid, kind: 'context-budget-t1', severity: 'info', text: message })) emitInjected(message);
+}
+
 (function main() {
   let exitCode = 0;
   try {
@@ -241,12 +258,7 @@ function saveState(file, st) {
       if (d.tier === 't1') {
         st.lastT1Call = st.calls;
         process.stderr.write(`${d.message}\n`);
-        process.stdout.write(`${JSON.stringify({
-          hookSpecificOutput: {
-            hookEventName: 'PostToolUse',
-            additionalContext: `${d.message}`,
-          },
-        })}\n`);
+        emitT1(sid, d.message);
       } else if (d.tier === 't2') {
         st.lastT2Call = st.calls;
         process.stderr.write(`${d.message}\n`);
@@ -292,12 +304,8 @@ function saveState(file, st) {
             if (d.tier === 't2') st.lastT2Call = st.calls;
             else st.lastT1Call = st.calls;
             process.stderr.write(`${d.message}\n`);
-            process.stdout.write(`${JSON.stringify({
-              hookSpecificOutput: {
-                hookEventName: 'PostToolUse',
-                additionalContext: `${d.message}`,
-              },
-            })}\n`);
+            if (d.tier === 't1') emitT1(sid, d.message);
+            else emitInjected(d.message); // the unknown-window T2 advisory stays model-facing
           } else if (d.tier === 't2') {
             st.lastT2Call = st.calls;
             process.stderr.write(`${d.message}\n`);

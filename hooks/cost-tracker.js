@@ -198,7 +198,11 @@ try {
       try {
         const sid = input.session_id;
         const qtext = msg;
-        if (typeof sid === 'string' && sid.length > 0) {
+        if (typeof sid === 'string' && sid.length > 0 && require('./_shared/advisory-sink.js').advisoryMode('cost_tracker') === 'sink') {
+          // P7a advisory bridge: the owner's nudge goes to <live>/advisories/<sid>.jsonl (shown by the live mod), not the
+          // model's context. AUTOPILOT_ADVISORY_BRIDGE_COST_TRACKER=inject restores the advisory-queue -> advisory-relay path.
+          require('./_shared/advisory-sink.js').writeAdvisory({ sid, kind: 'cost-tracker', severity: 'warn', text: qtext });
+        } else if (typeof sid === 'string' && sid.length > 0) {
           const { resolveLiveDir, sanitizeSessionId } = require('../scripts/lib/live-state-dir.js');
           const qdir = path.join(resolveLiveDir().base, 'advisory-queue');
           fs.mkdirSync(qdir, { recursive: true });

@@ -45,6 +45,24 @@ ct_payload() {
 export AUTOPILOT_COST_TRACKER_CACHE_READ_WARN=1000
 unset AUTOPILOT_HOOK_COST_TRACKER AUTOPILOT_COST_TRACKER
 { turn 400 10 5; turn 700 10 5; } > "$TR"
+
+# P7a advisory bridge (default): the owner's advice is NOT queued for the relay and carries no model context; it is exactly one
+# row {id, kind, severity, text, at} in <live>/advisories/<sid>.jsonl, text byte-identical to the stderr copy.
+SK_SID="adv-ct-sink"
+run_hook cost-tracker.js "$(ct_payload "$SK_SID")"
+assert_eq 0 "$__RUN_EXIT" "cost-tracker bridge: exit 0"
+assert_not_contains "$__RUN_STDOUT" 'additionalContext' "cost-tracker bridge: no additionalContext"
+assert_file_absent "$(queue_path "$SK_SID")" "cost-tracker bridge: nothing in advisory-queue"
+SK_ROWS="$LIVE_DIR/advisories/$SK_SID.jsonl"
+assert_file_exists "$SK_ROWS" "cost-tracker bridge: advisory file written"
+assert_eq "1" "$(wc -l < "$SK_ROWS" | tr -d ' ')" "cost-tracker bridge: exactly one advisory row"
+SK_TEXT="$(node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8").trim()); if(!r.id||r.kind!=="cost-tracker"||r.severity!=="warn"||!r.at) process.exit(3); process.stdout.write(r.text)' "$SK_ROWS")"
+assert_eq "$SK_TEXT" "$(grep '^cost-tracker: session' <<<"$__RUN_STDERR")" "cost-tracker bridge: row text byte-identical to stderr"
+run_hook advisory-relay.js "{\"session_id\":\"$SK_SID\",\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"x\"}"
+assert_not_contains "$__RUN_STDOUT" 'cost-tracker' "cost-tracker bridge: advisory-relay has nothing to relay"
+
+# Everything below tests the queue + relay path, which the knob restores (AUTOPILOT_ADVISORY_BRIDGE_COST_TRACKER=inject).
+export AUTOPILOT_ADVISORY_BRIDGE_COST_TRACKER=inject
 run_hook cost-tracker.js "$(ct_payload "$CT_SID")"
 assert_eq 0 "$__RUN_EXIT" "cost-tracker advisory exit 0"
 assert_contains "$__RUN_STDERR" 'cost-tracker: session adv-ct-session has read 1,100 cache tokens' "cost-tracker stderr unchanged"

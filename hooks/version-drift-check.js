@@ -60,7 +60,7 @@ function driftHint() {
   if (!upstream || !Number.isFinite(behind) || behind <= 0) return "";
 
   return (
-    `\n\n⚠ autopilot dev clone is ${behind} commit${behind === 1 ? "" : "s"} behind ` +
+    `⚠ autopilot dev clone is ${behind} commit${behind === 1 ? "" : "s"} behind ` +
     `${upstream} (as of your last fetch). To update: run \`git -C ${root} pull --ff-only\` ` +
     `in a shell, then \`/reload-plugins\` here — this session is running the older ` +
     `checked-out version.`
@@ -69,10 +69,27 @@ function driftHint() {
 
 function run() {
   let context = "";
+  let hint = "";
   try {
-    context = driftHint();
+    hint = driftHint();
   } catch {
-    context = "";
+    hint = "";
+  }
+  if (hint) {
+    // P7a advisory bridge: the drift text is for the owner. Default: one advisory row (shown by the live mod) and a
+    // stderr copy, no model context. AUTOPILOT_ADVISORY_BRIDGE_VERSION_DRIFT=inject restores the SessionStart injection.
+    const sink = require("./_shared/advisory-sink.js");
+    let sid = "";
+    try {
+      const p = JSON.parse(fs.readFileSync(0, "utf8"));
+      if (p && typeof p.session_id === "string") sid = p.session_id;
+    } catch { /* no payload */ }
+    sid = sid || process.env.CLAUDE_CODE_SESSION_ID || process.env.CLAUDE_SESSION_ID || "";
+    if (sink.advisoryMode("version_drift") === "inject" || !sink.writeAdvisory({ sid, kind: "version-drift", severity: "warn", text: hint })) {
+      context = "\n\n" + hint;
+    } else {
+      process.stderr.write(hint + "\n");
+    }
   }
   // SessionStart hook → always emit the SessionStart output shape. (driftHint
   // already returns "" when CLAUDE_PLUGIN_ROOT is unset, so the empty-context

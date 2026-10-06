@@ -1742,3 +1742,39 @@ test('P7c: qc fact of another project, another schema, a bad state or broken JSO
   expect(readQc('{nope', QC_WANT)).toBe(null)
   expect(readQc(JSON.stringify(qcFact({ state: 'ok', evidence: 'trailer' })), QC_WANT)).toEqual({ state: 'ok', range: 'abc..HEAD', protected_files_count: 2, evidence: 'trailer' })
 })
+// P7a advisory bridge: the hooks append {id, kind, severity, text, at} rows to <live>/advisories/<sid>.jsonl; the mod toasts each new
+// row of THIS session once, text unchanged, and counts them for a band chip. RED before advisories.ts + pollAdvisories existed.
+const ADV_PATH = (sid: string) => LIVE + '/advisories/' + sid + '.jsonl'
+const advRow = (id: string, text: string, at = '2026-10-04T10:00:10.000Z', kind = 'cost-tracker') => j({ id, kind, severity: 'warn', text, at })
+for (const surface of SURFACES) {
+  test('advisory bridge: each new row of this session is one toast with the unchanged text, never repeated (' + surface + ')', async ($, on) => {
+    const files = base()
+    files[ADV_PATH(SID_A)] = advRow('a1', 'cost-tracker: session s has read 1,100 cache tokens — unchanged text') + '\n'
+    const w = world(on, files)
+    await start($, surface)
+    expect(w.toasts).toEqual(['cost-tracker: session s has read 1,100 cache tokens — unchanged text'])
+    await w.clock.advance(5000)
+    expect(w.toasts.length).toBe(1) // seen: no repeat
+    w.files[ADV_PATH(SID_A)] += advRow('a2', 'Context budget T1: second', '2026-10-04T10:00:40.000Z', 'context-budget-t1') + '\n' + 'not json\n'
+    await w.clock.advance(5000)
+    expect(w.toasts).toEqual(['cost-tracker: session s has read 1,100 cache tokens — unchanged text', 'Context budget T1: second'])
+  })
+
+  test('advisory bridge: another session\'s file is never read, a row older than 5 minutes at first read is history (' + surface + ')', async ($, on) => {
+    const files = base()
+    files[ADV_PATH(SID_B)] = advRow('b1', 'OTHER SESSION') + '\n'
+    files[ADV_PATH(SID_A)] = advRow('old1', 'OLD HISTORY', '2026-10-04T09:30:00.000Z') + '\n' + advRow('new1', 'FRESH') + '\n'
+    const w = world(on, files)
+    await start($, surface)
+    expect(w.toasts).toEqual(['FRESH'])
+    expect(w.reads.filter(p => p === ADV_PATH(SID_B))).toEqual([])
+  })
+
+  test('advisory bridge: no advisories file is silence, and the mod writes nothing (' + surface + ')', async ($, on) => {
+    const w = world(on, base())
+    await start($, surface)
+    await w.clock.advance(5000)
+    expect(w.toasts).toEqual([])
+    expect(w.writes).toEqual([])
+  })
+}

@@ -61,11 +61,18 @@ assert_contains "$__RUN_STDERR" 'cost unknown' "unpriced model: cost unknown"
 assert_not_contains "$__RUN_STDERR" "% of this session's spend" "unpriced model: no guessed share"
 
 # ── 4. queued advisory carries the same truthful text ──
+# P7a: by default the advice is one advisory row for the live mod (no queue); the knob restores the queue.
 fresh_session; over; live ct-sig-q 33
 run_hook cost-tracker.js "$(payload ct-sig-q)"
-QF="$LIVE_DIR/advisory-queue/ct-sig-q.jsonl"
-assert_file_exists "$QF" "advisory queued"
-assert_contains "$(cat "$QF")" 'context now 33%' "queued text carries the real %"
+AF="$LIVE_DIR/advisories/ct-sig-q.jsonl"
+assert_file_exists "$AF" "advisory row written"
+assert_contains "$(cat "$AF")" 'context now 33%' "advisory row text carries the real %"
+assert_file_absent "$LIVE_DIR/advisory-queue/ct-sig-q.jsonl" "bridge default: not queued for the relay"
+fresh_session; over; live ct-sig-qi 33
+AUTOPILOT_ADVISORY_BRIDGE_COST_TRACKER=inject run_hook cost-tracker.js "$(payload ct-sig-qi)"
+QF="$LIVE_DIR/advisory-queue/ct-sig-qi.jsonl"
+assert_file_exists "$QF" "inject knob: advisory queued"
+assert_contains "$(cat "$QF")" 'context now 33%' "inject knob: queued text carries the real %"
 
 # ── 5. fail-open on a corrupt live file ──
 fresh_session; over; printf '{not json' > "$LIVE_DIR/context/ct-sig-bad.json"

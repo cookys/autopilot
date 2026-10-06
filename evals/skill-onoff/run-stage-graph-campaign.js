@@ -9,7 +9,7 @@
 // after any interruption; a `failure_class` row re-runs, max 3 recorded attempts per cell):
 //   * stage-graph tasks (the prereg's 12) x --arms (default change,red; --with-base adds base, reported not gated)
 //     x reps; each arm is a multi-pack arm manifest <arms-dir>/<arm>.json (freeze-guidance-arm.js; the red arm
-//     is the rotated planted-red). No prompt prefix (the briefs are the frozen task.md bytes).
+//     is the rotated planted-red). Prompt prefix `Use dev-flow:` (ONOFF_PROMPT_PREFIX, amend-1-invocation; task.md bytes stay frozen).
 //   * the generic-marker regression the prereg requires: the 7 prereg `generic.tasks` x {base,change} x reps,
 //     each task group under the exact conditions of the row that registered it (fixture-scripts pack of that row,
 //     ONOFF_PROMPT_PREFIX of amendments 2/3, marker lib of amendment 2/4) with the sg fixture scripts overlaid
@@ -58,7 +58,11 @@ const GENERIC = [
 const genericIds = GENERIC.flatMap((g) => g.tasks);
 if (!flag('--skip-generic') && JSON.stringify([...genericIds].sort()) !== JSON.stringify([...P.generic.tasks].sort())) die('internal: GENERIC groups do not cover the prereg generic tasks');
 
-const groups = [{ kind: 'stage-graph', tasks: P.tasks, arms: sgArms, env: {}, extra: ['--arm-manifests', armsDir] }];
+// Invocation preface (prereg/stage-graph.amend-1-invocation.json): without it a headless -p sonnet cell never loads the
+// skill (live 2026-10-06: 6-8 s, skill_invoked false, no session-mode/stage-advance call) — the same failure P1W amendment 2
+// fixed for w2a-g/w2b-g. Names ONLY the skill: no size / bug / urgent / stage vocabulary (those are what the markers measure).
+const SG_PROMPT_PREFIX = 'Use dev-flow:';
+const groups = [{ kind: 'stage-graph', tasks: P.tasks, arms: sgArms, env: { ONOFF_PROMPT_PREFIX: SG_PROMPT_PREFIX }, extra: ['--arm-manifests', armsDir] }];
 if (!flag('--skip-generic')) {
   for (const g of GENERIC) {
     groups.push({

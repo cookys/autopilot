@@ -257,16 +257,17 @@ use(`node scripts/session-mode.js set --size ${ans.size}${ans.bug ? ' --bug' : '
 if (ans.first_rung !== 'none') use('node scripts/probe-unknown.js classify --terms x', JSON.stringify({ eligible_max: ans.first_rung, recommend: ans.first_rung }));
 for (const node of graph.walk.slice(0, ans.horizon_index + 1)) use(`node scripts/stage-advance.js --to ${node}`, '{"ok":true}');
 fs.writeFileSync('agent-work.txt', 'did work\n');
+if (process.env.SG_PROMPT_LOG && process.argv[2]) fs.appendFileSync(process.env.SG_PROMPT_LOG, `${fs.readFileSync(process.argv[2], 'utf8').split('\n')[0]}\n`);
 process.stdout.write(`${out.join('\n')}\n`);
 NODE
 cat > "$TMP/agent.sh" <<EOF
 #!/usr/bin/env bash
-exec node "$AGENT"
+exec node "$AGENT" "\$@"
 EOF
 chmod +x "$TMP/agent.sh"
 export SG_BASE="$BASE" ONOFF_SG_EXPECTED="$EXPECTED"
 export ONOFF_STUB_BIN="$TMP/agent.sh"
-RES="$TMP/res.jsonl"
+RES="$TMP/res.jsonl"; export SG_PROMPT_LOG="$TMP/prompts.log"
 CAMP() { node "$BASE/run-stage-graph-campaign.js" --runner stub --model sonnet --reps 2 --prereg "$PREREG" --arms-dir "$ARMS" --skip-generic "$@"; }
 set +e; CAMP --results "$RES" > "$TMP/camp.out" 2> "$TMP/camp.err"; rc=$?; set -e
 [ "$rc" -eq 0 ] || fail "campaign (stub) rc=$rc: $(tail -3 "$TMP/camp.out") $(tail -3 "$TMP/camp.err")"
@@ -279,6 +280,10 @@ for t in stage-graph-m-feature stage-graph-m-bug stage-graph-m-urgent-high; do [
 for t in stage-graph-xs-feature stage-graph-s-feature stage-graph-l-feature stage-graph-xl-deliverable stage-graph-xs-bug stage-graph-s-urgent stage-graph-l-u0-known stage-graph-l-research-a stage-graph-l-research-b; do
   [ "$(pj "counts.red.per_task.$t" <<<"$verdict")" -eq 0 ] || fail "red must break $t"
 done
+# invocation preface (prereg/stage-graph.amend-1-invocation.json): a bare task.md never loads the skill in headless -p
+# (live 2026-10-06: 6-8 s cells, skill_invoked false). EVERY stage-graph cell, both arms, must carry the same skill-only preface.
+[ "$(wc -l < "$SG_PROMPT_LOG")" -eq 48 ] && [ "$(sort -u "$SG_PROMPT_LOG")" = "Use dev-flow:" ] || fail "every stage-graph cell prompt must start with 'Use dev-flow:' (got: $(sort -u "$SG_PROMPT_LOG" | head -3))"
+node -e 'const a=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));if(a.ONOFF_PROMPT_PREFIX!=="Use dev-flow:"||/size|bug|urgent|stage|\bXS\b|\bXL\b/i.test(a.ONOFF_PROMPT_PREFIX))process.exit(1)' "$BASE/prereg/stage-graph.amend-1-invocation.json" || fail "amendment prefix must equal the campaign's and name only the skill"
 # resume: re-running the same command runs no cell
 set +e; CAMP --results "$RES" > "$TMP/camp2.out" 2>/dev/null; set -e
 grep -q "ran=0" "$TMP/camp2.out" || fail "resume must skip finished cells: $(grep matrix "$TMP/camp2.out")"

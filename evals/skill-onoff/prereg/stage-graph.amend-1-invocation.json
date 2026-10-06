@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "artifact_type": "skill_onoff_prereg_amendment",
+  "amendment": 1,
+  "row": "stage-graph",
+  "date": "2026-10-06",
+  "no_counted_cell_had_run": true,
+  "reason": "first campaign attempt 2026-10-06: every cell 6-8 s, skill_invoked false, no session-mode.js / stage-advance.js call (sg_size/bug/urgent/walk/pass all false) in change AND red arms. Live probe: claude -p sonnet given the bare task.md does the edit directly and never loads the dev-flow skill. Same failure as P1W amendment 2.",
+  "frozen_files_edited": [],
+  "change": "run-stage-graph-campaign.js sets ONOFF_PROMPT_PREFIX for the 12 stage-graph tasks, identically in every arm; the generic groups keep their own registered prefixes. task.md files, packs, arms and answer keys are untouched. Rows of the first attempt carry no prefix and must not be reused (delete that results file; resume treats them as done).",
+  "ONOFF_PROMPT_PREFIX": "Use dev-flow:",
+  "vocabulary_rule": "the prefix names only the skill: no size, bug, urgent, stage, helper or script vocabulary",
+  "evidence": "same cell, change arm: bare prompt -> 8 s, skill_invoked false, only sg_rung+sg_work true; with prefix -> 14 s, skill_invoked true, session-mode.js set --size XS, stage-advance.js --to implement/qc-gate/finish, all 7 markers true"
+}

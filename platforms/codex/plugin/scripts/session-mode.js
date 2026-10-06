@@ -18,6 +18,10 @@
  *   overwrites, so compact/resume keep the root; an EXPIRED marker is replaced by a new marker with a NEW root.
  *   repo_identity/project_key/root_run_id are additive, null when underivable; `set` also writes
  *   ~/.autopilot/live-pointer.json — src/status/live-pointer.js)
+ *   size/urgent/bug/base_ref (stage-graph P2a, plan §2.9): `set --size XS|S|M|L|XL [--urgent] [--bug] [--base-ref <sha>]`
+ *   without --level creates a plain marker or merges into the live one (level preserved), under the marker lock;
+ *   --size only moves up; base_ref defaults to `git merge-base HEAD develop|main|master` (null + stderr note when
+ *   underivable). stage/stage_set_at/unit/review_families/high_risk are written by scripts/stage-advance.js.
  *   campaign_roots (mods P1W SCOPE, `bind-campaign-root`): the Mission roots of the campaigns this /l5-/l6 session
  *   launched (<= 8, newest last). The engine's sealed Mission root can never equal the marker's job root (the marker is
  *   set before prepare/grant mint the mission), so this is the only link from a session to the campaign it runs; the
@@ -472,10 +476,14 @@ function gitToplevel() {
   }
 }
 
+// Valueless flags (stage-graph P2a): `--urgent` / `--bug` take no value, so they must not swallow the next token.
+const BOOLEAN_FLAGS = new Set(['--urgent', '--bug']);
+
 function parseArgs(argv) {
   const args = { _: [] };
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i].startsWith('--')) { args[argv[i].slice(2)] = argv[i + 1]; i++; }
+    if (BOOLEAN_FLAGS.has(argv[i])) args[argv[i].slice(2)] = true;
+    else if (argv[i].startsWith('--')) { args[argv[i].slice(2)] = argv[i + 1]; i++; }
     else args._.push(argv[i]);
   }
   return args;
@@ -729,6 +737,132 @@ function cmdSetPlain(args, phase) {
   return 0;
 }
 
+// ---- stage-graph P2a: size / urgent / bug / base_ref init fields (plan §2.9) --------------------------------
+const SIZES = Object.freeze(['XS', 'S', 'M', 'L', 'XL']);
+const INIT_FLAGS = ['size', 'urgent', 'bug', 'base-ref'];
+const BASE_REF_SHA = /^[0-9a-f]{7,64}$/u;
+// Default-branch candidates, same order as scripts/resolve-review-loop.sh probe_diff_bytes (develop, then main);
+// master and the origin/* spellings are added so a clone without a local develop still resolves.
+const DEFAULT_BRANCHES = Object.freeze(['develop', 'main', 'master', 'origin/develop', 'origin/main']);
+
+// The merge-base of HEAD and the first default-branch candidate that resolves; null when none does.
+function defaultBaseRef(repoRoot) {
+  for (const branch of DEFAULT_BRANCHES) {
+    try {
+      const sha = execFileSync('git', ['-C', repoRoot, 'merge-base', 'HEAD', branch], {
+        encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim();
+      if (BASE_REF_SHA.test(sha)) return sha;
+    } catch (_error) { /* try the next candidate */ }
+  }
+  return null;
+}
+
+function hasInitFlags(args) {
+  return INIT_FLAGS.some((k) => Object.prototype.hasOwnProperty.call(args, k));
+}
+
+function parseInit(args) {
+  const init = {};
+  if (Object.prototype.hasOwnProperty.call(args, 'size')) {
+    if (!SIZES.includes(args.size)) return { error: `invalid --size "${args.size}" (want ${SIZES.join('|')})` };
+    init.size = args.size;
+  }
+  if (args.urgent === true) init.urgent = true;
+  if (args.bug === true) init.bug = true;
+  if (Object.prototype.hasOwnProperty.call(args, 'base-ref')) {
+    if (typeof args['base-ref'] !== 'string' || !BASE_REF_SHA.test(args['base-ref'])) {
+      return { error: `invalid --base-ref "${args['base-ref']}" (want a 7-64 char lowercase hex commit sha)` };
+    }
+    init.baseRef = args['base-ref'];
+  }
+  return { init };
+}
+
+// Merge the init fields into `marker` (mutates). `prior` is the marker being merged into (null on create):
+// urgent/bug only ever turn ON; base_ref survives a merge unless --base-ref is given (a size bump must not
+// move the diff base); a missing base_ref is derived once and stderr says so when it cannot be.
+function applyInitFields(marker, init, repoRoot, prior) {
+  if (init.size) marker.size = init.size;
+  if (init.urgent) marker.urgent = true;
+  else if (typeof marker.urgent !== 'boolean') marker.urgent = false;
+  if (init.bug) marker.bug = true;
+  else if (typeof marker.bug !== 'boolean') marker.bug = false;
+  if (init.baseRef) marker.base_ref = init.baseRef;
+  else if (!prior || typeof prior.base_ref !== 'string') {
+    marker.base_ref = defaultBaseRef(repoRoot);
+    if (marker.base_ref === null) {
+      process.stderr.write(
+        `session-mode: could not derive base_ref (merge-base of HEAD with ${DEFAULT_BRANCHES.join('|')} failed in ${repoRoot}); ` +
+        'stored base_ref: null (the size-bump check is skipped until one is set with --base-ref)\n',
+      );
+    }
+  }
+  return marker;
+}
+
+// `set --size/--urgent/--bug/--base-ref [--phase <name>]` without an orchestrator level: create-if-absent
+// (plain marker, level null) / merge-if-present (level and every other field preserved), under the marker
+// lock + atomic rename. --size is upward-only against an existing marker's size.
+function cmdSetInit(args, phase) {
+  const parsed = parseInit(args);
+  if (parsed.error) { process.stderr.write(`session-mode: ${parsed.error}\n`); return 2; }
+  const { init } = parsed;
+  const ttlHours = args['ttl-hours'] !== undefined ? Number(args['ttl-hours']) : DEFAULT_TTL_HOURS;
+  if (!Number.isFinite(ttlHours) || ttlHours < 0) {
+    process.stderr.write(`session-mode: invalid --ttl-hours "${args['ttl-hours']}"\n`);
+    return 2;
+  }
+  const repoRoot = path.resolve(args['repo-root'] || gitToplevel());
+  const timeoutMs = Number(process.env.AUTOPILOT_SESSION_MODE_LOCK_TIMEOUT_MS) > 0
+    ? Number(process.env.AUTOPILOT_SESSION_MODE_LOCK_TIMEOUT_MS) : PHASE_LOCK_TIMEOUT_MS;
+  const file = markerPath();
+  fs.mkdirSync(markerDir(), { recursive: true });
+  let result = null; // { marker, created } | { refusal }
+  try {
+    withWriteLock({ storeDir: markerDir(), lockFile: `${file}.lock`, name: 'session-mode marker', timeoutMs }, () => {
+      const current = readSessionRecord();
+      if (current) {
+        if (init.size && SIZES.includes(current.size) && SIZES.indexOf(init.size) < SIZES.indexOf(current.size)) {
+          result = { refusal: `refusing --size ${init.size}: the marker is already ${current.size} and size only moves up (XS<S<M<L<XL)` };
+          return;
+        }
+        const next = applyInitFields({ ...current }, init, repoRoot, current);
+        if (phase && phase.value !== null) {
+          next.phase = phase.value;
+          next.phase_set_at = new Date().toISOString();
+        }
+        writeMarkerFile(file, next);
+        result = { marker: next, created: false };
+        return;
+      }
+      let scope = { repo_identity: null, project_key: null };
+      try { scope = scopeFromCwd(repoRoot); } catch (_error) { /* fail-open: fields stay null */ }
+      const now = Date.now();
+      const explicitRoot = typeof args['root-run-id'] === 'string' && /^[A-Za-z0-9._-]+$/.test(args['root-run-id'])
+        ? args['root-run-id'] : '';
+      const marker = applyInitFields(buildPlainMarker({
+        sessionId: getSessionId(), repoRoot, scope, now, ttlHours,
+        rootRunId: resolveJobRoot({ explicit: explicitRoot, now }),
+        phase: phase && phase.value !== null ? phase.value : null,
+      }), init, repoRoot, null);
+      writeMarkerFile(file, marker);
+      result = { marker, created: true };
+    });
+  } catch (error) {
+    process.stderr.write(`session-mode: marker not written: ${error.message}\n`);
+    return 1;
+  }
+  if (!result) { process.stderr.write('session-mode: marker not written\n'); return 1; }
+  if (result.refusal) { process.stderr.write(`session-mode: ${result.refusal}\n`); return 2; }
+  if (result.created) {
+    try { writeLivePointer(); } catch (_error) { /* fail-open: pointer is advisory for the mod */ }
+    startProjectWatcher(result.marker, result.marker.repo_root);
+  }
+  process.stdout.write(`${JSON.stringify({ ok: true, marker_path: file, ...result.marker }, null, 2)}\n`);
+  return 0;
+}
+
 function cmdSet(args) {
   const hasPhase = Object.prototype.hasOwnProperty.call(args, 'phase');
   const hasLevel = Object.prototype.hasOwnProperty.call(args, 'level');
@@ -739,10 +873,18 @@ function cmdSet(args) {
       process.stderr.write(`session-mode: ${phase.error}\n`);
       return 2;
     }
-    if (!hasLevel) return cmdSetPhase(phase.value);
+    if (!hasLevel && !hasInitFlags(args)) return cmdSetPhase(phase.value);
   }
+  // Stage-graph P2a: size/urgent/bug/base-ref without an orchestrator level is the create-or-merge init
+  // (an existing marker keeps its level).
+  if ((!hasLevel || args.level === 'none') && hasInitFlags(args)) return cmdSetInit(args, phase);
   if (!hasLevel || args.level === 'none') return cmdSetPlain(args, phase);
   const level = args.level;
+  const initParsed = parseInit(args);
+  if (initParsed.error) {
+    process.stderr.write(`session-mode: ${initParsed.error}\n`);
+    return 2;
+  }
   if (!LEVELS.has(level)) {
     process.stderr.write(`session-mode: invalid --level "${level}" (want l3|l4|l5|l6, or none for a plain session)\n`);
     return 2;
@@ -844,6 +986,7 @@ function cmdSet(args) {
       };
     }
   }
+  if (hasInitFlags(args)) applyInitFields(marker, initParsed.init, repoRoot, null);
   fs.mkdirSync(markerDir(), { recursive: true });
   const tmp = `${markerPath()}.tmp-${process.pid}`;
   fs.writeFileSync(tmp, `${JSON.stringify(marker, null, 2)}\n`);
@@ -1130,6 +1273,7 @@ function main() {
         'Usage: session-mode.js set [--level none] [--root-run-id <id>] [--phase <name>] (plain session) | ' +
         'set --level l3|l4|l5|l6 [--entry-level l3|l4|l5|l6] ' +
         '[--fallback none|solo|precondition_failed] [--repo-root <dir>] [--ttl-hours N] [--root-run-id <id>] [--phase <name>] | ' +
+        'set --size XS|S|M|L|XL [--urgent] [--bug] [--base-ref <sha>] (create-or-merge; size only moves up) | ' +
         'set --phase <name|\'\'> (update the active marker) | clear | retire --session <id> --integration-receipt <file> [--integration-ref <ref>] | bind-campaign-root --root <id> (--repo-identity <id> | --repo-root <dir>) | status | root\n',
       );
       return 2;
@@ -1156,4 +1300,9 @@ module.exports = {
   validateCloseReceipt,
   verifyMissionRoutingProjection,
   LEVELS,
+  SIZES,
+  markerDir,
+  writeMarkerFile,
+  defaultBaseRef,
+  PHASE_LOCK_TIMEOUT_MS,
 };

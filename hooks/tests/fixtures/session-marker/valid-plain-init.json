@@ -1,0 +1,14 @@
+{
+  "session_id": "fx-plain",
+  "level": null,
+  "repo_root": "/tmp/fx/repo",
+  "started_at": "2026-10-06T06:20:38.512Z",
+  "expires_at": "2026-10-07T06:20:38.512Z",
+  "repo_identity": null,
+  "project_key": null,
+  "root_run_id": "job-1-aa",
+  "size": "XS",
+  "urgent": false,
+  "bug": false,
+  "base_ref": null
+}

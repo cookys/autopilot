@@ -20,7 +20,8 @@
     "research-to-ship": "research-to-ship-sg-base"
   },
   "files": [
-    "guidance-files-sg-base"
+    "guidance-files-sg-base",
+    "guidance-files-sg-extra-base"
   ],
   "fixture_scripts": [
     "fixture-scripts-sg"

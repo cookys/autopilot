@@ -55,6 +55,12 @@ Release merges happen in the dedicated worktree `.claude/worktrees/release-3.0.0
   - Confirming cell: 14 s; `Skill autopilot:dev-flow` → `set --size XS` → `--to implement` → `qc-gate` → `finish`; all markers true.
 - **Relaunched** on release `3bfce882`. First rows: change rep 1 took 19 s and passed; red rep 1 took 32 s and failed.
 
+- **Verdict, change arm v1 (packs `*-sg-change`): NOT-SHIP.** The rule needs ≥ 10/12 tasks; the change arm passed 6/12. Red passed 1/12, so the instrument discriminates. Generic: 5 markers checked, none regressed. Total 114 cells.
+  - Passed (≥ 2/3 reps): xs-feature, s-feature, xs-bug, m-feature, xl-deliverable, s-urgent.
+  - Failed: l-feature 1/3, m-bug 0/3, m-urgent-high 1/3, l-u0-known 0/3, l-research-a 0/3, l-research-b 0/3.
+  - Recorded as-is. Per the prereg, the next attempt is a new arm; there is no rerun of v1.
+  - Per-rep diagnosis (guidance / task / instrument / noise) is in progress. Any task or instrument change made after seeing this data is flagged for the owner's decision.
+
 ## Open items for the alpha.1 cut
 
 1. **Total QC of the protected diff.** This is owed since the no-verify push. It also covers Train B. **Points for the reviewer:**

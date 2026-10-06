@@ -61,6 +61,13 @@ Release merges happen in the dedicated worktree `.claude/worktrees/release-3.0.0
   - Recorded as-is. Per the prereg, the next attempt is a new arm; there is no rerun of v1.
   - Per-rep diagnosis (guidance / task / instrument / noise) is in progress. Any task or instrument change made after seeing this data is flagged for the owner's decision.
 
+- **Verdict, change arm v2** (packs `*-sg-change-v2`; guidance v2 `356c69a6`; amend-2 `8b460bb2`): **NOT-SHIP**.
+  - Change passed 4/12 tasks: xs-feature, s-feature, xs-bug and s-urgent.
+  - Red passed 0/12.
+  - **Generic regression** on `d2-l-multimodule`: `f1_session_sha` dropped from base 3/3 to change 1/3, and `f1_plan_file` from 2/3 to 1/3.
+  - Run 1 lost 80 cells to OAuth expiry (infra_fail), and those cells were resumed after `/login`. The infra rows remain in `results/stage-graph.v2.jsonl` and are not scored.
+  - Per-cell transcripts are retained under `results/stage-graph-cells/`.
+
 ## Open items for the alpha.1 cut
 
 1. **Total QC of the protected diff.** This is owed since the no-verify push. It also covers Train B. **Points for the reviewer:**

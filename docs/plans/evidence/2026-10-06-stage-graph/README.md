@@ -12,6 +12,11 @@ Plan: [`../../2026-10-06-dev-flow-stage-graph.md`](../../2026-10-06-dev-flow-sta
 | P1 | `813bf3e8` | `stage-graph.test.sh` 19/0 (all 84 fixture cells exact) after rebase; own mutation (drop code-review from M base) → 16/3; `check-stage-vocab.js` report-only, 1113 findings today (old ids 929, size enum 28, marker phase 120, owner U4 36) |
 | P2a | `d15d9306`..`6b0eabfa` | First return counted the E1 bump on `base_ref..HEAD` as the plan text said — but dev-flow runs qc-gate before commit, so for XS/S the bump would never fire. **Plan deviation (depth-0):** the bump and the `high_risk` sample measure base_ref vs the working tree plus untracked non-ignored files (`classify-diff-risk.sh --diff-file`). Re-verified from the committed state: `stage-advance.test.sh` 140/0, session-mode suites green, contract-schema ok; own mutation (untracked files excluded) → 5 red |
 
+## Push and QC debt
+
+- 2026-10-06: develop pushed to origin with `git push --no-verify` (`7fc8efc5..776ece39`, 197 commits) by owner choice "b". The qc-gate pre-push hook blocked it because no commit carried `QC-Verdict: PASS`. The range holds the mods P1W work (per-fix reviews recorded in `../2026-10-04-mods-p1c/accepted-heads-p1w.txt`) plus Train A. **A full QC of the protected diff is owed before the alpha.1 cut.**
+- Train B branch: `release/3.0.0` created at `776ece39`.
+
 ## Carried into later phases
 
 - **P5 prerequisite (from P0):** the skill-onoff harness varies one skill per arm; the P5 change arm spans 16 skill packs + 8 files (`evals/skill-onoff/prereg/stage-graph.json`), so P5 first needs an arm builder that installs whole pack sets. Also P5 builds the fixture-scripts pack once `session-mode.js --size`, `stage-advance.js`, `stage-graph.js` exist.

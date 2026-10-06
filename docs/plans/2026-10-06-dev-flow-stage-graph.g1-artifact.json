@@ -1,0 +1,646 @@
+{
+ "schema_version": 1,
+ "artifact_type": "plan_review_artifact",
+ "ticket": "dev-flow-stage-graph",
+ "logical_plan_id": "dev-flow-stage-graph-2026-10-06",
+ "session_id": "e041e8fe-15fe-42c4-8214-0b41b1f26a1a",
+ "session_key": "3205fffcd92c2e0f61a5e2fb7d8228c47e3b95bf1262f403d930eb6a72e81c32",
+ "generation": 1,
+ "verdict": "CONDITIONAL",
+ "semantic_verdict": "CONDITIONAL",
+ "terminal": false,
+ "policy_reason": "depth_0_adjudication_required",
+ "rubric_sha256": "e81edf2485938ff5324c17261215c808e6fea84dc80bc117d63151680ba5b709",
+ "manifest_sha256": "36e1364aef813e8e671ceeb110028cb66c00e539d8bb70b3bcb41ec52a6fb9e1",
+ "plan_sha256": "bb6f2523f1f89a436474076fe5aa1619cef2188e495ef868ccf38ddd3e6d6a43",
+ "growth_ratio": {
+  "numerator": 1,
+  "denominator": 1
+ },
+ "growth_warning": false,
+ "transport_status": "complete",
+ "attempts": [
+  {
+   "seat_id": "sol_chair",
+   "target_id": "sol_chair",
+   "attempt": 1,
+   "transport_envelope": {
+    "schema_version": 1,
+    "artifact_type": "runner_transport_envelope",
+    "request_binding": {
+     "runner": "codex",
+     "model": "gpt-5.6-sol",
+     "operation": "plan-review",
+     "request_digest": "07f34dfcecbfa705c7af6b96deb884f7cc0dcd58c44c19570a4091137a2c41a3"
+    },
+    "outcome": {
+     "classification": "success",
+     "exit_status": 0,
+     "signal": null,
+     "error_code": null
+    },
+    "output_digests": {
+     "stdout_sha256": "e9bdcd830e4f0916961d4bcfa53b81fe450f6f29064af1a8eada604e297b4473",
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "private_raw_reference": {
+     "kind": "private-file",
+     "locator": "/tmp/dispatch-author-codex-hndvs0/stdout",
+     "digest": "e9bdcd830e4f0916961d4bcfa53b81fe450f6f29064af1a8eada604e297b4473"
+    },
+    "receipt_digest": "2e7c73a33d823367ec9ad62d51213d67d6b2addd0595337e43c9b2832411b7d3"
+   },
+   "transport_status": "success",
+   "parser_status": "strict",
+   "semantic_status": "available",
+   "unratified_semantic_status": "unavailable"
+  },
+  {
+   "seat_id": "grok_deep",
+   "target_id": "grok_deep",
+   "attempt": 1,
+   "transport_envelope": {
+    "schema_version": 1,
+    "artifact_type": "runner_transport_envelope",
+    "request_binding": {
+     "runner": "grok",
+     "model": "grok-4.6",
+     "operation": "plan-review",
+     "request_digest": "e55a8d1db7c50399d889d0173bcba287f5ccbaf47d686ac5702b2128b59c4cd8"
+    },
+    "outcome": {
+     "classification": "success",
+     "exit_status": 0,
+     "signal": null,
+     "error_code": null
+    },
+    "output_digests": {
+     "stdout_sha256": "05aafab91083b348fb916b12f28bbb2c1504ad606c7b8de4fd342029e0a90fdb",
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "private_raw_reference": {
+     "kind": "private-file",
+     "locator": "/tmp/dispatch-author-log-1ybCgl",
+     "digest": "05aafab91083b348fb916b12f28bbb2c1504ad606c7b8de4fd342029e0a90fdb"
+    },
+    "receipt_digest": "33a8a74128b6fc93614517966d19e21d081aa6ccaeaf3361d360404cb3a2b7e8"
+   },
+   "transport_status": "success",
+   "parser_status": "strict",
+   "semantic_status": "available",
+   "unratified_semantic_status": "unavailable"
+  },
+  {
+   "seat_id": "minimax_consult",
+   "target_id": "minimax_consult",
+   "attempt": 1,
+   "transport_envelope": {
+    "schema_version": 1,
+    "artifact_type": "runner_transport_envelope",
+    "request_binding": {
+     "runner": "cc-shim",
+     "model": "MiniMax-M3",
+     "operation": "plan-review",
+     "request_digest": "7bf93011f95a70ee6b2c5cf0230f92d539928d44dd82b2811a988570e5f7bfa3"
+    },
+    "outcome": {
+     "classification": "success",
+     "exit_status": 0,
+     "signal": null,
+     "error_code": null
+    },
+    "output_digests": {
+     "stdout_sha256": "ff20cbbbddc582510945b517f5a41aa00fccb91d9218110dca0e6fa2c21fefd7",
+     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "private_raw_reference": {
+     "kind": "private-file",
+     "locator": "/tmp/dispatch-author-log-8qY89C",
+     "digest": "ff20cbbbddc582510945b517f5a41aa00fccb91d9218110dca0e6fa2c21fefd7"
+    },
+    "receipt_digest": "99076c798d9007696844ed832cc25e2c85b6cc51e0cc655ad5299efee7eb10d8"
+   },
+   "transport_status": "success",
+   "parser_status": "strict",
+   "semantic_status": "available",
+   "unratified_semantic_status": "unavailable"
+  }
+ ],
+ "substitutions": [],
+ "reviewer_verdicts": [
+  {
+   "seat_id": "sol_chair",
+   "target_id": "sol_chair",
+   "family": "openai",
+   "verdict": "STOP"
+  },
+  {
+   "seat_id": "grok_deep",
+   "target_id": "grok_deep",
+   "family": "xai",
+   "verdict": "STOP"
+  },
+  {
+   "seat_id": "minimax_consult",
+   "target_id": "minimax_consult",
+   "family": "minimax",
+   "verdict": "CONDITIONAL"
+  }
+ ],
+ "findings": [
+  {
+   "rubric_id": "R1",
+   "class": "decision-now",
+   "severity": "blocking",
+   "affected_surface": "references/stage-graph.json, scripts/stage-graph.js, and the P1 acceptance suite",
+   "claim": "The plan does not define a unique, complete stage graph.",
+   "evidence": "Section 0 says size selects nodes but contains no size-to-node table. P1 instead delegates that contract to an external proposal page and tests only XS plus one L transition. The urgent rule moves code-review after finish, but the required edges, terminal behavior, and subsequent legal transitions are not specified.",
+   "evidence_reference": "§0.1, §0.5, P1 step 1, and P1 Acceptance",
+   "repair": "Freeze the complete size-to-node matrix and all normal, bug, urgent-low-risk, and urgent-high-risk transitions in the plan or a pinned fixture. Add acceptance cases for every size and variant, including the post-finish urgent path and every loop-back.",
+   "blocks_next_slice_or_immediate_integrity": true,
+   "cannot_defer_to_spike": true,
+   "rubric_mapped": true,
+   "candidate_blocker": true,
+   "provenance": [
+    {
+     "seat_id": "sol_chair",
+     "runner": "codex",
+     "model": "gpt-5.6-sol"
+    }
+   ],
+   "duplicate_reports": [],
+   "disposition": null,
+   "fingerprint": "0ac5f7c1b0f5ab1961e72def7c05a28d4957de016cef0e63c817a7e3e39b4596"
+  },
+  {
+   "rubric_id": "R3",
+   "class": "decision-now",
+   "severity": "blocking",
+   "affected_surface": "P0 eval manifest, P4 guidance changes, P5 guidance changes, and commit gating",
+   "claim": "The mechanism-guidance separation is stated but not enforceable, and the planned eval does not clearly cover every guidance surface.",
+   "evidence": "P4 refers to guidance text shipping after a P0 verdict even though P0 only preregisters the eval. P5 creates changed text before running the comparison but defines no candidate isolation or receipt-bound commit gate. P0 names six skill packs, while P5 also changes l4, l5, l6, templates, and references without showing that those exact files are included in the evaluated candidate.",
+   "evidence_reference": "§4 Commit streams, P0 step 1, P4 heading and step 2, and P5 steps 1 through 7",
+   "repair": "Pre-register an exact guidance-file manifest, evaluate an isolated candidate whose digest is recorded in the verdict receipt, and add a mechanical gate that rejects guidance commits without a passing receipt for that digest and rejects mechanism commits that touch the guidance manifest.",
+   "blocks_next_slice_or_immediate_integrity": true,
+   "cannot_defer_to_spike": true,
+   "rubric_mapped": true,
+   "candidate_blocker": true,
+   "provenance": [
+    {
+     "seat_id": "sol_chair",
+     "runner": "codex",
+     "model": "gpt-5.6-sol"
+    }
+   ],
+   "duplicate_reports": [],
+   "disposition": null,
+   "fingerprint": "6f64b99d14e1626df133c0ca336fd3f4cb314950a7e1dafa6e2914c6391d9aa6"
+  },
+  {
+   "rubric_id": "R4",
+   "class": "decision-now",
+   "severity": "blocking",
+   "affected_surface": "P0 answer key, stage-order scorer, and P0/P1 dependency ordering",
+   "claim": "The preregistered stage-order metric depends on a mutable artifact that does not yet exist.",
+   "evidence": "P0 re-keys its scorer on scripts/stage-graph.js, while P1 creates that script and its graph. The dependency map permits P0 and P1 to run in parallel, and no frozen graph fixture or digest binds later graph changes to the preregistered answer key.",
+   "evidence_reference": "P0 steps 3 through 5 and the §4 Dependency map",
+   "repair": "Put explicit expected sequences in the frozen answer key or bind it to an immutable graph fixture and digest. Make the scorer consume that frozen input, require P1 to match it, and reject any graph change that would alter scoring without a newly registered arm.",
+   "blocks_next_slice_or_immediate_integrity": true,
+   "cannot_defer_to_spike": true,
+   "rubric_mapped": true,
+   "candidate_blocker": true,
+   "provenance": [
+    {
+     "seat_id": "sol_chair",
+     "runner": "codex",
+     "model": "gpt-5.6-sol"
+    }
+   ],
+   "duplicate_reports": [],
+   "disposition": null,
+   "fingerprint": "299f2daee3eab1056f469eb4c8c5734fdd2170ba494fc730a93efadb43426900"
+  },
+  {
+   "rubric_id": "R5",
+   "class": "decision-now",
+   "severity": "blocking",
+   "affected_surface": "Consumer config files, ladder references, routing descriptions, and migration validation",
+   "claim": "The authorized breaking-change migration does not cover every acknowledged consumer-visible surface.",
+   "evidence": "The plan acknowledges copied consumer dev-flow and finish-flow configs but only updates repository templates; it gives no migration or explicit manual procedure for existing copies. The U4 owner-to-U5 rename is described as affecting about ten files, but no exact inventory or semantic gate can distinguish a stale U4 owner reference from the new valid U4 experiment rung. KR4 does not cover that rename.",
+   "evidence_reference": "§2.6 Affected consumers and Migration, §3 project-config-template rows, P4 step 1, and KR4",
+   "repair": "Enumerate every affected consumer surface, add migration instructions or a migrator for existing config copies, and add a semantic ladder-reference checker that proves all owner references use U5 while experiment references use U4. Include these steps in the 3.0.0 migration and rollback validation.",
+   "blocks_next_slice_or_immediate_integrity": true,
+   "cannot_defer_to_spike": true,
+   "rubric_mapped": true,
+   "candidate_blocker": true,
+   "provenance": [
+    {
+     "seat_id": "sol_chair",
+     "runner": "codex",
+     "model": "gpt-5.6-sol"
+    }
+   ],
+   "duplicate_reports": [],
+   "disposition": null,
+   "fingerprint": "ad1cd3d3f287348b132b2174de40ab51d74858759236e0075d4877d72fd1d5fe"
+  },
+  {
+   "rubric_id": "R6",
+   "class": "decision-now",
+   "severity": "blocking",
+   "affected_surface": "Marker schema, session-mode.js, stage-advance.js, and status readers",
+   "claim": "The marker contract lacks initialization ownership and unambiguous field semantics.",
+   "evidence": "stage-advance.js needs the marker size to validate the first node, but its interface has no size or urgent arguments and no phase names the writer that initializes those fields. The band requires size and level, yet the new marker field list identifies no level field or authoritative source. review_families is described both as an n argument and as the families actually used, without a declared schema shape.",
+   "evidence_reference": "§2 KR1, §2.5 Global Constraints, §3 session-mode.js row, and P2 steps 1 through 3",
+   "repair": "Specify every marker field type and invariant, name the atomic initialization writer for size and urgent, identify the authoritative level source, and define whether review_families stores a count or family identities. Add first-write, missing-field, illegal-transition, and full initialization tests.",
+   "blocks_next_slice_or_immediate_integrity": true,
+   "cannot_defer_to_spike": true,
+   "rubric_mapped": true,
+   "candidate_blocker": true,
+   "provenance": [
+    {
+     "seat_id": "sol_chair",
+     "runner": "codex",
+     "model": "gpt-5.6-sol"
+    }
+   ],
+   "duplicate_reports": [],
+   "disposition": null,
+   "fingerprint": "74a57820c49f9befb8f26a93f098bfe2a81010b3ba4efdb1e084c532a49c5b30"
+  },
+  {
+   "rubric_id": "R7",
+   "class": "decision-now",
+   "severity": "blocking",
+   "affected_surface": "Canonical node-to-writer table and P3 rail tests",
+   "claim": "Rail coverage cannot be derived because writer ownership is deferred and several nodes have no named writer.",
+   "evidence": "P3 postpones identifying qc-gate and finish entry points. The file map gives alternatives for the QC entry and a generic finish-flow entry, while diagnose, research, proposal, and verify have no exact rail writer there. P1 predeclares only intent, plan, and implement as prose candidates.",
+   "evidence_reference": "§3 rail-script row, P1 step 1, and P3 step 1",
+   "repair": "Pin a complete table now with one exact script and entry function or the literal prose designation for every node. Bind each rail row to a deterministic test that asserts stage, timestamp, review-family data where applicable, fail-open behavior, and exactly one visible diagnostic on failure.",
+   "blocks_next_slice_or_immediate_integrity": true,
+   "cannot_defer_to_spike": true,
+   "rubric_mapped": true,
+   "candidate_blocker": true,
+   "provenance": [
+    {
+     "seat_id": "sol_chair",
+     "runner": "codex",
+     "model": "gpt-5.6-sol"
+    }
+   ],
+   "duplicate_reports": [],
+   "disposition": null,
+   "fingerprint": "e3649b8b1026b8af613c28b6737b5270746f7641927bfbf1354b1c873b0ae37b"
+  },
+  {
+   "rubric_id": "R8",
+   "class": "decision-now",
+   "severity": "blocking",
+   "affected_surface": "probe-unknown.js, decision receipts, ladder exhaustion, and ladder call sites",
+   "claim": "The panel and experiment rung contracts omit the concrete budgets, receipt schema, and exhaustion behavior required by the rubric.",
+   "evidence": "P4 says only to add budgets without giving values, units, reset rules, or attempt ceilings. It partially describes an experiment receipt and one panel skip status but not a common receipt contract. Exhaustion appears only as a requested test case; the transition taken after exhaustion is never specified.",
+   "evidence_reference": "P4 step 1 and P4 Acceptance",
+   "repair": "Freeze numeric or otherwise mechanically bounded budgets for both rungs, define receipt fields and allowed statuses, state each exhaustion transition and terminal behavior, tie S1, S4, and S5 to their canonical definitions, and add deterministic eligibility, receipt, exhaustion, classifier, and renumbering tests.",
+   "blocks_next_slice_or_immediate_integrity": true,
+   "cannot_defer_to_spike": true,
+   "rubric_mapped": true,
+   "candidate_blocker": true,
+   "provenance": [
+    {
+     "seat_id": "sol_chair",
+     "runner": "codex",
+     "model": "gpt-5.6-sol"
+    }
+   ],
+   "duplicate_reports": [],
+   "disposition": null,
+   "fingerprint": "617908e4d4cd098e34f657c0f6aaa18b970b0ad07409b672d7b896868e3ff611"
+  },
+  {
+   "rubric_id": "R10",
+   "class": "decision-now",
+   "severity": "blocking",
+   "affected_surface": "P5 sizing policy, KR1 evidence procedure, and executable acceptance instructions",
+   "claim": "Material policy values and acceptance references remain unresolved for a zero-context implementer.",
+   "evidence": "P5 delegates the diff-scope bump thresholds to implementation instead of freezing their values. KR1 and P7 cite §54 and §55, but this plan has no such sections and does not give the exact external path and anchors. These omissions affect task sizing and the release-blocking real-machine verdict.",
+   "evidence_reference": "KR1, P5 step 1, and P7 steps 1 through 2",
+   "repair": "Freeze the threshold values and boundary behavior before P0 answer-key finalization. Replace the dangling section references with exact repository paths and anchors, and state the commands, fixtures, and expected pass outputs for the per-field gate.",
+   "blocks_next_slice_or_immediate_integrity": true,
+   "cannot_defer_to_spike": true,
+   "rubric_mapped": true,
+   "candidate_blocker": true,
+   "provenance": [
+    {
+     "seat_id": "sol_chair",
+     "runner": "codex",
+     "model": "gpt-5.6-sol"
+    }
+   ],
+   "duplicate_reports": [],
+   "disposition": null,
+   "fingerprint": "e6fb54d7f70024efa0033e76cf34ac6036f24ce7dbde92fa1722b74320a0567d"
+  },
+  {
+   "rubric_id": "R11",
+   "class": "decision-now",
+   "severity": "blocking",
+   "affected_surface": "Phase dependency map, develop landing order, and alpha.1 cut criteria",
+   "claim": "The dependency map permits broken intermediate landings and an alpha containing guidance for unavailable mechanisms.",
+   "evidence": "P5 instructs prose nodes to call stage-advance.js but depends only on P1, even though stage-advance.js is created in P2. Alpha.1 requires P5 and P6 but not P2 or P3, so it can advertise a live graph while the marker transition mechanism or rail writers are absent. P5 and P6 also split the hard vocabulary rename across independently landable phases, and P4 splits a no-alias ladder renumber from its guidance consumers.",
+   "evidence_reference": "P2, P4, P5, P6, P8 step 1, and the §4 Dependency map",
+   "repair": "Revise the dependency and landing boundaries so guidance cannot land before its mechanisms, no-alias renames and all in-repository consumers merge as one coherent slice, and alpha.1 requires the complete graph, marker, rail, ladder, guidance, and backlog contracts with all invariants green.",
+   "blocks_next_slice_or_immediate_integrity": true,
+   "cannot_defer_to_spike": true,
+   "rubric_mapped": true,
+   "candidate_blocker": true,
+   "provenance": [
+    {
+     "seat_id": "sol_chair",
+     "runner": "codex",
+     "model": "gpt-5.6-sol"
+    }
+   ],
+   "duplicate_reports": [],
+   "disposition": null,
+   "fingerprint": "380d40f8789bea84c8ddcaa0ae9f94a136fb092eb9aa12111a6839b97fcc4f4a"
+  },
+  {
+   "rubric_id": "R1",
+   "class": "decision-now",
+   "severity": "blocking",
+   "affected_surface": "references/stage-graph.json, schemas/stage-graph.schema.json, scripts/stage-graph.js, Plan §0.1–§0.5, §4 P1",
+   "claim": "P1's canonical graph is under-specified relative to §0: the size-to-node map, research branch, urgent high-risk exception, and per-node writers are not frozen in the plan text, so the P1 acceptance examples cannot be checked against a §0 size table.",
+   "evidence": "§0.5 states only that size selects nodes; the per-size sets are deferred to an external proposal-page table. The only concrete set is the P1 acceptance for XS: implement, qc-gate, finish. Node ids in §2.5 include research, diagnose, proposal, plan-review, and verify, with research 'when needed' from §0.2, but P1 lists no edge or flag that puts research in or out of a size's node set. Urgent reordering in P1 depends on classify-diff-risk.sh reporting high, while the stated CLI is nodes --size S [--bug] [--urgent] and next --from node --size S, with no high-risk flag and with next omitting --bug/--urgent. Writers are named only for intent, plan, implement as prose; diagnose, research, proposal, plan-review, verify, code-review, qc-gate, and finish have no named rail or prose value in P1 (P3 later pins only qc-gate and finish). §0 contains no size table, so the R1 consistency check against P1 acceptance has no in-plan baseline.",
+   "evidence_reference": "Plan §0.1–§0.5 Settled graph/research/sizes; §2.5 node ids; §4 P1 steps 1 and 3 and P1 acceptance; §4 P3.1 writer pinning; §3 file map for stage-graph.js CLI.",
+   "repair": "Inline into P1 (and §0) a complete size-to-node table for XS S M L XL, plus bug entry (diagnose replacing which nodes), the research optional edge keyed on the unknown ladder, and urgent order with an explicit high-risk input. Give every node id a writer of prose or a named script. Extend stage-graph.js next/nodes flags to --bug --urgent --high-risk so they match those rules. Replace the XS/L acceptance lines with exact CLI stdout for each size and for bug/urgent variants, matching that table.",
+   "blocks_next_slice_or_immediate_integrity": true,
+   "cannot_defer_to_spike": true,
+   "rubric_mapped": true,
+   "candidate_blocker": true,
+   "provenance": [
+    {
+     "seat_id": "grok_deep",
+     "runner": "grok",
+     "model": "grok-4.6"
+    }
+   ],
+   "duplicate_reports": [],
+   "disposition": null,
+   "fingerprint": "d529bc32a9917dba3d1c214c4871fb49bac564917c01febe8b0b223614e71c19"
+  },
+  {
+   "rubric_id": "R3",
+   "class": "decision-now",
+   "severity": "non-blocking",
+   "affected_surface": "Plan §4 commit streams, P0, P6, P8; skills/**/SKILL.md vs scripts/",
+   "claim": "The mechanism/guidance split is written as commit-stream policy, and P0 plus P8 are unlabelled, so the split is not yet a checkable gate.",
+   "evidence": "Commit streams name mechanism as P1, P2, P3, P6-code, P7 and guidance as P4-text and P5. P-R is labelled mechanism in its header. P0 (freeze packs, tasks, answer key, prereg) and P8 (alpha/release cuts) sit outside both lists. P4 mixes probe-unknown.js mechanism with a later guidance commit, which is described in prose. §2.5 says a mechanism commit never edits requirement text, with no path allowlist, no PR file-list check, and no script that fails a mechanism-labelled commit that touches SKILL.md. Sequencing P0 before P4/P5 text is stated as acceptance and is reviewable in git history.",
+   "evidence_reference": "Plan §2.5 Global Constraints mechanism/guidance bullets; §4 Commit streams; §4 P0, P4, P5, P6, P-R, P8 headers.",
+   "repair": "Label P0 as mechanism (eval harness) and P8 as release. Add a path allowlist under §2.5: mechanism commits may touch scripts/, schemas/, mods/, evals/prereg and tasks, and references/stage-graph.json; a CI check on the PR file list fails a mechanism-labelled commit that edits skills/**/SKILL.md or other requirement prose. Keep P4 as two commits with that gate.",
+   "blocks_next_slice_or_immediate_integrity": false,
+   "cannot_defer_to_spike": true,
+   "rubric_mapped": true,
+   "candidate_blocker": false,
+   "provenance": [
+    {
+     "seat_id": "grok_deep",
+     "runner": "grok",
+     "model": "grok-4.6"
+    }
+   ],
+   "duplicate_reports": [],
+   "disposition": null,
+   "fingerprint": "4d2d2cf69ee00610085c9d2b313c976dde373be019f18ac24946d522f3fb225a"
+  },
+  {
+   "rubric_id": "R4",
+   "class": "decision-now",
+   "severity": "blocking",
+   "affected_surface": "evals/skill-onoff/prereg/, evals/skill-onoff/tasks/stage-graph-*, evals/skill-onoff/lib, hooks/tests/skill-onoff-*.test.sh, Plan §4 P0/P5, §5 Eval-gated, dependency map",
+   "claim": "The P0 metric is only partly mechanical, the ship rule is an empty slot, and the P5 eval scores stage-advance.js calls while P5 does not depend on P2, which is the phase that creates that script.",
+   "evidence": "P0 freezes an answer key for size, entry node, node order, and first ladder rung. The metric says size and entry are exact and node order is scored on transcript stage-advance calls, with no extractor for size or entry (marker field, declaration line, or CLI). The ship rule is 'to be set in this phase, not after seeing data' with no formula. Planted-red and no rerun-until-green (record fail, new arm) are stated. KR3 and P5 step 6 run that eval on base vs changed skill text. Dependency map is P0 to P4/P5 and P1 to P5; P2 (scripts/stage-advance.js) sits on P1 to P2 to P3 to P7 and is absent from P5's inputs. Running P5 in parallel with or before P2 yields transcripts with no stage-advance calls to score. §5 allows score-onoff.js or an unnamed sibling scorer.",
+   "evidence_reference": "Plan §4 P0 steps 3–5 and acceptance; §4 P5 step 6; §2 KR3; §4 Dependency map; §5 Eval-gated.",
+   "repair": "In P0, freeze extractors: size and entry from named transcript or marker fields, node order from stage-advance.js invocations compared to stage-graph.js. Commit a numeric ship rule before any ON pack exists (planted-red must fail, plus a pre-registered exact-match count). Add P2 as a dependency of the P5 eval run so the scorer's stage-advance path exists. Name the scorer file. Keep failing verdicts as a new arm.",
+   "blocks_next_slice_or_immediate_integrity": true,
+   "cannot_defer_to_spike": true,
+   "rubric_mapped": true,
+   "candidate_blocker": true,
+   "provenance": [
+    {
+     "seat_id": "grok_deep",
+     "runner": "grok",
+     "model": "grok-4.6"
+    }
+   ],
+   "duplicate_reports": [],
+   "disposition": null,
+   "fingerprint": "fd8ede4e306ca477bfcc0c7207f70cd3047983e0a4c952828bcf996094ba8032"
+  },
+  {
+   "rubric_id": "R5",
+   "class": "decision-now",
+   "severity": "non-blocking",
+   "affected_surface": "skills/*/SKILL.md description fields; project-config-template and live .claude config copies; KR4 grep set vs U4 owner rung",
+   "claim": "The hard-rename surface list is incomplete for skill routing descriptions and for leftover owner-rung ids, so a consumer-visible string can survive P5/P6.",
+   "evidence": "§2.6 and P5.5 update description: lines for dev-flow, finish-flow, and team. §3 also rewrites skills/ceo-agent/SKILL.md, skills/debug, think-tank, l4, l5, l6, and ceo references, with no description: step for those files. P4 says U4 to U5 everywhere with no alias, about 10 files; KR4 greps L-1…L-5.7, H-9…, S-scope-gate, S.1, F.1, Fix, H and omits a leftover U4 owner-rung id. Live onboarded .claude/dev-flow-config.md and finish-flow-config.md that copy ## L-5 / H-9 headings are called a comment-only soft break, with migration only on templates. Backlog enum, the two scripts, migrate map Fix to S and H to S!, marker phase removal in P2, and CHANGELOG rollback-to-2.x are stated.",
+   "evidence_reference": "Plan §2.6 Affected consumers and Migration; §3 skill rows; §4 P4.2, P5.5, P6; §2 KR4.",
+   "repair": "Extend P5.5 to every shipped skill description: that still names old sizes or L-/H- ids (ceo-agent, debug, think-tank, l3–l6, team already listed). Add a KR4 pattern for owner-rung U4 in non-history files. State whether live consumer config headings are rewritten, ignored, or called out in the CHANGELOG migration section.",
+   "blocks_next_slice_or_immediate_integrity": false,
+   "cannot_defer_to_spike": true,
+   "rubric_mapped": true,
+   "candidate_blocker": false,
+   "provenance": [
+    {
+     "seat_id": "grok_deep",
+     "runner": "grok",
+     "model": "grok-4.6"
+    }
+   ],
+   "duplicate_reports": [],
+   "disposition": null,
+   "fingerprint": "3f32f63af1d8a2da7feb72b9fb0b6c7be22ba61cacad0754f69270416a76130b"
+  },
+  {
+   "rubric_id": "R6",
+   "class": "decision-now",
+   "severity": "blocking",
+   "affected_surface": "scripts/session-mode.js, scripts/stage-advance.js, schemas/ marker contract, src/status/phase-input.js, src/status/planned-input.js",
+   "claim": "Marker field types and stage-advance init/legality cannot be tested from the plan: review_families disagrees with itself, and first-write into the size entry node assumes size/urgent/bug already on the marker with no init API.",
+   "evidence": "New fields listed: stage, stage_set_at, size, urgent, unit {index,total,label}, review_families. P2 CLI is stage-advance.js --to node [--unit i/N:label] [--review-families n] (a count). §2.5 says the marker records the families actually used (identities). KR1 prints n族 (a count). First write with no current stage is legal only into the size's entry node, but stage-advance.js is not given --size, --bug, or --urgent, and session-mode.js set is not given flags for those fields. Missing marker exits 2; illegal jump exits 3 with allowed:false, from, to, legal_next. --phase, phase, and phase_set_at are removed with no dual-read, grep-confirmed. stage_set_at format and whether unit is required are omitted. Bug entry from §0.1 changes the entry node, and that flag is absent from P2.",
+   "evidence_reference": "Plan §4 P2 steps 1–3 and acceptance; §2.5 review-strength bullet; §2 KR1 band slots; §0.1 bug entry; §3 session-mode.js / stage-advance.js rows.",
+   "repair": "Freeze a marker schema: stage enum of node ids, stage_set_at timestamp format, size enum, urgent boolean, optional bug boolean, unit object or absent, review_families as an array of family ids (band may display its length). Document session-mode.js set flags that write size, urgent, and bug before any stage-advance. Define first write as legal only to the entry node of that size/bug combination; keep exit 2 and exit 3 as specified; add tests for init then a full legal chain per size.",
+   "blocks_next_slice_or_immediate_integrity": true,
+   "cannot_defer_to_spike": true,
+   "rubric_mapped": true,
+   "candidate_blocker": true,
+   "provenance": [
+    {
+     "seat_id": "grok_deep",
+     "runner": "grok",
+     "model": "grok-4.6"
+    }
+   ],
+   "duplicate_reports": [],
+   "disposition": null,
+   "fingerprint": "0807d96a13dc8d2a27c2e30d515284a7e147756340710a7087301f97e1100699"
+  },
+  {
+   "rubric_id": "R8",
+   "class": "decision-now",
+   "severity": "blocking",
+   "affected_surface": "scripts/probe-unknown.js, scripts/dispatch-discuss.js, skills/dev-flow, skills/debug, skills/think-tank, skills/l4, skills/l5, skills/l6, skills/ceo-agent, Plan §4 P4, §8",
+   "claim": "Panel and experiment rungs have eligibility sketches but no concrete budgets, receipts, or exhaustion behaviour, and the call-site list disagrees with the file map, so P0 ladder answer keys and P4 cannot be implemented consistently.",
+   "evidence": "P4.1 adds panel (dispatch-discuss.js when qualified, else single-family think-tank recorded as skipped/not-heterogeneous) and experiment (throwaway worktree, pre-registered question and pass/fail, receipt carries criterion and result). Eligibility: panel for a whether unknown with S5, or any unknown after survey; experiment when an S4 or S1 signal survives a survey. The text then says 'add budgets' with no figures, units, or what happens at zero. Exhaustion appears only in hooks/tests/probe-unknown.test.sh acceptance. classify must not emit the owner rung; order U0–U5 with U4 to U5 everywhere. P4.2 names four call sites: dev-flow intent/plan, debug, think-tank, ceo foreman round end. §3 lists skills/l4, l5, l6 SKILL.md as ladder call sites in P4/P5. P0 step 3 freezes expected first rung for the ladder on the same eligibility rules. KR4 does not grep leftover U4.",
+   "evidence_reference": "Plan §4 P4.1–P4.2 and P4 acceptance; §3 skills/{debug,think-tank,l4,l5,l6} row; §4 P0 step 3; §8 Ladder order.",
+   "repair": "Write per-rung budget, receipt, and exhaustion (skip, record skipped/not-heterogeneous, or climb) for panel and experiment, reusing existing U1/U2 budget units if those already exist. List every owner-rung U4 file, including l4/l5/l6 and ceo references, and update all of them in the P4 guidance commit. Align P0 ladder expected-rung keys to those eligibility rules. Add a grep gate for leftover owner-rung U4.",
+   "blocks_next_slice_or_immediate_integrity": true,
+   "cannot_defer_to_spike": true,
+   "rubric_mapped": true,
+   "candidate_blocker": true,
+   "provenance": [
+    {
+     "seat_id": "grok_deep",
+     "runner": "grok",
+     "model": "grok-4.6"
+    }
+   ],
+   "duplicate_reports": [],
+   "disposition": null,
+   "fingerprint": "0a79ddc63ff483b2bb93bf4aa6dfc912ed7dd480760770916031dc2946352f08"
+  },
+  {
+   "rubric_id": "R10",
+   "class": "decision-now",
+   "severity": "blocking",
+   "affected_surface": "Plan §4 Dependency map, P8 cut points, P1 discovery wiring, P5 E1 thresholds, scripts/stage-graph.js",
+   "claim": "A zero-context engineer cannot execute P1/P5/P8 from named commands and expected outputs, and the dependency map disagrees with phase contents and alpha cuts.",
+   "evidence": "P1 step 4 says to wire stage-graph.js into the four discovery points named in CLAUDE.md without listing those points or the expected snippets. P5 E1 says diff-scope-report.sh threshold bumps one size, with 'threshold numbers set here' and no numbers or derivation method. P5 guidance requires models to call stage-advance.js (a P2 artifact) while the map is P1 to P5 only. P8 alpha.1 is after P5+P6 so 'the new vocabulary is live and the owner dogfoods the graph' while P2/P3 (marker writes) are on a separate chain to alpha.2. next --from verify --size L 'includes' implement and code-review rather than an exact JSON array. P0 ship rule and P1 size table are slots to fill during the phase. P-R, P0, and P1 in parallel is consistent with the map.",
+   "evidence_reference": "Plan §4 P1 step 4 and acceptance; §4 P5 step 1 E1; §4 P8 cut points; §4 Dependency map; §3 CLAUDE.md discovery mention.",
+   "repair": "Name the four CLAUDE.md discovery points and the patch each gets in P1. Put exact stage-graph.js stdout fixtures in P1 acceptance for every size and for --bug/--urgent. Add P2 to P5's dependencies (eval and prose calls). Move alpha.1 to after P2 at least (vocabulary plus marker fields), or change the alpha.1 claim to 'guidance only'. Write the E1 bump thresholds or a formula from historical diff-scope-report.sh output in P5.",
+   "blocks_next_slice_or_immediate_integrity": true,
+   "cannot_defer_to_spike": true,
+   "rubric_mapped": true,
+   "candidate_blocker": true,
+   "provenance": [
+    {
+     "seat_id": "grok_deep",
+     "runner": "grok",
+     "model": "grok-4.6"
+    }
+   ],
+   "duplicate_reports": [],
+   "disposition": null,
+   "fingerprint": "de1079ab7f5b656f55de3f6663f60a5b2d68f2bf1fe0a881b0a72db219d4251c"
+  },
+  {
+   "rubric_id": "R11",
+   "class": "decision-now",
+   "severity": "blocking",
+   "affected_surface": "develop merge train; scripts/session-mode.js phase removal; mods/live band; scripts/check-backlog-entries.js; P8 alpha cuts; directory marketplace live tree a2b91aef",
+   "claim": "Independent develop landings of P2 and P6 recreate an empty or broken consumer surface before any 3.0.0-alpha cut, which contradicts the plan's own landability mitigation and the empty-band ruling the work is meant to fix.",
+   "evidence": "§6 says keep each phase independently landable on develop and release nothing until P8. P2 removes --phase, phase, and phase_set_at and switches the watcher, review page, and band to structured fields with no dual-read (§0.8, P2.3). P3 is the first writer of stage on rails; P7 is V4a. After P2 and before P3 the band reads stage fields nothing writes, which is the dash-placeholder failure in §0 (live band ● 进行中 autopilot · — · 5m · —). This host loads the live tree via the directory marketplace (a2b91aef), so a develop merge of P2 is what the owner runs. P6 makes check-backlog-entries.js reject Fix/H on develop; only docs/BACKLOG.md in this repo is migrated in-phase, so other consumers of the live plugin fail CI before a release. Alpha.1 is P5+P6 and alpha.2 is P7, so P2 can sit on develop uncut. Rollback is pin the last 2.x tag, which does not help a marketplace-following develop checkout.",
+   "evidence_reference": "Plan §0 thesis empty band; §0.8 no shims; §2.6 Pre-releases and Rollback; §4 P2.3, P3, P6, P7, P8; §6 Scope/breaking-rename mitigations.",
+   "repair": "Make the breaking develop merge a single train: P2 field add may land additively, but phase removal, band reader switch, and P3 writers merge together, and P7 may follow in the same train or as alpha.2 immediately after. Land P6 only in the alpha.1 cut, not as a lone develop merge. State that independently landable means additive mechanism (P1, P-R, P4-mechanism) only; authorized-breaking steps ship on an alpha tag the owner opts into.",
+   "blocks_next_slice_or_immediate_integrity": true,
+   "cannot_defer_to_spike": true,
+   "rubric_mapped": true,
+   "candidate_blocker": true,
+   "provenance": [
+    {
+     "seat_id": "grok_deep",
+     "runner": "grok",
+     "model": "grok-4.6"
+    }
+   ],
+   "duplicate_reports": [],
+   "disposition": null,
+   "fingerprint": "e249c6cf20ba9e879dfdb0a63a1d8f8987fcecce8c8b636149d6cce806e1cd5c"
+  },
+  {
+   "rubric_id": "R8",
+   "class": "decision-now",
+   "severity": "non-blocking",
+   "affected_surface": "P4 mechanism design for panel and experiment rungs",
+   "claim": "The plan asserts the new rungs have eligibility rules and partial receipts but does not state concrete budgets, exhaustion behaviour, or the meaning of the S1/S4/S5 signal labels that gate eligibility, all of which R8 requires up front rather than deferred to the phase.",
+   "evidence": "P4.1 says add budgets without any numbers; panel and experiment eligibility reference S5, S4 and S1 signals whose definitions are not given in the plan; exhaustion behaviour is named only in the acceptance line (planted cases for each new rung and its exhaustion), not in the body of the step.",
+   "evidence_reference": "PLAN §4 P4 step 1",
+   "repair": "Pre-state panel and experiment budgets (e.g. wall-clock minutes, model tokens) and the exhaustion rule (fall through to next rung or halt). Either spell out the S1/S4/S5 signal definitions in the plan or cite the existing references file that does, and lift the exhaustion rule from the acceptance line into the step body so R8 is satisfied as written.",
+   "blocks_next_slice_or_immediate_integrity": false,
+   "cannot_defer_to_spike": false,
+   "rubric_mapped": true,
+   "candidate_blocker": false,
+   "provenance": [
+    {
+     "seat_id": "minimax_consult",
+     "runner": "cc-shim",
+     "model": "MiniMax-M3"
+    }
+   ],
+   "duplicate_reports": [],
+   "disposition": null,
+   "fingerprint": "9b3046e410541cea4a1056edbd8ed5fb52776e4e6f4f4162d21e67192109d927"
+  },
+  {
+   "rubric_id": "R10",
+   "class": "decision-now",
+   "severity": "non-blocking",
+   "affected_surface": "P3 step 1, P5 step 1, and the band data contract in P7",
+   "claim": "Three executability gaps: P3 leaves qc-gate and finish entry scripts unidentified, P5 leaves the diff-scope threshold values unset, and the band shows size·level ▸ stage but the marker has no level field while KR1 states every slot comes from a marker field.",
+   "evidence": "P3.1 The qc-gate and finish entries are to be identified in this phase; P5.1 diff-scope-report.sh threshold → bump one size, threshold numbers set here; §3 marker row lists stage, stage_set_at, size, urgent, unit {index,total,label}, review_families (no level); §2 KR1 the band shows size·level ▸ stage and every slot comes from a marker field, never a dash placeholder.",
+   "evidence_reference": "PLAN §3 marker row, §4 P3 step 1, §4 P5 step 1, §2 KR1",
+   "repair": "Add a P-prep step (or extend P1) that records the qc-gate and finish entry-script candidates and the diff-scope threshold values, and decide explicitly whether the level shown in the band is a new marker field or an out-of-marker read from the active slash command; update the marker row and KR1 to match so a zero-context engineer can execute P3, P5 and P7 as written.",
+   "blocks_next_slice_or_immediate_integrity": false,
+   "cannot_defer_to_spike": false,
+   "rubric_mapped": true,
+   "candidate_blocker": false,
+   "provenance": [
+    {
+     "seat_id": "minimax_consult",
+     "runner": "cc-shim",
+     "model": "MiniMax-M3"
+    }
+   ],
+   "duplicate_reports": [],
+   "disposition": null,
+   "fingerprint": "d93c50fdc933be5f7b3938a19c95a1456d1847fd533182f59ff7d705378afc62"
+  }
+ ],
+ "backlog_candidates": [
+  {
+   "fingerprint": "4d2d2cf69ee00610085c9d2b313c976dde373be019f18ac24946d522f3fb225a",
+   "rubric_id": "R3",
+   "affected_surface": "Plan §4 commit streams, P0, P6, P8; skills/**/SKILL.md vs scripts/",
+   "claim": "The mechanism/guidance split is written as commit-stream policy, and P0 plus P8 are unlabelled, so the split is not yet a checkable gate.",
+   "evidence_reference": "Plan §2.5 Global Constraints mechanism/guidance bullets; §4 Commit streams; §4 P0, P4, P5, P6, P-R, P8 headers.",
+   "disposition": null
+  },
+  {
+   "fingerprint": "3f32f63af1d8a2da7feb72b9fb0b6c7be22ba61cacad0754f69270416a76130b",
+   "rubric_id": "R5",
+   "affected_surface": "skills/*/SKILL.md description fields; project-config-template and live .claude config copies; KR4 grep set vs U4 owner rung",
+   "claim": "The hard-rename surface list is incomplete for skill routing descriptions and for leftover owner-rung ids, so a consumer-visible string can survive P5/P6.",
+   "evidence_reference": "Plan §2.6 Affected consumers and Migration; §3 skill rows; §4 P4.2, P5.5, P6; §2 KR4.",
+   "disposition": null
+  },
+  {
+   "fingerprint": "9b3046e410541cea4a1056edbd8ed5fb52776e4e6f4f4162d21e67192109d927",
+   "rubric_id": "R8",
+   "affected_surface": "P4 mechanism design for panel and experiment rungs",
+   "claim": "The plan asserts the new rungs have eligibility rules and partial receipts but does not state concrete budgets, exhaustion behaviour, or the meaning of the S1/S4/S5 signal labels that gate eligibility, all of which R8 requires up front rather than deferred to the phase.",
+   "evidence_reference": "PLAN §4 P4 step 1",
+   "disposition": null
+  },
+  {
+   "fingerprint": "d93c50fdc933be5f7b3938a19c95a1456d1847fd533182f59ff7d705378afc62",
+   "rubric_id": "R10",
+   "affected_surface": "P3 step 1, P5 step 1, and the band data contract in P7",
+   "claim": "Three executability gaps: P3 leaves qc-gate and finish entry scripts unidentified, P5 leaves the diff-scope threshold values unset, and the band shows size·level ▸ stage but the marker has no level field while KR1 states every slot comes from a marker field.",
+   "evidence_reference": "PLAN §3 marker row, §4 P3 step 1, §4 P5 step 1, §2 KR1",
+   "disposition": null
+  }
+ ],
+ "accepted_blocker_count": 0,
+ "repair_authorized": false,
+ "next_generation": 2,
+ "reviewed_at": "2026-10-06T05:02:48.987Z"
+}

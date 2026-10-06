@@ -1,0 +1,102 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "dev-flow-stage-graph-2026-10-06",
+ "generation": 1,
+ "findings": [
+  {
+   "fingerprint": "0ac5f7c1b0f5ab1961e72def7c05a28d4957de016cef0e63c817a7e3e39b4596",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct: §0 had no size table. Folded: §2.7 freezes the full size×{feature,bug}×{normal,urgent-low,urgent-high} node sequences, every loop-back, the optional research edge and the post-finish urgent path; P0 freezes them as a fixture and P1's acceptance is an exact match against it."
+  },
+  {
+   "fingerprint": "6f64b99d14e1626df133c0ca336fd3f4cb314950a7e1dafa6e2914c6391d9aa6",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct. Folded: §2.8 names the guidance manifest (exact globs); the P0 change pack is built from exactly those files; new scripts/check-guidance-eval.js re-derives at every alpha/final cut that each manifest file is byte-equal to the evaluated pack and re-runs the deterministic scorer on the recorded results (re-derivation, not attestation — ADR-0001). P4 wording fixed: guidance ships after the P0-registered eval's verdict, which runs in P5."
+  },
+  {
+   "fingerprint": "299f2daee3eab1056f469eb4c8c5734fdd2170ba494fc730a93efadb43426900",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct. Folded: answer key carries explicit expected sequences and is bound to the frozen fixture hooks/tests/fixtures/stage-graph/expected.json written in P0 from §2.7; dependency is now P0 → P1 and P1 must reproduce the fixture; a graph change that alters the fixture needs a new registered arm."
+  },
+  {
+   "fingerprint": "ad1cd3d3f287348b132b2174de40ab51d74858759236e0075d4877d72fd1d5fe",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct. Folded: one new scripts/check-stage-vocab.js serves as the repo gate (KR4) and as the consumer migration report (--repo <consumer>: lists stale ids in .claude/*.md and backlog files with the replacement). The U4→U5 renumber has an enumerated file list (§4 P4) and a semantic check (owner words within the U4 context = fail). CHANGELOG migration section names both tools."
+  },
+  {
+   "fingerprint": "74a57820c49f9befb8f26a93f098bfe2a81010b3ba4efdb1e084c532a49c5b30",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct. Folded: §2.9 freezes the marker schema (types, invariants), the init writer session-mode.js set --size/--urgent/--bug/--base-ref, level from the existing marker `level` field, review_families = array of family ids (band shows its length), and stage-advance exit codes 2/3/4."
+  },
+  {
+   "fingerprint": "e3649b8b1026b8af613c28b6737b5270746f7641927bfbf1354b1c873b0ae37b",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct; the facts were checked. Folded: §2.7 writer column pins every node — rail writers only plan-review (dispatch-plan-review.js main), code-review (hetero-review-loop.js main) and implement at l5/l6 (engine implement-review); every other node is honestly `prose` with its owning skill. P3 tests per rail row."
+  },
+  {
+   "fingerprint": "617908e4d4cd098e34f657c0f6aaa18b970b0ad07409b672d7b896868e3ff611",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct. Folded: budgets reuse probe-unknown units (per work unit): U1 2, U2 1, U3 panel 1, U4 experiment 1; exhaustion unchanged (budget-exhausted → none; owner rung U5 only via caller stop); receipt = existing ladder row plus rail/families (panel) and question/criterion/result (experiment); eligibility stated in S1–S6 terms from probe-unknown.js's header."
+  },
+  {
+   "fingerprint": "e6fb54d7f70024efa0033e76cf34ac6036f24ce7dbde92fa1722b74320a0567d",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct. Folded: E1 thresholds frozen in §2.7 (git diff --numstat against marker base_ref; files/lines per size) with boundary behaviour; §54/§55 replaced by references/evidence-discipline.md §54/§55; gate command and expected PASS line named in P7."
+  },
+  {
+   "fingerprint": "380d40f8789bea84c8ddcaa0ae9f94a136fb092eb9aa12111a6839b97fcc4f4a",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct. Folded: §4 landing trains — Train A additive only (P-R, P0, P1, P2a, P4a) may land on develop; Train B (P2b phase removal + reader switch, P3, P4b renumber+ladder text, P5, P6) is built on release/3.0.0 in a worktree and merges to develop only at the alpha.1 cut with every invariant green; P5 depends on P2a; alpha.1 = complete graph+marker+rails+ladder+guidance+backlog."
+  },
+  {
+   "fingerprint": "d529bc32a9917dba3d1c214c4871fb49bac564917c01febe8b0b223614e71c19",
+   "disposition": "duplicate",
+   "rationale": "Same defect as 0ac5f7c1b0 plus the writer half of e3649b8b10; same folds. CLI gains --bug --urgent --high-risk on nodes and next."
+  },
+  {
+   "fingerprint": "4d2d2cf69ee00610085c9d2b313c976dde373be019f18ac24946d522f3fb225a",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Folded with 6f64b99d14: every phase header now carries its stream label (mechanism/guidance/release/eval)."
+  },
+  {
+   "fingerprint": "fd8ede4e306ca477bfcc0c7207f70cd3047983e0a4c952828bcf996094ba8032",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct. Folded: P0 names the scorer evals/skill-onoff/score-stage-graph.js and its extractors (session-mode.js set --size/--bug/--urgent and stage-advance.js --to from transcript Bash tool_use via lib/transcript-query.js), a numeric ship rule, and P5's eval depends on P2a."
+  },
+  {
+   "fingerprint": "3f32f63af1d8a2da7feb72b9fb0b6c7be22ba61cacad0754f69270416a76130b",
+   "disposition": "duplicate",
+   "rationale": "Same as ad1cd3d3f2; descriptions are in the guidance manifest and in check-stage-vocab.js's pattern set."
+  },
+  {
+   "fingerprint": "0807d96a13dc8d2a27c2e30d515284a7e147756340710a7087301f97e1100699",
+   "disposition": "duplicate",
+   "rationale": "Same as 74a57820c4; adopted the array-of-family-ids shape and the bug flag as proposed."
+  },
+  {
+   "fingerprint": "0a79ddc63ff483b2bb93bf4aa6dfc912ed7dd480760770916031dc2946352f08",
+   "disposition": "duplicate",
+   "rationale": "Same as 617908e4d4; the U4 file list (incl. l4/l5/l6, ceo-agent, hetero-dispatch, scripts-inventory, decision-ledger, tests, mirrors) is enumerated in P4."
+  },
+  {
+   "fingerprint": "de1079ab7f5b656f55de3f6663f60a5b2d68f2bf1fe0a881b0a72db219d4251c",
+   "disposition": "duplicate",
+   "rationale": "Same as e6fb54d7f7 and 380d40f878; additionally the four CLAUDE.md discovery points are named in P1/P5 and P1 acceptance is exact stdout."
+  },
+  {
+   "fingerprint": "e249c6cf20ba9e879dfdb0a63a1d8f8987fcecce8c8b636149d6cce806e1cd5c",
+   "disposition": "duplicate",
+   "rationale": "Same as 380d40f878; adopted the single-train proposal (additive on develop, breaking on release/3.0.0 until the alpha cut). Noted the live-plugin fact: develop's working tree is what this host loads."
+  },
+  {
+   "fingerprint": "9b3046e410541cea4a1056edbd8ed5fb52776e4e6f4f4162d21e67192109d927",
+   "disposition": "duplicate",
+   "rationale": "Same as 617908e4d4."
+  },
+  {
+   "fingerprint": "d93c50fdc933be5f7b3938a19c95a1456d1847fd533182f59ff7d705378afc62",
+   "disposition": "duplicate",
+   "rationale": "Same as e3649b8b10 (writers), e6fb54d7f7 (thresholds) and 74a57820c4 (level field)."
+  }
+ ]
+}

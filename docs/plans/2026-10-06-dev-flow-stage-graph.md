@@ -1,326 +1,451 @@
 # Plan — dev-flow stage graph: one named graph, T-shirt sizes, a marker the band can read
 
-> Status: draft (R0) · Owner: cookys · Branch: develop (per-phase branches at execution) · Frame: guidance + mechanism, authorized-breaking (3.0.0)
-> Proposal page (owner's choices recorded there): https://claude.ai/artifact/WhaLzUsfwmMdDut9ndVB7X (v2)
-> Blocks: mods P1W TUI band (`2026-10-03-mods-visible-dispatch.md` R5.10 → B) and therefore the next release.
+> Status: R1 (G1 repair) · Owner: cookys · Branch: Train A on develop, Train B on `release/3.0.0` (§4) · Frame: guidance + mechanism, authorized-breaking (3.0.0)
+> Blocks the mods P1W TUI band (`2026-10-03-mods-visible-dispatch.md` R5.10/R5.11) and therefore the next release.
 
 ## 0. Context / thesis
 
-The W4 real-machine gate passed in every mode, then the owner chose to make the band a TUI before releasing (R5.10 **B**, `docs/plans/evidence/2026-10-06-tui-band/README.md`). The band's position and progress slots had no data source. The live band printed `● 進行中 autopilot · — · 5m · —` / `回合進行中（0 分）`: half the slots were dashes, and the elapsed time contradicted itself. The owner's ruling was that a placeholder UI with no data is pointless. The stage inventory (`docs/plans/evidence/2026-10-06-dev-flow-stage-inventory/README.md`) found the cause:
-- dev-flow's stages exist only in prose;
-- "L" means three different things;
-- "phase" means six;
-- no skill or hook writes the current stage anywhere a program can read it.
+The band's position and progress slots have no data source; the live band printed `● 進行中 autopilot · — · 5m · —` / `回合進行中（0 分）`. The owner ruled that a placeholder UI with no data is pointless. The stage inventory (`docs/plans/evidence/2026-10-06-dev-flow-stage-inventory/README.md`) found:
+- dev-flow stages exist only in prose;
+- "L" means three things and "phase" six;
+- no skill or hook writes the current stage where a program can read it.
 
-This plan replaces the stage prose with one named graph. A script owns the graph, and the rails write the graph position into the session marker. The TUI band is then rebuilt on that data.
+This plan replaces the stage prose with one named graph that a script owns. Writers record the graph position in the session marker, and the band is rebuilt on that data.
 
 ### Settled — do not reopen (owner rulings, 2026-10-06)
 
-1. **The graph** (owner's sketch, refined in discussion):
-   - Main path: `intent → [research when needed] → proposal → plan → plan-review⟲ → per phase (implement → verify) → code-review⟲ → qc-gate → finish`.
-   - Bugs enter at `diagnose`.
-2. **Research branch.**
-   - When the unknown ladder says U0, the model proposes from its own knowledge and no survey runs.
+1. **Graph.** `intent → [research when needed] → proposal → plan → plan-review⟲ → per phase (implement → verify) → code-review⟲ → qc-gate → finish`. Bugs enter at `diagnose`. Exact sequences are in §2.7.
+2. **Research before proposal.**
+   - Unknown-ladder U0: the model proposes from its own knowledge, with no survey.
    - Otherwise it climbs the ladder, and the proposal comes after the research.
-3. **Proposal.** The `proposal` node is a web page: assumptions plus illustrated options for the user to pick. The page this plan cites is the first one.
-4. **Verify per phase.** Each phase is verified by a qualified verifier (engine scorecard verifier role). The hetero code review runs once after all phases, on the full diff. The same rule applies to bug and urgent work.
-5. **Sizes are T-shirt sizes `XS S M L XL`.** A size decides only which nodes run.
-   - A bug is not a size.
-   - Urgency is a flag written AFTER the letter: `S!`, with alias `S急`. A prefix `!` would be eaten by Claude Code's bash mode.
-6. **Levels `/l3–/l6` are hetero/delegation mode, never size.** The owner corrected this explicitly. Levels decide who executes `implement` and who authors verification. They are orthogonal to size.
-7. **Review strength is a third axis.**
-   - "hetero" is a property of the review seat (how many model families), resolved by `scripts/resolve-review-loop.sh` from risk and roster.
-   - No node is named hetero.
-   - A Claude-only user on `/l3` or `/l4` runs the same graph.
-8. **No compatibility shims.** The owner rejected leftovers that can never be removed, because they end up unmaintainable. Old names are migrated, not aliased; the legacy marker `phase` field is removed, and its readers move to the new fields in the same phase. Rollback means pinning the previous tag.
-9. **Pre-releases for testing.** The owner, currently the heaviest user, tests `3.0.0-alpha.N` cuts before 3.0.0.
-   - 2.37.0 is never cut; mods P1W folds into 3.0.0.
-   - The ladder renumbers cleanly (§8 Q1 resolved).
-10. **Proposal-page answers:** `A2 B1 C2 D2 E1 F2 G1`. §2.6 and §4 carry them out.
-   - A2: hard rename → 3.0.0.
+   - `proposal` is a web page of assumptions plus illustrated options that the user picks from.
+3. **Two review layers.** Each phase is verified by a qualified verifier (engine scorecard verifier role). The hetero code review runs once after all phases, on the full diff. The same rule applies to bug and urgent work.
+4. **Sizes.**
+   - `XS S M L XL` decide only which nodes run.
+   - A bug is an entry node, not a size.
+   - Urgency is a suffix after the letter: `S!`, alias `S急`. A prefix `!` is eaten by Claude Code's bash mode.
+5. **Levels.** `/l3–/l6` are hetero/delegation mode (who implements, who authors verification), orthogonal to size.
+6. **Review strength.** It is a third axis: the number of model families on a review node, resolved by `scripts/resolve-review-loop.sh` from risk and roster. No node is named hetero, and a Claude-only `/l3` user runs the same graph.
+7. **No compatibility shims.** Old names are migrated, not aliased, and the marker `phase` field is removed. Rollback means pinning the previous tag.
+8. **Releases.** Pre-releases are `3.0.0-alpha.N`, tested by the owner as the heaviest user. 2.37.0 is never cut, and mods P1W folds into 3.0.0.
+9. **Proposal-page answers** (https://claude.ai/artifact/WhaLzUsfwmMdDut9ndVB7X v2): `A2 B1 C2 D2 E1 F2 G1`.
+   - A2: hard rename.
    - B1: JSON + CLI.
-   - C2: `stage-advance.js`.
-   - D2: structured marker fields.
-   - E1: the model sizes the task at entry, and a diff threshold bumps the size.
-   - F2: new ladder rungs land in this plan.
-   - G1: one family for low-risk review by default.
+   - C2: `stage-advance.js` validates.
+   - D2: structured marker.
+   - E1: size at entry plus a diff-threshold bump.
+   - F2: new ladder rungs here.
+   - G1: low-risk review = one family, fresh context, as the default.
 
 ## 1. Problem
 
-The owner wants to glance at a session, in the terminal band or on the review page, and know four things:
-- which step the work is in;
+The owner wants to glance at the band or review page and know four things:
+- which step a session is in;
 - how far along it is;
 - whether it needs them;
 - how strongly it is being checked.
 
-Today none of these is recorded mechanically outside `/l5–/l6` campaigns. Colleagues who only have Claude cannot tell what dev-flow expects of them, because review strength is tangled into the stage names.
+None of this is recorded mechanically outside `/l5–/l6` campaigns. Claude-only colleagues cannot tell what dev-flow expects of them, because review strength is tangled into stage names.
 
 ## 2. OKR / KRs
 
-- **KR1** — The real-machine gate re-run passes per field (§54) in every mode:
-  - modes: dev-flow, `/l3`, ceo, `/l4`, `/l5`, `/l6`;
-  - the band shows `size·level ▸ stage [unit k/N] [·n族]`;
-  - every slot comes from a marker field, never a dash placeholder;
-  - each check is backed by a colored screenshot (§55).
-- **KR2** — For every node that has a rail, a deterministic test runs the rail against a temp marker and asserts `stage` and `stage_set_at`. Coverage is 100% of the node→writer table in P3.
-- **KR3** — The pre-registered eval (P0) meets its frozen ship rule for the guidance change. The eval compares the base skill text with the changed skill text, and the rule covers size choice, entry node and node order on the answer-keyed task set.
-- **KR4** — A grep gate in `check-canonical-invariants.sh` finds zero old ids in shipped non-history files: `L-1…L-5.7`, `H-9…`, `S-scope-gate`, `S.1`, `F.1`, and the old size enum `Fix`/`H`.
-- **KR5** — After `migrate-backlog-entries.js`, autopilot's own `docs/BACKLOG.md` passes `check-backlog-entries.js`.
+- **KR1 — real-machine gate.** The gate re-run passes per field (`references/evidence-discipline.md` §54) in every mode: dev-flow, `/l3`, ceo, `/l4`, `/l5`, `/l6`.
+  - The band shows `size·level ▸ stage [unit k/N] [·n族]`.
+  - Each slot is derived from a marker field (§2.9), with no dash placeholder.
+  - Each check has a colored screenshot (same file, §55).
+- **KR2 — rail tests.** Every rail row in §2.7 has a deterministic test that runs the rail against a temp marker and asserts `stage`, `stage_set_at` and, where applicable, `review_families`.
+- **KR3 — eval.** The P0-registered eval meets its frozen ship rule, and `check-guidance-eval.js` passes at every cut.
+- **KR4 — vocabulary.** `node scripts/check-stage-vocab.js` reports zero hits in shipped non-history files. It checks for:
+  - old stage ids;
+  - the old size enum `Fix`/`H` in effort fields and descriptions;
+  - the marker `phase` field;
+  - owner-rung `U4`.
+- **KR5 — backlog.** `docs/BACKLOG.md` passes `check-backlog-entries.js` after migration.
 
 ## 2.5 Global Constraints (copied verbatim into every dispatch)
 
 - Sizes are exactly `XS`, `S`, `M`, `L`, `XL`. Urgency is the suffix `!` (alias `急`) written after the size letter, never before it; scripts and the marker carry it as `urgent: true`.
 - Graph node ids are exactly: `intent`, `diagnose`, `research`, `proposal`, `plan`, `plan-review`, `implement`, `verify`, `code-review`, `qc-gate`, `finish`. No node id contains `hetero`.
-- `/l3`–`/l6` keep their current meaning (who implements / who authors verification). Size never encodes level and level never encodes size.
-- Review strength = the number of distinct model families on a review node, resolved by `scripts/resolve-review-loop.sh`; it is never silently lowered — a shortfall goes through the existing `on_engine_unavailable` policy, and the marker records the families actually used.
-- The graph's single canonical definition is `references/stage-graph.json`; prose cites `scripts/stage-graph.js` output and never re-lists the node sequence.
-- New scripts are Node ≥ 20.10, built-ins only; stdout JSON, diagnostics on stderr, exit codes documented in the header.
-- A mechanism commit (code that makes an existing requirement happen) never edits requirement text; a guidance commit (what a skill asks for) ships only after the P0 eval verdict. They are separate commits.
-- No trust machinery (ADR-0001): the marker is telemetry, never authority; a gate re-derives, it never trusts a stage claim.
+- `/l3`–`/l6` keep their current meaning. Size never encodes level and level never encodes size.
+- Review strength = the distinct model families on a review node, resolved by `scripts/resolve-review-loop.sh`; never silently lowered (a shortfall goes through `on_engine_unavailable`); the marker records the family ids actually used.
+- `references/stage-graph.json` is the graph's single canonical definition; prose cites `scripts/stage-graph.js` output and never re-lists node sequences.
+- New scripts are Node ≥ 20.10, built-ins only; one JSON object on stdout, diagnostics on stderr, exit codes in the header.
+- Mechanism commits never edit files in the guidance manifest (§2.8); guidance ships only on a cut where `check-guidance-eval.js` passes.
+- No trust machinery (ADR-0001): the marker is telemetry; gates re-derive, never trust a stage claim.
 
 ## 2.6 Change-policy decisions
 
-- **Compatibility impact: `authorized-breaking`.** Owner answer A2, 2026-10-06. The release is **3.0.0**. The unreleased 2.37.0 content (mods P1W) folds into it, and no 2.37.0 is cut.
-  - **Affected consumers:**
-    - backlog `**Effort**:` rows in every consumer repo (`check-backlog-entries.js:31` enum, `next-pick.js:167` regex);
-    - consumer `.claude/dev-flow-config.md` / `finish-flow-config.md`, which may cross-reference the `## L-5 / H-9 …` heading (comment-only, soft break);
-    - skill routing, because the `description:` of dev-flow, finish-flow and team changes;
-    - the unknown-ladder rung ids, if §8 Q1 renumbers the owner rung.
-  - **Migration:** `migrate-backlog-entries.js` gains the old→new effort map: `Fix→S`, `H→S!`, `S→S`, `M→M`, `L→L`. `check-backlog-entries.js` rejects an old value with a message that names the mapping and the migration command. The CHANGELOG 3.0.0 entry carries a migration section.
-  - **Rollback:** pin the last 2.x tag. Only backlog rows and the marker change on disk. The marker's legacy `phase` field is removed (§0.8), so a 2.x reader sees no phase after a 3.x session; that is acceptable because the marker is per-session telemetry with a TTL.
-  - **Pre-releases:** `3.0.0-alpha.N` cuts (§0.9, phase P-R) let the owner test the breaking change on the release channel. On this host the directory marketplace already loads the live tree (`a2b91aef`), so alpha tags matter for other machines and colleagues.
-  - **Contract validation:** `schemas/` entries for the marker and the graph, gated by `check-contract-schema.js`.
-- **Dependency decision: `platform/stdlib`.** Node built-ins and existing repo scripts only.
+- **Compatibility impact: `authorized-breaking`** (owner A2, 2026-10-06). The target is 3.0.0, via `3.0.0-alpha.N`.
+  - **Consumers affected:**
+    - backlog `**Effort**:` rows (`check-backlog-entries.js:31`, `next-pick.js:167`);
+    - consumer `.claude/dev-flow-config.md`, generated by `scaffold-config.js` (no update mode), and `finish-flow-config.md`, copied by hand; both may carry old ids;
+    - skill routing via the `description:` of dev-flow, finish-flow and team;
+    - ladder rung ids (owner rung U4 → U5);
+    - marker readers of `phase`.
+  - **Migration:**
+    - `migrate-backlog-entries.js` maps `Fix→S`, `H→S!`, and leaves `S/M/L` unchanged;
+    - `check-stage-vocab.js --repo <consumer>` lists every stale line in `.claude/*.md` and the backlog files, with its replacement;
+    - the CHANGELOG 3.0.0 migration section names both tools and the hand step for configs.
+  - **Rollback:** pin the last 2.x tag. Old markers are per-session telemetry with a TTL, so a 2.x reader after a 3.x session only sees no phase.
+  - **Contract validation:** graph and marker schemas, through `check-contract-schema.js`.
+- **Dependency decision: `platform/stdlib`.**
+
+## 2.7 The graph (frozen; P0 turns it into the fixture P1 must reproduce)
+
+**Sequences (feature entry):**
+- `XS`: implement → qc-gate → finish
+- `S`: implement → verify → qc-gate → finish
+- `M`: plan → implement → verify → code-review → qc-gate → finish
+- `L`: intent → [research] → proposal → plan → plan-review → (implement → verify)×N → code-review → qc-gate → finish
+- `XL`: as L, except each deliverable D runs (implement → verify)×phases(D) → code-review. `unit.kind` is `deliverable`.
+
+**Variants:**
+- **`--bug`:** `diagnose` replaces the leading node.
+  - XS, S: `diagnose → implement…`
+  - M: `diagnose → plan…`
+  - L, XL: `diagnose → [research] → proposal…`
+- **Research is an optional edge.** Both `intent|diagnose → research → proposal` and `intent|diagnose → proposal` are legal. Taking it is the ladder's call, not the graph's.
+- **`--urgent` without `--high-risk`:** code-review moves after finish (`… verify → qc-gate → finish → code-review`). Post-finish code-review is terminal, and each finding opens a new `S` task.
+- **`--urgent --high-risk`:** the normal order. XS and S have no code-review, so urgency only marks them.
+- **High risk** means `resolve-review-loop.sh` reports `review_risk: high` when fed the `risk_flags` of `classify-diff-risk.sh --range <base_ref>..HEAD`.
+
+**Loop-backs** (all legal): plan-review→plan, verify→implement (same or next unit), code-review→implement, qc-gate→implement. The terminal node is finish, or code-review on the urgent path.
+
+**Size bump (E1):**
+- Stage-advance into `verify` or `qc-gate` computes `git diff --numstat <base_ref>..HEAD`.
+- Limits, in files / changed lines (added+deleted), across all paths:
+
+  | Size | Files | Changed lines |
+  |---|---|---|
+  | XS | ≤2 | ≤20 |
+  | S | ≤6 | ≤200 |
+  | M | ≤20 | ≤800 |
+  | L, XL | no limit | no limit |
+
+- A diff equal to a limit fits. Over a limit, stage-advance exits 4 with the next size, and the caller runs `session-mode.js set --size <next>` (upward only).
+- A bump changes only the remaining path; earlier nodes are not retroactively required.
+
+**Writers** — the rail, or `prose` plus the skill that calls `stage-advance.js`:
+
+| Node | Writer |
+|---|---|
+| intent, proposal, plan | prose (dev-flow) |
+| diagnose | prose (debug) |
+| research | prose (the caller acting on the `probe-unknown.js` recommendation) |
+| plan-review | rail: `dispatch-plan-review.js` `main()` |
+| implement | rail at l5/l6: `bin/autopilot.js engine implement-review` (with unit); prose at l3/l4 (dev-flow, foreman) |
+| verify | prose (dev-flow; at l6, the verification-author dispatch) |
+| code-review | rail: `hetero-review-loop.js` `main()` |
+| qc-gate | prose (quality-pipeline) |
+| finish | prose (finish-flow) |
+
+## 2.8 Guidance manifest (what the eval must cover)
+
+- **Manifest paths:** `skills/*/SKILL.md`, `skills/*/references/**`, `references/*.md`, `agents/*.md`, `project-config-template/*.md`.
+- **Change pack:** the P0 prereg lists exactly which of these files P4b and P5 change, and the P0 change pack is built from exactly those files.
+- **Cut gate:** `check-guidance-eval.js` checks two things at each cut:
+  1. Every manifest file that differs from the 2.x base is byte-equal to its copy in the evaluated pack (digests in `evals/skill-onoff/packs/manifest.json`).
+  2. Re-running the scorer on the recorded results reproduces SHIP.
+
+## 2.9 Marker schema (frozen)
+
+Kept: `level` (`l3|l4|l5|l6|null`) and the identity fields. Removed: `phase`, `phase_set_at`.
+
+New fields:
+
+| Field | Type / invariant |
+|---|---|
+| `size` | `XS\|S\|M\|L\|XL` |
+| `urgent` | bool |
+| `bug` | bool |
+| `base_ref` | commit sha |
+| `stage` | node id enum |
+| `stage_set_at` | ISO-8601 UTC with ms |
+| `unit` | `{kind: phase\|deliverable, index ≥1, total ≥1, label ≤64 chars}`, or absent |
+| `review_families` | array of family ids, e.g. `["anthropic","openai"]`; the band shows its length |
+
+**Init:** dev-flow entry runs `session-mode.js set --size <S> [--urgent] [--bug] [--base-ref <sha>]` in one lock with an atomic rename. `--base-ref` defaults to `git merge-base HEAD <default branch>`.
+
+**`stage-advance.js --to <node> [--unit kind:i/N:label] [--review-families a,b]`** exits:
+- **0** — written.
+- **2** — no marker.
+- **3** — illegal transition. Prints `{allowed:false, from, to, legal_next}`. A first write must target the entry node for (size, bug).
+- **4** — size bump required (§2.7). Prints `{bump_to}`.
+- **5** — `size` missing (init not run).
 
 ## 3. File-structure map
 
 | File | Responsibility | Phase |
 |---|---|---|
-| `references/stage-graph.json` (new) | Canonical graph: nodes, edges (incl. loop-backs), size → node set, bug entry, urgent rule, per-node writer | P1 |
-| `schemas/stage-graph.schema.json` (new) | Graph schema, gated by `check-contract-schema.js` | P1 |
-| `scripts/stage-graph.js` (new) | CLI: `nodes --size <S> [--bug] [--urgent]`, `next --from <node> --size <S>`, `validate` | P1 |
-| `scripts/stage-advance.js` (new) | Validates a transition against the graph, then writes the marker's stage fields through `session-mode.js`; refuses illegal jumps with a reason | P2 |
-| `scripts/session-mode.js` | Marker gains `stage`, `stage_set_at`, `size`, `urgent`, `unit {index,total,label}`, `review_families`; `--phase` and the `phase`/`phase_set_at` fields are removed | P2 |
-| `scripts/sync-version.js`, `scripts/preflight-release.sh`, version comparators (`hooks/version-drift-check*`, any `\d+\.\d+\.\d+` version regex P-R finds) | Accept `X.Y.Z-alpha.N`; shields badge escaping; prerelease ordering | P-R |
-| `schemas/` marker contract, `scripts/check-contract-schema.js` | New marker fields | P2 |
-| `src/status/phase-input.js`, `src/status/planned-input.js` | Read the structured fields | P2 |
-| `scripts/dispatch-plan-review.js`, `scripts/hetero-review-loop.js`, QC entry (`scripts/qc-panel.js` / qc-gate caller — P3 pins the exact entry), finish-flow's closing script entry | Call `stage-advance.js` on node entry; record `review_families` | P3 |
-| `scripts/probe-unknown.js`, `scripts/decision-ledger.js`, `scripts/dispatch-discuss.js` (consumer side) | New rungs: panel, experiment; eligibility rules; receipts | P4 |
-| `skills/dev-flow/SKILL.md` (+ `references/`), `skills/finish-flow/SKILL.md`, `skills/ceo-agent/SKILL.md` + `references/{level-front-door,depth0-control-loop,tree-adapter}.md`, `skills/team/SKILL.md`, `skills/{debug,think-tank,l4,l5,l6}/SKILL.md` (ladder call sites), `references/plan-template.md`, `references/hetero-dispatch.md`, other 1-hit references from the footprint | Guidance rewrite to graph vocabulary; boy-scout trim | P4 (ladder text), P5 |
-| `project-config-template/{dev-flow-config,finish-flow-config,review-loop-config}.md` | Graph vocabulary; G1 default (low-risk review = 1 family, fresh context) | P5 |
-| `profiles/*`, `platforms/codex/plugin/*`, `evals/skill-onoff/packs/*` | Hash re-pin (`profiles-hash-repin` sequence), mirror sync, re-freeze packs | P5 |
-| `scripts/check-backlog-entries.js`, `scripts/next-pick.js`, `scripts/migrate-backlog-entries.js`, `docs/BACKLOG.md` | Effort enum = graph sizes + urgent suffix; migration | P6 |
-| `scripts/check-canonical-invariants.sh` | Old-id grep gate (KR4); drop the pinned `S-scope-gate` literal | P5 |
-| `evals/skill-onoff/{tasks,prereg,lib}/*`, `hooks/tests/skill-onoff-*.test.sh` | New task set + answer key, stage-order checker keyed on the graph instead of `L-1 L-3 L-4 L-5` | P0 |
-| `mods/live/{band.tsx,pane.tsx,model.ts}`, `docs/plans/evidence/2026-10-04-mods-p1c/gate/check.js` | TUI band V4a + ⓘ panel on the new fields; per-field gate + colored screenshot | P7 |
-| `CHANGELOG.md`, `docs/projects/INDEX.md`, version mirrors | alpha cuts, then the 3.0.0 release | P8 |
+| `references/stage-graph.json`, `schemas/stage-graph.schema.json` (new) | §2.7 as data | P1 |
+| `scripts/stage-graph.js` (new) | `nodes --size S [--bug] [--urgent] [--high-risk]`, `next --from N --size S [same flags]`, `validate` | P1 |
+| `hooks/tests/fixtures/stage-graph/expected.json` (new) | Frozen fixture: 30 sequences (5 sizes × 2 entries × 3 urgency) | P0 |
+| `scripts/session-mode.js`, marker schema | §2.9 fields and init flags (P2a); remove `--phase`/`phase`/`phase_set_at` (P2b) | P2 |
+| `scripts/stage-advance.js` (new) | Transition legality, bump check, marker write | P2a |
+| `src/status/phase-input.js`, `planned-input.js`, watcher, review page | Read §2.9 fields only | P2b |
+| `scripts/dispatch-plan-review.js`, `scripts/hetero-review-loop.js`, `bin/autopilot.js` engine implement-review | Rail writers (§2.7) | P3 |
+| `scripts/probe-unknown.js`, `scripts/decision-ledger.js` | U3 panel, U4 experiment, owner → U5 | P4 |
+| `scripts/check-stage-vocab.js` (new) | KR4 gate; `--repo` consumer report; semantic U4 check | P5 |
+| `scripts/check-guidance-eval.js` (new) | §2.8 cut gate, called by `preflight-release.sh` | P0 (written), P8 (wired) |
+| Guidance manifest files (§2.8) | Graph vocabulary; ladder text | P4b, P5 |
+| `profiles/*`, `platforms/codex/plugin/*`, `evals/skill-onoff/packs/*` | Hash re-pin, mirror sync, pack freeze | P5 |
+| `scripts/{check-backlog-entries,next-pick,migrate-backlog-entries}.js`, `docs/BACKLOG.md` | Effort = sizes + suffix; migration | P6 |
+| `scripts/sync-version.js`, `scripts/preflight-release.sh`, version comparators | Pre-release support | P-R |
+| `mods/live/{band.tsx,pane.tsx,model.ts}`, `docs/plans/evidence/2026-10-04-mods-p1c/gate/check.js` | V4a band + ⓘ panel; per-field gate | P7 |
 
-## 4. Phases
+## 4. Phases and landing trains
 
-Phase sizes below use the **pre-plan** dev-flow vocabulary (S/L/H/Fix), because the new vocabulary does not exist until P5 lands.
+Phase sizes use the **pre-plan** vocabulary (S/L/H/Fix), because the new one does not exist until P5.
 
-**Commit streams:**
-- **mechanism:** P1, P2, P3, P6-code, P7. These need no eval, and their commits must not edit requirement text.
-- **guidance:** P4-text and P5. These ship only after their eval verdict.
+- **Train A** (additive; may land on develop any time, because it changes no existing behavior; develop's working tree is what this host loads via the directory marketplace): P-R, P0, P1, P2a, P4a.
+- **Train B** (breaking; built in a worktree on `release/3.0.0`, merged to develop only at the alpha.1 cut with every invariant green): P2b, P3, P4b, P5, P6, then P7 (alpha.2).
 
-### P0 — Pre-register the evals (S)
+### P-R — pre-release tooling (S; mechanism; Train A)
 
-1. Freeze the base packs from live HEAD with `evals/skill-onoff/freeze-pack.js`:
-   - dev-flow (+ references), finish-flow, ceo-agent, team;
-   - the ladder call-site skills: debug and think-tank.
-2. Write the task set, `evals/skill-onoff/tasks/stage-graph-*`, at least 12 briefs:
-   - each size;
-   - bug vs feature;
-   - urgent with and without high-risk paths;
-   - one U0-known and two research-needing.
-3. Freeze the answer key: expected size, entry node, node order and, for the ladder, the expected first rung.
-4. Write a pre-registration in `evals/skill-onoff/prereg/`:
-   - **metric:** agreement with the answer key. Size and entry node are exact; node order is scored on the transcript's `stage-advance` calls.
-   - **ship rule:** to be set in this phase, not after seeing data.
-   - **planted-red:** a pack whose graph text is deliberately wrong must fail the rule.
-5. Re-key the stage-order checker (`lib/p1w-markers.sh`) on `stage-graph.js next` instead of the hard-coded `L-1 L-3 L-4 L-5`.
+1. `sync-version.js` accepts `X.Y.Z(-(alpha|beta|rc).N)?`. In shields badge paths, `-` is escaped as `--`.
+2. `preflight-release.sh`, and every comparator found by `grep -rn '\\d+\\.\\d+\\.\\d+'` in `scripts/` and `hooks/`, order a pre-release below its release (semver §11).
+3. Probe once with the real `claude plugin list` that a pre-release plugin.json loads, and record the output in the evidence dir.
 
-**Acceptance:** prereg committed before any P4 or P5 text exists, and the planted-red fixture fails under `hooks/tests/skill-onoff-*.test.sh`.
+**Acceptance:** fixture tests round-trip `3.0.0-alpha.1 → alpha.2 → 3.0.0`, and the probe output is recorded.
 
-### P1 — Graph data + query CLI (L)
+### P0 — eval pre-registration (S; eval; Train A; before P1)
 
-1. Write `references/stage-graph.json` from §0.1–§0.5:
-   - nodes and edges;
-   - loop-backs `verify→implement`, `code-review→implement`, `qc-gate→implement`, `plan-review→plan`;
-   - size → node set as in the proposal page table;
-   - bug entry `diagnose`, replacing `intent`/`proposal`;
-   - urgent: code-review moves after `finish`'s merge unless `classify-diff-risk.sh` reports high;
-   - each node's writer: a rail script, or `prose` for intent, plan, implement.
-2. Write the schema and add it to `check-contract-schema.js`.
-3. Implement `stage-graph.js`.
-4. Wire it into the four discovery points named in CLAUDE.md.
+1. Write `expected.json` from §2.7.
+2. Freeze base packs from HEAD (`evals/skill-onoff/freeze-pack.js`) for every §2.8 file that P4b/P5 will change.
+3. Write `evals/skill-onoff/tasks/stage-graph-*`, 12 briefs:
+   - XS/S/M/L feature;
+   - XL deliverable;
+   - XS and M bug;
+   - `S!`, plus `M!` with a high-risk path;
+   - one U0-known L;
+   - two research-needing L.
 
-**Acceptance:**
-- `stage-graph.js nodes --size XS` prints `["implement","qc-gate","finish"]`.
-- `next --from verify --size L` includes `implement` and `code-review`.
-- `validate` fails on a planted graph with an unreachable node.
-- Tests live in `hooks/tests/stage-graph.test.sh`.
+   Each brief has an answer key: size, bug, urgent, research yes/no, the expected sequence taken from `expected.json`, and the expected first rung.
+4. Write the scorer `evals/skill-onoff/score-stage-graph.js`. It extracts, in order, from Bash `tool_use` events via `lib/transcript-query.js`:
+   - `session-mode.js set --size … [--bug] [--urgent]`;
+   - `stage-advance.js --to …`;
+   - the first `probe-unknown.js` recommend.
 
-### P2 — Structured marker + `stage-advance.js` (L)
+   **Rep passes** when size, bug and urgent are exact, the first target is the expected entry node, and the observed sequence is a prefix of the expected one with length ≥ min(3, expected).
+   **Task passes** when 2 of 3 reps pass.
+5. Freeze the ship rule in `evals/skill-onoff/prereg/stage-graph.md` (reps 3, sonnet):
+   - the change arm passes ≥ 10/12 tasks;
+   - a planted-red arm (graph text with M and S swapped) passes ≤ 6/12;
+   - no `skill-onoff-generic` marker that base passes in ≥ 2/3 reps may regress.
 
-1. Add the new fields to `session-mode.js set` with the same lock and atomic-rename discipline as `--phase`.
-2. `stage-advance.js --to <node> [--unit i/N:label] [--review-families n]` reads the current marker stage, then:
-   - asks `stage-graph.js next` whether the move is legal;
-   - writes on legal;
-   - exits 3 with `{allowed:false, from, to, legal_next}` on illegal.
-   - A first write with no current stage is legal only into the size's entry node.
-3. Update `phase-input.js` and `planned-input.js` to read the structured fields only. Remove `--phase`, `phase` and `phase_set_at` everywhere they are written or read: the watcher, the review page, the band and their tests. No dual-read period.
+   A failure is recorded and the revision is a new arm. There is no rerun-until-green.
+6. Write `check-guidance-eval.js` (§2.8), and re-key `lib/p1w-markers.sh` on `expected.json`.
 
 **Acceptance:**
-- Tests cover a legal chain from entry to finish for every size.
-- An illegal jump (`plan → implement` on size L, skipping plan-review) is refused.
-- A test with no marker exits 2.
-- A repo-wide grep finds no reader or writer of the removed `phase` field outside history.
+- The prereg is committed before any P4b/P5 text exists.
+- The planted-red fixture fails in `hooks/tests/skill-onoff-*.test.sh`.
+- `check-guidance-eval.js` fails on a fixture whose shipped file differs from its pack copy.
 
-### P3 — Rails write the marker on node entry (L)
+### P1 — graph data + CLI (L; mechanism; Train A; after P0)
 
-1. Pin the node→writer table: for each rail node, the exact script and line where the node begins.
-   - The `qc-gate` and `finish` entries are to be identified in this phase. If a node has no single entry script, it becomes a `prose` writer and is recorded so, not invented.
-2. Each rail calls `stage-advance.js` on entry and passes `--review-families` from its resolved panel.
-3. Failure handling is fail-open: a refused or failed stage write never blocks the rail, and it prints one stderr line.
+1. Write `stage-graph.json` and its schema, wired into `check-contract-schema.js`.
+2. Write `stage-graph.js`.
+3. Wire two of the four CLAUDE.md discovery points here:
+   - a `docs/scripts-inventory.md` row;
+   - the CLAUDE.md "Mission, campaign & session state" list.
 
-**Acceptance:** KR2. Every rail row has a test that runs the rail (stub engine) against a temp marker and asserts `stage` and `review_families`.
+   P5 wires the other two (the dev-flow Available Scripts row and `skills/dev-flow/references/stage-graph.md`), because those are guidance files.
 
-### P4 — Unknown ladder: panel + experiment rungs (L; guidance text after the P0 verdict)
+**Acceptance:** `hooks/tests/stage-graph.test.sh` checks exact stdout:
+- `nodes` for all 30 combinations equals `expected.json` (e.g. `nodes --size XS` → `["implement","qc-gate","finish"]`);
+- `next --from verify --size L` → `["code-review","implement"]`;
+- `next --from finish --size M --urgent` → `["code-review"]`;
+- `validate` exits 1 on a planted graph with an unreachable node.
 
-1. **Mechanism (in `probe-unknown.js`):**
-   - add rung **panel**: a multi-family discussion through `dispatch-discuss.js` when the discuss seat is qualified, and today's single-family think-tank when it is not (recorded as `skipped/not-heterogeneous`, as U1 does today);
-   - add rung **experiment**: a spike in a throwaway worktree with a pre-registered question and pass/fail criterion. Its receipt carries the criterion and the result;
-   - add the eligibility rules: panel for a `whether` unknown with S5, or any unknown after survey; experiment only when an S4 or S1 signal survives a survey;
-   - add budgets;
-   - keep `classify` from ever emitting the owner rung;
-   - order `U0 local · U1 consult · U2 survey · U3 panel · U4 experiment · U5 owner`; the owner rung renumbers U4 → U5 everywhere, no alias (§0.8).
-2. Update the four call sites and their skills (dev-flow intent/plan, debug, think-tank, the ceo foreman round end) in the guidance commit.
+### P2a — marker fields + stage-advance (L; mechanism; Train A)
+
+1. Implement the §2.9 init flags and fields, and `stage-advance.js`. `phase` stays untouched here.
 
 **Acceptance:**
-- `hooks/tests/probe-unknown.test.sh` extends with planted cases for each new rung and its exhaustion.
-- The P0 ladder rows meet their rule.
+- For each size, init then the full legal chain from `expected.json` succeeds.
+- An illegal `plan → implement` on L exits 3.
+- A first write to `plan` on size S exits 3.
+- No marker exits 2.
+- No `size` exits 5.
+- A planted over-threshold diff on XS exits 4 with `bump_to: S`.
+- A downward `set --size` is refused.
 
-### P5 — Guidance rewrite to the graph vocabulary (H-equivalent care, L size)
+### P2b — remove `phase`, switch readers (S; mechanism; Train B)
 
-1. Rewrite dev-flow's size and stage sections as:
-   - the graph (cited from `stage-graph.js`, not copied);
-   - the `stage-advance.js` calls for the prose nodes;
-   - the E1 rule: size at entry, and `diff-scope-report.sh` threshold → bump one size, threshold numbers set here.
-   - Remove `L-1…`, `S-scope-gate`, the Fix and H sections, and the duplicate "S Session End" (inventory problems 1–9). Boy-scout trim toward contract-card shape.
-2. finish-flow:
-   - closing steps become the `finish` node's checklist keyed by size;
-   - urgent: post-merge code-review that opens an `S` follow-up.
-3. ceo-agent and its references: drop the copied definitions, cite the graph, and keep the level table.
-4. team, plan-template (phase size field → new sizes), the config templates, and the review-loop template default G1.
-5. Update the `description:` lines of dev-flow, finish-flow and team.
-6. Run the P0 eval with base vs changed packs. Ship only on the frozen rule.
-7. Then:
-   - run the `profiles-hash-repin` sequence;
-   - sync the codex mirror;
-   - re-freeze the eval packs as the new base;
-   - add the KR4 grep gate.
+1. Remove `--phase`, `phase` and `phase_set_at` from `session-mode.js`.
+2. Move every reader (watcher, review page, band `model.ts` and their tests) to the §2.9 fields.
 
-**Acceptance:** KR3, KR4. The profiles chain is green, and `sync-codex-plugin-skills.sh --check` is in sync.
+**Acceptance:** `check-stage-vocab.js` finds no `phase`-field reader or writer, and the status suites are green.
 
-### P6 — Backlog effort enum hard rename (S)
+### P3 — rail writers (L; mechanism; Train B)
 
-1. `check-backlog-entries.js`: valid values are the sizes from `stage-graph.json`, plus an optional `!`/`急` suffix.
-   - Old `Fix`/`H` are rejected with the mapping message.
-   - `XL` becomes valid, so the negative fixture changes.
+1. The three rails in §2.7 call `stage-advance.js` on entry. They pass `--review-families` from the resolved panel, and `--unit` where the engine knows it.
+2. A failed or refused write is fail-open: the rail continues, and prints exactly one stderr line `stage-advance: <exit> <reason>`.
+
+**Acceptance:** KR2. Each rail is run with a stub engine against a temp marker and asserts `stage`, `review_families` and `unit`. A forced exit 3 produces the one-line diagnostic, and the rail still exits 0.
+
+### P4 — ladder: U3 panel, U4 experiment, U5 owner (L; P4a mechanism on Train A, P4b renumber + text on Train B)
+
+**P4a** is additive and sits behind `unknown_ladder_v3`, default off. P4b deletes the knob.
+
+- **Budgets** use probe-unknown's existing unit (per work unit): U1 2, U2 1, U3 1, U4 1.
+- **U3 panel:**
+  - Eligibility: today's U3 rule, a hard why/whether signal (S1/S2/S3/S5).
+  - Rail: `dispatch-discuss.js` when the discuss seat is qualified. Otherwise think-tank (`whether`) or the debugger PUA (`why`), with `heterogeneous:false, reason:not-heterogeneous`.
+  - Receipt: the existing ladder row plus `rail` and `families[]`.
+- **U4 experiment:**
+  - Eligible only after a U2 receipt exists for the work unit and S4 or S1 is still present.
+  - Runs as a spike in a throwaway worktree.
+  - Receipt adds `question`, `criterion`, and `result: pass|fail|inconclusive`.
+- **Exhaustion** is unchanged: a used rung is never repeated, and when everything is spent the result is `recommend:none, reason:budget-exhausted`.
+- **U5 owner** is reached only by the caller's own stop. `classify` never emits it.
+
+**P4b** renumbers:
+- `probe-unknown.js` lines 20, 31, 32, 76, 85, 403, 437;
+- `decision-ledger.js` lines 31, 70, 94;
+- `hooks/tests/probe-unknown.test.sh` lines 67, 69, 72, 138.
+
+It also rewrites the ladder text in `skills/{debug,l4,l5,l6}/SKILL.md`, `skills/ceo-agent/SKILL.md`, `references/depth0-control-loop.md`, `references/hetero-dispatch.md`, `docs/scripts-inventory.md`, and the dev-flow intent/plan and think-tank call sites, then re-syncs the mirrors. The unrelated `U4` in `BACKLOG.md:791` and `mission-convergence.test.sh:256` is excluded by path in `check-stage-vocab.js`.
+
+**Acceptance:**
+- `probe-unknown.test.sh` has planted cases for each new rung's eligibility, receipt and exhaustion, and for classify never emitting U5.
+- `check-stage-vocab.js` fails a fixture with `U4` next to owner words.
+
+### P5 — guidance rewrite (L; guidance; Train B; after P0, P2a)
+
+1. **dev-flow:**
+   - sizes, entry and init per §2.9;
+   - stage calls that cite `stage-graph.js`;
+   - the E1 bump;
+   - remove `L-1…`, `S-scope-gate`, the Fix/H sections and the duplicate S session-end;
+   - contract-card trim.
+2. **finish-flow:** the `finish` checklist keyed by size, and the urgent post-finish code-review.
+3. **ceo-agent:** cite the graph, keep the level table.
+4. **team**, `references/plan-template.md`, the config templates, and the G1 default in `review-loop-config.md`.
+5. The `description:` lines of dev-flow, finish-flow and team.
+6. The P1-deferred discovery rows.
+7. Run the P0 eval: base vs change, plus planted-red.
+8. On SHIP:
+   - `profiles-hash-repin`;
+   - codex mirror sync;
+   - re-freeze the packs;
+   - wire `check-stage-vocab.js` into `check-canonical-invariants.sh` and drop its `S-scope-gate` literal.
+
+**Acceptance:** KR3 and KR4; the profiles chain is green; `sync-codex-plugin-skills.sh --check` is in sync.
+
+### P6 — backlog effort rename (S; mechanism; Train B)
+
+1. `check-backlog-entries.js`: valid values are the sizes from `stage-graph.json` plus an optional `!`/`急`. `Fix` and `H` are rejected with the mapping and the migration command. `XL` becomes valid, so its negative fixture changes.
 2. `next-pick.js`:
-   - parses the suffix instead of silently dropping it;
-   - the human-gate rule moves from `L|H` to `L|XL` or urgent;
-   - the tie-break is re-derived.
-3. `migrate-backlog-entries.js` gains the map. Run it on `docs/BACKLOG.md`.
+   - parses the suffix;
+   - human gate = `L|XL` or urgent;
+   - tie-break `XS > S > M`.
+3. Migrate `docs/BACKLOG.md`.
 
-**Acceptance:** KR5, plus fixture tests for each old value.
+**Acceptance:** KR5, plus a fixture for each old value.
 
-### P7 — TUI band + ⓘ panel on the new data (L)
+### P7 — TUI band + ⓘ panel (L; mechanism; Train B → alpha.2)
 
-1. Implement V4a as decided in the TUI README:
-   - one line: theme-key glyph, verdict word, `size·level ▸ stage`, unit `k/N` (frozen only), `·n族`, indicators, then `ⓘ`;
-   - a panel with the legend, the current detail, and the graph with the current node highlighted.
-2. Update `gate/check.js` to judge per field, add the colored-screenshot step, and re-run the real-machine gate in every mode.
+1. Implement V4a (TUI README) on the §2.9 fields:
+   - band line: `size·level ▸ stage`, `unit k/N`, `·n族`, and the `stage_set_at` age;
+   - panel: legend, detail, and the graph with the current node highlighted.
+2. `gate/check.js`:
+   - judges each slot against its marker field, expected output `PASS <mode> fields=<n>`;
+   - adds a colored-screenshot step (`capture-pane -e` → `ansi2html.py` → headless chrome).
+3. Re-run the gate in every mode.
 
 **Acceptance:** KR1.
 
-### P-R — Release tooling accepts pre-releases (S; mechanism; runs first, in parallel with P0/P1)
+### P8 — cuts (S; release; repeated)
 
-1. `sync-version.js`: accept `X.Y.Z` and `X.Y.Z-alpha.N` (also `beta`/`rc`). Shields badges need `-` escaped as `--` in the badge path.
-2. `preflight-release.sh` and every version comparator found by a repo grep (`version-drift-check`, plan graduation, INDEX parsing) order pre-releases below their release, following semver §11.
-3. Probe once with the real `claude plugin` CLI that a plugin.json carrying a pre-release version loads and is listed correctly. Record the run. The claim is not shipped without it.
+**Cut points:**
+- alpha.1 = Train B merged (P2b, P3, P4b, P5, P6) with every invariant green.
+- alpha.2 = P7.
+- 3.0.0 = owner sign-off plus the KR1 gate.
 
-**Acceptance:**
-- Tests round-trip `3.0.0-alpha.1 → 3.0.0-alpha.2 → 3.0.0` through `sync-version.js` and `preflight-release.sh` fixtures.
-- The CLI probe output is recorded in the evidence dir.
+**Each cut:**
+1. A CHANGELOG section. 3.0.0's folds in the mods P1W entries and `a2b91aef`'s Unreleased section, plus migration and rollback.
+2. The INDEX row.
+3. `preflight-release.sh`, now calling `check-guidance-eval.js`.
+4. Plan graduation (final cut only).
+5. Ask the owner before every push.
 
-### P8 — Cut alphas, then release 3.0.0 (S, repeated)
+**Dependency map:**
+- `P0 → P1 → P2a → {P2b, P3, P5}`
+- `P0 → P5`
+- `P4a → P4b → P5`
+- `P1 → P6`
+- `P-R → P8`
+- `{P2b, P3, P4b, P5, P6} → alpha.1`
+- `P7 → alpha.2 → 3.0.0`
 
-1. Cut points:
-   - `3.0.0-alpha.1` after P5 + P6 land: the new vocabulary is live and the owner dogfoods the graph.
-   - `3.0.0-alpha.2` after P7: the TUI band.
-   - Further alphas as fixes accumulate.
-   - `3.0.0` once the owner signs off and the real-machine gate passes.
-2. Each cut gets a CHANGELOG section. 3.0.0's section carries migration and rollback and folds in the mods P1W entries and `a2b91aef`'s Unreleased section.
-3. Each cut also needs: the INDEX row, plan graduation (final only), and `preflight-release.sh`.
-4. Ask the owner before every push.
-
-**Dependency map:** `P0 → {P4, P5}`; `P1 → P2 → P3 → P7`; `P1 → {P5, P6}`; `P4 → P5`; `P-R → P8`; `{P5, P6} → alpha.1`; `{P3, P7} → alpha.2 → 3.0.0`. P-R, P0 and P1 can run in parallel; P4-mechanism can run in parallel with P2/P3.
+P-R and P0 run first, in parallel. P4a runs in parallel with P1/P2a.
 
 ## 5. Test / validation
 
 - **Script-gated:**
-  - per-phase tests (§4);
+  - per-phase acceptance;
   - `check-contract-schema.js`;
-  - `check-canonical-invariants.sh` (KR4);
-  - the profiles hash chain;
-  - codex mirror parity;
-  - the real-machine gate kit `check.js` (per field).
-- **Eval-gated:**
-  - P0 prereg: frozen answer key, frozen ship rule, planted-red that must fail;
-  - run with `evals/skill-onoff/run-skill-onoff-matrix.sh`;
-  - scored mechanically with `score-onoff.js` or a sibling scorer keyed on the answer key.
-  - No rerun-until-green: a failing verdict is recorded, and the text is revised as a new arm.
+  - `check-stage-vocab.js`;
+  - `check-guidance-eval.js`;
+  - the profiles chain;
+  - mirror parity;
+  - `gate/check.js`.
+- **Eval-gated:** P0's frozen rule, with a planted red and no rerun-until-green.
 - **Human-gated:**
-  - this proposal page (done);
-  - the colored-screenshot judgment of the band (§55);
-  - the push.
+  - the proposal page (done);
+  - the colored-screenshot judgment;
+  - each push.
 
 ## 6. Risks + inversion
 
-What would guarantee failure, and the mitigation for each:
-
-- **The eval cannot tell base from change**, because the task set is too easy and a vacuous FULL==OFF passes. Mitigation: a planted-red pack must fail, P0 acceptance.
-- **The model skips the prose `stage-advance` calls**, leaving the band stale on intent, plan and implement.
-  - `stage-advance` refuses illegal jumps but cannot force a call.
-  - Mitigation: the band shows the age of `stage_set_at`, and the gate kit asserts that stages advance during real runs.
-  - An event-inferring hook (proposal option C3, not chosen) goes to BACKLOG with a ticket if the gate shows staleness.
-- **The breaking rename strands consumers.** Mitigations:
-  - a reject message that names the mapping and the migration command;
-  - a migration section in the CHANGELOG;
-  - rollback to the 2.x tag.
-- **Scope**: F2 roughly doubles the plan, and the TUI waits behind P0–P6.
-  - The owner accepted this (no placeholder UI).
-  - Mitigation: run P1/P0 and P4-mechanism in parallel, and keep each phase independently landable on develop. Nothing releases until P8.
-- **Hash-chain and mirror churn** from repeated SKILL.md edits. Mitigation: all skill text lands in one P5 guidance commit, and the re-pin runs once.
-- **The graph drifts from prose again.** Mitigation: B1 means prose cites the CLI, and the KR4 gate catches old ids. The inverse risk is a prose copy of the node list, which a P5 review must reject.
+- **A vacuous eval.**
+  - Mitigation: a planted-red arm must fail, and the exact-sequence fixture binds the scorer.
+- **Prose writers skip `stage-advance`** (six nodes are prose-written).
+  - Exit 3 refuses illegal jumps but cannot force a call.
+  - Mitigation: the band shows the `stage_set_at` age, and the gate asserts that stages advance in real runs.
+  - If staleness shows anyway, an event-inferring hook (option C3) goes to BACKLOG.
+- **The breaking change reaches develop early.**
+  - Mitigation: Train B stays on `release/3.0.0` until alpha.1.
+- **Stranded consumers.**
+  - Mitigation: the reject message names the mapping; `check-stage-vocab.js --repo`; the CHANGELOG migration section.
+- **Scope.** F2 doubles the work; the owner accepted the TUI wait.
+  - Mitigation: Train A parallelism.
+- **Hash-chain churn.**
+  - Mitigation: one P5 guidance commit and one re-pin.
+- **Graph/prose drift.**
+  - Mitigation: prose cites the CLI, and the KR4 gate catches leftovers.
 
 ## 7. Out of scope
 
-- An event-inferring stage hook (proposal option C3).
-- codeforge's own mod and the shared TUI style guide. That comes after this lands (TUI README decision 6).
-- Any change to what `/l3–/l6` mean, or to campaign engine states. Campaign states map onto `unit` progress only.
-- Re-qualifying engines for the verifier role.
-- Compatibility aliases of any kind (§0.8). P4/P5 consume the existing scorecard.
-- Cleaning up the stale `2.36.36` cache dir. That is host hygiene, and doctor already warns.
+- An event-inferring stage hook (option C3).
+- The codeforge mod and the shared TUI style guide.
+- Changes to `/l3–/l6` meaning or to campaign engine states, which map onto `unit` only.
+- Re-qualifying verifier engines.
+- The stale `2.36.36` cache, which the doctor already warns about.
+- Compatibility aliases of any kind.
 
 ## 8. Open questions (Board)
 
-None open. Resolved 2026-10-06 (§0.8–§0.9):
-- **Ladder order:** `U0 local · U1 consult · U2 survey · U3 panel · U4 experiment · U5 owner`. The owner rung renumbers U4 → U5 in every file (about 10), with no alias.
-- **2.37.0:** never cut. Pre-releases are `3.0.0-alpha.N`.
+None. Resolved 2026-10-06:
+- Ladder order: U0 local · U1 consult · U2 survey · U3 panel · U4 experiment · U5 owner, with no alias.
+- No 2.37.0.
 
 ## Review log
 
-- **R0** (2026-10-06, author Claude Opus 5.5 at depth-0): drafted from the owner discussion and the proposal page answers `A2 B1 C2 D2 E1 F2 G1`. The footprint pass that informed §2.6 and §3 was a sonnet Explore run in session e041e8fe. Frozen rubric: `docs/plans/2026-10-06-dev-flow-stage-graph.rubric.md` (R1–R11). Manifest: `docs/plans/2026-10-06-dev-flow-stage-graph.plan-review-manifest.json`, with `logical_plan_id: dev-flow-stage-graph-2026-10-06`, seats sol chair (openai), grok deep (xai) and MiniMax consult, and a minimum of 2 families.
+- **R0** (2026-10-06, Claude Opus 5.5 at depth-0): drafted from the owner discussion and the proposal-page answers.
+  - Frozen rubric: `docs/plans/2026-10-06-dev-flow-stage-graph.rubric.md` (R1–R11).
+  - Manifest: `docs/plans/2026-10-06-dev-flow-stage-graph.plan-review-manifest.json`, `logical_plan_id: dev-flow-stage-graph-2026-10-06`.
+  - Seats: sol chair (openai), grok deep (xai), MiniMax consult; minimum 2 families.
+- **G1** (2026-10-06): CONDITIONAL. Transport was complete (3/3 seats), with 16 blocker candidates.
+  - Artifact: `docs/plans/2026-10-06-dev-flow-stage-graph.g1-artifact.json`.
+  - Depth-0 dispositions: `….g1-dispositions.json` — 9 accepted blockers; the rest duplicates or accepted non-blocking; none rejected.
+- **R1** is the bounded repair of the accepted G1 blockers and nothing else:
+  - §2.7 graph and writers;
+  - §2.8 guidance manifest and cut gate;
+  - §2.9 marker schema;
+  - the P0 scorer and ship rule;
+  - P4 budgets and receipts;
+  - landing trains;
+  - E1 thresholds;
+  - named discovery points.

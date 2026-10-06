@@ -230,7 +230,7 @@ Ask which posture to take toward scope:
 > 3. **Hold** — make it bulletproof, no scope changes in either direction
 > 4. **Reduce** — ruthless minimalism, strip to absolute essentials
 
-Default if user doesn't choose: **Hold** for S-size tasks, **Selective** for L-size tasks.
+Default if user doesn't choose: **Hold** for XS/S tasks, **Selective** for M/L/XL tasks.
 
 Scope mode shapes how the CEO handles every fork in the road:
 - **Expand**: when encountering optional improvements, propose them enthusiastically with effort estimate
@@ -256,7 +256,7 @@ Ask if anything is absolutely off-limits. If none, use default DOA.
 |---------------|----------|
 | Tech selection | zstd vs deflate, which library |
 | Research | Invoke `autopilot:survey` only when the unknown-escalation ladder probe says `recommend: U2` with budget left; a judgment-only research wish is recorded as a ledger `note`, never dispatched |
-| Unknown escalation | Climb U1–U2 when `scripts/probe-unknown.js classify` recommends them (read-only, budgeted per `review-loop-config.md`); U3 by `unknown_type` (`whether` → think-tank, `why` → debugger PUA); U4 is a Board escalation, never a CEO decision |
+| Unknown escalation | Ladder U0 local · U1 consult · U2 survey · U3 panel · U4 experiment · U5 owner. Climb U1–U4 when `scripts/probe-unknown.js classify` recommends them (budgeted per `review-loop-config.md`): U3 panel via dispatch-discuss when the discuss seat is qualified, else think-tank (`whether`) / debugger PUA (`why`); U4 = a spike in a throwaway worktree, only after a U2 receipt with the unknown still present, receipt `--question --criterion --result`. U5 (owner) is a Board escalation reached only by the caller's own stop (stall fuse / DOA stop) — classify never emits it |
 | Team composition | Agent count, roles, parallel vs sequential |
 | Implementation path | Phase order, file structure, API design |
 | Error recovery | Build failure fix, test failure handling |
@@ -273,7 +273,7 @@ Record all decisions in CEO Report for traceability. No prior approval needed, b
 | Irreversible ops | Delete files/branches, force-push, drop tables | Cannot undo |
 | Resources 2x+ | Work estimate doubles original | Exceeds implied budget |
 
-**Note on merge as an "irreversible op"**: Merging into `develop` is within CEO DOA for L-size workflows; see [references/level-front-door.md](references/level-front-door.md) § "Mid-run question discipline".
+**Note on merge as an "irreversible op"**: Merging into `develop` is within CEO DOA for M/L/XL workflows; see [references/level-front-door.md](references/level-front-door.md) § "Mid-run question discipline".
 
 When encountering these, pause and propose:
 
@@ -291,11 +291,11 @@ When encountering these, pause and propose:
 
 ```
 1. Confirm OKR + involvement level + scope mode + red lines
-2. Size the task (S/L/H) — same criteria as dev-flow
-   IF S-size: create S-scope-gate TaskCreate BEFORE any implementation (see Scope Creep
-   Detection section). CEO mode does NOT exempt this — "I'll track scope mentally" is
-   exactly the failure mode the TaskCreate exists to prevent.
-3. IF L-size:
+2. Enter the stage graph — size the task XS/S/M/L/XL (`--bug` for a bug, `--urgent` for `S!`), same criteria as dev-flow:
+   `node scripts/session-mode.js set --size <size> [--urgent] [--bug]`. Walk with
+   `node scripts/stage-advance.js --to <node>`; the node sequence is `node scripts/stage-graph.js nodes --size <size>`.
+   CEO mode does NOT exempt entry or the E1 size bump (see Scope Creep Detection).
+3. IF M/L/XL (multi-deliverable work):
    a. Create project dir (<projects_dir>/YYYY-MM-DD-<name>/)    ← MANDATORY, not optional
       projects_dir from `scripts/resolve-project-paths.sh --target <repo>`; never literal docs/.
       `projects_dir: none` ⇒ STOP and ask the user where projects live; a mandatory step
@@ -303,37 +303,24 @@ When encountering these, pause and propose:
    b. Write README.md with OKR, phases, success criteria
    c. Update INDEX.md
    c2. `scripts/tree.js init <proj>` + emit root node — tree dual-run (shadow) is
-      the DEFAULT for CEO L-size tasks (Board directive 2026-06-12: accumulate
+      the DEFAULT for CEO multi-deliverable tasks (Board directive 2026-06-12: accumulate
       calibration samples + audit trail; TaskCreate stays authoritative, zero
       authority change). Skip only if the Board says so for this task.
    d. Create feature branch
-   e. **Scope Completeness Audit** (MANDATORY before phase TaskCreate):
-      TaskCreate "L-1.5: Scope completeness audit" as the FIRST task. Walk the
-      dev-flow L-1 dimensions checklist (source/tests/docs/API/templates/CHANGELOG/
+   e. **Scope Completeness Audit** (`intent` node, MANDATORY before phase TaskCreate):
+      TaskCreate "intent: scope completeness audit" as the FIRST task. Walk the
+      dev-flow `intent` dimensions checklist (source/tests/docs/API/templates/CHANGELOG/
       version/migration/consumers/dogfood). For each "yes" row, add a phase task
       OR record it as explicitly out-of-scope in README. Do not proceed to (f) until
-      README scope boundary reflects this coverage. Historical rationale: scope holes
-      cannot be recovered by the L-5 forcing function — a phase plan that correctly
+      README scope boundary reflects this coverage. A phase plan that correctly
       executes an incomplete scope still ships incomplete work.
-   f. TaskCreate phase tasks (P0..PN) AND both dev-flow parent forcing-function tasks:
-      "L-1.6: Skill routing — invoke required skills for all affected code areas" and
-      "L-5: Invoke autopilot:finish-flow". The parent tasks are the forcing functions
-      for skill routing and L-5 completion and are NON-OPTIONAL — missing either =
-      failed L-1 gate.
-   L-size four-stage default: plan hetero loop review → dispatch → per-phase hetero review → qc gate (with `autopilot:hetero-review` running plan-loop and code-loop stages).
+   f. TaskCreate phase tasks (P0..PN; each phase is a graph `unit`) AND both forcing-function tasks:
+      "intent: skill routing — invoke required skills for all affected code areas" and
+      "finish: invoke autopilot:finish-flow". Both are NON-OPTIONAL — missing either =
+      failed intent gate.
    CEO mode does NOT exempt project setup. "I'll track it mentally" is NOT acceptable.
-4. IF H-size:
-   a. Create hotfix branch (`hotfix/<description>`).
-   b. TaskCreate parent "H-9: Invoke autopilot:finish-flow" closing task with full description:
-      ```
-      TaskCreate: "H-9: Invoke autopilot:finish-flow"
-        description: MANDATORY hotfix completion. Invoke autopilot:finish-flow
-        which will expand into 6 discrete sub-tasks (verify fix, quality gate,
-        merge to main --no-ff, post-incident learn [MANDATORY], delete hotfix
-        branch, session end). Do not mark completed until all 6 sub-tasks
-        reach completed.
-      ```
-   The parent task is the forcing function for H-9 and is NON-OPTIONAL.
+   Review layers (per-phase verifier, one hetero code review on the full diff, qc gate): `node scripts/stage-graph.js nodes --size <size>`; strength per `scripts/resolve-review-loop.sh`.
+4. IF urgent (`S!` / `M!`): create a `hotfix/<description>` branch; finish-flow carries the urgent closing (post-finish code-review) and learn is unconditional.
 5. Execute phases:
    - Within DOA? → CEO decides, record
    - Beyond DOA? → Pause, propose to Board
@@ -341,10 +328,10 @@ When encountering these, pause and propose:
 7. Need research? → run `node scripts/probe-unknown.js classify --ledger <ledger> --work-unit <run> --terms <nouns>`; invoke `autopilot:survey` only on `recommend: U2` with budget left, then `node scripts/probe-unknown.js receipt --ledger <ledger> --rung U2 --unknown-type <type> --terms <terms> --signals <ids from classify> --work-unit <run>`; a judgment-only wish becomes a ledger `note`, not a dispatch
 8. Need multi-perspective analysis? → Invoke think-tank (see trigger rules above)
 9. Need parallel execution? → Pick the first AVAILABLE entry from `.claude/dispatch-config.md` → Parallel Dispatch. If no config file exists, or `superpowers:dispatching-parallel-agents` is listed but the plugin is not installed, fall back to `native` — issue multiple `Task` tool calls in a single response. (dev-flow session rules inject team config either way.)
-   - For L-size parallel dispatch: use Seven-Element Task Prompt from [references/task-prompt-templates.md](references/task-prompt-templates.md)
-   - Every subagent prompt MUST include a `### SKILLS` section instructing the subagent to invoke each required skill via the Skill tool before touching code. Paraphrasing a skill's methodology in the prompt is NOT a substitute — same discipline dev-flow L-1.6 enforces on the main session, applied to dispatch.
+   - For M/L/XL parallel dispatch: use Seven-Element Task Prompt from [references/task-prompt-templates.md](references/task-prompt-templates.md)
+   - Every subagent prompt MUST include a `### SKILLS` section instructing the subagent to invoke each required skill via the Skill tool before touching code. Paraphrasing a skill's methodology in the prompt is NOT a substitute — same discipline dev-flow's intent-node skill routing enforces on the main session, applied to dispatch.
    - Subagents report via [COMPLETION] / [ESCALATION] structured formats
-10. At workflow end (L or H): invoke `autopilot:finish-flow`. Execute all sub-tasks autonomously
+10. At the `finish` node (every size): invoke `autopilot:finish-flow`. Execute all sub-tasks autonomously
     within DOA. Do NOT pause between sub-tasks to ask the user — the forcing function is not
     a pause point, it is a completeness gate.
 11. Final CEO Report with complete decision log.
@@ -352,31 +339,14 @@ When encountering these, pause and propose:
 
 ## Scope Creep Detection (mandatory forcing function)
 
-"This is a hard gate" in passive markdown is still passive markdown. The gate requires a
-TaskCreate — see the historical rationale for L-1.6 and L-5: passive bullets get mentally
-compressed into "I know this". CEO mode provides no exemption.
+"This is a hard gate" in passive markdown is still passive markdown. The size gate is mechanical:
+`stage-advance.js` into `verify` or `qc-gate` compares the diff to the size limits
+(`node scripts/stage-graph.js limits --size <size>`) and exits 4 with `bump_to` when the work outgrew its size.
+CEO mode provides no exemption: run `session-mode.js set --size <bump_to>`, advance to
+`stage-graph.js next --from <current stage>` under the new size (never retry the original `--to`), and for a bump
+into M/L/XL create the project dir + README + INDEX retroactively and record prior commits as completed phases.
 
-**S → L escalation** — create this at S-start before ANY implementation:
-
-```
-TaskCreate: "S-scope-gate: Evaluate scope before every commit"
-  description: MANDATORY before every commit. Check all three indicators:
-    (1) Fewer than 3 commits on this task so far?
-    (2) Fewer than 3 different modules touched?
-    (3) No features added beyond original goal?
-  If ANY indicator is NO → STOP. Escalate to L:
-    - Create project dir + README + INDEX (retroactive)
-    - Record prior commits as completed phases
-    - Create L-1.6 and L-5 TaskCreates, then continue with L Workflow tracking
-  Mark this task ONLY when: work is complete AND scope stayed S throughout (all YES),
-  OR L-escalation is complete and project tracking is in place.
-```
-
-CEO's "Focus as subtraction" cognitive pattern is a thinking instinct — not a substitute for
-the TaskCreate. The task stays pending and surfaces before every tool use; the instinct only
-fires when the CEO thinks to invoke it. Use both.
-
-**L scope expansion** (L work grows beyond its original README scope boundary):
+**Scope expansion** (M/L/XL work grows beyond its original README scope boundary):
 
 ```
 After every phase, ask: "Does remaining scope still match the README scope boundary?"
@@ -473,34 +443,33 @@ with exit 3). See `references/model-routing.md` §"Tree roles".
 |-------|-------|
 | Ask user about every small decision | Tactical: autonomous + record |
 | Report only good news | Risks and bad news are more important |
-| Skip quality-pipeline "because I'm sure" | L / H run it at the merge boundary via finish-flow L-5.2 / H-9.2 |
+| Skip quality-pipeline "because I'm sure" | the `qc-gate` node runs it before `finish`; finish-flow re-checks at the merge boundary |
 | Pivot without evidence | Must have data/research backing |
 | Silently expand scope | Beyond original scope → must report |
 | Same fix strategy after repeated failure | Consecutive failures → circuit breaker |
-| L-size work without project dir | **Always** create project + README + INDEX |
+| M/L/XL work without project dir | **Always** create project + README + INDEX |
 | "CEO mode exempts me from project tracking" | CEO wraps dev-flow, does not skip it |
-| Scope grew from S→L but no project created | Scope creep detection gate → stop and create |
+| Scope grew past its size but no project created | Scope creep detection gate → stop and create |
 | "I'll track it in my head" | TodoWrite is the tracking mechanism, not memory |
-| Skip S-scope-gate TaskCreate "CEO's Focus-as-subtraction instinct covers this" | Cognitive patterns fire when you think to invoke them; the TaskCreate surfaces before every tool use. Use both |
-| Evaluate S-scope-gate only at task end rather than before every commit | Task must be created at S-start; system-reminder surfaces it continuously, not just at completion |
+| Ignore a `stage-advance.js` exit 4 (size bump) "because the diff is small enough in spirit" | The limits are `stage-graph.js limits`; bump with `session-mode.js set --size <bump_to>` and continue from `next --from <current stage>` |
 | L-scope expansion approved autonomously by CEO as a tactical decision | Doubled estimate or new subsystem = DOA "Resources 2x+ / Scope expansion" = Board Decision; CEO cannot approve unilaterally |
 | "Skip edge cases to save time" | Boil the Lake — completeness costs minutes with AI |
 | Say "handle errors" without specifics | Name the error, trigger, recovery, and user impact |
 | Drift from chosen scope mode mid-execution | Commit to the mode; raise Board Decision if mode itself needs changing |
 | Decide without thinking through failure modes | Inversion reflex — always ask "what would make this fail?" |
-| Stop at "ready for PR, your call" at L-5 | Merge to develop is within DOA; invoke `finish-flow` and execute all 7 sub-tasks autonomously |
-| Inline L-5 / H-9 closing steps "because CEO is fast" | Speed does not mean skipping — invoke `finish-flow`; the TaskCreate forcing function IS the speed discipline |
-| Skip `autopilot:learn` at L-5.6 / H-9.4 "nothing notable" | Evaluate the 5 learn-trigger questions first; for H-size, learn is unconditional MANDATORY |
-| Skip the L-1.5 Scope Completeness Audit "because the task is obvious" | Scope holes are invisible until after you've shipped the wrong deliverable; the audit is cheap and the alternative is not |
+| Stop at "ready for PR, your call" at the `finish` node | Merge to develop is within DOA; invoke `finish-flow` and execute all its sub-tasks autonomously |
+| Inline the `finish` closing steps "because CEO is fast" | Speed does not mean skipping — invoke `finish-flow`; the TaskCreate forcing function IS the speed discipline |
+| Skip `autopilot:learn` at `finish` "nothing notable" | Evaluate the 5 learn-trigger questions first; for urgent work, learn is unconditional MANDATORY |
+| Skip the `intent` Scope Completeness Audit "because the task is obvious" | Scope holes are invisible until after you've shipped the wrong deliverable; the audit is cheap and the alternative is not |
 | Enumerate phases before running the scope audit | Scope audit determines WHICH phases exist; phase TaskCreate comes second |
 | Bump version in one file from memory without grepping | Always `grep <old-version>` across the repo first; if the grep returns N hits, the edit list must touch all N. Memory drops files (marketplace.json, README badges) silently |
-| Absorb external OSS / prior art design without crediting source | The L-1.5 `Credit / attribution` row triggers — README's `Inspired By` section is part of scope, not an afterthought caught by the user pointing it out post-merge |
-| Dispatch subagent with prompt that paraphrases a skill's methodology | The subagent must invoke the skill via the Skill tool — same as dev-flow L-1.6 enforces on the main session. Paraphrasing loses fidelity (full checklist / red-line rules / rationalization table). Every L-size dispatch prompt must include the `### SKILLS` section per `references/task-prompt-templates.md` |
+| Absorb external OSS / prior art design without crediting source | The `intent` audit `Credit / attribution` row triggers — README's `Inspired By` section is part of scope, not an afterthought caught by the user pointing it out post-merge |
+| Dispatch subagent with prompt that paraphrases a skill's methodology | The subagent must invoke the skill via the Skill tool — same as dev-flow's intent-node skill routing enforces on the main session. Paraphrasing loses fidelity (full checklist / red-line rules / rationalization table). Every M/L/XL dispatch prompt must include the `### SKILLS` section per `references/task-prompt-templates.md` |
 | Route decisions through `tree.js next-decision` before `board_signoff` exists | Check the authority gate first — no `board_signoff` event = dual-run (shadow) mode; TaskCreate stays authoritative |
 | Read a work product directly when the tree is active | All artifact reads go through `scripts/tree.js fetch <proj> <node> --raw` — this emits the logged `manager_raw_read` event; a bare Read is a KR1 violation |
 | Dispatch Fable-class model as a delegate | Manager (depth 0) is Fable-class; Fable is NEVER dispatched — delegates are opus/sonnet-class at most |
 | Delegate to depth 3 without a Board decision | v1 depth limit is 2 (manager → sub-orchestrator → worker); depth-3 requires a named bound + escalation rule approved by the Board |
-| Archive the project (L-5.5) before emitting final node verdicts | `tree.js` rejects `_archive/<proj>` (proj-name validation) — archived trees are read-only; emit every node's closing verdict BEFORE the archive move (2026-06-12 dogfood divergence) |
+| Archive the project (finish-flow archive step) before emitting final node verdicts | `tree.js` rejects `_archive/<proj>` (proj-name validation) — archived trees are read-only; emit every node's closing verdict BEFORE the archive move (2026-06-12 dogfood divergence) |
 
 ## Capability-adaptive projection (shadow)
 

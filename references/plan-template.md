@@ -2,7 +2,7 @@
 
 The home for **plan authoring** discipline. Internalized from superpowers' `writing-plans` as a *template*
 (not a skill — a plan form never triggers standalone; it is invoked by `research-to-ship` Phase 2 and
-`dev-flow` L-2). Output a plan to `docs/plans/<YYYY-MM-DD>-<slug>.md` (real date from the environment —
+`dev-flow` `plan` node). Output a plan to `docs/plans/<YYYY-MM-DD>-<slug>.md` (real date from the environment —
 never invent one).
 
 **Step 0 — register it**: before any review, paste `node scripts/check-plan-graduation.js
@@ -15,7 +15,7 @@ with no `active` INDEX row is `plan_unregistered` — `scripts/dispatch-plan-rev
 1. **File-structure map** — which files will be touched, and each one's responsibility. A reviewer should
    see the surface area before reading a single step.
 2. **Bite-sized phases** — each phase is one coherent, independently-shippable chunk with a **dev-flow size**
-   (S / L / H / Fix) and an explicit **acceptance** ("done when …").
+   (XS / S / M / L / XL, plus `!` for urgent or `bug` for a bug) and an explicit **acceptance** ("done when …"). Each phase of the plan maps to a graph `unit` (kind `phase`; `stage-advance.js --unit phase:i/N:label`).
 3. **Every step is concrete** — the actual command, the code shape, the expected output. **Never** "add
    error handling" / "improve X" — say *which* call, *which* failure, *which* file:line. A zero-context
    engineer must be able to execute the step without guessing.
@@ -104,7 +104,7 @@ insufficient.
 ## Boundaries
 - **Authoring vs decomposition**: this template authors the *plan*; `agents/planner.md` decomposes an
   *existing* plan into six-element Task Prompts. Different jobs — don't conflate.
-- **Authoring vs gating**: `dev-flow` L-2 / `research-to-ship` Phase 2 own the *gate* (enter-plan-mode,
+- **Authoring vs gating**: `dev-flow` `plan` node / `research-to-ship` Phase 2 own the *gate* (enter-plan-mode,
   user approval); this template owns the *structure* of what gets written.
 - **Discover-then-author**: if the design isn't settled yet (options not even on the table), that's
   `brainstorm` first — author the plan only once an approach is chosen.

@@ -2,7 +2,7 @@
 
 > Inspired by [tanweai/pua](https://github.com/tanweai/pua) P9 Task Prompt system (MIT License)
 
-When dispatching subagents for L-size work, use structured templates instead of
+When dispatching subagents for M/L/XL work, use structured templates instead of
 ad-hoc prompts. Structured prompts eliminate ambiguity, reduce subagent rework,
 and enable verifiable completion.
 
@@ -11,7 +11,7 @@ and enable verifiable completion.
 > DONE / DON'T) used when CEO / team / dev-flow spawn subagents to execute work.
 > The `autopilot:planner` agent has a SEPARATE six-element **decomposition**
 > contract (Goal / Scope / Input / Output / Acceptance / Boundaries) used to
-> break L-size work into subtasks. Both derive from PUA P9 with different roles
+> break M/L/XL work into subtasks. Both derive from PUA P9 with different roles
 > — planner produces the breakdown; the dispatch template structures each unit
 > of work going out to a subagent (if a planner ran, each decomposed subtask is
 > wrapped using this template; if not, each ad-hoc dispatch unit uses it
@@ -19,7 +19,7 @@ and enable verifiable completion.
 
 ## Seven-Element Task Prompt
 
-Use this template for every Agent tool dispatch in L-size parallel execution.
+Use this template for every Agent tool dispatch in M/L/XL parallel execution.
 
 ```markdown
 ## [Task Title]
@@ -44,7 +44,7 @@ Naming a skill in WHY/WHAT/HOW MUCH is NOT enough. The subagent must
 **call the Skill tool** to load each skill's full methodology into its session
 context — paraphrasing the skill into bullets loses fidelity and depends on
 the dispatcher having read the skill itself. This is the same discipline
-dev-flow L-1.6 enforces on the main session, applied to subagent dispatch.]
+dev-flow's intent-node skill routing enforces on the main session, applied to subagent dispatch.]
 - Invoke `/<plugin>:<skill>` via the Skill tool — example: `/autopilot:debug`
 - Invoke `/<project>:<skill>` if project skills cover the affected code area
 - If no skill applies, write `none — explain why` (forces explicit decision)

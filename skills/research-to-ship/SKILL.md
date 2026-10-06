@@ -47,7 +47,7 @@ topic needs deep, multi-source, fact-checked synthesis, use `deep-research` inst
 Author a concrete plan to `<plans_dir>/<YYYY-MM-DD>-<slug>.md` — `plans_dir` from
 `scripts/resolve-project-paths.sh --target "$(git rev-parse --show-toplevel)"`, never a literal
 `docs/plans/`; `none` ⇒ ask where plans live before writing one using the **plan-authoring template** —
-file-structure map, bite-sized phases with dev-flow sizes (S/L/H/Fix) + acceptance, every step concrete
+file-structure map, bite-sized phases with dev-flow sizes (XS–XL, `!` for urgent, `bug` for a bug) + acceptance, every step concrete
 (actual command/code/expected output, never "improve X"), scope cut, test plan, risks + inversion, and
 open questions only the user can answer. Run the template's self-review (scope coverage / placeholder
 scan / dependency map) before the gate. Use the **real current date** from the environment — never invent.
@@ -94,8 +94,8 @@ field `none` ⇒ ask where the project record should live before writing; never 
 `none/…` path and never create the directory the reference doc happens to name.
 
 ### Phase 5 — Execute per dev-flow  · delegate → `autopilot:dev-flow`
-Run `autopilot:dev-flow` on the project, phase by phase: scope audit → phase tasks → implement →
-`autopilot:quality-pipeline` before each merge → `autopilot:finish-flow` at the end. For a phase with
+Run `autopilot:dev-flow` on the project, phase by phase through the stage graph (`node scripts/stage-graph.js nodes --size <size>`; each plan phase is a `unit`),
+ending at `autopilot:finish-flow`. For a phase with
 a **transcript-checkable** finish line (e.g. "all tests in X pass"), you MAY offer the user a `/goal`
 condition to drive it to green hands-off (Claude Code only — see `ceo-agent` "Harness primitives";
 degrades to manual re-prompting elsewhere).

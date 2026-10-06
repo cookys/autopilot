@@ -203,7 +203,7 @@ a JSON outcome.
 
 ### 3. qc@depth-0 is THE gate
 
-The foreman runs dev-flow → finish-flow, which has its **own** L-5 qc. That qc is
+The foreman runs dev-flow → finish-flow, which has its **own** `qc-gate` node qc. That qc is
 explicitly **first-pass / non-authoritative**.
 
 The authoritative gate is a **depth-0 QC panel** whose reviewer families/panel
@@ -294,10 +294,10 @@ exact-tip ack/handoff) until depth 0 explicitly discards it; the reaper must kee
 it uncontained. On conflict, retry once, else escalate — never auto-resolve.
 
 After an identity-preserving merge, retire dispatch-owned dated branches through
-the deterministic reaper, not an ad-hoc broad branch glob. Reuse finish-flow
-L-5.6's exact `autopilot_root` resolver and authoritative `integration_target`
+the deterministic reaper, not an ad-hoc broad branch glob. Reuse finish-flow's
+exact `autopilot_root` resolver and authoritative `integration_target`
 derivation; do not create a second resolver here. If those values have not yet
-been resolved, run that L-5.6 procedure first and halt on any ambiguity. Bind the
+been resolved, run that finish-flow procedure first and halt on any ambiguity. Bind the
 consumer independently so a plugin-package script is never resolved from its git
 root:
 
@@ -431,8 +431,9 @@ node scripts/probe-unknown.js classify --ledger <ledger> --work-unit <run> \
 
 - `U1` ⇒ `bash scripts/dispatch-consult.sh --question-file <q> --artifact <a> --ladder-receipt <ledger> --ladder-terms <terms> --ladder-unknown-type <type> --ladder-signals <ids from classify> --ladder-work-unit <run>`.
 - `U2` ⇒ dispatch `autopilot:survey` (or its `issue-search` mode for a `why` unknown) **in the background**, keep the round moving on independent work, and when the result is read: `node scripts/probe-unknown.js receipt --ledger <ledger> --rung U2 --unknown-type <type> --terms <terms> --signals <ids> --work-unit <run>`.
-- `U3` ⇒ by the classify output's `unknown_type`: `whether` (S5) → `autopilot:think-tank`; `why` (S1/S2/S3 — the `--convergence`/`--stall` inputs above make this a live outcome here) → `autopilot:debugger` PUA; then `receipt … --rung U3 --unknown-type <type> --signals <ids from classify>`.
-- The probe never recommends U4 by itself (a spent budget is `none`, never an escalation). U4 is the run's own stop — the stall fuse (§8) or a DOA boundary — and when that stop fires the foreman attaches `ladder_receipts:` (the ledger rows) to the `[ESCALATION]`, so the owner sees the concrete, reviewable climbs, not a summary.
+- `U3` ⇒ a **panel**, rail named by classify's `rail`: `dispatch-discuss` when the discuss seat is qualified (heterogeneous), else `autopilot:think-tank` (`whether`, S5) / `autopilot:debugger` PUA (`why`, S1/S2/S3 — the `--convergence`/`--stall` inputs above make this a live outcome here), which classify marks `heterogeneous:false`. Then `receipt … --rung U3 --unknown-type <type> --signals <ids from classify> --rail <rail> --families <a,b>`; a non-heterogeneous panel is still a real climb: `--heterogeneous false`, no `--reason`.
+- `U4` ⇒ an **experiment**: a spike in a throwaway worktree, recommended only after a U2 receipt with S4 or S1 still present. Then `receipt … --rung U4 --unknown-type <type> --signals <ids> --question <q> --criterion <c> --result pass|fail|inconclusive` (all three required).
+- The probe never recommends U5 by itself (a spent budget is `none`, never an escalation). U5 (owner) is the run's own stop — the stall fuse (§8) or a DOA boundary — and when that stop fires the foreman attaches `ladder_receipts:` (the ledger rows) to the `[ESCALATION]`, so the owner sees the concrete, reviewable climbs, not a summary.
 - `none` ⇒ continue; the probe's `reason` (`budget-exhausted` / `not-heterogeneous` / `knob-off`) is printed in the report's Ladder section. Exhaustion never buys a higher rung and never escalates.
 
 Vetoes are the operator's asynchronous authority: `decision-ledger.js veto --id

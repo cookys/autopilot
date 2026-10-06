@@ -25,10 +25,11 @@ import { newTracker, parseAdvisories, takeNew } from './advisories'
 import type { AdvisoryTracker } from './advisories'
 import { Band } from './band'
 import { Pane } from './pane'
+import type { PaneTab } from './pane'
 import {
   acceptanceToast, bandLine1, bandView, buildSections, checkEnvelope, commonDirOf, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
   headerText, hhmm, isKey, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
-  readForeman, readLoadSource, readJobModel, readManifest, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd, startMsOf, STATE_TEXT, POINTER_SCHEMA,
+  readForeman, readLoadSource, readJobModel, readManifest, readReview, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd, startMsOf, STATE_TEXT, POINTER_SCHEMA,
 } from './model'
 import type { Counts, DecisionsView, EnvelopeCheck, JobModel, Json, LiveSnapshot, Manifest, Sources } from './model'
 
@@ -46,6 +47,7 @@ let snapshot: LiveSnapshot | null = null
 let timer: { cancel: () => void } | undefined
 let viewport: { columns: number; isFullscreen?: boolean } | null = null
 let paneAttempted = false
+let paneTab: PaneTab = 'dispatch'
 let previous: { scope: string; counts: Counts | null; acceptance: string | null } | null = null
 const advisories: AdvisoryTracker = newTracker() // P7a: advisory rows seen for the current session; advisories.count feeds a band chip
 const jobDates = new Map<string, string>()
@@ -71,7 +73,7 @@ async function readObject($: EngineInterface, path: string): Promise<Json | null
 function plain(state: LiveSnapshot['state'], text: string, over: Partial<LiveSnapshot> = {}): LiveSnapshot {
   return {
     state, text, band: null, header: text, decision: null, project_key: null, root_run_id: null, link: null, rows: null, gates: null,
-    sections: NO_SECTIONS, published_at: null, session_as_of: null, host_as_of: null, ...over,
+    sections: NO_SECTIONS, review: null, published_at: null, session_as_of: null, host_as_of: null, ...over,
   }
 }
 
@@ -292,6 +294,7 @@ async function buildSnapshot($: EngineInterface, nowMs: number): Promise<{ snap:
     snap: plain('ok', bandLine1(band) + (band.reason === null ? '' : '\n' + band.reason), {
       ...common, band, header: headerText(env, sid, ctx), decision: jobModel === null || !jobModel.needs_decision ? null : jobModel.decision,
       sections: buildSections(src, foreman, identity, nowMs),
+      review: readReview(await readText($, liveBase + '/runs/' + scope.key + '.review.json'), scope.key),
     }),
     counts: countsOf(env),
     acceptance: jobModel === null ? null : jobModel.acceptance,
@@ -350,6 +353,7 @@ async function refresh($: EngineInterface): Promise<void> {
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
+    paneTab = 'dispatch'
     if (timer === undefined) timer = $.clock.every(TICK_MS, () => refresh($))
     await refresh($)
     return next(e)
@@ -370,5 +374,5 @@ export const register: Register = on => {
     return Band($.ui.resolve(e), snapshot === null ? 'live · waiting for the first snapshot' : snapshot.text, snapshot === null ? null : snapshot.band)
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE_ID }, ($, e) => Pane($.ui.resolve(e), snapshot))
+  on('ui.render', { component: 'Pane', requestId: PANE_ID }, ($, e) => Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { paneTab = t; $.ui.invalidate('ui.render') }))
 }

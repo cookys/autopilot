@@ -2,7 +2,7 @@
 // decision comes first). Pure view over the snapshot; `el` comes from
 // $.ui.resolve(e). W3a: the attention / waiting / task / decision / foreman sections arrive as ready text lines. Tables are Text lines (Box/Text/Link exist on every surface; no Image anywhere).
 
-import { hhmm, staleSuffix } from './model'
+import { hhmm, reviewLines, staleSuffix } from './model'
 import type { LiveGateRow, LivePaneRow, LiveSnapshot, PaneLine } from './model'
 
 type El = (props: any) => any
@@ -22,7 +22,22 @@ function gateLine(g: LiveGateRow): string {
   return [cell(g.phase), 'gen ' + cell(g.generation), cell(g.verdict), cell(g.status)].join(' · ')
 }
 
-export function Pane(el: { Box: El; Text: El; Link: El }, snap: LiveSnapshot | null) {
+export type PaneTab = 'dispatch' | 'review'
+
+// P7d: the tab strip. Buttons when the surface has them (a click or Enter switches the tab), plain Text otherwise.
+function tabStrip(el: { Box: El; Text: El; Button?: El }, tab: PaneTab, onTab: (t: PaneTab) => void, hasReview: boolean) {
+  const { Box, Text, Button } = el
+  const tabs: { id: PaneTab; label: string }[] = [{ id: 'dispatch', label: 'Dispatch' }, { id: 'review', label: hasReview ? 'Review •' : 'Review' }]
+  return (
+    <Box>
+      {tabs.map(t => Button === undefined
+        ? <Text key={t.id} bold={t.id === tab} dimColor={t.id !== tab}>{(t.id === tab ? '[' + t.label + ']' : ' ' + t.label + ' ') + ' '}</Text>
+        : <Button key={t.id} plain dimColor={t.id !== tab} bold={t.id === tab} onPress={() => onTab(t.id)}>{t.id === tab ? '[' + t.label + ']' : ' ' + t.label + ' '}</Button>)}
+    </Box>
+  )
+}
+
+export function Pane(el: { Box: El; Text: El; Link: El; Button?: El }, snap: LiveSnapshot | null, tab: PaneTab = 'dispatch', onTab: (t: PaneTab) => void = () => {}) {
   const { Box, Text, Link } = el
   const line = (l: PaneLine) => <Text bold={l.bold} dimColor={l.dim} color={l.warn ? 'warning' : undefined} wrap="truncate">{l.text}</Text>
   if (snap === null) {
@@ -34,8 +49,18 @@ export function Pane(el: { Box: El; Text: El; Link: El }, snap: LiveSnapshot | n
   }
   const rows = snap.rows
   const gates = snap.gates
+  if (tab === 'review') {
+    return (
+      <Box flexDirection="column">
+        {tabStrip(el, tab, onTab, snap.review !== null)}
+        <Text bold>{snap.header}</Text>
+        {reviewLines(snap.review).map(line)}
+      </Box>
+    )
+  }
   return (
     <Box flexDirection="column">
+      {tabStrip(el, tab, onTab, snap.review !== null)}
       <Text bold>{snap.header}</Text>
       {snap.sections.attention.map(line)}
       {snap.decision === null || snap.sections.attention.length > 0 ? null : <Text bold color="warning">要你決定</Text>}

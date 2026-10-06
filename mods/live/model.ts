@@ -66,6 +66,8 @@ export type LiveSnapshot = {
   gates: LiveGateRow[] | null
   // W3a pane sections, text already built from the sources (empty = nothing to say)
   sections: PaneSections
+  // P7d: plan-review state + latest code-review round of this project (null = none published)
+  review: ReviewView | null
   published_at: string | null
   session_as_of: string | null
   host_as_of: string | null
@@ -928,4 +930,64 @@ export function buildSections(src: Sources, foreman: ForemanView | null, identit
     if (foreman.agents.length === 0 && foreman.stage === null) fm.push({ text: '沒有活動紀錄', dim: true })
   }
   return { attention, waiting, tasks, decisions, foreman: fm }
+}
+
+// ---- stage-graph P7d: the review fact (<live>/runs/<project_key>.review.json, schema autopilot.review/1, written by the watcher) ----
+// `plan` is the plan-review state of this repo (dispatch-plan-review.js), `code` the latest hetero-review-loop round summary;
+// either may be null. The file is project-scoped, so a project_key that is not the wanted one is an absent file.
+export const REVIEW_SCHEMA = 'autopilot.review/1'
+export type ReviewSeat = { id: string; family: string | null; status: string | null; verdict?: string | null }
+export type PlanReviewView = { logical_plan_id: string | null; generation: number; max_generations: number | null; terminal: boolean; verdict: string | null; seats: ReviewSeat[]; updated_at: string | null }
+export type CodeReviewView = { phase: string | null; generation: number | null; base: string | null; head: string | null; seats: ReviewSeat[]; converged: boolean; at: string | null }
+export type ReviewView = { plan: PlanReviewView | null; code: CodeReviewView | null }
+
+function reviewSeats(v: unknown, withVerdict: boolean): ReviewSeat[] {
+  if (!Array.isArray(v)) return []
+  return v.filter(isObject).map(s => ({ id: str(s.id) || '—', family: str(s.family), status: str(s.status), ...(withVerdict ? { verdict: str(s.verdict) } : {}) }))
+}
+
+export function readReview(text: string | null, projectKey: string): ReviewView | null {
+  if (text === null) return null
+  const parsed = parseJson(text)
+  if (!parsed.ok || !isObject(parsed.value) || parsed.value.schema !== REVIEW_SCHEMA || parsed.value.project_key !== projectKey) return null
+  const v = parsed.value
+  const p = isObject(v.plan) ? v.plan : null
+  const c = isObject(v.code) ? v.code : null
+  const plan: PlanReviewView | null = p === null || !Number.isInteger(p.generation) ? null : {
+    logical_plan_id: str(p.logical_plan_id), generation: p.generation as number, max_generations: Number.isInteger(p.max_generations) ? (p.max_generations as number) : null,
+    terminal: p.terminal === true, verdict: str(p.verdict), seats: reviewSeats(p.seats, false), updated_at: str(p.updated_at),
+  }
+  const code: CodeReviewView | null = c === null ? null : {
+    phase: str(c.phase), generation: Number.isInteger(c.generation) ? (c.generation as number) : null, base: str(c.base), head: str(c.head),
+    seats: reviewSeats(c.seats, true), converged: c.converged === true, at: str(c.at),
+  }
+  return plan === null && code === null ? null : { plan, code }
+}
+
+// The band's review slot (the band layout itself is P7): `R<n> ⟲`, n = the code-review round when there is one, else the plan-review generation; null = no slot.
+export function reviewSlot(r: ReviewView | null): string | null {
+  if (r === null) return null
+  const n = r.code !== null && r.code.generation !== null ? r.code.generation : r.plan !== null ? r.plan.generation : null
+  return n === null ? null : 'R' + n + ' ⟲'
+}
+
+const short = (sha: string | null): string => (sha === null ? '—' : sha.slice(0, 8))
+
+// The Review tab: plan review, then code review; "no review" when neither is published.
+export function reviewLines(r: ReviewView | null): PaneLine[] {
+  if (r === null) return [{ text: 'no review', dim: true }]
+  const out: PaneLine[] = []
+  if (r.plan !== null) {
+    const p = r.plan
+    out.push({ text: 'plan review · ' + (p.logical_plan_id || '—') + ' · gen ' + p.generation + (p.max_generations === null ? '' : '/' + p.max_generations) + ' · ' + (p.terminal ? 'terminal' : 'active') + ' · ' + (p.verdict || '—'), bold: true })
+    if (p.seats.length === 0) out.push({ text: '  no seat verdicts yet', dim: true })
+    for (const s of p.seats) out.push({ text: '  ' + s.id + ' · ' + (s.family || '—') + ' · ' + (s.status || '—') })
+  }
+  if (r.code !== null) {
+    const c = r.code
+    out.push({ text: 'code review · ' + (c.phase || '—') + ' · R' + (c.generation === null ? '—' : c.generation) + ' · ' + short(c.base) + '..' + short(c.head) + ' · ' + (c.converged ? 'converged' : 'open'), bold: true })
+    if (c.seats.length === 0) out.push({ text: '  no seats', dim: true })
+    for (const s of c.seats) out.push({ text: '  ' + s.id + ' · ' + (s.family || '—') + ' · ' + (s.status || '—') + ' · ' + (s.verdict || '—') })
+  }
+  return out
 }

@@ -441,6 +441,37 @@ function runSeatDispatch(seat, repoRoot, ledgerPhaseGDir, specFile, timeout) {
   });
 }
 
+// P7d (stage-graph, plan Owner addendum A1): publish a small round summary for the status band / Review tab.
+// Additive and fail-open: lives in the live dir (`<live>/review-rounds/<project_key>.json`, one file per repo, the
+// latest round overwrites), never touches the ledger, chain.json or any receipt. Reader: src/status/review-input.js.
+function publishRoundSummary({ repoRoot, phase, generation, base, head, seatResults, converged }) {
+  try {
+    const { scopeFromCwd } = require('../src/status/project-key');
+    const { resolveLiveDir } = require('./lib/live-state-dir');
+    const { project_key: key } = scopeFromCwd(repoRoot || process.cwd());
+    if (!key) return;
+    const dir = path.join(resolveLiveDir({ warn: () => {} }).base, 'review-rounds');
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const summary = {
+      schema: 'autopilot.review-round/1',
+      project_key: key,
+      phase,
+      generation,
+      base,
+      head,
+      seats: seatResults.map((r) => ({
+        id: r.seat.id,
+        family: r.seat.family || familyOfEngine(r.seat.engine),
+        status: r.status === 'reviewed' ? 'reviewed' : 'no_verdict',
+        verdict: r.rawOutput && typeof r.rawOutput.verdict === 'string' ? r.rawOutput.verdict : null,
+      })),
+      converged,
+      at: new Date().toISOString(),
+    };
+    writeFileSyncAtomic(path.join(dir, `${key}.json`), JSON.stringify(summary, null, 2) + '\n');
+  } catch (_e) { /* fail-open: a status summary never changes the review result */ }
+}
+
 async function handleCollect(flags) {
   // v2.36.5: validate the reviewed-seat floor FIRST — before any generation directory or seat
   // dispatch exists — so a garbage value costs nothing and cannot leave g<N>/ without a chain
@@ -878,6 +909,11 @@ async function handleCollect(flags) {
     full_range_sha256: fullRangeSha256,
     findings_sha256: findingsSha256,
     seat_artifact_sha256: seatArtifactSha256,
+  });
+
+  publishRoundSummary({
+    repoRoot, phase, generation, base, head, seatResults,
+    converged: !hasGap && allFindings.length === 0,
   });
 
   const seatSummaries = {};

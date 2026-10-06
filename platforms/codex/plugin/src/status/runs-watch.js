@@ -48,6 +48,7 @@ const { createDecisionsPublisher } = require('./decisions-sidecar');
 const { createForemanPublisher } = require('./foreman-activity');
 const { createQcPublisher } = require('./qc-fact');
 const { createLoadSourcePublisher } = require('./load-source');
+const { createReviewPublisher } = require('./review-input');
 const { createCodeFingerprint, pluginIdentity } = require('./code-fingerprint');
 
 const SCHEMA = 'autopilot.runs-live/1';
@@ -351,6 +352,7 @@ function createWatcher({
   const foremanSidecar = createForemanPublisher({ ...sidecarArgs, live, dispatchRunsDir: manifestDirOf(env) }); // WATCH-B: <scope>.foreman.json
   const qcFact = createQcPublisher({ ...sidecarArgs, repo: cwd }); // stage-graph P7c: <project_key>.qc.json
   const loadSourceSidecar = createLoadSourcePublisher({ live, env, repoDir: path.resolve(__dirname, '..', '..'), writeAtomic, log: (m) => log(m) }); // P7b: <live>/load-source.json
+  const reviewSidecar = createReviewPublisher({ runsDir, key, live, env, getIdentity: () => identity, writeAtomic, log: (m) => log(m) }); // P7d: <project_key>.review.json
   const state = {
     lastSignature: null, lastPublishMs: null, lastRuns: null, lastObservedAt: null, lastPaths: null,
     roots: new Set(), lastCounts: new Map(), lastCost: { sessions: {}, host_today_usd: null, host_today_as_of: null },
@@ -699,7 +701,7 @@ function createWatcher({
       state.lastPublishMs = nowMs;
       published = true;
     }
-    try { decisionsSidecar.publish({ runs: rows, roots: state.roots }); foremanSidecar.publish({ roots: state.roots, markers, nowMs }); qcFact.publish({ nowMs }); } catch (error) { log(`sidecar publish failed: ${error.message}`); }
+    try { decisionsSidecar.publish({ runs: rows, roots: state.roots }); foremanSidecar.publish({ roots: state.roots, markers, nowMs }); qcFact.publish({ nowMs }); reviewSidecar.publish({ nowMs }); } catch (error) { log(`sidecar publish failed: ${error.message}`); }
     try { loadSourceSidecar.publish({ nowMs }); } catch (error) { log(`load-source failed: ${error.message}`); }
     try { publishTurnEffective({ liveBase: live, key, nowMs, log }); } catch (error) { log(`turn-effective failed: ${error.message}`); }
     if (render) {

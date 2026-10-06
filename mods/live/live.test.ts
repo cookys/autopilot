@@ -58,7 +58,7 @@
 // in-memory tree; a missing file makes the bottom hook throw, which the mod sees as a rejected read.
 import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
-import { readQc, qcChip } from './model'
+import { readQc, qcChip, readReview, reviewSlot } from './model'
 
 const SURFACES = ['terminal', 'desktop'] as const
 
@@ -416,6 +416,99 @@ for (const surface of SURFACES) {
     expect(link?.props.href).toBe('http://localhost:9123/' + KEY + '/2026-10-04/' + ROOT + '/current/')
     expect(JSON.stringify(await pane.drawn())).not.toContain('"Image"')
     await pane.unmount()
+  })
+
+  // stage-graph P7d: the Review tab (plan-review state + the latest hetero-review-loop round, published by the watcher as <live>/runs/<key>.review.json)
+  const reviewFact = (over: Record<string, unknown> = {}) => ({
+    schema: 'autopilot.review/1', project_key: KEY, published_at: PUBLISHED,
+    plan: {
+      logical_plan_id: 'plan-x', generation: 2, max_generations: 2, terminal: false, verdict: 'CONDITIONAL',
+      seats: [{ id: 'sol_chair', family: 'openai', status: 'STOP' }, { id: 'grok_deep', family: 'xai', status: 'CONDITIONAL' }], updated_at: PUBLISHED,
+    },
+    code: {
+      phase: 'p7d', generation: 3, base: '1111111122222222', head: 'aaaaaaaabbbbbbbb', converged: false, at: PUBLISHED,
+      seats: [{ id: 's0', family: 'minimax', status: 'reviewed', verdict: 'FIX-THEN-SHIP' }],
+    },
+    ...over,
+  })
+  const reviewTab = async ($: any, w: World, label = 'review') => {
+    const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+    await pane.press({ key: label })
+    await pane.unmount()
+    // the press only sets the tab and invalidates; the host then draws the pane again, which is a fresh mount here
+    const again = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+    const tree = (await again.drawn()) as Node
+    await again.unmount()
+    return walkTexts(tree).map(textOf)
+  }
+
+  test('P7d review tab: plan-review generation, seats and verdict, and the latest code-review round render (' + surface + ')', async ($, on) => {
+    const files = base()
+    files[LIVE + '/runs/' + KEY + '.review.json'] = j(reviewFact())
+    const w = world(on, files)
+    await start($, surface)
+    const texts = await reviewTab($, w)
+    expect(texts).toContain('plan review · plan-x · gen 2/2 · active · CONDITIONAL')
+    expect(texts).toContain('  sol_chair · openai · STOP')
+    expect(texts).toContain('  grok_deep · xai · CONDITIONAL')
+    expect(texts).toContain('code review · p7d · R3 · 11111111..aaaaaaaa · open')
+    expect(texts).toContain('  s0 · minimax · reviewed · FIX-THEN-SHIP')
+    expect(texts).not.toContain('no review')
+    expect(texts.some(t => t.includes(' r1 ') || t.startsWith('r1'))).toBe(false) // the dispatch table is the other tab
+  })
+
+  test('P7d review tab: a terminal plan review and a converged round are worded as such (' + surface + ')', async ($, on) => {
+    const files = base()
+    files[LIVE + '/runs/' + KEY + '.review.json'] = j(reviewFact({
+      plan: { logical_plan_id: 'plan-y', generation: 1, max_generations: 2, terminal: true, verdict: 'GO', seats: [], updated_at: PUBLISHED },
+      code: { phase: 'p1', generation: 1, base: null, head: null, converged: true, at: PUBLISHED, seats: [] },
+    }))
+    const w = world(on, files)
+    await start($, surface)
+    const texts = await reviewTab($, w)
+    expect(texts).toContain('plan review · plan-y · gen 1/2 · terminal · GO')
+    expect(texts).toContain('  no seat verdicts yet')
+    expect(texts).toContain('code review · p1 · R1 · —..— · converged')
+  })
+
+  test('P7d review tab: no review file is "no review"; a file of another project or schema is no review either (' + surface + ')', async ($, on) => {
+    const files = base()
+    const w = world(on, files)
+    await start($, surface)
+    expect(await reviewTab($, w)).toContain('no review')
+    w.files[LIVE + '/runs/' + KEY + '.review.json'] = j(reviewFact({ project_key: OTHER_KEY }))
+    await w.clock.advance(5000)
+    expect(await reviewTab($, w)).toContain('no review')
+    w.files[LIVE + '/runs/' + KEY + '.review.json'] = j(reviewFact({ schema: 'autopilot.review/9' }))
+    await w.clock.advance(5000)
+    expect(await reviewTab($, w)).toContain('no review')
+  })
+
+  if (surface === 'terminal') {
+    test('P7d model: the band review slot is R<n> ⟲ (code round first, else plan generation); no review = no slot', () => {
+      const fact = (over: Record<string, unknown>) => readReview(JSON.stringify({ schema: 'autopilot.review/1', project_key: KEY, ...over }), KEY)
+      const plan = { logical_plan_id: 'p', generation: 2, max_generations: 2, terminal: false, verdict: null, seats: [], updated_at: null }
+      const code = { phase: 'x', generation: 4, base: null, head: null, converged: false, at: null, seats: [] }
+      expect(reviewSlot(fact({ plan, code }))).toBe('R4 ⟲')
+      expect(reviewSlot(fact({ plan }))).toBe('R2 ⟲')
+      expect(reviewSlot(fact({ code }))).toBe('R4 ⟲')
+      expect(reviewSlot(null)).toBe(null)
+      expect(fact({})).toBe(null)
+      expect(readReview(JSON.stringify({ schema: 'autopilot.review/1', project_key: OTHER_KEY, plan }), KEY)).toBe(null)
+      expect(readReview('{not json', KEY)).toBe(null)
+    })
+  }
+
+  test('P7d review tab: the dispatch tab is the default and the tab strip is Buttons, not Text (' + surface + ')', async ($, on) => {
+    const files = base()
+    files[LIVE + '/runs/' + KEY + '.review.json'] = j(reviewFact())
+    const w = world(on, files)
+    await start($, surface)
+    const parts = await paneParts($, surface)
+    expect(parts.texts).not.toContain('no review')
+    expect(parts.texts.some(t => t.startsWith('plan review'))).toBe(false)
+    expect(parts.texts.some(t => t.startsWith('r1'))).toBe(true)
+    expect(JSON.stringify(parts.tree)).toContain('"Button"')
   })
 
   test('pane: 100 columns never opens a pane; no server.json falls back to port 8787 (' + surface + ')', async ($, on) => {

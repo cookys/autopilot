@@ -116,6 +116,13 @@ assert_file_exists "$LEDGER/phase-p1.base" "case 3: phase base persisted at the 
 assert_eq "$(cat "$LEDGER/phase-p1.base")" "$PHASE_BASE" "case 3: ledger-root phase base file content matches --phase-base"
 assert_file_absent "$LEDGER/review-p1/phase-p1.base" "case 3: phase base is NOT written under review-p1/ (that was the doc-path-mismatch defect)"
 
+# Case 3b (P7d): a completed round publishes a small summary to the live dir, keyed by the repo's project_key; ledger untouched
+R_KEY=$(node -e 'const {scopeFromCwd}=require(process.argv[1]); process.stdout.write(scopeFromCwd(process.argv[2]).project_key||"")' "$REPO_ROOT/src/status/project-key.js" "$SCRATCH_REPO")
+R_FILE="$AUTOPILOT_LIVE_DIR/review-rounds/$R_KEY.json"
+assert_file_exists "$R_FILE" "case 3b: round summary written under <live>/review-rounds/<project_key>.json"
+R_JSON=$(cat "$R_FILE" 2>/dev/null)
+assert_eq "$(node -e 'const j=JSON.parse(process.argv[1]); console.log([j.schema,j.project_key===process.argv[2],j.phase,j.generation,j.base===process.argv[3],j.seats.length,j.seats[0].status,j.seats[0].verdict,j.converged,typeof j.at].join("|"))' "$R_JSON" "$R_KEY" "$PHASE_BASE")" "autopilot.review-round/1|true|p1|1|true|3|reviewed|SHIP-AS-IS|true|string" "case 3b: summary shape (phase, generation, base, seats, converged, at)"
+
 # Case 4: a seat with findings text containing one Critical and one Major produces two entries with distinct ids
 export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "FIX-THEN-SHIP", "findings": "Critical: SQL injection vulnerability\nDetailed description here.\n\nMajor: Unhandled promise rejection\nMore details."}'
 C4_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p4 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); C4_RC=$?
@@ -128,6 +135,9 @@ ID1=$(node -e 'const f = JSON.parse(fs.readFileSync(process.argv[1])).findings; 
 ID2=$(node -e 'const f = JSON.parse(fs.readFileSync(process.argv[1])).findings; console.log(f[1].id);' "$LEDGER/review-p4/g1/findings.json")
 [ "$ID1" != "$ID2" ]; ID_DIFF_RC=$?
 assert_exit_code "$ID_DIFF_RC" "0" "case 4: finding IDs are distinct"
+
+# Case 4b (P7d): a round with findings is not converged and replaces the latest summary of the repo
+assert_eq "$(node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); console.log([j.phase,j.converged,j.seats[0].verdict].join("|"))' "$R_FILE")" "p4|false|FIX-THEN-SHIP" "case 4b: latest round wins; findings => converged false"
 
 # Case 5: a seat returning {status: "no_verdict"} without --allow-seat-gap exits 1 and chain.json is not updated
 export STUB_RESPONSE_s0='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'

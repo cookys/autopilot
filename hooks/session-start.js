@@ -13,6 +13,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
+const semver = require('../scripts/lib/semver');
 const {
   composeSessionStartContext,
   buildSessionStartOutput,
@@ -40,27 +41,11 @@ const UPDATE_LOCK_STALE_MS = 60 * 1000;
 // restored, making a handoff redundant. `compact` is owned by compaction-state.
 const ALLOWED_SOURCES = new Set(['clear', 'startup']);
 
-function parseSemver(value) {
-  if (typeof value !== 'string') return null;
-  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(value.trim());
-  if (!match) return null;
-  const major = Number(match[1]);
-  const minor = Number(match[2]);
-  const patch = Number(match[3]);
-  if (!Number.isInteger(major) || !Number.isInteger(minor) || !Number.isInteger(patch)) return null;
-  return [major, minor, patch];
-}
-
-function compareSemver(a, b) {
-  for (let i = 0; i < 3; i++) {
-    if (a[i] !== b[i]) return a[i] - b[i];
-  }
-  return 0;
-}
-
-function formatSemver(tuple) {
-  return `${tuple[0]}.${tuple[1]}.${tuple[2]}`;
-}
+// Version parse/order/format live in the shared lib (pre-release aware). A "tuple" is
+// now the parsed semver object; the names are kept so call sites stay unchanged.
+const parseSemver = semver.parse;
+const compareSemver = semver.compare;
+const formatSemver = semver.format;
 
 function readVersionTupleFromJson(filePath) {
   try {
@@ -141,7 +126,7 @@ function collectUpdateHeadlines(changelogText, lastSeenTuple, currentTuple) {
   // on an empty/missing CHANGELOG, aborting before the watermark publish (review 🟠).
   if (!changelogText) return { shown: [], total: 0 };
   const lines = changelogText.split(/\r?\n/);
-  const headerRe = /^##\s+v(\d+\.\d+\.\d+)\s*[—–-]\s*(.+)$/;
+  const headerRe = new RegExp(`^##\\s+v(${semver.VERSION_PATTERN})\\s*[—–-]\\s*(.+)$`);
   const entries = [];
 
   for (const line of lines) {

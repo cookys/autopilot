@@ -246,6 +246,7 @@ fi
 AMBI="$FIX/ambig-repo"
 mkdir -p "$AMBI/.claude-plugin" "$AMBI/hooks" "$AMBI/scripts"
 cp "$SCRIPT" "$AMBI/scripts/check-optin-changelog.js"
+mkdir -p "$AMBI/scripts/lib" && cp "$REPO_ROOT/scripts/lib/semver.js" "$AMBI/scripts/lib/semver.js"
 
 (cd "$AMBI" && git init -q && \
   git config user.email t@t && \
@@ -423,6 +424,7 @@ assert_eq "$?" "0" "fence info-string <!-- does not swallow real prose after the
 NYC="$FIX/not-yet-committed"
 mkdir -p "$NYC/.claude-plugin" "$NYC/hooks" "$NYC/scripts"
 cp "$SCRIPT" "$NYC/scripts/check-optin-changelog.js"
+mkdir -p "$NYC/scripts/lib" && cp "$REPO_ROOT/scripts/lib/semver.js" "$NYC/scripts/lib/semver.js"
 (cd "$NYC" && git -c user.email=t@t -c user.name=t init -q && \
   printf '{ "name": "x", "version": "9.9.8" }\n' > .claude-plugin/plugin.json && \
   printf '{ "opt_in": ["alpha"] }\n' > hooks/opt-in-manifest.json && \

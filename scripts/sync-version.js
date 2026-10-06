@@ -41,6 +41,11 @@
 
 const fs = require('fs');
 const path = require('path');
+const semver = require('./lib/semver');
+
+// Badge/alt matchers accept a pre-release (`3.0.0--alpha.1` in the shields URL, `3.0.0-alpha.1` in alt).
+const BADGE_FIND = new RegExp(`badge/version-${semver.VERSION_PATTERN.replace(/-\(\?:alpha/, '--(?:alpha')}-`, 'g');
+const ALT_FIND = new RegExp(`alt="v${semver.VERSION_PATTERN}"`, 'g');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 
@@ -98,7 +103,7 @@ function deriveArgsFromCanonical() {
   }
   const canonical = JSON.parse(fs.readFileSync(canonicalPath, 'utf8'));
   const version = canonical.version;
-  if (!version || !/^\d+\.\d+\.\d+$/.test(version)) {
+  if (!semver.isValid(version)) {
     console.error(`error: canonical version invalid: ${version}`);
     process.exit(2);
   }
@@ -159,7 +164,7 @@ OUTPUT:
 function validateArgs(a) {
   const errs = [];
   if (!a.version) errs.push('--version required');
-  else if (!/^\d+\.\d+\.\d+$/.test(a.version)) errs.push(`invalid version "${a.version}" (expected N.N.N)`);
+  else if (!semver.isValid(a.version)) errs.push(`invalid version "${a.version}" (expected N.N.N or N.N.N-(alpha|beta|rc).N)`);
   if (!Number.isInteger(a.hookCount) || a.hookCount < 1 || a.hookCount > 100) errs.push(`--hook-count must be integer 1-100, got ${a.hookCount}`);
   if (!Number.isInteger(a.skillCount) || a.skillCount < 1 || a.skillCount > 100) errs.push(`--skill-count must be integer 1-100, got ${a.skillCount}`);
   if (!Number.isInteger(a.optInCount) || a.optInCount < 0 || a.optInCount >= a.hookCount) errs.push(`--opt-in-count must be integer 0..hook-count-1, got ${a.optInCount}`);
@@ -177,6 +182,7 @@ function validateArgs(a) {
 
 function buildEditPlan(args) {
   const V = args.version;
+  const BV = semver.badgeEscape(V); // shields.io: '-' -> '--'
   const H = args.hookCount;
   const D = args.defaultOnCount;
   const O = args.optInCount;
@@ -237,11 +243,11 @@ function buildEditPlan(args) {
       // so sync-version no longer writes it (single source of truth for hook counts).
       file: 'README.md',
       replacements: [
-        { find: /badge\/version-\d+\.\d+\.\d+-/g, to: `badge/version-${V}-`, expectAfter: 1, label: 'version badge' },
-        { find: /alt="v\d+\.\d+\.\d+"/g, to: `alt="v${V}"`, expectAfter: 1, label: 'version badge alt' },
+        { find: BADGE_FIND, to: `badge/version-${BV}-`, expectAfter: 1, label: 'version badge' },
+        { find: ALT_FIND, to: `alt="v${V}"`, expectAfter: 1, label: 'version badge alt' },
       ],
       verifyPatterns: [
-        { regex: new RegExp(`badge/version-${escapeRegex(V)}-`, 'g'), expect: 1, label: `version badge has ${V}` },
+        { regex: new RegExp(`badge/version-${escapeRegex(BV)}-`, 'g'), expect: 1, label: `version badge has ${V}` },
       ],
     },
   ];
@@ -280,11 +286,11 @@ function buildEditPlan(args) {
     plans.push({
       file: 'README.zh-TW.md',
       replacements: [
-        { find: /badge\/version-\d+\.\d+\.\d+-/g, to: `badge/version-${V}-`, expectAfter: 1, label: 'version badge (zh-TW)' },
-        { find: /alt="v\d+\.\d+\.\d+"/g, to: `alt="v${V}"`, expectAfter: 1, label: 'version badge alt (zh-TW)' },
+        { find: BADGE_FIND, to: `badge/version-${BV}-`, expectAfter: 1, label: 'version badge (zh-TW)' },
+        { find: ALT_FIND, to: `alt="v${V}"`, expectAfter: 1, label: 'version badge alt (zh-TW)' },
       ],
       verifyPatterns: [
-        { regex: new RegExp(`badge/version-${escapeRegex(V)}-`, 'g'), expect: 1, label: `zh-TW version badge has ${V}` },
+        { regex: new RegExp(`badge/version-${escapeRegex(BV)}-`, 'g'), expect: 1, label: `zh-TW version badge has ${V}` },
       ],
     });
   }

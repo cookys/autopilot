@@ -10,6 +10,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const semver = require('./lib/semver');
 
 const REPO = path.resolve(__dirname, '..');
 const FIRST_MANIFEST_VERSION = '2.26.2';
@@ -50,19 +51,9 @@ function normalizeStem(stem) {
   return String(stem).trim().toLowerCase();
 }
 
-function compareSemver(a, b) {
-  const pa = a.split('.').map((n) => Number(n));
-  const pb = b.split('.').map((n) => Number(n));
-  for (let i = 0; i < 3; i++) {
-    if (pa[i] > pb[i]) return 1;
-    if (pa[i] < pb[i]) return -1;
-  }
-  return 0;
-}
-
-function isValidSemver(v) {
-  return /^\d+\.\d+\.\d+$/.test(v);
-}
+// Version parse/order lives in the shared lib (pre-release aware, semver §11).
+const compareSemver = semver.compare;
+const isValidSemver = semver.isValid;
 
 function readText(absPath) {
   return fs.readFileSync(absPath, 'utf8');

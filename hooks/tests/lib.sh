@@ -465,7 +465,9 @@ run_hook() {
 setup_sync_version_sandbox() {
   local sandbox="$1"
   mkdir -p "$sandbox/.claude-plugin" "$sandbox/scripts" "$sandbox/hooks" "$sandbox/platforms/codex/plugin/.codex-plugin" "$sandbox/platforms/codex/.agents/plugins"
+  mkdir -p "$sandbox/scripts/lib"
   cp "$REPO_ROOT/scripts/sync-version.js"        "$sandbox/scripts/sync-version.js"
+  cp "$REPO_ROOT/scripts/lib/semver.js"          "$sandbox/scripts/lib/semver.js"
   cp "$REPO_ROOT/.claude-plugin/plugin.json"     "$sandbox/.claude-plugin/plugin.json"
   cp "$REPO_ROOT/.claude-plugin/marketplace.json" "$sandbox/.claude-plugin/marketplace.json"
   cp "$REPO_ROOT/plugin.json"                    "$sandbox/plugin.json"

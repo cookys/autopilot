@@ -38,7 +38,7 @@ case "${1:-}" in
 esac
 
 if [ "${1:-}" = "--update-baseline" ]; then
-  V=$(grep -oE '"version":[[:space:]]*"[0-9]+\.[0-9]+\.[0-9]+"' .claude-plugin/plugin.json | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+  V=$(node scripts/lib/semver.js from-json .claude-plugin/plugin.json 2>/dev/null | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
   P=$(find skills references -name '*.md' -type f | sort -u | xargs cat | wc -l)
   E=$(find src -name '*.js' -type f | sort -u | xargs cat | wc -l)
   mkdir -p docs/metrics
@@ -84,8 +84,19 @@ run_check() {
 # Resolve canonical version up-front (used by several checks).
 VERSION=""
 if [ -f "$CANONICAL" ]; then
-  VERSION=$(grep -oE '"version":[[:space:]]*"[0-9]+\.[0-9]+\.[0-9]+"' "$CANONICAL" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+  # One parser (scripts/lib/semver.js): accepts N.N.N and N.N.N-(alpha|beta|rc).N.
+  VERSION=$(node "$REPO/scripts/lib/semver.js" from-json "$CANONICAL" 2>/dev/null | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
 fi
+
+# grep -E PATTERN FILE where a final N.N.N is never satisfied by its own pre-release
+# line (v3.0.0-alpha.1 must not count as v3.0.0); a pre-release VERSION matches directly.
+version_in_file() {
+  local pat="$1" file="$2"
+  case "$VERSION" in
+    *-*) grep -qE "$pat" "$file" ;;
+    *) grep -E "$pat" "$file" | grep -vqE "v${VERSION//./\\.}-(alpha|beta|rc)\.[0-9]" ;;
+  esac
+}
 
 # ─── 1. canonical version parseable ───
 check_canonical_version() {
@@ -97,7 +108,7 @@ check_canonical_version() {
 check_changelog_entry() {
   [ -n "$VERSION" ] || return 1
   # Match a heading like "## v2.7.3 — ..." (allow trailing text)
-  grep -qE "^##[[:space:]]+v${VERSION//./\\.}( |\$|[^0-9])" "$CHANGELOG"
+  version_in_file "^##[[:space:]]+v${VERSION//./\\.}( |\$|[^0-9])" "$CHANGELOG"
 }
 
 # ─── 3. version mirrors in sync with canonical ───
@@ -108,7 +119,7 @@ check_version_mirrors() {
 # ─── 4. INDEX references the canonical version ───
 check_index_has_version() {
   [ -f "$INDEX" ] || return 1
-  grep -qE "v${VERSION//./\\.}( |\||\$|[^0-9])" "$INDEX"
+  version_in_file "v${VERSION//./\\.}( |\\||\$|[^0-9])" "$INDEX"
 }
 
 # ─── 5. every project README linked from INDEX exists ───

@@ -1,0 +1,25 @@
+P-R probe (plan §4 P-R step 3) — 2026-10-06
+Question: does Claude Code accept a plugin.json with a pre-release version?
+Fixture: temp dir (scratchpad, nothing installed into ~/.claude) with
+  .claude-plugin/plugin.json = {"name":"probe-pre","version":"3.0.0-alpha.1","description":"semver pre-release probe"}
+  skills/hello/SKILL.md (one trivial skill)
+
+$ claude plugin --help | grep validate
+  validate [options] <path>            Validate a plugin or marketplace
+
+$ claude plugin validate <fixture>
+Validating plugin manifest: <fixture>/.claude-plugin/plugin.json
+
+⚠ Found 1 warning:
+
+  ❯ author: No author information provided. Consider adding author details for plugin attribution
+
+✔ Validation passed with warnings
+(exit 0; the only warning is the missing author field — no version error)
+
+$ claude --plugin-dir <fixture> -p --model haiku "reply with the single word ok"
+ok
+(exit 0; plugin loaded for the session with no version error)
+
+Note: `claude plugin list` (the plan's wording) only lists installed plugins and would need an
+install into ~/.claude, which this phase must not do; validate + --plugin-dir load cover the same question.

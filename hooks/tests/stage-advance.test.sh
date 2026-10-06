@@ -273,6 +273,41 @@ adv --to qc-gate --repo-root "$R6"
 eq "3 binary files (1 file each, 0 lines) bump XS on file count" "4" "$RC"
 has "binary files count as 0 lines" '"lines":0' "$OUT"
 
+# working-tree counting: dev-flow gates BEFORE commit, so uncommitted + untracked work must count
+wt_repo() { mkrepo "$1"; printf 'a\n' >"$1/tracked.txt"; printf 'ign.txt\n' >"$1/.gitignore"; git -C "$1" add -A; git -C "$1" commit -q -m base; }
+wt_start() { newsess; sm set --size XS --repo-root "$1" >/dev/null 2>&1; adv --to implement --repo-root "$1"; }
+RA="$TEST_TMP/r-wt-a"; wt_repo "$RA"; wt_start "$RA"
+for _ in $(seq 1 21); do echo more >>"$RA/tracked.txt"; done
+adv --to qc-gate --repo-root "$RA"; eq "XS (a) uncommitted tracked edits over the limit -> 4" "4" "$RC"
+has "(a) counts the unstaged lines" '"lines":21' "$OUT"
+git -C "$RA" add -A
+adv --to qc-gate --repo-root "$RA"; eq "XS (a') staged-only edits over the limit -> 4" "4" "$RC"
+RB="$TEST_TMP/r-wt-b"; wt_repo "$RB"; wt_start "$RB"
+for _ in $(seq 1 21); do echo new >>"$RB/brand_new.txt"; done
+adv --to qc-gate --repo-root "$RB"; eq "XS (b) untracked new file over the limit -> 4" "4" "$RC"
+has "(b) untracked file counts as 1 file + its lines" '"files":1,"lines":21' "$OUT"
+RC3="$TEST_TMP/r-wt-c"; wt_repo "$RC3"; wt_start "$RC3"
+plant "$RC3" 1 21 committed
+adv --to qc-gate --repo-root "$RC3"; eq "XS (c) committed change over the limit -> 4" "4" "$RC"
+RD="$TEST_TMP/r-wt-d"; wt_repo "$RD"; wt_start "$RD"
+for _ in $(seq 1 100); do echo ignored >>"$RD/ign.txt"; done
+adv --to qc-gate --repo-root "$RD"; eq "XS (d) an ignored file does NOT count -> 0" "0" "$RC"
+RE="$TEST_TMP/r-wt-e"; wt_repo "$RE"; wt_start "$RE"
+head -c 2048 /dev/urandom >"$RE/blob.bin"; head -c 2048 /dev/urandom >"$RE/blob2.bin"; head -c 2048 /dev/urandom >"$RE/blob3.bin"
+adv --to qc-gate --repo-root "$RE"; eq "XS (e) 3 untracked binaries -> 4 on file count" "4" "$RC"
+has "(e) binaries count 0 lines" '"lines":0' "$OUT"
+# high_risk sampling sees uncommitted work too (real classify via --diff-file, stub resolver)
+RF="$TEST_TMP/r-wt-f"; wt_repo "$RF"
+newsess; sm set --size M --urgent --repo-root "$RF" >/dev/null 2>&1
+adv --to plan --repo-root "$RF"; adv --to implement --repo-root "$RF"; adv --to verify --repo-root "$RF"
+for _ in $(seq 1 50); do echo risky >>"$RF/untracked_risk.txt"; done
+for _ in $(seq 1 5); do echo edit >>"$RF/tracked.txt"; done
+: >"$STUB_LOG"
+( unset AUTOPILOT_STAGE_ADVANCE_CLASSIFY; export STUB_RISK=high; OUT=$(node "$SA" --to code-review --repo-root "$RF" 2>/dev/null); echo "$?" >"$TEST_TMP/rc" )
+eq "uncommitted sampling (rc)" "0" "$(cat "$TEST_TMP/rc")"
+DL=$(sed -n 's/.*--diff-lines \([0-9]*\).*/\1/p' "$STUB_LOG" | head -1)
+[ "${DL:-0}" -ge 55 ] && ok "classify saw the uncommitted + untracked lines (diff_lines=$DL)" || bad "classify diff_lines=$DL, expected >= 55"
+
 # XS -> S at qc-gate
 R7="$TEST_TMP/r-xs"; mkrepo "$R7"
 newsess; sm set --size XS --repo-root "$R7" >/dev/null 2>&1

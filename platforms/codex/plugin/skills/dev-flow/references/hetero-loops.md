@@ -20,16 +20,16 @@ This reference indexes the three deterministic scripts supporting dev-flow's pla
 ### scripts/check-phase-review-receipt.js
 
 - **What**: Validates phase review receipts (`receipt-<phase>.json`) against git history and review artifacts, or validates plan artifact blocker dispositions.
-- **When**: Called when gating a phase transition on a finalized `SHIP-AS-IS` review receipt, a valid `off` opt-out receipt, or dispositioned candidate blockers.
+- **When**: Called when gating the move past a review node on a finalized `SHIP-AS-IS` review receipt, a valid `off` opt-out receipt, or dispositioned candidate blockers.
 - **Contract**: Canonical options and usage in `node scripts/check-phase-review-receipt.js --help`; indexed in `docs/scripts-inventory.md`.
 
 ## Consult before design
 
-Canonical call site is dev-flow step L-2 (the receipted consult sub-step); this section documents the rail, it is not a second statement of the rule. For an L-size task, before the step-L-2 design decision, write the design question and relevant artifacts to files and call `bash scripts/dispatch-consult.sh --question-file <path> --artifact <path>` to get one bounded outside opinion before committing to the design.
+Canonical call site is the dev-flow `plan` node (the receipted consult step); this section documents the rail, it is not a second statement of the rule. For an L or XL task, before the design decision, write the design question and relevant artifacts to files and call `bash scripts/dispatch-consult.sh --question-file <path> --artifact <path>` to get one bounded outside opinion before committing to the design.
 
-## L-2.5 Plan Hetero Review Gate & Frozen Rubrics
+## Plan-review Gate & Frozen Rubrics
 
-The L-2.5 plan review stage ensures architectural, design, and boundary assumptions are rigorously challenged before code implementation starts. Invoked via `autopilot:hetero-review` with the target plan file path, the loop scaffolds a structured evaluation matrix using `scripts/plan-rubric-scaffold.js`.
+The `plan-review` node ensures architectural, design, and boundary assumptions are rigorously challenged before code implementation starts. Invoked via `autopilot:hetero-review` with the target plan file path, the loop scaffolds a structured evaluation matrix using `scripts/plan-rubric-scaffold.js`.
 
 ### Why the Gate Requires a Frozen Rubric (ADR-0001 & Depth-0 Re-derivation)
 Under ADR-0001, any review verdict remains merely an unverified claim until depth-0 tooling independently re-derives it from the reviewer's structured JSON artifact and the exact base..head range or plan revision it reviewed. A passing review verdict in isolation cannot serve as a deterministic gate because review evaluations are vulnerable to post-hoc rubric drift or subjective goalpost movement. Therefore, the gate requires:
@@ -47,32 +47,32 @@ Receipt verdicts strictly permit only two tokens: `SHIP-AS-IS` and `FIX-THEN-SHI
 
 ---
 
-## L-4 Phase Advance Gate & Receipt Chain Validation
+## Code-review Gate & Receipt Chain Validation
 
-The L-4 phase advance gate enforces mechanical verification before any phase is marked complete and execution transitions to the next phase:
-`node scripts/check-phase-review-receipt.js --ledger <project>/ledger --phase <p> --branch <b> --phase-base "$(cat <project>/ledger/phase-<p>.base)"`
+The `code-review` node runs once, after all units, on the full diff from the marker's `base_ref`, and gates `qc-gate` on:
+`node scripts/check-phase-review-receipt.js --ledger <ledger> --phase full --branch <b> --phase-base "$(cat <ledger>/phase-full.base)"`
 
 ### What Receipt Validation Checks
 1. **Contiguous Generation Chain**: Verifies that generations start at generation 1, increase contiguously without gaps, and link each iteration's base and head commits.
-2. **Matching Head & Phase Base**: Validates that the receipt's reviewed range matches the exact current branch HEAD and the recorded immutable phase base. A review of stale commits cannot gate current code.
+2. **Matching Head & Base**: Validates that the receipt's reviewed range matches the exact current branch HEAD and the recorded immutable base. A review of stale commits cannot gate current code.
 3. **SHIP-AS-IS Verdict or Explicit Opt-Out**: Confirms that the final aggregated verdict across seats is `SHIP-AS-IS` with all identified blockers dispositioned, or that a valid opt-out receipt was produced when `hetero_review` was configured to `off`.
 
-A heterogeneous implementer reporting all-green tests is treated as a claim, never a gate. Only depth-0 re-derivation by `scripts/check-phase-review-receipt.js` over reviewer JSON artifacts and commit ranges unlocks phase advancement.
+A heterogeneous implementer reporting all-green tests is treated as a claim, never a gate. Only depth-0 re-derivation by `scripts/check-phase-review-receipt.js` over reviewer JSON artifacts and commit ranges unlocks the next node. Per-unit checking is the `verify` node's qualified verifier, not this loop.
 
 ---
 
-## KR4 Size Predicates & Rationales
+## Review Nodes & Strength
 
-The KR4 review architecture matches review overhead and diversity directly to blast radius and design-decision density:
+Which review nodes run is the graph's decision (`node scripts/stage-graph.js nodes --size <size> …`); how strongly each is checked is a separate axis:
 
-| Size | Predicate | Blast Radius & Design Decision Density Rationale |
-|------|-----------|--------------------------------------------------|
-| **L** | `plan loop + per-phase hetero review + qc` | High blast radius across multiple modules and architectural subsystems. High density of design decisions requires front-loaded rubric freeze (`plan_review`) to catch conceptual flaws early, followed by per-phase heterogeneous reviews to prevent error compounding across phases, backed by deterministic quality gate (qc). |
-| **H** | `plan loop + per-phase hetero review + qc` | Critical blast radius impacting production stability under outage conditions. Even with accelerated execution, emergency fixes carry high risk of secondary regressions; plan review confirms containment scope, per-phase hetero review catches blind spots under time pressure, and qc ensures regression prevention. |
-| **S** | `no plan loop, one hetero seat + qc` | Constrained blast radius (single module, single commit, no interface change). Design decisions are minimal or non-existent, making plan loops unnecessary overhead. A single independent heterogeneous review seat provides cross-model sanity checking and blind-spot detection without multi-seat arbitration latency, supplemented by qc. |
-| **Fix** | `qc only` | Narrowest blast radius where root cause is already diagnosed and the solution is straightforward. Design decision density is zero. Imposing multi-model review loops adds latency without proportionate defect detection; automated regression tests and linting (qc) provide the required correctness guarantees. |
+| Node | Why it exists | Strength |
+|------|---------------|----------|
+| `plan-review` | Front-loads a frozen rubric where a plan carries design decisions, catching conceptual flaws before code exists | The plan loop's seat panel (`plan_review` knob) |
+| `verify` | Stops errors compounding across units: each unit is checked by a qualified verifier before the next starts | One qualified verifier (`engine-scorecard.js current --role verifier`) |
+| `code-review` | One cross-model pass over the whole change, where blind spots of a single family show | The distinct model families `scripts/resolve-review-loop.sh --field required_review_families` resolves from risk and roster; low risk defaults to one family with a fresh-context reviewer; a shortfall goes through `on_engine_unavailable`, never silently lowered; the marker records the families actually used |
+| `qc-gate` | Deterministic regression floor (tests, lint, completeness) | Project gate or `autopilot:quality-pipeline` |
 
-Enforcement for all four size predicates is driven by `scripts/hetero-review-loop.js` receipts and deterministic verification scripts.
+Enforcement is `scripts/hetero-review-loop.js` receipts plus `scripts/check-phase-review-receipt.js` re-derivation.
 
 ---
 

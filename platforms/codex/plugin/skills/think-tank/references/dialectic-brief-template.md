@@ -165,7 +165,7 @@ Steps, not a replacement.
 - "If the Minority Report gains evidence, re-invoke think-tank-dialectic
   with that evidence preloaded"
 - "For the Unresolved Questions, chain to autopilot:survey"
-- "For implementation: autopilot:dev-flow (L-size)"}
+- "For implementation: autopilot:dev-flow (M/L/XL)"}
 
 ### Follow-Up Tracking
 

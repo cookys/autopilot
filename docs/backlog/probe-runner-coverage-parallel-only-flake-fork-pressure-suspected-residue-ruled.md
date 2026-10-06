@@ -11,6 +11,6 @@ Source: docs/BACKLOG.md@05f97302492d26112f877bc2a97acb2578aca8df, migrated 2026-
   2% inodes); the one recurring flaky file was `probe-runner-coverage`, which failed on the
   CLEAN run — a pure file-parsing test, so residue cannot be its cause; 32-way fork pressure is
   the live suspect.
-- **Effort**: Fix.
+- **Effort**: S.
 - **Source**: fix/suite-residue-reaper QC round, depth-0 panel + foreman reproduction logs, 2026-08-28.
 

@@ -49,6 +49,17 @@ printf 'U4 owner stop\n' > "$R/hooks/tests/mission-convergence.test.sh"
 mkdir -p "$R/hooks/tests/fixtures/session-marker"
 printf '{"phase_set_at": 1}\n' > "$R/hooks/tests/fixtures/session-marker/invalid-legacy.json"
 printf '{"phase_set_at": 1}\n' > "$R/hooks/tests/fixtures/session-marker/valid-other.json"
+# history / digest-frozen exclusions (P5): each carries a hit that must be ignored, as does its codex-mirror twin
+for f in profiles/p0-sources/abc.txt profiles/guided-baseline-dispositions.json evals/skill-onoff/lib-r4/p1w-markers.sh \
+         evals/skill-onoff/archaeology-scan.js evals/skill-onoff/prereg/p.md hooks/tests/skill-onoff-markers.test.sh \
+         evals/engine-capabilities/no-skill-claim.expected.txt hooks/tests/migrate-backlog-entries.test.sh \
+         skill-creator-workspace/results/r.md docs/projects/INDEX.md; do
+  mkdir -p "$R/$(dirname "$f")" "$R/platforms/codex/plugin/$(dirname "$f")"
+  printf 'L-5.2 and H-9\n' > "$R/$f"; printf 'L-5.2 and H-9\n' > "$R/platforms/codex/plugin/$f"
+done
+mkdir -p "$R/platforms/codex/plugin/docs/plans"; printf 'L-5.2\n' > "$R/platforms/codex/plugin/docs/plans/p.md"
+# the near-miss: a sibling of an excluded file is still scanned
+mkdir -p "$R/profiles/p0-sources-extra"; printf 'L-5.2\n' > "$R/profiles/p0-sources-extra/x.txt"
 # >64 KiB of findings, to prove stdout is not truncated through a pipe
 mkdir -p "$R/big"; node -e 'let t="";for(let i=0;i<1500;i++)t+="old stage L-5.2 and H-9.3 line "+i+" padding padding padding\n";require("fs").writeFileSync(process.argv[1],t)' "$R/big/many.md"
 
@@ -86,6 +97,8 @@ for n in 1 2 3 4; do chk "U4 negative fixture $n not flagged" "!f.some((x) => x.
 chk "U4 experiment not flagged" '!f.some((x) => x.file === "scripts/u4-experiment.md")'
 chk "U4 path exclusion (mission-convergence.test.sh)" '!f.some((x) => x.file === "hooks/tests/mission-convergence.test.sh")'
 chk "excluded paths ignored" '!f.some((x) => /^(CHANGELOG\.md|docs\/plans\/|docs\/projects\/_archive\/|evals\/skill-onoff\/packs\/|node_modules\/)/.test(x.file))'
+chk "history/frozen paths and codex mirrors excluded" '!f.some((x) => /^(platforms\/codex\/plugin\/)?(profiles\/p0-sources\/|profiles\/guided-baseline-dispositions\.json$|evals\/skill-onoff\/(lib-r4|prereg)\/|evals\/skill-onoff\/archaeology-scan|hooks\/tests\/(skill-onoff-markers|migrate-backlog)|evals\/engine-capabilities\/|skill-creator-workspace\/|docs\/projects\/|docs\/plans\/)/.test(x.file))'
+chk "sibling of an excluded file still scanned" 'has("old_stage_id","profiles/p0-sources-extra/x.txt","L-5.2")'
 chk "counts present per category" '["old_stage_id","old_size_enum","marker_phase","owner_u4"].every((k) => Number.isInteger(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).counts[k]))'
 
 # --- --repo consumer mode ---------------------------------------------------------
@@ -119,6 +132,16 @@ node "$CHK" --root "$R" 2>/dev/null | cat > "$PIPED"
 SZ=$(wc -c < "$PIPED" | tr -d ' ')
 [ "$SZ" -gt 65536 ] && ok "piped result exceeds 64 KiB ($SZ bytes)" || bad "fixture too small: $SZ bytes"
 node -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.exit(d.findings.length===d.total?0:1)' "$PIPED" && ok "piped >64 KiB result parses whole" || bad "piped result truncated or inconsistent"
+
+# --gate: exit 1 on hits, exit 0 on a clean tree, report_only reflects the mode
+rc=0; node "$CHK" --root "$R" --gate --summary > "$TEST_TMP/gate.json" 2>/dev/null || rc=$?
+[ "$rc" -eq 1 ] && ok "--gate exits 1 when hits exist" || bad "--gate exit $rc on a dirty tree"
+node -e 'process.exit(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).report_only===false?0:1)' "$TEST_TMP/gate.json" && ok "--gate reports report_only=false" || bad "--gate report_only flag"
+CLEAN="$TEST_TMP/clean"; mkdir -p "$CLEAN/skills/x"; printf 'node scripts/stage-graph.js nodes --size S\n' > "$CLEAN/skills/x/SKILL.md"
+rc=0; node "$CHK" --root "$CLEAN" --gate >/dev/null 2>&1 || rc=$?
+[ "$rc" -eq 0 ] && ok "--gate exits 0 on a clean tree" || bad "--gate exit $rc on a clean tree"
+rc=0; node "$CHK" --repo "$C" --gate >/dev/null 2>&1 || rc=$?
+[ "$rc" -eq 1 ] && ok "--repo --gate exits 1 on stale consumer lines" || bad "--repo --gate exit $rc"
 
 rc=0; node "$CHK" --bogus >/dev/null 2>&1 || rc=$?
 [ "$rc" -eq 2 ] && ok "unknown arg exits 2" || bad "unknown arg exit $rc"

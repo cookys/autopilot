@@ -44,7 +44,7 @@ The `!`command`` syntax is a Claude Code preprocessor — it runs a shell comman
 | Config File | Customizes | Template |
 |-------------|-----------|----------|
 | `.claude/dev-flow-config.md` | Size rules, quality gates, build commands, special rules | [template](../project-config-template/dev-flow-config.md) |
-| `.claude/finish-flow-config.md` | L-5 / H-9 closing sequence overrides (merge target, archive proc, per-size quality gate) | [template](../project-config-template/finish-flow-config.md) |
+| `.claude/finish-flow-config.md` | `finish` node closing-sequence overrides (merge target, archive proc, per-size quality gate) | [template](../project-config-template/finish-flow-config.md) |
 | `.claude/quality-gate-config.md` | Test, scan, and review commands | [template](../project-config-template/quality-gate-config.md) |
 | `.claude/project-lifecycle-config.md` | Project paths, bootstrap/archive scripts | [template](../project-config-template/project-lifecycle-config.md) |
 | `.claude/next-config.md` | Work source paths for the next skill | [template](../project-config-template/next-config.md) |

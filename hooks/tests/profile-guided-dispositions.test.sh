@@ -25,11 +25,13 @@ cp -r "$REPO_ROOT/docs/projects/_archive/2026/07/2026-07-26-capability-adaptive-
 # The sandbox inherits the real tree's dispositions, and the real tree's sources are short
 # exactly those baseline rules. Synthetic cases must be ADDED to that list, never replace it —
 # replacing it would strand every real shortfall and turn this suite red on an honest repo.
-BASE_DISPOSITIONS=$(node -e '
+# Kept in a FILE, not an argv string: the real list is several hundred entries (> the 128 KiB single-argument limit).
+BASE_DISPOSITIONS="$TEST_TMP/base-dispositions.json"
+node -e '
   const fs=require("fs"),path=require("path");
   const f=path.join(process.argv[1],"profiles/guided-baseline-dispositions.json");
-  console.log(JSON.stringify(JSON.parse(fs.readFileSync(f,"utf8")).dispositions));
-' "$SANDBOX")
+  fs.writeFileSync(process.argv[2],JSON.stringify(JSON.parse(fs.readFileSync(f,"utf8")).dispositions));
+' "$SANDBOX" "$BASE_DISPOSITIONS"
 
 check() { # → echoes exit code; output to $TEST_TMP/check-out.txt
   set +e
@@ -71,7 +73,7 @@ set_dispositions() { # $1 = JSON array of SYNTHETIC dispositions, appended to th
     const sandbox=process.argv[1];
     const f=path.join(sandbox,"profiles/guided-baseline-dispositions.json");
     const doc=JSON.parse(fs.readFileSync(f,"utf8"));
-    doc.dispositions=JSON.parse(process.argv[3]).concat(JSON.parse(process.argv[2]));
+    doc.dispositions=JSON.parse(fs.readFileSync(process.argv[3],"utf8")).concat(JSON.parse(process.argv[2]));
     fs.writeFileSync(f,JSON.stringify(doc,null,2)+"\n");
     const sha=x=>crypto.createHash("sha256").update(fs.readFileSync(x)).digest("hex");
     const catPath=path.join(sandbox,"profiles/profile-catalog.json");
@@ -96,12 +98,22 @@ rc=$(check); [ "$rc" -ne 0 ] || fail "absent successor passed"
 expect_code "PROFILE_GUIDED_DISPOSITION_SUCCESSOR_MISSING" "absent-successor case"
 
 echo "=== green: rewritten disposition naming a PRESENT successor ==="
+# A rule that is BOTH in the P0 baseline and still present in the current tree (the dead-disposition case needs a
+# baseline hash that is not short; after the 3.0.0 rewrite the first current rule is no longer a baseline rule).
 PRESENT_HASH=$(node -e '
-  const path=require("path");
+  const path=require("path"),fs=require("fs");
   const { sha256, extractRuleCandidates, canonicalizeProjectedSkillSource }=require(process.argv[2]+"/scripts/measure-profile-context.js");
-  const fs=require("fs");
-  const src=canonicalizeProjectedSkillSource(fs.readFileSync(path.join(process.argv[1],"skills/dev-flow/SKILL.md"),"utf8"),process.argv[1],"skills/dev-flow/SKILL.md");
-  console.log(extractRuleCandidates(src)[0].content_hash);
+  const root=process.argv[1];
+  const baseline=new Map(), current=new Map();
+  for (const p of ["skills/dev-flow/SKILL.md","skills/ceo-agent/SKILL.md"]) {
+    const snap=fs.readFileSync(path.join(root,"profiles/p0-sources",sha256(p)+".txt"),"utf8");
+    for (const u of extractRuleCandidates(snap)) baseline.set(u.content_hash,(baseline.get(u.content_hash)||0)+1);
+    const src=canonicalizeProjectedSkillSource(fs.readFileSync(path.join(root,p),"utf8"),root,p);
+    for (const u of extractRuleCandidates(src)) current.set(u.content_hash,(current.get(u.content_hash)||0)+1);
+  }
+  const hit=[...baseline].find(([h,c])=>(current.get(h)||0)>=c);
+  if(!hit){console.error("no rule survives from the baseline");process.exit(1)}
+  console.log(hit[0]);
 ' "$SANDBOX" "$REPO_ROOT")
 set_dispositions "[{\"content_hash\":\"$HASH\",\"disposition\":\"rewritten\",\"successor_hashes\":[\"$PRESENT_HASH\"],\"rationale\":\"test: reworded into an existing rule\"}]"
 rc=$(check); [ "$rc" -eq 0 ] || { cat "$TEST_TMP/check-out.txt" >&2; fail "present successor rejected"; }

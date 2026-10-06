@@ -1,6 +1,6 @@
 ---
 name: team
-description: Team allocation and dependency-aware parallelization — decide when to use teams, select roles, dispatch parallel work safely. Invoke for L-size tasks to evaluate whether team dispatch reduces wall-clock time.
+description: Team allocation and dependency-aware parallelization — decide when to use teams, select roles, dispatch parallel work safely. Invoke for L/XL-size tasks to evaluate whether team dispatch reduces wall-clock time.
 ---
 
 # Team Allocation
@@ -22,13 +22,14 @@ Differences worth knowing:
 
 | Size | Team | Action |
 |------|------|--------|
-| S | No | Do directly |
-| L | Evaluate | Use decision tree below |
+| XS / S | No | Do directly |
+| M | Only if 2+ independent work blocks are obvious | Use decision tree below |
+| L / XL | Evaluate | Use decision tree below |
 
 ## Decision Tree
 
 ```
-L-size task
+L/XL-size task
 ├── All phases sequentially dependent? → No team, solo by phase
 ├── 2+ independent parallel work blocks? → Build team
 │   ├── Backend + Frontend changes   → backend-dev + frontend-dev
@@ -111,9 +112,9 @@ Agent tool:
 Paraphrasing a skill's methodology inside `<role-specific instructions>` is NOT
 a substitute for the SKILLS block. The subagent must call the Skill tool so the
 skill's full checklist / red-line rules / rationalization table load into its
-session context — same discipline dev-flow L-1.6 enforces on the main session,
+session context — same discipline dev-flow's intent-node skill routing enforces on the main session,
 applied to subagent dispatch. For the full Seven-Element template (including
-SKILLS) when dispatching L-size project work, see
+SKILLS) when dispatching L/XL-size project work, see
 `skills/ceo-agent/references/task-prompt-templates.md`.
 
 ### Coordination Principles
@@ -141,9 +142,9 @@ All tasks completed
 | "I'll do it faster solo" | Evaluate objectively — 2 modules = worth parallelizing |
 | Team commit task says "commit changes" | Must include quality-pipeline |
 | Dispatch without file overlap check | Always check overlap first |
-| Dispatch teammate prompt without `### SKILLS` section | Subagent must invoke required skills via the Skill tool before touching code; paraphrasing the methodology in the prompt loses fidelity (same rule as ceo-agent step 9 and dev-flow L-1.6) |
+| Dispatch teammate prompt without `### SKILLS` section | Subagent must invoke required skills via the Skill tool before touching code; paraphrasing the methodology in the prompt loses fidelity (same rule as ceo-agent step 9 and dev-flow intent-node skill routing) |
 
 ## See Also
 
 - [Dependency Analysis + Parallelization Tactics](references/team-tactics.md)
-- `autopilot:dev-flow` — orchestrates team evaluation at L-4
+- `autopilot:dev-flow` — orchestrates team evaluation at the `implement` node

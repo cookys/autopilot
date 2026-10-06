@@ -58,7 +58,7 @@ git checkout -b feat/v<X.Y.Z>-<feature-name> develop
 # 3. Plan doc (if not already written)
 # Write to docs/plans/YYYY-MM-DD-<feature-name>.md
 
-# 4. Project dir (MANDATORY per dev-flow L-1)
+# 4. Project dir (MANDATORY per dev-flow `intent` node)
 mkdir -p docs/projects/YYYY-MM-DD-<feature-name>
 # Write docs/projects/YYYY-MM-DD-<feature-name>/README.md with:
 #   - Project Goal (final goal, success criteria, scope boundary)
@@ -130,4 +130,4 @@ None. autopilot has no post-commit automation (no i18n check, no generated artif
 - **Skill description changes are L-size** even if they touch one line. A description change can shift which skill Claude invokes for a given user intent — effectively a routing protocol change. Treat as L, use review loop.
 - **New agent shipment requires plan + review loop**. v2.4.0 established that methodology agents need parallel-reviewer validation before shipping; do not skip this for future agents.
 - **Plugin dev-mode installed plugins cache agent list at session start**. New agents added mid-session are NOT dispatchable until Claude Code restart. Plan Phase 5 (integration verification) accordingly: structural validation this session, runtime dogfood deferred to the next session.
-- **Inspired By attribution is mandatory** when absorbing external OSS / prior art. L-1.5 Scope Completeness Audit already mandates this (v2.2.1 credit row).
+- **Inspired By attribution is mandatory** when absorbing external OSS / prior art. The `intent` node Scope Completeness Audit already mandates this (v2.2.1 credit row).

@@ -23,7 +23,7 @@
  *   node scripts/sync-version.js --check    # pre-commit gate: read canonical,
  *                                           # exit 1 if any tracked file drifts
  *
- * Safety (per L-5.2 r1 reviewer findings 2026-05-14):
+ * Safety (per r1 reviewer findings 2026-05-14):
  *   - Two-pass: pass 1 builds in-memory + asserts every replacement matched
  *     its expected count; pass 2 atomically commits writes
  *   - On any pass-1 failure → no file written, exit non-zero (no half-bump)

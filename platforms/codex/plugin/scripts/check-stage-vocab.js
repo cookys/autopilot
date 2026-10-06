@@ -2,15 +2,26 @@
 'use strict';
 
 // check-stage-vocab.js — KR4 vocabulary scan for the dev-flow stage-graph migration.
-// REPORT-ONLY in P1 (a gate from P5): always exits 0 and prints one findings JSON object.
+// Report-only by default (always exits 0, one findings JSON object on stdout). `--gate` (P5) makes it a failing gate:
+// exit 1 when the total is non-zero. `--repo <consumer>` stays advisory unless `--gate` is passed explicitly.
 //
-//   node scripts/check-stage-vocab.js [--root <dir>] [--summary]
-//   node scripts/check-stage-vocab.js --repo <consumer-dir> [--summary]
+//   node scripts/check-stage-vocab.js [--root <dir>] [--summary] [--gate]
+//   node scripts/check-stage-vocab.js --repo <consumer-dir> [--summary] [--gate]
 //
 // Default mode scans shipped non-history text files under --root (default: this repo; `git ls-files`
 // when it is a git work tree, else a directory walk). Excluded paths: CHANGELOG.md, docs/plans/**
 // (incl. docs/plans/_archive/**), docs/projects/_archive/**, evals/skill-onoff/packs/**,
-// .claude/worktrees/**, node_modules/**, .git/**, and this script plus its test.
+// .claude/worktrees/**, node_modules/**, .git/**, and this script plus its test. History/instrument exclusions (P5, by
+// exact path or directory prefix; a `platforms/codex/plugin/` mirror of any of them is excluded too) — these are frozen
+// or historical inputs, not shipped vocabulary: docs/projects/** (INDEX rows and maintenance logs are history),
+// profiles/p0-sources/** (content-addressed P0 baseline snapshots, written once by `build-profile-payload.js snapshot`
+// from the baseline commit) and profiles/guided-baseline-dispositions.json (append-only accounting of baseline rules
+// by hash; its rationales cite the old ids on purpose), the digest-frozen eval instruments
+// (evals/skill-onoff/lib/p1w-markers.sh, lib-r4/p1w-markers.sh, archaeology-scan.js, prereg/**) and the suites pinning
+// them (hooks/tests/skill-onoff-p1w-markers.test.sh, skill-onoff-markers.test.sh), the negative eval assertion
+// evals/engine-capabilities/no-skill-claim.expected.txt, the backlog-effort suites whose fixtures ARE the old values
+// (hooks/tests/check-backlog-entries.test.sh, migrate-backlog-entries.test.sh), and skill-creator-workspace/**
+// (recorded 2026-03/05 eval runs).
 //
 // Categories and patterns (case-sensitive):
 //   old_stage_id    L-1..L-5 with optional .N (`L-5.7`), H-9 with optional .N, `S-scope-gate`; and
@@ -34,7 +45,8 @@
 // docs/backlog/*.md) for old_stage_id and old_size_enum, printing each stale line with a replacement
 // hint (Fix->S, H->S!, L-5->finish, ...).
 //
-// Exit codes: 0 always for a completed scan (findings are in the JSON); 2 usage / unreadable root.
+// Exit codes: 0 for a completed scan (findings are in the JSON), or in --gate mode when the total is 0; 1 in --gate mode
+// when the total is non-zero; 2 usage / unreadable root.
 // Node >= 20.10, built-ins only.
 
 const fs = require('fs');
@@ -57,6 +69,22 @@ const EXCLUDE_PREFIXES = [
   'node_modules/',
   '.git/',
 ];
+const HISTORY_EXCLUDES = [
+  'docs/projects/',
+  'profiles/p0-sources/',
+  'profiles/guided-baseline-dispositions.json',
+  'evals/skill-onoff/lib/p1w-markers.sh',
+  'evals/skill-onoff/lib-r4/p1w-markers.sh',
+  'evals/skill-onoff/archaeology-scan.js',
+  'evals/skill-onoff/prereg/',
+  'hooks/tests/skill-onoff-p1w-markers.test.sh',
+  'hooks/tests/skill-onoff-markers.test.sh',
+  'evals/engine-capabilities/no-skill-claim.expected.txt',
+  'hooks/tests/check-backlog-entries.test.sh',
+  'hooks/tests/migrate-backlog-entries.test.sh',
+  'skill-creator-workspace/',
+];
+const CODEX_MIRROR = 'platforms/codex/plugin/';
 const U4_EXCLUDE_PATHS = ['docs/BACKLOG.md', 'hooks/tests/mission-convergence.test.sh'];
 const TEXT_EXT = new Set(['.md', '.js', '.cjs', '.mjs', '.ts', '.tsx', '.sh', '.json', '.yml', '.yaml', '.txt', '.py']);
 const MAX_BYTES = 2 * 1024 * 1024;
@@ -112,7 +140,9 @@ function listFiles(root) {
 
 function excluded(rel) {
   if (SELF_EXCLUDES.includes(rel) || SELF_EXCLUDES.some((x) => rel === `platforms/codex/plugin/${x}`)) return true; // the codex mirror is the same file
-  return EXCLUDE_PREFIXES.some((x) => rel === x || rel.startsWith(x));
+  const canon = rel.startsWith(CODEX_MIRROR) ? rel.slice(CODEX_MIRROR.length) : rel;
+  if (HISTORY_EXCLUDES.some((x) => canon === x || (x.endsWith('/') && canon.startsWith(x)))) return true;
+  return EXCLUDE_PREFIXES.some((x) => rel === x || rel.startsWith(x) || canon === x || canon.startsWith(x));
 }
 
 function readText(root, rel) {
@@ -192,10 +222,11 @@ function writeStdout(text) {
 }
 
 function parseArgs(argv) {
-  const o = { root: path.resolve(__dirname, '..'), repo: null, summary: false };
+  const o = { root: path.resolve(__dirname, '..'), repo: null, summary: false, gate: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--summary') o.summary = true;
+    else if (a === '--gate') o.gate = true;
     else if (a === '--root' || a === '--repo') {
       if (argv[i + 1] === undefined) {
         process.stderr.write(`check-stage-vocab: ${a} needs a value\n`);
@@ -251,13 +282,13 @@ function main() {
   const counts = { old_stage_id: 0, old_size_enum: 0, marker_phase: 0, owner_u4: 0 };
   for (const f of findings) counts[f.category]++;
   const total = findings.length;
-  const result = { mode: o.repo ? 'repo' : 'scan', root: base, report_only: true, counts, total };
+  const result = { mode: o.repo ? 'repo' : 'scan', root: base, report_only: !o.gate, counts, total };
   if (!o.summary) result.findings = findings;
   writeStdout(`${JSON.stringify(result)}\n`);
   process.stderr.write(
-    `check-stage-vocab: ${total} hit(s) — ${Object.entries(counts).map(([k, v]) => `${k}=${v}`).join(' ')} (report-only)\n`,
+    `check-stage-vocab: ${total} hit(s) — ${Object.entries(counts).map(([k, v]) => `${k}=${v}`).join(' ')} ${o.gate ? '(gate)' : '(report-only)'}\n`,
   );
-  process.exit(0);
+  process.exit(o.gate && total > 0 ? 1 : 0);
 }
 
 main();

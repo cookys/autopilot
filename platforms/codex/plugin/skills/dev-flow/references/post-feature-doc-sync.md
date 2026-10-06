@@ -1,7 +1,7 @@
 # Post-Feature Doc Sync
 
-> On-demand reference for dev-flow. Loaded at Session End after code changes.
-> Origin: `dev-flow/SKILL.md` Session End.
+> On-demand reference for dev-flow. Loaded after code changes (Session End Rule).
+> Origin: `dev-flow/SKILL.md` Session End Rule.
 
 After code changes, verify documentation matches the new state:
 
@@ -26,6 +26,6 @@ invoke **`autopilot:doc-sync`**:
 - **full** mode (expensive) — whole-repo sweep; OFFER for large/user-facing ships
   or periodically (>30 days since last).
 
-doc-sync is also wired into `finish-flow` L-5.4 (Post-Merge Review). It is
+doc-sync is also wired into `finish-flow`'s post-merge review row. It is
 report-only — triage + fix per its fix policy. Configure per-project domains via
 `.claude/doc-drift-config.md` (template in `project-config-template/`).

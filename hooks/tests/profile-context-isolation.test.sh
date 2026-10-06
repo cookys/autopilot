@@ -198,8 +198,16 @@ const baselineInventoryValid = Object.values(baseline.rule_inventory.category_to
   .reduce((sum, value) => sum + value, 0) === baseline.rule_inventory.canonical_rules
   && baseline.rule_inventory.rule_candidate_occurrences
     - baseline.rule_inventory.alias_occurrences === baseline.rule_inventory.canonical_rules;
-const currentInventoryValid = inventory.canonical_rules >= baseline.rule_inventory.canonical_rules
-  && inventory.rule_candidate_occurrences >= baseline.rule_inventory.rule_candidate_occurrences
+// The inventory is no longer monotonic: the 3.0.0 stage-graph rewrite removed baseline rules, each one accounted by
+// hash in guided-baseline-dispositions.json (the guided compatibility check enforces the exact relation). Every
+// baseline rule the current sources lack must be a disposition entry, so the shortfall is bounded by their count.
+const dispositionCount = JSON.parse(fs.readFileSync(
+  path.join(root, 'profiles', 'guided-baseline-dispositions.json'),
+  'utf8',
+)).dispositions.length;
+const currentInventoryValid = inventory.canonical_rules + dispositionCount >= baseline.rule_inventory.canonical_rules
+  && inventory.rule_candidate_occurrences + dispositionCount
+    >= baseline.rule_inventory.rule_candidate_occurrences
   && inventory.category_totals.obsolete === 0;
 const codex = baseline.hosts.find((host) => host.host === 'codex');
 const traces = codex && codex.evidence && codex.evidence.traces;
@@ -273,11 +281,11 @@ assert_contains "$AUTONOMOUS_BUILD_OUT" '"effective_profile": "autonomous"' "aut
 
 CATALOG_OUT="$(node "$BUILD_CLI" catalog --check --repo "$REPO_ROOT" 2>&1)"; CATALOG_EXIT=$?
 assert_exit_code "$CATALOG_EXIT" 0 "current inventory derives from the immutable P0 baseline"
-assert_contains "$CATALOG_OUT" '"canonical_rules": 815' "profile catalog accounts for every canonical rule"
-assert_eq "$(jq '.mappings | length' "$REPO_ROOT/profiles/rule-migration.json")" "815" \
+assert_contains "$CATALOG_OUT" '"canonical_rules": 654' "profile catalog accounts for every canonical rule"
+assert_eq "$(jq '.mappings | length' "$REPO_ROOT/profiles/rule-migration.json")" "654" \
   "every canonical rule has one content-addressed migration row"
 assert_eq "$(jq '[.mappings[].rule_id] | unique | length' \
-  "$REPO_ROOT/profiles/rule-migration.json")" "815" \
+  "$REPO_ROOT/profiles/rule-migration.json")" "654" \
   "rule migration identifiers are unique"
 
 P2_OUT="$(node - "$REPO_ROOT" "$TEST_TMP" <<'NODE'

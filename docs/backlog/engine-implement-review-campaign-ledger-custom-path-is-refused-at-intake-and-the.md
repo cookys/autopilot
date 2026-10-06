@@ -5,7 +5,7 @@ Source: docs/BACKLOG.md@05f97302492d26112f877bc2a97acb2578aca8df, migrated 2026-
 
 - **Trigger**: **FIRED — measured 2026-09-14**: `campaign_ledger_path_mismatch` ("must be the repository-wide canonical Git common-dir ledger"); the claim for attempt 1 was consumed and `mission grant` minted attempt 2.
 - **Context**: the flag exists in `--help` but only one value is accepted; either drop the flag or make intake validate it before the claim is spent.
-- **Effort**: Fix.
+- **Effort**: S.
 - **Source**: this dogfood.
 
 **Discovery**: when starting any work, `grep <topic>` here. Plan-doc-as-roadmap (`docs/plans/_archive/2026/05/2026-05-14-retro-roundup.md`) post-archive 後遷移 entries 也都歸這裡。

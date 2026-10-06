@@ -233,8 +233,8 @@ To opt a project into the tree:
 scripts/tree.js init <proj>
 ```
 
-**Default for CEO L-size tasks** (Board directive 2026-06-12): the CEO runs
-`tree.js init` as part of L-1 project setup (SKILL.md Execution step 3.c2) so
+**Default for CEO M/L/XL tasks** (Board directive 2026-06-12): the CEO runs
+`tree.js init` as part of project setup (`plan` node) (SKILL.md Execution step 3.c2) so
 shadow calibration samples and the audit trail accumulate on every L-ship.
 Skip only on explicit Board instruction for that task.
 
@@ -244,7 +244,7 @@ requires a `board_signoff` event emitted after the Board approves graduation
 (see §2).
 
 **Close-out ordering**: `tree.js` validates project names (no `/`), so once
-finish-flow L-5.5 moves the project under `_archive/` the tree is **read-only**.
+finish-flow moves the project under `_archive/` the tree is **read-only**.
 Emit every node's final `verdict` (including the closing node's) BEFORE the
 archive move (2026-06-12 dogfood divergence).
 

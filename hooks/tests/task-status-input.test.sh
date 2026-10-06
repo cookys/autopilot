@@ -2,7 +2,7 @@
 # Mods P1W W1b — the `autopilot status task` input bundle has a producer.
 #
 # Before: nothing in the repo wrote ${AUTOPILOT_TASK_STATUS_DIR:-$TMPDIR/autopilot-task-status}/<root>.json,
-# so `status task --root-run-id` always failed TASK_STATUS_INPUT_UNAVAILABLE and finish-flow L-5.3 /
+# so `status task --root-run-id` always failed TASK_STATUS_INPUT_UNAVAILABLE and finish-flow's merge row /
 # `session-mode.js clear` had no receipt to consume.
 #
 # RED (base 39cc491c with producer + engine hook removed, first full run of 37 assertions):

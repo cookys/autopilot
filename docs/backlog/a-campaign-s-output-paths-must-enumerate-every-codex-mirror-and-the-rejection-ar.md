@@ -7,6 +7,6 @@ Source: docs/BACKLOG.md@05f97302492d26112f877bc2a97acb2578aca8df, migrated 2026-
 - **Trigger**: `boundary_rejected: changed path 'platforms/codex/plugin/...' is outside sealed output surface`.
 - **Measured 2026-09-12** on the same graph. The `p1-integration-receipt-sha-ledger` node listed `schemas/merge-execution-receipt.schema.json`, `src/merge/cli.js` and `scripts/record-integration.js` in `output_paths`, plus the codex mirror of the new script — but not the mirrors of the schema or of `src/merge/cli.js`. `scripts/sync-codex-plugin-skills.sh` mirrors `bin src profiles schemas evals/clean evals/known-bad hooks/_shared references scripts project-config-template`, and the node's own `verify_cmd` runs `sync-codex-plugin-skills.sh --check`, so the implementer was **required by its verification to touch paths its contract forbade**. It did the work, wrote nine files, and the whole round was discarded at the boundary check.
 - **The authoring error is mine, but the shape is a trap worth a mechanism**: a graph author enumerates the files they are thinking about, while the mirror set is a property of the repo. Candidate fix: a graph-check rule that, for every `output_paths` entry under a mirrored root, requires the corresponding `platforms/codex/plugin/` path to be present too — refusing at `mission-execution-graph-check.js` time, which is free, rather than after a paid implementation round.
-- **Effort**: Fix for the graph-check rule.
+- **Effort**: S for the graph-check rule.
 - **Source**: /l5 dogfood, 2026-09-12.
 

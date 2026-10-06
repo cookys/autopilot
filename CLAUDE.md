@@ -98,7 +98,7 @@ The version (canonical in `.claude-plugin/plugin.json`, mirrored by `scripts/syn
 
 Rationale: a new script/hook/reference is real work but it is **not** a new user-facing capability the way a skill or agent is — bundling those under PATCH keeps the second digit meaningful as a "new thing users invoke" counter. The PATCH-vs-no-bump line is **code vs not-code**: if the change alters the behavior of any shipped code, it's at least a PATCH; reserve no-bump for changes that touch only docs or tests. (Borderline: a commit that is mostly tests plus a trivial incidental code touch may ride as no-bump if the code touch isn't itself the point; when the code fix *is* the point, it's a PATCH.)
 
-Mechanics: bump via `scripts/sync-version.js --version <V> --hook-count <N> --skill-count <M>` (opt-in/disabled counts are preserved from canonical when omitted). A version bump triggers the finish-flow L-5.5 release gate (`scripts/preflight-release.sh`: CHANGELOG entry + INDEX row + mirror parity).
+Mechanics: bump via `scripts/sync-version.js --version <V> --hook-count <N> --skill-count <M>` (opt-in/disabled counts are preserved from canonical when omitted). A version bump triggers the finish-flow Release hygiene row release gate (`scripts/preflight-release.sh`: CHANGELOG entry + INDEX row + mirror parity).
 
 **Concurrent-session PATCH collisions**: two sessions working this repo in parallel occasionally pick
 the same next PATCH number — version-mirror files with identical values merge silently with no git

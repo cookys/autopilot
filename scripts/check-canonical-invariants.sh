@@ -264,30 +264,12 @@ check_reference "reviewer→code-review/Invocation" \
   "agents/reviewer.md"                               "code-review.md) Invocation §" \
   "skills/quality-pipeline/references/code-review.md" "## Invocation"
 
-# repeat #3 — S-scope-gate block invariants. Seed the TaskCreate title line, the three
-# indicator lines, and the "Mark this task ONLY when" line across dev-flow and ceo-agent.
-check_repeat "s-scope-gate-title" \
-  'TaskCreate: "S-scope-gate: Evaluate scope before every commit"' \
-  "skills/dev-flow/SKILL.md" \
-  "skills/ceo-agent/SKILL.md"
-
-check_repeat "s-scope-gate-ind1" \
-  '    (1) Fewer than 3 commits on this task so far?' \
-  "skills/dev-flow/SKILL.md" \
-  "skills/ceo-agent/SKILL.md"
-
-check_repeat "s-scope-gate-ind2" \
-  '    (2) Fewer than 3 different modules touched?' \
-  "skills/dev-flow/SKILL.md" \
-  "skills/ceo-agent/SKILL.md"
-
-check_repeat "s-scope-gate-ind3" \
-  '    (3) No features added beyond original goal?' \
-  "skills/dev-flow/SKILL.md" \
-  "skills/ceo-agent/SKILL.md"
-
-check_repeat "s-scope-gate-mark" \
-  '  Mark this task ONLY when: work is complete AND scope stayed S throughout (all YES),' \
+# repeat #3 — the E1 size-bump command. The old scope-gate TaskCreate block (title, three indicator lines, "Mark this
+# task ONLY when") was deleted in 3.0.0 (P5): the scope-vs-size check is now mechanical (`stage-advance.js` exits 4 with
+# `bump_to` when the diff outgrew its size). What the old block protected — that an outgrown size is bumped, not ignored —
+# lives in the bump command both skills must state verbatim. Reword ritual: change it here AND in both files.
+check_repeat "size-bump-command" \
+  'session-mode.js set --size <bump_to>' \
   "skills/dev-flow/SKILL.md" \
   "skills/ceo-agent/SKILL.md"
 
@@ -375,6 +357,20 @@ elif node "$REPO/scripts/check-supersession-anchors.js" >/dev/null 2>&1; then
   ok "supersession-anchors: every superseded ruling carries a dated pointer; protected regions unchanged"
 else
   bad "supersession-anchors: a superseded ruling lacks its pointer, or a protected region changed — run node scripts/check-supersession-anchors.js"
+fi
+
+# ── stage-vocabulary invariant ───────────────────────────────────────────────────
+# The 3.0.0 stage-graph vocabulary replaced the L-n / H-n / S.n / F.n numbering, the S/L/H/Fix size enum, the marker
+# phase fields and the old ladder owner rung. A shipped file that names an old id is a stale instruction. History and
+# digest-frozen instruments are excluded by path inside the script (see its header). Gate mode: exit 1 on any hit.
+if [ "$IS_PLUGIN" = "1" ]; then
+  : # the plugin payload is a mirror of files already gated in the source repo
+elif ! command -v node >/dev/null 2>&1; then
+  envx "stage-vocab: node is required to run scripts/check-stage-vocab.js"
+elif node "$REPO/scripts/check-stage-vocab.js" --gate --summary >/dev/null 2>&1; then
+  ok "stage-vocab: no old stage ids, size enum, marker phase fields or owner-U4 wording in shipped files"
+else
+  bad "stage-vocab: a shipped file names an old stage id / size enum / marker phase / owner-U4 wording — run node scripts/check-stage-vocab.js"
 fi
 
 echo ""

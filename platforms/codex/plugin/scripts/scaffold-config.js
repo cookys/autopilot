@@ -320,7 +320,7 @@ const SETTINGS_ENV_KEY = 'CLAUDE_CODE_ENABLE_TODO_TOOLS';
 
 // CC >= 2.1.233 disables the task tools (TaskCreate/Get/Update/List, TodoWrite) on
 // Opus >= 4.8 / Sonnet >= 5 / Fable >= 5 / Mythos >= 5 unless opted in — which silently
-// no-ops every dev-flow forcing function (L-1.6 / L-5 / H-9 / S-scope-gate). The pin keeps
+// no-ops every dev-flow forcing function (the intent, qc-gate and finish node task rows). The pin keeps
 // them alive. Merge-safe: creates the file or adds the one env key; never clobbers other
 // keys; an EXPLICIT existing value (even "0") is the user's choice and is left alone.
 // Evidence: docs/plans/evidence/2026-08-20-interactive-cc-drivability-spike/ +

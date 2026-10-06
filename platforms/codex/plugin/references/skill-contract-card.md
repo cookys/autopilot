@@ -31,7 +31,7 @@ Every MUST/MANDATORY row in a card names its enforcer:
 
 | Enforcer class | Example |
 |---|---|
-| TaskCreate + system-reminder + blockedBy | L-1.6, L-5, S-scope-gate |
+| TaskCreate + system-reminder + blockedBy | intent skill routing, finish, the E1 size-bump gate (`stage-advance.js` exit 4) |
 | Deterministic script/hook | `mission-routing-admission.js`, quality gates |
 | Textual invariant check | `check-canonical-invariants.sh` repeat/reference rows |
 | `documented-only` tag | Everything else — and prose is not governance |

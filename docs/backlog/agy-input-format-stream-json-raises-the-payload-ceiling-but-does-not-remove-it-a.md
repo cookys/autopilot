@@ -102,6 +102,6 @@ Source: docs/BACKLOG.md@05f97302492d26112f877bc2a97acb2578aca8df, migrated 2026-
   errors the design prevents. It lived in `/tmp` during the investigation; reconstructing it is
   exactly where both hosts went wrong, so it is version-controlled next to the row it supports.
 - **Candidate**: keep `agy_argv_ceiling_assert` as a hard gate, add a stream-json transport behind it with its own empirically-derived ceiling (start conservative, e.g. 150 KB), and make the probe above a regression test with the nonce at the tail — never assert on `status` alone. Splitting the unit remains the correct answer above that.
-- **Effort**: S (transport + ceiling constant + the nonce regression test); the per-rail wiring is Fix each.
+- **Effort**: S (transport + ceiling constant + the nonce regression test); the per-rail wiring is S each.
 - **Source**: peer report from twgs-revival 2026-09-11, re-derived locally the same day with four probes; `scripts/lib/agy-argv-ceiling.sh`, callers at `dispatch-hetero.sh:2750`, `dispatch-author.sh:728`, `dispatch-review.sh:1398`.
 

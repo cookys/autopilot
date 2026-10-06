@@ -160,7 +160,11 @@ Thresholds (10/12, red <= 4/12, generic non-regression), arms, packs, the other 
 3. **Rung keys.** `eligible_max` depends on the nouns the agent passes to classify, so a pinned rung on the L/XL briefs scored noun choice;
    `l-u0-known`'s brief also named three new flags that are zero-hit, making U0 unreachable. For `l-feature`, `xl-deliverable`, `l-u0-known`
    the rung is now consistency with the probe (re-derived from the agent's own `--terms` on the frozen base tree; U0 key also needs the classify
-   at intent). The `l-u0-known` brief is rewritten from things that exist in its repo. Limit: the walk is still pinned to `noresearch`.
+   at intent). The `l-u0-known` brief is rewritten from things that exist in its repo. The expected walk of these three tasks follows the
+   consistent rung: the `research` variant of the key cell when the (probe-consistent) first classify reports >= U1, the key's `noresearch`
+   cell when U0/none; exact match up to the horizon either way. Pinned-rung tasks keep their pinned walk.
+4. **`session-mode set` chains.** Same per-invocation attribution as item 2 (its own `{ok:true, marker_path}` stdout; ambiguous -> old rule +
+   `ambiguous:true`).
 
 Spend-free proof: `hooks/tests/skill-onoff-stage-graph.test.sh` section 4 and `hooks/tests/skill-onoff-arm-builder.test.sh` (stub campaign keeps
 the cell artifacts); one mutation per fix goes red.

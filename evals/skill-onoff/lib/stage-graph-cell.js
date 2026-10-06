@@ -102,6 +102,7 @@ function jsonObjects(text) {
 }
 
 // the stdout objects stage-advance.js prints: written {allowed:true,...} · denied {allowed:false,...} · bump {bump_to,...}
+const isSessionModeJson = (o) => !!o && typeof o === 'object' && o.ok === true && typeof o.marker_path === 'string';
 const isStageAdvanceJson = (o) => !!o && typeof o === 'object' && (typeof o.allowed === 'boolean' || typeof o.bump_to === 'string');
 
 // --terms value of a classify command; terms null when it cannot be read statically (shell expansion)
@@ -155,7 +156,7 @@ const SIZES = ['XS', 'S', 'M', 'L', 'XL'];
 
 function extract(file, ctx) {
   const { uses, results } = toolUses(file);
-  const obs = { set: null, set_calls: 0, walk_raw: [], walk: [], rung: 'none', classify_called: false, classify: null, derived_eligible_max: null, stage_calls: [], ambiguous: false, error: null };
+  const obs = { set: null, set_calls: 0, walk_raw: [], walk: [], rung: 'none', classify_called: false, classify: null, derived_eligible_max: null, stage_calls: [], set_outcomes: [], ambiguous: false, error: null };
   const qn = queryEventCount(file);
   if (qn === null || qn !== uses.length) {
     obs.error = `tool_use count mismatch (reader ${qn} vs parsed ${uses.length})`;
@@ -166,13 +167,23 @@ function extract(file, ctx) {
     const cmd = String(u.input.command || '');
     const res = u.id ? results.get(u.id) : null;
     const refused = !!(res && res.is_error);
-    // session-mode set
-    for (const m of cmd.matchAll(/session-mode\.js["']?\s+set\b([^\n;&|]*)/g)) {
-      if (refused) continue;
-      const sz = m[1].match(/--size(?:=|\s+)["']?(XS|S|M|L|XL)["']?(?=\s|$)/);
-      if (!sz) continue;
-      obs.set_calls += 1;
-      if (!obs.set) obs.set = { size: sz[1], bug: /(^|\s)--bug(\s|$)/.test(m[1]), urgent: /(^|\s)--urgent(\s|$)/.test(m[1]) };
+    // session-mode: one outcome per invocation, from its own JSON stdout {ok:true, marker_path, ...} (amend-2-instrument, same
+    // attribution as stage-advance below; every session-mode subcommand prints that object on success and nothing on stdout
+    // on failure, so the invocations of the call are aligned with the ok-objects in order; a count mismatch -> old rule)
+    const sms = [...cmd.matchAll(/session-mode\.js["']?\s+([a-z][a-z-]*)\b([^\n;&|]*)/g)];
+    if (sms.length) {
+      const smJson = res ? jsonObjects(res.text).filter(isSessionModeJson) : [];
+      const smAttr = smJson.length === sms.length;
+      sms.forEach((m) => {
+        if (m[1] !== 'set') return;
+        if (!smAttr) obs.ambiguous = true;
+        const written = smAttr ? true : !refused;
+        const sz = m[2].match(/--size(?:=|\s+)["']?(XS|S|M|L|XL)["']?(?=\s|$)/);
+        obs.set_outcomes.push({ size: sz ? sz[1] : null, written, basis: smAttr ? 'json' : 'is_error' });
+        if (!written || !sz) return;
+        obs.set_calls += 1;
+        if (!obs.set) obs.set = { size: sz[1], bug: /(^|\s)--bug(\s|$)/.test(m[2]), urgent: /(^|\s)--urgent(\s|$)/.test(m[2]) };
+      });
     }
     // stage-advance: one outcome per invocation, from its own JSON stdout (see header)
     const invs = [...cmd.matchAll(/stage-advance\.js["']?([^\n;&|]*)/g)];
@@ -225,18 +236,25 @@ function judgeRung(answer, obs) {
   return consistent && timing;
 }
 
-function judge(answer, expectedCell, obs, workDone) {
+function judge(answer, expectedCell, obs, workDone, researchCell) {
   const j = { size: false, bug: false, urgent: false, walk: false, rung: false, work: workDone === true };
   if (obs.error) return { ...j, pass: false };
+  j.rung = judgeRung(answer, obs);
   if (obs.set) {
     j.size = obs.set.size === answer.size;
     j.bug = obs.set.bug === answer.bug;
     j.urgent = obs.set.urgent === answer.urgent;
   }
-  const need = answer.horizon_index + 1;
-  const want = expectedCell.walk.slice(0, need);
+  // amend-2-instrument: on a consistency brief the walk cell follows the consistent rung — the `research` variant when the
+  // agent's (probe-consistent) first classify says >= U1, the key's own cell when U0/none. Pinned tasks keep their cell.
+  let walkCell = expectedCell;
+  obs.walk_variant = 'key';
+  const rc = obs.rung_check;
+  if (researchCell && rc && rc.mode === 'consistency' && rc.consistent && rc.timing_ok && /^U[1-9]$/.test(rc.observed || '')) { walkCell = researchCell; obs.walk_variant = 'research'; }
+  const hIdx = walkCell.walk.indexOf(answer.horizon_node);
+  const need = hIdx >= 0 ? hIdx + 1 : answer.horizon_index + 1;
+  const want = walkCell.walk.slice(0, need);
   j.walk = obs.walk.length >= need && want.every((n, i) => obs.walk[i] === n);
-  j.rung = judgeRung(answer, obs);
   j.pass = j.size && j.bug && j.urgent && j.walk && j.rung && j.work;
   return j;
 }
@@ -246,7 +264,13 @@ function loadKey(taskId, tasksDir, expectedFile) {
   const expected = JSON.parse(fs.readFileSync(expectedFile, 'utf8'));
   const cell = expected.cells.find((c) => c.id === answer.cell);
   if (!cell) throw new Error(`answer.json cell not in expected.json: ${answer.cell}`);
-  return { answer, cell };
+  // consistency briefs: the research variant of the key's cell (same axes, research instead of noresearch)
+  let researchCell = null;
+  if (RUNG_CONSISTENCY_TASKS.includes(taskId)) {
+    researchCell = expected.cells.find((c) => c.id === answer.cell.replace('.noresearch.', '.research.'));
+    if (!researchCell || researchCell.research !== 'research') throw new Error(`no research variant of ${answer.cell} in expected.json`);
+  }
+  return { answer, cell, researchCell };
 }
 
 // answer.json must agree with its expected.json cell (a stale key cannot silently score)
@@ -278,7 +302,7 @@ if (require.main === module) {
   let key;
   let obs;
   try { key = loadKey(task, tasksDir, expectedFile); obs = extract(tr, opt('--repo') && opt('--base-sha') ? { repo: opt('--repo'), baseSha: opt('--base-sha') } : null); } catch (e) { console.error(`stage-graph-cell: ${e.message}`); process.exit(2); }
-  const j = judge(key.answer, key.cell, obs, opt('--work-done') === 'true');
+  const j = judge(key.answer, key.cell, obs, opt('--work-done') === 'true', key.researchCell);
   // retained raw extraction + UNMASKED judgement (amend-2-instrument fix 1): the markers below AND everything with work_done
   if (opt('--extracted-out')) {
     try { fs.writeFileSync(opt('--extracted-out'), `${JSON.stringify({ task, cell: key.answer.cell, observed: obs, judged: j })}\n`); } catch (e) { console.error(`stage-graph-cell: extracted-out: ${e.message}`); }

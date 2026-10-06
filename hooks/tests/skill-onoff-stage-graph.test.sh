@@ -343,9 +343,9 @@ jq1() { node -e 'const o=JSON.parse(process.argv[1]);let v=o;for(const k of proc
 SET='node scripts/session-mode.js set --size XS'
 W='{"allowed":true,"from":"implement","to":"qc-gate","marker_path":"/m","stage":"qc-gate"}'
 D='{"allowed":false,"from":"implement","to":"finish","legal_next":["qc-gate"],"reason":"x"}'
-OKJ='{"ok":true}'
+OKJ='{"ok":true,"marker_path":"/m","size":"XS"}'
 mkt() { SET="$SET" W="$W" D="$D" OKJ="$OKJ" node -e '
-const { SET, W, D, OKJ } = process.env;
+const { SET, W, D, OKJ, SETM, SETW } = process.env;
 const CLS = (t) => `node scripts/probe-unknown.js classify --ledger /tmp/l.jsonl --terms ${t}`;
 const ADV = (n) => `node scripts/stage-advance.js --to ${n}`;
 const spec = eval(process.argv[2]);
@@ -410,6 +410,56 @@ mkt "$TEST_TMP/n3.jsonl" '[[SET, OKJ, false], [CLS("notes,zzqx-storage"), "{\"el
 mkt "$TEST_TMP/n4.jsonl" '[[SET, OKJ, false], [CLS("\"$T\""), "{\"eligible_max\":\"U1\"}", false]]'
 o=$(cellj stage-graph-l-feature "$TEST_TMP/n4.jsonl" "$LR")
 [ "$(jq1 "$o" observed.rung_check.mode)" = '"pinned-fallback"' ] && [ "$(rungof "$o")" = false ] || fail "fix3: un-derivable terms use the pinned rule (U1 not accepted for a none key): $o"
+
+# ── walk follows the consistent rung (coordinator decision): >= U1 -> research variant, U0/none -> noresearch ──
+SETL='node scripts/session-mode.js set --size L'
+U1T='scheduler,zzqx-new-thing'
+walkj() { jq1 "$1" judged.walk; }
+# U1-consistent agent that goes through research: pass (rung and walk)
+mkt "$TEST_TMP/w1.jsonl" '[["'"$SETL"'", OKJ, false], [CLS("'"$U1T"'"), "{\"eligible_max\":\"U1\"}", false], [ADV("intent"), W, false], [ADV("research"), W, false], [ADV("proposal"), W, false], [ADV("plan"), W, false]]'
+o=$(cellj stage-graph-l-u0-known "$TEST_TMP/w1.jsonl" "$UR")
+[ "$(walkj "$o")" = true ] && [ "$(rungof "$o")" = true ] && [ "$(jq1 "$o" observed.walk_variant)" = '"research"' ] || fail "walk: U1-consistent agent through research must pass: $o"
+# U1-consistent agent that skips research: walk fails
+mkt "$TEST_TMP/w2.jsonl" '[["'"$SETL"'", OKJ, false], [CLS("'"$U1T"'"), "{\"eligible_max\":\"U1\"}", false], [ADV("intent"), W, false], [ADV("proposal"), W, false], [ADV("plan"), W, false]]'
+o=$(cellj stage-graph-l-u0-known "$TEST_TMP/w2.jsonl" "$UR")
+[ "$(walkj "$o")" = false ] && [ "$(rungof "$o")" = true ] || fail "walk: U1-consistent agent skipping research must fail the walk: $o"
+# U0 agent that goes through research: walk fails
+mkt "$TEST_TMP/w3.jsonl" '[["'"$SETL"'", OKJ, false], [CLS("scheduler,retry"), "{\"eligible_max\":\"U0\"}", false], [ADV("intent"), W, false], [ADV("research"), W, false], [ADV("proposal"), W, false], [ADV("plan"), W, false]]'
+o=$(cellj stage-graph-l-u0-known "$TEST_TMP/w3.jsonl" "$UR")
+[ "$(walkj "$o")" = false ] && [ "$(jq1 "$o" observed.walk_variant)" = '"key"' ] || fail "walk: U0 agent going through research must fail: $o"
+# U0 agent on the noresearch walk, and a none-key agent with no classify: pass
+mkt "$TEST_TMP/w4.jsonl" '[["'"$SETL"'", OKJ, false], [CLS("scheduler,retry"), "{\"eligible_max\":\"U0\"}", false], [ADV("intent"), W, false], [ADV("proposal"), W, false], [ADV("plan"), W, false]]'
+[ "$(walkj "$(cellj stage-graph-l-u0-known "$TEST_TMP/w4.jsonl" "$UR")")" = true ] || fail "walk: U0 agent on the noresearch walk must pass"
+mkt "$TEST_TMP/w5.jsonl" '[["'"$SETL"'", OKJ, false], [ADV("intent"), W, false], [ADV("proposal"), W, false], [ADV("plan"), W, false]]'
+[ "$(walkj "$(cellj stage-graph-l-feature "$TEST_TMP/w5.jsonl" "$LR")")" = true ] || fail "walk: none-key agent without classify keeps the noresearch walk"
+# an INCONSISTENT classify (U1 claimed for all-hit terms) does not buy the research variant
+mkt "$TEST_TMP/w6.jsonl" '[["'"$SETL"'", OKJ, false], [CLS("scheduler,retry"), "{\"eligible_max\":\"U1\"}", false], [ADV("intent"), W, false], [ADV("research"), W, false], [ADV("proposal"), W, false], [ADV("plan"), W, false]]'
+o=$(cellj stage-graph-l-u0-known "$TEST_TMP/w6.jsonl" "$UR")
+[ "$(walkj "$o")" = false ] && [ "$(rungof "$o")" = false ] || fail "walk: inconsistent U1 must not select the research variant: $o"
+# pinned tasks keep their pinned walk: no research variant is even loaded for them
+node -e 'const c=require(process.argv[1]);const k=c.loadKey("stage-graph-m-feature",process.argv[2],process.argv[3]);if(k.researchCell!==null)process.exit(1)' "$CELL" "$BASE/tasks" "$EXPECTED" || fail "walk: pinned task must have no research variant"
+
+# ── session-mode set: per-invocation outcome (same attribution as stage-advance) ──
+SETM='node scripts/session-mode.js set --size M --bug'
+SETW='{"ok":true,"marker_path":"/m","size":"M","bug":true}'
+export SETM SETW
+# chained success + failing follow-up command (call is_error, the set WAS written): counted
+mkt "$TEST_TMP/s1.jsonl" '[[SETM + " && bash run-tests.sh", SETW + "\nFAIL: red\n", true]]'
+o=$(cellj stage-graph-m-bug "$TEST_TMP/s1.jsonl")
+[ "$(jq1 "$o" observed.set.size)" = '"M"' ] && [ "$(jq1 "$o" observed.set.bug)" = true ] && [ "$(jq1 "$o" observed.ambiguous)" = false ] && [ "$(jq1 "$o" observed.set_outcomes.0.basis)" = '"json"' ] || fail "set: chained success + failing command must count the size: $o"
+# a failed set (no stdout JSON, is_error): not recorded; ambiguous -> old rule
+mkt "$TEST_TMP/s2.jsonl" '[[SETM, "session-mode: bad flag", true]]'
+o=$(cellj stage-graph-m-bug "$TEST_TMP/s2.jsonl")
+[ "$(jq1 "$o" observed.set)" = null ] && [ "$(jq1 "$o" observed.ambiguous)" = true ] || fail "set: a failed set must not be recorded: $o"
+# ambiguous success (no JSON, not an error): old rule counts it
+mkt "$TEST_TMP/s3.jsonl" '[[SETM, "done", false]]'
+o=$(cellj stage-graph-m-bug "$TEST_TMP/s3.jsonl")
+[ "$(jq1 "$o" observed.set.size)" = '"M"' ] && [ "$(jq1 "$o" observed.ambiguous)" = true ] || fail "set: ambiguous call falls back to the old rule and is flagged: $o"
+# a second session-mode call in the same command (alignment by count): get + set both print ok-objects -> still attributed
+mkt "$TEST_TMP/s4.jsonl" '[["node scripts/session-mode.js get && " + SETM + " && bash run-tests.sh", SETW + "\n" + SETW + "\nFAIL\n", true]]'
+o=$(cellj stage-graph-m-bug "$TEST_TMP/s4.jsonl")
+[ "$(jq1 "$o" observed.set.size)" = '"M"' ] && [ "$(jq1 "$o" observed.ambiguous)" = false ] || fail "set: per-invocation alignment across subcommands: $o"
+
 # the amendment record: amendment 2, v1 not re-scored, its task list == the code's, thresholds untouched
 node -e '
 const a = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));

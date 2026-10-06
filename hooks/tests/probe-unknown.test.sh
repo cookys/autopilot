@@ -216,7 +216,10 @@ node "$LEDGER" append --ledger "$G" --kind hypothesis --json '{"hypothesis_id":"
 node "$LEDGER" append --ledger "$G" --kind hypothesis --json '{"hypothesis_id":"g2","text":"b","status":"refuted","work_unit":"gw"}' >/dev/null
 node "$LEDGER" append --ledger "$G" --kind unknown --json '{"type":"how","rationale":"r","work_unit":"gs6"}' >/dev/null
 printf '%s\n' '{"verdict":"TRIP","reasons":["no-progress"]}' > "$TEST_TMP/conv.json"
-GPIN=("${PIN[@]}")
+# Isolation: probe-unknown counts repo hits with `git grep` over TRACKED files, so the golden/zero-hit cases run against a
+# throwaway empty git repo; otherwise this test's own committed fixtures would turn the invented term into a repo hit.
+ISO="$TEST_TMP/iso-repo"; mkdir -p "$ISO"; git -C "$ISO" init -q; printf x > "$ISO/f.txt"; git -C "$ISO" add f.txt
+GPIN=("${PIN[@]}" --repo-root "$ISO")
 norm() { node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);delete j.ledger;console.log(JSON.stringify(j))})'; }
 golden_cases() {
   node "$PROBE" classify --ledger "$TEST_TMP/none.jsonl" "${GPIN[@]}" | norm
@@ -245,7 +248,7 @@ assert_eq "$(node "$PROBE" classify --ledger "$G" --work-unit gw "${GPIN[@]}" --
 # ── v3 on ──
 V3=(--ladder-v3 on --budget-u4 1 --discuss-dispatch off)
 V="$TEST_TMP/v3.jsonl"
-vc() { node "$PROBE" classify --ledger "$V" "${PIN[@]}" "${V3[@]}" "$@"; }
+vc() { node "$PROBE" classify --ledger "$V" "${PIN[@]}" --repo-root "$ISO" "${V3[@]}" "$@"; }
 vr() { node "$PROBE" receipt --ledger "$V" --ladder-v3 on "$@"; }
 for h in a b; do node "$LEDGER" append --ledger "$V" --kind hypothesis --json "{\"hypothesis_id\":\"v$h\",\"text\":\"t\",\"status\":\"refuted\",\"work_unit\":\"vw\"}" >/dev/null; done
 vr --rung U1 --unknown-type why --terms x --signals S1 --work-unit vw >/dev/null

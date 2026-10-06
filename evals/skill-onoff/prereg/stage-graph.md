@@ -119,11 +119,21 @@ ids, the planted-red packs under `-sg-red`):
 | `quality-pipeline-sg-base` | `skills/quality-pipeline/` | SKILL.md + 6 references + `_base/` |
 | `distill-sg-base`, `doc-sync-sg-base`, `learn-sg-base`, `research-to-ship-sg-base` | the same-named skills | SKILL.md (+ distill references/sync-setup.md) |
 | `project-lifecycle-sg-base` | `skills/project-lifecycle/` | SKILL.md + references/{plan-bootstrap,project-archive,project-structure,templates}.md |
-| `guidance-files-sg-base` | repo paths (via `freeze-pack.js --scripts`) | `references/{four-layer-design,hetero-dispatch,multi-agent-portability,plan-template,skill-contract-card}.md`, `project-config-template/{dev-flow-config,finish-flow-config,review-loop-config}.md` |
+| `guidance-files-sg-base` | repo paths (via `freeze-pack.js --scripts`) | `references/{four-layer-design,hetero-dispatch,multi-agent-portability,plan-template,skill-contract-card}.md`, `project-config-template/{dev-flow-config,finish-flow-config,review-loop-config}.md`; amended 2026-10-06 (below) adds `references/{backlog-entry,evidence-discipline,review-page}.md` |
 
-Exact per-file list: `prereg/stage-graph.json` `guidance.files` (sorted, 61 paths) and `packs/manifest.json`
+Exact per-file list: `prereg/stage-graph.json` `guidance.files` (sorted, 65 paths after the pre-run amendment below) and `packs/manifest.json`
 digests. Pack mapping used by the gate: `skills/<s>/<rest>` -> `<s>-sg-change/<rest>`; every other path ->
 `guidance-files-sg-change/<repo path>`.
+
+## Pre-run amendment 2026-10-06 (no results seen)
+
+No live cell has run and no result has been seen. Guidance files that differ from `guidance.base_ref` (8a10980f)
+but were missing from `guidance.files` are added to `guidance.files` (61 -> 65): `references/backlog-entry.md`,
+`references/evidence-discipline.md`, `references/review-page.md` (also added to `non_skill_files`, 8 -> 11) and
+`skills/dev-flow/references/stage-graph.md` (a NEW file inside the dev-flow skill, absent at base: the base pack
+lacks it, the change pack carries it; the cut gate accepts it as differing from base and byte-equal to its pack copy).
+The three non-skill files exist at base, so the base arm ships their base_ref bytes via `guidance-files-sg-extra-base`.
+The 22 listed-but-unchanged files stay listed (byte-equal to base). The rule, briefs, answer keys and scorer are untouched.
 
 ## Known limits (recorded, not hidden)
 

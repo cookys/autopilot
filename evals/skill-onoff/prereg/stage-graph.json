@@ -118,23 +118,29 @@
       "files_change": "guidance-files-sg-change"
     },
     "non_skill_files": [
+      "project-config-template/dev-flow-config.md",
+      "project-config-template/finish-flow-config.md",
+      "project-config-template/review-loop-config.md",
+      "references/backlog-entry.md",
+      "references/evidence-discipline.md",
       "references/four-layer-design.md",
       "references/hetero-dispatch.md",
       "references/multi-agent-portability.md",
       "references/plan-template.md",
-      "references/skill-contract-card.md",
-      "project-config-template/dev-flow-config.md",
-      "project-config-template/finish-flow-config.md",
-      "project-config-template/review-loop-config.md"
+      "references/review-page.md",
+      "references/skill-contract-card.md"
     ],
     "files": [
       "project-config-template/dev-flow-config.md",
       "project-config-template/finish-flow-config.md",
       "project-config-template/review-loop-config.md",
+      "references/backlog-entry.md",
+      "references/evidence-discipline.md",
       "references/four-layer-design.md",
       "references/hetero-dispatch.md",
       "references/multi-agent-portability.md",
       "references/plan-template.md",
+      "references/review-page.md",
       "references/skill-contract-card.md",
       "skills/ceo-agent/SKILL.md",
       "skills/ceo-agent/references/decision-matrix.md",
@@ -150,6 +156,7 @@
       "skills/dev-flow/references/historical-rationale.md",
       "skills/dev-flow/references/model-routing.md",
       "skills/dev-flow/references/post-feature-doc-sync.md",
+      "skills/dev-flow/references/stage-graph.md",
       "skills/distill/SKILL.md",
       "skills/distill/references/sync-setup.md",
       "skills/doc-sync/SKILL.md",
@@ -189,6 +196,17 @@
       "skills/think-tank/references/problem-restate-gate.md",
       "skills/think-tank/references/role-prompts.md",
       "skills/think-tank/references/silent-pre-check.md"
-    ]
+    ],
+    "pre_run_amendment": {
+      "date": "2026-10-06",
+      "results_seen": false,
+      "note": "Pre-run amendment, no results seen: guidance files changed vs base_ref but missing from files. Added backlog-entry.md, evidence-discipline.md, review-page.md (non-skill) and skills/dev-flow/references/stage-graph.md (new file, absent at base_ref).",
+      "added": [
+        "references/backlog-entry.md",
+        "references/evidence-discipline.md",
+        "references/review-page.md",
+        "skills/dev-flow/references/stage-graph.md"
+      ]
+    }
   }
 }

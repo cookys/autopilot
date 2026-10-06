@@ -66,9 +66,9 @@ If no project config above, autopilot's own fallback skills are primary for meth
 
 ## Session Start
 
-Run before any code change. The stage graph (`references/stage-graph.json`) is the only definition of which
-nodes run; this skill says what to do inside each node. Script contract and exit handling:
-[references/stage-graph.md](references/stage-graph.md).
+Run before any code change. Steps 1 and 4 run at every size (bug, urgent included); step 1 precedes any research or
+question, so every session has a marker. `references/stage-graph.json` alone defines which nodes run; this skill
+says what to do inside each. Script contract and exits: [references/stage-graph.md](references/stage-graph.md).
 
 ```
 1. Size the task (table below), then record it — the flags are separate, never `--size M!`:
@@ -78,6 +78,14 @@ nodes run; this skill says what to do inside each node. Script contract and exit
 3. Run the start gates for your size (gate table below).
 4. Enter the first node: node scripts/stage-advance.js --to <entry from step 2>
 ```
+
+**No human available** (headless `-p`, a just-results level `/l3`–`/l6`, CEO mode): never stop to ask. Wherever this
+skill says ask, confirm, pick or "unsure ⇒ ask", take the recommended option (within DOA when one is set), record it
+as a decision taken on the owner's behalf, and continue: `node scripts/decision-ledger.js append --kind decision
+--json '{"decision_id":"<node>-<n>","class":"tactical","rationale":"<question → choice, why>","reversibility":"two-way"}'`
+(the default ledger the status band counts as ◆; the owner vetoes with `decision-ledger.js veto --id`; ceo-agent
+`references/depth0-control-loop.md` §6). Board-class stops stay stops: scope expansion, a DOA boundary, and the
+User Override Protocol's cannot-be-overridden list.
 
 ### Sizing
 
@@ -91,11 +99,12 @@ nodes run; this skill says what to do inside each node. Script contract and exit
 
 | Modifier | Predicate | Flag |
 |----------|-----------|------|
-| bug | The task is to make existing wrong behavior right. Size it by the fix's footprint (cause not yet located across several modules ⇒ M); module count alone never makes a bug L | `--bug` (entry node `diagnose`) |
+| bug | The task is to make existing wrong behavior right. Size it by the fix's footprint: a cause that spans several modules, or is not yet located among several, is at least M; module count alone never makes a bug L | `--bug` (entry node `diagnose`) |
 | urgent | Production is broken, or the user says it must ship now / today / within hours | `--urgent` (written `S!` / `S急` in prose and backlog) |
 
-- Between XS, S and M pick the smaller one: the E1 bump (`stage-advance.js` exit 4) moves the size up when the diff
-  outgrows it. L and XL are decided by structure, not by diff size.
+- Pick the smaller size only when two sizes genuinely fit their predicates: the E1 bump (`stage-advance.js` exit 4)
+  moves the size up when the diff outgrows it. L and XL are decided by structure, not by diff size.
+- Urgency never lowers the size: the urgent "smallest change" is about the diff, not the size flag.
 - Risk (money/points, auth/security, production protocol) does not change the size. It raises review strength:
   `scripts/resolve-review-loop.sh` reads it from `classify-diff-risk.sh` (`review_risk`).
 - Size moves only up (`set --size` refuses a downward move). A resumed session never re-sizes.
@@ -137,6 +146,7 @@ the walk resumes at the recorded node, never re-sized.
 | Entering any node | `node scripts/stage-advance.js --to <node>` before its work. Rails write `plan-review`, `code-review` and (at /l5–/l6) `implement` themselves; every other node is yours. A skill you hand off to may write the same node again — a repeat write is a harmless same-node update, so write it anyway |
 | Entering `implement` when `nodes` prints a non-null `unit_kind` | Add `--unit <unit_kind>:<i>/<N>:<label>` (`phase:` or `deliverable:`). Same `<i>` = repair of that unit; `<i>+1` = next unit; leaving the loop needs `<i> = <N>` |
 | Choosing the next node | `node scripts/stage-graph.js next --from <stage> --size <size> [--bug] [--urgent] [--research]`. `implement` in that list is the repair / next-unit edge; otherwise take the forward node |
+| Leaving the last `verify` of an urgent session | Not `next` (the risk is sampled only on this move): `stage-advance.js --to code-review`. Exit 0 ⇒ high risk, normal order. Exit 3 with `qc-gate` in `legal_next` ⇒ urgent-low: go to `qc-gate`; finish-flow runs the code-review after `finish` |
 | Exit 3 | Illegal move: read `legal_next`, go to one of those. Never retry the refused `--to`, never force |
 | Exit 4 | E1 bump: `session-mode.js set --size <bump_to>`, then advance to the forward node of `stage-graph.js next --from <current stage> --size <bump_to>`. Never retry the original `--to` |
 | Exit 2 / 5 | No marker / no size: run Session Start step 1, then retry the same call |
@@ -219,14 +229,19 @@ TaskCreate: "Scope completeness audit — enumerate all affected surfaces"
   project equivalent) — it is the skill-routing task's input.
 - CEO mode: the CEO runs the audit and records coverage in the README; it does not ask the user to enumerate.
 
-**Ladder probe** (also at `diagnose` for L/XL bugs): `node scripts/probe-unknown.js classify --ledger <ledger>
---work-unit <task-id> --terms <key nouns from the task brief>`. Ledger: `<project>/ledger/decisions.jsonl` (omitted ⇒
-`~/.autopilot/ladder/<repo-hash>.jsonl`).
+**Ladder probe** (L/XL at the end of `intent`; L/XL bugs at the end of `diagnose`): `node scripts/probe-unknown.js
+classify --ledger <ledger> --work-unit <task-id> --terms <dependency terms>`. Ledger: `<project>/ledger/decisions.jsonl`
+(omitted ⇒ `~/.autopilot/ladder/<repo-hash>.jsonl`). Terms are the existing or external things the design depends on
+and you cannot describe from the repo and general knowledge (libraries, APIs, modules, protocols, formats) — never
+the names of what the task will create: a new command, flag, file or feature name is zero-hit and not an unknown.
 
-| `eligible_max` | Next |
-|----------------|------|
-| `U0` or none | Read the local hits it lists; propose from your own knowledge → `proposal` |
-| `U1`–`U4` | An unknown exists → `research` (with `--research` on `stage-graph.js next`) |
+| `classify` says | Next |
+|-----------------|------|
+| `recommend: U0`, or `none` with `eligible_max: U0` | Read the local hits it lists; propose from your own knowledge → `proposal` |
+| `recommend: U1`–`U4` | An unknown exists → `research` (with `--research` on `stage-graph.js next`), climb that rung |
+| `recommend: none` with `eligible_max` above `U0` (rung skipped) | `research` with local means (its `none` row) |
+
+Sizes without a `research` node (XS–M bugs) work an unknown cause inside `diagnose` (`autopilot:debug` step 4).
 
 ### diagnose
 
@@ -255,7 +270,7 @@ ladder receipts.
 `node scripts/stage-advance.js --to proposal`, then publish a web page (Artifact tool) with the assumptions (from research, or your own knowledge at U0) and 2–3
 illustrated options, each with its trade-off and a recommendation; the user picks. Record the pick and the
 assumptions in the plan. No Artifact tool ⇒ write the page as a local `.html` file and list the options in the
-reply. Headless (`-p`) or CEO mode ⇒ take the recommended option within DOA, record it, continue.
+reply. No human available ⇒ take the recommended option and record it (Session Start), then continue to `plan`.
 
 ### plan
 
@@ -267,7 +282,7 @@ reply. Headless (`-p`) or CEO mode ⇒ take the recommended option within DOA, r
 | L, XL | User-provided plan ⇒ use it. Needs design ⇒ EnterPlanMode → design → ExitPlanMode → user approval. Save to `docs/plans/YYYY-MM-DD-<feature-name>.md` per [references/plan-template.md](../../references/plan-template.md). Project setup is mandatory even with a user-provided plan: project directory, branch, project index (bootstrap commands per project config) |
 
 **Consult before design (L, XL; the ladder's U1 at this call site)**: `node scripts/probe-unknown.js classify
---ledger <ledger> --work-unit <phase> --terms <design nouns>`; call `bash scripts/dispatch-consult.sh --question-file
+--ledger <ledger> --work-unit <phase> --terms <dependency terms, as at intent>`; call `bash scripts/dispatch-consult.sh --question-file
 <design-question> --artifact <plan-draft> --ladder-receipt <ledger> --ladder-terms <terms> --ladder-unknown-type
 <unknown_type> --ladder-signals <ids> --ladder-work-unit <phase>` **only on `recommend: U1`**. Any other
 `recommend` follows the research table; a skipped U1 (`not-heterogeneous`, `consult_dispatch: off`) never invokes
@@ -350,9 +365,7 @@ it ⇒ do NOT defer; unsure ⇒ ask the user. A passing deferral = one backlog r
 doubled, or requirements beyond the OKR ⇒ STOP. Board decision (user; CEO escalates): update the README scope
 boundary first, proceed only after explicit approval, record it in the project decision log.
 
-**Leaving the last unit of an urgent session**: advance `--to code-review`. `stage-advance.js` samples the diff risk on
-this move: written ⇒ high risk, normal order. Exit 3 with `qc-gate` in `legal_next` ⇒ urgent-low: go to `qc-gate`;
-code-review runs after `finish` (finish-flow).
+**Leaving the last unit of an urgent session**: `--to code-review`, never `next` (Stage protocol row).
 
 ### code-review (the rail writes the stage)
 
@@ -413,7 +426,8 @@ foreground `sleep`, never `Monitor`.
 
 ### Urgent
 
-- Smallest possible change, fastest path to stable. A DB migration ⇒ STOP: `session-mode.js set --size L`.
+- Smallest possible diff, fastest path to stable; the size stays what Sizing says. A DB migration ⇒ STOP:
+  `session-mode.js set --size L`.
 - Production broken ⇒ the `hotfix/` branch from `main`; finish-flow merges back to `main` and makes the
   post-incident `autopilot:learn` mandatory. Rollback: invoke finish-flow once the rollback is verified stable.
 
@@ -447,7 +461,8 @@ choose complete, for tests, error handling, edge cases, docs and features alike.
 | `--size M!` or `!M` | `--size M --urgent`; `!` is written after the letter in prose only |
 | Copying a node sequence into a plan or prompt | Cite `stage-graph.js nodes`; the JSON is the only definition |
 | Retrying the refused `--to` after exit 3 or 4 | Exit 3: a `legal_next` node. Exit 4: bump, then `next` from the current stage |
-| Sizing a bug L because it crosses 3 modules | Size the fix's footprint; L only for design / multi-phase work |
+| Sizing a bug L because it crosses 3 modules, or S while its cause is unlocated across several | Size the fix's footprint: a cause across several modules is at least M; L only for design / multi-phase work |
+| `--terms` naming what the task will create | Terms are existing or external dependencies; new names are zero-hit by construction |
 | Raising the size for a risky change | Risk raises review strength, not size |
 | Ask "continue?" after a unit | Proceed directly to the next unit |
 | Re-sizing on context continuation | Use the marker's size; only the E1 bump moves it |

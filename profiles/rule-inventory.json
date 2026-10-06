@@ -280,7 +280,7 @@
     },
     {
       "path": "skills/dev-flow/SKILL.md",
-      "sha256": "165d41c3ee13ae5e36a2172ea3731b9283c474c625070e778a9dc540bf6d8022",
+      "sha256": "80f2cfefbefe9d479f3b588f14ebfbd0d444cbb40e3bf680a2fc632ab1ee361a",
       "segments": [
         {
           "id": "dev.frontmatter",
@@ -316,181 +316,181 @@
           "id": "dev.session-start",
           "category": "guided",
           "start_line": 29,
-          "end_line": 43
+          "end_line": 51
         },
         {
           "id": "dev.sizing",
           "category": "topology",
-          "start_line": 44,
-          "end_line": 64
+          "start_line": 52,
+          "end_line": 73
         },
         {
           "id": "dev.start-gates",
           "category": "guided",
-          "start_line": 65,
-          "end_line": 86
+          "start_line": 74,
+          "end_line": 95
         },
         {
           "id": "dev.context-continuation",
           "category": "guided",
-          "start_line": 87,
-          "end_line": 94
+          "start_line": 96,
+          "end_line": 103
         },
         {
           "id": "dev.stage-protocol",
           "category": "core",
-          "start_line": 95,
-          "end_line": 109
+          "start_line": 104,
+          "end_line": 119
         },
         {
           "id": "dev.nodes",
           "category": "core",
-          "start_line": 110,
-          "end_line": 111
+          "start_line": 120,
+          "end_line": 121
         },
         {
           "id": "dev.intent",
           "category": "core",
-          "start_line": 112,
-          "end_line": 153
+          "start_line": 122,
+          "end_line": 163
         },
         {
           "id": "dev.scope-completeness-audit",
           "category": "guided",
-          "start_line": 154,
-          "end_line": 192
+          "start_line": 164,
+          "end_line": 207
         },
         {
           "id": "dev.diagnose",
           "category": "guided",
-          "start_line": 193,
-          "end_line": 198
+          "start_line": 208,
+          "end_line": 213
         },
         {
           "id": "dev.research",
           "category": "guided",
-          "start_line": 199,
-          "end_line": 214
+          "start_line": 214,
+          "end_line": 229
         },
         {
           "id": "dev.proposal",
           "category": "guided",
-          "start_line": 215,
-          "end_line": 221
+          "start_line": 230,
+          "end_line": 236
         },
         {
           "id": "dev.plan",
           "category": "guided",
-          "start_line": 222,
-          "end_line": 240
+          "start_line": 237,
+          "end_line": 255
         },
         {
           "id": "dev.plan-review",
           "category": "assurance",
-          "start_line": 241,
-          "end_line": 247
+          "start_line": 256,
+          "end_line": 262
         },
         {
           "id": "dev.implement",
           "category": "guided",
-          "start_line": 248,
-          "end_line": 270
+          "start_line": 263,
+          "end_line": 285
         },
         {
           "id": "dev.verify",
           "category": "assurance",
-          "start_line": 271,
-          "end_line": 318
+          "start_line": 286,
+          "end_line": 331
         },
         {
           "id": "dev.code-review",
           "category": "assurance",
-          "start_line": 319,
-          "end_line": 328
+          "start_line": 332,
+          "end_line": 341
         },
         {
           "id": "dev.qc-gate",
           "category": "assurance",
-          "start_line": 329,
-          "end_line": 340
+          "start_line": 342,
+          "end_line": 353
         },
         {
           "id": "dev.finish",
           "category": "guided",
-          "start_line": 341,
-          "end_line": 348
+          "start_line": 354,
+          "end_line": 361
         },
         {
           "id": "dev.session-rules",
           "category": "core",
-          "start_line": 349,
-          "end_line": 361
+          "start_line": 362,
+          "end_line": 374
         },
         {
           "id": "dev.background-wait-rule",
           "category": "guided",
-          "start_line": 362,
-          "end_line": 375
+          "start_line": 375,
+          "end_line": 388
         },
         {
           "id": "dev.urgent",
           "category": "guided",
-          "start_line": 376,
-          "end_line": 381
+          "start_line": 389,
+          "end_line": 395
         },
         {
           "id": "dev.staging-gate",
           "category": "topology",
-          "start_line": 382,
-          "end_line": 386
+          "start_line": 396,
+          "end_line": 400
         },
         {
           "id": "dev.session-end-rule",
           "category": "guided",
-          "start_line": 387,
-          "end_line": 396
+          "start_line": 401,
+          "end_line": 410
         },
         {
           "id": "dev.skill-routing",
           "category": "topology",
-          "start_line": 397,
-          "end_line": 399
+          "start_line": 411,
+          "end_line": 413
         },
         {
           "id": "dev.completeness-principle",
           "category": "assurance",
-          "start_line": 400,
-          "end_line": 404
+          "start_line": 414,
+          "end_line": 418
         },
         {
           "id": "dev.anti-patterns",
           "category": "guided",
-          "start_line": 405,
-          "end_line": 425
+          "start_line": 419,
+          "end_line": 440
         },
         {
           "id": "dev.user-override-protocol",
           "category": "core",
-          "start_line": 426,
-          "end_line": 438
+          "start_line": 441,
+          "end_line": 453
         },
         {
           "id": "dev.capability-adaptive-compatibility",
           "category": "guided",
-          "start_line": 439,
-          "end_line": 447
+          "start_line": 454,
+          "end_line": 462
         },
         {
           "id": "dev.mission-routing-override",
           "category": "topology",
-          "start_line": 448,
-          "end_line": 475
+          "start_line": 463,
+          "end_line": 490
         },
         {
           "id": "dev.available-scripts",
           "category": "topology",
-          "start_line": 476,
-          "end_line": 490
+          "start_line": 491,
+          "end_line": 505
         }
       ]
     }

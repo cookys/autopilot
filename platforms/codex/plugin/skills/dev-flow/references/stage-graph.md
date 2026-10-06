@@ -14,8 +14,8 @@
 | `node scripts/stage-graph.js limits --size <S>` | `{size, files, lines}` — the E1 ceiling (`null` = no limit; equal fits) |
 | `node scripts/stage-graph.js validate` | `{ok, errors}` — schema + reachability of the graph file |
 
-`--urgent` without `--high-risk` is urgent-low (code-review after `finish`, terminal). From `research`, `next`
-needs `--research`.
+`--urgent` without `--high-risk` is urgent-low (code-review after `finish`, terminal), so `next` cannot choose the
+move out of an urgent session's last `verify` (Urgent placement). From `research`, `next` needs `--research`.
 
 ## Record — `scripts/session-mode.js` and `scripts/stage-advance.js`
 
@@ -58,8 +58,10 @@ loop needs index = total.
 ## Urgent placement
 
 `high_risk` is sampled by `stage-advance.js` (via `classify-diff-risk.sh` → `resolve-review-loop.sh --field
-review_risk`) once, when an urgent session leaves its last `verify`; a sampling failure counts as high. Try
-`--to code-review`: written ⇒ normal order; exit 3 with `qc-gate` in `legal_next` ⇒ urgent-low.
+review_risk`) once, when an urgent session leaves its last `verify`; a sampling failure counts as high. Do not ask
+`next` for this move: attempt `--to code-review` first. Exit 0 ⇒ high risk, normal order; exit 3 with `qc-gate` in
+`legal_next` ⇒ urgent-low (advance to `qc-gate`; finish-flow runs the code-review after `finish`). This attempt is
+the one deliberate probe, not a retry of a refused move.
 
 ## Writers
 

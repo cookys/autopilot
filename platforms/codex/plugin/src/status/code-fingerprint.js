@@ -12,7 +12,7 @@
 // restarts the watcher. A file that was present at start and is gone now (an update that replaced the plugin directory) counts
 // as a change. Fail-open: an unreadable directory listing is "no change" (never kill a healthy watcher over a flaky read).
 //
-// Files: every src/status/*.js, scripts/render-review-page.js, scripts/lib/live-state-dir.js (the modules the watcher requires,
+// Files: every src/status/*.js, scripts/render-review-page.js, scripts/lib/live-state-dir.js, scripts/lib/load-source.js (the modules the watcher requires,
 // directly or lazily) and .claude-plugin/plugin.json (the version).
 
 const fs = require('fs');
@@ -20,7 +20,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
-const EXTRA_FILES = ['scripts/render-review-page.js', 'scripts/lib/live-state-dir.js', '.claude-plugin/plugin.json'];
+const EXTRA_FILES = ['scripts/render-review-page.js', 'scripts/lib/live-state-dir.js', 'scripts/lib/load-source.js', '.claude-plugin/plugin.json'];
 
 function listFiles(root) {
   let names = [];

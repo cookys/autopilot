@@ -207,25 +207,7 @@ PY
 # cache/<mkt>/<plugin>/<version>/ and loads THAT (2026-10-06: a months-old
 # 2.36.36 copy silently shadowed the dev symlink).
 marketplace_source_desc() {
-  PY_KNOWN="$KNOWN_MARKETPLACES_JSON" PY_NAME="$MARKETPLACE_NAME" python3 - <<'PY'
-import json
-import os
-
-try:
-    with open(os.environ["PY_KNOWN"], encoding="utf-8") as f:
-        entry = json.load(f).get(os.environ["PY_NAME"])
-except Exception:
-    entry = None
-if not isinstance(entry, dict):
-    print("missing")
-else:
-    src = entry.get("source") or {}
-    kind = src.get("source", "unknown")
-    if kind == "directory":
-        print("directory " + str(src.get("path", "")))
-    else:
-        print(kind)
-PY
+  node "$REPO_DIR/scripts/lib/load-source.js" marketplace-desc --claude-dir "$CLAUDE_DIR" --name "$MARKETPLACE_NAME"
 }
 
 marketplace_is_dev_directory() {
@@ -252,28 +234,18 @@ marketplace_warn_text() {
 # creates them and they can shadow the dev symlink. .in_use/ holds one file per
 # live session pid.
 check_stale_version_dirs() {
-  local d name pids pid live
+  local d name pids live
   [[ -d "$CACHE_BASE" ]] || return 0
-  for d in "$CACHE_BASE"/*/; do
-    [[ -d "$d" ]] || continue
-    name="$(basename "$d")"
-    [[ "$name" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+].*)?$ ]] || continue
-    pids=""
-    if [[ -d "$d/.in_use" ]]; then
-      for pid in $(ls "$d/.in_use" 2>/dev/null); do
-        pids="$pids $pid"
-      done
-    fi
-    live=""
-    for pid in $pids; do
-      kill -0 "$pid" 2>/dev/null && live="$live $pid"
-    done
+  # scripts/lib/load-source.js owns the detection (shared with the status watcher's load_source fact)
+  while IFS=$'\t' read -r name pids live; do
+    [[ -n "$name" ]] || continue
+    d="$CACHE_BASE/$name/"
     if [[ -n "$pids" ]]; then
-      status WARN "claude" "versioned plugin cache dir $d can shadow the dev symlink; .in_use lists pid(s):${pids} (alive:${live:- none}). Safe to remove once no listed pid is alive: rm -rf $d"
+      status WARN "claude" "versioned plugin cache dir $d can shadow the dev symlink; .in_use lists pid(s): ${pids} (alive: ${live:-none}). Safe to remove once no listed pid is alive: rm -rf $d"
     else
       status WARN "claude" "versioned plugin cache dir $d can shadow the dev symlink (no .in_use pids listed). Safe to remove: rm -rf $d"
     fi
-  done
+  done < <(node "$REPO_DIR/scripts/lib/load-source.js" stale-dirs --cache-base "$CACHE_BASE")
 }
 
 check_agents_symlink() {

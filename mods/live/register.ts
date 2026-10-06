@@ -28,7 +28,7 @@ import { Pane } from './pane'
 import {
   acceptanceToast, bandLine1, bandView, buildSections, checkEnvelope, commonDirOf, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
   headerText, hhmm, isKey, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
-  readForeman, readJobModel, readManifest, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd, startMsOf, STATE_TEXT, POINTER_SCHEMA,
+  readForeman, readLoadSource, readJobModel, readManifest, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd, startMsOf, STATE_TEXT, POINTER_SCHEMA,
 } from './model'
 import type { Counts, DecisionsView, EnvelopeCheck, JobModel, Json, LiveSnapshot, Manifest, Sources } from './model'
 
@@ -276,6 +276,7 @@ async function buildSnapshot($: EngineInterface, nowMs: number): Promise<{ snap:
   }
   const decisions = mergeDecisions(decisionViews)
   const foreman = readForeman(await readText($, liveBase + '/runs/' + scopeKey + '.foreman.json'), want)
+  const loadSource = readLoadSource(await readText($, liveBase + '/load-source.json'))
   const identity = isObject(env.scope) ? env.scope.repo_identity : null
   // elapsed: the newest campaign root's bound receipt, else the marker root's
   let receiptMs: number | null = null
@@ -284,7 +285,7 @@ async function buildSnapshot($: EngineInterface, nowMs: number): Promise<{ snap:
     receiptMs = await receiptStart($, identity, r)
     if (receiptMs !== null) { receiptRoot = r; break }
   }
-  const src: Sources = { tasks, attention, turn, decisions, manifest, foreman, startMs: startMsOf(receiptRoot, env, tasks, scope.marker === null ? null : scope.marker.started_at, receiptMs) }
+  const src: Sources = { tasks, attention, turn, decisions, manifest, foreman, loadSource, startMs: startMsOf(receiptRoot, env, tasks, scope.marker === null ? null : scope.marker.started_at, receiptMs) }
   const ctx = ctxShown(ctxText(await readText($, liveBase + '/context/' + fileSid + '.json'), nowMs), manifest)
   const band = bandView(env, jobModel, scope.key, nowMs, src)
   return {

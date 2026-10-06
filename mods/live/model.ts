@@ -224,6 +224,7 @@ export const TURN_EFFECTIVE_SCHEMA = 'autopilot.session-turn-effective/1'
 export const DECISIONS_SCHEMA = 'autopilot.decisions-sidecar/1'
 export const FOREMAN_SCHEMA = 'autopilot.foreman-activity/1'
 export const SOURCES_SCHEMA = 'autopilot.sources/1'
+export const LOAD_SOURCE_SCHEMA = 'autopilot.load-source/1'
 export const NOT_WIRED = '來源未接'
 export const TODO_TOOLS_HINT = '任務工具未開 · 設 CLAUDE_CODE_ENABLE_TODO_TOOLS=1 後才會記錄任務'
 
@@ -511,6 +512,58 @@ export function startMsOf(root: string | null, env: Json, tasks: TasksView | nul
   return Number.isFinite(m) ? m : earliestRunMs(env)
 }
 
+// P7b: <live>/load-source.json (machine-wide, not scope-bound): which copy of the plugin Claude Code loads. Watcher-published
+// (src/status/load-source.js); an absent / foreign-schema file reads as null (= no chip).
+export type LoadSourceView = {
+  plugin_version: string | null
+  source: string // "dev" | "cache:<semver>" | "unknown"
+  marketplace: string
+  behind_upstream: number | null
+  flags: string[]
+  stale_cache_dirs: { dir: string; in_use_pids: string[]; alive: string[] }[]
+}
+export function readLoadSource(text: string | null): LoadSourceView | null {
+  if (text === null) return null
+  const parsed = parseJson(text)
+  if (!parsed.ok || !isObject(parsed.value) || parsed.value.schema !== LOAD_SOURCE_SCHEMA) return null
+  const v = parsed.value
+  const strs = (x: unknown): string[] => (Array.isArray(x) ? x.filter((y): y is string => typeof y === 'string') : [])
+  return {
+    plugin_version: str(v.plugin_version), source: str(v.source) || 'unknown', marketplace: str(v.marketplace) || 'missing',
+    behind_upstream: finite(v.behind_upstream) && Number.isInteger(v.behind_upstream) && v.behind_upstream >= 0 ? v.behind_upstream : null,
+    flags: strs(v.flags),
+    stale_cache_dirs: (Array.isArray(v.stale_cache_dirs) ? v.stale_cache_dirs : []).filter(isObject).map(d => ({ dir: str(d.dir) || '?', in_use_pids: strs(d.in_use_pids), alive: strs(d.alive) })),
+  }
+}
+
+// Narrow the watcher's conservative source with the session's own claude pid when the caller has one: a pid listed in a cache
+// dir's .in_use means THIS session loaded that copy; a pid listed in none means it loaded no cache copy (dev when the dev link
+// is sound, else unknown). How the mod learns its claude pid is [unverified]; register.ts passes null today, which keeps the
+// watcher's any-alive-pid reading.
+export function loadSourceFor(v: LoadSourceView, sessionPid: number | string | null): string {
+  if (sessionPid === null) return v.source
+  const pid = String(sessionPid)
+  for (const d of v.stale_cache_dirs) {
+    if (d.in_use_pids.includes(pid)) return 'cache:' + (d.dir.split('/').filter(x => x !== '').pop() || '?')
+  }
+  if (!v.source.startsWith('cache:')) return v.source
+  return v.flags.includes('dev_link_missing_or_stale') ? 'unknown' : 'dev'
+}
+
+// The hygiene slot's load-source chip: `dev` / `dev ↓3` (behind upstream by 3), `dev ⚠` (the marketplace is not this repo's directory),
+// `cache 2.36.36 ⚠` (a stale cache copy is what loads), `src ? ⚠` (unknown). warn = the chip carries ⚠ (the renderer picks the warning colour).
+export function hygieneChip(v: LoadSourceView | null, sessionPid: number | string | null = null): { text: string; warn: boolean } | null {
+  if (v === null) return null
+  const src = loadSourceFor(v, sessionPid)
+  const marketplaceBad = v.flags.includes('marketplace_not_directory') || v.flags.includes('marketplace_not_this_repo')
+  if (src.startsWith('cache:')) return { text: 'cache ' + src.slice('cache:'.length) + ' ⚠', warn: true }
+  if (src === 'dev') {
+    const behind = v.behind_upstream !== null && v.behind_upstream > 0 ? ' ↓' + v.behind_upstream : ''
+    return { text: 'dev' + behind + (marketplaceBad ? ' ⚠' : ''), warn: marketplaceBad }
+  }
+  return { text: 'src ? ⚠', warn: true }
+}
+
 export type Sources = {
   tasks: TasksView | null
   attention: AttentionView | null
@@ -518,6 +571,7 @@ export type Sources = {
   decisions: DecisionsView | null
   manifest: Manifest | null
   foreman: ForemanView | null
+  loadSource?: LoadSourceView | null
   startMs: number | null
 }
 export const NO_SOURCES: Sources = { tasks: null, attention: null, turn: null, decisions: null, manifest: null, foreman: null, startMs: null }

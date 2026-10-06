@@ -183,6 +183,101 @@
       "fixture-scripts-w2b/src/status/task-status.js": "f1248fe78a506178126f1698e7ad2e19796987a0666e7c74bc579aa2c1d83142",
       "fixture-scripts-w2b/src/status/watch-inputs.js": "b078144fb916b8ed0ac755240bcc1e09c445213225e71f9bcac48b685f56f47d",
       "fixture-scripts-w2b/src/status/work-order-progress.js": "bd1518d185843f93cd8962bf971557f6738ed620cc9e65bac85f8686c5d904e5"
+    },
+    "dev-flow-sg-base": {
+      "dev-flow-sg-base/SKILL.md": "673fda38f064e2a5ad25a830998bec640eae3bae68780c8229b8334f1aba7b88",
+      "dev-flow-sg-base/references/context-continuation.md": "76ca43b304b64bc164d3ceafa25c5ac6218f0c1ecf8b4dce1cd31c1f7f02b9c7",
+      "dev-flow-sg-base/references/hetero-loops.md": "6fe6240fc1054e8db2c0871d838e13f0ffd783c0edf14c4f5f2c57727f6b8cef",
+      "dev-flow-sg-base/references/historical-rationale.md": "985e7476c110b9a3425d01c7d7a5d8e2b3e9a3e76b92e6f7e791ff78415cca9c",
+      "dev-flow-sg-base/references/model-routing.md": "0bb68abe770c34f070a18968c1f2d4ab2cace49d5fb826d2e5bd511c71271e9d",
+      "dev-flow-sg-base/references/post-feature-doc-sync.md": "f036506025ae240ee1f87ba44682179237ee4192cef387ed275285657ea46a94"
+    },
+    "finish-flow-sg-base": {
+      "finish-flow-sg-base/SKILL.md": "ac524f576cbba37613d4c1611e5e2bc902140db77df30eab03dfb5b445e9ce89"
+    },
+    "ceo-agent-sg-base": {
+      "ceo-agent-sg-base/SKILL.md": "7a1e6cf348f409dd11784286805d88f8e48fb93aaf4758df2cdae25c256b8695",
+      "ceo-agent-sg-base/references/decision-matrix.md": "3bd75c299500374e730759fa919b539259b98188d4fed9a22e7b47c90d851e5c",
+      "ceo-agent-sg-base/references/depth0-control-loop.md": "935e821805e8fc381c0128203d2fecb426c7e7de7aeb104b5fbdbf86e6b8bf47",
+      "ceo-agent-sg-base/references/doa-and-templates.md": "2f39bd6d509ee37868835548c3eda7cdd8cbde8d9906e7cd81471c3091e792aa",
+      "ceo-agent-sg-base/references/level-front-door.md": "e8980e06ef724edabb14b0b990297e3e99a087857770675b53bca09bca1f714a",
+      "ceo-agent-sg-base/references/task-prompt-templates.md": "45319e203a428a64fb1c1db2748d8202bb7b5ea755443d84333cc6c8046c9fa0",
+      "ceo-agent-sg-base/references/tree-adapter.md": "0a95d351aada7bc331ab0cab69dff57af5537fb910b991b789a0fd310da123c9"
+    },
+    "team-sg-base": {
+      "team-sg-base/SKILL.md": "fa63265e86c5b7187a43058683cb9b07e65d5dfb95dc2ab67b8da04b048e0d72",
+      "team-sg-base/references/team-tactics.md": "d0ad00463519481a36ec2c75d1ef31a694d6fc8e97844962a7b4974cb50773d9"
+    },
+    "debug-sg-base": {
+      "debug-sg-base/SKILL.md": "c6516f9aaa994c6ecf47c8379165a4507a68272ec1040bbb16b3e52f9f981dcb"
+    },
+    "think-tank-sg-base": {
+      "think-tank-sg-base/SKILL.md": "ecae753fe8b2508175437c13c49f8599d3be485eea1bf9e0b391bf6b0e9c613f",
+      "think-tank-sg-base/references/brief-template.md": "465854522911c3dad1dc63da03141bbdae914ab17aadfdb13744e788039aedfa",
+      "think-tank-sg-base/references/dialectic-brief-template.md": "6a3b5ac5a68fcbad213d7357e008ce06abb5ed86568194e2ea255e11b383167d",
+      "think-tank-sg-base/references/dialectic-mode.md": "bb47d4b4469c2f1dc8fcaf9934892ff3fb524fc691cd417d1ab43b20ecb946f1",
+      "think-tank-sg-base/references/dialectic-role-prompts.md": "eb11ad8d6bb778d1e0b2b7404bf93cc4a6ac008f8efacf540946cc7df2d07e7e",
+      "think-tank-sg-base/references/epistemic-diversity-scorecard.md": "79aaf0948f82c8da9d8c33ecc5ce126226b3cc24d300485440a8de22ae67d339",
+      "think-tank-sg-base/references/minority-report.md": "49ea8b7c29bc8df18bb82b58b4a6b377a38e3cafba76133b06439ecd719079a2",
+      "think-tank-sg-base/references/model-routing.md": "0bb68abe770c34f070a18968c1f2d4ab2cace49d5fb826d2e5bd511c71271e9d",
+      "think-tank-sg-base/references/problem-restate-gate.md": "e009bc787aa2ad2c5bd8112fd1de1489e20e2e22c15f1f92fd0eec75ccd5a778",
+      "think-tank-sg-base/references/role-prompts.md": "c7ea4d8446a47f3957b061f72d35df5812e6e6dc420974a13039efdf056f98cb",
+      "think-tank-sg-base/references/silent-pre-check.md": "cb4cb18fcce5b3f210687bcfabfbc976122e920a9d0f822e4e301efca1faba4f"
+    },
+    "l4-sg-base": {
+      "l4-sg-base/SKILL.md": "ffbfbe5c74702a6d62d39531307ef05077bb8578e8acd93f26cb6119acfdbf30"
+    },
+    "l5-sg-base": {
+      "l5-sg-base/SKILL.md": "a14eff2ca7a5b9df16e032ea5dfe276fad29b4725cd31e989f99705a98d998a3",
+      "l5-sg-base/references/hetero-impl-loop.md": "8736d1c44980a2435c352efc839d5f65bb9961fdfc3db94b58d2141a92876de2"
+    },
+    "l6-sg-base": {
+      "l6-sg-base/SKILL.md": "ac8ab39db0dd312191bc524edf18731b9685d6aec05c2ad76fb01f92e88dc623",
+      "l6-sg-base/references/full-dispatch-pipeline.md": "f93fb398897084f97046cd3698438b9df3501c19c907f85ef7cdf2a17764a422"
+    },
+    "next-sg-base": {
+      "next-sg-base/SKILL.md": "454bc2c8fdbf0d578d2306ef5bd26f9275e0afb55c2cb1f6982d230b8a623f46",
+      "next-sg-base/references/phase0-hygiene.md": "a0aa69d050b670b4c882e5b4714414e46977bda92df587037a545d26990b03e5"
+    },
+    "quality-pipeline-sg-base": {
+      "quality-pipeline-sg-base/SKILL.md": "b75377eb43cc76a00e6e30ec549d05dac5cbeccd2eef9426c3bdb99760686096",
+      "quality-pipeline-sg-base/_base/prohibited-behaviors.md": "dd22baa1c4fa6e989d8db4d61a8d288137ef1b365161538bb0b759dc53df1f8d",
+      "quality-pipeline-sg-base/references/anti-rationalization.md": "662c8e6b974ab847485eef6c1f52b2f0d766b743eabb4261ba3108839263b161",
+      "quality-pipeline-sg-base/references/code-review.md": "a7297b1930659112d95d89d04248922b52ac7d5b6c2f3e844ce5828545214877",
+      "quality-pipeline-sg-base/references/completeness-gate.md": "51834517a73919bdce77e36473159409f72f18cba101f3e63d6cee8cb86936f0",
+      "quality-pipeline-sg-base/references/model-routing.md": "0bb68abe770c34f070a18968c1f2d4ab2cace49d5fb826d2e5bd511c71271e9d",
+      "quality-pipeline-sg-base/references/test-integrity-gate.md": "a22348f5864b728fd3b6bde7127d99a08fab978225dbc121a7626551f396eead",
+      "quality-pipeline-sg-base/references/test-policy.md": "de7ba6bdc872f4fda01fa8aa50ed2fcbdc4dff856f28d75620f1b341b26130d9"
+    },
+    "distill-sg-base": {
+      "distill-sg-base/SKILL.md": "d25da384b2ecf8ca00ddc4bb6ca2d65aaf50e391212ae170b8a3df66683afe02",
+      "distill-sg-base/references/sync-setup.md": "fec6f4e98783d49be9225583020fda164146da96edf1f2c6f509e1128b2e955e"
+    },
+    "doc-sync-sg-base": {
+      "doc-sync-sg-base/SKILL.md": "1b28d78eb392f249f8a7b841a5c0b9e0d775c8d3a85e76f568b52383e82d9a2a"
+    },
+    "learn-sg-base": {
+      "learn-sg-base/SKILL.md": "0e12a691394b7f0aa322c0989416a4a9d92e42d056f41a31b20c8a70e315871d"
+    },
+    "project-lifecycle-sg-base": {
+      "project-lifecycle-sg-base/SKILL.md": "653f590f7cf6eed10ca5c7b6ca4230067543e9b9910244d27bf48fa480a85e4b",
+      "project-lifecycle-sg-base/references/plan-bootstrap.md": "0824cc3a5cf82de8087cd7917438a65044e1a8798061acb4d0d999b47186689c",
+      "project-lifecycle-sg-base/references/project-archive.md": "609e7f9572336bb239a10cf4b1306c141c91b5e55ff12b3de54ececdd4108e2b",
+      "project-lifecycle-sg-base/references/project-structure.md": "45db940337d55ec20aa88048cf6f67910465970b6f5d849167bbad10cec96cc3",
+      "project-lifecycle-sg-base/references/templates.md": "74813b2e291f7cc8982d6f98c16f863709f7386fa988a94835d3f742c37f2abe"
+    },
+    "research-to-ship-sg-base": {
+      "research-to-ship-sg-base/SKILL.md": "617e4478e8e8d8b76d674c74adba296852672f77fd16541c0bd76074fefc5760"
+    },
+    "guidance-files-sg-base": {
+      "guidance-files-sg-base/project-config-template/dev-flow-config.md": "4fed0d43e0f44f35cc52336c99b3e594bf7323630aa7aec6aac891a5b10a88c4",
+      "guidance-files-sg-base/project-config-template/finish-flow-config.md": "cef1d44e59b82be087555641c401c49e8aa139fa4ca059459c034c8a19dfd60d",
+      "guidance-files-sg-base/project-config-template/review-loop-config.md": "198abfc1678d7dbd5763f60efa0ab72d1254851adbcc78000321ee37e69f031f",
+      "guidance-files-sg-base/references/four-layer-design.md": "a63a5d7f28ead6b21dc81b1cfef4821c343aabf40ff389e87c2331fcb80d1441",
+      "guidance-files-sg-base/references/hetero-dispatch.md": "317661d002dec44b008bce4a3c440b37f3e692023a669ecc4bcc7e35cdec8b2f",
+      "guidance-files-sg-base/references/multi-agent-portability.md": "1618a35bbb8e30656d5e2b905d5dd70cc6752a35cff217bd384b6fc5723df556",
+      "guidance-files-sg-base/references/plan-template.md": "6a5363d9c4d6d148cab208ce11e32e90f586a77c3099dd341f643d65e61a9247",
+      "guidance-files-sg-base/references/skill-contract-card.md": "67a11a38dd38a3c68c970623d07f22682e867bf502ce353e822fd42dddd68c9c"
     }
   },
   "pack_meta": {
@@ -235,6 +330,91 @@
       "kind": "scripts",
       "source": "scripts/session-mode.js",
       "ref": "ee055a2e89d75ca6a283621ecd1676d2049feae0"
+    },
+    "dev-flow-sg-base": {
+      "kind": "skill",
+      "source": "dev-flow",
+      "ref": "8a10980f891ccf2f3a6fece582a4fd814cd5d83f"
+    },
+    "finish-flow-sg-base": {
+      "kind": "skill",
+      "source": "finish-flow",
+      "ref": "8a10980f891ccf2f3a6fece582a4fd814cd5d83f"
+    },
+    "ceo-agent-sg-base": {
+      "kind": "skill",
+      "source": "ceo-agent",
+      "ref": "8a10980f891ccf2f3a6fece582a4fd814cd5d83f"
+    },
+    "team-sg-base": {
+      "kind": "skill",
+      "source": "team",
+      "ref": "8a10980f891ccf2f3a6fece582a4fd814cd5d83f"
+    },
+    "debug-sg-base": {
+      "kind": "skill",
+      "source": "debug",
+      "ref": "8a10980f891ccf2f3a6fece582a4fd814cd5d83f"
+    },
+    "think-tank-sg-base": {
+      "kind": "skill",
+      "source": "think-tank",
+      "ref": "8a10980f891ccf2f3a6fece582a4fd814cd5d83f"
+    },
+    "l4-sg-base": {
+      "kind": "skill",
+      "source": "l4",
+      "ref": "8a10980f891ccf2f3a6fece582a4fd814cd5d83f"
+    },
+    "l5-sg-base": {
+      "kind": "skill",
+      "source": "l5",
+      "ref": "8a10980f891ccf2f3a6fece582a4fd814cd5d83f"
+    },
+    "l6-sg-base": {
+      "kind": "skill",
+      "source": "l6",
+      "ref": "8a10980f891ccf2f3a6fece582a4fd814cd5d83f"
+    },
+    "next-sg-base": {
+      "kind": "skill",
+      "source": "next",
+      "ref": "8a10980f891ccf2f3a6fece582a4fd814cd5d83f"
+    },
+    "quality-pipeline-sg-base": {
+      "kind": "skill",
+      "source": "quality-pipeline",
+      "ref": "8a10980f891ccf2f3a6fece582a4fd814cd5d83f"
+    },
+    "distill-sg-base": {
+      "kind": "skill",
+      "source": "distill",
+      "ref": "8a10980f891ccf2f3a6fece582a4fd814cd5d83f"
+    },
+    "doc-sync-sg-base": {
+      "kind": "skill",
+      "source": "doc-sync",
+      "ref": "8a10980f891ccf2f3a6fece582a4fd814cd5d83f"
+    },
+    "learn-sg-base": {
+      "kind": "skill",
+      "source": "learn",
+      "ref": "8a10980f891ccf2f3a6fece582a4fd814cd5d83f"
+    },
+    "project-lifecycle-sg-base": {
+      "kind": "skill",
+      "source": "project-lifecycle",
+      "ref": "8a10980f891ccf2f3a6fece582a4fd814cd5d83f"
+    },
+    "research-to-ship-sg-base": {
+      "kind": "skill",
+      "source": "research-to-ship",
+      "ref": "8a10980f891ccf2f3a6fece582a4fd814cd5d83f"
+    },
+    "guidance-files-sg-base": {
+      "kind": "scripts",
+      "source": "references/four-layer-design.md,references/hetero-dispatch.md,references/multi-agent-portability.md,references/plan-template.md,references/skill-contract-card.md,project-config-template/dev-flow-config.md,project-config-template/finish-flow-config.md,project-config-template/review-loop-config.md",
+      "ref": "8a10980f891ccf2f3a6fece582a4fd814cd5d83f"
     }
   }
 }

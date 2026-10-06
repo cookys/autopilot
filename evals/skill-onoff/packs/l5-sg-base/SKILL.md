@@ -1,0 +1,86 @@
+---
+name: l5
+description: >
+  Terse CEO front-door — Level 5: like /l4 (background worktree-isolated foreman, depth-0 control
+  loop + authoritative qc) but the IMPLEMENTER is orchestrated by the engine CLI and dispatched
+  through the canonical `engine implement-review` path. Use when: "/l5 <goal>", "L5 <goal>", you want cost-arbitrage
+  or a decorrelated second engine doing the mechanical impl. Presets involvement=just-results,
+  scope=Hold, project red lines plus -x additions (override --mode / --expand / --solo). Not for: all-Claude run (→ /l4), inline
+  (→ /l3).
+---
+
+# /l5 — CEO autonomy, foreman + hetero implementer
+
+> Ladder: the foreman inherits the unknown-escalation ladder (`scripts/probe-unknown.js` at every round end, budgets from `review-loop-config.md`, work unit = this whole run). The probe never recommends U4 — a spent budget is `none`; the run's own stop (stall fuse §8 / DOA boundary) attaches `ladder_receipts:` to its `[ESCALATION]` — see `ceo-agent/references/depth0-control-loop.md` §6.
+
+Terse front-door into `autopilot:ceo-agent` at **Level 5**: identical to `/l4`
+except the IMPLEMENTER is a heterogeneous engine driven through the canonical
+`engine implement-review --campaign-contract <campaign.json>` path
+(`bin/autopilot.js` → campaign controller → `dispatch-hetero.sh`).
+
+Hard rules:
+- Before any TaskCreate, branch, worktree, runner, or model effect, run
+  `node <plugin>/scripts/session-mode.js set --level l5 --repo-root <repo>`. `--solo` uses
+  `set --level l3 --entry-level l5 --fallback solo`; a recorded precondition degradation uses
+  `--fallback precondition_failed`. The command admits canonical Mission policy/graph/source
+  coverage before writing the marker. Topology may change; its admission digest and later
+  Mission prepare/grant may not.
+- The roster from [`../../scripts/resolve-review-loop.sh`](../../scripts/resolve-review-loop.sh)
+  is the ONLY source of truth — never hardcode model/runner/effort inline; implementer ladder rung 0 first.
+- Implementation dispatch uses an **immutable base SHA**; verification is by **git
+  artifacts** (commit/diff/cleanliness), never agent self-report.
+- **Context-window gate (v2.32.58)**: every rail sizes the payload against the target
+  engine's window before spending; over budget ⇒ `precondition_failed` with no runner and
+  no worktree. Split the unit or pick a larger-window engine — `--context-window warn|off`
+  overrides deliberately. Contract: [`references/hetero-dispatch.md`](../../references/hetero-dispatch.md) § Context-window gate.
+- **One mutating entry**: depth-0 freezes the campaign contract, then invokes
+  `node "$autopilot_root/bin/autopilot.js" engine implement-review --campaign-contract <campaign.json> ...`.
+  Campaign identity automatically enables the durable ledger and detached lifecycle. Direct
+  `scripts/dispatch-hetero.sh` invocation is controller-internal or diagnostic only, never an
+  equivalent L5 workflow. Contract or caller disagreement is rejected pre-spend; a new scope
+  requires a new contract hash.
+- **Bounded leaf lifecycle**: every managed leaf inherits the campaign's stable
+  `root_run_id`, which the canonical campaign controller derives from the
+  sealed `campaign_id` and injects on every initial, repair, and resumed
+  implementation dispatch as `AUTOPILOT_WORKTREE_ROOT_RUN_ID`. This resource
+  identity is separate from `AUTOPILOT_ROOT_RUN_ID`, which remains the
+  foreman/watcher trace root. Managed dispatch depth is normalized to at least
+  `1`, so an inherited zero/malformed depth cannot bypass occupancy admission.
+  Never substitute a foreman/stage/leaf run id or an ambient checkout path.
+  `max_leaf_worktrees_per_root` is a hard occupancy cap (default `4`), so a
+  retained outcome must be inspected and dispositioned immediately rather than
+  left until session end. Use `reap-dispatch-worktrees.sh` first, pass its exact
+  inventory to `reap-dispatch-branches.sh`, then issue and freshness-check one
+  `LifecycleResidueReceipt`. Freshness is not absence: require its
+  `zero_residue` field to be exactly `true`; `false` is a resource blocker.
+  This rail proves resource disposition only and never computes task
+  `can_close`, generation advance, or finish authority.
+- **Terminal status gate**: run
+  `node "$autopilot_root/bin/autopilot.js" status task --root-run-id <campaign-root> --json`
+  before merge, after merge, and before marker clear. Exit 0 alone is insufficient: capture the
+  pre-merge JSON receipt and mechanically assert `can_merge === true` before merging.
+  Finish-flow may clear an L5 marker only with
+  that final fresh, digest-valid receipt and `can_close=true`; lifecycle `zero_residue=true` alone
+  is not task completion.
+- Review is DECORRELATED: the reviewer is a different engine family than the implementer.
+- `--solo` → the `/l3` inline engine (also the degradation on `precondition_failed`).
+- Only admitted graph nodes become implementation tasks. Plan phase headings, modules, tests,
+  review seats, and retries stay inside the owning deliverable and gate-attempt budget.
+- 工頭等 leaf 只能用 `run_in_background`／子 Agent 的 task-notification 喚醒並結束回合；禁止前景 `sleep` 輪詢與把 leaf raw output 灌回 context（背景 `run_in_background` until-loop 等外部條件是允許的，一次通知；只收 schema 判準表）、禁止用 Monitor 等 leaf；工頭 Bash 上限 40 次。task-notification 是 best-effort，實測會整批漏送（2026-09-02 PEACE 回報：63 次有 29 次從未送達、1 次遲到 38 分鐘，一個 sonnet 工頭就這樣呆等一個早已跑完的 clippy），因此**「等通知」不得是唯一喚醒路徑**：每次交辦背景 leaf 都必須同回合 (a) 把 leaf 的 output path 寫進 context，(b) 另起一個背景死人開關（`run_in_background` 的 `sleep <deadline>; echo WAKE`，仍是背景、不違反禁輪詢）；沒有配對死人開關就結束回合＝紅。depth-0 交辦長階段給工頭後，同樣要自起該階段的死人計時器。
+- **工頭一刀一命**（v2.35.15，cuda 2026-09-04 quota digest：四個常駐 Sonnet 工頭活 13–33 小時、各 1,900–7,400 次 Bash、佔 79% 支出）：一個工頭只擁有**一個**已 admit 的 deliverable；該 deliverable 整合完、`foreman-guard` 的 Bash 上限（預設 40）到、或自己數到工具呼叫接近上限時，**寫 handoff（autopilot:handoff）並結束回合**，由 depth-0 為下一個 deliverable 另派工頭。禁止常駐等下一個指派。`hooks/foreman-guard.js`（default-on）在 PreToolUse 即時執行 ironlaw #6：l4–l6 session 內的子代理，第 41 次 Bash、前景輪詢（`true`／`sleep`／`while … sleep|grep`／`pgrep`／`ps -p`／讀 `/tasks/*.output`）、`Monitor` 一律 deny；depth-0 不受影響。派工人在 worker／reviewer prompt 第 2 行（緊接第 1 行 `Engine:` 之後）寫 `Role: worker` 或 `Role: reviewer`，該子代理 cap 升至 120（工頭預設仍 40）。任何 cap 前最後幾次呼叫只准 close-out allowlist（`cd`／git／`kill`／`rm`／`mkdir -p`／`ls`／`test`／寫檔），以便回合結束前能 commit。
+- **接手 read-list 上限**：新工頭只讀「這一刀」的 brief（≤ 300 行）與該線的 ledger 分檔；禁止「先整份讀」的連鎖清單（整份 ledger、整套 kernel 原始碼、歷史 rulings）——一次接手開場 30 萬 token 就是這樣來的。工頭派工必帶 `model:`（工頭預設 `sonnet`、hands 走 `implementer_ladder: auto`，見 front-door § Default dispatch topology），不得繼承 depth-0 的 `[1m]`／Fable（`dispatch-model-guard` default-on 會擋沒帶 model 的派工）。
+
+**Capability profile (shadow):** `/l5` fixes heterogeneous-implementer topology only. When the host
+supplies a current verified envelope/grant/profile payload, forward it unchanged; never infer
+guidance density from the level, runner, or model name. A late mismatch requires a fresh-session
+handoff.
+The canonical `profile-session.js` lane proves only no-effect context isolation. Existing
+heterogeneous rails remain guided until their exact adapter is independently witnessed enforcing
+the grant, tools, effects, identity, and terminal outcome.
+
+**MUST-READ**: [`references/hetero-impl-loop.md`](references/hetero-impl-loop.md)
+(this level's loop: roster fields, harness/telemetry, wired runners) and
+[`../ceo-agent/references/level-front-door.md`](../ceo-agent/references/level-front-door.md)
+(§ Heterogeneous engine loop details — diff scopes) and
+[`../ceo-agent/references/depth0-control-loop.md`](../ceo-agent/references/depth0-control-loop.md)
+(loop governance, qc@depth-0, run-summary ledger).

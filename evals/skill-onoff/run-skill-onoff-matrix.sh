@@ -11,13 +11,15 @@
 #   Generic arms (P1W; see run-skill-onoff-eval.sh): add --skill <name> (arms default base,change)
 #     [--pack-base <dir>] [--pack-change <dir>] [--with-pack <skill>=<dir>]... [--fixture-scripts <dir>]
 #     [--check-skill <name>]; each is passed through to every cell unchanged.
+#   Multi-pack arms (P5): --arm-manifests <dir> (needs --arms) — each arm runs with
+#     --arm-manifest <dir>/<arm>.json (see run-skill-onoff-eval.sh); --fixture-scripts a,b passes through.
 #
 # Rows with failure_class=infra_fail are NOT treated as complete — they re-run on resume
 # (max 3 recorded attempts per cell, then the cell stays missing for score-onoff to judge).
 
 set -euo pipefail
 
-MODEL=""; REPS="3"; RESULTS=""; TASKS=""; ARMS=""; RUNNER="cc"
+MODEL=""; REPS="3"; RESULTS=""; TASKS=""; ARMS=""; RUNNER="cc"; ARM_MANIFESTS=""
 PASS=()
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -27,6 +29,7 @@ while [ $# -gt 0 ]; do
     --tasks) TASKS="$2"; shift 2 ;;
     --arms) ARMS="$2"; shift 2 ;;
     --runner) RUNNER="$2"; shift 2 ;;
+    --arm-manifests) ARM_MANIFESTS="$2"; shift 2 ;;
     --skill|--pack-base|--pack-change|--with-pack|--fixture-scripts|--check-skill)
       [ "$1" != "--skill" ] || SKILL_SET=1
       PASS+=("$1" "$2"); shift 2 ;;
@@ -38,6 +41,9 @@ done
   exit 2
 }
 
+if [ -n "$ARM_MANIFESTS" ] && [ -z "$ARMS" ]; then
+  echo "ERROR: --arm-manifests needs --arms" >&2; exit 2
+fi
 if [ -z "$ARMS" ]; then
   if [ "${SKILL_SET:-0}" = 1 ]; then ARMS="base,change"; else ARMS="full,card,off"; fi
 fi
@@ -84,8 +90,9 @@ for task in "${TASK_ARR[@]}"; do
       fi
       out=$(mktemp -d -t "onoff-cell-XXXXXX")
       echo "── cell $task|$arm|$rep (attempt $((attempts+1)))"
+      MAN=(); [ -z "$ARM_MANIFESTS" ] || MAN=(--arm-manifest "$ARM_MANIFESTS/$arm.json")
       if bash "$BASE_DIR/run-skill-onoff-eval.sh" \
-          --task "$task" --arm "$arm" --model "$MODEL" --rep "$rep" \
+          --task "$task" --arm "$arm" --model "$MODEL" --rep "$rep" "${MAN[@]+"${MAN[@]}"}" \
           --runner "$RUNNER" --out "$out" "${PASS[@]+"${PASS[@]}"}" >/dev/null; then
         cat "$out/result.json" >> "$RESULTS"
       else

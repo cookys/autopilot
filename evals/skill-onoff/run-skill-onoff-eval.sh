@@ -25,6 +25,17 @@
 #   --check-skill name         manipulation check (E5): row carries "skill_invoked" for <name>
 #                              instead of the dev-flow-only skill_invoked_devflow field
 #                              (implied by --skill).
+# Multi-pack arms (P5 arm builder; every flag above keeps its exact behavior):
+#   run-skill-onoff-eval.sh --task <id> --arm-manifest <file.json> --model <m> ...
+#   --arm-manifest f   the arm is a SET of packs: {"schema_version":1,"arm":"base|change|red|...",
+#                      "skills":{"<skill>":"<packs/ dir name>",...},      every skill pack -> skills/<skill>/
+#                      "files":"<packs/ dir name>" | ["<dir>",...],      non-skill guidance files -> plugin ROOT
+#                      "fixture_scripts":["<dir>",...]}                   copied onto the fixture repo root
+#                      (after any --fixture-scripts dirs, so a manifest pack overlays a row's helper pack).
+#                      The row's "arm" is the manifest's arm (--arm, when also given, must agree). Companions of the
+#                      same name as a manifest skill are NOT copied; every pack is digest-verified exact. Row carries
+#                      skill_invoked/check_skill (default dev-flow). Not combinable with --skill/--pack-*/--with-pack.
+#   --fixture-scripts a,b   a comma list is applied in order (later overlays earlier) — manifest arms only.
 # Per-cell isolation (E4, every run; state root on tmpfs, see below): AUTOPILOT_LIVE_DIR / AUTOPILOT_TASK_STATUS_DIR
 # point under a per-cell temp dir (the decision ledger default lives in the fixture repo git-common-dir); copied to $OUT/state/ for evidence.
 #
@@ -36,7 +47,7 @@
 set -euo pipefail
 
 TASK_ID=""; ARM=""; MODEL=""; OUT_DIR=""; REP="1"; RUNNER="cc"
-SKILL=""; PACK_BASE=""; PACK_CHANGE=""; FIXTURE_SCRIPTS=""; CHECK_SKILL=""; WITH_PACKS=()
+SKILL=""; PACK_BASE=""; PACK_CHANGE=""; FIXTURE_SCRIPTS=""; CHECK_SKILL=""; WITH_PACKS=(); ARM_MANIFEST=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --task) TASK_ID="$2"; shift 2 ;;
@@ -51,14 +62,40 @@ while [ $# -gt 0 ]; do
     --with-pack) WITH_PACKS+=("$2"); shift 2 ;;
     --fixture-scripts) FIXTURE_SCRIPTS="$2"; shift 2 ;;
     --check-skill) CHECK_SKILL="$2"; shift 2 ;;
+    --arm-manifest) ARM_MANIFEST="$2"; shift 2 ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
 done
+MAN_SKILLS=""; MAN_FILES=""; MAN_FIXTURES=""
+if [ -n "$ARM_MANIFEST" ]; then
+  [ -f "$ARM_MANIFEST" ] || { echo "ERROR: arm manifest not found: $ARM_MANIFEST" >&2; exit 2; }
+  if [ -n "$SKILL$PACK_BASE$PACK_CHANGE" ] || [ "${#WITH_PACKS[@]}" -gt 0 ]; then
+    echo "ERROR: --arm-manifest cannot combine with --skill/--pack-*/--with-pack" >&2; exit 2
+  fi
+  # one tab-separated line: arm, "skill=pack ...", "files pack ...", "fixture pack ..." (a bad shape is exit 2)
+  MAN_LINE=$(node -e '
+    const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));
+    const bare=/^[a-z0-9][a-z0-9._-]*$/, bad=(m)=>{console.error("arm manifest: "+m);process.exit(2)};
+    if(j.schema_version!==1) bad("schema_version must be 1");
+    if(typeof j.arm!=="string"||!bare.test(j.arm)) bad("arm must be a bare name");
+    const sk=j.skills||{}; const fl=[].concat(j.files||[]); const fx=[].concat(j.fixture_scripts||[]);
+    if(typeof sk!=="object"||Array.isArray(sk)) bad("skills must be an object");
+    for(const [k,v] of Object.entries(sk)) if(!bare.test(k)||typeof v!=="string"||!bare.test(v)) bad("bad skill entry "+k);
+    for(const v of [...fl,...fx]) if(typeof v!=="string"||!bare.test(v)) bad("bad pack name "+v);
+    if(!Object.keys(sk).length&&!fl.length) bad("empty arm (no skills, no files)");
+    process.stdout.write([j.arm,Object.entries(sk).map(([k,v])=>k+"="+v).join(" "),fl.join(" "),fx.join(" ")].join("\t"));
+  ' "$ARM_MANIFEST") || exit 2
+  IFS=$'\t' read -r M_ARM MAN_SKILLS MAN_FILES MAN_FIXTURES <<< "$MAN_LINE"
+  [ -z "$ARM" ] || [ "$ARM" = "$M_ARM" ] || { echo "ERROR: --arm $ARM disagrees with manifest arm $M_ARM" >&2; exit 2; }
+  ARM="$M_ARM"
+fi
 if [ -z "$TASK_ID" ] || [ -z "$ARM" ] || [ -z "$MODEL" ]; then
   echo "Usage: $0 --task <id> --arm full|card|off --model <m> [--out <dir>] [--rep <n>] [--runner cc|stub]" >&2
   exit 2
 fi
-if [ -n "$SKILL" ]; then
+if [ -n "$ARM_MANIFEST" ]; then
+  [ -n "$CHECK_SKILL" ] || CHECK_SKILL="dev-flow"
+elif [ -n "$SKILL" ]; then
   case "$ARM" in base|change) ;; *) echo "ERROR: with --skill the arm must be base|change" >&2; exit 2 ;; esac
   case "$SKILL" in *[!a-z0-9-]*|"") echo "ERROR: bad --skill name: $SKILL" >&2; exit 2 ;; esac
 else
@@ -134,10 +171,17 @@ cleanup() { rm -rf "$TEMP_REPO" "$SCRATCH_HOME" "$SCRATCH_PLUGIN" "$CELL_STATE";
 trap cleanup EXIT
 
 cp -r "$TASK_DIR/repo"/. "$TEMP_REPO"/
-if [ -n "$FIXTURE_SCRIPTS" ]; then  # E3: identical frozen helper set in BOTH arms, before the base commit
+if [ -n "$FIXTURE_SCRIPTS" ] && [ -z "$ARM_MANIFEST" ]; then  # E3: identical frozen helper set in BOTH arms, before the base commit
   FS_NAME=$(pack_name "$FIXTURE_SCRIPTS")
   verify_pack "$FS_NAME" exact
   cp -r "$PACKS_DIR/$FS_NAME"/. "$TEMP_REPO"/
+fi
+if [ -n "$ARM_MANIFEST" ]; then  # P5: ordered fixture-scripts overlay (CLI list first, then the manifest's)
+  read -ra FS_LIST <<< "${FIXTURE_SCRIPTS//,/ } $MAN_FIXTURES"
+  for fs_one in "${FS_LIST[@]+"${FS_LIST[@]}"}"; do
+    FS_NAME=$(pack_name "$fs_one"); verify_pack "$FS_NAME" exact
+    cp -r "$PACKS_DIR/$FS_NAME"/. "$TEMP_REPO"/
+  done
 fi
 (
   cd "$TEMP_REPO"
@@ -160,11 +204,24 @@ for comp in "$PACKS_DIR/companions"/*/; do
   [ -d "$comp" ] || continue
   name=$(basename "$comp")
   if [ -n "$SKILL" ] && { [ "$name" = "$SKILL" ] || [[ "$WITH_NAMES" == *" $name "* ]]; }; then continue; fi
+  if [ -n "$ARM_MANIFEST" ] && [[ " $MAN_SKILLS " == *" $name="* ]]; then continue; fi
   mkdir -p "$SCRATCH_PLUGIN/skills/$name"
   cp -r "$comp". "$SCRATCH_PLUGIN/skills/$name/"
 done
 verify_pack "companions"
-if [ -n "$SKILL" ]; then
+if [ -n "$ARM_MANIFEST" ]; then
+  # P5: the arm is a SET of digest-verified packs (every skill + the non-skill guidance files).
+  for ms in $MAN_SKILLS; do
+    mskill="${ms%%=*}"; mpack="${ms#*=}"
+    MK=$(pack_name "$mpack"); verify_pack "$MK" exact
+    mkdir -p "$SCRATCH_PLUGIN/skills/$mskill"
+    cp -r "$PACKS_DIR/$MK"/. "$SCRATCH_PLUGIN/skills/$mskill/"
+  done
+  for mf in $MAN_FILES; do
+    MK=$(pack_name "$mf"); verify_pack "$MK" exact
+    cp -r "$PACKS_DIR/$MK"/. "$SCRATCH_PLUGIN"/
+  done
+elif [ -n "$SKILL" ]; then
   # E1/E2: generic arms — the target skill is the digest-verified pack; nothing else varies.
   if [ "$ARM" = "base" ]; then PK=$(pack_name "${PACK_BASE:-$SKILL-base}"); else PK=$(pack_name "${PACK_CHANGE:-$SKILL-change}"); fi
   verify_pack "$PK" exact

@@ -98,3 +98,28 @@ brief's `markers.sh` + `lib/stage-graph-markers.sh`), aggregate scorer `score-st
 `prereg/stage-graph.{md,json}`, base packs `*-sg-base` + `guidance-files-sg-base`, and the cut gate
 `scripts/check-guidance-eval.js`. Always pass an explicit `--tasks` list (the 12 ids in the prereg) to the
 matrix runner. Proof: `hooks/tests/skill-onoff-stage-graph.test.sh`, `hooks/tests/check-guidance-eval.test.sh`.
+
+### Stage-graph P5 arm builder (multi-pack arms, planted-red builder, campaign command)
+
+Spend-free infrastructure for plan §4 P5 item 7 (proof: `hooks/tests/skill-onoff-arm-builder.test.sh`).
+
+- **Arm manifest** (`arms/stage-graph/{base,change,red}.json`, read by `run-skill-onoff-eval.sh --arm-manifest`):
+  `{"schema_version":1,"arm":"base|change|red","skills":{"<skill>":"<pack>",…16},"files":"<pack>"|["<pack>",…],
+  "fixture_scripts":["<pack>",…]}`. Skill packs install to `skills/<skill>/`, `files` packs (non-skill guidance:
+  `references/*.md`, `project-config-template/*.md`) to the plugin ROOT, `fixture_scripts` onto the cell repo before the
+  frozen base commit (after any `--fixture-scripts a,b` list; later wins). Every pack is digest-verified `exact`. The
+  matrix takes `--arm-manifests <dir> --arms change,red` (one manifest per arm name). The `--skill` arms are untouched.
+- **Fixture scripts**: `packs/fixture-scripts-sg` (frozen from release/3.0.0): `session-mode.js`, `stage-advance.js`,
+  `stage-graph.js`, `probe-unknown.js`, `classify-diff-risk.sh`, `resolve-review-loop.sh` + libs, `references/stage-graph.json`, schemas.
+- **`freeze-guidance-arm.js change [--extra a,b] [--suffix s]`** freezes `<skill>-sg-change` (base tree + the prereg's
+  listed files from the working tree), `guidance-files-sg-change` (+ extras) and `guidance-files-sg-extra-base` (extras from
+  `guidance.base_ref`). Run it ONLY once the guidance is final; extras need a prereg amendment (the result prints it).
+  `base` writes the base arm manifest; `red` builds the planted-red arm. Frozen packs are never mutated; a re-freeze needs `--suffix`.
+- **Red arm**: `freeze-guidance-arm.js red [--require-text]` rotates XS<->L, S<->XL (M kept) in (1) the
+  `references/stage-graph.json` of every fixture pack (`fixture-scripts-sg-red`): the `base` + `bug` rules swap while `unit_kind` and
+  `bump_limits` stay, so the red agent's `stage-graph.js` / `stage-advance.js` serve rotated walks for the size it recorded (re-queried
+  and asserted at build time); and (2) best-effort prose in the change packs: size-table stage cells and `- XS: a → b` list lines
+  (`-sg-red` packs).
+- **Campaign**: `node evals/skill-onoff/run-stage-graph-campaign.js --results evals/skill-onoff/results/stage-graph.jsonl`
+  (`--dry-run` prints the cell list + cost estimate; resumable; ends with `score-stage-graph.js`). Generic regression cells
+  (7 tasks x base/change) run under the conditions of their original rows (fixture pack, prompt prefix, marker lib) with the sg scripts overlaid.

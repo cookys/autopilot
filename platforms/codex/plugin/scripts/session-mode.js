@@ -7,11 +7,11 @@
  * (mods P1W MARKER, plan R5.6): `level: null` is a PLAIN session (no orchestrator mode) — written by the
  * SessionStart ensure in hooks/runs-watch-autostart.js for opted-in repos and by `set` without --level.
  * Every mode reader treats level:null exactly like an absent marker (readMarker() returns null for it);
- * the fields meant to be read from a plain record are project_key, root_run_id, phase, started_at.
+ * the fields meant to be read from a plain record are project_key, root_run_id, size, stage, started_at.
  * level ∈ {l3,l4,l5,l6} is unchanged; any other non-null level is still an invalid marker:
  *   ${AUTOPILOT_SESSION_MODE_DIR:-~/.autopilot/session-mode}/<session-id>.json
  *   { session_id, level, repo_root, started_at, expires_at, entry_level?, fallback_reason?,
- *     mission_routing?, repo_identity?, project_key?, root_run_id?, phase?, phase_set_at?, campaign_roots? }
+ *     mission_routing?, repo_identity?, project_key?, root_run_id?, campaign_roots?, size?, urgent?, bug?, base_ref?, stage?, ... }
  *   (level is null for a plain session. A plain session is ONE JOB like any other (mods P1W PLAINROOT, plan R5.7):
  *   `set` and the SessionStart ensure assign root_run_id with the same rule as `set --level` — explicit --root-run-id
  *   > AUTOPILOT_ROOT_RUN_ID > a minted `job-<ts>-<rand>` (resolveJobRoot, the only minting site). The ensure never
@@ -26,8 +26,8 @@
  *   launched (<= 8, newest last). The engine's sealed Mission root can never equal the marker's job root (the marker is
  *   set before prepare/grant mint the mission), so this is the only link from a session to the campaign it runs; the
  *   watcher and the band read the union {root_run_id} + campaign_roots.
- *   phase/phase_set_at (mods P1W PHASE): free-text work phase (1-64 chars, trimmed, no control
- *   chars) + ISO-8601 stamp, read by the project watcher; absent = no phase.
+ *   The marker carries no phase fields (removed in stage-graph P2b, plan §0.7) and the old phase flag is a usage error;
+ *   the work position is `stage`/`stage_set_at`/`unit`, written by scripts/stage-advance.js.
  *
  * Design notes (see docs/plans/2026-07-14-context-budget-orchestrator-gate.md):
  * - Host-stable path (~/.autopilot, NOT $TMPDIR) — docker-exec contexts see the
@@ -41,15 +41,10 @@
  *
  * Usage:
  *   node scripts/session-mode.js set --level l3|l4|l5|l6 [--entry-level l3|l4|l5|l6]
- *     [--fallback none|solo|precondition_failed] [--repo-root <dir>] [--ttl-hours N] [--phase <name>]
- *   node scripts/session-mode.js set [--level none] [--repo-root <dir>] [--ttl-hours N] [--root-run-id <id>] [--phase <name>]
+ *     [--fallback none|solo|precondition_failed] [--repo-root <dir>] [--ttl-hours N]
+ *   node scripts/session-mode.js set [--level none] [--repo-root <dir>] [--ttl-hours N] [--root-run-id <id>]
  *     (no --level, or --level none: write a PLAIN-session marker, level null, replacing this session's plain or
  *     expired marker — exit 2 when an unexpired l3-l6 marker exists (use `clear`); no Mission routing, no entry_level. `status` prints it as level "none" with active:false.)
- *   node scripts/session-mode.js set --phase <name>     (--phase WITHOUT any --level flag: update ONLY
- *     phase/phase_set_at of this session's unexpired marker — l3-l6 or plain — lock + atomic rename, every other
- *     field unchanged; `--phase ''` clears the phase. Exit 2 when there is no unexpired marker (fail-closed:
- *     this form never creates one). Exit 1 when the marker lock stays held past
- *     AUTOPILOT_SESSION_MODE_LOCK_TIMEOUT_MS, default 8000.)
  *   node scripts/session-mode.js bind-campaign-root --root <id> (--repo-identity <git-common-dir:...> | --repo-root <dir>)
  *     (record <id> in THIS session's own marker `campaign_roots`: locked, atomic, idempotent, newest last, <= 8. Refuses
  *     (exit 3, one stderr line, marker untouched) unless the marker exists, is unexpired, is level l5/l6 and its repo
@@ -89,7 +84,6 @@ const { withWriteLock } = require('./lib/jsonl-store');
 
 const LEVELS = new Set(['l3', 'l4', 'l5', 'l6']);
 const DEFAULT_TTL_HOURS = 24;
-const PHASE_MAX = 64;
 const PHASE_LOCK_TIMEOUT_MS = 8000;
 const CAMPAIGN_ROOTS_MAX = 8;
 const CAMPAIGN_ROOT_ID = /^[A-Za-z0-9._-]{1,128}$/u;
@@ -183,7 +177,7 @@ function readMarker() {
 }
 
 // The per-session record: an orchestrator marker (l3-l6) OR a plain-session marker (level null), unexpired.
-// For callers that read the record's own fields (phase, root_run_id, project_key) rather than the mode.
+// For callers that read the record's own fields (root_run_id, project_key, size, stage) rather than the mode.
 // No argument: the env-keyed session (getSessionId). A hook, which gets the session id in its payload, passes it.
 function readSessionRecord(sessionId) {
   try {
@@ -510,9 +504,6 @@ function startProjectWatcher(marker, repoRoot) {
   }
 }
 
-// Phase names (mods P1W PHASE): 1-64 chars after trim, no control characters. An explicit empty
-// string is the clear request; whitespace-only is a mistake, not a clear.
-// Returns {value} (value === null means clear) or {error}.
 // True only when the environment names a session. getSessionId() falls back to the cwd for an unbound caller, which
 // is fine for reading but must never decide that a marker belongs to this process when something WRITES to it.
 function hasExplicitSessionId(env = process.env) {
@@ -581,59 +572,9 @@ function cmdBindCampaignRoot(args) {
   return 0;
 }
 
-function parsePhase(raw) {
-  if (typeof raw !== 'string') return { error: '--phase needs a value (use --phase \'\' to clear)' };
-  if (raw === '') return { value: null };
-  const trimmed = raw.trim();
-  if (trimmed.length === 0) return { error: 'invalid --phase: whitespace only (use --phase \'\' to clear)' };
-  if ([...trimmed].length > PHASE_MAX) return { error: `invalid --phase: longer than ${PHASE_MAX} characters` };
-  if (/[\u0000-\u001f\u007f-\u009f]/u.test(trimmed)) return { error: 'invalid --phase: control characters are not allowed' };
-  return { value: trimmed };
-}
-
-// `set --phase <name>` without any --level flag: update only phase/phase_set_at of the session's unexpired
-// record (an orchestrator marker or a plain-session marker).
-function cmdSetPhase(phase) {
-  if (!readSessionRecord()) {
-    process.stderr.write(
-      'session-mode: no unexpired session marker for this session; --phase alone updates an existing marker ' +
-      '(l3-l6 or plain) and never creates one. Run `set [--level none|l3|l4|l5|l6] --phase <name>` to create it\n',
-    );
-    return 2;
-  }
-  const timeoutMs = Number(process.env.AUTOPILOT_SESSION_MODE_LOCK_TIMEOUT_MS) > 0
-    ? Number(process.env.AUTOPILOT_SESSION_MODE_LOCK_TIMEOUT_MS) : PHASE_LOCK_TIMEOUT_MS;
-  let updated = null;
-  try {
-    withWriteLock({
-      storeDir: markerDir(), lockFile: `${markerPath()}.lock`, name: 'session-mode marker', timeoutMs,
-    }, () => {
-      // Re-read under the lock: the marker may have been cleared or replaced while we waited.
-      const current = readSessionRecord();
-      if (!current) return;
-      const next = { ...current };
-      delete next.phase;
-      delete next.phase_set_at;
-      if (phase !== null) {
-        next.phase = phase;
-        next.phase_set_at = new Date().toISOString();
-      }
-      const tmp = `${markerPath()}.tmp-${process.pid}`;
-      fs.writeFileSync(tmp, `${JSON.stringify(next, null, 2)}\n`);
-      fs.renameSync(tmp, markerPath()); // atomic on same fs
-      updated = next;
-    });
-  } catch (error) {
-    process.stderr.write(`session-mode: phase not written: ${error.message}\n`);
-    return 1;
-  }
-  if (!updated) {
-    process.stderr.write('session-mode: marker disappeared while waiting for the lock; phase not written\n');
-    return 2;
-  }
-  process.stdout.write(`${JSON.stringify({ ok: true, marker_path: markerPath(), ...updated }, null, 2)}\n`);
-  return 0;
-}
+// The phase flag was removed in stage-graph P2b (plan §0.7). Hard usage error naming the replacement; no alias.
+const PHASE_REMOVED_MESSAGE = '--phase was removed (stage-graph P2b): the marker no longer carries phase/phase_set_at. ' + // stage-vocab-allow
+  'Use `node scripts/stage-advance.js --to <node> [--unit kind:i/N:label]` to record the work position';
 
 // The one job-root rule (mods P1W W1f + PLAINROOT): explicit --root-run-id > AUTOPILOT_ROOT_RUN_ID (campaign / mission
 // roots stay untouched) > a freshly minted `job-<ts>-<rand>`. Used by `set --level`, plain `set` and the SessionStart ensure.
@@ -644,7 +585,7 @@ function resolveJobRoot({ explicit = '', now = Date.now(), env = process.env } =
 
 // A plain-session marker (level null): the per-session record without orchestrator mode. No Mission routing,
 // no entry_level. root_run_id is decided by the caller through resolveJobRoot (every plain marker has a job root).
-function buildPlainMarker({ sessionId, repoRoot, scope, now, ttlHours = DEFAULT_TTL_HOURS, rootRunId = null, phase = null }) {
+function buildPlainMarker({ sessionId, repoRoot, scope, now, ttlHours = DEFAULT_TTL_HOURS, rootRunId = null }) {
   const marker = {
     session_id: sessionId,
     level: null,
@@ -655,10 +596,6 @@ function buildPlainMarker({ sessionId, repoRoot, scope, now, ttlHours = DEFAULT_
     project_key: scope && scope.project_key ? scope.project_key : null,
     root_run_id: rootRunId || null,
   };
-  if (phase) {
-    marker.phase = phase;
-    marker.phase_set_at = new Date(now).toISOString();
-  }
   return marker;
 }
 
@@ -673,7 +610,7 @@ function writeMarkerFile(file, marker) {
 // unexpired marker of any kind exists for it; NEVER overwrite one (compact / resume / startup with a live l3-l6
 // or plain marker leave the bytes alone). An EXPIRED marker (parseable, expires_at in the past) is replaced;
 // an unreadable or malformed one is left untouched (not ours to destroy; fail-open). Takes the same
-// <marker>.lock as `set --phase` so a concurrent writer cannot interleave.
+// <marker>.lock as the `set --size` init so a concurrent writer cannot interleave.
 // -> 'created' | 'replaced_expired' | 'kept' | 'kept_unreadable' | 'skipped' (no usable session id).
 function ensurePlainMarker({ sessionId, repoRoot, scope, now = Date.now(), dir = markerDir() }) {
   const sid = normalizeSessionId(sessionId);
@@ -700,7 +637,7 @@ function ensurePlainMarker({ sessionId, repoRoot, scope, now = Date.now(), dir =
   return result;
 }
 
-function cmdSetPlain(args, phase) {
+function cmdSetPlain(args) {
   // A plain `set` is a record, not an exit from orchestrator mode: it never replaces this session's unexpired
   // l3-l6 marker (that would drop an l5/l6 session's mode without its close evidence). `clear` is the exit.
   const live = readMarker();
@@ -728,7 +665,6 @@ function cmdSetPlain(args, phase) {
     now: Date.now(),
     ttlHours,
     rootRunId: resolveJobRoot({ explicit: explicitRoot, now: Date.now() }),
-    phase: phase && phase.value !== null ? phase.value : null,
   });
   writeMarkerFile(markerPath(), marker);
   try { writeLivePointer(); } catch (_error) { /* fail-open: pointer is advisory for the mod */ }
@@ -801,10 +737,10 @@ function applyInitFields(marker, init, repoRoot, prior) {
   return marker;
 }
 
-// `set --size/--urgent/--bug/--base-ref [--phase <name>]` without an orchestrator level: create-if-absent
+// `set --size/--urgent/--bug/--base-ref` without an orchestrator level: create-if-absent
 // (plain marker, level null) / merge-if-present (level and every other field preserved), under the marker
 // lock + atomic rename. --size is upward-only against an existing marker's size.
-function cmdSetInit(args, phase) {
+function cmdSetInit(args) {
   const parsed = parseInit(args);
   if (parsed.error) { process.stderr.write(`session-mode: ${parsed.error}\n`); return 2; }
   const { init } = parsed;
@@ -828,10 +764,6 @@ function cmdSetInit(args, phase) {
           return;
         }
         const next = applyInitFields({ ...current }, init, repoRoot, current);
-        if (phase && phase.value !== null) {
-          next.phase = phase.value;
-          next.phase_set_at = new Date().toISOString();
-        }
         writeMarkerFile(file, next);
         result = { marker: next, created: false };
         return;
@@ -844,7 +776,6 @@ function cmdSetInit(args, phase) {
       const marker = applyInitFields(buildPlainMarker({
         sessionId: getSessionId(), repoRoot, scope, now, ttlHours,
         rootRunId: resolveJobRoot({ explicit: explicitRoot, now }),
-        phase: phase && phase.value !== null ? phase.value : null,
       }), init, repoRoot, null);
       writeMarkerFile(file, marker);
       result = { marker, created: true };
@@ -864,21 +795,15 @@ function cmdSetInit(args, phase) {
 }
 
 function cmdSet(args) {
-  const hasPhase = Object.prototype.hasOwnProperty.call(args, 'phase');
   const hasLevel = Object.prototype.hasOwnProperty.call(args, 'level');
-  let phase;
-  if (hasPhase) {
-    phase = parsePhase(args.phase);
-    if (phase.error) {
-      process.stderr.write(`session-mode: ${phase.error}\n`);
-      return 2;
-    }
-    if (!hasLevel && !hasInitFlags(args)) return cmdSetPhase(phase.value);
+  if (Object.prototype.hasOwnProperty.call(args, 'phase')) {
+    process.stderr.write(`session-mode: ${PHASE_REMOVED_MESSAGE}\n`);
+    return 2;
   }
   // Stage-graph P2a: size/urgent/bug/base-ref without an orchestrator level is the create-or-merge init
   // (an existing marker keeps its level).
-  if ((!hasLevel || args.level === 'none') && hasInitFlags(args)) return cmdSetInit(args, phase);
-  if (!hasLevel || args.level === 'none') return cmdSetPlain(args, phase);
+  if ((!hasLevel || args.level === 'none') && hasInitFlags(args)) return cmdSetInit(args);
+  if (!hasLevel || args.level === 'none') return cmdSetPlain(args);
   const level = args.level;
   const initParsed = parseInit(args);
   if (initParsed.error) {
@@ -935,10 +860,6 @@ function cmdSet(args) {
   const explicitRoot = typeof args['root-run-id'] === 'string' && /^[A-Za-z0-9._-]+$/.test(args['root-run-id'])
     ? args['root-run-id'] : '';
   marker.root_run_id = resolveJobRoot({ explicit: explicitRoot, now });
-  if (phase && phase.value !== null) {
-    marker.phase = phase.value;
-    marker.phase_set_at = new Date(now).toISOString();
-  }
   if (missionRouting.status !== 'LEGACY') {
     marker.entry_level = missionRouting.route.entry_level;
     marker.fallback_reason = missionRouting.route.fallback_reason;
@@ -1270,11 +1191,11 @@ function main() {
     case 'root': return cmdRoot();
     default:
       process.stderr.write(
-        'Usage: session-mode.js set [--level none] [--root-run-id <id>] [--phase <name>] (plain session) | ' +
+        'Usage: session-mode.js set [--level none] [--root-run-id <id>] (plain session) | ' +
         'set --level l3|l4|l5|l6 [--entry-level l3|l4|l5|l6] ' +
-        '[--fallback none|solo|precondition_failed] [--repo-root <dir>] [--ttl-hours N] [--root-run-id <id>] [--phase <name>] | ' +
+        '[--fallback none|solo|precondition_failed] [--repo-root <dir>] [--ttl-hours N] [--root-run-id <id>] | ' +
         'set --size XS|S|M|L|XL [--urgent] [--bug] [--base-ref <sha>] (create-or-merge; size only moves up) | ' +
-        'set --phase <name|\'\'> (update the active marker) | clear | retire --session <id> --integration-receipt <file> [--integration-ref <ref>] | bind-campaign-root --root <id> (--repo-identity <id> | --repo-root <dir>) | status | root\n',
+        'clear | retire --session <id> --integration-receipt <file> [--integration-ref <ref>] | bind-campaign-root --root <id> (--repo-identity <id> | --repo-root <dir>) | status | root\n',
       );
       return 2;
   }

@@ -9,8 +9,6 @@
   "repo_identity": "fx-identity",
   "project_key": "7897fab2c75bbe7c",
   "root_run_id": "job-1791267638-db145065",
-  "phase": "implement",
-  "phase_set_at": "2026-10-06T06:21:00.000Z",
   "campaign_roots": ["camp-1"],
   "size": "L",
   "urgent": true,

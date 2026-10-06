@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # hooks/tests/runs-watch-inputs.test.sh — mods P1W WATCH-A: the watcher's own inputs reach the published model.json
-# (planned W1g, decision W2a-m, compare W2e-m, sources manifest W1i, marker phase W2b-m read side) plus the
+# (planned W1g, decision W2a-m, compare W2e-m, sources manifest W1i, marker stage (P2b read side)) plus the
 # scripts/open-decision.js helper (decision/1) and the pure modules behind them.
 # Each item drives the real createWatcher (fake clock, real publish()) and asserts the published model.json field,
 # the sources row, and one negative control (stale file, file of another root, file of another repo, file left after the end signal).
@@ -221,21 +221,21 @@ out('s_tasks_off', sc && `${sc.sources.tasks.installed}/${sc.sources.tasks.enabl
 out('s_attention_cfg_off', sc && `${sc.sources.attention.installed}/${sc.sources.attention.enabled}`);
 delete process.env.AUTOPILOT_SESSION_TASKS; fs.unlinkSync(path.join(home, 'config.json'));
 
-// ---- item 6: marker phase (read side) ------------------------------------------------------------------------
+// ---- item 6: marker stage (read side; the §2.9 fields; the old marker phase fields are gone since P2b) ------------------------------------------------------------------------
 world.rows = [mkRow('r-3', 'R3'), mkRow('r-4', 'R4'), mkRow('r-c', 'R1')];
 settle();
 out('ph_none', J(model('R3').phase));
-marker('ph-a', { root_run_id: 'R3', phase: 'design', phase_set_at: iso(T - 50e3) });
+marker('ph-a', { root_run_id: 'R3', size: 'M', stage: 'plan', stage_set_at: iso(T - 50e3) });
 settle(); out('ph_single', J(model('R3').phase));
-marker('ph-b', { root_run_id: 'R3', phase: 'implement', phase_set_at: iso(T - 10e3) });
+marker('ph-b', { root_run_id: 'R3', stage: 'implement', stage_set_at: iso(T - 10e3) });
 settle(); out('ph_newest_wins', model('R3').phase && model('R3').phase.code);
-marker('ph-c', { root_run_id: 'R3', phase: 'WRONGPROJECT', phase_set_at: iso(T), project_key: 'other0000000000' });
-marker('ph-d', { root_run_id: 'R4', phase: 'WRONGROOT', phase_set_at: iso(T) });
+marker('ph-c', { root_run_id: 'R3', stage: 'verify', stage_set_at: iso(T), project_key: 'other0000000000' });
+marker('ph-d', { root_run_id: 'R4', stage: 'finish', stage_set_at: iso(T) });
 settle(); out('ph_foreign_ignored', model('R3').phase && model('R3').phase.code);
 out('ph_other_root_scope', model('R4').phase && model('R4').phase.code);
-marker('ph-b', { root_run_id: 'R3', phase: 'implement', phase_set_at: iso(T - 10e3), expires_at: iso(T - 1000) });
+marker('ph-b', { root_run_id: 'R3', stage: 'implement', stage_set_at: iso(T - 10e3), expires_at: iso(T - 1000) });
 settle(); out('ph_expired_falls_back', model('R3').phase && model('R3').phase.code);
-marker('ph-e', { root_run_id: 'R1', phase: 'MARKERPHASE', phase_set_at: iso(T) });
+marker('ph-e', { root_run_id: 'R1', stage: 'qc-gate', stage_set_at: iso(T) });
 settle(); out('ph_campaign_beats_marker', model('R1').phase && `${model('R1').phase.source}:${model('R1').phase.code}`);
 // ---- item 7: PHASE-TASK — the phase falls back to the session task in progress ----------------------------------
 out('pt_unbound_scope', model('unbound') ? J(model('unbound').phase) : 'nomodel'); // s-e (unbound) has beta in progress
@@ -264,14 +264,14 @@ tasksFile('pt-e', { project_key: 'otherproject0000', first_created_at: iso(T - 5
 marker('pt-e', { root_run_id: 'R7' });
 settle(); out('pt_foreign_ignored_R7', model('R7').phase.label);
 out('pt_other_root_own_scope', model('R9').phase.label);
-// marker phase beats the task; a campaign live phase beats both
-marker('pt-b', { root_run_id: 'R7', phase: 'design', phase_set_at: iso(T) });
+// marker stage beats the task; a campaign live phase beats both
+marker('pt-b', { root_run_id: 'R7', stage: 'plan', stage_set_at: iso(T) });
 settle(); out('pt_marker_beats_task', `${model('R7').phase.source}:${model('R7').phase.code}`);
 tasksFile('pt-f', { first_created_at: iso(T - 40e3), tasks: [ip('1', 'TASK-UNDER-CAMPAIGN', 1)] });
 marker('pt-f', { root_run_id: 'R1' });
 settle(); out('pt_campaign_beats_all', `${model('R1').phase.source}:${model('R1').phase.code}`);
 // tick-level: marking a task in_progress republishes with the new phase; completing it drops the phase
-fs.unlinkSync(path.join(sessDir, 'pt-b.json')); // R7 now has no marker phase
+fs.unlinkSync(path.join(sessDir, 'pt-b.json')); // R7 now has no marker stage
 tasksFile('pt-b', { first_created_at: iso(T - 80e3), tasks: [{ id: '2', subject: 'Flip me', status: 'pending', started_seq: null }] });
 settle(); out('pt_flip_before', J(model('R7').phase));
 marker('pt-b', { root_run_id: 'R7' });
@@ -347,21 +347,21 @@ eq "$KEY|R1" "$(dv s_scope)" "sources: scope"
 eq '{"installed":true,"enabled":true,"how":"hook hooks/session-tasks.js (knob AUTOPILOT_SESSION_TASKS)"}' "$(dv s_tasks)" "sources: tasks installed+enabled derived from hooks.json and knob"
 eq 'true/true' "$(dv s_attention)" "sources: attention"
 eq 'false|writer is a guidance row' "$(dv s_compare)" "sources: compare not installed, says why"
-eq 'attention,compare,context,decision,ledger_depth0,ledger_engine,phase,progress,task_status_input,tasks,turn' "$(dv s_keys)" "sources: the eleven sources the band reads"
+eq 'attention,compare,context,decision,ledger_depth0,ledger_engine,progress,stage,task_status_input,tasks,turn' "$(dv s_keys)" "sources: the eleven sources the band reads"
 eq yes "$(dv s_model_has_manifest)" "sources: the model carries the manifest"
 eq yes "$(dv s_compare_text_unwired)" "sources: the page says 來源未接 for the uninstalled compare writer"
 eq 'true/false' "$(dv s_tasks_off)" "sources: env knob off -> installed but not enabled"
 eq 'true/false' "$(dv s_attention_cfg_off)" "sources: config.json knob off -> installed but not enabled"
 # item 6
 eq null "$(dv ph_none)" "phase: no marker phase and no deliverable -> null"
-eq '{"code":"design","label":"design","source":"session"}' "$(dv ph_single)" "phase: marker phase reaches the model with source session"
-eq implement "$(dv ph_newest_wins)" "phase: two markers on one scope -> newest phase_set_at"
+eq '{"code":"plan","label":"M·l3 ▸ plan","source":"session"}' "$(dv ph_single)" "phase: marker stage reaches the model with source session"
+eq implement "$(dv ph_newest_wins)" "phase: two markers on one scope -> newest stage_set_at"
 eq implement "$(dv ph_foreign_ignored)" "phase negative: markers of another project / another root are ignored"
-eq WRONGROOT "$(dv ph_other_root_scope)" "phase: the other root's own scope reads its own marker"
-eq design "$(dv ph_expired_falls_back)" "phase negative: an expired marker (end signal) drops out"
+eq finish "$(dv ph_other_root_scope)" "phase: the other root's own scope reads its own marker"
+eq plan "$(dv ph_expired_falls_back)" "phase negative: an expired marker (end signal) drops out"
 eq 0 "$(dv sig_idle_no_republish)" "signature: no input change, no republish"
 eq 1 "$(dv sig_day_republish)" "signature: a day passing refreshes the open decision's age (已等 N 天) once"
-eq 'campaign:IMPLEMENTING' "$(dv ph_campaign_beats_marker)" "phase: campaign live phase beats the marker phase"
+eq 'campaign:IMPLEMENTING' "$(dv ph_campaign_beats_marker)" "phase: campaign live phase beats the marker stage"
 
 # item 7 PHASE-TASK
 eq '{"code":"1","label":"做：beta","source":"task"}' "$(dv pt_unbound_scope)" "phase task: the unbound scope shows its session's in-progress task"
@@ -373,7 +373,7 @@ eq 3 "$(dv pt_two_same_session_newest)" "phase task: two in progress in one sess
 eq '做：Newer session task' "$(dv pt_two_sessions_newest)" "phase task: two sessions on one root -> the most recently updated session"
 eq '做：Wire the watcher' "$(dv pt_foreign_ignored_R7)" "phase task negative: another project's in-progress task is never used"
 eq '做：OTHER-ROOT-TASK' "$(dv pt_other_root_own_scope)" "phase task: the other root's task shows only in its own scope"
-eq session:design "$(dv pt_marker_beats_task)" "phase task: marker phase beats the task"
+eq session:plan "$(dv pt_marker_beats_task)" "phase task: marker stage beats the task"
 eq campaign:IMPLEMENTING "$(dv pt_campaign_beats_all)" "phase task: campaign live phase beats marker and task"
 eq null "$(dv pt_flip_before)" "phase task tick: pending task -> no phase"
 eq 0 "$(dv pt_flip_idle_no_republish)" "phase task tick: no change -> no republish"
@@ -459,14 +459,14 @@ out('u_no_manifest_infers', `${model.wired.decision}/${model.wired.planned}/${mo
 const task = { artifact_type: 'task_status_receipt', root_run_id: 'R', evidence: { campaigns: [{ status: 'valid', phase: 'TERMINAL_READY' }] } };
 const prog = { artifact_type: 'controller_progress_receipt', root_run_id: 'R', completed_deliverables: [], remaining_deliverables: ['d9'], deliverable_count: 1, frozen_denominator_digest: 'a' };
 const mk = (o) => R.buildJobModel({ ...base, root: 'R', ...o }).phase;
-out('u_phase_campaign_receipt_over_marker', JSON.stringify(mk({ taskReceipt: task, progressReceipt: prog, markerPhase: { phase: 'mk' } })));
-out('u_phase_marker_over_deliverable', JSON.stringify(mk({ progressReceipt: prog, markerPhase: { phase: 'mk' } })));
+out('u_phase_campaign_receipt_over_marker', JSON.stringify(mk({ taskReceipt: task, progressReceipt: prog, markerStage: { stage: 'verify', size: 'S', urgent: true, level: 'l3', unit: { index: 1, total: 2 } } })));
+out('u_phase_marker_over_deliverable', JSON.stringify(mk({ progressReceipt: prog, markerStage: { stage: 'verify', size: 'S', urgent: true, level: 'l3', unit: { index: 1, total: 2 } } })));
 out('u_phase_deliverable_when_no_marker', JSON.stringify(mk({ progressReceipt: prog })));
-out('u_phase_invalid_marker_ignored', JSON.stringify(mk({ markerPhase: { phase: 5 } })));
+out('u_phase_invalid_marker_ignored', JSON.stringify(mk({ markerStage: { stage: 5 } })));
 // PHASE-TASK precedence at the renderer: marker > task > deliverable
 const tp = { id: '7', subject: 'Task subject' };
 out('u_phase_task_over_deliverable', JSON.stringify(mk({ progressReceipt: prog, taskPhase: tp })));
-out('u_phase_marker_over_task', JSON.stringify(mk({ progressReceipt: prog, markerPhase: { phase: 'mk' }, taskPhase: tp })));
+out('u_phase_marker_over_task', JSON.stringify(mk({ progressReceipt: prog, markerStage: { stage: 'verify', size: 'S', urgent: true, level: 'l3', unit: { index: 1, total: 2 } }, taskPhase: tp })));
 out('u_phase_campaign_over_task', JSON.stringify(mk({ taskReceipt: task, taskPhase: tp })));
 out('u_phase_task_alone', JSON.stringify(mk({ taskPhase: tp })));
 out('u_phase_task_blank_subject', JSON.stringify(mk({ progressReceipt: prog, taskPhase: { id: '7', subject: '   ' } })));
@@ -494,11 +494,11 @@ eq yes "$(uv u_task_manifest_on_text)" "renderer: wired task with no receipt doe
 eq false "$(uv u_task_manifest_off)" "renderer: task_status_input not installed -> task not wired"
 eq 'false/false/false' "$(uv u_no_manifest_infers)" "renderer: without a manifest the old inference holds"
 eq '{"code":"TERMINAL_READY","label":"收尾","source":"campaign"}' "$(uv u_phase_campaign_receipt_over_marker)" "phase precedence: valid campaign receipt phase over marker"
-eq '{"code":"mk","label":"mk","source":"session"}' "$(uv u_phase_marker_over_deliverable)" "phase precedence: marker over the first open deliverable"
+eq '{"code":"verify","label":"S!·l3 ▸ verify unit 1/2","source":"session"}' "$(uv u_phase_marker_over_deliverable)" "phase precedence: marker over the first open deliverable"
 eq '{"code":"d9","label":"做 d9","source":"deliverable"}' "$(uv u_phase_deliverable_when_no_marker)" "phase precedence: deliverable when no marker"
 eq null "$(uv u_phase_invalid_marker_ignored)" "phase: a non-string marker phase is ignored"
 eq '{"code":"7","label":"做：Task subject","source":"task"}' "$(uv u_phase_task_over_deliverable)" "phase precedence: task in progress over the first open deliverable"
-eq '{"code":"mk","label":"mk","source":"session"}' "$(uv u_phase_marker_over_task)" "phase precedence: marker over the task"
+eq '{"code":"verify","label":"S!·l3 ▸ verify unit 1/2","source":"session"}' "$(uv u_phase_marker_over_task)" "phase precedence: marker over the task"
 eq '{"code":"TERMINAL_READY","label":"收尾","source":"campaign"}' "$(uv u_phase_campaign_over_task)" "phase precedence: campaign receipt over the task"
 eq '{"code":"7","label":"做：Task subject","source":"task"}' "$(uv u_phase_task_alone)" "phase: task alone"
 eq '{"code":"d9","label":"做 d9","source":"deliverable"}' "$(uv u_phase_task_blank_subject)" "phase: a blank task subject is ignored (falls to the deliverable)"

@@ -445,7 +445,7 @@ function createWatcher({
     return m ? latestProgress({ commonDir: m[1], root }) : null;
   }
 
-  // WATCH-A inputs of one scope (planned / decision / compare / marker phase / sources manifest): src/status/watch-inputs.js
+  // WATCH-A inputs of one scope (planned / decision / compare / marker stage / sources manifest): src/status/watch-inputs.js
   function watchInputs(root, nowMs, wo) {
     return readWatchInputs({ env, key, identity, root, nowMs, liveBase: live, autopilotHome, markers: unexpiredMarkers(env, key, nowMs), progressReceipt: wo ? wo.value : null });
   }

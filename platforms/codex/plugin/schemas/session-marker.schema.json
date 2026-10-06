@@ -18,8 +18,6 @@
     "repo_identity": { "type": ["string", "null"] },
     "project_key": { "type": ["string", "null"] },
     "root_run_id": { "type": ["string", "null"] },
-    "phase": { "type": "string", "minLength": 1, "maxLength": 64 },
-    "phase_set_at": { "$ref": "#/$defs/isoUtcMs" },
     "campaign_roots": { "type": "array", "maxItems": 8, "items": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,128}$" } },
     "size": { "type": "string", "enum": ["XS", "S", "M", "L", "XL"] },
     "urgent": { "type": "boolean" },

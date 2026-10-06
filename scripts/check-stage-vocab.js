@@ -37,7 +37,13 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const SELF_EXCLUDES = ['scripts/check-stage-vocab.js', 'hooks/tests/check-stage-vocab.test.sh'];
+const SELF_EXCLUDES = ['scripts/check-stage-vocab.js', 'hooks/tests/check-stage-vocab.test.sh', 'platforms/codex/plugin/scripts/check-stage-vocab.js'];
+// marker_phase exemptions (P2b, plan §0.7). (1) Digest-frozen history that still names the removed phase flag: the frozen eval
+// markers library and the suite pinning it against recorded transcripts. (2) The suite whose whole job is to pin that the
+// removed flag is rejected. (3) A single line carrying the token `stage-vocab-allow` (a deliberate negative mention, e.g.
+// the rejection message itself). Exempt from marker_phase only.
+const MARKER_PHASE_HISTORY = ['evals/skill-onoff/lib/p1w-markers.sh', 'hooks/tests/skill-onoff-p1w-markers.test.sh', 'hooks/tests/session-mode-phase.test.sh'];
+const MARKER_PHASE_ALLOW_TOKEN = 'stage-vocab-allow';
 const EXCLUDE_PREFIXES = [
   'CHANGELOG.md',
   'docs/plans/',
@@ -143,8 +149,10 @@ function scanStageAndSize(rel, lines, add, withHints) {
 }
 
 function scanMarkerPhase(rel, lines, add) {
+  if (MARKER_PHASE_HISTORY.includes(rel)) return;
   const sessionModeFile = /(^|\/)session-mode[^/]*\.js$/.test(rel);
   lines.forEach((line, i) => {
+    if (line.includes(MARKER_PHASE_ALLOW_TOKEN)) return;
     if (/phase_set_at/.test(line)) add('marker_phase', rel, i + 1, line, 'phase_set_at');
     if (/--phase(?![\w-])/.test(line) && (sessionModeFile || /session-mode/.test(line))) {
       add('marker_phase', rel, i + 1, line, '--phase');

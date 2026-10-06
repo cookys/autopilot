@@ -835,7 +835,7 @@ function foremanSidecar(over: Record<string, unknown> = {}, scope: Record<string
   }
 }
 type SrcState = Record<string, { installed: boolean; enabled: boolean }>
-const ALL_ON: SrcState = Object.fromEntries(['tasks', 'attention', 'decision', 'ledger_engine', 'ledger_depth0', 'phase', 'compare', 'task_status_input', 'context', 'progress'].map(k => [k, { installed: true, enabled: true }]))
+const ALL_ON: SrcState = Object.fromEntries(['tasks', 'attention', 'decision', 'ledger_engine', 'ledger_depth0', 'stage', 'compare', 'task_status_input', 'context', 'progress'].map(k => [k, { installed: true, enabled: true }]))
 function manifest(over: SrcState = {}, scope: Record<string, unknown> = {}) {
   const sources: Record<string, unknown> = {}
   for (const [k, v] of Object.entries({ ...ALL_ON, ...over })) sources[k] = { ...v, how: 'x' }
@@ -1175,7 +1175,7 @@ for (const surface of SURFACES) {
 
   test('W3a marker contract: a plain session (level null) still resolves its scope (' + surface + ')', async ($, on) => {
     const files = base()
-    files[AHOME + '/session-mode/' + SID_A + '.json'] = j({ session_id: SID_A, level: null, project_key: KEY, root_run_id: null, started_at: '2026-10-04T09:40:00.000Z', phase: 'review', phase_set_at: PUBLISHED, expires_at: '2026-10-05T10:00:00.000Z' })
+    files[AHOME + '/session-mode/' + SID_A + '.json'] = j({ session_id: SID_A, level: null, project_key: KEY, root_run_id: null, started_at: '2026-10-04T09:40:00.000Z', size: 'M', stage: 'code-review', stage_set_at: PUBLISHED, expires_at: '2026-10-05T10:00:00.000Z' })
     world(on, files)
     await start($, surface)
     const text = await bandText($, surface)

@@ -1,27 +1,49 @@
 'use strict';
 
-// src/status/phase-input.js — the phase a session declared on its session-mode marker (mods P1W W2b-m, read side).
-// The writer is `session-mode.js set --phase <name>` (marker fields `phase` + `phase_set_at`). Only markers the caller
-// already filtered as unexpired and of this project count; here the root must also match the scope (null for unbound).
-// Two markers with a phase on one scope: the newest phase_set_at wins. Invalid phase (not a trimmed 1-64 code point string
-// without control characters) is ignored. Returns { phase, phase_set_at, session_id } or null.
+// src/status/phase-input.js — the work position a session recorded on its session-mode marker (read side).
+// The marker phase fields were removed in stage-graph P2b (plan §0.7); the position now comes from the §2.9
+// fields `stage` / `stage_set_at` (written by scripts/stage-advance.js) plus `size`, `urgent`, `level`, `unit`,
+// `review_families`. The file keeps its name (plan §2.9 reader list); there is no dual-read of the old fields.
+// Only markers the caller already filtered as unexpired and of this project count; the root must also match the scope
+// (null for unbound). Two markers with a stage on one scope: the newest stage_set_at wins. A marker without a valid
+// `stage` is ignored (size alone is not a position). Returns
+// { stage, stage_set_at, size, urgent, level, unit, review_families, session_id } or null.
 
-// Must stay identical to the writer's rule (scripts/session-mode.js parsePhase): 1-64 CODE POINTS, trimmed, no C0/DEL/C1
-// control characters. hooks/phase-rule-parity.test.js feeds both the same strings.
-const PHASE_MAX = 64;
-function validPhase(p) {
-  return typeof p === 'string' && p.length >= 1 && [...p].length <= PHASE_MAX && p === p.trim() && !/[\u0000-\u001f\u007f-\u009f]/u.test(p);
+const STAGES = ['intent', 'diagnose', 'research', 'proposal', 'plan', 'plan-review', 'implement', 'verify', 'code-review', 'qc-gate', 'finish'];
+const SIZES = ['XS', 'S', 'M', 'L', 'XL'];
+
+function validStage(s) { return typeof s === 'string' && STAGES.includes(s); }
+
+function cleanUnit(u) {
+  if (!u || typeof u !== 'object' || Array.isArray(u)) return null;
+  const { kind, index, total, label } = u;
+  if (kind !== 'phase' && kind !== 'deliverable') return null;
+  if (!Number.isInteger(index) || !Number.isInteger(total) || index < 1 || total < 1) return null;
+  return { kind, index, total, label: typeof label === 'string' ? label : '' };
 }
 
-function readMarkerPhase({ markers, key, root }) {
+function readMarkerStage({ markers, key, root }) {
   let best = null;
   for (const m of markers || []) {
-    if (!m || m.project_key !== key || (m.root_run_id || null) !== (root || null) || !validPhase(m.phase)) continue;
-    const at = Date.parse(m.phase_set_at);
+    if (!m || m.project_key !== key || (m.root_run_id || null) !== (root || null) || !validStage(m.stage)) continue;
+    const at = Date.parse(m.stage_set_at);
     const t = Number.isFinite(at) ? at : -Infinity;
-    if (!best || t > best.t) best = { t, phase: m.phase, phase_set_at: typeof m.phase_set_at === 'string' ? m.phase_set_at : null, session_id: typeof m.session_id === 'string' ? m.session_id : null };
+    if (best && t <= best.t) continue;
+    best = {
+      t,
+      value: {
+        stage: m.stage,
+        stage_set_at: typeof m.stage_set_at === 'string' ? m.stage_set_at : null,
+        size: SIZES.includes(m.size) ? m.size : null,
+        urgent: m.urgent === true,
+        level: typeof m.level === 'string' ? m.level : null,
+        unit: cleanUnit(m.unit),
+        review_families: Array.isArray(m.review_families) ? m.review_families.filter((f) => typeof f === 'string' && f) : [],
+        session_id: typeof m.session_id === 'string' ? m.session_id : null,
+      },
+    };
   }
-  return best ? { phase: best.phase, phase_set_at: best.phase_set_at, session_id: best.session_id } : null;
+  return best ? best.value : null;
 }
 
-module.exports = { readMarkerPhase, validPhase };
+module.exports = { readMarkerStage, validStage };

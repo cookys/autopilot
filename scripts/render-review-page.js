@@ -98,7 +98,8 @@ function buildProgress(receipt, root) {
 //      string kept as code) -> source 'campaign'. `awaiting_disposition` waits on depth-0, so it keeps the plain 等待處置 label.
 //   1. a VALID campaign entry of the task_status_receipt (`evidence.campaigns[].phase`; the receipt only validates TERMINAL campaigns,
 //      so a campaign phase here is always a terminal one) -> source 'campaign', zh-TW label;
-//   1b. (W2b-m) else the phase a session declared on its session-mode marker (`markerPhase.phase`) -> source 'session', label = the name;
+//   1b. (stage-graph P2b) else the stage on the session-mode marker (`markerStage`, §2.9 fields from src/status/phase-input.js) -> source 'session',
+//       code = the stage id, label `<size>[!]·<level> ▸ <stage>[ unit k/N]` (absent size/level parts are left out);
 //   1c. (PHASE-TASK) else the session task in progress (`taskPhase` {id, subject}) -> source 'task', label `做：<subject>` (subject cut to 40 chars, ellipsis);
 //   2. else the first still-open deliverable of the controller_progress_receipt -> source 'deliverable', `做 <id>`;
 //   3. else null. A live (non-terminal) campaign state is not reachable from here: no root_run_id -> campaign id mapping exists.
@@ -119,7 +120,13 @@ function taskPhaseLabel(subject) {
   const s = subject.replace(/\s+/g, ' ').trim();
   return `做：${s.length > 40 ? `${s.slice(0, 39)}…` : s}`;
 }
-function buildPhase(task, progress, markerPhase, taskPhase) {
+function markerStageLabel(m) {
+  const head = [`${typeof m.size === 'string' ? m.size : ''}${m.urgent === true && m.size ? '!' : ''}`, typeof m.level === 'string' ? m.level : ''].filter(Boolean).join('·');
+  const u = m.unit;
+  const unit = isObject(u) && Number.isInteger(u.index) && Number.isInteger(u.total) ? ` unit ${u.index}/${u.total}` : '';
+  return `${head ? `${head} ▸ ` : ''}${m.stage}${unit}`;
+}
+function buildPhase(task, progress, markerStage, taskPhase) {
   if (progress && typeof progress.live_phase === 'string' && progress.live_phase) {
     const code = progress.live_phase;
     return { code, label: phaseLabel(code), source: 'campaign' };
@@ -129,8 +136,8 @@ function buildPhase(task, progress, markerPhase, taskPhase) {
     if (!isObject(c) || c.status !== 'valid' || typeof c.phase !== 'string' || !c.phase) continue;
     return { code: c.phase, label: phaseLabel(c.phase), source: 'campaign' };
   }
-  if (isObject(markerPhase) && typeof markerPhase.phase === 'string' && markerPhase.phase) {
-    return { code: markerPhase.phase, label: markerPhase.phase, source: 'session' };
+  if (isObject(markerStage) && typeof markerStage.stage === 'string' && markerStage.stage) {
+    return { code: markerStage.stage, label: markerStageLabel(markerStage), source: 'session' };
   }
   if (isObject(taskPhase) && taskPhase.id != null && typeof taskPhase.subject === 'string' && taskPhase.subject.trim()) {
     return { code: String(taskPhase.id), label: taskPhaseLabel(taskPhase.subject), source: 'task' };
@@ -249,7 +256,7 @@ function buildJobModel(inputs) {
       failed_predicates: Array.isArray(task.failed_predicates) ? task.failed_predicates.map(String) : [],
     } : null,
     conclusion, needs_decision: Boolean(decision), decision, wired,
-    phase: buildPhase(task, progress, o.markerPhase, o.taskPhase), progress, planned, compare: o.compare || [], dispatch, gates,
+    phase: buildPhase(task, progress, o.markerStage, o.taskPhase), progress, planned, compare: o.compare || [], dispatch, gates,
     scope: envelope && isObject(envelope.scope) ? {
       project_key: envelope.scope.project_key || null, repo_identity: envelope.scope.repo_identity || null,
     } : null,
@@ -856,7 +863,7 @@ function assemble(o) {
     now: o.now, commit,
     taskReceipt: o.task ? o.task.value : null, progressReceipt: o.progress ? o.progress.value : null,
     reviewReceipts, compare: o.compare || [], compareProvided: o.compareProvided === true, decision: o.decision ? o.decision.value : null, planned: o.planned ? o.planned.value : null,
-    markerPhase: o.markerPhase || null, taskPhase: o.taskPhase || null, sourcesManifest: o.sourcesManifest || null,
+    markerStage: o.markerStage || null, taskPhase: o.taskPhase || null, sourcesManifest: o.sourcesManifest || null,
     isAncestor: gitIsAncestor(o.repo), sources,
   });
   return { model, reviewReceipts };

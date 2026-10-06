@@ -1,0 +1,9 @@
+{
+  "session_id": "fx-legacy-phase",
+  "level": null,
+  "repo_root": "/tmp/fx/repo",
+  "started_at": "2026-10-06T06:20:38.512Z",
+  "expires_at": "2026-10-07T06:20:38.512Z",
+  "phase": "implement",
+  "phase_set_at": "2026-10-06T06:21:00.000Z"
+}

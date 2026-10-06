@@ -76,7 +76,7 @@ if [ -n "${STUB_RESOLVE:-}" ]; then
   echo "resolved=$r"
 fi
 if [ -n "${STUB_RUN_HELPER:-}" ]; then
-  echo "helper=$(node scripts/session-mode.js set --phase L-1)"
+  echo "helper=$(node scripts/session-mode.js set --size S)"
 fi
 if [ -n "${STUB_SKILL_EVENT:-}" ]; then
   printf '{"message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"%s"}}]}}\n' "$STUB_SKILL_EVENT"
@@ -201,15 +201,15 @@ plain=$(run fs-none --task d1-s-tiny-feature --skill ceo-agent --arm base)
 for f in validate-json-schema.js decision-ledger.js run-ledger.sh lib/jsonl-store.js; do
   node -e 'const m=require(process.argv[1]).packs["fixture-scripts-base"];if(!m["fixture-scripts-base/scripts/"+process.argv[2]])process.exit(1)' "$BASE/packs/manifest.json" "$f" || fail "manifest lacks fixture script $f"
 done
-# pluggable helper pack: a stub session-mode.js with --phase stands in until the real row lands
+# pluggable helper pack: a stub session-mode.js stands in for a pack-provided helper
 mkdir -p "$TEST_TMP/helperpack/scripts"
-printf '#!/usr/bin/env node\nconsole.log("stub-phase:" + process.argv.slice(2).join(" "));\n' > "$TEST_TMP/helperpack/scripts/session-mode.js"
+printf '#!/usr/bin/env node\nconsole.log("stub-helper:" + process.argv.slice(2).join(" "));\n' > "$TEST_TMP/helperpack/scripts/session-mode.js"
 node "$BASE/freeze-pack.js" --id fixture-scripts-stubhelper --from-dir "$TEST_TMP/helperpack" >/dev/null
 export STUB_RUN_HELPER=1
 hb=$(run helper-b --task d1-s-tiny-feature --skill ceo-agent --arm base --fixture-scripts fixture-scripts-stubhelper)
 hc=$(run helper-c --task d1-s-tiny-feature --skill ceo-agent --arm change --fixture-scripts fixture-scripts-stubhelper)
 unset STUB_RUN_HELPER
-[ "$(kv "$hb" helper)" = "stub-phase:set --phase L-1" ] && [ "$(kv "$hc" helper)" = "stub-phase:set --phase L-1" ] \
+[ "$(kv "$hb" helper)" = "stub-helper:set --size S" ] && [ "$(kv "$hc" helper)" = "stub-helper:set --size S" ] \
   || fail "pack-provided helper not runnable in the fixture of both arms"
 echo tamper >> "$PK/fixture-scripts-stubhelper/scripts/session-mode.js"
 expect_rc 2 "tampered fixture-scripts pack" "${RUNNER[@]}" --skill ceo-agent --arm base --fixture-scripts fixture-scripts-stubhelper --out "$TEST_TMP/x9"

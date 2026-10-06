@@ -5,10 +5,10 @@
  * Contract under test
  *   - writer: `session-mode.js set` without --level (or --level none) writes level:null; root_run_id is a job root
  *     (explicit --root-run-id > AUTOPILOT_ROOT_RUN_ID > minted; mods P1W PLAINROOT, tests in plain-session-root.test.js);
- *     `status` prints level "none"; `set --phase` updates it in place.
+ *     `status` prints level "none"; `set --phase` is a usage error (removed in stage-graph P2b).
  *   - every marker reader treats level:null exactly like "no marker" (readers table in
  *     <scratchpad>/p1c/run-w/marker/REPORT.md), while a malformed level (not null, not l3-l6) stays invalid.
- *   - fields that are meant to be read from a plain marker (project_key, root_run_id, phase, started_at) are read.
+ *   - fields that are meant to be read from a plain marker (project_key, root_run_id, size, stage, started_at) are read.
  *   - SessionStart ensure (hooks/runs-watch-autostart.js): creates a plain marker only when no unexpired marker
  *     exists for the session id, NEVER overwrites (compact / resume / startup with a live l5 marker: bytes unchanged),
  *     replaces an expired one, creates nothing in a repo that is not opted in; UserPromptSubmit never creates one.
@@ -130,14 +130,12 @@ test('writer: bare `set` writes level:null with a job root, a project key and no
   assert.strictEqual(ttl, 24 * 3600 * 1000);
 });
 
-test('writer: --level none --phase X writes the phase on a plain marker', () => {
+test('writer: --level none --phase X is a usage error naming stage-advance.js; nothing is written', () => {
   const f = fx();
   const r = cli(f, ['set', '--level', 'none', '--phase', 'review', '--repo-root', f.repo]);
-  assert.strictEqual(r.status, 0, r.stderr);
-  const m = readJson(f.marker);
-  assert.strictEqual(m.level, null);
-  assert.strictEqual(m.phase, 'review');
-  assert.ok(Number.isFinite(Date.parse(m.phase_set_at)));
+  assert.strictEqual(r.status, 2);
+  assert.match(r.stderr, /stage-advance\.js --to <node>/);
+  assert.strictEqual(fs.existsSync(f.marker), false);
 });
 
 test('writer: root_run_id is --root-run-id, else AUTOPILOT_ROOT_RUN_ID, else minted', () => {
@@ -169,35 +167,26 @@ test('status prints level "none" for a plain marker; the file keeps null', () =>
   assert.strictEqual(JSON.parse(cli(f, ['status']).stdout).level, undefined);
 });
 
-test('phase: `set --phase` updates a plain marker in place (every other field identical)', () => {
+test('phase removed: `set --phase` over a plain marker exits 2 with the replacement named, bytes untouched; no phase fields are ever written', () => {
   const f = fx();
   cli(f, ['set', '--repo-root', f.repo]);
-  const before = readJson(f.marker);
-  const r = cli(f, ['set', '--phase', '  work  ']);
-  assert.strictEqual(r.status, 0, r.stderr);
-  const after = readJson(f.marker);
-  assert.strictEqual(after.phase, 'work');
-  const strip = (m) => { const c = { ...m }; delete c.phase; delete c.phase_set_at; return c; };
-  assert.deepStrictEqual(strip(after), strip(before));
-  assert.strictEqual(after.level, null);
-  assert.strictEqual(cli(f, ['set', '--phase', '']).status, 0);
-  assert.strictEqual(readJson(f.marker).phase, undefined);
+  const before = fs.readFileSync(f.marker);
+  for (const args of [['set', '--phase', '  work  '], ['set', '--phase', '']]) {
+    const r = cli(f, args);
+    assert.strictEqual(r.status, 2);
+    assert.match(r.stderr, /stage-advance\.js --to <node>/);
+    assert.ok(before.equals(fs.readFileSync(f.marker)));
+  }
+  const m = readJson(f.marker);
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(m, 'phase'), false);
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(m, 'phase_set_at'), false); // stage-vocab-allow
 });
 
-test('phase: `set --phase` with no marker at all still exits 2 and creates nothing', () => {
+test('phase removed: `set --phase` with no marker at all exits 2 and creates nothing', () => {
   const f = fx();
   const r = cli(f, ['set', '--phase', 'orphan']);
   assert.strictEqual(r.status, 2);
-  assert.match(r.stderr, /no unexpired session marker/i);
   assert.strictEqual(fs.existsSync(f.marker), false);
-});
-
-test('phase: `set --phase` on an expired plain marker exits 2, bytes untouched', () => {
-  const f = fx();
-  writePlain(f, { started_at: iso(Date.now() - 7200e3), expires_at: iso(Date.now() - 3600e3) });
-  const before = fs.readFileSync(f.marker);
-  assert.strictEqual(cli(f, ['set', '--phase', 'late']).status, 2);
-  assert.ok(before.equals(fs.readFileSync(f.marker)));
 });
 
 test('writer: `set --level l3` over a plain marker works and mints a job root; `clear` removes a plain marker', () => {
@@ -485,12 +474,13 @@ test('runs-watch cost: a plain marker adds no session to the cost summary; an l3
   assert.deepStrictEqual(Object.keys(tickCost()), ['smp-session']);
 });
 
-test('dev-flow plain marker: the watcher inputs resolve the session project and phase from it', () => {
+test('dev-flow plain marker: the watcher inputs resolve the session project and stage from it', () => {
   const f = fx();
   const key = scopeFromCwd(f.repo).project_key;
-  assert.strictEqual(cli(f, ['set', '--phase', 'x']).status, 2); // no marker yet
-  const r = cli(f, ['set', '--level', 'none', '--phase', '實作 W1', '--repo-root', f.repo]);
+  const r = cli(f, ['set', '--size', 'M', '--urgent', '--repo-root', f.repo]);
   assert.strictEqual(r.status, 0, r.stderr);
+  const mk = readJson(f.marker);
+  fs.writeFileSync(f.marker, JSON.stringify({ ...mk, stage: 'implement', stage_set_at: iso(Date.now()), unit: { kind: 'phase', index: 2, total: 3, label: 'W1' } }));
   const markers = unexpiredMarkers(watcherEnv(f), key, Date.now());
   assert.strictEqual(markers.length, 1, 'the plain marker carries this project key');
   assert.strictEqual(markers[0].project_key, key);
@@ -498,8 +488,12 @@ test('dev-flow plain marker: the watcher inputs resolve the session project and 
     env: watcherEnv(f), key, identity: scopeFromCwd(f.repo).repo_identity, root: markers[0].root_run_id, nowMs: Date.now(),
     liveBase: f.live, autopilotHome: path.dirname(f.markers), markers, progressReceipt: null,
   });
-  assert.strictEqual(inputs.assemble.markerPhase.phase, '實作 W1');
-  assert.strictEqual(inputs.assemble.markerPhase.session_id, 'smp-session');
+  assert.strictEqual(inputs.assemble.markerStage.stage, 'implement');
+  assert.strictEqual(inputs.assemble.markerStage.size, 'M');
+  assert.strictEqual(inputs.assemble.markerStage.urgent, true);
+  assert.deepStrictEqual(inputs.assemble.markerStage.unit, { kind: 'phase', index: 2, total: 3, label: 'W1' });
+  assert.strictEqual(inputs.assemble.markerStage.session_id, 'smp-session');
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(inputs.assemble, 'markerPhase'), false);
 });
 
 // ---------------------------------------------------------------- SessionStart ensure
@@ -545,7 +539,7 @@ test('ensure: compact and resume never overwrite a live l5 marker (bytes unchang
 
 test('ensure: a live plain marker is kept byte-for-byte on compact/resume', () => {
   const f = fx(); optIn(f);
-  writePlain(f, { project_key: scopeFromCwd(f.repo).project_key, phase: 'keep', phase_set_at: iso(Date.now()) });
+  writePlain(f, { project_key: scopeFromCwd(f.repo).project_key, size: 'S', stage: 'implement', stage_set_at: iso(Date.now()) });
   const before = fs.readFileSync(f.marker);
   for (const source of ['compact', 'resume']) {
     startHook(f, 'SessionStart', source, quiet);
@@ -661,7 +655,7 @@ test('watcher tick publishes the session phase (source session) from a plain mar
   };
   const publish = (withMarker) => {
     fs.rmSync(outRoot, { recursive: true, force: true });
-    if (withMarker) writePlain(f, { project_key: key, phase: '實作 W1', phase_set_at: iso(Date.now()) });
+    if (withMarker) writePlain(f, { project_key: key, level: 'l3', size: 'M', urgent: true, stage: 'implement', stage_set_at: iso(Date.now()), unit: { kind: 'phase', index: 2, total: 3, label: 'W1' } });
     else fs.rmSync(f.marker, { force: true });
     let t = Date.now();
     const w = createWatcher({ key, env: watcherEnv(f), cwd: f.repo, collect: () => [row], now: () => t, interval: 10, enrichCap: 8, render: { outRoot } });
@@ -674,10 +668,11 @@ test('watcher tick publishes the session phase (source session) from a plain mar
   };
   const withPlain = publish(true);
   assert.strictEqual(withPlain.phase.source, 'session');
-  assert.strictEqual(withPlain.phase.label, '實作 W1');
+  assert.strictEqual(withPlain.phase.code, 'implement');
+  assert.strictEqual(withPlain.phase.label, 'M!·l3 ▸ implement unit 2/3');
   assert.strictEqual(withPlain.scope.project_key, key);
   const without = publish(false);
-  assert.strictEqual(without.phase, null, 'control: no marker, no session phase');
+  assert.strictEqual(without.phase, null, 'control: no marker, no session stage');
 });
 
 // ---------------------------------------------------------------- repair 1: SessionStart ensure on the zero-spawn fast path
@@ -750,7 +745,7 @@ test('plain set refuses to replace an unexpired l3 / l5 / l6 marker of this sess
     const f = fx();
     setLevel(f, level);
     const before = fs.readFileSync(f.marker);
-    for (const args of [['set', '--repo-root', f.repo], ['set', '--level', 'none', '--repo-root', f.repo], ['set', '--level', 'none', '--phase', 'x', '--repo-root', f.repo]]) {
+    for (const args of [['set', '--repo-root', f.repo], ['set', '--level', 'none', '--repo-root', f.repo], ['set', '--level', 'none', '--root-run-id', 'job-x', '--repo-root', f.repo]]) {
       const r = cli(f, args);
       assert.strictEqual(r.status, 2, `${level} ${args.join(' ')}`);
       assert.match(r.stderr, /clear/);

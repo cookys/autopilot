@@ -224,13 +224,24 @@ test('concurrent binds serialise on the marker lock: every root lands, the file 
   assert.deepStrictEqual([...read(sb).campaign_roots].sort(), [...roots].sort());
 });
 
-test('set --phase and a later bind keep each other\'s fields (additive field survives the phase writer)', () => {
+test('set --size (init merge) and a later bind keep each other\'s fields (additive field survives the init writer)', () => {
   const sb = sandbox();
   writeMarker(sb);
   assert.strictEqual(bind(sb, ['--root', 'mission-aaa', '--repo-identity', IDENT]).status, 0);
-  const r = spawnSync('node', [CLI, 'set', '--phase', 'review'], { env: envOf(sb), encoding: 'utf8', input: '' });
+  const r = spawnSync('node', [CLI, 'set', '--size', 'M'], { env: envOf(sb), encoding: 'utf8', input: '' });
   assert.strictEqual(r.status, 0, r.stderr);
   const m = read(sb);
   assert.deepStrictEqual(m.campaign_roots, ['mission-aaa']);
-  assert.strictEqual(m.phase, 'review');
+  assert.strictEqual(m.size, 'M');
+  assert.strictEqual(m.phase, undefined);
+});
+
+test('the removed phase flag is rejected (P2b) and leaves campaign_roots untouched', () => {
+  const sb = sandbox();
+  writeMarker(sb);
+  assert.strictEqual(bind(sb, ['--root', 'mission-aaa', '--repo-identity', IDENT]).status, 0);
+  const r = spawnSync('node', [CLI, 'set', '--phase', 'review'], { env: envOf(sb), encoding: 'utf8', input: '' }); // stage-vocab-allow
+  assert.strictEqual(r.status, 2);
+  assert.match(r.stderr, /stage-advance\.js --to <node>/);
+  assert.deepStrictEqual(read(sb).campaign_roots, ['mission-aaa']);
 });

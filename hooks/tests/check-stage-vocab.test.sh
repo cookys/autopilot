@@ -26,6 +26,8 @@ printf -- '---\ndescription: Size a task (S/L/H/Fix) first\n---\n' > "$R/skills/
 # marker phase
 printf 'node scripts/session-mode.js set --phase L-3\nconst x = { phase_set_at: 1 };\n' > "$R/scripts/uses-phase.js"
 printf 'node check-phase-review-receipt.js --phase p1\n' > "$R/scripts/receipt-usage.md"
+printf 'node scripts/session-mode.js set --phase L-3 # stage-vocab-allow\nnode scripts/session-mode.js set --phase L-4\n' > "$R/scripts/allow-token.js"
+mkdir -p "$R/evals/skill-onoff/lib"; printf 'node scripts/session-mode.js set --phase L-3\n' > "$R/evals/skill-onoff/lib/p1w-markers.sh"
 # owner U4 semantic check
 printf 'The owner is asked at U4 when everything fails.\n' > "$R/scripts/u4-owner.md"
 printf 'U4 runs an experiment on a branch.\nIt is cheap and fast.\n' > "$R/scripts/u4-experiment.md"
@@ -61,6 +63,8 @@ chk "Effort M not flagged" '!f.some((x) => x.file === "docs/BACKLOG.md" && x.tex
 chk "description H detected" 'f.some((x) => x.category === "old_size_enum" && x.file === "skills/other/SKILL.md")'
 chk "phase_set_at detected" 'has("marker_phase","scripts/uses-phase.js","phase_set_at")'
 chk "session-mode --phase detected" 'has("marker_phase","scripts/uses-phase.js","--phase")'
+chk "allow token exempts only its own line" 'has("marker_phase","scripts/allow-token.js","--phase") && !f.some((x) => x.file === "scripts/allow-token.js" && x.category === "marker_phase" && x.line === 1)'
+chk "frozen history path exempt from marker_phase" '!f.some((x) => x.file === "evals/skill-onoff/lib/p1w-markers.sh" && x.category === "marker_phase")'
 chk "--phase of check-phase-review-receipt not flagged" '!f.some((x) => x.file === "scripts/receipt-usage.md")'
 chk "U4 next to owner flagged" 'has("owner_u4","scripts/u4-owner.md","U4")'
 chk "U4 experiment not flagged" '!f.some((x) => x.file === "scripts/u4-experiment.md")'

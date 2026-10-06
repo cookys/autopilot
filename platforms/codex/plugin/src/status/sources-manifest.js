@@ -68,8 +68,8 @@ function buildSourcesManifest({ pluginRoot, env = process.env, autopilotHome, sc
   const pickInstalled = exists(path.join(pluginRoot, 'scripts', 'decision-ledger.js')) && fileHas('scripts/next-pick.js', 'AUTOPILOT_ROOT_RUN_ID');
   out.ledger_depth0 = { installed: pickInstalled, enabled: pickInstalled, how: 'scripts/next-pick.js auto-pick appends to the default ledger when a marker or AUTOPILOT_ROOT_RUN_ID exists' };
 
-  const phaseInstalled = fileHas('scripts/session-mode.js', 'phase_set_at');
-  out.phase = { installed: phaseInstalled, enabled: phaseInstalled, how: 'session-mode.js set --phase <name> writes marker phase' };
+  const stageInstalled = exists(path.join(pluginRoot, 'scripts', 'stage-advance.js'));
+  out.stage = { installed: stageInstalled, enabled: stageInstalled, how: 'scripts/stage-advance.js --to <node> writes marker stage / unit / review_families' };
 
   out.compare = { installed: false, enabled: false, how: 'writer is a guidance row' };
 

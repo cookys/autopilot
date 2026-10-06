@@ -830,15 +830,16 @@ const positive = dispatch();
 check('positive_l6_marker_reaches_runner_once',
   positive.status === 0 && positive.effects === 1);
 
-// mods P1W SCOPE: `bind-campaign-root` adds a top-level campaign_roots to the session's own marker (and `set --phase` adds phase /
-// phase_set_at). Neither the session's own admission nor the bridge that scans EVERY marker may treat those additive fields as a
+// mods P1W SCOPE: `bind-campaign-root` adds a top-level campaign_roots to the session's own marker (and the §2.9 init / stage writers add size /
+// stage / stage_set_at). Neither the session's own admission nor the bridge that scans EVERY marker may treat those additive fields as a
 // malformed marker: the second dispatch of a campaign (repair round, resume) runs against the bound marker.
 clearMarkers();
 writeMarker(BRIDGE_SESSION_ID, {
   ...validSessionMarker(),
   campaign_roots: ['mission-bound-1', 'mission-bound-2'],
-  phase: 'review',
-  phase_set_at: '2026-07-28T00:00:01.000Z',
+  size: 'M',
+  stage: 'implement',
+  stage_set_at: '2026-07-28T00:00:01.000Z',
 });
 const boundMarker = dispatch();
 check('bound_marker_with_campaign_roots_reaches_runner_once',

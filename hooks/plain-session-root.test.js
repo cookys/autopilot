@@ -352,23 +352,23 @@ test('retention: droppedRoots forgets a root that no longer appears in rows, mar
 test('inputs: with a root on the plain marker the session tasks and phase belong to its root scope, not the unbound scope', () => {
   const f = fx();
   const now = Date.now();
-  writeMarker(f, 'sess-i', { root_run_id: 'job-r6', phase: '實作 W1', phase_set_at: iso(now) });
+  writeMarker(f, 'sess-i', { root_run_id: 'job-r6', size: 'M', stage: 'implement', stage_set_at: iso(now) });
   fs.mkdirSync(path.join(f.live, 'tasks'), { recursive: true });
   fs.writeFileSync(path.join(f.live, 'tasks', 'sess-i.json'), JSON.stringify({ schema: 'autopilot.session-tasks/1', session_id: 'sess-i', project_key: f.key, updated_at: iso(now), first_created_at: iso(now), tasks: [{ id: '1', subject: 'do it', status: 'pending' }] }));
   const markers = unexpiredMarkers(f.env, f.key, now);
   const read = (root) => readWatchInputs({ env: f.env, key: f.key, identity: f.identity, root, nowMs: now, liveBase: f.live, autopilotHome: path.join(f.home, '.autopilot'), markers, progressReceipt: null });
   const rooted = read('job-r6').assemble;
   assert.deepStrictEqual(rooted.planned.value.map((t) => t.title), ['do it']);
-  assert.strictEqual(rooted.markerPhase.phase, '實作 W1');
+  assert.strictEqual(rooted.markerStage.stage, 'implement');
   const unbound = read(null).assemble;
   assert.strictEqual(unbound.planned, null, 'the unbound scope does not carry it');
-  assert.strictEqual(unbound.markerPhase, null);
+  assert.strictEqual(unbound.markerStage, null);
 });
 
 test('inputs (tick level): a job page of the plain root carries the session phase; the unbound page does not', () => {
   const f = fx();
   const outRoot = path.join(f.base, 'review');
-  writeMarker(f, 'sess-p', { root_run_id: 'job-r7', phase: 'review', phase_set_at: iso(Date.now()) });
+  writeMarker(f, 'sess-p', { root_run_id: 'job-r7', size: 'L', stage: 'code-review', stage_set_at: iso(Date.now()) });
   const row = (root) => {
     const mf = path.join(f.base, `row-${root || 'u'}.manifest.json`);
     fs.writeFileSync(mf, JSON.stringify({ run_id: `r-${root || 'u'}`, root_run_id: root }));
@@ -382,7 +382,7 @@ test('inputs (tick level): a job page of the plain root carries the session phas
   walk(outRoot);
   assert.ok(models['job-r7'], 'the rooted job page exists');
   assert.strictEqual(models['job-r7'].phase.source, 'session');
-  assert.strictEqual(models['job-r7'].phase.label, 'review');
+  assert.strictEqual(models['job-r7'].phase.label, 'L ▸ code-review');
   assert.ok(models.unbound, 'the unbound page exists');
   assert.strictEqual(models.unbound.phase, null);
 });

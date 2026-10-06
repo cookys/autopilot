@@ -249,7 +249,7 @@ cd ~/projects/autopilot && git pull --ff-only   # shell; then run /reload-plugin
 
 (`/reload-plugins` is a Claude Code slash command, not a shell command — run it in the Claude session after the pull.)
 
-> ⚠️ **Three layers must stay current, not two.** Dev mode = ① the dev cache symlink + ② the registry `installPath` + ③ **the Claude Code marketplace clone** (`~/.claude/plugins/marketplaces/autopilot`). Session start resolves the plugin *version* from ③'s catalog — a stale marketplace clone silently loads an old skill set even when ① and ② are perfect (observed 2026-07-17: a clone frozen at v2.17.2 fed 5-week-old skills to a session on a v2.32.46 repo, zero errors shown). `scripts/dev-update.sh` now refreshes ③ automatically, and `scripts/dev-setup.sh --check` warns when ③'s version differs from the repo's.
+> ⚠️ **Dev mode = three layers.** ① the dev cache symlink + ② the registry `installPath` + ③ **a directory marketplace** pointing at this clone (`claude plugin marketplace add <clone>`; `dev-setup.sh` does it). Claude Code has two plugin loaders: the startup fast path honours ②, but the full loader (`/reload-plugins`, `/login`, some startups) ignores `installPath` for a `"source": "./"` plugin and — unless the marketplace is `directory`/`file` sourced — copies the marketplace clone into `cache/autopilot/autopilot/<version>/` and loads that, silently flipping a session to an old copy (observed 2026-10-06: a months-old 2.36.36). With a directory marketplace the full loader reads the clone in place, so there is no marketplace clone to refresh and `dev-update.sh` no longer pulls one. `scripts/dev-setup.sh --check` warns when the marketplace is not directory-sourced at this repo (fix: `claude plugin marketplace add <clone>`) and when a semver-named dir (e.g. `2.36.36`) exists under `~/.claude/plugins/cache/autopilot/autopilot/` (safe to remove once no pid listed in its `.in_use/` is alive).
 
 The `version-drift-check` hook gives a one-line nudge at session start when your clone has fallen behind its git upstream. As of v2.26.1 it is wired default-on in the plugin's `hooks.json` (silent for everyone except a dev clone behind upstream), so **dev-mode users get it automatically — no settings change needed**. (It moved out of `settings.example.json` because `${CLAUDE_PLUGIN_ROOT}` does not expand in a user's `settings.json`.)
 
@@ -466,7 +466,7 @@ Dev mode symlinks the plugin cache to your local clone. Edits to `skills/` take 
 
 Push/pull works normally across machines. Each machine runs step 1 once, then `dev-setup.sh` once. To update later: `git pull --ff-only` then `/reload-plugins` (or `./scripts/dev-update.sh`) — see [Updating](#updating).
 
-> **Note:** Dev mode sets `version: "dev"` in the plugin registry. To revert to the release version, run `/plugin update autopilot@autopilot`.
+> **Note:** Dev mode sets `version: "dev"` in the plugin registry and registers this clone as a directory marketplace. To revert to the release version, `/plugin marketplace remove autopilot`, then `/plugin marketplace add cookys/autopilot` and `/plugin install autopilot@autopilot`.
 
 ### Cache directory layout
 

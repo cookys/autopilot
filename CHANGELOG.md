@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased — dev-mode 改註冊為 directory marketplace（PATCH 類，版號待 release 時指派）
+
+- **問題**：Claude Code 的 full plugin loader（`/reload-plugins`、`/login`、部分啟動）對 string-source plugin 忽略 `installed_plugins.json` 的 `installPath`；marketplace 非 `directory`/`file` 來源時，會把 marketplace clone 複製到 `cache/autopilot/autopilot/<version>/` 並載入該份，session 因而靜默切到數月前的 2.36.36 副本。
+- **改動**：`scripts/dev-setup.sh` 設定時以 `claude plugin marketplace add <repo>` 註冊 directory marketplace（已是 directory 且路徑相符則略過；`DEV_SETUP_CLAUDE_BIN` 可覆寫 CLI 供測試）。`--check` doctor 以「marketplace 為 directory 且 path == repo」取代原本的「marketplace clone 版本」檢查，否則 WARN 並附修復指令；cache 底下出現 semver 命名目錄時 WARN（不刪除，列出 `.in_use` pid 與存活狀態）。`scripts/dev-update.sh` 不再 pull marketplace clone，改為轉印 doctor 的 marketplace／versioned-cache WARN。`docs/installation.md`、`AGENTS.md`、`docs/scripts-inventory.md` 同步。終端使用者的 github marketplace 安裝說明不變。
+- **驗證**：`hooks/tests/dev-setup.test.sh` 新增 doctor fixture（暫存 HOME；directory → OK、github／缺項 → WARN、semver 目錄 → WARN 且不刪除）。
+
 ## v2.36.116 — review 頁面可發布：版本化 job 頁、每主機一個 localhost review server、watcher 依事件重發（mods P1b）
 
 - **問題與改動（逐列）**：

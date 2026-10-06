@@ -40,10 +40,21 @@ OUT="$(bash "$SCRIPT" --install 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "1" "--install without harness/all exits 1"
 assert_contains "$OUT" "--install requires --harness" "--install without target explains required selector"
 
+# Stub claude CLI: records the marketplace registration, never touches a real ~/.claude.
+CLAUDE_STUB="$TEST_TMP/claude-stub"
+cat > "$CLAUDE_STUB" <<'SH'
+#!/usr/bin/env bash
+echo "claude $*" >> "$CLAUDE_STUB_MARKER"
+exit 0
+SH
+chmod +x "$CLAUDE_STUB"
+
 LEGACY_HOME="$TEST_TMP/legacy-home"
 make_claude_registry "$LEGACY_HOME"
-OUT="$(HOME="$LEGACY_HOME" bash "$SCRIPT" 2>&1)"; EXIT=$?
+LEGACY_MARKER="$TEST_TMP/claude-legacy-marker"
+OUT="$(HOME="$LEGACY_HOME" DEV_SETUP_CLAUDE_BIN="$CLAUDE_STUB" CLAUDE_STUB_MARKER="$LEGACY_MARKER" bash "$SCRIPT" 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "0" "no-arg legacy Claude setup exits 0"
+assert_contains "$(cat "$LEGACY_MARKER")" "claude plugin marketplace add $REPO_ROOT" "setup registers the repo as a directory marketplace"
 assert_file_exists "$LEGACY_HOME/.claude/plugins/cache/autopilot/autopilot/dev" "legacy creates dev symlink"
 assert_eq "$(readlink -f "$LEGACY_HOME/.claude/plugins/cache/autopilot/autopilot/dev")" "$REPO_ROOT" "legacy symlink points at repo"
 REG_PATH="$(HOME="$LEGACY_HOME" node - <<'NODE'
@@ -168,5 +179,50 @@ assert_eq "$EXIT" "1" "Codex package dev-setup refuses to run from generated pay
 assert_contains "$OUT" "source repository" "Codex package dev-setup explains source repo requirement"
 assert_file_absent "$REPO_ROOT/platforms/codex/plugin/scripts/install-opencode.sh" "Codex payload excludes source-repo OpenCode installer"
 assert_file_absent "$REPO_ROOT/platforms/codex/plugin/scripts/sync-opencode-plugin.sh" "Codex payload excludes OpenCode sync script"
+
+# --- Marketplace-source doctor (2026-10-06): the full plugin loader copies a non-directory
+# marketplace clone into cache/<mkt>/<plugin>/<version>/ and loads it instead of the dev symlink.
+doctor_home() {
+  local home="$1" kind="$2"
+  make_claude_registry "$home"
+  mkdir -p "$home/.claude/plugins/cache/autopilot/autopilot"
+  ln -s "$REPO_ROOT" "$home/.claude/plugins/cache/autopilot/autopilot/dev"
+  case "$kind" in
+    directory) printf '{"autopilot":{"source":{"source":"directory","path":"%s"}}}\n' "$REPO_ROOT" ;;
+    github) printf '{"autopilot":{"source":{"source":"github","repo":"cookys/autopilot"}}}\n' ;;
+  esac > "$home/.claude/plugins/known_marketplaces.json"
+}
+
+DIR_HOME="$TEST_TMP/doctor-dir"
+doctor_home "$DIR_HOME" directory
+OUT="$(HOME="$DIR_HOME" PATH="$CHECK_PATH" bash "$SCRIPT" --check --harness claude 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "0" "doctor: directory marketplace exits 0"
+assert_contains "$OUT" "OK   claude     autopilot marketplace is directory-sourced at $REPO_ROOT" "doctor: directory-sourced marketplace is OK"
+assert_not_contains "$OUT" "versioned plugin cache dir" "doctor: no semver dir, no cache warning"
+
+GH_HOME="$TEST_TMP/doctor-gh"
+doctor_home "$GH_HOME" github
+OUT="$(HOME="$GH_HOME" PATH="$CHECK_PATH" bash "$SCRIPT" --check --harness claude 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "0" "doctor: github marketplace is a warning, not a failure"
+assert_contains "$OUT" "WARN claude     autopilot marketplace source is \"github\"" "doctor: github-sourced marketplace warns"
+assert_contains "$OUT" "fix: claude plugin marketplace add $REPO_ROOT" "doctor: warning names the fix command"
+
+MISSING_HOME="$TEST_TMP/doctor-missing"
+doctor_home "$MISSING_HOME" none
+OUT="$(HOME="$MISSING_HOME" PATH="$CHECK_PATH" bash "$SCRIPT" --check --harness claude 2>&1)"
+assert_contains "$OUT" 'source is "missing"' "doctor: absent marketplace entry warns"
+
+# A semver cache dir warns (never deleted); .in_use pids are reported.
+SEMVER_HOME="$TEST_TMP/doctor-semver"
+doctor_home "$SEMVER_HOME" directory
+SEMVER_DIR="$SEMVER_HOME/.claude/plugins/cache/autopilot/autopilot/2.36.36"
+mkdir -p "$SEMVER_DIR/.in_use"
+: > "$SEMVER_DIR/.in_use/999999999"
+OUT="$(HOME="$SEMVER_HOME" PATH="$CHECK_PATH" bash "$SCRIPT" --check --harness claude 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "0" "doctor: semver cache dir is a warning, not a failure"
+assert_contains "$OUT" "versioned plugin cache dir $SEMVER_DIR/" "doctor: semver cache dir warns"
+assert_contains "$OUT" "pid(s): 999999999 (alive: none)" "doctor: .in_use pids listed with liveness"
+assert_contains "$OUT" "Safe to remove once no listed pid is alive" "doctor: removal guidance given"
+assert_file_exists "$SEMVER_DIR" "doctor never deletes the semver dir"
 
 finalize_test

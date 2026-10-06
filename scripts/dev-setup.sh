@@ -22,6 +22,9 @@ CLAUDE_DIR="$HOME/.claude"
 INSTALLED_JSON="$CLAUDE_DIR/plugins/installed_plugins.json"
 CACHE_BASE="$CLAUDE_DIR/plugins/cache/$MARKETPLACE_NAME/$PLUGIN_NAME"
 DEV_LINK="$CACHE_BASE/dev"
+KNOWN_MARKETPLACES_JSON="$CLAUDE_DIR/plugins/known_marketplaces.json"
+# Overridable so tests never run the real claude CLI.
+CLAUDE_BIN="${DEV_SETUP_CLAUDE_BIN:-claude}"
 
 MODE="setup"
 HARNESS=""
@@ -195,6 +198,84 @@ print(backup)
 PY
 }
 
+# Describe how Claude Code knows the autopilot marketplace. Prints one line:
+#   directory <path> | <other-source-type> | missing
+# Dev mode needs a DIRECTORY marketplace at this repo: the full plugin loader
+# (/reload-plugins, /login, some startups) ignores installed_plugins.json
+# installPath for a string-source plugin and, unless the marketplace is
+# directory/file sourced, copies the marketplace clone into
+# cache/<mkt>/<plugin>/<version>/ and loads THAT (2026-10-06: a months-old
+# 2.36.36 copy silently shadowed the dev symlink).
+marketplace_source_desc() {
+  PY_KNOWN="$KNOWN_MARKETPLACES_JSON" PY_NAME="$MARKETPLACE_NAME" python3 - <<'PY'
+import json
+import os
+
+try:
+    with open(os.environ["PY_KNOWN"], encoding="utf-8") as f:
+        entry = json.load(f).get(os.environ["PY_NAME"])
+except Exception:
+    entry = None
+if not isinstance(entry, dict):
+    print("missing")
+else:
+    src = entry.get("source") or {}
+    kind = src.get("source", "unknown")
+    if kind == "directory":
+        print("directory " + str(src.get("path", "")))
+    else:
+        print(kind)
+PY
+}
+
+marketplace_is_dev_directory() {
+  local desc kind path
+  desc="$(marketplace_source_desc)"
+  kind="${desc%% *}"
+  path="${desc#* }"
+  [[ "$kind" = "directory" && -n "$path" && "$(readlink -f "$path" 2>/dev/null || true)" = "$(readlink -f "$REPO_DIR")" ]]
+}
+
+marketplace_fix_hint() {
+  printf 'claude plugin marketplace add %s' "$REPO_DIR"
+}
+
+# Single doctor message shared by --check and dev-update.sh's equivalent.
+marketplace_warn_text() {
+  local desc
+  desc="$(marketplace_source_desc)"
+  printf 'autopilot marketplace source is "%s", not a directory marketplace at %s — /reload-plugins can copy it into a versioned cache dir and load a stale plugin; fix: %s' \
+    "$desc" "$REPO_DIR" "$(marketplace_fix_hint)"
+}
+
+# WARN (never delete) about semver-named dirs under CACHE_BASE: the full loader
+# creates them and they can shadow the dev symlink. .in_use/ holds one file per
+# live session pid.
+check_stale_version_dirs() {
+  local d name pids pid live
+  [[ -d "$CACHE_BASE" ]] || return 0
+  for d in "$CACHE_BASE"/*/; do
+    [[ -d "$d" ]] || continue
+    name="$(basename "$d")"
+    [[ "$name" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+].*)?$ ]] || continue
+    pids=""
+    if [[ -d "$d/.in_use" ]]; then
+      for pid in $(ls "$d/.in_use" 2>/dev/null); do
+        pids="$pids $pid"
+      done
+    fi
+    live=""
+    for pid in $pids; do
+      kill -0 "$pid" 2>/dev/null && live="$live $pid"
+    done
+    if [[ -n "$pids" ]]; then
+      status WARN "claude" "versioned plugin cache dir $d can shadow the dev symlink; .in_use lists pid(s):${pids} (alive:${live:- none}). Safe to remove once no listed pid is alive: rm -rf $d"
+    else
+      status WARN "claude" "versioned plugin cache dir $d can shadow the dev symlink (no .in_use pids listed). Safe to remove: rm -rf $d"
+    fi
+  done
+}
+
 check_agents_symlink() {
   local harness="$1"
   local link="$REPO_DIR/.agents/skills"
@@ -245,21 +326,31 @@ check_claude() {
     status WARN "claude" "registry installPath does not point at dev symlink"
   fi
 
-  # Third layer (2026-07-17 lesson): Claude Code resolves the plugin VERSION from
-  # the marketplace clone's catalog at session start. A stale clone silently fed
-  # a 5-week-old 2.17.2 skill set to a session even though the dev symlink and
-  # registry were both correct — dogfood broke with zero errors. The symlink and
-  # registry checks above cannot see this layer.
-  local mkt_manifest="$CLAUDE_DIR/plugins/marketplaces/$MARKETPLACE_NAME/.claude-plugin/marketplace.json"
-  if [[ -f "$mkt_manifest" ]]; then
-    local repo_ver mkt_ver
-    repo_ver="$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$REPO_DIR/.claude-plugin/plugin.json" | head -1 | grep -o '"[^"]*"$' | tr -d '"')"
-    mkt_ver="$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$mkt_manifest" | head -1 | grep -o '"[^"]*"$' | tr -d '"')"
-    if [[ -n "$mkt_ver" && "$mkt_ver" == "$repo_ver" ]]; then
-      status OK "claude" "marketplace clone version matches repo ($mkt_ver)"
-    else
-      status WARN "claude" "marketplace clone is STALE (${mkt_ver:-unreadable} vs repo ${repo_ver:-unreadable}) — session start can resolve the old version; run scripts/dev-update.sh"
-    fi
+  # Third layer: the marketplace source type. Superseded the 2026-07-17
+  # "stale marketplace clone" check — with a directory marketplace there is no
+  # clone to go stale, and the full loader reads this repo in place.
+  if marketplace_is_dev_directory; then
+    status OK "claude" "autopilot marketplace is directory-sourced at $REPO_DIR"
+  else
+    status WARN "claude" "$(marketplace_warn_text)"
+  fi
+
+  check_stale_version_dirs
+}
+
+# Idempotent: skip when already directory-sourced at this repo.
+register_dev_marketplace() {
+  if marketplace_is_dev_directory; then
+    echo "Marketplace already directory-sourced at $REPO_DIR"
+    return 0
+  fi
+  if ! have_cmd "$CLAUDE_BIN"; then
+    echo "WARN: '$CLAUDE_BIN' CLI not found on PATH; register the dev marketplace yourself: $(marketplace_fix_hint)" >&2
+    return 0
+  fi
+  echo "Registering $REPO_DIR as a directory marketplace…"
+  if ! "$CLAUDE_BIN" plugin marketplace add "$REPO_DIR"; then
+    echo "WARN: marketplace registration failed; run manually: $(marketplace_fix_hint)" >&2
   fi
 }
 
@@ -274,7 +365,7 @@ setup_claude() {
   if ! plugin_entry_exists 2>/dev/null; then
     echo "Error: $PLUGIN_KEY not found in installed_plugins.json." >&2
     echo "" >&2
-    echo "First install the plugin via the normal flow:" >&2
+    echo "First install the plugin via the normal (end-user) flow:" >&2
     echo "  /plugin marketplace add cookys/autopilot" >&2
     echo "  /plugin install autopilot@autopilot" >&2
     echo "" >&2
@@ -283,6 +374,8 @@ setup_claude() {
   fi
 
   "$REPO_DIR/scripts/setup-symlinks.sh"
+
+  register_dev_marketplace
 
   if [[ -L "$DEV_LINK" && "$(readlink -f "$DEV_LINK")" == "$(readlink -f "$REPO_DIR")" ]]; then
     if registry_points_to_dev_link 2>/dev/null; then
@@ -304,11 +397,12 @@ setup_claude() {
   echo "Restart Claude Code or run /reload-plugins to activate."
   echo ""
   echo "For future updates: cd $REPO_DIR && git pull --ff-only   (then /reload-plugins in Claude Code)"
-  echo "  (or run ./scripts/dev-update.sh -- pulls + prints the reload reminder)"
+  echo "  (or run ./scripts/dev-update.sh -- pulls + prints the reload reminder; the marketplace is a directory source, so no clone to refresh)"
   echo "  Optional: enable the version-drift-check hook to be nudged when behind."
   echo ""
-  echo "To revert to release version:"
-  echo "  /plugin update autopilot@autopilot"
+  echo "To revert to the release version (end-user install):"
+  echo "  /plugin marketplace remove autopilot && /plugin marketplace add cookys/autopilot"
+  echo "  /plugin install autopilot@autopilot"
 }
 
 check_codex_cli_state() {

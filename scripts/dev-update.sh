@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # dev-update.sh — pull the latest autopilot dev clone, then remind you to reload.
 #
-# Dev mode symlinks the plugin cache to this clone, so the entire update is
-# `git pull` + `/reload-plugins`. This wrapper does the pull and prints the
+# Dev mode symlinks the plugin cache to this clone (and registers it as a
+# directory marketplace), so the entire update is `git pull` + `/reload-plugins`. This wrapper does the pull and prints the
 # reload reminder (Claude Code, not a shell, owns /reload-plugins) plus a quick
 # behind/ahead summary. It is the daily-update companion to dev-setup.sh.
 #
@@ -27,25 +27,11 @@ git pull --ff-only
 
 AFTER="$(git rev-parse --short HEAD 2>/dev/null || echo '?')"
 
-# Also refresh the Claude Code marketplace clone — session start resolves the
-# plugin VERSION from its catalog, so leaving it stale silently loads an old
-# skill set even with the dev symlink + registry correct (2026-07-17 lesson:
-# a 6/4-frozen clone fed 2.17.2 to a session on a 2.32.46 repo). Best-effort:
-# a dirty/absent clone warns but never fails the repo update.
-MKT_DIR="$HOME/.claude/plugins/marketplaces/autopilot"
-if [[ -d "$MKT_DIR/.git" ]]; then
-  if git -C "$MKT_DIR" diff --quiet && git -C "$MKT_DIR" diff --cached --quiet; then
-    if git -C "$MKT_DIR" pull --ff-only >/dev/null 2>&1; then
-      echo "Marketplace clone refreshed ($(git -C "$MKT_DIR" rev-parse --short HEAD))."
-    else
-      echo "WARN: marketplace clone pull failed ($MKT_DIR) — session start may resolve a stale version." >&2
-    fi
-  else
-    echo "WARN: marketplace clone has local changes ($MKT_DIR) — not pulled; clean it or session start may resolve a stale version." >&2
-  fi
-else
-  echo "(No Claude Code marketplace clone at $MKT_DIR — skipping that layer.)"
-fi
+# Marketplace layer: dev mode needs a DIRECTORY marketplace at this repo, so
+# there is no clone to pull (a github-sourced clone made the full plugin loader
+# copy a stale versioned plugin dir — 2026-10-06). Warn-only; never fails the update.
+if DOCTOR_OUT="$("$REPO_DIR/scripts/dev-setup.sh" --check --harness claude 2>&1)"; then :; fi
+printf '%s\n' "$DOCTOR_OUT" | grep -E '^WARN +claude +(autopilot marketplace|versioned plugin cache)' >&2 || true
 
 # Dispatch-runs retention. `dispatch-status.js --reap` existed, was documented as the owner
 # of this cleanup by lib/prune-tmp-residue.sh, and had ZERO callers — 249 manifests spanning

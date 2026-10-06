@@ -1,0 +1,13 @@
+{
+  "task_id": "stage-graph-xs-bug",
+  "size": "XS",
+  "bug": true,
+  "urgent": false,
+  "research": "na",
+  "units": 1,
+  "cell": "XS.bug.normal.na.u1",
+  "horizon_index": 2,
+  "horizon_node": "qc-gate",
+  "first_rung": "none",
+  "horizon_justification": "diagnose, a one-line fix, the test run, qc-gate: all prose writes reachable in a few turns; the failing test is on screen from the first command. finish excluded as for the other XS/S briefs."
+}

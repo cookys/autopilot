@@ -1,0 +1,194 @@
+{
+  "schema_version": 1,
+  "artifact_type": "skill_onoff_prereg",
+  "row": "stage-graph",
+  "design": "docs/plans/2026-10-06-dev-flow-stage-graph.md sections 2.7-2.9 and 4 P0; human-readable twin: prereg/stage-graph.md",
+  "model": "sonnet",
+  "runner": "claude -p (headless depth-0)",
+  "reps": 3,
+  "arms": {
+    "base": "base",
+    "change": "change",
+    "red": "red"
+  },
+  "tasks": [
+    "stage-graph-xs-feature",
+    "stage-graph-s-feature",
+    "stage-graph-m-feature",
+    "stage-graph-l-feature",
+    "stage-graph-xl-deliverable",
+    "stage-graph-xs-bug",
+    "stage-graph-m-bug",
+    "stage-graph-s-urgent",
+    "stage-graph-m-urgent-high",
+    "stage-graph-l-u0-known",
+    "stage-graph-l-research-a",
+    "stage-graph-l-research-b"
+  ],
+  "thresholds": {
+    "rep_pass_min": 2,
+    "change_min_tasks": 10,
+    "red_max_tasks": 4
+  },
+  "rep_pass_markers": [
+    "sg_size",
+    "sg_bug",
+    "sg_urgent",
+    "sg_walk",
+    "sg_rung",
+    "sg_work"
+  ],
+  "rung_accepts": {
+    "none": [
+      "none",
+      "U0"
+    ],
+    "U0": [
+      "U0"
+    ],
+    "U1": [
+      "U1"
+    ]
+  },
+  "generic": {
+    "tasks": [
+      "a1-doa-boundary",
+      "a1b-doa-boundary-reset",
+      "a2-within-doa",
+      "d2-l-multimodule",
+      "d8-l-two-phase",
+      "f1-ready-to-merge",
+      "f1b-ready-to-merge-docs"
+    ],
+    "rule": "a marker that the base arm passes in >= 2/3 of its reps must pass in >= 2/3 of the change arm reps; every generic task needs >= reps usable rows in both arms"
+  },
+  "mutation": {
+    "name": "rotate-size-table",
+    "applies_to": "the change pack, in P5, to produce the planted-red arm (arm name \"red\")",
+    "rotate": {
+      "XS": "L",
+      "L": "XS",
+      "S": "XL",
+      "XL": "S",
+      "M": "M"
+    },
+    "meaning": "under the red pack, the stage sequence a session walks for size X is the base sequence of rotate[X]; the size value recorded by session-mode set is NOT rotated",
+    "invalidates": [
+      "stage-graph-xs-feature",
+      "stage-graph-s-feature",
+      "stage-graph-l-feature",
+      "stage-graph-xl-deliverable",
+      "stage-graph-xs-bug",
+      "stage-graph-s-urgent",
+      "stage-graph-l-u0-known",
+      "stage-graph-l-research-a",
+      "stage-graph-l-research-b"
+    ],
+    "keeps": [
+      "stage-graph-m-feature",
+      "stage-graph-m-bug",
+      "stage-graph-m-urgent-high"
+    ],
+    "expected_red_pass_at_most": 3
+  },
+  "guidance": {
+    "base_ref": "8a10980f891ccf2f3a6fece582a4fd814cd5d83f",
+    "skills": [
+      "dev-flow",
+      "finish-flow",
+      "ceo-agent",
+      "team",
+      "debug",
+      "think-tank",
+      "l4",
+      "l5",
+      "l6",
+      "next",
+      "quality-pipeline",
+      "distill",
+      "doc-sync",
+      "learn",
+      "project-lifecycle",
+      "research-to-ship"
+    ],
+    "pack_ids": {
+      "skill_base": "<skill>-sg-base",
+      "skill_change": "<skill>-sg-change",
+      "files_base": "guidance-files-sg-base",
+      "files_change": "guidance-files-sg-change"
+    },
+    "non_skill_files": [
+      "references/four-layer-design.md",
+      "references/hetero-dispatch.md",
+      "references/multi-agent-portability.md",
+      "references/plan-template.md",
+      "references/skill-contract-card.md",
+      "project-config-template/dev-flow-config.md",
+      "project-config-template/finish-flow-config.md",
+      "project-config-template/review-loop-config.md"
+    ],
+    "files": [
+      "project-config-template/dev-flow-config.md",
+      "project-config-template/finish-flow-config.md",
+      "project-config-template/review-loop-config.md",
+      "references/four-layer-design.md",
+      "references/hetero-dispatch.md",
+      "references/multi-agent-portability.md",
+      "references/plan-template.md",
+      "references/skill-contract-card.md",
+      "skills/ceo-agent/SKILL.md",
+      "skills/ceo-agent/references/decision-matrix.md",
+      "skills/ceo-agent/references/depth0-control-loop.md",
+      "skills/ceo-agent/references/doa-and-templates.md",
+      "skills/ceo-agent/references/level-front-door.md",
+      "skills/ceo-agent/references/task-prompt-templates.md",
+      "skills/ceo-agent/references/tree-adapter.md",
+      "skills/debug/SKILL.md",
+      "skills/dev-flow/SKILL.md",
+      "skills/dev-flow/references/context-continuation.md",
+      "skills/dev-flow/references/hetero-loops.md",
+      "skills/dev-flow/references/historical-rationale.md",
+      "skills/dev-flow/references/model-routing.md",
+      "skills/dev-flow/references/post-feature-doc-sync.md",
+      "skills/distill/SKILL.md",
+      "skills/distill/references/sync-setup.md",
+      "skills/doc-sync/SKILL.md",
+      "skills/finish-flow/SKILL.md",
+      "skills/l4/SKILL.md",
+      "skills/l5/SKILL.md",
+      "skills/l5/references/hetero-impl-loop.md",
+      "skills/l6/SKILL.md",
+      "skills/l6/references/full-dispatch-pipeline.md",
+      "skills/learn/SKILL.md",
+      "skills/next/SKILL.md",
+      "skills/next/references/phase0-hygiene.md",
+      "skills/project-lifecycle/SKILL.md",
+      "skills/project-lifecycle/references/plan-bootstrap.md",
+      "skills/project-lifecycle/references/project-archive.md",
+      "skills/project-lifecycle/references/project-structure.md",
+      "skills/project-lifecycle/references/templates.md",
+      "skills/quality-pipeline/SKILL.md",
+      "skills/quality-pipeline/_base/prohibited-behaviors.md",
+      "skills/quality-pipeline/references/anti-rationalization.md",
+      "skills/quality-pipeline/references/code-review.md",
+      "skills/quality-pipeline/references/completeness-gate.md",
+      "skills/quality-pipeline/references/model-routing.md",
+      "skills/quality-pipeline/references/test-integrity-gate.md",
+      "skills/quality-pipeline/references/test-policy.md",
+      "skills/research-to-ship/SKILL.md",
+      "skills/team/SKILL.md",
+      "skills/team/references/team-tactics.md",
+      "skills/think-tank/SKILL.md",
+      "skills/think-tank/references/brief-template.md",
+      "skills/think-tank/references/dialectic-brief-template.md",
+      "skills/think-tank/references/dialectic-mode.md",
+      "skills/think-tank/references/dialectic-role-prompts.md",
+      "skills/think-tank/references/epistemic-diversity-scorecard.md",
+      "skills/think-tank/references/minority-report.md",
+      "skills/think-tank/references/model-routing.md",
+      "skills/think-tank/references/problem-restate-gate.md",
+      "skills/think-tank/references/role-prompts.md",
+      "skills/think-tank/references/silent-pre-check.md"
+    ]
+  }
+}

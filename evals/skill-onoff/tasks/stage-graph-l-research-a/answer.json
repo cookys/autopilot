@@ -1,0 +1,13 @@
+{
+  "task_id": "stage-graph-l-research-a",
+  "size": "L",
+  "bug": false,
+  "urgent": false,
+  "research": "research",
+  "units": 3,
+  "cell": "L.feat.normal.research.u3",
+  "horizon_index": 3,
+  "horizon_node": "plan",
+  "first_rung": "U1",
+  "horizon_justification": "intent, research, proposal, plan: four prose writes. Zyphrelt-7 and glimmerwake are invented and appear nowhere in the repo, knowledge or memory, so classify yields signal S4 (unknown_type how, eligible_max U1) independent of the consult-seat environment."
+}

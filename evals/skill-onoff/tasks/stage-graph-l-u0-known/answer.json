@@ -1,0 +1,13 @@
+{
+  "task_id": "stage-graph-l-u0-known",
+  "size": "L",
+  "bug": false,
+  "urgent": false,
+  "research": "noresearch",
+  "units": 3,
+  "cell": "L.feat.normal.noresearch.u3",
+  "horizon_index": 2,
+  "horizon_node": "plan",
+  "first_rung": "U0",
+  "horizon_justification": "Same reachable prefix as l-feature. Every noun in the brief (scheduler, retry, queue, delay, backoff) exists in tracked repo files, so classify yields signals [] and eligible_max U0; the first rung must be exactly U0 (the consult ran and was resolved locally)."
+}

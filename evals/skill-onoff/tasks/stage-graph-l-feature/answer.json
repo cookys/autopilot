@@ -1,0 +1,13 @@
+{
+  "task_id": "stage-graph-l-feature",
+  "size": "L",
+  "bug": false,
+  "urgent": false,
+  "research": "noresearch",
+  "units": 3,
+  "cell": "L.feat.normal.noresearch.u3",
+  "horizon_index": 2,
+  "horizon_node": "plan",
+  "first_rung": "none",
+  "horizon_justification": "intent, proposal and plan are prose writes and a plan file; plan-review is a rail that needs hetero engines unavailable inside the cell, so the horizon stops at plan. The three-unit loop is never reached within the budget."
+}

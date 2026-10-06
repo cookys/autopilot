@@ -1,0 +1,13 @@
+{
+  "task_id": "stage-graph-m-feature",
+  "size": "M",
+  "bug": false,
+  "urgent": false,
+  "research": "na",
+  "units": 1,
+  "cell": "M.feat.normal.na.u1",
+  "horizon_index": 2,
+  "horizon_node": "verify",
+  "first_rung": "none",
+  "horizon_justification": "plan, implement, verify fit a 10 minute cell (new module, wiring, tests, README). code-review is a hetero rail with no engine inside the cell, so it is NOT frozen as reachable here; it is exercised by the M! brief."
+}

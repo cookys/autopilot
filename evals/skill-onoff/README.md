@@ -88,3 +88,13 @@ node evals/skill-onoff/score-p1w.js --prereg evals/skill-onoff/prereg/<row>.json
   multi-turn scope-creep, Mission Routing Override, forcing-function TaskCreates (headless `-p`
   has no TaskCreate tool — Phase-0 probe evidence in the plan's evidence dir; those blocks are
   KEEP-verbatim pinned so FULL/CARD are byte-identical on them).
+
+## Stage-graph row (dev-flow stage graph, P0 pre-registration)
+
+Spend-free infrastructure for the guidance eval of `docs/plans/2026-10-06-dev-flow-stage-graph.md`:
+12 briefs `tasks/stage-graph-*` (answer key `answer.json` per brief, cells in
+`hooks/tests/fixtures/stage-graph/expected.json`), per-cell extractor `lib/stage-graph-cell.js` (via each
+brief's `markers.sh` + `lib/stage-graph-markers.sh`), aggregate scorer `score-stage-graph.js`, frozen rule
+`prereg/stage-graph.{md,json}`, base packs `*-sg-base` + `guidance-files-sg-base`, and the cut gate
+`scripts/check-guidance-eval.js`. Always pass an explicit `--tasks` list (the 12 ids in the prereg) to the
+matrix runner. Proof: `hooks/tests/skill-onoff-stage-graph.test.sh`, `hooks/tests/check-guidance-eval.test.sh`.

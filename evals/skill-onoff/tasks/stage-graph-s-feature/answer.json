@@ -1,0 +1,13 @@
+{
+  "task_id": "stage-graph-s-feature",
+  "size": "S",
+  "bug": false,
+  "urgent": false,
+  "research": "na",
+  "units": 1,
+  "cell": "S.feat.normal.na.u1",
+  "horizon_index": 2,
+  "horizon_node": "qc-gate",
+  "first_rung": "none",
+  "horizon_justification": "Three small files (flag, tests, README). implement and verify are both prose writes around one test run; qc-gate follows the second run. finish is excluded: it merges and cleans up, which the headless cell budget does not reliably reach."
+}

@@ -1,0 +1,13 @@
+{
+  "task_id": "stage-graph-xs-feature",
+  "size": "XS",
+  "bug": false,
+  "urgent": false,
+  "research": "na",
+  "units": 1,
+  "cell": "XS.feat.normal.na.u1",
+  "horizon_index": 1,
+  "horizon_node": "qc-gate",
+  "first_rung": "none",
+  "horizon_justification": "One-file, one-line-class change plus its test pin: the whole job is edit, run the tests, run the gate. qc-gate is a prose write right after the local test run, reachable in a few turns. finish (merge/cleanup) is beyond a conservative budget."
+}

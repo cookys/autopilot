@@ -1,0 +1,13 @@
+{
+  "task_id": "stage-graph-m-urgent-high",
+  "size": "M",
+  "bug": false,
+  "urgent": true,
+  "research": "na",
+  "units": 1,
+  "cell": "M.feat.urgent-high.na.u1",
+  "horizon_index": 3,
+  "horizon_node": "code-review",
+  "first_rung": "none",
+  "horizon_justification": "The brief edits src/auth/session.js, so classify-diff-risk.sh sets risk_flags.protected_path=1 (domain auth) (verified by running classify-diff-risk.sh on a diff of that path); that flag feeds resolve-review-loop.sh --protected-path, whose rule is review_risk=high iff protected-path (or diff over 150 lines, low source trust, security surface, no oracle). The horizon deliberately includes code-review: with high risk the stage after verify is code-review (urgent-low would be qc-gate then finish then code-review). The guidance is expected to write the stage on ENTRY to the review node (rails write on entry), so the stage write is reachable even if the review rail itself cannot seat reviewers inside the cell."
+}

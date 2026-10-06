@@ -1,0 +1,13 @@
+{
+  "task_id": "stage-graph-s-urgent",
+  "size": "S",
+  "bug": false,
+  "urgent": true,
+  "research": "na",
+  "units": 1,
+  "cell": "S.feat.urgent-low.na.u1",
+  "horizon_index": 2,
+  "horizon_node": "qc-gate",
+  "first_rung": "none",
+  "horizon_justification": "S sequence is identical for urgent without high risk (urgency is a flag only for XS/S); same reachable prefix as s-feature. The urgent flag itself is graded through --urgent on session-mode set."
+}

@@ -1,0 +1,13 @@
+{
+  "task_id": "stage-graph-l-research-b",
+  "size": "L",
+  "bug": false,
+  "urgent": false,
+  "research": "research",
+  "units": 3,
+  "cell": "L.feat.normal.research.u3",
+  "horizon_index": 3,
+  "horizon_node": "plan",
+  "first_rung": "U1",
+  "horizon_justification": "As l-research-a with the invented nouns Quillfathom and dovetail-lease."
+}

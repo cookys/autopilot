@@ -1400,11 +1400,11 @@ for (const surface of SURFACES) {
 
   test('W3a sources manifest: phase / progress slots read 來源未接 only when no writer for them is live; no manifest = an em dash (' + surface + ')', async ($, on) => {
     const files = quietWorld()
-    files[P_SOURCES] = j(manifest({ phase: OFF, progress: OFF, task_status_input: OFF, tasks: OFF }))
+    files[P_SOURCES] = j(manifest({ stage: OFF, progress: OFF, task_status_input: OFF, tasks: OFF }))
     const w = world(on, files)
     await start($, surface)
     expect((await bandParts($, surface)).line1).toBe('◌ 待命 repo · 來源未接 · 10m · 來源未接')
-    files[P_SOURCES] = j(manifest({ phase: OFF, task_status_input: OFF })) // the campaign progress receipt writer still feeds the phase
+    files[P_SOURCES] = j(manifest({ stage: OFF, task_status_input: OFF })) // the campaign progress receipt writer still feeds the phase
     await w.clock.advance(5000)
     expect((await bandParts($, surface)).line1).toBe('◌ 待命 repo · — · 10m · —')
     files[P_SOURCES] = j(manifest({ progress: OFF, tasks: { installed: true, enabled: false } })) // installed but switched off = not wired
@@ -1417,7 +1417,7 @@ for (const surface of SURFACES) {
     await w.clock.advance(5000)
     expect((await bandParts($, surface)).line1).toBe('◌ 待命 repo · — · 10m · —')
     // data beats the manifest: a phase / progress the model really carries is shown even when the manifest says not installed
-    files[P_SOURCES] = j(manifest({ phase: OFF, progress: OFF, task_status_input: OFF, tasks: OFF }))
+    files[P_SOURCES] = j(manifest({ stage: OFF, progress: OFF, task_status_input: OFF, tasks: OFF }))
     files[W_MODEL] = j(model({ phase: { code: 'IMPLEMENTING', label: '實作', source: 'campaign' }, progress: { frozen: true, percent: 50, done: 4, total: 8 } }))
     await w.clock.advance(5000)
     expect((await bandParts($, surface)).line1).toBe('◌ 待命 repo · 實作 · 10m · 50%（4/8）')
@@ -1425,7 +1425,7 @@ for (const surface of SURFACES) {
 
   test('W3a sources manifest: the model\'s own sources_manifest is the fallback when the sidecar file is absent (' + surface + ')', async ($, on) => {
     const files = quietWorld()
-    files[W_MODEL] = j(model({ sources_manifest: manifest({ phase: OFF, progress: OFF, task_status_input: OFF, tasks: OFF }) }))
+    files[W_MODEL] = j(model({ sources_manifest: manifest({ stage: OFF, progress: OFF, task_status_input: OFF, tasks: OFF }) }))
     world(on, files)
     await start($, surface)
     expect((await bandParts($, surface)).line1).toBe('◌ 待命 repo · 來源未接 · 10m · 來源未接')

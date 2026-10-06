@@ -1,0 +1,64 @@
+{
+  "schema": "autopilot.stage-graph/1",
+  "source": "docs/plans/2026-10-06-dev-flow-stage-graph.md section 2.7",
+  "node_ids": ["intent", "diagnose", "research", "proposal", "plan", "plan-review", "implement", "verify", "code-review", "qc-gate", "finish"],
+  "sizes": {
+    "XS": {
+      "base": ["implement", "qc-gate", "finish"],
+      "unit_kind": null,
+      "bug": { "mode": "prepend" }
+    },
+    "S": {
+      "base": [{ "unit_loop": ["implement", "verify"] }, "qc-gate", "finish"],
+      "unit_kind": "phase",
+      "bug": { "mode": "prepend" }
+    },
+    "M": {
+      "base": ["plan", { "unit_loop": ["implement", "verify"] }, "code-review", "qc-gate", "finish"],
+      "unit_kind": "phase",
+      "bug": { "mode": "prepend" }
+    },
+    "L": {
+      "base": ["intent", { "optional": "research" }, "proposal", "plan", "plan-review", { "unit_loop": ["implement", "verify"] }, "code-review", "qc-gate", "finish"],
+      "unit_kind": "phase",
+      "bug": { "mode": "replace", "target": "intent" }
+    },
+    "XL": {
+      "base": ["intent", { "optional": "research" }, "proposal", "plan", "plan-review", { "unit_loop": ["implement", "verify"] }, "code-review", "qc-gate", "finish"],
+      "unit_kind": "deliverable",
+      "bug": { "mode": "replace", "target": "intent" }
+    }
+  },
+  "bug_node": "diagnose",
+  "urgency": {
+    "low": { "move_after": { "node": "code-review", "after": "finish" }, "terminal": "code-review" },
+    "high": { "note": "normal order; urgency is a mark only" }
+  },
+  "terminal": "finish",
+  "loop_backs": [
+    { "from": "plan-review", "to": "plan" },
+    { "from": "verify", "to": "implement" },
+    { "from": "qc-gate", "to": "implement" },
+    { "from": "code-review", "to": "implement", "except_urgency": ["urgent-low"] }
+  ],
+  "bump_limits": {
+    "XS": { "files": 2, "lines": 20 },
+    "S": { "files": 6, "lines": 200 },
+    "M": { "files": 20, "lines": 800 },
+    "L": { "files": null, "lines": null },
+    "XL": { "files": null, "lines": null }
+  },
+  "writers": {
+    "intent": "prose:dev-flow",
+    "diagnose": "prose:debug",
+    "research": "prose:probe-unknown.js recommendation caller",
+    "proposal": "prose:dev-flow",
+    "plan": "prose:dev-flow",
+    "plan-review": "rail:dispatch-plan-review.js main()",
+    "implement": "rail at l5/l6: bin/autopilot.js engine implement-review (with unit); prose at l3/l4: dev-flow, foreman",
+    "verify": "prose:dev-flow; at l6 the verification-author dispatch; in a campaign the engine per-deliverable review",
+    "code-review": "rail:hetero-review-loop.js main()",
+    "qc-gate": "prose:quality-pipeline",
+    "finish": "prose:finish-flow"
+  }
+}

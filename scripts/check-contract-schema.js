@@ -154,6 +154,13 @@ function main() {
     }
   }
 
+  // Stage graph (P1): references/stage-graph.json must satisfy schemas/stage-graph.schema.json and
+  // every declared node must be reachable (delegated to stage-graph.js validate).
+  const sg = spawnSync(process.execPath, [path.join(REPO_ROOT, 'scripts', 'stage-graph.js'), 'validate'], { encoding: 'utf8' });
+  if (sg.status !== 0) {
+    fail(`references/stage-graph.json fails stage-graph.js validate: ${(sg.stdout || '').trim() || (sg.stderr || '').trim()}`);
+  }
+
   console.log(`contract-schema-ok (${fieldOrder.length} fields, three-way equality + field-set + enum parity verified)`);
   process.exit(0);
 }

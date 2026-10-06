@@ -8,6 +8,7 @@ const crypto = require('crypto');
 const { spawn, spawnSync } = require('child_process');
 const deriveReceiptState = require('./lib/review-chain-derive');
 const { isSafeSeatId } = require('./lib/seat-id-guard');
+const { stageWrite, familyOfEngine } = require('./lib/stage-write');
 
 function assertSafeSeatId(id) {
   if (!isSafeSeatId(id)) {
@@ -245,6 +246,7 @@ function resolveSeats(seatsArg, repoRoot) {
       engine: seatObj.model || '',
       effort: seatObj.effort || '',
       endpoint,
+      family: typeof seatObj.family === 'string' && seatObj.family && seatObj.family !== 'unknown' ? seatObj.family : undefined,
     };
   });
 }
@@ -659,6 +661,8 @@ async function handleCollect(flags) {
     }
   }
 
+  // Stage graph (plan §2.7 writers): a review round starts here (collect only; finalize/opt-out never write). Fail-open.
+  stageWrite({ to: 'code-review' });
   const seatPromises = seats.map((seat) => runSeatDispatch(seat, repoRoot, gDir, specFile, timeout));
   const seatResults = await Promise.all(seatPromises);
 
@@ -779,6 +783,13 @@ async function handleCollect(flags) {
       }
     }
   }
+
+  // Same-node update: ONLY families of seats whose review completed (status reviewed after the verdict parse
+  // above). Seats that failed / had no verdict contribute nothing; planned families are written nowhere. Fail-open.
+  stageWrite({
+    to: 'code-review',
+    families: seatResults.filter((r) => r.status === 'reviewed').map((r) => r.seat.family || familyOfEngine(r.seat.engine)),
+  });
 
   // Extract findings
   const allFindings = [];

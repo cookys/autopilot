@@ -64,6 +64,7 @@ const {
 } = require('./lib/plan-review-findings');
 const { effortSeatTimeoutSeconds } = require('./lib/plan-review-timeout');
 const { createPanelManifest } = require('./lib/plan-review-panel');
+const { stageWrite } = require('./lib/stage-write');
 
 const SCRIPT_DIR = __dirname;
 const DISPATCH_AUTHOR = path.join(SCRIPT_DIR, 'dispatch-author.sh');
@@ -1796,6 +1797,8 @@ function main() {
   });
   if (early) finish(early, artifactExitCode(early));
   crashAt('after_claim');
+  // Stage graph (plan §2.7 writers): entering a real review round (a claim is held). Fail-open.
+  stageWrite({ to: 'plan-review' });
 
   // Validate disposition shape/identity before dispatch when possible so a bad
   // file cannot acquire a durable claim and then escape through the outer catch.
@@ -2075,6 +2078,9 @@ function main() {
       }
       atomicWriteJson(statePath, state);
     });
+    // Same-node update: ONLY the families of seats whose review completed (transport ok + verdict parsed).
+    // Manifest / planned families are written nowhere. Fail-open.
+    stageWrite({ to: 'plan-review', families: completedReviews.map((seat) => seat.family) });
     finish(artifact, artifactExitCode(artifact));
   } catch (error) {
     // A failed run must not render as a live panel with hours remaining

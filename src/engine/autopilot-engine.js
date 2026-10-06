@@ -4753,6 +4753,13 @@ class AutopilotEngine {
     });
   }
 
+  // Stage graph (plan §2.7 writers, P3): the engine's per-deliverable review IS that unit's `verify`.
+  // Written only when entry recorded a unit (this.stageUnit) and the campaign converged. Fail-open.
+  stageVerifyOnConverge(result) {
+    if (!result || result.status !== 'converged' || !this.stageUnit) return;
+    require('../../scripts/lib/stage-write').stageWrite({ to: 'verify', unit: this.stageUnit });
+  }
+
   runLegacyImplementationReviewLoop(input = {}) {
     const level = String(process.env.AUTOPILOT_LEVEL || '').toLowerCase();
     if (level === 'l5' || level === 'l6') {
@@ -6293,6 +6300,17 @@ class AutopilotEngine {
       && exactMissionClaim.graph_attempt > 0
       ? exactMissionClaim.graph_attempt : 1;
     const controllerWorkOrderId = `wo-${controllerRootRunId}-${controllerGraphNode}-a${controllerAttempt}`;
+    // Stage graph (plan §2.7 writers, P3): this campaign IS one deliverable of the frozen denominator. Entry
+    // writes `implement` with the unit; bin/autopilot.js writes `verify` (the per-deliverable review) when the
+    // campaign converges, from this.stageUnit. Fail-open: a failed write prints one stderr line, nothing else.
+    {
+      const { stageWrite, unitArg } = require('../../scripts/lib/stage-write');
+      const unitIdx = frozenDeliverableIds.indexOf(controllerGraphNode);
+      const unit = unitIdx >= 0
+        ? unitArg(unitIdx + 1, frozenDeliverableIds.length, controllerGraphNode) : null;
+      this.stageUnit = unit;
+      stageWrite({ to: 'implement', unit });
+    }
     const controllerFrozenBase = base || currentBase || null;
     const controllerSealedScope = {
       allow_paths: [...campaignControl.contract.allowed_path_prefixes],

@@ -480,10 +480,13 @@ if (args[0] === 'engine') {
           parsed.missionPrepared,
         );
       }
-      const result = new AutopilotEngine(engineOptions)
+      const implementReviewEngine = new AutopilotEngine(engineOptions);
+      const result = implementReviewEngine
         .runImplementationReviewLoop(strictL5Bootstrap
           ? { ...parsed, roster: strictL5Bootstrap.roster }
           : parsed);
+      // Stage graph (plan §2.7 writers): the per-deliverable review converged = that unit's `verify`. Fail-open.
+      implementReviewEngine.stageVerifyOnConverge(result);
       process.stdout.write(`${JSON.stringify(result)}\n`);
       process.exit(result.status === 'converged' ? 0 : 1);
     }

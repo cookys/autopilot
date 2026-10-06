@@ -181,6 +181,7 @@ adv --to verify
 adv --to implement --unit phase:2/3:wire; eq "advance (index+1) -> 0" "0" "$RC"
 adv --to verify
 adv --to implement --unit phase:1/3:parse; eq "index regression -> 3" "3" "$RC"
+adv --to verify --unit phase:1/3:parse; eq "same-node index regression (2 -> 1 at verify) -> 3" "3" "$RC"
 adv --to implement --unit phase:4/3:x; eq "index above total -> 3" "3" "$RC"
 adv --to implement --unit phase:2/4:x; eq "changing total -> 3" "3" "$RC"
 adv --to implement --unit deliverable:2/3:x; eq "changing kind -> 3" "3" "$RC"

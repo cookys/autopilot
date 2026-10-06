@@ -5,7 +5,7 @@
 # Every classification exits 0 (KR5); only usage and --strict exit 2.
 . "$(dirname "$0")/lib.sh"
 
-PROBE="$REPO_ROOT/scripts/probe-unknown.js"
+PROBE="${PROBE_OVERRIDE:-$REPO_ROOT/scripts/probe-unknown.js}"
 LEDGER="$REPO_ROOT/scripts/decision-ledger.js"
 BUNDLE="$REPO_ROOT/scripts/build-rehydration-bundle.js"
 L="$TEST_TMP/ledger.jsonl"
@@ -14,6 +14,7 @@ mkdir -p "$TEST_TMP/k" "$TEST_TMP/m"
 NOVEL="novel$(date +%s%N | tail -c 9)$RANDOM"
 # Every flag the probe would otherwise ask the resolver for is pinned, so the test never
 # depends on the host's review-loop config or topology.
+export AUTOPILOT_UNKNOWN_LADDER_V3=off
 PIN=(--knob auto --consult-resolved-from topology --consult-dispatch auto --budget-u1 2 --budget-u2 1 --budget-u3 1 --knowledge-dir "$TEST_TMP/k" --memory-dir "$TEST_TMP/m" --repo-root "$REPO_ROOT")
 field() { node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);const v=process.argv[1].split(".").reduce((o,k)=>o&&o[k],j);process.stdout.write(typeof v==="object"?JSON.stringify(v):String(v))})' "$1"; }
 append() { node "$LEDGER" append --ledger "$L" --kind "$1" --json "$2" >/dev/null; }
@@ -204,5 +205,153 @@ const sel=fn(rows); console.log(JSON.stringify({n:sel.length,keep:sel.some(r=>(r
   assert_contains "$OUT" '"hyp":true' "current-round hypothesis row survives the tail"
   assert_contains "$OUT" '"old":false' "older-round ladder row is not force-kept"
 fi
+
+# ═══ unknown_ladder_v3 (P4a, plan 2026-10-06-dev-flow-stage-graph) ═══
+# ── knob-off regression: classify output byte-identical to the pre-change script (golden generated from the
+#    ORIGINAL scripts/probe-unknown.js; regenerate only with PROBE_OVERRIDE=<original> PROBE_GOLDEN_WRITE=<file>) ──
+GOLDEN="$REPO_ROOT/hooks/tests/fixtures/probe-unknown-knob-off.golden"
+G="$TEST_TMP/golden.jsonl"
+GT="zzqx""golden""novel"   # split so this file itself never contains the literal term (repo grep would hit)
+node "$LEDGER" append --ledger "$G" --kind hypothesis --json '{"hypothesis_id":"g1","text":"a","status":"refuted","work_unit":"gw"}' >/dev/null
+node "$LEDGER" append --ledger "$G" --kind hypothesis --json '{"hypothesis_id":"g2","text":"b","status":"refuted","work_unit":"gw"}' >/dev/null
+node "$LEDGER" append --ledger "$G" --kind unknown --json '{"type":"how","rationale":"r","work_unit":"gs6"}' >/dev/null
+printf '%s\n' '{"verdict":"TRIP","reasons":["no-progress"]}' > "$TEST_TMP/conv.json"
+GPIN=("${PIN[@]}")
+norm() { node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);delete j.ledger;console.log(JSON.stringify(j))})'; }
+golden_cases() {
+  node "$PROBE" classify --ledger "$TEST_TMP/none.jsonl" "${GPIN[@]}" | norm
+  node "$PROBE" classify --ledger "$G" --work-unit gw "${GPIN[@]}" | norm
+  node "$PROBE" classify --ledger "$G" --work-unit gw --consensus LOW "${GPIN[@]}" | norm
+  node "$PROBE" classify --ledger "$G" --work-unit gs6 "${GPIN[@]}" | norm
+  node "$PROBE" classify --ledger "$G" --work-unit gt --terms "$GT" --fast-moving "${GPIN[@]}" | norm
+  node "$PROBE" classify --ledger "$G" --work-unit gt --terms "$GT" --fast-moving "${GPIN[@]}" --consult-resolved-from native-fallback | norm
+  node "$PROBE" classify --ledger "$G" --work-unit gw --stall "$TEST_TMP/stall.json" --convergence "$TEST_TMP/conv.json" "${GPIN[@]}" | norm
+  node "$PROBE" classify --ledger "$G" --work-unit gw "${GPIN[@]}" --budget-u1 0 --budget-u2 0 --budget-u3 0 | norm
+  # the four documented call-site argvs (references/hetero-dispatch.md; docs/scripts-inventory.md)
+  node "$PROBE" classify --ledger "$G" --work-unit gw --terms "$GT" "${GPIN[@]}" | norm
+  node "$PROBE" classify --ledger "$G" --work-unit gt --terms "$GT" "${GPIN[@]}" | norm
+  node "$PROBE" classify --ledger "$G" --work-unit gdec --consensus LOW --terms "$GT" "${GPIN[@]}" | norm
+  node "$PROBE" classify --ledger "$G" --work-unit gw --convergence "$TEST_TMP/conv.json" --stall "$TEST_TMP/stall.json" --terms "$GT" "${GPIN[@]}" | norm
+}
+if [ -n "${PROBE_GOLDEN_WRITE:-}" ]; then golden_cases > "$PROBE_GOLDEN_WRITE"; echo "golden written: $PROBE_GOLDEN_WRITE"; fi
+golden_cases > "$TEST_TMP/golden.actual"
+assert_eq "$(cat "$TEST_TMP/golden.actual")" "$(cat "$GOLDEN")" "knob off (default): 12 classify outputs byte-identical to the pre-change golden"
+assert_eq "$(wc -l < "$GOLDEN" | tr -d ' ')" "12" "golden holds 12 cases"
+assert_not_contains "$(cat "$TEST_TMP/golden.actual")" '"u4"' "knob off: no u4 budget key leaks"
+assert_not_contains "$(cat "$TEST_TMP/golden.actual")" 'ladder_v3' "knob off: no ladder_v3 key leaks"
+# explicit --ladder-v3 off equals default
+assert_eq "$(node "$PROBE" classify --ledger "$G" --work-unit gw "${GPIN[@]}" --ladder-v3 off | norm)" "$(sed -n 2p "$GOLDEN")" "--ladder-v3 off ≡ default"
+
+# ── v3 on ──
+V3=(--ladder-v3 on --budget-u4 1 --discuss-dispatch off)
+V="$TEST_TMP/v3.jsonl"
+vc() { node "$PROBE" classify --ledger "$V" "${PIN[@]}" "${V3[@]}" "$@"; }
+vr() { node "$PROBE" receipt --ledger "$V" --ladder-v3 on "$@"; }
+for h in a b; do node "$LEDGER" append --ledger "$V" --kind hypothesis --json "{\"hypothesis_id\":\"v$h\",\"text\":\"t\",\"status\":\"refuted\",\"work_unit\":\"vw\"}" >/dev/null; done
+vr --rung U1 --unknown-type why --terms x --signals S1 --work-unit vw >/dev/null
+vr --rung U1 --unknown-type why --terms x --signals S1 --work-unit vw >/dev/null
+OUT="$(vc --work-unit vw)"
+assert_eq "$(printf '%s' "$OUT" | field ladder_v3)" "true" "v3 reports ladder_v3"
+assert_eq "$(printf '%s' "$OUT" | field budget.u4)" "1" "v3 budget u4 argv 1"
+assert_eq "$(printf '%s' "$OUT" | field budget.used.U4)" "0" "v3 used.U4 present"
+assert_eq "$(printf '%s' "$OUT" | field recommend)" "U2" "v3 why: U1 spent ⇒ U2"
+vr --rung U2 --unknown-type why --terms x --signals S1 --work-unit vw >/dev/null
+# U3 panel, why, discuss unqualified ⇒ debugger-pua, not heterogeneous
+OUT="$(vc --work-unit vw)"
+assert_eq "$(printf '%s' "$OUT" | field recommend)" "U3" "v3 why after U2 ⇒ U3 panel"
+assert_eq "$(printf '%s' "$OUT" | field rail)" "debugger-pua" "why + discuss unqualified ⇒ debugger-pua"
+assert_eq "$(printf '%s' "$OUT" | field heterogeneous)" "false" "unqualified rail ⇒ heterogeneous false"
+assert_eq "$(printf '%s' "$OUT" | field reason)" "not-heterogeneous" "unqualified rail ⇒ reason not-heterogeneous"
+# qualified
+OUT="$(node "$PROBE" classify --ledger "$V" --work-unit vw "${PIN[@]}" --ladder-v3 on --discuss-dispatch on)"
+assert_eq "$(printf '%s' "$OUT" | field rail)" "dispatch-discuss" "discuss qualified ⇒ dispatch-discuss"
+assert_eq "$(printf '%s' "$OUT" | field heterogeneous)" "true" "qualified rail ⇒ heterogeneous true"
+# whether ⇒ think-tank when unqualified
+vr --rung U1 --unknown-type whether --terms y --signals S5 --work-unit vwh >/dev/null
+vr --rung U1 --unknown-type whether --terms y --signals S5 --work-unit vwh >/dev/null
+OUT="$(vc --work-unit vwh --consensus LOW)"
+assert_eq "$(printf '%s' "$OUT" | field unknown_type)" "whether" "S5 ⇒ whether"
+assert_eq "$(printf '%s' "$OUT" | field rail)" "think-tank" "whether + unqualified ⇒ think-tank"
+# how is capped at U2: never a U3 panel
+OUT="$(vc --work-unit vh --terms "$GT" --fast-moving)"
+assert_eq "$(printf '%s' "$OUT" | field unknown_type)" "how" "S4 ⇒ how"
+assert_eq "$(printf '%s' "$OUT" | field eligible_max)" "U2" "how capped at U2"
+assert_eq "$(printf '%s' "$OUT" | field recommend)" "U1" "how climbs from U1 (never a U3 panel)"
+# U3 receipt: rail + families
+OUT="$(vr --rung U3 --unknown-type why --terms x --signals S1 --work-unit vw --rail debugger-pua --families claude --heterogeneous false)"
+assert_eq "$(printf '%s' "$OUT" | field rail)" "debugger-pua" "U3 receipt carries rail"
+assert_eq "$(printf '%s' "$OUT" | field families)" '["claude"]' "U3 receipt carries families[]"
+assert_eq "$(printf '%s' "$OUT" | field heterogeneous)" "false" "U3 receipt heterogeneous false"
+vr --rung U3 --unknown-type why --terms x --signals S1 --rail bogus >/dev/null 2>&1; RC=$?
+assert_exit_code "$RC" "2" "bad --rail refused"
+node "$PROBE" receipt --ledger "$V" --rung U3 --unknown-type why --terms x --signals S1 --rail think-tank --ladder-v3 off >/dev/null 2>&1; RC=$?
+assert_exit_code "$RC" "2" "knob off refuses v3 receipt fields"
+# U4: S1 still present + U2 receipt + U3 spent ⇒ U4
+OUT="$(vc --work-unit vw)"
+assert_eq "$(printf '%s' "$OUT" | field recommend)" "U4" "U2 receipt + S1 + chain spent ⇒ U4 experiment"
+assert_eq "$(printf '%s' "$OUT" | field budget.used.U3)" "1" "non-heterogeneous U3 receipt consumed the budget"
+vc --work-unit vw --strict >/dev/null; RC=$?
+assert_exit_code "$RC" "2" "v3 --strict exits 2 on U4"
+# U4 receipt validation
+vr --rung U4 --unknown-type why --terms x --signals S1 --work-unit vw --question q --criterion c --result maybe >/dev/null 2>&1; RC=$?
+assert_exit_code "$RC" "2" "U4 result outside pass|fail|inconclusive refused"
+vr --rung U4 --unknown-type why --terms x --signals S1 --work-unit vw --question q --result pass >/dev/null 2>&1; RC=$?
+assert_exit_code "$RC" "2" "U4 receipt without criterion refused"
+vr --rung U4 --unknown-type why --terms x --signals S1 --work-unit vw >/dev/null 2>&1; RC=$?
+assert_exit_code "$RC" "2" "v3 U4 receipt without question/criterion/result refused"
+node "$LEDGER" append --ledger "$V" --kind ladder --json '{"rung":"U4","unknown_type":"why","terms":[],"signal_ids":[],"heterogeneous":true,"question":"q","criterion":"c","result":"maybe"}' >/dev/null 2>&1; RC=$?
+assert_exit_code "$RC" "2" "decision-ledger itself refuses a bad U4 result"
+node "$LEDGER" append --ledger "$V" --kind ladder --json '{"rung":"U3","unknown_type":"why","terms":[],"signal_ids":[],"heterogeneous":true,"rail":"nope"}' >/dev/null 2>&1; RC=$?
+assert_exit_code "$RC" "2" "decision-ledger refuses a bad rail"
+OUT="$(vr --rung U4 --unknown-type why --terms x --signals S1 --work-unit vw --question "does the cache race?" --criterion "repro in 3 runs" --result inconclusive)"; RC=$?
+assert_exit_code "$RC" "0" "valid U4 receipt accepted"
+assert_eq "$(printf '%s' "$OUT" | field result)" "inconclusive" "U4 receipt carries result"
+assert_eq "$(printf '%s' "$OUT" | field question)" "does the cache race?" "U4 receipt carries question"
+assert_eq "$(printf '%s' "$OUT" | field criterion)" "repro in 3 runs" "U4 receipt carries criterion"
+# exhaustion: U1..U4 all spent ⇒ none/budget-exhausted, never U5
+OUT="$(vc --work-unit vw)"
+assert_eq "$(printf '%s' "$OUT" | field recommend)" "none" "v3 all rungs spent ⇒ none"
+assert_eq "$(printf '%s' "$OUT" | field reason)" "budget-exhausted" "v3 exhaustion reason"
+assert_eq "$(printf '%s' "$OUT" | field budget.used.U4)" "1" "U4 used counted"
+# U3 exhaustion alone (whether chain U1→U3)
+vr --rung U3 --unknown-type whether --terms y --signals S5 --work-unit vwh --rail think-tank --families claude --heterogeneous false >/dev/null
+OUT="$(vc --work-unit vwh --consensus LOW)"
+assert_eq "$(printf '%s' "$OUT" | field recommend)" "none" "U3 spent (whether, no S4/S1) ⇒ none"
+assert_eq "$(printf '%s' "$OUT" | field reason)" "budget-exhausted" "U3 exhaustion ⇒ budget-exhausted"
+# U4 eligibility matrix
+for h in a b; do node "$LEDGER" append --ledger "$V" --kind hypothesis --json "{\"hypothesis_id\":\"n$h\",\"text\":\"t\",\"status\":\"refuted\",\"work_unit\":\"nu\"}" >/dev/null; done
+vr --rung U1 --unknown-type why --terms z --signals S1 --work-unit nu >/dev/null
+vr --rung U1 --unknown-type why --terms z --signals S1 --work-unit nu >/dev/null
+vr --rung U3 --unknown-type why --terms z --signals S1 --work-unit nu --rail debugger-pua --heterogeneous false >/dev/null
+assert_eq "$(vc --work-unit nu | field recommend)" "U2" "no U2 yet: U2 comes before any U4"
+vr --rung U2 --unknown-type why --terms z --signals S1 --work-unit nu --reason rail-failed >/dev/null
+OUT="$(vc --work-unit nu)"
+assert_eq "$(printf '%s' "$OUT" | field recommend)" "none" "U2 only rail-failed ⇒ no U4 (needs a real U2 receipt)"
+# S4 without S1, U2 receipt present ⇒ U4
+vr --rung U2 --unknown-type how --terms "$GT" --signals S4 --work-unit s4u >/dev/null
+assert_eq "$(vc --work-unit s4u --terms "$GT" --fast-moving | field recommend)" "U1" "how: U1 still first"
+vr --rung U1 --unknown-type how --terms "$GT" --signals S4 --work-unit s4u >/dev/null
+vr --rung U1 --unknown-type how --terms "$GT" --signals S4 --work-unit s4u >/dev/null
+assert_eq "$(vc --work-unit s4u --terms "$GT" --fast-moving | field recommend)" "U4" "S4 (no S1) + U2 receipt ⇒ U4"
+# S6-only (no S4/S1) with a U2 receipt ⇒ no U4
+node "$LEDGER" append --ledger "$V" --kind unknown --json '{"type":"how","rationale":"r","work_unit":"s6u"}' >/dev/null
+vr --rung U2 --unknown-type how --terms q --signals S6 --work-unit s6u >/dev/null
+vr --rung U1 --unknown-type how --terms q --signals S6 --work-unit s6u >/dev/null
+vr --rung U1 --unknown-type how --terms q --signals S6 --work-unit s6u >/dev/null
+assert_eq "$(vc --work-unit s6u | field recommend)" "none" "S6 only (no S4/S1) with U2 receipt ⇒ no U4"
+# classify never emits U5 across every v3 shape above
+ALLV3="$( { vc --work-unit vw; vc --work-unit vwh --consensus LOW; vc --work-unit nu; vc --work-unit s4u --terms "$GT" --fast-moving; vc --work-unit s6u; vc --work-unit fresh --consensus LOW --stall "$TEST_TMP/stall.json"; } )"
+assert_not_contains "$ALLV3" '"recommend":"U5"' "v3 classify never emits U5"
+# report carries v3 fields
+OUT="$(node "$PROBE" report --ledger "$V")"
+assert_contains "$OUT" '"result":"inconclusive"' "report carries U4 result"
+assert_contains "$OUT" '"rail":"think-tank"' "report carries U3 rail"
+# ── call-site argvs under v3 (shape check; exit 0, one JSON object) ──
+for site in "--work-unit cs1 --terms $GT" "--work-unit cs2 --consensus LOW --terms $GT" "--work-unit cs3 --convergence $TEST_TMP/conv.json --stall $TEST_TMP/stall.json --terms $GT"; do
+  # shellcheck disable=SC2086
+  OUT="$(vc $site)"; RC=$?
+  assert_exit_code "$RC" "0" "v3 call-site argv exits 0 ($site)"
+  assert_eq "$(printf '%s\n' "$OUT" | wc -l | tr -d ' ')" "1" "v3 call-site prints one JSON object"
+done
 
 finalize_test

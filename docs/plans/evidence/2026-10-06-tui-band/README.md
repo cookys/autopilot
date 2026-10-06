@@ -37,6 +37,8 @@ Spike plugin (static sample data, not product code): `spike-plugin/` — `/spike
 
 ## Open questions (owner raised; not decided)
 
+> **2026-10-06 update:** owner ruled no placeholder UI. The band waits for the stage graph: [`../../2026-10-06-dev-flow-stage-graph.md`](../../2026-10-06-dev-flow-stage-graph.md). Its P7 implements V4a on the structured marker fields; the questions below are answered there (progress = frozen `unit k/N`; position = `size·level ▸ stage`; review strength `·n族`).
+
 - **What the progress slot means.** Today `3/5` is either campaign deliverables (frozen controller receipt) or session tasks (`done*`, unfrozen) — ambiguous to the reader. Proposal: show `60%` (frozen only), plus a two-level position `▸ 4/5 <deliverable>·<phase>`.
 - **ETA** `⏳ 約 8m` — no source exists; only a naive estimate (average completed deliverable × remaining), frozen-only, dim.
 - **Gantt in the panel** — `src/status/planned-input.js` already lists campaign deliverables (done/remaining, titles) or session tasks; per-deliverable timing source is unverified.

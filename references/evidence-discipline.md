@@ -97,6 +97,12 @@ compute it another way — by hand, with a different tool, or from a fixture wri
 
 ---
 
+**A test can re-implement the code it checks.** The SCOPE2 engine test proved that the campaign id
+bound onto the session marker was right by recomputing it with the same formula the engine uses
+(identity, ticket, sha256 of the raw contract). A drift in the engine's inputs would have moved both
+sides together. The fix compares against the `campaign_id` the real `runCampaignIntake` emits (case H),
+and depth-0 checked the id against the work-order directory a real run created.
+
 ## 4. Absence of evidence must not read as agreement
 
 `divergence-monitor.js` refuses a path with zero paired samples. "No disagreements observed" across
@@ -1186,3 +1192,29 @@ the real store before and after a suite run, and prefer a path the validator can
 Preventing artifact: `hooks/tests/lib.sh` defaults `AUTOPILOT_LIVE_DIR` to a 0700 dir under `/dev/shm`;
 the live pointer location follows the session-mode dir; the remaining fall-through is BACKLOG row
 "A rejected AUTOPILOT_LIVE_DIR override silently falls through to the real live dir".
+
+## 54. A token found anywhere in the line is not the token in its slot
+
+The W4 gate checker judged the band's phase by `line1.includes(expected)`. The expected phase label
+`完成` is a substring of the verdict word `完成待驗收`, so every 完成待驗收 band passed the phase item
+even while its phase slot printed the raw code `COMPLETED` — two real captures (l5i-done2, l6-done)
+were PASS for exactly the defect the LABEL row then fixed. The elapsed item, in the same file, already
+split the line on ` · ` and read its own segment; the phase item did not.
+
+Rule: when a display has fields, judge each field in its own slot. A whole-line search can only prove
+that the characters occur somewhere.
+
+Preventing artifact: `gate/check.js` judges the phase on `line1.split(' · ')[1]`; `check.test.js` pins a
+band `✓ 完成待驗收 x · COMPLETED · …` to FAIL; a sweep of all 89 capture dirs flipped exactly those two.
+
+## 55. Text that renders is not text that reads — judge a screen from the screen
+
+The first TUI spike reported "all five items rendered" from `tmux capture-pane -p`, which strips every
+color and attribute. The owner looked over ssh and found the badges unreadable: `inverse` plus
+`backgroundColor` swapped into colored text on grey, white on yellow. Nothing in the plain capture could
+show it; the claim covered glyphs, not legibility.
+
+Rule: a claim about how a screen looks needs the colored screen — capture with `-e`, render it, and look.
+
+Preventing artifact: `docs/plans/evidence/2026-10-06-tui-band/ansi2html.py` + headless chrome screenshot
+(recipe in that README); the band palette uses Claude Code theme keys as text color only.

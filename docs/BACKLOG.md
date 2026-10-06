@@ -12,6 +12,46 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 4. ~~foreman rail Shape B~~ v2.36.34 · 5. ~~`308-db` (a) residue sweep~~ v2.36.35 · 6. ~~2026-09-12 dogfood four defects~~ v2.36.36 ·
 7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41 · 9. ~~ledger flag burns a grant~~ v2.36.42 · 10. ~~reviewer no_verdict releases the claim~~ v2.36.43. Next: operator-named work, or the 308-8f dispatch-hetero reports.
 
+### dev-flow stage model is inconsistent and unrecorded; the band cannot say which stage a session is in
+- **Status**: open
+- **Trigger**: FIRED — owner 2026-10-06 (TUI band design)
+- **Effort**: L
+- **Source**: depth-0 inventory (Explore pass, file:line)
+- **Pointer**: docs/plans/evidence/2026-10-06-dev-flow-stage-inventory/README.md
+- **Context**: S/Fix/L/H use four id styles, "L" and "phase" carry several meanings, closing steps live in two files; redesign one stage vocabulary + a marker writer (guidance change, eval first).
+
+### /l5 has no generator for the mission scaffold; depth-0 must hand-author plan, rubric, sources, graph and envelope
+- **Status**: open
+- **Trigger**: FIRED — mods P1W W4 gate runs l5c–l5i, 2026-10-05
+- **Effort**: L
+- **Source**: depth-0 verified (hetero-impl-loop.md recipe ~120-283; no script builds the artifacts)
+- **Pointer**: docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/RESULTS.md
+- **Context**: a one-line change took five gate attempts: pipe in verify_cmd, session id stripped, repo-bound envelope; the front door names the contract but not how to make one.
+
+### /l5 campaign status task reports can_merge and can_close false after a converged run
+- **Status**: open
+- **Trigger**: FIRED — mods P1W W4 gate runs l5h, l5i, l6
+- **Effort**: M
+- **Source**: depth-0 verified (status task output on three campaigns)
+- **Pointer**: docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/RESULTS.md
+- **Context**: campaign_binding_unmapped expects a campaign-v2 id while the receipt carries campaign-v1; merge and acceptance predicates stay unknown, so finish-flow cannot close an /l5 marker.
+
+### l5 SKILL.md misstates AUTOPILOT_ROOT_RUN_ID; the engine requires the sealed mission root
+- **Status**: open
+- **Trigger**: FIRED — mods P1W SCOPE row, 2026-10-05
+- **Effort**: S
+- **Source**: depth-0 verified (autopilot-engine.js managed_strict_root_identity_mismatch)
+- **Pointer**: docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/RESULTS.md
+- **Context**: skills/l5/SKILL.md:43-46 vs skills/l5/references/hetero-impl-loop.md:201; the engine enforces the recipe; correct the SKILL wording (guidance text).
+
+### Qwen3.8-Max-Preview via qoderclicn returned truncated output as the /l6 verification author
+- **Status**: open
+- **Trigger**: FIRED — mods P1W W4 gate run l6b, 2026-10-06
+- **Effort**: S
+- **Source**: depth-0 verified (author status truncated, frame_missing, exit 5)
+- **Pointer**: docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/RESULTS.md
+- **Context**: first live author dispatch after an owner-authorized quota probe; 583-byte garbled log; a qualification signal for that seat, not a band defect.
+
 ### An aborted /l5 session's marker fences every later /l5 dispatch in the repo until its TTL
 - **Status**: open
 - **Trigger**: FIRED — mods P1W W4 gate run l5e, 2026-10-05

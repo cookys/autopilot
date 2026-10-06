@@ -21,7 +21,7 @@
   },
   "files": [
     "guidance-files-sg-base",
-    "guidance-files-sg-extra-base-v2"
+    "guidance-files-sg-extra-base-v3"
   ],
   "fixture_scripts": [
     "fixture-scripts-sg"

@@ -37,7 +37,7 @@ says what to do inside each. Script contract and exits: [references/stage-graph.
    node scripts/session-mode.js set --size <XS|S|M|L|XL> [--urgent] [--bug]
 2. Read your node sequence (never copy it from prose):
    node scripts/stage-graph.js nodes --size <size> [--bug] [--urgent]
-3. Run the start gates for your size (gate table below).
+3. Run the start gates (table below). M, L, XL also owe the Entry gates (§ intent) before the first `implement`.
 4. Enter the first node: node scripts/stage-advance.js --to <entry from step 2>
 ```
 
@@ -77,10 +77,6 @@ User Override Protocol's cannot-be-overridden list.
 |------|-------|-----|----------|
 | Confirm task | all | Restate what will be done in one sentence (bug: the symptom and, when known, the root cause) | documented-only |
 | Branch check | all | `git branch --show-current`; bug ⇒ `git checkout -b fix/<description>`; production broken ⇒ `git checkout -b hotfix/<description> main` | documented-only |
-| Session start SHA | M, L, XL | `git rev-parse HEAD > .claude/session-start-sha` | documented-only |
-| Branch freshness | M, L, XL | `git log HEAD..main --oneline \| wc -l` (behind) and `git log main..HEAD --oneline \| wc -l` (ahead) → freshness table; no `main` ⇒ skip | documented-only |
-| Knowledge review | M, L, XL | `.claude/knowledge/` for prior learnings; unprocessed session digests; for L/XL also the ladder probe at `intent` | documented-only |
-| Draft plan overlap | M, L, XL | `ls docs/plans/*.md` (or the configured path): same feature / module / user story ⇒ normal mode asks the user whether to adopt the draft; CEO mode decides within DOA | documented-only |
 | Skill routing | all | Project skills for the target code area (CLAUDE.md, `.claude/skill-routing.md`) are invoked before code is written; L/XL via the skill-routing TaskCreate at `intent` | TaskCreate + blockedBy (L/XL); documented-only (XS–M) |
 | TaskCreate tools | all | TaskCreate missing from the tool list (Claude 5-era models are gated off by default since CC 2.1.233) ⇒ warn the user once to set `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` via `.claude/settings.json` `env` and continue — advisory, never a blocker (`references/multi-agent-portability.md`, task-persistence row) | documented-only |
 
@@ -105,6 +101,8 @@ the walk resumes at the recorded node, never re-sized.
 
 | Situation | Do |
 |-----------|----|
+| Calling `stage-advance` / `next` | One node per Bash call, output visible: no `>/dev/null`, no `\| head`/`tail`, no loop over nodes, no `&&`/`;` work chained after it. Read the exit code and JSON before the node's work. Write a node only when you start its work |
+| The walk | Done only when `--to finish` exits 0. Every node `nodes` printed runs: a small diff, passing tests or a commit already made never skips one (only the User Override Protocol does) |
 | Entering any node | `node scripts/stage-advance.js --to <node>` before its work. Rails write `plan-review`, `code-review` and (at /l5–/l6) `implement` themselves; every other node is yours. A skill you hand off to may write the same node again — a repeat write is a harmless same-node update, so write it anyway |
 | Entering `implement` when `nodes` prints a non-null `unit_kind` | Add `--unit <unit_kind>:<i>/<N>:<label>` (`phase:` or `deliverable:`). Same `<i>` = repair of that unit; `<i>+1` = next unit; leaving the loop needs `<i> = <N>` |
 | Choosing the next node | `node scripts/stage-graph.js next --from <stage> --size <size> [--bug] [--urgent] [--research]`. `implement` in that list is the repair / next-unit edge; otherwise take the forward node |
@@ -121,7 +119,24 @@ the walk resumes at the recorded node, never re-sized.
 
 ### intent
 
-`node scripts/stage-advance.js --to intent`, then record the goal in the project README; CEO mode skips the confirmation (the OKR was confirmed at CEO startup).
+`node scripts/stage-advance.js --to intent`, then work the Entry gates; leave `intent` only when gates 1–7 pass.
+
+**Entry gates** (M, L, XL): all must pass before the first `implement`; a blocked gate ⇒ surface to the
+decision-maker. M runs 1–5 at `plan`; L/XL bugs run 1–7 at `diagnose`.
+
+1. Session start SHA: `mkdir -p .claude && git rev-parse HEAD > .claude/session-start-sha`
+2. Branch freshness: `git log HEAD..main --oneline | wc -l` (behind), `git log main..HEAD --oneline | wc -l`
+   (ahead) → freshness table (Session Start); no `main` ⇒ skip
+3. Knowledge: `.claude/knowledge/` for prior learnings; unprocessed session digests
+4. In-progress projects: `docs/projects/INDEX.md` (or the configured path) — an active project for this work ⇒
+   Context Continuation instead of a new walk
+5. Draft plan overlap: `ls docs/plans/*.md` (or the configured path): same feature / module / user story ⇒
+   normal mode asks the user whether to adopt the draft; CEO mode decides within DOA
+6. (L, XL) Goal in the project README (below), both parent tasks created, Scope Completeness Audit done
+7. (L, XL) Ladder probe run — always, even when nothing looks unknown; its answer picks `research` or `proposal`
+8. (L, XL) Plan file on disk before `plan-review` (§ plan)
+
+Record the goal in the project README; CEO mode skips the confirmation (the OKR was confirmed at CEO startup).
 
 ```markdown
 ## Project Goal
@@ -191,7 +206,7 @@ TaskCreate: "Scope completeness audit — enumerate all affected surfaces"
   project equivalent) — it is the skill-routing task's input.
 - CEO mode: the CEO runs the audit and records coverage in the README; it does not ask the user to enumerate.
 
-**Ladder probe** (L/XL at the end of `intent`; L/XL bugs at the end of `diagnose`): `node scripts/probe-unknown.js
+**Ladder probe** (Entry gate 7, at the end of `intent`; L/XL bugs at the end of `diagnose`): `node scripts/probe-unknown.js
 classify --ledger <ledger> --work-unit <task-id> --terms <dependency terms>`. Ledger: `<project>/ledger/decisions.jsonl`
 (omitted ⇒ `~/.autopilot/ladder/<repo-hash>.jsonl`). Terms are the existing or external things the design depends on
 and you cannot describe from the repo and general knowledge (libraries, APIs, modules, protocols, formats) — never
@@ -208,8 +223,7 @@ Sizes without a `research` node (XS–M bugs) work an unknown cause inside `diag
 ### diagnose
 
 `node scripts/stage-advance.js --to diagnose`, then invoke `autopilot:debug` unless the root cause is already known; either way, state the
-root cause in one sentence before leaving the node. L/XL bugs also run the intent gates above (goal, audit, both
-parent tasks, ladder probe) here.
+root cause in one sentence before leaving the node. L/XL bugs also run Entry gates 1–7 (§ intent) here.
 
 ### research (only when the probe found an unknown)
 
@@ -222,10 +236,11 @@ then advance to `proposal`. Budgets per work unit: U1 2 · U2 1 · U3 1 · U4 1 
 | `U2` | `autopilot:survey` (`issue-search` mode for a `why` unknown), then `node scripts/probe-unknown.js receipt --ledger <ledger> --rung U2 --unknown-type <unknown_type> --terms <terms> --signals <ids> --work-unit <unit>` |
 | `U3` | The `rail` classify names: `dispatch-discuss` (qualified discuss seat), else `autopilot:think-tank` (`whether`) / `autopilot:debugger` PUA (`why`); receipt `--rung U3 --rail <rail> --families <a,b>` (non-heterogeneous rail: add `--heterogeneous false`, no `--reason`) |
 | `U4` | A spike in a throwaway worktree; receipt `--rung U4 --question <q> --criterion <c> --result pass\|fail\|inconclusive` |
-| `none` (rung skipped, e.g. `not-heterogeneous`, or budget spent) | Research with local means (repo, docs, knowledge); record what stays assumed — the proposal lists it |
+| `none` (rung skipped, e.g. `not-heterogeneous`, or budget spent) | Research with local means (repo, docs, knowledge); record what stays assumed, then advance to `proposal`, which lists it |
 
-U5 (owner) is never recommended: it is reached only by your own stop (DOA boundary, stall fuse), carrying the
-ladder receipts.
+An unknown still open once its rungs are spent or skipped is the research result, not a stop: it goes into
+`proposal` as an assumption. U5 (owner) is never recommended: it is reached only by a board-class stop
+(Session Start) or the stall fuse, carrying the ladder receipts — never by an unknown research could not close.
 
 ### proposal
 
@@ -240,8 +255,8 @@ reply. No human available ⇒ take the recommended option and record it (Session
 
 | Size | Plan |
 |------|------|
-| M | In-session: unit list (one task each), the verify command, acceptance |
-| L, XL | User-provided plan ⇒ use it. Needs design ⇒ EnterPlanMode → design → ExitPlanMode → user approval. Save to `docs/plans/YYYY-MM-DD-<feature-name>.md` per [references/plan-template.md](../../references/plan-template.md). Project setup is mandatory even with a user-provided plan: project directory, branch, project index (bootstrap commands per project config) |
+| M | Entry gates 1–5 (§ intent) first. In-session: unit list (one task each), the verify command, acceptance |
+| L, XL | User-provided plan ⇒ use it. Needs design ⇒ EnterPlanMode → design → ExitPlanMode → user approval. Write it to `docs/plans/YYYY-MM-DD-<feature-name>.md` per [references/plan-template.md](../../references/plan-template.md) and confirm it is on disk (`ls`) before `--to plan-review` — no code before it. Project setup is mandatory even with a user-provided plan: project directory, branch, project index (bootstrap commands per project config) |
 
 **Consult before design (L, XL; the ladder's U1 at this call site)**: `node scripts/probe-unknown.js classify
 --ledger <ledger> --work-unit <phase> --terms <dependency terms, as at intent>`; call `bash scripts/dispatch-consult.sh --question-file
@@ -423,6 +438,12 @@ choose complete, for tests, error handling, edge cases, docs and features alike.
 | `--size M!` or `!M` | `--size M --urgent`; `!` is written after the letter in prose only |
 | Copying a node sequence into a plan or prompt | Cite `stage-graph.js nodes`; the JSON is the only definition |
 | Retrying the refused `--to` after exit 3 or 4 | Exit 3: a `legal_next` node. Exit 4: bump, then `next` from the current stage |
+| `for n in …; do stage-advance --to $n`, `--to <node> >/dev/null && <work>` | One call per node, its output read before the work (Stage protocol) |
+| Skipping `verify`, `code-review` or `finish` because the change is small or already committed | The size chose the nodes; the walk ends at `finish` |
+| Searching or researching before `session-mode.js set` | Session Start step 1 comes first |
+| Stopping because research found no answer | Record the open unknown as an assumption and advance to `proposal` |
+| Leaving `intent` without the ladder probe "because nothing is unknown" | Run `classify` anyway (Entry gate 7); its `U0` is the answer |
+| A delegated commit task that says only "commit changes" | It names the gate that runs before the commit |
 | Sizing a bug L because it crosses 3 modules, or S while its cause is unlocated across several | Size the fix's footprint: a cause across several modules is at least M; L only for design / multi-phase work |
 | `--terms` naming what the task will create | Terms are existing or external dependencies; new names are zero-hit by construction |
 | Raising the size for a risky change | Risk raises review strength, not size |

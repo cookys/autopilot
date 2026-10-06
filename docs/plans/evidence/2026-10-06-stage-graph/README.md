@@ -68,6 +68,12 @@ Release merges happen in the dedicated worktree `.claude/worktrees/release-3.0.0
   - Run 1 lost 80 cells to OAuth expiry (infra_fail), and those cells were resumed after `/login`. The infra rows remain in `results/stage-graph.v2.jsonl` and are not scored.
   - Per-cell transcripts are retained under `results/stage-graph-cells/`.
 
+- **Verdict, change arm v3**: **NOT-SHIP**. Packs `*-sg-change-v3`; guidance v3 `7de9b10c`; amend-3 `72b796d0`. All 114 scored cells ran on Claude Code 2.1.292, pinned with `DISABLE_AUTOUPDATER=1`.
+  - **First pass was instrument-invalid.** Claude Code auto-updated 2.1.291 → 2.1.292 at row 57, so the scorer returned no counts. The 57 rows from 2.1.291 were set aside unread in `scratchpad/eval-v3-runs/` and re-run pinned to 2.1.292.
+  - **Change arm: 9/12.** It passes every task except l-feature (0/3), l-research-a (0/3) and l-research-b (0/3). The two research tasks failed as predicted, for structural reasons: in headless runs the agent stops to ask a human.
+  - **Red: 3/12**, within the ≤ 4 limit.
+  - **Generic: 4 markers checked, none regressed.** The d2 regression from v2 is fixed by restoring the L entry gates.
+
 ## Open items for the alpha.1 cut
 
 1. **Total QC of the protected diff.** This is owed since the no-verify push. It also covers Train B. **Points for the reviewer:**

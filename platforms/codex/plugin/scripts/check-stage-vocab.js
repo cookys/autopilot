@@ -161,6 +161,7 @@ function scanStageAndSize(rel, lines, add, withHints) {
 
 function scanMarkerPhase(rel, lines, add) {
   if (MARKER_PHASE_HISTORY.includes(rel)) return;
+  if (/^hooks\/tests\/fixtures\/session-marker\/invalid-[^/]*\.json$/.test(rel)) return; // intentional legacy examples
   const sessionModeFile = /(^|\/)session-mode[^/]*\.js$/.test(rel);
   lines.forEach((line, i) => {
     if (line.includes(MARKER_PHASE_ALLOW_TOKEN)) return;
@@ -179,6 +180,15 @@ function scanU4(rel, lines, add) {
     const hit = line.split(/[.;]\s|;/).some((clause) => RE_U4_AS_OWNER.some((re) => re.test(clause)) && !RE_NEGATION.test(clause));
     if (hit) add('owner_u4', rel, i + 1, line, 'U4');
   });
+}
+
+// process.exit() after process.stdout.write truncates a piped result at 64 KiB; write synchronously, retrying EAGAIN.
+function writeStdout(text) {
+  const buf = Buffer.from(text);
+  let off = 0;
+  while (off < buf.length) {
+    try { off += fs.writeSync(1, buf, off, buf.length - off); } catch (err) { if (err.code !== 'EAGAIN') throw err; }
+  }
 }
 
 function parseArgs(argv) {
@@ -243,7 +253,7 @@ function main() {
   const total = findings.length;
   const result = { mode: o.repo ? 'repo' : 'scan', root: base, report_only: true, counts, total };
   if (!o.summary) result.findings = findings;
-  process.stdout.write(`${JSON.stringify(result)}\n`);
+  writeStdout(`${JSON.stringify(result)}\n`);
   process.stderr.write(
     `check-stage-vocab: ${total} hit(s) — ${Object.entries(counts).map(([k, v]) => `${k}=${v}`).join(' ')} (report-only)\n`,
   );

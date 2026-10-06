@@ -46,6 +46,12 @@ for f in CHANGELOG.md docs/plans/p.md docs/projects/_archive/x/r.md evals/skill-
 done
 printf 'U4 owner stop\n' > "$R/hooks/tests/mission-convergence.test.sh"
 
+mkdir -p "$R/hooks/tests/fixtures/session-marker"
+printf '{"phase_set_at": 1}\n' > "$R/hooks/tests/fixtures/session-marker/invalid-legacy.json"
+printf '{"phase_set_at": 1}\n' > "$R/hooks/tests/fixtures/session-marker/valid-other.json"
+# >64 KiB of findings, to prove stdout is not truncated through a pipe
+mkdir -p "$R/big"; node -e 'let t="";for(let i=0;i<1500;i++)t+="old stage L-5.2 and H-9.3 line "+i+" padding padding padding\n";require("fs").writeFileSync(process.argv[1],t)' "$R/big/many.md"
+
 OUT="$TEST_TMP/out.json"
 rc=0; node "$CHK" --root "$R" > "$OUT" 2>/dev/null || rc=$?
 [ "$rc" -eq 0 ] && ok "scan exits 0 (report-only)" || bad "scan exit $rc"
@@ -106,6 +112,13 @@ const r = [
 console.log(r.every(Boolean) ? "yes" : "no " + JSON.stringify(r));
 ' "$COUT" > "$TEST_TMP/repo.verdict"
 [ "$(cat "$TEST_TMP/repo.verdict")" = "yes" ] && ok "--repo hints and scope" || bad "--repo: $(cat "$TEST_TMP/repo.verdict")"
+
+chk "marker_phase exempts session-marker invalid-*.json" '!f.some((x) => x.file === "hooks/tests/fixtures/session-marker/invalid-legacy.json") && has("marker_phase","hooks/tests/fixtures/session-marker/valid-other.json","phase_set_at")'
+PIPED="$TEST_TMP/piped.json"
+node "$CHK" --root "$R" 2>/dev/null | cat > "$PIPED"
+SZ=$(wc -c < "$PIPED" | tr -d ' ')
+[ "$SZ" -gt 65536 ] && ok "piped result exceeds 64 KiB ($SZ bytes)" || bad "fixture too small: $SZ bytes"
+node -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.exit(d.findings.length===d.total?0:1)' "$PIPED" && ok "piped >64 KiB result parses whole" || bad "piped result truncated or inconsistent"
 
 rc=0; node "$CHK" --bogus >/dev/null 2>&1 || rc=$?
 [ "$rc" -eq 2 ] && ok "unknown arg exits 2" || bad "unknown arg exit $rc"

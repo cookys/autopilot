@@ -62,6 +62,9 @@ if (!flag('--skip-generic') && JSON.stringify([...genericIds].sort()) !== JSON.s
 // skill (live 2026-10-06: 6-8 s, skill_invoked false, no session-mode/stage-advance call) — the same failure P1W amendment 2
 // fixed for w2a-g/w2b-g. Names ONLY the skill: no size / bug / urgent / stage vocabulary (those are what the markers measure).
 const SG_PROMPT_PREFIX = 'Use dev-flow:';
+// Cell retention (prereg/stage-graph.amend-2-instrument.json fix 1): every cell's transcript, stderr, markers and
+// extraction are kept under <results dir>/stage-graph-cells/<task>/<arm>/<rep>/ (gitignored). Scoring never reads them.
+const KEEP_CELLS_DIR = path.join(path.dirname(path.resolve(resultsPath)), 'stage-graph-cells');
 const groups = [{ kind: 'stage-graph', tasks: P.tasks, arms: sgArms, env: { ONOFF_PROMPT_PREFIX: SG_PROMPT_PREFIX }, extra: ['--arm-manifests', armsDir] }];
 if (!flag('--skip-generic')) {
   for (const g of GENERIC) {
@@ -131,7 +134,7 @@ fs.mkdirSync(path.dirname(path.resolve(resultsPath)), { recursive: true });
 for (const g of groups) {
   console.log(`== group ${g.kind}: ${g.tasks.length} tasks x [${g.arms.join(',')}] x ${reps} reps`);
   const r = cp.spawnSync('bash', [path.join(HERE, 'run-skill-onoff-matrix.sh'), '--model', model, '--reps', String(reps), '--results', path.resolve(resultsPath),
-    '--tasks', g.tasks.join(','), '--arms', g.arms.join(','), '--runner', runner, ...g.extra], { stdio: 'inherit', env: { ...process.env, ...g.env } });
+    '--tasks', g.tasks.join(','), '--arms', g.arms.join(','), '--runner', runner, ...g.extra], { stdio: 'inherit', env: { ...process.env, ...g.env, ONOFF_KEEP_CELLS_DIR: KEEP_CELLS_DIR } });
   if (r.status !== 0) die(`matrix failed for group ${g.kind} (exit ${r.status})`);
 }
 const s = cp.spawnSync('node', [path.join(HERE, 'score-stage-graph.js'), 'score', '--results', path.resolve(resultsPath), '--prereg', preregPath], { encoding: 'utf8' });

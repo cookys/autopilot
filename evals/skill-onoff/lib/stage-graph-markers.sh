@@ -23,5 +23,8 @@ sg_markers() { # $1 = task id (tasks/<id>/answer.json)
   local lib extra=()
   lib="$(cd "$(dirname "$QUERY")" && pwd)"
   [ -z "${ONOFF_SG_EXPECTED:-}" ] || extra=(--expected "$ONOFF_SG_EXPECTED")
-  node "$lib/stage-graph-cell.js" --task "$1" --transcript "$TRANSCRIPT" --work-done "$(sg_work_done)" --markers "${extra[@]+"${extra[@]}"}"
+  # --repo/--base-sha: rung-consistency derivation on the frozen base tree; --extracted-out: raw extraction kept next to
+  # the transcript (the matrix retains the cell dir when ONOFF_KEEP_CELLS_DIR is set) — amend-2-instrument fixes 1 and 3
+  node "$lib/stage-graph-cell.js" --task "$1" --transcript "$TRANSCRIPT" --work-done "$(sg_work_done)" --markers \
+    --repo "$PWD" --base-sha "${FROZEN_BASE_SHA:-}" --extracted-out "$(dirname "$TRANSCRIPT")/stage-graph-extracted.json" "${extra[@]+"${extra[@]}"}"
 }

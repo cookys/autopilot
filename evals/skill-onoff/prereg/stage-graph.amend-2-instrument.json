@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "artifact_type": "skill_onoff_prereg_amendment",
+  "amendment": 2,
+  "row": "stage-graph",
+  "date": "2026-10-06",
+  "made_after_v1_results_seen": true,
+  "v1_rescored": false,
+  "v1_status": "NOT-SHIP (change 6/12, red 1/12, generic clean) stays recorded as is. The amended scorer is never run over the v1 rows; the v1 transcripts were deleted by the runner, so no v1 re-score is even possible. Any verdict under this amendment belongs to a NEW arm/run (v2) and is not comparable to v1 as 'the same instrument'.",
+  "justification_rule": "each change fixes a defect that is reproducible on synthetic fixtures (hooks/tests/skill-onoff-stage-graph.test.sh section 4, hooks/tests/skill-onoff-arm-builder.test.sh section 4); none is justified by 'makes the arm pass'",
+  "thresholds_unchanged": {
+    "rep_pass_min": 2,
+    "change_min_tasks": 10,
+    "red_max_tasks": 4
+  },
+  "unchanged": ["ship thresholds", "arms", "packs and pack digests", "the other nine tasks' answer.json keys and briefs", "answer.json of the three consistency tasks", "expected walks, sizes, bug/urgent flags, research and units of all 12 tasks", "the rotate-size-table mutation", "generic non-regression rule"],
+  "fixes": {
+    "keep_transcripts": {
+      "defect": "run-skill-onoff-matrix.sh deleted each cell's out dir after appending the one-line row, so no failure could be diagnosed from evidence (v1 diagnosis section 0).",
+      "change": "run-skill-onoff-matrix.sh retains the out dir when ONOFF_KEEP_CELLS_DIR is set; run-stage-graph-campaign.js sets it for every cell to <results dir>/stage-graph-cells/<task>/<arm>/<rep>/ (an earlier attempt is kept as <rep>.attempt<N>). The directory is gitignored. lib/stage-graph-cell.js --extracted-out writes stage-graph-extracted.json (observed extraction + judgement NOT masked by work_done) beside the transcript. Scoring reads rows only, as before.",
+      "path": "evals/skill-onoff/results/stage-graph-cells/<task>/<arm>/<rep>/",
+      "proof": "arm-builder test section 4: a stub campaign leaves transcript.jsonl, prompt.md and stage-graph-extracted.json for all 48 cells"
+    },
+    "chained_stage_advance": {
+      "defect": "lib/stage-graph-cell.js treated a whole Bash tool_use's is_error as 'stage-advance refused'. `stage-advance.js --to X && bash run-tests.sh` with a red test is_error the call although the advance was written, so the node was dropped from the walk.",
+      "change": "each stage-advance invocation's outcome comes from its own JSON stdout in the tool_result, matched in order to the invocations of the command: {allowed:true,...} = written (exit 0); {allowed:false,...} (exit 3) or {bump_to,...} (exit 4) = refused (scripts/stage-advance.js prints nothing on stdout for exits 1/2/5). When the count of such JSON objects differs from the count of invocations (or there is none) the previous rule (the call's is_error) applies and observed.ambiguous is true; each call records stage_calls[].basis json|is_error.",
+      "not_changed": "session-mode.js set and classify keep the call-level is_error rule (the same chain risk exists for `set`; not fixed here, see residual)",
+      "proof": "stage-graph test section 4 c1..c5: chained success + red test counted; genuine exit 3 refused; two invocations in one call attributed one by one; {bump_to} refused; no JSON -> old rule + ambiguous:true"
+    },
+    "rung_keys": {
+      "defect": "classify's eligible_max is U1 if ANY --terms term has zero hits, so for the L/XL feature briefs the first rung depends on which nouns the agent chooses (a free variable the brief cannot fix). v1 keys (l-feature/xl none|U0, l-u0-known U0) therefore scored noun choice, not routing. In addition l-u0-known's brief named three new CLI flags (--max-attempts, --delay-ms, --delay-cap-ms) plus 'cap'/'exponential': zero-hit, so U0 was unreachable for an agent that used the brief's own words.",
+      "choice": "consistency check, not pinned keys with deterministic briefs",
+      "choice_rationale": "A brief cannot make an honest term list deterministic: the agent decides what its key nouns are, and any pinned rung would again measure that choice. What the guidance can be held to is that the routing follows the probe. The rule keeps two non-vacuous failure modes (rung inconsistent with the terms the agent passed; U0 key without a classify at intent), and every other marker (size/bug/urgent/walk/work) is unchanged. Honest limit: it accepts a U1 that the agent earned, while the walk marker still pins the noresearch walk, so an agent that follows a U1 into the research node still fails on walk. Whether that coupling is wanted is guidance policy and is left to the owner.",
+      "applies_to": ["stage-graph-l-feature", "stage-graph-xl-deliverable", "stage-graph-l-u0-known"],
+      "rule": "the first classify's eligible_max must equal what probe-unknown yields for the --terms the agent passed on the FROZEN BASE tree (a zero-hit term -> U1, --fast-moving -> U2, all hit or no terms -> U0); a classify later than intent may also report U0 for base-zero-hit terms (the agent's own files can create hits). Key U0: classify must be called, and at intent (before any accepted stage-advance to a node other than intent). Key none: no classify passes; a classify must be consistent. Terms that cannot be read statically (shell expansion) or no repo context: the previous pinned rule applies and observed.rung_check.mode is pinned-fallback.",
+      "known_approximation": "the derivation greps tracked files only; probe-unknown.js also reads .claude/knowledge and the memory dir, which do not exist in a cell",
+      "brief_change": "tasks/stage-graph-l-u0-known/task.md rewritten so the feature is described only with things that exist in the cell repo (scheduler, retry policy, queue, attempts, delay, backoff, runner, design doc); size, bug, urgent, research, units and the expected walk are identical, answer.json is untouched. The real probe returns U0 for the brief's nouns on the fixture repo.",
+      "proof": "stage-graph test section 4 r1..r6, n1..n4 (pass and fail for each of the two key kinds, plus the pinned fallback) and the brief-reachability check (real classify -> U0); (c) of the original suite still proves the other nine keys are pinned"
+    }
+  },
+  "spend_free_proof": "no live cell was run; hooks/tests/skill-onoff-stage-graph.test.sh and hooks/tests/skill-onoff-arm-builder.test.sh (stub runner), plus one mutation per fix reverted to red (recorded in the commit message)",
+  "fixture_updates": "skill-onoff-stage-graph.test.sh mk.js (U0 / l-feature transcripts now pass terms that exist in the repo) and skill-onoff-arm-builder.test.sh stub agent (runs the real classify on terms that exist for the U0 brief): both only because the U0/none keys are now scored on consistency with the terms",
+  "residual": ["session-mode.js set chained with a failing command is still dropped by the call-level is_error rule (v1 diagnosis I1, second half)", "work_done still requires repo dirt (v1 diagnosis latent I/T defect for the L/XL horizon nodes)"]
+}

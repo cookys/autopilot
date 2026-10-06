@@ -13,6 +13,8 @@
 #      (d) a walk diverging before the horizon, or stopping short of it, fails; one running past it passes
 #      plus: refused stage writes (is_error) are ignored, wrong size/bug/urgent fail, no-op is all false
 #   3. aggregate verdicts: SHIP / NOT-SHIP (change low, red high, generic regression) / STOP / INVALID
+#   4. amend-2-instrument (prereg/stage-graph.amend-2-instrument.json): chained stage-advance outcome per invocation,
+#      rung consistency (pass + fail cases), l-u0-known brief reachability (real probe -> U0)
 # Env: ONOFF_SG_BASE points the test at a mutated copy of evals/skill-onoff (mutation controls).
 
 set -euo pipefail
@@ -116,8 +118,9 @@ if (mode === 'bad-size') size = size === 'M' ? 'L' : 'M';
 if (mode === 'bad-bug') bug = !bug;
 if (mode === 'bad-urgent') urgent = !urgent;
 use(`cd /work && node "$CLAUDE_PLUGIN_ROOT/scripts/session-mode.js" set --size ${size}${bug ? ' --bug' : ''}${urgent ? ' --urgent' : ''} && echo init`, '{"ok":true}');
-if (rung) use(`node scripts/probe-unknown.js classify --ledger /tmp/l.jsonl --terms alpha,beta`, JSON.stringify({ artifact_type: 'unknown_probe', eligible_max: rung, recommend: rung === 'U1' ? 'none' : 'U0' }));
-else if (task.endsWith('l-feature')) use('node scripts/probe-unknown.js classify --terms notes,storage', JSON.stringify({ eligible_max: 'U0', recommend: 'U0' }));
+// amend-2-instrument: a consistency brief (U0 key) is judged on the agent's terms, so the U0 transcript passes terms that hit the repo
+if (rung) use(`node scripts/probe-unknown.js classify --ledger /tmp/l.jsonl --terms ${ans.first_rung === 'U0' ? 'scheduler,retry' : 'alpha,beta'}`, JSON.stringify({ artifact_type: 'unknown_probe', eligible_max: rung, recommend: rung === 'U1' ? 'none' : 'U0' }));
+else if (task.endsWith('l-feature')) use('node scripts/probe-unknown.js classify --terms notes', JSON.stringify({ eligible_max: 'U0', recommend: 'U0' }));
 for (let i = 0; i < walk.length; i++) {
   if (mode === 'refused' && i === 1) use(`node scripts/stage-advance.js --to ${walk[i] === 'verify' ? 'qc-gate' : 'finish'}`, '{"allowed":false}', true); // refused write: must be ignored
   use(`node scripts/stage-advance.js --to ${walk[i]}${i % 3 === 1 ? ' --unit phase:1/1:x' : ''}`, '{"ok":true}');
@@ -328,4 +331,102 @@ fs.writeFileSync(process.argv[2],out.map(JSON.stringify).join("\n")+"\n");' "$TE
 score "$TEST_TMP/r.jsonl"
 node -e 'const o=JSON.parse(process.argv[1]); if(o.counts.change.passed!==11||o.counts.change.per_task["stage-graph-m-feature"]!==1) process.exit(1)' "$SC_OUT" || fail "1/3 reps must not pass a task: $SC_OUT"
 
-echo "PASS: skill-onoff stage-graph instrument (expected.json, keys, (a) 12/12, (b) red $red<=3, (c) rung, (d) walk, verdicts)"
+echo "=== 4. amend-2-instrument: chained stage-advance outcome (fix 2), rung consistency (fix 3), brief reachability ==="
+AMEND="$BASE/prereg/stage-graph.amend-2-instrument.json"
+CELL="$BASE/lib/stage-graph-cell.js"
+cellj() { # $1 task $2 transcript [$3 repo] -> JSON (observed + judged)
+  local extra=(); [ -z "${3:-}" ] || extra=(--repo "$3" --base-sha "$(git -C "$3" rev-list --max-parents=0 HEAD | head -1)")
+  node "$CELL" --task "$1" --transcript "$2" --work-done true --expected "$EXPECTED" --tasks-dir "$BASE/tasks" "${extra[@]+"${extra[@]}"}"
+}
+jq1() { node -e 'const o=JSON.parse(process.argv[1]);let v=o;for(const k of process.argv[2].split("."))v=v==null?v:v[k];process.stdout.write(JSON.stringify(v))' "$1" "$2"; }
+# mkt <out> <js expression yielding the spec array>; the expression sees SET W D (stage-advance outputs) CLS(terms)
+SET='node scripts/session-mode.js set --size XS'
+W='{"allowed":true,"from":"implement","to":"qc-gate","marker_path":"/m","stage":"qc-gate"}'
+D='{"allowed":false,"from":"implement","to":"finish","legal_next":["qc-gate"],"reason":"x"}'
+OKJ='{"ok":true}'
+mkt() { SET="$SET" W="$W" D="$D" OKJ="$OKJ" node -e '
+const { SET, W, D, OKJ } = process.env;
+const CLS = (t) => `node scripts/probe-unknown.js classify --ledger /tmp/l.jsonl --terms ${t}`;
+const ADV = (n) => `node scripts/stage-advance.js --to ${n}`;
+const spec = eval(process.argv[2]);
+require("fs").writeFileSync(process.argv[1], spec.map(([cmd, res, err], i) => {
+  const id = `t${i}`;
+  const a = JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id, name: "Bash", input: { command: cmd } }] } });
+  return res === null ? a : `${a}\n${JSON.stringify({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: id, is_error: !!err, content: res }] } })}`;
+}).join("\n") + "\n");' "$1" "$2"; }
+
+# chained success + red test: the advance WAS written although the call is_error -> counted (the v1 defect)
+mkt "$TEST_TMP/c1.jsonl" '[[SET, OKJ, false], [ADV("implement") + " && bash run-tests.sh", W + "\nFAIL: stage one\n", true], [ADV("qc-gate"), W, false]]'
+o=$(cellj stage-graph-xs-feature "$TEST_TMP/c1.jsonl")
+[ "$(jq1 "$o" observed.walk)" = '["implement","qc-gate"]' ] || fail "fix2: chained success + red test must count the advance: $o"
+[ "$(jq1 "$o" observed.stage_calls.0.basis)" = '"json"' ] && [ "$(jq1 "$o" observed.ambiguous)" = false ] || fail "fix2: outcome must be attributed from JSON: $o"
+# genuine exit 3 (denied) in a chained call: refused, a later written advance still counts
+mkt "$TEST_TMP/c2.jsonl" '[[SET, OKJ, false], [ADV("finish") + " && bash run-tests.sh", D, true], [ADV("implement"), W, false]]'
+o=$(cellj stage-graph-xs-feature "$TEST_TMP/c2.jsonl")
+[ "$(jq1 "$o" observed.walk)" = '["implement"]' ] && [ "$(jq1 "$o" observed.stage_calls.0.written)" = false ] || fail "fix2: a genuine exit-3 refusal must stay refused: $o"
+# two invocations in one call, first denied, second written: attributed one by one
+mkt "$TEST_TMP/c3.jsonl" '[[SET, OKJ, false], [ADV("finish") + "; " + ADV("implement"), D + "\n" + W, true]]'
+o=$(cellj stage-graph-xs-feature "$TEST_TMP/c3.jsonl")
+[ "$(jq1 "$o" observed.walk)" = '["implement"]' ] && [ "$(jq1 "$o" observed.ambiguous)" = false ] || fail "fix2: per-invocation attribution inside one call: $o"
+# ambiguous (no stage-advance JSON): the old rule applies and ambiguous:true is recorded
+mkt "$TEST_TMP/c4.jsonl" '[[SET, OKJ, false], [ADV("implement") + " && bash run-tests.sh", "FAIL: red\n", true], [ADV("qc-gate"), "ok", false]]'
+o=$(cellj stage-graph-xs-feature "$TEST_TMP/c4.jsonl")
+[ "$(jq1 "$o" observed.walk)" = '["qc-gate"]' ] && [ "$(jq1 "$o" observed.ambiguous)" = true ] && [ "$(jq1 "$o" observed.stage_calls.0.basis)" = '"is_error"' ] || fail "fix2: ambiguous call must fall back to the call's is_error and be flagged: $o"
+# a bump-required output ({bump_to}, exit 4) wrote nothing
+mkt "$TEST_TMP/c5.jsonl" '[[SET, OKJ, false], [ADV("implement"), JSON.stringify({ bump_to: "S", files: 9, lines: 99 }), true]]'
+o=$(cellj stage-graph-xs-feature "$TEST_TMP/c5.jsonl")
+[ "$(jq1 "$o" observed.walk)" = '[]' ] || fail "fix2: {bump_to} is a refusal: $o"
+
+# ── fix 3: rung consistency (l-feature none, l-u0-known U0, xl none) ──
+UR="${DIRTY[stage-graph-l-u0-known]}"; LR="${DIRTY[stage-graph-l-feature]}"
+rungof() { jq1 "$1" judged.rung; }
+# pass: honest classify at intent, every term present in the repo -> U0
+mkt "$TEST_TMP/r1.jsonl" '[[SET, OKJ, false], [CLS("scheduler,retry,queue"), "{\"eligible_max\":\"U0\"}", false], [ADV("intent"), "{\"allowed\":true}", false]]'
+[ "$(rungof "$(cellj stage-graph-l-u0-known "$TEST_TMP/r1.jsonl" "$UR")")" = true ] || fail "fix3: U0 key, honest U0 at intent must pass"
+# pass: the agent honestly named a NEW noun -> probe and transcript agree on U1: consistent
+mkt "$TEST_TMP/r2.jsonl" '[[SET, OKJ, false], [CLS("scheduler,zzqx-new-thing"), "{\"eligible_max\":\"U1\"}", false]]'
+o=$(cellj stage-graph-l-u0-known "$TEST_TMP/r2.jsonl" "$UR")
+[ "$(rungof "$o")" = true ] && [ "$(jq1 "$o" observed.rung_check.derived)" = '"U1"' ] || fail "fix3: U1 reported for a zero-hit term is consistent: $o"
+# FAIL: result says U0 although a term is zero-hit in the repo
+mkt "$TEST_TMP/r3.jsonl" '[[SET, OKJ, false], [CLS("scheduler,zzqx-new-thing"), "{\"eligible_max\":\"U0\"}", false]]'
+[ "$(rungof "$(cellj stage-graph-l-u0-known "$TEST_TMP/r3.jsonl" "$UR")")" = false ] || fail "fix3: U0 reported for a zero-hit term must fail"
+# FAIL: result says U1 although every term hits
+mkt "$TEST_TMP/r4.jsonl" '[[SET, OKJ, false], [CLS("scheduler,retry"), "{\"eligible_max\":\"U1\"}", false]]'
+[ "$(rungof "$(cellj stage-graph-l-u0-known "$TEST_TMP/r4.jsonl" "$UR")")" = false ] || fail "fix3: U1 reported for all-hit terms must fail"
+# FAIL: U0 key and classify never called
+mkt "$TEST_TMP/r5.jsonl" '[[SET, OKJ, false], [ADV("intent"), "{\"allowed\":true}", false]]'
+[ "$(rungof "$(cellj stage-graph-l-u0-known "$TEST_TMP/r5.jsonl" "$UR")")" = false ] || fail "fix3: U0 key needs a classify call"
+# FAIL: U0 key, consistent classify but only AFTER the session moved past intent
+mkt "$TEST_TMP/r6.jsonl" '[[SET, OKJ, false], [ADV("intent"), "{\"allowed\":true}", false], [ADV("proposal"), "{\"allowed\":true}", false], [CLS("scheduler,retry"), "{\"eligible_max\":\"U0\"}", false]]'
+[ "$(rungof "$(cellj stage-graph-l-u0-known "$TEST_TMP/r6.jsonl" "$UR")")" = false ] || fail "fix3: U0 key needs classify at intent"
+# none key (l-feature): no classify passes; an honest consistent U1 on a feature noun passes (the v1 R1 case); an inconsistent one fails
+mkt "$TEST_TMP/n1.jsonl" '[[SET, OKJ, false]]'
+[ "$(rungof "$(cellj stage-graph-l-feature "$TEST_TMP/n1.jsonl" "$LR")")" = true ] || fail "fix3: none key, no classify must pass"
+mkt "$TEST_TMP/n2.jsonl" '[[SET, OKJ, false], [CLS("notes,zzqx-storage"), "{\"eligible_max\":\"U1\"}", false]]'
+[ "$(rungof "$(cellj stage-graph-l-feature "$TEST_TMP/n2.jsonl" "$LR")")" = true ] || fail "fix3: none key, honest U1 on a new feature noun must pass"
+mkt "$TEST_TMP/n3.jsonl" '[[SET, OKJ, false], [CLS("notes,zzqx-storage"), "{\"eligible_max\":\"U0\"}", false]]'
+[ "$(rungof "$(cellj stage-graph-l-feature "$TEST_TMP/n3.jsonl" "$LR")")" = false ] || fail "fix3: none key, inconsistent classify must fail"
+# un-derivable terms ($VAR) fall back to the pinned rule and say so
+mkt "$TEST_TMP/n4.jsonl" '[[SET, OKJ, false], [CLS("\"$T\""), "{\"eligible_max\":\"U1\"}", false]]'
+o=$(cellj stage-graph-l-feature "$TEST_TMP/n4.jsonl" "$LR")
+[ "$(jq1 "$o" observed.rung_check.mode)" = '"pinned-fallback"' ] && [ "$(rungof "$o")" = false ] || fail "fix3: un-derivable terms use the pinned rule (U1 not accepted for a none key): $o"
+# the amendment record: amendment 2, v1 not re-scored, its task list == the code's, thresholds untouched
+node -e '
+const a = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+const c = require(process.argv[2]);
+const want = [...c.RUNG_CONSISTENCY_TASKS].sort().join(",");
+if (a.amendment !== 2 || a.v1_rescored !== false || a.made_after_v1_results_seen !== true) process.exit(1);
+if ([...a.fixes.rung_keys.applies_to].sort().join(",") !== want) process.exit(2);
+if (JSON.stringify(a.thresholds_unchanged) !== JSON.stringify(require(process.argv[3]).thresholds)) process.exit(3);
+' "$AMEND" "$CELL" "$PREREG" || fail "amend-2-instrument.json invariants (rc=$?): amendment 2, v1 not re-scored, task list == RUNG_CONSISTENCY_TASKS, thresholds unchanged"
+
+# l-u0-known reachability: every noun the brief rests on exists in the fixture repo, the old new-flag tokens are gone, and the REAL probe
+# returns U0 for them (v1: the brief's own flag names were zero-hit, so classify could never yield U0)
+BR="$BASE/tasks/stage-graph-l-u0-known/task.md"
+for tok in 'max-attempts' 'delay-ms' 'delay-cap-ms' 'doubling' 'configurable cap' '--'; do if grep -qF -- "$tok" "$BR"; then fail "l-u0-known brief still names a thing that does not exist: $tok"; fi; done
+NOUNS=scheduler,retry,queue,attempts,delay,backoff,policy,runner
+for n in ${NOUNS//,/ }; do grep -qi -- "$n" "$BR" || fail "l-u0-known brief should still speak of $n"; done
+real=$(cd "$UR" && HOME="$TEST_TMP/home" node "$REPO_ROOT/scripts/probe-unknown.js" classify --ledger "$TEST_TMP/u0-ledger.jsonl" --terms "$NOUNS" 2>/dev/null) || fail "real classify on l-u0-known failed"
+[ "$(jq1 "$real" eligible_max)" = '"U0"' ] || fail "l-u0-known: the brief's nouns must classify U0 on the fixture repo: $real"
+
+echo "PASS: skill-onoff stage-graph instrument (expected.json, keys, (a) 12/12, (b) red $red<=3, (c) rung, (d) walk, verdicts, amend-2 chained advance + rung consistency + brief reachability)"

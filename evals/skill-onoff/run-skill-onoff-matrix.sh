@@ -14,6 +14,8 @@
 #   Multi-pack arms (P5): --arm-manifests <dir> (needs --arms) — each arm runs with
 #     --arm-manifest <dir>/<arm>.json (see run-skill-onoff-eval.sh); --fixture-scripts a,b passes through.
 #
+# Env ONOFF_KEEP_CELLS_DIR=<dir>: keep each cell's out dir under <dir>/<task>/<arm>/<rep>/ instead of deleting it.
+#
 # Rows with failure_class=infra_fail are NOT treated as complete — they re-run on resume
 # (max 3 recorded attempts per cell, then the cell stays missing for score-onoff to judge).
 
@@ -97,6 +99,15 @@ for task in "${TASK_ARR[@]}"; do
         cat "$out/result.json" >> "$RESULTS"
       else
         echo "harness error on $task|$arm|$rep (exit $?)" >&2
+      fi
+      # Retain the cell's artifacts (transcript, prompt, stderr, markers, state, stage-graph-extracted.json) before the
+      # scratch dir goes: opt-in via ONOFF_KEEP_CELLS_DIR -> <dir>/<task>/<arm>/<rep>/ (an earlier attempt of the same
+      # cell is kept as <rep>.attempt<N>). Scoring never reads it.
+      if [ -n "${ONOFF_KEEP_CELLS_DIR:-}" ]; then
+        keep="$ONOFF_KEEP_CELLS_DIR/$task/$arm/$rep"
+        mkdir -p "$(dirname "$keep")"
+        if [ -e "$keep" ]; then mv "$keep" "$keep.attempt$attempts" 2>/dev/null || rm -rf "$keep"; fi
+        cp -r "$out" "$keep" 2>/dev/null || echo "WARN: could not retain $out -> $keep" >&2
       fi
       rm -rf "$out"
       ran=$((ran+1))

@@ -143,3 +143,24 @@ The 22 listed-but-unchanged files stay listed (byte-equal to base). The rule, br
 - Fixture scripts (`session-mode.js --size`, `stage-advance.js`, `stage-graph.js`) do not exist at P0; they
   are frozen into a fixture-scripts pack in P5. The scorer only reads transcripts.
 - If a fixture-scripts pack ships `resolve-review-loop.sh`, `classify` still yields the same `eligible_max`.
+
+## Amendment 2 (instrument) 2026-10-06 — made AFTER the v1 results were seen
+
+Machine-readable record: `prereg/stage-graph.amend-2-instrument.json`. v1 (change 6/12, red 1/12, generic clean) is **NOT-SHIP and stays
+NOT-SHIP**; it is not re-scored with the amended scorer (its transcripts no longer exist) and no v1 re-score is presented. A verdict under
+this amendment belongs to a new run. Each change fixes a defect reproducible on synthetic fixtures; none is justified by "makes it pass".
+Thresholds (10/12, red <= 4/12, generic non-regression), arms, packs, the other nine briefs/keys and all walks are unchanged.
+
+1. **Transcripts kept.** The matrix deleted every cell dir after appending its row. `ONOFF_KEEP_CELLS_DIR` (set by `run-stage-graph-campaign.js`)
+   retains each cell under `results/stage-graph-cells/<task>/<arm>/<rep>/` (gitignored), including `stage-graph-extracted.json` (extraction
+   plus the judgement not masked by `work_done`). Scoring is unchanged.
+2. **Chained stage-advance.** The scorer took a Bash call's `is_error` as "advance refused", so `stage-advance.js --to X && bash run-tests.sh`
+   with a red test dropped a written advance. Each invocation's outcome now comes from its own JSON stdout (`{allowed:true}` written;
+   `{allowed:false}` / `{bump_to}` refused); unattributable calls keep the old rule and record `ambiguous:true`.
+3. **Rung keys.** `eligible_max` depends on the nouns the agent passes to classify, so a pinned rung on the L/XL briefs scored noun choice;
+   `l-u0-known`'s brief also named three new flags that are zero-hit, making U0 unreachable. For `l-feature`, `xl-deliverable`, `l-u0-known`
+   the rung is now consistency with the probe (re-derived from the agent's own `--terms` on the frozen base tree; U0 key also needs the classify
+   at intent). The `l-u0-known` brief is rewritten from things that exist in its repo. Limit: the walk is still pinned to `noresearch`.
+
+Spend-free proof: `hooks/tests/skill-onoff-stage-graph.test.sh` section 4 and `hooks/tests/skill-onoff-arm-builder.test.sh` (stub campaign keeps
+the cell artifacts); one mutation per fix goes red.

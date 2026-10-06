@@ -55,3 +55,5 @@ docs/projects/_archive/2026-07-09-m3-band-tasks/runs/
 # before the trap would otherwise leave an untracked file, and an untracked file is
 # dirty, which blocks the next managed dispatch before it spends anything.
 scripts/*.pre.js
+# Per-cell stage-graph eval artifacts (transcripts etc., run-stage-graph-campaign.js; amend-2-instrument): local evidence, large.
+evals/skill-onoff/results/stage-graph-cells/

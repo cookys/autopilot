@@ -254,7 +254,11 @@ const use = (cmd, result) => {
   out.push(JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, is_error: false, content: result }] } }));
 };
 use(`node scripts/session-mode.js set --size ${ans.size}${ans.bug ? ' --bug' : ''}${ans.urgent ? ' --urgent' : ''}`, '{"ok":true}');
-if (ans.first_rung !== 'none') use('node scripts/probe-unknown.js classify --terms x', JSON.stringify({ eligible_max: ans.first_rung, recommend: ans.first_rung }));
+// amend-2-instrument: the U0 brief is scored on consistency with the probe, so that stub runs the REAL classify on a term the repo contains
+if (ans.first_rung === 'U0') {
+  const real = cp.execFileSync('node', ['scripts/probe-unknown.js', 'classify', '--ledger', path.join(require('os').tmpdir(), `sg-stub-${process.pid}.jsonl`), '--terms', 'scheduler,retry'], { encoding: 'utf8' });
+  use('node scripts/probe-unknown.js classify --terms scheduler,retry', real);
+} else if (ans.first_rung !== 'none') use('node scripts/probe-unknown.js classify --terms x', JSON.stringify({ eligible_max: ans.first_rung, recommend: ans.first_rung }));
 for (const node of graph.walk.slice(0, ans.horizon_index + 1)) use(`node scripts/stage-advance.js --to ${node}`, '{"ok":true}');
 fs.writeFileSync('agent-work.txt', 'did work\n');
 if (process.env.SG_PROMPT_LOG && process.argv[2]) fs.appendFileSync(process.env.SG_PROMPT_LOG, `${fs.readFileSync(process.argv[2], 'utf8').split('\n')[0]}\n`);
@@ -284,6 +288,12 @@ done
 # (live 2026-10-06: 6-8 s cells, skill_invoked false). EVERY stage-graph cell, both arms, must carry the same skill-only preface.
 [ "$(wc -l < "$SG_PROMPT_LOG")" -eq 48 ] && [ "$(sort -u "$SG_PROMPT_LOG")" = "Use dev-flow:" ] || fail "every stage-graph cell prompt must start with 'Use dev-flow:' (got: $(sort -u "$SG_PROMPT_LOG" | head -3))"
 node -e 'const a=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));if(a.ONOFF_PROMPT_PREFIX!=="Use dev-flow:"||/size|bug|urgent|stage|\bXS\b|\bXL\b/i.test(a.ONOFF_PROMPT_PREFIX))process.exit(1)' "$BASE/prereg/stage-graph.amend-1-invocation.json" || fail "amendment prefix must equal the campaign's and name only the skill"
+# cell retention (prereg/stage-graph.amend-2-instrument.json fix 1): the stub campaign leaves every cell's artifacts next to the results file
+KEEP="$TMP/stage-graph-cells"
+[ "$(find "$KEEP" -name transcript.jsonl | wc -l)" -eq 48 ] || fail "retention: expected 48 retained transcripts under $KEEP, got $(find "$KEEP" -name transcript.jsonl | wc -l)"
+for f in prompt.md stage-graph-extracted.json result.json markers.env; do [ "$(find "$KEEP" -name "$f" | wc -l)" -eq 48 ] || fail "retention: $f missing from some cell"; done
+K1="$KEEP/stage-graph-l-u0-known/change/1"
+[ -s "$K1/transcript.jsonl" ] && [ "$(pj observed.rung_check.mode < "$K1/stage-graph-extracted.json")" = consistency ] && [ "$(pj judged.rung < "$K1/stage-graph-extracted.json")" = true ] || fail "retention: l-u0-known extraction must carry the consistency verdict: $(cat "$K1/stage-graph-extracted.json" | head -c 600)"
 # resume: re-running the same command runs no cell
 set +e; CAMP --results "$RES" > "$TMP/camp2.out" 2>/dev/null; set -e
 grep -q "ran=0" "$TMP/camp2.out" || fail "resume must skip finished cells: $(grep matrix "$TMP/camp2.out")"

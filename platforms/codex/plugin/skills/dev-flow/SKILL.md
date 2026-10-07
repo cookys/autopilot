@@ -245,10 +245,13 @@ TaskCreate: "Scope completeness audit — enumerate all affected surfaces"
 - CEO mode: the CEO runs the audit and records coverage in the README; it does not ask the user to enumerate.
 
 **Ladder probe** (Entry gate 7, at the end of `intent`; L/XL bugs at the end of `diagnose`): `node scripts/probe-unknown.js
-classify --ledger <ledger> --work-unit <task-id> --terms <dependency terms>`. Ledger: `<project>/ledger/decisions.jsonl`
-(omitted ⇒ `~/.autopilot/ladder/<repo-hash>.jsonl`). Terms are the existing or external things the design depends on
-and you cannot describe from the repo and general knowledge (libraries, APIs, modules, protocols, formats) — never
-the names of what the task will create: a new command, flag, file or feature name is zero-hit and not an unknown.
+classify --ledger <ledger> --work-unit <task-id> [--terms <terms>]`. Ledger: `<project>/ledger/decisions.jsonl`
+(omitted ⇒ `~/.autopilot/ladder/<repo-hash>.jsonl`). Terms are the things the design depends on that you would have to
+look up or verify before relying on them: unfamiliar libraries, internal modules you have not read, external services,
+protocols or formats you are not certain about. A zero-hit term is novelty, so omit dependencies you can use confidently
+from your own knowledge (standard library, mainstream platform APIs — they live outside the repo and miss by
+construction) and never name what the task will create (a new command, flag, file or feature name). Nothing qualifies
+⇒ run `classify` without `--terms`; expect `U0` → `proposal` unless another signal fires.
 
 `eligible_max` picks the node; `recommend` only picks the rail inside `research`:
 
@@ -485,7 +488,7 @@ choose complete, for tests, error handling, edge cases, docs and features alike.
 | Reading `recommend: none` as "no unknown" and skipping `research` | `eligible_max` above `U0` ⇒ `research`; `none` only says the rung is skipped |
 | A delegated commit task that says only "commit changes" | It names the gate that runs before the commit |
 | Sizing a bug L because it crosses 3 modules, or S while its cause is unlocated across several | Size the fix's footprint: a cause across several modules is at least M; L only for design / multi-phase work |
-| `--terms` naming what the task will create | Terms are existing or external dependencies; new names are zero-hit by construction |
+| `--terms` naming what the task will create, or a dependency you can use from your own knowledge | Terms are only what you would look up first; both miss the repo by construction and fake novelty |
 | Raising the size for a risky change | Risk raises review strength, not size |
 | Ask "continue?" after a unit | Proceed directly to the next unit |
 | Re-sizing on context continuation | Use the marker's size; only the E1 bump moves it |

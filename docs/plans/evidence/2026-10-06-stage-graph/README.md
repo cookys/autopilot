@@ -74,6 +74,13 @@ Release merges happen in the dedicated worktree `.claude/worktrees/release-3.0.0
   - **Red: 3/12**, within the ≤ 4 limit.
   - **Generic: 4 markers checked, none regressed.** The d2 regression from v2 is fixed by restoring the L entry gates.
 
+- **Verdict, change arm v4: NOT-SHIP, 9/12.**
+  - Setup: packs `*-sg-change-v4`, guidance `f8855559` (ladder routing keyed on `eligible_max`), 114 cells all on 2.1.292, no infra failures. Red 3/12. Generic: 4 checked, none regressed.
+  - l-feature is still 0/3. In all three reps the probe at intent returned U1, and the rung check was consistent, so the scorer expected the research variant. The agent still went `intent → proposal`.
+  - The terms it passed were well-known runtime APIs (`node fs rename`, `node:fs`), which have zero repo hits.
+  - The v4 text was confirmed present in the frozen pack, so the agent saw the rule and did not apply it to a dependency it considers general knowledge.
+  - Open design question for the owner: should a well-known external dependency with zero repo hits force `research`? The v4 hand flagged this as well.
+
 ## Open items for the alpha.1 cut
 
 1. **Total QC of the protected diff.** This is owed since the no-verify push. It also covers Train B. **Points for the reviewer:**

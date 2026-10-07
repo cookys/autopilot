@@ -601,3 +601,7 @@ The panel reads `~/.autopilot/plan-review/<session_key>/state.json` for the plan
 - `{P2b, P3} → P7` (already true).
 - `P7a`, `P7b`, `P7c` and `P7d` are independent of each other, and each lands before alpha.2.
 - They are built on `release/3.0.0` in parallel with the P5 eval revision.
+- **Owner ruling R-K1 (2026-10-07, after eval v4).** A well-known dependency that the agent can use confidently from its own knowledge (standard library, mainstream platform or runtime APIs) is not an unknown. It does not by itself send an L or XL task to `research`.
+  - This is implemented as a guidance change: the dev-flow `--terms` rule, in v5.
+  - The instrument stays unchanged.
+  - The v1–v4 verdicts stand as recorded (NOT-SHIP).

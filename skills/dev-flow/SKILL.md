@@ -133,7 +133,7 @@ decision-maker. M runs 1–5 at `plan`; L/XL bugs run 1–7 at `diagnose`.
 5. Draft plan overlap: `ls docs/plans/*.md` (or the configured path): same feature / module / user story ⇒
    normal mode asks the user whether to adopt the draft; CEO mode decides within DOA
 6. (L, XL) Goal in the project README (below), both parent tasks created, Scope Completeness Audit done
-7. (L, XL) Ladder probe run — always, even when nothing looks unknown; its answer picks `research` or `proposal`
+7. (L, XL) Ladder probe run — always, even when nothing looks unknown; its `eligible_max` picks `research` or `proposal`
 8. (L, XL) Plan file on disk before `plan-review` (§ plan)
 
 Record the goal in the project README; CEO mode skips the confirmation (the OKR was confirmed at CEO startup).
@@ -212,11 +212,12 @@ classify --ledger <ledger> --work-unit <task-id> --terms <dependency terms>`. Le
 and you cannot describe from the repo and general knowledge (libraries, APIs, modules, protocols, formats) — never
 the names of what the task will create: a new command, flag, file or feature name is zero-hit and not an unknown.
 
-| `classify` says | Next |
-|-----------------|------|
-| `recommend: U0`, or `none` with `eligible_max: U0` | Read the local hits it lists; propose from your own knowledge → `proposal` |
-| `recommend: U1`–`U4` | An unknown exists → `research` (with `--research` on `stage-graph.js next`), climb that rung |
-| `recommend: none` with `eligible_max` above `U0` (rung skipped) | `research` with local means (its `none` row) |
+`eligible_max` picks the node; `recommend` only picks the rail inside `research`:
+
+| `eligible_max` | Next |
+|----------------|------|
+| `U0` | No unknown: read the local hits it lists; propose from your own knowledge → `proposal` |
+| `U1`–`U4` | An unknown exists, whatever `recommend` says → `research` (`--research` on `stage-graph.js next`); `recommend: none` there means the rung is skipped, not that nothing is unknown |
 
 Sizes without a `research` node (XS–M bugs) work an unknown cause inside `diagnose` (`autopilot:debug` step 4).
 
@@ -225,7 +226,7 @@ Sizes without a `research` node (XS–M bugs) work an unknown cause inside `diag
 `node scripts/stage-advance.js --to diagnose`, then invoke `autopilot:debug` unless the root cause is already known; either way, state the
 root cause in one sentence before leaving the node. L/XL bugs also run Entry gates 1–7 (§ intent) here.
 
-### research (only when the probe found an unknown)
+### research (when `classify` reports `eligible_max` above `U0`)
 
 `node scripts/stage-advance.js --to research`, then act on `recommend` from the latest `classify`; re-run `classify` after each receipt until it says `U0` / `none`,
 then advance to `proposal`. Budgets per work unit: U1 2 · U2 1 · U3 1 · U4 1 — a spent rung is never repeated.
@@ -443,6 +444,7 @@ choose complete, for tests, error handling, edge cases, docs and features alike.
 | Searching or researching before `session-mode.js set` | Session Start step 1 comes first |
 | Stopping because research found no answer | Record the open unknown as an assumption and advance to `proposal` |
 | Leaving `intent` without the ladder probe "because nothing is unknown" | Run `classify` anyway (Entry gate 7); its `U0` is the answer |
+| Reading `recommend: none` as "no unknown" and skipping `research` | `eligible_max` above `U0` ⇒ `research`; `none` only says the rung is skipped |
 | A delegated commit task that says only "commit changes" | It names the gate that runs before the commit |
 | Sizing a bug L because it crosses 3 modules, or S while its cause is unlocated across several | Size the fix's footprint: a cause across several modules is at least M; L only for design / multi-phase work |
 | `--terms` naming what the task will create | Terms are existing or external dependencies; new names are zero-hit by construction |

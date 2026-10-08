@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/stage-graph.schema.json",
+  "title": "stage-graph",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "source", "node_ids", "sizes", "bug_node", "urgency", "terminal", "loop_backs", "bump_limits", "writers"],
+  "properties": {
+    "schema": { "const": "autopilot.stage-graph/1" },
+    "source": { "type": "string", "minLength": 1 },
+    "node_ids": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z][a-z-]*$" } },
+    "sizes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["XS", "S", "M", "L", "XL"],
+      "properties": {
+        "XS": { "$ref": "#/$defs/size" },
+        "S": { "$ref": "#/$defs/size" },
+        "M": { "$ref": "#/$defs/size" },
+        "L": { "$ref": "#/$defs/size" },
+        "XL": { "$ref": "#/$defs/size" }
+      }
+    },
+    "bug_node": { "type": "string" },
+    "urgency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["low", "high"],
+      "properties": {
+        "low": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["move_after", "terminal"],
+          "properties": {
+            "move_after": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["node", "after"],
+              "properties": { "node": { "type": "string" }, "after": { "type": "string" } }
+            },
+            "terminal": { "type": "string" }
+          }
+        },
+        "high": { "type": "object" }
+      }
+    },
+    "terminal": { "type": "string" },
+    "loop_backs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["from", "to"],
+        "properties": {
+          "from": { "type": "string" },
+          "to": { "type": "string" },
+          "except_urgency": { "type": "array", "items": { "enum": ["urgent-low"] } }
+        }
+      }
+    },
+    "bump_limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["XS", "S", "M", "L", "XL"],
+      "properties": {
+        "XS": { "$ref": "#/$defs/limit" },
+        "S": { "$ref": "#/$defs/limit" },
+        "M": { "$ref": "#/$defs/limit" },
+        "L": { "$ref": "#/$defs/limit" },
+        "XL": { "$ref": "#/$defs/limit" }
+      }
+    },
+    "writers": { "type": "object" }
+  },
+  "$defs": {
+    "size": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base", "unit_kind", "bug"],
+      "properties": {
+        "base": { "type": "array", "minItems": 1 },
+        "unit_kind": { "enum": ["phase", "deliverable", null] },
+        "bug": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode"],
+          "properties": { "mode": { "enum": ["prepend", "replace"] }, "target": { "type": "string" } }
+        }
+      }
+    },
+    "limit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["files", "lines"],
+      "properties": {
+        "files": { "type": ["integer", "null"], "minimum": 0 },
+        "lines": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    }
+  }
+}

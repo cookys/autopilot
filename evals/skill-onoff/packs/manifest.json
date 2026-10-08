@@ -1635,6 +1635,261 @@
       "fixture-scripts-sg-red-v5/src/status/turn-effective.js": "5140c4ae406a10749c58dbbfabaedac9f8c8ee0cad59d005687906b4ff0ca5aa",
       "fixture-scripts-sg-red-v5/src/status/watch-inputs.js": "32c5125700e451931f059c99a1bb7463647b7116ac11fc9af14c68af0f1272b6",
       "fixture-scripts-sg-red-v5/src/status/work-order-progress.js": "bd1518d185843f93cd8962bf971557f6738ed620cc9e65bac85f8686c5d904e5"
+    },
+    "dev-flow-sg-change-v6": {
+      "dev-flow-sg-change-v6/SKILL.md": "5ffbc1a9ea50c14683a402c8b8057ee6c1d92cf0228568e8ab68727337ba6ee7",
+      "dev-flow-sg-change-v6/references/context-continuation.md": "01f6139fe68c25004037c5537b60afff07c2e255db84079a731fac9f8f85ecad",
+      "dev-flow-sg-change-v6/references/hetero-loops.md": "15167c0ac0fa9c813a18108d3c069e0dbe2df3cf8b1c6ceb836482f216dcdb41",
+      "dev-flow-sg-change-v6/references/historical-rationale.md": "66bc48145c6500a22285cf9551cbf9348e9fe5727878a1ecd702eba1da92baf3",
+      "dev-flow-sg-change-v6/references/model-routing.md": "0bb68abe770c34f070a18968c1f2d4ab2cace49d5fb826d2e5bd511c71271e9d",
+      "dev-flow-sg-change-v6/references/post-feature-doc-sync.md": "e45a11a0fc984899b4afbf995a372db84636d37a4d49dea8bc95eb54d036b5cf",
+      "dev-flow-sg-change-v6/references/stage-graph.md": "8a8f8ebab4cfb2a1e4d2b96600b08e14a24e9570bf6c4a7e6eaa7e47fdef4349"
+    },
+    "finish-flow-sg-change-v6": {
+      "finish-flow-sg-change-v6/SKILL.md": "cc3f576c6775cbb2f8fa107a15b587750baa3d0066a7b820a585d0bca06ea3a7"
+    },
+    "ceo-agent-sg-change-v6": {
+      "ceo-agent-sg-change-v6/SKILL.md": "31406df5a67fe2de2967f972380a8ad631af3d9868e0210b02e143acc841f1a7",
+      "ceo-agent-sg-change-v6/references/decision-matrix.md": "3bd75c299500374e730759fa919b539259b98188d4fed9a22e7b47c90d851e5c",
+      "ceo-agent-sg-change-v6/references/depth0-control-loop.md": "c6afedebfb9fcc7c3bf89a7c1be8138a2bb15b0facfb6af13423a11227bb706e",
+      "ceo-agent-sg-change-v6/references/doa-and-templates.md": "2f39bd6d509ee37868835548c3eda7cdd8cbde8d9906e7cd81471c3091e792aa",
+      "ceo-agent-sg-change-v6/references/level-front-door.md": "e16f54e3bcea6762301712339f9142d2e49dd4be3e555b44b4a48fc351ff2675",
+      "ceo-agent-sg-change-v6/references/task-prompt-templates.md": "b5d3202cf36f8b8674794ecc8289670475a5cc524627fd451895fea8f8ba0451",
+      "ceo-agent-sg-change-v6/references/tree-adapter.md": "91f129576a5f5d186aa7dc272fa1a8a4ca8921afa3835dca2c413797738b401e"
+    },
+    "team-sg-change-v6": {
+      "team-sg-change-v6/SKILL.md": "32fa20a7b43807b3c3aef772d4f8b755955ae101e3a9ae1576c66b65ce894800",
+      "team-sg-change-v6/references/team-tactics.md": "d0ad00463519481a36ec2c75d1ef31a694d6fc8e97844962a7b4974cb50773d9"
+    },
+    "debug-sg-change-v6": {
+      "debug-sg-change-v6/SKILL.md": "6566956c7609c00c5d784e562d1c1bb18502f84f763580853a254137cf7d6402"
+    },
+    "think-tank-sg-change-v6": {
+      "think-tank-sg-change-v6/SKILL.md": "35e7c8642fa1096a73a1f3c715c62feeade96c64fae954bbff329a5aa5678e10",
+      "think-tank-sg-change-v6/references/brief-template.md": "465854522911c3dad1dc63da03141bbdae914ab17aadfdb13744e788039aedfa",
+      "think-tank-sg-change-v6/references/dialectic-brief-template.md": "868354c288c9ae6179c3cf1654370da80365ed85c6cadc680efd47e3018377a8",
+      "think-tank-sg-change-v6/references/dialectic-mode.md": "bb47d4b4469c2f1dc8fcaf9934892ff3fb524fc691cd417d1ab43b20ecb946f1",
+      "think-tank-sg-change-v6/references/dialectic-role-prompts.md": "eb11ad8d6bb778d1e0b2b7404bf93cc4a6ac008f8efacf540946cc7df2d07e7e",
+      "think-tank-sg-change-v6/references/epistemic-diversity-scorecard.md": "79aaf0948f82c8da9d8c33ecc5ce126226b3cc24d300485440a8de22ae67d339",
+      "think-tank-sg-change-v6/references/minority-report.md": "49ea8b7c29bc8df18bb82b58b4a6b377a38e3cafba76133b06439ecd719079a2",
+      "think-tank-sg-change-v6/references/model-routing.md": "0bb68abe770c34f070a18968c1f2d4ab2cace49d5fb826d2e5bd511c71271e9d",
+      "think-tank-sg-change-v6/references/problem-restate-gate.md": "e009bc787aa2ad2c5bd8112fd1de1489e20e2e22c15f1f92fd0eec75ccd5a778",
+      "think-tank-sg-change-v6/references/role-prompts.md": "c7ea4d8446a47f3957b061f72d35df5812e6e6dc420974a13039efdf056f98cb",
+      "think-tank-sg-change-v6/references/silent-pre-check.md": "cb4cb18fcce5b3f210687bcfabfbc976122e920a9d0f822e4e301efca1faba4f"
+    },
+    "l4-sg-change-v6": {
+      "l4-sg-change-v6/SKILL.md": "ff115b469654636c081a953cddbedfb754aa5300b5a3296785d30a380a2c52d7"
+    },
+    "l5-sg-change-v6": {
+      "l5-sg-change-v6/SKILL.md": "fe16cfd4b1d6dff57a39a95d7f7002e5484e8858ba5e386a91179dcef6a86107",
+      "l5-sg-change-v6/references/hetero-impl-loop.md": "8736d1c44980a2435c352efc839d5f65bb9961fdfc3db94b58d2141a92876de2"
+    },
+    "l6-sg-change-v6": {
+      "l6-sg-change-v6/SKILL.md": "b0d19c95a47efb0670ccc5c73ad35ce292b702b5db7e41f9806318562369a1e9",
+      "l6-sg-change-v6/references/full-dispatch-pipeline.md": "f93fb398897084f97046cd3698438b9df3501c19c907f85ef7cdf2a17764a422"
+    },
+    "next-sg-change-v6": {
+      "next-sg-change-v6/SKILL.md": "58b5082dda33e2ad8956b0a8d228b6975297f88f86c64dcea48c264bbccfabf4",
+      "next-sg-change-v6/references/phase0-hygiene.md": "1edb13c4ff46ec691023ee6975da452a87c7743976c1e8fbd25803609212a169"
+    },
+    "quality-pipeline-sg-change-v6": {
+      "quality-pipeline-sg-change-v6/SKILL.md": "1a6341d742a34d7716ea8671aeb5f5a9c6cabd76a9cf882c3c22577dbaab1238",
+      "quality-pipeline-sg-change-v6/_base/prohibited-behaviors.md": "dd22baa1c4fa6e989d8db4d61a8d288137ef1b365161538bb0b759dc53df1f8d",
+      "quality-pipeline-sg-change-v6/references/anti-rationalization.md": "662c8e6b974ab847485eef6c1f52b2f0d766b743eabb4261ba3108839263b161",
+      "quality-pipeline-sg-change-v6/references/code-review.md": "e2c4f7e514113b1bfb7e659d74031c2abc37e28e168215229c40a6efb52aefba",
+      "quality-pipeline-sg-change-v6/references/completeness-gate.md": "51834517a73919bdce77e36473159409f72f18cba101f3e63d6cee8cb86936f0",
+      "quality-pipeline-sg-change-v6/references/model-routing.md": "0bb68abe770c34f070a18968c1f2d4ab2cace49d5fb826d2e5bd511c71271e9d",
+      "quality-pipeline-sg-change-v6/references/test-integrity-gate.md": "a22348f5864b728fd3b6bde7127d99a08fab978225dbc121a7626551f396eead",
+      "quality-pipeline-sg-change-v6/references/test-policy.md": "de7ba6bdc872f4fda01fa8aa50ed2fcbdc4dff856f28d75620f1b341b26130d9"
+    },
+    "distill-sg-change-v6": {
+      "distill-sg-change-v6/SKILL.md": "89c0c7df91be731d8ec8b5c8ad24e103aae7696999187f9e67c32806d70143c5",
+      "distill-sg-change-v6/references/sync-setup.md": "fec6f4e98783d49be9225583020fda164146da96edf1f2c6f509e1128b2e955e"
+    },
+    "doc-sync-sg-change-v6": {
+      "doc-sync-sg-change-v6/SKILL.md": "abdcb2c381f8cb9e68892f4eb65444387136badbcfd6d99cdd438cec929651b1"
+    },
+    "learn-sg-change-v6": {
+      "learn-sg-change-v6/SKILL.md": "303960668942ef0eaa059a2f5685c75c79abbc9c1f22889e59a5605fcfa799f2"
+    },
+    "project-lifecycle-sg-change-v6": {
+      "project-lifecycle-sg-change-v6/SKILL.md": "1da4d0c97773a17e9b0848b29803dd4466a7b8660e9ee5203677c6ee27dfd1f3",
+      "project-lifecycle-sg-change-v6/references/plan-bootstrap.md": "45c5065d0fbb40fa43d0c0a2b09e4cdf0f359483b56fff8c5323a8149a35e9ac",
+      "project-lifecycle-sg-change-v6/references/project-archive.md": "2d17e6cea6a804ec8331aa83486b5ca78810fc9d5e795477598f4f37aa21c133",
+      "project-lifecycle-sg-change-v6/references/project-structure.md": "96a85b3915124819c57a14227cd666214a0c969aab1e8b08b542db2465965bb1",
+      "project-lifecycle-sg-change-v6/references/templates.md": "778a95fa3ca8335d37532c1f94d9b978e33b60f88dea2f84c80e92232b268d24"
+    },
+    "research-to-ship-sg-change-v6": {
+      "research-to-ship-sg-change-v6/SKILL.md": "9b943ed27e91fb14c73dfaf7c18d93abcac27d5c627886ab3c4d5582838b9e68"
+    },
+    "guidance-files-sg-change-v6": {
+      "guidance-files-sg-change-v6/project-config-template/dev-flow-config.md": "492929289da674b600d2d35015d5284d8c9ca428ca6c176fd8f6c6c7603e0f17",
+      "guidance-files-sg-change-v6/project-config-template/finish-flow-config.md": "b863a805ece736e8b62a7f02a4f0d7a4bbd041a201f362d97e099c9703081ed0",
+      "guidance-files-sg-change-v6/project-config-template/review-loop-config.md": "bd61fc95bf0a41dd5599a8ce7b7c9f891d24d9d46dbcc8d807d7a4da735d68a7",
+      "guidance-files-sg-change-v6/references/backlog-entry.md": "28580162d049d6d9861a7e02b4d0b9c80415a95ce8bc55ecbaef5fcde311952d",
+      "guidance-files-sg-change-v6/references/evidence-discipline.md": "18ad24ac6e7bc404313204d333746925af4473d0613b0425493135d435ccc6ea",
+      "guidance-files-sg-change-v6/references/four-layer-design.md": "f46a18557b8d0f42cd4986bb3a1bf5988028a88e01a4b83537643bc2577ee9d2",
+      "guidance-files-sg-change-v6/references/hetero-dispatch.md": "33d36fb1c38ae5bdc4169e99bb49776663d724c86c2bf7bc4cb649386634864b",
+      "guidance-files-sg-change-v6/references/multi-agent-portability.md": "578f21521a6eb618ece61c290c9716d2fd278889223094900962587717d07888",
+      "guidance-files-sg-change-v6/references/plan-template.md": "eed1780a6199460ebb7825e326e520bf4bbf0c21a236efd1fcda3fe8a62f4989",
+      "guidance-files-sg-change-v6/references/review-page.md": "17c9b914d573527d672da42396874d4b7c319e35beb01689f6d1aecc6a4c85fd",
+      "guidance-files-sg-change-v6/references/skill-contract-card.md": "d722c3033006d5ffefb38de40d6a3733b43934a02edbe0a6fb7a0dc40c232612"
+    },
+    "dev-flow-sg-red-v6": {
+      "dev-flow-sg-red-v6/SKILL.md": "5ffbc1a9ea50c14683a402c8b8057ee6c1d92cf0228568e8ab68727337ba6ee7",
+      "dev-flow-sg-red-v6/references/context-continuation.md": "01f6139fe68c25004037c5537b60afff07c2e255db84079a731fac9f8f85ecad",
+      "dev-flow-sg-red-v6/references/hetero-loops.md": "15167c0ac0fa9c813a18108d3c069e0dbe2df3cf8b1c6ceb836482f216dcdb41",
+      "dev-flow-sg-red-v6/references/historical-rationale.md": "66bc48145c6500a22285cf9551cbf9348e9fe5727878a1ecd702eba1da92baf3",
+      "dev-flow-sg-red-v6/references/model-routing.md": "0bb68abe770c34f070a18968c1f2d4ab2cace49d5fb826d2e5bd511c71271e9d",
+      "dev-flow-sg-red-v6/references/post-feature-doc-sync.md": "e45a11a0fc984899b4afbf995a372db84636d37a4d49dea8bc95eb54d036b5cf",
+      "dev-flow-sg-red-v6/references/stage-graph.md": "8a8f8ebab4cfb2a1e4d2b96600b08e14a24e9570bf6c4a7e6eaa7e47fdef4349"
+    },
+    "finish-flow-sg-red-v6": {
+      "finish-flow-sg-red-v6/SKILL.md": "cc3f576c6775cbb2f8fa107a15b587750baa3d0066a7b820a585d0bca06ea3a7"
+    },
+    "ceo-agent-sg-red-v6": {
+      "ceo-agent-sg-red-v6/SKILL.md": "31406df5a67fe2de2967f972380a8ad631af3d9868e0210b02e143acc841f1a7",
+      "ceo-agent-sg-red-v6/references/decision-matrix.md": "3bd75c299500374e730759fa919b539259b98188d4fed9a22e7b47c90d851e5c",
+      "ceo-agent-sg-red-v6/references/depth0-control-loop.md": "c6afedebfb9fcc7c3bf89a7c1be8138a2bb15b0facfb6af13423a11227bb706e",
+      "ceo-agent-sg-red-v6/references/doa-and-templates.md": "2f39bd6d509ee37868835548c3eda7cdd8cbde8d9906e7cd81471c3091e792aa",
+      "ceo-agent-sg-red-v6/references/level-front-door.md": "e16f54e3bcea6762301712339f9142d2e49dd4be3e555b44b4a48fc351ff2675",
+      "ceo-agent-sg-red-v6/references/task-prompt-templates.md": "b5d3202cf36f8b8674794ecc8289670475a5cc524627fd451895fea8f8ba0451",
+      "ceo-agent-sg-red-v6/references/tree-adapter.md": "91f129576a5f5d186aa7dc272fa1a8a4ca8921afa3835dca2c413797738b401e"
+    },
+    "team-sg-red-v6": {
+      "team-sg-red-v6/SKILL.md": "32fa20a7b43807b3c3aef772d4f8b755955ae101e3a9ae1576c66b65ce894800",
+      "team-sg-red-v6/references/team-tactics.md": "d0ad00463519481a36ec2c75d1ef31a694d6fc8e97844962a7b4974cb50773d9"
+    },
+    "debug-sg-red-v6": {
+      "debug-sg-red-v6/SKILL.md": "6566956c7609c00c5d784e562d1c1bb18502f84f763580853a254137cf7d6402"
+    },
+    "think-tank-sg-red-v6": {
+      "think-tank-sg-red-v6/SKILL.md": "35e7c8642fa1096a73a1f3c715c62feeade96c64fae954bbff329a5aa5678e10",
+      "think-tank-sg-red-v6/references/brief-template.md": "465854522911c3dad1dc63da03141bbdae914ab17aadfdb13744e788039aedfa",
+      "think-tank-sg-red-v6/references/dialectic-brief-template.md": "868354c288c9ae6179c3cf1654370da80365ed85c6cadc680efd47e3018377a8",
+      "think-tank-sg-red-v6/references/dialectic-mode.md": "bb47d4b4469c2f1dc8fcaf9934892ff3fb524fc691cd417d1ab43b20ecb946f1",
+      "think-tank-sg-red-v6/references/dialectic-role-prompts.md": "eb11ad8d6bb778d1e0b2b7404bf93cc4a6ac008f8efacf540946cc7df2d07e7e",
+      "think-tank-sg-red-v6/references/epistemic-diversity-scorecard.md": "79aaf0948f82c8da9d8c33ecc5ce126226b3cc24d300485440a8de22ae67d339",
+      "think-tank-sg-red-v6/references/minority-report.md": "49ea8b7c29bc8df18bb82b58b4a6b377a38e3cafba76133b06439ecd719079a2",
+      "think-tank-sg-red-v6/references/model-routing.md": "0bb68abe770c34f070a18968c1f2d4ab2cace49d5fb826d2e5bd511c71271e9d",
+      "think-tank-sg-red-v6/references/problem-restate-gate.md": "e009bc787aa2ad2c5bd8112fd1de1489e20e2e22c15f1f92fd0eec75ccd5a778",
+      "think-tank-sg-red-v6/references/role-prompts.md": "c7ea4d8446a47f3957b061f72d35df5812e6e6dc420974a13039efdf056f98cb",
+      "think-tank-sg-red-v6/references/silent-pre-check.md": "cb4cb18fcce5b3f210687bcfabfbc976122e920a9d0f822e4e301efca1faba4f"
+    },
+    "l4-sg-red-v6": {
+      "l4-sg-red-v6/SKILL.md": "ff115b469654636c081a953cddbedfb754aa5300b5a3296785d30a380a2c52d7"
+    },
+    "l5-sg-red-v6": {
+      "l5-sg-red-v6/SKILL.md": "fe16cfd4b1d6dff57a39a95d7f7002e5484e8858ba5e386a91179dcef6a86107",
+      "l5-sg-red-v6/references/hetero-impl-loop.md": "8736d1c44980a2435c352efc839d5f65bb9961fdfc3db94b58d2141a92876de2"
+    },
+    "l6-sg-red-v6": {
+      "l6-sg-red-v6/SKILL.md": "b0d19c95a47efb0670ccc5c73ad35ce292b702b5db7e41f9806318562369a1e9",
+      "l6-sg-red-v6/references/full-dispatch-pipeline.md": "f93fb398897084f97046cd3698438b9df3501c19c907f85ef7cdf2a17764a422"
+    },
+    "next-sg-red-v6": {
+      "next-sg-red-v6/SKILL.md": "58b5082dda33e2ad8956b0a8d228b6975297f88f86c64dcea48c264bbccfabf4",
+      "next-sg-red-v6/references/phase0-hygiene.md": "1edb13c4ff46ec691023ee6975da452a87c7743976c1e8fbd25803609212a169"
+    },
+    "quality-pipeline-sg-red-v6": {
+      "quality-pipeline-sg-red-v6/SKILL.md": "1a6341d742a34d7716ea8671aeb5f5a9c6cabd76a9cf882c3c22577dbaab1238",
+      "quality-pipeline-sg-red-v6/_base/prohibited-behaviors.md": "dd22baa1c4fa6e989d8db4d61a8d288137ef1b365161538bb0b759dc53df1f8d",
+      "quality-pipeline-sg-red-v6/references/anti-rationalization.md": "662c8e6b974ab847485eef6c1f52b2f0d766b743eabb4261ba3108839263b161",
+      "quality-pipeline-sg-red-v6/references/code-review.md": "e2c4f7e514113b1bfb7e659d74031c2abc37e28e168215229c40a6efb52aefba",
+      "quality-pipeline-sg-red-v6/references/completeness-gate.md": "51834517a73919bdce77e36473159409f72f18cba101f3e63d6cee8cb86936f0",
+      "quality-pipeline-sg-red-v6/references/model-routing.md": "0bb68abe770c34f070a18968c1f2d4ab2cace49d5fb826d2e5bd511c71271e9d",
+      "quality-pipeline-sg-red-v6/references/test-integrity-gate.md": "a22348f5864b728fd3b6bde7127d99a08fab978225dbc121a7626551f396eead",
+      "quality-pipeline-sg-red-v6/references/test-policy.md": "de7ba6bdc872f4fda01fa8aa50ed2fcbdc4dff856f28d75620f1b341b26130d9"
+    },
+    "distill-sg-red-v6": {
+      "distill-sg-red-v6/SKILL.md": "89c0c7df91be731d8ec8b5c8ad24e103aae7696999187f9e67c32806d70143c5",
+      "distill-sg-red-v6/references/sync-setup.md": "fec6f4e98783d49be9225583020fda164146da96edf1f2c6f509e1128b2e955e"
+    },
+    "doc-sync-sg-red-v6": {
+      "doc-sync-sg-red-v6/SKILL.md": "abdcb2c381f8cb9e68892f4eb65444387136badbcfd6d99cdd438cec929651b1"
+    },
+    "learn-sg-red-v6": {
+      "learn-sg-red-v6/SKILL.md": "303960668942ef0eaa059a2f5685c75c79abbc9c1f22889e59a5605fcfa799f2"
+    },
+    "project-lifecycle-sg-red-v6": {
+      "project-lifecycle-sg-red-v6/SKILL.md": "1da4d0c97773a17e9b0848b29803dd4466a7b8660e9ee5203677c6ee27dfd1f3",
+      "project-lifecycle-sg-red-v6/references/plan-bootstrap.md": "45c5065d0fbb40fa43d0c0a2b09e4cdf0f359483b56fff8c5323a8149a35e9ac",
+      "project-lifecycle-sg-red-v6/references/project-archive.md": "2d17e6cea6a804ec8331aa83486b5ca78810fc9d5e795477598f4f37aa21c133",
+      "project-lifecycle-sg-red-v6/references/project-structure.md": "96a85b3915124819c57a14227cd666214a0c969aab1e8b08b542db2465965bb1",
+      "project-lifecycle-sg-red-v6/references/templates.md": "778a95fa3ca8335d37532c1f94d9b978e33b60f88dea2f84c80e92232b268d24"
+    },
+    "research-to-ship-sg-red-v6": {
+      "research-to-ship-sg-red-v6/SKILL.md": "9b943ed27e91fb14c73dfaf7c18d93abcac27d5c627886ab3c4d5582838b9e68"
+    },
+    "guidance-files-sg-red-v6": {
+      "guidance-files-sg-red-v6/project-config-template/dev-flow-config.md": "492929289da674b600d2d35015d5284d8c9ca428ca6c176fd8f6c6c7603e0f17",
+      "guidance-files-sg-red-v6/project-config-template/finish-flow-config.md": "b863a805ece736e8b62a7f02a4f0d7a4bbd041a201f362d97e099c9703081ed0",
+      "guidance-files-sg-red-v6/project-config-template/review-loop-config.md": "bd61fc95bf0a41dd5599a8ce7b7c9f891d24d9d46dbcc8d807d7a4da735d68a7",
+      "guidance-files-sg-red-v6/references/backlog-entry.md": "28580162d049d6d9861a7e02b4d0b9c80415a95ce8bc55ecbaef5fcde311952d",
+      "guidance-files-sg-red-v6/references/evidence-discipline.md": "18ad24ac6e7bc404313204d333746925af4473d0613b0425493135d435ccc6ea",
+      "guidance-files-sg-red-v6/references/four-layer-design.md": "f46a18557b8d0f42cd4986bb3a1bf5988028a88e01a4b83537643bc2577ee9d2",
+      "guidance-files-sg-red-v6/references/hetero-dispatch.md": "33d36fb1c38ae5bdc4169e99bb49776663d724c86c2bf7bc4cb649386634864b",
+      "guidance-files-sg-red-v6/references/multi-agent-portability.md": "578f21521a6eb618ece61c290c9716d2fd278889223094900962587717d07888",
+      "guidance-files-sg-red-v6/references/plan-template.md": "eed1780a6199460ebb7825e326e520bf4bbf0c21a236efd1fcda3fe8a62f4989",
+      "guidance-files-sg-red-v6/references/review-page.md": "17c9b914d573527d672da42396874d4b7c319e35beb01689f6d1aecc6a4c85fd",
+      "guidance-files-sg-red-v6/references/skill-contract-card.md": "d722c3033006d5ffefb38de40d6a3733b43934a02edbe0a6fb7a0dc40c232612"
+    },
+    "fixture-scripts-sg-red-v6": {
+      "fixture-scripts-sg-red-v6/hooks/_shared/secret-patterns.js": "6e346778e58a6e030cbb2fd16299a6fa4b3e1466ec2bdcd3522b7f1b4d90460f",
+      "fixture-scripts-sg-red-v6/references/stage-graph.json": "f40d50d2ab3b8c26ed643ec74948ecbc162d1398433714213539aad5c796b2db",
+      "fixture-scripts-sg-red-v6/schemas/session-marker.schema.json": "a0dbeb7b3a43d41576e22140a6bce26b527b77b9c8cd562b2f4d8db20422f054",
+      "fixture-scripts-sg-red-v6/schemas/stage-graph.schema.json": "40cc34e73f5b45b50a00a21d65e55bfb8676aa0499a53ca4c3e16e912d960441",
+      "fixture-scripts-sg-red-v6/scripts/check-plan-graduation.js": "b552e69fbc5637b8ec9bf858b0dcb63ac84a74b71e809ea504958ccd627c8df4",
+      "fixture-scripts-sg-red-v6/scripts/classify-diff-risk.sh": "d3fb059c4e02d84254bf5de10cd5ffb7e4e6bb799139d2c2fdd4c9d18855fdab",
+      "fixture-scripts-sg-red-v6/scripts/lib/json-emit.sh": "8898b41473e825bd354370284c39fe2795245321c622be234537b28722626d49",
+      "fixture-scripts-sg-red-v6/scripts/lib/json-fields.sh": "3c15674d9abf28f91813a2d4afddaa42ec6c37392057e287d72fc2ffa6449138",
+      "fixture-scripts-sg-red-v6/scripts/lib/jsonl-store.js": "cd22086da91ec46a94feac05513bef26010c04e4ced9bf35b6df4aa99f9d5076",
+      "fixture-scripts-sg-red-v6/scripts/lib/live-state-dir.js": "5a4913d7d5c39f9d8255993c874cf41e0c5a4bda99b25c92d633139a9c2a706e",
+      "fixture-scripts-sg-red-v6/scripts/lib/qualification-asset-seals.js": "436eaa9d78498cd8946681ce496aaa813cd1bdeee144edd0e3a4c5a8be05c1d3",
+      "fixture-scripts-sg-red-v6/scripts/lib/resolve-config.sh": "a55276b1dc365223317d2f51e7cb3fb4f15ae884b1da911e901e265cb99b5d01",
+      "fixture-scripts-sg-red-v6/scripts/lifecycle-residue-receipt.js": "bc61d2c13af327e8ae972773651bcc3736f4eebc1d7faad204a1d1d0fd0f4a7e",
+      "fixture-scripts-sg-red-v6/scripts/mission-execution-graph-check.js": "e7040d08fb45d7fbdeb3566386d3cd66beedd8f5f2231bb852ee31e4e3c5a841",
+      "fixture-scripts-sg-red-v6/scripts/mission-routing-admission.js": "3319d92e474a549f8fd9f247fe8fc3e1b082d06bead8f322b1e367c39a5e367a",
+      "fixture-scripts-sg-red-v6/scripts/mission-terminal-reconcile.js": "24ac8b37006bb8f9a85dbf91d7c0f49c3d4920bafc094c6e3e37f082453a39eb",
+      "fixture-scripts-sg-red-v6/scripts/probe-unknown.js": "c6e8e20c85d27d77c368e445308f1e066acdc720e2e2ebec8f25a524284f8ca0",
+      "fixture-scripts-sg-red-v6/scripts/render-review-page.js": "e5ac141eabd526c76ebc4b7fa1c31b86e361e8ccd30f882b5d4f5b75eea32890",
+      "fixture-scripts-sg-red-v6/scripts/resolve-review-loop.sh": "a9acf889121c4e14c88f8b96a998bd3ec2a752fb025943800081f8234227bd6f",
+      "fixture-scripts-sg-red-v6/scripts/session-mode.js": "a7b6f20f767eac54730b9c6b3ae387e50b11b65332e0e34d33fc62c571a7b955",
+      "fixture-scripts-sg-red-v6/scripts/stage-advance.js": "2eaf932b251c826fa9b5e72e76426b800c554d4bed357a794bae464367a10910",
+      "fixture-scripts-sg-red-v6/scripts/stage-graph.js": "95fe5348be511006557c7ce6fe9767b2f498621e8e24a39efef23b8a983dc2f0",
+      "fixture-scripts-sg-red-v6/scripts/validate-json-schema.js": "a8c5c90f18a97082151b529d3b2bdd28c4f57389293b588f47008996ccbd0169",
+      "fixture-scripts-sg-red-v6/src/engine/authenticated-control.js": "39a953e8a153648f2b5f0302dc95d8c08a3f3ffba2aaff41e9286b2468691e70",
+      "fixture-scripts-sg-red-v6/src/engine/campaign-composition.js": "4dfff0fd488746bab5598cc4ffab7cb03e3979f0eab8e28a00835e7e2d3b1419",
+      "fixture-scripts-sg-red-v6/src/engine/campaign-verification.js": "e36fca56a23ed0e12600a8a1c1f749a153f20d7f84fb1553ec02d41d732f66c8",
+      "fixture-scripts-sg-red-v6/src/engine/controller-execution.js": "414b3a85e50f41ac28e67e5d903766045bcc0dfe723f201e27efc84c559860ae",
+      "fixture-scripts-sg-red-v6/src/engine/implementation-campaign.js": "09f8d1e680692786ac836879ddd424c18e537cc5a2525106498495d00f52b21f",
+      "fixture-scripts-sg-red-v6/src/engine/mission-campaign-identity.js": "618f0cdb2b6ee3238f5b16091c8616f19f82a0c6ac58842480ff332a2f170705",
+      "fixture-scripts-sg-red-v6/src/engine/mission-convergence.js": "4b1eb3df0e9b9967762e3d6f455fdf92dba0afe933ab978980f319241db40d61",
+      "fixture-scripts-sg-red-v6/src/engine/mission-execution-graph.js": "c6d8763040c9a33af95df742475c2209227e9275a7991f3e6e58b5906a3632fc",
+      "fixture-scripts-sg-red-v6/src/engine/mission-policy.js": "75da93f0b5a6a870ef7fb16a9263ff23fb1df7d9c39f66924f3cf7d1e119a1be",
+      "fixture-scripts-sg-red-v6/src/engine/owner-kernel/canonical.js": "71cce05cbcf26156e14eaf160cc4d4f5eb45a4a613f884973d4457694f7b0c68",
+      "fixture-scripts-sg-red-v6/src/engine/work-order.js": "777f97bdb0ebfbc7bfb9ffb863869bae505ce191891487573a968e77f969c790",
+      "fixture-scripts-sg-red-v6/src/lib/common.js": "d103d0ee9a6b023aeef191bad04224266ada0baa727fbd9f716d6e8c90f9b23e",
+      "fixture-scripts-sg-red-v6/src/mission/interface.js": "7716f5f0c67cf1c280a2e2dbaef57dc6fdbf7e1a432bae6db60aa73a1c47349d",
+      "fixture-scripts-sg-red-v6/src/status/code-fingerprint.js": "72f8030fd81721401b4ccaad997d71a396a7f93173341b9c3b45896be19c314e",
+      "fixture-scripts-sg-red-v6/src/status/compare-input.js": "402501f7579143b2764ae9c0e730d884995e26b1aa10003df4cb3fae4c680b68",
+      "fixture-scripts-sg-red-v6/src/status/decision-input.js": "dd323b593925d35569350ff4f5c0ddeeee6c5743be76d69a3315e365c8fecdc3",
+      "fixture-scripts-sg-red-v6/src/status/decisions-sidecar.js": "cb1ffef89ceab7f3107857c0059fbe9f432aec42aadc37b5ef45b5ae5fad85c9",
+      "fixture-scripts-sg-red-v6/src/status/foreman-activity.js": "2b22fcb70bcb300dd97f89747fc7b37899c8e61eba113285f2b57789c3204965",
+      "fixture-scripts-sg-red-v6/src/status/live-pointer.js": "63c969cff041091758dcd8c15575a3b08c7e5300098afccf6abfc729b1e39a01",
+      "fixture-scripts-sg-red-v6/src/status/phase-input.js": "6e7db926ab74130dfd94d3b7f334f71d1137bc9d0cd64b67c6b2018c5b56aa05",
+      "fixture-scripts-sg-red-v6/src/status/planned-input.js": "76da9a5502bdff8ad6d339889d191e62449d27327d4b3abee34bc67996dafd15",
+      "fixture-scripts-sg-red-v6/src/status/project-key.js": "ff8eaa48e555244b90eccd77d612533998f07f9f294512796638dffdf913e853",
+      "fixture-scripts-sg-red-v6/src/status/review-server.js": "4904ca78456fbec7613a0df6d3039aa68118b707ca3d15d177b19d9ce452b91c",
+      "fixture-scripts-sg-red-v6/src/status/runs-fields.js": "c1a08bb787839199644830387fd942b2c581ebcc32861c27bac09ffba3ea22bd",
+      "fixture-scripts-sg-red-v6/src/status/runs-watch.js": "9f8523eaa1792c79e59636491d6ccaa1769978dc9c25970e6994aee55256e2a6",
+      "fixture-scripts-sg-red-v6/src/status/scope-key.js": "eac1d4c99874fbfc665f1327675c79123a011ba8297d0dbf8e84557d6a47778d",
+      "fixture-scripts-sg-red-v6/src/status/sources-manifest.js": "72ae292d045c749a0896d03436e17dc7e7ee27cafc3a67df8536e8bf821d0846",
+      "fixture-scripts-sg-red-v6/src/status/task-runtime.js": "b202548b36c41b23ca59d3d78e83676453dbb18e3add6c982fa8891e0a2aec28",
+      "fixture-scripts-sg-red-v6/src/status/task-status.js": "f1248fe78a506178126f1698e7ad2e19796987a0666e7c74bc579aa2c1d83142",
+      "fixture-scripts-sg-red-v6/src/status/turn-effective.js": "5140c4ae406a10749c58dbbfabaedac9f8c8ee0cad59d005687906b4ff0ca5aa",
+      "fixture-scripts-sg-red-v6/src/status/watch-inputs.js": "32c5125700e451931f059c99a1bb7463647b7116ac11fc9af14c68af0f1272b6",
+      "fixture-scripts-sg-red-v6/src/status/work-order-progress.js": "bd1518d185843f93cd8962bf971557f6738ed620cc9e65bac85f8686c5d904e5"
     }
   },
   "pack_meta": {
@@ -4091,6 +4346,466 @@
       "files": 11
     },
     "fixture-scripts-sg-red-v5": {
+      "kind": "scripts",
+      "source": "fixture-scripts-sg",
+      "ref": "red-of:fixture-scripts-sg",
+      "derived_from": "fixture-scripts-sg",
+      "rotate": {
+        "XS": "L",
+        "L": "XS",
+        "S": "XL",
+        "XL": "S",
+        "M": "M"
+      },
+      "rotated_text": {
+        "tables": 0,
+        "lists": 0
+      },
+      "files": 55
+    },
+    "dev-flow-sg-change-v6": {
+      "kind": "skill",
+      "source": "dev-flow",
+      "ref": "8184a7b44d18566c312f43c36f6ef8aa2e5f0957",
+      "base_ref": "8a10980f891ccf2f3a6fece582a4fd814cd5d83f",
+      "files": 7
+    },
+    "finish-flow-sg-change-v6": {
+      "kind": "skill",
+      "source": "finish-flow",
+      "ref": "8184a7b44d18566c312f43c36f6ef8aa2e5f0957",
+      "base_ref": "8a10980f891ccf2f3a6fece582a4fd814cd5d83f",
+      "files": 1
+    },
+    "ceo-agent-sg-change-v6": {
+      "kind": "skill",
+      "source": "ceo-agent",
+      "ref": "8184a7b44d18566c312f43c36f6ef8aa2e5f0957",
+      "base_ref": "8a10980f891ccf2f3a6fece582a4fd814cd5d83f",
+      "files": 7
+    },
+    "team-sg-change-v6": {
+      "kind": "skill",
+      "source": "team",
+      "ref": "8184a7b44d18566c312f43c36f6ef8aa2e5f0957",
+      "base_ref": "8a10980f891ccf2f3a6fece582a4fd814cd5d83f",
+      "files": 2
+    },
+    "debug-sg-change-v6": {
+      "kind": "skill",
+      "source": "debug",
+      "ref": "8184a7b44d18566c312f43c36f6ef8aa2e5f0957",
+      "base_ref": "8a10980f891ccf2f3a6fece582a4fd814cd5d83f",
+      "files": 1
+    },
+    "think-tank-sg-change-v6": {
+      "kind": "skill",
+      "source": "think-tank",
+      "ref": "8184a7b44d18566c312f43c36f6ef8aa2e5f0957",
+      "base_ref": "8a10980f891ccf2f3a6fece582a4fd814cd5d83f",
+      "files": 11
+    },
+    "l4-sg-change-v6": {
+      "kind": "skill",
+      "source": "l4",
+      "ref": "8184a7b44d18566c312f43c36f6ef8aa2e5f0957",
+      "base_ref": "8a10980f891ccf2f3a6fece582a4fd814cd5d83f",
+      "files": 1
+    },
+    "l5-sg-change-v6": {
+      "kind": "skill",
+      "source": "l5",
+      "ref": "8184a7b44d18566c312f43c36f6ef8aa2e5f0957",
+      "base_ref": "8a10980f891ccf2f3a6fece582a4fd814cd5d83f",
+      "files": 2
+    },
+    "l6-sg-change-v6": {
+      "kind": "skill",
+      "source": "l6",
+      "ref": "8184a7b44d18566c312f43c36f6ef8aa2e5f0957",
+      "base_ref": "8a10980f891ccf2f3a6fece582a4fd814cd5d83f",
+      "files": 2
+    },
+    "next-sg-change-v6": {
+      "kind": "skill",
+      "source": "next",
+      "ref": "8184a7b44d18566c312f43c36f6ef8aa2e5f0957",
+      "base_ref": "8a10980f891ccf2f3a6fece582a4fd814cd5d83f",
+      "files": 2
+    },
+    "quality-pipeline-sg-change-v6": {
+      "kind": "skill",
+      "source": "quality-pipeline",
+      "ref": "8184a7b44d18566c312f43c36f6ef8aa2e5f0957",
+      "base_ref": "8a10980f891ccf2f3a6fece582a4fd814cd5d83f",
+      "files": 8
+    },
+    "distill-sg-change-v6": {
+      "kind": "skill",
+      "source": "distill",
+      "ref": "8184a7b44d18566c312f43c36f6ef8aa2e5f0957",
+      "base_ref": "8a10980f891ccf2f3a6fece582a4fd814cd5d83f",
+      "files": 2
+    },
+    "doc-sync-sg-change-v6": {
+      "kind": "skill",
+      "source": "doc-sync",
+      "ref": "8184a7b44d18566c312f43c36f6ef8aa2e5f0957",
+      "base_ref": "8a10980f891ccf2f3a6fece582a4fd814cd5d83f",
+      "files": 1
+    },
+    "learn-sg-change-v6": {
+      "kind": "skill",
+      "source": "learn",
+      "ref": "8184a7b44d18566c312f43c36f6ef8aa2e5f0957",
+      "base_ref": "8a10980f891ccf2f3a6fece582a4fd814cd5d83f",
+      "files": 1
+    },
+    "project-lifecycle-sg-change-v6": {
+      "kind": "skill",
+      "source": "project-lifecycle",
+      "ref": "8184a7b44d18566c312f43c36f6ef8aa2e5f0957",
+      "base_ref": "8a10980f891ccf2f3a6fece582a4fd814cd5d83f",
+      "files": 5
+    },
+    "research-to-ship-sg-change-v6": {
+      "kind": "skill",
+      "source": "research-to-ship",
+      "ref": "8184a7b44d18566c312f43c36f6ef8aa2e5f0957",
+      "base_ref": "8a10980f891ccf2f3a6fece582a4fd814cd5d83f",
+      "files": 1
+    },
+    "guidance-files-sg-change-v6": {
+      "kind": "guidance-files",
+      "source": "project-config-template/dev-flow-config.md,project-config-template/finish-flow-config.md,project-config-template/review-loop-config.md,references/backlog-entry.md,references/evidence-discipline.md,references/four-layer-design.md,references/hetero-dispatch.md,references/multi-agent-portability.md,references/plan-template.md,references/review-page.md,references/skill-contract-card.md",
+      "ref": "8184a7b44d18566c312f43c36f6ef8aa2e5f0957",
+      "base_ref": "8a10980f891ccf2f3a6fece582a4fd814cd5d83f",
+      "files": 11
+    },
+    "dev-flow-sg-red-v6": {
+      "kind": "skill",
+      "source": "dev-flow",
+      "ref": "red-of:dev-flow-sg-change-v6",
+      "derived_from": "dev-flow-sg-change-v6",
+      "rotate": {
+        "XS": "L",
+        "L": "XS",
+        "S": "XL",
+        "XL": "S",
+        "M": "M"
+      },
+      "md_files_rotated": 0,
+      "rotated_text": {
+        "tables": 0,
+        "lists": 0
+      },
+      "files": 7
+    },
+    "finish-flow-sg-red-v6": {
+      "kind": "skill",
+      "source": "finish-flow",
+      "ref": "red-of:finish-flow-sg-change-v6",
+      "derived_from": "finish-flow-sg-change-v6",
+      "rotate": {
+        "XS": "L",
+        "L": "XS",
+        "S": "XL",
+        "XL": "S",
+        "M": "M"
+      },
+      "md_files_rotated": 0,
+      "rotated_text": {
+        "tables": 0,
+        "lists": 0
+      },
+      "files": 1
+    },
+    "ceo-agent-sg-red-v6": {
+      "kind": "skill",
+      "source": "ceo-agent",
+      "ref": "red-of:ceo-agent-sg-change-v6",
+      "derived_from": "ceo-agent-sg-change-v6",
+      "rotate": {
+        "XS": "L",
+        "L": "XS",
+        "S": "XL",
+        "XL": "S",
+        "M": "M"
+      },
+      "md_files_rotated": 0,
+      "rotated_text": {
+        "tables": 0,
+        "lists": 0
+      },
+      "files": 7
+    },
+    "team-sg-red-v6": {
+      "kind": "skill",
+      "source": "team",
+      "ref": "red-of:team-sg-change-v6",
+      "derived_from": "team-sg-change-v6",
+      "rotate": {
+        "XS": "L",
+        "L": "XS",
+        "S": "XL",
+        "XL": "S",
+        "M": "M"
+      },
+      "md_files_rotated": 0,
+      "rotated_text": {
+        "tables": 0,
+        "lists": 0
+      },
+      "files": 2
+    },
+    "debug-sg-red-v6": {
+      "kind": "skill",
+      "source": "debug",
+      "ref": "red-of:debug-sg-change-v6",
+      "derived_from": "debug-sg-change-v6",
+      "rotate": {
+        "XS": "L",
+        "L": "XS",
+        "S": "XL",
+        "XL": "S",
+        "M": "M"
+      },
+      "md_files_rotated": 0,
+      "rotated_text": {
+        "tables": 0,
+        "lists": 0
+      },
+      "files": 1
+    },
+    "think-tank-sg-red-v6": {
+      "kind": "skill",
+      "source": "think-tank",
+      "ref": "red-of:think-tank-sg-change-v6",
+      "derived_from": "think-tank-sg-change-v6",
+      "rotate": {
+        "XS": "L",
+        "L": "XS",
+        "S": "XL",
+        "XL": "S",
+        "M": "M"
+      },
+      "md_files_rotated": 0,
+      "rotated_text": {
+        "tables": 0,
+        "lists": 0
+      },
+      "files": 11
+    },
+    "l4-sg-red-v6": {
+      "kind": "skill",
+      "source": "l4",
+      "ref": "red-of:l4-sg-change-v6",
+      "derived_from": "l4-sg-change-v6",
+      "rotate": {
+        "XS": "L",
+        "L": "XS",
+        "S": "XL",
+        "XL": "S",
+        "M": "M"
+      },
+      "md_files_rotated": 0,
+      "rotated_text": {
+        "tables": 0,
+        "lists": 0
+      },
+      "files": 1
+    },
+    "l5-sg-red-v6": {
+      "kind": "skill",
+      "source": "l5",
+      "ref": "red-of:l5-sg-change-v6",
+      "derived_from": "l5-sg-change-v6",
+      "rotate": {
+        "XS": "L",
+        "L": "XS",
+        "S": "XL",
+        "XL": "S",
+        "M": "M"
+      },
+      "md_files_rotated": 0,
+      "rotated_text": {
+        "tables": 0,
+        "lists": 0
+      },
+      "files": 2
+    },
+    "l6-sg-red-v6": {
+      "kind": "skill",
+      "source": "l6",
+      "ref": "red-of:l6-sg-change-v6",
+      "derived_from": "l6-sg-change-v6",
+      "rotate": {
+        "XS": "L",
+        "L": "XS",
+        "S": "XL",
+        "XL": "S",
+        "M": "M"
+      },
+      "md_files_rotated": 0,
+      "rotated_text": {
+        "tables": 0,
+        "lists": 0
+      },
+      "files": 2
+    },
+    "next-sg-red-v6": {
+      "kind": "skill",
+      "source": "next",
+      "ref": "red-of:next-sg-change-v6",
+      "derived_from": "next-sg-change-v6",
+      "rotate": {
+        "XS": "L",
+        "L": "XS",
+        "S": "XL",
+        "XL": "S",
+        "M": "M"
+      },
+      "md_files_rotated": 0,
+      "rotated_text": {
+        "tables": 0,
+        "lists": 0
+      },
+      "files": 2
+    },
+    "quality-pipeline-sg-red-v6": {
+      "kind": "skill",
+      "source": "quality-pipeline",
+      "ref": "red-of:quality-pipeline-sg-change-v6",
+      "derived_from": "quality-pipeline-sg-change-v6",
+      "rotate": {
+        "XS": "L",
+        "L": "XS",
+        "S": "XL",
+        "XL": "S",
+        "M": "M"
+      },
+      "md_files_rotated": 0,
+      "rotated_text": {
+        "tables": 0,
+        "lists": 0
+      },
+      "files": 8
+    },
+    "distill-sg-red-v6": {
+      "kind": "skill",
+      "source": "distill",
+      "ref": "red-of:distill-sg-change-v6",
+      "derived_from": "distill-sg-change-v6",
+      "rotate": {
+        "XS": "L",
+        "L": "XS",
+        "S": "XL",
+        "XL": "S",
+        "M": "M"
+      },
+      "md_files_rotated": 0,
+      "rotated_text": {
+        "tables": 0,
+        "lists": 0
+      },
+      "files": 2
+    },
+    "doc-sync-sg-red-v6": {
+      "kind": "skill",
+      "source": "doc-sync",
+      "ref": "red-of:doc-sync-sg-change-v6",
+      "derived_from": "doc-sync-sg-change-v6",
+      "rotate": {
+        "XS": "L",
+        "L": "XS",
+        "S": "XL",
+        "XL": "S",
+        "M": "M"
+      },
+      "md_files_rotated": 0,
+      "rotated_text": {
+        "tables": 0,
+        "lists": 0
+      },
+      "files": 1
+    },
+    "learn-sg-red-v6": {
+      "kind": "skill",
+      "source": "learn",
+      "ref": "red-of:learn-sg-change-v6",
+      "derived_from": "learn-sg-change-v6",
+      "rotate": {
+        "XS": "L",
+        "L": "XS",
+        "S": "XL",
+        "XL": "S",
+        "M": "M"
+      },
+      "md_files_rotated": 0,
+      "rotated_text": {
+        "tables": 0,
+        "lists": 0
+      },
+      "files": 1
+    },
+    "project-lifecycle-sg-red-v6": {
+      "kind": "skill",
+      "source": "project-lifecycle",
+      "ref": "red-of:project-lifecycle-sg-change-v6",
+      "derived_from": "project-lifecycle-sg-change-v6",
+      "rotate": {
+        "XS": "L",
+        "L": "XS",
+        "S": "XL",
+        "XL": "S",
+        "M": "M"
+      },
+      "md_files_rotated": 0,
+      "rotated_text": {
+        "tables": 0,
+        "lists": 0
+      },
+      "files": 5
+    },
+    "research-to-ship-sg-red-v6": {
+      "kind": "skill",
+      "source": "research-to-ship",
+      "ref": "red-of:research-to-ship-sg-change-v6",
+      "derived_from": "research-to-ship-sg-change-v6",
+      "rotate": {
+        "XS": "L",
+        "L": "XS",
+        "S": "XL",
+        "XL": "S",
+        "M": "M"
+      },
+      "md_files_rotated": 0,
+      "rotated_text": {
+        "tables": 0,
+        "lists": 0
+      },
+      "files": 1
+    },
+    "guidance-files-sg-red-v6": {
+      "kind": "guidance-files",
+      "source": "guidance-files-sg-change-v6",
+      "ref": "red-of:guidance-files-sg-change-v6",
+      "derived_from": "guidance-files-sg-change-v6",
+      "rotate": {
+        "XS": "L",
+        "L": "XS",
+        "S": "XL",
+        "XL": "S",
+        "M": "M"
+      },
+      "md_files_rotated": 0,
+      "rotated_text": {
+        "tables": 0,
+        "lists": 0
+      },
+      "files": 11
+    },
+    "fixture-scripts-sg-red-v6": {
       "kind": "scripts",
       "source": "fixture-scripts-sg",
       "ref": "red-of:fixture-scripts-sg",

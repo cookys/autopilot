@@ -6,7 +6,7 @@
   "hook_classes_sha256": "e1e57cc6bd0a5839943f6764316a351c409d592aa58037a5922c2a51ddc13786",
   "rule_migration_sha256": "22ae10443c392a6476c8f99fc198aab934689e615fdabb5a595ef99b90c56c82",
   "guided_compatibility_sha256": "819a1253cf41a2a208a39739a4bdfcc49d2c89da614910adf15f2a3eaf667212",
-  "guided_dispositions_sha256": "1f06732a4f3d269a5843671ef07150c8f2c6cc53896364e4672318088443ee5e",
+  "guided_dispositions_sha256": "90ec7a2ce173d27a528a3bae888eca71a7bf080b2250915ad5c8b7a1873725b8",
   "category_totals": {
     "core": 145,
     "guided": 250,

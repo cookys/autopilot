@@ -476,17 +476,17 @@
     {
       "content_hash": "dc15c2f45b5b4ad1661d38f34c85bdac68c3ef80ffda5b1b4d43ad41b4ec450b",
       "disposition": "removed",
-      "rationale": "P0 skills/ceo-agent/SKILL.md:386 (under \"Scope Creep Detection (mandatory forcing function)\"). Relocated verbatim by the P5 stage-graph rewrite (plan docs/plans/2026-10-06-dev-flow-stage-graph.md §2.5): the line now lives in skills/ceo-agent/SKILL.md, outside the two-file rule inventory."
+      "rationale": "P0 skills/ceo-agent/SKILL.md:386 (under \"Scope Creep Detection (mandatory forcing function)\"). Restated (reworded, not verbatim) by the P5 stage-graph rewrite (plan docs/plans/2026-10-06-dev-flow-stage-graph.md §2.5): the obligation now lives at skills/ceo-agent/SKILL.md:355 as the first scope-expansion indicator \"New subsystem not listed in original README phases\", inside the fenced block of the **Scope expansion** paragraph (fenced content is not an extracted rule candidate; catalog --check confirms the rule is not double-counted)."
     },
     {
       "content_hash": "4f9a46a6f307c0cd6938a69e4a22a2ae4751f21b732a94c7f0bdf65bc4c4079f",
       "disposition": "removed",
-      "rationale": "P0 skills/ceo-agent/SKILL.md:387 (under \"Scope Creep Detection (mandatory forcing function)\"). Relocated verbatim by the P5 stage-graph rewrite (plan docs/plans/2026-10-06-dev-flow-stage-graph.md §2.5): the line now lives in skills/ceo-agent/SKILL.md, outside the two-file rule inventory."
+      "rationale": "P0 skills/ceo-agent/SKILL.md:387 (under \"Scope Creep Detection (mandatory forcing function)\"). Restated (reworded, not verbatim) by the P5 stage-graph rewrite (plan docs/plans/2026-10-06-dev-flow-stage-graph.md §2.5): the obligation now lives at skills/ceo-agent/SKILL.md:356 as the scope-expansion indicator \"Public API surface larger than original estimate\", inside the fenced block of the **Scope expansion** paragraph (fenced content is not an extracted rule candidate)."
     },
     {
       "content_hash": "b8eaad6ea295f75167a3da5098360744c953a4d484d87ff804c0b6cd56c5a85a",
       "disposition": "removed",
-      "rationale": "P0 skills/ceo-agent/SKILL.md:388 (under \"Scope Creep Detection (mandatory forcing function)\"). Relocated verbatim by the P5 stage-graph rewrite (plan docs/plans/2026-10-06-dev-flow-stage-graph.md §2.5): the line now lives in skills/ceo-agent/SKILL.md, outside the two-file rule inventory."
+      "rationale": "P0 skills/ceo-agent/SKILL.md:388 (under \"Scope Creep Detection (mandatory forcing function)\"). Restated (reworded, not verbatim) by the P5 stage-graph rewrite (plan docs/plans/2026-10-06-dev-flow-stage-graph.md §2.5): the obligation now lives at skills/ceo-agent/SKILL.md:357 as the scope-expansion indicator \"Estimate doubled (2x+ original effort)\", inside the fenced block of the **Scope expansion** paragraph (fenced content is not an extracted rule candidate)."
     },
     {
       "content_hash": "39e3e5894c0ec5de50a642c4d781313f5150bc4a592ea520f9bc3f234151c3ff",
@@ -591,7 +591,7 @@
     {
       "content_hash": "f56a42069910a9f2a27cb05a2aaa08acb8eadb80d906998bdcab535184e2b0c4",
       "disposition": "removed",
-      "rationale": "P0 skills/dev-flow/SKILL.md:51 (under \"L-Size Full Gates\"). Relocated verbatim by the P5 stage-graph rewrite (plan docs/plans/2026-10-06-dev-flow-stage-graph.md §2.5): the line now lives in skills/dev-flow/SKILL.md, outside the two-file rule inventory."
+      "rationale": "P0 skills/dev-flow/SKILL.md:51 (under \"L-Size Full Gates\"). Restated (reworded, not verbatim) by the P5 stage-graph rewrite (plan docs/plans/2026-10-06-dev-flow-stage-graph.md §2.5): the obligation now lives at skills/dev-flow/SKILL.md:127 as \"Session start SHA: `mkdir -p .claude && git rev-parse HEAD > .claude/session-start-sha`\"; the bare command line also recurs verbatim at skills/dev-flow/references/context-continuation.md:14 as the continuation refresh step (outside the two inventory sources)."
     },
     {
       "content_hash": "293b01025f378183a66b7398ad50f0640cd4680fb5ede088f25c46d699468859",
@@ -601,7 +601,7 @@
     {
       "content_hash": "5079ab293bb2afccb5691fca35d938b78349f87ab939a64d4cf3e9d1ea7ed79c",
       "disposition": "removed",
-      "rationale": "P0 skills/dev-flow/SKILL.md:54 (under \"L-Size Full Gates\"). Relocated verbatim by the P5 stage-graph rewrite (plan docs/plans/2026-10-06-dev-flow-stage-graph.md §2.5): the line now lives in skills/dev-flow/SKILL.md, outside the two-file rule inventory."
+      "rationale": "P0 skills/dev-flow/SKILL.md:54 (under \"L-Size Full Gates\"). Restated (reworded, not verbatim) by the P5 stage-graph rewrite (plan docs/plans/2026-10-06-dev-flow-stage-graph.md §2.5): the obligation now lives at skills/dev-flow/SKILL.md:79 (Start gates table, \"Branch check\" row) as \"`git branch --show-current`; bug => `git checkout -b fix/<description>`; production broken => `git checkout -b hotfix/<description> main`\"."
     },
     {
       "content_hash": "860d8b6017e3bf448fe006d8d5b79553e4ebfe647f0f67ae4e0d905e40389398",
@@ -731,7 +731,7 @@
     {
       "content_hash": "c67a728b91f9ee4d7eb96a3ab7224abf2d4276fd0019650b17b947621a25ddc5",
       "disposition": "removed",
-      "rationale": "P0 skills/dev-flow/SKILL.md:99 (under \"Fix Path\"). Relocated verbatim by the P5 stage-graph rewrite (plan docs/plans/2026-10-06-dev-flow-stage-graph.md §2.5): the line now lives in skills/dev-flow/references/context-continuation.md, outside the two-file rule inventory."
+      "rationale": "P0 skills/dev-flow/SKILL.md:99 (under \"Fix Path\"). Restated (reworded, not verbatim) by the P5 stage-graph rewrite (plan docs/plans/2026-10-06-dev-flow-stage-graph.md §2.5): the obligation now lives at skills/dev-flow/SKILL.md:80 (Start gates table, \"Skill routing\" row) as \"Project skills for the target code area (CLAUDE.md, `.claude/skill-routing.md`) are invoked before code is written\"; it is not present in skills/dev-flow/references/context-continuation.md."
     },
     {
       "content_hash": "e14b26371b0109724290d6b2ef096bc7024cad444b410d8b85da771e753a711e",
@@ -1061,7 +1061,7 @@
     {
       "content_hash": "1a0387f70733f71bc93a0063b7c74f094d9730b977065ef84853a8baa1294c27",
       "disposition": "removed",
-      "rationale": "P0 skills/dev-flow/SKILL.md:269 (under \"Fix Workflow -- Bug Fix (any module count)\"). Relocated verbatim by the P5 stage-graph rewrite (plan docs/plans/2026-10-06-dev-flow-stage-graph.md §2.5): the line now lives in skills/dev-flow/SKILL.md, outside the two-file rule inventory."
+      "rationale": "P0 skills/dev-flow/SKILL.md:269 (under \"Fix Workflow -- Bug Fix (any module count)\"). Restated (reworded, not verbatim) by the P5 stage-graph rewrite (plan docs/plans/2026-10-06-dev-flow-stage-graph.md §2.5): the obligation now lives at skills/dev-flow/SKILL.md:79 (Start gates table, \"Branch check\" row) as \"bug => `git checkout -b fix/<description>`\"."
     },
     {
       "content_hash": "11d426eae671ac2827c7f96149a34d54d599a7f4553cd5637a7c8ea94683b3a8",
@@ -1486,7 +1486,7 @@
     {
       "content_hash": "09e1b8ad839cf1ce4cf214a76b705133a99c639f19356c80874b873dfb4449e3",
       "disposition": "removed",
-      "rationale": "P0 skills/dev-flow/SKILL.md:439 (under \"L-4. Per Phase\"). Relocated verbatim by the P5 stage-graph rewrite (plan docs/plans/2026-10-06-dev-flow-stage-graph.md §2.5): the line now lives in skills/dev-flow/SKILL.md, outside the two-file rule inventory."
+      "rationale": "P0 skills/dev-flow/SKILL.md:439 (under \"L-4. Per Phase\"). Restated (reworded, not verbatim) by the P5 stage-graph rewrite (plan docs/plans/2026-10-06-dev-flow-stage-graph.md §2.5): the obligation now lives at skills/dev-flow/SKILL.md:341 as \"**Backlog safety** (before deferring anything): affects the final goal => do NOT defer; goal unreachable without it => do NOT defer; unsure => ask the user\" (the header and the numbered list were folded into one line)."
     },
     {
       "content_hash": "5767cb4eb077c2d4482b8a42dc6dd114a87a164cfecedde8ce35a09e4276ab26",
@@ -1581,7 +1581,7 @@
     {
       "content_hash": "234b38b50622b3c52a1172109fc916fea667125db1004eeb283167fa582882d1",
       "disposition": "removed",
-      "rationale": "P0 skills/dev-flow/SKILL.md:476 (under \"Staging Gate\"). Relocated verbatim by the P5 stage-graph rewrite (plan docs/plans/2026-10-06-dev-flow-stage-graph.md §2.5): the line now lives in skills/dev-flow/SKILL.md, outside the two-file rule inventory."
+      "rationale": "P0 skills/dev-flow/SKILL.md:476 (under \"Staging Gate\"). Restated (reworded, not verbatim) by the P5 stage-graph rewrite (plan docs/plans/2026-10-06-dev-flow-stage-graph.md §2.5): the obligation now lives at skills/dev-flow/SKILL.md:417-418 (### Staging Gate) as \"Deploy per project config (default: build + restart)\", wrapped across two lines after the Trigger sentence."
     },
     {
       "content_hash": "62dfcdb7c9d28a42c68dd4fd213f40a194e46aa938006607c9f92593fbe22302",
@@ -1611,7 +1611,7 @@
     {
       "content_hash": "e5cce84ef9e954df6d6ae4e4b23dcbeac66186e316200234137d056424289823",
       "disposition": "removed",
-      "rationale": "P0 skills/dev-flow/SKILL.md:493 (under \"H Workflow -- Hotfix\"). Relocated verbatim by the P5 stage-graph rewrite (plan docs/plans/2026-10-06-dev-flow-stage-graph.md §2.5): the line now lives in skills/dev-flow/SKILL.md, outside the two-file rule inventory."
+      "rationale": "P0 skills/dev-flow/SKILL.md:493 (under \"H Workflow -- Hotfix\"). Restated (reworded, not verbatim) by the P5 stage-graph rewrite (plan docs/plans/2026-10-06-dev-flow-stage-graph.md §2.5): the obligation now lives at skills/dev-flow/SKILL.md:412 (### Urgent) as \"Production broken => the `hotfix/` branch from `main`\", and the branch command at skills/dev-flow/SKILL.md:79 (Start gates \"Branch check\" row)."
     },
     {
       "content_hash": "62a5533110be901f939c2f2f1ad04824935a519c00aeafa4e0fa8af86a0b85ac",
@@ -1651,7 +1651,7 @@
     {
       "content_hash": "996eb540a14e6fc0bc7b8a84f227688d7845280aad672a74ea7bc4bdeddde54d",
       "disposition": "removed",
-      "rationale": "P0 skills/dev-flow/SKILL.md:502 (under \"H Workflow -- Hotfix\"). Relocated verbatim by the P5 stage-graph rewrite (plan docs/plans/2026-10-06-dev-flow-stage-graph.md §2.5): the line now lives in skills/dev-flow/SKILL.md, outside the two-file rule inventory."
+      "rationale": "P0 skills/dev-flow/SKILL.md:502 (under \"H Workflow -- Hotfix\"). Restated (reworded, not verbatim) by the P5 stage-graph rewrite (plan docs/plans/2026-10-06-dev-flow-stage-graph.md §2.5): the obligation now lives at skills/dev-flow/SKILL.md:413 (### Urgent) as \"Rollback: invoke finish-flow once the rollback is verified stable\"."
     },
     {
       "content_hash": "792a37efc732602807a47db37a7fd26ec4c6107c974bec9f586f8d3696954045",
@@ -1801,7 +1801,7 @@
     {
       "content_hash": "8e4959716f2aa144ae588404dc71e1dbfe146cef3f1be6984d0251af4bc245a8",
       "disposition": "removed",
-      "rationale": "P0 skills/dev-flow/SKILL.md:555 (under \"L-Full Reference (invoked by finish-flow L-5.6)\"). Relocated verbatim by the P5 stage-graph rewrite (plan docs/plans/2026-10-06-dev-flow-stage-graph.md §2.5): the line now lives in skills/finish-flow/SKILL.md, outside the two-file rule inventory."
+      "rationale": "P0 skills/dev-flow/SKILL.md:555 (under \"L-Full Reference (invoked by finish-flow L-5.6)\"). Restated (reworded, not verbatim) by the P5 stage-graph rewrite (plan docs/plans/2026-10-06-dev-flow-stage-graph.md §2.5): the obligation now lives at skills/finish-flow/SKILL.md:123-124 (item 6 \"Triggered BACKLOG pickup\") as \"scoped by `git log --oneline $(cat .claude/session-start-sha 2>/dev/null || echo \"HEAD~10\")..HEAD`\" (the command appears inline in a sentence, not as a standalone line)."
     },
     {
       "content_hash": "3cf00a15142e146ec22677380b60f5de0590029ae97a1654ff5754d4cadb8c07",

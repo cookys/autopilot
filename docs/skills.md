@@ -18,7 +18,7 @@ The catalog is layered by how central a skill is to the daily loop — **core** 
 |-------|-------------|---------------|
 | **dev-flow** | Sizes tasks (XS/S/M/L/XL; `!` marks urgent; bugs enter at `diagnose`), sets session rules for config injection and quality gates, manages project tracking | `superpowers:writing-plans` (planning) |
 | **quality-pipeline** | Unified quality gate: test → scan → completeness → review | `superpowers:verification-before-completion` (partial) |
-| **finish-flow** | Size-aware closing forcing function — TaskCreates the size-keyed `finish` node rows (lite XS-M, full L/XL; urgent adds the post-finish review) so nothing gets silently compressed | — (no equivalent) |
+| **finish-flow** | Size-aware closing forcing function — TaskCreates the size-keyed `finish` node rows (lite XS-M, full L/XL; urgent M/L/XL adds the post-finish review; XS/S urgency is a mark only) so nothing gets silently compressed | — (no equivalent) |
 | **debug** | Evidence-first debugging methodology (tool → log → code) with Three Red Lines | `superpowers:systematic-debugging` (broader hypothesis-driven framing) |
 | **learn** | Auto-records knowledge from failures; knowledge health audit | — (no equivalent) |
 | **next** | Scan all work sources, recommend highest-priority task | — (no equivalent) |

@@ -13,9 +13,12 @@
 // changes: (size, urgent, bug, high_risk, stage, stage_set_at, unit) — stage_set_at rides along because the band shows its
 // age and re-entering the same stage moves it without moving `stage`. A vanished file is rewritten too.
 //
+// Intentional: the rewrite signature is the fact itself, so a unit index/label change (not part of the fact) does not rewrite it.
+//
 // Stale files: when a marker this publisher wrote for disappears (expired / ended / no size any more) its file is removed.
 // Files left by an EARLIER watcher process are NOT swept: the file carries no project_key, so a watcher cannot tell its own
-// from another project's (same stance as <live>/tasks and <live>/attention, which are never swept either).
+// from another project's (same stance as <live>/tasks and <live>/attention, which are never swept either). Intentional: only the owning session reads
+// its own file and the live dir is tmpfs, so a cross-restart orphan is harmless.
 
 const fs = require('fs');
 const path = require('path');

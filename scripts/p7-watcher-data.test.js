@@ -25,7 +25,7 @@ const schemaOf = (n) => JSON.parse(fs.readFileSync(path.join(__dirname, '..', 's
 const REPO_ROOT = path.join(__dirname, '..');
 const NOW = Date.now();
 const iso = (ms) => new Date(ms).toISOString();
-const TODAY = iso(NOW).slice(0, 10);
+const utcDay = () => new Date().toISOString().slice(0, 10); // computed at write time: a run across 00:00 UTC must not flake
 
 function git(cwd, ...a) {
   const r = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', ...a], { cwd, encoding: 'utf8' });
@@ -62,7 +62,7 @@ function mk() {
 }
 
 function writeCosts(ctx, rows) {
-  fs.writeFileSync(ctx.env.AUTOPILOT_COSTS_FILE, rows.map((r) => JSON.stringify({ ts: `${TODAY}T01:00:00.000Z`, session: 's1', ...r })).join('\n') + '\n');
+  fs.writeFileSync(ctx.env.AUTOPILOT_COSTS_FILE, rows.map((r) => JSON.stringify({ ts: `${utcDay()}T01:00:00.000Z`, session: 's1', ...r })).join('\n') + '\n');
 }
 function writeConfig(ctx, cf) {
   fs.writeFileSync(path.join(ctx.env.HOME, '.autopilot', 'config.json'), JSON.stringify({ cost_fuse: cf }));
@@ -123,6 +123,55 @@ test('D1 cost-fuse hook and the watcher report the same number for the same fixt
   } finally { ctx.cleanup(); }
 });
 
+test('D1 incremental: an appended row is picked up; a shrunk or rotated file is re-read in full', () => {
+  const ctx = mk();
+  try {
+    writeConfig(ctx, { daily_usd_brain: 80 });
+    writeCosts(ctx, [{ model: 'claude-fable-5-1', cost_usd: 10 }]);
+    const w = ctx.watcher();
+    ctx.tick(w);
+    assert.equal(ctx.envelope().host_today_brain_usd, 10);
+    // append (the reader must count only the new row; a double-count would give 25)
+    fs.appendFileSync(ctx.env.AUTOPILOT_COSTS_FILE, `${JSON.stringify({ ts: `${utcDay()}T02:00:00.000Z`, session: 's1', model: 'claude-opus-5-5', cost_usd: 5 })}\n`);
+    ctx.now += 15000;
+    ctx.tick(w);
+    assert.equal(ctx.envelope().host_today_brain_usd, 15);
+    // a partial last line is not parsed until it completes
+    fs.appendFileSync(ctx.env.AUTOPILOT_COSTS_FILE, `{"ts":"${utcDay()}T03:00:00.000Z","session":"s1","model":"claude-fable-5-1",`);
+    ctx.now += 15000;
+    ctx.tick(w);
+    assert.equal(ctx.envelope().host_today_brain_usd, 15);
+    fs.appendFileSync(ctx.env.AUTOPILOT_COSTS_FILE, '"cost_usd":1}\n');
+    ctx.now += 15000;
+    ctx.tick(w);
+    assert.equal(ctx.envelope().host_today_brain_usd, 16);
+    // shrink: the file is replaced by a shorter one -> full re-read
+    writeCosts(ctx, [{ model: 'claude-fable-5-1', cost_usd: 2 }]);
+    ctx.now += 15000;
+    ctx.tick(w);
+    assert.equal(ctx.envelope().host_today_brain_usd, 2);
+    // rotation to a LONGER file (size alone cannot tell): the inode changes -> full re-read
+    const rotated = `${ctx.env.AUTOPILOT_COSTS_FILE}.new`;
+    fs.writeFileSync(rotated, [3, 4, 5].map((c) => JSON.stringify({ ts: `${utcDay()}T01:00:00.000Z`, session: 's9', model: 'claude-fable-5-1', cost_usd: c })).join('\n') + '\n');
+    fs.renameSync(rotated, ctx.env.AUTOPILOT_COSTS_FILE);
+    ctx.now += 15000;
+    ctx.tick(w);
+    assert.equal(ctx.envelope().host_today_brain_usd, 12);
+  } finally { ctx.cleanup(); }
+});
+
+test('D1 an existing but unreadable costs file publishes null, never 0', { skip: typeof process.getuid === 'function' && process.getuid() === 0 }, () => {
+  const ctx = mk();
+  try {
+    writeCosts(ctx, [{ model: 'claude-fable-5-1', cost_usd: 10 }]);
+    fs.chmodSync(ctx.env.AUTOPILOT_COSTS_FILE, 0o000);
+    ctx.tick(ctx.watcher());
+    assert.equal(ctx.envelope().host_today_brain_usd, null);
+    assert.equal(ctx.envelope().brain_cap_usd, 150);
+    fs.chmodSync(ctx.env.AUTOPILOT_COSTS_FILE, 0o600);
+  } finally { ctx.cleanup(); }
+});
+
 // ---- D2 ----------------------------------------------------------------------------------------------------------------
 test('D2 ladder = latest ladder row under the repo+root filter; telemetry stays out of rows/count', () => {
   const scope = { project_key: 'k', repo_identity: 'git-common-dir:/r', root_run_id: null };
@@ -135,6 +184,9 @@ test('D2 ladder = latest ladder row under the repo+root filter; telemetry stays 
     row({ kind: 'ladder', rung: 'U5', ts: '2026-10-09T09:00:00.000Z', repo_identity: 'git-common-dir:/other' }), // foreign repo
     row({ kind: 'ladder', rung: 'U4', ts: '2026-10-09T08:00:00.000Z', root_run_id: 'root-x' }), // other root
     row({ kind: 'ladder', rung: 'U9', ts: '2026-10-09T10:00:00.000Z' }), // invalid rung ignored
+    row({ kind: 'ladder', rung: 'U0' }), // no ts: ignored even though it is last in file order
+    row({ kind: 'ladder', rung: 'U1', ts: 'not-a-date' }), // invalid ts: ignored
+    row({ kind: 'ladder', rung: 'U2', ts: '2026-10-09' }), // date without time: ignored
   ] }];
   const s = buildDecisionsSidecar({ scope, ledgers, runs: [], wired: [] });
   assert.deepEqual(s.ladder, { rung: 'U3', at: '2026-10-09T04:00:00.000Z' });
@@ -143,6 +195,10 @@ test('D2 ladder = latest ladder row under the repo+root filter; telemetry stays 
   const rooted = buildDecisionsSidecar({ scope: { ...scope, root_run_id: 'root-x' }, ledgers, runs: [], wired: [] });
   assert.deepEqual(rooted.ladder, { rung: 'U4', at: '2026-10-09T08:00:00.000Z' });
   assert.equal(buildDecisionsSidecar({ scope, ledgers: [{ source: 'ledger_default', rows: [] }], runs: [], wired: [] }).ladder, null);
+  const onlyBad = [{ source: 'ledger_default', rows: [row({ kind: 'ladder', rung: 'U2' }), row({ kind: 'ladder', rung: 'U3', ts: 'garbage' })] }];
+  assert.equal(buildDecisionsSidecar({ scope, ledgers: onlyBad, runs: [], wired: [] }).ladder, null, 'rows with a missing / invalid ts never produce a ladder');
+  const offset = [{ source: 'ledger_default', rows: [row({ kind: 'ladder', rung: 'U4', ts: '2026-10-09T12:00:00+08:00' })] }];
+  assert.deepEqual(buildDecisionsSidecar({ scope, ledgers: offset, runs: [], wired: [] }).ladder, { rung: 'U4', at: '2026-10-09T04:00:00.000Z' }, 'at is normalised to a UTC ISO string');
 });
 
 test('D2 the watcher publishes ladder in <project>.decisions.json', () => {
@@ -190,6 +246,7 @@ test('D3 residue: one clean-integrated + one dirty worktree -> reapable_worktree
     assert.equal(fact.project_key, ctx.scope.project_key);
     assert.equal(fact.reapable_worktrees, 1);
     assert.deepEqual(fact.by_class, { 'clean-integrated': 1, dirty: 1 });
+    assert.equal(validateJsonSchema(schemaOf('residue.schema.json'), fact).valid, true, 'residue validates against residue.schema.json');
     assert.equal(fact.source, 'repo-residue-sweep scan');
     // throttle: still inside 60 s of the first start -> no spawn, file untouched
     const mtime = fs.statSync(pub.file).mtimeMs;
@@ -239,6 +296,20 @@ test('D3 residue: a failing scan keeps the previous file and logs one line', asy
   } finally { ctx.cleanup(); }
 });
 
+test('D3 residue: if the main worktree cannot be resolved the publish is skipped (old file kept, one log line)', async () => {
+  const ctx = residueFixture();
+  try {
+    const { pub } = publisherOf(ctx);
+    assert.equal(await pub.publish({ nowMs: ctx.now }), true);
+    const before = fs.readFileSync(pub.file, 'utf8');
+    const bad = publisherOf(ctx, { repo: path.join(ctx.base, 'not-a-repo') });
+    assert.equal(await bad.pub.publish({ nowMs: ctx.now + 120000 }), false);
+    assert.equal(fs.readFileSync(pub.file, 'utf8'), before);
+    assert.equal(bad.logs.length, 1);
+    assert.match(bad.logs[0], /cannot resolve the main worktree/);
+  } finally { ctx.cleanup(); }
+});
+
 test('D3 residue: the watcher tick spawns the scan off the tick and publishes the file', async () => {
   const ctx = residueFixture();
   try {
@@ -279,12 +350,14 @@ test('D4 stage walk file equals `stage-graph.js nodes` for the marker; unchanged
     const a = JSON.parse(fs.readFileSync(stageFile(ctx, 'sid-a'), 'utf8'));
     const want = cliNodes(['--size', 'M', '--bug', '--urgent', '--units', '3']);
     assert.equal(a.schema, 'autopilot.stage-walk/1');
+    assert.equal(validateJsonSchema(schemaOf('stage-walk.schema.json'), a).valid, true, 'stage walk validates against stage-walk.schema.json');
     for (const k of ['nodes', 'walk', 'entry', 'terminal', 'unit_kind']) assert.deepEqual(a[k], want[k], k);
     assert.deepEqual({ sid: a.sid, size: a.size, urgent: a.urgent, bug: a.bug, high_risk: a.high_risk, units: a.units, current: a.current }, { sid: 'sid-a', size: 'M', urgent: true, bug: true, high_risk: false, units: 3, current: 'implement' });
     assert.equal(a.stage_set_at, iso(ctx.now - 30000));
     assert.equal(a.at, iso(ctx.now));
     const b = JSON.parse(fs.readFileSync(stageFile(ctx, 'sid-b'), 'utf8'));
     assert.equal(b.units, null);
+    assert.equal(validateJsonSchema(schemaOf('stage-walk.schema.json'), b).valid, true, 'unit-less walk validates too (units null)');
     assert.deepEqual(b.walk, cliNodes(['--size', 'S']).walk);
     assert.equal(fs.existsSync(stageFile(ctx, 'sid-nosize')), false, 'a marker without size has no walk');
     // unchanged marker -> no rewrite (at stays)

@@ -12,7 +12,8 @@
 // The scan (scripts/repo-residue-sweep.js scan --json) can take seconds on a repo with many worktrees, so it is spawned
 // ASYNCHRONOUSLY, never on the tick's critical path, at most once per THROTTLE_S per publisher (= per project), and never
 // two at once. On any failure (spawn error, non-zero exit, unparseable output, timeout) the previous file is left in place
-// and one line is logged; the next attempt waits the throttle again.
+// and one line is logged; the next attempt waits the throttle again. If the main worktree cannot be resolved the publish is skipped the same way
+// (scanning the supplied checkout instead would silently change what is counted).
 
 const fs = require('fs');
 const path = require('path');
@@ -69,9 +70,9 @@ function capture(bin, args, timeoutMs) {
 // from a linked worktree it would count the main checkout as `clean-integrated` and inflate the reapable count by one.
 async function mainWorktreeOf(repo) {
   const r = await capture('git', ['-C', repo, 'worktree', 'list', '--porcelain'], 10000);
-  if (r.error || r.code !== 0) return repo;
+  if (r.error || r.code !== 0) return null;
   const first = String(r.out).split('\n').find((l) => l.startsWith('worktree '));
-  return first ? first.slice('worktree '.length) : repo;
+  return first ? first.slice('worktree '.length) : null;
 }
 
 function createResiduePublisher({ runsDir, key, repo, writeAtomic, log = () => {}, now = Date.now, sweep = SWEEP, nodeBin = process.execPath, throttleS = THROTTLE_S }) {
@@ -96,6 +97,7 @@ function createResiduePublisher({ runsDir, key, repo, writeAtomic, log = () => {
     inflight = (async () => {
       try {
         const main = await mainWorktreeOf(repo);
+        if (main === null) { log('residue: cannot resolve the main worktree (git worktree list failed); keeping the previous file'); return false; }
         return finish(await capture(nodeBin, [sweep, 'scan', '--repo', main, '--json'], SCAN_TIMEOUT_MS));
       } catch (e) { log(`residue publish failed: ${e.message}`); return false; } finally { inflight = null; }
     })();

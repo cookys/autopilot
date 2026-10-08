@@ -9,6 +9,9 @@
 //                                        env overrides AUTOPILOT_COST_FUSE_MODE / AUTOPILOT_COST_FUSE_DAILY_USD)
 //   costsFileOf({ env, home })        -> costs.jsonl path (AUTOPILOT_COSTS_FILE else <home>/.claude/metrics/costs.jsonl)
 //   sumTodayTierSpend(file, tiersSet, onlySession?) -> USD summed over today's (UTC) rows whose model tier is in tiersSet
+//   createTierSpendReader(file)       -> incremental per-UTC-day, per-tier aggregate of the same rows (watcher; reads only appended
+//                                        bytes, resets on shrink / inode change); .read() -> { ok, todaySpend(tiersSet) }; ok=false when the
+//                                        file exists but cannot be read (the watcher publishes null; the fuse stays fail-soft on 0)
 //   safe(s)                           -> session-id sanitiser shared with cost-fuse state files
 //
 // Fail-soft by construction: config errors fall back to defaults, an unreadable costs file sums to 0. Node >= 20.10.
@@ -112,4 +115,61 @@ function sumTodayTierSpend(costsFile, tiersSet, onlySession) {
   return total;
 }
 
-module.exports = { DEFAULT_DAILY_USD_BRAIN, loadCostFuseConfig, costsFileOf, safe, sumTodayTierSpend };
+// Incremental twin of sumTodayTierSpend for long-lived readers. Same row rules (ts day, model present, tierOf, finite cost > 0),
+// aggregated per day and tier so a tier-set change needs no re-read. Only bytes past the last complete line are parsed.
+// A shrunk file or a changed inode (rotation) triggers a full re-read. read() never throws.
+function createTierSpendReader(file) {
+  const st = { offset: 0, ino: null, byDay: new Map() }; // day -> Map(tier -> usd)
+  function reset() { st.offset = 0; st.byDay = new Map(); }
+  function ingest(text) {
+    for (const line of text.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        const row = JSON.parse(trimmed);
+        if (!row || typeof row !== 'object' || typeof row.ts !== 'string' || !row.model) continue;
+        const cost = Number(row.cost_usd);
+        if (!Number.isFinite(cost) || cost <= 0) continue;
+        const day = row.ts.slice(0, 10);
+        const tier = tierOf(row.model);
+        const tiers = st.byDay.get(day) || new Map();
+        tiers.set(tier, (tiers.get(tier) || 0) + cost);
+        st.byDay.set(day, tiers);
+      } catch {
+        // ignore malformed line
+      }
+    }
+  }
+  function read() {
+    let stat;
+    try { stat = fs.statSync(file); } catch { return { ok: false, todaySpend: () => null }; }
+    if (st.ino !== null && (stat.ino !== st.ino || stat.size < st.offset)) reset();
+    st.ino = stat.ino;
+    if (stat.size > st.offset) {
+      try {
+        const fd = fs.openSync(file, 'r');
+        try {
+          const buf = Buffer.alloc(stat.size - st.offset);
+          const n = fs.readSync(fd, buf, 0, buf.length, st.offset);
+          const end = buf.subarray(0, n).lastIndexOf(10);
+          if (end !== -1) {
+            ingest(buf.subarray(0, end + 1).toString('utf8'));
+            st.offset += end + 1;
+          }
+        } finally { fs.closeSync(fd); }
+      } catch { return { ok: false, todaySpend: () => null }; }
+    }
+    return {
+      ok: true,
+      todaySpend(tiersSet) {
+        const tiers = st.byDay.get(new Date().toISOString().slice(0, 10));
+        let total = 0;
+        if (tiers) for (const [tier, usd] of tiers) if (tiersSet.has(tier)) total += usd;
+        return total;
+      },
+    };
+  }
+  return { read };
+}
+
+module.exports = { DEFAULT_DAILY_USD_BRAIN, loadCostFuseConfig, costsFileOf, safe, sumTodayTierSpend, createTierSpendReader };

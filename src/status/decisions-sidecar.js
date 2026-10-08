@@ -13,7 +13,7 @@
 // root (project-wide scope = root null = rows with no root; same convention as the per-root envelopes and the `unbound` job).
 // Counted kinds: decision, dispatch, pick, refreeze (proxy decisions). veto/note/hypothesis/unknown/ladder are telemetry.
 // P7 D2: the one telemetry fact the band shows is the escalation rung — `ladder: { rung: "U0".."U5", at } | null`, the latest
-// kind:"ladder" row (by ts, later file order wins a tie) under the same repo+root filter. Ladder rows stay out of rows/count.
+// kind:"ladder" row (by ts, later file order wins a tie; a row whose ts is missing or not an ISO date-time is ignored; `at` is the normalised ISO string) under the same repo+root filter. Ladder rows stay out of rows/count.
 //
 // Gap count (W2g b): runs (dispatch manifests) of this scope whose run_id has NO ledger row of kind === "dispatch" ->
 // `undocumented_dispatches`. Same rule as scripts/check-blueprint-conformance.js audit `unlogged_decision`, evaluated
@@ -31,6 +31,7 @@ const COUNTED_KINDS = new Set(['decision', 'dispatch', 'pick', 'refreeze']);
 const IRREVERSIBLE = new Set(['one-way', 'irreversible']);
 const PLUGIN_ROOT = path.join(__dirname, '..', '..');
 const RUNG = /^U[0-5]$/;
+const ISO_TS = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
 const SAFE_ROOT = /^[A-Za-z0-9._-]+$/;
 
 function commonDirOf(identity) {
@@ -110,10 +111,9 @@ function buildDecisionsSidecar({ scope, ledgers, runs, wired = writersWired() })
       if ((row.root_run_id || null) !== root) continue;
       if (row.kind === 'dispatch' && typeof row.run_id === 'string') dispatchLogged.add(row.run_id);
       if (COUNTED_KINDS.has(row.kind)) mine.push(toSidecarRow(row, source));
-      if (row.kind === 'ladder' && typeof row.rung === 'string' && RUNG.test(row.rung)) {
+      if (row.kind === 'ladder' && typeof row.rung === 'string' && RUNG.test(row.rung) && typeof row.ts === 'string' && ISO_TS.test(row.ts)) {
         const ms = Date.parse(row.ts);
-        const at = Number.isFinite(ms) ? ms : 0;
-        if (at >= ladderMs) { ladderMs = at; ladder = { rung: row.rung, at: typeof row.ts === 'string' ? row.ts : null }; }
+        if (Number.isFinite(ms) && ms >= ladderMs) { ladderMs = ms; ladder = { rung: row.rung, at: new Date(ms).toISOString() }; }
       }
     }
   }

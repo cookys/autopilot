@@ -48,7 +48,7 @@
           "required": ["rung", "at"],
           "properties": {
             "rung": { "enum": ["U0", "U1", "U2", "U3", "U4", "U5"] },
-            "at": { "oneOf": [{ "type": "string" }, { "type": "null" }] }
+            "at": { "type": "string", "format": "date-time" }
           }
         }
       ]

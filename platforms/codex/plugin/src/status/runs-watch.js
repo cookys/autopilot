@@ -52,7 +52,7 @@ const { createReviewPublisher } = require('./review-input');
 const { createResiduePublisher } = require('./residue');
 const { createStageWalkPublisher } = require('./stage-walk');
 const { createCodeFingerprint, pluginIdentity } = require('./code-fingerprint');
-const { loadCostFuseConfig, costsFileOf, sumTodayTierSpend } = require('../../scripts/lib/brain-spend');
+const { loadCostFuseConfig, costsFileOf, createTierSpendReader } = require('../../scripts/lib/brain-spend');
 
 const SCHEMA = 'autopilot.runs-live/1';
 const VALID_FOR_S = 180;
@@ -300,24 +300,20 @@ function createCostReader(env) {
 }
 
 // --- D1 (stage-graph P7): host-today brain-tier spend vs the cost-fuse cap ---------------------------------------------
-// The SAME computation hooks/cost-fuse.js runs (scripts/lib/brain-spend.js: config resolution incl. env override, tier
-// filter, UTC-day sum). costs.jsonl is only re-summed when its (size, mtime) or the UTC day changed.
-// -> { host_today_brain_usd: cents-rounded number | null (costs file unreadable), brain_cap_usd: number }
+// The SAME rules hooks/cost-fuse.js runs (scripts/lib/brain-spend.js: config resolution incl. env override, tier
+// classification, UTC-day sum), but incremental: createTierSpendReader parses only the bytes appended since the last tick.
+// -> { host_today_brain_usd: cents-rounded number | null (costs file missing or unreadable), brain_cap_usd: number }
 function createBrainSpendReader(env) {
   const home = env.HOME || os.homedir();
-  const cache = { sig: null, value: null };
-  function read(nowMs) {
+  let reader = null;
+  let readerFile = null;
+  function read() {
     const cfg = loadCostFuseConfig({ env, home });
     const file = costsFileOf({ env, home });
-    let sig;
-    try { const st = fs.statSync(file); sig = `${st.size}:${st.mtimeMs}:${new Date().toISOString().slice(0, 10)}:${cfg.tiers.join(',')}`; } catch (_error) {
-      return { host_today_brain_usd: null, brain_cap_usd: cfg.daily_usd_brain };
-    }
-    if (cache.sig !== sig) {
-      cache.sig = sig;
-      cache.value = Math.round(sumTodayTierSpend(file, new Set(cfg.tiers)) * 100) / 100;
-    }
-    return { host_today_brain_usd: cache.value, brain_cap_usd: cfg.daily_usd_brain };
+    if (!reader || readerFile !== file) { reader = createTierSpendReader(file); readerFile = file; }
+    const r = reader.read();
+    const usd = r.ok ? r.todaySpend(new Set(cfg.tiers)) : null;
+    return { host_today_brain_usd: usd === null ? null : Math.round(usd * 100) / 100, brain_cap_usd: cfg.daily_usd_brain };
   }
   return { read };
 }
@@ -384,7 +380,7 @@ function createWatcher({
   const stageWalkSidecar = createStageWalkPublisher({ live, writeAtomic, log: (m) => log(m) }); // P7 D4: <live>/stage/<sid>.json
   const state = {
     lastSignature: null, lastPublishMs: null, lastRuns: null, lastObservedAt: null, lastPaths: null,
-    roots: new Set(), lastCounts: new Map(), lastCost: { sessions: {}, host_today_usd: null, host_today_as_of: null, host_today_brain_usd: null, brain_cap_usd: brainSpend.read(now()).brain_cap_usd },
+    roots: new Set(), lastCounts: new Map(), lastCost: { sessions: {}, host_today_usd: null, host_today_as_of: null, host_today_brain_usd: null, brain_cap_usd: brainSpend.read().brain_cap_usd },
     idleSince: null,
     rootActiveAt: new Map(), droppedRoots: new Set(), // root retention (ROOT_RETENTION_S)
     // --render: last-seen signature per root, roots awaiting a publish, the debounce deadline, cached task receipts
@@ -680,7 +676,7 @@ function createWatcher({
     }
     const allMarkers = unexpiredMarkers(env, key, nowMs);
     const markers = allMarkers.filter(isOrchestratorMarker);
-    const cost = { ...costs.summary(nowMs, markers.map((m) => m.session_id).filter(Boolean)), ...brainSpend.read(nowMs) };
+    const cost = { ...costs.summary(nowMs, markers.map((m) => m.session_id).filter(Boolean)), ...brainSpend.read() };
     const candidates = new Set(state.roots);
     for (const r of rows) if (r.root_run_id) candidates.add(r.root_run_id);
     for (const m of allMarkers) {

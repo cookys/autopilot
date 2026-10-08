@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # semver.test.sh — shared fixture matrix (fixtures/semver/matrix.json) exercised
 # against every consumer of scripts/lib/semver.js: the lib itself, sync-version.js,
-# preflight-release.sh, check-optin-changelog.js and hooks/session-start.js.
+# preflight-release.sh, check-optin-changelog.js, hooks/session-start.js and
+# scripts/preflight-portability.sh (check_intent_capture_with_env).
 # Everything runs in temp sandboxes; the real plugin.json is never touched.
 
 . "$(dirname "$0")/lib.sh"
@@ -189,6 +190,28 @@ for v in "${BAD[@]}"; do
   [ -n "$v" ] || continue
   run_ss "$v" "1.0.0-alpha.1"
   assert_not_contains "$SS_OUT" "[Autopilot updated:" "session-start: malformed canonical '$v' yields no notice"
+done
+
+# ── 6. preflight-portability.sh: canonical-version check uses the shared grammar ──
+# The check function is extracted and run against a sandbox REPO whose plugin.json carries
+# each matrix version, so the real script's other checks (and ~/.autopilot) are never touched.
+PP="$TEST_TMP/pp"
+mkdir -p "$PP/scripts/lib" "$PP/.claude-plugin"
+cp "$SEMVER" "$PP/scripts/lib/"
+PP_FN=$(sed -n '/^check_intent_capture_with_env()/,/^}/p' "$REPO_ROOT/scripts/preflight-portability.sh")
+assert_neq "$PP_FN" "" "preflight-portability: check_intent_capture_with_env extracted"
+pp_check() { # pp_check <version> → exit status of the real check function
+  printf '{"name":"autopilot","version":"%s"}\n' "$1" > "$PP/.claude-plugin/plugin.json"
+  ( REPO="$PP"; eval "$PP_FN"; check_intent_capture_with_env ) >/dev/null 2>&1
+}
+for v in "${ASC[@]}"; do
+  pp_check "$v"
+  assert_exit_code "$?" 0 "preflight-portability: accepts canonical '$v'"
+done
+for v in "${BAD[@]}"; do
+  [ -n "$v" ] || continue
+  pp_check "$v"
+  assert_neq "$?" "0" "preflight-portability: rejects malformed canonical '$v'"
 done
 
 finalize_test

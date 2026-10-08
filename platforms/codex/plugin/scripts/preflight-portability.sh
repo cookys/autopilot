@@ -65,7 +65,8 @@ check_intent_capture_with_env() {
       console.log(pkg.version);
     } catch (e) { console.error('throw:', e.message); process.exit(1); }
   " 2>&1)
-  [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+  # One parser (scripts/lib/semver.js): accepts N.N.N and N.N.N-(alpha|beta|rc).N.
+  node "$REPO/scripts/lib/semver.js" valid "$v" >/dev/null 2>&1
 }
 
 # ─── 2. intent-capture without env var returns unknown (no throw) ───

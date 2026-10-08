@@ -81,6 +81,16 @@ Release merges happen in the dedicated worktree `.claude/worktrees/release-3.0.0
   - The v4 text was confirmed present in the frozen pack, so the agent saw the rule and did not apply it to a dependency it considers general knowledge.
   - Open design question for the owner: should a well-known external dependency with zero repo hits force `research`? The v4 hand flagged this as well.
 
+- **Verdict, change arm v5: SHIP.**
+  - Packs: `*-sg-change-v5`. Guidance: `259e5571` (the `--terms` rule now excludes well-known dependencies, per owner ruling R-K1).
+  - Runner: every cell ran on 2.1.292, pinned. Run 1 hit the weekly quota, so 55 cells came back infra_fail. They were resumed in the same results file after the reset. Each (task, arm, rep) has exactly one usable row.
+  - **Change arm: 10/12.**
+    - Every task passes except l-research-a and l-research-b, both 0/3. These two are structural, as predicted.
+    - l-feature went from 0/3 to 3/3.
+  - **Red arm: 3/12.**
+  - **Generic: 5 markers checked, none regressed.**
+  - Next: `check-guidance-eval` must accept the v5 suffix arm (BACKLOG e) before the cut gate can be run.
+
 ## Open items for the alpha.1 cut
 
 1. **Total QC of the protected diff.** This is owed since the no-verify push. It also covers Train B. **Points for the reviewer:**

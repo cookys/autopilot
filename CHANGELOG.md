@@ -1,10 +1,57 @@
 # Changelog
 
-## Unreleased — dev-mode 改註冊為 directory marketplace（PATCH 類，版號待 release 時指派）
+## v3.0.0-alpha.1 — dev-flow 改成一張具名 stage graph：T-shirt size、session marker 記錄位置、U0–U5 ladder（MAJOR pre-release，供 owner 測試）
 
-- **問題**：Claude Code 的 full plugin loader（`/reload-plugins`、`/login`、部分啟動）對 string-source plugin 忽略 `installed_plugins.json` 的 `installPath`；marketplace 非 `directory`/`file` 來源時，會把 marketplace clone 複製到 `cache/autopilot/autopilot/<version>/` 並載入該份，session 因而靜默切到數月前的 2.36.36 副本。
-- **改動**：`scripts/dev-setup.sh` 設定時以 `claude plugin marketplace add <repo>` 註冊 directory marketplace（已是 directory 且路徑相符則略過；`DEV_SETUP_CLAUDE_BIN` 可覆寫 CLI 供測試）。`--check` doctor 以「marketplace 為 directory 且 path == repo」取代原本的「marketplace clone 版本」檢查，否則 WARN 並附修復指令；cache 底下出現 semver 命名目錄時 WARN（不刪除，列出 `.in_use` pid 與存活狀態）。`scripts/dev-update.sh` 不再 pull marketplace clone，改為轉印 doctor 的 marketplace／versioned-cache WARN。`docs/installation.md`、`AGENTS.md`、`docs/scripts-inventory.md` 同步。終端使用者的 github marketplace 安裝說明不變。
-- **驗證**：`hooks/tests/dev-setup.test.sh` 新增 doctor fixture（暫存 HOME；directory → OK、github／缺項 → WARN、semver 目錄 → WARN 且不刪除）。
+這是 3.0.0 的第一個 pre-release，給 owner 當最重度使用者測試，不是 stable。它同時帶入 mods P1W（band、watcher、hook 寫入端）與前述 dev-mode 修正（見最後一組）。2.37.0 不會發。
+
+### 破壞性變更與遷移
+
+- **size enum**：`XS/S/M/L/XL` 取代 `S/L/H/Fix`。bug 是 entry node，用 `session-mode.js set --bug`，不是 size；hotfix 是 size 後面接 urgent 後綴 `!`（別名 `急`，如 `S!`），marker 記 `urgent: true`。遷移：改用新 size。
+- **舊 stage id 移除**（`L-1…L-5`、`H-1…H-9`、`S-Lite`、`F.1…F.5`、`S-scope-gate`）：graph 正本是 `references/stage-graph.json`，用 `scripts/stage-graph.js nodes|next|limits|validate` 查詢、用 `scripts/stage-advance.js --to <node>` 記錄位置；diff 超過 size 上限時 exit 4 並回報 `bump_to`。
+- **marker 的 `phase` 欄位移除**，改為 `stage`／`stage_set_at`／`unit`／`review_families`／`high_risk`。`session-mode.js set --phase` 現在 exit 2 並指向 `stage-advance.js`，沒有別名。讀 `phase` 的外部腳本需改讀 `stage`。
+- **unknown-escalation ladder 改號**：owner rung 由 U4 變 U5；U3 是 panel（`dispatch-discuss.js`／think-tank／debugger PUA），U4 是 experiment（throwaway worktree 的 spike），預算 U1 2、U2 1、U3 1、U4 1。`unknown_ladder_v3` 旋鈕刪除（新 ladder 永遠啟用）。讀 U4 當 owner 的外部文字需改成 U5。
+- **BACKLOG `**Effort**:`**：`Fix` 與 `H` 現被 `check-backlog-entries.js` 拒絕，`XL` 與 `!`／`急` 後綴合法。遷移：`node scripts/migrate-backlog-entries.js --backlog <file> --rename-effort`（預設 dry-run，加 `--apply` 才寫；`Fix→S`、`H→S!`，可重複執行）。`next-pick.js` 的 ask-first 條件改為 `L|XL` 或 urgent。
+- **consumer 設定檔**：`scaffold-config.js` 沒有 update 模式，既有的 `.claude/dev-flow-config.md`、`.claude/finish-flow-config.md` 等可能留有舊 id。執行 `node scripts/check-stage-vocab.js --repo <consumer>` 列出每一條過時行與建議替換，手動改；加 `--gate` 可讓它在有殘留時 exit 1。
+- **skill 路由**：dev-flow、finish-flow、team 的 `description:` 改用新 size 詞彙，原本靠 `S/L/H/Fix` 觸發的自訂路由需更新。
+
+### Rollback
+
+釘回 2.36.x：把 plugin 釘在 `v2.36.116` 的 release commit `7fc8efc5`（repo 沒有 2.36 tag；dev-mode 為 `git checkout 7fc8efc5`，marketplace 安裝則釘該 ref）。留下的東西：
+- BACKLOG 的 Effort 遷移是單向文字改寫，`migrate-backlog-entries.js` 沒有 reverse 模式；回 2.x 後 `S!`、`XL` 會被舊 `check-backlog-entries.js` 當成不合法，需手動改回 `Fix`／`H`／`L`（`git revert` 該遷移 commit 最直接）。
+- 3.x session 留下的 marker 只是帶 TTL 的 per-session telemetry，2.x 讀者看到的是沒有 phase，不會出錯。
+- consumer 手動改過的 `.claude/*-config.md` 不會自動還原。
+
+### 改動（依計畫 phase）
+
+- **P-R**：`scripts/lib/semver.js` 支援 `X.Y.Z-(alpha|beta|rc).N`，sync-version、preflight-release、check-optin-changelog、session-start 皆走它；`claude plugin` 實測可載入 pre-release 版號。
+- **P0**：eval 預註冊（`skill-onoff-stage-graph`，84 格 `expected.json` fixture，planted-red 對照）。
+- **P1**：`references/stage-graph.json`、`schemas/stage-graph.schema.json`、`scripts/stage-graph.js`。
+- **P2a／P2b**：marker 新欄位與 `scripts/stage-advance.js`（轉移合法性、unit 規則、E1 size bump、`high_risk` 取樣）；移除 `phase`，watcher、review 頁、band 讀取端改讀 stage 欄位。
+- **P3**：plan-review、hetero code-review、engine implement-review 三條 rail 進入時寫 stage，完成後只記錄實際完成的 review 家族；寫入失敗 fail-open，只印一行 stderr。
+- **P4a／P4b**：U3 panel、U4 experiment 與預算；owner rung 改號 U5；`check-stage-vocab.js` 掃描舊詞彙並接進 `check-canonical-invariants.sh`。
+- **P5 guidance**：dev-flow 736→530 行（含後續修正，初版 489）、finish-flow 184 行、新 `skills/dev-flow/references/stage-graph.md`；ceo-agent、l4–l6、debug、think-tank、team、quality-pipeline（改為 qc-gate 節點）、next、project-lifecycle、plan-template 與 config 模板同步改用新詞彙；profiles 重釘（364 條舊規則記為 `removed` disposition）。已知刪減：`S-scope-gate` 指標改由 E1 bump 取代、H-9 六個 subtask 的 TaskCreate 移交 finish-flow。
+- **P6**：BACKLOG effort 改名與 `docs/BACKLOG.md` 遷移（5 筆 `Fix`→`S`）。
+- **A1 P7a**：advisory bridge——`cost-tracker`、`version-drift-check`、`context-budget` T1、`suggest-compact` 的提示改寫入 `<live>/advisories/<sid>.jsonl`，不再注入 model context（逐 hook 旋鈕可恢復注入）。
+- **A1 P7b**：plugin load-source chip（`dev` 或 versioned cache，落後上游幾個 commit）。
+- **A1 P7c**：QC chip——watcher 以與 `.githooks/pre-push` 相同的規則發布 `QC ✓`／`QC owed`。
+- **A1 P7d**：review 分頁資料——plan-review state 與 hetero-review-loop round summary。
+- **P7 本體（單行多 widget band 與 ⓘ 面板）不在 alpha.1**，排在 alpha.2；alpha.1 只有 P7a–d 的資料與 `mods/live` 現有顯示。
+- **mods P1c／P1W**（v2.36.116 之後未入 CHANGELOG 的 182 個 commit，各 wave 的 per-fix hetero review 記錄於 `docs/plans/evidence/2026-10-04-mods-p1c/accepted-heads-p1w.txt`）：`mods/live` band／pane 與 toast；watcher 自動啟動、`session-tasks/1` 與 `attention/1` hook 寫入端；session 共用 job root、plain marker 成為每個 session 的紀錄（`level: null`）；campaign root 綁定；代決策 ledger 寫入端；task-status 輸入檔產生者；/l4–/l6 真機 gate 修補（foreman 活性、TaskStop、campaign scope、zh-TW phase 標籤）。
+- **dev-mode**（原 Unreleased，併入本版）：Claude Code 的 full plugin loader（`/reload-plugins`、`/login`）對 string-source plugin 會忽略 `installed_plugins.json` 的 `installPath`，在 marketplace 非 directory 來源時載入 `cache/autopilot/autopilot/<version>/` 的舊副本。`scripts/dev-setup.sh` 現以 `claude plugin marketplace add <repo>` 註冊 directory marketplace（`DEV_SETUP_CLAUDE_BIN` 可覆寫供測試）；`--check` 改檢查「marketplace 為 directory 且 path == repo」，cache 出現 semver 目錄時 WARN 不刪除；`dev-update.sh` 不再 pull marketplace clone。終端使用者的 github marketplace 安裝不變。`hooks/tests/dev-setup.test.sh` 新增 doctor fixture。
+
+### 驗證
+
+- **guidance eval**（frozen rule：change ≥ 10/12、red ≤ 4/12、generic 無 regression）：v1–v4 皆 NOT-SHIP 並如實保留；v5（R-K1：熟知依賴不算 unknown）SHIP，change 10/12、red 3/12、generic clean，114 格於 Claude Code 2.1.292；v6 arm 於 total QC 修補（G1–G5）後凍結重跑：SHIP，change 10/12、red 3/12、generic 4 項無 regression（`results/stage-graph.v6.jsonl`，114 格，2.1.292）；cut gate `check-guidance-eval.js` 43/43 與 v6 pack byte-equal。
+- **total QC**：範圍 `8a10980f..3aae28a4`，8 個 packet × 3 席（opus、GLM-5.2、MiniMax-M3）＋ fix 的 delta review，全數 SHIP-AS-IS；採納 F1–F5 與 G1–G5（見 `docs/plans/evidence/2026-10-06-stage-graph/qc-total-2026-10-08/README.md`）。
+- **全套件**：`run.sh --parallel 4` 在 `3aae28a4` 為 10/452 檔紅，其中 7 個是測試未跟上、已修（`2c0bec20`），3 個是 host 狀態（stray `/tmp/.git`，已移除後全綠），`skill-onoff-generic` 為已知的 host 相依 guard。
+
+### 已知後續
+
+- P7 本體（單行 band、ⓘ 面板、colored screenshot gate）→ alpha.2。
+- BACKLOG 2026-10-08 新列：`hetero-review-loop` 缺 phase-keyed packet mode（range >~400 KB 無法走 chain）；`dispatch-review` parser 拒絕跨行的 NO-FINDING-PROOF；`check-guidance-eval` 未把 results 綁到 arm manifest；generic arm 的 `fixture-scripts-sg` overlay 需證明不壓制 row marker；pre-push 缺 `scripts/lib/qc-evidence.sh` 時靜默放行。
+- 先前列：`stage-advance --resume`（換 session id 後須從 entry 重走）、G1 預設無 resolver key、eval campaign 需 fail-fast 與釘 runner 版本；pre-existing 紅：`autopilot-cli.test.sh`、`doc-drift-gate.js` 3 項。
+
+prose-justification: dev-flow 從 736 行縮到 530 行（初版 489），新增 `skills/dev-flow/references/stage-graph.md` 承接節點序列；finish-flow、ceo-agent、l4–l6 等為改詞彙並補 marker 清除與 size 判斷，guidance 由凍結 A/B eval 驗證（v5、v6 皆 SHIP）。
 
 ## v2.36.116 — review 頁面可發布：版本化 job 頁、每主機一個 localhost review server、watcher 依事件重發（mods P1b）
 

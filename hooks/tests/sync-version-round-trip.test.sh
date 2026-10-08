@@ -22,7 +22,9 @@ for f in "${TRACKED[@]}"; do
   PRE_HASH["$f"]=$(sha1sum "$f" | awk '{print $1}')
 done
 
-ORIG=$(grep -oE '"version":\s*"[0-9]+\.[0-9]+\.[0-9]+"' "$SANDBOX/.claude-plugin/plugin.json" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+# Shared grammar (scripts/lib/semver.js): X.Y.Z and X.Y.Z-(alpha|beta|rc).N. A strict X.Y.Z
+# regex here returned a truncated "3.0.0" for 3.0.0-alpha.1 and the round-trip then compared the wrong bytes.
+ORIG=$(node "$REPO_ROOT/scripts/lib/semver.js" from-json "$SANDBOX/.claude-plugin/plugin.json" | node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(0,"utf8")).version)')
 assert_neq "$ORIG" "" "original version parseable from sandbox canonical"
 
 # Derive the count args FROM the fixture's own description so the round-trip is

@@ -4,7 +4,8 @@
 . "$(dirname "$0")/lib.sh"
 
 # Look up the current canonical version so the flag matches.
-CURRENT_VERSION=$(grep -oE '"version":\s*"[0-9]+\.[0-9]+\.[0-9]+"' "$REPO_ROOT/.claude-plugin/plugin.json" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+# Read through the shared semver grammar so pre-release canonicals (3.0.0-alpha.1) are not truncated.
+CURRENT_VERSION=$(node "$REPO_ROOT/scripts/lib/semver.js" from-json "$REPO_ROOT/.claude-plugin/plugin.json" | node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(0,"utf8")).version)')
 assert_neq "$CURRENT_VERSION" "" "canonical version parseable for flag stamp"
 
 mkdir -p "$HOOK_HOME/.autopilot"

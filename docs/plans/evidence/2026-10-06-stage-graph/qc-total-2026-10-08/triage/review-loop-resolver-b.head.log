@@ -1,0 +1,6 @@
+FAIL [review-loop-resolver-b] r47: collect via default __dirname dispatcher exits 0: expected exit 0, got 1
+FAIL [review-loop-resolver-b] r47: stub captured child env: /tmp/autopilot-test-review-loop-resolver-b-63azeX/r47-dispatch.env does not exist
+cat: /tmp/autopilot-test-review-loop-resolver-b-63azeX/r47-dispatch.env: No such file or directory
+FAIL [review-loop-resolver-b] 47 passed, 2 failed
+      - r47: collect via default __dirname dispatcher exits 0: expected exit 0, got 1
+      - r47: stub captured child env: /tmp/autopilot-test-review-loop-resolver-b-63azeX/r47-dispatch.env does not exist

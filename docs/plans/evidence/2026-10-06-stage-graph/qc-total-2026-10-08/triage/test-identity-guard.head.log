@@ -1,0 +1,9 @@
+FAIL [test-identity-guard] git-invoking test missing lib.sh: check-guidance-eval.test.sh
+FAIL [test-identity-guard] git-invoking test missing lib.sh: check-stage-vocab.test.sh
+FAIL [test-identity-guard] git-invoking test missing lib.sh: skill-onoff-stage-graph.test.sh
+FAIL [test-identity-guard] git-invoking test missing lib.sh: stage-advance.test.sh
+FAIL [test-identity-guard] 42 passed, 4 failed
+      - git-invoking test missing lib.sh: check-guidance-eval.test.sh
+      - git-invoking test missing lib.sh: check-stage-vocab.test.sh
+      - git-invoking test missing lib.sh: skill-onoff-stage-graph.test.sh
+      - git-invoking test missing lib.sh: stage-advance.test.sh

@@ -1,0 +1,18 @@
+FAIL [resolve-review-loop-consult-discuss-switch] Population A: every extractor match is a named member of POP_A_ALLOW (an unlisted path above is a new roster consumer needing consult/discuss review): expected 'evals/skill-onoff/packs/fixture-scripts-sg-red/scripts/resolve-review-loop.sh
+evals/skill-onoff/packs/fixture-scripts-sg-red-v2/scripts/resolve-review-loop.sh
+evals/skill-onoff/packs/fixture-scripts-sg-red-v3/scripts/resolve-review-loop.sh
+evals/skill-onoff/packs/fixture-scripts-sg-red-v4/scripts/resolve-review-loop.sh
+evals/skill-onoff/packs/fixture-scripts-sg-red-v5/scripts/resolve-review-loop.sh
+evals/skill-onoff/packs/fixture-scripts-sg/scripts/resolve-review-loop.sh', got ''
+resolve-review-loop: ⚠ qc_panel[0] seat (gpt-5.5/codex) has no recorded operator admission — the managed rail's final panel will refuse it at intake
+resolve-review-loop: ⚠ qc_panel[1] seat (claude-opus/claude-native) has no recorded operator admission — the managed rail's final panel will refuse it at intake
+resolve-review-loop: ⚠ qc_panel[2] seat (gemini-3.6-flash-high/agy) has no recorded operator admission — the managed rail's final panel will refuse it at intake
+FAIL [resolve-review-loop-consult-discuss-switch] Population B: every 'reviewer_engine:' file pins the switches explicitly or is a named POP_B_DEFAULT_ALLOW member (unreviewed paths listed): expected ' hooks/tests/rail-stage-writers.test.sh', got ''
+FAIL [resolve-review-loop-consult-discuss-switch] 58 passed, 2 failed
+      - Population A: every extractor match is a named member of POP_A_ALLOW (an unlisted path above is a new roster consumer needing consult/discuss review): expected 'evals/skill-onoff/packs/fixture-scripts-sg-red/scripts/resolve-review-loop.sh
+evals/skill-onoff/packs/fixture-scripts-sg-red-v2/scripts/resolve-review-loop.sh
+evals/skill-onoff/packs/fixture-scripts-sg-red-v3/scripts/resolve-review-loop.sh
+evals/skill-onoff/packs/fixture-scripts-sg-red-v4/scripts/resolve-review-loop.sh
+evals/skill-onoff/packs/fixture-scripts-sg-red-v5/scripts/resolve-review-loop.sh
+evals/skill-onoff/packs/fixture-scripts-sg/scripts/resolve-review-loop.sh', got ''
+      - Population B: every 'reviewer_engine:' file pins the switches explicitly or is a named POP_B_DEFAULT_ALLOW member (unreviewed paths listed): expected ' hooks/tests/rail-stage-writers.test.sh', got ''

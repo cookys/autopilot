@@ -1,3 +1,22 @@
+# Delta QC — fixes for the 3.0.0 total QC, range 3aae28a4..0458c7bf2805e9db60b0c31975d3a971d5eca322 (branch release/3.0.0)
+
+A heterogeneous panel reviewed `8a10980f..3aae28a4` in 8 packets. The findings below were accepted as defects; this range is meant to address them. Review ONLY whether each commit fully addresses its finding and whether it introduces any new defect. Each fix is one commit (G2 and G3 also carry a profiles re-pin: `profiles/*.json` hash chains and dispositions, regenerated because skills/ceo-agent/SKILL.md and skills/dev-flow/SKILL.md are the rule-inventory sources). `platforms/codex/plugin/**` is a generated mirror (byte-checked by `sync-codex-plugin-skills.sh --check`: in sync).
+
+Accepted findings and their fixes:
+- F1 (fcc93cad): docs/skills.md dev-flow row said "Sizes tasks (S/L/H)"; docs/scripts-inventory.md next-pick row said "L/H … ask-first". 3.0.0 sizes are XS/S/M/L/XL with `!` urgent; bugs enter at diagnose.
+- F2 (c1f776f3): scripts/probe-unknown.js classify `break` on an over-max U2/U3 hid the U4 experiment rung, whose eligibility per plan P4 is position-free ("a U2 receipt exists for the work unit and S4 or S1 is still present").
+- F3 (f23e0c68): scripts/preflight-release.sh version_in_file dropped any whole line that also named a pre-release when VERSION is final, so "## v3.0.0 — folds v3.0.0-alpha.2" failed. Intent: final version must not match `v3.0.0-alpha.N`, `v3.0.0.1`, `v3.0.01`; a pinned existing test tolerates `v2.7.2-followup`.
+- F4 (95230eb6): 12 guided-baseline dispositions claimed "relocated verbatim … outside the two-file rule inventory", which cannot be true (the targets ARE the inventory sources; a verbatim rule there would make the disposition dead). Rationales rewritten to "restated" with the new location; catalog guided_dispositions_sha256 re-pinned.
+- F5 (2c0bec20): 7 test suites not kept in step with the range (dispatch-hetero heading assertion, resolver-a stub missing unknown_budget_u4, resolver-b driver dir missing lib/stage-write.js, consult-discuss-switch allowlists, test-identity-guard lib.sh sourcing, canonical-invariants sandbox missing check-stage-vocab.js, scorecard-tools r75 argv over 128 KiB).
+- G1 (0cf239d0, 🟠): finish-flow cleared the l4/l5/l6 session-mode marker (and ran the L5/L6 can_close status gate) only in the L/XL "Session end (full)" checklist; the lite session end (XS/S/M) said it "has no marker-clear step". Size is orthogonal to level, so an M-sized /l5 session left a live marker. The l4–l6 skills do not clear it themselves.
+- G4 (7c1f0042): the 2.x S workflow's "if the work came from backlog, delete the item" had no successor.
+- G5 (1fc8de26): resume replay in dev-flow references/context-continuation.md omitted `--unit` for unit-bearing sizes.
+- G2 (5e8717c8, 🟠): ceo-agent keyed project dir / README / INDEX / intent scope audit / tree.js init on M/L/XL; dev-flow, finish-flow (goal review, archive) and project-archive.md key them on L/XL; the M graph has no intent node; the 2026-06-12 Board directive said L-size.
+- G3 (0458c7bf): the urgent-placement probe (`--to code-review` when leaving the last verify) was told to every urgent session and promised a post-finish code-review; for XS/S there is no code-review anywhere (plan §2.7: urgency is a mark only). Scoped to M/L/XL.
+
+Constraints the guidance fixes had to respect: smallest possible diff (the text is re-evaluated by a frozen A/B eval), no restructuring, no new markdown table rows whose first cell is a size id. Severity vocabulary: 🔴 Critical / 🟠 Major / 🟡 Minor / 🔵 Suggestion. Cite file:line and a concrete failure scenario for every finding.
+
+## Frozen plan (docs/plans/2026-10-06-dev-flow-stage-graph.md, develop copy)
 # Plan — dev-flow stage graph: one named graph, T-shirt sizes, a marker the band can read
 
 > Status: R2 FROZEN (G2 terminal, depth-0 adjudicated) · Owner: cookys · Branch: Train A on develop, Train B on `release/3.0.0` (§4) · Frame: guidance + mechanism, authorized-breaking (3.0.0)

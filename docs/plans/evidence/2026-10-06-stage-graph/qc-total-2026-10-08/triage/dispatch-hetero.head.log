@@ -1,0 +1,5 @@
+FAIL [dispatch-hetero] prompt contains skill content: 'Development Flow Evaluation' not found in output
+On branch develop
+nothing to commit, working tree clean
+FAIL [dispatch-hetero] 352 passed, 1 failed
+      - prompt contains skill content: 'Development Flow Evaluation' not found in output

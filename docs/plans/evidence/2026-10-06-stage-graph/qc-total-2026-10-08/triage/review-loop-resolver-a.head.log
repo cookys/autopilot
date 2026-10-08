@@ -1,0 +1,3 @@
+FAIL [review-loop-resolver-a] r23: classify spawns resolve-review-loop.sh exactly once: expected '1', got '2'
+FAIL [review-loop-resolver-a] 10 passed, 1 failed
+      - r23: classify spawns resolve-review-loop.sh exactly once: expected '1', got '2'

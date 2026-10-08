@@ -1022,3 +1022,122 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: mods P1c C3b, 2026-10-04
 - **Pointer**: docs/backlog/mods-live-campaign-phase.md
 - **Context**: the live campaign phase is not reachable from the renderer (no root_run_id to campaign id mapping); dev-flow L-stages and plan phases have no writer.
+
+### `stage-advance --resume` for a resumed session with a new session id
+- **Status**: open
+- **Trigger**: before stage-graph 3.0.0 goes live
+- **Effort**: M
+- **Source**: stage-graph plan execution, 2026-10-06..08
+- **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/README.md
+- **Context**: a resumed session with a new id must re-walk from the entry node (first write must be the entry node); no resume path exists.
+
+### G1 default (low-risk review, one family, fresh-context) has no resolver key
+- **Status**: open
+- **Trigger**: when low-risk review routing is next touched
+- **Effort**: S
+- **Source**: stage-graph plan execution, 2026-10-06..08
+- **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/README.md
+- **Context**: "fresh-context reviewer" is documentation only; scripts/resolve-review-loop.sh has no key for it.
+
+### Eval campaigns should fail fast on auth and quota errors
+- **Status**: open
+- **Trigger**: before the next eval campaign
+- **Effort**: S
+- **Source**: stage-graph plan execution, 2026-10-06..08
+- **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/README.md
+- **Context**: OAuth expiry and weekly-limit each turned the rest of a campaign into 2-second infra_fail cells.
+
+### Eval campaigns should pin the runner version
+- **Status**: open
+- **Trigger**: before the next eval campaign
+- **Effort**: S
+- **Source**: stage-graph plan execution, 2026-10-06..08
+- **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/README.md
+- **Context**: Claude Code auto-updated mid-run (INSTRUMENT-INVALID); pinned by hand via PATH pin plus DISABLE_AUTOUPDATER=1.
+
+### `check-guidance-eval.js` hard-wires `-sg-change` pack ids
+- **Status**: open
+- **Trigger**: before the 3.0.0-alpha.1 cut
+- **Effort**: S
+- **Source**: stage-graph plan execution, 2026-10-06..08
+- **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/README.md
+- **Context**: suffixed arms (v2..v5) need it to take the arm manifest or suffix.
+
+### Pre-existing red suite: hooks/tests/autopilot-cli.test.sh
+- **Status**: open
+- **Trigger**: when the suite is next touched
+- **Effort**: S
+- **Source**: stage-graph plan execution, 2026-10-06..08
+- **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/README.md
+- **Context**: 9 FAILs, identical before Train A; not caused by the stage-graph work.
+
+### Pre-existing red gate: doc-drift-gate.js (3 failures)
+- **Status**: open
+- **Trigger**: when docs are next touched
+- **Effort**: S
+- **Source**: stage-graph plan execution, 2026-10-06..08
+- **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/README.md
+- **Context**: dangling CHANGELOG/INDEX links, unbalanced fences in backlog sidecars, a check-inputs-landed mention.
+
+### Pre-existing red suites: mods spike artifacts, 4 failures in claude plugin test
+- **Status**: open
+- **Trigger**: when mods spikes are next touched
+- **Effort**: S
+- **Source**: stage-graph plan execution, 2026-10-06..08
+- **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/README.md
+- **Context**: docs/plans/evidence/2026-10-03-mods-spikes/: S4 Image and S5 clock.every fail.
+
+### Pre-existing red suites: review-loop-resolver-a r23, qualification-scorecard-tools r51/r52/r75
+- **Status**: open
+- **Trigger**: when these suites are next touched
+- **Effort**: S
+- **Source**: stage-graph plan execution, 2026-10-06..08
+- **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/README.md
+- **Context**: seen during the stage-graph work, not caused by it.
+
+### P7c: .githooks/pre-push passes silently when scripts/lib/qc-evidence.sh is missing
+- **Status**: open
+- **Trigger**: when pre-push is next touched
+- **Effort**: S
+- **Source**: stage-graph plan execution, 2026-10-06..08
+- **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/README.md
+- **Context**: exits 0 like its resolver-missing path; decide fail-closed vs fail-open.
+
+### hetero-review-loop cannot carry a range over its packet ceiling: no phase-keyed packet mode
+- **Status**: open
+- **Trigger**: next review of a release range above ~400 KB
+- **Effort**: S
+- **Source**: 3.0.0 total QC, 2026-10-08
+- **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/qc-total-2026-10-08/README.md
+- **Context**: the exclude allowlist forbids path slicing, so the 1 MB range ran as a direct dispatch-review panel with no chain receipt.
+
+### dispatch-review parser rejects a multi-line NO-FINDING-PROOF that carries all three fields
+- **Status**: open
+- **Trigger**: when dispatch-review.sh is next touched
+- **Effort**: S
+- **Source**: 3.0.0 total QC, 2026-10-08 (K2 opus seat)
+- **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/qc-total-2026-10-08/README.md
+- **Context**: checked/evidence/conclusion present across lines; parsed as no_verdict and adopted from the raw log by hand.
+
+### check-guidance-eval does not bind the results file to the arm manifest
+- **Status**: open
+- **Trigger**: before the 3.0.0 final cut
+- **Effort**: S
+- **Source**: 3.0.0 total QC, 2026-10-08 (K4 opus + GLM)
+- **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/qc-total-2026-10-08/README.md
+- **Context**: rows carry arm:"change" only; stamp the arm-manifest digest per row and assert it in the gate.
+
+### Prove the generic-arm fixture-scripts-sg overlay does not suppress row markers
+- **Status**: open
+- **Trigger**: before the next guidance eval campaign
+- **Effort**: S
+- **Source**: 3.0.0 total QC, 2026-10-08 (K4 MiniMax); open item 4 of the stage-graph log
+- **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/qc-total-2026-10-08/README.md
+
+### pre-push degrades open silently when scripts/lib/qc-evidence.sh is missing
+- **Status**: open
+- **Trigger**: when .githooks/pre-push is next touched
+- **Effort**: S
+- **Source**: 3.0.0 total QC, 2026-10-08 (K2 GLM)
+- **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/qc-total-2026-10-08/README.md
+- **Context**: same posture as a missing resolver; add one stderr line so a broken install is visible.

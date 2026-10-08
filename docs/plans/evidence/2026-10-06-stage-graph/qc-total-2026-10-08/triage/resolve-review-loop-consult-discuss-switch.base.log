@@ -1,0 +1,4 @@
+resolve-review-loop: ⚠ qc_panel[0] seat (gpt-5.5/codex) has no recorded operator admission — the managed rail's final panel will refuse it at intake
+resolve-review-loop: ⚠ qc_panel[1] seat (claude-opus/claude-native) has no recorded operator admission — the managed rail's final panel will refuse it at intake
+resolve-review-loop: ⚠ qc_panel[2] seat (gemini-3.6-flash-high/agy) has no recorded operator admission — the managed rail's final panel will refuse it at intake
+PASS [resolve-review-loop-consult-discuss-switch] 60 assertions

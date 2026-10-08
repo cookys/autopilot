@@ -412,3 +412,62 @@ test('SCOPE: decisions are summed over the fresh root set; the latest ladder run
   const stale = camp({ 'decisions-sidecar.json': sc(1, 0), [`envelope--${CAMP}.json`]: env(CAMP, { published_at: iso(60) }), [`decisions-sidecar--${CAMP}.json`]: sc(2, 3) });
   assert.strictEqual(status(run(capture(stale, ['◌ 待命 │ ◆1 │ ⓘ'])), 'decisions'), 'PASS', 'a stale extra root adds nothing');
 });
+
+// ---- overflow fallback (contract section 2): unit bar, then ⏸ count, then ⚙ count, then the verdict word; expected lines = mods/live/live.test.ts "P7 fix B"
+const FALLBACK = [
+  [40, '⏸ 疑似卡住 │ ▰▰▰▱▱ │ ⚙2 ⏸1 │ ⓘ'], [30, '⏸ 疑似卡住 │ ▰▰▰▱▱ │ ⚙2 ⏸1 │ ⓘ'], [29, '⏸ 疑似卡住 │ ⚙2 ⏸1 │ ⓘ'], [21, '⏸ 疑似卡住 │ ⚙2 │ ⓘ'],
+  [20, '⏸ 疑似卡住 │ ⚙2 │ ⓘ'], [18, '⏸ 疑似卡住 │ ⓘ'], [12, '⏸ 疑似… │ ⓘ'],
+];
+for (const [cols, line] of FALLBACK) {
+  test(`FALLBACK bodyColumns ${cols}: ${line}`, () => {
+    const r = run(capture(richFiles(), [line], { body_columns: cols }));
+    assert.strictEqual(r.ok, true, JSON.stringify(r.results.filter((x) => x.status === 'FAIL')));
+    assert.ok(displayWidth(line) <= cols);
+    assert.strictEqual(status(r, 'layout'), 'PASS');
+  });
+}
+test('FALLBACK: the steps are judged in order — the bar still drawn at 29, the ⏸ count at 21, the ⚙ count at 18, a full verdict word at 12 all FAIL', () => {
+  const bad = (cols, line, slot) => assert.strictEqual(status(run(capture(richFiles(), [line], { body_columns: cols })), slot), slot === 'layout' ? 'FAIL' : 'FAIL', `${cols} ${slot}`);
+  bad(29, '⏸ 疑似卡住 │ ▰▰▰▱▱ │ ⚙2 ⏸1 │ ⓘ', 'layout');
+  bad(29, '⏸ 疑似卡住 │ ▰▰▰▱▱ │ ⚙2 ⏸1 │ ⓘ', 'unit');
+  bad(21, '⏸ 疑似卡住 │ ⚙2 ⏸1 │ ⓘ', 'dispatch');
+  bad(18, '⏸ 疑似卡住 │ ⚙2 │ ⓘ', 'dispatch');
+  bad(12, '⏸ 疑似卡住 │ ⓘ', 'layout');
+  bad(12, '⏸ 疑似卡住 │ ⓘ', 'verdict');
+  // the fallback is not an excuse when the line fits: at 30 the bar must stay
+  assert.strictEqual(status(run(capture(richFiles(), ['⏸ 疑似卡住 │ ⚙2 ⏸1 │ ⓘ'], { body_columns: 30 })), 'unit'), 'FAIL');
+  // the glyph and ⓘ are never removed
+  assert.strictEqual(run(capture(richFiles(), ['⏸ 疑似… │'], { body_columns: 12 })).ok, false);
+  const glyph = run(capture(richFiles(), ['⏸ │ ⓘ'], { body_columns: 5 }));
+  assert.strictEqual(status(glyph, 'verdict'), 'PASS');
+});
+test('FALLBACK: the stage is cut first (never below 2 cells), then the fallback; findBand reads a shortened verdict', () => {
+  assert.strictEqual(findBand('x\n⏸ 疑似… │ ⓘ').verdict, '疑似卡住'.length ? '疑似卡住' : '');
+  assert.strictEqual(findBand('⏸ │ ⓘ').verdict, '疑似卡住');
+  assert.strictEqual(findBand('⏸1 │ ⓘ'), null);
+});
+
+// ---- docked pane: bodyColumns from the transcript column
+function dockedPane(bandLine, column, rows) {
+  const pad = (txt) => txt + ' '.repeat(Math.max(0, column - displayWidth(txt)));
+  const body = [];
+  for (let i = 0; i < rows; i += 1) body.push(`${pad(`transcript row ${i}`)}│ pane row ${i}`);
+  return [...body, `${pad(bandLine)}│ pane footer`];
+}
+test('DOCK: a pane column in pane.txt gives bodyColumns = transcript column - 5 and says so; it beats window - 5, loses to meta.body_columns / --body-columns', () => {
+  const pane = dockedPane(RICH_120, 120, 10);
+  const dir = capture(richFiles(), pane, { window_width: 209 });
+  const d = derive(dir);
+  assert.strictEqual(d.columns, 115); assert.match(d.columnsHow, /^docked pane: transcript column 120 cells .*10 rows.* - 5$/);
+  const r = run(dir);
+  assert.strictEqual(r.ok, true, JSON.stringify(r.results.filter((x) => x.status === 'FAIL'))); assert.strictEqual(status(r, 'hygiene'), 'ABSENT');
+  // without the dock rule the full 209 band would be expected: the narrow band FAILs on the window rule
+  assert.strictEqual(run(capture(richFiles(), [RICH_120], { window_width: 209 })).ok, false);
+  assert.strictEqual(derive(capture(richFiles(), pane, { window_width: 209, body_columns: 90 })).columns, 90);
+  assert.strictEqual(derive(dir, { bodyColumns: 77 }).columns, 77);
+  assert.strictEqual(cli(dir).lines.find((l) => l.startsWith('width:')).includes('docked pane'), true);
+});
+test('DOCK: fewer than six border rows, or a border left of cell 20, is not a dock', () => {
+  assert.match(derive(capture(richFiles(), dockedPane(RICH_209, 120, 4), { window_width: 209 })).columnsHow, /^meta\.window_width/);
+  assert.match(derive(capture(richFiles(), dockedPane(RICH_209, 10, 12), { window_width: 209 })).columnsHow, /^meta\.window_width/);
+});

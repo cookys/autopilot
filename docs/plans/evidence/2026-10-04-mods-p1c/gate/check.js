@@ -25,9 +25,11 @@
 // Width table (applied to bodyColumns, cumulative): < 160 no hygiene; < 140 also no spend, decisions; < 120 also no ◷ age, no review;
 //   < 80 only verdict, dispatch, the unit BAR (no k/N, no 族) and ⓘ. A slot the table removes must be ABSENT (drawn = FAIL). If the line
 //   still does not fit, only the position's stage text may be cut with `…`.
+// Overflow fallback (contract section 2, as accepted from review of the mod): after the stage cut, still over -> remove the unit bar, then the
+//   ⏸ stalled count, then the ⚙ live count, then shorten the verdict word with `…` (glyph alone below 2 cells); never the glyph, never ⓘ.
 // bodyColumns: the engine's AbovePrompt prop `bodyColumns` = "the column's width less the engine's five at the right end" (plugin-authoring
 //   types/claude-code.d.ts, UiSite props). The column is the terminal, or the transcript's beside a docked Pane. ASSUMPTION recorded in the
-//   output: no docked pane, so bodyColumns = window_width - 5; meta.json `body_columns` (or --body-columns) overrides it when a dock is present.
+//   output: precedence --body-columns > meta.json body_columns > a docked pane found in pane.txt (the same cell offset of `│` on >= 6 rows; bodyColumns = that offset - 5) > window_width - 5.
 // Root set (mods P1W SCOPE): the session's band follows the root of its marker AND every root in marker.json `campaign_roots`; live counts,
 //   stall rows and proxy decisions are summed over the marker root's envelope and every FRESH extra envelope (published_at within
 //   valid_for_s, default 180, of the capture instant). A missing or stale extra envelope contributes nothing.
@@ -143,6 +145,27 @@ function hygieneChip(ls) {
     return `dev${behind}${bad ? ' ⚠' : ''}`;
   }
   return 'src ? ⚠';
+}
+
+// A docked pane splits the screen: the same cell offset of `│` repeats on many rows (the pane's left border). The transcript column is
+// the cells left of that border. The band row itself (verdict mark / ⓘ) is not evidence. Needs >= 6 rows; the leftmost such offset wins.
+function dockOf(paneText) {
+  if (!paneText) return null;
+  const byOffset = new Map();
+  for (const line of paneText.split('\n')) {
+    if (VERDICTS.some((v) => line.includes(`${v.mark} ${v.word}`)) || line.includes(`${SEP}${ICON}`)) continue;
+    let off = 0; const seen = new Set();
+    for (const ch of line) { if (ch === '│' && off >= 20 && !seen.has(off)) { seen.add(off); byOffset.set(off, (byOffset.get(off) || 0) + 1); } off += cellWidth(ch.codePointAt(0)); }
+  }
+  const hits = [...byOffset.entries()].filter(([, n]) => n >= 6).sort((a, b) => a[0] - b[0]);
+  return hits.length ? { column: hits[0][0], rows: hits[0][1] } : null;
+}
+function truncateTo(text, width) {
+  if (width < 1) return '';
+  if (displayWidth(text) <= width) return text;
+  let out = ''; let w = 0;
+  for (const ch of text) { const cw = cellWidth(ch.codePointAt(0)); if (w + cw > width - 1) break; out += ch; w += cw; }
+  return `${out}…`;
 }
 
 function derive(dir, opts = {}) {
@@ -318,7 +341,10 @@ function derive(dir, opts = {}) {
   let columns; let columnsHow;
   if (Number.isFinite(opts.bodyColumns)) { columns = opts.bodyColumns; columnsHow = '--body-columns'; }
   else if (Number.isFinite(meta.body_columns)) { columns = meta.body_columns; columnsHow = 'meta.body_columns'; }
-  else if (Number.isFinite(meta.window_width)) { columns = meta.window_width - RIGHT_MARGIN; columnsHow = `meta.window_width ${meta.window_width} - ${RIGHT_MARGIN} (engine right margin; no docked pane assumed)`; }
+  else if (dockOf(readText(path.join(dir, 'pane.txt')))) {
+    const dk = dockOf(readText(path.join(dir, 'pane.txt')));
+    columns = dk.column - RIGHT_MARGIN; columnsHow = `docked pane: transcript column ${dk.column} cells (border │ at cell ${dk.column} on ${dk.rows} rows of pane.txt) - ${RIGHT_MARGIN}`;
+  } else if (Number.isFinite(meta.window_width)) { columns = meta.window_width - RIGHT_MARGIN; columnsHow = `meta.window_width ${meta.window_width} - ${RIGHT_MARGIN} (engine right margin; no docked pane assumed)`; }
   else {
     const pane = readText(path.join(dir, 'pane.txt')) || '';
     const w = Math.max(0, ...pane.split('\n').map(displayWidth));
@@ -342,8 +368,27 @@ function derive(dir, opts = {}) {
   if (un.state === 'present' && dropped.has('kn')) { un.text = un.parts.bar; un.parts.knRemoved = true; }
   // does the line fit? (only the position's stage text may be cut)
   const present = SLOT_ORDER.filter((n) => slots[n].state === 'present');
-  const total = present.reduce((n, name) => n + displayWidth(slots[name].text), 0) + displayWidth(SEP) * present.length + displayWidth(ICON);
-  const over = total - columns;
+  let stageW = pos.state === 'present' ? displayWidth(pos.parts.stage) : 0;
+  const widthNow = () => present.filter((n) => slots[n].state === 'present')
+    .reduce((n, name) => n + (name === 'position' ? displayWidth(pos.text) - displayWidth(pos.parts.stage) + stageW : displayWidth(slots[name].text)), 0)
+    + displayWidth(SEP) * present.filter((n) => slots[n].state === 'present').length + displayWidth(ICON);
+  const over = widthNow() - columns;
+  // 1. the position's stage text is cut with `…` (never below 2 cells); 2. still over: the overflow fallback of contract section 2, in order:
+  //    remove the unit bar, then the ⏸ stalled count, then the ⚙ live count; 3. still over: shorten the verdict word with `…` (the glyph stays)
+  if (over > 0 && pos.state === 'present') stageW = Math.max(2, stageW - over);
+  const dsp = slots.dispatch;
+  const fallbackWhy = `removed by the overflow fallback (line over bodyColumns ${columns})`;
+  const steps = [
+    () => { if (slots.unit.state === 'present') { slots.unit.state = 'fallback'; slots.unit.why = fallbackWhy; } },
+    () => { if (dsp.state === 'present' && /⏸\d+/.test(dsp.text)) { const t = dsp.text.replace(/ ?⏸\d+/, ''); if (t === '') { dsp.state = 'fallback'; dsp.why = fallbackWhy; } else dsp.text = t; } },
+    () => { if (dsp.state === 'present') { dsp.state = 'fallback'; dsp.why = fallbackWhy; } },
+  ];
+  for (const step of steps) { if (widthNow() <= columns) break; step(); }
+  const vs = slots.verdict;
+  if (widthNow() > columns) {
+    const target = displayWidth(vs.text) - (widthNow() - columns);
+    vs.text = target >= 2 ? truncateTo(vs.text, target) : Array.from(vs.text)[0];
+  }
 
   return {
     meta, mode: meta.mode || String(meta.cell || '').split('-')[0] || '?', verdict, mark, attentionKind: attKind, okSnapshot, columns, columnsHow, slots, over, notes, reasons, nowMs,
@@ -356,12 +401,17 @@ function findBand(paneText) {
   const lines = String(paneText || '').split('\n');
   for (let i = lines.length - 1; i >= 0; i -= 1) {
     for (const v of VERDICTS) {
-      const at = lines[i].indexOf(`${v.mark} ${v.word}`);
-      if (at < 0) continue;
-      const iconAt = lines[i].indexOf(`${SEP}${ICON}`, at);
-      const text = iconAt >= 0 ? lines[i].slice(at, iconAt + SEP.length + ICON.length) : lines[i].slice(at).replace(/\s+$/, '');
-      if (iconAt < 0 && !(text === `${v.mark} ${v.word}` || text.startsWith(`${v.mark} ${v.word}${SEP}`))) continue; // a transcript line that merely mentions a verdict
-      return { verdict: v.word, text, line1: text, line2: '', icon: iconAt >= 0, kind: 'ok', surface: 'band' };
+      for (let at = lines[i].indexOf(v.mark); at >= 0; at = lines[i].indexOf(v.mark, at + 1)) {
+        const iconAt = lines[i].indexOf(`${SEP}${ICON}`, at);
+        const text = iconAt >= 0 ? lines[i].slice(at, iconAt + SEP.length + ICON.length) : lines[i].slice(at).replace(/\s+$/, '');
+        const first = text.split(SEP)[0];
+        const full = first === `${v.mark} ${v.word}`;
+        // the overflow fallback shortens the verdict word to a prefix + `…`, or to the glyph alone; only with the ⓘ drawn (else it is just a mention)
+        const cut = iconAt >= 0 && (first === v.mark || first === `${v.mark}…` || (first.startsWith(`${v.mark} `) && /^.*…$/.test(first) && v.word.startsWith(first.slice(2, -1)) && first.length > 3));
+        if (!full && !cut) continue;
+        if (iconAt < 0 && !(text === first || text.startsWith(`${first}${SEP}`))) continue; // a transcript line that merely mentions a verdict
+        return { verdict: v.word, text, line1: text, line2: '', icon: iconAt >= 0, kind: 'ok', surface: 'band' };
+      }
     }
   }
   return null;
@@ -394,7 +444,7 @@ function findDialog(paneText) {
 
 // classify one drawn segment by its own text (independent of what is expected)
 function classify(seg, index) {
-  if (index === 0) return /^[▲⏸✓●◌] \S/.test(seg) ? 'verdict' : null;
+  if (index === 0) return /^[▲⏸✓●◌]( \S.*)?$/.test(seg) ? 'verdict' : null;
   if (seg.includes('▸')) return 'position';
   if (/^[▰▱]/.test(seg)) return 'unit';
   if (/^(⚙\d+( ⏸\d+)?|⏸\d+)$/.test(seg)) return 'dispatch';
@@ -534,5 +584,5 @@ function main(argv) {
   return out.ok ? 0 : 1;
 }
 
-module.exports = { derive, findBand, findNonOk, findPanel, findDialog, classify, displayWidth, run, summary, main };
+module.exports = { dockOf, derive, findBand, findNonOk, findPanel, findDialog, classify, displayWidth, run, summary, main };
 if (require.main === module) process.exitCode = main(process.argv.slice(2));

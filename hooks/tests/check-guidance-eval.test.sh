@@ -10,6 +10,10 @@
 #   nothing differs from the base                               -> exit 0, score null
 #   deleted file still in the pack                              -> exit 1
 #   a change outside the manifest paths                         -> ignored
+#   suffixed arm (-v9) with matching packs                      -> exit 0
+#   suffixed arm but the packs frozen are the unsuffixed ones   -> exit 1 (not frozen)
+#   arm without the differing skill                             -> exit 1 (no change pack in the arm)
+#   arm manifest for a non-change arm / unreadable --arm        -> exit 2
 
 set -euo pipefail
 
@@ -79,8 +83,10 @@ mk_results() { # $1 out $2 changePassCount
 mk_results "$TEST_TMP/ship.jsonl" 12
 mk_results "$TEST_TMP/weak.jsonl" 9
 
-gate() { # args... ; sets G_OUT G_RC
-  set +e; G_OUT=$(node "$GATE" "$@" 2>"$TEST_TMP/gate.err"); G_RC=$?; set -e
+ARM="$TEST_TMP/arm.json"
+echo '{"schema_version":1,"arm":"change","skills":{"dev-flow":"dev-flow-sg-change"},"files":"guidance-files-sg-change"}' > "$ARM"
+gate() { # args... ; sets G_OUT G_RC (default --arm is last: a caller-supplied --arm wins, val() takes the first)
+  set +e; G_OUT=$(node "$GATE" "$@" --arm "$ARM" 2>"$TEST_TMP/gate.err"); G_RC=$?; set -e
 }
 ok_field() { node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).ok))' "$G_OUT"; }
 
@@ -137,6 +143,41 @@ echo "=== nothing differs from the base -> 0 without results ==="
 HEAD_REF=$(git -C "$R" rev-parse HEAD)
 gate --base "$HEAD_REF" --repo "$R" --prereg "$PRE" --packs-dir "$PK"
 [ "$G_RC" -eq 0 ] && node -e 'const o=JSON.parse(process.argv[1]); if(o.score!==null||o.differing.length!==0) process.exit(1)' "$G_OUT" || fail "no guidance change vs base must pass vacuously: $G_OUT"
+
+echo "=== suffixed arm (-v9) with matching packs -> 0 ==="
+ARM9="$TEST_TMP/arm9.json"; PK9="$TEST_TMP/packs9"
+echo '{"schema_version":1,"arm":"change","skills":{"dev-flow":"dev-flow-sg-change-v9"},"files":"guidance-files-sg-change-v9"}' > "$ARM9"
+mkdir -p "$PK9/dev-flow-sg-change-v9" "$PK9/guidance-files-sg-change-v9/references"
+cp "$R/skills/dev-flow/SKILL.md" "$PK9/dev-flow-sg-change-v9/SKILL.md"
+cp "$R/references/plan-template.md" "$PK9/guidance-files-sg-change-v9/references/plan-template.md"
+node -e '
+  const [pk, a, b] = process.argv.slice(1);
+  require("fs").writeFileSync(pk + "/manifest.json", JSON.stringify({ schema_version: 1, packs: {
+    "dev-flow-sg-change-v9": { "dev-flow-sg-change-v9/SKILL.md": a },
+    "guidance-files-sg-change-v9": { "guidance-files-sg-change-v9/references/plan-template.md": b } } }));
+' "$PK9" "$(sha "$R/skills/dev-flow/SKILL.md")" "$(sha "$R/references/plan-template.md")"
+gate --arm "$ARM9" --base "$BASE_REF" --repo "$R" --prereg "$PRE" --packs-dir "$PK9" --results "$TEST_TMP/ship.jsonl"
+[ "$G_RC" -eq 0 ] && node -e 'const o=JSON.parse(process.argv[1]); if(!o.arm.endsWith("arm9.json")||o.differing.some(d=>!d.pack.endsWith("-v9"))) process.exit(1)' "$G_OUT" || fail "suffixed arm must pass (rc=$G_RC): $G_OUT"
+
+echo "=== suffixed arm against the unsuffixed packs -> 1 ==="
+gate --arm "$ARM9" --base "$BASE_REF" --repo "$R" --prereg "$PRE" --packs-dir "$PK" --results "$TEST_TMP/ship.jsonl"
+[ "$G_RC" -eq 1 ] && grep -q 'not frozen in packs/manifest.json' <<<"$G_OUT" || fail "arm/pack id mismatch must fail (rc=$G_RC): $G_OUT"
+
+echo "=== arm missing the dev-flow skill -> 1 ==="
+ARMX="$TEST_TMP/armx.json"
+echo '{"schema_version":1,"arm":"change","skills":{},"files":"guidance-files-sg-change"}' > "$ARMX"
+gate --arm "$ARMX" --base "$BASE_REF" --repo "$R" --prereg "$PRE" --packs-dir "$PK" --results "$TEST_TMP/ship.jsonl"
+[ "$G_RC" -eq 1 ] && grep -q 'skill dev-flow has no change pack in the arm manifest' <<<"$G_OUT" || fail "skill absent from arm must fail (rc=$G_RC): $G_OUT"
+
+echo "=== arm manifest for the red arm -> 2 ==="
+ARMR="$TEST_TMP/armr.json"
+echo '{"schema_version":1,"arm":"red","skills":{"dev-flow":"dev-flow-sg-change"},"files":"guidance-files-sg-change"}' > "$ARMR"
+gate --arm "$ARMR" --base "$BASE_REF" --repo "$R" --prereg "$PRE" --packs-dir "$PK" --results "$TEST_TMP/ship.jsonl"
+[ "$G_RC" -eq 2 ] || fail "non-change arm must exit 2 (got $G_RC)"
+
+echo "=== unreadable --arm -> 2 ==="
+gate --arm "$TEST_TMP/no-such-arm.json" --base "$BASE_REF" --repo "$R" --prereg "$PRE" --packs-dir "$PK" --results "$TEST_TMP/ship.jsonl"
+[ "$G_RC" -eq 2 ] || fail "unreadable arm must exit 2 (got $G_RC)"
 
 echo "=== usage ==="
 set +e; node "$GATE" >/dev/null 2>&1; rc=$?; set -e

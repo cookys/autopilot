@@ -15,15 +15,16 @@
  * When no manifest file differs from the base there is nothing to evaluate: gate 1 passes vacuously
  * and the scorer is not required (`score: null`).
  *
- * Pack mapping (prereg guidance.pack_ids): skills/<s>/<rest> -> pack <s>-sg-change, file <rest>;
- * every other manifest path -> pack guidance-files-sg-change, file = the repo path itself.
+ * Pack mapping comes from the arm manifest (--arm; the evaluated arm's pack ids carry a version suffix
+ * on later runs, v2..v5): skills/<s>/<rest> -> pack arm.skills[<s>], file <rest>; every other manifest
+ * path -> pack arm.files, file = the repo path itself. Only the `change` arm is evaluated.
  *
  * Usage:
  *   check-guidance-eval.js --base <ref> [--head <ref, default HEAD>] [--repo <dir, default cwd>]
- *       [--prereg <json>] [--packs-dir <dir>] [--results <jsonl>] [--scorer <script>]
- *   Defaults: prereg/packs/scorer from evals/skill-onoff next to this script; --results required
+ *       [--prereg <json>] [--packs-dir <dir>] [--arm <json>] [--results <jsonl>] [--scorer <script>]
+ *   Defaults: prereg/packs/scorer/arm (arms/stage-graph/change.json) from evals/skill-onoff next to this script; --results required
  *   whenever a manifest file differs.
- * stdout: ONE JSON object {ok, base, head, differing[], failures[], score}. Diagnostics on stderr.
+ * stdout: ONE JSON object {ok, base, head, arm, differing[], failures[], score}. Diagnostics on stderr.
  * Exit: 0 gate passes · 1 gate fails · 2 usage / unreadable input.
  * Wiring into scripts/preflight-release.sh is P8, not now.
  * Node >= 20.10, built-ins only.
@@ -42,9 +43,10 @@ const head = val('--head') || 'HEAD';
 const repo = path.resolve(val('--repo') || process.cwd());
 const preregPath = val('--prereg') || path.join(EVAL, 'prereg', 'stage-graph.json');
 const packsDir = path.resolve(val('--packs-dir') || path.join(EVAL, 'packs'));
+const armPath = path.resolve(val('--arm') || path.join(EVAL, 'arms', 'stage-graph', 'change.json'));
 const resultsPath = val('--results');
 const scorer = val('--scorer') || path.join(EVAL, 'score-stage-graph.js');
-if (!base) die('usage: check-guidance-eval.js --base <ref> [--head <ref>] [--repo <dir>] [--prereg <json>] [--packs-dir <dir>] [--results <jsonl>]');
+if (!base) die('usage: check-guidance-eval.js --base <ref> [--head <ref>] [--repo <dir>] [--prereg <json>] [--packs-dir <dir>] [--arm <json>] [--results <jsonl>]');
 
 const git = (args) => {
   const r = cp.spawnSync('git', ['-C', repo, ...args], { encoding: null, maxBuffer: 1 << 28 });
@@ -53,8 +55,13 @@ const git = (args) => {
 };
 let P;
 let man;
+let arm;
 try { P = JSON.parse(fs.readFileSync(preregPath, 'utf8')); } catch (e) { die(`unreadable prereg: ${e.message}`); }
 try { man = JSON.parse(fs.readFileSync(path.join(packsDir, 'manifest.json'), 'utf8')); } catch (e) { die(`unreadable pack manifest: ${e.message}`); }
+try { arm = JSON.parse(fs.readFileSync(armPath, 'utf8')); } catch (e) { die(`unreadable arm manifest: ${e.message}`); }
+if (!arm || arm.arm !== 'change') die(`arm manifest ${armPath} is not the change arm (arm=${arm && arm.arm})`);
+if (!arm.skills || typeof arm.skills !== 'object' || Array.isArray(arm.skills)) die('arm manifest: skills must be an object');
+if (typeof arm.files !== 'string' || !arm.files) die('arm manifest: files must be a non-empty string');
 
 const IS_MANIFEST = [
   /^skills\/[^/]+\/SKILL\.md$/,
@@ -67,8 +74,8 @@ const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
 
 function packFor(p) {
   const m = p.match(/^skills\/([^/]+)\/(.+)$/);
-  if (m) return { id: `${m[1]}-sg-change`, rel: m[2] };
-  return { id: 'guidance-files-sg-change', rel: p };
+  if (m) return { id: Object.hasOwn(arm.skills, m[1]) ? arm.skills[m[1]] : undefined, skill: m[1], rel: m[2] };
+  return { id: arm.files, rel: p };
 }
 
 const diff = git(['diff', '--name-status', '--no-renames', '-z', base, head]).toString('utf8').split('\0').filter(Boolean);
@@ -81,13 +88,14 @@ for (let i = 0; i + 1 < diff.length; i += 2) {
 const listed = new Set(P.guidance.files);
 const failures = [];
 for (const d of differing) {
-  const { id, rel } = packFor(d.path);
+  const { id, rel, skill } = packFor(d.path);
   d.pack = id;
   d.pack_file = rel;
   const key = `${id}/${rel}`;
-  const entry = man.packs && man.packs[id] ? man.packs[id][key] : undefined;
+  const entry = id && man.packs && man.packs[id] ? man.packs[id][key] : undefined;
   const fail = (reason) => { d.ok = false; d.reason = reason; failures.push(`${d.path}: ${reason}`); };
   if (!listed.has(d.path)) { fail('not in the prereg guidance file set (an unevaluated guidance change: new pack + new arm required)'); continue; }
+  if (!id) { fail(`skill ${skill} has no change pack in the arm manifest`); continue; }
   if (!man.packs || !man.packs[id]) { fail(`change pack ${id} is not frozen in packs/manifest.json`); continue; }
   if (d.status === 'D') {
     if (entry !== undefined) fail('file deleted at head but still present in the change pack');
@@ -116,6 +124,6 @@ if (differing.length) {
   }
 }
 
-const out = { ok: failures.length === 0, base, head, differing, failures, score };
+const out = { ok: failures.length === 0, base, head, arm: armPath, differing, failures, score };
 process.stdout.write(`${JSON.stringify(out)}\n`);
 process.exit(out.ok ? 0 : 1);

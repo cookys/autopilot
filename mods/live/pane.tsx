@@ -63,8 +63,7 @@ export function Pane(el: { Box: El; Text: El; Link: El; Button?: El }, snap: Liv
         {b === null ? null : (
           <Box>
             <Text bold={b.verdict !== '待命'} color={b.slots[0]?.segs[0]?.color} wrap="truncate">{b.mark + ' ' + b.verdict}</Text>
-            <Text wrap="truncate">{' ' + b.head}</Text>
-            <Text dimColor={b.progressDim} wrap="truncate">{b.progress}</Text>
+            <Text wrap="truncate">{' ' + (snap.detail.project ?? b.project) + ' · ' + b.elapsed}</Text>
           </Box>
         )}
         {nowLines(snap).map(line)}

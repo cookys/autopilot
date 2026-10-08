@@ -45,6 +45,9 @@ export type BandView = {
   progress: string
   progressDim: boolean // an unfrozen denominator is drawn dim
   reason: string | null
+  project: string // P7 Now tab row: verdict + project + elapsed; progress and phase are their own lines
+  elapsed: string
+  phase: string
   slots: Slot[] // P7: the one-line band's slots in priority order (width-independent; layoutBand applies the width table)
 }
 
@@ -735,6 +738,9 @@ export function bandView(env: Json, jobModel: JobModel | null, projectKey: strin
     progress: prog.text,
     progressDim: prog.dim,
     reason: line2,
+    project: projectName(identity, projectKey),
+    elapsed: elapsedFrom(src.startMs, nowMs),
+    phase,
     slots,
   }
 }
@@ -1033,7 +1039,7 @@ export function reviewLines(r: ReviewView | null): PaneLine[] {
 export type ThemeKey = 'claude' | 'warning' | 'error' | 'success' | 'suggestion' | 'inactive' | 'subtle'
 export type SlotId = 'verdict' | 'position' | 'unit' | 'dispatch' | 'review' | 'decisions' | 'spend' | 'hygiene'
 // tag: which part the width table may drop or shorten (age, k/N, 族, the bar, the stage text)
-export type SegTag = 'age' | 'kn' | 'fam' | 'bar' | 'stage'
+export type SegTag = 'age' | 'kn' | 'fam' | 'bar' | 'stage' | 'live' | 'stalled'
 export type Seg = { text: string; color?: ThemeKey; bold?: boolean; tag?: SegTag }
 export type Slot = { id: SlotId; segs: Seg[] }
 
@@ -1147,7 +1153,7 @@ export function slotVerdict(v: { mark: string; word: string; key: ThemeKey }): S
 // `<size>[!]·<level> ▸ <stage>` + ` ◷<age>`; no marker stage = no slot
 export function slotPosition(m: MarkerView | null, nowMs: number): Slot | null {
   if (m === null || m.stage === null) return null
-  const head = (m.size === null ? '' : m.size + (m.urgent ? '!' : '')) + (m.level === null ? '' : '·' + m.level)
+  const head = [m.size === null ? null : m.size + (m.urgent ? '!' : ''), m.level].filter((x): x is string => x !== null).join('·') // no size: no leading `·`
   const segs: Seg[] = [sp((head === '' ? '' : head + ' ') + '▸ '), sp(m.stage, { color: 'claude', tag: 'stage' })]
   const age = m.stage_set_at_ms === null ? '—' : elapsedFrom(m.stage_set_at_ms, nowMs)
   if (age !== '—') segs.push(sp(' ◷' + age, { tag: 'age' }))
@@ -1173,8 +1179,8 @@ export function slotUnit(m: MarkerView | null): Slot | null {
 export function slotDispatch(live: number, stalled: number): Slot | null {
   if (live <= 0 && stalled <= 0) return null
   const segs: Seg[] = []
-  if (live > 0) segs.push(sp('⚙' + live))
-  if (stalled > 0) segs.push(sp((segs.length > 0 ? ' ' : '') + '⏸' + stalled, { color: 'error' }))
+  if (live > 0) segs.push(sp('⚙' + live, { tag: 'live' }))
+  if (stalled > 0) segs.push(sp((segs.length > 0 ? ' ' : '') + '⏸' + stalled, { color: 'error', tag: 'stalled' }))
   return { id: 'dispatch', segs }
 }
 
@@ -1204,10 +1210,14 @@ export function slotDecisions(d: DecisionsView | null): Slot | null {
 }
 
 // `$<brain today>/<cap>` (integers); warning from 80 % of the cap, error from 100 %
+export function spendColor(brain: number, cap: number): ThemeKey | undefined {
+  const ratio = brain / cap // the raw ratio, never a rounded percent: the band slot and the Spend tab judge the same number
+  return ratio >= 1 ? 'error' : ratio >= 0.8 ? 'warning' : undefined
+}
 export function slotSpend(s: { brain: number; cap: number } | null): Slot | null {
   if (s === null) return null
-  const ratio = s.brain / s.cap
-  return { id: 'spend', segs: [sp('$' + Math.round(s.brain) + '/' + Math.round(s.cap), ratio >= 1 ? { color: 'error' } : ratio >= 0.8 ? { color: 'warning' } : {})] }
+  const color = spendColor(s.brain, s.cap)
+  return { id: 'spend', segs: [sp('$' + Math.round(s.brain) + '/' + Math.round(s.cap), color === undefined ? {} : { color })] }
 }
 
 // hygieneChip text + ` · wt <n>` (reapable worktrees, n > 0 only)
@@ -1249,7 +1259,7 @@ export function layoutBand(slots: Slot[], columns: number): BandLayout {
   if (columns < 140) { drop.add('spend'); drop.add('decisions') }
   if (columns < 120) { drop.add('review'); drop.add('age') }
   if (columns < 80) { drop.add('position'); drop.add('kn'); drop.add('fam') }
-  const kept: Slot[] = slots.filter(s => !drop.has(s.id)).map(s => ({ id: s.id, segs: s.segs.filter(g => g.tag === undefined || !drop.has(g.tag)) }))
+  let kept: Slot[] = slots.filter(s => !drop.has(s.id)).map(s => ({ id: s.id, segs: s.segs.filter(g => g.tag === undefined || !drop.has(g.tag)) }))
   const join = (list: Slot[]): Seg[] => {
     const out: Seg[] = []
     list.forEach((s, i) => {
@@ -1259,11 +1269,28 @@ export function layoutBand(slots: Slot[], columns: number): BandLayout {
     out.push(sp(BAND_SEP, { color: 'subtle' }))
     return out
   }
-  let segs = join(kept)
   const widthOf = (g: Seg[]) => g.reduce((n, x) => n + displayWidth(x.text), 0) + displayWidth(BAND_ICON)
-  const over = widthOf(segs) - columns
+  let segs = join(kept)
+  let over = widthOf(segs) - columns
+  if (over > 0) segs = segs.map(g => (g.tag === 'stage' ? { ...g, text: truncateToWidth(g.text, Math.max(2, displayWidth(g.text) - over)) } : g))
+  // below the width table: still too long -> drop the unit bar, then the ⏸ stalled count, then the ⚙ count (a slot left empty goes with its separator)
+  const fallbacks: ((s: Slot) => Slot | null)[] = [
+    s => (s.id === 'unit' ? null : s),
+    s => (s.id === 'dispatch' ? { ...s, segs: s.segs.filter(g => g.tag !== 'stalled') } : s),
+    s => (s.id === 'dispatch' ? { ...s, segs: s.segs.filter(g => g.tag !== 'live') } : s),
+  ]
+  for (const f of fallbacks) {
+    if (widthOf(segs) <= columns) break
+    kept = kept.map(f).filter((s): s is Slot => s !== null && s.segs.length > 0)
+    segs = join(kept)
+  }
+  // last: shorten the verdict WORD, the glyph stays; the ⓘ is never touched
+  over = widthOf(segs) - columns
   if (over > 0) {
-    segs = segs.map(g => (g.tag === 'stage' ? { ...g, text: truncateToWidth(g.text, Math.max(2, displayWidth(g.text) - over)) } : g))
+    const v = segs[0]
+    const glyph = Array.from(v.text)[0]
+    const target = displayWidth(v.text) - over
+    segs = [{ ...v, text: target >= 2 ? truncateToWidth(v.text, target) : glyph }, ...segs.slice(1)]
   }
   return { segs, text: segs.map(g => g.text).join('') + BAND_ICON, width: widthOf(segs) }
 }
@@ -1311,12 +1338,19 @@ export function nowLines(snap: LiveSnapshot): PaneLine[] {
   const out: PaneLine[] = []
   const d = snap.detail
   if (snap.band !== null && snap.band.reason !== null) out.push({ text: snap.band.reason })
+  const bandPhase = snap.band === null ? null : snap.band.phase
   const pos = slotPosition(d.marker, d.now_ms ?? 0)
   out.push(pos === null ? NO_DATA('no stage recorded for this session') : row(seg('position  '), ...pos.segs))
   const unit = slotUnit(d.marker)
   out.push(unit === null || d.marker === null || d.marker.unit === null
     ? NO_DATA('no unit recorded')
     : row(seg('unit  '), ...unit.segs, seg(d.marker.unit.label === '' ? '' : ' ' + d.marker.unit.label + ' (' + d.marker.unit.kind + ')')))
+  // progress is its own line (dim while the denominator is unfrozen); the job-model phase is its own line too, except a label the marker
+  // produced (`size·level ▸ stage ...`), which is the position line above
+  if (snap.band !== null) {
+    out.push({ text: 'progress  ' + snap.band.progress, dim: snap.band.progressDim })
+    if (bandPhase !== null && !bandPhase.includes('▸')) out.push({ text: 'phase  ' + bandPhase })
+  }
   out.push(...snap.sections.attention)
   return out
 }
@@ -1368,7 +1402,8 @@ export function spendLines(snap: LiveSnapshot): PaneLine[] {
   if (s.brain === null || s.cap === null) out.push(NO_DATA('brain-tier spend today is not published'))
   else {
     const pct = Math.round((s.brain / s.cap) * 100)
-    out.push({ text: 'host today (brain tier) ' + usd(s.brain) + ' / ' + usd(s.cap) + ' · ' + pct + ' %', warn: pct >= 80, bold: pct >= 100 })
+    const color = spendColor(s.brain, s.cap)
+    out.push({ text: 'host today (brain tier) ' + usd(s.brain) + ' / ' + usd(s.cap) + ' · ' + pct + ' %', ...(color === undefined ? {} : { color }) })
   }
   out.push({ text: 'cost fuse · ' + s.mode, dim: true })
   return out

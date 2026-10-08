@@ -58,7 +58,7 @@
 // in-memory tree; a missing file makes the bottom hook throw, which the mod sees as a rejected read.
 import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
-import { readQc, qcChip, readReview, reviewSlot, displayWidth, truncateToWidth, layoutBand, readMarker, readResidue, readStageWalk, bandSlots, slotUnit, slotPosition, slotDispatch, slotDecisions, slotSpend, slotHygiene, slotReview, readLoadSource } from './model'
+import { readQc, qcChip, readReview, reviewSlot, displayWidth, truncateToWidth, layoutBand, readMarker, readResidue, readStageWalk, bandSlots, slotUnit, slotPosition, slotDispatch, slotDecisions, slotSpend, slotHygiene, slotReview, readLoadSource, spendLines } from './model'
 import type { Slot } from './model'
 
 const SURFACES = ['terminal', 'desktop'] as const
@@ -210,8 +210,17 @@ async function bandParts($: any, surface: (typeof SURFACES)[number], columns = 1
   const kids = (tree.children || []) as Node[]
   const head = kids[2]
   if (head && head.type === 'Box') {
-    const cells = walkTexts(head)
-    return { line1: cells.map(textOf).join(''), line2: textOf(kids[3]) || undefined, last: cells[cells.length - 1], tree }
+    // P7 Now tab: row = `<verdict> <project> · <elapsed>`; progress and phase are their own lines (phase is absent when the marker produced it: it is the position line)
+    const row = walkTexts(head).map(textOf).join('')
+    const texts = kids.map(k => textOf(k))
+    const progressNode = kids.find(k => textOf(k).startsWith('progress  ')) as Node
+    const progress = textOf(progressNode).slice('progress  '.length)
+    const phaseLine = texts.find(t => t.startsWith('phase  '))
+    const phase = phaseLine === undefined ? '—' : phaseLine.slice('phase  '.length)
+    const cut = row.lastIndexOf(' · ')
+    // summary: the pre-P7 row shape, rebuilt from the new pieces, so the semantic cases keep asserting verdict / project / phase / elapsed / progress
+    const summary = row.slice(0, cut) + ' · ' + phase + ' · ' + row.slice(cut + 3) + ' · ' + progress
+    return { line1: summary, row, line2: textOf(kids[3]) || undefined, last: progressNode, tree }
   }
   const line = await bandLine($, surface, columns)
   const cells = walkTexts(line.tree)
@@ -2269,4 +2278,72 @@ test('P7 model: the stage text is cut with … when the line still does not fit,
   expect(line.text.startsWith('● 進行中 │ M·l5 ▸ implement')).toBe(true)
   expect(line.text.endsWith('… │ ⚙1 │ ⓘ')).toBe(true)
   expect(layoutBand(slots, 209).text).toBe('● 進行中 │ M·l5 ▸ implement-' + 'x'.repeat(70) + ' ◷3m │ ⚙1 │ ⓘ')
+})
+
+// ---- P7 review round 1 fixes ----
+for (const surface of SURFACES) {
+  test('P7 fix A: the band slot and the Spend tab judge the raw ratio: 119.6/150 plain, 120/150 warning, 150/150 error (' + surface + ')', async ($, on) => {
+    const files = richWorld()
+    const w = world(on, files)
+    await start($, surface)
+    const spendNode = async (brain: number) => {
+      files[LIVE + '/runs/' + KEY + '--' + ROOT + '.json'] = j(envelope({ host_today_brain_usd: brain, brain_cap_usd: 150 }))
+      await w.clock.advance(5000)
+      const band = walkTexts((await bandLine($, surface, 209)).tree).find(n => textOf(n).startsWith('$') && textOf(n).includes('/150'))
+      const tab = walkTexts((await paneParts($, surface, 'spend')).tree).find(n => textOf(n).startsWith('host today (brain tier)'))
+      return [band?.props?.color, tab?.props?.color, textOf(tab as Node)] as const
+    }
+    const a = await spendNode(119.6) // rounds to 80 % in the old Spend tab but is below 0.8 of the cap
+    expect(a[0]).toBeUndefined()
+    expect(a[1]).toBeUndefined()
+    expect(a[2]).toBe('host today (brain tier) $119.60 / $150.00 · 80 %')
+    const b = await spendNode(120)
+    expect([b[0], b[1]]).toEqual(['warning', 'warning'])
+    const c = await spendNode(150)
+    expect([c[0], c[1]]).toEqual(['error', 'error'])
+  })
+
+  for (const cols of [40, 30, 20, 12]) {
+    test('P7 fix B: at ' + cols + ' columns the ⓘ and the verdict glyph survive and the line fits (' + surface + ')', async ($, on) => {
+      world(on, richWorld())
+      await start($, surface)
+      const line = await bandLine($, surface, cols)
+      expect(line.text.endsWith('ⓘ')).toBe(true)
+      expect(line.text.startsWith('⏸')).toBe(true)
+      expect(displayWidth(line.text)).toBeLessThanOrEqual(cols)
+      expect(line.info).toBeDefined()
+    })
+  }
+
+  test('P7 fix B: below the table the unit bar goes first, then the stalled count, then the live count, then the verdict word (' + surface + ')', async ($, on) => {
+    world(on, richWorld())
+    await start($, surface)
+    const at = async (n: number) => (await bandLine($, surface, n)).text
+    expect(await at(30)).toBe('⏸ 疑似卡住 │ ▰▰▰▱▱ │ ⚙2 ⏸1 │ ⓘ') // exactly fits
+    expect(await at(29)).toBe('⏸ 疑似卡住 │ ⚙2 ⏸1 │ ⓘ') // bar first
+    expect(await at(21)).toBe('⏸ 疑似卡住 │ ⚙2 │ ⓘ') // then the stalled count
+    expect(await at(18)).toBe('⏸ 疑似卡住 │ ⓘ') // then the live count
+    expect(await at(12)).toBe('⏸ 疑似… │ ⓘ')
+  })
+
+  test('P7 fix C: the Now tab row is verdict + project + elapsed, the stage is drawn once, progress is its own line (' + surface + ')', async ($, on) => {
+    world(on, richWorld())
+    await start($, surface)
+    const now = await paneParts($, surface, 'now')
+    const p = await bandParts($, surface)
+    expect(p.row).toBe('⏸ 疑似卡住 repo · 10m')
+    expect(now.texts.filter(t => t === 'implement').length).toBe(1) // position only; the old row repeated the stage
+    expect(now.texts).toContain('progress  —')
+    const verdict = walkTexts(now.tree).find(n => textOf(n) === '⏸ 疑似卡住')
+    expect(verdict?.props?.color).toBe('error')
+  })
+}
+
+test('P7 fix D: a level with no valid size has no leading ·', () => {
+  const NOW = Date.parse('2026-10-04T10:00:30.000Z')
+  const text = (m: Record<string, unknown>) => slotPosition(readMarker({ stage: 'implement', stage_set_at: '2026-10-04T09:57:30.000Z', ...m }), NOW)?.segs.map(g => g.text).join('')
+  expect(text({ level: 'l5' })).toBe('l5 ▸ implement ◷3m')
+  expect(text({ size: 'HUGE', level: 'l5', urgent: true })).toBe('l5 ▸ implement ◷3m')
+  expect(text({ size: 'S', level: 'l4' })).toBe('S·l4 ▸ implement ◷3m')
+  expect(text({})).toBe('▸ implement ◷3m')
 })

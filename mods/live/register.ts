@@ -186,6 +186,7 @@ async function receiptStart($: EngineInterface, identity: unknown, root: string)
 }
 
 // The cost fuse's mode as hooks/cost-fuse.js resolves it: AUTOPILOT_COST_FUSE_MODE, else ~/.autopilot/config.json cost_fuse.mode, else warn.
+// (env first, then config: the same result as hooks/cost-fuse.js, which loads the config and then applies the env override)
 async function fuseModeOf($: EngineInterface, autopilotHome: string): Promise<string> {
   try {
     const env = await $.env.get('AUTOPILOT_COST_FUSE_MODE')

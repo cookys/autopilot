@@ -19,7 +19,9 @@ When resuming work on an existing feature branch with an active project:
    Same session: `node scripts/session-mode.js status` shows `stage` and `unit`.
    New session (the marker is per session): `node scripts/session-mode.js set --size <original size>
    [--urgent] [--bug]`, then `stage-advance.js --to` each node of the `stage-graph.js nodes` walk up
-   to the resume node — the first write must be the entry node, and each later call is a legal move.
+   to the resume node — the first write must be the entry node, and each later call is a legal move
+   (a replayed `implement` takes `--unit <unit_kind>:<i>/<N>:<label>` when `nodes` prints a non-null `unit_kind`:
+   `<i>` = the resume unit, or `<N>` when resuming past the unit loop).
    Continue with `node scripts/stage-graph.js next --from <stage> --size <size> [flags]`.
    When Mission is active, apply the resume-projection rule below.
 

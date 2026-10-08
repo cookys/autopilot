@@ -106,6 +106,16 @@ S5a, S5b, S7, S8; `README.md` there is the verdict table). A mod is CC-only; non
   `sources_manifest`); and, for a campaign root, `<git-common-dir>/autopilot/work-orders/<root>/*.json` (the common dir is the
   envelope's published `scope.repo_identity`; a root that is not a plain `[A-Za-z0-9._-]` segment is never joined into a path).
   A sidecar whose `scope` is not this project / root is an absent file.
+  - **P7 watcher facts (stage-graph plan; contract `docs/plans/evidence/2026-10-06-stage-graph/p7/contract.md` §①)**, all written by the
+    watcher tmp + rename into `<live>`, a failing source leaves the old file and logs one line: the runs envelope's optional
+    `host_today_brain_usd` (cents; `null` when the costs file is unreadable) and `brain_cap_usd` (the same `scripts/lib/brain-spend.js`
+    computation `hooks/cost-fuse.js` runs: configured tiers, UTC day, `cost_fuse.daily_usd_brain` + `AUTOPILOT_COST_FUSE_DAILY_USD`);
+    `ladder: { rung, at } | null` in the decisions sidecar (latest `kind:"ladder"` row; ladder rows stay out of `count`);
+    `runs/<project_key>.residue.json` (`autopilot.residue/1`, `src/status/residue.js`: async `repo-residue-sweep.js scan` of the main
+    worktree, at most once per 60 s, never two at once; `reapable_worktrees` = `clean-integrated` + `missing-dir`); and
+    `stage/<sid>.json` (`autopilot.stage-walk/1`, `src/status/stage-walk.js`: `scripts/stage-graph.js` `buildWalk` for each unexpired
+    marker with a `size`, rewritten only when size/urgent/bug/high_risk/stage/stage_set_at/unit change; a file whose marker vanished
+    is removed by the watcher that wrote it, files of an earlier watcher process are not swept).
   - Verdict precedence now: `要你決定` (attention `permission` / `question`, or an open decision; reason `等你批准：…（等了 N 分）`,
     `等你回答：…`, or the question plus `（已等 N 天）` when the model marks it stale and a whole day has passed) > `疑似卡住` (a stalled dispatch run, or a stamped, un-ended subagent quiet >= 180 s: `工頭 N 分沒有動作`; a `SubagentStop` ends it, a stamp older than the 24 h marker TTL is ignored; the 180 s is `FOREMAN_STALL_S`, the dispatch stall bound) >
     `完成待驗收` (frozen done = total, or every session task completed; both need nothing live, no fresh un-ended foreman, and acceptance undecided; the

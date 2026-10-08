@@ -49,7 +49,10 @@ const { createForemanPublisher } = require('./foreman-activity');
 const { createQcPublisher } = require('./qc-fact');
 const { createLoadSourcePublisher } = require('./load-source');
 const { createReviewPublisher } = require('./review-input');
+const { createResiduePublisher } = require('./residue');
+const { createStageWalkPublisher } = require('./stage-walk');
 const { createCodeFingerprint, pluginIdentity } = require('./code-fingerprint');
+const { loadCostFuseConfig, costsFileOf, sumTodayTierSpend } = require('../../scripts/lib/brain-spend');
 
 const SCHEMA = 'autopilot.runs-live/1';
 const VALID_FOR_S = 180;
@@ -296,6 +299,29 @@ function createCostReader(env) {
   return { summary, file };
 }
 
+// --- D1 (stage-graph P7): host-today brain-tier spend vs the cost-fuse cap ---------------------------------------------
+// The SAME computation hooks/cost-fuse.js runs (scripts/lib/brain-spend.js: config resolution incl. env override, tier
+// filter, UTC-day sum). costs.jsonl is only re-summed when its (size, mtime) or the UTC day changed.
+// -> { host_today_brain_usd: cents-rounded number | null (costs file unreadable), brain_cap_usd: number }
+function createBrainSpendReader(env) {
+  const home = env.HOME || os.homedir();
+  const cache = { sig: null, value: null };
+  function read(nowMs) {
+    const cfg = loadCostFuseConfig({ env, home });
+    const file = costsFileOf({ env, home });
+    let sig;
+    try { const st = fs.statSync(file); sig = `${st.size}:${st.mtimeMs}:${new Date().toISOString().slice(0, 10)}:${cfg.tiers.join(',')}`; } catch (_error) {
+      return { host_today_brain_usd: null, brain_cap_usd: cfg.daily_usd_brain };
+    }
+    if (cache.sig !== sig) {
+      cache.sig = sig;
+      cache.value = Math.round(sumTodayTierSpend(file, new Set(cfg.tiers)) * 100) / 100;
+    }
+    return { host_today_brain_usd: cache.value, brain_cap_usd: cfg.daily_usd_brain };
+  }
+  return { read };
+}
+
 // --- worktree -> project map -------------------------------------------------------------
 function worktreePaths({ cwd, scope }) {
   const out = {};
@@ -347,15 +373,18 @@ function createWatcher({
   let identity = scope.repo_identity;
 
   const costs = createCostReader(env);
+  const brainSpend = createBrainSpendReader(env);
   const sidecarArgs = { runsDir, key, getIdentity: () => identity, writeAtomic, safeSegment, log: (m) => log(m) };
   const decisionsSidecar = createDecisionsPublisher(sidecarArgs); // WATCH-B: <scope>.decisions.json
   const foremanSidecar = createForemanPublisher({ ...sidecarArgs, live, dispatchRunsDir: manifestDirOf(env) }); // WATCH-B: <scope>.foreman.json
   const qcFact = createQcPublisher({ ...sidecarArgs, repo: cwd }); // stage-graph P7c: <project_key>.qc.json
   const loadSourceSidecar = createLoadSourcePublisher({ live, env, repoDir: path.resolve(__dirname, '..', '..'), writeAtomic, log: (m) => log(m) }); // P7b: <live>/load-source.json
   const reviewSidecar = createReviewPublisher({ runsDir, key, live, env, getIdentity: () => identity, writeAtomic, log: (m) => log(m) }); // P7d: <project_key>.review.json
+  const residueSidecar = createResiduePublisher({ runsDir, key, repo: cwd, writeAtomic, log: (m) => log(m), now }); // P7 D3: <project_key>.residue.json (async scan, 60 s throttle)
+  const stageWalkSidecar = createStageWalkPublisher({ live, writeAtomic, log: (m) => log(m) }); // P7 D4: <live>/stage/<sid>.json
   const state = {
     lastSignature: null, lastPublishMs: null, lastRuns: null, lastObservedAt: null, lastPaths: null,
-    roots: new Set(), lastCounts: new Map(), lastCost: { sessions: {}, host_today_usd: null, host_today_as_of: null },
+    roots: new Set(), lastCounts: new Map(), lastCost: { sessions: {}, host_today_usd: null, host_today_as_of: null, host_today_brain_usd: null, brain_cap_usd: brainSpend.read(now()).brain_cap_usd },
     idleSince: null,
     rootActiveAt: new Map(), droppedRoots: new Set(), // root retention (ROOT_RETENTION_S)
     // --render: last-seen signature per root, roots awaiting a publish, the debounce deadline, cached task receipts
@@ -383,6 +412,8 @@ function createWatcher({
       sessions: state.lastCost.sessions,
       host_today_usd: state.lastCost.host_today_usd,
       host_today_as_of: state.lastCost.host_today_as_of,
+      host_today_brain_usd: state.lastCost.host_today_brain_usd,
+      brain_cap_usd: state.lastCost.brain_cap_usd,
     };
   }
 
@@ -649,7 +680,7 @@ function createWatcher({
     }
     const allMarkers = unexpiredMarkers(env, key, nowMs);
     const markers = allMarkers.filter(isOrchestratorMarker);
-    const cost = costs.summary(nowMs, markers.map((m) => m.session_id).filter(Boolean));
+    const cost = { ...costs.summary(nowMs, markers.map((m) => m.session_id).filter(Boolean)), ...brainSpend.read(nowMs) };
     const candidates = new Set(state.roots);
     for (const r of rows) if (r.root_run_id) candidates.add(r.root_run_id);
     for (const m of allMarkers) {
@@ -681,7 +712,7 @@ function createWatcher({
     const bound = freshBoundOf(rows, interval, enrichCap);
     const counts = new Map([[null, computeCounts(rows, interval, enrichCap, bound)]]);
     for (const root of roots) counts.set(root, computeCounts(scopeRows(rows, root), interval, enrichCap, bound));
-    const costSignature = JSON.stringify({ s: Object.entries(cost.sessions).map(([k, v]) => [k, v.session_usd]), t: cost.host_today_usd });
+    const costSignature = JSON.stringify({ s: Object.entries(cost.sessions).map(([k, v]) => [k, v.session_usd]), t: cost.host_today_usd, b: cost.host_today_brain_usd, c: cost.brain_cap_usd });
     const signature = `${signatureOf(rows)}|${JSON.stringify([...counts])}|${costSignature}`;
     const changed = signature !== state.lastSignature;
     const due = state.lastPublishMs === null || nowMs - state.lastPublishMs >= HEARTBEAT_S * 1000;
@@ -703,6 +734,8 @@ function createWatcher({
     }
     try { decisionsSidecar.publish({ runs: rows, roots: state.roots }); foremanSidecar.publish({ roots: state.roots, markers, nowMs }); qcFact.publish({ nowMs }); reviewSidecar.publish({ nowMs }); } catch (error) { log(`sidecar publish failed: ${error.message}`); }
     try { loadSourceSidecar.publish({ nowMs }); } catch (error) { log(`load-source failed: ${error.message}`); }
+    try { residueSidecar.publish({ nowMs }); } catch (error) { log(`residue publish failed: ${error.message}`); }
+    try { stageWalkSidecar.publish({ markers: allMarkers, nowMs }); } catch (error) { log(`stage walk failed: ${error.message}`); }
     try { publishTurnEffective({ liveBase: live, key, nowMs, log }); } catch (error) { log(`turn-effective failed: ${error.message}`); }
     if (render) {
       try { renderPass(rows, nowMs, roots); } catch (error) { log(`render pass failed: ${error.message}`); }

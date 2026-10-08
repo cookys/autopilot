@@ -11,9 +11,16 @@
 #   AUTOPILOT_SESSION_MODE_DIR  marker dir override (autopilot home = its parent), as the plugin itself does
 #   GATE_TMUX_SOCKET         tmux -L <name> (a private server); default = the tmux server you are attached to
 #   GATE_OUT                 output base, default <this dir>/runs
+#   GATE_MODE                mode name written to meta.json (dev-flow, l3 ... ); default = the cell name up to the first '-'
 # Capture layout (what check.js reads):
-#   meta.json pane.txt band.txt panel.txt marker.json attention.json tasks.json turn.json context.json envelope.json decisions-sidecar.json
+#   meta.json pane.txt pane.ansi band.txt panel.txt marker.json attention.json tasks.json turn.json context.json envelope.json decisions-sidecar.json
 #   foreman.json sources.json model.json decision-file.json work-orders/*.json agents/*.json marker-dir-ls.txt ps-watchers.txt
+#   P7 facts (the one-line band's slots, re-derived by check.js): envelope.json carries D1 (host_today_brain_usd / brain_cap_usd),
+#   decisions-sidecar.json carries D2 (ladder), residue.json = <live>/runs/<project_key>.residue.json (D3), stage.json = <live>/stage/<sid>.json (D4),
+#   qc.json = <live>/runs/<project_key>.qc.json, review.json = <live>/runs/<project_key>.review.json, load-source.json = <live>/load-source.json,
+#   marker.json = the session marker. pane.ansi = `capture-pane -e -p` (colour; gate/screenshot.sh renders it). meta.json records window_width / pane_width
+#   (check.js: bodyColumns = window_width - 5) and mode (GATE_MODE, else the cell name's first dash-separated part).
+#   band.txt = THE one band line (a verdict mark ... ending in ⓘ, or the non-ok `<reason> │ ⓘ` line).
 #   Root set (mods P1W SCOPE): for each root in marker.campaign_roots (<= 8, plain names only) also envelope--<root>.json,
 #   decisions-sidecar--<root>.json, model--<root>.json and campaign-work-orders/<root>/*.json (the campaign root's progress receipts).
 #   (agents/*.json = <live>/agents/<sid>/*.json, the per-subagent activity stamps with ended_at; check.js derives the foreman verdict from them)
@@ -35,6 +42,8 @@ TMUX_CMD=(tmux)
 NOW_MS=$(node -e 'process.stdout.write(String(Date.now()))')
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 PANE=$("${TMUX_CMD[@]}" capture-pane -p -t "$TARGET" 2>&1) || { echo "tmux capture-pane failed: $PANE" >&2; exit 2; }
+PANE_ANSI=$("${TMUX_CMD[@]}" capture-pane -e -p -t "$TARGET" 2>/dev/null || true)
+PANE_DIMS=$("${TMUX_CMD[@]}" display -p -t "$TARGET" '#{window_width} #{pane_width}' 2>/dev/null || true)
 PANE_CWD=$("${TMUX_CMD[@]}" display -p -t "$TARGET" '#{pane_current_path}' 2>/dev/null || true)
 
 AHOME=${HOME}/.autopilot
@@ -46,9 +55,11 @@ if [ ! -f "$POINTER" ]; then echo "no live pointer at $POINTER (is a watcher / s
 OUT=${GATE_OUT:-$HERE/runs}/$CELL/$STAMP
 mkdir -p "$OUT/work-orders" || exit 2
 printf '%s\n' "$PANE" > "$OUT/pane.txt"
+printf '%s\n' "$PANE_ANSI" > "$OUT/pane.ansi"
 
 # everything else is resolved in node (JSON, sanitising rules written out here, not imported from the plugin)
 export GATE_OUT_DIR=$OUT GATE_NOW_MS=$NOW_MS GATE_CELL=$CELL GATE_SID_ARG=$SID_ARG GATE_PANE_CWD=$PANE_CWD
+export GATE_PANE_DIMS=$PANE_DIMS GATE_MODE_ARG=${GATE_MODE:-}
 export GATE_MARKERS=$MARKERS GATE_POINTER=$POINTER GATE_AHOME=$AHOME
 node - <<'NODE'
 const fs = require('fs'); const path = require('path');
@@ -111,6 +122,14 @@ if (live) {
     if (an.length) fs.mkdirSync(path.join(out, 'agents'), { recursive: true });
     for (const n of an) copy(path.join(ad, n), path.join('agents', n));
   }
+  // P7 facts keyed by project (not scope) or session
+  if (pkey) {
+    copy(path.join(live, 'runs', `${pkey}.qc.json`), 'qc.json');
+    copy(path.join(live, 'runs', `${pkey}.review.json`), 'review.json');
+    copy(path.join(live, 'runs', `${pkey}.residue.json`), 'residue.json');
+  }
+  copy(path.join(live, 'stage', `${ssid}.json`), 'stage.json');
+  copy(path.join(live, 'load-source.json'), 'load-source.json');
   if (scope) {
     copy(path.join(live, 'runs', `${scope}.json`), 'envelope.json');
     copy(path.join(live, 'runs', `${scope}.decisions.json`), 'decisions-sidecar.json');
@@ -169,11 +188,26 @@ for (const r of croots) {
   }
 }
 
-// --- band.txt: the last line with a verdict mark + the line after it
+// --- band.txt: the ONE band line. A verdict mark + word on the line; the band runs up to ` │ ⓘ` (a docked pane to its right is not part of it).
+// No verdict line: the non-ok line `<reason> │ ⓘ`.
 const pane = fs.readFileSync(path.join(out, 'pane.txt'), 'utf8').split('\n');
 const marks = ['▲ 要你決定', '⏸ 疑似卡住', '✓ 完成待驗收', '● 進行中', '◌ 待命'];
+const ICON_END = ' │ ⓘ';
 let band = '';
-for (let i = pane.length - 1; i >= 0; i -= 1) { if (marks.some((k) => pane[i].includes(k))) { band = `${pane[i]}\n${pane[i + 1] || ''}\n`; break; } }
+for (let i = pane.length - 1; i >= 0 && !band; i -= 1) {
+  for (const k of marks) {
+    const at = pane[i].indexOf(k);
+    if (at < 0) continue;
+    const end = pane[i].indexOf(ICON_END, at);
+    if (end >= 0) { band = `${pane[i].slice(at, end + ICON_END.length)}\n`; break; }
+  }
+}
+if (!band) {
+  for (let i = pane.length - 1; i >= 0; i -= 1) {
+    const end = pane[i].indexOf(ICON_END);
+    if (end > 0 && !marks.some((k) => pane[i].includes(k))) { band = `${pane[i].slice(0, end + ICON_END.length).replace(/^\s+/, '')}\n`; break; }
+  }
+}
 fs.writeFileSync(path.join(out, 'band.txt'), band);
 // panel.txt: a permission / AskUserQuestion dialog hides the band row, but the mod's top-right panel still shows the verdict
 // word alone in its cell with the reason in the cell below (no mark glyph). The text after the last │ of the line.
@@ -182,11 +216,15 @@ const cell = (l) => { const parts = l.split('│').map((p) => p.trim()).filter(B
 let panel = '';
 for (let i = 0; i < pane.length; i += 1) { if (words.includes(cell(pane[i]))) { panel = `${cell(pane[i])}\n${cell(pane[i + 1] || '')}\n`; break; } }
 fs.writeFileSync(path.join(out, 'panel.txt'), panel);
-if (!band && !panel) missing.push('band lines and panel verdict in the pane (no verdict mark / panel word found)');
+if (!band && !panel) missing.push('band line and panel verdict in the pane (no verdict mark ending in ⓘ / panel word found)');
 else if (!band) missing.push('band row hidden (a dialog is open?): the panel verdict is recorded in panel.txt');
 
+const dims = String(E.GATE_PANE_DIMS || '').split(/\s+/).map(Number);
+const windowWidth = Number.isFinite(dims[0]) && dims[0] > 0 ? dims[0] : null;
+const paneWidth = Number.isFinite(dims[1]) && dims[1] > 0 ? dims[1] : null;
+const mode = E.GATE_MODE_ARG || String(E.GATE_CELL).split('-')[0];
 fs.writeFileSync(path.join(out, 'meta.json'), `${JSON.stringify({
-  schema: 'autopilot.gate-capture/1', cell: E.GATE_CELL, captured_at: new Date(Number(E.GATE_NOW_MS)).toISOString(), captured_at_ms: Number(E.GATE_NOW_MS),
+  schema: 'autopilot.gate-capture/2', cell: E.GATE_CELL, mode, window_width: windowWidth, pane_width: paneWidth, captured_at: new Date(Number(E.GATE_NOW_MS)).toISOString(), captured_at_ms: Number(E.GATE_NOW_MS),
   session_id: sid, session_id_how: how, sanitised_session_id: ssid, project_key: pkey, root_run_id: root, scope_key: scope,
   live_base: live, autopilot_home: E.GATE_AHOME, pane_cwd: E.GATE_PANE_CWD || null, git_common_dir: common, missing,
 }, null, 2)}\n`);

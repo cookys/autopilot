@@ -1,465 +1,414 @@
 'use strict';
 
 // gate/check.test.js — unit tests of check.js on hand-made capture dirs (node --test gate/check.test.js).
-// Each verdict word, 來源未接, frozen / unfrozen progress, the decisions line, elapsed, plus PLANTED-RED cases: a capture
-// whose band shows the wrong verdict / progress / project must FAIL.
-// LABEL (mods P1W): +4 tests (the 4th: phase judged in its own slot, RED before: run-w/land/label-slot-red.txt; mutation whole-line includes: mut-label-whole-line-includes.txt)
-// LABEL first 3: +3 tests (a mapped phase code must show its zh-TW label, never the raw code; COMPLETED -> 完成; lower-case code maps; an unmapped code stays raw). RED before: 2 of the 3 fail.
-// GATEFIX (mods P1W): +8 tests (completion needs no live run, panel surface under a dialog, band preferred, planted reds). RED before the change: 31 tests, 23 pass / 8 fail; GREEN: 31 / 31.
-// GATEFIX mutation controls (run-w/land/mut-check-*.txt): done-ignores-live, panel-never, panel-free-pass, band-not-preferred, panel-substring, each red then restored.
-// Result before GATEFIX: 23 tests, 23 pass. Mutation controls (each breaks one rule in check.js, the suite goes red, restored):
-// compare-always-pass 2 red, decision-ignored 1, stall-ignored 1, deleted-counted 1, idle-attention-decides 1,
-// frozen-needs-digest 1 (after the unfrozen receipt case carried a count), notwired-always 2.
-
-// TURN (mods P1W): +4 tests (an active turn is 進行中 with 回合進行中, ended / absent / stale = 待命, permission attention outranks, planted reds). Mutation controls: run-w/land/mut-turn-check-*.txt.
-
-// SCOPE (mods P1W, gate run l5g): +10 tests (43 -> 53), the band follows the campaigns the marker names (marker.campaign_roots + envelope--<root>.json /
-// decisions-sidecar--<root>.json / model--<root>.json / campaign-work-orders/<root>/): live, terminal, job-root review after terminal, stall, stale / missing
-// extra envelope, summed decisions, newest-root progress / phase / elapsed, unsafe roots, planted reds. RED before the change: 53 tests, 46 pass / 7 fail
-// (run-w/land/scope-check-red.txt; the 3 negative cases hold vacuously); GREEN 53 / 53. Mutation controls: run-w/land/scope-mut-check-*.txt.
+// P7 rewrite (stage-graph P7 work package 3a): the band is ONE line (` │ ` separators, last segment ⓘ), judged slot by slot against the
+// P7 contract. Sections: the verdict precedence (kept from W4: attention / stall / foreman / completion / live work / turn / root set),
+// the one-line band at 209 / 120 / 80 columns with rich and sparse facts, one planted FAIL per slot, the width-table ABSENT rule,
+// the non-ok line, the panel / dialog surfaces, and the final summary line. Mutation proofs of check.js are recorded in the P7 report
+// (each mutation turns named tests red; restored afterwards).
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { run, derive, findBand } = require('./check.js');
+const { spawnSync } = require('child_process');
+const { run, derive, findBand, findNonOk, classify, displayWidth, summary } = require('./check.js');
 
 const NOW = Date.parse('2026-10-05T10:00:00.000Z');
 const IDENT = 'git-common-dir:/home/u/projects/demo/.git';
 const SID = 'sess-1';
 const ROOT = 'job-1';
+const PK = 'abcdef0123456789';
 const iso = (offMin) => new Date(NOW - offMin * 60000).toISOString();
 
-function capture(files, bandLines) {
+const baseEnvelope = (over) => ({ schema: 'autopilot.runs-live/1', scope: { project_key: PK, repo_identity: IDENT, root_run_id: ROOT }, published_at: iso(0), valid_for_s: 180, runs: [], counts: { confirmed_live: 0, exited: 0, unknown: 0 }, ...(over || {}) });
+
+// capture(files, paneLines, meta): a capture dir with a fresh quiet envelope and a bare marker; `files[name] = null` removes a file
+function capture(files, paneLines, metaOver) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gatechk-'));
   const w = (n, v) => { fs.mkdirSync(path.dirname(path.join(dir, n)), { recursive: true }); fs.writeFileSync(path.join(dir, n), typeof v === 'string' ? v : JSON.stringify(v)); };
-  w('meta.json', { cell: 't', sid: SID, project_key: 'abcdef0123456789', root_run_id: ROOT, captured_at: new Date(NOW).toISOString(), captured_at_ms: NOW });
-  w('marker.json', { session_id: SID, level: null, repo_identity: IDENT, project_key: 'abcdef0123456789', root_run_id: ROOT, started_at: iso(30), expires_at: iso(-600) });
-  w('envelope.json', { schema: 'autopilot.runs-live/1', scope: { project_key: 'abcdef0123456789', repo_identity: IDENT, root_run_id: ROOT }, runs: [], counts: { confirmed_live: 0, exited: 0, unknown: 0 } });
+  w('meta.json', { cell: 'l5-t', mode: 'l5', sid: SID, project_key: PK, root_run_id: ROOT, captured_at: new Date(NOW).toISOString(), captured_at_ms: NOW, window_width: 209, ...(metaOver || {}) });
+  w('marker.json', { session_id: SID, level: null, repo_identity: IDENT, project_key: PK, root_run_id: ROOT, started_at: iso(30), expires_at: iso(-600) });
+  w('envelope.json', baseEnvelope());
   for (const [n, v] of Object.entries(files || {})) { if (v === null) fs.rmSync(path.join(dir, n), { force: true }); else w(n, v); }
-  w('pane.txt', `some output\n\n${(bandLines || []).join('\n')}\n> \n`);
+  w('pane.txt', `some output\n\n${(paneLines || []).join('\n')}\n> \n`);
   return dir;
 }
 const status = (res, name) => (res.results.find((r) => r.name === name) || {}).status;
-const tasksFile = (list, first) => ({ schema: 'autopilot.session-tasks/1', session_id: SID, first_created_at: first || iso(30), tasks: list });
+const tasksFile = (list) => ({ schema: 'autopilot.session-tasks/1', session_id: SID, first_created_at: iso(30), tasks: list });
 const t = (id, subject, st, seq) => ({ id, subject, status: st, started_seq: seq === undefined ? null : seq });
 const receipt = (extra) => ({ root_run_id: ROOT, controller: { progress_receipts: [{ artifact_type: 'controller_progress_receipt', root_run_id: ROOT, issued_at: iso(20), generation: 1, ...extra }] } });
 
-test('findBand takes the last band line and the reason line after it', () => {
-  const b = findBand('x\n● 進行中 demo · — · 5m · —\nreason\n> ');
-  assert.strictEqual(b.verdict, '進行中');
-  assert.strictEqual(b.line2, 'reason');
-  assert.strictEqual(findBand('nothing here'), null);
+// ---- rich facts: every slot present at 209
+const richMarker = (over) => ({ session_id: SID, level: 'l5', repo_identity: IDENT, project_key: PK, root_run_id: ROOT, started_at: iso(30), expires_at: iso(-600),
+  size: 'M', urgent: true, stage: 'implement', stage_set_at: iso(3), unit: { kind: 'deliverable', index: 3, total: 5, label: 'x' }, review_families: ['a', 'b'], ...(over || {}) });
+const richFiles = (over) => ({
+  'marker.json': richMarker(),
+  'envelope.json': baseEnvelope({ runs: [{ run_id: 'r1', alive: true, stall: false, started_at: iso(30) }, { run_id: 'r2', alive: true, stall: true, started_at: iso(30) }],
+    counts: { confirmed_live: 2, exited: 0, unknown: 0 }, host_today_brain_usd: 123.4, brain_cap_usd: 150 }),
+  'review.json': { schema: 'autopilot.review/1', project_key: PK, code: { generation: 2 }, plan: { generation: 1 } },
+  'qc.json': { schema: 'autopilot.qc-status/1', scope: { project_key: PK, root_run_id: null }, state: 'ok' },
+  'decisions-sidecar.json': { schema: 'autopilot.decisions-sidecar/1', count: 3, irreversible_count: 1, undocumented_dispatches: 1, ladder: { rung: 'U2', at: iso(5) } },
+  'load-source.json': { schema: 'autopilot.load-source/1', source: 'dev', behind_upstream: 3, flags: [] },
+  'residue.json': { schema: 'autopilot.residue/1', project_key: PK, reapable_worktrees: 2, by_class: { 'clean-integrated': 1, 'missing-dir': 1, other: 4 } },
+  ...(over || {}),
+});
+const RICH_209 = '⏸ 疑似卡住 │ M!·l5 ▸ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙2 ⏸1 │ R2 ⟲ · QC ✓ │ ◆3 ?1 U2 │ $123/150 │ dev ↓3 · wt 2 │ ⓘ';
+const RICH_120 = '⏸ 疑似卡住 │ M!·l5 ▸ implement │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙2 ⏸1 │ ⓘ';
+const RICH_80 = '⏸ 疑似卡住 │ ▰▰▰▱▱ │ ⚙2 ⏸1 │ ⓘ';
+const rich = (line, width, over) => capture(richFiles(over), [line], { window_width: width });
+
+// ---- the band at three widths, rich facts
+test('RICH 209: every slot is judged PASS, the summary is PASS <mode> fields=10', () => {
+  const r = run(rich(RICH_209, 209));
+  for (const n of ['verdict', 'position', 'unit', 'dispatch', 'review', 'decisions', 'spend', 'hygiene', 'ⓘ', 'layout']) assert.strictEqual(status(r, n), 'PASS', n);
+  assert.strictEqual(r.ok, true); assert.strictEqual(r.fields, 10);
+  assert.strictEqual(summary(r), 'PASS l5 fields=10');
+  assert.strictEqual(r.derived.columns, 204);
+});
+test('RICH 120 (bodyColumns 115): hygiene, spend, decisions, review and the ◷ age are ABSENT; the rest PASS', () => {
+  const r = run(rich(RICH_120, 120));
+  for (const n of ['hygiene', 'spend', 'decisions', 'review']) assert.strictEqual(status(r, n), 'ABSENT', n);
+  for (const n of ['verdict', 'position', 'unit', 'dispatch', 'ⓘ', 'layout']) assert.strictEqual(status(r, n), 'PASS', n);
+  assert.strictEqual(r.ok, true); assert.strictEqual(r.derived.columns, 115);
+});
+test('RICH 80 (bodyColumns 75): only verdict, the unit bar (no k/N, no 族), dispatch and ⓘ', () => {
+  const r = run(rich(RICH_80, 80));
+  assert.strictEqual(status(r, 'position'), 'ABSENT');
+  for (const n of ['verdict', 'unit', 'dispatch', 'ⓘ', 'layout']) assert.strictEqual(status(r, n), 'PASS', n);
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(summary(r), 'PASS l5 fields=10');
+});
+test('RICH 80: a k/N or 族 left on the bar FAILs the unit slot', () => {
+  assert.strictEqual(status(run(rich('⏸ 疑似卡住 │ ▰▰▰▱▱ 3/5 │ ⚙2 ⏸1 │ ⓘ', 80)), 'unit'), 'FAIL');
 });
 
-test('要你決定 by an attention permission, with the reason on line 2', () => {
-  const dir = capture({ 'attention.json': { schema: 'autopilot.attention/1', kind: 'permission', summary: 'Bash: rm -rf /tmp/x', since: iso(2) } },
-    ['▲ 要你決定 demo · — · 30m · —', '等你批准：Bash: rm -rf /tmp/x（等了 2 分）']);
-  const r = run(dir);
-  assert.strictEqual(status(r, 'verdict'), 'PASS'); assert.strictEqual(status(r, 'reason'), 'PASS');
+// ---- sparse facts: empty slots are left out, never a doubled separator
+const SPARSE = { 'marker.json': richMarker({ size: 'S', urgent: false, level: null, stage: 'plan', unit: undefined, review_families: [], stage_set_at: iso(10) }), 'envelope.json': baseEnvelope() };
+test('SPARSE 209: verdict + position + ⓘ only; the other slots are ABSENT with the empty reason', () => {
+  const r = run(capture(SPARSE, ['◌ 待命 │ S ▸ plan ◷10m │ ⓘ']));
+  for (const n of ['unit', 'dispatch', 'review', 'decisions', 'spend', 'hygiene']) assert.strictEqual(status(r, n), 'ABSENT', n);
+  for (const n of ['verdict', 'position', 'ⓘ', 'layout']) assert.strictEqual(status(r, n), 'PASS', n);
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(summary(r), 'PASS l5 fields=10');
 });
-test('要你決定 by an attention question', () => {
-  const dir = capture({ 'attention.json': { kind: 'question', summary: 'which db?' } }, ['▲ 要你決定 demo · — · 30m · —', '等你回答：which db?']);
-  assert.strictEqual(status(run(dir), 'verdict'), 'PASS');
+test('SPARSE 120 and 80 pass the same facts (position gone at 80)', () => {
+  assert.strictEqual(run(capture(SPARSE, ['◌ 待命 │ S ▸ plan │ ⓘ'], { window_width: 120 })).ok, true);
+  const r80 = run(capture(SPARSE, ['◌ 待命 │ ⓘ'], { window_width: 80 }));
+  assert.strictEqual(r80.ok, true); assert.strictEqual(status(r80, 'position'), 'ABSENT');
 });
-test('要你決定 by an open decision file, even with an idle attention file', () => {
-  const dir = capture({ 'decision-file.json': { schema: 'autopilot.decision/1', question: '要不要強推 main？' }, 'attention.json': { kind: 'idle', summary: 'waiting' } },
-    ['▲ 要你決定 demo · — · 30m · —', '要不要強推 main？']);
-  const r = run(dir);
-  assert.strictEqual(status(r, 'verdict'), 'PASS'); assert.strictEqual(status(r, 'reason'), 'PASS');
+test('SPARSE: a doubled separator / an empty slot drawn FAILs the layout', () => {
+  assert.strictEqual(status(run(capture(SPARSE, ['◌ 待命 │ S ▸ plan ◷10m │  │ ⓘ'])), 'layout'), 'FAIL');
 });
-test('attention idle alone is not 要你決定', () => {
-  const dir = capture({ 'attention.json': { kind: 'idle', summary: 'waiting' } }, ['◌ 待命 demo · — · 30m · —', '沒有派工在跑']);
-  assert.strictEqual(derive(dir).verdict, '待命');
-});
-test('疑似卡住 from an envelope run with stall:true', () => {
-  const dir = capture({ 'envelope.json': { scope: { project_key: 'abcdef0123456789', repo_identity: IDENT }, runs: [{ run_id: 'r', alive: true, stall: true, started_at: iso(30) }], counts: { confirmed_live: 1 } } },
-    ['⏸ 疑似卡住 demo · — · 30m · —', '1 個派工疑似沒有輸出']);
-  assert.strictEqual(status(run(dir), 'verdict'), 'PASS');
-});
-test('完成待驗收 by frozen done == total (and the progress tokens)', () => {
-  const dir = capture({ 'work-orders/n1-a1.json': receipt({ frozen_denominator_digest: 'sha', deliverable_count: 4, completed_deliverables: ['a', 'b', 'c', 'd'], remaining_deliverables: [] }) },
-    ['✓ 完成待驗收 demo · — · 20m · 100%（4/4）', '驗收結論尚未出']);
-  const r = run(dir);
-  assert.strictEqual(status(r, 'verdict'), 'PASS'); assert.strictEqual(status(r, 'progress'), 'PASS'); assert.strictEqual(status(r, 'elapsed'), 'PASS');
-});
-test('完成待驗收 by every session task completed', () => {
-  const dir = capture({ 'tasks.json': tasksFile([t(1, 'a', 'completed'), t(2, 'b', 'completed'), t(3, 'gone', 'deleted')]), 'work-orders/x.json': null },
-    ['✓ 完成待驗收 demo · — · 30m · 2 done*', '任務 2/2 都完成，等你驗收']);
-  const r = run(dir);
-  assert.strictEqual(status(r, 'verdict'), 'PASS'); assert.strictEqual(status(r, 'progress'), 'PASS');
-});
-test('進行中 by a live run', () => {
-  const dir = capture({ 'envelope.json': { scope: { project_key: 'abcdef0123456789', repo_identity: IDENT }, runs: [{ run_id: 'r', alive: true, stall: false, started_at: iso(30) }], counts: { confirmed_live: 1 } } },
-    ['● 進行中 demo · — · 30m · —', '1 個派工在跑']);
-  assert.strictEqual(status(run(dir), 'verdict'), 'PASS');
-});
-test('進行中 by a task in progress; the phase is that task, the progress is unfrozen', () => {
-  const dir = capture({ 'tasks.json': tasksFile([t(1, 'done one', 'completed'), t(2, 'write the thing', 'in_progress', 1)]) },
-    ['● 進行中 demo · 做：write the thing · 30m · 1 done*', '']);
-  const r = run(dir);
-  assert.strictEqual(status(r, 'verdict'), 'PASS'); assert.strictEqual(status(r, 'phase'), 'PASS'); assert.strictEqual(status(r, 'progress'), 'PASS');
-});
-test('待命 when nothing is live, awaited or done', () => {
-  const dir = capture({}, ['◌ 待命 demo · — · 30m · —', '沒有派工在跑']);
-  assert.strictEqual(status(run(dir), 'verdict'), 'PASS');
-});
-test('phase precedence: campaign receipt phase beats marker phase beats task', () => {
-  const dir = capture({ 'work-orders/n.json': receipt({ phase: 'IMPLEMENTING' }), 'tasks.json': tasksFile([t(2, 'x', 'in_progress', 1)]) }, ['● 進行中 demo · 實作 · 20m · 0 done*', '']);
-  assert.strictEqual(status(run(dir), 'phase'), 'PASS');
-  const m = capture({ 'marker.json': { session_id: SID, level: null, repo_identity: IDENT, project_key: 'abcdef0123456789', root_run_id: ROOT, started_at: iso(30), phase: 'L-3 實作' }, 'tasks.json': tasksFile([t(2, 'x', 'in_progress', 1)]) }, ['● 進行中 demo · L-3 實作 · 30m · 0 done*', '']);
-  assert.strictEqual(status(run(m), 'phase'), 'PASS');
-});
-test('來源未接 shows for phase and progress when the manifest names the writers and they are off', () => {
-  const manifest = { schema: 'autopilot.sources/1', sources: {
-    phase: { installed: false, enabled: false }, progress: { installed: false, enabled: false }, tasks: { installed: false, enabled: false }, task_status_input: { installed: false, enabled: false } } };
-  const dir = capture({ 'sources.json': manifest }, ['◌ 待命 demo · 來源未接 · 30m · 來源未接', '沒有派工在跑']);
-  const r = run(dir);
-  assert.strictEqual(status(r, 'phase'), 'PASS'); assert.strictEqual(status(r, 'progress'), 'PASS');
-});
-test('a wired-but-empty source shows an em dash, not 來源未接', () => {
-  const manifest = { schema: 'autopilot.sources/1', sources: { phase: { installed: true, enabled: true }, progress: { installed: true, enabled: true }, tasks: { installed: true, enabled: true }, task_status_input: { installed: true, enabled: true } } };
-  const dir = capture({ 'sources.json': manifest }, ['◌ 待命 demo · — · 30m · —', '沒有派工在跑']);
-  const r = run(dir);
-  assert.strictEqual(status(r, 'phase'), 'PASS'); assert.strictEqual(status(r, 'progress'), 'PASS');
-  const wrong = run(capture({ 'sources.json': manifest }, ['◌ 待命 demo · 來源未接 · 30m · 來源未接', '']));
-  assert.strictEqual(status(wrong, 'phase'), 'FAIL');
-});
-test('frozen progress: percent and n/N both required; unfrozen receipt gives n done*', () => {
-  const frozen = { frozen_denominator_digest: 'd', deliverable_count: 8, completed_deliverables: ['1', '2', '3', '4', '5'], remaining_deliverables: ['6', '7', '8'] };
-  assert.strictEqual(status(run(capture({ 'work-orders/n.json': receipt(frozen) }, ['● 進行中 demo · 做 6 · 20m · 62.5%（5/8）', ''])), 'progress'), 'PASS');
-  assert.strictEqual(status(run(capture({ 'work-orders/n.json': receipt(frozen) }, ['● 進行中 demo · 做 6 · 20m · 5/8', ''])), 'progress'), 'FAIL');
-  const unfrozen = { deliverable_count: 4, completed_deliverables: ['1', '2', '3'], remaining_deliverables: ['4'] };
-  assert.strictEqual(status(run(capture({ 'work-orders/n.json': receipt(unfrozen) }, ['● 進行中 demo · 做 4 · 20m · 3 done*', ''])), 'progress'), 'PASS');
-  assert.strictEqual(status(run(capture({ 'work-orders/n.json': receipt(unfrozen) }, ['● 進行中 demo · 做 4 · 20m · 75%（3/4）', ''])), 'progress'), 'FAIL');
-});
-test('decisions line counts from the sidecar; zero counts require absence', () => {
-  const sc = { schema: 'autopilot.decisions-sidecar/1', count: 3, irreversible_count: 1, undocumented_dispatches: 2, writers_wired: ['engine'] };
-  const ok = run(capture({ 'decisions-sidecar.json': sc }, ['◌ 待命 demo · — · 30m · —', '沒有派工在跑 · 代你決定 3 件（1 件不可逆） · 僅 engine 自動裁決 · 2 件派工無決策紀錄']));
-  assert.strictEqual(status(ok, 'decisions'), 'PASS'); assert.strictEqual(status(ok, 'undocumented'), 'PASS');
-  const bad = run(capture({ 'decisions-sidecar.json': sc }, ['◌ 待命 demo · — · 30m · —', '沒有派工在跑 · 代你決定 2 件（1 件不可逆）']));
-  assert.strictEqual(status(bad, 'decisions'), 'FAIL'); assert.strictEqual(status(bad, 'undocumented'), 'FAIL');
-  const zero = { ...sc, count: 0, irreversible_count: 0, undocumented_dispatches: 0 };
-  assert.strictEqual(status(run(capture({ 'decisions-sidecar.json': zero }, ['◌ 待命 demo · — · 30m · —', '沒有派工在跑'])), 'no-decisions-line'), 'PASS');
-  assert.strictEqual(status(run(capture({ 'decisions-sidecar.json': zero }, ['◌ 待命 demo · — · 30m · —', '沒有派工在跑 · 代你決定 1 件（0 件不可逆）'])), 'no-decisions-line'), 'FAIL');
-});
-test('elapsed is compared within two minutes', () => {
-  assert.strictEqual(status(run(capture({}, ['◌ 待命 demo · — · 31m · —', ''])), 'elapsed'), 'PASS');
-  assert.strictEqual(status(run(capture({}, ['◌ 待命 demo · — · 50m · —', ''])), 'elapsed'), 'FAIL');
-});
-test('project name: repo directory, else 8 hex of the key for a bare repo', () => {
-  assert.strictEqual(derive(capture({}, [])).tokens.find((x) => x.name === 'project').expected, 'demo');
-  const bare = capture({ 'envelope.json': { scope: { project_key: 'abcdef0123456789', repo_identity: 'git-common-dir:/srv/demo.git' }, runs: [] }, 'marker.json': { session_id: SID, level: null, project_key: 'abcdef0123456789', root_run_id: ROOT, started_at: iso(30) } }, []);
-  assert.strictEqual(derive(bare).tokens.find((x) => x.name === 'project').expected, 'abcdef01');
+test('SPARSE: a level-less marker with no size draws no leading separator (▸ stage); level null omits ·level', () => {
+  const files = { 'marker.json': richMarker({ size: undefined, urgent: false, level: null, stage: 'plan', unit: undefined, review_families: [], stage_set_at: undefined }) };
+  assert.strictEqual(run(capture(files, ['◌ 待命 │ ▸ plan │ ⓘ'])).ok, true);
+  const lvl = { 'marker.json': richMarker({ size: 'L', urgent: false, level: 'l4', stage: 'plan', unit: undefined, review_families: [], stage_set_at: undefined }) };
+  assert.strictEqual(run(capture(lvl, ['◌ 待命 │ L·l4 ▸ plan │ ⓘ'])).ok, true);
 });
 
-// ---- planted red: the band disagrees with the sources -> FAIL, never tuned away
-test('PLANTED RED: band says 進行中 while an attention permission is open -> FAIL', () => {
-  const dir = capture({ 'attention.json': { kind: 'permission', summary: 'Bash: x' } }, ['● 進行中 demo · — · 30m · —', '1 個派工在跑']);
-  const r = run(dir);
+// ---- one planted FAIL per slot: ONE mutated fact, the rich band no longer matches
+function mutated(over, line) { return run(rich(line || RICH_209, 209, over)); }
+test('PLANTED RED verdict: the stalled run is gone, so the band must say 進行中 (it says 疑似卡住)', () => {
+  const r = mutated({ 'envelope.json': baseEnvelope({ runs: [{ alive: true, stall: false }, { alive: true, stall: false }], counts: { confirmed_live: 2 }, host_today_brain_usd: 123.4, brain_cap_usd: 150 }) });
   assert.strictEqual(status(r, 'verdict'), 'FAIL'); assert.strictEqual(r.ok, false);
 });
-test('PLANTED RED: band says 待命 while a run is stalled -> FAIL', () => {
-  const dir = capture({ 'envelope.json': { scope: { project_key: 'abcdef0123456789', repo_identity: IDENT }, runs: [{ alive: true, stall: true, started_at: iso(30) }], counts: { confirmed_live: 1 } } }, ['◌ 待命 demo · — · 30m · —', '']);
-  assert.strictEqual(run(dir).ok, false);
+test('PLANTED RED position: another stage in the marker', () => {
+  const r = mutated({ 'marker.json': richMarker({ stage: 'verify' }) });
+  assert.deepStrictEqual(r.failed, ['position']);
 });
-test('PLANTED RED: wrong project name and wrong progress -> FAIL', () => {
-  const dir = capture({ 'tasks.json': tasksFile([t(1, 'a', 'completed'), t(2, 'b', 'in_progress', 1)]) }, ['● 進行中 other · 做：b · 30m · 2 done*', '']);
-  const r = run(dir);
-  assert.strictEqual(status(r, 'project'), 'FAIL'); assert.strictEqual(status(r, 'progress'), 'FAIL'); assert.strictEqual(r.ok, false);
+test('PLANTED RED position age: ◷ tolerance is +-2 min (5m passes against 3m, 6m fails)', () => {
+  assert.strictEqual(status(run(rich(RICH_209.replace('◷3m', '◷5m'), 209)), 'position'), 'PASS');
+  assert.strictEqual(status(run(rich(RICH_209.replace('◷3m', '◷6m'), 209)), 'position'), 'FAIL');
+  assert.strictEqual(status(run(rich(RICH_209.replace(' ◷3m', ''), 209)), 'position'), 'FAIL', 'a missing age FAILs');
 });
-test('PLANTED RED: no band in the pane -> FAIL', () => {
-  assert.strictEqual(run(capture({}, ['just a shell prompt'])).ok, false);
+test('PLANTED RED unit: the marker unit index moved on', () => {
+  const r = mutated({ 'marker.json': richMarker({ unit: { kind: 'deliverable', index: 4, total: 5, label: 'x' } }) });
+  assert.deepStrictEqual(r.failed, ['unit']);
 });
-test('a fully matching capture is ok overall', () => {
-  assert.strictEqual(run(capture({}, ['◌ 待命 demo · — · 30m · —', '沒有派工在跑'])).ok, true);
+test('PLANTED RED unit 族: the review family count changed', () => {
+  assert.deepStrictEqual(mutated({ 'marker.json': richMarker({ review_families: ['a', 'b', 'c'] }) }).failed, ['unit']);
+});
+test('PLANTED RED dispatch: one more live run in the envelope counts', () => {
+  const r = mutated({ 'envelope.json': baseEnvelope({ runs: [{ alive: true, stall: true }], counts: { confirmed_live: 3 }, host_today_brain_usd: 123.4, brain_cap_usd: 150 }) });
+  assert.deepStrictEqual(r.failed, ['dispatch']);
+});
+test('PLANTED RED review: another review round', () => {
+  assert.deepStrictEqual(mutated({ 'review.json': { schema: 'autopilot.review/1', project_key: PK, code: { generation: 3 } } }).failed, ['review']);
+});
+test('PLANTED RED review QC chip: qc owed while the band says QC ✓', () => {
+  assert.deepStrictEqual(mutated({ 'qc.json': { schema: 'autopilot.qc-status/1', scope: { project_key: PK, root_run_id: null }, state: 'owed' } }).failed, ['review']);
+});
+test('PLANTED RED decisions: the sidecar count changed', () => {
+  assert.deepStrictEqual(mutated({ 'decisions-sidecar.json': { count: 4, undocumented_dispatches: 1, ladder: { rung: 'U2', at: iso(5) } } }).failed, ['decisions']);
+});
+test('PLANTED RED decisions rung: the latest ladder rung is another one', () => {
+  assert.deepStrictEqual(mutated({ 'decisions-sidecar.json': { count: 3, undocumented_dispatches: 1, ladder: { rung: 'U4', at: iso(5) } } }).failed, ['decisions']);
+});
+test('PLANTED RED spend: brain-tier spend in the envelope changed', () => {
+  const r = mutated({ 'envelope.json': baseEnvelope({ runs: [{ alive: true, stall: false }, { alive: true, stall: true }], counts: { confirmed_live: 2 }, host_today_brain_usd: 140, brain_cap_usd: 150 }) });
+  assert.deepStrictEqual(r.failed, ['spend']);
+});
+test('PLANTED RED hygiene: more reapable worktrees in the residue fact', () => {
+  assert.deepStrictEqual(mutated({ 'residue.json': { schema: 'autopilot.residue/1', project_key: PK, reapable_worktrees: 3, by_class: { 'clean-integrated': 2, 'missing-dir': 1 } } }).failed, ['hygiene']);
+});
+test('PLANTED RED hygiene chip: behind upstream changed in load-source', () => {
+  assert.deepStrictEqual(mutated({ 'load-source.json': { schema: 'autopilot.load-source/1', source: 'dev', behind_upstream: 5, flags: [] } }).failed, ['hygiene']);
+});
+test('PLANTED RED ⓘ: the band is drawn without the info button', () => {
+  const r = run(rich(RICH_209.replace(' │ ⓘ', ''), 209));
+  assert.strictEqual(status(r, 'ⓘ'), 'FAIL'); assert.strictEqual(r.ok, false);
+});
+test('residue.json whose reapable count disagrees with by_class is a note (the D3 definition)', () => {
+  const r = mutated({ 'residue.json': { schema: 'autopilot.residue/1', project_key: PK, reapable_worktrees: 2, by_class: { 'clean-integrated': 1, 'missing-dir': 0 } } });
+  assert.ok(r.derived.notes.some((n) => n.includes('inconsistent')));
+});
+test('facts of another project or schema are not facts (a foreign residue / qc / review draws nothing)', () => {
+  const r = mutated({ 'residue.json': { schema: 'autopilot.residue/1', project_key: 'other', reapable_worktrees: 2 }, 'qc.json': { schema: 'autopilot.qc-status/1', scope: { project_key: 'other' }, state: 'ok' } },
+    '⏸ 疑似卡住 │ M!·l5 ▸ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙2 ⏸1 │ R2 ⟲ │ ◆3 ?1 U2 │ $123/150 │ dev ↓3 │ ⓘ');
+  assert.strictEqual(r.ok, true);
 });
 
-// ---- GATEFIX (mods P1W W4 gate pilot): completion needs no live run; dialogs hide the band, the panel is judged then
-const liveEnv = { scope: { project_key: 'abcdef0123456789', repo_identity: IDENT }, runs: [{ run_id: 'r', alive: true, stall: false, started_at: iso(30) }], counts: { confirmed_live: 1 } };
-const allDoneTasks = () => tasksFile([t(1, 'a', 'completed'), t(2, 'b', 'completed')]);
-test('GATEFIX: every task completed AND a live run -> 進行中 is expected (not 完成待驗收)', () => {
-  const dir = capture({ 'tasks.json': allDoneTasks(), 'envelope.json': liveEnv }, ['● 進行中 demo · — · 30m · 2 done*', '1 個派工在跑']);
+// ---- spend / hygiene / unit specifics
+test('spend is empty when the brain spend is not published', () => {
+  const files = richFiles({ 'envelope.json': baseEnvelope({ runs: [{ alive: true, stall: false }, { alive: true, stall: true }], counts: { confirmed_live: 2 } }) });
+  const r = run(capture(files, ['⏸ 疑似卡住 │ M!·l5 ▸ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙2 ⏸1 │ R2 ⟲ · QC ✓ │ ◆3 ?1 U2 │ dev ↓3 · wt 2 │ ⓘ']));
+  assert.strictEqual(status(r, 'spend'), 'ABSENT'); assert.strictEqual(r.ok, true);
+});
+test('hygiene chip forms: cache copy, unknown source, marketplace warning, no chip but wt', () => {
+  const hy = (ls, res, line) => run(capture(richFiles({ 'load-source.json': ls, 'residue.json': res }), [RICH_209.replace('dev ↓3 · wt 2', line)]));
+  const noRes = { schema: 'autopilot.residue/1', project_key: PK, reapable_worktrees: 0, by_class: {} };
+  assert.strictEqual(status(hy({ schema: 'autopilot.load-source/1', source: 'cache:2.36.36', flags: [] }, noRes, 'cache 2.36.36 ⚠'), 'hygiene'), 'PASS');
+  assert.strictEqual(status(hy({ schema: 'autopilot.load-source/1', source: 'unknown', flags: [] }, noRes, 'src ? ⚠'), 'hygiene'), 'PASS');
+  assert.strictEqual(status(hy({ schema: 'autopilot.load-source/1', source: 'dev', flags: ['marketplace_not_this_repo'] }, noRes, 'dev ⚠'), 'hygiene'), 'PASS');
+  assert.strictEqual(status(hy(null, { schema: 'autopilot.residue/1', project_key: PK, reapable_worktrees: 4, by_class: { 'clean-integrated': 4 } }, 'wt 4'), 'hygiene'), 'PASS');
+  assert.strictEqual(status(hy({ schema: 'autopilot.load-source/1', source: 'dev', flags: [] }, noRes, 'dev'), 'hygiene'), 'PASS');
+});
+test('unit bar scales to 10 cells when N > 10, and 5/20 puts the current cell at ceil(5*10/20)=3', () => {
+  const files = { 'marker.json': richMarker({ stage: undefined, unit: { kind: 'deliverable', index: 5, total: 20, label: 'x' }, review_families: [] }), 'envelope.json': baseEnvelope() };
+  const r = run(capture(files, ['◌ 待命 │ ▰▰▰▱▱▱▱▱▱▱ 5/20 │ ⓘ']));
+  assert.strictEqual(status(r, 'unit'), 'PASS');
+  assert.strictEqual(status(run(capture(files, ['◌ 待命 │ ▰▰▰▰▱▱▱▱▱▱ 5/20 │ ⓘ'])), 'unit'), 'FAIL');
+});
+test('a long stage name may be cut with … to fit bodyColumns; an uncut stage that does not fit FAILs the layout', () => {
+  const long = 'x'.repeat(220);
+  const files = richFiles({ 'marker.json': richMarker({ stage: long }) });
+  const drawn = RICH_209.replace('implement', `${'x'.repeat(40)}…`);
+  const r = run(capture(files, [drawn]));
+  assert.ok(r.derived.over > 0); assert.strictEqual(status(r, 'position'), 'PASS'); assert.strictEqual(status(r, 'layout'), 'PASS');
+  const uncut = run(capture(files, [RICH_209.replace('implement', long)]));
+  assert.strictEqual(status(uncut, 'layout'), 'FAIL'); assert.strictEqual(uncut.ok, false);
+});
+
+// ---- the width-table ABSENT rule
+test('WIDTH TABLE: a slot the table removed at this width is FAIL if drawn (hygiene at 119 columns of body, spend at 139, review at 119, position at 79)', () => {
+  const at = (line, bodyColumns) => run(capture(richFiles(), [line], { body_columns: bodyColumns }));
+  assert.strictEqual(status(at(RICH_209, 159), 'hygiene'), 'FAIL', 'hygiene < 160');
+  assert.strictEqual(status(at(RICH_209, 139), 'spend'), 'FAIL', 'spend < 140');
+  assert.strictEqual(status(at(RICH_209, 139), 'decisions'), 'FAIL', 'decisions < 140');
+  assert.strictEqual(status(at(RICH_209, 119), 'review'), 'FAIL', 'review < 120');
+  assert.strictEqual(status(at(RICH_209, 79), 'position'), 'FAIL', 'position < 80');
+  assert.strictEqual(status(at(RICH_209, 79), 'unit'), 'FAIL', 'k/N and 族 < 80');
+});
+test('WIDTH TABLE: exact thresholds — all slots at 160, no hygiene at 159, no spend/decisions at 139, no review/age at 119, no k/N at 79', () => {
+  const rows = (b) => derive(capture(richFiles(), [], { body_columns: b })).slots;
+  assert.strictEqual(rows(160).hygiene.state, 'present'); assert.strictEqual(rows(159).hygiene.state, 'width');
+  assert.strictEqual(rows(140).spend.state, 'present'); assert.strictEqual(rows(139).spend.state, 'width'); assert.strictEqual(rows(139).decisions.state, 'width');
+  assert.strictEqual(rows(120).review.state, 'present'); assert.strictEqual(rows(119).review.state, 'width');
+  assert.ok(rows(120).position.text.includes('◷')); assert.ok(!rows(119).position.text.includes('◷'));
+  assert.strictEqual(rows(80).position.state, 'present'); assert.strictEqual(rows(79).position.state, 'width');
+  assert.strictEqual(rows(79).unit.text, '▰▰▰▱▱');
+});
+test('WIDTH: the window width is read from meta (bodyColumns = window - 5); --body-columns / meta.body_columns override it', () => {
+  assert.strictEqual(derive(capture(richFiles(), [], { window_width: 120 })).columns, 115);
+  assert.strictEqual(derive(capture(richFiles(), [], { window_width: 120, body_columns: 90 })).columns, 90);
+  assert.strictEqual(derive(capture(richFiles(), [], { window_width: undefined }), {}).columns >= 0, true, 'no width recorded: falls back to the widest pane line');
+  assert.strictEqual(derive(capture(richFiles(), [], { window_width: 120 }), { bodyColumns: 300 }).columns, 300);
+});
+test('displayWidth: CJK is 2 cells, the band glyphs are 1', () => {
+  assert.strictEqual(displayWidth('疑似卡住'), 8); assert.strictEqual(displayWidth('▰▱⚙⏸◆ⓘ│▸◷⟲'), 10);
+});
+
+// ---- the non-ok line
+test('NON-OK: no envelope -> one line `<reason> │ ⓘ`; a band drawn instead FAILs, a slot-bearing line FAILs', () => {
+  const files = { 'envelope.json': null };
+  const ok = run(capture(files, ['no project · run: autopilot status runs --watch │ ⓘ']));
+  assert.strictEqual(status(ok, 'nonok'), 'PASS'); assert.strictEqual(status(ok, 'ⓘ'), 'PASS'); assert.strictEqual(ok.ok, true);
+  assert.strictEqual(summary(ok), 'PASS l5 fields=2');
+  assert.strictEqual(run(capture(files, ['◌ 待命 │ ⓘ'])).ok, false);
+  assert.strictEqual(status(run(capture(files, ['no project │ extra │ ⓘ'])), 'nonok'), 'FAIL');
+});
+test('NON-OK: a stale envelope is the non-ok line; a fresh envelope drawn as the non-ok line FAILs verdict', () => {
+  const stale = { 'envelope.json': baseEnvelope({ published_at: iso(10) }) };
+  assert.strictEqual(run(capture(stale, ['stale · run: autopilot status runs --watch │ ⓘ'])).ok, true);
+  const r = run(capture({}, ['stale · run: autopilot status runs --watch │ ⓘ']));
+  assert.strictEqual(status(r, 'verdict'), 'FAIL'); assert.strictEqual(r.ok, false);
+});
+
+// ---- the summary line
+function cli(dir, args) {
+  const p = spawnSync(process.execPath, [path.join(__dirname, 'check.js'), dir, ...(args || [])], { encoding: 'utf8' });
+  return { code: p.status, lines: p.stdout.trimEnd().split('\n'), stdout: p.stdout, stderr: p.stderr };
+}
+test('SUMMARY: the last line is exactly `PASS <mode> fields=<n>` / `FAIL <mode> fields=<n> failed=<slots>`; exit 0 / 1 / 2', () => {
+  const pass = cli(rich(RICH_209, 209));
+  assert.strictEqual(pass.lines[pass.lines.length - 1], 'PASS l5 fields=10'); assert.strictEqual(pass.code, 0);
+  assert.ok(pass.lines.some((l) => /^PASS spend expected \$123\/150 got \$123\/150 \[.+\]$/.test(l)));
+  assert.ok(pass.lines.some((l) => /^surface: band$/.test(l)));
+  assert.ok(pass.lines.some((l) => /^width: bodyColumns=204 \[.*window_width 209 - 5.*\]$/.test(l)));
+  const fail = cli(rich(RICH_209.replace('$123/150', '$99/150').replace('3/5', '4/5'), 209));
+  assert.strictEqual(fail.lines[fail.lines.length - 1], 'FAIL l5 fields=10 failed=unit,spend'); assert.strictEqual(fail.code, 1);
+  assert.ok(fail.lines.some((l) => /^FAIL spend expected \$123\/150 got \$99\/150 /.test(l)));
+  const absent = cli(rich(RICH_120, 120));
+  assert.ok(absent.lines.some((l) => /^ABSENT hygiene expected absent \(removed by the width table \(bodyColumns 115 < 160\)\) got absent /.test(l)));
+  assert.strictEqual(cli('/nonexistent/dir').code, 2);
+  assert.strictEqual(cli(rich(RICH_209, 209), ['--body-columns', 'x']).code, 2);
+});
+test('SUMMARY: the mode comes from meta.mode, else the cell prefix; --json carries the same summary', () => {
+  assert.strictEqual(cli(capture(SPARSE, ['◌ 待命 │ S ▸ plan ◷10m │ ⓘ'], { mode: 'dev-flow' })).lines.pop(), 'PASS dev-flow fields=10');
+  assert.strictEqual(cli(capture(SPARSE, ['◌ 待命 │ S ▸ plan ◷10m │ ⓘ'], { mode: undefined, cell: 'l6-idle' })).lines.pop(), 'PASS l6 fields=10');
+  const j = JSON.parse(cli(rich(RICH_209, 209), ['--json']).stdout);
+  assert.strictEqual(j.summary, 'PASS l5 fields=10'); assert.strictEqual(j.body_columns, 204);
+});
+
+// ---- pane reading
+test('findBand takes the last band line up to ⓘ; a docked pane to its right is not part of it; a transcript mention is not a band', () => {
+  const b = findBand('x\n● 進行中 │ ⚙1 │ ⓘ      │ pane text\n> ');
+  assert.strictEqual(b.verdict, '進行中'); assert.strictEqual(b.text, '● 進行中 │ ⚙1 │ ⓘ');
+  assert.strictEqual(findBand('we saw ● 進行中 earlier in the log'), null);
+  assert.strictEqual(findBand('nothing here'), null);
+  assert.strictEqual(findNonOk('no project │ ⓘ').kind, 'nonok');
+  assert.strictEqual(classify('R3 ⟲', 3), 'review'); assert.strictEqual(classify('garbage', 3), null);
+});
+
+// ---- verdict precedence (kept from W4), judged through the one-line band
+test('要你決定 by an attention permission / question, or an open decision file even with an idle attention file', () => {
+  const perm = capture({ 'attention.json': { schema: 'autopilot.attention/1', kind: 'permission', summary: 'Bash: rm -rf /tmp/x', since: iso(2) } }, ['▲ 要你決定 │ ⓘ']);
+  assert.strictEqual(status(run(perm), 'verdict'), 'PASS');
+  assert.strictEqual(derive(capture({ 'attention.json': { kind: 'question', summary: 'which db?' } }, [])).verdict, '要你決定');
+  assert.strictEqual(derive(capture({ 'decision-file.json': { schema: 'autopilot.decision/1', question: '要不要強推 main？' }, 'attention.json': { kind: 'idle', summary: 'waiting' } }, [])).verdict, '要你決定');
+  assert.strictEqual(derive(capture({ 'attention.json': { kind: 'idle', summary: 'waiting' } }, [])).verdict, '待命');
+});
+test('疑似卡住 from an envelope run with stall:true', () => {
+  const dir = capture({ 'envelope.json': baseEnvelope({ runs: [{ run_id: 'r', alive: true, stall: true, started_at: iso(30) }], counts: { confirmed_live: 1 } }) }, ['⏸ 疑似卡住 │ ⚙1 ⏸1 │ ⓘ']);
   const r = run(dir);
-  assert.strictEqual(status(r, 'verdict'), 'PASS'); assert.strictEqual(r.ok, true);
-  const wrong = run(capture({ 'tasks.json': allDoneTasks(), 'envelope.json': liveEnv }, ['✓ 完成待驗收 demo · — · 30m · 2 done*', '任務 2/2 都完成，等你驗收']));
-  assert.strictEqual(status(wrong, 'verdict'), 'FAIL');
+  assert.strictEqual(status(r, 'verdict'), 'PASS'); assert.strictEqual(status(r, 'dispatch'), 'PASS'); assert.strictEqual(r.ok, true);
 });
-test('GATEFIX: frozen done == total AND a live run -> 進行中; the live run ended -> 完成待驗收', () => {
-  const rc = { 'work-orders/a.json': receipt({ completed_deliverables: ['a', 'b'], remaining_deliverables: [], deliverable_count: 2, frozen_denominator_digest: 'abc' }) };
-  const live = run(capture({ ...rc, 'envelope.json': liveEnv }, ['● 進行中 demo · — · 20m · 100%（2/2）', '1 個派工在跑']));
-  assert.strictEqual(status(live, 'verdict'), 'PASS');
-  const done = run(capture({ ...rc }, ['✓ 完成待驗收 demo · — · 20m · 100%（2/2）', '驗收結論尚未出']));
-  assert.strictEqual(status(done, 'verdict'), 'PASS');
+test('完成待驗收 by frozen done == total, or every session task completed (deleted ones never count)', () => {
+  const frozen = capture({ 'work-orders/n1-a1.json': receipt({ frozen_denominator_digest: 'sha', deliverable_count: 4, completed_deliverables: ['a', 'b', 'c', 'd'], remaining_deliverables: [] }) }, ['✓ 完成待驗收 │ ⓘ']);
+  assert.strictEqual(status(run(frozen), 'verdict'), 'PASS');
+  const tasks = capture({ 'tasks.json': tasksFile([t(1, 'a', 'completed'), t(2, 'b', 'completed'), t(3, 'gone', 'deleted')]) }, ['✓ 完成待驗收 │ ⓘ']);
+  assert.strictEqual(status(run(tasks), 'verdict'), 'PASS');
 });
+test('進行中 by a live run or a task in progress; 待命 when nothing is live', () => {
+  assert.strictEqual(status(run(capture({ 'envelope.json': baseEnvelope({ runs: [{ run_id: 'r', alive: true, stall: false }], counts: { confirmed_live: 1 } }) }, ['● 進行中 │ ⚙1 │ ⓘ'])), 'verdict'), 'PASS');
+  assert.strictEqual(derive(capture({ 'tasks.json': tasksFile([t(1, 'x', 'completed'), t(2, 'y', 'in_progress', 1)]) }, [])).verdict, '進行中');
+  assert.strictEqual(status(run(capture({}, ['◌ 待命 │ ⓘ'])), 'verdict'), 'PASS');
+});
+test('PLANTED RED: band 進行中 while an attention permission is open; band 待命 while a run is stalled; no band at all', () => {
+  const a = run(capture({ 'attention.json': { kind: 'permission', summary: 'Bash: x' } }, ['● 進行中 │ ⓘ']));
+  assert.strictEqual(status(a, 'verdict'), 'FAIL'); assert.strictEqual(a.ok, false);
+  assert.strictEqual(run(capture({ 'envelope.json': baseEnvelope({ runs: [{ alive: true, stall: true }], counts: { confirmed_live: 1 } }) }, ['◌ 待命 │ ⓘ'])).ok, false);
+  const none = run(capture({}, ['just a shell prompt']));
+  assert.strictEqual(none.ok, false); assert.strictEqual(none.surface, null); assert.match(summary(none), /^FAIL l5 fields=1 failed=verdict$/);
+});
+test('GATEFIX: every task completed AND a live run -> 進行中 (completion needs no live run)', () => {
+  const files = { 'tasks.json': tasksFile([t(1, 'a', 'completed'), t(2, 'b', 'completed')]), 'envelope.json': baseEnvelope({ runs: [{ run_id: 'r', alive: true, stall: false }], counts: { confirmed_live: 1 } }) };
+  assert.strictEqual(status(run(capture(files, ['● 進行中 │ ⚙1 │ ⓘ'])), 'verdict'), 'PASS');
+  assert.strictEqual(status(run(capture(files, ['✓ 完成待驗收 │ ⚙1 │ ⓘ'])), 'verdict'), 'FAIL');
+});
+
+// ---- surfaces: a dialog hides the band, the panel (or only attention.json) is judged
 const SIDE = (l) => `${l.padEnd(60)}│`;
 const panelPane = (word, reason) => [SIDE('● Creating a file'), `${SIDE(' Do you want to proceed?')}${word}`, `${SIDE(' ❯ 1. Yes')}${reason}`, SIDE(' Esc to cancel')];
-test('GATEFIX: a dialog hides the band; the top-right panel verdict + reason are judged and the surface is printed', () => {
+test('SURFACE panel: verdict + reason judged, the slots SKIP and are not counted; a panel with no open attention FAILs', () => {
   const dir = capture({ 'attention.json': { schema: 'autopilot.attention/1', kind: 'permission', summary: 'Bash: touch /tmp/gate-perm-test', since: iso(0) } },
     panelPane('要你決定', '等你批准：Bash: touch /tmp/gate-perm-test（等了 0 分）'));
   const r = run(dir);
-  assert.strictEqual(r.surface, 'panel');
-  assert.strictEqual(status(r, 'verdict'), 'PASS'); assert.strictEqual(status(r, 'reason'), 'PASS');
-  assert.strictEqual(r.ok, true);
-  assert.strictEqual(status(r, 'project'), 'SKIP'); // the panel does not carry project / phase / progress / elapsed
+  assert.strictEqual(r.surface, 'panel'); assert.strictEqual(status(r, 'verdict'), 'PASS'); assert.strictEqual(status(r, 'reason'), 'PASS');
+  assert.strictEqual(status(r, 'position'), 'SKIP'); assert.strictEqual(r.fields, 2); assert.strictEqual(summary(r), 'PASS l5 fields=2');
+  const bad = run(capture({}, panelPane('要你決定', '等你批准：Bash: x')));
+  assert.strictEqual(bad.surface, 'panel'); assert.strictEqual(status(bad, 'verdict'), 'FAIL'); assert.strictEqual(bad.ok, false);
 });
-test('GATEFIX: AskUserQuestion dialog, panel surface', () => {
-  const dir = capture({ 'attention.json': { schema: 'autopilot.attention/1', kind: 'question', summary: '請選擇 A 還是 B？', since: iso(0) } },
-    panelPane('要你決定', '等你回答：請選擇 A 還是 B？（等了 0 分）'));
-  const r = run(dir);
-  assert.strictEqual(r.surface, 'panel'); assert.strictEqual(r.ok, true);
-});
-test('GATEFIX: the band wins over the panel when both are present, and says so', () => {
+test('SURFACE band wins over the panel; no verdict and no dialog is no surface', () => {
   const dir = capture({ 'attention.json': { schema: 'autopilot.attention/1', kind: 'permission', summary: 'Bash: ls', since: iso(0) } },
-    [...panelPane('要你決定', '等你批准：Bash: ls（等了 0 分）'), '▲ 要你決定 demo · — · 30m · —', '等你批准：Bash: ls（等了 0 分）']);
-  const r = run(dir);
-  assert.strictEqual(r.surface, 'band'); assert.strictEqual(status(r, 'project'), 'PASS');
+    [...panelPane('要你決定', '等你批准：Bash: ls（等了 0 分）'), '▲ 要你決定 │ ⓘ']);
+  assert.strictEqual(run(dir).surface, 'band');
+  assert.strictEqual(run(capture({}, [SIDE('x') + '會議記錄：要你決定 的事項', SIDE('y') + '無'])).surface, null);
 });
-test('GATEFIX PLANTED RED: panel says 要你決定 but no attention / decision file is open -> FAIL (panel is never a free pass)', () => {
-  const r = run(capture({}, panelPane('要你決定', '等你批准：Bash: x')));
-  assert.strictEqual(r.surface, 'panel'); assert.strictEqual(status(r, 'verdict'), 'FAIL'); assert.strictEqual(r.ok, false);
-});
-test('GATEFIX PLANTED RED: attention open but neither band nor panel shows a verdict -> FAIL', () => {
-  const r = run(capture({ 'attention.json': { kind: 'permission', summary: 'Bash: ls' } }, ['just a dialog']));
-  assert.strictEqual(r.ok, false); assert.strictEqual(r.surface, null);
-});
-test('GATEFIX: the panel finder ignores a bare verdict word that is not alone in its panel cell', () => {
-  const dir = capture({}, [SIDE('x') + '會議記錄：要你決定 的事項', SIDE('y') + '無']);
-  assert.strictEqual(run(dir).surface, null);
+const DIALOG = ['● Foreman: csv parser', '', ' Bash command · from the general-purpose agent', ' This command requires approval', '', ' Do you want to proceed?', ' ❯ 1. Yes', '   4. No', ' Esc to cancel · Tab to amend'];
+test('SURFACE dialog: judged from attention.json alone; absent / idle attention FAILs', () => {
+  const r = run(capture({ 'attention.json': { schema: 'autopilot.attention/1', kind: 'permission', summary: 'Bash: git reset', since: iso(0) } }, DIALOG));
+  assert.strictEqual(r.surface, 'dialog'); assert.strictEqual(r.ok, true); assert.strictEqual(status(r, 'unit'), 'SKIP');
+  assert.strictEqual(run(capture({}, DIALOG)).ok, false);
+  assert.strictEqual(run(capture({ 'attention.json': { kind: 'idle', summary: 'waiting' } }, DIALOG)).ok, false);
 });
 
+// ---- turn, foremen, root set (verdict derivation, unchanged from W4)
 const turnF = (state, offMin, extra) => ({ schema: 'autopilot.session-turn/1', session_id: SID, state, since: iso(offMin === undefined ? 3 : offMin), project_key: null, root_run_id: null, ...extra });
-test('TURN: an active turn with nothing else is 進行中 and the reason names the turn', () => {
-  const dir = capture({ 'turn.json': turnF('active') }, ['● 進行中 demo · — · 30m · —', '回合進行中（3 分）']);
-  assert.strictEqual(derive(dir).verdict, '進行中');
-  const r = run(dir);
-  assert.strictEqual(status(r, 'verdict'), 'PASS'); assert.strictEqual(status(r, 'reason'), 'PASS'); assert.strictEqual(r.ok, true);
-});
-test('TURN: ended, absent, or older than 24 h is 待命; permission attention outranks an active turn', () => {
+test('TURN: active = 進行中; ended, absent, older than 24 h or a foreign schema = 待命; permission outranks; an interrupted turn (same since) = 待命', () => {
+  assert.strictEqual(derive(capture({ 'turn.json': turnF('active') }, [])).verdict, '進行中');
   assert.strictEqual(derive(capture({ 'turn.json': turnF('ended') }, [])).verdict, '待命');
-  assert.strictEqual(derive(capture({}, [])).verdict, '待命');
   assert.strictEqual(derive(capture({ 'turn.json': turnF('active', 25 * 60) }, [])).verdict, '待命');
   assert.strictEqual(derive(capture({ 'turn.json': { ...turnF('active'), schema: 'x/1' } }, [])).verdict, '待命');
   assert.strictEqual(derive(capture({ 'turn.json': turnF('active'), 'attention.json': { kind: 'permission', summary: 'Bash: ls' } }, [])).verdict, '要你決定');
-});
-test('GATEFIX2: an interrupted turn (turn-effective.json with the same since) is 待命; another since / schema / state keeps it 進行中', () => {
   const T = turnF('active');
   const eff = (extra) => ({ schema: 'autopilot.session-turn-effective/1', session_id: SID, state: 'ended', reason: 'interrupted', turn_since: T.since, ...extra });
   assert.strictEqual(derive(capture({ 'turn.json': T, 'turn-effective.json': eff() }, [])).verdict, '待命');
   assert.strictEqual(derive(capture({ 'turn.json': T, 'turn-effective.json': eff({ turn_since: iso(1) }) }, [])).verdict, '進行中');
-  assert.strictEqual(derive(capture({ 'turn.json': T, 'turn-effective.json': eff({ schema: 'x/1' }) }, [])).verdict, '進行中');
-  assert.strictEqual(derive(capture({ 'turn.json': T, 'turn-effective.json': eff({ state: 'active' }) }, [])).verdict, '進行中');
-  const r = run(capture({ 'turn.json': T, 'turn-effective.json': eff() }, ['◌ 待命 demo · — · 30m · —', '沒有派工在跑']));
-  assert.strictEqual(r.ok, true);
-  assert.strictEqual(run(capture({ 'turn.json': T, 'turn-effective.json': eff() }, ['● 進行中 demo · — · 30m · —', '回合進行中（3 分）'])).ok, false, 'band still 進行中 after an interrupt -> FAIL');
 });
-test('TURN PLANTED RED: band says 待命 while the turn is active -> FAIL; band says 進行中 with an ended turn -> FAIL', () => {
-  assert.strictEqual(run(capture({ 'turn.json': turnF('active') }, ['◌ 待命 demo · — · 30m · —', '沒有派工在跑'])).ok, false);
-  assert.strictEqual(run(capture({ 'turn.json': turnF('ended') }, ['● 進行中 demo · — · 30m · —', '回合進行中（3 分）'])).ok, false);
-});
-test('TURN PLANTED RED: active turn, band 進行中 but line 2 does not name the turn -> FAIL on reason', () => {
-  const r = run(capture({ 'turn.json': turnF('active') }, ['● 進行中 demo · — · 30m · —', '沒有派工在跑']));
-  assert.strictEqual(status(r, 'reason'), 'FAIL'); assert.strictEqual(r.ok, false);
-});
-
-// ---- P1W FOREMAN (mods): foremen = agents/*.json stamps; dialog surface ----
-// RED before the change: see run-w/land/foreman-red-check.txt. Mutation controls: run-w/land/mut-foreman-check-*.txt.
 const agentF = (id, ageS, extra) => ({ schema: 'autopilot.agent-activity/1', session_id: SID, agent_id: id, agent_type: 'general-purpose', last_tool_at: new Date(NOW - ageS * 1000).toISOString(), last_tool_name: 'Bash', ...extra });
-test('FOREMAN: an un-ended agent quiet < 180 s is 進行中 and the reason names the foreman; >= 180 s is 疑似卡住 with 工頭 N 分沒有動作', () => {
-  const run1 = run(capture({ 'agents/f1.json': agentF('f1', 40) }, ['● 進行中 demo · — · 30m · —', '工頭在跑：last tool: Bash（0 分前有動作）']));
-  assert.strictEqual(status(run1, 'verdict'), 'PASS'); assert.strictEqual(status(run1, 'reason'), 'PASS');
-  assert.strictEqual(derive(capture({ 'agents/f1.json': agentF('f1', 179) }, [])).verdict, '進行中');
-  const stalled = run(capture({ 'agents/f1.json': agentF('f1', 200) }, ['⏸ 疑似卡住 demo · — · 30m · —', '工頭 3 分沒有動作']));
-  assert.strictEqual(status(stalled, 'verdict'), 'PASS'); assert.strictEqual(status(stalled, 'reason'), 'PASS'); assert.strictEqual(stalled.ok, true);
-  assert.strictEqual(derive(capture({ 'agents/f1.json': agentF('f1', 180) }, [])).verdict, '疑似卡住');
-});
-test('FOREMAN: ended, older than 24 h, foreign schema, or no last_tool_at are ignored (待命)', () => {
+test('FOREMAN: an un-ended agent quiet < 180 s is 進行中, >= 180 s is 疑似卡住 and counts one stalled dispatch (⏸1); ended / stale / foreign are ignored', () => {
   const v = (files) => derive(capture(files, [])).verdict;
+  assert.strictEqual(v({ 'agents/f1.json': agentF('f1', 179) }), '進行中');
+  assert.strictEqual(v({ 'agents/f1.json': agentF('f1', 180) }), '疑似卡住');
   assert.strictEqual(v({ 'agents/f1.json': agentF('f1', 40, { ended_at: iso(0) }) }), '待命');
   assert.strictEqual(v({ 'agents/f1.json': agentF('f1', 25 * 3600) }), '待命');
   assert.strictEqual(v({ 'agents/f1.json': agentF('f1', 40, { schema: 'x/1' }) }), '待命');
-  assert.strictEqual(v({ 'agents/f1.json': agentF('f1', 40, { last_tool_at: 'nope' }) }), '待命');
-  assert.strictEqual(v({}), '待命');
+  assert.strictEqual(v({ 'agents/f1.json': agentF('f1', 40, { last_tool_name: null }) }), '進行中');
+  const r = run(capture({ 'agents/f1.json': agentF('f1', 400) }, ['⏸ 疑似卡住 │ ⏸1 │ ⓘ']));
+  assert.strictEqual(status(r, 'dispatch'), 'PASS'); assert.strictEqual(r.ok, true);
 });
-test('FOREMAN: precedence — attention > envelope stall > foreman stall > 完成待驗收; a fresh foreman blocks 完成待驗收; a live run still wins the reason', () => {
+test('FOREMAN: precedence — a fresh foreman blocks 完成待驗收; a stalled one outranks it; attention outranks a stalled foreman', () => {
   const done = { 'tasks.json': tasksFile([t('1', 'a', 'completed'), t('2', 'b', 'completed')]) };
-  assert.strictEqual(derive(capture({ ...done }, [])).verdict, '完成待驗收');
+  assert.strictEqual(derive(capture(done, [])).verdict, '完成待驗收');
   assert.strictEqual(derive(capture({ ...done, 'agents/f1.json': agentF('f1', 40) }, [])).verdict, '進行中');
-  assert.strictEqual(derive(capture({ ...done, 'agents/f1.json': agentF('f1', 40, { ended_at: iso(0) }) }, [])).verdict, '完成待驗收');
   assert.strictEqual(derive(capture({ ...done, 'agents/f1.json': agentF('f1', 400) }, [])).verdict, '疑似卡住');
   assert.strictEqual(derive(capture({ 'agents/f1.json': agentF('f1', 400), 'attention.json': { kind: 'permission', summary: 'Bash: ls' } }, [])).verdict, '要你決定');
-  const env = { schema: 'autopilot.runs-live/1', scope: { project_key: 'abcdef0123456789', repo_identity: IDENT, root_run_id: ROOT }, runs: [{ run_id: 'r', alive: true, stall: true, started_at: iso(30) }], counts: { confirmed_live: 1 } };
-  const r = run(capture({ 'envelope.json': env, 'agents/f1.json': agentF('f1', 400) }, ['⏸ 疑似卡住 demo · — · 30m · —', '最久的派工 4m 沒有輸出']));
-  assert.strictEqual(r.derived.verdict, '疑似卡住'); assert.strictEqual(status(r, 'reason'), undefined, 'the envelope stall owns the reason, no foreman reason token');
-  const live = run(capture({ 'envelope.json': { ...env, runs: [{ run_id: 'r', alive: true, started_at: iso(30) }] }, 'agents/f1.json': agentF('f1', 40) }, ['● 進行中 demo · — · 30m · —', '1 個派工在跑']));
-  assert.strictEqual(status(live, 'verdict'), 'PASS'); assert.strictEqual(status(live, 'reason'), undefined);
 });
-test('FOREMAN PLANTED RED: band says 待命 while a foreman works -> FAIL; band 進行中 but the reason does not name the foreman -> FAIL; band 進行中 for a stalled foreman -> FAIL', () => {
-  assert.strictEqual(run(capture({ 'agents/f1.json': agentF('f1', 40) }, ['◌ 待命 demo · — · 30m · —', '沒有派工在跑'])).ok, false);
-  assert.strictEqual(status(run(capture({ 'agents/f1.json': agentF('f1', 40) }, ['● 進行中 demo · — · 30m · —', '回合進行中（3 分）'])), 'reason'), 'FAIL');
-  assert.strictEqual(run(capture({ 'agents/f1.json': agentF('f1', 400) }, ['● 進行中 demo · — · 30m · —', '工頭在跑：x（0 分前有動作）'])).ok, false);
-  assert.strictEqual(status(run(capture({ 'agents/f1.json': agentF('f1', 400) }, ['⏸ 疑似卡住 demo · — · 30m · —', '最久的派工 3m 沒有輸出'])), 'reason'), 'FAIL');
-});
-
-const DIALOG = ['● Foreman: csv parser', '', ' Bash command · from the general-purpose agent', ' This command requires approval', '', ' Do you want to proceed?', ' ❯ 1. Yes', '   4. No', ' Esc to cancel · Tab to amend'];
-test('DIALOG: neither band nor panel visible but a permission dialog on screen -> judged from attention.json only; surface: dialog', () => {
-  const dir = capture({ 'attention.json': { schema: 'autopilot.attention/1', kind: 'permission', summary: 'Bash: git reset -q --hard', since: iso(0) } }, DIALOG);
-  const r = run(dir);
-  assert.strictEqual(r.surface, 'dialog'); assert.strictEqual(status(r, 'verdict'), 'PASS'); assert.strictEqual(r.ok, true);
-  assert.strictEqual(status(r, 'project'), 'SKIP'); assert.strictEqual(status(r, 'reason'), 'SKIP');
-  const q = run(capture({ 'attention.json': { schema: 'autopilot.attention/1', kind: 'question', summary: '選哪個？', since: iso(0) } }, DIALOG));
-  assert.strictEqual(q.surface, 'dialog'); assert.strictEqual(q.ok, true);
-});
-test('DIALOG PLANTED RED: a dialog on screen but attention.json is absent, idle, or the verdict is not 要你決定 -> FAIL; the band / panel still win when present', () => {
-  const none = run(capture({}, DIALOG));
-  assert.strictEqual(none.surface, 'dialog'); assert.strictEqual(none.ok, false);
-  assert.strictEqual(run(capture({ 'attention.json': { schema: 'autopilot.attention/1', kind: 'idle', summary: 'waiting' } }, DIALOG)).ok, false);
-  const withBand = run(capture({ 'attention.json': { schema: 'autopilot.attention/1', kind: 'permission', summary: 'Bash: ls', since: iso(0) } }, ['▲ 要你決定 demo · — · 30m · —', '等你批准：Bash: ls（等了 0 分）', ...DIALOG]));
-  assert.strictEqual(withBand.surface, 'band');
-  assert.strictEqual(run(capture({}, ['just some output'])).surface, null, 'no dialog text, no verdict: still no surface');
-});
-
-// ---- P1W FOREMAN2: a started-only stamp (SubagentStart: last_tool_name null) is a foreman too ----
-test('FOREMAN2: a started-only stamp (last_tool_name null) is 進行中 under 180 s and 疑似卡住 from 180 s; started then ended is 待命', () => {
-  const v = (files) => derive(capture(files, [])).verdict;
-  assert.strictEqual(v({ 'agents/f1.json': agentF('f1', 40, { last_tool_name: null }) }), '進行中');
-  assert.strictEqual(v({ 'agents/f1.json': agentF('f1', 200, { last_tool_name: null }) }), '疑似卡住');
-  assert.strictEqual(v({ 'agents/f1.json': agentF('f1', 40, { last_tool_name: null, ended_at: iso(0) }) }), '待命');
-});
-
-// ---- P1W SCOPE: the root set (marker root + campaign_roots) ----
 const CAMP = 'mission-1';
 const CAMP0 = 'mission-0';
-const PK = 'abcdef0123456789';
-const markerWith = (roots, extra) => ({ session_id: SID, level: 'l5', repo_identity: IDENT, project_key: PK, root_run_id: ROOT, started_at: iso(30), expires_at: iso(-600), campaign_roots: roots, ...(extra || {}) });
+const markerWith = (roots) => ({ session_id: SID, level: 'l5', repo_identity: IDENT, project_key: PK, root_run_id: ROOT, started_at: iso(30), expires_at: iso(-600), campaign_roots: roots });
 const env = (root, over) => ({ schema: 'autopilot.runs-live/1', scope: { project_key: PK, repo_identity: IDENT, root_run_id: root }, published_at: iso(0), valid_for_s: 180, runs: [], counts: { confirmed_live: 0, exited: 0, unknown: 0 }, ...(over || {}) });
 const liveRow = (id, over) => ({ run_id: id, alive: true, stall: false, started_at: iso(30), ...(over || {}) });
 const frozenReceipt = (root, extra) => ({ root_run_id: root, controller: { progress_receipts: [{ artifact_type: 'controller_progress_receipt', root_run_id: root, issued_at: iso(20), generation: 1, frozen_denominator_digest: 'sha', deliverable_count: 4, completed_deliverables: ['a', 'b', 'c', 'd'], remaining_deliverables: [], ...(extra || {}) }] } });
 const camp = (files, roots) => ({ 'marker.json': markerWith(roots || [CAMP]), ...files });
-
-test('SCOPE: a live run under the campaign root is 進行中 although the job root is quiet', () => {
-  const dir = capture(camp({ [`envelope--${CAMP}.json`]: env(CAMP, { runs: [liveRow('c1')], counts: { confirmed_live: 1, exited: 0, unknown: 0 } }) }),
-    ['● 進行中 demo · — · 30m · —', '1 個派工在跑']);
-  const r = run(dir);
-  assert.strictEqual(r.derived.verdict, '進行中'); assert.strictEqual(status(r, 'verdict'), 'PASS');
+const liveC = { runs: [liveRow('c1')], counts: { confirmed_live: 1, exited: 0, unknown: 0 } };
+test('SCOPE: a live / stalled run under a fresh campaign root counts, and the dispatch slot sums the root set', () => {
+  assert.strictEqual(derive(capture(camp({ [`envelope--${CAMP}.json`]: env(CAMP, liveC) }), [])).verdict, '進行中');
+  assert.strictEqual(derive(capture(camp({ [`envelope--${CAMP}.json`]: env(CAMP, { runs: [liveRow('c1', { stall: true })], counts: { confirmed_live: 1 } }) }), [])).verdict, '疑似卡住');
+  const both = capture(camp({ 'envelope.json': env(ROOT, { runs: [liveRow('j1')], counts: { confirmed_live: 2 } }), [`envelope--${CAMP}.json`]: env(CAMP, liveC) }), ['● 進行中 │ ⚙3 │ ⓘ']);
+  assert.strictEqual(status(run(both), 'dispatch'), 'PASS');
+  assert.strictEqual(status(run(capture(camp({ 'envelope.json': env(ROOT, { runs: [liveRow('j1')], counts: { confirmed_live: 2 } }), [`envelope--${CAMP}.json`]: env(CAMP, liveC) }), ['● 進行中 │ ⚙2 │ ⓘ'])), 'dispatch'), 'FAIL');
 });
-
-test('SCOPE: campaign terminal (frozen 4/4, no live run) is 完成待驗收 with the frozen progress and the campaign\'s own elapsed start', () => {
-  const dir = capture(camp({ [`envelope--${CAMP}.json`]: env(CAMP), [`campaign-work-orders/${CAMP}/n1-a1.json`]: frozenReceipt(CAMP, { phase: 'TERMINAL_READY' }) }),
-    ['✓ 完成待驗收 demo · 收尾 · 20m · 100%（4/4）', '驗收結論尚未出']);
-  const r = run(dir);
-  assert.strictEqual(r.derived.verdict, '完成待驗收');
-  for (const n of ['verdict', 'phase', 'progress', 'elapsed']) assert.strictEqual(status(r, n), 'PASS', n);
+test('SCOPE: a stale or missing extra envelope contributes nothing; an unsafe campaign root is ignored', () => {
+  assert.strictEqual(derive(capture(camp({ [`envelope--${CAMP}.json`]: env(CAMP, { ...liveC, published_at: iso(60) }) }), [])).verdict, '待命');
+  assert.strictEqual(derive(capture(camp({ [`envelope--${CAMP}.json`]: env(CAMP, { ...liveC, published_at: undefined }) }), [])).verdict, '待命');
+  assert.strictEqual(derive(capture(camp({}), [])).verdict, '待命');
+  assert.strictEqual(derive(capture(camp({ 'envelope--../x.json': env('x', liveC) }, ['../x', 42, '', ROOT, 'a/b']), [])).verdict, '待命');
 });
-
-test('SCOPE: the job root live review after the campaign is terminal is 進行中 (the union, not a switch)', () => {
-  const dir = capture(camp({
-    'envelope.json': env(ROOT, { runs: [liveRow('j1')], counts: { confirmed_live: 1, exited: 0, unknown: 0 } }),
-    [`envelope--${CAMP}.json`]: env(CAMP), [`campaign-work-orders/${CAMP}/n1-a1.json`]: frozenReceipt(CAMP),
-  }), ['● 進行中 demo · — · 20m · 100%（4/4）', '1 個派工在跑']);
-  assert.strictEqual(derive(dir).verdict, '進行中');
+test('SCOPE: campaign terminal (frozen 4/4, no live run) is 完成待驗收; the job root live review after it is 進行中', () => {
+  const fr = { [`envelope--${CAMP}.json`]: env(CAMP), [`campaign-work-orders/${CAMP}/n1-a1.json`]: frozenReceipt(CAMP) };
+  assert.strictEqual(derive(capture(camp(fr), [])).verdict, '完成待驗收');
+  assert.strictEqual(derive(capture(camp({ ...fr, 'envelope.json': env(ROOT, liveC) }), [])).verdict, '進行中');
+  const older = camp({ [`envelope--${CAMP0}.json`]: env(CAMP0), [`envelope--${CAMP}.json`]: env(CAMP), [`campaign-work-orders/${CAMP0}/n1-a1.json`]: frozenReceipt(CAMP0) }, [CAMP0, CAMP]);
+  assert.strictEqual(derive(capture(older, [])).verdict, '完成待驗收');
 });
-
-test('SCOPE: a stalled run under the campaign root is 疑似卡住', () => {
-  const dir = capture(camp({ [`envelope--${CAMP}.json`]: env(CAMP, { runs: [liveRow('c1', { stall: true })], counts: { confirmed_live: 1, exited: 0, unknown: 0 } }) }), []);
-  assert.strictEqual(derive(dir).verdict, '疑似卡住');
-});
-
-test('SCOPE: a stale or missing extra envelope contributes nothing and never hides the marker root\'s', () => {
-  const live5 = { runs: [liveRow('c1'), liveRow('c2')], counts: { confirmed_live: 5, exited: 0, unknown: 0 } };
-  assert.strictEqual(derive(capture(camp({ [`envelope--${CAMP}.json`]: env(CAMP, { ...live5, published_at: iso(60) }) }), [])).verdict, '待命', 'stale extra');
-  assert.strictEqual(derive(capture(camp({ [`envelope--${CAMP}.json`]: env(CAMP, { ...live5, published_at: undefined }) }), [])).verdict, '待命', 'no published_at is not fresh');
-  assert.strictEqual(derive(capture(camp({}), [])).verdict, '待命', 'missing extra');
-  const job = capture(camp({ 'envelope.json': env(ROOT, { runs: [liveRow('j1', { stall: true })], counts: { confirmed_live: 1, exited: 0, unknown: 0 } }), [`envelope--${CAMP}.json`]: env(CAMP, { ...live5, published_at: iso(60) }) }), []);
-  assert.strictEqual(derive(job).verdict, '疑似卡住', 'the marker root still speaks');
-  const onlyCamp = capture(camp({ 'envelope.json': null, [`envelope--${CAMP}.json`]: env(CAMP, live5) }), []);
-  assert.strictEqual(derive(onlyCamp).verdict, '進行中', 'marker root envelope absent, campaign fresh');
-});
-
-test('SCOPE: proxy decisions are summed across the sidecars of the root set', () => {
-  const sc = (count, irr, undoc) => ({ schema: 'autopilot.decisions-sidecar/1', count, irreversible_count: irr, undocumented_dispatches: undoc });
-  const dir = capture(camp({ 'decisions-sidecar.json': sc(1, 0, 0), [`decisions-sidecar--${CAMP}.json`]: sc(2, 1, 3) }),
-    ['◌ 待命 demo · — · 30m · —', '沒有派工在跑 · 代你決定 3 件（1 件不可逆） · 3 件派工無決策紀錄']);
-  const r = run(dir);
-  assert.strictEqual(status(r, 'decisions'), 'PASS'); assert.strictEqual(status(r, 'undocumented'), 'PASS');
-});
-
-test('SCOPE: progress, phase and elapsed come from the NEWEST campaign root that has them', () => {
-  const dir = capture(camp({
-    [`envelope--${CAMP0}.json`]: env(CAMP0), [`envelope--${CAMP}.json`]: env(CAMP),
-    [`campaign-work-orders/${CAMP0}/n1-a1.json`]: frozenReceipt(CAMP0, { deliverable_count: 8, completed_deliverables: ['a', 'b', 'c', 'd'], remaining_deliverables: ['e'], phase: 'IMPLEMENTING', issued_at: iso(50) }),
-    [`campaign-work-orders/${CAMP}/n2-a1.json`]: frozenReceipt(CAMP, { deliverable_count: 8, completed_deliverables: ['a', 'b', 'c', 'd', 'e'], remaining_deliverables: ['f'], phase: 'REVIEWING', issued_at: iso(10) }),
-  }, [CAMP0, CAMP]), ['● 進行中 demo · 審查 · 10m · 62.5%（5/8）', '']);
-  const r = run(dir);
-  for (const n of ['phase', 'progress', 'elapsed']) assert.strictEqual(status(r, n), 'PASS', n);
-  // the newest has no frozen progress yet: the older campaign's is the one shown
-  const older = run(capture(camp({
-    [`envelope--${CAMP0}.json`]: env(CAMP0), [`envelope--${CAMP}.json`]: env(CAMP),
-    [`campaign-work-orders/${CAMP0}/n1-a1.json`]: frozenReceipt(CAMP0, { deliverable_count: 8, completed_deliverables: ['a', 'b', 'c', 'd'], remaining_deliverables: ['e'], phase: 'IMPLEMENTING', issued_at: iso(50) }),
-    [`campaign-work-orders/${CAMP}/n2-a1.json`]: { root_run_id: CAMP, controller: { progress_receipts: [{ artifact_type: 'controller_progress_receipt', root_run_id: CAMP, issued_at: iso(10), generation: 1 }] } },
-  }, [CAMP0, CAMP]), ['● 進行中 demo · 實作 · 10m · 50%（4/8）', '']));
-  assert.strictEqual(status(older, 'progress'), 'PASS');
-});
-
-test('SCOPE: unsafe, repeated and non-string campaign roots are ignored (never turned into a path)', () => {
-  const dir = capture(camp({ 'envelope--../x.json': env('x', { counts: { confirmed_live: 9, exited: 0, unknown: 0 } }) }, ['../x', 42, '', ROOT, 'a/b']), []);
-  assert.strictEqual(derive(dir).verdict, '待命');
-});
-
-test('SCOPE PLANTED RED: a band that ignores the campaign (待命) against a live campaign run FAILS; so does 完成待驗收 over a live job-root review', () => {
-  const live = camp({ [`envelope--${CAMP}.json`]: env(CAMP, { runs: [liveRow('c1')], counts: { confirmed_live: 1, exited: 0, unknown: 0 } }) });
-  assert.strictEqual(run(capture(live, ['◌ 待命 demo · — · 30m · —', '沒有派工在跑'])).ok, false);
-  const jobLive = camp({ 'envelope.json': env(ROOT, { runs: [liveRow('j1')], counts: { confirmed_live: 1, exited: 0, unknown: 0 } }), [`envelope--${CAMP}.json`]: env(CAMP), [`campaign-work-orders/${CAMP}/n1-a1.json`]: frozenReceipt(CAMP) });
-  assert.strictEqual(run(capture(jobLive, ['✓ 完成待驗收 demo · — · 20m · 100%（4/4）', '驗收結論尚未出'])).ok, false);
-});
-
-test('SCOPE: a marker without campaign_roots derives exactly as before (existing captures still check)', () => {
-  const dir = capture({ [`envelope--${CAMP}.json`]: env(CAMP, { counts: { confirmed_live: 9, exited: 0, unknown: 0 } }) }, ['◌ 待命 demo · — · 30m · —', '沒有派工在跑']);
-  assert.strictEqual(derive(dir).verdict, '待命');
-});
-
-// ---- P1W SCOPE2 (gate run l5h): marker.campaign_roots = [mission root, ICC id]; the frozen receipt is under work-orders/<ICC id>/ ----
-// Verification of the existing union (check.js / capture.sh are generic over campaign_roots); mutation controls: run-w/land/scope2-mut-check-*.txt.
-const ICC = 'campaign-v1-' + '3d'.repeat(32);
-test('SCOPE2: mission root without receipts + ICC root with a frozen done = total receipt, no live run -> 完成待驗收', () => {
-  const dir = capture(camp({
-    [`envelope--${CAMP}.json`]: env(CAMP), [`envelope--${ICC}.json`]: env(ICC),
-    [`campaign-work-orders/${ICC}/gate-a1.json`]: frozenReceipt(ICC, { phase: 'TERMINAL_READY' }),
-  }, [CAMP, ICC]), ['✓ 完成待驗收 demo · 收尾 · 20m · 100%（4/4）', '驗收結論尚未出']);
-  const r = run(dir);
-  assert.strictEqual(r.derived.verdict, '完成待驗收');
-  for (const n of ['verdict', 'phase', 'progress', 'elapsed']) assert.strictEqual(status(r, n), 'PASS', n);
-});
-test('SCOPE2: the same shape with a live run under either root is 進行中; with the ICC id unbound it is 待命', () => {
-  const wo = { [`campaign-work-orders/${ICC}/gate-a1.json`]: frozenReceipt(ICC) };
-  const liveC = { runs: [liveRow('c1')], counts: { confirmed_live: 1, exited: 0, unknown: 0 } };
-  assert.strictEqual(derive(capture(camp({ [`envelope--${CAMP}.json`]: env(CAMP, liveC), [`envelope--${ICC}.json`]: env(ICC), ...wo }, [CAMP, ICC]), [])).verdict, '進行中', 'live under the mission root');
-  assert.strictEqual(derive(capture(camp({ [`envelope--${CAMP}.json`]: env(CAMP), [`envelope--${ICC}.json`]: env(ICC, liveC), ...wo }, [CAMP, ICC]), [])).verdict, '進行中', 'live under the ICC root');
-  assert.strictEqual(derive(capture(camp({ [`envelope--${CAMP}.json`]: env(CAMP), ...wo }, [CAMP]), [])).verdict, '待命', 'the pre-SCOPE2 marker (mission root only) never sees the receipt');
-});
-
-// ---- P1W LABEL: a phase code the table maps must be drawn as its zh-TW label, not the raw code ----
-test('LABEL: COMPLETED is drawn as 完成; the raw code on the band FAILS the phase item', () => {
-  const ok = capture({ 'work-orders/n.json': receipt({ phase: 'COMPLETED' }), 'tasks.json': tasksFile([t(2, 'x', 'in_progress', 1)]) }, ['● 進行中 demo · 完成 · 20m · 0 done*', '']);
-  assert.strictEqual(status(run(ok), 'phase'), 'PASS');
-  const raw = capture({ 'work-orders/n.json': receipt({ phase: 'COMPLETED' }), 'tasks.json': tasksFile([t(2, 'x', 'in_progress', 1)]) }, ['● 進行中 demo · COMPLETED · 20m · 0 done*', '']);
-  assert.strictEqual(status(run(raw), 'phase'), 'FAIL');
-});
-test('LABEL: a lower-case receipt phase maps like the upper-case one', () => {
-  const ok = capture({ 'work-orders/n.json': receipt({ phase: 'awaiting_disposition' }), 'tasks.json': tasksFile([t(2, 'x', 'in_progress', 1)]) }, ['● 進行中 demo · 等待處置 · 20m · 0 done*', '']);
-  assert.strictEqual(status(run(ok), 'phase'), 'PASS');
-});
-test('LABEL: an unmapped future code stays raw and passes only raw', () => {
-  const ok = capture({ 'work-orders/n.json': receipt({ phase: 'WEIRD_FUTURE' }), 'tasks.json': tasksFile([t(2, 'x', 'in_progress', 1)]) }, ['● 進行中 demo · WEIRD_FUTURE · 20m · 0 done*', '']);
-  assert.strictEqual(status(run(ok), 'phase'), 'PASS');
-});
-// ---- P1W LABEL (review fix): the phase is judged in its own slot (segment 2 of band line 1), never anywhere on the line ----
-// RED before the slot fix: the verdict word 完成待驗收 contains 完成, so a band showing the raw COMPLETED passed.
-test('LABEL: the phase label must be in the phase slot, not inside the verdict word', () => {
-  const files = { 'work-orders/n.json': receipt({ phase: 'COMPLETED' }), 'tasks.json': tasksFile([t(2, 'x', 'completed', 1)]) };
-  const raw = run(capture(files, ['✓ 完成待驗收 demo · COMPLETED · 4m · 0 done*', '']));
-  assert.strictEqual(raw.derived.verdict, '完成待驗收');
-  assert.strictEqual(status(raw, 'phase'), 'FAIL');
-  const ok = run(capture(files, ['✓ 完成待驗收 demo · 完成 · 4m · 0 done*', '']));
-  assert.strictEqual(status(ok, 'phase'), 'PASS');
+test('SCOPE: decisions are summed over the fresh root set; the latest ladder rung by time wins', () => {
+  const sc = (count, undoc, ladder) => ({ schema: 'autopilot.decisions-sidecar/1', count, irreversible_count: 0, undocumented_dispatches: undoc, ...(ladder ? { ladder } : {}) });
+  const files = camp({ 'decisions-sidecar.json': sc(1, 0, { rung: 'U1', at: iso(20) }), [`envelope--${CAMP}.json`]: env(CAMP), [`decisions-sidecar--${CAMP}.json`]: sc(2, 3, { rung: 'U3', at: iso(5) }) });
+  assert.strictEqual(status(run(capture(files, ['◌ 待命 │ ◆3 ?3 U3 │ ⓘ'])), 'decisions'), 'PASS');
+  assert.strictEqual(status(run(capture(files, ['◌ 待命 │ ◆3 ?3 U1 │ ⓘ'])), 'decisions'), 'FAIL');
+  const stale = camp({ 'decisions-sidecar.json': sc(1, 0), [`envelope--${CAMP}.json`]: env(CAMP, { published_at: iso(60) }), [`decisions-sidecar--${CAMP}.json`]: sc(2, 3) });
+  assert.strictEqual(status(run(capture(stale, ['◌ 待命 │ ◆1 │ ⓘ'])), 'decisions'), 'PASS', 'a stale extra root adds nothing');
 });

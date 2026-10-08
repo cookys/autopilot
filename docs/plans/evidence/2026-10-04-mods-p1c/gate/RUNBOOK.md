@@ -36,7 +36,21 @@ tmux 的細節（兩個 session 同時開時最容易出錯）：
 
 `capture.sh` 只讀、不寫 live 目錄和 marker 目錄；它會自己從 pane 的目錄找到最新的 session marker。找錯時，把 session id 當第三個參數傳進去。
 
-`check.js` 的 PASS 長這樣：每個項目一行 `PASS`，最後一行 `RESULT: PASS`。項目包括結論詞（verdict）、專案名、階段、進度、經過時間，以及（有資料時）「代你決定」「n 件派工無決策紀錄」兩個片段和第二行的理由。輸出的第二行 `surface: band` 或 `surface: panel` 說明它判斷的是哪個畫面：權限或 AskUserQuestion 的對話框開著時，底下那一列 band 會被蓋住，只剩右上角面板顯示「要你決定」和理由；這時 `capture.sh` 把面板文字存在 `panel.txt`，`check.js` 改判面板，只比對結論詞和理由，其餘項目印 `SKIP`。band 看得到時一律判 band。FAIL 的意思是 band 和來源檔不一致，這是一個發現，不是檢查器的錯：請保留存檔目錄、不要重跑覆蓋，直接記進結果表。
+**P7 一行 band（stage-graph alpha.2 起）。** band 現在只有一行：`<結論> │ <位置> │ <單元> │ <派工> │ <review> │ <決策> │ <花費> │ <衛生> │ ⓘ`，空的槽整個省略，窄螢幕依寬度表拿掉槽（< 160 衛生；< 140 花費、決策；< 120 ◷ 時間、review；< 80 只剩結論、派工、單元進度條、ⓘ）。契約：`docs/plans/evidence/2026-10-06-stage-graph/p7/contract.md` §②。原來的第二行（理由）搬到面板的 Now 分頁，不再由 `check.js` 判。
+
+`capture.sh` 除了 `pane.txt` 也存彩色的 `pane.ansi`，並把 D1–D4 與 qc / review / load-source / residue / stage 檔、session marker 一起複製進存檔目錄，`meta.json` 記 `window_width`、`mode`（`GATE_MODE`，沒設就取格子名第一段）。`check.js` 從這些檔獨立推出每一槽，每槽印一行 `PASS|FAIL|ABSENT <槽> expected … got … [來源]`，最後一行固定是 `PASS <mode> fields=<n>` 或 `FAIL <mode> fields=<n> failed=<槽,…>`（n = 判了幾槽，含 `layout`：整行順序、分隔、寬度）。寬度表被拿掉的槽必須是 ABSENT，畫出來就 FAIL。寬度表套在 `bodyColumns` 上，假設 `bodyColumns = window_width - 5`（引擎右邊留 5 格，沒有 docked pane）；有 dock 時在 `meta.json` 寫 `body_columns` 或用 `check.js <dir> --body-columns N` 覆蓋。位置槽的 ◷ 時間容許 ±2 分鐘。
+
+### 三個寬度 + 彩色截圖
+
+```bash
+GATE_TMUX_SOCKET=gate bash $G/widths.sh <cell> gate-l5: <sid>   # 把視窗依序調成 209 / 120 / 80 欄，各等 >= 8 秒重畫，存 <cell>-w209 / -w120 / -w80，並產生截圖
+for d in <印出的三個目錄>; do node $G/check.js $d; done
+bash $G/screenshot.sh <capture-dir>                              # 單獨補截圖：band-<W>.png（只有 band 那一行）與 pane.png，路徑寫進 meta.json
+```
+
+截圖流程是 `pane.ansi` → `docs/plans/evidence/2026-10-06-tui-band/ansi2html.py` → headless chrome，視窗每欄 10 px，看得到整個寬度。純文字的 `capture-pane -p` 沒有顏色，主題色要看 PNG（用 Read 看圖）。FAIL 的存檔目錄一樣不覆蓋重跑。
+
+**面板 / dialog 表面不變：** dialog 蓋住 band 時 `check.js` 判右上角面板（結論詞 + 理由），或只憑 `attention.json` 判結論；其餘槽印 `SKIP`，不算進 fields。
 
 「來源未接」：sources 清單（`sources.json`）說某個寫入端沒裝或被關掉時，band 該格寫「來源未接」就是 PASS，`check.js` 會自己依清單判斷，你不用特別處理。
 

@@ -1,41 +1,46 @@
 #!/usr/bin/env node
 'use strict';
 
-// gate/check.js <capture-dir> [--json] — W4 real-machine gate: INDEPENDENT re-derivation of the band.
+// gate/check.js <capture-dir> [--json] [--body-columns N] — real-machine gate: INDEPENDENT re-derivation of the one-line band.
 //
 // Dev-time tool, not shipped. It deliberately shares no code with mods/live/model.ts, scripts/render-review-page.js or
-// src/status/*: every rule below is written from the plan text (§4 P1W "W4 門檻", R5.5-R5.9) and the blueprint's
-// cell -> source table, from the capture's own copies of the source files (see capture.sh for the layout).
-// A disagreement between this checker and the band is a FINDING. Never tune a rule here to make a band pass.
+// src/status/*: every rule below is written from the P7 contract (docs/plans/evidence/2026-10-06-stage-graph/p7/contract.md
+// section 2: the slot table and the width table) and the earlier W4 verdict rules, from the capture's own copies of the source
+// files (see capture.sh for the layout). A disagreement between this checker and the band is a FINDING. Never tune a rule here
+// to make a band pass; when the mod and the contract disagree, the contract wins and the slot FAILs.
 //
-// Root set (mods P1W SCOPE, gate run l5g): the session's band follows the root of its marker AND every root in marker.json
-//   `campaign_roots` (the Mission roots of campaigns it launched; oldest -> newest). capture.sh copies envelope--<root>.json,
-//   decisions-sidecar--<root>.json, model--<root>.json and campaign-work-orders/<root>/*.json per extra root. This checker
-//   re-derives the union by its own code: live counts / stall rows / proxy decisions summed over the marker root's envelope and
-//   every FRESH extra envelope (published_at within valid_for_s, default 180, of the capture instant); frozen progress and phase from the
-//   newest campaign root that has them; the elapsed start from the newest campaign root with a bound receipt. A missing or stale
-//   extra envelope contributes nothing and never hides the others.
-// Expected values are derived from files only; the captured pane is read last and only compared.
-//   verdict   attention kind permission|question OR an open decision file -> 要你決定
-//             else any envelope run with stall:true                        -> 疑似卡住
-//             else an un-ended agent (agents/*.json, no ended_at, last_tool_at within 24 h) quiet >= 180 s -> 疑似卡住 (reason 工頭 N 分沒有動作)
-//             else (frozen done==total OR every session task done) AND no live run AND no un-ended agent quiet < 180 s -> 完成待驗收
-//             else a live run OR an un-ended agent quiet < 180 s (reason 工頭在跑) OR a task in progress OR an active turn (turn.json state active, since within 24 h) -> 進行中
-//             else                                                         -> 待命
-//   project   repo identity, last directory of the git common dir's parent (else first 8 hex of the project key)
-//   phase     campaign receipt phase > campaign phase kept by the job model > marker phase > task in progress > first open deliverable > —
-//             (來源未接 when the sources manifest names phase, progress and task_status_input and all three are off)
-//   progress  frozen: "<p>%" and "<n>/<N>"; unfrozen: "<n> done*"; none: 來源未接 (progress and tasks writers off) or —
-//   decisions "代你決定 m 件（k 件不可逆）" when m>0, "n 件派工無決策紀錄" when n>0 (sidecar counts)
-//   reason    要你決定: the attention summary or the decision question appears on band line 2
-//   elapsed   start of this piece of work vs the capture instant, +-2 minutes
+// The band is ONE line: slots joined by ` │ `, last segment `ⓘ`. A non-ok snapshot (no project / error / stale) is one dim line
+// `<reason> │ ⓘ`. Slots, in priority order (contract section 2):
+//   verdict   `<glyph> <word>`, from attention / decision file / stall / foreman / completion / live work (the W4 precedence below)
+//   position  `<size>[!]·<level> ▸ <stage>` + ` ◷<age>` (marker.json size/urgent/level/stage; age of stage_set_at, +-2 min);
+//             `·<level>` omitted when level is null; empty when the marker has no stage
+//   unit      `<bar> <k>/<N>` + ` ·<n>族` (marker.unit, marker.review_families); bar = k-1 done + the current cell (`▰`) + the rest `▱`,
+//             N > 10 scaled to 10 cells (current cell = ceil(k*10/N): the contract names no rounding, this is the assumption)
+//   dispatch  `⚙<live>` + ` ⏸<stalled>` (envelope counts / stall rows over the fresh root set; zero is left out)
+//   review    `R<n> ⟲` (review.json: code.generation, else plan.generation) + ` · QC ✓` / ` · QC owed` (qc.json state)
+//   decisions `◆<proxy>` + ` ?<undocumented>` + ` <rung>` (decisions sidecars summed over the root set; latest ladder rung)
+//   spend     `$<brain today>/<cap>` (envelope host_today_brain_usd / brain_cap_usd, rounded to integers; empty when not published)
+//   hygiene   load-source chip (dev / dev ↓n / dev ⚠ / cache <v> ⚠ / src ? ⚠) + ` · wt <n>` (residue.json reapable worktrees, n > 0)
+//   ⓘ         always last
+// Width table (applied to bodyColumns, cumulative): < 160 no hygiene; < 140 also no spend, decisions; < 120 also no ◷ age, no review;
+//   < 80 only verdict, dispatch, the unit BAR (no k/N, no 族) and ⓘ. A slot the table removes must be ABSENT (drawn = FAIL). If the line
+//   still does not fit, only the position's stage text may be cut with `…`.
+// bodyColumns: the engine's AbovePrompt prop `bodyColumns` = "the column's width less the engine's five at the right end" (plugin-authoring
+//   types/claude-code.d.ts, UiSite props). The column is the terminal, or the transcript's beside a docked Pane. ASSUMPTION recorded in the
+//   output: no docked pane, so bodyColumns = window_width - 5; meta.json `body_columns` (or --body-columns) overrides it when a dock is present.
+// Root set (mods P1W SCOPE): the session's band follows the root of its marker AND every root in marker.json `campaign_roots`; live counts,
+//   stall rows and proxy decisions are summed over the marker root's envelope and every FRESH extra envelope (published_at within
+//   valid_for_s, default 180, of the capture instant). A missing or stale extra envelope contributes nothing.
+// Verdict precedence (W4):
+//   attention kind permission|question OR an open decision file -> 要你決定; else any envelope run with stall:true -> 疑似卡住;
+//   else an un-ended agent quiet >= 180 s -> 疑似卡住; else (frozen done==total OR every session task done) AND no live run AND no fresh
+//   agent -> 完成待驗收; else a live run OR a fresh agent OR a task in progress OR an active turn -> 進行中; else 待命.
 // Surface (dialogs): while a permission / AskUserQuestion dialog is open the band row is hidden and only the mod's top-right panel
-//   shows the verdict word alone in its cell, the reason in the cell below. The band is judged when present; else the panel
-//   (verdict + reason only; the other tokens print SKIP). The judged surface is printed as `surface: band|panel|dialog`.
-//   A dialog raised by a subagent is full-width and hides BOTH the band and the panel (gate run l4-running-foreman): when neither is
-//   visible but the pane shows a permission / question dialog, only the verdict is judged, from attention.json alone
-//   (kind permission|question -> 要你決定); `surface: dialog`. A dialog with no such attention file FAILs.
-// Exit: 0 every token PASS (or 來源未接 as expected), 1 any FAIL, 2 usage / unreadable capture.
+//   shows the verdict word alone in its cell, the reason in the cell below (verdict + reason judged, the slots print SKIP). A dialog
+//   raised by a subagent hides BOTH: only the verdict is judged, from attention.json alone; `surface: dialog`.
+// Output: one line per judged slot `PASS|FAIL|ABSENT <slot> expected <..> got <..> [source]`, then the final line
+//   `PASS <mode> fields=<n>` or `FAIL <mode> fields=<n> failed=<slot,...>` (n = slots judged, SKIP not counted).
+// Exit: 0 PASS, 1 any FAIL, 2 usage / unreadable capture.
 
 const fs = require('fs');
 const path = require('path');
@@ -44,33 +49,34 @@ const VERDICTS = [
   { mark: '▲', word: '要你決定' }, { mark: '⏸', word: '疑似卡住' }, { mark: '✓', word: '完成待驗收' },
   { mark: '●', word: '進行中' }, { mark: '◌', word: '待命' },
 ];
-const NOT_WIRED = '來源未接';
+const SLOT_ORDER = ['verdict', 'position', 'unit', 'dispatch', 'review', 'decisions', 'spend', 'hygiene'];
+const SEP = ' │ ';
+const ICON = 'ⓘ';
+const SIZES = ['XS', 'S', 'M', 'L', 'XL'];
 const FOREMAN_STALL_S = 180; // the dispatch stall bound (dispatch-status.js DEFAULT_STALL_SECS); written here from the plan text, not imported
 const MARKER_TTL_MS = 24 * 3600 * 1000;
-const PHASE_ZH = {
-  PREPARED: '準備', IMPLEMENTING: '實作', VERTICAL_VERIFICATION: '垂直驗證', REVIEWING: '審查', ADJUDICATING: '裁定',
-  AWAITING_DISPOSITION: '等待處置', REPAIRING: '修復', TERMINAL_READY: '收尾', TERMINAL_FOLLOW_UP: '收尾（有後續）',
-  TERMINAL_STOP: '已停止', BOUNDARY_REJECTED: '邊界被拒', AWAITING_CONVERGENCE_ADJUDICATION: '等待收斂裁定',
-  COMPLETED: '完成', FOLLOW_UP: '收尾（有後續）', TERMINAL: '已結束', SEALED_ZERO_DIFF: '零差異封存',
-  AWAITING_EFFECT_RECONCILIATION: '等待效果對帳', ADOPTED_ORPHAN: '接手孤兒',
-};
+const RIGHT_MARGIN = 5; // the engine's five cells at the right end of the column (types/claude-code.d.ts bodyColumns)
+const AGE_TOLERANCE_MIN = 2;
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 function readJson(file) { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_e) { return null; } }
 function readText(file) { try { return fs.readFileSync(file, 'utf8'); } catch (_e) { return null; } }
 const ms = (v) => { const t = typeof v === 'string' ? Date.parse(v) : NaN; return Number.isFinite(t) ? t : null; };
+const posInt = (v) => typeof v === 'number' && Number.isInteger(v) && v >= 1;
+const count = (v) => typeof v === 'number' && Number.isInteger(v) && v >= 0;
+const str = (v) => (typeof v === 'string' && v !== '' ? v : null);
 
-function projectNameOf(identity, projectKey) {
-  const fallback = String(projectKey || '').slice(0, 8) || '—';
-  if (typeof identity !== 'string' || !identity.startsWith('git-common-dir:')) return fallback;
-  let dir = identity.slice('git-common-dir:'.length).replace(/\/+$/, '');
-  if (!dir.endsWith('/.git')) return fallback;
-  dir = dir.slice(0, -5);
-  return dir.split('/').filter(Boolean).pop() || fallback;
+// Terminal cells: East Asian Wide / Fullwidth = 2, combining / zero-width = 0, everything else (the band glyphs included) = 1.
+function cellWidth(c) {
+  if (c === 0 || (c >= 0x0300 && c <= 0x036f) || (c >= 0x200b && c <= 0x200f) || (c >= 0xfe00 && c <= 0xfe0f) || (c >= 0x20d0 && c <= 0x20ff)) return 0;
+  const wide = [[0x1100, 0x115f], [0x2e80, 0x303e], [0x3041, 0x33ff], [0x3400, 0x4dbf], [0x4e00, 0x9fff], [0xa000, 0xa4cf], [0xac00, 0xd7a3],
+    [0xf900, 0xfaff], [0xfe30, 0xfe4f], [0xff00, 0xff60], [0xffe0, 0xffe6], [0x1f300, 0x1f64f], [0x1f900, 0x1f9ff], [0x20000, 0x3fffd]];
+  return wide.some(([a, b]) => c >= a && c <= b) ? 2 : 1;
 }
+function displayWidth(text) { let w = 0; for (const ch of String(text)) w += cellWidth(ch.codePointAt(0)); return w; }
 
 function elapsedText(startMs, nowMs) {
-  if (startMs === null || nowMs < startMs) return '—';
+  if (startMs === null || nowMs === null || nowMs < startMs) return '—';
   const min = Math.floor((nowMs - startMs) / 60000);
   if (min < 60) return `${min}m`;
   const h = Math.floor(min / 60);
@@ -84,7 +90,7 @@ function parseElapsedMin(s) {
   return null;
 }
 
-// newest controller_progress_receipt among work-orders/*.json (issued_at, then generation)
+// newest controller_progress_receipt among <sub>/*.json (issued_at, then generation); only the frozen progress (the verdict's completion rule) uses it
 function newestReceipt(dir, root, sub = 'work-orders') {
   let best = null;
   let names = [];
@@ -104,21 +110,6 @@ function newestReceipt(dir, root, sub = 'work-orders') {
   return best;
 }
 
-function receiptStartMs(dir, root, sub = 'work-orders') {
-  let best = Infinity;
-  let names = [];
-  try { names = fs.readdirSync(path.join(dir, sub)).filter((n) => n.endsWith('.json')); } catch (_e) { return null; }
-  for (const n of names) {
-    const f = readJson(path.join(dir, sub, n));
-    if (!isObj(f) || (typeof f.root_run_id === 'string' && f.root_run_id !== root)) continue;
-    const list = isObj(f.controller) && Array.isArray(f.controller.progress_receipts) ? f.controller.progress_receipts : [];
-    for (const r of list) {
-      if (isObj(r) && r.artifact_type === 'controller_progress_receipt' && r.root_run_id === root && ms(r.issued_at) !== null) best = Math.min(best, ms(r.issued_at));
-    }
-  }
-  return best === Infinity ? null : best;
-}
-
 // marker.campaign_roots: plain strings only (they name files), not the marker's own root, no repeats, at most 8, oldest -> newest
 function campaignRootsOf(marker, root) {
   const raw = marker && Array.isArray(marker.campaign_roots) ? marker.campaign_roots : [];
@@ -126,7 +117,7 @@ function campaignRootsOf(marker, root) {
   for (const r of raw) if (typeof r === 'string' && /^[A-Za-z0-9._-]{1,128}$/.test(r) && r !== '.' && r !== '..' && r !== root && !out.includes(r)) out.push(r);
   return out.slice(-8);
 }
-// an extra root's envelope counts only while fresh: published_at parses and is within valid_for_s (default 180) of the capture instant
+// an envelope counts only while fresh: published_at parses and is within valid_for_s (default 180) of the capture instant
 function freshEnvelope(env, nowMs) {
   if (!isObj(env)) return false;
   const at = ms(env.published_at);
@@ -134,7 +125,27 @@ function freshEnvelope(env, nowMs) {
   return at !== null && nowMs !== null && nowMs - at <= validS * 1000;
 }
 
-function derive(dir) {
+// ---- slot builders: each returns { text, parts } or null (empty)
+function unitBar(index, total) {
+  const cells = Math.min(total, 10);
+  const k = Math.min(Math.max(index, 1), total);
+  const cur = total > 10 ? Math.max(1, Math.min(10, Math.ceil((k * 10) / total))) : k;
+  return '▰'.repeat(cur - 1) + '▰' + '▱'.repeat(cells - cur);
+}
+
+function hygieneChip(ls) {
+  const source = str(ls.source) || 'unknown';
+  const flags = Array.isArray(ls.flags) ? ls.flags.filter((f) => typeof f === 'string') : [];
+  if (source.startsWith('cache:')) return `cache ${source.slice('cache:'.length)} ⚠`;
+  if (source === 'dev') {
+    const behind = count(ls.behind_upstream) && ls.behind_upstream > 0 ? ` ↓${ls.behind_upstream}` : '';
+    const bad = flags.includes('marketplace_not_directory') || flags.includes('marketplace_not_this_repo');
+    return `dev${behind}${bad ? ' ⚠' : ''}`;
+  }
+  return 'src ? ⚠';
+}
+
+function derive(dir, opts = {}) {
   const J = (n) => readJson(path.join(dir, n));
   const meta = J('meta.json') || {};
   const marker = J('marker.json');
@@ -143,298 +154,385 @@ function derive(dir) {
   const turnEff = J('turn-effective.json');
   const tasksFile = J('tasks.json');
   const envelope = J('envelope.json');
-  const sidecar = J('decisions-sidecar.json');
   const decisionFile = J('decision-file.json');
-  const model = J('model.json');
-  const sourcesFile = J('sources.json') || (model && model.sources_manifest) || null;
   const nowMs = Number.isFinite(meta.captured_at_ms) ? meta.captured_at_ms : ms(meta.captured_at);
   const root = (marker && typeof marker.root_run_id === 'string' && marker.root_run_id) || meta.root_run_id || null;
-  const files = {};
-  const exp = { tokens: [], notes: [] };
-  const put = (name, expected, source, extra) => exp.tokens.push({ name, expected, source, ...(extra || {}) });
+  const notes = [];
+  const reasons = []; // the legacy panel-surface reason tokens
 
   // ---- tasks (deleted ones never count)
   let tasks = null;
   if (isObj(tasksFile) && Array.isArray(tasksFile.tasks)) {
     const live = tasksFile.tasks.filter((t) => isObj(t) && t.status !== 'deleted');
-    tasks = {
-      total: live.length, completed: live.filter((t) => t.status === 'completed').length,
-      inProgress: live.filter((t) => t.status === 'in_progress'),
-      first: ms(tasksFile.first_created_at),
-    };
+    tasks = { total: live.length, completed: live.filter((t) => t.status === 'completed').length, inProgress: live.filter((t) => t.status === 'in_progress') };
   }
-  // ---- foremen: capture.sh copies <live>/agents/<sid>/*.json to agents/ (autopilot.agent-activity/1; ended_at set by SubagentStop)
-  const agentsDir = path.join(dir, 'agents');
+  // ---- foremen: agents/*.json (autopilot.agent-activity/1; ended_at set by SubagentStop)
   let agentNames = [];
-  try { agentNames = fs.readdirSync(agentsDir).filter((n) => n.endsWith('.json')).sort(); } catch (_e) { agentNames = []; }
+  try { agentNames = fs.readdirSync(path.join(dir, 'agents')).filter((n) => n.endsWith('.json')).sort(); } catch (_e) { agentNames = []; }
   const foremen = { fresh: [], stalled: [] };
   for (const n of agentNames) {
-    const a = readJson(path.join(agentsDir, n));
+    const a = readJson(path.join(dir, 'agents', n));
     if (!isObj(a) || a.schema !== 'autopilot.agent-activity/1' || typeof a.agent_id !== 'string' || !a.agent_id) continue;
     if (typeof a.ended_at === 'string' && ms(a.ended_at) !== null) continue; // done
     const at = ms(a.last_tool_at);
-    if (at === null || nowMs - at > MARKER_TTL_MS) continue;
+    if (at === null || nowMs === null || nowMs - at > MARKER_TTL_MS) continue;
     const ageS = Math.max(0, Math.floor((nowMs - at) / 1000));
     (ageS < FOREMAN_STALL_S ? foremen.fresh : foremen.stalled).push({ id: a.agent_id, ageS, file: `agents/${n}` });
   }
   const foremanFresh = foremen.fresh.length > 0;
   const foremanStalled = foremen.stalled.length > 0;
-  // ---- root set: the marker root + the campaign roots (oldest -> newest)
+  // ---- root set: the marker root + the FRESH campaign roots (oldest -> newest)
   const campaignRoots = campaignRootsOf(marker, root);
   const extras = [];
   for (const r of campaignRoots) {
     const e = J(`envelope--${r}.json`);
-    if (freshEnvelope(e, nowMs)) extras.push({ root: r, envelope: e });
+    if (freshEnvelope(e, nowMs)) extras.push({ root: r, envelope: e, sidecar: J(`decisions-sidecar--${r}.json`) });
   }
+  // a snapshot is ok only when the marker root's own envelope is fresh (published_at within valid_for_s); otherwise the band is the non-ok line
+  const okSnapshot = freshEnvelope(envelope, nowMs);
   const envelopes = [envelope, ...extras.map((x) => x.envelope)].filter(isObj);
   const runs = envelopes.flatMap((e) => (Array.isArray(e.runs) ? e.runs.filter(isObj) : []));
-  const stalled = runs.some((r) => r.stall === true);
+  const stalledRows = runs.filter((r) => r.stall === true).length;
   const withCounts = envelopes.filter((e) => isObj(e.counts) && Number.isFinite(e.counts.confirmed_live));
-  const liveRun = withCounts.length > 0
-    ? withCounts.reduce((n, e) => n + e.counts.confirmed_live, 0) > 0
-    : runs.some((r) => r.alive === true && r.phase !== 'exited' && !r.ended_at && !r.final_status);
+  const liveN = withCounts.length > 0
+    ? withCounts.reduce((n, e) => n + e.counts.confirmed_live, 0)
+    : runs.filter((r) => r.alive === true && r.phase !== 'exited' && !r.ended_at && !r.final_status).length;
+  const liveRun = liveN > 0;
 
-  // ---- progress: the newest campaign root with a FROZEN progress, else the marker root's, else the newest campaign root's
-  const progressOf = (rec, mdl) => {
-    if (rec) {
-      const r = rec.r;
-      const done = Array.isArray(r.completed_deliverables) ? r.completed_deliverables : null;
-      const rem = Array.isArray(r.remaining_deliverables) ? r.remaining_deliverables : null;
-      const frozen = Boolean(typeof r.frozen_denominator_digest === 'string' && r.frozen_denominator_digest && Number.isInteger(r.deliverable_count) && r.deliverable_count > 0 && done);
-      return {
-        frozen, done: done ? done.length : null, total: frozen ? r.deliverable_count : null,
-        pct: frozen ? Math.round((done.length / r.deliverable_count) * 1000) / 10 : null,
-        source: rec.file, openId: rem && rem.length ? String(rem[0]) : null, phaseCode: typeof r.phase === 'string' && r.phase ? r.phase : null,
-      };
-    }
-    if (mdl && isObj(mdl.progress) && mdl.progress.frozen === true && Number.isFinite(mdl.progress.done) && Number.isFinite(mdl.progress.total) && mdl.progress.total > 0) {
-      return { frozen: true, done: mdl.progress.done, total: mdl.progress.total, pct: Math.round((mdl.progress.done / mdl.progress.total) * 1000) / 10, source: mdl.__file || 'model.json', openId: null, phaseCode: null };
-    }
-    return null;
+  // ---- frozen progress (only the completion rule of the verdict uses it): the newest campaign root with a frozen receipt, else the marker root's
+  const frozenOf = (rec) => {
+    if (!rec) return null;
+    const r = rec.r;
+    const done = Array.isArray(r.completed_deliverables) ? r.completed_deliverables : null;
+    const ok = Boolean(typeof r.frozen_denominator_digest === 'string' && r.frozen_denominator_digest && Number.isInteger(r.deliverable_count) && r.deliverable_count > 0 && done);
+    return ok ? { done: done.length, total: r.deliverable_count, source: rec.file } : null;
   };
-  const rec = newestReceipt(dir, root);
-  const own = progressOf(rec, model);
-  const campaignViews = campaignRoots.map((r) => {
-    const cm = J(`model--${r}.json`);
-    const crec = newestReceipt(dir, r, path.join('campaign-work-orders', r));
-    return { root: r, model: isObj(cm) ? { ...cm, __file: `model--${r}.json` } : null, rec: crec, progress: progressOf(crec, isObj(cm) ? { ...cm, __file: `model--${r}.json` } : null) };
-  }).reverse(); // newest first
-  const frozenCampaign = campaignViews.find((v) => v.progress && v.progress.frozen);
-  const anyCampaign = campaignViews.find((v) => v.progress);
-  const progress = frozenCampaign ? frozenCampaign.progress : (own || (anyCampaign ? anyCampaign.progress : null));
-  // phase code: the newest campaign root whose receipt carries one, else the marker root's receipt
-  const campaignPhase = campaignViews.find((v) => v.progress && v.progress.phaseCode);
-  const phaseProgress = campaignPhase ? campaignPhase.progress : (own && own.phaseCode ? own : null);
-  const campaignModelPhase = campaignViews.find((v) => v.model && isObj(v.model.phase) && v.model.phase.source === 'campaign' && typeof v.model.phase.label === 'string' && v.model.phase.label);
-
-  // ---- sources manifest
-  const srcs = isObj(sourcesFile) && isObj(sourcesFile.sources) ? sourcesFile.sources : null;
-  const off = (names) => srcs !== null && names.every((n) => isObj(srcs[n]) && !(srcs[n].installed === true && srcs[n].enabled === true));
+  const frozenViews = campaignRoots.map((r) => frozenOf(newestReceipt(dir, r, path.join('campaign-work-orders', r)))).reverse();
+  const modelFrozen = (() => {
+    const m = J('model.json');
+    return isObj(m) && isObj(m.progress) && m.progress.frozen === true && Number.isFinite(m.progress.done) && Number.isFinite(m.progress.total) && m.progress.total > 0
+      ? { done: m.progress.done, total: m.progress.total, source: 'model.json' } : null;
+  })();
+  const frozen = frozenViews.find(Boolean) || frozenOf(newestReceipt(dir, root)) || modelFrozen;
 
   // ---- verdict
   const attKind = isObj(attention) ? attention.kind : null;
   const decisionOpen = isObj(decisionFile) && typeof decisionFile.question === 'string' && decisionFile.question !== '';
-  const frozenDone = progress && progress.frozen && progress.done === progress.total;
-  // turn.json (hooks/awaiting-owner.js): active while a prompt is being worked; older than the 24 h marker TTL = a crashed session's leftover
+  const frozenDone = frozen && frozen.done === frozen.total;
   const turnActive = isObj(turnFile) && turnFile.schema === 'autopilot.session-turn/1' && turnFile.state === 'active'
-    && ms(turnFile.since) !== null && nowMs - ms(turnFile.since) <= 24 * 3600 * 1000
-    // turn-effective.json (watcher-owned, GATEFIX2): an Escape interrupt fires no Stop; the watcher publishes `ended` for that ONE turn (same `since`).
+    && ms(turnFile.since) !== null && nowMs !== null && nowMs - ms(turnFile.since) <= MARKER_TTL_MS
+    // an Escape interrupt fires no Stop; the watcher publishes `ended` for that ONE turn (same `since`)
     && !(isObj(turnEff) && turnEff.schema === 'autopilot.session-turn-effective/1' && turnEff.state === 'ended' && turnEff.turn_since === turnFile.since);
   const tasksDone = tasks && tasks.total > 0 && tasks.completed === tasks.total;
   let verdict; let verdictSource;
-  if (attKind === 'permission' || attKind === 'question') { verdict = '要你決定'; verdictSource = 'attention.json kind=' + attKind; }
+  if (attKind === 'permission' || attKind === 'question') { verdict = '要你決定'; verdictSource = `attention.json kind=${attKind}`; }
   else if (decisionOpen) { verdict = '要你決定'; verdictSource = 'decision-file.json (open)'; }
-  else if (stalled) { verdict = '疑似卡住'; verdictSource = 'envelope.json run stall:true'; }
+  else if (stalledRows > 0) { verdict = '疑似卡住'; verdictSource = 'envelope.json run stall:true'; }
   else if (foremanStalled) { verdict = '疑似卡住'; verdictSource = `${foremen.stalled[0].file} un-ended, quiet ${Math.max(...foremen.stalled.map((x) => x.ageS))} s`; }
-  else if ((frozenDone || tasksDone) && !liveRun && !foremanFresh) { verdict = '完成待驗收'; verdictSource = frozenDone ? `${progress.source} frozen ${progress.done}/${progress.total}` : 'tasks.json all completed'; }
+  else if ((frozenDone || tasksDone) && !liveRun && !foremanFresh) { verdict = '完成待驗收'; verdictSource = frozenDone ? `${frozen.source} frozen ${frozen.done}/${frozen.total}` : 'tasks.json all completed'; }
   else if (liveRun || foremanFresh || (tasks && tasks.inProgress.length > 0) || turnActive) {
     verdict = '進行中';
     verdictSource = liveRun ? 'envelope.json live run' : foremanFresh ? `${foremen.fresh[0].file} un-ended, quiet < ${FOREMAN_STALL_S} s` : (tasks && tasks.inProgress.length > 0) ? 'tasks.json in_progress' : 'turn.json active';
-  }
-  else { verdict = '待命'; verdictSource = 'nothing live, awaited or complete'; }
-  put('verdict', verdict, verdictSource, { exact: true });
+  } else { verdict = '待命'; verdictSource = 'nothing live, awaited or complete'; }
+  const mark = VERDICTS.find((v) => v.word === verdict).mark;
 
-  // ---- project
-  const baseEnv = envelope || (envelopes[0] || null);
-  const identity = (baseEnv && baseEnv.scope && baseEnv.scope.repo_identity) || (marker && marker.repo_identity) || null;
-  const pkey = (baseEnv && baseEnv.scope && baseEnv.scope.project_key) || (marker && marker.project_key) || meta.project_key || '';
-  put('project', projectNameOf(identity, pkey), baseEnv ? 'envelope.json scope.repo_identity' : 'marker.json repo_identity');
-
-  // ---- phase
-  let phaseAlts = null; let phaseSource = '';
-  const taskNow = tasks && tasks.inProgress.length
-    ? tasks.inProgress.slice().sort((a, b) => (b.started_seq || 0) - (a.started_seq || 0))[0] : null;
-  if (phaseProgress) {
-    const zh = Object.prototype.hasOwnProperty.call(PHASE_ZH, phaseProgress.phaseCode.toUpperCase()) ? PHASE_ZH[phaseProgress.phaseCode.toUpperCase()] : null;
-    // a mapped code must be drawn as its label (the raw code is a FAIL); an unmapped one stays raw
-    phaseAlts = [zh || phaseProgress.phaseCode]; phaseSource = `${phaseProgress.source} phase`;
-  } else if (campaignModelPhase) {
-    phaseAlts = [campaignModelPhase.model.phase.label]; phaseSource = `${campaignModelPhase.model.__file} phase (campaign)`;
-  } else if (model && isObj(model.phase) && model.phase.source === 'campaign' && typeof model.phase.label === 'string' && model.phase.label) {
-    phaseAlts = [model.phase.label]; phaseSource = 'model.json phase (campaign)';
-  } else if (marker && typeof marker.phase === 'string' && marker.phase) {
-    phaseAlts = [marker.phase]; phaseSource = 'marker.json phase';
-  } else if (taskNow && typeof taskNow.subject === 'string' && taskNow.subject.trim()) {
-    const s = taskNow.subject.replace(/\s+/g, ' ').trim();
-    phaseAlts = [`做：${s.length > 40 ? `${s.slice(0, 39)}…` : s}`]; phaseSource = 'tasks.json in_progress task';
-  } else if (progress && progress.openId) {
-    phaseAlts = [`做 ${progress.openId}`]; phaseSource = `${progress.source} first open deliverable`;
-  } else if (off(['phase', 'progress', 'task_status_input'])) {
-    phaseAlts = [NOT_WIRED]; phaseSource = 'sources.json phase/progress/task_status_input all off';
-  } else { phaseAlts = ['—']; phaseSource = 'no phase source has data'; }
-  put('phase', phaseAlts, phaseSource);
-
-  // ---- progress text
-  if (progress && progress.frozen) {
-    put('progress', [`${progress.pct}%`, `${progress.done}/${progress.total}`], progress.source, { all: true });
-  } else if (progress && progress.done !== null) {
-    put('progress', [`${progress.done} done*`], progress.source);
-  } else if (tasks && tasks.total > 0) {
-    put('progress', [`${tasks.completed} done*`], 'tasks.json');
-  } else if (off(['progress', 'tasks'])) {
-    put('progress', [NOT_WIRED], 'sources.json progress/tasks off');
-  } else put('progress', ['—'], 'no progress source has data');
-
-  // ---- decisions line + reason
-  const sidecars = [sidecar, ...campaignRoots.map((r) => J(`decisions-sidecar--${r}.json`))].filter(isObj);
-  if (sidecars.length > 0) {
-    const sum = (k) => sidecars.reduce((n, sc) => n + (Number.isInteger(sc[k]) ? sc[k] : 0), 0);
-    const m = sum('count');
-    const k = sum('irreversible_count');
-    const n = sum('undocumented_dispatches');
-    if (m > 0) put('decisions', [`代你決定 ${m} 件（${k} 件不可逆）`], 'decisions-sidecar*.json count/irreversible_count', { line2: true });
-    if (n > 0) put('undocumented', [`${n} 件派工無決策紀錄`], 'decisions-sidecar*.json undocumented_dispatches', { line2: true });
-    if (m === 0 && n === 0) put('no-decisions-line', null, 'decisions-sidecar*.json counts zero', { absent: ['代你決定', '件派工無決策紀錄'] });
-  } else {
-    exp.notes.push('no decisions sidecar in the capture: decisions line not checked');
-  }
+  // legacy panel reason (the reason moved to the panel's Now tab; it is still judged on the dialog-time top-right panel)
   if (verdict === '要你決定') {
-    if (attKind === 'permission' || attKind === 'question') put('reason', [String(attention.summary || '').slice(0, 30)], 'attention.json summary', { line2: true });
-    else put('reason', [String(decisionFile.question).slice(0, 30)], 'decision-file.json question', { line2: true });
+    if (attKind === 'permission' || attKind === 'question') reasons.push({ expected: String(attention.summary || '').slice(0, 30), source: 'attention.json summary' });
+    else reasons.push({ expected: String(decisionFile.question).slice(0, 30), source: 'decision-file.json question' });
+  } else if (verdict === '疑似卡住' && stalledRows === 0 && foremanStalled) reasons.push({ expected: '工頭 ', source: foremen.stalled[0].file });
+  else if (verdict === '進行中' && !liveRun && foremanFresh) reasons.push({ expected: '工頭在跑：', source: foremen.fresh[0].file });
+  else if (verdict === '進行中' && !liveRun && !(tasks && tasks.inProgress.length > 0)) reasons.push({ expected: '回合進行中', source: 'turn.json active' });
+
+  // ---- slots (full, before the width table)
+  const pkey = (isObj(envelope) && isObj(envelope.scope) && envelope.scope.project_key) || (marker && marker.project_key) || meta.project_key || null;
+  const slots = {};
+  const put = (name, text, source, parts) => { slots[name] = { name, text, source, parts: parts || {}, state: text === null ? 'empty' : 'present' }; };
+
+  put('verdict', `${mark} ${verdict}`, verdictSource);
+
+  // position + unit from the marker (§2.9 fields; a field of the wrong type reads as absent)
+  const mSize = marker && SIZES.includes(marker.size) ? marker.size : null;
+  const mLevel = marker ? str(marker.level) : null;
+  const mStage = marker ? str(marker.stage) : null;
+  if (mStage !== null) {
+    const head = [mSize === null ? null : mSize + (marker.urgent === true ? '!' : ''), mLevel].filter((x) => x !== null).join('·');
+    const setAt = ms(marker.stage_set_at);
+    const age = setAt === null ? '—' : elapsedText(setAt, nowMs);
+    put('position', `${head === '' ? '' : `${head} `}▸ ${mStage}${age === '—' ? '' : ` ◷${age}`}`, 'marker.json size/urgent/level/stage/stage_set_at',
+      { head: head === '' ? '' : `${head} `, stage: mStage, age: age === '—' ? null : age });
+  } else put('position', null, 'marker.json has no stage');
+
+  const u = marker && isObj(marker.unit) ? marker.unit : null;
+  if (u && str(u.kind) && posInt(u.index) && posInt(u.total)) {
+    const fams = Array.isArray(marker.review_families) ? marker.review_families.filter((f) => typeof f === 'string' && f !== '').length : 0;
+    const bar = unitBar(u.index, u.total);
+    put('unit', `${bar} ${u.index}/${u.total}${fams > 0 ? ` ·${fams}族` : ''}`, 'marker.json unit/review_families', { bar, kn: ` ${u.index}/${u.total}`, fam: fams > 0 ? ` ·${fams}族` : '' });
+  } else put('unit', null, 'marker.json has no unit');
+
+  put('dispatch', liveN > 0 || stalledRows + (foremanStalled ? 1 : 0) > 0
+    ? [liveN > 0 ? `⚙${liveN}` : null, stalledRows + (foremanStalled ? 1 : 0) > 0 ? `⏸${stalledRows + (foremanStalled ? 1 : 0)}` : null].filter(Boolean).join(' ') : null,
+  'envelope*.json counts.confirmed_live / stall rows (+ a stalled foreman)');
+
+  // review: review.json (scope = this project) + qc.json (scope = this project)
+  const review = J('review.json');
+  const qc = J('qc.json');
+  const reviewOk = isObj(review) && review.schema === 'autopilot.review/1' && review.project_key === pkey;
+  let rn = null;
+  if (reviewOk) {
+    if (isObj(review.code) && Number.isInteger(review.code.generation)) rn = review.code.generation;
+    else if (isObj(review.plan) && Number.isInteger(review.plan.generation)) rn = review.plan.generation;
   }
+  const qcOk = isObj(qc) && qc.schema === 'autopilot.qc-status/1' && isObj(qc.scope) && qc.scope.project_key === pkey;
+  const chip = qcOk ? (qc.state === 'ok' ? 'QC ✓' : qc.state === 'owed' ? 'QC owed' : null) : null;
+  put('review', rn === null && chip === null ? null : [rn === null ? null : `R${rn} ⟲`, chip].filter(Boolean).join(' · '), 'review.json generation + qc.json state');
 
-  if (verdict === '疑似卡住' && !stalled && foremanStalled) put('reason', ['工頭 ', '分沒有動作'], foremen.stalled[0].file, { line2: true, all: true });
-  if (verdict === '進行中' && !liveRun && foremanFresh) put('reason', ['工頭在跑：'], foremen.fresh[0].file, { line2: true });
-  else if (verdict === '進行中' && !liveRun && !(tasks && tasks.inProgress.length > 0)) put('reason', ['回合進行中'], 'turn.json active (no live run, no task in progress)', { line2: true });
+  // decisions: sidecars of the root set (summed), the latest ladder rung by `at`
+  const sidecars = [J('decisions-sidecar.json'), ...extras.map((x) => x.sidecar)].filter(isObj);
+  const sum = (k) => sidecars.reduce((n, sc) => n + (count(sc[k]) ? sc[k] : 0), 0);
+  const ladders = sidecars.map((sc) => sc.ladder).filter((l) => isObj(l) && /^U[0-5]$/.test(l.rung) && ms(l.at) !== null).sort((a, b) => ms(b.at) - ms(a.at));
+  const dparts = [sum('count') > 0 ? `◆${sum('count')}` : null, sum('undocumented_dispatches') > 0 ? `?${sum('undocumented_dispatches')}` : null, ladders[0] ? ladders[0].rung : null].filter(Boolean);
+  put('decisions', dparts.length ? dparts.join(' ') : null, 'decisions-sidecar*.json count / undocumented_dispatches / ladder');
 
-  // ---- elapsed
-  // campaign root with a bound receipt: earliest receipt; otherwise the session's own start (tasks, then marker); last the earliest run
-  let start = null; let startSource = '';
-  let rs = null;
-  for (const v of campaignViews) { rs = receiptStartMs(dir, v.root, path.join('campaign-work-orders', v.root)); if (rs !== null) break; }
-  if (rs === null && root) rs = receiptStartMs(dir, root);
-  if (rs !== null) { start = rs; startSource = 'work-orders earliest receipt'; }
-  else if (tasks && tasks.first !== null) { start = tasks.first; startSource = 'tasks.json first_created_at'; }
-  else if (marker && ms(marker.started_at) !== null) { start = ms(marker.started_at); startSource = 'marker.json started_at'; }
+  // spend: D1 on the envelope
+  const brain = isObj(envelope) ? envelope.host_today_brain_usd : null;
+  const cap = isObj(envelope) ? envelope.brain_cap_usd : null;
+  put('spend', Number.isFinite(brain) && Number.isFinite(cap) && cap > 0 ? `$${Math.round(brain)}/${Math.round(cap)}` : null, 'envelope.json host_today_brain_usd / brain_cap_usd');
+
+  // hygiene: load-source chip + reapable worktrees (clean-integrated + missing-dir, from by_class when present)
+  const ls = J('load-source.json');
+  const lsOk = isObj(ls) && ls.schema === 'autopilot.load-source/1';
+  const res = J('residue.json');
+  let wt = 0;
+  if (isObj(res) && res.schema === 'autopilot.residue/1' && res.project_key === pkey && count(res.reapable_worktrees)) {
+    wt = res.reapable_worktrees;
+    if (isObj(res.by_class)) {
+      const by = (res.by_class['clean-integrated'] || 0) + (res.by_class['missing-dir'] || 0);
+      if (by !== res.reapable_worktrees) notes.push(`residue.json is inconsistent: reapable_worktrees=${res.reapable_worktrees} but by_class clean-integrated + missing-dir = ${by}`);
+    }
+  }
+  const hchip = lsOk ? hygieneChip(ls) : null;
+  put('hygiene', hchip === null && wt === 0 ? null : [hchip, wt > 0 ? `wt ${wt}` : null].filter(Boolean).join(' · '), 'load-source.json + residue.json');
+
+  // ---- width
+  let columns; let columnsHow;
+  if (Number.isFinite(opts.bodyColumns)) { columns = opts.bodyColumns; columnsHow = '--body-columns'; }
+  else if (Number.isFinite(meta.body_columns)) { columns = meta.body_columns; columnsHow = 'meta.body_columns'; }
+  else if (Number.isFinite(meta.window_width)) { columns = meta.window_width - RIGHT_MARGIN; columnsHow = `meta.window_width ${meta.window_width} - ${RIGHT_MARGIN} (engine right margin; no docked pane assumed)`; }
   else {
-    const starts = runs.map((r) => ms(r.started_at)).filter((x) => x !== null);
-    if (starts.length) { start = Math.min(...starts); startSource = 'envelope.json earliest run'; }
+    const pane = readText(path.join(dir, 'pane.txt')) || '';
+    const w = Math.max(0, ...pane.split('\n').map(displayWidth));
+    columns = w - RIGHT_MARGIN; columnsHow = `widest pane line ${w} - ${RIGHT_MARGIN} (no width recorded in meta.json)`;
   }
-  if (nowMs !== null && start !== null) put('elapsed', elapsedText(start, nowMs), startSource, { tolerantMin: 2, startMs: start, nowMs });
-  else exp.notes.push('elapsed not derivable (no start source or no capture time)');
+  const dropped = new Set();
+  if (columns < 160) dropped.add('hygiene');
+  if (columns < 140) { dropped.add('spend'); dropped.add('decisions'); }
+  if (columns < 120) { dropped.add('review'); dropped.add('age'); }
+  if (columns < 80) { dropped.add('position'); dropped.add('kn'); dropped.add('fam'); }
+  const tableRule = (name) => (name === 'hygiene' ? '< 160' : name === 'spend' || name === 'decisions' ? '< 140' : name === 'review' ? '< 120' : '< 80');
+  for (const name of SLOT_ORDER) {
+    const s = slots[name];
+    if (s.state === 'present' && dropped.has(name)) { s.state = 'width'; s.why = `removed by the width table (bodyColumns ${columns} ${tableRule(name)})`; }
+    else if (s.state === 'empty') s.why = `empty: ${s.source}`;
+  }
+  // slot parts the table removes while the slot stays: age (< 120), k/N and 族 (< 80)
+  const pos = slots.position;
+  if (pos.state === 'present' && dropped.has('age') && pos.parts.age !== null) { pos.text = pos.text.replace(` ◷${pos.parts.age}`, ''); pos.parts.ageRemoved = true; }
+  const un = slots.unit;
+  if (un.state === 'present' && dropped.has('kn')) { un.text = un.parts.bar; un.parts.knRemoved = true; }
+  // does the line fit? (only the position's stage text may be cut)
+  const present = SLOT_ORDER.filter((n) => slots[n].state === 'present');
+  const total = present.reduce((n, name) => n + displayWidth(slots[name].text), 0) + displayWidth(SEP) * present.length + displayWidth(ICON);
+  const over = total - columns;
 
-  return { meta, tokens: exp.tokens, notes: exp.notes, verdict, attentionKind: attKind };
+  return {
+    meta, mode: meta.mode || String(meta.cell || '').split('-')[0] || '?', verdict, mark, attentionKind: attKind, okSnapshot, columns, columnsHow, slots, over, notes, reasons, nowMs,
+  };
 }
 
-// the band = the last line carrying one of the five marks + verdict words, and the line after it
+// ---- reading the pane
+// the band: the last line carrying a verdict mark + word; it runs up to ` │ ⓘ` (a docked pane to its right is not part of the band)
 function findBand(paneText) {
   const lines = String(paneText || '').split('\n');
   for (let i = lines.length - 1; i >= 0; i -= 1) {
     for (const v of VERDICTS) {
       const at = lines[i].indexOf(`${v.mark} ${v.word}`);
-      if (at >= 0) return { verdict: v.word, line1: lines[i].slice(at), line2: (lines[i + 1] || '').trim(), line1Raw: lines[i] };
+      if (at < 0) continue;
+      const iconAt = lines[i].indexOf(`${SEP}${ICON}`, at);
+      const text = iconAt >= 0 ? lines[i].slice(at, iconAt + SEP.length + ICON.length) : lines[i].slice(at).replace(/\s+$/, '');
+      if (iconAt < 0 && !(text === `${v.mark} ${v.word}` || text.startsWith(`${v.mark} ${v.word}${SEP}`))) continue; // a transcript line that merely mentions a verdict
+      return { verdict: v.word, text, line1: text, line2: '', icon: iconAt >= 0, kind: 'ok', surface: 'band' };
     }
   }
   return null;
 }
-
+// a non-ok line: `<reason> │ ⓘ`, no verdict mark
+function findNonOk(paneText) {
+  const lines = String(paneText || '').split('\n');
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    const at = lines[i].indexOf(`${SEP}${ICON}`);
+    if (at < 0) continue;
+    if (VERDICTS.some((v) => lines[i].includes(`${v.mark} ${v.word}`))) continue;
+    const text = lines[i].slice(0, at + SEP.length + ICON.length).replace(/^\s+/, '');
+    if (text.length > SEP.length + ICON.length) return { text, line1: text, line2: '', icon: true, kind: 'nonok', surface: 'band' };
+  }
+  return null;
+}
 // the panel (right-hand column, after the last │): a cell that is exactly one verdict word, the cell on the next line is the reason
 function findPanel(paneText) {
   const cells = String(paneText || '').split('\n').map((l) => { const parts = l.split('│').map((p) => p.trim()).filter(Boolean); return l.includes('│') ? (parts[parts.length - 1] || '') : l.trim(); });
   for (let i = 0; i < cells.length; i += 1) {
     const v = VERDICTS.find((x) => cells[i] === x.word);
-    if (v) return { verdict: v.word, line1: v.word, line2: cells[i + 1] || '', surface: 'panel' };
+    if (v) return { verdict: v.word, line1: v.word, line2: cells[i + 1] || '', kind: 'panel', surface: 'panel' };
   }
   return null;
 }
-
-// A permission / question dialog drawn by Claude Code itself (full width: it can hide the band AND the panel). Marker texts of the
-// dialog chrome, nothing the mod draws.
+// A permission / question dialog drawn by Claude Code itself (full width: it can hide the band AND the panel).
 function findDialog(paneText) {
   return /This command requires approval|Do you want to (proceed|make this edit|create|run)|❯ 1\. Yes|Esc to cancel · Tab to amend/.test(String(paneText || ''));
 }
 
-function compare(derived, band) {
+// classify one drawn segment by its own text (independent of what is expected)
+function classify(seg, index) {
+  if (index === 0) return /^[▲⏸✓●◌] \S/.test(seg) ? 'verdict' : null;
+  if (seg.includes('▸')) return 'position';
+  if (/^[▰▱]/.test(seg)) return 'unit';
+  if (/^(⚙\d+( ⏸\d+)?|⏸\d+)$/.test(seg)) return 'dispatch';
+  if (/^R\d+ ⟲|^QC /.test(seg)) return 'review';
+  if (/^\$\d+\/\d+$/.test(seg)) return 'spend';
+  if (/^(dev|cache |src \?|wt )/.test(seg)) return 'hygiene';
+  if (seg.split(' ').every((tok) => /^(◆\d+|\?\d+|U\d)$/.test(tok))) return 'decisions';
+  return null;
+}
+
+// ---- judging
+function judgeBand(d, band) {
   const results = [];
-  for (const t of derived.tokens) {
-    const r = { name: t.name, source: t.source, expected: t.expected, status: 'FAIL', detail: '' };
-    if (!band) { r.detail = 'no band or panel verdict found in the pane'; results.push(r); continue; }
-    if (band.surface === 'dialog' && t.name !== 'verdict') { r.status = 'SKIP'; r.detail = 'a dialog hides the band and the panel'; results.push(r); continue; }
-    if (band.surface === 'panel' && t.name !== 'verdict' && t.name !== 'reason') { r.status = 'SKIP'; r.detail = 'not shown on the panel'; results.push(r); continue; }
-    // the phase is judged in its own slot (line 1 = "<mark> <verdict> <project> · <phase> · <elapsed> · ..."), never anywhere on the line:
-    // the verdict word 完成待驗收 would otherwise satisfy a phase label 完成
-    let text = t.line2 ? band.line2 : band.line1;
-    if (t.name === 'phase' && !t.line2) { const segs = band.line1.split(' · '); text = segs.length >= 2 ? segs[1].trim() : ''; }
-    if (t.exact) {
-      r.status = band.verdict === t.expected ? 'PASS' : 'FAIL';
-      r.detail = `band shows ${band.verdict}`;
-    } else if (t.absent) {
-      const hit = t.absent.filter((s) => band.line2.includes(s) || band.line1.includes(s));
-      r.status = hit.length === 0 ? 'PASS' : 'FAIL'; r.detail = hit.length ? `band shows ${hit.join(', ')}` : 'band shows none';
-    } else if (t.tolerantMin !== undefined) {
-      const segs = band.line1.split(' · ');
-      const shown = segs.length >= 3 ? segs[2].trim() : null;
-      const min = shown === null ? null : parseElapsedMin(shown);
-      if (t.expected === '—') { r.status = shown === '—' ? 'PASS' : 'FAIL'; r.detail = `band shows ${shown}`; }
-      else if (min === null) { r.detail = `band elapsed unreadable (${shown})`; }
-      else { const want = parseElapsedMin(t.expected); r.status = Math.abs(min - want) <= t.tolerantMin ? 'PASS' : 'FAIL'; r.detail = `band shows ${shown}`; }
-    } else {
-      const alts = Array.isArray(t.expected) ? t.expected : [t.expected];
-      const ok = t.all ? alts.every((a) => text.includes(a)) : alts.some((a) => text.includes(a));
-      r.status = ok ? 'PASS' : 'FAIL';
-      r.detail = ok ? '' : `band line ${t.line2 ? 2 : 1}: ${text}`;
-    }
-    results.push(r);
+  const res = (name, status, expected, got, source, detail) => results.push({ name, status, expected, got, source, detail: detail || '' });
+  const iconDrawn = band.icon;
+  // the non-ok snapshot
+  if (!d.okSnapshot) {
+    const plain = band.kind === 'nonok' && band.text.split(SEP).length === 2;
+    res('nonok', plain ? 'PASS' : 'FAIL', '`<reason> │ ⓘ` (one dim line, no slots)', band.text, 'envelope.json missing / not fresh (non-ok snapshot)');
+    res('ⓘ', iconDrawn ? 'PASS' : 'FAIL', 'ⓘ', iconDrawn ? 'ⓘ' : 'none', 'contract slot 9: always drawn');
+    return results;
   }
+  if (band.kind === 'nonok') {
+    res('verdict', 'FAIL', `${d.mark} ${d.verdict}`, band.text, d.slots.verdict.source, 'the snapshot is ok (envelope fresh) but the band is the non-ok line');
+    res('ⓘ', 'PASS', 'ⓘ', 'ⓘ', 'contract slot 9: always drawn');
+    return results;
+  }
+  const segs = band.text.split(SEP);
+  if (iconDrawn) segs.pop(); // the trailing `ⓘ`
+  const drawn = {}; const extra = []; const order = [];
+  segs.forEach((s, i) => {
+    const c = classify(s, i);
+    if (c === null) extra.push(`unclassified "${s}"`);
+    else if (drawn[c] !== undefined) extra.push(`second ${c} "${s}"`);
+    else { drawn[c] = s; order.push(c); }
+  });
+  for (const name of SLOT_ORDER) {
+    const s = d.slots[name];
+    const got = drawn[name];
+    if (s.state !== 'present') {
+      if (got === undefined) res(name, 'ABSENT', `absent (${s.why})`, 'absent', s.source);
+      else res(name, 'FAIL', `absent (${s.why})`, got, s.source, 'drawn although it must be absent');
+      continue;
+    }
+    if (got === undefined) { res(name, 'FAIL', s.text, 'absent', s.source); continue; }
+    if (name === 'position') {
+      const m = /^(.*?▸ )(.*?)(?: ◷(\S+))?$/.exec(got);
+      const exp = s.parts;
+      const stageOk = m && m[1] === exp.head + '▸ ' && (m[2] === exp.stage || (d.over > 0 && m[2].endsWith('…') && exp.stage.startsWith(m[2].slice(0, -1))));
+      const expAge = s.parts.ageRemoved ? null : exp.age;
+      let ageOk = false; let ageNote = '';
+      if (m) {
+        if (expAge === null) { ageOk = m[3] === undefined; ageNote = ageOk ? '' : `age ◷${m[3]} must be absent`; }
+        else if (m[3] === undefined) ageNote = `age ◷${expAge} missing`;
+        else {
+          const a = parseElapsedMin(m[3]); const e = parseElapsedMin(expAge);
+          ageOk = a !== null && e !== null && Math.abs(a - e) <= AGE_TOLERANCE_MIN;
+          ageNote = ageOk ? '' : `age ◷${m[3]} vs ◷${expAge} (+-${AGE_TOLERANCE_MIN} min)`;
+        }
+      }
+      res(name, stageOk && ageOk ? 'PASS' : 'FAIL', s.text, got, s.source, stageOk ? ageNote : `head/stage differ${ageNote ? `; ${ageNote}` : ''}`);
+    } else res(name, got === s.text ? 'PASS' : 'FAIL', s.text, got, s.source);
+  }
+  res('ⓘ', iconDrawn ? 'PASS' : 'FAIL', 'ⓘ', iconDrawn ? 'ⓘ' : 'none', 'contract slot 9: always drawn');
+  // layout: classification complete, no duplicates / empty segment, slots in priority order, fits bodyColumns, ⓘ last
+  const problems = [...extra];
+  const rank = order.map((n) => SLOT_ORDER.indexOf(n));
+  if (rank.some((r, i) => i > 0 && r < rank[i - 1])) problems.push(`slots out of priority order: ${order.join(',')}`);
+  if (segs.some((s) => s === '')) problems.push('an empty segment (doubled separator)');
+  const lineWidth = displayWidth(band.text);
+  if (lineWidth > d.columns) problems.push(`line is ${lineWidth} cells wide, over bodyColumns ${d.columns}`);
+  res('layout', problems.length === 0 ? 'PASS' : 'FAIL', `one line of at most ${d.columns} cells, slots in priority order, joined by " │ ", ⓘ last`, `${lineWidth} cells`, 'contract section 2', problems.join('; '));
   return results;
 }
 
-function run(dir) {
-  const derived = derive(dir);
+function judgePanelLike(d, band) {
+  const results = [];
+  const res = (name, status, expected, got, source, detail) => results.push({ name, status, expected, got, source, detail: detail || '' });
+  res('verdict', band.verdict === d.verdict ? 'PASS' : 'FAIL', d.verdict, band.verdict, d.slots.verdict.source, `${band.surface} shows ${band.verdict}`);
+  for (const r of d.reasons) {
+    if (band.surface === 'panel') res('reason', band.line2.includes(r.expected) ? 'PASS' : 'FAIL', r.expected, band.line2, r.source);
+    else res('reason', 'SKIP', r.expected, 'hidden', r.source, 'a dialog hides the band and the panel');
+  }
+  for (const name of SLOT_ORDER.slice(1)) res(name, 'SKIP', '-', '-', d.slots[name].source, band.surface === 'panel' ? 'not shown on the panel' : 'a dialog hides the band and the panel');
+  return results;
+}
+
+function run(dir, opts = {}) {
+  const d = derive(dir, opts);
   const pane = readText(path.join(dir, 'pane.txt')) || `${readText(path.join(dir, 'band.txt')) || ''}\n${readText(path.join(dir, 'panel.txt')) || ''}`;
-  const bandOnly = findBand(pane);
-  let band = bandOnly ? { ...bandOnly, surface: 'band' } : findPanel(pane);
+  let band = findBand(pane) || findNonOk(pane) || findPanel(pane);
   // neither band nor panel, but a permission / question dialog is on screen: the verdict is judged from attention.json alone
   if (!band && findDialog(pane)) {
-    const kind = derived.attentionKind;
-    band = { verdict: kind === 'permission' || kind === 'question' ? '要你決定' : '(a dialog is shown but attention.json is not permission / question)', line1: '(dialog)', line2: '', surface: 'dialog' };
+    const kind = d.attentionKind;
+    band = { verdict: kind === 'permission' || kind === 'question' ? '要你決定' : '(a dialog is shown but attention.json is not permission / question)', line1: '(dialog)', line2: '', kind: 'dialog', surface: 'dialog' };
   }
-  const results = compare(derived, band);
+  let results;
+  if (!band) results = [{ name: 'verdict', status: 'FAIL', expected: d.okSnapshot ? `${d.mark} ${d.verdict}` : 'non-ok line', got: 'NOT FOUND', source: 'pane.txt', detail: 'no band, non-ok line or panel verdict found in the pane' }];
+  else if (band.surface === 'band') results = judgeBand(d, band);
+  else results = judgePanelLike(d, band);
+  const judged = results.filter((r) => r.status !== 'SKIP');
+  const failed = [...new Set(results.filter((r) => r.status === 'FAIL').map((r) => r.name))];
   return {
-    derived, band, results, surface: band ? band.surface : null,
-    ok: results.length > 0 && results.every((r) => r.status === 'PASS' || r.status === 'SKIP') && results.some((r) => r.status === 'PASS'),
+    derived: d, band, results, surface: band ? band.surface : null, fields: judged.length, failed,
+    ok: failed.length === 0 && results.some((r) => r.status === 'PASS'),
   };
 }
 
+function summary(out) {
+  return out.ok ? `PASS ${out.derived.mode} fields=${out.fields}` : `FAIL ${out.derived.mode} fields=${out.fields} failed=${out.failed.join(',')}`;
+}
+
 function main(argv) {
-  const args = argv.filter((a) => !a.startsWith('--'));
-  if (args.length !== 1 || !fs.existsSync(args[0]) || !fs.statSync(args[0]).isDirectory()) {
-    process.stderr.write('usage: check.js <capture-dir> [--json]\n');
+  const opts = {};
+  const args = [];
+  for (let i = 0; i < argv.length; i += 1) {
+    if (argv[i] === '--body-columns') { opts.bodyColumns = Number(argv[i + 1]); i += 1; }
+    else if (!argv[i].startsWith('--')) args.push(argv[i]);
+  }
+  if (args.length !== 1 || !fs.existsSync(args[0]) || !fs.statSync(args[0]).isDirectory() || ('bodyColumns' in opts && !Number.isFinite(opts.bodyColumns))) {
+    process.stderr.write('usage: check.js <capture-dir> [--json] [--body-columns N]\n');
     return 2;
   }
-  const out = run(args[0]);
-  if (argv.includes('--json')) { process.stdout.write(`${JSON.stringify({ ok: out.ok, results: out.results, surface: out.surface, notes: out.derived.notes }, null, 2)}\n`); return out.ok ? 0 : 1; }
-  process.stdout.write(`capture ${args[0]}  cell=${out.derived.meta.cell || '?'}\n`);
-  process.stdout.write(`surface: ${out.surface || 'none'}\n`);
-  process.stdout.write(`${out.surface === 'panel' ? 'panel' : out.surface === 'dialog' ? 'dialog' : 'band'}: ${out.band ? `${out.band.line1}\n      ${out.band.line2}` : 'NOT FOUND'}\n`);
-  for (const r of out.results) {
-    const exp = Array.isArray(r.expected) ? r.expected.join(' + ') : String(r.expected);
-    process.stdout.write(`${r.status}  ${r.name.padEnd(12)} expected ${exp}  [${r.source}]${r.detail ? `  (${r.detail})` : ''}\n`);
+  const out = run(args[0], opts);
+  if (argv.includes('--json')) {
+    process.stdout.write(`${JSON.stringify({ ok: out.ok, mode: out.derived.mode, fields: out.fields, failed: out.failed, results: out.results, surface: out.surface, notes: out.derived.notes, body_columns: out.derived.columns, summary: summary(out) }, null, 2)}\n`);
+    return out.ok ? 0 : 1;
   }
-  for (const n of out.derived.notes) process.stdout.write(`note: ${n}\n`);
-  process.stdout.write(out.ok ? 'RESULT: PASS\n' : 'RESULT: FAIL\n');
+  const w = (s) => process.stdout.write(`${s}\n`);
+  w(`capture ${args[0]}  cell=${out.derived.meta.cell || '?'}`);
+  w(`surface: ${out.surface || 'none'}`);
+  w(`width: bodyColumns=${out.derived.columns} [${out.derived.columnsHow}]`);
+  w(`${out.surface === 'panel' ? 'panel' : out.surface === 'dialog' ? 'dialog' : 'band'}: ${out.band ? out.band.line1 : 'NOT FOUND'}`);
+  for (const r of out.results) w(`${r.status} ${r.name} expected ${r.expected} got ${r.got} [${r.source}]${r.detail ? ` (${r.detail})` : ''}`);
+  for (const n of out.derived.notes) w(`note: ${n}`);
+  w(summary(out));
   return out.ok ? 0 : 1;
 }
 
-module.exports = { derive, compare, findBand, findPanel, findDialog, run, main };
+module.exports = { derive, findBand, findNonOk, findPanel, findDialog, classify, displayWidth, run, summary, main };
 if (require.main === module) process.exitCode = main(process.argv.slice(2));

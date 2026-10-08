@@ -196,4 +196,7 @@ function main() {
   return out(nextNodes(graph, v, o.vals['--from']));
 }
 
-main();
+if (require.main === module) main();
+
+// Library surface (src/status/stage-walk.js): buildWalk() reads rule data only; it die()s on an unknown size, so callers check graph.sizes first.
+module.exports = { buildWalk, DEFAULT_GRAPH };

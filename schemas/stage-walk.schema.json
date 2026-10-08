@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/stage-walk.schema.json",
+  "title": "stage-walk",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "sid", "size", "urgent", "bug", "high_risk", "units", "nodes", "walk", "entry", "terminal", "unit_kind", "current", "stage_set_at", "at"],
+  "properties": {
+    "schema": { "const": "autopilot.stage-walk/1" },
+    "sid": { "type": "string", "minLength": 1 },
+    "size": { "enum": ["XS", "S", "M", "L", "XL"] },
+    "urgent": { "type": "boolean" },
+    "bug": { "type": "boolean" },
+    "high_risk": { "type": "boolean" },
+    "units": { "oneOf": [{ "type": "integer", "minimum": 1 }, { "type": "null" }] },
+    "nodes": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+    "walk": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+    "entry": { "type": "string", "minLength": 1 },
+    "terminal": { "type": "string", "minLength": 1 },
+    "unit_kind": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }] },
+    "current": {
+      "oneOf": [
+        { "enum": ["intent", "diagnose", "research", "proposal", "plan", "plan-review", "implement", "verify", "code-review", "qc-gate", "finish"] },
+        { "type": "null" }
+      ]
+    },
+    "stage_set_at": { "oneOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }] },
+    "at": { "type": "string", "format": "date-time" }
+  }
+}

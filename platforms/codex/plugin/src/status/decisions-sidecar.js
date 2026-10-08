@@ -12,6 +12,8 @@
 // Row filter, both files: row.repo_identity === the watcher's repo_identity AND (row.root_run_id || null) === the scope's
 // root (project-wide scope = root null = rows with no root; same convention as the per-root envelopes and the `unbound` job).
 // Counted kinds: decision, dispatch, pick, refreeze (proxy decisions). veto/note/hypothesis/unknown/ladder are telemetry.
+// P7 D2: the one telemetry fact the band shows is the escalation rung — `ladder: { rung: "U0".."U5", at } | null`, the latest
+// kind:"ladder" row (by ts, later file order wins a tie; a row whose ts is missing or not an ISO date-time is ignored; `at` is the normalised ISO string) under the same repo+root filter. Ladder rows stay out of rows/count.
 //
 // Gap count (W2g b): runs (dispatch manifests) of this scope whose run_id has NO ledger row of kind === "dispatch" ->
 // `undocumented_dispatches`. Same rule as scripts/check-blueprint-conformance.js audit `unlogged_decision`, evaluated
@@ -28,6 +30,27 @@ const SCHEMA = 'autopilot.decisions-sidecar/1';
 const COUNTED_KINDS = new Set(['decision', 'dispatch', 'pick', 'refreeze']);
 const IRREVERSIBLE = new Set(['one-way', 'irreversible']);
 const PLUGIN_ROOT = path.join(__dirname, '..', '..');
+const RUNG = /^U[0-5]$/;
+const ISO_TS = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|[+-](\d{2}):(\d{2}))$/;
+
+// -> epoch ms, or null unless ts is a real calendar instant: the components must survive a UTC round-trip (Date would
+// silently turn 2026-02-30 into March 2, 24:00 into the next day), and an offset must be a plausible hh:mm.
+function strictIsoMs(ts) {
+  const m = typeof ts === 'string' ? ISO_TS.exec(ts) : null;
+  if (!m) return null;
+  const [Y, M, D, h, mi, sec] = m.slice(1, 7).map(Number);
+  const wall = new Date(Date.UTC(Y, M - 1, D, h, mi, sec));
+  if (wall.getUTCFullYear() !== Y || wall.getUTCMonth() !== M - 1 || wall.getUTCDate() !== D
+    || wall.getUTCHours() !== h || wall.getUTCMinutes() !== mi || wall.getUTCSeconds() !== sec) return null;
+  let offsetMs = 0;
+  if (m[8] !== 'Z') {
+    const oh = Number(m[9]);
+    const om = Number(m[10]);
+    if (oh > 23 || om > 59) return null;
+    offsetMs = (oh * 60 + om) * 60000 * (m[8][0] === '-' ? -1 : 1);
+  }
+  return wall.getTime() + (m[7] ? Math.floor(Number(m[7]) * 1000) : 0) - offsetMs;
+}
 const SAFE_ROOT = /^[A-Za-z0-9._-]+$/;
 
 function commonDirOf(identity) {
@@ -99,12 +122,18 @@ function buildDecisionsSidecar({ scope, ledgers, runs, wired = writersWired() })
   const root = scope.root_run_id || null;
   const mine = [];
   const dispatchLogged = new Set();
+  let ladder = null;
+  let ladderMs = -Infinity;
   for (const { source, rows } of ledgers) {
     for (const row of rows) {
       if (row.repo_identity !== scope.repo_identity) continue;
       if ((row.root_run_id || null) !== root) continue;
       if (row.kind === 'dispatch' && typeof row.run_id === 'string') dispatchLogged.add(row.run_id);
       if (COUNTED_KINDS.has(row.kind)) mine.push(toSidecarRow(row, source));
+      if (row.kind === 'ladder' && typeof row.rung === 'string' && RUNG.test(row.rung)) {
+        const ms = strictIsoMs(row.ts);
+        if (ms !== null && ms >= ladderMs) { ladderMs = ms; ladder = { rung: row.rung, at: new Date(ms).toISOString() }; }
+      }
     }
   }
   mine.sort((a, b) => (Date.parse(a.at) || 0) - (Date.parse(b.at) || 0));
@@ -118,6 +147,7 @@ function buildDecisionsSidecar({ scope, ledgers, runs, wired = writersWired() })
     irreversible_count: mine.filter((r) => r.irreversible).length,
     writers_wired: wired,
     undocumented_dispatches: undocumented,
+    ladder,
   };
 }
 

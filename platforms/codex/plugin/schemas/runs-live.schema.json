@@ -156,6 +156,15 @@
         "null"
       ],
       "format": "date-time"
+    },
+    "host_today_brain_usd": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "brain_cap_usd": {
+      "type": "number"
     }
   }
 }

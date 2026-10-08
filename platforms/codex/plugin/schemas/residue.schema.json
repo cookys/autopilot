@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/residue.schema.json",
+  "title": "residue",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "project_key", "at", "reapable_worktrees", "by_class", "source"],
+  "properties": {
+    "schema": { "const": "autopilot.residue/1" },
+    "project_key": { "type": "string", "minLength": 1 },
+    "at": { "type": "string", "format": "date-time" },
+    "reapable_worktrees": { "type": "integer", "minimum": 0 },
+    "by_class": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "live": { "type": "integer", "minimum": 1 },
+        "missing-dir": { "type": "integer", "minimum": 1 },
+        "dirty": { "type": "integer", "minimum": 1 },
+        "clean-integrated": { "type": "integer", "minimum": 1 },
+        "clean-unintegrated": { "type": "integer", "minimum": 1 },
+        "unverifiable": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "source": { "const": "repo-residue-sweep scan" }
+  }
+}

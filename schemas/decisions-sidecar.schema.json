@@ -4,7 +4,7 @@
   "title": "decisions-sidecar",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "scope", "rows", "count", "irreversible_count", "writers_wired", "undocumented_dispatches"],
+  "required": ["schema", "scope", "rows", "count", "irreversible_count", "writers_wired", "undocumented_dispatches", "ladder"],
   "properties": {
     "schema": { "const": "autopilot.decisions-sidecar/1" },
     "scope": {
@@ -38,6 +38,20 @@
     "count": { "type": "integer", "minimum": 0 },
     "irreversible_count": { "type": "integer", "minimum": 0 },
     "writers_wired": { "type": "array", "uniqueItems": true, "items": { "enum": ["engine", "next-pick"] } },
-    "undocumented_dispatches": { "type": "integer", "minimum": 0 }
+    "undocumented_dispatches": { "type": "integer", "minimum": 0 },
+    "ladder": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["rung", "at"],
+          "properties": {
+            "rung": { "enum": ["U0", "U1", "U2", "U3", "U4", "U5"] },
+            "at": { "type": "string", "format": "date-time" }
+          }
+        }
+      ]
+    }
   }
 }

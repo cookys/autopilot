@@ -436,7 +436,7 @@ function classify(opts) {
     if (rung === 'U4') {
       // experiment rung: signal-gated, not position-gated (a U2 receipt plus S4 or S1 still standing).
       if (!(hasU2Receipt && (has('S4') || has('S1')))) continue;
-    } else if (RUNGS.indexOf(rung) > maxIdx) break;
+    } else if (RUNGS.indexOf(rung) > maxIdx) continue;
     if (rung === 'U1' && !heterogeneousU1) {
       out.skipped_rungs.push('U1');
       continue;

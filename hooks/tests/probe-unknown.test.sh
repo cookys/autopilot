@@ -347,6 +347,13 @@ vr --rung U2 --unknown-type how --terms q --signals S6 --work-unit s6u >/dev/nul
 vr --rung U1 --unknown-type how --terms q --signals S6 --work-unit s6u >/dev/null
 vr --rung U1 --unknown-type how --terms q --signals S6 --work-unit s6u >/dev/null
 assert_eq "$(vc --work-unit s6u | field recommend)" "none" "S6 only (no S4/S1) with U2 receipt ⇒ no U4"
+# S4 only, NOT fast-moving ⇒ eligible_max U1 (U2 over-max); U4 is signal-gated, not position-gated
+vr --rung U2 --unknown-type how --terms "$GT" --signals S4 --work-unit s4m >/dev/null
+vr --rung U1 --unknown-type how --terms "$GT" --signals S4 --work-unit s4m >/dev/null
+vr --rung U1 --unknown-type how --terms "$GT" --signals S4 --work-unit s4m >/dev/null
+OUT="$(vc --work-unit s4m --terms "$GT")"
+assert_eq "$(printf '%s' "$OUT" | field eligible_max)" "U1" "S4 only, not fast-moving ⇒ eligible_max U1"
+assert_eq "$(printf '%s' "$OUT" | field recommend)" "U4" "over-max U2 does not hide the signal-gated U4 (U2 receipt + S4)"
 
 # classify never emits U5 across every v3 shape above
 ALLV3="$( { vc --work-unit vw; vc --work-unit vwh --consensus LOW; vc --work-unit nu; vc --work-unit s4u --terms "$GT" --fast-moving; vc --work-unit s6u; vc --work-unit fresh --consensus LOW --stall "$TEST_TMP/stall.json"; } )"

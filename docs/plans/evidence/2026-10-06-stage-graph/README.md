@@ -95,6 +95,11 @@ Release merges happen in the dedicated worktree `.claude/worktrees/release-3.0.0
   - `check-guidance-eval` now derives pack ids from the arm manifest (`265aa2a7`, BACKLOG e closed); on v5 it passes (43/43 byte-equal, scorer SHIP). v5 results committed (`3aae28a4`).
   - Total QC of Train A + B (`8a10980f..3aae28a4`): 8 packets × 3 seats, then a delta review of the fixes, all SHIP-AS-IS — see [qc-total-2026-10-08/README.md](qc-total-2026-10-08/README.md). Fixes F1–F5 (docs, probe-unknown U4, preflight final-version match, 12 disposition rationales, 7 test suites) and guidance fixes G1–G5 (finish-flow marker clear at any size for l4–l6, ceo-agent project dir on L/XL, urgent probe scoped to M/L/XL, backlog-row cleanup, resume `--unit`).
   - G1–G5 change guidance, so by owner decision a v6 arm was frozen (`f47798c0`, packs `*-sg-change-v6`/`*-sg-red-v6`, base arm unchanged) and the campaign relaunched on 2.1.292 into `results/stage-graph.v6.jsonl`. Same frozen rule (change ≥ 10/12, red ≤ 4/12, generic no regression).
+- **Verdict, change arm v6: SHIP** (2026-10-09).
+  - Packs `*-sg-change-v6` (`f47798c0`), results `results/stage-graph.v6.jsonl` (`14e57179`): 114 usable cells, one per (task, arm, rep), all on 2.1.292.
+  - **Change 10/12**: every task passes except l-research-a/b (0/3, structural as before); s-urgent 3/3 after the G3 wording change; m-urgent-high 2/3, xs-feature 2/3, m-bug 2/3. **Red 3/12. Generic: 4 checked, none regressed.**
+  - Run notes: depth-0 paused the campaign once after 3 rows on a mistaken instrument suspicion (xs-feature change r1: the agent called `session-mode.js` by the plugin-dir path and gave up; the fixture scripts were present) — rows kept, resumed with the same command. Run 2 hit an expired OAuth session mid-run (68 `infra_fail runner_error`, 2 s each); resumed after a CLI probe and only those cells re-ran.
+  - Cut gate: `check-guidance-eval.js --base 8a10980f --results …v6.jsonl` → ok, 43/43 byte-equal to the v6 packs, scorer SHIP.
 
 ## Open items for the alpha.1 cut
 

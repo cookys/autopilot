@@ -296,25 +296,25 @@ When encountering these, pause and propose:
    `node scripts/stage-advance.js --to <node>`; the node sequence is `node scripts/stage-graph.js nodes --size <size>`.
    CEO mode does NOT exempt entry or the E1 size bump (see Scope Creep Detection).
 3. IF M/L/XL (multi-deliverable work):
-   a. Create project dir (<projects_dir>/YYYY-MM-DD-<name>/)    ← MANDATORY, not optional
+   a. (L/XL) Create project dir (<projects_dir>/YYYY-MM-DD-<name>/)    ← MANDATORY, not optional
       projects_dir from `scripts/resolve-project-paths.sh --target <repo>`; never literal docs/.
       `projects_dir: none` ⇒ STOP and ask the user where projects live; a mandatory step
       with no location is a question, not a `none/…` path.
-   b. Write README.md with OKR, phases, success criteria
-   c. Update INDEX.md
-   c2. `scripts/tree.js init <proj>` + emit root node — tree dual-run (shadow) is
-      the DEFAULT for CEO multi-deliverable tasks (Board directive 2026-06-12: accumulate
+   b. (L/XL) Write README.md with OKR, phases, success criteria
+   c. (L/XL) Update INDEX.md
+   c2. (L/XL) `scripts/tree.js init <proj>` + emit root node — tree dual-run (shadow) is
+      the DEFAULT for CEO L/XL tasks (Board directive 2026-06-12: accumulate
       calibration samples + audit trail; TaskCreate stays authoritative, zero
       authority change). Skip only if the Board says so for this task.
    d. Create feature branch
-   e. **Scope Completeness Audit** (`intent` node, MANDATORY before phase TaskCreate):
+   e. (L/XL) **Scope Completeness Audit** (`intent` node, MANDATORY before phase TaskCreate):
       TaskCreate "intent: scope completeness audit" as the FIRST task. Walk the
       dev-flow `intent` dimensions checklist (source/tests/docs/API/templates/CHANGELOG/
       version/migration/consumers/dogfood). For each "yes" row, add a phase task
       OR record it as explicitly out-of-scope in README. Do not proceed to (f) until
       README scope boundary reflects this coverage. A phase plan that correctly
       executes an incomplete scope still ships incomplete work.
-   f. TaskCreate phase tasks (P0..PN; each phase is a graph `unit`) AND both forcing-function tasks:
+   f. TaskCreate phase tasks (P0..PN; each phase is a graph `unit`) AND (L/XL) both forcing-function tasks:
       "intent: skill routing — invoke required skills for all affected code areas" and
       "finish: invoke autopilot:finish-flow". Both are NON-OPTIONAL — missing either =
       failed intent gate.
@@ -344,9 +344,9 @@ When encountering these, pause and propose:
 (`node scripts/stage-graph.js limits --size <size>`) and exits 4 with `bump_to` when the work outgrew its size.
 CEO mode provides no exemption: run `session-mode.js set --size <bump_to>`, advance to
 `stage-graph.js next --from <current stage>` under the new size (never retry the original `--to`), and for a bump
-into M/L/XL create the project dir + README + INDEX retroactively and record prior commits as completed phases.
+into L/XL create the project dir + README + INDEX retroactively and record prior commits as completed phases.
 
-**Scope expansion** (M/L/XL work grows beyond its original README scope boundary):
+**Scope expansion** (L/XL work grows beyond its original README scope boundary):
 
 ```
 After every phase, ask: "Does remaining scope still match the README scope boundary?"
@@ -447,7 +447,7 @@ with exit 3). See `references/model-routing.md` §"Tree roles".
 | Pivot without evidence | Must have data/research backing |
 | Silently expand scope | Beyond original scope → must report |
 | Same fix strategy after repeated failure | Consecutive failures → circuit breaker |
-| M/L/XL work without project dir | **Always** create project + README + INDEX |
+| L/XL work without project dir | **Always** create project + README + INDEX |
 | "CEO mode exempts me from project tracking" | CEO wraps dev-flow, does not skip it |
 | Scope grew past its size but no project created | Scope creep detection gate → stop and create |
 | "I'll track it in my head" | TodoWrite is the tracking mechanism, not memory |

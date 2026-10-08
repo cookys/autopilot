@@ -191,12 +191,12 @@
       "content_hash": "12fb8846aec4a9f9da4e64636069a0ee4e25163c270d3da6a458957d8620c7a7",
       "disposition": "rewritten",
       "successor_hashes": [
-        "82ba0ae70190ebfc75acbf09d38decae5f830b13a8e19be41124accb5550d02d",
+        "a107e0da28943888ed31dcb77ef58b2836f1bfb18c5c15028d7a0d17d4d89cc8",
         "4d2a2342d8dc19dc2bfb6e45dec6a7be1342db57c842971b71629240f35943ce",
         "d8ea8ae52de539c606de4c2c88e0cfb290f8488a96675e01153182b11885ad6f",
         "6f20ee22cd76f18619feb67e45cb7d70d11388710142cc3a9a8301c0cf75d5d0"
       ],
-      "rationale": "P0 skills/ceo-agent/SKILL.md:299 ('a. Create project dir (docs/projects/YYYY-MM-DD-<name>/) ← MANDATORY'). The MANDATORY project-dir step survives at current :299; the literal docs/ path became <projects_dir> resolved by scripts/resolve-project-paths.sh, with :300-:302 stating the resolver and the `none` ⇒ ask rule. v2.36.33 (12b2de41, Project Paths reader); re-pinned v2.36.49 after the drift sat unpinned 2026-09-13→15."
+      "rationale": "P0 skills/ceo-agent/SKILL.md:299 ('a. Create project dir (docs/projects/YYYY-MM-DD-<name>/) ← MANDATORY'). The MANDATORY project-dir step survives at current :299; the literal docs/ path became <projects_dir> resolved by scripts/resolve-project-paths.sh, with :300-:302 stating the resolver and the `none` ⇒ ask rule. v2.36.33 (12b2de41, Project Paths reader); re-pinned v2.36.49 after the drift sat unpinned 2026-09-13→15. Successor re-pinned 3.0.0 (stage-graph G2): :299 now reads 'a. (L/XL) Create project dir (<projects_dir>/YYYY-MM-DD-<name>/) ← MANDATORY' — the step is scoped back to L/XL (P0 keyed it on L-size; P5b's 'IF M/L/XL' had over-extended it to M), wording otherwise unchanged."
     },
     {
       "content_hash": "073d53d70688de78ed7a1dfcd9bb18e34269b7c9fafc55162c22c0f30ee56c42",
@@ -2047,6 +2047,30 @@
       "content_hash": "366310fec3fca5faf192a75bf4026fd6c71d13b1872cd0aeab5bed0b0b840700",
       "disposition": "removed",
       "rationale": "P0 skills/dev-flow/SKILL.md:646 (under \"Pre-implementation Checklist\"). Dropped or restated by the P5 stage-graph rewrite (plan docs/plans/2026-10-06-dev-flow-stage-graph.md §2.5): the old L-n/H-n/S./F. stage choreography is replaced by the stage-graph node protocol (references/stage-graph.json, scripts/stage-graph.js); wording no longer present verbatim in the guided lifecycle sources."
+    },
+    {
+      "content_hash": "47bda1922a039a670db850f877d18e94be7d7da2df048871aaf06abefb5c5537",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "6d6f3ce1a8b058a29aaaaf0c15d848312ca37486108e62043f2807245fb6d401"
+      ],
+      "rationale": "P0 skills/ceo-agent/SKILL.md:305 ('b. Write README.md with OKR, phases, success criteria', under step 3 'IF L-size'). Restated (reworded, not verbatim) at skills/ceo-agent/SKILL.md:303 as 'b. (L/XL) Write README.md with OKR, phases, success criteria': only the (L/XL) scope tag was added. 3.0.0 stage-graph G2: P5b's 'IF M/L/XL' header had extended the project README to M, whose graph has no intent node and whose closing has no archive; the tag restores P0's L-only keying (L/XL in the 3.0.0 size set)."
+    },
+    {
+      "content_hash": "deda9b7f5ecda30fc92d4cb8e327d09eca38d83e939fce359d7c427240be9089",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "7267f6c3ee87bea5d95b80e29b984e56d0228f5d0524f4dd04b62ebe14a91858"
+      ],
+      "rationale": "P0 skills/ceo-agent/SKILL.md:306 ('c. Update INDEX.md', under step 3 'IF L-size'). Restated (reworded, not verbatim) at skills/ceo-agent/SKILL.md:304 as 'c. (L/XL) Update INDEX.md': only the (L/XL) scope tag was added. 3.0.0 stage-graph G2: the project INDEX row pairs with finish-flow's L/XL-only Archive project row, so the step is scoped back to L/XL after P5b's 'IF M/L/XL' header."
+    },
+    {
+      "content_hash": "8b71a1a272f8b19127a8f9b1cb160de19f90526400f6a3f9e54c14fef175ecd0",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "56f82e988d3257c7ac48a15a73de4063b22ed71b585e966a11d4f112e18c5ae2"
+      ],
+      "rationale": "P0 skills/ceo-agent/SKILL.md:307 ('c2. `scripts/tree.js init <proj>` + emit root node — tree dual-run (shadow) is', under step 3 'IF L-size'). Restated (reworded, not verbatim) at skills/ceo-agent/SKILL.md:305 as 'c2. (L/XL) `scripts/tree.js init <proj>` + emit root node …': only the (L/XL) scope tag was added; :306 now names 'CEO L/XL tasks' as the Board-directive default. 3.0.0 stage-graph G2: the 2026-06-12 Board directive covered L-size; tree init needs the project dir, which is L/XL-only."
     }
   ]
 }

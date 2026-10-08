@@ -233,7 +233,7 @@ To opt a project into the tree:
 scripts/tree.js init <proj>
 ```
 
-**Default for CEO M/L/XL tasks** (Board directive 2026-06-12): the CEO runs
+**Default for CEO L/XL tasks** (Board directive 2026-06-12): the CEO runs
 `tree.js init` as part of project setup (`plan` node) (SKILL.md Execution step 3.c2) so
 shadow calibration samples and the audit trail accumulate on every L-ship.
 Skip only on explicit Board instruction for that task.

@@ -88,14 +88,20 @@ if [ -f "$CANONICAL" ]; then
   VERSION=$(node "$REPO/scripts/lib/semver.js" from-json "$CANONICAL" 2>/dev/null | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
 fi
 
-# grep -E PATTERN FILE where a final N.N.N is never satisfied by its own pre-release
-# line (v3.0.0-alpha.1 must not count as v3.0.0); a pre-release VERSION matches directly.
+# grep -E PATTERN FILE. Patterns end in a "[^0-9])" tail (the char after the version).
+# A final N.N.N must not be satisfied by its own pre-release (v3.0.0-alpha.1) or a longer
+# version (v3.0.01, v3.0.0.1): for a final VERSION the tail is tightened to refuse a
+# following ".", digit, or a pre-release "-alpha"/"-beta"/"-rc" (other historical "-suffix"
+# forms such as "v2.7.2-followup" are still tolerated, as before). Matching is per pattern,
+# not per line, so a line that also mentions a pre-release ("## v3.0.0 — folds v3.0.0-alpha.2") still counts. A pre-release
+# VERSION matches the pattern as given.
 version_in_file() {
   local pat="$1" file="$2"
   case "$VERSION" in
-    *-*) grep -qE "$pat" "$file" ;;
-    *) grep -E "$pat" "$file" | grep -vqE "v${VERSION//./\\.}-(alpha|beta|rc)\.[0-9]" ;;
+    *-*) ;;
+    *) pat="${pat%\[^0-9\])}[^-.0-9]|-([^abr]|a[^l]|b[^e]|r[^c]|\$))" ;;
   esac
+  grep -qE "$pat" "$file"
 }
 
 # ─── 1. canonical version parseable ───

@@ -115,6 +115,14 @@ assert_contains "$(pf_result "$PF2" "[2] CHANGELOG.md has a '## v3.0.0' entry")"
 assert_contains "$(pf_result "$PF2" "[4] docs/projects/INDEX.md references v3.0.0")" "✗" "preflight: alpha INDEX row does not satisfy final 3.0.0"
 printf '## v3.0.0 — final\n## v3.0.0-alpha.1 — first alpha\n' > "$PF2/CHANGELOG.md"
 assert_contains "$(pf_result "$PF2" "[2] CHANGELOG.md has a '## v3.0.0' entry")" "✓" "preflight: final heading satisfies 3.0.0"
+# A final heading/INDEX row that also mentions a pre-release on the same line still counts.
+printf '## v3.0.0 — folds v3.0.0-alpha.2\n' > "$PF2/CHANGELOG.md"
+printf '| x | v3.0.0 | folds v3.0.0-alpha.2 |\n' > "$PF2/docs/projects/INDEX.md"
+assert_contains "$(pf_result "$PF2" "[2] CHANGELOG.md has a '## v3.0.0' entry")" "✓" "preflight: final heading mixed with a pre-release mention passes"
+assert_contains "$(pf_result "$PF2" "[4] docs/projects/INDEX.md references v3.0.0")" "✓" "preflight: final INDEX row mixed with a pre-release mention passes"
+# Only pre-release headings present while canonical is final ⇒ fail (also with trailing text and a longer version).
+printf '## v3.0.0-alpha.1\n## v3.0.0.1 — x\n## v3.0.01 — y\n' > "$PF2/CHANGELOG.md"
+assert_contains "$(pf_result "$PF2" "[2] CHANGELOG.md has a '## v3.0.0' entry")" "✗" "preflight: only '## v3.0.0-alpha.1' (and longer versions) does not satisfy final 3.0.0"
 
 # Plain N.N.N behaviour unchanged (historical '-followup' suffix still counts).
 PF3="$TEST_TMP/pf-plain"

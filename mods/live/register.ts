@@ -25,13 +25,13 @@ import { newTracker, parseAdvisories, takeNew } from './advisories'
 import type { AdvisoryTracker } from './advisories'
 import { Band } from './band'
 import { Pane } from './pane'
-import type { PaneTab } from './pane'
 import {
   acceptanceToast, bandLine1, bandView, buildSections, checkEnvelope, commonDirOf, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
-  headerText, hhmm, isKey, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
-  readForeman, readLoadSource, readJobModel, readManifest, readReview, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd, startMsOf, STATE_TEXT, POINTER_SCHEMA,
+  headerText, hhmm, projectName as projectNameOf, isKey, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
+  readForeman, readLoadSource, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
+  spendOf, startMsOf, STATE_TEXT, POINTER_SCHEMA, NO_DETAIL, usd,
 } from './model'
-import type { Counts, DecisionsView, EnvelopeCheck, JobModel, Json, LiveSnapshot, Manifest, Sources } from './model'
+import type { Counts, DecisionsView, EnvelopeCheck, JobModel, Json, LiveSnapshot, Manifest, PaneTab, Sources } from './model'
 
 const TICK_MS = 5000
 const PANE_ID = 'autopilot-live'
@@ -47,7 +47,7 @@ let snapshot: LiveSnapshot | null = null
 let timer: { cancel: () => void } | undefined
 let viewport: { columns: number; isFullscreen?: boolean } | null = null
 let paneAttempted = false
-let paneTab: PaneTab = 'dispatch'
+let paneTab: PaneTab = 'now'
 let previous: { scope: string; counts: Counts | null; acceptance: string | null } | null = null
 const advisories: AdvisoryTracker = newTracker() // P7a: advisory rows seen for the current session; advisories.count feeds a band chip
 const jobDates = new Map<string, string>()
@@ -73,7 +73,7 @@ async function readObject($: EngineInterface, path: string): Promise<Json | null
 function plain(state: LiveSnapshot['state'], text: string, over: Partial<LiveSnapshot> = {}): LiveSnapshot {
   return {
     state, text, band: null, header: text, decision: null, project_key: null, root_run_id: null, link: null, rows: null, gates: null,
-    sections: NO_SECTIONS, review: null, published_at: null, session_as_of: null, host_as_of: null, ...over,
+    sections: NO_SECTIONS, review: null, published_at: null, session_as_of: null, host_as_of: null, detail: NO_DETAIL, ...over,
   }
 }
 
@@ -178,6 +178,17 @@ async function receiptStart($: EngineInterface, identity: unknown, root: string)
   const ms = earliestReceiptMs(texts, root)
   if (ms !== null) receiptStarts.set(root, ms)
   return ms
+}
+
+// The cost fuse's mode as hooks/cost-fuse.js resolves it: AUTOPILOT_COST_FUSE_MODE, else ~/.autopilot/config.json cost_fuse.mode, else warn.
+async function fuseModeOf($: EngineInterface, autopilotHome: string): Promise<string> {
+  try {
+    const env = await $.env.get('AUTOPILOT_COST_FUSE_MODE')
+    if (env === 'block' || env === 'warn' || env === 'off') return env
+  } catch (_e) { /* no env */ }
+  const cfg = await readObject($, autopilotHome + '/config.json')
+  const cf = cfg !== null && isObject(cfg.cost_fuse) ? cfg.cost_fuse : null
+  return cf !== null && (cf.mode === 'block' || cf.mode === 'warn' || cf.mode === 'off') ? cf.mode : 'warn'
 }
 
 async function buildSnapshot($: EngineInterface, nowMs: number): Promise<{ snap: LiveSnapshot; counts: Counts | null; acceptance: string | null }> {
@@ -287,14 +298,24 @@ async function buildSnapshot($: EngineInterface, nowMs: number): Promise<{ snap:
     receiptMs = await receiptStart($, identity, r)
     if (receiptMs !== null) { receiptRoot = r; break }
   }
-  const src: Sources = { tasks, attention, turn, decisions, manifest, foreman, loadSource, startMs: startMsOf(receiptRoot, env, tasks, scope.marker === null ? null : scope.marker.started_at, receiptMs) }
+  // P7: the stage-graph facts. Each is optional; an absent / foreign file reads as null and its slot / tab says "no data".
+  const marker = readMarker(scope.marker)
+  const qc = readQc(await readText($, liveBase + '/runs/' + scope.key + '.qc.json'), { project_key: scope.key, root_run_id: null })
+  const residue = readResidue(await readText($, liveBase + '/runs/' + scope.key + '.residue.json'), scope.key)
+  const stage = readStageWalk(await readText($, liveBase + '/stage/' + fileSid + '.json'), sid)
+  const review = readReview(await readText($, liveBase + '/runs/' + scope.key + '.review.json'), scope.key)
+  const src: Sources = { tasks, attention, turn, decisions, manifest, foreman, loadSource, marker, review, qc, residue, startMs: startMsOf(receiptRoot, env, tasks, scope.marker === null ? null : scope.marker.started_at, receiptMs) }
   const ctx = ctxShown(ctxText(await readText($, liveBase + '/context/' + fileSid + '.json'), nowMs), manifest)
   const band = bandView(env, jobModel, scope.key, nowMs, src)
   return {
     snap: plain('ok', bandLine1(band) + (band.reason === null ? '' : '\n' + band.reason), {
       ...common, band, header: headerText(env, sid, ctx), decision: jobModel === null || !jobModel.needs_decision ? null : jobModel.decision,
       sections: buildSections(src, foreman, identity, nowMs),
-      review: readReview(await readText($, liveBase + '/runs/' + scope.key + '.review.json'), scope.key),
+      review,
+      detail: {
+        now_ms: nowMs, project: projectNameOf(identity, scope.key), marker, qc, stage, decisions, load_source: loadSource, residue,
+        spend: { session: sessionUsd(env, sid).text, host_all: usd(env.host_today_usd), brain: spendOf(env)?.brain ?? null, cap: spendOf(env)?.cap ?? null, mode: await fuseModeOf($, autopilotHome) },
+      },
     }),
     counts: countsOf(env),
     acceptance: jobModel === null ? null : jobModel.acceptance,
@@ -344,7 +365,7 @@ async function refresh($: EngineInterface): Promise<void> {
     // pane: asked for once, and only where it would be a sidebar (fullscreen, >= 144 columns)
     if (!paneAttempted && built.snap.project_key !== null && viewport !== null && viewport.isFullscreen === true && viewport.columns >= PANE_MIN_COLUMNS) {
       paneAttempted = true
-      await $.ui.open({ id: PANE_ID, title: 'Dispatch' })
+      await $.ui.open({ id: PANE_ID, title: 'Autopilot' })
     }
   } catch (_e) {
     // a bad tick must never take the session down; the next tick tries again
@@ -353,7 +374,7 @@ async function refresh($: EngineInterface): Promise<void> {
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    paneTab = 'dispatch'
+    paneTab = 'now'
     if (timer === undefined) timer = $.clock.every(TICK_MS, () => refresh($))
     await refresh($)
     return next(e)
@@ -371,7 +392,13 @@ export const register: Register = on => {
   on('ui.render', { component: 'AbovePrompt' }, ($, e, next) => {
     viewport = e.viewport ? { columns: e.viewport.columns, isFullscreen: e.viewport.isFullscreen } : null
     if (e.props.hasSurvey) return next(e)
-    return Band($.ui.resolve(e), snapshot === null ? 'live · waiting for the first snapshot' : snapshot.text, snapshot === null ? null : snapshot.band)
+    // the ⓘ opens (or raises) the panel on the Legend tab; no hotkey, the band's autoFocus puts the keyboard path at Ctrl+x Tab, Enter
+    const info = async () => {
+      paneTab = 'legend'
+      $.ui.invalidate('ui.render')
+      await $.ui.open({ id: PANE_ID, title: 'Autopilot', focus: true, closeOnEscape: true })
+    }
+    return Band($.ui.resolve(e), snapshot, e.props.bodyColumns, info)
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, ($, e) => Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { paneTab = t; $.ui.invalidate('ui.render') }))

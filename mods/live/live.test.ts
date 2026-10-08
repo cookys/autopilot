@@ -199,19 +199,34 @@ function walkTexts(n: Node, out: Node[] = []): Node[] {
   return out
 }
 
-// The drawn band: line 1 is the row of Texts, line 2 (when present) the reason Text; a state band is one Text.
+// P7: the band is ONE line (see the "P7 band" cases below); the verdict row, the project / phase / elapsed / progress and the reason
+// moved to the panel's Now tab. This helper keeps the old semantic cases reading the same strings from there: line1 = the Now tab's
+// verdict row, line2 = its reason line; a non-ok state (no project, stale, ...) has no Now row, so line1 is the band's reason text.
 async function bandParts($: any, surface: (typeof SURFACES)[number], columns = 120) {
-  const ui = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns, rows: 50, isFullscreen: true } })
-  const tree = (await ui.drawn()) as Node
-  await ui.unmount()
-  const first = (tree.children || [])[0] as Node | undefined
-  if (tree.type === 'Box' && first && first.type === 'Box') {
-    const cells = walkTexts(first)
-    return { line1: cells.map(textOf).join(''), line2: (tree.children || []).slice(1).map(c => textOf(c as Node)).join('') || undefined, last: cells[cells.length - 1], tree }
+  const pane = await paneOn($, surface, 'now')
+  const tree = (await pane.drawn()) as Node
+  await pane.unmount()
+  const kids = (tree.children || []) as Node[]
+  const head = kids[2]
+  if (head && head.type === 'Box') {
+    const cells = walkTexts(head)
+    return { line1: cells.map(textOf).join(''), line2: textOf(kids[3]) || undefined, last: cells[cells.length - 1], tree }
   }
-  const cells = walkTexts(tree)
-  return { line1: cells.map(textOf).join('\n'), line2: undefined, last: cells[cells.length - 1], tree }
+  const line = await bandLine($, surface, columns)
+  const cells = walkTexts(line.tree)
+  return { line1: textOf(cells[0]).replace(/ │ $/, ''), line2: undefined, last: cells[0], tree }
 }
+
+// the real band (AbovePrompt): its drawn tree, the full line (Texts + the ⓘ label) and the ⓘ Button node
+async function bandLine($: any, surface: (typeof SURFACES)[number], columns = 120) {
+  const ui = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: columns }, viewport: { columns: Math.max(columns, 20), rows: 50, isFullscreen: true } })
+  const tree = (await ui.drawn()) as Node
+  const info = await ui.find({ type: 'Button' })
+  await ui.unmount()
+  const texts = walkTexts(tree).map(textOf).join('')
+  return { tree, text: texts + (info ? labelOf(info as Node) : ''), info: info as Node | undefined }
+}
+const labelOf = (n: Node): string => (typeof n.props?.label === 'string' ? (n.props.label as string) : textOf(n))
 
 // text a test greps: line 1, then the reason on its own line
 async function bandText($: any, surface: (typeof SURFACES)[number], columns = 120) {
@@ -219,12 +234,26 @@ async function bandText($: any, surface: (typeof SURFACES)[number], columns = 12
   return p.line2 === undefined ? p.line1 : p.line1 + '\n' + p.line2
 }
 
-async function paneParts($: any, surface: (typeof SURFACES)[number]) {
-  const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+// the pane on one tab (default: Dispatch, where the rows / gates / tasks / foreman live); the press only sets the tab and invalidates, the host then draws again (a fresh mount here)
+async function paneParts($: any, surface: (typeof SURFACES)[number], tab: string = 'dispatch') {
+  const mountPane = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+  const first = await mountPane()
+  await first.press({ key: tab })
+  await first.unmount()
+  const pane = await mountPane()
   const tree = (await pane.drawn()) as Node
   const link = await pane.find({ type: 'Link' })
   await pane.unmount()
   return { texts: walkTexts(tree).map(textOf), href: link?.props.href as string | undefined, tree }
+}
+
+// a mounted pane on one tab (the caller unmounts it)
+async function paneOn($: any, surface: (typeof SURFACES)[number], tab: string) {
+  const mountPane = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+  const first = await mountPane()
+  await first.press({ key: tab })
+  await first.unmount()
+  return mountPane()
 }
 
 const paneHeader = async ($: any, surface: (typeof SURFACES)[number]) => (await paneParts($, surface)).texts[0] as string
@@ -407,7 +436,7 @@ for (const surface of SURFACES) {
     expect(w.opens.length).toBe(1)
     expect(w.opens[0]?.id).toBe('autopilot-live')
     await band.unmount()
-    const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+    const pane = await paneOn($, surface, 'dispatch')
     expect((await pane.find({ type: 'Text', text: 'r1' }))).toBeDefined()
     expect((await pane.find({ type: 'Text', text: 'r3' }))).toBeDefined()
     expect(await pane.find({ type: 'Text', text: 'execution status, not progress' })).toBeDefined()
@@ -453,7 +482,7 @@ for (const surface of SURFACES) {
     expect(texts).toContain('  grok_deep · xai · CONDITIONAL')
     expect(texts).toContain('code review · p7d · R3 · 11111111..aaaaaaaa · open')
     expect(texts).toContain('  s0 · minimax · reviewed · FIX-THEN-SHIP')
-    expect(texts).not.toContain('no review')
+    expect(texts).not.toContain('no data · no review published')
     expect(texts.some(t => t.includes(' r1 ') || t.startsWith('r1'))).toBe(false) // the dispatch table is the other tab
   })
 
@@ -475,13 +504,13 @@ for (const surface of SURFACES) {
     const files = base()
     const w = world(on, files)
     await start($, surface)
-    expect(await reviewTab($, w)).toContain('no review')
+    expect(await reviewTab($, w)).toContain('no data · no review published')
     w.files[LIVE + '/runs/' + KEY + '.review.json'] = j(reviewFact({ project_key: OTHER_KEY }))
     await w.clock.advance(5000)
-    expect(await reviewTab($, w)).toContain('no review')
+    expect(await reviewTab($, w)).toContain('no data · no review published')
     w.files[LIVE + '/runs/' + KEY + '.review.json'] = j(reviewFact({ schema: 'autopilot.review/9' }))
     await w.clock.advance(5000)
-    expect(await reviewTab($, w)).toContain('no review')
+    expect(await reviewTab($, w)).toContain('no data · no review published')
   })
 
   if (surface === 'terminal') {
@@ -499,13 +528,13 @@ for (const surface of SURFACES) {
     })
   }
 
-  test('P7d review tab: the dispatch tab is the default and the tab strip is Buttons, not Text (' + surface + ')', async ($, on) => {
+  test('P7d review tab: the dispatch tab holds the rows (the default is Now) and the tab strip is Buttons, not Text (' + surface + ')', async ($, on) => {
     const files = base()
     files[LIVE + '/runs/' + KEY + '.review.json'] = j(reviewFact())
     const w = world(on, files)
     await start($, surface)
     const parts = await paneParts($, surface)
-    expect(parts.texts).not.toContain('no review')
+    expect(parts.texts).not.toContain('no data · no review published')
     expect(parts.texts.some(t => t.startsWith('plan review'))).toBe(false)
     expect(parts.texts.some(t => t.startsWith('r1'))).toBe(true)
     expect(JSON.stringify(parts.tree)).toContain('"Button"')
@@ -526,7 +555,7 @@ for (const surface of SURFACES) {
     await w.clock.advance(5000)
     expect(w.opens.length).toBe(0)
     await band2.unmount()
-    const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+    const pane = await paneOn($, surface, 'dispatch')
     expect((await pane.find({ type: 'Link' }))?.props.href).toBe('http://localhost:8787/' + KEY + '/2026-10-04/' + ROOT + '/current/')
     await pane.unmount()
   })
@@ -535,7 +564,7 @@ for (const surface of SURFACES) {
     const files = base()
     const w = world(on, files)
     await start($, surface)
-    const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+    const pane = await paneOn($, surface, 'dispatch')
     expect((await pane.find({ type: 'Link' }))?.props.href).toBe('http://localhost:8787/' + KEY + '/')
     await pane.unmount()
     delete w.files[LIVE + '/runs/' + KEY + '--' + ROOT + '.json']
@@ -605,7 +634,7 @@ for (const surface of SURFACES) {
     const p = await bandParts($, surface)
     expect(p.line1).toBe('▲ 要你決定 repo · — · 10m · —')
     expect(p.line2).toBe('要合併 plan 還是拆開？')
-    const lead = walkTexts(p.tree)[0] as Node
+    const lead = walkTexts(p.tree).find(n => /^[▲⏸✓●◌]/.test(textOf(n))) as Node
     expect(lead.props?.bold).toBe(true) // the word is drawn loud, not dim
     expect(lead.props?.dimColor).not.toBe(true)
   })
@@ -694,7 +723,7 @@ for (const surface of SURFACES) {
     expect(p.line1).toBe('◌ 待命 repo · — · 10m · 62.5%（5/8）')
     expect(p.line2).toBe('沒有派工在跑')
     expect(p.line1).not.toContain('○')
-    const lead = walkTexts(p.tree)[0] as Node
+    const lead = walkTexts(p.tree).find(n => /^[▲⏸✓●◌]/.test(textOf(n))) as Node
     expect(lead.props?.bold).not.toBe(true) // idle is drawn plain
     // no job page at all: still the idle word, with an em dash progress
     delete w.files[MODEL_PATH]
@@ -848,27 +877,27 @@ for (const surface of SURFACES) {
     put(files, null, { needs_decision: true, decision: DECISION })
     const w = world(on, files)
     await start($, surface)
-    let pane = await paneParts($, surface)
+    let pane = await paneParts($, surface, 'now')
     expect(pane.texts[0]).toBe('session $0.42 · host $3.10 · ctx 37%') // the header row stays on top
-    expect(pane.texts[1]).toBe('要你決定')
-    expect(pane.texts[2]).toBe('要合併 plan 還是拆開？')
-    expect(pane.texts[3]).toBe('1. 合併 — 一次驗收')
-    expect(pane.texts[4]).toBe('2. 拆開 — 兩次驗收')
-    const dispatchAt = pane.texts.findIndex(t => t.includes('execution status, not progress'))
-    expect(dispatchAt).toBeGreaterThan(4) // the table comes after, and is still there
-    expect(pane.texts.some(t => t.includes('gates'))).toBe(true)
-    expect(pane.href).toBe('http://localhost:8787/' + KEY + '/2026-10-04/' + ROOT + '/current/')
+    const at = pane.texts.indexOf('要你決定') // P7: the awaited decision moved from the Dispatch tab to Now
+    expect(at).toBeGreaterThan(0)
+    expect(pane.texts.slice(at, at + 4)).toEqual(['要你決定', '要合併 plan 還是拆開？', '1. 合併 — 一次驗收', '2. 拆開 — 兩次驗收'])
+    const disp = await paneParts($, surface, 'dispatch') // the table is still there, on its own tab, and so is the Link
+    expect(disp.texts.some(t => t.includes('execution status, not progress'))).toBe(true)
+    expect(disp.texts.some(t => t.includes('gates'))).toBe(true)
+    expect(disp.texts).not.toContain('要你決定')
+    expect(disp.href).toBe('http://localhost:8787/' + KEY + '/2026-10-04/' + ROOT + '/current/')
     // fields that do not exist are not shown: a question with no options, then no decision at all
     put(w.files, null, { needs_decision: true, decision: { question: '只有問題', options: [], not_authorized: null } })
     await w.clock.advance(5000)
-    pane = await paneParts($, surface)
-    expect(pane.texts.slice(1, 3)).toEqual(['要你決定', '只有問題'])
-    expect(pane.texts[3]).not.toMatch(/^\d\. /)
+    pane = await paneParts($, surface, 'now')
+    const at2 = pane.texts.indexOf('要你決定')
+    expect(pane.texts.slice(at2, at2 + 2)).toEqual(['要你決定', '只有問題'])
+    expect(pane.texts[at2 + 2]).not.toMatch(/^\d\. /)
     put(w.files, null, { needs_decision: false, decision: null })
     await w.clock.advance(5000)
-    pane = await paneParts($, surface)
+    pane = await paneParts($, surface, 'now')
     expect(pane.texts).not.toContain('要你決定')
-    expect(pane.texts[1]).toContain('execution status, not progress')
   })
 }
 
@@ -1117,10 +1146,11 @@ for (const surface of SURFACES) {
     files[P_ATT()] = j(attention('permission'))
     world(on, files)
     await start($, surface)
-    const pane = await paneParts($, surface)
-    expect(pane.texts[1]).toBe('要你決定')
-    expect(pane.texts[2]).toBe('等你批准：Bash: rm -rf build（等了 5 分）')
-    expect(pane.texts.findIndex(t => t.includes('execution status, not progress'))).toBeGreaterThan(2)
+    const pane = await paneParts($, surface, 'now')
+    const at = pane.texts.indexOf('要你決定') // P7: the attention lines moved from the Dispatch tab to Now
+    expect(at).toBeGreaterThan(0)
+    expect(pane.texts[at + 1]).toBe('等你批准：Bash: rm -rf build（等了 5 分）')
+    expect((await paneParts($, surface, 'dispatch')).texts).not.toContain('要你決定')
   })
 
   test('W3a decision age: a stale open decision shows 已等 N 天 in band and pane; a fresh one does not (' + surface + ')', async ($, on) => {
@@ -1129,7 +1159,7 @@ for (const surface of SURFACES) {
     const w = world(on, files)
     await start($, surface)
     expect((await bandParts($, surface)).line2).toBe('要合併 plan 還是拆開？（已等 3 天）')
-    expect((await paneParts($, surface)).texts[2]).toBe('要合併 plan 還是拆開？（已等 3 天）')
+    expect((await paneParts($, surface, 'now')).texts).toContain('要合併 plan 還是拆開？（已等 3 天）')
     files[W_MODEL] = j(model({ needs_decision: true, decision: { ...DECISION_W, stale: false, age_s: 40 } }))
     await w.clock.advance(5000)
     expect((await bandParts($, surface)).line2).toBe('要合併 plan 還是拆開？')
@@ -1325,7 +1355,7 @@ for (const surface of SURFACES) {
     files[P_DEC] = j(decisionsSidecar({ rows: [...rows, { round: 3, decision: '沒有編號的決定', irreversible: false, at: '2026-10-04T09:50:00.000Z', writer: 'engine', kind: 'pick', decision_id: null, source: 'ledger_default' }], count: 3 }))
     world(on, files)
     await start($, surface)
-    const t = (await paneParts($, surface)).texts
+    const t = (await paneParts($, surface, 'decisions')).texts // P7: the proxy-decision rows moved to the Decisions tab
     expect(t).toContain('代你決定 3 件（1 件不可逆）')
     expect(t.some(x => x.includes('先拆 plan 再實作') && x.includes('d-1') && x.includes(' · 可逆 · '))).toBe(true)
     expect(t.some(x => x.includes('刪掉舊分支') && x.includes('不可逆'))).toBe(true)
@@ -1341,11 +1371,11 @@ for (const surface of SURFACES) {
     files[P_SOURCES] = j(manifest({ ledger_engine: OFF, ledger_depth0: OFF }))
     const w = world(on, files)
     await start($, surface)
-    expect((await paneParts($, surface)).texts).toContain('代你決定：來源未接')
+    expect((await paneParts($, surface, 'decisions')).texts).toContain('代你決定：來源未接')
     expect((await bandParts($, surface)).line2).toBe('沒有派工在跑')
     files[P_SOURCES] = j(manifest({ ledger_engine: OFF })) // one writer installed: wired, currently empty
     await w.clock.advance(5000)
-    expect((await paneParts($, surface)).texts.some(x => x.startsWith('代你決定'))).toBe(false)
+    expect((await paneParts($, surface, 'decisions')).texts.some(x => x.startsWith('代你決定'))).toBe(false)
   })
 
   test('W3a foreman: rows with description, label and age; stale rows dim; binding stated; stage line (' + surface + ')', async ($, on) => {
@@ -1476,7 +1506,8 @@ for (const surface of SURFACES) {
     const w = world(on, files)
     await start($, surface)
     expect((await bandParts($, surface)).line2).toBe('沒有派工在跑')
-    let t = (await paneParts($, surface)).texts
+    const both = async () => [...(await paneParts($, surface, 'dispatch')).texts, ...(await paneParts($, surface, 'decisions')).texts]
+    let t = await both()
     expect(t.some(x => x.startsWith('代你決定'))).toBe(false)
     expect(t).toContain('工頭狀態：來源未接') // the foreign foreman rows are not shown
     expect(t.some(x => x.includes('修 parser'))).toBe(false)
@@ -1484,7 +1515,7 @@ for (const surface of SURFACES) {
     files[P_DEC] = j(decisionsSidecar({}, { root_run_id: 'other-root' }))
     files[P_FOREMAN] = j(foremanSidecar({}, { root_run_id: 'other-root' }))
     await w.clock.advance(5000)
-    t = (await paneParts($, surface)).texts
+    t = await both()
     expect((await bandParts($, surface)).line2).toBe('沒有派工在跑')
     expect(t.some(x => x.includes('修 parser'))).toBe(false)
     files[P_DEC] = j({ ...decisionsSidecar(), schema: 'other/1' })

@@ -187,6 +187,8 @@ test('D2 ladder = latest ladder row under the repo+root filter; telemetry stays 
     row({ kind: 'ladder', rung: 'U0' }), // no ts: ignored even though it is last in file order
     row({ kind: 'ladder', rung: 'U1', ts: 'not-a-date' }), // invalid ts: ignored
     row({ kind: 'ladder', rung: 'U2', ts: '2026-10-09' }), // date without time: ignored
+    row({ kind: 'ladder', rung: 'U5', ts: '2026-02-30T00:00:00Z' }), // lexically valid, calendar-invalid (Date -> Mar 2): must not win
+    row({ kind: 'ladder', rung: 'U5', ts: '2026-10-09T24:00:00Z' }), // 24:00 rolls to the next day: ignored
   ] }];
   const s = buildDecisionsSidecar({ scope, ledgers, runs: [], wired: [] });
   assert.deepEqual(s.ladder, { rung: 'U3', at: '2026-10-09T04:00:00.000Z' });
@@ -197,6 +199,8 @@ test('D2 ladder = latest ladder row under the repo+root filter; telemetry stays 
   assert.equal(buildDecisionsSidecar({ scope, ledgers: [{ source: 'ledger_default', rows: [] }], runs: [], wired: [] }).ladder, null);
   const onlyBad = [{ source: 'ledger_default', rows: [row({ kind: 'ladder', rung: 'U2' }), row({ kind: 'ladder', rung: 'U3', ts: 'garbage' })] }];
   assert.equal(buildDecisionsSidecar({ scope, ledgers: onlyBad, runs: [], wired: [] }).ladder, null, 'rows with a missing / invalid ts never produce a ladder');
+  const calendar = [{ source: 'ledger_default', rows: [row({ kind: 'ladder', rung: 'U1', ts: '2026-01-15T00:00:00.000Z' }), row({ kind: 'ladder', rung: 'U5', ts: '2026-02-30T00:00:00Z' })] }];
+  assert.deepEqual(buildDecisionsSidecar({ scope, ledgers: calendar, runs: [], wired: [] }).ladder, { rung: 'U1', at: '2026-01-15T00:00:00.000Z' }, '2026-02-30 (Date -> Mar 2) later in file order does not win');
   const offset = [{ source: 'ledger_default', rows: [row({ kind: 'ladder', rung: 'U4', ts: '2026-10-09T12:00:00+08:00' })] }];
   assert.deepEqual(buildDecisionsSidecar({ scope, ledgers: offset, runs: [], wired: [] }).ladder, { rung: 'U4', at: '2026-10-09T04:00:00.000Z' }, 'at is normalised to a UTC ISO string');
 });

@@ -1,31 +1,31 @@
-// mods/live/band.tsx — the band above the prompt (plan P1c, redesigned in P1c C3). Pure view: `el` is the surface
-// table's constructors from $.ui.resolve(e). A data band is two lines: line 1 is the verdict word (one of five), project, phase, elapsed
-// and progress; line 2 is one reason sentence. Any other state (no pointer, stale, ...) is one dim line of text.
-// No Image, no Raster: nothing here depends on a graphics protocol.
+// mods/live/band.tsx — the band above the prompt: ONE line (stage-graph P7, contract ②). Pure view over the snapshot's slots:
+// `layoutBand` (model.ts) applies the width table, this file only draws the result as a row of Texts and the ⓘ Button.
+// Colours are theme keys as text colour only: no backgroundColor, no inverse, no raw colour. No Image, no Raster.
 
-import type { BandView } from './model'
+import { BAND_ICON, layoutBand, plainBandText } from './model'
+import type { LiveSnapshot } from './model'
 
 type El = (props: any) => any
 
-export function Band(el: { Box: El; Text: El }, text: string, view: BandView | null) {
-  const { Box, Text } = el
-  if (view === null) {
+export function Band(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, onInfo: () => void) {
+  const { Box, Text, Button } = el
+  const icon = Button === undefined
+    ? <Text>{BAND_ICON}</Text>
+    : <Button key="info" plain autoFocus onPress={onInfo}>{BAND_ICON}</Button>
+  if (snap === null || snap.band === null) {
+    const reason = snap === null ? 'live · waiting for the first snapshot' : snap.text
     return (
       <Box>
-        <Text dimColor wrap="truncate">{text}</Text>
+        <Text dimColor wrap="truncate">{plainBandText(reason, columns) + ' │ '}</Text>
+        {icon}
       </Box>
     )
   }
-  // a decision awaited is the loudest thing on the band; the other words are drawn plain
-  const loud = view.verdict === '要你決定'
+  const line = layoutBand(snap.band.slots, columns)
   return (
-    <Box flexDirection="column">
-      <Box>
-        <Text bold={view.verdict !== '待命'} color={loud ? 'warning' : undefined} wrap="truncate">{view.mark + ' ' + view.verdict}</Text>
-        <Text wrap="truncate">{' ' + view.head}</Text>
-        <Text dimColor={view.progressDim} wrap="truncate">{view.progress}</Text>
-      </Box>
-      {view.reason === null ? null : <Text dimColor wrap="truncate">{view.reason}</Text>}
+    <Box>
+      {line.segs.map((s, i) => <Text key={'s' + i} color={s.color} bold={s.bold} wrap="truncate">{s.text}</Text>)}
+      {icon}
     </Box>
   )
 }

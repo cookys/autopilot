@@ -201,6 +201,20 @@ test('D3 residue: one clean-integrated + one dirty worktree -> reapable_worktree
   } finally { ctx.cleanup(); }
 });
 
+test('D3 residue: clean-integrated + missing-dir + dirty -> reapable_worktrees 2 (a deleted worktree directory counts)', async () => {
+  const ctx = residueFixture();
+  try {
+    const wtGone = path.join(ctx.base, 'wt-gone');
+    git(ctx.repo, 'worktree', 'add', '-q', wtGone, '-b', 'gone-branch');
+    fs.rmSync(wtGone, { recursive: true, force: true }); // no `git worktree prune`: git still lists it
+    const { pub } = publisherOf(ctx);
+    assert.equal(await pub.publish({ nowMs: ctx.now }), true);
+    const fact = JSON.parse(fs.readFileSync(pub.file, 'utf8'));
+    assert.deepEqual(fact.by_class, { 'clean-integrated': 1, 'missing-dir': 1, dirty: 1 });
+    assert.equal(fact.reapable_worktrees, 2);
+  } finally { ctx.cleanup(); }
+});
+
 test('D3 residue: a watcher whose cwd is a linked worktree still scans the main worktree (the main checkout is never counted)', async () => {
   const ctx = residueFixture();
   try {

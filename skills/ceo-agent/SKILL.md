@@ -320,7 +320,7 @@ When encountering these, pause and propose:
       failed intent gate.
    CEO mode does NOT exempt project setup. "I'll track it mentally" is NOT acceptable.
    Review layers (per-phase verifier, one hetero code review on the full diff, qc gate): `node scripts/stage-graph.js nodes --size <size>`; strength per `scripts/resolve-review-loop.sh`.
-4. IF urgent (`S!` / `M!`): create a `hotfix/<description>` branch; finish-flow carries the urgent closing (post-finish code-review) and learn is unconditional.
+4. IF urgent (`S!` / `M!`): create a `hotfix/<description>` branch; finish-flow carries the urgent closing (post-finish code-review for urgent-low M and up; XS/S urgency is a mark only) and learn is unconditional.
 5. Execute phases:
    - Within DOA? → CEO decides, record
    - Beyond DOA? → Pause, propose to Board

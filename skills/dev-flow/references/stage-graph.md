@@ -58,10 +58,11 @@ loop needs index = total.
 ## Urgent placement
 
 `high_risk` is sampled by `stage-advance.js` (via `classify-diff-risk.sh` → `resolve-review-loop.sh --field
-review_risk`) once, when an urgent session leaves its last `verify`; a sampling failure counts as high. Do not ask
+review_risk`) once, when an urgent session leaves its last `verify`; a sampling failure counts as high. For M, L and XL, do not ask
 `next` for this move: attempt `--to code-review` first. Exit 0 ⇒ high risk, normal order; exit 3 with `qc-gate` in
 `legal_next` ⇒ urgent-low (advance to `qc-gate`; finish-flow runs the code-review after `finish`). This attempt is
-the one deliberate probe, not a retry of a refused move.
+the one deliberate probe, not a retry of a refused move. XS/S: urgency is a mark only — take `next` as usual; no
+`code-review` before or after `finish`.
 
 ## Writers
 

@@ -144,7 +144,7 @@ the walk resumes at the recorded node, never re-sized.
 | Entering any node | `node scripts/stage-advance.js --to <node>` before its work. Rails write `plan-review`, `code-review` and (at /l5–/l6) `implement` themselves; every other node is yours. A skill you hand off to may write the same node again — a repeat write is a harmless same-node update, so write it anyway |
 | Entering `implement` when `nodes` prints a non-null `unit_kind` | Add `--unit <unit_kind>:<i>/<N>:<label>` (`phase:` or `deliverable:`). Same `<i>` = repair of that unit; `<i>+1` = next unit; leaving the loop needs `<i> = <N>` |
 | Choosing the next node | `node scripts/stage-graph.js next --from <stage> --size <size> [--bug] [--urgent] [--research]`. `implement` in that list is the repair / next-unit edge; otherwise take the forward node |
-| Leaving the last `verify` of an urgent session | Not `next` (the risk is sampled only on this move): `stage-advance.js --to code-review`. Exit 0 ⇒ high risk, normal order. Exit 3 with `qc-gate` in `legal_next` ⇒ urgent-low: go to `qc-gate`; finish-flow runs the code-review after `finish` |
+| Leaving the last `verify` of an urgent M, L or XL session | Not `next` (the risk is sampled only on this move): `stage-advance.js --to code-review`. Exit 0 ⇒ high risk, normal order. Exit 3 with `qc-gate` in `legal_next` ⇒ urgent-low: go to `qc-gate`; finish-flow runs the code-review after `finish`. XS/S: urgency is a mark only — take `next` as usual; no `code-review` before or after `finish` |
 | Exit 3 | Illegal move: read `legal_next`, go to one of those. Never retry the refused `--to`, never force |
 | Exit 4 | E1 bump: `session-mode.js set --size <bump_to>`, then advance to the forward node of `stage-graph.js next --from <current stage> --size <bump_to>`. Never retry the original `--to` |
 | Exit 2 / 5 | No marker / no size: run Session Start step 1, then retry the same call |
@@ -384,7 +384,7 @@ it ⇒ do NOT defer; unsure ⇒ ask the user. A passing deferral = one backlog r
 doubled, or requirements beyond the OKR ⇒ STOP. Board decision (user; CEO escalates): update the README scope
 boundary first, proceed only after explicit approval, record it in the project decision log.
 
-**Leaving the last unit of an urgent session**: `--to code-review`, never `next` (Stage protocol row).
+**Leaving the last unit of an urgent M, L or XL session**: `--to code-review`, never `next` (Stage protocol row; XS/S: urgency is a mark only).
 
 ### code-review (the rail writes the stage)
 

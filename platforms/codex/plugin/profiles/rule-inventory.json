@@ -22,7 +22,7 @@
   "sources": [
     {
       "path": "skills/ceo-agent/SKILL.md",
-      "sha256": "0d9c7ca076f363a93cdfb4227413e2ed65d37121c810b95c077075e631c908da",
+      "sha256": "31406df5a67fe2de2967f972380a8ad631af3d9868e0210b02e143acc841f1a7",
       "segments": [
         {
           "id": "ceo.discovery-routing",
@@ -280,7 +280,7 @@
     },
     {
       "path": "skills/dev-flow/SKILL.md",
-      "sha256": "5342b031a13f86ad60e64346e261222a1850fc0e2715027313be4bde934d3724",
+      "sha256": "5ffbc1a9ea50c14683a402c8b8057ee6c1d92cf0228568e8ab68727337ba6ee7",
       "segments": [
         {
           "id": "dev.frontmatter",

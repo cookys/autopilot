@@ -19,6 +19,7 @@ if [ "\${1:-}" = "--field" ]; then
     unknown_budget_u1) echo 2 ;;
     unknown_budget_u2) echo 1 ;;
     unknown_budget_u3) echo 1 ;;
+    unknown_budget_u4) echo 1 ;;
     consult_resolved_from) echo topology ;;
     consult_dispatch) echo auto ;;
     *) echo "" ;;
@@ -26,7 +27,7 @@ if [ "\${1:-}" = "--field" ]; then
   exit 0
 fi
 cat <<'JSON'
-{"unknown_escalation":"auto","unknown_resolved_from":"default","unknown_budget_u1":"2","unknown_budget_u2":"1","unknown_budget_u3":"1","consult_resolved_from":"topology","consult_dispatch":"auto"}
+{"unknown_escalation":"auto","unknown_resolved_from":"default","unknown_budget_u1":"2","unknown_budget_u2":"1","unknown_budget_u3":"1","unknown_budget_u4":"1","consult_resolved_from":"topology","consult_dispatch":"auto"}
 JSON
 EOF
   chmod +x "$TREE/scripts/resolve-review-loop.sh"

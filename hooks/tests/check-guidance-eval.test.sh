@@ -16,6 +16,8 @@
 #   arm manifest for a non-change arm / unreadable --arm        -> exit 2
 
 set -euo pipefail
+# git env hygiene + scratch-dir ceilings only (this suite keeps its own TEST_TMP/trap).
+AUTOPILOT_TEST_LIB_HELPERS_ONLY=1 . "$(dirname "$0")/lib.sh"
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 GATE="$REPO_ROOT/scripts/check-guidance-eval.js"

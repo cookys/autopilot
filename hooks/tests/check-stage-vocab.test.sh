@@ -3,6 +3,8 @@
 # A scratch tree (not a git repo -> directory-walk mode) holds one hit per category plus decoys that must not hit.
 
 set -euo pipefail
+# The checker probes git (ls-files) in the scratch tree: lib.sh ceilings keep it from finding a repo above /tmp.
+AUTOPILOT_TEST_LIB_HELPERS_ONLY=1 . "$(dirname "$0")/lib.sh"
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 CHK="$REPO_ROOT/scripts/check-stage-vocab.js"

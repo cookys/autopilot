@@ -263,9 +263,11 @@ hooks/tests/hetero-review-loop.test.sh|matches the JSON-literal extractor, roste
 hooks/tests/resolve-review-loop-a.test.sh|resolver shard, quoted "reviewer_engine" literals
 hooks/tests/resolve-review-loop-b.test.sh|resolver shard, quoted "reviewer_engine" literals and EXPECTED_KEYS
 hooks/tests/review-loop-runner.test.sh|payload JS literal, widened and asserted above'
+# Frozen eval pack copies (evals/skill-onoff/packs/*/scripts/resolve-review-loop.sh) are byte-checked
+# evidence inputs (scripts/check-guidance-eval.js), not roster consumers: excluded from the scan.
 POP_A_MATCHED="$(
   { git -C "$REPO_ROOT" grep -l "validateReviewLoopConfig" -- hooks/ ":!$SELF" 2>/dev/null;
-    git -C "$REPO_ROOT" grep -l '"reviewer_engine"' -- hooks/ evals/ ":!$SELF" 2>/dev/null; } \
+    git -C "$REPO_ROOT" grep -l '"reviewer_engine"' -- hooks/ evals/ ":!$SELF" ":!evals/skill-onoff/packs/" 2>/dev/null; } \
     | sort -u
 )"
 POP_A_UNLISTED="$(printf '%s\n' "$POP_A_MATCHED" | grep -vxF -f <(printf '%s\n' "$POP_A_ALLOW" | cut -d'|' -f1) | grep -v '^$')"
@@ -351,6 +353,7 @@ assert_eq "validated-ok" "$CONTRACT_PARITY_OUT" "contract-parity.test.sh's real 
 # matching file that does neither FAILS with its path named; adding a compliant or listed
 # file never requires editing a number.
 POP_B_DEFAULT_ALLOW='hooks/tests/autopilot-cli.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/rail-stage-writers.test.sh|in-process roster object literal for a stage-writer campaign fixture, never resolved from config; consult/discuss not involved
 hooks/tests/autopilot-engine-boundary-resume.test.sh|partial roster fixture, resolves consult/discuss via the default
 hooks/tests/autopilot-engine-park-reserve.test.sh|partial roster fixture, resolves consult/discuss via the default
 hooks/tests/autopilot-engine-repair-branch.test.sh|partial roster fixture, resolves consult/discuss via the default

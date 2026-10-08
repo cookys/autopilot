@@ -263,11 +263,13 @@ assert_r75_vacuous_red_case_in() {
   cp -r "$REPO_ROOT/skills/dev-flow" "$sandbox/skills/dev-flow"
   cp -r "$REPO_ROOT/docs/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles" \
         "$sandbox/docs/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles"
-  base_dispositions="$(node -e '
+  # The dispositions array exceeds MAX_ARG_STRLEN (128 KiB) as one argv string: hand it over as a file.
+  base_dispositions="$TEST_TMP/r75-base-dispositions.json"
+  node -e '
     const fs=require("fs"),path=require("path");
     const f=path.join(process.argv[1],"profiles/guided-baseline-dispositions.json");
-    console.log(JSON.stringify(JSON.parse(fs.readFileSync(f,"utf8")).dispositions));
-  ' "$sandbox")"
+    fs.writeFileSync(process.argv[2],JSON.stringify(JSON.parse(fs.readFileSync(f,"utf8")).dispositions));
+  ' "$sandbox" "$base_dispositions"
   fake_rule="- synthetic baseline rule planted by assert_r75_vacuous_red_case_in"
   hash="$(node -e '
     const fs=require("fs"),path=require("path");
@@ -290,7 +292,7 @@ assert_r75_vacuous_red_case_in() {
     const sandbox=process.argv[1];
     const f=path.join(sandbox,"profiles/guided-baseline-dispositions.json");
     const doc=JSON.parse(fs.readFileSync(f,"utf8"));
-    doc.dispositions=JSON.parse(process.argv[3]).concat(JSON.parse(process.argv[2]));
+    doc.dispositions=JSON.parse(fs.readFileSync(process.argv[3],"utf8")).concat(JSON.parse(process.argv[2]));
     fs.writeFileSync(f,JSON.stringify(doc,null,2)+"\n");
     const sha=x=>crypto.createHash("sha256").update(fs.readFileSync(x)).digest("hex");
     const catPath=path.join(sandbox,"profiles/profile-catalog.json");

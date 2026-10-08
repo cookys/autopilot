@@ -20,6 +20,8 @@
 # Env: ONOFF_SG_BASE points the test at a mutated copy of evals/skill-onoff (mutation controls).
 
 set -euo pipefail
+# git env hygiene + scratch-dir ceilings only (this suite keeps its own TEST_TMP/trap).
+AUTOPILOT_TEST_LIB_HELPERS_ONLY=1 . "$(dirname "$0")/lib.sh"
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 BASE="${ONOFF_SG_BASE:-$REPO_ROOT/evals/skill-onoff}"

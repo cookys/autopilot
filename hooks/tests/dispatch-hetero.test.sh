@@ -941,7 +941,8 @@ assert_contains "$OUT" '"skill_mode_effective": "prompt"' "effective skill mode 
 assert_contains "$OUT" '"skills_injected": ["autopilot:dev-flow"]' "skills injected array matches"
 assert_file_exists "$TEST_TMP/captured_prompt.txt" "captured prompt file exists"
 assert_contains "$(cat "$TEST_TMP/captured_prompt.txt")" "=== SKILL: autopilot:dev-flow ===" "prompt contains skill delimiter"
-assert_contains "$(cat "$TEST_TMP/captured_prompt.txt")" "Development Flow Evaluation" "prompt contains skill content"
+assert_contains "$(cat "$TEST_TMP/captured_prompt.txt")" "# Development Flow" "prompt contains skill content (SKILL.md heading)"
+assert_contains "$(cat "$TEST_TMP/captured_prompt.txt")" "name: dev-flow" "prompt contains the dev-flow skill frontmatter"
 # 11b. agy is launched with --new-project: without it agy resumes a conversation keyed by an
 # ancestor path and commits into THAT conversation's repository (308-8f rail probe, reproduced
 # 2026-09-13 — autopilot's own main checkout took a stray `probe2` commit from a scratch worktree).

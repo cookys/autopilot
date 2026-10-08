@@ -7,6 +7,8 @@
 # E1 bump walks to finish. Temp repos + a temp AUTOPILOT_SESSION_MODE_DIR; the real ~/.autopilot is never touched.
 
 set -uo pipefail
+# git env hygiene + scratch-dir ceilings only (this suite keeps its own TEST_TMP/trap).
+AUTOPILOT_TEST_LIB_HELPERS_ONLY=1 . "$(dirname "$0")/lib.sh"
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SA="$REPO_ROOT/scripts/stage-advance.js"

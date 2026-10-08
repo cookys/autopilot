@@ -17,9 +17,9 @@ SG="$REPO_ROOT/scripts/stage-graph.js"
 FIXTURE="$REPO_ROOT/hooks/tests/fixtures/stage-graph/expected.json"
 TEST_TMP=$(mktemp -d -t "stage-advance-test-XXXXXX")
 trap 'rm -rf "$TEST_TMP"' EXIT
-PASS=0; FAILS=0
+PASS=0; FAIL=0
 ok() { PASS=$((PASS+1)); echo "ok: $*"; }
-bad() { FAILS=$((FAILS+1)); echo "FAIL: $*" >&2; }
+bad() { FAIL=$((FAIL+1)); echo "FAIL: $*" >&2; }
 eq() { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1: expected [$2] got [$3]"; fi; }
 has() { case "$3" in *"$2"*) ok "$1" ;; *) bad "$1: [$3] lacks [$2]" ;; esac; }
 
@@ -417,5 +417,5 @@ eq "walk failures" "0" "$3"
 [ "$3" != "0" ] && echo "  first failures: $WALK" >&2
 ok "walked $2 stage-advance steps"
 
-echo "stage-advance.test: pass=$PASS fail=$FAILS"
-[ "$FAILS" -eq 0 ]
+echo "stage-advance.test: pass=$PASS fail=$FAIL"
+[ "$FAIL" -eq 0 ]

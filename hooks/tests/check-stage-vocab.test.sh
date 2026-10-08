@@ -10,9 +10,9 @@ REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 CHK="$REPO_ROOT/scripts/check-stage-vocab.js"
 TEST_TMP=$(mktemp -d -t "check-stage-vocab-test-XXXXXX")
 trap 'rm -rf "$TEST_TMP"' EXIT
-PASS=0; FAILS=0
+PASS=0; FAIL=0
 ok() { PASS=$((PASS+1)); echo "ok: $*"; }
-bad() { FAILS=$((FAILS+1)); echo "FAIL: $*" >&2; }
+bad() { FAIL=$((FAIL+1)); echo "FAIL: $*" >&2; }
 
 R="$TEST_TMP/tree"
 mkdir -p "$R/skills/dev-flow" "$R/skills/other" "$R/docs/plans" "$R/docs/projects/_archive/x" \
@@ -148,5 +148,5 @@ rc=0; node "$CHK" --repo "$C" --gate >/dev/null 2>&1 || rc=$?
 rc=0; node "$CHK" --bogus >/dev/null 2>&1 || rc=$?
 [ "$rc" -eq 2 ] && ok "unknown arg exits 2" || bad "unknown arg exit $rc"
 
-echo "check-stage-vocab.test: pass=$PASS fail=$FAILS"
-[ "$FAILS" -eq 0 ]
+echo "check-stage-vocab.test: pass=$PASS fail=$FAIL"
+[ "$FAIL" -eq 0 ]

@@ -1,0 +1,9 @@
+FAIL [qualification-scorecard-tools] r51: list --from failed
+FAIL [qualification-scorecard-tools] r51: list --from uses the pre-effort fallback when event id and bundle are absent: '  evidence        (pre-effort feed row — no event id / bundle recorded)' not found in output
+FAIL [qualification-scorecard-tools] r52: list --from failed
+FAIL [qualification-scorecard-tools] r52: list prints exactly one consolidated pre-effort seat_hash summary: expected '1', got '0'
+FAIL [qualification-scorecard-tools] 31 passed, 4 failed
+      - r51: list --from failed
+      - r51: list --from uses the pre-effort fallback when event id and bundle are absent: '  evidence        (pre-effort feed row — no event id / bundle recorded)' not found in output
+      - r52: list --from failed
+      - r52: list prints exactly one consolidated pre-effort seat_hash summary: expected '1', got '0'

@@ -1102,3 +1102,42 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: stage-graph plan execution, 2026-10-06..08
 - **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/README.md
 - **Context**: exits 0 like its resolver-missing path; decide fail-closed vs fail-open.
+
+### hetero-review-loop cannot carry a range over its packet ceiling: no phase-keyed packet mode
+- **Status**: open
+- **Trigger**: next review of a release range above ~400 KB
+- **Effort**: S
+- **Source**: 3.0.0 total QC, 2026-10-08
+- **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/qc-total-2026-10-08/README.md
+- **Context**: the exclude allowlist forbids path slicing, so the 1 MB range ran as a direct dispatch-review panel with no chain receipt.
+
+### dispatch-review parser rejects a multi-line NO-FINDING-PROOF that carries all three fields
+- **Status**: open
+- **Trigger**: when dispatch-review.sh is next touched
+- **Effort**: S
+- **Source**: 3.0.0 total QC, 2026-10-08 (K2 opus seat)
+- **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/qc-total-2026-10-08/README.md
+- **Context**: checked/evidence/conclusion present across lines; parsed as no_verdict and adopted from the raw log by hand.
+
+### check-guidance-eval does not bind the results file to the arm manifest
+- **Status**: open
+- **Trigger**: before the 3.0.0 final cut
+- **Effort**: S
+- **Source**: 3.0.0 total QC, 2026-10-08 (K4 opus + GLM)
+- **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/qc-total-2026-10-08/README.md
+- **Context**: rows carry arm:"change" only; stamp the arm-manifest digest per row and assert it in the gate.
+
+### Prove the generic-arm fixture-scripts-sg overlay does not suppress row markers
+- **Status**: open
+- **Trigger**: before the next guidance eval campaign
+- **Effort**: S
+- **Source**: 3.0.0 total QC, 2026-10-08 (K4 MiniMax); open item 4 of the stage-graph log
+- **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/qc-total-2026-10-08/README.md
+
+### pre-push degrades open silently when scripts/lib/qc-evidence.sh is missing
+- **Status**: open
+- **Trigger**: when .githooks/pre-push is next touched
+- **Effort**: S
+- **Source**: 3.0.0 total QC, 2026-10-08 (K2 GLM)
+- **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/qc-total-2026-10-08/README.md
+- **Context**: same posture as a missing resolver; add one stderr line so a broken install is visible.

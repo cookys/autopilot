@@ -1,0 +1,140 @@
+FAIL [qualification-feed-adopt] list --from reads the sample feed: expected exit 0, got 1
+FAIL [qualification-feed-adopt] all 29 defaults are read: expected '29', got ''
+FAIL [qualification-feed-adopt] the strike is read: expected '1', got ''
+FAIL [qualification-feed-adopt] all 53 priors are read: expected '53', got ''
+FAIL [qualification-feed-adopt] a filesystem source is reported as such: expected 'path', got ''
+FAIL [qualification-feed-adopt] the digest is a sha256 of what we received: expected '64', got '0'
+FAIL [qualification-feed-adopt] the sample feed's advertised digest does NOT match ours — reported, not fatal: expected 'false', got ''
+FAIL [qualification-feed-adopt] a feed declaring digest_basis is read: expected exit 0, got 1
+FAIL [qualification-feed-adopt] a declared basis marks the advertised digest as producer-internal: expected 'true', got ''
+FAIL [qualification-feed-adopt] the comparison is still performed and still reported honestly: expected 'false', got ''
+FAIL [qualification-feed-adopt] our digest is sha256 of the FILE BYTES — a declared basis never makes us adopt the producer's value: expected '2c2fb095cacdf56131b9287491e091f33dcce044df0301f85526cbd246ccd372', got ''
+FAIL [qualification-feed-adopt] and the cache is addressed by that hash, never the advertised one: /tmp/autopilot-test-qualification-feed-adopt-Cofk1D/feed-cache//feed.json does not exist
+FAIL [qualification-feed-adopt] the human output states what the advertised digest actually is: 'producer-internal fingerprint' not found in output
+FAIL [qualification-feed-adopt] the basis-less sample reports no basis: 'null' not found in output
+FAIL [qualification-feed-adopt] a feed with no declared basis still gets the loud warning: 'DOES NOT match ours' not found in output
+FAIL [qualification-feed-adopt] a hostile feed still lists (sanitizing is not refusing): expected exit 0, got 1
+FAIL [qualification-feed-adopt] the newline is rendered as a visible escape, keeping the value on one line: 'basis      benign\n' not found in output
+<anonymous_script>:1
+adopt-qualification-defaults: qualification feed cache must not live inside a git work tree: /tmp/autopilot-test-qualification-feed-adopt-Cofk1D/feed-cache
+^
+
+SyntaxError: Unexpected token 'a', "adopt-qual"... is not valid JSON
+    at JSON.parse (<anonymous>)
+    at [eval]:2:18
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.16.0
+FAIL [qualification-feed-adopt] --json preserves the original value verbatim — the record is not edited, only the display: expected 'true', got ''
+FAIL [qualification-feed-adopt] a pre-effort feed hash is identified as the three-field basis, not as 'unknown': expected 'legacy_three_field', got ''
+FAIL [qualification-feed-adopt] and it is reported as not matching our derivation: expected 'false', got ''
+ERROR: seat-hash requires --engine, --runner, and --role
+<anonymous_script>:1
+Usage:
+^
+
+SyntaxError: Unexpected token 'U', "Usage:
+  n"... is not valid JSON
+    at JSON.parse (<anonymous>)
+    at Socket.<anonymous> ([eval]:1:82)
+    at Socket.emit (node:events:521:24)
+    at endReadableNT (node:internal/streams/readable:1735:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+Node.js v24.16.0
+FAIL [qualification-feed-adopt] the sample strike carries no effort — the legacy partition, not a wildcard: expected 'null', got ''
+ERROR: seat-hash requires --engine, --runner, and --role
+<anonymous_script>:1
+Usage:
+^
+
+SyntaxError: Unexpected token 'U', "Usage:
+  n"... is not valid JSON
+    at JSON.parse (<anonymous>)
+    at Socket.<anonymous> ([eval]:1:82)
+    at Socket.emit (node:events:521:24)
+    at endReadableNT (node:internal/streams/readable:1735:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+Node.js v24.16.0
+FAIL [qualification-feed-adopt] the gating rule is stated in the output: '"gating": "exam identity only' not found in output
+FAIL [qualification-feed-adopt] adopt --from succeeds: expected exit 0, got 1
+FAIL [qualification-feed-adopt] exactly the selected seat is adopted: expected '1', got ''
+head: cannot open '/tmp/autopilot-test-qualification-feed-adopt-Cofk1D/sc/scorecard.jsonl' for reading: No such file or directory
+FAIL [qualification-feed-adopt] and records that the advertised digest disagreed: expected 'false', got ''
+FAIL [qualification-feed-adopt] the adopted row carries its effort: expected 'high', got ''
+FAIL [qualification-feed-adopt] the adopted seat is qualified at effort=high: expected 'qualified', got 'no_record'
+FAIL [qualification-feed-adopt] and says why: 'refused_already_adopted' not found in output
+FAIL [qualification-feed-adopt] and the refusal names the reason: 'refused_local_evidence_present' not found in output
+FAIL [qualification-feed-adopt] adopt --priors succeeds: expected exit 0, got 1
+FAIL [qualification-feed-adopt] all 53 priors are appended: '"appended": 53' not found in output
+FAIL [qualification-feed-adopt] none were refused: '"refused": 0' not found in output
+node:fs:441
+    return binding.readFileUtf8(path, stringToFlags(options.flag));
+                   ^
+
+Error: ENOENT: no such file or directory, open '/tmp/autopilot-test-qualification-feed-adopt-Cofk1D/cap3/qualification-evidence.jsonl'
+    at Object.readFileSync (node:fs:441:20)
+    at [eval]:3:17
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3 {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/tmp/autopilot-test-qualification-feed-adopt-Cofk1D/cap3/qualification-evidence.jsonl'
+}
+
+Node.js v24.16.0
+FAIL [qualification-feed-adopt] the priors landed as external_prior evidence: expected '53', got ''
+FAIL [qualification-feed-adopt] NO prior is qualified — a feed cannot manufacture a qualification it did not earn upstream: expected '0', got ''
+FAIL [qualification-feed-adopt] a current manifest is written: /tmp/autopilot-test-qualification-feed-adopt-Cofk1D/feed-cache/current.json does not exist
+FAIL [qualification-feed-adopt] the body is cached under OUR digest: /tmp/autopilot-test-qualification-feed-adopt-Cofk1D/feed-cache//feed.json does not exist
+sha256sum: /tmp/autopilot-test-qualification-feed-adopt-Cofk1D/feed-cache//feed.json: No such file or directory
+FAIL [qualification-feed-adopt] 15 passed, 36 failed
+      - list --from reads the sample feed: expected exit 0, got 1
+      - all 29 defaults are read: expected '29', got ''
+      - the strike is read: expected '1', got ''
+      - all 53 priors are read: expected '53', got ''
+      - a filesystem source is reported as such: expected 'path', got ''
+      - the digest is a sha256 of what we received: expected '64', got '0'
+      - the sample feed's advertised digest does NOT match ours — reported, not fatal: expected 'false', got ''
+      - a feed declaring digest_basis is read: expected exit 0, got 1
+      - a declared basis marks the advertised digest as producer-internal: expected 'true', got ''
+      - the comparison is still performed and still reported honestly: expected 'false', got ''
+      - our digest is sha256 of the FILE BYTES — a declared basis never makes us adopt the producer's value: expected '2c2fb095cacdf56131b9287491e091f33dcce044df0301f85526cbd246ccd372', got ''
+      - and the cache is addressed by that hash, never the advertised one: /tmp/autopilot-test-qualification-feed-adopt-Cofk1D/feed-cache//feed.json does not exist
+      - the human output states what the advertised digest actually is: 'producer-internal fingerprint' not found in output
+      - the basis-less sample reports no basis: 'null' not found in output
+      - a feed with no declared basis still gets the loud warning: 'DOES NOT match ours' not found in output
+      - a hostile feed still lists (sanitizing is not refusing): expected exit 0, got 1
+      - the newline is rendered as a visible escape, keeping the value on one line: 'basis      benign\n' not found in output
+      - --json preserves the original value verbatim — the record is not edited, only the display: expected 'true', got ''
+      - a pre-effort feed hash is identified as the three-field basis, not as 'unknown': expected 'legacy_three_field', got ''
+      - and it is reported as not matching our derivation: expected 'false', got ''
+      - the sample strike carries no effort — the legacy partition, not a wildcard: expected 'null', got ''
+      - the gating rule is stated in the output: '"gating": "exam identity only' not found in output
+      - adopt --from succeeds: expected exit 0, got 1
+      - exactly the selected seat is adopted: expected '1', got ''
+      - and records that the advertised digest disagreed: expected 'false', got ''
+      - the adopted row carries its effort: expected 'high', got ''
+      - the adopted seat is qualified at effort=high: expected 'qualified', got 'no_record'
+      - and says why: 'refused_already_adopted' not found in output
+      - and the refusal names the reason: 'refused_local_evidence_present' not found in output
+      - adopt --priors succeeds: expected exit 0, got 1
+      - all 53 priors are appended: '"appended": 53' not found in output
+      - none were refused: '"refused": 0' not found in output
+      - the priors landed as external_prior evidence: expected '53', got ''
+      - NO prior is qualified — a feed cannot manufacture a qualification it did not earn upstream: expected '0', got ''
+      - a current manifest is written: /tmp/autopilot-test-qualification-feed-adopt-Cofk1D/feed-cache/current.json does not exist
+      - the body is cached under OUR digest: /tmp/autopilot-test-qualification-feed-adopt-Cofk1D/feed-cache//feed.json does not exist

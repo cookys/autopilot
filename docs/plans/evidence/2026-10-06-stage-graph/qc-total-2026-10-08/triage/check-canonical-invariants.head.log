@@ -1,0 +1,15 @@
+FAIL [check-canonical-invariants] aligned tree exit code: expected '1', got '0'
+FAIL [check-canonical-invariants] aligned tree message: 'all canonical invariants hold' not found in output
+FAIL [check-canonical-invariants] no-rogue sandbox reader-allowlist exit code: expected '1', got '0'
+FAIL [check-canonical-invariants] restored reference size exit code: expected '1', got '0'
+FAIL [check-canonical-invariants] reword+seed-update (same-commit ritual) exit code: expected '1', got '0'
+FAIL [check-canonical-invariants] reword+seed-update passes: 'all canonical invariants hold' not found in output
+FAIL [check-canonical-invariants] allowlisted unratified mention passes: expected '1', got '0'
+FAIL [check-canonical-invariants] 24 passed, 7 failed
+      - aligned tree exit code: expected '1', got '0'
+      - aligned tree message: 'all canonical invariants hold' not found in output
+      - no-rogue sandbox reader-allowlist exit code: expected '1', got '0'
+      - restored reference size exit code: expected '1', got '0'
+      - reword+seed-update (same-commit ritual) exit code: expected '1', got '0'
+      - reword+seed-update passes: 'all canonical invariants hold' not found in output
+      - allowlisted unratified mention passes: expected '1', got '0'

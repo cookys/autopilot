@@ -1,0 +1,1 @@
+{ "runner": "claude-native", "model": "opus", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "/tmp/dispatch-review-log-Sp9TCz", "error": "NO-FINDING-PROOF must contain non-empty checked, evidence, and conclusion fields", "usage": null, "unratified_verdict": null }

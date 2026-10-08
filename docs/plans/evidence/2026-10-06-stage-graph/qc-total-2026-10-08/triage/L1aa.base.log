@@ -1,0 +1,422 @@
+✖ refresh fetches fixed paginated endpoint and writes only bounded provisional roles (4.838879ms)
+✖ all-tie cohorts use a deterministic neutral percentile (0.784817ms)
+✖ index versions remain separate content-addressed cohorts (0.799014ms)
+✖ missing key and API failures preserve current cache and evidence bytes (2.13537ms)
+✖ malformed later pages and endpoint overrides fail before cache publication (1.26446ms)
+✖ CLI exposes no endpoint override and cache integrity is fail-closed (92.08325ms)
+✔ refresh rejects a cache path inside a Git worktree before fetching (0.630677ms)
+✖ refresh resolves cache symlinks and refuses echoed credentials (1.261355ms)
+✖ refresh bounds streamed bodies and rejects cache child symlinks (2.460912ms)
+✖ aa-import ledger producer rejects non-external evidence and unknown producers (1.068151ms)
+✖ aa importer cannot claim an evidence id owned by another producer (0.751975ms)
+✖ refresh rejects an evidence store inside a Git worktree before fetching (0.888903ms)
+✖ failed current publication rolls back evidence and new cache objects (0.903791ms)
+✖ ledger validation failure leaves prior current and cache objects unchanged (0.614887ms)
+✖ new cohorts retire prior candidates that fall below floor or disappear (0.729924ms)
+✖ recorded candidates are retired even when their cache was lost (0.858967ms)
+✖ equal-time retirement evidence wins over a provisional prior (0.75423ms)
+✖ transactional evidence cannot become visible before cache publication (0.641848ms)
+✖ a later recorded refresh carries retirement debt across no-record snapshots (0.694297ms)
+✖ retirement after an unrecorded provisional targets recorded lineage (0.656415ms)
+✖ readCurrent binds manifest metadata and every raw object to the snapshot (0.634184ms)
+✖ an older completed fetch cannot overwrite a newer current snapshot (0.804244ms)
+✖ cache destination is re-resolved after fetch to catch ancestor swaps (0.888773ms)
+ℹ tests 23
+ℹ suites 0
+ℹ pass 1
+ℹ fail 22
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 211.116836
+
+✖ failing tests:
+
+test at scripts/import-aa-capabilities.test.js:113:1
+✖ refresh fetches fixed paginated endpoint and writes only bounded provisional roles (4.838879ms)
+  Error: AA cache directory must be outside a Git worktree
+      at assertOutsideGit (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:771:11)
+      at assertCacheDestination (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:786:3)
+      at normalizeRefreshOptions (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1368:3)
+      at refreshCapabilities (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1387:19)
+      at TestContext.<anonymous> (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.test.js:128:24)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1306:25)
+      at Test.start (node:internal/test_runner/test:1177:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:385:17)
+
+test at scripts/import-aa-capabilities.test.js:206:1
+✖ all-tie cohorts use a deterministic neutral percentile (0.784817ms)
+  Error: AA cache directory must be outside a Git worktree
+      at assertOutsideGit (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:771:11)
+      at assertCacheDestination (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:786:3)
+      at normalizeRefreshOptions (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1368:3)
+      at refreshCapabilities (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1387:19)
+      at TestContext.<anonymous> (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.test.js:209:9)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1306:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:897:18)
+      at Test.postRun (node:internal/test_runner/test:1447:19)
+      at Test.run (node:internal/test_runner/test:1372:12)
+
+test at scripts/import-aa-capabilities.test.js:224:1
+✖ index versions remain separate content-addressed cohorts (0.799014ms)
+  Error: AA cache directory must be outside a Git worktree
+      at assertOutsideGit (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:771:11)
+      at assertCacheDestination (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:786:3)
+      at normalizeRefreshOptions (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1368:3)
+      at refreshCapabilities (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1387:19)
+      at TestContext.<anonymous> (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.test.js:232:9)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1306:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:897:18)
+      at Test.postRun (node:internal/test_runner/test:1447:19)
+      at Test.run (node:internal/test_runner/test:1372:12)
+
+test at scripts/import-aa-capabilities.test.js:271:1
+✖ missing key and API failures preserve current cache and evidence bytes (2.13537ms)
+  AssertionError [ERR_ASSERTION]: 401
+      at async TestContext.<anonymous> (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.test.js:314:5)
+      at async Test.run (node:internal/test_runner/test:1313:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:897:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: Error: AA cache directory must be outside a Git worktree
+        at assertOutsideGit (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:771:11)
+        at assertCacheDestination (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:786:3)
+        at normalizeRefreshOptions (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1368:3)
+        at refreshCapabilities (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1387:19)
+        at TestContext.<anonymous> (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.test.js:315:7)
+        at async Test.run (node:internal/test_runner/test:1313:7)
+        at async Test.processPendingSubtests (node:internal/test_runner/test:897:7),
+    expected: /HTTP 401/,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/import-aa-capabilities.test.js:330:1
+✖ malformed later pages and endpoint overrides fail before cache publication (1.26446ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /index version changed/. Input:
+  
+  'Error: AA cache directory must be outside a Git worktree'
+  
+      at async TestContext.<anonymous> (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.test.js:337:3)
+      at async Test.run (node:internal/test_runner/test:1313:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:897:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: Error: AA cache directory must be outside a Git worktree
+        at assertOutsideGit (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:771:11)
+        at assertCacheDestination (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:786:3)
+        at normalizeRefreshOptions (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1368:3)
+        at refreshCapabilities (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1387:19)
+        at TestContext.<anonymous> (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.test.js:338:5)
+        at Test.runInAsyncScope (node:async_hooks:227:14)
+        at Test.run (node:internal/test_runner/test:1306:25)
+        at Test.processPendingSubtests (node:internal/test_runner/test:897:18)
+        at Test.postRun (node:internal/test_runner/test:1447:19)
+        at Test.run (node:internal/test_runner/test:1372:12),
+    expected: /index version changed/,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/import-aa-capabilities.test.js:367:1
+✖ CLI exposes no endpoint override and cache integrity is fail-closed (92.08325ms)
+  Error: AA cache directory must be outside a Git worktree
+      at assertOutsideGit (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:771:11)
+      at assertCacheDestination (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:786:3)
+      at normalizeRefreshOptions (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1368:3)
+      at refreshCapabilities (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1387:19)
+      at TestContext.<anonymous> (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.test.js:383:9)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1306:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:897:18)
+      at Test.postRun (node:internal/test_runner/test:1447:19)
+      at Test.run (node:internal/test_runner/test:1372:12)
+
+test at scripts/import-aa-capabilities.test.js:416:1
+✖ refresh resolves cache symlinks and refuses echoed credentials (1.261355ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /credential material/. Input:
+  
+  'Error: AA cache directory must be outside a Git worktree'
+  
+      at async TestContext.<anonymous> (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.test.js:438:3)
+      at async Test.run (node:internal/test_runner/test:1313:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:897:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: Error: AA cache directory must be outside a Git worktree
+        at assertOutsideGit (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:771:11)
+        at assertCacheDestination (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:786:3)
+        at normalizeRefreshOptions (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1368:3)
+        at refreshCapabilities (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1387:19)
+        at TestContext.<anonymous> (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.test.js:439:5)
+        at async Test.run (node:internal/test_runner/test:1313:7)
+        at async Test.processPendingSubtests (node:internal/test_runner/test:897:7),
+    expected: /credential material/,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/import-aa-capabilities.test.js:450:1
+✖ refresh bounds streamed bodies and rejects cache child symlinks (2.460912ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /response-size limit/. Input:
+  
+  'Error: AA cache directory must be outside a Git worktree'
+  
+      at async TestContext.<anonymous> (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.test.js:454:3)
+      at async Test.run (node:internal/test_runner/test:1313:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:897:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: Error: AA cache directory must be outside a Git worktree
+        at assertOutsideGit (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:771:11)
+        at assertCacheDestination (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:786:3)
+        at normalizeRefreshOptions (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1368:3)
+        at refreshCapabilities (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1387:19)
+        at TestContext.<anonymous> (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.test.js:455:5)
+        at Test.runInAsyncScope (node:async_hooks:227:14)
+        at Test.run (node:internal/test_runner/test:1306:25)
+        at Test.processPendingSubtests (node:internal/test_runner/test:897:18)
+        at Test.postRun (node:internal/test_runner/test:1447:19)
+        at Test.run (node:internal/test_runner/test:1372:12),
+    expected: /response-size limit/,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/import-aa-capabilities.test.js:503:1
+✖ aa-import ledger producer rejects non-external evidence and unknown producers (1.068151ms)
+  Error: AA cache directory must be outside a Git worktree
+      at assertOutsideGit (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:771:11)
+      at assertCacheDestination (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:786:3)
+      at normalizeRefreshOptions (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1368:3)
+      at refreshCapabilities (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1387:19)
+      at TestContext.<anonymous> (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.test.js:505:9)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1306:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:897:18)
+      at Test.postRun (node:internal/test_runner/test:1447:19)
+      at Test.run (node:internal/test_runner/test:1372:12)
+
+test at scripts/import-aa-capabilities.test.js:599:1
+✖ aa importer cannot claim an evidence id owned by another producer (0.751975ms)
+  Error: AA cache directory must be outside a Git worktree
+      at assertOutsideGit (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:771:11)
+      at assertCacheDestination (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:786:3)
+      at normalizeRefreshOptions (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1368:3)
+      at refreshCapabilities (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1387:19)
+      at TestContext.<anonymous> (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.test.js:601:9)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1306:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:897:18)
+      at Test.postRun (node:internal/test_runner/test:1447:19)
+      at Test.run (node:internal/test_runner/test:1372:12)
+
+test at scripts/import-aa-capabilities.test.js:642:1
+✖ refresh rejects an evidence store inside a Git worktree before fetching (0.888903ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /evidence store must be outside a Git worktree/. Input:
+  
+  'Error: AA cache directory must be outside a Git worktree'
+  
+      at async TestContext.<anonymous> (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.test.js:647:3)
+      at async Test.run (node:internal/test_runner/test:1313:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:897:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: Error: AA cache directory must be outside a Git worktree
+        at assertOutsideGit (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:771:11)
+        at assertCacheDestination (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:786:3)
+        at normalizeRefreshOptions (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1368:3)
+        at refreshCapabilities (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1387:19)
+        at TestContext.<anonymous> (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.test.js:648:5)
+        at Test.runInAsyncScope (node:async_hooks:227:14)
+        at Test.run (node:internal/test_runner/test:1306:25)
+        at Test.processPendingSubtests (node:internal/test_runner/test:897:18)
+        at Test.postRun (node:internal/test_runner/test:1447:19)
+        at Test.run (node:internal/test_runner/test:1372:12),
+    expected: /evidence store must be outside a Git worktree/,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/import-aa-capabilities.test.js:663:1
+✖ failed current publication rolls back evidence and new cache objects (0.903791ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /current\.json/. Input:
+  
+  'Error: AA cache directory must be outside a Git worktree'
+  
+      at async TestContext.<anonymous> (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.test.js:666:3)
+      at async Test.run (node:internal/test_runner/test:1313:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:897:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: Error: AA cache directory must be outside a Git worktree
+        at assertOutsideGit (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:771:11)
+        at assertCacheDestination (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:786:3)
+        at normalizeRefreshOptions (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1368:3)
+        at refreshCapabilities (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1387:19)
+        at TestContext.<anonymous> (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.test.js:667:5)
+        at Test.runInAsyncScope (node:async_hooks:227:14)
+        at Test.run (node:internal/test_runner/test:1306:25)
+        at Test.processPendingSubtests (node:internal/test_runner/test:897:18)
+        at Test.postRun (node:internal/test_runner/test:1447:19)
+        at Test.run (node:internal/test_runner/test:1372:12),
+    expected: /current\.json/,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at scripts/import-aa-capabilities.test.js:690:1
+✖ ledger validation failure leaves prior current and cache objects unchanged (0.614887ms)
+  Error: AA cache directory must be outside a Git worktree
+      at assertOutsideGit (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:771:11)
+      at assertCacheDestination (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:786:3)
+      at normalizeRefreshOptions (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1368:3)
+      at refreshCapabilities (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1387:19)
+      at TestContext.<anonymous> (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.test.js:692:9)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1306:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:897:18)
+      at Test.postRun (node:internal/test_runner/test:1447:19)
+      at Test.run (node:internal/test_runner/test:1372:12)
+
+test at scripts/import-aa-capabilities.test.js:723:1
+✖ new cohorts retire prior candidates that fall below floor or disappear (0.729924ms)
+  Error: AA cache directory must be outside a Git worktree
+      at assertOutsideGit (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:771:11)
+      at assertCacheDestination (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:786:3)
+      at normalizeRefreshOptions (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1368:3)
+      at refreshCapabilities (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1387:19)
+      at TestContext.<anonymous> (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.test.js:725:9)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1306:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:897:18)
+      at Test.postRun (node:internal/test_runner/test:1447:19)
+      at Test.run (node:internal/test_runner/test:1372:12)
+
+test at scripts/import-aa-capabilities.test.js:792:1
+✖ recorded candidates are retired even when their cache was lost (0.858967ms)
+  Error: AA cache directory must be outside a Git worktree
+      at assertOutsideGit (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:771:11)
+      at assertCacheDestination (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:786:3)
+      at normalizeRefreshOptions (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1368:3)
+      at refreshCapabilities (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1387:19)
+      at TestContext.<anonymous> (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.test.js:794:9)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1306:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:897:18)
+      at Test.postRun (node:internal/test_runner/test:1447:19)
+      at Test.run (node:internal/test_runner/test:1372:12)
+
+test at scripts/import-aa-capabilities.test.js:849:1
+✖ equal-time retirement evidence wins over a provisional prior (0.75423ms)
+  Error: AA cache directory must be outside a Git worktree
+      at assertOutsideGit (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:771:11)
+      at assertCacheDestination (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:786:3)
+      at normalizeRefreshOptions (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1368:3)
+      at refreshCapabilities (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1387:19)
+      at TestContext.<anonymous> (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.test.js:852:9)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1306:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:897:18)
+      at Test.postRun (node:internal/test_runner/test:1447:19)
+      at Test.run (node:internal/test_runner/test:1372:12)
+
+test at scripts/import-aa-capabilities.test.js:900:1
+✖ transactional evidence cannot become visible before cache publication (0.641848ms)
+  Error: AA cache directory must be outside a Git worktree
+      at assertOutsideGit (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:771:11)
+      at assertCacheDestination (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:786:3)
+      at normalizeRefreshOptions (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1368:3)
+      at refreshCapabilities (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1387:19)
+      at TestContext.<anonymous> (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.test.js:902:9)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1306:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:897:18)
+      at Test.postRun (node:internal/test_runner/test:1447:19)
+      at Test.run (node:internal/test_runner/test:1372:12)
+
+test at scripts/import-aa-capabilities.test.js:946:1
+✖ a later recorded refresh carries retirement debt across no-record snapshots (0.694297ms)
+  Error: AA cache directory must be outside a Git worktree
+      at assertOutsideGit (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:771:11)
+      at assertCacheDestination (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:786:3)
+      at normalizeRefreshOptions (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1368:3)
+      at refreshCapabilities (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1387:19)
+      at TestContext.<anonymous> (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.test.js:948:9)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1306:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:897:18)
+      at Test.postRun (node:internal/test_runner/test:1447:19)
+      at Test.run (node:internal/test_runner/test:1372:12)
+
+test at scripts/import-aa-capabilities.test.js:1017:1
+✖ retirement after an unrecorded provisional targets recorded lineage (0.656415ms)
+  Error: AA cache directory must be outside a Git worktree
+      at assertOutsideGit (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:771:11)
+      at assertCacheDestination (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:786:3)
+      at normalizeRefreshOptions (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1368:3)
+      at refreshCapabilities (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1387:19)
+      at TestContext.<anonymous> (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.test.js:1027:9)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1306:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:897:18)
+      at Test.postRun (node:internal/test_runner/test:1447:19)
+      at Test.run (node:internal/test_runner/test:1372:12)
+
+test at scripts/import-aa-capabilities.test.js:1081:1
+✖ readCurrent binds manifest metadata and every raw object to the snapshot (0.634184ms)
+  Error: AA cache directory must be outside a Git worktree
+      at assertOutsideGit (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:771:11)
+      at assertCacheDestination (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:786:3)
+      at normalizeRefreshOptions (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1368:3)
+      at refreshCapabilities (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1387:19)
+      at TestContext.<anonymous> (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.test.js:1083:9)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1306:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:897:18)
+      at Test.postRun (node:internal/test_runner/test:1447:19)
+      at Test.run (node:internal/test_runner/test:1372:12)
+
+test at scripts/import-aa-capabilities.test.js:1129:1
+✖ an older completed fetch cannot overwrite a newer current snapshot (0.804244ms)
+  Error: AA cache directory must be outside a Git worktree
+      at assertOutsideGit (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:771:11)
+      at assertCacheDestination (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:786:3)
+      at normalizeRefreshOptions (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1368:3)
+      at refreshCapabilities (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1387:19)
+      at TestContext.<anonymous> (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.test.js:1131:9)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1306:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:897:18)
+      at Test.postRun (node:internal/test_runner/test:1447:19)
+      at Test.run (node:internal/test_runner/test:1372:12)
+
+test at scripts/import-aa-capabilities.test.js:1154:1
+✖ cache destination is re-resolved after fetch to catch ancestor swaps (0.888773ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /cache destination changed during refresh/. Input:
+  
+  'Error: AA cache directory must be outside a Git worktree'
+  
+      at async TestContext.<anonymous> (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.test.js:1162:3)
+      at async Test.run (node:internal/test_runner/test:1313:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:897:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: Error: AA cache directory must be outside a Git worktree
+        at assertOutsideGit (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:771:11)
+        at assertCacheDestination (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:786:3)
+        at normalizeRefreshOptions (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1368:3)
+        at refreshCapabilities (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.js:1387:19)
+        at TestContext.<anonymous> (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/qc/triage/base-wt/scripts/import-aa-capabilities.test.js:1163:5)
+        at Test.runInAsyncScope (node:async_hooks:227:14)
+        at Test.run (node:internal/test_runner/test:1306:25)
+        at Test.processPendingSubtests (node:internal/test_runner/test:897:18)
+        at Test.postRun (node:internal/test_runner/test:1447:19)
+        at Test.run (node:internal/test_runner/test:1372:12),
+    expected: /cache destination changed during refresh/,
+    operator: 'rejects',
+    diff: 'simple'
+  }

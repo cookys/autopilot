@@ -1,0 +1,10 @@
+=== T1: legacy dev-flow arms byte-identical to the pre-EVALX harness ===
+=== T2: E1 generic arms ===
+=== T3: E2 live packs equal their freeze ref; historical pack untouched ===
+=== T4: E3 fixture scripts (frozen subset, both arms, in the base commit) ===
+=== T5: E4 per-cell isolation ===
+=== T6: E5 manipulation check ===
+=== T7: matrix passthrough + resume ===
+=== amend-2: ONOFF_PROMPT_PREFIX is prepended identically in both arms; unset = task.md verbatim ===
+=== the real stores were never touched ===
+FAIL: real /run/user/<uid>/autopilot or ~/.autopilot root changed during the test (inode/mtime diff)

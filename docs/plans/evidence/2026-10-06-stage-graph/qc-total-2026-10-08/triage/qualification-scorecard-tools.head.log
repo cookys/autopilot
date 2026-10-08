@@ -1,0 +1,12 @@
+FAIL [qualification-scorecard-tools] r51: list --from failed
+FAIL [qualification-scorecard-tools] r51: list --from uses the pre-effort fallback when event id and bundle are absent: '  evidence        (pre-effort feed row — no event id / bundle recorded)' not found in output
+FAIL [qualification-scorecard-tools] r52: list --from failed
+FAIL [qualification-scorecard-tools] r52: list prints exactly one consolidated pre-effort seat_hash summary: expected '1', got '0'
+hooks/tests/qualification-scorecard-tools.test.sh: line 288: /home/cookys/.local/bin/node: Argument list too long
+FAIL [qualification-scorecard-tools] r75: alien-hash emits NOT_IN_BASELINE (not DEAD): 'PROFILE_GUIDED_DISPOSITION_NOT_IN_BASELINE' not found in output
+FAIL [qualification-scorecard-tools] 30 passed, 5 failed
+      - r51: list --from failed
+      - r51: list --from uses the pre-effort fallback when event id and bundle are absent: '  evidence        (pre-effort feed row — no event id / bundle recorded)' not found in output
+      - r52: list --from failed
+      - r52: list prints exactly one consolidated pre-effort seat_hash summary: expected '1', got '0'
+      - r75: alien-hash emits NOT_IN_BASELINE (not DEAD): 'PROFILE_GUIDED_DISPOSITION_NOT_IN_BASELINE' not found in output

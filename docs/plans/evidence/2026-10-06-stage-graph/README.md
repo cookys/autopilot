@@ -91,9 +91,14 @@ Release merges happen in the dedicated worktree `.claude/worktrees/release-3.0.0
   - **Generic: 5 markers checked, none regressed.**
   - Next: `check-guidance-eval` must accept the v5 suffix arm (BACKLOG e) before the cut gate can be run.
 
+- **Total QC and change arm v6 (2026-10-08).**
+  - `check-guidance-eval` now derives pack ids from the arm manifest (`265aa2a7`, BACKLOG e closed); on v5 it passes (43/43 byte-equal, scorer SHIP). v5 results committed (`3aae28a4`).
+  - Total QC of Train A + B (`8a10980f..3aae28a4`): 8 packets × 3 seats, then a delta review of the fixes, all SHIP-AS-IS — see [qc-total-2026-10-08/README.md](qc-total-2026-10-08/README.md). Fixes F1–F5 (docs, probe-unknown U4, preflight final-version match, 12 disposition rationales, 7 test suites) and guidance fixes G1–G5 (finish-flow marker clear at any size for l4–l6, ceo-agent project dir on L/XL, urgent probe scoped to M/L/XL, backlog-row cleanup, resume `--unit`).
+  - G1–G5 change guidance, so by owner decision a v6 arm was frozen (`f47798c0`, packs `*-sg-change-v6`/`*-sg-red-v6`, base arm unchanged) and the campaign relaunched on 2.1.292 into `results/stage-graph.v6.jsonl`. Same frozen rule (change ≥ 10/12, red ≤ 4/12, generic no regression).
+
 ## Open items for the alpha.1 cut
 
-1. **Total QC of the protected diff.** This is owed since the no-verify push. It also covers Train B. **Points for the reviewer:**
+1. **Total QC of the protected diff.** Done 2026-10-08 (see v6 entry above). This was owed since the no-verify push. It also covers Train B. **Points for the reviewer:**
    - (a) The profiles re-pin accounts 364 baseline rules as `removed` dispositions (12 relocated verbatim).
    - (b) To keep the shrink green, `profile-context-isolation`'s "inventory ≥ baseline" check was changed to allow for the disposition count. That changes a test assertion, so it needs a human look.
    - (c) P5a/P5b dropped requirements, listed above.

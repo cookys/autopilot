@@ -16,6 +16,11 @@
 //            <git-common-dir>/autopilot/work-orders/<root>/*.json   (campaign start = earliest bound progress receipt;
 //            the common dir comes from the envelope's scope.repo_identity, a published path, never a computed live base)
 //
+//   P7       <live_base>/runs/<project_key>.qc.json, .residue.json, .review.json; <live_base>/stage/<sid>.json; load-source.json; the marker's
+//            §2.9 fields (size, urgent, level, stage, stage_set_at, unit, review_families); the envelope's host_today_brain_usd / brain_cap_usd;
+//            the decisions sidecar's `ladder`. Each is optional: absent -> its slot is left out and its tab says "no data".
+//            The band is ONE line (band.tsx, layout in model.ts layoutBand); the ⓘ opens the pane on the Legend tab.
+//
 // $.session.id() is read on EVERY tick: /clear gives the session a new id while the timer keeps running (S7).
 // Every clock comparison uses $.clock.now(), so a test with a mocked clock decides fresh / stale.
 

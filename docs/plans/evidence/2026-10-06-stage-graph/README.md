@@ -103,3 +103,10 @@ Release merges happen in the dedicated worktree `.claude/worktrees/release-3.0.0
 - **P5 prerequisite (from P0):** the skill-onoff harness varies one skill per arm; the P5 change arm spans 16 skill packs + 8 files (`evals/skill-onoff/prereg/stage-graph.json`), so P5 first needs an arm builder that installs whole pack sets. Also P5 builds the fixture-scripts pack once `session-mode.js --size`, `stage-advance.js`, `stage-graph.js` exist.
 - **P0 deviations accepted:** first rung = `eligible_max` of the first classify (the resolver makes `recommend` host-dependent); expected `none` also accepts `U0`; `lib/p1w-markers.sh` not re-keyed (digest-frozen in `prereg/FROZEN.json`) — a sibling `lib/stage-graph-markers.sh` instead; horizons stop at `plan` (L/XL), `verify` (M), `code-review` (M! high-risk) because review rails need hetero engines a cell does not have.
 - **Cut-gate side effect to resolve before alpha.1:** `check-guidance-eval.js` requires every guidance-manifest file that differs from the 2.x base to be byte-equal to the evaluated pack. Any unrelated `references/*.md` / SKILL.md edit made between now and the cut (e.g. a new `references/evidence-discipline.md` section) therefore has to be inside the P5 pack or the cut fails. Pending lesson for `evidence-discipline.md` (golden green only while untracked; golden that pins every knob cannot see a default change) is parked here until then.
+
+## Reports
+
+- [eval-v1-diagnosis.md](eval-v1-diagnosis.md) — change arm v1 failure diagnosis (inferred; transcripts deleted)
+- [eval-v2-diagnosis.md](eval-v2-diagnosis.md) — arm v2 failure diagnosis
+- [eval-v3-lfeature-diagnosis.md](eval-v3-lfeature-diagnosis.md) — arm v3 l-feature diagnosis
+- [mods-candidates-survey.md](mods-candidates-survey.md) — mods candidates survey (folded into plan addendum A1)

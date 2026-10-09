@@ -26,7 +26,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: L
 - **Source**: depth-0 verified (hetero-impl-loop.md recipe ~120-283; no script builds the artifacts)
 - **Pointer**: docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/RESULTS.md
-- **Context**: a one-line change took five gate attempts: pipe in verify_cmd, session id stripped, repo-bound envelope; the front door names the contract but not how to make one.
+- **Context**: a one-line change took five gate attempts (verify_cmd pipe, session id stripped, repo-bound envelope). P7 gate 2026-10-09: the /l6 foreman returned BLOCKED until depth-0 authored the task-authority envelope.
 
 ### /l5 campaign status task reports can_merge and can_close false after a converged run
 - **Status**: open
@@ -1164,3 +1164,35 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: fleet peer revival.3d (cuda), 2026-10-09
 - **Pointer**: docs/backlog/peer-reported-revival3d-worktree-branch-accumulation.md
+
+### /l4–/l6 sessions never set a size, so the band position slot and Graph tab stay empty
+- **Status**: open
+- **Trigger**: before the 3.0.0 final cut (the P7 band shows no position for these sessions)
+- **Effort**: M
+- **Source**: P7 real-machine gate, 2026-10-09 (l4/l5/l6 panels: Graph says no stage walk published)
+- **Pointer**: docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/RESULTS.md
+- **Context**: the fix is a guidance change in the l4–l6 front doors (call session-mode set --size), so it needs a skill-onoff eval before it ships.
+
+### P7 gate capture races the band: facts are read before the band refreshes
+- **Status**: open
+- **Trigger**: next time the P7 gate is run on a real machine
+- **Effort**: S
+- **Source**: P7 real-machine gate, 2026-10-09 (l6-running-c-w80: band lagged 5 s, ⚙1 missing)
+- **Pointer**: docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/RESULTS.md
+- **Context**: capture.sh should wait until the band snapshot is not older than the facts timestamp before capturing, instead of a fixed delay.
+
+### A stray /tmp/.git keeps reappearing and turns suites red; the polluter is unknown
+- **Status**: open
+- **Trigger**: next time /tmp/.git is found (seen again before the alpha.1 cut)
+- **Effort**: S
+- **Source**: alpha.1 full-suite run, 2026-10-08; alpha.2 cut, 2026-10-09
+- **Pointer**: docs/backlog/import-aa-capabilities-test-host-pinned-tmp-in-worktree.md
+- **Context**: suspect eval `claude -p` cells running with cwd /tmp; find the writer (watch /tmp for .git) and make suites tolerate it. See the import-aa row above.
+
+### P7 test-hardening nits from review
+- **Status**: open
+- **Trigger**: when mods/live/register.ts or gate/check.js is next touched
+- **Effort**: S
+- **Source**: P7 hetero reviews (suggestion tier), 2026-10-09
+- **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/README.md
+- **Context**: untested `$.ui.panes()` throw path (register.ts ~405-410); cycle test lacks a Graph→Dispatch→Review press assertion; a double press before `$.ui.open` resolves reopens Legend; check.js tailProblem skips the non-ok band tail.

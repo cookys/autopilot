@@ -101,6 +101,39 @@ Release merges happen in the dedicated worktree `.claude/worktrees/release-3.0.0
   - Run notes: depth-0 paused the campaign once after 3 rows on a mistaken instrument suspicion (xs-feature change r1: the agent called `session-mode.js` by the plugin-dir path and gave up; the fixture scripts were present) — rows kept, resumed with the same command. Run 2 hit an expired OAuth session mid-run (68 `infra_fail runner_error`, 2 s each); resumed after a CLI probe and only those cells re-ran.
   - Cut gate: `check-guidance-eval.js --base 8a10980f --results …v6.jsonl` → ok, 43/43 byte-equal to the v6 packs, scorer SHIP.
 
+## P7 body (release/3.0.0, alpha.2)
+
+Contract: [`p7/contract.md`](p7/contract.md) (data facts D1–D4, slot grammar, width table). Plan: §P7 and Owner addendum A1.
+
+| Part | Commits | What shipped |
+|---|---|---|
+| contract | `addd22ab` | Data contract and band grammar written before code. |
+| ① data | `c53891f2`, `1702cdd5`, `f49d1adf`, `71525772`, merge `e3633b59` | `scripts/lib/brain-spend.js` (cost-fuse uses it, behaviour unchanged); `src/status/residue.js` writes `<live>/runs/<project_key>.residue.json` (reapable worktree residue only: clean-integrated and missing-dir); `src/status/stage-walk.js` writes `<live>/stage/<sid>.json`; the runs envelope gains `host_today_brain_usd` and `brain_cap_usd`; the decisions sidecar gains `ladder {rung, at}`. New schemas `residue`, `stage-walk`; `runs-live` and `decisions-sidecar` updated. Review round 1 fixes: incremental spend, `null` on unreadable, ladder timestamp validation (calendar-invalid rejected). |
+| ② mod | `4e368b48`, `70b0fcd1`, `d1585838`, `5507e7ac`, merge `fec1a9fd` | The band is one line of side-by-side widgets in priority order verdict, position, unit, dispatch, review, decisions, spend, hygiene, then the info icon. Width drops at <160 / <140 / <120 / <80; the narrower fallback drops the unit bar, then the pause count, then the gear count; the verdict glyph and the info icon always stay. The info icon opens an eight-tab panel (Legend, Now, Graph, Dispatch, Review, Decisions, Spend, Hygiene). Spend slot = host-today brain-tier spend over `cost_fuse.daily_usd_brain`. Review round 1 fixes: spend raw ratio, tiny-width fallback, Now row, position separator. |
+| keyboard | `581ab3c2`, `0b32958a` | The pane opened by the info press puts the keyboard ring on the open tab. Pressing the icon with the pane closed opens Legend; pressing it while open shows the next tab (keyboard: Ctrl+x Tab, then Enter repeatedly). |
+| ③ gate | `e1d177f6`, `95ed4fc3`, `2ed96442`, `b170549c`, `1f5a7868`, `9634a40c`, `7d90a78b`, `5e08cbb9`, `59ad445e`, `adbdc2ac` | `gate/` under `../2026-10-04-mods-p1c/`: `capture.sh -e`, `widths.sh`, `screenshot.sh` (colored PNGs via ansi2html and headless chrome), `check.js` (independent per-slot judgement from the contract) and `check.test.js`. `references/mods.md` was restored to the frozen eval set; watcher facts live in the P7 contract. |
+
+Every stage had a hetero review (opus, GLM, MiniMax, Qwen and sol seats) until SHIP-AS-IS.
+
+Alpha.1 regression fixes found while preparing this cut: `f28b1176` (FAILS to FAIL in the check-stage-vocab and stage-advance tests so the gate recognises them), `ebec83fd` (version-parsing tests read the version through `semver.js`), `7b72089e` (`scripts/preflight-portability.sh` rejected pre-release versions; it now calls `node scripts/lib/semver.js valid`; `semver.test.sh` section 6). The last one is shipped code, a PATCH.
+
+### P7 gate result (real machine, 2026-10-09)
+
+Full table: [`../2026-10-04-mods-p1c/gate/runs/RESULTS.md`](../2026-10-04-mods-p1c/gate/runs/RESULTS.md), section "P7 gate" and batches B and C. Modes: plain dev-flow, /l3, ceo-agent, /l4, /l5, /l6; states permission, idle, question, running, dispatch, done, stall; widths 209, 120 and 80; panel tabs Legend, Now, Graph.
+
+- Re-judging all 171 per-width captures in RESULTS.md with the final `check.js`: 170 PASS, 1 FAIL. The 11 captures that read FAIL in the table were judged by an earlier `check.js` (question dialog at 80 columns hides band and panel; display-width reason cut at 120; a /l4 session with no marker) and PASS after `2ed96442` and `b170549c`; the table keeps the original lines.
+- The one FAIL is `l6-running-c-w80`: the band lagged 5 s behind a hand that had just started, so the gear 1 was missing. It is a capture race, recorded as is and not re-run in place.
+- Keyboard tab cycle (`dev-flow-panel-keys-cycle`): PASS at 200 and 120 columns; each Enter advances one tab and wraps Hygiene to Legend. The earlier `dev-flow-panel-keys` FAILs (before `0b32958a`) are kept.
+- The /l5 and /l6 stall cells needed a sealed campaign; they ran on the rebuilt sandbox in batch C and PASS.
+
+### P7 known limits
+
+- /l4–/l6 sessions never set a size, so the position slot and the Graph tab show nothing for them (BACKLOG row).
+- The gate captures facts before the band refreshes (BACKLOG row, `l6-running-c-w80`).
+- A stray `/tmp/.git` keeps reappearing and reds suites; polluter unknown (BACKLOG row).
+- The /l6 depth-0 did not author the task-authority envelope (extended the existing /l5 scaffold row).
+- Review nits left for later: `$.ui.panes()` throw path untested, no Graph to Dispatch to Review press assertion in the cycle test, a double press before `$.ui.open` resolves reopens Legend, `check.js` does not judge the non-ok band tail (BACKLOG row).
+
 ## Open items for the alpha.1 cut
 
 1. **Total QC of the protected diff.** Done 2026-10-08 (see v6 entry above). This was owed since the no-verify push. It also covers Train B. **Points for the reviewer:**

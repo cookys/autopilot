@@ -508,3 +508,11 @@ test('GATEFIX dock detector: the boxed 80-column panel is not a dock (bodyColumn
   assert.strictEqual(derive(fixture('perm-w120', true)).columns, 65);
   assert.strictEqual(require('./check.js').dockOf(fs.readFileSync(path.join(FIX, 'idle-w80', 'pane.txt'), 'utf8')), null);
 });
+test('GATEFIX no scope (real l4-idle capture, run ended with session-mode clear): no marker and no envelope -> the bare verdict band or the no-project line passes, anything else FAILs', () => {
+  const r = run(fixture('l4-idle-w120'));
+  assert.strictEqual(r.ok, true, JSON.stringify(r.results.filter((x) => x.status === 'FAIL'))); assert.strictEqual(status(r, 'no-scope'), 'PASS');
+  const withBand = (band) => { const d = fixture('l4-idle-w120'); const p = path.join(d, 'pane.txt'); fs.writeFileSync(p, fs.readFileSync(p, 'utf8').split('◌ 待命 │ ⓘ').join(band)); return run(d); };
+  assert.strictEqual(withBand('no project · run: autopilot status runs --watch │ ⓘ').ok, true);
+  assert.strictEqual(withBand('● 進行中 │ ⓘ').ok, false); // the derived verdict is 待命
+  assert.strictEqual(withBand('◌ 待命 │ ⚙1 │ ⓘ').ok, false); // no facts back a slot
+});

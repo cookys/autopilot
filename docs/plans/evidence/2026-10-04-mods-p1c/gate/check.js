@@ -221,6 +221,8 @@ function derive(dir, opts = {}) {
   }
   // a snapshot is ok only when the marker root's own envelope is fresh (published_at within valid_for_s); otherwise the band is the non-ok line
   const okSnapshot = freshEnvelope(envelope, nowMs);
+  // no marker file and no envelope in the capture (e.g. the run ended with `session-mode clear`): the session has no scope of its own
+  const noScope = !isObj(marker) && !isObj(envelope);
   const envelopes = [envelope, ...extras.map((x) => x.envelope)].filter(isObj);
   const runs = envelopes.flatMap((e) => (Array.isArray(e.runs) ? e.runs.filter(isObj) : []));
   const stalledRows = runs.filter((r) => r.stall === true).length;
@@ -403,7 +405,7 @@ function derive(dir, opts = {}) {
   }
 
   return {
-    meta, mode: meta.mode || String(meta.cell || '').split('-')[0] || '?', verdict, mark, attentionKind: attKind, okSnapshot, columns, columnsHow, slots, over, notes, reasons, nowMs,
+    meta, mode: meta.mode || String(meta.cell || '').split('-')[0] || '?', verdict, mark, attentionKind: attKind, okSnapshot, noScope, columns, columnsHow, slots, over, notes, reasons, nowMs,
   };
 }
 
@@ -474,6 +476,17 @@ function judgeBand(d, band) {
   const res = (name, status, expected, got, source, detail) => results.push({ name, status, expected, got, source, detail: detail || '' });
   const iconDrawn = band.icon;
   // the non-ok snapshot
+  if (!d.okSnapshot && d.noScope) {
+    // No marker, so the mod resolves the project from the cwd path map instead: either no project / no envelope (the mod's plain
+    // `no project · run: …` / `unavailable · run: …` line), or the project-level envelope the capture driver does not copy, which
+    // draws the verdict alone. The capture holds no slot facts, so only a bare verdict band (derived from attention / turn) is accepted.
+    const bare = `${d.mark} ${d.verdict} │ ⓘ`;
+    const plainLine = band.kind === 'nonok' && /^(no project|unavailable) · run: .* │ ⓘ$/.test(band.text);
+    const ok = plainLine || band.text === bare;
+    res('no-scope', ok ? 'PASS' : 'FAIL', `\`${bare}\` or the mod's no-project / unavailable line (no marker, no envelope)`, band.text, 'marker.json and envelope.json both missing');
+    res('ⓘ', iconDrawn ? 'PASS' : 'FAIL', 'ⓘ', iconDrawn ? 'ⓘ' : 'none', 'contract slot 9: always drawn');
+    return results;
+  }
   if (!d.okSnapshot) {
     const plain = band.kind === 'nonok' && band.text.split(SEP).length === 2;
     res('nonok', plain ? 'PASS' : 'FAIL', '`<reason> │ ⓘ` (one dim line, no slots)', band.text, 'envelope.json missing / not fresh (non-ok snapshot)');

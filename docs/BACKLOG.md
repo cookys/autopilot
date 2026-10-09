@@ -1197,3 +1197,27 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: P7 hetero reviews (suggestion tier), 2026-10-09
 - **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/README.md
 - **Context**: untested `$.ui.panes()` throw path (register.ts ~405-410); cycle test lacks a Graph→Dispatch→Review press assertion; a double press before `$.ui.open` resolves reopens Legend; check.js tailProblem skips the non-ok band tail.
+
+### Hygiene tab truncates the needs_human command at the pane edge
+- **Status**: open
+- **Trigger**: when mods/live Hygiene tab is next touched, or before the 3.0.0 final cut
+- **Effort**: S
+- **Source**: residue-hygiene-w209 real-machine capture, 2026-10-09
+- **Pointer**: docs/plans/evidence/2026-10-09-residue-auto-reap/README.md
+- **Context**: the dim `command` line under each row ends in `…` at the pane edge, so the exact command cannot be read or copied in a narrow pane; wrap it or add a copy affordance.
+
+### the residue band reminder shows only where the runs watcher starts
+- **Status**: open
+- **Trigger**: before the 3.0.0 final cut, or the first report of a repo with residue and no `wt N`
+- **Effort**: S
+- **Source**: residue-hygiene-w209 real-machine capture, 2026-10-09
+- **Pointer**: docs/plans/evidence/2026-10-09-residue-auto-reap/README.md
+- **Context**: the watcher starts only in onboarded repos (.claude config) or with AUTOPILOT_RUNS_WATCH_AUTOSTART=1; elsewhere auto-reap still runs and writes the advisory but nothing shows `wt N`.
+
+### the docked panel narrows the band below 160 columns and hides the hygiene slot
+- **Status**: open
+- **Trigger**: when mods/live band layout or panel docking is next touched
+- **Effort**: S
+- **Source**: residue-hygiene-w209 real-machine capture, 2026-10-09
+- **Pointer**: docs/plans/evidence/2026-10-09-residue-auto-reap/README.md
+- **Context**: at 209 columns the auto-docked pane cut bodyColumns to 114, so `wt N` was hidden until the dock was closed.

@@ -270,6 +270,12 @@ test('NON-OK: no envelope -> one line `<reason> │ ⓘ`; a band drawn instead F
   assert.strictEqual(run(capture(files, ['◌ 待命 │ ⓘ'])).ok, false);
   assert.strictEqual(status(run(capture(files, ['no project │ extra │ ⓘ'])), 'nonok'), 'FAIL');
 });
+test('GATEFIX NON-OK: content after the ⓘ on the non-ok line FAILs; the [-] toggle does not', () => {
+  const files = { 'envelope.json': null };
+  assert.strictEqual(status(run(capture(files, ['no project · run: x │ ⓘ      [-]'])), 'nonok'), 'PASS');
+  assert.strictEqual(status(run(capture(files, ['no project · run: x │ ⓘ │ garbage'])), 'nonok'), 'FAIL');
+  assert.strictEqual(status(run(capture(files, ['no project · run: x │ ⓘ garbage'])), 'nonok'), 'FAIL');
+});
 test('NON-OK: a stale envelope is the non-ok line; a fresh envelope drawn as the non-ok line FAILs verdict', () => {
   const stale = { 'envelope.json': baseEnvelope({ published_at: iso(10) }) };
   assert.strictEqual(run(capture(stale, ['stale · run: autopilot status runs --watch │ ⓘ'])).ok, true);
@@ -547,4 +553,26 @@ test('GATEFIX no scope (real l4-idle capture, run ended with session-mode clear)
   assert.strictEqual(withBand('no project · run: autopilot status runs --watch │ ⓘ').ok, true);
   assert.strictEqual(withBand('● 進行中 │ ⓘ').ok, false); // the derived verdict is 待命
   assert.strictEqual(withBand('◌ 待命 │ ⚙1 │ ⓘ').ok, false); // no facts back a slot
+});
+
+// widths.sh with a stub tmux and a stub capture.sh that writes TWO lines (the second after the first was read): under pipefail a
+// `| head -n 1` made capture.sh die of SIGPIPE and the good capture was reported as failed. Takes ~6 s (the sweep's minimum redraw wait).
+test('GATEFIX widths.sh: a capture.sh that writes after its first line is a good capture (no SIGPIPE under pipefail)', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gatew-'));
+  fs.copyFileSync(path.join(__dirname, 'widths.sh'), path.join(dir, 'widths.sh'));
+  const sh = (n, body) => { fs.writeFileSync(path.join(dir, n), `#!/usr/bin/env bash\n${body}\n`, { mode: 0o755 }); };
+  fs.mkdirSync(path.join(dir, 'cap'));
+  sh('capture.sh', `echo "${dir}/cap"; sleep 0.5; echo "second line"`);
+  sh('screenshot.sh', 'exit 0');
+  fs.mkdirSync(path.join(dir, 'bin'));
+  fs.writeFileSync(path.join(dir, 'bin', 'tmux'), `#!/usr/bin/env bash
+case "$1" in
+  display) cat "${dir}/w" 2>/dev/null || echo 100 ;;
+  resize-window) while [ $# -gt 0 ]; do [ "$1" = -x ] && echo "$2" > "${dir}/w"; shift; done ;;
+esac
+exit 0
+`, { mode: 0o755 });
+  const p = spawnSync('bash', [path.join(dir, 'widths.sh'), 'cell', 'target'], { encoding: 'utf8', env: { ...process.env, PATH: `${path.join(dir, 'bin')}:${process.env.PATH}`, GATE_WIDTHS: '100', GATE_REDRAW_S: '6' } });
+  assert.strictEqual(p.status, 0, p.stderr);
+  assert.strictEqual(p.stdout.trim(), `100 ${dir}/cap`);
 });

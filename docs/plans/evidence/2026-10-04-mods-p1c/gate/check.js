@@ -509,7 +509,8 @@ function judgeBand(d, band) {
   }
   if (!d.okSnapshot) {
     const plain = band.kind === 'nonok' && band.text.split(SEP).length === 2;
-    res('nonok', plain ? 'PASS' : 'FAIL', '`<reason> │ ⓘ` (one dim line, no slots)', band.text, 'envelope.json missing / not fresh (non-ok snapshot)');
+    const tp = tailProblem(band, d);
+    res('nonok', plain && !tp ? 'PASS' : 'FAIL', '`<reason> │ ⓘ` (one dim line, no slots)', band.text, 'envelope.json missing / not fresh (non-ok snapshot)', tp || '');
     res('ⓘ', iconDrawn ? 'PASS' : 'FAIL', 'ⓘ', iconDrawn ? 'ⓘ' : 'none', 'contract slot 9: always drawn');
     return results;
   }

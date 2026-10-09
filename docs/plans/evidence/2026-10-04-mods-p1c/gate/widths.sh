@@ -38,7 +38,9 @@ for W in $WIDTHS; do
   sleep "$WAIT"
   GOT=$("${TMUX_CMD[@]}" display -p -t "$TARGET" '#{window_width}')
   if [ "$GOT" != "$W" ]; then echo "window is $GOT columns after asking for $W (a larger attached client pins it?)" >&2; RC=1; fi
-  OUT=$(bash "$HERE/capture.sh" "$CELL-w$W" "$TARGET" ${SID_ARG:+"$SID_ARG"} | head -n 1) || { echo "capture.sh failed at $W" >&2; RC=1; continue; }
+  # the whole output first, then its first line: `| head -n 1` would SIGPIPE a capture.sh that writes after its first line (141 under pipefail)
+  ALL=$(bash "$HERE/capture.sh" "$CELL-w$W" "$TARGET" ${SID_ARG:+"$SID_ARG"}) || { echo "capture.sh failed at $W" >&2; RC=1; continue; }
+  OUT=${ALL%%$'\n'*}
   if [ ! -d "$OUT" ]; then echo "capture.sh printed no capture dir at $W: '$OUT'" >&2; RC=1; continue; fi
   [ "${GATE_SKIP_SCREENSHOT:-}" = 1 ] || bash "$HERE/screenshot.sh" "$OUT" >/dev/null || RC=1
   echo "$W $OUT"

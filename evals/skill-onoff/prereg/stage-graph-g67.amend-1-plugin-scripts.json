@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "artifact_type": "skill_onoff_prereg_amendment",
+  "amendment": 1,
+  "row": "stage-graph-g67",
+  "date": "2026-10-10",
+  "made_after_v1_results_seen": true,
+  "v1_rescored": false,
+  "v1_status": "INSTRUMENT-DEFECTIVE for G6 (results/stage-graph-g67.v1.jsonl, arms v7: ON 1/3 on the G6 rows). Precondition 2 of the prereg (\"g6 ON cells reach session-mode.js through the fixture scripts\") was false: the skill text says node <plugin>/scripts/session-mode.js and the scratch plugin (run-skill-onoff-eval.sh, built from the arm files packs) held only lib, pin-evidence-anchors.js, reap-dispatch-branches.sh and repo-residue-sweep.js. One ON cell hit MODULE_NOT_FOUND; the others found it absent and skipped. The G6 result measures the instrument, not the text, and is not a NOT-SHIP of G6. G7 v1 (ON 3/3, OFF 0/3) is recorded but also superseded: the v8 text changes G7. v1 is never re-scored and never pooled with v2.",
+  "v2_run": "a NEW arm: ON = *-sg-change-v8 + guidance-files-sg-change-v8, OFF = *-sg-change-v6 unchanged, both with fixture-scripts-g67-v2; new results file results/stage-graph-g67.v2.jsonl",
+  "fixes": {
+    "plugin_scripts": {
+      "defect": "scratch plugin lacked scripts/session-mode.js and its require graph",
+      "change": "fixture-scripts-g67-v2 lists scripts/session-mode.js (+ its literal requires, followed by freeze-pack); installed in both arms, in fixture_scripts and in files (plugin root)"
+    },
+    "self_check": {
+      "defect": "nothing verified, before the agent started, that the scripts the skill text names exist in the plugin",
+      "change": "prereg plugin_required_scripts = [scripts/session-mode.js]; run-g67-campaign.js exports ONOFF_REQUIRE_PLUGIN_SCRIPTS; run-skill-onoff-eval.sh require()s each from the scratch plugin and, on failure, emits infra_fail/plugin_script_unresolvable without starting the agent",
+      "proof": "hooks/tests/skill-onoff-g67.test.sh section 7"
+    },
+    "arms": {
+      "change": "on.json -> -v8 change packs, off.json keeps -v6; both -> fixture-scripts-g67-v2; allowed_arm_difference unchanged (same five files)"
+    }
+  },
+  "unchanged": [
+    "thresholds",
+    "ship rule",
+    "briefs",
+    "markers",
+    "scorer",
+    "runner pin",
+    "timeouts",
+    "allowed_arm_difference (five files)"
+  ],
+  "post_merge_stamp": "arm manifest sha256 are null until stamp-g67-amendment.js runs after the post-merge pack freeze; FROZEN.json stage-graph-g67.amendments.amend-1-plugin-scripts is filled by the same command"
+}

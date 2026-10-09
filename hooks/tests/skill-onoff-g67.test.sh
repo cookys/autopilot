@@ -207,7 +207,7 @@ echo "=== 6. run-g67-campaign.js ==="
 out=$(node "$BASE/run-g67-campaign.js" --results "$TEST_TMP/dry.jsonl" --dry-run)
 [ "$(grep -c '^todo' <<<"$out")" -eq 24 ] || fail "dry run must list 24 todo cells"
 node -e 'const j=JSON.parse(process.argv[1].trim().split("\n").pop());if(j.cells_total!==24||j.cells_todo!==24||!(j.estimated_cost_usd.high>j.estimated_cost_usd.typical&&j.estimated_cost_usd.typical>j.estimated_cost_usd.low))process.exit(1)' "$out" || fail "dry-run summary shape"
-# synthetic packs: 4 skills x {off,on}, one guidance-files pack, one fixture pack, one companion
+# synthetic packs: 4 skills x {off,on}, one guidance-files pack, one fixture pack (also installed in the plugin root, carrying session-mode.js), one companion
 PK="$TEST_TMP/packs"; AR="$TEST_TMP/arms"; mkdir -p "$PK" "$AR"
 node - "$PK" "$AR" <<'NODE'
 const fs = require('fs'), path = require('path'), crypto = require('crypto');
@@ -224,9 +224,11 @@ put('l5-off', 'references/hetero-impl-loop.md', 'loop OFF\n'); put('l5-on', 'ref
 put('l5-off', 'references/other.md', 'o\n'); put('l5-on', 'references/other.md', 'o\n');
 put('files-x', 'references/x.md', 'x\n');
 put('fx', 'scripts/x.js', '// x\n');
+put('fx', 'scripts/session-mode.js', 'module.exports = {};\n'); // amendment 1: the plugin must carry it
+put('fx-broken', 'scripts/session-mode.js', 'require("./lib/not-shipped");\n');
 put('same', 'SKILL.md', 'same\n');
 fs.writeFileSync(path.join(pk, 'manifest.json'), JSON.stringify(man));
-for (const arm of ['off', 'on']) fs.writeFileSync(path.join(ar, `${arm}.json`), JSON.stringify({ schema_version: 1, arm, skills: { ...Object.fromEntries(skills.map((s) => [s, `${s}-${arm}`])), learn: 'same' }, files: ['files-x'], fixture_scripts: ['fx'] }));
+for (const arm of ['off', 'on']) fs.writeFileSync(path.join(ar, `${arm}.json`), JSON.stringify({ schema_version: 1, arm, skills: { ...Object.fromEntries(skills.map((s) => [s, `${s}-${arm}`])), learn: 'same' }, files: ['files-x', 'fx'], fixture_scripts: ['fx'] }));
 NODE
 rc=0; o=$(ONOFF_PACKS_DIR="$PK" node "$BASE/run-g67-campaign.js" --check-arms --arms-dir "$AR") || rc=$?
 [ "$rc" = 0 ] && grep -q '"ok":true' <<<"$o" || fail "check-arms should pass on a clean pair (rc=$rc $o)"
@@ -306,4 +308,70 @@ rc=0; o=$(PATH="$TEST_TMP/fakebin:$PATH" ONOFF_PACKS_DIR="$PK" node "$BASE/run-g
 [ "$rc" = 2 ] && grep -q 'registered pin' <<<"$o" || fail "live run must refuse an unpinned claude (rc=$rc $o)"
 [ ! -e "$TEST_TMP/live.jsonl" ] || fail "an unpinned refusal must not create a results file"
 
-echo "PASS: skill-onoff-g67 (markers, fixtures, scorer, timeout knob, campaign)"
+
+
+echo "=== 7. amendment 1: plugin-script self-check (v1: session-mode.js was absent from the plugin) ==="
+# the real prereg registers the script, and the campaign hands it to the harness
+node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));if(JSON.stringify(j.plugin_required_scripts)!==JSON.stringify(["scripts/session-mode.js"]))process.exit(1)' "$PREREG_REAL" || fail "prereg must register scripts/session-mode.js in plugin_required_scripts"
+# a stub that records that the agent was started
+SENT="$TEST_TMP/agent-started"
+cat > "$TEST_TMP/stub-sentinel.sh" <<STUB
+#!/usr/bin/env bash
+: > "$SENT"
+printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"ls"}}]}}'
+STUB
+chmod +x "$TEST_TMP/stub-sentinel.sh"
+# bad arm A: session-mode.js only in the fixture repo (fixture_scripts), NOT in the plugin root (the exact v1 shape)
+cp "$AR/on.json" "$TEST_TMP/arm-noplugin.json"
+node -e 'const fs=require("fs");const p=process.argv[1];const j=JSON.parse(fs.readFileSync(p));j.files=["files-x"];fs.writeFileSync(p,JSON.stringify(j))' "$TEST_TMP/arm-noplugin.json"
+# bad arm B: present but its require graph does not resolve
+cp "$AR/on.json" "$TEST_TMP/arm-broken.json"
+node -e 'const fs=require("fs");const p=process.argv[1];const j=JSON.parse(fs.readFileSync(p));j.files=["files-x","fx-broken"];fs.writeFileSync(p,JSON.stringify(j))' "$TEST_TMP/arm-broken.json"
+cell7() { # $1 out dir  $2 arm manifest  (env ONOFF_REQUIRE_PLUGIN_SCRIPTS from the caller)
+  rm -f "$SENT"
+  ONOFF_STUB_BIN="$TEST_TMP/stub-sentinel.sh" ONOFF_PACKS_DIR="$PK" bash "$BASE/run-skill-onoff-eval.sh" --task g6-l4 --arm-manifest "$2" --model sonnet --runner stub --check-skill l4 --out "$1" >/dev/null
+}
+ONOFF_REQUIRE_PLUGIN_SCRIPTS=scripts/session-mode.js cell7 "$TEST_TMP/s7-ok" "$AR/on.json"
+grep -q '"failure_class":null' "$TEST_TMP/s7-ok/result.json" || fail "plugin carries session-mode.js: the cell must proceed ($(cat "$TEST_TMP/s7-ok/result.json"))"
+[ -e "$SENT" ] || fail "plugin carries session-mode.js: the agent must be started"
+ONOFF_REQUIRE_PLUGIN_SCRIPTS=scripts/session-mode.js cell7 "$TEST_TMP/s7-absent" "$TEST_TMP/arm-noplugin.json"
+grep -q '"failure_class":"infra_fail","failure_cause":"plugin_script_unresolvable"' "$TEST_TMP/s7-absent/result.json" || fail "session-mode.js absent from the plugin must be infra_fail/plugin_script_unresolvable ($(cat "$TEST_TMP/s7-absent/result.json"))"
+[ ! -e "$SENT" ] || fail "absent script: the agent must NOT be started"
+grep -q 'session-mode.js' "$TEST_TMP/s7-absent/preflight.log" || fail "preflight.log must name the script"
+ONOFF_REQUIRE_PLUGIN_SCRIPTS=scripts/session-mode.js cell7 "$TEST_TMP/s7-broken" "$TEST_TMP/arm-broken.json"
+grep -q '"failure_cause":"plugin_script_unresolvable"' "$TEST_TMP/s7-broken/result.json" || fail "a script whose require graph is missing must be plugin_script_unresolvable"
+[ ! -e "$SENT" ] || fail "broken require graph: the agent must NOT be started"
+# a path escaping the plugin root: plant a LOADABLE escape.js beside the scratch plugin (TMPDIR is private to this test), so only the guard can fail it
+mkdir -p "$TEST_TMP/s7tmp"; echo "module.exports = {};" > "$TEST_TMP/s7tmp/escape.js"
+TMPDIR="$TEST_TMP/s7tmp" ONOFF_REQUIRE_PLUGIN_SCRIPTS=../escape.js cell7 "$TEST_TMP/s7-escape" "$AR/on.json"
+grep -q '"failure_cause":"plugin_script_unresolvable"' "$TEST_TMP/s7-escape/result.json" || fail "a path escaping the plugin root must fail the check ($(cat "$TEST_TMP/s7-escape/result.json"))"
+grep -q "bad required script path" "$TEST_TMP/s7-escape/preflight.log" || fail "the escape must be refused by the path guard, not by a failed load"
+[ ! -e "$SENT" ] || fail "escape: the agent must NOT be started"
+# default (env unset): no check, rows of every other eval are unchanged
+( unset ONOFF_REQUIRE_PLUGIN_SCRIPTS; cell7 "$TEST_TMP/s7-default" "$TEST_TMP/arm-noplugin.json" )
+grep -q '"failure_class":null' "$TEST_TMP/s7-default/result.json" && [ -e "$SENT" ] || fail "without the env the check must be off"
+# campaign level: a plugin that lacks the script STOPs the whole campaign (24 infra_fail rows), nothing is scored
+mkdir -p "$TEST_TMP/arms-noplugin"
+for a in off on; do node -e 'const fs=require("fs");const j=JSON.parse(fs.readFileSync(process.argv[1]));j.files=["files-x"];fs.writeFileSync(process.argv[2],JSON.stringify(j))' "$AR/$a.json" "$TEST_TMP/arms-noplugin/$a.json"; done
+RES7="$TEST_TMP/e2e7/stage-graph-g67.v2.jsonl"; mkdir -p "$TEST_TMP/e2e7"
+rc=0; o=$(ONOFF_STUB_BIN="$STUB_E2E" ONOFF_PACKS_DIR="$PK" node "$BASE/run-g67-campaign.js" --results "$RES7" --runner stub --arms-dir "$TEST_TMP/arms-noplugin" --prereg "$PREREG" 2>/dev/null | tail -1) || rc=$?
+[ "$rc" = 4 ] && grep -q '"STOP"' <<<"$o" || fail "a plugin without session-mode.js must STOP the campaign (rc=$rc $o)"
+[ "$(grep -c '"failure_cause":"plugin_script_unresolvable"' "$RES7")" -eq 24 ] || fail "expected 24 plugin_script_unresolvable rows"
+# a live (cc) run on the pinned claude refuses null or mismatching arm shas (the real prereg is unstamped until the post-merge stamp)
+mkdir -p "$TEST_TMP/pinbin"; printf '#!/usr/bin/env bash\necho "2.1.292 (Claude Code)"\n' > "$TEST_TMP/pinbin/claude"; chmod +x "$TEST_TMP/pinbin/claude"
+node -e 'const fs=require("fs");const j=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));j.runner_pin_path=process.argv[3];fs.writeFileSync(process.argv[2],JSON.stringify(j))' "$PREREG" "$TEST_TMP/prereg-pinbin.json" "$TEST_TMP/pinbin/"
+rc=0; o=$(PATH="$TEST_TMP/pinbin:$PATH" ONOFF_PACKS_DIR="$PK" node "$BASE/run-g67-campaign.js" --results "$TEST_TMP/live2.jsonl" --arms-dir "$AR" --prereg "$TEST_TMP/prereg-pinbin.json" 2>&1) || rc=$?
+[ "$rc" = 2 ] && grep -q "not stamped" <<<"$o" || fail "live run must refuse null arm shas (rc=$rc $o)"
+node -e 'const fs=require("fs");const j=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));j.arm_manifests.off.sha256="d".repeat(64);j.arm_manifests.on.sha256="e".repeat(64);fs.writeFileSync(process.argv[1],JSON.stringify(j))' "$TEST_TMP/prereg-pinbin.json"
+rc=0; o=$(PATH="$TEST_TMP/pinbin:$PATH" ONOFF_PACKS_DIR="$PK" node "$BASE/run-g67-campaign.js" --results "$TEST_TMP/live2.jsonl" --arms-dir "$AR" --prereg "$TEST_TMP/prereg-pinbin.json" 2>&1) || rc=$?
+[ "$rc" = 2 ] && grep -q "does not match" <<<"$o" || fail "live run must refuse mismatching arm shas (rc=$rc $o)"
+[ ! -e "$TEST_TMP/live2.jsonl" ] || fail "a refusal must not create a results file"
+
+# the prereg must register plugin_required_scripts: absent or empty is a loud refusal, not a silently disabled check
+for v in delete empty; do
+  node -e 'const fs=require("fs");const j=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));if(process.argv[3]==="delete")delete j.plugin_required_scripts;else j.plugin_required_scripts=[];fs.writeFileSync(process.argv[2],JSON.stringify(j))' "$PREREG" "$TEST_TMP/prereg-nopsr.json" "$v"
+  rc=0; o=$(node "$BASE/run-g67-campaign.js" --results "$TEST_TMP/nopsr.jsonl" --dry-run --prereg "$TEST_TMP/prereg-nopsr.json" 2>&1) || rc=$?
+  [ "$rc" = 2 ] && grep -q plugin_required_scripts <<<"$o" || fail "prereg with plugin_required_scripts $v must be refused (rc=$rc $o)"
+done
+
+echo "PASS: skill-onoff-g67 (markers, fixtures, scorer, timeout knob, campaign, plugin-script self-check)"

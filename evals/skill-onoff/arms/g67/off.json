@@ -21,10 +21,10 @@
   },
   "files": [
     "guidance-files-sg-change-v6",
-    "fixture-scripts-g67"
+    "fixture-scripts-g67-v2"
   ],
   "fixture_scripts": [
     "fixture-scripts-sg",
-    "fixture-scripts-g67"
+    "fixture-scripts-g67-v2"
   ]
 }

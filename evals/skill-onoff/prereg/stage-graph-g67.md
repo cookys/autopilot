@@ -166,3 +166,37 @@ cells, mean $0.135, max $0.517): low $3.25, **typical $6.50** (2× mean, an assu
 (SHIP, NOT-SHIP ×3, STOP ×3 incl. rerun-clears, INSTRUMENT-INVALID ×5), the timeout knob, `--check-arms` (clean + three planted
 reds), and a stub-runner end-to-end campaign (failing runner ⇒ STOP, resume ⇒ SHIP, third run adds no rows, unpinned `claude` ⇒
 refusal). Mutation-checked: dropping the `--size` or `--yes` conjunct turns the suite red.
+
+## Amendment 1 (instrument) 2026-10-10 — made AFTER the v1 results were seen
+
+Machine-readable record: `prereg/stage-graph-g67.amend-1-plugin-scripts.json`; recorded in `prereg/FROZEN.json`
+`stage-graph-g67.amendments.amend-1-plugin-scripts`.
+
+**v1 status.** `results/stage-graph-g67.v1.jsonl` (arms v7) is **INSTRUMENT-DEFECTIVE for G6** and stays recorded as run. Precondition 2
+above was false: the skill text says `node <plugin>/scripts/session-mode.js set …`, but the scratch plugin (assembled by
+`run-skill-onoff-eval.sh` from the arm's `files` packs) held only `lib/`, `pin-evidence-anchors.js`, `reap-dispatch-branches.sh` and
+`repo-residue-sweep.js`. One ON cell hit `MODULE_NOT_FOUND`; the others found the script absent and skipped it. The G6 ON 1/3 therefore
+measures the instrument, not the text, and is **not** a NOT-SHIP of G6. G7 v1 (ON 3/3, OFF 0/3) is recorded, and is also superseded,
+because the v8 text changes G7. v1 is never re-scored and never pooled with v2.
+
+**v2 is a new arm, a new results file.** ON = the `*-sg-change-v8` packs + `guidance-files-sg-change-v8`; OFF = the `*-sg-change-v6`
+packs, unchanged; both with `fixture-scripts-g67-v2`. Results go to `results/stage-graph-g67.v2.jsonl`. Thresholds, ship rule, briefs,
+markers, scorer, runner pin, timeouts and the five-file `allowed_arm_difference` are unchanged.
+
+**Changes (each fixes a reproducible defect; none is justified by "makes it pass").**
+
+1. `fixture-scripts-g67-v2` adds `scripts/session-mode.js` to the pack, identically in both arms and in both install places (fixture
+   repo root and plugin root). Its literal require graph is followed by `freeze-pack`; 62 files at a7533ce4, and
+   `node <pack>/scripts/session-mode.js set --level l4 --size XS` runs from the pack alone. `fixture-scripts-g67` (v1) stays in
+   `packs/` as history; no arm references it.
+2. Harness self-check. `plugin_required_scripts` (prereg) is exported by `run-g67-campaign.js` as `ONOFF_REQUIRE_PLUGIN_SCRIPTS`;
+   `run-skill-onoff-eval.sh` `require()`s each from the assembled scratch plugin before the agent starts, so the whole require graph
+   must load. A failure is `infra_fail` / `plugin_script_unresolvable`, the agent is never started, and the campaign STOPs on it like any
+   infra cell; it never scores. Spend-free proof: `hooks/tests/skill-onoff-g67.test.sh` section 7.
+3. A live run refuses to start while the prereg's arm-manifest `sha256` are null or differ from `arms/g67/*.json`.
+
+**Post-merge freeze (not done yet; needs the close-session behaviour of `batch/r2-mech` and the v8 text in the tree).** The exact
+commands are `fixture_scripts_freeze.post_merge_steps` in `prereg/stage-graph-g67.json`; the last one, `stamp-g67-amendment.js`,
+writes the two arm shas and the amendment digests. Until then the arm shas are null and no live cell can run.
+
+Precondition 2 of the original list is replaced by: `session-mode.js` loads from the scratch plugin, checked per cell before the agent starts.

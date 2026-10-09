@@ -2,7 +2,7 @@
   "schema_version": 1,
   "artifact_type": "skill_onoff_prereg",
   "row": "stage-graph-g67",
-  "status": "FROZEN 2026-10-10 (FROZEN.json row stage-graph-g67; arm manifest shas set; packs *-sg-change-v7 and fixture-scripts-g67 built before any live cell)",
+  "status": "AMENDED 2026-10-10 (amendment 1, after the v1 results were seen): v1 is INSTRUMENT-DEFECTIVE for G6; the v2 attempt is a NEW arm (v8 packs, fixture-scripts-g67-v2). Arm manifest shas are null until `node evals/skill-onoff/stamp-g67-amendment.js` runs after the post-merge freeze (see fixture_scripts_freeze.post_merge_steps); a live run refuses to start while they are null.",
   "design": "human-readable twin: prereg/stage-graph-g67.md; changes under test: G6 (l4/l5/l6 entry records --size) and G7 (finish-flow close-out runs close-session) of the guidance-v7 branch (194e2ecc)",
   "model": "sonnet",
   "runner": "claude -p (headless depth-0)",
@@ -16,13 +16,13 @@
   "arm_manifests": {
     "off": {
       "file": "arms/g67/off.json",
-      "sha256": "bd3f90f2fd035b6eddaef7525f843a0a5a40ea56f30334707ccf0b0751d84679",
-      "packs": "*-sg-change-v6 (= stage-graph change arm as of 71fac023) + fixture-scripts-sg + fixture-scripts-g67"
+      "sha256": null,
+      "packs": "*-sg-change-v6 (= stage-graph change arm as of 71fac023) + fixture-scripts-sg + fixture-scripts-g67-v2"
     },
     "on": {
       "file": "arms/g67/on.json",
-      "sha256": "888ef51540459a58b87ddae53679e7ae329e9aa26384b2e0a68902553964755f",
-      "packs": "*-sg-change-v7 (freeze-guidance-arm.js change --suffix v7, after the guidance-v7 merge) + fixture-scripts-sg + fixture-scripts-g67"
+      "sha256": null,
+      "packs": "*-sg-change-v8 (freeze-guidance-arm.js change --suffix v8, after the merge of guidance-v8 + close-session) + fixture-scripts-sg + fixture-scripts-g67-v2"
     }
   },
   "allowed_arm_difference": {
@@ -36,11 +36,20 @@
     "note": "v7 change set is FIVE files (four SKILL.md + l5/references/hetero-impl-loop.md, which adds the size to the l5 entry and degrade commands); off and on must differ ONLY in these, enforced file-by-file by run-g67-campaign.js --check-arms on the frozen packs"
   },
   "fixture_scripts_freeze": {
-    "pack": "fixture-scripts-g67",
-    "command": "node evals/skill-onoff/freeze-pack.js --id fixture-scripts-g67 --scripts scripts/repo-residue-sweep.js,scripts/pin-evidence-anchors.js,scripts/reap-dispatch-branches.sh,scripts/lib/json-emit.sh,scripts/lib/worktree-reap.sh --ref <merged develop sha containing close-session AND the guidance-v7 merge>",
-    "why_explicit_list": "repo-residue-sweep.js spawns scripts/pin-evidence-anchors.js via path.join(__dirname, ...) and finish-flow runs reap-dispatch-branches.sh (+ the two shell libs it sources); freeze-pack follows only literal relative JS requires, so these are named explicitly. Verified 2026-10-10 against release-3.0.0 @ 29938656: 13 files, close-session exits 0 on the g7-close fixture.",
-    "installed_twice": "in the manifest fixture_scripts (copied onto the fixture repo root, after fixture-scripts-sg) AND in the manifest files list (copied to the synthetic PLUGIN root). The second is load-bearing: finish-flow derives autopilot_root from the plugin root and its resolver requires scripts/reap-dispatch-branches.sh there; without it the G7 row cannot even resolve its script path in the eval plugin",
-    "same_in_both_arms": "both arm manifests list the pack in both places: the OFF arm HAS the close-session sweep too, so the only variable is the guidance text"
+    "pack": "fixture-scripts-g67-v2",
+    "supersedes": "fixture-scripts-g67 (v1; stays in packs/ and manifest.json as history, no arm references it)",
+    "command": "node evals/skill-onoff/freeze-pack.js --id fixture-scripts-g67-v2 --scripts scripts/session-mode.js,scripts/repo-residue-sweep.js,scripts/pin-evidence-anchors.js,scripts/reap-dispatch-branches.sh,scripts/lib/json-emit.sh,scripts/lib/worktree-reap.sh --ref <merged develop sha containing close-session AND the batch/r2-mech close-session behaviour>",
+    "why_explicit_list": "freeze-pack follows only literal relative JS requires. session-mode.js is now listed so the plugin root carries it (v1 omitted it: the skill text says <plugin>/scripts/session-mode.js and the eval plugin had only the 13 close-session files). Its literal require graph (campaign-verification, mission-routing-admission, project-key, live-pointer, jsonl-store, and the lazy runs-watch) is followed automatically: checked 2026-10-10 against a7533ce4, 62 files, `node <pack>/scripts/session-mode.js set --level l4 --size XS` exits 0 from the pack alone. repo-residue-sweep.js spawns pin-evidence-anchors.js through path.join(__dirname, ...) and finish-flow runs reap-dispatch-branches.sh (+ the two shell libs), so those stay explicit.",
+    "installed_twice": "both arm manifests list the pack in fixture_scripts (fixture repo root) AND in files (synthetic PLUGIN root); the second is what puts scripts/session-mode.js and scripts/repo-residue-sweep.js where the skill text looks for them",
+    "same_in_both_arms": "identical in off.json and on.json; the only variable is the guidance text",
+    "post_merge_steps": [
+      "git -C <merged tree> rev-parse HEAD   # the merged develop sha, call it $SHA; it must contain close-session (batch/r2-mech) and the guidance v8 text",
+      "node evals/skill-onoff/freeze-pack.js --id fixture-scripts-g67-v2 --scripts scripts/session-mode.js,scripts/repo-residue-sweep.js,scripts/pin-evidence-anchors.js,scripts/reap-dispatch-branches.sh,scripts/lib/json-emit.sh,scripts/lib/worktree-reap.sh --ref $SHA",
+      "node evals/skill-onoff/freeze-guidance-arm.js change --suffix v8 --arms-dir \"$(mktemp -d)\"   # from the merged working tree; freezes the 16 *-sg-change-v8 + guidance-files-sg-change-v8; --arms-dir keeps arms/stage-graph untouched. Skip when those packs already exist (the stage-graph v8 row freezes the same ids).",
+      "node evals/skill-onoff/run-g67-campaign.js --check-arms   # off(v6) vs on(v8) differ only in the five registered files",
+      "node evals/skill-onoff/stamp-g67-amendment.js   # writes the two arm sha256 into this file and the amendment digests into prereg/FROZEN.json",
+      "bash hooks/tests/skill-onoff-g67.test.sh && git add -A evals/skill-onoff && git commit   # commit packs + stamp together"
+    ]
   },
   "tasks": {
     "g6-l4": {
@@ -95,5 +104,13 @@
   "markers": {
     "g6_size": "the FIRST `session-mode.js set` Bash invocation carrying the task's level (--level lN, or --entry-level lN) also carries --size <XS|S|M|L|XL> (literal)",
     "g7_close": "ANY Bash invocation of `repo-residue-sweep.js close-session` carrying --session <non-empty: literal sid or $CLAUDE_CODE_SESSION_ID> and --yes"
-  }
+  },
+  "results_files": {
+    "v1": "results/stage-graph-g67.v1.jsonl (arms v7; INSTRUMENT-DEFECTIVE for G6, superseded for G7; kept as recorded, never re-scored)",
+    "v2": "results/stage-graph-g67.v2.jsonl (arms v8, the only file a verdict under amendment 1 may come from)"
+  },
+  "plugin_required_scripts": [
+    "scripts/session-mode.js"
+  ],
+  "plugin_required_scripts_note": "run-g67-campaign.js exports these as ONOFF_REQUIRE_PLUGIN_SCRIPTS; run-skill-onoff-eval.sh require()s each from the assembled scratch plugin before the agent starts. A script that does not load (absent, or a missing module in its require graph) makes the cell infra_fail/plugin_script_unresolvable and the agent is never started (STOP, not a score)."
 }

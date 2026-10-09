@@ -105,4 +105,18 @@ assert_eq "$EX" "0" "hook: artifact present → exit 0"
 OUT="$(run_pre_push "0000000000000000000000000000000000000000" "$TIP4" "$TEST_TMP/block.md")"; EX=$?
 assert_eq "$EX" "0" "hook: branch-delete (zero local) → exit 0"
 
+# T9: shared decision lib missing -> degrade open (exit 0) but LOUD on stderr
+mv "$SBX/scripts/lib/qc-evidence.sh" "$SBX/scripts/lib/qc-evidence.sh.off"
+OUT="$(run_pre_push "$TIP4" "$TIP3" "$TEST_TMP/block.md")"; EX=$?
+assert_eq "$EX" "0" "hook: qc-evidence.sh missing -> degrade open exit 0"
+assert_contains "$OUT" "qc-gate: WARNING shared decision lib" "hook: qc-evidence.sh missing -> stderr warning"
+mv "$SBX/scripts/lib/qc-evidence.sh.off" "$SBX/scripts/lib/qc-evidence.sh"
+
+# T10: resolver missing -> degrade open but LOUD
+mv "$SBX/scripts/resolve-qc-gate.sh" "$SBX/scripts/resolve-qc-gate.sh.off"
+OUT="$(run_pre_push "$TIP4" "$TIP3" "$TEST_TMP/block.md")"; EX=$?
+assert_eq "$EX" "0" "hook: resolver missing -> degrade open exit 0"
+assert_contains "$OUT" "qc-gate: WARNING resolver" "hook: resolver missing -> stderr warning"
+mv "$SBX/scripts/resolve-qc-gate.sh.off" "$SBX/scripts/resolve-qc-gate.sh"
+
 finalize_test

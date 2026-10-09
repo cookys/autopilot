@@ -193,6 +193,18 @@ OUT="$(STUB_MODE=ship_tautology "$SCRIPT" --runner codex --model gpt-5.5 --diff-
 assert_contains "$OUT" "NO-FINDING-PROOF contains a tautological checked, evidence, or conclusion value" \
   "blacklist value uses the battery tautology message (preservation)"
 
+# Multi-line proof (3.0.0 total QC K2): all three fields present across lines is accepted;
+# a missing or empty field across lines still fails.
+OUT="$(STUB_MODE=ship_multiline_proof "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "multi-line no-finding proof with all three fields is accepted"
+assert_contains "$OUT" '"status": "reviewed"' "multi-line proof → reviewed"
+assert_contains "$OUT" 'conclusion=both gates fully enclose' "multi-line proof is folded into one parsed proof"
+OUT="$(STUB_MODE=ship_multiline_missing "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "multi-line proof missing conclusion still fails"
+assert_contains "$OUT" '"status": "no_verdict"' "multi-line proof missing conclusion → no_verdict"
+OUT="$(STUB_MODE=ship_multiline_empty "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "multi-line proof with empty conclusion still fails"
+
 # 反向：放寬分隔符**沒有**放寬反鴨子蓋章的閘門。缺欄位、同義反覆仍然擋。
 OUT="$(STUB_MODE=ship_missing_conclusion "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "proof without a conclusion field still fails"

@@ -366,10 +366,16 @@ if [ -n "$CHECK_SKILL" ]; then
 else
   INVOKED_FIELDS=$(printf '"skill_invoked_devflow":%s' "$skill_invoked_devflow")
 fi
+# Arm-manifest rows additionally carry the sha256 of the manifest file they ran under, so
+# scripts/check-guidance-eval.js can refuse a results file produced by a different arm.
+ARM_SHA_FIELD=""
+if [ -n "$ARM_MANIFEST" ]; then
+  ARM_SHA_FIELD=$(printf ',"arm_manifest_sha256":"%s"' "$(sha256sum "$ARM_MANIFEST" | cut -d' ' -f1)")
+fi
 RESULT_JSON="$OUT_DIR/result.json"
-printf '{"task_id":"%s","arm":"%s","model":"%s","runner":"%s","runner_version":"%s","rep":%s,"duration_s":%s,"frozen_base_sha":"%s","markers":%s,%s,"failure_class":%s,"failure_cause":%s}\n' \
+printf '{"task_id":"%s","arm":"%s","model":"%s","runner":"%s","runner_version":"%s","rep":%s,"duration_s":%s,"frozen_base_sha":"%s","markers":%s,%s,"failure_class":%s,"failure_cause":%s%s}\n' \
   "$TASK_ID" "$ARM" "$MODEL" "$RUNNER" "$runner_version_clean" "$REP" \
   "$((END_TIME - START_TIME))" "$FROZEN_BASE_SHA" "$markers_json" \
-  "$INVOKED_FIELDS" "$failure_class" "$failure_cause" > "$RESULT_JSON"
+  "$INVOKED_FIELDS" "$failure_class" "$failure_cause" "$ARM_SHA_FIELD" > "$RESULT_JSON"
 
 cat "$RESULT_JSON"

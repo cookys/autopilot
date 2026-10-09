@@ -112,10 +112,27 @@ for (const d of differing) {
   d.ok = true;
 }
 
+// Bind the results file to the arm manifest: every change-arm row must carry the sha256 of the arm
+// manifest it ran under (written by run-skill-onoff-eval.sh), and it must equal the digest of --arm.
+function armBindingFailures(file) {
+  const want = sha(fs.readFileSync(armPath));
+  let rows;
+  try { rows = fs.readFileSync(file, 'utf8').split('\n').filter((l) => l.trim()).map((l) => JSON.parse(l)); } catch (e) { return [`results file unreadable for arm binding: ${e.message}`]; }
+  const changeRows = rows.filter((r) => r && r.arm === 'change');
+  if (!changeRows.length) return ['results file has no change-arm rows to bind to the arm manifest'];
+  const unstamped = changeRows.filter((r) => typeof r.arm_manifest_sha256 !== 'string').length;
+  const wrong = changeRows.filter((r) => typeof r.arm_manifest_sha256 === 'string' && r.arm_manifest_sha256 !== want).length;
+  const out = [];
+  if (unstamped) out.push(`${unstamped} change-arm row(s) carry no arm_manifest_sha256 (results not bound to the arm manifest)`);
+  if (wrong) out.push(`${wrong} change-arm row(s) were produced under a different arm manifest (arm_manifest_sha256 != sha256 of ${path.basename(armPath)})`);
+  return out;
+}
+
 let score = null;
 if (differing.length) {
   if (!resultsPath) failures.push('results file required: manifest files differ from base but --results was not given');
   else {
+    failures.push(...armBindingFailures(resultsPath));
     const r = cp.spawnSync('node', [scorer, 'score', '--results', resultsPath, '--prereg', preregPath], { encoding: 'utf8', maxBuffer: 1 << 26 });
     let parsed = null;
     try { parsed = JSON.parse(r.stdout.trim().split('\n').pop()); } catch { /* leave null */ }

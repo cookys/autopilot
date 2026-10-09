@@ -1329,5 +1329,26 @@ assert_contains "$T10_OUT" "WARNING: Diff size" "test 10: diff size warning prin
 assert_contains "$T10_OUT" "exceeds 400000 bytes" "test 10: diff size warning names threshold"
 assert_contains "$T10_OUT" "--exclude" "test 10: diff size warning suggests --exclude"
 
+# Test 11: chain.json read-modify-write is serialised by a lock (backlog: collect appended without a lock)
+# 11a: a fresh lock held by someone else makes collect wait, then fail loudly -- never write around it
+mkdir -p "$LEDGER/review-p_lock"
+mkdir "$LEDGER/review-p_lock/chain.json.lock"
+T11A_OUT=$(AUTOPILOT_CHAIN_LOCK_TIMEOUT_MS=400 node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_lock --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T11A_RC=$?
+assert_exit_code "$T11A_RC" "1" "test 11a: collect exits 1 while another holder owns the chain lock"
+assert_contains "$T11A_OUT" "waiting for the chain.json lock" "test 11a: timeout message names the lock"
+assert_file_absent "$LEDGER/review-p_lock/chain.json" "test 11a: nothing written around the held lock"
+# 11b: a stale lock (crashed holder) is broken and the collect proceeds
+mkdir -p "$LEDGER/review-p_stale"; mkdir "$LEDGER/review-p_stale/chain.json.lock"; sleep 0.05
+T11B_OUT=$(AUTOPILOT_CHAIN_LOCK_STALE_MS=1 node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_stale --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T11B_RC=$?
+assert_exit_code "$T11B_RC" "0" "test 11b: stale lock is broken, collect succeeds"
+assert_file_absent "$LEDGER/review-p_stale/chain.json.lock" "test 11b: lock released after the write"
+# 11c: concurrent collects of the same phase/generation never leave a corrupt chain or a stuck lock
+for i in 1 2 3 4; do
+  node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_race --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" >/dev/null 2>&1 &
+done
+wait
+assert_eq "$(node -e 'const c=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); console.log(Array.isArray(c)&&c.length===1&&c[0].generation===1)' "$LEDGER/review-p_race/chain.json")" "true" "test 11c: concurrent collects leave one valid generation-1 entry"
+assert_file_absent "$LEDGER/review-p_race/chain.json.lock" "test 11c: no lock left behind"
+
 finalize_test
 

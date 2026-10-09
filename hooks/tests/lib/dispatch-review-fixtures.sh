@@ -196,6 +196,33 @@ case "$MODE" in
     echo "NO-FINDING-PROOF: checked=diff; evidence=tests. conclusion=looks good"
     echo "$END"
     ;;
+  ship_multiline_proof)
+    # Real K2 shape: the proof wraps, one field per line.
+    echo "$BEGIN"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "FINDINGS: none"
+    echo "NO-FINDING-PROOF: checked=neutral-arm control flow and keyPrefix equality;"
+    echo "  evidence=the gated block encloses every new read and write;"
+    echo "  conclusion=both gates fully enclose their new control flow"
+    echo "$END"
+    ;;
+  ship_multiline_missing)
+    echo "$BEGIN"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "FINDINGS: none"
+    echo "NO-FINDING-PROOF: checked=neutral-arm control flow;"
+    echo "  evidence=the gated block encloses every new read and write"
+    echo "$END"
+    ;;
+  ship_multiline_empty)
+    echo "$BEGIN"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "FINDINGS: none"
+    echo "NO-FINDING-PROOF: checked=neutral-arm control flow;"
+    echo "  evidence=the gated block encloses every new read and write;"
+    echo "  conclusion="
+    echo "$END"
+    ;;
   fix_with_proof)
     echo "$BEGIN"
     echo "VERDICT: FIX-THEN-SHIP"

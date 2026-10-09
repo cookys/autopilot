@@ -35,6 +35,41 @@ function writeFileSyncAtomic(targetPath, content) {
   }
 }
 
+// Exclusive lock around a chain.json read-modify-write. mkdir is atomic, so the lock directory
+// <chain>.lock is the mutex; a lock older than the stale age (crashed holder) is broken. Waiting is
+// bounded: past the timeout the caller gets a loud error instead of a lost or interleaved update.
+function withChainLock(chainPath, fn) {
+  const lockPath = `${chainPath}.lock`;
+  const timeoutMs = Number(process.env.AUTOPILOT_CHAIN_LOCK_TIMEOUT_MS) > 0 ? Number(process.env.AUTOPILOT_CHAIN_LOCK_TIMEOUT_MS) : 15000;
+  const staleMs = Number(process.env.AUTOPILOT_CHAIN_LOCK_STALE_MS) > 0 ? Number(process.env.AUTOPILOT_CHAIN_LOCK_STALE_MS) : 30000;
+  fs.mkdirSync(path.dirname(chainPath), { recursive: true });
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      fs.mkdirSync(lockPath);
+      break;
+    } catch (e) {
+      if (!e || e.code !== 'EEXIST') throw e;
+      try {
+        if (Date.now() - fs.statSync(lockPath).mtimeMs > staleMs) {
+          fs.rmdirSync(lockPath);
+          continue;
+        }
+      } catch (_e) { continue; } // holder released between mkdir and stat: retry
+      if (Date.now() >= deadline) {
+        console.error(`ERROR: Timed out after ${timeoutMs}ms waiting for the chain.json lock ${lockPath} (another collect holds it; remove it if no collect is running)`);
+        process.exit(1);
+      }
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+    }
+  }
+  try {
+    return fn();
+  } finally {
+    try { fs.rmdirSync(lockPath); } catch (_e) { /* already gone */ }
+  }
+}
+
 // Trusted floor for reviewed seats — the SAME sources check-phase-review-receipt.js honours
 // (--min-reviewed-seats flag, else AUTOPILOT_MIN_REVIEWED_SEATS, else all seats), same grammar.
 const CANONICAL_POSITIVE_INT_RE = /^[1-9][0-9]*$/;
@@ -708,6 +743,9 @@ async function handleCollect(flags) {
   }
 
   function saveChainEntry(newEntry) {
+    withChainLock(chainPath, () => saveChainEntryLocked(newEntry));
+  }
+  function saveChainEntryLocked(newEntry) {
     let currentChain = [];
     if (fs.existsSync(chainPath)) {
       try {

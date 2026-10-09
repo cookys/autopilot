@@ -210,8 +210,10 @@ async function orphanResidueCount($: EngineInterface): Promise<number> {
       // the FIRST `.git` met is the repo: a directory (it holds HEAD) or a gitfile. If its result file cannot be resolved or read the answer
       // is 0; a parent repo's file is never borrowed.
       if (await readText($, dir + '/.git/HEAD') !== null) return autoResidueCount(await readText($, dir + '/.git/autopilot-residue-auto.json'))
-      const gitdir = gitdirOfGitFile(await readText($, dir + '/.git'), dir)
-      if (gitdir !== null) {
+      const gitText = await readText($, dir + '/.git')
+      if (gitText !== null) { // a `.git` file exists: it is the repo, even when it is empty or unparseable
+        const gitdir = gitdirOfGitFile(gitText, dir)
+        if (gitdir === null) return 0
         const common = commonDirOfGitdir(gitdir, await readText($, gitdir + '/commondir'))
         return autoResidueCount(await readText($, common + '/autopilot-residue-auto.json'))
       }

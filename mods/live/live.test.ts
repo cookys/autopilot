@@ -425,6 +425,12 @@ for (const surface of SURFACES) {
     w.files['/work/repo/.git'] = 'gitdir: /nowhere/.git/worktrees/x\n'
     await w.clock.advance(5000)
     expect(await bandText($, surface)).not.toContain('wt ')
+    // an empty or unparseable gitfile is still the first .git: 0, never the parent's 7
+    for (const junk of ['', 'garbage\n']) {
+      w.files['/work/repo/.git'] = junk
+      await w.clock.advance(5000)
+      expect(await bandText($, surface)).not.toContain('wt ')
+    }
     // a relative submodule gitfile reads the submodule's own result file
     w.files['/work/repo/.git'] = 'gitdir: ../.git/modules/sub\n'
     w.files['/work/.git/modules/sub/autopilot-residue-auto.json'] = auto(4)

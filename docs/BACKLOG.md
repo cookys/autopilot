@@ -1174,14 +1174,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/RESULTS.md
 - **Context**: the fix is a guidance change in the l4–l6 front doors (call session-mode set --size), so it needs a skill-onoff eval before it ships.
 
-### P7 gate capture races the band: facts are read before the band refreshes
-- **Status**: open
-- **Trigger**: next time the P7 gate is run on a real machine
-- **Effort**: S
-- **Source**: P7 real-machine gate, 2026-10-09 (l6-running-c-w80: band lagged 5 s, ⚙1 missing)
-- **Pointer**: docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/RESULTS.md
-- **Context**: capture.sh should wait until the band snapshot is not older than the facts timestamp before capturing, instead of a fixed delay.
-
 ### A stray /tmp/.git keeps reappearing and turns suites red; the polluter is unknown
 - **Status**: open
 - **Trigger**: next time /tmp/.git is found (seen again before the alpha.1 cut)
@@ -1189,22 +1181,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: alpha.1 full-suite run, 2026-10-08; alpha.2 cut, 2026-10-09
 - **Pointer**: docs/backlog/import-aa-capabilities-test-host-pinned-tmp-in-worktree.md
 - **Context**: suspect eval `claude -p` cells running with cwd /tmp; find the writer (watch /tmp for .git) and make suites tolerate it. See the import-aa row above.
-
-### P7 test-hardening nits from review
-- **Status**: open
-- **Trigger**: when mods/live/register.ts or gate/check.js is next touched
-- **Effort**: S
-- **Source**: P7 hetero reviews (suggestion tier), 2026-10-09
-- **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/README.md
-- **Context**: untested `$.ui.panes()` throw path (register.ts ~405-410); cycle test lacks a Graph→Dispatch→Review press assertion; a double press before `$.ui.open` resolves reopens Legend; check.js tailProblem skips the non-ok band tail.
-
-### Hygiene tab truncates the needs_human command at the pane edge
-- **Status**: open
-- **Trigger**: when mods/live Hygiene tab is next touched, or before the 3.0.0 final cut
-- **Effort**: S
-- **Source**: residue-hygiene-w209 real-machine capture, 2026-10-09
-- **Pointer**: docs/plans/evidence/2026-10-09-residue-auto-reap/README.md
-- **Context**: the dim `command` line under each row ends in `…` at the pane edge, so the exact command cannot be read or copied in a narrow pane; wrap it or add a copy affordance.
 
 ### the residue band reminder shows only where the runs watcher starts
 - **Status**: open
@@ -1214,10 +1190,3 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-10-09-residue-auto-reap/README.md
 - **Context**: the watcher starts only in onboarded repos (.claude config) or with AUTOPILOT_RUNS_WATCH_AUTOSTART=1; elsewhere auto-reap still runs and writes the advisory but nothing shows `wt N`.
 
-### the docked panel narrows the band below 160 columns and hides the hygiene slot
-- **Status**: open
-- **Trigger**: when mods/live band layout or panel docking is next touched
-- **Effort**: S
-- **Source**: residue-hygiene-w209 real-machine capture, 2026-10-09
-- **Pointer**: docs/plans/evidence/2026-10-09-residue-auto-reap/README.md
-- **Context**: at 209 columns the auto-docked pane cut bodyColumns to 114, so `wt N` was hidden until the dock was closed.

@@ -139,6 +139,8 @@ type World = {
   toasts: string[]
   panes: string[]
   opens: { id: string; title?: string; focus?: true; closeOnEscape?: true }[]
+  panesThrow: boolean // $.ui.panes() rejects (the engine cannot list panes)
+  openGate: Promise<void> | null // $.ui.open does not resolve (and the pane is not listed) until this settles
   writes: string[]
   reads: string[]
   lists: string[]
@@ -147,7 +149,7 @@ type World = {
 
 // Registers the bottom hooks (what the engine would answer) for one test.
 function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A): World {
-  const w: World = { files, sid: { value: sid }, cwdReal: { value: CWD }, toasts: [], panes: [], opens: [], writes: [], reads: [], lists: [], clock: undefined as never }
+  const w: World = { files, sid: { value: sid }, cwdReal: { value: CWD }, toasts: [], panes: [], opens: [], panesThrow: false, openGate: null, writes: [], reads: [], lists: [], clock: undefined as never }
   w.clock = mock.clock(on, { now: nowMs })
   mock.env(on, { HOME })
   on('fs.read', ($, e) => {
@@ -182,9 +184,14 @@ function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A): World {
   on('session.end', () => ({ sessionId: w.sid.value }))
   on('ui.invalidate', () => ({ value: undefined }))
   on('ui.toast', ($, e) => { w.toasts.push(e.text); return { value: undefined } })
-  on('ui.open', ($, e) => { w.opens.push({ id: e.id, title: e.title, focus: e.focus, closeOnEscape: e.closeOnEscape }); if (!w.panes.includes(e.id)) w.panes.push(e.id); return { value: { isPlaced: true } } })
+  on('ui.open', async ($, e) => {
+    w.opens.push({ id: e.id, title: e.title, focus: e.focus, closeOnEscape: e.closeOnEscape })
+    if (w.openGate !== null) await w.openGate
+    if (!w.panes.includes(e.id)) w.panes.push(e.id)
+    return { value: { isPlaced: true } }
+  })
   on('ui.close', ($, e) => { w.panes = w.panes.filter(id => id !== e.id); return { value: undefined } })
-  on('ui.panes', () => ({ value: w.panes.map(id => ({ id, title: 'Autopilot', isShown: true, isFocused: false, isPlaced: true })) }))
+  on('ui.panes', () => { if (w.panesThrow) throw new Error('engine cannot list panes'); return { value: w.panes.map(id => ({ id, title: 'Autopilot', isShown: true, isFocused: false, isPlaced: true })) } })
   return w
 }
 
@@ -1965,12 +1972,12 @@ const RICH_209 = '⏸ 疑似卡住 │ M!·l5 ▸ implement ◷3m │ ▰▰▰�
 const RICH_WIDTHS: [number, string][] = [
   [209, RICH_209],
   [160, RICH_209],
-  [159, '⏸ 疑似卡住 │ M!·l5 ▸ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙2 ⏸1 │ R3 ⟲ · QC ✓ │ ◆3 ?1 U2 │ $120/150 │ ⓘ'],
-  [140, '⏸ 疑似卡住 │ M!·l5 ▸ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙2 ⏸1 │ R3 ⟲ · QC ✓ │ ◆3 ?1 U2 │ $120/150 │ ⓘ'],
-  [139, '⏸ 疑似卡住 │ M!·l5 ▸ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙2 ⏸1 │ R3 ⟲ · QC ✓ │ ⓘ'],
-  [120, '⏸ 疑似卡住 │ M!·l5 ▸ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙2 ⏸1 │ R3 ⟲ · QC ✓ │ ⓘ'],
-  [119, '⏸ 疑似卡住 │ M!·l5 ▸ implement │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙2 ⏸1 │ ⓘ'],
-  [80, '⏸ 疑似卡住 │ M!·l5 ▸ implement │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙2 ⏸1 │ ⓘ'],
+  [159, '⏸ 疑似卡住 │ M!·l5 ▸ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙2 ⏸1 │ R3 ⟲ · QC ✓ │ ◆3 ?1 U2 │ $120/150 │ wt 2 │ ⓘ'],
+  [140, '⏸ 疑似卡住 │ M!·l5 ▸ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙2 ⏸1 │ R3 ⟲ · QC ✓ │ ◆3 ?1 U2 │ $120/150 │ wt 2 │ ⓘ'],
+  [139, '⏸ 疑似卡住 │ M!·l5 ▸ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙2 ⏸1 │ R3 ⟲ · QC ✓ │ wt 2 │ ⓘ'],
+  [120, '⏸ 疑似卡住 │ M!·l5 ▸ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙2 ⏸1 │ R3 ⟲ · QC ✓ │ wt 2 │ ⓘ'],
+  [119, '⏸ 疑似卡住 │ M!·l5 ▸ implement │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙2 ⏸1 │ wt 2 │ ⓘ'],
+  [80, '⏸ 疑似卡住 │ M!·l5 ▸ implement │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙2 ⏸1 │ wt 2 │ ⓘ'],
   [79, '⏸ 疑似卡住 │ ▰▰▰▱▱ │ ⚙2 ⏸1 │ ⓘ'],
   [60, '⏸ 疑似卡住 │ ▰▰▰▱▱ │ ⚙2 ⏸1 │ ⓘ'],
 ]
@@ -2094,6 +2101,10 @@ for (const surface of SURFACES) {
     expect(await shownTab()).toBe('now')
     await press()
     expect(await shownTab()).toBe('graph')
+    await press()
+    expect(await shownTab()).toBe('dispatch') // Graph -> Dispatch -> Review is the middle of the ring
+    await press()
+    expect(await shownTab()).toBe('review')
     // a mouse click on a tab, then the press continues from the clicked tab
     const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
     await pane.press({ key: 'review' })
@@ -2105,6 +2116,49 @@ for (const surface of SURFACES) {
     w.panes = []
     await press()
     expect(await shownTab()).toBe('legend')
+  })
+
+  test('P7 band: $.ui.panes() throwing reads as closed: the press opens the panel on Legend and does not break the band (' + surface + ')', async ($, on) => {
+    const w = world(on, richWorld())
+    await start($, surface)
+    w.panesThrow = true
+    const band = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    const shownTab = async () => {
+      const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+      const tab = (await pane.findAll({ type: 'Button' }) as Drawn[]).find(b => b.props?.autoFocus === true)?.props?.key
+      await pane.unmount()
+      return tab
+    }
+    for (let i = 0; i < 2; i += 1) { // without a pane list every press is "closed": Legend each time, never a throw
+      const ui = await band()
+      await ui.press({ key: 'info' })
+      await ui.unmount()
+      expect(await shownTab()).toBe('legend')
+    }
+    expect(w.opens.length).toBe(2)
+    expect(w.opens.every(o => o.id === 'autopilot-live' && o.focus === true)).toBe(true)
+    expect((await bandLine($, surface, 209)).info).toBeDefined() // the band still draws
+  })
+
+  test('P7 band: a second press before $.ui.open resolves moves on to the next tab, it does not reopen Legend (' + surface + ')', async ($, on) => {
+    const w = world(on, richWorld())
+    await start($, surface)
+    let release: () => void = () => {}
+    w.openGate = new Promise<void>(r => { release = r })
+    const band = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    const first = await band()
+    const firstPress = first.press({ key: 'info' }) // the open is parked on the gate: the pane is not listed yet
+    const second = await band()
+    const secondPress = second.press({ key: 'info' })
+    await new Promise(r => setTimeout(r, 20))
+    release()
+    await Promise.all([firstPress, secondPress])
+    await first.unmount()
+    await second.unmount()
+    const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+    const tab = (await pane.findAll({ type: 'Button' }) as Drawn[]).find(b => b.props?.autoFocus === true)?.props?.key
+    await pane.unmount()
+    expect(tab).toBe('now') // Legend (first press) then Now (second press)
   })
 
   test('P7 band: a non-ok snapshot is one dim line `<reason> │ ⓘ`, the reason cut to fit (' + surface + ')', async ($, on) => {
@@ -2197,6 +2251,10 @@ for (const surface of SURFACES) {
     expect(hygiene.texts).toContain('2 need you · 3 MB · auto 3h0m ago: −2 wt, 1 branches archived')
     expect(hygiene.texts).toContain('worktree …/worktrees/hands-x · dirty · 4d · 2 MB · failure')
     expect(hygiene.texts).toContain('  git -C /home/u/proj worktree remove --force /home/u/proj/.claude/worktrees/hands-x')
+    // the needs_human command wraps (never cut at the pane edge); the neighbouring row lines stay single-line
+    const cmdNode = walkTexts(hygiene.tree).find(n => textOf(n).startsWith('  git -C /home/u/proj worktree remove'))
+    expect(cmdNode?.props?.wrap).toBe('wrap')
+    expect(walkTexts(hygiene.tree).find(n => textOf(n) === 'worktree …/worktrees/hands-x · dirty · 4d · 2 MB · failure')?.props?.wrap).toBe('truncate')
     expect(hygiene.texts).toContain('branch feature/old · unintegrated-branch · 20d · —')
     expectThemeOnly(hygiene.tree as Drawn)
   })
@@ -2335,6 +2393,21 @@ test('P7 model: the stage text is cut with … when the line still does not fit,
   expect(line.text.startsWith('● 進行中 │ M·l5 ▸ implement')).toBe(true)
   expect(line.text.endsWith('… │ ⚙1 │ ⓘ')).toBe(true)
   expect(layoutBand(slots, 209).text).toBe('● 進行中 │ M·l5 ▸ implement-' + 'x'.repeat(70) + ' ◷3m │ ⚙1 │ ⓘ')
+})
+
+test('P7 width table: below 160 the load-source chip goes but `wt N` stays down to 80 (a docked panel cannot hide the owner reminder)', () => {
+  const ls = readLoadSource(JSON.stringify({ schema: 'autopilot.load-source/1', source: 'dev', marketplace: 'directory', behind_upstream: 3, flags: [], stale_cache_dirs: [] }))
+  const rs = (n: number) => readResidue(JSON.stringify({ schema: 'autopilot.residue/1', project_key: KEY, reapable_worktrees: 0, by_class: {}, needs_human_count: n }), KEY)
+  const slots = (n: number, withLs = true) => bandSlots({
+    verdict: { mark: '●', word: '進行中', key: 'suggestion' }, marker: null, live: 1, stalled: 0, review: null, qc: null, decisions: null, spend: null,
+    loadSource: withLs ? ls : null, residue: rs(n), nowMs: 0,
+  })
+  expect(layoutBand(slots(2), 209).text).toBe('● 進行中 │ ⚙1 │ dev ↓3 · wt 2 │ ⓘ')
+  expect(layoutBand(slots(2), 159).text).toBe('● 進行中 │ ⚙1 │ wt 2 │ ⓘ') // the docked panel case (bodyColumns 114 at 209 columns)
+  expect(layoutBand(slots(2), 114).text).toBe('● 進行中 │ ⚙1 │ wt 2 │ ⓘ')
+  expect(layoutBand(slots(2, false), 114).text).toBe('● 進行中 │ ⚙1 │ wt 2 │ ⓘ')
+  expect(layoutBand(slots(0), 114).text).toBe('● 進行中 │ ⚙1 │ ⓘ') // no residue to act on: the chip alone leaves no empty slot or doubled separator
+  expect(layoutBand(slots(2), 79).text).toBe('● 進行中 │ ⚙1 │ ⓘ') // < 80 keeps only verdict, dispatch, unit bar
 })
 
 // ---- P7 review round 1 fixes ----

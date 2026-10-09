@@ -36,7 +36,9 @@ tmux 的細節（兩個 session 同時開時最容易出錯）：
 
 `capture.sh` 只讀、不寫 live 目錄和 marker 目錄；它會自己從 pane 的目錄找到最新的 session marker。找錯時，把 session id 當第三個參數傳進去。
 
-**P7 一行 band（stage-graph alpha.2 起）。** band 現在只有一行：`<結論> │ <位置> │ <單元> │ <派工> │ <review> │ <決策> │ <花費> │ <衛生> │ ⓘ`，空的槽整個省略，窄螢幕依寬度表拿掉槽（< 160 衛生；< 140 花費、決策；< 120 ◷ 時間、review；< 80 只剩結論、派工、單元進度條、ⓘ）。契約：`docs/plans/evidence/2026-10-06-stage-graph/p7/contract.md` §②。原來的第二行（理由）搬到面板的 Now 分頁，不再由 `check.js` 判。
+band 每約 5 秒才重讀一次來源檔，剛發生的事（例如剛開始的派工）可能還沒畫上去。所以 `capture.sh` 存完後會自己跑 `check.js`；FAIL 就等 `GATE_SETTLE_STEP_S`（預設 3 秒）再抓一次（先 pane、後來源檔），最多等 `GATE_BAND_WAIT_S`（預設 14 秒，設 0 就只抓一次）。留下的是最後一次，被取代的不留；等滿還是 FAIL 就照實留下並在 stderr 說明，`meta.json` 的 `settle_attempt` 記是第幾次。
+
+**P7 一行 band（stage-graph alpha.2 起）。** band 現在只有一行：`<結論> │ <位置> │ <單元> │ <派工> │ <review> │ <決策> │ <花費> │ <衛生> │ ⓘ`，空的槽整個省略，窄螢幕依寬度表拿掉槽（< 160 衛生的載入來源 chip（`wt N` 留到 80）；< 140 花費、決策；< 120 ◷ 時間、review；< 80 只剩結論、派工、單元進度條、ⓘ）。契約：`docs/plans/evidence/2026-10-06-stage-graph/p7/contract.md` §②。原來的第二行（理由）搬到面板的 Now 分頁，不再由 `check.js` 判。
 
 `capture.sh` 除了 `pane.txt` 也存彩色的 `pane.ansi`，並把 D1–D4 與 qc / review / load-source / residue / stage 檔、session marker 一起複製進存檔目錄，`meta.json` 記 `window_width`、`mode`（`GATE_MODE`，沒設就取格子名第一段）。`check.js` 從這些檔獨立推出每一槽，每槽印一行 `PASS|FAIL|ABSENT <槽> expected … got … [來源]`，最後一行固定是 `PASS <mode> fields=<n>` 或 `FAIL <mode> fields=<n> failed=<槽,…>`（n = 判了幾槽，含 `layout`：整行順序、分隔、寬度）。寬度表被拿掉的槽必須是 ABSENT，畫出來就 FAIL。寬度表套在 `bodyColumns` 上，假設 `bodyColumns = window_width - 5`（引擎右邊留 5 格，沒有 docked pane）；有 dock 時在 `meta.json` 寫 `body_columns` 或用 `check.js <dir> --body-columns N` 覆蓋。位置槽的 ◷ 時間容許 ±2 分鐘。
 

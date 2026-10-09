@@ -54,7 +54,7 @@ const richFiles = (over) => ({
   ...(over || {}),
 });
 const RICH_209 = '⏸ 疑似卡住 │ M!·l5 ▸ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙2 ⏸1 │ R2 ⟲ · QC ✓ │ ◆3 ?1 U2 │ $123/150 │ dev ↓3 · wt 2 │ ⓘ';
-const RICH_120 = '⏸ 疑似卡住 │ M!·l5 ▸ implement │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙2 ⏸1 │ ⓘ';
+const RICH_120 = '⏸ 疑似卡住 │ M!·l5 ▸ implement │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙2 ⏸1 │ wt 2 │ ⓘ'; // below 160 the chip is gone, `wt N` (the owner reminder) stays down to 80
 const RICH_80 = '⏸ 疑似卡住 │ ▰▰▰▱▱ │ ⚙2 ⏸1 │ ⓘ';
 const rich = (line, width, over) => capture(richFiles(over), [line], { window_width: width });
 
@@ -66,10 +66,11 @@ test('RICH 209: every slot is judged PASS, the summary is PASS <mode> fields=10'
   assert.strictEqual(summary(r), 'PASS l5 fields=10');
   assert.strictEqual(r.derived.columns, 204);
 });
-test('RICH 120 (bodyColumns 115): hygiene, spend, decisions, review and the ◷ age are ABSENT; the rest PASS', () => {
+test('RICH 120 (bodyColumns 115): spend, decisions, review and the ◷ age are ABSENT, hygiene is just `wt 2`; the rest PASS', () => {
   const r = run(rich(RICH_120, 120));
-  for (const n of ['hygiene', 'spend', 'decisions', 'review']) assert.strictEqual(status(r, n), 'ABSENT', n);
-  for (const n of ['verdict', 'position', 'unit', 'dispatch', 'ⓘ', 'layout']) assert.strictEqual(status(r, n), 'PASS', n);
+  for (const n of ['spend', 'decisions', 'review']) assert.strictEqual(status(r, n), 'ABSENT', n);
+  for (const n of ['verdict', 'position', 'unit', 'dispatch', 'hygiene', 'ⓘ', 'layout']) assert.strictEqual(status(r, n), 'PASS', n);
+  assert.strictEqual(r.results.find((x) => x.name === 'hygiene').expected, 'wt 2');
   assert.strictEqual(r.ok, true); assert.strictEqual(r.derived.columns, 115);
 });
 test('RICH 80 (bodyColumns 75): only verdict, the unit bar (no k/N, no 族), dispatch and ⓘ', () => {
@@ -243,7 +244,9 @@ test('GATEFIX classify: the verdict below 2 cells is the glyph alone or glyph + 
 // ---- the width-table ABSENT rule
 test('WIDTH TABLE: a slot the table removed at this width is FAIL if drawn (hygiene at 119 columns of body, spend at 139, review at 119, position at 79)', () => {
   const at = (line, bodyColumns) => run(capture(richFiles(), [line], { body_columns: bodyColumns }));
-  assert.strictEqual(status(at(RICH_209, 159), 'hygiene'), 'FAIL', 'hygiene < 160');
+  assert.strictEqual(status(at(RICH_209, 159), 'hygiene'), 'FAIL', 'the hygiene chip < 160 (only `wt N` may be drawn)');
+  assert.strictEqual(status(at(RICH_209.replace('dev ↓3 · wt 2', 'wt 2'), 159), 'hygiene'), 'PASS', '`wt N` alone survives < 160');
+  assert.strictEqual(status(at(RICH_209.replace('dev ↓3 · wt 2', 'wt 2'), 79), 'hygiene'), 'FAIL', '`wt N` is removed < 80');
   assert.strictEqual(status(at(RICH_209, 139), 'spend'), 'FAIL', 'spend < 140');
   assert.strictEqual(status(at(RICH_209, 139), 'decisions'), 'FAIL', 'decisions < 140');
   assert.strictEqual(status(at(RICH_209, 119), 'review'), 'FAIL', 'review < 120');
@@ -252,7 +255,7 @@ test('WIDTH TABLE: a slot the table removed at this width is FAIL if drawn (hygi
 });
 test('WIDTH TABLE: exact thresholds — all slots at 160, no hygiene at 159, no spend/decisions at 139, no review/age at 119, no k/N at 79', () => {
   const rows = (b) => derive(capture(richFiles(), [], { body_columns: b })).slots;
-  assert.strictEqual(rows(160).hygiene.state, 'present'); assert.strictEqual(rows(159).hygiene.state, 'width');
+  assert.strictEqual(rows(160).hygiene.text, 'dev ↓3 · wt 2'); assert.strictEqual(rows(159).hygiene.text, 'wt 2'); assert.strictEqual(rows(80).hygiene.text, 'wt 2'); assert.strictEqual(rows(79).hygiene.state, 'width');
   assert.strictEqual(rows(140).spend.state, 'present'); assert.strictEqual(rows(139).spend.state, 'width'); assert.strictEqual(rows(139).decisions.state, 'width');
   assert.strictEqual(rows(120).review.state, 'present'); assert.strictEqual(rows(119).review.state, 'width');
   assert.ok(rows(120).position.text.includes('◷')); assert.ok(!rows(119).position.text.includes('◷'));
@@ -306,7 +309,9 @@ test('SUMMARY: the last line is exactly `PASS <mode> fields=<n>` / `FAIL <mode> 
   assert.strictEqual(fail.lines[fail.lines.length - 1], 'FAIL l5 fields=10 failed=unit,spend'); assert.strictEqual(fail.code, 1);
   assert.ok(fail.lines.some((l) => /^FAIL spend expected \$123\/150 got \$99\/150 /.test(l)));
   const absent = cli(rich(RICH_120, 120));
-  assert.ok(absent.lines.some((l) => /^ABSENT hygiene expected absent \(removed by the width table \(bodyColumns 115 < 160\)\) got absent /.test(l)));
+  assert.ok(absent.lines.some((l) => /^ABSENT spend expected absent \(removed by the width table \(bodyColumns 115 < 140\)\) got absent /.test(l)));
+  const lowest = cli(rich(RICH_80, 80));
+  assert.ok(lowest.lines.some((l) => /^ABSENT hygiene expected absent \(removed by the width table \(bodyColumns 75 < 80\)\) got absent /.test(l)));
   assert.strictEqual(cli('/nonexistent/dir').code, 2);
   assert.strictEqual(cli(rich(RICH_209, 209), ['--body-columns', 'x']).code, 2);
 });
@@ -506,7 +511,7 @@ test('DOCK: a pane column in pane.txt gives bodyColumns = transcript column - 5 
   const d = derive(dir);
   assert.strictEqual(d.columns, 115); assert.match(d.columnsHow, /^docked pane: transcript column 120 cells .*10 rows.* - 5$/);
   const r = run(dir);
-  assert.strictEqual(r.ok, true, JSON.stringify(r.results.filter((x) => x.status === 'FAIL'))); assert.strictEqual(status(r, 'hygiene'), 'ABSENT');
+  assert.strictEqual(r.ok, true, JSON.stringify(r.results.filter((x) => x.status === 'FAIL'))); assert.strictEqual(status(r, 'hygiene'), 'PASS'); // docked: the chip goes, `wt 2` stays
   // without the dock rule the full 209 band would be expected: the narrow band FAILs on the window rule
   assert.strictEqual(run(capture(richFiles(), [RICH_120], { window_width: 209 })).ok, false);
   assert.strictEqual(derive(capture(richFiles(), pane, { window_width: 209, body_columns: 90 })).columns, 90);
@@ -557,10 +562,16 @@ test('GATEFIX dock detector: the boxed 80-column panel is not a dock (bodyColumn
 test('GATEFIX no scope (real l4-idle capture, run ended with session-mode clear): no marker and no envelope -> the bare verdict band or the no-project line passes, anything else FAILs', () => {
   const r = run(fixture('l4-idle-w120'));
   assert.strictEqual(r.ok, true, JSON.stringify(r.results.filter((x) => x.status === 'FAIL'))); assert.strictEqual(status(r, 'no-scope'), 'PASS');
-  const withBand = (band) => { const d = fixture('l4-idle-w120'); const p = path.join(d, 'pane.txt'); fs.writeFileSync(p, fs.readFileSync(p, 'utf8').split('◌ 待命 │ ⓘ').join(band)); return run(d); };
+  // the replacement keeps the dock border where it was (the spaces after the ⓘ absorb the width change), so the tail is judged on its own merit
+  const withBand = (band) => { const d = fixture('l4-idle-w120'); const p = path.join(d, 'pane.txt'); const old = '◌ 待命 │ ⓘ'; fs.writeFileSync(p, fs.readFileSync(p, 'utf8').replace(new RegExp(old + '( +)'), (_m, sp) => band + ' '.repeat(Math.max(1, sp.length - (displayWidth(band) - displayWidth(old)))))); return run(d); };
   assert.strictEqual(withBand('no project · run: autopilot status runs --watch │ ⓘ').ok, true);
   assert.strictEqual(withBand('● 進行中 │ ⓘ').ok, false); // the derived verdict is 待命
   assert.strictEqual(withBand('◌ 待命 │ ⚙1 │ ⓘ').ok, false); // no facts back a slot
+  // the tail after the ⓘ is judged on this path too: the engine's [-] toggle passes, anything else FAILs
+  assert.strictEqual(withBand('◌ 待命 │ ⓘ').ok, true); // the real capture: spaces, the [-] toggle, the dock border
+  assert.strictEqual(withBand('◌ 待命 │ ⓘ garbage').ok, false);
+  assert.strictEqual(withBand('no project · run: autopilot status runs --watch │ ⓘ │ garbage').ok, false);
+  assert.strictEqual(status(withBand('◌ 待命 │ ⓘ garbage'), 'no-scope'), 'FAIL');
 });
 
 // widths.sh with a stub tmux and a stub capture.sh that writes TWO lines (the second after the first was read): under pipefail a
@@ -583,4 +594,39 @@ exit 0
   const p = spawnSync('bash', [path.join(dir, 'widths.sh'), 'cell', 'target'], { encoding: 'utf8', env: { ...process.env, PATH: `${path.join(dir, 'bin')}:${process.env.PATH}`, GATE_WIDTHS: '100', GATE_REDRAW_S: '6' } });
   assert.strictEqual(p.status, 0, p.stderr);
   assert.strictEqual(p.stdout.trim(), `100 ${dir}/cap`);
+});
+
+// capture.sh settle loop: the band lags the facts by up to one poll, so a capture that check.js FAILs is repeated (pane first, facts after) within a
+// bounded budget. Stub tmux + a stub checker that FAILs N times, then PASSes; the superseded captures are removed, the last is kept either way.
+function settleRun(failTimes, extraEnv) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gates-'));
+  fs.copyFileSync(path.join(__dirname, 'capture.sh'), path.join(dir, 'capture.sh'));
+  fs.mkdirSync(path.join(dir, 'bin')); fs.mkdirSync(path.join(dir, 'home'));
+  fs.writeFileSync(path.join(dir, 'bin', 'tmux'), '#!/usr/bin/env bash\ncase "$1" in\n  capture-pane) echo "◌ 待命 │ ⓘ" ;;\n  display) echo "100 100" ;;\nesac\nexit 0\n', { mode: 0o755 });
+  fs.writeFileSync(path.join(dir, 'checker.sh'), `#!/usr/bin/env bash\nn=$(cat "${dir}/calls" 2>/dev/null || echo 0); n=$((n+1)); echo $n > "${dir}/calls"\n[ $n -le ${failTimes} ] && exit 1\nexit 0\n`, { mode: 0o755 });
+  const env = { ...process.env, HOME: path.join(dir, 'home'), PATH: `${path.join(dir, 'bin')}:${process.env.PATH}`, GATE_OUT: path.join(dir, 'runs'), GATE_CHECK_CMD: path.join(dir, 'checker.sh'), GATE_SETTLE_STEP_S: '1', ...extraEnv };
+  const p = spawnSync('bash', [path.join(dir, 'capture.sh'), 'cell', 'target'], { encoding: 'utf8', env });
+  const caps = fs.existsSync(path.join(dir, 'runs', 'cell')) ? fs.readdirSync(path.join(dir, 'runs', 'cell')) : [];
+  const calls = Number(fs.existsSync(path.join(dir, 'calls')) ? fs.readFileSync(path.join(dir, 'calls'), 'utf8') : 0);
+  const kept = caps.length === 1 ? JSON.parse(fs.readFileSync(path.join(dir, 'runs', 'cell', caps[0], 'meta.json'), 'utf8')) : null;
+  return { p, caps, calls, kept };
+}
+test('GATEFIX capture.sh settle: a FAILing capture is repeated until the band catches up; only the passing capture is kept', () => {
+  const r = settleRun(2, { GATE_BAND_WAIT_S: '30' });
+  assert.strictEqual(r.p.status, 0, r.p.stderr);
+  assert.strictEqual(r.calls, 3); assert.strictEqual(r.caps.length, 1);
+  assert.strictEqual(r.kept.settle_attempt, 3);
+  assert.strictEqual(r.p.stdout.split('\n')[0], path.join(path.dirname(r.p.stdout.split('\n')[0]), r.caps[0])); // first line = the kept capture dir (widths.sh reads it)
+  assert.ok(!/did not settle/.test(r.p.stderr));
+});
+test('GATEFIX capture.sh settle: the wait is bounded; a band that never matches keeps the last capture and says so', () => {
+  const r = settleRun(99, { GATE_BAND_WAIT_S: '4' });
+  assert.strictEqual(r.p.status, 0, r.p.stderr);
+  assert.ok(r.calls >= 2 && r.calls <= 4, `attempts ${r.calls}`); assert.strictEqual(r.caps.length, 1);
+  assert.match(r.p.stderr, /band did not settle within 4s/);
+});
+test('GATEFIX capture.sh settle: GATE_BAND_WAIT_S=0 captures once and never runs the checker', () => {
+  const r = settleRun(99, { GATE_BAND_WAIT_S: '0' });
+  assert.strictEqual(r.p.status, 0, r.p.stderr); assert.strictEqual(r.calls, 0); assert.strictEqual(r.caps.length, 1);
+  assert.strictEqual(r.kept.settle_attempt, 1);
 });

@@ -53,6 +53,7 @@ let timer: { cancel: () => void } | undefined
 let viewport: { columns: number; isFullscreen?: boolean } | null = null
 let paneAttempted = false
 let paneTab: PaneTab = 'now'
+let opening = 0 // presses whose $.ui.open the ⓘ started has not resolved yet: $.ui.panes() may not list the pane, but a second press is still a press on an open pane
 let previous: { scope: string; counts: Counts | null; acceptance: string | null } | null = null
 const advisories: AdvisoryTracker = newTracker() // P7a: advisory rows seen for the current session; advisories.count feeds a band chip
 const jobDates = new Map<string, string>()
@@ -381,6 +382,7 @@ async function refresh($: EngineInterface): Promise<void> {
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     paneTab = 'now'
+    opening = 0
     if (timer === undefined) timer = $.clock.every(TICK_MS, () => refresh($))
     await refresh($)
     return next(e)
@@ -402,15 +404,21 @@ export const register: Register = on => {
     // while the person holds the ⓘ, so this is the keyboard way to change tab). "Open" is the engine's own record, $.ui.panes() (the pane
     // is listed until it closes, however it was opened). No hotkey: the band's autoFocus puts the keyboard path at Ctrl+x Tab, Enter.
     const info = async () => {
-      let isOpen = false
+      const inFlight = opening > 0 // an earlier press is still opening (or deciding): this press lands on an open pane
+      opening += 1
       try {
-        isOpen = (await $.ui.panes()).some(p => p.id === PANE_ID)
-      } catch (_e) {
-        isOpen = false
+        let isOpen = inFlight
+        try {
+          isOpen = isOpen || (await $.ui.panes()).some(p => p.id === PANE_ID)
+        } catch (_e) {
+          // the engine could not list panes: treat the pane as closed (Legend) unless an earlier press is in flight
+        }
+        paneTab = isOpen ? PANE_TABS[(PANE_TABS.indexOf(paneTab) + 1) % PANE_TABS.length] : 'legend'
+        $.ui.invalidate('ui.render')
+        await $.ui.open({ id: PANE_ID, title: 'Autopilot', focus: true, closeOnEscape: true })
+      } finally {
+        opening -= 1
       }
-      paneTab = isOpen ? PANE_TABS[(PANE_TABS.indexOf(paneTab) + 1) % PANE_TABS.length] : 'legend'
-      $.ui.invalidate('ui.render')
-      await $.ui.open({ id: PANE_ID, title: 'Autopilot', focus: true, closeOnEscape: true })
     }
     return Band($.ui.resolve(e), snapshot, e.props.bodyColumns, info)
   })

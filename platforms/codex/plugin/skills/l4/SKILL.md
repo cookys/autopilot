@@ -58,9 +58,9 @@ qc verdict**.
 
 Hard rules:
 - Startup presets identical to `/l3`; engine all-Claude (hetero implementer → `/l5`).
-- Before any TaskCreate, branch, worktree, runner, or model effect, size the task per
-  [dev-flow Sizing](../dev-flow/SKILL.md#sizing) (prose `M!` = `--size M --urgent`) and run
-  `node <plugin>/scripts/session-mode.js set --level l4 --size <XS|S|M|L|XL> [--urgent] [--bug] --repo-root <repo>`.
+- First action of the session, sizing from the request alone (no repo reads or edits first), at every size including XS:
+  size the task per [dev-flow Sizing](../dev-flow/SKILL.md#sizing) (prose `M!` = `--size M --urgent`) and run
+  `node <plugin>/scripts/session-mode.js set --level l4 --size <XS|S|M|L|XL> [--urgent] [--bug] --repo-root <repo>`; `--size` is required.
   `--solo` uses `set --level l3 --entry-level l4 --fallback solo --size <size> [--urgent] [--bug]`; a recorded
   precondition degradation uses `set --level l3 --entry-level l4 --fallback precondition_failed --size <size> [--urgent] [--bug]`.
   The command admits canonical Mission policy/graph/source

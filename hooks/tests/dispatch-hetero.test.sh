@@ -541,6 +541,11 @@ assert_contains "$(cat "$KEEP_WT/.autopilot-worktree")" 'retention=lease' \
   "kept worktree marker records lease retention"
 assert_contains "$(cat "$KEEP_WT/.autopilot-worktree")" 'retention_owner=test-campaign' \
   "kept worktree marker records its owner"
+# R1: an explicit lease keeps its own expiry; the default 72 h record never overrides it.
+assert_contains "$(cat "$KEEP_WT/.autopilot-worktree")" "retention_expires_at=$RETAIN_UNTIL" \
+  "R1: explicit lease keeps its own retention_expires_at"
+assert_not_contains "$(cat "$KEEP_WT/.autopilot-worktree")" 'retention_reason=' \
+  "R1: explicit lease gets no default retention_reason"
 git -C "$SBX" worktree remove --force "$KEEP_WT" >/dev/null 2>&1 || true
 
 # 5e. Grok repair lineage reuses the exact retained worktree, branch, and
@@ -797,6 +802,7 @@ assert_contains "$OUT" '"status": "no_op"' "no_op status (exit 0, no commit)"
 KEPT_WT="$(printf '%s' "$OUT" | grep -o '"worktree": "[^"]*"' | cut -d'"' -f4)"
 assert_neq "" "$KEPT_WT" "no_op keeps worktree path in JSON"
 assert_file_exists "$KEPT_WT/.git" "kept worktree exists on disk"
+assert_retention_record "$KEPT_WT" no_op 72 "R1 no_op keep"
 git -C "$SBX" worktree remove --force "$KEPT_WT" >/dev/null 2>&1 || true
 
 # 7 (case d). question_suspected: stub exits non-zero (proxy for timeout/stall) with no commit
@@ -806,6 +812,7 @@ assert_contains "$OUT" '"status": "question_suspected"' "question_suspected stat
 assert_contains "$OUT" "clarifying question" "question_suspected error hints at the cause"
 assert_not_contains "$OUT" '"status": "no_op"' "abnormal-exit no-commit is NOT collapsed into no_op"
 Q_WT="$(printf '%s' "$OUT" | grep -o '"worktree": "[^"]*"' | cut -d'"' -f4)"
+assert_retention_record "$Q_WT" question_suspected 72 "R1 question_suspected keep"
 git -C "$SBX" worktree remove --force "$Q_WT" >/dev/null 2>&1 || true
 
 # 8 (case b). failure: stub commits cleanly but exits non-zero → NOT scored success (KR1)
@@ -814,6 +821,16 @@ assert_eq "1" "$EXIT" "failure (clean commit + non-zero exit) exit code"
 assert_contains "$OUT" '"status": "failure"' "failure status"
 assert_not_contains "$OUT" '"status": "committed"' "non-zero exit with clean commit is NEVER committed/success"
 F_WT="$(printf '%s' "$OUT" | grep -o '"worktree": "[^"]*"' | cut -d'"' -f4)"
+assert_retention_record "$F_WT" failure 72 "R1 failure keep"
+# R1: the stamped marker is still an exact schema-2 leaf for the lifecycle scan (not malformed).
+R1_SCAN="$(cd "$SBX" && "$REPO_ROOT/scripts/reap-dispatch-worktrees.sh" scan --repo "$SBX" --root-run-id "$(sed -n 's/^root_run_id=//p' "$F_WT/.autopilot-worktree")" 2>&1)"
+assert_not_contains "$R1_SCAN" 'invalid_schema_2_marker' "R1 scan: stamped marker is not classed malformed"
+assert_contains "$R1_SCAN" "$F_WT" "R1 scan: stamped leaf is still seen"
+# residue.lease_hours is honoured (env tier of the shared resolver)
+OUT="$(cd "$SBX" && AUTOPILOT_RESIDUE_LEASE_HOURS=5 "$SCRIPT" --branch feat/failcommit5 --prompt-file "$PROMPT" --agy-bin "$STUB_FAIL_COMMIT" 2>&1)"; EXIT=$?
+F5_WT="$(printf '%s' "$OUT" | grep -o '"worktree": "[^"]*"' | cut -d'"' -f4)"
+assert_retention_record "$F5_WT" failure 5 "R1 residue.lease_hours=5 honoured"
+git -C "$SBX" worktree remove --force "$F5_WT" >/dev/null 2>&1 || true
 git -C "$SBX" worktree remove --force "$F_WT" >/dev/null 2>&1 || true
 
 # 9. agy directive carries the ABSOLUTE worktree anchor (v2.25.9 fix).

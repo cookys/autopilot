@@ -203,6 +203,8 @@ assert_eq "$(field "$OUT" status)" "escalated" "5: status escalated"
 assert_eq "$(field "$OUT" escalation_path)" "$RD/ESCALATION.md" "5: escalation path reported"
 WT5="$(field "$OUT" worktree)"
 [ -d "$WT5" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "5: worktree kept for resume"
+assert_retention_record "$WT5" escalated 72 "5: R1 escalated keep"
+assert_contains "$(cat "$WT5/.autopilot-worktree")" 'retention=inspect' "5: R1 keeps the inspect retention line"
 echo "unit-1 first" > "$TEST_TMP/answer.md"
 SD5="$SD"
 OUT="$(cd "$SBX" && PATH="$STUBDIR:$PATH" KIMI_STUB_MODE=escalate KIMI_STUB_CONTINUE_MODE=complete KIMI_STUB_DIR="$SD5" KIMI_STUB_REPORT_DIR="$RD" \
@@ -222,6 +224,7 @@ run_foreman script r6
 assert_eq "$RC" "1" "6: mutated → exit 1"
 assert_eq "$(field "$OUT" status)" "main_checkout_mutated" "6: status main_checkout_mutated"
 assert_eq "$(field "$OUT" main_checkout_boundary)" "main_checkout_mutated" "6: boundary field"
+assert_retention_record "$(field "$OUT" worktree)" main_checkout_mutated 72 "6: R1 main_checkout_mutated keep"
 rm -f "$SBX/README.md"
 
 # ======================================================================= 7 merge commit

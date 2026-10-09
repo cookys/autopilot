@@ -117,7 +117,9 @@
 #       [--reuse-worktree <absolute-path>]      # campaign repair: reuse an exact retained
 #       [--expected-worktree-instance <sha256>] # required identity fence for retained reuse
 #       [--resume-session <uuid>]               # Grok repair: resume the exact prior session
-#   scripts/dispatch-hetero.sh --gc            # marker-scoped stale worktree reaper
+#   scripts/dispatch-hetero.sh --gc            # marker-scoped stale worktree reaper (opt-in via stale_reaper_age_days,
+#                                              default 0 = off; a rail-local fast path. The CANONICAL automatic reaper is
+#                                              `repo-residue-sweep.js reap --auto --yes`, run by the SessionStart hook)
 #       [--reap-unmarked --yes]                # recovery: reap unmarked hetero-* only
 #   ⏳ TIMEOUT: the implementer run can take MANY minutes. Under Claude Code's Bash tool,
 #   pass a generous `timeout` — the 120s tool default SIGTERMs long runs (exit 143). Persist
@@ -162,6 +164,10 @@
 #       1 = ran but did not yield a reviewable clean commit — one of: failure,
 #           dirty, no_op, question_suspected (worktree KEPT for inspection — clean up
 #           with `git worktree remove`)
+#           A kept worktree's marker carries `retention_reason=<token>` and
+#           `retention_expires_at=<now + residue.lease_hours (default 72 h)>` (also on boundary_rejected,
+#           main_checkout_mutated and the detach-forced keep); an explicit --keep-worktree lease keeps its own
+#           expiry. repo-residue-sweep.js reap --auto reads these.
 #       2 = precondition failure (nothing was created)
 
 set -uo pipefail
@@ -4764,6 +4770,20 @@ classify_outcome() {
     OUTCOME_EXIT=1
     OUTCOME_ERR="wall timeout (${__wt_secs}s) exceeded — worker terminated"
   fi
+  # R1 retention record: every path that leaves the worktree on disk stamps its marker with
+  # why and until when (residue.lease_hours, default 72 h) — repo-residue-sweep.js reap --auto
+  # is the reaper that reads it. Still inside the lifetime flock (the lock fd is held for the
+  # whole dispatch). An explicit --keep-worktree lease keeps its own expiry (helper no-ops).
+  # Fail-soft: a failed stamp must never change the outcome.
+  if [ -n "${WT:-}" ] && [ -d "$WT" ]; then
+    local __ret_reason="$OUTCOME_STATUS"
+    if [ "$OUTCOME_STATUS" = "boundary_rejected" ] && [ "${HANDS_BOUNDARY_CODE:-}" = "main_checkout_mutated" ]; then
+      __ret_reason="main_checkout_mutated"
+    elif [ "$OUTCOME_STATUS" = "committed" ]; then
+      if [ "${IN_DETACHED_CHILD:-0}" = "1" ]; then __ret_reason="detach_keep"; else __ret_reason="reap_failed"; fi
+    fi
+    _wt_record_retention "$WT" "$__ret_reason" || true
+  fi
   # Observability: stamp the manifest so post-mortem status reads phase:"exited" with the
   # final status even after processes/locks are gone (both inline and detached paths).
   manifest_finalize "$OUTCOME_STATUS"
@@ -4906,6 +4926,7 @@ dispatch_detached_run() {
       _cont_terminal_on_exit _cont_finalize_or_die \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \
       _wt_has_control_chars _wt_resolve_repo_root _wt_read_marker_created_at _wt_json_escape _wt_is_live \
+      _wt_read_schema2_marker _wt_record_retention _wt_residue_lease_hours \
       gc_stale_worktrees 2>/dev/null || true
   } > "$state_file"
   # In detach mode the DETACHED child owns the worktree/branch lifecycle. A caller signal must

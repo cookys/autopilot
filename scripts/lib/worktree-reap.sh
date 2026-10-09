@@ -3,6 +3,12 @@
 #
 # Provides: reap_worktree, reap_worktree_minimal, gc_stale_worktrees,
 #           _wt_is_live, _wt_validate_path
+#           _wt_read_schema2_marker (marker grammar), _wt_record_retention (R1 keep record)
+#
+# gc_stale_worktrees (`dispatch-hetero.sh --gc`, gated by stale_reaper_age_days, default 0) is an
+# opt-in, rail-local fast path. The canonical automatic reaper is `repo-residue-sweep.js reap
+# --auto --yes`; its marker grammar mirrors _wt_read_schema2_marker (parity pinned by
+# hooks/tests/repo-residue-auto.test.sh).
 #
 # Contract (locked by docs/plans/2026-07-09-worktree-teardown-seam.md):
 #   - reap_worktree / --gc NEVER run git branch -D (abort trap is sole site)
@@ -171,6 +177,7 @@ _wt_read_schema2_marker() {
   _WT_MARKER_RETENTION_OWNER=""
   _WT_MARKER_RETENTION_REASON_SHA256=""
   _WT_MARKER_RETENTION_EXPIRES_AT=""
+  _WT_MARKER_RETENTION_REASON=""
   [ -f "$marker" ] && [ ! -L "$marker" ] && [ -O "$marker" ] || return 1
   exec {fd}<"$marker" || return 1
   fd_path="/proc/$$/fd/$fd"
@@ -186,33 +193,35 @@ _wt_read_schema2_marker() {
       return 1
     fi
   done
-  local line_count
+  # Optional keys. Each may occur at most once; the line count must equal
+  # 7 required keys + the optional keys present (no stray lines). Accepted shapes:
+  #   base                          (7)
+  #   retention=inspect|""          (8)    rail/foreman keep marker, pre-R1
+  #   [retention=inspect]+reason+expires    (9 / 10)  R1 default keep record
+  #   retention=lease+owner+reason_sha256+expires (11)  explicit --keep-worktree lease
+  # A lease never carries retention_reason; the default record never carries
+  # retention_owner / retention_reason_sha256.
+  local line_count expected=7 okey present_opt=""
   line_count="$(wc -l < "$fd_path" | tr -d ' ')"
-  if [ "$line_count" -eq 11 ]; then
-    for key in retention retention_owner retention_reason_sha256 retention_expires_at; do
-      if [ "$(grep -c "^${key}=" "$fd_path" 2>/dev/null)" -ne 1 ]; then
-        exec {fd}>&-
-        return 1
-      fi
-    done
-    _WT_MARKER_RETENTION="$(sed -n 's/^retention=//p' "$fd_path")"
-    _WT_MARKER_RETENTION_OWNER="$(sed -n 's/^retention_owner=//p' "$fd_path")"
-    _WT_MARKER_RETENTION_REASON_SHA256="$(
-      sed -n 's/^retention_reason_sha256=//p' "$fd_path"
-    )"
-    _WT_MARKER_RETENTION_EXPIRES_AT="$(
-      sed -n 's/^retention_expires_at=//p' "$fd_path"
-    )"
-  elif [ "$line_count" -eq 8 ]; then
-    [ "$(grep -c '^retention=' "$fd_path" 2>/dev/null)" -eq 1 ] || {
-      exec {fd}>&-
-      return 1
-    }
-    _WT_MARKER_RETENTION="$(sed -n 's/^retention=//p' "$fd_path")"
-  elif [ "$line_count" -ne 7 ]; then
+  for okey in retention retention_owner retention_reason_sha256 retention_expires_at retention_reason; do
+    case "$(grep -c "^${okey}=" "$fd_path" 2>/dev/null)" in
+      0) ;;
+      1) expected=$((expected + 1)); present_opt="$present_opt $okey" ;;
+      *) exec {fd}>&-; return 1 ;;
+    esac
+  done
+  if [ "$line_count" -ne "$expected" ]; then
     exec {fd}>&-
     return 1
   fi
+  case " $present_opt " in *" retention "*) _WT_MARKER_RETENTION="$(sed -n 's/^retention=//p' "$fd_path")" ;; esac
+  case " $present_opt " in *" retention_owner "*) _WT_MARKER_RETENTION_OWNER="$(sed -n 's/^retention_owner=//p' "$fd_path")" ;; esac
+  case " $present_opt " in *" retention_reason_sha256 "*)
+    _WT_MARKER_RETENTION_REASON_SHA256="$(sed -n 's/^retention_reason_sha256=//p' "$fd_path")" ;; esac
+  case " $present_opt " in *" retention_expires_at "*)
+    _WT_MARKER_RETENTION_EXPIRES_AT="$(sed -n 's/^retention_expires_at=//p' "$fd_path")" ;; esac
+  case " $present_opt " in *" retention_reason "*)
+    _WT_MARKER_RETENTION_REASON="$(sed -n 's/^retention_reason=//p' "$fd_path")" ;; esac
 
   val="$(sed -n 's/^schema=//p' "$fd_path")"
   _WT_MARKER_CREATED_AT="$(sed -n 's/^created_at=//p' "$fd_path")"
@@ -237,10 +246,79 @@ _wt_read_schema2_marker() {
     [[ "$_WT_MARKER_RETENTION_OWNER" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
     [[ "$_WT_MARKER_RETENTION_REASON_SHA256" =~ ^[0-9a-f]{64}$ ]] || return 1
     [[ "$_WT_MARKER_RETENTION_EXPIRES_AT" =~ ^[0-9]+$ ]] || return 1
-  elif [ -n "$_WT_MARKER_RETENTION" ] && [ "$_WT_MARKER_RETENTION" != "inspect" ]; then
-    return 1
+    [ -z "$_WT_MARKER_RETENTION_REASON" ] || return 1
+  else
+    if [ -n "$_WT_MARKER_RETENTION" ] && [ "$_WT_MARKER_RETENTION" != "inspect" ]; then
+      return 1
+    fi
+    [ -z "$_WT_MARKER_RETENTION_OWNER" ] && [ -z "$_WT_MARKER_RETENTION_REASON_SHA256" ] || return 1
+    # reason and expires travel together or not at all
+    local has_reason=0 has_exp=0
+    case " $present_opt " in *" retention_reason "*) has_reason=1 ;; esac
+    case " $present_opt " in *" retention_expires_at "*) has_exp=1 ;; esac
+    [ "$has_reason" -eq "$has_exp" ] || return 1
+    case " $present_opt " in *" retention_owner "*|*" retention_reason_sha256 "*) return 1 ;; esac
+    if [[ " $present_opt " == *" retention_reason "* ]]; then
+      [[ "$_WT_MARKER_RETENTION_REASON" =~ ^[a-z0-9_]+$ ]] || return 1
+      [[ "$_WT_MARKER_RETENTION_EXPIRES_AT" =~ ^[0-9]+$ ]] || return 1
+    fi
   fi
   git check-ref-format --branch "$_WT_MARKER_BRANCH" >/dev/null 2>&1 || return 1
+  return 0
+}
+
+# --- R1 retention record ------------------------------------------------------
+# Lib dir captured at source time: a detached child gets these functions via
+# `declare -f` where BASH_SOURCE is gone, so it falls back to SELF_DIR.
+_WT_REAP_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# _wt_residue_lease_hours — residue.lease_hours from the shared resolver
+# (scripts/lib/residue-config.js: env, then ~/.autopilot/config.json, then 72).
+# Prints a positive integer; any failure prints the default.
+_wt_residue_lease_hours() {
+  local dir="${SELF_DIR:-}" h=""
+  if [ -n "$dir" ]; then dir="$dir/lib"; else dir="$_WT_REAP_LIB_DIR"; fi
+  h="$(node "$dir/residue-config.js" --field lease_hours 2>/dev/null)" || h=""
+  [[ "$h" =~ ^[0-9]+$ ]] && [ "$h" -gt 0 ] || h=72
+  printf '%s' "$h"
+}
+
+# _wt_record_retention <worktree> <reason> [hours]
+# Called by a rail at the moment it decides to KEEP a worktree, while it still holds
+# the worktree's lifetime flock. Rewrites the schema-2 marker atomically (tmp + mv)
+# with `retention_reason=<token>` and `retention_expires_at=<now + lease hours>`.
+#   - the marker must already pass _wt_read_schema2_marker (else untouched, rc 1)
+#   - retention=lease (explicit --keep-worktree) is left exactly as written: rc 0
+#   - retention=inspect is preserved; previous reason/expires are replaced
+# reason is reduced to [a-z0-9_]+ (empty → "kept").
+_wt_record_retention() {
+  local wt="${1:-}" reason="${2:-}" hours="${3:-}" marker tmp now expires line
+  [ -n "$wt" ] && [ -d "$wt" ] || return 1
+  marker="$wt/.autopilot-worktree"
+  _wt_read_schema2_marker "$marker" || return 1
+  [ "$_WT_MARKER_RETENTION" = "lease" ] && return 0
+  reason="$(printf '%s' "$reason" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9_' '_' | sed 's/_*$//; s/^_*//' | cut -c1-48)"
+  [ -n "$reason" ] || reason="kept"
+  [[ "$hours" =~ ^[0-9]+$ ]] && [ "$hours" -gt 0 ] || hours="$(_wt_residue_lease_hours)"
+  now="$(date +%s)"
+  expires=$((now + hours * 3600))
+  tmp="$marker.tmp.$$"
+  {
+    while IFS= read -r line || [ -n "$line" ]; do
+      case "$line" in
+        retention_reason=*|retention_expires_at=*|schema=*) ;;
+        *) printf '%s\n' "$line" ;;
+      esac
+    done < "$marker"
+    printf 'retention_reason=%s\n' "$reason"
+    printf 'retention_expires_at=%s\n' "$expires"
+    printf 'schema=2\n'
+  } > "$tmp" 2>/dev/null || { rm -f -- "$tmp"; return 1; }
+  if ! _wt_read_schema2_marker "$tmp"; then
+    rm -f -- "$tmp"
+    return 1
+  fi
+  mv -f -- "$tmp" "$marker" || { rm -f -- "$tmp"; return 1; }
   return 0
 }
 

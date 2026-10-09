@@ -57,10 +57,12 @@ except the IMPLEMENTER is a heterogeneous engine driven through the canonical
 (`bin/autopilot.js` → campaign controller → `dispatch-hetero.sh`).
 
 Hard rules:
-- Before any TaskCreate, branch, worktree, runner, or model effect, run
-  `node <plugin>/scripts/session-mode.js set --level l5 --repo-root <repo>`. `--solo` uses
-  `set --level l3 --entry-level l5 --fallback solo`; a recorded precondition degradation uses
-  `--fallback precondition_failed`. The command admits canonical Mission policy/graph/source
+- Before any TaskCreate, branch, worktree, runner, or model effect, size the task per
+  [dev-flow Sizing](../dev-flow/SKILL.md#sizing) (prose `M!` = `--size M --urgent`) and run
+  `node <plugin>/scripts/session-mode.js set --level l5 --size <XS|S|M|L|XL> [--urgent] [--bug] --repo-root <repo>`.
+  `--solo` uses `set --level l3 --entry-level l5 --fallback solo --size <size> [--urgent] [--bug]`; a recorded
+  precondition degradation uses `set --level l3 --entry-level l5 --fallback precondition_failed --size <size> [--urgent] [--bug]`.
+  The command admits canonical Mission policy/graph/source
   coverage before writing the marker. Topology may change; its admission digest and later
   Mission prepare/grant may not.
 - The roster from [`../../scripts/resolve-review-loop.sh`](../../scripts/resolve-review-loop.sh)

@@ -1,0 +1,35 @@
+{
+  "schema": "autopilot.gate-capture/2",
+  "cell": "residue-hygiene-w209-band2",
+  "mode": "residue",
+  "window_width": 209,
+  "pane_width": 209,
+  "captured_at": "2026-10-09T15:49:10.555Z",
+  "captured_at_ms": 1791560950555,
+  "session_id": "7b6c930e-53dc-4f12-ae46-f7d64a99dbe5",
+  "session_id_how": "argument",
+  "sanitised_session_id": "7b6c930e-53dc-4f12-ae46-f7d64a99dbe5",
+  "project_key": "53b8dffb003842e4",
+  "root_run_id": "job-1791560796-aa7c3488",
+  "scope_key": "53b8dffb003842e4--job-1791560796-aa7c3488",
+  "live_base": "/run/user/1000/autopilot",
+  "autopilot_home": "/home/cookys/.autopilot",
+  "pane_cwd": "/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/residue/proof1/repo",
+  "git_common_dir": "/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/residue/proof1/repo/.git",
+  "missing": [
+    "attention.json (/run/user/1000/autopilot/attention/7b6c930e-53dc-4f12-ae46-f7d64a99dbe5.json)",
+    "tasks.json (/run/user/1000/autopilot/tasks/7b6c930e-53dc-4f12-ae46-f7d64a99dbe5.json)",
+    "turn.json (/run/user/1000/autopilot/turn/7b6c930e-53dc-4f12-ae46-f7d64a99dbe5.json)",
+    "turn-effective.json (/run/user/1000/autopilot/turn-effective/7b6c930e-53dc-4f12-ae46-f7d64a99dbe5.json)",
+    "agents (/run/user/1000/autopilot/agents/7b6c930e-53dc-4f12-ae46-f7d64a99dbe5)",
+    "review.json (/run/user/1000/autopilot/runs/53b8dffb003842e4.review.json)",
+    "stage.json (/run/user/1000/autopilot/stage/7b6c930e-53dc-4f12-ae46-f7d64a99dbe5.json)",
+    "foreman.json (/run/user/1000/autopilot/runs/53b8dffb003842e4--job-1791560796-aa7c3488.foreman.json)",
+    "decision-file.json (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/residue/proof1/repo/.git/autopilot/decisions/53b8dffb003842e4--job-1791560796-aa7c3488.json)",
+    "work-orders (/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/residue/proof1/repo/.git/autopilot/work-orders/job-1791560796-aa7c3488)"
+  ],
+  "screenshots": {
+    "band": "/home/cookys/projects/autopilot/docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/residue-hygiene-w209-band2/20261009T154910Z/band-209.png",
+    "pane": "/home/cookys/projects/autopilot/docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/residue-hygiene-w209-band2/20261009T154910Z/pane.png"
+  }
+}

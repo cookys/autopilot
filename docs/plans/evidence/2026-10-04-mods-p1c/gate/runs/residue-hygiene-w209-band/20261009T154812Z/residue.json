@@ -1,0 +1,26 @@
+{
+  "schema": "autopilot.residue/1",
+  "project_key": "53b8dffb003842e4",
+  "at": "2026-10-09T15:47:42.672Z",
+  "reapable_worktrees": 0,
+  "by_class": {
+    "dirty": 1
+  },
+  "source": "repo-residue-sweep scan",
+  "needs_human_count": 1,
+  "needs_human_bytes": 16384,
+  "needs_human": [
+    {
+      "kind": "worktree",
+      "class": "dirty",
+      "age_days": 4.17,
+      "bytes": 16384,
+      "reason": "1 uncommitted path(s)",
+      "command": "git -C '/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/residue/proof1/wt-dirty' status --short",
+      "path": "/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/residue/proof1/wt-dirty"
+    }
+  ],
+  "auto_ran_at": "2026-10-09T15:44:05.386Z",
+  "auto_removed_count": 1,
+  "auto_archived_count": 1
+}

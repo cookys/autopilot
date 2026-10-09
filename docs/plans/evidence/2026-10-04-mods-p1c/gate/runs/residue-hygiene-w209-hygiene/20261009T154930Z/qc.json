@@ -1,0 +1,14 @@
+{
+  "schema": "autopilot.qc-status/1",
+  "scope": {
+    "project_key": "53b8dffb003842e4",
+    "repo_identity": "git-common-dir:/tmp/claude-1000/-home-cookys-projects-autopilot/1b6129a4-0dc4-480d-b044-f416613f597a/scratchpad/residue/proof1/repo/.git",
+    "root_run_id": null
+  },
+  "state": "unknown",
+  "range": null,
+  "protected_files_count": 0,
+  "evidence": null,
+  "mode": "block",
+  "checked_at": "2026-10-09T15:48:43.272Z"
+}

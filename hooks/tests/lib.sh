@@ -401,6 +401,30 @@ assert_exit_code() {
   fi
 }
 
+assert_retention_record() {
+  # assert_retention_record <worktree> <reason> <lease-hours> <msg>
+  # R1: a rail that KEEPS a worktree stamps its schema-2 marker with why + until when, and the
+  # stamped marker still passes the ownership validator the reapers use.
+  local wt="$1" reason="$2" hours="$3" msg="$4" m exp now
+  m="$wt/.autopilot-worktree"
+  if grep -qx "retention_reason=$reason" "$m" 2>/dev/null; then
+    __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+  else
+    fail "$msg: marker lacks retention_reason=$reason ($(tr '\n' ' ' < "$m" 2>/dev/null))"
+  fi
+  exp="$(sed -n 's/^retention_expires_at=//p' "$m" 2>/dev/null)"; now="$(date +%s)"
+  if [[ "$exp" =~ ^[0-9]+$ ]] && [ "$exp" -ge $((now + hours * 3600 - 900)) ] && [ "$exp" -le $((now + hours * 3600 + 60)) ]; then
+    __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+  else
+    fail "$msg: retention_expires_at=$exp not ~now+${hours}h"
+  fi
+  if bash -c '. "$1"; _wt_read_schema2_marker "$2"' _ "$REPO_ROOT/scripts/lib/worktree-reap.sh" "$m"; then
+    __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+  else
+    fail "$msg: stamped marker fails _wt_read_schema2_marker"
+  fi
+}
+
 # run_hook <hook-relative-path> [<stdin>]
 # Captures into __RUN_STDOUT, __RUN_STDERR, __RUN_EXIT. Uses sandboxed HOME.
 run_hook() {

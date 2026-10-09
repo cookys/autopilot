@@ -225,6 +225,8 @@ fi
 # ---------------------------------------------------------------- boundary (shared lib)
 # shellcheck source=lib/main-checkout-boundary.sh
 source "$SELF_DIR/lib/main-checkout-boundary.sh"
+# shellcheck source=lib/worktree-reap.sh
+source "$SELF_DIR/lib/worktree-reap.sh"   # _wt_record_retention (R1 retention record on keep)
 # Validate any --sibling-ref-prefix / --sibling-path-prefix the operator declared (gap 2: two
 # foremen dispatched concurrently on one repo should name each other's namespaces here) with the
 # SAME rules dispatch-hetero.sh applies to its own flags of the same name.
@@ -470,5 +472,11 @@ fi
 if [ "$STATUS" = completed ] && [ "$KEEP" -eq 0 ]; then
   exec {WT_LOCK_FD}>&-
   git worktree remove --force "$WT" >/dev/null 2>&1 || true
+elif [ -n "${WT:-}" ] && [ -d "$WT" ]; then
+  # R1 retention record: the worktree stays, so its marker says why and until when
+  # (residue.lease_hours, default 72 h; repo-residue-sweep.js reap --auto reads it). The
+  # lifetime flock is still held (WT_LOCK_FD). Fail-soft: never changes the verdict.
+  if [ "$STATUS" = completed ]; then _ret_reason="keep_requested"; else _ret_reason="$STATUS"; fi
+  _wt_record_retention "$WT" "$_ret_reason" || true
 fi
 emit

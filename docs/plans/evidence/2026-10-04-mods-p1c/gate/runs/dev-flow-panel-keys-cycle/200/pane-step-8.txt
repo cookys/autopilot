@@ -1,0 +1,50 @@
+                                                                                                              │                                                                                       ✕
+ ▐▛███▛█   Claude Code v2.1.295                                                                               │ Legend [Now] Graph  Dispatch  Review  Decisions  Spend  Hygiene
+▝▜██████▀  Sonnet 5.5 · Claude Max                                                                            │session $— · host $287.37 · ctx —
+ ▝▝   ▝▝   ~/projects/gate-sandbox                                                                            │◌ 待命 gate-sandbox · 0m
+                                                                                                              │沒有派工在跑
+                                                                                                              │no data · no stage recorded for this session
+                                                                                                              │no data · no unit recorded
+                                                                                                              │progress  —
+                                                                                                              │phase  —
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+                                                                                                              │
+◌ 待命 │ ⓘ                                                                                                [-] │
+                                                                                                              │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ Try "how does <filepath> work?"
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Sonnet 5.5 ── ~/projects/gate-sandbox develop ──────────────────────────────────────────── v2.1.295
+  ─                                                                                → codeforge adopt
+  ⏵⏵ accept edits on (shift+tab to cycle) · ← 6 agents

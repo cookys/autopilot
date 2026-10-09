@@ -1,0 +1,50 @@
+                                                                      │                                               ✕
+ ▐▛███▛█   Claude Code v2.1.295                                       │ Legend  Now  Graph  Dispatch  Review [Decisions]
+▝▜██████▀  Sonnet 5.5 · Claude Max                                    │ Spend  Hygiene
+ ▝▝   ▝▝   ~/projects/gate-sandbox                                    │session $— · host $287.37 · ctx —
+                                                                      │no decision made on your behalf
+                                                                      │no data · no escalation rung recorded
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+◌ 待命 │ ⓘ                                                        [-] │
+                                                                      │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ Try "fix typecheck errors"
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Sonnet 5.5 ── ~/projects/gate-sandbox develop ──────────────────────────────────────────── v2.1.295
+  ─                                                                                → codeforge adopt
+  ⏵⏵ accept edits on (shift+tab to cycle) · ← 6 agents

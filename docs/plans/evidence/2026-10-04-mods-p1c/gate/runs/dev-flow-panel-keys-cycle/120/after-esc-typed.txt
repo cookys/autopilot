@@ -1,0 +1,50 @@
+                                                                      │                                               ✕
+ ▐▛███▛█   Claude Code v2.1.295                                       │[Legend] Now  Graph  Dispatch  Review  Decisions
+▝▜██████▀  Sonnet 5.5 · Claude Max                                    │ Spend  Hygiene
+ ▝▝   ▝▝   ~/projects/gate-sandbox                                    │圖例 · what the one-line band shows (left to rig…
+                                                                      │▲ 要你決定
+                                                                      │  a decision or an approval waits for you
+                                                                      │⏸ 疑似卡住  a dispatch or foreman has gone quiet
+                                                                      │✓ 完成待驗收  work is done, acceptance is yours
+                                                                      │● 進行中  something is running
+                                                                      │◌ 待命  idle: nothing running
+                                                                      │M!·l5 ▸ implement ◷3m
+                                                                      │  size (! = urgent) · level ▸ stage · time in
+                                                                      │this stage
+                                                                      │▰▰▰▱▱ 3/5 ·2族
+                                                                      │  unit bar: done / current / to come · k of N ·
+                                                                      │review families
+                                                                      │⚙2 ⏸1
+                                                                      │  live dispatches · stalled dispatches (zero is
+                                                                      │left out)
+                                                                      │R2 ⟲ · QC ✓ / QC owed
+                                                                      │  review round · pre-push QC evidence present /
+                                                                      │owed
+                                                                      │◆3 ?1 U2
+                                                                      │  decided on your behalf · dispatches with no
+                                                                      │decision record · latest escalation rung
+                                                                      │$120/150
+                                                                      │  brain-tier spend today / cap · warning from 80
+                                                                      │%, error from 100 %
+                                                                      │dev ↓3 · wt 2
+                                                                      │  plugin load source (⚠ = look at it) · reapable
+                                                                      │worktrees
+                                                                      │ⓘ
+                                                                      │  opens this panel; with it open, shows the next
+                                                                      │tab
+                                                                      │keyboard: Ctrl+x Tab, then Enter on ⓘ; each furt…
+                                                                      │narrow terminals drop slots: < 160 hygiene · < 1…
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+◌ 待命 │ ⓘ                                                        [-] │
+                                                                      │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ x
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Sonnet 5.5 ── ~/projects/gate-sandbox develop ──────────────────────────────────────────── v2.1.295
+  ─                                                                                → codeforge adopt
+  ⏵⏵ accept edits on (shift+tab to cycle)

@@ -250,7 +250,7 @@ assert_contains "$NH_TXT" '"branch":"feature/old"' "needs_human: unintegrated no
 assert_eq "$(jx "$OUT" 'j.needs_human.find(e=>e.path&&e.path.endsWith("/wt-b-mismatch")).class')" "marker-branch-mismatch" "needs_human: marker branch mismatch listed"
 nhcmd() { jx "$OUT" "j.needs_human.find(e=>e.path&&e.path.endsWith('/wt-$1')).command"; }
 DET_HEAD="$(git -C "$TEST_TMP/wt-b-detached" rev-parse HEAD)"
-assert_eq "$(nhcmd b-detached)" "git -C '$SBX' update-ref 'refs/archive/$(today)/detached/wt-b-detached' '$DET_HEAD' && git -C '$SBX' worktree remove '$TEST_TMP/wt-b-detached'" "needs_human (detached): command archives HEAD first"
+assert_eq "$(nhcmd b-detached)" "git -C '$SBX' update-ref 'refs/archive/$(today)/detached/wt-b-detached-${DET_HEAD:0:12}' '$DET_HEAD' '' && git -C '$SBX' worktree remove '$TEST_TMP/wt-b-detached'" "needs_human (detached): command archives HEAD first"
 assert_eq "$(nhcmd b-mismatch)" "git -C '$SBX' worktree remove '$TEST_TMP/wt-b-mismatch'" "needs_human (marker mismatch): HEAD is the branch tip, plain remove"
 CMD_DET="$(nhcmd b-detached)"
 assert_not_contains "$NH_TXT" '/wt-b-live' "needs_human: live excluded"
@@ -304,8 +304,41 @@ assert_eq "$(jx "$OUT3" 'j.needs_human.find(e=>e.branch==="hands/old2").class')"
 # run the suggested commands exactly: the worktrees go, the old HEADs stay resolvable through the archive ref
 G cat-file -e "$DET_HEAD^{commit}" && bash -c "$CMD_DET"
 [ ! -d "$TEST_TMP/wt-b-detached" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "suggested commands should remove the worktrees"
-assert_eq "$(G rev-parse "refs/archive/$(today)/detached/wt-b-detached")" "$DET_HEAD" "detached HEAD survives under the archive ref"
+assert_eq "$(G rev-parse "refs/archive/$(today)/detached/wt-b-detached-${DET_HEAD:0:12}")" "$DET_HEAD" "detached HEAD survives under the archive ref"
 G branch -f probe-det "$DET_HEAD" && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "old HEAD must be restorable"
+
+# archive-ref safety: create-only, collision-proof, check-ref-format-safe names
+mk_detached() { # <dir-name> -> detached, clean, expired-marker worktree
+  G worktree add -q --detach "$TEST_TMP/$1" "$BASE" 2>/dev/null
+  git -C "$TEST_TMP/$1" -c user.email=t@t -c user.name=t commit -q --allow-empty -m "ahead-$1"
+  mk_marker "$TEST_TMP/$1" "none" root-z run-z "retention_reason=failure" "$EXPIRED"
+}
+rm -f "$COMMON/autopilot/mission/registry.json"   # restore a reliable campaign signal (corrupt registry from above)
+mk_detached "wt-col"; mk_detached "sp ace.lock"
+COL_HEAD="$(git -C "$TEST_TMP/wt-col" rev-parse HEAD)"; SP_HEAD="$(git -C "$TEST_TMP/sp ace.lock" rev-parse HEAD)"
+OUT4="$(node "$SCRIPT" reap --repo "$SBX" --auto --yes)"
+nh4() { jx "$OUT4" "j.needs_human.find(e=>e.path&&e.path.endsWith('/$1')).command"; }
+CMD_COL="$(nh4 wt-col)"; CMD_SP="$(nh4 'sp ace.lock')"
+# (1) a pre-existing ref with the exact name: the command fails and the worktree stays
+COL_REF="refs/archive/$(today)/detached/wt-col-${COL_HEAD:0:12}"
+G update-ref "$COL_REF" "$BASE"
+bash -c "$CMD_COL" 2>/dev/null && fail "collision: command should fail" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
+[ -d "$TEST_TMP/wt-col" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "collision: worktree must stay"
+assert_eq "$(G rev-parse "$COL_REF")" "$BASE" "collision: existing archive ref not overwritten"
+# (2) space + trailing .lock: ref name is valid and the command succeeds
+SP_REF="refs/archive/$(today)/detached/sp-ace-${SP_HEAD:0:12}"
+assert_contains "$CMD_SP" "'$SP_REF'" "sanitized ref name (space, .lock)"
+git check-ref-format "$SP_REF" && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "ref name must pass check-ref-format"
+bash -c "$CMD_SP" && [ ! -d "$TEST_TMP/sp ace.lock" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "sanitized command should succeed and remove the worktree"
+assert_eq "$(G rev-parse "$SP_REF")" "$SP_HEAD" "sanitized archive ref holds the HEAD"
+# (3) branch-archive collision keeps the branch (auto mode never overwrites)
+OLD4="$(old_commit 20 "$BASE")"; no_reflog_branch hands/coll "$OLD4"
+G update-ref "refs/archive/$(today)/hands/coll" "$BASE"
+OUT5="$(node "$SCRIPT" reap --repo "$SBX" --auto --yes)"
+G rev-parse --verify -q refs/heads/hands/coll >/dev/null && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "branch with colliding archive ref must be kept"
+assert_eq "$(jx "$OUT5" 'j.kept.find(k=>k.branch==="hands/coll").why')" "archive_ref_failed" "reason: archive ref collision"
+assert_eq "$(G rev-parse "refs/archive/$(today)/hands/coll")" "$BASE" "branch collision: existing ref not overwritten"
+assert_contains "$(jx "$OUT5" 'j.needs_human.find(e=>e.branch==="hands/coll").command')" "'' && git" "needs_human branch command is create-only"
 
 kill "$SESS_PID" 2>/dev/null; wait "$SESS_PID" 2>/dev/null
 

@@ -587,6 +587,14 @@ function measureSizes(paths) {
 }
 
 // ------------------------------------------------------------------ needs-human set
+// Leaf of refs/archive/<date>/detached/: a basename sanitized to check-ref-format rules plus the head sha prefix
+// (two worktrees sharing a basename must not share a ref).
+function archiveRefLeaf(wtPath, head) {
+  let b = path.basename(wtPath).replace(/[^A-Za-z0-9._-]/g, '-').replace(/\.{2,}/g, '.');
+  b = b.replace(/^[.-]+/, '');
+  for (let prev = null; prev !== b;) { prev = b; b = b.replace(/\.lock$/, '').replace(/\.+$/, ''); }
+  return `${b || 'wt'}-${String(head).slice(0, 12)}`;
+}
 // ctx: { mainPath, cfg, nowMs, sig, scriptPath, failedWorktrees:Set, failedBranches:Set }
 function computeNeedsHuman(rows, branches, ctx) {
   const list = [];
@@ -597,8 +605,9 @@ function computeNeedsHuman(rows, branches, ctx) {
   // commits reachable only from HEAD on a plain `worktree remove`: pin HEAD under refs/archive first.
   const cmdRemoveSafe = (w) => {
     if (!w.detached && w.head_is_branch_tip === true) return cmdRemove(w.path);
-    const ref = `refs/archive/${utcDate(ctx.nowMs)}/detached/${path.basename(w.path)}`;
-    return `git -C ${shq(ctx.mainPath)} update-ref ${shq(ref)} ${shq(w.head)} && ${cmdRemove(w.path)}`;
+    // create-only (empty old-value): a pre-existing ref makes update-ref fail, so `&&` keeps the worktree.
+    const ref = `refs/archive/${utcDate(ctx.nowMs)}/detached/${archiveRefLeaf(w.path, w.head)}`;
+    return `git -C ${shq(ctx.mainPath)} update-ref ${shq(ref)} ${shq(w.head)} '' && ${cmdRemove(w.path)}`;
   };
   // campaign-held: an unresolved campaign/Mission names this root; campaign-unknown: the signal is unreadable
   // and the marker's root differs from its run (the auto mode keeps those too).
@@ -656,7 +665,7 @@ function computeNeedsHuman(rows, branches, ctx) {
     const age = daysSince(act, ctx.nowMs);
     if (age === null || age < ctx.cfg.archive_branch_days) continue;
     const ref = `refs/archive/${utcDate(ctx.nowMs)}/${b.branch}`;
-    list.push({ kind: 'branch', branch: b.branch, class: b.class, age_days: age, bytes: null, reason: dispatch ? 'archive_failed' : 'unintegrated_non_dispatch', command: `git -C ${shq(ctx.mainPath)} update-ref ${shq(ref)} ${b.tip} && git -C ${shq(ctx.mainPath)} branch -D ${shq(b.branch)}` });
+    list.push({ kind: 'branch', branch: b.branch, class: b.class, age_days: age, bytes: null, reason: dispatch ? 'archive_failed' : 'unintegrated_non_dispatch', command: `git -C ${shq(ctx.mainPath)} update-ref ${shq(ref)} ${b.tip} '' && git -C ${shq(ctx.mainPath)} branch -D ${shq(b.branch)}` });
   }
   return list;
 }

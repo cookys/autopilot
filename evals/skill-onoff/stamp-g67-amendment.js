@@ -27,6 +27,7 @@ const TOUCHED = [
   'arms/g67/off.json', 'arms/g67/on.json',
   'prereg/stage-graph-g67.json', 'prereg/stage-graph-g67.md', 'prereg/stage-graph-g67.amend-1-plugin-scripts.json',
   'run-g67-campaign.js', 'run-skill-onoff-eval.sh', 'stamp-g67-amendment.js',
+  'packs/manifest.json', 'README.md', '../../hooks/tests/skill-onoff-g67.test.sh',
 ];
 
 const manifest = readJson('packs/manifest.json');
@@ -37,6 +38,13 @@ for (const a of ['off', 'on']) {
 }
 if (missing.length) die(`packs not frozen yet (run the post_merge_steps first): ${missing.join(', ')}`);
 
+// provenance of a pack the amendment introduced: freeze-pack writes manifest.packs[id] (file digests, the key the existence
+// check above uses) and manifest.pack_meta[id] (source ref); both must be there or the stamp refuses
+function packMeta(id) {
+  const meta = (manifest.pack_meta || {})[id];
+  if (!meta || !meta.ref) die(`packs/manifest.json has no pack_meta.${id}.ref (freeze it with freeze-pack.js)`);
+  return { ...meta, files: Object.keys(manifest.packs[id]).length, digest_sha256: crypto.createHash('sha256').update(JSON.stringify(manifest.packs[id])).digest('hex') };
+}
 const preregPath = path.join(root, 'prereg/stage-graph-g67.json');
 const prereg = readJson('prereg/stage-graph-g67.json');
 const armSha = { off: sha('arms/g67/off.json'), on: sha('arms/g67/on.json') };
@@ -67,7 +75,7 @@ row.amendments[AMEND] = {
   made_after_v1_results_seen: true,
   v1_status: 'INSTRUMENT-DEFECTIVE for G6 (precondition false: session-mode.js absent from the plugin); G7 v1 superseded by the v8 text. Never re-scored.',
   v2_results: 'results/stage-graph-g67.v2.jsonl',
-  packs: Object.fromEntries(['fixture-scripts-g67-v2'].map((id) => [id, (manifest.pack_meta || {})[id] || null])),
+  packs: Object.fromEntries(['fixture-scripts-g67-v2'].map((id) => [id, packMeta(id)])),
   files,
 };
 row.files_note = 'files = digests of the v1 as-run state (arms v7, fixture-scripts-g67); superseded by amendments.amend-1-plugin-scripts.files for every file listed there';

@@ -341,8 +341,12 @@ grep -q 'session-mode.js' "$TEST_TMP/s7-absent/preflight.log" || fail "preflight
 ONOFF_REQUIRE_PLUGIN_SCRIPTS=scripts/session-mode.js cell7 "$TEST_TMP/s7-broken" "$TEST_TMP/arm-broken.json"
 grep -q '"failure_cause":"plugin_script_unresolvable"' "$TEST_TMP/s7-broken/result.json" || fail "a script whose require graph is missing must be plugin_script_unresolvable"
 [ ! -e "$SENT" ] || fail "broken require graph: the agent must NOT be started"
-ONOFF_REQUIRE_PLUGIN_SCRIPTS=../escape cell7 "$TEST_TMP/s7-escape" "$AR/on.json"
-grep -q '"failure_cause":"plugin_script_unresolvable"' "$TEST_TMP/s7-escape/result.json" || fail "a path escaping the plugin root must fail the check"
+# a path escaping the plugin root: plant a LOADABLE escape.js beside the scratch plugin (TMPDIR is private to this test), so only the guard can fail it
+mkdir -p "$TEST_TMP/s7tmp"; echo "module.exports = {};" > "$TEST_TMP/s7tmp/escape.js"
+TMPDIR="$TEST_TMP/s7tmp" ONOFF_REQUIRE_PLUGIN_SCRIPTS=../escape.js cell7 "$TEST_TMP/s7-escape" "$AR/on.json"
+grep -q '"failure_cause":"plugin_script_unresolvable"' "$TEST_TMP/s7-escape/result.json" || fail "a path escaping the plugin root must fail the check ($(cat "$TEST_TMP/s7-escape/result.json"))"
+grep -q "bad required script path" "$TEST_TMP/s7-escape/preflight.log" || fail "the escape must be refused by the path guard, not by a failed load"
+[ ! -e "$SENT" ] || fail "escape: the agent must NOT be started"
 # default (env unset): no check, rows of every other eval are unchanged
 ( unset ONOFF_REQUIRE_PLUGIN_SCRIPTS; cell7 "$TEST_TMP/s7-default" "$TEST_TMP/arm-noplugin.json" )
 grep -q '"failure_class":null' "$TEST_TMP/s7-default/result.json" && [ -e "$SENT" ] || fail "without the env the check must be off"
@@ -362,5 +366,12 @@ node -e 'const fs=require("fs");const j=JSON.parse(fs.readFileSync(process.argv[
 rc=0; o=$(PATH="$TEST_TMP/pinbin:$PATH" ONOFF_PACKS_DIR="$PK" node "$BASE/run-g67-campaign.js" --results "$TEST_TMP/live2.jsonl" --arms-dir "$AR" --prereg "$TEST_TMP/prereg-pinbin.json" 2>&1) || rc=$?
 [ "$rc" = 2 ] && grep -q "does not match" <<<"$o" || fail "live run must refuse mismatching arm shas (rc=$rc $o)"
 [ ! -e "$TEST_TMP/live2.jsonl" ] || fail "a refusal must not create a results file"
+
+# the prereg must register plugin_required_scripts: absent or empty is a loud refusal, not a silently disabled check
+for v in delete empty; do
+  node -e 'const fs=require("fs");const j=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));if(process.argv[3]==="delete")delete j.plugin_required_scripts;else j.plugin_required_scripts=[];fs.writeFileSync(process.argv[2],JSON.stringify(j))' "$PREREG" "$TEST_TMP/prereg-nopsr.json" "$v"
+  rc=0; o=$(node "$BASE/run-g67-campaign.js" --results "$TEST_TMP/nopsr.jsonl" --dry-run --prereg "$TEST_TMP/prereg-nopsr.json" 2>&1) || rc=$?
+  [ "$rc" = 2 ] && grep -q plugin_required_scripts <<<"$o" || fail "prereg with plugin_required_scripts $v must be refused (rc=$rc $o)"
+done
 
 echo "PASS: skill-onoff-g67 (markers, fixtures, scorer, timeout knob, campaign, plugin-script self-check)"

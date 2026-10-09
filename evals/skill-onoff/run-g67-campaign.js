@@ -42,6 +42,7 @@ if (!['cc', 'stub'].includes(runner)) die('runner must be cc|stub');
 if (runner !== 'stub' && model !== P.model) die(`model must be ${P.model} (the prereg's registered model), got ${model}`);
 if (!Number.isInteger(reps) || reps < 1) die('--reps must be a positive integer');
 if (runner !== 'stub' && reps !== P.reps) die(`reps must be ${P.reps} (prereg) for a live run, got ${reps}`);
+if (!Array.isArray(P.plugin_required_scripts) || P.plugin_required_scripts.length === 0) die(`prereg ${preregPath} has no plugin_required_scripts (amendment 1): without it the plugin-script self-check is silently off`);
 const ARMS = [P.arms.off, P.arms.on];
 const TASKS = Object.keys(P.tasks);
 

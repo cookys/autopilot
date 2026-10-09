@@ -282,7 +282,9 @@ if [ -n "${ONOFF_REQUIRE_PLUGIN_SCRIPTS:-}" ]; then
   IFS=, read -ra REQ_SCRIPTS <<< "$ONOFF_REQUIRE_PLUGIN_SCRIPTS"
   for rs in "${REQ_SCRIPTS[@]}"; do
     case "$rs" in /*|*..*|"") PREFLIGHT_FAIL="bad required script path: $rs"; break ;; esac
-    if ! HOME="$SCRATCH_HOME" node -e 'require(require("path").join(process.argv[1], process.argv[2]))' "$SCRATCH_PLUGIN" "$rs" > "$OUT_DIR/preflight.log" 2>&1; then
+    # fresh empty cwd + scratch HOME: require-time side effects can never land in the eval checkout. A script that guards its
+    # main with `require.main === module` (session-mode.js does) only loads its require graph here; main never runs.
+    if ! ( cd "$(mktemp -d -p "$SCRATCH_HOME" preflight-XXXXXX)" && HOME="$SCRATCH_HOME" node -e 'require(require("path").join(process.argv[1], process.argv[2]))' "$SCRATCH_PLUGIN" "$rs" ) > "$OUT_DIR/preflight.log" 2>&1; then
       PREFLIGHT_FAIL="plugin script does not load: $rs"; break
     fi
   done

@@ -93,6 +93,8 @@ set -uo pipefail
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=lib/json-emit.sh
 source "$SELF_DIR/lib/json-emit.sh"
+# shellcheck source=lib/dispatch-branch-ledger.sh
+source "$SELF_DIR/lib/dispatch-branch-ledger.sh"
 # shellcheck source=lib/dispatch-detach.sh
 source "$SELF_DIR/lib/dispatch-detach.sh"
 
@@ -268,6 +270,8 @@ if [ "$RESUME" -eq 0 ]; then
     git update-ref -d "refs/heads/$BRANCH" >/dev/null 2>&1 || true
     die_precondition "git worktree add failed for $WT"
   fi
+  # Branch->session ledger row (close-out ownership). Fail-open: never fails the dispatch.
+  dispatch_branch_ledger_append "$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" "$BRANCH" "$RUN_ID" "${AUTOPILOT_WORKTREE_ROOT_RUN_ID:-$RUN_ID}" "$BASE_SHA"
   # Schema-2 marker + lifetime flock so reap-dispatch-worktrees.sh treats this like any rail's.
   _excl="$(git rev-parse --git-common-dir)/info/exclude"; mkdir -p "$(dirname "$_excl")"
   for _name in .autopilot-worktree .autopilot-worktree.lock; do

@@ -15,6 +15,7 @@
 //   repo-residue-sweep.js reap     --repo <dir> --yes [--preserve-dir <dir>] [--older-than-days N]
 //                                  [--integration-ref <ref>] [--json]
 //   repo-residue-sweep.js reap     --repo <dir> --auto --yes [--integration-ref <ref>] [--json]
+//   repo-residue-sweep.js close-session --session <sid> [--yes] [--repo <dir>] [--integration-ref <ref>] [--json]
 //
 // CLASSES (from git facts, never from a marker's claim):
 //   worktree: live | missing-dir | dirty | clean-integrated | clean-unintegrated
@@ -85,6 +86,32 @@
 // file is older than UNKNOWN_SEAT_MIN_AGE_DAYS (14; --older-than-days overrides, 0 allowed).
 // Every scan row carries decision keep|reap and a reason.
 //
+// CLOSE-SESSION (`close-session --session S`; dry run without --yes, which prints the plan and exits 0):
+// session close-out. Acts ONLY on local branches that the branch ledger
+// <git-common-dir>/autopilot/dispatch-branches.jsonl (rows appended by dispatch-hetero.sh /
+// dispatch-foreman.sh via scripts/lib/dispatch-branch-ledger.sh) attributes to S. A row is S's when its
+// session_id is S (CLAUDE_CODE_SESSION_ID at creation); because a foreman's hands run in a child Claude
+// session with another id, a row whose root_run_id or run_id equals the run_id of a row S owns is S's too,
+// transitively (only run_id propagates, never root_run_id; row order does not matter). A branch name that
+// appears in several rows belongs to whoever owns the LATEST row (created_at, then file order), and that row
+// must describe the live ref: the ref's oldest reflog entry within 120 s of the row's created_at (no reflog:
+// tip commit date not older than the row, or tip == the row's base_sha), else keep `ledger_row_stale`. No age floor. Per branch, in order:
+//   keep  integration ref; checked out in any worktree; pointed at by ANY marker worktree that is live, has a
+//         process cwd inside (or /proc unknowable) or an unexpired lease; stale ledger row; campaign signal unreliable
+//         (campaign_signal_unavailable); a row's root_run_id/run_id (or the marker's) in an unresolved
+//         campaign/Mission (unresolved_campaign);
+//   integrated (same rule as the sweep) -> pin-evidence-anchors apply, then `git update-ref -d` with the expected tip (compare-and-swap);
+//   unintegrated -> `git update-ref refs/archive/<UTC date>/<branch> <tip> ''` (create-only), verify, pin
+//         anchors, then delete with `git update-ref -d refs/heads/<branch> <tip>` (compare-and-swap). A colliding ref at another sha keeps the branch (archive_ref_failed); a
+//         ref already at this exact tip counts as this tip's archive.
+// Output {schema:"autopilot.close-session/1", session, dry_run, deleted:[{branch,tip}],
+// archived:[{branch,tip,ref}], kept:[{branch,why}]}. Exit 0 = nothing left behind except by a keep rule;
+// 1 = something it was asked to remove stayed (archive_ref_failed, evidence_anchoring_failed, tip_changed,
+// a failed delete, integration_unverifiable); a branch checked out between planning and deletion is kept as checked_out_late; 2 = usage / ledger unreadable. Restore an archive with
+// `git branch <name> refs/archive/<date>/<name>`.
+// LEDGER COMPACTION: `reap --auto` drops ledger rows whose branch no longer exists (unparseable lines are
+// kept), rewriting atomically under the same flock the rails append under; failure is a note, never fatal.
+//
 // OUTPUT: one JSON object; `scan` is read-only. EXIT: 0 ok · 1 reap left something it was asked
 // to remove (named) · 2 usage / cannot run. A scan finding is not an error.
 //
@@ -114,14 +141,14 @@ const AUTO_RESULT_NAME = 'autopilot-residue-auto.json';
 
 function usage(msg) {
   if (msg) process.stderr.write(`repo-residue-sweep: ${msg}\n`);
-  process.stderr.write('usage: repo-residue-sweep.js scan|preserve|reap --repo <dir> [--integration-ref <ref>] [--out <dir>] [--worktree <path>]... [--yes] [--auto] [--sizes] [--preserve-dir <dir>] [--older-than-days N] [--json]\n');
+  process.stderr.write('usage: repo-residue-sweep.js scan|preserve|reap|close-session --repo <dir> [--session <sid>] [--integration-ref <ref>] [--out <dir>] [--worktree <path>]... [--yes] [--auto] [--sizes] [--preserve-dir <dir>] [--older-than-days N] [--json]\n');
   process.exit(2);
 }
 
 function parseArgs(argv) {
-  const out = { cmd: null, repo: null, integrationRef: null, out: null, worktrees: [], yes: false, preserveDir: null, olderThanDays: null, auto: false, sizes: false };
+  const out = { cmd: null, repo: null, integrationRef: null, out: null, worktrees: [], yes: false, preserveDir: null, olderThanDays: null, auto: false, sizes: false, session: null };
   const cmd = argv[0];
-  if (!['scan', 'preserve', 'reap'].includes(cmd)) usage(`command must be scan|preserve|reap (got: ${cmd || ''})`);
+  if (!['scan', 'preserve', 'reap', 'close-session'].includes(cmd)) usage(`command must be scan|preserve|reap|close-session (got: ${cmd || ''})`);
   out.cmd = cmd;
   for (let i = 1; i < argv.length; i += 1) {
     const k = argv[i];
@@ -130,6 +157,7 @@ function parseArgs(argv) {
     else if (k === '--integration-ref') out.integrationRef = need();
     else if (k === '--out') out.out = need();
     else if (k === '--worktree') out.worktrees.push(need());
+    else if (k === '--session') out.session = need();
     else if (k === '--yes') out.yes = true;
     else if (k === '--auto') out.auto = true;
     else if (k === '--sizes') out.sizes = true;
@@ -139,7 +167,13 @@ function parseArgs(argv) {
     else if (k === '-h' || k === '--help') { process.stdout.write(fs.readFileSync(__filename, 'utf8').split('\n').filter((l) => l.startsWith('//')).join('\n') + '\n'); process.exit(0); }
     else usage(`unknown argument: ${k}`);
   }
+  if (!out.repo && cmd === 'close-session') out.repo = process.cwd();
   if (!out.repo) usage('--repo is required');
+  if (out.session !== null && cmd !== 'close-session') usage('--session belongs to close-session');
+  if (cmd === 'close-session') {
+    if (!out.session || !/^[A-Za-z0-9._-]+$/.test(out.session)) usage('close-session requires --session <sid> ([A-Za-z0-9._-]+)');
+    if (out.auto || out.sizes || out.preserveDir !== null || out.olderThanDays !== null || out.out || out.worktrees.length) usage('close-session takes only --session --yes --repo --integration-ref --json');
+  }
   if (cmd === 'preserve' && !out.out) usage('preserve requires --out <dir>');
   if (cmd === 'reap' && !out.yes) usage('reap requires --yes');
   if (out.auto && cmd !== 'reap') usage('--auto belongs to reap');
@@ -804,11 +838,15 @@ function runAuto(o, mainPath, integrationSha, integrationBranch, common) {
     }
   }
 
+  // 3b. dispatch-branch ledger: drop rows whose branch is gone (atomic, under the rails' append lock; fail-open)
+  const ledger = compactLedger(common, mainPath);
+  if (ledger.error) notes.push(ledger.error);
+
   // 4. what remains for a person
   rows = classifyWorktrees(mainPath, mainPath, integrationSha);
   annotateWorktrees(rows, cfg, Date.now(), cwds, mainPath);
   branches = classifyBranches(mainPath, listWorktrees(mainPath).map((w) => ({ branch: w.branch, path: path.resolve(w.path) })), integrationSha, integrationBranch);
-  const report = { schema: 'autopilot.residue-auto/1', ran_at: new Date(nowMs).toISOString(), ran_at_epoch: Math.floor(nowMs / 1000), removed, archived, kept, notes, anchors };
+  const report = { schema: 'autopilot.residue-auto/1', ran_at: new Date(nowMs).toISOString(), ran_at_epoch: Math.floor(nowMs / 1000), removed, archived, kept, notes, anchors, ledger };
   const ctx = { mainPath, cfg, nowMs: Date.now(), sig, failedWorktrees, failedBranches };
   attachNeedsHuman(report, rows, branches, ctx, 'measure', null);
   const tmp = `${resultPath}.tmp.${process.pid}`;
@@ -819,7 +857,200 @@ function runAuto(o, mainPath, integrationSha, integrationBranch, common) {
   return leftover.length > 0 ? 1 : 0;
 }
 
+// ------------------------------------------------------------------ dispatch-branch ledger + close-session
+// The rails (dispatch-hetero.sh, dispatch-foreman.sh via scripts/lib/dispatch-branch-ledger.sh) append one
+// row per branch they create to <git-common-dir>/autopilot/dispatch-branches.jsonl, under flock on
+// <ledger>.lock. close-session reads it; `reap --auto` compacts it under the same lock.
+const LEDGER_NAME = 'dispatch-branches.jsonl';
+const LEDGER_SCHEMA = 'autopilot.dispatch-branch/1';
+function ledgerPath(common) { return path.join(common, 'autopilot', LEDGER_NAME); }
+
+// null = ledger unreadable; [] = absent/empty. Malformed lines are skipped here (compaction keeps them).
+function readLedger(common) {
+  const p = ledgerPath(common);
+  let text;
+  try { text = fs.readFileSync(p, 'utf8'); } catch (e) { return e.code === 'ENOENT' ? [] : null; }
+  const rows = [];
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue;
+    let r; try { r = JSON.parse(line); } catch { continue; }
+    if (r && r.schema === LEDGER_SCHEMA && typeof r.branch === 'string' && r.branch) rows.push(r);
+  }
+  return rows;
+}
+
+// Branches that belong to session S. A row is S's when its session_id is S. A foreman runs its hands in a child
+// Claude session (different session id), so ownership follows run ids: a row whose root_run_id or run_id equals
+// the run_id of a row already owned by S is owned too, transitively. Only the run_id of an owned row propagates
+// (never its root_run_id: that would pull in sibling sessions that share a campaign root).
+function ownedBranches(rows, session) {
+  const owned = new Set();
+  const runIds = new Set();
+  const take = (r) => { owned.add(r); if (typeof r.run_id === 'string' && r.run_id) runIds.add(r.run_id); };
+  for (const r of rows) if (r.session_id === session) take(r);
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const r of rows) {
+      if (owned.has(r)) continue;
+      if ((typeof r.root_run_id === 'string' && runIds.has(r.root_run_id)) || (typeof r.run_id === 'string' && runIds.has(r.run_id))) { take(r); grew = true; }
+    }
+  }
+  // A branch name can be reused (deleted, then re-created by another session or by hand): the LATEST row for
+  // a name (greatest created_at, ties by file order) is the one that describes the live branch. The branch is
+  // S's only when that row is owned; an older owned row is stale history.
+  const latest = new Map();
+  rows.forEach((r, i) => {
+    const cur = latest.get(r.branch);
+    const at = Number(r.created_at) || 0;
+    if (!cur || at >= cur.at) latest.set(r.branch, { r, at, i });
+  });
+  const names = new Map(); // branch -> [its latest row], only when S owns that row
+  for (const [branch, { r }] of latest) if (owned.has(r)) names.set(branch, [r]);
+  return names;
+}
+
+// Drop ledger rows whose branch no longer exists. Runs as `node <this> _compact-ledger <common> <main>` under
+// `flock -x <ledger>.lock` so a rail appending at the same moment waits. Unparseable lines are kept verbatim.
+function compactLedgerLocked(common, mainPath) {
+  const p = ledgerPath(common);
+  let text; try { text = fs.readFileSync(p, 'utf8'); } catch (e) { return e.code === 'ENOENT' ? 0 : -1; }
+  const heads = git(mainPath, ['for-each-ref', '--format=%(refname:short)', 'refs/heads']);
+  if (!heads.ok) return -1;
+  const live = new Set(heads.out.split('\n').filter(Boolean));
+  const keep = []; let dropped = 0;
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue;
+    let r = null; try { r = JSON.parse(line); } catch { /* keep junk */ }
+    if (r && r.schema === LEDGER_SCHEMA && typeof r.branch === 'string' && !live.has(r.branch)) { dropped += 1; continue; }
+    keep.push(line);
+  }
+  if (dropped === 0) return 0;
+  const tmp = `${p}.tmp.${process.pid}`;
+  fs.writeFileSync(tmp, keep.length ? `${keep.join('\n')}\n` : '');
+  fs.renameSync(tmp, p);
+  return dropped;
+}
+function compactLedger(common, mainPath) {
+  const p = ledgerPath(common);
+  if (!fs.existsSync(p)) return { compacted: 0 };
+  const r = spawnSync('flock', ['-x', '-w', '10', `${p}.lock`, process.execPath, __filename, '_compact-ledger', common, mainPath], { encoding: 'utf8' });
+  if (r.error || r.status !== 0) return { compacted: 0, error: `ledger compaction failed (rc ${r.status}): ${(r.stderr || String(r.error || '')).trim().slice(0, 200)}` };
+  const n = Number((r.stdout || '').trim());
+  return { compacted: Number.isFinite(n) ? n : 0 };
+}
+
+// A rail appends its row seconds after it creates the branch, so the row describes the live ref only when the
+// ref's CURRENT lifetime began within LEDGER_STALE_SLACK_S of the row's created_at. Lifetime start = the oldest
+// reflog entry (a deleted branch's reflog goes with it). A branch re-created later by another session or by hand
+// starts after the row; one that predates it starts before. No reflog: only the lower bound can be checked,
+// against the tip commit date. Undeterminable = false (the branch is kept).
+const LEDGER_STALE_SLACK_S = 120;
+function ledgerRowFitsBranch(repo, b, createdAt, baseSha) {
+  if (!Number.isFinite(createdAt)) return false;
+  const r = git(repo, ['reflog', 'show', '--date=unix', '--format=%gd', `refs/heads/${b.branch}`]);
+  if (r.ok && r.out.trim()) {
+    const m = /@\{(\d+)\}$/.exec(r.out.trim().split('\n').pop().trim());
+    if (!m) return false;
+    return Math.abs(Number(m[1]) - createdAt) <= LEDGER_STALE_SLACK_S;
+  }
+  if (baseSha && b.tip === baseSha) return true; // still at the commit the rail created it from
+  return b.last_commit_unix ? b.last_commit_unix >= createdAt - LEDGER_STALE_SLACK_S : false;
+}
+
+function runCloseSession(o, mainPath, integrationSha, integrationBranch, common) {
+  const nowMs = Date.now();
+  const report = { schema: 'autopilot.close-session/1', session: o.session, dry_run: !o.yes, deleted: [], archived: [], kept: [] };
+  const rows = readLedger(common);
+  if (rows === null) { process.stderr.write(`repo-residue-sweep: dispatch-branch ledger unreadable: ${ledgerPath(common)}\n`); return 2; }
+  const mine = ownedBranches(rows, o.session);
+  const cfg = loadResidueConfig();
+  const wts = listWorktrees(mainPath);
+  const checkedOut = new Map();
+  for (const w of wts) if (w.branch) checkedOut.set(w.branch, path.resolve(w.path));
+  const branches = classifyBranches(mainPath, wts.map((w) => ({ branch: w.branch, path: path.resolve(w.path) })), integrationSha, integrationBranch);
+  const byName = new Map(branches.map((b) => [b.branch, b]));
+  const sig = loadCampaignSignal(common);
+  const wtRows = classifyWorktrees(mainPath, mainPath, integrationSha);
+  annotateWorktrees(wtRows, cfg, nowMs, readProcCwds(), mainPath);
+  const pointers = new Map(); // branch -> every marker worktree that names it
+  for (const w of wtRows) {
+    if (!(w.marker_strict && w.marker_strict.valid && fs.existsSync(w.path))) continue;
+    if (!pointers.has(w.marker_strict.branch)) pointers.set(w.marker_strict.branch, []);
+    pointers.get(w.marker_strict.branch).push(w);
+  }
+
+  const planDelete = []; const planArchive = [];
+  for (const name of [...mine.keys()].sort()) {
+    const b = byName.get(name);
+    if (!b) continue; // already gone
+    const keep = (why) => report.kept.push({ branch: name, why });
+    if (b.class === 'integration-ref') { keep('integration_ref'); continue; }
+    if (checkedOut.has(name)) { keep('checked_out'); continue; }
+    const ptrs = pointers.get(name) || [];
+    // ANY pointing worktree that is live, in use or under an unexpired lease keeps the branch
+    if (ptrs.some((w) => w.class === 'live' || w.cwd_busy !== false || w.lease_expired === false)) { keep('live_or_in_use_or_unexpired_lease_worktree'); continue; }
+    // The row must describe THIS lifetime of the branch (the name may have been reused after S's branch was deleted).
+    if (!ledgerRowFitsBranch(mainPath, b, Number(mine.get(name)[0].created_at), mine.get(name)[0].base_sha)) { keep('ledger_row_stale'); continue; }
+    if (!sig.reliable) { keep('campaign_signal_unavailable'); continue; }
+    const ids = [];
+    for (const r of mine.get(name)) { if (r.root_run_id) ids.push(r.root_run_id); if (r.run_id) ids.push(r.run_id); }
+    for (const w of ptrs) ids.push(w.marker_strict.root_run_id);
+    if (ids.some((id) => sig.unresolved.has(id)) || [...sig.unresolved].some((id) => id.length >= 8 && name.includes(id))) { keep('unresolved_campaign'); continue; }
+    if (b.class === 'integrated') planDelete.push(b);
+    else if (b.class === 'unintegrated') planArchive.push(b);
+    else report.kept.push({ branch: name, why: 'integration_unverifiable', failed: true });
+  }
+
+  if (!o.yes) {
+    for (const b of planDelete) report.deleted.push({ branch: b.branch, tip: b.tip });
+    for (const b of planArchive) report.archived.push({ branch: b.branch, tip: b.tip, ref: `refs/archive/${utcDate(nowMs)}/${b.branch}` });
+    writeStdout(`${JSON.stringify(report)}\n`);
+    return 0;
+  }
+
+  // archive first (create-only, each verified), then one anchor pass over everything to delete, then delete
+  const toDelete = planDelete.map((b) => ({ b, ref: null }));
+  for (const b of planArchive) {
+    const ref = `refs/archive/${utcDate(nowMs)}/${b.branch}`;
+    const cur = git(mainPath, ['rev-parse', '--verify', '--quiet', ref]);
+    let ok = cur.ok && cur.out.trim() === b.tip; // an archive ref already at this tip is this tip's archive
+    if (!ok && !cur.ok) ok = git(mainPath, ['update-ref', ref, b.tip, '']).ok; // '' = create-only
+    const verify = ok ? git(mainPath, ['rev-parse', '--verify', `${ref}^{commit}`]) : null;
+    if (verify && verify.ok && verify.out.trim() === b.tip) toDelete.push({ b, ref });
+    else report.kept.push({ branch: b.branch, why: 'archive_ref_failed', failed: true });
+  }
+  if (toDelete.length > 0) {
+    const args = [path.join(__dirname, 'pin-evidence-anchors.js'), 'apply', '--repo-root', mainPath, '--json'];
+    for (const { b } of toDelete) args.push('--exclude-ref', `refs/heads/${b.branch}`);
+    const r = spawnSync('node', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+    if (r.status !== 0) {
+      for (const { b } of toDelete) report.kept.push({ branch: b.branch, why: 'evidence_anchoring_failed', failed: true });
+    } else {
+      for (const { b, ref } of toDelete) {
+        const nowTip = git(mainPath, ['rev-parse', '--verify', '--quiet', `refs/heads/${b.branch}`]);
+        if (!nowTip.ok || nowTip.out.trim() !== b.tip) { report.kept.push({ branch: b.branch, why: 'tip_changed', failed: true }); continue; }
+        // anchoring took time: a worktree may have checked the branch out meanwhile
+        if (listWorktrees(mainPath).some((w) => w.branch === b.branch)) { report.kept.push({ branch: b.branch, why: 'checked_out_late' }); continue; }
+        // compare-and-swap: refuses if the branch moved since classification
+        const d = git(mainPath, ['update-ref', '-d', `refs/heads/${b.branch}`, b.tip]);
+        if (!d.ok) { report.kept.push({ branch: b.branch, why: d.err.trim().slice(0, 200) || 'branch_delete_failed', failed: true }); continue; }
+        if (ref) report.archived.push({ branch: b.branch, tip: b.tip, ref });
+        else report.deleted.push({ branch: b.branch, tip: b.tip });
+      }
+    }
+  }
+  const failed = report.kept.some((k) => k.failed);
+  for (const k of report.kept) delete k.failed;
+  writeStdout(`${JSON.stringify(report)}\n`);
+  return failed ? 1 : 0;
+}
+
 function main() {
+  if (process.argv[2] === '_compact-ledger') { // internal: runs under flock, see compactLedger()
+    let n = -1; try { n = compactLedgerLocked(process.argv[3], process.argv[4]); } catch { n = -1; }
+    if (n < 0) return 1;
+    writeStdout(`${n}\n`); return 0;
+  }
   const o = parseArgs(process.argv.slice(2));
   const repo = path.resolve(o.repo);
   const top = git(repo, ['rev-parse', '--show-toplevel']);
@@ -835,6 +1066,7 @@ function main() {
 
   const commonRaw = git(mainPath, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
   const common = commonRaw.ok ? commonRaw.out : path.join(mainPath, '.git');
+  if (o.cmd === 'close-session') return runCloseSession(o, mainPath, integrationSha.out, integrationBranch, common);
   if (o.cmd === 'reap' && o.auto) return runAuto(o, mainPath, integrationSha.out, integrationBranch, common);
 
   const worktrees = classifyWorktrees(mainPath, mainPath, integrationSha.out);

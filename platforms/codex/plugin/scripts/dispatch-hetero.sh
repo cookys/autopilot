@@ -554,6 +554,8 @@ usage() { sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'; }
 
 # shellcheck source=lib/json-emit.sh
 . "$SELF_DIR/lib/json-emit.sh"
+# shellcheck source=lib/dispatch-branch-ledger.sh
+. "$SELF_DIR/lib/dispatch-branch-ledger.sh"
 # shellcheck source=lib/grok-effort.sh
 . "$SELF_DIR/lib/grok-effort.sh"
 # shellcheck source=lib/cursor-model.sh
@@ -3110,6 +3112,9 @@ if [ "$WORKTREE_REUSED" -eq 0 ] \
   # even when dir creation fails (verified 2026-06-22). Reap it before bailing.
   _wt_lock_fail "git worktree add failed"
 fi
+# Branch->session ledger row (close-out ownership). Fail-open: never fails the dispatch.
+[ "$WORKTREE_REUSED" -eq 1 ] \
+  || dispatch_branch_ledger_append "$_wt_common_dir" "$BRANCH" "$WT_RUN_ID" "$WORKTREE_ROOT_RUN_ID" "$BASE_SHA"
 [ "$WORKTREE_REUSED" -eq 1 ] || _wt_creation_test_checkpoint after-add
 # Marker = --gc eligibility token (name-independent). Lifetime flock = liveness gate
 # (kernel-released on process death incl. SIGKILL; no pid checks — plan §2a/§2c).

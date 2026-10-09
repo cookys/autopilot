@@ -1,0 +1,25 @@
+{
+  "schema": "autopilot.load-source/1",
+  "checked_at": "2026-10-09T02:36:42.303Z",
+  "plugin_version": "3.0.0-alpha.1",
+  "source": "dev",
+  "source_basis": "dev_link",
+  "marketplace": "directory",
+  "marketplace_path": "/home/cookys/projects/autopilot",
+  "marketplace_is_dev": true,
+  "dev_link_ok": true,
+  "behind_upstream": 0,
+  "flags": [
+    "stale_cache_dirs"
+  ],
+  "stale_cache_dirs": [
+    {
+      "dir": "/home/cookys/.claude/plugins/cache/autopilot/autopilot/2.36.36",
+      "in_use_pids": [
+        "1808913",
+        "2097570"
+      ],
+      "alive": []
+    }
+  ]
+}

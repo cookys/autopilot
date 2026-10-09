@@ -1,0 +1,94 @@
+{
+  "schema": "autopilot.foreman-activity/1",
+  "scope": {
+    "project_key": "51de403da82a23f0",
+    "repo_identity": "git-common-dir:/home/cookys/projects/gate-sandbox/.git",
+    "root_run_id": "job-1791518496-ff49f41a"
+  },
+  "binding": "session",
+  "stall_s": 600,
+  "agents": [
+    {
+      "agent_id": "abf608c675ee1ab17",
+      "description": null,
+      "label": null,
+      "last_activity_at": "2026-10-09T04:05:11.119Z",
+      "age_s": 214,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-09T04:05:11.119Z",
+      "source": "stamp",
+      "session_id": "5c243380-f5fd-4321-b0c6-36ced1d1768e",
+      "binding": "session"
+    },
+    {
+      "agent_id": "a807af18bc30120d7",
+      "description": "L6 foreman: gate readme line",
+      "label": "Checking worktree git status",
+      "last_activity_at": "2026-10-09T04:05:06.021Z",
+      "age_s": 219,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-09T04:05:18.947Z",
+      "source": "stamp",
+      "session_id": "5c243380-f5fd-4321-b0c6-36ced1d1768e",
+      "binding": "session"
+    },
+    {
+      "agent_id": "a6761da255f31fa1a",
+      "description": null,
+      "label": null,
+      "last_activity_at": "2026-10-09T04:04:39.815Z",
+      "age_s": 245,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-09T04:04:39.815Z",
+      "source": "stamp",
+      "session_id": "5c243380-f5fd-4321-b0c6-36ced1d1768e",
+      "binding": "session"
+    },
+    {
+      "agent_id": "a30830e265112453c",
+      "description": null,
+      "label": null,
+      "last_activity_at": "2026-10-09T04:04:08.524Z",
+      "age_s": 276,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-09T04:04:08.524Z",
+      "source": "stamp",
+      "session_id": "5c243380-f5fd-4321-b0c6-36ced1d1768e",
+      "binding": "session"
+    },
+    {
+      "agent_id": "ad872709198e5974b",
+      "description": null,
+      "label": null,
+      "last_activity_at": "2026-10-09T04:03:37.324Z",
+      "age_s": 307,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-09T04:03:37.324Z",
+      "source": "stamp",
+      "session_id": "5c243380-f5fd-4321-b0c6-36ced1d1768e",
+      "binding": "session"
+    },
+    {
+      "agent_id": "ac50dfd2577be6ccd",
+      "description": null,
+      "label": null,
+      "last_activity_at": "2026-10-09T04:03:06.114Z",
+      "age_s": 339,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-09T04:03:06.114Z",
+      "source": "stamp",
+      "session_id": "5c243380-f5fd-4321-b0c6-36ced1d1768e",
+      "binding": "session"
+    }
+  ],
+  "stage": null,
+  "stage_source": null,
+  "stage_at": null,
+  "stage_age_s": null
+}

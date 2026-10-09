@@ -1,0 +1,16 @@
+{
+  "schema": "autopilot.decision/1",
+  "question": "請選 A 還是 B？",
+  "options": [
+    "A",
+    "B"
+  ],
+  "context": null,
+  "not_authorized": null,
+  "root_run_id": "job-1791514519-a0625980",
+  "repo_identity": "git-common-dir:/home/cookys/projects/gate-sandbox/.git",
+  "project_key": "51de403da82a23f0",
+  "opened_at": "2026-10-09T02:57:29.797Z",
+  "opened_by_session": "d2ea4d36-6a61-49ca-a6ad-f750c76fbf05",
+  "source": "ask_user_question"
+}

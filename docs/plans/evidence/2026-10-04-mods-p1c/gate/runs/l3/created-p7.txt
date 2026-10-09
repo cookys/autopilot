@@ -1,0 +1,7 @@
+P7 gate run A (2026-10-09), mode l3
+session id: aae85c79-d1b4-4577-a393-8f1af8f4507b (marker ~/.autopilot/session-mode/aae85c79-d1b4-4577-a393-8f1af8f4507b.json, level l3, root_run_id job-1791513684-0efcd31c)
+other roots seen in runs/: job-1791513640-213770f5 (51de403da82a23f0--job-1791513640-213770f5.json, a transient scope of this /l3 start)
+scope key: 51de403da82a23f0--job-1791513684-0efcd31c (project_key 51de403da82a23f0)
+hand: dispatch-hetero codex gpt-6-astra, root hetero-1791514213-2670304-a029, killed after stall capture
+sandbox: uncommitted README.md line (reset before next mode); governance enforce->shadow (reset)
+extra capture dirs: perm-agent, idle2, panel-legend/now/graph

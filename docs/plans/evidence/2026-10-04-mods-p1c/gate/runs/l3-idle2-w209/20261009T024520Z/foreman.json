@@ -1,0 +1,68 @@
+{
+  "schema": "autopilot.foreman-activity/1",
+  "scope": {
+    "project_key": "51de403da82a23f0",
+    "repo_identity": "git-common-dir:/home/cookys/projects/gate-sandbox/.git",
+    "root_run_id": "job-1791513684-0efcd31c"
+  },
+  "binding": "session",
+  "stall_s": 600,
+  "agents": [
+    {
+      "agent_id": "a77bd7408a0684c43",
+      "description": null,
+      "label": null,
+      "last_activity_at": "2026-10-09T02:43:55.837Z",
+      "age_s": 73,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-09T02:43:55.837Z",
+      "source": "stamp",
+      "session_id": "aae85c79-d1b4-4577-a393-8f1af8f4507b",
+      "binding": "session"
+    },
+    {
+      "agent_id": "a4661aad6deb0bf8c",
+      "description": null,
+      "label": null,
+      "last_activity_at": "2026-10-09T02:42:25.784Z",
+      "age_s": 163,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-09T02:42:25.784Z",
+      "source": "stamp",
+      "session_id": "aae85c79-d1b4-4577-a393-8f1af8f4507b",
+      "binding": "session"
+    },
+    {
+      "agent_id": "aa50e1853c424dbcc",
+      "description": "Append test line to README",
+      "label": "Append test line to README",
+      "last_activity_at": "2026-10-09T02:42:18.625Z",
+      "age_s": 170,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-09T02:42:20.160Z",
+      "source": "stamp",
+      "session_id": "aae85c79-d1b4-4577-a393-8f1af8f4507b",
+      "binding": "session"
+    },
+    {
+      "agent_id": "ade711e3af5279147",
+      "description": null,
+      "label": null,
+      "last_activity_at": "2026-10-09T02:42:17.645Z",
+      "age_s": 171,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-09T02:42:17.645Z",
+      "source": "stamp",
+      "session_id": "aae85c79-d1b4-4577-a393-8f1af8f4507b",
+      "binding": "session"
+    }
+  ],
+  "stage": null,
+  "stage_source": null,
+  "stage_at": null,
+  "stage_age_s": null
+}

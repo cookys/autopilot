@@ -1,0 +1,21 @@
+{
+  "schema": "autopilot.attention/1",
+  "session_id": "5c243380-f5fd-4321-b0c6-36ced1d1768e",
+  "project_key": "51de403da82a23f0",
+  "kind": "question",
+  "tool_name": "AskUserQuestion",
+  "summary": "工頭卡在 mission prepare:sandbox 裡有兩個先前嘗試(2026-10-05)留下的 ACTIVE Mission lineage,擋住新的 Mission。要怎麼處置?",
+  "since": "2026-10-09T04:05:24.332Z",
+  "updated_at": "2026-10-09T04:05:30.335Z",
+  "pending": [
+    {
+      "agent_id": null,
+      "tool_name": "AskUserQuestion",
+      "input_digest": "38b31a3d8d58e487",
+      "kind": "question",
+      "summary": "工頭卡在 mission prepare:sandbox 裡有兩個先前嘗試(2026-10-05)留下的 ACTIVE Mission lineage,擋住新的 Mission。要怎麼處置?",
+      "since": "2026-10-09T04:05:24.332Z",
+      "updated_at": "2026-10-09T04:05:24.332Z"
+    }
+  ]
+}

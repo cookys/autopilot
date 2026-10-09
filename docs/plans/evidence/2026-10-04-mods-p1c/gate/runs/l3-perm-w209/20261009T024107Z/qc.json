@@ -1,0 +1,14 @@
+{
+  "schema": "autopilot.qc-status/1",
+  "scope": {
+    "project_key": "51de403da82a23f0",
+    "repo_identity": "git-common-dir:/home/cookys/projects/gate-sandbox/.git",
+    "root_run_id": null
+  },
+  "state": "unknown",
+  "range": null,
+  "protected_files_count": 0,
+  "evidence": null,
+  "mode": "warn",
+  "checked_at": "2026-10-09T02:40:31.683Z"
+}

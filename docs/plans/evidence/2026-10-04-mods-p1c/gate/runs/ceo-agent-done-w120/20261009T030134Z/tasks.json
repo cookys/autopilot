@@ -1,0 +1,28 @@
+{
+  "schema": "autopilot.session-tasks/1",
+  "session_id": "d2ea4d36-6a61-49ca-a6ad-f750c76fbf05",
+  "cwd": "/home/cookys/projects/gate-sandbox",
+  "project_key": "51de403da82a23f0",
+  "updated_at": "2026-10-09T03:00:50.184Z",
+  "first_created_at": "2026-10-09T02:59:57.946Z",
+  "tasks": [
+    {
+      "id": "1",
+      "subject": "寫 A",
+      "status": "completed",
+      "started_seq": 1
+    },
+    {
+      "id": "2",
+      "subject": "寫 B",
+      "status": "completed",
+      "started_seq": null
+    }
+  ],
+  "counts": {
+    "total": 2,
+    "completed": 2,
+    "in_progress": 0
+  },
+  "current": null
+}

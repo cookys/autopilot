@@ -1,0 +1,4 @@
+== batch C sandbox rebuild 2026-10-09
+old sandbox moved (not deleted): ~/projects/gate-sandbox -> /tmp/gate-sandbox-old-20261009T042235Z
+stale state it carried (all under sandbox git common dir): .git/autopilot/mission/{registry.json,states/*,artifacts/*} (lineages gate-readme-line-2026-10-05, gate-readme-line-v2-2026-10-05), .git/autopilot/{implementation-campaign.jsonl,work-orders,controller-authority,decisions,task-status-lifecycle}
+nothing outside the sandbox deleted

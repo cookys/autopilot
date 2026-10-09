@@ -1,0 +1,50 @@
+● 工頭的引擎還在背景跑（grant 成功，engine implement-review 執行中），這是中間通知，不是最終結果。                     │                                                                                       ✕
+                                                                                                                       │ Legend [Now] Graph  Dispatch  Review  Decisions  Spend  Hygiene
+  目前狀況：                                                                                                           │session $1.86 · host $228.21 · ctx 10%
+  - 分支是 mission/20c40ae80803/gate-readme-line-v2-2026-10-05-a1，base 是 e1316d0。                                   │● 進行中 gate-sandbox · 12m
+  - 工頭還沒有回報 head sha、diff 和 campaign 結果。                                                                   │工頭在跑：L6 foreman retry with envelope（0 分前有動作）
+  - 工頭自己的 3300 秒死人開關也已經設好。                                                                             │no data · no stage recorded for this session
+                                                                                                                       │no data · no unit recorded
+  所以我現在不做任何驗收或合併。等工頭的完成通知到了（或者死人開關喚醒），我再做這幾件事：                             │progress  —
+  1. 自己跑 grep -qx gate-l5-test-line README.md 和 node test.js。                                                     │phase  —
+  2. 取 status task 收據，確認 can_merge === true 才合併。                                                             │
+  3. 檢查有沒有留下 leaf worktree 或分支（zero_residue 必須是 true）。                                                 │
+                                                                                                                       │
+✻ Brewed for 4m 13s · done 12:46 PM · 2 shells still running                                                           │
+                                                                                                                       │
+● Agent "L6 foreman retry with envelope" finished · 2m 59s                                                             │
+                                                                                                                       │
+  Ran 2 shell commands                                                                                                 │
+                                                                                                                       │
+● 主 checkout 被判定 dirty，只是因為工頭自己的 worktree 目錄 .claude/worktrees/                                        │
+  沒被追蹤，不是真的有未提交的改動。我已把它加進本機的 .git/info/exclude（不進 repo、不會 commit），現在 git status    │
+  乾淨了。                                                                                                             │
+                                                                                                                       │
+  工頭的重試用它自己的乾淨 worktree 當 --cwd，目前還在背景跑。這個問題之後在主 checkout 做 merge 或 status task        │
+  時也會遇到，現在先排除了。                                                                                           │
+                                                                                                                       │
+  等工頭下一個完成通知。通知到了之後，我再自己跑驗收、取 status task 收據並檢查殘留。                                  │
+                                                                                                                       │
+✻ Waiting for 1 background agent to finish                                                                             │
+                                                                                                                       │
+● Agent "L6 foreman retry with envelope" finished · 3m 19s                                                             │
+                                                                                                                       │
+● 第 3 次引擎執行已在背景啟動，前兩次都在 campaign intake 就被擋下，沒有花任何輪次，也沒有 claim：                     │
+                                                                                                                       │
+  - 第 1 次：主 checkout 被判 dirty，原因是前一則說明的 .claude/worktrees/ 沒被追蹤。我已用 .git/info/exclude 排除。   │
+  - 第 2 次：--verify-cmd 跟 sealed contract 不一致。contract 裡是 grep -qx gate-l5-test-line README.md && node        │
+    test.js，我先前給的是只有 grep 的版本。工頭已改用 sealed 的完整字串。                                              │
+                                                                                                                       │
+  目前沒有任何結果，也還沒有 README 變更或合併。我等工頭的下一個完成通知，到了之後再自己跑驗收、取 status task         │
+  收據並檢查殘留。                                                                                                     │
+● 進行中 │ ⓘ                                                                                                       [-] │
+                                                                                                   ◐ medium · /effort  │
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Sonnet 5.5 ── ~/projects/gate-sandbox develop ──────────────────────────────────────────── v2.1.295
+  5h ▮▮▯▯▯▯ 47% 2h21m   7d ▮▯▯▯▯▯ 33% 5d23h   ctx ▯▯▯▯▯▯ 10%                       → codeforge adopt
+  ⏵⏵ accept edits on · 2 shells · ← 6 agents
+
+  ● main
+  ◯ general-purpose  Waiting on run-engine.sh                                                                                                                                           3m 33s · ↓ 65.9k tokens

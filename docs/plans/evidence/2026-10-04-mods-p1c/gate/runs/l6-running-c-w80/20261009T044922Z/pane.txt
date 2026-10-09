@@ -1,0 +1,50 @@
+
+✻ Waiting for 1 background agent to finish
+
+● Agent "L6 foreman retry with envelope" finished · 3m 19s
+
+● 第 3 次引擎執行已在背景啟動，前兩次都在 campaign intake
+  就被擋下，沒有花任何輪次，也沒有 claim：
+
+  - 第 1 次：主 checkout 被判 dirty，原因是前一則說明的 .claude/worktrees/
+    沒被追蹤。我已用 .git/info/exclude 排除。
+  - 第 2 次：--verify-cmd 跟 sealed contract 不一致。contract 裡是 grep -qx
+    gate-l5-test-line README.md && node test.js，我先前給的是只有 grep
+    的版本。工頭已改用 sealed 的完整字串。
+
+  目前沒有任何結果，也還沒有 README
+  變更或合併。我等工頭的下一個完成通知，到了之後再自己跑驗收、取 status task
+  收據並檢查殘留。
+
+● Agent "L6 foreman retry with envelope" finished · 3m 42s
+
+● 這是又一則中間通知：工頭說「attempt
+  2」在背景執行，沒有最終結果。我不清楚它是第 3 次引擎執行的重試，還是另一個
+  mission attempt，所以先不下結論。工頭已用掉約 31 次 Bash（上限
+  40），可能很快就會交班。
+
+  我繼續等完成通知，目前不驗收也不合併。如果通知說它因為到達上限而結束，我會先查
+  campaign 狀態（campaign status），再決定要不要為同一個 deliverable 另派工頭。
+
+✻ Worked for 46s · done 12:49 PM · 3 shells still running
+╭────────────────────────────────────────────────────────────────────────────✕─╮
+│  Legend [Now] Graph  Dispatch  Review  Decisions  Spend  Hygiene             │
+│ session $1.86 · host $228.21 · ctx 10%                                       │
+│ ● 進行中 gate-sandbox · 0m                                                   │
+│ 工頭在跑：L6 foreman retry with envelope（0 分前有動作）                     │
+│ no data · no stage recorded for this session                                 │
+│ no data · no unit recorded                                                   │
+│ progress  —                                                                  │
+│ phase  —                                                                     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+● 進行中 │ ⓘ                                                                [-]
+                                                            ◐ medium · /effort
+────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────
+  Sonnet 5.5 ── ~/projects/gate-sandbox develop ─────────────────────────────…
+  5h ▮▮▯▯▯▯ 47% 2h20m   7d ▮▯▯▯▯▯ 33% 5d23h   ctx ▯▯▯▯▯▯ 10%                 …
+  ⏵⏵ accept edits on · 3 shells · ← 6 agents
+
+  ● main
+  ◯ general-purpose  Waiting on run-engine.sh          3m 42s · ↓ 67.1k tokens

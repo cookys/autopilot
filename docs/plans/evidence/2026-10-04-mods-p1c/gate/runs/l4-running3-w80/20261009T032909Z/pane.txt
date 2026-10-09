@@ -1,0 +1,50 @@
+  - commit 署名: worker 的 commit trailer 寫的是 Haiku 5.5，不是 Sonnet
+    5.5，不影響內容。
+
+✻ Sautéed for 4m 17s · done 11:25 AM · 4 shells still running
+
+❯ 請只執行這一個指令，然後回報退出碼，不要做別的事：node
+  /home/cookys/projects/autopilot/scripts/session-mode.js set --level l4
+  --repo-root "$PWD"
+
+  Ran 1 shell command
+
+● 退出碼是 0。
+
+  為了只回報退出碼，我把指令的輸出丟掉了，所以沒看到 JSON
+  內容。這個指令會重新寫入 l4 的 session-mode 標記，我沒有再做別的事。
+
+✻ Brewed for 3s · done 11:25 AM · 4 shells still running
+
+❯ 用任務清單工具建立兩個任務：「任務一」「任務二」，只把任務一設為
+  in_progress，任務二保持
+  pending，然後直接停止並回覆「已建立」，不要做任何其他事。
+
+● 已建立
+
+✻ Sautéed for 5s · done 11:28 AM · 4 shells still running
+
+  2 tasks (0 done, 1 in progress, 1 open)
+  ◼ 任務一
+  ◻ 任務二
+╭────────────────────────────────────────────────────────────────────────────✕─╮
+│  Legend [Now] Graph  Dispatch  Review  Decisions  Spend  Hygiene             │
+│ session $2.95 · host $99.89 · ctx 11%                                        │
+│ ● 進行中 gate-sandbox · 1m                                                   │
+│ 任務進行中：任務一                                                           │
+│ no data · no stage recorded for this session                                 │
+│ no data · no unit recorded                                                   │
+│ progress  0 done*                                                            │
+│ phase  做：任務一                                                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+● 進行中 │ ⓘ                                                                [-]
+
+────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────
+  Sonnet 5.5 ── ~/projects/gate-sandbox develop ─────────────────────────────…
+  5h ▮▯▯▯▯▯ 24% 3h41m   7d ▮▯▯▯▯▯ 27% 6d0h   ctx ▯▯▯▯▯▯ 11%                  …
+  ⏵⏵ accept edits on · 4 shells · ← 6 agents
+
+  ● main
+  ◯ general-purpose  L4 foreman: README line 2 + note     29s · ↓ 39.8k tokens

@@ -1,0 +1,50 @@
+● 工頭回報 precondition_failed：worktree 的基底是 9c5bf49，不是
+  e1316d0。我先查原因。
+
+  Ran 1 shell command
+
+● 問題根因是這個 repo 缺少 origin/HEAD，導致 fresh 基底退回到舊的 commit
+  9c5bf49；worktree 無改動已自動清除。我會按文件做法將 worktree.baseRef 設為
+  head 後重新派送。 · summary
+
+  Ran 2 shell commands
+
+● 重派工頭，brief 同前，並加上 STEP 0 基底驗證。
+
+● Agent(L4 foreman retry: README line)
+  ⎿  Backgrounded agent (↓ to manage · ctrl+o to expand)
+
+  Ran 1 shell command
+
+● 第一次派出的工頭回報 precondition_failed：它的 worktree 基底是舊的
+  9c5bf49，不是 e1316d0。原因是這個 repo 沒有 origin/HEAD，所以預設基底退回舊
+  commit。那個 worktree 沒有改動，已自動清除，沒有任何東西被改動、合併或推送。
+
+  我已把 worktree.baseRef 設為 head，寫在被 git 忽略的
+  .claude/settings.local.json。然後重派了工頭，brief 裡加了基底檢查（HEAD
+  不對就先 reset）。新的工頭正在背景執行，另有 20 分鐘的死人開關當後備。
+
+  工頭回報前我不預測結果。回報後我會做 depth-0 的權威 qc，通過才合併回 develop
+  並清理 worktree。
+
+────────────────────────────────────────────────────────────────────────────────
+ Bash command · from the general-purpose agent
+ Tip: auto mode handles these prompts for you — choose "switch to auto mode"
+ below
+ Append test line, commit, and print SHA
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ │ printf 'gate-l5-test-line\n' >> README.md && tail -n 3 README.md && git add
+ │ README.md && git commit -q -m "docs: add gate test line to README" -m
+ │ "Co-Authored-By: Claude Haiku 5.5 <noreply@anthropic.com>" && git rev-parse
+ │ HEAD && git show --stat --oneline HEAD | head -3 && git status --short
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ This command requires approval
+
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don't ask again for git add and git commit commands in
+      /home/cookys/projects/gate-sandbox
+   3. Yes, and switch to auto mode · auto mode handles these prompts for you
+   4. No
+
+ Esc to cancel · Tab to amend · ctrl+x ctrl+k twice to stop background agents

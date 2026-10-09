@@ -1,0 +1,50 @@
+                                                                      │                                               ✕
+● Agent "qc reviewer: correctness" finished · 2m 16s                  │ Legend [Now] Graph  Dispatch  Review  Decisions
+                                                                      │ Spend  Hygiene
+● 3 位 reviewer 全數 PASS，沒有必修項。合併並清理：                   │session $2.77 · host $99.71 · ctx 10%
+                                                                      │◌ 待命 gate-sandbox · 1m
+  Ran 1 shell command                                                 │沒有派工在跑 · 停在等你指示 0 分
+                                                                      │no data · no stage recorded for this session
+● README 已多一行 gate-l4-line-2，也新增了                            │no data · no unit recorded
+  docs/note-l4.md（兩句說明）。兩者已合併進本機                       │progress  —
+  develop（31e2fb7），沒有推送到遠端。                                │phase  —
+                                                                      │
+  合併後我再跑了一次 node test.js，輸出 ok；grep -qx gate-l5-test-line│
+  README.md 也還成立，README 最後一行是 gate-l4-line-2。3 位          │
+  reviewer（正確性、範圍與整潔、內容對抗式）都回報                    │
+  PASS，沒有必修項。worktree 和分支已移除，session-mode 標記已清除。  │
+                                                                      │
+  - 與已 admit 任務圖不符: 已 admit 的圖是上一輪「單一 README         │
+    行」的節點，預留額度是 1 個變更檔，這次改了 2                     │
+    個檔，其中一個是新建檔。/l4                                       │
+    沒有攔截這點，所以照做；你若要正式對齊，圖需要另外更新。          │
+  - note 的措辭: 第二句說「不影響文件內容」，字面上略鬆，因為 README  │
+    確實多了一行。這只是小問題。                                      │
+  - commit 署名: worker 的 commit trailer 寫的是 Haiku 5.5，不是      │
+    Sonnet 5.5，不影響內容。                                          │
+                                                                      │
+✻ Sautéed for 4m 17s · done 11:25 AM · 4 shells still running         │
+                                                                      │
+❯ 請只執行這一個指令，然後回報退出碼，不要做別的事：node              │
+  /home/cookys/projects/autopilot/scripts/session-mode.js set --level │
+  l4 --repo-root "$PWD"                                               │
+                                                                      │
+  Ran 1 shell command                                                 │
+                                                                      │
+● 退出碼是 0。                                                        │
+                                                                      │
+  為了只回報退出碼，我把指令的輸出丟掉了，所以沒看到 JSON             │
+  內容。這個指令會重新寫入 l4 的 session-mode 標記，我沒有再做別的事。│
+                                                                      │
+✻ Brewed for 3s · done 11:25 AM · 4 shells still running              │
+◌ 待命 │ ⓘ                                                        [-] │
+                                                                      │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Sonnet 5.5 ── ~/projects/gate-sandbox develop ──────────────────────────────────────────── v2.1.295
+  5h ▮▯▯▯▯▯ 23% 3h44m   7d ▮▯▯▯▯▯ 27% 6d0h   ctx ▯▯▯▯▯▯ 10%                        → codeforge adopt
+  ⏵⏵ accept edits on · 4 shells · ← 6 agents
+
+  ● main
+  ◯ general-purpose  L4 foreman: README line 2 + note                                             29s · ↓ 39.8k tokens

@@ -1,0 +1,50 @@
+                                                                                                                       │                                                                                       ✕
+  Ran 1 shell command                                                                                                  │ Legend [Now] Graph  Dispatch  Review  Decisions  Spend  Hygiene
+                                                                                                                       │session $1.34 · host $218.63 · ctx 9%
+● Depth-0 自行驗證 git artifact（不信 self-report）。                                                                  │✓ 完成待驗收 gate-sandbox · 6m
+                                                                                                                       │驗收結論尚未出
+  Ran 1 shell command                                                                                                  │no data · no stage recorded for this session
+                                                                                                                       │no data · no unit recorded
+● Diff 僅動 README.md 一行，驗證通過。跑 pre-merge 狀態閘門。                                                          │progress  100%（1/1）
+                                                                                                                       │phase  完成
+  Ran 2 shell commands                                                                                                 │
+                                                                                                                       │
+● 我停在合併前，沒有合併。/l5 的硬規定要求 status task 回傳 can_merge === true 才能 merge，這次回傳 false。            │
+                                                                                                                       │
+  已完成並驗證                                                                                                         │
+  - 實作者（grok/grok-4.7）已在 branch mission/143504fc8cb6/gate-readme-line-v2-2026-10-05-a1 提交 3fb0cc1。           │
+  - diff 只有 README.md 多一行 gate-l5-test-line，在檔尾，有結尾換行。                                                 │
+  - 我在乾淨的暫時 worktree 檢出該 commit 自行驗證。grep -qx gate-l5-test-line README.md 通過，node test.js 也通過。   │
+  - develop 仍在 e1316d0，沒被動到。                                                                                   │
+                                                                                                                       │
+  卡住的地方                                                                                                           │
+  - status task --root-run-id mission-143504fc8cb657e5b1ce03db --json 回傳 can_merge: false、can_close: false。        │
+  - 失敗的 predicate 是 merge_preflight_unknown、campaigns_terminal_unknown、acceptance_unknown、product_merged_unknown│
+    、merge_edges_unknown、merge_provenance_invalid。                                                                  │
+  - root-run-id 與 contract 一致，所以不是帶錯參數。mission 本身是 COMPLETE，zero_residue 為 true。                    │
+  - 這些 predicate 全是「unknown」而不是失敗，跟 hetero-impl-loop.md 記的已知限制相符：status task 目前沒有 writer。   │
+  - 這個閘門我不會自己繞過。                                                                                           │
+                                                                                                                       │
+  幾個疑點                                                                                                             │
+  - 派工輸出裡有一行 stage-advance: 5 the marker has no size，意思是 marker 沒設 size。我沒用 set --size               │
+    補，也不確定這跟 acceptance_unknown 有沒有關係。                                                                   │
+  - 輸出還有 strict /l5 POLICY OVERRIDE：4 個席位（implementer、qc:1、qc:4、verification_author）沒有 capability       │
+    claim，原因是 advisory_default。                                                                                   │
+                                                                                                                       │
+  下一步選項（你決定）                                                                                                 │
+  1. 照文件的降級路徑：session-mode.js set --level l3 --entry-level l5 --fallback precondition_failed，再依 git 證據在 │
+     develop 上 merge 3fb0cc1，同時把 rail 的缺陷記成 BACKLOG。                                                        │
+  2. 先設 --size 看 acceptance_unknown 會不會消失，再重跑閘門。                                                        │
+  3. 這是 throwaway repo，你直接授權手動 merge。                                                                       │
+                                                                                                                       │
+  目前 l5 marker 還在，沒有清除，因為 can_close 不是 true。                                                            │
+                                                                                                                       │
+✻ Crunched for 21s · done 12:34 PM · 1 shell still running                                                             │
+✓ 完成待驗收 │ ⓘ                                                                                                   [-] │
+                                                                                                                       │
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Sonnet 5.5 ── ~/projects/gate-sandbox develop ──────────────────────────────────────────── v2.1.295
+  5h ▮▮▯▯▯▯ 44% 2h35m   7d ▮▯▯▯▯▯ 33% 5d23h   ctx ▯▯▯▯▯▯ 9%                        → codeforge adopt
+  ⏵⏵ accept edits on · 1 shell · ← 6 agents

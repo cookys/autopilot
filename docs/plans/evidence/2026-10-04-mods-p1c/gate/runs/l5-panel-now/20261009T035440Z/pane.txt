@@ -1,0 +1,50 @@
+    - 這可以完成 README 這一行，但不經過 rail，所以不算通過 l5 gate。                                         │                                                                                       ✕
+  - 另一條路是改在全新的 clone 或 sandbox 目錄上跑完整 rail。                                                 │ Legend [Now] Graph  Dispatch  Review  Decisions  Spend  Hygiene
+    - 那裡沒有舊 lineage，不會被擋，不用動這個 repo 的狀態。                                                  │session $2.86 · host $118.85 · ctx 11%
+    - 缺點是這就不是原本那個 gate-sandbox 了。                                                                │✓ 完成待驗收 gate-sandbox · 2m
+                                                                                                              │任務 2/2 都完成，等你驗收
+  你想走哪一條？如果這次要驗的就是「舊 lineage 卡住時 l5 gate 會怎麼表現」，那目前這個                        │no data · no stage recorded for this session
+  UNRESOLVED_MISSION_EXISTS 加 not_aborting 的結果本身就是觀察到的行為，可以直接當結論記錄。                  │no data · no unit recorded
+                                                                                                              │progress  2 done*
+✻ Cooked for 33s · done 11:47 AM                                                                              │phase  —
+                                                                                                              │
+❯ 先不用管 rail 了。現在請用 AskUserQuestion 問我選 A 還是 B，我答了你再繼續，不要做別的事。                  │
+                                                                                                              │
+● User answered Claude's questions:                                                                           │
+  ⎿  · 請選 A 還是 B？ → A                                                                                    │
+                                                                                                              │
+● 你選了 A，但 A 的第一步（用 finalize-abort 結案兩條舊 lineage）我剛才已經跑過，被拒絕，目前還是做不到。     │
+                                                                                                              │
+  - 原因：finalize-abort 要先有 host 注入的 authenticatedControlAdapter 產生的 abort 事件。autopilot          │
+    裡沒有任何 host 實作它，root CLI 一律 fail closed。                                                       │
+  - 現況：兩條舊 lineage 沒被動過，repo 工作樹是乾淨的，README 也還沒改。                                     │
+  - 沒做的事：要讓 A 往下走，只能自造一個永遠通過的 adapter，或直接改 .git/autopilot/mission/ 的              │
+    state。這兩種都是繞過驗證，我沒有你的明確授權就不做。                                                     │
+                                                                                                              │
+  所以我停在這裡，沒有做別的事。你想怎麼繼續？                                                                │
+                                                                                                              │
+  - 明確授權繞過：你說「授權我自造 adapter 結案這兩條」之類的話，我才會做，而且只動 gate-sandbox 這兩條。     │
+  - 改走其他路：像前面說的退回 /l3 內聯、在新 clone 上跑 rail，或你記得 v2 原本的 objective 文字。            │
+                                                                                                              │
+✻ Brewed for 8s · done 11:51 AM                                                                               │
+                                                                                                              │
+❯ 用任務清單工具建立兩個任務：「任務一」「任務二」，只把任務一設為 in_progress，任務二保持                    │
+  pending，然後直接停止並回覆「已建立」，不要做任何其他事。                                                   │
+                                                                                                              │
+● 已建立                                                                                                      │
+                                                                                                              │
+✻ Brewed for 5s · done 11:51 AM                                                                               │
+                                                                                                              │
+❯ 把任務一、任務二都設為 completed，然後只回覆「完成」，不要做別的事。                                        │
+                                                                                                              │
+● 完成                                                                                                        │
+                                                                                                              │
+✻ Cooked for 3s · done 11:53 AM                                                                               │
+✓ 完成待驗收 │ ⓘ                                                                                          [-] │
+                                                                                                              │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Sonnet 5.5 ── ~/projects/gate-sandbox develop ──────────────────────────────────────────── v2.1.295
+  5h ▮▯▯▯▯▯ 31% 3h16m   7d ▮▯▯▯▯▯ 29% 6d0h   ctx ▯▯▯▯▯▯ 11%                        → codeforge adopt
+  ⏵⏵ accept edits on (shift+tab to cycle) · ← 6 agents

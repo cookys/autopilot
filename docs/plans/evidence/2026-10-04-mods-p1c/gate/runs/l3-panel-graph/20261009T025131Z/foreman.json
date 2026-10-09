@@ -1,0 +1,107 @@
+{
+  "schema": "autopilot.foreman-activity/1",
+  "scope": {
+    "project_key": "51de403da82a23f0",
+    "repo_identity": "git-common-dir:/home/cookys/projects/gate-sandbox/.git",
+    "root_run_id": "job-1791513684-0efcd31c"
+  },
+  "binding": "session",
+  "stall_s": 600,
+  "agents": [
+    {
+      "agent_id": "a84e2986515741a1b",
+      "description": null,
+      "label": null,
+      "last_activity_at": "2026-10-09T02:50:13.474Z",
+      "age_s": 71,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-09T02:50:13.474Z",
+      "source": "stamp",
+      "session_id": "aae85c79-d1b4-4577-a393-8f1af8f4507b",
+      "binding": "session"
+    },
+    {
+      "agent_id": "a735e36c6d76391f0",
+      "description": null,
+      "label": null,
+      "last_activity_at": "2026-10-09T02:46:44.974Z",
+      "age_s": 280,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-09T02:46:44.974Z",
+      "source": "stamp",
+      "session_id": "aae85c79-d1b4-4577-a393-8f1af8f4507b",
+      "binding": "session"
+    },
+    {
+      "agent_id": "a0048859e7faa0d9f",
+      "description": null,
+      "label": null,
+      "last_activity_at": "2026-10-09T02:45:48.827Z",
+      "age_s": 336,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-09T02:45:48.827Z",
+      "source": "stamp",
+      "session_id": "aae85c79-d1b4-4577-a393-8f1af8f4507b",
+      "binding": "session"
+    },
+    {
+      "agent_id": "a77bd7408a0684c43",
+      "description": null,
+      "label": null,
+      "last_activity_at": "2026-10-09T02:43:55.837Z",
+      "age_s": 449,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-09T02:43:55.837Z",
+      "source": "stamp",
+      "session_id": "aae85c79-d1b4-4577-a393-8f1af8f4507b",
+      "binding": "session"
+    },
+    {
+      "agent_id": "a4661aad6deb0bf8c",
+      "description": null,
+      "label": null,
+      "last_activity_at": "2026-10-09T02:42:25.784Z",
+      "age_s": 539,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-09T02:42:25.784Z",
+      "source": "stamp",
+      "session_id": "aae85c79-d1b4-4577-a393-8f1af8f4507b",
+      "binding": "session"
+    },
+    {
+      "agent_id": "aa50e1853c424dbcc",
+      "description": "Append test line to README",
+      "label": "Append test line to README",
+      "last_activity_at": "2026-10-09T02:42:18.625Z",
+      "age_s": 546,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-09T02:42:20.160Z",
+      "source": "stamp",
+      "session_id": "aae85c79-d1b4-4577-a393-8f1af8f4507b",
+      "binding": "session"
+    },
+    {
+      "agent_id": "ade711e3af5279147",
+      "description": null,
+      "label": null,
+      "last_activity_at": "2026-10-09T02:42:17.645Z",
+      "age_s": 547,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-09T02:42:17.645Z",
+      "source": "stamp",
+      "session_id": "aae85c79-d1b4-4577-a393-8f1af8f4507b",
+      "binding": "session"
+    }
+  ],
+  "stage": null,
+  "stage_source": null,
+  "stage_at": null,
+  "stage_age_s": null
+}

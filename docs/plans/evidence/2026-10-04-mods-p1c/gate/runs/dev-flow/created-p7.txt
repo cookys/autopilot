@@ -1,0 +1,6 @@
+P7 gate run A (2026-10-09), mode dev-flow
+session id: 32d072ea-ae35-4832-9c12-fdceec893ed1 (marker ~/.autopilot/session-mode/32d072ea-ae35-4832-9c12-fdceec893ed1.json, root_run_id job-1791512372-95b6dd0d)
+scope key: 51de403da82a23f0--job-1791512372-95b6dd0d (project_key 51de403da82a23f0)
+hand: dispatch-hetero codex gpt-6-astra, root hetero-1791513256-2623717-9507, worktree /tmp/hetero-gate-stall-df-MCvTO5, killed after stall capture
+sandbox: local commit f434484 on develop (README line); .claude/owner-kernel-governance.json mission enforce->shadow (uncommitted)
+extra capture dirs: df-probe (pre-run probe), perm-stage, running-dispatch, panel-legend/now/graph

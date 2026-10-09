@@ -1,1 +1,6 @@
-l4 sessions 14006793-7b34-480b-b35e-eea8b9e803b0, 46295021-1f8d-4f30-85b5-8529a8372f5e (tmux gate:l4, exited); roots job-1791193372-a0ca186d, job-1791193590-b4af70c5 + csv run; foreman worktrees/branches (worktree-agent-*) were merged/removed by depth-0; /tmp/autopilot-dispatch-runs/foreman-csv-1791193934.ledger.jsonl; leftover older worktrees (not mine): /tmp/hetero-gate-stall*, hetero-gate2-stall-1-* with branches gate-stall, gate-stall2, gate-stall3, gate2-stall-1
+batch B / l4 (2026-10-09)
+tmux session: gate-l4 (private server -L gate), killed
+claude session id: 3028da81-bc08-4aa5-8ea9-8f6786b5c6ab (marker ~/.autopilot/session-mode/<sid>.json; cleared by the session itself several times, re-set via session-mode.js set --level l4)
+scope key / project_key: 51de403da82a23f0 ; root_run_ids: job-1791515388-b2c1a7b9 and later
+branches (local gate-sandbox only): worktree-agent-a35522ad6615bee1e, worktree-agent-a44b8690286ef5054 (merged, removed); gate-l4-stall (hand worktree /tmp/hetero-gate-l4-stall-Ag7uO8, hand killed)
+sandbox settings.local.json got worktree.baseRef=head (git-ignored); sandbox develop reset after mode

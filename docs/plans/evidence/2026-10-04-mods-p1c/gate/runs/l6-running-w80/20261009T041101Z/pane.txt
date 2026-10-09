@@ -1,0 +1,50 @@
+
+● 好,我先不碰 Mission 狀態,這次 /l6 到此停住。
+
+  - 結果:README 沒有改動,沒有派出任何 leaf,也沒有合併。工頭的 worktree
+    是乾淨的。
+  - 卡住的原因:mission prepare 失敗,回報
+    UNRESOLVED_MISSION_EXISTS。.git/autopilot/mission/registry.json 裡有兩個
+    2026-10-05 留下的 lineage,狀態都是 ACTIVE:
+    - lineage-v1-6c52a9b2…
+    - lineage-v1-bf0a9f8a…
+  - 你可以看的地方:.git/autopilot/mission/ 和
+    .git/autopilot/implementation-campaign.jsonl。後者尾端有一筆
+    campaign-v1-1bacbe4d… 已標為 abandon。
+  - 未確定:工頭略過了 mission-terminal-reconcile.js legacy,因為 sandbox 沒有
+    legacy B/C mission root。這會不會影響之後的 admission,目前不知道。
+  - 還在背景跑:watcher 和 45 分鐘的死人開關。工頭已結束,所以它們不會再有事件。
+  - session marker 還在:l6 marker 沒有清除,按規則要有 can_close=true
+    的收據才能清。你處理完之後再叫我繼續就行。
+
+✻ Churned for 6m 33s · done 12:07 PM · 2 shells still running
+
+❯ 用任務清單工具建立兩個任務：「任務一」「任務二」，只把任務一設為
+  in_progress，任務二保持
+  pending，然後直接停止並回覆「已建立」，不要做任何其他事。
+
+● 已建立
+
+✻ Churned for 6s · done 12:09 PM · 2 shells still running
+
+  2 tasks (0 done, 1 in progress, 1 open)
+  ◼ 任務一
+  ◻ 任務二
+╭────────────────────────────────────────────────────────────────────────────✕─╮
+│  Legend [Now] Graph  Dispatch  Review  Decisions  Spend  Hygiene             │
+│ session $1.35 · host $132.10 · ctx 8%                                        │
+│ ● 進行中 gate-sandbox · 1m                                                   │
+│ 任務進行中：任務一                                                           │
+│ no data · no stage recorded for this session                                 │
+│ no data · no unit recorded                                                   │
+│ progress  0 done*                                                            │
+│ phase  做：任務一                                                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+● 進行中 │ ⓘ                                                                [-]
+
+────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────
+  Sonnet 5.5 ── ~/projects/gate-sandbox develop ─────────────────────────────…
+  5h ▮▮▯▯▯▯ 35% 3h0m   7d ▮▯▯▯▯▯ 30% 5d23h   ctx ▯▯▯▯▯▯ 8%                   …
+  ⏵⏵ accept edits on · 2 shells · ← 6 agents

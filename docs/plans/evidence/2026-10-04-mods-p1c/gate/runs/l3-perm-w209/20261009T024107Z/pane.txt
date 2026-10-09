@@ -1,0 +1,50 @@
+                                                                                                                       │                                                                                       ✕
+ ▐▛███▛█   Claude Code v2.1.295                                                                                        │ Legend [Now] Graph  Dispatch  Review  Decisions  Spend  Hygiene
+▝▜██████▀  Sonnet 5.5 · Claude Max                                                                                     │session $— · host $33.37 · ctx 5%
+ ▝▝   ▝▝   ~/projects/gate-sandbox                                                                                     │▲ 要你決定 gate-sandbox · 0m
+                                                                                                                       │等你批准：Bash: node /home/cookys/projects/autopilot/scripts/session-mode.js set --level…
+                                                                                                                       │no data · no stage recorded for this session
+❯ /autopilot:l3 在 README 加一行測試字                                                                                 │no data · no unit recorded
+                                                                                                                       │progress  —
+  Reading ~/projects/autopilot/skills/ceo-agent/references/level-front-door.md                                         │phase  —
+  ⎿  ~/projects/autopilot/skills/ceo-agent/references/level-front-door.md                                              │要你決定
+                                                                                                                       │等你批准：Bash: node /home/cookys/projects/autopilot/scripts/session-mode.js set --level…
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
+ Bash command                                                                                                          │
+ Tip: auto mode handles these prompts for you — choose "switch to auto mode" below                                     │
+ Set session mode l3 and list repo                                                                                     │
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌│
+ │ node /home/cookys/projects/autopilot/scripts/session-mode.js set --level l3 --repo-root                             │
+ │ /home/cookys/projects/gate-sandbox; echo "exit=$?"; ls; git status --short | head                                   │
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌│
+ This command requires approval                                                                                        │
+                                                                                                                       │
+ Do you want to proceed?                                                                                               │
+ ❯ 1. Yes                                                                                                              │
+   2. Yes, and don't ask again for node /home/cookys/projects/autopilot/scripts/session-mode.js set --level l3         │
+      --repo-root /home/cookys/projects/gate-sandbox and "echo \"exit=$?\"" commands in                                │
+      /home/cookys/projects/gate-sandbox                                                                               │
+   3. Yes, and switch to auto mode · auto mode handles these prompts for you                                           │
+   4. No                                                                                                               │
+                                                                                                                       │
+ Esc to cancel · Tab to amend                                                                                          │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │

@@ -1,0 +1,50 @@
+                                                                                                                       │                                                                                       ✕
+                                                                                                                       │ Legend  Now [Graph] Dispatch  Review  Decisions  Spend  Hygiene
+❯ 用 /home/cookys/projects/autopilot/scripts/dispatch-hetero.sh 派一個 codex hand：--runner codex --model gpt-6-astra  │session $1.25 · host $33.37 · ctx —
+  --branch gate/stall-df，prompt 檔先寫到 /tmp/gate-stall-df.txt，內容是「執行 bash -c "sleep 420"                     │XS
+  一次，等它結束，然後什麼都不要改」。背景派工，派完就回一句「派了」並停。                                             │⊢ implement → qc-gate → finish ⊣
+                                                                                                                       │entry implement · terminal finish · now finish
+  Ran 2 shell commands                                                                                                 │
+                                                                                                                       │
+● 派了                                                                                                                 │
+                                                                                                                       │
+✻ Crunched for 5s · done 10:32 AM                                                                                      │
+                                                                                                                       │
+● Background command "Dispatch codex hand in background" completed (exit code 0)                                       │
+                                                                                                                       │
+  Ran 1 shell command                                                                                                  │
+                                                                                                                       │
+● 我前面回「派了」是錯的，派工其實沒成功。腳本立刻結束，回報 precondition_failed：                                     │
+                                                                                                                       │
+  ▎ Mission enforce mode requires a sealed campaign strict projection                                                  │
+                                                                                                                       │
+  dispatcher_called: false、model_calls: 0、resources_created: 0，所以 codex 沒有被呼叫，gate/stall-df 分支和 worktree │
+  也都沒建。/tmp/gate-stall-df.txt 已寫好，完整輸出在 /tmp/gate-stall-df.out。                                         │
+                                                                                                                       │
+  原因是這個 repo 的 Mission 治理設成 enforce 模式，要求先有封存好的 campaign                                          │
+  才能派工。我沒去繞過這個檢查，因為那是治理規則。                                                                     │
+                                                                                                                       │
+  接下來有兩個做法，請你選一個：                                                                                       │
+  1. 你提供或建立 campaign 設定，我再用 --campaign-contract 之類的參數重派。                                           │
+  2. 如果這是 gate 測試，你確認可以暫時關掉這個 repo 的 Mission enforce，我再重派。                                    │
+                                                                                                                       │
+✻ Baked for 6s · done 10:32 AM                                                                                         │
+                                                                                                                       │
+❯ 好，我已把這個 sandbox 的 Mission 模式暫改成 shadow（gate 測試用）。請用同樣參數重派那個 codex                       │
+  hand（/tmp/gate-stall-df.txt 已在），背景派工，派完回「派了」並停。                                                  │
+                                                                                                                       │
+  Ran 2 shell commands                                                                                                 │
+                                                                                                                       │
+● Background command "Redispatch codex hand in background" completed (exit code 0)                                     │
+                                                                                                                       │
+● 派了                                                                                                                 │
+                                                                                                                       │
+✻ Crunched for 9s · done 10:34 AM                                                                                      │
+⏸ 疑似卡住 │ XS ▸ finish │ ⚙1 ⏸1 │ ⓘ                                                                               [-] │
+                                                                                                                       │
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 查一下 codex hand 的派工狀態
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Sonnet 5.5 ── ~/projects/gate-sandbox develop ──────────────────────────────────────────── v2.1.295
+  5h ▯▯▯▯▯▯ 4% 4h35m   7d ▮▯▯▯▯▯ 22% 6d1h   ctx ▯▯▯▯▯▯ 8%                          → codeforge adopt
+  ⏵⏵ accept edits on (shift+tab to cycle) · ← 6 agents

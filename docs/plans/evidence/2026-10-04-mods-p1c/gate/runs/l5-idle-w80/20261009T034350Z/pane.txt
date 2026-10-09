@@ -1,0 +1,50 @@
+  要先做一個你該決定的選擇，所以我先停在這裡。
+
+  目前狀態
+  - session-mode set --level l5 已成功，marker 是 READY，Mission
+    policy／graph／source 都已 admit。
+  - sandbox 裡已經有針對這件事的計畫：
+    - 計畫 docs/plans/2026-10-05-gate-readme-line.md：在 README.md 結尾加一行
+      gate-l5-test-line。
+    - 驗收：grep -qx gate-l5-test-line README.md 加 node test.js，而且只能動
+      README.md。
+  - v2 節點 gate-readme-line-v2-2026-10-05 已經用掉 1 次 attempt（a1）。那次在
+    2026-10-05 被 campaign_pre_effect_blocked 拒絕，沒花模型也沒建
+    worktree，之後被廢棄。
+  - 節點的 gate_attempt_budget 是 3，所以還剩 2 次。
+  - 我在 ledger 和 artifacts 裡沒找到 a1
+    被拒的具體原因，不確定現在重跑會不會同樣被擋。
+  - 現在的 graph digest（95c8c4…）和舊 lineage 記的（beb0e5…）不一樣。照
+    reference，這可能需要新 lineage。
+
+  選項
+  1. 走完整 rail（推薦，如果這次是在測 gate）：
+     - 重新 freeze authority、mission prepare 和 grant，寫 brief，再 engine
+       implement-review 派給 hetero 實作者。
+     - 這會消耗 1 次 attempt（剩 2 次），而且不保證不再被擋。
+  2. 降級到 /l3 內聯：我直接在 README.md 加一行。
+     - 這不經過 rail，只是把檔案改好。
+     - 如果你要驗證的是 l5 gate 本身，這個選項沒有意義。
+
+  另外，你說的「測試字」我先假設就是計畫裡寫的
+  gate-l5-test-line。如果你要的是別的字串，請告訴我。你要走哪一個？
+
+✻ Churned for 37s · done 11:40 AM
+╭────────────────────────────────────────────────────────────────────────────✕─╮
+│  Legend [Now] Graph  Dispatch  Review  Decisions  Spend  Hygiene             │
+│ session $0.89 · host $112.22 · ctx —                                         │
+│ ◌ 待命 gate-sandbox · 4m                                                     │
+│ 沒有派工在跑 · 停在等你指示 2 分                                             │
+│ no data · no stage recorded for this session                                 │
+│ no data · no unit recorded                                                   │
+│ progress  —                                                                  │
+│ phase  —                                                                     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+◌ 待命 │ ⓘ                                                                  [-]
+
+────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────
+  Sonnet 5.5 ── ~/projects/gate-sandbox develop ─────────────────────────────…
+  5h ▮▯▯▯▯▯ 28% 3h29m   7d ▮▯▯▯▯▯ 28% 6d0h   ctx ▯▯▯▯▯▯ 7%                   …
+  ⏵⏵ accept edits on (shift+tab to cycle) · ← 6 agents

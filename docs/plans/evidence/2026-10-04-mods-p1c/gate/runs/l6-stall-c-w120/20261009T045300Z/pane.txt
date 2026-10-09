@@ -1,0 +1,50 @@
+                                                                      │                                               ✕
+  工頭的重試用它自己的乾淨 worktree 當                                │ Legend [Now] Graph  Dispatch  Review  Decisions
+  --cwd，目前還在背景跑。這個問題之後在主 checkout 做 merge 或 status │ Spend  Hygiene
+  task 時也會遇到，現在先排除了。                                     │session $1.90 · host $228.25 · ctx —
+                                                                      │⏸ 疑似卡住 gate-sandbox · 3m
+  等工頭下一個完成通知。通知到了之後，我再自己跑驗收、取 status task  │最久的派工 3m 沒有輸出 · 1 件派工無決策紀錄
+  收據並檢查殘留。                                                    │no data · no stage recorded for this session
+                                                                      │no data · no unit recorded
+✻ Waiting for 1 background agent to finish                            │progress  0%（0/1）
+                                                                      │phase  準備
+● Agent "L6 foreman retry with envelope" finished · 3m 19s            │
+                                                                      │
+● 第 3 次引擎執行已在背景啟動，前兩次都在 campaign intake             │
+  就被擋下，沒有花任何輪次，也沒有 claim：                            │
+                                                                      │
+  - 第 1 次：主 checkout 被判 dirty，原因是前一則說明的               │
+    .claude/worktrees/ 沒被追蹤。我已用 .git/info/exclude 排除。      │
+  - 第 2 次：--verify-cmd 跟 sealed contract 不一致。contract 裡是    │
+    grep -qx gate-l5-test-line README.md && node                      │
+    test.js，我先前給的是只有 grep 的版本。工頭已改用 sealed          │
+    的完整字串。                                                      │
+                                                                      │
+  目前沒有任何結果，也還沒有 README                                   │
+  變更或合併。我等工頭的下一個完成通知，到了之後再自己跑驗收、取      │
+  status task 收據並檢查殘留。                                        │
+                                                                      │
+● Agent "L6 foreman retry with envelope" finished · 3m 42s            │
+                                                                      │
+● 這是又一則中間通知：工頭說「attempt                                 │
+  2」在背景執行，沒有最終結果。我不清楚它是第 3                       │
+  次引擎執行的重試，還是另一個 mission                                │
+  attempt，所以先不下結論。工頭已用掉約 31 次 Bash（上限              │
+  40），可能很快就會交班。                                            │
+                                                                      │
+  我繼續等完成通知，目前不驗收也不合併。如果通知說它因為到達上限而結束│
+  ，我會先查 campaign 狀態（campaign status），再決定要不要為同一個   │
+  deliverable 另派工頭。                                              │
+                                                                      │
+✻ Worked for 46s · done 12:49 PM · 3 shells still running             │
+⏸ 疑似卡住 │ ⚙1 ⏸1 │ ⓘ                                            [-] │
+                                                                      │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Sonnet 5.5 ── ~/projects/gate-sandbox develop ──────────────────────────────────────────── v2.1.295
+  5h ▮▮▯▯▯▯ 47% 2h20m   7d ▮▯▯▯▯▯ 33% 5d23h   ctx ▯▯▯▯▯▯ 10%                       → codeforge adopt
+  ⏵⏵ accept edits on · 3 shells · ← 6 agents
+
+  ● main
+  ◯ general-purpose  Waiting on run-engine.sh                                                  3m 42s · ↓ 67.1k tokens

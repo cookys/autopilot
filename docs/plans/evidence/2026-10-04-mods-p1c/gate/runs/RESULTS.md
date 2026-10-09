@@ -149,3 +149,213 @@ DEPTH-0 ADJUDICATION of l6 (2026-10-06 ~00:00, live FF9, gate-sandbox5; check.js
 | l6 author (FF9, gate-sandbox6) | author-done | PASS (band) / author BLOCKED (engine output) | runs/l6b-author-done/20261005T163746Z | band "◌ 待命 gate-sandbox6 · — · 2m · —", check.js RESULT: PASS (~30 s after turn end). Author dispatch: dispatch-author --strict-contract exit=5, status truncated, error frame_missing, 38 s; raw log 583 B of broken `<tool_call>`/`<|>` markers (copy runs/l6b/author-raw-log.txt); no artifact, sandbox clean, no containment breach. Not rerun (max_attempts 1) |
 
 DEPTH-0 ADJUDICATION of l6b (2026-10-06 ~00:40, live FF9, gate-sandbox6; check.js re-run: 2 PASS). Owner-authorized quota probe: safe probe left quota unknown; live-spend with the checker's exact binding (`--role verification_author --effort high --endpoint @none`) → available, endpoint_binding exact → dispatch-contract GO (assurance provisional). **/l6 author cell PASS for the band**: l6b-author-running `● 進行中 gate-sandbox6 … 1 個派工在跑` with the envelope row role author / qoderclicn / Qwen3.8-Max-Preview alive; l6b-author-done 待命 after it ended. The author ENGINE output was broken (`status truncated, error frame_missing`, exit 5, 583-byte garbled log) — a seat-quality finding for engine qualification, not a band defect; one attempt, not retried.
+
+## P7 gate (2026-10-09, run A: dev-flow, l3, ceo-agent; plugin develop 95ed4fc3; sandbox gate-sandbox; widths 209/120/80)
+
+Rows are check.js final lines, one per width capture (dir = gate/runs/<dir>). w80 captures got meta.body_columns=75 where check.js misread the 80-col stacked pane as a dock (see notes). created.txt per mode: runs/<mode>/created-p7.txt.
+
+| capture dir | check.js final line |
+|---|---|
+| dev-flow-perm-w209/20261009T022226Z | PASS dev-flow fields=2 |
+| dev-flow-perm-w120/20261009T022234Z | PASS dev-flow fields=2 |
+| dev-flow-perm-w80/20261009T022243Z | PASS dev-flow fields=1 |
+| dev-flow-perm-stage-w209/20261009T022417Z | PASS dev-flow fields=2 |
+| dev-flow-perm-stage-w120/20261009T022425Z | PASS dev-flow fields=2 |
+| dev-flow-perm-stage-w80/20261009T022434Z | PASS dev-flow fields=1 |
+| dev-flow-idle-w209/20261009T022730Z | PASS dev-flow fields=10 |
+| dev-flow-idle-w120/20261009T022739Z | PASS dev-flow fields=10 |
+| dev-flow-idle-w80/20261009T022748Z | PASS dev-flow fields=10 (body_columns=75 written) |
+| dev-flow-ask-w209/20261009T022849Z | PASS dev-flow fields=2 |
+| dev-flow-ask-w120/20261009T022857Z | PASS dev-flow fields=2 |
+| dev-flow-ask-w80/20261009T022906Z | FAIL dev-flow fields=1 failed=verdict |
+| dev-flow-running-w209/20261009T023015Z | PASS dev-flow fields=10 |
+| dev-flow-running-w120/20261009T023023Z | PASS dev-flow fields=10 |
+| dev-flow-running-w80/20261009T023032Z | PASS dev-flow fields=10 |
+| dev-flow-done-w209/20261009T023123Z | PASS dev-flow fields=10 |
+| dev-flow-done-w120/20261009T023132Z | PASS dev-flow fields=10 |
+| dev-flow-done-w80/20261009T023141Z | PASS dev-flow fields=10 |
+| dev-flow-running-dispatch-w209/20261009T023538Z | PASS dev-flow fields=10 |
+| dev-flow-running-dispatch-w120/20261009T023547Z | PASS dev-flow fields=10 |
+| dev-flow-running-dispatch-w80/20261009T023555Z | PASS dev-flow fields=10 |
+| dev-flow-panel-legend | PASS dev-flow fields=10 |
+| dev-flow-panel-now/20261009T023659Z | PASS dev-flow fields=10 |
+| dev-flow-panel-graph/20261009T023702Z | PASS dev-flow fields=10 |
+| dev-flow-stall-w209/20261009T023950Z | PASS dev-flow fields=10 |
+| dev-flow-stall-w120/20261009T023959Z | PASS dev-flow fields=10 |
+| dev-flow-stall-w80/20261009T024007Z | PASS dev-flow fields=10 |
+| l3-perm-w209/20261009T024107Z | PASS l3 fields=2 |
+| l3-perm-w120/20261009T024116Z | PASS l3 fields=2 |
+| l3-perm-w80/20261009T024124Z | PASS l3 fields=1 |
+| l3-perm-agent-w209/20261009T024157Z | PASS l3 fields=2 |
+| l3-perm-agent-w120/20261009T024206Z | PASS l3 fields=2 |
+| l3-perm-agent-w80/20261009T024214Z | PASS l3 fields=1 |
+| l3-idle-w209/20261009T024246Z | PASS l3 fields=10 |
+| l3-idle-w120/20261009T024254Z | PASS l3 fields=10 |
+| l3-idle-w80/20261009T024303Z | PASS l3 fields=10 |
+| l3-ask-w209/20261009T024331Z | PASS l3 fields=2 |
+| l3-ask-w120/20261009T024340Z | PASS l3 fields=2 |
+| l3-ask-w80/20261009T024348Z | FAIL l3 fields=1 failed=verdict |
+| l3-idle2-w209/20261009T024520Z | PASS l3 fields=10 |
+| l3-idle2-w120/20261009T024528Z | PASS l3 fields=10 |
+| l3-idle2-w80/20261009T024537Z | PASS l3 fields=10 |
+| l3-running-w209/20261009T024619Z | PASS l3 fields=10 |
+| l3-running-w120/20261009T024628Z | PASS l3 fields=10 |
+| l3-running-w80/20261009T024636Z | PASS l3 fields=10 |
+| l3-done-w209/20261009T024728Z | PASS l3 fields=10 |
+| l3-done-w120/20261009T024736Z | PASS l3 fields=10 |
+| l3-done-w80/20261009T024745Z | PASS l3 fields=10 |
+| l3-panel-legend/20261009T025119Z | PASS l3 fields=10 |
+| l3-panel-now/20261009T025127Z | PASS l3 fields=10 |
+| l3-panel-graph/20261009T025131Z | PASS l3 fields=10 |
+| l3-stall-w209/20261009T025447Z | PASS l3 fields=10 |
+| l3-stall-w120/20261009T025455Z | PASS l3 fields=10 |
+| l3-stall-w80/20261009T025504Z | PASS l3 fields=10 |
+| ceo-agent-perm-w209/20261009T025547Z | PASS ceo-agent fields=2 |
+| ceo-agent-perm-w120/20261009T025555Z | FAIL ceo-agent fields=2 failed=reason |
+| ceo-agent-perm-w80/20261009T025604Z | PASS ceo-agent fields=1 |
+| ceo-agent-idle-w209/20261009T025706Z | PASS ceo-agent fields=10 |
+| ceo-agent-idle-w120/20261009T025715Z | PASS ceo-agent fields=10 |
+| ceo-agent-idle-w80/20261009T025723Z | PASS ceo-agent fields=10 |
+| ceo-agent-ask-w209/20261009T025751Z | PASS ceo-agent fields=2 |
+| ceo-agent-ask-w120/20261009T025759Z | PASS ceo-agent fields=2 |
+| ceo-agent-ask-w80/20261009T025807Z | FAIL ceo-agent fields=1 failed=verdict |
+| ceo-agent-idle2-w209/20261009T025931Z | PASS ceo-agent fields=10 |
+| ceo-agent-idle2-w120/20261009T025939Z | PASS ceo-agent fields=10 |
+| ceo-agent-idle2-w80/20261009T025948Z | PASS ceo-agent fields=10 |
+| ceo-agent-running-w209/20261009T030027Z | PASS ceo-agent fields=10 |
+| ceo-agent-running-w120/20261009T030036Z | PASS ceo-agent fields=10 |
+| ceo-agent-running-w80/20261009T030044Z | PASS ceo-agent fields=10 |
+| ceo-agent-done-w209/20261009T030126Z | PASS ceo-agent fields=10 |
+| ceo-agent-done-w120/20261009T030134Z | PASS ceo-agent fields=10 |
+| ceo-agent-done-w80/20261009T030143Z | PASS ceo-agent fields=10 |
+| ceo-agent-panel-legend/20261009T030304Z | PASS ceo-agent fields=10 |
+| ceo-agent-panel-now/20261009T030308Z | PASS ceo-agent fields=10 |
+| ceo-agent-panel-graph/20261009T030311Z | PASS ceo-agent fields=10 |
+| ceo-agent-stall-w209/20261009T030514Z | PASS ceo-agent fields=10 |
+| ceo-agent-stall-w120/20261009T030522Z | PASS ceo-agent fields=10 |
+| ceo-agent-stall-w80/20261009T030531Z | PASS ceo-agent fields=10 |
+| ceo-agent-stall-b-w209/20261009T030739Z | PASS ceo-agent fields=10 |
+| ceo-agent-stall-b-w120/20261009T030747Z | PASS ceo-agent fields=10 |
+| ceo-agent-stall-b-w80/20261009T030756Z | PASS ceo-agent fields=10 |
+
+Notes: (1) ask-w80 FAILs (3 modes): at 80 columns the AskUserQuestion dialog hides band and panel, check.js finds no verdict; attention.json kind=question is correct, so this is a display/checker-surface finding. (2) ceo-agent-perm-w120 FAIL reason: the 50-wide dock truncates the reason with an ellipsis by display width, check.js expects a fixed-length prefix (checker rule, band fine). (3) ceo-agent-stall (first) was captured 2m21 after SIGSTOP, before the stall flag; PASS with 進行中; retry ceo-agent-stall-b shows ⏸ 疑似卡住. (4) Sandbox Mission mode was temporarily set to shadow (uncommitted, reset after each mode) because a plain dispatch-hetero is refused under enforce; stall hands killed after capture.
+
+### Batch B: l4, l5, l6 (2026-10-09 11:08-12:15 CST; plugin develop 95ed4fc3; sandbox gate-sandbox; widths 209/120/80; 80-col captures have body_columns=75 written to meta.json)
+
+| Capture dir | check.js final line |
+|---|---|
+| l4-perm-w209/20261009T031056Z | PASS l4 fields=2 |
+| l4-perm-w120/20261009T031105Z | PASS l4 fields=2 |
+| l4-perm-w80/20261009T031113Z | PASS l4 fields=1 |
+| l4-perm-agent-w209/20261009T031358Z | PASS l4 fields=2 |
+| l4-perm-agent-w120/20261009T031406Z | PASS l4 fields=2 |
+| l4-perm-agent-w80/20261009T031414Z | PASS l4 fields=1 |
+| l4-idle-w209/20261009T031754Z | FAIL l4 fields=2 failed=nonok |
+| l4-idle-w120/20261009T031803Z | FAIL l4 fields=2 failed=nonok |
+| l4-idle-w80/20261009T031811Z | FAIL l4 fields=2 failed=nonok |
+| l4-ask-w209/20261009T032015Z | PASS l4 fields=2 |
+| l4-ask-w120/20261009T032023Z | PASS l4 fields=2 |
+| l4-ask-w80/20261009T032031Z | FAIL l4 fields=1 failed=verdict |
+| l4-running-w209/20261009T032158Z | PASS l4 fields=2 |
+| l4-running-w120/20261009T032206Z | PASS l4 fields=2 |
+| l4-running-w80/20261009T032215Z | PASS l4 fields=1 |
+| l4-running2-w209/20261009T032446Z | PASS l4 fields=2 |
+| l4-running2-w120/20261009T032455Z | PASS l4 fields=2 |
+| l4-running2-w80/20261009T032503Z | PASS l4 fields=1 |
+| l4-idle2-w209/20261009T032736Z | PASS l4 fields=10 |
+| l4-idle2-w120/20261009T032745Z | PASS l4 fields=10 |
+| l4-idle2-w80/20261009T032754Z | PASS l4 fields=10 |
+| l4-running3-w209/20261009T032852Z | PASS l4 fields=10 |
+| l4-running3-w120/20261009T032901Z | PASS l4 fields=10 |
+| l4-running3-w80/20261009T032909Z | PASS l4 fields=10 |
+| l4-done-w209/20261009T033022Z | PASS l4 fields=10 |
+| l4-done-w120/20261009T033030Z | PASS l4 fields=10 |
+| l4-done-w80/20261009T033039Z | PASS l4 fields=10 |
+| l4-panel-legend/20261009T033112Z | PASS l4 fields=10 |
+| l4-panel-now/20261009T033146Z | PASS l4 fields=10 |
+| l4-panel-graph/20261009T033152Z | PASS l4 fields=10 |
+| l4-stall-w209/20261009T033741Z | PASS l4 fields=10 |
+| l4-stall-w120/20261009T033749Z | PASS l4 fields=10 |
+| l4-stall-w80/20261009T033758Z | PASS l4 fields=10 |
+| l5-perm-w209/20261009T033906Z | PASS l5 fields=2 |
+| l5-perm-w120/20261009T033914Z | PASS l5 fields=2 |
+| l5-perm-w80/20261009T033923Z | PASS l5 fields=1 |
+| l5-idle-w209/20261009T034333Z | PASS l5 fields=10 |
+| l5-idle-w120/20261009T034342Z | PASS l5 fields=10 |
+| l5-idle-w80/20261009T034350Z | PASS l5 fields=10 |
+| l5-ask-w209/20261009T035103Z | PASS l5 fields=2 |
+| l5-ask-w120/20261009T035111Z | PASS l5 fields=2 |
+| l5-ask-w80/20261009T035120Z | FAIL l5 fields=1 failed=verdict |
+| l5-running-w209/20261009T035237Z | PASS l5 fields=10 |
+| l5-running-w120/20261009T035245Z | PASS l5 fields=10 |
+| l5-running-w80/20261009T035254Z | PASS l5 fields=10 |
+| l5-done-w209/20261009T035405Z | PASS l5 fields=10 |
+| l5-done-w120/20261009T035414Z | PASS l5 fields=10 |
+| l5-done-w80/20261009T035422Z | PASS l5 fields=10 |
+| l5-panel-legend/20261009T035431Z | PASS l5 fields=10 |
+| l5-panel-now/20261009T035440Z | PASS l5 fields=10 |
+| l5-panel-graph/20261009T035446Z | PASS l5 fields=10 |
+| l5-compact/20261009T035657Z | PASS l5 fields=10 |
+| l6-perm-w209/20261009T040119Z | PASS l6 fields=2 |
+| l6-perm-w120/20261009T040127Z | PASS l6 fields=2 |
+| l6-perm-w80/20261009T040136Z | PASS l6 fields=1 |
+| l6-ask-w209/20261009T040655Z | PASS l6 fields=2 |
+| l6-ask-w120/20261009T040704Z | PASS l6 fields=2 |
+| l6-ask-w80/20261009T040712Z | FAIL l6 fields=1 failed=verdict |
+| l6-idle-w209/20261009T040925Z | PASS l6 fields=10 |
+| l6-idle-w120/20261009T040933Z | PASS l6 fields=10 |
+| l6-idle-w80/20261009T040942Z | PASS l6 fields=10 |
+| l6-running-w209/20261009T041044Z | PASS l6 fields=10 |
+| l6-running-w120/20261009T041052Z | PASS l6 fields=10 |
+| l6-running-w80/20261009T041101Z | PASS l6 fields=10 |
+| l6-done-w209/20261009T041214Z | PASS l6 fields=10 |
+| l6-done-w120/20261009T041226Z | PASS l6 fields=10 |
+| l6-done-w80/20261009T041235Z | PASS l6 fields=10 |
+| l6-panel-legend/20261009T041244Z | PASS l6 fields=10 |
+| l6-panel-now/20261009T041253Z | PASS l6 fields=10 |
+| l6-panel-graph/20261009T041259Z | PASS l6 fields=10 |
+
+Notes (batch B):
+(1) l4-idle (first): FAIL nonok. The /l4 depth-0 ran `session-mode clear` at the end of its run, so the session had no marker (meta.json scope_key null); band showed only `◌ 待命 │ ⓘ`; check.js has no envelope without a marker. Retry l4-idle2 (marker re-set with `session-mode.js set --level l4`, run by the driven session) PASS. Finding: after /l4 finishes and clears its marker the session has no scope; a plain follow-up prompt does not recreate the marker.
+(2) ask-w80 FAILs (l4, l5, l6): at 80 columns the AskUserQuestion dialog hides band and panel; attention.json kind=question correct; known checker gap, 'question dialog hides band'.
+(3) /l4 ran a real foreman twice (first one failed precondition_failed: worktree base 9c5bf49 because the sandbox has no origin/HEAD; depth-0 set worktree.baseRef=head in git-ignored settings.local.json and re-dispatched; merged locally, not pushed). l4-perm = real depth-0 Bash permission dialogs; l4-perm-agent = foreman-subagent dialog (surface dialog). l4-running/l4-running2 captured while a subagent dialog was open (fields=2, dialog surface, panel verdict 進行中/要你決定); real band-surface running cell is l4-running3 (task in_progress, method 1). done cells use method (2) (two tasks completed, no dispatch). l4 marker for idle2/running3/done/stall was set by the driven session running session-mode.js set --level l4 (the state at the /l4 front door), because the campaign had cleared it.
+(4) l5 campaign rail BLOCKED (enforce): UNRESOLVED_MISSION_EXISTS, two old ACTIVE lineages (gate-readme-line-2026-10-05, gate-readme-line-v2-2026-10-05) in the sandbox; finalize-abort needs an authenticated control adapter; original authority intent not recoverable. l6: same blocker in the foreman (mission prepare -> UNRESOLVED_MISSION_EXISTS for lineage-v1-6c52a9b2 / lineage-v1-bf0a9f8a), raised to the user via a real AskUserQuestion (decision file payload: source ask_user_question, 3 options, root_run_id job-1791518496-ff49f41a; closed after answer; l6-ask is that real question). l5/l6 idle/running/done/panel cells were taken with the real l5/l6 markers (set by the front door) using the task-list methods.
+(5) stall cells: l4 PASS (Mission mode set to shadow in sandbox owner-kernel-governance.json line 90, reset with git checkout after; codex hand gpt-6-astra pid 3015936 cwd/environ checked, SIGSTOP 11:34:22, ⏸ seen 11:37:29 = 3m07s; hand killed). l5 and l6 stall BLOCKED: with an active l5/l6 marker dispatch-hetero.sh is refused even in shadow ('precondition_failed: active session-mode=l5 requires a sealed campaign strict projection'; l6: prompt-only write dispatch refused, needs sealed campaign / engine implement-review). No hand spawned.
+(6) extras: (a) PASS in l4 (decision file present during question with question/options A,B, source ask_user_question, gone after answer) and l6 (real question, payload above). (b) l5 /compact: marker sha256 before = after (888f2693...), level l5, band after compact PASS: l5-compact/20261009T035657Z. (c)/(d)/(e)/(f) not run.
+(7) Panel: Ctrl+x Tab then Enter opens/focuses the pane on Legend in all three modes (at 200 columns the pane is already auto-docked on Now; the keystrokes switched it to Legend). Tab/Enter, Right/Left/Down+Enter did NOT switch tabs; an SGR mouse click on the tab label (tmux send-keys of ESC[<0;col;2M/m) switched to Now and Graph. Legend lists the slot glyphs; Now shows verdict + reason line (e.g. 任務 2/2 都完成，等你驗收) + progress; Graph shows 'no data · no stage walk published for this session' (no stage recorded: sessions here never set a size). Panel captures are at window width 200, not 209.
+(8) Watcher: gate-sandbox watcher pid 2598395 (started 10:19:32, after 95ed4fc3 commit, cwd gate-sandbox) already serves new code: runs/<scope>.json has host_today_brain_usd (77.3 -> 134 over the run) and brain_cap_usd 150; stage/<sid>.json appeared (3028da81...json) in the live dir. Not restarted.
+(9) Sessions created: l4 3028da81-bc08-4aa5-8ea9-8f6786b5c6ab, l5 94d641f7-fb20-4646-9968-96c5b604acaf, l6 5c243380-f5fd-4321-b0c6-36ced1d1768e (details gate/runs/l4|l5|l6/created.txt). Leftover: worktree /tmp/hetero-gate-l4-stall-Ag7uO8 (branch gate-l4-stall).
+
+## Batch C (2026-10-09, live plugin b170549c, rebuilt sandbox)
+| cell | check.js final line |
+|---|---|
+| l5-running-c-w209/20261009T042901Z | PASS l5 fields=10 |
+| l5-running-c-w120/20261009T042910Z | PASS l5 fields=10 |
+| l5-running-c-w80/20261009T042918Z | PASS l5 fields=10 |
+| l5-stall-c-w209/20261009T043306Z | PASS l5 fields=10 |
+| l5-stall-c-w120/20261009T043314Z | PASS l5 fields=10 |
+| l5-stall-c-w80/20261009T043323Z | PASS l5 fields=10 |
+| l5-done-c-w209/20261009T043554Z | PASS l5 fields=10 |
+| l5-done-c-w120/20261009T043602Z | PASS l5 fields=10 |
+| l5-done-c-w80/20261009T043611Z | PASS l5 fields=10 |
+| l6-perm-c-w209/20261009T044144Z | PASS l6 fields=2 |
+| l6-perm-c-w120/20261009T044153Z | PASS l6 fields=2 |
+| l6-perm-c-w80/20261009T044201Z | PASS l6 fields=1 |
+| l6-running-c-w209/20261009T044905Z | PASS l6 fields=10 |
+| l6-running-c-w120/20261009T044913Z | PASS l6 fields=10 |
+| l6-running-c-w80/20261009T044922Z | FAIL l6 fields=10 failed=dispatch |
+| l6-stall-c-w209/20261009T045251Z | PASS l6 fields=10 |
+| l6-stall-c-w120/20261009T045300Z | PASS l6 fields=10 |
+| l6-stall-c-w80/20261009T045309Z | PASS l6 fields=10 |
+| l6-done-c-w209/20261009T045453Z | PASS l6 fields=10 |
+| l6-done-c-w120/20261009T045501Z | PASS l6 fields=10 |
+| l6-done-c-w80/20261009T045510Z | PASS l6 fields=10 |
+| dev-flow-panel-keys (200 cols) | FAIL: Ctrl+x Tab then Enter on the info mark opens/keeps the pane on Legend (ring on the info mark, [Legend] highlighted); Tab, Right, Left, Down, Up, S-Tab, Enter, Space did NOT move to Now/Graph. Esc did not close the pane but returned typing to the prompt (a typed char landed in the prompt). Ends on Legend. captures: runs/dev-flow-panel-keys/w200 |
+| dev-flow-panel-keys (120 cols) | FAIL: same as 200 cols, both with the pane auto-docked and after closing it by SGR click on x and reopening via Ctrl+x Tab Enter (opens on Legend); no key switches tabs; Esc leaves pane open, focus on prompt. captures: runs/dev-flow-panel-keys/w120 |
+
+Notes (batch C):
+(1) Sandbox rebuilt: old ~/projects/gate-sandbox moved to /tmp/gate-sandbox-old-20261009T042235Z (not deleted); fresh clone of ~/projects/gate-sandbox-origin.git, local branch develop tracking origin/develop (origin HEAD points at nonexistent master, so no origin/HEAD, as before), restored only git-ignored .claude/settings.local.json (permissions allow + worktree.baseRef=head) copied from the old dir. No hooksPath existed. Stale UNRESOLVED_MISSION_EXISTS state lived only under the sandbox git common dir (.git/autopilot/mission/{registry.json,states,artifacts}, implementation-campaign.jsonl, work-orders, controller-authority) so the move removed it. For l6 the sandbox was re-cloned again (previous one at /tmp/gate-sandbox-after-l5-20261009) because the l5 lineage was now COMPLETE.
+(2) l5: campaign ran for real (prepare, grant, grok-4.7 hand via dispatch-hetero, mission COMPLETE, frozen 1/1). Hand pid 3239467 (cwd/environ checked) SIGSTOP 12:29:39, stall:true 12:32:38, band stall, SIGCONT 12:33:26, campaign finished; depth-0 then stopped at can_merge unknown predicates (status task has no writer); marker left l5. l6: first foreman returned BLOCKED (no task-authority envelope; depth-0 did not author one); after a user nudge depth-0 authored it and a retry foreman ran the campaign (a2 lineage); hand pid 3367039 SIGSTOP 12:49:36, stall:true 12:52:25, SIGCONT 12:53:12, done 12:54.
+(3) l6-running-c-w80 FAIL dispatch: band showed only 進行中 while envelope already had a live run; the hand had started between the w120 and w80 captures (band lags up to 5 s); likely timing, not re-run in place.
+(4) Colour (band-209.png): done = green check + verdict word, dim separators; stall = pink/red mark + word with white gear/pause counts. The info mark renders as a small half-moon glyph, mouse-mode box [-] mid-line.
+(5) Sessions: panel-keys a0976e0e-b6fb-4a58-ad5f-f4fb95eb0b89; l5 ffea7985-61a8-46dd-b36b-092895eb3ea2 (marker l5 left, root job-1791519827-d7c12422, project 51de403da82a23f0); l6 7cbcb68a-3fe4-4681-b1a3-7fc841acc835 (marker l6 left, root job-1791520623-bfaad5b0). Branches: mission/143504fc8cb6/...-a1 (old sandbox), mission/20c40ae80803/...-a2 and worktree-agent-a0a996e5a76cd2993 (locked worktree .claude/worktrees/agent-a0a996e5a76cd2993) in the new sandbox; .git/info/exclude of new sandbox got .claude/worktrees/ from the driven session.

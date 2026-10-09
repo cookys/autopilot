@@ -1,0 +1,50 @@
+                                                                                                                       │                                                                                       ✕
+                                                                                                                       │ Legend [Now] Graph  Dispatch  Review  Decisions  Spend  Hygiene
+● l6 session marker 已設好，Mission 路由驗證通過，HEAD 與 origin/develop 一致，不需另設 worktree base。接下來派一個    │session $0.89 · host $223.84 · ctx 7%
+  sonnet 工頭在隔離 worktree 中跑 Mission prepare → engine implement-review。 · summary                                │▲ 要你決定 gate-sandbox · 4m
+                                                                                                                       │等你批准：Bash: pkill -f "sleep 1500" ; echo done（等了 0 分）
+● Agent(L6 foreman: README test line)                                                                                  │no data · no stage recorded for this session
+  ⎿  Initializing…                                                                                                     │no data · no unit recorded
+  ⎿  Error: dispatch-model-guard: prompt line 1 must be "Engine: <model>…" matching model: sonnet (got: Engine:        │progress  —
+     claude-sonnet)                                                                                                    │phase  —
+                                                                                                                       │要你決定
+  Ran 1 shell command                                                                                                  │等你批准：Bash: pkill -f "sleep 1500" ; echo done（等了 0 分）
+                                                                                                                       │
+● Guard 要求第 1 行為 Engine: sonnet，修正後重派。                                                                     │
+                                                                                                                       │
+● Agent(L6 foreman: README test line)                                                                                  │
+  ⎿  Backgrounded agent (↓ to manage · ctrl+o to expand)                                                               │
+                                                                                                                       │
+● 工頭已在背景啟動（sonnet、worktree 隔離），死人開關也已設好（25                                                      │
+  分鐘）。我現在結束這一回合，等工頭的完成通知或死人開關喚醒。                                                         │
+                                                                                                                       │
+  目前狀態                                                                                                             │
+  - l6 session marker 已設定，Mission 路由 admit 通過（1 個 deliverable）。                                            │
+  - 目標：在 README.md 結尾加一行 gate-l5-test-line，這是 repo 內已 admit 的 plan 指定的測試字。                       │
+  - 工頭只負責跑 engine implement-review。我不會自己改 README。                                                        │
+  - 工頭回報後，我會自己執行驗收指令：grep -qx gate-l5-test-line README.md 和 node test.js。                           │
+  - 合併前我會先取 status task 收據，並確認 can_merge === true。                                                       │
+                                                                                                                       │
+✻ Waiting for 1 background agent to finish                                                                             │
+                                                                                                                       │
+● Agent "L6 foreman: README test line" finished · 1m 12s                                                               │
+                                                                                                                       │
+  Stopping the deadman timer                                                                                           │
+  ⎿  $ pkill -f "sleep 1500" ; echo done                                                                               │
+                                                                                                                       │
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
+ Bash command                                                                                                          │
+ Tip: auto mode handles these prompts for you — choose "switch to auto mode" below                                     │
+ Stop the deadman timer                                                                                                │
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌│
+ pkill -f "sleep 1500" ; echo done                                                                                     │
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌│
+ This command requires approval                                                                                        │
+                                                                                                                       │
+ Do you want to proceed?                                                                                               │
+ ❯ 1. Yes                                                                                                              │
+   2. Yes, and don’t ask again for: pkill -f "sleep 1500"                                                              │
+   3. Yes, and switch to auto mode · auto mode handles these prompts for you                                           │
+   4. No                                                                                                               │
+                                                                                                                       │
+ Esc to cancel · Tab to amend                                                                                          │

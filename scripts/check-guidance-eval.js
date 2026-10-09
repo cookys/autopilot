@@ -112,19 +112,31 @@ for (const d of differing) {
   d.ok = true;
 }
 
-// Bind the results file to the arm manifest: every change-arm row must carry the sha256 of the arm
-// manifest it ran under (written by run-skill-onoff-eval.sh), and it must equal the digest of --arm.
+// Bind the results file to the arm manifest. Either every change-arm row carries arm_manifest_sha256
+// equal to the sha256 of --arm (written by run-skill-onoff-eval.sh), or - for committed legacy
+// evidence that must stay byte-identical - a sidecar <results-basename>.arm-binding.json sits next
+// to the results file, whose results_sha256 matches the file and whose arm_manifest_sha256 equals
+// the --arm digest.
 function armBindingFailures(file) {
   const want = sha(fs.readFileSync(armPath));
+  let raw;
   let rows;
-  try { rows = fs.readFileSync(file, 'utf8').split('\n').filter((l) => l.trim()).map((l) => JSON.parse(l)); } catch (e) { return [`results file unreadable for arm binding: ${e.message}`]; }
+  try { raw = fs.readFileSync(file); rows = raw.toString('utf8').split('\n').filter((l) => l.trim()).map((l) => JSON.parse(l)); } catch (e) { return [`results file unreadable for arm binding: ${e.message}`]; }
   const changeRows = rows.filter((r) => r && r.arm === 'change');
   if (!changeRows.length) return ['results file has no change-arm rows to bind to the arm manifest'];
-  const unstamped = changeRows.filter((r) => typeof r.arm_manifest_sha256 !== 'string').length;
-  const wrong = changeRows.filter((r) => typeof r.arm_manifest_sha256 === 'string' && r.arm_manifest_sha256 !== want).length;
+  const stamped = changeRows.filter((r) => typeof r.arm_manifest_sha256 === 'string');
+  if (stamped.length === changeRows.length) {
+    const wrong = stamped.filter((r) => r.arm_manifest_sha256 !== want).length;
+    return wrong ? [`${wrong} change-arm row(s) were produced under a different arm manifest (arm_manifest_sha256 != sha256 of ${path.basename(armPath)})`] : [];
+  }
+  if (stamped.length) return [`${changeRows.length - stamped.length} change-arm row(s) carry no arm_manifest_sha256 (partially stamped results)`];
+  const sidecarPath = path.join(path.dirname(file), `${path.basename(file).replace(/\.jsonl$/, '')}.arm-binding.json`);
+  let side;
+  try { side = JSON.parse(fs.readFileSync(sidecarPath, 'utf8')); } catch { return [`change-arm rows carry no arm_manifest_sha256 and no readable arm-binding sidecar at ${sidecarPath} (results not bound to the arm manifest)`]; }
+  if (!side || side.schema !== 'autopilot.results-arm-binding/1') return [`arm-binding sidecar ${sidecarPath} has an unknown schema`];
   const out = [];
-  if (unstamped) out.push(`${unstamped} change-arm row(s) carry no arm_manifest_sha256 (results not bound to the arm manifest)`);
-  if (wrong) out.push(`${wrong} change-arm row(s) were produced under a different arm manifest (arm_manifest_sha256 != sha256 of ${path.basename(armPath)})`);
+  if (side.results_sha256 !== sha(raw)) out.push(`arm-binding sidecar results_sha256 is stale (does not match ${path.basename(file)})`);
+  if (side.arm_manifest_sha256 !== want) out.push(`arm-binding sidecar names a different arm manifest (arm_manifest_sha256 != sha256 of ${path.basename(armPath)})`);
   return out;
 }
 

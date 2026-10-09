@@ -109,6 +109,22 @@ node -e 'const fs=require("fs");fs.writeFileSync(process.argv[2],fs.readFileSync
 gate --base "$BASE_REF" --repo "$R" --prereg "$PRE" --packs-dir "$PK" --results "$TEST_TMP/unstamped.jsonl"
 [ "$G_RC" -eq 1 ] && grep -q 'carry no arm_manifest_sha256' <<<"$G_OUT" || fail "unstamped change rows must fail (rc=$G_RC): $G_OUT"
 
+echo "=== legacy results bound by an arm-binding sidecar ==="
+LG="$TEST_TMP/legacy"; mkdir -p "$LG"
+node -e 'const fs=require("fs");fs.writeFileSync(process.argv[2],fs.readFileSync(process.argv[1],"utf8").split("\n").filter(Boolean).map(l=>{const r=JSON.parse(l);delete r.arm_manifest_sha256;return JSON.stringify(r)}).join("\n")+"\n")' "$TEST_TMP/ship.jsonl" "$LG/old.jsonl"
+write_sidecar() { # $1 results-sha $2 arm-sha
+  printf '{"schema":"autopilot.results-arm-binding/1","results":"old.jsonl","results_sha256":"%s","arm_manifest_sha256":"%s"}\n' "$1" "$2" > "$LG/old.arm-binding.json"
+}
+write_sidecar "$(sha "$LG/old.jsonl")" "$(sha "$ARM")"
+gate --base "$BASE_REF" --repo "$R" --prereg "$PRE" --packs-dir "$PK" --results "$LG/old.jsonl"
+[ "$G_RC" -eq 0 ] || fail "good sidecar must pass (rc=$G_RC): $G_OUT"
+write_sidecar "0000000000000000000000000000000000000000000000000000000000000000" "$(sha "$ARM")"
+gate --base "$BASE_REF" --repo "$R" --prereg "$PRE" --packs-dir "$PK" --results "$LG/old.jsonl"
+[ "$G_RC" -eq 1 ] && grep -q 'results_sha256 is stale' <<<"$G_OUT" || fail "stale sidecar results sha must fail (rc=$G_RC): $G_OUT"
+write_sidecar "$(sha "$LG/old.jsonl")" "$(sha "$ARMOTHER")"
+gate --base "$BASE_REF" --repo "$R" --prereg "$PRE" --packs-dir "$PK" --results "$LG/old.jsonl"
+[ "$G_RC" -eq 1 ] && grep -q 'sidecar names a different arm manifest' <<<"$G_OUT" || fail "sidecar naming a different arm must fail (rc=$G_RC): $G_OUT"
+
 echo "=== results that do not reproduce SHIP -> 1 ==="
 gate --base "$BASE_REF" --repo "$R" --prereg "$PRE" --packs-dir "$PK" --results "$TEST_TMP/weak.jsonl"
 [ "$G_RC" -eq 1 ] && grep -q 'did not reproduce SHIP' <<<"$G_OUT" || fail "weak results must fail the gate (rc=$G_RC): $G_OUT"

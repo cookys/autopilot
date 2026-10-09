@@ -1350,5 +1350,15 @@ wait
 assert_eq "$(node -e 'const c=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); console.log(Array.isArray(c)&&c.length===1&&c[0].generation===1)' "$LEDGER/review-p_race/chain.json")" "true" "test 11c: concurrent collects leave one valid generation-1 entry"
 assert_file_absent "$LEDGER/review-p_race/chain.json.lock" "test 11c: no lock left behind"
 
+# 11d: finalize takes the same lock around its chain.json read-modify-write
+echo '[]' > "$TEST_TMP/disp-empty.json"
+mkdir "$LEDGER/review-p_lock/chain.json.lock"
+T11D_OUT=$(AUTOPILOT_CHAIN_LOCK_TIMEOUT_MS=400 node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_lock --generation 1 --dispositions "$TEST_TMP/disp-empty.json" --branch work 2>&1); T11D_RC=$?
+assert_exit_code "$T11D_RC" "1" "test 11d: finalize exits 1 while another holder owns the chain lock"
+assert_contains "$T11D_OUT" "waiting for the chain.json lock" "test 11d: finalize waits on the chain lock"
+rmdir "$LEDGER/review-p_lock/chain.json.lock"
+T11E_OUT=$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_lock --generation 1 --dispositions "$TEST_TMP/disp-empty.json" --branch work 2>&1) || true
+assert_file_absent "$LEDGER/review-p_lock/chain.json.lock" "test 11e: finalize releases the lock on every exit path"
+
 finalize_test
 

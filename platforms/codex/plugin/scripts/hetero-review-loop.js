@@ -38,7 +38,7 @@ function writeFileSyncAtomic(targetPath, content) {
 // Exclusive lock around a chain.json read-modify-write. mkdir is atomic, so the lock directory
 // <chain>.lock is the mutex; a lock older than the stale age (crashed holder) is broken. Waiting is
 // bounded: past the timeout the caller gets a loud error instead of a lost or interleaved update.
-function withChainLock(chainPath, fn) {
+function acquireChainLock(chainPath) {
   const lockPath = `${chainPath}.lock`;
   const timeoutMs = Number(process.env.AUTOPILOT_CHAIN_LOCK_TIMEOUT_MS) > 0 ? Number(process.env.AUTOPILOT_CHAIN_LOCK_TIMEOUT_MS) : 15000;
   const staleMs = Number(process.env.AUTOPILOT_CHAIN_LOCK_STALE_MS) > 0 ? Number(process.env.AUTOPILOT_CHAIN_LOCK_STALE_MS) : 30000;
@@ -63,10 +63,20 @@ function withChainLock(chainPath, fn) {
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
     }
   }
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    try { fs.rmdirSync(lockPath); } catch (_e) { /* already gone */ }
+  };
+}
+
+function withChainLock(chainPath, fn) {
+  const release = acquireChainLock(chainPath);
   try {
     return fn();
   } finally {
-    try { fs.rmdirSync(lockPath); } catch (_e) { /* already gone */ }
+    release();
   }
 }
 
@@ -1022,8 +1032,13 @@ async function handleFinalize(flags) {
     process.exit(1);
   }
 
-  // Chain entry validation
+  // Chain entry validation. finalize reads, mutates and rewrites chain.json, so it holds the chain
+  // lock from before the read until the process exits (every path ends in process.exit).
   const chainPath = path.join(reviewPhaseDir, 'chain.json');
+  if (fs.existsSync(reviewPhaseDir)) {
+    const releaseChainLock = acquireChainLock(chainPath);
+    process.on('exit', releaseChainLock);
+  }
   let chain = [];
   if (!fs.existsSync(chainPath)) {
     console.error(`ERROR: Missing chain.json at ${chainPath}`);

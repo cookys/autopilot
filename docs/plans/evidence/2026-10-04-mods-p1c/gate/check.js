@@ -151,13 +151,21 @@ function hygieneChip(ls) {
 // the cells left of that border. The band row itself (verdict mark / ⓘ) is not evidence. Needs >= 6 rows; the leftmost such offset wins.
 function dockOf(paneText) {
   if (!paneText) return null;
+  const lines = String(paneText).replace(/\n+$/, '').split('\n');
   const byOffset = new Map();
-  for (const line of paneText.split('\n')) {
+  let inBox = false; // rows between a `╭` line and its `╰` line are a boxed panel (stacked below 100 columns), never a dock
+  for (const line of lines) {
+    if (line.includes('╭')) inBox = true;
+    const boxRow = inBox;
+    if (line.includes('╰')) inBox = false;
+    if (boxRow) continue;
     if (VERDICTS.some((v) => line.includes(`${v.mark} ${v.word}`)) || line.includes(`${SEP}${ICON}`)) continue;
     let off = 0; const seen = new Set();
     for (const ch of line) { if (ch === '│' && off >= 20 && !seen.has(off)) { seen.add(off); byOffset.set(off, (byOffset.get(off) || 0) + 1); } off += cellWidth(ch.codePointAt(0)); }
   }
-  const hits = [...byOffset.entries()].filter(([, n]) => n >= 6).sort((a, b) => a[0] - b[0]);
+  // a docked pane runs the full height of the screen: the border must span most (>= 60 %) of the pane.txt rows
+  const need = Math.max(6, Math.ceil(lines.length * 0.6));
+  const hits = [...byOffset.entries()].filter(([, n]) => n >= need).sort((a, b) => a[0] - b[0]);
   return hits.length ? { column: hits[0][0], rows: hits[0][1] } : null;
 }
 function truncateTo(text, width) {
@@ -261,7 +269,11 @@ function derive(dir, opts = {}) {
 
   // legacy panel reason (the reason moved to the panel's Now tab; it is still judged on the dialog-time top-right panel)
   if (verdict === '要你決定') {
-    if (attKind === 'permission' || attKind === 'question') reasons.push({ expected: String(attention.summary || '').slice(0, 30), source: 'attention.json summary' });
+    // the panel draws `<label><summary>` (+ `（等了 N 分）`), cut by DISPLAY width with a trailing `…` (mods/live/model.ts reason line)
+    if (attKind === 'permission' || attKind === 'question') {
+      const label = attKind === 'permission' ? '等你批准：' : '等你回答：';
+      reasons.push({ expected: label + String(attention.summary || ''), label, full: label + String(attention.summary || ''), source: 'attention.json summary' });
+    }
     else reasons.push({ expected: String(decisionFile.question).slice(0, 30), source: 'decision-file.json question' });
   } else if (verdict === '疑似卡住' && stalledRows === 0 && foremanStalled) reasons.push({ expected: '工頭 ', source: foremen.stalled[0].file });
   else if (verdict === '進行中' && !liveRun && foremanFresh) reasons.push({ expected: '工頭在跑：', source: foremen.fresh[0].file });
@@ -439,7 +451,8 @@ function findPanel(paneText) {
 }
 // A permission / question dialog drawn by Claude Code itself (full width: it can hide the band AND the panel).
 function findDialog(paneText) {
-  return /This command requires approval|Do you want to (proceed|make this edit|create|run)|❯ 1\. Yes|Esc to cancel · Tab to amend/.test(String(paneText || ''));
+  // permission dialogs, and the AskUserQuestion dialog (footer `Enter to select · ↑/↓ to navigate · Esc to cancel`)
+  return /This command requires approval|Do you want to (proceed|make this edit|create|run)|❯ 1\. Yes|Esc to cancel · Tab to amend|Enter to select · ↑\/↓ to navigate/.test(String(paneText || ''));
 }
 
 // classify one drawn segment by its own text (independent of what is expected)
@@ -520,12 +533,23 @@ function judgeBand(d, band) {
   return results;
 }
 
+// The drawn reason is the full text (optionally followed by the wait suffix), or a display-width prefix of it (at least the label and
+// one more character) followed by `…`. Other reasons (decision file / foreman / turn) keep the plain substring rule.
+function reasonDrawn(r, drawn) {
+  if (typeof r.full !== 'string') return drawn.includes(r.expected);
+  const body = drawn.replace(/（等了 \d+ 分）$/, '');
+  if (body === r.full) return true;
+  if (!drawn.endsWith('…')) return false;
+  const prefix = drawn.slice(0, -1);
+  return r.full.startsWith(prefix) && Array.from(prefix).length > Array.from(r.label).length;
+}
+
 function judgePanelLike(d, band) {
   const results = [];
   const res = (name, status, expected, got, source, detail) => results.push({ name, status, expected, got, source, detail: detail || '' });
   res('verdict', band.verdict === d.verdict ? 'PASS' : 'FAIL', d.verdict, band.verdict, d.slots.verdict.source, `${band.surface} shows ${band.verdict}`);
   for (const r of d.reasons) {
-    if (band.surface === 'panel') res('reason', band.line2.includes(r.expected) ? 'PASS' : 'FAIL', r.expected, band.line2, r.source);
+    if (band.surface === 'panel') res('reason', reasonDrawn(r, band.line2) ? 'PASS' : 'FAIL', r.expected, band.line2, r.source);
     else res('reason', 'SKIP', r.expected, 'hidden', r.source, 'a dialog hides the band and the panel');
   }
   for (const name of SLOT_ORDER.slice(1)) res(name, 'SKIP', '-', '-', d.slots[name].source, band.surface === 'panel' ? 'not shown on the panel' : 'a dialog hides the band and the panel');

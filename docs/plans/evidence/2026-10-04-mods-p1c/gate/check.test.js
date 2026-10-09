@@ -471,3 +471,40 @@ test('DOCK: fewer than six border rows, or a border left of cell 20, is not a do
   assert.match(derive(capture(richFiles(), dockedPane(RICH_209, 120, 4), { window_width: 209 })).columnsHow, /^meta\.window_width/);
   assert.match(derive(capture(richFiles(), dockedPane(RICH_209, 10, 12), { window_width: 209 })).columnsHow, /^meta\.window_width/);
 });
+
+// ---- P7 gate fixes (first real-machine batch): captures copied from gate/runs into gate/fixtures
+const FIX = path.join(__dirname, 'fixtures');
+// a scratch copy of a fixture, optionally without the driver's body_columns key (so the dock detector decides)
+function fixture(name, dropBodyColumns) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gatefix-'));
+  for (const f of fs.readdirSync(path.join(FIX, name))) fs.copyFileSync(path.join(FIX, name, f), path.join(dir, f));
+  if (dropBodyColumns) { const m = JSON.parse(fs.readFileSync(path.join(dir, 'meta.json'), 'utf8')); delete m.body_columns; delete m.body_columns_note; fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify(m)); }
+  return dir;
+}
+test('GATEFIX question dialog at 80 columns (real capture): no band, no panel -> surface dialog judged from attention.json', () => {
+  const r = run(fixture('ask-w80'));
+  assert.strictEqual(r.surface, 'dialog'); assert.strictEqual(r.ok, true, JSON.stringify(r.results.filter((x) => x.status === 'FAIL')));
+  assert.strictEqual(status(r, 'verdict'), 'PASS');
+  // the dialog is judged against attention.json: an idle attention file under the same question dialog still FAILs
+  const dir = fixture('ask-w80'); fs.writeFileSync(path.join(dir, 'attention.json'), JSON.stringify({ kind: 'idle', summary: 'x' }));
+  assert.strictEqual(run(dir).ok, false);
+});
+test('GATEFIX reason is cut by DISPLAY width with a trailing ellipsis (real capture w120): a display-width prefix of label + summary passes', () => {
+  const r = run(fixture('perm-w120'));
+  assert.strictEqual(r.surface, 'panel'); assert.strictEqual(status(r, 'reason'), 'PASS', JSON.stringify(r.results.filter((x) => x.status === 'FAIL')));
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(status(run(fixture('perm-w209')), 'reason'), 'PASS');
+  // a wrong drawn reason, an uncut one that is not the full text, and a bare label still FAIL
+  const bad = (drawn) => { const d = fixture('perm-w120'); const p = path.join(d, 'pane.txt'); fs.writeFileSync(p, fs.readFileSync(p, 'utf8').split('等你批准：Bash: printf \'\\n測試字：這是一行測試文…').join(drawn)); return status(run(d), 'reason'); };
+  assert.strictEqual(bad('等你批准：Bash: rm -rf /…'), 'FAIL');
+  assert.strictEqual(bad('等你批准：Bash: printf'), 'FAIL');
+  assert.strictEqual(bad('等你批准：…'), 'FAIL');
+});
+test('GATEFIX dock detector: the boxed 80-column panel is not a dock (bodyColumns 75); the 209 dock is still found at cell 119; w120 at 70', () => {
+  const d80 = derive(fixture('idle-w80', true));
+  assert.strictEqual(d80.columns, 75); assert.match(d80.columnsHow, /^meta\.window_width 80/);
+  assert.strictEqual(derive(fixture('perm-w80', true)).columns, 75);
+  assert.strictEqual(derive(fixture('perm-w209', true)).columns, 114); assert.match(derive(fixture('perm-w209', true)).columnsHow, /transcript column 119 cells/);
+  assert.strictEqual(derive(fixture('perm-w120', true)).columns, 65);
+  assert.strictEqual(require('./check.js').dockOf(fs.readFileSync(path.join(FIX, 'idle-w80', 'pane.txt'), 'utf8')), null);
+});

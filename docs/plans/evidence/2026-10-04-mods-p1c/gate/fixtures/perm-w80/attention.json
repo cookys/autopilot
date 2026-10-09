@@ -1,0 +1,21 @@
+{
+  "schema": "autopilot.attention/1",
+  "session_id": "d2ea4d36-6a61-49ca-a6ad-f750c76fbf05",
+  "project_key": "51de403da82a23f0",
+  "kind": "permission",
+  "tool_name": "Bash",
+  "summary": "Bash: printf '\\n測試字：這是一行測試文字。\\n' >> README.md && git add README.md && git commit -q -m \"docs: add test line to README C…",
+  "since": "2026-10-09T02:55:33.487Z",
+  "updated_at": "2026-10-09T02:55:39.484Z",
+  "pending": [
+    {
+      "agent_id": null,
+      "tool_name": "Bash",
+      "input_digest": "282d716043d2cebb",
+      "kind": "permission",
+      "summary": "Bash: printf '\\n測試字：這是一行測試文字。\\n' >> README.md && git add README.md && git commit -q -m \"docs: add test line to README C…",
+      "since": "2026-10-09T02:55:33.487Z",
+      "updated_at": "2026-10-09T02:55:33.487Z"
+    }
+  ]
+}

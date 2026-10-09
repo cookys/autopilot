@@ -32,7 +32,7 @@ function tabStrip(el: { Box: El; Text: El; Button?: El }, tab: PaneTab, onTab: (
     <Box flexWrap="wrap">
       {PANE_TABS.map(t => Button === undefined
         ? <Text key={t} bold={t === tab} dimColor={t !== tab}>{(t === tab ? '[' + label(t) + ']' : ' ' + label(t) + ' ') + ' '}</Text>
-        : <Button key={t} plain dimColor={t !== tab} bold={t === tab} onPress={() => onTab(t)}>{t === tab ? '[' + label(t) + ']' : ' ' + label(t) + ' '}</Button>)}
+        : <Button key={t} plain {...(t === tab ? { autoFocus: true as const } : {})} dimColor={t !== tab} bold={t === tab} onPress={() => onTab(t)}>{t === tab ? '[' + label(t) + ']' : ' ' + label(t) + ' '}</Button>)}
     </Box>
   )
 }

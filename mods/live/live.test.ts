@@ -137,7 +137,7 @@ type World = {
   sid: { value: string }
   cwdReal: { value: string }
   toasts: string[]
-  opens: { id: string; title?: string }[]
+  opens: { id: string; title?: string; focus?: true; closeOnEscape?: true }[]
   writes: string[]
   reads: string[]
   lists: string[]
@@ -181,7 +181,7 @@ function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A): World {
   on('session.end', () => ({ sessionId: w.sid.value }))
   on('ui.invalidate', () => ({ value: undefined }))
   on('ui.toast', ($, e) => { w.toasts.push(e.text); return { value: undefined } })
-  on('ui.open', ($, e) => { w.opens.push({ id: e.id, title: e.title }); return { value: { isPlaced: true } } })
+  on('ui.open', ($, e) => { w.opens.push({ id: e.id, title: e.title, focus: e.focus, closeOnEscape: e.closeOnEscape }); return { value: { isPlaced: true } } })
   return w
 }
 
@@ -445,6 +445,9 @@ for (const surface of SURFACES) {
     await w.clock.advance(5000)
     expect(w.opens.length).toBe(1)
     expect(w.opens[0]?.id).toBe('autopilot-live')
+    // the unasked auto-open must never take the keyboard (it would steal the prompt)
+    expect(w.opens[0]?.focus).toBeUndefined()
+    expect(w.opens[0]?.closeOnEscape).toBeUndefined()
     await band.unmount()
     const pane = await paneOn($, surface, 'dispatch')
     expect((await pane.find({ type: 'Text', text: 'r1' }))).toBeDefined()
@@ -2052,8 +2055,15 @@ for (const surface of SURFACES) {
     await ui.press({ key: 'info' })
     await ui.unmount()
     expect(w.opens.map(o => o.id)).toEqual(['autopilot-live'])
+    // a keyboard press opens the pane WITH the keyboard and Escape-to-close
+    expect(w.opens[0]?.focus).toBe(true)
+    expect(w.opens[0]?.closeOnEscape).toBe(true)
     const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
     const texts = walkTexts((await pane.drawn()) as Node).map(textOf)
+    // the keyboard lands on the open tab's button, so Enter acts at once (the ring does not start on nothing)
+    const tabButtons = (await pane.findAll({ type: 'Button' })) as Drawn[]
+    expect(tabButtons.length).toBe(8)
+    expect(tabButtons.filter(b => b.props?.autoFocus === true).length).toBe(1)
     await pane.unmount()
     expect(texts.some(t => t.startsWith('圖例'))).toBe(true) // the Legend tab, not Now
     expect(texts.some(t => t.startsWith('session $'))).toBe(false)

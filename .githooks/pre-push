@@ -28,7 +28,11 @@ if [ -r "$__TIG_LIB" ]; then
 fi
 
 RESOLVE="$REPO_ROOT/scripts/resolve-qc-gate.sh"
-[ -x "$RESOLVE" ] || exit 0   # no resolver → don't block (degrade open)
+if [ ! -x "$RESOLVE" ]; then
+  # Degrade open (a broken install must not wedge every push), but never silently.
+  printf 'qc-gate: WARNING resolver %s missing - qc-gate NOT enforced (broken install?)\n' "$RESOLVE" >&2
+  exit 0
+fi
 
 MODE="$("$RESOLVE" --field mode 2>/dev/null || echo block)"
 [ "$MODE" = "off" ] && exit 0
@@ -43,7 +47,11 @@ violations=""
 # The protected-path / evidence decision lives in ONE place, shared with the status
 # fact (scripts/qc-evidence-status.js): scripts/lib/qc-evidence.sh.
 __QC_LIB="$REPO_ROOT/scripts/lib/qc-evidence.sh"
-[ -r "$__QC_LIB" ] || exit 0   # no shared decision lib → don't block (degrade open)
+if [ ! -r "$__QC_LIB" ]; then
+  # Same posture as a missing resolver: degrade open, but loudly.
+  printf 'qc-gate: WARNING shared decision lib %s missing - qc-gate NOT enforced (broken install?)\n' "$__QC_LIB" >&2
+  exit 0
+fi
 # shellcheck disable=SC1090
 . "$__QC_LIB"
 touches_protected() { qc_touches_protected "$1"; }

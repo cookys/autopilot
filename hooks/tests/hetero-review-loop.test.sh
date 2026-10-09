@@ -1329,5 +1329,79 @@ assert_contains "$T10_OUT" "WARNING: Diff size" "test 10: diff size warning prin
 assert_contains "$T10_OUT" "exceeds 400000 bytes" "test 10: diff size warning names threshold"
 assert_contains "$T10_OUT" "--exclude" "test 10: diff size warning suggests --exclude"
 
+# Test 11: chain.json read-modify-write is serialised by a lock (backlog: collect appended without a lock)
+# 11a: a fresh lock held by someone else makes collect wait, then fail loudly -- never write around it
+mkdir -p "$LEDGER/review-p_lock"
+mkdir "$LEDGER/review-p_lock/chain.json.lock"
+T11A_OUT=$(AUTOPILOT_CHAIN_LOCK_TIMEOUT_MS=400 node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_lock --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T11A_RC=$?
+assert_exit_code "$T11A_RC" "1" "test 11a: collect exits 1 while another holder owns the chain lock"
+assert_contains "$T11A_OUT" "another collect/finalize holds it" "test 11a: timeout message names the lock"
+assert_file_absent "$LEDGER/review-p_lock/chain.json" "test 11a: nothing written around the held lock"
+# 11b: a stale lock (crashed holder) is broken and the collect proceeds
+mkdir -p "$LEDGER/review-p_stale"; mkdir "$LEDGER/review-p_stale/chain.json.lock"; sleep 0.05
+T11B_OUT=$(AUTOPILOT_CHAIN_LOCK_STALE_MS=1 node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_stale --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T11B_RC=$?
+assert_exit_code "$T11B_RC" "0" "test 11b: stale lock is broken, collect succeeds"
+assert_file_absent "$LEDGER/review-p_stale/chain.json.lock" "test 11b: lock released after the write"
+# 11c: concurrent collects of the same phase/generation never leave a corrupt chain or a stuck lock
+for i in 1 2 3 4; do
+  node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_race --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" >/dev/null 2>&1 &
+done
+wait
+assert_eq "$(node -e 'const c=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); console.log(Array.isArray(c)&&c.length===1&&c[0].generation===1)' "$LEDGER/review-p_race/chain.json")" "true" "test 11c: concurrent collects leave one valid generation-1 entry"
+assert_file_absent "$LEDGER/review-p_race/chain.json.lock" "test 11c: no lock left behind"
+
+# 11d: finalize takes the same lock around its chain.json read-modify-write
+echo '[]' > "$TEST_TMP/disp-empty.json"
+mkdir -p "$LEDGER/review-p_lock/chain.json.lock"
+T11D_OUT=$(AUTOPILOT_CHAIN_LOCK_TIMEOUT_MS=400 node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_lock --generation 1 --dispositions "$TEST_TMP/disp-empty.json" --branch work 2>&1); T11D_RC=$?
+assert_exit_code "$T11D_RC" "1" "test 11d: finalize exits 1 while another holder owns the chain lock"
+assert_contains "$T11D_OUT" "waiting for the chain.json lock" "test 11d: finalize waits on the chain lock"
+rmdir "$LEDGER/review-p_lock/chain.json.lock"
+T11E_OUT=$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_lock --generation 1 --dispositions "$TEST_TMP/disp-empty.json" --branch work 2>&1) || true
+assert_file_absent "$LEDGER/review-p_lock/chain.json.lock" "test 11e: finalize releases the lock on every exit path"
+
+# 11f-11h: lock internals, exercised on the REAL functions extracted from the driver
+LOCKH="$TEST_TMP/lock-harness.js"
+node -e '
+  const fs = require("fs");
+  const src = fs.readFileSync(process.argv[1], "utf8");
+  const a = src.indexOf("function acquireChainLock"), b = src.indexOf("// Trusted floor for reviewed seats");
+  fs.writeFileSync(process.argv[2], "const fs=require(\"fs\"),path=require(\"path\"),crypto=require(\"crypto\");\n" + src.slice(a, b) +
+   "\nmodule.exports={acquireChainLock,withChainLock};\n");
+' "$SCRIPT" "$LOCKH"
+# 11f: two waiters racing for one STALE lock never overlap inside the locked region
+LOCKDIR="$TEST_TMP/lockrace"; mkdir -p "$LOCKDIR/chain.json.lock"; sleep 0.5
+for w in a b c; do
+  AUTOPILOT_CHAIN_LOCK_STALE_MS=300 node -e '
+    const fs = require("fs"); const { withChainLock } = require(process.argv[1]);
+    withChainLock(process.argv[2] + "/chain.json", () => {
+      fs.appendFileSync(process.argv[2] + "/trace", "start\n");
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 80);
+      fs.appendFileSync(process.argv[2] + "/trace", "end\n");
+    });' "$LOCKH" "$LOCKDIR" &
+done
+wait
+assert_eq "$(tr '\n' ',' < "$LOCKDIR/trace")" "start,end,start,end,start,end," "test 11f: three waiters on a stale lock enter the locked region one at a time"
+assert_file_absent "$LOCKDIR/chain.json.lock" "test 11f: no lock left after the race"
+# 11g: a process.exit inside the locked fn still releases the lock
+EXITDIR="$TEST_TMP/lockexit"; mkdir -p "$EXITDIR"
+node -e 'const { withChainLock } = require(process.argv[1]); withChainLock(process.argv[2] + "/chain.json", () => { process.exit(3); });' "$LOCKH" "$EXITDIR"; T11G_RC=$?
+assert_exit_code "$T11G_RC" "3" "test 11g: process.exit inside the lock keeps its exit code"
+assert_file_absent "$EXITDIR/chain.json.lock" "test 11g: exit inside the locked fn releases the lock"
+# 11h: a holder whose lock was broken must not delete its successor's lock (token check)
+TOKDIR="$TEST_TMP/locktok"; mkdir -p "$TOKDIR"
+node -e '
+  const fs = require("fs"); const { acquireChainLock } = require(process.argv[1]);
+  const c = process.argv[2] + "/chain.json";
+  const releaseOld = acquireChainLock(c);
+  fs.rmSync(c + ".lock", { recursive: true });           // lock broken as stale by someone else
+  const releaseNew = acquireChainLock(c);                // successor holds it now
+  releaseOld();                                          // the old holder wakes up
+  if (!fs.existsSync(c + ".lock")) { console.log("DELETED-SUCCESSOR"); process.exit(1); }
+  releaseNew();
+  if (fs.existsSync(c + ".lock")) { console.log("LEAK"); process.exit(1); }
+  console.log("OK");' "$LOCKH" "$TOKDIR" > "$TEST_TMP/t11h.out" 2>&1
+assert_eq "$(cat "$TEST_TMP/t11h.out")" "OK" "test 11h: release is token-checked (old holder cannot remove successor's lock)"
+
 finalize_test
 

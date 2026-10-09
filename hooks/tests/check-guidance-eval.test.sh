@@ -64,14 +64,15 @@ node -e '
 ' "$REAL_PREREG" "$PRE"
 
 # recorded results: SHIP (change 12/12, red = the 3 M briefs only, generic unchanged) or a weaker change arm
-mk_results() { # $1 out $2 changePassCount
+mk_results() { # $1 out $2 changePassCount $3 arm-manifest file the change rows ran under
   node -e '
     const fs = require("fs");
     const P = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
     const nPass = Number(process.argv[3]);
     const K = ["sg_size", "sg_bug", "sg_urgent", "sg_walk", "sg_rung", "sg_work", "sg_pass"];
     const mk = (v) => Object.fromEntries(K.map((k) => [k, v]));
-    const row = (task, arm, rep, markers) => JSON.stringify({ task_id: task, arm, model: "sonnet", runner: "cc", runner_version: "9.9.9 (Claude Code)", rep, markers, failure_class: null });
+    const armSha = require("crypto").createHash("sha256").update(fs.readFileSync(process.argv[4])).digest("hex");
+    const row = (task, arm, rep, markers) => JSON.stringify({ task_id: task, arm, model: "sonnet", runner: "cc", runner_version: "9.9.9 (Claude Code)", rep, markers, failure_class: null, ...(arm === "change" ? { arm_manifest_sha256: armSha } : {}) });
     const out = [];
     P.tasks.forEach((t, i) => { for (let rep = 1; rep <= 3; rep++) {
       out.push(row(t, "base", rep, mk(false)));
@@ -80,13 +81,12 @@ mk_results() { # $1 out $2 changePassCount
     } });
     for (const t of P.generic.tasks) for (let rep = 1; rep <= 3; rep++) for (const arm of ["base", "change"]) out.push(row(t, arm, rep, { f1_session_sha: true }));
     fs.writeFileSync(process.argv[2], out.join("\n") + "\n");
-  ' "$PRE" "$1" "$2"
+  ' "$PRE" "$1" "$2" "$3"
 }
-mk_results "$TEST_TMP/ship.jsonl" 12
-mk_results "$TEST_TMP/weak.jsonl" 9
-
 ARM="$TEST_TMP/arm.json"
 echo '{"schema_version":1,"arm":"change","skills":{"dev-flow":"dev-flow-sg-change"},"files":"guidance-files-sg-change"}' > "$ARM"
+mk_results "$TEST_TMP/ship.jsonl" 12 "$ARM"
+mk_results "$TEST_TMP/weak.jsonl" 9 "$ARM"
 gate() { # args... ; sets G_OUT G_RC (default --arm is last: a caller-supplied --arm wins, val() takes the first)
   set +e; G_OUT=$(node "$GATE" "$@" --arm "$ARM" 2>"$TEST_TMP/gate.err"); G_RC=$?; set -e
 }
@@ -96,6 +96,39 @@ echo "=== matching pack + SHIP results -> 0 ==="
 gate --base "$BASE_REF" --repo "$R" --prereg "$PRE" --packs-dir "$PK" --results "$TEST_TMP/ship.jsonl"
 [ "$G_RC" -eq 0 ] && [ "$(ok_field)" = true ] || fail "matching must pass (rc=$G_RC): $G_OUT"
 node -e 'const o=JSON.parse(process.argv[1]); if(o.differing.length!==2||o.differing.some(d=>d.ok!==true)||o.score.verdict!=="SHIP") process.exit(1)' "$G_OUT" || fail "expected 2 differing guidance files, both ok, scorer SHIP: $G_OUT"
+
+echo "=== results produced under a different arm manifest -> 1 ==="
+ARMOTHER="$TEST_TMP/arm-other.json"
+echo '{"schema_version":1,"arm":"change","skills":{"dev-flow":"dev-flow-sg-change"},"files":"guidance-files-sg-change","note":"other arm"}' > "$ARMOTHER"
+mk_results "$TEST_TMP/other-arm.jsonl" 12 "$ARMOTHER"
+gate --base "$BASE_REF" --repo "$R" --prereg "$PRE" --packs-dir "$PK" --results "$TEST_TMP/other-arm.jsonl"
+[ "$G_RC" -eq 1 ] && grep -q 'produced under a different arm manifest' <<<"$G_OUT" || fail "results from a different arm must fail (rc=$G_RC): $G_OUT"
+
+echo "=== change rows that carry no arm digest -> 1 ==="
+node -e 'const fs=require("fs");fs.writeFileSync(process.argv[2],fs.readFileSync(process.argv[1],"utf8").split("\n").filter(Boolean).map(l=>{const r=JSON.parse(l);delete r.arm_manifest_sha256;return JSON.stringify(r)}).join("\n")+"\n")' "$TEST_TMP/ship.jsonl" "$TEST_TMP/unstamped.jsonl"
+gate --base "$BASE_REF" --repo "$R" --prereg "$PRE" --packs-dir "$PK" --results "$TEST_TMP/unstamped.jsonl"
+[ "$G_RC" -eq 1 ] && grep -q 'carry no arm_manifest_sha256' <<<"$G_OUT" || fail "unstamped change rows must fail (rc=$G_RC): $G_OUT"
+
+echo "=== legacy results bound by an arm-binding sidecar ==="
+LG="$TEST_TMP/legacy"; mkdir -p "$LG"
+node -e 'const fs=require("fs");fs.writeFileSync(process.argv[2],fs.readFileSync(process.argv[1],"utf8").split("\n").filter(Boolean).map(l=>{const r=JSON.parse(l);delete r.arm_manifest_sha256;return JSON.stringify(r)}).join("\n")+"\n")' "$TEST_TMP/ship.jsonl" "$LG/old.jsonl"
+write_sidecar() { # $1 results-sha $2 arm-sha
+  printf '{"schema":"autopilot.results-arm-binding/1","results":"old.jsonl","results_sha256":"%s","arm_manifest_sha256":"%s"}\n' "$1" "$2" > "$LG/old.arm-binding.json"
+}
+write_sidecar "$(sha "$LG/old.jsonl")" "$(sha "$ARM")"
+gate --base "$BASE_REF" --repo "$R" --prereg "$PRE" --packs-dir "$PK" --results "$LG/old.jsonl"
+[ "$G_RC" -eq 0 ] || fail "good sidecar must pass (rc=$G_RC): $G_OUT"
+write_sidecar "0000000000000000000000000000000000000000000000000000000000000000" "$(sha "$ARM")"
+gate --base "$BASE_REF" --repo "$R" --prereg "$PRE" --packs-dir "$PK" --results "$LG/old.jsonl"
+[ "$G_RC" -eq 1 ] && grep -q 'results_sha256 is stale' <<<"$G_OUT" || fail "stale sidecar results sha must fail (rc=$G_RC): $G_OUT"
+write_sidecar "$(sha "$LG/old.jsonl")" "$(sha "$ARMOTHER")"
+gate --base "$BASE_REF" --repo "$R" --prereg "$PRE" --packs-dir "$PK" --results "$LG/old.jsonl"
+[ "$G_RC" -eq 1 ] && grep -q 'sidecar names a different arm manifest' <<<"$G_OUT" || fail "sidecar naming a different arm must fail (rc=$G_RC): $G_OUT"
+
+echo "=== mixed rows (one stamped, the rest unstamped) -> 1 ==="
+node -e 'const fs=require("fs");let first=true;fs.writeFileSync(process.argv[2],fs.readFileSync(process.argv[1],"utf8").split("\n").filter(Boolean).map(l=>{const r=JSON.parse(l);if(r.arm==="change"){if(first){first=false}else delete r.arm_manifest_sha256}return JSON.stringify(r)}).join("\n")+"\n")' "$TEST_TMP/ship.jsonl" "$TEST_TMP/mixed.jsonl"
+gate --base "$BASE_REF" --repo "$R" --prereg "$PRE" --packs-dir "$PK" --results "$TEST_TMP/mixed.jsonl"
+[ "$G_RC" -eq 1 ] && grep -q 'partially stamped results' <<<"$G_OUT" || fail "mixed stamped/unstamped rows must fail (rc=$G_RC): $G_OUT"
 
 echo "=== results that do not reproduce SHIP -> 1 ==="
 gate --base "$BASE_REF" --repo "$R" --prereg "$PRE" --packs-dir "$PK" --results "$TEST_TMP/weak.jsonl"
@@ -158,7 +191,8 @@ node -e '
     "dev-flow-sg-change-v9": { "dev-flow-sg-change-v9/SKILL.md": a },
     "guidance-files-sg-change-v9": { "guidance-files-sg-change-v9/references/plan-template.md": b } } }));
 ' "$PK9" "$(sha "$R/skills/dev-flow/SKILL.md")" "$(sha "$R/references/plan-template.md")"
-gate --arm "$ARM9" --base "$BASE_REF" --repo "$R" --prereg "$PRE" --packs-dir "$PK9" --results "$TEST_TMP/ship.jsonl"
+mk_results "$TEST_TMP/ship9.jsonl" 12 "$ARM9"
+gate --arm "$ARM9" --base "$BASE_REF" --repo "$R" --prereg "$PRE" --packs-dir "$PK9" --results "$TEST_TMP/ship9.jsonl"
 [ "$G_RC" -eq 0 ] && node -e 'const o=JSON.parse(process.argv[1]); if(!o.arm.endsWith("arm9.json")||o.differing.some(d=>!d.pack.endsWith("-v9"))) process.exit(1)' "$G_OUT" || fail "suffixed arm must pass (rc=$G_RC): $G_OUT"
 
 echo "=== suffixed arm against the unsuffixed packs -> 1 ==="

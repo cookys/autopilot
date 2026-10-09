@@ -1,0 +1,7 @@
+{
+  "schema": "autopilot.results-arm-binding/1",
+  "results": "stage-graph.v6.jsonl",
+  "results_sha256": "0f137bc0b804fa546b2e105d871cc6aac8b08981d9c1df0239e21971de16f492",
+  "arm_manifest_sha256": "d430ab913a27c4f64167334ca2222606d9d834fe1b25980b31a67d650ce73211",
+  "basis": "post-hoc: arm freeze commit f47798c0 precedes results commit 14e57179; recorded 2026-10-10"
+}

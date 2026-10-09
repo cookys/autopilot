@@ -684,13 +684,24 @@ validate_review_block() {
     if [ "${proof_line_count:-0}" -ne 1 ]; then
       BATTERY_FAIL_REASON="SHIP-AS-IS requires exactly one anchored NO-FINDING-PROOF line"; return 1
     fi
+    # A proof may wrap: continuation lines directly after the anchored line are
+    # folded in (single-space joined) until a blank line, a code fence, or another
+    # anchored VERDICT/FINDINGS/NO-FINDING-PROOF line. Folding only changes where
+    # the three labelled fields may sit; the shape + tautology checks below still
+    # apply to the folded text, so a missing or empty field still fails.
     BATTERY_PROOF="$(awk '
-      BEGIN { in_fence = 0 }
-      /^```/ { in_fence = 1 - in_fence; next }
+      BEGIN { in_fence = 0; in_proof = 0; proof = "" }
+      /^```/ { in_fence = 1 - in_fence; in_proof = 0; next }
       !in_fence && /^NO-FINDING-PROOF:/ {
         sub(/^NO-FINDING-PROOF:[[:space:]]*/, "", $0)
-        print
+        proof = $0; in_proof = 1; next
       }
+      in_proof && !in_fence {
+        if ($0 ~ /^[[:space:]]*$/ || $0 ~ /^(VERDICT|FINDINGS|NO-FINDING-PROOF):/) { in_proof = 0; next }
+        line = $0; sub(/^[[:space:]]+/, "", line); sub(/[[:space:]]+$/, "", line)
+        proof = proof " " line
+      }
+      END { print proof }
     ' "$block_file")"
     # Anchor on the FIELD LABELS, not on one hard-coded separator: kimi-code/k3
     # (2026-08-15) separated its last field with a period and lost a substantive

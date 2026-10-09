@@ -261,6 +261,7 @@ Small batches that bump the version but don't warrant a project README. Source o
 
 | Date | Ship | Version | Merge |
 |------|------|---------|-------|
+| 2026-10-09 | mods band 改成單行多 widget 加 ⓘ 八分頁面板（P7 本體）；alpha.1 pre-release 版號回歸修正；real-machine gate 171 張中 170 PASS | v3.0.0-alpha.2 | — | [CHANGELOG](../../CHANGELOG.md) |
 | 2026-10-09 | dev-flow 改成具名 stage graph（MAJOR pre-release，供 owner 測試）；v6 guidance eval SHIP；total QC SHIP-AS-IS | v3.0.0-alpha.1 | — | [CHANGELOG](../../CHANGELOG.md) |
 | 2026-10-04 | review 頁面可發布：版本化 job 頁、每主機一個 localhost review server、watcher 依事件重發（mods P1b）；SHIP-AS-IS | v2.36.116 | — | [CHANGELOG](../../CHANGELOG.md) |
 | 2026-10-04 | `autopilot status runs` 回報耗時／rc／scope／新鮮度；per-project watcher 發布 scoped 即時快照（mods P1a）；SHIP-AS-IS | v2.36.115 | — | [CHANGELOG](../../CHANGELOG.md) |

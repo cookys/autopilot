@@ -1,5 +1,35 @@
 # Changelog
 
+## v3.0.0-alpha.2 — mods band 改成單行多 widget 加 ⓘ 八分頁面板，並補上 alpha.1 的 pre-release 版號回歸修正（pre-release，供 owner 測試）
+
+這是 3.0.0 的第二個 pre-release，不是 stable。它交付 alpha.1 預告的 P7 本體（單行 band、ⓘ 面板、colored screenshot gate），並修掉 alpha.1 之後發現的 pre-release 版號回歸。沒有破壞性變更，從 alpha.1 升級不需要遷移。
+
+### 改動
+
+- **P7 ① 資料**：`scripts/lib/brain-spend.js`（cost-fuse 改用它，行為不變）；`src/status/residue.js` 發布 `<live>/runs/<project_key>.residue.json`，只計可回收的 worktree 殘留（已整合且乾淨、目錄已不存在）；`src/status/stage-walk.js` 發布 `<live>/stage/<sid>.json`；runs envelope 新增 `host_today_brain_usd`、`brain_cap_usd`；decisions sidecar 新增 `ladder {rung, at}`。新增 `residue`、`stage-walk` schema，更新 `runs-live`、`decisions-sidecar` schema。
+- **P7 ② mod**：band 是單行並排 widget，依優先序為 verdict、position、unit、dispatch、review、decisions、spend、hygiene、ⓘ；寬度小於 160／140／120／80 時依序丟掉低優先 widget，更窄時先丟 unit 條、再丟 ⏸ 數、再丟 ⚙ 數，verdict 符號與 ⓘ 永遠保留。ⓘ 開啟八分頁面板（Legend、Now、Graph、Dispatch、Review、Decisions、Spend、Hygiene）。Spend 欄是本機當日 brain 層花費除以 `cost_fuse.daily_usd_brain`。
+- **鍵盤切分頁**：面板關著時按 ⓘ 開在 Legend；面板開著時再按 ⓘ 顯示下一個分頁（鍵盤：Ctrl+x Tab，之後反覆按 Enter）；由 ⓘ 開出的面板把鍵盤焦點放在目前分頁上。
+- **P7 ③ gate**：`docs/plans/evidence/2026-10-04-mods-p1c/gate/` 新增 `capture.sh -e`、`widths.sh`、`screenshot.sh`（ansi2html 加 headless chrome 出彩色 PNG）、`check.js`（依 contract 逐 slot 獨立重新推導並判定）與 `check.test.js`。這是開發期工具，不隨 plugin 出貨。
+- **alpha.1 回歸修正**：`scripts/preflight-portability.sh` 原本不接受 pre-release 版號，現在改用 `node scripts/lib/semver.js valid`（出貨程式碼，PATCH 等級；`semver.test.sh` 新增 §6）；`check-stage-vocab` 與 `stage-advance` 測試的 `FAILS` 改為 gate 認得的 `FAIL`；版本解析測試改走 `semver.js`。
+
+### 驗證
+
+- **real-machine gate**（2026-10-09，六種模式：plain dev-flow、/l3、ceo-agent、/l4、/l5、/l6，寬度 209／120／80）：以最終版 `check.js` 重新判定 RESULTS.md 的 171 張逐寬度截圖，170 PASS、1 FAIL。唯一的 FAIL 是 `l6-running-c-w80`：band 比剛啟動的 hand 慢 5 秒，缺 ⚙1，屬 capture 競態，照實保留不重跑。表中原本標 FAIL 的另外 11 張是舊版 `check.js` 判定（80 欄的提問對話框會蓋住 band、120 欄的 reason 依顯示寬度截斷、/l4 session 無 marker），checker 修正後皆 PASS，表內保留原始行。鍵盤分頁循環（Legend 起按 Enter 輪一圈）在 200 與 120 欄 PASS。完整表：`docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/RESULTS.md`。
+- **hetero review**：P7 每個階段（資料、mod、gate）都經 opus、GLM、MiniMax、Qwen、sol 席位審查，修到 SHIP-AS-IS 為止。
+- **cut gate**：`check-guidance-eval.js --base 8a10980f --results evals/skill-onoff/results/stage-graph.v6.jsonl` 結果 `ok:true`、scorer SHIP（guidance 檔與 v6 pack 逐位元組相同，alpha.2 沒有再動 guidance）；`check-plan-graduation.js` exit 0。
+- **全套件**：`run.sh --parallel 4` 為 4／453 檔紅：`skill-onoff-generic` 是已知的 host guard；另外 3 項（L1 unit 的 `import-aa-capabilities.test.js` 23 項、`qualification-feed-adopt`、`qualification-scorecard-tools`）都是 `/tmp/.git`（空目錄，今日 10:47 出現）造成，`TMPDIR=/dev/shm` 重跑全綠（23／23、51、33）。
+
+### 已知後續
+
+- /l4–/l6 session 從不設定 size，所以 band 的 position 欄與 Graph 分頁在這些 session 是空的；修法是改 front door 引導文字，需先跑 skill-onoff eval（BACKLOG 新列）。
+- gate 的 capture 在 band 更新前就讀了 facts（`l6-running-c-w80`）；`capture.sh` 應等 band 不早於 facts 時間戳（BACKLOG 新列）。
+- `/tmp/.git` 一再出現並讓套件變紅，製造者未知，懷疑是在 /tmp 執行的 eval `claude -p` cell（BACKLOG 新列）。
+- /l6 的 depth-0 不會自己寫 task-authority envelope，foreman 因此先回報 BLOCKED（併入既有「/l5 沒有 mission scaffold 產生器」那一列）。
+- review 的 suggestion 級小項：`$.ui.panes()` 丟例外的路徑沒有測試、循環測試缺 Graph→Dispatch→Review 的按鍵斷言、`$.ui.open` 完成前連按兩次會重開 Legend、`check.js` 沒有判定 non-ok band 的尾端（BACKLOG 新列）。
+- 既有紅燈：`skill-onoff-generic` 的 host guard 仍紅；`autopilot-cli.test.sh` 與 `doc-drift-gate.js` 在本次全套件中沒有紅。
+
+prose-justification: alpha.2 本身沒有新增 skill 或 reference 文字（P7 是 mods 程式與 gate 工具）；prose 相對 v2.35.2 基線的增長來自 alpha.1 已說明的 stage graph 改寫（dev-flow 736→530 行、新 `skills/dev-flow/references/stage-graph.md`），guidance 由凍結 A/B eval 驗證（v5、v6 皆 SHIP）。
+
 ## v3.0.0-alpha.1 — dev-flow 改成一張具名 stage graph：T-shirt size、session marker 記錄位置、U0–U5 ladder（MAJOR pre-release，供 owner 測試）
 
 這是 3.0.0 的第一個 pre-release，給 owner 當最重度使用者測試，不是 stable。它同時帶入 mods P1W（band、watcher、hook 寫入端）與前述 dev-mode 修正（見最後一組）。2.37.0 不會發。

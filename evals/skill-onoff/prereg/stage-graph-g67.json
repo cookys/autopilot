@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "artifact_type": "skill_onoff_prereg",
+  "row": "stage-graph-g67",
+  "status": "DRAFT-FOR-REVIEW (not frozen: no FROZEN.json entry, arm manifest shas unset, v7 packs not yet built)",
+  "design": "human-readable twin: prereg/stage-graph-g67.md; changes under test: G6 (l4/l5/l6 entry records --size) and G7 (finish-flow close-out runs close-session) of the guidance-v7 branch (194e2ecc)",
+  "model": "sonnet",
+  "runner": "claude -p (headless depth-0)",
+  "runner_version_pin": "2.1.292 (Claude Code)",
+  "runner_pin_path": "/tmp/claude-1000/-home-cookys-projects-autopilot/e041e8fe-15fe-42c4-8214-0b41b1f26a1a/scratchpad/claude-pin/",
+  "reps": 3,
+  "arms": {
+    "off": "off",
+    "on": "on"
+  },
+  "arm_manifests": {
+    "off": {
+      "file": "arms/g67/off.json",
+      "sha256": null,
+      "packs": "*-sg-change-v6 (= stage-graph change arm as of 71fac023) + fixture-scripts-sg + fixture-scripts-g67"
+    },
+    "on": {
+      "file": "arms/g67/on.json",
+      "sha256": null,
+      "packs": "*-sg-change-v7 (freeze-guidance-arm.js change --suffix v7, after the guidance-v7 merge) + fixture-scripts-sg + fixture-scripts-g67"
+    }
+  },
+  "allowed_arm_difference": {
+    "files": [
+      "finish-flow/SKILL.md",
+      "l4/SKILL.md",
+      "l5/SKILL.md",
+      "l5/references/hetero-impl-loop.md",
+      "l6/SKILL.md"
+    ],
+    "note": "v7 change set is FIVE files (four SKILL.md + l5/references/hetero-impl-loop.md, which adds the size to the l5 entry and degrade commands); off and on must differ ONLY in these, enforced file-by-file by run-g67-campaign.js --check-arms on the frozen packs"
+  },
+  "fixture_scripts_freeze": {
+    "pack": "fixture-scripts-g67",
+    "command": "node evals/skill-onoff/freeze-pack.js --id fixture-scripts-g67 --scripts scripts/repo-residue-sweep.js,scripts/pin-evidence-anchors.js,scripts/reap-dispatch-branches.sh,scripts/lib/json-emit.sh,scripts/lib/worktree-reap.sh --ref <merged develop sha containing close-session AND the guidance-v7 merge>",
+    "why_explicit_list": "repo-residue-sweep.js spawns scripts/pin-evidence-anchors.js via path.join(__dirname, ...) and finish-flow runs reap-dispatch-branches.sh (+ the two shell libs it sources); freeze-pack follows only literal relative JS requires, so these are named explicitly. Verified 2026-10-10 against release-3.0.0 @ 29938656: 13 files, close-session exits 0 on the g7-close fixture.",
+    "installed_twice": "in the manifest fixture_scripts (copied onto the fixture repo root, after fixture-scripts-sg) AND in the manifest files list (copied to the synthetic PLUGIN root). The second is load-bearing: finish-flow derives autopilot_root from the plugin root and its resolver requires scripts/reap-dispatch-branches.sh there; without it the G7 row cannot even resolve its script path in the eval plugin",
+    "same_in_both_arms": "both arm manifests list the pack in both places: the OFF arm HAS the close-session sweep too, so the only variable is the guidance text"
+  },
+  "tasks": {
+    "g6-l4": {
+      "change": "G6",
+      "marker": "g6_size",
+      "skill": "l4",
+      "prefix": "Use l4:",
+      "timeout": "5m"
+    },
+    "g6-l5": {
+      "change": "G6",
+      "marker": "g6_size",
+      "skill": "l5",
+      "prefix": "Use l5:",
+      "timeout": "5m"
+    },
+    "g6-l6": {
+      "change": "G6",
+      "marker": "g6_size",
+      "skill": "l6",
+      "prefix": "Use l6:",
+      "timeout": "5m"
+    },
+    "g7-close": {
+      "change": "G7",
+      "marker": "g7_close",
+      "skill": "finish-flow",
+      "prefix": "Use finish-flow:",
+      "timeout": "8m"
+    }
+  },
+  "changes": {
+    "G6": [
+      "g6-l4",
+      "g6-l5",
+      "g6-l6"
+    ],
+    "G7": [
+      "g7-close"
+    ]
+  },
+  "thresholds": {
+    "on_min_reps": 2,
+    "off_max_reps": 1,
+    "v1_min_invoked_ratio": 0.9
+  },
+  "ship_rule": "SHIP iff EVERY task has ON passing >= on_min_reps of 3 reps AND OFF passing <= off_max_reps of 3 reps",
+  "stop_rule": "any (task,arm,rep) cell with no clean row (infra_fail or missing) => STOP; rerun that cell (run-g67-campaign.js resumes, max 3 attempts per cell), never score around it",
+  "invalid_rule": "mixed models, mixed runner versions, a runner version other than runner_version_pin, more than one arm manifest per arm, identical off/on manifests, a registered manifest sha not matched, or the manipulation check (task skill invoked in < 90% of an arm's cells) => INSTRUMENT-INVALID",
+  "timeout_semantics": "per-cell timeout is the registered stop, not a failure: ONOFF_TIMEOUT_IS_COMPLETE=1 makes exit 124/137 with a non-empty transcript a complete cell (row carries stopped_by_timeout:true). A cell that has not issued the registered call by the timeout scores false for its arm.",
+  "scope_lock": "authorises ONLY: sonnet depth-0, headless -p, runner 2.1.292, these four briefs, the frozen off/on arm manifests. Says nothing about foreman/hands behaviour after entry, opus/fable, or interactive sessions.",
+  "markers": {
+    "g6_size": "the FIRST `session-mode.js set` Bash invocation carrying the task's level (--level lN, or --entry-level lN) also carries --size <XS|S|M|L|XL> (literal)",
+    "g7_close": "ANY Bash invocation of `repo-residue-sweep.js close-session` carrying --session <non-empty: literal sid or $CLAUDE_CODE_SESSION_ID> and --yes"
+  }
+}

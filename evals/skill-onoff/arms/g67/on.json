@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "arm": "on",
+  "skills": {
+    "dev-flow": "dev-flow-sg-change-v7",
+    "finish-flow": "finish-flow-sg-change-v7",
+    "ceo-agent": "ceo-agent-sg-change-v7",
+    "team": "team-sg-change-v7",
+    "debug": "debug-sg-change-v7",
+    "think-tank": "think-tank-sg-change-v7",
+    "l4": "l4-sg-change-v7",
+    "l5": "l5-sg-change-v7",
+    "l6": "l6-sg-change-v7",
+    "next": "next-sg-change-v7",
+    "quality-pipeline": "quality-pipeline-sg-change-v7",
+    "distill": "distill-sg-change-v7",
+    "doc-sync": "doc-sync-sg-change-v7",
+    "learn": "learn-sg-change-v7",
+    "project-lifecycle": "project-lifecycle-sg-change-v7",
+    "research-to-ship": "research-to-ship-sg-change-v7"
+  },
+  "files": [
+    "guidance-files-sg-change-v7",
+    "fixture-scripts-g67"
+  ],
+  "fixture_scripts": [
+    "fixture-scripts-sg",
+    "fixture-scripts-g67"
+  ]
+}

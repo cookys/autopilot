@@ -39,7 +39,7 @@
 # Per-cell isolation (E4, every run; state root on tmpfs, see below): AUTOPILOT_LIVE_DIR / AUTOPILOT_TASK_STATUS_DIR
 # point under a per-cell temp dir (the decision ledger default lives in the fixture repo git-common-dir); copied to $OUT/state/ for evidence.
 #
-# Env: ONOFF_PROMPT_PREFIX (optional preface line before task.md, both arms; amend-2) · ONOFF_TIMEOUT (default 10m) · ONOFF_STUB_BIN (required for --runner stub)
+# Env: ONOFF_PROMPT_PREFIX (optional preface line before task.md, both arms; amend-2) · ONOFF_TIMEOUT (default 10m) · ONOFF_TIMEOUT_IS_COMPLETE=1 (a timeout stop with a non-empty transcript is a complete cell, row carries stopped_by_timeout; default off) · ONOFF_STUB_BIN (required for --runner stub)
 #      ONOFF_PACKS_DIR (override packs dir; tests) · ONOFF_STATE_BASE (tmpfs base for per-cell state; none writable = exit 2) · ONOFF_SHM_DIR (default /dev/shm)
 # Emits: $OUT/result.json (single-line JSONL row), $OUT/transcript.jsonl, $OUT/prompt.md
 # Exit: 0 = row emitted (marker outcomes live IN the row) · 2 = harness/config error
@@ -324,8 +324,13 @@ if node "$BASE_DIR/lib/transcript-query.js" "$TRANSCRIPT" skill-invoked "${CHECK
 fi
 
 # ── failure classification (closed vocabulary; content-free) ──
-failure_class="null"; failure_cause="null"
-if [ "$RUN_EXIT" -eq 124 ] || [ "$RUN_EXIT" -eq 137 ]; then
+failure_class="null"; failure_cause="null"; STOPPED_BY_TIMEOUT=0
+if [ "${ONOFF_TIMEOUT_IS_COMPLETE:-0}" = 1 ] && { [ "$RUN_EXIT" -eq 124 ] || [ "$RUN_EXIT" -eq 137 ]; } \
+    && [ -s "$TRANSCRIPT" ] && [ "$MARKERS_EXIT" -eq 0 ]; then
+  # stage-graph-g67: the markers only need the first minutes, so the per-cell timeout is the registered stop, not a failure.
+  # Default off (every other row keeps timeout = infra_fail). The row says so: "stopped_by_timeout":true.
+  STOPPED_BY_TIMEOUT=1
+elif [ "$RUN_EXIT" -eq 124 ] || [ "$RUN_EXIT" -eq 137 ]; then
   failure_class='"infra_fail"'; failure_cause='"runner_timeout"'
 elif [ "$RUN_EXIT" -ne 0 ] \
     && grep -Eqi '(^|[^a-z])(unauthorized|forbidden|authentication|invalid[ _-]?(api[ _-]?)?key|login required|token expired)([^a-z]|$)' "$RAW_ERR" 2>/dev/null; then
@@ -374,6 +379,7 @@ if [ -n "$ARM_MANIFEST" ]; then
   else ARM_SHA=$(shasum -a 256 "$ARM_MANIFEST" | cut -d' ' -f1); fi
   ARM_SHA_FIELD=$(printf ',"arm_manifest_sha256":"%s"' "$ARM_SHA")
 fi
+[ "$STOPPED_BY_TIMEOUT" -eq 0 ] || ARM_SHA_FIELD="$ARM_SHA_FIELD,\"stopped_by_timeout\":true"
 RESULT_JSON="$OUT_DIR/result.json"
 printf '{"task_id":"%s","arm":"%s","model":"%s","runner":"%s","runner_version":"%s","rep":%s,"duration_s":%s,"frozen_base_sha":"%s","markers":%s,%s,"failure_class":%s,"failure_cause":%s%s}\n' \
   "$TASK_ID" "$ARM" "$MODEL" "$RUNNER" "$runner_version_clean" "$REP" \

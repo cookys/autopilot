@@ -16,12 +16,12 @@
   "arm_manifests": {
     "off": {
       "file": "arms/g67/off.json",
-      "sha256": null,
+      "sha256": "5e65732600b719f61fcc3c717297ca751050c218bbd2c93b02d732618e0a5aac",
       "packs": "*-sg-change-v6 (= stage-graph change arm as of 71fac023) + fixture-scripts-sg + fixture-scripts-g67-v2"
     },
     "on": {
       "file": "arms/g67/on.json",
-      "sha256": null,
+      "sha256": "d280532ca2b7ba1055061874bc294be54ed387b4b56289dc6ac526ea48744eb6",
       "packs": "*-sg-change-v8 (freeze-guidance-arm.js change --suffix v8, after the merge of guidance-v8 + close-session) + fixture-scripts-sg + fixture-scripts-g67-v2"
     }
   },

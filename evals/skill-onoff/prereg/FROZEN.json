@@ -127,13 +127,34 @@
     "amendments": {
       "amend-1-plugin-scripts": {
         "date": "2026-10-10",
-        "stamped": false,
+        "stamped": true,
         "made_after_v1_results_seen": true,
         "v1_status": "INSTRUMENT-DEFECTIVE for G6 (precondition false: session-mode.js absent from the plugin); G7 v1 superseded by the v8 text. Never re-scored.",
         "v2_results": "results/stage-graph-g67.v2.jsonl",
-        "note": "files/packs are filled by evals/skill-onoff/stamp-g67-amendment.js after the post-merge pack freeze (prereg/stage-graph-g67.json fixture_scripts_freeze.post_merge_steps)"
+        "packs": {
+          "fixture-scripts-g67-v2": {
+            "kind": "scripts",
+            "source": "scripts/session-mode.js,scripts/repo-residue-sweep.js,scripts/pin-evidence-anchors.js,scripts/reap-dispatch-branches.sh,scripts/lib/json-emit.sh,scripts/lib/worktree-reap.sh",
+            "ref": "3c91f091663535d2360615b696824f403a7df910",
+            "files": 62,
+            "digest_sha256": "bfe1d19375c5e5cf2cfe0d58cfd525356e0ea275a9087f630ba0704cf89752db"
+          }
+        },
+        "files": {
+          "arms/g67/off.json": "5e65732600b719f61fcc3c717297ca751050c218bbd2c93b02d732618e0a5aac",
+          "arms/g67/on.json": "d280532ca2b7ba1055061874bc294be54ed387b4b56289dc6ac526ea48744eb6",
+          "prereg/stage-graph-g67.json": "f46b39b1aa9130cbde48eeb6b89ff1cf1562bf4011debf1c7a6d3f9b5f32dd58",
+          "prereg/stage-graph-g67.md": "aa530431693978db02121fc679fa3bbd120e39313f41ebcfa565a677398f7e92",
+          "prereg/stage-graph-g67.amend-1-plugin-scripts.json": "c4f40c62417e5d3f53022c67d7e873bb2dd84511d8cd8cb5c9c27268e3d5e254",
+          "run-g67-campaign.js": "3acf2c954057da046e40afc3c354bde261de5c2b595a786b7caf938e95269626",
+          "run-skill-onoff-eval.sh": "ef09676a67fa8f9add67680728cd2064e1bc9369f9edeb225bb400d9f706249e",
+          "stamp-g67-amendment.js": "d0fc5e027fe5f2e18e4acaa1028d3b3da0bb04356b7ae5bd785319c191cec695",
+          "packs/manifest.json": "a5b2ae827e08c52c9a897d8b414bb98bfe2dc547a3c192f55e7ada347aad7684",
+          "README.md": "911056a3864df5c0f207b74610b4d79c7d872667d6d34e681ba3592fc7fbc0f7",
+          "../../hooks/tests/skill-onoff-g67.test.sh": "e04fa0dfa2a83e63bb6365b31d07e8e5296e2d2b8d913d377d7bff47862b47e4"
+        }
       }
     },
-    "files_note": "files = digests of the v1 as-run state (arms v7, fixture-scripts-g67); superseded by amendments.amend-1-plugin-scripts.files for every file listed there once stamped"
+    "files_note": "files = digests of the v1 as-run state (arms v7, fixture-scripts-g67); superseded by amendments.amend-1-plugin-scripts.files for every file listed there"
   }
 }

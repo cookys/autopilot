@@ -22,6 +22,30 @@
         "unverifiable": { "type": "integer", "minimum": 1 }
       }
     },
-    "source": { "const": "repo-residue-sweep scan" }
+    "source": { "const": "repo-residue-sweep scan" },
+    "needs_human_count": { "type": "integer", "minimum": 0 },
+    "needs_human_bytes": { "type": ["integer", "null"], "minimum": 0 },
+    "needs_human": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "class", "age_days", "bytes", "reason", "command"],
+        "properties": {
+          "kind": { "enum": ["worktree", "branch"] },
+          "path": { "type": "string", "minLength": 1 },
+          "branch": { "type": "string", "minLength": 1 },
+          "class": { "type": "string", "minLength": 1 },
+          "age_days": { "type": ["number", "null"] },
+          "bytes": { "type": ["integer", "null"], "minimum": 0 },
+          "reason": { "type": ["string", "null"] },
+          "command": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "auto_ran_at": { "type": ["string", "null"] },
+    "auto_removed_count": { "type": "integer", "minimum": 0 },
+    "auto_archived_count": { "type": "integer", "minimum": 0 }
   }
 }

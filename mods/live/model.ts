@@ -1102,7 +1102,14 @@ export function readMarker(m: Json | null): MarkerView | null {
 
 // ---- D3 residue / D4 stage walk / D1 spend ----
 export const RESIDUE_SCHEMA = 'autopilot.residue/1'
-export type ResidueView = { reapable: number; by_class: Record<string, number>; at: string | null }
+// Residue auto-reap R4 (docs/plans/evidence/2026-10-09-residue-auto-reap/contract.md): the band's `wt N` and the Hygiene tab show
+// needs_human_*, the residue a person must act on. Fields absent from an older fact read as 0 / null / [].
+export type NeedsHumanEntry = { kind: string; target: string; class: string; age_days: number | null; bytes: number | null; reason: string | null; command: string | null }
+export type ResidueView = {
+  reapable: number; by_class: Record<string, number>; at: string | null
+  needs_human_count: number; needs_human_bytes: number | null; needs_human: NeedsHumanEntry[]
+  auto_ran_at: string | null; auto_removed_count: number | null; auto_archived_count: number | null
+}
 export function readResidue(text: string | null, projectKey: string): ResidueView | null {
   if (text === null) return null
   const parsed = parseJson(text)
@@ -1111,7 +1118,28 @@ export function readResidue(text: string | null, projectKey: string): ResidueVie
   if (!isCount(v.reapable_worktrees)) return null
   const by: Record<string, number> = {}
   if (isObject(v.by_class)) for (const k of Object.keys(v.by_class)) if (isCount(v.by_class[k])) by[k] = v.by_class[k] as number
-  return { reapable: v.reapable_worktrees, by_class: by, at: str(v.at) }
+  const rows: NeedsHumanEntry[] = []
+  if (Array.isArray(v.needs_human)) {
+    for (const e of v.needs_human) {
+      if (!isObject(e)) continue
+      const target = str(e.path) ?? str(e.branch)
+      if (target === null) continue
+      rows.push({
+        kind: str(e.kind) ?? '—', target, class: str(e.class) ?? '—',
+        age_days: typeof e.age_days === 'number' && Number.isFinite(e.age_days) ? e.age_days : null,
+        bytes: isCount(e.bytes) ? e.bytes : null, reason: str(e.reason), command: str(e.command),
+      })
+      if (rows.length >= 20) break
+    }
+  }
+  return {
+    reapable: v.reapable_worktrees, by_class: by, at: str(v.at),
+    needs_human_count: isCount(v.needs_human_count) ? v.needs_human_count : 0,
+    needs_human_bytes: isCount(v.needs_human_bytes) ? v.needs_human_bytes : null,
+    needs_human: rows, auto_ran_at: str(v.auto_ran_at),
+    auto_removed_count: isCount(v.auto_removed_count) ? v.auto_removed_count : null,
+    auto_archived_count: isCount(v.auto_archived_count) ? v.auto_archived_count : null,
+  }
 }
 
 export const STAGE_WALK_SCHEMA = 'autopilot.stage-walk/1'
@@ -1220,10 +1248,10 @@ export function slotSpend(s: { brain: number; cap: number } | null): Slot | null
   return { id: 'spend', segs: [sp('$' + Math.round(s.brain) + '/' + Math.round(s.cap), color === undefined ? {} : { color })] }
 }
 
-// hygieneChip text + ` · wt <n>` (reapable worktrees, n > 0 only)
+// hygieneChip text + ` · wt <n>` (needs_human_count = what a person must act on, n > 0 only; supersedes the P7 reapable-only ruling)
 export function slotHygiene(ls: LoadSourceView | null, residue: ResidueView | null): Slot | null {
   const chip = hygieneChip(ls)
-  const wt = residue !== null && residue.reapable > 0 ? residue.reapable : 0
+  const wt = residue !== null && residue.needs_human_count > 0 ? residue.needs_human_count : 0
   if (chip === null && wt === 0) return null
   const segs: Seg[] = []
   if (chip !== null) segs.push(sp(chip.text, chip.warn ? { color: 'warning' } : {}))
@@ -1327,7 +1355,7 @@ export function legendLines(): PaneLine[] {
     l([seg('R2 ⟲'), seg(' · '), seg('QC ✓', 'success'), seg(' / '), seg('QC owed', 'warning')], 'review round · pre-push QC evidence present / owed'),
     l([seg('◆3', 'claude'), seg(' '), seg('?1', 'inactive'), seg(' U2')], 'decided on your behalf · dispatches with no decision record · latest escalation rung'),
     l([seg('$120/150', 'warning')], 'brain-tier spend today / cap · warning from 80 %, error from 100 %'),
-    l([seg('dev ↓3'), seg(' · '), seg('wt 2')], 'plugin load source (⚠ = look at it) · reapable worktrees'),
+    l([seg('dev ↓3'), seg(' · '), seg('wt 2')], 'plugin load source (⚠ = look at it) · worktrees and branches that need you (Hygiene tab)'),
     l([seg('ⓘ')], 'opens this panel; with it open, shows the next tab'),
     { text: 'keyboard: Ctrl+x Tab, then Enter on ⓘ; each further Enter shows the next tab', dim: true },
     { text: 'narrow terminals drop slots: < 160 hygiene · < 140 spend, decisions · < 120 review, age · < 80 all but verdict, dispatch, unit bar', dim: true },
@@ -1410,8 +1438,13 @@ export function spendLines(snap: LiveSnapshot): PaneLine[] {
   return out
 }
 
-// Hygiene tab: load source detail + reapable worktree residue
-export function hygieneLines(ls: LoadSourceView | null, residue: ResidueView | null): PaneLine[] {
+// Hygiene tab: load source detail + the residue that needs a person (residue auto-reap R4)
+const sizeText = (b: number | null): string => (b === null ? '—' : b >= 1073741824 ? (b / 1073741824).toFixed(1) + ' GB' : b >= 1048576 ? Math.round(b / 1048576) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB')
+const shortTarget = (t: string, kind: string): string => {
+  if (kind === 'worktree') { const parts = t.split('/').filter(Boolean); t = parts.length > 2 ? '…/' + parts.slice(-2).join('/') : t }
+  return t.length > 48 ? '…' + t.slice(-47) : t
+}
+export function hygieneLines(ls: LoadSourceView | null, residue: ResidueView | null, nowMs: number | null = null): PaneLine[] {
   const out: PaneLine[] = []
   if (ls === null) out.push(NO_DATA('no load source published'))
   else {
@@ -1423,9 +1456,18 @@ export function hygieneLines(ls: LoadSourceView | null, residue: ResidueView | n
   }
   if (residue === null) out.push(NO_DATA('no worktree residue published'))
   else {
-    out.push({ text: 'reapable worktrees · ' + residue.reapable, bold: residue.reapable > 0 })
-    const classes = Object.keys(residue.by_class).sort()
-    out.push(classes.length === 0 ? { text: '  no residue classes', dim: true } : { text: '  ' + classes.map(c => c + ' ' + residue.by_class[c]).join(' · '), dim: true })
+    let auto = 'no auto run yet'
+    if (residue.auto_ran_at !== null) {
+      const ms = Date.parse(residue.auto_ran_at)
+      const ago = nowMs !== null && Number.isFinite(ms) ? ageText((nowMs - ms) / 1000) : '—'
+      auto = 'auto ' + ago + ' ago: −' + (residue.auto_removed_count ?? 0) + ' wt, ' + (residue.auto_archived_count ?? 0) + ' branches archived'
+    }
+    out.push({ text: residue.needs_human_count + ' need you · ' + sizeText(residue.needs_human_bytes) + ' · ' + auto, bold: residue.needs_human_count > 0 })
+    for (const e of residue.needs_human) {
+      out.push({ text: e.kind + ' ' + shortTarget(e.target, e.kind) + ' · ' + e.class + ' · ' + (e.age_days === null ? '—' : Math.floor(e.age_days) + 'd') + ' · ' + sizeText(e.bytes) + (e.reason === null ? '' : ' · ' + e.reason) })
+      out.push({ text: '  ' + (e.command ?? '—'), dim: true })
+    }
+    if (residue.needs_human_count > residue.needs_human.length) out.push({ text: '  … ' + (residue.needs_human_count - residue.needs_human.length) + ' more not shown (the list is capped at 20)', dim: true })
   }
   return out
 }

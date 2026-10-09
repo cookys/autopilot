@@ -285,6 +285,66 @@ test('D3 residue: a watcher whose cwd is a linked worktree still scans the main 
   } finally { ctx.cleanup(); }
 });
 
+// ---- residue auto-reap R4: the additive needs_human fields from <git-common-dir>/autopilot-residue-auto.json ----
+const autoRecord = (over = {}) => ({
+  schema: 'autopilot.residue-auto/1', ran_at: '2026-10-09T01:00:00.000Z', removed: [{ path: '/x/a' }, { path: '/x/b' }], archived: [{ branch: 'hands/z' }],
+  needs_human: [
+    { kind: 'worktree', path: '/x/dirty', class: 'dirty', age_days: 3.5, bytes: 1048576, reason: 'failure', command: 'git worktree remove --force /x/dirty' },
+    { kind: 'branch', branch: 'feature/old', class: 'unintegrated-branch', age_days: 20, bytes: null, reason: null, command: 'git branch -D feature/old' },
+  ],
+  needs_human_count: 2, needs_human_bytes: 1048576, ...over,
+});
+const writeAuto = (ctx, rec) => fs.writeFileSync(path.join(ctx.repo, '.git', 'autopilot-residue-auto.json'), typeof rec === 'string' ? rec : JSON.stringify(rec));
+
+test('R4 residue: the auto-run record adds needs_human_* / auto_* fields; the fact validates against the schema; the schema id is unchanged', async () => {
+  const ctx = residueFixture();
+  try {
+    writeAuto(ctx, autoRecord());
+    const { pub, logs } = publisherOf(ctx);
+    assert.equal(await pub.publish({ nowMs: ctx.now }), true);
+    const fact = JSON.parse(fs.readFileSync(pub.file, 'utf8'));
+    assert.equal(fact.schema, 'autopilot.residue/1');
+    assert.equal(fact.reapable_worktrees, 1, 'the scan part is unchanged');
+    assert.equal(fact.needs_human_count, 2);
+    assert.equal(fact.needs_human_bytes, 1048576);
+    assert.equal(fact.auto_ran_at, '2026-10-09T01:00:00.000Z');
+    assert.equal(fact.auto_removed_count, 2);
+    assert.equal(fact.auto_archived_count, 1);
+    assert.equal(fact.needs_human.length, 2);
+    assert.deepEqual(fact.needs_human[0], { kind: 'worktree', class: 'dirty', age_days: 3.5, bytes: 1048576, reason: 'failure', command: 'git worktree remove --force /x/dirty', path: '/x/dirty' });
+    assert.equal(fact.needs_human[1].branch, 'feature/old');
+    const v = validateJsonSchema(schemaOf('residue.schema.json'), fact);
+    assert.equal(v.valid, true, JSON.stringify(v));
+    assert.deepEqual(logs, []);
+  } finally { ctx.cleanup(); }
+});
+
+test('R4 residue: needs_human is capped at 20 entries (the count keeps the true total); no record / foreign schema / garbage adds no fields', async () => {
+  const ctx = residueFixture();
+  try {
+    const many = Array.from({ length: 30 }, (_, i) => ({ kind: 'branch', branch: `b${i}`, class: 'unintegrated-branch', age_days: 15, bytes: null, reason: null, command: `git branch -D b${i}` }));
+    writeAuto(ctx, autoRecord({ needs_human: many, needs_human_count: 30 }));
+    const { pub } = publisherOf(ctx);
+    assert.equal(await pub.publish({ nowMs: ctx.now }), true);
+    let fact = JSON.parse(fs.readFileSync(pub.file, 'utf8'));
+    assert.equal(fact.needs_human.length, 20);
+    assert.equal(fact.needs_human_count, 30);
+    assert.equal(validateJsonSchema(schemaOf('residue.schema.json'), fact).valid, true);
+    for (const bad of [null, '{not json', JSON.stringify({ schema: 'other/1', needs_human_count: 5 }), JSON.stringify(autoRecord({ needs_human_count: -1 }))]) {
+      if (bad === null) fs.rmSync(path.join(ctx.repo, '.git', 'autopilot-residue-auto.json'), { force: true }); else writeAuto(ctx, bad);
+      assert.equal(await pub.publish({ nowMs: ctx.now += 61000 }), true);
+      fact = JSON.parse(fs.readFileSync(pub.file, 'utf8'));
+      assert.equal('needs_human_count' in fact, false, `no fields for ${String(bad).slice(0, 20)}`);
+      assert.equal(validateJsonSchema(schemaOf('residue.schema.json'), fact).valid, true);
+    }
+  } finally { ctx.cleanup(); }
+});
+
+test('R4 residue: the watcher never starts du (sizes come only from the auto run)', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'status', 'residue.js'), 'utf8');
+  assert.equal(/['"]du['"]/.test(src), false);
+});
+
 test('D3 residue: a failing scan keeps the previous file and logs one line', async () => {
   const ctx = residueFixture();
   try {

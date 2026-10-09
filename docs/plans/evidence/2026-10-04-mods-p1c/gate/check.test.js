@@ -50,7 +50,7 @@ const richFiles = (over) => ({
   'qc.json': { schema: 'autopilot.qc-status/1', scope: { project_key: PK, root_run_id: null }, state: 'ok' },
   'decisions-sidecar.json': { schema: 'autopilot.decisions-sidecar/1', count: 3, irreversible_count: 1, undocumented_dispatches: 1, ladder: { rung: 'U2', at: iso(5) } },
   'load-source.json': { schema: 'autopilot.load-source/1', source: 'dev', behind_upstream: 3, flags: [] },
-  'residue.json': { schema: 'autopilot.residue/1', project_key: PK, reapable_worktrees: 2, by_class: { 'clean-integrated': 1, 'missing-dir': 1, other: 4 } },
+  'residue.json': { schema: 'autopilot.residue/1', project_key: PK, reapable_worktrees: 2, by_class: { 'clean-integrated': 1, 'missing-dir': 1, other: 4 }, needs_human_count: 2, needs_human: [] },
   ...(over || {}),
 });
 const RICH_209 = '⏸ 疑似卡住 │ M!·l5 ▸ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙2 ⏸1 │ R2 ⟲ · QC ✓ │ ◆3 ?1 U2 │ $123/150 │ dev ↓3 · wt 2 │ ⓘ';
@@ -149,8 +149,15 @@ test('PLANTED RED spend: brain-tier spend in the envelope changed', () => {
   const r = mutated({ 'envelope.json': baseEnvelope({ runs: [{ alive: true, stall: false }, { alive: true, stall: true }], counts: { confirmed_live: 2 }, host_today_brain_usd: 140, brain_cap_usd: 150 }) });
   assert.deepStrictEqual(r.failed, ['spend']);
 });
-test('PLANTED RED hygiene: more reapable worktrees in the residue fact', () => {
-  assert.deepStrictEqual(mutated({ 'residue.json': { schema: 'autopilot.residue/1', project_key: PK, reapable_worktrees: 3, by_class: { 'clean-integrated': 2, 'missing-dir': 1 } } }).failed, ['hygiene']);
+test('PLANTED RED hygiene: a different needs_human_count in the residue fact', () => {
+  assert.deepStrictEqual(mutated({ 'residue.json': { schema: 'autopilot.residue/1', project_key: PK, reapable_worktrees: 2, by_class: { 'clean-integrated': 1, 'missing-dir': 1 }, needs_human_count: 3, needs_human: [] } }).failed, ['hygiene']);
+});
+test('residue auto-reap R4: wt is needs_human_count, never the reapable count (a band drawing wt <reapable> fails; no needs_human_count draws no wt)', () => {
+  const hy = (res, line) => run(capture(richFiles({ 'residue.json': res }), [RICH_209.replace('dev ↓3 · wt 2', line)]));
+  const reapOnly = { schema: 'autopilot.residue/1', project_key: PK, reapable_worktrees: 5, by_class: { 'clean-integrated': 5 } };
+  assert.strictEqual(status(hy(reapOnly, 'dev ↓3 · wt 5'), 'hygiene'), 'FAIL');
+  assert.strictEqual(status(hy(reapOnly, 'dev ↓3'), 'hygiene'), 'PASS');
+  assert.strictEqual(status(hy({ ...reapOnly, needs_human_count: 0, needs_human: [] }, 'dev ↓3'), 'hygiene'), 'PASS');
 });
 test('PLANTED RED hygiene chip: behind upstream changed in load-source', () => {
   assert.deepStrictEqual(mutated({ 'load-source.json': { schema: 'autopilot.load-source/1', source: 'dev', behind_upstream: 5, flags: [] } }).failed, ['hygiene']);
@@ -159,8 +166,9 @@ test('PLANTED RED ⓘ: the band is drawn without the info button', () => {
   const r = run(rich(RICH_209.replace(' │ ⓘ', ''), 209));
   assert.strictEqual(status(r, 'ⓘ'), 'FAIL'); assert.strictEqual(r.ok, false);
 });
-test('residue.json whose reapable count disagrees with by_class is a note (the D3 definition)', () => {
-  const r = mutated({ 'residue.json': { schema: 'autopilot.residue/1', project_key: PK, reapable_worktrees: 2, by_class: { 'clean-integrated': 1, 'missing-dir': 0 } } });
+test('residue.json whose needs_human list is longer than its count is a note', () => {
+  const e = { kind: 'branch', branch: 'b', class: 'x', age_days: 1, bytes: null, reason: null, command: 'c' };
+  const r = mutated({ 'residue.json': { schema: 'autopilot.residue/1', project_key: PK, reapable_worktrees: 2, by_class: {}, needs_human_count: 2, needs_human: [e, e, e] } });
   assert.ok(r.derived.notes.some((n) => n.includes('inconsistent')));
 });
 test('facts of another project or schema are not facts (a foreign residue / qc / review draws nothing)', () => {
@@ -177,11 +185,11 @@ test('spend is empty when the brain spend is not published', () => {
 });
 test('hygiene chip forms: cache copy, unknown source, marketplace warning, no chip but wt', () => {
   const hy = (ls, res, line) => run(capture(richFiles({ 'load-source.json': ls, 'residue.json': res }), [RICH_209.replace('dev ↓3 · wt 2', line)]));
-  const noRes = { schema: 'autopilot.residue/1', project_key: PK, reapable_worktrees: 0, by_class: {} };
+  const noRes = { schema: 'autopilot.residue/1', project_key: PK, reapable_worktrees: 0, by_class: {}, needs_human_count: 0 };
   assert.strictEqual(status(hy({ schema: 'autopilot.load-source/1', source: 'cache:2.36.36', flags: [] }, noRes, 'cache 2.36.36 ⚠'), 'hygiene'), 'PASS');
   assert.strictEqual(status(hy({ schema: 'autopilot.load-source/1', source: 'unknown', flags: [] }, noRes, 'src ? ⚠'), 'hygiene'), 'PASS');
   assert.strictEqual(status(hy({ schema: 'autopilot.load-source/1', source: 'dev', flags: ['marketplace_not_this_repo'] }, noRes, 'dev ⚠'), 'hygiene'), 'PASS');
-  assert.strictEqual(status(hy(null, { schema: 'autopilot.residue/1', project_key: PK, reapable_worktrees: 4, by_class: { 'clean-integrated': 4 } }, 'wt 4'), 'hygiene'), 'PASS');
+  assert.strictEqual(status(hy(null, { schema: 'autopilot.residue/1', project_key: PK, reapable_worktrees: 0, by_class: {}, needs_human_count: 4 }, 'wt 4'), 'hygiene'), 'PASS');
   assert.strictEqual(status(hy({ schema: 'autopilot.load-source/1', source: 'dev', flags: [] }, noRes, 'dev'), 'hygiene'), 'PASS');
 });
 test('unit bar scales to 10 cells when N > 10, and 5/20 puts the current cell at ceil(5*10/20)=3', () => {

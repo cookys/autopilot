@@ -77,7 +77,7 @@ export function Pane(el: { Box: El; Text: El; Link: El; Button?: El }, snap: Liv
   if (tab === 'review') return <Box flexDirection="column">{strip}{head}{reviewLines(snap.review).map(line)}{qcLines(snap.detail.qc).map(line)}</Box>
   if (tab === 'decisions') return <Box flexDirection="column">{strip}{head}{decisionsTabLines(snap).map(line)}</Box>
   if (tab === 'spend') return <Box flexDirection="column">{strip}{head}{spendLines(snap).map(line)}</Box>
-  if (tab === 'hygiene') return <Box flexDirection="column">{strip}{head}{hygieneLines(snap.detail.load_source, snap.detail.residue).map(line)}</Box>
+  if (tab === 'hygiene') return <Box flexDirection="column">{strip}{head}{hygieneLines(snap.detail.load_source, snap.detail.residue, snap.detail.now_ms).map(line)}</Box>
   const rows = snap.rows
   const gates = snap.gates
   return (

@@ -1135,11 +1135,3 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: the fix is a guidance change in the l4–l6 front doors (call session-mode set --size), so it needs a skill-onoff eval before it ships.
 
 
-### the residue band reminder shows only where the runs watcher starts
-- **Status**: open
-- **Trigger**: before the 3.0.0 final cut, or the first report of a repo with residue and no `wt N`
-- **Effort**: S
-- **Source**: residue-hygiene-w209 real-machine capture, 2026-10-09
-- **Pointer**: docs/plans/evidence/2026-10-09-residue-auto-reap/README.md
-- **Context**: the watcher starts only in onboarded repos (.claude config) or with AUTOPILOT_RUNS_WATCH_AUTOSTART=1; elsewhere auto-reap still runs and writes the advisory but nothing shows `wt N`.
-

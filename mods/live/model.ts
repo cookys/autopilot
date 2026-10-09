@@ -894,6 +894,8 @@ export function portOf(text: string | null): number {
 export const STATE_TEXT = {
   noPointer: 'no pointer · run: ' + RUNS_HINT,
   noProject: 'no project · run: ' + RUNS_HINT,
+  // a repo with no watcher scope still shows its residue reminder: wt N from <git-common-dir>/autopilot-residue-auto.json
+  noProjectWt: (wt: number) => 'no project · wt ' + wt + ' · run: ' + RUNS_HINT,
   unreadable: 'unreadable',
   stale: (key: string, publishedAt: string | null) => 'stale' + (publishedAt ? ' · last published ' + publishedAt : '') + ' · run: ' + RUNS_HINT + ' --project ' + key,
   unavailable: (key: string) => 'unavailable · run: ' + RUNS_HINT + ' --project ' + key,
@@ -1122,7 +1124,7 @@ export function readResidue(text: string | null, projectKey: string): ResidueVie
   if (Array.isArray(v.needs_human)) {
     for (const e of v.needs_human) {
       if (!isObject(e)) continue
-      const target = str(e.path) ?? str(e.branch)
+      const target = str(e.path) ?? str(e.branch) ?? str(e.ref)
       if (target === null) continue
       rows.push({
         kind: str(e.kind) ?? '—', target, class: str(e.class) ?? '—',
@@ -1140,6 +1142,44 @@ export function readResidue(text: string | null, projectKey: string): ResidueVie
     auto_removed_count: isCount(v.auto_removed_count) ? v.auto_removed_count : null,
     auto_archived_count: isCount(v.auto_archived_count) ? v.auto_archived_count : null,
   }
+}
+
+// `reap --auto`'s own result file (<git-common-dir>/autopilot-residue-auto.json): needs_human_count when it is a positive integer, else 0.
+export function autoResidueCount(text: string | null): number {
+  if (text === null) return 0
+  const parsed = parseJson(text)
+  if (!parsed.ok || !isObject(parsed.value) || parsed.value.schema !== 'autopilot.residue-auto/1') return 0
+  const n = parsed.value.needs_human_count
+  return isCount(n) ? n : 0
+}
+
+// Absolute path with `.`/`..` segments folded (never above the root).
+export function normalizeAbs(p: string): string {
+  const out: string[] = []
+  for (const seg of p.split('/')) {
+    if (seg === '' || seg === '.') continue
+    if (seg === '..') out.pop()
+    else out.push(seg)
+  }
+  return '/' + out.join('/')
+}
+
+// The gitdir a `.git` FILE names (`gitdir: <path>`), absolute and normalised; a relative path is resolved against the directory that holds the file.
+export function gitdirOfGitFile(text: string | null, dir: string): string | null {
+  if (text === null) return null
+  const m = /^gitdir:\s*(.+?)\s*$/m.exec(text)
+  if (m === null) return null
+  const g = m[1]
+  return normalizeAbs(g.startsWith('/') ? g : dir + '/' + g)
+}
+
+// The common dir of a gitdir, the way git finds it: `<gitdir>/commondir` (relative to the gitdir) when it exists; else the gitdir itself
+// (a submodule); only without that file, a linked worktree's `<common>/worktrees/<name>` is cut at its LAST `/worktrees/`.
+export function commonDirOfGitdir(gitdir: string, commondirText: string | null): string {
+  const c = commondirText === null ? '' : commondirText.trim()
+  if (c !== '') return normalizeAbs(c.startsWith('/') ? c : gitdir + '/' + c)
+  const i = gitdir.lastIndexOf('/worktrees/')
+  return i > 0 ? gitdir.slice(0, i) : gitdir
 }
 
 export const STAGE_WALK_SCHEMA = 'autopilot.stage-walk/1'

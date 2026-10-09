@@ -16,7 +16,7 @@ NOW="$(date +%s)"
 TODAY="$(date -u +%F)"
 jx() { printf '%s' "$1" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);const v=eval(process.argv[1]);process.stdout.write(typeof v==="string"?v:JSON.stringify(v));})' "$2"; }
 # stable one-line summary of a close-session report
-sig() { jx "$1" '"deleted="+j.deleted.map(x=>x.branch).sort().join(",")+";archived="+j.archived.map(x=>x.branch).sort().join(",")+";kept="+j.kept.map(x=>x.branch+":"+x.why).sort().join(",")'; }
+sig() { jx "$1" '"deleted="+j.deleted.map(x=>x.branch).sort().join(",")+";unint="+j.deleted.filter(x=>x.integrated===false).map(x=>x.branch).sort().join(",")+";kept="+j.kept.map(x=>x.branch+":"+x.why).sort().join(",")'; }
 
 G() { git -C "$SBX" -c user.email=t@t -c user.name=t "$@"; }
 ledger_row() { # <branch> <session|null> <run_id> <root_run_id>
@@ -111,51 +111,51 @@ BEFORE="$(refs_snapshot)"
 DRY="$(run_close --session S1)"; assert_eq "$?" "0" "dry run -> exit 0"
 assert_eq "$(refs_snapshot)" "$BEFORE" "dry run changes no ref"
 assert_eq "$(jx "$DRY" 'j.dry_run')" "true" "dry run says so"
-EXPECT="deleted=foreman/F1,s1-merged;archived=hands/F1/u1,hands/F1/u2,s1-shared,s1-unint;kept=reuse-hand:ledger_row_stale,s1-campaign:unresolved_campaign,s1-checkedout:checked_out,s1-leased:live_or_in_use_or_unexpired_lease_worktree"
+EXPECT="deleted=foreman/F1,hands/F1/u1,hands/F1/u2,s1-merged,s1-shared,s1-unint;unint=hands/F1/u1,hands/F1/u2,s1-shared,s1-unint;kept=reuse-hand:ledger_row_stale,s1-campaign:unresolved_campaign,s1-checkedout:checked_out,s1-leased:live_or_in_use_or_unexpired_lease_worktree"
 assert_eq "$(sig "$DRY")" "$EXPECT" "dry run plan = the real plan"
 assert_eq "$(jx "$DRY" 'j.schema+"|"+j.session')" "autopilot.close-session/1|S1" "report schema + session"
 
 # ---------------------------------------------------------------- the real run
 S2TIP="$(G rev-parse s2-unint)"; NLTIP="$(G rev-parse noledger)"; U1TIP="$(G rev-parse hands/F1/u1)"; UNTIP="$(G rev-parse s1-unint)"
-OUT="$(run_close --session S1 --yes)"; RC=$?
+OUT="$(run_close --session S1 --yes 2>"$TEST_TMP/s1.err")"; RC=$?
 assert_eq "$RC" "0" "S1 close-out -> exit 0 (only keep rules left behind)"
 assert_eq "$(sig "$OUT")" "$EXPECT" "S1 close-out acts exactly on the right branches"
 for b in s1-merged foreman/F1 s1-unint hands/F1/u1 hands/F1/u2; do G rev-parse --verify -q "refs/heads/$b" >/dev/null && fail "$b should be deleted" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)); done
 for b in s1-checkedout s1-campaign s1-leased s2-unint noledger reuse-s2 reuse-hand sib-shared; do G rev-parse --verify -q "refs/heads/$b" >/dev/null && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "$b must survive"; done
-assert_eq "$(G rev-parse "refs/archive/$TODAY/s1-unint")" "$UNTIP" "unintegrated branch archived at its tip"
-assert_eq "$(G rev-parse "refs/archive/$TODAY/hands/F1/u1")" "$U1TIP" "foreman-owned hand archived at its tip"
+assert_eq "$(G for-each-ref refs/archive | wc -l | tr -d ' ')" "0" "close-session writes NO refs/archive ref (owner ruling 2026-10-10)"
+assert_eq "$(jx "$OUT" '"archived" in j')" "false" "report has no archived list"
+assert_eq "$(jx "$OUT" 'j.deleted.find(d=>d.branch==="s1-unint").integrated+"|"+j.deleted.find(d=>d.branch==="s1-merged").integrated+"|"+j.deleted.find(d=>d.branch==="s1-unint").tip')" "false|true|$UNTIP" "deleted entries carry integrated + tip"
+assert_contains "$(cat "$TEST_TMP/s1.err")" "git branch s1-unint $UNTIP" "stderr recovery line for an unintegrated delete"
+assert_contains "$(cat "$TEST_TMP/s1.err")" "git branch hands/F1/u1 $U1TIP" "stderr recovery line for the foreman-owned hand"
+assert_not_contains "$(cat "$TEST_TMP/s1.err")" "s1-merged" "no recovery line for an integrated delete"
+G branch -q restored-s1-unint "$UNTIP" && assert_eq "$(G rev-parse restored-s1-unint)" "$UNTIP" "the printed recovery command's tip is restorable" ; G branch -q -D restored-s1-unint
 assert_eq "$(G rev-parse s2-unint)" "$S2TIP" "S2's branch untouched"
 assert_eq "$(G rev-parse noledger)" "$NLTIP" "branch with no ledger row untouched"
-assert_eq "$(G for-each-ref "refs/archive/$TODAY/" | grep -c -E 's2-unint|noledger|s1-merged|checkedout')" "0" "no archive ref for anything but S1's unintegrated branches"
-assert_eq "$(jx "$OUT" 'j.archived.find(a=>a.branch==="s1-unint").ref')" "refs/archive/$TODAY/s1-unint" "archived entry carries the ref"
 # idempotent: a second run has nothing left to remove
 OUT2="$(run_close --session S1 --yes)"; assert_eq "$?" "0" "second run exit 0"
-assert_eq "$(sig "$OUT2")" "deleted=;archived=;kept=reuse-hand:ledger_row_stale,s1-campaign:unresolved_campaign,s1-checkedout:checked_out,s1-leased:live_or_in_use_or_unexpired_lease_worktree" "second run only repeats keep rules"
+assert_eq "$(sig "$OUT2")" "deleted=;unint=;kept=reuse-hand:ledger_row_stale,s1-campaign:unresolved_campaign,s1-checkedout:checked_out,s1-leased:live_or_in_use_or_unexpired_lease_worktree" "second run only repeats keep rules"
 # S2 on the same repo now: its own branch is archived, nothing else
 OUT3="$(run_close --session S2 --yes)"; assert_eq "$?" "0" "S2 close-out exit 0"
-assert_eq "$(sig "$OUT3")" "deleted=;archived=reuse-s2,s2-unint;kept=" "S2 close-out acts on its own branches, including the reused name whose latest row is S2's"
+assert_eq "$(sig "$OUT3")" "deleted=reuse-s2,s2-unint;unint=reuse-s2,s2-unint;kept=" "S2 close-out acts on its own branches, including the reused name whose latest row is S2's"
 assert_eq "$(G rev-parse noledger)" "$NLTIP" "still: branch with no ledger row untouched"
 G rev-parse --verify -q refs/heads/sib-shared >/dev/null && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "sibling sharing a root_run_id must survive"
-OUT4="$(run_close --session S3 --yes)"; assert_eq "$(sig "$OUT4")" "deleted=;archived=sib-shared;kept=" "S3 owns only its own row"
+OUT4="$(run_close --session S3 --yes)"; assert_eq "$(sig "$OUT4")" "deleted=sib-shared;unint=sib-shared;kept=" "S3 owns only its own row"
 
 # ---------------------------------------------------------------- campaign signal unreadable -> keep
 build_fixture "$TEST_TMP/repo2"
 printf '{"schema_version":1,"missions":' > "$SBX/.git/autopilot/mission-bad.tmp"; mkdir -p "$SBX/.git/autopilot/mission"; printf 'not json' > "$SBX/.git/autopilot/mission/registry.json"
 OUT="$(run_close --session S1 --yes)"; RC=$?
 assert_eq "$RC" "0" "unreliable campaign signal: keep rule, exit 0"
-assert_eq "$(jx "$OUT" 'j.deleted.length+j.archived.length')" "0" "unreliable campaign signal: nothing removed"
+assert_eq "$(jx "$OUT" 'j.deleted.length')" "0" "unreliable campaign signal: nothing removed"
 assert_contains "$(sig "$OUT")" "s1-unint:campaign_signal_unavailable" "unreliable campaign signal named"
 
-# ---------------------------------------------------------------- archive collision keeps (exit 1)
+# ---------------------------------------------------------------- a pre-existing archive ref is neither needed nor touched
 build_fixture "$TEST_TMP/repo3"
 G update-ref "refs/archive/$TODAY/s1-unint" "$BASE"
-UNTIP="$(G rev-parse s1-unint)"
-OUT="$(run_close --session S1 --yes)"; RC=$?
-assert_eq "$RC" "1" "archive collision -> exit 1"
-assert_eq "$(jx "$OUT" 'j.kept.find(k=>k.branch==="s1-unint").why')" "archive_ref_failed" "collision reason"
-assert_eq "$(G rev-parse s1-unint)" "$UNTIP" "colliding branch kept"
-assert_eq "$(G rev-parse "refs/archive/$TODAY/s1-unint")" "$BASE" "pre-existing archive ref not overwritten"
-G rev-parse --verify -q refs/heads/s1-merged >/dev/null && fail "other branches still processed after a collision" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
+OUT="$(run_close --session S1 --yes 2>/dev/null)"; RC=$?
+assert_eq "$RC" "0" "colliding archive ref is irrelevant now -> exit 0"
+G rev-parse --verify -q refs/heads/s1-unint >/dev/null && fail "unintegrated branch deleted despite the colliding ref" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
+assert_eq "$(G rev-parse "refs/archive/$TODAY/s1-unint")" "$BASE" "pre-existing archive ref not touched"
 
 # ---------------------------------------------------------------- no reflog: a branch still at its base is not stale
 mkdir -p "$TEST_TMP/repo6"; SBX="$TEST_TMP/repo6"; G init -q -b develop; G config core.logAllRefUpdates false
@@ -167,7 +167,7 @@ assert_eq "$(G reflog show refs/heads/nr-atbase 2>/dev/null | wc -l | tr -d ' ')
 ledger_row nr-atbase S1 r-a r-a; ledger_row nr-oldtip S1 r-b r-b; ledger_row nr-newtip S1 r-c r-c
 G update-ref refs/heads/nr-oldtip2 "$AT"; node -e 'process.stdout.write(JSON.stringify({schema:"autopilot.dispatch-branch/1",branch:"nr-oldtip2",session_id:"S1",run_id:"r-d",root_run_id:"r-d",created_at:Number(process.argv[1]),base_sha:process.argv[2]})+"\n")' "$NOW" "$AT" >> "$SBX/.git/autopilot/dispatch-branches.jsonl"
 OUT="$(run_close --session S1 --yes)"
-assert_eq "$(sig "$OUT")" "deleted=nr-atbase;archived=nr-newtip,nr-oldtip2;kept=nr-oldtip:ledger_row_stale" "no reflog: tip==base_sha fits; old tip with another base is stale; a fresh tip fits"
+assert_eq "$(sig "$OUT")" "deleted=nr-atbase,nr-newtip,nr-oldtip2;unint=nr-newtip,nr-oldtip2;kept=nr-oldtip:ledger_row_stale" "no reflog: tip==base_sha fits; old tip with another base is stale; a fresh tip fits"
 
 # ---------------------------------------------------------------- checked out between planning and deletion
 build_fixture "$TEST_TMP/repo7"
@@ -181,7 +181,7 @@ OUT="$(LATE_WT="$TEST_TMP/late-wt" node "$LATE/scripts/repo-residue-sweep.js" cl
 assert_eq "$RC" "0" "checked_out_late is a keep rule: exit 0"
 assert_eq "$(jx "$OUT" 'j.kept.find(k=>k.branch==="s1-unint").why')" "checked_out_late" "branch checked out during anchoring is kept"
 assert_eq "$(G rev-parse s1-unint)" "$UNTIP" "late-checked-out branch still exists at its tip"
-assert_eq "$(jx "$OUT" 'j.archived.some(a=>a.branch==="s1-unint")')" "false" "late-checked-out branch is not reported archived"
+assert_eq "$(jx "$OUT" 'j.deleted.some(a=>a.branch==="s1-unint")')" "false" "late-checked-out branch is not reported deleted"
 LM="$(sed -E "s/if \(listWorktrees\(mainPath\)\.some\(\(w\) => w\.branch === b\.branch\)\) \{/if (false) {/" "$SCRIPT")"
 rm "$LATE/scripts/repo-residue-sweep.js"; printf '%s\n' "$LM" > "$LATE/scripts/repo-residue-sweep.js"
 cmp -s "$SCRIPT" "$LATE/scripts/repo-residue-sweep.js" && fail "late-checkout mutation did not apply"
@@ -192,7 +192,7 @@ assert_neq "$(jx "$OUTM" 'j.kept.find(k=>k.branch==="s1-unint")?j.kept.find(k=>k
 # ---------------------------------------------------------------- no ledger at all
 mkdir -p "$TEST_TMP/repo4"; SBX="$TEST_TMP/repo4"; G init -q -b develop; G commit -q --allow-empty -m base; BASE="$(G rev-parse HEAD)"; ahead lone
 OUT="$(run_close --session S1 --yes)"; assert_eq "$?" "0" "no ledger: exit 0"
-assert_eq "$(sig "$OUT")" "deleted=;archived=;kept=" "no ledger: nothing to do"
+assert_eq "$(sig "$OUT")" "deleted=;unint=;kept=" "no ledger: nothing to do"
 G rev-parse --verify -q refs/heads/lone >/dev/null && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "no ledger: branch untouched"
 
 # ---------------------------------------------------------------- compaction under reap --auto
@@ -242,5 +242,17 @@ M2="$(mutate checkedout "s/if \(checkedOut\.has\(name\)\) \{ keep\('checked_out'
 assert_neq "$(sig "$M2")" "$EXPECT" "mutant: checked-out guard removed -> outcome differs"
 M3="$(mutate lease "s/ \|\| w\.lease_expired === false\)\) \{ keep/ || false)) { keep/")"
 assert_neq "$(sig "$M3")" "$EXPECT" "mutant: lease-pointer guard weakened -> outcome differs"
+
+# no-archive + recovery line: a mutant that archives again, and one that drops the stderr line
+mutate_run() { # <label> <sed expr> : like mutate, but keeps stderr in $MERR and leaves the fixture for inspection
+  rm -f "$MUT/scripts/repo-residue-sweep.js"; sed -E "$2" "$SCRIPT" > "$MUT/scripts/repo-residue-sweep.js"
+  cmp -s "$SCRIPT" "$MUT/scripts/repo-residue-sweep.js" && fail "mutation '$1' did not apply"
+  build_fixture "$TEST_TMP/mrepo-$1"
+  MERR="$(CS_SCRIPT="$MUT/scripts/repo-residue-sweep.js" run_close --session S1 --yes 2>&1 >/dev/null)"
+}
+mutate_run noarchive "s|const integrated = b.class === 'integrated';|const integrated = b.class === 'integrated'; if (!integrated) git(mainPath, ['update-ref', 'refs/archive/mut/' + b.branch, b.tip]);|"
+assert_neq "$(G for-each-ref refs/archive | wc -l | tr -d ' ')" "0" "mutant: close-session archives again -> the no-refs/archive assertion would fail"
+mutate_run norecovery "s|if \(!integrated\) process\.stderr\.write\([^;]*;||"
+assert_not_contains "$MERR" "git branch s1-unint" "mutant: recovery line removed -> stderr lacks it"
 
 finalize_test

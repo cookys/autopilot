@@ -33,9 +33,10 @@
         "additionalProperties": false,
         "required": ["kind", "class", "age_days", "bytes", "reason", "command"],
         "properties": {
-          "kind": { "enum": ["worktree", "branch"] },
+          "kind": { "enum": ["worktree", "branch", "archive-ref"] },
           "path": { "type": "string", "minLength": 1 },
           "branch": { "type": "string", "minLength": 1 },
+          "ref": { "type": "string", "minLength": 1 },
           "class": { "type": "string", "minLength": 1 },
           "age_days": { "type": ["number", "null"] },
           "bytes": { "type": ["integer", "null"], "minimum": 0 },

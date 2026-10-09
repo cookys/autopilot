@@ -140,6 +140,7 @@ type World = {
   panes: string[]
   opens: { id: string; title?: string; focus?: true; closeOnEscape?: true }[]
   panesThrow: boolean // $.ui.panes() rejects (the engine cannot list panes)
+  panesGate: Promise<void> | null // $.ui.panes() does not answer until this settles
   openGate: Promise<void> | null // $.ui.open does not resolve (and the pane is not listed) until this settles
   writes: string[]
   reads: string[]
@@ -149,7 +150,7 @@ type World = {
 
 // Registers the bottom hooks (what the engine would answer) for one test.
 function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A): World {
-  const w: World = { files, sid: { value: sid }, cwdReal: { value: CWD }, toasts: [], panes: [], opens: [], panesThrow: false, openGate: null, writes: [], reads: [], lists: [], clock: undefined as never }
+  const w: World = { files, sid: { value: sid }, cwdReal: { value: CWD }, toasts: [], panes: [], opens: [], panesThrow: false, panesGate: null, openGate: null, writes: [], reads: [], lists: [], clock: undefined as never }
   w.clock = mock.clock(on, { now: nowMs })
   mock.env(on, { HOME })
   on('fs.read', ($, e) => {
@@ -191,7 +192,7 @@ function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A): World {
     return { value: { isPlaced: true } }
   })
   on('ui.close', ($, e) => { w.panes = w.panes.filter(id => id !== e.id); return { value: undefined } })
-  on('ui.panes', () => { if (w.panesThrow) throw new Error('engine cannot list panes'); return { value: w.panes.map(id => ({ id, title: 'Autopilot', isShown: true, isFocused: false, isPlaced: true })) } })
+  on('ui.panes', async () => { if (w.panesGate !== null) await w.panesGate; if (w.panesThrow) throw new Error('engine cannot list panes'); return { value: w.panes.map(id => ({ id, title: 'Autopilot', isShown: true, isFocused: false, isPlaced: true })) } })
   return w
 }
 
@@ -1999,6 +2000,13 @@ function expectThemeOnly(tree: Drawn) {
 }
 const joined = (texts: string[]) => texts.join('')
 
+async function shownTabOf($: any, surface: any) {
+  const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+  const tab = (await pane.findAll({ type: 'Button' }) as Drawn[]).find(b => b.props?.autoFocus === true)?.props?.key
+  await pane.unmount()
+  return tab
+}
+
 for (const surface of SURFACES) {
   test('P7 band: one line; the rich fixture draws every slot at 209 columns, in priority order (' + surface + ')', async ($, on) => {
     world(on, richWorld())
@@ -2159,6 +2167,51 @@ for (const surface of SURFACES) {
     const tab = (await pane.findAll({ type: 'Button' }) as Drawn[]).find(b => b.props?.autoFocus === true)?.props?.key
     await pane.unmount()
     expect(tab).toBe('now') // Legend (first press) then Now (second press)
+  })
+
+  test('P7 band: a second press while $.ui.panes() is still pending moves on to the next tab, not Legend (' + surface + ')', async ($, on) => {
+    const w = world(on, richWorld())
+    await start($, surface)
+    let release: () => void = () => {}
+    w.panesGate = new Promise<void>(r => { release = r })
+    const a = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    const pa = a.press({ key: 'info' })
+    const b = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    const pb = b.press({ key: 'info' })
+    const c = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    const pc = c.press({ key: 'info' })
+    await new Promise(r => setTimeout(r, 20))
+    release()
+    await Promise.all([pa, pb, pc])
+    await a.unmount(); await b.unmount(); await c.unmount()
+    expect(await shownTabOf($, surface)).toBe('graph') // closed -> Legend, then Now, then Graph
+  })
+
+  test('P7 band: a session.start during a pending press does not break later double presses (' + surface + ')', async ($, on) => {
+    const w = world(on, richWorld())
+    await start($, surface)
+    let release: () => void = () => {}
+    w.openGate = new Promise<void>(r => { release = r })
+    const a = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    const pa = a.press({ key: 'info' }) // parked on the open gate
+    await new Promise(r => setTimeout(r, 20))
+    await start($, surface) // session.start resets the press state while that press is in flight
+    release()
+    await pa
+    await a.unmount()
+    w.openGate = null
+    w.panes = [] // the person closed it
+    let release2: () => void = () => {}
+    w.panesGate = new Promise<void>(r => { release2 = r })
+    const b = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    const pb = b.press({ key: 'info' })
+    const c = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    const pc = c.press({ key: 'info' })
+    await new Promise(r => setTimeout(r, 20))
+    release2()
+    await Promise.all([pb, pc])
+    await b.unmount(); await c.unmount()
+    expect(await shownTabOf($, surface)).toBe('now') // Legend, then Now
   })
 
   test('P7 band: a non-ok snapshot is one dim line `<reason> │ ⓘ`, the reason cut to fit (' + surface + ')', async ($, on) => {

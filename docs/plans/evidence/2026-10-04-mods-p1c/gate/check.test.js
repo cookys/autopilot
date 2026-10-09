@@ -630,3 +630,8 @@ test('GATEFIX capture.sh settle: GATE_BAND_WAIT_S=0 captures once and never runs
   assert.strictEqual(r.p.status, 0, r.p.stderr); assert.strictEqual(r.calls, 0); assert.strictEqual(r.caps.length, 1);
   assert.strictEqual(r.kept.settle_attempt, 1);
 });
+test('GATEFIX capture.sh settle: a leading zero in the settle knobs is decimal (08 is not an invalid octal)', () => {
+  const r = settleRun(99, { GATE_BAND_WAIT_S: '08', GATE_SETTLE_STEP_S: '09' });
+  assert.strictEqual(r.p.status, 0, r.p.stderr); assert.strictEqual(r.calls, 1); assert.strictEqual(r.caps.length, 1);
+  assert.match(r.p.stderr, /band did not settle within 8s/);
+});

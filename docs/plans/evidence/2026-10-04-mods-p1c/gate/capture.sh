@@ -46,6 +46,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 if [ "${GATE_SETTLE_CHILD:-}" != 1 ]; then
   WAIT_S=${GATE_BAND_WAIT_S:-14}; STEP_S=${GATE_SETTLE_STEP_S:-3}
   case "$WAIT_S$STEP_S" in *[!0-9]*|'') echo "GATE_BAND_WAIT_S / GATE_SETTLE_STEP_S must be whole seconds" >&2; exit 2 ;; esac
+  WAIT_S=$((10#$WAIT_S)); STEP_S=$((10#$STEP_S)) # a leading zero (08) is decimal here, not an invalid octal
   if [ "$WAIT_S" -gt 0 ]; then
     DEADLINE=$(( $(date +%s) + WAIT_S )); ATTEMPT=1
     while :; do

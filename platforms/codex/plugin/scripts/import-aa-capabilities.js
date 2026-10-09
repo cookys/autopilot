@@ -9,6 +9,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const process = require('process');
+const { hasGitMarker } = require('./lib/qualification-feed');
 const {
   appendEvidenceRecords,
   readEvidenceRows,
@@ -746,7 +747,7 @@ function nearestGitRoot(target) {
   }
   if (!fs.statSync(current).isDirectory()) current = path.dirname(current);
   while (true) {
-    if (fs.existsSync(path.join(current, '.git'))) return current;
+    if (hasGitMarker(current)) return current;
     const parent = path.dirname(current);
     if (parent === current) return null;
     current = parent;

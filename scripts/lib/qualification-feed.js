@@ -53,12 +53,45 @@ function expandTilde(p) {
   return p;
 }
 
+// True unless `<dir>/.git` is demonstrably not a repository marker. A marker is a gitfile
+// (`gitdir: ...`) or a git dir (has HEAD); an empty `.git` directory is not one: Codex's bubblewrap
+// sandbox leaves empty `.git` mount targets under every writable root (including /tmp) when it does
+// not exit cleanly. Fails closed: only ENOENT/ENOTDIR mean "absent"; any other probe error
+// (EACCES, EPERM, ...) counts as present, because a cache must not land in a repo we cannot see.
+function absent(error) {
+  return error && (error.code === 'ENOENT' || error.code === 'ENOTDIR');
+}
+
+function hasGitMarker(dir) {
+  const marker = path.join(dir, '.git');
+  let st;
+  try {
+    st = fs.statSync(marker);
+  } catch (error) {
+    return !absent(error);
+  }
+  if (st.isDirectory()) {
+    try {
+      fs.statSync(path.join(marker, 'HEAD'));
+      return true;
+    } catch (error) {
+      return !absent(error);
+    }
+  }
+  if (!st.isFile()) return false;
+  try {
+    return fs.readFileSync(marker, 'utf8').startsWith('gitdir:');
+  } catch (error) {
+    return !absent(error);
+  }
+}
+
 // A cache directory inside a git work tree gets committed by accident. This mirrors
 // import-aa-capabilities.js's assertOutsideGit for the same reason.
 function assertOutsideGit(dir, label) {
   let current = path.resolve(dir);
   for (;;) {
-    if (fs.existsSync(path.join(current, '.git'))) {
+    if (hasGitMarker(current)) {
       throw feedError(`${label} must not live inside a git work tree: ${dir}`);
     }
     const parent = path.dirname(current);
@@ -339,5 +372,6 @@ module.exports = {
   writeCache,
   readCurrentManifest,
   defaultCacheDir,
+  hasGitMarker,
   sha256,
 };

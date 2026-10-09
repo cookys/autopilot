@@ -643,6 +643,7 @@ test('refresh rejects an evidence store inside a Git worktree before fetching', 
   const { root, cacheDir } = withTemp(t);
   const worktree = path.join(root, 'tracked');
   fs.mkdirSync(path.join(worktree, '.git'), { recursive: true });
+  fs.writeFileSync(path.join(worktree, '.git', 'HEAD'), 'ref: refs/heads/main\n');
   let called = false;
   await assert.rejects(
     refreshCapabilities({
@@ -1158,6 +1159,7 @@ test('cache destination is re-resolved after fetch to catch ancestor swaps', asy
   const tracked = path.join(root, 'tracked');
   fs.mkdirSync(parent);
   fs.mkdirSync(path.join(tracked, '.git'), { recursive: true });
+  fs.writeFileSync(path.join(tracked, '.git', 'HEAD'), 'ref: refs/heads/main\n');
   const cacheDir = path.join(parent, 'cache');
   await assert.rejects(
     refreshCapabilities({
@@ -1177,4 +1179,109 @@ test('cache destination is re-resolved after fetch to catch ancestor swaps', asy
     /cache destination changed during refresh/,
   );
   assert.strictEqual(fs.existsSync(path.join(tracked, 'cache')), false);
+});
+
+// A cache directory under a parent whose `.git` is only an empty directory (Codex bubblewrap leaves
+// these mount targets under /tmp) is not inside a worktree; a real repo or a gitfile still is.
+async function cacheRefusal(root, parentSetup) {
+  const parent = path.join(root, 'parent');
+  fs.mkdirSync(parent);
+  parentSetup(parent);
+  try {
+    await refreshCapabilities({
+      apiKey: 'key',
+      cacheDir: path.join(parent, 'cache'),
+      recordEvidence: false,
+      fetchImpl: async () => { throw new Error('fetch-reached'); },
+    });
+  } catch (error) {
+    return /fetch-reached|request failed/.test(error.message) ? null : error.message;
+  }
+  return null;
+}
+
+test('cache directory under an empty .git directory is allowed', async (t) => {
+  const { root } = withTemp(t);
+  const refusal = await cacheRefusal(root, (parent) => fs.mkdirSync(path.join(parent, '.git')));
+  assert.strictEqual(refusal, null);
+});
+
+test('cache directory under a real git repo is still refused', async (t) => {
+  const { root } = withTemp(t);
+  const refusal = await cacheRefusal(root, (parent) => {
+    require('child_process').execFileSync('git', ['init', '-q', parent]);
+  });
+  assert.match(refusal, /outside a Git worktree/);
+});
+
+test('cache directory under a gitfile (linked worktree) is still refused', async (t) => {
+  const { root } = withTemp(t);
+  const refusal = await cacheRefusal(root, (parent) => {
+    fs.writeFileSync(path.join(parent, '.git'), 'gitdir: /elsewhere/.git/worktrees/x\n');
+  });
+  assert.match(refusal, /outside a Git worktree/);
+});
+
+test('cache directory under an unreadable .git directory fails closed', async (t) => {
+  if (typeof process.getuid === 'function' && process.getuid() === 0) {
+    t.skip('root bypasses directory permissions');
+    return;
+  }
+  const { root } = withTemp(t);
+  const git = path.join(root, 'parent', '.git');
+  let refusal;
+  try {
+    refusal = await cacheRefusal(root, (parent) => {
+      fs.mkdirSync(path.join(parent, '.git'));
+      fs.writeFileSync(path.join(parent, '.git', 'HEAD'), 'ref: refs/heads/main\n');
+      fs.chmodSync(path.join(parent, '.git'), 0o000);
+    });
+  } finally {
+    try { fs.chmodSync(git, 0o700); } catch { /* never created */ }
+  }
+  assert.match(refusal, /outside a Git worktree/);
+});
+
+test('evidence store under an empty .git ancestor is allowed, under a real repo refused', async (t) => {
+  const { root, cacheDir } = withTemp(t);
+  const empty = path.join(root, 'empty');
+  fs.mkdirSync(path.join(empty, '.git'), { recursive: true });
+  const sentinel = async () => { throw new Error('fetch-reached'); };
+  await assert.rejects(
+    refreshCapabilities({ apiKey: 'key', cacheDir, store: path.join(empty, 'state'), fetchImpl: sentinel }),
+    /fetch-reached|request failed/,
+  );
+  const real = path.join(root, 'real');
+  fs.mkdirSync(real);
+  require('child_process').execFileSync('git', ['init', '-q', real]);
+  await assert.rejects(
+    refreshCapabilities({ apiKey: 'key', cacheDir, store: path.join(real, 'state'), fetchImpl: sentinel }),
+    /evidence store must be outside a Git worktree/,
+  );
+});
+
+test('qualification-feed writeCache: empty .git allowed; gitfile and real repo refused', (t) => {
+  const { writeCache } = require('./lib/qualification-feed');
+  const { root } = withTemp(t);
+  const parsed = { digest: 'a'.repeat(64), origin: 'test', defaults: [], strikes: [], priors: [] };
+  const attempt = (name, setup) => {
+    const parent = path.join(root, name);
+    fs.mkdirSync(parent);
+    setup(parent);
+    try {
+      writeCache(path.join(parent, 'cache'), parsed, Buffer.from('{}'), '2026-01-01T00:00:00.000Z');
+      return null;
+    } catch (error) {
+      return /git work tree/.test(error.message) ? 'refused' : `other: ${error.message}`;
+    }
+  };
+  assert.strictEqual(attempt('empty', (p) => fs.mkdirSync(path.join(p, '.git'))), null);
+  assert.strictEqual(
+    attempt('gitfile', (p) => fs.writeFileSync(path.join(p, '.git'), 'gitdir: /x/.git/worktrees/y\n')),
+    'refused',
+  );
+  assert.strictEqual(
+    attempt('real', (p) => require('child_process').execFileSync('git', ['init', '-q', p])),
+    'refused',
+  );
 });

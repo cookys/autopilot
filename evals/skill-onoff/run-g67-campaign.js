@@ -14,7 +14,7 @@
 // (0 SHIP · 3 NOT-SHIP · 4 STOP · 5 INSTRUMENT-INVALID · 2 usage).
 //
 // Live preflight (cc runner): `claude --version` must equal the prereg's runner_version_pin and the arm manifests must
-// exist and pass --check-arms (off and on differ only in the four registered skills). Run with the pin dir first on
+// exist and pass --check-arms (off and on differ only in the five registered files). Run with the pin dir first on
 // PATH:  PATH="<runner_pin_path>:$PATH" node evals/skill-onoff/run-g67-campaign.js --results ...
 // --dry-run: prints the cell list (done/todo), the pin status and an estimated cost; spends nothing, needs no packs.
 // --check-arms: spend-free; compares the frozen off/on packs named by the manifests (needs the packs frozen).
@@ -57,19 +57,21 @@ function checkArms() {
   const arm = (a) => JSON.parse(fs.readFileSync(path.join(armsDir, `${a}.json`), 'utf8'));
   const off = arm(P.arms.off);
   const on = arm(P.arms.on);
-  const allowed = new Set(P.allowed_arm_difference.skills);
+  // file-level: the arms may differ ONLY in the registered files (skill-relative path "<skill>/<file>")
+  const allowed = new Set(P.allowed_arm_difference.files);
   const problems = [];
   const differing = [];
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   for (const s of new Set([...Object.keys(off.skills), ...Object.keys(on.skills)])) {
     if (!off.skills[s] || !on.skills[s]) { problems.push(`skill ${s} present in only one arm`); continue; }
-    if (same(packFiles(off.skills[s], manifest), packFiles(on.skills[s], manifest))) { if (allowed.has(s)) problems.push(`skill ${s} is registered as changed but its packs are identical`); continue; }
-    differing.push(s);
-    if (!allowed.has(s)) problems.push(`skill ${s} differs between the arms but is not a registered change`);
+    const fo = packFiles(off.skills[s], manifest);
+    const fn = packFiles(on.skills[s], manifest);
+    for (const f of new Set([...Object.keys(fo), ...Object.keys(fn)])) if (fo[f] !== fn[f]) differing.push(`${s}/${f}`);
   }
-  for (const s of allowed) if (!differing.includes(s) && off.skills[s] && on.skills[s] && !problems.some((p) => p.startsWith(`skill ${s} `))) problems.push(`skill ${s} did not differ`);
+  for (const f of differing) if (!allowed.has(f)) problems.push(`${f} differs between the arms but is not a registered change`);
+  for (const f of allowed) if (!differing.includes(f)) problems.push(`${f} is registered as changed but does not differ`);
   const merge = (ids) => Object.assign({}, ...[].concat(ids || []).map((i) => packFiles(i, manifest)));
-  if (!same(merge(off.files), merge(on.files))) problems.push('guidance files packs differ between the arms (only the four registered SKILL.md packs may differ)');
+  if (!same(merge(off.files), merge(on.files))) problems.push('guidance files packs differ between the arms (only the five registered files may differ)');
   if (!same(off.fixture_scripts, on.fixture_scripts)) problems.push('fixture_scripts lists differ between the arms');
   for (const id of off.fixture_scripts || []) packFiles(id, manifest); // must exist
   return { ok: problems.length === 0, differing: differing.sort(), problems };

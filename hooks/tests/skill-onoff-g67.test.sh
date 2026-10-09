@@ -218,6 +218,8 @@ const put = (id, rel, body, mode = 0o644) => {
 put('companions', 'learn/SKILL.md', 'learn\n');
 const skills = ['l4', 'l5', 'l6', 'finish-flow'];
 for (const s of skills) { put(`${s}-off`, 'SKILL.md', `${s} OFF\n`); put(`${s}-on`, 'SKILL.md', `${s} ON\n`); }
+put('l5-off', 'references/hetero-impl-loop.md', 'loop OFF\n'); put('l5-on', 'references/hetero-impl-loop.md', 'loop ON\n');
+put('l5-off', 'references/other.md', 'o\n'); put('l5-on', 'references/other.md', 'o\n');
 put('files-x', 'references/x.md', 'x\n');
 put('fx', 'scripts/x.js', '// x\n');
 put('same', 'SKILL.md', 'same\n');
@@ -234,6 +236,26 @@ rc=0; ONOFF_PACKS_DIR="$PK" node "$BASE/run-g67-campaign.js" --check-arms --arms
 cp -r "$AR" "$TEST_TMP/arms-red2"; node -e 'const fs=require("fs");const p=process.argv[1]+"/on.json";const j=JSON.parse(fs.readFileSync(p));j.skills["finish-flow"]="finish-flow-off";fs.writeFileSync(p,JSON.stringify(j))' "$TEST_TMP/arms-red2"
 rc=0; ONOFF_PACKS_DIR="$PK" node "$BASE/run-g67-campaign.js" --check-arms --arms-dir "$TEST_TMP/arms-red2" >/dev/null || rc=$?
 [ "$rc" = 2 ] || fail "check-arms must reject a vacuous ON arm (rc=$rc)"
+# planted red 2b/2c: l5 packs built from a js helper (fifth registered file unchanged / unregistered file changed)
+mkl5() { # $1 pack id  $2 hetero-impl-loop body  $3 other.md body
+  node - "$PK" "$1" "$2" "$3" <<'NODE'
+const fs=require("fs"),path=require("path"),crypto=require("crypto");
+const [pk,id,loop,other]=process.argv.slice(2);const man=JSON.parse(fs.readFileSync(path.join(pk,"manifest.json")));
+const h=(b)=>crypto.createHash("sha256").update(b).digest("hex");
+const files={"SKILL.md":"l5 ON\n","references/hetero-impl-loop.md":loop+"\n","references/other.md":other+"\n"};
+man.packs[id]={};
+for(const [rel,b] of Object.entries(files)){const f=path.join(pk,id,rel);fs.mkdirSync(path.dirname(f),{recursive:true});fs.writeFileSync(f,b);man.packs[id][`${id}/${rel}`]=h(b);}
+fs.writeFileSync(path.join(pk,"manifest.json"),JSON.stringify(man));
+NODE
+}
+mkl5 l5-same "loop OFF" "o"
+cp -r "$AR" "$TEST_TMP/arms-red2b"; node -e 'const fs=require("fs");const p=process.argv[1]+"/on.json";const j=JSON.parse(fs.readFileSync(p));j.skills.l5="l5-same";fs.writeFileSync(p,JSON.stringify(j))' "$TEST_TMP/arms-red2b"
+rc=0; ONOFF_PACKS_DIR="$PK" node "$BASE/run-g67-campaign.js" --check-arms --arms-dir "$TEST_TMP/arms-red2b" >/dev/null || rc=$?
+[ "$rc" = 2 ] || fail "check-arms must reject an unchanged registered l5 reference (rc=$rc)"
+mkl5 l5-x "loop ON" "CHANGED"
+cp -r "$AR" "$TEST_TMP/arms-red2c"; node -e 'const fs=require("fs");const p=process.argv[1]+"/on.json";const j=JSON.parse(fs.readFileSync(p));j.skills.l5="l5-x";fs.writeFileSync(p,JSON.stringify(j))' "$TEST_TMP/arms-red2c"
+rc=0; ONOFF_PACKS_DIR="$PK" node "$BASE/run-g67-campaign.js" --check-arms --arms-dir "$TEST_TMP/arms-red2c" >/dev/null || rc=$?
+[ "$rc" = 2 ] || fail "check-arms must reject an unregistered differing file inside l5 (rc=$rc)"
 # planted red 3: fixture scripts differ between the arms
 cp -r "$AR" "$TEST_TMP/arms-red3"; node -e 'const fs=require("fs");const p=process.argv[1]+"/on.json";const j=JSON.parse(fs.readFileSync(p));j.fixture_scripts=[];fs.writeFileSync(p,JSON.stringify(j))' "$TEST_TMP/arms-red3"
 rc=0; ONOFF_PACKS_DIR="$PK" node "$BASE/run-g67-campaign.js" --check-arms --arms-dir "$TEST_TMP/arms-red3" >/dev/null || rc=$?

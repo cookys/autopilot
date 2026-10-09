@@ -8,7 +8,7 @@ with new pack ids — there is no rerun-until-green (a rerun of an `infra_fail` 
 
 ## What is being proved
 
-Two guidance changes of branch `guidance-v7` (194e2ecc), each a *mechanism* change (an already-stated step actually
+Two guidance changes of branch `guidance-v7` (194e2ecc; the v7 change set is five files, see Arms), each a *mechanism* change (an already-stated step actually
 happening), not a new demand:
 
 | Id | Text change | Observable |
@@ -24,9 +24,9 @@ happening), not a new demand:
 | `on` | the 16 `*-sg-change-v7` skill packs + `guidance-files-sg-change-v7` (built by `freeze-guidance-arm.js change --suffix v7` after the guidance-v7 merge) + the same two fixture-script packs |
 
 Manifests: `arms/g67/{off,on}.json`. They are hand-written (the stage-graph `change.json` is not reused as-is because the
-fixture packs differ). **The arms differ ONLY in the four SKILL.md packs l4, l5, l6, finish-flow** — `run-g67-campaign.js
---check-arms` byte-compares the frozen packs and a live run refuses to start unless that holds (a v7 freeze that dragged in
-any other guidance edit would otherwise be a silent confound; the 12 other skills, the guidance-files pack and both fixture
+fixture packs differ). **The arms differ ONLY in five files: `l4/SKILL.md`, `l5/SKILL.md`, `l5/references/hetero-impl-loop.md`, `l6/SKILL.md`, `finish-flow/SKILL.md`** (the l5 reference adds the size to the l5 entry and degrade commands) — `run-g67-campaign.js
+--check-arms` byte-compares the frozen packs file by file and a live run refuses to start unless that holds (a v7 freeze that dragged in
+any other guidance edit would otherwise be a silent confound; every other file of every skill pack, the guidance-files pack and both fixture
 packs must be identical across the arms).
 
 ### Fixture scripts — the exact step (G7 needs them)
@@ -138,13 +138,13 @@ The stage-graph v7 run (separate row) must use the same pin so the two rows shar
 (it lives under a session scratchpad in `/tmp`), re-create it as a symlink to a retained `versions/<v>` binary and update both
 rows' pin together — 2.1.295 is the proposed alternative for BOTH, never one of them.
 
-## Preconditions to confirm before freezing (not verifiable without a live cell)
+## Preconditions
 
-1. `CLAUDE_CODE_SESSION_ID` is exported into the Bash tool environment under `claude -p` 2.1.292 with the scratch HOME. The
-   finish-flow row says skip when it is unset; if it is unset the ON arm could legitimately skip and fail for an instrument
-   reason. The g7 extraction keeps the sweep's own JSON (`result_session`) so the first ON cell shows whether the sid was
-   non-empty. Memory notes say the Bash tool env carries it; this suite did not verify it live.
-2. Both `g6-l*` ON cells reach `session-mode.js` through the fixture's `scripts/` (as the stage-graph cells already do) — the
+1. **Confirmed.** `claude -p` on 2.1.292 sets `CLAUDE_CODE_SESSION_ID` in the Bash tool environment: a probe from a scratch dir
+   with the pinned binary printed `SID=[7b8112a2-7a48-4c59-8d0a-976b7bc3c373]` (coordinator, 2026-10-10). So the finish-flow
+   "skip when unset" branch does not apply under this instrument. The g7 extraction still records the sweep's echoed `session`
+   (`result_session`) for review.
+2. (Not verified live.) Both `g6-l*` ON cells reach `session-mode.js` through the fixture's `scripts/` (as the stage-graph cells already do) — the
    skill text says `<plugin>/scripts/…`; the plugin root has no `session-mode.js`. The marker accepts any path to the script.
 
 ## Run

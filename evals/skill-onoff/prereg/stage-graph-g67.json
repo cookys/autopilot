@@ -26,13 +26,14 @@
     }
   },
   "allowed_arm_difference": {
-    "skills": [
-      "l4",
-      "l5",
-      "l6",
-      "finish-flow"
+    "files": [
+      "finish-flow/SKILL.md",
+      "l4/SKILL.md",
+      "l5/SKILL.md",
+      "l5/references/hetero-impl-loop.md",
+      "l6/SKILL.md"
     ],
-    "note": "off and on must differ ONLY in these four SKILL.md packs; run-g67-campaign.js --check-arms enforces it on the frozen packs (the 12 other skills, the guidance-files pack and both fixture-script packs must be byte-identical across the arms)"
+    "note": "v7 change set is FIVE files (four SKILL.md + l5/references/hetero-impl-loop.md, which adds the size to the l5 entry and degrade commands); off and on must differ ONLY in these, enforced file-by-file by run-g67-campaign.js --check-arms on the frozen packs"
   },
   "fixture_scripts_freeze": {
     "pack": "fixture-scripts-g67",

@@ -340,6 +340,28 @@ assert_eq "$(jx "$OUT5" 'j.kept.find(k=>k.branch==="hands/coll").why')" "archive
 assert_eq "$(G rev-parse "refs/archive/$(today)/hands/coll")" "$BASE" "branch collision: existing ref not overwritten"
 assert_contains "$(jx "$OUT5" 'j.needs_human.find(e=>e.branch==="hands/coll").command')" "'' && git" "needs_human branch command is create-only"
 
+# (4) archive refs older than residue.archive_remind_days (default 90) are listed, never deleted
+D100="$(date -u -d '-100 days' +%F)"; D30="$(date -u -d '-30 days' +%F)"
+G update-ref "refs/archive/$D100/hands/ancient" "$BASE"; G update-ref "refs/archive/$D100/detached/wt-ancient-abc" "$BASE"; G update-ref "refs/archive/$D30/hands/recent" "$BASE"
+OUT6="$(node "$SCRIPT" reap --repo "$SBX" --auto --yes)"
+assert_eq "$(jx "$OUT6" 'j.needs_human.filter(e=>e.kind==="archive-ref").map(e=>e.ref).sort().join(",")')" "refs/archive/$D100/detached/wt-ancient-abc,refs/archive/$D100/hands/ancient" "reap --auto: only archive refs older than 90 days are listed"
+assert_eq "$(jx "$OUT6" 'j.needs_human.find(e=>e.ref==="refs/archive/'"$D100"'/hands/ancient").class+"|"+j.needs_human.find(e=>e.ref==="refs/archive/'"$D100"'/hands/ancient").age_days')" "archive-old|100" "archive-ref class + age"
+assert_eq "$(jx "$OUT6" 'j.needs_human.find(e=>e.ref==="refs/archive/'"$D100"'/hands/ancient").command')" "git -C '$SBX' update-ref -d 'refs/archive/$D100/hands/ancient' $BASE" "archive-ref exact command"
+assert_eq "$(G rev-parse "refs/archive/$D100/hands/ancient")" "$BASE" "old archive ref is never deleted by reap --auto"
+SCAN6="$(node "$SCRIPT" scan --repo "$SBX")"
+assert_contains "$(jx "$SCAN6" 'j.needs_human.map(e=>e.ref||"").join(" ")')" "refs/archive/$D100/hands/ancient" "scan lists the old archive ref too"
+assert_not_contains "$(jx "$SCAN6" 'j.needs_human.map(e=>e.ref||"").join(" ")')" "$D30/hands/recent" "scan: a 30-day archive ref is not listed"
+OUT7="$(AUTOPILOT_RESIDUE_ARCHIVE_REMIND_DAYS=20 node "$SCRIPT" scan --repo "$SBX")"
+assert_contains "$(jx "$OUT7" 'j.needs_human.map(e=>e.ref||"").join(" ")')" "$D30/hands/recent" "residue.archive_remind_days (env) moves the threshold"
+bash -c "$(jx "$OUT6" 'j.needs_human.find(e=>e.ref==="refs/archive/'"$D100"'/hands/ancient").command')" && ! G rev-parse --verify -q "refs/archive/$D100/hands/ancient" >/dev/null && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "the printed command deletes the ref"
+# mutant: the age gate removed -> a 30-day ref is listed under the default threshold
+MUTB="$TEST_TMP/mutb"; mkdir -p "$MUTB/scripts"; ln -s "$REPO_ROOT/src" "$MUTB/src"
+for f in "$REPO_ROOT"/scripts/*; do ln -s "$f" "$MUTB/scripts/$(basename "$f")"; done
+rm "$MUTB/scripts/repo-residue-sweep.js"; sed -E 's/if \(age < remind\) continue;//' "$SCRIPT" > "$MUTB/scripts/repo-residue-sweep.js"
+cmp -s "$SCRIPT" "$MUTB/scripts/repo-residue-sweep.js" && fail "archive-age mutation did not apply"
+MB="$(node "$MUTB/scripts/repo-residue-sweep.js" scan --repo "$SBX")"
+assert_contains "$(jx "$MB" 'j.needs_human.map(e=>e.ref||"").join(" ")')" "$D30/hands/recent" "mutant: age gate removed -> the 30-day ref is listed (default-threshold assertion would fail)"
+
 kill "$SESS_PID" 2>/dev/null; wait "$SESS_PID" 2>/dev/null
 
 finalize_test

@@ -101,14 +101,15 @@
 //         (campaign_signal_unavailable); a row's root_run_id/run_id (or the marker's) in an unresolved
 //         campaign/Mission (unresolved_campaign);
 //   integrated (same rule as the sweep) -> pin-evidence-anchors apply, then `git update-ref -d` with the expected tip (compare-and-swap);
-//   unintegrated -> `git update-ref refs/archive/<UTC date>/<branch> <tip> ''` (create-only), verify, pin
-//         anchors, then delete with `git update-ref -d refs/heads/<branch> <tip>` (compare-and-swap). A colliding ref at another sha keeps the branch (archive_ref_failed); a
-//         ref already at this exact tip counts as this tip's archive.
-// Output {schema:"autopilot.close-session/1", session, dry_run, deleted:[{branch,tip}],
-// archived:[{branch,tip,ref}], kept:[{branch,why}]}. Exit 0 = nothing left behind except by a keep rule;
-// 1 = something it was asked to remove stayed (archive_ref_failed, evidence_anchoring_failed, tip_changed,
-// a failed delete, integration_unverifiable); a branch checked out between planning and deletion is kept as checked_out_late; 2 = usage / ledger unreadable. Restore an archive with
-// `git branch <name> refs/archive/<date>/<name>`.
+//   unintegrated -> abandoned work (finish-flow close-out ends the round; handoff does not run close-out):
+//         pin anchors, then DELETE directly with `git update-ref -d refs/heads/<branch> <tip>` (compare-and-swap);
+//         NO refs/archive ref is written. Recovery: for each unintegrated delete one stderr line
+//         `git branch <branch> <tip>` works until git gc prunes the unreachable commits (~2 weeks by default).
+//         (`reap --auto`'s 14-day path still archives: those are sessions that never finished.)
+// Output {schema:"autopilot.close-session/1", session, dry_run, deleted:[{branch,tip,integrated:true|false}],
+// kept:[{branch,why}]} (no `archived` list). Exit 0 = nothing left behind except by a keep rule;
+// 1 = something it was asked to remove stayed (evidence_anchoring_failed, tip_changed,
+// a failed delete, integration_unverifiable); a branch checked out between planning and deletion is kept as checked_out_late; 2 = usage / ledger unreadable.
 // LEDGER COMPACTION: `reap --auto` drops ledger rows whose branch no longer exists (unparseable lines are
 // kept), rewriting atomically under the same flock the rails append under; failure is a note, never fatal.
 //
@@ -701,6 +702,23 @@ function computeNeedsHuman(rows, branches, ctx) {
     const ref = `refs/archive/${utcDate(ctx.nowMs)}/${b.branch}`;
     list.push({ kind: 'branch', branch: b.branch, class: b.class, age_days: age, bytes: null, reason: dispatch ? 'archive_failed' : 'unintegrated_non_dispatch', command: `git -C ${shq(ctx.mainPath)} update-ref ${shq(ref)} ${b.tip} '' && git -C ${shq(ctx.mainPath)} branch -D ${shq(b.branch)}` });
   }
+  // refs/archive/<YYYY-MM-DD>/... older than residue.archive_remind_days: remind only, never delete (the
+  // archive is the only copy of that work). Age comes from the date in the ref path.
+  const remind = ctx.cfg.archive_remind_days;
+  if (Number.isFinite(remind) && remind > 0) {
+    const fe = git(ctx.mainPath, ['for-each-ref', '--format=%(refname) %(objectname)', 'refs/archive/']);
+    if (fe.ok) {
+      for (const line of fe.out.split('\n')) {
+        const m = /^(refs\/archive\/(\d{4}-\d{2}-\d{2})\/\S+) ([0-9a-f]{40,64})$/.exec(line.trim());
+        if (!m) continue;
+        const t = Date.parse(`${m[2]}T00:00:00Z`);
+        if (!Number.isFinite(t)) continue;
+        const age = Math.floor((ctx.nowMs - t) / 86400000);
+        if (age < remind) continue;
+        list.push({ kind: 'archive-ref', ref: m[1], class: 'archive-old', age_days: age, bytes: null, reason: `archive ref older than ${remind} days`, command: `git -C ${shq(ctx.mainPath)} update-ref -d ${shq(m[1])} ${m[3]}` });
+      }
+    }
+  }
   return list;
 }
 
@@ -959,7 +977,7 @@ function ledgerRowFitsBranch(repo, b, createdAt, baseSha) {
 
 function runCloseSession(o, mainPath, integrationSha, integrationBranch, common) {
   const nowMs = Date.now();
-  const report = { schema: 'autopilot.close-session/1', session: o.session, dry_run: !o.yes, deleted: [], archived: [], kept: [] };
+  const report = { schema: 'autopilot.close-session/1', session: o.session, dry_run: !o.yes, deleted: [], kept: [] };
   const rows = readLedger(common);
   if (rows === null) { process.stderr.write(`repo-residue-sweep: dispatch-branch ledger unreadable: ${ledgerPath(common)}\n`); return 2; }
   const mine = ownedBranches(rows, o.session);
@@ -979,7 +997,7 @@ function runCloseSession(o, mainPath, integrationSha, integrationBranch, common)
     pointers.get(w.marker_strict.branch).push(w);
   }
 
-  const planDelete = []; const planArchive = [];
+  const planDelete = [];
   for (const name of [...mine.keys()].sort()) {
     const b = byName.get(name);
     if (!b) continue; // already gone
@@ -996,29 +1014,18 @@ function runCloseSession(o, mainPath, integrationSha, integrationBranch, common)
     for (const r of mine.get(name)) { if (r.root_run_id) ids.push(r.root_run_id); if (r.run_id) ids.push(r.run_id); }
     for (const w of ptrs) ids.push(w.marker_strict.root_run_id);
     if (ids.some((id) => sig.unresolved.has(id)) || [...sig.unresolved].some((id) => id.length >= 8 && name.includes(id))) { keep('unresolved_campaign'); continue; }
-    if (b.class === 'integrated') planDelete.push(b);
-    else if (b.class === 'unintegrated') planArchive.push(b);
+    if (b.class === 'integrated' || b.class === 'unintegrated') planDelete.push(b);
     else report.kept.push({ branch: name, why: 'integration_unverifiable', failed: true });
   }
 
   if (!o.yes) {
-    for (const b of planDelete) report.deleted.push({ branch: b.branch, tip: b.tip });
-    for (const b of planArchive) report.archived.push({ branch: b.branch, tip: b.tip, ref: `refs/archive/${utcDate(nowMs)}/${b.branch}` });
+    for (const b of planDelete) report.deleted.push({ branch: b.branch, tip: b.tip, integrated: b.class === 'integrated' });
     writeStdout(`${JSON.stringify(report)}\n`);
     return 0;
   }
 
-  // archive first (create-only, each verified), then one anchor pass over everything to delete, then delete
-  const toDelete = planDelete.map((b) => ({ b, ref: null }));
-  for (const b of planArchive) {
-    const ref = `refs/archive/${utcDate(nowMs)}/${b.branch}`;
-    const cur = git(mainPath, ['rev-parse', '--verify', '--quiet', ref]);
-    let ok = cur.ok && cur.out.trim() === b.tip; // an archive ref already at this tip is this tip's archive
-    if (!ok && !cur.ok) ok = git(mainPath, ['update-ref', ref, b.tip, '']).ok; // '' = create-only
-    const verify = ok ? git(mainPath, ['rev-parse', '--verify', `${ref}^{commit}`]) : null;
-    if (verify && verify.ok && verify.out.trim() === b.tip) toDelete.push({ b, ref });
-    else report.kept.push({ branch: b.branch, why: 'archive_ref_failed', failed: true });
-  }
+  // one anchor pass over everything to delete, then delete (no archive ref: owner ruling 2026-10-10)
+  const toDelete = planDelete.map((b) => ({ b }));
   if (toDelete.length > 0) {
     const args = [path.join(__dirname, 'pin-evidence-anchors.js'), 'apply', '--repo-root', mainPath, '--json'];
     for (const { b } of toDelete) args.push('--exclude-ref', `refs/heads/${b.branch}`);
@@ -1026,7 +1033,7 @@ function runCloseSession(o, mainPath, integrationSha, integrationBranch, common)
     if (r.status !== 0) {
       for (const { b } of toDelete) report.kept.push({ branch: b.branch, why: 'evidence_anchoring_failed', failed: true });
     } else {
-      for (const { b, ref } of toDelete) {
+      for (const { b } of toDelete) {
         const nowTip = git(mainPath, ['rev-parse', '--verify', '--quiet', `refs/heads/${b.branch}`]);
         if (!nowTip.ok || nowTip.out.trim() !== b.tip) { report.kept.push({ branch: b.branch, why: 'tip_changed', failed: true }); continue; }
         // anchoring took time: a worktree may have checked the branch out meanwhile
@@ -1034,8 +1041,9 @@ function runCloseSession(o, mainPath, integrationSha, integrationBranch, common)
         // compare-and-swap: refuses if the branch moved since classification
         const d = git(mainPath, ['update-ref', '-d', `refs/heads/${b.branch}`, b.tip]);
         if (!d.ok) { report.kept.push({ branch: b.branch, why: d.err.trim().slice(0, 200) || 'branch_delete_failed', failed: true }); continue; }
-        if (ref) report.archived.push({ branch: b.branch, tip: b.tip, ref });
-        else report.deleted.push({ branch: b.branch, tip: b.tip });
+        const integrated = b.class === 'integrated';
+        report.deleted.push({ branch: b.branch, tip: b.tip, integrated });
+        if (!integrated) process.stderr.write(`git branch ${b.branch} ${b.tip}\n`);
       }
     }
   }

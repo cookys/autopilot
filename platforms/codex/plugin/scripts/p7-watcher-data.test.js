@@ -357,6 +357,14 @@ test('R4 residue: an entry the person resolved after the last auto run disappear
   } finally { ctx.cleanup(); }
 });
 
+test('R4 residue: an old archive-ref (kind archive-ref, class archive-old) is counted and published, schema-valid', () => {
+  const ref = 'refs/archive/2026-06-01/hands/x';
+  const fact = buildResidueFact({ key: 'k', report: { worktrees: [], needs_human: [{ kind: 'archive-ref', ref, class: 'archive-old', age_days: 100, bytes: null, reason: 'archive ref older than 90 days', command: `git update-ref -d ${ref} abc` }, { kind: 'archive-ref', class: 'archive-old', age_days: 1, bytes: null, reason: null, command: 'x' }] }, atMs: 0, auto: null });
+  assert.equal(fact.needs_human_count, 1, 'the ref-less entry is dropped, the real one counts');
+  assert.equal(fact.needs_human[0].ref, ref);
+  assert.equal(validateJsonSchema(schemaOf('residue.schema.json'), fact).valid, true);
+});
+
 test('R4 residue: needs_human rows are capped at 20 (the count keeps the true total)', () => {
   const many = Array.from({ length: 30 }, (_, i) => ({ kind: 'branch', branch: `b${i}`, class: 'unintegrated', age_days: 15, bytes: null, reason: null, command: `git branch -D b${i}` }));
   const fact = buildResidueFact({ key: 'k', report: { worktrees: [], needs_human: many }, atMs: 0, auto: null });

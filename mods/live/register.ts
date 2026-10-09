@@ -31,7 +31,7 @@ import type { AdvisoryTracker } from './advisories'
 import { Band } from './band'
 import { Pane } from './pane'
 import {
-  acceptanceToast, bandLine1, bandView, buildSections, checkEnvelope, commonDirOf, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
+  acceptanceToast, autoResidueCount, bandLine1, bandView, buildSections, checkEnvelope, commonDirOf, commonDirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
   headerText, hhmm, projectName as projectNameOf, isKey, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
   readForeman, readLoadSource, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
   spendOf, startMsOf, STATE_TEXT, POINTER_SCHEMA, NO_DETAIL, usd,
@@ -199,6 +199,26 @@ async function fuseModeOf($: EngineInterface, autopilotHome: string): Promise<st
   return cf !== null && (cf.mode === 'block' || cf.mode === 'warn' || cf.mode === 'off') ? cf.mode : 'warn'
 }
 
+// No watcher scope for this cwd (a repo that was never onboarded): the residue reminder still has to reach the person, so read
+// `reap --auto`'s own result straight from the repo. The mod cannot run git, so it walks up from the cwd to the first `.git`: a
+// directory holds the file directly, a `.git` file (a linked worktree) names the common dir. Absent / foreign = 0.
+const MAX_GIT_WALK = 16
+async function orphanResidueCount($: EngineInterface): Promise<number> {
+  try {
+    let dir = await $.session.cwd()
+    for (let i = 0; i < MAX_GIT_WALK && dir !== ''; i++) {
+      const direct = await readText($, dir + '/.git/autopilot-residue-auto.json')
+      if (direct !== null) return autoResidueCount(direct)
+      const common = commonDirOfGitFile(await readText($, dir + '/.git'), dir)
+      if (common !== null) return autoResidueCount(await readText($, common + '/autopilot-residue-auto.json'))
+      const cut = dir.lastIndexOf('/')
+      if (cut <= 0) break
+      dir = dir.slice(0, cut)
+    }
+  } catch (_e) { /* no cwd / unreadable: no reminder */ }
+  return 0
+}
+
 async function buildSnapshot($: EngineInterface, nowMs: number): Promise<{ snap: LiveSnapshot; counts: Counts | null; acceptance: string | null }> {
   const none = (snap: LiveSnapshot) => ({ snap, counts: null, acceptance: null })
   const home = await $.env.get('HOME')
@@ -214,7 +234,10 @@ async function buildSnapshot($: EngineInterface, nowMs: number): Promise<{ snap:
 
   const sid = await $.session.id()
   const scope = await resolveScope($, autopilotHome, liveBase, sid, nowMs)
-  if (scope === null) return none(plain('no-project', STATE_TEXT.noProject))
+  if (scope === null) {
+    const wt = await orphanResidueCount($)
+    return none(plain('no-project', wt > 0 ? STATE_TEXT.noProjectWt(wt) : STATE_TEXT.noProject))
+  }
 
   // The root set: the marker root first, then the campaign roots (oldest -> newest). Each root is read like the marker root alone
   // used to be; a root whose envelope is missing / stale / malformed is left out and never hides the others.

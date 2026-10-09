@@ -73,7 +73,9 @@ The emitted totals are `needs_human_count` and `needs_human_bytes`.
 
 `reap --auto` writes its result to `<git-common-dir>/autopilot-residue-auto.json` (`{schema: "autopilot.residue-auto/1", ran_at, removed: [...], archived: [...], needs_human: [...], needs_human_count, needs_human_bytes}`). The watcher reads this file.
 
-Config, through the existing resolver chain (project, then user `~/.autopilot/config.json`, then defaults): `residue: { auto_reap: true, lease_hours: 72, archive_branch_days: 14, branch_prefixes: [] }`.
+Config, through the existing resolver chain (project, then user `~/.autopilot/config.json`, then defaults): `residue: { auto_reap: true, lease_hours: 72, archive_branch_days: 14, archive_remind_days: 90, branch_prefixes: [] }`.
+
+**Archive-ref aging (owner ruling, 2026-10-10).** `reap --auto` and `scan` list every `refs/archive/<YYYY-MM-DD>/...` ref whose path date is older than `residue.archive_remind_days` (default 90; env `AUTOPILOT_RESIDUE_ARCHIVE_REMIND_DAYS`) in `needs_human` as `{kind: "archive-ref", ref, class: "archive-old", age_days, bytes: null, reason, command: "git -C <repo> update-ref -d <ref> <sha>"}`. They are never deleted automatically: the archive may be the only copy of that work. The watcher publishes the entry with `ref` instead of `path`/`branch` (`schemas/residue.schema.json` kind enum gains `archive-ref`) and it counts toward `wt N`.
 
 ## R3 — SessionStart hook `hooks/residue-auto-reap.js` (default-on)
 
@@ -109,6 +111,8 @@ Config, through the existing resolver chain (project, then user `~/.autopilot/co
 - `auto_archived_count`.
 
 `schemas/residue.schema.json` gains these additive fields; the schema id does not change. The watcher must not start `du` itself.
+
+No-project reminder (owner ruling, 2026-10-10): the watcher starts only in onboarded repos, so a repo without autopilot config would never show `wt N`. When the live mod finds no scope for its cwd, it reads `needs_human_count` straight from `<git-common-dir>/autopilot-residue-auto.json` and, when it is above 0, the band's no-project line and the Now tab header read `no project · wt N · run: ...`. The mod cannot run git: it walks up from the cwd to the first `.git`. A `.git` directory holds the file directly; a `.git` file (a linked worktree) names `<common>/worktrees/<name>`, and the common dir is the part before `/worktrees/`. A missing, malformed or foreign-schema file reads as 0. Tests: `mods/live/live.test.ts` ("no project still shows wt N").
 
 Band hygiene slot: `wt N` now shows `needs_human_count`, the residue a person must act on. It is hidden when that count is 0. The owner's 2026-10-09 answer supersedes the P7 "reapable only" ruling: reapable residue is now cleared automatically within 24 h, so a reapable count would tell the user nothing. Colour and theme key are unchanged from P7.
 
@@ -146,7 +150,7 @@ Recorded after hands A and B merged; each is accepted as shipped and supersedes 
 
 ## Session close-out (alpha.4)
 
-Owner ruling, 2026-10-09: at close-out, a session's merged dispatch branches are deleted and its unintegrated ones are archived (`refs/archive/`, create-only) and then deleted, instead of waiting `archive_branch_days`. Mechanism only; the finish-flow text that calls it rides the next guidance eval.
+Owner ruling, 2026-10-09: at close-out, a session's merged dispatch branches are deleted and its unintegrated ones are deleted directly, instead of waiting `archive_branch_days`. Owner ruling, 2026-10-10 (supersedes the archive-then-delete half): at finish-flow close-out the round is over, and handoff is a different thing that does not run close-out, so a session's unintegrated dispatch branches are abandoned work and get no `refs/archive` ref. Mechanism only; the finish-flow text that calls it rides the next guidance eval.
 
 **Branch-to-session ledger.** `dispatch-hetero.sh` and `dispatch-foreman.sh` append one JSON line when they create a branch (`scripts/lib/dispatch-branch-ledger.sh`) to `<git-common-dir>/autopilot/dispatch-branches.jsonl`: `{schema:"autopilot.dispatch-branch/1", branch, session_id, run_id, root_run_id, created_at, base_sha}`. `session_id` is `$CLAUDE_CODE_SESSION_ID`, else null; `AUTOPILOT_SESSION_ID` is never read. The append runs under `flock -x` on `<ledger>.lock` and is fail-open: a failure prints one stderr line and the dispatch continues. A reused worktree appends nothing (its branch already has a row).
 
@@ -155,10 +159,10 @@ Owner ruling, 2026-10-09: at close-out, a session's merged dispatch branches are
 **Command.** `repo-residue-sweep.js close-session --session <sid> [--yes] [--repo <dir>] [--integration-ref <ref>] [--json]`. Without `--yes` it prints the plan and exits 0. For each ledger-owned local branch that still exists (branches without a ledger row are never touched; no age floor):
 - keep, with the reason listed: the integration ref; checked out in any worktree; pointed at by a marker worktree that is live, in use (process cwd, or `/proc` unknowable) or under an unexpired lease; campaign signal unreliable (`campaign_signal_unavailable`); a row's or marker's root/run id in an unresolved campaign or Mission (`unresolved_campaign`);
 - integrated: `pin-evidence-anchors.js apply`, then delete (`update-ref -d`, as above);
-- unintegrated: `git update-ref refs/archive/<UTC date>/<branch> <tip> ''` (create-only), verify, pin anchors, then delete. A colliding ref at a different sha keeps the branch with `archive_ref_failed`.
+- unintegrated: pin anchors, then delete with the same compare-and-swap `update-ref -d`. No archive ref is written. For each such delete one recovery line goes to stderr: `git branch <branch> <tip>`. It works until `git gc` prunes the now-unreachable commits (about 2 weeks by default). `reap --auto`'s 14-day path still archives, because those are branches of sessions that never finished.
 
-Output: `{schema:"autopilot.close-session/1", session, dry_run, deleted:[{branch,tip}], archived:[{branch,tip,ref}], kept:[{branch,why}]}`. Exit 0 when nothing it was asked to remove is left behind except by a keep rule; 1 when something stayed for another reason (`archive_ref_failed`, `evidence_anchoring_failed`, `tip_changed`, a failed delete, `integration_unverifiable`); 2 for usage or an unreadable ledger.
+Output: `{schema:"autopilot.close-session/1", session, dry_run, deleted:[{branch,tip,integrated:true|false}], kept:[{branch,why}]}`; there is no `archived` list. Exit 0 when nothing it was asked to remove is left behind except by a keep rule; 1 when something stayed for another reason (`evidence_anchoring_failed`, `tip_changed`, a failed delete, `integration_unverifiable`); 2 for usage or an unreadable ledger.
 
 **Compaction.** `reap --auto` drops ledger rows whose branch no longer exists, rewriting the file atomically under the same lock (`ledger.compacted` in its stdout report). Unparseable lines are kept. A failed compaction is a note in the report, not an error.
 
-Tests: `hooks/tests/close-session.test.sh` (two sessions, foreman-owned hands, dry run, collision, compaction, lock waits, mutants for the ownership rule, the checked-out guard and the lease guard) plus ledger assertions in `dispatch-hetero.test.sh` and `dispatch-foreman.test.sh`.
+Tests: `hooks/tests/close-session.test.sh` (two sessions, foreman-owned hands, dry run, a pre-existing archive ref ignored, no archive ref written, the stderr recovery line, compaction, lock waits, mutants for the ownership rule, the checked-out guard and the lease guard) plus ledger assertions in `dispatch-hetero.test.sh` and `dispatch-foreman.test.sh`.

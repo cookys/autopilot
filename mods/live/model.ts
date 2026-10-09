@@ -894,6 +894,8 @@ export function portOf(text: string | null): number {
 export const STATE_TEXT = {
   noPointer: 'no pointer · run: ' + RUNS_HINT,
   noProject: 'no project · run: ' + RUNS_HINT,
+  // a repo with no watcher scope still shows its residue reminder: wt N from <git-common-dir>/autopilot-residue-auto.json
+  noProjectWt: (wt: number) => 'no project · wt ' + wt + ' · run: ' + RUNS_HINT,
   unreadable: 'unreadable',
   stale: (key: string, publishedAt: string | null) => 'stale' + (publishedAt ? ' · last published ' + publishedAt : '') + ' · run: ' + RUNS_HINT + ' --project ' + key,
   unavailable: (key: string) => 'unavailable · run: ' + RUNS_HINT + ' --project ' + key,
@@ -1122,7 +1124,7 @@ export function readResidue(text: string | null, projectKey: string): ResidueVie
   if (Array.isArray(v.needs_human)) {
     for (const e of v.needs_human) {
       if (!isObject(e)) continue
-      const target = str(e.path) ?? str(e.branch)
+      const target = str(e.path) ?? str(e.branch) ?? str(e.ref)
       if (target === null) continue
       rows.push({
         kind: str(e.kind) ?? '—', target, class: str(e.class) ?? '—',
@@ -1140,6 +1142,27 @@ export function readResidue(text: string | null, projectKey: string): ResidueVie
     auto_removed_count: isCount(v.auto_removed_count) ? v.auto_removed_count : null,
     auto_archived_count: isCount(v.auto_archived_count) ? v.auto_archived_count : null,
   }
+}
+
+// `reap --auto`'s own result file (<git-common-dir>/autopilot-residue-auto.json): needs_human_count when it is a positive integer, else 0.
+export function autoResidueCount(text: string | null): number {
+  if (text === null) return 0
+  const parsed = parseJson(text)
+  if (!parsed.ok || !isObject(parsed.value) || parsed.value.schema !== 'autopilot.residue-auto/1') return 0
+  const n = parsed.value.needs_human_count
+  return isCount(n) ? n : 0
+}
+
+// The git common dir a `.git` file points at: `gitdir: <abs>/.git/worktrees/<name>` -> `<abs>/.git`; a submodule's gitdir is its own common dir.
+export function commonDirOfGitFile(text: string | null, dir: string): string | null {
+  if (text === null) return null
+  const m = /^gitdir:\s*(.+?)\s*$/m.exec(text)
+  if (m === null) return null
+  let g = m[1]
+  if (!g.startsWith('/')) g = dir.replace(/\/+$/, '') + '/' + g
+  if (g.split('/').includes('..')) return null
+  const i = g.indexOf('/worktrees/')
+  return (i > 0 ? g.slice(0, i) : g).replace(/\/+$/, '')
 }
 
 export const STAGE_WALK_SCHEMA = 'autopilot.stage-walk/1'

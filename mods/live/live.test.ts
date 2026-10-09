@@ -376,6 +376,38 @@ for (const surface of SURFACES) {
     expect(await bandText($, surface)).toContain('no project')
   })
 
+  // residue band reminder without a watcher scope: wt N read straight from <git-common-dir>/autopilot-residue-auto.json
+  test('band: no project still shows wt N from the repo\'s own reap --auto result (' + surface + ')', async ($, on) => {
+    const files = base()
+    delete files[AHOME + '/session-mode/' + SID_A + '.json']
+    const auto = (n: number) => j({ schema: 'autopilot.residue-auto/1', ran_at: '2026-10-04T09:00:00.000Z', needs_human: [], needs_human_count: n, needs_human_bytes: 0 })
+    files['/work/repo/.git/autopilot-residue-auto.json'] = auto(3)
+    const w = world(on, files)
+    await start($, surface)
+    expect(await bandText($, surface)).toContain('no project · wt 3 · run:')
+    expect(await paneHeader($, surface)).toContain('wt 3')
+    // zero, a foreign schema or a malformed file: the plain no-project line, no wt
+    w.files['/work/repo/.git/autopilot-residue-auto.json'] = auto(0)
+    await w.clock.advance(5000)
+    expect(await bandText($, surface)).not.toContain('wt ')
+    w.files['/work/repo/.git/autopilot-residue-auto.json'] = j({ schema: 'other/1', needs_human_count: 9 })
+    await w.clock.advance(5000)
+    expect(await bandText($, surface)).not.toContain('wt ')
+    w.files['/work/repo/.git/autopilot-residue-auto.json'] = '{not json'
+    await w.clock.advance(5000)
+    expect(await bandText($, surface)).toContain('no project')
+    // a linked worktree: .git is a file naming <common>/worktrees/<name>
+    delete w.files['/work/repo/.git/autopilot-residue-auto.json']
+    w.files['/work/repo/.git'] = 'gitdir: /main/.git/worktrees/wt1\n'
+    w.files['/main/.git/autopilot-residue-auto.json'] = auto(2)
+    await w.clock.advance(5000)
+    expect(await bandText($, surface)).toContain('no project · wt 2 · run:')
+    // a scoped project is unaffected: the envelope band, not the no-project line
+    w.files[LIVE + '/runs/paths/' + KEY + '.json'] = j({ '/work/repo': { project_key: KEY, repo_identity: 'y' } })
+    await w.clock.advance(5000)
+    expect(await bandText($, surface)).toContain(FOUND)
+  })
+
   test('band: stale after valid_for_s; a re-read never makes an old envelope fresh (' + surface + ')', async ($, on) => {
     const w = world(on, base(), NOW_STALE)
     await start($, surface)

@@ -61,8 +61,8 @@ function autoFields(report, auto) {
     const rows = [];
     let known = 0; let anyKnown = false;
     for (const e of scanList) {
-      if (!e || typeof e !== 'object' || (e.kind !== 'worktree' && e.kind !== 'branch')) continue;
-      if (e.kind === 'worktree' ? !textOf(e.path) : !textOf(e.branch)) continue;
+      if (!e || typeof e !== 'object' || (e.kind !== 'worktree' && e.kind !== 'branch' && e.kind !== 'archive-ref')) continue;
+      if (e.kind === 'worktree' ? !textOf(e.path) : e.kind === 'branch' ? !textOf(e.branch) : !textOf(e.ref)) continue;
       const bytes = e.kind === 'worktree' && sizes.has(e.path) ? sizes.get(e.path) : null;
       if (bytes !== null) { known += bytes; anyKnown = true; }
       const row = {
@@ -73,7 +73,7 @@ function autoFields(report, auto) {
         reason: textOf(e.reason),
         command: textOf(e.command),
       };
-      if (e.kind === 'worktree') row.path = e.path; else row.branch = e.branch;
+      if (e.kind === 'worktree') row.path = e.path; else if (e.kind === 'branch') row.branch = e.branch; else row.ref = e.ref;
       rows.push(row);
     }
     out.needs_human_count = rows.length;

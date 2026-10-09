@@ -22,8 +22,8 @@
 //   spend     `$<brain today>/<cap>` (envelope host_today_brain_usd / brain_cap_usd, rounded to integers; empty when not published)
 //   hygiene   load-source chip (dev / dev ↓n / dev ⚠ / cache <v> ⚠ / src ? ⚠) + ` · wt <n>` (residue.json needs_human_count, n > 0)
 //   ⓘ         always last
-// Width table (applied to bodyColumns, cumulative): < 160 no hygiene; < 140 also no spend, decisions; < 120 also no ◷ age, no review;
-//   < 80 only verdict, dispatch, the unit BAR (no k/N, no 族) and ⓘ. A slot the table removes must be ABSENT (drawn = FAIL). If the line
+// Width table (applied to bodyColumns, cumulative): < 160 no hygiene load-source chip (`wt N` stays; the whole slot goes < 80); < 140 also no spend, decisions; < 120 also no ◷ age, no review;
+//   < 80 only verdict, dispatch, the unit BAR (no k/N, no 族) and ⓘ (no `wt N` either). A slot the table removes must be ABSENT (drawn = FAIL). If the line
 //   still does not fit, only the position's stage text may be cut with `…`.
 // Overflow fallback (contract section 2, as accepted from review of the mod): after the stage cut, still over -> remove the unit bar, then the
 //   ⏸ stalled count, then the ⚙ live count, then shorten the verdict word with `…` (glyph alone below 2 cells); never the glyph, never ⓘ.
@@ -349,7 +349,7 @@ function derive(dir, opts = {}) {
     }
   }
   const hchip = lsOk ? hygieneChip(ls) : null;
-  put('hygiene', hchip === null && wt === 0 ? null : [hchip, wt > 0 ? `wt ${wt}` : null].filter(Boolean).join(' · '), 'load-source.json + residue.json');
+  put('hygiene', hchip === null && wt === 0 ? null : [hchip, wt > 0 ? `wt ${wt}` : null].filter(Boolean).join(' · '), 'load-source.json + residue.json', { wt });
 
   // ---- width
   let columns; let columnsHow;
@@ -365,17 +365,20 @@ function derive(dir, opts = {}) {
     columns = w - RIGHT_MARGIN; columnsHow = `widest pane line ${w} - ${RIGHT_MARGIN} (no width recorded in meta.json)`;
   }
   const dropped = new Set();
-  if (columns < 160) dropped.add('hygiene');
+  // hygiene: below 160 only the load-source chip goes; the `wt N` owner reminder stays down to 80 (a docked panel must not hide it)
+  if (columns < 160 && !(slots.hygiene.parts.wt > 0)) dropped.add('hygiene');
   if (columns < 140) { dropped.add('spend'); dropped.add('decisions'); }
   if (columns < 120) { dropped.add('review'); dropped.add('age'); }
-  if (columns < 80) { dropped.add('position'); dropped.add('kn'); dropped.add('fam'); }
-  const tableRule = (name) => (name === 'hygiene' ? '< 160' : name === 'spend' || name === 'decisions' ? '< 140' : name === 'review' ? '< 120' : '< 80');
+  if (columns < 80) { dropped.add('position'); dropped.add('kn'); dropped.add('fam'); dropped.add('hygiene'); }
+  const tableRule = (name) => (name === 'hygiene' ? (columns < 80 ? '< 80' : '< 160') : name === 'spend' || name === 'decisions' ? '< 140' : name === 'review' ? '< 120' : '< 80');
   for (const name of SLOT_ORDER) {
     const s = slots[name];
     if (s.state === 'present' && dropped.has(name)) { s.state = 'width'; s.why = `removed by the width table (bodyColumns ${columns} ${tableRule(name)})`; }
     else if (s.state === 'empty') s.why = `empty: ${s.source}`;
   }
-  // slot parts the table removes while the slot stays: age (< 120), k/N and 族 (< 80)
+  // slot parts the table removes while the slot stays: the load-source chip (< 160, `wt N` stays), age (< 120), k/N and 族 (< 80)
+  const hy = slots.hygiene;
+  if (hy.state === 'present' && columns < 160 && hy.parts.wt > 0) { hy.text = `wt ${hy.parts.wt}`; hy.parts.chipRemoved = true; }
   const pos = slots.position;
   if (pos.state === 'present' && dropped.has('age') && pos.parts.age !== null) { pos.text = pos.text.replace(` ◷${pos.parts.age}`, ''); pos.parts.ageRemoved = true; }
   const un = slots.unit;
@@ -502,8 +505,9 @@ function judgeBand(d, band) {
     // draws the verdict alone. The capture holds no slot facts, so only a bare verdict band (derived from attention / turn) is accepted.
     const bare = `${d.mark} ${d.verdict} │ ⓘ`;
     const plainLine = band.kind === 'nonok' && /^(no project|unavailable) · run: .* │ ⓘ$/.test(band.text);
-    const ok = plainLine || band.text === bare;
-    res('no-scope', ok ? 'PASS' : 'FAIL', `\`${bare}\` or the mod's no-project / unavailable line (no marker, no envelope)`, band.text, 'marker.json and envelope.json both missing');
+    const tp = tailProblem(band, d); // nothing but the engine's [-] toggle (or a docked pane's border) may follow the ⓘ
+    const ok = (plainLine || band.text === bare) && !tp;
+    res('no-scope', ok ? 'PASS' : 'FAIL', `\`${bare}\` or the mod's no-project / unavailable line (no marker, no envelope)`, band.text, 'marker.json and envelope.json both missing', tp || '');
     res('ⓘ', iconDrawn ? 'PASS' : 'FAIL', 'ⓘ', iconDrawn ? 'ⓘ' : 'none', 'contract slot 9: always drawn');
     return results;
   }

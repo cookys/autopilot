@@ -41,7 +41,7 @@ export function Pane(el: { Box: El; Text: El; Link: El; Button?: El }, snap: Liv
   const { Box, Text, Link } = el
   const line = (l: PaneLine, i: number) => l.segs !== undefined
     ? <Box key={'l' + i} flexWrap="wrap">{l.segs.map((s, j) => <Text key={'g' + j} color={s.color} bold={s.bold}>{s.text}</Text>)}</Box>
-    : <Text key={'l' + i} bold={l.bold} dimColor={l.dim} color={l.color ?? (l.warn ? 'warning' : undefined)} wrap="truncate">{l.text}</Text>
+    : <Text key={'l' + i} bold={l.bold} dimColor={l.dim} color={l.color ?? (l.warn ? 'warning' : undefined)} wrap={l.wrap === true ? 'wrap' : 'truncate'}>{l.text}</Text>
   if (snap === null) {
     return (
       <Box flexDirection="column">

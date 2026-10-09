@@ -32,7 +32,7 @@ export type LiveGateRow = {
 export type LiveDecision = { question: string; options: { label: string; consequence: string }[]; stale: boolean; age_s: number | null }
 
 // one pane line: plain text plus how it is drawn
-export type PaneLine = { text: string; dim?: boolean; bold?: boolean; warn?: boolean; color?: ThemeKey; segs?: Seg[] }
+export type PaneLine = { text: string; dim?: boolean; bold?: boolean; warn?: boolean; color?: ThemeKey; segs?: Seg[]; wrap?: boolean }
 // attention = something awaits the human (drawn first); waiting = idle / source-not-wired note; the rest follow the gate rows
 export type PaneSections = { attention: PaneLine[]; waiting: PaneLine[]; tasks: PaneLine[]; decisions: PaneLine[]; foreman: PaneLine[] }
 export const NO_SECTIONS: PaneSections = { attention: [], waiting: [], tasks: [], decisions: [], foreman: [] }
@@ -1039,7 +1039,7 @@ export function reviewLines(r: ReviewView | null): PaneLine[] {
 export type ThemeKey = 'claude' | 'warning' | 'error' | 'success' | 'suggestion' | 'inactive' | 'subtle'
 export type SlotId = 'verdict' | 'position' | 'unit' | 'dispatch' | 'review' | 'decisions' | 'spend' | 'hygiene'
 // tag: which part the width table may drop or shorten (age, k/N, 族, the bar, the stage text)
-export type SegTag = 'age' | 'kn' | 'fam' | 'bar' | 'stage' | 'live' | 'stalled'
+export type SegTag = 'age' | 'kn' | 'fam' | 'bar' | 'stage' | 'live' | 'stalled' | 'chip' | 'wt'
 export type Seg = { text: string; color?: ThemeKey; bold?: boolean; tag?: SegTag }
 export type Slot = { id: SlotId; segs: Seg[] }
 
@@ -1254,8 +1254,11 @@ export function slotHygiene(ls: LoadSourceView | null, residue: ResidueView | nu
   const wt = residue !== null && residue.needs_human_count > 0 ? residue.needs_human_count : 0
   if (chip === null && wt === 0) return null
   const segs: Seg[] = []
-  if (chip !== null) segs.push(sp(chip.text, chip.warn ? { color: 'warning' } : {}))
-  if (wt > 0) segs.push(sp((chip !== null ? ' · ' : '') + 'wt ' + wt))
+  if (chip !== null) segs.push(sp(chip.text, chip.warn ? { color: 'warning', tag: 'chip' } : { tag: 'chip' }))
+  if (wt > 0) {
+    if (chip !== null) segs.push(sp(' · ', { tag: 'chip' })) // the separator goes with the chip: a lone `wt N` has no leading ` · `
+    segs.push(sp('wt ' + wt, { tag: 'wt' }))
+  }
   return { id: 'hygiene', segs }
 }
 
@@ -1278,16 +1281,16 @@ export const BAND_SEP = ' │ '
 export const BAND_ICON = 'ⓘ'
 export type BandLayout = { segs: Seg[]; text: string; width: number }
 
-// The width table (contract ②), cumulative: < 160 no hygiene; < 140 also no spend / decisions; < 120 also no ◷ age / review;
+// The width table (contract ②), cumulative: < 160 no load-source chip (the `wt N` owner reminder stays down to 80, so a docked panel cannot hide it); < 140 also no spend / decisions; < 120 also no ◷ age / review;
 // < 80 only verdict, dispatch and the unit bar. Then, if the line still does not fit, the position's stage text is cut with `…`.
 // Never the verdict, never the ⓘ. `segs` is everything before the ⓘ button (its separator included); `text` is the whole line.
 export function layoutBand(slots: Slot[], columns: number): BandLayout {
   const drop = new Set<string>()
-  if (columns < 160) drop.add('hygiene')
+  if (columns < 160) drop.add('chip')
   if (columns < 140) { drop.add('spend'); drop.add('decisions') }
   if (columns < 120) { drop.add('review'); drop.add('age') }
-  if (columns < 80) { drop.add('position'); drop.add('kn'); drop.add('fam') }
-  let kept: Slot[] = slots.filter(s => !drop.has(s.id)).map(s => ({ id: s.id, segs: s.segs.filter(g => g.tag === undefined || !drop.has(g.tag)) }))
+  if (columns < 80) { drop.add('position'); drop.add('kn'); drop.add('fam'); drop.add('hygiene') }
+  let kept: Slot[] = slots.filter(s => !drop.has(s.id)).map(s => ({ id: s.id, segs: s.segs.filter(g => g.tag === undefined || !drop.has(g.tag)) })).filter(s => s.segs.length > 0)
   const join = (list: Slot[]): Seg[] => {
     const out: Seg[] = []
     list.forEach((s, i) => {
@@ -1358,7 +1361,7 @@ export function legendLines(): PaneLine[] {
     l([seg('dev ↓3'), seg(' · '), seg('wt 2')], 'plugin load source (⚠ = look at it) · worktrees and branches that need you (Hygiene tab)'),
     l([seg('ⓘ')], 'opens this panel; with it open, shows the next tab'),
     { text: 'keyboard: Ctrl+x Tab, then Enter on ⓘ; each further Enter shows the next tab', dim: true },
-    { text: 'narrow terminals drop slots: < 160 hygiene · < 140 spend, decisions · < 120 review, age · < 80 all but verdict, dispatch, unit bar', dim: true },
+    { text: 'narrow terminals drop slots: < 160 load-source chip (wt N stays) · < 140 spend, decisions · < 120 review, age · < 80 all but verdict, dispatch, unit bar (wt N too)', dim: true },
   ]
 }
 
@@ -1465,7 +1468,7 @@ export function hygieneLines(ls: LoadSourceView | null, residue: ResidueView | n
     out.push({ text: residue.needs_human_count + ' need you · ' + sizeText(residue.needs_human_bytes) + ' · ' + auto, bold: residue.needs_human_count > 0 })
     for (const e of residue.needs_human) {
       out.push({ text: e.kind + ' ' + shortTarget(e.target, e.kind) + ' · ' + e.class + ' · ' + (e.age_days === null ? '—' : Math.floor(e.age_days) + 'd') + ' · ' + sizeText(e.bytes) + (e.reason === null ? '' : ' · ' + e.reason) })
-      out.push({ text: '  ' + (e.command ?? '—'), dim: true })
+      out.push({ text: '  ' + (e.command ?? '—'), dim: true, wrap: true }) // the command is copied by hand: it wraps over lines, never cut at the pane edge
     }
     if (residue.needs_human_count > residue.needs_human.length) out.push({ text: '  … ' + (residue.needs_human_count - residue.needs_human.length) + ' more not shown (the list is capped at 20)', dim: true })
   }

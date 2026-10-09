@@ -12,6 +12,12 @@
 #   GATE_TMUX_SOCKET         tmux -L <name> (a private server); default = the tmux server you are attached to
 #   GATE_OUT                 output base, default <this dir>/runs
 #   GATE_MODE                mode name written to meta.json (dev-flow, l3 ... ); default = the cell name up to the first '-'
+#   GATE_BAND_WAIT_S         settle budget in seconds (default 14, 0 = capture once, no settling). The band reads its facts every ~5 s, so a capture
+#                            can hold facts newer than the band it drew (a hand started a moment ago: the band lacks its ⚙1). After each capture
+#                            the wrapper runs check.js on it; a FAIL means the band may simply be behind, so it waits GATE_SETTLE_STEP_S (default 3)
+#                            and captures again (pane first, facts after, as always) until PASS or the budget is spent. The last capture is kept
+#                            either way (a real defect still FAILs in check.js); meta.json records settle_attempt.
+#   GATE_CHECK_CMD           the checker the settle loop runs on a capture dir (default: node <this dir>/check.js); exit 0 = band matches facts
 # Capture layout (what check.js reads):
 #   meta.json pane.txt pane.ansi band.txt panel.txt marker.json attention.json tasks.json turn.json context.json envelope.json decisions-sidecar.json
 #   foreman.json sources.json model.json decision-file.json work-orders/*.json agents/*.json marker-dir-ls.txt ps-watchers.txt
@@ -35,6 +41,29 @@ CELL=$1; TARGET=$2; SID_ARG=${3:-}
 case "$CELL" in *[!A-Za-z0-9._-]*|'') echo "cell name must be [A-Za-z0-9._-]+" >&2; exit 2 ;; esac
 command -v node >/dev/null 2>&1 || { echo "node not found" >&2; exit 2; }
 HERE=$(cd "$(dirname "$0")" && pwd)
+
+# --- settle loop: the band lags the facts by up to one poll (~5 s). Re-capture (pane first, facts after) while check.js says FAIL, within a bounded budget.
+if [ "${GATE_SETTLE_CHILD:-}" != 1 ]; then
+  WAIT_S=${GATE_BAND_WAIT_S:-14}; STEP_S=${GATE_SETTLE_STEP_S:-3}
+  case "$WAIT_S$STEP_S" in *[!0-9]*|'') echo "GATE_BAND_WAIT_S / GATE_SETTLE_STEP_S must be whole seconds" >&2; exit 2 ;; esac
+  WAIT_S=$((10#$WAIT_S)); STEP_S=$((10#$STEP_S)) # a leading zero (08) is decimal here, not an invalid octal
+  if [ "$WAIT_S" -gt 0 ]; then
+    DEADLINE=$(( $(date +%s) + WAIT_S )); ATTEMPT=1
+    while :; do
+      RC=0; ALL=$(GATE_SETTLE_CHILD=1 GATE_SETTLE_ATTEMPT=$ATTEMPT bash "$0" "$@") || RC=$?
+      [ $RC -eq 0 ] || exit $RC
+      CAP=${ALL%%$'\n'*}
+      CRC=0
+      if [ -n "${GATE_CHECK_CMD:-}" ]; then $GATE_CHECK_CMD "$CAP" >/dev/null 2>&1 || CRC=$?; else node "$HERE/check.js" "$CAP" >/dev/null 2>&1 || CRC=$?; fi
+      # PASS, a checker error (2), or no time for another round: keep this capture. Only a plain FAIL (1) is worth another look.
+      if [ $CRC -ne 1 ] || [ $(( $(date +%s) + STEP_S )) -ge "$DEADLINE" ]; then
+        [ $CRC -ne 1 ] || echo "band did not settle within ${WAIT_S}s (attempt $ATTEMPT still FAILs check.js); keeping the last capture" >&2
+        printf '%s\n' "$ALL"; exit 0
+      fi
+      rm -rf "$CAP"; sleep "$STEP_S"; ATTEMPT=$(( ATTEMPT + 1 ))
+    done
+  fi
+fi
 TMUX_CMD=(tmux)
 [ -n "${GATE_TMUX_SOCKET:-}" ] && TMUX_CMD=(tmux -L "$GATE_TMUX_SOCKET")
 
@@ -59,7 +88,7 @@ printf '%s\n' "$PANE_ANSI" > "$OUT/pane.ansi"
 
 # everything else is resolved in node (JSON, sanitising rules written out here, not imported from the plugin)
 export GATE_OUT_DIR=$OUT GATE_NOW_MS=$NOW_MS GATE_CELL=$CELL GATE_SID_ARG=$SID_ARG GATE_PANE_CWD=$PANE_CWD
-export GATE_PANE_DIMS=$PANE_DIMS GATE_MODE_ARG=${GATE_MODE:-}
+export GATE_PANE_DIMS=$PANE_DIMS GATE_MODE_ARG=${GATE_MODE:-} GATE_ATTEMPT=${GATE_SETTLE_ATTEMPT:-1}
 export GATE_MARKERS=$MARKERS GATE_POINTER=$POINTER GATE_AHOME=$AHOME
 node - <<'NODE'
 const fs = require('fs'); const path = require('path');
@@ -226,7 +255,7 @@ const mode = E.GATE_MODE_ARG || String(E.GATE_CELL).split('-')[0];
 fs.writeFileSync(path.join(out, 'meta.json'), `${JSON.stringify({
   schema: 'autopilot.gate-capture/2', cell: E.GATE_CELL, mode, window_width: windowWidth, pane_width: paneWidth, captured_at: new Date(Number(E.GATE_NOW_MS)).toISOString(), captured_at_ms: Number(E.GATE_NOW_MS),
   session_id: sid, session_id_how: how, sanitised_session_id: ssid, project_key: pkey, root_run_id: root, scope_key: scope,
-  live_base: live, autopilot_home: E.GATE_AHOME, pane_cwd: E.GATE_PANE_CWD || null, git_common_dir: common, missing,
+  live_base: live, autopilot_home: E.GATE_AHOME, pane_cwd: E.GATE_PANE_CWD || null, git_common_dir: common, settle_attempt: Number(E.GATE_ATTEMPT) || 1, missing,
 }, null, 2)}\n`);
 process.stdout.write(`${out}\n`);
 if (missing.length) process.stderr.write(`absent (recorded in meta.json): ${missing.join('; ')}\n`);

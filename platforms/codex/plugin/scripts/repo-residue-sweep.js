@@ -95,19 +95,19 @@
 // transitively (only run_id propagates, never root_run_id; row order does not matter). A branch name that
 // appears in several rows belongs to whoever owns the LATEST row (created_at, then file order), and that row
 // must describe the live ref: the ref's oldest reflog entry within 120 s of the row's created_at (no reflog:
-// tip commit date not older than the row), else keep `ledger_row_stale`. No age floor. Per branch, in order:
+// tip commit date not older than the row, or tip == the row's base_sha), else keep `ledger_row_stale`. No age floor. Per branch, in order:
 //   keep  integration ref; checked out in any worktree; pointed at by ANY marker worktree that is live, has a
 //         process cwd inside (or /proc unknowable) or an unexpired lease; stale ledger row; campaign signal unreliable
 //         (campaign_signal_unavailable); a row's root_run_id/run_id (or the marker's) in an unresolved
 //         campaign/Mission (unresolved_campaign);
-//   integrated (same rule as the sweep) -> pin-evidence-anchors apply, `git branch -D`;
+//   integrated (same rule as the sweep) -> pin-evidence-anchors apply, then `git update-ref -d` with the expected tip (compare-and-swap);
 //   unintegrated -> `git update-ref refs/archive/<UTC date>/<branch> <tip> ''` (create-only), verify, pin
 //         anchors, then delete with `git update-ref -d refs/heads/<branch> <tip>` (compare-and-swap). A colliding ref at another sha keeps the branch (archive_ref_failed); a
 //         ref already at this exact tip counts as this tip's archive.
 // Output {schema:"autopilot.close-session/1", session, dry_run, deleted:[{branch,tip}],
 // archived:[{branch,tip,ref}], kept:[{branch,why}]}. Exit 0 = nothing left behind except by a keep rule;
 // 1 = something it was asked to remove stayed (archive_ref_failed, evidence_anchoring_failed, tip_changed,
-// branch -D failure, integration_unverifiable); 2 = usage / ledger unreadable. Restore an archive with
+// a failed delete, integration_unverifiable); a branch checked out between planning and deletion is kept as checked_out_late; 2 = usage / ledger unreadable. Restore an archive with
 // `git branch <name> refs/archive/<date>/<name>`.
 // LEDGER COMPACTION: `reap --auto` drops ledger rows whose branch no longer exists (unparseable lines are
 // kept), rewriting atomically under the same flock the rails append under; failure is a note, never fatal.
@@ -945,7 +945,7 @@ function compactLedger(common, mainPath) {
 // starts after the row; one that predates it starts before. No reflog: only the lower bound can be checked,
 // against the tip commit date. Undeterminable = false (the branch is kept).
 const LEDGER_STALE_SLACK_S = 120;
-function ledgerRowFitsBranch(repo, b, createdAt) {
+function ledgerRowFitsBranch(repo, b, createdAt, baseSha) {
   if (!Number.isFinite(createdAt)) return false;
   const r = git(repo, ['reflog', 'show', '--date=unix', '--format=%gd', `refs/heads/${b.branch}`]);
   if (r.ok && r.out.trim()) {
@@ -953,6 +953,7 @@ function ledgerRowFitsBranch(repo, b, createdAt) {
     if (!m) return false;
     return Math.abs(Number(m[1]) - createdAt) <= LEDGER_STALE_SLACK_S;
   }
+  if (baseSha && b.tip === baseSha) return true; // still at the commit the rail created it from
   return b.last_commit_unix ? b.last_commit_unix >= createdAt - LEDGER_STALE_SLACK_S : false;
 }
 
@@ -989,7 +990,7 @@ function runCloseSession(o, mainPath, integrationSha, integrationBranch, common)
     // ANY pointing worktree that is live, in use or under an unexpired lease keeps the branch
     if (ptrs.some((w) => w.class === 'live' || w.cwd_busy !== false || w.lease_expired === false)) { keep('live_or_in_use_or_unexpired_lease_worktree'); continue; }
     // The row must describe THIS lifetime of the branch (the name may have been reused after S's branch was deleted).
-    if (!ledgerRowFitsBranch(mainPath, b, Number(mine.get(name)[0].created_at))) { keep('ledger_row_stale'); continue; }
+    if (!ledgerRowFitsBranch(mainPath, b, Number(mine.get(name)[0].created_at), mine.get(name)[0].base_sha)) { keep('ledger_row_stale'); continue; }
     if (!sig.reliable) { keep('campaign_signal_unavailable'); continue; }
     const ids = [];
     for (const r of mine.get(name)) { if (r.root_run_id) ids.push(r.root_run_id); if (r.run_id) ids.push(r.run_id); }
@@ -1028,6 +1029,8 @@ function runCloseSession(o, mainPath, integrationSha, integrationBranch, common)
       for (const { b, ref } of toDelete) {
         const nowTip = git(mainPath, ['rev-parse', '--verify', '--quiet', `refs/heads/${b.branch}`]);
         if (!nowTip.ok || nowTip.out.trim() !== b.tip) { report.kept.push({ branch: b.branch, why: 'tip_changed', failed: true }); continue; }
+        // anchoring took time: a worktree may have checked the branch out meanwhile
+        if (listWorktrees(mainPath).some((w) => w.branch === b.branch)) { report.kept.push({ branch: b.branch, why: 'checked_out_late' }); continue; }
         // compare-and-swap: refuses if the branch moved since classification
         const d = git(mainPath, ['update-ref', '-d', `refs/heads/${b.branch}`, b.tip]);
         if (!d.ok) { report.kept.push({ branch: b.branch, why: d.err.trim().slice(0, 200) || 'branch_delete_failed', failed: true }); continue; }

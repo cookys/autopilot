@@ -157,6 +157,38 @@ assert_eq "$(G rev-parse s1-unint)" "$UNTIP" "colliding branch kept"
 assert_eq "$(G rev-parse "refs/archive/$TODAY/s1-unint")" "$BASE" "pre-existing archive ref not overwritten"
 G rev-parse --verify -q refs/heads/s1-merged >/dev/null && fail "other branches still processed after a collision" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
 
+# ---------------------------------------------------------------- no reflog: a branch still at its base is not stale
+mkdir -p "$TEST_TMP/repo6"; SBX="$TEST_TMP/repo6"; G init -q -b develop; G config core.logAllRefUpdates false
+echo a > "$SBX/a.txt"; G add a.txt; G commit -q -m base; BASE="$(G rev-parse HEAD)"
+echo b > "$SBX/b.txt"; G add b.txt; G commit -q -m second; mkdir -p "$SBX/.git/autopilot"
+OLD="$(date -d '-3 days' -R)"; AT="$(GIT_AUTHOR_DATE="$OLD" GIT_COMMITTER_DATE="$OLD" G commit-tree "$(G rev-parse "$BASE^{tree}")" -p "$BASE" -m old)"
+G update-ref refs/heads/nr-atbase "$BASE"; G update-ref refs/heads/nr-oldtip "$AT"; G update-ref refs/heads/nr-newtip "$(G commit-tree "$(G rev-parse "$BASE^{tree}")" -p "$BASE" -m fresh)"
+assert_eq "$(G reflog show refs/heads/nr-atbase 2>/dev/null | wc -l | tr -d ' ')" "0" "fixture really has no reflog"
+ledger_row nr-atbase S1 r-a r-a; ledger_row nr-oldtip S1 r-b r-b; ledger_row nr-newtip S1 r-c r-c
+G update-ref refs/heads/nr-oldtip2 "$AT"; node -e 'process.stdout.write(JSON.stringify({schema:"autopilot.dispatch-branch/1",branch:"nr-oldtip2",session_id:"S1",run_id:"r-d",root_run_id:"r-d",created_at:Number(process.argv[1]),base_sha:process.argv[2]})+"\n")' "$NOW" "$AT" >> "$SBX/.git/autopilot/dispatch-branches.jsonl"
+OUT="$(run_close --session S1 --yes)"
+assert_eq "$(sig "$OUT")" "deleted=nr-atbase;archived=nr-newtip,nr-oldtip2;kept=nr-oldtip:ledger_row_stale" "no reflog: tip==base_sha fits; old tip with another base is stale; a fresh tip fits"
+
+# ---------------------------------------------------------------- checked out between planning and deletion
+build_fixture "$TEST_TMP/repo7"
+LATE="$TEST_TMP/late-mut"; mkdir -p "$LATE/scripts"; ln -s "$REPO_ROOT/src" "$LATE/src"
+for f in "$REPO_ROOT"/scripts/*; do ln -s "$f" "$LATE/scripts/$(basename "$f")"; done
+rm "$LATE/scripts/pin-evidence-anchors.js" "$LATE/scripts/repo-residue-sweep.js"; cp "$SCRIPT" "$LATE/scripts/repo-residue-sweep.js"
+printf '%s\n' "const {spawnSync}=require('child_process');const a=process.argv;const root=a[a.indexOf('--repo-root')+1];" \
+  "spawnSync('git',['-C',root,'worktree','add','-q',process.env.LATE_WT,'s1-unint']);process.stdout.write('{}');" > "$LATE/scripts/pin-evidence-anchors.js"
+UNTIP="$(G rev-parse s1-unint)"
+OUT="$(LATE_WT="$TEST_TMP/late-wt" node "$LATE/scripts/repo-residue-sweep.js" close-session --repo "$SBX" --session S1 --yes)"; RC=$?
+assert_eq "$RC" "0" "checked_out_late is a keep rule: exit 0"
+assert_eq "$(jx "$OUT" 'j.kept.find(k=>k.branch==="s1-unint").why')" "checked_out_late" "branch checked out during anchoring is kept"
+assert_eq "$(G rev-parse s1-unint)" "$UNTIP" "late-checked-out branch still exists at its tip"
+assert_eq "$(jx "$OUT" 'j.archived.some(a=>a.branch==="s1-unint")')" "false" "late-checked-out branch is not reported archived"
+LM="$(sed -E "s/if \(listWorktrees\(mainPath\)\.some\(\(w\) => w\.branch === b\.branch\)\) \{/if (false) {/" "$SCRIPT")"
+rm "$LATE/scripts/repo-residue-sweep.js"; printf '%s\n' "$LM" > "$LATE/scripts/repo-residue-sweep.js"
+cmp -s "$SCRIPT" "$LATE/scripts/repo-residue-sweep.js" && fail "late-checkout mutation did not apply"
+G worktree remove --force "$TEST_TMP/late-wt" 2>/dev/null
+OUTM="$(LATE_WT="$TEST_TMP/late-wt2" node "$LATE/scripts/repo-residue-sweep.js" close-session --repo "$SBX" --session S1 --yes)"
+assert_neq "$(jx "$OUTM" 'j.kept.find(k=>k.branch==="s1-unint")?j.kept.find(k=>k.branch==="s1-unint").why:"deleted"')" "checked_out_late" "mutant: late re-check removed -> the checked-out branch is deleted"
+
 # ---------------------------------------------------------------- no ledger at all
 mkdir -p "$TEST_TMP/repo4"; SBX="$TEST_TMP/repo4"; G init -q -b develop; G commit -q --allow-empty -m base; BASE="$(G rev-parse HEAD)"; ahead lone
 OUT="$(run_close --session S1 --yes)"; assert_eq "$?" "0" "no ledger: exit 0"
@@ -200,7 +232,7 @@ M1B="$(mutate allsessions 's/if \(r\.session_id === session\) take\(r\);/take(r)
 assert_neq "$(sig "$M1B")" "$EXPECT" "mutant: every session's rows owned -> outcome differs (S2/other branches would be hit)"
 M4="$(mutate rootprop 's/runIds\.add\(r\.run_id\);/runIds.add(r.run_id); runIds.add(r.root_run_id);/')"
 assert_neq "$(sig "$M4")" "$EXPECT" "mutant: root_run_id propagates -> sibling session's branch is archived"
-M5="$(mutate stale 's/if \(!ledgerRowFitsBranch\(mainPath, b, Number\(mine\.get\(name\)\[0\]\.created_at\)\)\) \{/if (false) {/')"
+M5="$(mutate stale 's/if \(!ledgerRowFitsBranch\([^{]*\) \{/if (false) {/')"
 assert_neq "$(sig "$M5")" "$EXPECT" "mutant: staleness check removed -> hand-re-created branch is archived"
 M6="$(mutate lastpointer 's/ptrs\.some\(/ptrs.slice(-1).some(/')"
 assert_neq "$(sig "$M6")" "$EXPECT" "mutant: only the last pointing worktree counts -> leased branch is archived"

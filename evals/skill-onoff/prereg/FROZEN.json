@@ -85,5 +85,44 @@
         "prereg/amend-4-work-done.json": "1fd12421ad293daa6c8dfcff527b50bfc64dbc252f09c693d35f1661fe0a99f5"
       }
     }
+  },
+  "stage-graph-g67": {
+    "frozen_at": "2026-10-10",
+    "note": "sha256 of the stage-graph-g67 pre-registration (rule, markers, scorer, briefs, arm manifests) frozen before any live cell. Any edit after the first live cell voids the row.",
+    "files": {
+      "arms/g67/off.json": "bd3f90f2fd035b6eddaef7525f843a0a5a40ea56f30334707ccf0b0751d84679",
+      "arms/g67/on.json": "888ef51540459a58b87ddae53679e7ae329e9aa26384b2e0a68902553964755f",
+      "lib/g67-cell.js": "39f2887e063a3fc858c09d920ba9617a494027699ee8226caca1b4be719e057e",
+      "lib/g67-markers.sh": "a047478cf3f78b7f73baec65f14aec60e23a21054ba7f7af8f65d6ab69068051",
+      "prereg/stage-graph-g67.json": "07473863632a1cf069fcf6d7d1f5354737ceab1d9b2bebdf0b34672465a1ec86",
+      "prereg/stage-graph-g67.md": "dd3a0d4a01a9e8258ea9b9ea74c01252cf7c2076a54c106224ba7c63ffb22b73",
+      "run-g67-campaign.js": "390493662453037a4384123dfcd005fc011420d8d3a02d066fbe9d3f7933651d",
+      "score-g67.js": "d717420d1cb86138208be18c5a8ec7e696164990d988786f312f70beb7af1ad4",
+      "tasks/g6-l4/init-repo.sh": "bf4bdc8b2d2b94e6c7f9d18eafa8071a4b90e5530872c4da425bbba0ab1e24a2",
+      "tasks/g6-l4/markers.sh": "3b44862fee1bd0cbb9e90f21c734d084d0c1c03573ed1ccf225f4caecf8589c2",
+      "tasks/g6-l4/repo/cli.js": "d4746144ab359306ab343aea1636510dd0fd8ff35ac2d1f69510cb6a7d598f66",
+      "tasks/g6-l4/repo/lib/greet.js": "20b5bbc38b1c2e3922c2d5b26e09ac14d17c7523ee369f7b2cdf5538ba1fa063",
+      "tasks/g6-l4/repo/run-tests.sh": "0802c459a348472fac9745ec697d98a4066340897be95b60678aa4fc7f97b24a",
+      "tasks/g6-l4/task.md": "ae9760da0bbf3f29b3aa0ec411d47dacca3a8325609110620df958fc78f12ae7",
+      "tasks/g6-l5/init-repo.sh": "bf4bdc8b2d2b94e6c7f9d18eafa8071a4b90e5530872c4da425bbba0ab1e24a2",
+      "tasks/g6-l5/markers.sh": "c00ddb30a4b97d338ad1e5916f801b942024265c5246f5d53dbb277296aaf4bc",
+      "tasks/g6-l5/repo/cli.js": "d4746144ab359306ab343aea1636510dd0fd8ff35ac2d1f69510cb6a7d598f66",
+      "tasks/g6-l5/repo/lib/greet.js": "20b5bbc38b1c2e3922c2d5b26e09ac14d17c7523ee369f7b2cdf5538ba1fa063",
+      "tasks/g6-l5/repo/run-tests.sh": "0802c459a348472fac9745ec697d98a4066340897be95b60678aa4fc7f97b24a",
+      "tasks/g6-l5/task.md": "ae9760da0bbf3f29b3aa0ec411d47dacca3a8325609110620df958fc78f12ae7",
+      "tasks/g6-l6/init-repo.sh": "bf4bdc8b2d2b94e6c7f9d18eafa8071a4b90e5530872c4da425bbba0ab1e24a2",
+      "tasks/g6-l6/markers.sh": "953e5f484d16905b61f18acf470fe461ec1543ae2c6d696c01455a7bea2598f6",
+      "tasks/g6-l6/repo/cli.js": "d4746144ab359306ab343aea1636510dd0fd8ff35ac2d1f69510cb6a7d598f66",
+      "tasks/g6-l6/repo/lib/greet.js": "20b5bbc38b1c2e3922c2d5b26e09ac14d17c7523ee369f7b2cdf5538ba1fa063",
+      "tasks/g6-l6/repo/run-tests.sh": "0802c459a348472fac9745ec697d98a4066340897be95b60678aa4fc7f97b24a",
+      "tasks/g6-l6/task.md": "ae9760da0bbf3f29b3aa0ec411d47dacca3a8325609110620df958fc78f12ae7",
+      "tasks/g7-close/init-repo.sh": "696ee54606c8e5fde90418872fc70e1c18eca75eda860db44dffd92f4f7e1660",
+      "tasks/g7-close/markers.sh": "cac76fdd803c635822662cbfd3dac24232a404377f3eecd171fb1e4445d31c86",
+      "tasks/g7-close/repo/cli.js": "5048813d7dddaea5aaf612ad0adf7a8312ae8eecfcb3961ba437bd2238ede90e",
+      "tasks/g7-close/repo/docs/projects/greet/README.md": "9dad58a4bbb2be4e7efac904c9d0d3d211dbb1956f2b33e34a7f58cfd2f0ea13",
+      "tasks/g7-close/repo/lib/greet.js": "9bfc5aeab40621c47b6d982f81c65833b900de69440bc6a004e58cf37e5acb2f",
+      "tasks/g7-close/repo/run-tests.sh": "c4b119ea9043dd58acf457e4180ebf915283a415165c717145ee0d7c24b9c3ac",
+      "tasks/g7-close/task.md": "fe099a2e163848ebe4744e9fc722eba497a1c052ad6944a9c5f8026a997e07f7"
+    }
   }
 }

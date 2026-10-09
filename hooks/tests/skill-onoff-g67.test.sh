@@ -19,9 +19,11 @@ AUTOPILOT_TEST_LIB_HELPERS_ONLY=1 . "$(dirname "$0")/lib.sh"
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 BASE="$REPO_ROOT/evals/skill-onoff"
-PREREG="$BASE/prereg/stage-graph-g67.json"
+PREREG_REAL="$BASE/prereg/stage-graph-g67.json"
 QUERY="$BASE/lib/transcript-query.js"
 TEST_TMP=$(mktemp -d -t "skill-onoff-g67-test-XXXXXX")
+node -e 'const fs=require("fs");const j=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));for(const a of ["off","on"])j.arm_manifests[a].sha256=null;fs.writeFileSync(process.argv[2],JSON.stringify(j))' "$PREREG_REAL" "$TEST_TMP/prereg-unpinned.json"
+PREREG="$TEST_TMP/prereg-unpinned.json"
 trap 'rm -rf "$TEST_TMP"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
@@ -284,10 +286,10 @@ fi
 STUB
 chmod +x "$STUB_E2E"
 RES="$TEST_TMP/e2e/stage-graph-g67.v1.jsonl"; mkdir -p "$TEST_TMP/e2e"
-rc=0; o=$(G67_STUB_FAIL=1 ONOFF_STUB_BIN="$STUB_E2E" ONOFF_PACKS_DIR="$PK" node "$BASE/run-g67-campaign.js" --results "$RES" --runner stub --arms-dir "$AR" 2>/dev/null | tail -1) || rc=$?
+rc=0; o=$(G67_STUB_FAIL=1 ONOFF_STUB_BIN="$STUB_E2E" ONOFF_PACKS_DIR="$PK" node "$BASE/run-g67-campaign.js" --results "$RES" --runner stub --arms-dir "$AR" --prereg "$PREREG" 2>/dev/null | tail -1) || rc=$?
 [ "$rc" = 4 ] && grep -q '"STOP"' <<<"$o" || fail "a failing runner must STOP (rc=$rc $o)"
 [ "$(grep -c '"failure_class":"infra_fail"' "$RES")" -eq 24 ] || fail "expected 24 infra_fail rows after the failing pass"
-rc=0; o=$(ONOFF_STUB_BIN="$STUB_E2E" ONOFF_PACKS_DIR="$PK" node "$BASE/run-g67-campaign.js" --results "$RES" --runner stub --arms-dir "$AR" 2>/dev/null | tail -1) || rc=$?
+rc=0; o=$(ONOFF_STUB_BIN="$STUB_E2E" ONOFF_PACKS_DIR="$PK" node "$BASE/run-g67-campaign.js" --results "$RES" --runner stub --arms-dir "$AR" --prereg "$PREREG" 2>/dev/null | tail -1) || rc=$?
 [ "$rc" = 0 ] && grep -q '"SHIP"' <<<"$o" || fail "resume with a good runner must SHIP (rc=$rc $o)"
 grep -q '"G6":"holds"' <<<"$o" && grep -q '"G7":"holds"' <<<"$o" || fail "per-change verdicts missing: $o"
 [ "$(grep -c '"arm_manifest_sha256"' "$RES")" -eq 48 ] || fail "every row must carry arm_manifest_sha256"
@@ -296,7 +298,7 @@ grep -q '"G6":"holds"' <<<"$o" && grep -q '"G7":"holds"' <<<"$o" || fail "per-ch
 [ -s "$TEST_TMP/e2e/g67-cells/g7-close/on/1/g67-extracted.json" ] || fail "cell artifacts not retained"
 # idempotent: a third run spends nothing and scores the same
 before=$(wc -l < "$RES")
-ONOFF_STUB_BIN="$STUB_E2E" ONOFF_PACKS_DIR="$PK" node "$BASE/run-g67-campaign.js" --results "$RES" --runner stub --arms-dir "$AR" >/dev/null 2>&1 || fail "third run"
+ONOFF_STUB_BIN="$STUB_E2E" ONOFF_PACKS_DIR="$PK" node "$BASE/run-g67-campaign.js" --results "$RES" --runner stub --arms-dir "$AR" --prereg "$PREREG" >/dev/null 2>&1 || fail "third run"
 [ "$(wc -l < "$RES")" -eq "$before" ] || fail "a complete campaign must not add rows"
 # the live runner refuses an unpinned PATH claude (no spend): a fake claude on PATH reporting another version
 mkdir -p "$TEST_TMP/fakebin"; printf '#!/usr/bin/env bash\necho "9.9.9 (Claude Code)"\n' > "$TEST_TMP/fakebin/claude"; chmod +x "$TEST_TMP/fakebin/claude"

@@ -2,7 +2,7 @@
   "schema_version": 1,
   "artifact_type": "skill_onoff_prereg",
   "row": "stage-graph-g67",
-  "status": "DRAFT-FOR-REVIEW (not frozen: no FROZEN.json entry, arm manifest shas unset, v7 packs not yet built)",
+  "status": "FROZEN 2026-10-10 (FROZEN.json row stage-graph-g67; arm manifest shas set; packs *-sg-change-v7 and fixture-scripts-g67 built before any live cell)",
   "design": "human-readable twin: prereg/stage-graph-g67.md; changes under test: G6 (l4/l5/l6 entry records --size) and G7 (finish-flow close-out runs close-session) of the guidance-v7 branch (194e2ecc)",
   "model": "sonnet",
   "runner": "claude -p (headless depth-0)",
@@ -16,12 +16,12 @@
   "arm_manifests": {
     "off": {
       "file": "arms/g67/off.json",
-      "sha256": null,
+      "sha256": "bd3f90f2fd035b6eddaef7525f843a0a5a40ea56f30334707ccf0b0751d84679",
       "packs": "*-sg-change-v6 (= stage-graph change arm as of 71fac023) + fixture-scripts-sg + fixture-scripts-g67"
     },
     "on": {
       "file": "arms/g67/on.json",
-      "sha256": null,
+      "sha256": "888ef51540459a58b87ddae53679e7ae329e9aa26384b2e0a68902553964755f",
       "packs": "*-sg-change-v7 (freeze-guidance-arm.js change --suffix v7, after the guidance-v7 merge) + fixture-scripts-sg + fixture-scripts-g67"
     }
   },

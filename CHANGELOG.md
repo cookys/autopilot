@@ -1,5 +1,39 @@
 # Changelog
 
+## v3.0.0-alpha.3 — 殘留 worktree 與 dispatch 分支自動回收：SessionStart hook 預設開啟，剩下要人處理的才在 band 提醒（pre-release，供 owner 測試）
+
+這是 3.0.0 的第三個 pre-release，不是 stable。起因是 revival.3d 的 peer 回報：dispatch 留下的 worktree 與分支在硬碟上一路堆積，沒有人收。這版讓安全的部分自動收掉，收不掉的才提醒人。新增一個預設開啟的 SessionStart hook，從 alpha.2 升級不需要遷移，但 band 的 `wt N` 意義改了（見下）。
+
+### 改動
+
+- **R1 保留紀錄**：`dispatch-hetero.sh` 與 `dispatch-foreman.sh` 每次保留 worktree 時，在 `.autopilot-worktree` marker 寫入 `retention_reason`（如 `failure`、`dirty`、`boundary_rejected`）與 `retention_expires_at`（現在加 `residue.lease_hours`）。明確的 `--keep-worktree` lease 保留自己的到期時間，預設值不會蓋掉它。
+- **R2 自動回收**：`scripts/repo-residue-sweep.js reap --auto --yes` 是唯一的自動回收器，只做安全的事。
+  - 會移除：目錄已不存在的 worktree（`git worktree prune`）；帶有效 schema-2 marker、不在使用中（flock 與 `/proc/*/cwd` 都沒人）、乾淨、HEAD 等於本地分支尖端，且「已整合」或「lease 已過期」的 worktree；未整合、超過 `archive_branch_days` 沒有活動的 `hands/`、`hetero/`、`foreman/`（及 `branch_prefixes`）分支，先封存再刪。
+  - 永遠不會：刪除有未提交變更的 worktree、動沒有 marker 的 worktree、刪非 dispatch 分支、刪被 checkout 的分支、動屬於未結 campaign 或 Mission 的 worktree 與分支。這些與其他收不掉的項目改列入 `needs_human`，每項附一行精確指令（需要時保留 HEAD、封存 ref 為 create-only 不會覆蓋）。
+  - 結果寫入 `<git-common-dir>/autopilot-residue-auto.json`。
+- **R3 新 hook（預設開啟）**：`hooks/residue-auto-reap.js` 在 SessionStart（startup、resume、clear、compact）背景啟動上述 sweep，不等待、不注入 context；每個 repo 24 小時最多跑一次；sweep 後若還有要人處理的項目，只寫一則 advisory。hook 共 37 個（24 預設開啟、13 opt-in）。
+  - 關閉方式任選：`~/.autopilot/config.json` 設 `{"hooks":{"residue-auto-reap":false}}`、或 `{"residue":{"auto_reap":false}}`、或環境變數 `AUTOPILOT_HOOK_RESIDUE_AUTO_REAP=0`。
+- **R4 band 與 Hygiene 分頁**：band 的 `wt N` 現在是「需要人處理的殘留數」（`needs_human_count`），為 0 時隱藏，取代 alpha.2 的「只計可回收」意義，因為可回收的現在會在 24 小時內自動清掉。Hygiene 分頁第一行是 `N need you · 大小` 加上最近一次自動回收，下面最多 20 列，每列附精確指令。`schemas/residue.schema.json` 新增欄位（schema id 不變）。
+- **設定**（`~/.autopilot/config.json` 的 `residue`，或環境變數 `AUTOPILOT_RESIDUE_*`）：`auto_reap: true`、`lease_hours: 72`、`archive_branch_days: 14`、`branch_prefixes: []`。沒有 project 層。
+- **還原被封存的分支**：`git branch <name> refs/archive/<date>/<name>`。
+- 此版沒有改任何 skill 文字；finish-flow 收尾時封存本 session 分支的步驟屬 guidance 變更，等 v7 eval。
+
+### 驗證
+
+- **hetero review**：兩個 packet（rails 加 sweep；hook 加 watcher 加 mod）第 1 輪由 opus、GLM、MiniMax 審，opus 對 packet A 判 FIX-THEN-SHIP（資料遺失指令、marker 與分支不符被靜默略過、過期提醒），全修；第 2 輪 delta 由 opus 與 GLM 審封存 ref 覆寫問題，已修成 create-only；第 3 輪 opus SHIP-AS-IS。被駁回的意見（campaign journal 不存在應為空 map 而非不可讀、codex mirror 模組已存在、F3 fixture 因 HEAD 是 symbolic ref 無法構造）記在 evidence。
+- **真實 session 證明**：`prove-hook-fires.sh` 在 2.1.295 的真實 `claude -p` 下 ALL PASS（11 項）：過期 worktree 被移除且分支保留、dirty worktree 保留並列入 needs_human、15 天前的 `hands/x` 被刪且 `refs/archive/<date>/hands/x` 指向舊尖端、stamp 存在、24 小時內第二個 session 不重跑。
+- **209 欄 capture**：`residue-hygiene-w209` PASS，band 顯示 `wt 1`，Hygiene 分頁顯示摘要、列與指令。
+- **cut gate、全套件**：`check-guidance-eval.js --base 8a10980f --results evals/skill-onoff/results/stage-graph.v6.jsonl` 結果 `ok:true`、scorer SHIP；`check-plan-graduation.js` exit 0；`preflight-release.sh` 9/9、`preflight-portability.sh` 通過。全套件 `run.sh --parallel 4` 為 4／455 檔紅：`skill-onoff-generic` 是已知的 host guard；另外 3 項（L1 unit 的 `import-aa-capabilities.test.js`、`qualification-feed-adopt`、`qualification-scorecard-tools`）仍是 `/tmp/.git`（空目錄）造成，`TMPDIR=/dev/shm` 重跑全綠（23／23、51、33）。證據目錄：`docs/plans/evidence/2026-10-09-residue-auto-reap/`。
+
+### 已知後續
+
+- Hygiene 分頁的指令行在窄 pane 會被截斷，無法完整讀取或複製（BACKLOG 新列）。
+- band 提醒只在 runs watcher 會啟動的 repo 出現（已 onboard 的 repo，或 `AUTOPILOT_RUNS_WATCH_AUTOSTART=1`）；其他 repo 仍會回收並寫 advisory，但看不到 `wt N`（BACKLOG 新列）。
+- 自動 docked 的 panel 讓 band 低於 160 欄，hygiene 欄被隱藏（BACKLOG 新列）。
+- `refs/archive/*` 不會過期；`dispatch-hetero.sh --gc` 預計在 3.0.0 final 移除（皆為既有 BACKLOG 列）。
+
+prose-justification: alpha.3 沒有改任何 skill 文字（機制全在 script、hook、watcher 與 mod）；prose 相對 v2.35.2 基線的增長來自 alpha.1 已說明的 stage graph 改寫，guidance 由凍結 A/B eval 驗證（v5、v6 皆 SHIP）。
+
 ## v3.0.0-alpha.2 — mods band 改成單行多 widget 加 ⓘ 八分頁面板，並補上 alpha.1 的 pre-release 版號回歸修正（pre-release，供 owner 測試）
 
 這是 3.0.0 的第二個 pre-release，不是 stable。它交付 alpha.1 預告的 P7 本體（單行 band、ⓘ 面板、colored screenshot gate），並修掉 alpha.1 之後發現的 pre-release 版號回歸。沒有破壞性變更，從 alpha.1 升級不需要遷移。

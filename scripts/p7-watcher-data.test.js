@@ -17,7 +17,7 @@ const { spawnSync } = require('child_process');
 const { createWatcher } = require('../src/status/runs-watch');
 const { scopeFromCwd } = require('../src/status/project-key');
 const { buildDecisionsSidecar } = require('../src/status/decisions-sidecar');
-const { createResiduePublisher } = require('../src/status/residue');
+const { createResiduePublisher, buildResidueFact } = require('../src/status/residue');
 const { sumTodayTierSpend, loadCostFuseConfig } = require('./lib/brain-spend');
 const { validateJsonSchema } = require('./validate-json-schema.js');
 const schemaOf = (n) => JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'schemas', n), 'utf8'));
@@ -296,51 +296,77 @@ const autoRecord = (over = {}) => ({
 });
 const writeAuto = (ctx, rec) => fs.writeFileSync(path.join(ctx.repo, '.git', 'autopilot-residue-auto.json'), typeof rec === 'string' ? rec : JSON.stringify(rec));
 
-test('R4 residue: the auto-run record adds needs_human_* / auto_* fields; the fact validates against the schema; the schema id is unchanged', async () => {
+const needsOf = (fact, name) => fact.needs_human.find((e) => e.path && e.path.endsWith(`/${name}`));
+
+test('R4 residue: the list comes from the scan, sizes by path from the auto record, auto_* from the record; the fact validates and the schema id is unchanged', async () => {
   const ctx = residueFixture();
   try {
-    writeAuto(ctx, autoRecord());
+    const dirtyPath = fs.realpathSync(path.join(ctx.base, 'wt-dirty'));
+    writeAuto(ctx, autoRecord({ needs_human: [{ kind: 'worktree', path: dirtyPath, class: 'dirty', age_days: 3.5, bytes: 1048576, reason: 'failure', command: 'x' }], needs_human_count: 99, needs_human_bytes: 99 }));
     const { pub, logs } = publisherOf(ctx);
     assert.equal(await pub.publish({ nowMs: ctx.now }), true);
     const fact = JSON.parse(fs.readFileSync(pub.file, 'utf8'));
     assert.equal(fact.schema, 'autopilot.residue/1');
     assert.equal(fact.reapable_worktrees, 1, 'the scan part is unchanged');
-    assert.equal(fact.needs_human_count, 2);
-    assert.equal(fact.needs_human_bytes, 1048576);
+    assert.equal(fact.needs_human_count, 2, 'count = the scan list (wt-dirty + the unmarked wt-clean), not the auto record count');
+    assert.equal(needsOf(fact, 'wt-dirty').bytes, 1048576, 'bytes matched by path from the auto record');
+    assert.equal(needsOf(fact, 'wt-clean').bytes, null, 'no cached size -> null');
+    assert.equal(fact.needs_human_bytes, 1048576, 'sum of the known sizes');
+    assert.match(needsOf(fact, 'wt-dirty').command, /status --short/);
     assert.equal(fact.auto_ran_at, '2026-10-09T01:00:00.000Z');
     assert.equal(fact.auto_removed_count, 2);
     assert.equal(fact.auto_archived_count, 1);
-    assert.equal(fact.needs_human.length, 2);
-    assert.deepEqual(fact.needs_human[0], { kind: 'worktree', class: 'dirty', age_days: 3.5, bytes: 1048576, reason: 'failure', command: 'git worktree remove --force /x/dirty', path: '/x/dirty' });
-    assert.equal(fact.needs_human[1].branch, 'feature/old');
     const v = validateJsonSchema(schemaOf('residue.schema.json'), fact);
     assert.equal(v.valid, true, JSON.stringify(v));
     assert.deepEqual(logs, []);
   } finally { ctx.cleanup(); }
 });
 
-test('R4 residue: needs_human is capped at 20 entries (the count keeps the true total); no record / foreign schema / garbage adds no fields', async () => {
+test('R4 residue: no auto record (never ran, or residue.auto_reap=false) still publishes the list; a foreign/garbage record adds no auto_* and no sizes', async () => {
   const ctx = residueFixture();
   try {
-    const many = Array.from({ length: 30 }, (_, i) => ({ kind: 'branch', branch: `b${i}`, class: 'unintegrated-branch', age_days: 15, bytes: null, reason: null, command: `git branch -D b${i}` }));
-    writeAuto(ctx, autoRecord({ needs_human: many, needs_human_count: 30 }));
     const { pub } = publisherOf(ctx);
-    assert.equal(await pub.publish({ nowMs: ctx.now }), true);
-    let fact = JSON.parse(fs.readFileSync(pub.file, 'utf8'));
-    assert.equal(fact.needs_human.length, 20);
-    assert.equal(fact.needs_human_count, 30);
-    assert.equal(validateJsonSchema(schemaOf('residue.schema.json'), fact).valid, true);
     for (const bad of [null, '{not json', JSON.stringify({ schema: 'other/1', needs_human_count: 5 }), JSON.stringify(autoRecord({ needs_human_count: -1 }))]) {
       if (bad === null) fs.rmSync(path.join(ctx.repo, '.git', 'autopilot-residue-auto.json'), { force: true }); else writeAuto(ctx, bad);
       assert.equal(await pub.publish({ nowMs: ctx.now += 61000 }), true);
-      fact = JSON.parse(fs.readFileSync(pub.file, 'utf8'));
-      assert.equal('needs_human_count' in fact, false, `no fields for ${String(bad).slice(0, 20)}`);
+      const fact = JSON.parse(fs.readFileSync(pub.file, 'utf8'));
+      const tag = String(bad).slice(0, 20);
+      assert.equal(fact.needs_human_count, 2, `list published for ${tag}`);
+      assert.equal(fact.needs_human.every((e) => e.bytes === null), true, tag);
+      assert.equal(fact.needs_human_bytes, null, tag);
+      assert.equal('auto_ran_at' in fact, false, `no auto_* for ${tag}`);
       assert.equal(validateJsonSchema(schemaOf('residue.schema.json'), fact).valid, true);
     }
   } finally { ctx.cleanup(); }
 });
 
-test('R4 residue: the watcher never starts du (sizes come only from the auto run)', () => {
+test('R4 residue: an entry the person resolved after the last auto run disappears on the next scan (the stale auto record does not resurrect it)', async () => {
+  const ctx = residueFixture();
+  try {
+    const dirtyPath = fs.realpathSync(path.join(ctx.base, 'wt-dirty'));
+    writeAuto(ctx, autoRecord({ needs_human: [{ kind: 'worktree', path: dirtyPath, class: 'dirty', age_days: 1, bytes: 4096, reason: null, command: 'x' }], needs_human_count: 1 }));
+    const { pub } = publisherOf(ctx);
+    assert.equal(await pub.publish({ nowMs: ctx.now }), true);
+    assert.ok(needsOf(JSON.parse(fs.readFileSync(pub.file, 'utf8')), 'wt-dirty'));
+    git(ctx.repo, 'worktree', 'remove', '--force', path.join(ctx.base, 'wt-dirty'));
+    assert.equal(await pub.publish({ nowMs: ctx.now += 61000 }), true);
+    const fact = JSON.parse(fs.readFileSync(pub.file, 'utf8'));
+    assert.equal(needsOf(fact, 'wt-dirty'), undefined);
+    assert.equal(fact.needs_human_count, 1);
+    assert.equal(fact.needs_human_bytes, null, 'the resolved entry no longer contributes its cached size');
+  } finally { ctx.cleanup(); }
+});
+
+test('R4 residue: needs_human rows are capped at 20 (the count keeps the true total)', () => {
+  const many = Array.from({ length: 30 }, (_, i) => ({ kind: 'branch', branch: `b${i}`, class: 'unintegrated', age_days: 15, bytes: null, reason: null, command: `git branch -D b${i}` }));
+  const fact = buildResidueFact({ key: 'k', report: { worktrees: [], needs_human: many }, atMs: 0, auto: null });
+  assert.equal(fact.needs_human.length, 20);
+  assert.equal(fact.needs_human_count, 30);
+  assert.equal(validateJsonSchema(schemaOf('residue.schema.json'), fact).valid, true);
+  assert.equal('needs_human_count' in buildResidueFact({ key: 'k', report: { worktrees: [] }, atMs: 0 }), false, 'a scan without needs_human adds no fields');
+});
+
+test('R4 residue: the watcher never starts du (sizes come only from the auto record)', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'status', 'residue.js'), 'utf8');
   assert.equal(/['"]du['"]/.test(src), false);
 });

@@ -118,6 +118,7 @@ mk_wt b-live unintegrated;      mk_marker "$TEST_TMP/wt-b-live" b-live root-i ru
 mk_wt b-busy unintegrated;      mk_marker "$TEST_TMP/wt-b-busy" b-busy root-j run-j "retention_reason=failure" "$EXPIRED"
 ( cd "$TEST_TMP/wt-b-busy" && exec sleep 600 ) & BUSY_PID=$!
 mk_wt b-detached unintegrated;  mk_marker "$TEST_TMP/wt-b-detached" b-detached root-k run-k "retention_reason=failure" "$EXPIRED"; git -C "$TEST_TMP/wt-b-detached" checkout -q --detach
+mk_wt b-mismatch unintegrated;  mk_marker "$TEST_TMP/wt-b-mismatch" some-other-branch root-mm run-mm "retention_reason=failure" "$EXPIRED"
 mk_wt b-nomarker unintegrated
 mk_wt b-nomarker-int
 mk_wt b-badmarker unintegrated; mk_marker "$TEST_TMP/wt-b-badmarker" b-badmarker root-m run-m "retention_reason=failure" "$EXPIRED"; echo 'stray line' >> "$TEST_TMP/wt-b-badmarker/.autopilot-worktree"
@@ -200,6 +201,7 @@ kept b-dirty dirty;       assert_eq "$(why b-dirty)" "dirty" "reason: dirty"
 kept b-live live;         assert_eq "$(why b-live)" "live" "reason: live (flock)"
 kept b-busy "process cwd"; assert_eq "$(why b-busy)" "process_cwd_inside" "reason: process cwd inside"
 kept b-detached detached; assert_eq "$(why b-detached)" "detached_or_head_not_branch_tip" "reason: detached HEAD"
+kept b-mismatch "marker branch differs"; assert_eq "$(why b-mismatch)" "marker_branch_mismatch" "reason: marker branch mismatch"
 kept b-nomarker "no marker"; assert_eq "$(why b-nomarker)" "no_marker" "reason: no marker"
 kept b-nomarker-int "no marker (integrated)"; assert_eq "$(why b-nomarker-int)" "no_marker" "reason: integrated but no marker"
 kept b-badmarker "invalid marker"; assert_eq "$(why b-badmarker)" "marker_invalid" "reason: invalid marker"
@@ -245,6 +247,12 @@ assert_contains "$NH_TXT" '/wt-b-detached' "needs_human: expired detached marker
 assert_contains "$NH_TXT" '/wt-b-nomarker' "needs_human: clean-unintegrated without a marker"
 assert_contains "$NH_TXT" '/wt-b-badmarker' "needs_human: invalid marker counts as no marker"
 assert_contains "$NH_TXT" '"branch":"feature/old"' "needs_human: unintegrated non-dispatch branch older than 14 d"
+assert_eq "$(jx "$OUT" 'j.needs_human.find(e=>e.path&&e.path.endsWith("/wt-b-mismatch")).class')" "marker-branch-mismatch" "needs_human: marker branch mismatch listed"
+nhcmd() { jx "$OUT" "j.needs_human.find(e=>e.path&&e.path.endsWith('/wt-$1')).command"; }
+DET_HEAD="$(git -C "$TEST_TMP/wt-b-detached" rev-parse HEAD)"
+assert_eq "$(nhcmd b-detached)" "git -C '$SBX' update-ref 'refs/archive/$(today)/detached/wt-b-detached' '$DET_HEAD' && git -C '$SBX' worktree remove '$TEST_TMP/wt-b-detached'" "needs_human (detached): command archives HEAD first"
+assert_eq "$(nhcmd b-mismatch)" "git -C '$SBX' worktree remove '$TEST_TMP/wt-b-mismatch'" "needs_human (marker mismatch): HEAD is the branch tip, plain remove"
+CMD_DET="$(nhcmd b-detached)"
 assert_not_contains "$NH_TXT" '/wt-b-live' "needs_human: live excluded"
 assert_not_contains "$NH_TXT" '/wt-b-unexpired' "needs_human: unexpired default lease excluded"
 assert_not_contains "$NH_TXT" '/wt-b-lease-unexpired' "needs_human: unexpired explicit lease excluded"
@@ -292,6 +300,12 @@ G rev-parse --verify -q refs/heads/hands/old2 >/dev/null && __TEST_PASS_COUNT=$(
 assert_contains "$(jx "$OUT3" 'j.notes')" 'campaign_signal_unavailable' "report says the signal was unavailable"
 assert_eq "$(jx "$OUT3" 'j.needs_human.find(e=>e.path&&e.path.endsWith("/wt-s-diff")).class')" "campaign-unknown" "needs_human: unreadable signal -> campaign-unknown (worktree)"
 assert_eq "$(jx "$OUT3" 'j.needs_human.find(e=>e.branch==="hands/old2").class')" "campaign-unknown" "needs_human: unreadable signal -> campaign-unknown (branch)"
+
+# run the suggested commands exactly: the worktrees go, the old HEADs stay resolvable through the archive ref
+G cat-file -e "$DET_HEAD^{commit}" && bash -c "$CMD_DET"
+[ ! -d "$TEST_TMP/wt-b-detached" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "suggested commands should remove the worktrees"
+assert_eq "$(G rev-parse "refs/archive/$(today)/detached/wt-b-detached")" "$DET_HEAD" "detached HEAD survives under the archive ref"
+G branch -f probe-det "$DET_HEAD" && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "old HEAD must be restorable"
 
 kill "$SESS_PID" 2>/dev/null; wait "$SESS_PID" 2>/dev/null
 

@@ -11,8 +11,9 @@
 //
 // Residue auto-reap R4 (docs/plans/evidence/2026-10-09-residue-auto-reap/contract.md): when `<git-common-dir>/autopilot-residue-auto.json`
 // (written by `repo-residue-sweep.js reap --auto`, schema autopilot.residue-auto/1) exists, the fact also carries the additive fields
-// needs_human_count / needs_human_bytes / needs_human (capped at 20) / auto_ran_at / auto_removed_count / auto_archived_count. The band's
-// `wt N` is needs_human_count. This file is only READ here: the watcher never starts `du` (sizes come from the auto run).
+// auto_ran_at / auto_removed_count / auto_archived_count and lends its cached sizes. needs_human_count / needs_human (capped at 20) come
+// from the watcher's own scan (`needs_human` in `scan --json`), so they track the repo and do not need the auto run; needs_human_bytes
+// is the sum of the sizes known by path (null when none). The band's `wt N` is needs_human_count. The watcher never starts `du`.
 //
 // The scan (scripts/repo-residue-sweep.js scan --json) can take seconds on a repo with many worktrees, so it is spawned
 // ASYNCHRONOUSLY, never on the tick's critical path, at most once per THROTTLE_S per publisher (= per project), and never
@@ -37,32 +38,54 @@ const SWEEP = path.join(__dirname, '..', '..', 'scripts', 'repo-residue-sweep.js
 const isCount = (v) => Number.isInteger(v) && v >= 0;
 const textOf = (v) => (typeof v === 'string' && v ? v : null);
 
-// A valid autopilot.residue-auto/1 record -> the additive fields, else null (absent / foreign / unparseable = no fields).
-function autoFields(auto) {
-  if (!auto || typeof auto !== 'object' || auto.schema !== AUTO_SCHEMA || !isCount(auto.needs_human_count)) return null;
-  const rows = [];
+// The list a person must act on comes from the watcher's own throttled `scan --json` (so it follows the repo as the person acts
+// on it, and exists with residue.auto_reap=false); the auto-run record only lends cached sizes (matched by path) and the auto_* counts.
+function validAuto(auto) {
+  return auto && typeof auto === 'object' && auto.schema === AUTO_SCHEMA && isCount(auto.needs_human_count) ? auto : null;
+}
+function cachedSizes(auto) {
+  const m = new Map();
   for (const e of Array.isArray(auto.needs_human) ? auto.needs_human : []) {
-    if (!e || typeof e !== 'object' || (e.kind !== 'worktree' && e.kind !== 'branch')) continue;
-    const row = {
-      kind: e.kind,
-      class: textOf(e.class) || 'unknown',
-      age_days: Number.isFinite(e.age_days) ? e.age_days : null,
-      bytes: isCount(e.bytes) ? e.bytes : null,
-      reason: textOf(e.reason),
-      command: textOf(e.command),
-    };
-    if (e.kind === 'worktree') { if (!textOf(e.path)) continue; row.path = e.path; } else { if (!textOf(e.branch)) continue; row.branch = e.branch; }
-    rows.push(row);
-    if (rows.length >= NEEDS_HUMAN_CAP) break;
+    if (e && e.kind === 'worktree' && textOf(e.path) && isCount(e.bytes)) m.set(e.path, e.bytes);
   }
-  return {
-    needs_human_count: auto.needs_human_count,
-    needs_human_bytes: isCount(auto.needs_human_bytes) ? auto.needs_human_bytes : null,
-    needs_human: rows,
-    auto_ran_at: textOf(auto.ran_at),
-    auto_removed_count: Array.isArray(auto.removed) ? auto.removed.length : 0,
-    auto_archived_count: Array.isArray(auto.archived) ? auto.archived.length : 0,
-  };
+  return m;
+}
+
+// scan report (+ optional auto record) -> the additive fields. No `needs_human` array in the scan = no needs_human fields.
+function autoFields(report, auto) {
+  const valid = validAuto(auto);
+  const scanList = report && Array.isArray(report.needs_human) ? report.needs_human : null;
+  const out = {};
+  if (scanList) {
+    const sizes = valid ? cachedSizes(valid) : new Map();
+    const rows = [];
+    let known = 0; let anyKnown = false;
+    for (const e of scanList) {
+      if (!e || typeof e !== 'object' || (e.kind !== 'worktree' && e.kind !== 'branch')) continue;
+      if (e.kind === 'worktree' ? !textOf(e.path) : !textOf(e.branch)) continue;
+      const bytes = e.kind === 'worktree' && sizes.has(e.path) ? sizes.get(e.path) : null;
+      if (bytes !== null) { known += bytes; anyKnown = true; }
+      const row = {
+        kind: e.kind,
+        class: textOf(e.class) || 'unknown',
+        age_days: Number.isFinite(e.age_days) ? e.age_days : null,
+        bytes,
+        reason: textOf(e.reason),
+        command: textOf(e.command),
+      };
+      if (e.kind === 'worktree') row.path = e.path; else row.branch = e.branch;
+      rows.push(row);
+    }
+    out.needs_human_count = rows.length;
+    out.needs_human_bytes = anyKnown ? known : null;
+    out.needs_human = rows.slice(0, NEEDS_HUMAN_CAP);
+  }
+  if (valid) {
+    out.auto_ran_at = textOf(valid.ran_at);
+    out.auto_removed_count = Array.isArray(valid.removed) ? valid.removed.length : 0;
+    out.auto_archived_count = Array.isArray(valid.archived) ? valid.archived.length : 0;
+  }
+  return out;
 }
 
 function buildResidueFact({ key, report, atMs, auto = null }) {
@@ -77,7 +100,7 @@ function buildResidueFact({ key, report, atMs, auto = null }) {
     reapable_worktrees: REAPABLE_CLASSES.reduce((n, c) => n + (byClass[c] || 0), 0),
     by_class: byClass,
     source: 'repo-residue-sweep scan',
-    ...(autoFields(auto) || {}),
+    ...autoFields(report, auto),
   };
 }
 

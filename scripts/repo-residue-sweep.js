@@ -593,6 +593,13 @@ function computeNeedsHuman(rows, branches, ctx) {
   const wtRoot = `${ctx.mainPath}/.claude/worktrees/`;
   const cmdRemove = (p) => `git -C ${shq(ctx.mainPath)} worktree remove ${shq(p)}`;
   const cmdInspect = (p) => `git -C ${shq(p)} status --short`;
+  // A worktree whose HEAD is not the tip of a local branch (detached, or its branch was moved) would lose the
+  // commits reachable only from HEAD on a plain `worktree remove`: pin HEAD under refs/archive first.
+  const cmdRemoveSafe = (w) => {
+    if (!w.detached && w.head_is_branch_tip === true) return cmdRemove(w.path);
+    const ref = `refs/archive/${utcDate(ctx.nowMs)}/detached/${path.basename(w.path)}`;
+    return `git -C ${shq(ctx.mainPath)} update-ref ${shq(ref)} ${shq(w.head)} && ${cmdRemove(w.path)}`;
+  };
   // campaign-held: an unresolved campaign/Mission names this root; campaign-unknown: the signal is unreadable
   // and the marker's root differs from its run (the auto mode keeps those too).
   const heldClass = (m) => {
@@ -612,8 +619,9 @@ function computeNeedsHuman(rows, branches, ctx) {
     if (w.marker_valid === true) {
       if (!w.lease_expired) continue; // unexpired lease: the owner asked for it to stay
       if (needsInspect) { list.push(entry(cmdInspect(w.path))); continue; }
-      if (w.detached || w.head_is_branch_tip !== true) { list.push(entry(cmdRemove(w.path))); continue; }
-      if (ctx.failedWorktrees.has(w.path)) { list.push(entry(cmdRemove(w.path))); continue; }
+      if (w.detached || w.head_is_branch_tip !== true) { list.push(entry(cmdRemoveSafe(w))); continue; }
+      if (w.marker_strict.branch !== w.branch) { list.push(Object.assign(entry(cmdRemoveSafe(w)), { class: 'marker-branch-mismatch', reason: `marker branch ${w.marker_strict.branch}, checked out ${w.branch}` })); continue; }
+      if (ctx.failedWorktrees.has(w.path)) { list.push(entry(cmdRemoveSafe(w))); continue; }
       // Retained only because of an unresolved campaign (or an unreadable campaign signal): never removed
       // here, but it must still reach the person once its lease has run out.
       const hold = w.cwd_busy === false && w.head_is_branch_tip === true && w.marker_strict.branch === w.branch ? heldClass(w.marker_strict) : null;
@@ -621,7 +629,7 @@ function computeNeedsHuman(rows, branches, ctx) {
       continue; // otherwise: busy or about to be reaped by the next auto run
     }
     if (needsInspect) list.push(entry(cmdInspect(w.path)));
-    else if (w.class === 'clean-unintegrated' || w.class === 'clean-integrated') list.push(entry(cmdRemove(w.path)));
+    else if (w.class === 'clean-unintegrated' || w.class === 'clean-integrated') list.push(entry(cmdRemoveSafe(w)));
   }
   for (const b of branches) {
     if (b.class !== 'unintegrated') continue;

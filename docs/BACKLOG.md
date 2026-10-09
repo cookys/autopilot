@@ -1142,14 +1142,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/RESULTS.md
 - **Context**: capture.sh should wait until the band snapshot is not older than the facts timestamp before capturing, instead of a fixed delay.
 
-### A stray /tmp/.git keeps reappearing and turns suites red; the polluter is unknown
-- **Status**: open
-- **Trigger**: next time /tmp/.git is found (seen again before the alpha.1 cut)
-- **Effort**: S
-- **Source**: alpha.1 full-suite run, 2026-10-08; alpha.2 cut, 2026-10-09
-- **Pointer**: docs/backlog/import-aa-capabilities-test-host-pinned-tmp-in-worktree.md
-- **Context**: suspect eval `claude -p` cells running with cwd /tmp; find the writer (watch /tmp for .git) and make suites tolerate it. See the import-aa row above.
-
 ### P7 test-hardening nits from review
 - **Status**: open
 - **Trigger**: when mods/live/register.ts or gate/check.js is next touched

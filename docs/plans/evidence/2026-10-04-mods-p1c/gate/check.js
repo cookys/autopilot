@@ -20,7 +20,7 @@
 //   review    `R<n> ⟲` (review.json: code.generation, else plan.generation) + ` · QC ✓` / ` · QC owed` (qc.json state)
 //   decisions `◆<proxy>` + ` ?<undocumented>` + ` <rung>` (decisions sidecars summed over the root set; latest ladder rung)
 //   spend     `$<brain today>/<cap>` (envelope host_today_brain_usd / brain_cap_usd, rounded to integers; empty when not published)
-//   hygiene   load-source chip (dev / dev ↓n / dev ⚠ / cache <v> ⚠ / src ? ⚠) + ` · wt <n>` (residue.json reapable worktrees, n > 0)
+//   hygiene   load-source chip (dev / dev ↓n / dev ⚠ / cache <v> ⚠ / src ? ⚠) + ` · wt <n>` (residue.json needs_human_count, n > 0)
 //   ⓘ         always last
 // Width table (applied to bodyColumns, cumulative): < 160 no hygiene; < 140 also no spend, decisions; < 120 also no ◷ age, no review;
 //   < 80 only verdict, dispatch, the unit BAR (no k/N, no 族) and ⓘ. A slot the table removes must be ABSENT (drawn = FAIL). If the line
@@ -336,16 +336,16 @@ function derive(dir, opts = {}) {
   const cap = isObj(envelope) ? envelope.brain_cap_usd : null;
   put('spend', Number.isFinite(brain) && Number.isFinite(cap) && cap > 0 ? `$${Math.round(brain)}/${Math.round(cap)}` : null, 'envelope.json host_today_brain_usd / brain_cap_usd');
 
-  // hygiene: load-source chip + reapable worktrees (clean-integrated + missing-dir, from by_class when present)
+  // hygiene: load-source chip + `wt N` = needs_human_count (residue auto-reap R4 supersedes the P7 reapable-only ruling: reapable
+  // residue is auto-reaped within 24 h, so only what a person must act on is counted). Absent field = 0 = hidden.
   const ls = J('load-source.json');
   const lsOk = isObj(ls) && ls.schema === 'autopilot.load-source/1';
   const res = J('residue.json');
   let wt = 0;
   if (isObj(res) && res.schema === 'autopilot.residue/1' && res.project_key === pkey && count(res.reapable_worktrees)) {
-    wt = res.reapable_worktrees;
-    if (isObj(res.by_class)) {
-      const by = (res.by_class['clean-integrated'] || 0) + (res.by_class['missing-dir'] || 0);
-      if (by !== res.reapable_worktrees) notes.push(`residue.json is inconsistent: reapable_worktrees=${res.reapable_worktrees} but by_class clean-integrated + missing-dir = ${by}`);
+    if (count(res.needs_human_count)) {
+      wt = res.needs_human_count;
+      if (Array.isArray(res.needs_human) && res.needs_human.length > Math.min(wt, 20)) notes.push(`residue.json is inconsistent: needs_human_count=${wt} but needs_human lists ${res.needs_human.length} entries`);
     }
   }
   const hchip = lsOk ? hygieneChip(ls) : null;

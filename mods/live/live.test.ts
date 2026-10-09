@@ -1947,7 +1947,12 @@ function richWorld(): Tree {
     schema: 'autopilot.load-source/1', checked_at: PUBLISHED, plugin_version: '2.37.0', source: 'dev', source_basis: 'dev_link', marketplace: 'directory',
     behind_upstream: 3, flags: [], stale_cache_dirs: [],
   })
-  files[LIVE + '/runs/' + KEY + '.residue.json'] = j({ schema: 'autopilot.residue/1', project_key: KEY, at: PUBLISHED, reapable_worktrees: 2, by_class: { 'clean-integrated': 1, 'missing-dir': 1 }, source: 'repo-residue-sweep scan' })
+  files[LIVE + '/runs/' + KEY + '.residue.json'] = j({ schema: 'autopilot.residue/1', project_key: KEY, at: PUBLISHED, reapable_worktrees: 2, by_class: { 'clean-integrated': 1, 'missing-dir': 1 }, source: 'repo-residue-sweep scan',
+    needs_human_count: 2, needs_human_bytes: 3 * 1048576, auto_ran_at: '2026-10-04T07:00:30.000Z', auto_removed_count: 2, auto_archived_count: 1,
+    needs_human: [
+      { kind: 'worktree', path: '/home/u/proj/.claude/worktrees/hands-x', class: 'dirty', age_days: 4.2, bytes: 2097152, reason: 'failure', command: 'git -C /home/u/proj worktree remove --force /home/u/proj/.claude/worktrees/hands-x' },
+      { kind: 'branch', branch: 'feature/old', class: 'unintegrated-branch', age_days: 20, bytes: null, reason: null, command: 'git branch -D feature/old' },
+    ] })
   files[LIVE + '/stage/' + SID_A + '.json'] = j({
     schema: 'autopilot.stage-walk/1', sid: SID_A, size: 'M', urgent: true, bug: false, high_risk: false, units: 5,
     nodes: ['spec', 'plan', 'implement', 'verify', 'finish'], walk: ['spec', 'plan', 'implement', 'verify', 'finish'], entry: 'spec', terminal: 'finish',
@@ -2189,8 +2194,10 @@ for (const surface of SURFACES) {
     const hygiene = await tab('hygiene')
     expect(hygiene.texts).toContain('load source · dev ↓3')
     expect(hygiene.texts.some(t => t.includes('plugin 2.37.0 · source dev · marketplace directory · behind upstream 3'))).toBe(true)
-    expect(hygiene.texts).toContain('reapable worktrees · 2')
-    expect(hygiene.texts).toContain('  clean-integrated 1 · missing-dir 1')
+    expect(hygiene.texts).toContain('2 need you · 3 MB · auto 3h0m ago: −2 wt, 1 branches archived')
+    expect(hygiene.texts).toContain('worktree …/worktrees/hands-x · dirty · 4d · 2 MB · failure')
+    expect(hygiene.texts).toContain('  git -C /home/u/proj worktree remove --force /home/u/proj/.claude/worktrees/hands-x')
+    expect(hygiene.texts).toContain('branch feature/old · unintegrated-branch · 20d · —')
     expectThemeOnly(hygiene.tree as Drawn)
   })
 
@@ -2300,12 +2307,19 @@ test('P7 model: slot texts and theme keys', () => {
   expect(slotSpend(null)).toBeNull()
   // hygiene: chip + wt n (n > 0 only)
   const ls = (over: Record<string, unknown> = {}) => readLoadSource(JSON.stringify({ schema: 'autopilot.load-source/1', source: 'dev', marketplace: 'directory', behind_upstream: 0, flags: [], stale_cache_dirs: [], ...over }))
-  const rs = (n: number) => readResidue(JSON.stringify({ schema: 'autopilot.residue/1', project_key: KEY, reapable_worktrees: n, by_class: {} }), KEY)
+  const rs = (n: number) => readResidue(JSON.stringify({ schema: 'autopilot.residue/1', project_key: KEY, reapable_worktrees: 9, by_class: {}, needs_human_count: n }), KEY)
+  expect(text(slotHygiene(ls(), readResidue(JSON.stringify({ schema: 'autopilot.residue/1', project_key: KEY, reapable_worktrees: 5, by_class: {} }), KEY)))).toBe('dev') // reapable alone draws nothing: auto-reap clears it, needs_human_count is the number
   expect(text(slotHygiene(ls(), rs(2)))).toBe('dev · wt 2')
   expect(text(slotHygiene(ls(), rs(0)))).toBe('dev')
   expect(text(slotHygiene(null, rs(3)))).toBe('wt 3')
   expect(slotHygiene(ls({ flags: ['marketplace_not_directory'] }), null)?.segs[0].color).toBe('warning')
   expect(slotHygiene(null, rs(0))).toBeNull()
+  // an older fact without the needs_human fields reads as 0 / [] (no wt segment, no rows); the list is capped at 20
+  const old = readResidue(JSON.stringify({ schema: 'autopilot.residue/1', project_key: KEY, reapable_worktrees: 4, by_class: {} }), KEY)
+  expect(old?.needs_human_count).toBe(0)
+  expect(old?.needs_human).toEqual([])
+  const many = readResidue(JSON.stringify({ schema: 'autopilot.residue/1', project_key: KEY, reapable_worktrees: 0, by_class: {}, needs_human_count: 25, needs_human: Array.from({ length: 25 }, (_, i) => ({ kind: 'branch', branch: 'b' + i, class: 'x', age_days: 1, bytes: null, reason: null, command: 'c' })) }), KEY)
+  expect(many?.needs_human.length).toBe(20)
   expect(readResidue(JSON.stringify({ schema: 'autopilot.residue/1', project_key: OTHER_KEY, reapable_worktrees: 1 }), KEY)).toBeNull()
   expect(readStageWalk(JSON.stringify({ schema: 'autopilot.stage-walk/1', sid: 'other', walk: ['a'] }), SID_A)).toBeNull()
 })

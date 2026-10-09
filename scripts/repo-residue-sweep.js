@@ -92,14 +92,17 @@
 // dispatch-foreman.sh via scripts/lib/dispatch-branch-ledger.sh) attributes to S. A row is S's when its
 // session_id is S (CLAUDE_CODE_SESSION_ID at creation); because a foreman's hands run in a child Claude
 // session with another id, a row whose root_run_id or run_id equals the run_id of a row S owns is S's too,
-// transitively (only run_id propagates, never root_run_id). No age floor. Per branch, in order:
-//   keep  integration ref; checked out in any worktree; pointed at by a marker worktree that is live, has a
-//         process cwd inside (or /proc unknowable) or an unexpired lease; campaign signal unreliable
+// transitively (only run_id propagates, never root_run_id; row order does not matter). A branch name that
+// appears in several rows belongs to whoever owns the LATEST row (created_at, then file order), and that row
+// must describe the live ref: the ref's oldest reflog entry within 120 s of the row's created_at (no reflog:
+// tip commit date not older than the row), else keep `ledger_row_stale`. No age floor. Per branch, in order:
+//   keep  integration ref; checked out in any worktree; pointed at by ANY marker worktree that is live, has a
+//         process cwd inside (or /proc unknowable) or an unexpired lease; stale ledger row; campaign signal unreliable
 //         (campaign_signal_unavailable); a row's root_run_id/run_id (or the marker's) in an unresolved
 //         campaign/Mission (unresolved_campaign);
 //   integrated (same rule as the sweep) -> pin-evidence-anchors apply, `git branch -D`;
 //   unintegrated -> `git update-ref refs/archive/<UTC date>/<branch> <tip> ''` (create-only), verify, pin
-//         anchors, `git branch -D`. A colliding ref at another sha keeps the branch (archive_ref_failed); a
+//         anchors, then delete with `git update-ref -d refs/heads/<branch> <tip>` (compare-and-swap). A colliding ref at another sha keeps the branch (archive_ref_failed); a
 //         ref already at this exact tip counts as this tip's archive.
 // Output {schema:"autopilot.close-session/1", session, dry_run, deleted:[{branch,tip}],
 // archived:[{branch,tip,ref}], kept:[{branch,why}]}. Exit 0 = nothing left behind except by a keep rule;
@@ -892,8 +895,17 @@ function ownedBranches(rows, session) {
       if ((typeof r.root_run_id === 'string' && runIds.has(r.root_run_id)) || (typeof r.run_id === 'string' && runIds.has(r.run_id))) { take(r); grew = true; }
     }
   }
-  const names = new Map(); // branch -> its owned rows
-  for (const r of owned) { if (!names.has(r.branch)) names.set(r.branch, []); names.get(r.branch).push(r); }
+  // A branch name can be reused (deleted, then re-created by another session or by hand): the LATEST row for
+  // a name (greatest created_at, ties by file order) is the one that describes the live branch. The branch is
+  // S's only when that row is owned; an older owned row is stale history.
+  const latest = new Map();
+  rows.forEach((r, i) => {
+    const cur = latest.get(r.branch);
+    const at = Number(r.created_at) || 0;
+    if (!cur || at >= cur.at) latest.set(r.branch, { r, at, i });
+  });
+  const names = new Map(); // branch -> [its latest row], only when S owns that row
+  for (const [branch, { r }] of latest) if (owned.has(r)) names.set(branch, [r]);
   return names;
 }
 
@@ -927,6 +939,23 @@ function compactLedger(common, mainPath) {
   return { compacted: Number.isFinite(n) ? n : 0 };
 }
 
+// A rail appends its row seconds after it creates the branch, so the row describes the live ref only when the
+// ref's CURRENT lifetime began within LEDGER_STALE_SLACK_S of the row's created_at. Lifetime start = the oldest
+// reflog entry (a deleted branch's reflog goes with it). A branch re-created later by another session or by hand
+// starts after the row; one that predates it starts before. No reflog: only the lower bound can be checked,
+// against the tip commit date. Undeterminable = false (the branch is kept).
+const LEDGER_STALE_SLACK_S = 120;
+function ledgerRowFitsBranch(repo, b, createdAt) {
+  if (!Number.isFinite(createdAt)) return false;
+  const r = git(repo, ['reflog', 'show', '--date=unix', '--format=%gd', `refs/heads/${b.branch}`]);
+  if (r.ok && r.out.trim()) {
+    const m = /@\{(\d+)\}$/.exec(r.out.trim().split('\n').pop().trim());
+    if (!m) return false;
+    return Math.abs(Number(m[1]) - createdAt) <= LEDGER_STALE_SLACK_S;
+  }
+  return b.last_commit_unix ? b.last_commit_unix >= createdAt - LEDGER_STALE_SLACK_S : false;
+}
+
 function runCloseSession(o, mainPath, integrationSha, integrationBranch, common) {
   const nowMs = Date.now();
   const report = { schema: 'autopilot.close-session/1', session: o.session, dry_run: !o.yes, deleted: [], archived: [], kept: [] };
@@ -942,8 +971,12 @@ function runCloseSession(o, mainPath, integrationSha, integrationBranch, common)
   const sig = loadCampaignSignal(common);
   const wtRows = classifyWorktrees(mainPath, mainPath, integrationSha);
   annotateWorktrees(wtRows, cfg, nowMs, readProcCwds(), mainPath);
-  const pointers = new Map();
-  for (const w of wtRows) if (w.marker_strict && w.marker_strict.valid && fs.existsSync(w.path)) pointers.set(w.marker_strict.branch, w);
+  const pointers = new Map(); // branch -> every marker worktree that names it
+  for (const w of wtRows) {
+    if (!(w.marker_strict && w.marker_strict.valid && fs.existsSync(w.path))) continue;
+    if (!pointers.has(w.marker_strict.branch)) pointers.set(w.marker_strict.branch, []);
+    pointers.get(w.marker_strict.branch).push(w);
+  }
 
   const planDelete = []; const planArchive = [];
   for (const name of [...mine.keys()].sort()) {
@@ -952,12 +985,15 @@ function runCloseSession(o, mainPath, integrationSha, integrationBranch, common)
     const keep = (why) => report.kept.push({ branch: name, why });
     if (b.class === 'integration-ref') { keep('integration_ref'); continue; }
     if (checkedOut.has(name)) { keep('checked_out'); continue; }
-    const pointer = pointers.get(name);
-    if (pointer && (pointer.class === 'live' || pointer.cwd_busy !== false || pointer.lease_expired === false)) { keep('live_or_in_use_or_unexpired_lease_worktree'); continue; }
+    const ptrs = pointers.get(name) || [];
+    // ANY pointing worktree that is live, in use or under an unexpired lease keeps the branch
+    if (ptrs.some((w) => w.class === 'live' || w.cwd_busy !== false || w.lease_expired === false)) { keep('live_or_in_use_or_unexpired_lease_worktree'); continue; }
+    // The row must describe THIS lifetime of the branch (the name may have been reused after S's branch was deleted).
+    if (!ledgerRowFitsBranch(mainPath, b, Number(mine.get(name)[0].created_at))) { keep('ledger_row_stale'); continue; }
     if (!sig.reliable) { keep('campaign_signal_unavailable'); continue; }
     const ids = [];
     for (const r of mine.get(name)) { if (r.root_run_id) ids.push(r.root_run_id); if (r.run_id) ids.push(r.run_id); }
-    if (pointer) ids.push(pointer.marker_strict.root_run_id);
+    for (const w of ptrs) ids.push(w.marker_strict.root_run_id);
     if (ids.some((id) => sig.unresolved.has(id)) || [...sig.unresolved].some((id) => id.length >= 8 && name.includes(id))) { keep('unresolved_campaign'); continue; }
     if (b.class === 'integrated') planDelete.push(b);
     else if (b.class === 'unintegrated') planArchive.push(b);
@@ -992,7 +1028,8 @@ function runCloseSession(o, mainPath, integrationSha, integrationBranch, common)
       for (const { b, ref } of toDelete) {
         const nowTip = git(mainPath, ['rev-parse', '--verify', '--quiet', `refs/heads/${b.branch}`]);
         if (!nowTip.ok || nowTip.out.trim() !== b.tip) { report.kept.push({ branch: b.branch, why: 'tip_changed', failed: true }); continue; }
-        const d = git(mainPath, ['branch', '-D', b.branch]);
+        // compare-and-swap: refuses if the branch moved since classification
+        const d = git(mainPath, ['update-ref', '-d', `refs/heads/${b.branch}`, b.tip]);
         if (!d.ok) { report.kept.push({ branch: b.branch, why: d.err.trim().slice(0, 200) || 'branch_delete_failed', failed: true }); continue; }
         if (ref) report.archived.push({ branch: b.branch, tip: b.tip, ref });
         else report.deleted.push({ branch: b.branch, tip: b.tip });

@@ -20,7 +20,7 @@ sig() { jx "$1" '"deleted="+j.deleted.map(x=>x.branch).sort().join(",")+";archiv
 
 G() { git -C "$SBX" -c user.email=t@t -c user.name=t "$@"; }
 ledger_row() { # <branch> <session|null> <run_id> <root_run_id>
-  node -e 'process.stdout.write(JSON.stringify({schema:"autopilot.dispatch-branch/1",branch:process.argv[1],session_id:process.argv[2]==="null"?null:process.argv[2],run_id:process.argv[3],root_run_id:process.argv[4],created_at:Number(process.argv[5]),base_sha:process.argv[6]})+"\n")' "$1" "$2" "$3" "$4" "$NOW" "$BASE" >> "$SBX/.git/autopilot/dispatch-branches.jsonl"
+  node -e 'process.stdout.write(JSON.stringify({schema:"autopilot.dispatch-branch/1",branch:process.argv[1],session_id:process.argv[2]==="null"?null:process.argv[2],run_id:process.argv[3],root_run_id:process.argv[4],created_at:Number(process.argv[5]),base_sha:process.argv[6]})+"\n")' "$1" "$2" "$3" "$4" "${CREATED:-$NOW}" "$BASE" >> "$SBX/.git/autopilot/dispatch-branches.jsonl"
 }
 ahead() { # <branch> : branch one commit ahead of BASE, not checked out
   local c; c="$(G commit-tree "$(G rev-parse "$BASE^{tree}")" -p "$BASE" -m "ahead-$1-$RANDOM")"; G update-ref "refs/heads/$1" "$c"
@@ -39,24 +39,38 @@ build_fixture() {
   G update-ref refs/heads/foreman/F1 "$BASE"                      # foreman branch, integrated
   ahead s1-unint; ahead s2-unint; ahead noledger; ahead s1-campaign; ahead s1-leased
   ahead hands/F1/u1; ahead hands/F1/u2
+  ahead reuse-s2; ahead reuse-hand; ahead s1-shared; ahead sib-shared
   G worktree add -q "$TEST_TMP/co-$$-$(basename "$SBX")" -b s1-checkedout "$BASE" 2>/dev/null
   git -C "$TEST_TMP/co-$$-$(basename "$SBX")" -c user.email=t@t -c user.name=t commit -q --allow-empty -m "ahead-co"
   # an unexpired-lease marker worktree (on another branch) that names s1-leased
   local lw="$TEST_TMP/lease-$$-$(basename "$SBX")"
   G worktree add -q "$lw" -b lease-holder "$BASE" 2>/dev/null
   printf 'created_at=%s\nbranch=s1-leased\nbase_sha=%s\nrun_id=r-l\nroot_run_id=r-l\nloop_id=r-l\nretention_reason=failure\nretention_expires_at=%s\nschema=2\n' "$NOW" "$BASE" "$((NOW + 100000))" > "$lw/.autopilot-worktree"
+  # second marker worktree naming the SAME branch, with an EXPIRED lease, created after the unexpired one
+  local lw2="$TEST_TMP/lease2-$$-$(basename "$SBX")"
+  G worktree add -q "$lw2" -b lease-holder2 "$BASE" 2>/dev/null
+  printf 'created_at=%s\nbranch=s1-leased\nbase_sha=%s\nrun_id=r-l2\nroot_run_id=r-l2\nloop_id=r-l2\nretention_reason=failure\nretention_expires_at=%s\nschema=2\n' "$NOW" "$BASE" "$((NOW - 100))" > "$lw2/.autopilot-worktree"
   # campaign journal: camp-open unresolved
   node -e 'process.stdout.write(JSON.stringify({kind:"journal",op:"campaign_event",payload:JSON.stringify({campaign_id:"camp-open",event:{event_type:"review_started"}})})+"\n")' > "$SBX/.git/autopilot/implementation-campaign.jsonl"
   # ledger. S1 owns: merged, unint, checkedout, campaign, leased, and foreman F1 (run id F1).
+  # the nested hand's row comes BEFORE its parent's row, and both before the foreman's: ownership must not depend on order
+  ledger_row hands/F1/u2 S9 u2 u1            # nested: owned through root_run_id=u1 (transitive)
+  ledger_row hands/F1/u1 null u1 F1          # hand in the foreman's child session: owned through root_run_id=F1
+  ledger_row foreman/F1 S1 F1 F1
   ledger_row s1-merged S1 r-m r-m
   ledger_row s1-unint S1 r-u r-u
   ledger_row s1-checkedout S1 r-c r-c
   ledger_row s1-campaign S1 r-camp camp-open
   ledger_row s1-leased S1 r-ls r-ls
-  ledger_row foreman/F1 S1 F1 F1
-  ledger_row hands/F1/u1 null u1 F1          # hand in the foreman's child session: owned through root_run_id=F1
-  ledger_row hands/F1/u2 S9 u2 u1            # nested: owned through root_run_id=u1 (transitive)
   ledger_row s2-unint S2 r-s2 r-s2
+  # a name reused: S1's row, then a NEWER row from S2 for the same branch -> the branch is S2's, not S1's
+  CREATED=$((NOW - 5)) ledger_row reuse-s2 S1 r-old r-old
+  ledger_row reuse-s2 S2 r-new r-new
+  # a name re-created by hand long after S1's row (the row is hours older than the live ref) -> stale
+  CREATED=$((NOW - 7200)) ledger_row reuse-hand S1 r-rh r-rh
+  # root_run_id must not pull in siblings: S3's row shares S1's root but is not S1's
+  ledger_row s1-shared S1 r-sh shared-root
+  ledger_row sib-shared S3 r-sib shared-root
   # noledger: deliberately no row
 }
 run_close() { node "${CS_SCRIPT:-$SCRIPT}" close-session --repo "$SBX" "$@"; }
@@ -97,7 +111,7 @@ BEFORE="$(refs_snapshot)"
 DRY="$(run_close --session S1)"; assert_eq "$?" "0" "dry run -> exit 0"
 assert_eq "$(refs_snapshot)" "$BEFORE" "dry run changes no ref"
 assert_eq "$(jx "$DRY" 'j.dry_run')" "true" "dry run says so"
-EXPECT="deleted=foreman/F1,s1-merged;archived=hands/F1/u1,hands/F1/u2,s1-unint;kept=s1-campaign:unresolved_campaign,s1-checkedout:checked_out,s1-leased:live_or_in_use_or_unexpired_lease_worktree"
+EXPECT="deleted=foreman/F1,s1-merged;archived=hands/F1/u1,hands/F1/u2,s1-shared,s1-unint;kept=reuse-hand:ledger_row_stale,s1-campaign:unresolved_campaign,s1-checkedout:checked_out,s1-leased:live_or_in_use_or_unexpired_lease_worktree"
 assert_eq "$(sig "$DRY")" "$EXPECT" "dry run plan = the real plan"
 assert_eq "$(jx "$DRY" 'j.schema+"|"+j.session')" "autopilot.close-session/1|S1" "report schema + session"
 
@@ -107,7 +121,7 @@ OUT="$(run_close --session S1 --yes)"; RC=$?
 assert_eq "$RC" "0" "S1 close-out -> exit 0 (only keep rules left behind)"
 assert_eq "$(sig "$OUT")" "$EXPECT" "S1 close-out acts exactly on the right branches"
 for b in s1-merged foreman/F1 s1-unint hands/F1/u1 hands/F1/u2; do G rev-parse --verify -q "refs/heads/$b" >/dev/null && fail "$b should be deleted" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)); done
-for b in s1-checkedout s1-campaign s1-leased s2-unint noledger; do G rev-parse --verify -q "refs/heads/$b" >/dev/null && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "$b must survive"; done
+for b in s1-checkedout s1-campaign s1-leased s2-unint noledger reuse-s2 reuse-hand sib-shared; do G rev-parse --verify -q "refs/heads/$b" >/dev/null && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "$b must survive"; done
 assert_eq "$(G rev-parse "refs/archive/$TODAY/s1-unint")" "$UNTIP" "unintegrated branch archived at its tip"
 assert_eq "$(G rev-parse "refs/archive/$TODAY/hands/F1/u1")" "$U1TIP" "foreman-owned hand archived at its tip"
 assert_eq "$(G rev-parse s2-unint)" "$S2TIP" "S2's branch untouched"
@@ -116,11 +130,13 @@ assert_eq "$(G for-each-ref "refs/archive/$TODAY/" | grep -c -E 's2-unint|noledg
 assert_eq "$(jx "$OUT" 'j.archived.find(a=>a.branch==="s1-unint").ref')" "refs/archive/$TODAY/s1-unint" "archived entry carries the ref"
 # idempotent: a second run has nothing left to remove
 OUT2="$(run_close --session S1 --yes)"; assert_eq "$?" "0" "second run exit 0"
-assert_eq "$(sig "$OUT2")" "deleted=;archived=;kept=s1-campaign:unresolved_campaign,s1-checkedout:checked_out,s1-leased:live_or_in_use_or_unexpired_lease_worktree" "second run only repeats keep rules"
+assert_eq "$(sig "$OUT2")" "deleted=;archived=;kept=reuse-hand:ledger_row_stale,s1-campaign:unresolved_campaign,s1-checkedout:checked_out,s1-leased:live_or_in_use_or_unexpired_lease_worktree" "second run only repeats keep rules"
 # S2 on the same repo now: its own branch is archived, nothing else
 OUT3="$(run_close --session S2 --yes)"; assert_eq "$?" "0" "S2 close-out exit 0"
-assert_eq "$(sig "$OUT3")" "deleted=;archived=s2-unint;kept=" "S2 close-out acts only on S2's branch"
+assert_eq "$(sig "$OUT3")" "deleted=;archived=reuse-s2,s2-unint;kept=" "S2 close-out acts on its own branches, including the reused name whose latest row is S2's"
 assert_eq "$(G rev-parse noledger)" "$NLTIP" "still: branch with no ledger row untouched"
+G rev-parse --verify -q refs/heads/sib-shared >/dev/null && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "sibling sharing a root_run_id must survive"
+OUT4="$(run_close --session S3 --yes)"; assert_eq "$(sig "$OUT4")" "deleted=;archived=sib-shared;kept=" "S3 owns only its own row"
 
 # ---------------------------------------------------------------- campaign signal unreadable -> keep
 build_fixture "$TEST_TMP/repo2"
@@ -182,9 +198,17 @@ assert_neq "$(sig "$M1")" "$EXPECT" "mutant: no transitive run-id ownership -> o
 assert_contains "$(sig "$M1")" "kept=" "mutant transitive still runs"
 M1B="$(mutate allsessions 's/if \(r\.session_id === session\) take\(r\);/take(r);/')"
 assert_neq "$(sig "$M1B")" "$EXPECT" "mutant: every session's rows owned -> outcome differs (S2/other branches would be hit)"
+M4="$(mutate rootprop 's/runIds\.add\(r\.run_id\);/runIds.add(r.run_id); runIds.add(r.root_run_id);/')"
+assert_neq "$(sig "$M4")" "$EXPECT" "mutant: root_run_id propagates -> sibling session's branch is archived"
+M5="$(mutate stale 's/if \(!ledgerRowFitsBranch\(mainPath, b, Number\(mine\.get\(name\)\[0\]\.created_at\)\)\) \{/if (false) {/')"
+assert_neq "$(sig "$M5")" "$EXPECT" "mutant: staleness check removed -> hand-re-created branch is archived"
+M6="$(mutate lastpointer 's/ptrs\.some\(/ptrs.slice(-1).some(/')"
+assert_neq "$(sig "$M6")" "$EXPECT" "mutant: only the last pointing worktree counts -> leased branch is archived"
+M7="$(mutate latestrow 's/if \(!cur \|\| at >= cur\.at\) latest\.set/if (!cur) latest.set/')"
+assert_neq "$(sig "$M7")" "$EXPECT" "mutant: first row wins instead of the latest -> reused name is mis-owned"
 M2="$(mutate checkedout "s/if \(checkedOut\.has\(name\)\) \{ keep\('checked_out'\); continue; \}//")"
 assert_neq "$(sig "$M2")" "$EXPECT" "mutant: checked-out guard removed -> outcome differs"
-M3="$(mutate lease "s/ \|\| pointer\.lease_expired === false\)\) \{ keep/ || false)) { keep/")"
+M3="$(mutate lease "s/ \|\| w\.lease_expired === false\)\) \{ keep/ || false)) { keep/")"
 assert_neq "$(sig "$M3")" "$EXPECT" "mutant: lease-pointer guard weakened -> outcome differs"
 
 finalize_test

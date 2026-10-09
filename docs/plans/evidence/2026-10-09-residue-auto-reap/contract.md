@@ -143,3 +143,22 @@ Recorded after hands A and B merged; each is accepted as shipped and supersedes 
 - The 24 h stamp is claimed before the sweep runs, so a failing sweep is not retried by every later session.
 - The Codex package wires no SessionStart hook for this feature.
 - `campaign-held` / `campaign-unknown`: a marker worktree whose lease has expired (or a dispatch branch older than `archive_branch_days`) that is retained only because its `root_run_id` is in an unresolved campaign or Mission is never removed, but is listed in `needs_human` with class `campaign-held` and `reason=root_run_id=<id>`. When the campaign signal is unreadable, the same worktrees (root differs from run) and old dispatch branches are listed as `campaign-unknown`. The `command` is the sweep scan plus the root id, because no safe one-line abort exists (`mission finalize-abort` needs a drained Mission state file). `scan --json` now loads the campaign signal too.
+
+## Session close-out (alpha.4)
+
+Owner ruling, 2026-10-09: at close-out, a session's merged dispatch branches are deleted and its unintegrated ones are archived (`refs/archive/`, create-only) and then deleted, instead of waiting `archive_branch_days`. Mechanism only; the finish-flow text that calls it rides the next guidance eval.
+
+**Branch-to-session ledger.** `dispatch-hetero.sh` and `dispatch-foreman.sh` append one JSON line when they create a branch (`scripts/lib/dispatch-branch-ledger.sh`) to `<git-common-dir>/autopilot/dispatch-branches.jsonl`: `{schema:"autopilot.dispatch-branch/1", branch, session_id, run_id, root_run_id, created_at, base_sha}`. `session_id` is `$CLAUDE_CODE_SESSION_ID`, else null; `AUTOPILOT_SESSION_ID` is never read. The append runs under `flock -x` on `<ledger>.lock` and is fail-open: a failure prints one stderr line and the dispatch continues. A reused worktree appends nothing (its branch already has a row).
+
+**Ownership.** A foreman's hands run in a child Claude session with another session id, so ownership follows run ids. A branch belongs to session S when its row's `session_id` is S, or its `root_run_id` or `run_id` equals the `run_id` of a row S owns, transitively. Only `run_id` propagates; a row's `root_run_id` never pulls in siblings that share a campaign root. Limitation: under a managed campaign the hand's `root_run_id` is the shared Mission root, not the foreman's `run_id`, so a hand reaches S only if some S-owned row carries that run id.
+
+**Command.** `repo-residue-sweep.js close-session --session <sid> [--yes] [--repo <dir>] [--integration-ref <ref>] [--json]`. Without `--yes` it prints the plan and exits 0. For each ledger-owned local branch that still exists (branches without a ledger row are never touched; no age floor):
+- keep, with the reason listed: the integration ref; checked out in any worktree; pointed at by a marker worktree that is live, in use (process cwd, or `/proc` unknowable) or under an unexpired lease; campaign signal unreliable (`campaign_signal_unavailable`); a row's or marker's root/run id in an unresolved campaign or Mission (`unresolved_campaign`);
+- integrated: `pin-evidence-anchors.js apply`, then `git branch -D`;
+- unintegrated: `git update-ref refs/archive/<UTC date>/<branch> <tip> ''` (create-only), verify, pin anchors, `git branch -D`. A colliding ref at a different sha keeps the branch with `archive_ref_failed`.
+
+Output: `{schema:"autopilot.close-session/1", session, dry_run, deleted:[{branch,tip}], archived:[{branch,tip,ref}], kept:[{branch,why}]}`. Exit 0 when nothing it was asked to remove is left behind except by a keep rule; 1 when something stayed for another reason (`archive_ref_failed`, `evidence_anchoring_failed`, `tip_changed`, a failed `branch -D`, `integration_unverifiable`); 2 for usage or an unreadable ledger.
+
+**Compaction.** `reap --auto` drops ledger rows whose branch no longer exists, rewriting the file atomically under the same lock (`ledger.compacted` in its stdout report). Unparseable lines are kept. A failed compaction is a note in the report, not an error.
+
+Tests: `hooks/tests/close-session.test.sh` (two sessions, foreman-owned hands, dry run, collision, compaction, lock waits, mutants for the ownership rule, the checked-out guard and the lease guard) plus ledger assertions in `dispatch-hetero.test.sh` and `dispatch-foreman.test.sh`.

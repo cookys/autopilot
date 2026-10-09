@@ -122,6 +122,11 @@ assert_eq "$(field "$OUT" base_sha)" "$BASE" "2: base pinned to HEAD sha"
 assert_eq "$(field "$OUT" foreman_head)" "$BASE" "2: foreman branch left at base"
 assert_eq "$(field "$OUT" foreman_commits)" "0" "2: no foreman commits"
 assert_eq "$(field "$OUT" session_id)" "session_stub_0" "2: session id captured from resume hint"
+# branch->session ledger: one row for foreman/r2; run_id = root_run_id = the run id (no managed campaign), base pinned
+LROW="$(grep -F '"branch":"foreman/r2"' "$SBX/.git/autopilot/dispatch-branches.jsonl" 2>/dev/null)"
+assert_eq "$(printf '%s\n' "$LROW" | grep -c .)" "1" "2: ledger has one row for the foreman branch"
+assert_eq "$(printf '%s' "$LROW" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);process.stdout.write([j.schema,j.run_id,j.root_run_id,j.base_sha,j.session_id===(process.env.CLAUDE_CODE_SESSION_ID||null),/^[0-9]+$/.test(String(j.created_at))].join("|"))})')" \
+  "autopilot.dispatch-branch/1|r2|r2|$BASE|true|true" "2: ledger row fields (session_id follows CLAUDE_CODE_SESSION_ID, never AUTOPILOT_SESSION_ID)"
 assert_eq "$(field "$OUT" egress_policy)" "unbounded" "2: egress declared unbounded"
 assert_eq "$(field "$OUT" env_policy)" "allowlist" "2: env policy declared"
 assert_contains "$(field "$OUT" env_passthrough)" 'PASS_ME' "2: passthrough listed"

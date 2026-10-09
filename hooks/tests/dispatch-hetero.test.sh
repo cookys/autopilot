@@ -302,6 +302,12 @@ BRANCH_EXISTS="$(git -C "$SBX" rev-parse --verify --quiet refs/heads/feat/smoke 
 assert_eq "yes" "$BRANCH_EXISTS" "branch survives for review/merge"
 SMOKE_CONTENT="$(git -C "$SBX" show feat/smoke:ok.txt)"
 assert_eq "ok" "$SMOKE_CONTENT" "artifact verifiable from branch"
+# branch->session ledger: the rail appended exactly one row for the branch it created (close-session ownership)
+LEDGER_ROWS="$(grep -F '"branch":"feat/smoke"' "$(git -C "$SBX" rev-parse --path-format=absolute --git-common-dir)/autopilot/dispatch-branches.jsonl" 2>/dev/null)"
+assert_eq "1" "$(printf '%s\n' "$LEDGER_ROWS" | grep -c .)" "ledger: one row appended for the created branch"
+assert_eq "autopilot.dispatch-branch/1:ok" \
+  "$(printf '%s' "$LEDGER_ROWS" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);const ok=/^[0-9a-f]{40,64}$/.test(j.base_sha)&&/^[0-9]+$/.test(String(j.created_at))&&j.run_id&&j.root_run_id&&(j.session_id===null||typeof j.session_id==="string")&&j.session_id===(process.env.CLAUDE_CODE_SESSION_ID||null);process.stdout.write(j.schema+":"+(ok?"ok":"BAD "+s));})')" \
+  "ledger: row carries schema, run ids, base sha and the session id (null when unset)"
 assert_eq "$(
   git -C "$SBX" for-each-ref --format='%(refname)' refs/autopilot/lifecycle-roots/ \
     | wc -l

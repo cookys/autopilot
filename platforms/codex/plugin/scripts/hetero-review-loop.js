@@ -36,39 +36,61 @@ function writeFileSyncAtomic(targetPath, content) {
 }
 
 // Exclusive lock around a chain.json read-modify-write. mkdir is atomic, so the lock directory
-// <chain>.lock is the mutex; a lock older than the stale age (crashed holder) is broken. Waiting is
-// bounded: past the timeout the caller gets a loud error instead of a lost or interleaved update.
+// <chain>.lock is the mutex. The holder writes a pid+random token file inside it and release() removes
+// the lock only while that token is still there, so a holder whose lock was broken as stale can never
+// delete its successor's lock. A stale lock (crashed holder) is broken by atomically renaming the
+// directory to a unique tombstone (only one waiter's rename can succeed) and re-checking the
+// tombstone's age before discarding it. Waiting is bounded: past the timeout the caller gets a loud
+// error instead of a lost or interleaved update. A process.on('exit') hook releases the lock on any
+// process.exit inside the locked region.
 function acquireChainLock(chainPath) {
   const lockPath = `${chainPath}.lock`;
   const timeoutMs = Number(process.env.AUTOPILOT_CHAIN_LOCK_TIMEOUT_MS) > 0 ? Number(process.env.AUTOPILOT_CHAIN_LOCK_TIMEOUT_MS) : 15000;
   const staleMs = Number(process.env.AUTOPILOT_CHAIN_LOCK_STALE_MS) > 0 ? Number(process.env.AUTOPILOT_CHAIN_LOCK_STALE_MS) : 30000;
+  const ownerFile = path.join(lockPath, 'owner');
+  const token = `${process.pid}-${crypto.randomBytes(8).toString('hex')}`;
   fs.mkdirSync(path.dirname(chainPath), { recursive: true });
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     try {
       fs.mkdirSync(lockPath);
+      try { fs.writeFileSync(ownerFile, token); } catch (_e) { /* a breaker may already have taken the dir; release() re-checks */ }
       break;
     } catch (e) {
       if (!e || e.code !== 'EEXIST') throw e;
-      try {
-        if (Date.now() - fs.statSync(lockPath).mtimeMs > staleMs) {
-          fs.rmdirSync(lockPath);
-          continue;
+      let ageMs;
+      try { ageMs = Date.now() - fs.statSync(lockPath).mtimeMs; } catch (_e) { continue; } // released meanwhile: retry
+      if (ageMs > staleMs) {
+        const tomb = `${lockPath}.dead-${token}`;
+        try { fs.renameSync(lockPath, tomb); } catch (_e) { continue; } // another waiter won the break
+        let tombAge = Infinity;
+        try { tombAge = Date.now() - fs.statSync(tomb).mtimeMs; } catch (_e) { /* gone */ }
+        if (tombAge <= staleMs) {
+          // The lock was replaced by a fresh holder between our stat and rename: put it back.
+          try { fs.renameSync(tomb, lockPath); continue; } catch (_e) { /* fall through to discard */ }
         }
-      } catch (_e) { continue; } // holder released between mkdir and stat: retry
+        try { fs.rmSync(tomb, { recursive: true, force: true }); } catch (_e) { /* best effort */ }
+        continue;
+      }
       if (Date.now() >= deadline) {
-        console.error(`ERROR: Timed out after ${timeoutMs}ms waiting for the chain.json lock ${lockPath} (another collect holds it; remove it if no collect is running)`);
+        console.error(`ERROR: Timed out after ${timeoutMs}ms waiting for the chain.json lock ${lockPath} (another collect/finalize holds it; remove it if none is running)`);
         process.exit(1);
       }
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
     }
   }
   let released = false;
-  return () => {
+  const release = () => {
     if (released) return;
     released = true;
-    try { fs.rmdirSync(lockPath); } catch (_e) { /* already gone */ }
+    process.removeListener('exit', release);
+    try {
+      if (fs.readFileSync(ownerFile, 'utf8') !== token) return; // not ours any more
+      fs.rmSync(lockPath, { recursive: true, force: true });
+    } catch (_e) { /* already gone */ }
   };
+  process.on('exit', release);
+  return release;
 }
 
 function withChainLock(chainPath, fn) {
@@ -1036,8 +1058,7 @@ async function handleFinalize(flags) {
   // lock from before the read until the process exits (every path ends in process.exit).
   const chainPath = path.join(reviewPhaseDir, 'chain.json');
   if (fs.existsSync(reviewPhaseDir)) {
-    const releaseChainLock = acquireChainLock(chainPath);
-    process.on('exit', releaseChainLock);
+    acquireChainLock(chainPath); // released by its own exit hook
   }
   let chain = [];
   if (!fs.existsSync(chainPath)) {

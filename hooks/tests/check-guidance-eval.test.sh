@@ -125,6 +125,11 @@ write_sidecar "$(sha "$LG/old.jsonl")" "$(sha "$ARMOTHER")"
 gate --base "$BASE_REF" --repo "$R" --prereg "$PRE" --packs-dir "$PK" --results "$LG/old.jsonl"
 [ "$G_RC" -eq 1 ] && grep -q 'sidecar names a different arm manifest' <<<"$G_OUT" || fail "sidecar naming a different arm must fail (rc=$G_RC): $G_OUT"
 
+echo "=== mixed rows (one stamped, the rest unstamped) -> 1 ==="
+node -e 'const fs=require("fs");let first=true;fs.writeFileSync(process.argv[2],fs.readFileSync(process.argv[1],"utf8").split("\n").filter(Boolean).map(l=>{const r=JSON.parse(l);if(r.arm==="change"){if(first){first=false}else delete r.arm_manifest_sha256}return JSON.stringify(r)}).join("\n")+"\n")' "$TEST_TMP/ship.jsonl" "$TEST_TMP/mixed.jsonl"
+gate --base "$BASE_REF" --repo "$R" --prereg "$PRE" --packs-dir "$PK" --results "$TEST_TMP/mixed.jsonl"
+[ "$G_RC" -eq 1 ] && grep -q 'partially stamped results' <<<"$G_OUT" || fail "mixed stamped/unstamped rows must fail (rc=$G_RC): $G_OUT"
+
 echo "=== results that do not reproduce SHIP -> 1 ==="
 gate --base "$BASE_REF" --repo "$R" --prereg "$PRE" --packs-dir "$PK" --results "$TEST_TMP/weak.jsonl"
 [ "$G_RC" -eq 1 ] && grep -q 'did not reproduce SHIP' <<<"$G_OUT" || fail "weak results must fail the gate (rc=$G_RC): $G_OUT"

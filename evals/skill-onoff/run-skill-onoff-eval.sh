@@ -370,7 +370,9 @@ fi
 # scripts/check-guidance-eval.js can refuse a results file produced by a different arm.
 ARM_SHA_FIELD=""
 if [ -n "$ARM_MANIFEST" ]; then
-  ARM_SHA_FIELD=$(printf ',"arm_manifest_sha256":"%s"' "$(sha256sum "$ARM_MANIFEST" | cut -d' ' -f1)")
+  if command -v sha256sum >/dev/null 2>&1; then ARM_SHA=$(sha256sum "$ARM_MANIFEST" | cut -d' ' -f1)
+  else ARM_SHA=$(shasum -a 256 "$ARM_MANIFEST" | cut -d' ' -f1); fi
+  ARM_SHA_FIELD=$(printf ',"arm_manifest_sha256":"%s"' "$ARM_SHA")
 fi
 RESULT_JSON="$OUT_DIR/result.json"
 printf '{"task_id":"%s","arm":"%s","model":"%s","runner":"%s","runner_version":"%s","rep":%s,"duration_s":%s,"frozen_base_sha":"%s","markers":%s,%s,"failure_class":%s,"failure_cause":%s%s}\n' \

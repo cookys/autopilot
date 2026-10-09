@@ -1,0 +1,21 @@
+{
+  "schema": "autopilot.attention/1",
+  "session_id": "7cbcb68a-3fe4-4681-b1a3-7fc841acc835",
+  "project_key": "51de403da82a23f0",
+  "kind": "permission",
+  "tool_name": "Bash",
+  "summary": "Bash: pkill -f \"sleep 1500\" ; echo done",
+  "since": "2026-10-09T04:40:47.410Z",
+  "updated_at": "2026-10-09T04:40:53.409Z",
+  "pending": [
+    {
+      "agent_id": null,
+      "tool_name": "Bash",
+      "input_digest": "e01681cc80052e19",
+      "kind": "permission",
+      "summary": "Bash: pkill -f \"sleep 1500\" ; echo done",
+      "since": "2026-10-09T04:40:47.410Z",
+      "updated_at": "2026-10-09T04:40:47.410Z"
+    }
+  ]
+}

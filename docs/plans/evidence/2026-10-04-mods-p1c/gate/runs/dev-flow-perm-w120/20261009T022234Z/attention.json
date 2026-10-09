@@ -1,0 +1,21 @@
+{
+  "schema": "autopilot.attention/1",
+  "session_id": "32d072ea-ae35-4832-9c12-fdceec893ed1",
+  "project_key": "51de403da82a23f0",
+  "kind": "permission",
+  "tool_name": "Bash",
+  "summary": "Bash: git branch --show-current && ls /home/cookys/projects/autopilot/skills/dev-flow/scripts 2>/dev/null | head; ls /h…",
+  "since": "2026-10-09T02:21:04.101Z",
+  "updated_at": "2026-10-09T02:21:10.103Z",
+  "pending": [
+    {
+      "agent_id": null,
+      "tool_name": "Bash",
+      "input_digest": "75656df695d270cf",
+      "kind": "permission",
+      "summary": "Bash: git branch --show-current && ls /home/cookys/projects/autopilot/skills/dev-flow/scripts 2>/dev/null | head; ls /h…",
+      "since": "2026-10-09T02:21:04.101Z",
+      "updated_at": "2026-10-09T02:21:04.101Z"
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+● 正在備妥 foreman 派工的前置作業(run id、ledger、watcher、死人開關),接著派
+  sonnet 工頭執行唯一的 deliverable。
+
+  Ran 2 shell commands
+
+● Ledger 由工頭的 stage-acquire 建立即可(watcher 會顯示 WAIT)。現在啟動 watcher
+  與死人開關,然後派工頭。
+
+  Ran 2 shell commands
+
+● Agent(L6 foreman: gate readme line)
+  ⎿  Backgrounded agent (↓ to manage · ctrl+o to expand)
+
+● 已啟動 /l6,工頭正在背景執行,README 還沒有任何變更。
+
+  - 任務:在 README.md 結尾加一行 gate-l5-test-line。這是 Mission 已 admit
+    的那一行,和你說的「測試字」一致。
+  - 設定:session mode 已設為 l6,Mission 已 admit,共 1 個 deliverable。
+  - 工頭:派了一個背景 sonnet 工頭,負責走完整的 engine implement-review 流程。
+  - 監看:watch-foreman.js 的 watcher 已在背景啟動,另有一個 45
+    分鐘的死人開關,避免通知漏送時一直空等。
+  - 尚未做:合併和清除 session marker 都還沒做。
+  - 合併前提:工頭回報後,我會親自跑 status task 驗收。can_merge 必須是 true,而且
+    git diff 只能動到 README.md,才會合併。
+
+  我不會把工頭的回報當成通過,結果以我自己重跑的驗證為準。
+
+✻ Waiting for 1 background agent to finish
+
+● Agent "L6 foreman: gate readme line" finished · 2m 44s
+────────────────────────────────────────────────────────────────────────────────
+ ☐ Mission 處置
+
+│ 工頭卡在 mission prepare:sandbox 裡有兩個先前嘗試(2026-10-05)留下的 ACTIVE
+│ Mission lineage,擋住新的 Mission。要怎麼處置?
+
+❯ 1. 收掉舊 lineage 後重跑 (Recommended)
+     用 mission finalize-abort/withdraw 收掉兩個舊 lineage(lineage-v1-6c52a9b2…
+     與 lineage-v1-bf0a9f8a…),再讓新工頭從 mission prepare 重跑。這是 throwaway
+     sandbox,但收掉後無法復原。
+  2. 改走 successor
+     用 mission successor 讓新 Mission 接續其中一個舊
+     lineage,保留歷史,但流程較不確定、可能需要更多步驟。
+  3. 先不動,我自己看
+     不碰 Mission 狀態,結束這次 /l6,由你檢查 .git/autopilot/mission/ 後再決定。
+  4. Type something.
+────────────────────────────────────────────────────────────────────────────────
+  5. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel

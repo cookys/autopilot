@@ -1,0 +1,17 @@
+{
+  "schema": "autopilot.decisions-sidecar/1",
+  "scope": {
+    "project_key": "51de403da82a23f0",
+    "repo_identity": "git-common-dir:/home/cookys/projects/gate-sandbox/.git",
+    "root_run_id": "mission-143504fc8cb657e5b1ce03db"
+  },
+  "rows": [],
+  "count": 0,
+  "irreversible_count": 0,
+  "writers_wired": [
+    "engine",
+    "next-pick"
+  ],
+  "undocumented_dispatches": 1,
+  "ladder": null
+}

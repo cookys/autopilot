@@ -1,0 +1,50 @@
+
+  Ran 1 shell command
+
+● 兩條舊 lineage 我沒辦法正規結案，所以停在這裡，沒有動到它們。
+
+  結果
+  - mission finalize-abort 對 v1 和 v2 都被拒絕，原因是 not_aborting。
+    - 要結案，狀態必須先經過一個「已驗證的 abort 控制事件」進入 ABORTING。
+    - 這個事件只能由 host 注入 authenticatedControlAdapter 來產生。
+    - root CLI 的 mission control 沒有這個 adapter，所以一律 fail closed。
+    - 我在 autopilot 全 repo 搜過，沒有任何 host 實作這個
+      adapter，所以現有程式裡沒有正規的結案入口。
+  - 我拿 scratchpad 當輸出做 dry-run，拒絕時不會寫 --out。所以兩條 lineage 的
+    state、registry 和 repo 都沒變，工作樹仍是乾淨的。
+
+  還能走的路
+  - 自己造一個「永遠通過」的 adapter，或直接改 state／registry 檔。
+    - 這等於繞過驗證，也違反「不手動刪除或改動 Mission 狀態」的規則。
+    - 這種繞過我不做，除非你明確授權。
+  - 找回 v2 原本的 authority envelope，讓 prepare 對上同一條 lineage 繼續用。
+    - 它的 intent 我在 /tmp 和舊 session 紀錄都找不到，所以這條走不通。
+    - 如果你記得當時的 objective 文字，或知道檔案放在哪，告訴我，我可以試。
+  - 退回 /l3 內聯：直接在 README.md 加 gate-l5-test-line。
+    - 這可以完成 README 這一行，但不經過 rail，所以不算通過 l5 gate。
+  - 另一條路是改在全新的 clone 或 sandbox 目錄上跑完整 rail。
+    - 那裡沒有舊 lineage，不會被擋，不用動這個 repo 的狀態。
+    - 缺點是這就不是原本那個 gate-sandbox 了。
+
+  你想走哪一條？如果這次要驗的就是「舊 lineage 卡住時 l5 gate
+  會怎麼表現」，那目前這個 UNRESOLVED_MISSION_EXISTS 加 not_aborting
+  的結果本身就是觀察到的行為，可以直接當結論記錄。
+
+✻ Cooked for 33s · done 11:47 AM
+
+❯ 先不用管 rail 了。現在請用 AskUserQuestion 問我選 A 還是
+  B，我答了你再繼續，不要做別的事。
+────────────────────────────────────────────────────────────────────────────────
+ ☐ A or B
+
+請選 A 還是 B？
+
+❯ 1. A
+     依先前的選項 A 繼續（結案兩條舊 lineage 後重跑完整 rail）
+  2. B
+     依先前的選項 B 繼續（由你自行處置舊 lineage，處理完再叫我繼續）
+  3. Type something.
+────────────────────────────────────────────────────────────────────────────────
+  4. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel

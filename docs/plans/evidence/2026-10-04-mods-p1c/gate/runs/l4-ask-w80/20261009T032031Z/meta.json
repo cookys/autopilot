@@ -1,0 +1,33 @@
+{
+ "schema": "autopilot.gate-capture/2",
+ "cell": "l4-ask-w80",
+ "mode": "l4",
+ "window_width": 80,
+ "pane_width": 80,
+ "captured_at": "2026-10-09T03:20:31.695Z",
+ "captured_at_ms": 1791516031695,
+ "session_id": "3028da81-bc08-4aa5-8ea9-8f6786b5c6ab",
+ "session_id_how": "argument",
+ "sanitised_session_id": "3028da81-bc08-4aa5-8ea9-8f6786b5c6ab",
+ "project_key": null,
+ "root_run_id": null,
+ "scope_key": null,
+ "live_base": "/run/user/1000/autopilot",
+ "autopilot_home": "/home/cookys/.autopilot",
+ "pane_cwd": "/home/cookys/projects/gate-sandbox",
+ "git_common_dir": null,
+ "missing": [
+  "marker (/home/cookys/.autopilot/session-mode/3028da81-bc08-4aa5-8ea9-8f6786b5c6ab.json)",
+  "tasks.json (/run/user/1000/autopilot/tasks/3028da81-bc08-4aa5-8ea9-8f6786b5c6ab.json)",
+  "turn-effective.json (/run/user/1000/autopilot/turn-effective/3028da81-bc08-4aa5-8ea9-8f6786b5c6ab.json)",
+  "stage.json (/run/user/1000/autopilot/stage/3028da81-bc08-4aa5-8ea9-8f6786b5c6ab.json)",
+  "scope files (no marker project_key)",
+  "decision-file / work-orders (no git-common-dir identity)",
+  "band line and panel verdict in the pane (no verdict mark ending in \u24d8 / panel word found)"
+ ],
+ "screenshots": {
+  "band": null,
+  "pane": "/home/cookys/projects/autopilot/docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/l4-ask-w80/20261009T032031Z/pane.png"
+ },
+ "body_columns": 75
+}

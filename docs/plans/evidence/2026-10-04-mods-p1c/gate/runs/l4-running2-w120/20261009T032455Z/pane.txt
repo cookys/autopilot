@@ -1,0 +1,50 @@
+  個不阻擋的小意見：note 說「不影響文件內容」，字面上略鬆，因為 README│                                               ✕
+  確實多了一行。                                                      │ Legend [Now] Graph  Dispatch  Review  Decisions
+                                                                      │ Spend  Hygiene
+  現在 3 位裡已有 2 位                                                │session $2.57 · host $97.23 · ctx 10%
+  PASS，只剩正確性那位，等它回報後我再裁決並合併。                    │▲ 要你決定 gate-sandbox · 3m
+                                                                      │等你批准：Bash: B=worktree-agent-a44b8690286ef50…
+✻ Waiting for 1 background agent to finish                            │no data · no stage recorded for this session
+                                                                      │no data · no unit recorded
+● Agent "qc reviewer: correctness" finished · 2m 16s                  │progress  —
+                                                                      │phase  —
+● 3 位 reviewer 全數 PASS，沒有必修項。合併並清理：                   │要你決定
+                                                                      │等你批准：Bash: B=worktree-agent-a44b8690286ef50…
+  Merge, verify, GC worktree, clear marker                            │
+  ⎿  $ B=worktree-agent-a44b8690286ef5054 && git merge --no-ff $B -m  │
+     "Merge /l4 foreman: README line 2 and l4 note                    │
+     Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>" 2>&1 |│
+     tail -4 && grep -qx gate-l5-test-line README.md && tail -1       │
+     README.md && node test.js && git branch --merged develop | grep …│
+                                                                      │
+──────────────────────────────────────────────────────────────────────│
+ Bash command                                                         │
+ Tip: auto mode handles these prompts for you — choose "switch to     │
+ auto mode" below                                                     │
+ Merge, verify, GC worktree, clear marker                             │
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌│
+ │ B=worktree-agent-a44b8690286ef5054 && git merge --no-ff $B -m      │
+ │ "Merge /l4 foreman: README line 2 and l4 note                      │
+ │                                                                    │
+ │ Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>" 2>&1 |  │
+ │ tail -4 && grep -qx gate-l5-test-line README.md && tail -1         │
+ │ README.md && node test.js && git branch --merged develop | grep -q │
+ │ $B && git worktree remove -f -f                                    │
+ │ .claude/worktrees/agent-a44b8690286ef5054 && git branch -d $B &&   │
+ │ node /home/cookys/projects/autopilot/scripts/session-mode.js clear │
+ │ 2>&1 | tail -2; git worktree list | head -1; git status --short;   │
+ │ git log --oneline -3                                               │
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌│
+ This command requires approval                                       │
+                                                                      │
+ Do you want to proceed?                                              │
+ ❯ 1. Yes                                                             │
+   2. Yes, and don't ask again for "git merge --no-ff                 │
+      worktree-agent-a44b8690286ef5054 -m 'Merge /l4 foreman: README  │
+      line 2 and l4 note" and node test.js commands in                │
+      /home/cookys/projects/gate-sandbox                              │
+   3. Yes, and switch to auto mode · auto mode handles these prompts  │
+      for you                                                         │
+   4. No                                                              │
+                                                                      │
+ Esc to cancel · Tab to amend                                         │

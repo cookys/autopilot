@@ -1,0 +1,33 @@
+{
+  "schema": "autopilot.gate-capture/2",
+  "cell": "l3-stall-w80",
+  "mode": "l3",
+  "window_width": 80,
+  "pane_width": 80,
+  "captured_at": "2026-10-09T02:55:04.414Z",
+  "captured_at_ms": 1791514504414,
+  "session_id": "aae85c79-d1b4-4577-a393-8f1af8f4507b",
+  "session_id_how": "argument",
+  "sanitised_session_id": "aae85c79-d1b4-4577-a393-8f1af8f4507b",
+  "project_key": "51de403da82a23f0",
+  "root_run_id": "job-1791513684-0efcd31c",
+  "scope_key": "51de403da82a23f0--job-1791513684-0efcd31c",
+  "live_base": "/run/user/1000/autopilot",
+  "autopilot_home": "/home/cookys/.autopilot",
+  "pane_cwd": "/home/cookys/projects/gate-sandbox",
+  "git_common_dir": "/home/cookys/projects/gate-sandbox/.git",
+  "missing": [
+    "attention.json (/run/user/1000/autopilot/attention/aae85c79-d1b4-4577-a393-8f1af8f4507b.json)",
+    "turn-effective.json (/run/user/1000/autopilot/turn-effective/aae85c79-d1b4-4577-a393-8f1af8f4507b.json)",
+    "review.json (/run/user/1000/autopilot/runs/51de403da82a23f0.review.json)",
+    "stage.json (/run/user/1000/autopilot/stage/aae85c79-d1b4-4577-a393-8f1af8f4507b.json)",
+    "decision-file.json (/home/cookys/projects/gate-sandbox/.git/autopilot/decisions/51de403da82a23f0--job-1791513684-0efcd31c.json)",
+    "work-orders (/home/cookys/projects/gate-sandbox/.git/autopilot/work-orders/job-1791513684-0efcd31c)"
+  ],
+  "screenshots": {
+    "band": "/home/cookys/projects/autopilot/docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/l3-stall-w80/20261009T025504Z/band-80.png",
+    "pane": "/home/cookys/projects/autopilot/docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/l3-stall-w80/20261009T025504Z/pane.png"
+  },
+  "body_columns": 75,
+  "body_columns_note": "p7 gate: w80 stacked pane is not a dock; real bodyColumns = 80-5"
+}

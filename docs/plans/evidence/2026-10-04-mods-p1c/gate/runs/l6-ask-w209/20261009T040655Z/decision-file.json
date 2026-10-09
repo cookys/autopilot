@@ -1,0 +1,17 @@
+{
+  "schema": "autopilot.decision/1",
+  "question": "工頭卡在 mission prepare:sandbox 裡有兩個先前嘗試(2026-10-05)留下的 ACTIVE Mission lineage,擋住新的 Mission。要怎麼處置?",
+  "options": [
+    "收掉舊 lineage 後重跑 (Recommended)",
+    "改走 successor",
+    "先不動,我自己看"
+  ],
+  "context": null,
+  "not_authorized": null,
+  "root_run_id": "job-1791518496-ff49f41a",
+  "repo_identity": "git-common-dir:/home/cookys/projects/gate-sandbox/.git",
+  "project_key": "51de403da82a23f0",
+  "opened_at": "2026-10-09T04:05:24.291Z",
+  "opened_by_session": "5c243380-f5fd-4321-b0c6-36ced1d1768e",
+  "source": "ask_user_question"
+}

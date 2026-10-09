@@ -1,11 +1,8 @@
-mode l5 (2026-10-05, live /run/user/1000/autopilot)
-sessions: Cell 0 (tmux ts) 8a938a99-38d9-4821-8ada-a866b7276c60 ; /l5 (tmux l5) 7be684e2-aab6-4266-bf0b-cc77cf3136de
-markers: ~/.autopilot/session-mode/8a938a99-....json , 7be684e2-....json (level l5, root_run_id job-1791203101-e4d1bb25, project_key 51de403da82a23f0)
-watchers seen (not started by hand): pid 2831473, 2926632 (status runs --watch)
-agents: a4aee842ac77aa8e0 (Cell 0 gate-wait agent, stamp ended_at 12:22:08.314Z after TaskStop), a68317190287c4b0d (first dispatch rejected by dispatch-model-guard)
-tasks file: /run/user/1000/autopilot/tasks/7be684e2-....json
-decision file (opened and closed by AskUserQuestion): ~/projects/gate-sandbox/.git/autopilot/decisions/51de403da82a23f0--job-1791203101-e4d1bb25.json
-campaign root/ids: none (rail never reached; BLOCKED at mission scaffold)
-worktrees/branches left by this run: none (the gate-stall*, gate2-stall-1 worktrees under /tmp/hetero-* predate this run)
-copied config: /home/cookys/projects/autopilot/.claude/review-loop-config.md -> ~/projects/gate-sandbox/.claude/review-loop-config.md (untracked, still present)
-origin gate-sandbox-origin.git develop = 490bbea at start and end
+batch B / l5 (2026-10-09)
+tmux session: gate-l5 (private -L gate), killed
+claude session id: 94d641f7-fb20-4646-9968-96c5b604acaf (marker level l5 left in ~/.autopilot/session-mode, expires 24h)
+project_key/scope 51de403da82a23f0; no root_run, worktree or branch created (campaign rail blocked; stall hand refused)
+model scratch: /tmp/mr.json ; scratchpad /tmp/claude-1000/-home-cookys-projects-gate-sandbox/94d641f7-fb20-4646-9968-96c5b604acaf/
+l4 marker 3028da81-bc08-4aa5-8ea9-8f6786b5c6ab also left in place
+
+batch C sessions: panel-keys a0976e0e-b6fb-4a58-ad5f-f4fb95eb0b89; l5 ffea7985-61a8-46dd-b36b-092895eb3ea2; l6 7cbcb68a-3fe4-4681-b1a3-7fc841acc835; markers left in ~/.autopilot/session-mode/. See RESULTS.md notes (batch C).

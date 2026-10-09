@@ -1,0 +1,37 @@
+
+ ▐▛███▛█   Claude Code v2.1.295
+▝▜██████▀  Sonnet 5.5 · Claude Max
+ ▝▝   ▝▝   ~/projects/gate-sandbox
+
+
+❯ /autopilot:l6 在 README 加一行測試字
+
+● 先依 /l6 規則設定 session mode,同時看一下 repo 現況。
+
+  Setting L6 session mode and inspecting repo
+  ⎿  $ node /home/cookys/projects/autopilot/scripts/session-mode.js set --level
+     l6 --repo-root /home/cookys/projects/gate-sandbox; echo "exit=$?"; ls; git
+     branch --show-current; head -20 README.md
+
+────────────────────────────────────────────────────────────────────────────────
+ Bash command
+ Tip: auto mode handles these prompts for you — choose "switch to auto mode"
+ below
+ Set L6 session mode and inspect repo
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ │ node /home/cookys/projects/autopilot/scripts/session-mode.js set --level l6
+ │ --repo-root /home/cookys/projects/gate-sandbox; echo "exit=$?"; ls; git
+ │ branch --show-current; head -20 README.md
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ This command requires approval
+
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don't ask again for node
+      /home/cookys/projects/autopilot/scripts/session-mode.js set --level l6
+      --repo-root /home/cookys/projects/gate-sandbox and "echo \"exit=$?\""
+      commands in /home/cookys/projects/gate-sandbox
+   3. Yes, and switch to auto mode · auto mode handles these prompts for you
+   4. No
+
+ Esc to cancel · Tab to amend

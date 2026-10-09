@@ -1,0 +1,21 @@
+{
+  "schema": "autopilot.attention/1",
+  "session_id": "3028da81-bc08-4aa5-8ea9-8f6786b5c6ab",
+  "project_key": "51de403da82a23f0",
+  "kind": "permission",
+  "tool_name": "Bash",
+  "summary": "Bash: printf 'gate-l5-test-line\\n' >> README.md && tail -n 3 README.md && git add README.md && git commit -q -m \"docs: …",
+  "since": "2026-10-09T03:13:38.809Z",
+  "updated_at": "2026-10-09T03:13:44.863Z",
+  "pending": [
+    {
+      "agent_id": "a3fe32cd10cd934d3",
+      "tool_name": "Bash",
+      "input_digest": "bf6351f533c852ae",
+      "kind": "permission",
+      "summary": "Bash: printf 'gate-l5-test-line\\n' >> README.md && tail -n 3 README.md && git add README.md && git commit -q -m \"docs: …",
+      "since": "2026-10-09T03:13:38.809Z",
+      "updated_at": "2026-10-09T03:13:38.809Z"
+    }
+  ]
+}

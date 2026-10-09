@@ -1,0 +1,11 @@
+{
+  "schema": "autopilot.residue/1",
+  "project_key": "51de403da82a23f0",
+  "at": "2026-10-09T04:51:46.336Z",
+  "reapable_worktrees": 1,
+  "by_class": {
+    "clean-integrated": 1,
+    "live": 1
+  },
+  "source": "repo-residue-sweep scan"
+}

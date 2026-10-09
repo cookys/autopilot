@@ -1,0 +1,50 @@
+  分鐘計時器）跑完了。那一輪的工作早已完成並合併，所以不需要處理。
+
+  目前沒有待辦。上一則派工失敗（precondition_failed，mission_convergence
+  有不支援的鍵 shadowment_mode）仍然沒動，你要我去查那個設定的話再說。
+
+✻ Brewed for 2s · done 11:33 AM · 2 shells still running
+
+● Background command "Background dead-man switch for retry foreman" completed
+(exit code 0)
+
+● 這是重派工頭時起的死人開關（20
+  分鐘計時器）跑完了。那個工頭早就回報並合併完成，所以不需要處理。
+
+  還剩一個同類計時器沒響：第二輪 /l4（README 第二行加
+  note）那個。它也一樣，工作已完成，響了也只需忽略。
+
+  目前沒有待辦。
+
+✻ Baked for 2s · done 11:33 AM · 2 shells still running
+
+❯ 設定已修正，請再執行一次同一個派工指令（背景，不要等待）：bash
+  /home/cookys/projects/autopilot/scripts/dispatch-hetero.sh --branch
+  gate-l4-stall --prompt-file /tmp/gate-l4-stall-prompt.txt --runner codex
+  --model gpt-6-astra 。派出後回報 run id 與 manifest 路徑就停止。
+
+  Read 1 file, ran 1 shell command
+
+● 派工指令已在背景啟動（背景任務 ID b1066zih3），但現在還拿不到 run id 和
+  manifest 路徑。輸出檔 /tmp/claude-1000/-home-cookys-projects-gate-sandbox/3028
+  da81-bc08-4aa5-8ea9-8f6786b5c6ab/tasks/b1066zih3.output
+  目前是空的，腳本還沒印出任何東西。
+
+  這次它沒有像上次那樣立刻失敗，可能是設定已經通過、正在往下跑，但這只是推測，不
+  能當成已派出。我不輪詢，結束時會有通知，到時我再讀輸出回報 run id 與 manifest
+  路徑。
+
+✻ Cogitated for 6s · done 11:33 AM · 2 shells still running
+╭────────────────────────────────────────────────────────────────────────────✕─╮
+│  Legend  Now [Graph] Dispatch  Review  Decisions  Spend  Hygiene             │
+│ session $3.49 · host $109.53 · ctx —                                         │
+│ no data · no stage walk published for this session                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+⏸ 疑似卡住 │ ⚙1 ⏸1 │ ⓘ                                                      [-]
+
+────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────
+  Sonnet 5.5 ── ~/projects/gate-sandbox develop ─────────────────────────────…
+  5h ▮▯▯▯▯▯ 27% 3h36m   7d ▮▯▯▯▯▯ 28% 6d0h   ctx ▯▯▯▯▯▯ 11%                  …
+  ⏵⏵ accept edits on · 2 shells · ← 6 agents

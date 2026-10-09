@@ -1,0 +1,68 @@
+{
+  "schema": "autopilot.foreman-activity/1",
+  "scope": {
+    "project_key": "51de403da82a23f0",
+    "repo_identity": "git-common-dir:/home/cookys/projects/gate-sandbox/.git",
+    "root_run_id": "job-1791515509-07b0bb1e"
+  },
+  "binding": "session",
+  "stall_s": 600,
+  "agents": [
+    {
+      "agent_id": "ac409d8f4a3f60b4d",
+      "description": null,
+      "label": null,
+      "last_activity_at": "2026-10-09T03:14:06.809Z",
+      "age_s": 8,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-09T03:14:06.809Z",
+      "source": "stamp",
+      "session_id": "3028da81-bc08-4aa5-8ea9-8f6786b5c6ab",
+      "binding": "session"
+    },
+    {
+      "agent_id": "a3fe32cd10cd934d3",
+      "description": "Append README test line",
+      "label": "Append README test line",
+      "last_activity_at": "2026-10-09T03:13:37.155Z",
+      "age_s": 38,
+      "stale": false,
+      "stamped": true,
+      "ended_at": null,
+      "source": "stamp",
+      "session_id": "3028da81-bc08-4aa5-8ea9-8f6786b5c6ab",
+      "binding": "session"
+    },
+    {
+      "agent_id": "a35522ad6615bee1e",
+      "description": "L4 foreman retry: README line",
+      "label": "L4 foreman retry: README line",
+      "last_activity_at": "2026-10-09T03:13:36.003Z",
+      "age_s": 39,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-09T03:13:37.238Z",
+      "source": "stamp",
+      "session_id": "3028da81-bc08-4aa5-8ea9-8f6786b5c6ab",
+      "binding": "session"
+    },
+    {
+      "agent_id": "ade5584433563b5f8",
+      "description": "L4 foreman: README test line",
+      "label": "L4 foreman: README test line",
+      "last_activity_at": "2026-10-09T03:13:01.533Z",
+      "age_s": 73,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-09T03:13:08.604Z",
+      "source": "stamp",
+      "session_id": "3028da81-bc08-4aa5-8ea9-8f6786b5c6ab",
+      "binding": "session"
+    }
+  ],
+  "stage": null,
+  "stage_source": null,
+  "stage_at": null,
+  "stage_age_s": null
+}

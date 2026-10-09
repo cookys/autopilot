@@ -1,0 +1,21 @@
+{
+  "schema": "autopilot.attention/1",
+  "session_id": "d2ea4d36-6a61-49ca-a6ad-f750c76fbf05",
+  "project_key": "51de403da82a23f0",
+  "kind": "question",
+  "tool_name": "AskUserQuestion",
+  "summary": "請選 A 還是 B？",
+  "since": "2026-10-09T02:57:29.833Z",
+  "updated_at": "2026-10-09T02:57:35.836Z",
+  "pending": [
+    {
+      "agent_id": null,
+      "tool_name": "AskUserQuestion",
+      "input_digest": "3f4000eb3a909815",
+      "kind": "question",
+      "summary": "請選 A 還是 B？",
+      "since": "2026-10-09T02:57:29.833Z",
+      "updated_at": "2026-10-09T02:57:29.833Z"
+    }
+  ]
+}

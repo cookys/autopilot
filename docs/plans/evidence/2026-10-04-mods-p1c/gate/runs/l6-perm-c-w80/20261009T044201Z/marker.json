@@ -1,0 +1,53 @@
+{
+  "session_id": "7cbcb68a-3fe4-4681-b1a3-7fc841acc835",
+  "level": "l6",
+  "repo_root": "/home/cookys/projects/gate-sandbox",
+  "started_at": "2026-10-09T04:37:03.348Z",
+  "expires_at": "2026-10-10T04:37:03.348Z",
+  "repo_identity": "git-common-dir:/home/cookys/projects/gate-sandbox/.git",
+  "project_key": "51de403da82a23f0",
+  "root_run_id": "job-1791520623-bfaad5b0",
+  "entry_level": "l6",
+  "fallback_reason": "none",
+  "mission_routing": {
+    "status": "READY",
+    "admitted": true,
+    "would_block": false,
+    "prior_marker_status": "absent",
+    "admission": {
+      "schema_version": 1,
+      "artifact_type": "mission_routing_admission",
+      "authority_status": "enforce",
+      "repo_identity": "git-common-dir:/home/cookys/projects/gate-sandbox/.git",
+      "mission_policy_digest": "23373ee72afbff25f8be9b16f3bcd18e3e07a4b88e9f7071d282e54b8e84bdb9",
+      "mission_graph_digest": "beb0e5cd14f5a2531254c4b589c0d77b616b982244ce2a522441dc1bd4193053",
+      "sources_digest": "c90fd08261712ab651d590069bff48c8ad0b06521923ba776e99a901f054f227",
+      "deliverable_count": 1,
+      "source_authoring_unit_count": 0,
+      "critical_path": 1,
+      "batch_count": 1,
+      "reservation_totals": {
+        "campaigns": 1,
+        "wall_seconds": 3600,
+        "tool_calls": 100,
+        "engine_attempts": 2,
+        "external_wait_seconds": 900,
+        "canonical_changed_files": 1,
+        "output_bytes": 100000
+      },
+      "admission_digest": "28d2a0c26ca2408599992e02940fc90d90099343c5649edb6c35414c683388ff"
+    }
+  },
+  "mission_noop": {
+    "schema_version": 1,
+    "artifact_type": "mission_noop_adoption_set",
+    "admission_digest": "28d2a0c26ca2408599992e02940fc90d90099343c5649edb6c35414c683388ff",
+    "noop_adoptions": [],
+    "noop_short_circuit": false,
+    "dispatcher_called": null,
+    "mutation_attempts": null,
+    "gate_attempts": null,
+    "resources_created": null,
+    "digest": "06913389ba5cfc91806c90c130a139067d1f3451490b10d77c8b650c58d3d687"
+  }
+}

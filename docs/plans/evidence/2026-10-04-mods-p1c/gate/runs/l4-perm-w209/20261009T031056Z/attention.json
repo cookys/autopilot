@@ -1,0 +1,30 @@
+{
+  "schema": "autopilot.attention/1",
+  "session_id": "3028da81-bc08-4aa5-8ea9-8f6786b5c6ab",
+  "project_key": "51de403da82a23f0",
+  "kind": "permission",
+  "tool_name": "Bash",
+  "summary": "Bash: ls -a && git status --short | head && sed -n 1,120p /home/cookys/projects/autopilot/skills/ceo-agent/references/l…",
+  "since": "2026-10-09T03:10:21.322Z",
+  "updated_at": "2026-10-09T03:10:27.968Z",
+  "pending": [
+    {
+      "agent_id": null,
+      "tool_name": "Bash",
+      "input_digest": "a1841676218022c4",
+      "kind": "permission",
+      "summary": "Bash: ls -a && git status --short | head && sed -n 1,120p /home/cookys/projects/autopilot/skills/ceo-agent/references/l…",
+      "since": "2026-10-09T03:10:21.322Z",
+      "updated_at": "2026-10-09T03:10:21.322Z"
+    },
+    {
+      "agent_id": null,
+      "tool_name": "Bash",
+      "input_digest": "c55accb636c11c4b",
+      "kind": "permission",
+      "summary": "Bash: cat README* 2>/dev/null | head -40; ls /home/cookys/projects/autopilot/scripts/session-mode.js",
+      "since": "2026-10-09T03:10:21.962Z",
+      "updated_at": "2026-10-09T03:10:21.962Z"
+    }
+  ]
+}

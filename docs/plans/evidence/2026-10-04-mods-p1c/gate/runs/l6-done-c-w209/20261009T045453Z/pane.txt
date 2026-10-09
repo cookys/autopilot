@@ -1,0 +1,50 @@
+                                                                                                                       │                                                                                       ✕
+● Depth-0 自己驗證：diff、驗收指令、status task 收據。                                                                 │ Legend [Now] Graph  Dispatch  Review  Decisions  Spend  Hygiene
+                                                                                                                       │session $1.90 · host $228.25 · ctx 11%
+  Ran 3 shell commands                                                                                                 │✓ 完成待驗收 gate-sandbox · 5m
+                                                                                                                       │驗收結論尚未出
+● Campaign 的 root run id 是 mission-20c40ae80803eaff1e3f4762（不是 session 的 job id），改用它取收據。                │no data · no stage recorded for this session
+                                                                                                                       │no data · no unit recorded
+  Ran 2 shell commands                                                                                                 │progress  100%（1/1）
+                                                                                                                       │phase  完成
+● README 那一行已經寫好、驗收也是綠的，但我沒有合併，因為 status task 的合併前收據顯示 can_merge: false。l6            │
+  規則要求這個值必須是 true 才能合併，所以我停在這裡。                                                                 │
+                                                                                                                       │
+  已驗證（我自己跑的）                                                                                                 │
+  - 分支 mission/20c40ae80803/gate-readme-line-v2-2026-10-05-a2，範圍是 e1316d0..ca98479。                             │
+  - diff 只有 README.md | 1 +，內容就是結尾多一行 gate-l5-test-line。                                                  │
+  - 我在分離的暫時 checkout 裡跑了驗收，grep -qx gate-l5-test-line README.md 通過，node test.js 輸出 ok、exit 0。      │
+  - 殘留：zero_residue: true，沒有遺留的 worktree 或分支（分支 …-a2 本身是為了合併而保留的）。                         │
+  - mission_terminal: true，phase 是 TERMINAL_READY。                                                                  │
+                                                                                                                       │
+  為什麼不能合併                                                                                                       │
+  - 收據 can_merge 和 can_close 都是 false，收據放在 scratchpad 的 status-pre.json。                                   │
+  - 失敗的 predicate 全是 *_unknown：merge_preflight_unknown、campaigns_terminal_unknown、acceptance_unknown、product_m│
+    erged_unknown、merge_edges_unknown，再加 merge_provenance_invalid。                                                │
+  - 也就是說收據缺少 campaign 終結（campaigns_terminal）、acceptance 結論和 merge 請求的證據，不是程式碼有問題。       │
+  - 前面 status task 用 session 的 job id 取不到輸入，這次改用 campaign 的 root run id mission-20c40ae80803eaff1e3f4762│
+    才取到。                                                                                                           │
+                                                                                                                       │
+  已知的小問題                                                                                                         │
+  - 工頭第 1 次嘗試因為它自己的呼叫錯誤被擋下，graph 的 3 次嘗試額度用掉 2 次，剩 1 次。                               │
+  - 我加了本機的 .git/info/exclude 條目 .claude/worktrees/，不會進 repo。                                              │
+                                                                                                                       │
+  下一步，請你選：                                                                                                     │
+  1. 我照 campaign terminalize、merge execute --request 的路徑補齊終結與 merge 證據，再重取收據；can_merge 變 true     │
+     才合併。這是 CLI 內建的路徑，但我還沒查過這個 sandbox 該怎麼用。                                                  │
+  2. 你直接決定要不要手動 cherry-pick ca98479 進 develop。這會繞過 l6 的合併關卡，要你明確同意我才會做。               │
+                                                                                                                       │
+  我建議選 1。                                                                                                         │
+                                                                                                                       │
+✻ Baked for 27s · done 12:54 PM · 2 shells still running                                                               │
+✓ 完成待驗收 │ ⓘ                                                                                                   [-] │
+                                                                                                                       │
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Sonnet 5.5 ── ~/projects/gate-sandbox develop ──────────────────────────────────────────── v2.1.295
+  5h ▮▮▯▯▯▯ 48% 2h15m   7d ▮▮▯▯▯▯ 34% 5d23h   ctx ▯▯▯▯▯▯ 11%                       → codeforge adopt
+  ⏵⏵ accept edits on · 2 shells · ← 6 agents
+
+  ● main
+  ◯ general-purpose  Waiting on run-engine.sh                                                                                                                                           8m 46s · ↓ 71.1k tokens

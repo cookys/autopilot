@@ -1,0 +1,50 @@
+                                                                                                                       │                                                                                       ✕
+  變更還沒 commit，留在 develop 的工作區。你要我 commit 的話跟我說一聲。                                               │[Legend] Now  Graph  Dispatch  Review  Decisions  Spend  Hygiene
+                                                                                                                       │圖例 · what the one-line band shows (left to right; an empty slot is left out)
+✻ Churned for 1m 35s · done 10:42 AM · 1 shell still running                                                           │▲ 要你決定  a decision or an approval waits for you
+                                                                                                                       │⏸ 疑似卡住  a dispatch or foreman has gone quiet
+❯ 先用 AskUserQuestion 問我選 A 還是 B，我答了你再繼續                                                                 │✓ 完成待驗收  work is done, acceptance is yours
+                                                                                                                       │● 進行中  something is running
+● User answered Claude's questions:                                                                                    │◌ 待命  idle: nothing running
+  ⎿  · 請選 A 還是 B？ → A                                                                                             │M!·l5 ▸ implement ◷3m  size (! = urgent) · level ▸ stage · time in this stage
+                                                                                                                       │▰▰▰▱▱ 3/5 ·2族  unit bar: done / current / to come · k of N · review families
+● 你選了 A。不過你沒說 A 代表什麼，我手上也沒有對應的上下文，所以還不知道要往哪個方向繼續。                            │⚙2 ⏸1  live dispatches · stalled dispatches (zero is left out)
+                                                                                                                       │R2 ⟲ · QC ✓ / QC owed  review round · pre-push QC evidence present / owed
+  目前 README 的測試字還在 develop 的工作區，沒有 commit。A 是指要 commit 這個變更，還是別的事？告訴我我就接著做。     │◆3 ?1 U2
+                                                                                                                       │  decided on your behalf · dispatches with no decision record · latest escalation rung
+✻ Crunched for 3s · done 10:43 AM · 1 shell still running                                                              │$120/150  brain-tier spend today / cap · warning from 80 %, error from 100 %
+                                                                                                                       │dev ↓3 · wt 2  plugin load source (⚠ = look at it) · reapable worktrees
+❯ 用任務清單工具建立兩個任務：「寫 A」「寫 B」，只把「寫 A」設為 in_progress，不要完成任何任務，然後回一句「好」就停。 │ⓘ  opens this panel
+                                                                                                                       │narrow terminals drop slots: < 160 hygiene · < 140 spend, decisions · < 120 review, age …
+● 好                                                                                                                   │
+                                                                                                                       │
+✻ Crunched for 5s · done 10:45 AM · 1 shell still running                                                              │
+                                                                                                                       │
+❯ 把「寫 A」「寫 B」兩個任務都標為 completed，然後回一句「好」就停。                                                   │
+                                                                                                                       │
+● 好                                                                                                                   │
+                                                                                                                       │
+✻ Worked for 3s · done 10:46 AM · 1 shell still running                                                                │
+                                                                                                                       │
+❯ (gate 測試：此 sandbox 的 Mission 模式已暫改 shadow，可派工。)用                                                     │
+  /home/cookys/projects/autopilot/scripts/dispatch-hetero.sh 派一個 codex hand：--runner codex --model gpt-6-astra     │
+  --branch gate/stall-l3，prompt 檔先寫到 /tmp/gate-stall-l3.txt，內容是「執行 bash -c "sleep 420"                     │
+  一次，等它結束，然後什麼都不要改」。背景派工，派完就回一句「派了」並停。                                             │
+                                                                                                                       │
+● Write(/tmp/gate-stall-l3.txt)                                                                                        │
+  ⎿  Wrote 1 line to ../../../../tmp/gate-stall-l3.txt                                                                 │
+      1 執行 bash -c "sleep 420" 一次，等它結束，然後什麼都不要改                                                      │
+                                                                                                                       │
+  Ran 2 shell commands                                                                                                 │
+                                                                                                                       │
+● 派了                                                                                                                 │
+                                                                                                                       │
+✻ Brewed for 10s · done 10:50 AM · 1 shell still running                                                               │
+● 進行中 │ ⚙1 │ ⓘ                                                                                                  [-] │
+                                                                                                                       │
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 看一下派工輸出
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Sonnet 5.5 ── ~/projects/gate-sandbox develop ──────────────────────────────────────────── v2.1.295
+  5h ▯▯▯▯▯▯ 12% 4h19m   7d ▮▯▯▯▯▯ 24% 6d1h   ctx ▯▯▯▯▯▯ 8%                         → codeforge adopt
+  ⏵⏵ accept edits on · 1 shell · ← 6 agents

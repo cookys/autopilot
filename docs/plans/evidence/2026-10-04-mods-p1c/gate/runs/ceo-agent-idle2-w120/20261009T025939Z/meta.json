@@ -1,0 +1,33 @@
+{
+  "schema": "autopilot.gate-capture/2",
+  "cell": "ceo-agent-idle2-w120",
+  "mode": "ceo-agent",
+  "window_width": 120,
+  "pane_width": 120,
+  "captured_at": "2026-10-09T02:59:39.789Z",
+  "captured_at_ms": 1791514779789,
+  "session_id": "d2ea4d36-6a61-49ca-a6ad-f750c76fbf05",
+  "session_id_how": "argument",
+  "sanitised_session_id": "d2ea4d36-6a61-49ca-a6ad-f750c76fbf05",
+  "project_key": "51de403da82a23f0",
+  "root_run_id": "job-1791514519-a0625980",
+  "scope_key": "51de403da82a23f0--job-1791514519-a0625980",
+  "live_base": "/run/user/1000/autopilot",
+  "autopilot_home": "/home/cookys/.autopilot",
+  "pane_cwd": "/home/cookys/projects/gate-sandbox",
+  "git_common_dir": "/home/cookys/projects/gate-sandbox/.git",
+  "missing": [
+    "tasks.json (/run/user/1000/autopilot/tasks/d2ea4d36-6a61-49ca-a6ad-f750c76fbf05.json)",
+    "turn-effective.json (/run/user/1000/autopilot/turn-effective/d2ea4d36-6a61-49ca-a6ad-f750c76fbf05.json)",
+    "agents (/run/user/1000/autopilot/agents/d2ea4d36-6a61-49ca-a6ad-f750c76fbf05)",
+    "review.json (/run/user/1000/autopilot/runs/51de403da82a23f0.review.json)",
+    "stage.json (/run/user/1000/autopilot/stage/d2ea4d36-6a61-49ca-a6ad-f750c76fbf05.json)",
+    "foreman.json (/run/user/1000/autopilot/runs/51de403da82a23f0--job-1791514519-a0625980.foreman.json)",
+    "decision-file.json (/home/cookys/projects/gate-sandbox/.git/autopilot/decisions/51de403da82a23f0--job-1791514519-a0625980.json)",
+    "work-orders (/home/cookys/projects/gate-sandbox/.git/autopilot/work-orders/job-1791514519-a0625980)"
+  ],
+  "screenshots": {
+    "band": "/home/cookys/projects/autopilot/docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/ceo-agent-idle2-w120/20261009T025939Z/band-120.png",
+    "pane": "/home/cookys/projects/autopilot/docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/ceo-agent-idle2-w120/20261009T025939Z/pane.png"
+  }
+}

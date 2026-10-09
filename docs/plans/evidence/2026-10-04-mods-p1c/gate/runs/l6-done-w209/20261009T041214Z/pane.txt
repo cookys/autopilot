@@ -1,0 +1,50 @@
+  - 尚未做:合併和清除 session marker 都還沒做。                                                                        │                                                                                       ✕
+  - 合併前提:工頭回報後,我會親自跑 status task 驗收。can_merge 必須是 true,而且 git diff 只能動到 README.md,才會合併。 │ Legend [Now] Graph  Dispatch  Review  Decisions  Spend  Hygiene
+                                                                                                                       │session $1.43 · host $133.51 · ctx 8%
+  我不會把工頭的回報當成通過,結果以我自己重跑的驗證為準。                                                              │✓ 完成待驗收 gate-sandbox · 2m
+                                                                                                                       │任務 2/2 都完成，等你驗收
+✻ Waiting for 1 background agent to finish                                                                             │no data · no stage recorded for this session
+                                                                                                                       │no data · no unit recorded
+● Agent "L6 foreman: gate readme line" finished · 2m 44s                                                               │progress  2 done*
+                                                                                                                       │phase  —
+● User answered Claude's questions:                                                                                    │
+  ⎿  · 工頭卡在 mission prepare:sandbox 裡有兩個先前嘗試(2026-10-05)留下的 ACTIVE Mission lineage,擋住新的             │
+     Mission。要怎麼處置? → 先不動,我自己看                                                                            │
+                                                                                                                       │
+                                                                                                                       │
+● 好,我先不碰 Mission 狀態,這次 /l6 到此停住。                                                                         │
+                                                                                                                       │
+  - 結果:README 沒有改動,沒有派出任何 leaf,也沒有合併。工頭的 worktree 是乾淨的。                                      │
+  - 卡住的原因:mission prepare 失敗,回報 UNRESOLVED_MISSION_EXISTS。.git/autopilot/mission/registry.json 裡有兩個      │
+    2026-10-05 留下的 lineage,狀態都是 ACTIVE:                                                                         │
+    - lineage-v1-6c52a9b2…                                                                                             │
+    - lineage-v1-bf0a9f8a…                                                                                             │
+  - 你可以看的地方:.git/autopilot/mission/ 和 .git/autopilot/implementation-campaign.jsonl。後者尾端有一筆             │
+    campaign-v1-1bacbe4d… 已標為 abandon。                                                                             │
+  - 未確定:工頭略過了 mission-terminal-reconcile.js legacy,因為 sandbox 沒有 legacy B/C mission                        │
+    root。這會不會影響之後的 admission,目前不知道。                                                                    │
+  - 還在背景跑:watcher 和 45 分鐘的死人開關。工頭已結束,所以它們不會再有事件。                                         │
+  - session marker 還在:l6 marker 沒有清除,按規則要有 can_close=true 的收據才能清。你處理完之後再叫我繼續就行。        │
+                                                                                                                       │
+✻ Churned for 6m 33s · done 12:07 PM · 2 shells still running                                                          │
+                                                                                                                       │
+❯ 用任務清單工具建立兩個任務：「任務一」「任務二」，只把任務一設為 in_progress，任務二保持                             │
+  pending，然後直接停止並回覆「已建立」，不要做任何其他事。                                                            │
+                                                                                                                       │
+● 已建立                                                                                                               │
+                                                                                                                       │
+✻ Churned for 6s · done 12:09 PM · 2 shells still running                                                              │
+                                                                                                                       │
+❯ 把任務一、任務二都設為 completed，然後只回覆「完成」，不要做別的事。                                                 │
+                                                                                                                       │
+● 完成                                                                                                                 │
+                                                                                                                       │
+✻ Churned for 3s · done 12:11 PM · 2 shells still running                                                              │
+✓ 完成待驗收 │ ⓘ                                                                                                   [-] │
+                                                                                                                       │
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Sonnet 5.5 ── ~/projects/gate-sandbox develop ──────────────────────────────────────────── v2.1.295
+  5h ▮▮▯▯▯▯ 36% 2h58m   7d ▮▯▯▯▯▯ 30% 5d23h   ctx ▯▯▯▯▯▯ 8%                        → codeforge adopt
+  ⏵⏵ accept edits on · 2 shells · ← 6 agents

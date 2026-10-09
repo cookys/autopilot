@@ -1,0 +1,55 @@
+{
+  "schema": "autopilot.foreman-activity/1",
+  "scope": {
+    "project_key": "51de403da82a23f0",
+    "repo_identity": "git-common-dir:/home/cookys/projects/gate-sandbox/.git",
+    "root_run_id": "job-1791520623-bfaad5b0"
+  },
+  "binding": "session",
+  "stall_s": 600,
+  "agents": [
+    {
+      "agent_id": "a629336127935799c",
+      "description": null,
+      "label": null,
+      "last_activity_at": "2026-10-09T04:40:27.771Z",
+      "age_s": 16,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-09T04:40:27.771Z",
+      "source": "stamp",
+      "session_id": "7cbcb68a-3fe4-4681-b1a3-7fc841acc835",
+      "binding": "session"
+    },
+    {
+      "agent_id": "a2f6e5087d4bffec1",
+      "description": "L6 foreman: README test line",
+      "label": "Listing old sandbox copy files",
+      "last_activity_at": "2026-10-09T04:40:26.376Z",
+      "age_s": 18,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-09T04:40:37.229Z",
+      "source": "stamp",
+      "session_id": "7cbcb68a-3fe4-4681-b1a3-7fc841acc835",
+      "binding": "session"
+    },
+    {
+      "agent_id": "adb4ff8a96d47057d",
+      "description": null,
+      "label": null,
+      "last_activity_at": "2026-10-09T04:39:56.662Z",
+      "age_s": 47,
+      "stale": false,
+      "stamped": true,
+      "ended_at": "2026-10-09T04:39:56.662Z",
+      "source": "stamp",
+      "session_id": "7cbcb68a-3fe4-4681-b1a3-7fc841acc835",
+      "binding": "session"
+    }
+  ],
+  "stage": null,
+  "stage_source": null,
+  "stage_at": null,
+  "stage_age_s": null
+}

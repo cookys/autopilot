@@ -1328,7 +1328,8 @@ export function legendLines(): PaneLine[] {
     l([seg('◆3', 'claude'), seg(' '), seg('?1', 'inactive'), seg(' U2')], 'decided on your behalf · dispatches with no decision record · latest escalation rung'),
     l([seg('$120/150', 'warning')], 'brain-tier spend today / cap · warning from 80 %, error from 100 %'),
     l([seg('dev ↓3'), seg(' · '), seg('wt 2')], 'plugin load source (⚠ = look at it) · reapable worktrees'),
-    l([seg('ⓘ')], 'opens this panel'),
+    l([seg('ⓘ')], 'opens this panel; with it open, shows the next tab'),
+    { text: 'keyboard: Ctrl+x Tab, then Enter on ⓘ; each further Enter shows the next tab', dim: true },
     { text: 'narrow terminals drop slots: < 160 hygiene · < 140 spend, decisions · < 120 review, age · < 80 all but verdict, dispatch, unit bar', dim: true },
   ]
 }

@@ -137,6 +137,7 @@ type World = {
   sid: { value: string }
   cwdReal: { value: string }
   toasts: string[]
+  panes: string[]
   opens: { id: string; title?: string; focus?: true; closeOnEscape?: true }[]
   writes: string[]
   reads: string[]
@@ -146,7 +147,7 @@ type World = {
 
 // Registers the bottom hooks (what the engine would answer) for one test.
 function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A): World {
-  const w: World = { files, sid: { value: sid }, cwdReal: { value: CWD }, toasts: [], opens: [], writes: [], reads: [], lists: [], clock: undefined as never }
+  const w: World = { files, sid: { value: sid }, cwdReal: { value: CWD }, toasts: [], panes: [], opens: [], writes: [], reads: [], lists: [], clock: undefined as never }
   w.clock = mock.clock(on, { now: nowMs })
   mock.env(on, { HOME })
   on('fs.read', ($, e) => {
@@ -181,7 +182,9 @@ function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A): World {
   on('session.end', () => ({ sessionId: w.sid.value }))
   on('ui.invalidate', () => ({ value: undefined }))
   on('ui.toast', ($, e) => { w.toasts.push(e.text); return { value: undefined } })
-  on('ui.open', ($, e) => { w.opens.push({ id: e.id, title: e.title, focus: e.focus, closeOnEscape: e.closeOnEscape }); return { value: { isPlaced: true } } })
+  on('ui.open', ($, e) => { w.opens.push({ id: e.id, title: e.title, focus: e.focus, closeOnEscape: e.closeOnEscape }); if (!w.panes.includes(e.id)) w.panes.push(e.id); return { value: { isPlaced: true } } })
+  on('ui.close', ($, e) => { w.panes = w.panes.filter(id => id !== e.id); return { value: undefined } })
+  on('ui.panes', () => ({ value: w.panes.map(id => ({ id, title: 'Autopilot', isShown: true, isFocused: false, isPlaced: true })) }))
   return w
 }
 
@@ -2067,6 +2070,36 @@ for (const surface of SURFACES) {
     await pane.unmount()
     expect(texts.some(t => t.startsWith('圖例'))).toBe(true) // the Legend tab, not Now
     expect(texts.some(t => t.startsWith('session $'))).toBe(false)
+  })
+
+  test('P7 band: the info press cycles tabs while the pane is open; closed it opens on Legend (' + surface + ')', async ($, on) => {
+    const w = world(on, richWorld())
+    await start($, surface)
+    const band = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    const shownTab = async () => {
+      const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+      const tab = (await pane.findAll({ type: 'Button' }) as Drawn[]).find(b => b.props?.autoFocus === true)?.props?.key
+      await pane.unmount()
+      return tab
+    }
+    const press = async () => { const ui = await band(); await ui.press({ key: 'info' }); await ui.unmount() }
+    await press() // closed -> Legend
+    expect(await shownTab()).toBe('legend')
+    await press()
+    expect(await shownTab()).toBe('now')
+    await press()
+    expect(await shownTab()).toBe('graph')
+    // a mouse click on a tab, then the press continues from the clicked tab
+    const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+    await pane.press({ key: 'review' })
+    await pane.unmount()
+    await press()
+    expect(await shownTab()).toBe('decisions')
+    for (const want of ['spend', 'hygiene', 'legend', 'now']) { await press(); expect(await shownTab()).toBe(want) } // wraps after Hygiene
+    // closed again (Escape / the person closes it): the next press is Legend, not the tab after Now
+    w.panes = []
+    await press()
+    expect(await shownTab()).toBe('legend')
   })
 
   test('P7 band: a non-ok snapshot is one dim line `<reason> │ ⓘ`, the reason cut to fit (' + surface + ')', async ($, on) => {

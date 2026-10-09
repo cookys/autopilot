@@ -32,7 +32,7 @@ import { Band } from './band'
 import { Pane } from './pane'
 import {
   acceptanceToast, bandLine1, bandView, buildSections, checkEnvelope, commonDirOf, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
-  headerText, hhmm, projectName as projectNameOf, isKey, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
+  headerText, hhmm, projectName as projectNameOf, isKey, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
   readForeman, readLoadSource, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
   spendOf, startMsOf, STATE_TEXT, POINTER_SCHEMA, NO_DETAIL, usd,
 } from './model'
@@ -398,9 +398,17 @@ export const register: Register = on => {
   on('ui.render', { component: 'AbovePrompt' }, ($, e, next) => {
     viewport = e.viewport ? { columns: e.viewport.columns, isFullscreen: e.viewport.isFullscreen } : null
     if (e.props.hasSurvey) return next(e)
-    // the ⓘ opens (or raises) the panel on the Legend tab; no hotkey, the band's autoFocus puts the keyboard path at Ctrl+x Tab, Enter
+    // the ⓘ opens the panel on the Legend tab; pressed again while the panel is open it shows the next tab (the pane never gets the keyboard
+    // while the person holds the ⓘ, so this is the keyboard way to change tab). "Open" is the engine's own record, $.ui.panes() (the pane
+    // is listed until it closes, however it was opened). No hotkey: the band's autoFocus puts the keyboard path at Ctrl+x Tab, Enter.
     const info = async () => {
-      paneTab = 'legend'
+      let isOpen = false
+      try {
+        isOpen = (await $.ui.panes()).some(p => p.id === PANE_ID)
+      } catch (_e) {
+        isOpen = false
+      }
+      paneTab = isOpen ? PANE_TABS[(PANE_TABS.indexOf(paneTab) + 1) % PANE_TABS.length] : 'legend'
       $.ui.invalidate('ui.render')
       await $.ui.open({ id: PANE_ID, title: 'Autopilot', focus: true, closeOnEscape: true })
     }

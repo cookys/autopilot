@@ -190,14 +190,46 @@ test('unit bar scales to 10 cells when N > 10, and 5/20 puts the current cell at
   assert.strictEqual(status(r, 'unit'), 'PASS');
   assert.strictEqual(status(run(capture(files, ['◌ 待命 │ ▰▰▰▰▱▱▱▱▱▱ 5/20 │ ⓘ'])), 'unit'), 'FAIL');
 });
-test('a long stage name may be cut with … to fit bodyColumns; an uncut stage that does not fit FAILs the layout', () => {
+test('a long stage name is cut with … exactly as far as needed (never below 2 cells); an uncut or wrongly cut stage FAILs', () => {
   const long = 'x'.repeat(220);
   const files = richFiles({ 'marker.json': richMarker({ stage: long }) });
-  const drawn = RICH_209.replace('implement', `${'x'.repeat(40)}…`);
-  const r = run(capture(files, [drawn]));
+  // expected cut, worked out by hand: the line with the 9-cell stage `implement` is W cells; 204 columns (209 - 5) are available
+  const stageW = 204 - (displayWidth(RICH_209) - displayWidth('implement'));
+  const exact = `${'x'.repeat(stageW - 1)}…`;
+  const r = run(capture(files, [RICH_209.replace('implement', exact)]));
   assert.ok(r.derived.over > 0); assert.strictEqual(status(r, 'position'), 'PASS'); assert.strictEqual(status(r, 'layout'), 'PASS');
+  assert.strictEqual(displayWidth(RICH_209.replace('implement', exact)), 204);
+  for (const bad of [`${'x'.repeat(40)}…`, 'x…', '…', `${'x'.repeat(stageW)}…`]) {
+    assert.strictEqual(status(run(capture(files, [RICH_209.replace('implement', bad)])), 'position'), 'FAIL', `stage "${bad.slice(0, 12)}…" must FAIL`);
+  }
   const uncut = run(capture(files, [RICH_209.replace('implement', long)]));
   assert.strictEqual(status(uncut, 'layout'), 'FAIL'); assert.strictEqual(uncut.ok, false);
+});
+test('GATEFIX content after the ⓘ on the band row FAILs the layout; the engine [-] toggle and a docked pane border do not', () => {
+  const ok = '● 進行中 │ ⓘ';
+  const lay = (row, meta) => status(run(capture({ 'turn.json': turnF('active') }, [row], meta)), 'layout');
+  assert.strictEqual(lay(ok), 'PASS');
+  assert.strictEqual(lay(`${ok}      [-]`), 'PASS');
+  assert.strictEqual(lay(`${ok} │ garbage`), 'FAIL');
+  assert.strictEqual(lay(`${ok}  garbage [-]`), 'FAIL');
+  // a docked pane: the border at the dock cell is fine, a `│` anywhere else is content
+  const docked = dockedPane(ok, 40, 12);
+  assert.strictEqual(status(run(capture({ 'turn.json': turnF('active') }, docked)), 'layout'), 'PASS');
+  const forged = docked.map((l) => l.replace(`${ok}`, `${ok} │ garbage`));
+  assert.strictEqual(status(run(capture({ 'turn.json': turnF('active') }, forged)), 'layout'), 'FAIL');
+});
+test('GATEFIX layout rules: slots out of priority order FAIL, a duplicated slot FAILs, each by its own rule', () => {
+  const files = richFiles();
+  const layout = (line) => { const r = run(capture(files, [line], { window_width: 209 })); return r.results.find((x) => x.name === 'layout'); };
+  assert.strictEqual(layout(RICH_209).status, 'PASS');
+  const swapped = '⏸ 疑似卡住 │ ▰▰▰▱▱ 3/5 ·2族 │ M!·l5 ▸ implement ◷3m │ ⚙2 ⏸1 │ R2 ⟲ · QC ✓ │ ◆3 ?1 U2 │ $123/150 │ dev ↓3 · wt 2 │ ⓘ';
+  const o = layout(swapped); assert.strictEqual(o.status, 'FAIL'); assert.match(o.detail, /out of priority order/);
+  const dup = RICH_209.replace(' │ ⚙2 ⏸1 │', ' │ ⚙2 ⏸1 │ ⚙2 ⏸1 │');
+  const d = layout(dup); assert.strictEqual(d.status, 'FAIL'); assert.match(d.detail, /second dispatch/);
+});
+test('GATEFIX classify: the verdict below 2 cells is the glyph alone or glyph + …', () => {
+  assert.strictEqual(classify('●', 0), 'verdict'); assert.strictEqual(classify('●…', 0), 'verdict'); assert.strictEqual(classify('● 進行…', 0), 'verdict');
+  assert.strictEqual(classify('x…', 0), null);
 });
 
 // ---- the width-table ABSENT rule

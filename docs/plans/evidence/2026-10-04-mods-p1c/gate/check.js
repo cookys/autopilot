@@ -383,13 +383,18 @@ function derive(dir, opts = {}) {
   // does the line fit? (only the position's stage text may be cut)
   const present = SLOT_ORDER.filter((n) => slots[n].state === 'present');
   let stageW = pos.state === 'present' ? displayWidth(pos.parts.stage) : 0;
+  let stageDrawn = pos.state === 'present' ? pos.parts.stage : ''; // the stage as the band draws it: whole, or cut with the 1-cell `…` counted
   const widthNow = () => present.filter((n) => slots[n].state === 'present')
-    .reduce((n, name) => n + (name === 'position' ? displayWidth(pos.text) - displayWidth(pos.parts.stage) + stageW : displayWidth(slots[name].text)), 0)
+    .reduce((n, name) => n + (name === 'position' ? displayWidth(pos.text) - displayWidth(pos.parts.stage) + displayWidth(stageDrawn) : displayWidth(slots[name].text)), 0)
     + displayWidth(SEP) * present.filter((n) => slots[n].state === 'present').length + displayWidth(ICON);
   const over = widthNow() - columns;
   // 1. the position's stage text is cut with `…` (never below 2 cells); 2. still over: the overflow fallback of contract section 2, in order:
   //    remove the unit bar, then the ⏸ stalled count, then the ⚙ live count; 3. still over: shorten the verdict word with `…` (the glyph stays)
-  if (over > 0 && pos.state === 'present') stageW = Math.max(2, stageW - over);
+  if (over > 0 && pos.state === 'present') {
+    stageW = Math.max(2, stageW - over);
+    stageDrawn = truncateTo(pos.parts.stage, stageW); // the EXACT cut: only as far as needed, never below 2 cells
+    pos.parts.stageCut = stageDrawn;
+  }
   const dsp = slots.dispatch;
   const fallbackWhy = `removed by the overflow fallback (line over bodyColumns ${columns})`;
   const steps = [
@@ -405,11 +410,26 @@ function derive(dir, opts = {}) {
   }
 
   return {
-    meta, mode: meta.mode || String(meta.cell || '').split('-')[0] || '?', verdict, mark, attentionKind: attKind, okSnapshot, noScope, columns, columnsHow, slots, over, notes, reasons, nowMs,
+    meta, mode: meta.mode || String(meta.cell || '').split('-')[0] || '?', verdict, mark, attentionKind: attKind, okSnapshot, noScope, dock: dockOf(readText(path.join(dir, 'pane.txt'))), columns, columnsHow, slots, over, notes, reasons, nowMs,
   };
 }
 
 // ---- reading the pane
+// what is drawn on the band row after the ⓘ: { tail, tailAt (cell offset of the first char of the tail) }
+function tailOf(line, end) {
+  if (end < 0) return { tail: '', tailAt: 0 };
+  return { tail: line.slice(end), tailAt: displayWidth(line.slice(0, end)) };
+}
+// Nothing but whitespace and the engine's `[-]` toggle may follow the ⓘ; with a docked pane the pane's border `│` (at the dock cell)
+// and the pane's own text after it are not the band. Returns a problem text or null.
+function tailProblem(band, d) {
+  const tail = band.tail || '';
+  const m = /^\s*(\[-\])?\s*/.exec(tail);
+  const rest = tail.slice(m[0].length);
+  if (rest === '') return null;
+  if (d.dock && rest.startsWith('│') && band.tailAt + displayWidth(tail.slice(0, m[0].length)) === d.dock.column) return null;
+  return `content drawn after ⓘ on the band row: "${rest.trim()}"`;
+}
 // the band: the last line carrying a verdict mark + word; it runs up to ` │ ⓘ` (a docked pane to its right is not part of the band)
 function findBand(paneText) {
   const lines = String(paneText || '').split('\n');
@@ -424,7 +444,7 @@ function findBand(paneText) {
         const cut = iconAt >= 0 && (first === v.mark || first === `${v.mark}…` || (first.startsWith(`${v.mark} `) && /^.*…$/.test(first) && v.word.startsWith(first.slice(2, -1)) && first.length > 3));
         if (!full && !cut) continue;
         if (iconAt < 0 && !(text === first || text.startsWith(`${first}${SEP}`))) continue; // a transcript line that merely mentions a verdict
-        return { verdict: v.word, text, line1: text, line2: '', icon: iconAt >= 0, kind: 'ok', surface: 'band' };
+        return { verdict: v.word, text, line1: text, line2: '', icon: iconAt >= 0, kind: 'ok', surface: 'band', ...tailOf(lines[i], iconAt >= 0 ? iconAt + SEP.length + ICON.length : -1) };
       }
     }
   }
@@ -438,7 +458,7 @@ function findNonOk(paneText) {
     if (at < 0) continue;
     if (VERDICTS.some((v) => lines[i].includes(`${v.mark} ${v.word}`))) continue;
     const text = lines[i].slice(0, at + SEP.length + ICON.length).replace(/^\s+/, '');
-    if (text.length > SEP.length + ICON.length) return { text, line1: text, line2: '', icon: true, kind: 'nonok', surface: 'band' };
+    if (text.length > SEP.length + ICON.length) return { text, line1: text, line2: '', icon: true, kind: 'nonok', surface: 'band', ...tailOf(lines[i], at + SEP.length + ICON.length) };
   }
   return null;
 }
@@ -459,7 +479,7 @@ function findDialog(paneText) {
 
 // classify one drawn segment by its own text (independent of what is expected)
 function classify(seg, index) {
-  if (index === 0) return /^[▲⏸✓●◌]( \S.*)?$/.test(seg) ? 'verdict' : null;
+  if (index === 0) return /^[▲⏸✓●◌](…| \S.*)?$/.test(seg) ? 'verdict' : null;
   if (seg.includes('▸')) return 'position';
   if (/^[▰▱]/.test(seg)) return 'unit';
   if (/^(⚙\d+( ⏸\d+)?|⏸\d+)$/.test(seg)) return 'dispatch';
@@ -519,7 +539,7 @@ function judgeBand(d, band) {
     if (name === 'position') {
       const m = /^(.*?▸ )(.*?)(?: ◷(\S+))?$/.exec(got);
       const exp = s.parts;
-      const stageOk = m && m[1] === exp.head + '▸ ' && (m[2] === exp.stage || (d.over > 0 && m[2].endsWith('…') && exp.stage.startsWith(m[2].slice(0, -1))));
+      const stageOk = m && m[1] === exp.head + '▸ ' && (m[2] === (exp.stageCut !== undefined ? exp.stageCut : exp.stage));
       const expAge = s.parts.ageRemoved ? null : exp.age;
       let ageOk = false; let ageNote = '';
       if (m) {
@@ -540,6 +560,8 @@ function judgeBand(d, band) {
   const rank = order.map((n) => SLOT_ORDER.indexOf(n));
   if (rank.some((r, i) => i > 0 && r < rank[i - 1])) problems.push(`slots out of priority order: ${order.join(',')}`);
   if (segs.some((s) => s === '')) problems.push('an empty segment (doubled separator)');
+  const tp = tailProblem(band, d);
+  if (tp) problems.push(tp);
   const lineWidth = displayWidth(band.text);
   if (lineWidth > d.columns) problems.push(`line is ${lineWidth} cells wide, over bodyColumns ${d.columns}`);
   res('layout', problems.length === 0 ? 'PASS' : 'FAIL', `one line of at most ${d.columns} cells, slots in priority order, joined by " │ ", ⓘ last`, `${lineWidth} cells`, 'contract section 2', problems.join('; '));

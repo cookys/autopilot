@@ -10,6 +10,7 @@
 # The window must be a session window that tmux lets you resize (an attached client larger than the target pins the size: use a
 # detached private server `tmux -L gate new-session -d`, as DRIVER.md says; `window-size manual` is set for the sweep and restored).
 set -u
+set -o pipefail
 if [ $# -lt 2 ] || [ $# -gt 3 ]; then echo "usage: $0 <cell-name> <tmux-target> [session-id]" >&2; exit 2; fi
 CELL=$1; TARGET=$2; SID_ARG=${3:-}
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -29,6 +30,7 @@ restore() {
   else "${TMUX_CMD[@]}" set-window-option -u -t "$TARGET" window-size >/dev/null 2>&1 || true; fi
 }
 trap restore EXIT
+trap 'restore; exit 130' INT TERM # an interrupted sweep puts the window size back
 
 RC=0
 for W in $WIDTHS; do
@@ -36,7 +38,8 @@ for W in $WIDTHS; do
   sleep "$WAIT"
   GOT=$("${TMUX_CMD[@]}" display -p -t "$TARGET" '#{window_width}')
   if [ "$GOT" != "$W" ]; then echo "window is $GOT columns after asking for $W (a larger attached client pins it?)" >&2; RC=1; fi
-  OUT=$(bash "$HERE/capture.sh" "$CELL-w$W" "$TARGET" ${SID_ARG:+"$SID_ARG"} | head -n 1) || { RC=1; continue; }
+  OUT=$(bash "$HERE/capture.sh" "$CELL-w$W" "$TARGET" ${SID_ARG:+"$SID_ARG"} | head -n 1) || { echo "capture.sh failed at $W" >&2; RC=1; continue; }
+  if [ ! -d "$OUT" ]; then echo "capture.sh printed no capture dir at $W: '$OUT'" >&2; RC=1; continue; fi
   [ "${GATE_SKIP_SCREENSHOT:-}" = 1 ] || bash "$HERE/screenshot.sh" "$OUT" >/dev/null || RC=1
   echo "$W $OUT"
 done

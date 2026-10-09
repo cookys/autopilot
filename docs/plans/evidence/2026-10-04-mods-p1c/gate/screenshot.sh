@@ -29,7 +29,7 @@ const lines = ansi.split('\n');
 let bandLine = '';
 let plain = '';
 try { plain = fs.readFileSync(path.join(dir, 'band.txt'), 'utf8').split('\n')[0]; } catch (_e) { /* none */ }
-if (plain) { const hit = lines.find((l) => strip(l).includes(plain)); if (hit) bandLine = hit; }
+if (plain) { const hit = lines.findLast((l) => strip(l).includes(plain)); if (hit) bandLine = hit; }
 fs.writeFileSync(path.join(dir, 'band.ansi'), `${bandLine}\n`);
 const width = Number.isFinite(meta.window_width) ? meta.window_width : Math.max(...lines.map(cells));
 process.stdout.write(`${width} ${Math.max(width, ...lines.map(cells))} ${lines.length}`);

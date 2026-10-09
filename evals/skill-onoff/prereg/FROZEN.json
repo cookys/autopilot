@@ -123,6 +123,17 @@
       "tasks/g7-close/repo/lib/greet.js": "9bfc5aeab40621c47b6d982f81c65833b900de69440bc6a004e58cf37e5acb2f",
       "tasks/g7-close/repo/run-tests.sh": "c4b119ea9043dd58acf457e4180ebf915283a415165c717145ee0d7c24b9c3ac",
       "tasks/g7-close/task.md": "fe099a2e163848ebe4744e9fc722eba497a1c052ad6944a9c5f8026a997e07f7"
-    }
+    },
+    "amendments": {
+      "amend-1-plugin-scripts": {
+        "date": "2026-10-10",
+        "stamped": false,
+        "made_after_v1_results_seen": true,
+        "v1_status": "INSTRUMENT-DEFECTIVE for G6 (precondition false: session-mode.js absent from the plugin); G7 v1 superseded by the v8 text. Never re-scored.",
+        "v2_results": "results/stage-graph-g67.v2.jsonl",
+        "note": "files/packs are filled by evals/skill-onoff/stamp-g67-amendment.js after the post-merge pack freeze (prereg/stage-graph-g67.json fixture_scripts_freeze.post_merge_steps)"
+      }
+    },
+    "files_note": "files = digests of the v1 as-run state (arms v7, fixture-scripts-g67); superseded by amendments.amend-1-plugin-scripts.files for every file listed there once stamped"
   }
 }

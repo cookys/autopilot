@@ -130,4 +130,5 @@ Per-task ship rule (ON >= 2/3, OFF <= 1/3) over `g6-l4|l5|l6` (entry `session-mo
 (finish-flow runs `repo-residue-sweep.js close-session … --yes`): `prereg/stage-graph-g67.{md,json}` (DRAFT until frozen),
 `run-g67-campaign.js` (`--dry-run`, `--check-arms`, resumable), `score-g67.js`, `lib/g67-cell.js`, arms `arms/g67/`.
 `ONOFF_TIMEOUT_IS_COMPLETE=1` (run-skill-onoff-eval.sh) turns a timeout stop into a complete cell (`stopped_by_timeout`).
+Amendment 1 (2026-10-10): v1 is instrument-defective for G6 (session-mode.js was absent from the plugin); v2 is a new arm (v8 packs, `fixture-scripts-g67-v2`) with a per-cell plugin-script self-check (`ONOFF_REQUIRE_PLUGIN_SCRIPTS`); post-merge freeze steps in `prereg/stage-graph-g67.json` `fixture_scripts_freeze.post_merge_steps`, finished by `stamp-g67-amendment.js`.
 Spend-free proof: `hooks/tests/skill-onoff-g67.test.sh`.

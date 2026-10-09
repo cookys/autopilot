@@ -40,6 +40,9 @@
 # point under a per-cell temp dir (the decision ledger default lives in the fixture repo git-common-dir); copied to $OUT/state/ for evidence.
 #
 # Env: ONOFF_PROMPT_PREFIX (optional preface line before task.md, both arms; amend-2) · ONOFF_TIMEOUT (default 10m) · ONOFF_TIMEOUT_IS_COMPLETE=1 (a timeout stop with a non-empty transcript is a complete cell, row carries stopped_by_timeout; default off) · ONOFF_STUB_BIN (required for --runner stub)
+#      ONOFF_REQUIRE_PLUGIN_SCRIPTS (comma list of plugin-root-relative scripts, e.g. scripts/session-mode.js; before the agent starts each is
+#        require()d from the assembled scratch plugin, so its whole require graph must resolve; any failure is infra_fail/plugin_script_unresolvable
+#        and the runner is never started. The g67 rows set it from the prereg; default off = no check)
 #      ONOFF_PACKS_DIR (override packs dir; tests) · ONOFF_STATE_BASE (tmpfs base for per-cell state; none writable = exit 2) · ONOFF_SHM_DIR (default /dev/shm)
 # Emits: $OUT/result.json (single-line JSONL row), $OUT/transcript.jsonl, $OUT/prompt.md
 # Exit: 0 = row emitted (marker outcomes live IN the row) · 2 = harness/config error
@@ -272,8 +275,24 @@ RAW_ERR="$OUT_DIR/stderr.log"
 TIMEOUT_LIMIT="${ONOFF_TIMEOUT:-10m}"
 START_TIME=$(date +%s)
 
+# ── instrument self-check: scripts the skill text addresses as <plugin>/scripts/... must load from THIS scratch plugin ──
+# (stage-graph-g67 v1: session-mode.js was absent from the plugin, so G6 ON cells measured the instrument, not the text.)
+PREFLIGHT_FAIL=""
+if [ -n "${ONOFF_REQUIRE_PLUGIN_SCRIPTS:-}" ]; then
+  IFS=, read -ra REQ_SCRIPTS <<< "$ONOFF_REQUIRE_PLUGIN_SCRIPTS"
+  for rs in "${REQ_SCRIPTS[@]}"; do
+    case "$rs" in /*|*..*|"") PREFLIGHT_FAIL="bad required script path: $rs"; break ;; esac
+    if ! HOME="$SCRATCH_HOME" node -e 'require(require("path").join(process.argv[1], process.argv[2]))' "$SCRATCH_PLUGIN" "$rs" > "$OUT_DIR/preflight.log" 2>&1; then
+      PREFLIGHT_FAIL="plugin script does not load: $rs"; break
+    fi
+  done
+  [ -z "$PREFLIGHT_FAIL" ] || echo "preflight: $PREFLIGHT_FAIL" >> "$OUT_DIR/preflight.log"
+fi
+
 set +e
-if [ "$RUNNER" = "cc" ]; then
+if [ -n "$PREFLIGHT_FAIL" ]; then
+  : > "$TRANSCRIPT"; : > "$RAW_ERR"; RUN_EXIT=0   # the agent is never started
+elif [ "$RUNNER" = "cc" ]; then
   (
     cd "$TEMP_REPO"
     export HOME="$SCRATCH_HOME"
@@ -325,7 +344,9 @@ fi
 
 # ── failure classification (closed vocabulary; content-free) ──
 failure_class="null"; failure_cause="null"; STOPPED_BY_TIMEOUT=0
-if [ "${ONOFF_TIMEOUT_IS_COMPLETE:-0}" = 1 ] && { [ "$RUN_EXIT" -eq 124 ] || [ "$RUN_EXIT" -eq 137 ]; } \
+if [ -n "$PREFLIGHT_FAIL" ]; then
+  failure_class='"infra_fail"'; failure_cause='"plugin_script_unresolvable"'
+elif [ "${ONOFF_TIMEOUT_IS_COMPLETE:-0}" = 1 ] && { [ "$RUN_EXIT" -eq 124 ] || [ "$RUN_EXIT" -eq 137 ]; } \
     && [ -s "$TRANSCRIPT" ] && [ "$MARKERS_EXIT" -eq 0 ]; then
   # stage-graph-g67: the markers only need the first minutes, so the per-cell timeout is the registered stop, not a failure.
   # Default off (every other row keeps timeout = infra_fail). The row says so: "stopped_by_timeout":true.

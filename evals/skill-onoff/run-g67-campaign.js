@@ -22,6 +22,7 @@
 const fs = require('fs');
 const path = require('path');
 const cp = require('child_process');
+const crypto = require('crypto');
 
 const HERE = __dirname;
 const argv = process.argv.slice(2);
@@ -165,6 +166,13 @@ if (runner === 'cc') {
   let r;
   try { r = checkArms(); } catch (e) { r = { ok: false, problems: [e.message] }; }
   if (!r.ok) die(`--check-arms failed: ${r.problems.join('; ')}`);
+  // amendment 1: a live run needs the stamped arm shas (stamp-g67-amendment.js, after the post-merge pack freeze)
+  for (const a of ['off', 'on']) {
+    const reg = P.arm_manifests[P.arms[a]].sha256;
+    const got = crypto.createHash('sha256').update(fs.readFileSync(path.join(armsDir, `${P.arms[a]}.json`))).digest('hex');
+    if (!reg) die(`arm manifest ${a} sha256 is not stamped in the prereg (run stamp-g67-amendment.js after the post-merge freeze)`);
+    if (reg !== got) die(`arm manifest ${a} sha256 ${got} does not match the prereg's registered ${reg}`);
+  }
 }
 fs.mkdirSync(path.dirname(path.resolve(resultsPath)), { recursive: true });
 const KEEP_CELLS_DIR = path.join(path.dirname(path.resolve(resultsPath)), 'g67-cells');
@@ -174,7 +182,7 @@ for (const t of TASKS) {
   const r = cp.spawnSync('bash', [path.join(HERE, 'run-skill-onoff-matrix.sh'), '--model', model, '--reps', String(reps), '--results', path.resolve(resultsPath),
     '--tasks', t, '--arms', ARMS.join(','), '--runner', runner, '--arm-manifests', armsDir, '--check-skill', T.skill], {
     stdio: 'inherit',
-    env: { ...process.env, ONOFF_PROMPT_PREFIX: T.prefix, ONOFF_TIMEOUT: process.env.ONOFF_TIMEOUT_OVERRIDE || T.timeout, ONOFF_TIMEOUT_IS_COMPLETE: '1', ONOFF_KEEP_CELLS_DIR: KEEP_CELLS_DIR },
+    env: { ...process.env, ONOFF_PROMPT_PREFIX: T.prefix, ONOFF_TIMEOUT: process.env.ONOFF_TIMEOUT_OVERRIDE || T.timeout, ONOFF_TIMEOUT_IS_COMPLETE: '1', ONOFF_KEEP_CELLS_DIR: KEEP_CELLS_DIR, ONOFF_REQUIRE_PLUGIN_SCRIPTS: (P.plugin_required_scripts || []).join(',') },
   });
   if (r.status !== 0) die(`matrix failed for task ${t} (exit ${r.status})`);
 }

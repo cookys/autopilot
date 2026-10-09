@@ -1153,16 +1153,33 @@ export function autoResidueCount(text: string | null): number {
   return isCount(n) ? n : 0
 }
 
-// The git common dir a `.git` file points at: `gitdir: <abs>/.git/worktrees/<name>` -> `<abs>/.git`; a submodule's gitdir is its own common dir.
-export function commonDirOfGitFile(text: string | null, dir: string): string | null {
+// Absolute path with `.`/`..` segments folded (never above the root).
+export function normalizeAbs(p: string): string {
+  const out: string[] = []
+  for (const seg of p.split('/')) {
+    if (seg === '' || seg === '.') continue
+    if (seg === '..') out.pop()
+    else out.push(seg)
+  }
+  return '/' + out.join('/')
+}
+
+// The gitdir a `.git` FILE names (`gitdir: <path>`), absolute and normalised; a relative path is resolved against the directory that holds the file.
+export function gitdirOfGitFile(text: string | null, dir: string): string | null {
   if (text === null) return null
   const m = /^gitdir:\s*(.+?)\s*$/m.exec(text)
   if (m === null) return null
-  let g = m[1]
-  if (!g.startsWith('/')) g = dir.replace(/\/+$/, '') + '/' + g
-  if (g.split('/').includes('..')) return null
-  const i = g.indexOf('/worktrees/')
-  return (i > 0 ? g.slice(0, i) : g).replace(/\/+$/, '')
+  const g = m[1]
+  return normalizeAbs(g.startsWith('/') ? g : dir + '/' + g)
+}
+
+// The common dir of a gitdir, the way git finds it: `<gitdir>/commondir` (relative to the gitdir) when it exists; else the gitdir itself
+// (a submodule); only without that file, a linked worktree's `<common>/worktrees/<name>` is cut at its LAST `/worktrees/`.
+export function commonDirOfGitdir(gitdir: string, commondirText: string | null): string {
+  const c = commondirText === null ? '' : commondirText.trim()
+  if (c !== '') return normalizeAbs(c.startsWith('/') ? c : gitdir + '/' + c)
+  const i = gitdir.lastIndexOf('/worktrees/')
+  return i > 0 ? gitdir.slice(0, i) : gitdir
 }
 
 export const STAGE_WALK_SCHEMA = 'autopilot.stage-walk/1'

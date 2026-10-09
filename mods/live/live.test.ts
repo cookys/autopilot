@@ -381,6 +381,7 @@ for (const surface of SURFACES) {
     const files = base()
     delete files[AHOME + '/session-mode/' + SID_A + '.json']
     const auto = (n: number) => j({ schema: 'autopilot.residue-auto/1', ran_at: '2026-10-04T09:00:00.000Z', needs_human: [], needs_human_count: n, needs_human_bytes: 0 })
+    files['/work/repo/.git/HEAD'] = 'ref: refs/heads/main\n'
     files['/work/repo/.git/autopilot-residue-auto.json'] = auto(3)
     const w = world(on, files)
     await start($, surface)
@@ -397,7 +398,7 @@ for (const surface of SURFACES) {
     await w.clock.advance(5000)
     expect(await bandText($, surface)).toContain('no project')
     // a linked worktree: .git is a file naming <common>/worktrees/<name>
-    delete w.files['/work/repo/.git/autopilot-residue-auto.json']
+    delete w.files['/work/repo/.git/autopilot-residue-auto.json']; delete w.files['/work/repo/.git/HEAD']
     w.files['/work/repo/.git'] = 'gitdir: /main/.git/worktrees/wt1\n'
     w.files['/main/.git/autopilot-residue-auto.json'] = auto(2)
     await w.clock.advance(5000)
@@ -406,6 +407,41 @@ for (const surface of SURFACES) {
     w.files[LIVE + '/runs/paths/' + KEY + '.json'] = j({ '/work/repo': { project_key: KEY, repo_identity: 'y' } })
     await w.clock.advance(5000)
     expect(await bandText($, surface)).toContain(FOUND)
+  })
+
+  test('band: wt N stops at the first .git; relative gitfiles, submodules and a worktrees-named parent resolve (' + surface + ')', async ($, on) => {
+    const files = base()
+    delete files[AHOME + '/session-mode/' + SID_A + '.json']
+    const auto = (n: number) => j({ schema: 'autopilot.residue-auto/1', ran_at: '2026-10-04T09:00:00.000Z', needs_human: [], needs_human_count: n, needs_human_bytes: 0 })
+    // a nested repo (cwd /work/repo/sub) with no result file, under a parent repo that has one: 0, the parent is never borrowed
+    files['/work/.git/HEAD'] = 'ref: refs/heads/main\n'
+    files['/work/.git/autopilot-residue-auto.json'] = auto(7)
+    files['/work/repo/.git/HEAD'] = 'ref: refs/heads/main\n'
+    const w = world(on, files)
+    await start($, surface)
+    expect(await bandText($, surface)).not.toContain('wt ')
+    // an unresolvable gitfile at the first .git also answers 0, not the parent's 7
+    delete w.files['/work/repo/.git/HEAD']
+    w.files['/work/repo/.git'] = 'gitdir: /nowhere/.git/worktrees/x\n'
+    await w.clock.advance(5000)
+    expect(await bandText($, surface)).not.toContain('wt ')
+    // a relative submodule gitfile reads the submodule's own result file
+    w.files['/work/repo/.git'] = 'gitdir: ../.git/modules/sub\n'
+    w.files['/work/.git/modules/sub/autopilot-residue-auto.json'] = auto(4)
+    await w.clock.advance(5000)
+    expect(await bandText($, surface)).toContain('no project · wt 4 · run:')
+    // a linked worktree: commondir is preferred, relative to the gitdir
+    w.files['/work/repo/.git'] = 'gitdir: /main/.git/worktrees/wt1\n'
+    w.files['/main/.git/worktrees/wt1/commondir'] = '../..\n'
+    w.files['/main/.git/autopilot-residue-auto.json'] = auto(5)
+    await w.clock.advance(5000)
+    expect(await bandText($, surface)).toContain('no project · wt 5 · run:')
+    // a main repo under a directory named `worktrees` (no commondir file): the cut is at the last /worktrees/ of the gitdir only
+    delete w.files['/main/.git/worktrees/wt1/commondir']
+    w.files['/work/repo/.git'] = 'gitdir: /srv/worktrees/proj/.git/worktrees/wt9\n'
+    w.files['/srv/worktrees/proj/.git/autopilot-residue-auto.json'] = auto(6)
+    await w.clock.advance(5000)
+    expect(await bandText($, surface)).toContain('no project · wt 6 · run:')
   })
 
   test('band: stale after valid_for_s; a re-read never makes an old envelope fresh (' + surface + ')', async ($, on) => {

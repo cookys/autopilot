@@ -354,6 +354,11 @@ assert_not_contains "$(jx "$SCAN6" 'j.needs_human.map(e=>e.ref||"").join(" ")')"
 OUT7="$(AUTOPILOT_RESIDUE_ARCHIVE_REMIND_DAYS=20 node "$SCRIPT" scan --repo "$SBX")"
 assert_contains "$(jx "$OUT7" 'j.needs_human.map(e=>e.ref||"").join(" ")')" "$D30/hands/recent" "residue.archive_remind_days (env) moves the threshold"
 bash -c "$(jx "$OUT6" 'j.needs_human.find(e=>e.ref==="refs/archive/'"$D100"'/hands/ancient").command')" && ! G rev-parse --verify -q "refs/archive/$D100/hands/ancient" >/dev/null && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "the printed command deletes the ref"
+# an impossible calendar date in a ref path is skipped, not rolled over
+G update-ref "refs/archive/2026-02-31/hands/impossible" "$BASE"; G update-ref "refs/archive/2026-13-01/hands/badmonth" "$BASE"
+SCAN8="$(node "$SCRIPT" scan --repo "$SBX")"
+assert_not_contains "$(jx "$SCAN8" 'j.needs_human.map(e=>e.ref||"").join(" ")')" "impossible" "an invalid date (02-31) in a ref path is not listed"
+assert_not_contains "$(jx "$SCAN8" 'j.needs_human.map(e=>e.ref||"").join(" ")')" "badmonth" "an invalid date (month 13) is not listed"
 # mutant: the age gate removed -> a 30-day ref is listed under the default threshold
 MUTB="$TEST_TMP/mutb"; mkdir -p "$MUTB/scripts"; ln -s "$REPO_ROOT/src" "$MUTB/src"
 for f in "$REPO_ROOT"/scripts/*; do ln -s "$f" "$MUTB/scripts/$(basename "$f")"; done

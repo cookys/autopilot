@@ -713,6 +713,8 @@ function computeNeedsHuman(rows, branches, ctx) {
         if (!m) continue;
         const t = Date.parse(`${m[2]}T00:00:00Z`);
         if (!Number.isFinite(t)) continue;
+        const back = new Date(t); // a real calendar date: 2026-02-31 would roll over to March
+        if (`${back.getUTCFullYear()}-${String(back.getUTCMonth() + 1).padStart(2, '0')}-${String(back.getUTCDate()).padStart(2, '0')}` !== m[2]) continue;
         const age = Math.floor((ctx.nowMs - t) / 86400000);
         if (age < remind) continue;
         list.push({ kind: 'archive-ref', ref: m[1], class: 'archive-old', age_days: age, bytes: null, reason: `archive ref older than ${remind} days`, command: `git -C ${shq(ctx.mainPath)} update-ref -d ${shq(m[1])} ${m[3]}` });

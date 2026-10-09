@@ -83,16 +83,37 @@ function advisories(fx, sid) {
 const SID = 'sess-1';
 
 test('disabled(): default on; env and config knobs switch it off', () => {
-  assert.strictEqual(LIB.disabled({}, {}), false);
-  assert.strictEqual(LIB.disabled({ AUTOPILOT_HOOK_RESIDUE_AUTO_REAP: '0' }, {}), true);
-  assert.strictEqual(LIB.disabled({ AUTOPILOT_HOOK_RESIDUE_AUTO_REAP: 'false' }, {}), true);
-  assert.strictEqual(LIB.disabled({ AUTOPILOT_HOOK_RESIDUE_AUTO_REAP: '1' }, {}), false);
-  assert.strictEqual(LIB.disabled({ AUTOPILOT_RESIDUE_AUTO_REAP: 'off' }, {}), true);
-  assert.strictEqual(LIB.disabled({}, { hooks: { 'residue-auto-reap': false } }), true);
-  assert.strictEqual(LIB.disabled({}, { hooks: { 'residue-auto-reap': true } }), false);
-  assert.strictEqual(LIB.disabled({}, { residue: { auto_reap: false } }), true);
-  assert.strictEqual(LIB.disabled({}, { residue: { auto_reap: true, lease_hours: 72 } }), false);
-  assert.strictEqual(LIB.disabled({}, { hooks: { 'residue-auto-reap': 'garbage' } }), false);
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'rar-home-'));
+  assert.strictEqual(LIB.disabled({}, {}, home), false);
+  assert.strictEqual(LIB.disabled({ AUTOPILOT_HOOK_RESIDUE_AUTO_REAP: '0' }, {}, home), true);
+  assert.strictEqual(LIB.disabled({ AUTOPILOT_HOOK_RESIDUE_AUTO_REAP: 'false' }, {}, home), true);
+  assert.strictEqual(LIB.disabled({ AUTOPILOT_HOOK_RESIDUE_AUTO_REAP: '1' }, {}, home), false);
+  assert.strictEqual(LIB.disabled({ AUTOPILOT_RESIDUE_AUTO_REAP: '0' }, {}, home), true);
+  assert.strictEqual(LIB.disabled({}, { hooks: { 'residue-auto-reap': false } }, home), true);
+  assert.strictEqual(LIB.disabled({}, { hooks: { 'residue-auto-reap': true } }, home), false);
+  assert.strictEqual(LIB.disabled({}, { hooks: { 'residue-auto-reap': 'garbage' } }, home), false);
+});
+
+test('disabled(): residue.auto_reap goes through scripts/lib/residue-config.js (same chain and env as the sweep)', () => {
+  const cfgHome = (residue) => {
+    const h = fs.mkdtempSync(path.join(os.tmpdir(), 'rar-home-'));
+    fs.mkdirSync(path.join(h, '.autopilot'));
+    fs.writeFileSync(path.join(h, '.autopilot', 'config.json'), JSON.stringify({ residue }));
+    return h;
+  };
+  const off = cfgHome({ auto_reap: false });
+  const on = cfgHome({ auto_reap: true, lease_hours: 72 });
+  assert.strictEqual(LIB.disabled({}, {}, off), true, 'user config residue.auto_reap=false');
+  assert.strictEqual(LIB.disabled({}, {}, on), false);
+  assert.strictEqual(LIB.disabled({ AUTOPILOT_RESIDUE_AUTO_REAP: '1' }, {}, off), false, 'env =1 beats the user config tier, as in the sweep');
+  assert.strictEqual(LIB.disabled({ AUTOPILOT_RESIDUE_AUTO_REAP: '0' }, {}, on), true, 'env =0 beats the user config tier');
+  // the hook decides exactly what the sweep's resolver decides
+  const { loadResidueConfig } = require('../scripts/lib/residue-config.js');
+  for (const [env, h] of [[{}, off], [{}, on], [{ AUTOPILOT_RESIDUE_AUTO_REAP: '1' }, off], [{ AUTOPILOT_RESIDUE_AUTO_REAP: '0' }, on]]) {
+    assert.strictEqual(LIB.disabled(env, {}, h), !loadResidueConfig({ env, home: h }).auto_reap);
+  }
+  // 'off' was accepted by the old private reader but is not part of the shared chain: the sweep would still run
+  assert.strictEqual(LIB.disabled({ AUTOPILOT_RESIDUE_AUTO_REAP: 'off' }, {}, on), false);
 });
 
 test('fires: spawns the sweep detached with the contract argv, writes the stamp, advisory after the sweep', () => {

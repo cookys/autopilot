@@ -593,6 +593,17 @@ function computeNeedsHuman(rows, branches, ctx) {
   const wtRoot = `${ctx.mainPath}/.claude/worktrees/`;
   const cmdRemove = (p) => `git -C ${shq(ctx.mainPath)} worktree remove ${shq(p)}`;
   const cmdInspect = (p) => `git -C ${shq(p)} status --short`;
+  // campaign-held: an unresolved campaign/Mission names this root; campaign-unknown: the signal is unreadable
+  // and the marker's root differs from its run (the auto mode keeps those too).
+  const heldClass = (m) => {
+    if (!ctx.sig) return null;
+    if (!ctx.sig.reliable) return m.root_run_id !== m.run_id ? 'campaign-unknown' : null;
+    return ctx.sig.unresolved.has(m.root_run_id) ? 'campaign-held' : null;
+  };
+  // No one-line abort exists: `mission finalize-abort` needs a drained Mission state file. Point at the scan and the id.
+  const holdCommand = (root) => `node ${shq(path.join(__dirname, 'repo-residue-sweep.js'))} scan --json --repo ${shq(ctx.mainPath)}  # find root_run_id ${root}; close or abort that campaign/Mission (node bin/autopilot.js mission finalize-abort --state <mission state> --out <file>), then the next auto run reaps it`;
+  const markerBranches = new Map();
+  for (const w of rows) if (w.marker_strict && w.marker_strict.valid && fs.existsSync(w.path)) markerBranches.set(w.marker_strict.branch, w);
   for (const w of rows) {
     if (w.class === 'live' || w.class === 'missing-dir') continue;
     if (w.cwd_busy === true && w.path.startsWith(wtRoot)) continue; // someone is working in it
@@ -602,8 +613,12 @@ function computeNeedsHuman(rows, branches, ctx) {
       if (!w.lease_expired) continue; // unexpired lease: the owner asked for it to stay
       if (needsInspect) { list.push(entry(cmdInspect(w.path))); continue; }
       if (w.detached || w.head_is_branch_tip !== true) { list.push(entry(cmdRemove(w.path))); continue; }
-      if (ctx.failedWorktrees.has(w.path)) list.push(entry(cmdRemove(w.path)));
-      continue; // otherwise: busy, campaign-held or about to be reaped by the next auto run
+      if (ctx.failedWorktrees.has(w.path)) { list.push(entry(cmdRemove(w.path))); continue; }
+      // Retained only because of an unresolved campaign (or an unreadable campaign signal): never removed
+      // here, but it must still reach the person once its lease has run out.
+      const hold = w.cwd_busy === false && w.head_is_branch_tip === true && w.marker_strict.branch === w.branch ? heldClass(w.marker_strict) : null;
+      if (hold) list.push(Object.assign(entry(holdCommand(w.marker_strict.root_run_id)), { class: hold, reason: `root_run_id=${w.marker_strict.root_run_id}` }));
+      continue; // otherwise: busy or about to be reaped by the next auto run
     }
     if (needsInspect) list.push(entry(cmdInspect(w.path)));
     else if (w.class === 'clean-unintegrated' || w.class === 'clean-integrated') list.push(entry(cmdRemove(w.path)));
@@ -611,7 +626,23 @@ function computeNeedsHuman(rows, branches, ctx) {
   for (const b of branches) {
     if (b.class !== 'unintegrated') continue;
     const dispatch = isDispatchBranch(b.branch, ctx.cfg);
-    if (dispatch && !ctx.failedBranches.has(b.branch)) continue; // the archive path owns these
+    if (dispatch && !ctx.failedBranches.has(b.branch)) {
+      // the archive path owns these — unless a campaign (or an unreadable signal) is what keeps them
+      if (!ctx.sig) continue;
+      const act0 = b.activity_unix !== undefined ? b.activity_unix : branchLastActivity(ctx.mainPath, b);
+      const age0 = daysSince(act0 || b.last_commit_unix, ctx.nowMs);
+      if (age0 === null || age0 < ctx.cfg.archive_branch_days) continue;
+      const ptr = markerBranches.get(b.branch);
+      if (ptr && (ptr.class === 'live' || ptr.lease_expired === false)) continue;
+      let hold = null;
+      if (!ctx.sig.reliable) hold = 'campaign-unknown';
+      else if ((ptr && ctx.sig.unresolved.has(ptr.marker_strict.root_run_id)) || [...ctx.sig.unresolved].some((id) => id.length >= 8 && b.branch.includes(id))) hold = 'campaign-held';
+      if (hold) {
+        const root = ptr ? ptr.marker_strict.root_run_id : ([...ctx.sig.unresolved].find((id) => id.length >= 8 && b.branch.includes(id)) || 'unknown');
+        list.push({ kind: 'branch', branch: b.branch, class: hold, age_days: age0, bytes: null, reason: `root_run_id=${root}`, command: holdCommand(root) });
+      }
+      continue;
+    }
     if (!dispatch && b.activity_unix === undefined) b.activity_unix = branchLastActivity(ctx.mainPath, b);
     const act = dispatch ? (b.activity_unix || b.last_commit_unix) : b.activity_unix;
     const age = daysSince(act, ctx.nowMs);
@@ -799,7 +830,7 @@ function main() {
     const cfg = loadResidueConfig();
     const nowMs = Date.now();
     annotateWorktrees(worktrees, cfg, nowMs, readProcCwds(), mainPath);
-    const ctx = { mainPath, cfg, nowMs, sig: null, failedWorktrees: new Set(), failedBranches: new Set() };
+    const ctx = { mainPath, cfg, nowMs, sig: loadCampaignSignal(common), failedWorktrees: new Set(), failedBranches: new Set() };
     attachNeedsHuman(report, worktrees, branches, ctx, o.sizes ? 'measure' : 'cached', readCachedSizes(common));
     writeStdout(`${JSON.stringify(report)}\n`);
     return 0;

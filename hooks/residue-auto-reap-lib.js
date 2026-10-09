@@ -16,6 +16,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
+const { loadResidueConfig } = require('../scripts/lib/residue-config.js');
 
 const STEM = 'residue-auto-reap';
 const STAMP_NAME = 'autopilot-residue-auto.stamp';
@@ -32,7 +33,7 @@ function isOff(v) {
 
 function userConfig() {
   try {
-    const cfg = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.autopilot', 'config.json'), 'utf8'));
+    const cfg = JSON.parse(fs.readFileSync(path.join(process.env.HOME || os.homedir(), '.autopilot', 'config.json'), 'utf8'));
     return cfg && typeof cfg === 'object' ? cfg : {};
   } catch (_error) {
     return {};
@@ -40,14 +41,13 @@ function userConfig() {
 }
 
 // Default-on disable convention: an explicitly negative value switches the hook off; absent / garbage leaves it on.
-//   env AUTOPILOT_HOOK_RESIDUE_AUTO_REAP=0   |  ~/.autopilot/config.json {"hooks":{"residue-auto-reap":false}}
-//   env AUTOPILOT_RESIDUE_AUTO_REAP=0        |  ~/.autopilot/config.json {"residue":{"auto_reap":false}}
-function disabled(env = process.env, cfg = userConfig()) {
+//   hook-specific knobs: env AUTOPILOT_HOOK_RESIDUE_AUTO_REAP=0 | ~/.autopilot/config.json {"hooks":{"residue-auto-reap":false}}
+//   residue.auto_reap: decided by scripts/lib/residue-config.js, the same chain and env as the sweep
+//   (defaults -> ~/.autopilot/config.json residue -> env AUTOPILOT_RESIDUE_AUTO_REAP=0|1).
+function disabled(env = process.env, cfg = userConfig(), home) {
   if (isOff(env.AUTOPILOT_HOOK_RESIDUE_AUTO_REAP)) return true;
-  if (isOff(env.AUTOPILOT_RESIDUE_AUTO_REAP)) return true;
   if (cfg.hooks && typeof cfg.hooks === 'object' && isOff(cfg.hooks[STEM])) return true;
-  if (cfg.residue && typeof cfg.residue === 'object' && isOff(cfg.residue.auto_reap)) return true;
-  return false;
+  return !loadResidueConfig({ env, home: home || env.HOME || os.homedir() }).auto_reap;
 }
 
 // One git process: { toplevel, common } or null (not a repo / git missing).

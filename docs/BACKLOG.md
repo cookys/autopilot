@@ -1142,28 +1142,29 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/qc-total-2026-10-08/README.md
 - **Context**: same posture as a missing resolver; add one stderr line so a broken install is visible.
 
-### PEER-REPORTED (revival.3d): retained dispatch worktrees have no retention record and never expire
+### finish-flow close-out does not archive-then-delete this session's unintegrated dispatch branches
 - **Status**: open
-- **Trigger**: after the 3.0.0-alpha.2 P7 gate
-- **Effort**: M
-- **Source**: fleet peer revival.3d (cuda), 2026-10-09
-- **Pointer**: docs/backlog/peer-reported-revival3d-worktree-branch-accumulation.md
-- **Context**: dispatch-hetero exit 1 / --keep-worktree and foreman non-clean runs keep trees forever; repo-residue-sweep runs only by hand.
-
-### PEER-REPORTED (revival.3d): rejected hands/hetero/foreman branches are never archived or deleted
-- **Status**: open
-- **Trigger**: after the 3.0.0-alpha.2 P7 gate
+- **Trigger**: the v7 skill-onoff eval (rides with the /l4–/l6 size row below)
 - **Effort**: S
-- **Source**: fleet peer revival.3d (cuda), 2026-10-09
-- **Pointer**: docs/backlog/peer-reported-revival3d-worktree-branch-accumulation.md
-- **Context**: no archive-ref-then-delete step in l4–l6, hetero-implement-judge or finish-flow close-out.
+- **Source**: peer revival.3d (cuda) 2026-10-09; split from the closed revival.3d rows, owner ruling 2026-10-09
+- **Pointer**: docs/plans/evidence/2026-10-09-residue-auto-reap/contract.md
+- **Context**: guidance change (a finish-flow step), so it needs eval evidence; until then `repo-residue-sweep.js reap --auto` archives such branches after `residue.archive_branch_days`.
 
-### PEER-REPORTED (revival.3d): plain-session and /l4 dispatch-hetero work has no close-out reap
+### refs/archive/* written by the residue sweep never expire
 - **Status**: open
-- **Trigger**: after the 3.0.0-alpha.2 P7 gate
+- **Trigger**: when archive refs are first seen accumulating (or before the 3.0.0 final cut)
 - **Effort**: S
-- **Source**: fleet peer revival.3d (cuda), 2026-10-09
-- **Pointer**: docs/backlog/peer-reported-revival3d-worktree-branch-accumulation.md
+- **Source**: residue auto-reap review, 2026-10-09
+- **Pointer**: docs/plans/evidence/2026-10-09-residue-auto-reap/contract.md
+- **Context**: `reap --auto` keeps every archived tip reachable under `refs/archive/<date>/<branch>` forever; needs a prune rule (age cap, then `git gc`) and a needs_human line before it is dropped.
+
+### remove dispatch-hetero.sh --gc and stale_reaper_age_days at 3.0.0 final
+- **Status**: open
+- **Trigger**: the 3.0.0 final cut
+- **Effort**: S
+- **Source**: residue auto-reap contract, 2026-10-09
+- **Pointer**: docs/plans/evidence/2026-10-09-residue-auto-reap/contract.md
+- **Context**: `repo-residue-sweep.js reap --auto` is the canonical automatic reaper; the rail-local `--gc` path (default 0, off) is redundant; breaking removal, no shim.
 
 ### /l4–/l6 sessions never set a size, so the band position slot and Graph tab stay empty
 - **Status**: open

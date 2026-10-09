@@ -129,3 +129,17 @@ Gate:
 - After both are merged, run B's real-session proof of R3 against the merged result.
 - Each hand runs `bash scripts/sync-codex-plugin-skills.sh` for mirror drift. Each touched suite runs in the foreground. The full suite runs once at the cut.
 - Version: 3.0.0-alpha.3. This is the version number to report to revival.3d.
+
+## Accepted deviations (2026-10-09)
+
+Recorded after hands A and B merged; each is accepted as shipped and supersedes the text above where they differ.
+
+- The marker validator is `_wt_read_schema2_marker` (`scripts/lib/worktree-reap.sh`), mirrored by `parseSchema2Marker` in the sweep. The contract's `_wt_marker_valid` name is not the entry point.
+- There is no project config tier. The `residue` chain is defaults, then `~/.autopilot/config.json`, then env (`AUTOPILOT_RESIDUE_AUTO_REAP`, `AUTOPILOT_RESIDUE_LEASE_HOURS`, `AUTOPILOT_RESIDUE_ARCHIVE_BRANCH_DAYS`), resolved by `scripts/lib/residue-config.js`. The hook uses the same resolver for `auto_reap`; its own knobs (`AUTOPILOT_HOOK_RESIDUE_AUTO_REAP=0`, `hooks.residue-auto-reap=false`) stay hook-specific.
+- An unexpired explicit lease (`retention=lease`) beats `clean-integrated`: the worktree stays until the lease expires.
+- A fresh integrated dispatch branch is kept for 1 h after its last activity (`integrated_but_recent`) before auto mode deletes it.
+- Clean-integrated worktrees without a marker are listed in `needs_human`, not removed.
+- The main checkout is the first entry of `git worktree list`.
+- The 24 h stamp is claimed before the sweep runs, so a failing sweep is not retried by every later session.
+- The Codex package wires no SessionStart hook for this feature.
+- `campaign-held` / `campaign-unknown`: a marker worktree whose lease has expired (or a dispatch branch older than `archive_branch_days`) that is retained only because its `root_run_id` is in an unresolved campaign or Mission is never removed, but is listed in `needs_human` with class `campaign-held` and `reason=root_run_id=<id>`. When the campaign signal is unreadable, the same worktrees (root differs from run) and old dispatch branches are listed as `campaign-unknown`. The `command` is the sweep scan plus the root id, because no safe one-line abort exists (`mission finalize-abort` needs a drained Mission state file). `scan --json` now loads the campaign signal too.

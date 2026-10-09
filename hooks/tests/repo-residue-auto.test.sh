@@ -255,6 +255,14 @@ assert_eq "$(jx "$OUT" 'j.needs_human.find(e=>e.path&&e.path.endsWith("/wt-b-dir
 assert_eq "$(jx "$OUT" 'j.needs_human.find(e=>e.path&&e.path.endsWith("/wt-b-dirty")).command')" "git -C '$TEST_TMP/wt-b-dirty' status --short" "needs_human exact command (dirty)"
 assert_eq "$(jx "$OUT" 'j.needs_human.find(e=>e.path&&e.path.endsWith("/wt-b-nomarker")).command')" "git -C '$SBX' worktree remove '$TEST_TMP/wt-b-nomarker'" "needs_human exact command (clean)"
 assert_eq "$(jx "$OUT" 'j.needs_human.find(e=>e.branch==="feature/old").command.startsWith("git -C \x27'"$SBX"'\x27 update-ref ")')" "true" "needs_human branch command archives first"
+# campaign-held: retained forever by the sweep, but must reach the person once the lease ran out
+assert_eq "$(jx "$OUT" 'j.needs_human.find(e=>e.path&&e.path.endsWith("/wt-b-campaign")).class')" "campaign-held" "needs_human: expired worktree of an open campaign (journal)"
+assert_eq "$(jx "$OUT" 'j.needs_human.find(e=>e.path&&e.path.endsWith("/wt-b-campaign")).reason')" "root_run_id=camp-open" "campaign-held reason names the root_run_id"
+assert_contains "$(jx "$OUT" 'j.needs_human.find(e=>e.path&&e.path.endsWith("/wt-b-campaign")).command')" "repo-residue-sweep.js' scan --json" "campaign-held command points at the scan"
+assert_contains "$(jx "$OUT" 'j.needs_human.find(e=>e.path&&e.path.endsWith("/wt-b-campaign")).command')" "camp-open" "campaign-held command cites the campaign id"
+assert_eq "$(jx "$OUT" 'j.needs_human.find(e=>e.path&&e.path.endsWith("/wt-b-mission")).class')" "campaign-held" "needs_human: expired worktree of an open Mission (registry)"
+assert_eq "$(jx "$OUT" 'j.needs_human.find(e=>e.branch==="hands/camp-12345678-x").class')" "campaign-held" "needs_human: old dispatch branch of an open campaign"
+assert_eq "$(jx "$OUT" 'j.needs_human.some(e=>e.class==="campaign-held"&&/wt-w-campaign-done/.test(e.path||""))')" "false" "needs_human: a finished campaign is reaped, not listed"
 assert_eq "$(jx "$OUT" 'j.needs_human.filter(e=>e.kind==="worktree").every(e=>typeof e.bytes==="number")')" "true" "auto run measures worktree sizes"
 assert_eq "$(jx "$OUT" 'j.needs_human_count===j.needs_human.length')" "true" "needs_human_count"
 assert_eq "$(jx "$OUT" 'j.needs_human_bytes===j.needs_human.reduce((a,e)=>a+(e.bytes||0),0)')" "true" "needs_human_bytes"
@@ -282,6 +290,9 @@ kept s-diff "campaign signal unavailable: root_run_id != run_id"
 assert_eq "$(jx "$OUT3" 'j.kept.find(k=>k.path&&k.path.endsWith("/wt-s-diff")).why')" "campaign_signal_unavailable" "reason: signal unavailable (worktree)"
 G rev-parse --verify -q refs/heads/hands/old2 >/dev/null && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "no archive while the campaign signal is unavailable"
 assert_contains "$(jx "$OUT3" 'j.notes')" 'campaign_signal_unavailable' "report says the signal was unavailable"
+assert_eq "$(jx "$OUT3" 'j.needs_human.find(e=>e.path&&e.path.endsWith("/wt-s-diff")).class')" "campaign-unknown" "needs_human: unreadable signal -> campaign-unknown (worktree)"
+assert_eq "$(jx "$OUT3" 'j.needs_human.find(e=>e.branch==="hands/old2").class')" "campaign-unknown" "needs_human: unreadable signal -> campaign-unknown (branch)"
+
 kill "$SESS_PID" 2>/dev/null; wait "$SESS_PID" 2>/dev/null
 
 finalize_test

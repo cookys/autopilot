@@ -1141,3 +1141,26 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: 3.0.0 total QC, 2026-10-08 (K2 GLM)
 - **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/qc-total-2026-10-08/README.md
 - **Context**: same posture as a missing resolver; add one stderr line so a broken install is visible.
+
+### PEER-REPORTED (revival.3d): retained dispatch worktrees have no retention record and never expire
+- **Status**: open
+- **Trigger**: after the 3.0.0-alpha.2 P7 gate
+- **Effort**: M
+- **Source**: fleet peer revival.3d (cuda), 2026-10-09
+- **Pointer**: docs/backlog/peer-reported-revival3d-worktree-branch-accumulation.md
+- **Context**: dispatch-hetero exit 1 / --keep-worktree and foreman non-clean runs keep trees forever; repo-residue-sweep runs only by hand.
+
+### PEER-REPORTED (revival.3d): rejected hands/hetero/foreman branches are never archived or deleted
+- **Status**: open
+- **Trigger**: after the 3.0.0-alpha.2 P7 gate
+- **Effort**: S
+- **Source**: fleet peer revival.3d (cuda), 2026-10-09
+- **Pointer**: docs/backlog/peer-reported-revival3d-worktree-branch-accumulation.md
+- **Context**: no archive-ref-then-delete step in l4–l6, hetero-implement-judge or finish-flow close-out.
+
+### PEER-REPORTED (revival.3d): plain-session and /l4 dispatch-hetero work has no close-out reap
+- **Status**: open
+- **Trigger**: after the 3.0.0-alpha.2 P7 gate
+- **Effort**: S
+- **Source**: fleet peer revival.3d (cuda), 2026-10-09
+- **Pointer**: docs/backlog/peer-reported-revival3d-worktree-branch-accumulation.md

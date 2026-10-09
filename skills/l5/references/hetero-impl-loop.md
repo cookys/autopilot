@@ -170,7 +170,7 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
     reviewed under it (`frozen rubric/manifest drifted`) and the only path is a new
     `logical_plan_id` AND a new `--ticket` (the old ticket stays bound to the old id), keeping the
     earlier generation's artifact and dispositions as evidence (2026-09-17).
-6. `node scripts/session-mode.js set --level l5 --repo-root <repo>` → `READY`. First check
+6. `node scripts/session-mode.js set --level l5 --size <XS|S|M|L|XL> [--urgent] [--bug] --repo-root <repo>` → `READY`. First check
    `~/.autopilot/session-mode/` for another ACTIVE managed marker of this repo: the bridge scans
    every marker and one with a different graph digest blocks intake (a deliberate concurrency
    fence). If that marker's deliverable is already integrated, retire it with evidence —
@@ -264,7 +264,7 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
     lands in a released CHANGELOG section, its INDEX row flips `active` → the released version, and
     any BACKLOG row this campaign's plan now supersedes is deleted in the same pass.
     When the rail stops, degrade per the documented fallback
-    (`session-mode.js set --level l3 --entry-level l5 --fallback precondition_failed`), repair on
+    (`session-mode.js set --level l3 --entry-level l5 --fallback precondition_failed --size <size> [--urgent] [--bug]`), repair on
     the mission branch in its retained worktree, merge on git evidence, and file the rail defect.
 
 ## Parallel units (measured 2026-09-18, v2.36.70: four rows, four kimi-code/k3 foremen, 44 min)

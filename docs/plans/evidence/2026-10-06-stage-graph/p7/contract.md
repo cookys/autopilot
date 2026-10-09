@@ -53,3 +53,12 @@ A missing fact renders an explicit "no data" line, never an empty tab.
 - `capture.sh`: add `capture-pane -e` (keep `-p`), copy D1–D4 files plus qc/review/load-source facts; window widths 209, 120, 80 (`tmux resize-window -x`).
 - `check.js`: re-derive every rendered slot independently from the copied facts (shares no code with `mods/live`), judge it field by field; print one line per slot and a final `PASS <mode> fields=<n>` / `FAIL <mode> fields=<n> failed=<list>`; a slot that the width table removed is judged as "absent" at that width.
 - Colored screenshot step: `ansi2html.py` (`docs/plans/evidence/2026-10-06-tui-band/ansi2html.py`) → headless chrome → `band-<width>.png` per capture.
+
+## Implementation notes (①)
+
+What the shipped watcher side of ① actually does (moved here from `references/mods.md`, which is a frozen guidance-manifest file). Every file is written by the watcher as tmp + rename into `<live>`; a failing source leaves the old file in place and logs one line.
+
+- **Brain spend (D1).** The runs envelope carries optional `host_today_brain_usd` (cents; `null` when the costs file is unreadable) and `brain_cap_usd`. Both come from `scripts/lib/brain-spend.js`, the same computation `hooks/cost-fuse.js` runs: configured tiers, UTC day, cap from `cost_fuse.daily_usd_brain` and `AUTOPILOT_COST_FUSE_DAILY_USD`.
+- **Ladder rung (D2).** The decisions sidecar has `ladder: { rung, at } | null`, taken from the latest `kind:"ladder"` row. Ladder rows stay out of `count`.
+- **Residue (D3).** `src/status/residue.js` publishes `runs/<project_key>.residue.json` (`autopilot.residue/1`). It runs `repo-residue-sweep.js scan` on the main worktree asynchronously, at most once per 60 s and never two at once. `reapable_worktrees` = `clean-integrated` + `missing-dir`.
+- **Stage walk (D4).** `src/status/stage-walk.js` publishes `stage/<sid>.json` (`autopilot.stage-walk/1`) using `scripts/stage-graph.js` `buildWalk`, for each unexpired marker that has a `size`. A file is rewritten only when size / urgent / bug / high_risk / stage / stage_set_at / unit change. A file whose marker vanished is removed by the watcher that wrote it; files left by an earlier watcher process are not swept.

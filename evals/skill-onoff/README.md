@@ -123,3 +123,11 @@ Spend-free infrastructure for plan §4 P5 item 7 (proof: `hooks/tests/skill-onof
 - **Campaign**: `node evals/skill-onoff/run-stage-graph-campaign.js --results evals/skill-onoff/results/stage-graph.jsonl`
   (`--dry-run` prints the cell list + cost estimate; resumable; ends with `score-stage-graph.js`). Generic regression cells
   (7 tasks x base/change) run under the conditions of their original rows (fixture pack, prompt prefix, marker lib) with the sg scripts overlaid.
+
+## stage-graph-g67 (guidance-v7 G6/G7 ON/OFF suite)
+
+Per-task ship rule (ON >= 2/3, OFF <= 1/3) over `g6-l4|l5|l6` (entry `session-mode set` carries `--size`) and `g7-close`
+(finish-flow runs `repo-residue-sweep.js close-session … --yes`): `prereg/stage-graph-g67.{md,json}` (DRAFT until frozen),
+`run-g67-campaign.js` (`--dry-run`, `--check-arms`, resumable), `score-g67.js`, `lib/g67-cell.js`, arms `arms/g67/`.
+`ONOFF_TIMEOUT_IS_COMPLETE=1` (run-skill-onoff-eval.sh) turns a timeout stop into a complete cell (`stopped_by_timeout`).
+Spend-free proof: `hooks/tests/skill-onoff-g67.test.sh`.

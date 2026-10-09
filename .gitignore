@@ -61,3 +61,4 @@ evals/skill-onoff/results/stage-graph-cells/
 # gate captures: keep text facts, band PNGs and panel PNGs; html/ansi renders are regenerable (gate/screenshot.sh)
 docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/**/*.html
 docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/**/*.ansi
+docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/**/pane.png

@@ -54,7 +54,21 @@ if (check) {
   const fz = readJson('prereg/FROZEN.json')['stage-graph-g67'];
   const rec = ((fz || {}).amendments || {})[AMEND];
   if (!rec || !rec.stamped) bad.push('FROZEN.json amendment not stamped');
-  else for (const f of TOUCHED) if (rec.files[f] !== sha(f)) bad.push(f);
+  else {
+    for (const f of TOUCHED) {
+      // packs/manifest.json is shared by every skill-onoff row and only ever grows (a new row freezes new packs into it), so a
+      // whole-file digest goes stale on the first unrelated row. For THIS amendment check what it owns instead: every pack
+      // the g67 arms name is present, and fixture-scripts-g67-v2 (the one pack the amendment introduced) is byte-identical to
+      // the digest recorded at stamp time.
+      if (f === 'packs/manifest.json') {
+        const owned = ((rec.packs || {})['fixture-scripts-g67-v2'] || {}).digest_sha256;
+        const now = manifest.packs['fixture-scripts-g67-v2'] && crypto.createHash('sha256').update(JSON.stringify(manifest.packs['fixture-scripts-g67-v2'])).digest('hex');
+        if (!owned || owned !== now) bad.push('packs/manifest.json (fixture-scripts-g67-v2 entry)');
+        continue;
+      }
+      if (rec.files[f] !== sha(f)) bad.push(f);
+    }
+  }
   if (bad.length) die(`digest mismatch: ${bad.join(', ')}`);
   console.log(JSON.stringify({ ok: true, arm_sha256: armSha }));
   process.exit(0);

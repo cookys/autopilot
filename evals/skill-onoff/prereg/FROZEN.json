@@ -148,13 +148,58 @@
           "prereg/stage-graph-g67.amend-1-plugin-scripts.json": "c4f40c62417e5d3f53022c67d7e873bb2dd84511d8cd8cb5c9c27268e3d5e254",
           "run-g67-campaign.js": "3acf2c954057da046e40afc3c354bde261de5c2b595a786b7caf938e95269626",
           "run-skill-onoff-eval.sh": "ef09676a67fa8f9add67680728cd2064e1bc9369f9edeb225bb400d9f706249e",
-          "stamp-g67-amendment.js": "d0fc5e027fe5f2e18e4acaa1028d3b3da0bb04356b7ae5bd785319c191cec695",
+          "stamp-g67-amendment.js": "93898451597f02821398745bb2c260094c850c13bf9c9a5adb5b008127f7321f",
           "packs/manifest.json": "a5b2ae827e08c52c9a897d8b414bb98bfe2dc547a3c192f55e7ada347aad7684",
           "README.md": "911056a3864df5c0f207b74610b4d79c7d872667d6d34e681ba3592fc7fbc0f7",
           "../../hooks/tests/skill-onoff-g67.test.sh": "e04fa0dfa2a83e63bb6365b31d07e8e5296e2d2b8d913d377d7bff47862b47e4"
-        }
+        },
+        "check_note": "2026-10-11: packs/manifest.json is append-only and shared by every row; stamp-g67-amendment.js --check now verifies the g67-owned entry (fixture-scripts-g67-v2 pack digest) instead of the whole-file digest, so later rows freezing packs (stage-graph-g8, v9) do not read as g67 drift. The files.packs/manifest.json value is the as-stamped record and is no longer compared. The stamp-g67-amendment.js digest below was re-recorded for this checker edit only; no g67 result file, prereg, arm or scorer changed."
       }
     },
     "files_note": "files = digests of the v1 as-run state (arms v7, fixture-scripts-g67); superseded by amendments.amend-1-plugin-scripts.files for every file listed there"
+  },
+  "stage-graph-g8": {
+    "frozen_at": "2026-10-10",
+    "stamped": true,
+    "note": "sha256 of the stage-graph-g8 pre-registration (rule, markers, scorer, briefs, arm manifests, shared harness files) frozen before any live cell. Any edit after the first live cell voids the row.",
+    "packs": {
+      "fixture-scripts-g8-v2": {
+        "kind": "scripts",
+        "source": "scripts/session-mode.js",
+        "ref": "ac3ccd074624600e10847dd85fd5a376e09cc103",
+        "files": 55,
+        "digest_sha256": "af7de745c799e2dad1e4f3741c09009a7cf353fd006ba932fa1481f79ceba476"
+      }
+    },
+    "files": {
+      "../../hooks/tests/skill-onoff-g8.test.sh": "ad38dceee37b8e6306b54c11da0dea8efab6315a6affcc4b03cb617732ed006b",
+      "arms/g8/off.json": "a29e5ef41035dd85a4ea1112de4900b1c13acbc26524d981cd37fcb092f5fba1",
+      "arms/g8/on.json": "79780c036c3c568033f53522dbcd4d6705dea341ce52806f3167fe5da5b42dfa",
+      "lib/g67-cell.js": "39f2887e063a3fc858c09d920ba9617a494027699ee8226caca1b4be719e057e",
+      "lib/g8-cell.js": "ba9c09dccaf7fa95c759a6b294ac17d4a7ece19b3f6c45b20670bf08ed113c5d",
+      "lib/g8-markers.sh": "5a48a5e201ae82f5f7a0e04b5360d5698809f731805e6b0aed95d8afe53d614e",
+      "lib/transcript-query.js": "5efb32c95a0f43c2cab54163c59413d7884111a0f602b8d5ce7e8749f83f2cd9",
+      "packs/manifest.json": "a3e891cfd193f856cfeb6c38b1624d0c51d8a7b3ae29f2f873954c18aa0ac31e",
+      "prereg/stage-graph-g8.json": "fc6071cd764dde7c387e14b9e01f7e63bd25b778094f65328fec87f98656aab9",
+      "prereg/stage-graph-g8.md": "cd40c55c1063530452e9c148cbcb6a7304a6674df91ef03e5be2a35239e1924d",
+      "run-g67-campaign.js": "3acf2c954057da046e40afc3c354bde261de5c2b595a786b7caf938e95269626",
+      "run-g8-campaign.js": "46e40471b97ddf4c92b92a85136123ce3b334d2eddc3690e5b30925242c12b8e",
+      "run-skill-onoff-eval.sh": "ef09676a67fa8f9add67680728cd2064e1bc9369f9edeb225bb400d9f706249e",
+      "run-skill-onoff-matrix.sh": "22f088afc58ab14da97f60d72f37f48f98875317f369c56aa86830509c1da0bd",
+      "score-g67.js": "d717420d1cb86138208be18c5a8ec7e696164990d988786f312f70beb7af1ad4",
+      "stamp-prereg.js": "587450e15d7e841bdb52686e6c30e549cc977b3b38fca90e6cef813866844cd3",
+      "tasks/g8-flow/init-repo.sh": "bf4bdc8b2d2b94e6c7f9d18eafa8071a4b90e5530872c4da425bbba0ab1e24a2",
+      "tasks/g8-flow/markers.sh": "ee9a9f68d33b99b894982e7060bca2455992392618957e99ecd7e8e79cb76a0c",
+      "tasks/g8-flow/repo/cli.js": "d4746144ab359306ab343aea1636510dd0fd8ff35ac2d1f69510cb6a7d598f66",
+      "tasks/g8-flow/repo/lib/greet.js": "20b5bbc38b1c2e3922c2d5b26e09ac14d17c7523ee369f7b2cdf5538ba1fa063",
+      "tasks/g8-flow/repo/run-tests.sh": "0802c459a348472fac9745ec697d98a4066340897be95b60678aa4fc7f97b24a",
+      "tasks/g8-flow/task.md": "93438c27f9f5bbe09711adbc88095e1465611af3e18af6328b16bc22a2c3ec17",
+      "tasks/g8-l4/init-repo.sh": "bf4bdc8b2d2b94e6c7f9d18eafa8071a4b90e5530872c4da425bbba0ab1e24a2",
+      "tasks/g8-l4/markers.sh": "2927d3c5a8af1d670a2174e2ebeab2a32855ce5417bcebfacbc1f9803f8156ec",
+      "tasks/g8-l4/repo/cli.js": "d4746144ab359306ab343aea1636510dd0fd8ff35ac2d1f69510cb6a7d598f66",
+      "tasks/g8-l4/repo/lib/greet.js": "20b5bbc38b1c2e3922c2d5b26e09ac14d17c7523ee369f7b2cdf5538ba1fa063",
+      "tasks/g8-l4/repo/run-tests.sh": "0802c459a348472fac9745ec697d98a4066340897be95b60678aa4fc7f97b24a",
+      "tasks/g8-l4/task.md": "93438c27f9f5bbe09711adbc88095e1465611af3e18af6328b16bc22a2c3ec17"
+    }
   }
 }

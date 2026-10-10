@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "artifact_type": "skill_onoff_prereg_amendment",
+  "amendment": 4,
+  "row": "stage-graph",
+  "date": "2026-10-11",
+  "no_counted_cell_had_run": true,
+  "made_after_v8_results_seen": true,
+  "v1_to_v8_rescored": false,
+  "reason": "instrument change, not a rule change: the runner. v1-v8 stage-graph results (results/stage-graph*.jsonl, 114 rows in v8) were produced on Claude Code 2.1.292 through a PATH-dir symlink into ~/.local/share/claude/versions/. The auto-updater deleted 2.1.292 (installed now: 2.1.293-2.1.296), so the pin directory holds a dangling link and that exact binary cannot be reproduced.",
+  "change": "stage-graph v9 (results/stage-graph.v9.jsonl, arms *-sg-change-v9 / *-sg-red-v9, base unchanged) runs ENTIRELY on Claude Code 2.1.296. Pin: a copy (not a link) at ~/.autopilot/claude-pin/2.1.296/claude, PATH dir ~/.autopilot/claude-pin/bin/ whose claude links to that copy. Launch with DISABLE_AUTOUPDATER=1.",
+  "comparability": "v9 is a NEW arm on a NEW runner version; it is not pooled with v1-v8 and its verdict is not compared with theirs as 'the same instrument'. v1-v8 rows stay as recorded (runner_version 2.1.292). No v9 cell may run on any other version; a mixed-version v9 file is INSTRUMENT-INVALID by the existing mixed-runner rule.",
+  "unchanged": [
+    "ship thresholds",
+    "briefs, answer keys, markers, scorer",
+    "base arm and base pack ids",
+    "the generic non-regression rule",
+    "work_done",
+    "amendments 1-3"
+  ],
+  "sibling_change": "stage-graph-g8 registers the same runner (2.1.296) in its own prereg before its first live cell; stage-graph-g67 ran on 2.1.292 and is not re-run"
+}

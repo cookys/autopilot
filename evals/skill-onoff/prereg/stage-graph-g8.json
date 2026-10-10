@@ -2,12 +2,13 @@
   "schema_version": 1,
   "artifact_type": "skill_onoff_prereg",
   "row": "stage-graph-g8",
-  "status": "DRAFT FOR REVIEW 2026-10-10 - not frozen. Blocked on: (1) the v9 guidance text (branch batch/g8-guid) merged and frozen as *-sg-change-v9, (2) allowed_arm_difference.files filled from that change, (3) `node evals/skill-onoff/stamp-prereg.js --row stage-graph-g8` run after both. A live run refuses to start while the arm sha256 are null or the allowed file list is empty.",
+  "status": "FROZEN 2026-10-11 before any live cell: v9 text merged, packs *-sg-change-v9 and fixture-scripts-g8-v2 frozen from ac3ccd07, allowed_arm_difference filled, arm shas stamped by stamp-prereg.js --row stage-graph-g8",
   "design": "human-readable twin: prereg/stage-graph-g8.md; change under test: G8 (a second task in the same live session is started with `session-mode.js set --new-task --size <S>`, not `set --size`), mechanism commit 73a59216 on batch/newtask, text on batch/g8-guid",
   "model": "sonnet",
   "runner": "claude -p (headless depth-0)",
-  "runner_version_pin": "2.1.292 (Claude Code)",
-  "runner_pin_path": "/tmp/claude-1000/-home-cookys-projects-autopilot/e041e8fe-15fe-42c4-8214-0b41b1f26a1a/scratchpad/claude-pin/",
+  "runner_version_pin": "2.1.296 (Claude Code)",
+  "runner_pin_path": "/home/cookys/.autopilot/claude-pin/bin/",
+  "runner_pin_note": "2.1.292 (the pin first proposed) was auto-update-deleted; 2.1.296 is a COPY (not a link) at ~/.autopilot/claude-pin/2.1.296/claude, bin/claude links to that copy, so the auto-updater cannot remove it. The same pin is recorded for stage-graph v9 in prereg/stage-graph.amend-4-runner-pin.json.",
   "reps": 3,
   "arms": {
     "off": "off",
@@ -16,25 +17,30 @@
   "arm_manifests": {
     "off": {
       "file": "arms/g8/off.json",
-      "sha256": null,
-      "packs": "*-sg-change-v8 (the current stage-graph change arm = the g67 ON arm) + guidance-files-sg-change-v8 + fixture-scripts-sg + fixture-scripts-g8"
+      "sha256": "a29e5ef41035dd85a4ea1112de4900b1c13acbc26524d981cd37fcb092f5fba1",
+      "packs": "*-sg-change-v8 (the current stage-graph change arm = the g67 ON arm) + guidance-files-sg-change-v8 + fixture-scripts-sg + fixture-scripts-g8-v2"
     },
     "on": {
       "file": "arms/g8/on.json",
-      "sha256": null,
-      "packs": "*-sg-change-v9 + guidance-files-sg-change-v9 (freeze-guidance-arm.js change --suffix v9 after the batch/g8-guid merge) + fixture-scripts-sg + fixture-scripts-g8"
+      "sha256": "79780c036c3c568033f53522dbcd4d6705dea341ce52806f3167fe5da5b42dfa",
+      "packs": "*-sg-change-v9 + guidance-files-sg-change-v9 (freeze-guidance-arm.js change --suffix v9 after the batch/g8-guid merge) + fixture-scripts-sg + fixture-scripts-g8-v2"
     }
   },
   "allowed_arm_difference": {
-    "files": [],
-    "TO_FILL": "the exact <skill>/<file> list of the G8 text change, known only when batch/g8-guid is done. Expected (not registered): dev-flow/SKILL.md, l4/SKILL.md, l5/SKILL.md, l6/SKILL.md, plus any reference file the branch touches. Fill it from the diff of that branch, then run run-g8-campaign.js --check-arms.",
+    "files": [
+      "dev-flow/SKILL.md",
+      "l4/SKILL.md",
+      "l5/SKILL.md",
+      "l6/SKILL.md"
+    ],
+    "filled_from": "git diff --name-only e6131fba HEAD -- skills (v8 freeze vs the merged g8 text) = exactly these four SKILL.md files",
     "note": "off and on must differ ONLY in these files, enforced file-by-file by run-g8-campaign.js --check-arms on the frozen packs (the same checker as g67). An empty list is refused by run-g8-campaign.js (it would pass vacuously)."
   },
   "fixture_scripts_freeze": {
-    "pack": "fixture-scripts-g8",
-    "status": "FROZEN in this branch (packs/fixture-scripts-g8, 54 files)",
-    "command": "node evals/skill-onoff/freeze-pack.js --id fixture-scripts-g8 --scripts scripts/session-mode.js --ref 73a59216",
-    "source_ref": "73a59216aac00c92ed22e949771472e375693fd5 (batch/newtask: session-mode.js with `set --new-task`)",
+    "pack": "fixture-scripts-g8-v2",
+    "status": "FROZEN in this branch (packs/fixture-scripts-g8-v2, 55 files @ ac3ccd07)",
+    "command": "node evals/skill-onoff/freeze-pack.js --id fixture-scripts-g8-v2 --scripts scripts/session-mode.js --ref ac3ccd07",
+    "source_ref": "ac3ccd074624600e10847dd85fd5a376e09cc103 (release/3.0.0 HEAD: session-mode.js with `set --new-task` and the `--level none` fix; supersedes fixture-scripts-g8 frozen from 73a59216, which lacked the fix and is unused by any manifest)",
     "why": "freeze-pack follows the literal relative JS requires of session-mode.js (campaign-verification, mission-routing-admission, project-key, live-pointer, jsonl-store, lazily runs-watch), so the pack carries the new-task session-mode.js and everything it loads. If batch/newtask is amended before merge, re-freeze under a NEW id (fixture-scripts-g8-v2) from the merged sha and point both arms at it; a frozen pack is never edited.",
     "installed_twice": "both arm manifests list the pack in fixture_scripts (fixture repo root, after fixture-scripts-sg so the new session-mode.js overlays the old one) AND in files (synthetic PLUGIN root, where the skill text says <plugin>/scripts/session-mode.js)",
     "same_in_both_arms": "identical in off.json and on.json; the only variable is the guidance text. The stage-advance.js of fixture-scripts-sg is used unchanged by both arms (checked: set --size, then set --new-task --size, then status, on the overlay).",
@@ -79,7 +85,7 @@
   "invalid_rule": "mixed models, mixed runner versions, a runner version other than runner_version_pin, more than one arm manifest per arm, identical off/on manifests, a registered manifest sha not matched, or the manipulation check (task skill invoked in < 90% of an arm's cells) => INSTRUMENT-INVALID",
   "timeout_semantics": "per-cell timeout is the registered stop, not a failure: ONOFF_TIMEOUT_IS_COMPLETE=1 makes exit 124/137 with a non-empty transcript a complete cell (row carries stopped_by_timeout:true). A cell that has not issued the registered call by the timeout scores false for its arm.",
   "timeout_estimate": "Each cell does two small edit+test+commit tasks after loading a skill body. Measured basis: stage-graph/g67 sonnet cells 25-250 s end to end for ONE small task (g67 cells were cut at 5 m and 8 m). Two tasks plus the skill load and the entry/handoff rows: expected 3-8 min; dev-flow 10 m (about 1.3x the high estimate). The /l4 cell also launches a background foreman, which adds minutes, so 15 m. Worst case wall clock (every cell cut): 3 reps x 2 arms x (10+15) m = 150 min; expected 40-70 min.",
-  "scope_lock": "authorises ONLY: sonnet depth-0, headless -p, runner 2.1.292, these two briefs, the frozen off/on arm manifests. Says nothing about foreman/hands behaviour after entry, opus/fable, interactive sessions, /l5 or /l6 (the same text edit, not sampled here), or a second task that is a fix (--bug).",
+  "scope_lock": "authorises ONLY: sonnet depth-0, headless -p, runner 2.1.296, these two briefs, the frozen off/on arm manifests. Says nothing about foreman/hands behaviour after entry, opus/fable, interactive sessions, /l5 or /l6 (the same text edit, not sampled here), or a second task that is a fix (--bug).",
   "markers": {
     "g8_new_task": "AFTER the first `session-mode.js set` Bash invocation there is another `session-mode.js set` invocation carrying `--new-task` (bare flag token) AND a legal literal --size <XS|S|M|L|XL>"
   },
@@ -110,6 +116,6 @@
     "../../hooks/tests/skill-onoff-g8.test.sh"
   ],
   "freeze_packs": [
-    "fixture-scripts-g8"
+    "fixture-scripts-g8-v2"
   ]
 }

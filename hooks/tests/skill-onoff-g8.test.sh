@@ -9,7 +9,7 @@
 #   1. g8_new_task marker: pass cases (second set with --new-task + literal --size, level flag, first set itself new-task,
 #      line continuation, refused call) and fail cases (no second set, plain second set, lone --new-task, no/invalid/variable
 #      size, flag only in prose or a read of the script, --new-task=1, --new-task-x)
-#   2. fixtures: tasks exist, share the g6 fixture, briefs carry no answer vocabulary; the fixture-scripts-g8 overlay really
+#   2. fixtures: tasks exist, share the g6 fixture, briefs carry no answer vocabulary; the fixture-scripts-g8-v2 overlay really
 #      runs `set --size` then `set --new-task --size` (task_seq 2, stage cleared)
 #   3. score-g67.js verdicts on the g8 prereg: SHIP / NOT-SHIP / STOP / INSTRUMENT-INVALID
 #   4. run-g8-campaign.js: dry run, empty allowed list refused, --check-arms (clean + planted reds), stub e2e (STOP, resume, SHIP),
@@ -27,7 +27,7 @@ trap 'rm -rf "$TEST_TMP"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
 # a copy of the real prereg with the to-be-filled bits filled in synthetically (allowed list; shas stay null)
-node -e 'const fs=require("fs");const j=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));j.allowed_arm_difference.files=["l4/SKILL.md"];fs.writeFileSync(process.argv[2],JSON.stringify(j))' "$PREREG_REAL" "$TEST_TMP/prereg-filled.json"
+node -e 'const fs=require("fs");const j=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));j.allowed_arm_difference.files=["l4/SKILL.md"];for(const a of ["off","on"])j.arm_manifests[a].sha256=null;fs.writeFileSync(process.argv[2],JSON.stringify(j))' "$PREREG_REAL" "$TEST_TMP/prereg-filled.json"
 PREREG="$TEST_TMP/prereg-filled.json"
 
 # ---- synthetic transcript builder: mk <out> <skill|-> <cmd>... ; a cmd prefixed "ERR:" gets an is_error result ----
@@ -117,15 +117,15 @@ F="$TEST_TMP/g8repo"; mkdir -p "$F"; cp -r "$BASE/tasks/g8-flow/repo"/. "$F"/
 ( cd "$F" && bash run-tests.sh >/dev/null ) || fail "g8 fixture run-tests.sh must be green at base"
 # the scripts pack: frozen, from the registered ref, and the overlay (sg first, g8 on top) really does set --new-task
 node -e '
-const m=require(process.argv[1]);const meta=(m.pack_meta||{})["fixture-scripts-g8"];
-if(!meta||!/^73a59216/.test(meta.ref))process.exit(1);
-if(!m.packs["fixture-scripts-g8"]["fixture-scripts-g8/scripts/session-mode.js"])process.exit(2)' "$BASE/packs/manifest.json" || fail "fixture-scripts-g8 must be frozen from 73a59216 and carry scripts/session-mode.js"
-grep -q -- "--new-task" "$BASE/packs/fixture-scripts-g8/scripts/session-mode.js" || fail "pack session-mode.js has no --new-task"
+const m=require(process.argv[1]);const meta=(m.pack_meta||{})["fixture-scripts-g8-v2"];
+if(!meta||!/^ac3ccd07/.test(meta.ref))process.exit(1);
+if(!m.packs["fixture-scripts-g8-v2"]["fixture-scripts-g8-v2/scripts/session-mode.js"])process.exit(2)' "$BASE/packs/manifest.json" || fail "fixture-scripts-g8-v2 must be frozen from ac3ccd07 and carry scripts/session-mode.js"
+grep -q -- "--new-task" "$BASE/packs/fixture-scripts-g8-v2/scripts/session-mode.js" || fail "pack session-mode.js has no --new-task"
 for a in off on; do
-  node -e 'const m=require(process.argv[1]);if(JSON.stringify(m.fixture_scripts)!==JSON.stringify(["fixture-scripts-sg","fixture-scripts-g8"])||!m.files.includes("fixture-scripts-g8"))process.exit(1)' "$BASE/arms/g8/$a.json" || fail "arms/g8/$a.json must overlay fixture-scripts-g8 in the repo root AND the plugin root"
+  node -e 'const m=require(process.argv[1]);if(JSON.stringify(m.fixture_scripts)!==JSON.stringify(["fixture-scripts-sg","fixture-scripts-g8-v2"])||!m.files.includes("fixture-scripts-g8-v2"))process.exit(1)' "$BASE/arms/g8/$a.json" || fail "arms/g8/$a.json must overlay fixture-scripts-g8-v2 in the repo root AND the plugin root"
 done
 OV="$TEST_TMP/overlay"; mkdir -p "$OV/home"
-cp -r "$BASE/packs/fixture-scripts-sg"/. "$OV"/; cp -r "$BASE/packs/fixture-scripts-g8"/. "$OV"/
+cp -r "$BASE/packs/fixture-scripts-sg"/. "$OV"/; cp -r "$BASE/packs/fixture-scripts-g8-v2"/. "$OV"/
 ( cd "$OV" && git init -q && git config user.name t && git config user.email t@t && git config commit.gpgsign false && git checkout -q -b develop && echo x > f && git add -A && git commit -q -m base )
 ovrun() { ( cd "$OV" && HOME="$OV/home" CLAUDE_CODE_SESSION_ID=g8-test AUTOPILOT_SESSION_MODE_DIR="$OV/sm" AUTOPILOT_LIVE_DIR="$OV/live" node scripts/session-mode.js "$@" 2>/dev/null ); }
 ovrun set --size M >/dev/null || fail "overlay: set --size M"
@@ -144,7 +144,7 @@ const prereg = JSON.parse(fs.readFileSync(process.env.PREREG, 'utf8'));
 const rows = [];
 for (const [task, T] of Object.entries(prereg.tasks)) for (const arm of ['off', 'on']) for (let rep = 1; rep <= 3; rep++) {
   const pass = ((s[arm] || {})[task] || [])[rep - 1] === 1;
-  const r = { task_id: task, arm, model: 'sonnet', runner: 'cc', runner_version: s.ver || '2.1.292 (Claude Code)', rep, duration_s: 60, frozen_base_sha: 'x',
+  const r = { task_id: task, arm, model: 'sonnet', runner: 'cc', runner_version: s.ver || '2.1.296 (Claude Code)', rep, duration_s: 60, frozen_base_sha: 'x',
     markers: { [T.marker]: pass }, skill_invoked: s.noskill ? false : true, check_skill: T.skill, failure_class: null, failure_cause: null, arm_manifest_sha256: arm === 'on' ? (s.onsha || 'b'.repeat(64)) : (s.offsha || 'a'.repeat(64)) };
   if (s.drop && s.drop.includes(`${task}|${arm}|${rep}`)) continue;
   if (s.infra && s.infra.includes(`${task}|${arm}|${rep}`)) { r.failure_class = 'infra_fail'; r.failure_cause = 'runner_timeout'; }
@@ -169,12 +169,12 @@ sexp "NOT-SHIP one OFF at 2/3"          "{\"on\":$ALL_ON,\"off\":{\"g8-l4\":[1,1
 sexp "STOP missing cell"                "{\"on\":$ALL_ON,\"off\":{},\"drop\":[\"g8-l4|on|2\"]}" "4 STOP"
 sexp "STOP infra_fail only"             "{\"on\":$ALL_ON,\"off\":{},\"infra\":[\"g8-flow|off|1\"]}" "4 STOP"
 sexp "rerun clears the STOP"            "{\"on\":$ALL_ON,\"off\":{},\"infra\":[\"g8-flow|off|1\"],\"rerun\":[\"g8-flow|off|1\"]}" "0 SHIP"
-sexp "INVALID mixed-in other version"   "{\"on\":$ALL_ON,\"off\":{},\"ver\":\"2.1.296 (Claude Code)\"}" "5 INSTRUMENT-INVALID"
+sexp "INVALID mixed-in other version"   "{\"on\":$ALL_ON,\"off\":{},\"ver\":\"2.1.295 (Claude Code)\"}" "5 INSTRUMENT-INVALID"
 sexp "INVALID V1 skill not invoked"     "{\"on\":$ALL_ON,\"off\":{},\"noskill\":true}" "5 INSTRUMENT-INVALID"
 sexp "INVALID identical arm shas"       "{\"on\":$ALL_ON,\"off\":{},\"onsha\":\"$(printf 'a%.0s' $(seq 64))\"}" "5 INSTRUMENT-INVALID"
 # mixed Claude Code versions inside one results file => the test is void
 node "$TEST_TMP/rows.js" "$TEST_TMP/rows.jsonl" "{\"on\":$ALL_ON,\"off\":{}}"
-node -e 'const fs=require("fs");const p=process.argv[1];const L=fs.readFileSync(p,"utf8").trim().split("\n");const j=JSON.parse(L[3]);j.runner_version="2.1.296 (Claude Code)";L[3]=JSON.stringify(j);fs.writeFileSync(p,L.join("\n")+"\n")' "$TEST_TMP/rows.jsonl"
+node -e 'const fs=require("fs");const p=process.argv[1];const L=fs.readFileSync(p,"utf8").trim().split("\n");const j=JSON.parse(L[3]);j.runner_version="2.1.295 (Claude Code)";L[3]=JSON.stringify(j);fs.writeFileSync(p,L.join("\n")+"\n")' "$TEST_TMP/rows.jsonl"
 rc=0; o=$(node "$BASE/score-g67.js" --prereg "$PREREG" --results "$TEST_TMP/rows.jsonl") || rc=$?
 [ "$rc" = 5 ] && grep -q 'mixed runner versions' <<<"$o" || fail "mixed runner versions must be INSTRUMENT-INVALID (rc=$rc $o)"
 # a registered arm sha that the rows do not match
@@ -183,16 +183,17 @@ node "$TEST_TMP/rows.js" "$TEST_TMP/rows.jsonl" "{\"on\":$ALL_ON,\"off\":{}}"
 rc=0; node "$BASE/score-g67.js" --prereg "$TEST_TMP/prereg-pinned.json" --results "$TEST_TMP/rows.jsonl" >/dev/null || rc=$?
 [ "$rc" = 5 ] || fail "registered arm sha mismatch must be INSTRUMENT-INVALID (rc=$rc)"
 # the registered rule itself
-node -e 'const p=require(process.argv[1]);const T=p.thresholds;if(T.on_min_reps!==2||T.off_max_reps!==1||p.reps!==3||p.runner_version_pin!=="2.1.292 (Claude Code)"||p.model!=="sonnet")process.exit(1);if(JSON.stringify(p.changes)!==JSON.stringify({G8:["g8-flow","g8-l4"]}))process.exit(2)' "$PREREG_REAL" || fail "registered rule drifted from the pre-registration"
+node -e 'const p=require(process.argv[1]);const T=p.thresholds;if(T.on_min_reps!==2||T.off_max_reps!==1||p.reps!==3||p.runner_version_pin!=="2.1.296 (Claude Code)"||p.model!=="sonnet")process.exit(1);if(JSON.stringify(p.changes)!==JSON.stringify({G8:["g8-flow","g8-l4"]}))process.exit(2)' "$PREREG_REAL" || fail "registered rule drifted from the pre-registration"
 
 echo "=== 4. run-g8-campaign.js ==="
 out=$(node "$BASE/run-g8-campaign.js" --results "$TEST_TMP/dry.jsonl" --dry-run)
 [ "$(grep -c '^todo' <<<"$out")" -eq 12 ] || fail "dry run must list 12 todo cells"
 node -e 'const j=JSON.parse(process.argv[1].trim().split("\n").pop());if(j.row!=="stage-graph-g8"||j.cells_total!==12||j.per_task_timeout["g8-flow"]!=="10m"||j.per_task_timeout["g8-l4"]!=="15m"||!(j.estimated_cost_usd.high>j.estimated_cost_usd.typical&&j.estimated_cost_usd.typical>j.estimated_cost_usd.low))process.exit(1)' "$out" || fail "dry-run summary shape"
-# the real prereg has an empty allowed list until the text branch lands: both check-arms and a live run refuse it
-rc=0; o=$(node "$BASE/run-g8-campaign.js" --check-arms 2>&1) || rc=$?
+# an emptied copy of the prereg (the real one is filled since the post-merge freeze): both check-arms and a live run refuse it
+node -e 'const fs=require("fs");const j=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));j.allowed_arm_difference.files=[];fs.writeFileSync(process.argv[2],JSON.stringify(j))' "$PREREG_REAL" "$TEST_TMP/prereg-empty.json"
+rc=0; o=$(node "$BASE/run-g8-campaign.js" --prereg "$TEST_TMP/prereg-empty.json" --check-arms 2>&1) || rc=$?
 [ "$rc" = 2 ] && grep -q 'allowed_arm_difference.files is empty' <<<"$o" || fail "an empty allowed list must be refused by --check-arms (rc=$rc $o)"
-rc=0; o=$(node "$BASE/run-g8-campaign.js" --results "$TEST_TMP/refuse.jsonl" --runner stub 2>&1) || rc=$?
+rc=0; o=$(node "$BASE/run-g8-campaign.js" --prereg "$TEST_TMP/prereg-empty.json" --results "$TEST_TMP/refuse.jsonl" --runner stub 2>&1) || rc=$?
 [ "$rc" = 2 ] && grep -q 'allowed_arm_difference.files is empty' <<<"$o" || fail "an empty allowed list must be refused by a run (rc=$rc $o)"
 [ ! -e "$TEST_TMP/refuse.jsonl" ] || fail "a refusal must not create a results file"
 # synthetic packs: skills dev-flow + l4 (the g8 tasks' check-skills) off/on, one companion, one scripts pack carrying session-mode.js
@@ -276,7 +277,7 @@ rc=0; o=$(ONOFF_STUB_BIN="$STUB_E2E" front --results "$RES2" --runner stub --arm
 mkdir -p "$TEST_TMP/fakebin"; printf '#!/usr/bin/env bash\necho "9.9.9 (Claude Code)"\n' > "$TEST_TMP/fakebin/claude"; chmod +x "$TEST_TMP/fakebin/claude"
 rc=0; o=$(PATH="$TEST_TMP/fakebin:$PATH" front --results "$TEST_TMP/live.jsonl" --arms-dir "$AR" 2>&1) || rc=$?
 [ "$rc" = 2 ] && grep -q 'registered pin' <<<"$o" || fail "live run must refuse an unpinned claude (rc=$rc $o)"
-mkdir -p "$TEST_TMP/pinbin"; printf '#!/usr/bin/env bash\necho "2.1.292 (Claude Code)"\n' > "$TEST_TMP/pinbin/claude"; chmod +x "$TEST_TMP/pinbin/claude"
+mkdir -p "$TEST_TMP/pinbin"; printf '#!/usr/bin/env bash\necho "2.1.296 (Claude Code)"\n' > "$TEST_TMP/pinbin/claude"; chmod +x "$TEST_TMP/pinbin/claude"
 node -e 'const fs=require("fs");const j=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));j.runner_pin_path=process.argv[3];fs.writeFileSync(process.argv[2],JSON.stringify(j))' "$PREREG" "$TEST_TMP/prereg-pinbin.json" "$TEST_TMP/pinbin/"
 rc=0; o=$(PATH="$TEST_TMP/pinbin:$PATH" ONOFF_PACKS_DIR="$PK" node "$BASE/run-g8-campaign.js" --prereg "$TEST_TMP/prereg-pinbin.json" --results "$TEST_TMP/live2.jsonl" --arms-dir "$AR" 2>&1) || rc=$?
 [ "$rc" = 2 ] && grep -q "not stamped" <<<"$o" || fail "live run must refuse null arm shas (rc=$rc $o)"

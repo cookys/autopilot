@@ -1,8 +1,7 @@
 # Pre-registration — stage-graph-g8 (row `stage-graph-g8`)
 
-**Status: DRAFT FOR REVIEW. Not frozen.** `FROZEN.json` has no `stage-graph-g8` entry, the two arm-manifest shas are
-null, the v9 packs (`*-sg-change-v9`) are not built, and `allowed_arm_difference.files` is empty until the text branch
-`batch/g8-guid` lands. Machine-readable twin: `prereg/stage-graph-g8.json` (the scorer and the runner read the JSON; this
+**Status: FROZEN 2026-10-11 (before any live cell; stamped by `stamp-prereg.js --row stage-graph-g8`).** The v9 packs
+(`*-sg-change-v9`) and `fixture-scripts-g8-v2` are frozen from `ac3ccd07`, and `allowed_arm_difference.files` is filled. Machine-readable twin: `prereg/stage-graph-g8.json` (the scorer and the runner read the JSON; this
 file is the human statement of the same rule). Any edit to the briefs, marker, scorer, arm manifests or this rule after the
 first live cell voids the row; a failure is recorded and the next attempt is a NEW arm with new pack ids. There is no
 rerun-until-green (rerunning an `infra_fail` CELL is not that; see STOP).
@@ -22,20 +21,19 @@ the task-scoped size, urgent, bug, base_ref; records `task_seq`). The text is wr
 
 | Arm | Packs |
 |---|---|
-| `off` | the 16 `*-sg-change-v8` skill packs + `guidance-files-sg-change-v8` (= the current stage-graph change arm; the g67 ON arm) + `fixture-scripts-sg` + `fixture-scripts-g8` |
+| `off` | the 16 `*-sg-change-v8` skill packs + `guidance-files-sg-change-v8` (= the current stage-graph change arm; the g67 ON arm) + `fixture-scripts-sg` + `fixture-scripts-g8-v2` |
 | `on` | the 16 `*-sg-change-v9` skill packs + `guidance-files-sg-change-v9` (built by `freeze-guidance-arm.js change --suffix v9` after the `batch/g8-guid` merge) + the same two fixture-script packs |
 
 Manifests: `arms/g8/{off,on}.json` (generated from the g67 ON manifest, only the pack suffix and the fixture pack differ).
-**The arms differ ONLY in the files the G8 text change touches — list: `allowed_arm_difference.files` in the JSON, TO BE FILLED
-after `batch/g8-guid` is done** (expected: `dev-flow/SKILL.md`, `l4/SKILL.md`, `l5/SKILL.md`, `l6/SKILL.md`, and any reference
-file that branch edits). `run-g8-campaign.js --check-arms` byte-compares the frozen packs file by file (the g67 checker, reused)
+**The arms differ ONLY in the files the G8 text change touches — list: `allowed_arm_difference.files` in the JSON, filled 2026-10-11 from
+`git diff --name-only e6131fba HEAD -- skills`: `dev-flow/SKILL.md`, `l4/SKILL.md`, `l5/SKILL.md`, `l6/SKILL.md`.** `run-g8-campaign.js --check-arms` byte-compares the frozen packs file by file (the g67 checker, reused)
 and a live run refuses to start unless that holds. `run-g8-campaign.js` additionally REFUSES an empty list, because the generic
 checker would pass an off/on pair that differs in nothing.
 
 ### Fixture scripts
 
-`fixture-scripts-g8` is frozen now (it does not depend on the text): `session-mode.js` at `73a59216` plus its literal require
-graph (54 files; `freeze-pack` follows `require('./…')`). It is installed twice in both manifests: in `fixture_scripts` (fixture
+`fixture-scripts-g8-v2` is `session-mode.js` frozen from `ac3ccd07` (the merged tree; the first freeze, `fixture-scripts-g8` @ `73a59216`, lacked the `--level none` fix and is unused) plus its literal require
+graph (55 files; `freeze-pack` follows `require('./…')`). It is installed twice in both manifests: in `fixture_scripts` (fixture
 repo root, after `fixture-scripts-sg`, so the `--new-task` session-mode.js overlays the older one) and in `files` (the synthetic
 PLUGIN root, where the skill text says `<plugin>/scripts/session-mode.js`). Identical in both arms. The pre-turn check of the g67
 amendment is kept: `plugin_required_scripts = ["scripts/session-mode.js"]` is `require()`d from the assembled scratch plugin
@@ -101,27 +99,24 @@ failure of the text, for OFF the expected state). Default harness behaviour (tim
 | every task: **ON passes ≥ 2 of 3 reps AND OFF passes ≤ 1 of 3 reps** | **SHIP (0)** |
 | any task violates either bound | NOT-SHIP (3) |
 | any `(task, arm, rep)` cell without a clean row (missing, or only `infra_fail` rows) | **STOP (4)**: rerun that cell (resumable, max 3 recorded attempts per cell); a clean rerun row clears it; never score around it |
-| mixed models; **mixed Claude Code versions**; a runner other than the pin `2.1.292 (Claude Code)`; more than one arm manifest per arm; identical off/on manifests; a registered manifest sha not matched | **INSTRUMENT-INVALID (5)** (the test is void) |
+| mixed models; **mixed Claude Code versions**; a runner other than the pin `2.1.296 (Claude Code)`; more than one arm manifest per arm; identical off/on manifests; a registered manifest sha not matched | **INSTRUMENT-INVALID (5)** (the test is void) |
 | manipulation check V1: the task's skill invoked in < 90 % of an arm's cells | INSTRUMENT-INVALID (5): without it an unloaded skill would read as a NOT-SHIP of the text |
 
 Judgement order: INVALID(model/runner/arm) → STOP → INVALID(V1) → ship rule. Honest weakness: ON 2/3 vs OFF 1/3 is the thinnest
 contrast the rule admits; with n = 3 this is a mechanism-use check, not an effect size.
 
-## Runner pin — NEEDS A DECISION BEFORE FREEZE
+## Runner pin (decided 2026-10-11)
 
-Pinned to Claude Code **2.1.292** via the PATH dir
-`/tmp/claude-1000/-home-cookys-projects-autopilot/e041e8fe-15fe-42c4-8214-0b41b1f26a1a/scratchpad/claude-pin/`. Checked
-2026-10-10/11: the directory exists, but its `claude` is a **dangling symlink** to
-`~/.local/share/claude/versions/2.1.292`, a binary that is no longer on disk (installed versions: 2.1.293, .294, .295, .296; `claude`
-on PATH is 2.1.296). `run-g8-campaign.js --dry-run` shows `pin_version: null`; a live run refuses to start. The g67 prereg named 2.1.295
-as the proposed alternative "for BOTH rows, never one". Either 2.1.292 is restored from somewhere, or both pin fields (this row
-and the stage-graph rows that share the instrument) move to a retained version together. This file is NOT changed to a different
-version here, because that is a registered-instrument decision, not a drafting detail.
+Pinned to Claude Code **2.1.296**. The first proposal (2.1.292) was deleted by the auto-updater, leaving a dangling link. This
+time the binary is a COPY: `~/.autopilot/claude-pin/2.1.296/claude` (copied from `~/.local/share/claude/versions/2.1.296`), and
+the PATH dir `~/.autopilot/claude-pin/bin/` holds `claude` linking to that copy, so a version cleanup cannot remove it. The
+stage-graph rows move to the same pin together (`prereg/stage-graph.amend-4-runner-pin.json`: v9 and later; v1–v8 stay as run on
+2.1.292); g67 ran on 2.1.292 and is not re-run.
 
 ## Run
 
 ```
-PIN=/tmp/claude-1000/-home-cookys-projects-autopilot/e041e8fe-15fe-42c4-8214-0b41b1f26a1a/scratchpad/claude-pin
+PIN=$HOME/.autopilot/claude-pin/bin
 node evals/skill-onoff/run-g8-campaign.js --results evals/skill-onoff/results/stage-graph-g8.v1.jsonl --dry-run   # cells, pin, cost
 node evals/skill-onoff/run-g8-campaign.js --check-arms                                                          # off/on differ only in the registered files
 PATH="$PIN:$PATH" node evals/skill-onoff/run-g8-campaign.js --results evals/skill-onoff/results/stage-graph-g8.v1.jsonl   # live; resumable

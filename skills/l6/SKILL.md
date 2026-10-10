@@ -26,6 +26,8 @@ Hard rules:
   The command admits canonical Mission policy/graph/source
   coverage before writing the marker. Topology may change; its admission digest and later
   Mission prepare/grant may not.
+  A new task after the previous one finished (not a resume) runs `set --new-task --level <the live level> --size <size> [--urgent] [--bug]`
+  instead of the entry `set` (level unchanged; urgent and bug do not carry over).
 - **Delegate the labor, never the trust**: depth-0 still EXECUTES committed
   artifacts, runs the mechanical checks, judges convergence-by-verification, and
   holds merge authority. A dispatched green or reviewer pass is never

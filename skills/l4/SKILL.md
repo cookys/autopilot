@@ -27,6 +27,8 @@ Hard rules:
   precondition degradation uses `set --level l3 --entry-level l4 --fallback precondition_failed --size <size> [--urgent] [--bug]`.
   The command admits canonical Mission policy/graph/source
   coverage before writing the marker. Topology may change; its admission digest may not.
+  A new task after the previous one finished (not a resume) runs `set --new-task --level <the live level> --size <size> [--urgent] [--bug]`
+  instead of the entry `set` (level unchanged; urgent and bug do not carry over).
 - **qc@depth-0 is THE gate**: reviewer families/panel come from
   `scripts/resolve-review-loop.sh` (`qc_panel` / `required_review_families` /
   `min_panel_size`); resolver unavailable → fall back to 3 reviewers. A

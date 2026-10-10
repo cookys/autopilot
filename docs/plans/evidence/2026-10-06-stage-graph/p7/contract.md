@@ -1,4 +1,4 @@
-# P7 body — data contract and band grammar (alpha.2)
+# P7 body — data contract and band grammar (alpha.2; the band and panel sections follow TUI v2, 2026-10-10)
 
 Binding for the three P7 work packages: ① watcher data (`src/status/*`), ② mod (`mods/live/*`), ③ gate (`docs/plans/evidence/2026-10-04-mods-p1c/gate/*`). Spec source: plan `docs/plans/2026-10-06-dev-flow-stage-graph.md` §P7 + Owner addendum A1 (slot table, width table, tab list); owner design decisions: `docs/plans/evidence/2026-10-06-tui-band/README.md` (V4a, clean ⓘ, legend in panel, theme-key text colour only). Owner rulings 2026-10-09: spend = host-today **brain-tier** spend over the cost-fuse cap; `wt N` = **reapable** worktree residue only (**superseded 2026-10-09 by the residue auto-reap contract: `wt N` = `needs_human_count`**, see `docs/plans/evidence/2026-10-09-residue-auto-reap/contract.md` R4).
 
@@ -15,38 +15,50 @@ All writes atomic (tmp + rename), small JSON, never block the tick; a failing so
 
 Existing facts the mod must start consuming (already published): `<live>/runs/<project_key>.qc.json` (P7c, `readQc`), `<live>/load-source.json` (P7b, `readLoadSource`), `<live>/runs/<project_key>.review.json` (P7d, `readReview`), the session marker `<ah>/session-mode/<sid>.json` (§2.9 fields).
 
-## ② Band grammar (one line, AbovePrompt)
+## ② Band grammar (one line, AbovePrompt) — TUI v2 (2026-10-10, owner-approved; supersedes the alpha.2 grammar below it in history)
 
-Width budget = `e.props.bodyColumns`, measured in **display cells** (East Asian Wide/Fullwidth = 2; the glyphs below count as 1 — verify in the colored screenshot). Slots in priority order, joined by ` │ ` (the `│` in theme key `subtle`); an empty slot is skipped entirely (no doubled separator). Zero counts are omitted.
+Design record and mockups: `docs/plans/evidence/2026-10-10-tui-v2/` (information architecture, i18n plan, rendered PNGs). Every word comes from the string tables `mods/live/locales/{en,zh-TW}.json` (see "Locales"); glyphs, numbers, ids, paths, shas and commands are not translated.
 
-| # | Slot | Text | Colour (theme key, text only) | Empty when |
+Width budget = `e.props.bodyColumns`, measured in **display cells** (East Asian Wide/Fullwidth = 2; the glyphs below count as 1). Items inside a group are separated by one space, groups by ` │ ` (the `│` in theme key `subtle`); an empty slot is skipped entirely (no doubled separator). Zero counts are omitted. Slots in priority order:
+
+| # | Slot (group) | Text | Colour (theme key, text only) | Empty when |
 |---|---|---|---|---|
-| 1 | verdict | `<glyph> <word>` (▲ 要你決定 / ⏸ 疑似卡住 / ✓ 完成待驗收 / ● 進行中 / ◌ 待命) | warning / error / success / suggestion / inactive | never |
-| 2 | position | `<size>[!]·<level> ▸ <stage>` + ` ◷<age>` (age of `stage_set_at`, same formatter as elapsed); `·<level>` omitted when level is null | stage `claude`, rest default | no marker stage |
-| 3 | unit | `<bar> <k>/<N>` + ` ·<n>族` (n = `review_families.length`, omitted when 0); bar: k−1 done cells `▰` (success), the current cell `▰` (claude), remaining `▱` (inactive); N > 10 → scale to 10 cells | as stated | no `marker.unit` |
-| 4 | dispatch | `⚙<live>` + ` ⏸<stalled>` | ⚙ default, ⏸ error | both 0 |
-| 5 | review | `R<n> ⟲` (from `reviewSlot`) + ` · QC ✓` / ` · QC owed` (`qcChip`) | QC owed `warning`, ✓ `success` | no review and no qc fact |
-| 6 | decisions | `◆<proxy>` + ` ?<undocumented>` + ` <rung>` | ◆ `claude`, ? `inactive`, rung default | all absent |
-| 7 | spend | `$<brain_today>/<cap>` (integers) | `warning` at ≥ 80 % of cap, `error` at ≥ 100 % | `host_today_brain_usd` null |
-| 8 | hygiene | `hygieneChip` text + ` · wt <n>` (n = residue.json `needs_human_count`, n > 0 only; was reapable_worktrees in P7, superseded by `docs/plans/evidence/2026-10-09-residue-auto-reap/contract.md` R4: reapable residue is auto-reaped within 24 h, `wt` counts what a person must act on) | chip `warn` → `warning` | no load-source fact and n = 0 |
-| 9 | ⓘ | Button, `plain`, `autoFocus`, NO `hotkey`; opens/raises the pane | default | never |
+| 1 | verdict (own group) | `<glyph> <word>`: ▲ 要你決定 / Needs you, ⏸ 疑似卡住 / Stalled, ✓ 完成待驗收 / Awaiting acceptance, ● 進行中 / Running, ◌ 待命 / Idle. At >= 160 columns a 要你決定 / 疑似卡住 verdict carries its one-phrase reason after the word (dim): the attention summary, the decision question, the quietest dispatch, the foreman's silence; clipped to 48 cells and to the room left, drawn only when >= 8 cells of room remain | warning / error / success / suggestion / inactive (bold except idle); reason dim | never |
+| 2 | position (own group) | `<size>[!]·<level> ▸ <stage>`; at >= 160 `<size>[!]·<level> <walk> <stage> ◷<age>` with the stage walk `●─●─◐─○─○` (stage.json `walk`; the marker stage is the `◐`; done nodes `●`, later `○`; no walk drawn with < 2 or > 9 nodes or when the stage is not on it: then `▸ <stage> ◷<age>`); `·<level>` omitted when level is null | stage `claude` bold, `●` success, `◐` claude bold, `○` inactive, `─` subtle, `▸` and `◷age` dim | no marker stage |
+| 3 | unit (own group) | `<bar> <k>/<N>` + ` ·<n>族` (en `·<n>fam`); bar: k−1 done cells `▰` (success), the current cell `▰` (claude), remaining `▱` (inactive); N > 10 → 10 cells, current cell `ceil(k*10/N)` | as stated; the families word dim | no `marker.unit` |
+| 4 | dispatch + review (ONE group) | `⚙<live>` + ` ⏸<stalled>`, then ` ⟲R<n>` (`⟲` dim; n = code round, else plan generation) + ` QC✓` / ` QC▲` (`QC▲` = protected diff without evidence: it awaits a person) | ⚙ default, ⏸ error, QC▲ warning bold, QC✓ success | both parts empty |
+| 5 | decisions (own group) | `◆<proxy>` + ` ?<undocumented>` + ` <rung>` | `◆` default (claude is reserved for "you are here"), `?` inactive, rung default | all absent |
+| 6 | spend (own group) | `$<brain today> <bar> <pct>%` : amount rounded to an integer, bar cells = `round(ratio*n)` filled in the state colour, the rest `▱` inactive, pct = `round(ratio*100)` (dim) | state colour: success below 80 % of the cap, warning from 80 %, error from 100 % (amount plain below 80 %) | `host_today_brain_usd` null |
+| 7 | hygiene (own group) | load-source chip (`dev`, `dev↓3` with the arrow dim, `dev ⚠`, `cache <v> ⚠`, `src ? ⚠`) + ` ⚑<n>` (n = residue.json `needs_human_count`, n > 0 only) | chip `warn` → warning; `⚑N` warning bold | no load-source fact and n = 0 |
+| 8 | ⓘ | Button, `plain`, `autoFocus`, NO `hotkey`; opens/raises the pane | default | never |
 
-Narrow widths (A1 table), applied cumulatively until the line fits: `< 160` remove the hygiene slot's load-source chip (the `wt N` owner reminder stays down to 80, so a docked panel that narrows the band cannot hide it; at `< 80` the whole hygiene slot goes); `< 140` also remove spend and decisions; `< 120` also remove the ◷ age and review; `< 80` keep only verdict, dispatch, the unit **bar** (no k/N, no 族) and ⓘ. If it still does not fit, truncate the position slot's stage text with `…`, never the verdict or ⓘ. **Overflow fallback** (as implemented in `mods/live/model.ts` `layoutBand`, accepted at review): if the line is still wider than the budget after the stage text is cut (to no less than 2 cells), apply in order, stopping as soon as it fits: remove the unit bar slot; then remove the `⏸<stalled>` count (the dispatch slot goes with it if nothing is left); then remove the `⚙<live>` count; then shorten the verdict text with `…` to the cells that fit (the glyph alone when fewer than 2 cells remain). The verdict glyph and ⓘ are never removed. Assumptions the contract did not state, now fixed: for N > 10 the bar has 10 cells and the current cell is `ceil(k*10/N)` (k clamped to 1..N); the spend slot rounds both numbers with `Math.round`.
+Width table (the bar sizes and the dropped parts are part of the contract):
 
-Non-ok snapshot (no project, error, stale): one dim line `<reason>` + ` │ ` + ⓘ. The former second band line (reason / proxy tail) moves to the panel's Now tab — the band is ONE line.
+| Columns | Drawn |
+|---|---|
+| >= 160 | everything: the stage walk and age, families, decisions, the 10-cell spend bar with its percent, the load-source chip, the verdict's reason |
+| 120–159 | verdict, `<size>·<level> ▸ <stage>`, unit bar + `k/N`, `⚙ ⏸ ⟲R QC`, `$<n>` + 5-cell bar, `⚑N` |
+| 80–119 | verdict, unit bar (no `k/N`), `⚙N ⏸N QC▲/QC✓` (no round), `$` + 3-cell bar (no amount), `⚑N` |
+| < 80 | verdict, `⚙N ⏸N`, `⚑N` |
 
-## ② Panel (pane `autopilot-live`, opened by ⓘ; also auto-opened as today at ≥ 144 columns fullscreen)
+**Overflow fallback** (as implemented in `mods/live/model.ts` `layoutBand`): if the line is still wider than the budget, the position slot's stage text is cut with `…` (never below 2 cells), then, in order and stopping as soon as it fits: remove the unit bar slot; remove the `⏸<stalled>` count (the dispatch part goes with it if nothing is left); remove the `⚙<live>` count; shorten the verdict WORD with `…` (the glyph alone when fewer than 2 cells remain). The verdict glyph, the `⚑N` owner reminder and the ⓘ are never removed. The reason phrase is added last, with whatever room is left. The line never exceeds the budget in display cells, in either locale.
 
-Hand-built tab strip (Buttons), in this order: **Legend · Now · Graph · Dispatch · Review · Decisions · Spend · Hygiene**. ⓘ opens on Legend.
-- Legend: every glyph/indicator of the band with its meaning (table above), theme colours as on the band.
-- Now: project, `size·level ▸ stage` with age, unit k/N + label, the verdict reason, attention lines, the awaited decision (moved from today's Dispatch tab top).
-- Graph: the D4 walk as `node → node → …`, current node in `claude` bold, done nodes `success`, later nodes `subtle`; entry/terminal marked; size/flags line above.
-- Dispatch: today's dispatch rows + gate rows + foreman (minus what moved to Now).
-- Review: today's Review tab (P7d) + QC fact detail.
-- Decisions: proxy-decision list/counts, undocumented dispatches, latest ladder rung + time.
-- Spend: session $, host today all-tier $, host today brain-tier $ / cap, fuse mode.
-- Hygiene: load source detail (version, dev/cache, behind upstream) + the residue that needs a person: summary `<N> need you · <size> · auto <age> ago: −<removed> wt, <archived> branches archived`, then up to 20 rows (kind, target, class, age, size, reason) each followed by a dim exact command (residue auto-reap contract R4; replaces the P7 by-class listing).
-A missing fact renders an explicit "no data" line, never an empty tab.
+Non-ok snapshot (no project, error, stale): one dim line `<reason>` + ` │ ` + ⓘ (a residue reminder in the no-project line reads `⚑N`). The former second band line (reason / proxy tail) lives in the panel's Now tab.
+
+### Locales
+
+`mods/live/locales/en.json` (source of truth) and `zh-TW.json`, compiled to `locales.ts` by `node mods/live/gen-locales.js` (a hooks module imports only code files); `--check` fails on drift, a missing id, differing placeholders, an id the code uses that en lacks, an unused en id, or a key-column label wider than 12 cells (it runs first in `mods/live/run-tests.sh`). Locale choice, resolved on every tick: `~/.autopilot/config.json` `ui.locale` (`en` | `zh-TW` | `auto`) > `AUTOPILOT_LOCALE` > the Claude Code language setting (the `/config` row `language`, verified on Claude Code 2.1.296: `$.config.list()` returns it as a `text` row holding e.g. `正體中文台灣用語`; else `language` in `~/.claude/settings.json`; a value naming a Traditional-Chinese / 台灣 / zh-TW variant is zh-TW, anything else en) > `LC_ALL` / `LANG` (`zh_TW*` is zh-TW) > en.
+
+## ② Panel (pane `autopilot-live`, opened by ⓘ; also auto-opened as today at >= 144 columns fullscreen) — TUI v2
+
+Hand-built tab strip (Buttons), six tabs in this order: **Now · Dispatch · Review · Spend · Hygiene · ?** (zh-TW: 現況 · 派工 · 審查 · 用量 · 殘留 · ?). Merges: the stage walk lives in Now, the decisions in Review, the glyph legend is the `?` tab. ⓘ opens on **Now** and each further press shows the next tab (the `?` is last, then Now again). The active tab is bold on a `subtle` background (the one background the panel uses: legible over ssh + tmux in truecolor and 256 colours, spike 2026-10-10; `inverse` stays banned), a `subtle` rule under the strip is its baseline. A tab that holds something for the owner carries a badge: `⚙N` live dispatches on Dispatch, `▲` on Review when pre-push QC is owed, `⚑N` on Hygiene.
+- Now: hero row (verdict · project · time since start), the verdict reason (dim), the `session $ · host $ · ctx %` header (dim). Sections with rule lines `── Title ───`: **Needs you** (first when something awaits: the decision question and options, an attention reason, `⚑N worktrees need you → Hygiene`; else `✓ nothing waits for you right now`), **Where you are** (the stage-walk diagram with labels, then key/value rows stage / unit / progress / phase), **Working now** (dispatch counts, review round + QC, the session's tasks), **Cost today** (brain-tier bar against the cap).
+- Dispatch: `⚙ N running · ⏸ N stalled · ✓ N done`; a run table (run, role, engine / model, state glyph, elapsed, last seen), columns as wide as their widest cell in display cells; review gates; the waiting / foreman lines; the review-page link; the snapshot note.
+- Review: plan review and code review (round bar, range, seats), pre-push QC, the decisions made on your behalf (counts, the ladder rung as a six-step bar, the per-decision rows with their veto commands).
+- Spend: brain-tier cap bar with an 80 % tick, the host-today split (brain vs other tiers), session, cost-fuse mode.
+- Hygiene: load-source detail, then the residue that needs a person (summary, one row per item, the exact command wrapping under it).
+- `?`: the glyph legend (drawn from the same vocabulary as the band), the keys, the width table.
+Key/value rows: a dim key column of exactly 12 display cells (zh labels up to 6 characters), values in default colour. A missing fact renders an explicit "no data" line, never an empty tab.
 
 ## ③ Gate (after ② is frozen)
 

@@ -11,6 +11,7 @@
 #   AUTOPILOT_SESSION_MODE_DIR  marker dir override (autopilot home = its parent), as the plugin itself does
 #   GATE_TMUX_SOCKET         tmux -L <name> (a private server); default = the tmux server you are attached to
 #   GATE_OUT                 output base, default <this dir>/runs
+#   GATE_LOCALE              the band's language (en | zh-TW), recorded as meta.json `locale` (only an explicit value is recorded: the pane resolves its own locale, the capturing shell's AUTOPILOT_LOCALE says nothing about it); check.js prefers it, else infers it from the band
 #   GATE_MODE                mode name written to meta.json (dev-flow, l3 ... ); default = the cell name up to the first '-'
 #   GATE_BAND_WAIT_S         settle budget in seconds (default 14, 0 = capture once, no settling). The band reads its facts every ~5 s, so a capture
 #                            can hold facts newer than the band it drew (a hand started a moment ago: the band lacks its ⚙1). After each capture
@@ -255,7 +256,7 @@ const mode = E.GATE_MODE_ARG || String(E.GATE_CELL).split('-')[0];
 fs.writeFileSync(path.join(out, 'meta.json'), `${JSON.stringify({
   schema: 'autopilot.gate-capture/2', cell: E.GATE_CELL, mode, window_width: windowWidth, pane_width: paneWidth, captured_at: new Date(Number(E.GATE_NOW_MS)).toISOString(), captured_at_ms: Number(E.GATE_NOW_MS),
   session_id: sid, session_id_how: how, sanitised_session_id: ssid, project_key: pkey, root_run_id: root, scope_key: scope,
-  live_base: live, autopilot_home: E.GATE_AHOME, pane_cwd: E.GATE_PANE_CWD || null, git_common_dir: common, settle_attempt: Number(E.GATE_ATTEMPT) || 1, missing,
+  live_base: live, autopilot_home: E.GATE_AHOME, pane_cwd: E.GATE_PANE_CWD || null, git_common_dir: common, settle_attempt: Number(E.GATE_ATTEMPT) || 1, locale: E.GATE_LOCALE || null, missing,
 }, null, 2)}\n`);
 process.stdout.write(`${out}\n`);
 if (missing.length) process.stderr.write(`absent (recorded in meta.json): ${missing.join('; ')}\n`);

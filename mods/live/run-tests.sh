@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# mods/live/run-tests.sh — run the live mod's suites (live.test.ts, load-source.test.ts) with `claude plugin test`.
+# mods/live/run-tests.sh — run the live mod's suites (gen-locales.js --check, live.test.ts, load-source.test.ts) with `claude plugin test`.
 #
 # `claude plugin test <folder>` runs a plugin's *.test.ts files against the real engine, and a plugin loads its hooks module from the
 # `modules` key of hooks/hooks.json. The suite is written for a plugin named `autopilot` ($.state refs are owner-checked) whose
@@ -15,6 +15,10 @@
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# the string tables: locales.ts must match the JSON sources, both locales must carry the same ids and placeholders (gen-locales.js --check)
+node "$here/gen-locales.js" --check
+node --test "$here/gen-locales.test.js"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 

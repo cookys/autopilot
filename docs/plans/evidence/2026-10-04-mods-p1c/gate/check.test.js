@@ -1,6 +1,9 @@
 'use strict';
 
 // gate/check.test.js — unit tests of check.js on hand-made capture dirs (node --test gate/check.test.js).
+// TUI v2 (2026-10-10): the band grammar is groups joined by ` │ ` (the dispatch count and the review round / QC chip share one group), the wide band
+// carries the stage walk, a 10-cell spend bar and the verdict's reason, `⚑N` replaces `wt N`, and every word comes in two locales (zh-TW, en). The cases
+// below are written against the contract's width table (>= 160 / 120-159 / 80-119 / < 80), not against the mod.
 // P7 rewrite (stage-graph P7 work package 3a): the band is ONE line (` │ ` separators, last segment ⓘ), judged slot by slot against the
 // P7 contract. Sections: the verdict precedence (kept from W4: attention / stall / foreman / completion / live work / turn / root set),
 // the one-line band at 209 / 120 / 80 columns with rich and sparse facts, one planted FAIL per slot, the width-table ABSENT rule,
@@ -51,37 +54,114 @@ const richFiles = (over) => ({
   'decisions-sidecar.json': { schema: 'autopilot.decisions-sidecar/1', count: 3, irreversible_count: 1, undocumented_dispatches: 1, ladder: { rung: 'U2', at: iso(5) } },
   'load-source.json': { schema: 'autopilot.load-source/1', source: 'dev', behind_upstream: 3, flags: [] },
   'residue.json': { schema: 'autopilot.residue/1', project_key: PK, reapable_worktrees: 2, by_class: { 'clean-integrated': 1, 'missing-dir': 1, other: 4 }, needs_human_count: 2, needs_human: [] },
+  'stage.json': { schema: 'autopilot.stage-walk/1', sid: SID, walk: ['spec', 'plan', 'implement', 'verify', 'finish'], nodes: ['spec', 'plan', 'implement', 'verify', 'finish'], current: 'implement' },
   ...(over || {}),
 });
-const RICH_209 = '⏸ 疑似卡住 │ M!·l5 ▸ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙2 ⏸1 │ R2 ⟲ · QC ✓ │ ◆3 ?1 U2 │ $123/150 │ dev ↓3 · wt 2 │ ⓘ';
-const RICH_120 = '⏸ 疑似卡住 │ M!·l5 ▸ implement │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙2 ⏸1 │ wt 2 │ ⓘ'; // below 160 the chip is gone, `wt N` (the owner reminder) stays down to 80
-const RICH_80 = '⏸ 疑似卡住 │ ▰▰▰▱▱ │ ⚙2 ⏸1 │ ⓘ';
+// the rich world draws a 要你決定-less 疑似卡住 (one stalled run, no age published), so the wide band carries the reason `有 1 個派工疑似沒有輸出`
+const RICH_209 = '⏸ 疑似卡住 有 1 個派工疑似沒有輸出 │ M!·l5 ●─●─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙2 ⏸1 ⟲R2 QC✓ │ ◆3 ?1 U2 │ $123 ▰▰▰▰▰▰▰▰▱▱ 82% │ dev↓3 ⚑2 │ ⓘ';
+const RICH_209_NR = RICH_209.replace(' 有 1 個派工疑似沒有輸出', ''); // the same line without the reason phrase (what a line too tight for it looks like)
+const RICH_MID = '⏸ 疑似卡住 │ M!·l5 ▸ implement │ ▰▰▰▱▱ 3/5 │ ⚙2 ⏸1 ⟲R2 QC✓ │ $123 ▰▰▰▰▱ │ ⚑2 │ ⓘ'; // 120-159
+const RICH_120 = '⏸ 疑似卡住 │ ▰▰▰▱▱ │ ⚙2 ⏸1 QC✓ │ $▰▰▱ │ ⚑2 │ ⓘ'; // 80-119: no position, no k/N, no round, no amount; `⚑N` (the owner reminder) stays
+const RICH_80 = '⏸ 疑似卡住 │ ⚙2 ⏸1 │ ⚑2 │ ⓘ'; // < 80: verdict, dispatch, ⚑N
 const rich = (line, width, over) => capture(richFiles(over), [line], { window_width: width });
 
-// ---- the band at three widths, rich facts
-test('RICH 209: every slot is judged PASS, the summary is PASS <mode> fields=10', () => {
+// ---- the band at four tiers, rich facts
+test('RICH 209: every slot is judged PASS, the summary is PASS <mode> fields=11 (the reason phrase is the 11th)', () => {
   const r = run(rich(RICH_209, 209));
-  for (const n of ['verdict', 'position', 'unit', 'dispatch', 'review', 'decisions', 'spend', 'hygiene', 'ⓘ', 'layout']) assert.strictEqual(status(r, n), 'PASS', n);
-  assert.strictEqual(r.ok, true); assert.strictEqual(r.fields, 10);
-  assert.strictEqual(summary(r), 'PASS l5 fields=10');
+  for (const n of ['verdict', 'position', 'unit', 'dispatch', 'review', 'decisions', 'spend', 'hygiene', 'reason', 'ⓘ', 'layout']) assert.strictEqual(status(r, n), 'PASS', n);
+  assert.strictEqual(r.ok, true); assert.strictEqual(r.fields, 11);
+  assert.strictEqual(summary(r), 'PASS l5 fields=11');
   assert.strictEqual(r.derived.columns, 204);
 });
-test('RICH 120 (bodyColumns 115): spend, decisions, review and the ◷ age are ABSENT, hygiene is just `wt 2`; the rest PASS', () => {
+test('RICH 130 (bodyColumns 125, 120-159): no walk, age, families, decisions, chip, percent or reason; `▸ stage`, k/N, ⟲R QC, 5-cell bar, ⚑N', () => {
+  const r = run(rich(RICH_MID, 130));
+  assert.strictEqual(status(r, 'decisions'), 'ABSENT'); assert.strictEqual(status(r, 'reason'), undefined);
+  for (const n of ['verdict', 'position', 'unit', 'dispatch', 'review', 'spend', 'hygiene', 'ⓘ', 'layout']) assert.strictEqual(status(r, n), 'PASS', n);
+  assert.strictEqual(r.derived.columns, 125); assert.strictEqual(r.ok, true);
+});
+test('RICH 120 (bodyColumns 115, 80-119): no position, no k/N, no round, no amount, no decisions; the bars, QC, `⚑N` stay', () => {
   const r = run(rich(RICH_120, 120));
-  for (const n of ['spend', 'decisions', 'review']) assert.strictEqual(status(r, n), 'ABSENT', n);
-  for (const n of ['verdict', 'position', 'unit', 'dispatch', 'hygiene', 'ⓘ', 'layout']) assert.strictEqual(status(r, n), 'PASS', n);
-  assert.strictEqual(r.results.find((x) => x.name === 'hygiene').expected, 'wt 2');
+  for (const n of ['position', 'decisions']) assert.strictEqual(status(r, n), 'ABSENT', n);
+  for (const n of ['verdict', 'unit', 'dispatch', 'review', 'spend', 'hygiene', 'ⓘ', 'layout']) assert.strictEqual(status(r, n), 'PASS', n);
+  assert.strictEqual(r.results.find((x) => x.name === 'hygiene').expected, '⚑2');
+  assert.strictEqual(r.results.find((x) => x.name === 'review').expected, 'QC✓');
   assert.strictEqual(r.ok, true); assert.strictEqual(r.derived.columns, 115);
 });
-test('RICH 80 (bodyColumns 75): only verdict, the unit bar (no k/N, no 族), dispatch and ⓘ', () => {
+test('RICH 80 (bodyColumns 75, < 80): only verdict, dispatch, `⚑N` and ⓘ', () => {
   const r = run(rich(RICH_80, 80));
-  assert.strictEqual(status(r, 'position'), 'ABSENT');
-  for (const n of ['verdict', 'unit', 'dispatch', 'ⓘ', 'layout']) assert.strictEqual(status(r, n), 'PASS', n);
+  for (const n of ['position', 'unit', 'review', 'spend', 'decisions']) assert.strictEqual(status(r, n), 'ABSENT', n);
+  for (const n of ['verdict', 'dispatch', 'hygiene', 'ⓘ', 'layout']) assert.strictEqual(status(r, n), 'PASS', n);
   assert.strictEqual(r.ok, true);
   assert.strictEqual(summary(r), 'PASS l5 fields=10');
 });
-test('RICH 80: a k/N or 族 left on the bar FAILs the unit slot', () => {
-  assert.strictEqual(status(run(rich('⏸ 疑似卡住 │ ▰▰▰▱▱ 3/5 │ ⚙2 ⏸1 │ ⓘ', 80)), 'unit'), 'FAIL');
+test('RICH 120: a k/N, a round or an amount left on the small band FAILs its slot', () => {
+  assert.strictEqual(status(run(rich(RICH_120.replace('▰▰▰▱▱', '▰▰▰▱▱ 3/5'), 120)), 'unit'), 'FAIL');
+  assert.strictEqual(status(run(rich(RICH_120.replace('QC✓', '⟲R2 QC✓'), 120)), 'review'), 'FAIL');
+  assert.strictEqual(status(run(rich(RICH_120.replace('$▰▰▱', '$123 ▰▰▱'), 120)), 'spend'), 'FAIL');
+});
+
+// ---- the English table: the same rich world, words in en
+const RICH_209_EN = '⏸ Stalled 1 dispatch looks silent │ M!·l5 ●─●─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2fam │ ⚙2 ⏸1 ⟲R2 QC✓ │ ◆3 ?1 U2 │ $123 ▰▰▰▰▰▰▰▰▱▱ 82% │ dev↓3 ⚑2 │ ⓘ';
+const RICH_MID_EN = '⏸ Stalled │ M!·l5 ▸ implement │ ▰▰▰▱▱ 3/5 │ ⚙2 ⏸1 ⟲R2 QC✓ │ $123 ▰▰▰▰▱ │ ⚑2 │ ⓘ';
+test('EN 209: the verdict word, the reason phrase and the `fam` word come from the en table; the locale follows the drawn verdict word', () => {
+  const r = run(rich(RICH_209_EN, 209));
+  assert.strictEqual(r.ok, true, JSON.stringify(r.results.filter((x) => x.status === 'FAIL')));
+  assert.strictEqual(r.derived.locale, 'en'); assert.strictEqual(r.derived.verdict, 'Stalled');
+  assert.strictEqual(status(r, 'reason'), 'PASS'); assert.strictEqual(r.fields, 11);
+  assert.strictEqual(r.derived.reasonSlot.known.full, '1 dispatch looks silent'); // plural: one dispatch
+  // an en capture judged as zh-TW (forced) FAILs: the words differ
+  assert.strictEqual(run(rich(RICH_209_EN, 209), { locale: 'zh-TW' }).ok, false);
+  // the rule: meta.locale when declared (check.js run(): --locale, then meta.locale), otherwise inferred from the band's verdict word; derive() alone with no declaration is zh-TW
+  assert.strictEqual(derive(capture(richFiles(), [], { locale: 'en' })).verdict, 'Stalled');
+});
+test('locale: meta.locale decides (a capture-time record), even against the words the band draws', () => {
+  assert.strictEqual(run(rich(RICH_209_EN, 209, undefined)).derived.locale, 'en');
+  const d = rich(RICH_209_EN, 209); const m = JSON.parse(fs.readFileSync(path.join(d, 'meta.json'), 'utf8')); m.locale = 'zh-TW'; fs.writeFileSync(path.join(d, 'meta.json'), JSON.stringify(m));
+  const r = run(d);
+  assert.strictEqual(r.derived.locale, 'zh-TW'); assert.strictEqual(r.ok, false, 'an en band judged against the recorded zh-TW locale FAILs');
+  assert.ok(fs.readFileSync(path.join(__dirname, 'capture.sh'), 'utf8').includes('locale: E.GATE_LOCALE || null'), 'capture.sh records meta.locale from an explicit GATE_LOCALE only');
+  assert.ok(!/locale:[^\n]*AUTOPILOT_LOCALE/.test(fs.readFileSync(path.join(__dirname, 'capture.sh'), 'utf8').split('\n').filter((l) => l.includes('settle_attempt')).join('')), 'the capturing shell AUTOPILOT_LOCALE is not recorded');
+});
+test('EN 130: the mid tier in en', () => {
+  assert.strictEqual(run(rich(RICH_MID_EN, 130)).ok, true);
+});
+test('EN verdict words: Needs you / Stalled / Awaiting acceptance / Running / Idle, each found by findBand with its locale', () => {
+  for (const [mark, word, kind] of [['▲', 'Needs you', 'decide'], ['⏸', 'Stalled', 'stalled'], ['✓', 'Awaiting acceptance', 'waiting'], ['●', 'Running', 'running'], ['◌', 'Idle', 'idle']]) {
+    const b = findBand(`x\n${mark} ${word} │ ⓘ`);
+    assert.strictEqual(b.verdict, word); assert.strictEqual(b.locale, 'en'); assert.strictEqual(b.kind, kind);
+  }
+  assert.strictEqual(findBand('▲ 要你決定 │ ⓘ').locale, 'zh-TW');
+  assert.strictEqual(findBand('we were Running earlier in the log'), null);
+});
+// a reason as the band draws it: the longest prefix of `text` within `n` cells, ending in `…` when it was cut
+const clip = (text, n) => { if (displayWidth(text) <= n) return text; let out = ''; let w = 0; for (const ch of text) { const cw = displayWidth(ch); if (w + cw > n - 1) break; out += ch; w += cw; } return `${out}…`; };
+test('EN reason phrase: the attention summary with the en wait suffix, a clipped prefix, and the wide-only rule', () => {
+  const short = { 'attention.json': { schema: 'autopilot.attention/1', kind: 'permission', summary: 'ls', since: iso(5) } };
+  assert.strictEqual(status(run(capture(short, ['▲ Needs you waiting for your approval: ls (waited 5 min) │ ⓘ'])), 'reason'), 'PASS');
+  const long = { 'attention.json': { schema: 'autopilot.attention/1', kind: 'permission', summary: 'Bash: rm -rf build', since: iso(5) } };
+  const clipped = clip('waiting for your approval: Bash: rm -rf build (waited 5 min)', 48);
+  assert.strictEqual(displayWidth(clipped), 48);
+  assert.strictEqual(status(run(capture(long, [`▲ Needs you ${clipped} │ ⓘ`])), 'reason'), 'PASS'); // clipped by cells
+  assert.strictEqual(status(run(capture(long, ['▲ Needs you waiting for your approval: Bash: something else │ ⓘ'])), 'reason'), 'FAIL');
+  assert.strictEqual(status(run(capture(long, ['▲ Needs you waiting for your approval: Bash: rm -rf build (waited 5 min) │ ⓘ'])), 'reason'), 'FAIL', 'wider than 48 cells: the band never draws it whole');
+  assert.strictEqual(status(run(capture(long, ['▲ Needs you │ ⓘ'])), 'reason'), 'FAIL', 'wide and roomy: the reason must be drawn');
+  // below 160 the reason must be absent, and a drawn one FAILs
+  assert.strictEqual(status(run(capture(long, ['▲ Needs you │ ⓘ'], { body_columns: 150 })), 'reason'), undefined);
+  assert.strictEqual(status(run(capture(long, [`▲ Needs you ${clipped} │ ⓘ`], { body_columns: 150 })), 'reason'), 'FAIL');
+});
+test('reason phrase: at most 48 cells (a wider one FAILs), a clipped one passes, and a decision file question is the reason too', () => {
+  const att = { 'attention.json': { schema: 'autopilot.attention/1', kind: 'question', summary: '要不要把這個很長很長很長很長很長很長很長很長很長很長很長很長的 plan 拆開來分段做？', since: iso(1) } };
+  const fullText = '等你回答：要不要把這個很長很長很長很長很長很長很長很長很長很長很長很長的 plan 拆開來分段做？（等了 1 分）';
+  assert.strictEqual(status(run(capture(att, [`▲ 要你決定 ${fullText} │ ⓘ`])), 'reason'), 'FAIL'); // wider than 48 cells
+  const clipped = clip(fullText, 48);
+  assert.ok(displayWidth(clipped) <= 48);
+  assert.strictEqual(status(run(capture(att, [`▲ 要你決定 ${clipped} │ ⓘ`])), 'reason'), 'PASS');
+  const dec = { 'decision-file.json': { schema: 'autopilot.decision/1', question: '要不要強推 main？' } };
+  assert.strictEqual(status(run(capture(dec, ['▲ 要你決定 要不要強推 main？ │ ⓘ'])), 'reason'), 'PASS');
+  // the room rule: with the line already at the budget there is no room, so none is drawn and none is expected
+  const d = derive(capture(att, [], { body_columns: 160 }));
+  assert.strictEqual(d.reasonSlot.applies, true);
+  assert.strictEqual(derive(capture(att, [], { body_columns: 159 })).reasonSlot.applies, false);
 });
 
 // ---- sparse facts: empty slots are left out, never a doubled separator
@@ -93,10 +173,10 @@ test('SPARSE 209: verdict + position + ⓘ only; the other slots are ABSENT with
   assert.strictEqual(r.ok, true);
   assert.strictEqual(summary(r), 'PASS l5 fields=10');
 });
-test('SPARSE 120 and 80 pass the same facts (position gone at 80)', () => {
-  assert.strictEqual(run(capture(SPARSE, ['◌ 待命 │ S ▸ plan │ ⓘ'], { window_width: 120 })).ok, true);
-  const r80 = run(capture(SPARSE, ['◌ 待命 │ ⓘ'], { window_width: 80 }));
-  assert.strictEqual(r80.ok, true); assert.strictEqual(status(r80, 'position'), 'ABSENT');
+test('SPARSE 130 and 100 pass the same facts (the position is `▸ stage` at 130, gone below 120)', () => {
+  assert.strictEqual(run(capture(SPARSE, ['◌ 待命 │ S ▸ plan │ ⓘ'], { window_width: 130 })).ok, true);
+  const r100 = run(capture(SPARSE, ['◌ 待命 │ ⓘ'], { window_width: 100 }));
+  assert.strictEqual(r100.ok, true); assert.strictEqual(status(r100, 'position'), 'ABSENT');
 });
 test('SPARSE: a doubled separator / an empty slot drawn FAILs the layout', () => {
   assert.strictEqual(status(run(capture(SPARSE, ['◌ 待命 │ S ▸ plan ◷10m │  │ ⓘ'])), 'layout'), 'FAIL');
@@ -118,6 +198,17 @@ test('PLANTED RED position: another stage in the marker', () => {
   const r = mutated({ 'marker.json': richMarker({ stage: 'verify' }) });
   assert.deepStrictEqual(r.failed, ['position']);
 });
+test('PLANTED RED walk: the diagram must show the current node where the marker says (`◐` at the wrong node FAILs; no walk file draws `▸ stage`)', () => {
+  assert.deepStrictEqual(mutated({ 'stage.json': { schema: 'autopilot.stage-walk/1', walk: ['spec', 'plan', 'implement', 'verify', 'finish'], current: 'verify' } }, RICH_209.replace('●─●─◐─○─○', '●─●─●─◐─○')).failed, ['position']);
+  const noWalk = mutated({ 'stage.json': null }, RICH_209.replace('●─●─◐─○─○', '▸'));
+  assert.strictEqual(status(noWalk, 'position'), 'PASS'); // a missing walk file: the plain `▸ implement ◷3m` form
+  assert.strictEqual(status(mutated({ 'stage.json': null }), 'position'), 'FAIL'); // ... and the diagram drawn without a walk file FAILs
+  // a walk of 10 nodes is too long for the band: `▸ stage`
+  const long = Array.from({ length: 10 }, (_x, i) => (i === 4 ? 'implement' : `n${i}`));
+  assert.strictEqual(status(mutated({ 'stage.json': { schema: 'autopilot.stage-walk/1', walk: long, current: 'implement' } }, RICH_209.replace('●─●─◐─○─○', '▸')), 'position'), 'PASS');
+  // the current stage is not on the walk: no diagram
+  assert.strictEqual(status(mutated({ 'stage.json': { schema: 'autopilot.stage-walk/1', walk: ['a', 'b', 'c'], current: 'implement' } }, RICH_209.replace('●─●─◐─○─○', '▸')), 'position'), 'PASS');
+});
 test('PLANTED RED position age: ◷ tolerance is +-2 min (5m passes against 3m, 6m fails)', () => {
   assert.strictEqual(status(run(rich(RICH_209.replace('◷3m', '◷5m'), 209)), 'position'), 'PASS');
   assert.strictEqual(status(run(rich(RICH_209.replace('◷3m', '◷6m'), 209)), 'position'), 'FAIL');
@@ -133,11 +224,16 @@ test('PLANTED RED unit 族: the review family count changed', () => {
 test('PLANTED RED dispatch: one more live run in the envelope counts', () => {
   const r = mutated({ 'envelope.json': baseEnvelope({ runs: [{ alive: true, stall: true }], counts: { confirmed_live: 3 }, host_today_brain_usd: 123.4, brain_cap_usd: 150 }) });
   assert.deepStrictEqual(r.failed, ['dispatch']);
+  // the dispatch count shares its group with the review part: a review part drawn apart (its own ` │ `) is a second group
+  assert.strictEqual(status(run(rich(RICH_209.replace('⚙2 ⏸1 ⟲R2 QC✓', '⚙2 ⏸1 │ ⟲R2 QC✓'), 209)), 'layout'), 'FAIL', 'dispatch and review are ONE group: drawn in separate segments FAILs the layout');
+  assert.match(run(rich(RICH_209.replace('⚙2 ⏸1 ⟲R2 QC✓', '⚙2 ⏸1 │ ⟲R2 QC✓'), 209)).results.find((x) => x.name === 'layout').detail, /one group/);
+  // a lone review segment (no dispatch facts) stays legal
+  assert.strictEqual(status(run(rich(RICH_209.replace('⚙2 ⏸1 ⟲R2 QC✓', '⟲R2 QC✓'), 209, { 'envelope.json': baseEnvelope({ host_today_brain_usd: 123.4, brain_cap_usd: 150 }) })), 'layout'), 'PASS', 'the group rule does not trip on a lone review segment');
 });
 test('PLANTED RED review: another review round', () => {
   assert.deepStrictEqual(mutated({ 'review.json': { schema: 'autopilot.review/1', project_key: PK, code: { generation: 3 } } }).failed, ['review']);
 });
-test('PLANTED RED review QC chip: qc owed while the band says QC ✓', () => {
+test('PLANTED RED review QC chip: qc owed while the band says QC✓', () => {
   assert.deepStrictEqual(mutated({ 'qc.json': { schema: 'autopilot.qc-status/1', scope: { project_key: PK, root_run_id: null }, state: 'owed' } }).failed, ['review']);
 });
 test('PLANTED RED decisions: the sidecar count changed', () => {
@@ -150,15 +246,22 @@ test('PLANTED RED spend: brain-tier spend in the envelope changed', () => {
   const r = mutated({ 'envelope.json': baseEnvelope({ runs: [{ alive: true, stall: false }, { alive: true, stall: true }], counts: { confirmed_live: 2 }, host_today_brain_usd: 140, brain_cap_usd: 150 }) });
   assert.deepStrictEqual(r.failed, ['spend']);
 });
+test('spend bar cells and percent: round(ratio * cells) filled of 10, round(ratio * 100) %', () => {
+  const sp = (brain, cap) => derive(capture(richFiles({ 'envelope.json': baseEnvelope({ runs: [{ alive: true, stall: true }], counts: { confirmed_live: 2 }, host_today_brain_usd: brain, brain_cap_usd: cap }) }), [], { body_columns: 209 })).slots.spend.text;
+  assert.strictEqual(sp(60, 100), '$60 ▰▰▰▰▰▰▱▱▱▱ 60%');
+  assert.strictEqual(sp(12, 100), '$12 ▰▱▱▱▱▱▱▱▱▱ 12%');
+  assert.strictEqual(sp(160, 150), '$160 ▰▰▰▰▰▰▰▰▰▰ 107%'); // over the cap: the bar is full, the percent is honest
+  assert.strictEqual(sp(0, 150), '$0 ▱▱▱▱▱▱▱▱▱▱ 0%');
+});
 test('PLANTED RED hygiene: a different needs_human_count in the residue fact', () => {
   assert.deepStrictEqual(mutated({ 'residue.json': { schema: 'autopilot.residue/1', project_key: PK, reapable_worktrees: 2, by_class: { 'clean-integrated': 1, 'missing-dir': 1 }, needs_human_count: 3, needs_human: [] } }).failed, ['hygiene']);
 });
-test('residue auto-reap R4: wt is needs_human_count, never the reapable count (a band drawing wt <reapable> fails; no needs_human_count draws no wt)', () => {
-  const hy = (res, line) => run(capture(richFiles({ 'residue.json': res }), [RICH_209.replace('dev ↓3 · wt 2', line)]));
+test('residue auto-reap R4: ⚑N is needs_human_count, never the reapable count (a band drawing ⚑<reapable> fails; no needs_human_count draws no ⚑)', () => {
+  const hy = (res, line) => run(capture(richFiles({ 'residue.json': res }), [RICH_209.replace('dev↓3 ⚑2', line)]));
   const reapOnly = { schema: 'autopilot.residue/1', project_key: PK, reapable_worktrees: 5, by_class: { 'clean-integrated': 5 } };
-  assert.strictEqual(status(hy(reapOnly, 'dev ↓3 · wt 5'), 'hygiene'), 'FAIL');
-  assert.strictEqual(status(hy(reapOnly, 'dev ↓3'), 'hygiene'), 'PASS');
-  assert.strictEqual(status(hy({ ...reapOnly, needs_human_count: 0, needs_human: [] }, 'dev ↓3'), 'hygiene'), 'PASS');
+  assert.strictEqual(status(hy(reapOnly, 'dev↓3 ⚑5'), 'hygiene'), 'FAIL');
+  assert.strictEqual(status(hy(reapOnly, 'dev↓3'), 'hygiene'), 'PASS');
+  assert.strictEqual(status(hy({ ...reapOnly, needs_human_count: 0, needs_human: [] }, 'dev↓3'), 'hygiene'), 'PASS');
 });
 test('PLANTED RED hygiene chip: behind upstream changed in load-source', () => {
   assert.deepStrictEqual(mutated({ 'load-source.json': { schema: 'autopilot.load-source/1', source: 'dev', behind_upstream: 5, flags: [] } }).failed, ['hygiene']);
@@ -174,24 +277,28 @@ test('residue.json whose needs_human list is longer than its count is a note', (
 });
 test('facts of another project or schema are not facts (a foreign residue / qc / review draws nothing)', () => {
   const r = mutated({ 'residue.json': { schema: 'autopilot.residue/1', project_key: 'other', reapable_worktrees: 2 }, 'qc.json': { schema: 'autopilot.qc-status/1', scope: { project_key: 'other' }, state: 'ok' } },
-    '⏸ 疑似卡住 │ M!·l5 ▸ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙2 ⏸1 │ R2 ⟲ │ ◆3 ?1 U2 │ $123/150 │ dev ↓3 │ ⓘ');
+    '⏸ 疑似卡住 有 1 個派工疑似沒有輸出 │ M!·l5 ●─●─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙2 ⏸1 ⟲R2 │ ◆3 ?1 U2 │ $123 ▰▰▰▰▰▰▰▰▱▱ 82% │ dev↓3 │ ⓘ');
   assert.strictEqual(r.ok, true);
 });
 
 // ---- spend / hygiene / unit specifics
 test('spend is empty when the brain spend is not published', () => {
   const files = richFiles({ 'envelope.json': baseEnvelope({ runs: [{ alive: true, stall: false }, { alive: true, stall: true }], counts: { confirmed_live: 2 } }) });
-  const r = run(capture(files, ['⏸ 疑似卡住 │ M!·l5 ▸ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙2 ⏸1 │ R2 ⟲ · QC ✓ │ ◆3 ?1 U2 │ dev ↓3 · wt 2 │ ⓘ']));
+  const r = run(capture(files, ['⏸ 疑似卡住 有 1 個派工疑似沒有輸出 │ M!·l5 ●─●─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙2 ⏸1 ⟲R2 QC✓ │ ◆3 ?1 U2 │ dev↓3 ⚑2 │ ⓘ']));
   assert.strictEqual(status(r, 'spend'), 'ABSENT'); assert.strictEqual(r.ok, true);
 });
 test('hygiene chip forms: cache copy, unknown source, marketplace warning, no chip but wt', () => {
-  const hy = (ls, res, line) => run(capture(richFiles({ 'load-source.json': ls, 'residue.json': res }), [RICH_209.replace('dev ↓3 · wt 2', line)]));
+  const hy = (ls, res, line) => run(capture(richFiles({ 'load-source.json': ls, 'residue.json': res }), [RICH_209.replace('dev↓3 ⚑2', line)]));
   const noRes = { schema: 'autopilot.residue/1', project_key: PK, reapable_worktrees: 0, by_class: {}, needs_human_count: 0 };
   assert.strictEqual(status(hy({ schema: 'autopilot.load-source/1', source: 'cache:2.36.36', flags: [] }, noRes, 'cache 2.36.36 ⚠'), 'hygiene'), 'PASS');
   assert.strictEqual(status(hy({ schema: 'autopilot.load-source/1', source: 'unknown', flags: [] }, noRes, 'src ? ⚠'), 'hygiene'), 'PASS');
   assert.strictEqual(status(hy({ schema: 'autopilot.load-source/1', source: 'dev', flags: ['marketplace_not_this_repo'] }, noRes, 'dev ⚠'), 'hygiene'), 'PASS');
-  assert.strictEqual(status(hy(null, { schema: 'autopilot.residue/1', project_key: PK, reapable_worktrees: 0, by_class: {}, needs_human_count: 4 }, 'wt 4'), 'hygiene'), 'PASS');
+  assert.strictEqual(status(hy(null, { schema: 'autopilot.residue/1', project_key: PK, reapable_worktrees: 0, by_class: {}, needs_human_count: 4 }, '⚑4'), 'hygiene'), 'PASS');
   assert.strictEqual(status(hy({ schema: 'autopilot.load-source/1', source: 'dev', flags: [] }, noRes, 'dev'), 'hygiene'), 'PASS');
+});
+test('the behind-upstream arrow follows the chip name without a space (`dev↓3`, never `dev ↓3`)', () => {
+  assert.strictEqual(status(run(rich(RICH_209.replace('dev↓3', 'dev ↓3'), 209)), 'hygiene'), 'FAIL');
+  assert.strictEqual(derive(capture(richFiles(), [], { body_columns: 209 })).slots.hygiene.text, 'dev↓3 ⚑2');
 });
 test('unit bar scales to 10 cells when N > 10, and 5/20 puts the current cell at ceil(5*10/20)=3', () => {
   const files = { 'marker.json': richMarker({ stage: undefined, unit: { kind: 'deliverable', index: 5, total: 20, label: 'x' }, review_families: [] }), 'envelope.json': baseEnvelope() };
@@ -201,17 +308,17 @@ test('unit bar scales to 10 cells when N > 10, and 5/20 puts the current cell at
 });
 test('a long stage name is cut with … exactly as far as needed (never below 2 cells); an uncut or wrongly cut stage FAILs', () => {
   const long = 'x'.repeat(220);
-  const files = richFiles({ 'marker.json': richMarker({ stage: long }) });
+  const files = richFiles({ 'marker.json': richMarker({ stage: long }), 'stage.json': { schema: 'autopilot.stage-walk/1', walk: ['spec', 'plan', long, 'verify', 'finish'], current: long } });
   // expected cut, worked out by hand: the line with the 9-cell stage `implement` is W cells; 204 columns (209 - 5) are available
-  const stageW = 204 - (displayWidth(RICH_209) - displayWidth('implement'));
+  const stageW = 204 - (displayWidth(RICH_209_NR) - displayWidth('implement'));
   const exact = `${'x'.repeat(stageW - 1)}…`;
-  const r = run(capture(files, [RICH_209.replace('implement', exact)]));
+  const r = run(capture(files, [RICH_209_NR.replace('implement', exact)])); // a line this tight has no room for the reason phrase
   assert.ok(r.derived.over > 0); assert.strictEqual(status(r, 'position'), 'PASS'); assert.strictEqual(status(r, 'layout'), 'PASS');
-  assert.strictEqual(displayWidth(RICH_209.replace('implement', exact)), 204);
+  assert.strictEqual(displayWidth(RICH_209_NR.replace('implement', exact)), 204);
   for (const bad of [`${'x'.repeat(40)}…`, 'x…', '…', `${'x'.repeat(stageW)}…`]) {
-    assert.strictEqual(status(run(capture(files, [RICH_209.replace('implement', bad)])), 'position'), 'FAIL', `stage "${bad.slice(0, 12)}…" must FAIL`);
+    assert.strictEqual(status(run(capture(files, [RICH_209_NR.replace('implement', bad)])), 'position'), 'FAIL', `stage "${bad.slice(0, 12)}…" must FAIL`);
   }
-  const uncut = run(capture(files, [RICH_209.replace('implement', long)]));
+  const uncut = run(capture(files, [RICH_209_NR.replace('implement', long)]));
   assert.strictEqual(status(uncut, 'layout'), 'FAIL'); assert.strictEqual(uncut.ok, false);
 });
 test('GATEFIX content after the ⓘ on the band row FAILs the layout; the engine [-] toggle and a docked pane border do not', () => {
@@ -231,36 +338,42 @@ test('GATEFIX layout rules: slots out of priority order FAIL, a duplicated slot 
   const files = richFiles();
   const layout = (line) => { const r = run(capture(files, [line], { window_width: 209 })); return r.results.find((x) => x.name === 'layout'); };
   assert.strictEqual(layout(RICH_209).status, 'PASS');
-  const swapped = '⏸ 疑似卡住 │ ▰▰▰▱▱ 3/5 ·2族 │ M!·l5 ▸ implement ◷3m │ ⚙2 ⏸1 │ R2 ⟲ · QC ✓ │ ◆3 ?1 U2 │ $123/150 │ dev ↓3 · wt 2 │ ⓘ';
+  const swapped = '⏸ 疑似卡住 有 1 個派工疑似沒有輸出 │ ▰▰▰▱▱ 3/5 ·2族 │ M!·l5 ●─●─◐─○─○ implement ◷3m │ ⚙2 ⏸1 ⟲R2 QC✓ │ ◆3 ?1 U2 │ $123 ▰▰▰▰▰▰▰▰▱▱ 82% │ dev↓3 ⚑2 │ ⓘ';
   const o = layout(swapped); assert.strictEqual(o.status, 'FAIL'); assert.match(o.detail, /out of priority order/);
-  const dup = RICH_209.replace(' │ ⚙2 ⏸1 │', ' │ ⚙2 ⏸1 │ ⚙2 ⏸1 │');
+  const dup = RICH_209.replace(' │ ⚙2 ⏸1 ⟲R2 QC✓ │', ' │ ⚙2 ⏸1 ⟲R2 QC✓ │ ⚙2 ⏸1 │');
   const d = layout(dup); assert.strictEqual(d.status, 'FAIL'); assert.match(d.detail, /second dispatch/);
 });
 test('GATEFIX classify: the verdict below 2 cells is the glyph alone or glyph + …', () => {
   assert.strictEqual(classify('●', 0), 'verdict'); assert.strictEqual(classify('●…', 0), 'verdict'); assert.strictEqual(classify('● 進行…', 0), 'verdict');
   assert.strictEqual(classify('x…', 0), null);
+  assert.strictEqual(classify('▲ Needs you pick adapter A or B', 0), 'verdict'); // the reason phrase rides on the verdict segment
 });
 
 // ---- the width-table ABSENT rule
-test('WIDTH TABLE: a slot the table removed at this width is FAIL if drawn (hygiene at 119 columns of body, spend at 139, review at 119, position at 79)', () => {
+test('WIDTH TABLE: a part the table removed at this width is FAIL if drawn (the chip < 160, decisions < 160, position < 120, round < 120, k/N < 120, spend < 80)', () => {
   const at = (line, bodyColumns) => run(capture(richFiles(), [line], { body_columns: bodyColumns }));
-  assert.strictEqual(status(at(RICH_209, 159), 'hygiene'), 'FAIL', 'the hygiene chip < 160 (only `wt N` may be drawn)');
-  assert.strictEqual(status(at(RICH_209.replace('dev ↓3 · wt 2', 'wt 2'), 159), 'hygiene'), 'PASS', '`wt N` alone survives < 160');
-  assert.strictEqual(status(at(RICH_209.replace('dev ↓3 · wt 2', 'wt 2'), 79), 'hygiene'), 'FAIL', '`wt N` is removed < 80');
-  assert.strictEqual(status(at(RICH_209, 139), 'spend'), 'FAIL', 'spend < 140');
-  assert.strictEqual(status(at(RICH_209, 139), 'decisions'), 'FAIL', 'decisions < 140');
-  assert.strictEqual(status(at(RICH_209, 119), 'review'), 'FAIL', 'review < 120');
-  assert.strictEqual(status(at(RICH_209, 79), 'position'), 'FAIL', 'position < 80');
-  assert.strictEqual(status(at(RICH_209, 79), 'unit'), 'FAIL', 'k/N and 族 < 80');
+  assert.strictEqual(status(at(RICH_209_NR, 159), 'hygiene'), 'FAIL', 'the chip < 160 (only `⚑N` may be drawn)');
+  assert.strictEqual(status(at(RICH_MID, 159), 'hygiene'), 'PASS', '`⚑N` alone survives < 160');
+  assert.strictEqual(status(at(RICH_80, 79), 'hygiene'), 'PASS', '`⚑N` survives < 80 (the owner reminder is never dropped)');
+  assert.strictEqual(status(at(RICH_209_NR, 159), 'decisions'), 'FAIL', 'decisions < 160');
+  assert.strictEqual(status(at(RICH_MID, 119), 'position'), 'FAIL', 'position < 120');
+  assert.strictEqual(status(at(RICH_MID, 119), 'review'), 'FAIL', 'the round < 120 (QC stays)');
+  assert.strictEqual(status(at(RICH_120, 119), 'review'), 'PASS', 'QC alone at 80-119');
+  assert.strictEqual(status(at(RICH_120, 79), 'spend'), 'FAIL', 'spend < 80');
+  assert.strictEqual(status(at(RICH_120, 79), 'unit'), 'FAIL', 'the unit bar < 80');
+  assert.strictEqual(status(at(RICH_120, 79), 'review'), 'FAIL', 'QC < 80');
 });
-test('WIDTH TABLE: exact thresholds — all slots at 160, no hygiene at 159, no spend/decisions at 139, no review/age at 119, no k/N at 79', () => {
+test('WIDTH TABLE: exact thresholds — all at 160, no chip/decisions/walk at 159, no position/round/k-n at 119, no unit/review/spend at 79', () => {
   const rows = (b) => derive(capture(richFiles(), [], { body_columns: b })).slots;
-  assert.strictEqual(rows(160).hygiene.text, 'dev ↓3 · wt 2'); assert.strictEqual(rows(159).hygiene.text, 'wt 2'); assert.strictEqual(rows(80).hygiene.text, 'wt 2'); assert.strictEqual(rows(79).hygiene.state, 'width');
-  assert.strictEqual(rows(140).spend.state, 'present'); assert.strictEqual(rows(139).spend.state, 'width'); assert.strictEqual(rows(139).decisions.state, 'width');
-  assert.strictEqual(rows(120).review.state, 'present'); assert.strictEqual(rows(119).review.state, 'width');
-  assert.ok(rows(120).position.text.includes('◷')); assert.ok(!rows(119).position.text.includes('◷'));
-  assert.strictEqual(rows(80).position.state, 'present'); assert.strictEqual(rows(79).position.state, 'width');
-  assert.strictEqual(rows(79).unit.text, '▰▰▰▱▱');
+  assert.strictEqual(rows(160).hygiene.text, 'dev↓3 ⚑2'); assert.strictEqual(rows(159).hygiene.text, '⚑2'); assert.strictEqual(rows(80).hygiene.text, '⚑2'); assert.strictEqual(rows(79).hygiene.text, '⚑2'); assert.strictEqual(rows(30).hygiene.state, 'present');
+  assert.strictEqual(rows(160).decisions.state, 'present'); assert.strictEqual(rows(159).decisions.state, 'width');
+  assert.strictEqual(rows(160).spend.text, '$123 ▰▰▰▰▰▰▰▰▱▱ 82%'); assert.strictEqual(rows(159).spend.text, '$123 ▰▰▰▰▱'); assert.strictEqual(rows(120).spend.text, '$123 ▰▰▰▰▱');
+  assert.strictEqual(rows(119).spend.text, '$▰▰▱'); assert.strictEqual(rows(80).spend.text, '$▰▰▱'); assert.strictEqual(rows(79).spend.state, 'width');
+  assert.strictEqual(rows(120).review.text, '⟲R2 QC✓'); assert.strictEqual(rows(119).review.text, 'QC✓'); assert.strictEqual(rows(80).review.text, 'QC✓'); assert.strictEqual(rows(79).review.state, 'width');
+  assert.strictEqual(rows(160).position.text, 'M!·l5 ●─●─◐─○─○ implement ◷3m'); assert.strictEqual(rows(159).position.text, 'M!·l5 ▸ implement'); assert.strictEqual(rows(120).position.state, 'present'); assert.strictEqual(rows(119).position.state, 'width');
+  assert.strictEqual(rows(160).unit.text, '▰▰▰▱▱ 3/5 ·2族'); assert.strictEqual(rows(159).unit.text, '▰▰▰▱▱ 3/5'); assert.strictEqual(rows(120).unit.text, '▰▰▰▱▱ 3/5'); assert.strictEqual(rows(119).unit.text, '▰▰▰▱▱');
+  assert.strictEqual(rows(80).unit.text, '▰▰▰▱▱'); assert.strictEqual(rows(79).unit.state, 'width');
+  assert.strictEqual(rows(30).dispatch.state, 'present');
 });
 test('WIDTH: the window width is read from meta (bodyColumns = window - 5); --body-columns / meta.body_columns override it', () => {
   assert.strictEqual(derive(capture(richFiles(), [], { window_width: 120 })).columns, 115);
@@ -280,6 +393,13 @@ test('NON-OK: no envelope -> one line `<reason> │ ⓘ`; a band drawn instead F
   assert.strictEqual(summary(ok), 'PASS l5 fields=2');
   assert.strictEqual(run(capture(files, ['◌ 待命 │ ⓘ'])).ok, false);
   assert.strictEqual(status(run(capture(files, ['no project │ extra │ ⓘ'])), 'nonok'), 'FAIL');
+});
+test('NON-OK in zh-TW: the state texts come from the zh table; a residue reminder is `⚑N`', () => {
+  const files = { 'envelope.json': null };
+  assert.strictEqual(run(capture(files, ['沒有專案 · 請執行：autopilot status runs --watch │ ⓘ'])).ok, true);
+  assert.strictEqual(run(capture(files, ['沒有專案 · ⚑3 · 請執行：autopilot status runs --watch │ ⓘ'])).ok, true);
+  assert.strictEqual(run(capture(files, ['no project · ⚑3 · run: autopilot status runs --watch │ ⓘ'])).ok, true);
+  assert.strictEqual(status(run(capture({ 'envelope.json': baseEnvelope({ published_at: iso(10) }) }, ['資料過舊 · 上次發佈 18:00 · 請執行：autopilot status runs --watch │ ⓘ'])), 'nonok'), 'PASS');
 });
 test('GATEFIX NON-OK: content after the ⓘ on the non-ok line FAILs; the [-] toggle does not', () => {
   const files = { 'envelope.json': null };
@@ -301,17 +421,18 @@ function cli(dir, args) {
 }
 test('SUMMARY: the last line is exactly `PASS <mode> fields=<n>` / `FAIL <mode> fields=<n> failed=<slots>`; exit 0 / 1 / 2', () => {
   const pass = cli(rich(RICH_209, 209));
-  assert.strictEqual(pass.lines[pass.lines.length - 1], 'PASS l5 fields=10'); assert.strictEqual(pass.code, 0);
-  assert.ok(pass.lines.some((l) => /^PASS spend expected \$123\/150 got \$123\/150 \[.+\]$/.test(l)));
+  assert.strictEqual(pass.lines[pass.lines.length - 1], 'PASS l5 fields=11'); assert.strictEqual(pass.code, 0);
+  assert.ok(pass.lines.some((l) => /^PASS spend expected \$123 ▰▰▰▰▰▰▰▰▱▱ 82% got \$123 ▰▰▰▰▰▰▰▰▱▱ 82% \[.+\]$/.test(l)));
   assert.ok(pass.lines.some((l) => /^surface: band$/.test(l)));
   assert.ok(pass.lines.some((l) => /^width: bodyColumns=204 \[.*window_width 209 - 5.*\]$/.test(l)));
-  const fail = cli(rich(RICH_209.replace('$123/150', '$99/150').replace('3/5', '4/5'), 209));
-  assert.strictEqual(fail.lines[fail.lines.length - 1], 'FAIL l5 fields=10 failed=unit,spend'); assert.strictEqual(fail.code, 1);
-  assert.ok(fail.lines.some((l) => /^FAIL spend expected \$123\/150 got \$99\/150 /.test(l)));
+  const fail = cli(rich(RICH_209.replace('$123 ▰▰▰▰▰▰▰▰▱▱ 82%', '$99 ▰▰▰▰▰▰▱▱▱▱ 66%').replace('3/5', '4/5'), 209));
+  assert.strictEqual(fail.lines[fail.lines.length - 1], 'FAIL l5 fields=11 failed=unit,spend'); assert.strictEqual(fail.code, 1);
+  assert.ok(fail.lines.some((l) => /^FAIL spend expected \$123 ▰▰▰▰▰▰▰▰▱▱ 82% got \$99 ▰▰▰▰▰▰▱▱▱▱ 66% /.test(l)));
   const absent = cli(rich(RICH_120, 120));
-  assert.ok(absent.lines.some((l) => /^ABSENT spend expected absent \(removed by the width table \(bodyColumns 115 < 140\)\) got absent /.test(l)));
+  assert.ok(absent.lines.some((l) => /^ABSENT position expected absent \(removed by the width table \(bodyColumns 115 < 120\)\) got absent /.test(l)));
   const lowest = cli(rich(RICH_80, 80));
-  assert.ok(lowest.lines.some((l) => /^ABSENT hygiene expected absent \(removed by the width table \(bodyColumns 75 < 80\)\) got absent /.test(l)));
+  assert.ok(lowest.lines.some((l) => /^ABSENT spend expected absent \(removed by the width table \(bodyColumns 75 < 80\)\) got absent /.test(l)));
+  assert.ok(cli(rich(RICH_209_EN, 209), ['--locale', 'en']).lines.some((l) => /^PASS verdict expected ⏸ Stalled got ⏸ Stalled /.test(l)));
   assert.strictEqual(cli('/nonexistent/dir').code, 2);
   assert.strictEqual(cli(rich(RICH_209, 209), ['--body-columns', 'x']).code, 2);
 });
@@ -319,7 +440,7 @@ test('SUMMARY: the mode comes from meta.mode, else the cell prefix; --json carri
   assert.strictEqual(cli(capture(SPARSE, ['◌ 待命 │ S ▸ plan ◷10m │ ⓘ'], { mode: 'dev-flow' })).lines.pop(), 'PASS dev-flow fields=10');
   assert.strictEqual(cli(capture(SPARSE, ['◌ 待命 │ S ▸ plan ◷10m │ ⓘ'], { mode: undefined, cell: 'l6-idle' })).lines.pop(), 'PASS l6 fields=10');
   const j = JSON.parse(cli(rich(RICH_209, 209), ['--json']).stdout);
-  assert.strictEqual(j.summary, 'PASS l5 fields=10'); assert.strictEqual(j.body_columns, 204);
+  assert.strictEqual(j.summary, 'PASS l5 fields=11'); assert.strictEqual(j.body_columns, 204);
 });
 
 // ---- pane reading
@@ -328,8 +449,8 @@ test('findBand takes the last band line up to ⓘ; a docked pane to its right is
   assert.strictEqual(b.verdict, '進行中'); assert.strictEqual(b.text, '● 進行中 │ ⚙1 │ ⓘ');
   assert.strictEqual(findBand('we saw ● 進行中 earlier in the log'), null);
   assert.strictEqual(findBand('nothing here'), null);
-  assert.strictEqual(findNonOk('no project │ ⓘ').kind, 'nonok');
-  assert.strictEqual(classify('R3 ⟲', 3), 'review'); assert.strictEqual(classify('garbage', 3), null);
+  assert.strictEqual(findNonOk('no project │ ⓘ').lineKind, 'nonok');
+  assert.strictEqual(classify('⟲R3 QC✓', 3), 'review'); assert.strictEqual(classify('⚙2 ⏸1 ⟲R3 QC▲', 3), 'dispatch'); assert.strictEqual(classify('$▰▰▱', 5), 'spend'); assert.strictEqual(classify('⚑3', 6), 'hygiene'); assert.strictEqual(classify('garbage', 3), null);
 });
 
 // ---- verdict precedence (kept from W4), judged through the one-line band
@@ -340,8 +461,14 @@ test('要你決定 by an attention permission / question, or an open decision fi
   assert.strictEqual(derive(capture({ 'decision-file.json': { schema: 'autopilot.decision/1', question: '要不要強推 main？' }, 'attention.json': { kind: 'idle', summary: 'waiting' } }, [])).verdict, '要你決定');
   assert.strictEqual(derive(capture({ 'attention.json': { kind: 'idle', summary: 'waiting' } }, [])).verdict, '待命');
 });
-test('疑似卡住 from an envelope run with stall:true', () => {
-  const dir = capture({ 'envelope.json': baseEnvelope({ runs: [{ run_id: 'r', alive: true, stall: true, started_at: iso(30) }], counts: { confirmed_live: 1 } }) }, ['⏸ 疑似卡住 │ ⚙1 ⏸1 │ ⓘ']);
+test('疑似卡住 from an envelope run with stall:true; the quietest dispatch names itself in the wide-band reason', () => {
+  const dir = capture({ 'envelope.json': baseEnvelope({ runs: [{ run_id: 'r', alive: true, stall: true, started_at: iso(30), last_event_age_s: 600 }, { run_id: 'q', alive: true, stall: true, last_event_age_s: 1800 }], counts: { confirmed_live: 2 } }) }, ['⏸ 疑似卡住 最久的派工 30m 沒有輸出 │ ⚙2 ⏸2 │ ⓘ']);
+  const r2 = run(dir);
+  assert.strictEqual(status(r2, 'reason'), 'PASS', JSON.stringify(r2.results)); assert.strictEqual(status(r2, 'dispatch'), 'PASS');
+  assert.strictEqual(status(run(capture({ 'envelope.json': baseEnvelope({ runs: [{ run_id: 'r', alive: true, stall: true, last_event_age_s: 600 }], counts: { confirmed_live: 1 } }) }, ['⏸ 疑似卡住 最久的派工 30m 沒有輸出 │ ⚙1 ⏸1 │ ⓘ'])), 'reason'), 'FAIL', 'the age comes from the rows: 10 m, not 30');
+});
+test('疑似卡住 from an envelope run with stall:true (no age published: the count phrase)', () => {
+  const dir = capture({ 'envelope.json': baseEnvelope({ runs: [{ run_id: 'r', alive: true, stall: true, started_at: iso(30) }], counts: { confirmed_live: 1 } }) }, ['⏸ 疑似卡住 有 1 個派工疑似沒有輸出 │ ⚙1 ⏸1 │ ⓘ']);
   const r = run(dir);
   assert.strictEqual(status(r, 'verdict'), 'PASS'); assert.strictEqual(status(r, 'dispatch'), 'PASS'); assert.strictEqual(r.ok, true);
 });
@@ -381,6 +508,16 @@ test('SURFACE panel: verdict + reason judged, the slots SKIP and are not counted
   const bad = run(capture({}, panelPane('要你決定', '等你批准：Bash: x')));
   assert.strictEqual(bad.surface, 'panel'); assert.strictEqual(status(bad, 'verdict'), 'FAIL'); assert.strictEqual(bad.ok, false);
 });
+test('SURFACE panel (TUI v2 Now tab): the hero row `<glyph> <word>  <project> · <since>` is the verdict cell, the next non-blank cell is the reason (it may carry the proxy tail), in both locales', () => {
+  const hero = (word, reason, since) => [SIDE('● Creating a file'), `${SIDE(' Do you want to proceed?')}${word}  demo · ${since}`, `${SIDE(' ❯ 1. Yes')}${reason}`, SIDE(' Esc to cancel')];
+  const att = { 'attention.json': { schema: 'autopilot.attention/1', kind: 'permission', summary: 'Bash: touch /tmp/gate-perm-test', since: iso(0) } };
+  const zh = run(capture(att, hero('▲ 要你決定', '等你批准：Bash: touch /tmp/gate-perm-test（等了 0 分） · 代你決定 3 件（0 件不可逆）', '已進行 0m')));
+  assert.strictEqual(zh.surface, 'panel'); assert.strictEqual(status(zh, 'verdict'), 'PASS'); assert.strictEqual(status(zh, 'reason'), 'PASS', JSON.stringify(zh.results));
+  const en = run(capture(att, hero('▲ Needs you', 'waiting for your approval: Bash: touch /tmp/gate-perm-test (waited 0 min)', '0m since start')));
+  assert.strictEqual(en.surface, 'panel'); assert.strictEqual(en.derived.locale, 'en'); assert.strictEqual(status(en, 'verdict'), 'PASS'); assert.strictEqual(status(en, 'reason'), 'PASS', JSON.stringify(en.results));
+  assert.strictEqual(status(run(capture(att, hero('▲ 要你決定', '等你批准：Bash: something else', '已進行 0m'))), 'reason'), 'FAIL');
+  assert.strictEqual(status(run(capture({}, hero('▲ 要你決定', '等你批准：Bash: x', '已進行 0m'))), 'verdict'), 'FAIL'); // no open attention
+});
 test('SURFACE band wins over the panel; no verdict and no dialog is no surface', () => {
   const dir = capture({ 'attention.json': { schema: 'autopilot.attention/1', kind: 'permission', summary: 'Bash: ls', since: iso(0) } },
     [...panelPane('要你決定', '等你批准：Bash: ls（等了 0 分）'), '▲ 要你決定 │ ⓘ']);
@@ -417,7 +554,7 @@ test('FOREMAN: an un-ended agent quiet < 180 s is 進行中, >= 180 s is 疑似�
   assert.strictEqual(v({ 'agents/f1.json': agentF('f1', 25 * 3600) }), '待命');
   assert.strictEqual(v({ 'agents/f1.json': agentF('f1', 40, { schema: 'x/1' }) }), '待命');
   assert.strictEqual(v({ 'agents/f1.json': agentF('f1', 40, { last_tool_name: null }) }), '進行中');
-  const r = run(capture({ 'agents/f1.json': agentF('f1', 400) }, ['⏸ 疑似卡住 │ ⏸1 │ ⓘ']));
+  const r = run(capture({ 'agents/f1.json': agentF('f1', 400) }, ['⏸ 疑似卡住 工頭 6 分沒有動作 │ ⏸1 │ ⓘ'])); // 400 s = 6 min: the foreman's own reason phrase
   assert.strictEqual(status(r, 'dispatch'), 'PASS'); assert.strictEqual(r.ok, true);
 });
 test('FOREMAN: precedence — a fresh foreman blocks 完成待驗收; a stalled one outranks it; attention outranks a stalled foreman', () => {
@@ -464,10 +601,10 @@ test('SCOPE: decisions are summed over the fresh root set; the latest ladder run
   assert.strictEqual(status(run(capture(stale, ['◌ 待命 │ ◆1 │ ⓘ'])), 'decisions'), 'PASS', 'a stale extra root adds nothing');
 });
 
-// ---- overflow fallback (contract section 2): unit bar, then ⏸ count, then ⚙ count, then the verdict word; expected lines = mods/live/live.test.ts "P7 fix B"
+// ---- overflow fallback (contract section 2): unit bar, then ⏸ count, then ⚙ count, then the verdict word; `⚑N` and ⓘ stay; expected lines = mods/live/live.test.ts "P7 fix B"
 const FALLBACK = [
-  [40, '⏸ 疑似卡住 │ ▰▰▰▱▱ │ ⚙2 ⏸1 │ ⓘ'], [30, '⏸ 疑似卡住 │ ▰▰▰▱▱ │ ⚙2 ⏸1 │ ⓘ'], [29, '⏸ 疑似卡住 │ ⚙2 ⏸1 │ ⓘ'], [21, '⏸ 疑似卡住 │ ⚙2 │ ⓘ'],
-  [20, '⏸ 疑似卡住 │ ⚙2 │ ⓘ'], [18, '⏸ 疑似卡住 │ ⓘ'], [12, '⏸ 疑似… │ ⓘ'],
+  [40, '⏸ 疑似卡住 │ ⚙2 ⏸1 │ ⚑2 │ ⓘ'], [27, '⏸ 疑似卡住 │ ⚙2 ⏸1 │ ⚑2 │ ⓘ'], [26, '⏸ 疑似卡住 │ ⚙2 │ ⚑2 │ ⓘ'], [24, '⏸ 疑似卡住 │ ⚙2 │ ⚑2 │ ⓘ'],
+  [23, '⏸ 疑似卡住 │ ⚑2 │ ⓘ'], [19, '⏸ 疑似卡住 │ ⚑2 │ ⓘ'], [18, '⏸ 疑似卡… │ ⚑2 │ ⓘ'], [12, '⏸ … │ ⚑2 │ ⓘ'],
 ];
 for (const [cols, line] of FALLBACK) {
   test(`FALLBACK bodyColumns ${cols}: ${line}`, () => {
@@ -477,23 +614,21 @@ for (const [cols, line] of FALLBACK) {
     assert.strictEqual(status(r, 'layout'), 'PASS');
   });
 }
-test('FALLBACK: the steps are judged in order — the bar still drawn at 29, the ⏸ count at 21, the ⚙ count at 18, a full verdict word at 12 all FAIL', () => {
-  const bad = (cols, line, slot) => assert.strictEqual(status(run(capture(richFiles(), [line], { body_columns: cols })), slot), slot === 'layout' ? 'FAIL' : 'FAIL', `${cols} ${slot}`);
-  bad(29, '⏸ 疑似卡住 │ ▰▰▰▱▱ │ ⚙2 ⏸1 │ ⓘ', 'layout');
-  bad(29, '⏸ 疑似卡住 │ ▰▰▰▱▱ │ ⚙2 ⏸1 │ ⓘ', 'unit');
-  bad(21, '⏸ 疑似卡住 │ ⚙2 ⏸1 │ ⓘ', 'dispatch');
-  bad(18, '⏸ 疑似卡住 │ ⚙2 │ ⓘ', 'dispatch');
-  bad(12, '⏸ 疑似卡住 │ ⓘ', 'layout');
-  bad(12, '⏸ 疑似卡住 │ ⓘ', 'verdict');
-  // the fallback is not an excuse when the line fits: at 30 the bar must stay
-  assert.strictEqual(status(run(capture(richFiles(), ['⏸ 疑似卡住 │ ⚙2 ⏸1 │ ⓘ'], { body_columns: 30 })), 'unit'), 'FAIL');
-  // the glyph and ⓘ are never removed
-  assert.strictEqual(run(capture(richFiles(), ['⏸ 疑似… │'], { body_columns: 12 })).ok, false);
-  const glyph = run(capture(richFiles(), ['⏸ │ ⓘ'], { body_columns: 5 }));
-  assert.strictEqual(status(glyph, 'verdict'), 'PASS');
+test('FALLBACK: the steps are judged in order — the ⏸ count still drawn at 26, the ⚙ count at 23, a full verdict word at 18 all FAIL', () => {
+  const bad = (cols, line, slot) => assert.strictEqual(status(run(capture(richFiles(), [line], { body_columns: cols })), slot), 'FAIL', `${cols} ${slot}`);
+  bad(26, '⏸ 疑似卡住 │ ⚙2 ⏸1 │ ⚑2 │ ⓘ', 'layout');
+  bad(26, '⏸ 疑似卡住 │ ⚙2 ⏸1 │ ⚑2 │ ⓘ', 'dispatch');
+  bad(23, '⏸ 疑似卡住 │ ⚙2 │ ⚑2 │ ⓘ', 'dispatch');
+  bad(18, '⏸ 疑似卡住 │ ⚑2 │ ⓘ', 'layout');
+  bad(18, '⏸ 疑似卡住 │ ⚑2 │ ⓘ', 'verdict');
+  // the fallback is not an excuse when the line fits: at 27 the dispatch part stays whole
+  assert.strictEqual(status(run(capture(richFiles(), ['⏸ 疑似卡住 │ ⚙2 │ ⚑2 │ ⓘ'], { body_columns: 27 })), 'dispatch'), 'FAIL');
+  // the glyph, `⚑N` and ⓘ are never removed
+  assert.strictEqual(run(capture(richFiles(), ['⏸ … │ ⚑2'], { body_columns: 12 })).ok, false);
+  assert.strictEqual(status(run(capture(richFiles(), ['⏸ … │ ⓘ'], { body_columns: 12 })), 'hygiene'), 'FAIL');
 });
 test('FALLBACK: the stage is cut first (never below 2 cells), then the fallback; findBand reads a shortened verdict', () => {
-  assert.strictEqual(findBand('x\n⏸ 疑似… │ ⓘ').verdict, '疑似卡住'.length ? '疑似卡住' : '');
+  assert.strictEqual(findBand('x\n⏸ 疑似… │ ⓘ').verdict, '疑似卡住');
   assert.strictEqual(findBand('⏸ │ ⓘ').verdict, '疑似卡住');
   assert.strictEqual(findBand('⏸1 │ ⓘ'), null);
 });
@@ -511,7 +646,7 @@ test('DOCK: a pane column in pane.txt gives bodyColumns = transcript column - 5 
   const d = derive(dir);
   assert.strictEqual(d.columns, 115); assert.match(d.columnsHow, /^docked pane: transcript column 120 cells .*10 rows.* - 5$/);
   const r = run(dir);
-  assert.strictEqual(r.ok, true, JSON.stringify(r.results.filter((x) => x.status === 'FAIL'))); assert.strictEqual(status(r, 'hygiene'), 'PASS'); // docked: the chip goes, `wt 2` stays
+  assert.strictEqual(r.ok, true, JSON.stringify(r.results.filter((x) => x.status === 'FAIL'))); assert.strictEqual(status(r, 'hygiene'), 'PASS'); // docked: the chip goes, `⚑2` stays
   // without the dock rule the full 209 band would be expected: the narrow band FAILs on the window rule
   assert.strictEqual(run(capture(richFiles(), [RICH_120], { window_width: 209 })).ok, false);
   assert.strictEqual(derive(capture(richFiles(), pane, { window_width: 209, body_columns: 90 })).columns, 90);

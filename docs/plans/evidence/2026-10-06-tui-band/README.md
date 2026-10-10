@@ -9,6 +9,7 @@ Context: after the W4 real-machine gate passed across all modes (`../2026-10-04-
 3. **Clean `ⓘ`** — no `hotkey` on the Button (a hotkey draws as `i: ⓘ`); the keyboard path is Ctrl+x Tab then Enter (the ⓘ has `autoFocus`).
 4. **The legend lives in a click-to-open panel, not next to the icons** — pressing `ⓘ` opens a pane with 「圖例」 (glyph → meaning) and 「目前」 (project, phase, reason, dispatch table). Capture: `captures/v4-legend.png`.
 5. **Colors follow the Claude Code theme** — theme keys as TEXT color only; no backgroundColor, no inverse, no hex/rgb/ansi256 (the first spike's inverse/background badges were unreadable: `captures/s123-first-spike.png`).
+   - *Amended 2026-10-10 (TUI v2, `../2026-10-10-tui-v2/README.md`):* the panel's ACTIVE TAB is the one exception: `backgroundColor="subtle"` (a theme key) with bold default text, never `inverse`. The earlier unreadable result was `inverse` + `backgroundColor`; a real-machine spike showed background + default text legible in truecolor and 256 colours. The band itself still draws no background.
 6. **codeforge** (`~/projects/codeforge`, the status-line/pet CLI) should also become its own Claude Code mod plugin — not merged into autopilot (different product narrative; data contract via live context files stays). Separate repo/session; after autopilot's TUI lands, share one TUI style guide (theme-key palette, glyph table, ⓘ legend pattern) and agree a band-row budget between the two mods.
 
 ## Palette and glyphs (as built in the spike, owner-previewed)

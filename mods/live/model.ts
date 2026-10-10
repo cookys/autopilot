@@ -365,6 +365,12 @@ export function readManifest(value: unknown, want: ScopeWant): Manifest | null {
   return out
 }
 
+// The producer (scripts/render-review-page.js) writes a task-sourced phase as the zh-only `做：<subject>`. Strip that prefix and re-prefix from the locale table so an en session never shows Chinese.
+const TASK_PHASE_PREFIX = '做：'
+function phaseText(ph: { label: string; source: string | null }, t: T): string {
+  return ph.source === 'task' && ph.label.startsWith(TASK_PHASE_PREFIX) ? t('phase.task', { subject: ph.label.slice(TASK_PHASE_PREFIX.length) }) : ph.label
+}
+
 // true / false = the writer is / is not installed AND enabled; null = no manifest, or it does not name this source
 export function liveSource(m: Manifest | null, name: string): boolean | null {
   if (m === null) return null
@@ -740,7 +746,7 @@ export function bandView(env: Json, jobModel: JobModel | null, projectKey: strin
   const identity = isObject(env.scope) ? env.scope.repo_identity : null
   // the phase is the job model's `phase.label` (campaign > receipt > marker stage `size·level ▸ stage` + `unit k/N` > task in progress > deliverable); absent / malformed: an em dash, never the process phase.
   // No writer of a stage live per the sources manifest: 來源未接 (a phase the model really carries is shown whatever the manifest says).
-  const phase = jobModel !== null && jobModel.phase !== null ? jobModel.phase.label : notWired(src.manifest, ['stage', 'progress', 'task_status_input']) ? t(NOT_WIRED_ID) : '—'
+  const phase = jobModel !== null && jobModel.phase !== null ? phaseText(jobModel.phase, t) : notWired(src.manifest, ['stage', 'progress', 'task_status_input']) ? t(NOT_WIRED_ID) : '—'
   let prog = progressView(progress, t)
   if (prog.text === '—') {
     if (src.tasks !== null && src.tasks.total > 0) prog = { text: t('progress.unfrozen', { n: src.tasks.completed }), dim: true } // task counts have no frozen denominator
@@ -823,7 +829,7 @@ export type JobModel = {
   conclusion: string | null
   decision: LiveDecision | null
   progress: JobProgress | null
-  phase: { code: string | null; label: string } | null
+  phase: { code: string | null; label: string; source: string | null } | null
   sources_manifest: unknown
 }
 
@@ -864,7 +870,7 @@ export function readJobModel(text: string | null): JobModel | null {
       }
     : null
   const ph = m.phase
-  const phase = isObject(ph) && typeof ph.label === 'string' && ph.label ? { code: typeof ph.code === 'string' ? ph.code : null, label: ph.label } : null
+  const phase = isObject(ph) && typeof ph.label === 'string' && ph.label ? { code: typeof ph.code === 'string' ? ph.code : null, label: ph.label, source: typeof ph.source === 'string' ? ph.source : null } : null
   return { acceptance, gates, needs_decision: m.needs_decision === true, conclusion: typeof m.conclusion === 'string' && m.conclusion ? m.conclusion : null, decision, progress, phase, sources_manifest: m.sources_manifest }
 }
 
@@ -1497,6 +1503,7 @@ const NO_DATA = (t: T, what: string): PaneLine => ({ text: t('nodata.prefix', { 
 // ---- wrapping: panel text is never clipped. A line wider than the pane breaks at spaces, after a `/`, and between CJK characters; its continuation
 // lines are indented by `hang` (kv rows: under the value column; other rows: their own leading blanks). Only a single unbreakable token longer than
 // a whole line is hard-broken. A line that fits is returned untouched.
+const CLOSING_PUNCT = '）」』、。，；：！？)]}】》〉,.;:!?'
 type WrapCh = { ch: string; si: number; w: number }
 function wrapLine(l: PaneLine, cols: number): PaneLine[] {
   if (displayWidth(l.text) <= cols) return [l]
@@ -1511,7 +1518,8 @@ function wrapLine(l: PaneLine, cols: number): PaneLine[] {
     const blank = c.ch === ' '
     const last = tokens[tokens.length - 1]
     const lastCh = last === undefined ? null : last.cs[last.cs.length - 1]
-    const joins = last !== undefined && last.blank === blank && !(lastCh !== null && (lastCh.ch === '/' || lastCh.w === 2)) && !(c.w === 2 && lastCh !== null && lastCh.w !== 2 && !blank)
+    const closing = !blank && last !== undefined && !last.blank && CLOSING_PUNCT.includes(c.ch)
+    const joins = closing || last !== undefined && last.blank === blank && !(lastCh !== null && (lastCh.ch === '/' || lastCh.w === 2)) && !(c.w === 2 && lastCh !== null && lastCh.w !== 2 && !blank)
     if (joins) { last.cs.push(c); last.w += c.w } else tokens.push({ cs: [c], blank, w: c.w })
   }
   const lines: WrapCh[][] = []
@@ -1541,6 +1549,24 @@ function wrapLine(l: PaneLine, cols: number): PaneLine[] {
   }
   while (cur.length > 0 && cur[cur.length - 1].ch === ' ') cur.pop()
   if (cur.length > 0 || lines.length === 0) lines.push(cur)
+  // a continuation line holding a single glyph is a widow: pull the previous line's last word (or last character) down beside it
+  if (lines.length > 1) {
+    const lastLine = lines[lines.length - 1]
+    const body = lastLine.slice(hang)
+    if (body.length === 1) {
+      const prev = lines[lines.length - 2]
+      let k = prev.length
+      while (k > hang && prev[k - 1].ch !== ' ') k--
+      if (k === hang || k === prev.length) { k = prev.length - 1; while (k > hang && CLOSING_PUNCT.includes(prev[k].ch)) k-- } // no blank to break at: move one character, with any closing punctuation joined to it
+      const moved = prev.slice(k)
+      const rest = prev.slice(0, k)
+      while (rest.length > 0 && rest[rest.length - 1].ch === ' ') rest.pop()
+      const gap: WrapCh[] = moved[moved.length - 1]?.w === 2 || body[0].w === 2 ? [] : [{ ch: ' ', si: -1, w: 1 }]
+      const merged = [...pad(hang), ...moved, ...gap, ...body]
+      const mw = merged.reduce((n, c) => n + c.w, 0)
+      if (rest.length > hang && mw <= cols) { lines[lines.length - 2] = rest; lines[lines.length - 1] = merged }
+    }
+  }
   return lines.map(cs => {
     const text = cs.map(c => c.ch).join('')
     if (l.segs === undefined) return { ...l, text, hang: undefined, wrap: undefined }

@@ -63,7 +63,7 @@
 // in-memory tree; a missing file makes the bottom hook throw, which the mod sees as a rejected read.
 import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
-import { readQc, qcChip, readReview, reviewSlot, displayWidth, truncateToWidth, layoutBand, readMarker, readResidue, readStageWalk, bandSlots, slotUnit, slotPosition, slotDispatch, slotDecisions, slotSpend, slotHygiene, slotReview, readLoadSource, PANE_TABS, verdictOf, reviewTabLines, wrapLines, legendLines, hygieneTabLines, dispatchLines } from './model'
+import { readQc, qcChip, readReview, reviewSlot, displayWidth, truncateToWidth, layoutBand, readMarker, readResidue, readStageWalk, bandSlots, slotUnit, slotPosition, slotDispatch, slotDecisions, slotSpend, slotHygiene, slotReview, readLoadSource, PANE_TABS, verdictOf, reviewTabLines, wrapLines, legendLines, bandView, hygieneTabLines, dispatchLines } from './model'
 import { makeT, resolveLocale, localeFromLanguage } from './i18n'
 import { EN, ZH_TW } from './locales'
 import type { Slot } from './model'
@@ -3029,6 +3029,40 @@ test('legend: every entry is one example plus its explanation, wrapped, at width
       expect(lines[pos + 1].text.startsWith('  ') && !lines[pos + 1].text.includes('M!'), locale + ' ' + cols).toBe(true)
     }
   }
+})
+
+test('wrapLines: no continuation line is only a closing punctuation mark or a single glyph, widths 30 to 130 in en and zh-TW', () => {
+  const lone = (l: { text: string }) => [...l.text.trim()].length === 1
+  for (const locale of ['en', 'zh-TW'] as const) {
+    const t = makeT(locale)
+    for (let cols = 30; cols <= 130; cols++) {
+      for (const l of legendLines({ t, cols })) {
+        expect(displayWidth(l.text), locale + ' ' + cols + ': ' + l.text).toBeLessThanOrEqual(cols)
+        if (/^ /.test(l.text) && l.text.trim() !== '') expect(lone(l), locale + ' ' + cols + ' lone glyph: ' + l.text).toBe(false)
+      }
+    }
+  }
+  const title = '狀態列上的符號（由左到右；沒有資料的項目不顯示）'
+  for (let cols = 12; cols <= 60; cols++) {
+    const lines = wrapLines([{ text: title }], cols)
+    for (const l of lines.slice(1)) expect([...l.text.trim()].length > 1 && !'）」』、。，；：！？'.includes(l.text.trim()[0]), cols + ': ' + l.text).toBe(true)
+  }
+  for (const [txt, cols] of [['一二三四，五', 10], ['一二三四五六，七', 12], ['甲乙丙丁戊（己庚）辛', 14], ['一二三四五。六', 10]] as [string, number][]) {
+    const ls = wrapLines([{ text: txt }], cols)
+    expect(ls.map(l => l.text.trim()).join(''), txt).toBe(txt)
+    for (const l of ls.slice(1)) expect(!'，。）」、；：！？'.includes(l.text.trim()[0]) && [...l.text.trim()].length > 1, txt + ' -> ' + JSON.stringify(ls.map(x => x.text))).toBe(true)
+  }
+  const dim = wrapLines([{ text: 'alpha beta gamma delta epsilon zeta eta theta ⚑' }], 40)
+  expect(dim.map(l => l.text).join(' ').replace(/\s+/g, ' ')).toBe('alpha beta gamma delta epsilon zeta eta theta ⚑')
+  expect(dim[dim.length - 1].text.trim().length).toBeGreaterThan(1)
+})
+
+test('band phase: a task-sourced phase renders in the session locale, not the producer zh prefix; other sources are shown as given', () => {
+  const model = (phase: unknown) => ({ phase, acceptance: null, gates: [], needs_decision: false, conclusion: null, decision: null, progress: null, sources_manifest: null }) as unknown as Parameters<typeof bandView>[1]
+  const ph = { code: '1', label: '做：alpha', source: 'task' }
+  expect(bandView({}, model(ph), 'p', 0, undefined, makeT('en')).phase).toBe('doing: alpha')
+  expect(bandView({}, model(ph), 'p', 0, undefined, makeT('zh-TW')).phase).toBe('做：alpha')
+  expect(bandView({}, model({ code: 'c', label: '審查', source: 'campaign' }), 'p', 0, undefined, makeT('en')).phase).toBe('審查')
 })
 
 test('hygiene tab: a long cache dir, worktree path and reason wrap in full at 60 columns', () => {

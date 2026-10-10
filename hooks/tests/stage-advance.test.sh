@@ -417,5 +417,88 @@ eq "walk failures" "0" "$3"
 [ "$3" != "0" ] && echo "  first failures: $WALK" >&2
 ok "walked $2 stage-advance steps"
 
+# ---------------------------------------------------------------- set --new-task (second task in one live session)
+RN="$TEST_TMP/r-newtask"; mkrepo "$RN"
+newsess; sm set --level l4 --size L --repo-root "$RN" >/dev/null 2>&1
+for n in intent proposal plan plan-review; do adv --to $n; done
+adv --to implement --unit phase:1/3:a; adv --to verify; adv --to implement --unit phase:2/3:b; adv --to verify
+adv --to implement --unit phase:3/3:c --review-families codex,grok; adv --to verify; adv --to code-review; adv --to qc-gate
+adv --to finish; eq "fixture 2 at finish" '"finish"' "$(jf stage)"
+ROOT0=$(jf root_run_id); STARTED0=$(jf started_at); EXP0=$(jf expires_at); IDENT0=$(jf repo_identity); BASE0=$(jf base_ref)
+adv --to implement --unit phase:1/2:n; RC_OLD=$RC
+eq "BEFORE: finish -> implement refused -> 3" "3" "$RC_OLD"
+sm set --size XL --repo-root "$RN" >/dev/null 2>&1
+eq "plain set --size leaves stage untouched" '"finish"' "$(jf stage)"
+eq "plain set --size writes no task_seq" "<absent>" "$(jf task_seq)"
+# new task from finish: no warning
+sm set --new-task --size S --repo-root "$RN" >/dev/null 2>"$TEST_TMP/err"; RC=$?
+eq "--new-task from finish (rc)" "0" "$RC"
+eq "--new-task from finish: no warning" "" "$(cat "$TEST_TMP/err")"
+for k in stage stage_set_at unit review_families high_risk; do eq "--new-task clears $k" "<absent>" "$(jf $k)"; done
+eq "--new-task: new size" '"S"' "$(jf size)"
+eq "--new-task keeps level" '"l4"' "$(jf level)"
+eq "--new-task keeps root_run_id" "$ROOT0" "$(jf root_run_id)"
+eq "--new-task keeps started_at" "$STARTED0" "$(jf started_at)"
+eq "--new-task keeps expires_at" "$EXP0" "$(jf expires_at)"
+eq "--new-task keeps repo_identity" "$IDENT0" "$(jf repo_identity)"
+eq "--new-task re-derives base_ref" "$BASE0" "$(jf base_ref)"
+eq "--new-task: task_seq 2 (first task had none)" "2" "$(jf task_seq)"
+has "--new-task: task_started_at is iso" "T" "$(jf task_started_at)"
+schema_ok "marker after --new-task"
+adv --to implement; eq "AFTER: S entry node implement accepted (was refused at finish/qc-gate)" "0" "$RC"
+eq "AFTER: stage implement" '"implement"' "$(jf stage)"
+# unit rules start from scratch: L task with 3 units after a 3/3 task, index 1 accepted
+newsess; sm set --size L --repo-root "$RN" >/dev/null 2>&1
+for n in intent proposal plan plan-review; do adv --to $n; done
+adv --to implement --unit phase:3/3:c; adv --to verify; adv --to code-review; adv --to qc-gate
+adv --to implement --unit phase:1/3:a; eq "BEFORE: unit 1/3 after a 3/3 task refused (not an edge) -> 3" "3" "$RC"
+sm set --new-task --size L --repo-root "$RN" >/dev/null 2>"$TEST_TMP/err"; RC=$?
+eq "new-task from qc-gate (rc)" "0" "$RC"
+has "warning when the previous task was not at finish" "was at stage qc-gate, not finish" "$(cat "$TEST_TMP/err")"
+for n in intent proposal plan plan-review; do adv --to $n; done
+adv --to implement --unit phase:1/2:a; eq "AFTER: unit 1/2 with a different total accepted" "0" "$RC"
+eq "AFTER: unit written fresh" '{"kind":"phase","index":1,"total":2,"label":"a"}' "$(jf unit)"
+sm set --new-task --size M --repo-root "$RN" >/dev/null 2>&1
+eq "task_seq increments to 3" "3" "$(jf task_seq)"
+# a tolerated first task: marker with no work yet counts as task 1
+newsess; sm set --level none --repo-root "$RN" >/dev/null 2>&1
+sm set --new-task --size M --repo-root "$RN" >/dev/null 2>&1
+eq "workless marker + --new-task -> task_seq 1" "1" "$(jf task_seq)"
+# no live marker at all
+newsess; sm set --new-task --size XS --repo-root "$RN" >/dev/null 2>&1; RC=$?
+eq "--new-task without a marker creates one (rc)" "0" "$RC"
+eq "created marker: task_seq 1, level null, size XS" '1 null "XS"' "$(jf task_seq) $(jf level) $(jf size)"
+# --level interplay
+newsess; sm set --level l5 --size M --repo-root "$RN" >/dev/null 2>&1
+sm set --new-task --level l5 --size S --repo-root "$RN" >/dev/null 2>&1; RC=$?
+eq "--new-task --level <same> accepted" "0" "$RC"
+eq "--level same: level kept, task_seq 2" '"l5" 2' "$(jf level) $(jf task_seq)"
+sm set --new-task --level l3 --size S --repo-root "$RN" >/dev/null 2>"$TEST_TMP/err"; RC=$?
+eq "--new-task --level <different> refused" "2" "$RC"
+has "level refusal names the live level" "live marker is level l5" "$(cat "$TEST_TMP/err")"
+sm set --new-task --level none --size S --repo-root "$RN" >/dev/null 2>"$TEST_TMP/err"; RC=$?
+eq "--new-task --level none on a live l5 marker refused" "2" "$RC"
+eq "refused --level none leaves the level" '"l5"' "$(jf level)"
+newsess; sm set --new-task --level l4 --size S --repo-root "$RN" >/dev/null 2>&1; RC=$?
+eq "--new-task --level l4 without a live marker refused" "2" "$RC"
+sm set --new-task --size BIG --repo-root "$RN" >/dev/null 2>&1; eq "--new-task invalid --size exits 2" "2" "$?"
+# high_risk and base_ref are task-scoped too (high_risk planted: it is normally sampled by stage-advance on an urgent walk)
+newsess; sm set --size M --base-ref "$(printf 'b%.0s' $(seq 1 40))" --repo-root "$RN" >/dev/null 2>&1
+node -e 'const fs=require("fs");const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));m.high_risk=true;fs.writeFileSync(process.argv[1],JSON.stringify(m))' "$MARKER"
+eq "fixture: high_risk planted" "true" "$(jf high_risk)"
+sm set --new-task --size M --repo-root "$RN" >/dev/null 2>&1
+eq "--new-task clears high_risk" "<absent>" "$(jf high_risk)"
+eq "--new-task re-derives base_ref instead of keeping the old task's" "\"$(git -C "$RN" rev-parse HEAD)\"" "$(jf base_ref)"
+sm set --new-task --size M --base-ref "$(printf 'c%.0s' $(seq 1 40))" --repo-root "$RN" >/dev/null 2>&1
+eq "--new-task --base-ref wins" "\"$(printf 'c%.0s' $(seq 1 40))\"" "$(jf base_ref)"
+# urgent/bug are task-scoped
+newsess; sm set --size M --urgent --bug --repo-root "$RN" >/dev/null 2>&1; sm set --new-task --size S --repo-root "$RN" >/dev/null 2>&1
+eq "--new-task resets urgent/bug" "false false" "$(jf urgent) $(jf bug)"
+sm set --new-task --size S --urgent --repo-root "$RN" >/dev/null 2>&1; eq "--new-task --urgent re-sets only urgent" "true false" "$(jf urgent) $(jf bug)"
+# no --size: the new task is unsized
+newsess; sm set --size M --repo-root "$RN" >/dev/null 2>&1; sm set --new-task --repo-root "$RN" >/dev/null 2>&1
+eq "--new-task without --size clears size" "<absent>" "$(jf size)"
+sm set --size L --repo-root "$RN" >/dev/null 2>&1; eq "later set --size on the new task works" '"L"' "$(jf size)"
+
 echo "stage-advance.test: pass=$PASS fail=$FAIL"
 [ "$FAIL" -eq 0 ]

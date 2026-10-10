@@ -114,6 +114,13 @@ test('EN 209: the verdict word, the reason phrase and the `fam` word come from t
   // meta.locale decides when the band cannot (a bare glyph band)
   assert.strictEqual(derive(capture(richFiles(), [], { locale: 'en' })).verdict, 'Stalled');
 });
+test('locale: meta.locale decides (a capture-time record), even against the words the band draws', () => {
+  assert.strictEqual(run(rich(RICH_209_EN, 209, undefined)).derived.locale, 'en');
+  const d = rich(RICH_209_EN, 209); const m = JSON.parse(fs.readFileSync(path.join(d, 'meta.json'), 'utf8')); m.locale = 'zh-TW'; fs.writeFileSync(path.join(d, 'meta.json'), JSON.stringify(m));
+  const r = run(d);
+  assert.strictEqual(r.derived.locale, 'zh-TW'); assert.strictEqual(r.ok, false, 'an en band judged against the recorded zh-TW locale FAILs');
+  assert.ok(fs.readFileSync(path.join(__dirname, 'capture.sh'), 'utf8').includes('locale: E.GATE_LOCALE || E.AUTOPILOT_LOCALE'), 'capture.sh records meta.locale');
+});
 test('EN 130: the mid tier in en', () => {
   assert.strictEqual(run(rich(RICH_MID_EN, 130)).ok, true);
 });
@@ -217,7 +224,10 @@ test('PLANTED RED dispatch: one more live run in the envelope counts', () => {
   const r = mutated({ 'envelope.json': baseEnvelope({ runs: [{ alive: true, stall: true }], counts: { confirmed_live: 3 }, host_today_brain_usd: 123.4, brain_cap_usd: 150 }) });
   assert.deepStrictEqual(r.failed, ['dispatch']);
   // the dispatch count shares its group with the review part: a review part drawn apart (its own ` │ `) is a second group
-  assert.strictEqual(status(run(rich(RICH_209.replace('⚙2 ⏸1 ⟲R2 QC✓', '⚙2 ⏸1 │ ⟲R2 QC✓'), 209)), 'layout'), 'PASS', 'two segments classify fine; priority order is what is judged');
+  assert.strictEqual(status(run(rich(RICH_209.replace('⚙2 ⏸1 ⟲R2 QC✓', '⚙2 ⏸1 │ ⟲R2 QC✓'), 209)), 'layout'), 'FAIL', 'dispatch and review are ONE group: drawn in separate segments FAILs the layout');
+  assert.match(run(rich(RICH_209.replace('⚙2 ⏸1 ⟲R2 QC✓', '⚙2 ⏸1 │ ⟲R2 QC✓'), 209)).results.find((x) => x.name === 'layout').detail, /one group/);
+  // a lone review segment (no dispatch facts) stays legal
+  assert.strictEqual(status(run(rich(RICH_209.replace('⚙2 ⏸1 ⟲R2 QC✓', '⟲R2 QC✓'), 209, { 'envelope.json': baseEnvelope({ host_today_brain_usd: 123.4, brain_cap_usd: 150 }) })), 'layout'), 'PASS', 'the group rule does not trip on a lone review segment');
 });
 test('PLANTED RED review: another review round', () => {
   assert.deepStrictEqual(mutated({ 'review.json': { schema: 'autopilot.review/1', project_key: PK, code: { generation: 3 } } }).failed, ['review']);

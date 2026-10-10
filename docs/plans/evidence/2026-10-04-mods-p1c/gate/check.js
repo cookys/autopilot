@@ -687,6 +687,8 @@ function judgeBand(d, band) {
   res('ⓘ', iconDrawn ? 'PASS' : 'FAIL', 'ⓘ', iconDrawn ? 'ⓘ' : 'none', 'contract slot 9: always drawn');
   // layout: classification complete, no duplicates / empty segment, slots in priority order, fits bodyColumns, ⓘ last
   const problems = [...extra];
+  // dispatch and review are ONE group: both drawn, but in different segments, is a layout fault (a lone review segment is legal)
+  if (drawn.dispatch !== undefined && drawn.review !== undefined && !segs.some((sg) => / (⟲R\d+|QC[✓▲])/.test(sg) && /^(⚙|⏸)/.test(sg))) problems.push('dispatch and review are one group (joined by a space), drawn in separate segments');
   const rank = order.map((n) => SLOT_ORDER.indexOf(n));
   if (rank.some((r, i) => i > 0 && r < rank[i - 1])) problems.push(`slots out of priority order: ${order.join(',')}`);
   if (segs.some((sg) => sg === '')) problems.push('an empty segment (doubled separator)');

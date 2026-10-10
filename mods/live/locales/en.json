@@ -118,6 +118,7 @@
   "label.host": "host today",
   "label.fuse": "cost fuse",
   "label.source": "source",
+  "label.marketplace": "marketplace",
   "label.flags": "flags",
 
   "now.needs_you": "Needs you",

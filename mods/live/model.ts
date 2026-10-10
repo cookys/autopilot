@@ -1461,7 +1461,7 @@ export function layoutBand(slots: Slot[], columns: number): BandLayout {
   }
   // the verdict's reason phrase (wide bands only): whatever room is left, clipped, right after the verdict word
   const room = columns - widthOf(segs) - 1
-  if (rs.text !== null && segs[0] !== undefined && kept[0] !== undefined && kept[0].id === 'verdict' && room >= REASON_MIN) {
+  if (rs.text !== null && segs[0] !== undefined && kept[0] !== undefined && kept[0].id === 'verdict' && room >= REASON_MIN) { // widthOf() already counts the ⓘ, so room = free cells - 1 and the inserted ' ' + reason (1 + room) fills the line exactly
     segs = [segs[0], sp(' ' + truncateToWidth(rs.text, Math.min(room, REASON_MAX)), { dim: true }), ...segs.slice(1)]
   }
   return { segs, text: segs.map(g => g.text).join('') + BAND_ICON, width: widthOf(segs) }
@@ -1775,7 +1775,7 @@ export function reviewTabLines(snap: LiveSnapshot, ctx: PaneCtx = { t: T_EN, col
       out.push(kv(t('label.decisions'), seg('◆ ' + dv.count, undefined, true), seg(' ' + t('review.made')), dseg('   ? ' + dv.undocumented + ' ' + t('review.undocumented'))))
       if (dv.ladder === null) out.push(NO_DATA(t, 'nodata.ladder'))
       else {
-        const n = Number(dv.ladder.rung.slice(1))
+        const n = Math.max(0, Math.min(5, Number(dv.ladder.rung.slice(1)) || 0))
         const ago = d.now_ms !== null ? ' · ' + agoText((d.now_ms - Date.parse(dv.ladder.at)) / 1000, t) : ''
         out.push(kv(t('label.ladder'), seg('▰'.repeat(n + 1), 'success'), seg('▱'.repeat(5 - n), 'inactive'), seg('  '), seg(dv.ladder.rung, undefined, true), dseg('  U0 ─ U5' + ago)))
       }
@@ -1837,7 +1837,7 @@ export function hygieneTabLines(snap: LiveSnapshot, ctx: PaneCtx = { t: T_EN, co
     out.push(rule(t('hygiene.load'), [chip !== null && chip.warn ? seg('⚠ ' + chip.text, 'warning') : seg(chip === null ? '—' : chip.text, 'success')], ctx.cols))
     const behind = ls.behind_upstream
     out.push(kv(t('label.source'), seg(loadSourceFor(ls, null), undefined, true), seg('  v' + (ls.plugin_version ?? '—')), ...(behind !== null && behind > 0 ? [seg('  ↓' + behind, 'warning'), dseg(' ' + t('hygiene.behind'))] : [])))
-    out.push(kv('marketplace', ls.marketplace === 'missing' ? seg('✗ ' + ls.marketplace, 'warning') : seg('✓ ' + ls.marketplace, 'success')))
+    out.push(kv(t('label.marketplace'), ls.marketplace === 'missing' ? seg('✗ ' + ls.marketplace, 'warning') : seg('✓ ' + ls.marketplace, 'success')))
     if (ls.flags.length > 0) out.push(kv(t('label.flags'), seg(ls.flags.join(', '), 'warning')))
     for (const dir of ls.stale_cache_dirs) out.push({ text: '  ' + t('hygiene.cache_dir', { dir: dir.dir, pids: dir.in_use_pids.join(', ') || '—', alive: dir.alive.join(', ') || '—' }), dim: true })
     out.push(BLANK)

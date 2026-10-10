@@ -7,7 +7,8 @@
 //   node mods/live/gen-locales.js           write locales.ts
 //   node mods/live/gen-locales.js --check   exit 1 on: locales.ts drift from the JSON · an id missing from either file · a placeholder set that differs
 //                                           between the two files · a `t('id')` literal in the code that en lacks · an en id nothing uses ·
-//                                           a key-column label (label.*) wider than 12 display cells in either locale
+//                                           a key-column label (label.*) wider than 12 display cells in either locale ·
+//                                           a kv()/rule() label passed as a literal instead of t()
 //
 // exit codes: 0 ok · 1 check failed · 2 usage / unreadable input
 
@@ -69,6 +70,8 @@ function check(en, zh) {
     if (DYNAMIC_PREFIXES.some((p) => id.startsWith(p))) continue;
     if (!code.includes(`'${id}'`)) problems.push(`en id ${id} is not used by the code`);
   }
+  // a key-column label or a rule title passed as a string literal is an untranslated word: kv('x', ...) / rule('x', ...) must go through t()
+  for (const m of code.matchAll(/\b(kv|rule)\(\s*'([^']+)'/g)) problems.push(`${m[1]}('${m[2]}', ...) passes a literal label; use t('label.…') / t('…')`);
   const generated = render(en, zh);
   let onDisk = null;
   try { onDisk = fs.readFileSync(path.join(dir, 'locales.ts'), 'utf8'); } catch (_e) { /* none */ }

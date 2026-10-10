@@ -63,7 +63,7 @@
 // in-memory tree; a missing file makes the bottom hook throw, which the mod sees as a rejected read.
 import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
-import { readQc, qcChip, readReview, reviewSlot, displayWidth, truncateToWidth, layoutBand, readMarker, readResidue, readStageWalk, bandSlots, slotUnit, slotPosition, slotDispatch, slotDecisions, slotSpend, slotHygiene, slotReview, readLoadSource, PANE_TABS, verdictOf } from './model'
+import { readQc, qcChip, readReview, reviewSlot, displayWidth, truncateToWidth, layoutBand, readMarker, readResidue, readStageWalk, bandSlots, slotUnit, slotPosition, slotDispatch, slotDecisions, slotSpend, slotHygiene, slotReview, readLoadSource, PANE_TABS, verdictOf, reviewTabLines } from './model'
 import { makeT, resolveLocale, localeFromLanguage } from './i18n'
 import { EN, ZH_TW } from './locales'
 import type { Slot } from './model'
@@ -310,14 +310,14 @@ for (const surface of SURFACES) {
     world(on, base())
     await start($, surface)
     expect(await bandText($, surface)).toBe(FRESH_TEXT())
-    expect((await paneHeader($, surface))).toBe('session $0.42 · host $3.10 · ctx 37%')
+    expect((await paneHeader($, surface))).toBe('工作階段 $0.42 · 本機 $3.10 · ctx 37%')
   })
 
   test('band: two sessions of one repo each show their own sid cost and ctx (' + surface + ')', async ($, on) => {
     const w = world(on, base(), NOW_FRESH, SID_B)
     await start($, surface)
     const text = await paneHeader($, surface)
-    expect(text).toContain('session $9.99 · host $3.10')
+    expect(text).toContain('工作階段 $9.99 · 本機 $3.10')
     expect(text).toContain('ctx 88%')
     expect(text).not.toContain('$0.42')
     expect(text).not.toContain('ctx 37%')
@@ -331,7 +331,7 @@ for (const surface of SURFACES) {
     world(on, files)
     await start($, surface)
     const text = await paneHeader($, surface)
-    expect(text).toBe('session $— · host $— · ctx —')
+    expect(text).toBe('工作階段 $— · 本機 $— · ctx —')
     expect(text).not.toContain('$0')
     expect(text).not.toContain('ctx 0')
   })
@@ -385,7 +385,7 @@ for (const surface of SURFACES) {
     await $.session.end({ reason: 'clear', sessionId: SID_A, resume: {} } as never)
     await w.clock.advance(5000) // the timer must have survived the clear
     expect(await bandText($, surface)).toContain('疑似卡住 repo')
-    expect(await paneHeader($, surface)).toBe('session $— · host $3.10 · ctx —')
+    expect(await paneHeader($, surface)).toBe('工作階段 $— · 本機 $3.10 · ctx —')
   })
 
   test('band: an expired marker is ignored (' + surface + ')', async ($, on) => {
@@ -512,7 +512,7 @@ for (const surface of SURFACES) {
     files[LIVE + '/runs/' + KEY + '.json'] = j(envelope({ host_today_usd: 1.25 }, null))
     world(on, files)
     await start($, surface)
-    expect(await paneHeader($, surface)).toContain('host $1.25')
+    expect(await paneHeader($, surface)).toContain('本機 $1.25')
   })
 
   test('PLAINROOT band: a plain marker (level null) carrying a job root reads that root scope, not the project scope (' + surface + ')', async ($, on) => {
@@ -525,7 +525,7 @@ for (const surface of SURFACES) {
     world(on, files)
     await start($, surface)
     const header = await paneHeader($, surface)
-    expect(header).toContain('host $1.25')
+    expect(header).toContain('本機 $1.25')
     expect(header).not.toContain('7.77')
   })
 
@@ -562,7 +562,7 @@ for (const surface of SURFACES) {
     const r3 = rows.find(t => t.includes(' r3 ')) as string
     expect(r1).toContain('implementer')
     expect(r1).toContain('codex / gpt')
-    expect(r1).toContain('● run')
+    expect(r1).toContain('● 執行')
     expect(r2).toContain('⏸ 疑似卡住')
     expect(r3).toContain('✓ rc 0')
     expect(rows.some(t => t.includes('這是執行狀態，不是進度'))).toBe(true)
@@ -890,14 +890,14 @@ for (const surface of SURFACES) {
     put(w.files, null, { progress: { frozen: false, percent: null, done: 3, total: null } })
     await w.clock.advance(5000)
     p = await bandParts($, surface)
-    expect(p.line1.endsWith('· 3 done*')).toBe(true)
+    expect(p.line1.endsWith('· 已完成 3*')).toBe(true)
     expect(p.line1).not.toContain('%')
     expect(p.last?.props?.dimColor).toBe(true)
     // a percent that arrives next to an unfrozen flag is not shown either
     put(w.files, null, { progress: { frozen: false, percent: 37.5, done: 3, total: 8 } })
     await w.clock.advance(5000)
     p = await bandParts($, surface)
-    expect(p.line1.endsWith('· 3 done*')).toBe(true)
+    expect(p.line1.endsWith('· 已完成 3*')).toBe(true)
     expect(p.line1).not.toContain('%')
     expect(p.last?.props?.dimColor).toBe(true)
     // a frozen flag without a usable percent / total is not trusted: the percent is not invented
@@ -905,7 +905,7 @@ for (const surface of SURFACES) {
     await w.clock.advance(5000)
     p = await bandParts($, surface)
     expect(p.line1).not.toContain('%')
-    expect(p.line1.endsWith('· 3 done*')).toBe(true)
+    expect(p.line1.endsWith('· 已完成 3*')).toBe(true)
   })
 
   test('progress: no job model, no progress, or no count is an em dash, never 0 and never a percent (' + surface + ')', async ($, on) => {
@@ -1004,7 +1004,7 @@ for (const surface of SURFACES) {
     const text = await bandText($, surface)
     expect(text).not.toMatch(/\$|ctx|host|session/)
     const pane = await paneParts($, surface)
-    expect(pane.texts[0]).toBe('session $0.42 · host $3.10 · ctx 37%')
+    expect(pane.texts[0]).toBe('工作階段 $0.42 · 本機 $3.10 · ctx 37%')
   })
 
   test('pane: when a decision is awaited it is the first section, built from the model decision; the Link stays (' + surface + ')', async ($, on) => {
@@ -1014,7 +1014,7 @@ for (const surface of SURFACES) {
     await start($, surface)
     let pane = await paneParts($, surface, 'now')
     expect(pane.texts[0]).toContain('▲ 要你決定') // the hero row (verdict · project · since) is the first line
-    expect(pane.texts.find(t => t.startsWith('session $'))).toBe('session $0.42 · host $3.10 · ctx 37%') // the header stays on top, dim
+    expect(pane.texts.find(t => t.startsWith('工作階段 $'))).toBe('工作階段 $0.42 · 本機 $3.10 · ctx 37%') // the header stays on top, dim
     const rule = pane.texts.findIndex(t => t.startsWith('── 要你處理')) // the awaited decision is the first section (before "where you are")
     expect(rule).toBeGreaterThan(0)
     expect(rule).toBeLessThan(pane.texts.findIndex(t => t.startsWith('── 現在在哪')))
@@ -1022,7 +1022,7 @@ for (const surface of SURFACES) {
     expect(pane.texts[rule]).toContain('▲ 1') // the section badge counts what awaits you
     const disp = await paneParts($, surface, 'dispatch') // the table is still there, on its own tab, and so is the Link
     expect(disp.texts.some(t => t.includes('這是執行狀態，不是進度'))).toBe(true)
-    expect(disp.texts.some(t => t.startsWith('── Review gate'))).toBe(true)
+    expect(disp.texts.some(t => t.startsWith('── 審查關卡'))).toBe(true)
     expect(disp.texts.some(t => t.includes('要合併 plan 還是拆開？'))).toBe(false)
     expect(disp.href).toBe('http://localhost:8787/' + KEY + '/2026-10-04/' + ROOT + '/current/')
     // fields that do not exist are not shown: a question with no options, then no decision at all
@@ -1313,7 +1313,7 @@ for (const surface of SURFACES) {
     const w = world(on, files)
     await start($, surface)
     let p = await bandParts($, surface)
-    expect(p.line1).toBe('● 進行中 repo · — · 30m · 1 done*') // GATEFIX: a task in progress is 進行中 (was 待命); root scope with tasks and no receipt: tasks first_created_at (09:30), progress unfrozen
+    expect(p.line1).toBe('● 進行中 repo · — · 30m · 已完成 1*') // GATEFIX: a task in progress is 進行中 (was 待命); root scope with tasks and no receipt: tasks first_created_at (09:30), progress unfrozen
     const last = p.last as Node
     expect(last.props?.dimColor).toBe(true)
     const pane = await paneParts($, surface, 'now')
@@ -1323,7 +1323,7 @@ for (const surface of SURFACES) {
     files[P_TASKS()] = j(allDone())
     await w.clock.advance(5000)
     p = await bandParts($, surface)
-    expect(p.line1).toBe('✓ 完成待驗收 repo · — · 30m · 2 done*')
+    expect(p.line1).toBe('✓ 完成待驗收 repo · — · 30m · 已完成 2*')
     expect(p.line2).toBe('任務 2/2 都完成，等你驗收')
     // a live run beats "tasks all done"
     files[W_ENV] = j(envelope({ runs: [row({ run_id: 'r1' })], counts: quiet(1) }))
@@ -1355,7 +1355,7 @@ for (const surface of SURFACES) {
     files[LIVE + '/context/' + SID_FILE + '.json'] = j(context(55))
     const w = world(on, files, NOW_FRESH, SID_RAW)
     await start($, surface)
-    expect((await bandParts($, surface)).line1.endsWith('1 done*')).toBe(true)
+    expect((await bandParts($, surface)).line1.endsWith('已完成 1*')).toBe(true)
     expect(await paneHeader($, surface)).toContain('ctx 55%') // the context file name is sanitised too
     files[P_TASKS(SID_FILE)] = j({ ...tasksFile({}, SID_RAW), schema: 'other/1' })
     // wrong schema: the file is absent, so no manifest means no task section at all
@@ -1524,7 +1524,7 @@ for (const surface of SURFACES) {
     await start($, surface)
     const pane = await paneParts($, surface)
     const t = pane.texts
-    expect(t).toContain('工頭活動（依 session 綁定：同一 session 的多個工作會看到同一批）')
+    expect(t).toContain('工頭活動（依工作階段綁定：同一工作階段的多個工作會看到同一批）')
     expect(t).toContain('修 parser · running · 30s 前')
     expect(t).toContain('a2 · last tool: Bash · 20m 前 · 久未動')
     expect(t).toContain('階段 implement · 1m 前（run_ledger:tmp）')
@@ -1733,18 +1733,18 @@ for (const surface of SURFACES) {
     files[P_SOURCES] = j(manifest({ context: OFF }))
     const w = world(on, files)
     await start($, surface)
-    expect(await paneHeader($, surface)).toBe('session $0.42 · host $3.10 · ctx 來源未接')
+    expect(await paneHeader($, surface)).toBe('工作階段 $0.42 · 本機 $3.10 · ctx 來源未接')
     files[P_SOURCES] = j(manifest())
     files[LIVE + '/context/' + SID_A + '.json'] = j({ schema_version: 1, session_id: SID_A, written_at: '2026-10-04T10:00:20.000Z', writer: 'context-budget', window_source: 'unknown', model: {}, context_window: { context_window_size: null, used_percentage: null, total_input_tokens: 90000, current_usage: {} } })
     await w.clock.advance(5000)
-    expect(await paneHeader($, surface)).toBe('session $0.42 · host $3.10 · ctx —')
+    expect(await paneHeader($, surface)).toBe('工作階段 $0.42 · 本機 $3.10 · ctx —')
     files[LIVE + '/context/' + SID_A + '.json'] = j({ schema_version: 1, session_id: SID_A, written_at: '2026-10-04T10:00:20.000Z', writer: 'context-budget', window_source: 'observed', model: {}, context_window: { context_window_size: 1000000, used_percentage: 9, total_input_tokens: 90000, current_usage: {} } })
     await w.clock.advance(5000)
-    expect(await paneHeader($, surface)).toBe('session $0.42 · host $3.10 · ctx 9%')
+    expect(await paneHeader($, surface)).toBe('工作階段 $0.42 · 本機 $3.10 · ctx 9%')
     // data beats the manifest
     files[P_SOURCES] = j(manifest({ context: OFF }))
     await w.clock.advance(5000)
-    expect(await paneHeader($, surface)).toBe('session $0.42 · host $3.10 · ctx 9%')
+    expect(await paneHeader($, surface)).toBe('工作階段 $0.42 · 本機 $3.10 · ctx 9%')
   })
 }
 
@@ -2222,8 +2222,8 @@ for (const surface of SURFACES) {
     expect(tabButtons.filter(b => b.props?.autoFocus === true).length).toBe(1)
     await pane.unmount()
     expect(texts[0]).toContain('⏸ 疑似卡住') // the Now tab: its hero row, then the dim header
-    expect(texts.some(t => t.startsWith('session $'))).toBe(true)
-    expect(texts.some(t => t.startsWith('── band 上的符號'))).toBe(false) // not the legend
+    expect(texts.some(t => t.startsWith('工作階段 $'))).toBe(true)
+    expect(texts.some(t => t.startsWith('── 狀態列上的符號'))).toBe(false) // not the legend
   })
 
   test('P7 band: the info press cycles the six tabs while the pane is open; closed it opens on Now (' + surface + ')', async ($, on) => {
@@ -2423,32 +2423,32 @@ for (const surface of SURFACES) {
     world(on, richWorld())
     await start($, surface)
     const tab = async (id: string) => paneParts($, surface, id)
-    const has = (texts: string[], ...parts: string[]) => texts.some(t => parts.every(p => t.includes(p)))
+    const has = (texts: string[], ...parts: string[]) => { const ok = texts.some(t => parts.every(p => t.includes(p))); if (!ok) throw new Error('no line has: ' + parts.join(' | ')); return ok }
     const legend = await tab('legend')
-    expect(legend.texts[0]).toContain('band 上的符號')
+    expect(legend.texts[0]).toContain('狀態列上的符號')
     for (const glyph of ['▲ 要你決定', '⏸ 疑似卡住', '✓ 完成待驗收', '● 進行中', '◌ 待命', '⚙2', '⟲', 'QC✓', 'QC▲', '◆3', '?1', '$85', '⚑3', 'ⓘ', '◐']) expect(joined(legend.texts)).toContain(glyph)
     expect(legend.texts.some(t => t.includes('Ctrl+x Tab'))).toBe(true)
     expectThemeOnly(legend.tree as Drawn, true)
 
     const now = await tab('now')
     expect(now.texts[0]).toContain('⏸ 疑似卡住  repo')
-    expect(now.texts).toContain('session $0.42 · host $3.10 · ctx 37%')
+    expect(now.texts).toContain('工作階段 $0.42 · 本機 $3.10 · ctx 37%')
     expect(has(now.texts, '階段', 'implement', '已在此階段 3m', 'M!·l5')).toBe(true)
-    expect(has(now.texts, '單元', '▰▰▰▱▱ 3/5', 'band (deliverable)', '2 個 review 家族')).toBe(true)
+    expect(has(now.texts, '單元', '▰▰▰▱▱ 3/5', 'band (deliverable)', '2 個審查家族')).toBe(true)
     const walk = now.texts.find(t => t.includes('◐')) as string // the stage-walk diagram: five nodes, the third is the current one
     expect(walk.match(/[●◐○]/g)?.join('')).toBe('●●◐○○')
-    expect(now.texts.some(t => t.includes('implement') && !t.includes('◐') && !t.includes('階段') && !t.includes('⏸'))).toBe(true) // the label row under the diagram
+    expect(now.texts.some(t => t.includes('實作') && !t.includes('◐') && !t.includes('階段') && !t.includes('⏸'))).toBe(true) // the label row under the diagram (stage ids are translated labels)
     expect(has(now.texts, '派工', '⚙ 2', '2 個執行中', '1 個疑似卡住')).toBe(true)
     expect(has(now.texts, '審查', '⟲ R3', 'QC✓')).toBe(true)
     expect(now.texts.some(t => t.startsWith('最久的派工 4m 沒有輸出'))).toBe(true) // the verdict reason, dim, under the hero row
     expectThemeOnly(now.tree as Drawn, true)
 
     const dispatch = await tab('dispatch')
-    expect(has(dispatch.texts, ' r1 ', 'implementer', '● run')).toBe(true)
+    expect(has(dispatch.texts, ' r1 ', 'implementer', '● 執行')).toBe(true)
     expect(has(dispatch.texts, '⚙ 2', '執行中', '⏸ 1 疑似卡住', '✓ 1 已完成')).toBe(true)
 
     const review = await tab('review')
-    expect(has(review.texts, 'Code review', '▲ 未收斂')).toBe(true)
+    expect(has(review.texts, '程式碼審查', '▲ 未收斂')).toBe(true)
     expect(has(review.texts, '輪次', 'R3', '11111111..aaaaaaaa', 'p7')).toBe(true)
     expect(has(review.texts, 'Push 前 QC', '✓ 證據齊全')).toBe(true)
     expect(has(review.texts, '證據', 'trailer', '2 個受保護檔案在範圍內', '11111111..aaaaaaaa')).toBe(true)
@@ -2461,14 +2461,14 @@ for (const surface of SURFACES) {
     expect(has(spend.texts, '$120.40', '/ $150.00')).toBe(true)
     expect(has(spend.texts, '80 %')).toBe(true)
     expect(has(spend.texts, '本機今日', '$3.10', '所有層')).toBe(true)
-    expect(has(spend.texts, '本 session', '$0.42') || has(spend.texts, 'session', '$0.42')).toBe(true)
+    expect(has(spend.texts, '工作階段', '$0.42')).toBe(true)
     expect(has(spend.texts, '花費保險絲', 'warn 模式', '只提醒、不擋')).toBe(true)
     expectThemeOnly(spend.tree as Drawn, true)
 
     const hygiene = await tab('hygiene')
     expect(has(hygiene.texts, '外掛載入來源', 'dev ↓3')).toBe(true)
     expect(has(hygiene.texts, '來源', 'dev', 'v2.37.0', '↓3', '落後 upstream')).toBe(true)
-    expect(has(hygiene.texts, 'marketplace', '✓ directory')).toBe(true)
+    expect(has(hygiene.texts, '市集', '✓ directory')).toBe(true)
     expect(has(hygiene.texts, '要你處理的 worktree 與分支', '⚑ 2', '3 MB')).toBe(true)
     expect(hygiene.texts).toContain('2 項要你處理 · 3 MB · 3h0m 前自動清理：刪 2 個 worktree、封存 1 條分支')
     expect(has(hygiene.texts, '⚑', 'worktree', '…/worktrees/hands-x', 'dirty · 4d · 2 MB · failure')).toBe(true)
@@ -2923,3 +2923,41 @@ for (const surface of SURFACES) {
     })
   }
 }
+
+// ---- review round 1 fixes ----
+test('layoutBand: a long reason at 160 and 209 columns with every slot drawn keeps the line within the budget and the ⓘ in its cell (finding 1 was a false alarm: widthOf counts the ⓘ; mutation room+1 turns this red)', () => {
+  for (const locale of ['en', 'zh-TW'] as const) {
+    const t = makeT(locale)
+    for (const cols of [160, 170, 175, 180, 209]) {
+      for (const reason of ['x'.repeat(200), '要不要把這個很長很長很長很長很長很長很長很長很長很長很長很長的 plan 拆開來分段做？'.repeat(3)]) {
+        const facts = { ...gridFacts('blocked', t), reason }
+        const line = layoutBand(bandSlots(facts as never, t), cols)
+        expect(displayWidth(line.text), locale + ' ' + cols).toBeLessThanOrEqual(cols)
+        expect(line.text.endsWith('ⓘ'), locale + ' ' + cols).toBe(true)
+        expect(line.width).toBe(displayWidth(line.text))
+      }
+    }
+  }
+  // exactly at the edge: find the width where the reason first fits and check the line is still within it
+  const t = makeT('en')
+  const noReason = layoutBand(bandSlots({ ...gridFacts('blocked', t), reason: null } as never, t), 209).width
+  for (let cols = noReason; cols < noReason + 14; cols += 1) {
+    const withReason = layoutBand(bandSlots({ ...gridFacts('blocked', t), reason: 'a reason phrase long enough to clip' } as never, t), Math.max(cols, 160))
+    expect(withReason.width).toBeLessThanOrEqual(Math.max(cols, 160))
+  }
+})
+
+test('Review tab: a ladder rung outside U0..U5 is clamped, never a negative repeat', () => {
+  const snap = (rung: string) => ({
+    header: 'h', review: null, decision: null, sections: { attention: [], waiting: [], tasks: [], decisions: [], foreman: [] },
+    detail: { qc: null, now_ms: 1000, decisions: { rows: [], count: 1, irreversible: 0, writers: [], undocumented: 0, identity: null, root: null, ladder: { rung, at: new Date(0).toISOString() } } },
+  }) as never
+  for (const rung of ['U7', 'U9', 'U5', 'U0', 'Ux']) {
+    const lines = reviewTabLines(snap(rung))
+    const row = lines.find(l => l.text.includes('U0 ─ U5'))!
+    const filled = (row.text.match(/▰/g) || []).length
+    const empty = (row.text.match(/▱/g) || []).length
+    expect(filled + empty, rung).toBe(6)
+    expect(filled, rung).toBe(rung === 'U7' || rung === 'U9' || rung === 'U5' ? 6 : 1) // clamped to 5 -> six cells filled; U0 and a bad number -> one
+  }
+})

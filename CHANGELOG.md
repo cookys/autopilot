@@ -1,5 +1,32 @@
 # Changelog
 
+## v3.0.0-alpha.6 — 同一個 session 開第二個任務可以用 `set --new-task` 重走階段流程，用量分頁多一條 24 小時走勢線，鍵盤也能切分頁（pre-release，供 owner 測試）
+
+這是 3.0.0 的第六個 pre-release，不是 stable。alpha.5 留下的三個畫面後續（第二個任務、鍵盤切分頁、用量走勢）這版都處理了。其中「第二個任務」同時動了 `session-mode.js` 與 dev-flow、`/l4`、`/l5`、`/l6` 的說明文字，所以另外做了一組事先登記的 ON/OFF 測驗。
+
+### 改動
+
+- **新任務重設階段**：`node scripts/session-mode.js set --new-task` 會清掉上一個任務的 stage、unit、`review_families`、`high_risk`、size、`urgent`、`bug`、`base_ref`，保留等級與工作階段欄位，`task_seq` 加 1，所以 band 與 Graph 會從頭開始。**什麼時候用**：上一個任務已經完成（走到 finish）、同一個 live session 要開始另一個新任務的時候。**什麼時候不能用**：續接同一個任務（接著昨天的進度、補修同一件事、resume）不能用，因為會把還在進行中的階段與 unit 清掉。上一個任務還沒到 finish 就重設，指令仍會執行，只會印一行警告，所以只有確定上一個任務結束才下這個指令。`--level` 一定要等於目前的等級，不能順便換等級。階段紀錄器（`src/status/stage-walk.js`）會把 `task_seq` 一起發佈。
+- **說明文字**：dev-flow 與 `/l4`、`/l5`、`/l6` 各補一小段，說明上一個任務完成後的新任務（不是續接）改用 `set --new-task`，不要再用 `set --size` 去蓋。
+- **鍵盤切分頁**：在各種寬度下，按 Ctrl+x Tab 再按 Enter 都能穩定切到下一個分頁。做法是在面板最前面加一顆「▸ 下一頁」按鈕，讓鍵盤焦點有地方落。
+- **用量走勢線**：用量分頁新增最近 24 小時的每小時花費走勢線。資料由監看程式（runs watcher）每 15 分鐘記一次全機花費，保留 48 小時，存在 `<live>/runs/spend-history.json`（`<live>` 是 live 狀態目錄，在 tmpfs 上，重開機就沒了）。
+- **gate 截圖轉換器**：`ansi2html` 現在正確處理 OSC 8 超連結控制碼，Dispatch 分頁的 PNG 不再出現原始的 `]8;…` 文字。
+- **測驗工具**：stage-graph 測驗釘版改成 Claude Code 2.1.296（2.1.292 被自動更新刪掉了），並改用不會被刪的複本 `~/.autopilot/claude-pin`；判定程式修正同一行指令的順序判斷，並讓每一輪的對話紀錄各放各的目錄。
+
+### 驗證
+
+- **g8 新題組**（`set --new-task` 的說明文字，事先登記）v1 通過：dev-flow 改版 3/3、未改 1/3；`/l4` 改版 3/3、未改 0/3。
+- **stage-graph 舊題回歸**：v9 未通過（9/12），照實記錄，原因是判定程式把同一行裡兩個指令的順序誤判了一次，再加上取樣隨機，與新文字無關。修訂 5 修正判定程式後，用與 v9 逐字相同的文字重跑 v10：通過，改動版 10/12、刻意改壞版 3/12、舊情境 4 項無退步（Claude Code 2.1.296）。
+- **cut gate**：`check-guidance-eval.js --base 8a10980f --results evals/skill-onoff/results/stage-graph.v10.jsonl` 結束碼 0。
+- **hetero review**：新任務重設與三項畫面後續審過，由 opus、GLM、Qwen 席位審查，修到沒有未結意見。
+
+### 已知後續
+
+- 判定程式在整個工具呼叫被拒絕時會略過 classify：例如 `classify; stage-advance` 裡 advance 被拒絕，已經成功的 classify 會漏記（`evals/skill-onoff/lib/stage-graph-cell.js` 的 `!refused` 條件，BACKLOG 列）。這和 v9 那次「同一行指令順序」的誤判是不同的問題，同樣屬於判定程式本身，下一次跑 stage-graph 測驗前要先修。
+- 走勢線只有這台機器記錄的花費，而且存在 tmpfs，重開機後要等 24 小時才會畫滿。
+
+prose-justification: 本版只在 dev-flow 加 4 行、`/l4`、`/l5`、`/l6` 各加 2 行說明 `set --new-task` 的使用時機，這是第二個任務原本沒有可用指令的缺口；已由 g8 測驗（改版 3/3 對未改 1/3 與 0/3）和 stage-graph v10 回歸（無退步）驗證有效。
+
 ## v3.0.0-alpha.5 — 即時 TUI 重新設計：資訊圖表化的 band 與六個分頁的面板，支援英文與正體中文（pre-release，供 owner 測試）
 
 這是 3.0.0 的第五個 pre-release，不是 stable。這版把 Claude Code 裡的 live mod（輸入框上方的 band 與展開的面板）整個重新設計，並加上雙語介面。沒有改任何 skill 文字，也沒有 script 或 hook 的行為變更；只動 `mods/live`、gate 工具與文件。從 alpha.4 升級不需要遷移，唯一看得到的差別是 band 上的 `wt N` 改成 `⚑N`（見下）。

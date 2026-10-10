@@ -261,6 +261,7 @@ Small batches that bump the version but don't warrant a project README. Source o
 
 | Date | Ship | Version | Merge |
 |------|------|---------|-------|
+| 2026-10-10 | session 收尾由 finish-flow 直接刪本 session 的 dispatch 分支並印還原指令；封存 ref 超過 90 天只提醒；`/l4`–`/l6` 進場必須指定 size；v8 與 G6／G7 eval 皆 SHIP | v3.0.0-alpha.4 | — | [CHANGELOG](../../CHANGELOG.md) |
 | 2026-10-09 | 殘留 worktree 與 dispatch 分支自動回收（預設開啟的 SessionStart hook）；band `wt N` 改為需人處理數；真實 session 證明 11 項 PASS，三輪 hetero review SHIP-AS-IS | v3.0.0-alpha.3 | — | [CHANGELOG](../../CHANGELOG.md) |
 | 2026-10-09 | mods band 改成單行多 widget 加 ⓘ 八分頁面板（P7 本體）；alpha.1 pre-release 版號回歸修正；real-machine gate 171 張中 170 PASS | v3.0.0-alpha.2 | — | [CHANGELOG](../../CHANGELOG.md) |
 | 2026-10-09 | dev-flow 改成具名 stage graph（MAJOR pre-release，供 owner 測試）；v6 guidance eval SHIP；total QC SHIP-AS-IS | v3.0.0-alpha.1 | — | [CHANGELOG](../../CHANGELOG.md) |

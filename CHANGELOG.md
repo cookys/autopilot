@@ -1,5 +1,38 @@
 # Changelog
 
+## v3.0.0-alpha.4 — session 收尾時直接刪掉本 session 的 dispatch 分支並印出還原指令，/l4–/l6 進場必須指定 size（pre-release，供 owner 測試）
+
+這是 3.0.0 的第四個 pre-release，不是 stable。alpha.3 把「安全的殘留」自動收掉，這版補上另一半：session 做完時，由 finish-flow 收尾明確收掉這個 session 自己的 dispatch 分支。同時修掉 mods band、tooling 與 worktree 判斷的一批問題，並把 `/l4`–`/l6` 進場要設定 size 這件事寫進 guidance。沒有破壞性變更，從 alpha.3 升級不需要遷移；唯一的行為變化是 `/l4`–`/l6` 進場現在必須帶 `--size`（見下）。
+
+### 改動
+
+- **session 收尾（close-out）**：`dispatch-hetero.sh` 與 `dispatch-foreman.sh` 建分支時，把「分支屬於哪個 session」記進 `<git-common-dir>/autopilot/dispatch-branches.jsonl`。新指令 `scripts/repo-residue-sweep.js close-session --session <id> --yes` 依這份紀錄處理本 session 的分支。
+  - **會刪除**：本 session 尚未整合的 dispatch 分支，直接刪除，不再先封存。每刪一條就印一行還原指令 `git branch <name> <tip>`；分支尖端在 git gc 之前都還找得到，大約 2 週，所以還原指令在這段期間內有效。
+  - **只在 finish-flow 收尾時執行，不在 handoff 時執行**。handoff 是把工作交給下一個 session，下一個 session 可能還要用這些分支，只有 finish-flow 才表示這件事做完了。finish-flow 新增 `Dispatch-branch close-out` 一列，handoff 會略過它。
+  - **會保留**：目前被 checkout 的分支（刪除前再查一次）、還有活著 worktree 的分支、屬於未結 campaign 的分支。分支歸屬看最新一筆紀錄，並且要和現有 ref 的生命週期對得上；foreman 底下 hand 的分支算 foreman 那個 session 的。刪除用帶預期 tip 的 `update-ref -d`，tip 被別人動過就不刪。
+  - **14 天自動路徑不變**：`reap --auto` 對超過 `archive_branch_days` 沒活動的未整合分支仍然先封存再刪。只有 close-session 這個明確的收尾動作直接刪除。
+- **封存 ref 老化提醒**：超過 `residue.archive_remind_days`（預設 90 天）的 `refs/archive/*` 會列入 `needs_human`（kind `archive-ref/archive-old`），附一行指令讓人自己決定。只提醒，永遠不會自動刪除。
+- **沒設定 autopilot 的 repo 也看得到 `wt N`**：mods band 在沒有 project 的狀態下，改讀 `<git-common-dir>/autopilot-residue-auto.json` 顯示 `wt N`（往上找到第一個 `.git`，不呼叫 git）。這解掉 alpha.3 的已知後續「band 提醒只在 runs watcher 會啟動的 repo 出現」。
+- **空的 `.git` 目錄不再被當成 git 倉庫**：Codex 的 bwrap sandbox 異常結束時，會在 `/tmp` 這類可寫目錄留下空的 `.git`、`.agents`、`.aws`、`.codex` 掛載點。AA 快取與 evidence store 的「不可放在 git worktree 裡」檢查因此把整個 `/tmp` 當成倉庫，讓三支測試變紅。現在 `.git` 必須是含 `HEAD` 的目錄或 `gitdir:` 檔案才算；讀不到權限時視為倉庫（保守擋下）。另外，band 往上尋找 `.git` 時，遇到空的或解析不了的 `.git` 檔案就停在那裡顯示 0，不會跑去讀外層倉庫的數字。
+- **guidance：`/l4`–`/l6` 進場先指定 size**。進場的第一個呼叫改成 `session-mode.js set --level lN --size <XS|S|M|L|XL> …`，`--size` 現在是必要參數；沒帶 size 的話 band 的 position 欄與 Graph 分頁會是空的，這是 alpha.2 的已知後續。`/l4` 要把它當成 session 的第一個動作（只憑需求判斷大小），`/l5`、`/l6` 不論大小都不能省略。finish-flow 收尾新增上述 `Dispatch-branch close-out` 一列。這兩項都是新的 guidance 要求，所以先跑了預先登記的 ON/OFF eval 證明有效，也重跑了 stage-graph 回歸 eval 證明沒有退步（見驗證）。
+- **mods/live 修正**：Hygiene 分頁的指令行會折行（alpha.3 的已知後續）、docked band 在 160 欄以下仍保留 `wt N`、ⓘ 按鍵的順序以序號判斷、gate capture 等畫面穩定後才擷取（`capture.sh` 的 settle 參數以十進位讀取）。
+- **tooling 修正**：pre-push 在 QC 函式庫缺失時明確警告，不再靜默降級；多行的 NO-FINDING-PROOF 能被辨識；`check-guidance-eval.js` 的結果檔與 arm 綁定（已提交的證據用 sidecar 綁定，v6 補了 sidecar）；`chain.json` 寫入加鎖，鎖有擁有者 token，過期鎖以 tombstone 方式打破並在結束時釋放。
+
+### 驗證
+
+- **hetero review**：本版每一批（close-session 與 ledger、mods、tooling、gitdir、guidance、eval harness、residue 第二輪）都由 2 到 3 個不同模型家族的審查席位審過（席位取自 opus、GLM、MiniMax、Qwen），修到 SHIP-AS-IS 為止。close-session 的審查抓到：紀錄過期、只看最後一個 pointer worktree、刪除沒有 CAS、沒有 reflog 時的 base 判斷、刪除前才被 checkout 的分支，全部修好並有 mutant 釘住。
+- **guidance eval（v8）**：`results/stage-graph.v8.jsonl`，Claude Code 2.1.292，change 10／12、red 3／12、generic 檢查 4 項無退步，SHIP。cut gate `check-guidance-eval.js --base 8a10980f --results evals/skill-onoff/results/stage-graph.v8.jsonl` 結果 `ok:true`、scorer SHIP，exit 0。
+- **G6／G7 ON/OFF eval（`stage-graph-g67`）**：v1 因 eval plugin 缺 `session-mode.js` 判為 instrument 缺陷（NOT-SHIP，如實記錄，不算 guidance 結果），v2 依 amendment 1 重跑：G6（`/l4`、`/l5`、`/l6`）ON 3／3、OFF 0／3；G7 ON 3／3、OFF 0／3，SHIP。
+- **gates 與全套件**：全套件 457 個檔案中 1 個紅，是已知的主機狀態檢查 `skill-onoff-generic`（其他 live session 同時寫入 `~/.autopilot`）；`preflight-release.sh` 9／9、`preflight-portability.sh` 17／17。細節記在 `docs/plans/evidence/2026-10-09-residue-auto-reap/README.md`（alpha.4 一節）與 `docs/plans/evidence/2026-10-06-stage-graph/README.md`。
+
+### 已知後續
+
+- close-session 刪除後只能靠印出的 `git branch <name> <tip>` 還原，且只在 git gc 之前有效（約 2 週）；沒有保存那行輸出的話，只能用 `git fsck --lost-found` 之類的方式找回。
+- `refs/archive/*` 只會被提醒，不會自動刪除；`dispatch-hetero.sh --gc` 預計在 3.0.0 final 移除（既有 BACKLOG 列）。
+- band 與面板的資訊圖表化改版與多語言（英文、正體中文）正在進行，排在下一版。
+
+prose-justification: alpha.4 的 guidance 變更只有 `/l4`–`/l6` 進場必須帶 `--size`，以及 finish-flow 多一列收尾，行數幾乎不變；兩項都是新的要求，已由凍結的 G6／G7 ON/OFF eval 與 v8 stage-graph 回歸 eval 驗證（皆 SHIP）。其餘變更在 script、hook、watcher 與 mod。
+
 ## v3.0.0-alpha.3 — 殘留 worktree 與 dispatch 分支自動回收：SessionStart hook 預設開啟，剩下要人處理的才在 band 提醒（pre-release，供 owner 測試）
 
 這是 3.0.0 的第三個 pre-release，不是 stable。起因是 revival.3d 的 peer 回報：dispatch 留下的 worktree 與分支在硬碟上一路堆積，沒有人收。這版讓安全的部分自動收掉，收不掉的才提醒人。新增一個預設開啟的 SessionStart hook，從 alpha.2 升級不需要遷移，但 band 的 `wt N` 意義改了（見下）。

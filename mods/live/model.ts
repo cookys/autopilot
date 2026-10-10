@@ -1479,6 +1479,7 @@ export function plainBandText(reason: string, columns: number): string {
 }
 
 // ---- the panel's tabs: Now (absorbs the stage walk) · Dispatch · Review (absorbs the decisions) · Spend · Hygiene · ? (the legend) ----
+export const NEXT_TAB_GLYPH = '▸' // the pane's first Button: Enter on it shows the next tab (pane.tsx tabStrip)
 export const PANE_TABS = ['now', 'dispatch', 'review', 'spend', 'hygiene', 'legend'] as const
 export type PaneTab = (typeof PANE_TABS)[number]
 export const tabLabel = (tab: PaneTab, t: T): string => t('tab.' + tab)

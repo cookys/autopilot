@@ -443,6 +443,18 @@ async function refresh($: EngineInterface): Promise<void> {
   }
 }
 
+const nextTab = (t: PaneTab): PaneTab => PANE_TABS[(PANE_TABS.indexOf(t) + 1) % PANE_TABS.length]
+
+// After a press on a tab Button (a click, or Tab / arrows + Enter) the keyboard ring returns to the `▸` chip, so the next Enter steps on instead of
+// re-pressing the tab that was just chosen. Best effort: a pane that does not hold the keys refuses, and the tab has switched anyway.
+async function ringToNext($: EngineInterface): Promise<void> {
+  try {
+    await $.ui.focus({ requestId: PANE_ID, key: 'next' })
+  } catch (_e) {
+    // not holding the keyboard: nothing to move
+  }
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     paneTab = 'now'
@@ -471,7 +483,7 @@ export const register: Register = on => {
     const info = async () => {
       const seq = ++pressSeq
       const prev = decided
-      const nextOf = (t: PaneTab): PaneTab => PANE_TABS[(PANE_TABS.indexOf(t) + 1) % PANE_TABS.length]
+      const nextOf = nextTab
       const mine: Promise<PaneTab> = (async () => {
         if (prev !== null) return nextOf(await prev) // an earlier press is still deciding / opening: $.ui.panes() may not list the pane yet
         let isOpen = false
@@ -495,5 +507,5 @@ export const register: Register = on => {
     return Band($.ui.resolve(e), snapshot, e.props.bodyColumns, info, tr)
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE_ID }, ($, e) => Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { paneTab = t; $.ui.invalidate('ui.render') }, tr, e.props.bodyColumns))
+  on('ui.render', { component: 'Pane', requestId: PANE_ID }, ($, e) => Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { paneTab = t; $.ui.invalidate('ui.render'); void ringToNext($) }, tr, e.props.bodyColumns, () => { paneTab = nextTab(paneTab); $.ui.invalidate('ui.render') }))
 }

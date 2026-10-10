@@ -2121,9 +2121,12 @@ function expectThemeOnly(tree: Drawn, allowTabBackground = false) {
 }
 const joined = (texts: string[]) => texts.join('')
 
+// the tab showing: its Button wraps a Text (the subtle-background label); the others hold a bare string, and the `next` chip is no tab
+const isActiveTab = (b: Drawn): boolean => b.props?.key !== 'next' && (b.children || []).some((c: unknown) => typeof c !== 'string')
+
 async function shownTabOf($: any, surface: any) {
   const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
-  const tab = (await pane.findAll({ type: 'Button' }) as Drawn[]).find(b => b.props?.autoFocus === true)?.props?.key
+  const tab = (await pane.findAll({ type: 'Button' }) as Drawn[]).find(b => isActiveTab(b))?.props?.key
   await pane.unmount()
   return tab
 }
@@ -2216,10 +2219,11 @@ for (const surface of SURFACES) {
     expect(w.opens[0]?.closeOnEscape).toBe(true)
     const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
     const texts = rowsOf((await pane.drawn()) as Node)
-    // the keyboard lands on the open tab's button, so Enter acts at once (the ring does not start on nothing)
+    // the keyboard lands on the first-drawn `▸` next-tab chip, whose Enter steps on (never on the active tab's own button: that Enter is a no-op)
     const tabButtons = (await pane.findAll({ type: 'Button' })) as Drawn[]
-    expect(tabButtons.length).toBe(6)
-    expect(tabButtons.filter(b => b.props?.autoFocus === true).length).toBe(1)
+    expect(tabButtons.length).toBe(7)
+    expect(tabButtons.filter(b => b.props?.autoFocus === true).map(b => b.props?.key)).toEqual(['next'])
+    expect(tabButtons[0].props?.key).toBe('next')
     await pane.unmount()
     expect(texts[0]).toContain('⏸ 疑似卡住') // the Now tab: its hero row, then the dim header
     expect(texts.some(t => t.startsWith('工作階段 $'))).toBe(true)
@@ -2232,7 +2236,7 @@ for (const surface of SURFACES) {
     const band = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     const shownTab = async () => {
       const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
-      const tab = (await pane.findAll({ type: 'Button' }) as Drawn[]).find(b => b.props?.autoFocus === true)?.props?.key
+      const tab = (await pane.findAll({ type: 'Button' }) as Drawn[]).find(b => isActiveTab(b))?.props?.key
       await pane.unmount()
       return tab
     }
@@ -2244,17 +2248,67 @@ for (const surface of SURFACES) {
     expect(await shownTab()).toBe('dispatch')
     await press()
     expect(await shownTab()).toBe('review')
-    // a mouse click on a tab, then the press continues from the clicked tab
+    // a mouse click on another tab, then the press continues from the clicked tab
     const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
-    await pane.press({ key: 'review' })
+    await pane.press({ key: 'spend' })
     await pane.unmount()
-    await press()
     expect(await shownTab()).toBe('spend')
-    for (const want of ['hygiene', 'legend', 'now', 'dispatch']) { await press(); expect(await shownTab()).toBe(want) } // the ? legend is last; the ring wraps to Now
+    await press()
+    expect(await shownTab()).toBe('hygiene')
+    for (const want of ['legend', 'now', 'dispatch']) { await press(); expect(await shownTab()).toBe(want) } // the ? legend is last; the ring wraps to Now
     // closed again (Escape / the person closes it): the next press is Now, not the tab after Dispatch
     w.panes = []
     await press()
     expect(await shownTab()).toBe('now')
+  })
+
+  // Real machine 2026-10-10 (120 columns): Ctrl+x Tab can land the ring on the pane's active tab Button, where Enter pressed the tab it already showed.
+  // The first-drawn Button is now the `▸` next-tab chip and it alone carries autoFocus.
+  const paneTabs = async ($: any, surface: any) => $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+
+  test('keyboard: Enter on the ▸ chip (where the ring lands) steps through all six tabs and wraps, whatever tab shows (' + surface + ')', async ($, on) => {
+    const w = world(on, richWorld())
+    await start($, surface)
+    for (const want of ['dispatch', 'review', 'spend', 'hygiene', 'legend', 'now', 'dispatch']) {
+      const pane = await paneTabs($, surface)
+      await pane.press({ key: 'next' })
+      await pane.unmount()
+      expect(await shownTabOf($, surface)).toBe(want)
+    }
+  })
+
+  test('mouse / arrows: a press on a tab Button selects that tab, also the one already showing (' + surface + ')', async ($, on) => {
+    const w = world(on, richWorld())
+    await start($, surface)
+    const pane = await paneTabs($, surface)
+    await pane.press({ key: 'hygiene' })
+    await pane.press({ key: 'hygiene' }) // the showing tab: unchanged, as before (no step on)
+    await pane.unmount()
+    expect(await shownTabOf($, surface)).toBe('hygiene')
+  })
+
+  test('keyboard: ▸ and the ⓘ share one order: a ⓘ press after a ▸ press continues from the tab showing (' + surface + ')', async ($, on) => {
+    const w = world(on, richWorld())
+    await start($, surface)
+    const band = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    await band.press({ key: 'info' }) // closed -> Now
+    const pane = await paneTabs($, surface)
+    await pane.press({ key: 'next' }) // -> Dispatch
+    await pane.press({ key: 'next' }) // -> Review
+    await pane.unmount()
+    await band.press({ key: 'info' }) // the pane is open: the next tab
+    await band.unmount()
+    expect(await shownTabOf($, surface)).toBe('spend')
+    expect(w.panes).toEqual(['autopilot-live'])
+  })
+
+  test('keyboard: a tab press switches the tab even when the pane does not hold the keys, so the ring move is refused (' + surface + ')', async ($, on) => {
+    const w = world(on, richWorld())
+    await start($, surface)
+    const pane = await paneTabs($, surface)
+    await pane.press({ key: 'review' })
+    await pane.unmount()
+    expect(await shownTabOf($, surface)).toBe('review')
   })
 
   test('P7 band: $.ui.panes() throwing reads as closed: the press opens the panel on Now and does not break the band (' + surface + ')', async ($, on) => {
@@ -2264,7 +2318,7 @@ for (const surface of SURFACES) {
     const band = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     const shownTab = async () => {
       const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
-      const tab = (await pane.findAll({ type: 'Button' }) as Drawn[]).find(b => b.props?.autoFocus === true)?.props?.key
+      const tab = (await pane.findAll({ type: 'Button' }) as Drawn[]).find(b => isActiveTab(b))?.props?.key
       await pane.unmount()
       return tab
     }
@@ -2295,7 +2349,7 @@ for (const surface of SURFACES) {
     await first.unmount()
     await second.unmount()
     const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
-    const tab = (await pane.findAll({ type: 'Button' }) as Drawn[]).find(b => b.props?.autoFocus === true)?.props?.key
+    const tab = (await pane.findAll({ type: 'Button' }) as Drawn[]).find(b => isActiveTab(b))?.props?.key
     await pane.unmount()
     expect(tab).toBe('dispatch') // Now (first press) then Dispatch (second press)
   })
@@ -2379,7 +2433,7 @@ for (const surface of SURFACES) {
     const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
     const tree = (await pane.drawn()) as Drawn
     const buttons = walkAll(tree).filter(n => n.type === 'Button').map(n => n.props?.key as string)
-    expect(buttons).toEqual(['now', 'dispatch', 'review', 'spend', 'hygiene', 'legend'])
+    expect(buttons).toEqual(['next', 'now', 'dispatch', 'review', 'spend', 'hygiene', 'legend']) // the ▸ chip first (it carries the autoFocus), then the six tabs in contract order
     // the strip (child 0): zh labels, a badge per tab that holds something for the owner: ⚙N live runs, ⚑N residue (QC is ok here, so no ▲ on Review)
     const strip = stripOf(tree as Node)
     expect(strip).toContain('現況')

@@ -1134,4 +1134,36 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/RESULTS.md
 - **Context**: the fix is a guidance change in the l4–l6 front doors (call session-mode set --size), so it needs a skill-onoff eval before it ships.
 
+### a second task in one live session cannot restart the stage walk
+- **Status**: open
+- **Trigger**: before the 3.0.0 final cut (the band stays on the first task's stage and unit)
+- **Effort**: M
+- **Source**: TUI v2 real-machine gate runs tui-v2-running3 and running4, 2026-10-10
+- **Pointer**: docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/RESULTS.md
+- **Context**: `set --size` keeps stage/unit and stage-advance refuses `implement` after qc-gate; add `set --new-task` (clears stage/unit/review_families) or allow a new cycle; guidance change, eval first.
+
+### Ctrl+x Tab then Enter on the ⓘ chip advances panel tabs only intermittently at 120 columns
+- **Status**: open
+- **Trigger**: before the 3.0.0 final cut (mouse clicks always work)
+- **Effort**: S
+- **Source**: TUI v2 real-machine gate, 2026-10-10
+- **Pointer**: docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/RESULTS.md
+- **Context**: hypothesis: `$.ui.open({focus:true})` or the active tab's autoFocus Button takes keyboard focus, so Enter hits the tab Button; confirm by logging which onPress fires.
+
+### gate screenshots show raw OSC 8 hyperlink text on the Dispatch tab
+- **Status**: open
+- **Trigger**: when Dispatch-tab PNGs are next used as evidence
+- **Effort**: XS
+- **Source**: TUI v2 real-machine gate, 2026-10-10
+- **Pointer**: docs/plans/evidence/2026-10-10-tui-v2/README.md
+- **Context**: the gate renderer (ansi2html) does not handle OSC 8, so the PNGs print `]8;…` instead of the link text; strip or convert the sequences before rendering.
+
+### no spend history is published, so the Spend tab cannot draw a sparkline
+- **Status**: open
+- **Trigger**: when the Spend tab is next revised
+- **Effort**: M
+- **Source**: TUI v2 design (ia.md data gaps), 2026-10-10
+- **Pointer**: docs/plans/evidence/2026-10-10-tui-v2/ia.md
+- **Context**: the approved design wanted a spend sparkline; the live state carries only the current cost, so a bounded per-session history must be published first.
+
 

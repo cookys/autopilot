@@ -770,3 +770,21 @@ test('GATEFIX capture.sh settle: a leading zero in the settle knobs is decimal (
   assert.strictEqual(r.p.status, 0, r.p.stderr); assert.strictEqual(r.calls, 1); assert.strictEqual(r.caps.length, 1);
   assert.match(r.p.stderr, /band did not settle within 8s/);
 });
+
+// OSC 8 in the screenshot converter (ansi2html.py): link text is rendered, the raw sequence never is, other OSC / DCS strings are stripped
+test('ansi2html: OSC 8 links (ST and BEL terminators) render the text as <a>, no raw escape text; other OSC strings are stripped', () => {
+  const a2h = path.join(__dirname, '..', '..', '2026-10-06-tui-band', 'ansi2html.py');
+  const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'a2h-')), 'o.html');
+  const p = spawnSync('python3', ['-I', a2h, path.join(__dirname, 'fixtures', 'osc8', 'pane.ansi'), out], { encoding: 'utf8' });
+  assert.strictEqual(p.status, 0, p.stderr);
+  const html = fs.readFileSync(out, 'utf8');
+  const text = html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ');
+  assert.ok(text.includes('plain LINKTEXT after'), text);
+  assert.ok(text.includes('red BELLINK done'), text);
+  assert.ok(text.includes('strip tail end'), text);
+  for (const raw of [']8;', 'id=a1', 'https://example.com', 'window title', 'AAAA', 'dcs-payload']) assert.ok(!text.includes(raw), `raw text ${raw} leaked: ${text}`);
+  assert.match(html, /<a href="https:\/\/example\.com\/x\?y=1"[^>]*>/);
+  assert.match(html, /<a href="file:\/\/\/tmp\/r\.json"[^>]*>/);
+  // the link closes at ESC ] 8 ; ; : only the 8 + 7 link-text cells are anchors
+  assert.strictEqual((html.match(/<a /g) || []).length, 'LINKTEXT'.length + 'BELLINK'.length);
+});

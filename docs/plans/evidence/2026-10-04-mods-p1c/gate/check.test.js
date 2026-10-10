@@ -497,6 +497,16 @@ test('SURFACE panel: verdict + reason judged, the slots SKIP and are not counted
   const bad = run(capture({}, panelPane('要你決定', '等你批准：Bash: x')));
   assert.strictEqual(bad.surface, 'panel'); assert.strictEqual(status(bad, 'verdict'), 'FAIL'); assert.strictEqual(bad.ok, false);
 });
+test('SURFACE panel (TUI v2 Now tab): the hero row `<glyph> <word>  <project> · <since>` is the verdict cell, the next non-blank cell is the reason (it may carry the proxy tail), in both locales', () => {
+  const hero = (word, reason, since) => [SIDE('● Creating a file'), `${SIDE(' Do you want to proceed?')}${word}  demo · ${since}`, `${SIDE(' ❯ 1. Yes')}${reason}`, SIDE(' Esc to cancel')];
+  const att = { 'attention.json': { schema: 'autopilot.attention/1', kind: 'permission', summary: 'Bash: touch /tmp/gate-perm-test', since: iso(0) } };
+  const zh = run(capture(att, hero('▲ 要你決定', '等你批准：Bash: touch /tmp/gate-perm-test（等了 0 分） · 代你決定 3 件（0 件不可逆）', '已進行 0m')));
+  assert.strictEqual(zh.surface, 'panel'); assert.strictEqual(status(zh, 'verdict'), 'PASS'); assert.strictEqual(status(zh, 'reason'), 'PASS', JSON.stringify(zh.results));
+  const en = run(capture(att, hero('▲ Needs you', 'waiting for your approval: Bash: touch /tmp/gate-perm-test (waited 0 min)', '0m since start')));
+  assert.strictEqual(en.surface, 'panel'); assert.strictEqual(en.derived.locale, 'en'); assert.strictEqual(status(en, 'verdict'), 'PASS'); assert.strictEqual(status(en, 'reason'), 'PASS', JSON.stringify(en.results));
+  assert.strictEqual(status(run(capture(att, hero('▲ 要你決定', '等你批准：Bash: something else', '已進行 0m'))), 'reason'), 'FAIL');
+  assert.strictEqual(status(run(capture({}, hero('▲ 要你決定', '等你批准：Bash: x', '已進行 0m'))), 'verdict'), 'FAIL'); // no open attention
+});
 test('SURFACE band wins over the panel; no verdict and no dialog is no surface', () => {
   const dir = capture({ 'attention.json': { schema: 'autopilot.attention/1', kind: 'permission', summary: 'Bash: ls', since: iso(0) } },
     [...panelPane('要你決定', '等你批准：Bash: ls（等了 0 分）'), '▲ 要你決定 │ ⓘ']);

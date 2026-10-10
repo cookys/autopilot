@@ -555,12 +555,17 @@ function findNonOk(paneText) {
   }
   return null;
 }
-// the panel (right-hand column, after the last │): a cell that is exactly one verdict word, the cell on the next line is the reason
+// the panel (right-hand column, after the last │): a cell that is exactly one verdict word (the pre-v2 Now tab), or the TUI v2 Now-tab hero row
+// `<glyph> <word>  <project> · <since>` (the verdict word followed by two spaces); the first non-blank cell after it is the reason
 function findPanel(paneText) {
   const cells = String(paneText || '').split('\n').map((l) => { const parts = l.split('│').map((p) => p.trim()).filter(Boolean); return l.includes('│') ? (parts[parts.length - 1] || '') : l.trim(); });
   for (let i = 0; i < cells.length; i += 1) {
-    const v = VERDICTS.find((x) => cells[i] === x.word);
-    if (v) return { verdict: v.word, kind: v.kind, locale: v.locale, line1: v.word, line2: cells[i + 1] || '', lineKind: 'panel', surface: 'panel' };
+    const v = VERDICTS.find((x) => cells[i] === x.word || cells[i].startsWith(`${x.mark} ${x.word}  `));
+    if (v) {
+      const hero = cells[i] !== v.word;
+      const next = hero ? cells.slice(i + 1).find((c) => c !== '') || '' : cells[i + 1] || '';
+      return { verdict: v.word, kind: v.kind, locale: v.locale, line1: hero ? cells[i] : v.word, line2: next, lineKind: 'panel', surface: 'panel' };
+    }
   }
   return null;
 }
@@ -711,6 +716,7 @@ function reasonDrawn(r, drawn) {
   if (typeof r.full !== 'string') return drawn.includes(r.expected);
   const body = drawn.replace(/（等了 \d+ 分）$| \(waited \d+ min\)$/, '');
   if (body === r.full) return true;
+  if (drawn.startsWith(r.full)) return true; // the Now tab's reason line continues with the proxy-decision tail (` · ...`)
   if (!drawn.endsWith('…')) return false;
   const prefix = drawn.slice(0, -1);
   return r.full.startsWith(prefix) && Array.from(prefix).length > Array.from(r.label).length;

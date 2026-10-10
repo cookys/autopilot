@@ -57,6 +57,17 @@ The `!`command`` syntax is a Claude Code preprocessor — it runs a shell comman
 | `.claude/owner-kernel-governance.json` | Project governance: mission-convergence enforcement + budgets, guidance defaults, red lines, rosters (filename is historical; the file is a live mission/campaign input) | [template](../project-config-template/governance-config.md) · [dogfood example](../.claude/owner-kernel-governance.json) |
 | `.claude/loop.md` | Default prompt for a bare `/loop` — unattended babysit of the current branch (CI/PR tending → `next`/`debug`/`quality-pipeline`). Claude Code only (v2.1.72+); degrades cleanly elsewhere. | [template](../project-config-template/loop.md) |
 
+### Live TUI language (`ui.locale`)
+
+The `live` mod (the band above the prompt and its panel, Claude Code only) speaks English or Traditional Chinese (zh-TW). The language is chosen on every tick, so a change takes effect without a reload:
+
+1. `~/.autopilot/config.json` → `{"ui": {"locale": "en" | "zh-TW" | "auto"}}` (default `auto`), the highest priority.
+2. The `AUTOPILOT_LOCALE` environment variable (`en` | `zh-TW`), for one-offs and tests.
+3. `auto` follows Claude Code's own language setting (the `language` row of `/config`, else `language` in `~/.claude/settings.json`): a value naming a Traditional-Chinese / 台灣 / zh-TW variant is zh-TW, anything else is English.
+4. Last, `LC_ALL` / `LANG` (`zh_TW*` is zh-TW), then English.
+
+The string tables are `mods/live/locales/en.json` (source of truth) and `zh-TW.json`; `node mods/live/gen-locales.js` compiles them into `locales.ts` and `--check` verifies both tables carry the same ids and placeholders.
+
 ### Project governance (`owner-kernel-governance.json`)
 
 The decision/acceptance state machine that once consumed this file was retired on 2026-08-16

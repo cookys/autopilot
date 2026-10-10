@@ -19,7 +19,11 @@
 //   P7       <live_base>/runs/<project_key>.qc.json, .residue.json, .review.json; <live_base>/stage/<sid>.json; load-source.json; the marker's
 //            §2.9 fields (size, urgent, level, stage, stage_set_at, unit, review_families); the envelope's host_today_brain_usd / brain_cap_usd;
 //            the decisions sidecar's `ladder`. Each is optional: absent -> its slot is left out and its tab says "no data".
-//            The band is ONE line (band.tsx, layout in model.ts layoutBand); the ⓘ opens the pane on the Legend tab.
+//            The band is ONE line (band.tsx, layout in model.ts layoutBand); the ⓘ opens the pane on the Now tab (6 tabs: Now Dispatch Review Spend Hygiene ?).
+//
+//   i18n     every word comes from mods/live/locales/{en,zh-TW}.json (compiled to locales.ts) through `t`; the locale is resolved on every tick:
+//            ~/.autopilot/config.json ui.locale > AUTOPILOT_LOCALE > Claude Code's language setting ($.config.list() row `language`, else the
+//            user settings.json) > LC_ALL / LANG > en
 //
 // $.session.id() is read on EVERY tick: /clear gives the session a new id while the timer keeps running (S7).
 // Every clock comparison uses $.clock.now(), so a test with a mocked clock decides fresh / stale.
@@ -27,6 +31,8 @@
 import type { EngineInterface, Register } from 'claude-code'
 
 import { newTracker, parseAdvisories, takeNew } from './advisories'
+import { makeT, resolveLocale, T_EN } from './i18n'
+import type { T } from './i18n'
 import type { AdvisoryTracker } from './advisories'
 import { Band } from './band'
 import { Pane } from './pane'
@@ -34,7 +40,7 @@ import {
   acceptanceToast, autoResidueCount, bandLine1, bandView, buildSections, checkEnvelope, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
   headerText, hhmm, projectName as projectNameOf, isKey, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
   readForeman, readLoadSource, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
-  spendOf, startMsOf, STATE_TEXT, POINTER_SCHEMA, NO_DETAIL, usd,
+  spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd,
 } from './model'
 import type { Counts, DecisionsView, EnvelopeCheck, JobModel, Json, LiveSnapshot, Manifest, PaneTab, Sources } from './model'
 
@@ -53,6 +59,7 @@ let timer: { cancel: () => void } | undefined
 let viewport: { columns: number; isFullscreen?: boolean } | null = null
 let paneAttempted = false
 let paneTab: PaneTab = 'now'
+let tr: T = T_EN // the active translator, set at the start of every tick (and read by the band / pane draws)
 let pressSeq = 0 // one number per ⓘ press, taken before any await; only the latest press may assign paneTab or end the chain
 let decided: Promise<PaneTab> | null = null // the tab the latest unfinished press chose: a press landing meanwhile steps on from it (N rapid presses = N tabs)
 let previous: { scope: string; counts: Counts | null; acceptance: string | null } | null = null
@@ -225,8 +232,33 @@ async function orphanResidueCount($: EngineInterface): Promise<number> {
   return 0
 }
 
-async function buildSnapshot($: EngineInterface, nowMs: number): Promise<{ snap: LiveSnapshot; counts: Counts | null; acceptance: string | null }> {
+// Claude Code's own language setting: the `/config` row named `language` when the engine lists one, else `language` in the user's settings.json.
+// The row exists (verified on Claude Code 2.1.296: a `text` row, e.g. "正體中文台灣用語"); the file fallback covers an engine that lacks it; any failure is "no setting".
+async function claudeLanguage($: EngineInterface, home: string | undefined): Promise<string | null> {
+  try {
+    const row = (await $.config.list()).find(r => r.key === 'language')
+    if (row !== undefined && typeof row.value === 'string' && row.value.trim() !== '') return row.value
+  } catch (_e) { /* no such row / the engine cannot list */ }
+  if (!home) return null
+  const settings = await readObject($, home + '/.claude/settings.json')
+  return settings !== null && typeof settings.language === 'string' && settings.language.trim() !== '' ? settings.language : null
+}
+
+async function resolveT($: EngineInterface): Promise<T> {
+  let home: string | undefined
+  try { home = await $.env.get('HOME') } catch (_e) { home = undefined }
+  const cfg = home ? await readObject($, home + '/.autopilot/config.json') : null
+  const ui = cfg !== null && isObject(cfg.ui) ? cfg.ui : null
+  const envLocale = await $.env.get('AUTOPILOT_LOCALE').catch(() => undefined)
+  const lang = (await $.env.get('LC_ALL').catch(() => undefined)) || (await $.env.get('LANG').catch(() => undefined))
+  const needLanguage = !(ui !== null && (ui.locale === 'en' || ui.locale === 'zh-TW')) && envLocale !== 'en' && envLocale !== 'zh-TW'
+  const language = needLanguage ? await claudeLanguage($, home) : null
+  return makeT(resolveLocale({ config: ui === null ? undefined : ui.locale, env: envLocale, language, lang }))
+}
+
+async function buildSnapshot($: EngineInterface, nowMs: number, t: T): Promise<{ snap: LiveSnapshot; counts: Counts | null; acceptance: string | null }> {
   const none = (snap: LiveSnapshot) => ({ snap, counts: null, acceptance: null })
+  const STATE_TEXT = stateText(t)
   const home = await $.env.get('HOME')
   if (!home) return none(plain('no-pointer', STATE_TEXT.noPointer))
   const pointerText = await readText($, home + '/.autopilot/live-pointer.json')
@@ -341,17 +373,18 @@ async function buildSnapshot($: EngineInterface, nowMs: number): Promise<{ snap:
   const residue = readResidue(await readText($, liveBase + '/runs/' + scope.key + '.residue.json'), scope.key)
   const stage = readStageWalk(await readText($, liveBase + '/stage/' + fileSid + '.json'), sid)
   const review = readReview(await readText($, liveBase + '/runs/' + scope.key + '.review.json'), scope.key)
-  const src: Sources = { tasks, attention, turn, decisions, manifest, foreman, loadSource, marker, review, qc, residue, startMs: startMsOf(receiptRoot, env, tasks, scope.marker === null ? null : scope.marker.started_at, receiptMs) }
-  const ctx = ctxShown(ctxText(await readText($, liveBase + '/context/' + fileSid + '.json'), nowMs), manifest)
-  const band = bandView(env, jobModel, scope.key, nowMs, src)
+  const src: Sources = { tasks, attention, turn, decisions, manifest, foreman, loadSource, marker, review, qc, residue, stage, startMs: startMsOf(receiptRoot, env, tasks, scope.marker === null ? null : scope.marker.started_at, receiptMs) }
+  const ctx = ctxShown(ctxText(await readText($, liveBase + '/context/' + fileSid + '.json'), nowMs), manifest, t)
+  const band = bandView(env, jobModel, scope.key, nowMs, src, t)
   return {
     snap: plain('ok', bandLine1(band) + (band.reason === null ? '' : '\n' + band.reason), {
-      ...common, band, header: headerText(env, sid, ctx), decision: jobModel === null || !jobModel.needs_decision ? null : jobModel.decision,
-      sections: buildSections(src, foreman, identity, nowMs),
+      ...common, band, header: headerText(env, sid, ctx, t), decision: jobModel === null || !jobModel.needs_decision ? null : jobModel.decision,
+      sections: buildSections(src, foreman, identity, nowMs, t),
       review,
       detail: {
+        counts: countsOf(env), stalled: stalledCount(env, foreman, nowMs),
         now_ms: nowMs, project: projectNameOf(identity, scope.key), marker, qc, stage, decisions, load_source: loadSource, residue,
-        spend: { session: sessionUsd(env, sid).text, host_all: usd(env.host_today_usd), brain: spendOf(env)?.brain ?? null, cap: spendOf(env)?.cap ?? null, mode: await fuseModeOf($, autopilotHome) },
+        spend: { session: sessionUsd(env, sid).text, host_all: usd(env.host_today_usd), host_all_n: typeof env.host_today_usd === 'number' && Number.isFinite(env.host_today_usd) ? env.host_today_usd : null, brain: spendOf(env)?.brain ?? null, cap: spendOf(env)?.cap ?? null, mode: await fuseModeOf($, autopilotHome) },
       },
     }),
     counts: countsOf(env),
@@ -378,8 +411,9 @@ async function pollAdvisories($: EngineInterface, nowMs: number): Promise<void> 
 async function refresh($: EngineInterface): Promise<void> {
   try {
     const nowMs = await $.clock.now()
+    tr = await resolveT($)
     await pollAdvisories($, nowMs)
-    const built = await buildSnapshot($, nowMs)
+    const built = await buildSnapshot($, nowMs, tr)
     snapshot = built.snap
     $.ui.invalidate('ui.render')
     // toasts: only between two fresh snapshots of the same scope
@@ -388,11 +422,11 @@ async function refresh($: EngineInterface): Promise<void> {
       if (previous !== null && previous.scope === scope) {
         const texts: string[] = []
         if (previous.counts !== null && built.counts !== null) {
-          const t = executionToast(previous.counts, built.counts)
+          const t = executionToast(previous.counts, built.counts, tr)
           if (t !== null) texts.push(t)
         }
         if (previous.acceptance !== null && built.acceptance !== null) {
-          const t = acceptanceToast(previous.acceptance, built.acceptance)
+          const t = acceptanceToast(previous.acceptance, built.acceptance, tr)
           if (t !== null) texts.push(t)
         }
         for (const text of texts) $.ui.toast(text)
@@ -431,7 +465,7 @@ export const register: Register = on => {
   on('ui.render', { component: 'AbovePrompt' }, ($, e, next) => {
     viewport = e.viewport ? { columns: e.viewport.columns, isFullscreen: e.viewport.isFullscreen } : null
     if (e.props.hasSurvey) return next(e)
-    // the ⓘ opens the panel on the Legend tab; pressed again while the panel is open it shows the next tab (the pane never gets the keyboard
+    // the ⓘ opens the panel on the Now tab; pressed again while the panel is open it shows the next tab (6 tabs, the ? legend last, then Now again) (the pane never gets the keyboard
     // while the person holds the ⓘ, so this is the keyboard way to change tab). "Open" is the engine's own record, $.ui.panes() (the pane
     // is listed until it closes, however it was opened). No hotkey: the band's autoFocus puts the keyboard path at Ctrl+x Tab, Enter.
     const info = async () => {
@@ -444,9 +478,9 @@ export const register: Register = on => {
         try {
           isOpen = (await $.ui.panes()).some(p => p.id === PANE_ID)
         } catch (_e) {
-          // the engine could not list panes: treat the pane as closed (Legend)
+          // the engine could not list panes: treat the pane as closed (Now)
         }
-        return isOpen ? nextOf(paneTab) : 'legend'
+        return isOpen ? nextOf(paneTab) : 'now'
       })()
       decided = mine
       try {
@@ -458,8 +492,8 @@ export const register: Register = on => {
         if (seq === pressSeq) decided = null
       }
     }
-    return Band($.ui.resolve(e), snapshot, e.props.bodyColumns, info)
+    return Band($.ui.resolve(e), snapshot, e.props.bodyColumns, info, tr)
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE_ID }, ($, e) => Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { paneTab = t; $.ui.invalidate('ui.render') }))
+  on('ui.render', { component: 'Pane', requestId: PANE_ID }, ($, e) => Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { paneTab = t; $.ui.invalidate('ui.render') }, tr, e.props.bodyColumns))
 }

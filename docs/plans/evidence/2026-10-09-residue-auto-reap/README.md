@@ -1,4 +1,4 @@
-# Residue auto-reap — evidence log (3.0.0-alpha.3)
+# Residue auto-reap — evidence log (3.0.0-alpha.3, alpha.4)
 
 Contract: [`contract.md`](contract.md) (incl. "Accepted deviations"). Source: peer report from revival.3d, 2026-10-09 (worktree and branch accumulation).
 
@@ -38,6 +38,32 @@ Reviewers: opus, GLM, MiniMax (hetero panel).
 - Band PNG: `docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/residue-hygiene-w209-band2/20261009T154910Z/band-209.png`
 - Hygiene tab PNG: `docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/residue-hygiene-w209-hygiene/20261009T154930Z/band-209.png`
 - First capture (docked pane, hygiene slot hidden, check PASS with hygiene ABSENT): `.../residue-hygiene-w209-band/20261009T154812Z/`
+
+## alpha.4 additions (2026-10-10)
+
+Follow-up batches after alpha.3, each hetero-reviewed (opus, GLM, MiniMax, Qwen) until SHIP-AS-IS.
+
+| Change | Commits | Summary |
+|--------|---------|---------|
+| session ledger | 41a44f85 | `dispatch-hetero.sh` and `dispatch-foreman.sh` append a branch-to-session row to `<git-common-dir>/autopilot/dispatch-branches.jsonl` (flock, fail-open); `reap --auto` compacts it under the same lock |
+| `close-session` | 41a44f85, 1977780e, fd29d230, 53fa2105 | `repo-residue-sweep.js close-session --session S --yes` deletes the session's dispatch branches directly (CAS `update-ref -d` with the expected tip); no archive ref |
+| archive aging | 53fa2105, 0bc8e71a | archive refs older than `residue.archive_remind_days` (90) are listed in `needs_human` as `archive-ref/archive-old`; never deleted. Dates are real calendar dates |
+| unconfigured repos | 53fa2105, 0bc8e71a, 7e617903 | the live mod's no-project line shows `wt N` read from `<git-common-dir>/autopilot-residue-auto.json` (walk up to the first `.git`, no git); an empty or unparseable `.git` ends the walk with 0 |
+
+Deletion rule and the owner's reasoning:
+
+- `close-session` deletes the session's unintegrated dispatch branches and prints `git branch <name> <tip>` per deleted branch. The tip stays reachable until git gc (about 2 weeks), which is the recovery window.
+- It keeps checked-out branches (re-checked right before each delete: `checked_out_late`), branches with a live worktree, and campaign-held branches. Ownership follows run ids, so a foreman's hands belong to the foreman's session; a branch name belongs to the owner of its latest ledger row, and that row must match the live ref's lifetime (`ledger_row_stale` otherwise).
+- It runs at finish-flow close-out, not at handoff. Owner's reasoning: handoff is not close-out. A handoff passes work to the next session, which may still need those branches; only finish-flow says the work is done.
+- The 14-day `reap --auto` path still archives before deleting. Only the explicit close-out deletes without an archive.
+
+Review rounds:
+
+- **Round 1** (ledger and `close-session`): findings on ledger staleness, only the last pointer worktree considered, and a non-CAS delete. Fixed in 1977780e: latest-row ownership with a lifetime match, every marker worktree naming a branch, `update-ref -d` with the expected tip; mutants pinned for sibling `root_run_id`, order-independent transitivity, reused names, two-pointer leases.
+- **Round 2**: a branch still at its row's `base_sha` must fit without a reflog; a branch checked out between scan and delete must be kept. Fixed in fd29d230.
+- **Round 3** (direct deletion, archive-ref reminders, `wt N` without a watcher; 53fa2105, 0bc8e71a, 7e617903): hetero-reviewed in 3 rounds, merged as 3c91f091.
+
+Guidance for the close-out row (G7) and the `/l4`–`/l6` size at entry (G6) are covered by the g67 ON/OFF suite, SHIP; see `../2026-10-06-stage-graph/README.md`.
 
 ## Known limits (BACKLOG rows added at the cut)
 

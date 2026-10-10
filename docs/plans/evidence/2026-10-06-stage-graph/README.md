@@ -101,6 +101,14 @@ Release merges happen in the dedicated worktree `.claude/worktrees/release-3.0.0
   - Run notes: depth-0 paused the campaign once after 3 rows on a mistaken instrument suspicion (xs-feature change r1: the agent called `session-mode.js` by the plugin-dir path and gave up; the fixture scripts were present) — rows kept, resumed with the same command. Run 2 hit an expired OAuth session mid-run (68 `infra_fail runner_error`, 2 s each); resumed after a CLI probe and only those cells re-ran.
   - Cut gate: `check-guidance-eval.js --base 8a10980f --results …v6.jsonl` → ok, 43/43 byte-equal to the v6 packs, scorer SHIP.
 
+- **Guidance v7 and the g67 suite (2026-10-10).** Two mechanism changes were added after v6: G6 (`/l4`–`/l6` entry sets a size with `session-mode.js set --size`) and G7 (finish-flow close-out runs `repo-residue-sweep.js close-session`). They change guidance text, so by owner decision they got their own pre-registered ON/OFF suite, `stage-graph-g67` (prereg `evals/skill-onoff/prereg/stage-graph-g67.{md,json}`), and the stage-graph change arm was frozen again as v7.
+  - **v7 g67 v1: NOT-SHIP, instrument defect.** G6 ON passed 1/3 because `session-mode.js` was absent from the synthetic eval plugin, so the entry call could not run. G7 ON 3/3, OFF 0/3. Recorded as instrument-defective, not as a guidance result. The fix is a plugin-script self-check and a v2 arm (`fixture-scripts-g67-v2`), recorded as amendment 1 (`stage-graph-g67.amend-1-plugin-scripts.json`).
+  - **v7 stage-graph regression run: aborted after 6 cells.** The guidance text changed again (v8) while it ran, so the rows are not counted.
+- **Verdict, change arm v8: SHIP** (2026-10-10; packs `*-sg-change-v8`, freeze `e6131fba`, results `results/stage-graph.v8.jsonl`, Claude Code 2.1.292).
+  - **Change 10/12, red 3/12, generic 4 checked, none regressed.** Same frozen rule as v5 and v6.
+  - Cut gate: `check-guidance-eval.js --base 8a10980f --results …v8.jsonl` exits 0, `ok:true`, scorer SHIP (it defaults to `arms/stage-graph/change.json`, which is v8).
+- **Verdict, g67 v2: SHIP** (`results/stage-graph-g67.v2.jsonl`, 24 rows). G6 under `/l4`, `/l5` and `/l6`: ON 3/3, OFF 0/3. G7: ON 3/3, OFF 0/3. The arms differ only in the five frozen guidance files.
+
 ## P7 body (release/3.0.0, alpha.2)
 
 Contract: [`p7/contract.md`](p7/contract.md) (data facts D1–D4, slot grammar, width table). Plan: §P7 and Owner addendum A1.

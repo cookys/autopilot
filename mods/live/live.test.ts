@@ -2941,20 +2941,26 @@ test('layoutBand: a long reason is clipped to the room left: a prefix of it is d
       expect(body.endsWith('…'), locale + ' ' + cols).toBe(true)
       expect(reason.startsWith(body.slice(0, -1)), locale + ' ' + cols + ': it is a prefix of the reason').toBe(true)
     }
-    // the edge: the narrowest width where the reason (>= 8 cells) is drawn at all, and the line at that width and the next few
-    const bare = at(160, null).width
+    // the edge: a long stage name makes the rest of the line wide enough that the room (not the 160-column tier) decides when the reason first fits
+    const wideFacts = (r: string | null) => ({ ...gridFacts('blocked', t), marker: gridMarker('review-' + 'x'.repeat(70)), reason: r })
+    const atW = (cols: number, r: string | null = reason) => layoutBand(bandSlots(wideFacts(r) as never, t), cols)
+    const W = atW(400, null).width // the full line without a reason (stage uncut)
+    expect(W, locale + ' bare line is wider than the 160 tier').toBeGreaterThan(165)
+    const drawsReason = (cols: number) => atW(cols).text !== atW(cols, null).text
     let edge = -1
-    for (let cols = 160; cols < 260; cols += 1) if (at(cols).text !== at(cols, null).text) { edge = cols; break }
-    expect(edge, locale + ' edge exists').toBeGreaterThan(0)
+    for (let cols = 160; cols < W + 40; cols += 1) if (drawsReason(cols)) { edge = cols; break }
+    expect(edge, locale + ' the scan starts below the edge').toBeGreaterThan(160)
+    expect(drawsReason(edge - 1), locale + ' one column narrower: no reason').toBe(false)
+    expect(drawsReason(edge), locale + ' at the edge: the reason is drawn').toBe(true)
+    // the reason needs 8 cells of room after the ⓘ cell and the separating space: edge = bare width + 1 (space) + 8 + 1 (ⓘ is in W already) -> W + 9
+    expect(edge, locale + ' edge = W + 9').toBe(W + 9)
     for (let cols = edge - 1; cols <= edge + 12; cols += 1) {
-      const line = at(cols)
+      const line = atW(cols)
       expect(displayWidth(line.text), locale + ' edge ' + cols).toBeLessThanOrEqual(cols)
       expect(line.text.endsWith('ⓘ'), locale + ' edge ' + cols).toBe(true)
     }
-    // at the edge the reason takes every spare cell: the line is exactly the budget wide there
-    expect(at(edge).width, locale + ' fills the edge exactly').toBeLessThanOrEqual(edge)
-    expect(at(edge).width, locale + ' fills the edge exactly').toBeGreaterThanOrEqual(edge - 1)
-    expect(bare).toBeGreaterThan(0)
+    expect(atW(edge).width, locale + ' the reason takes the spare cells at the edge (a 2-cell character may leave one)').toBeGreaterThanOrEqual(locale === 'en' ? edge : edge - 1)
+    expect(atW(edge).width, locale + ' never over the budget').toBeLessThanOrEqual(edge)
   }
 })
 

@@ -18,7 +18,9 @@ function fixture(extra) {
   if (extra) fs.appendFileSync(path.join(dir, 'model.ts'), `\n${extra}\n`);
   return dir;
 }
-const check = (dir) => spawnSync(process.execPath, [path.join(dir, 'gen-locales.js'), '--check'], { encoding: 'utf8' });
+const check = (dir) => {
+  try { return spawnSync(process.execPath, [path.join(dir, 'gen-locales.js'), '--check'], { encoding: 'utf8' }); } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+};
 
 test('the real tree passes --check (exit 0)', () => {
   const r = check(fixture(''));

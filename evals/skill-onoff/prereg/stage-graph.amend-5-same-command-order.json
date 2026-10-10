@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "artifact_type": "skill_onoff_prereg_amendment",
+  "amendment": 5,
+  "row": "stage-graph",
+  "date": "2026-10-11",
+  "effective_from": "v10",
+  "no_counted_cell_had_run": true,
+  "made_after_v9_results_seen": true,
+  "v9_rescored": false,
+  "v1_to_v9_rescored": false,
+  "v9_verdict": "NOT-SHIP as recorded (change 9/12, threshold 10). The owner decided on 2026-10-11 not to re-judge v9; it stays a failed run.",
+  "reason": "instrument defect found by diagnosing v9: lib/stage-graph-cell.js judged a classify's `at_intent` from the stage-advance calls processed so far, and processed every stage-advance of a Bash command BEFORE looking at that command's classify. Within ONE command line the order the shell ran them in was therefore ignored.",
+  "defect": {
+    "file": "evals/skill-onoff/lib/stage-graph-cell.js",
+    "example": "v9 stage-graph-l-u0-known change rep3: `node scripts/probe-unknown.js classify --work-unit retry 2>&1 | head -20; node scripts/stage-advance.js --to proposal`. The shell ran classify first (the session was still at intent), but the extractor had already counted the later `--to proposal`, so classify.at_intent came out false and the U0-key timing check failed a cell whose agent behaved correctly. That cell is the v9 false negative: it is NOT re-scored.",
+    "checked_same_family": {
+      "walk": "order inside one command line was already textual (stageAdvanceInvocations emits sites and loop iterations in source order); tests added, no code change",
+      "first_set": "the first written session-mode set of one line was already the textually first (matchAll order); tests added, no code change"
+    }
+  },
+  "change": "stageAdvanceInvocations now records each invocation's source position (pos). `classify.at_intent` is true iff no stage-advance written BEFORE the classify's own position (earlier calls, plus earlier text of the same command line) names a node other than intent. A stage-advance written after the classify on the same line no longer counts against it. Separators `;` `&&` `||` newline and pipe all keep source order.",
+  "cell_dirs": "run-stage-graph-campaign.js now keeps each cell under results/stage-graph-cells/<results file name without extension>/<task>/<arm>/<rep>/ (v10 -> stage-graph-cells/stage-graph.v10/...). Before this, v9 overwrote v8's transcripts at results/stage-graph-cells/<task>/<arm>/<rep>/. Existing directories are left as they are (they now hold v9, v8 is gone).",
+  "text_unchanged": "v10 packs hold the byte-identical guidance text of v9 (only the pack ids differ: -v10); the v9 rule, briefs, answer keys, markers, base arm and thresholds are unchanged.",
+  "thresholds_unchanged": {
+    "rep_pass_min": 2,
+    "change_min_tasks": 10,
+    "red_max_tasks": 4
+  },
+  "comparability": "v10 is a NEW arm run (arms *-sg-change-v10 / *-sg-red-v10, same runner pin 2.1.296) scored by the corrected extractor. v9 rows stay as recorded and are not pooled with v10.",
+  "unchanged": [
+    "ship thresholds",
+    "briefs, answer keys, markers",
+    "base arm and base pack ids",
+    "the generic non-regression rule",
+    "work_done",
+    "runner pin (amendment 4)",
+    "amendments 1-4"
+  ]
+}

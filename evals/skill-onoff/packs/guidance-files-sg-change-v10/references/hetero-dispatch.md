@@ -1,0 +1,877 @@
+# Heterogeneous Dispatch — outbound shell-out to non-Claude engines
+
+Claude Code dispatching another coding engine (Antigravity `agy` + Gemini, verified; others by the same pattern once spiked) as a **headless implementer**, via Bash. This is the outbound counterpart of [`multi-agent-portability.md`](multi-agent-portability.md)'s hosting story: autopilot doesn't just *run on* many agents — a Claude Code session can *dispatch across* them.
+
+Empirical basis: [`multi-agent-portability.md`](multi-agent-portability.md) § "Verified by Spike (agy 1.0.5 headless dispatch, 2026-06-11)". First production use: the `_bodies` relocation (merged `a83c04a`), implemented by Gemini 3.5 Flash from a six-element Task Prompt.
+
+## When to reach for it
+
+- **Decorrelated second opinion** — a different model family reviewing or re-deriving reduces same-family blind spots (the same independence logic as [`blind-dispatch.md`](blind-dispatch.md), applied to model choice).
+- **Cost arbitrage** — flash-class models for mechanical, well-specified implementation or research fan-out.
+- **Engine diversity probing** — checking whether a behavior is model-specific.
+
+Not for: anything needing autopilot skills inside the executor (unverified — see Unverified below), or tasks too fuzzy for a six-element contract (fix the contract first; that's the planner's job).
+
+## Invariants (non-negotiable)
+
+1. **Worktree isolation is mandatory, not advisory.** agy has no `--allowedTools`-grade granular allowlist; `--dangerously-skip-permissions` is all-or-nothing. [`scripts/dispatch-hetero.sh`](../scripts/dispatch-hetero.sh) hard-codes this rail — there is no flag to run in the main checkout.
+2. **Verify by artifacts, never by self-report.** Observed failure mode: the agent claimed success while skipping the requested commit-hash output. The script reports commit presence, diff stats, and tree cleanliness from `git`, not from the agent's prose.
+3. **Verdict stays at depth 0.** The shelled-out engine implements; the dispatching Claude Code session reviews the branch diff (quality-pipeline) before merge. A hetero implementer never self-certifies — same invariant as [`blind-dispatch.md`](blind-dispatch.md) § Nested dispatch.
+4. **The contract is the prompt.** The executor has no autopilot plugin; methodology travels inside the six-element Task Prompt (goal / scope / input / output / acceptance / boundaries). Planner output is the native input format.
+5. **Every brief carries a scale budget (gate 5).** The Task Prompt's HOW MUCH element MUST state a LOC-delta / files-touched ceiling (see [`skills/ceo-agent/references/task-prompt-templates.md`](../skills/ceo-agent/references/task-prompt-templates.md) § HOW MUCH). A worker that would exceed it STOPS and returns an `[ESCALATION]` to re-scope — it never silently grinds past the budget. A brief with no budget is incomplete.
+6. **No bare multi-hour autonomous loop (gate 4).** A hetero implement/review loop that runs for hours MUST have a named depth-0 clock owner armed with the sensing watcher and the convergence brake ([`scripts/check-loop-convergence.js`](../scripts/check-loop-convergence.js) — gates 1 + 3; see [`skills/ceo-agent/references/level-front-door.md`](../skills/ceo-agent/references/level-front-door.md) § 裸跑禁令). Unwatched hours-long self-directed loops are the banned "bare run" shape.
+7. **Input must fit the engine's context window (gate 7).** Every rail runs the context-window gate before spawning a runner; an over-budget unit fails closed rather than letting the engine compact its way through. See § Context-window gate.
+
+## Runner choice and guidance profile are separate
+
+Heterogeneous dispatch chooses a runner; capability admission decides whether that exact
+model/runner/configuration/deployment may hold the requested role; the execution-profile compiler
+then chooses `guided` or `autonomous`. A strong model is not admitted merely because its name
+appears in a static routing table, and a guided profile cannot turn an unqualified model into an
+owner or reviewer. Fallback repeats admission and profile resolution for the replacement identity
+instead of inheriting the failed engine's grant.
+
+[`scripts/dispatch-local-openai.js`](../scripts/dispatch-local-openai.js) is a deliberately narrower
+adapter. It sends one bounded author/reviewer prompt with no repository tools, under a protected
+roster, deny-by-default egress, pre/post identity binding, a one-slot lease, capacity checks, and
+cancellation/recovery checks. It is not a `dispatch-hetero.sh --runner`, implementer, owner, or
+agentic harness. The generic transport contract has fake-server coverage; no live local runtime
+row or local agentic runner is claimed in this release. A `finish_reason=length` reply with no
+content fails closed as `output_budget_exhausted`, the same name as the anthropic-compatible rail.
+
+## Context-window gate
+
+[`scripts/check-context-window.js`](../scripts/check-context-window.js) (+ the sourceable wrapper [`scripts/lib/context-window.sh`](../scripts/lib/context-window.sh)) answers one question before anything is spent: **does the input we are about to feed this engine fit its context window?**
+
+Why it exists — measured on this machine, not assumed. A read-only scan of 1231 headless `codex_exec` dispatch sessions (90 days, `~/.codex/sessions`, real `event_msg.token_count` telemetry):
+
+| Signal | Value |
+|--------|-------|
+| Total dispatch tokens | 788.0M — **98.4% of it input** |
+| Sessions that hit a context wall (compaction) | 53 (**4.3%**) |
+| Tokens burned by those 53 | **322.9M = 41.0% of the whole corpus** |
+| Of those 53, `gpt-5.3-codex-spark` | **52** (observed window 121600) |
+
+The cost driver is oversized input meeting a small window — not output volume, and **not** review-loop round count (a measured 76-round cluster cost 7.9M; a 41-round cluster cost 60.9M because it fed 5.4M/15.9M single-turn inputs). This gate replaces `dispatch-review.sh`'s former hardcoded 96 KB advisory, which was engine-agnostic and therefore meaningless: the same 400 KB diff overflows spark's 121600 window and sits comfortably inside grok-4.5's 500000.
+
+```bash
+# Standalone
+scripts/check-context-window.js --model gpt-5.3-codex-spark --file prompt.txt --file diff.txt
+# → {verdict: OK|OVER_BUDGET|UNKNOWN_WINDOW, window, window_source, estimated_tokens, threshold_tokens, ...}
+# exit 0 = may dispatch · 1 = blocked · 2 = usage error
+
+# On any rail (default mode = block)
+scripts/dispatch-hetero.sh --model X --prompt-file p.txt --context-window warn
+AUTOPILOT_CONTEXT_WINDOW_GATE=off scripts/dispatch-review.sh ...
+```
+
+Rules that make it safe to leave on:
+
+- **The estimator rounds UP** (bytes ÷ 3.5, the repo's blended divisor). Under-estimating is the one direction that silently defeats the gate.
+- **Window resolution order**: `--window` > a recorded `context_window` capability observation > the built-in observed-default table > unknown. The table is seeded from real runtime telemetry, never vendor claims, and records the **minimum** where a model was observed with more than one window (spark: 121600 and 258400 → 121600 wins).
+- **Unknown window never blocks** by default — a new engine must not become undispatchable because nobody has observed it yet. `--strict` flips this for callers that want it.
+- **The gate is a cost control, not a security boundary.** If the gate itself cannot run (no node, script missing), it warns and lets the dispatch through rather than turning a tooling fault into a dispatch outage. Only a real `OVER_BUDGET` blocks.
+- **Reason strings carry no double quotes** — they are interpolated into shell-assembled JSON by the rails.
+
+Recording an observed window (so the gate stops guessing from the table):
+
+```bash
+echo '{"schema_version":1,"observed_at":"...Z","runner":"codex","model":"<id>","role":"implementer",
+  "capability":{"quota":{"status":"unknown","confidence":"low","ttl_seconds":0},
+                "context_window":{"total_tokens":121600,"evidence":"token_count.model_context_window"}}}' \
+  | scripts/engine-capability-state.js record --file /dev/stdin
+```
+
+`context_window` merges **role-agnostically** (a window belongs to the model, not the seat) and a `null` reading never clobbers a valid one.
+
+[`scripts/resolve-review-loop.sh --input-bytes N`](../scripts/resolve-review-loop.sh) reports — never rewrites — a roster seat whose window cannot hold `N` bytes, appending to the existing `capability_warnings` array. Same posture as the quota path: the resolver states the fact, the consumer decides per `on_engine_unavailable`. No new contract field exists, so `check-context-window.js` stays the single source of window truth.
+
+### agy argv-payload ceiling — a second, harder wall
+
+The context-window gate is about what the *model* can hold. `agy` has a lower wall the *kernel*
+enforces, and it is reached first.
+
+`agy` has **no `--prompt-file`** (checked against `agy --help`, agy 1.1.x, 2026-09-02: only
+`-p`/`--print`/`--prompt`, which take the prompt as one argv string, plus `--input-format
+stream-json` on stdin — that one requires `--output-format stream-json` and a different parser, so
+no rail uses it). Every other runner here feeds the prompt through `--prompt-file` (codex, grok) or
+STDIN (cc-shim, qoderclicn, cursor) and is unaffected.
+
+Linux caps a **single argv string** at `MAX_ARG_STRLEN` = 32 × PAGE_SIZE — **131072 bytes including
+the NUL**, so 131071 is the largest string that execs. This is per-string and has nothing to do with
+the far larger total `ARG_MAX` (2097152 on this host), which is why `getconf ARG_MAX` looks like
+plenty of headroom right up until the dispatch dies. Measured 2026-09-02 (Linux 7.0.0, PAGE_SIZE
+4096): 131071 → exec ok, 131072 → fail, 131073 → fail.
+
+The failure is **silent by construction**: `execve` fails before agy starts, so there is no vendor
+error, no partial output, and nothing for the verdict parser to read — the caller sees only a bare
+shell status (126 and 127 have both been observed in the field). A reviewer seat that "returned
+nothing" looks the same as a stalled one.
+
+[`scripts/lib/agy-argv-ceiling.sh`](../scripts/lib/agy-argv-ceiling.sh) derives the ceiling from the
+live PAGE_SIZE (a 64K-page host has a 2 MB limit — never hardcode 131071) and **all three** agy
+rails refuse over it with a named reason instead of letting the exec fail:
+
+- `dispatch-review.sh` → `no_verdict` carrying the byte count, the ceiling, and the remedy. The
+  review was fully set up, and the caller's fail-closed contract already treats `no_verdict` as "do
+  not ship", so this is not a `precondition_failed`.
+- `dispatch-hetero.sh` → `precondition_failed`, raised **before** the worktree and branch exist, so
+  that status's "nothing was created" claim stays true.
+- `dispatch-author.sh` → `precondition_failed` (its generated `run.sh` embeds `-p "$(cat …)"`, the
+  same single-argv shape).
+
+`scripts/qc-panel.js` carries the same check in JS for its judge-B agy seats, and
+`scripts/hetero-review-loop.js` carries it too — it prechecks the estimated diff+spec bytes before
+dispatching any `agy`-runner seat and exits before spend when the estimate exceeds the ceiling.
+Measure **bytes**, never `${#var}`: that counts characters, and one multibyte character in the
+prompt makes the guard under-report — the unsafe direction.
+
+Remedy when you hit it: narrow `--diff` (fewer files, smaller range), split the unit, or send that
+seat to a runner that reads a prompt file or STDIN. Splitting is the caller's decision — neither rail
+silently reviews half a diff and reports a verdict for the whole thing.
+
+### Transport fallback for a frozen plan-review seat
+
+A seat in a `dispatch-plan-review.js` manifest may declare **`transport_fallback`** — a second pipe
+to the SAME logical reviewer:
+
+```json
+"transport_fallback": { "runner": "cursor", "model": "cursor-grok-4.6-xhigh",
+                        "endpoint": "default", "qualification_status": "qualified" }
+```
+
+It is not a seat and not a tuple. It carries no `id`, `family`, `role` or `effort` on purpose: the
+seat's identity does not change, `minimum_distinct_families` is computed from **logical** families
+only, and the effort is inherited. A transport event that could move the decorrelation math would be
+a semantic substitution wearing a transport costume — which is what the seat's separate
+`fallbacks[]` array already is, openly, and what this is deliberately not.
+
+Rules:
+
+- **Absent ⇒ nothing changes.** The key is optional and is never materialized when absent, so a
+  manifest that does not use it keeps its exact canonical bytes.
+- **Fires only on a transport-class failure** — the non-`success` runner-envelope outcomes
+  (`exit_failure`, `timeout`, `quota`, `unavailable`, `interrupted`). NOT on a parse or semantic
+  disagreement over a healthy pipe, and NOT on `identity_mismatch`/`raw_binding_mismatch`: those are
+  integrity failures, and retrying elsewhere would paper over exactly what they exist to surface.
+- **Costs an attempt, never a generation.** `max_attempts_per_seat: 2` is unchanged and still frozen.
+  It arms once; there is no third pipe.
+- **`qualification_status: "unqualified"` is never dispatched to.** A transport failure is not an
+  override for a manifest that says "do not route here".
+- Receipts carry both identities: `logical_identity` on every attempt, plus `actual_transport` only
+  on the attempt that used the fallback.
+
+**The freezing authority's obligation, which no code can check**: a transport fallback must actually
+reach the *same model*. `cursor-grok-4.6-xhigh` is a legitimate second pipe to Grok 4.6 for an
+xAI seat; a codex pipe is not, however "qualified" it is. The schema cannot verify that two vendor
+ids denote one model, so whoever freezes the manifest owns it.
+
+**Today no shipped roster names such a pair.** The mechanism is complete and tested; a manifest that
+uses it must name a runner+model that is separately qualified for the seat's role. `cursor` is not
+(see the § above) — the mechanism exists and is unrouted, which is the honest state.
+
+## What a ladder climb means (v2.36.20)
+
+The implementer ladder is ordered cheapest-first and climbed by index on each red repair round.
+Two vendor facts make a naive climb unsound across a family boundary:
+
+- Anthropic: *"effort level names don't correspond to the same amount of thinking across models"*
+  (`prompting-claude-fable-5-1`, "Consider all effort levels", read 2026-09-08).
+- The vendors disagree on what `low` even does — Anthropic documents it as suppressing search,
+  OpenAI documents it as ideal for tool use and search (`guides/reasoning`, read 2026-09-08).
+
+So `medium@openai` and `medium@anthropic` are two different amounts of thinking wearing one label.
+The ladder therefore does **not** compare effort labels across families to decide what is "stronger".
+It uses the label only as the cost proxy it always was, and enforces one adjacency rule instead:
+
+> Consecutive rungs may share a family **only** when the effort strictly increases.
+
+A same-family rung at the same cost tier is a no-op climb — same model, same tokenizer, same failure
+mode — so a repair round spent there learns nothing. `scripts/resolve-dispatch-topology.js` builds
+the ladder to satisfy that rule, picking from the cheapest remaining tier every time, and preferring
+a same-family rung when the tier already outranks the previous rung so that the scarce
+different-family rungs are saved for the ties that need them. On a single-family host nothing
+changes. Where a tail has only one family left, the rule is unsatisfiable and the order stands.
+
+`scripts/lib/effort-scale.js` is the seam where a measured per-family effort scale would land. It is
+identity for every family today, deliberately: the published evidence says the labels are
+incomparable, which is not the same as knowing the exchange rate between them, and a fabricated
+coefficient would re-create the defect this rule exists to avoid.
+
+## Reviewer output-token budget
+
+`dispatch-review.sh --max-tokens <n>` optionally requests a maximum model response of 1 through
+200000 tokens. This is an output-token budget only: it does not limit input context, prompt bytes,
+visible characters, wall time, tool turns, reasoning effort, or monetary spend. The flag is mapped
+only where the installed runner exposes a verified enforceable surface:
+
+| Reviewer runner | Mapping when `--max-tokens <n>` is supplied |
+|-----------------|-----------------------------------------------|
+| `anthropic-compatible` | Direct adapter `--max-tokens <n>` (Anthropic API `max_tokens`) |
+| `qoderclicn` | Qoder CLI `--max-output-tokens <n>` |
+| `codex`, `agy`, `grok`, `cc-shim`, `claude-native`, `cursor` | Unsupported: exit 2 with `status=precondition_failed` before runner resolution or spawn |
+
+The value must be an unpadded positive base-10 integer in the inclusive range; missing, zero,
+negative, fractional, non-numeric, or over-range values fail before spend. Omitting the flag adds no
+runner argument, synthesizes no wrapper default, and adds no result field, so each transport keeps
+its existing default and the review JSON schema is unchanged. Truncation never authorizes a review:
+Anthropic `stop_reason=max_tokens` and a Qoder exit-0 response missing the complete wrapped block
+both remain `no_verdict`; a partial `SHIP-AS-IS` is not parsed.
+
+The direct `anthropic-compatible` adapter's own default is `--max-tokens 16384` (thinking plus
+verdict; v2.36.111, was 4096). A response that stops at `max_tokens` with no text block is the named
+failure `output_budget_exhausted` (surfaced by `dispatch-review.sh`): fail-closed, never a verdict.
+
+## Script
+
+```bash
+scripts/dispatch-hetero.sh --branch feat/<task> --prompt-file /tmp/task.md \
+    [--model "Gemini 3.5 Flash (High)"] [--base develop] [--timeout 9m]
+```
+
+JSON to stdout: `{status, runner, model, containment, contained, branch, base, commit, files_changed, insertions, deletions, worktree, agent_log, error, duplex}` (`runner` is `"codex"`, `"agy"`, `"grok"`, `"cc-shim"`, `"pi"`, `"qoderclicn"`, `"cursor"`, or `"unresolved"` per `--runner auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor` — `"unresolved"` appears only on a `precondition_failed` raised BEFORE runner resolution, meaning no rail was selected (e.g. a `--runner auto` refusal of a Cursor-hosted id, or a missing `--branch`); `auto` routes `*gpt*`/`*codex*` → codex, `*grok*`/`*composer*` → grok, `*qwen*`/`*qwq*` → qoderclicn, else agy; **`auto` never selects `cursor`** — a `cursor-` prefixed model id (or a Cursor-hosted `gpt-5.3-codex-*` id) makes `auto` fail closed with exit 2 naming the explicit runner (`--runner cursor` is required); `model` echoes `--model`; `containment`/`contained` carry teardown-hygiene provenance; `duplex` is `"rpc"` for `pi` and `null` for all other runners; all **engine provenance** the caller records in its run-summary ledger; consumed by the `/l5` impl row, [`skills/ceo-agent/references/depth0-control-loop.md`](../skills/ceo-agent/references/depth0-control-loop.md)). Exit 0 = committed + clean tree + agent exit 0 (worktree auto-removed; **branch survives** for review/merge). Exit 1 = ran but did not yield a reviewable clean commit (`dirty` / `failure` / `no_op` / `question_suspected` — see Outcome states; worktree **kept** for inspection). Exit 2 = precondition failure. The agent's stdout/stderr are written to a temp file; **`agent_log` contains that file's path, not the log text** — read the file to inspect agent output.
+
+### Outcome states
+
+The no-commit case is **split by how the worker ended** so a legitimate no-op task is not confused with a stalled/paused one. The split is CLI-agnostic — it reads git artifacts + the already-captured `AGENT_EXIT`, with **zero stream parsing** (no `--output-format` / no question-mark heuristic; a heuristic on the assistant stream would be scrape-equivalent and is out of scope).
+
+| `status` | Condition | Meaning | Exit |
+|----------|-----------|---------|------|
+| `committed` | new commit + clean tree + agent exit 0 | **success** — the only path that returns 0; branch is ready for review/merge | 0 |
+| `failure` | new commit + clean tree but agent **exit ≠ 0** | the worker left a commit but ended abnormally; **not** scored success (a non-zero exit is never `committed`) | 1 |
+| `dirty` | new commit but tree left uncommitted-dirty | the worker committed then kept editing; not a reviewable clean state | 1 |
+| `no_op` | **no** new commit + agent **exit 0** | the agent legitimately judged nothing was needed; not a dispatch failure. **(agy/Gemini, pre-v2.25.9: a `no_op` here usually meant agy invented a scratch project instead of editing the worktree — agy `-p` ignores process cwd. Fixed v2.25.9: the agy directive now PREPENDS an absolute-worktree anchor, so agy edits in place — verified single- and multi-file. A `no_op` from agy now means what it says.)** | 1 |
+| `question_suspected` | **no** new commit + (timeout **or** exit ≠ 0) | the worker likely **paused on a clarifying question** (auto-approve / `--dangerously-skip-permissions` does *not* silence the model's own question — see [`blind-dispatch.md`](blind-dispatch.md) § "Clarifying questions survive auto-approve") or otherwise stalled | 1 |
+| `engine_unavailable` | worker exit ≠ 0 (would have been `failure` or `question_suspected`) **and** the error log classifies as a known engine-unavailability signal (`quota_exhausted` / `rate_limited` / `auth_failed` / `overloaded`) | the runner hit a quota/auth/overload death (e.g. grok HTTP 402), not a clarifying question or code failure; worktree **kept** | 1 |
+
+The caller distinguishes "nothing needed" (`no_op`) from "blind hang" (`question_suspected`) at ~20 lines of shell, surfacing the real pain — a silently hung worker — without any new always-on LLM or stream parser in the dispatch path.
+
+#### Wrapper commit subject
+
+When the worker leaves the worktree dirty at the base (edit-only workers), the rail captures the edits itself and the commit subject is exactly `dispatch-hetero(<runner label>): edits on <branch>`. A worker that commits its own work owns its subject — so the wrapper subject is present on SOME hands commits, not all. Either way the subject is an IDENTIFIER, never evidence of integration: landed vs not-landed is answered by `scripts/check-containment.js` and `scripts/check-inputs-landed.js`, not by grepping subjects. `check-hands-commit.js --expect-wrapper-subject` asserts that subject; the rail passes it only on the capture path (it made the commit), never for a worker's own commit.
+
+`boundary_rejected` with `boundary_code: main_checkout_mutated` is the main-checkout fingerprint (`scripts/lib/main-checkout-boundary.sh`) seeing ANY ref, HEAD, config, hook, or working-tree delta between the before and after reads. It cannot attribute, so it discards the round. Two consequences the caller owns: **concurrent dispatches on one repo reject each other** — each one's new branch is a ref delta to the others — unless the caller declares the namespace with `--sibling-ref-prefix refs/heads/<ns>/` (repeatable; `refs/heads/` alone is refused; 308-8f, 2026-09-14); and **rail I/O should land outside the checkout** — a result or stderr file written under the main checkout is a stat-walk delta (also 308-8f); a caller that must write there declares the pre-existing directory with `--sibling-path-prefix <dir>/` (repeatable; `/`, `.git/`, absolute and `..` forms refused), which prunes only the stat walk — refs, diffs, config, hooks and index there still count. Otherwise serialize dispatches per repo.
+
+### pi (RPC duplex)
+
+`--runner pi` drives `pi --mode rpc` in a dedicated supervisory process
+([`scripts/lib/pi-rpc-run.js`](../scripts/lib/pi-rpc-run.js)). The supervisor spawns
+`pi --mode rpc --provider <provider> --model <model> --session-dir <dir>`, forwards the
+native JSONL event stream verbatim to the dispatch log (`agent_end`, `message_end`,
+`tool_execution_*`, ...), and prepends an EDIT-ONLY harness directive to the task prompt. The
+dispatch declares `log_format: "pi-rpc"` and emits ADDITIVE `duplex: "rpc"` in both final
+JSON and manifest for contract-aware consumers. **pi RPC is a persistent server — it does NOT
+exit after `agent_end`** (it waits for the next prompt), so the supervisor proactively shuts it
+down on `agent_end` (stdin EOF → SIGTERM → SIGKILL) and scores success on the OBSERVED
+`agent_end` + prompt response, never on pi's self-exit code (waiting for that would deadlock —
+verified live 2026-07-11).
+
+Usage is derived from declared `pi-rpc` parsing only: `message_end` messages are parsed from
+`message.usage` and aggregated (`input`/`output`/`cacheRead`), with `usage_source: "pi-rpc"`.
+`pi-rpc` is intentionally separated from the generic JSONL scanner so nested `cost` fields cannot
+pollute totals. A stalled stream gets one report-only `supervisor_stall_probe` steer injection
+(`no_event_timeout`) and remains report-only by default unless `PI_RPC_MAX_SECS` is set.
+Evidence + residuals: [`docs/projects/_archive/2026/07/2026-07-11-dispatch-observability-s1/spike-pi-rpc.md`](https://github.com/cookys/autopilot/blob/develop/docs/projects/_archive/2026/07/2026-07-11-dispatch-observability-s1/spike-pi-rpc.md). The trust rails
+(`worktree` isolation, wrapper-commit, artifact verification) remain unchanged.
+
+### Directive reachability (Phase 2 — advisory nudge channel)
+
+Depth-0 can queue a one-way **advisory** directive to a running stage's lease holder via the R0
+ledger ([`scripts/run-ledger.sh`](../scripts/run-ledger.sh) `directive-send` / `directive-poll` /
+`directive-ack`): `directive-send` binds the nudge to the target stage's CURRENT lease
+(generation+nonce) and **refuses if no stage is leased** — you cannot nudge a stage nobody holds.
+Every send is terminalized by exactly one ack row (`directive_delivered`, or `directive_expired`
+with reason `run_ended` / `stale_generation` — the stale reason covers BOTH a generation advance
+and a same-generation nonce mismatch, i.e. a fenced/replaced writer) — a directive never vanishes
+silently. This holds across ledger rotation too: `directive-poll`/`directive-ack` scan the rotated
+`<ledger>.N` segments, so a directive whose row rotated out of the live ledger stays visible and
+still terminalizes. Delivery is **queue-and-deliver-at-boundary**, never a hard interrupt. How far a directive actually reaches
+depends on the runner:
+
+| Runner | Reachability | Mechanism |
+|--------|--------------|-----------|
+| `pi` (RPC duplex) | **mid-run** | the supervisor ([`pi-rpc-run.js`](../scripts/lib/pi-rpc-run.js)) polls the ledger on its own cadence (`PI_RPC_DIRECTIVE_POLL_SECS`, default 5s), **validates the directive's bound lease (generation+nonce) against the CURRENT lease before steering** — a stale directive is never steered to the current worker, only terminalized as expired — then delivers a native RPC `steer` prefixed `[depth-0 directive] …` and acks `directive_delivered` **from the supervisor** (never the worker; an ack failure is emitted as a `supervisor_directive_ack_failed` log event, not swallowed). At shutdown any still-pending directive is `directive_expired(run_ended)` — the expiry runs AFTER the child teardown ladder is armed, so a lock-contended ledger can't delay worker teardown. Enabled only when `--ledger/--run-id/--stage` are all passed (`dispatch-hetero.sh --runner pi` forwards its own coords automatically) — otherwise byte-identical to before. |
+| CC foreman (dev-flow inline) | **stage boundary** | the foreman reads its own run-id **once** at each stage boundary (before `stage-acquire` of the next stage), honors + records, then acks. Not a wait-loop. |
+| one-shot batch runners (`codex exec` / `agy -p` / `grok` / `cc-shim`) | **UNREACHABLE mid-run** | no duplex channel — a directive can only shape the **NEXT** round's dispatch prompt. No pretend-channel is offered. |
+
+AUTHORITY LINES (non-negotiable): a directive is **advisory** — the lease holder keeps the stage,
+there is **no auto-kill on non-response** (Stage 3 scheduling/steer stays BACKLOG'd), and the
+read-only [`watch-foreman.js`](../scripts/watch-foreman.js) NEVER gains a directive-send surface
+(its no-`child_process` / report-only invariant is unchanged). The delivering supervisor — not the
+worker — writes every ack (worker bytes stay JSON-escaped inside tool events, so a worker can't
+forge its own delivery).
+
+### Deferred — stream-json "live question" rail (spike-gated, NOT built)
+
+A richer signal — a *live* "the model is asking a question" event from `--output-format stream-json` — is **deferred behind an existence spike, not committed**. `claude -p --output-format stream-json` is known to emit `assistant` / `tool_use` / `tool_result` / `result`; whether any of `claude` / `codex exec` / `gemini -p` emits a **machine-distinguishable** "asking a question" event is unverified. **Before any parser code**, a spike must capture real runs and answer "does the event even exist." If it does not, the rail is invalid (a question-mark heuristic would be scrape-equivalent) and stays unbuilt. Recorded sample files are the spike deliverable; any future parser is tested against the recording, never a live CLI. Tracked in the plan's §8, not here.
+
+After exit 0: review `git diff <base>..<branch>` through quality-pipeline, then merge or discard the branch.
+
+## Task status and explicit merge closeout
+
+For managed L5/L6 root runs, merge permission and task completion are different facts. Persist the
+exact task evidence bundle at
+`${AUTOPILOT_TASK_STATUS_DIR:-${TMPDIR:-/tmp}/autopilot-task-status}/<root_run_id>.json`, then
+query it without mutating refs or worktrees:
+
+```bash
+node "$autopilot_root/bin/autopilot.js" status task --root-run-id "$root_run_id"
+task_status_receipt="$(mktemp)"
+node "$autopilot_root/bin/autopilot.js" status task \
+  --root-run-id "$root_run_id" --json >"$task_status_receipt"
+node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));if(v.can_merge!==true)process.exit(1)' \
+  "$task_status_receipt"
+```
+
+Human output starts with `DONE` only when the receipt's full `can_close` predicate is true.
+Otherwise it starts with `NOT DONE`, the first blocker, and the next action. Always read the four
+states independently:
+
+```text
+NOT DONE product_merged=true consumer_updated=true pushed=false zero_residue=false
+Blocker: pushed_false
+Next action: push the required integration ref after explicit approval
+```
+
+### Direction is data, not prose
+
+A merge intent names every direction explicitly. For example, this sequence integrates safety
+work into the product branch, then advances the consumer branch; it does not imply or permit the
+reverse edge:
+
+```json
+{
+  "edges": [
+    {
+      "sequence": 1,
+      "source_ref": "refs/heads/safety",
+      "target_ref": "refs/heads/develop",
+      "mode": "no-ff"
+    },
+    {
+      "sequence": 2,
+      "source_ref": "refs/heads/develop",
+      "source_from_edge": 1,
+      "target_ref": "refs/heads/peo",
+      "mode": "ff-only"
+    }
+  ],
+  "forbidden_reverse_edges": [
+    {
+      "source_ref": "refs/heads/peo",
+      "target_ref": "refs/heads/develop"
+    }
+  ]
+}
+```
+
+`buildMergeIntent()` resolves refs/worktrees and seals this contract.
+`preflightMergeIntent()` is strictly read-only: it inventories staged, unstaged, untracked, and
+ambiguous target paths; compares incoming paths; and returns `safe`, `overlapping`, `ambiguous`, or
+`blocked`. It never checks out, merges, stashes, resets, pushes, or deletes anything.
+
+Mutation has a separate front door. The request file must carry the exact `{manifest, seal}`,
+the caller's matching `manifest_seal`, the digest-valid preflight receipt, and exact
+`approved_preservation` paths:
+
+```bash
+node "$autopilot_root/bin/autopilot.js" merge execute \
+  --request /path/to/sealed-merge-request.json --json
+```
+
+Execution revalidates every endpoint, target symbolic ref, worktree/repository binding, dirty
+inventory, and protected bytes before each edge. It runs only the declared `no-ff` or `ff-only`
+mode and emits a content-digested execution receipt. It does not push, delete branches/worktrees,
+or drop stashes. Run task status freshly before merge, after merge, and immediately before L5/L6
+marker clear; a previously green receipt cannot authorize a later mutation boundary.
+
+### Cleanup (caller's responsibility — both are deliberate persistence)
+
+- `agent_log` file: persists on every path (it is the only record of agent output, including on success). `rm` it after reading.
+- Kept managed worktrees (exit 1, or `--keep-worktree`): inspect, then immediately use the exact root-run lifecycle below. Do not bypass its write-ahead branch inventory with a manual `git worktree remove --force`, and never use a bare `git branch -D`.
+- Interrupt trap: `scripts/dispatch-hetero.sh` installs a `TERM` trap (and an `INT` trap for the atypical parent-only-INT case) that self-reaps its worktree + branch if the run is killed mid-agy, disarming once agy returns. A **Ctrl-C** (INT to the whole process group) does NOT hit the trap — agy dies and the run routes through the normal `question_suspected` exit-1 path with the worktree **kept for inspection** (verified empirically 2026-06-22).
+
+## Managed root-run lifecycle
+
+The stable resource identity is `git-common-dir:<canonical-path>` plus the
+campaign `root_run_id`. The canonical campaign controller derives that root
+from the sealed `campaign_id` and injects it through
+`AUTOPILOT_WORKTREE_ROOT_RUN_ID` on every initial, repair, and resumed
+implementation dispatch. This resource channel is deliberately separate from
+the manifest's `AUTOPILOT_ROOT_RUN_ID`: the latter remains the current foreman
+trace root so `watch-foreman.js --root <foreman-run-id>` continues to observe
+its leaves. All schema-2 implementation descendants inherit the worktree root
+unchanged. The managed campaign adapter also normalizes dispatch depth to a
+positive decimal before spawning the leaf; zero or malformed inherited depth
+cannot disable the budget block.
+An explicitly managed dispatch admits that root durably before publishing a
+pending record or creating a branch/worktree. A direct one-shot dispatch with
+no explicit worktree root keeps the legacy cleanup path and does not create
+lifecycle authority as a side effect.
+`max_leaf_worktrees_per_root` (default `4`) limits simultaneous retained
+schema-2 leaves for that identity; repository lifecycle locking serializes
+admission, reconciliation, scan, and reap. A budget rejection is a
+pre-spend `precondition_failed`, not permission to create another root id.
+
+Once depth 0 has inspected a retained result, disposition it immediately:
+
+```bash
+: "${lifecycle_artifact_dir:?set a caller-owned durable artifact directory}"
+: "${campaign_id:?bind the admitted sealed campaign_id}"
+[[ "$campaign_id" =~ ^campaign-v1-[0-9a-f]{64}$ ]] \
+  || { printf '%s\n' 'invalid lifecycle campaign_id' >&2; exit 2; }
+root_run_id="$campaign_id"
+lifecycle_dir="$(mktemp -d "$lifecycle_artifact_dir/root-$root_run_id.XXXXXX")" \
+  || exit 2
+worktree_result="$lifecycle_dir/worktrees.json"
+branch_result="$lifecycle_dir/branches.json"
+receipt="$lifecycle_dir/residue-receipt.json"
+bash "$autopilot_root/scripts/reap-dispatch-worktrees.sh" reap \
+  --repo "$consumer_repo" --root-run-id "$root_run_id" --yes \
+  >"$worktree_result" || exit $?
+bash "$autopilot_root/scripts/reap-dispatch-branches.sh" reap \
+  --repo "$consumer_repo" --into "$integration_target" \
+  --inventory-file "$worktree_result" --yes >"$branch_result" || exit $?
+node "$autopilot_root/scripts/lifecycle-residue-receipt.js" issue \
+  --repo "$consumer_repo" --root-run-id "$root_run_id" \
+  --worktree-result "$worktree_result" --branch-result "$branch_result" \
+  --out "$receipt" || exit $?
+node "$autopilot_root/scripts/lifecycle-residue-receipt.js" check \
+  --repo "$consumer_repo" --root-run-id "$root_run_id" \
+  --receipt "$receipt" || exit $?
+node -e '
+const value = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+if (value.zero_residue !== true) process.exit(1);
+' "$receipt" || { printf '%s\n' 'lifecycle residue remains' >&2; exit 1; }
+```
+
+The artifact directory belongs to depth 0, must survive leaf cleanup, and is
+recorded in the run summary for LSM consumption. Every attempt uses a unique
+mode-0700 `root-<id>.*` directory, so a failed step cannot fall through to a
+stale receipt. The validated id is prefixed with `root-` before path
+construction, so the otherwise valid ids `.` and `..` cannot traverse the
+artifact root. `check` exit 0 means the
+receipt is structurally valid and fresh; depth 0 must also read
+`zero_residue`. A fresh `false` is an exact lifecycle blocker, not a pass.
+
+The worktree controller removes only exact clean/dead owned leaves and writes
+durable branch/tip inventory before removal. Dirty, live, malformed, legacy,
+unsupported, pending, or raced states remain visible blockers. Resolve the
+reported state (for example commit/preserve dirty work or stop a live owner)
+and rerun the same exact-root sequence; never force-remove past it. If an
+exact branch is not contained, rerun the branch disposition with
+`--ack-preserved <branch@tip>` only after an explicit preservation handoff;
+never broaden a regex to make it disappear.
+
+Automatic managed success cleanup targets only the completing leaf. An explicit
+`--keep-worktree` is a bounded lease and is rejected unless
+`--retain-owner`, `--retain-reason`, and future `--retain-until` are all
+present. The schema-2 marker stores the owner, reason digest, and expiry.
+Later budget reconciliation counts that leaf but cannot remove it before depth
+0 dispositions it. Inventory
+copy publication is protected by a write-ahead intent: pre-authority copies may
+be rolled back and a post-authority trailing intent may be cleared only when
+both copies still match. Missing, malformed, or extra evidence never gains
+authority during load and still fails closed.
+Managed `INT`/`TERM` follows the same journal-before-remove rule and never
+deletes the branch in the trap. The final targeted reap is bound to the tip
+captured by the first journal step; a hook or race that advances the branch is
+preserved for explicit disposition instead of creating a second membership.
+Exact branch disposition inherits and verifies the same lifecycle lock fd for
+its controller rescan, then holds that lock through validation and destructive
+disposition, so a new managed leaf cannot enter between canonical inventory and
+branch action.
+
+Managed implementation campaigns keep one branch and one retained worktree
+across the initial mutation and every authorized repair. A repair passes the
+exact prior commit as `--base` and the exact retained checkout through
+`--reuse-worktree` plus the controller-bound `--expected-worktree-instance`
+digest; creating a successor branch is not a retry mechanism. Grok
+repairs additionally pass the first call's UUID through `--resume-session`.
+Runners without a verified resume API may start a new provider conversation in
+the same checkout, but the campaign receipt must name
+`provider_session_non_reuse_reason`. The retained checkout is removed without
+`--force` on terminal success. Dirty or unverifiable state blocks cleanup.
+
+Finding IDs and accepted invariants are carried across repair prompts. The same
+normalized finding may authorize one bounded repair; seeing it again stops at
+`awaiting_convergence_adjudication` before another runner call. Renamed finding
+sets that fail to shrink for two repair rounds stop at the same gate. Durable
+`git_candidate` references include the exact repair lineage so a new process
+after compaction can restore branch, worktree, provider session, lease, churn,
+and input-measurement identity rather than redispatching from transcript memory.
+
+Before first anchor creation, the controller admits the root into a private
+repo-level registry (`initializing` then `active`). An active registered root
+can never be reinitialized when its per-root evidence disappears. The
+controller then cross-binds a random per-root nonce plus the journal
+directory's birth-time/device/inode generation between a mode-0600 anchor under the Git
+common directory and a mode-0600 sentinel inside the private mode-0700
+branch-inventory directory. Each immutable inventory record is also mirrored
+under the separate anchor directory and compared byte-for-byte on every load.
+The monotonic authority is a canonical JSON Git blob reached through
+`refs/autopilot/lifecycle-roots/<root-key>` and advanced with `git update-ref`
+compare-and-swap. It carries the generation plus every record key/content
+digest, and permanently binds the admitted journal's
+nonce/birth-time/device/inode.
+Anchor and registry are updated afterward and may only be repaired
+forward from that ref; the sentinel keeps immutable directory identity. A kill
+after the authority CAS is recoverable, and coordinated stale snapshots of the
+ordinary anchor+registry files cannot roll the Git authority back. A copied
+sentinel cannot bless a replacement directory, an individual or mirrored pair
+cannot disappear silently, and a missing active anchor is never rebuilt from
+the sentinel. A pre-anchor journal is imported only when its directory is
+owner-private mode 0700 and every imported record is owner-owned mode 0600.
+Empty exact inventory is accepted only after these bindings and a fresh
+controller scan prove no unresolved journal branch. A same-owner adversary that
+can also rewrite the authority ref and Git object database is outside this
+local proof boundary.
+Crash-recovery claims cover process death and `SIGKILL`. Without explicit host
+and filesystem fsync guarantees, power loss may require manual recovery and
+must fail closed rather than prove zero residue.
+
+Managed successful leaves use this controller for automatic cleanup: exact
+branch/tip evidence is committed before the worktree is removed. The legacy
+direct remover remains only for unmanaged depth-zero dispatches.
+
+`LifecycleResidueReceipt` binds the current repository identity, root id,
+worktree observation, exact branch inventory, and disposition journal. It is
+freshness-checked before handoff to the lifecycle state machine, but it proves
+resource disposition only: it never computes task `can_close`, generation
+advance, merge authority, or finish authority.
+
+## Repo-branch lifecycle
+
+`scripts/reap-dispatch-branches.sh` is the preserve-first lifecycle rail for dispatch-owned **local** branches. Its built-in anchored grammar is:
+
+* `ceo-integration-candidate-r<N>` — integration candidates.
+* `ceo-<task>-r<N>-<YYYYMMDD>` — dated intermediate rounds.
+* `agent/<task>-r<N>-<YYYYMMDD>` — dated unit rounds.
+* Repeated `--pattern <bash-ere>` adds an explicit local family; an empty ERE is rejected because it would match every local branch. Batch `unit-*` branches are intentionally out of scope and remain owned by `dispatch-batch.sh`.
+
+`scan` emits JSON classification without destructive mutation (it may create
+owned coordination lock files). `check` is the finish-flow gate: exit 0 means
+no unacknowledged ahead integration candidate; exit 1 means depth 0 must
+integrate, explicitly preserve, or discard. `--ack <branch>` records
+preservation against the exact current tip; malformed, missing, or moved-tip
+acks are pruned fail-closed.
+
+Durable acknowledgement and destructive reap currently support SHA-1 object-format repositories only (40 lowercase hexadecimal object IDs). On SHA-256 repositories `scan` remains available/read-only, but a durable `check --ack` is unavailable (non-40-hex stored acks are pruned and re-arm the gate) and `reap --yes` fails closed during tip validation before any ref deletion.
+
+`scan` reports containment against the authoritative integration target first, otherwise against a canonical maximal live candidate target (one canonical candidate per same-tip group; non-maximal candidate tips cannot become sole containment proof). `reap` is dry-run unless `--yes` is supplied, and it only deletes branches contained by the authoritative integration target. `--reap-superseded` exposes supersession in the preview but never authorizes deletion of an uncontained branch; discard is manual depth-0/human work after preservation. Before deletion the tool creates and verifies one positive-ref full-history bundle, checks every head, and revalidates exact tip + containment + complete worktree occupancy around the compare-delete CAS. If post-delete proof invalidates, exact-ref restoration is attempted only with a prepared `update-ref --stdin` transaction using `option no-deref`; a raced direct ref or symref aborts/fails closed rather than being overwritten, and the verified bundle remains the authoritative recovery artifact. Git has no transaction spanning ref and worktree metadata, so a hostile concurrent actor can still race after the final validation; the script never overclaims stronger serialization.
+
+Exit 2 is a usage/environment failure. Bundles default under the git common dir; a relative `--bundle-dir` resolves against the repo root, never caller CWD. The tool never touches remote refs and never treats a name match alone as deletion authority.
+
+Signal-handler orphan paths use the private state root `${AUTOPILOT_ORPHAN_STATE_DIR:-${TMPDIR:-/tmp}/autopilot-${UID}}`. It must be a real owner-owned mode-0700 directory; unsafe mode, symlink, non-directory, or foreign ownership fails startup closed with exit 2. `--gc` retries only exact registered own-user worktrees and holds the normal lifetime-flock proof through removal, so a live or unsafe/unsupported lock preserves the worktree and its retry entry.
+
+## Mid-run observability — run manifest + [`scripts/dispatch-status.js`](../scripts/dispatch-status.js)
+
+A dispatch is no longer fire-and-forget (Stage 1, BACKLOG "Dispatch observability"). At START,
+`dispatch-hetero.sh` and `dispatch-review.sh` write a **run manifest** to
+`${AUTOPILOT_DISPATCH_RUNS_DIR:-${TMPDIR:-/tmp}/autopilot-dispatch-runs}/<run-id>.manifest.json`
+(run_id, live log path, worktree, lock path, predicted containment, pid) and announce
+`run_id=… manifest=…` on stderr — BEFORE blocking on the worker. The worker's event stream was
+always streamed live to the log file; the manifest is what makes it findable mid-flight.
+
+```bash
+scripts/dispatch-status.js --run <run-id>      # one JSON line: phase/alive/stall/tokens/files
+scripts/dispatch-status.js --list              # all manifests (started/ended)
+scripts/dispatch-status.js --log <p> --summary # parse-only (events/tool_calls/tokens)
+scripts/dispatch-status.js --reap [--days N] [--dry-run]  # retention reaper (see below)
+```
+
+- **Liveness** (advisory ordering): flock probe on the worktree lifetime lock (same contract as
+  `_wt_is_live`; survives detach — the child inherits the fd) → cgroup scope → pid. Any positive
+  signal ⇒ `alive:true` / `phase:"running"`; finalized manifest (`ended_at`) ⇒ `"exited"`.
+- **Stall**: `alive` AND log mtime age > `--stall-secs` (default 180) ⇒ `stall:true`. Report-only —
+  Stage 1 has NO auto-kill; killing stays the caller's call (`--gc`, `dispatch-batch.sh reap`).
+- **Telemetry honesty**: events/tool_calls/tokens are parsed from the HARNESS event stream
+  (codex-chrome `tokens used` footer — empirically fixtured; generic JSONL key scan), NEVER from
+  worker self-report. The stream format is **dispatcher-declared** (manifest `log_format` /
+  `--format`, derived from the invocation flags the dispatcher itself chose), never content-
+  sniffed — a worker printing JSON usage lines into a plain-text log cannot promote its own
+  output into telemetry. Production agy dispatches capture `--output-format json` into a private
+  envelope, validate its closed response/usage schema, and copy only the response into the framed
+  worker log; malformed, duplicate-key, trailing, invalid-number, or nonzero-exit envelopes yield
+  `usage:null`. Formats carrying no signal (including cc-shim plain text) likewise yield honest
+  `null`, not fabricated numbers. `files_touched` is git-artifact-derived from the worktree.
+- **Final JSON**: `dispatch-hetero.sh` emits `run_id` / `usage` / `wall_secs`; agy usage comes only
+  from the validated private envelope, while other runners retain their declared-format parser.
+  `dispatch-review.sh` now also emits required `usage` (`null` for runners without an admitted
+  signal or any failed agy envelope; closed agy usage with `source:"agy-json"` on success).
+- **Trust boundary unchanged**: all of this is SCHEDULING telemetry. Verdicts still come from git
+  artifacts + fail-closed parsers only. Disable manifests with `AUTOPILOT_DISPATCH_MANIFEST=0`.
+- **Trace lineage contract:** dispatchers inherit lineage from incoming env
+  (`AUTOPILOT_PARENT_RUN_ID`, `AUTOPILOT_ROOT_RUN_ID`, `AUTOPILOT_DISPATCH_DEPTH`) and stamp
+  each manifest with `parent_run_id` + `root_run_id` + `depth` so dispatch trees are auditable.
+  - ⚠️ **`AUTOPILOT_ROOT_RUN_ID` alone does not set the LINEAGE root.** It is read only inside
+    the has-parent branch, so without `AUTOPILOT_PARENT_RUN_ID` the dispatch becomes its own
+    lineage root. It is **not** discarded, though, and passing it alone is **supported**: the
+    continuation/rehydration resolver still honours it (`_cont_root`), which is how a run
+    re-attaches to an existing root after compaction. Do **not** add a fail-closed guard on
+    root-without-parent — tried 2026-07-31, it broke 8 assertions in
+    `codex-compaction-rehydration.test.sh`. To set the lineage root, **set both to that id**.
+  - ⚠️ **Lineage is telemetry-only ONLY off the sealed-campaign rail.** With
+    `--campaign-contract`, `root_run_id` is load-bearing: `deriveCampaignDispatchUnit`
+    requires `rootRunId === campaignContract.mission_runtime.root_run_id` and otherwise
+    rejects with `caller root_run_id disagrees with campaign mission_runtime` — an error
+    that names neither env var, so read this bullet before believing the campaign contract
+    is at fault. A Mission leaf therefore dispatches with
+    `AUTOPILOT_PARENT_RUN_ID=AUTOPILOT_ROOT_RUN_ID=<mission_runtime.root_run_id>`.
+- **HONEST BOUNDARY (observability scope):** lineage spans only layers passing through
+  `dispatch-hetero.sh` / `dispatch-review.sh`; engine-internal spawns (e.g. codex `spawn_agent`,
+  agy recursion) and depth-0-only tooling do not appear unless they emit one of those
+  dispatch manifests.
+
+## Residue retention — startup log prune + manifest reaper
+
+Dispatch residue used to accumulate with NO retention until it exhausted the host's `/tmp`
+per-user quota (usrquota) and silently broke every harness Bash call on the machine
+(2026-07-13 incident: 1910 `dispatch-review-log-*` + 616 test-fixture logs + 126
+`pi-rpc-session-*` + 602 manifests ≈ 21 GiB). Two mechanisms now bound it:
+
+- **Startup log prune** (`scripts/lib/prune-tmp-residue.sh`): each dispatch script
+  (`dispatch-hetero.sh` / `dispatch-review.sh` / `dispatch-author.sh` / `dispatch-explore.sh`)
+  best-effort prunes aged `${TMPDIR}` residue (raw logs, prompt temps, scratch cwds, pi sessions)
+  at startup — its own caller-passed patterns UNIONED with the shared `PRUNE_TMP_RESIDUE_PATTERNS`
+  registry (owned by the script, not by callers), so every call also prunes that shared set, not
+  merely its own family. Items older than `${AUTOPILOT_TMP_LOG_RETENTION_DAYS:-3}` days,
+  own-user only, `-maxdepth 1`, fixed name prefixes. `0` disables. LOGS AND SCRATCH ONLY —
+  worktrees are never blind-mtime-pruned (they carry a liveness lock; see next bullet).
+- **Manifest reaper** (`dispatch-status.js --reap [--days N] [--dry-run]`, default 7 days):
+  scans the runs dir; a LIVE run (flock/pid/scope probe) is never touched regardless of age;
+  not-live manifests older than `--days` are deleted; a failure-kept worktree is removed ONLY
+  on a DEFINITIVE dead lock verdict + the `.autopilot-worktree` marker + a free worktree lock
+  (the `gc_stale_worktrees` eligibility contract), then the owner repo gets `git worktree
+  prune`. Unmarked dirs and unparseable manifests are never deleted. Complements (not
+  replaces) `dispatch-hetero.sh --gc`, which stays the config-gated worktree-only reaper.
+
+## Implementer ladder (unit class + red repair)
+
+A project may set `implementer_ladder` in `.claude/review-loop-config.md` as a comma list of
+`engine/effort@runner` rungs (each runner must be a valid `implementer_runner`). When the field is
+absent the resolver emits `implementer_ladder: []` and dispatch keeps using the three
+`implementer_engine` / `implementer_effort` / `implementer_runner` fields.
+
+When the ladder is present:
+
+- campaign contract `unit_class: mechanical` starts at rung 0; omitted or `judgment` starts at
+  rung 1 (a one-rung ladder always uses that rung)
+- repair generation `r` (0-based, first dispatch is 0) uses `min(start + r, top)`
+- hitting the top rung and going red again is existing `awaiting_convergence_adjudication`, not a
+  new state
+- `on_engine_unavailable` stays the availability axis and is not reused for this climb
+
+The engine records the dispatched tuple plus `implementer_ladder_rung` on the
+`dispatch_implementation` ledger row. The same topology resolver (`scripts/resolve-dispatch-topology.js`) also derives `reviewer_ladder`, `consult_ladder`, `discuss_ladder`, and a `plan_review_panel` via `--role`, consumed by `scripts/resolve-review-loop.sh`'s `auto` transitions for `plan_review`, `hetero_review`, and `consult_dispatch`.
+
+## Wired engines (runners) — how to pick one
+
+`--runner` (or `implementer_runner`/`reviewer_runner` in `.claude/review-loop-config.md`):
+
+| Runner | Engine / models | Implementer | Reviewer | How to invoke / notes |
+|--------|-----------------|:-:|:-:|------|
+| `codex` | OpenAI `gpt-*`/`*codex*` | ✅ self-commits, can run build/test mid-turn | ✅ | default; `--effort` reasoning. Auto-selected for `*gpt*`/`*codex*` models. |
+| `agy` | Google Gemini (Antigravity CLI) | ✅ can run build/test (sync foreground; auto-managed to completion, bounded by `--print-timeout` — the old "run_command 10s cap" is REFUTED on 1.0.14, see portability § 2026-07-02) | ✅ | needs interactive auth; absolute-worktree anchor (agy `-p` ignores cwd). Gotcha: no cross-call `&`/`nohup` bg jobs (each `run_command` = isolated subshell, reaps its children) — run long tasks as ONE sync command. **No `--prompt-file`** — the prompt goes as one argv string, so a payload over ~131 KB is refused by the rails before exec (see § agy argv-payload ceiling); every other runner here reads a file or STDIN and has no such wall. |
+| `grok` | xAI `grok-4.5` (upstream renamed from `grok-build`, verified 2026-07-14), `grok-composer-2.5-fast` | ✅ EDIT-ONLY + wrapper-commit | ✅ read-only (scratch cwd) | needs `grok login`. HONORS `--cwd` (no anchor). Composer 2.5 lives in the grok CLI on the Grok Build plan. Auto-selected for `*grok*`/`*composer*`. |
+| `cc-shim` | Claude Code CLI → **any Anthropic-compatible endpoint** (`MiniMax-M3`, GLM, …) | ✅ EDIT-ONLY + wrapper-commit | ✅ read-only (scratch cwd, no skip-perms) | **EXPLICIT-only**. Set `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` in env (NOT `ANTHROPIC_API_KEY` — it's unset so it can't override the shim token). Prompt via STDIN. For an IMPLEMENTER the MODEL writes the code, not the driver family. **MiniMax-M3:** baseline reviewer calibration is 10/10 known-bad, 0 false-pass-on-critical, 3/3 clean, but its diff-only seat later produced false central claims in 5/6 observations. The exact `MiniMax-M3` + `cc-shim` + `minimax` tuple requires `reviewer_limitation: minimax-false-central-claim-5-of-6`; independently verify its findings. **GLM-5.2**: endpoint verified but 529-overloaded as of 2026-06-30 — full loop unverified. **Local models** (SGLang/vLLM/llama.cpp `/v1/messages`): same rail; define a named endpoint (`autopilot endpoints set`) — `https://` or loopback `http://` by default, or `--transport plaintext-private` for a private-range IP literal (disclosed, notice on every dispatch); qualify with `engine-qualify.sh implementer --endpoint <name>` so exam and routing share one definition (engine-onboarding § "Serving a local model for a team"). |
+| `pi` | `pi` coding agent RPC mode (`v0.80.6`), MiniMax provider | ✅ EDIT-ONLY + wrapper-commit + duplex supervision | ❌ NOT wired (implementer-only — `dispatch-review.sh` rejects `--runner pi`; do NOT count pi toward reviewer/qc-panel family coverage) | **EXPLICIT-only** (declarative via `implementer_runner: pi` in `review-loop-config.md`, or hand-typed `--runner pi`; never auto-routed). `--provider` defaults `minimax` (env `PI_RPC_PROVIDER` override), `--pi-bin` test seam, `PI_MODELS_JSON` precondition path override for auth lookup, native `pi-rpc` stream + report-only stall probe. |
+| `qoderclicn` | Qoder CLI CN → Alibaba `Qwen3.8-Max-Preview` (also gateways GLM-5.2 / DeepSeek-V4 / Kimi / MiniMax-M2.7) | ✅ EDIT-ONLY + wrapper-commit | ✅ read-only (scratch cwd, `--tools ""`) | needs Qoder CLI CN auth (`~/.qoder-cn`). HONORS `-w`/`--cwd` (no anchor — grok-shaped, NOT agy). Prompt via STDIN; `-p` print mode; effort → `--reasoning-effort`; `--qoder-bin` test seam. Reviewer splits STDOUT/STDERR (a benign `fatal: not a git repository` on stderr from the non-git scratch cwd stays out of the parse). Auto-selected for `*qwen*`/`*qwq*`. Spike-verified 2026-07-24 (edit-only + `-w` honored, both paths e2e-passed on Qwen3.8-Max-Preview). |
+| `cursor` | Cursor CLI (`cursor-agent`) → ~60 models across five vendors on one OAuth login; this plan's effort mapping covers `cursor-grok-4.6-*` and `gpt-5.3-codex-*` only | ✅ EDIT-ONLY + wrapper-commit | ✅ read-only (scratch cwd, `--mode ask`) | needs `cursor-agent` login. HONORS process cwd AND `--workspace <abs>` (no anchor — grok-shaped, NOT agy). Prompt via STDIN; `-p` print mode; `--trust` MANDATORY headlessly (the run aborts on workspace trust without it). Effort is the **model-id suffix**, not a flag — there is no `--reasoning-effort` on this rail. `--cursor-bin`/`--cursor-fast` test seams (default lane is non-fast). **EXPLICIT-only — `auto` refuses cursor ids and fails closed, never selects cursor.** Reviewer/author rails are bound to `--output-format text`. Deliberately excluded from the blind-review allowlist. **Read-only here is COOPERATIVE, not enforced**: the 2026-08-29 adversarial probe (`docs/plans/evidence/2026-08-29-cursor-containment-probe/`, 18 probes on 2026.08.25-3e8eec8) found `--mode ask` is cooperative and overridden by `--force`, `permissions.deny: ["*"]` silently no-ops, enumerated deny is allow-by-omission (TodoWrite and WebSearch ran uncontained, WebSearch making a real outbound call), and `--sandbox` is AppArmor-gated. The scratch cwd is real containment for the working directory; the process is not otherwise prevented from reaching the host. That is why `qualification-review-provider.js` refuses cursor unconditionally as an exam transport. **NOT yet qualified — no roster admission** (`resolve-review-loop.sh` has no cursor entry; Stage-1 implementer qualification is a separate, deferred phase). |
+| `opencode` | OpenCode CLI (`opencode run`) → any provider/model id in `opencode models` (e.g. `opencode-go/muse-spark-1.3-contributor` on the OpenCode Go plan, `opencode/*-free`) | ✅ EDIT-ONLY + wrapper-commit | ✅ read-only (scratch cwd, `--agent plan`; BEST-EFFORT, see caveat) | **EXPLICIT-only** (never auto — ids are `provider/model`, no vendor family to match). Spike-verified 2026-09-03 on opencode 1.18.25: `--dir <wt>` anchors edits (grok-shaped, no agy anchor); prompt via STDIN when no positional message; `--pure` drops the operator's external plugins (hermetic exam surface); `--format json` streams events (`step_finish.tokens` carries usage — parsing is BACKLOG, `log_format: plain`, usage `null`). No effort flag on this route — the seat's effort is a label. `--opencode-bin` test seam. Plan: `docs/plans/2026-09-03-opencode-implementer-rail.md`. **Reviewer rail** (`dispatch-review.sh --runner opencode`, probe-verified 2026-09-07 on 1.18.27): same `--dir`/`--pure`/STDIN/`--format json` shape, plus `--agent plan` (denies `edit`) and `--variant` for effort (`max` clamps to `xhigh`). Final assistant text is extracted from the last `{"type":"text",...}` NDJSON event's `.part.text`. **`--agent plan` is COOPERATIVE, not enforced**: a live adversarial probe (asked it to run `hostname` via its bash tool) showed it does NOT block tool execution — the real hostname came back. Scratch cwd is the actual containment (never the repo — the diff is text in the prompt). Deliberately excluded from the blind-review allowlist, same tier as `kimi`/`cursor`/`grok`; `qualification-review-provider.js` refuses `opencode` unconditionally as an exam transport (same doctrine as its `cursor` refusal). |
+
+For AUTHORING flows, prefer `anthropic-compatible` when the request is a large single-shot payload where `cc-shim` (Claude Code CLI transport) can stall or fail with 529-style endpoint pathologies. This path runs the same direct `dispatch-anthropic-review.js --raw` transport with `MINIMAX_API_KEY`/`ANTHROPIC_COMPATIBLE_AUTH_TOKEN`, and it resolves credentials by endpoint name the same way as cc-shim when `--endpoint <name>` is supplied.
+
+Full per-runner usage recipes (incl. the cc-shim env setup and which models are clean) live in
+[`../project-config-template/review-loop-config.md`](../project-config-template/review-loop-config.md) § Gotchas.
+The resolver's `family_of()` recognises openai/anthropic/google/xai/minimax/zhipu for the
+decorrelation overlap check.
+
+## The consult seat — `scripts/dispatch-consult.sh`
+
+A mid-run heterogeneous second opinion used to be hand-typed `dispatch-review.sh` argv:
+the operator picked a runner, a model and an effort at the keyboard, so the choice was
+invisible to the roster and unreproducible between runs. It is now a **seat** in
+`review-loop-config.md`, resolved AND dispatched by one script (plan
+`docs/plans/_archive/2026/08/2026-08-28-consult-discuss-qualification.md` D8):
+
+```bash
+scripts/dispatch-consult.sh --question-file <what to decide> --artifact <diff/file/test-output> [--artifact <more>...]
+```
+
+`dispatch-consult.sh` owns switch resolution itself — it reads `consult_dispatch` from the
+resolved roster and refuses (exit 2, naming the field) before any transport spawns when the
+seat is off. It is **not** `dispatch-review.sh`: that rail only succeeds after parsing a
+`SHIP-AS-IS`/`FIX-THEN-SHIP` verdict, which a consult answer must never carry. Consult rides
+`dispatch-author.sh`'s raw-prompt rail instead, carrying the frozen consult response schema
+(`evals/consult-eval-rubric.md`) with no review-verdict protocol anywhere in the prompt, the
+parser, or the output. A response carrying a loop-convergence verdict token is rejected.
+
+**Blind-evidence preflight is structural, not a caller responsibility.** Before any
+dispatch, the script runs `scripts/check-blind-evidence.sh` over the question file and every
+`--artifact`, and refuses (exit 4) a payload carrying an implementer's self-report, summary,
+or self-verdict — only artifacts and the original question ever reach a consult engine
+(`references/blind-dispatch.md` § Verifier isolation).
+
+Two properties carry over from the other seats, and both matter here:
+
+- **Qualification still gates it.** Naming a runner with no recorded role qualification
+  (today `cursor`) makes the resolver EXIT 3 unless `$AUTOPILOT_QUALIFICATION_OVERRIDE`
+  carries an unexpired entry for that engine/runner AND `"role": "consult"`, OR the seat
+  holds a recorded, non-demoted `consult` role-qualification row (D7's switch-on
+  qualification gate, when `consult_dispatch: on`). `dispatch-consult.sh` surfaces the
+  resolver's own refusal message rather than inventing its own.
+- **A consult is still ADVICE.** Same trust boundary as the codex-plugin consult channel below:
+  it never substitutes qc@depth-0, artifact verification, or the decorrelated review
+  rails. Routing it through a seat makes the choice reproducible; it does not promote the
+  answer.
+
+The sibling `discuss_*` seat (heterogeneous participation in `think-tank`) now also has an
+executable consumer, `scripts/dispatch-discuss.js` (plan D9), called from
+`skills/think-tank/SKILL.md`. It resolves and dispatches the same way — own switch
+resolution, `dispatch-author.sh`'s raw-prompt rail, a closed production schema, advisory only.
+
+### Hook points — the four canonical unknown-escalation ladder call sites
+
+The consult seat is rung U1 of the unknown-escalation ladder (plan
+`docs/plans/_archive/2026/09/2026-09-07-unknown-escalation-ladder.md`). It is never called unconditionally: every
+site runs `scripts/probe-unknown.js classify` first and acts only on `recommend`; every U1–U4
+climb appends one `ladder` row (`dispatch-consult.sh --ladder-receipt` for U1,
+`probe-unknown.js receipt` for U2/U3/U4; U5 is the owner and is reached only by the caller's own stop). This list is canonical; the SKILLs spell the same argv.
+
+| Site | classify argv | Rungs it can spawn |
+|---|---|---|
+| `debug` step 4 (after every refuted `hypothesis` row) | `node scripts/probe-unknown.js classify --ledger <ledger> --work-unit <task> --terms <error nouns>` | U1 `dispatch-consult.sh … --ladder-receipt <ledger> --ladder-terms <terms> --ladder-unknown-type why --ladder-signals S1 --ladder-work-unit <task>`; U2 survey `issue-search` + `receipt --rung U2`; U3 panel (`dispatch-discuss`, else `autopilot:debugger` PUA) + `receipt --rung U3`; U4 spike + `receipt --rung U4 --question --criterion --result` |
+| `dev-flow` `intent` node (and `diagnose` for L/XL bugs) probe, the `research` node, and the `plan` node (L, XL consult-before-design) | `node scripts/probe-unknown.js classify --ledger <ledger> --work-unit <task-id or phase> --terms <task / design nouns>` (at `intent` / `diagnose` no phase exists yet: the task id is the work unit; at `plan` and after, the phase id) | U1 `dispatch-consult.sh … --ladder-receipt <ledger> --ladder-terms <terms> --ladder-unknown-type how --ladder-signals <ids> --ladder-work-unit <phase>`; U2 survey + `receipt --rung U2 --work-unit <phase>` |
+| `think-tank` Step 5 (consensus LOW) | `node scripts/probe-unknown.js classify --ledger <ledger> --work-unit <decision> --consensus LOW --terms <decision nouns>` | U1 consult (`--ladder-unknown-type whether --ladder-signals S5 --ladder-work-unit <decision>`); U3 panel (`dispatch-discuss`, else `think-tank-dialectic`) + `receipt --rung U3 --signals S5 --work-unit <decision>`; U4 spike + `receipt --rung U4` |
+| `ceo-agent` foreman round end (`skills/ceo-agent/references/depth0-control-loop.md`) | `node scripts/probe-unknown.js classify --ledger <round ledger> --work-unit <run> --convergence <convergence.json> --stall <stall.json> --terms <round nouns>` | U1 consult (`--ladder-signals <ids> --ladder-work-unit <run>`); U2 background survey + `receipt --rung U2 --work-unit <run>`; U3 panel (`dispatch-discuss`, else think-tank `whether` / debugger PUA `why`) + `receipt --rung U3 --work-unit <run>`; U4 spike + `receipt --rung U4`; the probe never emits U5 — the stall fuse / DOA stop reaches the owner and attaches `ladder_receipts:` to its `[ESCALATION]` |
+
+- quality-pipeline: never consults a seat that is already sitting in the resolved qc_panel — the resolver's exclusion enforces this mechanically, no extra code needed here.
+
+## Codex-plugin consult (optional)
+
+The seat rail (`scripts/dispatch-consult.sh`, resolved by `consult_dispatch: auto` from topology) is the default way to ask a model a single question; the codex plugin, when installed, is an optional faster transport for the same purpose, not a separate posture.
+
+When the official OpenAI codex plugin (`openai/codex-plugin-cc`) is installed AND the
+host is Claude Code, a THIRD posture exists alongside write-rails and review-rails:
+a quick, repo-grounded second opinion that lands as advice in
+context, not as a verified artifact.
+
+- Channels: the `codex:codex-rescue` subagent via the Agent tool, or
+  `codex-companion.mjs task --model <m> --effort <e>` directly. Both ride a shared
+  app-server broker (structured protocol — no stdout scraping, no late-flush class;
+  threads are resumable across calls).
+- Measured profile (first-round spike, 2026-07-05, small-n): a repo-grounded
+  technical assessment returned in ~9s vs ~50s–5min for an equivalent question
+  through `dispatch-author.sh`/`dispatch-explore.sh`. Use it when the deliverable is
+  an OPINION (design sanity check, "am I missing a failure mode", second diagnosis
+  pass) and latency matters.
+- **Trust boundary (non-negotiable)**: consult output is ADVICE — it never
+  substitutes qc@depth-0, artifact verification, or the decorrelated review rails.
+  Labor (implementation, harness authoring) stays on the write/authoring rails with
+  worktree isolation and artifact verification.
+- **The plugin's own review channel is NOT integrated** (`/codex:review` is
+  model-locked to GPT-5.3-Codex-Spark with no --model flag, and has not passed the
+  `evals/known-bad` calibration bar) — see the BACKLOG entry for the gate. Keep the
+  plugin's stop-time review gate DISABLED (it overlaps autopilot's pre-push qc-gate).
+- Degradation: plugin absent / non-CC host → fall back to `dispatch-explore.sh`
+  (repo-grounded answer with read-probe) or `dispatch-author.sh` (raw authoring
+  prompt). The consult posture is optional leverage, never a dependency.
+
+## Reading the repo — [`scripts/dispatch-explore.sh`](../scripts/dispatch-explore.sh)
+
+`dispatch-hetero.sh` (write) and `dispatch-review.sh` (review a diff fed as **text**) both **avoid** letting the engine read the worktree. The opposite posture — you *want* a hetero engine to **read the real repo** and answer grounded (capability discovery, broad-context review, "what does this codebase actually do") — is [`scripts/dispatch-explore.sh`](../scripts/dispatch-explore.sh). The repo is trusted here; reading it is the point.
+
+**Why a script — the silent-guess trap.** Each read path has one non-obvious rail that, if skipped, makes the engine **read nothing and guess instead**, then report confident wrong "facts" (a map-only agy once "fact-checked" the real 24 skills down to an invented 23, and declared an existing skill missing). Both rails are baked in:
+
+| Engine | Failure if naive | Baked-in recipe |
+|--------|------------------|-----------------|
+| **codex** | `--sandbox read-only` needs **bubblewrap** to exec the file-read commands; when `bwrap` is absent the sandbox fails *before* file access and codex falls back to guessing | detect `bwrap`: present → `--sandbox read-only`; absent → `--dangerously-bypass-approvals-and-sandbox` + a loud stderr note (bypass is OK here — repo trusted, read-only intent — but NEVER in `dispatch-review.sh`'s untrusted-diff path). Always `-C <repo>`. |
+| **agy** | `agy -p` **ignores the process cwd** (invents a `~/.gemini` scratch project), so a relative-path prompt reads nothing | the prompt PREPENDS `Your ABSOLUTE working directory is <repo>` + an explicit absolute-path read-list; output captured via `script -qec` pseudo-TTY (the #76/#408 stdout-drop rail). Correct arg order: prompt right after `-p`, `--model` LAST (a `--model` wedged before the prompt makes agy answer "I am running on \<model\>" instead of the task). |
+
+**Fail-loud read probe (the autopilot guard — never trust self-report).** Before any answer is trusted, a fresh unguessable token is written to a sentinel file in the repo and the engine is told to echo it on a `READ-PROBE:` line. No match ⇒ the engine could not read ⇒ `status:read_failed`, exit 3, and the guessed body is **withheld**, never returned as valid. This makes "the engine silently guessed" a hard error instead of a plausible-looking lie — the same fail-closed stance as Invariant 2. (`--no-probe` exists for smoke tests only.)
+
+**Read-INTENT, not write-PROOF.** Only the codex `--sandbox read-only` path (bwrap present) actually *prevents* writes; agy has no read-only mode and the codex bypass path is unsandboxed. So rather than over-claim read-only, the script snapshots `git status --porcelain` before/after and, if the engine touched any tracked or untracked(non-ignored) file, returns `status:explored_dirty` (exit 4) + a loud stderr warning — detect-by-artifact (Invariant 2) applied to "did it stay read-only." (One blind spot: writes confined to already-gitignored paths, which porcelain can't see without an unbounded `--ignored` walk — run on a clean tree.) `sudo apt install bubblewrap` upgrades the codex path to genuinely write-proof.
+
+```bash
+scripts/dispatch-explore.sh --runner codex|agy --model <name> --prompt-file <file> \
+    [--repo <dir>] [--effort xhigh] [--timeout 9m]
+# JSON: {runner, model, status: explored|explored_dirty|read_failed|precondition_failed, read_probe, sandbox, repo_modified, raw_log, error}
+# exit 0 = explored (clean) · 4 = explored_dirty (answer present but repo was written — read-intent violated) · 3 = read_failed (body withheld) · 2 = precondition
+```
+
+> Optional: `sudo apt install bubblewrap` lets codex read under its proper `--sandbox read-only` instead of the bypass — the script auto-detects and switches; nothing else changes.
+
+## A non-Claude foreman — [`scripts/dispatch-foreman.sh`](../scripts/dispatch-foreman.sh)
+
+Shape B of [`docs/plans/_archive/2026/09/2026-09-13-non-claude-foreman-rail-design.md`](../docs/plans/_archive/2026/09/2026-09-13-non-claude-foreman-rail-design.md)
+(owner ruling: quota is the motive). kimi holds the orchestration loop in a dispatcher-created
+worktree and drives hands through the rails above; **the rail, not the prompt, enforces what
+`hooks/foreman-guard.js` enforces for a Claude foreman**, and the verdict stays at depth 0.
+
+```bash
+scripts/dispatch-foreman.sh --brief-file <file> --plan-file <file> [--model kimi-code/k3] [--base <ref>] \
+    [--run-id <id>] [--ledger <path>] [--tool-cap N] [--timeout 3600] [--env-passthrough NAME]...
+# resume after an escalation (same worktree — kimi refuses to resume from another cwd):
+scripts/dispatch-foreman.sh --resume --run-dir <run_dir> --answer-file <file>
+# JSON: status completed|escalated|tool_cap_reached|deadline_expired|foreman_failed|main_checkout_mutated|
+#       main_checkout_unverified|foreman_integrated|unsafe_commit_content|content_check_unverified|precondition_failed
+#       + foreman_branch foreman_head base_sha hands_branches[] report_path handoff_written stream_log tool_calls …
+# exit 0 = completed|escalated · 1 = every other status · 2 = precondition_failed
+```
+
+| Rail-owned enforcement | Mechanism |
+|---|---|
+| Audit log outside the worktree | `<run_dir>/foreman.stream.jsonl` is kimi's stream-json as emitted; brief/plan/protocol/REPORT/HANDOFF/ESCALATION live in the run dir too. kimi's `~/.kimi-code/` store is resume state, not audit |
+| Tool cap (ironlaw #6) | Same knob as `foreman-guard` (`foreman_guard.bash_cap` / `AUTOPILOT_FOREMAN_GUARD_BASH_CAP`, default 40). Each stream line is parsed as JSON (a hand's leaked stdout is a non-JSON line and is skipped); assistant `tool_calls` named `Bash` are counted; call N > cap kills the process group and runs ONE `kimi -c` handoff turn (own cap 5). The rail never writes HANDOFF.md itself — `handoff_written=false` is the honest answer |
+| Verdict at depth 0 | `scripts/lib/main-checkout-boundary.sh` (the ONE implementation shared with `dispatch-hetero.sh`) fingerprints the main checkout before/after; only `refs/heads/foreman/<run>` and `refs/heads/hands/<run>/*` may move. A merge commit or a non-descendant head on the foreman branch is `foreman_integrated`; foreman commits pass `check-hands-commit.js`. Hands branches are listed from git, never from the report |
+| Env | Allowlist (`PATH HOME TERM LANG LC_* TMPDIR XDG_* KIMI_* AUTOPILOT_*` + `--env-passthrough`) plus `HANDS_GIT_ENV` (push/fetch blocked for every child). `egress_policy: "unbounded"` — network egress is not bounded (kimi has MCP http/sse) and the result says so |
+| Containment | `setsid` session; the kill targets its process group. Hands dispatched with ledger coords are their own sessions by the detach contract and survive by design |
+| Waiting | The protocol tells the foreman to wait with [`scripts/wait-dispatch-results.js`](../scripts/wait-dispatch-results.js) (`--ledger <path> --expect <run_id>.<stage>`), the wait side of the exit-file contract every detached rail already lands — never a shell poll loop |
+
+Not wired into `/l5` yet: routing a level's foreman through this rail is a skill change with its own bar (a second PATCH).
+
+## Role-prompt reuse (engine-neutral bodies)
+
+[`.opencode/agent-bodies/*.body.md`](../.opencode/agent-bodies/) are frontmatter-free role prompts generated for OpenCode — but plain markdown is engine-neutral. Feeding `reviewer.body.md` + a diff to `agy -p` yields a methodology-carrying heterogeneous reviewer with zero new files. (The directory is named for its primary consumer; this secondary use is intentional.)
+
+## Unverified — spike before asserting
+
+- ~~agy with the autopilot plugin installed: do skills load in `-p` mode?~~ **Resolved 2026-06-11: NO** — verified negative (probe + tool-inventory; see [`multi-agent-portability.md`](multi-agent-portability.md) § agy spike). Invariant 4 ("the contract is the prompt") is therefore a necessity, not a preference. Interactive-mode loading untested.
+
+### Skill transport is now a MEASURED capability, not an assumption (v2.31.2)
+
+Because native skill loading in `-p`/`exec` is a verified negative for the current runners, autopilot no
+longer *assumes* anything about skills-inside-the-executor. `dispatch-hetero.sh --skill-mode
+off|prompt|native|auto` + `--skill <name>` makes transport explicit: **`prompt`** prepends a bounded
+skill pack (selected `SKILL.md` bodies, ≤ a byte budget, path-traversal-guarded) to the implementer
+prompt; **`native`** is a **precondition** that consults the capability store and REFUSES unless a bench
+has recorded `skill_transport.native = supported` (so it can never silently claim an unavailable
+mechanism); **`auto`** uses native only when bench-supported+fresh, else prompt, else off; **`off`**
+(default) is byte-identical to prior behavior. `scripts/bench-engine-capability.sh` is the only thing
+that may record native/prompt-pack support, and only from an actual passing bench. Reviewers
+(`dispatch-review.sh`) NEVER receive a skill pack (verifier isolation). See CLAUDE.md inventory for the
+three capability-state scripts.
+- agy `-p` exposes `define_subagent` / `invoke_subagent` / `manage_subagents` — a native subagent surface inside the headless executor. Semantics unprobed; could matter if a dispatched phase wants its own fan-out.
+- Other engines' headless equivalence (`gemini` CLI, `codex` CLI): same spike shape as the agy one — prove full agentic loop + flags before writing them here. `opencode run` was spiked 2026-09-03 (1.18.25) and is now the `--runner opencode` implementer rail above.
+
+## Shell-level guard for raw agy calls
+
+The guarded installer only protects its own path. For raw `agy plugin install/uninstall` typed in a shell, source [`scripts/agy-shell-guard.zsh`](../scripts/agy-shell-guard.zsh) in your `~/.zshrc` — it blocks plugin operations while any symlink sits in `~/.gemini/config/plugins/` (the agy ≤ 1.0.7 data-loss kill condition; see [`multi-agent-portability.md`](multi-agent-portability.md) § agy spike). Note: `agy -p` dispatch (this doc's subject) was never the dangerous path — the wrapper passes it straight through.
+
+## QC panel judges ride the same recipe
+
+`scripts/qc-panel.js` (task-tree engine P4) dispatches its Gemini judge via the same
+`agy -p` plumbing this doc describes — read-only judging in a throwaway dir with only
+the intended inputs, file-write verdict, `--print-timeout 8m`,
+`--dangerously-skip-permissions`. The judge path never mutates a repo, so the worktree
+rail is replaced by the throwaway-dir rail; everything else (artifact-based verification,
+never trust self-report) carries over. Spike caveats: `multi-agent-portability.md` §7.
+
+A terminal `qc_panel` seat is admitted only by (a) the incumbent qualified reviewer tuple, (b) an exact `fallback_ladder` row, or (c) `override_admitted_seats` containing `qc_panel[N]`. Record a standing pin with `node scripts/engine-capability-state.js pin-seat --role qc_panel --engine <model> --runner <runner> --effort <effort> --endpoint <name|@none> --reason <text> --operator <who>`. Campaign intake refuses an unadmitted seat (`final_panel_seat_unqualified`) before any spend.
+
+For reviewer isolation, the engine supports a `--spec-file <file>` flag to pass the original task specification as a trusted baseline. This solves structural reviewer non-convergence by scoping the review against dispatcher-authored bounds, while keeping the diff itself as the only untrusted input.
+
+## No skill yet — deliberately
+
+Two real uses so far. Per the distill philosophy (extract skills from recurring practice, not speculatively), the skill wrapper waits for recurrence — trigger tracked in [`docs/BACKLOG.md`](../docs/BACKLOG.md).

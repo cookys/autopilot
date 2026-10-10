@@ -560,4 +560,70 @@ o=$(cellj stage-graph-l-u0-known "$TEST_TMP/d3t.jsonl")
 
 echo "PASS: amend-3 extractor (loop/variable targets, hidden stdout ambiguous, multi-JSON classify)"
 
+echo "=== 6. amend-5-scorer: same-command order (classify vs stage-advance at_intent, walk order, first set) ==="
+AMEND5="$BASE/prereg/stage-graph.amend-5-same-command-order.json"
+[ -f "$AMEND5" ] || fail "amend-5-same-command-order.json missing"
+node -e '
+const a = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+if (a.amendment !== 5 || a.v9_rescored !== false || a.v1_to_v9_rescored !== false || a.effective_from !== "v10" || a.no_counted_cell_had_run !== true) process.exit(1);
+if (!a.defect || !/classify/.test(a.defect.example || "") || !a.change || !a.cell_dirs) process.exit(2);
+if (JSON.stringify(a.thresholds_unchanged) !== JSON.stringify(require(process.argv[2]).thresholds)) process.exit(3);
+' "$AMEND5" "$PREREG" || fail "amend-5 invariants (rc=$?): amendment 5, v9 not re-scored, effective v10, defect example + change + cell_dirs, thresholds unchanged"
+atint() { jq1 "$1" observed.classify.at_intent; }
+REP3='node scripts/probe-unknown.js classify --work-unit retry 2>&1 | head -20; node scripts/stage-advance.js --to proposal'
+REP3R='node scripts/stage-advance.js --to proposal; node scripts/probe-unknown.js classify --work-unit retry 2>&1 | head -20'
+CLU0='{\"eligible_max\":\"U0\"}'
+# the v9 rep3 command: classify FIRST, then stage-advance on the same line -> classify ran at intent
+mkt "$TEST_TMP/o1.jsonl" '[["'"$SETL"'", OKJ, false], ["'"$REP3"'", "'"$CLU0"'\n" + W, false]]'
+o=$(cellj stage-graph-l-u0-known "$TEST_TMP/o1.jsonl")
+[ "$(atint "$o")" = true ] || fail "amend-5: classify written before stage-advance on one line must be at_intent: $o"
+# reversed: stage-advance (past intent) first, then classify on the same line -> not at intent
+mkt "$TEST_TMP/o2.jsonl" '[["'"$SETL"'", OKJ, false], ["'"$REP3R"'", W + "\n'"$CLU0"'", false]]'
+o=$(cellj stage-graph-l-u0-known "$TEST_TMP/o2.jsonl")
+[ "$(atint "$o")" = false ] || fail "amend-5: stage-advance written before classify on one line must NOT be at_intent: $o"
+# other separators keep textual order: && and newline
+mkt "$TEST_TMP/o3.jsonl" '[["'"$SETL"'", OKJ, false], ["node scripts/probe-unknown.js classify --work-unit retry && node scripts/stage-advance.js --to proposal", "'"$CLU0"'\n" + W, false]]'
+[ "$(atint "$(cellj stage-graph-l-u0-known "$TEST_TMP/o3.jsonl")")" = true ] || fail "amend-5: classify && advance must be at_intent"
+mkt "$TEST_TMP/o4.jsonl" '[["'"$SETL"'", OKJ, false], ["node scripts/stage-advance.js --to proposal\nnode scripts/probe-unknown.js classify --work-unit retry", W + "\n'"$CLU0"'", false]]'
+[ "$(atint "$(cellj stage-graph-l-u0-known "$TEST_TMP/o4.jsonl")")" = false ] || fail "amend-5: advance newline classify must NOT be at_intent"
+# an intent advance before the classify on the same line is still at intent; a REFUSED advance before it does not count
+mkt "$TEST_TMP/o5.jsonl" '[["'"$SETL"'", OKJ, false], ["node scripts/stage-advance.js --to intent; node scripts/probe-unknown.js classify --work-unit retry", W + "\n'"$CLU0"'", false]]'
+[ "$(atint "$(cellj stage-graph-l-u0-known "$TEST_TMP/o5.jsonl")")" = true ] || fail "amend-5: an advance to intent before the classify keeps at_intent"
+mkt "$TEST_TMP/o6.jsonl" '[["'"$SETL"'", OKJ, false], ["node scripts/stage-advance.js --to finish; node scripts/probe-unknown.js classify --work-unit retry", D + "\n'"$CLU0"'", false]]'
+[ "$(atint "$(cellj stage-graph-l-u0-known "$TEST_TMP/o6.jsonl")")" = true ] || fail "amend-5: a refused advance before the classify wrote nothing, still at_intent"
+# earlier calls still count (cross-call order was always right)
+mkt "$TEST_TMP/o7.jsonl" '[["'"$SETL"'", OKJ, false], [ADV("proposal"), W, false], ["node scripts/probe-unknown.js classify --work-unit retry", "'"$CLU0"'", false]]'
+[ "$(atint "$(cellj stage-graph-l-u0-known "$TEST_TMP/o7.jsonl")")" = false ] || fail "amend-5: an advance in an EARLIER call still means not at_intent"
+# whole judgement: the rep3 command now passes the rung timing, the reversed one fails it (U0 key, U0 reported)
+o=$(cellj stage-graph-l-u0-known "$TEST_TMP/o1.jsonl" "$UR")
+[ "$(rungof "$o")" = true ] || fail "amend-5: rep3-shaped command must pass the rung judgement on the U0 key: $o"
+o=$(cellj stage-graph-l-u0-known "$TEST_TMP/o2.jsonl" "$UR")
+[ "$(rungof "$o")" = false ] || fail "amend-5: advance-then-classify must fail the U0 key timing: $o"
+# the pre-amend-5 extractor (HEAD of the commit before the fix) gets the rep3 command wrong: the test bites
+OLD5="$TEST_TMP/old5"; mkdir -p "$OLD5"; cp "$BASE/lib/transcript-query.js" "$OLD5/"
+if git -C "$REPO_ROOT" show 635ceb44:evals/skill-onoff/lib/stage-graph-cell.js > "$OLD5/stage-graph-cell.js" 2>/dev/null; then
+  o5=$(node -e 'const { extract } = require(process.argv[1]); process.stdout.write(JSON.stringify({ observed: extract(process.argv[2], null) }));' "$OLD5/stage-graph-cell.js" "$TEST_TMP/o1.jsonl")
+  [ "$(atint "$o5")" = false ] || fail "amend-5: the pre-fix extractor was expected to misjudge the rep3 command as not at_intent: $o5"
+fi
+
+# walk order inside one command line is textual (checked for the same family of defect: it already was)
+mkt "$TEST_TMP/p1.jsonl" '[[SET, OKJ, false], [ADV("plan") + "; " + ADV("implement") + " && " + ADV("verify"), W + "\n" + W + "\n" + W, false]]'
+o=$(cellj stage-graph-xs-feature "$TEST_TMP/p1.jsonl")
+[ "$(jq1 "$o" observed.walk)" = '["plan","implement","verify"]' ] || fail "amend-5: same-line walk keeps textual order: $o"
+mkt "$TEST_TMP/p2.jsonl" '[[SET, OKJ, false], [ADV("verify") + "; " + ADV("implement") + " && " + ADV("plan"), W + "\n" + W + "\n" + W, false]]'
+o=$(cellj stage-graph-xs-feature "$TEST_TMP/p2.jsonl")
+[ "$(jq1 "$o" observed.walk)" = '["verify","implement","plan"]' ] || fail "amend-5: reversed same-line walk keeps textual order: $o"
+mkt "$TEST_TMP/p3.jsonl" '[[SET, OKJ, false], [ADV("plan") + "; for n in implement verify; do node scripts/stage-advance.js --to $n; done; " + ADV("qc-gate"), W + "\n{\"allowed\":true,\"to\":\"implement\"}\n{\"allowed\":true,\"to\":\"verify\"}\n" + W, false]]'
+o=$(cellj stage-graph-xs-feature "$TEST_TMP/p3.jsonl")
+[ "$(jq1 "$o" observed.walk)" = '["plan","implement","verify","qc-gate"]' ] || fail "amend-5: a loop between two same-line advances stays in textual order: $o"
+# first-set inside one command line is textual too
+SETS='node scripts/session-mode.js set --size S'; SETXL='node scripts/session-mode.js set --size XL'
+mkt "$TEST_TMP/q1.jsonl" '[["'"$SETS"'; '"$SETXL"'", OKJ + "\n" + OKJ, false]]'
+o=$(cellj stage-graph-m-bug "$TEST_TMP/q1.jsonl")
+[ "$(jq1 "$o" observed.set.size)" = '"S"' ] || fail "amend-5: first set on one line is the textually first: $o"
+mkt "$TEST_TMP/q2.jsonl" '[["'"$SETXL"'; '"$SETS"'", OKJ + "\n" + OKJ, false]]'
+o=$(cellj stage-graph-m-bug "$TEST_TMP/q2.jsonl")
+[ "$(jq1 "$o" observed.set.size)" = '"XL"' ] || fail "amend-5: reversed first set on one line is the textually first: $o"
+echo "PASS: amend-5 scorer (same-command classify/advance order, walk order, first set)"
+
 echo "PASS: skill-onoff stage-graph instrument (expected.json, keys, (a) 12/12, (b) red $red<=3, (c) rung, (d) walk, verdicts, amend-2 chained advance + rung consistency + brief reachability)"

@@ -194,7 +194,7 @@ function stageAdvanceInvocations(cmd, res) {
     const toM = m[1].match(/--to(?:=|\s+)(?:["']?([a-z][a-z-]*)["']?(?=\s|$)|["']?\$\{?([A-Za-z_]\w*)\}?["']?(?=\s|$))/);
     if (!toM) continue; // not an advance invocation (cat/grep of the script, --help, ...)
     const loop = loops.find((l) => m.index >= l.from && m.index < l.to) || null;
-    const site = { lit: toM[1] || null, vr: toM[2] || null, hidden: STDOUT_REDIRECT.test(m[1]), loop };
+    const site = { lit: toM[1] || null, vr: toM[2] || null, hidden: STDOUT_REDIRECT.test(m[1]), loop, pos: m.index };
     if (loop) loop.sites.push(site);
     sites.push(site);
   }
@@ -214,9 +214,9 @@ function stageAdvanceInvocations(cmd, res) {
     for (let i = 0; i < (g.mult === null ? 1 : g.mult); i += 1) {
       for (const s of g.sites) {
         const argvTo = s.lit || (s.vr && g.loop && s.vr === g.loop.v && g.loop.items ? g.loop.items[i] : null);
-        if (s.hidden) out.push({ to: argvTo, written: false, outcome: 'ambiguous', basis: 'hidden' });
-        else if (attributable) { const r = recs[k]; k += 1; out.push({ to: r.to || argvTo, written: r.written, outcome: r.written ? 'written' : 'refused', basis: 'json' }); }
-        else out.push({ to: argvTo, written: false, outcome: 'ambiguous', basis: 'unattributable' });
+        if (s.hidden) out.push({ to: argvTo, written: false, outcome: 'ambiguous', basis: 'hidden', pos: s.pos });
+        else if (attributable) { const r = recs[k]; k += 1; out.push({ to: r.to || argvTo, written: r.written, outcome: r.written ? 'written' : 'refused', basis: 'json', pos: s.pos }); }
+        else out.push({ to: argvTo, written: false, outcome: 'ambiguous', basis: 'unattributable', pos: s.pos });
       }
     }
   }
@@ -257,20 +257,25 @@ function extract(file, ctx) {
       });
     }
     // stage-advance: one outcome per invocation, from its own JSON stdout (header; amend-3 rules in stageAdvanceInvocations)
-    for (const inv of stageAdvanceInvocations(cmd, res)) {
+    const walkBeforeCall = obs.walk_raw.slice();
+    const invs = stageAdvanceInvocations(cmd, res);
+    for (const inv of invs) {
       if (inv.outcome === 'ambiguous') obs.ambiguous = true;
       obs.stage_calls.push({ to: inv.to, written: inv.written, basis: inv.basis, outcome: inv.outcome });
       if (inv.written && inv.to) obs.walk_raw.push(inv.to);
     }
     // first classify
     const cl = cmd.match(/probe-unknown\.js["']?\s+classify\b([^\n;&|]*)/);
+    // amend-5-same-command-order: at_intent is judged at the classify's own textual position. A stage-advance written
+    // EARLIER in the same command line (`advance --to proposal; classify`) moved the session past intent first; one
+    // written LATER (`classify; advance --to proposal`) did not. Nodes of earlier calls are all before it.
     if (!obs.classify_called && cl && !refused) {
       obs.classify_called = true;
       const j = res ? classifyResult(res.text) : null;
       obs.rung = j && typeof j.eligible_max === 'string' ? j.eligible_max : 'unobserved';
       const pt = parseTerms(cl[1]);
       const fast = /(^|\s)--fast-moving(\s|$)/.test(cl[1]);
-      obs.classify = { terms: pt.terms, terms_present: pt.present, fast_moving: fast, at_intent: !obs.walk_raw.some((n) => n !== 'intent') };
+      obs.classify = { terms: pt.terms, terms_present: pt.present, fast_moving: fast, at_intent: !walkBeforeCall.concat(invs.filter((v) => v.written && v.to && v.pos < cl.index).map((v) => v.to)).some((n) => n !== 'intent') };
       obs.derived_eligible_max = deriveEligibleMax(pt.terms, fast, ctx);
     }
   }

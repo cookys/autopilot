@@ -63,8 +63,9 @@ if (!flag('--skip-generic') && JSON.stringify([...genericIds].sort()) !== JSON.s
 // fixed for w2a-g/w2b-g. Names ONLY the skill: no size / bug / urgent / stage vocabulary (those are what the markers measure).
 const SG_PROMPT_PREFIX = 'Use dev-flow:';
 // Cell retention (prereg/stage-graph.amend-2-instrument.json fix 1): every cell's transcript, stderr, markers and
-// extraction are kept under <results dir>/stage-graph-cells/<task>/<arm>/<rep>/ (gitignored). Scoring never reads them.
-const KEEP_CELLS_DIR = path.join(path.dirname(path.resolve(resultsPath)), 'stage-graph-cells');
+// extraction are kept under <results dir>/stage-graph-cells/<results file name without extension>/<task>/<arm>/<rep>/
+// (gitignored; amend-5-same-command-order: one subtree per results file, so v10 does not overwrite v9). Scoring never reads them.
+const KEEP_CELLS_DIR = path.join(path.dirname(path.resolve(resultsPath)), 'stage-graph-cells', path.basename(resultsPath).replace(/\.[^.]*$/, ''));
 const groups = [{ kind: 'stage-graph', tasks: P.tasks, arms: sgArms, env: { ONOFF_PROMPT_PREFIX: SG_PROMPT_PREFIX }, extra: ['--arm-manifests', armsDir] }];
 if (!flag('--skip-generic')) {
   for (const g of GENERIC) {

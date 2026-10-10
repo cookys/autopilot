@@ -289,7 +289,9 @@ done
 [ "$(wc -l < "$SG_PROMPT_LOG")" -eq 48 ] && [ "$(sort -u "$SG_PROMPT_LOG")" = "Use dev-flow:" ] || fail "every stage-graph cell prompt must start with 'Use dev-flow:' (got: $(sort -u "$SG_PROMPT_LOG" | head -3))"
 node -e 'const a=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));if(a.ONOFF_PROMPT_PREFIX!=="Use dev-flow:"||/size|bug|urgent|stage|\bXS\b|\bXL\b/i.test(a.ONOFF_PROMPT_PREFIX))process.exit(1)' "$BASE/prereg/stage-graph.amend-1-invocation.json" || fail "amendment prefix must equal the campaign's and name only the skill"
 # cell retention (prereg/stage-graph.amend-2-instrument.json fix 1): the stub campaign leaves every cell's artifacts next to the results file
-KEEP="$TMP/stage-graph-cells"
+# amend-5-same-command-order: one subtree per results file (res.jsonl -> stage-graph-cells/res/...), so a later run never overwrites an earlier one
+KEEP="$TMP/stage-graph-cells/res"
+[ ! -d "$TMP/stage-graph-cells/stage-graph-l-u0-known" ] || fail "retention: cells must live under stage-graph-cells/<results file name>/, not directly under stage-graph-cells/"
 [ "$(find "$KEEP" -name transcript.jsonl | wc -l)" -eq 48 ] || fail "retention: expected 48 retained transcripts under $KEEP, got $(find "$KEEP" -name transcript.jsonl | wc -l)"
 for f in prompt.md stage-graph-extracted.json result.json markers.env; do [ "$(find "$KEEP" -name "$f" | wc -l)" -eq 48 ] || fail "retention: $f missing from some cell"; done
 K1="$KEEP/stage-graph-l-u0-known/change/1"

@@ -108,6 +108,12 @@ Release merges happen in the dedicated worktree `.claude/worktrees/release-3.0.0
   - **Change 10/12, red 3/12, generic 4 checked, none regressed.** Same frozen rule as v5 and v6.
   - Cut gate: `check-guidance-eval.js --base 8a10980f --results …v8.jsonl` exits 0, `ok:true`, scorer SHIP (it defaults to `arms/stage-graph/change.json`, which is v8).
 - **Verdict, g67 v2: SHIP** (`results/stage-graph-g67.v2.jsonl`, 24 rows). G6 under `/l4`, `/l5` and `/l6`: ON 3/3, OFF 0/3. G7: ON 3/3, OFF 0/3. The arms differ only in the five frozen guidance files.
+- **Guidance v9 and the g8 suite (2026-10-11).** `session-mode.js set --new-task` restarts the stage walk for a second task, and the dev-flow and `/l4`–`/l6` text now says to use it for a new task after the previous one finished (not for a continuation). By owner decision it got its own pre-registered ON/OFF suite, `stage-graph-g8` (prereg `evals/skill-onoff/prereg/stage-graph-g8.{md,json}`), and the stage-graph change arm was frozen again as v9. The runner pin moved to Claude Code 2.1.296 (2.1.292 was deleted by an auto-update; revision 4 uses a copy that cannot be deleted, `~/.autopilot/claude-pin`).
+  - **g8 v1: SHIP** (`results/stage-graph-g8.v1.jsonl`). dev-flow: changed 3/3, unchanged 1/3. `/l4`: changed 3/3, unchanged 0/3.
+  - **stage-graph v9 regression run: NOT-SHIP, change 9/12** (`results/stage-graph.v9.jsonl`). Recorded as is. The cause was the scorer reading two commands in one shell line in the wrong order once, plus sampling noise; it is not the new text.
+  - **Revision 5** fixed the scorer's same-command order handling and put each run's transcript in its own directory. The arms were not changed.
+  - **Verdict, stage-graph v10: SHIP** (`results/stage-graph.v10.jsonl`, same text as v9 byte for byte, Claude Code 2.1.296). Change 10/12, deliberately broken arm 3/12, the 4 old scenarios did not regress. Cut gate: `check-guidance-eval.js --base 8a10980f --results …v10.jsonl` exits 0.
+  - Open defect: the scorer drops a whole refused tool call, so a refused second command hides a successful first one (BACKLOG row).
 
 ## P7 body (release/3.0.0, alpha.2)
 

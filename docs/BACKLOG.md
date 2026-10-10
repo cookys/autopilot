@@ -1134,10 +1134,10 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/RESULTS.md
 - **Context**: the fix is a guidance change in the l4–l6 front doors (call session-mode set --size), so it needs a skill-onoff eval before it ships.
 
-### a second task in one live session cannot restart the stage walk
+### the eval scorer skips classify when the whole tool call is refused
 - **Status**: open
-- **Trigger**: before the 3.0.0 final cut (the band stays on the first task's stage and unit)
-- **Effort**: M
-- **Source**: TUI v2 real-machine gate runs tui-v2-running3 and running4, 2026-10-10
-- **Pointer**: docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/RESULTS.md
-- **Context**: `set --size` keeps stage/unit and stage-advance refuses `implement` after qc-gate; add `set --new-task` (clears stage/unit/review_families) or allow a new cycle; guidance change, eval first.
+- **Trigger**: before the next stage-graph eval run
+- **Effort**: S
+- **Source**: stage-graph v9 regression run, 2026-10-11 (change arm 9/12 NOT-SHIP, same-command order misjudged once)
+- **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/README.md
+- **Context**: stage-graph-cell.js (evals/skill-onoff/lib) `!refused` drops a whole refused (is_error) call: in `classify; stage-advance` a refused advance hides the successful classify. Judge per command.

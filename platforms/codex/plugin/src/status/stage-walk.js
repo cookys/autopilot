@@ -5,12 +5,13 @@
 //
 //   <live>/stage/<sid>.json   schema autopilot.stage-walk/1
 //   { schema, sid, size, urgent, bug, high_risk, units: N|null, nodes, walk, entry, terminal, unit_kind,
-//     current: marker.stage|null, stage_set_at: marker.stage_set_at|null, at }
+//     current: marker.stage|null, stage_set_at: marker.stage_set_at|null, task_seq: marker.task_seq|null, at }
 //
 // One file per unexpired session marker of this project that carries a `size`. nodes/walk/entry/terminal/unit_kind come from
 // scripts/stage-graph.js buildWalk() (required, never spawned, no graph rule re-implemented here) with the marker's
 // size/urgent/bug/high_risk and units = marker.unit.total (1 without a unit). The file is rewritten only when an input
-// changes: (size, urgent, bug, high_risk, stage, stage_set_at, unit) — stage_set_at rides along because the band shows its
+// changes: (size, urgent, bug, high_risk, stage, stage_set_at, task_seq, unit) — a new task_seq (session-mode set --new-task) restarts the walk: the
+// fact is rebuilt from the cleared marker, nothing of the previous task carries over; stage_set_at rides along because the band shows its
 // age and re-entering the same stage moves it without moving `stage`. A vanished file is rewritten too.
 //
 // Intentional: the rewrite signature is the fact itself, so a unit index/label change (not part of the fact) does not rewrite it.
@@ -53,6 +54,7 @@ function buildStageWalkFact(marker, graph) {
     unit_kind: w.unit_kind,
     current: typeof marker.stage === 'string' ? marker.stage : null,
     stage_set_at: typeof marker.stage_set_at === 'string' ? marker.stage_set_at : null,
+    task_seq: Number.isInteger(marker.task_seq) && marker.task_seq >= 1 ? marker.task_seq : null,
   };
 }
 

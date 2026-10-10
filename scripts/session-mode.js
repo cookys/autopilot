@@ -22,6 +22,16 @@
  *   without --level creates a plain marker or merges into the live one (level preserved), under the marker lock;
  *   --size only moves up; base_ref defaults to `git merge-base HEAD develop|main|master` (null + stderr note when
  *   underivable). stage/stage_set_at/unit/review_families/high_risk are written by scripts/stage-advance.js.
+ *   `set --new-task [--size ...] [--urgent] [--bug] [--base-ref <sha>] [--level <the live level>]` starts a SECOND task
+ *   in the same live session: it clears stage, stage_set_at, unit, review_families, high_risk and the task-scoped
+ *   size/urgent/bug/base_ref (re-sent or re-derived, so a new task never inherits the previous task's flags or diff
+ *   base), keeps level, entry_level, fallback_reason, mission_*, root_run_id, repo_root, started_at, expires_at,
+ *   campaign_roots and every other session-scoped field, and records task_seq (1 for a session's first task, +1 per
+ *   --new-task) and task_started_at. Size may go down (the upward-only rule is per task). Choice: allowed from ANY
+ *   stage; when the previous task is not at `finish` a one-line stderr warning says so (a refusal would strand a
+ *   session whose task was abandoned or finished off-graph; the warning keeps the abandonment visible). --level, when
+ *   given, must equal the live marker's level (exit 2 otherwise; it never re-admits Mission routing). With no live
+ *   marker it creates a plain one (task_seq 1). Without --new-task `set` is unchanged (size only moves up, stage kept).
  *   campaign_roots (mods P1W SCOPE, `bind-campaign-root`): the Mission roots of the campaigns this /l5-/l6 session
  *   launched (<= 8, newest last). The engine's sealed Mission root can never equal the marker's job root (the marker is
  *   set before prepare/grant mint the mission), so this is the only link from a session to the campaign it runs; the
@@ -471,7 +481,7 @@ function gitToplevel() {
 }
 
 // Valueless flags (stage-graph P2a): `--urgent` / `--bug` take no value, so they must not swallow the next token.
-const BOOLEAN_FLAGS = new Set(['--urgent', '--bug']);
+const BOOLEAN_FLAGS = new Set(['--urgent', '--bug', '--new-task']);
 
 function parseArgs(argv) {
   const args = { _: [] };
@@ -675,7 +685,7 @@ function cmdSetPlain(args) {
 
 // ---- stage-graph P2a: size / urgent / bug / base_ref init fields (plan §2.9) --------------------------------
 const SIZES = Object.freeze(['XS', 'S', 'M', 'L', 'XL']);
-const INIT_FLAGS = ['size', 'urgent', 'bug', 'base-ref'];
+const INIT_FLAGS = ['size', 'urgent', 'bug', 'base-ref', 'new-task'];
 const BASE_REF_SHA = /^[0-9a-f]{7,64}$/u;
 // Default-branch candidates, same order as scripts/resolve-review-loop.sh probe_diff_bytes (develop, then main);
 // master and the origin/* spellings are added so a clone without a local develop still resolves.
@@ -693,6 +703,9 @@ function defaultBaseRef(repoRoot) {
   }
   return null;
 }
+
+// Fields `set --new-task` drops from a live marker: the stage-advance position plus the task-scoped init fields.
+const NEW_TASK_CLEARED = Object.freeze(['stage', 'stage_set_at', 'unit', 'review_families', 'high_risk', 'size', 'urgent', 'bug', 'base_ref']);
 
 function hasInitFlags(args) {
   return INIT_FLAGS.some((k) => Object.prototype.hasOwnProperty.call(args, k));
@@ -744,6 +757,7 @@ function cmdSetInit(args) {
   const parsed = parseInit(args);
   if (parsed.error) { process.stderr.write(`session-mode: ${parsed.error}\n`); return 2; }
   const { init } = parsed;
+  const newTask = args['new-task'] === true;
   const ttlHours = args['ttl-hours'] !== undefined ? Number(args['ttl-hours']) : DEFAULT_TTL_HOURS;
   if (!Number.isFinite(ttlHours) || ttlHours < 0) {
     process.stderr.write(`session-mode: invalid --ttl-hours "${args['ttl-hours']}"\n`);
@@ -758,6 +772,26 @@ function cmdSetInit(args) {
   try {
     withWriteLock({ storeDir: markerDir(), lockFile: `${file}.lock`, name: 'session-mode marker', timeoutMs }, () => {
       const current = readSessionRecord();
+      if (current && newTask) {
+        const asked = args.level === 'none' ? null : args.level; // none means a plain (level null) session
+        if (asked !== undefined && asked !== current.level) {
+          result = { refusal: `refusing --new-task with --level ${asked === null ? 'none' : asked}: the live marker is level ${current.level}; --new-task keeps the level` };
+          return;
+        }
+        const seqPrev = Number.isInteger(current.task_seq) && current.task_seq >= 1 ? current.task_seq
+          : (current.size !== undefined || current.stage !== undefined ? 1 : 0);
+        if (typeof current.stage === 'string' && current.stage !== 'finish') {
+          process.stderr.write(`session-mode: --new-task: the previous task (#${seqPrev || 1}) was at stage ${current.stage}, not finish; its stage walk is discarded\n`);
+        }
+        const next = { ...current };
+        for (const k of NEW_TASK_CLEARED) delete next[k];
+        applyInitFields(next, init, repoRoot, null);
+        next.task_seq = seqPrev + 1;
+        next.task_started_at = new Date().toISOString();
+        writeMarkerFile(file, next);
+        result = { marker: next, created: false };
+        return;
+      }
       if (current) {
         if (init.size && SIZES.includes(current.size) && SIZES.indexOf(init.size) < SIZES.indexOf(current.size)) {
           result = { refusal: `refusing --size ${init.size}: the marker is already ${current.size} and size only moves up (XS<S<M<L<XL)` };
@@ -766,6 +800,10 @@ function cmdSetInit(args) {
         const next = applyInitFields({ ...current }, init, repoRoot, current);
         writeMarkerFile(file, next);
         result = { marker: next, created: false };
+        return;
+      }
+      if (newTask && args.level !== undefined && args.level !== "none") {
+        result = { refusal: `refusing --new-task with --level ${args.level}: no live marker to keep the level of (run set --level ${args.level} first)` };
         return;
       }
       let scope = { repo_identity: null, project_key: null };
@@ -777,6 +815,7 @@ function cmdSetInit(args) {
         sessionId: getSessionId(), repoRoot, scope, now, ttlHours,
         rootRunId: resolveJobRoot({ explicit: explicitRoot, now }),
       }), init, repoRoot, null);
+      if (newTask) { marker.task_seq = 1; marker.task_started_at = new Date(now).toISOString(); }
       writeMarkerFile(file, marker);
       result = { marker, created: true };
     });
@@ -802,6 +841,7 @@ function cmdSet(args) {
   }
   // Stage-graph P2a: size/urgent/bug/base-ref without an orchestrator level is the create-or-merge init
   // (an existing marker keeps its level).
+  if (args['new-task'] === true) return cmdSetInit(args); // --level, if any, is checked there against the live marker
   if ((!hasLevel || args.level === 'none') && hasInitFlags(args)) return cmdSetInit(args);
   if (!hasLevel || args.level === 'none') return cmdSetPlain(args);
   const level = args.level;
@@ -1195,6 +1235,7 @@ function main() {
         'set --level l3|l4|l5|l6 [--entry-level l3|l4|l5|l6] ' +
         '[--fallback none|solo|precondition_failed] [--repo-root <dir>] [--ttl-hours N] [--root-run-id <id>] | ' +
         'set --size XS|S|M|L|XL [--urgent] [--bug] [--base-ref <sha>] (create-or-merge; size only moves up) | ' +
+        'set --new-task [--size XS|S|M|L|XL] [--urgent] [--bug] [--base-ref <sha>] (restart the stage walk for a second task) | ' +
         'clear | retire --session <id> --integration-receipt <file> [--integration-ref <ref>] | bind-campaign-root --root <id> (--repo-identity <id> | --repo-root <dir>) | status | root\n',
       );
       return 2;

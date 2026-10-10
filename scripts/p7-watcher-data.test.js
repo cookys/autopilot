@@ -478,6 +478,58 @@ test('D4 stage walk file equals `stage-graph.js nodes` for the marker; unchanged
   } finally { ctx.cleanup(); }
 });
 
+test('D4 a new task_seq resets the published walk: no carry-over of the previous task, task_seq published and schema-valid', () => {
+  const ctx = mk();
+  try {
+    const unit = { kind: 'phase', index: 3, total: 3, label: 'ship' };
+    writeMarker(ctx, 'sid-t', { size: 'L', stage: 'qc-gate', stage_set_at: iso(ctx.now - 5000), unit, task_seq: 1 });
+    const w = ctx.watcher();
+    ctx.tick(w);
+    const first = JSON.parse(fs.readFileSync(stageFile(ctx, 'sid-t'), 'utf8'));
+    assert.equal(first.task_seq, 1);
+    assert.equal(first.current, 'qc-gate');
+    assert.equal(first.units, 3);
+    assert.equal(validateJsonSchema(schemaOf('stage-walk.schema.json'), first).valid, true);
+    // same size and flags, stage/unit cleared, task_seq bumped (what `session-mode.js set --new-task --size L` writes)
+    writeMarker(ctx, 'sid-t', { size: 'L', task_seq: 2, task_started_at: iso(ctx.now) });
+    ctx.now += 15000;
+    ctx.tick(w);
+    const second = JSON.parse(fs.readFileSync(stageFile(ctx, 'sid-t'), 'utf8'));
+    assert.equal(second.task_seq, 2);
+    assert.equal(second.current, null, 'previous stage does not carry over');
+    assert.equal(second.stage_set_at, null);
+    assert.equal(second.units, null, 'previous unit total does not carry over');
+    assert.equal(second.at, iso(ctx.now), 'the file was rewritten');
+    assert.equal(validateJsonSchema(schemaOf('stage-walk.schema.json'), second).valid, true);
+    // task_seq alone moves the signature: identical walk inputs, new seq -> rewrite
+    writeMarker(ctx, 'sid-t', { size: 'L', task_seq: 3 });
+    ctx.now += 15000;
+    ctx.tick(w);
+    const third = JSON.parse(fs.readFileSync(stageFile(ctx, 'sid-t'), 'utf8'));
+    assert.equal(third.task_seq, 3);
+    assert.equal(third.at, iso(ctx.now));
+    // a marker without task_seq publishes null
+    writeMarker(ctx, 'sid-u', { size: 'S' });
+    ctx.now += 15000;
+    ctx.tick(w);
+    assert.equal(JSON.parse(fs.readFileSync(stageFile(ctx, 'sid-u'), 'utf8')).task_seq, null);
+  } finally { ctx.cleanup(); }
+});
+
+test('D4 a new-task marker without size removes the previous task stage file', () => {
+  const ctx = mk();
+  try {
+    writeMarker(ctx, 'sid-ns', { size: 'L', stage: 'plan', stage_set_at: iso(ctx.now), task_seq: 1 });
+    const w = ctx.watcher();
+    ctx.tick(w);
+    assert.ok(fs.existsSync(stageFile(ctx, 'sid-ns')));
+    writeMarker(ctx, 'sid-ns', { task_seq: 2, task_started_at: iso(ctx.now) });
+    ctx.now += 15000;
+    ctx.tick(w);
+    assert.equal(fs.existsSync(stageFile(ctx, 'sid-ns')), false, 'no stale walk of the previous task');
+  } finally { ctx.cleanup(); }
+});
+
 test('D4 a marker that disappears takes its own stage file with it', () => {
   const ctx = mk();
   try {

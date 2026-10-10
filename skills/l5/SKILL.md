@@ -27,6 +27,8 @@ Hard rules:
   The command admits canonical Mission policy/graph/source
   coverage before writing the marker. Topology may change; its admission digest and later
   Mission prepare/grant may not.
+  A new task after the previous one finished (not a resume) runs `set --new-task --level <the live level> --size <size> [--urgent] [--bug]`
+  instead of the entry `set` (level unchanged; urgent and bug do not carry over).
 - The roster from [`../../scripts/resolve-review-loop.sh`](../../scripts/resolve-review-loop.sh)
   is the ONLY source of truth — never hardcode model/runner/effort inline; implementer ladder rung 0 first.
 - Implementation dispatch uses an **immutable base SHA**; verification is by **git

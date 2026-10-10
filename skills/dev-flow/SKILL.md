@@ -70,6 +70,10 @@ User Override Protocol's cannot-be-overridden list.
 - Risk (money/points, auth/security, production protocol) does not change the size. It raises review strength:
   `scripts/resolve-review-loop.sh` reads it from `classify-diff-risk.sh` (`review_risk`).
 - Size moves only up (`set --size` refuses a downward move). A resumed session never re-sizes.
+- New task after the previous one finished (the marker still has its `stage`): step 1 is
+  `set --new-task --size <size> [--urgent] [--bug]`, not `set --size` (which keeps the old stage). Size moves only up
+  within a task, so the new size may be lower. Urgent and bug do not carry over; pass them again. Then steps 2–4 from
+  the entry node. Resuming the same task never uses `--new-task`.
 
 ### Start gates
 

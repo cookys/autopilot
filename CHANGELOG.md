@@ -1,5 +1,33 @@
 # Changelog
 
+## v3.0.0-alpha.5 — 即時 TUI 重新設計：資訊圖表化的 band 與六個分頁的面板，支援英文與正體中文（pre-release，供 owner 測試）
+
+這是 3.0.0 的第五個 pre-release，不是 stable。這版把 Claude Code 裡的 live mod（輸入框上方的 band 與展開的面板）整個重新設計，並加上雙語介面。沒有改任何 skill 文字，也沒有 script 或 hook 的行為變更；只動 `mods/live`、gate 工具與文件。從 alpha.4 升級不需要遷移，唯一看得到的差別是 band 上的 `wt N` 改成 `⚑N`（見下）。
+
+### 改動
+
+- **band**：各群組之間用 `│` 分隔。寬度 160 欄以上會多出階段流程圖（stage walk），以及 10 格的用量條（含百分比）和判定的原因；用量與 QC 一路保留到 80 欄。`⚑N` 表示需要你處理的 worktree，取代原本的 `wt N`，任何寬度都不會被省略。一種顏色只代表一種意思，而且只用 theme key。目前選到的分頁是唯一有背景色的地方（theme key `subtle`），已在 tmux 內的 truecolor 與 256 色下實測可讀。
+- **面板**：原本 8 個分頁合併成 6 個。Now 吸收 Graph，Review 吸收 Decisions，Legend 變成 `?`。中文分頁名稱是 現況、派工、審查、用量、殘留、？。分頁有 badge，各區塊用分隔線標題，key 欄固定 12 格。長文字會換行，不再用 `…` 截掉。派工表比面板寬時，改成每個 run 一個區塊往下堆疊。按 ⓘ 現在直接開在 Now 分頁。
+- **多語言**：字串表放在 `mods/live/locales/en.json` 與 `zh-TW.json`，編譯成 `locales.ts`。測試腳本會跑 `gen-locales.js --check`，兩份表的 id 與 placeholder 不一致，或程式裡出現寫死的標籤文字，都會被擋下。語言依序決定：`~/.autopilot/config.json` 的 `ui.locale`，再來是環境變數 `AUTOPILOT_LOCALE`，再來是 Claude Code 的語言設定，再來是 `LANG`，最後是 `en`。要切換語言，在 `~/.autopilot/config.json` 設 `{"ui": {"locale": "en"}}`（或 `"zh-TW"`），或單次用 `AUTOPILOT_LOCALE=zh-TW` 啟動。對齊以顯示寬度計算，中文字算兩格。詳見 `docs/configuration.md`。
+- **gate 工具**：`check.js` 在兩種語言下都能判讀新的版面文法；`capture.sh` 會明確記錄 `GATE_LOCALE`。
+
+### 驗證
+
+- **hetero review**：重新設計本身審了 3 輪，後續修正（換行、圖例、任務階段標籤、斷行孤字）審了 2 輪，由 opus、GLM、Qwen 席位審查，修到沒有未結意見為止。
+- **測試**：mods 測試 286 項通過；gate 的 `check.test.js` 92 項通過。
+- **實機 gate**：在 Claude Code 實機（私有 tmux）跑 5 種狀態 × 3 種寬度 × 2 種語言，加上 6 個面板分頁。修好換行問題後再做一次 15 張擷圖的複驗，結果記在 `docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/RESULTS.md`（`tui-v2-*` 與 `tui-v2-fix-*`），PNG 在 `docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/tui-v2*/`。設計與 i18n 的依據在 `docs/plans/evidence/2026-10-10-tui-v2/`。實機中途有幾張因 `/clear` 換了新的 session id 而無效，已在 RESULTS 標明並由 running4 取代，不是 band 的缺陷。
+- **cut gate**：`check-guidance-eval.js --base 8a10980f --results evals/skill-onoff/results/stage-graph.v8.jsonl` 與 `check-plan-graduation.js` 都是 exit 0（scorer SHIP）。全套件 `run.sh --parallel 4` 在 457 個檔案中 1 個紅，是已知的主機狀態檢查 `skill-onoff-generic`（其他 live session 同時寫入 `~/.autopilot`，單獨重跑仍是同一個原因）。`preflight-release.sh` 與 `preflight-portability.sh` 的結果見 release commit。
+
+### 已知後續
+
+- 同一個 live session 裡開第二個任務，stage walk 不會重來：`session-mode set --size` 會保留原本的 stage 與 unit，而 stage-advance 在 qc-gate 之後拒絕再進 `implement`。要加 `--new-task` 或允許新週期，屬 guidance 變更，要先做 eval（BACKLOG 列）。
+- 在 120 欄用 Ctrl+x Tab 再按 Enter 點 ⓘ，面板分頁只是偶爾會前進；滑鼠點擊一直正常。推測是鍵盤焦點落在分頁的 Button（BACKLOG 列）。
+- gate 的截圖轉換器（ansi2html）不認得 OSC 8 超連結，Dispatch 分頁的 PNG 會顯示原始的 `]8;…` 文字（BACKLOG 列）。
+- 沒有公開的用量歷史，所以用量分頁畫不出 sparkline（BACKLOG 列）。
+- `◐ ● ▲ ⓘ` 這幾個寬度不明確的符號，在把它們當成雙格寬的終端機設定下，版面可能錯位；尚未在 owner 的終端機上測過。
+
+prose-justification: alpha.5 沒有改任何 skill 或 reference 文字，prose 行數相對 v2.35.2 基準的增幅是先前版本累積的，本版沒有新增；本版的變更都在 `mods/live`、gate 工具與文件。
+
 ## v3.0.0-alpha.4 — session 收尾時直接刪掉本 session 的 dispatch 分支並印出還原指令，/l4–/l6 進場必須指定 size（pre-release，供 owner 測試）
 
 這是 3.0.0 的第四個 pre-release，不是 stable。alpha.3 把「安全的殘留」自動收掉，這版補上另一半：session 做完時，由 finish-flow 收尾明確收掉這個 session 自己的 dispatch 分支。同時修掉 mods band、tooling 與 worktree 判斷的一批問題，並把 `/l4`–`/l6` 進場要設定 size 這件事寫進 guidance。沒有破壞性變更，從 alpha.3 升級不需要遷移；唯一的行為變化是 `/l4`–`/l6` 進場現在必須帶 `--size`（見下）。

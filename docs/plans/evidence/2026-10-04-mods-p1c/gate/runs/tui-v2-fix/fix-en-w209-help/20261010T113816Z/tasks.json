@@ -1,0 +1,37 @@
+{
+  "schema": "autopilot.session-tasks/1",
+  "session_id": "3a7fda83-741c-4007-ad5a-dacc103c454a",
+  "cwd": "/home/cookys/projects/gate-sandbox",
+  "project_key": "51de403da82a23f0",
+  "updated_at": "2026-10-10T11:37:42.101Z",
+  "first_created_at": "2026-10-10T11:37:40.211Z",
+  "tasks": [
+    {
+      "id": "1",
+      "subject": "alpha",
+      "status": "in_progress",
+      "started_seq": 1
+    },
+    {
+      "id": "2",
+      "subject": "beta",
+      "status": "pending",
+      "started_seq": null
+    },
+    {
+      "id": "3",
+      "subject": "gamma",
+      "status": "pending",
+      "started_seq": null
+    }
+  ],
+  "counts": {
+    "total": 3,
+    "completed": 0,
+    "in_progress": 1
+  },
+  "current": {
+    "id": "1",
+    "subject": "alpha"
+  }
+}

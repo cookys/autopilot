@@ -408,3 +408,15 @@ Notes (batch C):
 | tui-v2 | tui-v2-running4-zh-w120 | PASS | runs/tui-v2/tui-v2-running4-zh-w120/20261010T093111Z | PASS tui-v2 fields=10 |
 | tui-v2 | tui-v2-running4-zh-w209 | PASS | runs/tui-v2/tui-v2-running4-zh-w209/20261010T093103Z | PASS tui-v2 fields=10 |
 | tui-v2 | tui-v2-running4-zh-w80 | PASS | runs/tui-v2/tui-v2-running4-zh-w80/20261010T093120Z | PASS tui-v2 fields=1 | 80 cols: panel overlay hides band, judged from panel |
+| tui-v2-fix | fix-en-w209-help | PASS (panel visually read; see note in report) | runs/tui-v2-fix/fix-en-w209-help/20261010T113816Z | zh-TW/en panel re-capture after wrap fix; check.js PASS only on *-now band captures |
+| tui-v2-fix | fix-en-w209-hygiene | PASS (panel visually read; see note in report) | runs/tui-v2-fix/fix-en-w209-hygiene/20261010T113813Z | zh-TW/en panel re-capture after wrap fix; check.js PASS only on *-now band captures |
+| tui-v2-fix | fix-en-w209-now | PASS (panel visually read; see note in report) | runs/tui-v2-fix/fix-en-w209-now/20261010T113810Z | zh-TW/en panel re-capture after wrap fix; check.js PASS only on *-now band captures |
+| tui-v2-fix | fix-zh-w120-help | PASS (panel visually read; see note in report) | runs/tui-v2-fix/fix-zh-w120-help/20261010T113700Z | zh-TW/en panel re-capture after wrap fix; check.js PASS only on *-now band captures |
+| tui-v2-fix | fix-zh-w120-hygiene | PASS (panel visually read; see note in report) | runs/tui-v2-fix/fix-zh-w120-hygiene/20261010T113657Z | zh-TW/en panel re-capture after wrap fix; check.js PASS only on *-now band captures |
+| tui-v2-fix | fix-zh-w120-now | PASS (panel visually read; see note in report) | runs/tui-v2-fix/fix-zh-w120-now/20261010T113704Z | zh-TW/en panel re-capture after wrap fix; check.js PASS only on *-now band captures |
+| tui-v2-fix | fix-zh-w209-dispatch | PASS (panel visually read; see note in report) | runs/tui-v2-fix/fix-zh-w209-dispatch/20261010T113445Z | zh-TW/en panel re-capture after wrap fix; check.js PASS only on *-now band captures |
+| tui-v2-fix | fix-zh-w209-help | PASS (panel visually read; see note in report) | runs/tui-v2-fix/fix-zh-w209-help/20261010T113441Z | zh-TW/en panel re-capture after wrap fix; check.js PASS only on *-now band captures |
+| tui-v2-fix | fix-zh-w209-hygiene | PASS (panel visually read; see note in report) | runs/tui-v2-fix/fix-zh-w209-hygiene/20261010T113439Z | zh-TW/en panel re-capture after wrap fix; check.js PASS only on *-now band captures |
+| tui-v2-fix | fix-zh-w209-now | PASS (panel visually read; see note in report) | runs/tui-v2-fix/fix-zh-w209-now/20261010T113443Z | zh-TW/en panel re-capture after wrap fix; check.js PASS only on *-now band captures |
+| tui-v2-fix | fix-zh-w209-review | PASS (panel visually read; see note in report) | runs/tui-v2-fix/fix-zh-w209-review/20261010T113435Z | zh-TW/en panel re-capture after wrap fix; check.js PASS only on *-now band captures |
+| tui-v2-fix | fix-zh-w209-usage | PASS (panel visually read; see note in report) | runs/tui-v2-fix/fix-zh-w209-usage/20261010T113437Z | zh-TW/en panel re-capture after wrap fix; check.js PASS only on *-now band captures |

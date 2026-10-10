@@ -1,0 +1,50 @@
+                                                                                                                       │                                                                                       ✕
+ ▐▛███▛█   Claude Code v2.1.296                                                                                        │ Now   Dispatch   Review   Spend   Hygiene ⚑1  ?
+▝▜██████▀  Sonnet 5.5 · Claude Max                                                                                     │─────────────────────────────────────────────────────────────────────────────────────────
+ ▝▝   ▝▝   ~/projects/gate-sandbox                                                                                     │● Running  gate-sandbox · 0m since start
+                                                                                                                       │task in progress: alpha
+                                                                                                                       │session $0.18 · host $252.61 · ctx 5%
+❯ Create three tasks with TaskCreate: alpha, beta, gamma; mark alpha in_progress; reply ready                          │── Needs you ───────────────────────────────────────────────────────────────────── ⚑ 1 ──
+                                                                                                                       │ ⚑ 1 worktree needs you → Hygiene tab
+● ready                                                                                                                │── Where you are ────────────────────────────────────────────────────────────────────────
+                                                                                                                       │no data · no stage recorded for this session
+  已建立 alpha、beta、gamma 三個任務,alpha 已標為 in_progress。                                                        │no data · no unit recorded
+                                                                                                                       │progress    0 done*
+✻ Sautéed for 7s · done 7:37 PM                                                                                        │phase       做：alpha
+                                                                                                                       │── Working now ──────────────────────────────────────────────────────────────────────────
+                                                                                                                       │dispatch    ⚙ 0 running  0 stalled
+                                                                                                                       │tasks 0/3 done · 1 in progress
+                                                                                                                       │current: alpha
+                                                                                                                       │[~] alpha
+                                                                                                                       │[ ] beta
+                                                                                                                       │[ ] gamma
+                                                                                                                       │── Cost today ───────────────────────────────────────────────────────────────────────────
+                                                                                                                       │cost        $219.58 / $150.00  ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰  146%
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+  3 tasks (0 done, 1 in progress, 2 open)                                                                              │
+  ◼ alpha                                                                                                              │
+  ◻ beta                                                                                                               │
+  ◻ gamma                                                                                                              │
+● Running │ $▰▰▰ │ ⚑1 │ ⓘ                                                                                          [-] │
+                                                                                                                       │
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Sonnet 5.5 ── ~/projects/gate-sandbox develop ──────────────────────────────────────────── v2.1.296
+  5h ▮▯▯▯▯▯ 20% 1h32m   7d ▮▮▮▮▮▯ 89% 4d16h   ctx ▯▯▯▯▯▯ 5%                        → codeforge adopt
+  ⏵⏵ accept edits on (shift+tab to cycle) · ← 6 agents

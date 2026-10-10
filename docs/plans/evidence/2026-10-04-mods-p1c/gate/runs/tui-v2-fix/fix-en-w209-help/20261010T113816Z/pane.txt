@@ -1,0 +1,50 @@
+                                                                                                                       │                                                                                       ✕
+ ▐▛███▛█   Claude Code v2.1.296                                                                                        │ Now   Dispatch   Review   Spend   Hygiene ⚑1  ?
+▝▜██████▀  Sonnet 5.5 · Claude Max                                                                                     │─────────────────────────────────────────────────────────────────────────────────────────
+ ▝▝   ▝▝   ~/projects/gate-sandbox                                                                                     │── What the band shows (left to right; an empty item is left out) ───────────────────────
+                                                                                                                       │▲ Needs you         a decision or an approval waits for you
+                                                                                                                       │⏸ Stalled           a dispatch or foreman has gone quiet
+❯ Create three tasks with TaskCreate: alpha, beta, gamma; mark alpha in_progress; reply ready                          │✓ Awaiting acceptance
+                                                                                                                       │  work is done, acceptance is yours
+● ready                                                                                                                │● Running           something is running
+                                                                                                                       │◌ Idle              idle: nothing running
+  已建立 alpha、beta、gamma 三個任務,alpha 已標為 in_progress。                                                        │M!·l5 ●─●─◐─○─○ implement ◷3m
+                                                                                                                       │  size (! = urgent) · level · stage walk (done / now / to come) · stage · time in stage
+✻ Sautéed for 7s · done 7:37 PM                                                                                        │▰▰▰▱▱ 3/5 ·2fam     unit bar: done / current / to come · k of N · review families
+                                                                                                                       │⚙2 ⏸1               live dispatches · stalled dispatches (zero is left out)
+                                                                                                                       │⟲R2 QC✓ / QC▲       review round · pre-push QC evidence present / owed
+                                                                                                                       │◆3 ?1 U2            decided on your behalf · dispatches with no record · latest
+                                                                                                                       │                    escalation rung
+                                                                                                                       │$85 ▰▰▰▰▰▰▰▰▱▱ 85%  brain-tier spend today and bar · amber from 80 % of the cap, red from
+                                                                                                                       │                    100 %
+                                                                                                                       │dev↓3 ⚑3            plugin load source (↓ = behind upstream) · ⚑ worktrees and branches
+                                                                                                                       │                    that need you
+                                                                                                                       │ⓘ                   opens this panel; with it open, shows the next tab
+                                                                                                                       │keyboard: Ctrl+x Tab, then Enter on ⓘ; each further Enter shows the next tab
+                                                                                                                       │narrow terminals drop items: < 160 walk, reason, load-source chip · < 120 stage, round,
+                                                                                                                       │amounts · < 80 all but verdict, ⚙ and ⚑
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+  3 tasks (0 done, 1 in progress, 2 open)                                                                              │
+  ◼ alpha                                                                                                              │
+  ◻ beta                                                                                                               │
+  ◻ gamma                                                                                                              │
+● Running │ $▰▰▰ │ ⚑1 │ ⓘ                                                                                          [-] │
+                                                                                                                       │
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Sonnet 5.5 ── ~/projects/gate-sandbox develop ──────────────────────────────────────────── v2.1.296
+  5h ▮▯▯▯▯▯ 20% 1h32m   7d ▮▮▮▮▮▯ 89% 4d16h   ctx ▯▯▯▯▯▯ 5%                        → codeforge adopt
+  ⏵⏵ accept edits on (shift+tab to cycle) · ← 6 agents

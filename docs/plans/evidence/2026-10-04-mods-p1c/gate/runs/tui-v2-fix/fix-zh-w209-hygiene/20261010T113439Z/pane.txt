@@ -1,0 +1,50 @@
+                                                                                                                       │                                                                                       ✕
+ ▐▛███▛█   Claude Code v2.1.296                                                                                        │ 現況   派工   審查   用量   殘留 ⚑1   ?
+▝▜██████▀  Sonnet 5.5 · Claude Max                                                                                     │─────────────────────────────────────────────────────────────────────────────────────────
+ ▝▝   ▝▝   ~/projects/gate-sandbox                                                                                     │工作階段 $0.19 · 本機 $252.44 · ctx 5%
+                                                                                                                       │── 外掛載入來源 ────────────────────────────────────────────────────────────────── dev ──
+                                                                                                                       │來源        dev  v3.0.0-alpha.4
+❯ Create three tasks with TaskCreate: alpha, beta, gamma; mark alpha in_progress; reply ready                          │市集        ✓ directory
+                                                                                                                       │旗標        stale_cache_dirs
+● ready                                                                                                                │  快取目錄 /home/cookys/.claude/plugins/cache/autopilot/autopilot/2.36.36 · 使用中
+                                                                                                                       │  1808913, 2097570 · 存活 —
+  三個任務（alpha、beta、gamma）已建立，alpha 已設為 in_progress。                                                     │── 要你處理的 worktree 與分支 ──────────────────────────────────────────── ⚑ 1  144 KB ──
+                                                                                                                       │1 項要你處理 · 144 KB · 6h36m 前自動清理：刪 0 個 worktree、封存 0 條分支
+✻ Baked for 7s · done 7:33 PM                                                                                          │ ⚑ worktree /home/cookys/projects/gate-sandbox/.claude/worktrees/agent-a0a996e5a76cd2993
+                                                                                                                       │            · clean-integrated · 1d · 144 KB · HEAD is an ancestor of the integration ref
+                                                                                                                       │   git -C '/home/cookys/projects/gate-sandbox' worktree remove '/home/cookys/projects/
+                                                                                                                       │   gate-sandbox/.claude/worktrees/agent-a0a996e5a76cd2993'
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+                                                                                                                       │
+  3 tasks (0 done, 1 in progress, 2 open)                                                                              │
+  ◼ alpha                                                                                                              │
+  ◻ beta                                                                                                               │
+  ◻ gamma                                                                                                              │
+● 進行中 │ $▰▰▰ │ ⚑1 │ ⓘ                                                                                           [-] │
+                                                                                                                       │
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Sonnet 5.5 ── ~/projects/gate-sandbox develop ──────────────────────────────────────────── v2.1.296
+  5h ▮▯▯▯▯▯ 20% 1h36m   7d ▮▮▮▮▮▯ 89% 4d16h   ctx ▯▯▯▯▯▯ 5%                        → codeforge adopt
+  ⏵⏵ accept edits on (shift+tab to cycle) · ← 6 agents

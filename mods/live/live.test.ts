@@ -63,7 +63,7 @@
 // in-memory tree; a missing file makes the bottom hook throw, which the mod sees as a rejected read.
 import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
-import { readQc, qcChip, readReview, reviewSlot, displayWidth, truncateToWidth, layoutBand, readMarker, readResidue, readStageWalk, bandSlots, slotUnit, slotPosition, slotDispatch, slotDecisions, slotSpend, slotHygiene, slotReview, readLoadSource, PANE_TABS, verdictOf, reviewTabLines, wrapLines, legendLines, hygieneTabLines } from './model'
+import { readQc, qcChip, readReview, reviewSlot, displayWidth, truncateToWidth, layoutBand, readMarker, readResidue, readStageWalk, bandSlots, slotUnit, slotPosition, slotDispatch, slotDecisions, slotSpend, slotHygiene, slotReview, readLoadSource, PANE_TABS, verdictOf, reviewTabLines, wrapLines, legendLines, hygieneTabLines, dispatchLines } from './model'
 import { makeT, resolveLocale, localeFromLanguage } from './i18n'
 import { EN, ZH_TW } from './locales'
 import type { Slot } from './model'
@@ -3049,5 +3049,43 @@ test('hygiene tab: a long cache dir, worktree path and reason wrap in full at 60
     expect(flat.replace(/\s/g, '').includes(dir.replace(/\s/g, ''))).toBe(true)
     expect(flat.replace(/\s/g, '').includes(target)).toBe(true)
     expect(flat.replace(/\s/g, '').includes('mustremainreadabletotheend'.replace(/\s/g, '')) || flat.includes('readable to the end')).toBe(true)
+  }
+})
+
+// ---- dispatch table: aligned when it fits, one block per run when it does not ----
+const dispatchSnap = (rows: object[]) => ({
+  header: 'h', rows, gates: null, link: null, published_at: null, session_as_of: null, host_as_of: null,
+  sections: { attention: [], waiting: [], tasks: [], decisions: [], foreman: [] },
+  detail: { counts: { confirmed_live: 1, exited: 1, unknown: 0 }, stalled: 0 },
+}) as never
+const RUN = (id: string, runner: string, model: string) => ({ run_id: id, role: 'hands', runner, model, stall: false, rc: null, final_status: null, elapsed_s: 90, probe_age_s: 5, phase: null })
+
+test('dispatch tab: a table wider than the pane becomes one block per run (kv rows, hang 12), never rows wrapped apart from the header', () => {
+  const long = [RUN('r-' + 'a'.repeat(40), 'opencode-with-a-long-name', 'some-vendor/a-very-long-model-id-v2'), RUN('r2', 'codex', 'gpt')]
+  for (const locale of ['en', 'zh-TW'] as const) {
+    const t = makeT(locale)
+    const lines = dispatchLines(dispatchSnap(long), { t, cols: 60 })
+    for (const l of lines) expect(displayWidth(l.text), l.text).toBeLessThanOrEqual(60)
+    expect(lines.some(l => l.text.startsWith(' ' + t('dispatch.col_run') + '  ')), locale + ' no table header').toBe(false)
+    const head = lines.findIndex(l => l.text.startsWith(' r-' + 'a'.repeat(40)))
+    expect(head, locale).toBeGreaterThan(0)
+    expect(lines[head + 1].text.startsWith(t('dispatch.col_role')), locale).toBe(true)
+    expect(lines[head + 1].hang, locale).toBe(12)
+    expect(lines.map(l => l.text).join('').replace(/\s/g, '').includes('some-vendor/a-very-long-model-id-v2'), locale + ' nothing clipped').toBe(true)
+  }
+})
+
+test('dispatch tab: a table that fits stays aligned: every row\'s state column starts where the header\'s does', () => {
+  const normal = [RUN('r1', 'codex', 'gpt-5'), { ...RUN('r2', 'claude', 'sonnet'), rc: 0 }, { ...RUN('r3', 'kimi', 'k2'), stall: true }]
+  for (const locale of ['en', 'zh-TW'] as const) {
+    const t = makeT(locale)
+    const lines = dispatchLines(dispatchSnap(normal), { t, cols: 90 }).map(l => l.text)
+    const header = lines.find(l => l.startsWith(' ' + t('dispatch.col_run') + '  ')) as string
+    expect(header, locale).toBeDefined()
+    const at = (line: string, needle: string) => displayWidth(line.slice(0, line.indexOf(needle)))
+    const want = at(header, t('dispatch.col_state'))
+    const rowsTxt = lines.filter(l => / r[123] /.test(l))
+    expect(rowsTxt.length).toBe(3)
+    for (const r of rowsTxt) expect(at(r, r.includes('✓ rc') ? '✓ rc' : r.includes('⏸') ? '⏸' : '● '), r).toBe(want)
   }
 })

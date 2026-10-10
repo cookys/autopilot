@@ -1741,14 +1741,30 @@ function dispatchLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
       ]
       const heads = [t('dispatch.col_run'), t('dispatch.col_role'), t('dispatch.col_engine'), t('dispatch.col_state'), t('dispatch.col_elapsed')]
       const widths = cols.map((c, i) => Math.max(displayWidth(heads[i]), ...c.map(displayWidth)) + 2)
-      out.push(row(dseg(' ' + heads.map((h, i) => padCells(h, widths[i])).join('') + t('dispatch.col_seen'))))
-      rows.forEach((r, i) => {
-        out.push(row(
-          seg(' ' + padCells(cols[0][i], widths[0])), seg(padCells(cols[1][i], widths[1])), seg(padCells(cols[2][i], widths[2])),
-          seg(padCells(cols[3][i], widths[3]), sts[i].color), seg(padCells(cols[4][i], widths[4])),
-          dseg(r.probe_age_s === null ? '—' : agoText(r.probe_age_s, t)), ...(r.phase === null ? [] : [dseg(' · ' + r.phase)]),
-        ))
-      })
+      const seen = rows.map(r => (r.probe_age_s === null ? '—' : agoText(r.probe_age_s, t)))
+      const tableW = 1 + widths.reduce((n, x) => n + x, 0) + Math.max(displayWidth(t('dispatch.col_seen')), ...rows.map((r, i) => displayWidth(seen[i]) + (r.phase === null ? 0 : 3 + displayWidth(r.phase))))
+      if (tableW > ctx.cols) {
+        // too wide for one aligned table (wrapping rows apart from the header would shear the columns): one block per run
+        rows.forEach((r, i) => {
+          if (i > 0) out.push(BLANK)
+          out.push(withHang(row(seg(' ' + cols[0][i], undefined, true)), 1))
+          out.push(kv(t('dispatch.col_role'), seg(cols[1][i])))
+          out.push(kv(t('label.engine'), seg(cols[2][i])))
+          out.push(kv(t('dispatch.col_state'), seg(sts[i].text, sts[i].color)))
+          out.push(kv(t('dispatch.col_elapsed'), seg(cols[4][i])))
+          out.push(kv(t('dispatch.col_seen'), dseg(seen[i])))
+          if (r.phase !== null) out.push(kv(t('label.phase'), seg(r.phase)))
+        })
+      } else {
+        out.push(row(dseg(' ' + heads.map((h, i) => padCells(h, widths[i])).join('') + t('dispatch.col_seen'))))
+        rows.forEach((r, i) => {
+          out.push(row(
+            seg(' ' + padCells(cols[0][i], widths[0])), seg(padCells(cols[1][i], widths[1])), seg(padCells(cols[2][i], widths[2])),
+            seg(padCells(cols[3][i], widths[3]), sts[i].color), seg(padCells(cols[4][i], widths[4])),
+            dseg(seen[i]), ...(r.phase === null ? [] : [dseg(' · ' + r.phase)]),
+          ))
+        })
+      }
     }
     out.push(BLANK, rule(t('dispatch.gates'), [], ctx.cols))
     const gates = snap.gates

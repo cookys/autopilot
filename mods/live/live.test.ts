@@ -3192,27 +3192,36 @@ test('spend history: a foreign schema, broken JSON or no file reads as null; bad
 })
 
 test('spend history: hourly buckets hold the spend ADDED in each hour, 24 of them, the current hour last', () => {
-  const samples = readSpendHistory(shText([{ at: at(4.4), usd: 10 }, { at: at(3.4), usd: 12 }, { at: at(2.4), usd: 12 }, { at: at(0.4), usd: 17.5 }])) as never
+  const samples = readSpendHistory(shText([{ at: at(4.4), usd: 10 }, { at: at(3.4), usd: 12 }, { at: at(2.4), usd: 12 }, { at: at(1.4), usd: 17.5 }])) as never
   const b = hourlySpend(samples, SH_NOW) as number[]
   expect(b.length).toBe(24)
-  // 12:30 now: the sample at 12:06 (0.4 h ago) is the current hour (index 23); 10:06 is 2.4 h ago (index 21); 09:06 index 20; 08:06 (4.4) index 19 is the baseline, counted 0
-  expect(Math.round(b[23] * 100) / 100).toBe(5.5)
-  expect(b[22]).toBe(0)
+  // 12:30 now: the sample at 11:06 (1.4 h ago) is index 22; 10:06 is 2.4 h ago (index 21); 09:06 index 20; 08:06 (4.4) index 19 is the baseline, counted 0
+  expect(Math.round(b[22] * 100) / 100).toBe(5.5)
+  expect(b[23]).toBe(0)
   expect(b[21]).toBe(0)
   expect(Math.round(b[20] * 100) / 100).toBe(2)
   expect(b[19]).toBe(0)
   expect(Math.round(b.reduce((a, c) => a + c, 0) * 100) / 100).toBe(7.5)
 })
 
-test('spend history: the first sample of a new UTC day counts in full; a falling figure never counts below zero; samples outside 24 h are ignored', () => {
+test('spend history: a reset (any boundary) gives the new cumulative value, a flat or falling figure is never a negative bar, and a baseline over 1 h old draws no bar', () => {
   const nowMs = Date.parse('2026-10-10T01:30:00.000Z')
   const before = (h: number) => new Date(nowMs - h * 3600 * 1000).toISOString()
-  const b = hourlySpend(readSpendHistory(JSON.stringify({ schema: 'autopilot.spend-history/1', samples: [{ at: before(30), usd: 99 }, { at: before(2), usd: 40 }, { at: before(0.7), usd: 3 }, { at: before(0.2), usd: 2.5 }] })), nowMs) as number[]
-  // 23:30 on the 9th (40, baseline from the old sample's day: a new sample after a long gap, same UTC day as before(30)? no: 30 h earlier is the 8th -> counts in full 40), 00:48 on the 10th (3, new day: full), 01:18 (2.5 < 3: 0)
-  expect(b[23]).toBe(0)
-  expect(Math.round(b[22] * 100) / 100).toBe(3)
-  expect(b[21]).toBe(40)
+  const mk = (rows: [number, number][]) => hourlySpend(readSpendHistory(JSON.stringify({ schema: 'autopilot.spend-history/1', samples: rows.map(([h, usd]) => ({ at: before(h), usd })) })), nowMs) as number[]
+  // 40 -> 3 (reset: +3, not -37 and not a spike of 40) -> 3.5 (+0.5) -> 2.5 (reset again: +2.5)
+  const b = mk([[1.5, 40], [1.2, 3], [0.7, 3.5], [0.2, 2.5]])
+  expect(Math.round(b.reduce((a, c) => a + c, 0) * 100) / 100).toBe(6)
   expect(b.some(v => v < 0)).toBe(false)
+  // the same series at any wall-clock boundary gives the same answer: it never looks at the date
+  const c = hourlySpend(readSpendHistory(JSON.stringify({ schema: 'autopilot.spend-history/1', samples: [{ at: '2026-10-10T04:00:00.000Z', usd: 40 }, { at: '2026-10-10T04:15:00.000Z', usd: 3 }] })), Date.parse('2026-10-10T04:20:00.000Z')) as number[]
+  expect(c[23]).toBe(3)
+  // a gap: the baseline is 90 minutes older than the sample -> unknown, no bar; exactly 1 h still counts
+  const gap = mk([[2, 10], [0.5, 25], [0.2, 26]])
+  expect(Math.round(gap.reduce((a, x) => a + x, 0) * 100) / 100).toBe(1)
+  const edge = mk([[1.2, 10], [0.2, 16]])
+  expect(Math.round(edge.reduce((a, x) => a + x, 0) * 100) / 100).toBe(6)
+  // samples outside the 24 h window are ignored
+  expect(mk([[40, 1], [30, 2], [0.1, 5]])).toBe(null as never)
 })
 
 test('spend history: fewer than 2 samples in the last 24 h is no sparkline (null), however old the others are', () => {

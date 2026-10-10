@@ -36,7 +36,8 @@ function createSpendHistoryPublisher({ live, writeAtomic, log = () => {} }) {
   // -> true when a sample was appended and the file written
   function publish({ nowMs, usd }) {
     if (typeof usd !== 'number' || !Number.isFinite(usd) || usd < 0) return false;
-    const samples = readSamples(file);
+    // a sample dated more than one throttle interval in the future (a clock that jumped) is stale: dropped, so sampling resumes
+    const samples = readSamples(file).filter((x) => Date.parse(x.at) - nowMs <= SAMPLE_EVERY_S * 1000);
     const last = samples.length > 0 ? Date.parse(samples[samples.length - 1].at) : null;
     if (last !== null && nowMs - last < SAMPLE_EVERY_S * 1000) return false; // also when the clock went backwards
     const kept = samples.filter((s) => nowMs - Date.parse(s.at) <= KEEP_MS);

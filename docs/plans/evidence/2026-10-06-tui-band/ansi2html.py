@@ -23,10 +23,10 @@ def xterm256(n):
     return '#%02x%02x%02x' % (v, v, v)
 
 
-# one token per escape string: CSI | OSC (BEL or ST terminated, or unterminated to end of line) | DCS/APC/PM/SOS string
+# one token per escape string: CSI | OSC (BEL or ST terminated; a new ESC or the end of the line aborts it, as in a real terminal) | DCS/APC/PM/SOS string
 TOKEN = (r'(\x1b\[[0-9;:]*[A-Za-z]'
-         r'|\x1b\][^\x07\x1b\n]*(?:\x07|\x1b\\|(?=\n)|\Z)'
-         r'|\x1b[P_^X][^\x07\x1b\n]*(?:\x07|\x1b\\|(?=\n)|\Z))')
+         r'|\x1b\][^\x07\x1b\n]*(?:\x07|\x1b\\|(?=[\n\x1b])|\Z)'
+         r'|\x1b[P_^X][^\x07\x1b\n]*(?:\x07|\x1b\\|(?=[\n\x1b])|\Z))')
 
 
 def width(ch):
@@ -88,8 +88,10 @@ def main():
             if ch == '\n':
                 rows.append(cur); cur = []
                 continue
-            if ch == '\r':
-                continue
+            if ch == '\t':
+                ch = ' '
+            if ord(ch) < 0x20 or ord(ch) == 0x7f:
+                continue  # no C0 control (a stray ESC, BEL, CR, ...) ever reaches the HTML
             cur.append((ch, dict(st), link))
     if cur:
         rows.append(cur)

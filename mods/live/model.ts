@@ -124,9 +124,12 @@ export function readSpendHistory(text: string | null): SpendSample[] | null {
   return out.sort((a, b) => a.ms - b.ms)
 }
 
-// The last 24 hourly buckets (oldest first, the current hour last) of spend ADDED per hour. A sample's usd is the UTC-day cumulative figure, so its
-// increment is usd - the previous sample's usd (never negative); the first sample of a new UTC day counts in full, the very first sample ever has no
-// baseline and counts 0. The increment lands in the bucket of the sample that shows it. Fewer than 2 samples inside the window -> null (no sparkline).
+// The last 24 hourly buckets (oldest first, the current hour last) of spend ADDED per hour. A sample's usd is the cumulative figure since the host's
+// "today" began (scripts/lib/brain-spend.js sums UTC-day rows: its header, `todayPrefix` and `todaySpend`), but the rule here does not depend on where
+// that boundary is: delta = cur >= prev ? cur - prev : cur, so a reset yields the new cumulative value, never a spike or a zero. A baseline more than
+// 1 h older than the sample is unknown (a watcher gap): that sample adds no bar; the very first sample has no baseline and adds none. The delta lands
+// in the bucket of the sample that shows it. Fewer than 2 samples inside the window -> null (no sparkline).
+export const SPEND_BASELINE_MAX_MS = HOUR_MS
 export function hourlySpend(samples: SpendSample[] | null, nowMs: number): number[] | null {
   if (samples === null) return null
   const endHour = Math.floor(nowMs / HOUR_MS)
@@ -139,8 +142,8 @@ export function hourlySpend(samples: SpendSample[] | null, nowMs: number): numbe
     inWindow += 1
     if (i === 0) return
     const prev = samples[i - 1]
-    const sameDay = new Date(prev.ms).toISOString().slice(0, 10) === new Date(cur.ms).toISOString().slice(0, 10)
-    buckets[h - startHour] += sameDay ? Math.max(0, cur.usd - prev.usd) : cur.usd
+    if (cur.ms - prev.ms > SPEND_BASELINE_MAX_MS) return
+    buckets[h - startHour] += cur.usd >= prev.usd ? cur.usd - prev.usd : cur.usd
   })
   return inWindow >= 2 ? buckets : null
 }

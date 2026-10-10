@@ -555,14 +555,46 @@ test('C spend history: samples older than 48 hours are dropped, the rest kept in
     let h = JSON.parse(fs.readFileSync(pub.file, 'utf8'));
     assert.deepEqual(h.samples.map((s) => s.usd), [3], 'both earlier samples are > 48 h old');
     assert.equal(pub.publish({ nowMs: t0 + KEEP_MS + 25 * 60 * 1000, usd: 9 }), false, 'a clock that went backwards adds nothing');
-    let t = t0 + KEEP_MS + 30 * 60 * 1000;
-    for (let i = 0; i < MAX_SAMPLES + 20; i++) { t += SAMPLE_EVERY_S * 1000 / 10; pub.publish({ nowMs: t, usd: 1 }); }
-    h = JSON.parse(fs.readFileSync(pub.file, 'utf8'));
-    assert.ok(h.samples.length <= MAX_SAMPLES);
-    assert.deepEqual(h.samples.map((s) => s.at), [...h.samples.map((s) => s.at)].sort());
+    assert.ok(h.samples.length >= 1);
     assert.deepEqual(fs.readdirSync(path.join(live, 'runs')), ['spend-history.json']);
-    assert.equal(pub.publish({ nowMs: t + 10 * SAMPLE_EVERY_S * 1000, usd: -1 }), false);
-    assert.equal(pub.publish({ nowMs: t + 10 * SAMPLE_EVERY_S * 1000, usd: NaN }), false);
+    const t = t0 + KEEP_MS + 2 * 3600 * 1000;
+    assert.equal(pub.publish({ nowMs: t, usd: -1 }), false);
+    assert.equal(pub.publish({ nowMs: t, usd: NaN }), false);
+  } finally { fs.rmSync(live, { recursive: true, force: true }); }
+});
+
+test('C spend history: a history above MAX_SAMPLES is cut to the newest MAX_SAMPLES on the next write', () => {
+  const live = fs.mkdtempSync(path.join('/dev/shm', 'autopilot-test-shcap-'));
+  try {
+    const writeAtomic = (f, t) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, t); };
+    const pub = createSpendHistoryPublisher({ live, writeAtomic });
+    const now = Date.parse('2026-10-10T12:00:00.000Z');
+    const n = MAX_SAMPLES + 100; // 500 samples 5 minutes apart: all inside 48 h, so only the cap can cut
+    const samples = Array.from({ length: n }, (_, i) => ({ at: iso(now - (n - i + 3) * 5 * 60 * 1000), usd: i }));
+    assert.ok(now - Date.parse(samples[0].at) < KEEP_MS);
+    fs.mkdirSync(path.join(live, 'runs'), { recursive: true });
+    fs.writeFileSync(pub.file, JSON.stringify({ schema: 'autopilot.spend-history/1', updated_at: iso(now), samples }));
+    assert.equal(pub.publish({ nowMs: now, usd: 999 }), true);
+    const h = JSON.parse(fs.readFileSync(pub.file, 'utf8'));
+    assert.equal(h.samples.length, MAX_SAMPLES);
+    assert.deepEqual(h.samples[h.samples.length - 1], { at: iso(now), usd: 999 });
+    assert.equal(h.samples[0].usd, n - (MAX_SAMPLES - 1), 'the oldest ones were cut, the newest kept');
+  } finally { fs.rmSync(live, { recursive: true, force: true }); }
+});
+
+test('C spend history: a last sample dated more than 15 minutes in the future is stale: dropped, and sampling resumes', () => {
+  const live = fs.mkdtempSync(path.join('/dev/shm', 'autopilot-test-shfut-'));
+  try {
+    const writeAtomic = (f, t) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, t); };
+    const pub = createSpendHistoryPublisher({ live, writeAtomic });
+    const now = Date.parse('2026-10-10T12:00:00.000Z');
+    fs.mkdirSync(path.join(live, 'runs'), { recursive: true });
+    const put = (samples) => fs.writeFileSync(pub.file, JSON.stringify({ schema: 'autopilot.spend-history/1', updated_at: iso(now), samples }));
+    put([{ at: iso(now - 3600e3), usd: 1 }, { at: iso(now + 3 * 3600e3), usd: 7 }]);
+    assert.equal(pub.publish({ nowMs: now, usd: 2 }), true, 'the future sample did not block sampling');
+    assert.deepEqual(JSON.parse(fs.readFileSync(pub.file, 'utf8')).samples.map((s) => s.usd), [1, 2]);
+    put([{ at: iso(now - 3600e3), usd: 1 }, { at: iso(now + 10 * 60e3), usd: 7 }]);
+    assert.equal(pub.publish({ nowMs: now, usd: 2 }), false, 'within 15 minutes ahead it still throttles');
   } finally { fs.rmSync(live, { recursive: true, force: true }); }
 });
 

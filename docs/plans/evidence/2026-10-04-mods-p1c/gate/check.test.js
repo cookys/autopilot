@@ -782,6 +782,9 @@ test('ansi2html: OSC 8 links (ST and BEL terminators) render the text as <a>, no
   assert.ok(text.includes('plain LINKTEXT after'), text);
   assert.ok(text.includes('red BELLINK done'), text);
   assert.ok(text.includes('strip tail end'), text);
+  assert.ok(text.includes('x y'), 'an ESC aborts an unterminated OSC; the text after it survives: ' + text);
+  assert.ok(text.includes('lonestrayend'), text);
+  assert.ok(!html.includes('\x1b') && !html.includes('\x07'), 'no raw control byte reaches the HTML');
   for (const raw of [']8;', 'id=a1', 'https://example.com', 'window title', 'AAAA', 'dcs-payload']) assert.ok(!text.includes(raw), `raw text ${raw} leaked: ${text}`);
   assert.match(html, /<a href="https:\/\/example\.com\/x\?y=1"[^>]*>/);
   assert.match(html, /<a href="file:\/\/\/tmp\/r\.json"[^>]*>/);

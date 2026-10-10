@@ -89,7 +89,7 @@ export type LiveSnapshot = {
   detail: PaneDetail
 }
 
-export type SpendView = { session: string; host_all: string; host_all_n: number | null; brain: number | null; cap: number | null; mode: string }
+export type SpendView = { session: string; host_all: string; host_all_n: number | null; brain: number | null; cap: number | null; mode: string; hourly?: number[] | null }
 export type PaneDetail = {
   counts: Counts | null // the envelope's dispatch counts (merged over the root set); null = not published
   stalled: number // stalled runs + a stalled foreman (the band's ⏸ count)
@@ -104,6 +104,55 @@ export type PaneDetail = {
   spend: SpendView | null
 }
 export const NO_DETAIL: PaneDetail = { counts: null, stalled: 0, now_ms: null, project: null, marker: null, qc: null, stage: null, decisions: null, load_source: null, residue: null, spend: null }
+
+// ---- the host-wide spend history (<live>/runs/spend-history.json, schema autopilot.spend-history/1) -> the Spend tab's hourly sparkline ----
+export const SPEND_HISTORY_SCHEMA = 'autopilot.spend-history/1'
+export const SPARK_BARS = '▁▂▃▄▅▆▇█'
+const HOUR_MS = 3600 * 1000
+export const SPEND_BUCKETS = 24
+export type SpendSample = { ms: number; usd: number }
+export function readSpendHistory(text: string | null): SpendSample[] | null {
+  if (text === null) return null
+  const parsed = parseJson(text)
+  if (!parsed.ok || !isObject(parsed.value) || parsed.value.schema !== SPEND_HISTORY_SCHEMA || !Array.isArray(parsed.value.samples)) return null
+  const out: SpendSample[] = []
+  for (const x of parsed.value.samples) {
+    if (!isObject(x) || typeof x.at !== 'string' || !finite(x.usd) || x.usd < 0) continue
+    const ms = Date.parse(x.at)
+    if (Number.isFinite(ms)) out.push({ ms, usd: x.usd })
+  }
+  return out.sort((a, b) => a.ms - b.ms)
+}
+
+// The last 24 hourly buckets (oldest first, the current hour last) of spend ADDED per hour. A sample's usd is the cumulative figure since the host's
+// "today" began (scripts/lib/brain-spend.js sums UTC-day rows: its header, `todayPrefix` and `todaySpend`), but the rule here does not depend on where
+// that boundary is: delta = cur >= prev ? cur - prev : cur, so a reset yields the new cumulative value, never a spike or a zero. A baseline more than
+// 1 h older than the sample is unknown (a watcher gap): that sample adds no bar; the very first sample has no baseline and adds none. The delta lands
+// in the bucket of the sample that shows it. Fewer than 2 samples inside the window -> null (no sparkline).
+export const SPEND_BASELINE_MAX_MS = HOUR_MS
+export function hourlySpend(samples: SpendSample[] | null, nowMs: number): number[] | null {
+  if (samples === null) return null
+  const endHour = Math.floor(nowMs / HOUR_MS)
+  const startHour = endHour - (SPEND_BUCKETS - 1)
+  const buckets: number[] = new Array(SPEND_BUCKETS).fill(0)
+  let inWindow = 0
+  samples.forEach((cur, i) => {
+    const h = Math.floor(cur.ms / HOUR_MS)
+    if (h < startHour || h > endHour) return
+    inWindow += 1
+    if (i === 0) return
+    const prev = samples[i - 1]
+    if (cur.ms - prev.ms > SPEND_BASELINE_MAX_MS) return
+    buckets[h - startHour] += cur.usd >= prev.usd ? cur.usd - prev.usd : cur.usd
+  })
+  return inWindow >= 2 ? buckets : null
+}
+
+// `▁▂▃▄▅▆▇█`, one cell per bucket scaled to the peak; an all-zero window is a flat floor
+export function sparkText(values: number[]): string {
+  const peak = Math.max(...values)
+  return values.map(v => SPARK_BARS[peak <= 0 ? 0 : Math.min(SPARK_BARS.length - 1, Math.round((v / peak) * (SPARK_BARS.length - 1)))]).join('')
+}
 
 export const SNAPSHOT_SCHEMA = 'autopilot.runs-live/1'
 export const MODEL_SCHEMA = 'review-job-model/1'
@@ -1479,6 +1528,7 @@ export function plainBandText(reason: string, columns: number): string {
 }
 
 // ---- the panel's tabs: Now (absorbs the stage walk) · Dispatch · Review (absorbs the decisions) · Spend · Hygiene · ? (the legend) ----
+export const NEXT_TAB_GLYPH = '▸' // the pane's first Button: Enter on it shows the next tab (pane.tsx tabStrip)
 export const PANE_TABS = ['now', 'dispatch', 'review', 'spend', 'hygiene', 'legend'] as const
 export type PaneTab = (typeof PANE_TABS)[number]
 export const tabLabel = (tab: PaneTab, t: T): string => t('tab.' + tab)
@@ -1921,7 +1971,15 @@ function spendTabLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
   out.push(BLANK)
   out.push(kv(t('label.session'), seg(s.session)))
   out.push(kv(t('label.fuse'), seg(t('spend.mode', { mode: s.mode })), dseg(' — ' + t('spend.mode_' + s.mode))))
-  out.push({ text: ' ' + t('spend.no_history'), dim: true })
+  const hourly = s.hourly ?? null
+  if (hourly === null) out.push({ text: ' ' + t('spend.no_history'), dim: true })
+  else {
+    const total = hourly.reduce((a, b) => a + b, 0)
+    out.push(BLANK)
+    out.push(rule(t('spend.hourly'), [seg('+' + usd(total), undefined, true)], ctx.cols))
+    out.push(row(seg(' '), seg(sparkText(hourly).slice(0, -1), 'suggestion'), seg(sparkText(hourly).slice(-1), 'suggestion', true)))
+    out.push({ text: ' ' + t('spend.hourly_caption', { peak: usd(Math.max(...hourly)) }), dim: true, wrap: true })
+  }
   return out
 }
 

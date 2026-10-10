@@ -491,3 +491,117 @@ test('D4 a marker that disappears takes its own stage file with it', () => {
     assert.equal(fs.existsSync(stageFile(ctx, 'sid-gone')), false);
   } finally { ctx.cleanup(); }
 });
+
+// ---- follow-up C: host-wide spend history (sparkline source) -----------------------------------------------------------------
+const { createSpendHistoryPublisher, SAMPLE_EVERY_S, KEEP_MS, MAX_SAMPLES } = require('../src/status/spend-history');
+const spendHistoryOf = (ctx) => { const f = path.join(ctx.live, 'runs', 'spend-history.json'); return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : null; };
+
+test('C spend history: the first tick samples host_today_brain_usd into <live>/runs/spend-history.json (host-wide file, schema-valid)', () => {
+  const ctx = mk();
+  try {
+    writeCosts(ctx, [{ model: 'claude-fable-5-1', cost_usd: 12.3456 }]);
+    ctx.tick(ctx.watcher());
+    const h = spendHistoryOf(ctx);
+    assert.equal(h.schema, 'autopilot.spend-history/1');
+    assert.deepEqual(h.samples, [{ at: iso(ctx.now), usd: 12.35 }]);
+    assert.equal(validateJsonSchema(schemaOf('spend-history.schema.json'), h).valid, true);
+    assert.equal(fs.existsSync(path.join(ctx.live, 'runs', `${ctx.scope.project_key}.spend-history.json`)), false, 'one host file, not one per project');
+  } finally { ctx.cleanup(); }
+});
+
+test('C spend history: at most one sample per 15 minutes, however many ticks (and a second watcher reads the throttle from the file)', () => {
+  const ctx = mk();
+  try {
+    writeCosts(ctx, [{ model: 'claude-fable-5-1', cost_usd: 5 }]);
+    const w = ctx.watcher();
+    ctx.tick(w);
+    for (let i = 0; i < 20; i++) { ctx.now += 40 * 1000; ctx.tick(w); } // ~13 minutes of 40 s ticks
+    assert.equal(spendHistoryOf(ctx).samples.length, 1);
+    ctx.now += 2 * 60 * 1000; // 15 min 20 s after the first
+    ctx.tick(ctx.watcher()); // a different watcher instance: the throttle is the file's last sample
+    assert.equal(spendHistoryOf(ctx).samples.length, 2);
+    ctx.now += (SAMPLE_EVERY_S - 1) * 1000;
+    ctx.tick(w);
+    assert.equal(spendHistoryOf(ctx).samples.length, 2, 'one second short of 15 minutes: no sample');
+    ctx.now += 2000;
+    ctx.tick(w);
+    assert.equal(spendHistoryOf(ctx).samples.length, 3);
+  } finally { ctx.cleanup(); }
+});
+
+test('C spend history: no costs file (null spend) adds no sample and creates no file; an unreadable history is started afresh', () => {
+  const ctx = mk();
+  try {
+    ctx.tick(ctx.watcher());
+    assert.equal(spendHistoryOf(ctx), null, 'null is not 0: nothing is recorded');
+    writeCosts(ctx, [{ model: 'claude-fable-5-1', cost_usd: 1 }]);
+    fs.mkdirSync(path.join(ctx.live, 'runs'), { recursive: true });
+    fs.writeFileSync(path.join(ctx.live, 'runs', 'spend-history.json'), '{not json');
+    ctx.now += 1000;
+    ctx.tick(ctx.watcher());
+    assert.equal(spendHistoryOf(ctx).samples.length, 1);
+  } finally { ctx.cleanup(); }
+});
+
+test('C spend history: samples older than 48 hours are dropped, the rest kept in order; the count is capped; the write leaves no tmp file', () => {
+  const live = fs.mkdtempSync(path.join('/dev/shm', 'autopilot-test-sh-'));
+  try {
+    const writeAtomic = (f, t) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f + '.tmp', t); fs.renameSync(f + '.tmp', f); };
+    const pub = createSpendHistoryPublisher({ live, writeAtomic });
+    const t0 = Date.parse('2026-10-10T00:00:00.000Z');
+    assert.equal(pub.publish({ nowMs: t0, usd: 1 }), true);
+    assert.equal(pub.publish({ nowMs: t0 + 20 * 60 * 1000, usd: 2 }), true);
+    assert.equal(pub.publish({ nowMs: t0 + KEEP_MS + 30 * 60 * 1000, usd: 3 }), true);
+    let h = JSON.parse(fs.readFileSync(pub.file, 'utf8'));
+    assert.deepEqual(h.samples.map((s) => s.usd), [3], 'both earlier samples are > 48 h old');
+    assert.equal(pub.publish({ nowMs: t0 + KEEP_MS + 25 * 60 * 1000, usd: 9 }), false, 'a clock that went backwards adds nothing');
+    assert.ok(h.samples.length >= 1);
+    assert.deepEqual(fs.readdirSync(path.join(live, 'runs')), ['spend-history.json']);
+    const t = t0 + KEEP_MS + 2 * 3600 * 1000;
+    assert.equal(pub.publish({ nowMs: t, usd: -1 }), false);
+    assert.equal(pub.publish({ nowMs: t, usd: NaN }), false);
+  } finally { fs.rmSync(live, { recursive: true, force: true }); }
+});
+
+test('C spend history: a history above MAX_SAMPLES is cut to the newest MAX_SAMPLES on the next write', () => {
+  const live = fs.mkdtempSync(path.join('/dev/shm', 'autopilot-test-shcap-'));
+  try {
+    const writeAtomic = (f, t) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, t); };
+    const pub = createSpendHistoryPublisher({ live, writeAtomic });
+    const now = Date.parse('2026-10-10T12:00:00.000Z');
+    const n = MAX_SAMPLES + 100; // 500 samples 5 minutes apart: all inside 48 h, so only the cap can cut
+    const samples = Array.from({ length: n }, (_, i) => ({ at: iso(now - (n - i + 3) * 5 * 60 * 1000), usd: i }));
+    assert.ok(now - Date.parse(samples[0].at) < KEEP_MS);
+    fs.mkdirSync(path.join(live, 'runs'), { recursive: true });
+    fs.writeFileSync(pub.file, JSON.stringify({ schema: 'autopilot.spend-history/1', updated_at: iso(now), samples }));
+    assert.equal(pub.publish({ nowMs: now, usd: 999 }), true);
+    const h = JSON.parse(fs.readFileSync(pub.file, 'utf8'));
+    assert.equal(h.samples.length, MAX_SAMPLES);
+    assert.deepEqual(h.samples[h.samples.length - 1], { at: iso(now), usd: 999 });
+    assert.equal(h.samples[0].usd, n - (MAX_SAMPLES - 1), 'the oldest ones were cut, the newest kept');
+  } finally { fs.rmSync(live, { recursive: true, force: true }); }
+});
+
+test('C spend history: a last sample dated more than 15 minutes in the future is stale: dropped, and sampling resumes', () => {
+  const live = fs.mkdtempSync(path.join('/dev/shm', 'autopilot-test-shfut-'));
+  try {
+    const writeAtomic = (f, t) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, t); };
+    const pub = createSpendHistoryPublisher({ live, writeAtomic });
+    const now = Date.parse('2026-10-10T12:00:00.000Z');
+    fs.mkdirSync(path.join(live, 'runs'), { recursive: true });
+    const put = (samples) => fs.writeFileSync(pub.file, JSON.stringify({ schema: 'autopilot.spend-history/1', updated_at: iso(now), samples }));
+    put([{ at: iso(now - 3600e3), usd: 1 }, { at: iso(now + 3 * 3600e3), usd: 7 }]);
+    assert.equal(pub.publish({ nowMs: now, usd: 2 }), true, 'the future sample did not block sampling');
+    assert.deepEqual(JSON.parse(fs.readFileSync(pub.file, 'utf8')).samples.map((s) => s.usd), [1, 2]);
+    put([{ at: iso(now - 3600e3), usd: 1 }, { at: iso(now + 10 * 60e3), usd: 7 }]);
+    assert.equal(pub.publish({ nowMs: now, usd: 2 }), false, 'within 15 minutes ahead it still throttles');
+  } finally { fs.rmSync(live, { recursive: true, force: true }); }
+});
+
+test('C spend history: a write failure is logged once and the tick survives', () => {
+  const logs = [];
+  const pub = createSpendHistoryPublisher({ live: '/nonexistent-live', writeAtomic: () => { throw new Error('EROFS'); }, log: (m) => logs.push(m) });
+  assert.equal(pub.publish({ nowMs: Date.now(), usd: 4 }), false);
+  assert.equal(logs.length, 1);
+  assert.match(logs[0], /EROFS/);
+});

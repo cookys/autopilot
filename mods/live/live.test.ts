@@ -63,7 +63,7 @@
 // in-memory tree; a missing file makes the bottom hook throw, which the mod sees as a rejected read.
 import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
-import { readQc, qcChip, readReview, reviewSlot, displayWidth, truncateToWidth, layoutBand, readMarker, readResidue, readStageWalk, bandSlots, slotUnit, slotPosition, slotDispatch, slotDecisions, slotSpend, slotHygiene, slotReview, readLoadSource, PANE_TABS, verdictOf, reviewTabLines, wrapLines, legendLines, bandView, hygieneTabLines, dispatchLines } from './model'
+import { readQc, qcChip, readReview, reviewSlot, displayWidth, truncateToWidth, layoutBand, readMarker, readResidue, readStageWalk, bandSlots, slotUnit, slotPosition, slotDispatch, slotDecisions, slotSpend, slotHygiene, slotReview, readLoadSource, PANE_TABS, verdictOf, reviewTabLines, wrapLines, legendLines, bandView, hygieneTabLines, dispatchLines, spendTabLines, readSpendHistory, hourlySpend, sparkText, SPARK_BARS } from './model'
 import { makeT, resolveLocale, localeFromLanguage } from './i18n'
 import { EN, ZH_TW } from './locales'
 import type { Slot } from './model'
@@ -2121,9 +2121,12 @@ function expectThemeOnly(tree: Drawn, allowTabBackground = false) {
 }
 const joined = (texts: string[]) => texts.join('')
 
+// the tab showing: its Button wraps a Text (the subtle-background label); the others hold a bare string, and the `next` chip is no tab
+const isActiveTab = (b: Drawn): boolean => b.props?.key !== 'next' && (b.children || []).some((c: unknown) => typeof c !== 'string')
+
 async function shownTabOf($: any, surface: any) {
   const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
-  const tab = (await pane.findAll({ type: 'Button' }) as Drawn[]).find(b => b.props?.autoFocus === true)?.props?.key
+  const tab = (await pane.findAll({ type: 'Button' }) as Drawn[]).find(b => isActiveTab(b))?.props?.key
   await pane.unmount()
   return tab
 }
@@ -2216,10 +2219,11 @@ for (const surface of SURFACES) {
     expect(w.opens[0]?.closeOnEscape).toBe(true)
     const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
     const texts = rowsOf((await pane.drawn()) as Node)
-    // the keyboard lands on the open tab's button, so Enter acts at once (the ring does not start on nothing)
+    // the keyboard lands on the first-drawn `▸` next-tab chip, whose Enter steps on (never on the active tab's own button: that Enter is a no-op)
     const tabButtons = (await pane.findAll({ type: 'Button' })) as Drawn[]
-    expect(tabButtons.length).toBe(6)
-    expect(tabButtons.filter(b => b.props?.autoFocus === true).length).toBe(1)
+    expect(tabButtons.length).toBe(7)
+    expect(tabButtons.filter(b => b.props?.autoFocus === true).map(b => b.props?.key)).toEqual(['next'])
+    expect(tabButtons[0].props?.key).toBe('next')
     await pane.unmount()
     expect(texts[0]).toContain('⏸ 疑似卡住') // the Now tab: its hero row, then the dim header
     expect(texts.some(t => t.startsWith('工作階段 $'))).toBe(true)
@@ -2232,7 +2236,7 @@ for (const surface of SURFACES) {
     const band = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     const shownTab = async () => {
       const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
-      const tab = (await pane.findAll({ type: 'Button' }) as Drawn[]).find(b => b.props?.autoFocus === true)?.props?.key
+      const tab = (await pane.findAll({ type: 'Button' }) as Drawn[]).find(b => isActiveTab(b))?.props?.key
       await pane.unmount()
       return tab
     }
@@ -2244,17 +2248,67 @@ for (const surface of SURFACES) {
     expect(await shownTab()).toBe('dispatch')
     await press()
     expect(await shownTab()).toBe('review')
-    // a mouse click on a tab, then the press continues from the clicked tab
+    // a mouse click on another tab, then the press continues from the clicked tab
     const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
-    await pane.press({ key: 'review' })
+    await pane.press({ key: 'spend' })
     await pane.unmount()
-    await press()
     expect(await shownTab()).toBe('spend')
-    for (const want of ['hygiene', 'legend', 'now', 'dispatch']) { await press(); expect(await shownTab()).toBe(want) } // the ? legend is last; the ring wraps to Now
+    await press()
+    expect(await shownTab()).toBe('hygiene')
+    for (const want of ['legend', 'now', 'dispatch']) { await press(); expect(await shownTab()).toBe(want) } // the ? legend is last; the ring wraps to Now
     // closed again (Escape / the person closes it): the next press is Now, not the tab after Dispatch
     w.panes = []
     await press()
     expect(await shownTab()).toBe('now')
+  })
+
+  // Real machine 2026-10-10 (120 columns): Ctrl+x Tab can land the ring on the pane's active tab Button, where Enter pressed the tab it already showed.
+  // The first-drawn Button is now the `▸` next-tab chip and it alone carries autoFocus.
+  const paneTabs = async ($: any, surface: any) => $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+
+  test('keyboard: Enter on the ▸ chip (where the ring lands) steps through all six tabs and wraps, whatever tab shows (' + surface + ')', async ($, on) => {
+    const w = world(on, richWorld())
+    await start($, surface)
+    for (const want of ['dispatch', 'review', 'spend', 'hygiene', 'legend', 'now', 'dispatch']) {
+      const pane = await paneTabs($, surface)
+      await pane.press({ key: 'next' })
+      await pane.unmount()
+      expect(await shownTabOf($, surface)).toBe(want)
+    }
+  })
+
+  test('mouse / arrows: a press on a tab Button selects that tab, also the one already showing (' + surface + ')', async ($, on) => {
+    const w = world(on, richWorld())
+    await start($, surface)
+    const pane = await paneTabs($, surface)
+    await pane.press({ key: 'hygiene' })
+    await pane.press({ key: 'hygiene' }) // the showing tab: unchanged, as before (no step on)
+    await pane.unmount()
+    expect(await shownTabOf($, surface)).toBe('hygiene')
+  })
+
+  test('keyboard: ▸ and the ⓘ share one order: a ⓘ press after a ▸ press continues from the tab showing (' + surface + ')', async ($, on) => {
+    const w = world(on, richWorld())
+    await start($, surface)
+    const band = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    await band.press({ key: 'info' }) // closed -> Now
+    const pane = await paneTabs($, surface)
+    await pane.press({ key: 'next' }) // -> Dispatch
+    await pane.press({ key: 'next' }) // -> Review
+    await pane.unmount()
+    await band.press({ key: 'info' }) // the pane is open: the next tab
+    await band.unmount()
+    expect(await shownTabOf($, surface)).toBe('spend')
+    expect(w.panes).toEqual(['autopilot-live'])
+  })
+
+  test('keyboard: a tab press switches the tab even when the pane does not hold the keys, so the ring move is refused (' + surface + ')', async ($, on) => {
+    const w = world(on, richWorld())
+    await start($, surface)
+    const pane = await paneTabs($, surface)
+    await pane.press({ key: 'review' })
+    await pane.unmount()
+    expect(await shownTabOf($, surface)).toBe('review')
   })
 
   test('P7 band: $.ui.panes() throwing reads as closed: the press opens the panel on Now and does not break the band (' + surface + ')', async ($, on) => {
@@ -2264,7 +2318,7 @@ for (const surface of SURFACES) {
     const band = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     const shownTab = async () => {
       const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
-      const tab = (await pane.findAll({ type: 'Button' }) as Drawn[]).find(b => b.props?.autoFocus === true)?.props?.key
+      const tab = (await pane.findAll({ type: 'Button' }) as Drawn[]).find(b => isActiveTab(b))?.props?.key
       await pane.unmount()
       return tab
     }
@@ -2295,7 +2349,7 @@ for (const surface of SURFACES) {
     await first.unmount()
     await second.unmount()
     const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
-    const tab = (await pane.findAll({ type: 'Button' }) as Drawn[]).find(b => b.props?.autoFocus === true)?.props?.key
+    const tab = (await pane.findAll({ type: 'Button' }) as Drawn[]).find(b => isActiveTab(b))?.props?.key
     await pane.unmount()
     expect(tab).toBe('dispatch') // Now (first press) then Dispatch (second press)
   })
@@ -2379,7 +2433,7 @@ for (const surface of SURFACES) {
     const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
     const tree = (await pane.drawn()) as Drawn
     const buttons = walkAll(tree).filter(n => n.type === 'Button').map(n => n.props?.key as string)
-    expect(buttons).toEqual(['now', 'dispatch', 'review', 'spend', 'hygiene', 'legend'])
+    expect(buttons).toEqual(['next', 'now', 'dispatch', 'review', 'spend', 'hygiene', 'legend']) // the ▸ chip first (it carries the autoFocus), then the six tabs in contract order
     // the strip (child 0): zh labels, a badge per tab that holds something for the owner: ⚙N live runs, ⚑N residue (QC is ok here, so no ▲ on Review)
     const strip = stripOf(tree as Node)
     expect(strip).toContain('現況')
@@ -3123,3 +3177,101 @@ test('dispatch tab: a table that fits stays aligned: every row\'s state column s
     for (const r of rowsTxt) expect(at(r, r.includes('✓ rc') ? '✓ rc' : r.includes('⏸') ? '⏸' : '● '), r).toBe(want)
   }
 })
+
+// ---- follow-up C: the Spend tab's hourly sparkline (source: <live>/runs/spend-history.json, published by the runs watcher) ----
+const SH_NOW = Date.parse('2026-10-10T12:30:00.000Z')
+const shText = (samples: { at: string; usd: number }[]) => JSON.stringify({ schema: 'autopilot.spend-history/1', updated_at: new Date(SH_NOW).toISOString(), samples })
+const at = (hoursAgo: number) => new Date(SH_NOW - hoursAgo * 3600 * 1000).toISOString()
+
+test('spend history: a foreign schema, broken JSON or no file reads as null; bad samples are skipped; samples come back sorted', () => {
+  expect(readSpendHistory(null)).toBe(null)
+  expect(readSpendHistory('{nope')).toBe(null)
+  expect(readSpendHistory(JSON.stringify({ schema: 'other/1', samples: [] }))).toBe(null)
+  const got = readSpendHistory(JSON.stringify({ schema: 'autopilot.spend-history/1', samples: [{ at: at(1), usd: 5 }, { at: 'x', usd: 1 }, { at: at(2), usd: -3 }, { at: at(3), usd: 2 }, { at: at(4), usd: NaN }] }))
+  expect(got?.map(x => x.usd)).toEqual([2, 5])
+})
+
+test('spend history: hourly buckets hold the spend ADDED in each hour, 24 of them, the current hour last', () => {
+  const samples = readSpendHistory(shText([{ at: at(4.4), usd: 10 }, { at: at(3.4), usd: 12 }, { at: at(2.4), usd: 12 }, { at: at(1.4), usd: 17.5 }])) as never
+  const b = hourlySpend(samples, SH_NOW) as number[]
+  expect(b.length).toBe(24)
+  // 12:30 now: the sample at 11:06 (1.4 h ago) is index 22; 10:06 is 2.4 h ago (index 21); 09:06 index 20; 08:06 (4.4) index 19 is the baseline, counted 0
+  expect(Math.round(b[22] * 100) / 100).toBe(5.5)
+  expect(b[23]).toBe(0)
+  expect(b[21]).toBe(0)
+  expect(Math.round(b[20] * 100) / 100).toBe(2)
+  expect(b[19]).toBe(0)
+  expect(Math.round(b.reduce((a, c) => a + c, 0) * 100) / 100).toBe(7.5)
+})
+
+test('spend history: a reset (any boundary) gives the new cumulative value, a flat or falling figure is never a negative bar, and a baseline over 1 h old draws no bar', () => {
+  const nowMs = Date.parse('2026-10-10T01:30:00.000Z')
+  const before = (h: number) => new Date(nowMs - h * 3600 * 1000).toISOString()
+  const mk = (rows: [number, number][]) => hourlySpend(readSpendHistory(JSON.stringify({ schema: 'autopilot.spend-history/1', samples: rows.map(([h, usd]) => ({ at: before(h), usd })) })), nowMs) as number[]
+  // 40 -> 3 (reset: +3, not -37 and not a spike of 40) -> 3.5 (+0.5) -> 2.5 (reset again: +2.5)
+  const b = mk([[1.5, 40], [1.2, 3], [0.7, 3.5], [0.2, 2.5]])
+  expect(Math.round(b.reduce((a, c) => a + c, 0) * 100) / 100).toBe(6)
+  expect(b.some(v => v < 0)).toBe(false)
+  // the same series at any wall-clock boundary gives the same answer: it never looks at the date
+  const c = hourlySpend(readSpendHistory(JSON.stringify({ schema: 'autopilot.spend-history/1', samples: [{ at: '2026-10-10T04:00:00.000Z', usd: 40 }, { at: '2026-10-10T04:15:00.000Z', usd: 3 }] })), Date.parse('2026-10-10T04:20:00.000Z')) as number[]
+  expect(c[23]).toBe(3)
+  // a gap: the baseline is 90 minutes older than the sample -> unknown, no bar; exactly 1 h still counts
+  const gap = mk([[2, 10], [0.5, 25], [0.2, 26]])
+  expect(Math.round(gap.reduce((a, x) => a + x, 0) * 100) / 100).toBe(1)
+  const edge = mk([[1.2, 10], [0.2, 16]])
+  expect(Math.round(edge.reduce((a, x) => a + x, 0) * 100) / 100).toBe(6)
+  // samples outside the 24 h window are ignored
+  expect(mk([[40, 1], [30, 2], [0.1, 5]])).toBe(null as never)
+})
+
+test('spend history: fewer than 2 samples in the last 24 h is no sparkline (null), however old the others are', () => {
+  expect(hourlySpend(null, SH_NOW)).toBe(null)
+  expect(hourlySpend([], SH_NOW)).toBe(null)
+  expect(hourlySpend(readSpendHistory(shText([{ at: at(0.1), usd: 5 }])), SH_NOW)).toBe(null)
+  expect(hourlySpend(readSpendHistory(shText([{ at: at(40), usd: 1 }, { at: at(30), usd: 2 }, { at: at(0.1), usd: 5 }])), SH_NOW)).toBe(null)
+  expect(hourlySpend(readSpendHistory(shText([{ at: at(1), usd: 1 }, { at: at(0.1), usd: 5 }])), SH_NOW)).not.toBe(null)
+})
+
+test('spend history: sparkText scales to the peak over the eight bars; zeros are the floor; an all-zero window is flat', () => {
+  expect(SPARK_BARS).toBe('▁▂▃▄▅▆▇█')
+  expect(sparkText([0, 1, 2, 4, 8])).toBe('▁▂▃▅█')
+  expect(sparkText([0, 0, 0])).toBe('▁▁▁')
+  expect(sparkText([5])).toBe('█')
+})
+
+const spendSnap = (hourly: number[] | null) => ({
+  header: 'h', rows: null, gates: null, link: null, published_at: null, session_as_of: null, host_as_of: null,
+  sections: { attention: [], waiting: [], tasks: [], decisions: [], foreman: [] },
+  detail: { counts: null, stalled: 0, now_ms: SH_NOW, spend: { session: '$1.00', host_all: '$20.00', host_all_n: 20, brain: 12, cap: 150, mode: 'warn', hourly } },
+}) as never
+const HOURLY = [0, 0, 0.5, 1, 0, 0, 2, 3.5, 1, 0, 0, 0, 0.2, 0, 4, 2, 1, 0, 0, 0.5, 0, 1, 2, 3]
+
+for (const width of [60, 76, 90]) {
+  for (const locale of ['en', 'zh-TW'] as const) {
+    test('spend tab: the hourly sparkline is 24 bars with a total and a peak caption, nothing wider than the pane (' + locale + ', ' + width + ' columns)', () => {
+      const t = makeT(locale)
+      const lines = spendTabLines(spendSnap(HOURLY), { t, cols: width })
+      for (const l of lines) expect(displayWidth(l.text), l.text).toBeLessThanOrEqual(width)
+      const bars = lines.find(l => l.text.length > 0 && [...l.text.trim()].every(c => SPARK_BARS.includes(c)))
+      expect(bars, 'a row of only spark bars').toBeDefined()
+      expect([...(bars as { text: string }).text.trim()].length).toBe(24)
+      expect((bars as { text: string }).text.trim()).toBe(sparkText(HOURLY))
+      // the bars carry the brain-tier theme colour (suggestion), the current hour bold; text colour only
+      expect((bars as { segs: { color?: string }[] }).segs.filter(x => x.color !== undefined).every(x => x.color === 'suggestion')).toBe(true)
+      const total = HOURLY.reduce((a, c) => a + c, 0)
+      const ruleLine = lines.find(l => l.text.includes(t('spend.hourly')))
+      expect(ruleLine?.text).toContain('+$' + total.toFixed(2))
+      const caption = lines.map(l => l.text).join('\n')
+      expect(caption).toContain('$4.00')
+      expect(lines.some(l => l.text.includes(t('spend.no_history')))).toBe(false)
+    })
+
+    test('spend tab: with no history (or fewer than 2 samples) there is no sparkline, only the note (' + locale + ', ' + width + ' columns)', () => {
+      const t = makeT(locale)
+      const lines = spendTabLines(spendSnap(null), { t, cols: width })
+      expect(lines.map(l => l.text.trim()).filter(x => x !== '').join(' ').replace(/ +/g, ' ')).toContain(t('spend.no_history').replace(/ +/g, ' '))
+      expect(lines.some(l => [...l.text].some(c => SPARK_BARS.includes(c)))).toBe(false)
+      for (const l of lines) expect(displayWidth(l.text), l.text).toBeLessThanOrEqual(width)
+    })
+  }
+}

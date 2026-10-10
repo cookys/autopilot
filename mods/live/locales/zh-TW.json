@@ -195,7 +195,9 @@
   "spend.mode_warn": "只提醒、不擋",
   "spend.mode_block": "到額度就擋",
   "spend.mode_off": "關閉",
-  "spend.no_history": "目前沒有逐時花費紀錄，所以還畫不出走勢線",
+  "spend.no_history": "還沒有花費紀錄：每 15 分鐘取一次樣，第二筆起就會畫圖",
+  "spend.hourly": "近 24 小時",
+  "spend.hourly_caption": "brain 層每小時新增的花費（一格一小時，最右是這個小時）· 尖峰每小時 {peak}",
 
   "hygiene.load": "外掛載入來源",
   "hygiene.behind": "落後 upstream",

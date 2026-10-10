@@ -51,6 +51,7 @@ const { createLoadSourcePublisher } = require('./load-source');
 const { createReviewPublisher } = require('./review-input');
 const { createResiduePublisher } = require('./residue');
 const { createStageWalkPublisher } = require('./stage-walk');
+const { createSpendHistoryPublisher } = require('./spend-history');
 const { createCodeFingerprint, pluginIdentity } = require('./code-fingerprint');
 const { loadCostFuseConfig, costsFileOf, createTierSpendReader } = require('../../scripts/lib/brain-spend');
 
@@ -377,6 +378,7 @@ function createWatcher({
   const loadSourceSidecar = createLoadSourcePublisher({ live, env, repoDir: path.resolve(__dirname, '..', '..'), writeAtomic, log: (m) => log(m) }); // P7b: <live>/load-source.json
   const reviewSidecar = createReviewPublisher({ runsDir, key, live, env, getIdentity: () => identity, writeAtomic, log: (m) => log(m) }); // P7d: <project_key>.review.json
   const residueSidecar = createResiduePublisher({ runsDir, key, repo: cwd, writeAtomic, log: (m) => log(m), now }); // P7 D3: <project_key>.residue.json (async scan, 60 s throttle)
+  const spendHistory = createSpendHistoryPublisher({ live, writeAtomic, log: (m) => log(m) }); // follow-up C: <live>/runs/spend-history.json (host-wide, one sample per 15 min, 48 h)
   const stageWalkSidecar = createStageWalkPublisher({ live, writeAtomic, log: (m) => log(m) }); // P7 D4: <live>/stage/<sid>.json
   const state = {
     lastSignature: null, lastPublishMs: null, lastRuns: null, lastObservedAt: null, lastPaths: null,
@@ -731,6 +733,7 @@ function createWatcher({
     try { decisionsSidecar.publish({ runs: rows, roots: state.roots }); foremanSidecar.publish({ roots: state.roots, markers, nowMs }); qcFact.publish({ nowMs }); reviewSidecar.publish({ nowMs }); } catch (error) { log(`sidecar publish failed: ${error.message}`); }
     try { loadSourceSidecar.publish({ nowMs }); } catch (error) { log(`load-source failed: ${error.message}`); }
     try { residueSidecar.publish({ nowMs }); } catch (error) { log(`residue publish failed: ${error.message}`); }
+    try { spendHistory.publish({ nowMs, usd: cost.host_today_brain_usd }); } catch (error) { log(`spend history failed: ${error.message}`); }
     try { stageWalkSidecar.publish({ markers: allMarkers, nowMs }); } catch (error) { log(`stage walk failed: ${error.message}`); }
     try { publishTurnEffective({ liveBase: live, key, nowMs, log }); } catch (error) { log(`turn-effective failed: ${error.message}`); }
     if (render) {

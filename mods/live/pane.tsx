@@ -5,7 +5,7 @@
 
 import { T_EN } from './i18n'
 import type { T } from './i18n'
-import { dispatchLines, hygieneTabLines, legendLines, nowLines, paneWidth, PANE_TABS, reviewTabLines, spendTabLines, tabBadges, tabLabel } from './model'
+import { NEXT_TAB_GLYPH, dispatchLines, hygieneTabLines, legendLines, nowLines, paneWidth, PANE_TABS, reviewTabLines, spendTabLines, tabBadges, tabLabel } from './model'
 import type { LiveSnapshot, PaneLine, PaneTab } from './model'
 
 export type { PaneTab } from './model'
@@ -14,12 +14,17 @@ type El = (props: any) => any
 
 // The tab strip: Buttons when the surface has them (a click or Enter switches the tab), plain Text otherwise. The active tab is bold on a `subtle`
 // background (a tab you can see); a `subtle` rule under the strip is its baseline. A tab that holds something for the owner carries a badge.
-function tabStrip(el: { Box: El; Text: El; Button?: El }, tab: PaneTab, onTab: (t: PaneTab) => void, snap: LiveSnapshot | null, t: T, cols: number) {
+// The FIRST drawn Button is the `▸` next-tab chip and it carries the pane's autoFocus ("of several in one site the first drawn wins"): whenever Ctrl+x Tab or
+// `open({focus})` hands the pane the keyboard, the ring lands on a Button whose Enter steps to the next tab. It used to land on the ACTIVE tab's Button,
+// where Enter pressed the tab already showing (a no-op): "Ctrl+x Tab, Enter, Enter" cycled tabs only when the ring happened to sit on the band's ⓘ
+// (real machine 2026-10-10, 120 columns). The tab Buttons stay pressable (a click, or Tab / arrows + Enter) and still select their own tab.
+function tabStrip(el: { Box: El; Text: El; Button?: El }, tab: PaneTab, onTab: (t: PaneTab) => void, onNext: () => void, snap: LiveSnapshot | null, t: T, cols: number) {
   const { Box, Text, Button } = el
   const badges = snap === null ? {} : tabBadges(snap)
   return (
     <Box flexDirection="column">
       <Box flexWrap="wrap">
+        {Button === undefined ? null : <Box key="next"><Button key="next" plain autoFocus onPress={onNext}>{NEXT_TAB_GLYPH}</Button><Text> </Text></Box>}
         {PANE_TABS.map(id => {
           const on = id === tab
           const label = ' ' + tabLabel(id, t) + ' '
@@ -28,7 +33,7 @@ function tabStrip(el: { Box: El; Text: El; Button?: El }, tab: PaneTab, onTab: (
             <Box key={id}>
               {Button === undefined
                 ? <Text bold={on} dimColor={!on} backgroundColor={on ? 'subtle' : undefined}>{label}</Text>
-                : <Button key={id} plain {...(on ? { autoFocus: true as const } : {})} dimColor={!on} bold={on} onPress={() => onTab(id)}>
+                : <Button key={id} plain dimColor={!on} bold={on} onPress={() => onTab(id)}>
                     {on ? <Text bold backgroundColor="subtle">{label}</Text> : label}
                   </Button>}
               {badge === undefined ? null : <Text bold backgroundColor={on ? 'subtle' : undefined} color={badge.color}>{badge.text + (on ? ' ' : '')}</Text>}
@@ -42,14 +47,14 @@ function tabStrip(el: { Box: El; Text: El; Button?: El }, tab: PaneTab, onTab: (
   )
 }
 
-export function Pane(el: { Box: El; Text: El; Link: El; Button?: El }, snap: LiveSnapshot | null, tab: PaneTab = 'now', onTab: (t: PaneTab) => void = () => {}, t: T = T_EN, bodyColumns: number | null = null) {
+export function Pane(el: { Box: El; Text: El; Link: El; Button?: El }, snap: LiveSnapshot | null, tab: PaneTab = 'now', onTab: (t: PaneTab) => void = () => {}, t: T = T_EN, bodyColumns: number | null = null, onNext: () => void = () => {}) {
   const { Box, Text, Link } = el
   const cols = paneWidth(bodyColumns)
   const ctx = { t, cols }
   const line = (l: PaneLine, i: number) => l.segs !== undefined
     ? <Box key={'l' + i} flexWrap={l.wrap === true ? 'wrap' : undefined}>{l.segs.map((s, j) => <Text key={'g' + j} color={s.color} bold={s.bold} dimColor={s.dim} wrap={l.wrap === true ? 'wrap' : 'truncate'}>{s.text}</Text>)}</Box>
     : <Text key={'l' + i} bold={l.bold} dimColor={l.dim} color={l.color ?? (l.warn ? 'warning' : undefined)} wrap={l.wrap === true ? 'wrap' : 'truncate'}>{l.text}</Text>
-  const strip = tabStrip(el, tab, onTab, snap, t, cols)
+  const strip = tabStrip(el, tab, onTab, onNext, snap, t, cols)
   if (snap === null) {
     return (
       <Box flexDirection="column">

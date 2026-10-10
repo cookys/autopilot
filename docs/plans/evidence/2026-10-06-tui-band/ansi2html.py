@@ -3,6 +3,8 @@
 
 Handles SGR 0/1/2/3/4/7/9/22/23/24/27/29/30-37/39/40-47/49/90-97/100-107/38;5/48;5/38;2/48;2. CJK cells are
 double width (East Asian Wide/Fullwidth). The terminal default bg/fg are parameters (a dark theme by default).
+OSC 8 hyperlinks (ESC ] 8 ; params ; URI ST, ST = ESC \\ or BEL) render their link text wrapped in <a href>, never the raw
+sequence; every other OSC / DCS / APC / PM / SOS string is stripped (an unterminated one runs to the end of its line).
 """
 import html, re, sys, unicodedata
 
@@ -21,6 +23,12 @@ def xterm256(n):
     return '#%02x%02x%02x' % (v, v, v)
 
 
+# one token per escape string: CSI | OSC (BEL or ST terminated; a new ESC or the end of the line aborts it, as in a real terminal) | DCS/APC/PM/SOS string
+TOKEN = (r'(\x1b\[[0-9;:]*[A-Za-z]'
+         r'|\x1b\][^\x07\x1b\n]*(?:\x07|\x1b\\|(?=[\n\x1b])|\Z)'
+         r'|\x1b[P_^X][^\x07\x1b\n]*(?:\x07|\x1b\\|(?=[\n\x1b])|\Z))')
+
+
 def width(ch):
     return 2 if unicodedata.east_asian_width(ch) in ('W', 'F') else 1
 
@@ -32,7 +40,17 @@ def main():
     text = open(src, encoding='utf-8', errors='replace').read()
     st = dict(fg=None, bg=None, bold=False, dim=False, ital=False, und=False, inv=False, strike=False)
     rows, cur = [], []
-    for tok in re.split(r'(\x1b\[[0-9;:]*[A-Za-z])', text):
+    link = None
+    for tok in re.split(TOKEN, text):
+        if tok is None or tok == '':
+            continue
+        if tok.startswith('\x1b]'):
+            m = re.match(r'\x1b\]8;([^;\x07\x1b]*);([^\x07\x1b]*)', tok)
+            if m:
+                link = m.group(2) or None
+            continue
+        if tok.startswith(('\x1bP', '\x1b_', '\x1b^', '\x1bX')):
+            continue
         if tok.startswith('\x1b['):
             if not tok.endswith('m'):
                 continue
@@ -70,15 +88,17 @@ def main():
             if ch == '\n':
                 rows.append(cur); cur = []
                 continue
-            if ch == '\r':
-                continue
-            cur.append((ch, dict(st)))
+            if ch == '\t':
+                ch = ' '
+            if ord(ch) < 0x20 or ord(ch) == 0x7f:
+                continue  # no C0 control (a stray ESC, BEL, CR, ...) ever reaches the HTML
+            cur.append((ch, dict(st), link))
     if cur:
         rows.append(cur)
     out_rows = []
     for row in rows:
         spans = []
-        for ch, s in row:
+        for ch, s, href in row:
             fg, bg = s['fg'] or dfg, s['bg'] or dbg
             if s['inv']:
                 fg, bg = bg, fg
@@ -89,7 +109,10 @@ def main():
             deco = ' '.join(x for x, on in (('underline', s['und']), ('line-through', s['strike'])) if on)
             if deco: css += f'text-decoration:{deco};'
             w = width(ch)
-            spans.append(f'<span style="{css}display:inline-block;width:{w}ch;text-align:center">{html.escape(ch) if ch != " " else "&nbsp;"}</span>')
+            cell = f'<span style="{css}display:inline-block;width:{w}ch;text-align:center">{html.escape(ch) if ch != " " else "&nbsp;"}</span>'
+            if href:
+                cell = f'<a href="{html.escape(href, quote=True)}" style="text-decoration:none">{cell}</a>'
+            spans.append(cell)
         out_rows.append('<div class="r">' + ''.join(spans) + '</div>')
     page = f'''<!doctype html><meta charset="utf-8"><style>
 body{{margin:0;background:{dbg};}}

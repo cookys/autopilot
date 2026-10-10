@@ -195,7 +195,9 @@
   "spend.mode_warn": "warns, never blocks",
   "spend.mode_block": "blocks at the cap",
   "spend.mode_off": "off",
-  "spend.no_history": "no per-hour history is published, so there is no sparkline yet",
+  "spend.no_history": "no spend history yet: one sample every 15 minutes, a graph from the second",
+  "spend.hourly": "Last 24 h",
+  "spend.hourly_caption": "brain tier, spend added per hour (one bar = one hour, the right edge is this hour) · peak {peak} per hour",
 
   "hygiene.load": "Plugin load source",
   "hygiene.behind": "behind upstream",

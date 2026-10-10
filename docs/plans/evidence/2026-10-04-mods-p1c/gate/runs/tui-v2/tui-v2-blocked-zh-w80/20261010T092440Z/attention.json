@@ -1,0 +1,21 @@
+{
+  "schema": "autopilot.attention/1",
+  "session_id": "8b7c7fd6-b90d-4049-8b32-6a59fee5a6eb",
+  "project_key": "51de403da82a23f0",
+  "kind": "permission",
+  "tool_name": "Bash",
+  "summary": "Bash: ls; cat lib/greet.js test.js README.md; ls /home/cookys/projects/autopilot/skills/dev-flow/scripts 2>/dev/null | …",
+  "since": "2026-10-10T09:23:16.942Z",
+  "updated_at": "2026-10-10T09:23:22.943Z",
+  "pending": [
+    {
+      "agent_id": null,
+      "tool_name": "Bash",
+      "input_digest": "046d90707c6172ef",
+      "kind": "permission",
+      "summary": "Bash: ls; cat lib/greet.js test.js README.md; ls /home/cookys/projects/autopilot/skills/dev-flow/scripts 2>/dev/null | …",
+      "since": "2026-10-10T09:23:16.942Z",
+      "updated_at": "2026-10-10T09:23:16.942Z"
+    }
+  ]
+}

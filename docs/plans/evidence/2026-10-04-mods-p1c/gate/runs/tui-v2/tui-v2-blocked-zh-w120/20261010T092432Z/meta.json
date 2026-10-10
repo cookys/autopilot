@@ -1,0 +1,36 @@
+{
+  "schema": "autopilot.gate-capture/2",
+  "cell": "tui-v2-blocked-zh-w120",
+  "mode": "tui-v2",
+  "window_width": 120,
+  "pane_width": 120,
+  "captured_at": "2026-10-10T09:24:32.088Z",
+  "captured_at_ms": 1791624272088,
+  "session_id": "8b7c7fd6-b90d-4049-8b32-6a59fee5a6eb",
+  "session_id_how": "argument",
+  "sanitised_session_id": "8b7c7fd6-b90d-4049-8b32-6a59fee5a6eb",
+  "project_key": "51de403da82a23f0",
+  "root_run_id": "job-1791624077-e2840ddf",
+  "scope_key": "51de403da82a23f0--job-1791624077-e2840ddf",
+  "live_base": "/run/user/1000/autopilot",
+  "autopilot_home": "/home/cookys/.autopilot",
+  "pane_cwd": "/home/cookys/projects/gate-sandbox",
+  "git_common_dir": "/home/cookys/projects/gate-sandbox/.git",
+  "settle_attempt": 1,
+  "locale": "zh-TW",
+  "missing": [
+    "tasks.json (/run/user/1000/autopilot/tasks/8b7c7fd6-b90d-4049-8b32-6a59fee5a6eb.json)",
+    "turn-effective.json (/run/user/1000/autopilot/turn-effective/8b7c7fd6-b90d-4049-8b32-6a59fee5a6eb.json)",
+    "agents (/run/user/1000/autopilot/agents/8b7c7fd6-b90d-4049-8b32-6a59fee5a6eb)",
+    "review.json (/run/user/1000/autopilot/runs/51de403da82a23f0.review.json)",
+    "stage.json (/run/user/1000/autopilot/stage/8b7c7fd6-b90d-4049-8b32-6a59fee5a6eb.json)",
+    "foreman.json (/run/user/1000/autopilot/runs/51de403da82a23f0--job-1791624077-e2840ddf.foreman.json)",
+    "decision-file.json (/home/cookys/projects/gate-sandbox/.git/autopilot/decisions/51de403da82a23f0--job-1791624077-e2840ddf.json)",
+    "work-orders (/home/cookys/projects/gate-sandbox/.git/autopilot/work-orders/job-1791624077-e2840ddf)",
+    "band line and panel verdict in the pane (no verdict mark ending in ⓘ / panel word found)"
+  ],
+  "screenshots": {
+    "band": null,
+    "pane": "/home/cookys/projects/autopilot/docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/tui-v2/tui-v2-blocked-zh-w120/20261010T092432Z/pane.png"
+  }
+}

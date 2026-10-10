@@ -1,0 +1,50 @@
+
+ ▐▛███▛█   Claude Code v2.1.296
+▝▜██████▀  Sonnet 5.5 · Claude Max
+ ▝▝   ▝▝   ~/projects/gate-sandbox
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+╭────────────────────────────────────────────────────────────────────────────✕─╮
+│  Now   Dispatch   Review   Spend   Hygiene ⚑1  ?                             │
+│ ──────────────────────────────────────────────────────────────────────────   │
+│ ◌ Idle  gate-sandbox · 0m since start                                        │
+│ no dispatch running                                                          │
+│ session $— · host $182.46 · ctx —                                            │
+│ ── Needs you ────────────────────────────────────────────────────── ⚑ 1 ──   │
+│  ⚑ 1 worktree needs you → Hygiene tab                                        │
+│ ── Where you are ─────────────────────────────────────────────────────────   │
+│ no data · no stage recorded for this session                                 │
+│ no data · no unit recorded                                                   │
+│ progress    —                                                                │
+│ phase       —                                                                │
+│ ── Working now ───────────────────────────────────────────────────────────   │
+│ dispatch    ⚙ 0 running  0 stalled                                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+◌ Idle │ ⚑1 │ ⓘ                                                             [-]
+
+────────────────────────────────────────────────────────────────────────────────
+❯ Try "refactor <filepath>"
+────────────────────────────────────────────────────────────────────────────────
+  Sonnet 5.5 ── ~/projects/gate-sandbox develop ─────────────────────────────…
+  ─                                                                          …
+  ⏵⏵ accept edits on (shift+tab to cycle) · ← 6 agents

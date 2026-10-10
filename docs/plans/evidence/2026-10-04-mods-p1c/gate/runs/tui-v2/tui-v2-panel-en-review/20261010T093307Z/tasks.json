@@ -1,0 +1,67 @@
+{
+  "schema": "autopilot.session-tasks/1",
+  "session_id": "a12167af-9ade-4518-8c1d-7e6d5247abc5",
+  "cwd": "/home/cookys/projects/gate-sandbox",
+  "project_key": "51de403da82a23f0",
+  "updated_at": "2026-10-10T09:32:20.180Z",
+  "first_created_at": "2026-10-10T09:26:48.014Z",
+  "tasks": [
+    {
+      "id": "1",
+      "subject": "Skill routing — invoke required skills for affected code areas",
+      "status": "completed",
+      "started_seq": null
+    },
+    {
+      "id": "2",
+      "subject": "finish: Invoke autopilot:finish-flow",
+      "status": "pending",
+      "started_seq": null
+    },
+    {
+      "id": "3",
+      "subject": "Add whisper option to greet (lower-cases output)",
+      "status": "in_progress",
+      "started_seq": 1
+    },
+    {
+      "id": "4",
+      "subject": "Add title option to greet (prefixes title)",
+      "status": "pending",
+      "started_seq": null
+    },
+    {
+      "id": "5",
+      "subject": "Add reverse option to greet (reverses output)",
+      "status": "pending",
+      "started_seq": null
+    },
+    {
+      "id": "6",
+      "subject": "alpha",
+      "status": "in_progress",
+      "started_seq": 2
+    },
+    {
+      "id": "7",
+      "subject": "beta",
+      "status": "pending",
+      "started_seq": null
+    },
+    {
+      "id": "8",
+      "subject": "gamma",
+      "status": "pending",
+      "started_seq": null
+    }
+  ],
+  "counts": {
+    "total": 8,
+    "completed": 1,
+    "in_progress": 2
+  },
+  "current": {
+    "id": "6",
+    "subject": "alpha"
+  }
+}

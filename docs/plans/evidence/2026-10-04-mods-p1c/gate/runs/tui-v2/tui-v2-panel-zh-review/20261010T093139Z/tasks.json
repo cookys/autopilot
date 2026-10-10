@@ -1,0 +1,73 @@
+{
+  "schema": "autopilot.session-tasks/1",
+  "session_id": "1e1d6fb4-66b6-4918-86ef-2cf5da319ce5",
+  "cwd": "/home/cookys/projects/gate-sandbox",
+  "project_key": "51de403da82a23f0",
+  "updated_at": "2026-10-10T09:30:48.024Z",
+  "first_created_at": "2026-10-10T09:26:46.147Z",
+  "tasks": [
+    {
+      "id": "1",
+      "subject": "whisper option: greet(name,{whisper:true}) lower-cases output",
+      "status": "completed",
+      "started_seq": 1
+    },
+    {
+      "id": "2",
+      "subject": "title option: greet(name,{title:\"Dr\"}) prefixes the title",
+      "status": "completed",
+      "started_seq": 2
+    },
+    {
+      "id": "3",
+      "subject": "reverse option: greet(name,{reverse:true}) reverses output",
+      "status": "completed",
+      "started_seq": 3
+    },
+    {
+      "id": "4",
+      "subject": "exclaim option: greet(name,{exclaim:true}) appends \"!\"",
+      "status": "pending",
+      "started_seq": 4
+    },
+    {
+      "id": "5",
+      "subject": "repeat option: greet(name,{repeat:2}) repeats the greeting twice",
+      "status": "pending",
+      "started_seq": null
+    },
+    {
+      "id": "6",
+      "subject": "caps option: greet(name,{caps:true}) capitalizes first letter",
+      "status": "pending",
+      "started_seq": null
+    },
+    {
+      "id": "7",
+      "subject": "alpha",
+      "status": "in_progress",
+      "started_seq": 5
+    },
+    {
+      "id": "8",
+      "subject": "beta",
+      "status": "pending",
+      "started_seq": null
+    },
+    {
+      "id": "9",
+      "subject": "gamma",
+      "status": "pending",
+      "started_seq": null
+    }
+  ],
+  "counts": {
+    "total": 9,
+    "completed": 3,
+    "in_progress": 1
+  },
+  "current": {
+    "id": "7",
+    "subject": "alpha"
+  }
+}

@@ -362,3 +362,49 @@ Notes (batch C):
 | dev-flow-panel-keys-cycle (200 cols) | PASS: pane already docked on Now at start; Ctrl+x Tab, then 9x Enter on the info mark gave Graph, Dispatch, Review, Decisions, Spend, Hygiene, Legend, Now, Graph (each Enter advances one tab, wraps Hygiene to Legend). Esc returned the prompt (typed char landed in prompt). Closed via SGR click on the x (col 199); Ctrl+x Tab Enter reopened on Legend. session ac246111-fc81-4c87-babd-3539f6e5fc63. captures: runs/dev-flow-panel-keys-cycle/200 |
 | dev-flow-panel-keys-cycle (120 cols) | PASS: pane not docked at start; Ctrl+x Tab, then 9x Enter gave Legend, Now, Graph, Dispatch, Review, Decisions, Spend, Hygiene, Legend (first Enter opens on Legend). Esc returned the prompt. Closed via SGR click on x (col 119); Ctrl+x Tab Enter reopened on Legend. session 946438b1-979f-4db0-bac8-cd976673f34e. captures: runs/dev-flow-panel-keys-cycle/120 |
 | residue-hygiene-w209 | PASS (with env deviation): fixture repo has no .claude/*-config.md so plain claude showed 'no project' and no watcher; relaunched with AUTOPILOT_RUNS_WATCH_AUTOSTART=1 (opt-in knob). Auto-docked panel narrows bodyColumns to 114 (<160) so band hid the hygiene slot (first capture residue-hygiene-w209-band, check PASS with hygiene ABSENT); closed dock via SGR click on the x (row 1 col 208). Band '◌ 待命 │ $535/150 │ dev · wt 1 │ ⓘ', check.js 'PASS residue fields=10' (hygiene PASS expected dev · wt 1). Ctrl+x Tab + 8x Enter reached Hygiene: '1 need you · 16 KB · auto 5m ago: −1 wt, 1 branches archived', row 'worktree …/proof1/wt-dirty · dirty · 4d · 16 KB · 1 uncommitted path(s)', dim 'git -C …' command line truncated with … at pane edge. session 7b6c930e-53dc-4f12-ae46-f7d64a99dbe5, project 53b8dffb003842e4. captures: runs/residue-hygiene-w209-band2/20261009T154910Z, runs/residue-hygiene-w209-hygiene/20261009T154930Z |
+| tui-v2 | tui-v2-blocked-zh-w120 | PASS | runs/tui-v2/tui-v2-blocked-zh-w120/20261010T092432Z | PASS tui-v2 fields=2 | permission dialog (surface panel) |
+| tui-v2 | tui-v2-blocked-zh-w209 | PASS | runs/tui-v2/tui-v2-blocked-zh-w209/20261010T092423Z | PASS tui-v2 fields=2 | permission dialog (surface panel) |
+| tui-v2 | tui-v2-blocked-zh-w80 | PASS | runs/tui-v2/tui-v2-blocked-zh-w80/20261010T092440Z | PASS tui-v2 fields=1 | 80 cols: panel overlay hides band, judged from panel | permission dialog (surface panel) |
+| tui-v2 | tui-v2-done-zh-w120 | PASS | runs/tui-v2/tui-v2-done-zh-w120/20261010T092914Z | PASS tui-v2 fields=10 | INVALID capture: sid was the pre-/clear id (/clear issues a new session id), facts stale vs pane; not a band defect; superseded by running4 |
+| tui-v2 | tui-v2-done-zh-w209 | FAIL | runs/tui-v2/tui-v2-done-zh-w209/20261010T092906Z | FAIL tui-v2 fields=10 failed=unit | INVALID capture: sid was the pre-/clear id (/clear issues a new session id), facts stale vs pane; not a band defect; superseded by running4 |
+| tui-v2 | tui-v2-done-zh-w80 | PASS | runs/tui-v2/tui-v2-done-zh-w80/20261010T092923Z | PASS tui-v2 fields=10 | INVALID capture: sid was the pre-/clear id (/clear issues a new session id), facts stale vs pane; not a band defect; superseded by running4 |
+| tui-v2 | tui-v2-idle-en-w120 | PASS | runs/tui-v2/tui-v2-idle-en-w120/20261010T092159Z | PASS tui-v2 fields=10 |
+| tui-v2 | tui-v2-idle-en-w209 | PASS | runs/tui-v2/tui-v2-idle-en-w209/20261010T092151Z | PASS tui-v2 fields=10 |
+| tui-v2 | tui-v2-idle-en-w80 | PASS | runs/tui-v2/tui-v2-idle-en-w80/20261010T092208Z | PASS tui-v2 fields=10 |
+| tui-v2 | tui-v2-idle-zh-w120 | PASS | runs/tui-v2/tui-v2-idle-zh-w120/20261010T092159Z | PASS tui-v2 fields=10 |
+| tui-v2 | tui-v2-idle-zh-w209 | PASS | runs/tui-v2/tui-v2-idle-zh-w209/20261010T092151Z | PASS tui-v2 fields=10 |
+| tui-v2 | tui-v2-idle-zh-w80 | PASS | runs/tui-v2/tui-v2-idle-zh-w80/20261010T092208Z | PASS tui-v2 fields=10 |
+| tui-v2 | tui-v2-panel-en-dispatch | PASS | runs/tui-v2/tui-v2-panel-en-dispatch/20261010T093304Z | PASS tui-v2 fields=10 |
+| tui-v2 | tui-v2-panel-en-help | PASS | runs/tui-v2/tui-v2-panel-en-help/20261010T093316Z | PASS tui-v2 fields=10 |
+| tui-v2 | tui-v2-panel-en-hygiene | PASS | runs/tui-v2/tui-v2-panel-en-hygiene/20261010T093313Z | PASS tui-v2 fields=10 |
+| tui-v2 | tui-v2-panel-en-now | PASS | runs/tui-v2/tui-v2-panel-en-now/20261010T093300Z | PASS tui-v2 fields=10 |
+| tui-v2 | tui-v2-panel-en-review | PASS | runs/tui-v2/tui-v2-panel-en-review/20261010T093307Z | PASS tui-v2 fields=10 |
+| tui-v2 | tui-v2-panel-en-spend | PASS | runs/tui-v2/tui-v2-panel-en-spend/20261010T093310Z | PASS tui-v2 fields=10 |
+| tui-v2 | tui-v2-panel-zh-dispatch | PASS | runs/tui-v2/tui-v2-panel-zh-dispatch/20261010T093137Z | PASS tui-v2 fields=10 |
+| tui-v2 | tui-v2-panel-zh-help | PASS | runs/tui-v2/tui-v2-panel-zh-help/20261010T093148Z | PASS tui-v2 fields=10 |
+| tui-v2 | tui-v2-panel-zh-hygiene | PASS | runs/tui-v2/tui-v2-panel-zh-hygiene/20261010T093146Z | PASS tui-v2 fields=10 |
+| tui-v2 | tui-v2-panel-zh-now | PASS | runs/tui-v2/tui-v2-panel-zh-now/20261010T093317Z | PASS tui-v2 fields=10 |
+| tui-v2 | tui-v2-panel-zh-review | PASS | runs/tui-v2/tui-v2-panel-zh-review/20261010T093139Z | PASS tui-v2 fields=10 |
+| tui-v2 | tui-v2-panel-zh-usage | PASS | runs/tui-v2/tui-v2-panel-zh-usage/20261010T093142Z | PASS tui-v2 fields=10 |
+| tui-v2 | tui-v2-panel-zh-wrap | PASS | runs/tui-v2/tui-v2-panel-zh-wrap/20261010T093151Z | PASS tui-v2 fields=10 |
+| tui-v2 | tui-v2-question-en-w120 | FAIL | runs/tui-v2/tui-v2-question-en-w120/20261010T092927Z | FAIL tui-v2 fields=10 failed=verdict | INVALID capture: sid was the pre-/clear id (/clear issues a new session id), facts stale vs pane; not a band defect; superseded by running4 |
+| tui-v2 | tui-v2-question-en-w209 | FAIL | runs/tui-v2/tui-v2-question-en-w209/20261010T092906Z | FAIL tui-v2 fields=10 failed=verdict,unit | INVALID capture: sid was the pre-/clear id (/clear issues a new session id), facts stale vs pane; not a band defect; superseded by running4 |
+| tui-v2 | tui-v2-question-en-w80 | n/a | runs/tui-v2/tui-v2-question-en-w80/20261010T092948Z | no check.out |
+| tui-v2 | tui-v2-running-zh-w120 | PASS | runs/tui-v2/tui-v2-running-zh-w120/20261010T092602Z | PASS tui-v2 fields=10 | band was 完成待驗收 (sandbox already had shout; task no-op), not mid-implementation |
+| tui-v2 | tui-v2-running-zh-w209 | PASS | runs/tui-v2/tui-v2-running-zh-w209/20261010T092553Z | PASS tui-v2 fields=10 | band was 完成待驗收 (sandbox already had shout; task no-op), not mid-implementation |
+| tui-v2 | tui-v2-running-zh-w80 | PASS | runs/tui-v2/tui-v2-running-zh-w80/20261010T092611Z | PASS tui-v2 fields=10 | band was 完成待驗收 (sandbox already had shout; task no-op), not mid-implementation |
+| tui-v2 | tui-v2-running2-en-w120 | FAIL | runs/tui-v2/tui-v2-running2-en-w120/20261010T092752Z | FAIL tui-v2 fields=10 failed=verdict | INVALID capture: sid was the pre-/clear id (/clear issues a new session id), facts stale vs pane; not a band defect; superseded by running4 |
+| tui-v2 | tui-v2-running2-en-w209 | FAIL | runs/tui-v2/tui-v2-running2-en-w209/20261010T092731Z | FAIL tui-v2 fields=10 failed=verdict,unit | INVALID capture: sid was the pre-/clear id (/clear issues a new session id), facts stale vs pane; not a band defect; superseded by running4 |
+| tui-v2 | tui-v2-running2-en-w80 | FAIL | runs/tui-v2/tui-v2-running2-en-w80/20261010T092813Z | FAIL tui-v2 fields=1 failed=verdict | INVALID capture: sid was the pre-/clear id (/clear issues a new session id), facts stale vs pane; not a band defect; superseded by running4 | 80 cols: panel overlay hides band, judged from panel |
+| tui-v2 | tui-v2-running2-zh-w120 | PASS | runs/tui-v2/tui-v2-running2-zh-w120/20261010T092739Z | PASS tui-v2 fields=10 | INVALID capture: sid was the pre-/clear id (/clear issues a new session id), facts stale vs pane; not a band defect; superseded by running4 |
+| tui-v2 | tui-v2-running2-zh-w209 | FAIL | runs/tui-v2/tui-v2-running2-zh-w209/20261010T092731Z | FAIL tui-v2 fields=10 failed=verdict,unit | INVALID capture: sid was the pre-/clear id (/clear issues a new session id), facts stale vs pane; not a band defect; superseded by running4 |
+| tui-v2 | tui-v2-running2-zh-w80 | PASS | runs/tui-v2/tui-v2-running2-zh-w80/20261010T092748Z | PASS tui-v2 fields=10 | INVALID capture: sid was the pre-/clear id (/clear issues a new session id), facts stale vs pane; not a band defect; superseded by running4 |
+| tui-v2 | tui-v2-running3-zh-w120 | PASS | runs/tui-v2/tui-v2-running3-zh-w120/20261010T093028Z | PASS tui-v2 fields=10 |
+| tui-v2 | tui-v2-running3-zh-w209 | PASS | runs/tui-v2/tui-v2-running3-zh-w209/20261010T093019Z | PASS tui-v2 fields=10 |
+| tui-v2 | tui-v2-running3-zh-w80 | PASS | runs/tui-v2/tui-v2-running3-zh-w80/20261010T093037Z | PASS tui-v2 fields=1 | 80 cols: panel overlay hides band, judged from panel |
+| tui-v2 | tui-v2-running4-en-w120 | PASS | runs/tui-v2/tui-v2-running4-en-w120/20261010T093241Z | PASS tui-v2 fields=10 |
+| tui-v2 | tui-v2-running4-en-w209 | PASS | runs/tui-v2/tui-v2-running4-en-w209/20261010T093232Z | PASS tui-v2 fields=10 |
+| tui-v2 | tui-v2-running4-en-w80 | PASS | runs/tui-v2/tui-v2-running4-en-w80/20261010T093250Z | PASS tui-v2 fields=1 | 80 cols: panel overlay hides band, judged from panel |
+| tui-v2 | tui-v2-running4-zh-w120 | PASS | runs/tui-v2/tui-v2-running4-zh-w120/20261010T093111Z | PASS tui-v2 fields=10 |
+| tui-v2 | tui-v2-running4-zh-w209 | PASS | runs/tui-v2/tui-v2-running4-zh-w209/20261010T093103Z | PASS tui-v2 fields=10 |
+| tui-v2 | tui-v2-running4-zh-w80 | PASS | runs/tui-v2/tui-v2-running4-zh-w80/20261010T093120Z | PASS tui-v2 fields=1 | 80 cols: panel overlay hides band, judged from panel |

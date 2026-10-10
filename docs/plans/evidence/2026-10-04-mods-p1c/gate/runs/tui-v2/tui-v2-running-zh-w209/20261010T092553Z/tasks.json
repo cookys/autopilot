@@ -1,0 +1,64 @@
+{
+  "schema": "autopilot.session-tasks/1",
+  "session_id": "8b7c7fd6-b90d-4049-8b32-6a59fee5a6eb",
+  "cwd": "/home/cookys/projects/gate-sandbox",
+  "project_key": "51de403da82a23f0",
+  "updated_at": "2026-10-10T09:25:42.146Z",
+  "first_created_at": "2026-10-10T09:24:58.380Z",
+  "tasks": [
+    {
+      "id": "1",
+      "subject": "實作 greet 的 shout 選項",
+      "status": "completed",
+      "started_seq": null
+    },
+    {
+      "id": "2",
+      "subject": "在 test.js 加入 shout 測試",
+      "status": "completed",
+      "started_seq": null
+    },
+    {
+      "id": "3",
+      "subject": "在 README 加一行 shout 說明",
+      "status": "completed",
+      "started_seq": null
+    },
+    {
+      "id": "4",
+      "subject": "verify、qc-gate 與 finish",
+      "status": "completed",
+      "started_seq": null
+    },
+    {
+      "id": "5",
+      "subject": "finish · qc verdict",
+      "status": "completed",
+      "started_seq": null
+    },
+    {
+      "id": "6",
+      "subject": "finish · Confirm commit",
+      "status": "completed",
+      "started_seq": null
+    },
+    {
+      "id": "7",
+      "subject": "finish · Dispatch-branch close-out",
+      "status": "completed",
+      "started_seq": null
+    },
+    {
+      "id": "8",
+      "subject": "finish · Session end (lite)",
+      "status": "completed",
+      "started_seq": null
+    }
+  ],
+  "counts": {
+    "total": 8,
+    "completed": 8,
+    "in_progress": 0
+  },
+  "current": null
+}

@@ -1,0 +1,50 @@
+                                                                      │                                               ✕
+ ▐▛███▛█   Claude Code v2.1.296                                       │ Now   Dispatch   Review   Spend   Hygiene ⚑1
+▝▜██████▀  Sonnet 5.5 · Claude Max                                    │ ?
+ ▝▝   ▝▝   ~/projects/gate-sandbox                                    │───────────────────────────────────────────────
+                                                                      │◌ Idle  gate-sandbox · 0m since start
+                                                                      │no dispatch running
+                                                                      │session $— · host $182.46 · ctx —
+                                                                      │── Needs you ─────────────────────────── ⚑ 1 ──
+                                                                      │ ⚑ 1 worktree needs you → Hygiene tab
+                                                                      │── Where you are ──────────────────────────────
+                                                                      │no data · no stage recorded for this session
+                                                                      │no data · no unit recorded
+                                                                      │progress    —
+                                                                      │phase       —
+                                                                      │── Working now ────────────────────────────────
+                                                                      │dispatch    ⚙ 0 running  0 stalled
+                                                                      │task tools are off · set CLAUDE_CODE_ENABLE_TODO…
+                                                                      │── Cost today ─────────────────────────────────
+                                                                      │cost     …$158… / $150.0…▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰…  10…
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+                                                                      │
+◌ Idle │ ⚑1 │ ⓘ                                                   [-] │
+                                                                      │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ Try "refactor <filepath>"
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Sonnet 5.5 ── ~/projects/gate-sandbox develop ──────────────────────────────────────────── v2.1.296
+  ─                                                                                → codeforge adopt
+  ⏵⏵ accept edits on (shift+tab to cycle) · ← 6 agents

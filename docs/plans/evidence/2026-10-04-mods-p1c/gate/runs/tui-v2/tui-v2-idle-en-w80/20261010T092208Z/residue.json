@@ -1,0 +1,26 @@
+{
+  "schema": "autopilot.residue/1",
+  "project_key": "51de403da82a23f0",
+  "at": "2026-10-10T09:21:18.272Z",
+  "reapable_worktrees": 1,
+  "by_class": {
+    "clean-integrated": 1
+  },
+  "source": "repo-residue-sweep scan",
+  "needs_human_count": 1,
+  "needs_human_bytes": 147456,
+  "needs_human": [
+    {
+      "kind": "worktree",
+      "class": "clean-integrated",
+      "age_days": 1.18,
+      "bytes": 147456,
+      "reason": "HEAD is an ancestor of the integration ref",
+      "command": "git -C '/home/cookys/projects/gate-sandbox' worktree remove '/home/cookys/projects/gate-sandbox/.claude/worktrees/agent-a0a996e5a76cd2993'",
+      "path": "/home/cookys/projects/gate-sandbox/.claude/worktrees/agent-a0a996e5a76cd2993"
+    }
+  ],
+  "auto_ran_at": "2026-10-10T04:57:46.160Z",
+  "auto_removed_count": 0,
+  "auto_archived_count": 0
+}

@@ -1,0 +1,15 @@
+capture tui-v2-idle-zh-w209/20261010T092151Z/  cell=tui-v2-idle-zh-w209
+surface: band
+width: bodyColumns=114 [docked pane: transcript column 119 cells (border │ at cell 119 on 42 rows of pane.txt) - 5]
+band: ◌ 待命 │ $▰▰▰ │ ⚑1 │ ⓘ
+PASS verdict expected ◌ 待命 got ◌ 待命 [nothing live, awaited or complete]
+ABSENT position expected absent (empty: marker.json has no stage) got absent [marker.json has no stage]
+ABSENT unit expected absent (empty: marker.json has no unit) got absent [marker.json has no unit]
+ABSENT dispatch expected absent (empty: envelope*.json counts.confirmed_live / stall rows (+ a stalled foreman)) got absent [envelope*.json counts.confirmed_live / stall rows (+ a stalled foreman)]
+ABSENT review expected absent (empty: review.json generation + qc.json state) got absent [review.json generation + qc.json state]
+ABSENT decisions expected absent (empty: decisions-sidecar*.json count / undocumented_dispatches / ladder) got absent [decisions-sidecar*.json count / undocumented_dispatches / ladder]
+PASS spend expected $▰▰▰ got $▰▰▰ [envelope.json host_today_brain_usd / brain_cap_usd]
+PASS hygiene expected ⚑1 got ⚑1 [load-source.json + residue.json]
+PASS ⓘ expected ⓘ got ⓘ [contract slot 9: always drawn]
+PASS layout expected one line of at most 114 cells, slots in priority order, joined by " │ " (dispatch and review share one group), ⓘ last got 22 cells [contract section 2]
+PASS tui-v2 fields=10

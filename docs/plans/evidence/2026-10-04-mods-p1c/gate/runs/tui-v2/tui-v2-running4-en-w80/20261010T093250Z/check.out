@@ -1,0 +1,13 @@
+capture /home/cookys/projects/autopilot/docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/tui-v2/tui-v2-running4-en-w80/20261010T093250Z  cell=tui-v2-running4-en-w80
+surface: panel
+width: bodyColumns=75 [meta.window_width 80 - 5 (engine right margin; no docked pane assumed)]
+panel: ● Running  gate-sandbox · 5m since start
+PASS verdict expected Running got Running [tasks.json in_progress] (panel shows Running)
+SKIP position expected - got - [marker.json size/urgent/level/stage/stage_set_at (+ stage.json walk)] (not shown on the panel)
+SKIP unit expected - got - [marker.json unit/review_families] (not shown on the panel)
+SKIP dispatch expected - got - [envelope*.json counts.confirmed_live / stall rows (+ a stalled foreman)] (not shown on the panel)
+SKIP review expected - got - [review.json generation + qc.json state] (not shown on the panel)
+SKIP decisions expected - got - [decisions-sidecar*.json count / undocumented_dispatches / ladder] (not shown on the panel)
+SKIP spend expected - got - [envelope.json host_today_brain_usd / brain_cap_usd] (not shown on the panel)
+SKIP hygiene expected - got - [load-source.json + residue.json] (not shown on the panel)
+PASS tui-v2 fields=1

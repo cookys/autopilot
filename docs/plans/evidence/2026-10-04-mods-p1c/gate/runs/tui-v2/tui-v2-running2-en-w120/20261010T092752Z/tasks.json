@@ -1,0 +1,46 @@
+{
+  "schema": "autopilot.session-tasks/1",
+  "session_id": "f2f96cb3-61e5-42bb-9f33-d34b1e960d71",
+  "cwd": "/home/cookys/projects/gate-sandbox",
+  "project_key": "51de403da82a23f0",
+  "updated_at": "2026-10-10T09:25:09.506Z",
+  "first_created_at": "2026-10-10T09:25:06.745Z",
+  "tasks": [
+    {
+      "id": "1",
+      "subject": "finish: Invoke autopilot:finish-flow",
+      "status": "pending",
+      "started_seq": null
+    },
+    {
+      "id": "2",
+      "subject": "實作 greet 的 shout 選項(lib/greet.js)",
+      "status": "pending",
+      "started_seq": null
+    },
+    {
+      "id": "3",
+      "subject": "在 test.js 新增 shout 測試",
+      "status": "pending",
+      "started_seq": null
+    },
+    {
+      "id": "4",
+      "subject": "README 新增 shout 用法一行",
+      "status": "pending",
+      "started_seq": null
+    },
+    {
+      "id": "5",
+      "subject": "驗證與 qc-gate:node test.js",
+      "status": "pending",
+      "started_seq": null
+    }
+  ],
+  "counts": {
+    "total": 5,
+    "completed": 0,
+    "in_progress": 0
+  },
+  "current": null
+}

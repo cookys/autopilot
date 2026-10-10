@@ -1,0 +1,14 @@
+capture /home/cookys/projects/autopilot/docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/tui-v2/tui-v2-blocked-zh-w80/20261010T092440Z  cell=tui-v2-blocked-zh-w80
+surface: dialog
+width: bodyColumns=75 [meta.window_width 80 - 5 (engine right margin; no docked pane assumed)]
+dialog: (dialog)
+PASS verdict expected 要你決定 got 要你決定 [attention.json kind=permission] (dialog shows 要你決定)
+SKIP reason expected 等你批准：Bash: ls; cat lib/greet.js test.js README.md; ls /home/cookys/projects/autopilot/skills/dev-flow/scripts 2>/dev/null | … got hidden [attention.json summary] (a dialog hides the band and the panel)
+SKIP position expected - got - [marker.json has no stage] (a dialog hides the band and the panel)
+SKIP unit expected - got - [marker.json has no unit] (a dialog hides the band and the panel)
+SKIP dispatch expected - got - [envelope*.json counts.confirmed_live / stall rows (+ a stalled foreman)] (a dialog hides the band and the panel)
+SKIP review expected - got - [review.json generation + qc.json state] (a dialog hides the band and the panel)
+SKIP decisions expected - got - [decisions-sidecar*.json count / undocumented_dispatches / ladder] (a dialog hides the band and the panel)
+SKIP spend expected - got - [envelope.json host_today_brain_usd / brain_cap_usd] (a dialog hides the band and the panel)
+SKIP hygiene expected - got - [load-source.json + residue.json] (a dialog hides the band and the panel)
+PASS tui-v2 fields=1

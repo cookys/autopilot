@@ -1,0 +1,15 @@
+capture /home/cookys/projects/autopilot/docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/tui-v2/tui-v2-panel-en-spend/20261010T093310Z  cell=tui-v2-panel-en-spend
+surface: band
+width: bodyColumns=114 [docked pane: transcript column 119 cells (border │ at cell 119 on 43 rows of pane.txt) - 5]
+band: ● Running │ ▰▱▱ │ $▰▰▰ │ ⚑1 │ ⓘ
+PASS verdict expected ● Running got ● Running [tasks.json in_progress]
+ABSENT position expected absent (removed by the width table (bodyColumns 114 < 120)) got absent [marker.json size/urgent/level/stage/stage_set_at (+ stage.json walk)]
+PASS unit expected ▰▱▱ got ▰▱▱ [marker.json unit/review_families]
+ABSENT dispatch expected absent (empty: envelope*.json counts.confirmed_live / stall rows (+ a stalled foreman)) got absent [envelope*.json counts.confirmed_live / stall rows (+ a stalled foreman)]
+ABSENT review expected absent (empty: review.json generation + qc.json state) got absent [review.json generation + qc.json state]
+ABSENT decisions expected absent (empty: decisions-sidecar*.json count / undocumented_dispatches / ladder) got absent [decisions-sidecar*.json count / undocumented_dispatches / ladder]
+PASS spend expected $▰▰▰ got $▰▰▰ [envelope.json host_today_brain_usd / brain_cap_usd]
+PASS hygiene expected ⚑1 got ⚑1 [load-source.json + residue.json]
+PASS ⓘ expected ⓘ got ⓘ [contract slot 9: always drawn]
+PASS layout expected one line of at most 114 cells, slots in priority order, joined by " │ " (dispatch and review share one group), ⓘ last got 31 cells [contract section 2]
+PASS tui-v2 fields=10

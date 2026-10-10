@@ -1,0 +1,31 @@
+{
+  "schema": "autopilot.stage-walk/1",
+  "sid": "1e1d6fb4-66b6-4918-86ef-2cf5da319ce5",
+  "size": "S",
+  "urgent": false,
+  "bug": false,
+  "high_risk": false,
+  "units": 3,
+  "nodes": [
+    "implement",
+    "verify",
+    "qc-gate",
+    "finish"
+  ],
+  "walk": [
+    "implement",
+    "verify",
+    "implement",
+    "verify",
+    "implement",
+    "verify",
+    "qc-gate",
+    "finish"
+  ],
+  "entry": "implement",
+  "terminal": "finish",
+  "unit_kind": "phase",
+  "current": "qc-gate",
+  "stage_set_at": "2026-10-10T09:27:34.807Z",
+  "at": "2026-10-10T09:27:37.238Z"
+}

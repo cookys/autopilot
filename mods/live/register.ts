@@ -16,6 +16,7 @@
 //            <git-common-dir>/autopilot/work-orders/<root>/*.json   (campaign start = earliest bound progress receipt;
 //            the common dir comes from the envelope's scope.repo_identity, a published path, never a computed live base)
 //
+//   spend    <live_base>/runs/spend-history.json (host-wide, schema autopilot.spend-history/1): the Spend tab's hourly sparkline; absent / < 2 samples -> a note
 //   P7       <live_base>/runs/<project_key>.qc.json, .residue.json, .review.json; <live_base>/stage/<sid>.json; load-source.json; the marker's
 //            §2.9 fields (size, urgent, level, stage, stage_set_at, unit, review_families); the envelope's host_today_brain_usd / brain_cap_usd;
 //            the decisions sidecar's `ladder`. Each is optional: absent -> its slot is left out and its tab says "no data".
@@ -39,7 +40,7 @@ import { Pane } from './pane'
 import {
   acceptanceToast, autoResidueCount, bandLine1, bandView, buildSections, checkEnvelope, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
   headerText, hhmm, projectName as projectNameOf, isKey, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
-  readForeman, readLoadSource, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
+  readForeman, readLoadSource, readSpendHistory, hourlySpend, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
   spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd,
 } from './model'
 import type { Counts, DecisionsView, EnvelopeCheck, JobModel, Json, LiveSnapshot, Manifest, PaneTab, Sources } from './model'
@@ -384,7 +385,7 @@ async function buildSnapshot($: EngineInterface, nowMs: number, t: T): Promise<{
       detail: {
         counts: countsOf(env), stalled: stalledCount(env, foreman, nowMs),
         now_ms: nowMs, project: projectNameOf(identity, scope.key), marker, qc, stage, decisions, load_source: loadSource, residue,
-        spend: { session: sessionUsd(env, sid).text, host_all: usd(env.host_today_usd), host_all_n: typeof env.host_today_usd === 'number' && Number.isFinite(env.host_today_usd) ? env.host_today_usd : null, brain: spendOf(env)?.brain ?? null, cap: spendOf(env)?.cap ?? null, mode: await fuseModeOf($, autopilotHome) },
+        spend: { session: sessionUsd(env, sid).text, host_all: usd(env.host_today_usd), host_all_n: typeof env.host_today_usd === 'number' && Number.isFinite(env.host_today_usd) ? env.host_today_usd : null, brain: spendOf(env)?.brain ?? null, cap: spendOf(env)?.cap ?? null, mode: await fuseModeOf($, autopilotHome), hourly: hourlySpend(readSpendHistory(await readText($, liveBase + '/runs/spend-history.json')), nowMs) },
       },
     }),
     counts: countsOf(env),

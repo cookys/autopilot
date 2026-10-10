@@ -63,7 +63,7 @@
 // in-memory tree; a missing file makes the bottom hook throw, which the mod sees as a rejected read.
 import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
-import { readQc, qcChip, readReview, reviewSlot, displayWidth, truncateToWidth, layoutBand, readMarker, readResidue, readStageWalk, bandSlots, slotUnit, slotPosition, slotDispatch, slotDecisions, slotSpend, slotHygiene, slotReview, readLoadSource, PANE_TABS, verdictOf, reviewTabLines, wrapLines, legendLines, bandView, hygieneTabLines, dispatchLines } from './model'
+import { readQc, qcChip, readReview, reviewSlot, displayWidth, truncateToWidth, layoutBand, readMarker, readResidue, readStageWalk, bandSlots, slotUnit, slotPosition, slotDispatch, slotDecisions, slotSpend, slotHygiene, slotReview, readLoadSource, PANE_TABS, verdictOf, reviewTabLines, wrapLines, legendLines, bandView, hygieneTabLines, dispatchLines, spendTabLines, readSpendHistory, hourlySpend, sparkText, SPARK_BARS } from './model'
 import { makeT, resolveLocale, localeFromLanguage } from './i18n'
 import { EN, ZH_TW } from './locales'
 import type { Slot } from './model'
@@ -3177,3 +3177,92 @@ test('dispatch tab: a table that fits stays aligned: every row\'s state column s
     for (const r of rowsTxt) expect(at(r, r.includes('✓ rc') ? '✓ rc' : r.includes('⏸') ? '⏸' : '● '), r).toBe(want)
   }
 })
+
+// ---- follow-up C: the Spend tab's hourly sparkline (source: <live>/runs/spend-history.json, published by the runs watcher) ----
+const SH_NOW = Date.parse('2026-10-10T12:30:00.000Z')
+const shText = (samples: { at: string; usd: number }[]) => JSON.stringify({ schema: 'autopilot.spend-history/1', updated_at: new Date(SH_NOW).toISOString(), samples })
+const at = (hoursAgo: number) => new Date(SH_NOW - hoursAgo * 3600 * 1000).toISOString()
+
+test('spend history: a foreign schema, broken JSON or no file reads as null; bad samples are skipped; samples come back sorted', () => {
+  expect(readSpendHistory(null)).toBe(null)
+  expect(readSpendHistory('{nope')).toBe(null)
+  expect(readSpendHistory(JSON.stringify({ schema: 'other/1', samples: [] }))).toBe(null)
+  const got = readSpendHistory(JSON.stringify({ schema: 'autopilot.spend-history/1', samples: [{ at: at(1), usd: 5 }, { at: 'x', usd: 1 }, { at: at(2), usd: -3 }, { at: at(3), usd: 2 }, { at: at(4), usd: NaN }] }))
+  expect(got?.map(x => x.usd)).toEqual([2, 5])
+})
+
+test('spend history: hourly buckets hold the spend ADDED in each hour, 24 of them, the current hour last', () => {
+  const samples = readSpendHistory(shText([{ at: at(4.4), usd: 10 }, { at: at(3.4), usd: 12 }, { at: at(2.4), usd: 12 }, { at: at(0.4), usd: 17.5 }])) as never
+  const b = hourlySpend(samples, SH_NOW) as number[]
+  expect(b.length).toBe(24)
+  // 12:30 now: the sample at 12:06 (0.4 h ago) is the current hour (index 23); 10:06 is 2.4 h ago (index 21); 09:06 index 20; 08:06 (4.4) index 19 is the baseline, counted 0
+  expect(Math.round(b[23] * 100) / 100).toBe(5.5)
+  expect(b[22]).toBe(0)
+  expect(b[21]).toBe(0)
+  expect(Math.round(b[20] * 100) / 100).toBe(2)
+  expect(b[19]).toBe(0)
+  expect(Math.round(b.reduce((a, c) => a + c, 0) * 100) / 100).toBe(7.5)
+})
+
+test('spend history: the first sample of a new UTC day counts in full; a falling figure never counts below zero; samples outside 24 h are ignored', () => {
+  const nowMs = Date.parse('2026-10-10T01:30:00.000Z')
+  const before = (h: number) => new Date(nowMs - h * 3600 * 1000).toISOString()
+  const b = hourlySpend(readSpendHistory(JSON.stringify({ schema: 'autopilot.spend-history/1', samples: [{ at: before(30), usd: 99 }, { at: before(2), usd: 40 }, { at: before(0.7), usd: 3 }, { at: before(0.2), usd: 2.5 }] })), nowMs) as number[]
+  // 23:30 on the 9th (40, baseline from the old sample's day: a new sample after a long gap, same UTC day as before(30)? no: 30 h earlier is the 8th -> counts in full 40), 00:48 on the 10th (3, new day: full), 01:18 (2.5 < 3: 0)
+  expect(b[23]).toBe(0)
+  expect(Math.round(b[22] * 100) / 100).toBe(3)
+  expect(b[21]).toBe(40)
+  expect(b.some(v => v < 0)).toBe(false)
+})
+
+test('spend history: fewer than 2 samples in the last 24 h is no sparkline (null), however old the others are', () => {
+  expect(hourlySpend(null, SH_NOW)).toBe(null)
+  expect(hourlySpend([], SH_NOW)).toBe(null)
+  expect(hourlySpend(readSpendHistory(shText([{ at: at(0.1), usd: 5 }])), SH_NOW)).toBe(null)
+  expect(hourlySpend(readSpendHistory(shText([{ at: at(40), usd: 1 }, { at: at(30), usd: 2 }, { at: at(0.1), usd: 5 }])), SH_NOW)).toBe(null)
+  expect(hourlySpend(readSpendHistory(shText([{ at: at(1), usd: 1 }, { at: at(0.1), usd: 5 }])), SH_NOW)).not.toBe(null)
+})
+
+test('spend history: sparkText scales to the peak over the eight bars; zeros are the floor; an all-zero window is flat', () => {
+  expect(SPARK_BARS).toBe('▁▂▃▄▅▆▇█')
+  expect(sparkText([0, 1, 2, 4, 8])).toBe('▁▂▃▅█')
+  expect(sparkText([0, 0, 0])).toBe('▁▁▁')
+  expect(sparkText([5])).toBe('█')
+})
+
+const spendSnap = (hourly: number[] | null) => ({
+  header: 'h', rows: null, gates: null, link: null, published_at: null, session_as_of: null, host_as_of: null,
+  sections: { attention: [], waiting: [], tasks: [], decisions: [], foreman: [] },
+  detail: { counts: null, stalled: 0, now_ms: SH_NOW, spend: { session: '$1.00', host_all: '$20.00', host_all_n: 20, brain: 12, cap: 150, mode: 'warn', hourly } },
+}) as never
+const HOURLY = [0, 0, 0.5, 1, 0, 0, 2, 3.5, 1, 0, 0, 0, 0.2, 0, 4, 2, 1, 0, 0, 0.5, 0, 1, 2, 3]
+
+for (const width of [60, 76, 90]) {
+  for (const locale of ['en', 'zh-TW'] as const) {
+    test('spend tab: the hourly sparkline is 24 bars with a total and a peak caption, nothing wider than the pane (' + locale + ', ' + width + ' columns)', () => {
+      const t = makeT(locale)
+      const lines = spendTabLines(spendSnap(HOURLY), { t, cols: width })
+      for (const l of lines) expect(displayWidth(l.text), l.text).toBeLessThanOrEqual(width)
+      const bars = lines.find(l => l.text.length > 0 && [...l.text.trim()].every(c => SPARK_BARS.includes(c)))
+      expect(bars, 'a row of only spark bars').toBeDefined()
+      expect([...(bars as { text: string }).text.trim()].length).toBe(24)
+      expect((bars as { text: string }).text.trim()).toBe(sparkText(HOURLY))
+      // the bars carry the brain-tier theme colour (suggestion), the current hour bold; text colour only
+      expect((bars as { segs: { color?: string }[] }).segs.filter(x => x.color !== undefined).every(x => x.color === 'suggestion')).toBe(true)
+      const total = HOURLY.reduce((a, c) => a + c, 0)
+      const ruleLine = lines.find(l => l.text.includes(t('spend.hourly')))
+      expect(ruleLine?.text).toContain('+$' + total.toFixed(2))
+      const caption = lines.map(l => l.text).join('\n')
+      expect(caption).toContain('$4.00')
+      expect(lines.some(l => l.text.includes(t('spend.no_history')))).toBe(false)
+    })
+
+    test('spend tab: with no history (or fewer than 2 samples) there is no sparkline, only the note (' + locale + ', ' + width + ' columns)', () => {
+      const t = makeT(locale)
+      const lines = spendTabLines(spendSnap(null), { t, cols: width })
+      expect(lines.map(l => l.text.trim()).filter(x => x !== '').join(' ').replace(/ +/g, ' ')).toContain(t('spend.no_history').replace(/ +/g, ' '))
+      expect(lines.some(l => [...l.text].some(c => SPARK_BARS.includes(c)))).toBe(false)
+      for (const l of lines) expect(displayWidth(l.text), l.text).toBeLessThanOrEqual(width)
+    })
+  }
+}

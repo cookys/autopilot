@@ -55,6 +55,7 @@ export const EN: Record<string, string> = {
   "state.stale_at": "stale · last published {at} · run: {hint} --project {key}",
   "state.unavailable": "unavailable · run: {hint} --project {key}",
   "progress.frozen": "{pct}% ({done}/{total})",
+  "phase.task": "doing: {subject}",
   "progress.unfrozen": "{n} done*",
   "state.run": "run",
   "state.stalled": "stalled",
@@ -276,6 +277,7 @@ export const ZH_TW: Record<string, string> = {
   "state.stale_at": "資料過舊 · 上次發佈 {at} · 請執行：{hint} --project {key}",
   "state.unavailable": "無法取得 · 請執行：{hint} --project {key}",
   "progress.frozen": "{pct}%（{done}/{total}）",
+  "phase.task": "做：{subject}",
   "progress.unfrozen": "已完成 {n}*",
   "state.run": "執行中",
   "state.stalled": "疑似卡住",
@@ -441,5 +443,5 @@ export const ZH_TW: Record<string, string> = {
   "legend.hygiene": "外掛載入來源（↓ = 落後 upstream）· ⚑ 要你處理的 worktree 與分支",
   "legend.icon": "開啟這個面板；面板開著時，切到下一個分頁",
   "legend.keys": "鍵盤：Ctrl+x Tab，再對 ⓘ 按 Enter；每按一次 Enter 切到下一個分頁",
-  "legend.widths": "終端機變窄時會省略：< 160 路徑圖、原因、載入來源 · < 120 階段、輪次、金額 · < 80 只留 verdict、⚙、⚑"
+  "legend.widths": "終端機變窄時會省略：< 160 路徑圖、原因、載入來源 · < 120 階段、輪次、金額 · < 80 只留狀態字、⚙、⚑"
 }

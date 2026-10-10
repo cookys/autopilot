@@ -111,7 +111,7 @@ test('EN 209: the verdict word, the reason phrase and the `fam` word come from t
   assert.strictEqual(r.derived.reasonSlot.known.full, '1 dispatch looks silent'); // plural: one dispatch
   // an en capture judged as zh-TW (forced) FAILs: the words differ
   assert.strictEqual(run(rich(RICH_209_EN, 209), { locale: 'zh-TW' }).ok, false);
-  // meta.locale decides when the band cannot (a bare glyph band)
+  // the rule: meta.locale when declared (check.js run(): --locale, then meta.locale), otherwise inferred from the band's verdict word; derive() alone with no declaration is zh-TW
   assert.strictEqual(derive(capture(richFiles(), [], { locale: 'en' })).verdict, 'Stalled');
 });
 test('locale: meta.locale decides (a capture-time record), even against the words the band draws', () => {
@@ -119,7 +119,8 @@ test('locale: meta.locale decides (a capture-time record), even against the word
   const d = rich(RICH_209_EN, 209); const m = JSON.parse(fs.readFileSync(path.join(d, 'meta.json'), 'utf8')); m.locale = 'zh-TW'; fs.writeFileSync(path.join(d, 'meta.json'), JSON.stringify(m));
   const r = run(d);
   assert.strictEqual(r.derived.locale, 'zh-TW'); assert.strictEqual(r.ok, false, 'an en band judged against the recorded zh-TW locale FAILs');
-  assert.ok(fs.readFileSync(path.join(__dirname, 'capture.sh'), 'utf8').includes('locale: E.GATE_LOCALE || E.AUTOPILOT_LOCALE'), 'capture.sh records meta.locale');
+  assert.ok(fs.readFileSync(path.join(__dirname, 'capture.sh'), 'utf8').includes('locale: E.GATE_LOCALE || null'), 'capture.sh records meta.locale from an explicit GATE_LOCALE only');
+  assert.ok(!/locale:[^\n]*AUTOPILOT_LOCALE/.test(fs.readFileSync(path.join(__dirname, 'capture.sh'), 'utf8').split('\n').filter((l) => l.includes('settle_attempt')).join('')), 'the capturing shell AUTOPILOT_LOCALE is not recorded');
 });
 test('EN 130: the mid tier in en', () => {
   assert.strictEqual(run(rich(RICH_MID_EN, 130)).ok, true);

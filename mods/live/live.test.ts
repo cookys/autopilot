@@ -2925,25 +2925,36 @@ for (const surface of SURFACES) {
 }
 
 // ---- review round 1 fixes ----
-test('layoutBand: a long reason at 160 and 209 columns with every slot drawn keeps the line within the budget and the ⓘ in its cell (finding 1 was a false alarm: widthOf counts the ⓘ; mutation room+1 turns this red)', () => {
+test('layoutBand: a long reason is clipped to the room left: a prefix of it is drawn, the line fits the budget exactly at the edge and the ⓘ keeps its cell (mutation room+1 turns this red)', () => {
+  const REASONS = { en: 'x'.repeat(200), 'zh-TW': '要不要把這個很長很長很長很長很長很長很長很長很長很長很長很長的 plan 拆開來分段做？'.repeat(3) }
   for (const locale of ['en', 'zh-TW'] as const) {
     const t = makeT(locale)
-    for (const cols of [160, 170, 175, 180, 209]) {
-      for (const reason of ['x'.repeat(200), '要不要把這個很長很長很長很長很長很長很長很長很長很長很長很長的 plan 拆開來分段做？'.repeat(3)]) {
-        const facts = { ...gridFacts('blocked', t), reason }
-        const line = layoutBand(bandSlots(facts as never, t), cols)
-        expect(displayWidth(line.text), locale + ' ' + cols).toBeLessThanOrEqual(cols)
-        expect(line.text.endsWith('ⓘ'), locale + ' ' + cols).toBe(true)
-        expect(line.width).toBe(displayWidth(line.text))
-      }
+    const reason = REASONS[locale]
+    const at = (cols: number, r: string | null = reason) => layoutBand(bandSlots({ ...gridFacts('blocked', t), reason: r } as never, t), cols)
+    for (const cols of [160, 209]) {
+      const line = at(cols)
+      expect(displayWidth(line.text), locale + ' ' + cols).toBeLessThanOrEqual(cols)
+      expect(line.text.endsWith(' │ ⓘ'), locale + ' ' + cols).toBe(true)
+      const v = verdictOf('decide', t)
+      const body = line.text.slice(v.mark.length + 1 + v.word.length + 1, line.text.indexOf(' │ ')) // the text after the verdict word
+      expect(body.length, locale + ' ' + cols + ': a reason is drawn').toBeGreaterThan(5)
+      expect(body.endsWith('…'), locale + ' ' + cols).toBe(true)
+      expect(reason.startsWith(body.slice(0, -1)), locale + ' ' + cols + ': it is a prefix of the reason').toBe(true)
     }
-  }
-  // exactly at the edge: find the width where the reason first fits and check the line is still within it
-  const t = makeT('en')
-  const noReason = layoutBand(bandSlots({ ...gridFacts('blocked', t), reason: null } as never, t), 209).width
-  for (let cols = noReason; cols < noReason + 14; cols += 1) {
-    const withReason = layoutBand(bandSlots({ ...gridFacts('blocked', t), reason: 'a reason phrase long enough to clip' } as never, t), Math.max(cols, 160))
-    expect(withReason.width).toBeLessThanOrEqual(Math.max(cols, 160))
+    // the edge: the narrowest width where the reason (>= 8 cells) is drawn at all, and the line at that width and the next few
+    const bare = at(160, null).width
+    let edge = -1
+    for (let cols = 160; cols < 260; cols += 1) if (at(cols).text !== at(cols, null).text) { edge = cols; break }
+    expect(edge, locale + ' edge exists').toBeGreaterThan(0)
+    for (let cols = edge - 1; cols <= edge + 12; cols += 1) {
+      const line = at(cols)
+      expect(displayWidth(line.text), locale + ' edge ' + cols).toBeLessThanOrEqual(cols)
+      expect(line.text.endsWith('ⓘ'), locale + ' edge ' + cols).toBe(true)
+    }
+    // at the edge the reason takes every spare cell: the line is exactly the budget wide there
+    expect(at(edge).width, locale + ' fills the edge exactly').toBeLessThanOrEqual(edge)
+    expect(at(edge).width, locale + ' fills the edge exactly').toBeGreaterThanOrEqual(edge - 1)
+    expect(bare).toBeGreaterThan(0)
   }
 })
 

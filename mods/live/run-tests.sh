@@ -18,6 +18,7 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # the string tables: locales.ts must match the JSON sources, both locales must carry the same ids and placeholders (gen-locales.js --check)
 node "$here/gen-locales.js" --check
+node --test "$here/gen-locales.test.js" >/dev/null
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 

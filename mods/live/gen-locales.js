@@ -52,7 +52,7 @@ const displayWidth = (s) => { let w = 0; for (const ch of s) w += cellWidth(ch.c
 const placeholders = (s) => [...new Set([...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]))].sort().join(',');
 const baseId = (id) => id.replace(/\.(one|other)$/, '');
 
-function check(en, zh) {
+function check(en, zh, srcDir = dir) {
   const problems = [];
   const enIds = Object.keys(en);
   const zhIds = new Set(Object.keys(zh));
@@ -63,7 +63,7 @@ function check(en, zh) {
     if (table[id] !== undefined && displayWidth(table[id]) > KEY_COLUMN_CELLS) problems.push(`${name} ${id} is ${displayWidth(table[id])} cells (key column is ${KEY_COLUMN_CELLS})`);
   }
   let code = '';
-  for (const f of SOURCES) { try { code += fs.readFileSync(path.join(dir, f), 'utf8') + '\n'; } catch (_e) { problems.push(`cannot read ${f}`); } }
+  for (const f of SOURCES) { try { code += fs.readFileSync(path.join(srcDir, f), 'utf8') + '\n'; } catch (_e) { problems.push(`cannot read ${f}`); } }
   const exists = (id) => en[id] !== undefined || en[id + '.one'] !== undefined || en[id + '.other'] !== undefined;
   for (const m of code.matchAll(/\bt\(\s*'([\w.-]+)'\s*[,)]/g)) if (!exists(m[1])) problems.push(`code uses t('${m[1]}') but en has no such id`);
   for (const id of new Set(enIds.map(baseId))) {
@@ -71,7 +71,7 @@ function check(en, zh) {
     if (!code.includes(`'${id}'`)) problems.push(`en id ${id} is not used by the code`);
   }
   // a key-column label or a rule title passed as a string literal is an untranslated word: kv('x', ...) / rule('x', ...) must go through t()
-  for (const m of code.matchAll(/\b(kv|rule)\(\s*'([^']+)'/g)) problems.push(`${m[1]}('${m[2]}', ...) passes a literal label; use t('label.…') / t('…')`);
+  for (const m of code.matchAll(/\b(kv|rule)\(\s*(['"`])((?:(?!\2).)+)\2/g)) problems.push(`${m[1]}(${m[2]}${m[3]}${m[2]}, ...) passes a literal label; use t('label.…') / t('…')`);
   const generated = render(en, zh);
   let onDisk = null;
   try { onDisk = fs.readFileSync(path.join(dir, 'locales.ts'), 'utf8'); } catch (_e) { /* none */ }

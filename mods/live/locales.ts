@@ -276,7 +276,7 @@ export const ZH_TW: Record<string, string> = {
   "state.unavailable": "無法取得 · 請執行：{hint} --project {key}",
   "progress.frozen": "{pct}%（{done}/{total}）",
   "progress.unfrozen": "已完成 {n}*",
-  "state.run": "執行",
+  "state.run": "執行中",
   "state.stalled": "疑似卡住",
   "veto.no_id": "（沒有 decision_id，無法 veto）",
   "veto.no_path": "（找不到 ledger 路徑，無法組出 veto 指令）",

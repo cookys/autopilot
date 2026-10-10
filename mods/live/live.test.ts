@@ -63,7 +63,7 @@
 // in-memory tree; a missing file makes the bottom hook throw, which the mod sees as a rejected read.
 import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
-import { readQc, qcChip, readReview, reviewSlot, displayWidth, truncateToWidth, layoutBand, readMarker, readResidue, readStageWalk, bandSlots, slotUnit, slotPosition, slotDispatch, slotDecisions, slotSpend, slotHygiene, slotReview, readLoadSource, PANE_TABS, verdictOf, reviewTabLines } from './model'
+import { readQc, qcChip, readReview, reviewSlot, displayWidth, truncateToWidth, layoutBand, readMarker, readResidue, readStageWalk, bandSlots, slotUnit, slotPosition, slotDispatch, slotDecisions, slotSpend, slotHygiene, slotReview, readLoadSource, PANE_TABS, verdictOf, reviewTabLines, wrapLines, legendLines, hygieneTabLines } from './model'
 import { makeT, resolveLocale, localeFromLanguage } from './i18n'
 import { EN, ZH_TW } from './locales'
 import type { Slot } from './model'
@@ -269,8 +269,8 @@ async function bandText($: any, surface: (typeof SURFACES)[number], columns = 12
 }
 
 // the pane on one tab (default: Dispatch, where the rows / gates / tasks / foreman live); the press only sets the tab and invalidates, the host then draws again (a fresh mount here)
-async function paneParts($: any, surface: (typeof SURFACES)[number], tab: string = 'dispatch') {
-  const mountPane = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+async function paneParts($: any, surface: (typeof SURFACES)[number], tab: string = 'dispatch', bodyColumns: number = PANE_PROPS.bodyColumns) {
+  const mountPane = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: { ...PANE_PROPS, bodyColumns }, viewport: { columns: 160, rows: 50, isFullscreen: true } })
   const first = await mountPane()
   await first.press({ key: tab })
   await first.unmount()
@@ -2471,7 +2471,7 @@ for (const surface of SURFACES) {
     expect(has(hygiene.texts, '市集', '✓ directory')).toBe(true)
     expect(has(hygiene.texts, '要你處理的 worktree 與分支', '⚑ 2', '3 MB')).toBe(true)
     expect(hygiene.texts).toContain('2 項要你處理 · 3 MB · 3h0m 前自動清理：刪 2 個 worktree、封存 1 條分支')
-    expect(has(hygiene.texts, '⚑', 'worktree', '…/worktrees/hands-x', 'dirty · 4d · 2 MB · failure')).toBe(true)
+    expect(has(hygiene.texts, '⚑', 'worktree', '/home/u/proj/.claude/worktrees/hands-x', 'dirty · 4d · 2 MB · failure')).toBe(true)
     expect(hygiene.texts).toContain('   git -C /home/u/proj worktree remove --force /home/u/proj/.claude/worktrees/hands-x')
     // the needs_human command wraps (never cut at the pane edge); the neighbouring row lines stay single-line
     const cmdNode = walkTexts(hygiene.tree).find(n => textOf(n).startsWith('   git -C /home/u/proj worktree remove'))
@@ -2903,6 +2903,22 @@ for (const surface of SURFACES) {
   }
 
   for (const locale of ['en', 'zh-TW'] as const) {
+    test('TUI v2 panel: at pane widths 60, 76 and 90 no tab clips value text with … and no line is wider than the pane, in ' + locale + ' (' + surface + ')', async ($, on) => {
+      world(on, richWorld(), NOW_FRESH, SID_A, locale)
+      await start($, surface)
+      for (const width of [60, 76, 90]) {
+        for (const id of PANE_TABS) {
+          const parts = await paneParts($, surface, id, width)
+          for (const text of [stripOf(parts.tree), ...parts.texts]) {
+            expect(displayWidth(text), width + ' ' + id + ': ' + text).toBeLessThanOrEqual(width)
+            expect(text.includes('…'), width + ' ' + id + ': ' + text).toBe(false)
+          }
+        }
+      }
+    })
+  }
+
+  for (const locale of ['en', 'zh-TW'] as const) {
     test('TUI v2 panel: columns are padded by display cells: key labels are 12 cells wide and the run table lines up in ' + locale + ' (' + surface + ')', async ($, on) => {
       world(on, richWorld(), NOW_FRESH, SID_A, locale)
       await start($, surface)
@@ -2976,5 +2992,62 @@ test('Review tab: a ladder rung outside U0..U5 is clamped, never a negative repe
     const empty = (row.text.match(/▱/g) || []).length
     expect(filled + empty, rung).toBe(6)
     expect(filled, rung).toBe(rung === 'U7' || rung === 'U9' || rung === 'U5' ? 6 : 1) // clamped to 5 -> six cells filled; U0 and a bad number -> one
+  }
+})
+
+// ---- wrapping (pure): long values wrap under the value column, nothing is clipped, nothing is wider than the pane ----
+test('wrapLines: a kv row wraps with a hanging indent of 12 cells, a long path breaks after a /, a token longer than the line is hard-broken, short lines are untouched', () => {
+  const long = '/home/cookys/.claude/plugins/cache/autopilot/autopilot/2.36.36/some/deep/dir'
+  const lines = wrapLines([{ text: 'cache       ' + long, hang: 12, segs: [{ text: 'cache       ', dim: true }, { text: long }] }], 40)
+  expect(lines.length).toBeGreaterThan(1)
+  for (const l of lines) expect(displayWidth(l.text)).toBeLessThanOrEqual(40)
+  for (const l of lines.slice(1)) expect(l.text.startsWith(' '.repeat(12))).toBe(true)
+  expect(lines.map(l => l.text.trim()).join('').replace(/^cache/, '').trim()).toBe(long) // nothing lost, nothing added
+  const hard = wrapLines([{ text: 'x'.repeat(100) }], 30)
+  expect(hard.map(l => l.text).join('')).toBe('x'.repeat(100))
+  for (const l of hard) expect(displayWidth(l.text)).toBeLessThanOrEqual(30)
+  const cjk = wrapLines([{ text: '要不要把這個很長很長很長很長很長很長很長很長的計畫拆開來分段做', hang: 2 }], 20)
+  for (const l of cjk) expect(displayWidth(l.text)).toBeLessThanOrEqual(20)
+  const fits = { text: 'short', dim: true }
+  expect(wrapLines([fits], 40)[0]).toBe(fits)
+})
+
+test('legend: every entry is one example plus its explanation, wrapped, at widths 40 to 100 in en and zh-TW', () => {
+  for (const locale of ['en', 'zh-TW'] as const) {
+    const t = makeT(locale)
+    for (const cols of [40, 60, 76, 90, 100]) {
+      const lines = legendLines({ t, cols })
+      for (const l of lines) {
+        expect(displayWidth(l.text), locale + ' ' + cols + ': ' + l.text).toBeLessThanOrEqual(cols)
+        expect(l.text.includes('…'), locale + ' ' + cols + ': ' + l.text).toBe(false)
+      }
+      const all = lines.map(l => l.text).join('\n').replace(/\s+/g, '')
+      for (const id of ['position', 'unit', 'spend']) expect(all.includes(t('legend.' + id).replace(/\s+/g, '').slice(0, 6)), locale + ' ' + cols + ' ' + id).toBe(true)
+      const pos = lines.findIndex(l => l.text.startsWith('M!·l5')) // the stage walk example sits on its own line, its explanation below it
+      expect(pos, locale + ' ' + cols).toBeGreaterThan(0)
+      expect(lines[pos].text.includes('implement'), locale + ' ' + cols).toBe(true)
+      expect(lines[pos + 1].text.startsWith('  ') && !lines[pos + 1].text.includes('M!'), locale + ' ' + cols).toBe(true)
+    }
+  }
+})
+
+test('hygiene tab: a long cache dir, worktree path and reason wrap in full at 60 columns', () => {
+  const dir = '/home/cookys/.claude/plugins/cache/autopilot/autopilot/2.36.36'
+  const target = '/home/cookys/projects/autopilot/.claude/worktrees/some-very-long-worktree-name-here'
+  const snap = {
+    header: 'h', sections: { attention: [], waiting: [], tasks: [], decisions: [], foreman: [] },
+    detail: {
+      now_ms: 1000,
+      load_source: { source: 'dev', plugin_version: '3.0.0', marketplace: 'directory', flags: [], behind_upstream: null, stale_cache_dirs: [{ dir, in_use_pids: [18089, 18090], alive: [18089] }] },
+      residue: { needs_human_count: 1, needs_human_bytes: 1000, needs_human: [{ kind: 'worktree', target, class: 'dirty', age_days: 4, bytes: 1000, reason: 'a long explanatory reason that must stay readable to the end', command: null }], auto_ran_at: null, auto_removed_count: null, auto_archived_count: null },
+    },
+  } as never
+  for (const locale of ['en', 'zh-TW'] as const) {
+    const lines = hygieneTabLines(snap, { t: makeT(locale), cols: 60 })
+    const flat = lines.map(l => l.text.trim()).join('')
+    for (const l of lines) { expect(displayWidth(l.text), l.text).toBeLessThanOrEqual(60); expect(l.text.includes('…'), l.text).toBe(false) }
+    expect(flat.replace(/\s/g, '').includes(dir.replace(/\s/g, ''))).toBe(true)
+    expect(flat.replace(/\s/g, '').includes(target)).toBe(true)
+    expect(flat.replace(/\s/g, '').includes('mustremainreadabletotheend'.replace(/\s/g, '')) || flat.includes('readable to the end')).toBe(true)
   }
 })

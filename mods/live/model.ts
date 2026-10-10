@@ -38,7 +38,7 @@ export type LiveGateRow = {
 export type LiveDecision = { question: string; options: { label: string; consequence: string }[]; stale: boolean; age_s: number | null }
 
 // one pane line: plain text plus how it is drawn
-export type PaneLine = { text: string; dim?: boolean; bold?: boolean; warn?: boolean; color?: ThemeKey; segs?: Seg[]; wrap?: boolean }
+export type PaneLine = { text: string; dim?: boolean; bold?: boolean; warn?: boolean; color?: ThemeKey; segs?: Seg[]; wrap?: boolean; hang?: number }
 export type VerdictKind = 'decide' | 'stalled' | 'waiting' | 'running' | 'idle'
 // attention = something awaits the human (drawn first); waiting = idle / source-not-wired note; the rest follow the gate rows
 export type PaneSections = { attention: PaneLine[]; waiting: PaneLine[]; tasks: PaneLine[]; decisions: PaneLine[]; foreman: PaneLine[] }
@@ -1480,16 +1480,80 @@ export const tabLabel = (tab: PaneTab, t: T): string => t('tab.' + tab)
 // What a pane line is drawn with: the translator and the pane's width in cells (rules and bars size themselves to it)
 export type PaneCtx = { t: T; cols: number }
 export const DEFAULT_PANE_COLS = 76
-export const paneWidth = (bodyColumns: number | null | undefined): number => (typeof bodyColumns === 'number' && Number.isFinite(bodyColumns) ? Math.max(40, Math.min(bodyColumns - 2, 100)) : DEFAULT_PANE_COLS)
+// the panel is exactly as wide as the body the host gives it (rules, bars and wrapping all size to it); no body width known -> the default
+export const paneWidth = (bodyColumns: number | null | undefined): number => (typeof bodyColumns === 'number' && Number.isFinite(bodyColumns) ? Math.max(20, Math.floor(bodyColumns)) : DEFAULT_PANE_COLS)
 
 const KEY_W = 12 // the key column of a key/value row, in DISPLAY cells (zh labels up to 6 characters, en up to 12)
 const padCells = (text: string, width: number): string => text + ' '.repeat(Math.max(0, width - displayWidth(text)))
 const seg = (text: string, color?: ThemeKey, bold?: boolean, dim?: boolean): Seg => ({ text, ...(color === undefined ? {} : { color }), ...(bold ? { bold } : {}), ...(dim ? { dim } : {}) })
 const dseg = (text: string): Seg => seg(text, undefined, false, true)
 const row = (...segs: Seg[]): PaneLine => ({ text: segs.map(s => s.text).join(''), segs })
-const kv = (label: string, ...segs: Seg[]): PaneLine => row(dseg(padCells(label, KEY_W)), ...segs)
+const kv = (label: string, ...segs: Seg[]): PaneLine => ({ ...row(dseg(padCells(label, KEY_W)), ...segs), hang: KEY_W })
+const withHang = (l: PaneLine, hang: number): PaneLine => ({ ...l, hang })
 const BLANK: PaneLine = { text: '' }
 const NO_DATA = (t: T, what: string): PaneLine => ({ text: t('nodata.prefix', { what: t(what) }), dim: true })
+
+
+// ---- wrapping: panel text is never clipped. A line wider than the pane breaks at spaces, after a `/`, and between CJK characters; its continuation
+// lines are indented by `hang` (kv rows: under the value column; other rows: their own leading blanks). Only a single unbreakable token longer than
+// a whole line is hard-broken. A line that fits is returned untouched.
+type WrapCh = { ch: string; si: number; w: number }
+function wrapLine(l: PaneLine, cols: number): PaneLine[] {
+  if (displayWidth(l.text) <= cols) return [l]
+  const base: Seg[] = l.segs ?? [{ text: l.text, ...(l.color !== undefined ? { color: l.color } : l.warn ? { color: 'warning' as ThemeKey } : {}), ...(l.bold ? { bold: true } : {}), ...(l.dim ? { dim: true } : {}) }]
+  const chars: WrapCh[] = []
+  base.forEach((s, si) => { for (const ch of s.text) chars.push({ ch, si, w: cellWidth(ch.codePointAt(0) as number) }) })
+  const lead = (l.text.match(/^ */) as RegExpMatchArray)[0].length
+  const hang = Math.min(l.hang ?? lead, Math.max(0, Math.floor(cols / 2)))
+  // tokens: runs of blanks, and runs of other characters that end after a `/` or a wide (CJK) character
+  const tokens: { cs: WrapCh[]; blank: boolean; w: number }[] = []
+  for (const c of chars) {
+    const blank = c.ch === ' '
+    const last = tokens[tokens.length - 1]
+    const lastCh = last === undefined ? null : last.cs[last.cs.length - 1]
+    const joins = last !== undefined && last.blank === blank && !(lastCh !== null && (lastCh.ch === '/' || lastCh.w === 2)) && !(c.w === 2 && lastCh !== null && lastCh.w !== 2 && !blank)
+    if (joins) { last.cs.push(c); last.w += c.w } else tokens.push({ cs: [c], blank, w: c.w })
+  }
+  const lines: WrapCh[][] = []
+  let cur: WrapCh[] = []
+  let w = 0
+  let content = false
+  const pad = (n: number): WrapCh[] => Array.from({ length: n }, () => ({ ch: ' ', si: -1, w: 1 }))
+  const newLine = () => {
+    while (cur.length > 0 && cur[cur.length - 1].ch === ' ') cur.pop()
+    lines.push(cur)
+    cur = pad(hang)
+    w = hang
+    content = false
+  }
+  for (const tk of tokens) {
+    if (tk.blank) {
+      if (!content && lines.length > 0) continue // a blank at the start of a continuation line
+      if (w + tk.w <= cols) { cur.push(...tk.cs); w += tk.w } else newLine()
+      continue
+    }
+    if (w + tk.w > cols && content) newLine()
+    if (w + tk.w <= cols) { cur.push(...tk.cs); w += tk.w; content = true; continue }
+    for (const c of tk.cs) { // one token longer than a whole line: hard-break it
+      if (w + c.w > cols && content) newLine()
+      cur.push(c); w += c.w; content = true
+    }
+  }
+  while (cur.length > 0 && cur[cur.length - 1].ch === ' ') cur.pop()
+  if (cur.length > 0 || lines.length === 0) lines.push(cur)
+  return lines.map(cs => {
+    const text = cs.map(c => c.ch).join('')
+    if (l.segs === undefined) return { ...l, text, hang: undefined, wrap: undefined }
+    const segs: Seg[] = []
+    let run = ''
+    let at = -2
+    const flush = () => { if (run !== '') segs.push(at < 0 ? { text: run } : { ...base[at], text: run }); run = '' }
+    for (const c of cs) { if (c.si !== at) { flush(); at = c.si } run += c.ch }
+    flush()
+    return { text, segs }
+  })
+}
+export const wrapLines = (lines: PaneLine[], cols: number): PaneLine[] => lines.flatMap(l => wrapLine(l, cols))
 
 // `── Title ───────── right ──`: a section rule in `subtle` with a bold title and an optional right-hand badge
 export function rule(title: string, right: Seg[], cols: number): PaneLine {
@@ -1572,7 +1636,7 @@ const needsYouLines = (snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] => {
   return out
 }
 
-export function nowLines(snap: LiveSnapshot, ctx: PaneCtx = { t: T_EN, cols: DEFAULT_PANE_COLS }): PaneLine[] {
+function nowLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
   const t = ctx.t
   const d = snap.detail
   const b = snap.band
@@ -1653,7 +1717,7 @@ function runState(r: LivePaneRow, t: T): { text: string; color?: ThemeKey } {
   return { text: '● ' + t('state.run'), color: 'suggestion' }
 }
 
-export function dispatchLines(snap: LiveSnapshot, ctx: PaneCtx = { t: T_EN, cols: DEFAULT_PANE_COLS }): PaneLine[] {
+function dispatchLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
   const t = ctx.t
   const out: PaneLine[] = []
   const rows = snap.rows
@@ -1676,11 +1740,11 @@ export function dispatchLines(snap: LiveSnapshot, ctx: PaneCtx = { t: T_EN, cols
         rows.map(r => (r.elapsed_s === null ? '—' : ageText(r.elapsed_s))),
       ]
       const heads = [t('dispatch.col_run'), t('dispatch.col_role'), t('dispatch.col_engine'), t('dispatch.col_state'), t('dispatch.col_elapsed')]
-      const widths = cols.map((c, i) => Math.min(40, Math.max(displayWidth(heads[i]), ...c.map(displayWidth))) + 2)
+      const widths = cols.map((c, i) => Math.max(displayWidth(heads[i]), ...c.map(displayWidth)) + 2)
       out.push(row(dseg(' ' + heads.map((h, i) => padCells(h, widths[i])).join('') + t('dispatch.col_seen'))))
       rows.forEach((r, i) => {
         out.push(row(
-          seg(' ' + padCells(truncateToWidth(cols[0][i], widths[0] - 2), widths[0])), seg(padCells(truncateToWidth(cols[1][i], widths[1] - 2), widths[1])), seg(padCells(truncateToWidth(cols[2][i], widths[2] - 2), widths[2])),
+          seg(' ' + padCells(cols[0][i], widths[0])), seg(padCells(cols[1][i], widths[1])), seg(padCells(cols[2][i], widths[2])),
           seg(padCells(cols[3][i], widths[3]), sts[i].color), seg(padCells(cols[4][i], widths[4])),
           dseg(r.probe_age_s === null ? '—' : agoText(r.probe_age_s, t)), ...(r.phase === null ? [] : [dseg(' · ' + r.phase)]),
         ))
@@ -1734,7 +1798,7 @@ function seatRows(seats: ReviewSeat[], t: T): PaneLine[] {
   return out
 }
 
-export function reviewTabLines(snap: LiveSnapshot, ctx: PaneCtx = { t: T_EN, cols: DEFAULT_PANE_COLS }): PaneLine[] {
+function reviewTabLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
   const t = ctx.t
   const d = snap.detail
   const r = snap.review
@@ -1787,7 +1851,7 @@ export function reviewTabLines(snap: LiveSnapshot, ctx: PaneCtx = { t: T_EN, col
 }
 
 // ================= Spend =================
-export function spendTabLines(snap: LiveSnapshot, ctx: PaneCtx = { t: T_EN, cols: DEFAULT_PANE_COLS }): PaneLine[] {
+function spendTabLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
   const t = ctx.t
   const s = snap.detail.spend
   const out: PaneLine[] = [{ text: snap.header, dim: true }, BLANK]
@@ -1821,11 +1885,7 @@ export function spendTabLines(snap: LiveSnapshot, ctx: PaneCtx = { t: T_EN, cols
 
 // ================= Hygiene =================
 const sizeText = (b: number | null): string => (b === null ? '—' : b >= 1073741824 ? (b / 1073741824).toFixed(1) + ' GB' : b >= 1048576 ? Math.round(b / 1048576) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB')
-const shortTarget = (target: string, kind: string): string => {
-  if (kind === 'worktree') { const parts = target.split('/').filter(Boolean); target = parts.length > 2 ? '…/' + parts.slice(-2).join('/') : target }
-  return target.length > 48 ? '…' + target.slice(-47) : target
-}
-export function hygieneTabLines(snap: LiveSnapshot, ctx: PaneCtx = { t: T_EN, cols: DEFAULT_PANE_COLS }): PaneLine[] {
+function hygieneTabLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
   const t = ctx.t
   const ls = snap.detail.load_source
   const residue = snap.detail.residue
@@ -1854,7 +1914,7 @@ export function hygieneTabLines(snap: LiveSnapshot, ctx: PaneCtx = { t: T_EN, co
     }
     out.push({ text: t('hygiene.need_you_line', { n, size: sizeText(residue.needs_human_bytes), auto }), bold: n > 0 })
     for (const e of residue.needs_human) {
-      out.push(row(seg(' ⚑ ', 'warning', true), seg(padCells(e.kind, 9)), seg(shortTarget(e.target, e.kind)), dseg(' · ' + e.class + ' · ' + (e.age_days === null ? '—' : Math.floor(e.age_days) + 'd') + ' · ' + sizeText(e.bytes) + (e.reason === null ? '' : ' · ' + e.reason))))
+      out.push(withHang(row(seg(' ⚑ ', 'warning', true), seg(padCells(e.kind, 9)), seg(e.target), dseg(' · ' + e.class + ' · ' + (e.age_days === null ? '—' : Math.floor(e.age_days) + 'd') + ' · ' + sizeText(e.bytes) + (e.reason === null ? '' : ' · ' + e.reason))), KEY_W))
       out.push({ text: '   ' + (e.command ?? '—'), dim: true, wrap: true }) // the command is copied by hand: it wraps over lines, never cut at the pane edge
     }
     if (n > residue.needs_human.length) out.push({ text: '  ' + t('hygiene.more', { n: n - residue.needs_human.length }), dim: true })
@@ -1865,24 +1925,45 @@ export function hygieneTabLines(snap: LiveSnapshot, ctx: PaneCtx = { t: T_EN, co
 // ================= ? (the legend: drawn from the same vocabulary the band uses) =================
 export function legendLines(ctx: PaneCtx = { t: T_EN, cols: DEFAULT_PANE_COLS }): PaneLine[] {
   const t = ctx.t
-  const l = (glyph: Seg[], id: string): PaneLine => row(...glyph, seg('  ' + t('legend.' + id)))
   const verdicts = (['decide', 'stalled', 'waiting', 'running', 'idle'] as VerdictKind[]).map(k => {
     const v = verdictOf(k, t)
-    return l([seg(v.mark + ' ' + v.word, v.key, k !== 'idle')], 'verdict_' + k)
+    return { glyph: [seg(v.mark + ' ' + v.word, v.key, k !== 'idle')], id: 'verdict_' + k }
   })
-  return [
-    rule(t('legend.title'), [], ctx.cols),
+  const entries: { glyph: Seg[]; id: string }[] = [
     ...verdicts,
-    l([seg('M!·l5 '), seg('●─●─', 'success'), seg('◐', 'claude', true), seg('─○─○ ', 'inactive'), seg('implement', 'claude', true), dseg(' ◷3m')], 'position'),
-    l([seg('▰▰', 'success'), seg('▰', 'claude'), seg('▱▱', 'inactive'), seg(' 3/5 '), dseg(t('band.fam', { n: 2 }))], 'unit'),
-    l([seg('⚙2'), seg(' ⏸1', 'error')], 'dispatch'),
-    l([dseg('⟲'), seg('R2 '), seg('QC✓', 'success'), seg(' / '), seg('QC▲', 'warning', true)], 'review'),
-    l([seg('◆3 '), seg('?1', 'inactive'), seg(' U2')], 'decisions'),
-    l([seg('$85 '), seg('▰▰▰▰▰▰▰▰', 'warning'), seg('▱▱', 'inactive'), dseg(' 85%')], 'spend'),
-    l([seg('dev'), dseg('↓3 '), seg('⚑3', 'warning', true)], 'hygiene'),
-    l([seg('ⓘ')], 'icon'),
-    BLANK,
-    { text: t('legend.keys'), dim: true },
-    { text: t('legend.widths'), dim: true },
+    { glyph: [seg('M!·l5 '), seg('●─●─', 'success'), seg('◐', 'claude', true), seg('─○─○ ', 'inactive'), seg('implement', 'claude', true), dseg(' ◷3m')], id: 'position' },
+    { glyph: [seg('▰▰', 'success'), seg('▰', 'claude'), seg('▱▱', 'inactive'), seg(' 3/5 '), dseg(t('band.fam', { n: 2 }))], id: 'unit' },
+    { glyph: [seg('⚙2'), seg(' ⏸1', 'error')], id: 'dispatch' },
+    { glyph: [dseg('⟲'), seg('R2 '), seg('QC✓', 'success'), seg(' / '), seg('QC▲', 'warning', true)], id: 'review' },
+    { glyph: [seg('◆3 '), seg('?1', 'inactive'), seg(' U2')], id: 'decisions' },
+    { glyph: [seg('$85 '), seg('▰▰▰▰▰▰▰▰', 'warning'), seg('▱▱', 'inactive'), dseg(' 85%')], id: 'spend' },
+    { glyph: [seg('dev'), dseg('↓3 '), seg('⚑3', 'warning', true)], id: 'hygiene' },
+    { glyph: [seg('ⓘ')], id: 'icon' },
   ]
+  // one entry = one example + its explanation. Examples up to LEGEND_EX_MAX cells share a column, the explanation wrapping under itself; a wider
+  // example (the position walk) is its own line, its explanation indented below it. A pane too narrow for a column stacks every entry.
+  const LEGEND_EX_MAX = 20
+  const wOf = (g: Seg[]) => g.reduce((n, x) => n + displayWidth(x.text), 0)
+  const narrow = entries.map(e => wOf(e.glyph)).filter(x => x <= LEGEND_EX_MAX)
+  const colW = Math.max(...narrow) + 2
+  const stacked = colW > Math.floor(ctx.cols / 2)
+  const out: PaneLine[] = [rule(t('legend.title'), [], ctx.cols)]
+  for (const e of entries) {
+    const gw = wOf(e.glyph)
+    const text = t('legend.' + e.id)
+    if (stacked || gw > LEGEND_EX_MAX) out.push(row(...e.glyph), withHang(row(seg('  ' + text)), 2))
+    else out.push(withHang(row(...e.glyph, seg(' '.repeat(colW - gw) + text)), colW))
+  }
+  out.push(BLANK, { text: t('legend.keys'), dim: true }, { text: t('legend.widths'), dim: true })
+  return wrapLines(out, ctx.cols)
 }
+
+export const nowLines = (snap: LiveSnapshot, ctx: PaneCtx = { t: T_EN, cols: DEFAULT_PANE_COLS }): PaneLine[] => wrapLines(nowLinesRaw(snap, ctx), ctx.cols)
+
+export const dispatchLines = (snap: LiveSnapshot, ctx: PaneCtx = { t: T_EN, cols: DEFAULT_PANE_COLS }): PaneLine[] => wrapLines(dispatchLinesRaw(snap, ctx), ctx.cols)
+
+export const reviewTabLines = (snap: LiveSnapshot, ctx: PaneCtx = { t: T_EN, cols: DEFAULT_PANE_COLS }): PaneLine[] => wrapLines(reviewTabLinesRaw(snap, ctx), ctx.cols)
+
+export const spendTabLines = (snap: LiveSnapshot, ctx: PaneCtx = { t: T_EN, cols: DEFAULT_PANE_COLS }): PaneLine[] => wrapLines(spendTabLinesRaw(snap, ctx), ctx.cols)
+
+export const hygieneTabLines = (snap: LiveSnapshot, ctx: PaneCtx = { t: T_EN, cols: DEFAULT_PANE_COLS }): PaneLine[] => wrapLines(hygieneTabLinesRaw(snap, ctx), ctx.cols)

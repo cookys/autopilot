@@ -95,6 +95,16 @@
         "run-stage-graph-campaign.js": "294b76c0b9e8d5f7b6a021568f00498a2b92a619998ccc96271bcd7cbf1429f8",
         "prereg/stage-graph.amend-5-same-command-order.json": "cdca96a3d04bb4eb700a9c306cbdded4c1a6bd164d1bd455738dd24d10477963"
       }
+    },
+    "stage-graph.amend-6-refused-call": {
+      "date": "2026-10-11",
+      "effective_from": "v11",
+      "no_counted_cell_had_run": true,
+      "note": "stage-graph row scorer fix (a refused call keeps the classify its own result proves ran). v10 re-extracted from its 72 transcripts: 0 differences, verdict unchanged. Digests are of the as-amended files; lib/stage-graph-cell.js supersedes the amend-5 digest.",
+      "files": {
+        "lib/stage-graph-cell.js": "cfd434a000d646d12661dc72c94aa5151163c8f8191042d53774ffea846f5dfd",
+        "prereg/stage-graph.amend-6-refused-call.json": "24ecac1e332ef3c78147aeea785401ea71b257ca6a5aaa53ddd66fc0474405c3"
+      }
     }
   },
   "stage-graph-g67": {

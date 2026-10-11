@@ -626,4 +626,58 @@ o=$(cellj stage-graph-m-bug "$TEST_TMP/q2.jsonl")
 [ "$(jq1 "$o" observed.set.size)" = '"XL"' ] || fail "amend-5: reversed first set on one line is the textually first: $o"
 echo "PASS: amend-5 scorer (same-command classify/advance order, walk order, first set)"
 
+echo "=== 7. amend-6-refused-call: a refused call does not hide a classify that ran (judged per command) ==="
+AMEND6="$BASE/prereg/stage-graph.amend-6-refused-call.json"
+[ -f "$AMEND6" ] || fail "amend-6-refused-call.json missing"
+node -e '
+const a = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+if (a.amendment !== 6 || a.v10_rescored_unchanged !== true || a.effective_from !== "v11" || a.no_counted_cell_had_run !== true) process.exit(1);
+if (!a.defect || !/classify/.test(a.defect.example || "") || !a.change || !a.attribution_rule) process.exit(2);
+if (JSON.stringify(a.thresholds_unchanged) !== JSON.stringify(require(process.argv[2]).thresholds)) process.exit(3);
+' "$AMEND6" "$PREREG" || fail "amend-6 invariants (rc=$?): amendment 6, v10 rescored unchanged, effective v11, defect example + change + attribution rule, thresholds unchanged"
+clsd() { jq1 "$1" observed.classify_called; }
+RUNGOF() { jq1 "$1" observed.rung; }
+# a FULL probe object (what probe-unknown.js prints); a bare {"eligible_max":..} is not one
+FULLP() { printf '{\\"schema_version\\":1,\\"artifact_type\\":\\"unknown_probe\\",\\"work_unit\\":\\"retry\\",\\"signals\\":[],\\"recommend\\":\\"none\\",\\"eligible_max\\":\\"%s\\",\\"budget\\":{\\"u1\\":2}}' "$1"; }
+CLADV='node scripts/probe-unknown.js classify --work-unit retry; node scripts/stage-advance.js --to finish'
+# the example: classify succeeded (its JSON is in the result), the advance in the SAME call was refused -> is_error on the call
+mkt "$TEST_TMP/r1.jsonl" '[["'"$SETL"'", OKJ, false], ["'"$CLADV"'", "'"$(FULLP U0)"'\n" + D, true]]'
+o=$(cellj stage-graph-l-u0-known "$TEST_TMP/r1.jsonl")
+[ "$(clsd "$o")" = true ] || fail "amend-6: classify ran, the advance after it was refused: the classify must still count: $o"
+[ "$(RUNGOF "$o")" = '"U0"' ] || fail "amend-6: the rung is read from the surviving classify result: $o"
+[ "$(atint "$o")" = true ] || fail "amend-6: the refused advance wrote nothing, the classify stays at_intent: $o"
+[ "$(jq1 "$o" observed.stage_calls.0.written)" = false ] || fail "amend-6: the refused advance must stay unwritten: $o"
+o=$(cellj stage-graph-l-u0-known "$TEST_TMP/r1.jsonl" "$UR")
+[ "$(rungof "$o")" = true ] || fail "amend-6: the U0 key rung judgement must pass on the surviving classify: $o"
+# the refusal cannot be attributed to the classify: the result holds no probe object -> stays discarded (conservative)
+mkt "$TEST_TMP/r2.jsonl" '[["'"$SETL"'", OKJ, false], ["'"$CLADV"'", "probe-unknown: error: ledger not writable", true]]'
+o=$(cellj stage-graph-l-u0-known "$TEST_TMP/r2.jsonl")
+[ "$(clsd "$o")" = false ] || fail "amend-6: a refused call with no classify object in its result must not count a classify: $o"
+# a refused call that is only the classify (its own failure, no probe object) is still discarded, as before
+mkt "$TEST_TMP/r3.jsonl" '[["'"$SETL"'", OKJ, false], ["node scripts/probe-unknown.js classify --work-unit retry", "refused", true]]'
+[ "$(clsd "$(cellj stage-graph-l-u0-known "$TEST_TMP/r3.jsonl")")" = false ] || fail "amend-6: a refused lone classify with no probe object stays discarded"
+# a refused call whose advance came BEFORE the classify still names the order: nothing written, so at_intent holds
+mkt "$TEST_TMP/r4.jsonl" '[["'"$SETL"'", OKJ, false], ["node scripts/stage-advance.js --to finish; node scripts/probe-unknown.js classify --work-unit retry", D + "\n'"$(FULLP U0)"'", true]]'
+o=$(cellj stage-graph-l-u0-known "$TEST_TMP/r4.jsonl")
+[ "$(clsd "$o")" = true ] && [ "$(atint "$o")" = true ] || fail "amend-6: refused advance then surviving classify must count at intent: $o"
+# a later FIRST classify in a non-refused call is still the first one that counts: a surviving refused-call classify is first
+mkt "$TEST_TMP/r5.jsonl" '[["'"$SETL"'", OKJ, false], ["'"$CLADV"'", "'"$(FULLP U1)"'\n" + D, true], ["node scripts/probe-unknown.js classify --work-unit retry", "'"$CLU0"'", false]]'
+[ "$(RUNGOF "$(cellj stage-graph-l-u0-known "$TEST_TMP/r5.jsonl")")" = '"U1"' ] || fail "amend-6: the first surviving classify is the first rung, wherever it sits"
+# another segment of the refused call prints a bare {"eligible_max":..}; the classify itself printed nothing: not a classify that ran
+mkt "$TEST_TMP/r6.jsonl" '[["'"$SETL"'", OKJ, false], ["echo X; node scripts/probe-unknown.js classify --work-unit retry; node scripts/stage-advance.js --to finish", "'"$CLU0"'\nprobe-unknown: error: ledger not writable\n" + D, true]]'
+[ "$(clsd "$(cellj stage-graph-l-u0-known "$TEST_TMP/r6.jsonl")")" = false ] || fail "amend-6: a bare eligible_max echoed by another segment must not count the classify as run"
+# premise of the probe-object rule: no script under scripts/ other than probe-unknown.js prints eligible_max
+others=$(grep -rl "eligible_max" "$REPO_ROOT/scripts" | grep -v '/scripts/probe-unknown\.js$' || true)
+[ -z "$others" ] || fail "amend-6: a script other than probe-unknown.js mentions eligible_max (it could print the probe shape): $others"
+# the pre-amend-6 extractor (HEAD before the fix) loses the classify of r1: the test bites
+OLD6="$TEST_TMP/old6"; mkdir -p "$OLD6"; cp "$BASE/lib/transcript-query.js" "$OLD6/"
+# fail closed (not SKIP): without the old extractor the proof that this test bites is gone
+git -C "$REPO_ROOT" show b00fb434:evals/skill-onoff/lib/stage-graph-cell.js > "$OLD6/stage-graph-cell.js" 2>/dev/null \
+  || fail "amend-6: cannot read b00fb434 (the pre-fix extractor) from git; fetch full history so the test can prove it bites"
+{
+  o6=$(node -e 'const { extract } = require(process.argv[1]); process.stdout.write(JSON.stringify({ observed: extract(process.argv[2], null) }));' "$OLD6/stage-graph-cell.js" "$TEST_TMP/r1.jsonl")
+  [ "$(clsd "$o6")" = false ] || fail "amend-6: the pre-fix extractor was expected to drop the classify of a refused call: $o6"
+}
+echo "PASS: amend-6 scorer (a refused call keeps the classify its own result proves ran)"
+
 echo "PASS: skill-onoff stage-graph instrument (expected.json, keys, (a) 12/12, (b) red $red<=3, (c) rung, (d) walk, verdicts, amend-2 chained advance + rung consistency + brief reachability)"

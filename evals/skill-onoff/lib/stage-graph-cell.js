@@ -10,7 +10,8 @@
 //                                                          eligible_max (see "first rung" below)
 // session-mode / classify: a Bash command whose paired tool_result has is_error:true is discarded (the
 // write was refused, the marker did not change). A tool_use with no paired result is counted (synthetic/aborted
-// transcripts).
+// transcripts). Exception (amend-6-refused-call): a refused call whose result still holds the classify's own probe
+// object (eligible_max) counts the classify -- the refusal was another segment's (`classify; stage-advance`).
 // stage-advance (amend-2-instrument, fix 2): each INVOCATION's own outcome is read from its JSON stdout in the
 // tool_result ({allowed:true,...} written; {allowed:false,...} exit 3 or {bump_to,...} exit 4 refused), matched to
 // the invocations of the command in order. `stage-advance --to X && bash run-tests.sh` with a red test is_error
@@ -223,6 +224,12 @@ function stageAdvanceInvocations(cmd, res) {
   return out;
 }
 
+// amend-6: the probe-unknown.js result object, recognised by fields only that script emits (not eligible_max alone)
+function probeObject(text) {
+  return jsonObjects(text).find((o) => o && typeof o === 'object' && o.artifact_type === 'unknown_probe' && typeof o.eligible_max === 'string'
+    && typeof o.recommend === 'string' && Array.isArray(o.signals) && o.budget && typeof o.budget === 'object') || null;
+}
+
 const SIZES = ['XS', 'S', 'M', 'L', 'XL'];
 
 function extract(file, ctx) {
@@ -269,9 +276,17 @@ function extract(file, ctx) {
     // amend-5-same-command-order: at_intent is judged at the classify's own textual position. A stage-advance written
     // EARLIER in the same command line (`advance --to proposal; classify`) moved the session past intent first; one
     // written LATER (`classify; advance --to proposal`) did not. Nodes of earlier calls are all before it.
-    if (!obs.classify_called && cl && !refused) {
+    // amend-6-refused-call: a refused (is_error) call no longer hides a classify that ran. The classify is judged per command:
+    // it counts when the call was not refused (as before), or when the refused call's own result holds a FULL probe object --
+    // artifact_type unknown_probe plus the probe's other fixed fields (recommend, signals, budget), see probeObject. Only
+    // probe-unknown.js prints that shape (hooks/tests/skill-onoff-stage-graph.test.sh asserts no other script under scripts/
+    // prints eligible_max), so a bare {"eligible_max":..} echoed by another segment of the call proves nothing. A refused call
+    // without such an object (errored classify, redirected or cut output) stays discarded: conservative, as before.
+    const clJson = cl && res ? (refused ? probeObject(res.text) : classifyResult(res.text)) : null;
+    const refusedProbe = refused ? clJson : null;
+    if (!obs.classify_called && cl && (!refused || refusedProbe)) {
       obs.classify_called = true;
-      const j = res ? classifyResult(res.text) : null;
+      const j = clJson;
       obs.rung = j && typeof j.eligible_max === 'string' ? j.eligible_max : 'unobserved';
       const pt = parseTerms(cl[1]);
       const fast = /(^|\s)--fast-moving(\s|$)/.test(cl[1]);

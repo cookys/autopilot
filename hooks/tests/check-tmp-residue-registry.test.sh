@@ -73,10 +73,26 @@ assert_contains "$OUT" "tmp-residue gate failed" "case2c: rejection comes from t
 assert_contains "$OUT" "zz-planted-unregistered-" "case2c: the message names the planted prefix"
 assert_eq "$(git -C "$CL" log -1 --format=%s)" "chore: clean change" "case2c: nothing was committed"
 
+
 # 2d. preflight gate step fails on the planted clone
 PF="$(cd "$CL" && AUTOPILOT_SKIP_SLASH_PROBE=1 bash scripts/preflight-release.sh 2>&1)"
 assert_contains "$PF" "✗ temp-prefix registry gate" "case2d: preflight gate step fails on the planted clone"
 assert_contains "$PF" "zz-planted-unregistered-" "case2d: preflight output names the planted prefix"
+
+# 2e. staged-then-reverted plant: the index holds the planted line, the worktree is clean again.
+#      --staged must judge the bytes being committed, so the real hook still rejects it.
+git -C "$CL" checkout -- scripts/lib/semver.js 2>/dev/null || true
+git -C "$CL" show HEAD:scripts/lib/semver.js > "$TMPDIR/semver.clean.js"
+cat "$TMPDIR/semver.clean.js" > "$CL/scripts/lib/semver.js"
+printf "const __planted2 = require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'zz-staged-only-'));\n" >> "$CL/scripts/lib/semver.js"
+git -C "$CL" add scripts/lib/semver.js
+cat "$TMPDIR/semver.clean.js" > "$CL/scripts/lib/semver.js"
+OUT="$(git -C "$CL" commit -q -m "feat: staged-only plant" 2>&1)"
+RC=$?
+assert_eq "$RC" "1" "case2e: pre-commit rejects a plant that exists only in the index (exit 1)"
+assert_contains "$OUT" "zz-staged-only-" "case2e: the message names the index-only prefix"
+git -C "$CL" reset -q HEAD -- scripts/lib/semver.js
+git -C "$CL" checkout -q -- scripts/lib/semver.js
 
 # ── Case 3: parity is enforced at the pre-commit entry point even when no shipped file changed ──
 git -C "$CL" reset -q --hard HEAD

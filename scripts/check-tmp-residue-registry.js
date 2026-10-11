@@ -241,8 +241,17 @@ function findAllowed(allow, rel, line) {
   return allow.entries.find((e) => e && e.file === rel && (e.match === undefined || e.match === '' || line.includes(e.match)));
 }
 
+function readSource(rootAbs, rel, fromIndex) {
+  if (!fromIndex) return fs.readFileSync(path.join(rootAbs, rel), 'utf8');
+  // --staged: judge the bytes that will be committed, not the working tree (a planted line that is
+  // staged and then reverted in the worktree must still be seen).
+  const r = cp.spawnSync('git', ['-C', rootAbs, 'show', `:${rel}`], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  if (r.status !== 0) throw new Error(`git show :${rel} failed: ${r.stderr.trim()}`);
+  return r.stdout;
+}
+
 function scanFile(rootAbs, rel, ctx) {
-  const text = fs.readFileSync(path.join(rootAbs, rel), 'utf8');
+  const text = readSource(rootAbs, rel, ctx.fromIndex);
   const lines = text.split('\n');
   const isSh = rel.endsWith('.sh');
   const isPy = rel.endsWith('.py');
@@ -312,7 +321,7 @@ function runGate(opts) {
   }
   const allow = loadAllowlist(allowFile);
   for (const p of allow.problems) findings.push({ code: 'allowlist_invalid', at: allowFile, detail: p });
-  const ctx = { entries: doc.entries, allow, allowUsed: new Set(), findings };
+  const ctx = { entries: doc.entries, allow, allowUsed: new Set(), findings, fromIndex: !!opts.staged };
 
   let files;
   const whole = !opts.files;

@@ -61,7 +61,7 @@
     {
       "file": "scripts/probe-mutation.js",
       "match": "mkdtempSync(tempDirPrefix)",
-      "reason": "Prefix is the probe-mutation- constant on the previous lines (listed as pending_registry below); the directory is a git worktree removed by the script."
+      "reason": "Prefix is the probe-mutation- constant on the previous lines (registered in scripts/lib/tmp-residue-registry.json as kind worktree); the directory is a git worktree removed by the script."
     },
     {
       "file": "scripts/benchmark-hook-multiplexer.js",
@@ -76,7 +76,7 @@
     {
       "file": "scripts/engine-qualify.js",
       "match": "impl-live-${caseSpec",
-      "reason": "Child of workRoot (impl-qualify-live-, pending_registry below), not a direct temp-root entry."
+      "reason": "Child of workRoot (impl-qualify-live-, registered in scripts/lib/tmp-residue-registry.json), not a direct temp-root entry."
     },
     {
       "file": "scripts/lib/test-integrity-l1.py",

@@ -110,4 +110,25 @@ assert_eq "$?" "0" "case5: --exclude-path drops exact paths"
 node "$CLI" bogus >/dev/null 2>&1
 assert_eq "$?" "2" "case5: unknown subcommand is a usage error (exit 2)"
 
+# ── Case 6: --exclude-source drops registry entries by their `source` label (session-hook counters) ──
+: > "$FX/claude-tool-count-sessX"; : > "$FX/claude-intent-tool-count-sessX"; : > "$FX/claude-edited-sessX.txt"
+OUT="$(node "$CLI" new-since --stamp "$STAMP" --tmpdir "$FX" --exclude-kind live,lock)"
+assert_contains "$OUT" "claude-tool-count-sessX" "case6: without --exclude-source the session-hook counter is reported"
+assert_contains "$OUT" "claude-edited-sessX.txt" "case6: claude-edited-* is a registered scratch entry"
+OUT="$(node "$CLI" new-since --stamp "$STAMP" --tmpdir "$FX" --exclude-kind live,lock --exclude-source session-hook)"
+assert_not_contains "$OUT" "claude-tool-count-sessX" "case6: --exclude-source session-hook drops claude-tool-count-*"
+assert_not_contains "$OUT" "claude-intent-tool-count-sessX" "case6: ... and claude-intent-tool-count-*"
+assert_not_contains "$OUT" "claude-edited-sessX.txt" "case6: ... and claude-edited-*"
+assert_contains "$OUT" "dispatch-review-abc123" "case6: other scratch entries stay reported (only the named source is dropped)"
+assert_contains "$OUT" "never-heard-of-it.AbC" "case6: unregistered entries stay reported"
+OUT="$(node "$CLI" new-since --stamp "$STAMP" --tmpdir "$FX" --exclude-kind live,lock --exclude-source no-such-source)"
+assert_contains "$OUT" "claude-tool-count-sessX" "case6: an unrelated source name drops nothing"
+
+# ── Case 7: external /tmp/sessions is registered as live (never pruned) ──
+mkdir "$FX/sessions"
+OUT="$(node "$CLI" new-since --stamp "$STAMP" --tmpdir "$FX")"
+assert_contains "$OUT" "live	dir	$FX/sessions" "case7: sessions is labelled kind live"
+OUT="$(node "$CLI" new-since --stamp "$STAMP" --tmpdir "$FX" --exclude-kind live)"
+assert_not_contains "$OUT" "$FX/sessions" "case7: --exclude-kind live drops sessions"
+
 finalize_test "tmp-residue-registry"

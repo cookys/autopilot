@@ -1,5 +1,5 @@
 {
-  "_comment": "Single statement of which temp prefixes exist and who cleans them. kinds: scratch|evidence|test-lockgated|live|lock|worktree. First matching entry wins; patterns are globs (* and ?). _SRR_PATTERNS in hooks/tests/lib/suite-residue-reap.sh must equal the test-lockgated entries (hooks/tests/tmp-residue-registry.test.sh). Age-only deletion acts on scratch/evidence only.",
+  "_comment": "Single statement of which temp prefixes exist and who cleans them. kinds: scratch|evidence|test-lockgated|live|lock|worktree. First matching entry wins; patterns are globs (* and ?). _SRR_PATTERNS in hooks/tests/lib/suite-residue-reap.sh must equal the test-lockgated entries (hooks/tests/tmp-residue-registry.test.sh). Age-only deletion acts on scratch/evidence only. Optional `source` labels who writes an entry at runtime (session-hook = the live Claude session's hooks); new-since --exclude-source drops it.",
   "version": 1,
   "entries": [
     {
@@ -161,14 +161,24 @@
       "kind": "scratch",
       "owner": "hooks/suggest-compact.js",
       "retention_days": 3,
-      "reason": "per-session tool counter (tiny)"
+      "reason": "per-session tool counter (tiny)",
+      "source": "session-hook"
     },
     {
       "pattern": "claude-intent-tool-count-*",
       "kind": "scratch",
       "owner": "hooks/intent-capture.js",
       "retention_days": 3,
-      "reason": "per-session intent tool counter (tiny)"
+      "reason": "per-session intent tool counter (tiny)",
+      "source": "session-hook"
+    },
+    {
+      "pattern": "claude-edited-*",
+      "kind": "scratch",
+      "owner": "hooks/accumulator.js",
+      "retention_days": 3,
+      "source": "session-hook",
+      "reason": "per-session edited-file list (tiny)"
     },
     {
       "pattern": "autopilot-kimi-raw-*",
@@ -204,6 +214,13 @@
       "owner": "scripts/dispatch-hetero.sh",
       "retention_days": null,
       "reason": "orphan-state dir autopilot-<uid>; never mtime-pruned"
+    },
+    {
+      "pattern": "sessions",
+      "kind": "live",
+      "owner": "external",
+      "retention_days": null,
+      "reason": "external: not created by autopilot; never pruned"
     },
     {
       "pattern": "autopilot-verify-wt-*",

@@ -198,4 +198,9 @@ Assumptions carried: the AF_UNIX 108-byte limit bounds the per-run dir path; all
   - Frozen rubric: `docs/plans/2026-10-12-tmp-residue-containment.rubric.md` (R1–R8).
   - Manifest: `docs/plans/2026-10-12-tmp-residue-containment.plan-review-manifest.json`, `logical_plan_id: tmp-residue-containment-2026-10-12`.
   - Seats: sol chair (openai, not required: codex quota has run dry before), grok deep (xai, required), MiniMax consult; minimum 2 families.
+- **Implementation adjudications (depth-0, 2026-10-12)**:
+  - KR1 excludes `/tmp/sessions` (external, kind `live`) and `source: session-hook` counters written by the live session running the suite.
+  - KR1's suite-green half accepts only failures that fail identically on develop: `skill-onoff-generic` (real `~/.autopilot` touched by concurrent sessions) and `dispatch-hetero-wall-timeout` (host-wide `pgrep` at line 181 sees other suites' watchdogs under `--parallel`; passes standalone on develop and feat).
+  - Both are BACKLOG rows.
+  - `review_input_digest` cannot be pinned because the verification receipt embeds the worktree path (already so at `82488bc8`); KR3 (5) pins `diff_digest` only.
 - Pending a version: the shipped-code changes (phases 2–4) are PATCH-class; owner deferred the version (2026-10-11), so no CHANGELOG section is written here.

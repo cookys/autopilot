@@ -14,7 +14,7 @@
 //   repo-residue-sweep.js preserve --repo <dir> --out <dir> [--worktree <path>]... [--json]
 //   repo-residue-sweep.js reap     --repo <dir> --yes [--preserve-dir <dir>] [--older-than-days N]
 //                                  [--integration-ref <ref>] [--json]
-//   repo-residue-sweep.js reap     --repo <dir> --auto --yes [--integration-ref <ref>] [--json]
+//   repo-residue-sweep.js reap     --repo <dir> --auto --yes [--integration-ref <ref>] [--tmpdir <dir>] [--json]
 //   repo-residue-sweep.js close-session --session <sid> [--yes] [--repo <dir>] [--integration-ref <ref>] [--json]
 //
 // CLASSES (from git facts, never from a marker's claim):
@@ -59,6 +59,12 @@
 //      checked out, not pointed at by a live/unexpired-lease marker, not in an unresolved
 //      campaign, after `update-ref refs/archive/<YYYY-MM-DD>/<branch> <tip>` + verify. Restore:
 //      `git branch <name> refs/archive/<date>/<name>`.
+//   4. tmp phase (once per 24 h per HOST): aged scratch|evidence entries of the shared temp root, via
+//      scripts/lib/tmp-residue.js prune (registry scripts/lib/tmp-residue-registry.json; live, lock, worktree and
+//      test-lockgated kinds, symlinks, lock-holding dirs and live .autopilot-owner dirs are never touched). Host stamp
+//      ${XDG_RUNTIME_DIR:-~/.autopilot}/autopilot-tmp-prune.stamp under flock. Receipt = `tmp_prune` in the report and
+//      the result file: {deleted:[names], kept:[{name,kind,why}]} or {skipped: "throttled"|"disabled"|"locked"|...}.
+//      Off with residue.tmp_prune=false or AUTOPILOT_RESIDUE_TMP_PRUNE=0. `--tmpdir <dir>` is the test seam.
 // Everything else is remind-only: `needs_human` (kind, path|branch, class, age_days, bytes,
 // reason, command) + needs_human_count / needs_human_bytes, emitted by `scan --json` too.
 // `bytes` (`du -sk`, 60 s total budget, null after it) exists only for `reap --auto` and
@@ -142,12 +148,12 @@ const AUTO_RESULT_NAME = 'autopilot-residue-auto.json';
 
 function usage(msg) {
   if (msg) process.stderr.write(`repo-residue-sweep: ${msg}\n`);
-  process.stderr.write('usage: repo-residue-sweep.js scan|preserve|reap|close-session --repo <dir> [--session <sid>] [--integration-ref <ref>] [--out <dir>] [--worktree <path>]... [--yes] [--auto] [--sizes] [--preserve-dir <dir>] [--older-than-days N] [--json]\n');
+  process.stderr.write('usage: repo-residue-sweep.js scan|preserve|reap|close-session --repo <dir> [--session <sid>] [--integration-ref <ref>] [--out <dir>] [--worktree <path>]... [--yes] [--auto] [--sizes] [--tmpdir <dir>] [--preserve-dir <dir>] [--older-than-days N] [--json]\n');
   process.exit(2);
 }
 
 function parseArgs(argv) {
-  const out = { cmd: null, repo: null, integrationRef: null, out: null, worktrees: [], yes: false, preserveDir: null, olderThanDays: null, auto: false, sizes: false, session: null };
+  const out = { cmd: null, repo: null, integrationRef: null, out: null, worktrees: [], yes: false, preserveDir: null, olderThanDays: null, auto: false, sizes: false, session: null, tmpdir: null };
   const cmd = argv[0];
   if (!['scan', 'preserve', 'reap', 'close-session'].includes(cmd)) usage(`command must be scan|preserve|reap|close-session (got: ${cmd || ''})`);
   out.cmd = cmd;
@@ -159,6 +165,7 @@ function parseArgs(argv) {
     else if (k === '--out') out.out = need();
     else if (k === '--worktree') out.worktrees.push(need());
     else if (k === '--session') out.session = need();
+    else if (k === '--tmpdir') out.tmpdir = need();
     else if (k === '--yes') out.yes = true;
     else if (k === '--auto') out.auto = true;
     else if (k === '--sizes') out.sizes = true;
@@ -178,6 +185,7 @@ function parseArgs(argv) {
   if (cmd === 'preserve' && !out.out) usage('preserve requires --out <dir>');
   if (cmd === 'reap' && !out.yes) usage('reap requires --yes');
   if (out.auto && cmd !== 'reap') usage('--auto belongs to reap');
+  if (out.tmpdir !== null && !out.auto) usage('--tmpdir belongs to reap --auto');
   if (out.auto && (out.preserveDir !== null || out.olderThanDays !== null)) usage('--auto does not combine with --preserve-dir or --older-than-days');
   if (out.sizes && cmd !== 'scan') usage('--sizes belongs to scan');
   return out;
@@ -749,6 +757,28 @@ function removeMarkerWorktree(mainPath, w) {
   return { ok: false, why: `worktree remove failed (rc ${r.status}): ${(r.stderr || '').trim().slice(0, 200)}` };
 }
 
+// Tmp phase of `reap --auto`: the daily, host-wide prune of the shared temp root. Registry kinds scratch|evidence only
+// (scripts/lib/tmp-residue.js prune does the work and owns every keep rule). Host stamp + flock under
+// ${XDG_RUNTIME_DIR:-~/.autopilot}: /tmp is host-wide, the per-repo stamp is not enough. Fail-open: never fails the sweep.
+const TMP_PRUNE_STAMP = 'autopilot-tmp-prune.stamp';
+const TMP_PRUNE_LOCK = 'autopilot-tmp-prune.lock';
+function runTmpPrune(o, cfg) {
+  if (!cfg.tmp_prune) return { skipped: 'disabled' };
+  try {
+    const dir = process.env.XDG_RUNTIME_DIR || path.join(process.env.HOME || os.homedir(), '.autopilot');
+    fs.mkdirSync(dir, { recursive: true });
+    const cli = path.join(__dirname, 'lib', 'tmp-residue.js');
+    const cliArgs = [cli, 'prune', '--stamp', path.join(dir, TMP_PRUNE_STAMP), '--throttle-hours', '24'];
+    if (o.tmpdir) cliArgs.push('--tmpdir', o.tmpdir);
+    // flock -n: a concurrent sweep (another repo) holds the lock => skipped, not queued. -E 75 tells that apart from the child's own exit codes.
+    const r = spawnSync('flock', ['-n', '-E', '75', path.join(dir, TMP_PRUNE_LOCK), process.execPath, ...cliArgs], { encoding: 'utf8', timeout: 5 * 60 * 1000 });
+    if (r.error) return { skipped: 'error', error: String(r.error.message).slice(0, 200) };
+    if (r.status === 75) return { skipped: 'locked' };
+    if (r.status !== 0) return { skipped: 'error', error: (r.stderr || `exit ${r.status}`).trim().slice(0, 200) };
+    return JSON.parse(r.stdout);
+  } catch (e) { return { skipped: 'error', error: String(e.message).slice(0, 200) }; }
+}
+
 function runAuto(o, mainPath, integrationSha, integrationBranch, common) {
   const cfg = loadResidueConfig();
   const nowMs = Date.now();
@@ -866,11 +896,12 @@ function runAuto(o, mainPath, integrationSha, integrationBranch, common) {
   rows = classifyWorktrees(mainPath, mainPath, integrationSha);
   annotateWorktrees(rows, cfg, Date.now(), cwds, mainPath);
   branches = classifyBranches(mainPath, listWorktrees(mainPath).map((w) => ({ branch: w.branch, path: path.resolve(w.path) })), integrationSha, integrationBranch);
-  const report = { schema: 'autopilot.residue-auto/1', ran_at: new Date(nowMs).toISOString(), ran_at_epoch: Math.floor(nowMs / 1000), removed, archived, kept, notes, anchors, ledger };
+  const tmp_prune = runTmpPrune(o, cfg);
+  const report = { schema: 'autopilot.residue-auto/1', ran_at: new Date(nowMs).toISOString(), ran_at_epoch: Math.floor(nowMs / 1000), removed, archived, kept, notes, anchors, ledger, tmp_prune };
   const ctx = { mainPath, cfg, nowMs: Date.now(), sig, failedWorktrees, failedBranches };
   attachNeedsHuman(report, rows, branches, ctx, 'measure', null);
   const tmp = `${resultPath}.tmp.${process.pid}`;
-  fs.writeFileSync(tmp, `${JSON.stringify({ schema: report.schema, ran_at: report.ran_at, ran_at_epoch: report.ran_at_epoch, removed, archived, needs_human: report.needs_human, needs_human_count: report.needs_human_count, needs_human_bytes: report.needs_human_bytes })}\n`);
+  fs.writeFileSync(tmp, `${JSON.stringify({ schema: report.schema, ran_at: report.ran_at, ran_at_epoch: report.ran_at_epoch, removed, archived, tmp_prune, needs_human: report.needs_human, needs_human_count: report.needs_human_count, needs_human_bytes: report.needs_human_bytes })}\n`);
   fs.renameSync(tmp, resultPath);
   writeStdout(`${JSON.stringify(report)}\n`);
   const leftover = kept.filter((k) => /^(worktree remove failed|became dirty|lock held|git worktree prune)/.test(k.why || ''));

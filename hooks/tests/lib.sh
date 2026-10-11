@@ -135,6 +135,11 @@ mkdir -p "$HOOK_TMPDIR"
 export TMPDIR="$HOOK_TMPDIR"
 export GIT_CEILING_DIRECTORIES="${GIT_CEILING_DIRECTORIES}:${TMPDIR}"
 
+# `repo-residue-sweep.js reap --auto` carries a daily host-wide temp-root prune whose stamp lives under
+# $XDG_RUNTIME_DIR (the real host). A suite that runs the sweep must not stamp or prune the real host, so it
+# is off by default here; hooks/tests/tmp-residue-prune.test.sh turns it on against fixture dirs.
+export AUTOPILOT_RESIDUE_TMP_PRUNE="${AUTOPILOT_RESIDUE_TMP_PRUNE:-0}"
+
 # Live-state leak (mods P1a review, 2026-10-04): `autopilot status runs` wrote
 # /run/user/<uid>/autopilot/runs-enrich-cursor.json from a suite that never set a live
 # dir. Default every suite to its own tmpfs live dir; a caller that already exports

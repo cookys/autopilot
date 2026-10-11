@@ -1088,3 +1088,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-10-09-residue-auto-reap/contract.md
 - **Context**: `repo-residue-sweep.js reap --auto` is the canonical automatic reaper; the rail-local `--gc` path (default 0, off) is redundant; breaking removal, no shim.
 
+
+
+### Run stage-graph v11 regression covering the packet guidance text
+- **Status**: open
+- **Trigger**: before the 3.0.0 final cut
+- **Effort**: M
+- **Source**: packet-guidance owner ruling, 2026-10-11
+- **Pointer**: docs/plans/2026-10-11-review-packet-mode.md
+- **Context**: Gate blocks: hetero-review SKILL.md and code-loop.md are outside prereg guidance.files; hetero-loops.md hash differs from v10. Write a prereg revision adding both files (as P5 did), freeze v11, then run it.

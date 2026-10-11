@@ -27,6 +27,8 @@ The code review loop freezes when either:
 
 Receipt verdict tokens are strictly `SHIP-AS-IS` and `FIX-THEN-SHIP`. Severities use only existing vocabulary (`Critical`, `Major`, `Minor`, `Suggestion`).
 
+A range too large for one packet is split by path with `--packets <packets.json> --packet <id>` (every changed file in exactly one packet) and gated by `check-phase-review-receipt.js --packets`; `--exclude` is never the way to shrink a review.
+
 ## The Growth Rail
 
 Code reviews enforce incremental delta verification to prevent unbounded loops and scope creep:

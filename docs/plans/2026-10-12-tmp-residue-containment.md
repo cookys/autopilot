@@ -199,3 +199,4 @@ Assumptions carried: the AF_UNIX 108-byte limit bounds the per-run dir path; all
   - Manifest: `docs/plans/2026-10-12-tmp-residue-containment.plan-review-manifest.json`, `logical_plan_id: tmp-residue-containment-2026-10-12`.
   - Seats: sol chair (openai, not required: codex quota has run dry before), grok deep (xai, required), MiniMax consult; minimum 2 families.
 - Pending a version: the shipped-code changes (phases 2–4) are PATCH-class; owner deferred the version (2026-10-11), so no CHANGELOG section is written here.
+- **P4** (2026-10-12): gate shipped on `feat/tmp-residue-p4`, pending a version (PATCH-class, no CHANGELOG section). `scripts/check-tmp-residue-registry.js` (+ `scripts/tmp-residue-allowlist.json`, 37 reasoned entries and 55 `pending_registry` entries awaiting registry rows), wired into `.githooks/pre-commit` (`--staged`) and `scripts/preflight-release.sh` (whole repo); test `hooks/tests/check-tmp-residue-registry.test.sh`.

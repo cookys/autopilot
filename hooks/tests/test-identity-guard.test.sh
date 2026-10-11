@@ -206,6 +206,8 @@ p3_seed_hooks() {
   cp "$REPO_ROOT/references/blind-dispatch.md" "$dest/references/blind-dispatch.md"
   printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$dest/scripts/sync-all.sh"
   chmod +x "$dest/scripts/sync-all.sh"
+  # pre-commit also runs the tmp-residue gate; this fixture only exercises the identity gate.
+  printf '%s\n' "process.exit(0);" > "$dest/scripts/check-tmp-residue-registry.js"
 }
 
 p3_init_repo() {

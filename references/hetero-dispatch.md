@@ -645,6 +645,12 @@ per-user quota (usrquota) and silently broke every harness Bash call on the mach
   the L1 `node --test` pass inside a flock-held `apl1.*` dir (a killed run's dir is recovered by
   `suite-residue-reap.sh`, never a live one's); `node scripts/lib/tmp-residue.js new-since --stamp
   <file> --exclude-kind live,lock --fail-on-entries` lists what a run left behind.
+- **Registration gate** (`scripts/check-tmp-residue-registry.js`, allowlist `scripts/tmp-residue-allowlist.json`):
+  a new temp prefix cannot ship unregistered. Every temp-root reference in `src/` `bin/` `hooks/`
+  `scripts/` must have its prefix in the registry, a guaranteed cleanup (JS: allocation is the first
+  statement of a `try` whose `finally` removes it; shell: `trap ... EXIT` before the `mktemp`), or a
+  reasoned allowlist entry; `_SRR_PATTERNS` must equal the registry's `test-lockgated` entries. It
+  blocks in `.githooks/pre-commit` (staged files) and `scripts/preflight-release.sh` (whole repo).
 - **Manifest reaper** (`dispatch-status.js --reap [--days N] [--dry-run]`, default 7 days):
   scans the runs dir; a LIVE run (flock/pid/scope probe) is never touched regardless of age;
   not-live manifests older than `--days` are deleted; a failure-kept worktree is removed ONLY

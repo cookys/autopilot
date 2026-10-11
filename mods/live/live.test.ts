@@ -1015,14 +1015,14 @@ for (const surface of SURFACES) {
     let pane = await paneParts($, surface, 'now')
     expect(pane.texts[0]).toContain('▲ 要你決定') // the hero row (verdict · project · since) is the first line
     expect(pane.texts.find(t => t.startsWith('工作階段 $'))).toBe('工作階段 $0.42 · 本機 $3.10 · ctx 37%') // the header stays on top, dim
-    const rule = pane.texts.findIndex(t => t.startsWith('── 要你處理')) // the awaited decision is the first section (before "where you are")
+    const rule = pane.texts.findIndex(t => t.startsWith('▌ 待你處理')) // the awaited decision is the first section (before "where you are")
     expect(rule).toBeGreaterThan(0)
-    expect(rule).toBeLessThan(pane.texts.findIndex(t => t.startsWith('── 現在在哪')))
+    expect(rule).toBeLessThan(pane.texts.findIndex(t => t.startsWith('▌ 目前位置')))
     expect(pane.texts.slice(rule + 1, rule + 4)).toEqual([' ▲ 要合併 plan 還是拆開？', '   1. 合併 — 一次驗收', '   2. 拆開 — 兩次驗收'])
     expect(pane.texts[rule]).toContain('▲ 1') // the section badge counts what awaits you
     const disp = await paneParts($, surface, 'dispatch') // the table is still there, on its own tab, and so is the Link
     expect(disp.texts.some(t => t.includes('這是執行狀態，不是進度'))).toBe(true)
-    expect(disp.texts.some(t => t.startsWith('── 審查關卡'))).toBe(true)
+    expect(disp.texts.some(t => t.startsWith('▌ 審查關卡'))).toBe(true)
     expect(disp.texts.some(t => t.includes('要合併 plan 還是拆開？'))).toBe(false)
     expect(disp.href).toBe('http://localhost:8787/' + KEY + '/2026-10-04/' + ROOT + '/current/')
     // fields that do not exist are not shown: a question with no options, then no decision at all
@@ -1286,7 +1286,7 @@ for (const surface of SURFACES) {
     world(on, files)
     await start($, surface)
     const pane = await paneParts($, surface, 'now')
-    const at = pane.texts.findIndex(t => t.startsWith('── 要你處理'))
+    const at = pane.texts.findIndex(t => t.startsWith('▌ 待你處理'))
     expect(at).toBeGreaterThan(0)
     expect(pane.texts[at + 1]).toBe(' ▲ 等你批准：Bash: rm -rf build（等了 5 分）')
     expect((await paneParts($, surface, 'dispatch')).texts.some(t => t.includes('等你批准'))).toBe(false)
@@ -2227,7 +2227,7 @@ for (const surface of SURFACES) {
     await pane.unmount()
     expect(texts[0]).toContain('⏸ 疑似卡住') // the Now tab: its hero row, then the dim header
     expect(texts.some(t => t.startsWith('工作階段 $'))).toBe(true)
-    expect(texts.some(t => t.startsWith('── 狀態列上的符號'))).toBe(false) // not the legend
+    expect(texts.some(t => t.startsWith('▌ 狀態列符號'))).toBe(false) // not the legend
   })
 
   test('P7 band: the info press cycles the six tabs while the pane is open; closed it opens on Now (' + surface + ')', async ($, on) => {
@@ -2479,7 +2479,7 @@ for (const surface of SURFACES) {
     const tab = async (id: string) => paneParts($, surface, id)
     const has = (texts: string[], ...parts: string[]) => { const ok = texts.some(t => parts.every(p => t.includes(p))); if (!ok) throw new Error('no line has: ' + parts.join(' | ')); return ok }
     const legend = await tab('legend')
-    expect(legend.texts[0]).toContain('狀態列上的符號')
+    expect(legend.texts[0]).toContain('狀態列符號')
     for (const glyph of ['▲ 要你決定', '⏸ 疑似卡住', '✓ 完成待驗收', '● 進行中', '◌ 待命', '⚙2', '⟲', 'QC✓', 'QC▲', '◆3', '?1', '$85', '⚑3', 'ⓘ', '◐']) expect(joined(legend.texts)).toContain(glyph)
     expect(legend.texts.some(t => t.includes('Ctrl+x Tab'))).toBe(true)
     expectThemeOnly(legend.tree as Drawn, true)
@@ -2504,14 +2504,14 @@ for (const surface of SURFACES) {
     const review = await tab('review')
     expect(has(review.texts, '程式碼審查', '▲ 未收斂')).toBe(true)
     expect(has(review.texts, '輪次', 'R3', '11111111..aaaaaaaa', 'p7')).toBe(true)
-    expect(has(review.texts, 'Push 前 QC', '✓ 證據齊全')).toBe(true)
+    expect(has(review.texts, '推送前 QC', '✓ 證據齊全')).toBe(true)
     expect(has(review.texts, '證據', 'trailer', '2 個受保護檔案在範圍內', '11111111..aaaaaaaa')).toBe(true)
     expect(has(review.texts, '決定', '◆ 3', '個已做', '? 1', '個派工沒有紀錄')).toBe(true)
     expect(has(review.texts, '升級階梯', '▰▰▰▱▱▱', 'U2', 'U0 ─ U5', '5m 前')).toBe(true)
     expectThemeOnly(review.tree as Drawn, true)
 
     const spend = await tab('spend')
-    expect(has(spend.texts, '今日 brain 層額度', '接近上限')).toBe(true)
+    expect(has(spend.texts, '今日額度', '接近上限')).toBe(true)
     expect(has(spend.texts, '$120.40', '/ $150.00')).toBe(true)
     expect(has(spend.texts, '80 %')).toBe(true)
     expect(has(spend.texts, '本機今日', '$3.10', '所有層')).toBe(true)
@@ -2520,10 +2520,10 @@ for (const surface of SURFACES) {
     expectThemeOnly(spend.tree as Drawn, true)
 
     const hygiene = await tab('hygiene')
-    expect(has(hygiene.texts, '外掛載入來源', 'dev ↓3')).toBe(true)
+    expect(has(hygiene.texts, '外掛來源', 'dev ↓3')).toBe(true)
     expect(has(hygiene.texts, '來源', 'dev', 'v2.37.0', '↓3', '落後 upstream')).toBe(true)
     expect(has(hygiene.texts, '市集', '✓ directory')).toBe(true)
-    expect(has(hygiene.texts, '要你處理的 worktree 與分支', '⚑ 2', '3 MB')).toBe(true)
+    expect(has(hygiene.texts, '待清殘留', '⚑ 2', '3 MB')).toBe(true)
     expect(hygiene.texts).toContain('2 項要你處理 · 3 MB · 3h0m 前自動清理：刪 2 個 worktree、封存 1 條分支')
     expect(has(hygiene.texts, '⚑', 'worktree', '/home/u/proj/.claude/worktrees/hands-x', 'dirty · 4d · 2 MB · failure')).toBe(true)
     expect(hygiene.texts).toContain('   git -C /home/u/proj worktree remove --force /home/u/proj/.claude/worktrees/hands-x')

@@ -8,6 +8,7 @@
  *
  * CLI:
  *   node scripts/cost-digest.js [--file <path>] [--since <N days, default 7>] [--today] [--by day|model|session|tier|agent] [--json]
+ *   node scripts/cost-digest.js [--file <path>] [--since <N>] [--today] --tree [--json]
  *   node scripts/cost-digest.js --help
  *
  * Columns: turns, input, output, cache_read, cache_write (cache_creation), ctx/turn, cost_usd.
@@ -18,6 +19,18 @@
  *   main transcript does not contain) as separate rows carrying `sidechain:true` + `agent_id`. `--by agent`
  *   groups main vs subagent; every day also reports subagent_share (cost) and subagent_cache_write_share.
  *   Old rows without these fields (or without cache_write_tokens) count as main / 0 and never break the report.
+ * Agent tree: subagent rows may also carry `parent_agent_id` (absent = parent is the main session), `depth`
+ *   (1 = spawned by main, 2 = by a depth-1 agent, ...) and `agent_type`, copied from the agent's sidecar by
+ *   hooks/cost-tracker.js. `--tree` rolls the window up as session > agent tree > model: the root of each session
+ *   is `depth-0` (the main rows); an agent hangs under `parent_agent_id`; an agent with no parent link (incl. old
+ *   rows without the field) hangs under the root; an agent whose parent never appears in the window also hangs
+ *   under the root and is marked orphan. Sessions sort by total desc, children by subtree total desc.
+ *   Honours --since/--today/--file; incompatible with --by (usage error, exit 2).
+ *   `--tree --json` shape:
+ *     { schema_version: 1, file, since, tree: true, skipped_lines,
+ *       sessions: [ { session, total_usd, root: NODE } ] }
+ *     NODE = { label, agent_id (null for root), agent_type (null|string), depth (0 for root), orphan (bool),
+ *              own_usd, subtree_usd, models: [ { model, turns, cost_usd } ] (desc by cost), children: [NODE] }
  */
 
 const fs = require('fs');
@@ -62,6 +75,8 @@ Options:
   --today                    Include only rows matching today's UTC day (shorthand; overrides --since)
   --by <day|model|session|tier|agent>
                              Grouping mode (default: day); agent = main vs subagent
+  --tree                     Per session, the agent tree (depth-0 > subagents by parent_agent_id) with per-model
+                             cost, own cost and subtree total; cannot be combined with --by
   --json                     Output JSON instead of text table
   --help                     Print usage information and exit 0
 `;
@@ -96,6 +111,8 @@ function parseArgs(argv) {
     since: 7,
     today: false,
     by: 'day',
+    byGiven: false,
+    tree: false,
     json: false
   };
 
@@ -134,12 +151,20 @@ function parseArgs(argv) {
         process.exit(2);
       }
       args.by = mode;
+      args.byGiven = true;
+    } else if (arg === '--tree') {
+      args.tree = true;
     } else if (arg === '--json') {
       args.json = true;
     } else {
       process.stderr.write(`Error: unknown option: ${arg}\n`);
       process.exit(2);
     }
+  }
+
+  if (args.tree && args.byGiven) {
+    process.stderr.write('Error: --tree cannot be combined with --by\n');
+    process.exit(2);
   }
 
   return args;
@@ -214,6 +239,107 @@ function pct(part, whole) {
   return whole > 0 ? part / whole : 0;
 }
 
+// Build per-session agent trees from filtered rows. Returns [{session, total, root}] sorted by total desc.
+function buildTrees(rows) {
+  const sessions = new Map();
+  const newNode = (id, row) => ({
+    agent_id: id, agent_type: null, depth: id ? 1 : 0, parent: null, orphan: false,
+    models: new Map(), own: 0, subtree: 0, children: []
+  });
+  for (const r of rows) {
+    const sess = typeof r.session === 'string' ? r.session : 'unknown';
+    let s = sessions.get(sess);
+    if (!s) { s = { session: sess, root: newNode(null), agents: new Map() }; sessions.set(sess, s); }
+    let node = s.root;
+    if (isSubagentRow(r)) {
+      const id = typeof r.agent_id === 'string' && r.agent_id ? r.agent_id : 'unknown';
+      node = s.agents.get(id);
+      if (!node) { node = newNode(id); s.agents.set(id, node); }
+      if (typeof r.agent_type === 'string' && r.agent_type) node.agent_type = r.agent_type;
+      if (Number.isInteger(r.depth) && r.depth > 0) node.depth = r.depth;
+      if (typeof r.parent_agent_id === 'string' && r.parent_agent_id) node.parent = r.parent_agent_id;
+    }
+    const model = r.model || 'unknown';
+    const m = node.models.get(model) || { model, turns: 0, cost_usd: 0 };
+    m.turns += num(r.turns);
+    m.cost_usd += r.cost_usd;
+    node.models.set(model, m);
+    node.own += r.cost_usd;
+  }
+  const out = [];
+  for (const s of sessions.values()) {
+    for (const [id, node] of s.agents) {
+      let parent = s.root;
+      if (node.parent && node.parent !== id) {
+        const p = s.agents.get(node.parent);
+        if (p) parent = p; else node.orphan = true;
+      }
+      node.attached = parent;
+    }
+    // A parent cycle (corrupt rows) would hide a subtree from the root: break it by re-attaching to root.
+    for (const node of s.agents.values()) {
+      const seen = new Set();
+      for (let p = node.attached; p && p !== s.root; p = p.attached) {
+        if (seen.has(p) || p === node) { node.attached = s.root; node.orphan = true; break; }
+        seen.add(p);
+      }
+    }
+    for (const node of s.agents.values()) node.attached.children.push(node);
+    const total = (n) => {
+      n.subtree = n.own + n.children.reduce((a, c) => a + total(c), 0);
+      n.children.sort((a, b) => b.subtree - a.subtree);
+      return n.subtree;
+    };
+    out.push({ session: s.session, total: total(s.root), root: s.root });
+  }
+  out.sort((a, b) => b.total - a.total);
+  return out;
+}
+
+function nodeLabel(n) {
+  if (!n.agent_id) return 'depth-0';
+  const base = (n.agent_type || 'agent') + ' ' + n.agent_id.slice(0, 5) + '\u2026';
+  return n.orphan ? base + ' [orphan]' : base;
+}
+
+function nodeModels(n) {
+  return Array.from(n.models.values()).sort((a, b) => b.cost_usd - a.cost_usd);
+}
+
+function nodeJson(n) {
+  return {
+    label: nodeLabel(n).replace(' [orphan]', ''),
+    agent_id: n.agent_id,
+    agent_type: n.agent_type,
+    depth: n.agent_id ? n.depth : 0,
+    orphan: n.orphan,
+    own_usd: Number(n.own.toFixed(4)),
+    subtree_usd: Number(n.subtree.toFixed(4)),
+    models: nodeModels(n).map((m) => ({ model: m.model, turns: m.turns, cost_usd: Number(m.cost_usd.toFixed(4)) })),
+    children: n.children.map(nodeJson)
+  };
+}
+
+// Render one node: first model line carries the label, further models get continuation lines; the subtree
+// total is appended to the node's last model line when it has children. `omitChildren` is used for the root,
+// whose children are drawn as its siblings (the root is the session's own "depth-0" line).
+function renderNode(n, connector, childPrefix, lines, omitChildren) {
+  const ms = nodeModels(n);
+  const sub = !omitChildren && n.children.length > 0 ? ` (subtree $${n.subtree.toFixed(2)})` : '';
+  const label = nodeLabel(n);
+  const cont = childPrefix + (omitChildren || n.children.length === 0 ? '   ' : '\u2502  ');
+  ms.forEach((m, i) => {
+    const text = `${m.model}  $${m.cost_usd.toFixed(2)}` + (i === ms.length - 1 ? sub : '');
+    if (i === 0) lines.push(`${connector}${label}  ${text}`);
+    else lines.push(`${cont}${' '.repeat(Array.from(label).length)}  ${text}`);
+  });
+  if (omitChildren) return;
+  n.children.forEach((c, i) => {
+    const last = i === n.children.length - 1;
+    renderNode(c, childPrefix + (last ? '\u2514\u2500 ' : '\u251c\u2500 '), childPrefix + (last ? '   ' : '\u2502  '), lines, false);
+  });
+}
+
 function run() {
   const args = parseArgs(process.argv);
 
@@ -264,6 +390,31 @@ function run() {
   const filteredRows = validRows.filter((r) => (
     args.today ? r._day === todayDay : (r._day >= sinceDay && r._day <= todayDay)
   ));
+
+  if (args.tree) {
+    const trees = buildTrees(filteredRows);
+    if (args.json) {
+      process.stdout.write(JSON.stringify({
+        schema_version: 1, file: resolvedPath, since: sinceDay, tree: true, skipped_lines: skippedLines,
+        sessions: trees.map((t) => ({ session: t.session, total_usd: Number(t.total.toFixed(4)), root: nodeJson(t.root) }))
+      }, null, 2) + '\n');
+    } else {
+      const lines = [];
+      for (const t of trees) {
+        lines.push(`session ${t.session.slice(0, 8)}  $${t.total.toFixed(2)}`);
+        // Root = the session's own rows; its agents are drawn as siblings of that line, as in the header example.
+        const kids = t.root.children;
+        if (t.root.own > 0 || t.root.models.size > 0) renderNode(t.root, kids.length ? '\u251c\u2500 ' : '\u2514\u2500 ', '', lines, true);
+        kids.forEach((c, i) => {
+          const last = i === kids.length - 1;
+          renderNode(c, last ? '\u2514\u2500 ' : '\u251c\u2500 ', last ? '   ' : '\u2502  ', lines, false);
+        });
+        lines.push('');
+      }
+      process.stdout.write(lines.join('\n') + (lines.length ? '' : 'no rows in window\n'));
+    }
+    process.exit(0);
+  }
 
   // Aggregate: day -> { totals, groups }
   const dayMap = new Map();

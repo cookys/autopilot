@@ -140,7 +140,23 @@ function aggregateSince(turns, startIndex) {
   return { totalTurns: total, deltas };
 }
 
+// Agent-tree fields from a subagent sidecar (agent-<id>.meta.json): {parentAgentId?, depth, agentType?}.
+// Absent parentAgentId = parent is the main session. Returns {} when the sidecar is missing/unreadable/not
+// an object, so callers write rows exactly as before. Never throws.
+function readAgentTree(metaPath) {
+  try {
+    const m = JSON.parse(require('fs').readFileSync(metaPath, 'utf8'));
+    if (!m || typeof m !== 'object' || Array.isArray(m)) return {};
+    const out = {};
+    if (typeof m.parentAgentId === 'string' && m.parentAgentId) out.parentAgentId = m.parentAgentId;
+    out.depth = Number.isInteger(m.spawnDepth) && m.spawnDepth > 0 ? m.spawnDepth : 1;
+    if (typeof m.agentType === 'string' && m.agentType) out.agentType = m.agentType;
+    return out;
+  } catch { return {}; }
+}
+
 module.exports = {
+  readAgentTree,
   PRICING, CACHE_READ_MULT, CACHE_WRITE_MULT,
   getRate, hasPriceRow, parseAssistantTurns, costOf, aggregateSince,
 };

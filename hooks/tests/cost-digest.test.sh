@@ -227,4 +227,48 @@ CWD_JSON="$(node "$DIGEST_SCRIPT" --file "$CWD_FIXTURE" --since 100 --by session
 CWD_ROWS="$(printf '%s' "$CWD_JSON" | node -e 'const j=JSON.parse(require("fs").readFileSync(0,"utf8"));const r=j.days.flatMap(d=>d.rows).filter(r=>r.session==="cwd-session");process.stdout.write(r.length+","+r[0].turns+","+r[0].cost_usd)')"
 assert_eq "$CWD_ROWS" "1,3,1.5" "--json --by session: one session in two cwds is one row with summed totals"
 
+# Test (h): --tree. Session tree-sess: main rows on two models; A (foreman) child of root via missing parent field,
+# B/C children of A, D orphan (parent never in window), E old-shape subagent row (no tree fields).
+TREE_FILE="$FIXTURE_DIR/tree.jsonl"
+cat > "$TREE_FILE" <<JSONL
+{"ts":"${TODAY_UTC}T08:00:00.000Z","session":"tree-sess-0001","model":"fable-5-1","turns":4,"cost_usd":8.0}
+{"ts":"${TODAY_UTC}T08:00:00.000Z","session":"tree-sess-0001","model":"sonnet-5-5","turns":2,"cost_usd":0.5}
+{"ts":"${TODAY_UTC}T08:00:01.000Z","session":"tree-sess-0001","model":"sonnet-5-5","turns":3,"cost_usd":3.0,"sidechain":true,"agent_id":"aaaaa11111","depth":1,"agent_type":"foreman"}
+{"ts":"${TODAY_UTC}T08:00:01.000Z","session":"tree-sess-0001","model":"haiku-4","turns":1,"cost_usd":0.25,"sidechain":true,"agent_id":"aaaaa11111","depth":1,"agent_type":"foreman"}
+{"ts":"${TODAY_UTC}T08:00:02.000Z","session":"tree-sess-0001","model":"sonnet-5-5","turns":2,"cost_usd":0.9,"sidechain":true,"agent_id":"bbbbb22222","parent_agent_id":"aaaaa11111","depth":2,"agent_type":"general-purpose"}
+{"ts":"${TODAY_UTC}T08:00:02.000Z","session":"tree-sess-0001","model":"sonnet-5-5","turns":1,"cost_usd":0.1,"sidechain":true,"agent_id":"ccccc33333","parent_agent_id":"aaaaa11111","depth":2}
+{"ts":"${TODAY_UTC}T08:00:03.000Z","session":"tree-sess-0001","model":"sonnet-5-5","turns":1,"cost_usd":0.4,"sidechain":true,"agent_id":"ddddd44444","parent_agent_id":"gone000000","depth":2,"agent_type":"explore"}
+{"ts":"${TODAY_UTC}T08:00:04.000Z","session":"tree-sess-0001","model":"sonnet-5-5","turns":1,"cost_usd":0.2,"sidechain":true,"agent_id":"eeeee55555"}
+{"ts":"${TODAY_UTC}T09:00:00.000Z","session":"tree-small-02","model":"sonnet-5-5","turns":1,"cost_usd":1.0}
+{"ts":"2026-01-01T09:00:00.000Z","session":"tree-old-0003","model":"sonnet-5-5","turns":1,"cost_usd":99}
+JSONL
+TREE_JSON="$(node "$DIGEST_SCRIPT" --file "$TREE_FILE" --today --tree --json)"
+assert_exit_code "$?" "0" "--tree --json exits 0"
+tj() { node -e 'const d=JSON.parse(process.argv[1]);const s=d.sessions.find(x=>x.session==="tree-sess-0001");const root=s.root;const find=(n,id)=>n.agent_id===id?n:n.children.reduce((a,c)=>a||find(c,id),null);let v;eval("v="+process.argv[2]);process.stdout.write(String(v))' "$TREE_JSON" "$1"; }
+assert_eq "$(tj 'd.sessions.map(x=>x.session).join()')" "tree-sess-0001,tree-small-02" "tree: sessions sorted by total desc, --today filter drops the old session"
+assert_eq "$(tj 's.total_usd')" "13.35" "tree: session total adds up all rows"
+assert_eq "$(tj 'root.own_usd')" "8.5" "tree: root own = main rows only"
+assert_eq "$(tj 'root.models.map(m=>m.model).join()')" "fable-5-1,sonnet-5-5" "tree: root keeps a per-model split, desc by cost"
+assert_eq "$(tj 'find(find(root,"aaaaa11111"),"bbbbb22222")!==null')" "true" "tree: depth-2 agent nests under its parent_agent_id"
+assert_eq "$(tj 'find(root,"aaaaa11111").children.map(c=>c.agent_id).join()')" "bbbbb22222,ccccc33333" "tree: children sorted by subtree desc"
+assert_eq "$(tj 'find(root,"aaaaa11111").models.length')" "2" "tree: one agent that used two models has two model entries"
+assert_eq "$(tj 'find(root,"aaaaa11111").subtree_usd')" "4.25" "tree: subtree = own 3.25 + children 1.0"
+assert_eq "$(tj 'root.children.map(c=>c.agent_id).sort().join()')" "aaaaa11111,ddddd44444,eeeee55555" "tree: parentless (old-shape) and orphan agents attach to the root"
+assert_eq "$(tj 'find(root,"ddddd44444").orphan')" "true" "tree: agent whose parent is not in the window is marked orphan"
+assert_eq "$(tj 'find(root,"eeeee55555").orphan')" "false" "tree: old-shape row without parent field is not an orphan"
+assert_eq "$(tj 'root.subtree_usd')" "13.35" "tree: root subtree equals session total"
+assert_eq "$(tj 'find(root,"aaaaa11111").label')" "foreman aaaaa…" "tree: label is agent_type + first 5 id chars"
+assert_eq "$(tj 'find(root,"eeeee55555").label')" "agent eeeee…" "tree: label falls back to 'agent' without agent_type"
+TREE_TXT="$(node "$DIGEST_SCRIPT" --file "$TREE_FILE" --today --tree)"
+assert_contains "$TREE_TXT" "session tree-ses  \$13.35" "tree text: session header with total"
+assert_contains "$TREE_TXT" "├─ depth-0  fable-5-1  \$8.00" "tree text: depth-0 line"
+assert_contains "$TREE_TXT" "foreman aaaaa…  sonnet-5-5  \$3.00" "tree text: agent first model line"
+assert_contains "$TREE_TXT" "haiku-4  \$0.25 (subtree \$4.25)" "tree text: second model on its own line, subtree on the last"
+assert_contains "$TREE_TXT" "├─ general-purpose bbbbb…  sonnet-5-5  \$0.90" "tree text: nested child drawn under its parent"
+assert_contains "$TREE_TXT" "explore ddddd… [orphan]" "tree text: orphan marker"
+node "$DIGEST_SCRIPT" --file "$TREE_FILE" --tree --by session >/dev/null 2>&1
+assert_exit_code "$?" "2" "--tree with --by exits 2"
+node "$DIGEST_SCRIPT" --file "$TREE_FILE" --by session --tree >/dev/null 2>&1
+assert_exit_code "$?" "2" "--by then --tree also exits 2"
+
 finalize_test

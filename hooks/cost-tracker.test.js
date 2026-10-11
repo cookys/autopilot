@@ -9,8 +9,8 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 
 const {
-  parseAssistantTurns, aggregateSince, costOf, getRate, PRICING,
-  CACHE_READ_MULT, CACHE_WRITE_MULT,
+  parseAssistantTurns, aggregateSince, costOf, getRate, hasPriceRow, PRICING,
+  CACHE_WRITE_MULT,
 } = require('./cost-tracker-lib.js');
 
 // Real-shape assistant turn line.
@@ -52,21 +52,50 @@ test('parseAssistantTurns: missing model defaults to sonnet', () => {
   assert.equal(parseAssistantTurns(jsonl)[0].model, 'sonnet');
 });
 
-test('getRate: substring match opus/haiku, default sonnet', () => {
-  assert.deepEqual(getRate('claude-opus-4-8'), PRICING.opus);
-  assert.deepEqual(getRate('claude-haiku-4-5'), PRICING.haiku);
-  assert.deepEqual(getRate('claude-sonnet-4-6'), PRICING.sonnet);
-  assert.deepEqual(getRate('claude-fable-5'), PRICING.sonnet); // unknown → sonnet default
-  assert.deepEqual(getRate(undefined), PRICING.sonnet);
+test('getRate: exact per-model-id rows; unknown falls back to sonnet-5-5 without a price row', () => {
+  assert.deepEqual(getRate('claude-opus-4-8'), PRICING['claude-opus-4-8']);
+  assert.deepEqual(getRate('claude-haiku-4-5'), PRICING['claude-haiku-4-5']);
+  assert.deepEqual(getRate('claude-sonnet-4-6'), PRICING['claude-sonnet-4-6']);
+  assert.deepEqual(getRate('claude-fable-5-1'), PRICING['claude-fable-5-1']);
+  assert.notDeepEqual(getRate('claude-fable-5-1'), PRICING['claude-sonnet-5-5']); // fable no longer sonnet
+  assert.deepEqual(getRate('claude-future-9'), PRICING['claude-sonnet-5-5']); // unknown -> fallback
+  assert.deepEqual(getRate(undefined), PRICING['claude-sonnet-5-5']);
 });
 
-test('costOf: cache-aware pricing (read 0.1x, write 1.25x of input rate)', () => {
-  // opus input=15/Mtok. 1M input + 1M output + 1M cacheRead + 1M cacheWrite.
-  const g = { model: 'opus', input: 1e6, output: 1e6, cacheRead: 1e6, cacheWrite: 1e6 };
-  const expected = (1e6 * 15 + 1e6 * 75 + 1e6 * 15 * CACHE_READ_MULT + 1e6 * 15 * CACHE_WRITE_MULT) / 1e6;
-  assert.equal(costOf(g), Math.round(expected * 1e6) / 1e6);
-  // sanity: read multiplier is cheaper than write
-  assert.ok(CACHE_READ_MULT < 1 && CACHE_WRITE_MULT > 1);
+test('getRate: claude-opus-5-5 and claude-opus-5 are distinct rows (longest match)', () => {
+  assert.deepEqual(getRate('claude-opus-5-5'), { input: 4, output: 20, cacheRead: 0.2 });
+  assert.deepEqual(getRate('claude-opus-5'), { input: 5, output: 25, cacheRead: 0.5 });
+  assert.notDeepEqual(getRate('claude-opus-5-5'), getRate('claude-opus-5'));
+  assert.deepEqual(getRate('claude-fable-5-1'), PRICING['claude-fable-5-1']);
+  assert.deepEqual(getRate('claude-fable-5'), PRICING['claude-fable-5']);
+});
+
+test('getRate: suffixed ids normalise ([1m], -YYYYMMDD, provider prefix)', () => {
+  assert.deepEqual(getRate('claude-opus-4-8[1m]'), PRICING['claude-opus-4-8']);
+  assert.deepEqual(getRate('claude-haiku-4-5-20251001'), PRICING['claude-haiku-4-5']);
+  assert.deepEqual(getRate('us.anthropic.claude-sonnet-4-6'), PRICING['claude-sonnet-4-6']);
+  assert.deepEqual(getRate('Anthropic.claude-opus-5-5-20260101[1m]'), PRICING['claude-opus-5-5']);
+  assert.ok(hasPriceRow('claude-opus-4-8[1m]'));
+  assert.ok(hasPriceRow('claude-haiku-4-5-20251001'));
+});
+
+test('hasPriceRow: true only for ids with their own row; bare "sonnet" default stays priced', () => {
+  assert.equal(hasPriceRow('claude-fable-5-1'), true);
+  assert.equal(hasPriceRow('sonnet'), true); // parseAssistantTurns default
+  assert.equal(hasPriceRow('claude-unknown-9'), false);
+  assert.equal(hasPriceRow('opus'), false);
+  assert.equal(hasPriceRow(undefined), false);
+});
+
+test('costOf: exact dollars per 5.5 id (absolute cache-read, write = 1.25x input)', () => {
+  const mk = (model) => ({ model, input: 1e6, output: 1e6, cacheRead: 1e6, cacheWrite: 1e6 });
+  // input + output + cacheRead + 1.25*input
+  assert.equal(costOf(mk('claude-fable-5-1')), 10 + 50 + 0.25 + 12.5);   // 72.75
+  assert.equal(costOf(mk('claude-opus-5-5')), 4 + 20 + 0.2 + 5);        // 29.2
+  assert.equal(costOf(mk('claude-sonnet-5-5')), 2 + 10 + 0.2 + 2.5);    // 14.7
+  assert.equal(costOf(mk('claude-haiku-5-5')), 0.1 + 0.5 + 0.01 + 0.125); // 0.735
+  assert.equal(costOf(mk('claude-fable-5')), 10 + 50 + 1 + 12.5);       // 73.5
+  assert.ok(CACHE_WRITE_MULT > 1);
 });
 
 test('aggregateSince: from 0 sums all turns, groups by model, sets cursor to total', () => {

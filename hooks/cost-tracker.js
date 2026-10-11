@@ -30,7 +30,7 @@ const os = require('os');
 const path = require('path');
 // default-on since v2.35.15 (was opt-in); opt out with AUTOPILOT_COST_TRACKER=false.
 
-const { parseAssistantTurns, aggregateSince, readAgentTree, getRate, hasPriceRow, CACHE_READ_MULT } = require('./cost-tracker-lib');
+const { parseAssistantTurns, aggregateSince, readAgentTree, getRate, hasPriceRow } = require('./cost-tracker-lib');
 const { resolveTranscriptPath } = require('./transcript-reader-lib');
 
 function sanitizeSession(s) {
@@ -204,7 +204,7 @@ try {
         calls += Number(r.turns) || 0;
         totalUsd += Number(r.cost_usd) || 0;
         if (!hasPriceRow(r.model)) priced = false;
-        else readUsd += (cr * getRate(r.model).input * CACHE_READ_MULT) / 1_000_000;
+        else readUsd += (cr * getRate(r.model).cacheRead) / 1_000_000;
       } catch { /* skip */ }
     }
     const warned = Number(cursor.cache_read_warned) || 0;

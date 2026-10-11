@@ -683,6 +683,13 @@
       "owner": "scripts/run-eval-batch.sh",
       "retention_days": null,
       "reason": "flock file kept in the shared temp root"
+    },
+    {
+      "pattern": "org.chromium.Chromium.*",
+      "kind": "live",
+      "owner": "external",
+      "retention_days": null,
+      "reason": "external: Chromium singleton dirs from headless browsers run by other tools; not created by autopilot; never pruned"
     }
   ]
 }

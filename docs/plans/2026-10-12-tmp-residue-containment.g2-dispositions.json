@@ -1,0 +1,92 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "tmp-residue-containment-2026-10-12",
+ "generation": 2,
+ "findings": [
+  {
+   "fingerprint": "e8cab8784a4f6d6a68afadf817b69d8a9a51d0ec3474ffb1a98d8a13476cea97",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct: a module-level Set is shared by engine instances in one process. Folded (phase 2 step 2): ownership is per instance (this.ownedTempDirs bound in the constructor); dispose and finish() touch only this instance's set."
+  },
+  {
+   "fingerprint": "880cf425838907e0a7f0f716b708fb3d7404838812bb61cb912ce86de3f3027d",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct: a hung live owner can outlive a wall-time-based retention. Folded (phase 2 step 4, phase 3 step 2): runtime scratch dirs carry .autopilot-owner {pid,start_time}; prune keeps any dir whose owner is alive with the same start time, regardless of age; KR4 tests it."
+  },
+  {
+   "fingerprint": "71f92c3eb9b59dd0b96eccabef8cff36a8bb9eacd3792b2219c4a91846d6182e",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct. Folded (phase 4 step 1a/2): the registry is the only registration source; the gate itself fails when _SRR_PATTERNS differs from the registry's test-lockgated entries, on pre-commit and preflight; KR5 self-test plants a reaper-only prefix."
+  },
+  {
+   "fingerprint": "deb954a17fb9d87a17c21cb1baa630510c7b7e1fb41f492509eec56646a2b3ae",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct within reason: a recognizer limited to allocation calls misses /tmp literals and helpers. Folded (phase 4 step 1): an occurrence is any textual temp-root reference (os.tmpdir(), $TMPDIR/${TMPDIR, '/tmp/' literals, mkdtemp/mktemp); helpers that only resolve the root are allowlisted with a reason; KR5 plants a bare /tmp/ literal. Indirection through runtime-computed paths remains caught at the helper that references the root."
+  },
+  {
+   "fingerprint": "513d22bae56b708ab7752f6084a9ba1fb9ca63f6016a5b4d8cd52cc4641c16ac",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct. Folded: KR1 runs under bash -c 'set -e' with --fail-on-entries; every phase's acceptance is now only its KR command(s) plus the full suite; the vague real-host run and wiring-only checks are no longer acceptance."
+  },
+  {
+   "fingerprint": "1706d42bd68382a14af3a87374598d91e58ea1b4c135f5e61820fd50b95259d4",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct. Folded (§4 dependency map, phase 1 step 2): the registry file and tmp-residue.js core (patterns, new-since) land first in phase 1; phases 2-4 depend on phase 1."
+  },
+  {
+   "fingerprint": "1aafb1d29e310614c459621c8ac91eb0953f7af780b06dd0d5816aec35b4a368",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct: the reaper lock-gates only a dir holding its own sidecar. Folded (phase 1 step 5): TEST_SHORT_TMP=/tmp/apt.XXXXXX carries its own .autopilot-live.lock held by the same holder process."
+  },
+  {
+   "fingerprint": "1c24186963df669fece986ec629b38a91a96161f60f864b81b07e025a644e99c",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct. Folded (KR1): new-since lists every current-user direct child newer than the stamp, labelled by registry kind or unregistered; --exclude-kind removes only named kinds, so worktree and unregistered leaks are always reported."
+  },
+  {
+   "fingerprint": "ad99d3992c375b646c0fa6c68eb3bb7b3faa7949944dac226349d66e62bea597",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct; same root as finding 2 (accepted blocker, one fold): one registration source, gate-enforced parity, phase 3 inventory includes lock and test-lockgated kinds."
+  },
+  {
+   "fingerprint": "2b1dc3a36c012b5ff3a2d2c9c10c3434b483fd8080adf6a6e9724ac87dda61ca",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct: rule text and negative control disagreed. Folded (phase 4 step 1b): allocation must be the first statement inside the try; 'immediately before' removed, so the planted allocation-before-try fixture fails under the rule."
+  },
+  {
+   "fingerprint": "20ddadfc4eb93b0c6c05b74ee850da6a6c4608f0917a3b4b0a3d88647aaaf4b0",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct. Folded (phase 4 step 1): every *.test.* file is excluded, including hooks/*.test.js such as the L1 probe."
+  },
+  {
+   "fingerprint": "e75fd2fd17807c5af0ae46a336a742b954513a89f1601433f2113079e460418e",
+   "disposition": "duplicate",
+   "rationale": "Duplicate of finding 0; folded there (per-instance set)."
+  },
+  {
+   "fingerprint": "2e496fee7831653b630c5547ed4eefe9b2145a8ab09212afe7d6f1b3ee9ddf4f",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Folded: KR2 (d) backdates a dead apl1.* dir and requires a real run.sh start to reap it."
+  },
+  {
+   "fingerprint": "84707f2436538e57ebca6e27ce762cb9bdbd93aac8485e6705acbbc62eadec17",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Folded: phase acceptance is the KR commands only; KR3 holds all listed scenarios."
+  },
+  {
+   "fingerprint": "1d4b4539bbda0a6a6adeffa41db9dc84a911286f615ebb05a2819ddd39299322",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Folded: registry lands in phase 1; hooks/README.md added to §3."
+  },
+  {
+   "fingerprint": "9fd5e062090b53619d05bfef662f2b88638a0bbcefd2dffd0bfe7435193d87eb",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Folded: §2.5 states this plan is the project page (plan-as-project), so the Review log is the only record."
+  },
+  {
+   "fingerprint": "69ab714f993d7ae81da81bdeeefac106845a11dad7aef1e7ec5862ea89fe162b",
+   "disposition": "duplicate",
+   "rationale": "Duplicate of finding 10; folded there."
+  }
+ ]
+}

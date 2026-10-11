@@ -30,7 +30,7 @@ const os = require('os');
 const path = require('path');
 // default-on since v2.35.15 (was opt-in); opt out with AUTOPILOT_COST_TRACKER=false.
 
-const { parseAssistantTurns, aggregateSince, getRate, hasPriceRow, CACHE_READ_MULT } = require('./cost-tracker-lib');
+const { parseAssistantTurns, aggregateSince, readAgentTree, getRate, hasPriceRow, CACHE_READ_MULT } = require('./cost-tracker-lib');
 const { resolveTranscriptPath } = require('./transcript-reader-lib');
 
 function sanitizeSession(s) {
@@ -140,7 +140,10 @@ try {
         const agg = aggregateSince(aTurns, Number(agentCursor[m[1]]) || 0);
         agentCursor[m[1]] = agg.totalTurns;
         fileCursor[m[1]] = { size: st.size, mtimeMs: st.mtimeMs };
-        for (const d of agg.deltas) subDeltas.push({ ...d, agentId: m[1] });
+        // Agent tree (parent link / depth / type) from the sidecar agent-<id>.meta.json; read only for files
+        // that were actually parsed. Missing or malformed sidecar → no extra fields (rows as before).
+        const tree = readAgentTree(path.join(subDir, `agent-${m[1]}.meta.json`));
+        for (const d of agg.deltas) subDeltas.push({ ...d, ...tree, agentId: m[1] });
       } catch { /* one unreadable subagent file never blocks the rest */ }
     }
   } catch { /* no subagents dir → nothing to add */ }
@@ -155,6 +158,9 @@ try {
     session,
     model: d.model,
     ...(d.agentId ? { sidechain: true, agent_id: d.agentId } : {}),
+    ...(d.agentId && d.parentAgentId ? { parent_agent_id: d.parentAgentId } : {}),
+    ...(d.agentId && d.depth ? { depth: d.depth } : {}),
+    ...(d.agentId && d.agentType ? { agent_type: d.agentType } : {}),
     input_tokens: d.input,
     output_tokens: d.output,
     cache_read_tokens: d.cacheRead,

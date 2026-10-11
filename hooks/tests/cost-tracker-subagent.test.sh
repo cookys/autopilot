@@ -97,4 +97,39 @@ run_hook cost-tracker.js "$(payload2)"
 assert_eq 0 "$__RUN_EXIT" "no subagents dir: exit 0"
 assert_eq "" "$__RUN_STDERR" "no subagents dir: silent"
 
+# ── 7. agent tree fields from sidecars: depth-1 (no parent), depth-2 (parentAgentId), no sidecar, malformed sidecar ──
+TREE_TR="$TEST_TMP/tree-transcript.jsonl"
+TSUB="$TEST_TMP/tree-transcript/subagents"
+mkdir -p "$TSUB"
+{ line t0 t0 1 1 1; } > "$TREE_TR"
+{ line d1 e1 5 100 10 ',"isSidechain":true,"agentId":"dep1"'; } > "$TSUB/agent-dep1.jsonl"
+printf '%s' '{"agentType":"foreman","toolUseId":"tu1","spawnDepth":1,"model":"sonnet"}' > "$TSUB/agent-dep1.meta.json"
+{ line d2 e2 5 100 10 ',"isSidechain":true,"agentId":"dep2"'; } > "$TSUB/agent-dep2.jsonl"
+printf '%s' '{"agentType":"general-purpose","toolUseId":"tu2","parentAgentId":"dep1","spawnDepth":2}' > "$TSUB/agent-dep2.meta.json"
+{ line d3 e3 5 100 10 ',"isSidechain":true,"agentId":"nometa"'; } > "$TSUB/agent-nometa.jsonl"
+{ line d4 e4 5 100 10 ',"isSidechain":true,"agentId":"badmeta"'; } > "$TSUB/agent-badmeta.jsonl"
+printf '%s' '{not json' > "$TSUB/agent-badmeta.meta.json"
+rm -f "$LEDGER"
+TP="$(printf '{"session_id":"ct-tree-session","transcript_path":"%s","hook_event_name":"Stop","cwd":"%s"}' "$TREE_TR" "$TEST_TMP")"
+run_hook cost-tracker.js "$TP"
+assert_eq 0 "$__RUN_EXIT" "tree stop exit 0"
+tfield() { node -e 'const r=require("fs").readFileSync(process.argv[1],"utf8").split("\n").filter(Boolean).map(JSON.parse).find(x=>x.agent_id===process.argv[2]);process.stdout.write(r?(process.argv[3] in r?String(r[process.argv[3]]):"<absent>"):"<norow>")' "$LEDGER" "$1" "$2"; }
+assert_eq "<absent>" "$(tfield dep1 parent_agent_id)" "depth-1 sidecar: no parent_agent_id"
+assert_eq "1" "$(tfield dep1 depth)" "depth-1 sidecar: depth 1"
+assert_eq "foreman" "$(tfield dep1 agent_type)" "depth-1 sidecar: agent_type"
+assert_eq "dep1" "$(tfield dep2 parent_agent_id)" "depth-2 sidecar: parent_agent_id"
+assert_eq "2" "$(tfield dep2 depth)" "depth-2 sidecar: depth 2"
+assert_eq "general-purpose" "$(tfield dep2 agent_type)" "depth-2 sidecar: agent_type"
+for a in nometa badmeta; do
+  assert_eq "<absent><absent><absent>" "$(tfield $a parent_agent_id)$(tfield $a depth)$(tfield $a agent_type)" "$a: no sidecar fields at all"
+  assert_eq "<absent>" "$(tfield $a nonexistent_field)" "$a: row still written"
+done
+MAINROW="$(grep -v sidechain "$LEDGER" | head -1)"
+assert_not_contains "$MAINROW" 'depth' "main row has no tree fields"
+# a sidecar is not re-read for a skipped (unchanged) file
+printf '%s' '{"agentType":"x","parentAgentId":"zzz"}' > "$TSUB/agent-dep1.meta.json"
+ROWS_BEFORE="$(wc -l < "$LEDGER")"
+run_hook cost-tracker.js "$TP"
+assert_eq "$ROWS_BEFORE" "$(wc -l < "$LEDGER")" "unchanged agent files: no new rows"
+
 finalize_test

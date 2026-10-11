@@ -97,7 +97,7 @@ test('missing file, small context, no window source ⇒ written with tokens, pct
 test('observed tokens > 200000 ⇒ window 1M, window_source observed, pct computed', () => {
   const live = shm('w2f-live-');
   const r = run(live, transcript([2, 388327, 2023]));
-  assert.strictEqual(r.status, 0, r.stderr);
+  assert.strictEqual(r.status, 2, r.stderr); // 390k >= absolute T2 150k; this test is about the writer
   const f = readJson(fileOf(live));
   assert.strictEqual(f.window_source, 'observed');
   assert.strictEqual(f.context_window.context_window_size, 1000000);
@@ -109,7 +109,7 @@ test('fresh status-line file ⇒ left byte-identical', () => {
   const live = shm('w2f-live-');
   const before = putFile(live, statusLineRec(1000000), SID, 5000);
   const r = run(live, transcript([2, 388327, 2023]));
-  assert.strictEqual(r.status, 0, r.stderr);
+  assert.strictEqual(r.status, 2, r.stderr); // T2 fires at the absolute 150k; the file must still be untouched
   assert.strictEqual(fs.readFileSync(fileOf(live), 'utf8'), before);
 });
 

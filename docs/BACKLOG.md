@@ -1106,21 +1106,13 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/README.md
 - **Context**: freeze-guidance-arm.js change/red end in armBase(), which only looks up extra-base id with the new suffix, so base.json loses extra-base-v5; restored by hand v7-v10. Base must not change.
 
-### PEER-REPORTED (c4140 llm-playground): warn on foreground sleep/tail polling at depth-0, not only in foremen
+### PEER-REPORTED (c4140 llm-playground): revise dev-flow SKILL.md foreground-wait advice
 - **Status**: open
-- **Trigger**: operator decision on adoption; peer data: 98 of 144 lead Bash calls were sleep/tail polls
+- **Trigger**: before the 3.0.0 final cut, with the v11 guidance eval
 - **Effort**: S
 - **Source**: fleet msg `01M4NVXM8WM1Q6GR4VSTST0P22`; replied `01M4NVY57683RPV21TNXTGQC2D`
 - **Pointer**: none
-- **Context**: foreman-guard.js sleep/while-wait rules need agent_id + l4-l6 marker, so depth-0 is never seen. Reuse them warn-only for any session; also revise dev-flow SKILL.md foreground-wait (<=15 min) advice.
-
-### PEER-REPORTED (c4140 llm-playground): context-budget defaults scale to 750K on 1M windows; re-remind per call
-- **Status**: open
-- **Trigger**: operator decision on adoption
-- **Effort**: S
-- **Source**: fleet msgs `01M4NVXM8WM1Q6GR4VSTST0P22`, `01M4NW48V3GDXBVBQGFJY6F1P3`; scaling verified locally
-- **Pointer**: none
-- **Context**: scaleTiers (context-budget-lib.js) scales unset t1/t2 by window: 1M gives T2 750K (peer saw first T2 at 777K). Cost is turns x context, so default absolute. Also throttle per token step, not per call.
+- **Context**: depth-0 foreground sleep/tail polling now draws an advice-only warning (depth0-delegate-gate); the dev-flow SKILL.md foreground-wait (<=15 min) wording is guidance text and waits for eval evidence before it changes.
 
 ### hetero-review-loop: a seat gap without --allow-seat-gap leaves the generation out of chain.json
 - **Status**: open
@@ -1161,3 +1153,11 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: tmp-residue qc-gate, 2026-10-12 (21 new findings, all XXXXXX templates)
 - **Pointer**: none
 - **Context**: the XXX marker rule matches mktemp templates; exclude XXXXXX runs. The phase-3 hand also saw --files f1 f2 report scannedFiles 0.
+
+### Cost ledger: agent tree with per-model accounting for subagents
+- **Status**: open
+- **Trigger**: after the cost-tracker subagent rows (token (e)) merge to develop
+- **Effort**: M
+- **Source**: owner 2026-10-12: exclude subagents from the brain-tier fuse; design an agent tree with per-model accounting
+- **Pointer**: none
+- **Context**: rows carry session, parent agent_id, depth and model; cost-digest rolls up session > agent tree > model; brain fuse counts depth-0 only; nested subagents (a subagent's own agents) must attach to their parent.

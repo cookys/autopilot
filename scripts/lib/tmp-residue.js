@@ -11,8 +11,13 @@
 //       than FILE's mtime, labelled with its registry kind or `unregistered`. --exclude-kind
 //       drops only the named kinds; --exclude-path drops exact paths. --fail-on-entries
 //       exits 1 when anything remains. Exit 2 on usage error.
-//
-// `prune` (age-based deletion) is not implemented here yet; it lands with the daily prune.
+//   node tmp-residue.js prune [--days N] [--tmpdir DIR] [--registry FILE] [--stamp FILE
+//                       --throttle-hours H] [--now-ms MS] [--json]
+//       Age-based deletion of kind scratch|evidence entries only: current-user direct children,
+//       no symlinks, mtime older than the entry's retention (default AUTOPILOT_TMP_LOG_RETENTION_DAYS;
+//       0 disables). Keeps a dir holding .autopilot-live.lock or a live .autopilot-owner
+//       {pid,start_time}. With --stamp/--throttle-hours, runs at most once per H hours. Prints a
+//       JSON receipt {tmpdir, deleted, kept, errors, skipped?}.
 // Node built-ins only.
 
 const fs = require('fs');

@@ -144,7 +144,7 @@ ANTHROPIC_AUTH_TOKEN=shimtok
 EOF
 chmod 600 "$f"
 printf 'diff --git a/x b/x\n' >"$WORK/d.diff"
-out="$(env -i HOME="$WORK/home" PATH="$PATH" AUTOPILOT_ENDPOINTS_ENV="$f" \
+out="$(env -i HOME="$WORK/home" PATH="$PATH" TMPDIR="$WORK" AUTOPILOT_ENDPOINTS_ENV="$f" \
   bash "$DR" --runner cc-shim --model test --diff-file "$WORK/d.diff" --bin /nonexistent/claude 2>&1)"; ec=$?
 assert_not_contains "$out" 'requires ANTHROPIC_BASE_URL' "loader populated base-url from file (precondition passed)"
 assert_not_contains "$out" 'requires ANTHROPIC_AUTH_TOKEN' "loader populated token from file (precondition passed)"

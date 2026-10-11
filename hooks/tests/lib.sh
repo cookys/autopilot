@@ -107,6 +107,7 @@ export NO_COLOR=1
 unset FORCE_COLOR 2>/dev/null || true
 
 TEST_NAME="${TEST_NAME:-$(basename "${BASH_SOURCE[1]:-$0}" .test.sh)}"
+__TEST_ORIG_TMPDIR="${TMPDIR:-/tmp}"
 TEST_TMP=$(mktemp -d -t "autopilot-test-${TEST_NAME}-XXXXXX")
 HOOKS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO_ROOT="$(cd "$HOOKS_DIR/.." && pwd)"
@@ -133,6 +134,11 @@ mkdir -p "$HOOK_TMPDIR"
 # different TMPDIR can still export its own after sourcing lib.sh.
 export TMPDIR="$HOOK_TMPDIR"
 export GIT_CEILING_DIRECTORIES="${GIT_CEILING_DIRECTORIES}:${TMPDIR}"
+
+# `repo-residue-sweep.js reap --auto` carries a daily host-wide temp-root prune whose stamp lives under
+# $XDG_RUNTIME_DIR (the real host). A suite that runs the sweep must not stamp or prune the real host, so it
+# is off by default here; hooks/tests/tmp-residue-prune.test.sh turns it on against fixture dirs.
+export AUTOPILOT_RESIDUE_TMP_PRUNE="${AUTOPILOT_RESIDUE_TMP_PRUNE:-0}"
 
 # Live-state leak (mods P1a review, 2026-10-04): `autopilot status runs` wrote
 # /run/user/<uid>/autopilot/runs-enrich-cursor.json from a suite that never set a live
@@ -270,6 +276,25 @@ else
   __TEST_LIVE_LOCK_FD=""
 fi
 
+# Short AF_UNIX-safe scratch dir (sun_path <= 108 bytes): tests whose sockets cannot live under
+# the long TEST_TMP path allocate under $TEST_SHORT_TMP instead of hard-coding /tmp/<prefix>-.
+# `apt.*` is a registered test-lockgated prefix (scripts/lib/tmp-residue-registry.json); it gets
+# its OWN .autopilot-live.lock, held by this same shell, so suite-residue-reap.sh recovers it only
+# after a kill -9. Allocated under the original TMPDIR when that is short, else /tmp.
+# Best-effort like the sidecar above: on failure TEST_SHORT_TMP stays empty.
+__TEST_SHORT_BASE="${__TEST_ORIG_TMPDIR:-/tmp}"
+[ "${#__TEST_SHORT_BASE}" -le 24 ] || __TEST_SHORT_BASE=/tmp
+TEST_SHORT_TMP="$(mktemp -d "$__TEST_SHORT_BASE/apt.XXXXXX" 2>/dev/null)" || TEST_SHORT_TMP=""
+__TEST_SHORT_LOCK_FD=""
+if [ -n "$TEST_SHORT_TMP" ]; then
+  if { exec {__TEST_SHORT_LOCK_FD}>>"$TEST_SHORT_TMP/.autopilot-live.lock"; } 2>/dev/null; then
+    flock -n "$__TEST_SHORT_LOCK_FD" 2>/dev/null || { { exec {__TEST_SHORT_LOCK_FD}>&-; } 2>/dev/null || true; __TEST_SHORT_LOCK_FD=""; }
+  else
+    __TEST_SHORT_LOCK_FD=""
+  fi
+  export TEST_SHORT_TMP
+fi
+
 # bash's EXIT trap is inherited into every subshell forked after it is set —
 # including command-substitution subshells like `OUT="$(... bash "$SCRIPT" ...)"`,
 # which every test case here uses to invoke the script under test. Each such
@@ -289,6 +314,10 @@ cleanup_test_tmp() {
   if [ -n "$__TEST_LIVE_LOCK_FD" ]; then
     { exec {__TEST_LIVE_LOCK_FD}>&-; } 2>/dev/null || true
   fi
+  if [ -n "$__TEST_SHORT_LOCK_FD" ]; then
+    { exec {__TEST_SHORT_LOCK_FD}>&-; } 2>/dev/null || true
+  fi
+  [ -n "$TEST_SHORT_TMP" ] && rm -rf "$TEST_SHORT_TMP"
   [ -n "$__TEST_OWN_LIVE_DIR" ] && rm -rf "$__TEST_OWN_LIVE_DIR"
   rm -rf "$TEST_TMP"
 }

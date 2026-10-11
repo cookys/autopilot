@@ -324,6 +324,14 @@ check_plan_graduation() {
   return "$rc"
 }
 
+# ─── 10. temp-prefix registry gate ───
+# Whole repo: every temp-root reference in shipped code is registered, cleaned by construction
+# or allowlisted with a reason, and the reaper's _SRR_PATTERNS equals the registry's
+# test-lockgated entries (scripts/check-tmp-residue-registry.js; plan 2026-10-12 tmp-residue).
+check_tmp_residue_gate() {
+  node scripts/check-tmp-residue-registry.js >&2
+}
+
 if [ "$ONLY_SLASH_PROBE" = "1" ]; then
   if check_slash_entry_probe; then
     exit 0
@@ -344,6 +352,7 @@ run_check "opt-in change is named in the CHANGELOG" check_optin_changelog
 run_check "slash-entry thin-shell probe (5 entries, LLM; skip: AUTOPILOT_SKIP_SLASH_PROBE=1)" check_slash_entry_probe
 run_check "north-star surface lines (prose↓ engine↑; +5% needs CHANGELOG justification)" check_north_star
 run_check "plan graduation clean (docs/BACKLOG.md queue rows, released docs/plans/*.md archived)" check_plan_graduation
+run_check "temp-prefix registry gate (check-tmp-residue-registry.js, whole repo)" check_tmp_residue_gate
 
 # ─── advisory: roster-field report ───────────────────────────────────────────
 # NOT a check and NOT counted in $FAILS — it prints the roster's

@@ -47,10 +47,10 @@ JSON
 
 # 1. Monotonic event_id assignment, event_id ignored from input
 reset
-echo "$(event_json codex gpt-5.5 reviewer available high 3600 2026-07-02T00:00:00Z)" | node "$CLI" record >/tmp/c1 2>/dev/null
-id1=$(jq_get event_id </tmp/c1)
-echo "$(event_json codex gpt-5.5 reviewer available high 3600 2026-07-02T00:01:00Z)" | node "$CLI" record >/tmp/c2 2>/dev/null
-id2=$(jq_get event_id </tmp/c2)
+echo "$(event_json codex gpt-5.5 reviewer available high 3600 2026-07-02T00:00:00Z)" | node "$CLI" record >"$TESTDIR/c1" 2>/dev/null
+id1=$(jq_get event_id <"$TESTDIR/c1")
+echo "$(event_json codex gpt-5.5 reviewer available high 3600 2026-07-02T00:01:00Z)" | node "$CLI" record >"$TESTDIR/c2" 2>/dev/null
+id2=$(jq_get event_id <"$TESTDIR/c2")
 [ "$id1" = "1" ] && [ "$id2" = "2" ] && ok "1: monotonic event_id assigned" || bad "1: got id1='$id1' id2='$id2'"
 
 # 2. Schema validation check

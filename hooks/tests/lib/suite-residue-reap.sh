@@ -209,6 +209,9 @@ _srr_probe_generic_lock() {
   return 2
 }
 
+# MUST equal the `test-lockgated` entries of scripts/lib/tmp-residue-registry.json
+# (hooks/tests/tmp-residue-registry.test.sh holds them equal). apl1.* = run.sh's per-run
+# L1 temp dir; apt.* = lib.sh's short AF_UNIX test dir; both carry an .autopilot-live.lock.
 _SRR_PATTERNS=(
   'autopilot-test-snapshot.*'
   'hetero-*'
@@ -216,6 +219,8 @@ _SRR_PATTERNS=(
   'hooks-run-parallel.*'
   'autopilot-l1-unit.*'
   'autopilot-managed-codex-home-*'
+  'apl1.*'
+  'apt.*'
 )
 
 # _srr_pattern_match <basename> → 0 if basename matches one of the fixed patterns.

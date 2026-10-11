@@ -230,6 +230,28 @@ test('without a session id the sweep still runs and no advisory is written', () 
   assert.ok(!fs.existsSync(path.join(fx.live, 'advisories')) || fs.readdirSync(path.join(fx.live, 'advisories')).length === 0);
 });
 
+test('tmp phase: the SessionStart hook\'s detached REAL sweep carries the tmp_prune receipt (aged scratch deleted, live kept)', () => {
+  const fx = fixture();
+  const tmpRoot = path.join(fx.root, 'tmproot');
+  const xdg = path.join(fx.root, 'xdg');
+  fs.mkdirSync(tmpRoot);
+  fs.mkdirSync(xdg);
+  const aged = new Date(Date.now() - 10 * 86400 * 1000);
+  const mk = (name) => { const d = path.join(tmpRoot, name); fs.mkdirSync(d); fs.utimesSync(d, aged, aged); return d; };
+  mk('dispatch-review-log-AGED');
+  mk('autopilot-dispatch-runs'); // live kind
+  delete fx.env.AUTOPILOT_RESIDUE_AUTO_SWEEP; // the shipped sweep, not the stub
+  Object.assign(fx.env, { TMPDIR: tmpRoot, XDG_RUNTIME_DIR: xdg });
+  const r = runHook(fx, { hook_event_name: 'SessionStart', session_id: SID, cwd: fx.repo });
+  assert.strictEqual(r.status, 0);
+  const resultFile = path.join(fx.common, 'autopilot-residue-auto.json');
+  assert.ok(waitFor(() => fs.existsSync(resultFile) && fs.existsSync(path.join(xdg, 'autopilot-tmp-prune.stamp'))), 'sweep finished');
+  const res = JSON.parse(fs.readFileSync(resultFile, 'utf8'));
+  assert.deepStrictEqual(res.tmp_prune.deleted, ['dispatch-review-log-AGED']);
+  assert.ok(!fs.existsSync(path.join(tmpRoot, 'dispatch-review-log-AGED')), 'aged scratch gone');
+  assert.ok(fs.existsSync(path.join(tmpRoot, 'autopilot-dispatch-runs')), 'aged live-kind dir kept');
+});
+
 test('wiring: hooks.json names the hook under SessionStart, hook-classes lists it', () => {
   const hooks = JSON.parse(fs.readFileSync(path.join(__dirname, 'hooks.json'), 'utf8'));
   const cmds = hooks.hooks.SessionStart.flatMap((b) => b.hooks.map((h) => h.command));

@@ -5,6 +5,8 @@
 #
 # Two parts:
 #   1. blind-dispatch.md issue-ref anti-rot grep (bespoke provenance guard, always).
+#   1b. scripts/check-tmp-residue-registry.js --staged (temp-prefix registry gate; staged shipped
+#      files + registry/reaper parity).
 #   2. scripts/sync-all.sh --check --changed — the manifest-driven sync/check rituals
 #      (version mirrors, agent-bodies, model-routing, codex + opencode payloads, README
 #      parity, hook inventory, canonical invariants, CLAUDE.md inventory). --changed
@@ -35,6 +37,18 @@ unset __TIG_LIB
 # with that subsection.
 if ! grep -q 'issues/10187' references/blind-dispatch.md || ! grep -q 'issues/2138' references/blind-dispatch.md; then
   echo "pre-commit: references/blind-dispatch.md lost a required issue ref (#10187 and/or #2138)" >&2
+  exit 1
+fi
+
+# --- tmp-residue gate: an unregistered temp reference cannot ship ---
+# Scans only the staged shipped files (src/ bin/ hooks/ scripts/, never tests) for temp-root
+# references that are neither registered in scripts/lib/tmp-residue-registry.json, cleaned by
+# construction, nor allowlisted with a reason; the registry/reaper parity check always runs.
+if ! TMP_GATE_OUT="$(node scripts/check-tmp-residue-registry.js --staged 2>&1)"; then
+  echo "─────────────────────────────────────────────────────────────" >&2
+  echo "pre-commit: tmp-residue gate failed (unregistered temp reference)" >&2
+  echo "─────────────────────────────────────────────────────────────" >&2
+  echo "$TMP_GATE_OUT" >&2
   exit 1
 fi
 

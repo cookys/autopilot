@@ -10,12 +10,19 @@
 #
 # Contract:
 #   prune_tmp_residue <days> <pattern>...
-#     - deletes items directly under ${TMPDIR:-/tmp} (-maxdepth 1) owned by the
-#       CURRENT user, matching <pattern>, with mtime older than <days> days
+#     - deletes items directly under ${TMPDIR:-/tmp} owned by the CURRENT user whose
+#       name matches a registry entry of kind scratch|evidence
+#       (scripts/lib/tmp-residue-registry.json), with mtime older than max(<days>, the
+#       entry's own retention); symlinks, dirs holding .autopilot-live.lock or an
+#       .autopilot-worktree marker, and dirs whose .autopilot-owner pid is alive are kept
 #     - <days> 0 / non-numeric => disabled no-op (callers pass
 #       ${AUTOPILOT_TMP_LOG_RETENTION_DAYS:-3}; 0 is the operator kill-switch)
-#     - patterns are fixed caller-side prefixes; a pattern containing '/' or
-#       starting with '.' is refused (path-traversal / dotfile guard)
+#     - the registry is the only source of patterns: every call prunes all of its
+#       scratch/evidence entries. A caller-passed pattern is honoured only if it
+#       equals one of them (so it adds nothing); any other is dropped, as is one
+#       containing '/' or starting with '.'. Live, lock, worktree and test-lockgated
+#       kinds are never age-deleted.
+#     - the work is done by scripts/lib/tmp-residue.js prune (Node); no node => no-op
 #     - ALWAYS returns 0 and stays silent: a prune failure must never break or
 #       noise up a dispatch (this runs before arg parsing on every invocation)
 #
@@ -24,57 +31,19 @@
 # reaper (lib/worktree-reap.sh gc_stale_worktrees, dispatch-status.js --reap);
 # blind mtime pruning them would race a live run.
 #
-# Registered prefixes (owned here, not by callers). Unioned with any
-# caller-passed patterns on every days>0 call. The autopilot-* family is
-# excluded: dispatch-foreman.sh --help defaults to
-# ${TMPDIR}/autopilot-foreman-runs/, a LIVE run dir; the marker guard
-# protects worktrees only.
-PRUNE_TMP_RESIDUE_PATTERNS=(
-  'dispatch-author-*'
-  'dispatch-explore-*'
-  'dispatch-review-*'
-  'dispatch-hetero-*'
-  'hetero-*-log-*'
-  'pi-rpc-session-*'
-  'hetero-detach-state-*'
-  'dispatch-anthropic-review-*'
-  'dispatch-contract-*'
-  'dispatch-plan-review-*'
-  'qc-panel-*'
-  'qc-refute-b-*'
-  'qc-emit-*'
-  'next-touch-evidence-*'
-  'hook-multiplexer-benchmark-*'
-  'verify-red-green-*'
-  'eval-selftest-*'
-  'run-ledger-*-test-*'
-)
 
 prune_tmp_residue() {
   local days="${1:-}"
   shift 2>/dev/null || return 0
   case "$days" in ''|*[!0-9]*) return 0 ;; esac
   [ "$days" -gt 0 ] 2>/dev/null || return 0
-  local tmp="${TMPDIR:-/tmp}"
-  [ -d "$tmp" ] || return 0
-  local me pat
-  me="$(id -un 2>/dev/null)" || return 0
-  for pat in "$@" "${PRUNE_TMP_RESIDUE_PATTERNS[@]}"; do
-    case "$pat" in
-      ''|*/*|.*) continue ;;
-    esac
-    # Marker guard (gpt-5.5 R3 Major): a worktree dir ALWAYS carries the
-    # .autopilot-worktree marker, and a branch name containing "log" makes the
-    # worktree name (hetero-<branch>-XXXXXX) collide with the hetero log
-    # pattern (hetero-*-log-*). A marked dir is NEVER blind-mtime-pruned here,
-    # no matter what pattern matched — worktree reaping stays lock/marker-gated
-    # in worktree-reap.sh / dispatch-status.js --reap.
-    find "$tmp" -maxdepth 1 -user "$me" -name "$pat" -mtime "+$days" \
-      \( -type f -o -type d \) -print0 2>/dev/null |
-      while IFS= read -r -d '' _pr_item; do
-        [ -e "$_pr_item/.autopilot-worktree" ] && continue
-        rm -rf -- "$_pr_item" 2>/dev/null
-      done
-  done
+  [ -d "${TMPDIR:-/tmp}" ] || return 0
+  local here cli
+  here="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)" || return 0
+  cli="$here/tmp-residue.js"
+  [ -f "$cli" ] || return 0
+  command -v node >/dev/null 2>&1 || return 0
+  # Caller patterns equal to a registry pattern are already pruned; the rest are dropped here.
+  node "$cli" prune --days "$days" >/dev/null 2>&1 || true
   return 0
 }

@@ -13,7 +13,9 @@ FAIL=0
 note() { printf '  %s\n' "$*"; }
 ok()   { printf 'ok   %s\n' "$*"; }
 bad()  { printf 'FAIL %s\n' "$*"; FAIL=1; }
-TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+TMP="$(mktemp -d "${TMPDIR:-/tmp}/autopilot-test-ladder-run-XXXXXX")"; trap 'rm -rf "$TMP"' EXIT
+# Everything ladder-run.sh and its helpers mktemp lands under $TMP, not the real ${TMPDIR}.
+export TMPDIR="$TMP"
 
 # Regression: the live implementer path must verify the implementer's returned commit,
 # not the caller's current HEAD. dispatch-hetero removes successful worktrees by default

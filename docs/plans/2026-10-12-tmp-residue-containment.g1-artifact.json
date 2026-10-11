@@ -1,0 +1,590 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "tmp-residue-containment-2026-10-12",
+  "logical_plan_id": "tmp-residue-containment-2026-10-12",
+  "session_id": "tmpres-g1-1791736470",
+  "session_key": "09a22a9baab878d216f0617a409529fcc541a8617b9b0f4c1d422546b6bf1d9f",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "43ca6deb8a286bbe17b4e7df52bf631d6e400ea036e9ff9f32c631d4f9d6ad91",
+  "manifest_sha256": "1fb4505a09cb0d9c6e1e8bcbc02712e84ec1d29d23edc058858a21ddc02c4cc5",
+  "plan_sha256": "bdd93be33fa7876edce3a839179337f999675fd9d157d3458fa7f0eafc996ff9",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "c8ec4de563fb5b2a6c20564bf81b2251ce39ae33ded9988b6638cfd749d80dad"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "b83030db77f299cb720b101b5cb13b6ca7f041c922bfa36802c3f58a9d6c9ad3",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-qdxDSA/stdout",
+          "digest": "b83030db77f299cb720b101b5cb13b6ca7f041c922bfa36802c3f58a9d6c9ad3"
+        },
+        "receipt_digest": "bbb0c1a6456ba6c81c4dec44626c4ab6daec300219e96f9c92b8f95494409b29"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "grok_deep",
+      "target_id": "grok_deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.6",
+          "operation": "plan-review",
+          "request_digest": "66865702bfb2d7f21060d0b037c21dbf578aada7b002b2a0c0f4b8cdefd83e41"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "e9b5bc8f49692a8a344bd7e33a048907ba4251909d778930c3aab2b63c216fcd",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-nBbVW8",
+          "digest": "e9b5bc8f49692a8a344bd7e33a048907ba4251909d778930c3aab2b63c216fcd"
+        },
+        "receipt_digest": "28cee5f11394074273bbfca86ec6cff1155d48983a79a1f580689a692c9dcc36"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_consult",
+      "target_id": "minimax_consult",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "ce3eae4b4f89401ccc32e9d67780006a4b2379d93e5b001a5ddab3b6c324fabd"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "2c419ec0fac1f85d48cdfd82711f8436f3dc56a9a94adc129ff2699af43eab34",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-jx0hNO",
+          "digest": "2c419ec0fac1f85d48cdfd82711f8436f3dc56a9a94adc129ff2699af43eab34"
+        },
+        "receipt_digest": "5d9b5dd31ba2a097168f7036062be4aaa8685e24ca741b7029880d787487b12d"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "family": "openai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "grok_deep",
+      "target_id": "grok_deep",
+      "family": "xai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "minimax_consult",
+      "target_id": "minimax_consult",
+      "family": "minimax",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Single registry, suite reaper, compatibility pruning wrapper, and registry gate",
+      "claim": "The plan creates two independent prefix authorities and does not prove that every age-based pruning path is unable to delete live directories.",
+      "evidence": "The JSON registry is called the single statement, but suite-residue-reap.sh retains its own prefix list and the gate accepts a prefix found in either source. Phase 3 does not require suite prefixes such as apl1.* to appear in the registry. The compatibility wrapper also continues honoring caller-supplied patterns, while rejection of live and worktree kinds is specified only for tmp-residue.js, leaving those extra patterns outside the stated kind checks.",
+      "evidence_reference": "§2.5 single-registry and mtime constraints; §2.6 Not merged with suite-residue-reap; phase 1 step 3; phase 3 steps 1-3; phase 4 step 1(a)",
+      "repair": "Make tmp-residue-registry.json enumerate every prefix, including lock-gated suite prefixes, with its owner and deletion policy. Make every reaper either derive its patterns from that registry or mechanically validate exact parity. Restrict caller-supplied wrapper patterns to registered scratch or evidence entries, reject unknown, live, and worktree patterns, and add a negative test proving a passed live pattern cannot be deleted.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "82399b505a8e9f0e92387504255804054c55f878b91d5741b293ed9a72ac2aee"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Static cleanup classification in check-tmp-residue-registry.js",
+      "claim": "The proposed same-function rule can classify cleanup as guaranteed when an exception or exit can occur before the protecting finally block or shell trap becomes active.",
+      "evidence": "Category (b) requires only a finally block or shell trap in the same function scope that names the variable. It does not require the allocation and every subsequent operation to be dominated by the protected try, nor require a shell trap to be installed before mktemp. A throw between allocation and entry into the try, or between mktemp and trap installation, would leak while satisfying the stated rule. The negative control covers only a success-path rmSync and would not detect either false negative.",
+      "evidence_reference": "Phase 4 step 1(b) and phase 4 acceptance for --self-test",
+      "repair": "Define a conservative mechanically checkable rule: the allocation must occur inside the exact try protected by the matching finally, or the shell trap must be installed before allocation and reference an immutable exact variable. Add negative controls for allocation before try, a throw before try, trap installation after mktemp, variable reassignment, and cleanup in an unrelated nested scope. Alternatively, require registration or an explicit reasoned allowlist whenever those conditions cannot be proven.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "69399dc471fe959e8bb93f8221c9d0fe24a3b44a57ceee72d1eb3348ada3ec12"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "KR1-KR5 and phase acceptance commands",
+      "claim": "Most acceptance criteria describe scenarios but do not provide commands that a zero-context engineer can run, despite the plan claiming that every KR has a named command.",
+      "evidence": "Examples include run.sh <one fast suite>, an engine review loop on a fixture repo, after a SessionStart, a real-host run, opt-out via config and env, disable the finally dispose, and a scratch commit then reset. These omit concrete harness paths, arguments, fixture setup, signal targeting, receipt locations, expected exit codes, or the name of the environment opt-out.",
+      "evidence_reference": "Project Goal success criteria; §2 KR2-KR5; phase 1-4 Acceptance subsections; §5 Test and validation",
+      "repair": "Add deterministic acceptance scripts or exact commands for every criterion, including fixture creation, process identification and signaling, clock or mtime setup, receipt capture, expected counts and exit codes, configuration and environment variable names, and cleanup. Use a temporary clone or worktree for hook negative controls instead of an unspecified scratch commit and reset procedure.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "8d66dab9664fdbc973664c3d13c02c990b937629c18850d47bb5aeb9b9af0c55"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Killed-run recovery semantics and KR2",
+      "claim": "KR2 requires the next run to reap a newly killed L1 directory, but the selected existing reaper is explicitly minimum-age-gated, so the stated acceptance is not guaranteed to pass.",
+      "evidence": "The constraints require reuse of suite-residue-reap.sh with flock plus minimum age. KR2 and phase 1 acceptance kill a run and immediately start another run expecting reaped to be at least one, without waiting for or aging the directory past the minimum threshold. A recently killed directory can therefore be correctly skipped as young while KR2 declares failure.",
+      "evidence_reference": "§2 KR2; §2.5 Never write a second reaper; phase 1 acceptance for killed-run recovery",
+      "repair": "Choose and state one semantic. If recovery means the first eligible run, assert skipped-young immediately, age or wait the fixture past the documented threshold, then assert reaping on the next start. If literal next-start recovery is required, specify a lock-safe dead-owner rule that bypasses minimum age and add race tests proving a newly created live directory remains protected.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "2edde01d1c8cbef16ced424d310bd19d99f50c771bb7a57354b9c8f4bc6a1ada"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Engine diff ownership, repair-prompt cleanup, injected providers, and digest stability",
+      "claim": "The acceptance suite does not force or observe several integrity properties required by the proposed lifetime model, allowing destructive or vacuous implementations to pass.",
+      "evidence": "The zero-residue assertion can pass for autopilot-repair-prompt-* without proving that the tested scenario ever created such a directory. No acceptance check proves that a path returned by an injected diffProvider survives success, reviewer failure, and finish. The plan also relies on inspection to confirm buildPacketOnce copied or read the diff and does not compare identity or canonical digest results before and after the ownership change.",
+      "evidence_reference": "Phase 2 steps 2-3 and Acceptance; §6 risks R4 and R7",
+      "repair": "Add tests that first prove each default-provider and repair-prompt directory existed while its consumer was active, then prove removal after the last reader on success and failure. Add injected-provider cases that retain and reread the caller-owned file after performReview and finish. Assert unchanged packet identity and canonical digest for representative identity, binding, legacy, and repair paths, and give the repair-prompt cleanup its own mutation negative control.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "24330cc478d468c9ac4dc263b90d17f325e42f3cf60fc3b7d58c3dea30c39708"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Final goal and out-of-scope boundary",
+      "claim": "The final goal promises containment for autopilot tests generally, while the approved scope explicitly permits standalone test executions to continue leaking.",
+      "evidence": "The final goal says temp artifacts created by autopilot tests stop accumulating, including artifacts from a future test that forgets cleanup. Section 7 says tests run outside hooks/tests/run.sh can still leak and excludes the preload mechanism that would contain them. Decision D3 authorizes the narrower implementation scope, but the success claim was not narrowed to match it.",
+      "evidence_reference": "Project Goal; §7 first out-of-scope item; §8 decision D3",
+      "repair": "Preserve owner decision D3 and narrow the goal and success language to tests executed through the supported hooks/tests/run.sh entry point. Explicitly state that standalone invocation is outside the guarantee and ensure no KR or completion claim implies otherwise.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d4083e3f3cca4827f93c03f78e10c211d9fc6380da9bc34b744a5ad37cff07ed"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "File map and implementation dispatch targets",
+      "claim": "Several implementation and documentation targets remain placeholders rather than concrete files or functions.",
+      "evidence": "The file map names references/… and relevant SKILL.md instead of exact paths. The legacy-loop and repair-prompt step says same pattern without naming the owning functions, and no concrete test files are assigned for the new phase 2, phase 3, or gate tests.",
+      "evidence_reference": "§3 File-structure map; phase 2 step 3; phase 3 and phase 4 acceptance sections",
+      "repair": "Replace every placeholder with an exact file path, name the legacy and repair-prompt owner functions, and assign each new behavioral or negative-control test to a concrete test file before implementation dispatch.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "9f5dcc786f9f24d1d62bf03f6d283566d28bd91df101b74a255685fd12dbe883"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "hooks/tests/engine-qualify-verdict-stability.test.sh (/tmp/aqvsd*) plus suite-residue-reap.sh lock-gated patterns",
+      "claim": "Test residue at the nine hardcoded /tmp/aqvsd* sites is cleaned only by per-test finally handlers and is outside the lock-aware reaper, so containment is not by construction and a killed run's residue is not recovered.",
+      "evidence": "The file-structure map and Phase 1 step 4 tell engine-qualify-verdict-stability.test.sh (9 /tmp/aqvsd* sites) to use finally-style cleanup because those paths must stay short for AF_UNIX. Phase 1 step 3 adds only apl1.* to _SRR_PATTERNS and to the lock-gated routing. The Phase 3 registry inventory names prune-tmp-residue prefixes plus pi-rpc-session-*, dispatch-anthropic-review-*, qual-scope.*, dispatch-consult-*, autopilot-review-loop-*, autopilot-repair-prompt-*, live dirs, evidence prefixes, and worktree creators, and does not name aqvsd*. KR2 only asserts reap of the apl1.* per-run dir. A SIGKILL during that shell test therefore leaves /tmp/aqvsd* with no lock-aware owner.",
+      "evidence_reference": "Plan §3 row hooks/tests/engine-qualify-verdict-stability.test.sh; §4 Phase 1 steps 3–4 and KR2 acceptance; §4 Phase 3 registry bullets",
+      "repair": "Create the aqvsd directories under the existing per-test TMPDIR/TEST_TMP (already short enough for AF_UNIX) so they die with the contained run; if a top-level /tmp path is mandatory, add aqvsd* to _SRR_PATTERNS lock-gated routing, hold .autopilot-live.lock in each live dir, and drop finally-only cleanup as the containment story.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "a5319aacfc39cc881f8e76c5a11747978efd324f125f71615899376d3745c47e"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "src/engine/autopilot-engine.js defaultDiffProvider, dispose(), loop collection, and finish() around :2014/:5096/:5173/:9665",
+      "claim": "finish() is specified to remove leftover collected diff dirs while the injected-provider carve-out is stated only for dispose(), so an injected test provider or any path that outlives one function can lose a file it still needs.",
+      "evidence": "Phase 2 step 2 says: The loop collects every diff dir it created; finish() removes any left (backstop for paths that throw past a finally). An injected diffProvider's files are not touched: dispose only removes a dir the default provider created. Collection is not restricted to defaultDiffProvider-created directories; the carve-out sentence binds only dispose(). Existing engine tests inject their own diffProvider (Test/validation). If the loop records those return paths, finish() deletes consumer files.",
+      "evidence_reference": "Plan §4 Phase 2 step 2; §2.5 diffProvider signature and in-place delete constraint; §5 engine-test injection note",
+      "repair": "Collect, dispose, and finish only directories created by defaultDiffProvider (explicit marker or owner set at create time). Never rm a path returned by an injected diffProvider. Add an acceptance run that injects a provider whose file must still exist after finish().",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "22f7b1fbda8be8d9d99648bb6e9ee5778568c40085be3e9764feb7a27ac086c0"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "scripts/lib/prune-tmp-residue.sh dispatch-startup prune vs scripts/lib/tmp-residue.js prune and tmp-residue-registry.json live kinds",
+      "claim": "The dispatch-startup prune path can still reach live directories with age-only deletion because the bash wrapper keeps the old pattern deleter, honours caller-passed patterns, and will see live prefixes now stored in the single registry.",
+      "evidence": "§2.6 keeps prune_tmp_residue <days> <pattern>... and says its fixed pattern array is replaced by the registry and caller-passed patterns are still honoured. Phase 3 step 3: prune-tmp-residue.sh reads patterns from the registry via node scripts/lib/tmp-residue.js patterns, keep signature/silence, behaviour otherwise unchanged. Phase 3 step 1 puts autopilot-foreman-runs, autopilot-dispatch-runs, and autopilot-<uid> in that registry as live. tmp-residue.js prune refuses live/worktree, but that refusal is not stated for patterns output or for the bash deleter used by dispatch-review.sh, dispatch-author.sh, dispatch-explore.sh, and dispatch-hetero.sh. §2.5 says mtime-only deletion applies only to kind scratch and a live directory is never mtime-pruned. Phase 3 acceptance proves live-kind refusal on the Node/KR4 path, not on those four callers.",
+      "evidence_reference": "Plan §2.5 mtime-only and live-dir constraints; §2.6 prune_tmp_residue compatibility; §4 Phase 3 steps 1–3 and acceptance",
+      "repair": "Make prune-tmp-residue.sh delegate deletion to tmp-residue.js prune (kind-aware, lock skip, no symlinks). If patterns must remain, emit only scratch and evidence, and reject caller-passed patterns that match live or worktree kinds. Extend KR4/Phase 3 acceptance with a dispatch-startup prune against an aged live fixture that must remain.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0e13b48874289a250a99a010d9eadd7f3290a5f4e0ad8a9fb6baccec4cc36926"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "§2 KR1–KR4 acceptance commands and the §2.5 leftover allowlist KR1 cites",
+      "claim": "KR1–KR4 are not runnable by a zero-context engineer with a named command: KR1 excludes an allowlist that §2.5 does not contain, and KR2–KR4 are protocols without concrete commands or fixtures.",
+      "evidence": "KR1 requires 0 new find ${TMPDIR:-/tmp} -maxdepth 1 -user $(id -un) -newer <stamp> entries after hooks/tests/run.sh, excluding the documented allowlist (§2.5). §2.5 has no leftover-entry allowlist; it does require suite_run_lock, suite_oracle_lock, and .autopilot-gc.lock to stay in shared TMPDIR, so lock files touched during the run match -newer and fail KR1. KR2 says run.sh <one fast suite> with no suite named. KR3 requires an engine review loop on a fixture repo with the default diffProvider and 0 new autopilot-review-loop-* / autopilot-repair-prompt-* dirs, with no fixture path and no test command. KR4 is after a SessionStart with no invocation a zero-context engineer can run. KR5 does name node scripts/check-tmp-residue-registry.js.",
+      "evidence_reference": "Plan §2 KR1–KR4; §2.5 lock-location and allowlist constraints; §4 Phase 1–3 acceptance",
+      "repair": "Write the KR1 leftover allowlist in §2.5 as exact maxdepth-1 names/patterns (cross-run locks and any intended sidecars). Name the KR2 fast suite. Name the Phase 2 engine test file and fixture repo. Name the SessionStart stand-in (for example the residue-auto-reap entry command plus how to read the folded JSON receipt and host stamp).",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "3ad79ca25e9b394514832ebdbeaeb2f35243eafbf3697c24b7549b71ffa2d413"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "src/engine/autopilot-engine.js identity/binding prepares :5672/:5705",
+      "claim": "Identity and binding prepares dispose after buildPacketOnce/digest rather than in finally, so a throw there depends on finish() running later.",
+      "evidence": "Phase 2 step 2: performReview calls dispose in finally after reviewDiff and classify return, but the identity and binding prepares call it after buildPacketOnce / digest. finish() is only a backstop for paths that throw past a finally. If those prepares throw and finish() is skipped, the dir leaks until the 3-day scratch backstop.",
+      "evidence_reference": "Plan §4 Phase 2 steps 2–3",
+      "repair": "Use the same finally/dispose pattern on the identity and binding prepares as performReview; keep finish() as backstop only. No current change to injected-provider policy beyond the R2 blocker repair.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "7f2dafd90d43664f5678b33cdb449782fa3d955e981b3e97f445cbdf1939add4"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "scripts/check-tmp-residue-registry.js reading hooks/tests/lib/suite-residue-reap.sh _SRR_PATTERNS",
+      "claim": "The gate's pass/fail rule is not fully mechanically specified for the bash reaper list it must treat as registered.",
+      "evidence": "Phase 4 step 1: each occurrence must be registered in tmp-residue-registry.json or suite-residue-reap.sh's list (or finally/trap or allowlisted). How the gate extracts _SRR_PATTERNS from Bash is unnamed (parser, regex, generated dump). A mis-parse either ships an unregistered prefix or fails today's repo.",
+      "evidence_reference": "Plan §2.6 gate-reads-both decision; §4 Phase 4 step 1",
+      "repair": "Specify one extractor (for example a --dump-patterns mode on the reaper, or a Node parser with a fixture in --self-test) and add a negative control where a prefix only in a malformed _SRR_PATTERNS line is not treated as registered. Follow-up only if the R3/R6 blockers land first.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "785c7d7ba5cfcc02b83214dce4e7083b4e2ed5b246e0eebca96e96925fee9560"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "docs four-place wiring rows and Phase 1 TMPDIR assertion coverage",
+      "claim": "Two wiring targets are not named as files, and Phase 1 only re-verifies one snapshot test for TMPDIR path assertions.",
+      "evidence": "The file-structure map lists docs/scripts-inventory.md, CLAUDE.md grouped list, references/… (residue reference), relevant SKILL.md table. Ellipsis and relevant SKILL.md are not concrete paths. Phase 1 acceptance re-verifies test-snapshot.test.sh and adds one L1 per-run-dir assertion, without a named grep or test list for other hardcoded /tmp expectations that would go red when L1 TMPDIR changes.",
+      "evidence_reference": "Plan §3 last row; §4 Phase 1 step 4 and acceptance",
+      "repair": "Name the residue reference file and each SKILL.md table to edit. Add a Phase 1 command that lists remaining hardcoded /tmp or os.tmpdir() writes under hooks/tests and scripts/*.test.* except the documented AF_UNIX exceptions. No current change; follow-up only.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "f0a8f8a73954309faac29c2ab6fbad4312ec422734030f2e34c5ddf0b44b9953"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "Phase 2 step 2 — dispose timing for the identity and binding prepares in src/engine/autopilot-engine.js around lines 5672 and 5705, which buildPacketOnce (src/runners/review-packet.js:601) feeds",
+      "claim": "The R2 invariant (every runtime temp file the plan deletes is deleted only after its last reader returns) rests on buildPacketOnce having fully consumed the diff before dispose, but the plan defers that verification to implementation as an unresolved 'Confirm' and only states the timing as an unverified assumption in §6 R7",
+      "evidence": "Phase 2 step 2 second sub-bullet reads 'The identity and binding prepares (:5672, :5705) call it after buildPacketOnce / digest. Confirm buildPacketOnce (src/runners/review-packet.js:601) has read or copied the diff before the dispose.' The 'Confirm' is left open. The matching safety test appears only as §6 R7 mitigation text ('a test asserts the reviewer saw the diff content before dispose') and is not folded into phase 2 acceptance; the stated mutation check ('disable the finally dispose and the test fails') catches absence of dispose but not premature dispose. Async/await between buildPacketOnce and the dispose is asserted but not demonstrated anywhere in the plan.",
+      "evidence_reference": "plan §4 phase 2 step 2; §4 phase 2 acceptance bullets; §6 R7",
+      "repair": "Promote the §6 R7 mitigation test ('a test asserts the reviewer saw the diff content before dispose') into the phase 2 acceptance criteria as an explicit named test; resolve the 'Confirm buildPacketOnce' verification before phase 2 merges on develop, and add a second test that fails if dispose runs before a synchronously-visible consumer has read the path (e.g., a fake diffProvider that throws if read after dispose).",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_consult",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "edb768d88ad8eb586a042a1ec41ec3645c28c4b0800e228a2852807d40db6e01"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "Phase 3 step 1 — retention days for the scratch entries autopilot-review-loop-* and autopilot-repair-prompt-* in scripts/lib/tmp-residue-registry.json",
+      "claim": "The registry plan leaves the retention days for the two runtime scratch backstop prefixes unspecified, so the backstop window that protects against a killed engine (R2/R4 symmetry) and the in-progress-work boundary are both underspecified and may miscalibrate",
+      "evidence": "Phase 3 step 1 first bullet lists 'autopilot-review-loop-* (scratch; backstop for killed engines)' and 'autopilot-repair-prompt-*' as scratch entries with no explicit retention value. §2.5 sets the registry default to AUTOPILOT_TMP_LOG_RETENTION_DAYS (3 days); three days is long enough to delete legitimate long-running work and short enough that the killed-engine backstop is mostly historical, while a shorter value can race live work and a longer value defeats the daily prune as a recovery mechanism. No test in KR4 or phase 3 acceptance pins the chosen value.",
+      "evidence_reference": "plan §4 phase 3 step 1 bullet 1; §2.5 default retention; §2 KR4 acceptance",
+      "repair": "Set explicit retention days for autopilot-review-loop-* and autopilot-repair-prompt-* in the registry, justified by the killed-engine cleanup window and the typical review-loop duration; add a KR4-adjacent test that plants a review-loop dir aged just inside the retention boundary (must be deleted) and a freshly-created one (must be kept), and assert the same for repair-prompt. Record the rationale next to the registry entries so the gate reviewer can see it without reading the plan.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_consult",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "851563f0fe22247095fb8a894e95e6c9bb95181b75c1779f19f0d7849915577a"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "9f5dcc786f9f24d1d62bf03f6d283566d28bd91df101b74a255685fd12dbe883",
+      "rubric_id": "R7",
+      "affected_surface": "File map and implementation dispatch targets",
+      "claim": "Several implementation and documentation targets remain placeholders rather than concrete files or functions.",
+      "evidence_reference": "§3 File-structure map; phase 2 step 3; phase 3 and phase 4 acceptance sections",
+      "disposition": null
+    },
+    {
+      "fingerprint": "7f2dafd90d43664f5678b33cdb449782fa3d955e981b3e97f445cbdf1939add4",
+      "rubric_id": "R2",
+      "affected_surface": "src/engine/autopilot-engine.js identity/binding prepares :5672/:5705",
+      "claim": "Identity and binding prepares dispose after buildPacketOnce/digest rather than in finally, so a throw there depends on finish() running later.",
+      "evidence_reference": "Plan §4 Phase 2 steps 2–3",
+      "disposition": null
+    },
+    {
+      "fingerprint": "785c7d7ba5cfcc02b83214dce4e7083b4e2ed5b246e0eebca96e96925fee9560",
+      "rubric_id": "R5",
+      "affected_surface": "scripts/check-tmp-residue-registry.js reading hooks/tests/lib/suite-residue-reap.sh _SRR_PATTERNS",
+      "claim": "The gate's pass/fail rule is not fully mechanically specified for the bash reaper list it must treat as registered.",
+      "evidence_reference": "Plan §2.6 gate-reads-both decision; §4 Phase 4 step 1",
+      "disposition": null
+    },
+    {
+      "fingerprint": "f0a8f8a73954309faac29c2ab6fbad4312ec422734030f2e34c5ddf0b44b9953",
+      "rubric_id": "R7",
+      "affected_surface": "docs four-place wiring rows and Phase 1 TMPDIR assertion coverage",
+      "claim": "Two wiring targets are not named as files, and Phase 1 only re-verifies one snapshot test for TMPDIR path assertions.",
+      "evidence_reference": "Plan §3 last row; §4 Phase 1 step 4 and acceptance",
+      "disposition": null
+    },
+    {
+      "fingerprint": "edb768d88ad8eb586a042a1ec41ec3645c28c4b0800e228a2852807d40db6e01",
+      "rubric_id": "R2",
+      "affected_surface": "Phase 2 step 2 — dispose timing for the identity and binding prepares in src/engine/autopilot-engine.js around lines 5672 and 5705, which buildPacketOnce (src/runners/review-packet.js:601) feeds",
+      "claim": "The R2 invariant (every runtime temp file the plan deletes is deleted only after its last reader returns) rests on buildPacketOnce having fully consumed the diff before dispose, but the plan defers that verification to implementation as an unresolved 'Confirm' and only states the timing as an unverified assumption in §6 R7",
+      "evidence_reference": "plan §4 phase 2 step 2; §4 phase 2 acceptance bullets; §6 R7",
+      "disposition": null
+    },
+    {
+      "fingerprint": "851563f0fe22247095fb8a894e95e6c9bb95181b75c1779f19f0d7849915577a",
+      "rubric_id": "R3",
+      "affected_surface": "Phase 3 step 1 — retention days for the scratch entries autopilot-review-loop-* and autopilot-repair-prompt-* in scripts/lib/tmp-residue-registry.json",
+      "claim": "The registry plan leaves the retention days for the two runtime scratch backstop prefixes unspecified, so the backstop window that protects against a killed engine (R2/R4 symmetry) and the in-progress-work boundary are both underspecified and may miscalibrate",
+      "evidence_reference": "plan §4 phase 3 step 1 bullet 1; §2.5 default retention; §2 KR4 acceptance",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-10-11T16:47:00.916Z"
+}

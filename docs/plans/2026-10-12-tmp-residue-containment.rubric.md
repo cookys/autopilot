@@ -1,0 +1,12 @@
+# Frozen rubric — TMPDIR residue containment (logical_plan_id: tmp-residue-containment-2026-10-12)
+
+Frozen 2026-10-12 before G1. Reviewers judge the plan against these items only. §8 "Proposal decisions" D1–D3 and the no-version-bump constraint are owner rulings and are out of scope for a blocker unless the plan contradicts them internally. Citations in the plan are provenance, not reading assignments: judge the plan text as written.
+
+- R1: [containment-by-construction] Test temp residue is contained without relying on each test cleaning up; a killed run's residue is recovered by an existing lock-aware reaper; a live run's directory can never be deleted; cross-run locks keep their shared location.
+- R2: [runtime-lifetime] Every runtime temp file the plan deletes is deleted only after its last reader returns, on success and failure paths; no consumer (including injected test providers and any path that outlives one function) can lose a file it still needs; no identity or digest changes as a side effect.
+- R3: [single-registry] There is exactly one statement of which temp prefixes exist and who cleans them; every pruning path and the gate read it; the decision not to merge the test reaper's list is justified, and no live directory is reachable by age-only deletion.
+- R4: [fires-in-practice] Each mechanism is shown firing on its real entry point (test runner, SessionStart sweep, pre-commit, release preflight), with a throttle/opt-out that is tested; nothing is wired but inert.
+- R5: [gate-soundness] The gate's pass/fail rule is mechanically decidable, has a negative control that must fail, distinguishes success-path-only cleanup from guaranteed cleanup, handles non-literal prefixes explicitly, and its allowlist entries carry reasons; it cannot make today's repo red on enable.
+- R6: [acceptance-is-behaviour] Every acceptance criterion measures observed behaviour (counts before/after, receipts, exit codes of negative controls), not the presence of code; each is runnable by a zero-context engineer with the named command.
+- R7: [executability-and-order] Steps name files, functions and commands concretely; the phase dependency map matches the phase contents; each phase lands on develop without breaking existing tests or users.
+- R8: [scope-and-risk] Risks and inversions are real and mitigated; out-of-scope items are explicit and do not undercut the final goal; the no-version-bump constraint is handled without inventing a CHANGELOG convention.

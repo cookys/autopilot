@@ -359,6 +359,7 @@ hooks/tests/autopilot-engine-park-reserve.test.sh|partial roster fixture, resolv
 hooks/tests/autopilot-engine-repair-branch.test.sh|partial roster fixture, resolves consult/discuss via the default
 hooks/tests/autopilot-engine-wall-expiry.test.sh|partial roster fixture, resolves consult/discuss via the default
 hooks/tests/autopilot-engine.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/engine-diff-lifetime.test.sh|in-process roster object literal for a temp-dir lifetime fixture, never resolved from config; consult/discuss not involved
 hooks/tests/calendar-teeth-negative.test.sh|partial roster fixture, resolves consult/discuss via the default
 hooks/tests/campaign-boundary-receipt-e2e.test.sh|bridge-fixture roster literal
 hooks/tests/campaign-dispatch-projection.test.sh|partial roster fixture, resolves consult/discuss via the default

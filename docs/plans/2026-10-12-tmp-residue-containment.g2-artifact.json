@@ -1,0 +1,614 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "tmp-residue-containment-2026-10-12",
+  "logical_plan_id": "tmp-residue-containment-2026-10-12",
+  "session_id": "tmpres-g2-1791737388",
+  "session_key": "09a22a9baab878d216f0617a409529fcc541a8617b9b0f4c1d422546b6bf1d9f",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "43ca6deb8a286bbe17b4e7df52bf631d6e400ea036e9ff9f32c631d4f9d6ad91",
+  "manifest_sha256": "1fb4505a09cb0d9c6e1e8bcbc02712e84ec1d29d23edc058858a21ddc02c4cc5",
+  "plan_sha256": "a3781c0c11a594eb69068af4ed4453f7a4a64f461bf4e1b350b5ba980fff9d3c",
+  "growth_ratio": {
+    "numerator": 13243,
+    "denominator": 10953
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "47484d171f10f5fa19f44509ffb68fc47342d0881a02f06769b3f0b1a37a600d"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "44f8783e91bdab8f8472194d1303e2a839e066292cb3535ecc042ee909e6d446",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-S6i40V/stdout",
+          "digest": "44f8783e91bdab8f8472194d1303e2a839e066292cb3535ecc042ee909e6d446"
+        },
+        "receipt_digest": "0ad202ecfae410841bd5a2b403f58b702a1eea4b5fc2af9f6f8e27f7c7178261"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "grok_deep",
+      "target_id": "grok_deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.6",
+          "operation": "plan-review",
+          "request_digest": "f61712fbc882dffd3648e7d21c1857abf4cc54ced5ff5e4b189d300ae96ec149"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "c0f5909758778fda9f25abd7a9374700fca4be889a62be804fc08e6c1c134143",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-hnDa2i",
+          "digest": "c0f5909758778fda9f25abd7a9374700fca4be889a62be804fc08e6c1c134143"
+        },
+        "receipt_digest": "7ed8185ee4a38e3329988803a5031b924388f4bcdf737cd0aa33674ed31738fc"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_consult",
+      "target_id": "minimax_consult",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "9713951597a294ba26f608ebb4d3071b6816786d2fcea5f12b0382f58860045b"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "c82b8bf8f8aa4b39bc187f3312cc783e34cb67447f86ecc43b2664436df8ea43",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-PJKKA5",
+          "digest": "c82b8bf8f8aa4b39bc187f3312cc783e34cb67447f86ecc43b2664436df8ea43"
+        },
+        "receipt_digest": "ece0715cf48e4a84f13a2c163fc3599561d9024edf0c9276cb3f52d844727c54"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "family": "openai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "grok_deep",
+      "target_id": "grok_deep",
+      "family": "xai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "minimax_consult",
+      "target_id": "minimax_consult",
+      "family": "minimax",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Engine-owned diff directories and finish() cleanup",
+      "claim": "The module-level owned-directory Set does not isolate concurrent engine instances, so one instance's finish() can delete another instance's diff directory while that instance still has a reader.",
+      "evidence": "Phase 2 records every defaultDiffProvider directory in a module-level Set and says dispose() and finish() remove members of that Set. The plan provides no singleton invariant, per-instance ownership token, or finish() filtering rule.",
+      "evidence_reference": "Section 4, Phase 2, step 2; Section 2, KR3",
+      "repair": "Track owned directories per engine or campaign instance, or associate every entry with an owner token and restrict finish() to that owner. Add a two-instance concurrency test proving that finishing one instance preserves the other's live diff.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "e8cab8784a4f6d6a68afadf817b69d8a9a51d0ec3474ffb1a98d8a13476cea97"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Age-based pruning of runtime scratch directories",
+      "claim": "Active runtime directories remain reachable by age-only deletion because the plan classifies them as scratch without requiring their owners to hold a live lock for the complete reader lifetime.",
+      "evidence": "Phase 3 assigns one-day scratch retention to autopilot-review-loop-*, autopilot-repair-prompt-*, and dispatch-consult-* based on a normal wall-time bound. tmp-residue.js age-prunes scratch entries and merely skips a live lock when one exists, while Phase 2 does not require these owners to create and hold such a lock. A suspended or hung live process can therefore outlive the retention threshold.",
+      "evidence_reference": "Section 4, Phase 3, steps 1-2; Section 4, Phase 2; Section 6, risk R3",
+      "repair": "Require every age-prunable runtime directory to hold a lock for its entire reader lifetime and make pruning perform a lock-aware recheck, or remove those directories from age-only pruning and recover them through a lock-aware path. Test this with an actual live owner older than the threshold.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "880cf425838907e0a7f0f716b708fb3d7404838812bb61cb912ce86de3f3027d"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Registry authority and gate registration rule",
+      "claim": "The gate creates a second registration authority by accepting a prefix found only in suite-residue-reap.sh, contrary to the registry being the single statement of prefixes and cleaners.",
+      "evidence": "The global constraint says every gate reads the registry and that the reaper list must equal registry test-lockgated entries. Phase 4 instead accepts registration in either the registry or the reaper list. The parity check is described as a test, not as an invariant enforced by both real gate entry points, so a reaper-only prefix can pass pre-commit while remaining absent from the registry.",
+      "evidence_reference": "Section 2.5 single-registry constraint; Section 4, Phase 4, step 1(a); Section 3 parity-test row",
+      "repair": "Make the gate accept managed prefixes only from tmp-residue-registry.json and enforce registry-to-reaper parity during every pre-commit and release gate execution. Treat the reaper list strictly as a derived consumer.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "71f92c3eb9b59dd0b96eccabef8cff36a8bb9eacd3792b2219c4a91846d6182e"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Static gate detection coverage",
+      "claim": "The specified recognizer does not establish that every new host-temp prefix is examined, so an unregistered prefix can bypass the gate through an allocation form outside the listed patterns.",
+      "evidence": "Phase 4 names mkdtemp, mkdtempSync, mktemp, and fixed prefixes joined from os.tmpdir() or TMPDIR. It does not define handling for direct /tmp paths, indirect temp-root variables, mkdir-based allocation, file creation or redirection, or helper wrappers. The non-literal rule applies only after an occurrence has been recognized, and the self-tests do not include these bypass forms.",
+      "evidence_reference": "Section 4, Phase 4, step 1; Section 2, KR5",
+      "repair": "Define a closed, mechanically enforced allocation boundary: either flag every shipped-code reference to a host temp root unless it uses an approved helper, or enumerate all supported creation and path-construction forms. Add negative controls for direct paths, indirect roots, mkdir, file creation, shell redirection, and wrapper calls.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "deb954a17fb9d87a17c21cb1baa630510c7b7e1fb41f492509eec56646a2b3ae"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "KR commands and phase acceptance criteria",
+      "claim": "The acceptance contract can report success after a failed test run and includes criteria that lack executable commands or measure wiring rather than behavior.",
+      "evidence": "KR1 separates stamp creation, run.sh, and new-since with semicolons, so its final exit status can be zero even when run.sh fails. Other acceptance bullets require an unspecified real-host run, a manual mutation, or a placeholder fast suite. The Phase 3 and Phase 4 inventory checks verify documentation wiring rather than observed residue behavior.",
+      "evidence_reference": "Section 2, KR1; Section 4 acceptance blocks for Phases 1-4; Section 5",
+      "repair": "Put each KR in a named fail-fast test or chain every required command with failure propagation. Encode the mutation and real-entry-point scenarios in those tests, replace placeholders with exact commands, and move inventory or documentation checks to a separate validation section.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "513d22bae56b708ab7752f6084a9ba1fb9ca63f6016a5b4d8cd52cc4641c16ac"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Phase dependency map and Phase 1 acceptance",
+      "claim": "Phase 1 cannot satisfy its own acceptance because KR1 depends on artifacts assigned to Phase 3, while Phase 3 also assumes Phase 1's new prefixes and parity state.",
+      "evidence": "Phase 1 acceptance requires KR1, whose command invokes scripts/lib/tmp-residue.js new-since and registry kinds. The file map creates tmp-residue.js and tmp-residue-registry.json in Phase 3. Phase 3 then expects apl1.* and apt.* from Phase 1 in the registry and parity test. The stated dependency map mentions only Phase 4 depending on Phase 3.",
+      "evidence_reference": "Section 2, KR1; Section 3 file-structure map; Section 4 phase preamble and Phases 1 and 3",
+      "repair": "Fold the registry and the read-only new-since capability into Phase 1 before its containment acceptance, leaving pruning and the daily trigger for Phase 3, and state the resulting dependencies explicitly.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "1706d42bd68382a14af3a87374598d91e58ea1b4c135f5e61820fd50b95259d4"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "hooks/tests/lib.sh TEST_SHORT_TMP (apt.*)",
+      "claim": "The apt.* short dir is treated as lock-gated residue while its live lock is not specified to live inside that dir for every lib.sh consumer, so the existing reaper can delete a live run dir.",
+      "evidence": "Section 3 has lib.sh export TEST_SHORT_TMP from mktemp -d /tmp/apt.XXXXXX, marks apt.* as test-lockgated, and says coverage is the test's existing .autopilot-live.lock sidecar. suite-residue-reap.sh lock-gates a directory only when that directory itself holds the sidecar (KR2, lib.sh:243-255, L1_TMP). A lock on a different tree such as TEST_TMP does not protect apt.*. lib.sh is sourced by many tests; with --parallel, a sibling suite_residue_reap after AUTOPILOT_SUITE_REAP_MIN_AGE (default 60s) can reap a still-in-use apt.* tree and break the AF_UNIX short-path sites.",
+      "evidence_reference": "Plan §3 row hooks/tests/lib.sh + engine-qualify-verdict-stability.test.sh; §2 KR2 lock-held keep; §2.5 reuse suite-residue-reap.sh and never a second reaper; Phase 1 step 4 apt.* on _SRR_PATTERNS",
+      "repair": "In lib.sh, allocate TEST_SHORT_TMP, flock $TEST_SHORT_TMP/.autopilot-live.lock for the sourcing suite lifetime (same sidecar as L1_TMP), and rm -rf that dir on EXIT. State that this lock lives in the apt.* dir. If only engine-qualify-verdict-stability.test.sh needs the short root, allocate it there instead of at lib.sh source time. Registry kind test-lockgated for apt.* is added in phase 3.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "1aafb1d29e310614c459621c8ac91eb0953f7af780b06dd0d5816aec35b4a368"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "KR1 command / scripts/lib/tmp-residue.js new-since",
+      "claim": "KR1 cannot demonstrate containment-by-construction because new-since has no defined scan universe and --exclude-kind live,lock is not a closed observation window.",
+      "evidence": "KR1 is: stamp, bash hooks/tests/run.sh --parallel, then node scripts/lib/tmp-residue.js new-since --stamp S --exclude-kind live,lock --json prints entries:[]. Section 3 only names the subcommand. If new-since glob-matches registry prefixes only, a run.sh test that writes a fresh hardcoded /tmp prefix is omitted and KR1 stays green while residue grows (the §0 failure). If it lists every current-user TMPDIR child, kind worktree is still reported (phase 3 registers worktree creators) and unmatched names have no kind, so --exclude-kind is undefined for them; a green full suite that creates tmp worktrees cannot print entries:[]. The stamp path from mktemp /tmp/kr1.XXXXXX also sits in TMPDIR with no omit rule.",
+      "evidence_reference": "Plan §2 KR1; §2.5 kinds scratch, evidence, test-lockgated, live, lock, worktree; §3 tmp-residue.js new-since row; §0 leftover prefixes outside the old lists",
+      "repair": "Pin the new-since contract in KR1 and in tmp-residue.js: current-user direct children of the measured TMPDIR, no symlinks, mtime at or after the stamp, omit the stamp path itself. Attach registry kind on prefix match; classify unmatched names as unmatched and include them. Keep excluding live and lock as written, and exclude worktree as well (or assert the suite left zero worktree children). entries:[] is then a closed behavioural check.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "1c24186963df669fece986ec629b38a91a96161f60f864b81b07e025a644e99c"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "scripts/lib/tmp-residue-registry.json, Phase 3 step 1, Phase 4 gate rule (a)",
+      "claim": "The plan states one registry that every prune path and the gate read, then specifies a second registration source for the gate and a phase-3 inventory that omits the kinds KR1 and the reaper need.",
+      "evidence": "Section 2.5/2.6: scripts/lib/tmp-residue-registry.json is the single statement; kinds include test-lockgated and lock; _SRR_PATTERNS equals test-lockgated via hooks/tests/tmp-residue-registry.test.sh so the gate reads only the registry; KR1 names .autopilot-suite-run.*.lock, .autopilot-suite-oracle.{lock,owner}, .autopilot-gc.lock as kind lock. Phase 4 rule (a) accepts a prefix registered in that JSON or in suite-residue-reap.sh. Pre-commit runs the gate, not the parity test, so a prefix added only to _SRR_PATTERNS ships with no registry owner or kind. Phase 3 step 1 lists today's prune-tmp-residue.sh prefixes plus named scratch, live, evidence, and worktree entries, and never names apl1.*, apt.*, autopilot-test-*, or the lock files. The §3 table kinds are only scratch/live/evidence/worktree. Phase 1 step 4 also says add apt.* to the registry before that file exists.",
+      "evidence_reference": "Plan §2.5 one registry file and kind list; §2.6 One statement, two deleters; §2 KR1 lock names; §3 tmp-residue-registry.json row; §4 Phase 3 step 1; §4 Phase 4 step 1(a); Phase 1 step 4",
+      "repair": "Gate rule (a) matches extracted prefixes only against tmp-residue-registry.json (all kinds). Keep the parity test as _SRR_PATTERNS equals the test-lockgated entries, and run it on the same pre-commit/preflight path as the gate. Rewrite phase 3 step 1 and the §3 kind list to include every §2.5 kind: test-lockgated apl1.*, apt.*, autopilot-test-* (and remaining _SRR_PATTERNS), lock prefixes exactly as KR1, plus the scratch/live/evidence/worktree sets already named. Phase 1 updates only _SRR_PATTERNS; the registry file is created in phase 3 with those rows. Age-only prune stays scratch/evidence only.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "ad99d3992c375b646c0fa6c68eb3bb7b3faa7949944dac226349d66e62bea597"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "check-tmp-residue-registry.js rule (b) and KR5 --self-test",
+      "claim": "The gate pass/fail rule and the required negative control disagree on allocation immediately before try, so the rule is not mechanically decidable from this text.",
+      "evidence": "Phase 4 rule (b) accepts JS allocation as the first statement of a try, or the assignment immediately before that try with nothing between, whose finally removes the variable. KR5 --self-test requires a planted fixture named allocation before the try to yield exit 1, in the same list as success-path-only rmSync and mktemp before its trap. An assignment immediately before try is a pass under rule (b) and a fail under KR5. An implementer can ship either behaviour and still claim KR5.",
+      "evidence_reference": "Plan §4 Phase 4 step 1(b); §2 KR5 --self-test planted fixtures",
+      "repair": "Name distinct plants that follow rule (b): assignment immediately before try with nothing between and finally removing the variable is a --self-test pass (guaranteed cleanup); allocation before try with an intervening statement is exit 1; keep unregistered literal prefix, success-path-only rmSync, mktemp before trap, and unextractable prefix without allowlist as exit 1. Use those names in KR5 and in hooks/tests/check-tmp-residue-registry.test.sh.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "2b1dc3a36c012b5ff3a2d2c9c10c3434b483fd8080adf6a6e9724ac87dda61ca"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Gate scan roots vs hooks/l1-tmpdir.test.js",
+      "claim": "The L1 probe is inside the shipped-code scan, calls os.tmpdir(), and is therefore an unextractable-prefix finding, which reds the tree on enable and collides with test files are not gated.",
+      "evidence": "Phase 4 scans src/, bin/, hooks/ (not hooks/tests/), and scripts/ (not *.test.*). The probe path in §3 and KR2 is hooks/l1-tmpdir.test.js: it is under hooks/, outside hooks/tests/, so it is scanned. The scanner flags os.tmpdir() and ${TMPDIR-joined prefixes and treats a non-literal prefix it cannot extract as a finding unless allowlisted. KR2 (a) requires that file to read os.tmpdir(). Phase 4 step 2 says test files are not gated. Enable-after-allowlist still needs an unplanned allowlist row for this probe, or the gate fails on today's repo.",
+      "evidence_reference": "Plan §4 Phase 4 steps 1-2 scan roots and test-file sentence; §2 KR2 (a); §3 new tests row hooks/l1-tmpdir.test.js",
+      "repair": "Put the probe on a path the gate already excludes (a hooks/tests/ file that run.sh still launches as the L1 node --test probe, or a scripts/*.test.js), or exclude **/*.test.js from every scan root, and print that rule in the gate header. Do not use an allowlist row as the way tests escape the gate.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "20ddadfc4eb93b0c6c05b74ee850da6a6c4608f0917a3b4b0a3d88647aaaf4b0"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "src/engine/autopilot-engine.js owned-dir Set",
+      "claim": "A module-level Set of owned diff dirs lets finish() remove a directory another in-process engine still needs.",
+      "evidence": "Phase 2 records each defaultDiffProvider dir in a module-level Set; dispose() and finish() delete only members of that set, which protects injected providers (KR3 (4)). Two engine objects in one Node process share a module-level Set, so finish() on one instance rmSyncs dirs the other instance's reviewer still has open. Existing engine tests inject providers; the new default-provider test and any future in-process overlap are the exposed path.",
+      "evidence_reference": "Plan §4 Phase 2 step 2 module-level Set and finish() backstop; §2 KR3 (4) injected provider; §2.5 diffProvider signature unchanged",
+      "repair": "Store the owned-dir Set on the engine instance (or state that AutopilotEngine is a process singleton and finish() runs once). Keep the injected-provider exclusion.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "e75fd2fd17807c5af0ae46a336a742b954513a89f1601433f2113079e460418e"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "KR2 vs run.sh reaper entry",
+      "claim": "Killed-run recovery is shown by calling suite_residue_reap on a fixture, so run.sh can omit apl1.* from its real reaper invocation and KR2 still passes.",
+      "evidence": "KR2 (b) builds an apl1.* dir, kill -9s the lock holder, backdates the lock past AUTOPILOT_SUITE_REAP_MIN_AGE, runs suite_residue_reap, and asserts reaped >= 1. The production entry in the rubric is the test runner. Phase 1 acceptance instead kills run.sh and runs run.sh again, with no backdate, so the second run can skip under the default 60s min age. Either procedure can pass while __suite_on_exit never passes apl1.* to the reaper.",
+      "evidence_reference": "Plan §2 KR2 (b)(c); §4 Phase 1 acceptance KR2; §2.5 reuse suite-residue-reap.sh; §6 R6 wired-but-off",
+      "repair": "Encode both in hooks/tests/l1-tmpdir-containment.test.sh: keep the backdated direct call, and add a nested run.sh that is kill -9'd during L1 plus a second run.sh whose reaper receipt includes that orphan apl1.* (backdate or wait past min age). Phase 1 acceptance names that same command only.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "2e496fee7831653b630c5547ed4eefe9b2145a8ab09212afe7d6f1b3ee9ddf4f"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Phase 1-3 acceptance bullets vs KR2/KR3/KR4",
+      "claim": "Phase acceptance still includes procedures that are not the named KR commands and are not pass/fail for a zero-context engineer.",
+      "evidence": "Phase 1 KR2 acceptance is a kill-and-rerun story distinct from bash hooks/tests/l1-tmpdir-containment.test.sh. Phase 2 acceptance lists success, git diff failure, and reviewer throw, and omits KR3's identity/binding throw, injected-provider survival, digest pin, and repair-prompt non-vacuous creation, so phase 2 can be called done with engine-diff-lifetime.test.sh incomplete. Phase 3 asks for a real-host run whose receipt lists actual deleted entries, with no command or assertion, while §5 says human-gated: none.",
+      "evidence_reference": "Plan §2 KR2 KR3 KR4; §4 Phase 1-3 Acceptance; §5 Human-gated none; §2.5 acceptance records observed behavior",
+      "repair": "Replace those bullets with the KR commands in §2. Phase 2 acceptance is bash hooks/tests/engine-diff-lifetime.test.sh and bash hooks/tests/dispatch-consult-trap.test.sh only. Drop the unscripted real-host inspection, or replace it with node scripts/repo-residue-sweep.js reap --auto --yes --json and assert tmp_prune has deleted or skipped (exit 0).",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "84707f2436538e57ebca6e27ce762cb9bdbd93aac8485e6705acbbc62eadec17"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Phase 1 vs phase 3 file list; hooks/README.md",
+      "claim": "Phase contents tell phase 1 to edit a registry file that phase 3 creates, and the scope-audit doc surface is missing from the file-structure map.",
+      "evidence": "The phase map says phases 1 and 2 are independent and the registry is new in phase 3. Phase 1 step 4 says add apt.* to _SRR_PATTERNS and the registry. Landing phase 1 first has no scripts/lib/tmp-residue-registry.json to edit. Scope completeness requires hooks/README.md (residue-auto-reap row gains the tmp phase) and docs/scripts-inventory.md; §3 lists docs/scripts-inventory.md, CLAUDE.md, references/hetero-dispatch.md, and skills/finish-flow/SKILL.md, and omits hooks/README.md.",
+      "evidence_reference": "Plan §4 opening dependency sentence; Phase 1 step 4; Scope completeness User-facing docs and Config templates; §3 File-structure map",
+      "repair": "Phase 1 edits run.sh, suite-residue-reap.sh, and the three escapers only. Phase 3 creates the registry including apt.* and apl1.*. Add hooks/README.md to the §3 table in phase 3 beside residue.auto_reap.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "1d4b4539bbda0a6a6adeffa41db9dc84a911286f615ebb05a2819ddd39299322"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "project README pending-a-version sentence",
+      "claim": "The no-version-bump constraint is recorded in the Review log and still omits the README row the same constraint names.",
+      "evidence": "Section 2.5 requires recording the change as pending a version in this plan's Review log and the project README, and forbids a CHANGELOG version section. The Review log already has that sentence. §3 does not list README.md, so the second required surface can be skipped while still claiming the constraint is handled.",
+      "evidence_reference": "Plan §2.5 first constraint; Review log Pending a version; §3 File-structure map; Scope completeness CHANGELOG deferred",
+      "repair": "Add README.md to the §3 table (one pending-a-version sentence, no CHANGELOG section, no sync-version.js). Keep the Review log line as written.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_deep",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "9fd5e062090b53619d05bfef662f2b88638a0bbcefd2dffd0bfe7435193d87eb"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "phase 4 gate scope rules and the 'Test files are not gated' claim",
+      "claim": "The gate's scan scope rules scan hooks/*.test.js files (e.g., hooks/l1-tmpdir.test.js) but step 2 of phase 4 says 'Test files are not gated'; the plan does not specify which side resolves the mismatch (extend the scope exclusion to hooks/*.test.*, or register the test file's temp calls in the registry or allowlist).",
+      "evidence": "Phase 4 step 1 names the scan paths as 'src/, bin/, hooks/ (not hooks/tests/), and scripts/ (not *.test.*)'; phase 4 step 2 states 'Test files are not gated: phase 1 contains them by construction'; the file-structure map places hooks/l1-tmpdir.test.js under hooks/, not hooks/tests/, so the gate scans it while step 2 says test files are exempt. The --self-test negative controls (planted unregistered prefix, success-path-only rmSync, allocation before try, mktemp before trap, unextractable prefix without allowlist) cover content rules but not the scope exclusion rules.",
+      "evidence_reference": "Plan §4 phase 4 steps 1-2; §3 file-structure map entry hooks/l1-tmpdir.test.js (under hooks/, not hooks/tests/); §2 KR2(a).",
+      "repair": "Pick one: (a) extend the gate's scope rules to exclude hooks/*.test.* alongside the existing hooks/tests/ and scripts/*.test.* exclusions so step 2's claim holds, or (b) drop 'Test files are not gated' from step 2 and require hooks/l1-tmpdir.test.js (and any future hooks/*.test.*) to register its temp prefixes in tmp-residue-registry.json (kind test-lockgated) or in tmp-residue-allowlist.json with a reason. No current change; follow-up only before phase 4 acceptance.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_consult",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "69ab714f993d7ae81da81bdeeefac106845a11dad7aef1e7ec5862ea89fe162b"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "e75fd2fd17807c5af0ae46a336a742b954513a89f1601433f2113079e460418e",
+      "rubric_id": "R2",
+      "affected_surface": "src/engine/autopilot-engine.js owned-dir Set",
+      "claim": "A module-level Set of owned diff dirs lets finish() remove a directory another in-process engine still needs.",
+      "evidence_reference": "Plan §4 Phase 2 step 2 module-level Set and finish() backstop; §2 KR3 (4) injected provider; §2.5 diffProvider signature unchanged",
+      "disposition": null
+    },
+    {
+      "fingerprint": "2e496fee7831653b630c5547ed4eefe9b2145a8ab09212afe7d6f1b3ee9ddf4f",
+      "rubric_id": "R4",
+      "affected_surface": "KR2 vs run.sh reaper entry",
+      "claim": "Killed-run recovery is shown by calling suite_residue_reap on a fixture, so run.sh can omit apl1.* from its real reaper invocation and KR2 still passes.",
+      "evidence_reference": "Plan §2 KR2 (b)(c); §4 Phase 1 acceptance KR2; §2.5 reuse suite-residue-reap.sh; §6 R6 wired-but-off",
+      "disposition": null
+    },
+    {
+      "fingerprint": "84707f2436538e57ebca6e27ce762cb9bdbd93aac8485e6705acbbc62eadec17",
+      "rubric_id": "R6",
+      "affected_surface": "Phase 1-3 acceptance bullets vs KR2/KR3/KR4",
+      "claim": "Phase acceptance still includes procedures that are not the named KR commands and are not pass/fail for a zero-context engineer.",
+      "evidence_reference": "Plan §2 KR2 KR3 KR4; §4 Phase 1-3 Acceptance; §5 Human-gated none; §2.5 acceptance records observed behavior",
+      "disposition": null
+    },
+    {
+      "fingerprint": "1d4b4539bbda0a6a6adeffa41db9dc84a911286f615ebb05a2819ddd39299322",
+      "rubric_id": "R7",
+      "affected_surface": "Phase 1 vs phase 3 file list; hooks/README.md",
+      "claim": "Phase contents tell phase 1 to edit a registry file that phase 3 creates, and the scope-audit doc surface is missing from the file-structure map.",
+      "evidence_reference": "Plan §4 opening dependency sentence; Phase 1 step 4; Scope completeness User-facing docs and Config templates; §3 File-structure map",
+      "disposition": null
+    },
+    {
+      "fingerprint": "9fd5e062090b53619d05bfef662f2b88638a0bbcefd2dffd0bfe7435193d87eb",
+      "rubric_id": "R8",
+      "affected_surface": "project README pending-a-version sentence",
+      "claim": "The no-version-bump constraint is recorded in the Review log and still omits the README row the same constraint names.",
+      "evidence_reference": "Plan §2.5 first constraint; Review log Pending a version; §3 File-structure map; Scope completeness CHANGELOG deferred",
+      "disposition": null
+    },
+    {
+      "fingerprint": "69ab714f993d7ae81da81bdeeefac106845a11dad7aef1e7ec5862ea89fe162b",
+      "rubric_id": "R5",
+      "affected_surface": "phase 4 gate scope rules and the 'Test files are not gated' claim",
+      "claim": "The gate's scan scope rules scan hooks/*.test.js files (e.g., hooks/l1-tmpdir.test.js) but step 2 of phase 4 says 'Test files are not gated'; the plan does not specify which side resolves the mismatch (extend the scope exclusion to hooks/*.test.*, or register the test file's temp calls in the registry or allowlist).",
+      "evidence_reference": "Plan §4 phase 4 steps 1-2; §3 file-structure map entry hooks/l1-tmpdir.test.js (under hooks/, not hooks/tests/); §2 KR2(a).",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-10-11T17:06:29.557Z"
+}

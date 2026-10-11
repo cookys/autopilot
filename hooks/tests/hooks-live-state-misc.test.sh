@@ -6,6 +6,12 @@ SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SELF_DIR/../.." && pwd)"
 HOOK="$REPO_ROOT/hooks/context-budget.js"
 
+# Contain every temp file the scripts under test create (dispatch-review logs, the
+# autopilot-dispatch-runs manifest dir, ...): they used to land in the real ${TMPDIR}.
+SUITE_TMPDIR="$(mktemp -d "${TMPDIR:-/tmp}/autopilot-test-hooks-live-state-misc-XXXXXX")"
+trap 'rm -rf "$SUITE_TMPDIR"' EXIT
+export TMPDIR="$SUITE_TMPDIR"
+
 PASS=0; FAIL=0
 ok()   { PASS=$((PASS+1)); printf 'ok — %s\n' "$1"; }
 bad()  { FAIL=$((FAIL+1)); printf 'FAIL — %s\n' "$1"; }

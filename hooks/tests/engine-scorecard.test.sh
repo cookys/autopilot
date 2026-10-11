@@ -26,10 +26,10 @@ JSON
 
 # 1: monotonic event_id, caller value ignored
 reset
-echo "$(row e r f reviewer c@1 0.5 manual 0 qualified 2099-01-01)" | sed 's/^{/{"event_id":999,/' | node "$CLI" record >/tmp/o1 2>/dev/null
-id1=$(jq_get event_id </tmp/o1)
-echo "$(row e2 r f reviewer c@1 0.5 manual 0 qualified 2099-01-01)" | node "$CLI" record >/tmp/o2 2>/dev/null
-id2=$(jq_get event_id </tmp/o2)
+echo "$(row e r f reviewer c@1 0.5 manual 0 qualified 2099-01-01)" | sed 's/^{/{"event_id":999,/' | node "$CLI" record >"$TESTDIR/o1" 2>/dev/null
+id1=$(jq_get event_id <"$TESTDIR/o1")
+echo "$(row e2 r f reviewer c@1 0.5 manual 0 qualified 2099-01-01)" | node "$CLI" record >"$TESTDIR/o2" 2>/dev/null
+id2=$(jq_get event_id <"$TESTDIR/o2")
 [ "$id1" = "1" ] && [ "$id2" = "2" ] && ok "1: monotonic event_id, caller 999 ignored" || bad "1: got '$id1','$id2' want 1,2"
 
 # 2: same identity, failed supersedes earlier qualified

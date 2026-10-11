@@ -675,7 +675,7 @@ const { runConsultQualification } = require(path.join(root, 'scripts/engine-qual
 // Use a short TMPDIR scoped to just this subprocess (and its broker/adapter
 // children, which inherit env) so the socket path stays well under the
 // limit; clean it up when done.
-const shortTmpBase = fs.mkdtempSync('/tmp/aqvsd-');
+const shortTmpBase = fs.mkdtempSync(require('path').join(process.env.TEST_SHORT_TMP || '/tmp', 'aqvsd-'));
 process.env.TMPDIR = shortTmpBase;
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-d3-regress-'));
 const adapterPath = path.join(tempRoot, 'prose-adapter.js');
@@ -1344,7 +1344,7 @@ assert(ocChecked >= 50, `OC-preservation checked enough terminal sequences, got 
 {
   const os = require('os');
   const crypto = require('crypto');
-  const shortTmpBase = fs.mkdtempSync('/tmp/aqvsd4-');
+  const shortTmpBase = fs.mkdtempSync(require('path').join(process.env.TEST_SHORT_TMP || '/tmp', 'aqvsd4-'));
   process.env.TMPDIR = shortTmpBase;
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'd4-wire-'));
   const digest = (s) => crypto.createHash('sha256').update(s).digest('hex');
@@ -2688,7 +2688,7 @@ for (const role of ['consult', 'discuss']) {
 // administration dispatched. Copy D4 writeScriptedConsultAdapter / baseOpts /
 // short-TMPDIR conventions.
 {
-  const shortTmpBase = fs.mkdtempSync('/tmp/aqvsd6-');
+  const shortTmpBase = fs.mkdtempSync(require('path').join(process.env.TEST_SHORT_TMP || '/tmp', 'aqvsd6-'));
   process.env.TMPDIR = shortTmpBase;
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'd6-t1-'));
   const digest = (s) => crypto.createHash('sha256').update(s).digest('hex');
@@ -2836,7 +2836,7 @@ for (const role of ['consult', 'discuss']) {
 // verdict == full-N verdict, 120 seeded sequences with a separately-written
 // referenceOracleFold). Reference it by name; do not duplicate it.
 {
-  const shortTmpBase = fs.mkdtempSync('/tmp/aqvsd6n-');
+  const shortTmpBase = fs.mkdtempSync(require('path').join(process.env.TEST_SHORT_TMP || '/tmp', 'aqvsd6n-'));
   process.env.TMPDIR = shortTmpBase;
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'd6-indep-'));
   const digest = (s) => crypto.createHash('sha256').update(s).digest('hex');
@@ -3204,7 +3204,7 @@ const eq = require(path.join(root, 'scripts/engine-qualify.js'));
 const failures = [];
 function assert(cond, msg) { if (!cond) failures.push(msg); }
 
-const shortTmpBase = fs.mkdtempSync('/tmp/aqvsd6h-');
+const shortTmpBase = fs.mkdtempSync(require('path').join(process.env.TEST_SHORT_TMP || '/tmp', 'aqvsd6h-'));
 process.env.TMPDIR = shortTmpBase;
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'd6-honest-'));
 const digest = (s) => crypto.createHash('sha256').update(s).digest('hex');
@@ -3491,7 +3491,7 @@ const gen = require(path.join(root, 'evals/consult-eval-generator.js'));
 const seals = require(path.join(root, 'scripts/lib/qualification-asset-seals.js'));
 
 // Same short-TMPDIR seam as D3.regress/D4 (unix socket UNIX_PATH_MAX).
-const shortTmpBase = fs.mkdtempSync('/tmp/aqvsd7a-');
+const shortTmpBase = fs.mkdtempSync(require('path').join(process.env.TEST_SHORT_TMP || '/tmp', 'aqvsd7a-'));
 process.env.TMPDIR = shortTmpBase;
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-d7a-'));
 const adapterPath = path.join(tempRoot, 'exclusivity-adapter.js');
@@ -3656,7 +3656,7 @@ const root = process.argv[2];
 const rawDir = process.argv[3];
 const { runConsultQualification } = require(path.join(root, 'scripts/engine-qualify.js'));
 
-const shortTmpBase = fs.mkdtempSync('/tmp/aqvsd7b-');
+const shortTmpBase = fs.mkdtempSync(require('path').join(process.env.TEST_SHORT_TMP || '/tmp', 'aqvsd7b-'));
 process.env.TMPDIR = shortTmpBase;
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-d7b-'));
 const adapterPath = path.join(tempRoot, 'shape-clean-adapter.js');
@@ -3899,7 +3899,7 @@ const root = process.argv[2];
 const rawDir = process.argv[3];
 const { runConsultQualification } = require(path.join(root, 'scripts/engine-qualify.js'));
 
-const shortTmpBase = fs.mkdtempSync('/tmp/aqvsd7d-');
+const shortTmpBase = fs.mkdtempSync(require('path').join(process.env.TEST_SHORT_TMP || '/tmp', 'aqvsd7d-'));
 process.env.TMPDIR = shortTmpBase;
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-d7d-'));
 const adapterPath = path.join(tempRoot, 'shape-clean-adapter.js');
@@ -4035,7 +4035,7 @@ function snapshotDir(dir) {
 const scorecardBefore = snapshotDir(scorecardDir);
 const capabilityBefore = snapshotDir(capabilityDir);
 
-const shortTmpBase = fs.mkdtempSync('/tmp/aqvsd7e-');
+const shortTmpBase = fs.mkdtempSync(require('path').join(process.env.TEST_SHORT_TMP || '/tmp', 'aqvsd7e-'));
 process.env.TMPDIR = shortTmpBase;
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-d7e-'));
 const adapterPath = path.join(tempRoot, 'shape-clean-adapter.js');

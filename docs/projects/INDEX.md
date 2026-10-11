@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-10-12 | [TMPDIR residue containment: contain test temp dirs, delete runtime temp files after use, gate unregistered prefixes](../plans/2026-10-12-tmp-residue-containment.md) | active | — | [plan](../plans/2026-10-12-tmp-residue-containment.md) |
 | 2026-10-11 | [review packet mode: carry a range over the packet ceiling without slicing it away](../plans/2026-10-11-review-packet-mode.md) | active | — | [plan](../plans/2026-10-11-review-packet-mode.md) |
 | 2026-10-06 | [dev-flow stage graph: one named graph, T-shirt sizes, a marker the band can read](../plans/2026-10-06-dev-flow-stage-graph.md) | active | — | [plan](../plans/2026-10-06-dev-flow-stage-graph.md) (R2 FROZEN) |
 | 2026-10-03 | [Mods 進 autopilot 本體：看得見的派工、owner review 網頁、事件核心、`autopilot.progress/1` 快照](../plans/2026-10-03-mods-visible-dispatch.md) | active | — | [plan](../plans/2026-10-03-mods-visible-dispatch.md) |

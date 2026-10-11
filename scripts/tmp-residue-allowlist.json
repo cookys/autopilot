@@ -1,0 +1,187 @@
+{
+  "_comment": "Gate allowlist for scripts/check-tmp-residue-registry.js. entries[]: {file, match?, reason}. `match` is a substring of the occurrence's source line (omitted = the whole file); line numbers are never used. Every entry needs a reason. Entries with pending_registry:true name a real temp prefix that is not yet in scripts/lib/tmp-residue-registry.json (it is the only registration source); they are temporary and move into the registry. A whole-repo scan reports entries that match no occurrence (allowlist_stale).",
+  "version": 1,
+  "entries": [
+    {
+      "file": "scripts/check-tmp-residue-registry.js",
+      "reason": "The gate's own detection regexes and self-test fixtures name temp constructs as text; its self-test directory is removed in a finally block."
+    },
+    {
+      "file": "scripts/lib/tmp-residue.js",
+      "reason": "Registry reader: resolves the temp root (opts.tmpdir / TMPDIR / os.tmpdir()) to list and classify entries; it allocates nothing."
+    },
+    {
+      "file": "hooks/exec-boundary.js",
+      "reason": "Path policy: lists the temp roots as sanctioned execution roots; creates nothing."
+    },
+    {
+      "file": "hooks/foreman-guard.js",
+      "reason": "Path policy: expands $TMPDIR and compares against /tmp for the close-out rm allowance; creates nothing."
+    },
+    {
+      "file": "scripts/lib/prune-tmp-residue.sh",
+      "match": "[ -d \"${TMPDIR:-/tmp}\" ]",
+      "reason": "Only checks that the temp root exists before delegating to tmp-residue.js prune (registry-driven); allocates nothing."
+    },
+    {
+      "file": "scripts/lib/grok-effort.sh",
+      "match": "cd \"${TMPDIR",
+      "reason": "Uses the temp root as the probe's working directory; allocates nothing."
+    },
+    {
+      "file": "scripts/dispatch-hetero.sh",
+      "match": "autopilot-managed-codex-home-*)",
+      "reason": "Case-pattern guard that restricts rm -rf to the registered (test-lockgated) autopilot-managed-codex-home-* family; allocates nothing."
+    },
+    {
+      "file": "src/runners/kimi.js",
+      "match": "options.cwd || os.tmpdir()",
+      "reason": "os.tmpdir() as the spawned CLI's default working directory; allocates nothing."
+    },
+    {
+      "file": "src/runners/kimi.js",
+      "match": "options.probeCwd || os.tmpdir()",
+      "reason": "os.tmpdir() as the probe CLI's default working directory; allocates nothing."
+    },
+    {
+      "file": "scripts/dispatch-review.sh",
+      "match": "SALVAGE_BLOCK=\"\"",
+      "reason": "Only a trailing comment mentions mktemp; the real allocation is covered by an EXIT trap."
+    },
+    {
+      "file": "scripts/dispatch-consult.sh",
+      "match": "_MKT_SFX=",
+      "reason": "Builds the six-X mktemp suffix; the allocation on the next line uses the registered dispatch-consult- prefix."
+    },
+    {
+      "file": "src/engine/autopilot-engine.js",
+      "match": "os.tmpdir(), prefix))",
+      "reason": "Shared allocator: both callers pass a registered prefix (autopilot-review-loop-, autopilot-repair-prompt-) and the owner disposes the directory (phase 2)."
+    },
+    {
+      "file": "scripts/probe-mutation.js",
+      "match": "mkdtempSync(tempDirPrefix)",
+      "reason": "Prefix is the probe-mutation- constant on the previous lines (registered in scripts/lib/tmp-residue-registry.json as kind worktree); the directory is a git worktree removed by the script."
+    },
+    {
+      "file": "scripts/benchmark-hook-multiplexer.js",
+      "match": "home-base-",
+      "reason": "Child of scratchRoot, which is the registered hook-multiplexer-benchmark-* directory, not a direct temp-root entry."
+    },
+    {
+      "file": "scripts/benchmark-hook-multiplexer.js",
+      "match": "home-candidate-",
+      "reason": "Child of scratchRoot, which is the registered hook-multiplexer-benchmark-* directory, not a direct temp-root entry."
+    },
+    {
+      "file": "scripts/engine-qualify.js",
+      "match": "impl-live-${caseSpec",
+      "reason": "Child of workRoot (impl-qualify-live-, registered in scripts/lib/tmp-residue-registry.json), not a direct temp-root entry."
+    },
+    {
+      "file": "scripts/lib/test-integrity-l1.py",
+      "match": "prefix=\"autopilot-l1-\"",
+      "reason": "Python allocation; the worktree root is removed with shutil.rmtree in the finally block of the same function."
+    },
+    {
+      "file": "scripts/lib/test-integrity-l1.py",
+      "match": "prefix=\"l1-\"",
+      "reason": "Child of the autopilot-l1- worktree root, not a direct temp-root entry."
+    },
+    {
+      "file": "scripts/bench-engine-capability.sh",
+      "match": "TEMP_STORE_DIR=",
+      "reason": "Bare mktemp -d; removed by cleanup() under a top-level `trap cleanup EXIT` (unguarded reference, so rule b does not recognise it)."
+    },
+    {
+      "file": "scripts/completeness-scan.sh",
+      "match": "TMPF=",
+      "reason": "Bare mktemp; `trap 'rm -f \"$TMPF\"' EXIT` is installed on the very next line."
+    },
+    {
+      "file": "scripts/distill-sync-setup.sh",
+      "match": "tmp=\"$(mktemp)\"",
+      "reason": "Bare mktemp; consumed by `mv \"$tmp\" \"$gi\"` in the same branch."
+    },
+    {
+      "file": "scripts/ladder-run.sh",
+      "match": "mktemp)",
+      "reason": "Bare mktemp; every path removes or mv-consumes it explicitly (rm -f / mv on success and failure); no trap."
+    },
+    {
+      "file": "scripts/preflight-release.sh",
+      "match": "out=\"$(mktemp)\"",
+      "reason": "Bare mktemp; removed by `rm -f \"$out\"` after the check."
+    },
+    {
+      "file": "scripts/probe-engine-capability.sh",
+      "match": "PROBE_ERR_FILE=\"$(mktemp)\"",
+      "reason": "Bare mktemp; `trap ... EXIT INT TERM` naming it is installed a few lines later and the normal path rm -f's it."
+    },
+    {
+      "file": "scripts/probe-engine-capability.sh",
+      "match": "PROBE_CWD=\"$(mktemp -d)\"",
+      "reason": "Bare mktemp -d; `trap ... EXIT INT TERM` naming it is installed a few lines later and the normal path rm -rf's it."
+    },
+    {
+      "file": "scripts/qualification-sweep.sh",
+      "match": "pd=$(mktemp -d)",
+      "reason": "Bare mktemp -d; removed by rm -rf on both the failure and the success path of the function."
+    },
+    {
+      "file": "scripts/sync-opencode-plugin.sh",
+      "match": "TMP=\"$(mktemp -d)\"",
+      "reason": "Bare mktemp -d; `trap 'rm -rf \"$TMP\"' EXIT` is installed on the next line."
+    },
+    {
+      "file": "scripts/test-doc-drift-gate.sh",
+      "match": "fixture=\"$(mktemp -d)\"",
+      "reason": "Bare mktemp -d; `trap 'rm -rf \"$fixture\"' EXIT` is installed on the next line."
+    },
+    {
+      "file": "scripts/test-grok-effort.sh",
+      "match": "stub_dir=\"$(mktemp -d)\"",
+      "reason": "Bare mktemp -d; the EXIT trap is on the same line, directly after the allocation."
+    },
+    {
+      "file": "scripts/classify-diff-risk.sh",
+      "match": "/classify-diff.",
+      "reason": "Template under ${TEST_TMP:-/tmp}; `trap 'rm -f \"$DIFF_FILE\"' EXIT` is installed on the next line."
+    },
+    {
+      "file": "scripts/dispatch-author.sh",
+      "match": "CNATIVE_CWD=\"$(mktemp -d)\"",
+      "reason": "Bare mktemp -d; removed by cleanup() (EXIT trap) and explicitly after use."
+    },
+    {
+      "file": "scripts/dispatch-hetero.sh",
+      "match": "${ORPHAN_LOG}.tmp.",
+      "reason": "Template beside the orphan log in the state directory, not under the temp root; mv-consumed."
+    },
+    {
+      "file": "scripts/dispatch-hetero.sh",
+      "match": "${ORPHAN_LOG}.worktrees.",
+      "reason": "Template beside the orphan log in the state directory, not under the temp root; removed after the scan."
+    },
+    {
+      "file": "scripts/dispatch-hetero.sh",
+      "match": "${ORPHAN_LOG}.worktrees-err.",
+      "reason": "Template beside the orphan log in the state directory, not under the temp root; removed after the scan."
+    },
+    {
+      "file": "scripts/dispatch-hetero.sh",
+      "match": "$_wt_common_dir/autopilot-worktree-creation/",
+      "reason": "Template inside the git common dir's creation-ledger directory, not under the temp root."
+    },
+    {
+      "file": "scripts/reap-dispatch-worktrees.sh",
+      "match": "$inventory_dir/.inventory.",
+      "reason": "Template inside the inventory state directory, not under the temp root; mv-consumed."
+    },
+    {
+      "file": "scripts/reap-dispatch-branches.sh",
+      "match": "$disposition_dir/.disposition.",
+      "reason": "Template inside the disposition state directory, not under the temp root; mv-consumed."
+    }
+  ]
+}

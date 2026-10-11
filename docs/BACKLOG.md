@@ -1153,3 +1153,11 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: tmp-residue qc-gate, 2026-10-12 (21 new findings, all XXXXXX templates)
 - **Pointer**: none
 - **Context**: the XXX marker rule matches mktemp templates; exclude XXXXXX runs. The phase-3 hand also saw --files f1 f2 report scannedFiles 0.
+
+### cost-digest --tree: review follow-ups (test strength, cycle placement, label collisions)
+- **Status**: open
+- **Trigger**: next touch of cost-tracker or cost-digest
+- **Effort**: S
+- **Source**: code review of `34dd3c33` (merge `7362f914`), 2026-10-12, verdict SHIP
+- **Pointer**: none
+- **Context**: short-circuit test cannot fail (assert a grown file's new row gets a rewritten sidecar's parent); no cycle/self-parent test; a node under a cycle can land on root as orphan; 5-char labels can collide.

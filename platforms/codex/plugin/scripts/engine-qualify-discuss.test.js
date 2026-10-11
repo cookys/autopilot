@@ -545,3 +545,4 @@ require('fs').writeFileSync(${JSON.stringify(sentinelPath)}, 'module-top-level-c
 
 if (assertions !== 55) throw new Error(`engine-qualify-discuss: expected exactly 55 assertions (count pin moved here from hooks/tests/engine-qualify-discuss.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);
+fs.rmSync(tempRoot, { recursive: true, force: true });

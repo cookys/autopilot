@@ -597,3 +597,4 @@ require('fs').writeFileSync(${JSON.stringify(sentinelPath)}, 'module-top-level-c
 
 if (assertions !== 56) throw new Error(`engine-qualify-consult: expected exactly 56 assertions (count pin moved here from hooks/tests/engine-qualify-consult.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);
+fs.rmSync(tempRoot, { recursive: true, force: true });

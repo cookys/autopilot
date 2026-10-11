@@ -1,0 +1,87 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "tmp-residue-containment-2026-10-12",
+ "generation": 1,
+ "findings": [
+  {
+   "fingerprint": "82399b505a8e9f0e92387504255804054c55f878b91d5741b293ed9a72ac2aee",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct: two prefix lists and caller patterns bypassed the kind check. Folded (§2.5/§2.6): one registry with kinds incl. test-lockgated and lock; _SRR_PATTERNS held equal by a parity test; age-only deletion and `patterns` emit only scratch/evidence; caller patterns honoured only if they equal one of those."
+  },
+  {
+   "fingerprint": "69399dc471fe959e8bb93f8221c9d0fe24a3b44a57ceee72d1eb3348ada3ec12",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct: same-scope finally/trap misses a throw between allocation and protection. Folded (phase 4 rule b): allocation must be the first statement of the try (JS) or the trap installed before mktemp (shell); KR5 self-test plants both cases and must exit 1."
+  },
+  {
+   "fingerprint": "8d66dab9664fdbc973664c3d13c02c990b937629c18850d47bb5aeb9b9af0c55",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct. Folded (§2 KRs): every KR is one command exiting 0, backed by a named new test that holds fixtures, signal targeting, receipt paths and the env opt-out name."
+  },
+  {
+   "fingerprint": "2edde01d1c8cbef16ced424d310bd19d99f50c771bb7a57354b9c8f4bc6a1ada",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct: min-age (AUTOPILOT_SUITE_REAP_MIN_AGE, default 60 s) would skip a just-killed dir. Folded (KR2): the test backdates the lock file with touch -d '-2 min' before reaping, and checks a held lock is kept."
+  },
+  {
+   "fingerprint": "24330cc478d468c9ac4dc263b90d17f325e42f3cf60fc3b7d58c3dea30c39708",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct. Folded (KR3): the stub reviewer records existence and bytes (non-vacuous), the repair-prompt scenario asserts a dir was created, an injected provider's file must survive finish(), digests are pinned to pre-change values, and two mutations must fail."
+  },
+  {
+   "fingerprint": "d4083e3f3cca4827f93c03f78e10c211d9fc6380da9bc34b744a5ad37cff07ed",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct: the goal over-claimed relative to D3. Folded (Project Goal): narrowed to shipped code and suites run through hooks/tests/run.sh; standalone node --test named out of scope."
+  },
+  {
+   "fingerprint": "9f5dcc786f9f24d1d62bf03f6d283566d28bd91df101b74a255685fd12dbe883",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Folded: concrete doc paths and new test files named in §3."
+  },
+  {
+   "fingerprint": "a5319aacfc39cc881f8e76c5a11747978efd324f125f71615899376d3745c47e",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct: the aqvsd sites had no lock-aware owner. Folded (§3, phase 1 step 4): lib.sh exports a short TEST_SHORT_TMP=/tmp/apt.XXXXXX under the existing live-lock holder; the 9 sites allocate under it; apt.* is test-lockgated in reaper and registry."
+  },
+  {
+   "fingerprint": "22f7b1fbda8be8d9d99648bb6e9ee5778568c40085be3e9764feb7a27ac086c0",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct: finish() backstop was not restricted to owned dirs. Folded (phase 2 step 2): defaultDiffProvider records owned dirs in a module-level Set; dispose and finish() remove only members; KR3 asserts an injected provider's file survives."
+  },
+  {
+   "fingerprint": "0e13b48874289a250a99a010d9eadd7f3290a5f4e0ad8a9fb6baccec4cc36926",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct, same root as finding 0 (accepted blocker, folded together): the bash wrapper now gets only scratch/evidence patterns and drops caller patterns that are not registry scratch/evidence entries."
+  },
+  {
+   "fingerprint": "3ad79ca25e9b394514832ebdbeaeb2f35243eafbf3697c24b7549b71ffa2d413",
+   "disposition": "accepted_blocker",
+   "rationale": "Correct: the allowlist did not exist and lock files would trip KR1. Folded with finding 2: KR1 uses tmp-residue.js new-since with --exclude-kind live,lock, the lock files named in §2.5 are registry kind lock; KR2-KR4 have named tests."
+  },
+  {
+   "fingerprint": "7f2dafd90d43664f5678b33cdb449782fa3d955e981b3e97f445cbdf1939add4",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Folded: identity/binding prepares wrap use in try/finally dispose."
+  },
+  {
+   "fingerprint": "785c7d7ba5cfcc02b83214dce4e7083b4e2ed5b246e0eebca96e96925fee9560",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Resolved by the registry fold: the gate reads only the registry; _SRR_PATTERNS parity is a test, no bash parsing."
+  },
+  {
+   "fingerprint": "f0a8f8a73954309faac29c2ab6fbad4312ec422734030f2e34c5ddf0b44b9953",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Folded: concrete doc paths; a git grep for other hard-coded /tmp expectations added to phase 1 step 4."
+  },
+  {
+   "fingerprint": "edb768d88ad8eb586a042a1ec41ec3645c28c4b0800e228a2852807d40db6e01",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Verified 2026-10-12: review-packet.js:601 reads the diff with fs.readFileSync before returning; plan text updated; KR3 mutation (dispose before reviewDiff) must fail."
+  },
+  {
+   "fingerprint": "851563f0fe22247095fb8a894e95e6c9bb95181b75c1779f19f0d7849915577a",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Folded: engine scratch retention 1 day, below which a live loop (7200 s wall cap) is always younger."
+  }
+ ]
+}

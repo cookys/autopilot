@@ -3,7 +3,7 @@
 
 ## Project Goal
 
-> **Final goal**: temp directories and files that autopilot's tests and shipped code create under `${TMPDIR:-/tmp}` stop accumulating on a long-lived host, including ones a future test or script forgets to clean.
+> **Final goal**: temp directories and files that autopilot's shipped code and its test suites run through `hooks/tests/run.sh` create under `${TMPDIR:-/tmp}` stop accumulating on a long-lived host, including ones a future test or script forgets to clean. A test file run standalone (`node --test <file>`) is outside this goal (D3, §7).
 > **Success criteria**: KR1–KR5 in §2, each measured on this host with the command named there (counts before/after, reaper and prune receipts, the gate's exit code on the repo and on its negative control).
 > **Scope boundary**: includes L1 test containment, owner-side deletion in the engine and `dispatch-consult.sh`, one registry with a daily prune, and a gate on shipped code. Excludes the items in §7.
 
@@ -51,15 +51,13 @@ The owner wants residue to stop accumulating systematically, not one leak at a t
 
 ## 2. OKR / KRs
 
-- **KR1 (tests contained)**: `bash hooks/tests/run.sh --parallel` run twice, counting `find "${TMPDIR:-/tmp}" -maxdepth 1 -user "$(id -un)" -newer <stamp>` entries before and after each. **0 new entries after the run ends**, excluding the documented allowlist (§2.5), on this host.
-- **KR2 (killed run recovered)**: a run killed with SIGKILL mid-L1 leaves its per-run dir. The next `run.sh` start reaps it (reaper JSON `reaped >= 1`), and a live run's dir is never reaped (`skipped_live` covers it).
-- **KR3 (runtime deletes)**:
-  - An engine review loop on a fixture repo, using the **default** `diffProvider`, ends with 0 new `autopilot-review-loop-*` and 0 new `autopilot-repair-prompt-*` dirs, on both the success path and the `git diff` failure path.
-  - `dispatch-consult.sh` interrupted with SIGTERM leaves 0 `dispatch-consult-*`.
-- **KR4 (daily prune actually fires)**: after a SessionStart, `residue-auto-reap` runs the tmp prune phase. Its JSON receipt lists the deleted entries (an aged fixture entry planted under a test `TMPDIR` is deleted; a fresh one and a live-locked one are kept). The host-level stamp mtime advances; a second SessionStart within 24 h does not re-run it.
-- **KR5 (gate)**: `node scripts/check-tmp-residue-registry.js` exits 0 on the repo.
-  - Negative control: its `--self-test` plants an unregistered `mkdtempSync(path.join(os.tmpdir(), 'zz-unreg-'))` in a scratch copy and must exit 1.
-  - It is wired into `.githooks/pre-commit` (changed shipped files) and `scripts/preflight-release.sh` (whole repo), and fires in both (shown by running each against the negative fixture).
+Each KR is one command that exits 0 on pass; the new test files encode the scenario, its fixtures and its negative control.
+
+- **KR1 (tests contained)**: `S=$(mktemp /tmp/kr1.XXXXXX); bash hooks/tests/run.sh --parallel; node scripts/lib/tmp-residue.js new-since --stamp "$S" --exclude-kind live,lock --json` prints `"entries":[]` (run twice on this host). `--exclude-kind lock` drops exactly the shared lock/owner files of §2.5 (`.autopilot-suite-run.*.lock`, `.autopilot-suite-oracle.{lock,owner}`, `.autopilot-gc.lock`), which the registry lists as kind `lock`; `live` drops `autopilot-dispatch-runs`, `autopilot-foreman-runs`, `autopilot-<uid>`. Nothing else is excused.
+- **KR2 (killed run recovered, live run kept)**: `bash hooks/tests/l1-tmpdir-containment.test.sh`. It (a) runs `run.sh` with the L1 probe `hooks/l1-tmpdir.test.js` and asserts the probe saw `os.tmpdir()` == the `apl1.*` dir run.sh exported as `AUTOPILOT_L1_TMP`; (b) creates an `apl1.*` dir whose `.autopilot-live.lock` is held by a child, `kill -9`s the child, backdates the lock file with `touch -d '-2 min'` (past `AUTOPILOT_SUITE_REAP_MIN_AGE`, default 60 s), runs `suite_residue_reap`, asserts `reaped >= 1` and the dir is gone; (c) the same with the lock still held asserts the dir is kept (`skipped_live >= 1`).
+- **KR3 (runtime deletes)**: `bash hooks/tests/engine-diff-lifetime.test.sh` on a fixture repo with the **default** `diffProvider`, for: success; `git diff` failure; reviewer throws; identity/binding prepare throws. In each it asserts (1) the dir existed while the reviewer ran (the stub reviewer records `fs.existsSync` and the diff bytes), (2) 0 owned `autopilot-review-loop-*` / `autopilot-repair-prompt-*` dirs remain, (3) the repair-prompt scenario actually created one (non-vacuous), (4) an injected `diffProvider`'s returned file still exists after `finish()`, (5) `diff_digest` / `review_input_digest` equal the values computed from the same diff bytes before the change (pinned in the test). Mutation: with dispose removed, (2) fails; with dispose moved before `reviewDiff`, (1) fails. `bash hooks/tests/dispatch-consult-trap.test.sh` sends SIGTERM mid-run and asserts 0 `dispatch-consult-*`.
+- **KR4 (daily prune fires)**: `bash hooks/tests/tmp-residue-prune.test.sh`. Under a fixture `TMPDIR` it runs `node scripts/repo-residue-sweep.js reap --auto --yes --repo <fixture> --tmpdir <fixture-tmp> --json` and asserts the receipt's `tmp_prune.deleted` lists exactly the aged `scratch` entry; a fresh scratch entry, an aged `live`-kind dir, an aged dir holding `.autopilot-live.lock`, and a symlink are kept. A second call within 24 h reports `tmp_prune.skipped: "throttled"` (host stamp `${XDG_RUNTIME_DIR:-~/.autopilot}/autopilot-tmp-prune.stamp`). Opt-outs `AUTOPILOT_RESIDUE_TMP_PRUNE=0` and `{"residue":{"tmp_prune":false}}` each give `skipped: "disabled"`. `hooks/tests/residue-auto-reap.test.sh` gains a case that the SessionStart hook's detached sweep produces that receipt.
+- **KR5 (gate)**: `node scripts/check-tmp-residue-registry.js` exits 0 on the repo; `node scripts/check-tmp-residue-registry.js --self-test` exits 0 only if each planted fixture (unregistered literal prefix; success-path-only `rmSync`; allocation before the `try`; `mktemp` before its `trap`; unextractable prefix without an allowlist entry) yields exit 1; `bash hooks/tests/check-tmp-residue-registry.test.sh` runs the real `.githooks/pre-commit` on a scratch clone with a planted file (exit 1) and `scripts/preflight-release.sh`'s gate step on the same clone (fails).
 
 ## 2.5 Global Constraints (copied verbatim into every dispatch)
 
@@ -70,7 +68,7 @@ The owner wants residue to stop accumulating systematically, not one leak at a t
 - Never write a second reaper. Killed-run recovery reuses `suite-residue-reap.sh` (flock + minimum age); worktree reaping stays with the marker/lock reapers (`lib/worktree-reap.sh`, `repo-residue-sweep.js`).
 - mtime-only deletion applies only to registry entries with `kind: "scratch"`. A live directory (`autopilot-foreman-runs`, `autopilot-<uid>`, `autopilot-dispatch-runs`) is never mtime-pruned.
 - The engine's `diffProvider` injection signature `{ base, commit, branch, round, currentBase, cwd } -> path` does not change. Diff files are deleted in place, never moved (moving them changes digests that may embed the path; see §6 R4).
-- One registry file is the single statement of "which temp prefixes exist and who cleans them": `scripts/lib/tmp-residue-registry.json`. Prune and gate both read it. `suite-residue-reap.sh` keeps its own lock-gated list (different semantics; see §2.6).
+- One registry file is the single statement of "which temp prefixes exist and who cleans them": `scripts/lib/tmp-residue-registry.json`, kinds `scratch` · `evidence` · `test-lockgated` · `live` · `lock` · `worktree`. Every prune path and the gate read it. `suite-residue-reap.sh`'s `_SRR_PATTERNS` must equal the registry's `test-lockgated` entries (parity test `hooks/tests/tmp-residue-registry.test.sh`). Age-only deletion (`tmp-residue.js prune` and the `prune_tmp_residue` wrapper) acts only on `scratch`/`evidence`; `tmp-residue.js patterns` emits only those kinds, and a caller-passed pattern to `prune_tmp_residue` is honoured only if it equals one of them, else dropped.
 - Every acceptance check records observed behavior (counts before/after, receipts, a negative control's exit code), never "the code exists".
 
 ## 2.6 Change-policy decisions
@@ -83,7 +81,7 @@ The owner wants residue to stop accumulating systematically, not one leak at a t
   - Registry and prune are Node built-ins: `fs`, `path`, `os`.
   - The daily trigger reuses `hooks/residue-auto-reap.js` → `repo-residue-sweep.js reap --auto`, which is already default-on, detached, flock-guarded and throttled. Its stamp is per repo; the tmp phase adds a host-level stamp/lock under `$XDG_RUNTIME_DIR` (fallback `~/.autopilot/`) because `/tmp` is host-wide.
   - Why not source the Bash lib from the hook: CLAUDE.md language rule (JSON + sandbox ⇒ Node), and the registry is JSON.
-- **Not merged with `suite-residue-reap`'s list**: that list routes entries to lock-gated deletion with TOCTOU rechecks for test runs; the registry's `scratch` entries are age-pruned. Merging would either weaken the lock gate or force the lock gate onto plain log files. The gate (phase 4) reads both, so a prefix covered by either source counts as registered.
+- **One statement, two deleters**: the test reaper's lock-gated semantics (TOCTOU rechecks, live-run detection) stay in `suite-residue-reap.sh`; its prefixes are registry entries of kind `test-lockgated`, held equal by the parity test, so the gate reads only the registry.
 
 ## 3. File-structure map
 
@@ -94,20 +92,21 @@ The owner wants residue to stop accumulating systematically, not one leak at a t
 | `hooks/tests/run.sh` (L1 block near :526-560) | create `apl1.XXXXXX`, hold `.autopilot-live.lock` in it, run `node --test` with `TMPDIR=<dir>`, remove on exit | 1 |
 | `hooks/tests/lib/suite-residue-reap.sh` (`_SRR_PATTERNS` :212) | add `apl1.*` as lock-gated | 1 |
 | `scripts/qualification-consult-discuss-transport.test.js:44` | use the inherited `TMPDIR` when its path is short enough, else a short dir it removes | 1 |
-| `hooks/tests/engine-qualify-verdict-stability.test.sh` (9 `/tmp/aqvsd*` sites) | `finally`-style cleanup (they must stay short for AF_UNIX) | 1 |
+| `hooks/tests/lib.sh` + `engine-qualify-verdict-stability.test.sh` (9 `/tmp/aqvsd*` sites) | lib.sh exports `TEST_SHORT_TMP=$(mktemp -d /tmp/apt.XXXXXX)` covered by the test's existing live-lock holder (`.autopilot-live.lock` sidecar); the 9 sites allocate under it (path stays < 60 bytes); `apt.*` is `test-lockgated` | 1 |
 | `hooks/tests/autopilot-engine.test.sh:6015,6032` | write debug JSON under `$TEST_TMP`, not `/tmp` | 1 |
 | `hooks/tests/test-snapshot.test.sh` | re-verify its TMPDIR assertions; add one for the L1 per-run dir | 1 |
 | `src/engine/autopilot-engine.js` (`defaultDiffProvider` :2014, `prepareReview` :5096, `performReview` :5173, identity/binding prepares :5672/:5705, legacy loop :11000, repair prompt :2670, `finish` :9665) | dispose diff dir per prepared review; delete on throw; repair prompt same; `finish()` backstop | 2 |
 | `scripts/dispatch-consult.sh` | `trap` cleanup for its temp files | 2 |
 | `scripts/lib/tmp-residue-registry.json` (new) | prefix · kind (`scratch` / `live` / `evidence` / `worktree`) · owner script · retention days · reason | 3 |
-| `scripts/lib/tmp-residue.js` (new) | load registry; `prune --days N [--tmpdir D] [--json]`; refuses `live`/`worktree`; skips entries holding `.autopilot-live.lock` or `.autopilot-worktree.lock` | 3 |
+| `scripts/lib/tmp-residue.js` (new) | load registry; `prune --days N [--tmpdir D] [--json]`; `patterns` (scratch/evidence only); `new-since --stamp F --exclude-kind K[,K]` (KR1); refuses `live`/`worktree`; skips entries holding `.autopilot-live.lock` or `.autopilot-worktree.lock` | 3 |
 | `scripts/lib/prune-tmp-residue.sh` | patterns come from the registry (via `node scripts/lib/tmp-residue.js patterns`); keep signature/silence | 3 |
 | `scripts/repo-residue-sweep.js` (`reap --auto`) + `hooks/residue-auto-reap-lib.js` | add the tmp phase under a host-level stamp/lock; `residue.tmp_prune` opt-out | 3 |
 | `scripts/lib/residue-config.js` | `tmp_prune` key | 3 |
 | `scripts/check-tmp-residue-registry.js` (new) + test | the gate (§4 phase 4) | 4 |
+| new tests: `hooks/l1-tmpdir.test.js`, `hooks/tests/l1-tmpdir-containment.test.sh` (1); `hooks/tests/engine-diff-lifetime.test.sh`, `hooks/tests/dispatch-consult-trap.test.sh` (2); `hooks/tests/tmp-residue-registry.test.sh`, `hooks/tests/tmp-residue-prune.test.sh` (3); `hooks/tests/check-tmp-residue-registry.test.sh` (4) | encode KR1–KR5 | 1–4 |
 | `scripts/tmp-residue-allowlist.json` (new) | bare `mktemp`, worktree creators, deliberate evidence, sandbox-internal `/tmp` — each with a reason | 4 |
 | `.githooks/pre-commit`, `scripts/preflight-release.sh` | wire the gate | 4 |
-| `docs/scripts-inventory.md`, CLAUDE.md grouped list, `references/…` (residue reference), relevant SKILL.md table | the four-place wiring for each new script | 3, 4 |
+| `docs/scripts-inventory.md`, CLAUDE.md grouped list, `references/hetero-dispatch.md` (temp-retention paragraph), `skills/finish-flow/SKILL.md` (scripts table) | the four-place wiring for each new script | 3, 4 |
 
 ## 4. Phases
 
@@ -121,7 +120,7 @@ Every phase is a deliverable with its own acceptance; phase 4 depends on the reg
    - `TMPDIR="$L1_TMP" node --test "${UNIT_FILES[@]}"`.
    - On exit: release, then `rm -rf "$L1_TMP"` after the node process group is gone. Hook into the existing `__suite_on_exit` ordering; do not reorder it.
 3. `suite-residue-reap.sh`: add `apl1.*` to `_SRR_PATTERNS` and to the lock-gated routing (`:225` case).
-4. Fix the three escapers in §3. Re-verify `test-snapshot.test.sh`.
+4. Fix the three escapers in §3; add `apt.*` to `_SRR_PATTERNS` and the registry. Find other hard-coded `/tmp` expectations with `git grep -n "'/tmp/\|\"/tmp/" -- hooks/tests scripts/*.test.js` and re-verify `test-snapshot.test.sh`.
 - **Acceptance**:
   - KR1 measured twice (serial and `--parallel`).
   - KR2: start `run.sh`, `kill -9` its process group during L1, assert the `apl1.*` dir remains, run `run.sh <one fast suite>`, and assert the reaper JSON shows it reaped. Also show a concurrently live run's dir is kept.
@@ -131,8 +130,9 @@ Every phase is a deliverable with its own acceptance; phase 4 depends on the reg
 1. `defaultDiffProvider`: on `git diff` failure, `rmSync(diffDir)` before throwing.
 2. `prepareReview` returns `dispose()` (removes its diff dir).
    - `performReview` calls it in `finally` after `reviewDiff` and `classify` return.
-   - The identity and binding prepares (`:5672`, `:5705`) call it after `buildPacketOnce` / digest. Confirm `buildPacketOnce` (`src/runners/review-packet.js:601`) has read or copied the diff before the dispose.
-   - The loop collects every diff dir it created; `finish()` removes any left (backstop for paths that throw past a `finally`). An injected `diffProvider`'s files are not touched: dispose only removes a dir the default provider created.
+   - The identity and binding prepares (`:5672`, `:5705`) call it after `buildPacketOnce` / digest; `review-packet.js:601` reads the diff with `fs.readFileSync` before returning (verified 2026-10-12), so the bytes are in memory before dispose.
+   - `defaultDiffProvider` records each dir it creates in a module-level `Set` of owned dirs; `dispose()` and the `finish()` backstop remove only members of that set. A path returned by an injected `diffProvider` is never in it, so neither ever touches it.
+   - The identity and binding prepares wrap their use in `try { … } finally { dispose() }`.
 3. Legacy loop (`:11000`) and the repair prompt (`:2670`): same pattern.
 4. `dispatch-consult.sh`: one `trap` that removes its temp files on EXIT/INT/TERM.
 - **Acceptance**:
@@ -143,7 +143,7 @@ Every phase is a deliverable with its own acceptance; phase 4 depends on the reg
 
 ### Phase 3 — One registry, daily prune that actually fires (size M)
 1. `tmp-residue-registry.json`:
-   - Every prefix `prune-tmp-residue.sh` lists today, plus `pi-rpc-session-*`, `dispatch-anthropic-review-*`, `qual-scope.*`, `dispatch-consult-*`, `autopilot-review-loop-*` (`scratch`; backstop for killed engines), `autopilot-repair-prompt-*`.
+   - Every prefix `prune-tmp-residue.sh` lists today, plus `pi-rpc-session-*`, `dispatch-anthropic-review-*`, `qual-scope.*`, `dispatch-consult-*`, `autopilot-review-loop-*` and `autopilot-repair-prompt-*` (`scratch`, retention 1 day: a killed engine's leftovers; a live loop's dir is younger than its 7200 s wall cap).
    - Live dirs (`autopilot-foreman-runs`, `autopilot-dispatch-runs`, `autopilot-<uid>`) as `live`.
    - `autopilot-kimi-raw-*` and `autopilot-frontmatter-evidence-*` as `evidence` with an explicit retention (14 days).
    - Worktree creators as `worktree`.
@@ -162,7 +162,7 @@ Every phase is a deliverable with its own acceptance; phase 4 depends on the reg
 ### Phase 4 — Gate: an unregistered temp prefix cannot ship (size M)
 1. `check-tmp-residue-registry.js` scans shipped code: `src/`, `bin/`, `hooks/` (not `hooks/tests/`), and `scripts/` (not `*.test.*`). It looks for `mkdtemp`/`mkdtempSync`/`mktemp` and `os.tmpdir()`/`${TMPDIR`-joined fixed prefixes, then extracts the literal prefix. Each occurrence must be one of:
    - (a) registered in `tmp-residue-registry.json` or `suite-residue-reap.sh`'s list;
-   - (b) cleaned in the same function scope by a `finally` block or a shell `trap` that names the variable. A bare `rmSync` on the success path does not count;
+   - (b) guaranteed cleanup: in JS the allocation is the first statement of a `try` (or the assignment immediately before it, with nothing between) whose `finally` removes the variable; in shell a `trap … EXIT` naming the variable (guarded `${var:-}`) is installed **before** the `mktemp` line in the same scope. A bare `rmSync` on the success path does not count;
    - (c) allowlisted in `tmp-residue-allowlist.json` with a reason.
    - A non-literal prefix it cannot extract is a finding unless allowlisted.
 2. Test files are not gated: phase 1 contains them by construction. The gate prints that scope in its header.
@@ -214,6 +214,8 @@ Assumptions carried: the AF_UNIX 108-byte limit bounds the per-run dir path; all
 
 ## Review log
 
+- **G1** (2026-10-12): CONDITIONAL (sol STOP, grok STOP, MiniMax CONDITIONAL; transport complete). 16 findings, 10 blocker candidates; all 10 accepted (two merged: KR1 allowlist into the acceptance-commands fold, wrapper live-kind into the registry fold). As-reviewed bytes sha256 `bdd93be3…`.
+- **R1** bounded repair of the accepted G1 blockers only: final goal narrowed to D3; KR1–KR5 rewritten as single commands backed by named tests (KR2 backdates the lock past the reaper's min age; KR3 non-vacuous, injected-provider survival, digest pin); registry kinds incl. `test-lockgated`/`lock` with a parity test and wrapper kind filter; owned-dir set for dispose/`finish()`; `apt.*` short lock-held dir for the AF_UNIX tests; gate rule (b) requires allocation dominated by the `try`/`trap`. Non-blocking folds: concrete doc paths, 1-day retention for engine scratch, `buildPacketOnce` read verified. Growth 1.15x.
 - **R0** (2026-10-12, depth-0 Opus 5.5): drafted from the read-only inventory of 2026-10-11 and the proposal answers.
   - Frozen rubric: `docs/plans/2026-10-12-tmp-residue-containment.rubric.md` (R1–R8).
   - Manifest: `docs/plans/2026-10-12-tmp-residue-containment.plan-review-manifest.json`, `logical_plan_id: tmp-residue-containment-2026-10-12`.

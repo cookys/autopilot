@@ -143,3 +143,9 @@ test('assertJsonValue ACCEPTED: 0 (positive zero) is not confused with -0', () =
   assert.doesNotThrow(() => assertJsonValue(0, '$'));
   assert.ok(!Object.is(0, -0), 'sanity: positive zero is not -0');
 });
+
+// node:test runs the cases after this file finishes loading, so clean up on
+// process exit; a failed run (non-zero code) keeps the directory for debugging.
+process.on('exit', (code) => {
+  if (code === 0) fs.rmSync(tempRoot, { recursive: true, force: true });
+});

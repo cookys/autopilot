@@ -1105,3 +1105,11 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: stage-graph v7..v10 freezes, 2026-10
 - **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/README.md
 - **Context**: freeze-guidance-arm.js change/red end in armBase(), which only looks up extra-base id with the new suffix, so base.json loses extra-base-v5; restored by hand v7-v10. Base must not change.
+
+### Engine review-loop diff files are never deleted
+- **Status**: open
+- **Trigger**: after the 3.0.0 final release
+- **Effort**: S
+- **Source**: local residue measurement, 2026-10-11 (107 dirs, 596 KB)
+- **Pointer**: none
+- **Context**: src/engine/autopilot-engine.js defaultDiffProvider (~L2014) leaves range.diff per round, lifetime unclear. Fix (a) delete diffDir in finish(), or (b) add autopilot-review-loop-* to prune-tmp-residue.sh patterns.

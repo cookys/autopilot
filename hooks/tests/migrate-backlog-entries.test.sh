@@ -449,11 +449,11 @@ assert_eq "$?" "0" "(p) dry-run exits 0" # RED at 488dc6dc: dry-run invented ope
 assert_contains "$(first_json "$dry")" '"unmapped_status"' "(p) dry-run lists unmapped_status" # RED at 488dc6dc: no errors array
 assert_contains "$(first_json "$dry")" '"unmapped_column"' "(p) dry-run lists unmapped_column" # RED at 488dc6dc: no errors array
 assert_contains "$(first_json "$dry")" '## Columns' "(p) unmapped_column names the ## Columns line" # RED at 488dc6dc: silent drop
-node "$MIG" --backlog "$P/docs/projects/BACKLOG.md" --config "$P/.claude/backlog-config.md" --apply --json >/tmp/mig-p-apply.json 2>/tmp/mig-p-apply.err || p_apply=$?
+node "$MIG" --backlog "$P/docs/projects/BACKLOG.md" --config "$P/.claude/backlog-config.md" --apply --json >"$TEST_TMP/mig-p-apply.json" 2>"$TEST_TMP/mig-p-apply.err" || p_apply=$?
 assert_eq "${p_apply:-0}" "1" "(p) --apply refuses without --allow-unmapped-to-sidecar" # RED at 488dc6dc: apply exited 0
 cmp -s "$P/docs/projects/BACKLOG.md" "$P/before.md"; assert_eq "$?" "0" "(p) refuse leaves the backlog byte-identical"
 assert_file_absent "$P/docs/backlog/gc-p.md" "(p) refuse writes no sidecar"
-node "$MIG" --backlog "$P/docs/projects/BACKLOG.md" --config "$P/.claude/backlog-config.md" --apply --allow-unmapped-to-sidecar --json >/tmp/mig-p-flag.json 2>/tmp/mig-p-flag.err || p_flag=$?
+node "$MIG" --backlog "$P/docs/projects/BACKLOG.md" --config "$P/.claude/backlog-config.md" --apply --allow-unmapped-to-sidecar --json >"$TEST_TMP/mig-p-flag.json" 2>"$TEST_TMP/mig-p-flag.err" || p_flag=$?
 assert_eq "${p_flag:-0}" "1" "(p) --allow-unmapped-to-sidecar still refuses while a column is unmapped" # RED at 488dc6dc: apply wrote
 cmp -s "$P/docs/projects/BACKLOG.md" "$P/before.md"; assert_eq "$?" "0" "(p) column error writes nothing"
 
@@ -493,7 +493,7 @@ EOC
 git -C "$P2" add -A >/dev/null; git -C "$P2" -c user.email=t@t -c user.name=t commit -qm base
 cp "$P2/docs/projects/BACKLOG.md" "$P2/before.md"
 ORIG_MYSTERY2="$(grep 'GC-p' "$P2/docs/projects/BACKLOG.md")"
-node "$MIG" --backlog "$P2/docs/projects/BACKLOG.md" --config "$P2/.claude/backlog-config.md" --apply --json >/tmp/mig-p2.json 2>/tmp/mig-p2.err || p2=$?
+node "$MIG" --backlog "$P2/docs/projects/BACKLOG.md" --config "$P2/.claude/backlog-config.md" --apply --json >"$TEST_TMP/mig-p2.json" 2>"$TEST_TMP/mig-p2.err" || p2=$?
 assert_eq "${p2:-0}" "1" "(p) status-only --apply refuses without the flag" # RED at 488dc6dc: invented open
 cmp -s "$P2/docs/projects/BACKLOG.md" "$P2/before.md"; assert_eq "$?" "0" "(p) status-only refuse is a no-write"
 out="$(node "$MIG" --backlog "$P2/docs/projects/BACKLOG.md" --config "$P2/.claude/backlog-config.md" --apply --allow-unmapped-to-sidecar --json)"

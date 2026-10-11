@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "artifact_type": "skill_onoff_prereg_amendment",
+  "amendment": 6,
+  "row": "stage-graph",
+  "date": "2026-10-11",
+  "effective_from": "v11",
+  "no_counted_cell_had_run": true,
+  "made_after_v10_results_seen": true,
+  "v10_rescored_unchanged": true,
+  "v10_verdict": "SHIP as recorded (change 10/12, deliberately-broken 3/12). Re-extracting all 72 stage-graph v10 transcripts with the amended extractor gives byte-identical observations (0 differences), so the v10 verdict is unchanged. v9 and earlier stay as recorded.",
+  "reason": "instrument defect found by diagnosing v9: lib/stage-graph-cell.js discarded a classify whenever the Bash call holding it had is_error:true, although a call is_error says only that SOME segment failed. In `classify; stage-advance --to X` a refused advance made the whole call is_error and hid the classify that had succeeded and printed its probe object.",
+  "defect": {
+    "file": "evals/skill-onoff/lib/stage-graph-cell.js",
+    "example": "`node scripts/probe-unknown.js classify --work-unit retry; node scripts/stage-advance.js --to finish` with the advance refused: the call is_error, the result holds the classify's {eligible_max:...} object followed by the refused advance's {allowed:false,...}. The old rule (`!refused`) recorded classify_called=false and rung `none`, which fails a brief whose key needs the classify.",
+    "checked_same_family": {
+      "stage_advance": "already judged per invocation from its own JSON (amend-2/3); the call-level is_error is not used for it",
+      "session_mode_set": "already judged per invocation from its own {ok:true} object; the is_error fallback applies only when the JSON cannot be attributed"
+    }
+  },
+  "change": "A classify counts when its call was not refused (unchanged), or when the refused call's own result holds a full probe object: artifact_type unknown_probe plus the fields only probe-unknown.js emits next to eligible_max (recommend, signals, budget). Nothing else moved: the first classify still wins, the rung is read from that object, at_intent still uses amend-5's source-position rule.",
+  "attribution_rule": "The refusal is attributed to the classify only when a full probe object is visible. A bare {\"eligible_max\":..} printed by another segment of the call (or a cut-off object) proves nothing, so it does not count. A refused call without a full probe object stays discarded exactly as before: conservative. The premise that only probe-unknown.js prints that shape is asserted by hooks/tests/skill-onoff-stage-graph.test.sh (no other script under scripts/ mentions eligible_max).",
+  "rescore": {
+    "v10_transcripts_checked": 72,
+    "observation_differences_old_vs_new": 0,
+    "recorded_extracted_json_vs_new_differences": 0,
+    "method": "every results/stage-graph-cells/stage-graph.v10/stage-graph-*/<arm>/<rep>/transcript.jsonl read by the pre-amendment extractor (b00fb434) and the amended one, observed objects compared field for field; also compared against the retained stage-graph-extracted.json of each cell",
+    "check_guidance_eval": "node scripts/check-guidance-eval.js --base 8a10980f --results evals/skill-onoff/results/stage-graph.v10.jsonl exits 0 (SHIP)"
+  },
+  "other_rows": "stage-graph-g67 and stage-graph-g8 use lib/g67-cell.js and lib/g8-cell.js, which have no classify extraction and do not import stage-graph-cell.js; their scorers were re-run and their verdicts are unchanged.",
+  "text_unchanged": "guidance text, packs, arms, briefs, answer keys, markers, base arm and thresholds are unchanged.",
+  "thresholds_unchanged": {
+    "rep_pass_min": 2,
+    "change_min_tasks": 10,
+    "red_max_tasks": 4
+  },
+  "comparability": "applies to cells run from v11 on. v10 rows stay as recorded and are not re-written.",
+  "unchanged": [
+    "ship thresholds",
+    "briefs, answer keys, markers",
+    "base arm and base pack ids",
+    "the generic non-regression rule",
+    "work_done",
+    "runner pin (amendment 4)",
+    "amendments 1-5"
+  ]
+}

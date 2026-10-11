@@ -1079,14 +1079,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/README.md
 - **Context**: docs/plans/evidence/2026-10-03-mods-spikes/: S4 Image and S5 clock.every fail.
 
-### Pre-existing red suites: review-loop-resolver-a r23, qualification-scorecard-tools r51/r52/r75
-- **Status**: open
-- **Trigger**: when these suites are next touched
-- **Effort**: S
-- **Source**: stage-graph plan execution, 2026-10-06..08
-- **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/README.md
-- **Context**: seen during the stage-graph work, not caused by it.
-
 ### hetero-review-loop cannot carry a range over its packet ceiling: no phase-keyed packet mode
 - **Status**: open
 - **Trigger**: next review of a release range above ~400 KB
@@ -1094,29 +1086,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: 3.0.0 total QC, 2026-10-08
 - **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/qc-total-2026-10-08/README.md
 - **Context**: the exclude allowlist forbids path slicing, so the 1 MB range ran as a direct dispatch-review panel with no chain receipt.
-
-### Prove the generic-arm fixture-scripts-sg overlay does not suppress row markers
-- **Status**: open
-- **Trigger**: before the next guidance eval campaign
-- **Effort**: S
-- **Source**: 3.0.0 total QC, 2026-10-08 (K4 MiniMax); open item 4 of the stage-graph log
-- **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/qc-total-2026-10-08/README.md
-
-### finish-flow close-out does not archive-then-delete this session's unintegrated dispatch branches
-- **Status**: open
-- **Trigger**: the v7 skill-onoff eval (rides with the /l4–/l6 size row below)
-- **Effort**: S
-- **Source**: peer revival.3d (cuda) 2026-10-09; split from the closed revival.3d rows, owner ruling 2026-10-09
-- **Pointer**: docs/plans/evidence/2026-10-09-residue-auto-reap/contract.md
-- **Context**: guidance change (a finish-flow step), so it needs eval evidence; until then `repo-residue-sweep.js reap --auto` archives such branches after `residue.archive_branch_days`.
-
-### refs/archive/* written by the residue sweep never expire
-- **Status**: open
-- **Trigger**: when archive refs are first seen accumulating (or before the 3.0.0 final cut)
-- **Effort**: S
-- **Source**: residue auto-reap review, 2026-10-09
-- **Pointer**: docs/plans/evidence/2026-10-09-residue-auto-reap/contract.md
-- **Context**: `reap --auto` keeps every archived tip reachable under `refs/archive/<date>/<branch>` forever; needs a prune rule (age cap, then `git gc`) and a needs_human line before it is dropped.
 
 ### remove dispatch-hetero.sh --gc and stale_reaper_age_days at 3.0.0 final
 - **Status**: open
@@ -1126,18 +1095,3 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-10-09-residue-auto-reap/contract.md
 - **Context**: `repo-residue-sweep.js reap --auto` is the canonical automatic reaper; the rail-local `--gc` path (default 0, off) is redundant; breaking removal, no shim.
 
-### /l4–/l6 sessions never set a size, so the band position slot and Graph tab stay empty
-- **Status**: open
-- **Trigger**: before the 3.0.0 final cut (the P7 band shows no position for these sessions)
-- **Effort**: M
-- **Source**: P7 real-machine gate, 2026-10-09 (l4/l5/l6 panels: Graph says no stage walk published)
-- **Pointer**: docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/RESULTS.md
-- **Context**: the fix is a guidance change in the l4–l6 front doors (call session-mode set --size), so it needs a skill-onoff eval before it ships.
-
-### the eval scorer skips classify when the whole tool call is refused
-- **Status**: open
-- **Trigger**: before the next stage-graph eval run
-- **Effort**: S
-- **Source**: stage-graph v9 regression run, 2026-10-11 (change arm 9/12 NOT-SHIP, same-command order misjudged once)
-- **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/README.md
-- **Context**: stage-graph-cell.js (evals/skill-onoff/lib) `!refused` drops a whole refused (is_error) call: in `classify; stage-advance` a refused advance hides the successful classify. Judge per command.

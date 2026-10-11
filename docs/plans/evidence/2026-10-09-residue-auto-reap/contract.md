@@ -147,6 +147,7 @@ Recorded after hands A and B merged; each is accepted as shipped and supersedes 
 - The 24 h stamp is claimed before the sweep runs, so a failing sweep is not retried by every later session.
 - The Codex package wires no SessionStart hook for this feature.
 - `campaign-held` / `campaign-unknown`: a marker worktree whose lease has expired (or a dispatch branch older than `archive_branch_days`) that is retained only because its `root_run_id` is in an unresolved campaign or Mission is never removed, but is listed in `needs_human` with class `campaign-held` and `reason=root_run_id=<id>`. When the campaign signal is unreadable, the same worktrees (root differs from run) and old dispatch branches are listed as `campaign-unknown`. The `command` is the sweep scan plus the root id, because no safe one-line abort exists (`mission finalize-abort` needs a drained Mission state file). `scan --json` now loads the campaign signal too.
+- `refs/archive/*` has no prune rule. Owner ruling, 2026-10-10: archive refs are reminder-only and are never deleted automatically; `reap --auto` lists those older than `residue.archive_remind_days` (default 90, `scripts/lib/residue-config.js`) in `needs_human` as class `archive-old` with the delete command, and the owner decides. The age-cap-then-`git gc` prune rule that the earlier BACKLOG row proposed is not built.
 
 ## Session close-out (alpha.4)
 

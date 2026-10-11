@@ -32,14 +32,15 @@ done
 CL="$TMPDIR/clone"   # under TMPDIR so the test-identity gate bypass below is honoured
 git clone -q --local "$REPO_ROOT" "$CL" >/dev/null 2>&1
 assert_eq "$?" "0" "case2: scratch clone created"
-# Overlay uncommitted working-tree files (modified or untracked; empty once the change is committed,
+# Overlay modified tracked files only (untracked files may be other parallel suites' transient
+# droppings in a shared snapshot; empty once the change is committed,
 # so the clone then tests exactly HEAD), then record a baseline with hooks off so the real hook only
 # sees the planted/clean change.
 while IFS= read -r f; do
   [ -f "$REPO_ROOT/$f" ] || continue
   mkdir -p "$CL/$(dirname "$f")"
   cp "$REPO_ROOT/$f" "$CL/$f"
-done < <(git -C "$REPO_ROOT" ls-files -m -o --exclude-standard)
+done < <(git -C "$REPO_ROOT" ls-files -m)
 export GIT_AUTHOR_NAME=tmp-gate GIT_AUTHOR_EMAIL=tmp-gate@example.invalid
 export GIT_COMMITTER_NAME=tmp-gate GIT_COMMITTER_EMAIL=tmp-gate@example.invalid
 git -C "$CL" -c core.hooksPath=/dev/null add -A >/dev/null 2>&1

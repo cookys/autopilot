@@ -47,6 +47,17 @@ function usage(msg) { const e = new Error(msg); e.usage = true; return e; }
 
 // ---------------------------------------------------------------- file discovery
 
+function trackedFiles(rootAbs) {
+  const top = cp.spawnSync('git', ['-C', rootAbs, 'rev-parse', '--show-toplevel'], { encoding: 'utf8' });
+  if (top.status !== 0) return null;
+  let real;
+  try { real = fs.realpathSync(rootAbs); } catch { return null; }
+  if (top.stdout.trim() !== real) return null; // rootAbs is not itself the checkout root
+  const ls = cp.spawnSync('git', ['-C', rootAbs, 'ls-files', '-c', '-z', '--', ...SCAN_ROOTS], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  if (ls.status !== 0) return null;
+  return ls.stdout.split('\0').filter((f) => f && inScope(f) && fs.existsSync(path.join(rootAbs, f)));
+}
+
 function walk(rootAbs, relDir, out) {
   let names;
   try { names = fs.readdirSync(path.join(rootAbs, relDir), { withFileTypes: true }); } catch { return; }
@@ -305,7 +316,13 @@ function runGate(opts) {
 
   let files;
   const whole = !opts.files;
-  if (whole) { files = []; for (const r of SCAN_ROOTS) walk(rootAbs, r, files); }
+  if (whole) {
+    // A git checkout is scanned by its index (tracked + staged), so transient untracked files other
+    // processes drop into the tree (parallel test suites sharing one snapshot) never count; a plain
+    // directory (the --self-test fixtures) is walked.
+    files = trackedFiles(rootAbs);
+    if (files === null) { files = []; for (const r of SCAN_ROOTS) walk(rootAbs, r, files); }
+  }
   else files = opts.files.map((f) => f.replace(/^\.\//, '')).filter((f) => inScope(f) && fs.existsSync(path.join(rootAbs, f)));
   files.sort();
   for (const rel of files) {

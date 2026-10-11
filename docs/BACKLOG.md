@@ -1122,10 +1122,10 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: costs.jsonl already has cache_write_tokens but cost-digest.js never sums it. Add it plus cache_read/turns; subagent share needs an isSidechain flag in cost-tracker-lib parseAssistantTurns (verify Stop sees sidechains).
 
-### PEER-REPORTED (c4140 llm-playground): context-budget re-reminds per token growth, not per call count
+### PEER-REPORTED (c4140 llm-playground): context-budget defaults scale to 750K on 1M windows; re-remind per call
 - **Status**: open
 - **Trigger**: operator decision on adoption
 - **Effort**: S
-- **Source**: fleet msg `01M4NVXM8WM1Q6GR4VSTST0P22`
+- **Source**: fleet msgs `01M4NVXM8WM1Q6GR4VSTST0P22`, `01M4NW48V3GDXBVBQGFJY6F1P3`; scaling verified locally
 - **Pointer**: none
-- **Context**: context-budget (default-on, T1 100k / T2 150k, points to handoff) throttles by call count, so it repeats at flat context. Add a context_budget step key (peer uses +50K) and token-based throttling.
+- **Context**: scaleTiers (context-budget-lib.js) scales unset t1/t2 by window: 1M gives T2 750K (peer saw first T2 at 777K). Cost is turns x context, so default absolute. Also throttle per token step, not per call.

@@ -406,9 +406,11 @@ test('1M live file, explicit t2=250000 => configured value wins (silent at 153k,
 function stepSession(extraEnv) {
   const liveDir = shmTmp('ctxbud-step-');
   const sid = `step-${Math.random().toString(36).slice(2)}`;
-  writeLiveMain(liveDir, sid, liveMainFixture());
   const env = freshEnv({ AUTOPILOT_LIVE_DIR: liveDir, ...extraEnv });
-  return (tokens) => runHook(
+  // The live file tracks the same total as the transcript (the statusline keeps it fresh), so
+  // the cheap no-parse path sees the real context too.
+  return (tokens) => writeLiveMain(liveDir, sid, liveMainFixture({ context_window: {
+    context_window_size: 1_000_000, total_input_tokens: tokens } })) || runHook(
     { transcript_path: tmpFile([usageLine(1_000, tokens - 1_000, 0, 10, new Date().toISOString())]), session_id: sid }, env);
 }
 
@@ -425,6 +427,25 @@ test('step=50000 (default): context parked at 160k reminds ONCE across many call
   assert.strictEqual(grown.status, 2, 'grew by step since the last reminder => remind again');
   assert.match(grown.stderr, /210k/);
   assert.strictEqual(call(215_000).status, 0, 'and parks again');
+});
+
+test('dropping below a tier threshold resets it: T2 reminds again on the next climb (compaction cycle)', () => {
+  const call = stepSession({});
+  assert.strictEqual(call(160_000).status, 2, 'first T2');
+  assert.strictEqual(call(165_000).status, 0, 'parked');
+  assert.strictEqual(call(40_000).status, 0, 'compacted below both tiers');
+  const again = call(160_000);
+  assert.strictEqual(again.status, 2, 'new cycle: first crossing after compaction must remind');
+  assert.match(again.stderr, /T2/);
+});
+
+test('dropping below a tier threshold resets it: T1 reminds again on the next climb (compaction cycle)', () => {
+  const call = stepSession({});
+  const first = call(120_000);
+  assert.match(first.stderr, /Context budget T1/, 'first T1');
+  assert.strictEqual(call(125_000).stderr.trim(), '', 'parked');
+  assert.strictEqual(call(40_000).stderr.trim(), '', 'compacted below T1');
+  assert.match(call(120_000).stderr, /Context budget T1/, 'new cycle: T1 reminds again');
 });
 
 test('step from config file applies; env AUTOPILOT_CONTEXT_BUDGET_STEP overrides the config file', () => {

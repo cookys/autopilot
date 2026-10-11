@@ -51,7 +51,7 @@ Prose execution sequence for code phases and diffs (see [`references/code-loop.m
 2. Depth-0 writes dispositions for all candidate findings.
 3. Run `node scripts/hetero-review-loop.js finalize --phase <p> --generation <n> --dispositions <file>` to aggregate verdicts.
 4. On a `FIX-THEN-SHIP` verdict, dispatch the emitted hands brief through the topology using `bash scripts/dispatch-hetero.sh` at rung 0, then collect the next generation over the delta and finalize again, repeating until `SHIP-AS-IS`.
-5. Run `node scripts/check-phase-review-receipt.js` in receipt mode.
+5. Run `node scripts/check-phase-review-receipt.js` in receipt mode (`--packets` for a packet set).
 6. The eventual merge commit carries the existing `QC-Verdict` trailer unchanged.
 7. When the `hetero_review` knob resolves to `off`, write the opt-out receipt via `node scripts/hetero-review-loop.js opt-out --knob hetero_review` instead of running the loop.
 

@@ -1161,3 +1161,11 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: code review of `34dd3c33` (merge `7362f914`), 2026-10-12, verdict SHIP
 - **Pointer**: none
 - **Context**: short-circuit test cannot fail (assert a grown file's new row gets a rewritten sidecar's parent); no cycle/self-parent test; a node under a cycle can land on root as orphan; 5-char labels can collide.
+
+### cost-tracker PRICING is stale family-level: opus 15/75, no fable row, flat 10% cache read
+- **Status**: open
+- **Trigger**: now; every cost report and the brain fuse read these rates
+- **Effort**: S
+- **Source**: claude-api skill price table (cached 2026-10-06) vs hooks/cost-tracker-lib.js:30-34, 2026-10-12
+- **Pointer**: none
+- **Context**: 5.5 rates: fable-5-1 10/50 read .25; opus-5-5 4/20 read .20; sonnet-5-5 2/10 read .20; haiku-5-5 .10/.50 (>100K .50/2.50). Opus over ~3.75x, fable under (sonnet fallback). Price per model id.

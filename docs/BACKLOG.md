@@ -1079,13 +1079,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/README.md
 - **Context**: docs/plans/evidence/2026-10-03-mods-spikes/: S4 Image and S5 clock.every fail.
 
-### hetero-review-loop cannot carry a range over its packet ceiling: no phase-keyed packet mode
-- **Status**: open
-- **Trigger**: next review of a release range above ~400 KB
-- **Effort**: S
-- **Source**: 3.0.0 total QC, 2026-10-08
-- **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/qc-total-2026-10-08/README.md
-- **Context**: the exclude allowlist forbids path slicing, so the 1 MB range ran as a direct dispatch-review panel with no chain receipt.
 
 ### remove dispatch-hetero.sh --gc and stale_reaper_age_days at 3.0.0 final
 - **Status**: open

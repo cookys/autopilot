@@ -1,6 +1,12 @@
 #!/usr/bin/env node
 'use strict';
 
+// hetero-review-loop.js — multi-seat review loop driver: collect / finalize / opt-out (see --help).
+// Packet mode (--packets <file> --packet <id>) carries a range too big for one review packet by
+// splitting it BY PATH into per-packet phases that a set check proves cover the range exactly once
+// (check-phase-review-receipt.js --packets); it never excludes a path. Without those flags every
+// behavior is unchanged. Plan: docs/plans/2026-10-11-review-packet-mode.md.
+
 const fs = require('fs');
 const path = require('path');
 const process = require('process');
@@ -121,6 +127,45 @@ function resolveMinReviewedSeats(flags, totalSeats) {
 }
 
 const { EXCLUDE_ALLOWLIST, isPathspecAllowed, loadConsumerExcludeAllowlist } = require('./lib/exclude-allowlist');
+const reviewPackets = require('./lib/review-packets');
+
+// Packet mode (collect/finalize): --packets <packets.json> --packet <id> makes this call one packet of a
+// packet set — its own phase `<set>-<id>`, reviewing only that packet's files of the full range. Returns
+// null when neither flag is given (the unchanged, whole-range path). Plan: docs/plans/2026-10-11-review-packet-mode.md.
+function resolvePacketFlags(flags) {
+  if (flags.packets === undefined && flags.packet === undefined) return null;
+  if (typeof flags.packets !== 'string' || typeof flags.packet !== 'string') {
+    console.error('ERROR: --packets <packets.json> and --packet <id> must be given together');
+    process.exit(2);
+  }
+  if (flags.exclude !== undefined) {
+    console.error('ERROR: --exclude cannot be combined with --packets: a packet set covers every changed path, it never leaves one out');
+    process.exit(2);
+  }
+  const loaded = reviewPackets.loadPacketsFile(path.resolve(flags.packets));
+  if (!loaded.ok) {
+    console.error(`ERROR: Invalid packets file: ${loaded.errors.join('; ')}`);
+    process.exit(1);
+  }
+  if (!Object.prototype.hasOwnProperty.call(loaded.packets, flags.packet)) {
+    console.error(`ERROR: Unknown packet '${flags.packet}' (the set '${loaded.set}' has: ${Object.keys(loaded.packets).join(', ')})`);
+    process.exit(2);
+  }
+  const phase = reviewPackets.packetPhase(loaded.set, flags.packet);
+  if (flags.phase !== undefined && flags.phase !== phase) {
+    console.error(`ERROR: --phase '${flags.phase}' conflicts with the packet phase '${phase}' (derived as <set>-<packet>); omit --phase`);
+    process.exit(2);
+  }
+  return {
+    set: loaded.set,
+    id: flags.packet,
+    phase,
+    packets: loaded.packets,
+    paths: loaded.packets[flags.packet],
+    sha256: loaded.sha256,
+    file: path.resolve(flags.packets),
+  };
+}
 
 function showHelp() {
   console.log(`Usage: node scripts/hetero-review-loop.js <subcommand> [flags]
@@ -135,6 +180,14 @@ Common flags:
   --ledger <dir>        Path to ledger directory
   --phase <id>          Phase identifier
   --help, -h            Show this help message
+
+Packet mode (collect and finalize): a range too big for one review packet is split BY PATH, never by
+exclusion:
+  --packets <file>      packets.json (autopilot.review-packets/1): { set, packets: { <id>: [exact file paths] } }
+  --packet <id>         Review only this packet's files; the phase is derived as <set>-<id> (omit --phase)
+                        Generation 1 requires the packets to cover every changed path exactly once;
+                        --exclude is refused. The whole set is gated by
+                        check-phase-review-receipt.js --packets <file> (a lone packet receipt is refused).
 
 Collect flags:
   --generation <n>      Generation number (integer >= 1)
@@ -558,7 +611,8 @@ async function handleCollect(flags) {
 
   const repoRoot = flags['repo-root'] ? path.resolve(flags['repo-root']) : '';
   const ledgerDir = flags.ledger ? path.resolve(flags.ledger) : '';
-  const phase = flags.phase;
+  const packetCtx = resolvePacketFlags(flags);
+  const phase = packetCtx ? packetCtx.phase : flags.phase;
 
   if (!ledgerDir || !phase) {
     console.error('ERROR: --ledger <dir> and --phase <id> are required');
@@ -638,6 +692,36 @@ async function handleCollect(flags) {
     process.exit(1);
   }
 
+  // Packet mode: the cover must hold BEFORE any seat is dispatched or any evidence directory exists.
+  // Generation 1 reviews the whole range, so the packets' union must equal the changed list exactly;
+  // a later generation reviews a fix on top, which may only touch covered files.
+  if (packetCtx) {
+    let names;
+    try {
+      names = reviewPackets.rangeNames(repoRoot, base, head);
+    } catch (e) {
+      console.error(`ERROR: Failed to list changed paths: ${e.message}`);
+      process.exit(1);
+    }
+    const coverProblems = reviewPackets.coverErrors(names, packetCtx.packets, generation === 1);
+    if (coverProblems.length > 0) {
+      console.error(`ERROR: packets '${packetCtx.set}' do not cover ${base}..${head}${generation === 1 ? ' exactly once' : ''}:\n${coverProblems.join('\n')}`);
+      process.exit(1);
+    }
+    if (generation > 1 && !names.some((n) => packetCtx.paths.includes(n))) {
+      console.error(`ERROR: nothing in packet '${packetCtx.id}' changed in ${base}..${head}; there is nothing for its seats to review (the set check already requires its files to be unchanged since its last reviewed head)`);
+      process.exit(1);
+    }
+    const pinPath = path.join(ledgerDir, `packets-${packetCtx.set}.json`);
+    if (fs.existsSync(pinPath)) {
+      const pinned = crypto.createHash('sha256').update(fs.readFileSync(pinPath)).digest('hex');
+      if (pinned !== packetCtx.sha256) {
+        console.error(`ERROR: ${pinPath} already pins different packets bytes for set '${packetCtx.set}'; a set's packets file is frozen once its first packet is collected`);
+        process.exit(1);
+      }
+    }
+  }
+
   // Resolve seats
   let seats = [];
   try {
@@ -688,9 +772,16 @@ async function handleCollect(flags) {
     }
   }
 
+  if (packetCtx) {
+    const pinPath = path.join(ledgerDir, `packets-${packetCtx.set}.json`);
+    if (!fs.existsSync(pinPath)) writeFileSyncAtomic(pinPath, fs.readFileSync(packetCtx.file));
+  }
+
   let diffText = '';
   try {
-    diffText = runGitDiff(base, head, repoRoot, excludedList);
+    diffText = packetCtx
+      ? reviewPackets.packetDiff(repoRoot, base, head, packetCtx.paths)
+      : runGitDiff(base, head, repoRoot, excludedList);
   } catch (e) {
     console.error(`ERROR: Failed to generate diff: ${e.message}`);
     process.exit(1);
@@ -700,7 +791,7 @@ async function handleCollect(flags) {
   const diffSha256 = crypto.createHash('sha256').update(diffText, 'utf8').digest('hex');
 
   let fullRangeSha256 = diffSha256;
-  if (excludedList.length > 0) {
+  if (excludedList.length > 0 || packetCtx) {
     try {
       const fullRangeDiffText = runGitDiff(base, head, repoRoot, []);
       fullRangeSha256 = crypto.createHash('sha256').update(fullRangeDiffText, 'utf8').digest('hex');
@@ -718,11 +809,17 @@ async function handleCollect(flags) {
     excluded: excludedList,
     diff_bytes: diffBytes,
   };
+  const packetRecord = packetCtx
+    ? { set: packetCtx.set, id: packetCtx.id, packets_sha256: packetCtx.sha256, paths: packetCtx.paths }
+    : null;
+  if (packetRecord) rangeJson.packet = packetRecord;
   writeFileSyncAtomic(path.join(gDir, 'range.json'), JSON.stringify(rangeJson, null, 2) + '\n');
   writeFileSyncAtomic(path.join(gDir, 'diff.txt'), diffText);
 
   // Before dispatching, if diff exceeds 400000 bytes, print warning
-  if (diffBytes > 400000) {
+  if (diffBytes > 400000 && packetCtx) {
+    console.warn(`WARNING: Packet diff size (${diffBytes} bytes) exceeds 400000 bytes; split packet '${packetCtx.id}' into smaller packets (every changed path must stay in exactly one packet)`);
+  } else if (diffBytes > 400000) {
     console.warn(`WARNING: Diff size (${diffBytes} bytes) exceeds 400000 bytes; consider using --exclude <pathspec,...>`);
   }
 
@@ -979,6 +1076,7 @@ async function handleCollect(flags) {
     full_range_sha256: fullRangeSha256,
     findings_sha256: findingsSha256,
     seat_artifact_sha256: seatArtifactSha256,
+    ...(packetRecord ? { packet: packetRecord } : {}),
   });
 
   publishRoundSummary({
@@ -1016,7 +1114,8 @@ async function handleCollect(flags) {
 async function handleFinalize(flags) {
   const repoRoot = flags['repo-root'] ? path.resolve(flags['repo-root']) : '';
   const ledgerDir = flags.ledger ? path.resolve(flags.ledger) : '';
-  const phase = flags.phase;
+  const packetCtx = resolvePacketFlags(flags);
+  const phase = packetCtx ? packetCtx.phase : flags.phase;
   const generationRaw = flags.generation;
   const dispositionsFile = flags.dispositions ? path.resolve(flags.dispositions) : '';
   const branch = flags.branch || '';
@@ -1372,6 +1471,7 @@ async function handleFinalize(flags) {
     kind: 'review',
     phase,
     branch: branch || undefined,
+    ...(chain.some((c) => c && c.packet) ? { packet: (() => { const p = chain.find((c) => c && c.packet).packet; return { set: p.set, id: p.id }; })() } : {}),
     phase_base_sha: phaseBaseSha,
     chain,
     verdict,

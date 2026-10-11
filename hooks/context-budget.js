@@ -11,11 +11,19 @@
  * this hook reads the actual curve.
  *
  * Tiers (defaults; override via ~/.autopilot/config.json context_budget
- * {t1,t2,mode} or env AUTOPILOT_CONTEXT_BUDGET_T1/T2/MODE):
- *  - T1 (100k): stderr nudge, exit 0 (user-visible). Refire ≤ every 20 calls.
+ * {t1,t2,step,mode} or env AUTOPILOT_CONTEXT_BUDGET_T1/T2/STEP/MODE):
+ *  - Defaults are ABSOLUTE (100k/150k) whatever the window: cost is turns x context, so a 1M
+ *    window does not move them up. Only a window smaller than 200K scales them down.
+ *  - T1 (100k): stderr nudge, exit 0 (user-visible).
  *  - T2 (150k): escalated advisory, exit 2 (stderr fed to the MODEL): write a
- *    handoff NOW + user-facing "/clear after it lands". Refire ≤ every 10
- *    calls. PostToolUse cannot deny and /clear is a USER action — no pretend
+ *    handoff NOW + user-facing "/clear after it lands".
+ *  - Re-reminder throttle is per TOKEN STEP, not per call: a tier refires only after context
+ *    grew >= step (default 50000; config context_budget.step / env AUTOPILOT_CONTEXT_BUDGET_STEP)
+ *    since that tier's last fire; the context at last fire lives in the state file
+ *    (lastT1Context/lastT2Context). step 0 = remind on every call past the threshold.
+ *    Two restart rules: context falling by >= step since the last reminder starts a new count,
+ *    and context dropping below a tier's threshold resets that tier (the next climb reminds).
+ *    PostToolUse cannot deny and /clear is a USER action — no pretend
  *    enforcement (MiniMax panel finding). T3 deny tier deliberately DEFERRED
  *    until warn-mode calibration exists (see plan §Out of scope).
  *
@@ -66,9 +74,9 @@ function getSessionId(payload) {
 
 function loadConfig() {
   // explicitT1/T2 track whether the value came from the USER (config/env) or is
-  // still the 200K-calibrated default. Window inference may rescale defaults;
+  // still the absolute default. Only a window SMALLER than 200K rescales defaults down;
   // it must never override a value the user set by hand. (v2.32.56)
-  const cfg = { t1: 100_000, t2: 150_000, mode: 'warn', explicitT1: false, explicitT2: false, liveWrite: true };
+  const cfg = { t1: 100_000, t2: 150_000, mode: 'warn', explicitT1: false, explicitT2: false, liveWrite: true, step: 50_000 };
   try {
     const file = path.join(os.homedir(), '.autopilot', 'config.json');
     const user = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -76,6 +84,7 @@ function loadConfig() {
     if (cb && typeof cb === 'object') {
       if (Number.isFinite(cb.t1)) { cfg.t1 = cb.t1; cfg.explicitT1 = true; }
       if (Number.isFinite(cb.t2)) { cfg.t2 = cb.t2; cfg.explicitT2 = true; }
+      if (Number.isFinite(cb.step) && cb.step >= 0) cfg.step = cb.step;
       if (cb.mode === 'off' || cb.mode === 'warn') cfg.mode = cb.mode;
       if (cb.live_write === false) cfg.liveWrite = false;
     }
@@ -84,6 +93,9 @@ function loadConfig() {
   const envT2 = Number(process.env.AUTOPILOT_CONTEXT_BUDGET_T2);
   if (Number.isFinite(envT1) && envT1 > 0) { cfg.t1 = envT1; cfg.explicitT1 = true; }
   if (Number.isFinite(envT2) && envT2 > 0) { cfg.t2 = envT2; cfg.explicitT2 = true; }
+  const envStepRaw = process.env.AUTOPILOT_CONTEXT_BUDGET_STEP;
+  const envStep = envStepRaw === undefined || envStepRaw === '' ? NaN : Number(envStepRaw);
+  if (Number.isFinite(envStep) && envStep >= 0) cfg.step = envStep; // env beats config; 0 = remind on every call
   if (process.env.AUTOPILOT_CONTEXT_BUDGET_MODE === 'off') cfg.mode = 'off';
   // v2.37 (mods P1W W2f) opt-out for the live-context-file writer only (the hook keeps nudging).
   const lw = process.env.AUTOPILOT_CONTEXT_BUDGET_LIVE_WRITE;
@@ -140,7 +152,14 @@ function loadState(file) {
     const st = JSON.parse(fs.readFileSync(file, 'utf8'));
     if (st && typeof st === 'object' && Number.isFinite(st.calls)) return st;
   } catch { /* corrupt/absent ⇒ reset-and-continue */ }
-  return { calls: 0, lastT1Call: 0, lastT2Call: 0, lastContext: 0, observedMax: 0 };
+  return { calls: 0, lastT1Context: 0, lastT2Context: 0, lastContext: 0, observedMax: 0 };
+}
+
+// A tier's step throttle restarts when context falls back under that tier's threshold
+// (compaction / clear): the next climb past it is a NEW cycle and must remind at once.
+function resetBelowTiers(st, contextTokens, cfg) {
+  if (contextTokens < cfg.t1) st.lastT1Context = 0;
+  if (contextTokens < cfg.t2) st.lastT2Context = 0;
 }
 
 function saveState(file, st) {
@@ -251,16 +270,17 @@ function emitT1(sid, message) {
       }
       st.lastContext = contextTokens;
       st.observedMax = Math.max(Number.isFinite(st.observedMax) ? st.observedMax : 0, contextTokens);
+      resetBelowTiers(st, contextTokens, liveCfg);
       const d = budgetDecision(
-        { contextTokens, calls: st.calls, lastT1Call: st.lastT1Call, lastT2Call: st.lastT2Call },
+        { contextTokens, calls: st.calls, lastT1Context: st.lastT1Context, lastT2Context: st.lastT2Context },
         { ...liveCfg, windowSource: 'statusline' },
       );
       if (d.tier === 't1') {
-        st.lastT1Call = st.calls;
+        st.lastT1Context = contextTokens;
         process.stderr.write(`${d.message}\n`);
         emitT1(sid, d.message);
       } else if (d.tier === 't2') {
-        st.lastT2Call = st.calls;
+        st.lastT2Context = contextTokens;
         process.stderr.write(`${d.message}\n`);
         exitCode = 2; // PostToolUse exit 2 ⇒ stderr reaches the model
       }
@@ -292,8 +312,9 @@ function emitT1(sid, message) {
           const liveCfg = rememberedWindow !== null
             ? tiersForKnownWindow(cfg, rememberedWindow)
             : scaleTiers(cfg, inferWindowTokens(st.observedMax));
+          resetBelowTiers(st, tokens, liveCfg);
           const d = budgetDecision(
-            { contextTokens: tokens, calls: st.calls, lastT1Call: st.lastT1Call, lastT2Call: st.lastT2Call },
+            { contextTokens: tokens, calls: st.calls, lastT1Context: st.lastT1Context, lastT2Context: st.lastT2Context },
             rememberedWindow !== null
               ? { ...liveCfg, windowSource: 'session-window' }
               // Unknown window: no live file, nothing remembered, and observedMax < 200K (200K and
@@ -301,13 +322,13 @@ function emitT1(sid, message) {
               : { ...liveCfg, windowUnknown: !cfg.explicitT2 && st.observedMax < BASE_WINDOW },
           );
           if (d.tier === 't1' || (d.tier === 't2' && d.advisory)) {
-            if (d.tier === 't2') st.lastT2Call = st.calls;
-            else st.lastT1Call = st.calls;
+            if (d.tier === 't2') { st.lastT2Context = tokens; }
+            else { st.lastT1Context = tokens; }
             process.stderr.write(`${d.message}\n`);
             if (d.tier === 't1') emitT1(sid, d.message);
             else emitInjected(d.message); // the unknown-window T2 advisory stays model-facing
           } else if (d.tier === 't2') {
-            st.lastT2Call = st.calls;
+            st.lastT2Context = tokens;
             process.stderr.write(`${d.message}\n`);
             exitCode = 2; // PostToolUse exit 2 ⇒ stderr reaches the model
           }

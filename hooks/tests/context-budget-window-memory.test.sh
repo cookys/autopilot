@@ -28,11 +28,12 @@ PASS=0; FAIL=0
 ok()   { PASS=$((PASS+1)); printf 'ok — %s\n' "$1"; }
 bad()  { FAIL=$((FAIL+1)); printf 'FAIL — %s\n' "$1"; }
 
-# A transcript whose single usage row sits at 160k tokens: 16%% of a 1M window (well
-# under the scaled 750k T2) but past the unscaled 150k T2. The value also matters for
-# case 3: inferWindowTokens(160k) returns the 200K calibration, so the inference path
-# still fires. (At 217k inference already concludes the window is 1M and fires nothing,
-# which would make this test pass without the fix.)
+# A transcript whose single usage row sits at 160k tokens: 16%% of a 1M window, past the
+# ABSOLUTE 150k T2 (defaults no longer scale up with the window). What this file pins is
+# WHICH window the message attributes to: "(statusline)" while the live file is fresh, the
+# remembered "this session's window" once it is gone, and the unknown-window advisory only
+# for a session that never saw a window. Case 2 runs with step 0 so the step throttle (state
+# keeps the context of the case-1 fire) cannot mask the second message.
 TRANSCRIPT="$TMP/transcript.jsonl"
 printf '%s\n' \
   '{"timestamp":"2026-09-09T08:00:00.000Z","message":{"usage":{"input_tokens":2,"cache_read_input_tokens":160000,"cache_creation_input_tokens":411,"output_tokens":10}}}' \
@@ -56,14 +57,14 @@ run_hook() {
   printf '%s' "$?"
 }
 
-# ---- 1. fresh live file: the exact window is read, no tier fires ----------------
+# ---- 1. fresh live file: the exact window is read; T2 fires at the absolute 150k ----
 write_live "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
 RC="$(run_hook)"
 ERR="$(cat "$TMP/err.txt")"
-[ "$RC" = "0" ] && ok "fresh live file: exit 0" || bad "fresh live file: exit $RC (stderr: $ERR)"
+[ "$RC" = "2" ] && ok "fresh live file: T2 at 160k on a 1M window (exit 2)" || bad "fresh live file: exit $RC (stderr: $ERR)"
 case "$ERR" in
-  *"Context budget T2"*) bad "fresh live file must not fire T2: $ERR" ;;
-  *) ok "fresh live file: no T2" ;;
+  *"16% of the ~1000k window (statusline)"*"threshold 150k"*) ok "fresh live file: message attributes the exact window, threshold 150k" ;;
+  *) bad "fresh live file: wrong message: $ERR" ;;
 esac
 
 # The window must have been remembered in the hook's own state.
@@ -72,24 +73,22 @@ KNOWN="$(node -e 'const s=require(process.argv[1]);process.stdout.write(String(s
   && ok "window remembered in state (knownWindow=1000000)" \
   || bad "window not remembered: knownWindow=$KNOWN"
 
-# ---- 2. live file goes stale: the remembered window must still hold -------------
-# This is the regression. Deleting the file is the strongest form of "unusable"
-# (stale, malformed and absent all take the same fallback branch).
+# ---- 2. live file goes stale: the remembered window must still be the one reported ---
+# Deleting the file is the strongest form of "unusable" (stale, malformed and absent all
+# take the same fallback branch). Before v2.36.22 this re-derived the window from observed
+# usage; the regression is the message losing the remembered 1M window.
 rm -f "$LIVE/context/$SID.json"
-RC="$(run_hook)"
+RC="$(AUTOPILOT_CONTEXT_BUDGET_STEP=0 run_hook)"
 ERR="$(cat "$TMP/err.txt")"
 case "$ERR" in
-  *"Context budget T2"*)
-    bad "stale live file re-derived the window and fired a spurious T2: $ERR" ;;
-  *)
-    ok "stale live file: no spurious T2 at 160k on a 1M window" ;;
+  *"16% of the ~1000k window (this session's window"*) ok "stale live file: remembered 1M window reported" ;;
+  *) bad "stale live file lost the remembered window: $ERR" ;;
 esac
-[ "$RC" = "0" ] && ok "stale live file: exit 0" || bad "stale live file: exit $RC (stderr: $ERR)"
+[ "$RC" = "2" ] && ok "stale live file: T2 exit 2 (known window, directive)" || bad "stale live file: exit $RC (stderr: $ERR)"
 
 # ---- 3. the memory is per-session, not global ------------------------------------
-# A different session with no live file must still take the inference path and, at
-# 217k observed, fire T2 against the 200K-calibrated ceiling. This is what proves the
-# fix did not simply disable the tier.
+# A different session with no live file must still take the inference path (here the
+# unknown-window advisory at 160k). This proves the memory did not leak across sessions.
 SID2="99999999-8888-7777-6666-555555555555"
 export CLAUDE_CODE_SESSION_ID="$SID2"
 PAYLOAD="{\"transcript_path\":\"$TRANSCRIPT\",\"session_id\":\"$SID2\"}"

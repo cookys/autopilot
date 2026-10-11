@@ -78,26 +78,43 @@ test('budgetDecision: below t1 ⇒ no fire', () => {
   assert.strictEqual(d.tier, null);
 });
 
-test('budgetDecision: t1 fires, then throttles for 20 calls', () => {
+test('budgetDecision: t1 fires, then throttles until context grows by step (default 50k)', () => {
   const cfg = { t1: 100_000, t2: 150_000 };
-  const first = budgetDecision({ contextTokens: 120_000, calls: 30, lastT1Call: 0, lastT2Call: 0 }, cfg);
+  const first = budgetDecision({ contextTokens: 120_000, calls: 30 }, cfg);
   assert.strictEqual(first.tier, 't1');
   assert.match(first.message, /120k/);
-  const throttled = budgetDecision({ contextTokens: 121_000, calls: 45, lastT1Call: 30, lastT2Call: 0 }, cfg);
+  // Many calls later but context barely moved => still throttled (calls no longer matter).
+  const throttled = budgetDecision({ contextTokens: 121_000, calls: 400, lastT1Context: 120_000 }, cfg);
   assert.strictEqual(throttled.tier, null);
-  const refire = budgetDecision({ contextTokens: 122_000, calls: 50, lastT1Call: 30, lastT2Call: 0 }, cfg);
+  const justShort = budgetDecision({ contextTokens: 119_999, calls: 401, lastT1Context: 70_000 + 50_000 }, cfg);
+  assert.strictEqual(justShort.tier, null);
+  const refire = budgetDecision({ contextTokens: 170_000, calls: 31, lastT1Context: 120_000 }, { t1: 100_000, t2: 0 });
   assert.strictEqual(refire.tier, 't1');
 });
 
-test('budgetDecision: t2 outranks t1, refires every 10 calls, message directs handoff', () => {
+test('budgetDecision: t2 outranks t1, refires per token step, message directs handoff', () => {
   const cfg = { t1: 100_000, t2: 150_000 };
-  const d = budgetDecision({ contextTokens: 160_000, calls: 60, lastT1Call: 50, lastT2Call: 0 }, cfg);
+  const d = budgetDecision({ contextTokens: 160_000, calls: 60, lastT1Context: 110_000 }, cfg);
   assert.strictEqual(d.tier, 't2');
   assert.match(d.message, /handoff/i);
-  const throttled = budgetDecision({ contextTokens: 161_000, calls: 65, lastT1Call: 50, lastT2Call: 60 }, cfg);
+  const throttled = budgetDecision({ contextTokens: 161_000, calls: 600, lastT1Context: 110_000, lastT2Context: 160_000 }, cfg);
   assert.strictEqual(throttled.tier, null);
-  const refire = budgetDecision({ contextTokens: 162_000, calls: 70, lastT1Call: 50, lastT2Call: 60 }, cfg);
+  const refire = budgetDecision({ contextTokens: 210_000, calls: 61, lastT1Context: 110_000, lastT2Context: 160_000 }, cfg);
   assert.strictEqual(refire.tier, 't2');
+});
+
+test('budgetDecision: step 0 reminds on every call past the threshold; custom step honoured', () => {
+  const every = budgetDecision({ contextTokens: 160_000, calls: 2, lastT2Context: 160_000 }, { t1: 100_000, t2: 150_000, step: 0 });
+  assert.strictEqual(every.tier, 't2');
+  const small = budgetDecision({ contextTokens: 170_000, calls: 2, lastT2Context: 160_000 }, { t1: 100_000, t2: 150_000, step: 10_000 });
+  assert.strictEqual(small.tier, 't2');
+  const big = budgetDecision({ contextTokens: 210_000, calls: 2, lastT2Context: 160_000 }, { t1: 100_000, t2: 150_000, step: 100_000 });
+  assert.strictEqual(big.tier, null);
+});
+
+test('budgetDecision: a drop of >= step (compaction) starts a new reminder cycle', () => {
+  const d = budgetDecision({ contextTokens: 155_000, calls: 2, lastT2Context: 400_000 }, { t1: 100_000, t2: 150_000 });
+  assert.strictEqual(d.tier, 't2');
 });
 
 // ---- wrapper black-box ----
@@ -256,7 +273,7 @@ test('wrapper: subagent fire (agent_id present) ⇒ silent exit 0 (depth-0 only)
 // no env var carries the window), so the window is inferred from evidence:
 // observing N tokens proves the window is > N.
 
-const { inferWindowTokens, scaleTiers, BASE_WINDOW } = require(LIB);
+const { inferWindowTokens, scaleTiers, tiersForKnownWindow, BASE_WINDOW } = require(LIB);
 
 test('inferWindowTokens: snaps to smallest known window above the observation', () => {
   assert.strictEqual(inferWindowTokens(0), 200_000);          // no evidence ⇒ base
@@ -269,20 +286,25 @@ test('inferWindowTokens: snaps to smallest known window above the observation', 
   assert.strictEqual(inferWindowTokens(-5), 200_000);
 });
 
-test('scaleTiers: scales defaults proportionally, leaves explicit values alone', () => {
+test('scaleTiers: NEVER scales defaults up (1M window keeps 100k/150k); only tags the window', () => {
   const dflt = { t1: 100_000, t2: 150_000, explicitT1: false, explicitT2: false };
-  assert.deepStrictEqual(
-    { t1: scaleTiers(dflt, 1_000_000).t1, t2: scaleTiers(dflt, 1_000_000).t2 },
-    { t1: 500_000, t2: 750_000 },   // 50% / 75% of 1M — same proportions as 200K
-  );
-  // Base window ⇒ untouched (no accidental drift for 200K sessions).
+  const out = scaleTiers(dflt, 1_000_000);
+  assert.deepStrictEqual({ t1: out.t1, t2: out.t2 }, { t1: 100_000, t2: 150_000 });
+  assert.strictEqual(out.inferredWindow, 1_000_000);
   assert.deepStrictEqual(scaleTiers(dflt, BASE_WINDOW), dflt);
+  // Explicit values pass through untouched too.
+  const pinned = { t1: 100_000, t2: 250_000, explicitT1: false, explicitT2: true };
+  assert.strictEqual(scaleTiers(pinned, 1_000_000).t2, 250_000);
+});
 
-  // B overlays A: a hand-set threshold must survive inference.
-  const pinned = { t1: 100_000, t2: 300_000, explicitT1: false, explicitT2: true };
-  const out = scaleTiers(pinned, 1_000_000);
-  assert.strictEqual(out.t2, 300_000, 'explicit t2 must not be rescaled');
-  assert.strictEqual(out.t1, 500_000, 'non-explicit t1 still scales');
+test('tiersForKnownWindow: no upscaling at 1M; a window below 200K still scales defaults DOWN', () => {
+  const dflt = { t1: 100_000, t2: 150_000, explicitT1: false, explicitT2: false };
+  const big = tiersForKnownWindow(dflt, 1_000_000);
+  assert.deepStrictEqual({ t1: big.t1, t2: big.t2 }, { t1: 100_000, t2: 150_000 });
+  const small = tiersForKnownWindow(dflt, 100_000);
+  assert.deepStrictEqual({ t1: small.t1, t2: small.t2 }, { t1: 50_000, t2: 75_000 });
+  const pinned = tiersForKnownWindow({ ...dflt, t2: 250_000, explicitT2: true }, 1_000_000);
+  assert.strictEqual(pinned.t2, 250_000);
 });
 
 test('budgetDecision: message states PROPORTION, not just absolute tokens', () => {
@@ -295,27 +317,20 @@ test('budgetDecision: message states PROPORTION, not just absolute tokens', () =
   assert.match(d.message, /80% of the ~1000k window/);
 });
 
-test('RED CHECK: pre-fix tiers would have fired T2 at 216k on a 1M window', () => {
-  // Proves this test file actually discriminates — with the old unscaled
-  // defaults, 216k trips T2. If this ever stops firing the guard below is vacuous.
-  const old = budgetDecision({ contextTokens: 216_000, calls: 1 }, { t1: 100_000, t2: 150_000 });
-  assert.strictEqual(old.tier, 't2', 'pre-fix behaviour must still reproduce');
-});
-
-test('GREEN: 216k on an inferred 1M window is silent (the reported bug)', () => {
+test('216k on an inferred 1M window fires T2 at the ABSOLUTE 150k (cost is turns x context)', () => {
   const cfg = { t1: 100_000, t2: 150_000, explicitT1: false, explicitT2: false };
-  const scaled = scaleTiers(cfg, inferWindowTokens(216_000));
-  const d = budgetDecision({ contextTokens: 216_000, calls: 1 }, scaled);
-  assert.strictEqual(d.tier, null, '22% of a 1M window must not fire any tier');
+  const tiers = scaleTiers(cfg, inferWindowTokens(216_000));
+  const d = budgetDecision({ contextTokens: 216_000, calls: 1 }, tiers);
+  assert.strictEqual(d.tier, 't2');
+  assert.match(d.message, /22% of the ~1000k window/, 'proportion is still stated');
 });
 
-test('wrapper end-to-end: 1M-scale context does not emit T2 (exit 0, no stderr)', () => {
-  // 216k total across the usage fields ⇒ ratchet infers 1M on this very call,
-  // so even the FIRST crossing is suppressed (evidence arrives with the reading).
+test('wrapper end-to-end: 216k with the window inferred as 1M still emits the T2 directive (exit 2)', () => {
   const p = tmpFile([usageLine(6_000, 200_000, 10_000, 10)]);
   const r = runHook({ transcript_path: p }, freshEnv());
-  assert.strictEqual(r.status, 0, 'must not exit 2 on a 1M-window session');
-  assert.strictEqual(r.stderr.trim(), '', 'must not nudge at 22% of window');
+  assert.strictEqual(r.status, 2);
+  assert.match(r.stderr, /threshold 150k/);
+  assert.doesNotMatch(r.stderr, /threshold 750k/);
 });
 
 test('wrapper: 160k with no live file/remembered window ⇒ unknown-window advisory (not a directive T2)', () => {
@@ -359,22 +374,94 @@ function liveMainFixture(overrides = {}) {
   };
 }
 
-test('RED/GREEN: 1M live file at 153k ⇒ no T2 (fails on pre-P2 code, which only infers the window)', () => {
+test('RED/GREEN: 1M live file at 153k => T2 fires at the absolute 150k (fails if tiers scale up with the window)', () => {
   const liveDir = shmTmp('ctxbud-live-1m-');
   const sid = 'live-sid-1m';
   writeLiveMain(liveDir, sid, liveMainFixture());
-  // No transcript usage anywhere near 153k ⇒ the OLD code's inference path (which only
-  // trusts the transcript) would see nothing and stay silent for the wrong reason; give it
-  // a transcript that ALSO reports ~153k so the pre-fix code's inference-only path fires
-  // T2 (153k ≥ its 200K-calibrated 150k default) — proving this test actually discriminates
-  // pre-fix from post-fix, not just "no transcript ⇒ no signal".
   const p = tmpFile([usageLine(1_000, 151_000, 1_000, 10)]); // 153k via transcript too
   const r = runHook(
     { transcript_path: p, session_id: sid },
     freshEnv({ AUTOPILOT_LIVE_DIR: liveDir }),
   );
-  assert.strictEqual(r.status, 0, 'a 1M-window session at 153k must not get the T2 escalated advisory');
-  assert.strictEqual(r.stderr.trim(), '', 'no nudge at 15% of a 1M window');
+  assert.strictEqual(r.status, 2, '1M window, no t1/t2 configured: T2 at 150k');
+  assert.match(r.stderr, /threshold 150k/);
+  assert.match(r.stderr, /\(statusline\)/);
+});
+
+test('1M live file, explicit t2=250000 => configured value wins (silent at 153k, fires at 260k)', () => {
+  const liveDir = shmTmp('ctxbud-live-1m-x-');
+  const sid = 'live-sid-1m-x';
+  writeLiveMain(liveDir, sid, liveMainFixture());
+  const env = freshEnv({ AUTOPILOT_LIVE_DIR: liveDir, AUTOPILOT_CONTEXT_BUDGET_T2: '250000' });
+  const low = runHook({ transcript_path: tmpFile([usageLine(1_000, 151_000, 1_000, 10)]), session_id: sid }, env);
+  assert.strictEqual(low.status, 0);
+  assert.doesNotMatch(low.stderr, /T2/);
+  const high = runHook({ transcript_path: tmpFile([usageLine(1_000, 258_000, 1_000, 10, new Date().toISOString())]), session_id: sid }, env);
+  assert.strictEqual(high.status, 2);
+  assert.match(high.stderr, /threshold 250k/);
+});
+
+// --- step throttle (per token step, not per call) ---
+// Drives the real wrapper repeatedly against ONE session id/state dir, varying the transcript.
+function stepSession(extraEnv) {
+  const liveDir = shmTmp('ctxbud-step-');
+  const sid = `step-${Math.random().toString(36).slice(2)}`;
+  const env = freshEnv({ AUTOPILOT_LIVE_DIR: liveDir, ...extraEnv });
+  // The live file tracks the same total as the transcript (the statusline keeps it fresh), so
+  // the cheap no-parse path sees the real context too.
+  return (tokens) => writeLiveMain(liveDir, sid, liveMainFixture({ context_window: {
+    context_window_size: 1_000_000, total_input_tokens: tokens } })) || runHook(
+    { transcript_path: tmpFile([usageLine(1_000, tokens - 1_000, 0, 10, new Date().toISOString())]), session_id: sid }, env);
+}
+
+test('step=50000 (default): context parked at 160k reminds ONCE across many calls; 210k reminds again', () => {
+  const call = stepSession({});
+  const first = call(160_000);
+  assert.strictEqual(first.status, 2, 'first crossing fires');
+  for (let i = 0; i < 25; i++) {
+    const r = call(160_000 + i * 100);
+    assert.strictEqual(r.status, 0, `call ${i + 2} at ~160k must stay silent`);
+    assert.strictEqual(r.stderr.trim(), '');
+  }
+  const grown = call(210_000);
+  assert.strictEqual(grown.status, 2, 'grew by step since the last reminder => remind again');
+  assert.match(grown.stderr, /210k/);
+  assert.strictEqual(call(215_000).status, 0, 'and parks again');
+});
+
+test('dropping below a tier threshold resets it: T2 reminds again on the next climb (compaction cycle)', () => {
+  const call = stepSession({});
+  assert.strictEqual(call(160_000).status, 2, 'first T2');
+  assert.strictEqual(call(165_000).status, 0, 'parked');
+  assert.strictEqual(call(40_000).status, 0, 'compacted below both tiers');
+  const again = call(160_000);
+  assert.strictEqual(again.status, 2, 'new cycle: first crossing after compaction must remind');
+  assert.match(again.stderr, /T2/);
+});
+
+test('dropping below a tier threshold resets it: T1 reminds again on the next climb (compaction cycle)', () => {
+  const call = stepSession({});
+  const first = call(120_000);
+  assert.match(first.stderr, /Context budget T1/, 'first T1');
+  assert.strictEqual(call(125_000).stderr.trim(), '', 'parked');
+  assert.strictEqual(call(40_000).stderr.trim(), '', 'compacted below T1');
+  assert.match(call(120_000).stderr, /Context budget T1/, 'new cycle: T1 reminds again');
+});
+
+test('step from config file applies; env AUTOPILOT_CONTEXT_BUDGET_STEP overrides the config file', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'ctxbud-home-'));
+  fs.mkdirSync(path.join(home, '.autopilot'));
+  fs.writeFileSync(path.join(home, '.autopilot', 'config.json'), JSON.stringify({ context_budget: { step: 10_000 } }));
+  const viaCfg = stepSession({ HOME: home });
+  assert.strictEqual(viaCfg(160_000).status, 2);
+  assert.strictEqual(viaCfg(171_000).status, 2, 'config step=10000 honoured');
+  const viaEnv = stepSession({ HOME: home, AUTOPILOT_CONTEXT_BUDGET_STEP: '100000' });
+  assert.strictEqual(viaEnv(160_000).status, 2);
+  assert.strictEqual(viaEnv(171_000).status, 0, 'env step=100000 overrides config step=10000');
+  assert.strictEqual(viaEnv(261_000).status, 2);
+  const every = stepSession({ AUTOPILOT_CONTEXT_BUDGET_STEP: '0' });
+  assert.strictEqual(every(160_000).status, 2);
+  assert.strictEqual(every(160_000).status, 2);
 });
 
 test('200K live file at 150k ⇒ T2 still fires (no regression for small windows)', () => {
@@ -607,7 +694,8 @@ test('absent live (no AUTOPILOT_LIVE_DIR override, no live file) ⇒ exit/stdout
   // "inferred from observed usage" — that phrasing is reserved for the inference path.
   const bigP = tmpFile([usageLine(6_000, 200_000, 10_000, 10)]);
   const bigR = runHook({ transcript_path: bigP }, freshEnv());
-  assert.strictEqual(bigR.status, 0, 'must not exit 2 on a 1M-window session (ratchet inference)');
+  assert.strictEqual(bigR.status, 2, 'absolute T2 (150k) applies on an inferred 1M window too');
+  assert.match(bigR.stderr, /inferred from observed usage/);
 });
 
 // v2.36.6 regressions (2026-09-06: T2 fired at 8% real usage right after auto-compaction).

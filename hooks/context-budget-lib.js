@@ -20,11 +20,15 @@ const fs = require('fs');
 
 const START_WINDOW_BYTES = 64 * 1024;
 const CAP_BYTES = 5 * 1024 * 1024;
-const T1_THROTTLE_CALLS = 20; // T1 refires at most every 20 tool calls
-const T2_THROTTLE_CALLS = 10; // T2 refires at most every 10 tool calls
+// Re-reminder throttle is per TOKEN STEP, not per call (cfg.step, default 50k): once a tier
+// has fired, it fires again only after context grew by >= step since that tier's last fire.
+// step 0 = no throttle (remind on every call past the threshold).
+const DEFAULT_STEP = 50_000;
 
 // --- Context-window inference (v2.32.56) -------------------------------------
 //
+// (Tiers no longer scale UP with the window — see scaleTiers. The window is still
+// inferred for the proportion shown in the message.)
 // The default tiers (100k/150k) are 50%/75% of a 200K window. On a 1M-window
 // model they fire from 15% onward and never stop — the hook reports an absolute
 // token count that the reader then mistakes for "nearly full". Observed
@@ -59,31 +63,25 @@ function inferWindowTokens(observedMax, windows = KNOWN_WINDOWS) {
 }
 
 /**
- * Scale non-explicit tiers to the inferred window, preserving their calibrated
- * proportions (t1=50%, t2=75% of window by default).
- * Explicit user config/env ALWAYS wins — inference only fills what was left
- * to the defaults, so a hand-set threshold is never silently overridden.
+ * Tiers for an INFERRED window. Defaults (t1=100k, t2=150k) are absolute and NEVER scale up:
+ * cost is turns x context regardless of window size, so a 1M window must not push T2 to 750k.
+ * This path only attaches `inferredWindow` so the message can state the proportion. Explicit
+ * user config/env wins and is never touched.
  */
 function scaleTiers(cfg, inferredWindow) {
   const ratio = inferredWindow / BASE_WINDOW;
   if (!Number.isFinite(ratio) || ratio <= 1) return cfg;
-  return {
-    ...cfg,
-    t1: cfg.explicitT1 ? cfg.t1 : Math.round(cfg.t1 * ratio),
-    t2: cfg.explicitT2 ? cfg.t2 : Math.round(cfg.t2 * ratio),
-    inferredWindow,
-  };
+  return { ...cfg, inferredWindow };
 }
 
 /**
- * v2.36.1: scale tiers to a window read EXACTLY from the statusline live file (not
- * inferred). Same proportional formula as scaleTiers, but always tags the result with
- * `inferredWindow` (even at ratio 1) so budgetDecision always states the proportion and
- * attributes it to the statusline — scaleTiers' ratio<=1 short-circuit exists only to
- * avoid noise on an UNEVIDENCED base-window guess, which does not apply to a real number.
+ * Tiers for a window read EXACTLY from the statusline live file (not inferred). Always tags
+ * `inferredWindow` so budgetDecision states the proportion and attributes it to the statusline.
+ * Defaults never scale UP; a window smaller than the 200K the defaults were calibrated for
+ * still scales them DOWN (so T2 can never sit above the real ceiling).
  */
 function tiersForKnownWindow(cfg, window) {
-  const ratio = Number.isFinite(window) && window > 0 ? window / BASE_WINDOW : 1;
+  const ratio = Number.isFinite(window) && window > 0 ? Math.min(1, window / BASE_WINDOW) : 1;
   return {
     ...cfg,
     t1: cfg.explicitT1 ? cfg.t1 : Math.round(cfg.t1 * ratio),
@@ -195,13 +193,22 @@ function readContextUsage(tpath, opts = {}) {
   return scanLastUsageRow(tpath, opts);
 }
 
+// Step throttle: eligible when the tier never fired (lastCtx 0), step <= 0, context grew by
+// >= step since its last fire, or context fell by >= step (compaction/clear = a new cycle).
+function stepEligible(contextTokens, lastCtx, step) {
+  if (!(step > 0) || !(lastCtx > 0)) return true;
+  const delta = contextTokens - lastCtx;
+  return delta >= step || delta <= -step;
+}
+
 /**
- * Pure tier decision. state: {contextTokens, calls, lastT1Call, lastT2Call};
- * cfg: {t1, t2}. Returns {tier: null|'t1'|'t2', message: string|null}.
- * T2 outranks T1; each tier throttles on its own last-fire counter.
+ * Pure tier decision. state: {contextTokens, calls, lastT1Context, lastT2Context};
+ * cfg: {t1, t2, step}. Returns {tier: null|'t1'|'t2', message: string|null}.
+ * T2 outranks T1; each tier throttles on the context size at its own last fire.
  */
 function budgetDecision(state, cfg) {
-  const { contextTokens, calls, lastT1Call = 0, lastT2Call = 0 } = state;
+  const { contextTokens, lastT1Context = 0, lastT2Context = 0 } = state;
+  const step = Number.isFinite(cfg.step) ? cfg.step : DEFAULT_STEP;
   const k = Math.round(contextTokens / 1000);
   // Always state the PROPORTION, not just the absolute count. An absolute "216k"
   // reads as "nearly full" on a 200K window and as "barely started" on 1M; the
@@ -217,8 +224,8 @@ function budgetDecision(state, cfg) {
   const pct = win ? ` = ${Math.round((contextTokens / win) * 100)}% of the ` +
     `~${Math.round(win / 1000)}k window ${windowClause}` : '';
   if (cfg.t2 > 0 && contextTokens >= cfg.t2) {
-    // lastT2Call 0 = never fired ⇒ always eligible (first crossing must not be throttled)
-    if (lastT2Call > 0 && calls - lastT2Call < T2_THROTTLE_CALLS) return { tier: null, message: null };
+    // lastT2Context 0 = never fired ⇒ always eligible (first crossing must not be throttled)
+    if (!stepEligible(contextTokens, lastT2Context, step)) return { tier: null, message: null };
     // Window genuinely unknown (no live file, no remembered window, observedMax < 200K):
     // 200K and 1M are indistinguishable, so a directive STOP would be a guess. Degrade to an
     // advisory — tier 't2' keeps the T2 throttle/counter, `advisory` tells the hook to deliver
@@ -245,7 +252,7 @@ function budgetDecision(state, cfg) {
     };
   }
   if (cfg.t1 > 0 && contextTokens >= cfg.t1) {
-    if (lastT1Call > 0 && calls - lastT1Call < T1_THROTTLE_CALLS) return { tier: null, message: null };
+    if (!stepEligible(contextTokens, lastT1Context, step)) return { tier: null, message: null };
     return {
       tier: 't1',
       message:
@@ -267,8 +274,7 @@ module.exports = {
   tiersForKnownWindow,
   START_WINDOW_BYTES,
   CAP_BYTES,
-  T1_THROTTLE_CALLS,
-  T2_THROTTLE_CALLS,
+  DEFAULT_STEP,
   KNOWN_WINDOWS,
   BASE_WINDOW,
 };

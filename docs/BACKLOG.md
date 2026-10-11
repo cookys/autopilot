@@ -1106,13 +1106,13 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/README.md
 - **Context**: freeze-guidance-arm.js change/red end in armBase(), which only looks up extra-base id with the new suffix, so base.json loses extra-base-v5; restored by hand v7-v10. Base must not change.
 
-### PEER-REPORTED (c4140 llm-playground): warn on foreground sleep/tail polling at depth-0, not only in foremen
+### PEER-REPORTED (c4140 llm-playground): revise dev-flow SKILL.md foreground-wait advice
 - **Status**: open
-- **Trigger**: operator decision on adoption; peer data: 98 of 144 lead Bash calls were sleep/tail polls
+- **Trigger**: before the 3.0.0 final cut, with the v11 guidance eval
 - **Effort**: S
 - **Source**: fleet msg `01M4NVXM8WM1Q6GR4VSTST0P22`; replied `01M4NVY57683RPV21TNXTGQC2D`
 - **Pointer**: none
-- **Context**: foreman-guard.js sleep/while-wait rules need agent_id + l4-l6 marker, so depth-0 is never seen. Reuse them warn-only for any session; also revise dev-flow SKILL.md foreground-wait (<=15 min) advice.
+- **Context**: depth-0 foreground sleep/tail polling now draws an advice-only warning (depth0-delegate-gate); the dev-flow SKILL.md foreground-wait (<=15 min) wording is guidance text and waits for eval evidence before it changes.
 
 ### PEER-REPORTED (c4140 llm-playground): cost-digest shows cache_write, cache_read per turn, subagent share
 - **Status**: open

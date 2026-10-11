@@ -49,11 +49,24 @@ function hasPriceRow(model) {
 
 // Parse transcript JSONL text → ordered list of assistant-turn usage records.
 // Each: { model, input, output, cacheRead, cacheWrite }. Order = file order
-// (append-only), which the cursor relies on.
+// (append-only), which the cursor relies on. Extra fields: sidechain, agentId.
+//
+// DEDUP: Claude Code writes ONE API response as several transcript lines (one per content
+// block), each repeating the response's `message.usage`. Counting every line inflates a long
+// session ~2.5x (measured locally: 813 assistant lines = 391 distinct responses; cache_creation
+// 8.8M raw vs 3.5M deduped). Lines are keyed by (message.id, requestId) and counted once, at the
+// position of the first line; the per-field MAX is kept because output_tokens can grow while a
+// response streams. A line with no message.id cannot be keyed and counts as its own turn.
+//
+// SIDECHAIN: `rec.isSidechain === true` / `rec.agentId` mark subagent lines. Claude Code stores
+// subagent transcripts in separate files (<session>/subagents/agent-<id>.jsonl), not in the main
+// transcript, so cost-tracker.js reads those files itself; the flag keeps the parser correct for
+// those files (every line carries it) and if a transcript ever inlines sidechain lines.
 function parseAssistantTurns(raw) {
   if (typeof raw !== 'string' || !raw.trim()) return [];
   const lines = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
   const turns = [];
+  const seen = new Map(); // dedup key -> turn
   for (const line of lines) {
     if (!line.trim()) continue;
     let rec;
@@ -61,13 +74,29 @@ function parseAssistantTurns(raw) {
     if (!rec || rec.type !== 'assistant' || !rec.message) continue;
     const u = rec.message.usage;
     if (!u || typeof u !== 'object') continue;
-    turns.push({
+    const t = {
       model: rec.message.model || 'sonnet',
       input: Number(u.input_tokens || 0),
       output: Number(u.output_tokens || 0),
       cacheRead: Number(u.cache_read_input_tokens || 0),
       cacheWrite: Number(u.cache_creation_input_tokens || 0),
-    });
+      sidechain: rec.isSidechain === true,
+      agentId: typeof rec.agentId === 'string' && rec.agentId ? rec.agentId : null,
+    };
+    const mid = rec.message.id;
+    if (typeof mid === 'string' && mid) {
+      const key = `${mid}|${typeof rec.requestId === 'string' ? rec.requestId : ''}`;
+      const prev = seen.get(key);
+      if (prev) {
+        prev.input = Math.max(prev.input, t.input);
+        prev.output = Math.max(prev.output, t.output);
+        prev.cacheRead = Math.max(prev.cacheRead, t.cacheRead);
+        prev.cacheWrite = Math.max(prev.cacheWrite, t.cacheWrite);
+        continue;
+      }
+      seen.set(key, t);
+    }
+    turns.push(t);
   }
   return turns;
 }
@@ -97,14 +126,15 @@ function aggregateSince(turns, startIndex) {
 
   const byModel = new Map();
   for (const t of turns.slice(start)) {
-    const g = byModel.get(t.model) ||
-      { model: t.model, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, turns: 0 };
+    const key = `${t.model}\0${t.agentId || ''}`;
+    const g = byModel.get(key) ||
+      { model: t.model, agentId: t.agentId || null, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, turns: 0 };
     g.input += t.input;
     g.output += t.output;
     g.cacheRead += t.cacheRead;
     g.cacheWrite += t.cacheWrite;
     g.turns += 1;
-    byModel.set(t.model, g);
+    byModel.set(key, g);
   }
   const deltas = [...byModel.values()].map((g) => ({ ...g, cost_usd: costOf(g) }));
   return { totalTurns: total, deltas };

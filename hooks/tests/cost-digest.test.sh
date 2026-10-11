@@ -170,4 +170,51 @@ SESSION_TEXT_DISTINCT_ROWS="$(node -e '
 ' "$SESSION_TEXT_OUT" "$DAY1")"
 assert_eq "$SESSION_TEXT_DISTINCT_ROWS" "3" "text --by session keeps the 8-char-prefix sessions on separate rows"
 
+# Test (g): cache_write sums, ctx/turn arithmetic, subagent share, old rows without new fields.
+# Day totals: main row   input 100 cr 9000 cw 900  turns 10 cost 3
+#             main row   input  50 cr 1000 cw 100  turns  5 cost 1   (old shape: no sidechain field)
+#             sub  row   input  40 cr 2000 cw 3000 turns  5 cost 4   (sidechain:true, agent_id)
+#             legacy row (no token fields at all)             turns  1 cost 0.5
+CW_FIXTURE="$FIXTURE_DIR/cachewrite.jsonl"
+cat > "$CW_FIXTURE" <<JSONL
+{"ts":"${DAY1}T09:00:00.000Z","session":"s-a","model":"claude-sonnet-4-5","input_tokens":100,"output_tokens":1,"cache_read_tokens":9000,"cache_write_tokens":900,"turns":10,"cost_usd":3,"cwd":"/app"}
+{"ts":"${DAY1}T09:10:00.000Z","session":"s-a","model":"claude-sonnet-4-5","input_tokens":50,"output_tokens":1,"cache_read_tokens":1000,"cache_write_tokens":100,"turns":5,"cost_usd":1,"cwd":"/app"}
+{"ts":"${DAY1}T09:20:00.000Z","session":"s-a","model":"claude-sonnet-4-5","sidechain":true,"agent_id":"ag1","input_tokens":40,"output_tokens":1,"cache_read_tokens":2000,"cache_write_tokens":3000,"turns":5,"cost_usd":4,"cwd":"/app"}
+{"ts":"${DAY1}T09:30:00.000Z","session":"s-b","model":"claude-sonnet-4-5","turns":1,"cost_usd":0.5,"cwd":"/app"}
+JSONL
+
+CW_JSON="$(node "$DIGEST_SCRIPT" --file "$CW_FIXTURE" --since 100 --by tier --json)"
+assert_exit_code "$?" "0" "digest on cache_write fixture exits 0"
+cwq() { # <json> <expression over day d (the DAY1 entry)>
+  node -e '
+    const d = JSON.parse(process.argv[1]).days.find(x => x.day === process.argv[3]);
+    process.stdout.write(String(eval(process.argv[2])));
+  ' "$1" "$2" "$DAY1"
+}
+assert_eq "$(cwq "$CW_JSON" 'd.rows[0].cache_write_tokens')" "4000" "--json cache_write_tokens sums main + subagent + legacy rows (900+100+3000+0)"
+assert_eq "$(cwq "$CW_JSON" 'd.rows[0].cache_read_tokens')" "12000" "--json cache_read_tokens still sums"
+# (100+50+40) input + 12000 cr + 4000 cw = 16190 over 21 turns = 770.95 -> 771
+assert_eq "$(cwq "$CW_JSON" 'd.rows[0].avg_context_per_turn')" "771" "avg_context_per_turn = (input+cache_read+cache_write)/turns from summed rows"
+# subagent: cost 4 of 8.5 total; cache_write 3000 of 4000
+assert_eq "$(cwq "$CW_JSON" 'd.subagent_usd')" "4" "subagent_usd counts only sidechain rows"
+assert_eq "$(cwq "$CW_JSON" 'Math.round(d.subagent_share*10000)')" "4706" "subagent_share = 4 / 8.5"
+assert_eq "$(cwq "$CW_JSON" 'd.subagent_cache_write_share')" "0.75" "subagent_cache_write_share = 3000 / 4000"
+
+AG_JSON="$(node "$DIGEST_SCRIPT" --file "$CW_FIXTURE" --since 100 --by agent --json)"
+assert_eq "$(cwq "$AG_JSON" 'd.rows.map(r => r.agent + ":" + r.cache_write_tokens + ":" + r.turns).sort().join(",")')" "main:1000:16,subagent:3000:5" "--by agent splits main from subagent"
+assert_eq "$(cwq "$AG_JSON" 'd.rows.find(r => r.agent === "subagent").avg_context_per_turn')" "1008" "subagent ctx/turn = (40+2000+3000)/5"
+
+for MODE in day model session tier agent; do
+  MODE_JSON="$(node "$DIGEST_SCRIPT" --file "$CW_FIXTURE" --since 100 --by "$MODE" --json)"
+  assert_eq "$(cwq "$MODE_JSON" 'd.rows.reduce((a, r) => a + r.cache_write_tokens, 0)')" "4000" "--by $MODE --json: cache_write_tokens present and totals 4000"
+  MODE_TEXT="$(node "$DIGEST_SCRIPT" --file "$CW_FIXTURE" --since 100 --by "$MODE")"
+  assert_contains "$MODE_TEXT" "cache_write" "--by $MODE text header has cache_write"
+  assert_contains "$MODE_TEXT" "subagent_share: 47.1% of cost, 75.0% of cache_write" "--by $MODE text reports subagent share"
+done
+
+# legacy-only ledger (no new fields anywhere): no crash, zeros
+OLD_JSON="$(node "$DIGEST_SCRIPT" --file "$FIXTURE_FILE" --since 100 --by agent --json)"
+assert_exit_code "$?" "0" "legacy-only ledger with --by agent exits 0"
+assert_eq "$(cwq "$OLD_JSON" 'd.rows[0].agent + ":" + d.rows[0].cache_write_tokens + ":" + d.subagent_share')" "main:0:0" "legacy rows count as main with cache_write 0 and subagent_share 0"
+
 finalize_test

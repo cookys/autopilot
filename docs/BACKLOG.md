@@ -1114,14 +1114,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: foreman-guard.js sleep/while-wait rules need agent_id + l4-l6 marker, so depth-0 is never seen. Reuse them warn-only for any session; also revise dev-flow SKILL.md foreground-wait (<=15 min) advice.
 
-### PEER-REPORTED (c4140 llm-playground): cost-digest shows cache_write, cache_read per turn, subagent share
-- **Status**: open
-- **Trigger**: operator decision on adoption; peer data: Sonnet subagents were 79% of cache_creation
-- **Effort**: S
-- **Source**: fleet msg `01M4NVXM8WM1Q6GR4VSTST0P22`; not reproduced locally
-- **Pointer**: none
-- **Context**: costs.jsonl already has cache_write_tokens but cost-digest.js never sums it. Add it plus cache_read/turns; subagent share needs an isSidechain flag in cost-tracker-lib parseAssistantTurns (verify Stop sees sidechains).
-
 ### PEER-REPORTED (c4140 llm-playground): context-budget defaults scale to 750K on 1M windows; re-remind per call
 - **Status**: open
 - **Trigger**: operator decision on adoption

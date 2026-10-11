@@ -15,36 +15,75 @@
 
 'use strict';
 
-// Anthropic cache pricing multipliers, relative to a model's base input rate:
-//   cache READ  is billed at 10% of input   (cache hit)
-//   cache WRITE is billed at 125% of input  (5-minute ephemeral cache create)
-// Without these, an autopilot session (cache_read dominates input ~40:1) would
-// be wildly mis-priced either way.
+// Cache WRITE is billed at 125% of a model's input rate (5-minute ephemeral cache create).
+// Cache READ is NOT a uniform fraction of input any more (0.25/10 for fable-5-1 but 1.00/10 for
+// fable-5, 0.20/4 for opus-5-5, ...), so every row carries its own absolute `cacheRead` price.
+// CACHE_READ_MULT is kept exported for compatibility only; it no longer drives any pricing.
 const CACHE_READ_MULT = 0.1;
 const CACHE_WRITE_MULT = 1.25;
 
-// Model pricing (USD per 1M tokens) — update when Anthropic changes pricing.
-// Matched by substring against the transcript's `message.model` (e.g.
-// "claude-opus-4-8" → opus). Unknown models fall back to sonnet (do NOT invent
-// pricing for an unverified tier — default + this comment is the honest choice).
+// Per-model-id pricing, USD per 1M tokens (source: claude-api skill price table, cached 2026-10-06).
+// Update when Anthropic changes pricing. Rows already written to costs.jsonl keep their old
+// `cost_usd`: they are NOT repriced (no backfill) -- only new rows use this table.
+// haiku-5-5 has a long-prompt tier (prompts >100K tokens: 0.50 in / 2.50 out). Per-request prompt
+// size is unknown at costOf time (the ledger aggregates many turns), so the <=100K rate is used:
+// a known under-estimate for >100K-prompt haiku-5-5 turns.
 const PRICING = {
-  haiku:  { input: 0.8, output: 4 },
-  sonnet: { input: 3,   output: 15 },
-  opus:   { input: 15,  output: 75 },
+  'claude-fable-5-1':   { input: 10,   output: 50,  cacheRead: 0.25 },
+  'claude-mythos-5-1':  { input: 10,   output: 50,  cacheRead: 0.25 },
+  'claude-fable-5':     { input: 10,   output: 50,  cacheRead: 1.00 },
+  'claude-mythos-5':    { input: 10,   output: 50,  cacheRead: 1.00 },
+  'claude-opus-5-5':    { input: 4,    output: 20,  cacheRead: 0.20 },
+  'claude-opus-5':      { input: 5,    output: 25,  cacheRead: 0.50 },
+  'claude-opus-4-8':    { input: 5,    output: 25,  cacheRead: 0.50 },
+  'claude-opus-4-7':    { input: 5,    output: 25,  cacheRead: 0.50 },
+  'claude-opus-4-6':    { input: 5,    output: 25,  cacheRead: 0.50 },
+  'claude-sonnet-5-5':  { input: 2,    output: 10,  cacheRead: 0.20 },
+  'claude-sonnet-5':    { input: 2,    output: 10,  cacheRead: 0.20 },
+  'claude-sonnet-4-6':  { input: 3,    output: 15,  cacheRead: 0.30 },
+  'claude-haiku-5-5':   { input: 0.10, output: 0.50, cacheRead: 0.01 },
+  'claude-haiku-4-5':   { input: 1,    output: 5,   cacheRead: 0.10 },
 };
 
-function getRate(model) {
-  const m = String(model || '').toLowerCase();
-  if (m.includes('haiku')) return PRICING.haiku;
-  if (m.includes('opus'))  return PRICING.opus;
-  return PRICING.sonnet; // default (incl. unknown/sonnet)
+// Unknown models fall back to this row for arithmetic ONLY (do NOT invent pricing for an
+// unverified tier -- hasPriceRow() stays false so callers print "cost unknown", not a guess).
+const FALLBACK_ID = 'claude-sonnet-5-5';
+// parseAssistantTurns defaults a missing model to the bare word 'sonnet'; keep that priced as the
+// sonnet-5-5 row (callers relied on hasPriceRow('sonnet') === true). Other bare family words are unknown.
+const BARE_ALIASES = { sonnet: FALLBACK_ID };
+
+// Normalise a transcript model id: lowercase, strip provider prefix (`us.anthropic.`, `anthropic.`),
+// a `[...]` suffix (e.g. `[1m]`), and a trailing `-YYYYMMDD` date.
+function normalizeModel(model) {
+  let m = String(model || '').toLowerCase().trim();
+  m = m.replace(/\[[^\]]*\]\s*$/, '');
+  m = m.replace(/^(?:[a-z]{2}\.)?anthropic\./, '');
+  m = m.replace(/-v\d+(?::\d+)?$/, ''); // bedrock `-v1:0`
+  m = m.replace(/-\d{8}$/, '');
+  return m;
 }
 
-// True when the model has its OWN price row (getRate's sonnet fallback is not a price row).
+// Row id for a model, or null. Exact match after normalisation, else longest row id that is a
+// prefix at a `-` boundary; so `claude-opus-5-5` never resolves to `claude-opus-5`.
+function resolveRowId(model) {
+  const m = normalizeModel(model);
+  if (BARE_ALIASES[m]) return BARE_ALIASES[m];
+  if (PRICING[m]) return m;
+  let best = null;
+  for (const id of Object.keys(PRICING)) {
+    if (m.startsWith(id + '-') && (!best || id.length > best.length)) best = id;
+  }
+  return best;
+}
+
+function getRate(model) {
+  return PRICING[resolveRowId(model) || FALLBACK_ID];
+}
+
+// True when the model has its OWN price row (getRate's fallback is not a price row).
 // Callers that print dollars use this to say "cost unknown" instead of presenting a guess.
 function hasPriceRow(model) {
-  const m = String(model || '').toLowerCase();
-  return m.includes('haiku') || m.includes('opus') || m.includes('sonnet');
+  return resolveRowId(model) !== null;
 }
 
 // Parse transcript JSONL text → ordered list of assistant-turn usage records.
@@ -107,7 +146,7 @@ function costOf(g) {
   const usd = (
     g.input * r.input +
     g.output * r.output +
-    g.cacheRead * r.input * CACHE_READ_MULT +
+    g.cacheRead * r.cacheRead +
     g.cacheWrite * r.input * CACHE_WRITE_MULT
   ) / 1_000_000;
   return Math.round(usd * 1e6) / 1e6; // 6dp — sub-cent costs stay meaningful
@@ -157,6 +196,6 @@ function readAgentTree(metaPath) {
 
 module.exports = {
   readAgentTree,
-  PRICING, CACHE_READ_MULT, CACHE_WRITE_MULT,
+  PRICING, CACHE_READ_MULT, CACHE_WRITE_MULT, normalizeModel,
   getRate, hasPriceRow, parseAssistantTurns, costOf, aggregateSince,
 };

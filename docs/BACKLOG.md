@@ -1105,3 +1105,27 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: stage-graph v7..v10 freezes, 2026-10
 - **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/README.md
 - **Context**: freeze-guidance-arm.js change/red end in armBase(), which only looks up extra-base id with the new suffix, so base.json loses extra-base-v5; restored by hand v7-v10. Base must not change.
+
+### PEER-REPORTED (c4140 llm-playground): warn on foreground sleep/tail polling at depth-0, not only in foremen
+- **Status**: open
+- **Trigger**: operator decision on adoption; peer data: 98 of 144 lead Bash calls were sleep/tail polls
+- **Effort**: S
+- **Source**: fleet msg `01M4NVXM8WM1Q6GR4VSTST0P22`; replied `01M4NVY57683RPV21TNXTGQC2D`
+- **Pointer**: none
+- **Context**: foreman-guard.js sleep/while-wait rules need agent_id + l4-l6 marker, so depth-0 is never seen. Reuse them warn-only for any session; also revise dev-flow SKILL.md foreground-wait (<=15 min) advice.
+
+### PEER-REPORTED (c4140 llm-playground): cost-digest shows cache_write, cache_read per turn, subagent share
+- **Status**: open
+- **Trigger**: operator decision on adoption; peer data: Sonnet subagents were 79% of cache_creation
+- **Effort**: S
+- **Source**: fleet msg `01M4NVXM8WM1Q6GR4VSTST0P22`; not reproduced locally
+- **Pointer**: none
+- **Context**: costs.jsonl already has cache_write_tokens but cost-digest.js never sums it. Add it plus cache_read/turns; subagent share needs an isSidechain flag in cost-tracker-lib parseAssistantTurns (verify Stop sees sidechains).
+
+### PEER-REPORTED (c4140 llm-playground): context-budget re-reminds per token growth, not per call count
+- **Status**: open
+- **Trigger**: operator decision on adoption
+- **Effort**: S
+- **Source**: fleet msg `01M4NVXM8WM1Q6GR4VSTST0P22`
+- **Pointer**: none
+- **Context**: context-budget (default-on, T1 100k / T2 150k, points to handoff) throttles by call count, so it repeats at flat context. Add a context_budget step key (peer uses +50K) and token-based throttling.

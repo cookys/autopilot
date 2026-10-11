@@ -1,0 +1,300 @@
+{
+  "_comment": "Single statement of which temp prefixes exist and who cleans them. kinds: scratch|evidence|test-lockgated|live|lock|worktree. First matching entry wins; patterns are globs (* and ?). _SRR_PATTERNS in hooks/tests/lib/suite-residue-reap.sh must equal the test-lockgated entries (hooks/tests/tmp-residue-registry.test.sh). Age-only deletion acts on scratch/evidence only.",
+  "version": 1,
+  "entries": [
+    {
+      "pattern": "hetero-*-log-*",
+      "kind": "scratch",
+      "owner": "scripts/dispatch-hetero.sh",
+      "retention_days": null,
+      "reason": "raw dispatch logs"
+    },
+    {
+      "pattern": "hetero-detach-state-*",
+      "kind": "scratch",
+      "owner": "scripts/lib/dispatch-detach.sh",
+      "retention_days": null,
+      "reason": "detach state scratch"
+    },
+    {
+      "pattern": "dispatch-author-*",
+      "kind": "scratch",
+      "owner": "scripts/dispatch-author.sh",
+      "retention_days": null,
+      "reason": "dispatch/script scratch and logs (prune-tmp-residue.sh list)"
+    },
+    {
+      "pattern": "dispatch-explore-*",
+      "kind": "scratch",
+      "owner": "scripts/dispatch-explore.sh",
+      "retention_days": null,
+      "reason": "dispatch/script scratch and logs (prune-tmp-residue.sh list)"
+    },
+    {
+      "pattern": "dispatch-review-*",
+      "kind": "scratch",
+      "owner": "scripts/dispatch-review.sh",
+      "retention_days": null,
+      "reason": "dispatch/script scratch and logs (prune-tmp-residue.sh list)"
+    },
+    {
+      "pattern": "dispatch-hetero-*",
+      "kind": "scratch",
+      "owner": "scripts/dispatch-hetero.sh",
+      "retention_days": null,
+      "reason": "dispatch/script scratch and logs (prune-tmp-residue.sh list)"
+    },
+    {
+      "pattern": "pi-rpc-session-*",
+      "kind": "scratch",
+      "owner": "scripts/lib/pi-rpc-run.js",
+      "retention_days": null,
+      "reason": "dispatch/script scratch and logs (prune-tmp-residue.sh list)"
+    },
+    {
+      "pattern": "dispatch-anthropic-review-*",
+      "kind": "scratch",
+      "owner": "scripts/dispatch-anthropic-review.js",
+      "retention_days": null,
+      "reason": "dispatch/script scratch and logs (prune-tmp-residue.sh list)"
+    },
+    {
+      "pattern": "dispatch-contract-*",
+      "kind": "scratch",
+      "owner": "scripts/dispatch-contract.js",
+      "retention_days": null,
+      "reason": "dispatch/script scratch and logs (prune-tmp-residue.sh list)"
+    },
+    {
+      "pattern": "dispatch-plan-review-*",
+      "kind": "scratch",
+      "owner": "scripts/dispatch-plan-review.js",
+      "retention_days": null,
+      "reason": "dispatch/script scratch and logs (prune-tmp-residue.sh list)"
+    },
+    {
+      "pattern": "qc-panel-*",
+      "kind": "scratch",
+      "owner": "scripts/qc-panel.js",
+      "retention_days": null,
+      "reason": "dispatch/script scratch and logs (prune-tmp-residue.sh list)"
+    },
+    {
+      "pattern": "qc-refute-b-*",
+      "kind": "scratch",
+      "owner": "scripts/qc-panel.js",
+      "retention_days": null,
+      "reason": "dispatch/script scratch and logs (prune-tmp-residue.sh list)"
+    },
+    {
+      "pattern": "qc-emit-*",
+      "kind": "scratch",
+      "owner": "scripts/qc-metric-emit.js",
+      "retention_days": null,
+      "reason": "dispatch/script scratch and logs (prune-tmp-residue.sh list)"
+    },
+    {
+      "pattern": "next-touch-evidence-*",
+      "kind": "scratch",
+      "owner": "scripts/next-touch-validation.js",
+      "retention_days": null,
+      "reason": "dispatch/script scratch and logs (prune-tmp-residue.sh list)"
+    },
+    {
+      "pattern": "hook-multiplexer-benchmark-*",
+      "kind": "scratch",
+      "owner": "scripts/benchmark-hook-multiplexer.js",
+      "retention_days": null,
+      "reason": "dispatch/script scratch and logs (prune-tmp-residue.sh list)"
+    },
+    {
+      "pattern": "verify-red-green-*",
+      "kind": "scratch",
+      "owner": "scripts/verify-red-green.sh",
+      "retention_days": null,
+      "reason": "dispatch/script scratch and logs (prune-tmp-residue.sh list)"
+    },
+    {
+      "pattern": "eval-selftest-*",
+      "kind": "scratch",
+      "owner": "scripts/run-eval-batch.sh",
+      "retention_days": null,
+      "reason": "dispatch/script scratch and logs (prune-tmp-residue.sh list)"
+    },
+    {
+      "pattern": "run-ledger-*-test-*",
+      "kind": "scratch",
+      "owner": "scripts/run-ledger.sh",
+      "retention_days": null,
+      "reason": "dispatch/script scratch and logs (prune-tmp-residue.sh list)"
+    },
+    {
+      "pattern": "qual-scope.*",
+      "kind": "scratch",
+      "owner": "scripts/resolve-review-loop.sh",
+      "retention_days": null,
+      "reason": "qualification scope file"
+    },
+    {
+      "pattern": "dispatch-consult-*",
+      "kind": "scratch",
+      "owner": "scripts/dispatch-consult.sh",
+      "retention_days": 1,
+      "reason": "consult temp files; owner deletes on exit (phase 2)"
+    },
+    {
+      "pattern": "autopilot-review-loop-*",
+      "kind": "scratch",
+      "owner": "src/engine/autopilot-engine.js",
+      "retention_days": 1,
+      "reason": "engine review-loop range.diff; owner deletes (phase 2)"
+    },
+    {
+      "pattern": "autopilot-repair-prompt-*",
+      "kind": "scratch",
+      "owner": "src/engine/autopilot-engine.js",
+      "retention_days": 1,
+      "reason": "engine repair prompt; owner deletes (phase 2)"
+    },
+    {
+      "pattern": "claude-tool-count-*",
+      "kind": "scratch",
+      "owner": "hooks/suggest-compact.js",
+      "retention_days": 3,
+      "reason": "per-session tool counter (tiny)"
+    },
+    {
+      "pattern": "claude-intent-tool-count-*",
+      "kind": "scratch",
+      "owner": "hooks/intent-capture.js",
+      "retention_days": 3,
+      "reason": "per-session intent tool counter (tiny)"
+    },
+    {
+      "pattern": "autopilot-kimi-raw-*",
+      "kind": "evidence",
+      "owner": "scripts/dispatch-author-kimi.js",
+      "retention_days": 14,
+      "reason": "retained kimi raw output for diagnosis"
+    },
+    {
+      "pattern": "autopilot-frontmatter-evidence-*",
+      "kind": "evidence",
+      "owner": "scripts/probe-skill-frontmatter-portability.sh",
+      "retention_days": 14,
+      "reason": "retained frontmatter probe evidence"
+    },
+    {
+      "pattern": "autopilot-foreman-runs",
+      "kind": "live",
+      "owner": "scripts/dispatch-foreman.sh",
+      "retention_days": null,
+      "reason": "live foreman run dir; never mtime-pruned"
+    },
+    {
+      "pattern": "autopilot-dispatch-runs",
+      "kind": "live",
+      "owner": "scripts/dispatch-hetero.sh",
+      "retention_days": null,
+      "reason": "live dispatch manifest dir; never mtime-pruned"
+    },
+    {
+      "pattern": "autopilot-[0-9]*",
+      "kind": "live",
+      "owner": "scripts/dispatch-hetero.sh",
+      "retention_days": null,
+      "reason": "orphan-state dir autopilot-<uid>; never mtime-pruned"
+    },
+    {
+      "pattern": "autopilot-verify-wt-*",
+      "kind": "worktree",
+      "owner": "src/engine/autopilot-engine.js",
+      "retention_days": null,
+      "reason": "verification worktree parent; marker/lock reapers only"
+    },
+    {
+      "pattern": ".autopilot-suite-run.*.lock",
+      "kind": "lock",
+      "owner": "hooks/tests/lib/suite-residue-reap.sh",
+      "retention_days": null,
+      "reason": "shared cross-run lock/registration file; stays in the shared temp root"
+    },
+    {
+      "pattern": ".autopilot-suite-oracle.lock",
+      "kind": "lock",
+      "owner": "hooks/tests/lib/suite-residue-reap.sh",
+      "retention_days": null,
+      "reason": "shared cross-run lock/registration file; stays in the shared temp root"
+    },
+    {
+      "pattern": ".autopilot-suite-oracle.owner",
+      "kind": "lock",
+      "owner": "hooks/tests/lib/suite-residue-reap.sh",
+      "retention_days": null,
+      "reason": "shared cross-run lock/registration file; stays in the shared temp root"
+    },
+    {
+      "pattern": ".autopilot-gc.lock",
+      "kind": "lock",
+      "owner": "hooks/tests/lib/suite-residue-reap.sh",
+      "retention_days": null,
+      "reason": "shared cross-run lock/registration file; stays in the shared temp root"
+    },
+    {
+      "pattern": "autopilot-test-snapshot.*",
+      "kind": "test-lockgated",
+      "owner": "hooks/tests/lib/suite-residue-reap.sh",
+      "retention_days": null,
+      "reason": "test scratch reaped only under lock/min-age gates"
+    },
+    {
+      "pattern": "hetero-*",
+      "kind": "test-lockgated",
+      "owner": "hooks/tests/lib/suite-residue-reap.sh",
+      "retention_days": null,
+      "reason": "also dispatch worktrees (hetero-<branch>-XXXXXX); lock/marker-gated reaper only"
+    },
+    {
+      "pattern": "autopilot-test-*",
+      "kind": "test-lockgated",
+      "owner": "hooks/tests/lib/suite-residue-reap.sh",
+      "retention_days": null,
+      "reason": "test scratch reaped only under lock/min-age gates"
+    },
+    {
+      "pattern": "hooks-run-parallel.*",
+      "kind": "test-lockgated",
+      "owner": "hooks/tests/lib/suite-residue-reap.sh",
+      "retention_days": null,
+      "reason": "test scratch reaped only under lock/min-age gates"
+    },
+    {
+      "pattern": "autopilot-l1-unit.*",
+      "kind": "test-lockgated",
+      "owner": "hooks/tests/lib/suite-residue-reap.sh",
+      "retention_days": null,
+      "reason": "test scratch reaped only under lock/min-age gates"
+    },
+    {
+      "pattern": "autopilot-managed-codex-home-*",
+      "kind": "test-lockgated",
+      "owner": "hooks/tests/lib/suite-residue-reap.sh",
+      "retention_days": null,
+      "reason": "test scratch reaped only under lock/min-age gates"
+    },
+    {
+      "pattern": "apl1.*",
+      "kind": "test-lockgated",
+      "owner": "hooks/tests/lib/suite-residue-reap.sh",
+      "retention_days": null,
+      "reason": "test scratch reaped only under lock/min-age gates"
+    },
+    {
+      "pattern": "apt.*",
+      "kind": "test-lockgated",
+      "owner": "hooks/tests/lib/suite-residue-reap.sh",
+      "retention_days": null,
+      "reason": "test scratch reaped only under lock/min-age gates"
+    }
+  ]
+}

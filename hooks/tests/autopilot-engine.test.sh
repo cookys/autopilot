@@ -6012,7 +6012,7 @@ runCase({
   },
 });
 } catch (error) {
-  fs.writeFileSync('/tmp/flag-debug.json', String(error && error.stack || error));
+  fs.writeFileSync(require('path').join(process.env.TMPDIR || '/tmp', 'flag-debug.json'), String(error && error.stack || error));
   throw error;
 }
 try {
@@ -6029,7 +6029,7 @@ runCase({
   },
 });
 } catch (error) {
-  fs.writeFileSync('/tmp/red-debug.json', String(error && error.stack || error));
+  fs.writeFileSync(require('path').join(process.env.TMPDIR || '/tmp', 'red-debug.json'), String(error && error.stack || error));
   throw error;
 }
 void first;

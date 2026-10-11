@@ -41,7 +41,16 @@ const { spawnSync } = require('child_process');
 // environment artifact, not a broker bug. Pin a short, real TMPDIR before
 // requiring the broker module so every mkdtempSync in this suite (this
 // file's own and the broker's) stays well under the limit.
-process.env.TMPDIR = fs.realpathSync('/tmp');
+// Keep the inherited TMPDIR (hooks/tests/run.sh's contained per-run `apl1.*` dir, ~15 bytes)
+// when it is short; otherwise use a short dir of our own and remove it on exit.
+const inheritedTmp = fs.realpathSync(process.env.TMPDIR || '/tmp');
+let ownShortTmp = null;
+if (Buffer.byteLength(inheritedTmp) <= 24) {
+  process.env.TMPDIR = inheritedTmp;
+} else {
+  ownShortTmp = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'apt.'));
+  process.env.TMPDIR = ownShortTmp;
+}
 
 const {
   BrokerError,
@@ -51,6 +60,10 @@ const {
 
 const PROVIDER = path.join(__dirname, 'qualification-review-provider.js');
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ap-cd-transport-'));
+process.on('exit', () => {
+  try { fs.rmSync(tempRoot, { recursive: true, force: true }); } catch { /* best effort */ }
+  if (ownShortTmp) { try { fs.rmSync(ownShortTmp, { recursive: true, force: true }); } catch { /* best effort */ } }
+});
 
 let assertions = 0;
 function check(value, message) {

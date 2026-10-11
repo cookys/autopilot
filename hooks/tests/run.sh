@@ -77,6 +77,9 @@ export AUTOPILOT_TEST_RUN_GUARD=1
 # Global; set by the parallel branch, cleared after its own successful rm -rf.
 # The EXIT trap also removes it (belt-and-suspenders on an interrupted run).
 PARALLEL_TMP=""
+# Per-run L1 (node --test) temp dir + its liveness-lock fd; see the L1 block below.
+L1_TMP=""
+L1_LOCK_FD=""
 declare -a PARALLEL_CHILD_PIDS=()
 TS_GUARD_STATE=""
 TS_SNAP=""
@@ -144,6 +147,16 @@ __suite_on_exit() {
   fi
   if [ -n "$PARALLEL_TMP" ]; then
     rm -rf "$PARALLEL_TMP"
+  fi
+  # L1 per-run dir: release the liveness lock, then remove (the node process group is
+  # gone by now — its pipeline finished or the interrupt trap waited on it).
+  if [ -n "${L1_LOCK_FD:-}" ]; then
+    { eval "exec ${L1_LOCK_FD}>&-"; } 2>/dev/null || true
+    L1_LOCK_FD=""
+  fi
+  if [ -n "${L1_TMP:-}" ]; then
+    rm -rf "$L1_TMP"
+    L1_TMP=""
   fi
   if command -v suite_residue_reap >/dev/null 2>&1; then
     suite_residue_reap >/dev/null 2>&1 || true
@@ -549,7 +562,24 @@ else
     # unattributed 1/24 red whose AssertionError was lost because only the summary
     # line was read). Kept only when red; deleted on green to avoid /tmp residue.
     L1_LOG="$(mktemp "${TMPDIR:-/tmp}/autopilot-l1-unit.XXXXXX")"
-    if ! node --test "${UNIT_FILES[@]}" 2>&1 | tee "$L1_LOG"; then
+    # Contain L1 temp files: node --test (and everything it spawns) gets its own short
+    # per-run TMPDIR, NOT exported to this shell (the shared locks and the EXIT reaper
+    # keep resolving the real ${TMPDIR}). Short + directly under the temp root so
+    # AF_UNIX paths fit in 108 bytes. The dir holds a live flock (the sidecar
+    # convention of hooks/tests/lib.sh) so suite-residue-reap.sh recovers it only after
+    # a kill -9 (lock free + min age), never while the run is alive. Best-effort: on any
+    # failure L1 runs un-contained, exactly as before.
+    L1_TMP="$(mktemp -d "${TMPDIR:-/tmp}/apl1.XXXXXX" 2>/dev/null)" || L1_TMP=""
+    L1_ENV=()
+    if [ -n "$L1_TMP" ]; then
+      if { exec {L1_LOCK_FD}>>"$L1_TMP/.autopilot-live.lock"; } 2>/dev/null; then
+        flock -n "$L1_LOCK_FD" 2>/dev/null || { { exec {L1_LOCK_FD}>&-; } 2>/dev/null || true; L1_LOCK_FD=""; }
+      else
+        L1_LOCK_FD=""
+      fi
+      L1_ENV=("TMPDIR=$L1_TMP" "AUTOPILOT_L1_TMP=$L1_TMP")
+    fi
+    if ! env "${L1_ENV[@]}" node --test "${UNIT_FILES[@]}" 2>&1 | tee "$L1_LOG"; then
       FAILED=$((FAILED + 1))
       FAILED_TESTS+=("L1 unit suite")
       echo "L1 full output preserved for attribution: $L1_LOG"

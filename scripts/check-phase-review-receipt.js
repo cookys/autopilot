@@ -6,6 +6,13 @@
  *   Flags: --ledger <dir> --phase <id> --branch <b> [--repo-root <r>]
  *   Validates <ledger>/receipt-<phase>.json against git history and review artifacts.
  *
+ * Mode C: review packet set (a range too big for one packet, split by path)
+ *   Flags: --packets <packets.json> --ledger <dir> --branch <b> --phase-base <sha> [--repo-root <r>]
+ *   Every packet phase `<set>-<id>` must pass Mode A (SHIP-AS-IS), the packets must cover the reviewed range
+ *   exactly once, and no packet file may have changed since its packet's last reviewed head. A packet
+ *   receipt alone is refused by Mode A. Exit 0 only when the whole set holds. Plan:
+ *   docs/plans/2026-10-11-review-packet-mode.md. Shared rules: scripts/lib/review-packets.js.
+ *
  * Mode B: plan-artifact / dispositions validation
  *   Flags: --plan-artifact <gN.json> --dispositions <gN-disposition.json>
  *   Validates that all candidate blockers have valid accepted/rejected dispositions.
@@ -20,6 +27,7 @@ const { spawnSync } = require('child_process');
 const deriveReceiptState = require('./lib/review-chain-derive');
 
 const { EXCLUDE_ALLOWLIST, isPathspecAllowed, loadConsumerExcludeAllowlist } = require('./lib/exclude-allowlist');
+const reviewPackets = require('./lib/review-packets');
 
 function deepEqual(a, b) {
   if (a === b) return true;
@@ -50,6 +58,9 @@ function printUsage() {
   console.log(`Usage:
   Mode A (Receipt validation):
     node scripts/check-phase-review-receipt.js --ledger <dir> --phase <id> --branch <b> --phase-base <sha> [--repo-root <r>]
+
+  Mode C (Review packet set — a range too big for one packet, split by path):
+    node scripts/check-phase-review-receipt.js --packets <packets.json> --ledger <dir> --branch <b> --phase-base <sha> [--repo-root <r>]
 
   Mode B (Plan-artifact / dispositions validation):
     node scripts/check-phase-review-receipt.js --plan-artifact <gN.json> --dispositions <gN-disp.json> [--plan-file <p>] [--rubric-file <r>]
@@ -522,7 +533,17 @@ function resolveConfiguredMinSeats(flags) {
   return parseInt(str, 10);
 }
 
-function validateModeA(flags) {
+// opts.packetSet ({ set, id, sha256, paths }) is passed only by the set check (validatePacketSet) — an
+// in-process parameter, never a CLI flag. A receipt whose chain carries `packet` covers only that
+// packet's files, so it must not pass as a whole-range receipt on its own.
+// Thrown in place of process.exit while validatePacketSet runs a packet's Mode A in-process. Every catch
+// inside validateModeA re-throws it, otherwise a catch that wraps a process.exit would swallow the exit and
+// report a misleading second error. (Chosen over one child process per packet: the packet context stays an
+// in-process parameter, not a CLI flag a caller could pass to a lone receipt.)
+class ExitSignal { constructor(code) { this.code = code; } }
+
+function validateModeA(flags, opts = {}) {
+  const packetSet = opts.packetSet || null;
   // Validated first, before any generation/chain validation runs — see resolveConfiguredMinSeats.
   const configuredMinSeats = resolveConfiguredMinSeats(flags);
 
@@ -547,6 +568,7 @@ function validateModeA(flags) {
     const content = fs.readFileSync(receiptPath, 'utf8');
     receipt = JSON.parse(content);
   } catch (err) {
+    if (err instanceof ExitSignal) throw err; // in-process set check: an exit inside a try must reach runModeAInProcess
     console.error(`Failed to read or parse receipt file: ${err.message}`);
     process.exit(1);
   }
@@ -573,6 +595,7 @@ function validateModeA(flags) {
       }
       chainOnDisk = JSON.parse(fs.readFileSync(chainPath, 'utf8'));
     } catch (err) {
+      if (err instanceof ExitSignal) throw err; // in-process set check: an exit inside a try must reach runModeAInProcess
       console.error(`Failed to read or parse ledger chain at ${chainPath}: ${err.message}`);
       process.exit(1);
     }
@@ -597,6 +620,18 @@ function validateModeA(flags) {
     if (!firstEntryDisk || firstEntryDisk.base !== expectedBaseSha) {
       console.error(`Ledger chain first entry base '${firstEntryDisk && firstEntryDisk.base}' does not match expected phase-base '${expectedBaseSha}'`);
       process.exit(1);
+    }
+
+    const packetEntries = chain.filter((e) => e && e.packet !== undefined);
+    if (!packetSet && (receipt.packet !== undefined || packetEntries.length > 0)) {
+      console.error(`Receipt for phase '${phase}' is a review-packet receipt: it covers only that packet's files, so it cannot stand for the whole range on its own — validate the set with --packets <packets.json>`);
+      process.exit(1);
+    }
+    if (packetSet) {
+      if (!receipt.packet || receipt.packet.set !== packetSet.set || receipt.packet.id !== packetSet.id) {
+        console.error(`Receipt for phase '${phase}' does not name packet ${packetSet.set}/${packetSet.id} (receipt.packet: ${JSON.stringify(receipt.packet)})`);
+        process.exit(1);
+      }
     }
 
     const findingsByGeneration = new Map();
@@ -647,6 +682,7 @@ function validateModeA(flags) {
           try {
             abortedRange = JSON.parse(fs.readFileSync(abortedRangePath, 'utf8'));
           } catch (err) {
+            if (err instanceof ExitSignal) throw err; // in-process set check: an exit inside a try must reach runModeAInProcess
             console.error(`Failed to read or parse range.json for aborted generation ${entry.generation}: ${err.message}`);
             process.exit(1);
           }
@@ -682,6 +718,7 @@ function validateModeA(flags) {
         }
         rangeObj = JSON.parse(fs.readFileSync(rangePath, 'utf8'));
       } catch (err) {
+        if (err instanceof ExitSignal) throw err; // in-process set check: an exit inside a try must reach runModeAInProcess
         console.error(`Failed to read or parse range.json for generation ${entry.generation}: ${err.message}`);
         process.exit(1);
       }
@@ -691,10 +728,28 @@ function validateModeA(flags) {
         process.exit(1);
       }
 
-      // Item 7: Exclusion allowlist enforcement
+      // Packet generation: the packet record must be the one the set file defines, byte-pinned, and a
+      // packet generation never carries exclusions (a packet slices by cover, not by leaving paths out).
       const hasExclusions = Array.isArray(rangeObj.excluded) && rangeObj.excluded.length > 0;
-      if (hasExclusions) {
-        for (const pattern of rangeObj.excluded) {
+      if (packetSet) {
+        const pk = entry.packet;
+        if (!pk || pk.set !== packetSet.set || pk.id !== packetSet.id || pk.packets_sha256 !== packetSet.sha256 || !deepEqual(pk.paths, packetSet.paths)) {
+          console.error(`Chain entry generation ${entry.generation} does not carry the packet record of ${packetSet.set}/${packetSet.id} as defined by the packets file`);
+          process.exit(1);
+        }
+        if (!deepEqual(rangeObj.packet, pk)) {
+          console.error(`range.json packet record differs from the chain entry for generation ${entry.generation}`);
+          process.exit(1);
+        }
+        if (hasExclusions) {
+          console.error(`Generation ${entry.generation} of packet ${packetSet.id} carries exclusions; a packet may not exclude paths`);
+          process.exit(1);
+        }
+      }
+
+      // Item 7: Exclusion allowlist enforcement
+      if (hasExclusions || packetSet) {
+        for (const pattern of (hasExclusions ? rangeObj.excluded : [])) {
           if (!isPathspecAllowed(pattern, consumerAllowlist)) {
             console.error(`ERROR: Exclude pathspec '${pattern}' is not permitted by allowlist`);
             process.exit(1);
@@ -732,11 +787,22 @@ function validateModeA(flags) {
           diffArgs.push(`:!${pattern}`);
         }
       }
-      const diffRes = spawnSync('git', diffArgs, {
-        cwd: repoRoot,
-        encoding: 'utf8',
-        maxBuffer: 64 * 1024 * 1024,
-      });
+      let diffRes;
+      if (packetSet) {
+        try {
+          diffRes = { status: 0, stdout: reviewPackets.packetDiff(repoRoot, entry.base, entry.head, packetSet.paths) };
+        } catch (err) {
+          if (err instanceof ExitSignal) throw err; // in-process set check: an exit inside a try must reach runModeAInProcess
+          console.error(`git diff failed for generation ${entry.generation}: ${err.message}`);
+          process.exit(1);
+        }
+      } else {
+        diffRes = spawnSync('git', diffArgs, {
+          cwd: repoRoot,
+          encoding: 'utf8',
+          maxBuffer: 64 * 1024 * 1024,
+        });
+      }
       if (diffRes.status !== 0) {
         console.error(`git diff failed for generation ${entry.generation}: ${diffRes.stderr || 'unknown error'}`);
         process.exit(1);
@@ -765,6 +831,7 @@ function validateModeA(flags) {
       try {
         findingsRaw = fs.readFileSync(findingsPath);
       } catch (err) {
+        if (err instanceof ExitSignal) throw err; // in-process set check: an exit inside a try must reach runModeAInProcess
         console.error(`Failed to read findings.json for generation ${entry.generation}: ${err.message}`);
         process.exit(1);
       }
@@ -826,6 +893,7 @@ function validateModeA(flags) {
         try {
           seatContent = JSON.parse(seatRaw.toString('utf8'));
         } catch (err) {
+          if (err instanceof ExitSignal) throw err; // in-process set check: an exit inside a try must reach runModeAInProcess
           console.error(`Failed to parse seat artifact ${seatFile} for generation ${entry.generation}: ${err.message}`);
           process.exit(1);
         }
@@ -846,6 +914,7 @@ function validateModeA(flags) {
       try {
         dispBytes = fs.readFileSync(dispositionsPath);
       } catch (err) {
+        if (err instanceof ExitSignal) throw err; // in-process set check: an exit inside a try must reach runModeAInProcess
         console.error(`Failed to read dispositions.json for generation ${entry.generation}: ${err.message}`);
         process.exit(1);
       }
@@ -861,6 +930,7 @@ function validateModeA(flags) {
       try {
         findingsData = JSON.parse(findingsRaw.toString('utf8'));
       } catch (err) {
+        if (err instanceof ExitSignal) throw err; // in-process set check: an exit inside a try must reach runModeAInProcess
         console.error(`Failed to parse findings.json for generation ${entry.generation}: ${err.message}`);
         process.exit(1);
       }
@@ -898,6 +968,7 @@ function validateModeA(flags) {
       try {
         dispData = JSON.parse(dispBytes.toString('utf8'));
       } catch (err) {
+        if (err instanceof ExitSignal) throw err; // in-process set check: an exit inside a try must reach runModeAInProcess
         console.error(`Failed to parse dispositions.json for generation ${entry.generation}: ${err.message}`);
         process.exit(1);
       }
@@ -1034,6 +1105,10 @@ function validateModeA(flags) {
       }
     }
 
+    // Packet member: the set check owns the head rule (ancestor of the tip, no packet path changed
+    // since this packet's last reviewed head) — a fix landed for ANOTHER packet moves the tip legitimately.
+    if (packetSet) process.exit(0);
+
     // (5) the last chain entry's head must equal current git rev-parse <branch> in repoRoot
     const lastEntry = chain[chain.length - 1];
     const revParseRes = spawnSync('git', ['rev-parse', branch], {
@@ -1122,6 +1197,7 @@ function validateModeA(flags) {
     try {
       configBytes = fs.readFileSync(receipt.config_source.path);
     } catch (err) {
+      if (err instanceof ExitSignal) throw err; // in-process set check: an exit inside a try must reach runModeAInProcess
       console.error(`Failed to read config source file: ${err.message}`);
       process.exit(1);
     }
@@ -1139,6 +1215,113 @@ function validateModeA(flags) {
   }
 }
 
+// Run validateModeA in-process for one packet phase without letting its process.exit end this
+// process: exit is turned into a thrown signal, console.error into a captured message list.
+function runModeAInProcess(flags, opts) {
+  const realExit = process.exit;
+  const realErr = console.error;
+  const realLog = console.log;
+  const msgs = [];
+  process.exit = (code) => { throw new ExitSignal(code === undefined ? 0 : code); };
+  console.error = (...a) => { msgs.push(a.join(' ')); };
+  console.log = () => {};
+  let code;
+  try {
+    validateModeA(flags, opts);
+    code = 0;
+  } catch (e) {
+    if (e instanceof ExitSignal) code = e.code;
+    else { code = 1; msgs.push(String(e && e.stack || e)); }
+  } finally {
+    process.exit = realExit;
+    console.error = realErr;
+    console.log = realLog;
+  }
+  return { code, msgs };
+}
+
+// Mode C — review packet set. The packets file defines the cover; each packet is its own phase
+// (`<set>-<id>`) validated by Mode A (so SHIP-AS-IS, reviewed-seat floor, packet diff re-derived);
+// this function adds the set rules. Plan: docs/plans/2026-10-11-review-packet-mode.md §2.4.
+function validatePacketSet(flags) {
+  const fail = (msg) => { console.error(msg); process.exit(1); };
+  const ledgerDir = flags.ledger;
+  const branch = flags.branch;
+  const base = flags['phase-base'];
+  const repoRoot = flags['repo-root'] ? path.resolve(flags['repo-root']) : process.cwd();
+  if (typeof flags.packets !== 'string' || !ledgerDir || !branch || typeof base !== 'string') {
+    fail('Packet set check requires --packets <file>, --ledger, --branch and --phase-base');
+  }
+  const loaded = reviewPackets.loadPacketsFile(flags.packets);
+  if (!loaded.ok) fail(`Invalid packets file: ${loaded.errors.join('; ')}`);
+  const { set, packets, sha256 } = loaded;
+  const ids = Object.keys(packets).sort();
+
+  const tipRes = spawnSync('git', ['rev-parse', branch], { cwd: repoRoot, encoding: 'utf8' });
+  if (tipRes.status !== 0) fail(`Failed to rev-parse branch '${branch}': ${tipRes.stderr || 'unknown error'}`);
+  const tip = tipRes.stdout.trim();
+
+  // Rule 2: every packet passes Mode A as a member of this set.
+  const problems = [];
+  const chains = {};
+  for (const id of ids) {
+    const phase = reviewPackets.packetPhase(set, id);
+    const memberFlags = { ...flags, phase, branch, 'phase-base': base, 'repo-root': repoRoot };
+    delete memberFlags.packets;
+    const r = runModeAInProcess(memberFlags, { packetSet: { set, id, sha256, paths: packets[id] } });
+    if (r.code !== 0) {
+      problems.push(`packet '${id}' (phase ${phase}) did not pass: ${r.msgs.join(' | ') || `exit ${r.code}`}`);
+      continue;
+    }
+    try {
+      chains[id] = JSON.parse(fs.readFileSync(path.join(ledgerDir, `review-${phase}`, 'chain.json'), 'utf8'));
+    } catch (e) {
+      problems.push(`packet '${id}': cannot read chain.json: ${e.message}`);
+    }
+  }
+  if (problems.length) fail(problems.join('\n'));
+
+  // Rule 3: same first reviewed head everywhere; the cover equals the range's changed list exactly.
+  let h1 = null;
+  const lastHead = {};
+  for (const id of ids) {
+    const finalized = chains[id].filter((e) => e && e.status === 'finalized');
+    const first = finalized[0];
+    const last = finalized[finalized.length - 1];
+    if (!first || !first.head || !last || !last.head) { problems.push(`packet '${id}' has no finalized generation`); continue; }
+    if (h1 === null) h1 = first.head;
+    else if (first.head !== h1) problems.push(`packet '${id}' was first reviewed at a different head (${first.head}, not ${h1}): every packet must pin the same full range`);
+    lastHead[id] = last.head;
+  }
+  if (problems.length) fail(problems.join('\n'));
+  try {
+    problems.push(...reviewPackets.coverErrors(reviewPackets.rangeNames(repoRoot, base, h1), packets, true));
+  } catch (e) {
+    problems.push(e.message);
+  }
+  if (problems.length) fail(`Packets do not cover the reviewed range ${base}..${h1} exactly once:\n${problems.join('\n')}`);
+
+  // Rule 4: relative to the tip, nothing a packet reviewed has changed since its last reviewed head,
+  // and nothing outside the cover has entered the range.
+  try {
+    problems.push(...reviewPackets.coverErrors(reviewPackets.rangeNames(repoRoot, base, tip), packets, false));
+    for (const id of ids) {
+      const anc = spawnSync('git', ['merge-base', '--is-ancestor', lastHead[id], tip], { cwd: repoRoot, encoding: 'utf8' });
+      if (anc.status !== 0) { problems.push(`packet '${id}' last reviewed head ${lastHead[id]} is not an ancestor of '${branch}' (${tip})`); continue; }
+      const own = new Set(packets[id]);
+      for (const n of reviewPackets.rangeNames(repoRoot, lastHead[id], tip)) {
+        if (own.has(n)) problems.push(`packet '${id}': '${n}' changed after its last reviewed head ${lastHead[id]}`);
+      }
+    }
+  } catch (e) {
+    problems.push(e.message);
+  }
+  if (problems.length) fail(`Packet set is stale against '${branch}':\n${problems.join('\n')}`);
+
+  console.log(`Packet set '${set}' ok: ${ids.length} packet(s), ${reviewPackets.union(packets).size} path(s) covered exactly once at ${h1}, tip ${tip}`);
+  process.exit(0);
+}
+
 function main() {
   const flags = parseArgs(process.argv.slice(2));
 
@@ -1149,6 +1332,8 @@ function main() {
 
   if (flags['plan-artifact'] && flags.dispositions) {
     validateModeB(flags);
+  } else if (flags.packets !== undefined) {
+    validatePacketSet(flags);
   } else if (flags.ledger || flags.phase || flags.branch) {
     validateModeA(flags);
   } else {

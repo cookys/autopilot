@@ -1403,5 +1403,370 @@ node -e '
   console.log("OK");' "$LOCKH" "$TOKDIR" > "$TEST_TMP/t11h.out" 2>&1
 assert_eq "$(cat "$TEST_TMP/t11h.out")" "OK" "test 11h: release is token-checked (old holder cannot remove successor's lock)"
 
-finalize_test
+# ─── packet mode (plan docs/plans/2026-10-11-review-packet-mode.md) ───
+# A range too big for one packet is split BY PATH: packets.json -> one phase per packet -> a set check
+# (check-phase-review-receipt.js --packets). Every negative case is proved twice: the writer (collect)
+# refuses it AND the checker refuses a hand-built ledger that bypassed the writer; then the guarded
+# line is removed from a COPY of the scripts and the same case must stop failing (the case really
+# depends on the check, not on something incidental).
+CHK="$REPO_ROOT/scripts/check-phase-review-receipt.js"
+PK_REPO="$TEST_TMP/pk_repo"
+mkdir -p "$PK_REPO/d" "$PK_REPO/generated"
+(
+  cd "$PK_REPO"
+  git init -q
+  git config user.email "test@example.com"
+  git config user.name "Test User"
+  for f in a.txt d/b.txt c.txt d/e.txt generated/g.txt; do echo "base $f" > "$f"; done
+  git add -A; git commit -q -m "base"
+  git checkout -q -b work
+  for f in a.txt d/b.txt c.txt d/e.txt generated/g.txt; do echo "work $f" >> "$f"; done
+  git add -A; git commit -q -m "work"
+)
+PK_BASE=$(git -C "$PK_REPO" rev-parse HEAD~1)
+PK_LEDGER="$TEST_TMP/pk_ledger"
+mkdir -p "$PK_LEDGER"
+cat << 'EOF' > "$TEST_TMP/pk_packets.json"
+{ "schema": "autopilot.review-packets/1", "set": "ps",
+  "packets": { "P1": ["a.txt"], "P2": ["d/b.txt", "generated/g.txt"], "P3": ["c.txt", "d/e.txt"] } }
+EOF
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
 
+pk_collect() { # <ledger> <packets-file> <packet> [extra flags...]
+  local led="$1" pf="$2" id="$3"; shift 3
+  node "$SCRIPT" collect --repo-root "$PK_REPO" --ledger "$led" --packets "$pf" --packet "$id" --generation 1 --branch work --phase-base "$PK_BASE" --seats "m1/low@codex" "$@" 2>&1
+}
+pk_finalize() { # <ledger> <packets-file> <packet> [generation]
+  echo "{ \"schema_version\": 1, \"phase\": \"ps-$3\", \"generation\": ${4:-1}, \"findings\": [] }" > "$TEST_TMP/pk_disp.json"
+  node "$SCRIPT" finalize --repo-root "$PK_REPO" --ledger "$1" --packets "$2" --packet "$3" --generation "${4:-1}" --branch work --dispositions "$TEST_TMP/pk_disp.json" 2>&1
+}
+pk_check() { # <script> <ledger> <packets-file>
+  node "$1" --repo-root "$PK_REPO" --ledger "$2" --packets "$3" --branch work --phase-base "$PK_BASE" 2>&1
+}
+# A copy of the scripts with ONE guard line removed: pk_mutant <name> <file> <exact old text> <new text>
+pk_mutant() {
+  local m="$TEST_TMP/mut-$1"
+  if [ ! -d "$m" ]; then mkdir -p "$m"; cp -r "$REPO_ROOT/scripts" "$m/scripts"; ln -s "$REPO_ROOT/src" "$m/src"; fi
+  node -e '
+    const fs = require("fs"); const f = process.argv[1], o = process.argv[2], n = process.argv[3];
+    const s = fs.readFileSync(f, "utf8"); if (s.split(o).length !== 2) { console.error("MUTATION TARGET NOT UNIQUE: " + o); process.exit(3); }
+    fs.writeFileSync(f, s.replace(o, () => n));' "$m/scripts/$2" "$3" "$4" || return 1
+  echo "$m"
+}
+
+# P1: normal split — three packets, each its own phase, all pinned to the same full range
+for id in P1 P2 P3; do
+  PK_OUT=$(pk_collect "$PK_LEDGER" "$TEST_TMP/pk_packets.json" "$id"); PK_RC=$?
+  assert_exit_code "$PK_RC" "0" "packet P1: collect packet $id exits 0"
+  PK_OUT=$(pk_finalize "$PK_LEDGER" "$TEST_TMP/pk_packets.json" "$id"); PK_RC=$?
+  assert_exit_code "$PK_RC" "0" "packet P1: finalize packet $id exits 0"
+done
+assert_file_exists "$PK_LEDGER/review-ps-P2/chain.json" "packet P1: packet phase is <set>-<id>"
+assert_file_exists "$PK_LEDGER/packets-ps.json" "packet P1: the packets file is pinned in the ledger"
+assert_contains "$(cat "$PK_LEDGER/review-ps-P2/g1/diff.txt")" "d/b.txt" "packet P1: P2's diff holds its own file"
+assert_not_contains "$(cat "$PK_LEDGER/review-ps-P2/g1/diff.txt")" "a.txt" "packet P1: P2's diff holds nothing of P1"
+PK_FULL=$(git -C "$PK_REPO" diff "$PK_BASE..work" | sha256sum | cut -d' ' -f1)
+assert_eq "$(node -e 'const r=require(process.argv[1]); console.log([r.full_range_sha256, r.excluded.length, r.packet.id].join("|"))' "$PK_LEDGER/review-ps-P2/g1/range.json")" "$PK_FULL|0|P2" "packet P1: range.json pins the full-range hash, no exclusions, names the packet"
+PK_OUT=$(pk_check "$CHK" "$PK_LEDGER" "$TEST_TMP/pk_packets.json"); PK_RC=$?
+assert_exit_code "$PK_RC" "0" "packet P1: the set check passes when every packet is SHIP-AS-IS and the cover is exact"
+assert_contains "$PK_OUT" "ok: 3 packet(s), 5 path(s)" "packet P1: the set check reports the cover"
+
+# P2: a lone packet receipt must not pass as a whole-range receipt
+PK_OUT=$(node "$CHK" --repo-root "$PK_REPO" --ledger "$PK_LEDGER" --phase ps-P1 --branch work --phase-base "$PK_BASE" 2>&1); PK_RC=$?
+assert_exit_code "$PK_RC" "1" "packet P2: Mode A on a packet receipt alone is refused"
+assert_contains "$PK_OUT" "review-packet receipt" "packet P2: the refusal says why"
+PK_M=$(pk_mutant lone check-phase-review-receipt.js "if (!packetSet && (receipt.packet !== undefined || packetEntries.length > 0)) {" "if (false) {") || fail "mutation setup failed (P2)"
+PK_OUT=$(node "$PK_M/scripts/check-phase-review-receipt.js" --repo-root "$PK_REPO" --ledger "$PK_LEDGER" --phase ps-P1 --branch work --phase-base "$PK_BASE" 2>&1); PK_RC=$?
+assert_not_contains "$PK_OUT" "review-packet receipt" "packet P2 (mutation): without the guard the refusal reason is gone (the case depends on the guard)"
+
+# P3: the packets omit a changed file (the "slice it away" attempt) — collect refuses, naming the path
+cat << 'EOF' > "$TEST_TMP/pk_missing.json"
+{ "schema": "autopilot.review-packets/1", "set": "pm",
+  "packets": { "P1": ["a.txt"], "P2": ["d/b.txt", "generated/g.txt"], "P3": ["c.txt"] } }
+EOF
+PK_OUT=$(pk_collect "$TEST_TMP/pk_ledger_m" "$TEST_TMP/pk_missing.json" P1); PK_RC=$?
+assert_exit_code "$PK_RC" "1" "packet P3: collect refuses a cover that misses a changed file"
+assert_contains "$PK_OUT" "missing: 'd/e.txt'" "packet P3: the refusal names the uncovered file"
+assert_file_absent "$TEST_TMP/pk_ledger_m/review-pm-P1/g1" "packet P3: nothing was collected"
+PK_M=$(pk_mutant cover hetero-review-loop.js "if (coverProblems.length > 0) {" "if (false) {") || fail "mutation setup failed (P3)"
+rm -rf "$TEST_TMP/pk_ledger_m2"
+PK_OUT=$(AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$SCRATCH_REPO/scripts/dispatch-review.sh" node "$PK_M/scripts/hetero-review-loop.js" collect --repo-root "$PK_REPO" --ledger "$TEST_TMP/pk_ledger_m2" --packets "$TEST_TMP/pk_missing.json" --packet P1 --generation 1 --branch work --phase-base "$PK_BASE" --seats "m1/low@codex" 2>&1); PK_RC=$?
+assert_exit_code "$PK_RC" "0" "packet P3 (mutation): without the cover check collect accepts the gap"
+
+# P3b: the same gap in a HAND-BUILT ledger (the writer bypassed): P1+P2 copied from the good run, packet sha
+# records rewritten to the gap file, receipts rewritten to match — the set check must still refuse, naming the file.
+cat << 'EOF' > "$TEST_TMP/pk_gap.json"
+{ "schema": "autopilot.review-packets/1", "set": "ps",
+  "packets": { "P1": ["a.txt"], "P2": ["d/b.txt", "generated/g.txt"] } }
+EOF
+pk_forge() { # <outdir> <packets-file>: copy the good ps ledger, re-pin every packet record to <packets-file>, re-write receipts to match
+  rm -rf "$1"; mkdir -p "$1"
+  node -e '
+    const fs = require("fs"), crypto = require("crypto");
+    const [src, dir, file] = process.argv.slice(1);
+    const text = fs.readFileSync(file, "utf8"); const sha = crypto.createHash("sha256").update(text, "utf8").digest("hex");
+    const set = JSON.parse(text);
+    for (const id of Object.keys(set.packets)) {
+      const ph = "ps-" + id;
+      fs.cpSync(src + "/review-" + ph, dir + "/review-" + ph, { recursive: true });
+      fs.copyFileSync(src + "/receipt-" + ph + ".json", dir + "/receipt-" + ph + ".json");
+      const chainP = dir + "/review-" + ph + "/chain.json"; const chain = JSON.parse(fs.readFileSync(chainP, "utf8"));
+      for (const e of chain) { e.packet.packets_sha256 = sha; e.packet.paths = set.packets[id]; }
+      fs.writeFileSync(chainP, JSON.stringify(chain, null, 2) + "\n");
+      for (const e of chain) {
+        const rp = dir + "/review-" + ph + "/g" + e.generation + "/range.json"; const r = JSON.parse(fs.readFileSync(rp, "utf8"));
+        r.packet = e.packet; fs.writeFileSync(rp, JSON.stringify(r, null, 2) + "\n");
+      }
+      const recP = dir + "/receipt-" + ph + ".json"; const rec = JSON.parse(fs.readFileSync(recP, "utf8"));
+      rec.chain = chain; fs.writeFileSync(recP, JSON.stringify(rec, null, 2) + "\n");
+    }' "$PK_LEDGER" "$1" "$2"
+}
+PK_FORGE="$TEST_TMP/pk_forge"
+pk_forge "$PK_FORGE" "$TEST_TMP/pk_gap.json"
+# the forged packet diffs are the original ones (paths unchanged for P1; P2 unchanged), so Mode A accepts them; only the cover is wrong
+PK_OUT=$(pk_check "$CHK" "$PK_FORGE" "$TEST_TMP/pk_gap.json"); PK_RC=$?
+assert_exit_code "$PK_RC" "1" "packet P3b: the set check refuses a hand-built ledger whose packets leave a changed file out"
+assert_contains "$PK_OUT" "missing: 'c.txt'" "packet P3b: names the first uncovered file"
+assert_contains "$PK_OUT" "missing: 'd/e.txt'" "packet P3b: names every uncovered file"
+# a gap is reported by two rules (exact cover at the first reviewed head, subset cover at the tip); remove both
+PK_M=$(pk_mutant setcover check-phase-review-receipt.js "problems.push(...reviewPackets.coverErrors(reviewPackets.rangeNames(repoRoot, base, h1), packets, true));" "") || fail "mutation setup failed (P3b)"
+PK_M=$(pk_mutant setcover check-phase-review-receipt.js "problems.push(...reviewPackets.coverErrors(reviewPackets.rangeNames(repoRoot, base, tip), packets, false));" "") || fail "mutation setup failed (P3b)"
+PK_OUT=$(pk_check "$PK_M/scripts/check-phase-review-receipt.js" "$PK_FORGE" "$TEST_TMP/pk_gap.json"); PK_RC=$?
+assert_exit_code "$PK_RC" "0" "packet P3b (mutation): without the cover rules the gapped hand-built set passes"
+
+# P3c: a hand-built ledger whose packet lists a file that is not in the range (extra) - only the exact-cover rule sees it
+cat << 'EOF' > "$TEST_TMP/pk_extra2.json"
+{ "schema": "autopilot.review-packets/1", "set": "ps",
+  "packets": { "P1": ["a.txt", "nothing.txt"], "P2": ["d/b.txt", "generated/g.txt"], "P3": ["c.txt", "d/e.txt"] } }
+EOF
+pk_forge "$TEST_TMP/pk_forge2" "$TEST_TMP/pk_extra2.json"
+PK_OUT=$(pk_check "$CHK" "$TEST_TMP/pk_forge2" "$TEST_TMP/pk_extra2.json"); PK_RC=$?
+assert_exit_code "$PK_RC" "1" "packet P3c: the set check refuses a hand-built packet that lists a file outside the range"
+assert_contains "$PK_OUT" "extra: 'nothing.txt'" "packet P3c: names the extra path"
+PK_M=$(pk_mutant extra check-phase-review-receipt.js "problems.push(...reviewPackets.coverErrors(reviewPackets.rangeNames(repoRoot, base, h1), packets, true));" "") || fail "mutation setup failed (P3c)"
+PK_OUT=$(pk_check "$PK_M/scripts/check-phase-review-receipt.js" "$TEST_TMP/pk_forge2" "$TEST_TMP/pk_extra2.json"); PK_RC=$?
+assert_exit_code "$PK_RC" "0" "packet P3c (mutation): without the exact-cover rule an extra path passes"
+
+# P4: two packets share a path
+cat << 'EOF' > "$TEST_TMP/pk_overlap.json"
+{ "schema": "autopilot.review-packets/1", "set": "po",
+  "packets": { "P1": ["a.txt", "c.txt"], "P2": ["d/b.txt", "generated/g.txt", "c.txt"], "P3": ["d/e.txt"] } }
+EOF
+PK_OUT=$(pk_collect "$TEST_TMP/pk_ledger_o" "$TEST_TMP/pk_overlap.json" P1); PK_RC=$?
+assert_exit_code "$PK_RC" "1" "packet P4: collect refuses overlapping packets"
+assert_contains "$PK_OUT" "overlap: 'c.txt' is in both packet 'P1' and packet 'P2'" "packet P4: the refusal names the shared path and both packets"
+PK_OUT=$(pk_check "$CHK" "$PK_LEDGER" "$TEST_TMP/pk_overlap.json"); PK_RC=$?
+assert_exit_code "$PK_RC" "1" "packet P4: the set check refuses an overlapping packets file"
+PK_M=$(pk_mutant overlap lib/review-packets.js "if (owner.has(p)) errors.push(" "if (false) errors.push(") || fail "mutation setup failed (P4)"
+PK_OUT=$(AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$SCRATCH_REPO/scripts/dispatch-review.sh" node "$PK_M/scripts/hetero-review-loop.js" collect --repo-root "$PK_REPO" --ledger "$TEST_TMP/pk_ledger_o2" --packets "$TEST_TMP/pk_overlap.json" --packet P1 --generation 1 --branch work --phase-base "$PK_BASE" --seats "m1/low@codex" 2>&1); PK_RC=$?
+assert_exit_code "$PK_RC" "0" "packet P4 (mutation): without the overlap check collect accepts the overlap"
+
+# P4b: a packet lists a file that is not in the range
+cat << 'EOF' > "$TEST_TMP/pk_extra.json"
+{ "schema": "autopilot.review-packets/1", "set": "pe",
+  "packets": { "P1": ["a.txt", "nothing.txt"], "P2": ["d/b.txt", "generated/g.txt", "c.txt", "d/e.txt"] } }
+EOF
+PK_OUT=$(pk_collect "$TEST_TMP/pk_ledger_e" "$TEST_TMP/pk_extra.json" P1); PK_RC=$?
+assert_exit_code "$PK_RC" "1" "packet P4b: collect refuses a packet path that did not change"
+assert_contains "$PK_OUT" "extra: 'nothing.txt'" "packet P4b: names the extra path"
+
+# P5: one packet did not pass — the whole set does not pass
+PK_LEDGER5="$TEST_TMP/pk_ledger5"; mkdir -p "$PK_LEDGER5"
+for id in P1 P2 P3; do pk_collect "$PK_LEDGER5" "$TEST_TMP/pk_packets.json" "$id" > /dev/null; done
+for id in P1 P2; do pk_finalize "$PK_LEDGER5" "$TEST_TMP/pk_packets.json" "$id" > /dev/null; done
+PK_OUT=$(pk_check "$CHK" "$PK_LEDGER5" "$TEST_TMP/pk_packets.json"); PK_RC=$?
+assert_exit_code "$PK_RC" "1" "packet P5: a packet without a receipt fails the set"
+assert_contains "$PK_OUT" "packet 'P3'" "packet P5: names the packet that did not pass"
+# P3 collected with a verified Critical finding -> FIX-THEN-SHIP, not SHIP-AS-IS
+rm -rf "$PK_LEDGER5/review-ps-P3"
+# (a per-seat STUB_RESPONSE_<seat> set by an earlier case outranks STUB_SEAT_RESPONSE in the stub, so set the seat's own)
+PK_S0_OLD="${STUB_RESPONSE_s0-__unset__}"
+export STUB_RESPONSE_s0='{"status": "reviewed", "verdict": "FIX-THEN-SHIP", "findings": "Critical: broken thing\nDetail."}'
+pk_collect "$PK_LEDGER5" "$TEST_TMP/pk_packets.json" P3 > /dev/null
+if [ "$PK_S0_OLD" = "__unset__" ]; then unset STUB_RESPONSE_s0; else export STUB_RESPONSE_s0="$PK_S0_OLD"; fi
+node -e 'const f=JSON.parse(require("fs").readFileSync(process.argv[1])).findings[0].id; require("fs").writeFileSync(process.argv[2], JSON.stringify({schema_version:1,phase:"ps-P3",generation:1,findings:[{id:f,disposition:"verified",rationale:"real"}]}))' "$PK_LEDGER5/review-ps-P3/g1/findings.json" "$TEST_TMP/pk_disp_bad.json"
+node "$SCRIPT" finalize --repo-root "$PK_REPO" --ledger "$PK_LEDGER5" --packets "$TEST_TMP/pk_packets.json" --packet P3 --generation 1 --branch work --dispositions "$TEST_TMP/pk_disp_bad.json" > /dev/null 2>&1
+assert_contains "$(cat "$PK_LEDGER5/receipt-ps-P3.json")" '"verdict": "FIX-THEN-SHIP"' "packet P5: setup — P3 finalized FIX-THEN-SHIP"
+PK_OUT=$(pk_check "$CHK" "$PK_LEDGER5" "$TEST_TMP/pk_packets.json"); PK_RC=$?
+assert_exit_code "$PK_RC" "1" "packet P5: one FIX-THEN-SHIP packet fails the set though the others are SHIP-AS-IS"
+assert_contains "$PK_OUT" "packet 'P3'" "packet P5: names the failing packet"
+PK_M=$(pk_mutant failed check-phase-review-receipt.js "if (r.code !== 0) {" "if (false) {") || fail "mutation setup failed (P5)"
+PK_OUT=$(pk_check "$PK_M/scripts/check-phase-review-receipt.js" "$PK_LEDGER5" "$TEST_TMP/pk_packets.json"); PK_RC=$?
+assert_exit_code "$PK_RC" "0" "packet P5 (mutation): without the per-packet pass requirement the set passes with a failed packet"
+
+# P6: trying to exclude files through packet mode: --exclude with --packets is refused...
+PK_OUT=$(pk_collect "$TEST_TMP/pk_ledger_x" "$TEST_TMP/pk_packets.json" P1 --exclude "generated/**"); PK_RC=$?
+assert_exit_code "$PK_RC" "2" "packet P6: --exclude together with --packets is refused"
+assert_contains "$PK_OUT" "never leaves one out" "packet P6: the refusal says packets never leave a path out"
+assert_file_absent "$TEST_TMP/pk_ledger_x/review-ps-P1" "packet P6: nothing was collected"
+PK_M=$(pk_mutant excl hetero-review-loop.js "if (flags.exclude !== undefined) {" "if (false) {") || fail "mutation setup failed (P6)"
+PK_OUT=$(AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$SCRATCH_REPO/scripts/dispatch-review.sh" node "$PK_M/scripts/hetero-review-loop.js" collect --repo-root "$PK_REPO" --ledger "$TEST_TMP/pk_ledger_x2" --packets "$TEST_TMP/pk_packets.json" --packet P1 --generation 1 --branch work --phase-base "$PK_BASE" --seats "m1/low@codex" --exclude "generated/**" 2>&1); PK_RC=$?
+assert_exit_code "$PK_RC" "0" "packet P6 (mutation): without the guard the exclusion rides along with a packet"
+# ...a source path is still not excludable even without packets (allowlist untouched)
+PK_OUT=$(node "$SCRIPT" collect --repo-root "$PK_REPO" --ledger "$TEST_TMP/pk_ledger_y" --phase py --generation 1 --branch work --phase-base "$PK_BASE" --seats "m1/low@codex" --exclude "d/b.txt" 2>&1); PK_RC=$?
+assert_exit_code "$PK_RC" "1" "packet P6: the exclude allowlist still refuses a non-allowlisted path"
+# ...and a packet generation that carries exclusions in a hand-built ledger is refused by the checker
+PK_EXCL="$TEST_TMP/pk_excl"; rm -rf "$PK_EXCL"; cp -r "$PK_LEDGER" "$PK_EXCL"
+node -e '
+  const fs = require("fs"); const rp = process.argv[1] + "/review-ps-P2/g1/range.json"; const r = JSON.parse(fs.readFileSync(rp, "utf8"));
+  r.excluded = ["generated/**"]; fs.writeFileSync(rp, JSON.stringify(r, null, 2) + "\n");' "$PK_EXCL"
+PK_OUT=$(pk_check "$CHK" "$PK_EXCL" "$TEST_TMP/pk_packets.json"); PK_RC=$?
+assert_exit_code "$PK_RC" "1" "packet P6: the checker refuses a packet generation that carries exclusions"
+assert_contains "$PK_OUT" "may not exclude paths" "packet P6: the checker names the rule"
+PK_M=$(pk_mutant exclchk check-phase-review-receipt.js 'console.error(`Generation ${entry.generation} of packet ${packetSet.id} carries exclusions; a packet may not exclude paths`);
+          process.exit(1);' "") || fail "mutation setup failed (P6b)"
+PK_OUT=$(pk_check "$PK_M/scripts/check-phase-review-receipt.js" "$PK_EXCL" "$TEST_TMP/pk_packets.json"); PK_RC=$?
+assert_exit_code "$PK_RC" "0" "packet P6b (mutation): without the rule a packet generation with exclusions passes the set"
+
+# P9: without --packets nothing changes: no packet record anywhere, whole-range receipt still passes Mode A
+UN_LEDGER="$TEST_TMP/pk_unchanged"; mkdir -p "$UN_LEDGER"
+PK_OUT=$(node "$SCRIPT" collect --repo-root "$PK_REPO" --ledger "$UN_LEDGER" --phase whole --generation 1 --branch work --phase-base "$PK_BASE" --seats "m1/low@codex" 2>&1); PK_RC=$?
+assert_exit_code "$PK_RC" "0" "packet P9: collect without packet flags exits 0"
+echo '{ "schema_version": 1, "phase": "whole", "generation": 1, "findings": [] }' > "$TEST_TMP/pk_disp_whole.json"
+node "$SCRIPT" finalize --repo-root "$PK_REPO" --ledger "$UN_LEDGER" --phase whole --generation 1 --branch work --dispositions "$TEST_TMP/pk_disp_whole.json" > /dev/null 2>&1
+assert_not_contains "$(cat "$UN_LEDGER/review-whole/g1/range.json")" "packet" "packet P9: range.json has no packet key"
+assert_not_contains "$(cat "$UN_LEDGER/review-whole/chain.json")" "packet" "packet P9: chain.json has no packet key"
+assert_not_contains "$(cat "$UN_LEDGER/receipt-whole.json")" "packet" "packet P9: the receipt has no packet key"
+assert_file_absent "$UN_LEDGER/packets-ps.json" "packet P9: no packets file pinned"
+PK_OUT=$(node "$CHK" --repo-root "$PK_REPO" --ledger "$UN_LEDGER" --phase whole --branch work --phase-base "$PK_BASE" 2>&1); PK_RC=$?
+assert_exit_code "$PK_RC" "0" "packet P9: Mode A passes the whole-range receipt unchanged"
+PK_M=$(pk_mutant plain hetero-review-loop.js "if (packetRecord) rangeJson.packet = packetRecord;" "rangeJson.packet = packetRecord;") || fail "mutation setup failed (P9)"
+rm -rf "$TEST_TMP/pk_unchanged2"; mkdir -p "$TEST_TMP/pk_unchanged2"
+AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$SCRATCH_REPO/scripts/dispatch-review.sh" node "$PK_M/scripts/hetero-review-loop.js" collect --repo-root "$PK_REPO" --ledger "$TEST_TMP/pk_unchanged2" --phase whole --generation 1 --branch work --phase-base "$PK_BASE" --seats "m1/low@codex" > /dev/null 2>&1
+assert_contains "$(cat "$TEST_TMP/pk_unchanged2/review-whole/g1/range.json")" '"packet"' "packet P9 (mutation): a collect that always writes a packet key is caught by the no-packet-key assertion"
+
+# P10: flag misuse
+PK_OUT=$(node "$SCRIPT" collect --repo-root "$PK_REPO" --ledger "$TEST_TMP/pk_ledger_z" --packets "$TEST_TMP/pk_packets.json" --generation 1 --branch work --phase-base "$PK_BASE" 2>&1); PK_RC=$?
+assert_exit_code "$PK_RC" "2" "packet P10: --packets without --packet exits 2"
+PK_OUT=$(pk_collect "$TEST_TMP/pk_ledger_z" "$TEST_TMP/pk_packets.json" NOPE); PK_RC=$?
+assert_exit_code "$PK_RC" "2" "packet P10: unknown packet id exits 2"
+PK_OUT=$(pk_collect "$TEST_TMP/pk_ledger_z" "$TEST_TMP/pk_packets.json" P1 --phase other); PK_RC=$?
+assert_exit_code "$PK_RC" "2" "packet P10: a --phase that differs from the derived packet phase exits 2"
+
+# P7: a later fix touching a packet's file after that packet's last reviewed head — the set is stale
+(cd "$PK_REPO" && echo "late" >> c.txt && git add c.txt && git commit -q -m "late fix")
+PK_OUT=$(pk_check "$CHK" "$PK_LEDGER" "$TEST_TMP/pk_packets.json"); PK_RC=$?
+assert_exit_code "$PK_RC" "1" "packet P7: a packet file changed after its last reviewed head fails the set"
+assert_contains "$PK_OUT" "'c.txt' changed after its last reviewed head" "packet P7: names the file and the rule"
+PK_M=$(pk_mutant stale check-phase-review-receipt.js "if (own.has(n)) problems.push(" "if (false) problems.push(") || fail "mutation setup failed (P7)"
+PK_OUT=$(pk_check "$PK_M/scripts/check-phase-review-receipt.js" "$PK_LEDGER" "$TEST_TMP/pk_packets.json"); PK_RC=$?
+assert_exit_code "$PK_RC" "0" "packet P7 (mutation): without the staleness rule the set passes over an unreviewed change"
+# P7b: re-reviewing only the touched packet (generation 2) brings the set back; an untouched packet cannot be re-collected
+PK_OUT=$(node "$SCRIPT" collect --repo-root "$PK_REPO" --ledger "$PK_LEDGER" --packets "$TEST_TMP/pk_packets.json" --packet P1 --generation 2 --branch work --seats "m1/low@codex" 2>&1); PK_RC=$?
+assert_exit_code "$PK_RC" "1" "packet P7b: collecting a later generation for a packet nothing changed in is refused"
+assert_contains "$PK_OUT" "nothing in packet 'P1' changed" "packet P7b: says why"
+PK_OUT=$(node "$SCRIPT" collect --repo-root "$PK_REPO" --ledger "$PK_LEDGER" --packets "$TEST_TMP/pk_packets.json" --packet P3 --generation 2 --branch work --seats "m1/low@codex" 2>&1); PK_RC=$?
+assert_exit_code "$PK_RC" "0" "packet P7b: generation 2 of the touched packet collects"
+PK_OUT=$(pk_finalize "$PK_LEDGER" "$TEST_TMP/pk_packets.json" P3 2); PK_RC=$?
+assert_exit_code "$PK_RC" "0" "packet P7b: generation 2 finalizes"
+PK_OUT=$(pk_check "$CHK" "$PK_LEDGER" "$TEST_TMP/pk_packets.json"); PK_RC=$?
+assert_exit_code "$PK_RC" "0" "packet P7b: after the touched packet is re-reviewed the set passes at the new tip (the other packets did not re-run)"
+
+# P8: a changed packets file is refused once the set is pinned
+cat << 'EOF' > "$TEST_TMP/pk_packets_alt.json"
+{ "schema": "autopilot.review-packets/1", "set": "ps",
+  "packets": { "P1": ["a.txt"], "P2": ["d/b.txt"], "P3": ["c.txt", "d/e.txt", "generated/g.txt"] } }
+EOF
+rm -rf "$PK_LEDGER5/review-ps-P1"
+PK_OUT=$(node "$SCRIPT" collect --repo-root "$PK_REPO" --ledger "$PK_LEDGER5" --packets "$TEST_TMP/pk_packets_alt.json" --packet P1 --generation 1 --branch work --phase-base "$PK_BASE" --seats "m1/low@codex" 2>&1); PK_RC=$?
+assert_exit_code "$PK_RC" "1" "packet P8: a second collect with different packets bytes for the same set is refused"
+assert_contains "$PK_OUT" "frozen once its first packet is collected" "packet P8: says why"
+
+
+# ─── packet mode, review follow-ups: set-rule mutations, exit-code proof of the lone-receipt guard,
+#     the pinned packets file, and exits swallowed by a catch in the in-process member check ───
+px_repo() { # <dir>: fresh repo like pk_repo (base + one work commit touching all five files); sets PK_REPO / PK_BASE
+  rm -rf "$1"; mkdir -p "$1/d" "$1/generated"
+  (
+    cd "$1"
+    git init -q
+    git config user.email "test@example.com"
+    git config user.name "Test User"
+    for f in a.txt d/b.txt c.txt d/e.txt generated/g.txt; do echo "base $f" > "$f"; done
+    git add -A; git commit -q -m "base"
+    git checkout -q -b work
+    for f in a.txt d/b.txt c.txt d/e.txt generated/g.txt; do echo "work $f" >> "$f"; done
+    git add -A; git commit -q -m "work"
+  )
+  PK_REPO="$1"; PK_BASE=$(git -C "$1" rev-parse HEAD~1)
+}
+px_fin() { # <ledger> <packet> -> collect then finalize that packet of the ps set at the current tip
+  pk_collect "$1" "$TEST_TMP/pk_packets.json" "$2" > /dev/null
+  pk_finalize "$1" "$TEST_TMP/pk_packets.json" "$2" > /dev/null
+}
+PK_REPO_MAIN="$PK_REPO"; PK_BASE_MAIN="$PK_BASE"
+
+# Q1: packets first reviewed at different heads (P1 at h1; a covered file changes; P2/P3 at h2) -> the set is refused
+px_repo "$TEST_TMP/px1"
+PX1_LEDGER="$TEST_TMP/px1_ledger"; mkdir -p "$PX1_LEDGER"
+px_fin "$PX1_LEDGER" P1
+(cd "$PK_REPO" && echo "between" >> d/e.txt && git add d/e.txt && git commit -q -m "between")
+px_fin "$PX1_LEDGER" P2; px_fin "$PX1_LEDGER" P3
+PK_OUT=$(pk_check "$CHK" "$PX1_LEDGER" "$TEST_TMP/pk_packets.json"); PK_RC=$?
+assert_exit_code "$PK_RC" "1" "packet Q1: packets first reviewed at different heads fail the set"
+assert_contains "$PK_OUT" "first reviewed at a different head" "packet Q1: the refusal says the heads differ"
+PK_M=$(pk_mutant heads check-phase-review-receipt.js "else if (first.head !== h1) problems.push(" "else if (false) problems.push(") || fail "mutation setup failed (Q1)"
+PK_OUT=$(pk_check "$PK_M/scripts/check-phase-review-receipt.js" "$PX1_LEDGER" "$TEST_TMP/pk_packets.json"); PK_RC=$?
+assert_exit_code "$PK_RC" "0" "packet Q1 (mutation): without the same-first-head rule a set pinned to two different ranges passes"
+
+# Q2: a file outside every packet enters the range after the packets were reviewed (tip subset cover)
+px_repo "$TEST_TMP/px2"
+PX2_LEDGER="$TEST_TMP/px2_ledger"; mkdir -p "$PX2_LEDGER"
+for id in P1 P2 P3; do px_fin "$PX2_LEDGER" "$id"; done
+(cd "$PK_REPO" && echo "new" > new.txt && git add new.txt && git commit -q -m "uncovered file")
+PK_OUT=$(pk_check "$CHK" "$PX2_LEDGER" "$TEST_TMP/pk_packets.json"); PK_RC=$?
+assert_exit_code "$PK_RC" "1" "packet Q2: a file added after review that no packet covers fails the set"
+assert_contains "$PK_OUT" "missing: 'new.txt'" "packet Q2: names the uncovered file"
+PK_M=$(pk_mutant tipcover check-phase-review-receipt.js "problems.push(...reviewPackets.coverErrors(reviewPackets.rangeNames(repoRoot, base, tip), packets, false));" "") || fail "mutation setup failed (Q2)"
+PK_OUT=$(pk_check "$PK_M/scripts/check-phase-review-receipt.js" "$PX2_LEDGER" "$TEST_TMP/pk_packets.json"); PK_RC=$?
+assert_exit_code "$PK_RC" "0" "packet Q2 (mutation): without the tip subset-cover rule an uncovered later file passes"
+
+# Q3: the branch is rewritten so a packet's last reviewed head is no longer an ancestor of the tip (same content, new commit ids)
+px_repo "$TEST_TMP/px3"
+PX3_LEDGER="$TEST_TMP/px3_ledger"; mkdir -p "$PX3_LEDGER"
+for id in P1 P2 P3; do px_fin "$PX3_LEDGER" "$id"; done
+(cd "$PK_REPO" && git commit -q --amend -m "work (rewritten)")
+PK_OUT=$(pk_check "$CHK" "$PX3_LEDGER" "$TEST_TMP/pk_packets.json"); PK_RC=$?
+assert_exit_code "$PK_RC" "1" "packet Q3: a rewritten branch (reviewed head not an ancestor of the tip) fails the set"
+assert_contains "$PK_OUT" "is not an ancestor" "packet Q3: names the ancestor rule"
+PK_M=$(pk_mutant anc check-phase-review-receipt.js "if (anc.status !== 0) {" "if (false) {") || fail "mutation setup failed (Q3)"
+PK_OUT=$(pk_check "$PK_M/scripts/check-phase-review-receipt.js" "$PX3_LEDGER" "$TEST_TMP/pk_packets.json"); PK_RC=$?
+assert_exit_code "$PK_RC" "0" "packet Q3 (mutation): without the ancestor rule a rewritten branch passes"
+
+# Q4: a lone packet receipt, exit-code proof. A set whose only packet holds every path has a packet diff equal to the
+# whole-range diff, so the ONLY thing refusing its lone receipt is the packet guard.
+px_repo "$TEST_TMP/px4"
+cat << 'EOF' > "$TEST_TMP/pk_one.json"
+{ "schema": "autopilot.review-packets/1", "set": "pone",
+  "packets": { "ALL": ["a.txt", "d/b.txt", "c.txt", "d/e.txt", "generated/g.txt"] } }
+EOF
+PX4_LEDGER="$TEST_TMP/px4_ledger"; mkdir -p "$PX4_LEDGER"
+pk_collect "$PX4_LEDGER" "$TEST_TMP/pk_one.json" ALL > /dev/null
+echo '{ "schema_version": 1, "phase": "pone-ALL", "generation": 1, "findings": [] }' > "$TEST_TMP/pk_disp_one.json"
+node "$SCRIPT" finalize --repo-root "$PK_REPO" --ledger "$PX4_LEDGER" --packets "$TEST_TMP/pk_one.json" --packet ALL --generation 1 --branch work --dispositions "$TEST_TMP/pk_disp_one.json" > /dev/null 2>&1
+PK_OUT=$(node "$CHK" --repo-root "$PK_REPO" --ledger "$PX4_LEDGER" --phase pone-ALL --branch work --phase-base "$PK_BASE" 2>&1); PK_RC=$?
+assert_exit_code "$PK_RC" "1" "packet Q4: a lone packet receipt is refused even when its diff equals the whole range"
+PK_M=$(pk_mutant lone2 check-phase-review-receipt.js "if (!packetSet && (receipt.packet !== undefined || packetEntries.length > 0)) {" "if (false) {") || fail "mutation setup failed (Q4)"
+PK_OUT=$(node "$PK_M/scripts/check-phase-review-receipt.js" --repo-root "$PK_REPO" --ledger "$PX4_LEDGER" --phase pone-ALL --branch work --phase-base "$PK_BASE" 2>&1); PK_RC=$?
+assert_exit_code "$PK_RC" "0" "packet Q4 (mutation): without the guard the lone receipt passes Mode A (exit 0), so the guard is what refuses it"
+
+# Q5: the packets file is frozen once pinned — mutation proof (the refusal itself is case P8)
+PK_REPO="$PK_REPO_MAIN"; PK_BASE="$PK_BASE_MAIN"
+rm -rf "$TEST_TMP/pk_ledger5m"; cp -r "$PK_LEDGER5" "$TEST_TMP/pk_ledger5m"; rm -rf "$TEST_TMP/pk_ledger5m/review-ps-P1"
+PK_M=$(pk_mutant pin hetero-review-loop.js "if (pinned !== packetCtx.sha256) {" "if (false) {") || fail "mutation setup failed (Q5)"
+PK_OUT=$(AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$SCRATCH_REPO/scripts/dispatch-review.sh" node "$PK_M/scripts/hetero-review-loop.js" collect --repo-root "$PK_REPO" --ledger "$TEST_TMP/pk_ledger5m" --packets "$TEST_TMP/pk_packets_alt.json" --packet P1 --generation 1 --branch work --phase-base "$PK_BASE" --seats "m1/low@codex" 2>&1); PK_RC=$?
+assert_exit_code "$PK_RC" "0" "packet Q5 (mutation): without the pin check a changed packets file is accepted into the same set"
+
+# Q6: an exit inside a try/catch of the member check must reach the set check unchanged (no swallowed or doubled error)
+PK_LEDGER6="$TEST_TMP/pk_ledger6"; mkdir -p "$PK_LEDGER6"; px_fin "$PK_LEDGER6" P1
+PK_OUT=$(pk_check "$CHK" "$PK_LEDGER6" "$TEST_TMP/pk_packets.json"); PK_RC=$?
+assert_exit_code "$PK_RC" "1" "packet Q6: set with a packet missing its receipt exits 1"
+assert_contains "$PK_OUT" "Receipt file not found" "packet Q6: the member's own error text is reported"
+assert_not_contains "$PK_OUT" "Failed to read or parse receipt file" "packet Q6: no second, misleading error from a catch that wrapped the exit"
+PK_M=$(pk_mutant swallow check-phase-review-receipt.js 'if (err instanceof ExitSignal) throw err; // in-process set check: an exit inside a try must reach runModeAInProcess
+    console.error(`Failed to read or parse receipt file' 'if (false) throw err; // in-process set check: an exit inside a try must reach runModeAInProcess
+    console.error(`Failed to read or parse receipt file') || fail "mutation setup failed (Q6)"
+PK_OUT=$(pk_check "$PK_M/scripts/check-phase-review-receipt.js" "$PK_LEDGER6" "$TEST_TMP/pk_packets.json"); PK_RC=$?
+assert_contains "$PK_OUT" "Failed to read or parse receipt file" "packet Q6 (mutation): without the re-throw the catch reports a misleading second error"
+
+finalize_test

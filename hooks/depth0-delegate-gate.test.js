@@ -334,3 +334,98 @@ test('garbage env mode maps to warn even when config says block and the live mod
   assert.match(last.stderr, /16 consecutive read-class calls/);
 });
 
+
+// ---- foreground-wait advisory (advice-only) ----
+
+const WAIT_RE = /depth0-delegate-gate: foreground wait at depth-0/;
+
+function waitBash(cmd, extra = {}) {
+  return bashPayload(cmd, extra);
+}
+
+test('wait advisory: foreground sleep 30 warns, exit 0, no deny', () => {
+  const r = runHook(waitBash('sleep 30'), freshEnv());
+  assert.strictEqual(r.status, 0);
+  assert.match(r.stderr, WAIT_RE);
+  assert.match(r.stdout, /additionalContext/);
+  assert.doesNotMatch(r.stdout, /permissionDecision/);
+});
+
+test('wait advisory: sleep 5 is silent', () => {
+  const r = runHook(waitBash('sleep 5'), freshEnv());
+  assert.strictEqual(r.status, 0);
+  assert.strictEqual(r.stderr.trim(), '');
+  assert.strictEqual(r.stdout.trim(), '');
+});
+
+test('wait advisory: run_in_background sleep 300 is silent', () => {
+  const r = runHook(bashPayload('sleep 300', { tool_input: { command: 'sleep 300', run_in_background: true } }), freshEnv());
+  assert.strictEqual(r.status, 0);
+  assert.strictEqual(r.stderr.trim(), '');
+  assert.strictEqual(r.stdout.trim(), '');
+});
+
+test('wait advisory: a subagent call (agent_id) is foreman-guard territory, silent here', () => {
+  const r = runHook(waitBash('sleep 30', { agent_id: 'sub-1' }), freshEnv());
+  assert.strictEqual(r.status, 0);
+  assert.strictEqual(r.stderr.trim(), '');
+  assert.strictEqual(r.stdout.trim(), '');
+});
+
+test('wait advisory: foreground until-loop with sleep warns', () => {
+  const r = runHook(waitBash('until grep -q x f; do sleep 10; done'), freshEnv());
+  assert.strictEqual(r.status, 0);
+  assert.match(r.stderr, WAIT_RE);
+});
+
+test('wait advisory: tail -f warns', () => {
+  const r = runHook(waitBash('tail -f /tmp/x.log'), freshEnv());
+  assert.strictEqual(r.status, 0);
+  assert.match(r.stderr, WAIT_RE);
+});
+
+test('wait advisory: ordinary commands stay silent', () => {
+  for (const cmd of ['git status', 'npm test', 'tail -n 20 /tmp/x.log', 'echo sleeping', 'sleep 5 && ls']) {
+    const r = runHook(waitBash(cmd), freshEnv());
+    assert.strictEqual(r.status, 0);
+    assert.doesNotMatch(r.stderr, WAIT_RE, cmd);
+  }
+});
+
+test('wait advisory: a sleep inside a heredoc body is data, silent', () => {
+  const r = runHook(waitBash('cat > f.sh <<EOF\nsleep 300\nEOF'), freshEnv());
+  assert.doesNotMatch(r.stderr, WAIT_RE);
+});
+
+test('wait advisory: mode off is silent', () => {
+  const r = runHook(waitBash('sleep 30'), freshEnv({ AUTOPILOT_DEPTH0_DELEGATE_GATE_MODE: 'off' }));
+  assert.strictEqual(r.status, 0);
+  assert.strictEqual(r.stderr.trim(), '');
+  assert.strictEqual(r.stdout.trim(), '');
+});
+
+test('wait advisory: block mode still only advises, never denies', () => {
+  const r = runHook(waitBash('sleep 30'), freshEnv({ AUTOPILOT_DEPTH0_DELEGATE_GATE_MODE: 'block' }));
+  assert.strictEqual(r.status, 0);
+  assert.match(r.stderr, WAIT_RE);
+  assert.doesNotMatch(r.stdout, /"deny"/);
+});
+
+test('wait advisory: throttled to the 1st hit and every 5th after in a session', () => {
+  const env = freshEnv();
+  const fired = [];
+  for (let i = 1; i <= 11; i += 1) {
+    const r = runHook(waitBash('sleep 30'), env);
+    assert.strictEqual(r.status, 0);
+    if (WAIT_RE.test(r.stderr)) fired.push(i);
+  }
+  assert.deepStrictEqual(fired, [1, 6, 11]);
+});
+
+test('wait advisory: does not touch the read counter', () => {
+  const env = freshEnv();
+  for (let i = 0; i < 7; i += 1) runHook(waitBash('sleep 30'), env);
+  // 7 waits must not have counted as reads: the 8th Read is the first read nudge.
+  for (let i = 1; i <= 7; i += 1) assert.strictEqual(runHook(payload('Read'), env).stderr.trim(), '');
+  assert.match(runHook(payload('Read'), env).stderr, /8 consecutive read-class/);
+});

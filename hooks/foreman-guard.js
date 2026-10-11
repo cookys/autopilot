@@ -55,6 +55,9 @@ const path = require('path');
 const { readMarker } = require('../scripts/session-mode.js');
 const { tiersForKnownWindow } = require('./context-budget-lib.js');
 const { resolveLiveDir, sanitizeSessionId, readLive } = require('../scripts/lib/live-state-dir.js');
+// Sleep / while-wait rules + the executable-text lexer live in one shared module so the depth-0
+// advisory (depth0-delegate-gate.js) and this hook can never drift apart.
+const { executableText, isAffirmative, SLEEP_RE, WHILE_WAIT_RE } = require('../scripts/lib/bash-wait-rules.js');
 
 const DEFAULT_BASH_CAP = 40;
 const DEFAULT_ADVISORY_EVERY = 40;
@@ -76,61 +79,11 @@ const FOREMAN_LEVELS = new Set(['l4', 'l5', 'l6']);
 // digit after `sleep` to stay off prose like `-m "sleep well"`.
 const POLL_RULES = [
   { id: 'noop-spin', re: /^\s*(?:true|:)\s*(?:;|&&|\|\|)?\s*$/, why: 'a no-op Bash call is a spin-wait' },
-  { id: 'sleep', re: /(?:^|[;&|(`\s'"])(?:\/[\w./-]*\/)?sleep\s+\d/, why: 'foreground sleep is a poll' },
-  { id: 'while-wait', re: /\b(?:while|until)\b[\s\S]*?\bdo\b[\s\S]*?(?:(?:^|[;&|(`\s'"])(?:\/[\w./-]*\/)?sleep\s+\d|(?:^|[;\s])(?:true|:)(?:\s*;|\s*$|\s+done\b))/, why: 'a while/until loop whose body sleeps or spins is a poll' },
+  { id: 'sleep', re: SLEEP_RE, why: 'foreground sleep is a poll' },
+  { id: 'while-wait', re: WHILE_WAIT_RE, why: 'a while/until loop whose body sleeps or spins is a poll' },
   { id: 'liveness-poll', re: /(?:^|[;&|(`\s'"])(?:\/[\w./-]*\/)?(?:pgrep\b|ps\s+-p\b|kill\s+-0\b)/, why: 'liveness probing is a poll' },
   { id: 'leaf-output-read', re: /\b(?:cat|tail|head|sed\s+-n|less|more)\b[^|;&]*\/tasks\/[^\s'"]*\.output\b/, why: 'reading a leaf output file into the foreman context' },
 ];
-
-// Strip the parts of a Bash command that are DATA, not executed commands: heredoc
-// BODIES (`<<TAG … TAG`, quoted or unquoted tag, optional `-`) and `#` comments to end
-// of line. Quote-aware (review round 2, gpt-5.6-sol): a `#` or `<<` inside single/double
-// quotes is literal, and the executable text before AND after a heredoc introducer on
-// its own line (`cat <<EOF; sleep 10`) is kept — only the body lines are dropped.
-// Quoted strings themselves stay: `bash -c '…'` / `sh -c "…"` / `eval` execute them.
-function executableText(cmd) {
-  const out = [];
-  const lines = String(cmd).split('\n');
-  let heredocTag = null;
-  for (const line of lines) {
-    if (heredocTag !== null) {
-      if (line.replace(/^\t+/, '') === heredocTag) heredocTag = null;
-      continue; // heredoc body: data
-    }
-    let keep = '';
-    let q = null; // active quote char
-    // Lexical word-start state (review round 3, gpt-5.6-sol): `#` opens a comment only at
-    // the START of a word. `echo foo\ #bar` keeps `#bar` inside the word because the
-    // escaped space did not end it — inspecting the raw previous char got that wrong.
-    let wordStart = true;
-    let i = 0;
-    while (i < line.length) {
-      const c = line[i];
-      if (q) {
-        if (c === '\\' && q === '"' && i + 1 < line.length) { keep += c + line[i + 1]; i += 2; continue; }
-        if (c === q) q = null;
-        keep += c; i += 1; continue;
-      }
-      if (c === '\\' && i + 1 < line.length) { keep += c + line[i + 1]; i += 2; wordStart = false; continue; }
-      if (c === "'" || c === '"') { q = c; keep += c; i += 1; wordStart = false; continue; }
-      if (c === '#' && wordStart) break; // comment to EOL
-      if (c === '<' && line[i + 1] === '<' && line[i + 2] !== '<') {
-        const m = /^<<-?\s*(?:'([^']+)'|"([^"]+)"|([A-Za-z_][\w]*))/.exec(line.slice(i));
-        if (m) { heredocTag = m[1] || m[2] || m[3]; i += m[0].length; wordStart = true; continue; } // drop the introducer only
-      }
-      wordStart = /[\s;&|(]/.test(c);
-      keep += c; i += 1;
-    }
-    out.push(keep);
-  }
-  return `${out.join('\n')}\n`;
-}
-
-function isAffirmative(v) {
-  if (v === true || v === 1) return true;
-  if (typeof v === 'string') return ['true', '1', 'yes', 'on'].includes(v.trim().toLowerCase());
-  return false;
-}
 
 function overlayRoleCaps(target, src) {
   if (!src || typeof src !== 'object') return;

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * depth0-delegate-gate — PreToolUse WebFetch|WebSearch|Read|Grep|Glob|Bash|Agent|Task|Skill
- * (default-on, v2.36.1 P3)
+ * (default-on, v2.36.1 P3; foreground-wait advisory added later)
  *
  * Nudges DEPTH-0 (never a subagent — skip whenever the payload carries `agent_id`, SPIKE-1)
  * away from doing its own long read bursts instead of delegating to an Explore/survey
@@ -33,8 +33,20 @@
  * same JSON shape foreman-guard.js emits. Without a live file the model is `unknown` — never
  * blocks, only warns (§2.6: this is new stderr by design).
  *
+ * FOREGROUND-WAIT ADVISORY (advice-only): independent of the read counter, a depth-0 Bash call
+ * that is NOT `run_in_background` and (a) runs `sleep` >= 20 s, (b) is a `while`/`until` loop whose
+ * body sleeps or spins, or (c) is `tail -f`/`-F`/`--follow`, gets one additionalContext line
+ * recommending run_in_background + completion notification, Monitor, or a background `until` loop.
+ * The match rules are the SAME ones foreman-guard.js denies on (scripts/lib/bash-wait-rules.js,
+ * shared; the 20 s floor is this gate's, foreman-guard denies any sleep). Throttle: the 1st hit per
+ * session and every `wait_advice_every`-th (default 5) hit after it; counter `waitHits` in the
+ * session state file. This rule supports `off` and `warn` only: in `block` mode it STILL only
+ * advises, because the foreground-wait guidance text (dev-flow SKILL.md) is still awaiting its
+ * eval and an unevidenced deny would enforce guidance nobody has measured. Mode `off` silences it.
+ *
  * MODES: ~/.autopilot/config.json {"depth0_delegate_gate": {"mode": "off"|"warn"|"block",
- * "threshold": 8, "guarded_models": ["fable","opus"]}} or AUTOPILOT_DEPTH0_DELEGATE_GATE_MODE.
+ * "threshold": 8, "guarded_models": ["fable","opus"], "wait_advice_every": 5}} or
+ * AUTOPILOT_DEPTH0_DELEGATE_GATE_MODE / AUTOPILOT_DEPTH0_WAIT_ADVICE_EVERY.
  * Garbage/unrecognised mode ⇒ warn (the default). Fail-open: any internal error ⇒ exit 0.
  * State: `<live-dir>/depth0-gate/<sid>.json` (+ AUTOPILOT_DEPTH0_GATE_DIR override), same
  * live-dir resolution as every other v2.36.1 consumer (scripts/lib/live-state-dir.js).
@@ -44,51 +56,17 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { resolveLiveDir, sanitizeSessionId, readLive, modelFamily } = require('../scripts/lib/live-state-dir.js');
+// Executable-text lexer + foreground-wait rules are shared with foreman-guard.js.
+const { executableText, detectForegroundWait } = require('../scripts/lib/bash-wait-rules.js');
 
 const DEFAULT_THRESHOLD = 8;
 const DEFAULT_GUARDED = ['fable', 'opus'];
 const READ_CLASS_TOOLS = new Set(['WebFetch', 'WebSearch', 'Read', 'Grep', 'Glob']);
 const DELEGATION_TOOLS = new Set(['Agent', 'Task', 'Skill']);
+const DEFAULT_WAIT_ADVICE_EVERY = 5;
+const WAIT_MIN_SLEEP_SECONDS = 20;
 // Executable-text prefixes (post-strip, trimmed) that make a Bash call read-class.
 const BASH_READ_PREFIXES = ['grep ', 'rg ', 'find ', 'cat ', 'sed -n', 'head ', 'tail '];
-
-// Same executable-text lexer as foreman-guard.js (heredoc bodies + `#` comments are DATA,
-// quoted strings stay because `bash -c '…'`/`sh -c "…"` execute them). Deliberately
-// duplicated rather than imported — single-crash isolation between the two hooks.
-function executableText(cmd) {
-  const out = [];
-  const lines = String(cmd).split('\n');
-  let heredocTag = null;
-  for (const line of lines) {
-    if (heredocTag !== null) {
-      if (line.replace(/^\t+/, '') === heredocTag) heredocTag = null;
-      continue; // heredoc body: data
-    }
-    let keep = '';
-    let q = null;
-    let wordStart = true;
-    let i = 0;
-    while (i < line.length) {
-      const c = line[i];
-      if (q) {
-        if (c === '\\' && q === '"' && i + 1 < line.length) { keep += c + line[i + 1]; i += 2; continue; }
-        if (c === q) q = null;
-        keep += c; i += 1; continue;
-      }
-      if (c === '\\' && i + 1 < line.length) { keep += c + line[i + 1]; i += 2; wordStart = false; continue; }
-      if (c === "'" || c === '"') { q = c; keep += c; i += 1; wordStart = false; continue; }
-      if (c === '#' && wordStart) break; // comment to EOL
-      if (c === '<' && line[i + 1] === '<' && line[i + 2] !== '<') {
-        const m = /^<<-?\s*(?:'([^']+)'|"([^"]+)"|([A-Za-z_][\w]*))/.exec(line.slice(i));
-        if (m) { heredocTag = m[1] || m[2] || m[3]; i += m[0].length; wordStart = true; continue; }
-      }
-      wordStart = /[\s;&|(]/.test(c);
-      keep += c; i += 1;
-    }
-    out.push(keep);
-  }
-  return `${out.join('\n')}\n`;
-}
 
 function isBashReadClass(cmd) {
   const text = executableText(typeof cmd === 'string' ? cmd : '').trim();
@@ -96,7 +74,9 @@ function isBashReadClass(cmd) {
 }
 
 function loadConfig() {
-  const cfg = { mode: 'warn', threshold: DEFAULT_THRESHOLD, guardedModels: DEFAULT_GUARDED };
+  const cfg = {
+    mode: 'warn', threshold: DEFAULT_THRESHOLD, guardedModels: DEFAULT_GUARDED, waitAdviceEvery: DEFAULT_WAIT_ADVICE_EVERY,
+  };
   try {
     const file = path.join(os.homedir(), '.autopilot', 'config.json');
     if (fs.existsSync(file)) {
@@ -105,6 +85,7 @@ function loadConfig() {
       if (g && typeof g === 'object') {
         if (['off', 'warn', 'block'].includes(g.mode)) cfg.mode = g.mode;
         if (Number.isInteger(g.threshold) && g.threshold > 0) cfg.threshold = g.threshold;
+        if (Number.isInteger(g.wait_advice_every) && g.wait_advice_every > 0) cfg.waitAdviceEvery = g.wait_advice_every;
         if (Array.isArray(g.guarded_models) && g.guarded_models.every((m) => typeof m === 'string')) {
           cfg.guardedModels = g.guarded_models;
         }
@@ -116,6 +97,8 @@ function loadConfig() {
     // An explicit env override wins over config; a garbage value maps to warn (never leaves block armed).
     cfg.mode = ['off', 'warn', 'block'].includes(envMode) ? envMode : 'warn';
   }
+  const envEvery = process.env.AUTOPILOT_DEPTH0_WAIT_ADVICE_EVERY;
+  if (envEvery !== undefined && /^\d+$/.test(envEvery.trim()) && Number(envEvery) > 0) cfg.waitAdviceEvery = Number(envEvery);
   return cfg;
 }
 
@@ -134,9 +117,12 @@ function stateDir(live) {
 function loadState(file) {
   try {
     const s = JSON.parse(fs.readFileSync(file, 'utf8'));
-    if (s && typeof s === 'object' && Number.isInteger(s.reads)) return s;
+    if (s && typeof s === 'object' && Number.isInteger(s.reads)) {
+      if (!Number.isInteger(s.waitHits)) s.waitHits = 0;
+      return s;
+    }
   } catch { /* fresh */ }
-  return { reads: 0, lastFireAt: null };
+  return { reads: 0, lastFireAt: null, waitHits: 0 };
 }
 
 function saveState(file, st) {
@@ -204,7 +190,12 @@ function classify(tool, input) {
 
     const tool = payload.tool_name || '';
     const kind = classify(tool, payload.tool_input);
-    if (kind === 'other') process.exit(0); // no-op: counter untouched
+    // Foreground-wait advisory (advice-only, never a deny): a depth-0 Bash that sleeps >=20 s,
+    // loops on sleep, or follows a log in the foreground. Independent of the read counter.
+    const waitRule = tool === 'Bash' && payload.tool_input
+      ? detectForegroundWait(payload.tool_input.command, payload.tool_input.run_in_background, WAIT_MIN_SLEEP_SECONDS)
+      : null;
+    if (kind === 'other' && !waitRule) process.exit(0); // no-op: counter untouched
 
     const live = resolveLiveDir();
     const sid = getSessionId(payload);
@@ -217,10 +208,20 @@ function classify(tool, input) {
     // for `block` mode — its own I/O — never holds the lock.
     const verdict = withLock(file, () => {
       const st = loadState(file);
+      // Throttle: first hit, then every `waitAdviceEvery`-th hit after it (hits 1, 1+N, 1+2N, ...).
+      let waitNudge = false;
+      if (waitRule) {
+        st.waitHits += 1;
+        waitNudge = (st.waitHits - 1) % cfg.waitAdviceEvery === 0;
+      }
+      if (kind === 'other') {
+        saveState(file, st);
+        return { action: 'silent', waitNudge };
+      }
       if (kind === 'delegation') {
         st.reads = 0;
         saveState(file, st);
-        return { action: 'silent' };
+        return { action: 'silent', waitNudge };
       }
       // kind === 'read'
       st.reads += 1;
@@ -230,7 +231,7 @@ function classify(tool, input) {
       if (nudge) st.lastFireAt = new Date().toISOString();
       const action = cfg.mode === 'block' && reads >= 2 * threshold ? 'maybe-block' : (nudge ? 'nudge' : 'silent');
       saveState(file, st);
-      return { action, nudge, reads };
+      return { action, nudge, reads, waitNudge };
     });
 
     if (verdict.action === 'maybe-block') {
@@ -246,9 +247,18 @@ function classify(tool, input) {
       // unguarded / unknown model past 2x: only the periodic nudge rule applies
     }
 
+    const advisories = [];
     if (verdict.nudge) {
-      const advisory = `depth0-delegate-gate: ${verdict.reads} consecutive read-class calls at depth-0 — `
-        + 'delegate to an Explore/survey subagent (model: sonnet) and read only its conclusion';
+      advisories.push(`depth0-delegate-gate: ${verdict.reads} consecutive read-class calls at depth-0 — `
+        + 'delegate to an Explore/survey subagent (model: sonnet) and read only its conclusion');
+    }
+    if (verdict.waitNudge) {
+      advisories.push(`depth0-delegate-gate: foreground wait at depth-0 (${waitRule}) — prefer run_in_background `
+        + 'with a completion notification, the Monitor tool, or an `until` loop run in the background, '
+        + 'instead of holding the turn with sleep/tail polling');
+    }
+    if (advisories.length) {
+      const advisory = advisories.join('\n');
       process.stderr.write(`${advisory}\n`);
       process.stdout.write(`${JSON.stringify({
         hookSpecificOutput: {

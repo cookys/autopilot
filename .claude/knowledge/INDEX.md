@@ -8,17 +8,13 @@
 
 | 日期 | 類別 | 簡述 | 文件 |
 |------|------|------|------|
+| 2026-10-11 | debug | Claude Code 自動更新會刪舊版本，測驗釘版只連結過去會壞；整個複製到 `~/.autopilot/claude-pin/<版本>/claude` | [debug-patterns.md](debug-patterns.md) |
+| 2026-10-10 | debug | Codex bwrap workspace-write 沙盒在可寫根目錄（含 /tmp）留下空的 `.git` 等掛載點，讓 worktree 檢查誤判；`.git` 要含 HEAD 或 `gitdir:` 才算倉庫 | [debug-patterns.md](debug-patterns.md) |
 | 2026-09-29 | debug | worktree 身分寫穿的第二條路徑：git 在 worktree 跑 hook 時會 export `GIT_DIR`，測試在暫存目錄 `git init`+裸 `git config` 會寫進主 clone 共用的 config（631 個 Test User commit），v2.36.103 在 run.sh/lib.sh unset 並加 drift guard | [debug-patterns.md](debug-patterns.md) |
 | 2026-09-29 | debug | `resolve-dispatch-topology.js` 不帶旗標會寫 `~/.autopilot/topology.json`；唯讀用 `--json --out /dev/null`，比對用 `--check` | [debug-patterns.md](debug-patterns.md) |
 | 2026-08-27 | arch | 訂閱不等於便宜:同一個 CLI、同一組登入,指向 first-party 模型走「大方的池」,指向第三方模型走「按 API 價計費的池」,差一個數量級;`auto` 沒有獨立額度(是母池的子項),`-fast` 是進出各 2 倍、只買延遲不省錢;CLI 查不到用量,只有互動模式的 slash command 有 | [vendor-quota-shapes.md](vendor-quota-shapes.md) |
 | 2026-08-25 | arch | 驗證一份「描述環境」的文件要獨立重畫地圖再 diff,不是逐句查證——逐句查不出它少畫了一整條通道;三位審查者全過,且其中一人據以推理的前提本身就是漏掉的那條 | [architecture.md](architecture.md) |
 | 2026-08-25 | arch | 讀斷言不等於測斷言:一席讀了「改鬆會變紅」的註解判 Verified Clean,另一席突變後發現全綠、真實語料 5→2;panel 合成必須 union-on-verified-critical,多數決會壓掉盲點catch | [architecture.md](architecture.md) |
-| 2026-08-25 | arch | 協定的句子攔不住一個 process:depth-0 獨佔 oracle 的規定寫得很清楚,已回傳的 foreman 仍出於盡責自己再跑一輪,15 個並行進程讓整個時間窗紅綠都不可解讀;獨佔要靠鎖不靠散文 | [architecture.md](architecture.md) |
-| 2026-08-02 | arch | Mission freeze 前先把 canonical outputs 經所有 deterministic generator 展開，mirrors 一起進 output/change/reservation/verification；若執行中才發現遺漏，舊 lease 誠實 terminalize，再用 additive successor 沿用同一 lineage | [architecture.md](architecture.md) |
-| 2026-07-31 | arch | Persistent implementer transcript 只保證上下文連續，不會自動產生 ICC/WLB/LSM lifecycle evidence；L5/L6 fallback 必須在第一次 effect 前接上 canonical adapter，事後不得偽造 `can_close` receipt | [architecture.md](architecture.md) |
-| 2026-07-29 | debug | CLI `--help` 只證明 option 存在，不證明可組合：Kimi 0.28.0 的 non-interactive `--prompt` 與 interactive `--plan` 互斥；hermetic fixture 若照抄錯誤 argv 也會假綠，需 live smoke | [debug-patterns.md](debug-patterns.md) |
-| 2026-07-27 | arch | Absence 不等於 zero：先用 repo registry admission 記住資源曾存在，再以 Git-ref CAS authority 防 ordinary-file rollback、anchor/registry forward-repair 防 torn write；先凍結 attack matrix、穩定 diff 後才跑昂貴外審 | [architecture.md](architecture.md) |
-| 2026-07-16 | debug | Silent-retry 假死（CLI×z.ai 確定性 529）— 分層診斷四步 + logging proxy 定位；readiness 探針要同傳輸同 payload | [debug-patterns.md](debug-patterns.md) |
 | 2026-10-02 | debug | bwrap 不能巢狀（apparmor_restrict_unprivileged_userns=1），suite 隔離改用拋棄式快照 | [debug-patterns.md](debug-patterns.md) |
 | 2026-10-03 | debug | agy 1.2.15：agent 名稱不進 log（用 agent=true 判）、agents 目錄被遷成絕對 symlink、會自動更新 | [debug-patterns.md](debug-patterns.md) |
 | 2026-10-03 | debug | setsid(1) 解不開啟動時被忽略的 SIGINT；背景啟動的 runner 會吞 INT | [debug-patterns.md](debug-patterns.md) |

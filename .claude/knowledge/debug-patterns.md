@@ -48,3 +48,14 @@
 **Date**: 2026-10-03 | **Context**: `test-snapshot` 的 SIGINT→130 案例偶發紅
 **Problem**: 背景啟動（`&`、`--parallel` worker）的非互動 shell 會把 SIGINT 設成 ignored；`exec setsid bash …` 不會重設，bash 也不准 trap 啟動時就 ignored 的訊號（`trap - INT` 無效）。內層吞掉 INT，外層回 0 不是 130。單獨前景跑永遠重現不了；看 `/proc/<pid>/status` 的 SigIgn/SigCgt 位元可證。
 **Solution**: 啟動前用能 reset 訊號處置的程式（python3 `signal.signal(..., SIG_DFL)` 後 `os.setsid()`+exec）；測試要有一個「以 INT ignored 狀態啟動」的確定性案例。
+
+## Codex bwrap workspace-write 沙盒在可寫根目錄留下空的 `.git` 等掛載點
+**Date**: 2026-10-10 | **Context**: `/tmp` 底下出現空的 `.git`，三支測試變紅
+**Problem**: Codex 的 bubblewrap workspace-write 沙盒會在每個可寫根目錄（包括 `/tmp`）建立空的唯讀掛載點 `.git`、`.agents`、`.aws`、`.codex`；沙盒沒有正常結束時這些空目錄就留下來。空的 `/tmp/.git` 讓「不可放在 git worktree 裡」的檢查把整個 `/tmp` 當成倉庫，三支測試因此變紅。判斷方式：四個空目錄的建立時間是同一瞬間。
+**Solution**: `.git` 必須是含 `HEAD` 的目錄或 `gitdir:` 檔案才算倉庫（`scripts/lib/qualification-feed.js` 的 `hasGitMarker`），讀不到權限時保守當成倉庫。
+**Reproduce**: `codex sandbox -c 'sandbox_mode="workspace-write"' -c 'sandbox_workspace_write.writable_roots=["<dir>"]' -- ls -la <dir>`
+
+## 測驗釘版不能只連結到 Claude Code 的 versions 目錄
+**Date**: 2026-10-11 | **Context**: stage-graph eval runner 釘版
+**Problem**: Claude Code 自動更新會刪掉 `~/.local/share/claude/versions/` 底下的舊版本；釘版如果只是指向那裡的連結，舊版被刪後連結就壞掉，測驗會被判無效。
+**Solution**: 把要釘的版本整個複製到 `~/.autopilot/claude-pin/<版本>/claude`，PATH 用 `~/.autopilot/claude-pin/bin`（見 `evals/skill-onoff/prereg/stage-graph.amend-4-runner-pin.json`）。

@@ -1631,13 +1631,10 @@ function wrapLine(l: PaneLine, cols: number): PaneLine[] {
 }
 export const wrapLines = (lines: PaneLine[], cols: number): PaneLine[] => lines.flatMap(l => wrapLine(l, cols))
 
-// `── Title ───────── right ──`: a section rule in `subtle` with a bold title and an optional right-hand badge
-export function rule(title: string, right: Seg[], cols: number): PaneLine {
-  const rightW = right.reduce((n, x) => n + displayWidth(x.text), 0)
-  const used = 3 + displayWidth(title) + 1 + (right.length > 0 ? 1 + rightW + 3 : 0)
-  const fill = Math.max(2, cols - used)
-  const segs: Seg[] = [seg('── ', 'subtle'), seg(title, undefined, true), seg(' ' + '─'.repeat(fill), 'subtle')]
-  if (right.length > 0) segs.push(seg(' '), ...right, seg(' ──', 'subtle'))
+// `▌ Title  right`: a section heading, a left accent block in `claude` then the bold title and an optional right-hand badge; no rule line is drawn
+export function rule(title: string, right: Seg[], _cols: number): PaneLine {
+  const segs: Seg[] = [seg('▌ ', 'claude'), seg(title, undefined, true)]
+  if (right.length > 0) segs.push(seg('  '), ...right)
   return row(...segs)
 }
 
@@ -2047,7 +2044,7 @@ export function legendLines(ctx: PaneCtx = { t: T_EN, cols: DEFAULT_PANE_COLS })
   const narrow = entries.map(e => wOf(e.glyph)).filter(x => x <= LEGEND_EX_MAX)
   const colW = Math.max(...narrow) + 2
   const stacked = colW > Math.floor(ctx.cols / 2)
-  const out: PaneLine[] = [rule(t('legend.title'), [], ctx.cols)]
+  const out: PaneLine[] = [rule(t('legend.title'), [], ctx.cols), row(dseg(t('legend.note')))]
   for (const e of entries) {
     const gw = wOf(e.glyph)
     const text = t('legend.' + e.id)

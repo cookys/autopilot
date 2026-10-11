@@ -649,13 +649,13 @@ for (const surface of SURFACES) {
   })
 
   if (surface === 'terminal') {
-    test('P7d model: the band review slot is ⟲R<n> (code round first, else plan generation); no review = no slot', () => {
+    test('P7d model: the band review slot is ↺R<n> (code round first, else plan generation); no review = no slot', () => {
       const fact = (over: Record<string, unknown>) => readReview(JSON.stringify({ schema: 'autopilot.review/1', project_key: KEY, ...over }), KEY)
       const plan = { logical_plan_id: 'p', generation: 2, max_generations: 2, terminal: false, verdict: null, seats: [], updated_at: null }
       const code = { phase: 'x', generation: 4, base: null, head: null, converged: false, at: null, seats: [] }
-      expect(reviewSlot(fact({ plan, code }))).toBe('⟲R4')
-      expect(reviewSlot(fact({ plan }))).toBe('⟲R2')
-      expect(reviewSlot(fact({ code }))).toBe('⟲R4')
+      expect(reviewSlot(fact({ plan, code }))).toBe('↺R4')
+      expect(reviewSlot(fact({ plan }))).toBe('↺R2')
+      expect(reviewSlot(fact({ code }))).toBe('↺R4')
       expect(reviewSlot(null)).toBe(null)
       expect(fact({})).toBe(null)
       expect(readReview(JSON.stringify({ schema: 'autopilot.review/1', project_key: OTHER_KEY, plan }), KEY)).toBe(null)
@@ -2085,8 +2085,8 @@ function richWorld(): Tree {
 }
 
 // TUI v2 grammar: groups separated by ` │ `, items inside a group by a space; the wide band carries the stage walk, a 10-cell spend bar + %, the verdict's reason
-const RICH_209 = '⏸ 疑似卡住 最久的派工 4m 沒有輸出 │ M!·l5 ●─●─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙2 ⏸1 ⟲R3 QC✓ │ ◆3 ?1 U2 │ $120 ▰▰▰▰▰▰▰▰▱▱ 80% │ dev↓3 ⚑2 │ ⓘ'
-const RICH_MID = '⏸ 疑似卡住 │ M!·l5 ▸ implement │ ▰▰▰▱▱ 3/5 │ ⚙2 ⏸1 ⟲R3 QC✓ │ $120 ▰▰▰▰▱ │ ⚑2 │ ⓘ'
+const RICH_209 = '⏸ 疑似卡住 最久的派工 4m 沒有輸出 │ M!·l5 ●─●─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙2 ⏸1 ↺R3 QC✓ │ ◆3 ?1 U2 │ $120 ▰▰▰▰▰▰▰▰▱▱ 80% │ dev↓3 ⚑2 │ ⓘ'
+const RICH_MID = '⏸ 疑似卡住 │ M!·l5 ▸ implement │ ▰▰▰▱▱ 3/5 │ ⚙2 ⏸1 ↺R3 QC✓ │ $120 ▰▰▰▰▱ │ ⚑2 │ ⓘ'
 const RICH_SMALL = '⏸ 疑似卡住 │ ▰▰▰▱▱ │ ⚙2 ⏸1 QC✓ │ $▰▰▱ │ ⚑2 │ ⓘ'
 const RICH_NARROW = '⏸ 疑似卡住 │ ⚙2 ⏸1 │ ⚑2 │ ⓘ'
 const RICH_WIDTHS: [number, string][] = [
@@ -2176,7 +2176,7 @@ for (const surface of SURFACES) {
     expect(colorOf('⚙2')).toBeUndefined()
     expect(colorOf(' ⏸1')).toBe('error') // stalled
     expect(colorOf('QC✓')).toBe('success')
-    expect(dimOf('⟲')).toBe(true)
+    expect(dimOf('↺')).toBe(true)
     expect(colorOf('◆3')).toBeUndefined() // claude is reserved for "you are here"
     expect(colorOf('?1')).toBe('inactive')
     expect(colorOf('U2')).toBeUndefined()
@@ -2480,7 +2480,7 @@ for (const surface of SURFACES) {
     const has = (texts: string[], ...parts: string[]) => { const ok = texts.some(t => parts.every(p => t.includes(p))); if (!ok) throw new Error('no line has: ' + parts.join(' | ')); return ok }
     const legend = await tab('legend')
     expect(legend.texts[0]).toContain('狀態列符號')
-    for (const glyph of ['▲ 要你決定', '⏸ 疑似卡住', '✓ 完成待驗收', '● 進行中', '◌ 待命', '⚙2', '⟲', 'QC✓', 'QC▲', '◆3', '?1', '$85', '⚑3', 'ⓘ', '◐']) expect(joined(legend.texts)).toContain(glyph)
+    for (const glyph of ['▲ 要你決定', '⏸ 疑似卡住', '✓ 完成待驗收', '● 進行中', '◌ 待命', '⚙2', '↺', 'QC✓', 'QC▲', '◆3', '?1', '$85', '⚑3', 'ⓘ', '◐']) expect(joined(legend.texts)).toContain(glyph)
     expect(legend.texts.some(t => t.includes('Ctrl+x Tab'))).toBe(true)
     expectThemeOnly(legend.tree as Drawn, true)
 
@@ -2493,7 +2493,7 @@ for (const surface of SURFACES) {
     expect(walk.match(/[●◐○]/g)?.join('')).toBe('●●◐○○')
     expect(now.texts.some(t => t.includes('實作') && !t.includes('◐') && !t.includes('階段') && !t.includes('⏸'))).toBe(true) // the label row under the diagram (stage ids are translated labels)
     expect(has(now.texts, '派工', '⚙ 2', '2 個執行中', '1 個疑似卡住')).toBe(true)
-    expect(has(now.texts, '審查', '⟲ R3', 'QC✓')).toBe(true)
+    expect(has(now.texts, '審查', '↺ R3', 'QC✓')).toBe(true)
     expect(now.texts.some(t => t.startsWith('最久的派工 4m 沒有輸出'))).toBe(true) // the verdict reason, dim, under the hero row
     expectThemeOnly(now.tree as Drawn, true)
 
@@ -2577,7 +2577,7 @@ test('P7 model: displayWidth counts East Asian wide as 2, combining as 0 and the
   expect(displayWidth('族')).toBe(2)
   expect(displayWidth('Ａ')).toBe(2) // fullwidth latin
   expect(displayWidth('é')).toBe(1) // combining acute
-  expect(displayWidth('▲⏸✓●◌▸◷▰▱⚙◆⟲ⓘ│')).toBe(14)
+  expect(displayWidth('▲⏸✓●◌▸◷▰▱⚙◆↺ⓘ│')).toBe(14)
   expect(displayWidth('')).toBe(0)
   expect(truncateToWidth('要你決定要你決定', 7)).toBe('要你決…')
   expect(displayWidth(truncateToWidth('要你決定要你決定', 7))).toBeLessThanOrEqual(7)
@@ -2617,13 +2617,13 @@ test('P7 model: slot texts and theme keys', () => {
   expect(text(slotDispatch(0, 1))).toBe('⏸1')
   expect(text(slotDispatch(3, 0))).toBe('⚙3')
   expect(slotDispatch(0, 0)).toBeNull()
-  // review: ⟲R<n> QC▲ / QC✓; the chip alone has no leading space
+  // review: ↺R<n> QC▲ / QC✓; the chip alone has no leading space
   const rv = readReview(JSON.stringify({ schema: 'autopilot.review/1', project_key: KEY, code: { generation: 4, seats: [] } }), KEY)
   const qc = (state: string) => readQc(JSON.stringify({ schema: 'autopilot.qc-status/1', scope: { project_key: KEY, root_run_id: null }, state }), { project_key: KEY, root_run_id: null })
-  expect(text(slotReview(rv, qc('owed')))).toBe('⟲R4 QC▲')
+  expect(text(slotReview(rv, qc('owed')))).toBe('↺R4 QC▲')
   expect(slotReview(rv, qc('owed'))?.segs[3]?.color).toBe('warning')
   expect(text(slotReview(null, qc('ok')))).toBe('QC✓')
-  expect(text(slotReview(rv, qc('not_needed')))).toBe('⟲R4')
+  expect(text(slotReview(rv, qc('not_needed')))).toBe('↺R4')
   expect(slotReview(null, qc('unknown'))).toBeNull()
   // decisions
   const dv = (over: Record<string, unknown>) => ({ rows: [], count: 0, irreversible: 0, writers: [], undocumented: 0, identity: null, root: null, ladder: null, ...over }) as never
@@ -2847,21 +2847,21 @@ const GRID: Record<string, string> = {
   'en idle 209': '◌ Idle │ $12 ▰▱▱▱▱▱▱▱▱▱ 12% │ dev↓3 │ ⓘ',
   'en idle 120': '◌ Idle │ $12 ▰▱▱▱▱ │ ⓘ',
   'en idle 80': '◌ Idle │ $▱▱▱ │ ⓘ',
-  'en running 209': '● Running │ M·l5 ●─●─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2fam │ ⚙2 ⟲R2 QC▲ │ ◆3 ?1 U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev↓3 │ ⓘ',
-  'en running 160': '● Running │ M·l5 ●─●─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2fam │ ⚙2 ⟲R2 QC▲ │ ◆3 ?1 U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev↓3 │ ⓘ',
-  'en running 140': '● Running │ M·l5 ▸ implement │ ▰▰▰▱▱ 3/5 │ ⚙2 ⟲R2 QC▲ │ $60 ▰▰▰▱▱ │ ⓘ',
-  'en running 120': '● Running │ M·l5 ▸ implement │ ▰▰▰▱▱ 3/5 │ ⚙2 ⟲R2 QC▲ │ $60 ▰▰▰▱▱ │ ⓘ',
+  'en running 209': '● Running │ M·l5 ●─●─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2fam │ ⚙2 ↺R2 QC▲ │ ◆3 ?1 U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev↓3 │ ⓘ',
+  'en running 160': '● Running │ M·l5 ●─●─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2fam │ ⚙2 ↺R2 QC▲ │ ◆3 ?1 U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev↓3 │ ⓘ',
+  'en running 140': '● Running │ M·l5 ▸ implement │ ▰▰▰▱▱ 3/5 │ ⚙2 ↺R2 QC▲ │ $60 ▰▰▰▱▱ │ ⓘ',
+  'en running 120': '● Running │ M·l5 ▸ implement │ ▰▰▰▱▱ 3/5 │ ⚙2 ↺R2 QC▲ │ $60 ▰▰▰▱▱ │ ⓘ',
   'en running 80': '● Running │ ▰▰▰▱▱ │ ⚙2 QC▲ │ $▰▰▱ │ ⓘ',
-  'en blocked 209': '▲ Needs you pick adapter A or B │ M·l5 ●─●─●─◐─○ review ◷3m │ ▰▰▰▱▱ 3/5 ·2fam │ ⚙1 ⟲R2 QC▲ │ ◆3 ?1 U2 │ $85 ▰▰▰▰▰▰▰▰▰▱ 85% │ dev↓3 ⚑3 │ ⓘ',
-  'en blocked 140': '▲ Needs you │ M·l5 ▸ review │ ▰▰▰▱▱ 3/5 │ ⚙1 ⟲R2 QC▲ │ $85 ▰▰▰▰▱ │ ⚑3 │ ⓘ',
+  'en blocked 209': '▲ Needs you pick adapter A or B │ M·l5 ●─●─●─◐─○ review ◷3m │ ▰▰▰▱▱ 3/5 ·2fam │ ⚙1 ↺R2 QC▲ │ ◆3 ?1 U2 │ $85 ▰▰▰▰▰▰▰▰▰▱ 85% │ dev↓3 ⚑3 │ ⓘ',
+  'en blocked 140': '▲ Needs you │ M·l5 ▸ review │ ▰▰▰▱▱ 3/5 │ ⚙1 ↺R2 QC▲ │ $85 ▰▰▰▰▱ │ ⚑3 │ ⓘ',
   'en blocked 80': '▲ Needs you │ ▰▰▰▱▱ │ ⚙1 QC▲ │ $▰▰▰ │ ⚑3 │ ⓘ',
   'zh-TW idle 209': '◌ 待命 │ $12 ▰▱▱▱▱▱▱▱▱▱ 12% │ dev↓3 │ ⓘ',
   'zh-TW idle 80': '◌ 待命 │ $▱▱▱ │ ⓘ',
-  'zh-TW running 209': '● 進行中 │ M·l5 ●─●─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙2 ⟲R2 QC▲ │ ◆3 ?1 U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev↓3 │ ⓘ',
-  'zh-TW running 120': '● 進行中 │ M·l5 ▸ implement │ ▰▰▰▱▱ 3/5 │ ⚙2 ⟲R2 QC▲ │ $60 ▰▰▰▱▱ │ ⓘ',
+  'zh-TW running 209': '● 進行中 │ M·l5 ●─●─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙2 ↺R2 QC▲ │ ◆3 ?1 U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev↓3 │ ⓘ',
+  'zh-TW running 120': '● 進行中 │ M·l5 ▸ implement │ ▰▰▰▱▱ 3/5 │ ⚙2 ↺R2 QC▲ │ $60 ▰▰▰▱▱ │ ⓘ',
   'zh-TW running 80': '● 進行中 │ ▰▰▰▱▱ │ ⚙2 QC▲ │ $▰▰▱ │ ⓘ',
-  'zh-TW blocked 209': '▲ 要你決定 選 adapter 方案 A 或 B │ M·l5 ●─●─●─◐─○ review ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙1 ⟲R2 QC▲ │ ◆3 ?1 U2 │ $85 ▰▰▰▰▰▰▰▰▰▱ 85% │ dev↓3 ⚑3 │ ⓘ',
-  'zh-TW blocked 140': '▲ 要你決定 │ M·l5 ▸ review │ ▰▰▰▱▱ 3/5 │ ⚙1 ⟲R2 QC▲ │ $85 ▰▰▰▰▱ │ ⚑3 │ ⓘ',
+  'zh-TW blocked 209': '▲ 要你決定 選 adapter 方案 A 或 B │ M·l5 ●─●─●─◐─○ review ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙1 ↺R2 QC▲ │ ◆3 ?1 U2 │ $85 ▰▰▰▰▰▰▰▰▰▱ 85% │ dev↓3 ⚑3 │ ⓘ',
+  'zh-TW blocked 140': '▲ 要你決定 │ M·l5 ▸ review │ ▰▰▰▱▱ 3/5 │ ⚙1 ↺R2 QC▲ │ $85 ▰▰▰▰▱ │ ⚑3 │ ⓘ',
   'zh-TW blocked 80': '▲ 要你決定 │ ▰▰▰▱▱ │ ⚙1 QC▲ │ $▰▰▰ │ ⚑3 │ ⓘ',
 }
 

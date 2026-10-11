@@ -1096,10 +1096,10 @@ export function reviewRound(r: ReviewView | null): number | null {
   return r.code !== null && r.code.generation !== null ? r.code.generation : r.plan !== null ? r.plan.generation : null
 }
 
-// The band's review slot text: `⟲R<n>`; null = no slot.
+// The band's review slot text: `↺R<n>`; null = no slot.
 export function reviewSlot(r: ReviewView | null): string | null {
   const n = reviewRound(r)
-  return n === null ? null : '⟲R' + n
+  return n === null ? null : '↺R' + n
 }
 
 const short = (sha: string | null): string => (sha === null ? '—' : sha.slice(0, 8))
@@ -1114,7 +1114,7 @@ export type Seg = { text: string; color?: ThemeKey; bold?: boolean; dim?: boolea
 export type Slot = { id: SlotId; segs: Seg[] }
 
 // Terminal cell width of a string: East Asian Wide / Fullwidth = 2, combining and zero-width = 0, everything else (the band glyphs
-// ▲⏸✓●◌▸◷▰▱⚙◆⟲ⓘ│… included) = 1.
+// ▲⏸✓●◌▸◷▰▱⚙◆↺ⓘ│… included) = 1.
 export function displayWidth(text: string): number {
   let w = 0
   for (const ch of text) w += cellWidth(ch.codePointAt(0) as number)
@@ -1349,13 +1349,13 @@ export function slotDispatch(live: number, stalled: number): Slot | null {
   return { id: 'dispatch', segs }
 }
 
-// `⟲R<n>` (⟲ dim) + ` QC▲` / ` QC✓`: the round goes at < 120, the QC chip stays down to 80
+// `↺R<n>` (↺ dim) + ` QC▲` / ` QC✓`: the round goes at < 120, the QC chip stays down to 80
 export function slotReview(r: ReviewView | null, q: QcView | null): Slot | null {
   const round = reviewRound(r)
   const chip = qcChip(q)
   if (round === null && chip === null) return null
   const segs: Seg[] = []
-  if (round !== null) segs.push(sp('⟲', { dim: true, tag: 'round' }), sp('R' + round, { tag: 'round' }))
+  if (round !== null) segs.push(sp('↺', { dim: true, tag: 'round' }), sp('R' + round, { tag: 'round' }))
   if (chip !== null) {
     if (round !== null) segs.push(sp(' ', { tag: 'round' }))
     segs.push(sp(chip, chip === 'QC✓' ? { color: 'success', tag: 'qc' } : { color: 'warning', bold: true, tag: 'qc' }))
@@ -1459,7 +1459,7 @@ const REASON_MIN = 8
 
 // The width table (cumulative per band; the line is ONE row, groups separated by ` │ `, items inside a group by a space):
 //   >= 160  everything: stage walk, 10-cell spend bar + %, the verdict's reason phrase, load-source chip, age, families, decisions
-//   120-159 verdict, `size·level ▸ stage`, unit bar + k/N, `⚙ ⏸ ⟲R QC`, `$N` + 5-cell bar, `⚑N`
+//   120-159 verdict, `size·level ▸ stage`, unit bar + k/N, `⚙ ⏸ ↺R QC`, `$N` + 5-cell bar, `⚑N`
 //   80-119  verdict, unit bar, `⚙N QC▲`, `$` + 3-cell bar, `⚑N`
 //   < 80    verdict, `⚙N ⏸N`, `⚑N`
 // Then, if the line still does not fit: the position's stage text is cut with `…`, then the unit bar, the ⏸ count and the ⚙ count go, then the
@@ -1756,7 +1756,7 @@ function nowLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
   const round = reviewRound(snap.review)
   if (round !== null || (d.qc !== null && qcChip(d.qc) !== null)) {
     const segs: Seg[] = []
-    if (round !== null) segs.push(dseg('⟲ '), seg('R' + round))
+    if (round !== null) segs.push(dseg('↺ '), seg('R' + round))
     const chip = qcChip(d.qc)
     if (chip !== null) segs.push(seg(round === null ? '' : '  '), d.qc !== null && d.qc.state === 'owed' ? seg(chip, 'warning', true) : seg(chip, 'success'), d.qc !== null && d.qc.state === 'owed' ? seg(' ' + t('now.qc_owed'), 'warning') : dseg(' ' + t('now.qc_ok')))
     out.push(BLANK)
@@ -2031,7 +2031,7 @@ export function legendLines(ctx: PaneCtx = { t: T_EN, cols: DEFAULT_PANE_COLS })
     { glyph: [seg('M!·l5 '), seg('●─●─', 'success'), seg('◐', 'claude', true), seg('─○─○ ', 'inactive'), seg('implement', 'claude', true), dseg(' ◷3m')], id: 'position' },
     { glyph: [seg('▰▰', 'success'), seg('▰', 'claude'), seg('▱▱', 'inactive'), seg(' 3/5 '), dseg(t('band.fam', { n: 2 }))], id: 'unit' },
     { glyph: [seg('⚙2'), seg(' ⏸1', 'error')], id: 'dispatch' },
-    { glyph: [dseg('⟲'), seg('R2 '), seg('QC✓', 'success'), seg(' / '), seg('QC▲', 'warning', true)], id: 'review' },
+    { glyph: [dseg('↺'), seg('R2 '), seg('QC✓', 'success'), seg(' / '), seg('QC▲', 'warning', true)], id: 'review' },
     { glyph: [seg('◆3 '), seg('?1', 'inactive'), seg(' U2')], id: 'decisions' },
     { glyph: [seg('$85 '), seg('▰▰▰▰▰▰▰▰', 'warning'), seg('▱▱', 'inactive'), dseg(' 85%')], id: 'spend' },
     { glyph: [seg('dev'), dseg('↓3 '), seg('⚑3', 'warning', true)], id: 'hygiene' },

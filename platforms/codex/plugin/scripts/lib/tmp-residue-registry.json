@@ -312,6 +312,377 @@
       "owner": "hooks/tests/lib/suite-residue-reap.sh",
       "retention_days": null,
       "reason": "test scratch reaped only under lock/min-age gates"
+    },
+    {
+      "pattern": "adopt-qd-*",
+      "kind": "scratch",
+      "owner": "scripts/adopt-qualification-defaults.js",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "hook-mux-trace-*",
+      "kind": "scratch",
+      "owner": "scripts/benchmark-hook-multiplexer.js",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "qualification-defaults-schemacheck-*",
+      "kind": "scratch",
+      "owner": "scripts/build-qualification-defaults.js",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "backlog-gate-*",
+      "kind": "scratch",
+      "owner": "scripts/check-backlog-entries.js",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "foreman-poll-*",
+      "kind": "scratch",
+      "owner": "scripts/check-foreman-polling.js",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "autopilot-dev-setup.*",
+      "kind": "scratch",
+      "owner": "scripts/dev-setup.sh",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "dispatch-discuss-prompt-*",
+      "kind": "scratch",
+      "owner": "scripts/dispatch-discuss.js",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "experience-critic-spec-*",
+      "kind": "scratch",
+      "owner": "scripts/dispatch-experience-critic.sh",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "autopilot-review-witness-*",
+      "kind": "scratch",
+      "owner": "scripts/engine-qualify.js",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "autopilot-va-case-*",
+      "kind": "scratch",
+      "owner": "scripts/engine-qualify.js",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "impl-qualify-live-*",
+      "kind": "scratch",
+      "owner": "scripts/engine-qualify.js",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "impl-live-tree-*",
+      "kind": "scratch",
+      "owner": "scripts/engine-qualify.js",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "autopilot-engine-qualify-*",
+      "kind": "scratch",
+      "owner": "scripts/engine-qualify.js",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "autopilot-agy-export-*",
+      "kind": "scratch",
+      "owner": "scripts/install-antigravity.sh",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "cleanroom-seat.*",
+      "kind": "scratch",
+      "owner": "scripts/lib/cleanroom-launch.sh",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "dispatch-detach-args-*",
+      "kind": "scratch",
+      "owner": "scripts/lib/dispatch-detach.sh",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "autopilot-bundle-verify-*",
+      "kind": "scratch",
+      "owner": "scripts/lifecycle-residue-receipt.js",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "backlog-mig-diff-*",
+      "kind": "scratch",
+      "owner": "scripts/migrate-backlog-entries.js",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "preflight-symlinked-intent.js",
+      "kind": "scratch",
+      "owner": "scripts/preflight-portability.sh",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "autopilot-codex-enforcement-*",
+      "kind": "scratch",
+      "owner": "scripts/probe-codex-enforcement.js",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "autopilot-platform-capabilities-*",
+      "kind": "scratch",
+      "owner": "scripts/probe-harness-capabilities.sh",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "autopilot-frontmatter-probe-*",
+      "kind": "scratch",
+      "owner": "scripts/probe-skill-frontmatter-portability.sh",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "qc-judge-b-q*",
+      "kind": "scratch",
+      "owner": "scripts/qc-panel.js",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "autopilot-case-broker-*",
+      "kind": "scratch",
+      "owner": "scripts/qualification-case-broker.js",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "qrp-grok-prompt-*",
+      "kind": "scratch",
+      "owner": "scripts/qualification-review-provider.js",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "qrp-codex-*",
+      "kind": "scratch",
+      "owner": "scripts/qualification-review-provider.js",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "qrp-clihome-*",
+      "kind": "scratch",
+      "owner": "scripts/qualification-review-provider.js",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "autopilot-bundle-recovery.*",
+      "kind": "scratch",
+      "owner": "scripts/reap-dispatch-branches.sh",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "autopilot-reap-refs-err.*",
+      "kind": "scratch",
+      "owner": "scripts/reap-dispatch-branches.sh",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "autopilot-branch-inventory.*",
+      "kind": "scratch",
+      "owner": "scripts/reap-dispatch-branches.sh",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "autopilot-reap-config.*",
+      "kind": "scratch",
+      "owner": "scripts/reap-dispatch-branches.sh",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "autopilot-reap-config-err.*",
+      "kind": "scratch",
+      "owner": "scripts/reap-dispatch-branches.sh",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "autopilot-reap-worktrees.*",
+      "kind": "scratch",
+      "owner": "scripts/reap-dispatch-branches.sh",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "autopilot-reap-worktrees-err.*",
+      "kind": "scratch",
+      "owner": "scripts/reap-dispatch-branches.sh",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "autopilot-reap-restore.*",
+      "kind": "scratch",
+      "owner": "scripts/reap-dispatch-branches.sh",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "autopilot-reap-delete-err.*",
+      "kind": "scratch",
+      "owner": "scripts/reap-dispatch-branches.sh",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "autopilot-worktree-list.*",
+      "kind": "scratch",
+      "owner": "scripts/reap-dispatch-worktrees.sh",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "autopilot-worktree-current.*",
+      "kind": "scratch",
+      "owner": "scripts/reap-dispatch-worktrees.sh",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "residue-sweep-index-*",
+      "kind": "scratch",
+      "owner": "scripts/repo-residue-sweep.js",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "autopilot-eval-wrapper-*",
+      "kind": "scratch",
+      "owner": "scripts/run-eval-batch.sh",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "autopilot-selftest-fixtures-*",
+      "kind": "scratch",
+      "owner": "scripts/run-eval-batch.sh",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "stage-advance-diff-*",
+      "kind": "scratch",
+      "owner": "scripts/stage-advance.js",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "autopilot-remediation-check-*",
+      "kind": "scratch",
+      "owner": "src/engine/autopilot-engine.js",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "autopilot-campaign-findings-*",
+      "kind": "scratch",
+      "owner": "src/engine/campaign-adjudication.js",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "autopilot-campaign-unit-*",
+      "kind": "scratch",
+      "owner": "src/engine/campaign-dispatch-projection.js",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "autopilot-readiness-*",
+      "kind": "scratch",
+      "owner": "src/readiness/live-probe.js",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "autopilot-kimi-cwd-*",
+      "kind": "scratch",
+      "owner": "src/runners/kimi.js",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "autopilot-review-shared-*",
+      "kind": "scratch",
+      "owner": "src/runners/review.js",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "autopilot-review-blind-*",
+      "kind": "scratch",
+      "owner": "src/runners/review.js",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
+      "pattern": "batch-integ-*",
+      "kind": "worktree",
+      "owner": "scripts/dispatch-batch.sh",
+      "retention_days": null,
+      "reason": "dispatch worktree path; reaped by the marker/lock reapers, never age-pruned"
+    },
+    {
+      "pattern": "foreman-*",
+      "kind": "worktree",
+      "owner": "scripts/dispatch-foreman.sh",
+      "retention_days": null,
+      "reason": "dispatch worktree path; reaped by the marker/lock reapers, never age-pruned"
+    },
+    {
+      "pattern": "probe-mutation-*",
+      "kind": "worktree",
+      "owner": "scripts/probe-mutation.js",
+      "retention_days": null,
+      "reason": "dispatch worktree path; reaped by the marker/lock reapers, never age-pruned"
+    },
+    {
+      "pattern": "autopilot-run-eval-batch.lock",
+      "kind": "lock",
+      "owner": "scripts/run-eval-batch.sh",
+      "retention_days": null,
+      "reason": "flock file kept in the shared temp root"
     }
   ]
 }

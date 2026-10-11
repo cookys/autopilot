@@ -2011,29 +2011,79 @@ function tempNameSegment(value) {
 }
 
 
-function defaultDiffProvider({ base, commit, branch, round, cwd }) {
-  const diffDir = fs.mkdtempSync(path.join(os.tmpdir(), `autopilot-review-loop-${tempNameSegment(branch)}-${round || 0}-`));
-  const file = path.join(diffDir, 'range.diff');
-  const outFd = fs.openSync(file, 'w');
-  let child;
+// Start time of a pid in clock ticks since boot (/proc/<pid>/stat field 22), or null.
+// The comm field may contain spaces and parens, so split after the LAST ")".
+function procStartTime(pid) {
   try {
-    child = spawnSync('git', ['diff', '--no-ext-diff', '--no-textconv', `${base}..${commit}`], {
-      cwd: cwd || process.cwd(),
-      encoding: 'utf8',
-      shell: false,
-      stdio: ['ignore', outFd, 'pipe'],
-    });
-  } finally {
-    fs.closeSync(outFd);
+    const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
+    const rest = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+    const ticks = Number(rest[19]);
+    return Number.isFinite(ticks) ? ticks : null;
+  } catch (_error) {
+    return null;
   }
-  if (child.error) {
-    throw child.error;
+}
+
+// Allocate a runtime scratch dir this process owns. `.autopilot-owner` {pid,start_time} lets
+// the age-based tmp prune keep a dir whose owner is still alive. The dir is recorded in
+// `owned` (per engine instance) so only this instance ever deletes it.
+function createOwnedTempDir(prefix, owned) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  if (owned) owned.add(dir);
+  try {
+    fs.writeFileSync(
+      path.join(dir, '.autopilot-owner'),
+      `${JSON.stringify({ pid: process.pid, start_time: procStartTime(process.pid) })}\n`,
+    );
+  } catch (error) {
+    removeOwnedTempDir(dir, owned);
+    throw error;
   }
-  if (child.status !== 0) {
-    const stderr = child.stderr ? `: ${String(child.stderr).trim()}` : '';
-    throw new Error(`git diff failed with status ${child.status}${stderr}`);
+  return dir;
+}
+
+function removeOwnedTempDir(dir, owned) {
+  if (!owned || !owned.has(dir)) return false;
+  owned.delete(dir);
+  try {
+    fs.rmSync(dir, { recursive: true, force: true });
+  } catch (_error) { /* best effort: the age-based prune is the backstop */ }
+  return true;
+}
+
+function defaultDiffProvider({ base, commit, branch, round, cwd }, owned = null) {
+  const diffDir = createOwnedTempDir(
+    `autopilot-review-loop-${tempNameSegment(branch)}-${round || 0}-`,
+    owned,
+  );
+  try {
+    const file = path.join(diffDir, 'range.diff');
+    const outFd = fs.openSync(file, 'w');
+    let child;
+    try {
+      child = spawnSync('git', ['diff', '--no-ext-diff', '--no-textconv', `${base}..${commit}`], {
+        cwd: cwd || process.cwd(),
+        encoding: 'utf8',
+        shell: false,
+        stdio: ['ignore', outFd, 'pipe'],
+      });
+    } finally {
+      fs.closeSync(outFd);
+    }
+    if (child.error) {
+      throw child.error;
+    }
+    if (child.status !== 0) {
+      const stderr = child.stderr ? `: ${String(child.stderr).trim()}` : '';
+      throw new Error(`git diff failed with status ${child.status}${stderr}`);
+    }
+    return file;
+  } catch (error) {
+    // The caller never receives a path on failure, so nothing else can delete this dir.
+    if (owned) removeOwnedTempDir(diffDir, owned);
+    else fs.rmSync(diffDir, { recursive: true, force: true });
+    throw error;
   }
-  return file;
 }
 
 const VERIFY_LEDGER_TAIL_BYTES = 4 * 1024;
@@ -2639,7 +2689,7 @@ function defaultRepairPromptWriter({
       acceptedInvariantsSourceCommit = null,
       acceptedInvariantsDigest = null,
       repairScopeSeal = null,
-}) {
+}, owned = null) {
   const original = fs.readFileSync(promptFile, 'utf8');
   const findings = review && review.review && typeof review.review.findings === 'string'
     ? review.review.findings
@@ -2667,9 +2717,15 @@ function defaultRepairPromptWriter({
     original,
   ].join('\n');
 
-  const repairDir = fs.mkdtempSync(path.join(os.tmpdir(), `autopilot-repair-prompt-${round || 0}-`));
+  const repairDir = createOwnedTempDir(`autopilot-repair-prompt-${round || 0}-`, owned);
   const repairFile = path.join(repairDir, 'prompt.txt');
-  fs.writeFileSync(repairFile, repairPrompt, 'utf8');
+  try {
+    fs.writeFileSync(repairFile, repairPrompt, 'utf8');
+  } catch (error) {
+    if (owned) removeOwnedTempDir(repairDir, owned);
+    else fs.rmSync(repairDir, { recursive: true, force: true });
+    throw error;
+  }
   return repairFile;
 }
 
@@ -2680,8 +2736,13 @@ class AutopilotEngine {
     this.reviewPostProviderHook = typeof options.reviewPostProviderHook === 'function'
       ? options.reviewPostProviderHook : null;
     this.implementationDispatcher = options.implementationDispatcher || dispatchImplementJson;
-    this.diffProvider = options.diffProvider || defaultDiffProvider;
-    this.repairPromptWriter = options.repairPromptWriter || defaultRepairPromptWriter;
+    // Scratch dirs created by this instance's DEFAULT providers. Only dirs in this set are
+    // ever deleted by this instance (an injected provider's paths never enter it).
+    this.ownedTempDirs = new Set();
+    this.diffProvider = options.diffProvider
+      || ((args) => defaultDiffProvider(args, this.ownedTempDirs));
+    this.repairPromptWriter = options.repairPromptWriter
+      || ((args) => defaultRepairPromptWriter(args, this.ownedTempDirs));
     this.remediationChecker = options.remediationChecker || defaultRemediationChecker;
     this.verifyCommandRunner = options.verifyCommandRunner || defaultVerifyCommandRunner;
     this.gitWorktreeAdd = options.gitWorktreeAdd || defaultGitWorktreeAdd;
@@ -3095,6 +3156,18 @@ class AutopilotEngine {
     return completed.status === 'completed'
       ? { ...completed, status: 'terminalized', event: appended.event }
       : completed;
+  }
+
+  // Delete the scratch dir holding `file` iff this instance's default provider created it.
+  disposeOwnedDiffFile(file) {
+    if (typeof file !== 'string') return false;
+    return removeOwnedTempDir(path.dirname(file), this.ownedTempDirs);
+  }
+
+  // Terminal backstop: remove whatever this instance still owns (prepared-but-never-reviewed
+  // diffs, repair prompts). Never throws.
+  disposeOwnedTempDirs() {
+    for (const dir of Array.from(this.ownedTempDirs)) removeOwnedTempDir(dir, this.ownedTempDirs);
   }
 
   ledgerEntry(unit, status, startedAt, detail = {}) {
@@ -5115,6 +5188,7 @@ class AutopilotEngine {
         specDigest = crypto.createHash('sha256')
           .update(fs.readFileSync(specFile)).digest('hex');
       } catch (error) {
+        this.disposeOwnedDiffFile(diffFile);
         return { prepared: false, reason: error.message || String(error) };
       }
       const reviewPayload = {
@@ -5125,7 +5199,7 @@ class AutopilotEngine {
         review_input_mode: reviewInputMode,
         vertical_failed: verticalFailed === true,
       };
-      return {
+      const preparedReceipt = {
         prepared: true,
         authority: {
           schema_version: 1,
@@ -5149,9 +5223,21 @@ class AutopilotEngine {
         prior_findings_included: false,
         full_diff_required: true,
       };
+      // Non-enumerable so the receipt's serialised / digested shape is unchanged.
+      Object.defineProperty(preparedReceipt, 'dispose', {
+        value: () => this.disposeOwnedDiffFile(diffFile),
+        enumerable: false,
+      });
+      return preparedReceipt;
     };
 
-    const performReview = ({
+    // Deletes the prepared review's diff dir when this instance's default provider made it.
+    // Never throws. Called only AFTER every synchronous reader of the diff has returned.
+    const disposePrepared = (prepared) => {
+      if (prepared && typeof prepared.dispose === 'function') prepared.dispose();
+    };
+
+    const performReviewCore = ({
       candidate,
       verification = null,
       scope,
@@ -5169,6 +5255,7 @@ class AutopilotEngine {
       providedReviewResult = undefined,
       preparedLaunch = null,
       sharedPacket = null,
+      _track = null,
     }) => {
       const prepared = preparedReview || prepareReview({
         candidate,
@@ -5179,6 +5266,7 @@ class AutopilotEngine {
         vertical_failed: verticalFailed,
         reviewRoster,
       });
+      if (_track) _track(prepared);
       if (!isObj(prepared)
           || prepared.prepared !== true
           || !isObj(prepared.authority)
@@ -5505,6 +5593,24 @@ class AutopilotEngine {
       return success;
     };
 
+    // The prepared diff is consumed synchronously inside performReviewCore (digest re-read +
+    // reviewDiff), so it is deleted here in `finally` — on success, on a thrown reviewer, and
+    // on every early return. A deferred (batched) seat keeps it for its finish call, which
+    // arrives here again carrying the same prepared_review.
+    const performReview = (reviewArgs) => {
+      let trackedPrepared = null;
+      let result;
+      try {
+        result = performReviewCore({
+          ...reviewArgs,
+          _track: (prepared) => { trackedPrepared = prepared; },
+        });
+        return result;
+      } finally {
+        if (!(result && result.deferred === true)) disposePrepared(trackedPrepared);
+      }
+    };
+
     const finalPanelSeatReceipt = (seat, seatIndex, outcome, loadBearing) => {
       const isReviewed = outcome && outcome.reviewed === true;
       let status = 'no_verdict';
@@ -5677,20 +5783,24 @@ class AutopilotEngine {
           review_input_mode: reviewInput.review_input_mode,
           vertical_failed: reviewInput.vertical_failed,
         });
-        if (identityPrepared && identityPrepared.prepared === true
-            && isStr(identityPrepared.diff_file)) {
-          try {
-            sharedPacket = buildPacketOnce({
-              repo: loopCwd,
-              baseSha: base,
-              candidateSha: reviewInput.candidate.commit,
-              diffFile: identityPrepared.diff_file,
-              specFile: promptFile,
-              denyExtra: roster.review_packet_deny_extra,
-            });
-          } catch (_sharedBuildError) {
-            sharedPacket = null;
+        try {
+          if (identityPrepared && identityPrepared.prepared === true
+              && isStr(identityPrepared.diff_file)) {
+            try {
+              sharedPacket = buildPacketOnce({
+                repo: loopCwd,
+                baseSha: base,
+                candidateSha: reviewInput.candidate.commit,
+                diffFile: identityPrepared.diff_file,
+                specFile: promptFile,
+                denyExtra: roster.review_packet_deny_extra,
+              });
+            } catch (_sharedBuildError) {
+              sharedPacket = null;
+            }
           }
+        } finally {
+          disposePrepared(identityPrepared);
         }
       }
       try {
@@ -5710,23 +5820,27 @@ class AutopilotEngine {
             review_input_mode: reviewInput.review_input_mode,
             vertical_failed: reviewInput.vertical_failed,
           });
-          if (!bindingPrepared || bindingPrepared.prepared !== true) return null;
-          const a = bindingPrepared.authority;
-          return {
-            root: path.join(commonForStore, 'autopilot', 'final-panel-seats'),
-            campaignId: campaignControl.campaign_id,
-            station: stationKind,
-            treeSha: reviewInput.candidate.tree_sha,
-            packetHash: sharedPacket && isStr(sharedPacket.packet_hash)
-              ? sharedPacket.packet_hash : null,
-            inputBinding: campaignCanonicalDigest({
-              candidate_tree_sha: a.candidate_tree_sha,
-              base_sha: a.base_sha,
-              diff_digest: a.diff_digest,
-              spec_digest: a.spec_digest,
-              review_input_digest: a.review_input_digest,
-            }),
-          };
+          try {
+            if (!bindingPrepared || bindingPrepared.prepared !== true) return null;
+            const a = bindingPrepared.authority;
+            return {
+              root: path.join(commonForStore, 'autopilot', 'final-panel-seats'),
+              campaignId: campaignControl.campaign_id,
+              station: stationKind,
+              treeSha: reviewInput.candidate.tree_sha,
+              packetHash: sharedPacket && isStr(sharedPacket.packet_hash)
+                ? sharedPacket.packet_hash : null,
+              inputBinding: campaignCanonicalDigest({
+                candidate_tree_sha: a.candidate_tree_sha,
+                base_sha: a.base_sha,
+                diff_digest: a.diff_digest,
+                spec_digest: a.spec_digest,
+                review_input_digest: a.review_input_digest,
+              }),
+            };
+          } finally {
+            disposePrepared(bindingPrepared);
+          }
         } catch (_error) {
           return null;
         }
@@ -9625,7 +9739,17 @@ class AutopilotEngine {
     }
   }
 
+  // Throw-path backstop: `finish()` covers every returned outcome; this covers an exception
+  // escaping the loop (e.g. a reviewer that throws) with a repair prompt still owned.
   _runImplementationReviewLoop(input = {}) {
+    try {
+      return this._runImplementationReviewLoopBody(input);
+    } finally {
+      this.disposeOwnedTempDirs();
+    }
+  }
+
+  _runImplementationReviewLoopBody(input = {}) {
     // Risk-triggered dynamic review is OPT-IN in the loop (default off): the review step
     // reuses the already-resolved roster and stays byte-compatible with the pre-R5 contract
     // unless the caller explicitly passes dynamicReviewRisk: true.
@@ -9663,6 +9787,7 @@ class AutopilotEngine {
       bestCommit: null,
     };
     const finish = (result) => {
+      this.disposeOwnedTempDirs();
       // Terminal campaign: reap its final-panel seat artifacts (a resume is the only reader).
       // Fail-open, but the outcome is recorded in the ledger with a named reason.
       if (campaignControl && isStr(campaignControl.campaign_id)) {
@@ -11090,52 +11215,57 @@ class AutopilotEngine {
           ledger,
         });
       }
-      review = this.reviewDiff({
-        packet: {
-          repo: loopCwd,
-          baseSha: immutableBase,
-          candidateSha: commit,
-          denyExtra: roster.review_packet_deny_extra,
-        },
-        priorStatus: round === 1 ? input.priorStatus : undefined,
-        diffFile,
-        specFile: input.noReviewSpec !== true ? promptFile : undefined,
-        roster: dynamicReviewRisk ? null : roster,
-        timeoutSeconds: reviewRemaining.seconds,
-        rosterArgs: Object.prototype.hasOwnProperty.call(input, 'rosterArgs')
-          ? input.rosterArgs
-          : ['--check-scorecard'],
-        resolverOptions: {
-          ...(input.resolverOptions || {}),
-          cwd: loopCwd,
-        },
-        dynamicReviewRisk,
-        extraReviewArgs: input.extraReviewArgs || [],
-        sourceTrust: input.sourceTrust,
-        oracleAvailable: input.oracleAvailable,
-        securitySurface: input.securitySurface,
-        samplingRatio: input.samplingRatio,
-        samplingSeed: input.samplingSeed,
-        classifyRulesFile: input.classifyRulesFile,
-        implementerEngine: roster && roster.implementer_engine,
-        runId: campaignDispatchIdentity
-          ? campaignDispatchIdentity.runId
-          : input.runId,
-        ledger: campaignDispatchIdentity
-          ? campaignDispatchIdentity.ledger
-          : input.ledger,
-        reviewStage: campaignDispatchIdentity
-          ? `campaign-review#r${round}`
-          : input.reviewStage,
-        reviewOptions: {
-          ...(input.reviewOptions || {}),
-          cwd: loopCwd,
-          blindDiscovery: true,
-          cleanroomExpectedVersions: cleanroomExpectedVersions(campaignControl),
-        },
-        requireQualifiedReviewer,
-        reviewerQualificationWaived: input.reviewerQualificationWaived,
-      });
+      try {
+        review = this.reviewDiff({
+          packet: {
+            repo: loopCwd,
+            baseSha: immutableBase,
+            candidateSha: commit,
+            denyExtra: roster.review_packet_deny_extra,
+          },
+          priorStatus: round === 1 ? input.priorStatus : undefined,
+          diffFile,
+          specFile: input.noReviewSpec !== true ? promptFile : undefined,
+          roster: dynamicReviewRisk ? null : roster,
+          timeoutSeconds: reviewRemaining.seconds,
+          rosterArgs: Object.prototype.hasOwnProperty.call(input, 'rosterArgs')
+            ? input.rosterArgs
+            : ['--check-scorecard'],
+          resolverOptions: {
+            ...(input.resolverOptions || {}),
+            cwd: loopCwd,
+          },
+          dynamicReviewRisk,
+          extraReviewArgs: input.extraReviewArgs || [],
+          sourceTrust: input.sourceTrust,
+          oracleAvailable: input.oracleAvailable,
+          securitySurface: input.securitySurface,
+          samplingRatio: input.samplingRatio,
+          samplingSeed: input.samplingSeed,
+          classifyRulesFile: input.classifyRulesFile,
+          implementerEngine: roster && roster.implementer_engine,
+          runId: campaignDispatchIdentity
+            ? campaignDispatchIdentity.runId
+            : input.runId,
+          ledger: campaignDispatchIdentity
+            ? campaignDispatchIdentity.ledger
+            : input.ledger,
+          reviewStage: campaignDispatchIdentity
+            ? `campaign-review#r${round}`
+            : input.reviewStage,
+          reviewOptions: {
+            ...(input.reviewOptions || {}),
+            cwd: loopCwd,
+            blindDiscovery: true,
+            cleanroomExpectedVersions: cleanroomExpectedVersions(campaignControl),
+          },
+          requireQualifiedReviewer,
+          reviewerQualificationWaived: input.reviewerQualificationWaived,
+        });
+      } finally {
+        // reviewDiff reads the diff synchronously; delete it on success AND on a throw.
+        this.disposeOwnedDiffFile(diffFile);
+      }
       if (round > 1 && previousReviewForRemediation) {
         const priorFindings = namedReviewFindings(previousReviewForRemediation);
         const currentFindings = namedReviewFindings(review);

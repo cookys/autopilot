@@ -2690,6 +2690,7 @@ const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
 fs.writeFileSync(prompt, 'prompt');
 const head = execSync('git rev-parse HEAD', { cwd: root, encoding: 'utf8' }).trim();
 let diffFile = null;
+let diffExistedDuringReview = false;
 
 const engine = new AutopilotEngine({
   implementationDispatcher(args) {
@@ -2718,6 +2719,7 @@ const engine = new AutopilotEngine({
   },
   reviewDispatcher(args) {
     diffFile = args[args.indexOf('--diff-file') + 1];
+    diffExistedDuringReview = fs.existsSync(diffFile);
     return {
       error: null,
       status: 0,
@@ -2755,13 +2757,15 @@ const result = engine.runLegacyImplementationReviewLoop({
 });
 
 console.log(`status=${result.status}`);
+console.log(`diff_exists_during_review=${diffExistedDuringReview}`);
 console.log(`diff_exists=${fs.existsSync(diffFile)}`);
 console.log(`diff_file=${diffFile}`);
 NODE
 )"; EXIT=$?
 assert_eq "0" "$EXIT" "AutopilotEngine default diff provider handles slash branch names"
 assert_contains "$OUT" "status=converged" "AutopilotEngine default diff provider converges"
-assert_contains "$OUT" "diff_exists=true" "AutopilotEngine default diff provider writes diff file"
+assert_contains "$OUT" "diff_exists_during_review=true" "AutopilotEngine default diff provider writes diff file"
+assert_contains "$OUT" "diff_exists=false" "AutopilotEngine default diff provider deletes the diff after the review (Phase 2 owner-side delete)"
 assert_contains "$OUT" "autopilot-review-loop-feature-slash-branch" "AutopilotEngine sanitizes slash branch in temp path"
 
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP/default-diff-large-prompt.txt" "$TEST_TMP/large-diff-repo" <<'NODE'

@@ -133,8 +133,7 @@ ladder_receipt() { # <reason-or-empty>
   [ -n "$reason" ] && args+=(--reason "$reason")
   [ -n "$LADDER_WORK_UNIT" ] && args+=(--work-unit "$LADDER_WORK_UNIT")
   [ -n "$LADDER_ROUND" ] && args+=(--round "$LADDER_ROUND")
-  local err
-  err="$(mktemp "${TMPDIR:-/tmp}/dispatch-consult-receipt.XXXXXX")"
+  local err="$CONSULT_TMP/receipt.err"
   if ! node "$SCRIPT_DIR/probe-unknown.js" "${args[@]}" >/dev/null 2>"$err"; then
     echo "dispatch-consult: ladder receipt refused: $(cat "$err" 2>/dev/null)" >&2
   fi
@@ -161,11 +160,24 @@ for _a in "${ARTIFACTS[@]}"; do
 done
 [ -x "$AUTHOR_BIN" ] || { echo "dispatch-consult: --dispatch-author-bin not executable: $AUTHOR_BIN" >&2; exit 2; }
 
+# ── 0. One owned scratch dir for every temp file this run writes. The trap is installed
+# BEFORE the allocation and removes the dir on every exit path (normal, `emit`, error,
+# INT/TERM — the signal traps exit so the EXIT trap runs). `.autopilot-owner` records the
+# owning pid + /proc start time so a later age-based prune never deletes a live run's dir.
+CONSULT_TMP=""
+trap '[ -n "${CONSULT_TMP:-}" ] && rm -rf -- "$CONSULT_TMP"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+_MKT_SFX="$(printf 'X%.0s' 1 2 3 4 5 6)"  # six X: the mktemp template suffix
+CONSULT_TMP="$(mktemp -d "${TMPDIR:-/tmp}/dispatch-consult-${_MKT_SFX}")" || { echo "dispatch-consult: cannot create scratch dir" >&2; exit 2; }
+_CONSULT_START="$(sed 's/^.*) //' "/proc/$$/stat" 2>/dev/null | awk '{print $20}')"
+printf '{"pid":%s,"start_time":%s}\n' "$$" "${_CONSULT_START:-null}" > "$CONSULT_TMP/.autopilot-owner"
+
 # ── 1. Resolve the roster, once. This is also where the D7 switch-on
 # qualification gate lives (resolve-review-loop.sh D7) — a seat that fails it
 # exits 3 with its own message; this script surfaces that message rather than
 # inventing its own (plan D8 contract).
-RESOLVE_ERR="$(mktemp "${TMPDIR:-/tmp}/dispatch-consult-resolve.XXXXXX.err")"
+RESOLVE_ERR="$CONSULT_TMP/resolve.err"
 RESOLVED_JSON="$(cd "$REPO_ROOT" && "$SCRIPT_DIR/resolve-review-loop.sh" 2>"$RESOLVE_ERR")"
 RESOLVE_RC=$?
 RESOLVE_ERR_TEXT="$(cat "$RESOLVE_ERR" 2>/dev/null)"
@@ -219,7 +231,7 @@ fi
 # ── 3. Assemble the raw prompt (no local review template — dispatch-author.sh
 # forwards raw bytes verbatim). Carries the frozen consult response contract
 # (evals/consult-eval-rubric.md), never a review-verdict protocol.
-PROMPT_FILE="$(mktemp "${TMPDIR:-/tmp}/dispatch-consult-prompt.XXXXXX")"
+PROMPT_FILE="$CONSULT_TMP/prompt.txt"
 CORPUS_MANIFEST="$REPO_ROOT_DEFAULT/evals/consult-capability-evidence-corpus.json"
 QC_TOKEN="qc@depth-0"
 if [ -r "$CORPUS_MANIFEST" ]; then
@@ -270,7 +282,7 @@ fi
 declare -a AUTHOR_ARGS=(--runner "$CONSULT_RUNNER" --model "$CONSULT_ENGINE" --effort "$CONSULT_EFFORT" --prompt-file "$PROMPT_FILE" --timeout "$TIMEOUT")
 [ -n "$CONSULT_ENDPOINT" ] && AUTHOR_ARGS+=(--endpoint "$CONSULT_ENDPOINT")
 
-AUTHOR_ERR="$(mktemp "${TMPDIR:-/tmp}/dispatch-consult-author.XXXXXX.err")"
+AUTHOR_ERR="$CONSULT_TMP/author.err"
 AUTHOR_OUT="$("$AUTHOR_BIN" "${AUTHOR_ARGS[@]}" 2>"$AUTHOR_ERR")"
 AUTHOR_RC=$?
 [ -s "$AUTHOR_ERR" ] && cat "$AUTHOR_ERR" >&2

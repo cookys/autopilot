@@ -18,7 +18,7 @@ const { createWatcher } = require('../src/status/runs-watch');
 const { scopeFromCwd } = require('../src/status/project-key');
 const { buildDecisionsSidecar } = require('../src/status/decisions-sidecar');
 const { createResiduePublisher, buildResidueFact } = require('../src/status/residue');
-const { sumTodayTierSpend, loadCostFuseConfig } = require('./lib/brain-spend');
+const { sumTodayTierSpend, createTierSpendReader, loadCostFuseConfig } = require('./lib/brain-spend');
 const { validateJsonSchema } = require('./validate-json-schema.js');
 const schemaOf = (n) => JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'schemas', n), 'utf8'));
 
@@ -120,6 +120,22 @@ test('D1 cost-fuse hook and the watcher report the same number for the same fixt
     // and both are the shared module's own answer
     const cfg = loadCostFuseConfig({ env: ctx.env, home: ctx.env.HOME });
     assert.equal(Math.round(sumTodayTierSpend(ctx.env.AUTOPILOT_COSTS_FILE, new Set(cfg.tiers)) * 100) / 100, e.host_today_brain_usd);
+  } finally { ctx.cleanup(); }
+});
+
+test('D1 subagent rows are excluded from the brain spend (one-shot sum and incremental reader); main rows still count', () => {
+  const ctx = mk();
+  try {
+    writeCosts(ctx, [
+      { model: 'claude-opus-5-5', cost_usd: 4 },
+      { model: 'claude-opus-5-5', cost_usd: 50, sidechain: true, agent_id: 'aaa111' },
+      { model: 'claude-opus-5-5', cost_usd: 60, agent_id: 'bbb222' },
+    ]);
+    const tiers = new Set(loadCostFuseConfig({ env: ctx.env, home: ctx.env.HOME }).tiers);
+    assert.equal(sumTodayTierSpend(ctx.env.AUTOPILOT_COSTS_FILE, tiers), 4);
+    const r = createTierSpendReader(ctx.env.AUTOPILOT_COSTS_FILE).read();
+    assert.equal(r.ok, true);
+    assert.equal(r.todaySpend(tiers), 4);
   } finally { ctx.cleanup(); }
 });
 

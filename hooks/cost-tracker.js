@@ -96,6 +96,9 @@ try {
   let cursor = {};
   try { cursor = JSON.parse(fs.readFileSync(cursorFile, 'utf8')) || {}; processed = Number(cursor.turns) || 0; }
   catch { /* first run for this session → 0 */ }
+  // KNOWN, ACCEPTED (one-time): cursors written before dedup-by-(message.id, requestId) count RAW transcript
+  // lines, while `processed` is now compared against deduped turns. A session in progress at upgrade time
+  // therefore skips a stretch of rows once (under-count, never double-count). Deliberately not migrated.
   // Cursor writes are tmp+rename and PRESERVE unrelated fields (cache_read_warned lives
   // here too; the plain overwrite reset it every turn — review round 1, gpt-5.6-sol).
   const writeCursor = (patch) => {
@@ -119,6 +122,9 @@ try {
   // ledger. Each file gets its own cursor entry (cursor.agents[agentId] = turns already logged);
   // the rows carry `sidechain:true` + `agent_id`. Fail-soft per file.
   const agentCursor = (cursor.agents && typeof cursor.agents === 'object') ? { ...cursor.agents } : {};
+  // agent_files[agentId] = {size, mtimeMs} seen last Stop: an unchanged file is skipped (no re-parse of
+  // every subagent file on every Stop). Old cursors lack the field → every file is just parsed once.
+  const fileCursor = (cursor.agent_files && typeof cursor.agent_files === 'object') ? { ...cursor.agent_files } : {};
   const subDeltas = [];
   try {
     const subDir = path.join(tpath.replace(/\.jsonl$/, ''), 'subagents');
@@ -126,15 +132,20 @@ try {
       const m = /^agent-(.+)\.jsonl$/.exec(name);
       if (!m) continue;
       try {
-        const aTurns = parseAssistantTurns(fs.readFileSync(path.join(subDir, name), 'utf8'));
+        const aPath = path.join(subDir, name);
+        const st = fs.statSync(aPath);
+        const seen = fileCursor[m[1]];
+        if (seen && seen.size === st.size && seen.mtimeMs === st.mtimeMs && m[1] in agentCursor) continue;
+        const aTurns = parseAssistantTurns(fs.readFileSync(aPath, 'utf8'));
         const agg = aggregateSince(aTurns, Number(agentCursor[m[1]]) || 0);
         agentCursor[m[1]] = agg.totalTurns;
+        fileCursor[m[1]] = { size: st.size, mtimeMs: st.mtimeMs };
         for (const d of agg.deltas) subDeltas.push({ ...d, agentId: m[1] });
       } catch { /* one unreadable subagent file never blocks the rest */ }
     }
   } catch { /* no subagents dir → nothing to add */ }
 
-  writeCursor({ turns: totalTurns, ts, agents: agentCursor });
+  writeCursor({ turns: totalTurns, ts, agents: agentCursor, agent_files: fileCursor });
 
   if (deltas.length === 0 && subDeltas.length === 0) process.exit(0); // nothing new since last Stop
 

@@ -35,8 +35,8 @@ test('parseAssistantTurns: extracts model+usage in file order, skips non-assista
   ].join('\n');
   const turns = parseAssistantTurns(jsonl);
   assert.equal(turns.length, 2);
-  assert.deepEqual(turns[0], { model: 'claude-opus-4-8', input: 100, output: 50, cacheRead: 1000, cacheWrite: 200 });
-  assert.deepEqual(turns[1], { model: 'claude-haiku-4-5', input: 10, output: 5, cacheRead: 0, cacheWrite: 0 });
+  assert.deepEqual(turns[0], { model: 'claude-opus-4-8', input: 100, output: 50, cacheRead: 1000, cacheWrite: 200, sidechain: false, agentId: null });
+  assert.deepEqual(turns[1], { model: 'claude-haiku-4-5', input: 10, output: 5, cacheRead: 0, cacheWrite: 0, sidechain: false, agentId: null });
 });
 
 test('parseAssistantTurns: malformed lines / empty / missing usage are skipped, never throw', () => {

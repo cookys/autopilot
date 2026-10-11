@@ -145,6 +145,7 @@ function parseArgs(argv) {
   return args;
 }
 
+// Same predicate as isSubagentRow in scripts/lib/brain-spend.js (keep in sync).
 function isSubagentRow(r) {
   return r.sidechain === true || (typeof r.agent_id === 'string' && r.agent_id.length > 0);
 }
@@ -154,11 +155,12 @@ function num(v) {
 }
 
 // Group definition per --by mode: key, identity fields, extra cells.
-function groupSpec(mode, r) {
+function groupSpec(mode, r, json) {
   if (mode === 'session') {
     const sess = typeof r.session === 'string' ? r.session : 'unknown';
     const cwd = typeof r.cwd === 'string' ? path.basename(r.cwd) : '';
-    return { key: sess + '\0' + cwd, ident: { session: sess }, cwd };
+    // JSON rows carry no cwd, so keying on it would split one session into duplicate rows (18ae04a7); only the text table shows cwd.
+    return { key: json ? sess : sess + '\0' + cwd, ident: { session: sess }, cwd };
   }
   if (mode === 'tier') {
     return { key: r._tier, ident: { tier: r._tier } };
@@ -278,7 +280,7 @@ function run() {
     if (r._tier === 'brain') dObj.brain_usd += r.cost_usd;
     if (sub) { dObj.sub_usd += r.cost_usd; dObj.cw_sub += cw; }
 
-    const spec = groupSpec(args.by, r);
+    const spec = groupSpec(args.by, r, args.json);
     let g = dObj.groups.get(spec.key);
     if (!g) {
       g = { ident: spec.ident, cwd: spec.cwd, sessionSet: new Set(), modelSet: new Set(),

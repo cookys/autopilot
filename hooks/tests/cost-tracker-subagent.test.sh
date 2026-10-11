@@ -66,6 +66,29 @@ assert_eq 1040 "$(sum_field cache_write_tokens sub)" "only the new subagent turn
 CUR="$(cat "$METRICS/.cursors/ct-sub-session.json")"
 assert_contains "$CUR" '"agents":{"aaa111":3}' "per-agent cursor recorded"
 
+# ── 5b. size/mtime short-circuit: unchanged subagent file is skipped; a grown one still yields its new turns ──
+CUR="$(cat "$METRICS/.cursors/ct-sub-session.json")"
+assert_contains "$CUR" '"agent_files":{"aaa111":{"size":' "cursor records subagent file size/mtime"
+ROWS_BEFORE="$(wc -l < "$LEDGER")"
+run_hook cost-tracker.js "$(payload)"
+assert_eq "$ROWS_BEFORE" "$(wc -l < "$LEDGER")" "unchanged subagent file: no rows appended"
+assert_eq 1040 "$(sum_field cache_write_tokens sub)" "unchanged subagent file: sub totals unchanged"
+line s4 q4 5 100 60 ',"isSidechain":true,"agentId":"aaa111"' >> "$SUBDIR/agent-aaa111.jsonl"
+run_hook cost-tracker.js "$(payload)"
+assert_eq 1100 "$(sum_field cache_write_tokens sub)" "grown subagent file: only the new turn is added"
+# an old-shape cursor (no agent_files) still works: file is parsed once, nothing double-counted
+node -e 'const f=process.argv[1],c=JSON.parse(require("fs").readFileSync(f,"utf8"));delete c.agent_files;require("fs").writeFileSync(f,JSON.stringify(c))' "$METRICS/.cursors/ct-sub-session.json"
+run_hook cost-tracker.js "$(payload)"
+assert_eq 1100 "$(sum_field cache_write_tokens sub)" "old cursor without agent_files: no double count"
+# same size + same mtime but different content is skipped unparsed (proves the file is not re-read): turn the
+# duplicate "s1" line into a fresh "s5" turn of equal byte length, then restore the mtime
+SUBF="$SUBDIR/agent-aaa111.jsonl"
+touch -r "$SUBF" "$TEST_TMP/mtime.ref"
+node -e 'const fs=require("fs"),f=process.argv[1];let t=fs.readFileSync(f,"utf8");t=t.replace(/"id":"s1"([^\n]*\n[^\n]*)"id":"s1"/,"\"id\":\"s1\"$1\"id\":\"s5\"");fs.writeFileSync(f,t)' "$SUBF"
+touch -r "$TEST_TMP/mtime.ref" "$SUBF"
+run_hook cost-tracker.js "$(payload)"
+assert_eq 1100 "$(sum_field cache_write_tokens sub)" "same size+mtime: subagent file is short-circuited, not re-parsed"
+
 # ── 6. missing subagents dir → no error, no sidechain rows ──
 rm -rf "$TEST_TMP/transcript"
 { line z1 w1 1 10 5; } > "$TR"

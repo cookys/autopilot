@@ -217,4 +217,14 @@ OLD_JSON="$(node "$DIGEST_SCRIPT" --file "$FIXTURE_FILE" --since 100 --by agent 
 assert_exit_code "$?" "0" "legacy-only ledger with --by agent exits 0"
 assert_eq "$(cwq "$OLD_JSON" 'd.rows[0].agent + ":" + d.rows[0].cache_write_tokens + ":" + d.subagent_share')" "main:0:0" "legacy rows count as main with cache_write 0 and subagent_share 0"
 
+# Test (g): --json --by session keys on the session id alone; one session with rows in two cwds is ONE row.
+CWD_FIXTURE="$TEST_TMP/cwd-fixture.jsonl"
+cat > "$CWD_FIXTURE" <<EOF
+{"ts":"${DAY1}T09:00:00.000Z","session":"cwd-session","model":"claude-sonnet-4-5","turns":1,"cost_usd":1.0000,"cwd":"/app/one"}
+{"ts":"${DAY1}T09:30:00.000Z","session":"cwd-session","model":"claude-sonnet-4-5","turns":2,"cost_usd":0.5000,"cwd":"/app/two"}
+EOF
+CWD_JSON="$(node "$DIGEST_SCRIPT" --file "$CWD_FIXTURE" --since 100 --by session --json)"
+CWD_ROWS="$(printf '%s' "$CWD_JSON" | node -e 'const j=JSON.parse(require("fs").readFileSync(0,"utf8"));const r=j.days.flatMap(d=>d.rows).filter(r=>r.session==="cwd-session");process.stdout.write(r.length+","+r[0].turns+","+r[0].cost_usd)')"
+assert_eq "$CWD_ROWS" "1,3,1.5" "--json --by session: one session in two cwds is one row with summed totals"
+
 finalize_test

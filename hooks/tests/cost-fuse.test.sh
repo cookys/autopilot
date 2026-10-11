@@ -151,6 +151,19 @@ run_hook cost-fuse.js "$(make_payload Edit '' 'switch-session')"
 assert_eq 0 "$__RUN_EXIT" "case5c: exit 0"
 assert_eq "" "$__RUN_STDOUT" "case5c: transcript (sonnet) wins over ledger (fable) -> allowed silently"
 
+# ── 5e. Ledger fallback skips subagent rows: last row is a sonnet subagent, main row before it is fable ──
+# Transcript yields no model, so resolution falls to the ledger; a subagent's model must not be taken as the session's.
+export AUTOPILOT_COST_FUSE_MODE=block
+printf '%s\n' '{"type":"user","message":{"role":"user","content":"hi"}}' > "$TRANSCRIPT_FILE"
+cat > "$AUTOPILOT_COSTS_FILE" <<EOF
+{"ts":"${TODAY}T01:00:00.000Z","session":"fallback-session","model":"claude-fable-5-1","cost_usd":200}
+{"ts":"${TODAY}T02:00:00.000Z","session":"fallback-session","model":"claude-sonnet-4-6","sidechain":true,"agent_id":"aaa111","cost_usd":1}
+EOF
+run_hook cost-fuse.js "$(make_payload Edit '' 'fallback-session')"
+assert_eq 0 "$__RUN_EXIT" "case5e: exit 0"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case5e: fallback resolves the main (fable) model, not the trailing subagent (sonnet) row"
+unset AUTOPILOT_COST_FUSE_MODE
+
 # ── 5d. Warn state rolls over by UTC day ───────────────────────────────
 unset AUTOPILOT_COST_FUSE_MODE
 rm -rf "$AUTOPILOT_COST_FUSE_DIR"

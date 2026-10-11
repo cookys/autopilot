@@ -204,3 +204,4 @@ Assumptions carried: the AF_UNIX 108-byte limit bounds the per-run dir path; all
   - Both are BACKLOG rows.
   - `review_input_digest` cannot be pinned because the verification receipt embeds the worktree path (already so at `82488bc8`); KR3 (5) pins `diff_digest` only.
 - Pending a version: the shipped-code changes (phases 2–4) are PATCH-class; owner deferred the version (2026-10-11), so no CHANGELOG section is written here.
+- **P4** (2026-10-12): gate shipped on `feat/tmp-residue-p4`, pending a version (PATCH-class, no CHANGELOG section). `scripts/check-tmp-residue-registry.js` (+ `scripts/tmp-residue-allowlist.json`, 37 reasoned entries and 55 `pending_registry` entries awaiting registry rows), wired into `.githooks/pre-commit` (`--staged`) and `scripts/preflight-release.sh` (whole repo); test `hooks/tests/check-tmp-residue-registry.test.sh`.

@@ -214,4 +214,8 @@ Assumptions carried: the AF_UNIX 108-byte limit bounds the per-run dir path; all
 
 ## Review log
 
-- R0 author: depth-0 (Opus 5.5), 2026-10-12, from the read-only inventory of 2026-10-11 (all file:line refs above). Manifest and rubric paths: to be added at plan-review.
+- **R0** (2026-10-12, depth-0 Opus 5.5): drafted from the read-only inventory of 2026-10-11 and the proposal answers.
+  - Frozen rubric: `docs/plans/2026-10-12-tmp-residue-containment.rubric.md` (R1–R8).
+  - Manifest: `docs/plans/2026-10-12-tmp-residue-containment.plan-review-manifest.json`, `logical_plan_id: tmp-residue-containment-2026-10-12`.
+  - Seats: sol chair (openai, not required: codex quota has run dry before), grok deep (xai, required), MiniMax consult; minimum 2 families.
+- Pending a version: the shipped-code changes (phases 2–4) are PATCH-class; owner deferred the version (2026-10-11), so no CHANGELOG section is written here.

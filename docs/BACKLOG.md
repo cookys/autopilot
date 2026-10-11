@@ -1129,3 +1129,43 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: fleet msgs `01M4NVXM8WM1Q6GR4VSTST0P22`, `01M4NW48V3GDXBVBQGFJY6F1P3`; scaling verified locally
 - **Pointer**: none
 - **Context**: scaleTiers (context-budget-lib.js) scales unset t1/t2 by window: 1M gives T2 750K (peer saw first T2 at 777K). Cost is turns x context, so default absolute. Also throttle per token step, not per call.
+
+### hetero-review-loop: a seat gap without --allow-seat-gap leaves the generation out of chain.json
+- **Status**: open
+- **Trigger**: next packet-mode or hetero code review that hits a no_verdict seat
+- **Effort**: S
+- **Source**: tmp-residue code review, packet P3-prune G1, 2026-10-12
+- **Pointer**: none
+- **Context**: collect exits "seat gap detected" and writes g1/ but no chain.json entry; collecting G2 then fails "Contiguous chain broken: missing generation 1". Record the generation as aborted instead.
+
+### Packet set: a packet re-collected at a later head can never match the set's G1 head
+- **Status**: open
+- **Trigger**: next packet set where one packet's G1 must be re-collected after the branch moved
+- **Effort**: S
+- **Source**: tmp-residue code review, 2026-10-12
+- **Pointer**: none
+- **Context**: check-phase-review-receipt --packets requires every packet's G1 at one head. Workaround used: temp branch at the set head, re-collect with --branch. Allow a later G1 when that packet's files are unchanged between heads.
+
+### Packet reviewers flag files in sibling packets as missing
+- **Status**: open
+- **Trigger**: next packet-mode review brief
+- **Effort**: S
+- **Source**: tmp-residue code review G1, 2026-10-12: about 15 of 19 MUST-FIX were cross-packet
+- **Pointer**: none
+- **Context**: each seat sees only its packet's diff and reads absent spec files as unimplemented. The review prompt should list the sibling packets and their paths as out of this packet's scope.
+
+### Full-suite --parallel reds that pass standalone: three suites
+- **Status**: open
+- **Trigger**: next time a full parallel run is a gate (KR1-style acceptance, release)
+- **Effort**: M
+- **Source**: tmp-residue KR1 runs, 2026-10-12 (each passes standalone; first also red on develop)
+- **Pointer**: none
+- **Context**: skill-onoff-generic: real ~/.autopilot changed by concurrent sessions. dispatch-hetero-wall-timeout:181 host-wide pgrep sees sibling watchdogs. pending-revocation-fold reads scripts/dispatch-contract.pre.js another suite deletes.
+
+### completeness-scan: mktemp XXXXXX templates read as markers; --files with several files scans 0
+- **Status**: open
+- **Trigger**: next quality-pipeline run on a diff that adds mktemp templates
+- **Effort**: S
+- **Source**: tmp-residue qc-gate, 2026-10-12 (21 new findings, all XXXXXX templates)
+- **Pointer**: none
+- **Context**: the XXX marker rule matches mktemp templates; exclude XXXXXX runs. The phase-3 hand also saw --files f1 f2 report scannedFiles 0.

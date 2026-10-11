@@ -12,6 +12,7 @@
 //   createTierSpendReader(file)       -> incremental per-UTC-day, per-tier aggregate of the same rows (watcher; reads only appended
 //                                        bytes, resets on shrink / inode change); .read() -> { ok, todaySpend(tiersSet) }; ok=false when the
 //                                        file exists but cannot be read (the watcher publishes null; the fuse stays fail-soft on 0)
+//   isSubagentRow(row)                -> true for cost-tracker subagent rows; both readers above skip them (owner ruling 2026-10-12)
 //   safe(s)                           -> session-id sanitiser shared with cost-fuse state files
 //
 // Fail-soft by construction: config errors fall back to defaults, an unreadable costs file sums to 0. Node >= 20.10.
@@ -80,6 +81,12 @@ function safe(s) {
   return String(s || 'unknown').replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 96);
 }
 
+// Subagent rows (cost-tracker appends `sidechain:true` + `agent_id`). Owner ruling 2026-10-12: subagent spend is EXCLUDED from the
+// brain-tier spend fuse. Same predicate as isSubagentRow in scripts/cost-digest.js (keep in sync).
+function isSubagentRow(row) {
+  return !!row && (row.sidechain === true || (typeof row.agent_id === 'string' && row.agent_id.length > 0));
+}
+
 function sumTodayTierSpend(costsFile, tiersSet, onlySession) {
   if (!costsFile || !fs.existsSync(costsFile)) return 0;
   const todayPrefix = new Date().toISOString().slice(0, 10);
@@ -95,6 +102,7 @@ function sumTodayTierSpend(costsFile, tiersSet, onlySession) {
         if (!row || typeof row !== 'object') continue;
         const ts = typeof row.ts === 'string' ? row.ts : '';
         if (!ts.startsWith(todayPrefix)) continue;
+        if (isSubagentRow(row)) continue;
         const model = row.model;
         if (!model) continue;
         if (onlySession && safe(row.session) !== safe(onlySession)) continue;
@@ -128,6 +136,7 @@ function createTierSpendReader(file) {
       try {
         const row = JSON.parse(trimmed);
         if (!row || typeof row !== 'object' || typeof row.ts !== 'string' || !row.model) continue;
+        if (isSubagentRow(row)) continue;
         const cost = Number(row.cost_usd);
         if (!Number.isFinite(cost) || cost <= 0) continue;
         const day = row.ts.slice(0, 10);
@@ -172,4 +181,4 @@ function createTierSpendReader(file) {
   return { read };
 }
 
-module.exports = { DEFAULT_DAILY_USD_BRAIN, loadCostFuseConfig, costsFileOf, safe, sumTodayTierSpend, createTierSpendReader };
+module.exports = { DEFAULT_DAILY_USD_BRAIN, loadCostFuseConfig, costsFileOf, safe, isSubagentRow, sumTodayTierSpend, createTierSpendReader };

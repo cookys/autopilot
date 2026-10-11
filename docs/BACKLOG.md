@@ -1114,14 +1114,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: depth-0 foreground sleep/tail polling now draws an advice-only warning (depth0-delegate-gate); the dev-flow SKILL.md foreground-wait (<=15 min) wording is guidance text and waits for eval evidence before it changes.
 
-### PEER-REPORTED (c4140 llm-playground): cost-digest shows cache_write, cache_read per turn, subagent share
-- **Status**: open
-- **Trigger**: operator decision on adoption; peer data: Sonnet subagents were 79% of cache_creation
-- **Effort**: S
-- **Source**: fleet msg `01M4NVXM8WM1Q6GR4VSTST0P22`; not reproduced locally
-- **Pointer**: none
-- **Context**: costs.jsonl already has cache_write_tokens but cost-digest.js never sums it. Add it plus cache_read/turns; subagent share needs an isSidechain flag in cost-tracker-lib parseAssistantTurns (verify Stop sees sidechains).
-
 ### hetero-review-loop: a seat gap without --allow-seat-gap leaves the generation out of chain.json
 - **Status**: open
 - **Trigger**: next packet-mode or hetero code review that hits a no_verdict seat

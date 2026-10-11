@@ -23,7 +23,7 @@ const os = require('os');
 const path = require('path');
 const { tierOf } = require('../scripts/cost-digest.js');
 // One shared implementation of config resolution + today's tier spend (scripts/lib/brain-spend.js; the runs watcher reads it too).
-const { loadCostFuseConfig, safe, sumTodayTierSpend } = require('../scripts/lib/brain-spend.js');
+const { loadCostFuseConfig, safe, isSubagentRow, sumTodayTierSpend } = require('../scripts/lib/brain-spend.js');
 
 const DEFAULT_DAILY_USD_BRAIN = 150; // the hook's own default; passed to the shared resolver (case7 of cost-fuse.test.sh mutates this literal)
 
@@ -201,7 +201,7 @@ function resolveSessionModel(payload, costsFile) {
         if (!line) continue;
         try {
           const row = JSON.parse(line);
-          if (row && row.session === targetSession && row.model) {
+          if (row && row.session === targetSession && row.model && !isSubagentRow(row)) {
             return row.model;
           }
         } catch {

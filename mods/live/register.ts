@@ -63,6 +63,7 @@ let paneTab: PaneTab = 'now'
 const expanded = new Set<string>() // the recent-prompt groups the person opened (by group id)
 const recentTracker = makeRecentTracker()
 let recent: RecentGroup[] | null = null // survives ticks: the snapshot is rebuilt each time, a failed read keeps the last value
+let recentSid: string | null = null // group ids are transcript indexes, so a new session id (/clear) drops every opened group
 let tr: T = T_EN // the active translator, set at the start of every tick (and read by the band / pane draws)
 let pressSeq = 0 // one number per ⓘ press, taken before any await; only the latest press may assign paneTab or end the chain
 let decided: Promise<PaneTab> | null = null // the tab the latest unfinished press chose: a press landing meanwhile steps on from it (N rapid presses = N tabs)
@@ -421,6 +422,8 @@ async function refresh($: EngineInterface): Promise<void> {
     try {
       const sid = await $.session.id()
       const msgs = await $.session.messages()
+      if (recentSid !== null && sid !== recentSid) expanded.clear()
+      recentSid = sid ?? null
       if (Array.isArray(msgs)) recent = recentTracker.update(sid ?? '', msgs as never)
     } catch (_e) {
       // the transcript is optional garnish: keep the previous value

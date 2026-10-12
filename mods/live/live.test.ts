@@ -3326,6 +3326,9 @@ test('recent: every redaction pattern becomes ***, ordinary text is untouched', 
   const [long] = groupRecent([U(fake(7990, 'x') + ' sk-' + fake(30, 'K'))])
   expect(long.prompt).not.toContain('sk-')
   expect(long.prompt.endsWith('***')).toBe(true)
+  // the store clip never splits a surrogate pair (no lone high surrogate at the cut)
+  const [emoji] = groupRecent([U(fake(7999, 'x') + '\u{1F600}tail')])
+  expect(/[\uD800-\uDBFF]$/.test(emoji.prompt)).toBe(false)
 })
 
 test('recent: a collapsed prompt is one line of at most 60 characters plus …', () => {
@@ -3445,4 +3448,13 @@ test('recent: pressing a group Button expands it, pressing again collapses it', 
   rows = await press()
   expect(rows.slice(-1)).toEqual(['▸ You: synthetic question one'])
   expect(w.toasts).toEqual([])
+  // a new session id (/clear) reuses transcript indexes: an opened group must not stay open for the new session
+  rows = await press()
+  expect(rows.slice(-4)[0]).toBe('▾ You:')
+  w.sid.value = SID_B
+  await w.clock.advance(5000)
+  const pane = await mountPane()
+  rows = rowsOf((await pane.drawn()) as Node)
+  await pane.unmount()
+  expect(rows.slice(-1)).toEqual(['▸ You: synthetic question one'])
 })

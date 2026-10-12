@@ -1817,7 +1817,8 @@ export function isRealPrompt(m: SessionMsg): boolean {
   return !INJECTED_PREFIXES.some(p => head.startsWith(p))
 }
 
-const clip = (s: string) => (s.length > RECENT_STORE_CHARS ? s.slice(0, RECENT_STORE_CHARS) : s)
+// cut on a code-point boundary: a UTF-16 slice can split a surrogate pair into a stray replacement glyph
+const clip = (s: string) => (s.length > RECENT_STORE_CHARS ? s.slice(0, /[\uD800-\uDBFF]/.test(s[RECENT_STORE_CHARS - 1]) ? RECENT_STORE_CHARS - 1 : RECENT_STORE_CHARS) : s)
 
 export function groupRecent(messages: readonly SessionMsg[], max: number = RECENT_MAX): RecentGroup[] {
   const groups: { id: string; prompt: string; replies: string[] }[] = []

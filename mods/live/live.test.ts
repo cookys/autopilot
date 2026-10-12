@@ -256,7 +256,7 @@ async function bandParts($: any, surface: (typeof SURFACES)[number], columns = 1
 async function bandLine($: any, surface: (typeof SURFACES)[number], columns = 120) {
   const ui = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: columns }, viewport: { columns: Math.max(columns, 20), rows: 50, isFullscreen: true } })
   const tree = (await ui.drawn()) as Node
-  const info = await ui.find({ type: 'Button' })
+  const info = ((await ui.findAll({ type: 'Button' })) as Node[]).find(b => b.props?.key === 'info') // the slots are Buttons too: the ⓘ is the one keyed info
   await ui.unmount()
   const texts = walkTexts(tree).map(textOf).join('')
   return { tree, text: texts + (info ? labelOf(info as Node) : ''), info: info as Node | undefined }
@@ -2086,10 +2086,10 @@ function richWorld(): Tree {
 }
 
 // TUI v2 grammar: groups separated by ` │ `, items inside a group by a space; the wide band carries the stage walk, a 10-cell spend bar + %, the verdict's reason
-const RICH_209 = '⏸ 疑似卡住 最久的派工 4m 沒有輸出 │ M!·l5 ●─●─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙2 ⏸1 ↺ R3 QC✓ │ ◆3 ?1 U2 │ $120 ▰▰▰▰▰▰▰▰▱▱ 80% │ dev↓3 ⚑2 │ ⓘ'
-const RICH_MID = '⏸ 疑似卡住 │ M!·l5 ▸ implement │ ▰▰▰▱▱ 3/5 │ ⚙2 ⏸1 ↺ R3 QC✓ │ $120 ▰▰▰▰▱ │ ⚑2 │ ⓘ'
-const RICH_SMALL = '⏸ 疑似卡住 │ ▰▰▰▱▱ │ ⚙2 ⏸1 QC✓ │ $▰▰▱ │ ⚑2 │ ⓘ'
-const RICH_NARROW = '⏸ 疑似卡住 │ ⚙2 ⏸1 │ ⚑2 │ ⓘ'
+const RICH_209 = '⏸ 疑似卡住 最久的派工 4m 沒有輸出 │ M!·l5 ●─●─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙2 ⏸1 ↺ R3 QC✓ │ ◆3 ?1 U2 │ $120 ▰▰▰▰▰▰▰▰▱▱ 80% │ dev↓3 ⚑2 │ ⓘ '
+const RICH_MID = '⏸ 疑似卡住 │ M!·l5 ▸ implement │ ▰▰▰▱▱ 3/5 │ ⚙2 ⏸1 ↺ R3 QC✓ │ $120 ▰▰▰▰▱ │ ⚑2 │ ⓘ '
+const RICH_SMALL = '⏸ 疑似卡住 │ ▰▰▰▱▱ │ ⚙2 ⏸1 QC✓ │ $▰▰▱ │ ⚑2 │ ⓘ '
+const RICH_NARROW = '⏸ 疑似卡住 │ ⚙2 ⏸1 │ ⚑2 │ ⓘ '
 const RICH_WIDTHS: [number, string][] = [
   [209, RICH_209],
   [160, RICH_209],
@@ -2194,9 +2194,9 @@ for (const surface of SURFACES) {
     world(on, base())
     await start($, surface)
     const text = (await bandLine($, surface, 209)).text
-    expect(text).toBe('⏸ 疑似卡住 最久的派工 4m 沒有輸出 │ ⚙2 ⏸1 │ ⓘ')
+    expect(text).toBe('⏸ 疑似卡住 最久的派工 4m 沒有輸出 │ ⚙2 ⏸1 │ ⓘ ')
     expect(text).not.toContain('│  │')
-    expect((await bandLine($, surface, 119)).text).toBe('⏸ 疑似卡住 │ ⚙2 ⏸1 │ ⓘ') // the reason phrase is for wide bands only
+    expect((await bandLine($, surface, 119)).text).toBe('⏸ 疑似卡住 │ ⚙2 ⏸1 │ ⓘ ') // the reason phrase is for wide bands only
   })
 
   test('P7 band: the ⓘ is a plain Button with autoFocus and no hotkey; pressing it opens the pane on the Now tab (' + surface + ')', async ($, on) => {
@@ -2204,11 +2204,14 @@ for (const surface of SURFACES) {
     await start($, surface)
     for (const cols of [209, 119, 60]) {
       const ui = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: cols }, viewport: { columns: cols, rows: 50, isFullscreen: true } })
-      const info = (await ui.find({ type: 'Button' })) as Drawn
+      const buttons = (await ui.findAll({ type: 'Button' })) as Drawn[]
+      const info = buttons.find(b => b.props?.key === 'info') as Drawn
       expect(info.props?.plain).toBe(true)
       expect(info.props?.autoFocus).toBe(true)
       expect(info.props?.hotkey).toBeUndefined()
       expect(JSON.stringify(info)).toContain('ⓘ')
+      expect(buttons.filter(b => b.props?.autoFocus === true).map(b => b.props?.key)).toEqual(['info']) // the slots never take the keyboard's first stop
+      expect(buttons[buttons.length - 1]).toBe(info) // and it is still the last control on the line
       await ui.unmount()
     }
     const ui = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
@@ -2229,6 +2232,112 @@ for (const surface of SURFACES) {
     expect(texts[0]).toContain('⏸ 疑似卡住') // the Now tab: its hero row, then the dim header
     expect(texts.some(t => t.startsWith('工作階段 $'))).toBe(true)
     expect(texts.some(t => t.startsWith('▌ 狀態列符號'))).toBe(false) // not the legend
+  })
+
+  test('P8 band: the ⓘ label is two cells, so the right half of a glyph the terminal draws wide is still the Button (' + surface + ')', async ($, on) => {
+    world(on, richWorld())
+    await start($, surface)
+    // ⓘ (U+24D8) is East Asian Width Ambiguous: counted one cell here, drawn two by a CJK-locale terminal; a one-cell Button left its right half dead
+    const line = await bandLine($, surface, 209)
+    const label = labelOf(line.info as Node)
+    expect(label).toBe('ⓘ ')
+    expect(displayWidth(label)).toBe(2)
+    expect(displayWidth(line.text)).toBeLessThanOrEqual(209)
+  })
+
+  test('P8 band: every slot is a plain Button keyed by its slot id, holding only its own text (' + surface + ')', async ($, on) => {
+    world(on, richWorld())
+    await start($, surface)
+    const cases: [number, string[]][] = [
+      [209, ['verdict', 'position', 'unit', 'dispatch', 'review', 'decisions', 'spend', 'hygiene', 'info']],
+      [60, ['verdict', 'dispatch', 'hygiene', 'info']],
+    ]
+    for (const [cols, keys] of cases) {
+      const ui = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: cols }, viewport: { columns: cols, rows: 50, isFullscreen: true } })
+      const buttons = (await ui.findAll({ type: 'Button' })) as Drawn[]
+      await ui.unmount()
+      expect(buttons.map(b => b.props?.key)).toEqual(keys)
+      for (const b of buttons) {
+        expect(b.props?.plain).toBe(true)
+        expect(b.props?.hotkey).toBeUndefined()
+        if (b.props?.key !== 'info') expect(textOf(b as Node)).not.toContain('│') // the separators sit between Buttons, never inside one
+      }
+    }
+    const slotText = async (key: string) => {
+      const ui = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: 209 }, viewport: { columns: 209, rows: 50, isFullscreen: true } })
+      const b = ((await ui.findAll({ type: 'Button' })) as Drawn[]).find(x => x.props?.key === key) as Node
+      await ui.unmount()
+      return textOf(b)
+    }
+    expect(await slotText('verdict')).toBe('⏸ 疑似卡住 最久的派工 4m 沒有輸出') // the reason phrase presses as the verdict
+    expect(await slotText('decisions')).toBe('◆3 ?1 U2')
+    expect(await slotText('spend')).toBe('$120 ▰▰▰▰▰▰▰▰▱▱ 80%')
+  })
+
+  test('P8 band: pressing a slot opens the pane, with the keyboard, on the tab that explains it (' + surface + ')', async ($, on) => {
+    const w = world(on, richWorld())
+    await start($, surface)
+    const pairs: [string, string][] = [['dispatch', 'dispatch'], ['decisions', 'review'], ['spend', 'spend'], ['hygiene', 'hygiene'], ['review', 'review'], ['unit', 'now'], ['verdict', 'now'], ['position', 'now']]
+    for (const [slot, tab] of pairs) {
+      const band = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: 209 }, viewport: { columns: 209, rows: 50, isFullscreen: true } })
+      await band.press({ key: slot })
+      await band.unmount()
+      const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+      const active = ((await pane.findAll({ type: 'Button' })) as Drawn[]).find(b => isActiveTab(b))?.props?.key
+      await pane.unmount()
+      expect([slot, active]).toEqual([slot, tab])
+    }
+    expect(w.opens.length).toBe(pairs.length)
+    expect(w.opens.every(o => o.id === 'autopilot-live' && o.focus === true && o.closeOnEscape === true)).toBe(true)
+  })
+
+  test('P8 band: pressing the position slot opens a folded 目前位置 section (' + surface + ')', async ($, on) => {
+    world(on, richWorld())
+    await start($, surface)
+    const mountPane = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+    const first = await mountPane()
+    await first.press({ key: 'now' })
+    await first.unmount()
+    const rowsNow = async () => { const p = await mountPane(); const r = rowsOf((await p.drawn()) as Node); await p.unmount(); return r }
+    const at = (await rowsNow()).findIndex(r => r.startsWith('▾ 目前位置'))
+    expect(at).toBeGreaterThan(0)
+    const fold = await mountPane()
+    await fold.press({ key: 'b' + at })
+    await fold.unmount()
+    expect((await rowsNow())[at].startsWith('▸ 目前位置')).toBe(true)
+    const band = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: 209 }, viewport: { columns: 209, rows: 50, isFullscreen: true } })
+    await band.press({ key: 'position' })
+    await band.unmount()
+    expect((await rowsNow())[at].startsWith('▾ 目前位置')).toBe(true)
+  })
+
+  test('P8 band: a slot pressed while an ⓘ press is still opening wins, and the next ⓘ steps on from the slot\'s tab (' + surface + ')', async ($, on) => {
+    const w = world(on, richWorld())
+    await start($, surface)
+    let release: () => void = () => {}
+    w.openGate = new Promise<void>(r => { release = r })
+    const band = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    const a = await band()
+    const pa = a.press({ key: 'info' }) // parked on the gate
+    const b = await band()
+    const pb = b.press({ key: 'dispatch' })
+    await new Promise(r => setTimeout(r, 20))
+    release()
+    await Promise.all([pa, pb])
+    await a.unmount()
+    await b.unmount()
+    const activeTab = async () => {
+      const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+      const tab = ((await pane.findAll({ type: 'Button' })) as Drawn[]).find(x => isActiveTab(x))?.props?.key
+      await pane.unmount()
+      return tab
+    }
+    expect(await activeTab()).toBe('dispatch') // the stale ⓘ press did not drag it back to Now
+    w.openGate = null
+    const c = await band()
+    await c.press({ key: 'info' })
+    await c.unmount()
+    expect(await activeTab()).toBe('review') // one step on from Dispatch
   })
 
   test('P7 band: the info press cycles the six tabs while the pane is open; closed it opens on Now (' + surface + ')', async ($, on) => {
@@ -2407,11 +2516,11 @@ for (const surface of SURFACES) {
     worldEn(on, files)
     await start($, surface)
     const wide = await bandLine($, surface, 209)
-    expect(wide.text).toBe('unavailable · run: autopilot status runs --watch --project ' + KEY + ' │ ⓘ')
+    expect(wide.text).toBe('unavailable · run: autopilot status runs --watch --project ' + KEY + ' │ ⓘ ')
     expect(walkTexts(wide.tree)[0].props?.dimColor).toBe(true)
     const narrow = await bandLine($, surface, 40)
     expect(displayWidth(narrow.text)).toBeLessThanOrEqual(40)
-    expect(narrow.text.endsWith('… │ ⓘ')).toBe(true)
+    expect(narrow.text.endsWith('… │ ⓘ ')).toBe(true)
     expect(narrow.info).toBeDefined()
   })
 
@@ -2635,11 +2744,11 @@ test('P7 model: slot texts and theme keys', () => {
   // spend: `$<integer> <bar> <pct>`; warning from 80 %, error from 100 %
   const colorOf = (brain: number) => slotSpend({ brain, cap: 150 })?.segs[0].color
   const lay = (s: Slot | null, cols: number) => layoutBand(s === null ? [] : [s], cols).text
-  expect(lay(slotSpend({ brain: 119.6, cap: 150 }), 209)).toBe('$120 ▰▰▰▰▰▰▰▰▱▱ 80% │ ⓘ')
-  expect(lay(slotSpend({ brain: 119.6, cap: 150 }), 150)).toBe('$120 ▰▰▰▰▱ │ ⓘ')
-  expect(lay(slotSpend({ brain: 119.6, cap: 150 }), 100)).toBe('$▰▰▱ │ ⓘ')
-  expect(lay(slotSpend({ brain: 12, cap: 100 }), 209)).toBe('$12 ▰▱▱▱▱▱▱▱▱▱ 12% │ ⓘ')
-  expect(lay(slotSpend({ brain: 160, cap: 150 }), 209)).toBe('$160 ▰▰▰▰▰▰▰▰▰▰ 107% │ ⓘ') // over the cap: the bar is full, the percent is honest
+  expect(lay(slotSpend({ brain: 119.6, cap: 150 }), 209)).toBe('$120 ▰▰▰▰▰▰▰▰▱▱ 80% │ ⓘ ')
+  expect(lay(slotSpend({ brain: 119.6, cap: 150 }), 150)).toBe('$120 ▰▰▰▰▱ │ ⓘ ')
+  expect(lay(slotSpend({ brain: 119.6, cap: 150 }), 100)).toBe('$▰▰▱ │ ⓘ ')
+  expect(lay(slotSpend({ brain: 12, cap: 100 }), 209)).toBe('$12 ▰▱▱▱▱▱▱▱▱▱ 12% │ ⓘ ')
+  expect(lay(slotSpend({ brain: 160, cap: 150 }), 209)).toBe('$160 ▰▰▰▰▰▰▰▰▰▰ 107% │ ⓘ ') // over the cap: the bar is full, the percent is honest
   expect(colorOf(119)).toBeUndefined()
   expect(colorOf(120)).toBe('warning')
   expect(colorOf(149)).toBe('warning')
@@ -2676,9 +2785,9 @@ test('P7 model: the stage text is cut with … when the line still does not fit,
   expect(displayWidth(line.text)).toBeLessThanOrEqual(125)
   expect(displayWidth(line.text)).toBeGreaterThanOrEqual(123) // cut as little as needed
   expect(line.text.startsWith('● 進行中 │ M·l5 ▸ implement')).toBe(true)
-  expect(line.text.endsWith('… │ ⚙1 │ ⓘ')).toBe(true)
-  expect(layoutBand(slots, 209).text).toBe('● 進行中 │ M·l5 ▸ implement-' + 'x'.repeat(100) + ' ◷3m │ ⚙1 │ ⓘ')
-  expect(layoutBand(slots, 100).text).toBe('● 進行中 │ ⚙1 │ ⓘ') // 80-119: no position slot at all
+  expect(line.text.endsWith('… │ ⚙1 │ ⓘ ')).toBe(true)
+  expect(layoutBand(slots, 209).text).toBe('● 進行中 │ M·l5 ▸ implement-' + 'x'.repeat(100) + ' ◷3m │ ⚙1 │ ⓘ ')
+  expect(layoutBand(slots, 100).text).toBe('● 進行中 │ ⚙1 │ ⓘ ') // 80-119: no position slot at all
 })
 
 test('P7 width table: below 160 the load-source chip goes but `⚑N` stays down to the narrowest line (a docked panel cannot hide the owner reminder)', () => {
@@ -2688,13 +2797,13 @@ test('P7 width table: below 160 the load-source chip goes but `⚑N` stays down 
     verdict: { mark: '●', word: '進行中', key: 'suggestion' }, marker: null, live: 1, stalled: 0, review: null, qc: null, decisions: null, spend: null,
     loadSource: withLs ? ls : null, residue: rs(n), nowMs: 0,
   })
-  expect(layoutBand(slots(2), 209).text).toBe('● 進行中 │ ⚙1 │ dev↓3 ⚑2 │ ⓘ')
-  expect(layoutBand(slots(2), 159).text).toBe('● 進行中 │ ⚙1 │ ⚑2 │ ⓘ') // the docked panel case (bodyColumns 114 at 209 columns)
-  expect(layoutBand(slots(2), 114).text).toBe('● 進行中 │ ⚙1 │ ⚑2 │ ⓘ')
-  expect(layoutBand(slots(2, false), 114).text).toBe('● 進行中 │ ⚙1 │ ⚑2 │ ⓘ')
-  expect(layoutBand(slots(0), 114).text).toBe('● 進行中 │ ⚙1 │ ⓘ') // no residue to act on: the chip alone leaves no empty slot or doubled separator
-  expect(layoutBand(slots(2), 79).text).toBe('● 進行中 │ ⚙1 │ ⚑2 │ ⓘ') // < 80 keeps verdict, ⚙ and ⚑
-  expect(layoutBand(slots(2), 20).text).toBe('● 進行中 │ ⚑2 │ ⓘ') // the dispatch count goes before the owner reminder does
+  expect(layoutBand(slots(2), 209).text).toBe('● 進行中 │ ⚙1 │ dev↓3 ⚑2 │ ⓘ ')
+  expect(layoutBand(slots(2), 159).text).toBe('● 進行中 │ ⚙1 │ ⚑2 │ ⓘ ') // the docked panel case (bodyColumns 114 at 209 columns)
+  expect(layoutBand(slots(2), 114).text).toBe('● 進行中 │ ⚙1 │ ⚑2 │ ⓘ ')
+  expect(layoutBand(slots(2, false), 114).text).toBe('● 進行中 │ ⚙1 │ ⚑2 │ ⓘ ')
+  expect(layoutBand(slots(0), 114).text).toBe('● 進行中 │ ⚙1 │ ⓘ ') // no residue to act on: the chip alone leaves no empty slot or doubled separator
+  expect(layoutBand(slots(2), 79).text).toBe('● 進行中 │ ⚙1 │ ⚑2 │ ⓘ ') // < 80 keeps verdict, ⚙ and ⚑
+  expect(layoutBand(slots(2), 20).text).toBe('● 進行中 │ ⚑2 │ ⓘ ') // the dispatch count goes before the owner reminder does
 })
 
 // ---- P7 review round 1 fixes ----
@@ -2727,7 +2836,7 @@ for (const surface of SURFACES) {
       world(on, richWorld())
       await start($, surface)
       const line = await bandLine($, surface, cols)
-      expect(line.text.endsWith('ⓘ')).toBe(true)
+      expect(line.text.endsWith('ⓘ ')).toBe(true)
       expect(line.text.startsWith('⏸')).toBe(true)
       expect(displayWidth(line.text)).toBeLessThanOrEqual(cols)
       expect(line.info).toBeDefined()
@@ -2738,10 +2847,11 @@ for (const surface of SURFACES) {
     world(on, richWorld())
     await start($, surface)
     const at = async (n: number) => (await bandLine($, surface, n)).text
-    expect(await at(27)).toBe('⏸ 疑似卡住 │ ⚙2 ⏸1 │ ⚑2 │ ⓘ') // exactly fits
-    expect(await at(26)).toBe('⏸ 疑似卡住 │ ⚙2 │ ⚑2 │ ⓘ') // the stalled count goes first
-    expect(await at(23)).toBe('⏸ 疑似卡住 │ ⚑2 │ ⓘ') // then the live count
-    expect(await at(18)).toBe('⏸ 疑似卡… │ ⚑2 │ ⓘ') // then the verdict word, never the ⚑ or the ⓘ
+    // every edge is one column wider than before P8: the ⓘ label is 'ⓘ ' (two cells, see BAND_INFO_LABEL), so each step lands one column later
+    expect(await at(28)).toBe('⏸ 疑似卡住 │ ⚙2 ⏸1 │ ⚑2 │ ⓘ ') // exactly fits
+    expect(await at(27)).toBe('⏸ 疑似卡住 │ ⚙2 │ ⚑2 │ ⓘ ') // the stalled count goes first
+    expect(await at(24)).toBe('⏸ 疑似卡住 │ ⚑2 │ ⓘ ') // then the live count
+    expect(await at(19)).toBe('⏸ 疑似卡… │ ⚑2 │ ⓘ ') // then the verdict word, never the ⚑ or the ⓘ
   })
 
   test('P7 fix C: the Now tab hero is verdict + project + elapsed, the stage is drawn once there, progress is its own row (' + surface + ')', async ($, on) => {
@@ -2845,25 +2955,25 @@ const gridLine = (locale: 'en' | 'zh-TW', state: 'idle' | 'running' | 'blocked',
 
 // the owner-approved mockup lines (docs/plans/evidence/2026-10-10-tui-v2): idle / running / blocked at 209 / 160 / 140 / 120 / 80, both locales
 const GRID: Record<string, string> = {
-  'en idle 209': '◌ Idle │ $12 ▰▱▱▱▱▱▱▱▱▱ 12% │ dev↓3 │ ⓘ',
-  'en idle 120': '◌ Idle │ $12 ▰▱▱▱▱ │ ⓘ',
-  'en idle 80': '◌ Idle │ $▱▱▱ │ ⓘ',
-  'en running 209': '● Running │ M·l5 ●─●─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2fam │ ⚙2 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev↓3 │ ⓘ',
-  'en running 160': '● Running │ M·l5 ●─●─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2fam │ ⚙2 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev↓3 │ ⓘ',
-  'en running 140': '● Running │ M·l5 ▸ implement │ ▰▰▰▱▱ 3/5 │ ⚙2 ↺ R2 QC▲ │ $60 ▰▰▰▱▱ │ ⓘ',
-  'en running 120': '● Running │ M·l5 ▸ implement │ ▰▰▰▱▱ 3/5 │ ⚙2 ↺ R2 QC▲ │ $60 ▰▰▰▱▱ │ ⓘ',
-  'en running 80': '● Running │ ▰▰▰▱▱ │ ⚙2 QC▲ │ $▰▰▱ │ ⓘ',
-  'en blocked 209': '▲ Needs you pick adapter A or B │ M·l5 ●─●─●─◐─○ review ◷3m │ ▰▰▰▱▱ 3/5 ·2fam │ ⚙1 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $85 ▰▰▰▰▰▰▰▰▰▱ 85% │ dev↓3 ⚑3 │ ⓘ',
-  'en blocked 140': '▲ Needs you │ M·l5 ▸ review │ ▰▰▰▱▱ 3/5 │ ⚙1 ↺ R2 QC▲ │ $85 ▰▰▰▰▱ │ ⚑3 │ ⓘ',
-  'en blocked 80': '▲ Needs you │ ▰▰▰▱▱ │ ⚙1 QC▲ │ $▰▰▰ │ ⚑3 │ ⓘ',
-  'zh-TW idle 209': '◌ 待命 │ $12 ▰▱▱▱▱▱▱▱▱▱ 12% │ dev↓3 │ ⓘ',
-  'zh-TW idle 80': '◌ 待命 │ $▱▱▱ │ ⓘ',
-  'zh-TW running 209': '● 進行中 │ M·l5 ●─●─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙2 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev↓3 │ ⓘ',
-  'zh-TW running 120': '● 進行中 │ M·l5 ▸ implement │ ▰▰▰▱▱ 3/5 │ ⚙2 ↺ R2 QC▲ │ $60 ▰▰▰▱▱ │ ⓘ',
-  'zh-TW running 80': '● 進行中 │ ▰▰▰▱▱ │ ⚙2 QC▲ │ $▰▰▱ │ ⓘ',
-  'zh-TW blocked 209': '▲ 要你決定 選 adapter 方案 A 或 B │ M·l5 ●─●─●─◐─○ review ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙1 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $85 ▰▰▰▰▰▰▰▰▰▱ 85% │ dev↓3 ⚑3 │ ⓘ',
-  'zh-TW blocked 140': '▲ 要你決定 │ M·l5 ▸ review │ ▰▰▰▱▱ 3/5 │ ⚙1 ↺ R2 QC▲ │ $85 ▰▰▰▰▱ │ ⚑3 │ ⓘ',
-  'zh-TW blocked 80': '▲ 要你決定 │ ▰▰▰▱▱ │ ⚙1 QC▲ │ $▰▰▰ │ ⚑3 │ ⓘ',
+  'en idle 209': '◌ Idle │ $12 ▰▱▱▱▱▱▱▱▱▱ 12% │ dev↓3 │ ⓘ ',
+  'en idle 120': '◌ Idle │ $12 ▰▱▱▱▱ │ ⓘ ',
+  'en idle 80': '◌ Idle │ $▱▱▱ │ ⓘ ',
+  'en running 209': '● Running │ M·l5 ●─●─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2fam │ ⚙2 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev↓3 │ ⓘ ',
+  'en running 160': '● Running │ M·l5 ●─●─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2fam │ ⚙2 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev↓3 │ ⓘ ',
+  'en running 140': '● Running │ M·l5 ▸ implement │ ▰▰▰▱▱ 3/5 │ ⚙2 ↺ R2 QC▲ │ $60 ▰▰▰▱▱ │ ⓘ ',
+  'en running 120': '● Running │ M·l5 ▸ implement │ ▰▰▰▱▱ 3/5 │ ⚙2 ↺ R2 QC▲ │ $60 ▰▰▰▱▱ │ ⓘ ',
+  'en running 80': '● Running │ ▰▰▰▱▱ │ ⚙2 QC▲ │ $▰▰▱ │ ⓘ ',
+  'en blocked 209': '▲ Needs you pick adapter A or B │ M·l5 ●─●─●─◐─○ review ◷3m │ ▰▰▰▱▱ 3/5 ·2fam │ ⚙1 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $85 ▰▰▰▰▰▰▰▰▰▱ 85% │ dev↓3 ⚑3 │ ⓘ ',
+  'en blocked 140': '▲ Needs you │ M·l5 ▸ review │ ▰▰▰▱▱ 3/5 │ ⚙1 ↺ R2 QC▲ │ $85 ▰▰▰▰▱ │ ⚑3 │ ⓘ ',
+  'en blocked 80': '▲ Needs you │ ▰▰▰▱▱ │ ⚙1 QC▲ │ $▰▰▰ │ ⚑3 │ ⓘ ',
+  'zh-TW idle 209': '◌ 待命 │ $12 ▰▱▱▱▱▱▱▱▱▱ 12% │ dev↓3 │ ⓘ ',
+  'zh-TW idle 80': '◌ 待命 │ $▱▱▱ │ ⓘ ',
+  'zh-TW running 209': '● 進行中 │ M·l5 ●─●─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙2 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev↓3 │ ⓘ ',
+  'zh-TW running 120': '● 進行中 │ M·l5 ▸ implement │ ▰▰▰▱▱ 3/5 │ ⚙2 ↺ R2 QC▲ │ $60 ▰▰▰▱▱ │ ⓘ ',
+  'zh-TW running 80': '● 進行中 │ ▰▰▰▱▱ │ ⚙2 QC▲ │ $▰▰▱ │ ⓘ ',
+  'zh-TW blocked 209': '▲ 要你決定 選 adapter 方案 A 或 B │ M·l5 ●─●─●─◐─○ review ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ⚙1 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $85 ▰▰▰▰▰▰▰▰▰▱ 85% │ dev↓3 ⚑3 │ ⓘ ',
+  'zh-TW blocked 140': '▲ 要你決定 │ M·l5 ▸ review │ ▰▰▰▱▱ 3/5 │ ⚙1 ↺ R2 QC▲ │ $85 ▰▰▰▰▱ │ ⚑3 │ ⓘ ',
+  'zh-TW blocked 80': '▲ 要你決定 │ ▰▰▰▱▱ │ ⚙1 QC▲ │ $▰▰▰ │ ⚑3 │ ⓘ ',
 }
 
 test('TUI v2 band grid: idle / running / blocked at 209 / 160 / 140 / 120 / 80 in en and zh-TW never exceed the column budget; the approved lines are drawn', () => {
@@ -2874,7 +2984,7 @@ test('TUI v2 band grid: idle / running / blocked at 209 / 160 / 140 / 120 / 80 i
         const where = locale + ' ' + state + ' ' + cols
         expect(displayWidth(line.text), where).toBeLessThanOrEqual(cols) // the budget is in display cells, CJK = 2
         expect(line.width, where).toBe(displayWidth(line.text))
-        expect(line.text.endsWith('ⓘ'), where).toBe(true)
+        expect(line.text.endsWith('ⓘ '), where).toBe(true)
         expect(line.text.startsWith(state === 'idle' ? '◌' : state === 'running' ? '●' : '▲'), where).toBe(true)
         if (state === 'blocked') expect(line.text, where).toContain('⚑3') // the owner reminder survives every width
         // tiers: the stage walk, the reason phrase, the 10-cell spend bar and the percent are for >= 160 only; the amount goes below 120
@@ -3005,7 +3115,7 @@ test('layoutBand: a long reason is clipped to the room left: a prefix of it is d
     for (const cols of [160, 209]) {
       const line = at(cols)
       expect(displayWidth(line.text), locale + ' ' + cols).toBeLessThanOrEqual(cols)
-      expect(line.text.endsWith(' │ ⓘ'), locale + ' ' + cols).toBe(true)
+      expect(line.text.endsWith(' │ ⓘ '), locale + ' ' + cols).toBe(true)
       const v = verdictOf('decide', t)
       const body = line.text.slice(v.mark.length + 1 + v.word.length + 1, line.text.indexOf(' │ ')) // the text after the verdict word
       expect(body.length, locale + ' ' + cols + ': a reason is drawn').toBeGreaterThan(5)
@@ -3023,12 +3133,12 @@ test('layoutBand: a long reason is clipped to the room left: a prefix of it is d
     expect(edge, locale + ' the scan starts below the edge').toBeGreaterThan(160)
     expect(drawsReason(edge - 1), locale + ' one column narrower: no reason').toBe(false)
     expect(drawsReason(edge), locale + ' at the edge: the reason is drawn').toBe(true)
-    // the reason needs 8 cells of room after the ⓘ cell and the separating space: edge = bare width + 1 (space) + 8 + 1 (ⓘ is in W already) -> W + 9
+    // the reason needs 8 cells (REASON_MIN) after its separating space: edge = bare width + 1 (the space) + 8 -> W + 9 (the ⓘ label is in W already)
     expect(edge, locale + ' edge = W + 9').toBe(W + 9)
     for (let cols = edge - 1; cols <= edge + 12; cols += 1) {
       const line = atW(cols)
       expect(displayWidth(line.text), locale + ' edge ' + cols).toBeLessThanOrEqual(cols)
-      expect(line.text.endsWith('ⓘ'), locale + ' edge ' + cols).toBe(true)
+      expect(line.text.endsWith('ⓘ '), locale + ' edge ' + cols).toBe(true)
     }
     expect(atW(edge).width, locale + ' the reason takes the spare cells at the edge (a 2-cell character may leave one)').toBeGreaterThanOrEqual(locale === 'en' ? edge : edge - 1)
     expect(atW(edge).width, locale + ' never over the budget').toBeLessThanOrEqual(edge)

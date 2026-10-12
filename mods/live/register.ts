@@ -41,9 +41,9 @@ import {
   acceptanceToast, autoResidueCount, makeRecentTracker, bandLine1, bandView, buildSections, checkEnvelope, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
   headerText, hhmm, projectName as projectNameOf, isKey, isSectionId, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
   readForeman, readLoadSource, readSpendHistory, hourlySpend, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
-  spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd,
+  slotTab, slotUnfolds, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd,
 } from './model'
-import type { Counts, DecisionsView, RecentGroup, EnvelopeCheck, JobModel, Json, LiveSnapshot, Manifest, PaneTab, Sources } from './model'
+import type { Counts, DecisionsView, RecentGroup, EnvelopeCheck, JobModel, Json, LiveSnapshot, Manifest, PaneTab, SlotId, Sources } from './model'
 
 const TICK_MS = 5000
 const PANE_ID = 'autopilot-live'
@@ -520,7 +520,24 @@ export const register: Register = on => {
         if (seq === pressSeq) decided = null
       }
     }
-    return Band($.ui.resolve(e), snapshot, e.props.bodyColumns, info, tr)
+    // a slot pressed opens the pane on the tab that explains it (model.ts slotTab). It is a press like the ⓘ's: it takes a sequence number, so an
+    // ⓘ press still in flight becomes stale and cannot drag the tab back, and it records its tab as `decided` while its open is in flight, so an
+    // ⓘ landing meanwhile steps on from the slot's tab instead of reading a pane $.ui.panes() does not list yet.
+    const slot = async (id: SlotId) => {
+      const seq = ++pressSeq
+      const tab = slotTab(id)
+      decided = Promise.resolve(tab)
+      paneTab = tab
+      const unfold = slotUnfolds(id)
+      if (unfold !== null) folded.delete(unfold)
+      try {
+        $.ui.invalidate('ui.render')
+        await $.ui.open({ id: PANE_ID, title: 'Autopilot', focus: true, closeOnEscape: true })
+      } finally {
+        if (seq === pressSeq) decided = null
+      }
+    }
+    return Band($.ui.resolve(e), snapshot, e.props.bodyColumns, info, tr, slot)
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, ($, e) => Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { paneTab = t; $.ui.invalidate('ui.render'); void ringToNext($) }, tr, e.props.bodyColumns, () => { paneTab = nextTab(paneTab); $.ui.invalidate('ui.render') }, expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') }, folded))

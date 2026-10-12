@@ -1112,7 +1112,7 @@ export type ThemeKey = 'claude' | 'warning' | 'error' | 'success' | 'suggestion'
 export type SlotId = 'verdict' | 'position' | 'unit' | 'dispatch' | 'review' | 'decisions' | 'spend' | 'hygiene'
 // tag: which part the width table may drop or shorten (age, k/N, 族, the bar, the stage text)
 export type SegTag = 'age' | 'kn' | 'fam' | 'bar' | 'stage' | 'live' | 'stalled' | 'chip' | 'wt' | 'walk' | 'arrow' | 'reason' | 'round' | 'qc' | 'amt' | 'pct' | 'bar10' | 'bar5' | 'bar3'
-export type Seg = { text: string; color?: ThemeKey; bold?: boolean; dim?: boolean; tag?: SegTag }
+export type Seg = { text: string; color?: ThemeKey; bold?: boolean; dim?: boolean; tag?: SegTag; slot?: SlotId } // slot: set by layoutBand on the band line (the Button it presses); a separator has none
 export type Slot = { id: SlotId; segs: Seg[] }
 
 // Terminal cell width of a string: East Asian Wide / Fullwidth = 2, combining and zero-width = 0, everything else (the band glyphs
@@ -1452,6 +1452,9 @@ export function bandSlots(f: BandFacts, t: T = T_EN): Slot[] {
 
 export const BAND_SEP = ' │ '
 export const BAND_ICON = 'ⓘ'
+// the ⓘ Button's label: the glyph plus a space. ⓘ (U+24D8) is East Asian Width Ambiguous: displayWidth counts it one cell, a CJK-locale terminal
+// (the owner's) draws it two, so a one-cell Button left the glyph's right half outside the control. The space makes the Button two cells either way.
+export const BAND_INFO_LABEL = BAND_ICON + ' '
 export type BandLayout = { segs: Seg[]; text: string; width: number }
 
 // slots in one group read as one thing (single space between): the dispatch count with the review round and QC chip; every other slot is its own group; groups are separated by ` │ `
@@ -1488,12 +1491,12 @@ export function layoutBand(slots: Slot[], columns: number): BandLayout {
     const out: Seg[] = []
     list.forEach((s, i) => {
       if (i > 0) out.push(GROUP[s.id] === GROUP[list[i - 1].id] ? sp(' ') : sp(BAND_SEP, { color: 'subtle' }))
-      out.push(...s.segs)
+      out.push(...s.segs.map(g => ({ ...g, slot: s.id })))
     })
     out.push(sp(BAND_SEP, { color: 'subtle' }))
     return out
   }
-  const widthOf = (g: Seg[]) => g.reduce((n, x) => n + displayWidth(x.text), 0) + displayWidth(BAND_ICON)
+  const widthOf = (g: Seg[]) => g.reduce((n, x) => n + displayWidth(x.text), 0) + displayWidth(BAND_INFO_LABEL)
   let segs = join(kept)
   let over = widthOf(segs) - columns
   if (over > 0) segs = segs.map(g => (g.tag === 'stage' ? { ...g, text: truncateToWidth(g.text, Math.max(2, displayWidth(g.text) - over)) } : g))
@@ -1519,20 +1522,24 @@ export function layoutBand(slots: Slot[], columns: number): BandLayout {
   // the verdict's reason phrase (wide bands only): whatever room is left, clipped, right after the verdict word
   const room = columns - widthOf(segs) - 1
   if (rs.text !== null && segs[0] !== undefined && kept[0] !== undefined && kept[0].id === 'verdict' && room >= REASON_MIN) { // widthOf() already counts the ⓘ, so room = free cells - 1 and the inserted ' ' + reason (1 + room) fills the line exactly
-    segs = [segs[0], sp(' ' + truncateToWidth(rs.text, Math.min(room, REASON_MAX)), { dim: true }), ...segs.slice(1)]
+    segs = [segs[0], { ...sp(' ' + truncateToWidth(rs.text, Math.min(room, REASON_MAX)), { dim: true }), slot: 'verdict' }, ...segs.slice(1)]
   }
-  return { segs, text: segs.map(g => g.text).join('') + BAND_ICON, width: widthOf(segs) }
+  return { segs, text: segs.map(g => g.text).join('') + BAND_INFO_LABEL, width: widthOf(segs) }
 }
 
-// a non-ok snapshot: one dim line `<reason> │ ⓘ`, the reason cut to fit
+// a non-ok snapshot: one dim line `<reason> │ ⓘ `, the reason cut to fit
 export function plainBandText(reason: string, columns: number): string {
-  return truncateToWidth(reason.replace(/\s*\n\s*/g, ' '), Math.max(1, columns - displayWidth(BAND_SEP) - displayWidth(BAND_ICON)))
+  return truncateToWidth(reason.replace(/\s*\n\s*/g, ' '), Math.max(1, columns - displayWidth(BAND_SEP) - displayWidth(BAND_INFO_LABEL)))
 }
 
 // ---- the panel's tabs: Now (absorbs the stage walk) · Dispatch · Review (absorbs the decisions) · Spend · Hygiene · ? (the legend) ----
 export const NEXT_TAB_GLYPH = '▸' // the pane's first Button: Enter on it shows the next tab (pane.tsx tabStrip)
 export const PANE_TABS = ['now', 'dispatch', 'review', 'spend', 'hygiene', 'legend'] as const
 export type PaneTab = (typeof PANE_TABS)[number]
+// a band slot pressed opens the pane on the tab that explains it; position and unit live in Now's 目前位置 section, which the press also unfolds
+const SLOT_TAB: Record<SlotId, PaneTab> = { verdict: 'now', position: 'now', unit: 'now', dispatch: 'dispatch', review: 'review', decisions: 'review', spend: 'spend', hygiene: 'hygiene' }
+export const slotTab = (id: SlotId): PaneTab => SLOT_TAB[id]
+export const slotUnfolds = (id: SlotId): string | null => (id === 'position' || id === 'unit' ? SECTION.where : null)
 export const tabLabel = (tab: PaneTab, t: T): string => t('tab.' + tab)
 
 // What a pane line is drawn with: the translator and the pane's width in cells (rules and bars size themselves to it)

@@ -32,7 +32,9 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 # replace and touch entries at the real store root at any time, so ANY snapshot diff of the root
 # (inode/mtime) is false-red noise under concurrency. What identifies a leak from THIS run is its own
 # unique names: the probe token every stub cell writes, and this run's TEST_TMP basename. Scan the
-# real roots recursively for those; the T5 mutation control proves the probe scan can fail.
+# real roots recursively for those. Root-level leaks under any name are caught separately: the whole
+# test runs with a fake HOME and a fake XDG_RUNTIME_DIR, asserted empty at the end. (The T5 mutation
+# control exercises the fake XDG store, not real_token_hits.)
 PROBE_TAG="evalx-$$-$RANDOM"; export ONOFF_PROBE_TAG="$PROBE_TAG"
 REAL_ROOTS=("/run/user/$(id -u)/autopilot" "$HOME/.autopilot")
 real_token_hits() {
@@ -43,6 +45,9 @@ real_token_hits() {
   done
   echo "$n"
 }
+
+# fake HOME: a cell that writes ~/.autopilot lands here, never in the host's real home
+FAKE_HOME="$TEST_TMP/home"; mkdir -p "$FAKE_HOME"; export HOME="$FAKE_HOME"
 
 # fake XDG runtime dir on tmpfs: every stub cell resolves "the real live dir" HERE, never the host's
 FAKE_XDG=""
@@ -290,5 +295,7 @@ tail -n +3 "$pb/prompt.md" | cmp -s - "$BASE/tasks/d1-s-tiny-feature/task.md" ||
 
 echo "=== the real stores were never touched ==="
 [ "$(real_token_hits)" = 0 ] || fail "a cell wrote its probe into the REAL live store"
+[ ! -e "$FAKE_HOME/.autopilot" ] || fail "a cell wrote ~/.autopilot (fake HOME) under some name"
+[ -z "$FAKE_XDG" ] || [ ! -e "$FAKE_XDG/autopilot" ] || fail "a cell wrote into the (fake) shared live dir"
 
 echo "PASS: skill-onoff generic harness (E1-E5)"

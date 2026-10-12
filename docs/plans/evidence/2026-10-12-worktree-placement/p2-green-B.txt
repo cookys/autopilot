@@ -1,0 +1,15 @@
+# P2 commit B — green run (each suite alone, in order)
+
+resolve-repo-placement rc=0
+identifier-scan rc=0
+probe-unknown rc=0
+worktree-activity rc=0
+orchestrator-edit-gate rc=0
+repo-residue-auto rc=0
+dispatch-batch rc=0
+dispatch-foreman rc=0
+dispatch-hetero-contract rc=0
+dispatch-hetero rc=0 (re-run after the case-4 fresh-sandbox fix)
+DONE
+
+## failing lines

@@ -390,6 +390,12 @@ if [ "$MODE" = merge-back ]; then
     err_usage "could not resolve integration worktree placement"
   fi
   INTEG_WT="$(mktemp -u -d "$integ_template")"
+  # A worktree inside the main checkout must not show there as untracked.
+  case "$INTEG_WT" in */.claude/worktrees/*)
+    integ_excl="$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir)/info/exclude"
+    mkdir -p "$(dirname "$integ_excl")"
+    grep -qxF /.claude/worktrees/ "$integ_excl" 2>/dev/null || printf '%s\n' /.claude/worktrees/ >> "$integ_excl" ;;
+  esac
   # detached worktree at base_sha — no integration branch ref to leak/collide.
   if ! git -C "$REPO" worktree add --quiet --detach "$INTEG_WT" "$base_sha" >/dev/null 2>&1; then
     err_usage "could not create integration worktree"

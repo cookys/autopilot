@@ -281,7 +281,10 @@ if [ "$RESUME" -eq 0 ]; then
   dispatch_branch_ledger_append "$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" "$BRANCH" "$RUN_ID" "${AUTOPILOT_WORKTREE_ROOT_RUN_ID:-$RUN_ID}" "$BASE_SHA"
   # Schema-2 marker + lifetime flock so reap-dispatch-worktrees.sh treats this like any rail's.
   _excl="$(git rev-parse --git-common-dir)/info/exclude"; mkdir -p "$(dirname "$_excl")"
-  for _name in .autopilot-worktree .autopilot-worktree.lock; do
+  _names=(.autopilot-worktree .autopilot-worktree.lock)
+  # A worktree inside the main checkout must not show there as untracked.
+  case "$WT" in */.claude/worktrees/*) _names+=(/.claude/worktrees/) ;; esac
+  for _name in "${_names[@]}"; do
     grep -qxF "$_name" "$_excl" 2>/dev/null || printf '%s\n' "$_name" >> "$_excl"
   done
   {

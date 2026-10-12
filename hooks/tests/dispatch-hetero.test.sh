@@ -284,9 +284,17 @@ assert_contains "$OUT" '"status": "committed"' "qoder committed status"
 assert_contains "$OUT" '"runner": "qoderclicn"' "qoder runner reported"
 
 # 4. committed path: stub commits → exit 0, JSON committed, branch survives, worktree removed
-# First run that places a worktree: the sandbox has no .claude/ yet, so this run creates the
-# placement directory — which must not read as a main-checkout mutation (status committed below).
-[ -e "$SBX/.claude" ] && fail "4: precondition — sandbox starts without .claude/" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
+# First run that places a worktree, in a fresh sandbox (earlier cases already placed some in $SBX):
+# the run creates .claude/worktrees itself, which must not read as a main-checkout mutation.
+FIRST_SBX="$TEST_TMP/repo-first"
+mkdir -p "$FIRST_SBX"
+git -C "$FIRST_SBX" init -q -b develop
+git -C "$FIRST_SBX" -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
+[ -e "$FIRST_SBX/.claude" ] && fail "4: precondition — fresh sandbox starts without .claude/" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
+OUT="$(cd "$FIRST_SBX" && "$SCRIPT" --branch feat/first --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "4: first placement in a sandbox without .claude/ exits 0"
+assert_contains "$OUT" '"status": "committed"' "4: first placement is committed, not main_checkout_mutated"
+assert_eq "" "$(git -C "$FIRST_SBX" status --porcelain)" "4: first placement leaves the sandbox porcelain clean"
 DIRECT_AUTHORITY_BEFORE="$(
   git -C "$SBX" for-each-ref --format='%(refname)' refs/autopilot/lifecycle-roots/ \
     | wc -l

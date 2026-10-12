@@ -533,13 +533,15 @@ function receipt(opts) {
 function findLedgers(projectDir) {
   const out = [];
   const stack = [projectDir];
+  // Rail and session worktrees under .claude/worktrees are other checkouts; node_modules is not ours.
+  const nested = path.join(projectDir, '.claude', 'worktrees');
   while (stack.length) {
     const d = stack.pop();
     let entries = [];
     try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch (err) { continue; }
     for (const e of entries) {
       const p = path.join(d, e.name);
-      if (e.isDirectory()) stack.push(p);
+      if (e.isDirectory()) { if (e.name !== 'node_modules' && p !== nested) stack.push(p); }
       else if (e.name.endsWith('.jsonl')) out.push(p);
     }
   }

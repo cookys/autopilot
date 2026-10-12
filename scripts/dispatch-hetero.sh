@@ -2928,8 +2928,10 @@ fi
 
 _wt_prepare_common_excludes() {
   mkdir -p "$_wt_common_dir/info" || return 1
-  local exclude="$_wt_common_dir/info/exclude" name
-  for name in .autopilot-worktree .autopilot-worktree.lock; do
+  local exclude="$_wt_common_dir/info/exclude" name names=(.autopilot-worktree .autopilot-worktree.lock)
+  # A worktree inside the main checkout must not show there as untracked.
+  case "$WT" in */.claude/worktrees/*) names+=(/.claude/worktrees/) ;; esac
+  for name in "${names[@]}"; do
     grep -qxF "$name" "$exclude" 2>/dev/null \
       || printf '%s\n' "$name" >> "$exclude" \
       || return 1

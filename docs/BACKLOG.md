@@ -963,14 +963,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: check-phase-review-receipt --packets requires every packet's G1 at one head. Workaround used: temp branch at the set head, re-collect with --branch. Allow a later G1 when that packet's files are unchanged between heads.
 
-### Full-suite --parallel reds that pass standalone: three suites
-- **Status**: open
-- **Trigger**: next time a full parallel run is a gate (KR1-style acceptance, release)
-- **Effort**: M
-- **Source**: tmp-residue KR1 runs, 2026-10-12 (each passes standalone; first also red on develop)
-- **Pointer**: none
-- **Context**: skill-onoff-generic: real ~/.autopilot changed by concurrent sessions. dispatch-hetero-wall-timeout:181 host-wide pgrep sees sibling watchdogs. pending-revocation-fold reads the dispatch-contract.pre.js temp file that another suite deletes.
-
 ### completeness-scan: mktemp XXXXXX templates read as markers; --files with several files scans 0
 - **Status**: open
 - **Trigger**: next quality-pipeline run on a diff that adds mktemp templates

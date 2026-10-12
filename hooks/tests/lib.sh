@@ -335,11 +335,11 @@ make_pre_tree() {
     [ -e "$e" ] || continue
     b="$(basename "$e")"
     case "$b" in scripts|.git) continue ;; esac
-    ln -s "$e" "$dir/$b"
+    ln -sfn "$e" "$dir/$b"
   done
   for e in "$REPO_ROOT"/scripts/*; do
     [ -e "$e" ] || continue
-    ln -s "$e" "$dir/scripts/$(basename "$e")"
+    ln -sfn "$e" "$dir/scripts/$(basename "$e")"
   done
 }
 

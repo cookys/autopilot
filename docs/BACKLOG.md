@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0133 -->
+<!-- next-id: BL-0136 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1735,19 +1735,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: Give the suite its own frozen graph + registry fixture instead of the host files.
 
-### plan archiving rewrites a sealed mission graph
-- **Id**: BL-0130
-- **Status**: open
-- **Since**: 2026-10-13
-- **Origin**: self
-- **Problem**: 計畫歸檔工具會改寫計畫裡提到的路徑，但沒有避開已封存、帶有內容指紋的工作圖；歸檔後指紋對不上，相關測試轉紅。
-- **Impact**: 每歸檔一份帶封存工作圖的計畫，就會再弄壞一次，上一次已經得手動復原。
-- **Trigger**: next plan archive that references a docs/mission-*-execution-graph.json
-- **Effort**: XS
-- **Source**: lane A review, 2026-10-13
-- **Pointer**: none
-- **Context**: check-plan-graduation.js frozenAssetFiles() (:396-441) omits graphs carrying graph_digest; add them. Root of 6559da33.
-
 ### peer_report_lost misses a peer row deleted in the opt-in commit
 - **Id**: BL-0131
 - **Status**: open
@@ -1773,3 +1760,42 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: lane F review round 6, 2026-10-13
 - **Pointer**: none
 - **Context**: Add Ids to the collision rows (parity test :60,:73); note in backlog-entry.md that opt-in is per field (Since alone leaves Origin extra_content).
+
+### sealed-docs list covers only part of the sha-bound files
+- **Id**: BL-0133
+- **Status**: open
+- **Since**: 2026-10-13
+- **Origin**: self
+- **Problem**: 新的封存檔清單只收了一部分被指紋鎖定的檔案：有 10 份工作圖靠另一份授權檔鎖定、另有兩類評分與規格檔，都還不在清單裡，改寫連結的工具仍可能碰壞它們。
+- **Impact**: 目前現役的工作圖受歸檔工具另一道規則保護，沒出事；但文件檢查改寫連結時仍可能再弄壞一次。
+- **Trigger**: next touch of scripts/lib/sealed-docs.js or a doc rewriter
+- **Effort**: S
+- **Source**: lane S review, 2026-10-13
+- **Pointer**: none
+- **Context**: Add graphs with a paired *-task-authority.json, *.seal.json spec_path, eval rubrics; catch only MODULE_NOT_FOUND (warn otherwise); fix doc-drift-gate.js:129 vs :46 comment.
+
+### fifteen sealed plan/rubric files no longer match their manifest digest
+- **Id**: BL-0134
+- **Status**: open
+- **Since**: 2026-10-13
+- **Origin**: self
+- **Problem**: 有 15 份已封存的計畫或評分檔，內容早就和當初鎖定的指紋對不上，原因是之前的歸檔改寫；目前沒有任何流程會檢查它們。
+- **Impact**: 現在不影響任何流程；若日後把派工路由指回這些舊任務或重跑，會直接以指紋不符失敗。
+- **Trigger**: mission routing points at one of these missions, or a check starts scanning all source manifests
+- **Effort**: S
+- **Source**: lane S investigation, 2026-10-13
+- **Pointer**: none
+- **Context**: Pre-date 2f3a2477; list via a sha256 scan of docs/mission-*-sources.json. Restore bytes from the sealing commit, never re-seal.
+
+### session-id scrub test needs a real setsid on the host
+- **Id**: BL-0135
+- **Status**: open
+- **Since**: 2026-10-13
+- **Origin**: self
+- **Problem**: 檢查派工不外洩 session 編號的測試裡，有一個案例要借用主機上真的 setsid 程式；沒有這個程式的主機會誤判成失敗。
+- **Impact**: 只在沒有 setsid 的主機上出現假紅；一般 Linux 都有，影響很小。
+- **Trigger**: next touch of dispatch-runner-session-id-scrub test, or a host without setsid
+- **Effort**: XS
+- **Source**: lane P2 review round 2, 2026-10-13
+- **Pointer**: none
+- **Context**: Case 1c stub calls REAL_SETSID=$(command -v setsid); skip 1c when it is empty.

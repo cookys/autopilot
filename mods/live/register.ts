@@ -38,12 +38,12 @@ import type { AdvisoryTracker } from './advisories'
 import { Band } from './band'
 import { Pane } from './pane'
 import {
-  acceptanceToast, autoResidueCount, bandLine1, bandView, buildSections, checkEnvelope, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
+  acceptanceToast, autoResidueCount, makeRecentTracker, bandLine1, bandView, buildSections, checkEnvelope, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
   headerText, hhmm, projectName as projectNameOf, isKey, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
   readForeman, readLoadSource, readSpendHistory, hourlySpend, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
   spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd,
 } from './model'
-import type { Counts, DecisionsView, EnvelopeCheck, JobModel, Json, LiveSnapshot, Manifest, PaneTab, Sources } from './model'
+import type { Counts, DecisionsView, RecentGroup, EnvelopeCheck, JobModel, Json, LiveSnapshot, Manifest, PaneTab, Sources } from './model'
 
 const TICK_MS = 5000
 const PANE_ID = 'autopilot-live'
@@ -60,6 +60,10 @@ let timer: { cancel: () => void } | undefined
 let viewport: { columns: number; isFullscreen?: boolean } | null = null
 let paneAttempted = false
 let paneTab: PaneTab = 'now'
+const expanded = new Set<string>() // the recent-prompt groups the person opened (by group id)
+const recentTracker = makeRecentTracker()
+let recent: RecentGroup[] | null = null // survives ticks: the snapshot is rebuilt each time, a failed read keeps the last value
+let recentSid: string | null = null // group ids are transcript indexes, so a new session id (/clear) drops every opened group
 let tr: T = T_EN // the active translator, set at the start of every tick (and read by the band / pane draws)
 let pressSeq = 0 // one number per ⓘ press, taken before any await; only the latest press may assign paneTab or end the chain
 let decided: Promise<PaneTab> | null = null // the tab the latest unfinished press chose: a press landing meanwhile steps on from it (N rapid presses = N tabs)
@@ -415,7 +419,16 @@ async function refresh($: EngineInterface): Promise<void> {
     tr = await resolveT($)
     await pollAdvisories($, nowMs)
     const built = await buildSnapshot($, nowMs, tr)
-    snapshot = built.snap
+    try {
+      const sid = await $.session.id()
+      const msgs = await $.session.messages()
+      if (recentSid !== null && sid !== recentSid) expanded.clear()
+      recentSid = sid ?? null
+      if (Array.isArray(msgs)) recent = recentTracker.update(sid ?? '', msgs as never)
+    } catch (_e) {
+      // the transcript is optional garnish: keep the previous value
+    }
+    snapshot = { ...built.snap, recent }
     $.ui.invalidate('ui.render')
     // toasts: only between two fresh snapshots of the same scope
     if (built.snap.state === 'ok') {
@@ -508,5 +521,5 @@ export const register: Register = on => {
     return Band($.ui.resolve(e), snapshot, e.props.bodyColumns, info, tr)
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE_ID }, ($, e) => Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { paneTab = t; $.ui.invalidate('ui.render'); void ringToNext($) }, tr, e.props.bodyColumns, () => { paneTab = nextTab(paneTab); $.ui.invalidate('ui.render') }))
+  on('ui.render', { component: 'Pane', requestId: PANE_ID }, ($, e) => Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { paneTab = t; $.ui.invalidate('ui.render'); void ringToNext($) }, tr, e.props.bodyColumns, () => { paneTab = nextTab(paneTab); $.ui.invalidate('ui.render') }, expanded, (id: string) => { if (!expanded.delete(id)) expanded.add(id); $.ui.invalidate('ui.render') }))
 }

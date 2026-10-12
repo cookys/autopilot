@@ -122,6 +122,14 @@ GLM, …). Recipes, preconditions, and the outcome table live in
 The order below is what the rails actually accept; every step that cost a grant attempt when
 done differently is marked. Paths are this repo's; a consumer substitutes its own.
 
+0. **Generator** (steps 1-3 and 5 mechanical parts): once the plan is written and committed,
+   `node scripts/scaffold-mission.js --plan docs/plans/<stem>.md --output-path <p>... [--create <p>...]
+   --verify-cmd <cmd>...` writes the rubric (when absent), sources manifest, one-node graph (codex
+   mirrors added, verify commands pre-checked for the intake argv shape) and the repo-bound
+   task-authority envelope under `<git-common-dir>/autopilot-scaffold/`, then self-checks them with
+   `mission-execution-graph-check.js`. It prints the INDEX row, routing-config edit, legacy-reconcile,
+   `prepare` and `grant` commands as `next_steps` and runs none of them; running the verify commands
+   at a detached base checkout (step 3) stays yours. `--check` validates without writing.
 1. **Plan + rubric** (content-bound): `docs/plans/<date>-<slug>.md` and `.rubric.md`; one plan id
    maps to exactly ONE graph node, so a plan whose phases must ship separately needs one plan
    file per campaign. Register it before Step 3: paste `check-plan-graduation.js

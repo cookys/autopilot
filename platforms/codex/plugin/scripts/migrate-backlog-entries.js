@@ -13,6 +13,20 @@
  * --rename-effort: in-place Effort vocabulary migration (Fix→S, H→S!; S/M/L unchanged, idempotent).
  * Dry-run by default; --apply writes. Touches only Effort values, no sidecars.
  *
+ * --to-reporter-fields --drafts <json> [--replies <md>] [--out <file>] [--json]
+ *   DRY-RUN ONLY (never writes --backlog; --apply is refused): adds Id / Since / Origin /
+ *   Reporter / Report / Reply / Problem / Impact to every heading row (references/backlog-entry.md).
+ *   Rows match a draft by its `h` title (exact, then case-insensitive). Id = BL-0001.. in file
+ *   order plus a `<!-- next-id -->` mark after the H1; Since = first commit date that added the
+ *   `### <title>` line; Origin from the draft `og` (external→peer, owner→owner, else self);
+ *   Problem / Impact = draft `pr` / `im` + " (draft)"; Reporter / Reply from the replies table
+ *   (`| idx | reporter | reply | … |`, idx = draft `i`), else from a "replied <id>" in Source;
+ *   Report = first message id in Source, else `<date> <channel>`. Nothing is invented: a peer
+ *   row with no Reply evidence gets no Reply line and is listed. The converted text goes to
+ *   --out (stdout gets the stats JSON) or to stdout (stats JSON on stderr); --json prints only
+ *   the stats. Stats list unmatched rows, unused drafts, peer rows missing a Reply, inferred
+ *   values, and the gate result on the converted text.
+ *
  * Default is dry-run: print the manifest JSON and a unified diff, write nothing.
  * --apply writes only after every sidecar re-read contains moved_sha256 text.
  *
@@ -49,7 +63,9 @@ function usage(code) {
   process.stderr.write(
     'Usage: node scripts/migrate-backlog-entries.js --backlog <file> ' +
     '[--config <file>] [--out-dir docs/backlog] [--apply] [--rename-effort] ' +
-    '[--allow-unmapped-to-sidecar] [--json]\n'
+    '[--allow-unmapped-to-sidecar] [--json]\n' +
+    '       node scripts/migrate-backlog-entries.js --backlog <file> --to-reporter-fields ' +
+    '--drafts <json> [--replies <md>] [--out <file>] [--json]   (dry-run only)\n'
   );
   process.exit(code);
 }
@@ -63,6 +79,10 @@ function parseArgs(argv) {
     json: false,
     allowUnmappedToSidecar: false,
     renameEffort: false,
+    toReporterFields: false,
+    drafts: null,
+    replies: null,
+    out: null,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -78,6 +98,10 @@ function parseArgs(argv) {
     else if (a === '--allow-unmapped-to-sidecar') out.allowUnmappedToSidecar = true;
     else if (a === '--json') out.json = true;
     else if (a === '--rename-effort') out.renameEffort = true;
+    else if (a === '--to-reporter-fields') out.toReporterFields = true;
+    else if (a === '--drafts') out.drafts = need();
+    else if (a === '--replies') out.replies = need();
+    else if (a === '--out') out.out = need();
     else usage(2);
   }
   if (!out.backlog) usage(2);
@@ -226,17 +250,30 @@ function normaliseEffort(fields, entryText) {
 // this), never a schema-shape defect this migrator should "fix" by moving prose to a sidecar. A
 // freshly-synthesized `shipped <ver> <today>` row would otherwise be misclassified as lossy on
 // day one.
+// Reporter-field defects (bad Reply, missing peer field, an over-cap Problem or Impact, …) are
+// fixed by editing the field, never by moving prose to a sidecar — they must not make a row
+// "need migration". A rebuilt row carries the reporter fields over verbatim (rowFields in
+// planMigration), so moving one would not shorten them anyway.
+const REPORTER_FIELD_CODES = new Set([
+  'bad_id', 'bad_since', 'bad_origin', 'bad_reply', 'peer_field_missing',
+  'peer_closed_unanswered', 'problem_has_identifier',
+]);
+
 function needsMigration(entry, cfg, repoRoot, now) {
   if (!entry || entry.unparseable) return false;
   const vios = checkEntry(entry, cfg, repoRoot, now);
   return vios.some((v) => !(
-    (v.code === 'cap_exceeded' && v.field === 'Title')
+    (v.code === 'cap_exceeded' && (v.field === 'Title' || v.field === 'Problem' || v.field === 'Impact'))
     || v.code === 'done_not_moved'
+    || REPORTER_FIELD_CODES.has(v.code)
+    || (v.code === 'missing_field' && gate.NEW_FIELDS.includes(v.field))
   ));
 }
 
 function renderEntry(title, fields) {
-  const order = ['Status', 'Trigger', 'Effort', 'Source', 'Pointer', 'Context'];
+  // A rebuilt row keeps its reporter fields (dropping them would lose the reporter record).
+  const order = ['Id', 'Status', 'Since', 'Origin', 'Reporter', 'Report', 'Reply', 'Problem', 'Impact',
+    'Trigger', 'Effort', 'Source', 'Pointer', 'Context'];
   const lines = [`### ${title}`];
   for (const k of order) {
     if (fields[k] == null || String(fields[k]).trim() === '') continue;
@@ -701,7 +738,7 @@ function planMigration(text, cfg, repoRoot, opts) {
     process.exit(2);
   }
   const { header, slices } = splitFile(text);
-  const entries = collectEntries(text, style);
+  const entries = collectEntries(text, style, cfg);
   const headingEntries = entries.filter((e) => !e.unparseable);
   if (headingEntries.length !== slices.length) {
     // Parser dropped or merged a block — still pair by title walk on slices.
@@ -727,7 +764,8 @@ function planMigration(text, cfg, repoRoot, opts) {
 
   for (let i = 0; i < slices.length; i++) {
     const slice = slices[i];
-    const parsed = collectEntries(slice, 'heading').find((e) => !e.unparseable) || {
+    // The slice has no next-id mark of its own: opt in on the whole file's terms.
+    const parsed = collectEntries(slice, 'heading', gate.withNextIdMark(cfg, text)).find((e) => !e.unparseable) || {
       fields: {},
       extra: true,
       text: slice,
@@ -769,13 +807,21 @@ function planMigration(text, cfg, repoRoot, opts) {
       Source: source || 'unknown',
       Pointer: pointer,
     };
+    // The reporter record (Id, Origin, Problem, …) is carried over verbatim: the rebuilt row
+    // replaces the original, so a field left out here is lost from the backlog.
+    for (const k of gate.NEW_FIELDS) {
+      if (fields[k] != null && String(fields[k]).trim() !== '') rowFields[k] = fields[k];
+    }
+    // Same cap the gate applies: 1600 B once the row carries a reporter field, else 900 B.
+    const hasReporter = gate.NEW_FIELDS.some((k) => k !== 'Id' && rowFields[k] != null);
+    const rowCap = gate.effectiveCap(cfg, hasReporter ? 'row' : 'entry');
     if (context) rowFields.Context = context;
     let rewritten = renderEntry(titleRaw, rowFields);
-    if (byteLen(rewritten) > 900 && rowFields.Context) {
+    if (byteLen(rewritten) > rowCap && rowFields.Context) {
       delete rowFields.Context;
       rewritten = renderEntry(titleRaw, rowFields);
     }
-    while (byteLen(rewritten) > 900 && byteLen(rowFields.Trigger) > 20) {
+    while (byteLen(rewritten) > rowCap && byteLen(rowFields.Trigger) > 20) {
       rowFields.Trigger = truncBytes(rowFields.Trigger.replace(/…$/, ''), Math.max(20, byteLen(rowFields.Trigger) - 32));
       rewritten = renderEntry(titleRaw, rowFields);
     }
@@ -948,9 +994,253 @@ function mainRenameEffort(args) {
   process.exit(0);
 }
 
+// --- --to-reporter-fields (dry-run conversion) ---
+
+const ORIGIN_MAP = { external: 'peer', owner: 'owner' };
+const MSG_ID_RE = /\b(msg_[0-9A-Za-z]{6,}|01M[0-9A-Z]{16,})\b/;
+const DATE_RE = /\b(\d{4}-\d{2}-\d{2})\b/;
+
+// `| idx | reporter | reply | … |` rows; idx must be an integer (header / prose rows are skipped).
+function parseRepliesTable(text) {
+  const out = new Map();
+  for (const line of String(text || '').split(/\r?\n/)) {
+    if (!/^\s*\|/.test(line)) continue;
+    const cells = line.split('|').slice(1, -1).map((c) => c.trim());
+    if (cells.length < 3 || !/^\d+$/.test(cells[0])) continue;
+    out.set(Number(cells[0]), { reporter: cells[1], reply: cells[2] });
+  }
+  return out;
+}
+
+// First commit date (author, YYYY-MM-DD) whose diff ADDED each `### <title>` line. One git call.
+function titleFirstSeen(repoRoot, rel) {
+  const seen = new Map();
+  let r;
+  try {
+    r = spawnSync('git', ['-C', repoRoot, 'log', '--reverse', '--format=@@DATE %as', '-p', '--unified=0',
+      '--no-color', '--no-ext-diff', '--', rel], { encoding: 'utf8', maxBuffer: 1024 * 1024 * 1024 });
+  } catch { return seen; }
+  if (!r || r.status !== 0) return seen;
+  let date = null;
+  for (const line of String(r.stdout).split('\n')) {
+    if (line.startsWith('@@DATE ')) { date = line.slice(7).trim(); continue; }
+    if (date && line.startsWith('+### ')) {
+      const t = line.slice(5).trim();
+      if (!seen.has(t)) seen.set(t, date);
+    }
+  }
+  return seen;
+}
+
+function reporterReplyFromSource(source, since) {
+  const m = String(source || '').match(/replied\s+`?([0-9A-Za-z_]{6,})`?/i);
+  if (!m) return null;
+  const d = String(source).match(DATE_RE);
+  return { reply: `${d ? d[1] : since} ${m[1]}`, dateInferred: !d };
+}
+
+function convertToReporterFields(text, drafts, replies, firstSeen) {
+  const byH = new Map();
+  const byHLower = new Map();
+  for (const d of drafts) {
+    if (!d || !d.h) continue;
+    byH.set(String(d.h).trim(), d);
+    byHLower.set(String(d.h).trim().toLowerCase(), d);
+  }
+  const lines = text.split('\n');
+  const heads = [];
+  for (let i = 0; i < lines.length; i++) if (/^### \S/.test(lines[i])) heads.push(i);
+  const stats = {
+    mode: 'to-reporter-fields', dry_run: true, rows: heads.length, matched: 0, matched_case_insensitive: 0,
+    unmatched: [], drafts: drafts.length, drafts_unused: [], by_origin: {}, peer_rows: [],
+    peer_missing_reply: [], inferred: [], since_missing: [], already_has_id: [],
+  };
+  const used = new Set();
+  const inserts = []; // { at, lines, after: boolean }
+  let n = 0;
+  heads.forEach((h, k) => {
+    const end = k + 1 < heads.length ? heads[k + 1] : lines.length;
+    const title = lines[h].slice(4).trim();
+    const block = lines.slice(h + 1, end);
+    const field = (name) => {
+      const l = block.find((x) => x.startsWith(`- **${name}**:`));
+      return l == null ? null : l.slice(`- **${name}**:`.length).trim();
+    };
+    if (field('Id') != null) { stats.already_has_id.push(title); return; }
+    let d = byH.get(title);
+    if (!d) {
+      d = byHLower.get(title.toLowerCase());
+      if (d) stats.matched_case_insensitive++;
+    }
+    n++;
+    const id = `BL-${String(n).padStart(4, '0')}`;
+    const since = firstSeen.get(title) || null;
+    if (!since) stats.since_missing.push({ id, title });
+    if (!d) {
+      stats.unmatched.push({ id, title });
+      inserts.push({ at: h, lines: [`- **Id**: ${id}`].concat(since ? [`- **Since**: ${since}`] : []) });
+      return;
+    }
+    stats.matched++;
+    used.add(d);
+    const origin = ORIGIN_MAP[d.og] || 'self';
+    stats.by_origin[origin] = (stats.by_origin[origin] || 0) + 1;
+    const add = [];
+    if (since) add.push(`- **Since**: ${since}`);
+    add.push(`- **Origin**: ${origin}`);
+    if (origin === 'peer') {
+      const source = field('Source') || '';
+      const tab = replies.get(Number(d.i));
+      let reporter = tab && tab.reporter;
+      if (!reporter) {
+        reporter = String(d.rp || '').split('；')[0].trim();
+        stats.inferred.push({ id, title, field: 'Reporter', value: reporter, from: 'draft rp' });
+      }
+      // The reporter's message id — never the id of our own reply ("replied <id>").
+      const mid = source.replace(/replied\s+`?[0-9A-Za-z_]{6,}`?/gi, '').match(MSG_ID_RE);
+      let report;
+      if (mid) report = mid[1];
+      else {
+        const sd = source.match(DATE_RE);
+        const channel = /fleet/i.test(source) ? 'fleet' : (/session|SendMessage/i.test(source) ? 'session' : 'peer');
+        report = `${sd ? sd[1] : since} ${channel}`;
+        stats.inferred.push({ id, title, field: 'Report', value: report, from: sd ? 'Source date + channel word' : 'Since + channel word' });
+      }
+      let reply = null;
+      const tabReply = tab && tab.reply;
+      if (tabReply && (tabReply === 'none' || tabReply === 'unknown' || /^\d{4}-\d{2}-\d{2}\s/.test(tabReply))) {
+        // One reporter: a second dated answer joins the first instead of reading as a second reporter.
+        // Split only where a new dated answer starts — a `；` inside a note is prose, not a separator.
+        // Any `；` left would read as a second reporter's Reply, so it becomes `，`.
+        reply = tabReply.split(/；(?=\s*\d{4}-\d{2}-\d{2}\s)/).map((x) => x.trim()).join(' + ').replace(/；/g, '，');
+        if (reply !== tabReply) stats.inferred.push({ id, title, field: 'Reply', value: reply, from: 'two replies joined with +' });
+      } else {
+        const fromSrc = reporterReplyFromSource(source, since);
+        if (fromSrc) {
+          reply = fromSrc.reply;
+          stats.inferred.push({ id, title, field: 'Reply', value: reply,
+            from: fromSrc.dateInferred ? '"replied <id>" in Source, date = Since (Source has no date)' : '"replied <id>" in Source + Source date' });
+        }
+      }
+      add.push(`- **Reporter**: ${reporter}`, `- **Report**: ${report}`);
+      if (reply) add.push(`- **Reply**: ${reply}`);
+      else stats.peer_missing_reply.push({ id, idx: d.i, title });
+      stats.peer_rows.push({ id, idx: d.i, reporter, report, reply: reply || null });
+    }
+    if (d.pr) add.push(`- **Problem**: ${String(d.pr).trim()} (draft)`);
+    if (d.im) add.push(`- **Impact**: ${String(d.im).trim()} (draft)`);
+    inserts.push({ at: h, lines: [`- **Id**: ${id}`] });
+    const statusIdx = block.findIndex((x) => x.startsWith('- **Status**:'));
+    inserts.push({ at: statusIdx >= 0 ? h + 1 + statusIdx : h, lines: add });
+  });
+  for (const d of drafts) {
+    if (!used.has(d)) stats.drafts_unused.push({ i: d.i, h: d.h, og: d.og });
+  }
+  // Apply bottom-up so earlier indexes stay valid; same index keeps insertion order.
+  const byAt = new Map();
+  for (const ins of inserts) byAt.set(ins.at, (byAt.get(ins.at) || []).concat(ins.lines));
+  const outLines = [];
+  for (let i = 0; i < lines.length; i++) {
+    outLines.push(lines[i]);
+    if (byAt.has(i)) outLines.push(...byAt.get(i));
+  }
+  // next-id high-water mark after the H1 (or at the top).
+  const mark = `<!-- next-id: BL-${String(n + 1).padStart(4, '0')} -->`;
+  const h1 = outLines.findIndex((l) => /^# /.test(l));
+  if (!gate.NEXT_ID_RE.test(text)) {
+    if (h1 >= 0) outLines.splice(h1 + 1, 0, '', mark);
+    else outLines.unshift(mark, '');
+  }
+  stats.next_id = `BL-${String(n + 1).padStart(4, '0')}`;
+  return { text: outLines.join('\n'), stats };
+}
+
+// The path a write to `p` would land on: symlinks resolved, and for a file that does not exist
+// yet, its directory's real path plus the basename.
+function realTarget(p) {
+  const abs = path.resolve(p);
+  try { return fs.realpathSync(abs); } catch { /* not there yet */ }
+  try { return path.join(fs.realpathSync(path.dirname(abs)), path.basename(abs)); } catch { return abs; }
+}
+
+function sameFile(a, b) {
+  if (realTarget(a) === realTarget(b)) return true;
+  try {
+    const sa = fs.statSync(a);
+    const sb = fs.statSync(b);
+    return sa.dev === sb.dev && sa.ino === sb.ino; // a hard link is the same file too
+  } catch {
+    return false;
+  }
+}
+
+// --to-reporter-fields never writes the backlog. These refusals run before ANY write in main(),
+// including --rename-effort, which would otherwise apply first.
+function refuseReporterFieldWrites(args) {
+  if (args.apply) {
+    process.stderr.write('--to-reporter-fields is dry-run only: --apply is refused\n');
+    process.exit(2);
+  }
+  if (!args.drafts) usage(2);
+  if (args.out && sameFile(args.out, args.backlog)) {
+    process.stderr.write('--out must not be the backlog itself (dry-run only)\n');
+    process.exit(2);
+  }
+}
+
+function mainToReporterFields(args) {
+  refuseReporterFieldWrites(args);
+  const backlogPath = path.resolve(args.backlog);
+  let text;
+  let drafts;
+  let repliesText = '';
+  try {
+    text = fs.readFileSync(backlogPath, 'utf8');
+    drafts = JSON.parse(fs.readFileSync(path.resolve(args.drafts), 'utf8'));
+    if (args.replies) repliesText = fs.readFileSync(path.resolve(args.replies), 'utf8');
+  } catch (e) {
+    process.stderr.write(`unreadable input: ${e.message}\n`);
+    process.exit(2);
+  }
+  if (!Array.isArray(drafts)) {
+    process.stderr.write('drafts must be a JSON array of {i,h,og,rp,pr,im}\n');
+    process.exit(2);
+  }
+  const repoRoot = gitToplevel(path.dirname(backlogPath)) || path.dirname(backlogPath);
+  const rel = posixRel(repoRoot, backlogPath);
+  const { text: converted, stats } = convertToReporterFields(text, drafts, parseRepliesTable(repliesText), titleFirstSeen(repoRoot, rel));
+  // Gate the converted text with the backlog's own config (written to a temp copy beside nothing real).
+  let cfg;
+  try { cfg = loadCfg(args, repoRoot); } catch { cfg = mergeConfig(builtinConfig(), { style: 'heading' }); }
+  const { violations } = gate.collectViolations(converted, cfg, repoRoot, Date.now());
+  const counts = {};
+  for (const v of violations) {
+    const k = v.field ? `${v.code}:${v.field}` : v.code;
+    counts[k] = (counts[k] || 0) + 1;
+  }
+  stats.gate_on_converted = { violations: violations.length, by_code: counts };
+  stats.bytes = { before: byteLen(text), after: byteLen(converted) };
+  stats.backlog = backlogPath;
+  stats.backlog_written = false;
+  const statsJson = JSON.stringify(stats) + '\n';
+  if (args.out) {
+    fs.writeFileSync(path.resolve(args.out), converted);
+    stats.out = path.resolve(args.out);
+    fs.writeSync(1, JSON.stringify(stats) + '\n');
+  } else if (args.json) {
+    fs.writeSync(1, statsJson);
+  } else {
+    fs.writeSync(1, converted);
+    fs.writeSync(2, statsJson);
+  }
+  process.exit(0);
+}
+
 function main() {
   const args = parseArgs(process.argv.slice(2));
+  if (args.toReporterFields) refuseReporterFieldWrites(args);
   if (args.renameEffort) mainRenameEffort(args);
+  if (args.toReporterFields) mainToReporterFields(args);
   const backlogPath = path.resolve(args.backlog);
   let text;
   try {
@@ -1041,5 +1331,7 @@ function main() {
   fs.writeSync(1, JSON.stringify(planned.manifest) + '\n');
   process.exit(result.ok && planned.manifest.preserved ? 0 : 1);
 }
+
+module.exports = { convertToReporterFields, parseRepliesTable, needsMigration, renderEntry };
 
 if (require.main === module) main();

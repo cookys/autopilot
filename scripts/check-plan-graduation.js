@@ -33,6 +33,12 @@
  *                                 (a live campaign lineage with a frozen source sha) —
  *                                 implicitly excluded from plan_released_not_archived;
  *                                 moving it would invalidate the frozen sha
+ *   peer_row_unanswered           a row --fix would delete (backlog_row_has_plan /
+ *                                 backlog_row_done / backlog_title_closed_status_open) is
+ *                                 Origin: peer with a Reply of none/unknown/missing, and its
+ *                                 Id is not written in the plan it points to. Reported
+ *                                 INSTEAD of the deletable code, so --fix never deletes it:
+ *                                 reply to the reporter first, or name the Id in the plan
  *   plan_reference_dangling       report-only, non-blocking: a tracked file (*.md, *.json,
  *                                 *.sh, *.js — excluding CHANGELOG.md and docs/BACKLOG.md,
  *                                 which are history) references a bare `docs/plans/<stem>`
@@ -106,6 +112,7 @@ const BLOCKING_CODES = new Set([
   'archive_destination_exists',
   'plan_unregistered',
   'plan_stem_malformed',
+  'peer_row_unanswered',
 ]);
 const REPORT_ONLY_CODES = new Set(['plan_orphan', 'plan_active_lineage', 'plan_reference_dangling']);
 const CODES = [...BLOCKING_CODES, ...REPORT_ONLY_CODES];
@@ -596,20 +603,59 @@ function loadBacklogGate() {
   return require(path.join(SCRIPT_DIR, 'check-backlog-entries.js'));
 }
 
-function collectBacklogRows(backlogPath) {
+// The backlog's own config decides which reporter fields a row carries (the entry gate's
+// opt-in rule: a next-id mark or required_fields); an unreadable config reads as none.
+function backlogFieldConfig(gate, repoRoot) {
+  try {
+    const p = gate.resolveBacklogConfigPath(repoRoot);
+    return p ? gate.mergeConfig(gate.builtinConfig(), gate.parseConfigFile(p)) : gate.builtinConfig();
+  } catch {
+    return gate.builtinConfig();
+  }
+}
+
+function collectBacklogRows(backlogPath, repoRoot) {
   const text = readFileSafe(backlogPath);
   if (text == null) return { text: null, rows: [] };
   const gate = loadBacklogGate();
-  const entries = gate.collectEntries(text, 'heading');
+  const root = repoRoot || gitToplevel(path.dirname(backlogPath)) || path.dirname(backlogPath);
+  const entries = gate.collectEntries(text, 'heading', backlogFieldConfig(gate, root));
   const rows = entries
     .filter((e) => !e.unparseable && e.fields)
     .map((e) => ({
       title: (e.fields.Title || e.title || '').trim(),
       status: (e.fields.Status || '').trim(),
       pointer: (e.fields.Pointer || '').trim(),
+      id: String(e.fields.Id || '').trim(),
+      origin: String(e.fields.Origin || '').trim(),
+      fields: e.fields,
       text: e.text,
     }));
   return { text, rows };
+}
+
+// A peer row whose reporter has not been answered (any Reply none/unknown/missing) must not be
+// deleted mechanically (R7). The exit is naming the row Id in the plan the row points to.
+function peerRowUnanswered(row) {
+  if (row.origin !== 'peer') return false;
+  const gate = loadBacklogGate();
+  const replies = gate.splitMulti(row.fields && row.fields.Reply);
+  const reports = gate.splitMulti(row.fields && row.fields.Report);
+  const n = Math.max(replies.length, reports.length, 1);
+  for (let i = 0; i < n; i++) if (gate.replyUnanswered(replies[i])) return true;
+  return false;
+}
+
+function idNamedInPlan(repoRoot, stem, id) {
+  if (!stem || !id) return false;
+  const files = [path.join(repoRoot, 'docs', 'plans', `${stem}.md`)];
+  const archived = findExistingArchivedPlan(path.join(repoRoot, 'docs', 'plans', '_archive'), stem);
+  if (archived) files.push(archived);
+  const re = new RegExp(escapeRegExp(id) + '(?![0-9])');
+  return files.some((f) => {
+    const t = readFileSafe(f);
+    return t != null && re.test(t);
+  });
 }
 
 // --- plan discovery ---
@@ -829,7 +875,7 @@ function run(opts) {
   const allowlist = loadAllowlist(opts.allowlist ? path.resolve(opts.allowlist) : null);
   const activeLineageStems = loadActiveLineageStems(repoRoot);
 
-  const { text: backlogText, rows } = collectBacklogRows(backlogPath);
+  const { text: backlogText, rows } = collectBacklogRows(backlogPath, repoRoot);
   const changelogText = readFileSafe(changelogPath) || '';
   const releasedText = releasedChangelogText(changelogPath);
 
@@ -838,6 +884,7 @@ function run(opts) {
   // --- BACKLOG-row checks ---
   for (const row of rows) {
     if (!row.title) continue;
+    const rowStart = violations.length;
     if (row.status && /^(shipped|dropped)\b/.test(row.status)) {
       violations.push({
         code: 'backlog_row_done',
@@ -868,6 +915,22 @@ function run(opts) {
         title: row.title,
         detail: 'title implies closed but Status is open',
       });
+    }
+    if (violations.length > rowStart && peerRowUnanswered(row)) {
+      const own = violations.splice(rowStart);
+      const stem = own.map((v) => v.stem).find(Boolean) || (row.pointer && row.pointer !== 'none' ? planStemForPointer(row.pointer) : null);
+      if (!idNamedInPlan(repoRoot, stem, row.id)) {
+        violations.push({
+          code: 'peer_row_unanswered',
+          kind: 'backlog_row',
+          title: row.title,
+          id: row.id || null,
+          detail: `${own.map((v) => v.code).join(', ')} — but Origin is peer with an unanswered Reply; `
+            + `reply first, or write ${row.id || 'the row Id'} into ${stem ? `docs/plans/${stem}.md` : 'the plan'}`,
+        });
+      } else {
+        violations.push(...own);
+      }
     }
   }
 
@@ -966,6 +1029,8 @@ function fixBacklog(backlogPath, violations) {
   const { text, rows } = collectBacklogRows(backlogPath);
   if (text == null) return { changed: false, removed: [] };
   const doomedTitles = new Set(doomed.map((v) => v.title));
+  // Belt and braces: a title run() flagged peer_row_unanswered is never deleted, whatever else it hit.
+  for (const v of violations) if (v.code === 'peer_row_unanswered') doomedTitles.delete(v.title);
   let out = text;
   const removed = [];
   for (const row of rows) {

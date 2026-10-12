@@ -966,4 +966,76 @@ assert_eq "$(printf '%s' "$index_after" | grep -c '\.\./plans/2026-03-04-tworows
 assert_contains "$index_after" "| v2.0.0 |" "the ACTIVE row's Version flips to --shipped-in"
 assert_contains "$index_after" "| v0.0.1 |" "the OTHER (already-versioned) row's Version is untouched"
 
+# --- R7: --fix never deletes an Origin: peer row whose reporter is unanswered, unless the plan
+#     it points to names the row Id. It reports peer_row_unanswered (blocking) instead.
+peer_row() {
+  # peer_row <file> <title> <id> <status> <pointer> <reply>
+  {
+    printf '\n### %s\n' "$2"
+    printf -- '- **Id**: %s\n' "$3"
+    printf -- '- **Status**: %s\n' "$4"
+    printf -- '- **Since**: 2026-09-05\n- **Origin**: peer\n- **Reporter**: cuda\n- **Report**: 2026-09-05 fleet\n'
+    printf -- '- **Reply**: %s\n' "$6"
+    printf -- '- **Trigger**: when tests run\n- **Effort**: S\n- **Source**: suite\n'
+    printf -- '- **Pointer**: %s\n' "$5"
+  } >> "$1"
+}
+r7_fixture() { # <name> [mark|cfg|none] -> repo; how the backlog opts in to reporter fields (default mark)
+  local d; d="$(fixture_repo "$1")"
+  case "${2:-mark}" in
+    mark) printf '\n<!-- next-id: BL-0005 -->\n' >> "$d/docs/BACKLOG.md" ;;
+    cfg) mkdir -p "$d/.claude"; printf '%s\n' '## Mode' '- mode: block' '- required_fields: Origin' > "$d/.claude/backlog-config.md" ;;
+  esac
+  printf '# Plan\n\nCarries BL-0003.\n' > "$d/docs/plans/2026-01-01-widget.md"
+  peer_row "$d/docs/BACKLOG.md" "Unanswered peer row" BL-0001 open docs/plans/2026-01-01-widget.md none
+  peer_row "$d/docs/BACKLOG.md" "Answered peer row" BL-0002 open docs/plans/2026-01-01-widget.md "2026-09-06 msg_01R"
+  peer_row "$d/docs/BACKLOG.md" "Unanswered peer row named in plan" BL-0003 open docs/plans/2026-01-01-widget.md unknown
+  peer_row "$d/docs/BACKLOG.md" "Unanswered shipped peer row" BL-0004 "shipped v1.0.0 2020-01-01" none none
+  git -C "$d" add -A >/dev/null
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+  echo "$d"
+}
+d="$(r7_fixture r7-check)"
+out="$(node "$GATE" --repo-root "$d" --json)"
+assert_eq "$(json_exit "$out")" "1" "R7: an unanswered peer row blocks"
+assert_eq "$(json_count "$out" peer_row_unanswered)" "2" "R7: both unanswered peer rows not named in a plan are peer_row_unanswered"
+assert_contains "$out" "BL-0001" "R7: the violation carries the Id"
+d="$(r7_fixture r7-fix)"
+out="$(node "$GATE" --repo-root "$d" --fix --json)"
+bl="$(cat "$d/docs/BACKLOG.md")"
+assert_contains "$bl" "### Unanswered peer row" "R7 --fix: the unanswered has-plan peer row is kept"
+assert_contains "$bl" "### Unanswered shipped peer row" "R7 --fix: the unanswered done peer row is kept"
+assert_not_contains "$bl" "### Answered peer row" "R7 --fix: an answered peer row is deleted as before"
+assert_not_contains "$bl" "### Unanswered peer row named in plan" "R7 --fix: a row whose Id the plan names is deleted"
+assert_eq "$(json_exit "$out")" "1" "R7 --fix: the kept rows still block after the fix"
+
+# The opt-in is the entry gate's: required_fields Origin in the backlog config works like the mark,
+# and a backlog that has not opted in has no peer rows (its Origin lines are legacy extra content).
+d="$(r7_fixture r7-cfg cfg)"
+out="$(node "$GATE" --repo-root "$d" --json)"
+assert_eq "$(json_count "$out" peer_row_unanswered)" "2" "R7 opt-in: required_fields Origin in the backlog config reads the peer rows"
+R7_CFG_DIR="$d"
+d="$(r7_fixture r7-legacy none)"
+out="$(node "$GATE" --repo-root "$d" --json)"
+assert_eq "$(json_count "$out" peer_row_unanswered)" "0" "R7 compat: a backlog that has not opted in has no peer rows, as the legacy gate read it"
+MUTC="$TEST_TMP/r7-mut-cfg"
+mkdir -p "$MUTC"
+cp -r "$REPO_ROOT/scripts" "$REPO_ROOT/references" "$MUTC/"
+sed -i "s/  const entries = gate.collectEntries(text, 'heading', backlogFieldConfig(gate, root));/  const entries = gate.collectEntries(text, 'heading');/" "$MUTC/scripts/check-plan-graduation.js"
+if cmp -s "$GATE" "$MUTC/scripts/check-plan-graduation.js"; then fail "R7 config mutation did not apply"; fi
+out="$(node "$MUTC/scripts/check-plan-graduation.js" --repo-root "$R7_CFG_DIR" --json)"
+assert_eq "$(json_count "$out" peer_row_unanswered)" "0" "R7 config mutation: ignoring the backlog config loses the peer rows (the suite can tell)"
+
+# Mutation: with the R7 guard removed, --fix deletes the unanswered row (the suite can tell).
+MUT="$TEST_TMP/r7-mut"
+mkdir -p "$MUT"
+cp -r "$REPO_ROOT/scripts" "$REPO_ROOT/references" "$MUT/"
+sed -i -e 's/if (violations.length > rowStart \&\& peerRowUnanswered(row)) {/if (false) {/' \
+  -e "s/for (const v of violations) if (v.code === 'peer_row_unanswered') doomedTitles.delete(v.title);//" \
+  "$MUT/scripts/check-plan-graduation.js"
+if cmp -s "$GATE" "$MUT/scripts/check-plan-graduation.js"; then fail "R7 mutation did not apply"; fi
+d="$(r7_fixture r7-mut-fix)"
+node "$MUT/scripts/check-plan-graduation.js" --repo-root "$d" --fix --json >/dev/null 2>&1 || true
+assert_not_contains "$(cat "$d/docs/BACKLOG.md")" "### Unanswered peer row" "R7 mutation: without the guard --fix deletes the unanswered row"
+
 finalize_test

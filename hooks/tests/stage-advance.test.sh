@@ -537,6 +537,36 @@ eq "set from a foreign repo: repo_root unchanged" "\"$WA\"" "$(jf repo_root)"
 eq "set back in the main checkout: the write happened (size XL)" '"XL"' "$(jf size)"
 eq "set back in the main checkout: repo_root follows back" "\"$RA\"" "$(jf repo_root)"
 
+# ---------------------------------------------------------------- P3.1: --new-task advisory when the worktree name and branch share no word
+# One stderr line, never a refusal: the exit code is 0 in every case.
+ADV='shares no word with it'
+newtask_in() { # dir -> RC: exit code of set --new-task run there, ERR: its stderr
+  newsess; (cd "$RA" && node "$SM" set --size S >/dev/null 2>&1)
+  (cd "$1" && node "$SM" set --new-task --size S >/dev/null 2>"$TEST_TMP/err"); RC=$?
+  ERR=$(cat "$TEST_TMP/err")
+}
+W="$TEST_TMP/wt-login-form"; git -C "$RA" worktree add -q -b feat/login-form "$W"
+newtask_in "$W"; eq "advisory: shared word -> exit 0" "0" "$RC"
+eq "advisory: shared word -> silent" "" "$ERR"
+W="$TEST_TMP/wt-autocompact-detect"; git -C "$RA" worktree add -q -b feat/worktree-placement-rule "$W"
+newtask_in "$W"; eq "advisory: no shared word -> exit 0" "0" "$RC"
+eq "advisory: no shared word -> one line" "1" "$(printf '%s\n' "$ERR" | grep -c "$ADV")"
+has "advisory: names the worktree dir" "wt-autocompact-detect" "$ERR"
+has "advisory: names the branch" "feat/worktree-placement-rule" "$ERR"
+has "advisory: points at the rule" "references/worktree-placement.md" "$ERR"
+git -C "$RA" checkout -q -b feat/unrelated-name; newtask_in "$RA"; git -C "$RA" checkout -q develop
+eq "advisory: main checkout -> exit 0" "0" "$RC"
+eq "advisory: main checkout -> silent" "" "$ERR"
+W="$TEST_TMP/feat-1234"; git -C "$RA" worktree add -q -b feat/1234 "$W"
+newtask_in "$W"; eq "advisory: only generic/digit tokens -> exit 0" "0" "$RC"
+eq "advisory: only generic/digit tokens -> silent" "" "$ERR"
+W="$TEST_TMP/Foo-bar"; git -C "$RA" worktree add -q -b foo-bar "$W"
+newtask_in "$W"; eq "advisory: case differs only -> exit 0" "0" "$RC"
+eq "advisory: case differs only -> silent" "" "$ERR"
+W="$TEST_TMP/wt-detached"; git -C "$RA" worktree add -q --detach "$W"
+newtask_in "$W"; eq "advisory: detached HEAD -> exit 0" "0" "$RC"
+eq "advisory: detached HEAD -> silent" "" "$ERR"
+
 # ---------------------------------------------------------------- D6: base_ref takes the newer of a local/remote pair
 # (plan P1.2 a-c, g, h). origin/* refs are planted with update-ref; no remote, no fetch.
 basesha() { sm set --size S --repo-root "$1" >/dev/null 2>&1; jf base_ref | tr -d '"'; }

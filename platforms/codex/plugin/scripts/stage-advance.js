@@ -38,10 +38,13 @@
 //
 // Resume (`--resume-from <old-id>`, takes no --to): a session that came back with a NEW id (compaction, `claude
 // --resume`) has an empty marker (`session-mode.js set --size ..` first) and would have to re-walk from the entry
-// node. This copies size / bug / urgent / stage / unit / base_ref from the OLD id's marker instead, so the position is
-// re-read from a record, never taken from the caller's word (ADR-0001). Fail closed (exit 6, nothing written, no
-// downgrade to a bare `--to`): the new marker already has a stage; the old marker is absent / expired / unreadable /
-// has no stage or size; the old id is the current id; or the two markers do not share a repo_identity. The old marker
+// node. This copies size / bug / urgent / stage / unit / base_ref / high_risk / review_families from the OLD id's
+// marker instead, so the position is re-read from a record, never taken from the caller's word (ADR-0001). Fail closed
+// (exit 6, nothing written, no downgrade to a bare `--to`): the new marker already has a stage; the old marker is
+// absent / expired / unreadable / has no stage or size; the old id is the current id; the two markers do not share a
+// repo_identity; or size / urgent / bug differ from the old marker (the new session must `set` the same size and
+// flags first; if it already set a larger size or opened bug/urgent, `set --new-task --size <old> [flags]` lowers it
+// again because size only moves up otherwise). The old marker
 // is only read, never changed. The write takes the same marker lock as every other stage write.
 //
 // Test injection: AUTOPILOT_STAGE_ADVANCE_CLASSIFY / AUTOPILOT_STAGE_ADVANCE_RESOLVE replace the two sampling
@@ -332,7 +335,8 @@ function decideResume(marker, old, oldId) {
   // refused: the new session must first `set` the same size and flags as the old one.
   if (old.size !== marker.size || (old.urgent === true) !== (marker.urgent === true) || (old.bug === true) !== (marker.bug === true)) {
     const d = (m) => `${m.size}${m.urgent === true ? ' urgent' : ''}${m.bug === true ? ' bug' : ''}`;
-    return refuse(`size/urgent/bug differ (old ${d(old)}, new ${d(marker)}); run session-mode.js set in the new session with the same size/flags as the old session first`);
+    const fix = `node scripts/session-mode.js set --new-task --size ${old.size}${old.urgent === true ? ' --urgent' : ''}${old.bug === true ? ' --bug' : ''}`;
+    return refuse(`size/urgent/bug differ (old ${d(old)}, new ${d(marker)}); \`set\` cannot lower the new marker (size only moves up, urgent/bug only turn on), so run \`${fix}\` in the new session to match the old one, then retry`);
   }
   const patch = { stage_set_at: new Date().toISOString() };
   for (const k of RESUME_COPY) if (old[k] !== undefined) patch[k] = old[k];

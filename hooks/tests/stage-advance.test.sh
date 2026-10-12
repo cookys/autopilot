@@ -640,7 +640,12 @@ adv --resume-from "$OLD_ID" --to plan; eq "--resume-from with --to is a usage er
 newsess; sm set --size XL --bug --repo-root "$RR" >/dev/null 2>&1
 adv --resume-from "$OLD_ID"; eq "different size refused (rc)" "6" "$RC"
 has "different size: reason" "differ" "$ERR"
+has "different size: hint names set --new-task with the old size and flags" "set --new-task --size L --bug" "$ERR"
 eq "different size: nothing written" "<absent>" "$(jf stage)"
+# the hint works: --new-task lowers the new marker to the old values, then --resume-from succeeds
+sm set --new-task --size L --bug --repo-root "$RR" >/dev/null 2>&1
+adv --resume-from "$OLD_ID"; eq "after set --new-task back to the old size/flags, resume succeeds (rc)" "0" "$RC"
+eq "after --new-task resume: stage copied" "$OLD_STAGE" "$(jf stage)"
 newsess; sm set --size L --bug --urgent --repo-root "$RR" >/dev/null 2>&1
 adv --resume-from "$OLD_ID"; eq "different urgent refused (rc)" "6" "$RC"
 newsess; sm set --size L --repo-root "$RR" >/dev/null 2>&1

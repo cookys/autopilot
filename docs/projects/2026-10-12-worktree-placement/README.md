@@ -32,3 +32,4 @@ Direction: C — decision `intent-17-2` in the decision ledger (owner's answer; 
 |---|---|
 | 2026-10-12 | intent: spike done (U2 receipt in `ladder.jsonl`), direction A recorded on the owner's behalf |
 | 2026-10-12 | owner chose C (`intent-17-2`); sweep follow-up added to the spike: Claude Code's periodic sweep keeps worktrees without its own marker, so rail worktrees under `.claude/worktrees/` are safe from it |
+| 2026-10-12 | plan-review G1 (opus chair): CONDITIONAL, 9 non-blocking findings all folded (`2ce98cf4`); receipt check passes against the reviewed bytes — evidence `docs/plans/evidence/2026-10-12-worktree-placement/plan-review/` |

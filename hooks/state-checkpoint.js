@@ -136,22 +136,19 @@ function buildTranscriptTail(turns) {
 
   // Always log start
   try {
-    // Read stdin with ENXIO graceful handling:
-    // `/compact` slash command invokes PreCompact hook WITHOUT piping a JSON
-    // payload — fs.readFileSync('/dev/stdin') then throws ENXIO. This is not
-    // a real failure (Claude Code's auto-compact DOES pipe the payload); the
-    // /compact CLI path simply skips hook payload. Detect and skip gracefully
-    // without polluting the log with "catastrophic" entries.
-    // (Discovered 2026-05-14 method-B testing — `docs/BACKLOG.md` entry.)
+    // Read fd 0, not the '/dev/stdin' PATH: Claude Code hands hooks a socket,
+    // and opening /dev/stdin on a socket throws ENXIO. The 2026-05-14 reading
+    // ("/compact pipes no payload") was this bug; it skipped every real
+    // auto-compact too (live CC 2.1.296, 2026-10-12; #6305, context-budget.js).
+    // ENXIO/EAGAIN can still mean no usable stdin: skip without a checkpoint.
     let stdin = '';
     try {
-      stdin = fs.readFileSync('/dev/stdin', 'utf8');
+      stdin = fs.readFileSync(0, 'utf8');
     } catch (err) {
       if (err.code === 'ENXIO' || err.code === 'EAGAIN') {
-        // No payload available — typical for /compact slash invocation.
-        // Log as skip + exit cleanly without writing checkpoint (there's
-        // nothing useful we could capture without transcript_path).
-        process.stderr.write(`[state-checkpoint] /compact invocation (no stdin payload) — skipping\n`);
+        // No payload available: nothing useful to capture without
+        // transcript_path, so log a skip and exit cleanly.
+        process.stderr.write(`[state-checkpoint] no stdin payload — skipping\n`);
         appendLog({ ts: timestamp, hostname: os.hostname(), session_id: '<no-stdin>', status: 'no_payload_skip', reason: `${err.code}: stdin not piped` });
         return process.exit(0);
       }

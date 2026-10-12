@@ -16,7 +16,7 @@
 #   T4 E3 fixture scripts: pack root copied into the base commit of BOTH arms; a pack-provided stub
 #      helper (the rows' helpers do not exist on develop yet) is runnable from the fixture
 #   T5 E4 isolation: per-cell AUTOPILOT_LIVE_DIR / TASK_STATUS_DIR on tmpfs (no tmpfs base = exit 2, fail closed); the ledger default stays inside the fixture repo; the real
-#      /run/user/<uid>/autopilot and ~/.autopilot are untouched (inode+mtime diff); mutation: with the
+#      /run/user/<uid>/autopilot and ~/.autopilot hold nothing carrying this run's unique names (concurrency-safe: no root snapshot diff); mutation: with the
 #      export removed the stub DOES reach the (fake) store, so the check can fail
 #   T6 E5: skill_invoked for the target skill (--skill / --check-skill); legacy row unchanged
 #   T7 matrix passes the generic flags through and resumes by cell
@@ -28,20 +28,21 @@ REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 BASE="$REPO_ROOT/evals/skill-onoff"
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
-# ── real-store snapshot BEFORE anything runs. The host's own sessions rewrite files DEEP inside the
-# live store continuously (statusline/context feeds), so a recursive mtime diff is noise; what a leaking
-# cell would do is create/replace entries at the store root. Snapshot = root dir inode+mtime plus the
-# inode of every root-level entry; plus a recursive scan for this run's unique probe token.
+# ── real-store leak check. The host's own sessions (and sibling suites run with --parallel) create,
+# replace and touch entries at the real store root at any time, so ANY snapshot diff of the root
+# (inode/mtime) is false-red noise under concurrency. What identifies a leak from THIS run is its own
+# unique names: the probe token every stub cell writes, and this run's TEST_TMP basename. Scan the
+# real roots recursively for those; the T5 mutation control proves the probe scan can fail.
 PROBE_TAG="evalx-$$-$RANDOM"; export ONOFF_PROBE_TAG="$PROBE_TAG"
 REAL_ROOTS=("/run/user/$(id -u)/autopilot" "$HOME/.autopilot")
-real_snap() {
-  { for r in "${REAL_ROOTS[@]}"; do
-      find "$r" -maxdepth 0 -printf '%p %i %T@\n' 2>/dev/null || true
-      find "$r" -maxdepth 1 -mindepth 1 -printf '%p %i\n' 2>/dev/null || true
-    done; } | LC_ALL=C sort | sha256sum | cut -d' ' -f1
+real_token_hits() {
+  local r n=0
+  for r in "${REAL_ROOTS[@]}"; do
+    [ -d "$r" ] || continue
+    n=$((n + $(find "$r" \( -name "*$PROBE_TAG*" -o -name "*$(basename "$TEST_TMP")*" \) 2>/dev/null | wc -l)))
+  done
+  echo "$n"
 }
-real_token_hits() { find "${REAL_ROOTS[@]}" -name "*$PROBE_TAG*" 2>/dev/null | wc -l; }
-REAL_BEFORE=$(real_snap)
 
 # fake XDG runtime dir on tmpfs: every stub cell resolves "the real live dir" HERE, never the host's
 FAKE_XDG=""
@@ -289,6 +290,5 @@ tail -n +3 "$pb/prompt.md" | cmp -s - "$BASE/tasks/d1-s-tiny-feature/task.md" ||
 
 echo "=== the real stores were never touched ==="
 [ "$(real_token_hits)" = 0 ] || fail "a cell wrote its probe into the REAL live store"
-[ "$(real_snap)" = "$REAL_BEFORE" ] || fail "real /run/user/<uid>/autopilot or ~/.autopilot root changed during the test (inode/mtime diff)"
 
 echo "PASS: skill-onoff generic harness (E1-E5)"

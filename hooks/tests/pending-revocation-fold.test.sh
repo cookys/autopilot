@@ -10,8 +10,8 @@
 
 PRE_SHA="62a580713c13ee35b0cce009e06c5441f52c790a"
 # Must live under scripts/ so __dirname-relative requires (../src, ../hooks) resolve.
-PRE_CONTRACT="$REPO_ROOT/scripts/dispatch-contract.pre.js"
-PRE_RESOLVE="$REPO_ROOT/scripts/resolve-dispatch-topology.pre.js"
+PRE_CONTRACT="$REPO_ROOT/scripts/dispatch-contract.pre.$$.js"
+PRE_RESOLVE="$REPO_ROOT/scripts/resolve-dispatch-topology.pre.$$.js"
 git -C "$REPO_ROOT" show "${PRE_SHA}:scripts/dispatch-contract.js" >"$PRE_CONTRACT"
 git -C "$REPO_ROOT" show "${PRE_SHA}:scripts/resolve-dispatch-topology.js" >"$PRE_RESOLVE"
 trap 'rm -f "$PRE_CONTRACT" "$PRE_RESOLVE"; cleanup_test_tmp' EXIT

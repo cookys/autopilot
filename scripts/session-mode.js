@@ -817,7 +817,7 @@ function cmdSetInit(args) {
         const next = { ...current };
         for (const k of NEW_TASK_CLEARED) delete next[k];
         followRepoRoot(next, repoRoot);
-        applyInitFields(next, init, next.repo_root, null);
+        applyInitFields(next, init, next.repo_root || repoRoot, null);
         next.task_seq = seqPrev + 1;
         next.task_started_at = new Date().toISOString();
         writeMarkerFile(file, next);
@@ -831,7 +831,7 @@ function cmdSetInit(args) {
         }
         const next = { ...current };
         followRepoRoot(next, repoRoot);
-        applyInitFields(next, init, next.repo_root, current);
+        applyInitFields(next, init, next.repo_root || repoRoot, current);
         writeMarkerFile(file, next);
         result = { marker: next, created: false };
         return;

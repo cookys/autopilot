@@ -530,9 +530,11 @@ eq "--new-task from a foreign repo: base_ref derived in repo_root, not the cwd" 
 newsess; (cd "$RA" && node "$SM" set --size S >/dev/null 2>&1)
 (cd "$WA" && node "$SM" set --size M >/dev/null 2>&1)
 eq "set from a linked worktree: repo_root follows" "\"$WA\"" "$(jf repo_root)"
-(cd "$RB" && node "$SM" set --size M >/dev/null 2>&1)
+(cd "$RB" && node "$SM" set --size L >/dev/null 2>&1)
+eq "set from a foreign repo: the write happened (size L)" '"L"' "$(jf size)"
 eq "set from a foreign repo: repo_root unchanged" "\"$WA\"" "$(jf repo_root)"
-(cd "$RA" && node "$SM" set --size M >/dev/null 2>&1)
+(cd "$RA" && node "$SM" set --size XL >/dev/null 2>&1)
+eq "set back in the main checkout: the write happened (size XL)" '"XL"' "$(jf size)"
 eq "set back in the main checkout: repo_root follows back" "\"$RA\"" "$(jf repo_root)"
 
 # ---------------------------------------------------------------- D6: base_ref takes the newer of a local/remote pair

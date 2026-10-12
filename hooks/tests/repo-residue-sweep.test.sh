@@ -125,6 +125,23 @@ node "$SCRIPT" reap --repo "$UP" --yes >/dev/null
 [ -d "$TEST_TMP/up-wt-dirty" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "stale develop: dirty worktree kept"
 [ -d "$TEST_TMP/up-wt-neither" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "stale develop: unintegrated worktree kept"
 
+# ---- diverged: local develop gains its own commit -> local stays the baseline, origin-only HEAD is NOT integrated
+U commit -q --allow-empty -m local-only
+U worktree add -q --detach "$TEST_TMP/up-wt-diverged" "$PUSHED" 2>/dev/null     # the earlier origin-only worktree was reaped
+OUT="$(node "$SCRIPT" scan --repo "$UP")"
+assert_eq "$(field "$OUT" summary.worktrees.clean-integrated)" "<undef>" "diverged develop: origin-only HEAD stays unintegrated (local baseline kept)"
+
+# ---- local-branch upstream must not widen: develop tracks local hands/x, behind it
+LP="$TEST_TMP/lp"; mkdir -p "$LP"
+L() { git -C "$LP" -c user.email=t@t -c user.name=t "$@"; }
+L init -q -b develop; echo a > "$LP/a.txt"; L add a.txt; L commit -q -m base
+L checkout -q -b hands/x; L commit -q --allow-empty -m only-on-hands; L checkout -q develop
+L branch --set-upstream-to=hands/x develop >/dev/null 2>&1
+node "$SCRIPT" reap --repo "$LP" --yes >/dev/null
+L rev-parse --verify --quiet refs/heads/hands/x >/dev/null && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "local-branch upstream: hands/x deleted"
+OUT="$(node "$SCRIPT" scan --repo "$LP")"
+assert_eq "$(field "$OUT" summary.branches.unintegrated)" "1" "local-branch upstream: hands/x stays unintegrated"
+
 # ---------------------------------------------------------------- argv hygiene
 node "$SCRIPT" reap --repo "$SBX" >/dev/null 2>&1; assert_eq "$?" "2" "reap without --yes → 2"
 node "$SCRIPT" preserve --repo "$SBX" >/dev/null 2>&1; assert_eq "$?" "2" "preserve without --out → 2"

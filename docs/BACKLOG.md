@@ -722,14 +722,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/hooks-tests-run-sh-timeout-marker-collides-with-a-suite-that-self-exits-124-137.md
 - **Context**: `is_suite_timeout_ec` treats any 124/137 as the wrapper's timeout.
 
-### `mission withdraw` cannot bind a `mission-subject-v2` claim to its ICC campaign — the intake journals no mission binding
-- **Status**: open
-- **Trigger**: any operator calling `mission withdraw --campaign-ledger <real ICC ledger>` on a claim minted by `grantMissionCampaign` (`identity_scheme: 'mission-subject-v2'`) whose campaign DID run; or the next time `campaign-intake.js`'s intake…
-- **Effort**: S
-- **Source**: U4 foreman 2026-08-31; cuda revival.3d QUIET-a 2026-09-06; v2.36.6 pre-merge review (opus) 🔴 C1.
-- **Pointer**: docs/backlog/mission-withdraw-cannot-bind-a-mission-subject-v2-claim-to-its-icc-campaign-the.md
-- **Context**: the claim id is `campaign-v2-<domain sha of the subject>` (`src/engine/mission-campaign-identity.js`); the ICC intake row is keyed `campaign-v1-<sha of repo, ticket, raw contract bytes>` (`src/engine/campaign-intake.js` ~1664) and…
-
 ### v2.35.5 qc-panel 🔵 follow-ups (managed-campaign rail debt, 2026-08-31)
 - **Status**: open
 - **Trigger**: next touch of the named files.

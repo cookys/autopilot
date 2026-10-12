@@ -575,7 +575,7 @@ m="$(mutate idc-off "s/return Boolean(cfg \&\& (cfg.next_id_mark || (cfg.require
 gate_run "$m" "$IDC_REQ_DIR" --config "$IDC_REQ_DIR/.claude/backlog-config.md"
 assert_eq "$(json_has_code "$GATE_OUT" bad_id)" "no" "Id opt-in mutation: never enforcing BL-NNNN is caught"
 
-m="$(mutate tc-view "s/^        if (NEW_FIELDS.includes(f) \&\& !tableFieldOptedIn(ocfg, f)) continue;$/        ;/")"
+m="$(mutate tc-view "s/^        if (NEW_FIELDS.includes(f) \&\& !fieldOptedIn(ocfg, f)) continue;$/        ;/")"
 gate_run "$m" "$TC_ORIGIN_DIR" --config "$TC_ORIGIN_DIR/.claude/backlog-config.md"
 assert_eq "$(json_has_code "$GATE_OUT" bad_origin)" "yes" "table compat mutation: reading table reporter columns without opt-in is caught"
 m="$(mutate tc-optin "s/^  return req.includes(f) || (PEER_FIELDS.includes(f) \&\& req.includes('Origin'));$/  return false;/")"

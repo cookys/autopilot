@@ -232,7 +232,7 @@ out="$(range_check "$d" HEAD~1..HEAD)"; rc=$?
 assert_eq "$rc:$(json_codes "$out")" "1:peer_report_lost" "table opt-in: with Origin in required_fields the same delete blocks"
 assert_eq "$(json_count "$out" peer_report_lost)" "1" "table opt-in: reported as peer_report_lost"
 MUT_NONORM="$MUTROOT/scripts/check-no-normalise.js"
-sed 's|^        if (NEW_FIELDS.includes(f) \&\& !tableFieldOptedIn(ocfg, f)) continue;$|        ;|' "$GATE" > "$MUT_NONORM"
+sed 's|^        if (NEW_FIELDS.includes(f) \&\& !fieldOptedIn(ocfg, f)) continue;$|        ;|' "$GATE" > "$MUT_NONORM"
 if cmp -s "$GATE" "$MUT_NONORM"; then fail "table compat mutation did not apply"; fi
 out="$(range_check "$TC_COMPAT_DIR" HEAD~1..HEAD "$MUT_NONORM")"; rc=$?
 assert_eq "$rc:$(json_count "$out" peer_report_lost)" "1:1" "table compat mutation: without parse-layer normalisation the legacy delete blocks (the suite can tell)"

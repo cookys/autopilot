@@ -980,8 +980,12 @@ peer_row() {
     printf -- '- **Pointer**: %s\n' "$5"
   } >> "$1"
 }
-r7_fixture() { # <name> -> repo
+r7_fixture() { # <name> [mark|cfg|none] -> repo; how the backlog opts in to reporter fields (default mark)
   local d; d="$(fixture_repo "$1")"
+  case "${2:-mark}" in
+    mark) printf '\n<!-- next-id: BL-0005 -->\n' >> "$d/docs/BACKLOG.md" ;;
+    cfg) mkdir -p "$d/.claude"; printf '%s\n' '## Mode' '- mode: block' '- required_fields: Origin' > "$d/.claude/backlog-config.md" ;;
+  esac
   printf '# Plan\n\nCarries BL-0003.\n' > "$d/docs/plans/2026-01-01-widget.md"
   peer_row "$d/docs/BACKLOG.md" "Unanswered peer row" BL-0001 open docs/plans/2026-01-01-widget.md none
   peer_row "$d/docs/BACKLOG.md" "Answered peer row" BL-0002 open docs/plans/2026-01-01-widget.md "2026-09-06 msg_01R"
@@ -1004,6 +1008,23 @@ assert_contains "$bl" "### Unanswered shipped peer row" "R7 --fix: the unanswere
 assert_not_contains "$bl" "### Answered peer row" "R7 --fix: an answered peer row is deleted as before"
 assert_not_contains "$bl" "### Unanswered peer row named in plan" "R7 --fix: a row whose Id the plan names is deleted"
 assert_eq "$(json_exit "$out")" "1" "R7 --fix: the kept rows still block after the fix"
+
+# The opt-in is the entry gate's: required_fields Origin in the backlog config works like the mark,
+# and a backlog that has not opted in has no peer rows (its Origin lines are legacy extra content).
+d="$(r7_fixture r7-cfg cfg)"
+out="$(node "$GATE" --repo-root "$d" --json)"
+assert_eq "$(json_count "$out" peer_row_unanswered)" "2" "R7 opt-in: required_fields Origin in the backlog config reads the peer rows"
+R7_CFG_DIR="$d"
+d="$(r7_fixture r7-legacy none)"
+out="$(node "$GATE" --repo-root "$d" --json)"
+assert_eq "$(json_count "$out" peer_row_unanswered)" "0" "R7 compat: a backlog that has not opted in has no peer rows, as the legacy gate read it"
+MUTC="$TEST_TMP/r7-mut-cfg"
+mkdir -p "$MUTC"
+cp -r "$REPO_ROOT/scripts" "$REPO_ROOT/references" "$MUTC/"
+sed -i "s/  const entries = gate.collectEntries(text, 'heading', backlogFieldConfig(gate, root));/  const entries = gate.collectEntries(text, 'heading');/" "$MUTC/scripts/check-plan-graduation.js"
+if cmp -s "$GATE" "$MUTC/scripts/check-plan-graduation.js"; then fail "R7 config mutation did not apply"; fi
+out="$(node "$MUTC/scripts/check-plan-graduation.js" --repo-root "$R7_CFG_DIR" --json)"
+assert_eq "$(json_count "$out" peer_row_unanswered)" "0" "R7 config mutation: ignoring the backlog config loses the peer rows (the suite can tell)"
 
 # Mutation: with the R7 guard removed, --fix deletes the unanswered row (the suite can tell).
 MUT="$TEST_TMP/r7-mut"

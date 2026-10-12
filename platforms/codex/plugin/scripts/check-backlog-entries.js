@@ -13,8 +13,10 @@
  * config may raise done_retention_days for a deliberate grace window.
  *
  * Reporter fields (2026-10-13): Id, Since, Origin, Reporter, Report, Reply, Problem, Impact.
- * Each is format-checked when present; `required_fields` in the config makes Id/Since/Origin/
- * Problem/Impact mandatory (default: none required, so a legacy backlog reads exactly as before).
+ * They are read only once the file opts in (a next-id mark, or the field in `required_fields`;
+ * see fieldOptedIn) — before that every style parses an entry exactly as the legacy gate did.
+ * Once read, each is format-checked when present; `required_fields` makes Id/Since/Origin/
+ * Problem/Impact mandatory.
  * Origin=peer makes Reporter/Report/Reply mandatory. A `<!-- next-id: BL-NNNN -->` comment is
  * the Id high-water mark: every BL- Id must be below it and unique.
  *
@@ -280,6 +282,17 @@ function fieldLine(line) {
   return { name, value: m[2].trim() };
 }
 
+// fieldLine, with the opt-in rule applied: a Since/Origin/Reporter/Report/Reply/Problem/Impact
+// line in a file that has not opted in (fieldOptedIn) is what the old gate made of it — an
+// unknown field line, i.e. extra content. Id keeps its own rule (blIdEnforced).
+function gatedFieldLine(line, cfg) {
+  const fl = fieldLine(line);
+  if (fl && !fl.extra && fl.name !== 'Id' && NEW_FIELDS.includes(fl.name) && !fieldOptedIn(cfg, fl.name)) {
+    return { extra: true, raw: line };
+  }
+  return fl;
+}
+
 function splitHeadingEntries(text) {
   const lines = text.split(/\r?\n/);
   const blocks = [];
@@ -308,7 +321,7 @@ function splitHeadingEntries(text) {
   return blocks;
 }
 
-function parseHeadingBlock(block) {
+function parseHeadingBlock(block, cfg) {
   const text = block.lines.join('\n');
   const fields = {};
   let extra = false;
@@ -327,7 +340,7 @@ function parseHeadingBlock(block) {
       continue;
     }
     if (!line.trim()) continue;
-    const fl = fieldLine(line);
+    const fl = gatedFieldLine(line, cfg); // heading
     if (fl && fl.extra) {
       extra = true;
       continue;
@@ -380,7 +393,7 @@ function parseTable(text) {
   return { header, rows };
 }
 
-function parseChecklist(text) {
+function parseChecklist(text, cfg) {
   const lines = text.split(/\r?\n/);
   const items = [];
   let cur = null;
@@ -398,7 +411,7 @@ function parseChecklist(text) {
       continue;
     }
     if (!line.trim()) continue;
-    const fl = fieldLine(line);
+    const fl = gatedFieldLine(line, cfg); // checklist
     if (fl && fl.extra) {
       cur.extra = true;
       continue;
@@ -472,13 +485,13 @@ function foreignEntryLines(text, style) {
   return out.map((line) => ({ unparseable: true, text: line, title: '' }));
 }
 
-// `cfg` (optional) only matters for tables: see tableFieldOptedIn. Without it a table row carries
-// no reporter-field column unless the text has a next-id mark.
+// `cfg` (optional) carries the opt-in (fieldOptedIn): without it, and without a next-id mark in
+// the text, no style reads a reporter field other than Id — exactly what the old gate read.
 function collectEntries(text, style, cfg) {
   const out = [];
+  const ocfg = withNextIdMark(cfg, text);
   if (style === 'table' || style === 'checklist') out.push(...foreignEntryLines(text, style));
   if (style === 'table') {
-    const ocfg = withNextIdMark(cfg, text);
     const { header, rows } = parseTable(text);
     if (!header) {
       if (text.trim()) out.push({ unparseable: true, text, title: '' });
@@ -499,7 +512,7 @@ function collectEntries(text, style, cfg) {
         if (f === 'Id' || idx[f] == null) continue;
         // Normalised here, once, so every consumer (checkEntry, rowPairs/peerReportLost, migrate,
         // plan-graduation) sees the row the old gate saw until the file opts in.
-        if (NEW_FIELDS.includes(f) && !tableFieldOptedIn(ocfg, f)) continue;
+        if (NEW_FIELDS.includes(f) && !fieldOptedIn(ocfg, f)) continue;
         fields[f] = get(f);
         if (NEW_FIELDS.includes(f)) newFieldBytes += byteLen(fields[f]) + 3;
       }
@@ -516,7 +529,7 @@ function collectEntries(text, style, cfg) {
     return out;
   }
   if (style === 'checklist') {
-    const items = parseChecklist(text);
+    const items = parseChecklist(text, ocfg);
     if (!items.length && text.trim()) {
       out.push({ unparseable: true, text, title: '' });
       return out;
@@ -549,7 +562,7 @@ function collectEntries(text, style, cfg) {
       out.push({ unparseable: true, text: b.lines.join('\n'), title: '' });
       continue;
     }
-    const p = parseHeadingBlock(b);
+    const p = parseHeadingBlock(b, ocfg);
     out.push(p);
   }
   return out;
@@ -646,12 +659,12 @@ function withNextIdMark(cfg, text) {
   return NEXT_ID_RE.test(String(text || '')) ? Object.assign({}, base, { next_id_mark: true }) : base;
 }
 
-// A table column that happens to be named Since, Origin, Reporter, Report, Reply, Problem or Impact
-// was never read by the old gate (it kept only the legacy columns). collectEntries keeps such a
-// column only once the file opts in: a next-id mark, or the field in `required_fields`
-// (Reporter/Report/Reply also follow a required Origin, since the peer rule reads them together).
-// Otherwise the row is parsed exactly as the old gate parsed it.
-function tableFieldOptedIn(cfg, f) {
+// One rule for every style: Since, Origin, Reporter, Report, Reply, Problem and Impact were never
+// read by the old gate (a heading/checklist line was extra content, a table column was ignored).
+// The parsers read such a field only once the file opts in: a next-id mark, or the field in
+// `required_fields` (Reporter/Report/Reply also follow a required Origin, since the peer rule
+// reads them together). Otherwise the entry is parsed exactly as the old gate parsed it.
+function fieldOptedIn(cfg, f) {
   if (!cfg) return false;
   if (cfg.next_id_mark) return true;
   const req = cfg.required_fields || [];
@@ -1373,7 +1386,25 @@ function runSelfTest() {
     add('bad_id-format-marked', 'heading', mark(2) + miniHeading({ ...base, Id: 'X-1' }), ['bad_id']);
     add('legacy-id-accepted', 'heading', miniHeading({ ...base, Id: '25' }), []);
     add('bad_id-not-below-next-id', 'heading', mark(1) + miniHeading(peer), ['bad_id']);
-    add('bad_id-no-next-id', 'heading', miniHeading(peer), ['bad_id'], { required_fields: ['Id'] });
+    add('bad_id-no-next-id', 'heading', miniHeading(peer), ['bad_id'],
+      { required_fields: ['Id', 'Since', 'Origin', 'Problem', 'Impact'] });
+    // Not opted in: a reporter-field line is what the old gate made of it, extra content.
+    add('legacy-reporter-line-heading', 'heading', miniHeading({ ...base, Since: 'last week', Origin: 'external' }),
+      ['extra_content']);
+    add(
+      'legacy-reporter-line-checklist',
+      'checklist',
+      '- [ ] [Minor] Gate self-test row\n' +
+      '  - Status: open\n' +
+      '  - Since: last week\n' +
+      '  - Origin: external\n' +
+      '  - Trigger: when the fixture runs\n' +
+      '  - Effort: S\n' +
+      '  - Source: self-test\n' +
+      '  - Pointer: docs/plans/ok.md\n',
+      ['extra_content'],
+      { style: 'checklist' }
+    );
     add('duplicate_id-heading', 'heading',
       mark(2) + miniHeading(peer) + '\n' + miniHeading({ ...peer, Title: 'Another row' }), ['duplicate_id']);
     add('bad_since', 'heading', mark(2) + miniHeading({ ...peer, Since: '2026-13-40' }), ['bad_since']);
@@ -1449,6 +1480,8 @@ module.exports = {
   LEGACY_EFFORT_MAP,
   collectEntries,
   withNextIdMark,
+  fieldOptedIn,
+  resolveBacklogConfigPath,
   parseHeadingBlock,
   splitHeadingEntries,
   fieldLine,

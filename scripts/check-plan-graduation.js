@@ -603,11 +603,23 @@ function loadBacklogGate() {
   return require(path.join(SCRIPT_DIR, 'check-backlog-entries.js'));
 }
 
-function collectBacklogRows(backlogPath) {
+// The backlog's own config decides which reporter fields a row carries (the entry gate's
+// opt-in rule: a next-id mark or required_fields); an unreadable config reads as none.
+function backlogFieldConfig(gate, repoRoot) {
+  try {
+    const p = gate.resolveBacklogConfigPath(repoRoot);
+    return p ? gate.mergeConfig(gate.builtinConfig(), gate.parseConfigFile(p)) : gate.builtinConfig();
+  } catch {
+    return gate.builtinConfig();
+  }
+}
+
+function collectBacklogRows(backlogPath, repoRoot) {
   const text = readFileSafe(backlogPath);
   if (text == null) return { text: null, rows: [] };
   const gate = loadBacklogGate();
-  const entries = gate.collectEntries(text, 'heading');
+  const root = repoRoot || gitToplevel(path.dirname(backlogPath)) || path.dirname(backlogPath);
+  const entries = gate.collectEntries(text, 'heading', backlogFieldConfig(gate, root));
   const rows = entries
     .filter((e) => !e.unparseable && e.fields)
     .map((e) => ({
@@ -863,7 +875,7 @@ function run(opts) {
   const allowlist = loadAllowlist(opts.allowlist ? path.resolve(opts.allowlist) : null);
   const activeLineageStems = loadActiveLineageStems(repoRoot);
 
-  const { text: backlogText, rows } = collectBacklogRows(backlogPath);
+  const { text: backlogText, rows } = collectBacklogRows(backlogPath, repoRoot);
   const changelogText = readFileSafe(changelogPath) || '';
   const releasedText = releasedChangelogText(changelogPath);
 

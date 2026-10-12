@@ -788,7 +788,7 @@ assert_eq "$(json_field "$out" totals.migrate)" "2" "exemption mutation: moving 
 # the two keeps its full Trigger and Context.
 RC="$(repo reporter-rowcap)"
 RC_T="$(python3 -c 'print("t"*230)')"; RC_S="$(python3 -c 'print("s"*150)')"; RC_C="$(python3 -c 'print("c"*230)')"
-printf '%s\n' '# Backlog' '' '### Mid size reporter row' '- **Id**: BL-0001' '- **Status**: open' '- **Since**: 2026-09-05' \
+printf '%s\n' '# Backlog' '' '<!-- next-id: BL-0002 -->' '' '### Mid size reporter row' '- **Id**: BL-0001' '- **Status**: open' '- **Since**: 2026-09-05' \
   '- **Origin**: self' "- **Problem**: $(python3 -c 'print("問"*96)')" "- **Impact**: $(python3 -c 'print("影"*50)')" \
   "- **Trigger**: $RC_T" '- **Effort**: S' "- **Source**: $RC_S" '- **Pointer**: docs/plans/ok.md' "- **Context**: $RC_C" \
   '- **Note**: extra prose that forces a move' '' > "$RC/docs/BACKLOG.md"

@@ -28,7 +28,9 @@ Several reporters on one row: `；`-separated in Reporter, Report and Reply, pos
 
 **Row cap**: 900 B for a row with only legacy fields; **1600 B** for a row carrying any of Since…Impact (an Id alone keeps a legacy row at 900 B and counts toward its pointer threshold). Nothing but these fields — an extra bullet, sub-list or code fence is `extra_content`.
 
-**Required**: Title/Status/Trigger/Effort/Source/Pointer always. Id, Since, Origin, Problem, Impact only when the config lists them (default: optional, so a project with legacy rows and no config sees no change). Reporter/Report/Reply are required whenever Origin is `peer`. In a **table**, a column named after a reporter field is read only once the file opts in (a next-id mark, or that field in `required_fields`; Reporter/Report/Reply follow a required Origin) — before that the row is parsed without those columns, so every check (the pre-push `--range` rule included) sees it exactly as the legacy gate did.
+**Required**: Title/Status/Trigger/Effort/Source/Pointer always. Id, Since, Origin, Problem, Impact only when the config lists them (default: optional, so a project with legacy rows and no config sees no change). Reporter/Report/Reply are required whenever Origin is `peer`.
+
+**Opt-in**: Since, Origin, Reporter, Report, Reply, Problem and Impact are read only in a file that opts in — a `<!-- next-id -->` mark, or the field in `required_fields` (Reporter/Report/Reply follow a required Origin). Until then every style parses the entry exactly as the legacy gate did: in a heading or checklist entry such a line is `extra_content`, in a table such a column is ignored, and every check (the pre-push `--range` rule and `check-plan-graduation.js` included) sees that legacy entry. Id keeps its own rule (BL-NNNN only after the same opt-in). A file written by `--to-reporter-fields` carries the mark.
 
 ```markdown
 <!-- next-id: BL-0043 -->

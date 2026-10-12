@@ -764,7 +764,8 @@ function planMigration(text, cfg, repoRoot, opts) {
 
   for (let i = 0; i < slices.length; i++) {
     const slice = slices[i];
-    const parsed = collectEntries(slice, 'heading').find((e) => !e.unparseable) || {
+    // The slice has no next-id mark of its own: opt in on the whole file's terms.
+    const parsed = collectEntries(slice, 'heading', gate.withNextIdMark(cfg, text)).find((e) => !e.unparseable) || {
       fields: {},
       extra: true,
       text: slice,

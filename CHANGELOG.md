@@ -6,6 +6,11 @@
 
 - **即時面板「現況」分頁多了「最近對話」**（merge `82d34da4`）：分頁最後列出這個 session 最近 3 則你輸入的 prompt，依時間排序，最新的在最下面。tool 結果和系統插入的訊息不算在內。每則預設收合成一行「▸ 你：…」（最多 60 字），點一下會展開，顯示完整 prompt 和 AI 的回覆，最多約 20 行。看起來像 secret 的字串（`sk-…`、`ghp_…`、`Bearer …`、`AKIA…`、`xox?-…`）在顯示前就由程式遮成 `***`，不經過模型。這段資料只有在 transcript 變動時才會重算；/clear 之後，原本展開的項目會全部收回。目前只能用滑鼠展開，還不能用鍵盤（BACKLOG 有列）。
 
+- **band 上的每一格都能點，點了直接開面板的對應分頁**（merge `1a2a903e`）：判定、位置、unit 開「現況」（位置與 unit 會順便展開「目前位置」區塊）；派工開「派工」；審查與決策開「審查」；用量開「用量」；殘留 `⚑N` 開「殘留」。面板一律取得焦點，按 Esc 關閉。鍵盤操作不變：Ctrl+x Tab 仍先停在 ⓘ，再用 Shift+Tab 移到各格。
+  - **ⓘ 右半格現在點得到**：ⓘ（U+24D8）屬於 East Asian Ambiguous 寬度，程式算 1 格，CJK 語系的終端機畫 2 格，所以原本只有左半格是按鈕。按鈕文字改成 `ⓘ `（2 格），寬度預算也跟著多算 1 格。
+  - **「現況」分頁的區塊更好分辨**：目前位置、執行狀況、今日花費、最近對話各有一條延伸到面板邊緣的標題線，點標題可以折疊；折疊狀態在 /clear 後保留，新 session 才重設。「待你處理」不會被折疊。標題線也套用到其他分頁的標題。
+  - **最近對話換行後仍可點**：一則對話換成多行時，每一行都能展開或收合，不再只有第一行有效。
+
 - **使用 1M context 卻沒設自動壓縮門檻時，T1 提醒會建議你設定**：沒設 `autoCompactWindow` 的話，1M context 的 session 要到接近 1M 才會自動壓縮。現在 context-budget 的 T1 提醒（100k）會多一行，建議在 `~/.claude/settings.json` 設 `"autoCompactWindow": 250000`，或執行 `/autocompact`。實測顯示，在 150k 到 300k 之間重置 context，大約可省下 20% 費用。以下情況不會出現這行：已經用任何方式設定門檻（env `CLAUDE_CODE_AUTO_COMPACT_WINDOW`、使用者或專案設定、`/autocompact` 寫入的單一模型設定）、視窗不是 1M、自動壓縮已關閉。
   - `scripts/dev-setup.sh --check` 會列出目前生效的門檻和它來自哪個檔案；沒有設定時顯示 WARN。
   - 新增的 `scripts/lib/autocompact-window.js` 依照 Claude Code 2.1.296 的規則推算門檻：env 優先，再依 user → project → local → policy 的順序合併設定檔。它讀不到命令列的 `--settings` 與 `--autocompact`，也讀不到伺服器下發的門檻。

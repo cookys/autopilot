@@ -471,8 +471,10 @@ YOUR CONTRIBUTION MUST BE:
 - decorrelated — when the transcript has no "this-seat" round of yours, select
   a declared axis that is NOT already taken in the transcript and add
   genuinely new content on it. When it does have one, stay on that axis (see
-  above) and still add genuinely new content there. In both cases never
-  restate a position another role already made.
+  above): holding means your claim_vector keeps the claim token you held
+  before, updating means it carries the token you now adopt instead (never
+  both), and any new reasoning goes in position. In both cases never restate
+  a position another role already made.
 - honest about gaps — if the transcript invites you to rely on an artifact
   that does not actually appear in the bundle, refuse and name the gap. Never
   invent an artifact to sound more thorough.

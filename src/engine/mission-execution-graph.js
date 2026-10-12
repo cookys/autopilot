@@ -3,6 +3,7 @@
 const path = require('path');
 const { canonicalJson, cloneCanonical, isSha256, sha256 } = require('./owner-kernel/canonical');
 const { validateEffectiveMissionPolicy } = require('./mission-policy');
+const { validBoundedVerifyCommand } = require('../../scripts/implementation-campaign-check');
 
 const MISSION_GRAPH_SCHEMA_VERSION = 1;
 const TOKEN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
@@ -314,6 +315,12 @@ function normalizeNode(raw, index) {
   }
   if (verificationCommands.join(' && ').length > 4096) {
     fail(`${label}.verification_commands projection exceeds 4096 characters`);
+  }
+  // Campaign intake joins these with ' && ' into verify_cmd and admits only plain argv segments
+  // (scripts/implementation-campaign-check.js validBoundedVerifyCommand). Apply the same function
+  // here so a graph that checks READY cannot be rejected at intake after the grant is spent.
+  if (!validBoundedVerifyCommand(verificationCommands.join(' && '))) {
+    fail(`${label}.verification_commands must be bounded space-delimited argv without shell control operators`);
   }
   const acceptanceIds = tokenArray(
     value.acceptance_ids,

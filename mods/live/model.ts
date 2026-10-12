@@ -2034,7 +2034,10 @@ export function readQuota(v: unknown): QuotaWindow[] {
     const { kind, percentUsed, resetsAt } = w as { kind?: unknown; percentUsed?: unknown; resetsAt?: unknown }
     if (typeof kind !== 'string' || kind === '' || typeof percentUsed !== 'number' || !Number.isFinite(percentUsed)) continue
     const at = typeof resetsAt === 'string' ? Date.parse(resetsAt) : NaN
-    out.push({ kind, pct: Math.max(0, percentUsed), resetsAtMs: Number.isFinite(at) ? at : null })
+    const reading = { kind, pct: Math.max(0, percentUsed), resetsAtMs: Number.isFinite(at) ? at : null }
+    const i = out.findIndex(o => o.kind === kind)
+    if (i < 0) out.push(reading)
+    else if (reading.pct > out[i].pct) out[i] = reading // one row per kind: the most used reading
   }
   const rank = (k: string) => { const i = QUOTA_ORDER.indexOf(k); return i < 0 ? QUOTA_ORDER.length : i }
   return out.sort((a, b) => rank(a.kind) - rank(b.kind))
@@ -2060,6 +2063,8 @@ export function readAccount(text: string | null): AccountView | null | undefined
   return { email, name: str(a.displayName), org: str(a.organizationName), role: str(a.organizationRole), plan: planText(a.organizationType, a.organizationRateLimitTier), extraUsage: a.hasExtraUsageEnabled === true }
 }
 
+// the shown percent is floored, so text and colour agree (79.9 shows 79% uncoloured) and 100% means the limit is reached
+const quotaPct = (pct: number): number => Math.floor(pct)
 // used share of a window: warning from 80 %, error from 100 % (the spend slot's thresholds)
 const quotaColor = (pct: number): ThemeKey | undefined => spendColor(pct, 100)
 const QUOTA_SHORT: Record<string, string> = { five_hour: '5h', seven_day: '7d', spend_limit: 'cap' } // not `$`: the spend slot's `$60` sits beside it
@@ -2074,7 +2079,7 @@ export function slotQuota(q: readonly QuotaWindow[] | null | undefined): Slot | 
     const tag = w === top ? undefined : 'qx'
     const c = quotaColor(w.pct)
     if (segs.length > 0) segs.push(sp(' ', { tag: 'qx' })) // a separator only matters while two windows show
-    segs.push(sp(QUOTA_SHORT[w.kind] + ' ', { dim: true, ...(tag === undefined ? {} : { tag }) }), sp(Math.round(w.pct) + '%', { ...(c === undefined ? {} : { color: c }), ...(tag === undefined ? {} : { tag }) }))
+    segs.push(sp(QUOTA_SHORT[w.kind] + ' ', { dim: true, ...(tag === undefined ? {} : { tag }) }), sp(quotaPct(w.pct) + '%', { ...(c === undefined ? {} : { color: c }), ...(tag === undefined ? {} : { tag }) }))
   }
   return { id: 'quota', segs }
 }
@@ -2095,7 +2100,7 @@ export function accountLines(a: AccountSnap | undefined, nowMs: number | null, c
     const key = QUOTA_KEYS[w.kind]
     const label = key === undefined ? bgLabel(w.kind.replace(/_/g, ' ')) : t(key)
     const resets = w.resetsAtMs === null || nowMs === null || w.resetsAtMs <= nowMs ? '' : '  ' + t('quota.resets', { in: ageText((w.resetsAtMs - nowMs) / 1000) })
-    rows.push(kv(label, ...spendBarSegs(Math.min(w.pct, 100), 100, 12), seg('  ' + Math.round(w.pct) + '%', quotaColor(w.pct)), dseg(resets)))
+    rows.push(kv(label, ...spendBarSegs(Math.min(w.pct, 100), 100, 12), seg('  ' + quotaPct(w.pct) + '%', quotaColor(w.pct)), dseg(resets)))
   }
   return rows.length === 0 ? [] : section(ctx, SECTION.account, t('now.account'), [], rows)
 }

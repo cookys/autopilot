@@ -154,6 +154,9 @@ type World = {
   writes: string[]
   reads: string[]
   lists: string[]
+  statErrors: Record<string, string> // $.fs.stat rejects with this message (the engine passes a message only, no `code`)
+  existsThrows: Set<string> // $.fs.exists rejects for these paths
+  env: Record<string, string> // what $.env.get answers; a test may change it between ticks
   clock: ReturnType<typeof mock.clock>
 }
 
@@ -162,16 +165,21 @@ const worldEn = (on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A) => world(o
 
 // Registers the bottom hooks (what the engine would answer) for one test.
 function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en' | 'zh-TW' | null = 'zh-TW', env: Record<string, string> = {}): World {
-  const w: World = { files, sid: { value: sid }, cwdReal: { value: CWD }, stats: {}, toasts: [], panes: [], opens: [], panesThrow: false, panesGate: null, openGate: null, writes: [], reads: [], lists: [], clock: undefined as never }
+  const w: World = { files, sid: { value: sid }, cwdReal: { value: CWD }, stats: {}, toasts: [], panes: [], opens: [], panesThrow: false, panesGate: null, openGate: null, writes: [], reads: [], lists: [], statErrors: {}, existsThrows: new Set(), env: { HOME, ...(locale === null ? {} : { AUTOPILOT_LOCALE: locale }), ...env }, clock: undefined as never }
   w.clock = mock.clock(on, { now: nowMs })
-  mock.env(on, { HOME, ...(locale === null ? {} : { AUTOPILOT_LOCALE: locale }), ...env }) // the suite pins zh-TW: the band words these cases assert are the zh-TW table's
+  // the suite pins zh-TW: the band words these cases assert are the zh-TW table's. Answered here rather than by mock.env, which keeps
+  // its own copy, so a test can change a variable between ticks
+  on('env.get', ($, e) => ({ value: w.env[e.name] }))
   on('fs.read', ($, e) => {
     w.reads.push(e.path)
     const t = w.files[e.path]
     if (t === undefined) throw new Error('ENOENT ' + e.path)
     return { value: t }
   })
-  on('fs.exists', ($, e) => ({ value: w.files[e.path] !== undefined }))
+  on('fs.exists', ($, e) => {
+    if (w.existsThrows.has(e.path)) throw new Error('EIO: i/o error, access')
+    return { value: w.files[e.path] !== undefined }
+  })
   on('fs.write', ($, e) => { w.writes.push(e.path); return { value: undefined } })
   on('fs.list', ($, e) => {
     w.lists.push(e.path)
@@ -187,9 +195,13 @@ function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en'
     if (seen.size === 0) throw new Error('ENOENT ' + e.path)
     return { value: [...seen].map(([name, kind]) => ({ name, kind, size: 1, mtimeMs: 0, isLink: false })) }
   })
-  on('fs.stat', ($, e) => (w.stats[e.path] !== undefined ? { value: { kind: 'file' as const, ...w.stats[e.path], isLink: false } } : {
+  on('fs.stat', ($, e) => {
+    if (w.statErrors[e.path] !== undefined) throw new Error(w.statErrors[e.path])
+    return statOf(e)
+  })
+  const statOf = (e: { path: string; resolve?: boolean }) => (w.stats[e.path] !== undefined ? { value: { kind: 'file' as const, ...w.stats[e.path], isLink: false } } : {
     value: { kind: 'dir' as const, size: 0, mtimeMs: 0, isLink: false, realPath: e.resolve ? (e.path === CWD ? w.cwdReal.value : e.path) : undefined },
-  }))
+  })
   on('session.id', () => ({ value: w.sid.value }))
   on('session.cwd', () => ({ value: CWD }))
   on('session.root', () => ({ value: '/work/repo' }))
@@ -3838,6 +3850,9 @@ test('quota: readQuota keeps well-formed windows in 5h / 7d / spend order and pa
   expect(readQuota(USAGE.rateLimits)).toEqual([{ kind: 'five_hour', pct: 42, resetsAtMs: Date.parse(RESET_5H) }, { kind: 'seven_day', pct: 18.4, resetsAtMs: null }])
   expect(readQuota([{ kind: 'spend_limit', percentUsed: 130 }, { kind: 'x', percentUsed: 'a' }, null, { percentUsed: 3 }, { kind: 'five_hour', percentUsed: NaN }, { kind: 'seven_day', percentUsed: -2, resetsAt: 'soon' }]))
     .toEqual([{ kind: 'seven_day', pct: 0, resetsAtMs: null }, { kind: 'spend_limit', pct: 130, resetsAtMs: null }])
+  // the same kind twice: one row, the most used reading
+  expect(readQuota([{ kind: 'five_hour', percentUsed: 20 }, { kind: 'seven_day', percentUsed: 5 }, { kind: 'five_hour', percentUsed: 64, resetsAt: RESET_5H }, { kind: 'five_hour', percentUsed: 30 }]))
+    .toEqual([{ kind: 'five_hour', pct: 64, resetsAtMs: Date.parse(RESET_5H) }, { kind: 'seven_day', pct: 5, resetsAtMs: null }])
   expect(readQuota(undefined)).toEqual([])
   expect(readQuota({ kind: 'five_hour' })).toEqual([])
 })
@@ -3890,6 +3905,12 @@ test('quota slot: a band still too long drops the quota windows before the ⏸ /
 test('quota slot: a window is plain below 80 %, warning from 80 %, error from 100 %; the label stays dim', () => {
   const colorOf = (pct: number) => (slotQuota([win('five_hour', pct)]) as Slot).segs.find(s => s.text.endsWith('%'))?.color
   expect([colorOf(79.9), colorOf(80), colorOf(99.9), colorOf(100), colorOf(130)]).toEqual([undefined, 'warning', 'warning', 'error', 'error'])
+  // the text is floored, so it agrees with the colour: 79.9 is an uncoloured 79%, 99.9 a warning 99%, never 100% before the limit
+  const textOf = (pct: number) => (slotQuota([win('five_hour', pct)]) as Slot).segs.map(g => g.text).join('')
+  expect([textOf(79.9), textOf(80), textOf(99.9), textOf(100)]).toEqual(['5h 79%', '5h 80%', '5h 99%', '5h 100%'])
+  const nowText = accountLines({ account: undefined, quota: [win('five_hour', 79.9)] }, null, { t: makeT('en'), cols: 120 })[1].text
+  expect(nowText).toContain(' 79%')
+  expect(nowText).not.toContain('80%')
   expect((slotQuota([win('five_hour', 42)]) as Slot).segs[0]).toMatchObject({ text: '5h ', dim: true })
 })
 
@@ -3959,13 +3980,16 @@ for (const surface of SURFACES) {
     await w.clock.advance(5000)
     expect(reads()).toBe(before)
     expect((await bandLine($, surface, 120)).text).toContain('5h 42% 7d 18%')
-    // Claude Code rewrote the file mid-tick (half a JSON): read, ignored, the account stays; the finished write is read and shown
+    // Claude Code rewrote the file (half a JSON) 10 s after the first parse: left alone until 30 s have passed since that parse,
+    // then read, ignored, the account stays; a failed parse starts no interval, so the next tick reads again
     w.files[PATH] = CLAUDE_JSON.slice(0, 50)
     w.stats[PATH] = { size: 50, mtimeMs: NOW_FRESH }
     await w.clock.advance(5000)
+    expect(reads()).toBe(before)
+    await w.clock.advance(20000)
     expect(reads()).toBe(before + 1)
     expect(await body()).toContain('owner@example.com')
-    await w.clock.advance(5000) // the same half-written stat: not cached, read again
+    await w.clock.advance(5000)
     expect(reads()).toBe(before + 2)
     const other = CLAUDE_JSON.replace('owner@example.com', 'second@example.com')
     w.files[PATH] = other
@@ -3996,22 +4020,70 @@ for (const surface of SURFACES) {
     await pane.unmount()
     expect(active).toBe('now')
     expect((await rowsNow()).join('\n')).toContain('second@example.com')
-    // the file is gone (logged out, another HOME): the account leaves, the windows stay
+    // stat refused while the file is still there (a permission or passing I/O error): the account stays, nothing is read
+    w.statErrors[PATH] = "EACCES: permission denied, lstat '" + PATH + "'"
+    const refused = reads()
+    await w.clock.advance(5000)
+    expect(reads()).toBe(refused)
+    expect(await body()).toContain('second@example.com')
+    // the file is gone but exists() itself rejects: no way to tell, the account stays
     delete w.files[PATH]
     delete w.stats[PATH]
+    w.statErrors[PATH] = "ENOENT: no such file or directory, lstat '" + PATH + "'"
+    w.existsThrows.add(PATH)
+    await w.clock.advance(5000)
+    expect(await body()).toContain('second@example.com')
+    // the file is gone (logged out, another HOME): the account leaves, the windows stay
+    w.existsThrows.delete(PATH)
     await w.clock.advance(5000)
     b = await body()
     expect(b).not.toContain('second@example.com')
     expect(b).toContain(t('label.quota_5h'))
     // back, then grown over $.fs.read's 4 MiB cap: not read, and no stale account either
+    delete w.statErrors[PATH]
     w.files[PATH] = other
     w.stats[PATH] = { size: other.length, mtimeMs: NOW_FRESH + 2 }
     await w.clock.advance(5000)
     expect(await body()).toContain('second@example.com')
-    w.stats[PATH] = { size: 5 * 1024 * 1024, mtimeMs: NOW_FRESH + 3 }
+    // exactly at the cap: still read, once the interval is up
+    w.stats[PATH] = { size: 4 * 1024 * 1024, mtimeMs: NOW_FRESH + 3 }
+    const atCap = reads()
+    await w.clock.advance(30000)
+    expect(reads()).toBe(atCap + 1)
+    w.stats[PATH] = { size: 4 * 1024 * 1024 + 1, mtimeMs: NOW_FRESH + 4 }
     const capped = reads()
     await w.clock.advance(5000)
     expect(reads()).toBe(capped)
     expect(await body()).not.toContain('@example.com')
   })
 }
+
+test('account: with CLAUDE_CONFIG_DIR set the account comes from that directory, not HOME', async ($, on) => {
+  const moved = CLAUDE_JSON.replace('owner@example.com', 'moved@example.com')
+  const w = world(on, { ...base(), [HOME + '/.claude.json']: CLAUDE_JSON, ['/cfg/.claude.json']: moved }, NOW_FRESH, SID_A, 'zh-TW', { CLAUDE_CONFIG_DIR: '/cfg/' })
+  w.stats[HOME + '/.claude.json'] = { size: CLAUDE_JSON.length, mtimeMs: NOW_FRESH - 60000 }
+  w.stats['/cfg/.claude.json'] = { size: moved.length, mtimeMs: NOW_FRESH - 60000 }
+  await start($, 'terminal')
+  const body = async () => (await paneParts($, 'terminal', 'now')).texts.join('\n')
+  const b = await body()
+  expect(b).toContain('moved@example.com')
+  expect(b).not.toContain('owner@example.com')
+  expect(w.reads).not.toContain(HOME + '/.claude.json')
+  // the variable changes mid-session to a directory whose file has the same size and mtime: read at once, not taken for the cached one
+  const again = CLAUDE_JSON.replace('owner@example.com', 'again@example.com')
+  w.files['/cfg2/.claude.json'] = again
+  w.stats['/cfg2/.claude.json'] = { size: moved.length, mtimeMs: NOW_FRESH - 60000 }
+  w.env.CLAUDE_CONFIG_DIR = '/cfg2'
+  await w.clock.advance(5000)
+  expect(await body()).toContain('again@example.com')
+  // a third directory whose file is half written: no account rather than the previous directory's
+  w.files['/cfg3/.claude.json'] = again.slice(0, 50)
+  w.stats['/cfg3/.claude.json'] = { size: 50, mtimeMs: NOW_FRESH }
+  w.env.CLAUDE_CONFIG_DIR = '/cfg3'
+  await w.clock.advance(5000)
+  expect(await body()).not.toContain('@example.com')
+  // set but empty: HOME
+  w.env.CLAUDE_CONFIG_DIR = ''
+  await w.clock.advance(5000)
+  expect(await body()).toContain('owner@example.com')
+})

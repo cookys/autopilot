@@ -20,14 +20,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/qc-gate-affected-suites.md
 - **Context**: full run past 30 min (stopped at 256/408); the 38 suites that reference the changed files passed in about 2 min. Keep the full suite for release preflight.
 
-### mods account and quota: five review follow-ups
-- **Status**: open
-- **Trigger**: the Account section blanks or shows a stale account, a percent near 80 shows the wrong colour, or `CLAUDE_CONFIG_DIR` is in use
-- **Effort**: S
-- **Source**: feat/mods-account review, 2026-10-13
-- **Pointer**: docs/backlog/mods-account-quota-followups.md
-- **Context**: readAccountQuota clears on any stat error (not only ENOENT); colour uses the raw ratio vs rounded text; no re-parse throttle; CLAUDE_CONFIG_DIR unverified; duplicate window kinds both shown.
-
 ### mods Now tab: a background row may never end when no status notification follows
 - **Status**: open
 - **Trigger**: a stale 背景指令 or 監看 row is seen, or a session is resumed after quitting with background work running

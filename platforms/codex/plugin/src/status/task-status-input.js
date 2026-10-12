@@ -171,6 +171,17 @@ function campaignEvents(rows, campaignId) {
   return events;
 }
 
+// The controller stores the verification as a wrapper {passed, cached, receipt_digest, receipt}
+// (src/engine/campaign-verification.js); the reader wants the bare receipt, whose exact key set it
+// checks. Bare receipts (and bundles written before this unwrap) pass through unchanged.
+function unwrapVerificationReceipt(value) {
+  if (value && typeof value === 'object' && value.receipt && typeof value.receipt === 'object'
+      && !Array.isArray(value.receipt) && value.artifact_type === undefined) {
+    return value.receipt;
+  }
+  return value;
+}
+
 // The controller work order is keyed by the managed campaign's own root id
 // (the campaign id), which differs from the Mission root; try both. A receipt is
 // accepted only when its digest is the one the ledger's vertical_verified event pins.
@@ -187,7 +198,9 @@ function workOrderVerification(root, ids, evidenceDigest) {
     for (const name of names.sort()) {
       if (!name.endsWith('.json')) continue;
       const order = readJsonSafe(path.join(dir, name));
-      const receipt = order && order.controller && order.controller.verification_receipt;
+      const receipt = unwrapVerificationReceipt(
+        order && order.controller && order.controller.verification_receipt,
+      );
       if (receipt && receipt.receipt_digest === evidenceDigest) return plain(receipt);
     }
   }
@@ -238,7 +251,7 @@ function deriveCampaignEntry({
     && verifiedEvent.payload.evidence_digest;
   const verification = workOrderVerification(root, [campaignId, rootRunId], evidenceDigest)
     || (prior.verification && prior.verification.receipt_digest === evidenceDigest
-      ? prior.verification : null);
+      ? unwrapVerificationReceipt(prior.verification) : null);
   if (!verification) return null;
 
   return {

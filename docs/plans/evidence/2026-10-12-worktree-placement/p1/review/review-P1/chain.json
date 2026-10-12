@@ -36,6 +36,55 @@
       "s3": "c0d76e54e3368036b97d9da04d59e58f0eeadd0cf9d1cf7e534707931cdfc955"
     },
     "dispositions_path": "review-P1/g1/dispositions.json",
-    "dispositions_sha256": "988dd038547ff4fd21ca66f7c02c745b1e0456637d10ccec524b2385289d883e"
+    "dispositions_sha256": "988dd038547ff4fd21ca66f7c02c745b1e0456637d10ccec524b2385289d883e",
+    "closed_findings": [
+      {
+        "id": "9c55ec7b9c07d9751b2f8612abc21e1d3f233f46f5fa5d3db450091609d92695",
+        "closed_by_generation": 2
+      },
+      {
+        "id": "b2c5418b0203fef4336c1bd4e2e741960fc268dd60b6b05f8fc9fab700b27b52",
+        "closed_by_generation": 2
+      }
+    ]
+  },
+  {
+    "generation": 2,
+    "base": "d9aa4210d87645ccf699b4582bfab10327ccfd0e",
+    "head": "202211cef946bb5c99d56a0b5c636853eca8559d",
+    "seats": [
+      {
+        "id": "s0",
+        "status": "reviewed"
+      },
+      {
+        "id": "s1",
+        "status": "reviewed"
+      },
+      {
+        "id": "s2",
+        "status": "reviewed"
+      },
+      {
+        "id": "s3",
+        "status": "reviewed"
+      }
+    ],
+    "reviewed_seats": 4,
+    "total_seats": 4,
+    "reviewed_seats_count": 4,
+    "total_seats_count": 4,
+    "status": "finalized",
+    "diff_sha256": "e9f0e6c1d7448c9ac6d0520c9a0f2889c47dbc0f91189b7d2e36e44b988f8f49",
+    "full_range_sha256": "e9b4cb8703e9d472aa8a392b656ef459f44f552f765c4b9fde78de0445c180e5",
+    "findings_sha256": "bc8c3b6b7404248eb85561da1ff967df24feb6fa3cda10305621c83a105737ad",
+    "seat_artifact_sha256": {
+      "s0": "0c03688ec1afb2ed1745915bf0500c02094bd57c12cf13e6add4f01d82fcf516",
+      "s1": "f04ff3cf9bdbde851a3e22120db95fcc872464f225095f42781d5e0c9502ae85",
+      "s2": "95215b3b86d127070f535a8d7e512fb3a2797d7d00b90067cf9952bd6bc5b5b6",
+      "s3": "f28f4ab10f774ac469ae8f9646ca8d2c4818a41aa304fb7f783b1a24d3693058"
+    },
+    "dispositions_path": "review-P1/g2/dispositions.json",
+    "dispositions_sha256": "cb07b105a0576d37a3e25584622a094ce5fe0106f9d1043cfdc71e5393a8e1cb"
   }
 ]

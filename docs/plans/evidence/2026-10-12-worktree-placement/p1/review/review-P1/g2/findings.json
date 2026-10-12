@@ -1,0 +1,34 @@
+{
+  "findings": [
+    {
+      "id": "c651ad25e714aa97ef0b74efa46c6eb28dee7ccdf4952984d88c0ebe2f9ca98d",
+      "severity": "Suggestion",
+      "seat": "s0",
+      "text": "🔵 [receipt-range-stops-before-fix] CUT/FOLLOW-UP The sealed g1 receipt (receipt-P1.json / chain.json, head d9aa4210) covers the generation that produced the `set-repo-root-undefined-fallback` finding, not the two-line `next.repo_root || repoRoot` fix and the L/XL test hardening in this diff; the fix is covered only by this review. Excluded because the receipt faithfully records what g1 reviewed and the dispositions file states the fix; a g2 entry is a loop-cadence choice, not a defect in the code."
+    },
+    {
+      "id": "151feae9da4f01577a19007b08cded61e41ba9ae36503f2a8183cfb069aeaf64",
+      "severity": "Suggestion",
+      "seat": "s0",
+      "text": "🔵 [red-green-assertion-digest-stale] CUT/FOLLOW-UP red-green.json pins stage-advance.test.sh at sha256 9ec73559… (head d9aa4210), but this diff edits that file (foreign-repo and follow-back sets now use L/XL with write assertions), so the polarity receipt's assertion digest no longer matches the committed test. Excluded because the C1/D5 red assertions the receipt proves are byte-unchanged and the hardening only adds assertions; re-running verify-red-green at the final P1 head is cheap hygiene if a gate compares digests, which the spec does not require."
+    },
+    {
+      "id": "8d828421662945cae2439bf19e4f3ac76b7c903600f23cefe5d2f7765b88c7d5",
+      "severity": "Suggestion",
+      "seat": "s1",
+      "text": "🔵 [p1-4-suite-run-evidence] CUT/FOLLOW-UP Plan P1.4 lists session-mode.test.sh, session-mode-phase/-watcher/-bind-campaign-root, plain-session-marker.test.js and mission-routing-admission.test.sh; this diff pins only stage-advance.test.sh green-at-head (red-green.json, dispositions cite 205/0 for that suite). Run and record the remaining P1.4 suites when executing the phase workflow; excluded from blocking because no concrete failure is shown and D6's base behaviour change is spec-acknowledged and pinned red-at-base by test (g)."
+    },
+    {
+      "id": "814da64cf0a56b671e8235a5fdda0f39f1b6afc470588f82b4c5bfe619425aef",
+      "severity": "Suggestion",
+      "seat": "s1",
+      "text": "🔵 [sessionreporoot-identity-fallback] CUT/FOLLOW-UP stage-advance.js sessionRepoRoot requires a non-empty marker.repo_identity, while followRepoRoot additionally derives identity from an absolute marker.repo_root; a legacy marker with repo_root but no repo_identity never follows E1 into a linked worktree (keeps exactly today's behaviour). Optional symmetry hardening only; excluded because the conservative fallback preserves base semantics and all current markers store repo_identity."
+    },
+    {
+      "id": "f2e17e277a50aa218209afc34b239c664255c920037a29f801383784e5c68fb1",
+      "severity": "Suggestion",
+      "seat": "s1",
+      "text": "🔵 [default-branches-order-consumers] CUT/FOLLOW-UP DEFAULT_BRANCHES now flattens to develop,origin/develop,main,origin/main,master,origin/master (was develop,main,master,origin/develop,origin/main); only defaultBaseRef is observed consuming it in this diff, so confirm via the P1.4 suites that no other consumer pins the old flat order. Never blocks: the order change is D6's declared, test-pinned behaviour change."
+    }
+  ]
+}

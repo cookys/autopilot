@@ -1,0 +1,664 @@
+diff --git a/docs/plans/evidence/2026-10-12-worktree-placement/p1/collect-g1.stderr b/docs/plans/evidence/2026-10-12-worktree-placement/p1/collect-g1.stderr
+new file mode 100644
+index 00000000..2e456151
+--- /dev/null
++++ b/docs/plans/evidence/2026-10-12-worktree-placement/p1/collect-g1.stderr
+@@ -0,0 +1,2 @@
++stage-advance: 3 leaving the unit loop needs index = total (unit 1/4)
++rc=0
+diff --git a/docs/plans/evidence/2026-10-12-worktree-placement/p1/collect-g1.stdout b/docs/plans/evidence/2026-10-12-worktree-placement/p1/collect-g1.stdout
+new file mode 100644
+index 00000000..dbd8d920
+--- /dev/null
++++ b/docs/plans/evidence/2026-10-12-worktree-placement/p1/collect-g1.stdout
+@@ -0,0 +1,32 @@
++{
++  "phase": "P1",
++  "generation": 1,
++  "base": "6ef014f4",
++  "head": "d9aa4210d87645ccf699b4582bfab10327ccfd0e",
++  "seats": [
++    "s0",
++    "s1",
++    "s2",
++    "s3"
++  ],
++  "findings_count": 6,
++  "status": "pending",
++  "seat_summaries": {
++    "s0": {
++      "findings_count": 4,
++      "proof_present": false
++    },
++    "s1": {
++      "findings_count": 2,
++      "proof_present": true
++    },
++    "s2": {
++      "findings_count": 0,
++      "proof_present": true
++    },
++    "s3": {
++      "findings_count": 0,
++      "proof_present": true
++    }
++  }
++}
+diff --git a/docs/plans/evidence/2026-10-12-worktree-placement/p1/red-green.json b/docs/plans/evidence/2026-10-12-worktree-placement/p1/red-green.json
+new file mode 100644
+index 00000000..dece26d5
+--- /dev/null
++++ b/docs/plans/evidence/2026-10-12-worktree-placement/p1/red-green.json
+@@ -0,0 +1,40 @@
++{
++  "verdict": "VALIDATED",
++  "red_green_validated": true,
++  "base_sha": "6ef014f449a73ab95cc3be3712eb0d8a3899e4d1",
++  "head_sha": "d9aa4210d87645ccf699b4582bfab10327ccfd0e",
++  "head_result": "green",
++  "base_result": "red",
++  "red_tests": [
++    "hooks/tests/stage-advance.test.sh"
++  ],
++  "reason": "",
++  "schema_version": 1,
++  "artifact_type": "red_green_polarity_receipt",
++  "test_command_digest": "11af8e8ab4c7d140148f8417d94bb9d18c9148fd5bcae8efc5d15ec933171dee",
++  "verify_command_path": "/tmp/claude-1000/-home-cookys-projects-autopilot/a14bb1ea-4b8b-421d-9e3d-a7fa6e844a18/scratchpad/rg-p1.sh",
++  "verify_command_bytes_sha256": "e605c083c779d3d240bf291d2d5a9cf0a307b2b3db3ffbfb4b2833aa9749afcc",
++  "verify_command_base_bytes_sha256": "e605c083c779d3d240bf291d2d5a9cf0a307b2b3db3ffbfb4b2833aa9749afcc",
++  "verify_command_head_bytes_sha256": "e605c083c779d3d240bf291d2d5a9cf0a307b2b3db3ffbfb4b2833aa9749afcc",
++  "execution_argv": [
++    "/tmp/claude-1000/-home-cookys-projects-autopilot/a14bb1ea-4b8b-421d-9e3d-a7fa6e844a18/scratchpad/rg-p1.sh",
++    "<detached-worktree>"
++  ],
++  "execution_artifacts": [
++    "hooks/tests/stage-advance.test.sh"
++  ],
++  "assertion_artifacts": [
++    {
++      "path": "hooks/tests/stage-advance.test.sh",
++      "sha256": "9ec735593ef92524864f3574e6131c22f29536882805e2a7e14230343a2cdbed"
++    }
++  ],
++  "assertion_artifact_path": "hooks/tests/stage-advance.test.sh",
++  "assertion_artifact_digest": "3c46dfad62788a8a51fc974fc90e8a935c9262c7a0ffede73d68578fcf737a00",
++  "expected_red_exit_class": "exact_exit_code",
++  "expected_red_exit_code": 1,
++  "green_result": "green",
++  "base_exit_code": 1,
++  "head_exit_code": 0,
++  "receipt_digest": "e19f0e6d326c01b40877726eeca76a050a72b315c5d6585148f40d6cf8cbdcec"
++}
+diff --git a/docs/plans/evidence/2026-10-12-worktree-placement/p1/review/phase-P1.base b/docs/plans/evidence/2026-10-12-worktree-placement/p1/review/phase-P1.base
+new file mode 100644
+index 00000000..a66b07d3
+--- /dev/null
++++ b/docs/plans/evidence/2026-10-12-worktree-placement/p1/review/phase-P1.base
+@@ -0,0 +1 @@
++6ef014f4
+diff --git a/docs/plans/evidence/2026-10-12-worktree-placement/p1/review/receipt-P1.json b/docs/plans/evidence/2026-10-12-worktree-placement/p1/review/receipt-P1.json
+new file mode 100644
+index 00000000..5de19c37
+--- /dev/null
++++ b/docs/plans/evidence/2026-10-12-worktree-placement/p1/review/receipt-P1.json
+@@ -0,0 +1,59 @@
++{
++  "kind": "review",
++  "phase": "P1",
++  "branch": "feat/worktree-placement-rule",
++  "phase_base_sha": "6ef014f4",
++  "chain": [
++    {
++      "generation": 1,
++      "base": "6ef014f4",
++      "head": "d9aa4210d87645ccf699b4582bfab10327ccfd0e",
++      "seats": [
++        {
++          "id": "s0",
++          "status": "reviewed"
++        },
++        {
++          "id": "s1",
++          "status": "reviewed"
++        },
++        {
++          "id": "s2",
++          "status": "reviewed"
++        },
++        {
++          "id": "s3",
++          "status": "reviewed"
++        }
++      ],
++      "reviewed_seats": 4,
++      "total_seats": 4,
++      "reviewed_seats_count": 4,
++      "total_seats_count": 4,
++      "status": "finalized",
++      "diff_sha256": "348ff3699c5ed0384fdcbd86d5b5858d53d8c8147587e74d59885eaf30f55cad",
++      "full_range_sha256": "eabde038cc4a6f12f1552b13bb42678c6449e71dfca57e09b55b97dfe44ea419",
++      "findings_sha256": "9456636fae07a688e7e162aad18ee69a7a9d798784852083df863b1616905a1a",
++      "seat_artifact_sha256": {
++        "s0": "f7b7c998465755cd4c030cf4bf45de83d540e5ee708646308bc196f2eb80cf60",
++        "s1": "21505cca1fe3cfaf80c8f8c3fce99cef2127a6b96b9c63408c939666432abf6b",
++        "s2": "a31441d179b323bf730594076aaf18fc98464f6f9675823e681ee2237cf3b447",
++        "s3": "c0d76e54e3368036b97d9da04d59e58f0eeadd0cf9d1cf7e534707931cdfc955"
++      },
++      "dispositions_path": "review-P1/g1/dispositions.json",
++      "dispositions_sha256": "988dd038547ff4fd21ca66f7c02c745b1e0456637d10ccec524b2385289d883e"
++    }
++  ],
++  "verdict": "SHIP-AS-IS",
++  "open_findings": [
++    {
++      "id": "9c55ec7b9c07d9751b2f8612abc21e1d3f233f46f5fa5d3db450091609d92695",
++      "severity": "Minor",
++      "seat": "s0",
++      "text": "🟡 [set-repo-root-undefined-fallback] MUST-FIX `cmdSetInit` now passes `next.repo_root` to `applyInitFields` on both the `--new-task` and merge paths, but `followRepoRoot` returns early when `marker.repo_root` is not a string, so a marker lacking `repo_root` (not validated on read; the cache-written plain marker path) now derives `base_ref` via `git -C undefined` → null instead of the caller's toplevel as before; smallest fix: `applyInitFields(next, init, next.repo_root || repoRoot, …)` at both call sites.",
++      "disposition": "verified"
++    }
++  ],
++  "resolved_from": "native-fallback",
++  "written_at": "2026-10-12T11:26:40.216Z"
++}
+diff --git a/docs/plans/evidence/2026-10-12-worktree-placement/p1/review/review-P1/chain.json b/docs/plans/evidence/2026-10-12-worktree-placement/p1/review/review-P1/chain.json
+new file mode 100644
+index 00000000..7348f5d2
+--- /dev/null
++++ b/docs/plans/evidence/2026-10-12-worktree-placement/p1/review/review-P1/chain.json
+@@ -0,0 +1,41 @@
++[
++  {
++    "generation": 1,
++    "base": "6ef014f4",
++    "head": "d9aa4210d87645ccf699b4582bfab10327ccfd0e",
++    "seats": [
++      {
++        "id": "s0",
++        "status": "reviewed"
++      },
++      {
++        "id": "s1",
++        "status": "reviewed"
++      },
++      {
++        "id": "s2",
++        "status": "reviewed"
++      },
++      {
++        "id": "s3",
++        "status": "reviewed"
++      }
++    ],
++    "reviewed_seats": 4,
++    "total_seats": 4,
++    "reviewed_seats_count": 4,
++    "total_seats_count": 4,
++    "status": "finalized",
++    "diff_sha256": "348ff3699c5ed0384fdcbd86d5b5858d53d8c8147587e74d59885eaf30f55cad",
++    "full_range_sha256": "eabde038cc4a6f12f1552b13bb42678c6449e71dfca57e09b55b97dfe44ea419",
++    "findings_sha256": "9456636fae07a688e7e162aad18ee69a7a9d798784852083df863b1616905a1a",
++    "seat_artifact_sha256": {
++      "s0": "f7b7c998465755cd4c030cf4bf45de83d540e5ee708646308bc196f2eb80cf60",
++      "s1": "21505cca1fe3cfaf80c8f8c3fce99cef2127a6b96b9c63408c939666432abf6b",
++      "s2": "a31441d179b323bf730594076aaf18fc98464f6f9675823e681ee2237cf3b447",
++      "s3": "c0d76e54e3368036b97d9da04d59e58f0eeadd0cf9d1cf7e534707931cdfc955"
++    },
++    "dispositions_path": "review-P1/g1/dispositions.json",
++    "dispositions_sha256": "988dd038547ff4fd21ca66f7c02c745b1e0456637d10ccec524b2385289d883e"
++  }
++]
+diff --git a/docs/plans/evidence/2026-10-12-worktree-placement/p1/review/review-P1/g1/diff.txt b/docs/plans/evidence/2026-10-12-worktree-placement/p1/review/review-P1/g1/diff.txt
+new file mode 100644
+index 00000000..4da6fbdd
+--- /dev/null
++++ b/docs/plans/evidence/2026-10-12-worktree-placement/p1/review/review-P1/g1/diff.txt
+@@ -0,0 +1,230 @@
++diff --git a/docs/plans/2026-10-12-worktree-placement.md b/docs/plans/2026-10-12-worktree-placement.md
++index 75e7d7ac..2531118c 100644
++--- a/docs/plans/2026-10-12-worktree-placement.md
+++++ b/docs/plans/2026-10-12-worktree-placement.md
++@@ -108,7 +108,7 @@ time (memory: parallel suites interfere). Per-phase hetero code review (quality-
++ 1. `hooks/tests/stage-advance.test.sh`: marker created in a sandbox main checkout, linked worktree with N committed
++    files on a branch, `stage-advance --to verify` from the worktree ⇒ `files = N`. Red at base (measures the main
++    checkout).
++-2. `hooks/tests/session-mode.test.sh`: (a) local `develop` behind `origin/develop` ⇒ stored `base_ref` is the remote
+++2. `hooks/tests/stage-advance.test.sh` (where the `set --new-task` cases already live; `session-mode.test.sh` clones the repo per run): (a) local `develop` behind `origin/develop` ⇒ stored `base_ref` is the remote
++    sha; (b) local ahead ⇒ local; (c) diverged ⇒ remote; (d) `set --new-task` from a linked worktree of the same repo
++    ⇒ `repo_root` is the worktree; (e) from a different repo ⇒ `repo_root` unchanged; (f) plain `set` (no
++    `--new-task`) from a linked worktree ⇒ `repo_root` follows, from a foreign repo ⇒ unchanged; (g) only
++diff --git a/hooks/tests/stage-advance.test.sh b/hooks/tests/stage-advance.test.sh
++index 7030bce5..fddd1722 100755
++--- a/hooks/tests/stage-advance.test.sh
+++++ b/hooks/tests/stage-advance.test.sh
++@@ -500,5 +500,72 @@ newsess; sm set --size M --repo-root "$RN" >/dev/null 2>&1; sm set --new-task --
++ eq "--new-task without --size clears size" "<absent>" "$(jf size)"
++ sm set --size L --repo-root "$RN" >/dev/null 2>&1; eq "later set --size on the new task works" '"L"' "$(jf size)"
++ 
+++# ---------------------------------------------------------------- D5: the marker follows the session into a linked worktree
+++# (plan docs/plans/2026-10-12-worktree-placement.md P1.1 / P1.2 d-f). No --repo-root: the cwd is what moves.
+++RA="$TEST_TMP/r-follow"; mkrepo "$RA"; plant "$RA" 1 1 seed
+++WA="$TEST_TMP/r-follow-wt"; git -C "$RA" worktree add -q -b feat/follow "$WA"
+++RB="$TEST_TMP/r-foreign"; mkrepo "$RB"; plant "$RB" 7 1 foreign
+++newsess; (cd "$RA" && node "$SM" set --size S >/dev/null 2>&1)
+++eq "fixture: marker created in the main checkout" "\"$RA\"" "$(jf repo_root)"
+++plant "$RA" 7 1 other    # other sessions' merges land on the main checkout's develop
+++plant "$WA" 1 1 mine     # this session's work, in the linked worktree
+++(cd "$WA" && node "$SA" --to implement >/dev/null 2>&1)
+++OUT=$(cd "$WA" && node "$SA" --to verify 2>"$TEST_TMP/err"); RC=$?
+++eq "E1 from a linked worktree measures that worktree (1 file fits S)" "0" "$RC"
+++# negative: a cwd in another repository measures marker.repo_root and leaves the marker alone
+++newsess; sm set --size S --repo-root "$RA" >/dev/null 2>&1
+++(cd "$RB" && node "$SA" --to implement >/dev/null 2>&1)
+++OUT=$(cd "$RB" && node "$SA" --to verify 2>"$TEST_TMP/err"); RC=$?
+++eq "E1 from a foreign repo measures marker.repo_root (clean, fits)" "0" "$RC"
+++eq "a foreign cwd leaves repo_root" "\"$RA\"" "$(jf repo_root)"
+++# set --new-task: follows a linked worktree of the same repo, ignores a foreign repo
+++newsess; (cd "$RA" && node "$SM" set --size S >/dev/null 2>&1)
+++(cd "$WA" && node "$SM" set --new-task --size S >/dev/null 2>&1)
+++eq "--new-task from a linked worktree: repo_root follows" "\"$WA\"" "$(jf repo_root)"
+++(cd "$RB" && node "$SM" set --new-task --size S >/dev/null 2>&1)
+++eq "--new-task from a foreign repo: repo_root unchanged" "\"$WA\"" "$(jf repo_root)"
+++eq "--new-task from a foreign repo: base_ref derived in repo_root, not the cwd" \
+++  "\"$(git -C "$WA" merge-base HEAD develop)\"" "$(jf base_ref)"
+++# set (merge path, no --new-task): follows in both directions, ignores a foreign repo
+++newsess; (cd "$RA" && node "$SM" set --size S >/dev/null 2>&1)
+++(cd "$WA" && node "$SM" set --size M >/dev/null 2>&1)
+++eq "set from a linked worktree: repo_root follows" "\"$WA\"" "$(jf repo_root)"
+++(cd "$RB" && node "$SM" set --size M >/dev/null 2>&1)
+++eq "set from a foreign repo: repo_root unchanged" "\"$WA\"" "$(jf repo_root)"
+++(cd "$RA" && node "$SM" set --size M >/dev/null 2>&1)
+++eq "set back in the main checkout: repo_root follows back" "\"$RA\"" "$(jf repo_root)"
+++
+++# ---------------------------------------------------------------- D6: base_ref takes the newer of a local/remote pair
+++# (plan P1.2 a-c, g, h). origin/* refs are planted with update-ref; no remote, no fetch.
+++basesha() { sm set --size S --repo-root "$1" >/dev/null 2>&1; jf base_ref | tr -d '"'; }
+++# (a) local develop behind origin/develop -> the remote's merge-base
+++R="$TEST_TMP/r-behind"; mkrepo "$R"; plant "$R" 1 1 a; C1=$(git -C "$R" rev-parse HEAD)
+++plant "$R" 1 1 b; C2=$(git -C "$R" rev-parse HEAD)
+++git -C "$R" update-ref refs/remotes/origin/develop "$C2"; git -C "$R" checkout -q -b feat/x; plant "$R" 1 1 f
+++git -C "$R" branch -f develop "$C1"
+++newsess; eq "base_ref: local develop behind origin/develop -> remote" "$C2" "$(basesha "$R")"
+++# (b) local ahead -> local
+++R="$TEST_TMP/r-ahead"; mkrepo "$R"; plant "$R" 1 1 a; C1=$(git -C "$R" rev-parse HEAD)
+++plant "$R" 1 1 b; C2=$(git -C "$R" rev-parse HEAD)
+++git -C "$R" update-ref refs/remotes/origin/develop "$C1"; git -C "$R" checkout -q -b feat/x; plant "$R" 1 1 f
+++newsess; eq "base_ref: local develop ahead of origin/develop -> local" "$C2" "$(basesha "$R")"
+++# (c) diverged -> remote
+++R="$TEST_TMP/r-diverged"; mkrepo "$R"; plant "$R" 1 1 a
+++git -C "$R" checkout -q -b side; plant "$R" 1 1 r; CR=$(git -C "$R" rev-parse HEAD)
+++git -C "$R" update-ref refs/remotes/origin/develop "$CR"
+++git -C "$R" checkout -q develop; plant "$R" 1 1 l
+++git -C "$R" checkout -q -b feat/x "$CR"; plant "$R" 1 1 f
+++newsess; eq "base_ref: diverged develop / origin/develop -> remote" "$CR" "$(basesha "$R")"
+++# (g) only origin/develop plus a local main -> origin/develop (today's flat order picked main)
+++R="$TEST_TMP/r-onlyremote"; mkrepo "$R" main; plant "$R" 1 1 a; C1=$(git -C "$R" rev-parse HEAD)
+++plant "$R" 1 1 b; C2=$(git -C "$R" rev-parse HEAD)
+++git -C "$R" update-ref refs/remotes/origin/develop "$C2"; git -C "$R" checkout -q -b feat/x; plant "$R" 1 1 f
+++git -C "$R" branch -f main "$C1"
+++newsess; eq "base_ref: origin/develop beats a local main" "$C2" "$(basesha "$R")"
+++# (h) only a local develop -> develop
+++R="$TEST_TMP/r-onlylocal"; mkrepo "$R"; plant "$R" 1 1 a; C1=$(git -C "$R" rev-parse HEAD)
+++git -C "$R" checkout -q -b feat/x; plant "$R" 1 1 f
+++newsess; eq "base_ref: only a local develop -> develop" "$C1" "$(basesha "$R")"
+++
++ echo "stage-advance.test: pass=$PASS fail=$FAIL"
++ [ "$FAIL" -eq 0 ]
++diff --git a/scripts/session-mode.js b/scripts/session-mode.js
++index 871126f3..c64c9c38 100644
++--- a/scripts/session-mode.js
+++++ b/scripts/session-mode.js
++@@ -687,23 +687,54 @@ function cmdSetPlain(args) {
++ const SIZES = Object.freeze(['XS', 'S', 'M', 'L', 'XL']);
++ const INIT_FLAGS = ['size', 'urgent', 'bug', 'base-ref', 'new-task'];
++ const BASE_REF_SHA = /^[0-9a-f]{7,64}$/u;
++-// Default-branch candidates, same order as scripts/resolve-review-loop.sh probe_diff_bytes (develop, then main);
++-// master and the origin/* spellings are added so a clone without a local develop still resolves.
++-const DEFAULT_BRANCHES = Object.freeze(['develop', 'main', 'master', 'origin/develop', 'origin/main']);
+++// Default-branch pairs, same order as scripts/resolve-review-loop.sh probe_diff_bytes (develop, then main), then
+++// master. Each local branch is paired with its origin/* spelling so a stale local branch never wins over a newer
+++// remote-tracking ref (worktree-placement plan D6). No fetch: whatever the refs say now.
+++const DEFAULT_BRANCH_PAIRS = Object.freeze([['develop', 'origin/develop'], ['main', 'origin/main'], ['master', 'origin/master']]);
+++const DEFAULT_BRANCHES = Object.freeze(DEFAULT_BRANCH_PAIRS.flat());
++ 
++-// The merge-base of HEAD and the first default-branch candidate that resolves; null when none does.
+++function mergeBaseWithHead(repoRoot, ref) {
+++  try {
+++    const sha = execFileSync('git', ['-C', repoRoot, 'merge-base', 'HEAD', ref], {
+++      encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+++    }).trim();
+++    return BASE_REF_SHA.test(sha) ? sha : null;
+++  } catch (_error) { return null; }
+++}
+++
+++function isAncestor(repoRoot, older, newer) {
+++  try {
+++    execFileSync('git', ['-C', repoRoot, 'merge-base', '--is-ancestor', older, newer], { stdio: 'ignore' });
+++    return true;
+++  } catch (_error) { return false; }
+++}
+++
+++// The merge-base of HEAD and the newer branch of the first pair with a branch sharing history with HEAD; null when
+++// none does. Both qualify: remote an ancestor of local (local ahead or equal) => local; local behind or diverged =>
+++// remote (the integration target).
++ function defaultBaseRef(repoRoot) {
++-  for (const branch of DEFAULT_BRANCHES) {
++-    try {
++-      const sha = execFileSync('git', ['-C', repoRoot, 'merge-base', 'HEAD', branch], {
++-        encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
++-      }).trim();
++-      if (BASE_REF_SHA.test(sha)) return sha;
++-    } catch (_error) { /* try the next candidate */ }
+++  for (const [local, remote] of DEFAULT_BRANCH_PAIRS) {
+++    const localBase = mergeBaseWithHead(repoRoot, local);
+++    const remoteBase = mergeBaseWithHead(repoRoot, remote);
+++    if (localBase && remoteBase) return isAncestor(repoRoot, remote, local) ? localBase : remoteBase;
+++    if (localBase || remoteBase) return localBase || remoteBase;
++   }
++   return null;
++ }
++ 
+++// A set run from a linked worktree of the marker's repository moves repo_root there, so E1 and the rails measure
+++// where the session works (worktree-placement plan D5); a cwd in another repository leaves it.
+++function followRepoRoot(marker, repoRoot) {
+++  if (typeof marker.repo_root !== 'string' || marker.repo_root === repoRoot) return;
+++  let want = typeof marker.repo_identity === 'string' && marker.repo_identity ? marker.repo_identity : null;
+++  let have = null;
+++  try {
+++    if (!want && path.isAbsolute(marker.repo_root)) want = markerRepoIdentity(marker.repo_root);
+++    have = scopeFromCwd(repoRoot).repo_identity;
+++  } catch (_error) { return; }
+++  if (want && have === want) marker.repo_root = repoRoot;
+++}
+++
++ // Fields `set --new-task` drops from a live marker: the stage-advance position plus the task-scoped init fields.
++ const NEW_TASK_CLEARED = Object.freeze(['stage', 'stage_set_at', 'unit', 'review_families', 'high_risk', 'size', 'urgent', 'bug', 'base_ref']);
++ 
++@@ -785,7 +816,8 @@ function cmdSetInit(args) {
++         }
++         const next = { ...current };
++         for (const k of NEW_TASK_CLEARED) delete next[k];
++-        applyInitFields(next, init, repoRoot, null);
+++        followRepoRoot(next, repoRoot);
+++        applyInitFields(next, init, next.repo_root, null);
++         next.task_seq = seqPrev + 1;
++         next.task_started_at = new Date().toISOString();
++         writeMarkerFile(file, next);
++@@ -797,7 +829,9 @@ function cmdSetInit(args) {
++           result = { refusal: `refusing --size ${init.size}: the marker is already ${current.size} and size only moves up (XS<S<M<L<XL)` };
++           return;
++         }
++-        const next = applyInitFields({ ...current }, init, repoRoot, current);
+++        const next = { ...current };
+++        followRepoRoot(next, repoRoot);
+++        applyInitFields(next, init, next.repo_root, current);
++         writeMarkerFile(file, next);
++         result = { marker: next, created: false };
++         return;
++diff --git a/scripts/stage-advance.js b/scripts/stage-advance.js
++index 9f346e4b..525d17a7 100755
++--- a/scripts/stage-advance.js
+++++ b/scripts/stage-advance.js
++@@ -24,7 +24,8 @@
++ //     `high_risk = (review_risk == "high")`, used for that move's legality. A sampling failure counts as high
++ //     (the normal review order is never silently dropped) and says so on stderr;
++ //   - E1 size bump: entering verify or qc-gate, the WORKING-TREE change against base_ref is measured, run in the
++-//     marker repo_root: `git diff --numstat <base_ref>` (tracked, committed + staged + unstaged) plus every
+++//     cwd's toplevel when it belongs to the marker's repository (repo_identity; a linked worktree of it), else in
+++//     the marker repo_root: `git diff --numstat <base_ref>` (tracked, committed + staged + unstaged) plus every
++ //     untracked non-ignored file (`git ls-files --others --exclude-standard`; 1 file + its line count). Binary
++ //     files = 1 file, 0 lines; renames follow git's default; ignored files never count. (dev-flow runs qc-gate
++ //     BEFORE commit, so a committed-only count would never fire; this deliberately deviates from the plan's
++@@ -48,6 +49,7 @@ const path = require('path');
++ const { spawnSync } = require('child_process');
++ const { withWriteLock } = require('./lib/jsonl-store');
++ const sessionMode = require('./session-mode');
+++const { scopeFromCwd } = require('../src/status/project-key');
++ 
++ const REPO_ROOT = path.resolve(__dirname, '..');
++ const STAGE_GRAPH = path.join(__dirname, 'stage-graph.js');
++@@ -227,13 +229,25 @@ function unitViolation(marker, from, to, unitArg, unitKind) {
++   return null;
++ }
++ 
+++// The cwd's toplevel when it belongs to the marker's repository (worktree-placement plan D5: a session that moved
+++// into a linked worktree is measured there); null otherwise, so a cwd in another repository never takes over.
+++function sessionRepoRoot(marker) {
+++  if (typeof marker.repo_identity !== 'string' || !marker.repo_identity) return null;
+++  const top = gitOut(process.cwd(), ['rev-parse', '--show-toplevel']);
+++  const dir = top === null ? '' : top.toString('utf8').trim();
+++  if (!dir) return null;
+++  let identity = null;
+++  try { identity = scopeFromCwd(dir).repo_identity; } catch (_e) { return null; }
+++  return identity === marker.repo_identity ? dir : null;
+++}
+++
++ // Pure decision over one marker snapshot. -> { code, out } | { write: patch, out }
++ function decide(marker, opts, repoRootArg) {
++   const to = opts.to;
++   const ids = JSON.parse(fs.readFileSync(GRAPH_JSON, 'utf8')).node_ids;
++   if (!ids.includes(to)) throw new Usage(`unknown node "${to}" (want one of ${ids.join('|')})`);
++   const from = typeof marker.stage === 'string' ? marker.stage : null;
++-  const repoRoot = repoRootArg || marker.repo_root || process.cwd();
+++  const repoRoot = repoRootArg || sessionRepoRoot(marker) || marker.repo_root || process.cwd();
++   const unitArg = opts.unit || null;
++   const eff = unitArg || (marker.unit && typeof marker.unit === 'object' ? marker.unit : null);
++ 
+diff --git a/docs/plans/evidence/2026-10-12-worktree-placement/p1/review/review-P1/g1/dispositions.json b/docs/plans/evidence/2026-10-12-worktree-placement/p1/review/review-P1/g1/dispositions.json
+new file mode 100644
+index 00000000..d9695b1c
+--- /dev/null
++++ b/docs/plans/evidence/2026-10-12-worktree-placement/p1/review/review-P1/g1/dispositions.json
+@@ -0,0 +1,37 @@
++{
++  "schema_version": 1,
++  "phase": "P1",
++  "generation": 1,
++  "findings": [
++    {
++      "id": "80b7e15dc2457769d2bfefbf77fe605fa789b59434bc9606b290c90ea036457d",
++      "disposition": "refuted",
++      "rationale": "Re-derived: an E1 overrun exits 4 and writes nothing (stage-advance decide returns code 4 with bump_to; no patch). The red run at base (commit 7ba74598) printed 'E1 from a linked worktree measures that worktree (1 file fits S): expected [0] got [4]', and verify-red-green.sh (p1/red-green.json, VALIDATED, base_exit_code 1) confirms the suite is red at base. The exit-code assertion is not vacuous."
++    },
++    {
++      "id": "9c55ec7b9c07d9751b2f8612abc21e1d3f233f46f5fa5d3db450091609d92695",
++      "disposition": "verified",
++      "rationale": "Real edge: followRepoRoot returns early on a marker without a string repo_root, and both cmdSetInit call sites then passed undefined to applyInitFields. Fixed: next.repo_root || repoRoot at both call sites."
++    },
++    {
++      "id": "4e284b05421cf29a726524b856174391fd779886525b18b4c3facdb78bb94e47",
++      "disposition": "refuted",
++      "rationale": "Bindings exist: scopeFromCwd is imported at scripts/session-mode.js:91 and markerRepoIdentity is a hoisted function declaration in the same file; stage-advance.js imports scopeFromCwd explicitly. The D5 tests pass (205/0), which they could not if either were unbound."
++    },
++    {
++      "id": "098fb3c240c2a0dbdb6160ed293c3b6256250cff48a1a819ef0d59eaa2124f50",
++      "disposition": "refuted",
++      "rationale": "No defect, as the finding itself says: equal local and remote give the same merge-base, so the stored sha is identical either way."
++    },
++    {
++      "id": "dbdd5854ac482657748593c02c7745b26eb280ec2a0a0be1b79afd1f5dadd8fb",
++      "disposition": "refuted",
++      "rationale": "Scope note, not a defect: P2-P4 are later phases with their own per-phase review."
++    },
++    {
++      "id": "b2c5418b0203fef4336c1bd4e2e741960fc268dd60b6b05f8fc9fab700b27b52",
++      "disposition": "verified",
++      "rationale": "Cheap hardening taken: the foreign-repo and follow-back set calls now pass increasing sizes (L, XL) and assert the size was written, so the repo_root assertions cannot pass on a refused write."
++    }
++  ]
++}
+diff --git a/docs/plans/evidence/2026-10-12-worktree-placement/p1/review/review-P1/g1/findings.json b/docs/plans/evidence/2026-10-12-worktree-placement/p1/review/review-P1/g1/findings.json
+new file mode 100644
+index 00000000..042294c9
+--- /dev/null
++++ b/docs/plans/evidence/2026-10-12-worktree-placement/p1/review/review-P1/g1/findings.json
+@@ -0,0 +1,40 @@
++{
++  "findings": [
++    {
++      "id": "80b7e15dc2457769d2bfefbf77fe605fa789b59434bc9606b290c90ea036457d",
++      "severity": "Major",
++      "seat": "s0",
++      "text": "🟠 [c1-test-asserts-exit-only] MUST-FIX The headline C1 test (\"E1 from a linked worktree measures that worktree (1 file fits S)\") asserts only `RC == 0` after `stage-advance --to verify`; E1 is a size *bump* (decide returns `{write: patch}` and the move proceeds), so measuring the main checkout's 7 files at base most likely bumps S→M and still exits 0, leaving the test green at base and the verification-map row \"P1.1 red at base\" unproven; smallest fix: after the verify move add `eq \"E1 in the worktree keeps size S\" '\"S\"' \"$(jf size)\"` (and the same `jf size` pin on the foreign-repo negative case), which is red at base regardless of E1's exit-code policy."
++    },
++    {
++      "id": "9c55ec7b9c07d9751b2f8612abc21e1d3f233f46f5fa5d3db450091609d92695",
++      "severity": "Minor",
++      "seat": "s0",
++      "text": "🟡 [set-repo-root-undefined-fallback] MUST-FIX `cmdSetInit` now passes `next.repo_root` to `applyInitFields` on both the `--new-task` and merge paths, but `followRepoRoot` returns early when `marker.repo_root` is not a string, so a marker lacking `repo_root` (not validated on read; the cache-written plain marker path) now derives `base_ref` via `git -C undefined` → null instead of the caller's toplevel as before; smallest fix: `applyInitFields(next, init, next.repo_root || repoRoot, …)` at both call sites."
++    },
++    {
++      "id": "4e284b05421cf29a726524b856174391fd779886525b18b4c3facdb78bb94e47",
++      "severity": "Suggestion",
++      "seat": "s0",
++      "text": "🔵 [session-mode-identity-imports-unverified] CUT/FOLLOW-UP `followRepoRoot` calls `markerRepoIdentity` and `scopeFromCwd` without an import in this hunk; the diff does not show whether session-mode.js already binds them (the marker already stores `repo_identity`, so it probably does). Not blocking: the new D5 tests would fail outright if unbound, and the try/catch would otherwise mask a ReferenceError as \"no follow\"; confirm the bindings exist when running the P1.4 suites."
++    },
++    {
++      "id": "098fb3c240c2a0dbdb6160ed293c3b6256250cff48a1a819ef0d59eaa2124f50",
++      "severity": "Suggestion",
++      "seat": "s0",
++      "text": "🔵 [d6-equal-refs-tiebreak] CUT/FOLLOW-UP When local and remote are the same commit, `isAncestor(remote, local)` is true and the local merge-base is returned; the spec's wording (\"local ancestor of remote ⇒ remote\") would pick remote, but both merge-bases are identical so the stored sha is the same. No change needed; noted so plan-review does not read it as a deviation."
++    },
++    {
++      "id": "dbdd5854ac482657748593c02c7745b26eb280ec2a0a0be1b79afd1f5dadd8fb",
++      "severity": "Suggestion",
++      "seat": "s1",
++      "text": "🔵 [p1-scope-p2-p4-followup] CUT/FOLLOW-UP — this diff delivers plan phase P1 only (D5 marker-follows-session in session-mode.js/stage-advance.js, D6 base_ref pairs, C1/C2 tests, plan-doc P1.2 sync); P2–P4 (placement resolver, rails under `<main>/.claude/worktrees/`, C3 advisory, C4 handoff, C5–C7) are separate per-phase changesets under the plan's own per-phase review cadence, so their absence here is scope, not a defect."
++    },
++    {
++      "id": "b2c5418b0203fef4336c1bd4e2e741960fc268dd60b6b05f8fc9fab700b27b52",
++      "severity": "Suggestion",
++      "seat": "s1",
++      "text": "🔵 [plainset-same-size-vacuity] CUT/FOLLOW-UP — optional test-strength hardening: in the plain-set block of hooks/tests/stage-advance.test.sh the foreign-repo and follows-back calls pass `--size M` while the marker is already M, so if the monotonic guard ever refused same-size sets (no write) those two asserts would pass vacuously — smallest fix is `--urgent` or an increasing size for those two calls; excluded because the equal-size path is write-permitted under the XS<S<M<L<XL \"moves up\" rule and the `--new-task` block already exercises foreign-no-follow non-vacuously."
++    }
++  ]
++}
+diff --git a/docs/plans/evidence/2026-10-12-worktree-placement/p1/review/review-P1/g1/range.json b/docs/plans/evidence/2026-10-12-worktree-placement/p1/review/review-P1/g1/range.json
+new file mode 100644
+index 00000000..1c6527fb
+--- /dev/null
++++ b/docs/plans/evidence/2026-10-12-worktree-placement/p1/review/review-P1/g1/range.json
+@@ -0,0 +1,10 @@
++{
++  "base": "6ef014f4",
++  "head": "d9aa4210d87645ccf699b4582bfab10327ccfd0e",
++  "diff_sha256": "348ff3699c5ed0384fdcbd86d5b5858d53d8c8147587e74d59885eaf30f55cad",
++  "full_range_sha256": "eabde038cc4a6f12f1552b13bb42678c6449e71dfca57e09b55b97dfe44ea419",
++  "excluded": [
++    "platforms/codex/plugin/**"
++  ],
++  "diff_bytes": 14536
++}
+diff --git a/docs/plans/evidence/2026-10-12-worktree-placement/p1/review/review-P1/g1/seat-s0.json b/docs/plans/evidence/2026-10-12-worktree-placement/p1/review/review-P1/g1/seat-s0.json
+new file mode 100644
+index 00000000..f0955765
+--- /dev/null
++++ b/docs/plans/evidence/2026-10-12-worktree-placement/p1/review/review-P1/g1/seat-s0.json
+@@ -0,0 +1,12 @@
++{
++  "runner": "claude-native",
++  "model": "claude-fable-5-1",
++  "status": "reviewed",
++  "verdict": "FIX-THEN-SHIP",
++  "findings": "🟠 [c1-test-asserts-exit-only] MUST-FIX The headline C1 test (\"E1 from a linked worktree measures that worktree (1 file fits S)\") asserts only `RC == 0` after `stage-advance --to verify`; E1 is a size *bump* (decide returns `{write: patch}` and the move proceeds), so measuring the main checkout's 7 files at base most likely bumps S→M and still exits 0, leaving the test green at base and the verification-map row \"P1.1 red at base\" unproven; smallest fix: after the verify move add `eq \"E1 in the worktree keeps size S\" '\"S\"' \"$(jf size)\"` (and the same `jf size` pin on the foreign-repo negative case), which is red at base regardless of E1's exit-code policy.\n🟡 [set-repo-root-undefined-fallback] MUST-FIX `cmdSetInit` now passes `next.repo_root` to `applyInitFields` on both the `--new-task` and merge paths, but `followRepoRoot` returns early when `marker.repo_root` is not a string, so a marker lacking `repo_root` (not validated on read; the cache-written plain marker path) now derives `base_ref` via `git -C undefined` → null instead of the caller's toplevel as before; smallest fix: `applyInitFields(next, init, next.repo_root || repoRoot, …)` at both call sites.\n🔵 [session-mode-identity-imports-unverified] CUT/FOLLOW-UP `followRepoRoot` calls `markerRepoIdentity` and `scopeFromCwd` without an import in this hunk; the diff does not show whether session-mode.js already binds them (the marker already stores `repo_identity`, so it probably does). Not blocking: the new D5 tests would fail outright if unbound, and the try/catch would otherwise mask a ReferenceError as \"no follow\"; confirm the bindings exist when running the P1.4 suites.\n🔵 [d6-equal-refs-tiebreak] CUT/FOLLOW-UP When local and remote are the same commit, `isAncestor(remote, local)` is true and the local merge-base is returned; the spec's wording (\"local ancestor of remote ⇒ remote\") would pick remote, but both merge-bases are identical so the stored sha is the same. No change needed; noted so plan-review does not read it as a deviation.",
++  "no_finding_proof": null,
++  "raw_log": "/tmp/dispatch-review-log-33HGgX",
++  "error": null,
++  "usage": null,
++  "frame_closed_by": "end-marker"
++}
+diff --git a/docs/plans/evidence/2026-10-12-worktree-placement/p1/review/review-P1/g1/seat-s1.json b/docs/plans/evidence/2026-10-12-worktree-placement/p1/review/review-P1/g1/seat-s1.json
+new file mode 100644
+index 00000000..67dabfd4
+--- /dev/null
++++ b/docs/plans/evidence/2026-10-12-worktree-placement/p1/review/review-P1/g1/seat-s1.json
+@@ -0,0 +1,12 @@
++{
++  "runner": "cc-shim",
++  "model": "GLM-5.2",
++  "status": "reviewed",
++  "verdict": "SHIP-AS-IS",
++  "findings": "🔵 [p1-scope-p2-p4-followup] CUT/FOLLOW-UP — this diff delivers plan phase P1 only (D5 marker-follows-session in session-mode.js/stage-advance.js, D6 base_ref pairs, C1/C2 tests, plan-doc P1.2 sync); P2–P4 (placement resolver, rails under `<main>/.claude/worktrees/`, C3 advisory, C4 handoff, C5–C7) are separate per-phase changesets under the plan's own per-phase review cadence, so their absence here is scope, not a defect.\n🔵 [plainset-same-size-vacuity] CUT/FOLLOW-UP — optional test-strength hardening: in the plain-set block of hooks/tests/stage-advance.test.sh the foreign-repo and follows-back calls pass `--size M` while the marker is already M, so if the monotonic guard ever refused same-size sets (no write) those two asserts would pass vacuously — smallest fix is `--urgent` or an increasing size for those two calls; excluded because the equal-size path is write-permitted under the XS<S<M<L<XL \"moves up\" rule and the `--new-task` block already exercises foreign-no-follow non-vacuously.",
++  "no_finding_proof": "checked=session-mode.js followRepoRoot + applyInitFields/new-task wiring + defaultBaseRef pair logic vs plan D5/D6, stage-advance.js sessionRepoRoot and repoRoot precedence vs D5, the new stage-advance.test.sh D5/D6 blocks vs plan P1.1 and P1.2 (a)–(h) plus the negative case, and the plan-doc P1.2 line sync against the frozen spec text; evidence=hand-traced every D6 fixture: (a) develop forced to C1 with origin/develop at C2 yields remote C2, (b) origin/develop at C1 with local C2 yields local C2, (c) diverged yields remote CR, (g) no local develop falls to pair-1 remote C2 where the old flat order returned main C1 (red at base), (h) lone local develop yields C1 — and `isAncestor(remote, local) ? localBase : remoteBase` implements exactly the D6 both-qualify rule (equal or local-ahead keeps local, behind or diverged takes remote) with the one-qualifies rule as fallback; followRepoRoot gates on repo_identity equality (identity derived from marker.repo_root only when absolute, errors swallowed to no-follow) so a foreign-repo cwd never hijacks repo_root, and applyInitFields now receives next.repo_root so base_ref derives in the followed root, pinned by the \"base_ref derived in repo_root, not the cwd\" assertion; stage-advance keeps precedence repoRootArg || sessionRepoRoot(marker) || marker.repo_root || cwd so an explicit flag wins, a same-repo worktree cwd is measured (C1 fixture: 1 committed file at size S from the linked worktree where the main checkout carries 7 files, hence red at base), and the foreign negative measures marker.repo_root with repo_root byte-identical afterward; no injection or untrusted-input surface is added (execFileSync with argv arrays, marker/cwd paths at the same trust level as before); conclusion=every P1 acceptance surface the diff claims is implemented and pinned exactly as the frozen spec's D5/D6 and C1/C2 define, and the two residual items above are phase-scope and test-strength notes that never block, so no MUST-FIX remains.",
++  "raw_log": "/tmp/dispatch-review-log-e6UOt2",
++  "error": null,
++  "usage": null,
++  "frame_closed_by": "end-marker"
++}
+diff --git a/docs/plans/evidence/2026-10-12-worktree-placement/p1/review/review-P1/g1/seat-s2.json b/docs/plans/evidence/2026-10-12-worktree-placement/p1/review/review-P1/g1/seat-s2.json
+new file mode 100644
+index 00000000..88b56fcb
+--- /dev/null
++++ b/docs/plans/evidence/2026-10-12-worktree-placement/p1/review/review-P1/g1/seat-s2.json
+@@ -0,0 +1,12 @@
++{
++  "runner": "cc-shim",
++  "model": "MiniMax-M3",
++  "status": "reviewed",
++  "verdict": "SHIP-AS-IS",
++  "findings": "none",
++  "no_finding_proof": "checked=D5 followRepoRoot in scripts/session-mode.js (cwd-identity compare against marker.repo_identity with markerRepoIdentity(marker.repo_root) fallback); D5 sessionRepoRoot in scripts/stage-advance.js (cwd-scope identity compare against marker.repo_identity); D6 defaultBaseRef in scripts/session-mode.js (DEFAULT_BRANCH_PAIRS order [develop,origin/develop],[main,origin/main],[master,origin/master], mergeBaseWithHead + isAncestor ordering, first-qualifying-pair-wins); the two cmdSetInit call sites (--new-task path and merge path) calling followRepoRoot then applyInitFields with next.repo_root; stage-advance.js decide() repoRoot preference order repoRootArg || sessionRepoRoot(marker) || marker.repo_root || process.cwd(); new hooks/tests/stage-advance.test.sh additions for C1 (linked-worktree E1 measures the worktree), C2 (a-h base_ref cases via D6), and D5 same-repo vs foreign-repo negative; spec mapping for C1, C2, D5, D6 from the project README and plan D5/D6 decisions; evidence=D5 followRepoRoot short-circuits when marker.repo_root === repoRoot and only mutates marker.repo_root when scopeFromCwd(cwd).repo_identity matches want, so the new test (cd \"$RB\" && set --new-task) leaves jf repo_root at \"$WA\" and the set-back-in-RA test moves it to \"$RA\", matching the assertions; the negative `E1 from a foreign repo measures marker.repo_root (clean, fits)` is exercised by (cd \"$RB\" && stage-advance --to verify) and would have RC=0 without the fix because sessionRepoRoot returns null and the marker path is taken; D6 defaultBaseRef iterates pairs in the spec order and the four cases match: case (a) local=develop at C1, origin/develop=C2, HEAD at feat/x -> isAncestor(C2,C1) is false so returns merge-base(HEAD,origin/develop)=C2 which equals the asserted $C2; case (b) local develop ahead C2, origin/develop=C1 -> isAncestor(C1,C2) is true so returns merge-base(HEAD,develop)=C2 matching asserted $C2; case (c) diverged develop=CL and origin/develop=CR with HEAD on feat/x from CR -> isAncestor(CR,CL) is false so returns merge-base(HEAD,origin/develop)=CR matching asserted $CR; case (g) only origin/develop at C2 with a local main at C1 -> first pair only origin/develop qualifies so returns C2 matching asserted $C2 (today's flat order would have picked main); case (h) only local develop at C1 -> first pair only develop qualifies so returns C1 matching asserted $C1; execFileSync is invoked with array arguments (no shell interpolation) in both mergeBaseWithHead and isAncestor, BASE_REF_SHA regex gates the merge-base output, and no fetch is added (D6 \"no fetch in session-mode.js\"); conclusion=P1 scope from the plan (D5 marker-follows-session and D6 default-base-ref pair ordering) is implemented in scripts/session-mode.js and scripts/stage-advance.js with red tests added in hooks/tests/stage-advance.test.sh that match the spec table for C1 and C2; logic tracks the plan decisions verbatim, exec paths are shell-safe, and the two decision points tested by the new fixtures behave as specified, leaving no concrete in-scope MUST-FIX.",
++  "raw_log": "/tmp/dispatch-review-log-G8A3co",
++  "error": null,
++  "usage": null,
++  "frame_closed_by": "end-marker"
++}
+diff --git a/docs/plans/evidence/2026-10-12-worktree-placement/p1/review/review-P1/g1/seat-s3.json b/docs/plans/evidence/2026-10-12-worktree-placement/p1/review/review-P1/g1/seat-s3.json
+new file mode 100644
+index 00000000..6a0f94bb
+--- /dev/null
++++ b/docs/plans/evidence/2026-10-12-worktree-placement/p1/review/review-P1/g1/seat-s3.json
+@@ -0,0 +1,12 @@
++{
++  "runner": "qoderclicn",
++  "model": "Qwen3.8-Max-Preview",
++  "status": "reviewed",
++  "verdict": "SHIP-AS-IS",
++  "findings": "none",
++  "no_finding_proof": "checked=P1 plan doc update, stage-advance.test.sh D5/D6 test cases (P1.1 negative, P1.2 a-h), session-mode.js followRepoRoot + defaultBaseRef rewrite, stage-advance.js sessionRepoRoot; evidence=D6 pair logic matches spec (isAncestor(remote,local)→localBase else remoteBase covers ahead/behind/diverged correctly per traced test scenarios a/b/c/g/h), D5 identity check prevents cross-repo hijack (followRepoRoot and sessionRepoRoot both compare scopeFromCwd().repo_identity to marker.repo_identity), all git invocations use execFileSync with array args (no shell injection), test fixtures correctly plant ref states and assert expected shas; conclusion=spec P1.1/P1.2 acceptance criteria fully covered by tests red-at-base provable via fixture setup, D5/D6 implementations match decisions, no MUST-FIX defects remain",
++  "raw_log": "/tmp/dispatch-review-log-sdnN31",
++  "error": null,
++  "usage": null,
++  "frame_closed_by": "end-marker"
++}
+diff --git a/hooks/tests/stage-advance.test.sh b/hooks/tests/stage-advance.test.sh
+index fddd1722..44a47f67 100755
+--- a/hooks/tests/stage-advance.test.sh
++++ b/hooks/tests/stage-advance.test.sh
+@@ -530,9 +530,11 @@ eq "--new-task from a foreign repo: base_ref derived in repo_root, not the cwd"
+ newsess; (cd "$RA" && node "$SM" set --size S >/dev/null 2>&1)
+ (cd "$WA" && node "$SM" set --size M >/dev/null 2>&1)
+ eq "set from a linked worktree: repo_root follows" "\"$WA\"" "$(jf repo_root)"
+-(cd "$RB" && node "$SM" set --size M >/dev/null 2>&1)
++(cd "$RB" && node "$SM" set --size L >/dev/null 2>&1)
++eq "set from a foreign repo: the write happened (size L)" '"L"' "$(jf size)"
+ eq "set from a foreign repo: repo_root unchanged" "\"$WA\"" "$(jf repo_root)"
+-(cd "$RA" && node "$SM" set --size M >/dev/null 2>&1)
++(cd "$RA" && node "$SM" set --size XL >/dev/null 2>&1)
++eq "set back in the main checkout: the write happened (size XL)" '"XL"' "$(jf size)"
+ eq "set back in the main checkout: repo_root follows back" "\"$RA\"" "$(jf repo_root)"
+ 
+ # ---------------------------------------------------------------- D6: base_ref takes the newer of a local/remote pair
+diff --git a/scripts/session-mode.js b/scripts/session-mode.js
+index c64c9c38..846867a1 100644
+--- a/scripts/session-mode.js
++++ b/scripts/session-mode.js
+@@ -817,7 +817,7 @@ function cmdSetInit(args) {
+         const next = { ...current };
+         for (const k of NEW_TASK_CLEARED) delete next[k];
+         followRepoRoot(next, repoRoot);
+-        applyInitFields(next, init, next.repo_root, null);
++        applyInitFields(next, init, next.repo_root || repoRoot, null);
+         next.task_seq = seqPrev + 1;
+         next.task_started_at = new Date().toISOString();
+         writeMarkerFile(file, next);
+@@ -831,7 +831,7 @@ function cmdSetInit(args) {
+         }
+         const next = { ...current };
+         followRepoRoot(next, repoRoot);
+-        applyInitFields(next, init, next.repo_root, current);
++        applyInitFields(next, init, next.repo_root || repoRoot, current);
+         writeMarkerFile(file, next);
+         result = { marker: next, created: false };
+         return;

@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "phase": "P1",
+  "generation": 2,
+  "findings": [
+    {
+      "id": "c651ad25e714aa97ef0b74efa46c6eb28dee7ccdf4952984d88c0ebe2f9ca98d",
+      "disposition": "refuted",
+      "rationale": "This generation is that coverage: g2 reviews d9aa4210..202211ce, the fix and the test hardening, and its receipt extends the chain."
+    },
+    {
+      "id": "151feae9da4f01577a19007b08cded61e41ba9ae36503f2a8183cfb069aeaf64",
+      "disposition": "refuted",
+      "rationale": "The polarity receipt proves the C1/D5/D6 assertions red at base 6ef014f4 and green at d9aa4210; 202211ce leaves those assertions byte-unchanged and only adds written-size assertions, which pass at head (stage-advance.test.sh 205/0 at 202211ce). No gate compares the digest."
+    },
+    {
+      "id": "8d828421662945cae2439bf19e4f3ac76b7c903600f23cefe5d2f7765b88c7d5",
+      "disposition": "refuted",
+      "rationale": "Re-run at head 202211ce, one at a time: session-mode 48/0, session-mode-phase 29 PASS, session-mode-watcher 33 PASS, engine-bind-campaign-root 2 PASS (the plan's session-mode-bind-campaign-root), mission-routing-admission 39 PASS, stage-advance 205/0, plain-session-marker.test.js 44/0."
+    },
+    {
+      "id": "814da64cf0a56b671e8235a5fdda0f39f1b6afc470588f82b4c5bfe619425aef",
+      "disposition": "refuted",
+      "rationale": "By design: without a stored identity stage-advance keeps today's behaviour (measure in marker.repo_root). Every marker session-mode writes carries repo_identity; a legacy marker keeps the base semantics rather than guessing."
+    },
+    {
+      "id": "f2e17e277a50aa218209afc34b239c664255c920037a29f801383784e5c68fb1",
+      "disposition": "refuted",
+      "rationale": "grep -rn DEFAULT_BRANCHES over scripts hooks src bin: the only other use is the error message at scripts/session-mode.js:776 (join for display). No consumer depends on the flat order; P1.4 suites green at head."
+    }
+  ]
+}

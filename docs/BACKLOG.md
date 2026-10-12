@@ -904,14 +904,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/mods-p5-proxy-decision-reminders.md
 - **Context**: no live decision ledger exists and nothing writes proxy-decision rows, so the live band cannot show them yet; writer, then watcher sidecar, then display.
 
-### `stage-advance --resume` for a resumed session with a new session id
-- **Status**: open
-- **Trigger**: before stage-graph 3.0.0 goes live
-- **Effort**: M
-- **Source**: stage-graph plan execution, 2026-10-06..08
-- **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/README.md
-- **Context**: a resumed session with a new id must re-walk from the entry node (first write must be the entry node); no resume path exists.
-
 ### G1 default (low-risk review, one family, fresh-context) has no resolver key
 - **Status**: open
 - **Trigger**: when low-risk review routing is next touched

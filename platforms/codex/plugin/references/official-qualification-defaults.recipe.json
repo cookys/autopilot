@@ -125,6 +125,81 @@
       "event_id": 155,
       "role": "implementer",
       "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/opus5-qualify"
+    },
+    {
+      "event_id": 203,
+      "role": "implementer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-12-claude-5.5-requalify/implementer/claude-haiku-5-5-qualify"
+    },
+    {
+      "event_id": 204,
+      "role": "implementer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-12-claude-5.5-requalify/implementer/claude-sonnet-5-5-qualify"
+    },
+    {
+      "event_id": 205,
+      "role": "implementer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-12-claude-5.5-requalify/implementer/claude-opus-5-5-qualify"
+    },
+    {
+      "event_id": 206,
+      "role": "reviewer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-12-claude-5.5-requalify/broker/haiku-high/reviewer"
+    },
+    {
+      "event_id": 207,
+      "role": "verification_author",
+      "evidence_bundle": "docs/plans/evidence/2026-10-12-claude-5.5-requalify/broker/haiku-high/verification_author"
+    },
+    {
+      "event_id": 208,
+      "role": "consult",
+      "evidence_bundle": "docs/plans/evidence/2026-10-12-claude-5.5-requalify/broker/haiku-high/consult"
+    },
+    {
+      "event_id": 209,
+      "role": "reviewer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-12-claude-5.5-requalify/broker/sonnet-high/reviewer"
+    },
+    {
+      "event_id": 210,
+      "role": "verification_author",
+      "evidence_bundle": "docs/plans/evidence/2026-10-12-claude-5.5-requalify/broker/sonnet-high/verification_author"
+    },
+    {
+      "event_id": 211,
+      "role": "consult",
+      "evidence_bundle": "docs/plans/evidence/2026-10-12-claude-5.5-requalify/broker/sonnet-high/consult"
+    },
+    {
+      "event_id": 212,
+      "role": "reviewer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-12-claude-5.5-requalify/broker/opus-high/reviewer"
+    },
+    {
+      "event_id": 213,
+      "role": "verification_author",
+      "evidence_bundle": "docs/plans/evidence/2026-10-12-claude-5.5-requalify/broker/opus-high/verification_author"
+    },
+    {
+      "event_id": 214,
+      "role": "consult",
+      "evidence_bundle": "docs/plans/evidence/2026-10-12-claude-5.5-requalify/broker/opus-high/consult"
+    },
+    {
+      "event_id": 215,
+      "role": "reviewer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-12-claude-5.5-requalify/broker/opus-low/reviewer"
+    },
+    {
+      "event_id": 216,
+      "role": "verification_author",
+      "evidence_bundle": "docs/plans/evidence/2026-10-12-claude-5.5-requalify/broker/opus-low/verification_author"
+    },
+    {
+      "event_id": 217,
+      "role": "consult",
+      "evidence_bundle": "docs/plans/evidence/2026-10-12-claude-5.5-requalify/broker/opus-low/consult"
     }
   ]
 }

@@ -1196,11 +1196,19 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 
 ### autocompact: users never learn to set autoCompactWindow; T2 still says STOP
 - **Status**: open
-- **Trigger**: owner 2026-10-12 — after the fresh-session autocompact test confirms rehydrate is enough
+- **Trigger**: owner 2026-10-12 — fresh-session test done: Claude Code's summary was enough (see Pointer)
 - **Effort**: M
 - **Source**: context reset cost analysis, 2026-10-12
 - **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
 - **Context**: detection shipped (scripts/lib/autocompact-window.js, T1 tip, dev-setup --check). Left: T2 wording when a window at or below T2 is set (guidance, needs ON/OFF eval); name it in the next release heading. Detail at Pointer.
+
+### Six hooks read only the '/dev/stdin' path (ENXIO under Claude Code)
+- **Status**: open
+- **Trigger**: next touch of any of them, or a report that one never fires
+- **Effort**: S
+- **Source**: autocompact live test, state-checkpoint fix `995bb329`, 2026-10-12
+- **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
+- **Context**: accumulator, log-error, intent-capture, capture-payload, design-quality, reload-watch open '/dev/stdin' with no fd 0 read; on a socket stdin that throws ENXIO, as it did for state-checkpoint. Check each fires; switch to readFileSync(0).
 
 ### hetero-review-loop collect: a seat gap without --allow-seat-gap strands generation 1
 - **Status**: open

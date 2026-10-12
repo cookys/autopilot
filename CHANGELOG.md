@@ -12,6 +12,11 @@
 
 ### 修正
 
+- **自動壓縮前的狀態存檔從來沒寫出來過**（commit `995bb329`）：PreCompact hook 用 `/dev/stdin` 這個路徑讀 Claude Code 傳來的資料。Claude Code 交給 hook 的 stdin 是 socket，用路徑開啟 socket 會直接丟 ENXIO，所以每次自動壓縮，hook 都只記一筆「略過」，`~/.autopilot/compaction-state.md` 一次也沒寫出來。舊註解把這個錯誤解讀成「手動 `/compact` 不傳資料」。這次在新開的 session 實測自動壓縮時抓到。修正方式：
+  - 改成直接讀 fd 0。
+  - 新增測試，用 Node 啟動 hook，讓它真的拿到 socket stdin。舊版 hook 在這個測試有 4 項失敗。
+  - 另外還有 6 個 hook 也只用路徑讀 stdin，已登記在 BACKLOG。
+
 - **discuss 資格考卷的題目說明和評分規則對不上**（merge `2e55f70f`）：D-a／D-b 的評分要求考生沿用自己上一輪（`this-seat`）的軸，但給考生的題目說明沒寫這條，還叫考生挑一條沒人用過的軸。另外，題目說明要求考生照抄 `round_id`，題目資料裡卻沒有這個欄位。兩個 solver 都自己補上了這條隱藏規則，所以先前 16/16 的結果沒有真正證到考卷沒問題。修正方式：
   - 題目說明寫明「沿用本席原軸」這條規則；守住立場時沿用原本的 claim token，更新立場時換成新 token，兩者不能同時出現。
   - 題目資料加上 `round_id`。

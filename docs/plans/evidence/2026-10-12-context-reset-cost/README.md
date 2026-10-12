@@ -119,3 +119,21 @@ opus-5-5, 1M window per the statusline.
 - T1 fired at 106k and again at 160k (50k step). Both went to the advisory sink only
   (`advisories/<sid>.jsonl`, kind `context-budget-t1`); neither reached the model.
 - `lastT2Context` stayed 0 past 160k, as expected with T2 at 300k.
+- Auto-compaction ran at 08:02:22Z. The last context the budget hook saw was 216,763 (so
+  compaction triggers near 250k minus the reserved headroom, not at 250k). The first live
+  reading after it was 71,261 (cache_creation 43,925 + cache_read 27,334). The session kept
+  going and lost no work. `lastT2Context` was still 0, so T2 never fired.
+- PreCompact did **not** write `~/.autopilot/compaction-state.md`. `.state-checkpoint.log`
+  recorded `no_payload_skip` / `ENXIO: stdin not piped` at 08:02:22.528Z. All 21 PreCompact
+  runs since May were the same skip, and no success has been logged since July. Cause: the
+  hook opened the `/dev/stdin` path. Claude Code hands hooks a socket, and that open throws
+  ENXIO. The old comment read this as "/compact pipes no payload". Fixed on this branch: the
+  hook reads fd 0, and `hooks/tests/state-checkpoint-socket-stdin.test.sh` reproduces the
+  socket (4 of 6 checks red on the old hook).
+- Rehydration after compaction: no `<autopilot-restored-state>` was injected, because there
+  was no file to inject. The session still knew its branch, its node (the code-review leg
+  after verify) and its next command without re-reading any large file. Two sources covered
+  it: Claude Code's own summary, and session-start's `[Autopilot Resume Hint]` (branch plus
+  the last Bash command). On this evidence, Claude Code's summary alone was enough for a
+  single-branch task. Whether the checkpoint adds anything is a question for the next
+  compaction, now that it gets written.

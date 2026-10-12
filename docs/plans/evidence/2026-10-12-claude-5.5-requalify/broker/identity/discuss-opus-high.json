@@ -1,0 +1,24 @@
+{
+  "identity": "claude-opus-5-5",
+  "model_alias": "claude-opus-5-5",
+  "model_version": "claude-opus-5-5",
+  "family": "anthropic",
+  "runner": "claude-native",
+  "runner_version": "2.1.296-Claude-Code",
+  "harness_version": "engine-qualify:a89579de",
+  "effort": "high",
+  "identity_resolved": true,
+  "prompt_config_hash": "0203f714f9aca37c15c8ebff58f4d5802a0000ac4ad10e8ec2f7f11c55c9512f",
+  "semantic_fingerprint": "7f9682614fb9be196713ee248751b8b2641aff46510e345a8370e57df5b68247",
+  "containment_fingerprint": "0c30519f2621ea681775006dfa77b1a964c7975b7b354f32c224fb33c7110469",
+  "_invented": [
+    "semantic = derive-hashes corpus semantic ⊕ model/effort (derive-hashes alone has no model/effort, so all seats collide); containment surface"
+  ],
+  "_semantic_surface": null,
+  "_containment_surface": {
+    "kind": "discuss-containment-surface-v1",
+    "exam_transport": "qualification-case-broker-networkless-bwrap",
+    "cli_posture": "claude -p --tools \"\" --setting-sources \"\" --strict-mcp-config",
+    "credential_isolation": "dedicated-exam-config-dir-credentials-only"
+  }
+}

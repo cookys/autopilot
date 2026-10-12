@@ -1,0 +1,96 @@
+=== SEAT: claude-haiku-5-5 ===
+role=implementer runner=cc-shim model=claude-haiku-5-5 family=anthropic effort=high version_source=operator-asserted endpoint=anthropic-native
+bundle: docs/plans/evidence/2026-10-12-claude-5.5-requalify/implementer/claude-haiku-5-5-qualify
+version_binary: claude
+
+[stage-0 probe]
+  # resolve cc-shim credentials from the operator's own Claude Code OAuth token
+  #   (~/.claude/.credentials.json .claudeAiOauth.accessToken) -> ANTHROPIC_BASE_URL=https://api.anthropic.com
+  scripts/dispatch-hetero.sh --branch probe-1 --prompt-file <tmp>/.prompt.txt \
+    --runner cc-shim --model claude-haiku-5-5 --effort high --base HEAD \
+    --timeout 240s --scaffold-tier off
+  # rc 0 + "status": "committed" -> probe receipt rc=0 appended to docs/plans/evidence/2026-10-12-claude-5.5-requalify/implementer/claude-haiku-5-5-qualify/probe-receipts.jsonl, proceed
+  # otherwise -> probe receipt rc=1 appended (instrument_charged:false), SKIP administration (uncharged)
+  # BEFORE all of the above: `claude --version` must exit 0 and print a version-shaped
+  #   first stdout line; anything else -> probe receipt rc=4, seat refused UNCHARGED.
+
+[administration]
+  node scripts/engine-qualify.js implementer \
+    --engine claude-haiku-5-5 --model claude-haiku-5-5 --model-version claude-haiku-5-5 \
+    --runner cc-shim --runner-version <resolved-at-execute-time> --family anthropic \
+    --harness-version dispatch-hetero:aef24416 --effort high \
+    --prompt-config-hash 16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a --semantic-fingerprint d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a \
+    --containment-fingerprint 2c1042fc7187841565fa4c9fafa2f25fa7efda49f0ed911cd0363300e21738fd \
+    --task-class bounded_implementation --domain repository --language en --tool git_commit \
+    --version-source operator-asserted --expires-days 90 \
+    --raw-dir docs/plans/evidence/2026-10-12-claude-5.5-requalify/implementer/claude-haiku-5-5-qualify/raw --emit-row \
+    > docs/plans/evidence/2026-10-12-claude-5.5-requalify/implementer/claude-haiku-5-5-qualify/qualify-out.json 2> docs/plans/evidence/2026-10-12-claude-5.5-requalify/implementer/claude-haiku-5-5-qualify/qualify-err.log
+
+[scorecard]
+  node scripts/engine-scorecard.js record --file docs/plans/evidence/2026-10-12-claude-5.5-requalify/implementer/claude-haiku-5-5-qualify/qualify-out.json \
+    > docs/plans/evidence/2026-10-12-claude-5.5-requalify/implementer/claude-haiku-5-5-qualify/record-out.json 2> docs/plans/evidence/2026-10-12-claude-5.5-requalify/implementer/claude-haiku-5-5-qualify/record-err.log
+
+=== SEAT: claude-sonnet-5-5 ===
+role=implementer runner=cc-shim model=claude-sonnet-5-5 family=anthropic effort=high version_source=operator-asserted endpoint=anthropic-native
+bundle: docs/plans/evidence/2026-10-12-claude-5.5-requalify/implementer/claude-sonnet-5-5-qualify
+version_binary: claude
+
+[stage-0 probe]
+  # resolve cc-shim credentials from the operator's own Claude Code OAuth token
+  #   (~/.claude/.credentials.json .claudeAiOauth.accessToken) -> ANTHROPIC_BASE_URL=https://api.anthropic.com
+  scripts/dispatch-hetero.sh --branch probe-1 --prompt-file <tmp>/.prompt.txt \
+    --runner cc-shim --model claude-sonnet-5-5 --effort high --base HEAD \
+    --timeout 240s --scaffold-tier off
+  # rc 0 + "status": "committed" -> probe receipt rc=0 appended to docs/plans/evidence/2026-10-12-claude-5.5-requalify/implementer/claude-sonnet-5-5-qualify/probe-receipts.jsonl, proceed
+  # otherwise -> probe receipt rc=1 appended (instrument_charged:false), SKIP administration (uncharged)
+  # BEFORE all of the above: `claude --version` must exit 0 and print a version-shaped
+  #   first stdout line; anything else -> probe receipt rc=4, seat refused UNCHARGED.
+
+[administration]
+  node scripts/engine-qualify.js implementer \
+    --engine claude-sonnet-5-5 --model claude-sonnet-5-5 --model-version claude-sonnet-5-5 \
+    --runner cc-shim --runner-version <resolved-at-execute-time> --family anthropic \
+    --harness-version dispatch-hetero:aef24416 --effort high \
+    --prompt-config-hash 16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a --semantic-fingerprint d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a \
+    --containment-fingerprint 2c1042fc7187841565fa4c9fafa2f25fa7efda49f0ed911cd0363300e21738fd \
+    --task-class bounded_implementation --domain repository --language en --tool git_commit \
+    --version-source operator-asserted --expires-days 90 \
+    --raw-dir docs/plans/evidence/2026-10-12-claude-5.5-requalify/implementer/claude-sonnet-5-5-qualify/raw --emit-row \
+    > docs/plans/evidence/2026-10-12-claude-5.5-requalify/implementer/claude-sonnet-5-5-qualify/qualify-out.json 2> docs/plans/evidence/2026-10-12-claude-5.5-requalify/implementer/claude-sonnet-5-5-qualify/qualify-err.log
+
+[scorecard]
+  node scripts/engine-scorecard.js record --file docs/plans/evidence/2026-10-12-claude-5.5-requalify/implementer/claude-sonnet-5-5-qualify/qualify-out.json \
+    > docs/plans/evidence/2026-10-12-claude-5.5-requalify/implementer/claude-sonnet-5-5-qualify/record-out.json 2> docs/plans/evidence/2026-10-12-claude-5.5-requalify/implementer/claude-sonnet-5-5-qualify/record-err.log
+
+=== SEAT: claude-opus-5-5 ===
+role=implementer runner=cc-shim model=claude-opus-5-5 family=anthropic effort=high version_source=operator-asserted endpoint=anthropic-native
+bundle: docs/plans/evidence/2026-10-12-claude-5.5-requalify/implementer/claude-opus-5-5-qualify
+version_binary: claude
+
+[stage-0 probe]
+  # resolve cc-shim credentials from the operator's own Claude Code OAuth token
+  #   (~/.claude/.credentials.json .claudeAiOauth.accessToken) -> ANTHROPIC_BASE_URL=https://api.anthropic.com
+  scripts/dispatch-hetero.sh --branch probe-1 --prompt-file <tmp>/.prompt.txt \
+    --runner cc-shim --model claude-opus-5-5 --effort high --base HEAD \
+    --timeout 240s --scaffold-tier off
+  # rc 0 + "status": "committed" -> probe receipt rc=0 appended to docs/plans/evidence/2026-10-12-claude-5.5-requalify/implementer/claude-opus-5-5-qualify/probe-receipts.jsonl, proceed
+  # otherwise -> probe receipt rc=1 appended (instrument_charged:false), SKIP administration (uncharged)
+  # BEFORE all of the above: `claude --version` must exit 0 and print a version-shaped
+  #   first stdout line; anything else -> probe receipt rc=4, seat refused UNCHARGED.
+
+[administration]
+  node scripts/engine-qualify.js implementer \
+    --engine claude-opus-5-5 --model claude-opus-5-5 --model-version claude-opus-5-5 \
+    --runner cc-shim --runner-version <resolved-at-execute-time> --family anthropic \
+    --harness-version dispatch-hetero:aef24416 --effort high \
+    --prompt-config-hash 16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a --semantic-fingerprint d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a \
+    --containment-fingerprint 2c1042fc7187841565fa4c9fafa2f25fa7efda49f0ed911cd0363300e21738fd \
+    --task-class bounded_implementation --domain repository --language en --tool git_commit \
+    --version-source operator-asserted --expires-days 90 \
+    --raw-dir docs/plans/evidence/2026-10-12-claude-5.5-requalify/implementer/claude-opus-5-5-qualify/raw --emit-row \
+    > docs/plans/evidence/2026-10-12-claude-5.5-requalify/implementer/claude-opus-5-5-qualify/qualify-out.json 2> docs/plans/evidence/2026-10-12-claude-5.5-requalify/implementer/claude-opus-5-5-qualify/qualify-err.log
+
+[scorecard]
+  node scripts/engine-scorecard.js record --file docs/plans/evidence/2026-10-12-claude-5.5-requalify/implementer/claude-opus-5-5-qualify/qualify-out.json \
+    > docs/plans/evidence/2026-10-12-claude-5.5-requalify/implementer/claude-opus-5-5-qualify/record-out.json 2> docs/plans/evidence/2026-10-12-claude-5.5-requalify/implementer/claude-opus-5-5-qualify/record-err.log
+

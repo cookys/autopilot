@@ -1161,3 +1161,11 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: code review of `34dd3c33` (merge `7362f914`), 2026-10-12, verdict SHIP
 - **Pointer**: none
 - **Context**: short-circuit test cannot fail (assert a grown file's new row gets a rewritten sidecar's parent); no cycle/self-parent test; a node under a cycle can land on root as orphan; 5-char labels can collide.
+
+### discuss exam: candidate prompt and envelope disagree with the oracle (axis rule, round_id)
+- **Status**: open
+- **Trigger**: owner 2026-10-12 — fix the exam, then re-administer discuss for claude 5.5 haiku/sonnet/opus-high and opus-low
+- **Effort**: M
+- **Source**: Claude 5.5 requalification analysis, 2026-10-12
+- **Pointer**: docs/plans/evidence/2026-10-12-claude-5.5-requalify/README.md
+- **Context**: D-b zero_information grades "reuse own axis" but the prompt says pick an untaken axis; envelope lacks round_id. Fix prompt/envelope (sealed asset: new hash, solver 16/16, plan review); grader untouched. Detail in Pointer.

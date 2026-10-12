@@ -1,0 +1,13 @@
+Mem:             122           4         110           0           8         118
+2026-10-12T09:55:45+08:00 role=reviewer START
+2026-10-12T10:01:53+08:00 role=reviewer END rc=1 (0=pass 1=fail-verdict 2=usage/precondition 124=wall timeout)
+2026-10-12T10:01:53+08:00 role=brain START
+2026-10-12T10:07:44+08:00 role=brain END rc=1 (0=pass 1=fail-verdict 2=usage/precondition 124=wall timeout)
+2026-10-12T10:07:44+08:00 role=verification_author START
+2026-10-12T10:10:00+08:00 role=verification_author END rc=0 (0=pass 1=fail-verdict 2=usage/precondition 124=wall timeout)
+2026-10-12T10:10:00+08:00 role=consult START
+2026-10-12T10:13:54+08:00 role=consult END rc=1 (0=pass 1=fail-verdict 2=usage/precondition 124=wall timeout)
+2026-10-12T10:13:54+08:00 role=discuss START
+2026-10-12T10:14:57+08:00 role=discuss END rc=1 (0=pass 1=fail-verdict 2=usage/precondition 124=wall timeout)
+2026-10-12T10:14:57+08:00 lane=haiku-high summary: reviewer=1 brain=1 verification_author=0 consult=1 discuss=1
+rc=0

@@ -1,0 +1,5 @@
+QUALIFICATION-SWEEP START 02:43:56Z (3 seats)
+SEAT claude-haiku-5-5 DONE: qualified 24/24 score=1.000 wall=254s event=203
+SEAT claude-sonnet-5-5 DONE: qualified 24/24 score=1.000 wall=191s event=204
+SEAT claude-opus-5-5 DONE: qualified 24/24 score=1.000 wall=317s event=205
+QUALIFICATION-SWEEP COMPLETE 02:57:10Z

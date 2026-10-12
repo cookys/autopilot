@@ -15,7 +15,7 @@
 
 - hetero code review 由 opus、GLM、MiniMax、Qwen 四席審查，結論是 SHIP-AS-IS，沒有未結的意見。
 - 完整測試套件有 4 個檔案失敗，都確認不是這次改動引入的：其中 2 個在 base `6e91be30` 上同樣失敗，另外 2 個是測試執行中途改動本機設定造成的，已記入 BACKLOG。
-- discuss 四格要用 discuss-v4 重考，追蹤項目見 BACKLOG。
+- 已用 discuss-v4 重考四格：haiku-high FAIL 29/48；sonnet-high、opus-high、opus-low PASS 45/48，scorecard 事件 218–221，四列都收進官方預設。
 
 ## v3.0.0-alpha.6 — 同一個 session 開第二個任務可以用 `set --new-task` 重走階段流程，用量分頁多一條 24 小時走勢線，鍵盤也能切分頁（pre-release，供 owner 測試）
 

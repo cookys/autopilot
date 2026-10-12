@@ -1162,14 +1162,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: short-circuit test cannot fail (assert a grown file's new row gets a rewritten sidecar's parent); no cycle/self-parent test; a node under a cycle can land on root as orphan; 5-char labels can collide.
 
-### discuss exam: re-administer discuss-v4 for the four claude 5.5 cells
-- **Status**: open
-- **Trigger**: owner 2026-10-12 — the exam fix merged (`2e55f70f`, corpus discuss-v4); re-administer haiku/sonnet/opus-high and opus-low
-- **Effort**: M
-- **Source**: Claude 5.5 requalification analysis, 2026-10-12
-- **Pointer**: docs/plans/evidence/2026-10-12-claude-5.5-requalify/README.md
-- **Context**: lane.sh with ROLES_OVERRIDE=discuss; re-derive identity (derive-fingerprints.js) for the new prompt hash and discuss-v4 first; record only after reading; copy emit-row.json to emitted-row.json for build-qualification-defaults.js.
-
 ### dispatch-discuss.js: production prompt lacks the own-axis rule the exam now discloses
 - **Status**: open
 - **Trigger**: before think-tank enables a discuss seat in production

@@ -34,13 +34,15 @@ const TRANSPORT = 'qualification-case-broker-networkless-bwrap';
 const CRED = 'dedicated-exam-config-dir-credentials-only';
 const corp = (r) => { const c = fs.readFileSync(path.join(REPO, `evals/${r}-capability-evidence-corpus.json`)); const g = fs.readFileSync(path.join(REPO, `evals/${r}-eval-generator.js`)); const j = JSON.parse(c);
   return { prompt: sha(Buffer.concat([c, g])), sem: sha(Buffer.from(JSON.stringify({ corpus_version: j.corpus_version, families: j.families, thresholds: j.thresholds, canary_closure: 'negative_control_admission_failed:true' }), 'utf8')) }; };
-const ownerPromptHash = sha(fs.readFileSync(path.join(HERE, 'owner-provider.js')));
+const ownerPath = path.join(HERE, 'owner-provider.js'); // owner-provider.js was never committed; owner is not examined this round
+const ownerPromptHash = fs.existsSync(ownerPath) ? sha(fs.readFileSync(ownerPath)) : null;
 const roles = {
   reviewer: { prompt: tmpl('SYSTEM_PROMPT'), sem: { kind: 'reviewer-semantic-surface-v1', model, transport: 'claude-p-tools-empty', reasoning_effort: effort, endpoint: '@none' }, con: { kind: 'reviewer-containment-surface-v1', exam_transport: TRANSPORT, cli_posture: POSTURE, credential_isolation: CRED }, invented: ['claude-specific surface strings'] },
   owner: { prompt: ownerPromptHash, sem: { kind: 'owner-semantic-surface-v1', model, transport: 'claude-p-tools-empty', reasoning_effort: effort }, con: { kind: 'owner-containment-surface-v1', exam_transport: TRANSPORT, cli_posture: POSTURE, credential_isolation: CRED }, invented: ['entire owner identity (no precedent); prompt hash = sha256(owner-provider.js bytes)'] },
   brain: { prompt: tmpl('BRAIN_SYSTEM_PROMPT'), sem: { kind: 'brain-seat-semantic-surface-v1', model, transport: 'claude-p-tools-empty', reasoning_effort: effort, setting_sources: 'none' }, con: { kind: 'brain-seat-containment-surface-v2', exam_transport: TRANSPORT, cli_posture: POSTURE, credential_isolation: CRED }, invented: ['credential_isolation string and --strict-mcp-config in posture differ from the 2026-09-24 opus row'] },
   verification_author: { prompt: vaPrompt(), sem: { kind: 'va-semantic-surface-v1', model, transport: 'claude-p-tools-empty', reasoning_effort: effort, endpoint: '@none' }, con: { kind: 'va-containment-surface-v1', exam_transport: TRANSPORT, twin_execution: 'host-va-runner-bwrap', credential_isolation: CRED }, invented: ['claude transport strings'] },
 };
+if (ownerPromptHash === null) delete roles.owner;
 for (const r of ['consult', 'discuss']) {
   const c = corp(r);
   roles[r] = { prompt: c.prompt, sem: null, semHex: sha(Buffer.from(JSON.stringify({ r, base: c.sem, model, effort }))), con: { kind: `${r}-containment-surface-v1`, exam_transport: TRANSPORT, cli_posture: POSTURE, credential_isolation: CRED }, invented: ['semantic = derive-hashes corpus semantic ⊕ model/effort (derive-hashes alone has no model/effort, so all seats collide); containment surface'] };

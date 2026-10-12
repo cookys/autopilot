@@ -200,6 +200,26 @@
       "event_id": 217,
       "role": "consult",
       "evidence_bundle": "docs/plans/evidence/2026-10-12-claude-5.5-requalify/broker/opus-low/consult"
+    },
+    {
+      "event_id": 218,
+      "role": "discuss",
+      "evidence_bundle": "docs/plans/evidence/2026-10-12-claude-5.5-requalify/broker/haiku-high/discuss-v4"
+    },
+    {
+      "event_id": 219,
+      "role": "discuss",
+      "evidence_bundle": "docs/plans/evidence/2026-10-12-claude-5.5-requalify/broker/sonnet-high/discuss-v4"
+    },
+    {
+      "event_id": 220,
+      "role": "discuss",
+      "evidence_bundle": "docs/plans/evidence/2026-10-12-claude-5.5-requalify/broker/opus-high/discuss-v4"
+    },
+    {
+      "event_id": 221,
+      "role": "discuss",
+      "evidence_bundle": "docs/plans/evidence/2026-10-12-claude-5.5-requalify/broker/opus-low/discuss-v4"
     }
   ]
 }

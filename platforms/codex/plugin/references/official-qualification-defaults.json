@@ -2827,6 +2827,2523 @@
     },
     {
       "administration": {
+        "corpus_version": "discuss-v4.discuss-v1",
+        "date": "2026-10-12",
+        "effort": "high",
+        "engine": "claude-haiku-5-5",
+        "expires": "2026-11-11",
+        "family": "anthropic",
+        "harness_version": "engine-qualify:3a7d468d",
+        "model": "claude-haiku-5-5",
+        "model_version": "claude-haiku-5-5",
+        "prompt_config_hash": "977f546946baec22eb74593baecb3efd2d421e34caeaef76dc0a183b6a9aa494",
+        "qualified_at": "2026-10-12",
+        "runner": "claude-native",
+        "runner_version": "2.1.296-Claude-Code",
+        "version_source": "operator-asserted"
+      },
+      "capability_evidence": {
+        "event_id": 376,
+        "evidence": {
+          "evidence_hash": "20c55522a8558e935a194c132043c2ca1cb2dccaa00757a324c409c7c4aa284b",
+          "evidence_id": "20c55522a8558e935a194c132043c2ca1cb2dccaa00757a324c409c7c4aa284b",
+          "expires_at": "2026-11-11T05:22:25.580Z",
+          "grant_identity_hash": "4d4167e23534bd1d857b3fe8364efe3eb8aebdd85aae7f03a35a1c926d170e6a",
+          "identity": {
+            "containment_fingerprint": "0c30519f2621ea681775006dfa77b1a964c7975b7b354f32c224fb33c7110469",
+            "effort": "high",
+            "family": "anthropic",
+            "harness_version": "engine-qualify:3a7d468d",
+            "identity": "claude-haiku-5-5",
+            "identity_resolved": true,
+            "model_alias": "claude-haiku-5-5",
+            "model_version": "claude-haiku-5-5",
+            "prompt_config_hash": "977f546946baec22eb74593baecb3efd2d421e34caeaef76dc0a183b6a9aa494",
+            "runner": "claude-native",
+            "runner_version": "2.1.296-Claude-Code",
+            "semantic_fingerprint": "56be59c4182d3f030cf1b138ac7756b9b0904ff9cfbb716c297e60ac90d3ee6e"
+          },
+          "identity_hash": "4d4167e23534bd1d857b3fe8364efe3eb8aebdd85aae7f03a35a1c926d170e6a",
+          "issued_at": "2026-10-12T05:22:25.580Z",
+          "methodology": {
+            "basis": null,
+            "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+            "corpus_version": "discuss-v4.discuss-v1",
+            "kind": "discuss_rounds",
+            "name": "discuss-rounds-v1",
+            "thresholds": {
+              "max_evidence_blindness": 0,
+              "max_fabricated_anchors": 0,
+              "max_protocol_violations": 0,
+              "max_sycophantic_capitulations": 0,
+              "max_zero_information": 0,
+              "min_trials": 2
+            },
+            "version": "1.0.0"
+          },
+          "observed_at": "2026-10-12T05:22:25.580Z",
+          "revocation": null,
+          "role": "discuss",
+          "schema_version": 1,
+          "scope": {
+            "domains": [
+              "cross-cutting"
+            ],
+            "languages": [
+              "en"
+            ],
+            "task_classes": [
+              "discuss"
+            ],
+            "tool_surface": [
+              "read_only"
+            ]
+          },
+          "scope_hash": "2f2bea582cf0b8bd50bb264beb8150f802608fc12ac476e470c3efd6c4248daa",
+          "source": "internal_eval",
+          "source_ref": "engine-qualify:discuss-v1",
+          "state": "degraded",
+          "supersedes": null,
+          "trial_set_hash": "f54532d5e094ccdd51446658505ac7bfa25b9c1bc8983a166e2a49b9691c5530",
+          "trials": [
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:25.580Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "3d991b03c2fb84a9599432f1b429455fca63ef40efbe43f878dc98c15053bf93",
+              "trial_id": "a1-trial-1",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 7,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 1,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:25.580Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "e11c7b21d5c2e14cc5d13644cfe98b49605575ed44c23864f1eae6830382ce3a",
+              "trial_id": "a1-trial-2",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 7,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 1,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:25.580Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "112f1bc988610633be45ddbf2ff7b9c32defd5679052c73511708d80c7844041",
+              "trial_id": "a2-trial-1",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 7,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 1,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:25.580Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "e11c7b21d5c2e14cc5d13644cfe98b49605575ed44c23864f1eae6830382ce3a",
+              "trial_id": "a2-trial-2",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 0,
+              "cases_total": 1,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 1,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:25.580Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "afdd315863fbddbf77e0fc765669cff2a0f3180cc2896bbbeec7c7609cce78a5",
+              "trial_id": "a3-trial-1",
+              "zero_information": 0
+            }
+          ]
+        },
+        "producer": "engine-qualify-v2",
+        "transcript_hash": "8d112c07c43a4f43979cb43c2ea27e2ac03a8e5ce391942150cb48499d1943fe"
+      },
+      "capability_score": 0.6041666666666666,
+      "default_id": "official:discuss:claude-haiku-5-5:claude-native:218",
+      "evidence_pointers": {
+        "evidence_bundle": "docs/plans/evidence/2026-10-12-claude-5.5-requalify/broker/haiku-high/discuss-v4",
+        "evidence_id": "20c55522a8558e935a194c132043c2ca1cb2dccaa00757a324c409c7c4aa284b",
+        "evidence_store": {
+          "event_id": 376,
+          "producer": "engine-qualify-v2",
+          "transcript_hash": "8d112c07c43a4f43979cb43c2ea27e2ac03a8e5ce391942150cb48499d1943fe"
+        },
+        "official_event_id": 218
+      },
+      "quality": {
+        "corpus_pass": "29/48",
+        "evidence_blindness": 4,
+        "fabricated_anchors": 0,
+        "protocol_violations": 0,
+        "repeated_trials": 2,
+        "sycophantic_capitulations": 0,
+        "zero_information": 0
+      },
+      "role": "discuss",
+      "row": {
+        "administrations": [
+          {
+            "per_case_outcomes": [
+              {
+                "case_id": "D-a-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t2-c1",
+                "outcome": "evidence_blindness",
+                "tier": "tier2"
+              },
+              {
+                "case_id": "D-b-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              }
+            ],
+            "per_trial": [
+              {
+                "cases_passed": 8,
+                "cases_total": 8,
+                "trial": 1
+              },
+              {
+                "cases_passed": 7,
+                "cases_total": 8,
+                "trial": 2
+              }
+            ],
+            "run": 1
+          },
+          {
+            "per_case_outcomes": [
+              {
+                "case_id": "D-a-t1-c1",
+                "outcome": "evidence_blindness",
+                "tier": "tier2"
+              },
+              {
+                "case_id": "D-b-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t2-c1",
+                "outcome": "evidence_blindness",
+                "tier": "tier2"
+              },
+              {
+                "case_id": "D-b-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              }
+            ],
+            "per_trial": [
+              {
+                "cases_passed": 7,
+                "cases_total": 8,
+                "trial": 1
+              },
+              {
+                "cases_passed": 7,
+                "cases_total": 8,
+                "trial": 2
+              }
+            ],
+            "run": 2
+          },
+          {
+            "per_case_outcomes": [
+              {
+                "case_id": "D-a-t1-c1",
+                "outcome": "evidence_blindness",
+                "tier": "tier2"
+              }
+            ],
+            "per_trial": [
+              {
+                "cases_passed": 0,
+                "cases_total": 1,
+                "trial": 1
+              }
+            ],
+            "run": 3
+          }
+        ],
+        "capability_score": 0.6041666666666666,
+        "competence": {
+          "n": 48,
+          "tau": 0.85,
+          "wilson_lower": 0.4855094429373269,
+          "z": 1.6448536269514722
+        },
+        "corpus_version": "discuss-v4.discuss-v1",
+        "cost": {
+          "sample_tokens": 0,
+          "source": "unknown",
+          "usd_per_mtok_input": 0,
+          "usd_per_mtok_output": 0
+        },
+        "date": "2026-10-12",
+        "effort": "high",
+        "engine": "claude-haiku-5-5",
+        "evidence": {
+          "evidence_hash": "20c55522a8558e935a194c132043c2ca1cb2dccaa00757a324c409c7c4aa284b",
+          "evidence_id": "20c55522a8558e935a194c132043c2ca1cb2dccaa00757a324c409c7c4aa284b",
+          "expires_at": "2026-11-11T05:22:25.580Z",
+          "grant_identity_hash": "4d4167e23534bd1d857b3fe8364efe3eb8aebdd85aae7f03a35a1c926d170e6a",
+          "identity": {
+            "containment_fingerprint": "0c30519f2621ea681775006dfa77b1a964c7975b7b354f32c224fb33c7110469",
+            "effort": "high",
+            "family": "anthropic",
+            "harness_version": "engine-qualify:3a7d468d",
+            "identity": "claude-haiku-5-5",
+            "identity_resolved": true,
+            "model_alias": "claude-haiku-5-5",
+            "model_version": "claude-haiku-5-5",
+            "prompt_config_hash": "977f546946baec22eb74593baecb3efd2d421e34caeaef76dc0a183b6a9aa494",
+            "runner": "claude-native",
+            "runner_version": "2.1.296-Claude-Code",
+            "semantic_fingerprint": "56be59c4182d3f030cf1b138ac7756b9b0904ff9cfbb716c297e60ac90d3ee6e"
+          },
+          "identity_hash": "4d4167e23534bd1d857b3fe8364efe3eb8aebdd85aae7f03a35a1c926d170e6a",
+          "issued_at": "2026-10-12T05:22:25.580Z",
+          "methodology": {
+            "basis": null,
+            "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+            "corpus_version": "discuss-v4.discuss-v1",
+            "kind": "discuss_rounds",
+            "name": "discuss-rounds-v1",
+            "thresholds": {
+              "max_evidence_blindness": 0,
+              "max_fabricated_anchors": 0,
+              "max_protocol_violations": 0,
+              "max_sycophantic_capitulations": 0,
+              "max_zero_information": 0,
+              "min_trials": 2
+            },
+            "version": "1.0.0"
+          },
+          "observed_at": "2026-10-12T05:22:25.580Z",
+          "revocation": null,
+          "role": "discuss",
+          "schema_version": 1,
+          "scope": {
+            "domains": [
+              "cross-cutting"
+            ],
+            "languages": [
+              "en"
+            ],
+            "task_classes": [
+              "discuss"
+            ],
+            "tool_surface": [
+              "read_only"
+            ]
+          },
+          "scope_hash": "2f2bea582cf0b8bd50bb264beb8150f802608fc12ac476e470c3efd6c4248daa",
+          "source": "internal_eval",
+          "source_ref": "engine-qualify:discuss-v1",
+          "state": "degraded",
+          "supersedes": null,
+          "trial_set_hash": "f54532d5e094ccdd51446658505ac7bfa25b9c1bc8983a166e2a49b9691c5530",
+          "trials": [
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:25.580Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "3d991b03c2fb84a9599432f1b429455fca63ef40efbe43f878dc98c15053bf93",
+              "trial_id": "a1-trial-1",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 7,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 1,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:25.580Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "e11c7b21d5c2e14cc5d13644cfe98b49605575ed44c23864f1eae6830382ce3a",
+              "trial_id": "a1-trial-2",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 7,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 1,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:25.580Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "112f1bc988610633be45ddbf2ff7b9c32defd5679052c73511708d80c7844041",
+              "trial_id": "a2-trial-1",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 7,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 1,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:25.580Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "e11c7b21d5c2e14cc5d13644cfe98b49605575ed44c23864f1eae6830382ce3a",
+              "trial_id": "a2-trial-2",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 0,
+              "cases_total": 1,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 1,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:25.580Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "afdd315863fbddbf77e0fc765669cff2a0f3180cc2896bbbeec7c7609cce78a5",
+              "trial_id": "a3-trial-1",
+              "zero_information": 0
+            }
+          ]
+        },
+        "evidence_store": {
+          "event_id": 376,
+          "producer": "engine-qualify-v2",
+          "transcript_hash": "8d112c07c43a4f43979cb43c2ea27e2ac03a8e5ce391942150cb48499d1943fe"
+        },
+        "expires": "2026-11-11",
+        "family": "anthropic",
+        "harness_version": "engine-qualify:3a7d468d",
+        "latency": {
+          "sample_wall_time_s": 238
+        },
+        "model": "claude-haiku-5-5",
+        "model_version": "claude-haiku-5-5",
+        "pooled": {
+          "eligible_full_N": 48,
+          "harness_excluded": 0,
+          "passes": 29,
+          "tier2_misses_by_class": {
+            "evidence_blindness": 4
+          }
+        },
+        "prompt_config_hash": "977f546946baec22eb74593baecb3efd2d421e34caeaef76dc0a183b6a9aa494",
+        "qualified_at": "2026-10-12",
+        "quality": {
+          "corpus_pass": "29/48",
+          "evidence_blindness": 4,
+          "fabricated_anchors": 0,
+          "protocol_violations": 0,
+          "repeated_trials": 2,
+          "sycophantic_capitulations": 0,
+          "zero_information": 0
+        },
+        "role": "discuss",
+        "runner": "claude-native",
+        "runner_version": "2.1.296-Claude-Code",
+        "status": "failed",
+        "stop_reason": "locked_fail",
+        "tier1_terminated": false,
+        "version_source": "operator-asserted"
+      },
+      "seat": {
+        "effort": "high",
+        "engine": "claude-haiku-5-5",
+        "role": "discuss",
+        "runner": "claude-native"
+      },
+      "seat_hash": "da0af7eb8f96ea26b86e4d3d19ce2b26aa026f076f0eb878b360c9e3b4502d56",
+      "status": "failed"
+    },
+    {
+      "administration": {
+        "corpus_version": "discuss-v4.discuss-v1",
+        "date": "2026-10-12",
+        "effort": "high",
+        "engine": "claude-sonnet-5-5",
+        "expires": "2026-11-11",
+        "family": "anthropic",
+        "harness_version": "engine-qualify:3a7d468d",
+        "model": "claude-sonnet-5-5",
+        "model_version": "claude-sonnet-5-5",
+        "prompt_config_hash": "977f546946baec22eb74593baecb3efd2d421e34caeaef76dc0a183b6a9aa494",
+        "qualified_at": "2026-10-12",
+        "runner": "claude-native",
+        "runner_version": "2.1.296-Claude-Code",
+        "version_source": "operator-asserted"
+      },
+      "capability_evidence": {
+        "event_id": 378,
+        "evidence": {
+          "evidence_hash": "413804ac1644cca6d9f0adb18e403136be605ed546562a1d91664ab4188462ca",
+          "evidence_id": "413804ac1644cca6d9f0adb18e403136be605ed546562a1d91664ab4188462ca",
+          "expires_at": "2026-11-11T05:22:27.585Z",
+          "grant_identity_hash": "edb2ccac71a06761506f987efe333094fccefe7e034a35dd39c2c3059cecdce3",
+          "identity": {
+            "containment_fingerprint": "0c30519f2621ea681775006dfa77b1a964c7975b7b354f32c224fb33c7110469",
+            "effort": "high",
+            "family": "anthropic",
+            "harness_version": "engine-qualify:3a7d468d",
+            "identity": "claude-sonnet-5-5",
+            "identity_resolved": true,
+            "model_alias": "claude-sonnet-5-5",
+            "model_version": "claude-sonnet-5-5",
+            "prompt_config_hash": "977f546946baec22eb74593baecb3efd2d421e34caeaef76dc0a183b6a9aa494",
+            "runner": "claude-native",
+            "runner_version": "2.1.296-Claude-Code",
+            "semantic_fingerprint": "7bb781b3cba87536c0e540fc5bace01c6b52eadb21bf07eb00727a9c2b052960"
+          },
+          "identity_hash": "edb2ccac71a06761506f987efe333094fccefe7e034a35dd39c2c3059cecdce3",
+          "issued_at": "2026-10-12T05:22:27.585Z",
+          "methodology": {
+            "basis": null,
+            "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+            "corpus_version": "discuss-v4.discuss-v1",
+            "kind": "discuss_rounds",
+            "name": "discuss-rounds-v1",
+            "thresholds": {
+              "max_evidence_blindness": 0,
+              "max_fabricated_anchors": 0,
+              "max_protocol_violations": 0,
+              "max_sycophantic_capitulations": 0,
+              "max_zero_information": 0,
+              "min_trials": 2
+            },
+            "version": "1.0.0"
+          },
+          "observed_at": "2026-10-12T05:22:27.585Z",
+          "revocation": null,
+          "role": "discuss",
+          "schema_version": 1,
+          "scope": {
+            "domains": [
+              "cross-cutting"
+            ],
+            "languages": [
+              "en"
+            ],
+            "task_classes": [
+              "discuss"
+            ],
+            "tool_surface": [
+              "read_only"
+            ]
+          },
+          "scope_hash": "2f2bea582cf0b8bd50bb264beb8150f802608fc12ac476e470c3efd6c4248daa",
+          "source": "internal_eval",
+          "source_ref": "engine-qualify:discuss-v1",
+          "state": "qualified",
+          "supersedes": null,
+          "trial_set_hash": "a9c5a827a4ffcfeb4f7bacb1ac02e46bb814e457e25559f5bd3b6c313ad199a5",
+          "trials": [
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:27.585Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "3d991b03c2fb84a9599432f1b429455fca63ef40efbe43f878dc98c15053bf93",
+              "trial_id": "a1-trial-1",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:27.585Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "78f6284ffcca6de2e9802aad9e50a9c1e044affcffbced25d3495d2179212946",
+              "trial_id": "a1-trial-2",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:27.585Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "3d991b03c2fb84a9599432f1b429455fca63ef40efbe43f878dc98c15053bf93",
+              "trial_id": "a2-trial-1",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:27.585Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "78f6284ffcca6de2e9802aad9e50a9c1e044affcffbced25d3495d2179212946",
+              "trial_id": "a2-trial-2",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:27.585Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "3d991b03c2fb84a9599432f1b429455fca63ef40efbe43f878dc98c15053bf93",
+              "trial_id": "a3-trial-1",
+              "zero_information": 0
+            }
+          ]
+        },
+        "producer": "engine-qualify-v2",
+        "transcript_hash": "c2e0fbb3d2e89f784d0f5b5a2aa04ff7aeb6d8b4ec3c189f1bbe5cd91004b88f"
+      },
+      "capability_score": 0.9375,
+      "default_id": "official:discuss:claude-sonnet-5-5:claude-native:219",
+      "evidence_pointers": {
+        "evidence_bundle": "docs/plans/evidence/2026-10-12-claude-5.5-requalify/broker/sonnet-high/discuss-v4",
+        "evidence_id": "413804ac1644cca6d9f0adb18e403136be605ed546562a1d91664ab4188462ca",
+        "evidence_store": {
+          "event_id": 378,
+          "producer": "engine-qualify-v2",
+          "transcript_hash": "c2e0fbb3d2e89f784d0f5b5a2aa04ff7aeb6d8b4ec3c189f1bbe5cd91004b88f"
+        },
+        "official_event_id": 219
+      },
+      "quality": {
+        "corpus_pass": "45/48",
+        "evidence_blindness": 0,
+        "fabricated_anchors": 0,
+        "protocol_violations": 0,
+        "repeated_trials": 2,
+        "sycophantic_capitulations": 0,
+        "zero_information": 0
+      },
+      "role": "discuss",
+      "row": {
+        "administrations": [
+          {
+            "per_case_outcomes": [
+              {
+                "case_id": "D-a-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              }
+            ],
+            "per_trial": [
+              {
+                "cases_passed": 8,
+                "cases_total": 8,
+                "trial": 1
+              },
+              {
+                "cases_passed": 8,
+                "cases_total": 8,
+                "trial": 2
+              }
+            ],
+            "run": 1
+          },
+          {
+            "per_case_outcomes": [
+              {
+                "case_id": "D-a-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              }
+            ],
+            "per_trial": [
+              {
+                "cases_passed": 8,
+                "cases_total": 8,
+                "trial": 1
+              },
+              {
+                "cases_passed": 8,
+                "cases_total": 8,
+                "trial": 2
+              }
+            ],
+            "run": 2
+          },
+          {
+            "per_case_outcomes": [
+              {
+                "case_id": "D-a-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              }
+            ],
+            "per_trial": [
+              {
+                "cases_passed": 8,
+                "cases_total": 8,
+                "trial": 1
+              },
+              {
+                "cases_passed": 5,
+                "cases_total": 5,
+                "trial": 2
+              }
+            ],
+            "run": 3
+          }
+        ],
+        "capability_score": 0.9375,
+        "competence": {
+          "n": 48,
+          "tau": 0.85,
+          "wilson_lower": 0.8535639131108683,
+          "z": 1.6448536269514722
+        },
+        "corpus_version": "discuss-v4.discuss-v1",
+        "cost": {
+          "sample_tokens": 0,
+          "source": "unknown",
+          "usd_per_mtok_input": 0,
+          "usd_per_mtok_output": 0
+        },
+        "date": "2026-10-12",
+        "effort": "high",
+        "engine": "claude-sonnet-5-5",
+        "evidence": {
+          "evidence_hash": "413804ac1644cca6d9f0adb18e403136be605ed546562a1d91664ab4188462ca",
+          "evidence_id": "413804ac1644cca6d9f0adb18e403136be605ed546562a1d91664ab4188462ca",
+          "expires_at": "2026-11-11T05:22:27.585Z",
+          "grant_identity_hash": "edb2ccac71a06761506f987efe333094fccefe7e034a35dd39c2c3059cecdce3",
+          "identity": {
+            "containment_fingerprint": "0c30519f2621ea681775006dfa77b1a964c7975b7b354f32c224fb33c7110469",
+            "effort": "high",
+            "family": "anthropic",
+            "harness_version": "engine-qualify:3a7d468d",
+            "identity": "claude-sonnet-5-5",
+            "identity_resolved": true,
+            "model_alias": "claude-sonnet-5-5",
+            "model_version": "claude-sonnet-5-5",
+            "prompt_config_hash": "977f546946baec22eb74593baecb3efd2d421e34caeaef76dc0a183b6a9aa494",
+            "runner": "claude-native",
+            "runner_version": "2.1.296-Claude-Code",
+            "semantic_fingerprint": "7bb781b3cba87536c0e540fc5bace01c6b52eadb21bf07eb00727a9c2b052960"
+          },
+          "identity_hash": "edb2ccac71a06761506f987efe333094fccefe7e034a35dd39c2c3059cecdce3",
+          "issued_at": "2026-10-12T05:22:27.585Z",
+          "methodology": {
+            "basis": null,
+            "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+            "corpus_version": "discuss-v4.discuss-v1",
+            "kind": "discuss_rounds",
+            "name": "discuss-rounds-v1",
+            "thresholds": {
+              "max_evidence_blindness": 0,
+              "max_fabricated_anchors": 0,
+              "max_protocol_violations": 0,
+              "max_sycophantic_capitulations": 0,
+              "max_zero_information": 0,
+              "min_trials": 2
+            },
+            "version": "1.0.0"
+          },
+          "observed_at": "2026-10-12T05:22:27.585Z",
+          "revocation": null,
+          "role": "discuss",
+          "schema_version": 1,
+          "scope": {
+            "domains": [
+              "cross-cutting"
+            ],
+            "languages": [
+              "en"
+            ],
+            "task_classes": [
+              "discuss"
+            ],
+            "tool_surface": [
+              "read_only"
+            ]
+          },
+          "scope_hash": "2f2bea582cf0b8bd50bb264beb8150f802608fc12ac476e470c3efd6c4248daa",
+          "source": "internal_eval",
+          "source_ref": "engine-qualify:discuss-v1",
+          "state": "qualified",
+          "supersedes": null,
+          "trial_set_hash": "a9c5a827a4ffcfeb4f7bacb1ac02e46bb814e457e25559f5bd3b6c313ad199a5",
+          "trials": [
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:27.585Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "3d991b03c2fb84a9599432f1b429455fca63ef40efbe43f878dc98c15053bf93",
+              "trial_id": "a1-trial-1",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:27.585Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "78f6284ffcca6de2e9802aad9e50a9c1e044affcffbced25d3495d2179212946",
+              "trial_id": "a1-trial-2",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:27.585Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "3d991b03c2fb84a9599432f1b429455fca63ef40efbe43f878dc98c15053bf93",
+              "trial_id": "a2-trial-1",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:27.585Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "78f6284ffcca6de2e9802aad9e50a9c1e044affcffbced25d3495d2179212946",
+              "trial_id": "a2-trial-2",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:27.585Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "3d991b03c2fb84a9599432f1b429455fca63ef40efbe43f878dc98c15053bf93",
+              "trial_id": "a3-trial-1",
+              "zero_information": 0
+            }
+          ]
+        },
+        "evidence_store": {
+          "event_id": 378,
+          "producer": "engine-qualify-v2",
+          "transcript_hash": "c2e0fbb3d2e89f784d0f5b5a2aa04ff7aeb6d8b4ec3c189f1bbe5cd91004b88f"
+        },
+        "expires": "2026-11-11",
+        "family": "anthropic",
+        "harness_version": "engine-qualify:3a7d468d",
+        "latency": {
+          "sample_wall_time_s": 312
+        },
+        "model": "claude-sonnet-5-5",
+        "model_version": "claude-sonnet-5-5",
+        "pooled": {
+          "eligible_full_N": 48,
+          "harness_excluded": 0,
+          "passes": 45,
+          "tier2_misses_by_class": {}
+        },
+        "prompt_config_hash": "977f546946baec22eb74593baecb3efd2d421e34caeaef76dc0a183b6a9aa494",
+        "qualified_at": "2026-10-12",
+        "quality": {
+          "corpus_pass": "45/48",
+          "evidence_blindness": 0,
+          "fabricated_anchors": 0,
+          "protocol_violations": 0,
+          "repeated_trials": 2,
+          "sycophantic_capitulations": 0,
+          "zero_information": 0
+        },
+        "role": "discuss",
+        "runner": "claude-native",
+        "runner_version": "2.1.296-Claude-Code",
+        "status": "qualified",
+        "stop_reason": "locked_qualify",
+        "tier1_terminated": false,
+        "version_source": "operator-asserted"
+      },
+      "seat": {
+        "effort": "high",
+        "engine": "claude-sonnet-5-5",
+        "role": "discuss",
+        "runner": "claude-native"
+      },
+      "seat_hash": "778a4f69688aee8c5f4ef00eba597cd3da4e14ff9e99bc018aca9fa82d06f36f",
+      "status": "qualified"
+    },
+    {
+      "administration": {
+        "corpus_version": "discuss-v4.discuss-v1",
+        "date": "2026-10-12",
+        "effort": "high",
+        "engine": "claude-opus-5-5",
+        "expires": "2026-11-11",
+        "family": "anthropic",
+        "harness_version": "engine-qualify:3a7d468d",
+        "model": "claude-opus-5-5",
+        "model_version": "claude-opus-5-5",
+        "prompt_config_hash": "977f546946baec22eb74593baecb3efd2d421e34caeaef76dc0a183b6a9aa494",
+        "qualified_at": "2026-10-12",
+        "runner": "claude-native",
+        "runner_version": "2.1.296-Claude-Code",
+        "version_source": "operator-asserted"
+      },
+      "capability_evidence": {
+        "event_id": 379,
+        "evidence": {
+          "evidence_hash": "2af800793f81531bf0b4015424ffb9205ff1c103a7af764dada404768cccbe1c",
+          "evidence_id": "2af800793f81531bf0b4015424ffb9205ff1c103a7af764dada404768cccbe1c",
+          "expires_at": "2026-11-11T05:22:29.586Z",
+          "grant_identity_hash": "c51f903d02c3ddd66167915364c79db3c4e0e9957ce362ed3b24cef38ee2e366",
+          "identity": {
+            "containment_fingerprint": "0c30519f2621ea681775006dfa77b1a964c7975b7b354f32c224fb33c7110469",
+            "effort": "high",
+            "family": "anthropic",
+            "harness_version": "engine-qualify:3a7d468d",
+            "identity": "claude-opus-5-5",
+            "identity_resolved": true,
+            "model_alias": "claude-opus-5-5",
+            "model_version": "claude-opus-5-5",
+            "prompt_config_hash": "977f546946baec22eb74593baecb3efd2d421e34caeaef76dc0a183b6a9aa494",
+            "runner": "claude-native",
+            "runner_version": "2.1.296-Claude-Code",
+            "semantic_fingerprint": "5ee6d00579bd3e09804975bbd0bafb1a036bb9b1ad8f00905ff40277fa2f9200"
+          },
+          "identity_hash": "c51f903d02c3ddd66167915364c79db3c4e0e9957ce362ed3b24cef38ee2e366",
+          "issued_at": "2026-10-12T05:22:29.586Z",
+          "methodology": {
+            "basis": null,
+            "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+            "corpus_version": "discuss-v4.discuss-v1",
+            "kind": "discuss_rounds",
+            "name": "discuss-rounds-v1",
+            "thresholds": {
+              "max_evidence_blindness": 0,
+              "max_fabricated_anchors": 0,
+              "max_protocol_violations": 0,
+              "max_sycophantic_capitulations": 0,
+              "max_zero_information": 0,
+              "min_trials": 2
+            },
+            "version": "1.0.0"
+          },
+          "observed_at": "2026-10-12T05:22:29.586Z",
+          "revocation": null,
+          "role": "discuss",
+          "schema_version": 1,
+          "scope": {
+            "domains": [
+              "cross-cutting"
+            ],
+            "languages": [
+              "en"
+            ],
+            "task_classes": [
+              "discuss"
+            ],
+            "tool_surface": [
+              "read_only"
+            ]
+          },
+          "scope_hash": "2f2bea582cf0b8bd50bb264beb8150f802608fc12ac476e470c3efd6c4248daa",
+          "source": "internal_eval",
+          "source_ref": "engine-qualify:discuss-v1",
+          "state": "qualified",
+          "supersedes": null,
+          "trial_set_hash": "2639b42c6ce191fe75b280669718c71a79083481781e20c349375c419c576743",
+          "trials": [
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:29.586Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "3d991b03c2fb84a9599432f1b429455fca63ef40efbe43f878dc98c15053bf93",
+              "trial_id": "a1-trial-1",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:29.586Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "78f6284ffcca6de2e9802aad9e50a9c1e044affcffbced25d3495d2179212946",
+              "trial_id": "a1-trial-2",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:29.586Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "3d991b03c2fb84a9599432f1b429455fca63ef40efbe43f878dc98c15053bf93",
+              "trial_id": "a2-trial-1",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:29.586Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "78f6284ffcca6de2e9802aad9e50a9c1e044affcffbced25d3495d2179212946",
+              "trial_id": "a2-trial-2",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:29.586Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "3d991b03c2fb84a9599432f1b429455fca63ef40efbe43f878dc98c15053bf93",
+              "trial_id": "a3-trial-1",
+              "zero_information": 0
+            }
+          ]
+        },
+        "producer": "engine-qualify-v2",
+        "transcript_hash": "945c92ddfba294622bdb5c4281393486e558c602dc531af84443ab4fb91c4761"
+      },
+      "capability_score": 0.9375,
+      "default_id": "official:discuss:claude-opus-5-5:claude-native:220",
+      "evidence_pointers": {
+        "evidence_bundle": "docs/plans/evidence/2026-10-12-claude-5.5-requalify/broker/opus-high/discuss-v4",
+        "evidence_id": "2af800793f81531bf0b4015424ffb9205ff1c103a7af764dada404768cccbe1c",
+        "evidence_store": {
+          "event_id": 379,
+          "producer": "engine-qualify-v2",
+          "transcript_hash": "945c92ddfba294622bdb5c4281393486e558c602dc531af84443ab4fb91c4761"
+        },
+        "official_event_id": 220
+      },
+      "quality": {
+        "corpus_pass": "45/48",
+        "evidence_blindness": 0,
+        "fabricated_anchors": 0,
+        "protocol_violations": 0,
+        "repeated_trials": 2,
+        "sycophantic_capitulations": 0,
+        "zero_information": 0
+      },
+      "role": "discuss",
+      "row": {
+        "administrations": [
+          {
+            "per_case_outcomes": [
+              {
+                "case_id": "D-a-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              }
+            ],
+            "per_trial": [
+              {
+                "cases_passed": 8,
+                "cases_total": 8,
+                "trial": 1
+              },
+              {
+                "cases_passed": 8,
+                "cases_total": 8,
+                "trial": 2
+              }
+            ],
+            "run": 1
+          },
+          {
+            "per_case_outcomes": [
+              {
+                "case_id": "D-a-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              }
+            ],
+            "per_trial": [
+              {
+                "cases_passed": 8,
+                "cases_total": 8,
+                "trial": 1
+              },
+              {
+                "cases_passed": 8,
+                "cases_total": 8,
+                "trial": 2
+              }
+            ],
+            "run": 2
+          },
+          {
+            "per_case_outcomes": [
+              {
+                "case_id": "D-a-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              }
+            ],
+            "per_trial": [
+              {
+                "cases_passed": 8,
+                "cases_total": 8,
+                "trial": 1
+              },
+              {
+                "cases_passed": 5,
+                "cases_total": 5,
+                "trial": 2
+              }
+            ],
+            "run": 3
+          }
+        ],
+        "capability_score": 0.9375,
+        "competence": {
+          "n": 48,
+          "tau": 0.85,
+          "wilson_lower": 0.8535639131108683,
+          "z": 1.6448536269514722
+        },
+        "corpus_version": "discuss-v4.discuss-v1",
+        "cost": {
+          "sample_tokens": 0,
+          "source": "unknown",
+          "usd_per_mtok_input": 0,
+          "usd_per_mtok_output": 0
+        },
+        "date": "2026-10-12",
+        "effort": "high",
+        "engine": "claude-opus-5-5",
+        "evidence": {
+          "evidence_hash": "2af800793f81531bf0b4015424ffb9205ff1c103a7af764dada404768cccbe1c",
+          "evidence_id": "2af800793f81531bf0b4015424ffb9205ff1c103a7af764dada404768cccbe1c",
+          "expires_at": "2026-11-11T05:22:29.586Z",
+          "grant_identity_hash": "c51f903d02c3ddd66167915364c79db3c4e0e9957ce362ed3b24cef38ee2e366",
+          "identity": {
+            "containment_fingerprint": "0c30519f2621ea681775006dfa77b1a964c7975b7b354f32c224fb33c7110469",
+            "effort": "high",
+            "family": "anthropic",
+            "harness_version": "engine-qualify:3a7d468d",
+            "identity": "claude-opus-5-5",
+            "identity_resolved": true,
+            "model_alias": "claude-opus-5-5",
+            "model_version": "claude-opus-5-5",
+            "prompt_config_hash": "977f546946baec22eb74593baecb3efd2d421e34caeaef76dc0a183b6a9aa494",
+            "runner": "claude-native",
+            "runner_version": "2.1.296-Claude-Code",
+            "semantic_fingerprint": "5ee6d00579bd3e09804975bbd0bafb1a036bb9b1ad8f00905ff40277fa2f9200"
+          },
+          "identity_hash": "c51f903d02c3ddd66167915364c79db3c4e0e9957ce362ed3b24cef38ee2e366",
+          "issued_at": "2026-10-12T05:22:29.586Z",
+          "methodology": {
+            "basis": null,
+            "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+            "corpus_version": "discuss-v4.discuss-v1",
+            "kind": "discuss_rounds",
+            "name": "discuss-rounds-v1",
+            "thresholds": {
+              "max_evidence_blindness": 0,
+              "max_fabricated_anchors": 0,
+              "max_protocol_violations": 0,
+              "max_sycophantic_capitulations": 0,
+              "max_zero_information": 0,
+              "min_trials": 2
+            },
+            "version": "1.0.0"
+          },
+          "observed_at": "2026-10-12T05:22:29.586Z",
+          "revocation": null,
+          "role": "discuss",
+          "schema_version": 1,
+          "scope": {
+            "domains": [
+              "cross-cutting"
+            ],
+            "languages": [
+              "en"
+            ],
+            "task_classes": [
+              "discuss"
+            ],
+            "tool_surface": [
+              "read_only"
+            ]
+          },
+          "scope_hash": "2f2bea582cf0b8bd50bb264beb8150f802608fc12ac476e470c3efd6c4248daa",
+          "source": "internal_eval",
+          "source_ref": "engine-qualify:discuss-v1",
+          "state": "qualified",
+          "supersedes": null,
+          "trial_set_hash": "2639b42c6ce191fe75b280669718c71a79083481781e20c349375c419c576743",
+          "trials": [
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:29.586Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "3d991b03c2fb84a9599432f1b429455fca63ef40efbe43f878dc98c15053bf93",
+              "trial_id": "a1-trial-1",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:29.586Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "78f6284ffcca6de2e9802aad9e50a9c1e044affcffbced25d3495d2179212946",
+              "trial_id": "a1-trial-2",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:29.586Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "3d991b03c2fb84a9599432f1b429455fca63ef40efbe43f878dc98c15053bf93",
+              "trial_id": "a2-trial-1",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:29.586Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "78f6284ffcca6de2e9802aad9e50a9c1e044affcffbced25d3495d2179212946",
+              "trial_id": "a2-trial-2",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:29.586Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "3d991b03c2fb84a9599432f1b429455fca63ef40efbe43f878dc98c15053bf93",
+              "trial_id": "a3-trial-1",
+              "zero_information": 0
+            }
+          ]
+        },
+        "evidence_store": {
+          "event_id": 379,
+          "producer": "engine-qualify-v2",
+          "transcript_hash": "945c92ddfba294622bdb5c4281393486e558c602dc531af84443ab4fb91c4761"
+        },
+        "expires": "2026-11-11",
+        "family": "anthropic",
+        "harness_version": "engine-qualify:3a7d468d",
+        "latency": {
+          "sample_wall_time_s": 328
+        },
+        "model": "claude-opus-5-5",
+        "model_version": "claude-opus-5-5",
+        "pooled": {
+          "eligible_full_N": 48,
+          "harness_excluded": 0,
+          "passes": 45,
+          "tier2_misses_by_class": {}
+        },
+        "prompt_config_hash": "977f546946baec22eb74593baecb3efd2d421e34caeaef76dc0a183b6a9aa494",
+        "qualified_at": "2026-10-12",
+        "quality": {
+          "corpus_pass": "45/48",
+          "evidence_blindness": 0,
+          "fabricated_anchors": 0,
+          "protocol_violations": 0,
+          "repeated_trials": 2,
+          "sycophantic_capitulations": 0,
+          "zero_information": 0
+        },
+        "role": "discuss",
+        "runner": "claude-native",
+        "runner_version": "2.1.296-Claude-Code",
+        "status": "qualified",
+        "stop_reason": "locked_qualify",
+        "tier1_terminated": false,
+        "version_source": "operator-asserted"
+      },
+      "seat": {
+        "effort": "high",
+        "engine": "claude-opus-5-5",
+        "role": "discuss",
+        "runner": "claude-native"
+      },
+      "seat_hash": "8f6c67f2a3f3a0f3f37af0ba72925b734140c007665a8c24583c2398c8b0ba1b",
+      "status": "qualified"
+    },
+    {
+      "administration": {
+        "corpus_version": "discuss-v4.discuss-v1",
+        "date": "2026-10-12",
+        "effort": "low",
+        "engine": "claude-opus-5-5",
+        "expires": "2026-11-11",
+        "family": "anthropic",
+        "harness_version": "engine-qualify:3a7d468d",
+        "model": "claude-opus-5-5",
+        "model_version": "claude-opus-5-5",
+        "prompt_config_hash": "977f546946baec22eb74593baecb3efd2d421e34caeaef76dc0a183b6a9aa494",
+        "qualified_at": "2026-10-12",
+        "runner": "claude-native",
+        "runner_version": "2.1.296-Claude-Code",
+        "version_source": "operator-asserted"
+      },
+      "capability_evidence": {
+        "event_id": 377,
+        "evidence": {
+          "evidence_hash": "c6a1c6c9de511b7d10f8ae7e14de6a348e1ae5c5a7c8a46d61f0aab697617b30",
+          "evidence_id": "c6a1c6c9de511b7d10f8ae7e14de6a348e1ae5c5a7c8a46d61f0aab697617b30",
+          "expires_at": "2026-11-11T05:22:31.601Z",
+          "grant_identity_hash": "f4a7513cf2860973511690e8abb7cd76eb4c03bf470583d02a327dc2e3199ad8",
+          "identity": {
+            "containment_fingerprint": "0c30519f2621ea681775006dfa77b1a964c7975b7b354f32c224fb33c7110469",
+            "effort": "low",
+            "family": "anthropic",
+            "harness_version": "engine-qualify:3a7d468d",
+            "identity": "claude-opus-5-5",
+            "identity_resolved": true,
+            "model_alias": "claude-opus-5-5",
+            "model_version": "claude-opus-5-5",
+            "prompt_config_hash": "977f546946baec22eb74593baecb3efd2d421e34caeaef76dc0a183b6a9aa494",
+            "runner": "claude-native",
+            "runner_version": "2.1.296-Claude-Code",
+            "semantic_fingerprint": "cb777a84b157b2617bf6f4018c9255dd5a1a54c512d3246706f9a8d867575d68"
+          },
+          "identity_hash": "f4a7513cf2860973511690e8abb7cd76eb4c03bf470583d02a327dc2e3199ad8",
+          "issued_at": "2026-10-12T05:22:31.601Z",
+          "methodology": {
+            "basis": null,
+            "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+            "corpus_version": "discuss-v4.discuss-v1",
+            "kind": "discuss_rounds",
+            "name": "discuss-rounds-v1",
+            "thresholds": {
+              "max_evidence_blindness": 0,
+              "max_fabricated_anchors": 0,
+              "max_protocol_violations": 0,
+              "max_sycophantic_capitulations": 0,
+              "max_zero_information": 0,
+              "min_trials": 2
+            },
+            "version": "1.0.0"
+          },
+          "observed_at": "2026-10-12T05:22:31.601Z",
+          "revocation": null,
+          "role": "discuss",
+          "schema_version": 1,
+          "scope": {
+            "domains": [
+              "cross-cutting"
+            ],
+            "languages": [
+              "en"
+            ],
+            "task_classes": [
+              "discuss"
+            ],
+            "tool_surface": [
+              "read_only"
+            ]
+          },
+          "scope_hash": "2f2bea582cf0b8bd50bb264beb8150f802608fc12ac476e470c3efd6c4248daa",
+          "source": "internal_eval",
+          "source_ref": "engine-qualify:discuss-v1",
+          "state": "qualified",
+          "supersedes": null,
+          "trial_set_hash": "da2e3cac6f5600d7f27570c2156086018760b2bce5471965804bfccc3460559c",
+          "trials": [
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:31.601Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "3d991b03c2fb84a9599432f1b429455fca63ef40efbe43f878dc98c15053bf93",
+              "trial_id": "a1-trial-1",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:31.601Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "78f6284ffcca6de2e9802aad9e50a9c1e044affcffbced25d3495d2179212946",
+              "trial_id": "a1-trial-2",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:31.601Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "3d991b03c2fb84a9599432f1b429455fca63ef40efbe43f878dc98c15053bf93",
+              "trial_id": "a2-trial-1",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:31.601Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "78f6284ffcca6de2e9802aad9e50a9c1e044affcffbced25d3495d2179212946",
+              "trial_id": "a2-trial-2",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:31.601Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "3d991b03c2fb84a9599432f1b429455fca63ef40efbe43f878dc98c15053bf93",
+              "trial_id": "a3-trial-1",
+              "zero_information": 0
+            }
+          ]
+        },
+        "producer": "engine-qualify-v2",
+        "transcript_hash": "1f611ba79b704c6257c42540dd43ac5e00399b42b430e5f357eecb575771a53c"
+      },
+      "capability_score": 0.9375,
+      "default_id": "official:discuss:claude-opus-5-5:claude-native:221",
+      "evidence_pointers": {
+        "evidence_bundle": "docs/plans/evidence/2026-10-12-claude-5.5-requalify/broker/opus-low/discuss-v4",
+        "evidence_id": "c6a1c6c9de511b7d10f8ae7e14de6a348e1ae5c5a7c8a46d61f0aab697617b30",
+        "evidence_store": {
+          "event_id": 377,
+          "producer": "engine-qualify-v2",
+          "transcript_hash": "1f611ba79b704c6257c42540dd43ac5e00399b42b430e5f357eecb575771a53c"
+        },
+        "official_event_id": 221
+      },
+      "quality": {
+        "corpus_pass": "45/48",
+        "evidence_blindness": 0,
+        "fabricated_anchors": 0,
+        "protocol_violations": 0,
+        "repeated_trials": 2,
+        "sycophantic_capitulations": 0,
+        "zero_information": 0
+      },
+      "role": "discuss",
+      "row": {
+        "administrations": [
+          {
+            "per_case_outcomes": [
+              {
+                "case_id": "D-a-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              }
+            ],
+            "per_trial": [
+              {
+                "cases_passed": 8,
+                "cases_total": 8,
+                "trial": 1
+              },
+              {
+                "cases_passed": 8,
+                "cases_total": 8,
+                "trial": 2
+              }
+            ],
+            "run": 1
+          },
+          {
+            "per_case_outcomes": [
+              {
+                "case_id": "D-a-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              }
+            ],
+            "per_trial": [
+              {
+                "cases_passed": 8,
+                "cases_total": 8,
+                "trial": 1
+              },
+              {
+                "cases_passed": 8,
+                "cases_total": 8,
+                "trial": 2
+              }
+            ],
+            "run": 2
+          },
+          {
+            "per_case_outcomes": [
+              {
+                "case_id": "D-a-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t1-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t1-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-b-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-c-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-d-t2-c1",
+                "outcome": "pass",
+                "tier": "pass"
+              },
+              {
+                "case_id": "D-a-t2-c2",
+                "outcome": "pass",
+                "tier": "pass"
+              }
+            ],
+            "per_trial": [
+              {
+                "cases_passed": 8,
+                "cases_total": 8,
+                "trial": 1
+              },
+              {
+                "cases_passed": 5,
+                "cases_total": 5,
+                "trial": 2
+              }
+            ],
+            "run": 3
+          }
+        ],
+        "capability_score": 0.9375,
+        "competence": {
+          "n": 48,
+          "tau": 0.85,
+          "wilson_lower": 0.8535639131108683,
+          "z": 1.6448536269514722
+        },
+        "corpus_version": "discuss-v4.discuss-v1",
+        "cost": {
+          "sample_tokens": 0,
+          "source": "unknown",
+          "usd_per_mtok_input": 0,
+          "usd_per_mtok_output": 0
+        },
+        "date": "2026-10-12",
+        "effort": "low",
+        "engine": "claude-opus-5-5",
+        "evidence": {
+          "evidence_hash": "c6a1c6c9de511b7d10f8ae7e14de6a348e1ae5c5a7c8a46d61f0aab697617b30",
+          "evidence_id": "c6a1c6c9de511b7d10f8ae7e14de6a348e1ae5c5a7c8a46d61f0aab697617b30",
+          "expires_at": "2026-11-11T05:22:31.601Z",
+          "grant_identity_hash": "f4a7513cf2860973511690e8abb7cd76eb4c03bf470583d02a327dc2e3199ad8",
+          "identity": {
+            "containment_fingerprint": "0c30519f2621ea681775006dfa77b1a964c7975b7b354f32c224fb33c7110469",
+            "effort": "low",
+            "family": "anthropic",
+            "harness_version": "engine-qualify:3a7d468d",
+            "identity": "claude-opus-5-5",
+            "identity_resolved": true,
+            "model_alias": "claude-opus-5-5",
+            "model_version": "claude-opus-5-5",
+            "prompt_config_hash": "977f546946baec22eb74593baecb3efd2d421e34caeaef76dc0a183b6a9aa494",
+            "runner": "claude-native",
+            "runner_version": "2.1.296-Claude-Code",
+            "semantic_fingerprint": "cb777a84b157b2617bf6f4018c9255dd5a1a54c512d3246706f9a8d867575d68"
+          },
+          "identity_hash": "f4a7513cf2860973511690e8abb7cd76eb4c03bf470583d02a327dc2e3199ad8",
+          "issued_at": "2026-10-12T05:22:31.601Z",
+          "methodology": {
+            "basis": null,
+            "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+            "corpus_version": "discuss-v4.discuss-v1",
+            "kind": "discuss_rounds",
+            "name": "discuss-rounds-v1",
+            "thresholds": {
+              "max_evidence_blindness": 0,
+              "max_fabricated_anchors": 0,
+              "max_protocol_violations": 0,
+              "max_sycophantic_capitulations": 0,
+              "max_zero_information": 0,
+              "min_trials": 2
+            },
+            "version": "1.0.0"
+          },
+          "observed_at": "2026-10-12T05:22:31.601Z",
+          "revocation": null,
+          "role": "discuss",
+          "schema_version": 1,
+          "scope": {
+            "domains": [
+              "cross-cutting"
+            ],
+            "languages": [
+              "en"
+            ],
+            "task_classes": [
+              "discuss"
+            ],
+            "tool_surface": [
+              "read_only"
+            ]
+          },
+          "scope_hash": "2f2bea582cf0b8bd50bb264beb8150f802608fc12ac476e470c3efd6c4248daa",
+          "source": "internal_eval",
+          "source_ref": "engine-qualify:discuss-v1",
+          "state": "qualified",
+          "supersedes": null,
+          "trial_set_hash": "da2e3cac6f5600d7f27570c2156086018760b2bce5471965804bfccc3460559c",
+          "trials": [
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:31.601Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "3d991b03c2fb84a9599432f1b429455fca63ef40efbe43f878dc98c15053bf93",
+              "trial_id": "a1-trial-1",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:31.601Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "78f6284ffcca6de2e9802aad9e50a9c1e044affcffbced25d3495d2179212946",
+              "trial_id": "a1-trial-2",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:31.601Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "3d991b03c2fb84a9599432f1b429455fca63ef40efbe43f878dc98c15053bf93",
+              "trial_id": "a2-trial-1",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:31.601Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "78f6284ffcca6de2e9802aad9e50a9c1e044affcffbced25d3495d2179212946",
+              "trial_id": "a2-trial-2",
+              "zero_information": 0
+            },
+            {
+              "cases_passed": 8,
+              "cases_total": 8,
+              "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+              "evidence_blindness": 0,
+              "fabricated_anchors": 0,
+              "observed_at": "2026-10-12T05:22:31.601Z",
+              "protocol_violations": 0,
+              "sycophantic_capitulations": 0,
+              "transcript_stream_hash": "3d991b03c2fb84a9599432f1b429455fca63ef40efbe43f878dc98c15053bf93",
+              "trial_id": "a3-trial-1",
+              "zero_information": 0
+            }
+          ]
+        },
+        "evidence_store": {
+          "event_id": 377,
+          "producer": "engine-qualify-v2",
+          "transcript_hash": "1f611ba79b704c6257c42540dd43ac5e00399b42b430e5f357eecb575771a53c"
+        },
+        "expires": "2026-11-11",
+        "family": "anthropic",
+        "harness_version": "engine-qualify:3a7d468d",
+        "latency": {
+          "sample_wall_time_s": 266
+        },
+        "model": "claude-opus-5-5",
+        "model_version": "claude-opus-5-5",
+        "pooled": {
+          "eligible_full_N": 48,
+          "harness_excluded": 0,
+          "passes": 45,
+          "tier2_misses_by_class": {}
+        },
+        "prompt_config_hash": "977f546946baec22eb74593baecb3efd2d421e34caeaef76dc0a183b6a9aa494",
+        "qualified_at": "2026-10-12",
+        "quality": {
+          "corpus_pass": "45/48",
+          "evidence_blindness": 0,
+          "fabricated_anchors": 0,
+          "protocol_violations": 0,
+          "repeated_trials": 2,
+          "sycophantic_capitulations": 0,
+          "zero_information": 0
+        },
+        "role": "discuss",
+        "runner": "claude-native",
+        "runner_version": "2.1.296-Claude-Code",
+        "status": "qualified",
+        "stop_reason": "locked_qualify",
+        "tier1_terminated": false,
+        "version_source": "operator-asserted"
+      },
+      "seat": {
+        "effort": "low",
+        "engine": "claude-opus-5-5",
+        "role": "discuss",
+        "runner": "claude-native"
+      },
+      "seat_hash": "4a80593c6b09a572811686b4e175d229c461262663dfeb15b71f6b3e0f98a433",
+      "status": "qualified"
+    },
+    {
+      "administration": {
         "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
         "date": "2026-08-21",
         "effort": "high",
@@ -10852,6 +13369,11 @@
   "recipe_version": "2026-09-02",
   "role_summary": {
     "consult": {
+      "failed": 1,
+      "other": 0,
+      "qualified": 3
+    },
+    "discuss": {
       "failed": 1,
       "other": 0,
       "qualified": 3

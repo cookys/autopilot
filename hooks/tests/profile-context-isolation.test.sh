@@ -889,6 +889,9 @@ if (args.includes('--version')) {
   process.stdout.write('2.1.220-test\\n');
   process.exit(0);
 }
+if (process.env.FAKE_CLAUDE_ENV_DUMP) {
+  fs.appendFileSync(process.env.FAKE_CLAUDE_ENV_DUMP, JSON.stringify(process.env) + '\\n');
+}
 const value = (flag) => {
   const index = args.indexOf(flag);
   return index < 0 ? undefined : args[index + 1];
@@ -1007,13 +1010,18 @@ assert_exit_code "$MEASURE_CWD_EXIT" 2 "measurement cannot replace the prepared 
 assert_contains "$MEASURE_CWD_OUT" "unsupported option --cwd" \
   "workspace override rejection is explicit"
 
-MEASURE_OUT="$(AUTOPILOT_PROFILE_TEST_RUNNER=1 node "$PROFILE_SESSION_CLI" measure \
+MEASURE_ENV_DUMP="$TEST_TMP/measure-child-env.jsonl"
+MEASURE_OUT="$(AUTOPILOT_SESSION_ID=parent-x FAKE_CLAUDE_ENV_DUMP="$MEASURE_ENV_DUMP" AUTOPILOT_PROFILE_TEST_RUNNER=1 node "$PROFILE_SESSION_CLI" measure \
   --runtime "$GUIDED_RUNTIME" \
   --binary "$FAKE_CLAUDE" \
   --model p2-runtime-model \
   --destination fixture:claude \
   --transport test-fixture \
   --repo "$REPO_ROOT" 2>&1)"; MEASURE_EXIT=$?
+assert_file_exists "$MEASURE_ENV_DUMP" "measure: the fake child claude ran and dumped its env"
+assert_contains "$(cat "$MEASURE_ENV_DUMP" 2>/dev/null)" "AUTOPILOT_PROFILE_RUNTIME" "measure: child env dump is the runner's env"
+assert_not_contains "$(cat "$MEASURE_ENV_DUMP" 2>/dev/null)" "AUTOPILOT_SESSION_ID" \
+  "measure: child claude does NOT inherit the parent's AUTOPILOT_SESSION_ID"
 assert_exit_code "$MEASURE_EXIT" 0 "guided runtime obtains harness-reported token delta"
 assert_contains "$MEASURE_OUT" '"control_tokens": 180' "measured delta binds the declared token count"
 

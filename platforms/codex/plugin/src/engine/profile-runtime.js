@@ -584,12 +584,16 @@ function claudeArgs(runtime, model, systemPrompt, outputFormat = 'json') {
 }
 
 function invokeClaude(binary, args, input, cwd, timeoutMs) {
+  // The profile runner is a child claude session: never let it inherit the parent's explicit
+  // session binding (session-mode.js getSessionId() prefers AUTOPILOT_SESSION_ID).
+  const runnerEnv = { ...process.env, AUTOPILOT_PROFILE_RUNTIME: '1' };
+  delete runnerEnv.AUTOPILOT_SESSION_ID;
   const result = spawnSync(binary, args, {
     cwd,
     input,
     timeout: timeoutMs,
     maxBuffer: MAX_RUNNER_OUTPUT_BYTES,
-    env: { ...process.env, AUTOPILOT_PROFILE_RUNTIME: '1' },
+    env: runnerEnv,
   });
   if (result.error || result.signal || result.status !== 0) {
     runtimeError(

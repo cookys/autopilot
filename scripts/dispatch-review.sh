@@ -903,6 +903,10 @@ else
   fi
   LINEAGE_DEPTH=0
 fi
+# The job-root lookup above was this rail's only legitimate read of the caller's explicit session
+# binding. Every runner launched below is a CHILD session: scrub the variable so it cannot make
+# session-mode.js getSessionId() resolve to the parent's id and overwrite the parent's marker.
+unset AUTOPILOT_SESSION_ID
 # Sanitize inherited lineage ids (control chars would corrupt the manifest JSON —
 # readers then skip the whole file) and force base-10 depth ("08" is octal-invalid
 # in $((...))). Mirrors dispatch-hetero.sh.

@@ -4045,7 +4045,12 @@ for (const surface of SURFACES) {
     w.stats[PATH] = { size: other.length, mtimeMs: NOW_FRESH + 2 }
     await w.clock.advance(5000)
     expect(await body()).toContain('second@example.com')
-    w.stats[PATH] = { size: 5 * 1024 * 1024, mtimeMs: NOW_FRESH + 3 }
+    // exactly at the cap: still read, once the interval is up
+    w.stats[PATH] = { size: 4 * 1024 * 1024, mtimeMs: NOW_FRESH + 3 }
+    const atCap = reads()
+    await w.clock.advance(30000)
+    expect(reads()).toBe(atCap + 1)
+    w.stats[PATH] = { size: 4 * 1024 * 1024 + 1, mtimeMs: NOW_FRESH + 4 }
     const capped = reads()
     await w.clock.advance(5000)
     expect(reads()).toBe(capped)
@@ -4071,6 +4076,12 @@ test('account: with CLAUDE_CONFIG_DIR set the account comes from that directory,
   w.env.CLAUDE_CONFIG_DIR = '/cfg2'
   await w.clock.advance(5000)
   expect(await body()).toContain('again@example.com')
+  // a third directory whose file is half written: no account rather than the previous directory's
+  w.files['/cfg3/.claude.json'] = again.slice(0, 50)
+  w.stats['/cfg3/.claude.json'] = { size: 50, mtimeMs: NOW_FRESH }
+  w.env.CLAUDE_CONFIG_DIR = '/cfg3'
+  await w.clock.advance(5000)
+  expect(await body()).not.toContain('@example.com')
   // set but empty: HOME
   w.env.CLAUDE_CONFIG_DIR = ''
   await w.clock.advance(5000)

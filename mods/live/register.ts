@@ -482,6 +482,7 @@ async function readAccountQuota($: EngineInterface, nowMs: number): Promise<void
     if (!dir) return
     const path = dir.replace(/\/+$/, '') + '/.claude.json'
     const clear = () => { account = undefined; accountFile = null } // no stale account, and a file back is read at once
+    if (accountFile !== null && accountFile.path !== path) clear() // another directory: the account shown came from the old one
     const st = await $.fs.stat(path).catch(() => null)
     if (st === null) {
       // the rejection carries only a message across the engine boundary (no `code`): ask whether the file is there instead.
@@ -490,7 +491,7 @@ async function readAccountQuota($: EngineInterface, nowMs: number): Promise<void
       return
     }
     if (st.kind !== 'file' || st.size > MAX_ACCOUNT_BYTES) { clear(); return }
-    const prev = accountFile !== null && accountFile.path === path ? accountFile : null // another directory is read at once
+    const prev = accountFile // the same path here: another directory cleared it above, so it is read at once
     if (prev !== null && prev.size === st.size && prev.mtimeMs === st.mtimeMs) return
     if (prev !== null && nowMs - prev.parsedMs < ACCOUNT_REPARSE_MS) return // changed again soon after a good parse: wait
     const next = readAccount(await readText($, path))

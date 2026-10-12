@@ -163,7 +163,7 @@ rm "$EV/docs/plans/sub/evidence/y/live.md"
 printf '# Live\nSee [gone](ghost.md).\n' > "$EV/docs/plans/live.md"
 run_gate "$EV"
 assert_exit_code "$__GATE_EXIT" 1 "broken link elsewhere in docs/plans/ still fails"
-# a path-like exclude matches from the scan root only, not as a substring deeper down
+# a path-like exclude matches from the scan root or the repo root, not as a substring deeper down
 mkdir -p "$EV/nested/docs/plans/evidence/2026-09-16-blind-review-redesign"
 rm "$EV/docs/plans/live.md"
 printf '# Live\nSee [gone](ghost.md).\n' > "$EV/nested/$FROZEN/consult-gpt-6-astra.md"

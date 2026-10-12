@@ -1,0 +1,10 @@
+{
+  "base": "5f5292cc",
+  "head": "b6aa5d8238e559e12499fa492796d899e2ecad6b",
+  "diff_sha256": "ab501b0c5d0b84d2f0bd14475e3c28f0ed5c69091c0862180d0b66c5698d7b90",
+  "full_range_sha256": "fc893dbef056f73d4e421c899b161530ddef51d8f4c830c6ff9e306c0efe0b0d",
+  "excluded": [
+    "platforms/codex/plugin/**"
+  ],
+  "diff_bytes": 99910
+}

@@ -1,0 +1,16 @@
+{
+  "findings": [
+    {
+      "id": "92fdf8d6f410ada46b6da07054cd40aa7ba029d4d188842485d536c29a311944",
+      "severity": "Suggestion",
+      "seat": "s0",
+      "text": "🔵 [p3-dead-crypto-import] CUT/FOLLOW-UP `hooks/session-handoff.js` and `hooks/session-start.js` keep `const crypto = require('crypto')` after the only visible sha1 use moved into `clearHandoffKey`; if no other call site remains it is a dead import. Excluded: no runtime effect, suites green, lint hygiene not in the P3 spec."
+    },
+    {
+      "id": "83ea39aff75c7d06e5695d814a3c6f014e57be39c8dfdb909011f61da9818ea3",
+      "severity": "Suggestion",
+      "seat": "s0",
+      "text": "🔵 [p3-receipt-volatile-verify-path] CUT/FOLLOW-UP `p3-red-green.json` records `verify_command_path` under a `/tmp/claude-1000/.../scratchpad/` directory that will not survive; the receipt still carries the script's sha256 and argv so the digest is checkable. Excluded: matches the P2 receipt shape and the spec does not require the verify script to be committed."
+    }
+  ]
+}

@@ -1,0 +1,364 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "worktree-placement-17",
+  "logical_plan_id": "worktree-placement-2026-10-12",
+  "session_id": "a14bb1ea-4b8b-421d-9e3d-a7fa6e844a18",
+  "session_key": "104a01f87c8d629229765e7a9738823809d19f3a1bbdf648058dd0e1e5937026",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "nonblocking_conditional",
+  "rubric_sha256": "0da92bfb4871d203140e1e552658f49ae1a36b7493a72e64decffe242e19b733",
+  "manifest_sha256": "f196b08023513b9d6c0c275fbc6712be9b1e6d8d255ea8013615e642f5b82fcd",
+  "plan_sha256": "491e9124426365ce194cfac56acaa12ca205869f38726312f9691680669b5b19",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "opus_chair",
+      "target_id": "opus_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "claude-native",
+          "model": "opus",
+          "operation": "plan-review",
+          "request_digest": "1f19cbb0e4472095570a3b858e35f720e9c279530ff3c52b3fbd4ff2326ae68b"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "d5c827613857f3e0702d7290c4828a4b9bfb88dc8aa6216b0f22129976daefc7",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-maKZCr",
+          "digest": "d5c827613857f3e0702d7290c4828a4b9bfb88dc8aa6216b0f22129976daefc7"
+        },
+        "receipt_digest": "4806756a072f38f4201e5857f60e268c4196be9f3aea00a6c76c663a8ba701fb"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "opus_chair",
+      "target_id": "opus_chair",
+      "family": "anthropic",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "P1.1 hooks/tests/stage-advance.test.sh; D5 in scripts/stage-advance.js:231-236 and session-mode.js set (non-new-task path)",
+      "claim": "The D5 identity guard has a test only on the session-mode set --new-task path. No test covers stage-advance run from a different repo's cwd, and none covers plain set (without --new-task), although D5 changes both.",
+      "evidence": "D5 says 'set and set --new-task re-resolve repo_root' and 'stage-advance measures E1 in the cwd's toplevel when its identity equals the marker's, else in marker.repo_root'. P1.2(e) tests only 'set --new-task from a different repo'. P1.1 tests only the same-repo linked-worktree case.",
+      "evidence_reference": "Plan section 2 D5; section 3 P1.1, P1.2(d)(e)",
+      "repair": "Add to P1.1 a case where stage-advance --to verify runs from an unrelated sandbox repo with the marker from repo A: files are measured in marker.repo_root, and the marker is not rewritten. Add to P1.2 a plain-set case from a linked worktree (repo_root follows) and from a foreign repo (repo_root unchanged).",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_chair",
+          "runner": "claude-native",
+          "model": "opus"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0eb57b8d210196ea45915e050b8e9ebfd649b09bc87a287ee52697344990f81e"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "D6 defaultBaseRef in scripts/session-mode.js:692-705; P1.2 tests",
+      "claim": "The one-side-missing case has no test. Two parts of D6 are also left open: whether the existing merge-base-with-HEAD requirement still filters candidates, and whether master is paired with origin/master. One-side-missing also changes behaviour at base. Today, with only origin/develop and a local main, main wins because the order is develop, main, master, origin/develop. Under D6, origin/develop wins. Nothing pins that change.",
+      "evidence": "P1.2 covers (a) behind, (b) ahead, (c) diverged and nothing for 'one exists'. Section 1 says defaultBaseRef 'takes the first of develop, main, master, origin/develop, origin/main with a merge-base'. D6 lists 'then master' with no remote partner and does not mention merge-base.",
+      "evidence_reference": "Plan section 1 session-mode bullet; section 2 D6; section 3 P1.2",
+      "repair": "Add P1.2 (f): only origin/develop exists plus a local main, so the result is origin/develop (red at base). Add (g): only local develop, so the result is develop. In D6, state whether a candidate pair needs a merge-base with HEAD to qualify, and state whether origin/master is considered.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_chair",
+          "runner": "claude-native",
+          "model": "opus"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0af32faadf0c6b88ed8c071b4e5d8c6751b51d3032f6ba41ae43a9781d4cce79"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "P3.1 token rule in session-mode.js set --new-task",
+      "claim": "The token rule can fire on a matching pair. If generic or digit-only tokens make up all of either side, both token sets can end up empty, so 'no shared token' is true for a worktree and branch that match. Example: dir feat-1234 with branch feat/1234. Case folding is also unspecified, so dir Foo-bar against branch foo-bar would fire.",
+      "evidence": "P3.1 drops 'feat, fix, hotfix, worktree, agent, wip, digits-only' and then prints when there is 'no shared token'. It defines no behaviour for an empty token set and no case normalisation.",
+      "evidence_reference": "Plan section 3 P3.1",
+      "repair": "Specify that tokens are lowercased and that the advisory stays silent when either side's filtered token set is empty. Add tests for an identical dir and branch made only of generic or digit tokens (silent) and for a case-only difference (silent).",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_chair",
+          "runner": "claude-native",
+          "model": "opus"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "a17475a83dd5906542e936e3413e5e75b6a88fb2f51d73cf3b97d5c0e2906faa"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "P2.3 rail call sites (batch :388 with --repo :272, hetero :2921, foreman :268) to resolve-repo-placement.js worktree",
+      "claim": "The plan does not say that each rail passes its own repo root through --from. Batch accepts --repo. If the resolver defaults to the process cwd, a batch run with --repo pointing at another repo would compute the main checkout of the cwd's repo, not the target repo, and git worktree add would put repo B's worktree inside repo A's tree.",
+      "evidence": "Section 1: 'batch REPO=\".\" (scripts/dispatch-batch.sh:93, --repo at :272)'. P2.1 defines '[--from <dir>]' as optional. P2.3 says only 'the three rails take the template from the resolver'.",
+      "evidence_reference": "Plan section 1 rails bullet; section 3 P2.1, P2.3",
+      "repair": "In P2.3, require every rail to call the resolver with --from set to its resolved repo root (batch passes $REPO, hetero and foreman pass their caller toplevel). Add a batch test that runs from an unrelated cwd with --repo pointing at the sandbox and asserts the worktree is under the sandbox's .claude/worktrees/.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_chair",
+          "runner": "claude-native",
+          "model": "opus"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "79181335dab5a6b96600d0492b75775547618827f19625f85ec99b0b2205a3d8"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "D3 main_checkout_fingerprint prune; first rail run in a main checkout without .claude/ or .claude/worktrees/",
+      "claim": "Pruning $MAIN_CHECKOUT/.claude/worktrees does not cover creating that directory. On the first rail run in a repo that lacks .claude/ or .claude/worktrees/, the rail's mkdir happens after the before-fingerprint. That adds a new .claude entry or changes the mtime of the existing .claude directory, which the stat walk still sees, so the round can still end as main_checkout_mutated because of the move.",
+      "evidence": "Section 1: the fingerprint 'stat-walks the whole $MAIN_CHECKOUT with find -xdev, pruning only .git and MAIN_CHECKOUT_FP_EXCLUDE_PATHS'. D3 prunes only '$MAIN_CHECKOUT/.claude/worktrees'. The rail sandbox repos start without .claude/ (Risks).",
+      "evidence_reference": "Plan section 1 fingerprint bullet; section 2 D3; section 5 Risks bullet 2",
+      "repair": "Specify that the rail creates <main>/.claude/worktrees (mkdir -p) before the before-fingerprint, or that the fingerprint ignores the directory-entry stat of .claude when only worktrees/ changed. Add a rail test that starts from a sandbox with no .claude/ and asserts the round is not main_checkout_mutated.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_chair",
+          "runner": "claude-native",
+          "model": "opus"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "cb787d49a51680e6708e90e56cd1b2bb3bb72e25067dae1d655bf69d2cc08f45"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "D7 hooks/orchestrator-edit-gate.js:99-107",
+      "claim": "D7 treats every target under <repoRoot>/.claude/worktrees/<name>/ as not inRepoRoot. That includes Claude Code native worktrees and other sessions' worktrees that have no .autopilot-worktree marker. The plan does not say what the gate does for a not-inRepoRoot target with no marker. If that branch allows the edit, D7 lets an orchestrator edit sibling session worktrees that are gated today.",
+      "evidence": "D7: the existing hasWorktreeMarkerAbove 'decides as for any dispatch worktree'. P2.3 tests only 'target under <repoRoot>/.claude/worktrees/x/ with a worktree marker'. Spike: native worktrees live in the same directory.",
+      "evidence_reference": "Plan section 1 spike bullet 1; section 2 D7; section 3 P2.3",
+      "repair": "State the gate result for an unmarked target under .claude/worktrees/: it should stay gated as in-repo, the same as today. Add that negative test next to the marked-worktree test.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_chair",
+          "runner": "claude-native",
+          "model": "opus"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "5f2a91be1d51437197ac67993cd5918cfc8f51dd150e5ea70f08030d4c10dd5a"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "C6 walker inventory (P2.5)",
+      "claim": "The walker list comes from an Explore survey, and only some entries were spot-checked. The plan names no reproducible enumeration, so 'every repo-tree walker' is not shown.",
+      "evidence": "Section 1: 'Repo survey (Explore subagent, file:line spot-checked where marked ✓)'. The Walkers bullet is not marked ✓ and lists project-detect.js:651 as 'unchecked'. P2.5 covers only identifier-scan and project-detect.",
+      "evidence_reference": "Plan section 1 Walkers bullet; section 3 P2.5",
+      "repair": "Add to P2.5 a recorded grep over scripts/ and hooks/ for recursive walkers: find without a .git-only scope, readdirSync or readdir with recursion, recursive globs, and walk helpers. Disposition each hit as 'skips', 'git ls-files', or 'cannot run from the main checkout', and keep that list in the evidence dir.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_chair",
+          "runner": "claude-native",
+          "model": "opus"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "fd376fb01347a187f32ce217fab91b07ebbe2a8eda39e85b1dbef6b289ba4097"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "P4.2 backlog dispositions",
+      "claim": "The plan does not map backlog gaps 1, 2, 3 and 7 to a phase or decision. Only gaps 4, 5, 6, 6b and 8 are named, so the 'marked fixed with the phase' step has no stated mapping to check against.",
+      "evidence": "Source: 'gaps 1–8'. Gap numbers appear only in D5 (6), D6 (6b), D8 (4), D12 (5, 8) and P4.2 (5, 8-wiring).",
+      "evidence_reference": "Plan header Source line; section 2 D5, D6, D8, D12; section 3 P4.2",
+      "repair": "Add a gap-to-phase table to section 4 or P4.2 covering gaps 1 through 8, each marked fixed (with its phase) or deferred (with its trigger).",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_chair",
+          "runner": "claude-native",
+          "model": "opus"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "dee15107276ec2b906c388d457b81a2f0b680ea22879f56effa792505c853021"
+    },
+    {
+      "rubric_id": "R10",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Section 3 P2.2, P3, P4; section 4 verification map",
+      "claim": "The plan does not name every test whose assertion moves. Sandbox clean-git-status assertions are left to 'P2.2's red run shows which'. P3 and P4 list no suites to run one at a time. The verification map has no rows for the D3, D7, D10 and D11 safety changes or for P2.4.",
+      "evidence": "Risks bullet 2: 'a test asserting a clean git status of the sandbox may change'. P3 has no suites step, P4 has only the inventory gate, and the section 4 rows cover only C1 to C7.",
+      "evidence_reference": "Plan section 3 P2.2, P3, P4; section 4; section 5 Risks bullet 2",
+      "repair": "Before P2 starts, grep the rail suites for git status or porcelain cleanliness assertions and list each one with why it moves (or that D11 keeps it). Add P3 suites (session-mode, session-handoff, session-start-handoff-inject, resolver test) and P4 gates. Add verification rows for D3, D7, D10, D11 and the P2.4 foreman-guard outcome.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_chair",
+          "runner": "claude-native",
+          "model": "opus"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "05e4da99feabef9722bba618029d3e16714211a70b9f3f6b609f36580b7b8001"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "0eb57b8d210196ea45915e050b8e9ebfd649b09bc87a287ee52697344990f81e",
+      "rubric_id": "R1",
+      "affected_surface": "P1.1 hooks/tests/stage-advance.test.sh; D5 in scripts/stage-advance.js:231-236 and session-mode.js set (non-new-task path)",
+      "claim": "The D5 identity guard has a test only on the session-mode set --new-task path. No test covers stage-advance run from a different repo's cwd, and none covers plain set (without --new-task), although D5 changes both.",
+      "evidence_reference": "Plan section 2 D5; section 3 P1.1, P1.2(d)(e)",
+      "disposition": null
+    },
+    {
+      "fingerprint": "0af32faadf0c6b88ed8c071b4e5d8c6751b51d3032f6ba41ae43a9781d4cce79",
+      "rubric_id": "R2",
+      "affected_surface": "D6 defaultBaseRef in scripts/session-mode.js:692-705; P1.2 tests",
+      "claim": "The one-side-missing case has no test. Two parts of D6 are also left open: whether the existing merge-base-with-HEAD requirement still filters candidates, and whether master is paired with origin/master. One-side-missing also changes behaviour at base. Today, with only origin/develop and a local main, main wins because the order is develop, main, master, origin/develop. Under D6, origin/develop wins. Nothing pins that change.",
+      "evidence_reference": "Plan section 1 session-mode bullet; section 2 D6; section 3 P1.2",
+      "disposition": null
+    },
+    {
+      "fingerprint": "a17475a83dd5906542e936e3413e5e75b6a88fb2f51d73cf3b97d5c0e2906faa",
+      "rubric_id": "R3",
+      "affected_surface": "P3.1 token rule in session-mode.js set --new-task",
+      "claim": "The token rule can fire on a matching pair. If generic or digit-only tokens make up all of either side, both token sets can end up empty, so 'no shared token' is true for a worktree and branch that match. Example: dir feat-1234 with branch feat/1234. Case folding is also unspecified, so dir Foo-bar against branch foo-bar would fire.",
+      "evidence_reference": "Plan section 3 P3.1",
+      "disposition": null
+    },
+    {
+      "fingerprint": "79181335dab5a6b96600d0492b75775547618827f19625f85ec99b0b2205a3d8",
+      "rubric_id": "R5",
+      "affected_surface": "P2.3 rail call sites (batch :388 with --repo :272, hetero :2921, foreman :268) to resolve-repo-placement.js worktree",
+      "claim": "The plan does not say that each rail passes its own repo root through --from. Batch accepts --repo. If the resolver defaults to the process cwd, a batch run with --repo pointing at another repo would compute the main checkout of the cwd's repo, not the target repo, and git worktree add would put repo B's worktree inside repo A's tree.",
+      "evidence_reference": "Plan section 1 rails bullet; section 3 P2.1, P2.3",
+      "disposition": null
+    },
+    {
+      "fingerprint": "cb787d49a51680e6708e90e56cd1b2bb3bb72e25067dae1d655bf69d2cc08f45",
+      "rubric_id": "R6",
+      "affected_surface": "D3 main_checkout_fingerprint prune; first rail run in a main checkout without .claude/ or .claude/worktrees/",
+      "claim": "Pruning $MAIN_CHECKOUT/.claude/worktrees does not cover creating that directory. On the first rail run in a repo that lacks .claude/ or .claude/worktrees/, the rail's mkdir happens after the before-fingerprint. That adds a new .claude entry or changes the mtime of the existing .claude directory, which the stat walk still sees, so the round can still end as main_checkout_mutated because of the move.",
+      "evidence_reference": "Plan section 1 fingerprint bullet; section 2 D3; section 5 Risks bullet 2",
+      "disposition": null
+    },
+    {
+      "fingerprint": "5f2a91be1d51437197ac67993cd5918cfc8f51dd150e5ea70f08030d4c10dd5a",
+      "rubric_id": "R6",
+      "affected_surface": "D7 hooks/orchestrator-edit-gate.js:99-107",
+      "claim": "D7 treats every target under <repoRoot>/.claude/worktrees/<name>/ as not inRepoRoot. That includes Claude Code native worktrees and other sessions' worktrees that have no .autopilot-worktree marker. The plan does not say what the gate does for a not-inRepoRoot target with no marker. If that branch allows the edit, D7 lets an orchestrator edit sibling session worktrees that are gated today.",
+      "evidence_reference": "Plan section 1 spike bullet 1; section 2 D7; section 3 P2.3",
+      "disposition": null
+    },
+    {
+      "fingerprint": "fd376fb01347a187f32ce217fab91b07ebbe2a8eda39e85b1dbef6b289ba4097",
+      "rubric_id": "R7",
+      "affected_surface": "C6 walker inventory (P2.5)",
+      "claim": "The walker list comes from an Explore survey, and only some entries were spot-checked. The plan names no reproducible enumeration, so 'every repo-tree walker' is not shown.",
+      "evidence_reference": "Plan section 1 Walkers bullet; section 3 P2.5",
+      "disposition": null
+    },
+    {
+      "fingerprint": "dee15107276ec2b906c388d457b81a2f0b680ea22879f56effa792505c853021",
+      "rubric_id": "R8",
+      "affected_surface": "P4.2 backlog dispositions",
+      "claim": "The plan does not map backlog gaps 1, 2, 3 and 7 to a phase or decision. Only gaps 4, 5, 6, 6b and 8 are named, so the 'marked fixed with the phase' step has no stated mapping to check against.",
+      "evidence_reference": "Plan header Source line; section 2 D5, D6, D8, D12; section 3 P4.2",
+      "disposition": null
+    },
+    {
+      "fingerprint": "05e4da99feabef9722bba618029d3e16714211a70b9f3f6b609f36580b7b8001",
+      "rubric_id": "R10",
+      "affected_surface": "Section 3 P2.2, P3, P4; section 4 verification map",
+      "claim": "The plan does not name every test whose assertion moves. Sandbox clean-git-status assertions are left to 'P2.2's red run shows which'. P3 and P4 list no suites to run one at a time. The verification map has no rows for the D3, D7, D10 and D11 safety changes or for P2.4.",
+      "evidence_reference": "Plan section 3 P2.2, P3, P4; section 4; section 5 Risks bullet 2",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-10-12T11:07:01.134Z"
+}

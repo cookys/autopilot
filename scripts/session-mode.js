@@ -687,21 +687,74 @@ function cmdSetPlain(args) {
 const SIZES = Object.freeze(['XS', 'S', 'M', 'L', 'XL']);
 const INIT_FLAGS = ['size', 'urgent', 'bug', 'base-ref', 'new-task'];
 const BASE_REF_SHA = /^[0-9a-f]{7,64}$/u;
-// Default-branch candidates, same order as scripts/resolve-review-loop.sh probe_diff_bytes (develop, then main);
-// master and the origin/* spellings are added so a clone without a local develop still resolves.
-const DEFAULT_BRANCHES = Object.freeze(['develop', 'main', 'master', 'origin/develop', 'origin/main']);
+// Default-branch pairs, same order as scripts/resolve-review-loop.sh probe_diff_bytes (develop, then main), then
+// master. Each local branch is paired with its origin/* spelling so a stale local branch never wins over a newer
+// remote-tracking ref (worktree-placement plan D6). No fetch: whatever the refs say now.
+const DEFAULT_BRANCH_PAIRS = Object.freeze([['develop', 'origin/develop'], ['main', 'origin/main'], ['master', 'origin/master']]);
+const DEFAULT_BRANCHES = Object.freeze(DEFAULT_BRANCH_PAIRS.flat());
 
-// The merge-base of HEAD and the first default-branch candidate that resolves; null when none does.
+function mergeBaseWithHead(repoRoot, ref) {
+  try {
+    const sha = execFileSync('git', ['-C', repoRoot, 'merge-base', 'HEAD', ref], {
+      encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    return BASE_REF_SHA.test(sha) ? sha : null;
+  } catch (_error) { return null; }
+}
+
+function isAncestor(repoRoot, older, newer) {
+  try {
+    execFileSync('git', ['-C', repoRoot, 'merge-base', '--is-ancestor', older, newer], { stdio: 'ignore' });
+    return true;
+  } catch (_error) { return false; }
+}
+
+// The merge-base of HEAD and the newer branch of the first pair with a branch sharing history with HEAD; null when
+// none does. Both qualify: remote an ancestor of local (local ahead or equal) => local; local behind or diverged =>
+// remote (the integration target).
 function defaultBaseRef(repoRoot) {
-  for (const branch of DEFAULT_BRANCHES) {
-    try {
-      const sha = execFileSync('git', ['-C', repoRoot, 'merge-base', 'HEAD', branch], {
-        encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
-      }).trim();
-      if (BASE_REF_SHA.test(sha)) return sha;
-    } catch (_error) { /* try the next candidate */ }
+  for (const [local, remote] of DEFAULT_BRANCH_PAIRS) {
+    const localBase = mergeBaseWithHead(repoRoot, local);
+    const remoteBase = mergeBaseWithHead(repoRoot, remote);
+    if (localBase && remoteBase) return isAncestor(repoRoot, remote, local) ? localBase : remoteBase;
+    if (localBase || remoteBase) return localBase || remoteBase;
   }
   return null;
+}
+
+// A set run from a linked worktree of the marker's repository moves repo_root there, so E1 and the rails measure
+// where the session works (worktree-placement plan D5); a cwd in another repository leaves it.
+function followRepoRoot(marker, repoRoot) {
+  if (typeof marker.repo_root !== 'string' || marker.repo_root === repoRoot) return;
+  let want = typeof marker.repo_identity === 'string' && marker.repo_identity ? marker.repo_identity : null;
+  let have = null;
+  try {
+    if (!want && path.isAbsolute(marker.repo_root)) want = markerRepoIdentity(marker.repo_root);
+    have = scopeFromCwd(repoRoot).repo_identity;
+  } catch (_error) { return; }
+  if (want && have === want) marker.repo_root = repoRoot;
+}
+
+// `set --new-task` in a linked worktree whose directory name and branch share no word: the worktree is probably
+// being reused for an unrelated task. Advisory only (references/worktree-placement.md); never changes the exit code.
+const GENERIC_TASK_TOKENS = new Set(['feat', 'fix', 'hotfix', 'worktree', 'agent', 'wip']);
+function taskTokens(text) {
+  return new Set(text.toLowerCase().split(/[-_/.]+/).filter((t) => t && !GENERIC_TASK_TOKENS.has(t) && !/^\d+$/.test(t)));
+}
+function newTaskAdvisory(repoRoot) {
+  const opts = { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] };
+  let branch;
+  try {
+    const gitDir = execFileSync('git', ['-C', repoRoot, 'rev-parse', '--path-format=absolute', '--git-dir'], opts).trim();
+    const commonDir = execFileSync('git', ['-C', repoRoot, 'rev-parse', '--path-format=absolute', '--git-common-dir'], opts).trim();
+    if (gitDir === commonDir) return null; // the main checkout
+    branch = execFileSync('git', ['-C', repoRoot, 'symbolic-ref', '--short', '-q', 'HEAD'], opts).trim();
+  } catch (_error) { return null; } // detached HEAD, or not a repository
+  const dir = path.basename(repoRoot);
+  const fromDir = taskTokens(dir);
+  const fromBranch = taskTokens(branch);
+  if (fromDir.size === 0 || fromBranch.size === 0 || [...fromDir].some((t) => fromBranch.has(t))) return null;
+  return `worktree ${dir} is on branch ${branch}, which shares no word with it — open a fresh worktree for a new task (references/worktree-placement.md)`;
 }
 
 // Fields `set --new-task` drops from a live marker: the stage-advance position plus the task-scoped init fields.
@@ -785,7 +838,8 @@ function cmdSetInit(args) {
         }
         const next = { ...current };
         for (const k of NEW_TASK_CLEARED) delete next[k];
-        applyInitFields(next, init, repoRoot, null);
+        followRepoRoot(next, repoRoot);
+        applyInitFields(next, init, next.repo_root || repoRoot, null);
         next.task_seq = seqPrev + 1;
         next.task_started_at = new Date().toISOString();
         writeMarkerFile(file, next);
@@ -797,7 +851,9 @@ function cmdSetInit(args) {
           result = { refusal: `refusing --size ${init.size}: the marker is already ${current.size} and size only moves up (XS<S<M<L<XL)` };
           return;
         }
-        const next = applyInitFields({ ...current }, init, repoRoot, current);
+        const next = { ...current };
+        followRepoRoot(next, repoRoot);
+        applyInitFields(next, init, next.repo_root || repoRoot, current);
         writeMarkerFile(file, next);
         result = { marker: next, created: false };
         return;
@@ -825,6 +881,10 @@ function cmdSetInit(args) {
   }
   if (!result) { process.stderr.write('session-mode: marker not written\n'); return 1; }
   if (result.refusal) { process.stderr.write(`session-mode: ${result.refusal}\n`); return 2; }
+  if (newTask) {
+    const advisory = newTaskAdvisory(repoRoot);
+    if (advisory) process.stderr.write(`session-mode: ${advisory}\n`);
+  }
   if (result.created) {
     try { writeLivePointer(); } catch (_error) { /* fail-open: pointer is advisory for the mod */ }
     startProjectWatcher(result.marker, result.marker.repo_root);

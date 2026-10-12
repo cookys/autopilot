@@ -36,7 +36,12 @@ Repo identity exists (`scripts/lib/repo-identity.sh:20-30` → `git-common-dir:<
 4. **Handoff placement is prose and keyed inconsistently.** The manual fallback keys by directory basename (two repos with the same basename collide; not per worktree); the `/clear` hook keys by repo hash. A session cannot predict where the other route wrote.
 5. **Cross-repo dispatch has no rule.** A session in repo A working on repo B has `resolve-project-paths.sh --target <dir>` for documents and nothing for worktrees or handoff.
 6. **The session marker's `repo_root` is fixed at creation and never follows the session into a worktree.** Live example (2026-10-12): this session created its marker in the main checkout, then worked in `.claude/worktrees/autocompact-detect`; `stage-advance --to verify` measured E1 with `git diff --numstat <base_ref>` in `repo_root` (`scripts/stage-advance.js:173`), i.e. the main checkout's develop (34 files, 1184 lines — other sessions' merges) instead of the branch (8 files, ~500 lines), and demanded an M→L bump. Worked around by clearing and re-creating the marker from inside the worktree. The resolver above should give the marker the worktree the session actually works in, or E1 should measure the cwd's toplevel when it shares the marker's `repo_identity`.
+   6b. **`base_ref` defaults to a stale local branch.** `defaultBaseRef` (`scripts/session-mode.js:692-698`) tries `develop` before `origin/develop`. In a worktree whose main checkout has not pulled, local `develop` lags: on 2026-10-12, `set --new-task` right after a merge pushed `origin/develop` to `4abd667f` stored `base_ref 7586c8dd` (local `develop`, several merges behind), which would again inflate E1. Worked around with `--base-ref 4abd667f`. The default should prefer whichever of the local and remote-tracking branch is ahead, or the remote one when the local one is its ancestor.
 7. Related, already filed: orphan / never-registered worktrees are not discovered (BACKLOG "Orphan leaf liveness and resource reconstruction"); `repo-residue-sweep.js:644` only flags `<main>/.claude/worktrees/` for review.
+
+8. **A worktree-isolated session cannot bring the main checkout up to date, not even through the owner's `!` command.** After the mods merge was pushed (2026-10-12), the main checkout's `develop` (the live plugin) stayed two merges behind; `! git -C /home/cookys/projects/autopilot pull --ff-only` was refused by the session's worktree guard, and from inside the worktree git refuses to move a branch checked out elsewhere. The owner had to pull from another terminal. The finish step that pushes should tell the owner that line, or the rule should say where the integration checkout lives.
+
+Second live example of gap 3 (2026-10-12): the next task (`feat/worktree-placement-rule`) also branched inside `.claude/worktrees/autocompact-detect` — three tasks, one worktree name.
 
 ## Direction (not decided — needs a plan, likely L)
 
@@ -45,3 +50,19 @@ Repo identity exists (`scripts/lib/repo-identity.sh:20-30` → `git-common-dir:<
 - A check at session start / `stage-advance --to intent` (`--new-task`): worktree name and branch agree with the marker's task, or the session is told to open a fresh worktree.
 - Handoff keyed by the marker's `repo_identity` (+ worktree path) on both routes, so the manual skill and the `/clear` hook write to one predictable place.
 - The rails' `/tmp` worktrees either move under the same root or carry the repo slug in their prefix.
+
+## Disposition (2026-10-12, plan `docs/plans/2026-10-12-worktree-placement.md`, direction C)
+
+The rule now lives in [`references/worktree-placement.md`](../../references/worktree-placement.md).
+
+| Gap | Disposition |
+|---|---|
+| 1 two unrelated roots | fixed — P2: rails create worktrees under `<main checkout>/.claude/worktrees/` through `scripts/resolve-repo-placement.js`; P4 rule |
+| 2 no per-repo grouping | fixed — P2: the path names the repo's main checkout |
+| 3 name ↔ branch ↔ task unrelated | fixed as far as the plan goes — P3: `set --new-task` advisory (never blocks); P4 rule |
+| 4 handoff keying | fixed — one resolver for both routes (P2), used by the hooks and the handoff skill (P3); the keys differ on purpose (rule § Handoff files) |
+| 5 cross-repo dispatch | deferred — BACKLOG "Cross-repo dispatch has no worktree or handoff rule" |
+| 6 marker `repo_root` fixed at creation | fixed — P1: the marker follows the session into a worktree of the same repo |
+| 6b stale `base_ref` | fixed — P1: newer of the local / remote-tracking pair |
+| 7 orphan worktrees not discovered | out of scope — already filed (BACKLOG "Orphan leaf liveness…"); the sweep no longer busy-skips marked rail worktrees under `.claude/worktrees/` |
+| 8 owner cannot pull from an isolated session | partly fixed — `resolve-repo-placement.js main` prints how far behind the main checkout is, the rule gives the owner line; finish-flow wiring deferred (BACKLOG "finish-flow does not tell the owner…") |

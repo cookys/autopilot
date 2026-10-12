@@ -96,7 +96,8 @@ function scanText(text, fileLabel) {
   return findings;
 }
 
-function walkDir(dir, out) {
+// <root>/.claude/worktrees holds other checkouts (rail and session worktrees), not this tree.
+function walkDir(dir, out, root = dir) {
   let ents;
   try {
     ents = fs.readdirSync(dir, { withFileTypes: true });
@@ -107,7 +108,8 @@ function walkDir(dir, out) {
     const full = path.join(dir, e.name);
     if (e.isDirectory()) {
       if (e.name === 'node_modules' || e.name === '.git') continue;
-      walkDir(full, out);
+      if (full === path.join(root, '.claude', 'worktrees')) continue;
+      walkDir(full, out, root);
     } else if (e.isFile() && SCAN_EXT_RE.test(e.name)) {
       out.push(full);
     }

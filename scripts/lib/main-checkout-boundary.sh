@@ -74,7 +74,10 @@ main_checkout_fingerprint() {
     || { _fp_unverifiable dirty; return 0; }
   # Every entry type, with type, mode and link target: a symlink planted over an empty
   # ignored directory has no regular file to change (round 5, 2026-09-13).
-  local -a _walk_prune=(-path "$MAIN_CHECKOUT/.git" -prune)
+  # .claude/worktrees holds linked worktrees (this rail's own, sibling rails', sessions'): each is
+  # another checkout with its own HEAD and index, so its writes are not this checkout's mutation.
+  # Its refs, config and hooks are shared and still measured below.
+  local -a _walk_prune=(-path "$MAIN_CHECKOUT/.git" -prune -o -path "$MAIN_CHECKOUT/.claude/worktrees" -prune)
   # `[*]+set` is empty for a declared-but-empty array too; tolerated here (and for the ref
   # prefixes above) because the guarded body is loop-only — never key an else-branch on it.
   if [ "${MAIN_CHECKOUT_FP_EXCLUDE_PATHS[*]+set}" = set ]; then

@@ -1,0 +1,40 @@
+{
+  "verdict": "VALIDATED",
+  "red_green_validated": true,
+  "base_sha": "6ef014f449a73ab95cc3be3712eb0d8a3899e4d1",
+  "head_sha": "d9aa4210d87645ccf699b4582bfab10327ccfd0e",
+  "head_result": "green",
+  "base_result": "red",
+  "red_tests": [
+    "hooks/tests/stage-advance.test.sh"
+  ],
+  "reason": "",
+  "schema_version": 1,
+  "artifact_type": "red_green_polarity_receipt",
+  "test_command_digest": "11af8e8ab4c7d140148f8417d94bb9d18c9148fd5bcae8efc5d15ec933171dee",
+  "verify_command_path": "/tmp/claude-1000/-home-cookys-projects-autopilot/a14bb1ea-4b8b-421d-9e3d-a7fa6e844a18/scratchpad/rg-p1.sh",
+  "verify_command_bytes_sha256": "e605c083c779d3d240bf291d2d5a9cf0a307b2b3db3ffbfb4b2833aa9749afcc",
+  "verify_command_base_bytes_sha256": "e605c083c779d3d240bf291d2d5a9cf0a307b2b3db3ffbfb4b2833aa9749afcc",
+  "verify_command_head_bytes_sha256": "e605c083c779d3d240bf291d2d5a9cf0a307b2b3db3ffbfb4b2833aa9749afcc",
+  "execution_argv": [
+    "/tmp/claude-1000/-home-cookys-projects-autopilot/a14bb1ea-4b8b-421d-9e3d-a7fa6e844a18/scratchpad/rg-p1.sh",
+    "<detached-worktree>"
+  ],
+  "execution_artifacts": [
+    "hooks/tests/stage-advance.test.sh"
+  ],
+  "assertion_artifacts": [
+    {
+      "path": "hooks/tests/stage-advance.test.sh",
+      "sha256": "9ec735593ef92524864f3574e6131c22f29536882805e2a7e14230343a2cdbed"
+    }
+  ],
+  "assertion_artifact_path": "hooks/tests/stage-advance.test.sh",
+  "assertion_artifact_digest": "3c46dfad62788a8a51fc974fc90e8a935c9262c7a0ffede73d68578fcf737a00",
+  "expected_red_exit_class": "exact_exit_code",
+  "expected_red_exit_code": 1,
+  "green_result": "green",
+  "base_exit_code": 1,
+  "head_exit_code": 0,
+  "receipt_digest": "e19f0e6d326c01b40877726eeca76a050a72b315c5d6585148f40d6cf8cbdcec"
+}

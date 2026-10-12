@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "phase": "P4",
+  "generation": 1,
+  "findings": [
+    {
+      "id": "84e0a2b413e51030ea93251589d55ab803934cb1831ee49bc8f87992c525a048",
+      "disposition": "verified",
+      "rationale": "Correct: p4-gates.sh keeps only `tail -6` of each gate, which cut the blocking backlog_row_has_plan line out of gates.txt while the depth-0 note names it. Fixed after this review by appending the gate's --json blocking violations to gates.txt."
+    },
+    {
+      "id": "1584079b8c2bdc3556b14b7e8f2e136efd2b876baeceacfe617d6bc48bbcf6b7",
+      "disposition": "refuted",
+      "rationale": "The claims are sourced in this plan's evidence: default location and branch `worktree-<name>` (spike-native-worktree.md line 11), `agent-<agentId>` (backlog sidecar line 15, citing skills/ceo-agent/references/level-front-door.md:435), EnterWorktree into .claude/worktrees/ without a prompt and the sweep's own-worktrees rule (spike lines 37-54, docs quoted), and the isolated session refusing the owner's `!` git command (sidecar gap 8, observed 2026-10-12). The reference now cites the spike next to that table."
+    },
+    {
+      "id": "6b5db463c290cb609b757b3d92020b6b305b9a98b7246664f54316dae287a2f3",
+      "disposition": "refuted",
+      "rationale": "Not a defect of this diff: the finding itself confirms every failing reference sits in lines this branch did not write and that each was checked against develop. Their remediation belongs to those rows."
+    },
+    {
+      "id": "922b72f0aff5457c6914d28d832b3ecd2ba944d87c6c44b44543a2825fb7e8a1",
+      "disposition": "verified",
+      "rationale": "Same defect as the s0 attribution finding: the captured output lacked the blocking line the note names. Fixed after this review by appending the --json blocking violations to gates.txt."
+    }
+  ]
+}

@@ -113,6 +113,9 @@ assert_eq "$RC" "2" "1: resume of a non-run-dir → 2"
 assert_eq "$(git -C "$SBX" worktree list --porcelain | grep -c '^worktree .*/foreman-')" "0" "1: preconditions created no worktree"
 
 # ======================================================================= 2 completed
+# First real run: the sandbox has no .claude/ yet, so the placement directory is created by this
+# run — and must not read as a main-checkout mutation (status completed below).
+[ -e "$SBX/.claude" ] && fail "2: precondition — sandbox starts without .claude/" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
 run_foreman complete r2 --env-passthrough PASS_ME --model kimi-code/k3
 assert_eq "$RC" "0" "2: completed → exit 0"
 assert_eq "$(field "$OUT" status)" "completed" "2: status completed"
@@ -133,6 +136,7 @@ assert_contains "$(field "$OUT" env_passthrough)" 'PASS_ME' "2: passthrough list
 assert_file_exists "$RD/foreman.stream.jsonl" "2: stream log in run dir"
 assert_eq "$(field "$OUT" stream_log)" "$RD/foreman.stream.jsonl" "2: stream_log path reported"
 WT2="$(field "$OUT" worktree)"
+case "$WT2" in "$(realpath "$SBX")/.claude/worktrees/foreman-r2-"??????) __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) ;; *) fail "2: worktree sits under the sandbox's .claude/worktrees/ (got $WT2)" ;; esac
 case "$RD" in "$WT2"*) fail "2: run dir must be OUTSIDE the worktree" ;; *) __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) ;; esac
 [ -d "$WT2" ] && fail "2: worktree removed after clean completion" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
 assert_eq "$(stat -c %a "$RD/brief.md")" "444" "2: brief copied read-only"
@@ -181,6 +185,7 @@ assert_eq "$(cat "$SD/cwd.1")" "$(cat "$SD/cwd.0")" "3: handoff turn runs in the
 assert_file_exists "$RD/foreman.stream.handoff.jsonl" "3: handoff stream captured separately"
 WT3="$(field "$OUT" worktree)"
 [ -d "$WT3" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "3: worktree retained after cap"
+assert_eq "$(git -C "$SBX" status --porcelain)" "" "3: sandbox porcelain stays clean with a worktree inside it (.claude/worktrees/ excluded)"
 # the spinning stub is dead (its process group was killed)
 sleep 0.5
 STUB_PID="$(cat "$SD/pid.0")"

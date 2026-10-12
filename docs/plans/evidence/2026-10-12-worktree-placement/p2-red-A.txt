@@ -1,0 +1,209 @@
+# P2 commit A — red run (each suite alone, in order)
+
+resolve-repo-placement rc=0
+identifier-scan rc=1
+probe-unknown rc=1
+worktree-activity rc=1
+orchestrator-edit-gate rc=1
+repo-residue-auto rc=1
+dispatch-batch rc=1
+dispatch-foreman rc=1
+dispatch-hetero-contract rc=1
+dispatch-hetero rc=1
+DONE
+
+## failing lines
+dispatch-batch.log: FAIL [dispatch-batch] merge-back: .claude/worktrees/ excluded in the repo's info/exclude
+dispatch-batch.log: FAIL [dispatch-batch] 83 passed, 1 failed
+dispatch-foreman.log: FAIL [dispatch-foreman] 2: completed → exit 0: expected '0', got '1'
+dispatch-foreman.log: FAIL [dispatch-foreman] 2: status completed: expected 'completed', got 'main_checkout_mutated'
+dispatch-foreman.log: FAIL [dispatch-foreman] 2: worktree removed after clean completion
+dispatch-foreman.log: FAIL [dispatch-foreman] 3: status tool_cap_reached: expected 'tool_cap_reached', got 'main_checkout_mutated'
+dispatch-foreman.log: FAIL [dispatch-foreman] 3: sandbox porcelain stays clean with a worktree inside it (.claude/worktrees/ excluded): expected '', got '?? .claude/'
+dispatch-foreman.log: FAIL [dispatch-foreman] 4: status deadline_expired: expected 'deadline_expired', got 'main_checkout_mutated'
+dispatch-foreman.log: FAIL [dispatch-foreman] 5: escalated → exit 0: expected '0', got '1'
+dispatch-foreman.log: FAIL [dispatch-foreman] 5: status escalated: expected 'escalated', got 'main_checkout_mutated'
+dispatch-foreman.log: FAIL [dispatch-foreman] 5: R1 escalated keep: marker lacks retention_reason=escalated (created_at=1791805513 branch=foreman/r5 base_sha=1868b9093f20b023d2d6ce85f4ae7189734c7f59 run_id=r5 root_run_id=r5 loop_id=r5 retention=inspect retention_reason=main_checkout_mutated retention_expires_at=1792064714 schema=2 )
+dispatch-foreman.log: FAIL [dispatch-foreman] 5: resume → exit 0: expected '0', got '1'
+dispatch-foreman.log: FAIL [dispatch-foreman] 5: resumed run completed: expected 'completed', got 'main_checkout_mutated'
+dispatch-foreman.log: FAIL [dispatch-foreman] 5: worktree removed after resumed completion
+dispatch-foreman.log: FAIL [dispatch-foreman] 7: merge on the foreman branch is foreman_integrated: expected 'foreman_integrated', got 'main_checkout_mutated'
+dispatch-foreman.log: FAIL [dispatch-foreman] 7: reason names the merge: 'merge commit' not found in output
+dispatch-foreman.log: FAIL [dispatch-foreman] 8: a plain foreman commit is allowed: expected 'completed', got 'main_checkout_mutated'
+dispatch-foreman.log: FAIL [dispatch-foreman] 8: force-added ignored file rejected by the content gate: expected 'unsafe_commit_content', got 'main_checkout_mutated'
+dispatch-foreman.log: FAIL [dispatch-foreman] 9: hands branches under the namespace are allowed: expected 'completed', got 'main_checkout_mutated'
+dispatch-foreman.log: FAIL [dispatch-foreman] 10: a blocked push leaves the main checkout unchanged: expected 'verified', got 'main_checkout_mutated'
+dispatch-foreman.log: FAIL [dispatch-foreman] 11: detached run relays exit 0: expected '0', got '1'
+dispatch-foreman.log: FAIL [dispatch-foreman] 11: relayed result is the durable one: expected 'completed', got 'main_checkout_mutated'
+dispatch-foreman.log: FAIL [dispatch-foreman] 11: exit file content: expected '0', got '1'
+dispatch-foreman.log: FAIL [dispatch-foreman] 11: wait reports the key: '"key":"r11.foreman","exit_code":0' not found in output
+dispatch-foreman.log: FAIL [dispatch-foreman] 12: nested hetero dispatch under the foreman env does not trip the boundary (stderr: ): expected 'completed', got 'main_checkout_mutated'
+dispatch-foreman.log: FAIL [dispatch-foreman] 13: with --sibling-ref-prefix refs/heads/foreman/ the sibling foreman's branch is exempt: expected 'completed', got 'main_checkout_mutated'
+dispatch-foreman.log: FAIL [dispatch-foreman] 103 passed, 24 failed
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_eq: expected '0', got '1'
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_contains: '"status": "committed"' not found in output
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_eq: expected '0', got '1'
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_contains: '"status": "committed"' not found in output
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_eq: expected '2', got '0'
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_eq: expected '0', got '2'
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_contains: '"status": "committed"' not found in output
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_contains: '"unit_id": "c2-fixture-unit"' not found in output
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_contains: '"go": "GO"' not found in output
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_eq: expected '120', got ''
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_eq: expected 'contract_wall', got ''
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_eq: expected 'dc4e07b1fb44a4190573b93ae8de7548d88575b2b7b93f18c3d919a9a6dc3834', got ''
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_eq: expected '506eb43a11b574d42559d0f33560a6e1ee722f8be19a3a9949285f3eb1238381', got ''
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_file_exists: /tmp/autopilot-test-dispatch-hetero-contract-azL8td/run-marker does not exist
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_eq: expected '0', got '2'
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_contains: '"status": "committed"' not found in output
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_contains: '"engine_assurance": "operator-override"' not found in output
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_file_exists: /tmp/autopilot-test-dispatch-hetero-contract-azL8td/run-marker does not exist
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] R3c: pinned seat admitted without an override file (out tail: repository has uncommitted changes (commit them, or pass a clean checkout/worktree as --cwd)\"]", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "skill_mode_effective": "off", "skills_injected": [], "run_id": "hetero-1791805547-2686626-ad67", "duplex": null, "retention_lease": null, "usage": null }): expected '0', got '2'
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] R3c: committed: '"status": "committed"' not found in output
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] R3c: assurance is the pin, not an override: '"engine_assurance": "operator-pin"' not found in output
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_file_exists: /tmp/autopilot-test-dispatch-hetero-contract-azL8td/run-marker does not exist
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] R3d: refusal names the missing evidence (tail: "error": "contract checker failed: [\"dirty: repository has uncommitted changes (commit them, or pass a clean checkout/worktree as --cwd)\"]", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "skill_mo): 'no qualified scorecard row' not found in output
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_eq: expected '0', got '2'
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_contains: '"status": "committed"' not found in output
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_eq: expected '60', got ''
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_eq: expected 'caller_within_wall', got ''
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_file_exists: /tmp/autopilot-test-dispatch-hetero-contract-azL8td/run-marker does not exist
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_eq: expected '0', got '2'
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_contains: '"status": "committed"' not found in output
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_eq: expected '120', got ''
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_eq: expected 'caller_within_wall', got ''
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_file_exists: /tmp/autopilot-test-dispatch-hetero-contract-azL8td/run-marker does not exist
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_contains: 'exceeds contract budget.wall_seconds' not found in output
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_eq: expected '0', got '1'
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_contains: '"status": "committed"' not found in output
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_contains: 'acceptance' not found in output
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_not_contains: unexpected 'precondition_failed' in output
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_not_contains: unexpected 'precondition_failed' in output
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_contains: '"status": "committed"' not found in output
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] assert_file_exists: /tmp/autopilot-test-dispatch-hetero-contract-azL8td/preflight-sentinel does not exist
+dispatch-hetero-contract.log: FAIL [dispatch-hetero-contract] 46 passed, 41 failed
+dispatch-hetero.log: FAIL [dispatch-hetero] root-without-parent is supported and must not fail closed: '"status": "committed"' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] parent+root dispatches: '"status": "committed"' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] qoder committed path exit code: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] qoder committed status: '"status": "committed"' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] 4: precondition — sandbox starts without .claude/
+dispatch-hetero.log: FAIL [dispatch-hetero] committed path exit code: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] committed status: '"status": "committed"' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] worktree auto-removed on success: '"worktree": null' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] managed committed path exit code: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] managed committed worktree is controller-reaped: '"worktree": null' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] controller Work Order does not block child runner admission: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] controller Work Order is excluded from implementer continuation scan: '"status": "committed"' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] malformed agy envelope with a clean commit exits 0 (status from artifacts): expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] malformed agy envelope no longer converts a landed commit into failure: '"status": "committed"' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] malformed envelope + no edits → no_op (artifact truth), not failure: '"status": "no_op"' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] nonzero agy exit is never committed success: '"status": "failure"' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] dirty status: '"status": "dirty"' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] sandbox porcelain stays clean with a worktree inside it (.claude/worktrees/ excluded): expected '?? .claude/', got ''
+dispatch-hetero.log: FAIL [dispatch-hetero] keep-worktree exit code: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] keep-worktree committed status: '"status": "committed"' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] initial Grok retained-lineage exit code: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] initial Grok retained-lineage commits: '"status": "committed"' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] same-root admission with one retained lease stays within budget: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] Grok repair reuse exit code: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] Grok repair reuse commits: '"status": "committed"' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] codex wrapper-commit exit code: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] codex wrapper-commit status: '"status": "committed"' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] codex wrapper-commit with author-only env exit code: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] codex author-only wrapper-commit status: '"status": "committed"' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] relative --codex-bin absolutized → committed exit 0: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] relative --codex-bin wrapper-commit status: '"status": "committed"' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] no_op status (exit 0, no commit): '"status": "no_op"' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] R1 no_op keep: marker lacks retention_reason=no_op (created_at=1791805581 branch=feat/empty base_sha=0f0e0fbb4d09b059b49e2285342896a0b519b031 run_id=hetero-1791805581-2714419-886e root_run_id=hetero-1791805581-2714419-886e loop_id=hetero-1791805581-2714419-886e retention_reason=main_checkout_mutated retention_expires_at=1792064781 schema=2 )
+dispatch-hetero.log: FAIL [dispatch-hetero] question_suspected status (non-zero exit, no commit): '"status": "question_suspected"' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] question_suspected error hints at the cause: 'clarifying question' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] R1 question_suspected keep: marker lacks retention_reason=question_suspected (created_at=1791805582 branch=feat/question base_sha=0f0e0fbb4d09b059b49e2285342896a0b519b031 run_id=hetero-1791805582-2715170-96c8 root_run_id=hetero-1791805582-2715170-96c8 loop_id=hetero-1791805582-2715170-96c8 retention_reason=main_checkout_mutated retention_expires_at=1792064782 schema=2 )
+dispatch-hetero.log: FAIL [dispatch-hetero] failure status: '"status": "failure"' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] R1 failure keep: marker lacks retention_reason=failure (created_at=1791805583 branch=feat/failcommit base_sha=0f0e0fbb4d09b059b49e2285342896a0b519b031 run_id=hetero-1791805583-2715909-86b8 root_run_id=hetero-1791805583-2715909-86b8 loop_id=hetero-1791805583-2715909-86b8 retention_reason=main_checkout_mutated retention_expires_at=1792064783 schema=2 )
+dispatch-hetero.log: FAIL [dispatch-hetero] R1 residue.lease_hours=5 honoured: marker lacks retention_reason=failure (created_at=1791805585 branch=feat/failcommit5 base_sha=0f0e0fbb4d09b059b49e2285342896a0b519b031 run_id=hetero-1791805584-2717184-217d root_run_id=hetero-1791805584-2717184-217d loop_id=hetero-1791805584-2717184-217d retention_reason=main_checkout_mutated retention_expires_at=1791823585 schema=2 )
+dispatch-hetero.log: FAIL [dispatch-hetero] anchor stub committed → exit 0: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] anchor flow committed: '"status": "committed"' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] quota failure status is engine_unavailable: '"status": "engine_unavailable"' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] quota failure error names the classification: 'engine unavailable (quota_exhausted)' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] capability store contains recorded event: /tmp/autopilot-test-dispatch-hetero-3OamYu/cap-store-hetero/capability.jsonl does not exist
+dispatch-hetero.log: FAIL [dispatch-hetero] recorded quota status is exhausted: expected 'exhausted', got 'unknown'
+dispatch-hetero.log: FAIL [dispatch-hetero] grok 402 fixture status is engine_unavailable: '"status": "engine_unavailable"' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] grok 402 error names quota_exhausted: 'engine unavailable (quota_exhausted)' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] default skill mode exit code: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] skill prompt mode exit code: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] sealed v1 campaign remains compatible outside strict governance: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] sealed bounded campaign dispatches under a live L6 marker: expected '2', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] sealed bounded campaign under live L6 reaches its runner: /tmp/autopilot-test-dispatch-hetero-3OamYu/captured_prompt.txt does not exist
+dispatch-hetero.log: FAIL [dispatch-hetero] strict campaign with stale-digest marker remains refused by marker bridge: FAIL [mission-routing-campaign-bridge] mission-routing-campaign-bridge oracle exits zero: expected exit 0, got 1
+dispatch-hetero.log: FAIL [mission-routing-campaign-bridge] bridge oracle positive_l6_marker_reaches_runner_once: expected 'PASS', got 'FAIL'
+dispatch-hetero.log: FAIL [mission-routing-campaign-bridge] bridge oracle bound_marker_with_campaign_roots_reaches_runner_once: expected 'PASS', got 'FAIL'
+dispatch-hetero.log: FAIL [mission-routing-campaign-bridge] bridge oracle off_mode_without_managed_marker_compatible: expected 'PASS', got 'FAIL'
+dispatch-hetero.log: FAIL [mission-routing-campaign-bridge] bridge oracle has zero failures (pass=20): expected '0', got '3'
+dispatch-hetero.log: FAIL [mission-routing-campaign-bridge] oracle proves positive_l6_marker_reaches_runner_once: 'positive_l6_marker_reaches_runner_once	PASS' not found in output
+dispatch-hetero.log: FAIL [mission-routing-campaign-bridge] oracle proves bound_marker_with_campaign_roots_reaches_runner_once: 'bound_marker_with_campaign_roots_reaches_runner_once	PASS' not found in output
+dispatch-hetero.log: FAIL [mission-routing-campaign-bridge] oracle proves off_mode_without_managed_marker_compatible: 'off_mode_without_managed_marker_compatible	PASS' not found in output
+dispatch-hetero.log: FAIL [mission-routing-campaign-bridge] 34 passed, 8 failed
+dispatch-hetero.log: FAIL [dispatch-hetero] dedicated marker bridge oracle remains green: 'PASS [mission-routing-campaign-bridge]' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] supported native skill exit code: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] auto fresh exit code: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] auto stale exit code: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] auto stale noskill exit code: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] auto F4 exit code: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] missing setsid support falls back to inline dispatch: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] setsid-unavailable fallback still returns committed outcome: '"status": "committed"' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] detached Grok effort path exit code: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] detached Grok effort path commits: '"status": "committed"' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] required_change/no-op projected-unit matrix exits zero: expected exit 0, got 1
+dispatch-hetero.log: FAIL [dispatch-hetero] required_change accepted by contract checker: '"required_change_schema_ok":true' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] unrelated change rejected: '"wrong_surface_rejected":true' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] ambient no-op rejected: '"ambient_noop_rejected":true' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] sealed no-op path exercised: '"sealed_noop_path_exercised":true' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] equality/no-commit validator executes under set -u: '"equality_noop_path_exercised":true' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] postcheck empty-diff validator executes under set -u: '"postcheck_empty_diff_path_exercised":true' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] forged, stale, and foreign no-op receipts reject cleanly: '"sealed_noop_substitutions_rejected":true' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] Engine rejects caller-minted zero-diff authority before dispatch: '"engine_caller_zero_diff_forbidden":true' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] gemini-flash alias dispatch exit code: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] default-model dispatch exit code: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] 22a: boundary_code unsafe_commit_content: '"boundary_code": "unsafe_commit_content"' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] 22b push attempt: round still exit 0 (prevention, not rejection): expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] 22b: status committed: '"status": "committed"' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] 22f dirty + unsafe: classified unsafe_commit_content, not dirty: '"boundary_code": "unsafe_commit_content"' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] 22g: cooperative self-committing stub still committed: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] 22q: with --sibling-ref-prefix the declared namespace is exempt — round exit 0: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] 22q: …and the round is committed: '"status": "committed"' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] 22z: AUTOPILOT_DISPATCH_SIBLING_REF_PREFIX env default exempts the same namespace as the CLI flag — round exit 0: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] 22z: …and the round is committed: '"status": "committed"' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] 22t detached: the declared namespace survives the detach boundary — round exit 0: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] 22t detached: …and the round is committed: '"status": "committed"' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] 22u: with --sibling-path-prefix the declared directory is exempt — round exit 0: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] 22u: …and the round is committed: '"status": "committed"' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] 22x detached: the declared directory survives the detach boundary — round exit 0: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] 22x detached: …and the round is committed: '"status": "committed"' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] 22m: the round itself completed (the stub ran to the push): '"status": "committed"' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] 22d control: cooperative stub still exit 0 with gates in place: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] 22d control: committed: '"status": "committed"' not found in output
+dispatch-hetero.log: FAIL [dispatch-hetero] hetero gemini-flash-medium default effort exit 0: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] hetero gemini-flash-high --effort low exit 0: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] hetero bare agy id exit 0: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] hetero grok argv capture exit 0: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] hetero codex argv capture exit 0: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] hetero cc-shim argv capture exit 0: expected '1', got '0'
+dispatch-hetero.log: FAIL [dispatch-hetero] 277 passed, 98 failed
+dispatch-hetero.log: FAIL [mission-routing-campaign-bridge] bridge oracle positive_l6_marker_reaches_runner_once: expected 'PASS', got 'FAIL'
+dispatch-hetero.log: FAIL [mission-routing-campaign-bridge] bridge oracle bound_marker_with_campaign_roots_reaches_runner_once: expected 'PASS', got 'FAIL'
+dispatch-hetero.log: FAIL [mission-routing-campaign-bridge] bridge oracle off_mode_without_managed_marker_compatible: expected 'PASS', got 'FAIL'
+dispatch-hetero.log: FAIL [mission-routing-campaign-bridge] bridge oracle has zero failures (pass=20): expected '0', got '3'
+dispatch-hetero.log: FAIL [mission-routing-campaign-bridge] oracle proves positive_l6_marker_reaches_runner_once: 'positive_l6_marker_reaches_runner_once	PASS' not found in output
+dispatch-hetero.log: FAIL [mission-routing-campaign-bridge] oracle proves bound_marker_with_campaign_roots_reaches_runner_once: 'bound_marker_with_campaign_roots_reaches_runner_once	PASS' not found in output
+dispatch-hetero.log: FAIL [mission-routing-campaign-bridge] oracle proves off_mode_without_managed_marker_compatible: 'off_mode_without_managed_marker_compatible	PASS' not found in output
+dispatch-hetero.log: FAIL [mission-routing-campaign-bridge] 34 passed, 8 failed
+identifier-scan.log: FAIL [identifier-scan] a hit inside .claude/worktrees/ is not this tree's: expected exit 0, got 1
+identifier-scan.log: FAIL [identifier-scan] 30 passed, 1 failed
+orchestrator-edit-gate.log: ✖ wrapper: l5 + depth-0 + marked rail worktree under .claude/worktrees ⇒ gated as a dispatch worktree (91.060458ms)
+orchestrator-edit-gate.log: ✖ wrapper: l5 + depth-0 + marked rail worktree under .claude/worktrees ⇒ gated as a dispatch worktree (91.060458ms)
+probe-unknown.log: FAIL [probe-unknown] --project-dir skips .claude/worktrees and node_modules: expected '2', got '4'
+probe-unknown.log: FAIL [probe-unknown] 145 passed, 1 failed
+repo-residue-auto.log: FAIL [repo-residue-auto] needs_human: a marked rail worktree under .claude/worktrees is judged by its marker, not a cwd inside it: '.claude/worktrees/hetero-rail-busy-abc123' not found in output
+repo-residue-auto.log: FAIL [repo-residue-auto] 199 passed, 1 failed
+worktree-activity.log: ✖ newestMtime skips <root>/.claude/worktrees but not the rest of .claude (1.223587ms)
+worktree-activity.log: ✖ newestMtime skips <root>/.claude/worktrees but not the rest of .claude (1.223587ms)

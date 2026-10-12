@@ -1,0 +1,19 @@
+# P2.6 remaining suites at c90c3e3b — each alone, in order
+
+dispatch-detach rc=0
+dispatch-detached-campaign-authority rc=0
+dispatch-worktree-lifecycle rc=0
+dispatch-hetero-gc rc=0
+worktree-reap rc=0
+repo-residue-sweep rc=0
+tmp-residue-registry rc=0
+check-tmp-residue-registry rc=0
+tmp-residue-prune rc=0
+suite-residue-reaper rc=0
+prune-tmp-residue rc=0
+foreman-guard rc=0
+foreman-guard-roles rc=0
+test-doc-drift-gate rc=0
+DONE
+
+## failing lines

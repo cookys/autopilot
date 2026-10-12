@@ -1,0 +1,40 @@
+{
+  "findings": [
+    {
+      "id": "80b7e15dc2457769d2bfefbf77fe605fa789b59434bc9606b290c90ea036457d",
+      "severity": "Major",
+      "seat": "s0",
+      "text": "🟠 [c1-test-asserts-exit-only] MUST-FIX The headline C1 test (\"E1 from a linked worktree measures that worktree (1 file fits S)\") asserts only `RC == 0` after `stage-advance --to verify`; E1 is a size *bump* (decide returns `{write: patch}` and the move proceeds), so measuring the main checkout's 7 files at base most likely bumps S→M and still exits 0, leaving the test green at base and the verification-map row \"P1.1 red at base\" unproven; smallest fix: after the verify move add `eq \"E1 in the worktree keeps size S\" '\"S\"' \"$(jf size)\"` (and the same `jf size` pin on the foreign-repo negative case), which is red at base regardless of E1's exit-code policy."
+    },
+    {
+      "id": "9c55ec7b9c07d9751b2f8612abc21e1d3f233f46f5fa5d3db450091609d92695",
+      "severity": "Minor",
+      "seat": "s0",
+      "text": "🟡 [set-repo-root-undefined-fallback] MUST-FIX `cmdSetInit` now passes `next.repo_root` to `applyInitFields` on both the `--new-task` and merge paths, but `followRepoRoot` returns early when `marker.repo_root` is not a string, so a marker lacking `repo_root` (not validated on read; the cache-written plain marker path) now derives `base_ref` via `git -C undefined` → null instead of the caller's toplevel as before; smallest fix: `applyInitFields(next, init, next.repo_root || repoRoot, …)` at both call sites."
+    },
+    {
+      "id": "4e284b05421cf29a726524b856174391fd779886525b18b4c3facdb78bb94e47",
+      "severity": "Suggestion",
+      "seat": "s0",
+      "text": "🔵 [session-mode-identity-imports-unverified] CUT/FOLLOW-UP `followRepoRoot` calls `markerRepoIdentity` and `scopeFromCwd` without an import in this hunk; the diff does not show whether session-mode.js already binds them (the marker already stores `repo_identity`, so it probably does). Not blocking: the new D5 tests would fail outright if unbound, and the try/catch would otherwise mask a ReferenceError as \"no follow\"; confirm the bindings exist when running the P1.4 suites."
+    },
+    {
+      "id": "098fb3c240c2a0dbdb6160ed293c3b6256250cff48a1a819ef0d59eaa2124f50",
+      "severity": "Suggestion",
+      "seat": "s0",
+      "text": "🔵 [d6-equal-refs-tiebreak] CUT/FOLLOW-UP When local and remote are the same commit, `isAncestor(remote, local)` is true and the local merge-base is returned; the spec's wording (\"local ancestor of remote ⇒ remote\") would pick remote, but both merge-bases are identical so the stored sha is the same. No change needed; noted so plan-review does not read it as a deviation."
+    },
+    {
+      "id": "dbdd5854ac482657748593c02c7745b26eb280ec2a0a0be1b79afd1f5dadd8fb",
+      "severity": "Suggestion",
+      "seat": "s1",
+      "text": "🔵 [p1-scope-p2-p4-followup] CUT/FOLLOW-UP — this diff delivers plan phase P1 only (D5 marker-follows-session in session-mode.js/stage-advance.js, D6 base_ref pairs, C1/C2 tests, plan-doc P1.2 sync); P2–P4 (placement resolver, rails under `<main>/.claude/worktrees/`, C3 advisory, C4 handoff, C5–C7) are separate per-phase changesets under the plan's own per-phase review cadence, so their absence here is scope, not a defect."
+    },
+    {
+      "id": "b2c5418b0203fef4336c1bd4e2e741960fc268dd60b6b05f8fc9fab700b27b52",
+      "severity": "Suggestion",
+      "seat": "s1",
+      "text": "🔵 [plainset-same-size-vacuity] CUT/FOLLOW-UP — optional test-strength hardening: in the plain-set block of hooks/tests/stage-advance.test.sh the foreign-repo and follows-back calls pass `--size M` while the marker is already M, so if the monotonic guard ever refused same-size sets (no write) those two asserts would pass vacuously — smallest fix is `--urgent` or an increasing size for those two calls; excluded because the equal-size path is write-permitted under the XS<S<M<L<XL \"moves up\" rule and the `--new-task` block already exercises foreign-no-follow non-vacuously."
+    }
+  ]
+}

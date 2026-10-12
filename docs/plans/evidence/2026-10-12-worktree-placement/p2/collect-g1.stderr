@@ -1,0 +1,3 @@
+stage-advance: 3 implement -> code-review is not an edge for size L
+ERROR: only 3 of 4 seats reviewed, below the receipt floor of 4 (default: all seats); generation 1 recorded as aborted (seat_gap_below_min) — check-phase-review-receipt would refuse it forever. Collect generation 2 from the same base (fix the failing seat, shrink the diff with --exclude, or lower the floor for BOTH collect and the checker — same flag/env spellings on both).
+rc=1

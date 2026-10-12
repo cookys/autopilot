@@ -129,6 +129,11 @@ mk_wt b-mission unintegrated;   mk_marker "$TEST_TMP/wt-b-mission" b-mission "mi
 mkdir -p "$SBX/.claude/worktrees"
 G worktree add -q "$SBX/.claude/worktrees/session" -b session-branch "$BASE" 2>/dev/null; echo y > "$SBX/.claude/worktrees/session/dirty.txt"
 ( cd "$SBX/.claude/worktrees/session" && exec sleep 600 ) & SESS_PID=$!
+# a RAIL worktree under .claude/worktrees (marker, expired lease, dirty) with a process inside: its
+# liveness is the flock, not a cwd, so it is still listed (D10)
+G worktree add -q "$SBX/.claude/worktrees/hetero-rail-busy-abc123" -b rail-busy "$BASE" 2>/dev/null; git -C "$SBX/.claude/worktrees/hetero-rail-busy-abc123" -c user.email=t@t -c user.name=t commit -q --allow-empty -m ahead-rail-busy
+mk_marker "$SBX/.claude/worktrees/hetero-rail-busy-abc123" rail-busy root-rb run-rb "retention_reason=dirty" "$EXPIRED"; echo z > "$SBX/.claude/worktrees/hetero-rail-busy-abc123/dirty.txt"
+( cd "$SBX/.claude/worktrees/hetero-rail-busy-abc123" && exec sleep 600 ) & RAIL_BUSY_PID=$!
 
 # campaign journal + Mission registry (the authoritative signals)
 mkdir -p "$COMMON/autopilot/mission/states"
@@ -257,6 +262,7 @@ assert_not_contains "$NH_TXT" '/wt-b-live' "needs_human: live excluded"
 assert_not_contains "$NH_TXT" '/wt-b-unexpired' "needs_human: unexpired default lease excluded"
 assert_not_contains "$NH_TXT" '/wt-b-lease-unexpired' "needs_human: unexpired explicit lease excluded"
 assert_not_contains "$NH_TXT" '.claude/worktrees/session' "needs_human: .claude/worktrees path with a live process excluded"
+assert_contains "$NH_TXT" '.claude/worktrees/hetero-rail-busy-abc123' "needs_human: a marked rail worktree under .claude/worktrees is judged by its marker, not a cwd inside it"
 assert_not_contains "$NH_TXT" 'hands/young' "needs_human: young branch excluded"
 assert_not_contains "$NH_TXT" 'feature/merged' "needs_human: integrated branch excluded"
 assert_eq "$(jx "$OUT" 'j.needs_human.find(e=>e.path&&e.path.endsWith("/wt-b-dirty")).reason')" "dirty" "needs_human reason = retention_reason"
@@ -368,5 +374,6 @@ MB="$(node "$MUTB/scripts/repo-residue-sweep.js" scan --repo "$SBX")"
 assert_contains "$(jx "$MB" 'j.needs_human.map(e=>e.ref||"").join(" ")')" "$D30/hands/recent" "mutant: age gate removed -> the 30-day ref is listed (default-threshold assertion would fail)"
 
 kill "$SESS_PID" 2>/dev/null; wait "$SESS_PID" 2>/dev/null
+kill "$RAIL_BUSY_PID" 2>/dev/null; wait "$RAIL_BUSY_PID" 2>/dev/null
 
 finalize_test

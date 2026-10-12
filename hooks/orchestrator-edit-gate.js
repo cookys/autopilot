@@ -79,6 +79,12 @@ function hasWorktreeMarkerAbove(target) {
   return false;
 }
 
+function inMarkedNestedWorktree(repoRoot, target) {
+  const parts = path.relative(path.join(repoRoot, '.claude', 'worktrees'), target).split(path.sep);
+  if (parts.length < 2 || parts[0] === '' || parts[0] === '..' || path.isAbsolute(parts[0])) return false;
+  try { fs.accessSync(path.join(repoRoot, '.claude', 'worktrees', parts[0], '.autopilot-worktree')); return true; } catch { return false; }
+}
+
 (function main() {
   let exitCode = 0;
   try {
@@ -97,7 +103,9 @@ function hasWorktreeMarkerAbove(target) {
     if (!rawTarget) process.exit(0);
     const target = resolveReal(rawTarget);
     const repoRoot = resolveReal(marker.repo_root);
-    const inRepoRoot = contains(repoRoot, target);
+    // A marked rail worktree under <repo>/.claude/worktrees/ is a dispatch worktree, not the repo
+    // (the .claude/ allowlist would otherwise let depth-0 edit it). Unmarked ones stay repo paths.
+    const inRepoRoot = contains(repoRoot, target) && !inMarkedNestedWorktree(repoRoot, target);
 
     const d = decide({
       markerLevel: marker.level,

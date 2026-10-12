@@ -15,6 +15,7 @@ const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 const semver = require('../scripts/lib/semver');
 const { compactionStateName } = require('./state-checkpoint-lib.js');
+const { clearHandoffKey } = require('../scripts/resolve-repo-placement.js');
 const {
   composeSessionStartContext,
   buildSessionStartOutput,
@@ -485,7 +486,7 @@ function run() {
     if (handoffEnabled(homeDir) && ALLOWED_SOURCES.has(source)) {
       const repoRoot = resolveRepoRoot(cwd);
       if (repoRoot) {
-        const repoHash = crypto.createHash('sha1').update(repoRoot).digest('hex');
+        const repoHash = clearHandoffKey(repoRoot);
         const handoffDir = path.join(homeDir, '.autopilot', 'handoff');
         if (!cleanStaleHandoff(handoffDir, repoHash)) {
           // On a consume miss (no handoff / writer still mid-publish / a racing

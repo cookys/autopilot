@@ -1,0 +1,108 @@
+# verify suites at 20db1618 — each alone, in order
+node:orchestrator-edit-gate rc=0
+node:worktree-activity rc=0
+all-hooks-fail-open rc=0
+autopilot-cli rc=1
+autopilot-engine-boundary-resume rc=0
+campaign-boundary-receipt-e2e rc=0
+campaign-dispatch-projection rc=0
+check-canonical-invariants rc=0
+check-stage-vocab rc=0
+close-session rc=0
+codex-compaction-rehydration rc=0
+context-window rc=0
+cost-fuse rc=0
+cursor-model rc=0
+dispatch-author-session-mode rc=0
+dispatch-batch rc=0
+dispatch-contract-artifact rc=0
+dispatch-contract rc=0
+dispatch-detach rc=0
+dispatch-detached-campaign-authority rc=0
+dispatch-foreman rc=0
+dispatch-hetero-contract rc=0
+dispatch-hetero-cursor-routing rc=0
+dispatch-hetero-gc rc=0
+dispatch-hetero-wall-timeout rc=0
+dispatch-hetero-watchdog-followups rc=0
+dispatch-hetero rc=0
+dispatch-identity-containment rc=0
+dispatch-job-root rc=0
+dispatch-kimi rc=0
+dispatch-lineage rc=0
+dispatch-opencode rc=0
+dispatch-pi rc=0
+dispatch-review-author-cursor rc=0
+dispatch-review-b rc=0
+dispatch-status rc=0
+dispatch-worktree-lifecycle rc=0
+final-panel-seat-reap rc=0
+foreman-guard-roles rc=0
+foreman-guard rc=0
+hook-advisory-channel rc=0
+hook-normalizers rc=0
+identifier-scan rc=0
+implementation-campaign-cli-seam rc=0
+lifecycle-residue-receipt rc=0
+live-pointer rc=0
+manifest-repo-identity rc=0
+mission-routing-admission rc=0
+mission-routing-campaign-bridge rc=0
+next-touch-validation rc=0
+p6d-gates-manifest rc=0
+probe-unknown rc=0
+project-key rc=0
+prune-tmp-residue rc=0
+qualification-sweep rc=0
+rail-stage-writers rc=0
+repo-residue-auto rc=0
+repo-residue-sweep rc=0
+resolve-endpoint rc=0
+resolve-repo-placement rc=0
+retro-review-loop rc=0
+review-loop-resolver-a rc=0
+runs-watch-render rc=0
+sealed-zero-diff-validator-parity rc=0
+semver rc=0
+session-handoff rc=0
+session-mode-phase rc=0
+session-mode-watcher rc=0
+session-mode rc=0
+session-start-handoff-inject rc=0
+session-start-update-check rc=0
+session-start rc=0
+skill-onoff-arm-builder rc=0
+skill-onoff-g67 rc=0
+skill-onoff-g8 rc=0
+skill-onoff-generic-overlay rc=0
+skill-onoff-generic rc=1
+skill-onoff-p1w-markers rc=0
+skill-onoff-stage-graph rc=0
+stage-advance rc=0
+status-finish-followup rc=0
+strike-decay rc=0
+strike-writer-wiring rc=0
+suite-residue-reaper rc=0
+task-status-input rc=0
+tmp-residue-prune rc=0
+tmp-residue-registry rc=0
+rc=done
+
+## Suite list
+Every hooks/tests/*.test.sh that names a code file changed in 4abd667f..20db1618, plus the suites the branch
+edited (verify-affected-suites.js), and the two node:test files the branch changed. 85 lines rc=0 of 87.
+
+## The two non-zero suites
+- autopilot-cli rc=1: 7 FAILs ("Mission routing rejected: exact legacy B/C terminal disposition is invalid"),
+  identical at base 4abd667f run in a detached worktree (121 passed, 7 failed both sides). BACKLOG
+  "Pre-existing red suite: hooks/tests/autopilot-cli.test.sh".
+- skill-onoff-generic rc=1, also rc=1 when rerun alone: its only FAIL is "real /run/user/<uid>/autopilot or
+  ~/.autopilot root changed during the test (inode/mtime diff)" — the live sessions on this host (this one
+  included) write those roots on every tool call. BACKLOG row naming skill-onoff-generic (concurrent sessions).
+  Run at base 4abd667f in a detached worktree (after the code-review collect): the same single FAIL, rc=1 —
+  PRE_EXISTING.
+
+## Completeness scan (--range 4abd667f..HEAD)
+rc=1 with 84 "new" hits, all false positives: the `XXX` marker regex matching the mktemp template `-XXXXXX` in
+the resolver, its tests, the reference and the registry/allowlist reasons; `return 0` exit codes in the
+resolver's main(); and the same lines repeated in review diff.txt evidence and the codex mirror.

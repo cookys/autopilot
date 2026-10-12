@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "worktree-placement-2026-10-12",
+  "generation": 1,
+  "findings": [
+    {
+      "fingerprint": "0eb57b8d210196ea45915e050b8e9ebfd649b09bc87a287ee52697344990f81e",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: P1.2 (f) plain set from a linked worktree (follows) and from a foreign repo (unchanged); P1.1 negative case: stage-advance from an unrelated repo measures in marker.repo_root and leaves the marker unchanged."
+    },
+    {
+      "fingerprint": "0af32faadf0c6b88ed8c071b4e5d8c6751b51d3032f6ba41ae43a9781d4cce79",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: D6 now pairs develop/main/master with their origin refs, keeps the merge-base-with-HEAD filter, and names the base behaviour change (origin/develop beats a local main); P1.2 (g) pins it red at base, (h) covers local-only."
+    },
+    {
+      "fingerprint": "a17475a83dd5906542e936e3413e5e75b6a88fb2f51d73cf3b97d5c0e2906faa",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: P3.1 lowercases tokens and stays silent when either filtered set is empty; tests added for feat-1234 vs feat/1234 and Foo-bar vs foo-bar, exit code asserted in every case."
+    },
+    {
+      "fingerprint": "79181335dab5a6b96600d0492b75775547618827f19625f85ec99b0b2205a3d8",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: P2.3 requires each rail to pass --from its own resolved repo root (batch $REPO); the resolver never falls back to cwd for rails; batch test runs from an unrelated cwd with --repo at the sandbox."
+    },
+    {
+      "fingerprint": "cb787d49a51680e6708e90e56cd1b2bb3bb72e25067dae1d655bf69d2cc08f45",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: D3 prunes the .claude/worktrees entry itself; the resolver worktree subcommand mkdir -p the directory and every rail calls it before the before-fingerprint; P2.3 adds a first-run test from a sandbox with no .claude/."
+    },
+    {
+      "fingerprint": "5f2a91be1d51437197ac67993cd5918cfc8f51dd150e5ea70f08030d4c10dd5a",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: D7 exempts only targets with an .autopilot-worktree marker above them; unmarked targets under .claude/worktrees/ stay inRepoRoot and gated as today; P2.3 adds the negative test."
+    },
+    {
+      "fingerprint": "fd376fb01347a187f32ce217fab91b07ebbe2a8eda39e85b1dbef6b289ba4097",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: P2.5 starts with a recorded grep enumeration (walkers.md with the command) over scripts/, hooks/, bin/, src/; every hit gets one of four dispositions."
+    },
+    {
+      "fingerprint": "dee15107276ec2b906c388d457b81a2f0b680ea22879f56effa792505c853021",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: P4.2 now carries a gap 1-8 table, each fixed with its phase, deferred with a trigger, or out of scope with its pointer."
+    },
+    {
+      "fingerprint": "05e4da99feabef9722bba618029d3e16714211a70b9f3f6b609f36580b7b8001",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: P2.0 records moved sandbox-cleanliness assertions before any change; P3.4 suites and P4.5 gates listed; verification map rows added for D3, D7, D10, D11 and P2.4."
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "runner": "claude-native",
+  "model": "claude-fable-5-1",
+  "status": "reviewed",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": "🟠 [c1-test-asserts-exit-only] MUST-FIX The headline C1 test (\"E1 from a linked worktree measures that worktree (1 file fits S)\") asserts only `RC == 0` after `stage-advance --to verify`; E1 is a size *bump* (decide returns `{write: patch}` and the move proceeds), so measuring the main checkout's 7 files at base most likely bumps S→M and still exits 0, leaving the test green at base and the verification-map row \"P1.1 red at base\" unproven; smallest fix: after the verify move add `eq \"E1 in the worktree keeps size S\" '\"S\"' \"$(jf size)\"` (and the same `jf size` pin on the foreign-repo negative case), which is red at base regardless of E1's exit-code policy.\n🟡 [set-repo-root-undefined-fallback] MUST-FIX `cmdSetInit` now passes `next.repo_root` to `applyInitFields` on both the `--new-task` and merge paths, but `followRepoRoot` returns early when `marker.repo_root` is not a string, so a marker lacking `repo_root` (not validated on read; the cache-written plain marker path) now derives `base_ref` via `git -C undefined` → null instead of the caller's toplevel as before; smallest fix: `applyInitFields(next, init, next.repo_root || repoRoot, …)` at both call sites.\n🔵 [session-mode-identity-imports-unverified] CUT/FOLLOW-UP `followRepoRoot` calls `markerRepoIdentity` and `scopeFromCwd` without an import in this hunk; the diff does not show whether session-mode.js already binds them (the marker already stores `repo_identity`, so it probably does). Not blocking: the new D5 tests would fail outright if unbound, and the try/catch would otherwise mask a ReferenceError as \"no follow\"; confirm the bindings exist when running the P1.4 suites.\n🔵 [d6-equal-refs-tiebreak] CUT/FOLLOW-UP When local and remote are the same commit, `isAncestor(remote, local)` is true and the local merge-base is returned; the spec's wording (\"local ancestor of remote ⇒ remote\") would pick remote, but both merge-bases are identical so the stored sha is the same. No change needed; noted so plan-review does not read it as a deviation.",
+  "no_finding_proof": null,
+  "raw_log": "/tmp/dispatch-review-log-33HGgX",
+  "error": null,
+  "usage": null,
+  "frame_closed_by": "end-marker"
+}

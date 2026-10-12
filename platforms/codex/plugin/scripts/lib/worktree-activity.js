@@ -34,6 +34,8 @@ function newestMtime(root, { maxEntries = DEFAULT_MAX_ENTRIES } = {}) {
   let seen = 0;
   let truncated = false;
   const stack = [root];
+  // Worktrees nested under <root>/.claude/worktrees are their own trees, not root's activity.
+  const nested = path.join(root, '.claude', 'worktrees');
   while (stack.length) {
     if (seen >= maxEntries) { truncated = true; break; }
     const dir = stack.pop();
@@ -46,7 +48,7 @@ function newestMtime(root, { maxEntries = DEFAULT_MAX_ENTRIES } = {}) {
       if (entry.isSymbolicLink()) continue;
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
-        if (SKIP_DIRS.has(entry.name)) continue;
+        if (SKIP_DIRS.has(entry.name) || full === nested) continue;
         stack.push(full);
         continue;
       }

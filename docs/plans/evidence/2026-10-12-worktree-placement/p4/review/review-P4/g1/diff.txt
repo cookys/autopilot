@@ -1,0 +1,262 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 9048edfe..a59a2082 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -4,6 +4,14 @@
+ 
+ ### 新增
+ 
++- **worktree 和 handoff 有了固定位置**（branch `feat/worktree-placement-rule`）：同一個 repo 的 worktree 現在都放在 `<主 checkout>/.claude/worktrees/` 底下，看路徑就知道屬於哪個 repo。規則寫在 `references/worktree-placement.md`。
++  - hetero、foreman、batch 三條 rail 建的 worktree 從暫存目錄搬到這裡，和你自己或 Claude Code 開的 worktree 放在一起；不論從主 checkout 還是從哪個 worktree 呼叫，都放到同一個地方。沒有一般主 checkout 的 repo（例如 bare repo）照舊放在暫存目錄，stderr 會說明原因。
++  - 新增 `scripts/resolve-repo-placement.js`，統一回答三個問題：worktree 該放哪裡、主 checkout 落後上游幾個 commit、兩種 handoff 檔各在哪裡。
++  - session marker 會跟著 session 進 worktree：在同一個 repo 的 worktree 裡執行 `session-mode.js set`，marker 就改記那個 worktree，`stage-advance` 量的 diff 才會是你正在改的分支。
++  - `base_ref` 的預設值改取 `develop` 和 `origin/develop` 之中較新的那一個；主 checkout 沒有 pull 時，diff 不會再被高估。
++  - 執行 `set --new-task` 時，如果 worktree 目錄名稱和分支名稱沒有任何共同的字，會印一行提醒，建議你為新任務開新的 worktree。這只是提醒，不會擋下指令。
++  - `/handoff` 沒有進行中的專案時，handoff 檔改成每個 repo 一份，同名的兩個 repo 不會再寫到同一個檔案；`/clear` 的 handoff 仍是每個 worktree 一份，路徑沒有變。
++
+ - **即時面板「現況」分頁多了「最近對話」**（merge `82d34da4`）：分頁最後列出這個 session 最近 3 則你輸入的 prompt，依時間排序，最新的在最下面。tool 結果和系統插入的訊息不算在內。每則預設收合成一行「▸ 你：…」（最多 60 字），點一下會展開，顯示完整 prompt 和 AI 的回覆，最多約 20 行。看起來像 secret 的字串（`sk-…`、`ghp_…`、`Bearer …`、`AKIA…`、`xox?-…`）在顯示前就由程式遮成 `***`，不經過模型。這段資料只有在 transcript 變動時才會重算；/clear 之後，原本展開的項目會全部收回。目前只能用滑鼠展開，還不能用鍵盤（BACKLOG 有列）。
+ 
+ - **band 上的每一格都能點，點了直接開面板的對應分頁**（merge `1a2a903e`）：判定、位置、unit 開「現況」（位置與 unit 會順便展開「目前位置」區塊）；派工開「派工」；審查與決策開「審查」；用量開「用量」；殘留 `⚑N` 開「殘留」。面板一律取得焦點，按 Esc 關閉。鍵盤操作不變：Ctrl+x Tab 仍先停在 ⓘ，再用 Shift+Tab 移到各格。
+diff --git a/docs/BACKLOG.md b/docs/BACKLOG.md
+index 0f52a149..9b3a4344 100644
+--- a/docs/BACKLOG.md
++++ b/docs/BACKLOG.md
+@@ -20,13 +20,21 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
+ - **Pointer**: docs/backlog/qc-gate-affected-suites.md
+ - **Context**: full run past 30 min (stopped at 256/408); the 38 suites that reference the changed files passed in about 2 min. Keep the full suite for release preflight.
+ 
+-### Worktree and handoff placement has no rule outside the dispatch rails
++### Cross-repo dispatch has no worktree or handoff rule
+ - **Status**: open
+-- **Trigger**: next task after feat/mods-pane-navigation merges (owner 2026-10-12: pick it up when the mod work is done)
+-- **Effort**: L
+-- **Source**: owner question 2026-10-12; repo-wide inventory in session a14bb1ea
++- **Trigger**: a session in repo A dispatches a rail at repo B
++- **Effort**: M
++- **Source**: worktree-placement gap 5, deferred by the plan (D12), 2026-10-12
++- **Pointer**: docs/backlog/worktree-and-handoff-placement-has-no-rule.md
++- **Context**: rails resolve placement from their own --from repo root; nothing says which repo's root, marker or handoff a cross-repo run uses.
++
++### finish-flow does not tell the owner how to update the main checkout after a push
++- **Status**: open
++- **Trigger**: owner approves a finish-flow guidance change (needs eval ON/OFF evidence first, scorecard-first)
++- **Effort**: S
++- **Source**: worktree-placement gap 8, deferred by the plan (D12), 2026-10-12
+ - **Pointer**: docs/backlog/worktree-and-handoff-placement-has-no-rule.md
+-- **Context**: rails use $TMPDIR, native/hand-made worktrees use .claude/worktrees with no naming rule; handoff fallback keys by basename, the /clear hook by repo hash; no cross-repo rule.
++- **Context**: an isolated worktree session cannot pull the main checkout; resolve-repo-placement.js main prints how far behind it is and references/worktree-placement.md gives the owner line.
+ 
+ ### calendar-teeth-negative instant2: consult evidence fixture exceeds the expiry ceiling
+ - **Status**: open
+diff --git a/docs/backlog/worktree-and-handoff-placement-has-no-rule.md b/docs/backlog/worktree-and-handoff-placement-has-no-rule.md
+index 73634776..1220c472 100644
+--- a/docs/backlog/worktree-and-handoff-placement-has-no-rule.md
++++ b/docs/backlog/worktree-and-handoff-placement-has-no-rule.md
+@@ -50,3 +50,19 @@ Second live example of gap 3 (2026-10-12): the next task (`feat/worktree-placeme
+ - A check at session start / `stage-advance --to intent` (`--new-task`): worktree name and branch agree with the marker's task, or the session is told to open a fresh worktree.
+ - Handoff keyed by the marker's `repo_identity` (+ worktree path) on both routes, so the manual skill and the `/clear` hook write to one predictable place.
+ - The rails' `/tmp` worktrees either move under the same root or carry the repo slug in their prefix.
++
++## Disposition (2026-10-12, plan `docs/plans/2026-10-12-worktree-placement.md`, direction C)
++
++The rule now lives in [`references/worktree-placement.md`](../../references/worktree-placement.md).
++
++| Gap | Disposition |
++|---|---|
++| 1 two unrelated roots | fixed — P2: rails create worktrees under `<main checkout>/.claude/worktrees/` through `scripts/resolve-repo-placement.js`; P4 rule |
++| 2 no per-repo grouping | fixed — P2: the path names the repo's main checkout |
++| 3 name ↔ branch ↔ task unrelated | fixed as far as the plan goes — P3: `set --new-task` advisory (never blocks); P4 rule |
++| 4 handoff keying | fixed — one resolver for both routes (P2), used by the hooks and the handoff skill (P3); the keys differ on purpose (rule § Handoff files) |
++| 5 cross-repo dispatch | deferred — BACKLOG "Cross-repo dispatch has no worktree or handoff rule" |
++| 6 marker `repo_root` fixed at creation | fixed — P1: the marker follows the session into a worktree of the same repo |
++| 6b stale `base_ref` | fixed — P1: newer of the local / remote-tracking pair |
++| 7 orphan worktrees not discovered | out of scope — already filed (BACKLOG "Orphan leaf liveness…"); the sweep no longer busy-skips marked rail worktrees under `.claude/worktrees/` |
++| 8 owner cannot pull from an isolated session | partly fixed — `resolve-repo-placement.js main` prints how far behind the main checkout is, the rule gives the owner line; finish-flow wiring deferred (BACKLOG "finish-flow does not tell the owner…") |
+diff --git a/docs/plans/evidence/2026-10-12-worktree-placement/p4/gates.txt b/docs/plans/evidence/2026-10-12-worktree-placement/p4/gates.txt
+new file mode 100644
+index 00000000..add01648
+--- /dev/null
++++ b/docs/plans/evidence/2026-10-12-worktree-placement/p4/gates.txt
+@@ -0,0 +1,47 @@
++=== node scripts/check-claude-md-inventory.js
++CLAUDE.md inventory: all 235 scripts named
++docs/scripts-inventory.md: all 235 scripts described
++CLAUDE.md size: 19742/40000 bytes
++rc=0
++=== node scripts/check-tmp-residue-registry.js
++check-tmp-residue-registry: OK (416 file(s) scanned, parity holds)
++rc=0
++=== node scripts/check-reference-sizes.js
++reference-size: all 45 skills/*/references/*.md under the 49152 numbered cap
++rc=0
++=== node scripts/check-plan-graduation.js
++plan_reference_dangling (report-only): docs/plans/2026-01-01-forgotten — 1 tracked file(s) reference docs/plans/evidence/2026-01-01-forgotten, which exists in neither the active nor the archived location
++plan_reference_dangling (report-only): docs/plans/2026-01-01-vanished — 1 tracked file(s) reference docs/plans/evidence/2026-01-01-vanished, which exists in neither the active nor the archived location
++plan_reference_dangling (report-only): docs/plans/2026-08-28-consult-discuss- — 1 tracked file(s) reference docs/plans/evidence/2026-08-28-consult-discuss-, which exists in neither the active nor the archived location
++plan_reference_dangling (report-only): docs/plans/2026-08-18-plugin-api — 1 tracked file(s) reference docs/plans/2026-08-18-plugin-api, which exists in neither the active nor the archived location
++plan_reference_dangling (report-only): docs/plans/2026-08-26-cursor-cli- — 2 tracked file(s) reference docs/plans/2026-08-26-cursor-cli-, which exists in neither the active nor the archived location
++plan_reference_dangling (report-only): docs/plans/2026-03-21-allowance-distribution-engine — 9 tracked file(s) reference docs/plans/2026-03-21-allowance-distribution-engine, which exists in neither the active nor the archived location
++rc=1
++=== node scripts/doc-drift-gate.js
++[FAIL] script-refs
++       - docs/BACKLOG.md: `scripts/dispatch-contract.pre.js` — no such file
++       - docs/backlog/peer-reported-revival3d-worktree-branch-accumulation.md: `scripts/check-unarchived-branches.mjs` — no such file
++       - references/evidence-discipline.md: `check-inputs-landed.sh` — did you mean scripts/check-inputs-landed.js? (renamed; bare ref)
++========================================
++3 check(s) FAILED
++rc=1
++=== node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md
++{"mode":"block","backlog":"/home/cookys/projects/autopilot/.claude/worktrees/autocompact-detect/docs/BACKLOG.md","style":"heading","entries":157,"bytes":94794,"violations":[{"code":"cap_exceeded","title":"agy `--input-format stream-json` raises the payload ceiling but does NOT remove it — and above it the failure is SILENT","field":"Title","detail":"121 > 120","allowed":true},{"code":"cap_exceeded","title":"autopilot effort vocabulary has no `minimal` — the muse-spark contributor tier cannot be examined at its cheapest setting","field":"Title","detail":"123 > 120","allowed":true},{"code":"cap_exceeded","title":"`src/engine/local-deployment.js` carries its own transport rule (TLS outside loopback) — align with `resolve-endpoint.sh` before it gets a live caller","field":"Title","detail":"152 > 120","allowed":true},{"code":"cap_exceeded","title":"certified-clean 語料庫重建 — evals/clean/ 已重定性為「已合併真實 diff 對照集」,絕對 specificity 門檻需要真 certified 集","field":"Title","detail":"149 > 120","allowed":true},{"code":"cap_exceeded","title":"`mission withdraw` cannot bind a `mission-subject-v2` claim to its ICC campaign — the intake journals no mission binding","field":"Title","detail":"122 > 120","allowed":true},{"code":"cap_exceeded","title":"context-budget falls back to inference after a long foreground tool call — live tick starves under the 120 s freshness cap","field":"Title","detail":"124 > 120","allowed":true},{"code":"cap_exceeded","title":"Stale `closed_findings` stamps on chain entries written by pre-v2.36.3 finalize have no repair path short of a new generation","field":"Title","detail":"125 > 120","allowed":true},{"code":"cap_exceeded","title":"CEO/dev-flow guidance proportionality — peer request to soften \"Boil the Lake\" / near-zero completion cost, TaskCreate-missing semantics, reversible-candidate release gates","field":"Title","detail":"174 > 120","allowed":true}],"new_count":0,"allowed_count":8,"exit":0}
++rc=0
++=== node scripts/check-supersession-anchors.js
++check-supersession-anchors: 6 anchors, 2 protected regions — ok
++rc=0
++=== bash scripts/sync-all.sh --check
++── check-js-syntax: node scripts/check-js-syntax.js
++── l1-cache-key-parity: node scripts/check-l1-cache-key-parity.js
++── check-backlog-entries: node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md
++── check-contract-schema: node scripts/check-contract-schema.js
++── check-profile-catalog: node scripts/build-profile-payload.js catalog --check --repo .
++{"mode":"check","changed":false,"ran":["sync-version","sync-agent-bodies","check-canonical-invariants","sync-model-routing","sync-codex-plugin-skills","sync-opencode-plugin","check-readme-parity","check-hook-inventory","check-claude-md-inventory","check-js-syntax","l1-cache-key-parity","check-backlog-entries","check-contract-schema","check-profile-catalog"],"skipped":[],"unknown_only":[],"failures":[],"ok":true}
++rc=0
++
++# Note (depth-0): the two rc=1 gates fail on develop too, on lines this branch did not write —
++# check-plan-graduation: backlog_row_has_plan "Run stage-graph v11 regression covering the packet guidance text"
++# (2026-10-11-review-packet-mode); doc-drift-gate script-refs: docs/BACKLOG.md `scripts/dispatch-contract.pre.js`,
++# docs/backlog/peer-reported-revival3d-worktree-branch-accumulation.md, references/evidence-discipline.md.
++# Each was confirmed present in `git show develop:<file>`. No violation names a file or row this phase added.
+diff --git a/docs/projects/2026-10-12-worktree-placement/README.md b/docs/projects/2026-10-12-worktree-placement/README.md
+index 87c533cb..44b6606c 100644
+--- a/docs/projects/2026-10-12-worktree-placement/README.md
++++ b/docs/projects/2026-10-12-worktree-placement/README.md
+@@ -24,7 +24,7 @@ Direction: C — decision `intent-17-2` in the decision ledger (owner's answer;
+ 
+ | # | Deliverable | Status |
+ |---|---|---|
+-| 1 | worktree placement rule (marker follow, base_ref, new-task advisory, handoff keying, rail relocation, reference) | implement (P1 ✅, P2 ✅, P3 ✅, P4 in progress) |
++| 1 | worktree placement rule (marker follow, base_ref, new-task advisory, handoff keying, rail relocation, reference) | implement (P1 ✅, P2 ✅, P3 ✅, P4 in review) |
+ 
+ ## Progress
+ 
+@@ -36,3 +36,4 @@ Direction: C — decision `intent-17-2` in the decision ledger (owner's answer;
+ | 2026-10-12 | P1 (marker follows the session, base_ref pairs): red `7ba74598` → green `d9aa4210`, `202211ce`; hetero review g2 SHIP-AS-IS, receipt `receipt-P1.json` (`5f5292cc`) |
+ | 2026-10-12 | P2 (rail placement): lists `5534f2e5`; red `28ab4d92` (resolver + rails repointed + red tests, `p2-red-A.txt`); green `c90c3e3b` (D3, D11, D7, D10, P2.5 walkers, `p2-green-B.txt`); verify-red-green A..B VALIDATED (`p2-red-green.json`); the 14 remaining P2.6 suites green at `c90c3e3b`, each run alone (`p2-6-suites.txt`). The resolver reuses `src/status/project-key` for repo identity (D5); its transitive require graph is 17 in-repo files with no non-builtin module, so the rail-path "built-ins only" rule holds. Deviations: D9 allowlist moved into the red commit (the pre-commit registry gate refuses the new allocation sites; gate metadata only, no runtime effect); D7 plan wording corrected (a marked nested worktree is a dispatch worktree, so depth-0 is gated there as in the temp dir; an unmarked one is allowed by the `.claude/` allowlist as today); `dispatch-hetero.test.sh` case 4 moved its first-placement check to a fresh sandbox (case 3d already places a worktree in `$SBX`, so the old precondition could never hold — the replacement is strictly stronger). P2.4: no foreman-guard change (`p2-4-foreman-guard.md`). Finder check: every reaper enumerates with `git worktree list --porcelain` or markers; no temp-root glob finds rail worktrees. Hetero review: g1 aborted (a seat's no-finding proof lacked `evidence=`); g2 SHIP-AS-IS — three seats flagged the unrecorded P2.6 runs (verified, fixed by `p2-6-suites.txt`), the rest refuted; receipt `p2/review/receipt-P2.json` |
+ | 2026-10-12 | P3 (new-task advisory, handoff through the resolver): red `5590b61b` (advisory tests in `stage-advance.test.sh`, next to the D5 fixtures); green `7bcef39c`; verify-red-green `19e4bb90..7bcef39c` VALIDATED (`p3-red-green.json`); P3.4 suites and the four other suites that load the two handoff hooks green, each alone (`p3-suites.txt`). Additions beyond the plan text: a detached-HEAD case (silent; `symbolic-ref` instead of `--abbrev-ref`, which prints `HEAD`); the resolver loads `project-key` on first identity use, so a hook requiring it for `clearHandoffKey` loads no other module. The `/clear` key is the hooks' own `repoRoot` passed to `clearHandoffKey`, not a re-resolved path. Hetero review g1 SHIP-AS-IS: four seats, two Suggestions from s0, both refuted (`crypto` is still used by both hooks; the volatile verify-script path is the receipt shape P1 and P2 share, the sha256 and argv carry the check); receipt `p3/review/receipt-P3.json` |
++| 2026-10-12 | P4 (the rule in one place, wiring): `references/worktree-placement.md` (the rule, what follows from one root, marker follow, handoff keys, the owner pull line, not covered); backlog sidecar disposition table for gaps 1–8; the old BACKLOG row replaced by two (gap 5 cross-repo dispatch, gap 8 finish-flow pull line); scripts-inventory row and resolver header point at the reference; CHANGELOG `## Unreleased` entry, no version bump. Gates in `p4/gates.txt`: inventory, residue registry, reference sizes, backlog entries, supersession anchors and `sync-all --check` pass; plan-graduation and doc-drift fail on develop too, on rows this branch did not write |
+diff --git a/docs/scripts-inventory.md b/docs/scripts-inventory.md
+index 123150a3..b1444907 100644
+--- a/docs/scripts-inventory.md
++++ b/docs/scripts-inventory.md
+@@ -97,7 +97,7 @@ This table is an INDEX, not a spec: one row = what it does + when to call it + p
+ | [`scripts/lib/plan-review-panel.js`](../scripts/lib/plan-review-panel.js) | Panel-level progress manifest (best-effort atomic writes at every seat transition) rendered by `dispatch-status.js --panels`; a manifest write failure never fails the review. |
+ | [`scripts/lib/dispatch-author-codex-transport.sh`](../scripts/lib/dispatch-author-codex-transport.sh) | Fail-closed Codex author transport; oracle: its focused hook test. |
+ | [`scripts/lib/dispatch-detach.sh`](../scripts/lib/dispatch-detach.sh) + [`scripts/lib/output-quiescence.sh`](../scripts/lib/output-quiescence.sh) | Detached read-only rail and late-output quiescence helpers. |
+-| [`scripts/resolve-repo-placement.js`](../scripts/resolve-repo-placement.js) | Where worktrees and handoff files go: `main` prints `{main_checkout, repo_identity, fallback, behind}` (the non-bare `.git` parent, else fallback); `worktree --prefix P --slug S --from DIR` creates `<main checkout>/.claude/worktrees/` and prints a `mktemp -u -d` template under it (temp dir on fallback, stderr says so) — used by `dispatch-hetero.sh`, `dispatch-foreman.sh`, `dispatch-batch.sh`; `handoff --route manual\|clear` prints the handoff path. Exit 0 ok / 1 not a repo / 2 usage. Contract: header comment; tests: [`hooks/tests/resolve-repo-placement.test.sh`](../hooks/tests/resolve-repo-placement.test.sh). Plan: `docs/plans/2026-10-12-worktree-placement.md`. |
++| [`scripts/resolve-repo-placement.js`](../scripts/resolve-repo-placement.js) | Where worktrees and handoff files go: `main` prints `{main_checkout, repo_identity, fallback, behind}` (the non-bare `.git` parent, else fallback); `worktree --prefix P --slug S --from DIR` creates `<main checkout>/.claude/worktrees/` and prints a `mktemp -u -d` template under it (temp dir on fallback, stderr says so) — used by `dispatch-hetero.sh`, `dispatch-foreman.sh`, `dispatch-batch.sh`; `handoff --route manual\|clear` prints the handoff path (the handoff skill; the session hooks call `clearHandoffKey`). Exit 0 ok / 1 not a repo / 2 usage. Rule: [`references/worktree-placement.md`](../references/worktree-placement.md); contract: header comment; tests: [`hooks/tests/resolve-repo-placement.test.sh`](../hooks/tests/resolve-repo-placement.test.sh). |
+ | [`scripts/lib/dispatch-branch-ledger.sh`](../scripts/lib/dispatch-branch-ledger.sh) | Sourceable; `dispatch_branch_ledger_append` writes one branch->session row to `<git-common-dir>/autopilot/dispatch-branches.jsonl` when `dispatch-hetero.sh` / `dispatch-foreman.sh` create a branch (flock, fail-open). Read by `repo-residue-sweep.js close-session`. Contract: file header; tests: [`hooks/tests/close-session.test.sh`](../hooks/tests/close-session.test.sh). |
+ | [`scripts/lib/repo-identity.sh`](../scripts/lib/repo-identity.sh) | Sourceable shell twin of `task-runtime.js` `repoIdentity()`: `repo_identity_of <dir>` and the manifest-field resolver the three dispatch rails use for `repo_identity` / `repo_identity_source`. Contract: file header; parity test `hooks/tests/repo-identity-parity.test.sh`. |
+ | [`scripts/lib/cleanroom-launch.sh`](../scripts/lib/cleanroom-launch.sh) | Argv-only bwrap launcher for a cleanroom (codex, kimi, agy) review seat: `--args 9` boundary, `--preflight` probe (kimi/agy: `--profile`, model-free, reports the observed `runner_version`), JSON launch line. Called by `dispatch-review.sh` under blind mode, which warns (advisory) when `AUTOPILOT_CLEANROOM_EXPECTED_VERSION` differs from the observed version. Oracle: [`hooks/tests/cleanroom-launch.test.sh`](../hooks/tests/cleanroom-launch.test.sh). |
+diff --git a/references/worktree-placement.md b/references/worktree-placement.md
+new file mode 100644
+index 00000000..f4cfa723
+--- /dev/null
++++ b/references/worktree-placement.md
+@@ -0,0 +1,83 @@
++# Worktree and handoff placement
++
++Where a repo's worktrees and handoff files go, who puts them there, and why the two handoff routes use
++different keys. One resolver answers every path question: [`scripts/resolve-repo-placement.js`](../scripts/resolve-repo-placement.js).
++Decisions and evidence: [`docs/plans/2026-10-12-worktree-placement.md`](../docs/plans/2026-10-12-worktree-placement.md).
++
++## The rule
++
++**Every worktree of a repo lives under one root: `<main checkout>/.claude/worktrees/`**, whoever creates it.
++The main checkout is the parent of the repo's `.git` directory (`git rev-parse --git-common-dir`), found the same
++way from the main checkout and from any linked worktree, so every worktree of one repo shares one root and the
++path says which repo it belongs to.
++
++| Who creates it | Name under `.claude/worktrees/` | How |
++|---|---|---|
++| A person, `claude -w <name>`, `EnterWorktree`, a subagent with `isolation: "worktree"` | `<name>` (subagents: `agent-<id>`); branch `worktree-<name>` unless created by hand | Claude Code's own placement; autopilot does not take it over (no `WorktreeCreate` hook) |
++| `dispatch-hetero.sh` | `hetero-<branch>-XXXXXX` | `resolve-repo-placement.js worktree --prefix hetero --slug <branch> --from <repo root>` |
++| `dispatch-foreman.sh` | `foreman-<run_id>-XXXXXX` | same, `--prefix foreman` |
++| `dispatch-batch.sh` (integration worktree) | `batch-integ-<run_id>-XXXXXX` | same, `--prefix batch-integ` |
++
++- **Name a hand-made worktree after its task**, and open a fresh one for the next task instead of branching a new
++  task inside the old one. `session-mode.js set --new-task` prints one advisory line when the worktree's directory
++  name and its branch share no word (generic words such as `feat`, `fix`, `wip` and digit-only words do not count).
++  It never blocks.
++- **Fallback**: a repo with no non-bare main checkout (a bare repo, a separate `--git-dir`) keeps rail worktrees in
++  the temp dir, and the resolver says so on stderr. The residue registry still lists those temp prefixes.
++- **Stay in the temp dir**: the `verify-red-green.sh` and test-integrity-L1 scratch worktrees. They are
++  short-lived, removed by their own script, and never handed to a person.
++
++### What follows from one root
++
++- Rail worktrees carry the `.autopilot-worktree` marker; liveness is the marker's lock, not a process cwd.
++  `repo-residue-sweep.js` skips a busy worktree under `.claude/worktrees/` only when it has no valid marker.
++- `orchestrator-edit-gate` treats a marked worktree under `.claude/worktrees/` as a dispatch worktree (depth-0
++  gated, subagents free), exactly as it treats one in the temp dir. An unmarked one is part of the repo's
++  `.claude/` tree, which the gate already allows.
++- The main-checkout boundary fingerprint skips `.claude/worktrees/`: each worktree there is another checkout with
++  its own review.
++- Repo-tree walkers that start at the main checkout (`identifier-scan.js`, `probe-unknown.js`,
++  `lib/worktree-activity.js`) skip `.claude/worktrees/`.
++- The rails add `/.claude/worktrees/` to the repo's shared `info/exclude`, so a consumer repo that does not ignore
++  that path sees no untracked entries. Its tracked `.gitignore` is not edited.
++- Claude Code's periodic worktree sweep only removes worktrees it created itself, so it never removes a rail
++  worktree there; `EnterWorktree` into `.claude/worktrees/` needs no prompt.
++
++## The session marker follows the session
++
++`session-mode.js set` (with or without `--new-task`) moves the marker's `repo_root` to the toplevel it runs in
++when that toplevel belongs to the same repo (same repo identity), and `stage-advance.js` measures the E1 diff in
++that worktree. A cwd in another repo leaves the marker alone. `base_ref` defaults to the newer of `develop` and
++`origin/develop` (then `main`, `master`), so a main checkout that has not pulled does not inflate E1.
++
++## Handoff files
++
++| Route | Path | Key | Consumed by |
++|---|---|---|---|
++| Active project | `<projects_dir>/<project>/HANDOFF.md` | the project (`resolve-project-paths.sh`) | whoever resumes the project |
++| Manual (`/handoff` without a project) | `~/.autopilot/handoff-manual/<repo name>-<8 hex>.md` | `sha1(repo identity)` — **one file per repo**, shared by its worktrees; outside a repo, `sha1(cwd)` | a later session in any worktree of the repo |
++| `/clear` hook | `~/.autopilot/handoff/<sha1>.md` | `sha1(realpath of the worktree's toplevel)` — **one file per worktree** | the next session started in that same worktree |
++
++Ask for a path with `resolve-repo-placement.js handoff --route manual|clear [--from <dir>]`; the hooks call its
++`clearHandoffKey()`. The keys differ on purpose: the manual handoff is written for a person or a later session to
++find from anywhere in the repo, while the `/clear` handoff is injected automatically, and a per-repo key would let a
++parallel session in a sibling worktree consume it.
++
++## Bringing the main checkout up to date
++
++A Claude Code session isolated in a worktree (`--worktree`, `EnterWorktree`) cannot move the main checkout's
++branch: git refuses to update a branch checked out elsewhere, and the session's isolation refuses git commands
++aimed at the main checkout, including the owner's `!` commands typed into that session. After a push, the owner runs
++this from a terminal that is not the isolated session:
++
++```bash
++node <plugin>/scripts/resolve-repo-placement.js main --from <any worktree of the repo>
++# {"main_checkout": "...", "behind": N, ...}  — N commits behind its upstream
++git -C <main_checkout> pull --ff-only
++```
++
++## Not covered
++
++- A session in repo A dispatching a rail at repo B: no rule yet (BACKLOG row).
++- Telling the owner the pull line from finish-flow automatically: BACKLOG row (a guidance change, so it needs eval
++  evidence first).
+diff --git a/scripts/resolve-repo-placement.js b/scripts/resolve-repo-placement.js
+index f8e29172..d4530731 100755
+--- a/scripts/resolve-repo-placement.js
++++ b/scripts/resolve-repo-placement.js
+@@ -2,8 +2,8 @@
+ 'use strict';
+ 
+ // resolve-repo-placement.js — where a repo's worktrees and handoffs live (plan
+-// docs/plans/2026-10-12-worktree-placement.md, D1/D8/D12). Node built-ins only: the rails call
+-// it on their dispatch path.
++// docs/plans/2026-10-12-worktree-placement.md, D1/D8/D12; the rule: references/worktree-placement.md).
++// Node built-ins only: the rails call it on their dispatch path.
+ //
+ //   main     [--from <dir>]                         → JSON {main_checkout, repo_identity, fallback, behind}
+ //   worktree --prefix <p> --slug <s> --from <dir>   → one line: a `mktemp -u -d` template

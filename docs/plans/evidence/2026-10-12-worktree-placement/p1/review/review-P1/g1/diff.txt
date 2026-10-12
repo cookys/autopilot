@@ -1,0 +1,230 @@
+diff --git a/docs/plans/2026-10-12-worktree-placement.md b/docs/plans/2026-10-12-worktree-placement.md
+index 75e7d7ac..2531118c 100644
+--- a/docs/plans/2026-10-12-worktree-placement.md
++++ b/docs/plans/2026-10-12-worktree-placement.md
+@@ -108,7 +108,7 @@ time (memory: parallel suites interfere). Per-phase hetero code review (quality-
+ 1. `hooks/tests/stage-advance.test.sh`: marker created in a sandbox main checkout, linked worktree with N committed
+    files on a branch, `stage-advance --to verify` from the worktree ⇒ `files = N`. Red at base (measures the main
+    checkout).
+-2. `hooks/tests/session-mode.test.sh`: (a) local `develop` behind `origin/develop` ⇒ stored `base_ref` is the remote
++2. `hooks/tests/stage-advance.test.sh` (where the `set --new-task` cases already live; `session-mode.test.sh` clones the repo per run): (a) local `develop` behind `origin/develop` ⇒ stored `base_ref` is the remote
+    sha; (b) local ahead ⇒ local; (c) diverged ⇒ remote; (d) `set --new-task` from a linked worktree of the same repo
+    ⇒ `repo_root` is the worktree; (e) from a different repo ⇒ `repo_root` unchanged; (f) plain `set` (no
+    `--new-task`) from a linked worktree ⇒ `repo_root` follows, from a foreign repo ⇒ unchanged; (g) only
+diff --git a/hooks/tests/stage-advance.test.sh b/hooks/tests/stage-advance.test.sh
+index 7030bce5..fddd1722 100755
+--- a/hooks/tests/stage-advance.test.sh
++++ b/hooks/tests/stage-advance.test.sh
+@@ -500,5 +500,72 @@ newsess; sm set --size M --repo-root "$RN" >/dev/null 2>&1; sm set --new-task --
+ eq "--new-task without --size clears size" "<absent>" "$(jf size)"
+ sm set --size L --repo-root "$RN" >/dev/null 2>&1; eq "later set --size on the new task works" '"L"' "$(jf size)"
+ 
++# ---------------------------------------------------------------- D5: the marker follows the session into a linked worktree
++# (plan docs/plans/2026-10-12-worktree-placement.md P1.1 / P1.2 d-f). No --repo-root: the cwd is what moves.
++RA="$TEST_TMP/r-follow"; mkrepo "$RA"; plant "$RA" 1 1 seed
++WA="$TEST_TMP/r-follow-wt"; git -C "$RA" worktree add -q -b feat/follow "$WA"
++RB="$TEST_TMP/r-foreign"; mkrepo "$RB"; plant "$RB" 7 1 foreign
++newsess; (cd "$RA" && node "$SM" set --size S >/dev/null 2>&1)
++eq "fixture: marker created in the main checkout" "\"$RA\"" "$(jf repo_root)"
++plant "$RA" 7 1 other    # other sessions' merges land on the main checkout's develop
++plant "$WA" 1 1 mine     # this session's work, in the linked worktree
++(cd "$WA" && node "$SA" --to implement >/dev/null 2>&1)
++OUT=$(cd "$WA" && node "$SA" --to verify 2>"$TEST_TMP/err"); RC=$?
++eq "E1 from a linked worktree measures that worktree (1 file fits S)" "0" "$RC"
++# negative: a cwd in another repository measures marker.repo_root and leaves the marker alone
++newsess; sm set --size S --repo-root "$RA" >/dev/null 2>&1
++(cd "$RB" && node "$SA" --to implement >/dev/null 2>&1)
++OUT=$(cd "$RB" && node "$SA" --to verify 2>"$TEST_TMP/err"); RC=$?
++eq "E1 from a foreign repo measures marker.repo_root (clean, fits)" "0" "$RC"
++eq "a foreign cwd leaves repo_root" "\"$RA\"" "$(jf repo_root)"
++# set --new-task: follows a linked worktree of the same repo, ignores a foreign repo
++newsess; (cd "$RA" && node "$SM" set --size S >/dev/null 2>&1)
++(cd "$WA" && node "$SM" set --new-task --size S >/dev/null 2>&1)
++eq "--new-task from a linked worktree: repo_root follows" "\"$WA\"" "$(jf repo_root)"
++(cd "$RB" && node "$SM" set --new-task --size S >/dev/null 2>&1)
++eq "--new-task from a foreign repo: repo_root unchanged" "\"$WA\"" "$(jf repo_root)"
++eq "--new-task from a foreign repo: base_ref derived in repo_root, not the cwd" \
++  "\"$(git -C "$WA" merge-base HEAD develop)\"" "$(jf base_ref)"
++# set (merge path, no --new-task): follows in both directions, ignores a foreign repo
++newsess; (cd "$RA" && node "$SM" set --size S >/dev/null 2>&1)
++(cd "$WA" && node "$SM" set --size M >/dev/null 2>&1)
++eq "set from a linked worktree: repo_root follows" "\"$WA\"" "$(jf repo_root)"
++(cd "$RB" && node "$SM" set --size M >/dev/null 2>&1)
++eq "set from a foreign repo: repo_root unchanged" "\"$WA\"" "$(jf repo_root)"
++(cd "$RA" && node "$SM" set --size M >/dev/null 2>&1)
++eq "set back in the main checkout: repo_root follows back" "\"$RA\"" "$(jf repo_root)"
++
++# ---------------------------------------------------------------- D6: base_ref takes the newer of a local/remote pair
++# (plan P1.2 a-c, g, h). origin/* refs are planted with update-ref; no remote, no fetch.
++basesha() { sm set --size S --repo-root "$1" >/dev/null 2>&1; jf base_ref | tr -d '"'; }
++# (a) local develop behind origin/develop -> the remote's merge-base
++R="$TEST_TMP/r-behind"; mkrepo "$R"; plant "$R" 1 1 a; C1=$(git -C "$R" rev-parse HEAD)
++plant "$R" 1 1 b; C2=$(git -C "$R" rev-parse HEAD)
++git -C "$R" update-ref refs/remotes/origin/develop "$C2"; git -C "$R" checkout -q -b feat/x; plant "$R" 1 1 f
++git -C "$R" branch -f develop "$C1"
++newsess; eq "base_ref: local develop behind origin/develop -> remote" "$C2" "$(basesha "$R")"
++# (b) local ahead -> local
++R="$TEST_TMP/r-ahead"; mkrepo "$R"; plant "$R" 1 1 a; C1=$(git -C "$R" rev-parse HEAD)
++plant "$R" 1 1 b; C2=$(git -C "$R" rev-parse HEAD)
++git -C "$R" update-ref refs/remotes/origin/develop "$C1"; git -C "$R" checkout -q -b feat/x; plant "$R" 1 1 f
++newsess; eq "base_ref: local develop ahead of origin/develop -> local" "$C2" "$(basesha "$R")"
++# (c) diverged -> remote
++R="$TEST_TMP/r-diverged"; mkrepo "$R"; plant "$R" 1 1 a
++git -C "$R" checkout -q -b side; plant "$R" 1 1 r; CR=$(git -C "$R" rev-parse HEAD)
++git -C "$R" update-ref refs/remotes/origin/develop "$CR"
++git -C "$R" checkout -q develop; plant "$R" 1 1 l
++git -C "$R" checkout -q -b feat/x "$CR"; plant "$R" 1 1 f
++newsess; eq "base_ref: diverged develop / origin/develop -> remote" "$CR" "$(basesha "$R")"
++# (g) only origin/develop plus a local main -> origin/develop (today's flat order picked main)
++R="$TEST_TMP/r-onlyremote"; mkrepo "$R" main; plant "$R" 1 1 a; C1=$(git -C "$R" rev-parse HEAD)
++plant "$R" 1 1 b; C2=$(git -C "$R" rev-parse HEAD)
++git -C "$R" update-ref refs/remotes/origin/develop "$C2"; git -C "$R" checkout -q -b feat/x; plant "$R" 1 1 f
++git -C "$R" branch -f main "$C1"
++newsess; eq "base_ref: origin/develop beats a local main" "$C2" "$(basesha "$R")"
++# (h) only a local develop -> develop
++R="$TEST_TMP/r-onlylocal"; mkrepo "$R"; plant "$R" 1 1 a; C1=$(git -C "$R" rev-parse HEAD)
++git -C "$R" checkout -q -b feat/x; plant "$R" 1 1 f
++newsess; eq "base_ref: only a local develop -> develop" "$C1" "$(basesha "$R")"
++
+ echo "stage-advance.test: pass=$PASS fail=$FAIL"
+ [ "$FAIL" -eq 0 ]
+diff --git a/scripts/session-mode.js b/scripts/session-mode.js
+index 871126f3..c64c9c38 100644
+--- a/scripts/session-mode.js
++++ b/scripts/session-mode.js
+@@ -687,23 +687,54 @@ function cmdSetPlain(args) {
+ const SIZES = Object.freeze(['XS', 'S', 'M', 'L', 'XL']);
+ const INIT_FLAGS = ['size', 'urgent', 'bug', 'base-ref', 'new-task'];
+ const BASE_REF_SHA = /^[0-9a-f]{7,64}$/u;
+-// Default-branch candidates, same order as scripts/resolve-review-loop.sh probe_diff_bytes (develop, then main);
+-// master and the origin/* spellings are added so a clone without a local develop still resolves.
+-const DEFAULT_BRANCHES = Object.freeze(['develop', 'main', 'master', 'origin/develop', 'origin/main']);
++// Default-branch pairs, same order as scripts/resolve-review-loop.sh probe_diff_bytes (develop, then main), then
++// master. Each local branch is paired with its origin/* spelling so a stale local branch never wins over a newer
++// remote-tracking ref (worktree-placement plan D6). No fetch: whatever the refs say now.
++const DEFAULT_BRANCH_PAIRS = Object.freeze([['develop', 'origin/develop'], ['main', 'origin/main'], ['master', 'origin/master']]);
++const DEFAULT_BRANCHES = Object.freeze(DEFAULT_BRANCH_PAIRS.flat());
+ 
+-// The merge-base of HEAD and the first default-branch candidate that resolves; null when none does.
++function mergeBaseWithHead(repoRoot, ref) {
++  try {
++    const sha = execFileSync('git', ['-C', repoRoot, 'merge-base', 'HEAD', ref], {
++      encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
++    }).trim();
++    return BASE_REF_SHA.test(sha) ? sha : null;
++  } catch (_error) { return null; }
++}
++
++function isAncestor(repoRoot, older, newer) {
++  try {
++    execFileSync('git', ['-C', repoRoot, 'merge-base', '--is-ancestor', older, newer], { stdio: 'ignore' });
++    return true;
++  } catch (_error) { return false; }
++}
++
++// The merge-base of HEAD and the newer branch of the first pair with a branch sharing history with HEAD; null when
++// none does. Both qualify: remote an ancestor of local (local ahead or equal) => local; local behind or diverged =>
++// remote (the integration target).
+ function defaultBaseRef(repoRoot) {
+-  for (const branch of DEFAULT_BRANCHES) {
+-    try {
+-      const sha = execFileSync('git', ['-C', repoRoot, 'merge-base', 'HEAD', branch], {
+-        encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+-      }).trim();
+-      if (BASE_REF_SHA.test(sha)) return sha;
+-    } catch (_error) { /* try the next candidate */ }
++  for (const [local, remote] of DEFAULT_BRANCH_PAIRS) {
++    const localBase = mergeBaseWithHead(repoRoot, local);
++    const remoteBase = mergeBaseWithHead(repoRoot, remote);
++    if (localBase && remoteBase) return isAncestor(repoRoot, remote, local) ? localBase : remoteBase;
++    if (localBase || remoteBase) return localBase || remoteBase;
+   }
+   return null;
+ }
+ 
++// A set run from a linked worktree of the marker's repository moves repo_root there, so E1 and the rails measure
++// where the session works (worktree-placement plan D5); a cwd in another repository leaves it.
++function followRepoRoot(marker, repoRoot) {
++  if (typeof marker.repo_root !== 'string' || marker.repo_root === repoRoot) return;
++  let want = typeof marker.repo_identity === 'string' && marker.repo_identity ? marker.repo_identity : null;
++  let have = null;
++  try {
++    if (!want && path.isAbsolute(marker.repo_root)) want = markerRepoIdentity(marker.repo_root);
++    have = scopeFromCwd(repoRoot).repo_identity;
++  } catch (_error) { return; }
++  if (want && have === want) marker.repo_root = repoRoot;
++}
++
+ // Fields `set --new-task` drops from a live marker: the stage-advance position plus the task-scoped init fields.
+ const NEW_TASK_CLEARED = Object.freeze(['stage', 'stage_set_at', 'unit', 'review_families', 'high_risk', 'size', 'urgent', 'bug', 'base_ref']);
+ 
+@@ -785,7 +816,8 @@ function cmdSetInit(args) {
+         }
+         const next = { ...current };
+         for (const k of NEW_TASK_CLEARED) delete next[k];
+-        applyInitFields(next, init, repoRoot, null);
++        followRepoRoot(next, repoRoot);
++        applyInitFields(next, init, next.repo_root, null);
+         next.task_seq = seqPrev + 1;
+         next.task_started_at = new Date().toISOString();
+         writeMarkerFile(file, next);
+@@ -797,7 +829,9 @@ function cmdSetInit(args) {
+           result = { refusal: `refusing --size ${init.size}: the marker is already ${current.size} and size only moves up (XS<S<M<L<XL)` };
+           return;
+         }
+-        const next = applyInitFields({ ...current }, init, repoRoot, current);
++        const next = { ...current };
++        followRepoRoot(next, repoRoot);
++        applyInitFields(next, init, next.repo_root, current);
+         writeMarkerFile(file, next);
+         result = { marker: next, created: false };
+         return;
+diff --git a/scripts/stage-advance.js b/scripts/stage-advance.js
+index 9f346e4b..525d17a7 100755
+--- a/scripts/stage-advance.js
++++ b/scripts/stage-advance.js
+@@ -24,7 +24,8 @@
+ //     `high_risk = (review_risk == "high")`, used for that move's legality. A sampling failure counts as high
+ //     (the normal review order is never silently dropped) and says so on stderr;
+ //   - E1 size bump: entering verify or qc-gate, the WORKING-TREE change against base_ref is measured, run in the
+-//     marker repo_root: `git diff --numstat <base_ref>` (tracked, committed + staged + unstaged) plus every
++//     cwd's toplevel when it belongs to the marker's repository (repo_identity; a linked worktree of it), else in
++//     the marker repo_root: `git diff --numstat <base_ref>` (tracked, committed + staged + unstaged) plus every
+ //     untracked non-ignored file (`git ls-files --others --exclude-standard`; 1 file + its line count). Binary
+ //     files = 1 file, 0 lines; renames follow git's default; ignored files never count. (dev-flow runs qc-gate
+ //     BEFORE commit, so a committed-only count would never fire; this deliberately deviates from the plan's
+@@ -48,6 +49,7 @@ const path = require('path');
+ const { spawnSync } = require('child_process');
+ const { withWriteLock } = require('./lib/jsonl-store');
+ const sessionMode = require('./session-mode');
++const { scopeFromCwd } = require('../src/status/project-key');
+ 
+ const REPO_ROOT = path.resolve(__dirname, '..');
+ const STAGE_GRAPH = path.join(__dirname, 'stage-graph.js');
+@@ -227,13 +229,25 @@ function unitViolation(marker, from, to, unitArg, unitKind) {
+   return null;
+ }
+ 
++// The cwd's toplevel when it belongs to the marker's repository (worktree-placement plan D5: a session that moved
++// into a linked worktree is measured there); null otherwise, so a cwd in another repository never takes over.
++function sessionRepoRoot(marker) {
++  if (typeof marker.repo_identity !== 'string' || !marker.repo_identity) return null;
++  const top = gitOut(process.cwd(), ['rev-parse', '--show-toplevel']);
++  const dir = top === null ? '' : top.toString('utf8').trim();
++  if (!dir) return null;
++  let identity = null;
++  try { identity = scopeFromCwd(dir).repo_identity; } catch (_e) { return null; }
++  return identity === marker.repo_identity ? dir : null;
++}
++
+ // Pure decision over one marker snapshot. -> { code, out } | { write: patch, out }
+ function decide(marker, opts, repoRootArg) {
+   const to = opts.to;
+   const ids = JSON.parse(fs.readFileSync(GRAPH_JSON, 'utf8')).node_ids;
+   if (!ids.includes(to)) throw new Usage(`unknown node "${to}" (want one of ${ids.join('|')})`);
+   const from = typeof marker.stage === 'string' ? marker.stage : null;
+-  const repoRoot = repoRootArg || marker.repo_root || process.cwd();
++  const repoRoot = repoRootArg || sessionRepoRoot(marker) || marker.repo_root || process.cwd();
+   const unitArg = opts.unit || null;
+   const eff = unitArg || (marker.unit && typeof marker.unit === 'object' ? marker.unit : null);
+ 

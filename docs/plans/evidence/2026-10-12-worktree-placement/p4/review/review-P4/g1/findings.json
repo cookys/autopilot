@@ -1,0 +1,28 @@
+{
+  "findings": [
+    {
+      "id": "84e0a2b413e51030ea93251589d55ab803934cb1831ee49bc8f87992c525a048",
+      "severity": "Suggestion",
+      "seat": "s0",
+      "text": "🔵 [p4-plan-graduation-attribution] CUT/FOLLOW-UP gates.txt shows only report-only `plan_reference_dangling` lines for check-plan-graduation yet records rc=1, while the depth-0 note attributes the failure to a `backlog_row_has_plan` violation that does not appear in the captured output (likely stderr not captured). Attribution to develop is plausible and no row this diff added is named, so it does not block; a follow-up could capture stderr (2>&1) so the blocking line is in the evidence file."
+    },
+    {
+      "id": "1584079b8c2bdc3556b14b7e8f2e136efd2b876baeceacfe617d6bc48bbcf6b7",
+      "severity": "Suggestion",
+      "seat": "s0",
+      "text": "🔵 [p4-native-claims-unsourced] CUT/FOLLOW-UP The reference asserts native-worktree details not in the spike (subagent names `agent-<id>`, branch `worktree-<name>`, \"`EnterWorktree` into `.claude/worktrees/` needs no prompt\", isolation refusing `!` commands). These are descriptive, not load-bearing for any rail or gate; worth a spike citation later, excluded now because no C1–C7 criterion depends on them."
+    },
+    {
+      "id": "6b5db463c290cb609b757b3d92020b6b305b9a98b7246664f54316dae287a2f3",
+      "severity": "Suggestion",
+      "seat": "s1",
+      "text": "🔵 [p4-gate-reds-preexisting] CUT/FOLLOW-UP two of the P4.5 gates exit 1 in `p4/gates.txt` (check-plan-graduation, doc-drift-gate); every failing reference sits in lines this branch did not write (`scripts/dispatch-contract.pre.js` in docs/BACKLOG.md pre-existing content, `check-unarchived-branches.mjs`, `check-inputs-landed.sh`, five dangling 2026-01→2026-08 plan-evidence dirs) and the depth-0 note records a `git show develop:<file>` confirmation for each — excluded from this version because remediation means editing unrelated backlog rows and old plan debt outside the frozen plan's scope; follow-up belongs to those rows' owners, not this diff."
+    },
+    {
+      "id": "922b72f0aff5457c6914d28d832b3ecd2ba944d87c6c44b44543a2825fb7e8a1",
+      "severity": "Suggestion",
+      "seat": "s1",
+      "text": "🔵 [p4-gates-note-capture-mismatch] CUT/FOLLOW-UP the gates.txt note attributes the check-plan-graduation rc=1 to a `backlog_row_has_plan` violation (\"Run stage-graph v11 regression…\", 2026-10-11-review-packet-mode) that the captured output above it does not show (the capture prints only `plan_reference_dangling (report-only)` lines) — evidence-hygiene only: the pre-existing-on-develop conclusion still holds from the captured dangling refs alone; re-capture the gate output or correct the note in a follow-up."
+    }
+  ]
+}

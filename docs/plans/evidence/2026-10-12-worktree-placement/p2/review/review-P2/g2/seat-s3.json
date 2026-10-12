@@ -1,0 +1,12 @@
+{
+  "runner": "qoderclicn",
+  "model": "Qwen3.8-Max-Preview",
+  "status": "reviewed",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": "🟠 [p26-c5-evidence-gap] MUST-FIX README progress row asserts \"P2.6 suites green\" and the spec C5 requires \"every reaper, the residue registry and repo-residue-sweep still reclaim them\", but `p2-green-B.txt` records rc=0 for only 10 suites (resolve-repo-placement, identifier-scan, probe-unknown, worktree-activity, orchestrator-edit-gate, repo-residue-auto, dispatch-batch, dispatch-foreman, dispatch-hetero-contract, dispatch-hetero). The plan §3 P2.6 list also names dispatch-detach, dispatch-worktree-lifecycle, dispatch-hetero-gc, worktree-reap, repo-residue-sweep, tmp-residue-registry, check-tmp-residue-registry, suite-residue-reaper, prune-tmp-residue, foreman-guard and test-doc-drift-gate — none have recorded runs in the diff. Impact: C5's reaper/registry reclamation claim and the D9/D10 surfaces are asserted green without evidence; a regression in those suites would ship under a passing record. Smallest remediation: run each missing suite one at a time and append its rc=0 line to `docs/plans/evidence/2026-10-12-worktree-placement/p2-green-B.txt` (or amend the README row to name exactly which suites ran and mark the rest pending before P2 closes).",
+  "no_finding_proof": null,
+  "raw_log": "/tmp/dispatch-review-log-6LPpGS",
+  "error": null,
+  "usage": null,
+  "frame_closed_by": "end-marker"
+}

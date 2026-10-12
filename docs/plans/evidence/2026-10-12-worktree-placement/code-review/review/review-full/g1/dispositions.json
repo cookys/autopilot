@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "phase": "full",
+  "generation": 1,
+  "findings": [
+    {
+      "id": "a438511b0d9bb316c3713cf3a0194b4a8559792fa07ccf5dfee2050b44fc8cb8",
+      "disposition": "refuted",
+      "rationale": "Spec-literal and accurate: P3.1 prints the advisory about the cwd's own worktree (directory name vs its branch); that statement is true whether or not the marker followed, so a foreign-repo cwd gets a correct line about the tree it is in. No case needs it silenced."
+    },
+    {
+      "id": "0482ecea667ad445c00cd6c056e545883536d059831db2609d8774d0f6229560",
+      "disposition": "refuted",
+      "rationale": "By design: the sweep keeps a busy worktree whose marker is present but invalid, the conservative direction (never reclaim a live tree it cannot attribute). D10 only narrows the skip for a valid marker, which the D10 test pins."
+    },
+    {
+      "id": "6dc15ec3f10b435fded640fb4a7137f0ca391f5445efddeef7281e801f086611",
+      "disposition": "verified",
+      "rationale": "Correct: the plan header still said \"awaiting plan-review\". Fixed after this review: the status line now records plan-review done, P1-P4 implemented and reviewed, verify done, in code-review, and links the project README."
+    },
+    {
+      "id": "9728db2eff40028fdefe748f313a5d0e5117dbe588ce98cf02e8641606dadd12",
+      "disposition": "refuted",
+      "rationale": "One git subprocess per stage transition (a handful per session), well under any hook budget; resolving the session root on every decide is what keeps E1 measured in the worktree the session is in (D5)."
+    },
+    {
+      "id": "736f966b0b175526adfb4f566df86b3af8a4f241ebae0944d02ce576750d1f12",
+      "disposition": "refuted",
+      "rationale": "The artifacts exist and are tracked on this branch: `git ls-files docs/plans/evidence/2026-10-12-worktree-placement` lists spike-native-worktree.md, moved-assertions.md, walkers.md, p2-red-A.txt, p2-green-B.txt, p2-red-green.json, p2-6-suites.txt, p2-4-foreman-guard.md, p3-red-green.json, p3-suites.txt, receipt-P1..P4.json, p4/gates.txt and verify-suites.txt. This collect excluded `docs/plans/evidence/**` from the review diff (each phase review already covered its own evidence), so the seat could not see them; the links resolve."
+    },
+    {
+      "id": "bd1e265878e3d41c3384b54867f34b5f0129c2747d29e75400b7db5e3e984f46",
+      "disposition": "verified",
+      "rationale": "Same as the s0 plan-header finding: fixed after this review (status line updated)."
+    },
+    {
+      "id": "998feb5e0e3b24785be61077dc25ea142383fb29169bb24c2ee2290003c1d4c5",
+      "disposition": "refuted",
+      "rationale": "`markerRepoIdentity` is defined in scripts/session-mode.js at line 1025 (and exported at line 1316); it predates this branch and is called at lines 442, 443, 550, 574, 732 and 1071. No ReferenceError path exists."
+    },
+    {
+      "id": "4fdad857474dda03f0b6576dac62cb019105183c282f7f233f0e7da5377efde7",
+      "disposition": "refuted",
+      "rationale": "The seat itself records this as verified, not a defect: CLAUDE.md names resolve-repo-placement.js in the Worktree & branch lifecycle group and check-claude-md-inventory.js passes (p4/gates.txt)."
+    }
+  ]
+}

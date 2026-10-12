@@ -665,7 +665,8 @@ function computeNeedsHuman(rows, branches, ctx) {
   for (const w of rows) if (w.marker_strict && w.marker_strict.valid && fs.existsSync(w.path)) markerBranches.set(w.marker_strict.branch, w);
   for (const w of rows) {
     if (w.class === 'live' || w.class === 'missing-dir') continue;
-    if (w.cwd_busy === true && w.path.startsWith(wtRoot)) continue; // someone is working in it
+    // A session worktree with a process in it is in use; a marked rail worktree is judged by its marker and lock.
+    if (w.cwd_busy === true && w.path.startsWith(wtRoot) && w.marker_valid !== true) continue;
     const entry = (command) => ({ kind: 'worktree', path: w.path, class: w.class, age_days: w.age_days, bytes: null, reason: w.retention_reason || (w.reason || '').slice(0, 120), command });
     const needsInspect = w.class === 'dirty' || w.class === 'unverifiable';
     if (w.marker_valid === true) {

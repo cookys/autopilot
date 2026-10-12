@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "phase": "P2",
+  "generation": 2,
+  "findings": [
+    {
+      "id": "1ea69e3e389e2123c95bc6b075a3a2150b07dea7bb868b9435c43e66c92aacd4",
+      "disposition": "verified",
+      "rationale": "Real evidence gap: the 14 remaining P2.6 suites were run at c90c3e3b, one at a time, but their rc lines were never committed. Fixed: docs/plans/evidence/2026-10-12-worktree-placement/p2-6-suites.txt records each suite with rc=0 (dispatch-detach, dispatch-detached-campaign-authority, dispatch-worktree-lifecycle, dispatch-hetero-gc, worktree-reap, repo-residue-sweep, tmp-residue-registry, check-tmp-residue-registry, tmp-residue-prune, suite-residue-reaper, prune-tmp-residue, foreman-guard, foreman-guard-roles, test-doc-drift-gate), and the README P2 row now cites it."
+    },
+    {
+      "id": "52434e63eb25e9b117f99a6a58696c915fde17f45f355f5d2337f39f69de8d36",
+      "disposition": "refuted",
+      "rationale": "Re-derived: the transitive require graph of scripts/resolve-repo-placement.js is 17 in-repo files with zero non-builtin specifiers (a walker over every require() from the script found none). 'Built-ins only' on a rail path means no npm dependency, which holds; reusing project-key is what D5 asks for. Noted in the README P2 row."
+    },
+    {
+      "id": "3f0023b06b810e2bd201f9dab8a262d1e340fa91c4870841690a9b8355fc8167",
+      "disposition": "refuted",
+      "rationale": "Not a regression: before this change (28ab4d92^, repo-residue-sweep.js:666) every cwd-busy worktree under .claude/worktrees was skipped. D10 only stops skipping those with a valid marker; a busy worktree with a malformed marker keeps the old behaviour, and is listed as soon as no process is inside it."
+    },
+    {
+      "id": "5fa9ec99065146741fb106a2cecb9290911c5579fd924010b6b61a330e089f28",
+      "disposition": "refuted",
+      "rationale": "No defect, as the finding says: dispatch-batch has no main-checkout fingerprint, so main_checkout_mutated cannot arise there, and its sandbox is created fresh, so the merge-back assertion already runs on a first placement."
+    },
+    {
+      "id": "09eb4f96037a9ecd4c64a4a05ccbdc0f7a99bd947a0b8cb84c8523dfb0c29031",
+      "disposition": "verified",
+      "rationale": "Same gap as the s0 finding: fixed by committing p2-6-suites.txt (14 suites, each rc=0 at c90c3e3b, run one at a time) and citing it from the README P2 row. The D9 files (allowlist, registry) are covered by check-tmp-residue-registry and tmp-residue-registry; D10 by repo-residue-sweep in addition to repo-residue-auto."
+    },
+    {
+      "id": "607e855b392f81bac99a249bdfc9801772da92161356303cb0fe4d750974f18f",
+      "disposition": "refuted",
+      "rationale": "Verified as asked: the transitive require graph of resolve-repo-placement.js is 17 in-repo files with zero non-builtin specifiers, so the resolver runs in a dependency-free checkout today. Inlining would fork the D5 identity rule."
+    },
+    {
+      "id": "54819d5969ed63a0d96de37c3d056366b38150bea4315a99045d4166f828bdbb",
+      "disposition": "refuted",
+      "rationale": "Direction is inverted: at repo-residue-sweep.js:669 a cwd-busy worktree under .claude/worktrees whose marker_valid is not true hits 'continue', so it is skipped, not listed. That skip is the behaviour before this change for every busy worktree there (28ab4d92^:666); nothing new is hidden."
+    },
+    {
+      "id": "d296de12a77f48bd0ae2f678965cfcccb69d2ba2548d673cda7b692704824525",
+      "disposition": "verified",
+      "rationale": "Same evidence-completeness gap; fixed by p2-6-suites.txt and the README P2 row citing it."
+    },
+    {
+      "id": "91863ff1a5f1bc5fe360a4893448e74b72c70a9be8c3855ea3f2c3640a0934f0",
+      "disposition": "refuted",
+      "rationale": "Verified as asked: the transitive require graph is 17 in-repo files, none requiring a non-builtin module. The rail-path constraint (no npm dependency) holds; inlining scopeFromCwd would fork the identity rule D5 reuses."
+    },
+    {
+      "id": "21a573f7fba84652b20af56aeaf4f6a7e1ecda8a66f86b82d4627e615b72ff2c",
+      "disposition": "refuted",
+      "rationale": "Pre-existing behaviour retained, not introduced: before this change every cwd-busy worktree under .claude/worktrees was skipped (28ab4d92^:666). D10 narrows the skip to worktrees without a valid marker; a malformed-marker worktree is listed once it is no longer busy."
+    },
+    {
+      "id": "2cc87c3617c1eb94c2c39aa8bac77725804de5c1bc23d37b68074d0dd0eb340b",
+      "disposition": "verified",
+      "rationale": "Same gap as s0/s1: fixed by committing p2-6-suites.txt (all 14 remaining P2.6 suites rc=0 at c90c3e3b, each run alone) and citing it from the README P2 row."
+    }
+  ]
+}

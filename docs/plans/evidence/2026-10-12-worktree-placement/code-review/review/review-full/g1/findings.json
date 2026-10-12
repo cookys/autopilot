@@ -1,0 +1,52 @@
+{
+  "findings": [
+    {
+      "id": "a438511b0d9bb316c3713cf3a0194b4a8559792fa07ccf5dfee2050b44fc8cb8",
+      "severity": "Suggestion",
+      "seat": "s0",
+      "text": "🔵 [advisory-foreign-cwd] CUT/FOLLOW-UP `newTaskAdvisory(repoRoot)` runs on the cwd's toplevel even when `followRepoRoot` declined to move the marker (foreign repo); the line is still accurate about the cwd and the spec's P3.1 condition is literally \"when the cwd is a linked worktree\", so excluded — note only if a foreign-worktree case is ever added."
+    },
+    {
+      "id": "0482ecea667ad445c00cd6c056e545883536d059831db2609d8774d0f6229560",
+      "severity": "Suggestion",
+      "seat": "s0",
+      "text": "🔵 [sweep-invalid-marker] CUT/FOLLOW-UP `repo-residue-sweep.js` keeps the busy-skip for worktrees whose marker exists but is invalid (`marker_valid !== true`), slightly wider than D10's \"without an `.autopilot-worktree` marker\"; the direction is conservative (never reclaims a busy, malformed-marker tree) and the D10 test covers the valid-marker case, so excluded."
+    },
+    {
+      "id": "6dc15ec3f10b435fded640fb4a7137f0ca391f5445efddeef7281e801f086611",
+      "severity": "Suggestion",
+      "seat": "s0",
+      "text": "🔵 [plan-header-status] CUT/FOLLOW-UP `docs/plans/2026-10-12-worktree-placement.md` header still reads \"awaiting plan-review\" while the project README records plan-review done and P1–P4 verified; doc staleness only, graduation gate is pre-existing red on develop, no behaviour impact."
+    },
+    {
+      "id": "9728db2eff40028fdefe748f313a5d0e5117dbe588ce98cf02e8641606dadd12",
+      "severity": "Suggestion",
+      "seat": "s0",
+      "text": "🔵 [stage-advance-git-spawn] CUT/FOLLOW-UP `sessionRepoRoot` spawns `git rev-parse` plus `scopeFromCwd` on every `decide`, not only on the E1 move; cost is one subprocess per stage transition, below any stated budget, so excluded."
+    },
+    {
+      "id": "736f966b0b175526adfb4f566df86b3af8a4f241ebae0944d02ce576750d1f12",
+      "severity": "Major",
+      "seat": "s1",
+      "text": "🟠 [wp-evidence-artifacts-missing] MUST-FIX — the diff ships `references/worktree-placement.md`, `docs/plans/2026-10-12-worktree-placement.md` and `docs/projects/2026-10-12-worktree-placement/README.md` that link or attest ~14 evidence artifacts (`evidence/2026-10-12-worktree-placement/spike-native-worktree.md`, `moved-assertions.md`, `walkers.md`, `p2-red-A.txt`, `p2-green-B.txt`, `p2-red-green.json`, `p2-6-suites.txt`, `p2-4-foreman-guard.md`, `p3-red-green.json`, `p3-suites.txt`, `receipt-P1..P4.json`, `p4/gates.txt`, `verify-suites.txt`) none of which the diff adds; the spec makes moved-assertions.md (P2.0), walkers.md (P2.5) and the foreman-guard grep record (P2.4) required deliverables and the C7/D3/D11/P4.5 verification map cites them — impact: dangling relative links in the shipped reference doc and a verification map whose gate/red-green/walker-disposition evidence (incl. the `project-detect.js:651` disposition) is not in the tree; smallest remediation: commit `docs/plans/evidence/2026-10-12-worktree-placement/**` on this branch, or repoint every citation to where the artifacts actually live."
+    },
+    {
+      "id": "bd1e265878e3d41c3384b54867f34b5f0129c2747d29e75400b7db5e3e984f46",
+      "severity": "Suggestion",
+      "seat": "s1",
+      "text": "🔵 [wp-plan-status-stale] CUT/FOLLOW-UP — the newly added plan header still reads \"Status: active — plan, awaiting plan-review\" while the same diff's project README records plan-review done and P1–P4 at verify; cosmetic inconsistency in a frozen planning artifact, excluded from this version because it changes no behavior — align the status line in a later docs pass."
+    },
+    {
+      "id": "998feb5e0e3b24785be61077dc25ea142383fb29169bb24c2ee2290003c1d4c5",
+      "severity": "Major",
+      "seat": "s2",
+      "text": "🟠 [markerRepoIdentity-undefined] CUT/FOLLOW-UP <`followRepoRoot` in `session-mode.js` calls `markerRepoIdentity(marker.repo_root)` as a fallback when `marker.repo_identity` is absent, but the symbol is neither defined nor imported in the visible diff. The try/catch masks the ReferenceError, so the function silently no-ops if a marker without `repo_identity` is ever read. Plan text says markers always store identity (the fallback path is dead code), so this is a latent dead reference, not a live defect — exclude from the current ship.>"
+    },
+    {
+      "id": "4fdad857474dda03f0b6576dac62cb019105183c282f7f233f0e7da5377efde7",
+      "severity": "Suggestion",
+      "seat": "s2",
+      "text": "🔵 [scripts-inventory-row-inventory-check] CUT/FOLLOW-UP <`docs/scripts-inventory.md` adds a row for `resolve-repo-placement.js`; `check-claude-md-inventory.js` is listed in P4.5 gates but the row appears only in `scripts-inventory.md`, not in `CLAUDE.md`'s \"Worktree & branch lifecycle\" group list beyond what the diff shows. The diff DOES add `resolve-repo-placement.js` to the CLAUDE.md group list, so the inventory check should pass — noted as verified rather than a defect.>"
+    }
+  ]
+}

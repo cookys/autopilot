@@ -145,10 +145,11 @@ get_last_json() {
     echo "$1" | grep '^{' | tail -n 1
 }
 
+# The registry, not a directory listing: the rail places worktrees under the consuming repo's
+# .claude/worktrees/ (or the temp dir on fallback), so a find in one directory can miss them.
 assert_no_hetero_worktrees() {
-    local dir="$CASE_TMP"
     local count
-    count=$(find "$dir" -maxdepth 1 -name 'hetero-*' 2>/dev/null | grep -c . || true)
+    count=$(git -C "$MINI_REPO" worktree list --porcelain 2>/dev/null | grep -c '^worktree .*/hetero-' || true)
     assert_eq "0" "$count"
 }
 

@@ -1,0 +1,32 @@
+{
+  "phase": "P4",
+  "generation": 1,
+  "base": "e1b9cce0",
+  "head": "dd0bb3b55a0f8c027b2e273efa42d6a159d50f43",
+  "seats": [
+    "s0",
+    "s1",
+    "s2",
+    "s3"
+  ],
+  "findings_count": 4,
+  "status": "pending",
+  "seat_summaries": {
+    "s0": {
+      "findings_count": 2,
+      "proof_present": true
+    },
+    "s1": {
+      "findings_count": 2,
+      "proof_present": true
+    },
+    "s2": {
+      "findings_count": 0,
+      "proof_present": true
+    },
+    "s3": {
+      "findings_count": 0,
+      "proof_present": true
+    }
+  }
+}

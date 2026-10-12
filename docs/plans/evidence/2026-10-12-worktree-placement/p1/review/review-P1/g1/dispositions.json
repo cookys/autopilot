@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "phase": "P1",
+  "generation": 1,
+  "findings": [
+    {
+      "id": "80b7e15dc2457769d2bfefbf77fe605fa789b59434bc9606b290c90ea036457d",
+      "disposition": "refuted",
+      "rationale": "Re-derived: an E1 overrun exits 4 and writes nothing (stage-advance decide returns code 4 with bump_to; no patch). The red run at base (commit 7ba74598) printed 'E1 from a linked worktree measures that worktree (1 file fits S): expected [0] got [4]', and verify-red-green.sh (p1/red-green.json, VALIDATED, base_exit_code 1) confirms the suite is red at base. The exit-code assertion is not vacuous."
+    },
+    {
+      "id": "9c55ec7b9c07d9751b2f8612abc21e1d3f233f46f5fa5d3db450091609d92695",
+      "disposition": "verified",
+      "rationale": "Real edge: followRepoRoot returns early on a marker without a string repo_root, and both cmdSetInit call sites then passed undefined to applyInitFields. Fixed: next.repo_root || repoRoot at both call sites."
+    },
+    {
+      "id": "4e284b05421cf29a726524b856174391fd779886525b18b4c3facdb78bb94e47",
+      "disposition": "refuted",
+      "rationale": "Bindings exist: scopeFromCwd is imported at scripts/session-mode.js:91 and markerRepoIdentity is a hoisted function declaration in the same file; stage-advance.js imports scopeFromCwd explicitly. The D5 tests pass (205/0), which they could not if either were unbound."
+    },
+    {
+      "id": "098fb3c240c2a0dbdb6160ed293c3b6256250cff48a1a819ef0d59eaa2124f50",
+      "disposition": "refuted",
+      "rationale": "No defect, as the finding itself says: equal local and remote give the same merge-base, so the stored sha is identical either way."
+    },
+    {
+      "id": "dbdd5854ac482657748593c02c7745b26eb280ec2a0a0be1b79afd1f5dadd8fb",
+      "disposition": "refuted",
+      "rationale": "Scope note, not a defect: P2-P4 are later phases with their own per-phase review."
+    },
+    {
+      "id": "b2c5418b0203fef4336c1bd4e2e741960fc268dd60b6b05f8fc9fab700b27b52",
+      "disposition": "verified",
+      "rationale": "Cheap hardening taken: the foreign-repo and follow-back set calls now pass increasing sizes (L, XL) and assert the size was written, so the repo_root assertions cannot pass on a refused write."
+    }
+  ]
+}

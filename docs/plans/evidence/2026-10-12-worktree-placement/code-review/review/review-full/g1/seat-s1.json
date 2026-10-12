@@ -1,0 +1,12 @@
+{
+  "runner": "cc-shim",
+  "model": "GLM-5.2",
+  "status": "reviewed",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": "🟠 [wp-evidence-artifacts-missing] MUST-FIX — the diff ships `references/worktree-placement.md`, `docs/plans/2026-10-12-worktree-placement.md` and `docs/projects/2026-10-12-worktree-placement/README.md` that link or attest ~14 evidence artifacts (`evidence/2026-10-12-worktree-placement/spike-native-worktree.md`, `moved-assertions.md`, `walkers.md`, `p2-red-A.txt`, `p2-green-B.txt`, `p2-red-green.json`, `p2-6-suites.txt`, `p2-4-foreman-guard.md`, `p3-red-green.json`, `p3-suites.txt`, `receipt-P1..P4.json`, `p4/gates.txt`, `verify-suites.txt`) none of which the diff adds; the spec makes moved-assertions.md (P2.0), walkers.md (P2.5) and the foreman-guard grep record (P2.4) required deliverables and the C7/D3/D11/P4.5 verification map cites them — impact: dangling relative links in the shipped reference doc and a verification map whose gate/red-green/walker-disposition evidence (incl. the `project-detect.js:651` disposition) is not in the tree; smallest remediation: commit `docs/plans/evidence/2026-10-12-worktree-placement/**` on this branch, or repoint every citation to where the artifacts actually live.\n🔵 [wp-plan-status-stale] CUT/FOLLOW-UP — the newly added plan header still reads \"Status: active — plan, awaiting plan-review\" while the same diff's project README records plan-review done and P1–P4 at verify; cosmetic inconsistency in a frozen planning artifact, excluded from this version because it changes no behavior — align the status line in a later docs pass.",
+  "no_finding_proof": null,
+  "raw_log": "/tmp/dispatch-review-log-QYNjVQ",
+  "error": null,
+  "usage": null,
+  "frame_closed_by": "end-marker"
+}

@@ -20,7 +20,9 @@ const { getToolEvent } = require('./transcript-reader-lib.js');
 try {
   // stdin pipe broken for tool-event hooks (ENXIO; #6305) → transcript fallback.
   let stdin = '';
-  try { stdin = fs.readFileSync('/dev/stdin', 'utf8'); } catch { /* ENXIO → transcript */ }
+  // fd 0 first: the '/dev/stdin' PATH throws ENXIO on a socket stdin.
+  try { stdin = fs.readFileSync(0, 'utf8'); }
+  catch { try { stdin = fs.readFileSync('/dev/stdin', 'utf8'); } catch { /* ENXIO → transcript */ } }
   const ev = getToolEvent({ stdin, env: process.env });
   const toolName = ev.tool_name || 'unknown';
   const toolOutput = typeof ev.tool_response === 'string'

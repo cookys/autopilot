@@ -21,8 +21,14 @@ function getSessionId() {
   return crypto.createHash('sha1').update(process.cwd()).digest('hex').slice(0, 12);
 }
 
+// fd 0, not the '/dev/stdin' PATH: Claude Code hands hooks a socket, and
+// opening the path on a socket throws ENXIO.
+function readStdin() {
+  try { return fs.readFileSync(0, 'utf8'); } catch { return fs.readFileSync('/dev/stdin', 'utf8'); }
+}
+
 try {
-  const input = JSON.parse(fs.readFileSync('/dev/stdin', 'utf8'));
+  const input = JSON.parse(readStdin());
   const toolInput = input.tool_input || {};
 
   // Collect file paths from Write (file_path) and Edit (file_path or edits[].file_path)

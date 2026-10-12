@@ -98,6 +98,34 @@ assert_eq "0" "$?" "refresh exits 0"
 status_task "$ROOT_RUN_ID"
 assert_eq "valid" "$(field "$__OUT" 'r.evidence.campaigns.status')" "refresh keeps the ledger-bound receipt"
 
+# 4b. verification wrapper handling. WO is the controller work order holding the real wrapper.
+WO="$REPO/.git/autopilot/work-orders/$ROOT_RUN_ID/tsi-node-a1.json"
+WO_BAK="$TEST_TMP/wo.bak"; cp "$WO" "$WO_BAK"
+ncamp() { node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).campaigns.length))' "$1"; }
+refresh_into() { # <dir> -> refreshes with the terminal receipt supplied or not per $2
+  ( export AUTOPILOT_TASK_STATUS_DIR="$1"; mkdir -p "$1"
+    env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID node "$PRODUCER" --repo "$REPO" --root-run-id "$ROOT_RUN_ID" ${2:+--terminal-receipt "$2"} >/dev/null 2>&1 ) ; }
+# 4b-1: a wrapper with passed:false never yields its inner receipt
+node -e 'const fs=require("fs");const o=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));o.controller.verification_receipt.passed=false;fs.writeFileSync(process.argv[1],JSON.stringify(o))' "$WO"
+refresh_into "$TEST_TMP/w-failed" "$TERMINAL_FILE"
+assert_eq "0" "$(ncamp "$TEST_TMP/w-failed/$ROOT_RUN_ID.json")" "wrapper passed:false: inner receipt not unwrapped, no campaign entry"
+# 4b-2: a gate-reused wrapper (digest, no receipt body) is skipped, never stored as the receipt
+node -e 'const fs=require("fs");const o=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const w=o.controller.verification_receipt;o.controller.verification_receipt={passed:true,receipt_digest:w.receipt_digest,gate_reused:true};fs.writeFileSync(process.argv[1],JSON.stringify(o))' "$WO"
+refresh_into "$TEST_TMP/w-reused" "$TERMINAL_FILE"
+assert_eq "0" "$(ncamp "$TEST_TMP/w-reused/$ROOT_RUN_ID.json")" "gate-reused wrapper without receipt: no malformed receipt bound"
+cp "$WO_BAK" "$WO"
+# 4b-3: prior-bundle fallback. Work order gone; the prior bundle holds the receipt as the OLD producer
+#       stored it (the whole wrapper). The refresh must unwrap it. Mutating the unwrap makes this red.
+rm -f "$WO"
+PRIOR="$TEST_TMP/w-prior"; mkdir -p "$PRIOR"
+node -e 'const fs=require("fs");const b=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const c=b.campaigns[0];const r=c.verification_receipt;c.verification_receipt={passed:true,cached:false,receipt_digest:r.receipt_digest,receipt:r};fs.writeFileSync(process.argv[2],JSON.stringify(b))' "$OUT/$ROOT_RUN_ID.json" "$PRIOR/$ROOT_RUN_ID.json"
+refresh_into "$PRIOR"
+assert_eq "1" "$(ncamp "$PRIOR/$ROOT_RUN_ID.json")" "work order deleted, prior bundle holds old wrapper: campaign entry kept"
+assert_eq "implementation_campaign_verification" "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).campaigns[0].verification_receipt.artifact_type)' "$PRIOR/$ROOT_RUN_ID.json")" "old wrapper in prior bundle is unwrapped to the bare receipt"
+( export AUTOPILOT_TASK_STATUS_DIR="$PRIOR"; status_task "$ROOT_RUN_ID"; printf '%s' "$__OUT" > "$TEST_TMP/prior.json" )
+assert_eq "valid" "$(field "$(cat "$TEST_TMP/prior.json")" 'r.evidence.campaigns.status')" "reader accepts the re-unwrapped prior-bundle receipt"
+cp "$WO_BAK" "$WO"
+
 # 5. after the merge, a refresh re-derives product_merged from git (nothing is asserted by the caller)
 git -C "$REPO" merge -q --ff-only feat/tsi || fail "fixture merge"
 env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID node "$PRODUCER" --repo "$REPO" --root-run-id "$ROOT_RUN_ID" >/dev/null 2>&1

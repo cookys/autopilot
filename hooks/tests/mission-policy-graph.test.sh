@@ -325,6 +325,17 @@ assert.equal(
 );
 graphApi.freezeMissionExecutionGraph(multiVerifyGraph, resolvedMission);
 
+// Same command-count ceiling as campaign intake (shared constant).
+const tooManyVerifyGraph = clone(graph);
+tooManyVerifyGraph.nodes[0].verification_commands = Array.from(
+  { length: campaignChecker.MAX_VERIFICATION_COMMANDS + 1 },
+  (_, i) => `verify-${i}`,
+);
+assert.throws(
+  () => graphApi.freezeMissionExecutionGraph(tooManyVerifyGraph, resolvedMission),
+  /verification_commands must contain at most/,
+);
+
 let effects = 0;
 let incompletePolicyEffects = 0;
 assert.throws(

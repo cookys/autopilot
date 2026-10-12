@@ -295,6 +295,8 @@ function normalizeAllowedPrefix(value) {
   return parts.join('/');
 }
 
+const MAX_VERIFICATION_COMMANDS = 128;
+
 function validBoundedVerifyCommand(value) {
   if (!nonEmptyString(value) || value.length > 4096) return false;
   const segments = value.split(' && ');
@@ -539,7 +541,7 @@ function validateMissionProjection(contract, required = false) {
   }
   validateUniqueStrings(dispatch.verification_commands, 'strict_dispatch.verification_commands', {
     minimum: 1,
-    maximum: 128,
+    maximum: MAX_VERIFICATION_COMMANDS,
     maxLength: 4096,
   }, errors);
   if (Array.isArray(dispatch.verification_commands)
@@ -1426,6 +1428,7 @@ module.exports = {
   projectMissionMode,
   repoObjectFormat,
   validateContract,
+  MAX_VERIFICATION_COMMANDS,
   validBoundedVerifyCommand,
   verifyEnforcedMissionGrant,
 };

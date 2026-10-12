@@ -18,6 +18,10 @@ path says which repo it belongs to.
 | `dispatch-foreman.sh` | `foreman-<run_id>-XXXXXX` | same, `--prefix foreman` |
 | `dispatch-batch.sh` (integration worktree) | `batch-integ-<run_id>-XXXXXX` | same, `--prefix batch-integ` |
 
+Claude Code's own behaviour here (names, branch, sweep, prompts, isolation) is from the docs and runs recorded in
+[`spike-native-worktree.md`](../docs/plans/evidence/2026-10-12-worktree-placement/spike-native-worktree.md); the
+refused `!` pull is gap 8 of [the backlog note](../docs/backlog/worktree-and-handoff-placement-has-no-rule.md).
+
 - **Name a hand-made worktree after its task**, and open a fresh one for the next task instead of branching a new
   task inside the old one. `session-mode.js set --new-task` prints one advisory line when the worktree's directory
   name and its branch share no word (generic words such as `feat`, `fix`, `wip` and digit-only words do not count).

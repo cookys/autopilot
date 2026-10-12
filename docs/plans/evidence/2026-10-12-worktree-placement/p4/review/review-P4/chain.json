@@ -1,0 +1,41 @@
+[
+  {
+    "generation": 1,
+    "base": "e1b9cce0",
+    "head": "dd0bb3b55a0f8c027b2e273efa42d6a159d50f43",
+    "seats": [
+      {
+        "id": "s0",
+        "status": "reviewed"
+      },
+      {
+        "id": "s1",
+        "status": "reviewed"
+      },
+      {
+        "id": "s2",
+        "status": "reviewed"
+      },
+      {
+        "id": "s3",
+        "status": "reviewed"
+      }
+    ],
+    "reviewed_seats": 4,
+    "total_seats": 4,
+    "reviewed_seats_count": 4,
+    "total_seats_count": 4,
+    "status": "finalized",
+    "diff_sha256": "3c5c7aca05d7f1234722f9693c5c3eda7bb5226dae01b4a3b8f15652083dc79b",
+    "full_range_sha256": "53411e291df5711dc739d83274ff9cb66d31f4f539b1da6a802f810dbab998bb",
+    "findings_sha256": "82420b703809dd519a0acf494f12fe51be1b84ea0e76dc4bac78a4cc03ab9bba",
+    "seat_artifact_sha256": {
+      "s0": "d416ed028013adb141dc3c668950e7ab319b45a50ac3b39eadeae090b49d05e3",
+      "s1": "d2be24ea6db77417929f581f7fbef1d3666631f09eb4727bb67597652479a14a",
+      "s2": "316be8d931045d12139273a4fbc482e6e3e614d68b5d692435531f5dd44472db",
+      "s3": "08b3f18f11396f8abdd5394882a3eb67b1e14b349ea9b6e4a36bcede0abbda8f"
+    },
+    "dispositions_path": "review-P4/g1/dispositions.json",
+    "dispositions_sha256": "0242ea55d13f6975258ab767291c34ee4b20bce7e672fa6e186b40cd27410950"
+  }
+]

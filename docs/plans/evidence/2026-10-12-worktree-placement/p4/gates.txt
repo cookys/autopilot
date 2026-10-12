@@ -45,3 +45,7 @@ rc=0
 # (2026-10-11-review-packet-mode); doc-drift-gate script-refs: docs/BACKLOG.md `scripts/dispatch-contract.pre.js`,
 # docs/backlog/peer-reported-revival3d-worktree-branch-accumulation.md, references/evidence-discipline.md.
 # Each was confirmed present in `git show develop:<file>`. No violation names a file or row this phase added.
+
+# check-plan-graduation --json, every violation except the report-only plan_reference_dangling and the
+# informational plan_active_lineage (captured after the P4 review; the tail above cut these off):
+# {"code":"backlog_row_has_plan","kind":"backlog_row","title":"Run stage-graph v11 regression covering the packet guidance text","stem":"2026-10-11-review-packet-mode","detail":"Pointer: docs/plans/2026-10-11-review-packet-mode.md -> plan docs/plans/2026-10-11-review-packet-mode.md"}

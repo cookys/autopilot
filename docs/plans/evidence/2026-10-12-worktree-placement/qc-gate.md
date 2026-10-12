@@ -31,3 +31,13 @@ Rerun after the fixes, each alone, all rc=0:
 - suites: `resolve-repo-placement` (34 passed), `dispatch-batch`, `dispatch-foreman`, `tmp-residue-registry`.
   `dispatch-hetero` was not rerun: the change is the resolver's mkdir-failure branch only, and the normal path the
   rails take is unchanged (batch and foreman exercise it through the same resolver call).
+
+## Delta review (`a0a76bc5..9f5931c4`)
+`autopilot:reviewer` (sonnet): no Critical or Major, MUST-FIX empty, risk Low; reran `resolve-repo-placement`
+(34 passed), `check-tmp-residue-registry` (OK) and `check-backlog-entries --mode block` (new_count 0), and checked each
+new reference/CHANGELOG sentence against `session-mode.js:793-794, 842, 870, 1010`.
+- Minor: the new BACKLOG row cited `orchestrator-edit-gate.js` without its directory — fixed to
+  `hooks/orchestrator-edit-gate.js:108-115`.
+- Suggestion: the reviewer could not rerun the old resolver against case 4b (worktree guard). Already done before the
+  commit by depth-0: HEAD `a0a76bc5`'s resolver on a repo whose `.claude` is a file printed the `binding.mkdir` stack
+  and exited 1; the fixed one exited 0 with `$TMPDIR/batch-r2-XXXXXX` and the `cannot create … (ENOTDIR)` line.

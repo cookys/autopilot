@@ -139,19 +139,36 @@ assert_exit_code "$__GATE_EXIT" 1 "CRLF doc with unbalanced fences fails"
 # Cleanup CRLF doc
 rm "$SANDBOX/docs/crlf.md"
 
-# 7b. docs/plans/evidence/ is frozen evidence and is excluded; sibling dirs are still checked
-echo "Testing frozen evidence exclusion..."
+# 7b. Only the listed verbatim consult transcripts under docs/plans/evidence/ are excluded
+# (by whole relative path prefix); every other file there, and look-alike paths, stay scanned.
+echo "Testing frozen consult-transcript exclusion..."
 EV="$TEST_TMP/ev-sandbox"
-mkdir -p "$EV/docs/plans/evidence/x" "$EV/docs/plans/sub/evidence/y"
-printf '# Frozen\nSee [gone](ghost.md).\n' > "$EV/docs/plans/evidence/x/frozen.md"
+FROZEN="docs/plans/evidence/2026-09-16-blind-review-redesign"
+mkdir -p "$EV/$FROZEN" "$EV/docs/plans/sub/evidence/y"
+printf '# Frozen\nSee [gone](ghost.md).\n' > "$EV/$FROZEN/consult-gpt-6-astra.md"
 run_gate "$EV"
-assert_exit_code "$__GATE_EXIT" 0 "broken link under docs/plans/evidence/ is not scanned"
+assert_exit_code "$__GATE_EXIT" 0 "listed consult transcript with a broken link is not scanned"
+printf '# Live\nSee [gone](ghost.md).\n' > "$EV/$FROZEN/other.md"
+run_gate "$EV"
+assert_exit_code "$__GATE_EXIT" 1 "non-excluded file under docs/plans/evidence/ with a broken link fails"
+rm "$EV/$FROZEN/other.md"
+printf '# Live\nSee [gone](ghost.md).\n' > "$EV/$FROZEN/consult-gpt-6-astra.md.bak.md"
+run_gate "$EV"
+assert_exit_code "$__GATE_EXIT" 1 "exclusion is a whole-path match, not a substring/prefix of the name"
+rm "$EV/$FROZEN/consult-gpt-6-astra.md.bak.md"
 printf '# Live\nSee [gone](ghost.md).\n' > "$EV/docs/plans/sub/evidence/y/live.md"
 run_gate "$EV"
 assert_exit_code "$__GATE_EXIT" 1 "broken link under docs/plans/sub/evidence/ still fails"
 rm "$EV/docs/plans/sub/evidence/y/live.md"
 printf '# Live\nSee [gone](ghost.md).\n' > "$EV/docs/plans/live.md"
 run_gate "$EV"
+assert_exit_code "$__GATE_EXIT" 1 "broken link elsewhere in docs/plans/ still fails"
+# a path-like exclude matches from the scan root only, not as a substring deeper down
+mkdir -p "$EV/nested/docs/plans/evidence/2026-09-16-blind-review-redesign"
+rm "$EV/docs/plans/live.md"
+printf '# Live\nSee [gone](ghost.md).\n' > "$EV/nested/$FROZEN/consult-gpt-6-astra.md"
+run_gate "$EV"
+assert_exit_code "$__GATE_EXIT" 1 "same relative path under another prefix is still scanned"
 assert_exit_code "$__GATE_EXIT" 1 "broken link elsewhere in docs/plans/ still fails"
 
 # 8. Testing invalid command arguments/usage errors (exit 2)

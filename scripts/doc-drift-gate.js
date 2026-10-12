@@ -40,10 +40,12 @@ const DEFAULT_EXCLUDES = [
   // AUDIT_ROOT — scanning them here produces false drift for whichever repo isn't
   // the one currently checked out there.
   ".claude/worktrees",
-  // Frozen evidence (consult answers, delta specs, ledgers quoted verbatim): the content is
-  // a record of what was said at the time, so its links/paths are not edited to stay live.
-  // Only this exact tree; the rest of docs/plans (and any other evidence/ dir) stays scanned.
-  "docs/plans/evidence/"
+  // Verbatim consult transcripts quoting ANOTHER machine's absolute paths (frozen evidence:
+  // rewriting them would falsify the record). Listed file by file on purpose — the rest of
+  // docs/plans/evidence/ is live (new evidence lands there) and stays scanned.
+  "docs/plans/evidence/2026-09-16-blind-review-redesign/consult-gpt-6-astra.md",
+  "docs/plans/evidence/2026-09-16-red-verification-repair/consult-codex-answer.md",
+  "docs/plans/evidence/2026-09-21-foreman-exam-design-consult/gpt-6-astra-via-codex.md"
 ];
 
 // Regex configuration
@@ -98,11 +100,27 @@ function isNestedGitRoot(dirpath) {
 /**
  * Traverse the directories recursively (using built-in fs synchronous APIs to replicate the behavior of os.walk).
  */
+// An exclude containing "/" is a path PREFIX relative to the scan root, matched on whole
+// segments ("docs/plans/x" never hides "docs/plans/xy"). An exclude without "/" is a
+// directory/file NAME matched as a whole segment at any depth (".git", "_archive", ...) —
+// not a substring, so ".git" no longer hides ".github".
+function isExcluded(rel, excludes) {
+  const r = rel.split(path.sep).join('/');
+  if (r === '' || r === '.') return false;
+  const segs = r.split('/');
+  return excludes.some(x => {
+    const e = x.replace(/\/+$/, '');
+    if (e.includes('/')) return r === e || r.startsWith(e + '/');
+    return segs.includes(e);
+  });
+}
+
 function getMdFiles(roots, excludes) {
   const out = new Set();
+  let scanRoot = '.';
 
   function walk(dirpath) {
-    if (excludes.some(x => dirpath.includes(x))) {
+    if (isExcluded(path.relative(scanRoot, dirpath), excludes)) {
       return;
     }
     let entries;
@@ -115,7 +133,7 @@ function getMdFiles(roots, excludes) {
 
     for (const entry of entries) {
       const fullPath = path.join(dirpath, entry.name);
-      if (excludes.some(x => fullPath.includes(x))) {
+      if (isExcluded(path.relative(scanRoot, fullPath), excludes)) {
         continue;
       }
 
@@ -153,6 +171,7 @@ function getMdFiles(roots, excludes) {
     }
 
     if (stat.isDirectory()) {
+      scanRoot = root;
       walk(root);
     }
   }

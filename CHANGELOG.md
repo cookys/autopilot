@@ -4,6 +4,13 @@
 
 ### 新增
 
+- **即時面板「現況」的「執行狀況」會列出 session 在背景跑的工作**（branch `feat/mods-activity`）：之前面板只顯示目前在哪個階段，看不出全套測試正在跑、跑到哪裡。現在每項背景工作各佔一列：
+  - **背景指令**：用 `run_in_background` 執行的指令，以及前景執行逾時、被移到背景的指令。列上顯示多久前有輸出，下一行是最後一行輸出。輸出檔超過 1 MiB 時只顯示時間。
+  - **監看**：Monitor 開的監看，下一行是最新的事件。
+  - **子代理**：還在跑的子代理，後面括號是它的類型。子代理自己開的背景指令不會另外列一行。
+  - 工作完成、失敗或被 TaskStop 停掉之後，那一列會自動消失。最多列 6 項，多的併成「還有 N 項」。指令和輸出裡長得像金鑰的字串會遮成 `***`。
+  - 已知限制：Claude 還在處理同一輪時，背景工作即使已經結束，那一列也會留到這一輪結束才消失，因為完成通知要等這一輪結束才會送進對話。
+
 - **worktree 和 handoff 有了固定位置**（branch `feat/worktree-placement-rule`）：同一個 repo 的 worktree 現在都放在 `<主 checkout>/.claude/worktrees/` 底下，看路徑就知道屬於哪個 repo。規則寫在 `references/worktree-placement.md`。
   - hetero、foreman、batch 三條 rail 建的 worktree 從暫存目錄搬到這裡，和你自己或 Claude Code 開的 worktree 放在一起；不論從主 checkout 還是從哪個 worktree 呼叫，都放到同一個地方。沒有一般主 checkout 的 repo（例如 bare repo），或主 checkout 裡建不出 `.claude/worktrees`（唯讀、或 `.claude` 是檔案），照舊放在暫存目錄，stderr 會說明原因。
   - 新增 `scripts/resolve-repo-placement.js`，統一回答三個問題：worktree 該放哪裡、主 checkout 落後上游幾個 commit、兩種 handoff 檔各在哪裡。

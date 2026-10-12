@@ -63,8 +63,8 @@
 // in-memory tree; a missing file makes the bottom hook throw, which the mod sees as a rejected read.
 import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
-import { readQc, qcChip, readReview, reviewSlot, displayWidth, truncateToWidth, layoutBand, readMarker, readResidue, readStageWalk, bandSlots, slotUnit, slotPosition, slotDispatch, slotDecisions, slotSpend, slotHygiene, slotReview, readLoadSource, PANE_TABS, verdictOf, reviewTabLines, wrapLines, legendLines, bandView, hygieneTabLines, dispatchLines, spendTabLines, readSpendHistory, hourlySpend, sparkText, SPARK_BARS, INJECTED_PREFIXES, RECENT_EXPANDED_LINES, collapsedPrompt, groupRecent, makeRecentTracker, recentLines, redactSecrets } from './model'
-import type { SessionMsg } from './model'
+import { readQc, qcChip, readReview, reviewSlot, displayWidth, truncateToWidth, layoutBand, readMarker, readResidue, readStageWalk, bandSlots, slotUnit, slotPosition, slotDispatch, slotDecisions, slotSpend, slotHygiene, slotReview, readLoadSource, PANE_TABS, verdictOf, reviewTabLines, wrapLines, legendLines, bandView, hygieneTabLines, dispatchLines, spendTabLines, readSpendHistory, hourlySpend, sparkText, SPARK_BARS, INJECTED_PREFIXES, RECENT_EXPANDED_LINES, collapsedPrompt, groupRecent, makeRecentTracker, recentLines, redactSecrets, scanBackground, lastOutputLine, activityLines, MAX_ACTIVITY_ROWS } from './model'
+import type { ActivityItem, SessionMsg } from './model'
 import { makeT, resolveLocale, localeFromLanguage } from './i18n'
 import { EN, ZH_TW } from './locales'
 import type { Slot } from './model'
@@ -144,6 +144,7 @@ type World = {
   files: Tree
   sid: { value: string }
   cwdReal: { value: string }
+  stats: Record<string, { size: number; mtimeMs: number }> // $.fs.stat of a file (a background command's output); any other path stats as a directory
   toasts: string[]
   panes: string[]
   opens: { id: string; title?: string; focus?: true; closeOnEscape?: true }[]
@@ -161,7 +162,7 @@ const worldEn = (on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A) => world(o
 
 // Registers the bottom hooks (what the engine would answer) for one test.
 function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en' | 'zh-TW' | null = 'zh-TW', env: Record<string, string> = {}): World {
-  const w: World = { files, sid: { value: sid }, cwdReal: { value: CWD }, toasts: [], panes: [], opens: [], panesThrow: false, panesGate: null, openGate: null, writes: [], reads: [], lists: [], clock: undefined as never }
+  const w: World = { files, sid: { value: sid }, cwdReal: { value: CWD }, stats: {}, toasts: [], panes: [], opens: [], panesThrow: false, panesGate: null, openGate: null, writes: [], reads: [], lists: [], clock: undefined as never }
   w.clock = mock.clock(on, { now: nowMs })
   mock.env(on, { HOME, ...(locale === null ? {} : { AUTOPILOT_LOCALE: locale }), ...env }) // the suite pins zh-TW: the band words these cases assert are the zh-TW table's
   on('fs.read', ($, e) => {
@@ -186,7 +187,7 @@ function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en'
     if (seen.size === 0) throw new Error('ENOENT ' + e.path)
     return { value: [...seen].map(([name, kind]) => ({ name, kind, size: 1, mtimeMs: 0, isLink: false })) }
   })
-  on('fs.stat', ($, e) => ({
+  on('fs.stat', ($, e) => (w.stats[e.path] !== undefined ? { value: { kind: 'file' as const, ...w.stats[e.path], isLink: false } } : {
     value: { kind: 'dir' as const, size: 0, mtimeMs: 0, isLink: false, realPath: e.resolve ? (e.path === CWD ? w.cwdReal.value : e.path) : undefined },
   }))
   on('session.id', () => ({ value: w.sid.value }))
@@ -3639,4 +3640,180 @@ test('now: a section heading runs a rule to the edge; pressing it folds the sect
   expect(folded[at + 2]).toBe(open[next])
   expect(await draw(at)).toEqual(open)
   expect(open.some(r => r.startsWith('▾ Needs you') || r.startsWith('▸ Needs you'))).toBe(false) // what waits for you never folds away
+})
+
+// ---- background work in the Now tab's working section: shells and watches from the messages, subagents from $.agent.list() ----
+// The texts are the shapes Claude Code wrote into a real transcript (ids and paths synthetic).
+const BG_OUT = '/tmp/claude-1000/proj/sid/tasks/bqd50316d.output'
+const bgText = (id: string, out: string) => 'Command running in background with ID: ' + id + '. Output is being written to: ' + out + '. You will be notified when it completes.'
+const bgUse = (id: string, extra: Record<string, unknown> = {}, input: Record<string, unknown> = { command: 'bash hooks/tests/run.sh', description: 'full suite', run_in_background: true }) =>
+  ({ tool_use_id: 'toolu_' + id, tool: 'Bash', input, result: { stdout: '', stderr: '', interrupted: false, isImage: false, noOutputExpected: false, backgroundTaskId: id }, text: bgText(id, '/tmp/claude-1000/proj/sid/tasks/' + id + '.output'), ...extra })
+const monUse = (id: string) => ({ tool_use_id: 'toolu_' + id, tool: 'Monitor', input: { description: 'watch CI', command: 'gh run watch' }, result: { taskId: id, timeoutMs: 30000, persistent: false }, text: 'Monitor started (task ' + id + ', expires in 30s). You will be notified on each event.' })
+const note = (taskId: string, body: string) => U('<task-notification>\n<task-id>' + taskId + '</task-id>\n' + body + '\n</task-notification>')
+const doneNote = (taskId: string, status = 'completed') => note(taskId, '<tool-use-id>toolu_' + taskId + '</tool-use-id>\n<output-file>/tmp/x.output</output-file>\n<status>' + status + '</status>\n<summary>Background command "x" ' + status + '</summary>')
+const eventNote = (taskId: string, event: string) => note(taskId, '<summary>Monitor event: "watch CI"</summary>\n<event>' + event + '</event>')
+
+test('activity: a background Bash and a Monitor start rows; the output path comes from the result text', () => {
+  const tasks = scanBackground([U('q'), A('', [bgUse('bqd50316d'), monUse('bng8w6gpz')])])
+  expect(tasks).toEqual([
+    { id: 'bqd50316d', kind: 'shell', label: 'full suite', output: BG_OUT, lastEvent: null },
+    { id: 'bng8w6gpz', kind: 'monitor', label: 'watch CI', output: null, lastEvent: null },
+  ])
+})
+
+test('activity: a foreground Bash moved to the background by its timeout is a row; a plain or refused call is not', () => {
+  const timedOut = bgUse('b1', { result: { stdout: '', backgroundTaskId: 'b1', timedOutAfterMs: 120000 } }, { command: 'make test' })
+  const plain = { tool_use_id: 'toolu_p', tool: 'Bash', input: { command: 'ls' }, result: { stdout: 'a', stderr: '' }, text: 'a' }
+  const refused = { ...bgUse('b2'), isError: true }
+  expect(scanBackground([A('', [timedOut, plain, refused])]).map(t => [t.id, t.label])).toEqual([['b1', 'make test']])
+})
+
+test('activity: a stored foreground result whose output reads like a start message is no row; a shell takes only its own output file', () => {
+  const docker = { tool_use_id: 'toolu_d', tool: 'Bash', input: { command: 'docker create alpine' }, result: { stdout: 'Created container with ID: 3f2a9c.', stderr: '' }, text: 'Created container with ID: 3f2a9c.' }
+  const grep = { tool_use_id: 'toolu_g', tool: 'Bash', input: { command: 'git diff' }, result: { stdout: bgText('zz', '/tmp/zz.output'), stderr: '' }, text: bgText('zz', '/tmp/zz.output') }
+  const watch = { tool_use_id: 'toolu_w', tool: 'Monitor', input: { command: 'cat log' }, result: { stdout: '' }, text: 'Monitor started (task m7, expires in 30s).' }
+  expect(scanBackground([A('', [docker, grep, watch])])).toEqual([])
+  const foreign = bgUse('b1', { text: 'Command running in background with ID: b1. Output is being written to: /etc/other.output.' })
+  expect(scanBackground([A('', [foreign])]).map(t => [t.id, t.output])).toEqual([['b1', null]])
+  // the id is literal in the path match: `b.1` does not take `bx1.output`
+  const dotted = bgUse('b.1', { text: 'Command running in background with ID: b.1. Output is being written to: /tmp/t/bx1.output.' })
+  expect(scanBackground([A('', [dotted])]).map(t => [t.id, t.output])).toEqual([['b.1', null]])
+  // headless: the start wording must open the text
+  const quoted = { tool_use_id: 'toolu_q', tool: 'Bash', input: { command: 'cat log' }, result: undefined, text: 'log: ' + bgText('b8', '/tmp/t/b8.output') }
+  expect(scanBackground([A('', [quoted])])).toEqual([])
+})
+
+test('activity: without a stored result (headless) the ids come from the result text', () => {
+  const shell = { ...bgUse('b9'), result: undefined }
+  const mon = { ...monUse('m9'), result: undefined }
+  const echoed = { tool_use_id: 'toolu_e', tool: 'Bash', input: { command: 'docker create alpine' }, result: undefined, text: 'Created container with ID: 3f2a9c.' }
+  expect(scanBackground([A('', [shell, mon, echoed])]).map(t => [t.id, t.kind, t.output])).toEqual([['b9', 'shell', '/tmp/claude-1000/proj/sid/tasks/b9.output'], ['m9', 'monitor', null]])
+})
+
+test('activity: a status notification or a TaskStop ends a row; a Monitor event keeps it and becomes its tail', () => {
+  const start = A('', [bgUse('b1'), bgUse('b2'), bgUse('b3'), monUse('m1'), monUse('m2')])
+  const tasks = scanBackground([
+    start,
+    eventNote('m1', 'build 3 of 7 passed'),
+    eventNote('m1', 'build 4 of 7 passed'),
+    doneNote('b1'),
+    note('b2', '<tool-use-id>toolu_b2</tool-use-id>\n<status>failed</status>'),
+    A('', [{ tool_use_id: 'toolu_s', tool: 'TaskStop', input: { task_id: 'm2' }, result: { message: 'stopped', task_id: 'm2', task_type: 'monitor' }, text: 'stopped' }]),
+  ])
+  expect(tasks.map(t => [t.id, t.lastEvent])).toEqual([['b3', null], ['m1', 'build 4 of 7 passed']])
+  // a notification matched only by its tool-use id ends the row too, and a running status does not
+  const byUse = scanBackground([A('', [bgUse('b4'), bgUse('b5')]), U('<task-notification>\n<tool-use-id>toolu_b4</tool-use-id>\n<status>killed</status>\n</task-notification>'), note('b5', '<status>running</status>')])
+  expect(byUse.map(t => t.id)).toEqual(['b5'])
+})
+
+test('activity: labels are one line, redacted and clipped', () => {
+  const secret = 'curl -H "Authorization: Bearer ' + 'k'.repeat(30) + '"\nsecond line'
+  const [t] = scanBackground([A('', [bgUse('b1', {}, { command: secret, run_in_background: true })])])
+  expect(t.label).toBe('curl -H "Authorization: Bearer ***" second line')
+  const [long] = scanBackground([A('', [bgUse('b2', {}, { description: 'x'.repeat(500) })])])
+  expect([...long.label].length).toBe(201)
+})
+
+test('activity: the last output line drops escape codes, takes the final \\r redraw, skips blank lines and masks secrets', () => {
+  expect(lastOutputLine('one\ntwo\n\n  \n')).toBe('two')
+  expect(lastOutputLine('\x1b[32m✓ 12 pass\x1b[0m\n')).toBe('✓ 12 pass')
+  expect(lastOutputLine('progress 10%\rprogress 55%\rprogress 90%')).toBe('progress 90%')
+  expect(lastOutputLine('progress 90%\r\n')).toBe('progress 90%')
+  expect(lastOutputLine('\x1b]0;title\x07token ghp_' + 'a'.repeat(30))).toBe('token ***')
+  expect(lastOutputLine('')).toBe(null)
+  expect(lastOutputLine('\n \n')).toBe(null)
+})
+
+for (const locale of ['en', 'zh-TW'] as const) {
+  for (const cols of [48, 120]) {
+    test('activity: every row fits the pane, the overflow is one +N row (' + locale + ', ' + cols + ' columns)', () => {
+      const t = makeT(locale)
+      const items: ActivityItem[] = [
+        { kind: 'shell', label: '全部測試 '.repeat(20), detail: null, tail: 'ℹ duration_ms 219.56 '.repeat(10), quietMs: 42000 },
+        { kind: 'monitor', label: 'watch CI', detail: null, tail: 'build 4 of 7', quietMs: null },
+        ...Array.from({ length: MAX_ACTIVITY_ROWS }, (_v, i): ActivityItem => ({ kind: 'agent', label: 'review phase ' + i, detail: 'autopilot:reviewer', tail: null, quietMs: null })),
+      ]
+      const lines = activityLines(items, { t, cols })
+      for (const l of lines) expect(displayWidth(l.text), l.text).toBeLessThanOrEqual(cols)
+      expect(lines.filter(l => l.text.includes('●')).length).toBe(MAX_ACTIVITY_ROWS)
+      expect(lines[lines.length - 1].text.trim()).toBe(t('bg.more', { n: items.length - MAX_ACTIVITY_ROWS }))
+      expect(lines[0].text).toContain(t('label.bg_shell'))
+      expect(lines[0].text).toContain(t('bg.quiet', { age: '42s' }))
+      expect(lines[1].text.trim().startsWith('└ ℹ duration_ms')).toBe(true)
+      expect(activityLines([], { t, cols })).toEqual([])
+      expect(activityLines(null, { t, cols })).toEqual([])
+    })
+  }
+}
+
+test('activity: the Now tab lists the running shell with its last line and quiet time, and the running agents; finished ones leave', async ($, on) => {
+  const t = makeT('zh-TW')
+  let messages: SessionMsg[] = [U('跑全套'), A('', [bgUse('bqd50316d'), monUse('bng8w6gpz')])]
+  let agentsThrow = false
+  const w = world(on, { ...base(), [BG_OUT]: 'ℹ tests 336\n\x1b[32m(pass) recent: tracker\x1b[0m\n' })
+  w.stats[BG_OUT] = { size: 60, mtimeMs: NOW_FRESH - 20000 }
+  on('session.messages', () => ({ value: messages }))
+  on('agent.list', () => {
+    if (agentsThrow) throw new Error('no agent list')
+    return { value: [{ id: 'a1', description: '審查 phase 1', type: 'autopilot:reviewer', status: 'running' }, { id: 'a2', description: '已完成的', type: 'Explore', status: 'completed' }] }
+  })
+  await start($, 'terminal')
+  const rows = async () => (await paneParts($, 'terminal', 'now')).texts
+  let r = await rows()
+  const at = r.findIndex(x => x.includes(t('now.working')))
+  expect(at).toBeGreaterThan(0)
+  const body = r.slice(at + 1).join('\n')
+  expect(body).toContain(t('label.bg_shell'))
+  expect(body).toContain('full suite')
+  expect(body).toContain(t('bg.quiet', { age: '20s' }))
+  expect(body).toContain('└ (pass) recent: tracker')
+  expect(body).toContain(t('label.bg_monitor'))
+  expect(body).toContain('審查 phase 1 (autopilot:reviewer)')
+  expect(body).not.toContain('已完成的')
+  // an unchanged output file (same size and mtime) is not read again
+  const outReads = () => w.reads.filter(p => p === BG_OUT).length
+  const before = outReads()
+  expect(before).toBeGreaterThan(0)
+  await w.clock.advance(5000)
+  await rows()
+  expect(outReads()).toBe(before)
+  // the output grows: re-read; the shell finishes and the agent list fails: the shell leaves, the watch stays
+  w.files[BG_OUT] = 'ℹ tests 336\nℹ pass 336\n'
+  w.stats[BG_OUT] = { size: 30, mtimeMs: NOW_FRESH }
+  await w.clock.advance(5000)
+  expect((await rows()).join('\n')).toContain('└ ℹ pass 336')
+  messages = [...messages, doneNote('bqd50316d')]
+  agentsThrow = true
+  await w.clock.advance(5000)
+  r = await rows()
+  const after = r.join('\n')
+  expect(after).not.toContain('full suite')
+  expect(after).toContain('watch CI')
+  expect(after).not.toContain('審查 phase 1') // the agent rows come from the list alone: no list, no agent rows
+})
+
+test('activity: an output file over 1 MiB shows no tail; an unread transcript keeps the shell rows; an agent description is one masked line', async ($, on) => {
+  const t = makeT('zh-TW')
+  let messagesThrow = false
+  const w = world(on, { ...base(), [BG_OUT]: 'never read\n' })
+  w.stats[BG_OUT] = { size: 2 * 1024 * 1024, mtimeMs: NOW_FRESH - 5000 }
+  on('session.messages', () => {
+    if (messagesThrow) throw new Error('no transcript')
+    return { value: [U('跑全套'), A('', [bgUse('bqd50316d')])] }
+  })
+  on('agent.list', () => ({ value: [{ id: 'a1', description: '審查\nghp_' + 'a'.repeat(30), type: 'autopilot:reviewer', status: 'running' }] }))
+  await start($, 'terminal')
+  const body = async () => (await paneParts($, 'terminal', 'now')).texts.join('\n')
+  let b = await body()
+  expect(b).toContain('full suite')
+  expect(b).toContain(t('bg.quiet', { age: '5s' }))
+  expect(b).not.toContain('└')
+  expect(w.reads).not.toContain(BG_OUT)
+  expect(b).toContain('審查 *** (autopilot:reviewer)')
+  messagesThrow = true
+  await w.clock.advance(5000)
+  b = await body()
+  expect(b).toContain('full suite')
+  expect(b).not.toContain(t('bg.quiet', { age: '5s' })) // a kept row's age would freeze: it shows none
+  expect(b.split('審查 ***').length - 1).toBe(1) // the agent row is replaced, not kept beside the new one
 })

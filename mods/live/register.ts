@@ -41,9 +41,9 @@ import {
   acceptanceToast, autoResidueCount, makeRecentTracker, bandLine1, bandView, buildSections, checkEnvelope, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
   headerText, hhmm, projectName as projectNameOf, isKey, isSectionId, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
   readForeman, readLoadSource, readSpendHistory, hourlySpend, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
-  slotTab, slotUnfolds, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd,
+  slotTab, slotUnfolds, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, MAX_ACTIVITY_ROWS,
 } from './model'
-import type { Counts, DecisionsView, RecentGroup, EnvelopeCheck, JobModel, Json, LiveSnapshot, Manifest, PaneTab, SlotId, Sources } from './model'
+import type { ActivityItem, Counts, DecisionsView, RecentGroup, EnvelopeCheck, JobModel, Json, LiveSnapshot, Manifest, PaneTab, SlotId, Sources } from './model'
 
 const TICK_MS = 5000
 const PANE_ID = 'autopilot-live'
@@ -65,6 +65,10 @@ const folded = new Set<string>() // the Now sections the person folded (SECTION 
 const recentTracker = makeRecentTracker()
 let recent: RecentGroup[] | null = null // survives ticks: the snapshot is rebuilt each time, a failed read keeps the last value
 let recentSid: string | null = null // group ids are transcript indexes, so a new session id (/clear) drops every opened group
+let activity: ActivityItem[] | null = null // survives ticks like `recent`: a failed read keeps the last value
+const tails = new Map<string, { size: number; mtimeMs: number; tail: string | null }>() // a background command's last output line, re-read only when its file changed
+const MAX_TAIL_BYTES = 1024 * 1024 // a bigger output file shows its quiet time, not its last line ($.fs.read takes the whole file)
+const LIVE_AGENT = new Set(['pending', 'running', 'waiting'])
 let tr: T = T_EN // the active translator, set at the start of every tick (and read by the band / pane draws)
 let pressSeq = 0 // one number per ⓘ press, taken before any await; only the latest press may assign paneTab or end the chain
 let decided: Promise<PaneTab> | null = null // the tab the latest unfinished press chose: a press landing meanwhile steps on from it (N rapid presses = N tabs)
@@ -414,22 +418,72 @@ async function pollAdvisories($: EngineInterface, nowMs: number): Promise<void> 
   }
 }
 
+// The background-work rows: the shells and watches scanned from the messages, each shell with its output file's last line and quiet time, then the
+// running subagents. Each source fails on its own: an unread transcript keeps the previous shell and watch rows; null = neither answered (the caller
+// keeps the previous rows). Only the rows the pane shows read their output file.
+async function readActivity($: EngineInterface, msgs: unknown, nowMs: number, prev: readonly ActivityItem[] | null): Promise<ActivityItem[] | null> {
+  const items: ActivityItem[] = []
+  let answered = false
+  if (!Array.isArray(msgs)) items.push(...(prev ?? []).filter(it => it.kind !== 'agent').map(it => ({ ...it, quietMs: null }))) // the age would freeze
+  else {
+    answered = true
+    const seen = new Set<string>()
+    for (const [i, task] of scanBackground(msgs as never).entries()) {
+      let tail = task.lastEvent
+      let quietMs: number | null = null
+      if (task.output !== null && i < MAX_ACTIVITY_ROWS) {
+        seen.add(task.output)
+        try {
+          const st = await $.fs.stat(task.output)
+          if (st.kind === 'file') {
+            quietMs = Math.max(0, nowMs - st.mtimeMs)
+            const hit = tails.get(task.output)
+            if (hit !== undefined && hit.size === st.size && hit.mtimeMs === st.mtimeMs) tail = hit.tail
+            else {
+              const text = st.size <= MAX_TAIL_BYTES ? await readText($, task.output) : null
+              tail = text === null ? null : lastOutputLine(text)
+              tails.set(task.output, { size: st.size, mtimeMs: st.mtimeMs, tail })
+            }
+          }
+        } catch (_e) { /* no output file yet: the row shows without a tail */ }
+      }
+      items.push({ kind: task.kind, label: task.label, detail: null, tail, quietMs })
+    }
+    for (const path of [...tails.keys()]) if (!seen.has(path)) tails.delete(path)
+  }
+  try {
+    const agents = await $.agent.list()
+    if (Array.isArray(agents)) {
+      answered = true
+      for (const a of agents) if (LIVE_AGENT.has(a.status)) items.push({ kind: 'agent', label: bgLabel(a.description || a.type), detail: a.description ? bgLabel(a.type) : null, tail: null, quietMs: null })
+    }
+  } catch (_e) { /* no agent list: the shells still show */ }
+  return answered ? items : null
+}
+
 async function refresh($: EngineInterface): Promise<void> {
   try {
     const nowMs = await $.clock.now()
     tr = await resolveT($)
     await pollAdvisories($, nowMs)
     const built = await buildSnapshot($, nowMs, tr)
+    let msgs: unknown = null
     try {
       const sid = await $.session.id()
-      const msgs = await $.session.messages()
+      msgs = await $.session.messages()
       if (recentSid !== null && sid !== recentSid) expanded.clear()
       recentSid = sid ?? null
       if (Array.isArray(msgs)) recent = recentTracker.update(sid ?? '', msgs as never)
     } catch (_e) {
       // the transcript is optional garnish: keep the previous value
     }
-    snapshot = { ...built.snap, recent }
+    try {
+      const next = await readActivity($, msgs, nowMs, activity)
+      if (next !== null) activity = next
+    } catch (_e) {
+      // garnish too: keep the previous rows
+    }
+    snapshot = { ...built.snap, recent, activity }
     $.ui.invalidate('ui.render')
     // toasts: only between two fresh snapshots of the same scope
     if (built.snap.state === 'ok') {

@@ -212,10 +212,26 @@ const EXPECTED_DISCUSS_GENERATOR_HASH = 'c95ed1f514a39eca6d03ea3bb0298bbab95ddea
 // (was e51b8eefd2f903a58a89f25d9598754adede238a56b97f42a63b022bc28ccfff).
 // rubric.md itself is byte-unchanged -> EXPECTED_DISCUSS_RUBRIC_HASH
 // unchanged.
+// 2026-10-12 re-seal (discuss-v4, exam disclosure fix): D-a/D-b's oracle
+// (gates.axisOwnAxis) requires axis_id to equal the seat's own earlier axis,
+// and DISCUSS_SYSTEM_PROMPT demands round_id be copied from the input -- but
+// the prompt never stated the own-axis rule (its "decorrelated" clause pushed
+// candidates AWAY from it) and buildDiscussCaseEnvelope sent no round_id. Both
+// envelope-only solvers derived the axis from this-seat and invented a
+// round_id, hiding the defect at 16/16. Fixed by disclosure only: the prompt
+// prose states the rule and the envelope now carries round_id (neither file
+// is a sealed asset). generator.js, grader.js and rubric.md are byte-
+// unchanged, so the requirement list is identical (mechanism, not guidance).
+// corpus_version bumped discuss-v3 -> discuss-v4 to mark a fresh evaluation
+// baseline -> EXPECTED_DISCUSS_CORPUS_HASH moved (was
+// 1525bb71a1dbf7c022d09ce3ac1115401b81504dc7f72e8e08a077faa88babf2); the
+// corpus seal was re-frozen via `rubric-freeze.js seal`, moving
+// EXPECTED_DISCUSS_SEAL_HASH (was
+// 6e2943238215f0f0f45099621f5c6628fc3af93111630128c1f676ad53c1ba94).
 const EXPECTED_DISCUSS_GRADER_HASH = '39b5ba15b49f1377b6e01d66727f2863ebc854dca8e80c20071c84a7b8af6b1a'
-const EXPECTED_DISCUSS_CORPUS_HASH = '1525bb71a1dbf7c022d09ce3ac1115401b81504dc7f72e8e08a077faa88babf2'
+const EXPECTED_DISCUSS_CORPUS_HASH = '81f25599334ff84dba4edb132a0ba553d7fff12f29f8c9b91c887aa1566782f3'
 const EXPECTED_DISCUSS_RUBRIC_HASH = '6a60a549626eeeab1f49974f020a059db6e24ac9e1834f44b5a442c4b9b86104'
-const EXPECTED_DISCUSS_SEAL_HASH = '6e2943238215f0f0f45099621f5c6628fc3af93111630128c1f676ad53c1ba94'
+const EXPECTED_DISCUSS_SEAL_HASH = '8505528377a16476a21126646b0f5bf747bc39f98f64f93176c2ea71248cffd7'
 
 const PATHS = {
   consult: {

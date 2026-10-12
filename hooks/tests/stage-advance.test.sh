@@ -500,5 +500,72 @@ newsess; sm set --size M --repo-root "$RN" >/dev/null 2>&1; sm set --new-task --
 eq "--new-task without --size clears size" "<absent>" "$(jf size)"
 sm set --size L --repo-root "$RN" >/dev/null 2>&1; eq "later set --size on the new task works" '"L"' "$(jf size)"
 
+# ---------------------------------------------------------------- D5: the marker follows the session into a linked worktree
+# (plan docs/plans/2026-10-12-worktree-placement.md P1.1 / P1.2 d-f). No --repo-root: the cwd is what moves.
+RA="$TEST_TMP/r-follow"; mkrepo "$RA"; plant "$RA" 1 1 seed
+WA="$TEST_TMP/r-follow-wt"; git -C "$RA" worktree add -q -b feat/follow "$WA"
+RB="$TEST_TMP/r-foreign"; mkrepo "$RB"; plant "$RB" 7 1 foreign
+newsess; (cd "$RA" && node "$SM" set --size S >/dev/null 2>&1)
+eq "fixture: marker created in the main checkout" "\"$RA\"" "$(jf repo_root)"
+plant "$RA" 7 1 other    # other sessions' merges land on the main checkout's develop
+plant "$WA" 1 1 mine     # this session's work, in the linked worktree
+(cd "$WA" && node "$SA" --to implement >/dev/null 2>&1)
+OUT=$(cd "$WA" && node "$SA" --to verify 2>"$TEST_TMP/err"); RC=$?
+eq "E1 from a linked worktree measures that worktree (1 file fits S)" "0" "$RC"
+# negative: a cwd in another repository measures marker.repo_root and leaves the marker alone
+newsess; sm set --size S --repo-root "$RA" >/dev/null 2>&1
+(cd "$RB" && node "$SA" --to implement >/dev/null 2>&1)
+OUT=$(cd "$RB" && node "$SA" --to verify 2>"$TEST_TMP/err"); RC=$?
+eq "E1 from a foreign repo measures marker.repo_root (clean, fits)" "0" "$RC"
+eq "a foreign cwd leaves repo_root" "\"$RA\"" "$(jf repo_root)"
+# set --new-task: follows a linked worktree of the same repo, ignores a foreign repo
+newsess; (cd "$RA" && node "$SM" set --size S >/dev/null 2>&1)
+(cd "$WA" && node "$SM" set --new-task --size S >/dev/null 2>&1)
+eq "--new-task from a linked worktree: repo_root follows" "\"$WA\"" "$(jf repo_root)"
+(cd "$RB" && node "$SM" set --new-task --size S >/dev/null 2>&1)
+eq "--new-task from a foreign repo: repo_root unchanged" "\"$WA\"" "$(jf repo_root)"
+eq "--new-task from a foreign repo: base_ref derived in repo_root, not the cwd" \
+  "\"$(git -C "$WA" merge-base HEAD develop)\"" "$(jf base_ref)"
+# set (merge path, no --new-task): follows in both directions, ignores a foreign repo
+newsess; (cd "$RA" && node "$SM" set --size S >/dev/null 2>&1)
+(cd "$WA" && node "$SM" set --size M >/dev/null 2>&1)
+eq "set from a linked worktree: repo_root follows" "\"$WA\"" "$(jf repo_root)"
+(cd "$RB" && node "$SM" set --size M >/dev/null 2>&1)
+eq "set from a foreign repo: repo_root unchanged" "\"$WA\"" "$(jf repo_root)"
+(cd "$RA" && node "$SM" set --size M >/dev/null 2>&1)
+eq "set back in the main checkout: repo_root follows back" "\"$RA\"" "$(jf repo_root)"
+
+# ---------------------------------------------------------------- D6: base_ref takes the newer of a local/remote pair
+# (plan P1.2 a-c, g, h). origin/* refs are planted with update-ref; no remote, no fetch.
+basesha() { sm set --size S --repo-root "$1" >/dev/null 2>&1; jf base_ref | tr -d '"'; }
+# (a) local develop behind origin/develop -> the remote's merge-base
+R="$TEST_TMP/r-behind"; mkrepo "$R"; plant "$R" 1 1 a; C1=$(git -C "$R" rev-parse HEAD)
+plant "$R" 1 1 b; C2=$(git -C "$R" rev-parse HEAD)
+git -C "$R" update-ref refs/remotes/origin/develop "$C2"; git -C "$R" checkout -q -b feat/x; plant "$R" 1 1 f
+git -C "$R" branch -f develop "$C1"
+newsess; eq "base_ref: local develop behind origin/develop -> remote" "$C2" "$(basesha "$R")"
+# (b) local ahead -> local
+R="$TEST_TMP/r-ahead"; mkrepo "$R"; plant "$R" 1 1 a; C1=$(git -C "$R" rev-parse HEAD)
+plant "$R" 1 1 b; C2=$(git -C "$R" rev-parse HEAD)
+git -C "$R" update-ref refs/remotes/origin/develop "$C1"; git -C "$R" checkout -q -b feat/x; plant "$R" 1 1 f
+newsess; eq "base_ref: local develop ahead of origin/develop -> local" "$C2" "$(basesha "$R")"
+# (c) diverged -> remote
+R="$TEST_TMP/r-diverged"; mkrepo "$R"; plant "$R" 1 1 a
+git -C "$R" checkout -q -b side; plant "$R" 1 1 r; CR=$(git -C "$R" rev-parse HEAD)
+git -C "$R" update-ref refs/remotes/origin/develop "$CR"
+git -C "$R" checkout -q develop; plant "$R" 1 1 l
+git -C "$R" checkout -q -b feat/x "$CR"; plant "$R" 1 1 f
+newsess; eq "base_ref: diverged develop / origin/develop -> remote" "$CR" "$(basesha "$R")"
+# (g) only origin/develop plus a local main -> origin/develop (today's flat order picked main)
+R="$TEST_TMP/r-onlyremote"; mkrepo "$R" main; plant "$R" 1 1 a; C1=$(git -C "$R" rev-parse HEAD)
+plant "$R" 1 1 b; C2=$(git -C "$R" rev-parse HEAD)
+git -C "$R" update-ref refs/remotes/origin/develop "$C2"; git -C "$R" checkout -q -b feat/x; plant "$R" 1 1 f
+git -C "$R" branch -f main "$C1"
+newsess; eq "base_ref: origin/develop beats a local main" "$C2" "$(basesha "$R")"
+# (h) only a local develop -> develop
+R="$TEST_TMP/r-onlylocal"; mkrepo "$R"; plant "$R" 1 1 a; C1=$(git -C "$R" rev-parse HEAD)
+git -C "$R" checkout -q -b feat/x; plant "$R" 1 1 f
+newsess; eq "base_ref: only a local develop -> develop" "$C1" "$(basesha "$R")"
+
 echo "stage-advance.test: pass=$PASS fail=$FAIL"
 [ "$FAIL" -eq 0 ]

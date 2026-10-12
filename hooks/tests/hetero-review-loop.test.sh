@@ -147,7 +147,7 @@ C5_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" -
 assert_exit_code "$C5_RC" "1" "case 5: exits 1 on gap without --allow-seat-gap"
 assert_file_exists "$LEDGER/review-p5/g1/range.json" "case 5: range.json written before exit"
 assert_file_exists "$LEDGER/review-p5/g1/seat-s1.json" "case 5: seat-s1.json written"
-assert_file_absent "$LEDGER/review-p5/chain.json" "case 5: chain.json not written"
+assert_contains "$(cat "$LEDGER/review-p5/chain.json")" '"reason": "seat_gap"' "case 5: gap recorded as an aborted chain entry (was: no chain.json, generation stranded)"
 assert_file_absent "$LEDGER/review-p5/g1/findings.json" "case 5: findings.json not written"
 
 # Case 6: same as (5) but with --allow-seat-gap AND a receipt floor the surviving seat count
@@ -1158,6 +1158,14 @@ export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "find
 T2C_OUT_NOGAP=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2c_nogap --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T2C_RC_NOGAP=$?
 assert_exit_code "$T2C_RC_NOGAP" "1" "test 2c: exits 1 when SHIP-AS-IS lacks proof and gap not allowed"
 assert_contains "$T2C_OUT_NOGAP" "Review seat gap detected on seat(s): s0" "test 2c: gap detected on unproven seat"
+# Backlog: a seat gap without --allow-seat-gap must record the generation aborted, not strand it
+# (g1/ on disk, no chain entry => g1 cannot be re-run and g2 fails "Contiguous chain broken").
+assert_file_exists "$LEDGER/review-p_test2c_nogap/chain.json" "test 2c: gap without --allow-seat-gap still writes a chain entry"
+assert_contains "$(cat "$LEDGER/review-p_test2c_nogap/chain.json")" '"reason": "seat_gap"' "test 2c: chain entry recorded aborted (seat_gap)"
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "none", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
+T2C_G2_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2c_nogap --generation 2 --branch work --seats "m1/low@codex" 2>&1); T2C_G2_RC=$?
+assert_exit_code "$T2C_G2_RC" "0" "test 2c: generation 2 collects after the gap-aborted generation 1 (was: Contiguous chain broken)"
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "none", "no_finding_proof": ""}'
 
 T2C_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2c --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" --allow-seat-gap 2>&1); T2C_RC=$?
 # v2.36.5: 0 of 1 seats reviewed is below any floor — the generation is recorded aborted
@@ -1465,6 +1473,14 @@ assert_file_exists "$PK_LEDGER/review-ps-P2/chain.json" "packet P1: packet phase
 assert_file_exists "$PK_LEDGER/packets-ps.json" "packet P1: the packets file is pinned in the ledger"
 assert_contains "$(cat "$PK_LEDGER/review-ps-P2/g1/diff.txt")" "d/b.txt" "packet P1: P2's diff holds its own file"
 assert_not_contains "$(cat "$PK_LEDGER/review-ps-P2/g1/diff.txt")" "a.txt" "packet P1: P2's diff holds nothing of P1"
+# Backlog: seats saw only their packet's diff and flagged sibling-packet files as missing. The
+# collect now hands every seat a scope note naming the sibling packets' paths (out of scope).
+PK_SCOPE=$(cat "$PK_LEDGER/review-ps-P2/g1/packet-scope.md" 2>/dev/null)
+assert_contains "$PK_SCOPE" "Sibling packet 'P1'" "packet P1: P2's scope note names sibling packet P1"
+assert_contains "$PK_SCOPE" "- c.txt" "packet P1: P2's scope note lists a sibling packet's path"
+assert_not_contains "$PK_SCOPE" "d/b.txt" "packet P1: P2's scope note does not list its own paths as siblings"
+bash "$REPO_ROOT/scripts/check-blind-evidence.sh" --payload "$PK_LEDGER/review-ps-P2/g1/packet-scope.md" >/dev/null 2>&1; PK_RC=$?
+assert_exit_code "$PK_RC" "0" "packet P1: the scope note passes the blind-evidence gate dispatch-review applies to the spec"
 PK_FULL=$(git -C "$PK_REPO" diff "$PK_BASE..work" | sha256sum | cut -d' ' -f1)
 assert_eq "$(node -e 'const r=require(process.argv[1]); console.log([r.full_range_sha256, r.excluded.length, r.packet.id].join("|"))' "$PK_LEDGER/review-ps-P2/g1/range.json")" "$PK_FULL|0|P2" "packet P1: range.json pins the full-range hash, no exclusions, names the packet"
 PK_OUT=$(pk_check "$CHK" "$PK_LEDGER" "$TEST_TMP/pk_packets.json"); PK_RC=$?

@@ -825,7 +825,41 @@ async function handleCollect(flags) {
 
   // Dispatch all seats concurrently
   const timeout = flags.timeout || '20m';
-  const specFile = flags['spec-file'] ? path.resolve(flags['spec-file']) : '';
+  let specFile = flags['spec-file'] ? path.resolve(flags['spec-file']) : '';
+
+  // Packet mode: each seat sees only its own packet's diff, so a spec that names files in
+  // sibling packets reads as "unimplemented". Tell the seat which paths belong to the other
+  // packets (reviewed separately, out of this packet's scope). The caller's spec, if any, is
+  // kept verbatim ahead of the scope section; the combined text is written next to the diff.
+  if (packetCtx) {
+    const siblings = Object.entries(packetCtx.packets).filter(([id]) => id !== packetCtx.id);
+    if (siblings.length > 0) {
+      const lines = [];
+      if (specFile) {
+        try {
+          lines.push(fs.readFileSync(specFile, 'utf8').replace(/\s+$/, ''), '');
+        } catch (e) {
+          console.error(`ERROR: Failed to read spec-file: ${e.message}`);
+          process.exit(1);
+        }
+      }
+      lines.push(
+        `Packet scope: you are reviewing packet '${packetCtx.id}' of review set '${packetCtx.set}'.`,
+        'Your diff contains ONLY the files of this packet. The files below belong to sibling packets,',
+        'which are reviewed separately: they are out of scope for this packet. A file or change that the',
+        'spec names but that is listed here is NOT missing or unimplemented; do not report it as a defect.',
+        ''
+      );
+      for (const [id, paths] of siblings) {
+        lines.push(`Sibling packet '${id}':`);
+        for (const sp of paths) lines.push(`- ${sp}`);
+        lines.push('');
+      }
+      const scopeFile = path.join(gDir, 'packet-scope.md');
+      writeFileSyncAtomic(scopeFile, lines.join('\n'));
+      specFile = scopeFile;
+    }
+  }
 
   if (seats.some((seat) => seat.runner === 'agy')) {
     const ceilRes = spawnSync('bash', ['-c', `. "${__dirname}/lib/agy-argv-ceiling.sh"; agy_argv_ceiling_bytes`], {
@@ -1007,7 +1041,16 @@ async function handleCollect(flags) {
 
   if (hasGap && !allowSeatGap) {
     const gapSeats = seatResults.filter((r) => r.status !== 'reviewed').map((r) => r.seat.id);
-    console.error(`ERROR: Review seat gap detected on seat(s): ${gapSeats.join(', ')}`);
+    // Record the generation aborted: g<N>/ is already on disk, so without a chain entry it
+    // can neither be re-collected (dir exists) nor continued (g<N+1> fails "Contiguous chain
+    // broken"). An aborted entry lets the next generation continue from this base.
+    saveChainEntry({
+      generation,
+      base,
+      status: 'aborted',
+      reason: 'seat_gap',
+    });
+    console.error(`ERROR: Review seat gap detected on seat(s): ${gapSeats.join(', ')}; generation ${generation} recorded as aborted (seat_gap) — collect generation ${generation + 1} from the same base`);
     process.exit(1);
   }
 

@@ -12,10 +12,19 @@
  * (done_retention_days default 0 — history is in git, not the row). A consumer
  * config may raise done_retention_days for a deliberate grace window.
  *
+ * Reporter fields (2026-10-13): Id, Since, Origin, Reporter, Report, Reply, Problem, Impact.
+ * Each is format-checked when present; `required_fields` in the config makes Id/Since/Origin/
+ * Problem/Impact mandatory (default: none required, so a legacy backlog reads exactly as before).
+ * Origin=peer makes Reporter/Report/Reply mandatory. A `<!-- next-id: BL-NNNN -->` comment is
+ * the Id high-water mark: every BL- Id must be below it and unique.
+ *
  * Usage:
  *   node scripts/check-backlog-entries.js --backlog <file>
  *     [--config <file>] [--allowlist <file>] [--mode warn|block]
  *     [--json] [--self-test] [--update-allowlist]
+ *   node scripts/check-backlog-entries.js --backlog <file> --range <base>..<head> | <head>
+ *     pre-push mode: the file gate on <head>'s committed backlog, plus peer_report_lost over
+ *     every commit in the range (base included) that touched the backlog.
  *
  * Exit: 0 clean or warn · 1 block with new violations · 2 usage / unreadable / self-test fail
  */
@@ -28,6 +37,19 @@ const { execFileSync, spawnSync } = require('child_process');
 const SCRIPT_DIR = __dirname;
 const KNOWN_FIELDS = ['Title', 'Status', 'Trigger', 'Effort', 'Source', 'Pointer', 'Context'];
 const REQUIRED = ['Title', 'Status', 'Trigger', 'Effort', 'Source', 'Pointer'];
+// Reporter fields. They never count toward the pointer threshold (R1), and a row carrying any of
+// them gets the larger row cap (R2). `required_fields` may name only REQUIRABLE ones; the peer
+// trio is required by `Origin: peer` itself.
+const NEW_FIELDS = ['Id', 'Since', 'Origin', 'Reporter', 'Report', 'Reply', 'Problem', 'Impact'];
+const REQUIRABLE = ['Id', 'Since', 'Origin', 'Problem', 'Impact'];
+const PEER_FIELDS = ['Reporter', 'Report', 'Reply'];
+const ALL_FIELDS = KNOWN_FIELDS.concat(NEW_FIELDS);
+const ORIGINS = ['peer', 'owner', 'self'];
+const BL_ID_RE = /^BL-(\d{4,})$/;
+const NEXT_ID_RE = /<!--\s*next-id\s*:\s*(\S+?)\s*-->/;
+// Several reporters share one row: Reporter/Report/Reply list them in the same order, `；`-separated.
+const MULTI_SEP = '；';
+const WARN_CODES = new Set(['problem_has_identifier']);
 // Effort = a size from references/stage-graph.json (the single canonical definition) plus an
 // optional urgency suffix `!` / `急` written AFTER the size. Sizes are read, never hard-coded.
 const STAGE_GRAPH_FILE = path.join(__dirname, '..', 'references', 'stage-graph.json');
@@ -65,7 +87,11 @@ const DEFAULT_CAPS = {
   Source: 160,
   Pointer: 200,
   Context: 240,
+  Problem: 300,
+  Impact: 160,
+  // `entry` caps a legacy row (no reporter field); `row` caps a row carrying any reporter field.
   entry: 900,
+  row: 1600,
 };
 const POINTER_THRESHOLD = 600;
 const DEFAULT_ROOTS = ['docs/plans/', 'docs/projects/', 'docs/backlog/'];
@@ -77,6 +103,8 @@ const CODES = [
   'pointer_missing', 'pointer_unresolved', 'pointer_required',
   'duplicate_title', 'duplicate_id', 'extra_content', 'done_not_moved',
   'unparseable_entry', 'config_raises_cap',
+  'bad_id', 'bad_since', 'bad_origin', 'bad_reply', 'peer_field_missing',
+  'peer_closed_unanswered', 'problem_has_identifier',
 ];
 
 function byteLen(s) {
@@ -87,7 +115,7 @@ function usage(code) {
   process.stderr.write(
     'Usage: node scripts/check-backlog-entries.js --backlog <file> ' +
     '[--config <file>] [--allowlist <file>] [--mode warn|block] ' +
-    '[--json] [--self-test] [--update-allowlist]\n'
+    '[--json] [--self-test] [--update-allowlist] [--range <base>..<head>]\n'
   );
   process.exit(code);
 }
@@ -101,6 +129,7 @@ function parseArgs(argv) {
     json: false,
     selfTest: false,
     updateAllowlist: false,
+    range: null,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -116,6 +145,7 @@ function parseArgs(argv) {
     else if (a === '--json') out.json = true;
     else if (a === '--self-test') out.selfTest = true;
     else if (a === '--update-allowlist') out.updateAllowlist = true;
+    else if (a === '--range') out.range = need();
     else usage(2);
   }
   if (out.mode != null && out.mode !== 'warn' && out.mode !== 'block') usage(2);
@@ -183,13 +213,23 @@ function parseConfigFile(filePath) {
   if (days && /^\d+$/.test(days)) cfg.done_retention_days = Number(days);
   const roots = parseListSection(text, /pointer\s*roots/i);
   if (roots.length) cfg.pointer_roots = roots;
+  // `required_fields: Id, Since` or a `## Required Fields` bullet list.
+  const reqKv = kv(text, 'required_fields');
+  const reqList = reqKv && reqKv !== 'none'
+    ? reqKv.split(/[,\s]+/)
+    : parseListSection(text, /required\s*fields/i).filter((x) => !/:/.test(x));
+  if (reqKv || reqList.length) {
+    cfg.required_fields = reqList
+      .map((x) => REQUIRABLE.find((f) => f.toLowerCase() === String(x).trim().toLowerCase()))
+      .filter(Boolean);
+  }
   const capLines = text.split(/\r?\n/);
   for (const line of capLines) {
     const m = line.match(/^\s*-\s+caps\.(\w+)\s*:\s*(\d+)\s*$/i)
-      || line.match(/^\s*-\s+(Title|Status|Trigger|Source|Pointer|Context|entry)\s*:\s*(\d+)\s*$/i);
+      || line.match(/^\s*-\s+(Title|Status|Trigger|Source|Pointer|Context|Problem|Impact|entry|row)\s*:\s*(\d+)\s*$/i);
     if (m) {
-      const canonical = KNOWN_FIELDS.find((f) => f.toLowerCase() === m[1].toLowerCase())
-        || (m[1].toLowerCase() === 'entry' ? 'entry' : null);
+      const canonical = ALL_FIELDS.find((f) => f.toLowerCase() === m[1].toLowerCase())
+        || (['entry', 'row'].includes(m[1].toLowerCase()) ? m[1].toLowerCase() : null);
       if (canonical) cfg.caps[canonical] = Number(m[2]);
     }
   }
@@ -207,6 +247,7 @@ function builtinConfig() {
     // done_not_moved on sight. done_retention_days remains an override knob for a
     // consumer that genuinely wants a grace window.
     done_retention_days: 0,
+    required_fields: [],
     caps: {},
   };
 }
@@ -219,6 +260,7 @@ function mergeConfig(base, over) {
     mode: over.mode || base.mode,
     allowlist_path: over.allowlist_path || base.allowlist_path,
     done_retention_days: over.done_retention_days != null ? over.done_retention_days : base.done_retention_days,
+    required_fields: (over.required_fields || base.required_fields || []).slice(),
     caps: Object.assign({}, over.caps || {}),
   };
   return out;
@@ -234,7 +276,7 @@ function fieldLine(line) {
     || line.match(/^\s*-\s+([A-Za-z]+)\s*[:：]\s*(.*)$/);
   if (!m) return null;
   const name = m[1];
-  if (!KNOWN_FIELDS.includes(name) && name !== 'Id') return { extra: true, raw: line };
+  if (!ALL_FIELDS.includes(name)) return { extra: true, raw: line };
   return { name, value: m[2].trim() };
 }
 
@@ -271,6 +313,7 @@ function parseHeadingBlock(block) {
   const fields = {};
   let extra = false;
   let inFence = false;
+  let newFieldBytes = 0;
   for (let i = 1; i < block.lines.length; i++) {
     const line = block.lines[i];
     if (/^\s*```/.test(line)) {
@@ -291,13 +334,14 @@ function parseHeadingBlock(block) {
     if (fl) {
       if (fields[fl.name] != null) extra = true;
       fields[fl.name] = fl.value;
+      if (NEW_FIELDS.includes(fl.name)) newFieldBytes += byteLen(line) + 1;
       continue;
     }
     extra = true;
   }
   if (fields.Title == null) fields.Title = block.title;
   else if (fields.Title.trim() !== block.title.trim()) extra = true;
-  return { fields, extra, text, id: null, title: fields.Title };
+  return { fields, extra, text, id: fields.Id || null, title: fields.Title, newFieldBytes };
 }
 
 // Split a table row on unescaped pipes; `\|` inside a cell is a literal pipe.
@@ -342,7 +386,7 @@ function parseChecklist(text) {
     const head = line.match(/^(\s*)-\s+\[[ xX]\]\s+(?:\[([^\]]*)\]\s+)?(.+)$/);
     if (head && head[1].length === 0) {
       if (cur) items.push(cur);
-      cur = { title: head[3].trim(), fields: {}, extra: false, lines: [line] };
+      cur = { title: head[3].trim(), fields: {}, extra: false, lines: [line], newFieldBytes: 0 };
       continue;
     }
     if (!cur) continue;
@@ -359,6 +403,7 @@ function parseChecklist(text) {
     }
     if (fl) {
       cur.fields[fl.name] = fl.value;
+      if (NEW_FIELDS.includes(fl.name)) cur.newFieldBytes += byteLen(line) + 1;
       continue;
     }
     if (/^\s+-\s+/.test(line)) cur.extra = true;
@@ -367,7 +412,7 @@ function parseChecklist(text) {
   return items;
 }
 
-function pointerOk(value, cfg, repoRoot) {
+function pointerOk(value, cfg, repoRoot, existsFn) {
   const v = String(value || '').trim();
   if (!v) return { missing: true };
   if (v.toLowerCase() === 'none') return { none: true };
@@ -390,7 +435,7 @@ function pointerOk(value, cfg, repoRoot) {
       rel === r || rel.startsWith(r.replace(/\/?$/, '/'));
   });
   if (!under) return { unresolved: true };
-  if (!fs.existsSync(abs)) return { unresolved: true };
+  if (!(existsFn || fs.existsSync)(abs)) return { unresolved: true };
   return { ok: true };
 }
 
@@ -442,8 +487,12 @@ function collectEntries(text, style) {
         continue;
       }
       const fields = {};
-      for (const f of KNOWN_FIELDS) {
-        if (idx[f] != null) fields[f] = get(f);
+      let newFieldBytes = 0;
+      for (const f of ALL_FIELDS) {
+        // A table's Id column predates the reporter fields and stays governed by id_pattern.
+        if (f === 'Id' || idx[f] == null) continue;
+        fields[f] = get(f);
+        if (NEW_FIELDS.includes(f)) newFieldBytes += byteLen(fields[f]) + 3;
       }
       out.push({
         fields,
@@ -451,6 +500,8 @@ function collectEntries(text, style) {
         text: row.raw,
         id: get('Id') || null,
         title: fields.Title || '',
+        newFieldBytes,
+        tableId: true,
       });
     }
     return out;
@@ -469,6 +520,7 @@ function collectEntries(text, style) {
         text: it.lines.join('\n'),
         id: it.fields.Id || null,
         title: it.fields.Title,
+        newFieldBytes: it.newFieldBytes,
       });
     }
     return out;
@@ -518,7 +570,116 @@ function effectiveCap(cfg, field) {
   return over;
 }
 
-function checkEntry(entry, cfg, repoRoot, now) {
+function isValidDate(s) {
+  const m = String(s || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return false;
+  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  return d.getUTCFullYear() === +m[1] && d.getUTCMonth() === +m[2] - 1 && d.getUTCDate() === +m[3];
+}
+
+function splitMulti(v) {
+  if (v == null || String(v).trim() === '') return [];
+  return String(v).split(MULTI_SEP).map((x) => x.trim());
+}
+
+// none | unknown | <YYYY-MM-DD> <msg id or pointer>
+function replyOk(part) {
+  if (part === 'none' || part === 'unknown') return true;
+  const m = String(part).match(/^(\d{4}-\d{2}-\d{2})\s+\S/);
+  return Boolean(m && isValidDate(m[1]));
+}
+
+function replyUnanswered(part) {
+  const v = String(part == null ? '' : part).trim();
+  return v === '' || v === 'none' || v === 'unknown' || !replyOk(v);
+}
+
+// (Report, Reply) pairs of one row, positionally; a missing Reply reads as unanswered.
+function reportPairs(fields) {
+  const reports = splitMulti(fields && fields.Report);
+  const replies = splitMulti(fields && fields.Reply);
+  return reports.filter(Boolean).map((report, i) => ({ report, reply: replies[i] || '' }));
+}
+
+// Problem is written for the owner, not the codebase: a backtick, a file path, or a `name:123`
+// line reference means an identifier leaked in. Warn-only.
+const IDENTIFIER_RES = [
+  /`/,
+  /(?:^|[^\w/])\.{0,2}\/?(?:[\w.-]+\/){2,}/,
+  /[\w-]+\/[\w-]+\.[A-Za-z][A-Za-z0-9]{0,5}\b/,
+  /[A-Za-z_][\w.-]*:\d+/,
+];
+
+function hasNewFields(entry) {
+  return (entry.newFieldBytes || 0) > 0;
+}
+
+// The pointer threshold measures only the seven legacy fields (R1): reporter-field lines are
+// subtracted, so a legacy row measures exactly what it always did.
+function legacyBytes(entry) {
+  return byteLen(entry.text) - (entry.newFieldBytes || 0);
+}
+
+function checkReporterFields(entry, fields, title, cfg) {
+  const vios = [];
+  const push = (code, field, detail) => vios.push({ code, title, field, detail });
+  const present = (f) => fields[f] != null && String(fields[f]).trim() !== '';
+  for (const f of cfg.required_fields || []) {
+    if (f === 'Id' && entry.tableId) {
+      if (!entry.id) push('missing_field', 'Id', 'Id missing');
+      continue;
+    }
+    if (!present(f)) push('missing_field', f, `${f} missing`);
+  }
+  if (!entry.tableId && present('Id')) {
+    const id = String(fields.Id).trim();
+    let ok = BL_ID_RE.test(id);
+    if (!ok && cfg.id_pattern) {
+      try { ok = new RegExp(cfg.id_pattern).test(id); } catch { /* ignore bad pattern */ }
+    }
+    if (!ok) push('bad_id', 'Id', `${id} (expected BL-NNNN)`);
+  }
+  if (present('Since') && !isValidDate(String(fields.Since).trim())) {
+    push('bad_since', 'Since', `${fields.Since} (expected YYYY-MM-DD)`);
+  }
+  const origin = present('Origin') ? String(fields.Origin).trim() : null;
+  if (origin != null && !ORIGINS.includes(origin)) {
+    push('bad_origin', 'Origin', `${origin} (expected ${ORIGINS.join('|')})`);
+  }
+  if (present('Reply')) {
+    for (const part of splitMulti(fields.Reply)) {
+      if (!replyOk(part)) push('bad_reply', 'Reply', `${part} (expected none|unknown|<YYYY-MM-DD> <msg id or pointer>)`);
+    }
+  }
+  if (origin === 'peer') {
+    const missing = PEER_FIELDS.filter((f) => !present(f));
+    for (const f of missing) push('peer_field_missing', f, `Origin peer needs ${f}`);
+    if (!missing.length) {
+      const n = PEER_FIELDS.map((f) => splitMulti(fields[f]).length);
+      if (n[0] !== n[1] || n[1] !== n[2]) {
+        push('peer_field_missing', 'Reply', `Reporter ${n[0]} / Report ${n[1]} / Reply ${n[2]} — one ${MULTI_SEP}-separated value per reporter`);
+      }
+    }
+    const st = present('Status') ? String(fields.Status).trim() : '';
+    if (/^(shipped|dropped)\b/.test(st)) {
+      const replies = splitMulti(fields.Reply);
+      const reports = splitMulti(fields.Report);
+      const count = Math.max(reports.length, replies.length, 1);
+      const open = [];
+      for (let i = 0; i < count; i++) if (replyUnanswered(replies[i])) open.push(reports[i] || '(no Report)');
+      if (open.length) push('peer_closed_unanswered', 'Reply', `${st} with no reply to ${open.join(', ')}`);
+    }
+  }
+  if (present('Problem')) {
+    const hit = IDENTIFIER_RES.find((re) => re.test(fields.Problem));
+    if (hit) {
+      vios.push({ code: 'problem_has_identifier', title, field: 'Problem', detail: 'Problem is for the owner: no backticks, file paths, or name:line refs', level: 'warn' });
+    }
+  }
+  return vios;
+}
+
+function checkEntry(entry, cfg, repoRoot, now, existsFn) {
   const vios = [];
   if (entry.unparseable) {
     vios.push({
@@ -567,7 +728,7 @@ function checkEntry(entry, cfg, repoRoot, now) {
       }
     }
   }
-  for (const f of KNOWN_FIELDS) {
+  for (const f of ALL_FIELDS) {
     if (fields[f] == null) continue;
     const cap = effectiveCap(cfg, f);
     if (cap == null) continue;
@@ -581,13 +742,14 @@ function checkEntry(entry, cfg, repoRoot, now) {
       });
     }
   }
-  const entryCap = effectiveCap(cfg, 'entry');
+  const capKey = hasNewFields(entry) ? 'row' : 'entry';
+  const entryCap = effectiveCap(cfg, capKey);
   const ebytes = byteLen(entry.text);
   if (ebytes > entryCap) {
     vios.push({
       code: 'cap_exceeded',
       title,
-      field: 'entry',
+      field: capKey,
       detail: `${ebytes} > ${entryCap}`,
     });
   }
@@ -613,14 +775,15 @@ function checkEntry(entry, cfg, repoRoot, now) {
   }
   const ptr = fields.Pointer;
   if (ptr != null && String(ptr).trim() !== '') {
-    const p = pointerOk(ptr, cfg, repoRoot);
+    const p = pointerOk(ptr, cfg, repoRoot, existsFn);
     if (p.none) {
-      if (byteLen(entry.text) > POINTER_THRESHOLD) {
+      const lb = legacyBytes(entry);
+      if (lb > POINTER_THRESHOLD) {
         vios.push({
           code: 'pointer_required',
           title,
           field: 'Pointer',
-          detail: `entry ${byteLen(entry.text)} B > ${POINTER_THRESHOLD} with none`,
+          detail: `entry ${lb} B > ${POINTER_THRESHOLD} with none`,
         });
       }
     } else if (p.unresolved) {
@@ -648,7 +811,63 @@ function checkEntry(entry, cfg, repoRoot, now) {
       });
     }
   }
+  vios.push(...checkReporterFields(entry, fields, title, cfg));
   return vios;
+}
+
+// Duplicate title/Id are reported in entry order, right before that entry's own violations (the
+// order the gate has always printed). The next-id high-water mark (R6) is checked after: an Id at
+// or above the mark, or a BL- Id with no mark at all, means two writers can hand out one number.
+function checkNextId(text, entries) {
+  const vios = [];
+  const blIds = [];
+  for (const ent of entries) {
+    if (!ent.id || ent.tableId) continue;
+    const id = String(ent.id).trim();
+    const m = id.match(BL_ID_RE);
+    if (m) blIds.push({ id, n: Number(m[1]), title: (ent.fields && ent.fields.Title) || ent.title || '' });
+  }
+  const mark = String(text || '').match(NEXT_ID_RE);
+  if (mark) {
+    const mm = mark[1].match(BL_ID_RE);
+    if (!mm) {
+      vios.push({ code: 'bad_id', title: '', field: 'Id', detail: `next-id ${mark[1]} (expected BL-NNNN)` });
+    } else {
+      for (const b of blIds) {
+        if (b.n >= Number(mm[1])) {
+          vios.push({ code: 'bad_id', title: b.title, field: 'Id', detail: `${b.id} is not below next-id ${mark[1]}; raise the next-id comment` });
+        }
+      }
+    }
+  } else if (blIds.length) {
+    vios.push({ code: 'bad_id', title: '', field: 'Id', detail: 'BL- Ids with no <!-- next-id: BL-NNNN --> high-water mark' });
+  }
+  return vios;
+}
+
+function collectViolations(text, cfg, repoRoot, now, existsFn) {
+  const entries = collectEntries(text, cfg.style || 'heading');
+  const violations = checkCapsRaised(cfg);
+  const titles = new Map();
+  const ids = new Map();
+  for (const ent of entries) {
+    const t = (ent.fields && ent.fields.Title) || ent.title || '';
+    const key = t.trim().toLowerCase();
+    if (key) {
+      if (titles.has(key)) {
+        violations.push({ code: 'duplicate_title', title: t, field: 'Title', detail: 'duplicate title' });
+      } else titles.set(key, true);
+    }
+    if (ent.id) {
+      const id = String(ent.id).trim();
+      if (ids.has(id)) {
+        violations.push({ code: 'duplicate_id', title: t, field: 'Id', detail: id });
+      } else ids.set(id, true);
+    }
+    violations.push(...checkEntry(ent, cfg, repoRoot, now, existsFn));
+  }
+  violations.push(...checkNextId(text, entries));
+  return { entries, violations };
 }
 
 function loadAllowlist(filePath) {
@@ -680,17 +899,7 @@ function allowSet(allow) {
   return s;
 }
 
-function runCheck(opts) {
-  const backlogPath = path.resolve(opts.backlog);
-  let text;
-  try {
-    text = fs.readFileSync(backlogPath, 'utf8');
-  } catch (e) {
-    process.stderr.write(`unreadable backlog: ${e.message}\n`);
-    process.exit(2);
-  }
-  const backlogDir = path.dirname(backlogPath);
-  const repoRoot = gitToplevel(backlogDir) || backlogDir;
+function loadGateConfig(opts, repoRoot) {
   let cfg = builtinConfig();
   let configPath = opts.config;
   if (!configPath) configPath = resolveBacklogConfigPath(repoRoot);
@@ -703,6 +912,33 @@ function runCheck(opts) {
     }
   }
   if (opts.mode) cfg.mode = opts.mode;
+  return cfg;
+}
+
+function violationLevel(v) {
+  return v.level || (WARN_CODES.has(v.code) ? 'warn' : 'block');
+}
+
+// at: optional { text, repoRoot, existsFn } — check a backlog read from somewhere other than the
+// working tree (the pre-push range mode reads the pushed commit's blob).
+function runCheck(opts, at) {
+  const backlogPath = path.resolve(opts.backlog);
+  let text;
+  let repoRoot;
+  if (at) {
+    text = at.text;
+    repoRoot = at.repoRoot;
+  } else {
+    try {
+      text = fs.readFileSync(backlogPath, 'utf8');
+    } catch (e) {
+      process.stderr.write(`unreadable backlog: ${e.message}\n`);
+      process.exit(2);
+    }
+    const backlogDir = path.dirname(backlogPath);
+    repoRoot = gitToplevel(backlogDir) || backlogDir;
+  }
+  const cfg = loadGateConfig(opts, repoRoot);
   const allowPath = opts.allowlist
     || (cfg.allowlist_path
       ? (path.isAbsolute(cfg.allowlist_path) ? cfg.allowlist_path : path.join(repoRoot, cfg.allowlist_path))
@@ -710,63 +946,179 @@ function runCheck(opts) {
   const allow = loadAllowlist(allowPath);
   const allowedPairs = allowSet(allow);
   const now = Date.now();
-  const violations = checkCapsRaised(cfg);
-  const entries = collectEntries(text, cfg.style || 'heading');
-  const titles = new Map();
-  const ids = new Map();
-  for (const ent of entries) {
-    const t = (ent.fields && ent.fields.Title) || ent.title || '';
-    const key = t.trim().toLowerCase();
-    if (key) {
-      if (titles.has(key)) {
-        violations.push({
-          code: 'duplicate_title',
-          title: t,
-          field: 'Title',
-          detail: 'duplicate title',
-        });
-      } else titles.set(key, true);
-    }
-    if (ent.id) {
-      if (ids.has(ent.id)) {
-        violations.push({
-          code: 'duplicate_id',
-          title: t,
-          field: 'Id',
-          detail: ent.id,
-        });
-      } else ids.set(ent.id, true);
-    }
-    violations.push(...checkEntry(ent, cfg, repoRoot, now));
-  }
   const style = cfg.style || 'heading';
+  const { entries, violations } = collectViolations(text, cfg, repoRoot, now, at && at.existsFn);
   const annotated = violations.map((v) => {
     const fp = fingerprint(style, v.title);
     const allowed = allowedPairs.has(`${fp}\0${v.code}`);
-    return Object.assign({ allowed }, v);
+    return Object.assign({ allowed }, v, { level: violationLevel(v) });
   });
-  const newCount = annotated.filter((v) => !v.allowed).length;
+  const report = buildReport(cfg, backlogPath, style, entries.length, byteLen(text), annotated);
+  return { report, allow, allowPath, cfg, style, annotated, entries, repoRoot };
+}
+
+function buildReport(cfg, backlogPath, style, entryCount, bytes, annotated) {
+  // A warn-level code (problem_has_identifier) is reported but never counts toward the exit.
+  const newCount = annotated.filter((v) => !v.allowed && v.level !== 'warn').length;
   const allowedCount = annotated.filter((v) => v.allowed).length;
+  const warnCount = annotated.filter((v) => !v.allowed && v.level === 'warn').length;
   let exit = 0;
   if (cfg.mode === 'block' && newCount > 0) exit = 1;
-  const report = {
+  return {
     mode: cfg.mode,
     backlog: backlogPath,
     style,
-    entries: entries.length,
-    bytes: byteLen(text),
+    entries: entryCount,
+    bytes,
     violations: annotated.map((v) => ({
       code: v.code,
       title: v.title,
       field: v.field,
       detail: v.detail,
       allowed: v.allowed,
+      level: v.level,
     })),
     new_count: newCount,
     allowed_count: allowedCount,
+    warn_count: warnCount,
     exit,
   };
-  return { report, allow, allowPath, cfg, style, annotated };
+}
+
+// --- pre-push range mode (R3-R6) ---
+
+function git(repoRoot, args) {
+  return spawnSync('git', ['-C', repoRoot].concat(args), {
+    encoding: 'utf8',
+    maxBuffer: 256 * 1024 * 1024,
+  });
+}
+
+function showAt(repoRoot, sha, rel) {
+  const r = git(repoRoot, ['show', `${sha}:${rel}`]);
+  return r.status === 0 ? r.stdout : null;
+}
+
+function existsAtFn(repoRoot, sha) {
+  return (abs) => {
+    const rel = path.relative(repoRoot, abs).split(path.sep).join('/');
+    if (!rel || rel.startsWith('..')) return false;
+    return git(repoRoot, ['cat-file', '-e', `${sha}:${rel}`]).status === 0;
+  };
+}
+
+function verifyCommit(repoRoot, rev) {
+  const r = git(repoRoot, ['rev-parse', '--verify', '--quiet', `${rev}^{commit}`]);
+  return r.status === 0 ? r.stdout.trim() : null;
+}
+
+function parseRange(spec) {
+  const i = String(spec).indexOf('..');
+  if (i < 0) return { base: null, head: spec };
+  return { base: spec.slice(0, i) || null, head: spec.slice(i + 2) || 'HEAD' };
+}
+
+function resolvePlansDir(repoRoot) {
+  const helper = path.join(SCRIPT_DIR, 'resolve-project-paths.sh');
+  const r = spawnSync('bash', [helper, '--target', repoRoot, '--field', 'plans_dir'], { encoding: 'utf8' });
+  const v = r.status === 0 ? String(r.stdout || '').trim() : '';
+  return (!v || v === 'none') ? 'docs/plans' : v.replace(/\/+$/, '');
+}
+
+function idMentionRe(id) {
+  return new RegExp(id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![0-9])');
+}
+
+function rowPairs(entries) {
+  const out = [];
+  for (const e of entries) {
+    if (!e.fields || !e.id) continue;
+    const id = String(e.id).trim();
+    for (const p of reportPairs(e.fields)) {
+      out.push({ key: `${id}\0${p.report}`, id, report: p.report, reply: p.reply, title: e.fields.Title || e.title || '' });
+    }
+  }
+  return out;
+}
+
+// peer_report_lost: every (Id, Report) pair seen in the range — base included, each commit that
+// touched the backlog in topological order, the LAST appearance's Reply wins (R4) — that is gone
+// at head (row deleted, or one reporter dropped from a surviving row: R5) while its last Reply was
+// none/unknown, and whose Id is not named by head's plans, CHANGELOG, or another BACKLOG row (R3).
+function peerReportLost(repoRoot, rel, baseSha, headSha, headEntries, style) {
+  const listArgs = ['rev-list', '--reverse', '--topo-order', '--full-history',
+    baseSha ? `${baseSha}..${headSha}` : headSha, '--', rel];
+  const r = git(repoRoot, listArgs);
+  if (r.status !== 0) return { error: `git rev-list failed: ${String(r.stderr || '').trim()}` };
+  const shas = (baseSha ? [baseSha] : []).concat(String(r.stdout).split('\n').filter(Boolean));
+  const last = new Map();
+  for (const sha of shas) {
+    const text = showAt(repoRoot, sha, rel);
+    if (text == null) continue;
+    for (const p of rowPairs(collectEntries(text, style))) last.set(p.key, Object.assign({ sha }, p));
+  }
+  const headKeys = new Set(rowPairs(headEntries).map((p) => p.key));
+  const plansDir = resolvePlansDir(repoRoot);
+  const exitCache = new Map();
+  const hasExit = (id) => {
+    if (exitCache.has(id)) return exitCache.get(id);
+    const re = idMentionRe(id);
+    let found = headEntries.some((e) => String(e.id || '').trim() !== id && re.test(e.text || ''));
+    if (!found) {
+      const pattern = re.source.replace('(?![0-9])', '([^0-9]|$)');
+      const g = git(repoRoot, ['grep', '-q', '-E', pattern, headSha, '--', plansDir, 'CHANGELOG.md']);
+      found = g.status === 0;
+    }
+    exitCache.set(id, found);
+    return found;
+  };
+  const lost = [];
+  for (const p of last.values()) {
+    if (headKeys.has(p.key)) continue;
+    if (!replyUnanswered(p.reply)) continue;
+    if (hasExit(p.id)) continue;
+    lost.push({
+      code: 'peer_report_lost',
+      title: p.title,
+      field: 'Report',
+      detail: `${p.id} ${p.report}: last Reply "${p.reply || '(missing)'}" at ${p.sha.slice(0, 12)}; reply first, or name ${p.id} in ${plansDir}/ or CHANGELOG.md`,
+      level: 'block',
+    });
+  }
+  return { lost, commits: shas.length };
+}
+
+function runRange(opts) {
+  const backlogAbs = path.resolve(opts.backlog);
+  const repoRoot = gitToplevel(fs.existsSync(path.dirname(backlogAbs)) ? path.dirname(backlogAbs) : process.cwd());
+  if (!repoRoot) {
+    process.stderr.write('--range needs the backlog inside a git repository\n');
+    process.exit(2);
+  }
+  const rel = path.relative(repoRoot, backlogAbs).split(path.sep).join('/');
+  const { base, head } = parseRange(opts.range);
+  const headSha = verifyCommit(repoRoot, head);
+  const baseSha = base ? verifyCommit(repoRoot, base) : null;
+  if (!headSha || (base && !baseSha)) {
+    process.stderr.write(`--range: cannot resolve ${opts.range}\n`);
+    process.exit(2);
+  }
+  const headText = showAt(repoRoot, headSha, rel);
+  const checked = runCheck(opts, {
+    text: headText == null ? '' : headText,
+    repoRoot,
+    existsFn: existsAtFn(repoRoot, headSha),
+  });
+  const lostRun = peerReportLost(repoRoot, rel, baseSha, headSha, checked.entries, checked.style);
+  if (lostRun.error) {
+    process.stderr.write(`${lostRun.error}\n`);
+    process.exit(2);
+  }
+  const annotated = checked.annotated.concat(lostRun.lost.map((v) => Object.assign({ allowed: false }, v)));
+  const report = buildReport(checked.cfg, backlogAbs, checked.style, checked.entries.length,
+    byteLen(headText || ''), annotated);
+  report.range = { base: baseSha, head: headSha, commits: lostRun.commits };
+  return report;
 }
 
 function updateAllowlist(allow, allowPath, style, annotated) {
@@ -774,6 +1126,7 @@ function updateAllowlist(allow, allowPath, style, annotated) {
   for (const v of annotated) still.add(`${fingerprint(style, v.title)}\0${v.code}`);
   const wouldAdd = [];
   for (const v of annotated) {
+    if (v.level === 'warn') continue;
     const fp = fingerprint(style, v.title);
     const key = `${fp}\0${v.code}`;
     const listed = (allow.entries || []).some(
@@ -800,7 +1153,8 @@ function updateAllowlist(allow, allowPath, style, annotated) {
 
 function miniHeading(fields) {
   const title = fields.Title;
-  const keys = ['Status', 'Trigger', 'Effort', 'Source', 'Pointer', 'Context'];
+  const keys = ['Id', 'Status', 'Since', 'Origin', 'Reporter', 'Report', 'Reply', 'Problem', 'Impact',
+    'Trigger', 'Effort', 'Source', 'Pointer', 'Context'];
   const bullets = keys
     .filter((k) => fields[k] != null)
     .map((k) => `- **${k}**: ${fields[k]}`)
@@ -957,28 +1311,43 @@ function runSelfTest() {
       { caps: { Title: 999 } }
     );
 
+    // --- reporter fields ---
+    const mark = (n) => `<!-- next-id: BL-${String(n).padStart(4, '0')} -->\n`;
+    const peer = {
+      ...base,
+      Id: 'BL-0001',
+      Since: '2026-09-05',
+      Origin: 'peer',
+      Reporter: 'cuda',
+      Report: '2026-09-05 fleet',
+      Reply: 'none',
+      Problem: '回報者在某情況下遇到問題',
+      Impact: '不修會一直重複發生',
+    };
+    add('reporter-row-ok', 'heading', mark(2) + miniHeading(peer), []);
+    add('missing_field-required', 'heading', miniHeading(base), ['missing_field'], { required_fields: ['Id'] });
+    add('bad_id-format', 'heading', miniHeading({ ...base, Id: 'X-1' }), ['bad_id']);
+    add('bad_id-not-below-next-id', 'heading', mark(1) + miniHeading(peer), ['bad_id']);
+    add('bad_id-no-next-id', 'heading', miniHeading(peer), ['bad_id']);
+    add('duplicate_id-heading', 'heading',
+      mark(2) + miniHeading(peer) + '\n' + miniHeading({ ...peer, Title: 'Another row' }), ['duplicate_id']);
+    add('bad_since', 'heading', mark(2) + miniHeading({ ...peer, Since: '2026-13-40' }), ['bad_since']);
+    add('bad_origin', 'heading', mark(2) + miniHeading({ ...peer, Origin: 'external' }), ['bad_origin']);
+    add('bad_reply', 'heading', mark(2) + miniHeading({ ...peer, Reply: 'replied' }), ['bad_reply']);
+    add('peer_field_missing', 'heading', mark(2) + miniHeading({ ...peer, Reply: undefined }), ['peer_field_missing']);
+    add('peer_field_missing-count', 'heading',
+      mark(2) + miniHeading({ ...peer, Reporter: 'cuda；openclaw', Report: '2026-09-05 fleet；msg_1' }), ['peer_field_missing']);
+    add('peer_closed_unanswered', 'heading', mark(2) + miniHeading({ ...peer, Status: 'dropped 2020-01-01' }),
+      ['done_not_moved', 'peer_closed_unanswered']);
+    add('peer_closed-answered', 'heading',
+      mark(2) + miniHeading({ ...peer, Status: 'dropped 2020-01-01', Reply: '2026-09-06 msg_01X' }), ['done_not_moved']);
+    add('problem_has_identifier', 'heading', mark(2) + miniHeading({ ...peer, Problem: '`scripts/x.js` 壞了' }),
+      ['problem_has_identifier']);
+
     const failures = [];
     for (const c of cases) {
       const ccfg = mergeConfig(cfg, Object.assign({ style: c.style }, c.extraCfg || {}));
-      const ents = collectEntries(c.text, ccfg.style);
-      const vios = checkCapsRaised(ccfg);
-      const titles = new Map();
-      const ids = new Map();
-      for (const ent of ents) {
-        const t = (ent.fields && ent.fields.Title) || ent.title || '';
-        const key = t.trim().toLowerCase();
-        if (key) {
-          if (titles.has(key)) {
-            vios.push({ code: 'duplicate_title', title: t, field: 'Title', detail: '' });
-          } else titles.set(key, true);
-        }
-        if (ent.id) {
-          if (ids.has(ent.id)) {
-            vios.push({ code: 'duplicate_id', title: t, field: 'Id', detail: ent.id });
-          } else ids.set(ent.id, true);
-        }
-        vios.push(...checkEntry(ent, ccfg, tmp, Date.now()));
-      }
+      const { violations: vios } = collectViolations(c.text, ccfg, tmp, Date.now());
       const got = [...new Set(vios.map((v) => v.code))].sort();
       const exp = c.expect.slice().sort();
       if (JSON.stringify(got) !== JSON.stringify(exp)) {
@@ -1010,6 +1379,12 @@ function main() {
     process.exit(runSelfTest());
   }
   if (!args.backlog) usage(2);
+  if (args.range) {
+    if (args.updateAllowlist) usage(2);
+    const rep = runRange(args);
+    fs.writeSync(1, JSON.stringify(rep) + '\n');
+    process.exit(rep.exit);
+  }
   const { report, allow, allowPath, style, annotated } = runCheck(args);
   if (args.updateAllowlist) {
     const u = updateAllowlist(allow, allowPath || args.allowlist, style, annotated);
@@ -1044,4 +1419,15 @@ module.exports = {
   pointerOk,
   splitTableCells,
   runCheck,
+  NEW_FIELDS,
+  ALL_FIELDS,
+  MULTI_SEP,
+  BL_ID_RE,
+  NEXT_ID_RE,
+  splitMulti,
+  replyOk,
+  replyUnanswered,
+  reportPairs,
+  isValidDate,
+  collectViolations,
 };

@@ -32,7 +32,7 @@ Each script encodes a step the pipeline previously asked the LLM to do by hand. 
 
 | Script | Replaces LLM-judgment for | When invoked |
 |--------|---------------------------|--------------|
-| [`scripts/check-backlog-entries.js`](../../scripts/check-backlog-entries.js) | Per-entry schema/caps/pointer gate (warn until Phase 4) | After writing a backlog row; pre-merge checklist |
+| [`scripts/check-backlog-entries.js`](../../scripts/check-backlog-entries.js) | Per-entry schema/caps/pointer/reporter-field gate; `--range` is the pre-push peer-report guard | After writing a backlog row; pre-merge checklist |
 | [`scripts/completeness-scan.sh`](../../scripts/completeness-scan.sh) | Anti-stub regex pass + new-vs-pre-existing classification | Completeness Gate step |
 | [`scripts/error-path-scan.sh`](../../scripts/error-path-scan.sh) | L0 attention-slip scan for error paths (swallowed errors, broadened catches, untested error paths) | Completeness Gate step (advisory to review) |
 | [`scripts/secret-scan-diff.js`](../../scripts/secret-scan-diff.js) | L0 attention-slip scan for leaked secrets | Completeness Gate step (blocking) |

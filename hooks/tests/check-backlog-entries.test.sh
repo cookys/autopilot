@@ -263,4 +263,174 @@ rc=$?
 set -e
 assert_eq "$rc" "1" "block mode exits 1 with new violations"
 
+# =============================================================================================
+# Reporter fields (Id / Since / Origin / Reporter / Report / Reply / Problem / Impact).
+
+codes_of() { # <json> -> "code:field:title|..." in report order
+  printf '%s' "$1" | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{try{const j=JSON.parse(d);process.stdout.write(j.violations.map(v=>v.code+":"+v.field+":"+v.title).join("|"))}catch(e){process.stdout.write("unparsable")}})'
+}
+level_of() { # <json> <code>
+  printf '%s' "$1" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const v=JSON.parse(d).violations.find(x=>x.code==='$2');process.stdout.write(v?v.level:'none')}catch(e){process.stdout.write('x')}})"
+}
+gate_run() { # <gate> <repo> [extra args] -> json; exit code in GATE_RC
+  local g="$1" d="$2"; shift 2
+  set +e
+  GATE_OUT="$(node "$g" --backlog "$d/docs/BACKLOG.md" --mode block --json "$@" 2>/dev/null)"
+  GATE_RC=$?
+  set -e
+}
+
+# --- legacy rows, no config: the result is pinned to what the pre-reporter-field gate returned on
+# the same fixture (old and new gate compared byte-for-byte when this golden was taken).
+T230="$(python3 -c 'print("t"*230)')"
+S150="$(python3 -c 'print("s"*150)')"
+C230="$(python3 -c 'print("c"*230)')"
+d="$(repo golden)"
+printf '%s\n' '# BACKLOG' '' \
+  '### Golden clean row' '- **Status**: open' '- **Trigger**: when tests run' '- **Effort**: S' '- **Source**: suite' '- **Pointer**: docs/plans/ok.md' '' \
+  '### Golden broken row' '- **Status**: pending' '- **Trigger**: when tests run' '- **Source**: suite' '- **Pointer**: docs/plans/ok.md' '' \
+  '### Golden long row' '- **Status**: open' "- **Trigger**: $T230" '- **Effort**: S' "- **Source**: $S150" '- **Pointer**: docs/plans/ok.md' "- **Context**: $C230" "- **Context**: $C230" '' \
+  '### Golden unpointed row' '- **Status**: open' "- **Trigger**: $T230" '- **Effort**: S' "- **Source**: $S150" '- **Pointer**: none' "- **Context**: $C120" '' \
+  '### Golden short unpointed row' '- **Status**: open' '- **Trigger**: when tests run' '- **Effort**: S' '- **Source**: suite' '- **Pointer**: none' '' \
+  '### Golden broken row' '- **Status**: dropped 2020-01-01' '- **Trigger**: when tests run' '- **Effort**: M' '- **Source**: suite' '- **Pointer**: docs/plans/gone.md' '' \
+  > "$d/docs/BACKLOG.md"
+GOLDEN='missing_field:Effort:Golden broken row|bad_status:Status:Golden broken row|extra_content::Golden long row|cap_exceeded:entry:Golden long row|pointer_required:Pointer:Golden unpointed row|duplicate_title:Title:Golden broken row|pointer_unresolved:Pointer:Golden broken row|done_not_moved:Status:Golden broken row'
+gate_run "$GATE" "$d"
+assert_eq "$GATE_RC" "1" "legacy golden: exit unchanged"
+assert_eq "$(codes_of "$GATE_OUT")" "$GOLDEN" "legacy golden: violations unchanged (no config)"
+gate_run "$GATE" "$d" --config /dev/null
+assert_eq "$(codes_of "$GATE_OUT")" "$GOLDEN" "legacy golden: violations unchanged (empty config)"
+
+# --- a well-formed peer row; each red case below edits exactly one line of it.
+prow() { # [title] -> a clean peer row
+  printf '%s\n' "### ${1:-Peer reported row}" '- **Id**: BL-0001' '- **Status**: open' '- **Since**: 2026-09-05' \
+    '- **Origin**: peer' '- **Reporter**: cuda' '- **Report**: 2026-09-05 fleet' '- **Reply**: none' \
+    '- **Problem**: 回報者在某情況下遇到問題' '- **Impact**: 不修會一直重複發生' \
+    '- **Trigger**: when tests run' '- **Effort**: S' '- **Source**: suite' '- **Pointer**: docs/plans/ok.md' ''
+}
+put() { # <repo> <row text> [next-id number]
+  printf '# BACKLOG\n\n<!-- next-id: BL-%04d -->\n\n%s\n' "${3:-2}" "$2" > "$1/docs/BACKLOG.md"
+}
+edit_row() { # <sed expr> -> the clean peer row with one edit
+  prow | sed "$1"
+}
+
+d="$(repo r-ok)"
+put "$d" "$(prow)"
+gate_run "$GATE" "$d"
+assert_eq "$GATE_RC" "0" "reporter fields: a clean peer row passes in block mode"
+assert_eq "$(codes_of "$GATE_OUT")" "" "reporter fields: no violations on the clean row"
+
+red_case() { # <code> <name> <row text> [next-id] [extra gate args...]
+  local code="$1" name="$2" text="$3" n="${4:-2}"; shift 4 2>/dev/null || shift $#
+  local d; d="$(repo "r-$name")"
+  put "$d" "$text" "$n"
+  gate_run "$GATE" "$d" "$@"
+  assert_eq "$(json_has_code "$GATE_OUT" "$code")" "yes" "red: $code fires ($name)"
+}
+red_case bad_since since "$(edit_row 's/^- \*\*Since\*\*: .*/- **Since**: 2026-13-40/')" 2
+red_case bad_origin origin "$(edit_row 's/^- \*\*Origin\*\*: .*/- **Origin**: external/')" 2
+red_case bad_reply reply "$(edit_row 's/^- \*\*Reply\*\*: .*/- **Reply**: replied/')" 2
+red_case peer_field_missing trio "$(edit_row '/^- \*\*Reply\*\*:/d')" 2
+red_case peer_field_missing count "$(edit_row 's/^- \*\*Reporter\*\*: .*/- **Reporter**: cuda；openclaw/')" 2
+red_case bad_id id-format "$(edit_row 's/^- \*\*Id\*\*: .*/- **Id**: BL-1/')" 2
+red_case bad_id id-at-next "$(prow)" 1
+red_case duplicate_id dup "$(prow 'First row')"$'\n\n'"$(prow 'Second row')" 2
+red_case peer_closed_unanswered closed "$(edit_row 's/^- \*\*Status\*\*: .*/- **Status**: dropped 2026-10-01/')" 2
+
+# Green twins.
+d="$(repo g-closed)"
+put "$d" "$(edit_row 's/^- \*\*Status\*\*: .*/- **Status**: dropped 2026-10-01/' | sed 's/^- \*\*Reply\*\*: .*/- **Reply**: 2026-10-01 msg_01R/')"
+gate_run "$GATE" "$d"
+assert_eq "$(json_has_code "$GATE_OUT" peer_closed_unanswered)" "no" "green: a closed peer row with a dated Reply is not peer_closed_unanswered"
+d="$(repo g-dup)"
+put "$d" "$(prow 'First row')"$'\n\n'"$(prow 'Second row' | sed 's/BL-0001/BL-0002/')" 3
+gate_run "$GATE" "$d"
+assert_eq "$GATE_RC" "0" "green: two unique Ids below next-id pass"
+d="$(repo g-self)"
+put "$d" "$(edit_row 's/^- \*\*Origin\*\*: .*/- **Origin**: self/' | sed '/^- \*\*Report/d; /^- \*\*Reply/d')"
+gate_run "$GATE" "$d"
+assert_eq "$GATE_RC" "0" "green: Origin self needs no Reporter/Report/Reply"
+
+# problem_has_identifier is a warning: reported, never blocks.
+d="$(repo r-ident)"
+put "$d" "$(edit_row 's/^- \*\*Problem\*\*: .*/- **Problem**: 改 `scripts\/x.js` 才會好/')"
+gate_run "$GATE" "$d"
+assert_eq "$(json_has_code "$GATE_OUT" problem_has_identifier)" "yes" "red: problem_has_identifier fires"
+assert_eq "$(level_of "$GATE_OUT" problem_has_identifier)" "warn" "problem_has_identifier is level warn"
+assert_eq "$GATE_RC" "0" "problem_has_identifier does not block in block mode"
+IDENT_DIR="$d"
+
+# --- required_fields config: optional by default, required when the config names them.
+LEGACY_ROW="$(printf '%s\n' '### Legacy only row' '- **Status**: open' '- **Trigger**: when tests run' '- **Effort**: S' '- **Source**: suite' '- **Pointer**: docs/plans/ok.md')"
+d="$(repo req-kv)"
+printf '%s\n' "$LEGACY_ROW" > "$d/docs/BACKLOG.md"
+printf '%s\n' '## Mode' '- mode: block' '- required_fields: Id, Since' > "$d/.claude/backlog-config.md"
+gate_run "$GATE" "$d" --config "$d/.claude/backlog-config.md"
+assert_contains "$(codes_of "$GATE_OUT")" "missing_field:Id:Legacy only row" "required_fields kv: Id required"
+assert_contains "$(codes_of "$GATE_OUT")" "missing_field:Since:Legacy only row" "required_fields kv: Since required"
+assert_not_contains "$(codes_of "$GATE_OUT")" "missing_field:Origin" "required_fields kv: unnamed fields stay optional"
+REQ_DIR="$d"
+d="$(repo req-list)"
+printf '%s\n' "$LEGACY_ROW" > "$d/docs/BACKLOG.md"
+printf '%s\n' '## Mode' '- mode: block' '' '## Required Fields' '- Problem' '- Impact' > "$d/.claude/backlog-config.md"
+gate_run "$GATE" "$d" --config "$d/.claude/backlog-config.md"
+assert_contains "$(codes_of "$GATE_OUT")" "missing_field:Problem:Legacy only row" "required_fields section: Problem required"
+assert_contains "$(codes_of "$GATE_OUT")" "missing_field:Impact:Legacy only row" "required_fields section: Impact required"
+d="$(repo req-none)"
+printf '%s\n' "$LEGACY_ROW" > "$d/docs/BACKLOG.md"
+gate_run "$GATE" "$d"
+assert_eq "$GATE_RC" "0" "no required_fields: a legacy row with no reporter field passes"
+
+# --- R1: the pointer threshold measures only the legacy fields.
+C200="$(python3 -c 'print("c"*200)')"
+R1_ROW="$(printf '%s\n' '### Pointer threshold row' '- **Id**: BL-0001' '- **Status**: open' '- **Since**: 2026-09-05' '- **Origin**: self' \
+  "- **Problem**: $(python3 -c 'print("問"*90)')" "- **Impact**: $(python3 -c 'print("影"*45)')" \
+  "- **Trigger**: $T230" '- **Effort**: S' "- **Source**: $S150" '- **Pointer**: none' "- **Context**: $(python3 -c 'print("c"*60)')")"
+d="$(repo r1-green)"
+put "$d" "$R1_ROW"
+gate_run "$GATE" "$d"
+assert_eq "$(json_has_code "$GATE_OUT" pointer_required)" "no" "R1: reporter fields do not count toward the 600 B pointer threshold"
+R1_DIR="$d"
+d="$(repo r1-red)"
+put "$d" "$(printf '%s\n' "$R1_ROW" | sed "s/^- \*\*Context\*\*: .*/- **Context**: $C200/")"
+gate_run "$GATE" "$d"
+assert_eq "$(json_has_code "$GATE_OUT" pointer_required)" "yes" "R1: legacy fields over 600 B still need a Pointer"
+
+# --- R2: a row with reporter fields is capped at 1600 B; a legacy row stays at 900 B.
+P290="$(python3 -c 'print("問"*96)')"
+I150="$(python3 -c 'print("影"*50)')"
+R2_ROW="$(printf '%s\n' '### Row cap row' '- **Id**: BL-0001' '- **Status**: open' '- **Since**: 2026-09-05' '- **Origin**: self' \
+  "- **Problem**: $P290" "- **Impact**: $I150" "- **Trigger**: $T230" '- **Effort**: S' "- **Source**: $S150" \
+  '- **Pointer**: docs/plans/ok.md' "- **Context**: $C230")"
+d="$(repo r2-green)"
+put "$d" "$R2_ROW"
+gate_run "$GATE" "$d"
+assert_eq "$(json_has_code "$GATE_OUT" cap_exceeded)" "no" "R2: a ~1.3 KB row carrying reporter fields is under the 1600 B row cap"
+R2_DIR="$d"
+d="$(repo r2-red)"
+put "$d" "$(printf '%s\n' "$R2_ROW" | sed 's/^- \*\*Origin\*\*: self/- **Origin**: peer\n- **Reporter**: '"$(python3 -c 'print("r"*150)')"'\n- **Report**: '"$(python3 -c 'print("p"*150)')"'\n- **Reply**: none/')"
+gate_run "$GATE" "$d"
+assert_contains "$(codes_of "$GATE_OUT")" "cap_exceeded:row:Row cap row" "R2: over 1600 B is cap_exceeded on row"
+
+# --- mutation proofs: each rule's test goes red when the rule is removed from the gate.
+mutate() { # <name> <sed expr> -> path of a mutated gate copy (fails the test if sed did not bite)
+  local m="$TEST_TMP/mutroot/scripts/check-$1.js"
+  sed "$2" "$GATE" > "$m"
+  if cmp -s "$GATE" "$m"; then fail "mutation $1 did not apply (pattern drifted)"; fi
+  echo "$m"
+}
+m="$(mutate r1 's/const lb = legacyBytes(entry);/const lb = byteLen(entry.text);/')"
+gate_run "$m" "$R1_DIR"
+assert_eq "$(json_has_code "$GATE_OUT" pointer_required)" "yes" "R1 mutation: counting the whole row trips the threshold (the suite can tell)"
+m="$(mutate r2 "s/hasNewFields(entry) ? 'row' : 'entry'/'entry'/")"
+gate_run "$m" "$R2_DIR"
+assert_eq "$(json_has_code "$GATE_OUT" cap_exceeded)" "yes" "R2 mutation: the 900 B cap on a reporter row is caught"
+m="$(mutate req 's/for (const f of cfg.required_fields || \[\])/for (const f of [])/')"
+gate_run "$m" "$REQ_DIR" --config "$REQ_DIR/.claude/backlog-config.md"
+assert_eq "$(json_has_code "$GATE_OUT" missing_field)" "no" "required_fields mutation: ignoring the config is caught"
+m="$(mutate warn "s/, level: 'warn' });/ });/; s/new Set(\['problem_has_identifier'\])/new Set([])/")"
+gate_run "$m" "$IDENT_DIR"
+assert_eq "$GATE_RC" "1" "warn-level mutation: a blocking problem_has_identifier is caught"
+
 finalize_test

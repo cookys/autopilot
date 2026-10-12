@@ -1,31 +1,109 @@
 # Backlog entry schema
 
-A backlog entry is an **index row**. It names what, when it fires, size, who saw it, and where evidence lives. Measurement numbers, log excerpts, call stacks, decision narratives, and more than one sentence of context live **at the pointer**, never in the row. Preferred pointer targets, in order: an existing `docs/plans/…` file, an existing `docs/projects/…` file, a ticket id matching `id_pattern`, then a sidecar `docs/backlog/<slug>.md`.
+A backlog entry is an **index row**: what, for whom, when it fires, size, who saw it, where evidence lives. Measurements, logs, stacks, decision narratives and more than one sentence of context live **at the pointer**. Preferred pointer targets, in order: an existing `docs/plans/…` file, an existing `docs/projects/…` file, a ticket id matching `id_pattern`, a sidecar `docs/backlog/<slug>.md`.
 
-Caps are UTF-8 **bytes** (not characters). The gate (`scripts/check-backlog-entries.js`) is the measuring instrument. A consumer config may only **lower** a cap.
+Caps are UTF-8 **bytes**. The instrument is `scripts/check-backlog-entries.js`; a consumer config may only **lower** a cap.
 
 ## Fields
 
-Every style carries the same fields. `Context` is the only optional field.
-
+| Field | Cap | Rule |
+|---|---|---|
+| Id | — | `BL-NNNN`, permanent: never renumbered, never reused. Below the file's `<!-- next-id: BL-NNNN -->` high-water mark and unique |
 | Title | 120 | one line; unique per file case-insensitively; no trailing period |
-| Status | 64 | `open` · `fired <YYYY-MM-DD>` · `shipped <version-or-sha> <YYYY-MM-DD>` · `dropped <YYYY-MM-DD>` — done rows carry the date so retention can be measured |
+| Status | 64 | `open` · `fired <YYYY-MM-DD>` · `shipped <version-or-sha> <YYYY-MM-DD>` · `dropped <YYYY-MM-DD>` |
+| Since | — | `YYYY-MM-DD` the row first appeared |
+| Origin | — | `peer` (someone outside this repo's sessions reported it) · `owner` · `self` |
+| Reporter | — | Origin=peer: who reported it (display) |
+| Report | — | Origin=peer: the report's message id, or `<YYYY-MM-DD> <channel>` |
+| Reply | — | Origin=peer: `none` · `unknown` · `<YYYY-MM-DD> <message id or pointer>` |
+| Problem | 300 | 正體中文 plain-language problem for the owner: no backticks, file paths or `name:line` |
+| Impact | 160 | what happens if it is never done |
 | Trigger | 240 | one line; for `fired` rows the date replaces the condition |
-| Effort | — | `XS` · `S` · `M` · `L` · `XL`, optionally with the urgent suffix `!` (alias `急`) after the size letter (`S!`) |
+| Effort | — | `XS` · `S` · `M` · `L` · `XL`, optional urgent suffix `!` (alias `急`) |
 | Source | 160 | who/what surfaced it |
-| Pointer | 200 | a path under a configured `pointer_roots` that **exists**, or an id matching `id_pattern`; `none` only when the whole entry is ≤ 600 B (pointer threshold; distinct from the 900 B entry cap) |
-| Context | 240 | optional; one-line problem statement |
+| Pointer | 200 | an existing path under `pointer_roots`, or an id matching `id_pattern`; `none` only when the seven legacy fields (Title…Context, not the reporter fields) total ≤ 600 B |
+| Context | 240 | optional one-liner |
 
-**Entry cap**: 900 B total. Nothing but these fields — an extra bullet, sub-list, or code fence is `extra_content`.
+Several reporters on one row: `；`-separated in Reporter, Report and Reply, positionally aligned (`cuda；openclaw` · `msg_01…；2026-09-05 fleet` · `2026-09-06 msg_01…；none`).
 
-**Done handling**: BACKLOG is a queue — a row exists only while nothing else owns the item. `shipped` / `dropped` rows are `done_not_moved` immediately (`done_retention_days` default 0; a consumer config may raise it for a deliberate grace window), and a row whose Pointer already resolves to an existing `docs/plans/*.md` is redundant with that plan the moment the plan exists. The fix is **deleting the row** (history is in git and at the pointer) — `scripts/check-plan-graduation.js --fix` does this mechanically.
+**Row cap**: 900 B for a row with only legacy fields; **1600 B** for a row carrying any of Id…Impact. Nothing but these fields — an extra bullet, sub-list or code fence is `extra_content`.
+
+**Required**: Title/Status/Trigger/Effort/Source/Pointer always. Id, Since, Origin, Problem, Impact only when the config lists them (default: optional, so a project with legacy rows and no config sees no change). Reporter/Report/Reply are required whenever Origin is `peer`.
+
+```markdown
+<!-- next-id: BL-0043 -->
+
+### Final panel terminal-stops instead of parking
+- **Id**: BL-0042
+- **Status**: open
+- **Since**: 2026-10-03
+- **Origin**: peer
+- **Reporter**: cuda
+- **Report**: 01M416P22N8XA90FX5YC8AQ3GV
+- **Reply**: 2026-10-03 session 74f6f85f:394
+- **Problem**: 最終審查只要有一點意見，整個自動化流程就直接終止，無法暫停等人處理後再接續。
+- **Impact**: 每次都得重跑整個流程，成本高。
+- **Trigger**: next managed campaign whose final panel returns a finding
+- **Effort**: M
+- **Source**: PEER-REPORTED cuda 2026-10-03
+- **Pointer**: docs/backlog/final-panel-parking.md
+```
+
+## Codes
+
+| Code | Level | Meaning |
+|---|---|---|
+| missing_field | block | a required field (above) is absent |
+| bad_id | block | Id not `BL-NNNN` (heading/checklist) · Id ≥ next-id · next-id mark malformed · BL Ids with no mark |
+| duplicate_id | block | two rows share an Id |
+| bad_since | block | Since is not a real `YYYY-MM-DD` |
+| bad_origin | block | Origin is not peer/owner/self |
+| bad_reply | block | a Reply part is not `none` / `unknown` / `<date> <pointer>` |
+| peer_field_missing | block | Origin=peer without Reporter/Report/Reply, or their `；` counts differ |
+| peer_closed_unanswered | block | Origin=peer, Status shipped/dropped, some Reply part none/unknown/missing |
+| problem_has_identifier | warn | Problem carries a backtick, path or `name:line` |
+| peer_report_lost | block (pre-push) | see Deletion protection |
+| cap_exceeded, pointer_missing, pointer_required, pointer_unresolved, extra_content, bad_status, bad_effort, duplicate_title, done_not_moved, unparseable_entry, config_raises_cap | block | unchanged legacy codes |
+
+`block` follows the config `mode`; with no config the gate runs in `warn` and never fails.
+
+## Deletion protection (peer rows)
+
+A peer report is not closed until the reporter has an answer.
+
+1. **File gate** (pre-commit, every run): `peer_closed_unanswered`.
+2. **pre-push** (`.githooks/pre-push` → `check-backlog-entries.js --range <base>..<head>`): for each pushed ref the range is `<remote_sha>..<local_sha>` (new remote branch: `origin/HEAD..<local_sha>`, whole history when origin/HEAD is unknown); a range that never touched the backlog is skipped. The BACKLOG is parsed at **every commit** in the range, base included. Each (Id, Report) pair keeps the Reply of its **last** appearance. A pair absent at head whose last Reply is none/unknown/missing is `peer_report_lost` — this also covers one reporter dropped from a surviving row. The only exit is the **Id string** in HEAD's `docs/plans/**`, `CHANGELOG.md`, or another BACKLOG row (a matching Report string does not count). The file gate also runs on the pushed head blob, so a merge that produced a duplicate Id or an Id ≥ next-id is caught.
+3. **`check-plan-graduation.js --fix`** never deletes a peer row with an unanswered Reply unless the plan it points to names its Id; it reports `peer_row_unanswered` (block) instead.
+
+## Done handling
+
+BACKLOG is a queue — a row exists only while nothing else owns the item. `shipped` / `dropped` rows are `done_not_moved` immediately (`done_retention_days` default 0), and a row whose Pointer resolves to an existing `docs/plans/*.md` is redundant once the plan exists. The fix is **deleting the row** (history stays in git and at the pointer); `check-plan-graduation.js --fix` does it mechanically, subject to the peer rule above.
+
+## Config — `.claude/backlog-config.md`
+
+```markdown
+## Style
+- style: heading
+## Mode
+- mode: block
+- required_fields: Id, Since, Origin, Problem, Impact
+## Caps
+- Problem: 200
+- row: 1200
+```
+
+`required_fields` may also be a `## Required Fields` section with one bullet per field; only Id, Since, Origin, Problem, Impact are accepted. Other keys: `id_pattern`, `allowlist_path`, `done_retention_days`, `## Pointer roots`, and for table conversion `## Columns` / `## Status map`.
 
 ## Styles
 
-A file declares one style in `backlog-config.md`. The gate parses all three.
+A file declares one style in the config; the gate parses all three.
 
 **heading** — `### Title` then `- **Field**: value` bullets (this repo).
 
-**table** — `| Id | Title | Status | Trigger | Effort | Source | Pointer | Context |` rows; `Id` matches `id_pattern`. Several tables (one per `##` section) may repeat the header; `\|` inside a cell is a literal pipe. A table with foreign headers (e.g. `id｜標題｜狀態｜體量｜來源｜spec｜備註`) is converted once by `migrate-backlog-entries.js`: map headers under a `## Columns` config section (`- 標題: Title`) and state words under `## Status map` (`- planned: open`); a `Trigger：…` inside the Status cell becomes Trigger; a row whose cells carry text the schema columns cannot hold moves its original row line verbatim to a sidecar, a row they can hold stays with `none`. An unmapped status word is never rewritten to `open`: the original row goes verbatim to a sidecar, the run records `unmapped_status`, and `--apply` refuses unless `--allow-unmapped-to-sidecar`. A header outside `## Columns` and outside the schema fields is a plan-time `unmapped_column` error that names the `- <header>: <Field>` line to add under `## Columns`; nothing is written.
+**table** — `| Id | Title | Status | Trigger | Effort | Source | Pointer | Context |` rows (reporter fields may be added as columns); the table `Id` matches `id_pattern`. Several tables may repeat the header; `\|` in a cell is a literal pipe. Foreign headers are converted once by `migrate-backlog-entries.js` via `## Columns` (`- 標題: Title`) and `## Status map` (`- planned: open`); rows the schema cannot hold move verbatim to a sidecar; an unmapped status word goes to a sidecar and `--apply` refuses without `--allow-unmapped-to-sidecar`; an unmapped header is a plan-time `unmapped_column` error.
 
 **checklist** — `- [ ] [Severity] Title` plus indented `- Field: value`. Severity is a tag, not a field.
+
+## Migration
+
+`node scripts/migrate-backlog-entries.js --backlog <file> --to-reporter-fields --drafts <json> [--replies <md>] [--out <file>]` is a **dry-run** that adds the reporter fields (Id in file order, Since from the first commit that added the heading, Problem/Impact from drafts with a `(draft)` suffix) and lists unmatched rows and peer rows without Reply evidence. It never writes the backlog.

@@ -577,7 +577,6 @@ n_err="$(node "$MIG" --backlog "$N/docs/projects/BACKLOG.md" --config "$N/.claud
 assert_eq "$n_err" "0" "(p) fully mapped table (n) still has zero errors"
 
 
-finalize_test
 
 # -- --rename-effort: Fix->S, H->S!, idempotent, dry-run by default (P6) --
 RE="$TEST_TMP/rename-effort"
@@ -600,16 +599,107 @@ cat > "$RE/BACKLOG.md" <<'EOB'
 - **Note**: the word Fix here stays
 EOB
 cp "$RE/BACKLOG.md" "$RE/orig.md"
-out="$(node "$SCRIPT" --backlog "$RE/BACKLOG.md" --rename-effort --json)"
+out="$(node "$MIG" --backlog "$RE/BACKLOG.md" --rename-effort --json)"
 assert_eq "$(json_field "$out" changed)" "2" "rename-effort dry-run counts 2 rows"
 assert_eq "$(cat "$RE/BACKLOG.md")" "$(cat "$RE/orig.md")" "rename-effort dry-run writes nothing"
-node "$SCRIPT" --backlog "$RE/BACKLOG.md" --rename-effort --apply --json >/dev/null
+node "$MIG" --backlog "$RE/BACKLOG.md" --rename-effort --apply --json >/dev/null
 r="$(cat "$RE/BACKLOG.md")"
 assert_contains "$r" "- **Effort**: S" "Fix became S"
 assert_contains "$r" "- **Effort**: S!" "H became S!"
 assert_contains "$r" "- **Effort**: M" "M unchanged"
 assert_contains "$r" "the word Fix here stays" "prose untouched"
 cp "$RE/BACKLOG.md" "$RE/after1.md"
-out="$(node "$SCRIPT" --backlog "$RE/BACKLOG.md" --rename-effort --apply --json)"
+out="$(node "$MIG" --backlog "$RE/BACKLOG.md" --rename-effort --apply --json)"
 assert_eq "$(json_field "$out" changed)" "0" "rename-effort second run changes nothing (idempotent)"
 assert_eq "$(cat "$RE/BACKLOG.md")" "$(cat "$RE/after1.md")" "rename-effort second run byte-identical"
+
+# -- --to-reporter-fields: dry-run conversion to Id/Since/Origin/Reporter/Report/Reply/Problem/Impact --
+TR="$(repo to-reporter)"
+legacy() { # <title> <source>
+  printf '%s\n' "### $1" '- **Status**: open' '- **Trigger**: when tests run' '- **Effort**: S' "- **Source**: $2" '- **Pointer**: docs/plans/ok.md' ''
+}
+printf '%s\n' '# Backlog' '' "$(legacy 'Self row' suite)" > "$TR/docs/BACKLOG.md"
+git -C "$TR" add -A
+GIT_AUTHOR_DATE='2026-09-01T10:00:00' GIT_COMMITTER_DATE='2026-09-01T10:00:00' git -C "$TR" commit -q -m one
+printf '%s\n' '# Backlog' '' "$(legacy 'Self row' suite)" "$(legacy 'Peer answered row' 'PEER-REPORTED cuda 2026-09-04, msg msg_01ABCDEFGH')" \
+  "$(legacy 'Peer replied-in-source row' 'PEER-REPORTED openclaw 2026-09-06; replied `msg_01REPLIED`')" \
+  "$(legacy 'Peer unknown row' 'PEER-REPORTED 308 over fleet 2026-09-07')" "$(legacy 'Owner row' 'owner ask')" \
+  "$(legacy 'Row with no draft' suite)" > "$TR/docs/BACKLOG.md"
+git -C "$TR" add -A
+GIT_AUTHOR_DATE='2026-09-08T10:00:00' GIT_COMMITTER_DATE='2026-09-08T10:00:00' git -C "$TR" commit -q -m two
+# Moving a row later (its heading line is re-added) must not move its Since.
+printf '%s\n' '# Backlog' '' "$(legacy 'Peer answered row' 'PEER-REPORTED cuda 2026-09-04, msg msg_01ABCDEFGH')" \
+  "$(legacy 'Peer replied-in-source row' 'PEER-REPORTED openclaw 2026-09-06; replied `msg_01REPLIED`')" \
+  "$(legacy 'Peer unknown row' 'PEER-REPORTED 308 over fleet 2026-09-07')" "$(legacy 'Owner row' 'owner ask')" \
+  "$(legacy 'Row with no draft' suite)" "$(legacy 'Self row' suite)" > "$TR/docs/BACKLOG.md"
+git -C "$TR" add -A
+GIT_AUTHOR_DATE='2026-09-20T10:00:00' GIT_COMMITTER_DATE='2026-09-20T10:00:00' git -C "$TR" commit -q -m three
+cat > "$TR/drafts.json" <<'EOJ'
+[{"i":1,"h":"Self row","og":"observed","rp":"","pr":"自己發現的問題","im":"影響一"},
+ {"i":2,"h":"peer answered row","og":"external","rp":"cuda（已回覆）","pr":"回報者遇到的問題","im":"影響二"},
+ {"i":3,"h":"Peer replied-in-source row","og":"external","rp":"openclaw（已回覆對方）","pr":"問題三","im":"影響三"},
+ {"i":4,"h":"Peer unknown row","og":"external","rp":"308","pr":"問題四","im":"影響四"},
+ {"i":5,"h":"Owner row","og":"owner","rp":"","pr":"問題五","im":"影響五"},
+ {"i":9,"h":"Row deleted long ago","og":"review","rp":"","pr":"x","im":"y"}]
+EOJ
+cat > "$TR/replies.md" <<'EOM'
+| idx | 反映者 | Reply 欄建議值 | 依據 |
+|---|---|---|---|
+| 2 | cuda（revival.3d） | 2026-09-05 session abcd1234:10；2026-09-06 fleet 01MXYZ（對方確認；無後續） | |
+| 3 | openclaw | 依 BACKLOG 原文「已回覆」 | |
+EOM
+before_sha="$(sha256sum "$TR/docs/BACKLOG.md" | cut -c1-64)"
+stats="$(node "$MIG" --backlog "$TR/docs/BACKLOG.md" --to-reporter-fields --drafts "$TR/drafts.json" --replies "$TR/replies.md" --out "$TR/converted.md")"
+assert_eq "$(sha256sum "$TR/docs/BACKLOG.md" | cut -c1-64)" "$before_sha" "to-reporter: the backlog is never written"
+assert_eq "$(json_field "$stats" backlog_written)" "false" "to-reporter: stats say the backlog was not written"
+assert_eq "$(json_field "$stats" matched)" "5" "to-reporter: 5 rows matched a draft"
+assert_eq "$(json_field "$stats" matched_case_insensitive)" "1" "to-reporter: one row matched case-insensitively"
+assert_contains "$stats" '"unmatched":[{"id":"BL-0005","title":"Row with no draft"}]' "to-reporter: the unmatched row is listed"
+assert_contains "$stats" '"drafts_unused":[{"i":9' "to-reporter: an unused draft is listed"
+assert_contains "$stats" '"peer_missing_reply":[{"id":"BL-0003","idx":4' "to-reporter: the peer row with no Reply evidence is listed"
+assert_eq "$(json_field "$stats" next_id)" "BL-0007" "to-reporter: next-id is one past the last Id"
+conv="$(cat "$TR/converted.md")"
+assert_contains "$conv" '<!-- next-id: BL-0007 -->' "to-reporter: next-id mark written"
+assert_contains "$conv" $'### Self row\n- **Id**: BL-0006\n- **Status**: open\n- **Since**: 2026-09-01\n- **Origin**: self\n- **Problem**: 自己發現的問題 (draft)\n- **Impact**: 影響一 (draft)\n- **Trigger**' "to-reporter: field order, Since from first appearance, (draft) suffix"
+assert_contains "$conv" $'- **Since**: 2026-09-08\n- **Origin**: peer\n- **Reporter**: cuda（revival.3d）\n- **Report**: msg_01ABCDEFGH\n- **Reply**: 2026-09-05 session abcd1234:10 + 2026-09-06 fleet 01MXYZ（對方確認，無後續）' "to-reporter: table Reporter/Reply, msg id Report, one reporter keeps one Reply"
+assert_contains "$conv" $'- **Reporter**: openclaw\n- **Report**: 2026-09-06 peer\n- **Reply**: 2026-09-06 msg_01REPLIED' "to-reporter: replied <id> in Source becomes the Reply"
+assert_contains "$conv" $'- **Reporter**: 308\n- **Report**: 2026-09-07 fleet\n- **Problem**' "to-reporter: no Reply is invented"
+assert_contains "$conv" $'- **Origin**: owner' "to-reporter: owner origin"
+assert_contains "$conv" $'### Row with no draft\n- **Id**: BL-0005\n- **Since**: 2026-09-08\n- **Status**' "to-reporter: an unmatched row still gets Id and Since, nothing else"
+# The converted text passes the gate apart from the one peer row whose Reply is missing.
+gate_out="$(node "$GATE" --backlog "$TR/converted.md" --mode block --json 2>/dev/null || true)"
+assert_eq "$(printf '%s' "$gate_out" | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const j=JSON.parse(d);process.stdout.write(j.violations.map(v=>v.code+":"+v.title).join("|"))})')" \
+  "peer_field_missing:Peer unknown row" "to-reporter: converted text is gate-clean except the listed peer gap"
+# Dry-run only.
+set +e
+node "$MIG" --backlog "$TR/docs/BACKLOG.md" --to-reporter-fields --drafts "$TR/drafts.json" --apply >/dev/null 2>&1
+rc_apply=$?
+node "$MIG" --backlog "$TR/docs/BACKLOG.md" --to-reporter-fields --drafts "$TR/drafts.json" --out "$TR/docs/BACKLOG.md" >/dev/null 2>&1
+rc_self=$?
+set -e
+assert_eq "$rc_apply" "2" "to-reporter: --apply is refused"
+assert_eq "$rc_self" "2" "to-reporter: --out pointing at the backlog is refused"
+assert_eq "$(sha256sum "$TR/docs/BACKLOG.md" | cut -c1-64)" "$before_sha" "to-reporter: refused runs leave the backlog untouched"
+
+# Mutations: last-seen Since and an invented Reply are both caught.
+MUTD="$TEST_TMP/mig-mut/scripts"
+mkdir -p "$MUTD" "$TEST_TMP/mig-mut/references"
+cp "$GATE" "$MUTD/"
+cp "$REPO_ROOT/references/stage-graph.json" "$TEST_TMP/mig-mut/references/"
+sed 's/      if (!seen.has(t)) seen.set(t, date);/      seen.set(t, date);/' "$MIG" > "$MUTD/mig-since.js"
+if cmp -s "$MIG" "$MUTD/mig-since.js"; then fail "Since mutation did not apply"; fi
+node "$MUTD/mig-since.js" --backlog "$TR/docs/BACKLOG.md" --to-reporter-fields --drafts "$TR/drafts.json" --replies "$TR/replies.md" --out "$TR/mut.md" >/dev/null
+assert_not_contains "$(cat "$TR/mut.md")" $'- **Since**: 2026-09-01\n- **Origin**: self' "Since mutation: last-touched date is caught (the suite can tell)"
+sed "s/      else stats.peer_missing_reply.push({ id, idx: d.i, title });/      else add.push('- **Reply**: none');/" "$MIG" > "$MUTD/mig-reply.js"
+if cmp -s "$MIG" "$MUTD/mig-reply.js"; then fail "Reply mutation did not apply"; fi
+node "$MUTD/mig-reply.js" --backlog "$TR/docs/BACKLOG.md" --to-reporter-fields --drafts "$TR/drafts.json" --replies "$TR/replies.md" --out "$TR/mut.md" >/dev/null
+assert_not_contains "$(cat "$TR/mut.md")" $'- **Reporter**: 308\n- **Report**: 2026-09-07 fleet\n- **Problem**' "Reply mutation: an invented Reply is caught (the suite can tell)"
+
+# needsMigration ignores reporter-field codes; renderEntry keeps reporter fields.
+nm="$(cd "$REPO_ROOT" && node -e '
+const m=require("./scripts/migrate-backlog-entries.js");
+const r=m.renderEntry("T",{Id:"BL-0001",Status:"open",Origin:"peer",Reporter:"a",Report:"b",Reply:"c",Trigger:"t",Effort:"S",Source:"s",Pointer:"none"});
+process.stdout.write(/Id\*\*: BL-0001[\s\S]*Reporter\*\*: a[\s\S]*Reply\*\*: c/.test(r)?"kept":"dropped");')"
+assert_eq "$nm" "kept" "renderEntry keeps Id/Reporter/Report/Reply"
+
+finalize_test

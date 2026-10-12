@@ -39,7 +39,11 @@ const DEFAULT_EXCLUDES = [
   // whose scripts/... references resolve against THEIR OWN root, not this scan's
   // AUDIT_ROOT — scanning them here produces false drift for whichever repo isn't
   // the one currently checked out there.
-  ".claude/worktrees"
+  ".claude/worktrees",
+  // Frozen evidence (consult answers, delta specs, ledgers quoted verbatim): the content is
+  // a record of what was said at the time, so its links/paths are not edited to stay live.
+  // Only this exact tree; the rest of docs/plans (and any other evidence/ dir) stays scanned.
+  "docs/plans/evidence/"
 ];
 
 // Regex configuration

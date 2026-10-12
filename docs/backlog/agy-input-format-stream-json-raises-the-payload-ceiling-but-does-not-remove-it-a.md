@@ -97,7 +97,7 @@ Source: docs/BACKLOG.md@05f97302492d26112f877bc2a97acb2578aca8df, migrated 2026-
   context/skim behaviour — only that the tail stops being answerable in that band, on this host. The
   operational consequence is the same either way.
 - **Why removing the ceiling would be a regression, not a fix**: today an over-size agy prompt fails CLOSED and loudly (execve fails, the rail records `no_verdict`, nobody mistakes it for a review). A silently truncated stream-json prompt fails OPEN: the reviewer reads the first ~175 KB of a diff and returns a confident verdict on the part it saw. A hetero review loop's whole purpose is defeated by a reviewer that cannot tell you it only read half.
-- **Reproducer kept in-repo**: [`hooks/fixtures/agy-payload-probe/`](../hooks/fixtures/agy-payload-probe/)
+- **Reproducer kept in-repo**: [`hooks/fixtures/agy-payload-probe/`](../../hooks/fixtures/agy-payload-probe/)
   — the deterministic generator, the runner, the expected payload digests, and the two methodology
   errors the design prevents. It lived in `/tmp` during the investigation; reconstructing it is
   exactly where both hosts went wrong, so it is version-controlled next to the row it supports.

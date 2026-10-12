@@ -139,6 +139,21 @@ assert_exit_code "$__GATE_EXIT" 1 "CRLF doc with unbalanced fences fails"
 # Cleanup CRLF doc
 rm "$SANDBOX/docs/crlf.md"
 
+# 7b. docs/plans/evidence/ is frozen evidence and is excluded; sibling dirs are still checked
+echo "Testing frozen evidence exclusion..."
+EV="$TEST_TMP/ev-sandbox"
+mkdir -p "$EV/docs/plans/evidence/x" "$EV/docs/plans/sub/evidence/y"
+printf '# Frozen\nSee [gone](ghost.md).\n' > "$EV/docs/plans/evidence/x/frozen.md"
+run_gate "$EV"
+assert_exit_code "$__GATE_EXIT" 0 "broken link under docs/plans/evidence/ is not scanned"
+printf '# Live\nSee [gone](ghost.md).\n' > "$EV/docs/plans/sub/evidence/y/live.md"
+run_gate "$EV"
+assert_exit_code "$__GATE_EXIT" 1 "broken link under docs/plans/sub/evidence/ still fails"
+rm "$EV/docs/plans/sub/evidence/y/live.md"
+printf '# Live\nSee [gone](ghost.md).\n' > "$EV/docs/plans/live.md"
+run_gate "$EV"
+assert_exit_code "$__GATE_EXIT" 1 "broken link elsewhere in docs/plans/ still fails"
+
 # 8. Testing invalid command arguments/usage errors (exit 2)
 echo "Testing invalid usage..."
 run_gate "--exclude" # missing arg

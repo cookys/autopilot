@@ -3,7 +3,7 @@
 Status: ✅ SHIPPED v2.32.42 — C1–C7 completed and merged as `76daeb8a`
 Spec owner: depth-0 CEO
 Target: v2.32.42
-Project: [`../projects/_archive/2026-07-15-dispatch-unit-contract-gate/README.md`](../projects/_archive/2026-07-15-dispatch-unit-contract-gate/README.md)
+Project: [`../projects/_archive/2026-07-15-dispatch-unit-contract-gate/README.md`](../projects/_archive/2026/07/2026-07-15-dispatch-unit-contract-gate/README.md)
 Origin: 2026-07-15 verification-author incident and repeated oversized author dispatches
 Depends on: verification-author roster gate; existing rubric-freeze, disjointness, session-mode, and dispatch-manifest machinery
 

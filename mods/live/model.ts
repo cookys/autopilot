@@ -1506,8 +1506,9 @@ export function layoutBand(slots: Slot[], columns: number): BandLayout {
   let segs = join(kept)
   let over = widthOf(segs) - columns
   if (over > 0) segs = segs.map(g => (g.tag === 'stage' ? { ...g, text: truncateToWidth(g.text, Math.max(2, displayWidth(g.text) - over)) } : g))
-  // below the width table: still too long -> drop the unit bar, then the ⏸ stalled count, then the ⚙ count (a slot left empty goes with its separator)
+  // below the width table: still too long -> drop the quota windows, then the unit bar, then the ⏸ stalled count, then the ⚙ count (a slot left empty goes with its separator)
   const fallbacks: ((s: Slot) => Slot | null)[] = [
+    s => (s.id === 'quota' ? null : s),
     s => (s.id === 'unit' ? null : s),
     s => (s.id === 'dispatch' ? { ...s, segs: s.segs.filter(g => g.tag !== 'stalled') } : s),
     s => (s.id === 'dispatch' ? { ...s, segs: s.segs.filter(g => g.tag !== 'live') } : s),
@@ -2060,7 +2061,7 @@ export function readAccount(text: string | null): AccountView | null | undefined
 
 // used share of a window: warning from 80 %, error from 100 % (the spend slot's thresholds)
 const quotaColor = (pct: number): ThemeKey | undefined => spendColor(pct, 100)
-const QUOTA_SHORT: Record<string, string> = { five_hour: '5h', seven_day: '7d', spend_limit: '$' }
+const QUOTA_SHORT: Record<string, string> = { five_hour: '5h', seven_day: '7d', spend_limit: 'cap' } // not `$`: the spend slot's `$60` sits beside it
 
 // `5h 42% 7d 18%`: the known windows only, each label dim and its percent coloured; below 120 columns only the most used window stays
 export function slotQuota(q: readonly QuotaWindow[] | null | undefined): Slot | null {

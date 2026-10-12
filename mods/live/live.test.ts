@@ -3866,6 +3866,20 @@ test('quota slot: absent without windows; both windows from 120 columns, the mos
   expect(slotUnfolds('quota')).toBe(SECTION.account)
 })
 
+test('quota slot: a band still too long drops the quota windows before the ⏸ / ⚙ counts; the spend window is `cap`, never `$`', () => {
+  const slots = (word: string) => bandSlots({
+    verdict: { mark: '●', word, key: 'suggestion' }, marker: null, live: 12, stalled: 3, review: null, qc: null, decisions: null, spend: null,
+    loadSource: null, residue: null, quota: [win('five_hour', 10), win('seven_day', 85)], nowMs: 0,
+  })
+  const fits = layoutBand(slots('w'.repeat(60)), 100).text
+  expect(fits).toContain('⚙12 ⏸3 │ 7d 85% │ ⓘ ')
+  const tight = layoutBand(slots('w'.repeat(76)), 100).text // 102 cells: one step over; dropping ⏸3 alone would fit (99), so the old order kept the quota
+  expect(tight).toContain('⚙12 ⏸3 │ ⓘ ')
+  expect(tight).not.toContain('85%')
+  expect(displayWidth(tight)).toBeLessThanOrEqual(100)
+  expect((slotQuota([win('spend_limit', 30)]) as Slot).segs.map(g => g.text).join('')).toBe('cap 30%')
+})
+
 test('quota slot: a window is plain below 80 %, warning from 80 %, error from 100 %; the label stays dim', () => {
   const colorOf = (pct: number) => (slotQuota([win('five_hour', pct)]) as Slot).segs.find(s => s.text.endsWith('%'))?.color
   expect([colorOf(79.9), colorOf(80), colorOf(99.9), colorOf(100), colorOf(130)]).toEqual([undefined, 'warning', 'warning', 'error', 'error'])
@@ -3944,6 +3958,8 @@ for (const surface of SURFACES) {
     await w.clock.advance(5000)
     expect(reads()).toBe(before + 1)
     expect(await body()).toContain('owner@example.com')
+    await w.clock.advance(5000) // the same half-written stat: not cached, read again
+    expect(reads()).toBe(before + 2)
     const other = CLAUDE_JSON.replace('owner@example.com', 'second@example.com')
     w.files[PATH] = other
     w.stats[PATH] = { size: other.length, mtimeMs: NOW_FRESH + 1 }
@@ -3952,13 +3968,33 @@ for (const surface of SURFACES) {
     b = await body()
     expect(b).toContain('second@example.com')
     expect((await bandLine($, surface, 120)).text).toContain('5h 91%')
-    // the slot opens the Now tab
+    // fold the Account section, then press the slot: the Now tab opens with the section unfolded
+    const mountPane = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+    const rowsNow = async () => { const p = await mountPane(); const r = rowsOf((await p.drawn()) as Node); await p.unmount(); return r }
+    const at = (await rowsNow()).findIndex(r => r.startsWith('▾ ' + t('now.account')))
+    expect(at).toBeGreaterThan(0)
+    const fold = await mountPane()
+    await fold.press({ key: 'b' + at })
+    await fold.unmount()
+    expect((await rowsNow())[at].startsWith('▸ ' + t('now.account'))).toBe(true)
+    expect((await rowsNow()).join('\n')).not.toContain('second@example.com')
+    const elsewhere = await mountPane()
+    await elsewhere.press({ key: 'spend' })
+    await elsewhere.unmount()
     const band = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: 209 }, viewport: { columns: 209, rows: 50, isFullscreen: true } })
     await band.press({ key: 'quota' })
     await band.unmount()
-    const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+    const pane = await mountPane()
     const active = ((await pane.findAll({ type: 'Button' })) as Drawn[]).find(x => isActiveTab(x))?.props?.key
     await pane.unmount()
     expect(active).toBe('now')
+    expect((await rowsNow()).join('\n')).toContain('second@example.com')
+    // the file is gone (logged out, another HOME): the account leaves, the windows stay
+    delete w.files[PATH]
+    delete w.stats[PATH]
+    await w.clock.advance(5000)
+    b = await body()
+    expect(b).not.toContain('second@example.com')
+    expect(b).toContain(t('label.quota_5h'))
   })
 }

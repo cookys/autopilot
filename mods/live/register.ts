@@ -477,14 +477,15 @@ async function readAccountQuota($: EngineInterface): Promise<void> {
     const home = await $.env.get('HOME')
     if (!home) return
     const path = home + '/.claude.json'
-    const st = await $.fs.stat(path)
-    if (st.kind !== 'file' || st.size > MAX_ACCOUNT_BYTES) return
+    const st = await $.fs.stat(path).catch(() => null)
+    if (st === null || st.kind !== 'file') { account = undefined; accountFile = null; return } // gone (logged out, another HOME): no stale account
+    if (st.size > MAX_ACCOUNT_BYTES) return
     if (accountFile !== null && accountFile.size === st.size && accountFile.mtimeMs === st.mtimeMs) return
     const next = readAccount(await readText($, path))
     if (next === undefined) return // unreadable or caught mid-rewrite: try again next tick
     account = next
     accountFile = { size: st.size, mtimeMs: st.mtimeMs }
-  } catch (_e) { /* no file: keep the last account */ }
+  } catch (_e) { /* a failed read: keep the last account */ }
 }
 
 async function refresh($: EngineInterface): Promise<void> {

@@ -634,6 +634,31 @@ function blIdEnforced(cfg) {
   return Boolean(cfg && (cfg.next_id_mark || (cfg.required_fields || []).includes('Id')));
 }
 
+// A table column that happens to be named Since, Origin, Problem, … was never read by the old
+// gate (it kept only the legacy columns). Such a column is checked — value, cap, row cap, pointer
+// threshold — only once the file opts in: a next-id mark, or the field in `required_fields`
+// (Reporter/Report/Reply also follow a required Origin, since the peer rule reads them together).
+// Otherwise the table row is checked exactly as the old gate checked it.
+function tableFieldOptedIn(cfg, f) {
+  if (!cfg) return false;
+  if (cfg.next_id_mark) return true;
+  const req = cfg.required_fields || [];
+  return req.includes(f) || (PEER_FIELDS.includes(f) && req.includes('Origin'));
+}
+
+function tableReporterView(entry, cfg) {
+  const fields = {};
+  let newFieldBytes = 0;
+  for (const [k, v] of Object.entries(entry.fields || {})) {
+    if (NEW_FIELDS.includes(k)) {
+      if (!tableFieldOptedIn(cfg, k)) continue;
+      newFieldBytes += byteLen(v) + 3;
+    }
+    fields[k] = v;
+  }
+  return Object.assign({}, entry, { fields, newFieldBytes });
+}
+
 function checkReporterFields(entry, fields, title, cfg) {
   const vios = [];
   const push = (code, field, detail) => vios.push({ code, title, field, detail });
@@ -694,6 +719,7 @@ function checkReporterFields(entry, fields, title, cfg) {
 }
 
 function checkEntry(entry, cfg, repoRoot, now, existsFn) {
+  if (entry && entry.tableId) entry = tableReporterView(entry, cfg);
   const vios = [];
   if (entry.unparseable) {
     vios.push({

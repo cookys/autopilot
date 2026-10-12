@@ -28,7 +28,7 @@ Several reporters on one row: `；`-separated in Reporter, Report and Reply, pos
 
 **Row cap**: 900 B for a row with only legacy fields; **1600 B** for a row carrying any of Since…Impact (an Id alone keeps a legacy row at 900 B and counts toward its pointer threshold). Nothing but these fields — an extra bullet, sub-list or code fence is `extra_content`.
 
-**Required**: Title/Status/Trigger/Effort/Source/Pointer always. Id, Since, Origin, Problem, Impact only when the config lists them (default: optional, so a project with legacy rows and no config sees no change). Reporter/Report/Reply are required whenever Origin is `peer`.
+**Required**: Title/Status/Trigger/Effort/Source/Pointer always. Id, Since, Origin, Problem, Impact only when the config lists them (default: optional, so a project with legacy rows and no config sees no change). Reporter/Report/Reply are required whenever Origin is `peer`. In a **table**, a column named after a reporter field is read only once the file opts in (a next-id mark, or that field in `required_fields`; Reporter/Report/Reply follow a required Origin) — before that the table is checked exactly as the legacy gate did.
 
 ```markdown
 <!-- next-id: BL-0043 -->

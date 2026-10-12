@@ -491,6 +491,35 @@ printf '%s\n' '## Mode' '- mode: block' '- required_fields: Id' > "$d/.claude/ba
 gate_run "$GATE" "$d" --config "$d/.claude/backlog-config.md"
 assert_eq "$(json_has_code "$GATE_OUT" bad_id)" "yes" "Id opt-in: required Id with BL Ids and no next-id mark is bad_id"
 
+# --- table compatibility: a column that happens to be named Origin/Since/Problem/Reply/… was never
+# read by the old gate; it is checked only once the file opts in (next-id mark or required_fields).
+P395="$(python3 -c 'print("問"*131 + "xx")')"
+tcol() { # <repo> <extra headers> <extra cells> [mark] [required_fields]
+  { printf '# BACKLOG\n\n'; [ -n "${4:-}" ] && printf '<!-- next-id: BL-0001 -->\n\n'
+    printf '| Title | Status | Trigger | Effort | Source | Pointer |%s\n' "$2"
+    printf '| --- | --- | --- | --- | --- | --- |%s\n' "$(printf '%s' "$2" | sed 's/[^|]*|/ --- |/g')"
+    printf '| Table row | open | when it fires | S | suite | none |%s\n' "$3"; } > "$1/docs/BACKLOG.md"
+  { printf '%s\n' '## Style' '- style: table' '## Mode' '- mode: block'; if [ -n "${5:-}" ]; then printf -- '- required_fields: %s\n' "$5"; fi; } > "$1/.claude/backlog-config.md"
+}
+d="$(repo tc-origin)"; tcol "$d" ' Origin |' ' external |'
+gate_run "$GATE" "$d" --config "$d/.claude/backlog-config.md"
+assert_eq "$GATE_RC:$(codes_of "$GATE_OUT")" "0:" "table compat: an Origin column valued 'external' is not read without opt-in, as before"
+TC_ORIGIN_DIR="$d"
+d="$(repo tc-since)"; tcol "$d" ' Since |' ' last week |'
+gate_run "$GATE" "$d" --config "$d/.claude/backlog-config.md"
+assert_eq "$GATE_RC:$(codes_of "$GATE_OUT")" "0:" "table compat: a Since column valued 'last week' is not read without opt-in, as before"
+d="$(repo tc-prob)"; tcol "$d" ' Problem | Reply |' " $P395 | will look next week |"
+gate_run "$GATE" "$d" --config "$d/.claude/backlog-config.md"
+assert_eq "$GATE_RC:$(codes_of "$GATE_OUT")" "0:" "table compat: a 395 B Problem and a free-text Reply are not read without opt-in, as before"
+# Opted in: the same columns are checked.
+d="$(repo tc-origin-mark)"; tcol "$d" ' Origin |' ' external |' mark
+gate_run "$GATE" "$d" --config "$d/.claude/backlog-config.md"
+assert_eq "$GATE_RC:$(codes_of "$GATE_OUT")" "1:bad_origin:Origin:Table row" "table opt-in: with a next-id mark the Origin column is checked"
+d="$(repo tc-since-req)"; tcol "$d" ' Since |' ' last week |' '' Since
+gate_run "$GATE" "$d" --config "$d/.claude/backlog-config.md"
+assert_eq "$GATE_RC:$(codes_of "$GATE_OUT")" "1:bad_since:Since:Table row" "table opt-in: Since in required_fields checks the Since column"
+TC_SINCE_REQ_DIR="$d"
+
 # --- mutation proofs: each rule's test goes red when the rule is removed from the gate.
 mutate() { # <name> <sed expr> -> path of a mutated gate copy (fails the test if sed did not bite)
   local m="$TEST_TMP/mutroot/scripts/check-$1.js"
@@ -526,5 +555,12 @@ assert_eq "$(json_has_code "$GATE_OUT" duplicate_id)" "no" "Id compat mutation: 
 m="$(mutate idc-off "s/return Boolean(cfg \&\& (cfg.next_id_mark || (cfg.required_fields || \[\]).includes('Id')));/return false;/")"
 gate_run "$m" "$IDC_REQ_DIR" --config "$IDC_REQ_DIR/.claude/backlog-config.md"
 assert_eq "$(json_has_code "$GATE_OUT" bad_id)" "no" "Id opt-in mutation: never enforcing BL-NNNN is caught"
+
+m="$(mutate tc-view "s/^  if (entry \&\& entry.tableId) entry = tableReporterView(entry, cfg);$/  ;/")"
+gate_run "$m" "$TC_ORIGIN_DIR" --config "$TC_ORIGIN_DIR/.claude/backlog-config.md"
+assert_eq "$(json_has_code "$GATE_OUT" bad_origin)" "yes" "table compat mutation: reading table reporter columns without opt-in is caught"
+m="$(mutate tc-optin "s/^  return req.includes(f) || (PEER_FIELDS.includes(f) \&\& req.includes('Origin'));$/  return false;/")"
+gate_run "$m" "$TC_SINCE_REQ_DIR" --config "$TC_SINCE_REQ_DIR/.claude/backlog-config.md"
+assert_eq "$(json_has_code "$GATE_OUT" bad_since)" "no" "table opt-in mutation: ignoring required_fields for table columns is caught"
 
 finalize_test

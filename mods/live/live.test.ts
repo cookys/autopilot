@@ -154,6 +154,7 @@ type World = {
   writes: string[]
   reads: string[]
   lists: string[]
+  statErrors: Record<string, string> // $.fs.stat rejects with this message (the engine passes a message only, no `code`)
   clock: ReturnType<typeof mock.clock>
 }
 
@@ -162,7 +163,7 @@ const worldEn = (on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A) => world(o
 
 // Registers the bottom hooks (what the engine would answer) for one test.
 function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en' | 'zh-TW' | null = 'zh-TW', env: Record<string, string> = {}): World {
-  const w: World = { files, sid: { value: sid }, cwdReal: { value: CWD }, stats: {}, toasts: [], panes: [], opens: [], panesThrow: false, panesGate: null, openGate: null, writes: [], reads: [], lists: [], clock: undefined as never }
+  const w: World = { files, sid: { value: sid }, cwdReal: { value: CWD }, stats: {}, toasts: [], panes: [], opens: [], panesThrow: false, panesGate: null, openGate: null, writes: [], reads: [], lists: [], statErrors: {}, clock: undefined as never }
   w.clock = mock.clock(on, { now: nowMs })
   mock.env(on, { HOME, ...(locale === null ? {} : { AUTOPILOT_LOCALE: locale }), ...env }) // the suite pins zh-TW: the band words these cases assert are the zh-TW table's
   on('fs.read', ($, e) => {
@@ -187,9 +188,13 @@ function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en'
     if (seen.size === 0) throw new Error('ENOENT ' + e.path)
     return { value: [...seen].map(([name, kind]) => ({ name, kind, size: 1, mtimeMs: 0, isLink: false })) }
   })
-  on('fs.stat', ($, e) => (w.stats[e.path] !== undefined ? { value: { kind: 'file' as const, ...w.stats[e.path], isLink: false } } : {
+  on('fs.stat', ($, e) => {
+    if (w.statErrors[e.path] !== undefined) throw new Error(w.statErrors[e.path])
+    return statOf(e)
+  })
+  const statOf = (e: { path: string; resolve?: boolean }) => (w.stats[e.path] !== undefined ? { value: { kind: 'file' as const, ...w.stats[e.path], isLink: false } } : {
     value: { kind: 'dir' as const, size: 0, mtimeMs: 0, isLink: false, realPath: e.resolve ? (e.path === CWD ? w.cwdReal.value : e.path) : undefined },
-  }))
+  })
   on('session.id', () => ({ value: w.sid.value }))
   on('session.cwd', () => ({ value: CWD }))
   on('session.root', () => ({ value: '/work/repo' }))
@@ -4010,14 +4015,22 @@ for (const surface of SURFACES) {
     await pane.unmount()
     expect(active).toBe('now')
     expect((await rowsNow()).join('\n')).toContain('second@example.com')
+    // stat refused while the file is still there (a permission or passing I/O error): the account stays, nothing is read
+    w.statErrors[PATH] = "EACCES: permission denied, lstat '" + PATH + "'"
+    const refused = reads()
+    await w.clock.advance(5000)
+    expect(reads()).toBe(refused)
+    expect(await body()).toContain('second@example.com')
     // the file is gone (logged out, another HOME): the account leaves, the windows stay
     delete w.files[PATH]
     delete w.stats[PATH]
+    w.statErrors[PATH] = "ENOENT: no such file or directory, lstat '" + PATH + "'"
     await w.clock.advance(5000)
     b = await body()
     expect(b).not.toContain('second@example.com')
     expect(b).toContain(t('label.quota_5h'))
     // back, then grown over $.fs.read's 4 MiB cap: not read, and no stale account either
+    delete w.statErrors[PATH]
     w.files[PATH] = other
     w.stats[PATH] = { size: other.length, mtimeMs: NOW_FRESH + 2 }
     await w.clock.advance(5000)
@@ -4029,3 +4042,15 @@ for (const surface of SURFACES) {
     expect(await body()).not.toContain('@example.com')
   })
 }
+
+test('account: with CLAUDE_CONFIG_DIR set the account comes from that directory, not HOME', async ($, on) => {
+  const moved = CLAUDE_JSON.replace('owner@example.com', 'moved@example.com')
+  const w = world(on, { ...base(), [HOME + '/.claude.json']: CLAUDE_JSON, ['/cfg/.claude.json']: moved }, NOW_FRESH, SID_A, 'zh-TW', { CLAUDE_CONFIG_DIR: '/cfg/' })
+  w.stats[HOME + '/.claude.json'] = { size: CLAUDE_JSON.length, mtimeMs: NOW_FRESH - 60000 }
+  w.stats['/cfg/.claude.json'] = { size: moved.length, mtimeMs: NOW_FRESH - 60000 }
+  await start($, 'terminal')
+  const b = (await paneParts($, 'terminal', 'now')).texts.join('\n')
+  expect(b).toContain('moved@example.com')
+  expect(b).not.toContain('owner@example.com')
+  expect(w.reads).not.toContain(HOME + '/.claude.json')
+})

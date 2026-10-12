@@ -10,7 +10,8 @@
 //            every root of the set is read like the marker root, one band is merged from them
 //   snapshot <live_base>/runs/<project_key>[--<root>].json, else the SSD copy <autopilot_home>/review/<key>/live/runs.<scope>.json
 //   context  <live_base>/context/<sanitised sid>.json      (this sid only)
-//   account  $HOME/.claude.json `oauthAccount` (Claude Code's own file: email, org, plan; re-read only when its size or mtime changed)
+//   account  $CLAUDE_CONFIG_DIR or $HOME /.claude.json `oauthAccount` (Claude Code's own file: email, org, plan; re-read only when its
+//            size or mtime changed, at most every 30 s)
 //   quota    $.session.usage().rateLimits                  (polled each tick; the `session.measure` event is not used, the tick already redraws)
 //   job page <autopilot_home>/review/<key>/<date>/<job>/current/model.json   (acceptance axis + gate rows, optional)
 //   W3a      <live_base>/tasks/<sid>.json, attention/<sid>.json              (this sid only)
@@ -73,7 +74,7 @@ const MAX_TAIL_BYTES = 1024 * 1024 // a bigger output file shows its quiet time,
 const LIVE_AGENT = new Set(['pending', 'running', 'waiting'])
 let quota: QuotaWindow[] = [] // the rate-limit windows; a usage() that throws keeps the last ones
 let account: AccountView | null | undefined = undefined // undefined until ~/.claude.json parsed once; a half-written read keeps the last value
-let accountFile: { size: number; mtimeMs: number } | null = null // the ~/.claude.json stat the account was parsed from (Claude Code rewrites it often)
+let accountFile: { path: string; size: number; mtimeMs: number } | null = null // the ~/.claude.json stat the account was parsed from (Claude Code rewrites it often)
 const MAX_ACCOUNT_BYTES = 4 * 1024 * 1024 // $.fs.read's cap
 const ACCOUNT_REPARSE_MS = 30_000 // a changed ~/.claude.json is read and parsed at most this often (it can be megabytes)
 let accountReadMs: number | null = null // when the last read of it started
@@ -476,18 +477,26 @@ async function readAccountQuota($: EngineInterface, nowMs: number): Promise<void
     quota = readQuota(isObject(usage) ? usage.rateLimits : null)
   } catch (_e) { /* no reading: keep the last windows */ }
   try {
-    const home = await $.env.get('HOME')
-    if (!home) return
-    const path = home + '/.claude.json'
+    // Claude Code keeps it in CLAUDE_CONFIG_DIR when that is set, else in HOME (checked against the real tool)
+    const dir = (await $.env.get('CLAUDE_CONFIG_DIR')) || (await $.env.get('HOME'))
+    if (!dir) return
+    const path = dir.replace(/\/+$/, '') + '/.claude.json'
+    const clear = () => { account = undefined; accountFile = null; accountReadMs = null } // no stale account, and a file back is read at once
     const st = await $.fs.stat(path).catch(() => null)
-    if (st === null || st.kind !== 'file' || st.size > MAX_ACCOUNT_BYTES) { account = undefined; accountFile = null; accountReadMs = null; return } // gone or unreadable: no stale account, and a file back is read at once
-    if (accountFile !== null && accountFile.size === st.size && accountFile.mtimeMs === st.mtimeMs) return
+    if (st === null) {
+      // the rejection carries only a message across the engine boundary (no `code`): ask whether the file is there instead.
+      // Gone: clear. Still there (a permission or passing I/O error): keep the last account.
+      if (!(await $.fs.exists(path).catch(() => true))) clear()
+      return
+    }
+    if (st.kind !== 'file' || st.size > MAX_ACCOUNT_BYTES) { clear(); return }
+    if (accountFile !== null && accountFile.path === path && accountFile.size === st.size && accountFile.mtimeMs === st.mtimeMs) return
     if (accountReadMs !== null && nowMs - accountReadMs < ACCOUNT_REPARSE_MS) return // changed again soon after a read: wait
     accountReadMs = nowMs
     const next = readAccount(await readText($, path))
     if (next === undefined) return // unreadable or caught mid-rewrite: try again next tick
     account = next
-    accountFile = { size: st.size, mtimeMs: st.mtimeMs }
+    accountFile = { path, size: st.size, mtimeMs: st.mtimeMs }
   } catch (_e) { /* a failed read: keep the last account */ }
 }
 

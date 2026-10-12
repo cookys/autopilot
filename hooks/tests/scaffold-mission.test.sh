@@ -156,6 +156,14 @@ assert_file_absent "$R3/docs/mission-$PLAN_STEM-sources.json" "rollback removes 
 assert_file_absent "$R3/docs/mission-$PLAN_STEM-execution-graph.json" "rollback removes new graph"
 assert_file_absent "$R3/docs/plans/$PLAN_STEM.rubric.md" "rollback removes new rubric"
 assert_file_absent "$COMMON3/autopilot-scaffold" "failed run leaves no scaffold directory behind"
+# Directories created by a failed run are removed; pre-existing ones stay. An over-long file
+# name makes the final write fail (ENAMETOOLONG) AFTER mkdir of the new nested directories.
+mkdir -p "$TEST_TMP/keep"
+LONG=$(printf 'x%.0s' $(seq 1 300))
+OUT=$(gen "$R3" --authority-out "$TEST_TMP/keep/new1/new2/$LONG.json" 2>&1); RC=$?
+assert_neq "$RC" "0" "nested-directory write failure exits non-zero"
+assert_file_absent "$TEST_TMP/keep/new1" "rollback removes directories this run created"
+assert_file_exists "$TEST_TMP/keep" "rollback keeps a pre-existing directory"
 # Default envelope name carries the graph digest prefix.
 gen "$R3" >/dev/null 2>&1
 G3=$(digest_of "$R3/docs/mission-$PLAN_STEM-execution-graph.json")

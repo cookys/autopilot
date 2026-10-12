@@ -29,7 +29,7 @@ Inputs (flags):
 - `--output-path <p>` (repeatable, required), `--create <p>` (repeatable; becomes `authorized_creates` and is excluded from `required_paths`)
 - `--required-path <p>` (repeatable; plan, rubric and every non-created output are added automatically)
 - `--verify-cmd <cmd>` (repeatable, required)
-- `--allowed-prefix <p>` (repeatable; default: the distinct first path segment of the outputs)
+- `--allowed-prefix <p>` (repeatable; default: the distinct first path segment of the outputs and required inputs, so the plan and rubric add `docs`; mirror paths use the mirror root `platforms/codex/plugin`)
 - `--required-change-path <p>` (repeatable, optional), `--spec-section` (default `Deliverable contract`)
 - `--acceptance-id <tok>` (repeatable; default `accept-R<n>` per rubric id), `--objective` (default: plan title)
 - Budgets with the defaults used by every shipped graph: `--profile standard`, `--max-changed-files` (default outputs + 8),
@@ -53,7 +53,7 @@ Pre-checks that fail BEFORE any file is written (the rules that cost attempts):
 
 Self-validation after generation: runs `inspect()` from `mission-execution-graph-check.js` (with mirror roots and repo root) on the files just written; any failure restores overwritten files byte for byte, removes newly created ones, and exits 2 with the validator's message.
 
-Outputs: the three repo files (rubric if generated, sources, graph) and the envelope outside the repo. stdout is one JSON object: `status`, paths, `plan_sha256`, `rubric_sha256`, `graph_digest`, and `next_steps` (including `mission_lineage_id`) (routing-config edit, `mission-terminal-reconcile.js legacy --graph-digest <d>`, `mission prepare` and `mission grant` commands).
+Outputs: the three repo files (rubric if generated, sources, graph) and the envelope outside the repo. stdout is one JSON object: `status`, paths, `plan_sha256`, `rubric_sha256`, `graph_digest`, and `next_steps` (including `mission_lineage_id`) (`commit`, `verify_at_base`, `routing_config`, `legacy_reconcile` = `mission-terminal-reconcile.js legacy --graph-digest <d>`, `prepare`, `grant`, `dispatch_env`).
 
 Deliberately NOT done: the script does not edit `docs/projects/INDEX.md`, `.claude/mission-routing-config.json`, run the legacy reconcile, run `prepare`/`grant`, or run the `verification_commands` at base. Those mutate shared state or spend a grant; they stay a depth-0 decision and are listed in `next_steps`. The detached-checkout base run of the verify commands also stays manual (recipe step 3).
 

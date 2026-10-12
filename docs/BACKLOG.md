@@ -872,14 +872,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/final-review-panel-fans-out-all-seats-at-once-no-bounded-concurrency.md
 - **Context**: `scripts/lib/review-fanout.js` main() uses Promise.all over all seats; add a named concurrency config, default all seats.
 
-### Plan-review seats judge plans from text alone — no source access
-- **Status**: fired 2026-10-03
-- **Trigger**: fired 2026-10-03 — mods plan G1 and G2 seats could not read source
-- **Effort**: M
-- **Source**: mods plan G1+G2 reviews
-- **Pointer**: docs/backlog/plan-review-seats-judge-plans-from-text-alone-no-source-access.md
-- **Context**: dispatch-plan-review.js gives seats rubric and plan text only; add allowlisted, size-capped, sealed context files or a read-only snapshot.
-
 ### Plan-review roster resolves to a single family on this repo
 - **Status**: fired 2026-10-03
 - **Trigger**: fired 2026-10-03 — resolve-review-loop.sh gave native-fallback (opus only) for mods plan review

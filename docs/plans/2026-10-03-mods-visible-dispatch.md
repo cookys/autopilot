@@ -221,6 +221,16 @@ O：owner 不用問「怎麼這麼慢」就知道誰在跑、跑多久、最後 
   4. 已看過（之後另做 spike）：`ack` 列、cursor 檔、review 頁按鈕三擇一。
 - 不做：改 `runs-live/1`、讓 mod 寫檔。BACKLOG 追蹤列：「mods P5 proxy-decision reminders (writer first)」。
 
+### P6 band／pane 互動回饋（owner 2026-10-12）— 分支 `feat/mods-pane-navigation`
+| 列 | 內容 | 大小 | 狀態 |
+|---|---|---|---|
+| U1 | 「最近對話」折行的那則點不開：`wrapLine` 帶 segs 時丟掉 `toggle`；收合列截成一行 | S | 本分支 |
+| U2 | 現況各區塊分隔不清楚、不能收合：區塊標題可點收合、區塊間 `subtle` 分隔線 | S | 本分支 |
+| U3 | band 每個 slot 可點，直接開 pane 到對應分頁 | S | 本分支 |
+| U4 | ⓘ 只有左半格點得到（ambiguous 寬度，owner 終端畫成 2 格） | XS | 本分支 |
+| U5 | pane 看不出現在在跑什麼（背景工作、子步驟、進度）；與 BACKLOG「Workflow snapshot」P2 子代理名冊重疊，先查資料來源再定大小 | ? | 待 spike |
+| U6 | 顯示登入帳號、組織、剩餘額度：先抓一次真 status line payload 確認 `rate_limits`／`spend_limit`；email 是否遮罩待 owner | ? | 待 spike |
+
 ## 5. Test / validation
 - 腳本閘：各 `hooks/tests/*.test.sh`；`claude plugin test mods/live`；`sync-all.sh`；`validate-json-schema.js`；grep 閘（`prompt.submit`、`asUser`、`process.spawn`）。
 - 真跑（evidence）：P1 `/l5` 一回合＋band 時戳＋四個觸發各一次 refresh 截圖；P3 三環境 `--once`；P4 一次 managed campaign 的投影與 `progress.json` heartbeat 紀錄。

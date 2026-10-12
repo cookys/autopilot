@@ -1,19 +1,21 @@
 // mods/live/band.tsx — the band above the prompt: ONE line (stage-graph P7, contract ②; TUI v2 grammar). Pure view over the snapshot's slots:
-// `layoutBand` (model.ts) applies the width table, this file only draws the result as a row of Texts and the ⓘ Button.
+// `layoutBand` (model.ts) applies the width table, this file only draws the result: each slot a plain Button keyed by its slot id (a press opens
+// the pane on the tab that explains it), the separators plain Texts between them, then the ⓘ Button.
 // Colours are theme keys as text colour only: no backgroundColor, no inverse, no raw colour. No Image, no Raster.
 
 import { T_EN } from './i18n'
 import type { T } from './i18n'
-import { BAND_ICON, layoutBand, plainBandText } from './model'
-import type { LiveSnapshot } from './model'
+import { BAND_INFO_LABEL, layoutBand, plainBandText } from './model'
+import type { LiveSnapshot, Seg, SlotId } from './model'
 
 type El = (props: any) => any
 
-export function Band(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, onInfo: () => void, t: T = T_EN) {
+export function Band(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, onInfo: () => void, t: T = T_EN, onSlot: (id: SlotId) => void = () => {}) {
   const { Box, Text, Button } = el
+  // only the ⓘ autoFocuses: Ctrl+x Tab lands on it, as before the slots were controls
   const icon = Button === undefined
-    ? <Text>{BAND_ICON}</Text>
-    : <Button key="info" plain autoFocus onPress={onInfo}>{BAND_ICON}</Button>
+    ? <Text>{BAND_INFO_LABEL}</Text>
+    : <Button key="info" plain autoFocus onPress={onInfo}>{BAND_INFO_LABEL}</Button>
   if (snap === null || snap.band === null) {
     const reason = snap === null ? t('band.waiting') : snap.text
     return (
@@ -24,9 +26,22 @@ export function Band(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot 
     )
   }
   const line = layoutBand(snap.band.slots, columns)
+  const text = (s: Seg, i: number) => <Text key={'s' + i} color={s.color} bold={s.bold} dimColor={s.dim} wrap="truncate">{s.text}</Text>
+  // consecutive segs of one slot become one Button; a seg with no slot (a separator) stays a bare Text
+  const runs: { slot: SlotId | undefined; at: number; segs: Seg[] }[] = []
+  line.segs.forEach((s, i) => {
+    const last = runs[runs.length - 1]
+    if (s.slot !== undefined && last !== undefined && last.slot === s.slot) last.segs.push(s)
+    else runs.push({ slot: s.slot, at: i, segs: [s] })
+  })
   return (
     <Box>
-      {line.segs.map((s, i) => <Text key={'s' + i} color={s.color} bold={s.bold} dimColor={s.dim} wrap="truncate">{s.text}</Text>)}
+      {runs.map(r => {
+        const texts = r.segs.map((s, j) => text(s, r.at + j))
+        const id = r.slot
+        if (id === undefined || Button === undefined) return texts
+        return <Button key={id} plain onPress={() => onSlot(id)}>{texts}</Button>
+      })}
       {icon}
     </Box>
   )

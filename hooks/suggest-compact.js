@@ -43,7 +43,11 @@ function getSessionId() {
 // returns '' without throwing, so it cannot exercise the ENXIO branch. Prod: /dev/stdin.
 function consumeStdin() {
   try {
-    return fs.readFileSync(process.env.AUTOPILOT_SUGGEST_COMPACT_STDIN || '/dev/stdin', 'utf8');
+    // Override (test only) keeps its path read. Prod reads fd 0: Claude Code hands hooks
+    // a socket and opening the '/dev/stdin' PATH on a socket throws ENXIO.
+    const override = process.env.AUTOPILOT_SUGGEST_COMPACT_STDIN;
+    if (override) return fs.readFileSync(override, 'utf8');
+    try { return fs.readFileSync(0, 'utf8'); } catch { return fs.readFileSync('/dev/stdin', 'utf8'); }
   } catch {
     /* ENXIO/parse — broken stdin pipe (#6305). Counting does not need stdin. */
     return '';

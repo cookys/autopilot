@@ -424,7 +424,7 @@ async function pollAdvisories($: EngineInterface, nowMs: number): Promise<void> 
 async function readActivity($: EngineInterface, msgs: unknown, nowMs: number, prev: readonly ActivityItem[] | null): Promise<ActivityItem[] | null> {
   const items: ActivityItem[] = []
   let answered = false
-  if (!Array.isArray(msgs)) items.push(...(prev ?? []).filter(it => it.kind !== 'agent'))
+  if (!Array.isArray(msgs)) items.push(...(prev ?? []).filter(it => it.kind !== 'agent').map(it => ({ ...it, quietMs: null }))) // the age would freeze
   else {
     answered = true
     const seen = new Set<string>()

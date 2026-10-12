@@ -3675,6 +3675,12 @@ test('activity: a stored foreground result whose output reads like a start messa
   expect(scanBackground([A('', [docker, grep, watch])])).toEqual([])
   const foreign = bgUse('b1', { text: 'Command running in background with ID: b1. Output is being written to: /etc/other.output.' })
   expect(scanBackground([A('', [foreign])]).map(t => [t.id, t.output])).toEqual([['b1', null]])
+  // the id is literal in the path match: `b.1` does not take `bx1.output`
+  const dotted = bgUse('b.1', { text: 'Command running in background with ID: b.1. Output is being written to: /tmp/t/bx1.output.' })
+  expect(scanBackground([A('', [dotted])]).map(t => [t.id, t.output])).toEqual([['b.1', null]])
+  // headless: the start wording must open the text
+  const quoted = { tool_use_id: 'toolu_q', tool: 'Bash', input: { command: 'cat log' }, result: undefined, text: 'log: ' + bgText('b8', '/tmp/t/b8.output') }
+  expect(scanBackground([A('', [quoted])])).toEqual([])
 })
 
 test('activity: without a stored result (headless) the ids come from the result text', () => {
@@ -3808,5 +3814,6 @@ test('activity: an output file over 1 MiB shows no tail; an unread transcript ke
   await w.clock.advance(5000)
   b = await body()
   expect(b).toContain('full suite')
-  expect(b).toContain('審查 ***')
+  expect(b).not.toContain(t('bg.quiet', { age: '5s' })) // a kept row's age would freeze: it shows none
+  expect(b.split('審查 ***').length - 1).toBe(1) // the agent row is replaced, not kept beside the new one
 })

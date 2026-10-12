@@ -51,6 +51,10 @@ copy_hermetic_repo() {
   common="$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-common-dir)"
   cp -a "$common" "$dest/.git"
   rm -rf "$dest/.git/worktrees"
+  # The live repo's runtime state (mission registry, campaign ledgers, dispatch runs) lives in the
+  # common dir. Copying it made this suite depend on whatever missions the host had run: a legacy
+  # registry entry whose terminal disposition belongs to another graph fails admission closed.
+  rm -rf "$dest/.git/autopilot"
   git -C "$dest" config --unset-all core.worktree 2>/dev/null || true
   node - "$REPO_ROOT/.claude/owner-kernel-governance.json" \
     "$dest/.claude/owner-kernel-governance.json" <<'NODE'

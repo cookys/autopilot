@@ -640,7 +640,11 @@ const src = artifact.defaults.find((d) => d.row && d.row.evidence
   && d.row.status === 'qualified' && d.capability_evidence);
 if (!src) { process.stdout.write('NO_FIXTURE'); process.exit(0); }
 
-const expires = new Date(Date.parse(issued) + 60 * 86400000).toISOString();
+// Reuse the source administration's own TTL: it already passed the per-role expiry ceiling
+// (MAX_QUALIFIED_TTL_DAYS), whichever role the first qualified default happens to be.
+// A hard-coded 60 days broke once that first default became a 30-day-cap consult seat.
+const srcTtlMs = Date.parse(src.row.evidence.expires_at) - Date.parse(src.row.evidence.issued_at);
+const expires = new Date(Date.parse(issued) + srcTtlMs).toISOString();
 const raw = JSON.parse(JSON.stringify(src.row.evidence));
 for (const derived of ['evidence_id', 'evidence_hash', 'scope_hash', 'identity_hash',
   'grant_identity_hash', 'trial_set_hash']) delete raw[derived];

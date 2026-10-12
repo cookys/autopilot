@@ -413,6 +413,70 @@ put "$d" "$(printf '%s\n' "$R2_ROW" | sed 's/^- \*\*Origin\*\*: self/- **Origin*
 gate_run "$GATE" "$d"
 assert_contains "$(codes_of "$GATE_OUT")" "cap_exceeded:row:Row cap row" "R2: over 1600 B is cap_exceeded on row"
 
+# --- Id compatibility: the old gate accepted any Id in heading and checklist rows. BL-NNNN is
+# enforced only when required_fields names Id or the file carries a next-id mark.
+idc_heading() { # <repo> <id> [mark]
+  { printf '# BACKLOG\n\n'; [ -n "${3:-}" ] && printf '<!-- next-id: BL-0100 -->\n\n'
+    printf '%s\n' '### Own numbered row' "- **Id**: $2" '- **Status**: open' '- **Trigger**: when tests run' \
+      '- **Effort**: S' '- **Source**: suite' '- **Pointer**: docs/plans/ok.md'; } > "$1/docs/BACKLOG.md"
+}
+idc_checklist() { # <repo> <id>
+  printf '%s\n' '# BACKLOG' '' '- [ ] [Minor] Own numbered checklist row' "  - Id: $2" '  - Status: open' \
+    '  - Trigger: when tests run' '  - Effort: S' '  - Source: suite' '  - Pointer: docs/plans/ok.md' > "$1/docs/BACKLOG.md"
+}
+d="$(repo idc-h-nocfg)"
+idc_heading "$d" 25
+gate_run "$GATE" "$d"
+assert_eq "$GATE_RC:$(codes_of "$GATE_OUT")" "0:" "Id compat: heading 'Id: 25' with no config passes, as before"
+IDC_H_DIR="$d"
+d="$(repo idc-h-cfg)"
+idc_heading "$d" 25
+printf '%s\n' '## Style' '- style: heading' '## Mode' '- mode: block' > "$d/.claude/backlog-config.md"
+gate_run "$GATE" "$d" --config "$d/.claude/backlog-config.md"
+assert_eq "$GATE_RC:$(codes_of "$GATE_OUT")" "0:" "Id compat: heading 'Id: 25' with a config that does not require Id passes"
+d="$(repo idc-h-bl-nomark)"
+idc_heading "$d" BL-0007
+gate_run "$GATE" "$d"
+assert_eq "$GATE_RC:$(codes_of "$GATE_OUT")" "0:" "Id compat: a BL Id with no next-id mark and no required Id passes"
+IDC_NOMARK_DIR="$d"
+d="$(repo idc-h-dup)"
+{ idc_heading "$d" 25; printf '\n%s\n' '### Second numbered row' '- **Id**: 25' '- **Status**: open' '- **Trigger**: when tests run' \
+    '- **Effort**: S' '- **Source**: suite' '- **Pointer**: docs/plans/ok.md' >> "$d/docs/BACKLOG.md"; }
+gate_run "$GATE" "$d"
+assert_eq "$GATE_RC:$(codes_of "$GATE_OUT")" "0:" "Id compat: a repeated legacy Id with no opt-in is not duplicate_id, as before"
+IDC_DUP_DIR="$d"
+d="$(repo idc-c-nocfg)"
+idc_checklist "$d" T-12
+printf '%s\n' '## Style' '- style: checklist' > "$d/.claude/backlog-config.md"
+gate_run "$GATE" "$d" --config "$d/.claude/backlog-config.md"
+assert_eq "$GATE_RC:$(codes_of "$GATE_OUT")" "0:" "Id compat: checklist 'Id: T-12' with a style-only config passes"
+d="$(repo idc-c-cfg)"
+idc_checklist "$d" T-12
+printf '%s\n' '## Style' '- style: checklist' '## Mode' '- mode: block' '- required_fields: Since' > "$d/.claude/backlog-config.md"
+gate_run "$GATE" "$d" --config "$d/.claude/backlog-config.md"
+assert_eq "$(json_has_code "$GATE_OUT" bad_id)" "no" "Id compat: checklist 'Id: T-12' is not bad_id when the config requires other fields only"
+# Opted in: the same rows are bad_id once Id is required or the file has a next-id mark.
+d="$(repo idc-h-req)"
+idc_heading "$d" 25
+printf '%s\n' '## Style' '- style: heading' '## Mode' '- mode: block' '- required_fields: Id' > "$d/.claude/backlog-config.md"
+gate_run "$GATE" "$d" --config "$d/.claude/backlog-config.md"
+assert_contains "$(codes_of "$GATE_OUT")" "bad_id:Id:Own numbered row" "Id opt-in: required_fields Id enforces BL-NNNN (heading)"
+IDC_REQ_DIR="$d"
+d="$(repo idc-h-mark)"
+idc_heading "$d" 25 mark
+gate_run "$GATE" "$d"
+assert_contains "$(codes_of "$GATE_OUT")" "bad_id:Id:Own numbered row" "Id opt-in: a next-id mark enforces BL-NNNN (heading)"
+d="$(repo idc-c-req)"
+idc_checklist "$d" T-12
+printf '%s\n' '## Style' '- style: checklist' '## Mode' '- mode: block' '- required_fields: Id' > "$d/.claude/backlog-config.md"
+gate_run "$GATE" "$d" --config "$d/.claude/backlog-config.md"
+assert_contains "$(codes_of "$GATE_OUT")" "bad_id:Id:Own numbered checklist row" "Id opt-in: required_fields Id enforces BL-NNNN (checklist)"
+d="$(repo idc-bl-req-nomark)"
+idc_heading "$d" BL-0007
+printf '%s\n' '## Mode' '- mode: block' '- required_fields: Id' > "$d/.claude/backlog-config.md"
+gate_run "$GATE" "$d" --config "$d/.claude/backlog-config.md"
+assert_eq "$(json_has_code "$GATE_OUT" bad_id)" "yes" "Id opt-in: required Id with BL Ids and no next-id mark is bad_id"
+
 # --- mutation proofs: each rule's test goes red when the rule is removed from the gate.
 mutate() { # <name> <sed expr> -> path of a mutated gate copy (fails the test if sed did not bite)
   local m="$TEST_TMP/mutroot/scripts/check-$1.js"
@@ -432,5 +496,18 @@ assert_eq "$(json_has_code "$GATE_OUT" missing_field)" "no" "required_fields mut
 m="$(mutate warn "s/, level: 'warn' });/ });/; s/new Set(\['problem_has_identifier'\])/new Set([])/")"
 gate_run "$m" "$IDENT_DIR"
 assert_eq "$GATE_RC" "1" "warn-level mutation: a blocking problem_has_identifier is caught"
+
+m="$(mutate idc "s/present('Id') && blIdEnforced(cfg)/present('Id')/")"
+gate_run "$m" "$IDC_H_DIR"
+assert_eq "$(json_has_code "$GATE_OUT" bad_id)" "yes" "Id compat mutation: enforcing BL-NNNN everywhere is caught"
+m="$(mutate idc-mark "s/blIds.length \&\& blIdEnforced(cfg)/blIds.length/")"
+gate_run "$m" "$IDC_NOMARK_DIR"
+assert_eq "$(json_has_code "$GATE_OUT" bad_id)" "yes" "Id compat mutation: demanding a next-id mark everywhere is caught"
+m="$(mutate idc-dup "s/if (ent.id \&\& (ent.tableId || blIdEnforced(ecfg))) {/if (ent.id) {/")"
+gate_run "$m" "$IDC_DUP_DIR"
+assert_eq "$(json_has_code "$GATE_OUT" duplicate_id)" "yes" "Id compat mutation: duplicate_id on legacy Ids is caught"
+m="$(mutate idc-off "s/return Boolean(cfg \&\& (cfg.next_id_mark || (cfg.required_fields || \[\]).includes('Id')));/return false;/")"
+gate_run "$m" "$IDC_REQ_DIR" --config "$IDC_REQ_DIR/.claude/backlog-config.md"
+assert_eq "$(json_has_code "$GATE_OUT" bad_id)" "no" "Id opt-in mutation: never enforcing BL-NNNN is caught"
 
 finalize_test

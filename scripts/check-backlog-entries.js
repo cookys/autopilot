@@ -314,6 +314,7 @@ function parseHeadingBlock(block) {
   let extra = false;
   let inFence = false;
   let newFieldBytes = 0;
+  let idBytes = 0;
   for (let i = 1; i < block.lines.length; i++) {
     const line = block.lines[i];
     if (/^\s*```/.test(line)) {
@@ -334,14 +335,15 @@ function parseHeadingBlock(block) {
     if (fl) {
       if (fields[fl.name] != null) extra = true;
       fields[fl.name] = fl.value;
-      if (NEW_FIELDS.includes(fl.name)) newFieldBytes += byteLen(line) + 1;
+      if (fl.name === 'Id') idBytes += byteLen(line) + 1;
+      else if (NEW_FIELDS.includes(fl.name)) newFieldBytes += byteLen(line) + 1;
       continue;
     }
     extra = true;
   }
   if (fields.Title == null) fields.Title = block.title;
   else if (fields.Title.trim() !== block.title.trim()) extra = true;
-  return { fields, extra, text, id: fields.Id || null, title: fields.Title, newFieldBytes };
+  return { fields, extra, text, id: fields.Id || null, title: fields.Title, newFieldBytes, idBytes };
 }
 
 // Split a table row on unescaped pipes; `\|` inside a cell is a literal pipe.
@@ -403,7 +405,8 @@ function parseChecklist(text) {
     }
     if (fl) {
       cur.fields[fl.name] = fl.value;
-      if (NEW_FIELDS.includes(fl.name)) cur.newFieldBytes += byteLen(line) + 1;
+      if (fl.name === 'Id') cur.idBytes = (cur.idBytes || 0) + byteLen(line) + 1;
+      else if (NEW_FIELDS.includes(fl.name)) cur.newFieldBytes += byteLen(line) + 1;
       continue;
     }
     if (/^\s+-\s+/.test(line)) cur.extra = true;
@@ -521,6 +524,7 @@ function collectEntries(text, style) {
         id: it.fields.Id || null,
         title: it.fields.Title,
         newFieldBytes: it.newFieldBytes,
+        idBytes: it.idBytes || 0,
       });
     }
     return out;
@@ -610,14 +614,24 @@ const IDENTIFIER_RES = [
   /[A-Za-z_][\w.-]*:\d+/,
 ];
 
+// An Id line predates the reporter fields (the old gate accepted and counted it), so Id alone
+// does not make a reporter row: a legacy row with an Id keeps the 900 B cap and its Id bytes
+// still count toward the pointer threshold, exactly as before.
 function hasNewFields(entry) {
   return (entry.newFieldBytes || 0) > 0;
 }
 
-// The pointer threshold measures only the seven legacy fields (R1): reporter-field lines are
-// subtracted, so a legacy row measures exactly what it always did.
+// The pointer threshold measures only the seven legacy fields (R1): reporter-field lines (and,
+// on a reporter row, the Id line) are subtracted, so a legacy row measures what it always did.
 function legacyBytes(entry) {
-  return byteLen(entry.text) - (entry.newFieldBytes || 0);
+  const id = hasNewFields(entry) ? (entry.idBytes || 0) : 0;
+  return byteLen(entry.text) - (entry.newFieldBytes || 0) - id;
+}
+
+// BL-NNNN is enforced only once a file opts in: `required_fields` names Id, or the file carries a
+// `<!-- next-id -->` mark. Otherwise any Id is accepted, as the old gate did.
+function blIdEnforced(cfg) {
+  return Boolean(cfg && (cfg.next_id_mark || (cfg.required_fields || []).includes('Id')));
 }
 
 function checkReporterFields(entry, fields, title, cfg) {
@@ -631,7 +645,7 @@ function checkReporterFields(entry, fields, title, cfg) {
     }
     if (!present(f)) push('missing_field', f, `${f} missing`);
   }
-  if (!entry.tableId && present('Id')) {
+  if (!entry.tableId && present('Id') && blIdEnforced(cfg)) {
     const id = String(fields.Id).trim();
     let ok = BL_ID_RE.test(id);
     if (!ok && cfg.id_pattern) {
@@ -818,7 +832,7 @@ function checkEntry(entry, cfg, repoRoot, now, existsFn) {
 // Duplicate title/Id are reported in entry order, right before that entry's own violations (the
 // order the gate has always printed). The next-id high-water mark (R6) is checked after: an Id at
 // or above the mark, or a BL- Id with no mark at all, means two writers can hand out one number.
-function checkNextId(text, entries) {
+function checkNextId(text, entries, cfg) {
   const vios = [];
   const blIds = [];
   for (const ent of entries) {
@@ -839,7 +853,7 @@ function checkNextId(text, entries) {
         }
       }
     }
-  } else if (blIds.length) {
+  } else if (blIds.length && blIdEnforced(cfg)) {
     vios.push({ code: 'bad_id', title: '', field: 'Id', detail: 'BL- Ids with no <!-- next-id: BL-NNNN --> high-water mark' });
   }
   return vios;
@@ -847,6 +861,7 @@ function checkNextId(text, entries) {
 
 function collectViolations(text, cfg, repoRoot, now, existsFn) {
   const entries = collectEntries(text, cfg.style || 'heading');
+  const ecfg = NEXT_ID_RE.test(String(text || '')) ? { ...cfg, next_id_mark: true } : cfg;
   const violations = checkCapsRaised(cfg);
   const titles = new Map();
   const ids = new Map();
@@ -858,15 +873,17 @@ function collectViolations(text, cfg, repoRoot, now, existsFn) {
         violations.push({ code: 'duplicate_title', title: t, field: 'Title', detail: 'duplicate title' });
       } else titles.set(key, true);
     }
-    if (ent.id) {
+    // A heading/checklist Id is checked for duplicates only once the file opts in (blIdEnforced):
+    // the old gate never read those Ids, so a project's own numbering must not start blocking.
+    if (ent.id && (ent.tableId || blIdEnforced(ecfg))) {
       const id = String(ent.id).trim();
       if (ids.has(id)) {
         violations.push({ code: 'duplicate_id', title: t, field: 'Id', detail: id });
       } else ids.set(id, true);
     }
-    violations.push(...checkEntry(ent, cfg, repoRoot, now, existsFn));
+    violations.push(...checkEntry(ent, ecfg, repoRoot, now, existsFn));
   }
-  violations.push(...checkNextId(text, entries));
+  violations.push(...checkNextId(text, entries, ecfg));
   return { entries, violations };
 }
 
@@ -1326,9 +1343,11 @@ function runSelfTest() {
     };
     add('reporter-row-ok', 'heading', mark(2) + miniHeading(peer), []);
     add('missing_field-required', 'heading', miniHeading(base), ['missing_field'], { required_fields: ['Id'] });
-    add('bad_id-format', 'heading', miniHeading({ ...base, Id: 'X-1' }), ['bad_id']);
+    add('bad_id-format', 'heading', miniHeading({ ...base, Id: 'X-1' }), ['bad_id'], { required_fields: ['Id'] });
+    add('bad_id-format-marked', 'heading', mark(2) + miniHeading({ ...base, Id: 'X-1' }), ['bad_id']);
+    add('legacy-id-accepted', 'heading', miniHeading({ ...base, Id: '25' }), []);
     add('bad_id-not-below-next-id', 'heading', mark(1) + miniHeading(peer), ['bad_id']);
-    add('bad_id-no-next-id', 'heading', miniHeading(peer), ['bad_id']);
+    add('bad_id-no-next-id', 'heading', miniHeading(peer), ['bad_id'], { required_fields: ['Id'] });
     add('duplicate_id-heading', 'heading',
       mark(2) + miniHeading(peer) + '\n' + miniHeading({ ...peer, Title: 'Another row' }), ['duplicate_id']);
     add('bad_since', 'heading', mark(2) + miniHeading({ ...peer, Since: '2026-13-40' }), ['bad_since']);

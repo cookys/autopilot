@@ -250,8 +250,10 @@ function normaliseEffort(fields, entryText) {
 // this), never a schema-shape defect this migrator should "fix" by moving prose to a sidecar. A
 // freshly-synthesized `shipped <ver> <today>` row would otherwise be misclassified as lossy on
 // day one.
-// Reporter-field defects (bad Reply, missing peer field, …) are fixed by editing the field, never
-// by moving prose to a sidecar — they must not make a row "need migration".
+// Reporter-field defects (bad Reply, missing peer field, an over-cap Problem or Impact, …) are
+// fixed by editing the field, never by moving prose to a sidecar — they must not make a row
+// "need migration". A rebuilt row carries the reporter fields over verbatim (rowFields in
+// planMigration), so moving one would not shorten them anyway.
 const REPORTER_FIELD_CODES = new Set([
   'bad_id', 'bad_since', 'bad_origin', 'bad_reply', 'peer_field_missing',
   'peer_closed_unanswered', 'problem_has_identifier',
@@ -261,7 +263,7 @@ function needsMigration(entry, cfg, repoRoot, now) {
   if (!entry || entry.unparseable) return false;
   const vios = checkEntry(entry, cfg, repoRoot, now);
   return vios.some((v) => !(
-    (v.code === 'cap_exceeded' && v.field === 'Title')
+    (v.code === 'cap_exceeded' && (v.field === 'Title' || v.field === 'Problem' || v.field === 'Impact'))
     || v.code === 'done_not_moved'
     || REPORTER_FIELD_CODES.has(v.code)
     || (v.code === 'missing_field' && gate.NEW_FIELDS.includes(v.field))
@@ -804,13 +806,21 @@ function planMigration(text, cfg, repoRoot, opts) {
       Source: source || 'unknown',
       Pointer: pointer,
     };
+    // The reporter record (Id, Origin, Problem, …) is carried over verbatim: the rebuilt row
+    // replaces the original, so a field left out here is lost from the backlog.
+    for (const k of gate.NEW_FIELDS) {
+      if (fields[k] != null && String(fields[k]).trim() !== '') rowFields[k] = fields[k];
+    }
+    // Same cap the gate applies: 1600 B once the row carries a reporter field, else 900 B.
+    const hasReporter = gate.NEW_FIELDS.some((k) => k !== 'Id' && rowFields[k] != null);
+    const rowCap = gate.effectiveCap(cfg, hasReporter ? 'row' : 'entry');
     if (context) rowFields.Context = context;
     let rewritten = renderEntry(titleRaw, rowFields);
-    if (byteLen(rewritten) > 900 && rowFields.Context) {
+    if (byteLen(rewritten) > rowCap && rowFields.Context) {
       delete rowFields.Context;
       rewritten = renderEntry(titleRaw, rowFields);
     }
-    while (byteLen(rewritten) > 900 && byteLen(rowFields.Trigger) > 20) {
+    while (byteLen(rewritten) > rowCap && byteLen(rowFields.Trigger) > 20) {
       rowFields.Trigger = truncBytes(rowFields.Trigger.replace(/…$/, ''), Math.max(20, byteLen(rowFields.Trigger) - 32));
       rewritten = renderEntry(titleRaw, rowFields);
     }
@@ -1144,17 +1154,42 @@ function convertToReporterFields(text, drafts, replies, firstSeen) {
   return { text: outLines.join('\n'), stats };
 }
 
-function mainToReporterFields(args) {
+// The path a write to `p` would land on: symlinks resolved, and for a file that does not exist
+// yet, its directory's real path plus the basename.
+function realTarget(p) {
+  const abs = path.resolve(p);
+  try { return fs.realpathSync(abs); } catch { /* not there yet */ }
+  try { return path.join(fs.realpathSync(path.dirname(abs)), path.basename(abs)); } catch { return abs; }
+}
+
+function sameFile(a, b) {
+  if (realTarget(a) === realTarget(b)) return true;
+  try {
+    const sa = fs.statSync(a);
+    const sb = fs.statSync(b);
+    return sa.dev === sb.dev && sa.ino === sb.ino; // a hard link is the same file too
+  } catch {
+    return false;
+  }
+}
+
+// --to-reporter-fields never writes the backlog. These refusals run before ANY write in main(),
+// including --rename-effort, which would otherwise apply first.
+function refuseReporterFieldWrites(args) {
   if (args.apply) {
     process.stderr.write('--to-reporter-fields is dry-run only: --apply is refused\n');
     process.exit(2);
   }
   if (!args.drafts) usage(2);
-  const backlogPath = path.resolve(args.backlog);
-  if (args.out && path.resolve(args.out) === backlogPath) {
+  if (args.out && sameFile(args.out, args.backlog)) {
     process.stderr.write('--out must not be the backlog itself (dry-run only)\n');
     process.exit(2);
   }
+}
+
+function mainToReporterFields(args) {
+  refuseReporterFieldWrites(args);
+  const backlogPath = path.resolve(args.backlog);
   let text;
   let drafts;
   let repliesText = '';
@@ -1202,6 +1237,7 @@ function mainToReporterFields(args) {
 
 function main() {
   const args = parseArgs(process.argv.slice(2));
+  if (args.toReporterFields) refuseReporterFieldWrites(args);
   if (args.renameEffort) mainRenameEffort(args);
   if (args.toReporterFields) mainToReporterFields(args);
   const backlogPath = path.resolve(args.backlog);

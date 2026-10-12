@@ -8,7 +8,7 @@ Caps are UTF-8 **bytes**. The instrument is `scripts/check-backlog-entries.js`; 
 
 | Field | Cap | Rule |
 |---|---|---|
-| Id | — | `BL-NNNN`, permanent: never renumbered, never reused. Below the file's `<!-- next-id: BL-NNNN -->` high-water mark and unique |
+| Id | — | `BL-NNNN`, permanent: never renumbered, never reused. Below the file's `<!-- next-id: BL-NNNN -->` high-water mark and unique. The format is enforced only once the file opts in (a next-id mark, or Id in `required_fields`); before that any Id is accepted, as the legacy gate did |
 | Title | 120 | one line; unique per file case-insensitively; no trailing period |
 | Status | 64 | `open` · `fired <YYYY-MM-DD>` · `shipped <version-or-sha> <YYYY-MM-DD>` · `dropped <YYYY-MM-DD>` |
 | Since | — | `YYYY-MM-DD` the row first appeared |
@@ -26,7 +26,7 @@ Caps are UTF-8 **bytes**. The instrument is `scripts/check-backlog-entries.js`; 
 
 Several reporters on one row: `；`-separated in Reporter, Report and Reply, positionally aligned (`cuda；openclaw` · `msg_01…；2026-09-05 fleet` · `2026-09-06 msg_01…；none`).
 
-**Row cap**: 900 B for a row with only legacy fields; **1600 B** for a row carrying any of Id…Impact. Nothing but these fields — an extra bullet, sub-list or code fence is `extra_content`.
+**Row cap**: 900 B for a row with only legacy fields; **1600 B** for a row carrying any of Since…Impact (an Id alone keeps a legacy row at 900 B and counts toward its pointer threshold). Nothing but these fields — an extra bullet, sub-list or code fence is `extra_content`.
 
 **Required**: Title/Status/Trigger/Effort/Source/Pointer always. Id, Since, Origin, Problem, Impact only when the config lists them (default: optional, so a project with legacy rows and no config sees no change). Reporter/Report/Reply are required whenever Origin is `peer`.
 
@@ -54,8 +54,8 @@ Several reporters on one row: `；`-separated in Reporter, Report and Reply, pos
 | Code | Level | Meaning |
 |---|---|---|
 | missing_field | block | a required field (above) is absent |
-| bad_id | block | Id not `BL-NNNN` (heading/checklist) · Id ≥ next-id · next-id mark malformed · BL Ids with no mark |
-| duplicate_id | block | two rows share an Id |
+| bad_id | block | Id not `BL-NNNN` (heading/checklist; only with a next-id mark or Id required) · Id ≥ next-id · next-id mark malformed · BL Ids with no mark while Id is required |
+| duplicate_id | block | two rows share an Id (heading/checklist: only with a next-id mark or Id required) |
 | bad_since | block | Since is not a real `YYYY-MM-DD` |
 | bad_origin | block | Origin is not peer/owner/self |
 | bad_reply | block | a Reply part is not `none` / `unknown` / `<date> <pointer>` |
@@ -72,7 +72,7 @@ Several reporters on one row: `；`-separated in Reporter, Report and Reply, pos
 A peer report is not closed until the reporter has an answer.
 
 1. **File gate** (pre-commit, every run): `peer_closed_unanswered`.
-2. **pre-push** (`.githooks/pre-push` → `check-backlog-entries.js --range <base>..<head>`): for each pushed ref the range is `<remote_sha>..<local_sha>` (new remote branch: `origin/HEAD..<local_sha>`, whole history when origin/HEAD is unknown); a range that never touched the backlog is skipped. The BACKLOG is parsed at **every commit** in the range, base included. Each (Id, Report) pair keeps the Reply of its **last** appearance. A pair absent at head whose last Reply is none/unknown/missing is `peer_report_lost` — this also covers one reporter dropped from a surviving row. The only exit is the **Id string** in HEAD's `docs/plans/**`, `CHANGELOG.md`, or another BACKLOG row (a matching Report string does not count). The file gate also runs on the pushed head blob, so a merge that produced a duplicate Id or an Id ≥ next-id is caught.
+2. **pre-push** (`.githooks/pre-push` → `check-backlog-entries.js --range <base>..<head>`): for each pushed ref the range is `<remote_sha>..<local_sha>` (new remote branch: `origin/HEAD..<local_sha>`, whole history when origin/HEAD is unknown); a range that never touched the backlog is skipped; a remote sha missing from the clone is skipped with a printed line. Without a config (warn mode) violations are printed and the push goes through. The BACKLOG is parsed at **every commit** in the range, base included. Each (Id, Report) pair keeps the Reply of its **last** appearance. A pair absent at head whose last Reply is none/unknown/missing is `peer_report_lost` — this also covers one reporter dropped from a surviving row. The only exit is the **Id string** in HEAD's `docs/plans/**`, `CHANGELOG.md`, or another BACKLOG row (a matching Report string does not count). The file gate also runs on the pushed head blob, so a merge that produced a duplicate Id or an Id ≥ next-id is caught.
 3. **`check-plan-graduation.js --fix`** never deletes a peer row with an unanswered Reply unless the plan it points to names its Id; it reports `peer_row_unanswered` (block) instead.
 
 ## Done handling

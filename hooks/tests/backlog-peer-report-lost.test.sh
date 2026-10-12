@@ -231,8 +231,8 @@ printf 'x\n' > "$SBX/unrelated.txt"
 UNREL="$(commit_all "$SBX" "unrelated change")"
 write_backlog "$SBX" 3 "$KEEP"
 HEADSHA="$(commit_all "$SBX" "delete unanswered row")"
-run_push() { # <stdin line> -> rc; output in PUSH_OUT
-  PUSH_OUT="$(cd "$SBX" && printf '%s\n' "$1" | bash .githooks/pre-push origin 2>&1)"
+run_push() { # <stdin line> [hook] -> rc; output in PUSH_OUT
+  PUSH_OUT="$(cd "$SBX" && printf '%s\n' "$1" | bash "${2:-.githooks/pre-push}" origin 2>&1)"
 }
 run_push "HEAD $HEADSHA refs/heads/develop $BASE"; rc=$?
 assert_eq "$rc" "1" "pre-push: git push origin HEAD:develop (remote sha known) blocks the loss"
@@ -254,5 +254,28 @@ write_backlog "$SBX" 2 "$(row 'Peer row one' BL-0001 cuda '2026-09-05 fleet' non
 FIXED="$(commit_all "$SBX" "restore")"
 run_push "HEAD $FIXED refs/heads/develop $BASE"; rc=$?
 assert_eq "$rc" "0" "pre-push: the pair is back at head → allowed"
+
+
+# A remote sha this clone does not have: skipped, but with a printed line (not silently).
+GHOST=1234567890abcdef1234567890abcdef12345678
+run_push "HEAD $HEADSHA refs/heads/develop $GHOST"; rc=$?
+assert_eq "$rc" "0" "pre-push: an unknown remote sha does not block"
+assert_contains "$PUSH_OUT" "remote commit $GHOST is not in this clone" "pre-push: an unknown remote sha is reported, not silently skipped"
+sed 's/        if ! git cat-file -e "${__bl_rsha}^{commit}" 2>\/dev\/null; then/        if false; then/' "$SBX/.githooks/pre-push" > "$SBX/.githooks/pre-push.mut-ghost"
+if cmp -s "$SBX/.githooks/pre-push" "$SBX/.githooks/pre-push.mut-ghost"; then fail "ghost mutation did not apply"; fi
+run_push "HEAD $HEADSHA refs/heads/develop $GHOST" .githooks/pre-push.mut-ghost
+assert_not_contains "$PUSH_OUT" "is not in this clone" "ghost mutation: a silent skip is caught (the suite can tell)"
+
+# No config → warn mode: the loss is printed, the push is not blocked.
+rm "$SBX/.claude/backlog-config.md"
+run_push "HEAD $HEADSHA refs/heads/develop $BASE"; rc=$?
+assert_eq "$rc" "0" "pre-push warn mode: the loss does not block"
+assert_contains "$PUSH_OUT" "warning only, push not blocked" "pre-push warn mode: the violation is announced"
+assert_contains "$PUSH_OUT" "peer_report_lost" "pre-push warn mode: the gate output is printed"
+sed '/^      elif printf .%s. "\$__bl_out" | grep -qE /,/^        printf .\\nbacklog gate: %s (%s) has violations/d' "$SBX/.githooks/pre-push" > "$SBX/.githooks/pre-push.mut-warn"
+if cmp -s "$SBX/.githooks/pre-push" "$SBX/.githooks/pre-push.mut-warn"; then fail "warn mutation did not apply"; fi
+bash -n "$SBX/.githooks/pre-push.mut-warn" || fail "warn mutation broke the hook syntax"
+run_push "HEAD $HEADSHA refs/heads/develop $BASE" .githooks/pre-push.mut-warn
+assert_not_contains "$PUSH_OUT" "peer_report_lost" "warn mutation: a silent warn mode is caught (the suite can tell)"
 
 finalize_test

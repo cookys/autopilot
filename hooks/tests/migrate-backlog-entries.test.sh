@@ -680,6 +680,23 @@ set -e
 assert_eq "$rc_apply" "2" "to-reporter: --apply is refused"
 assert_eq "$rc_self" "2" "to-reporter: --out pointing at the backlog is refused"
 assert_eq "$(sha256sum "$TR/docs/BACKLOG.md" | cut -c1-64)" "$before_sha" "to-reporter: refused runs leave the backlog untouched"
+# --out through a symlink to the backlog is the backlog: refused, nothing written.
+ln -s "$TR/docs/BACKLOG.md" "$TR/link.md"
+to_link() { # <migrator> -> exit code
+  set +e; node "$1" --backlog "$TR/docs/BACKLOG.md" --to-reporter-fields --drafts "$TR/drafts.json" --out "$TR/link.md" >/dev/null 2>&1; local rc=$?; set -e
+  echo "$rc"
+}
+assert_eq "$(to_link "$MIG")" "2" "to-reporter: --out via a symlink to the backlog is refused"
+assert_eq "$(sha256sum "$TR/docs/BACKLOG.md" | cut -c1-64)" "$before_sha" "to-reporter: the symlinked backlog is untouched"
+# --rename-effort --to-reporter-fields --apply: the refusal comes before the rename writes.
+printf '%s\n' '### Fix effort row' '- **Status**: open' '- **Trigger**: t' '- **Effort**: Fix' '- **Source**: s' '- **Pointer**: none' > "$TR/effort.md"
+cp "$TR/effort.md" "$TR/effort.orig"
+combo() { # <migrator> -> exit code
+  set +e; node "$1" --backlog "$TR/effort.md" --to-reporter-fields --drafts "$TR/drafts.json" --rename-effort --apply >/dev/null 2>&1; local rc=$?; set -e
+  echo "$rc"
+}
+assert_eq "$(combo "$MIG")" "2" "to-reporter + rename-effort + --apply is refused"
+assert_eq "$(cat "$TR/effort.md")" "$(cat "$TR/effort.orig")" "to-reporter + rename-effort + --apply writes nothing"
 
 # Mutations: last-seen Since and an invented Reply are both caught.
 MUTD="$TEST_TMP/mig-mut/scripts"
@@ -694,6 +711,17 @@ sed "s/      else stats.peer_missing_reply.push({ id, idx: d.i, title });/      
 if cmp -s "$MIG" "$MUTD/mig-reply.js"; then fail "Reply mutation did not apply"; fi
 node "$MUTD/mig-reply.js" --backlog "$TR/docs/BACKLOG.md" --to-reporter-fields --drafts "$TR/drafts.json" --replies "$TR/replies.md" --out "$TR/mut.md" >/dev/null
 assert_not_contains "$(cat "$TR/mut.md")" $'- **Reporter**: 308\n- **Report**: 2026-09-07 fleet\n- **Problem**' "Reply mutation: an invented Reply is caught (the suite can tell)"
+sed 's/  if (args.out \&\& sameFile(args.out, args.backlog)) {/  if (args.out \&\& path.resolve(args.out) === path.resolve(args.backlog)) {/' "$MIG" > "$MUTD/mig-link.js"
+if cmp -s "$MIG" "$MUTD/mig-link.js"; then fail "symlink mutation did not apply"; fi
+cp "$TR/docs/BACKLOG.md" "$TR/bl.keep"
+assert_eq "$(to_link "$MUTD/mig-link.js")" "0" "symlink mutation: comparing resolved paths only lets the write through (the suite can tell)"
+assert_neq "$(sha256sum "$TR/docs/BACKLOG.md" | cut -c1-64)" "$before_sha" "symlink mutation: the backlog was overwritten through the link"
+cp "$TR/bl.keep" "$TR/docs/BACKLOG.md"
+sed '/^  if (args.toReporterFields) refuseReporterFieldWrites(args);$/d' "$MIG" > "$MUTD/mig-order.js"
+if cmp -s "$MIG" "$MUTD/mig-order.js"; then fail "order mutation did not apply"; fi
+combo "$MUTD/mig-order.js" >/dev/null
+assert_neq "$(cat "$TR/effort.md")" "$(cat "$TR/effort.orig")" "order mutation: refusing after the rename lets the rename write (the suite can tell)"
+cp "$TR/effort.orig" "$TR/effort.md"
 
 # needsMigration ignores reporter-field codes; renderEntry keeps reporter fields.
 nm="$(cd "$REPO_ROOT" && node -e '
@@ -701,5 +729,46 @@ const m=require("./scripts/migrate-backlog-entries.js");
 const r=m.renderEntry("T",{Id:"BL-0001",Status:"open",Origin:"peer",Reporter:"a",Report:"b",Reply:"c",Trigger:"t",Effort:"S",Source:"s",Pointer:"none"});
 process.stdout.write(/Id\*\*: BL-0001[\s\S]*Reporter\*\*: a[\s\S]*Reply\*\*: c/.test(r)?"kept":"dropped");')"
 assert_eq "$nm" "kept" "renderEntry keeps Id/Reporter/Report/Reply"
+
+
+# -- end to end: the sidecar migration keeps a row's reporter fields, and an over-cap Problem
+#    alone never makes a row move (both rows run the full --apply path, not renderEntry alone).
+RF="$(repo reporter-apply)"
+P330="$(python3 -c 'print("問"*110)')"
+rrow() { # <title> <extra line or empty>
+  printf '%s\n' "### $1" "- **Id**: $2" '- **Status**: open' '- **Since**: 2026-09-05' '- **Origin**: peer' \
+    '- **Reporter**: cuda' '- **Report**: 2026-09-05 fleet' '- **Reply**: none' "- **Problem**: $P330" \
+    '- **Impact**: 不修會一直重複發生' '- **Trigger**: when tests run' '- **Effort**: S' '- **Source**: suite' \
+    '- **Pointer**: docs/plans/ok.md'
+  [ -n "${3:-}" ] && printf '%s\n' "$3"
+  printf '\n'
+}
+LONGP_ROW="$(rrow 'Long problem only row' BL-0002)"
+printf '%s\n' '# Backlog' '' '<!-- next-id: BL-0003 -->' '' "$(rrow 'Moved reporter row' BL-0001 '- **Note**: extra prose that forces a move')" '' "$LONGP_ROW" > "$RF/docs/BACKLOG.md"
+cp "$RF/docs/BACKLOG.md" "$RF/orig.md"
+rf_apply() { # <migrator> -> manifest JSON
+  node "$1" --backlog "$RF/docs/BACKLOG.md" --out-dir "$RF/docs/backlog" --apply --json 2>/dev/null | head -1
+}
+out="$(rf_apply "$MIG")"
+assert_eq "$(json_field "$out" preserved)" "true" "reporter apply: preserved"
+assert_eq "$(json_field "$out" totals.migrate)" "1" "reporter apply: only the row with a legacy defect moves"
+rf="$(cat "$RF/docs/BACKLOG.md")"
+assert_contains "$rf" $'### Moved reporter row\n- **Id**: BL-0001\n- **Status**: open\n- **Since**: 2026-09-05\n- **Origin**: peer\n- **Reporter**: cuda\n- **Report**: 2026-09-05 fleet\n- **Reply**: none\n- **Problem**: '"$P330"$'\n- **Impact**: 不修會一直重複發生\n- **Trigger**' "reporter apply: the moved row keeps Id/Since/Origin/Reporter/Report/Reply/Problem/Impact"
+assert_contains "$rf" '- **Pointer**: docs/backlog/moved-reporter-row.md' "reporter apply: the moved row points at its sidecar"
+assert_contains "$rf" "$LONGP_ROW" "reporter apply: a row whose only defect is an over-cap Problem stays byte-identical"
+assert_eq "$(ls "$RF/docs/backlog" 2>/dev/null | grep -c 'long-problem')" "0" "reporter apply: no sidecar for the over-cap-Problem row"
+out2="$(rf_apply "$MIG")"
+assert_eq "$(json_field "$out2" totals.moved_bytes)" "0" "reporter apply: a second apply moves nothing"
+# Mutations: dropping the carry-over or the Problem/Impact exemption turns the run red.
+sed "s/      if (fields\[k\] != null \&\& String(fields\[k\]).trim() !== '') rowFields\[k\] = fields\[k\];/      ;/" "$MIG" > "$MUTD/mig-carry.js"
+if cmp -s "$MIG" "$MUTD/mig-carry.js"; then fail "carry mutation did not apply"; fi
+cp "$RF/orig.md" "$RF/docs/BACKLOG.md"; rm -rf "$RF/docs/backlog"
+rf_apply "$MUTD/mig-carry.js" >/dev/null
+assert_not_contains "$(cat "$RF/docs/BACKLOG.md")" $'### Moved reporter row\n- **Id**: BL-0001' "carry mutation: a moved row losing its reporter fields is caught (the suite can tell)"
+sed "s/(v.field === 'Title' || v.field === 'Problem' || v.field === 'Impact')/v.field === 'Title'/" "$MIG" > "$MUTD/mig-exempt.js"
+if cmp -s "$MIG" "$MUTD/mig-exempt.js"; then fail "exemption mutation did not apply"; fi
+cp "$RF/orig.md" "$RF/docs/BACKLOG.md"; rm -rf "$RF/docs/backlog"
+out="$(rf_apply "$MUTD/mig-exempt.js")"
+assert_eq "$(json_field "$out" totals.migrate)" "2" "exemption mutation: moving the over-cap-Problem row is caught (the suite can tell)"
 
 finalize_test

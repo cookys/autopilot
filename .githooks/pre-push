@@ -31,8 +31,10 @@ fi
 # Runs before the qc-gate so qc-gate `mode: off` cannot switch it off. Per pushed ref the range is
 # the same one the qc-gate below uses: <remote_sha>..<local_sha>, or origin/HEAD..<local_sha> for a
 # new remote branch (the whole history when origin/HEAD is unknown). A range that never touched the
-# backlog is skipped; so is a remote sha this clone does not have (rev-list fails → empty).
-# Strength follows .claude/backlog-config.md `mode` (no config → warn, never blocks).
+# backlog is skipped. A remote sha this clone does not have is skipped with a printed line (fetch,
+# then push again to have that range checked).
+# Strength follows .claude/backlog-config.md `mode` (no config → warn: violations are printed, the
+# push is never blocked).
 __BL_GATE="$REPO_ROOT/scripts/check-backlog-entries.js"
 __BL_PATHS="$REPO_ROOT/scripts/resolve-project-paths.sh"
 if [ -r "$__BL_GATE" ] && [ -r "$__BL_PATHS" ] && command -v node >/dev/null 2>&1; then
@@ -46,6 +48,10 @@ if [ -r "$__BL_GATE" ] && [ -r "$__BL_PATHS" ] && command -v node >/dev/null 2>&
         __bl_base="$(git rev-parse --verify --quiet origin/HEAD 2>/dev/null || true)"
         if [ -n "$__bl_base" ]; then __bl_range="${__bl_base}..${__bl_lsha}"; else __bl_range="$__bl_lsha"; fi
       else
+        if ! git cat-file -e "${__bl_rsha}^{commit}" 2>/dev/null; then
+          printf 'backlog gate: %s: remote commit %s is not in this clone - range not checked (git fetch, then push again)\n' "${__bl_lref:-HEAD}" "$__bl_rsha" >&2
+          continue
+        fi
         __bl_range="${__bl_rsha}..${__bl_lsha}"
       fi
       [ -n "$(git rev-list -n1 "$__bl_range" -- "$__BL_REL" 2>/dev/null)" ] || continue
@@ -56,6 +62,9 @@ if [ -r "$__BL_GATE" ] && [ -r "$__BL_PATHS" ] && command -v node >/dev/null 2>&
         __bl_fail=1
       elif [ "$__bl_rc" -ne 0 ]; then
         printf 'backlog gate: WARNING could not check %s (%s), exit %s - NOT enforced\n%s\n' "${__bl_lref:-HEAD}" "$__bl_range" "$__bl_rc" "$__bl_out" >&2
+      elif printf '%s' "$__bl_out" | grep -qE '"(new_count|warn_count)":[1-9]'; then
+        # warn mode (or warn-level codes only): show the violations, never block.
+        printf '\nbacklog gate: %s (%s) has violations - warning only, push not blocked\n%s\n' "${__bl_lref:-HEAD}" "$__bl_range" "$__bl_out" >&2
       fi
     done <<< "$__PUSH_STDIN"
     if [ "$__bl_fail" -ne 0 ]; then

@@ -65,6 +65,7 @@ const {
 const { effortSeatTimeoutSeconds } = require('./lib/plan-review-timeout');
 const { createPanelManifest } = require('./lib/plan-review-panel');
 const { stageWrite } = require('./lib/stage-write');
+const { loadContextFiles, renderContextBlock } = require('./lib/plan-review-context');
 
 const SCRIPT_DIR = __dirname;
 const DISPATCH_AUTHOR = path.join(SCRIPT_DIR, 'dispatch-author.sh');
@@ -105,11 +106,19 @@ function usage() {
     --repo-root <repo> --plan-file <plan> --rubric-file <rubric> \\
     --ticket <id> --session-id <id> --generation <1|2> \\
     --manifest-file <manifest.json> [--disposition-file <decisions.json>] \\
-    [--state-dir <dir>] [--now <ISO-8601>] [--allow-unregistered]
+    [--context-file <repo-source-file>]... [--state-dir <dir>] [--now <ISO-8601>] \\
+    [--allow-unregistered]
 
 --allow-unregistered: skip the plan_unregistered refusal (the plan must have a
   docs/projects/INDEX.md row with Version "active") — for a scratch/consumer repo. Auto-
   allowed with no flag needed when the repo has no docs/projects/INDEX.md at all.
+
+--context-file: optional, repeatable. Hands seats read-only repo source files so claims about
+  code can be checked (default for non-codex seats: plan + rubric text only; codex seats can already read the repo tree). Files must live inside
+  --repo-root, use an allowlisted source extension, and stay within 12 files / 64 KB each /
+  256 KB total. Evidence, review-output, disposition and plan/rubric paths are refused (blind
+  dispatch). The file list and hashes are sealed with the session: generation 2 must pass the
+  identical set or it is refused.
 
 Legacy compatibility:
   replace --manifest-file with --runner/--model/--effort/--endpoint and optional
@@ -160,6 +169,13 @@ function parseArgs(argv) {
     if (arg === '-h' || arg === '--help') {
       process.stdout.write(`${usage()}\n`);
       process.exit(0);
+    }
+    if (arg === '--context-file') {
+      if (index + 1 >= argv.length || argv[index + 1] === '') {
+        throw new CliError('--context-file requires a non-empty value');
+      }
+      (opts.contextFiles = opts.contextFiles || []).push(argv[++index]);
+      continue;
     }
     if (arg === '--allow-unregistered') {
       opts.allowUnregistered = true;
@@ -954,7 +970,7 @@ function commitLogicalBinding(binding) {
   atomicWriteJson(binding.indexPath, binding.value);
 }
 
-function buildPrompt(seat, planBytes, rubricBytes, rubricIds) {
+function buildPrompt(seat, planBytes, rubricBytes, rubricIds, contextBundle = null) {
   const nonce = crypto.randomBytes(12).toString('hex');
   return `You are the ${seat.role} seat (${seat.id}) in one frozen plan-review generation.
 Review only against frozen rubric IDs: ${[...rubricIds].join(', ')}.
@@ -983,7 +999,7 @@ ${rubricBytes.toString('utf8')}
 <PLAN_UNDER_REVIEW_${nonce}>
 ${planBytes.toString('utf8')}
 </PLAN_UNDER_REVIEW_${nonce}>
-`;
+${renderContextBlock(contextBundle, nonce)}`;
 }
 
 function testSequence() {
@@ -1031,6 +1047,13 @@ function dispatchSeat(
     }
     const descriptor = typeof seam === 'string' ? { file: seam } : seam;
     if (descriptor.delay_ms !== undefined) sleepMilliseconds(descriptor.delay_ms);
+    if (process.env.AUTOPILOT_PLAN_REVIEW_PROMPT_DUMP_DIR) {
+      // Test seam only (gated above): lets a test assert what the seat prompt actually contains.
+      fs.writeFileSync(
+        path.join(process.env.AUTOPILOT_PLAN_REVIEW_PROMPT_DUMP_DIR, `${target.id}-${attempt}.prompt.txt`),
+        prompt,
+      );
+    }
     const rawPath = canonicalFile(descriptor.file, 'response seam');
     const raw = fs.readFileSync(rawPath);
     const classification = descriptor.classification || 'success';
@@ -1168,6 +1191,7 @@ function reviewSeat({
   planBytes,
   rubricBytes,
   rubricIds,
+  contextBundle = null,
   timeoutSeconds,
   timeoutExplicit,
   panel,
@@ -1258,7 +1282,7 @@ function reviewSeat({
     if (panel) panel.seatStart(seat.id, selected.id, attempt);
     const dispatched = dispatchSeat(
       bounded,
-      buildPrompt(bounded, planBytes, rubricBytes, rubricIds),
+      buildPrompt(bounded, planBytes, rubricBytes, rubricIds, contextBundle),
       attempt,
       sequence,
       legacyEnv,
@@ -1586,6 +1610,22 @@ function main() {
   const planSha = sha256(planBytes);
   const rubricSha = sha256(rubricBytes);
   const rubricIds = extractRubricIds(rubricBytes);
+  let contextBundle;
+  try {
+    contextBundle = loadContextFiles(opts.contextFiles, {
+      repoRoot: opts.repoRoot,
+      excluded: [opts.planFile, opts.rubricFile, opts.manifestFile, opts.dispositionFile],
+    });
+  } catch (error) {
+    if (error instanceof CliError || error.exitCode) {
+      process.stderr.write(`dispatch-plan-review: ${error.message}\n`);
+      process.exit(error.exitCode);
+    }
+    throw error;
+  }
+  const contextSha = contextBundle ? contextBundle.sha256 : null;
+  const contextCopy = path.join(sessionDir, 'context.json');
+  const contextSeal = path.join(sessionDir, 'context-seal.json');
   const clock = createClock(opts.now);
   const now = new Date(clock.now());
   const claimId = crypto.randomBytes(16).toString('hex');
@@ -1612,6 +1652,12 @@ function main() {
       if (!fs.existsSync(statePath)) {
         if (opts.generation !== 1) throw new CliError('new session must acquire generation 1', 3);
         fs.writeFileSync(manifestCopy, loaded.bytes, { mode: 0o600 });
+        if (contextBundle) {
+          fs.writeFileSync(contextCopy, contextBundle.manifestBytes, { mode: 0o600 });
+          if (sealSpec('seal', contextCopy, contextSeal) !== contextSha) {
+            throw new CliError('frozen context seal mismatch', 3);
+          }
+        }
         if (sealSpec('seal', opts.rubricFile, rubricSeal) !== rubricSha
             || sealSpec('seal', manifestCopy, manifestSeal) !== manifestSha) {
           throw new CliError('frozen rubric/manifest seal mismatch', 3);
@@ -1624,6 +1670,7 @@ function main() {
           ticket: opts.ticket,
           rubric_sha256: rubricSha,
           manifest_sha256: manifestSha,
+          context_sha256: contextSha,
           baseline_plan_sha256: planSha,
           baseline_plan_bytes: planBytes.length,
           started_at: now.toISOString(),
@@ -1645,6 +1692,9 @@ function main() {
       } else {
         state = loadState(statePath);
       }
+      if ((state.context_sha256 || null) !== contextSha) {
+        throw new CliError('frozen context drifted: --context-file set differs from the sealed session', 3);
+      }
       if (state.repo_identity !== repoIdentity
           || state.session_key !== sessionKey
           || state.ticket !== opts.ticket
@@ -1658,6 +1708,9 @@ function main() {
       if (sealSpec('check', opts.rubricFile, rubricSeal) !== rubricSha
           || sealSpec('check', manifestCopy, manifestSeal) !== manifestSha) {
         throw new CliError('frozen rubric/manifest drifted', 3);
+      }
+      if (contextSha && sealSpec('check', contextCopy, contextSeal) !== contextSha) {
+        throw new CliError('frozen context drifted', 3);
       }
       commitLogicalBinding(binding);
       if (state.terminal) {
@@ -1843,6 +1896,7 @@ function main() {
         planBytes,
         rubricBytes,
         rubricIds,
+        contextBundle,
         timeoutSeconds: opts.timeoutSeconds,
         timeoutExplicit: opts.timeoutExplicit === true,
         sequence,

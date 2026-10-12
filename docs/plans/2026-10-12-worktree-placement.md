@@ -86,11 +86,11 @@ Repo survey (Explore subagent, file:line spot-checked where marked ✓):
 |---|---|---|---|
 | D1 | Which "main checkout" do rails place under? | The repo's real main checkout: `dirname` of `git rev-parse --path-format=absolute --git-common-dir`, accepted only when that basename is `.git` and the parent is a non-bare work tree. Otherwise (bare repo, separate `--git-dir`) the rail keeps today's temp-dir location and says so on stderr. | One root per repo regardless of where the rail was called from (C's point). The fallback keeps exotic layouts working instead of failing. |
 | D2 | What else moves to the real main checkout? | **Only the placement.** `MAIN_CHECKOUT` for the fingerprint, `IDENTITY_REPO_ROOT`, the boundary checks and the `.autopilot-worktree` root keep using the caller's toplevel, as today. | Keeps this task from silently changing what the boundary protects. |
-| D3 | Fingerprint vs worktrees under `.claude/worktrees/` | `main_checkout_fingerprint` always prunes `$MAIN_CHECKOUT/.claude/worktrees` in the stat walk. | Each worktree there is a separate checkout with its own review; the boundary protects the main checkout's files. Pruning only this run's worktree would still trip on every concurrent rail and session (the existing false positive above). Trade-off stated for plan-review: an edit by a hand into a *sibling* worktree is no longer caught by this fingerprint (it never was for siblings in `/tmp`). |
+| D3 | Fingerprint vs worktrees under `.claude/worktrees/` | `main_checkout_fingerprint` always prunes `$MAIN_CHECKOUT/.claude/worktrees` in the stat walk — the directory entry itself and everything under it. Creating the directory is not a mutation either: the resolver's `worktree` subcommand runs `mkdir -p <main>/.claude/worktrees` and every rail calls it **before** its before-fingerprint, so the `.claude` entry or mtime change on a first run lands before the snapshot. | Each worktree there is a separate checkout with its own review; the boundary protects the main checkout's files. Pruning only this run's worktree would still trip on every concurrent rail and session (the existing false positive above). Trade-off stated for plan-review: an edit by a hand into a *sibling* worktree is no longer caught by this fingerprint (it never was for siblings in `/tmp`). |
 | D4 | Rail worktree names | Keep the prefixes: `hetero-<branch>-XXXXXX`, `foreman-<run_id>-XXXXXX`, `batch-integ-<run_id>-XXXXXX`, now under `<main>/.claude/worktrees/`. | Every basename matcher (`worktree-reap.sh:613`, registry, sweep) keeps working; the directory now says which repo. |
 | D5 | Marker for gap 6 | `set` and `set --new-task` re-resolve `repo_root` to the cwd's toplevel when its repo identity equals the marker's; `stage-advance` measures E1 in the cwd's toplevel when its identity equals the marker's, else in `marker.repo_root` as today. | The rail consumers compare `repo_root` to the caller's toplevel; following the session's worktree makes them match where the session works. Identity check keeps a cross-repo cwd from hijacking the marker. |
-| D6 | base_ref default (gap 6b) | Per pair (`develop`/`origin/develop`, then `main`/`origin/main`, then `master`): both exist → local is ancestor of remote ⇒ remote; remote ancestor of local ⇒ local; diverged ⇒ remote. One exists ⇒ that one. No fetch in `session-mode.js`. | The remote-tracking ref is the integration target; local ahead is legitimate unpushed work. |
-| D7 | `orchestrator-edit-gate` | A target under `<repoRoot>/.claude/worktrees/<name>/` is **not** `inRepoRoot`; the existing `hasWorktreeMarkerAbove` decides as for any dispatch worktree. | Nested worktrees are separate checkouts; without this, D4 removes the dispatch-worktree exemption. |
+| D6 | base_ref default (gap 6b) | Pairs in order `develop`/`origin/develop`, `main`/`origin/main`, `master`/`origin/master`. A ref qualifies only when it exists and has a merge-base with `HEAD` (today's filter, kept). The first pair with a qualifying member wins: both qualify → local is ancestor of remote ⇒ remote; remote ancestor of local ⇒ local; diverged ⇒ remote. One qualifies ⇒ that one. No fetch in `session-mode.js`. Behaviour change at base, pinned by a test: with only `origin/develop` and a local `main`, today's flat order picks `main`; D6 picks `origin/develop`. | The remote-tracking ref is the integration target; local ahead is legitimate unpushed work. |
+| D7 | `orchestrator-edit-gate` | A target under `<repoRoot>/.claude/worktrees/<name>/` **with** an `.autopilot-worktree` marker above it (`hasWorktreeMarkerAbove`) is not `inRepoRoot` and gets the dispatch-worktree exemption. Without the marker (a native or another session's worktree) it stays `inRepoRoot` and gated, exactly as today. | Nested worktrees are separate checkouts; without this, D4 removes the dispatch-worktree exemption. |
 | D8 | Handoff keying | One resolver prints both paths. Manual fallback: `~/.autopilot/handoff-manual/<basename>-<sha1(repo identity)[0:8]>.md` (one file per repo, shared by its worktrees). `/clear`: unchanged `sha1(realpath toplevel)` (per worktree — its consumer is the next session in the same worktree; keying it per repo would let a parallel session in a sibling worktree consume it). The hook calls the resolver's function instead of computing the hash itself. | Gap 4 is "a session cannot predict where the other route wrote"; one resolver fixes that. The two keys differ on purpose and the reference doc says why. The pinned `/clear` tests stay valid. |
 | D9 | Registry gate | Allowlist the three new `mktemp -u -d "$ROOT/…"` lines in `scripts/tmp-residue-allowlist.json` with the reason "under `<main>/.claude/worktrees/`, not the temp root". Keep the three registry entries (old residue still sits in `/tmp`); update their `reason`. | Smallest change; teaching the gate about absolute templates is a mechanism change with no second user yet. |
 | D10 | `repo-residue-sweep.js:668` busy-skip | Skip only worktrees **without** an `.autopilot-worktree` marker; rail worktrees keep marker/flock-based liveness. | Liveness of rail worktrees is the flock, not the cwd (memory: residue cleanup traps). |
@@ -110,7 +110,11 @@ time (memory: parallel suites interfere). Per-phase hetero code review (quality-
    checkout).
 2. `hooks/tests/session-mode.test.sh`: (a) local `develop` behind `origin/develop` ⇒ stored `base_ref` is the remote
    sha; (b) local ahead ⇒ local; (c) diverged ⇒ remote; (d) `set --new-task` from a linked worktree of the same repo
-   ⇒ `repo_root` is the worktree; (e) from a different repo ⇒ `repo_root` unchanged. Red at base for a, d.
+   ⇒ `repo_root` is the worktree; (e) from a different repo ⇒ `repo_root` unchanged; (f) plain `set` (no
+   `--new-task`) from a linked worktree ⇒ `repo_root` follows, from a foreign repo ⇒ unchanged; (g) only
+   `origin/develop` plus a local `main` ⇒ `origin/develop`; (h) only local `develop` ⇒ `develop`. Red at base for
+   a, d, f (linked case), g. P1.1 also gets the negative case: `stage-advance --to verify` from an unrelated sandbox
+   repo with repo A's marker measures in `marker.repo_root` and leaves the marker unchanged.
 3. Implement D5 in `session-mode.js` (`applyInitFields` / new-task path, reusing the identity function the marker
    already stores) and `stage-advance.js:231-236`; D6 in `defaultBaseRef`.
 4. Suites: `session-mode.test.sh`, `session-mode-phase`, `session-mode-watcher`, `session-mode-bind-campaign-root`,
@@ -126,19 +130,31 @@ time (memory: parallel suites interfere). Per-phase hetero code review (quality-
    Exports the same functions for hooks. Test file pins: call from the main checkout, from a linked worktree (same
    answer), bare-repo fallback, two repos with the same basename (different manual paths), two worktrees of one repo
    (same manual path, different `/clear` paths).
+0. Before any change: grep the rail and reaper suites for `git status` / `--porcelain` cleanliness assertions on the
+   sandbox and record each hit in `docs/plans/evidence/2026-10-12-worktree-placement/moved-assertions.md` with why it
+   moves or why D11's exclude keeps it. That file is the list of moved assertions; the red run in step 2 must not
+   add one that is not on it.
 2. Red first: run `dispatch-hetero-contract.test.sh`, `dispatch-foreman.test.sh`, `dispatch-batch*.test.sh` with the
    rails pointed at the resolver but **without** D3 — expect `main_checkout_mutated`; this is the red that proves D3
    is needed. Repoint `dispatch-hetero-contract.test.sh:151` to `git worktree list` (vacuous otherwise) and add an
    assertion per rail that its worktree sits under `$SBX/.claude/worktrees/`.
-3. Implement: the three rails take the template from the resolver (hetero `:2921`, foreman `:268`, batch `:388`);
-   D3 in `main_checkout_fingerprint`; D11 exclude line; D7 in `orchestrator-edit-gate.js` with a test (target under
-   `<repoRoot>/.claude/worktrees/x/` with a worktree marker ⇒ not gated as in-repo); D9 allowlist + registry reason;
-   D10 in `repo-residue-sweep.js` with a test.
+3. Implement: the three rails take the template from the resolver (hetero `:2921`, foreman `:268`, batch `:388`),
+   each passing `--from` its own resolved repo root (batch `$REPO`, hetero and foreman their caller toplevel) — the
+   resolver never falls back to the process cwd when a rail calls it — and calling it before the before-fingerprint
+   (D3). Batch test: run from an unrelated cwd with `--repo` at the sandbox ⇒ worktree under the sandbox's
+   `.claude/worktrees/`. First-run test per rail: sandbox with no `.claude/` ⇒ round is not `main_checkout_mutated`.
+   D3 in `main_checkout_fingerprint`; D11 exclude line; D7 in `orchestrator-edit-gate.js` with two tests (target
+   under `<repoRoot>/.claude/worktrees/x/` with a worktree marker ⇒ not gated as in-repo; same without a marker ⇒
+   gated as today); D9 allowlist + registry reason; D10 in `repo-residue-sweep.js` with a test.
 4. `foreman-guard.js:187-196`: grep the foreman protocol (`skills/`, `references/`, `scripts/dispatch-foreman.sh`
    brief text) for an `rm` of its own worktree. Found ⇒ allow the run's own worktree path in `isTmpSafePath` with a
    test; not found ⇒ record "no change needed" with the grep.
-5. Walkers (C6): `identifier-scan.js` skips `.claude/worktrees` (one test); read `project-detect.js:651` and either
-   add the skip with a test or record why it cannot reach it.
+5. Walkers (C6): enumerate first, reproducibly — a recorded grep over `scripts/`, `hooks/` and `bin/` + `src/` for
+   recursive walkers (`find` not scoped to `.git`, `readdirSync`/`readdir` with recursion or `{recursive: true}`,
+   recursive globs, `walk` helpers), kept as `walkers.md` in the evidence dir with the command. Each hit is
+   dispositioned `skips .claude/worktrees` / `uses git ls-files` / `cannot run from the main checkout (why)` /
+   `fixed here (test)`. Known so far: `identifier-scan.js` needs the skip (one test); `project-detect.js:651` to be
+   read; doc-drift-gate and check-stage-vocab already skip.
 6. Suites, one at a time: the three rail suites, `dispatch-detach`, `dispatch-worktree-lifecycle`,
    `dispatch-hetero-gc`, `worktree-reap`, `repo-residue-sweep`, `repo-residue-auto`, `tmp-residue-registry`,
    `check-tmp-residue-registry`, `suite-residue-reaper`, `prune-tmp-residue`, `orchestrator-edit-gate`,
@@ -147,27 +163,44 @@ time (memory: parallel suites interfere). Per-phase hetero code review (quality-
 ### P3 — new-task advisory; handoff through the resolver (C3, C4)
 
 1. `session-mode.js set --new-task`: when the cwd is a linked worktree, split its directory name and the current
-   branch on `[-_/.]`, drop generic tokens (`feat`, `fix`, `hotfix`, `worktree`, `agent`, `wip`, digits-only); no
-   shared token ⇒ one stderr line `worktree <dir> is on branch <b>, which shares no word with it — open a fresh
-   worktree for a new task (references/worktree-placement.md)`. Exit code unchanged. Two-case test (match / no
-   match) plus "main checkout ⇒ silent".
+   branch on `[-_/.]`, lowercase every token, drop generic tokens (`feat`, `fix`, `hotfix`, `worktree`, `agent`,
+   `wip`, digits-only). Either filtered set empty ⇒ silent (nothing to compare). Both non-empty and no shared token ⇒
+   one stderr line `worktree <dir> is on branch <b>, which shares no word with it — open a fresh worktree for a new
+   task (references/worktree-placement.md)`. Exit code unchanged. Tests: match ⇒ silent; no match ⇒ one line; main
+   checkout ⇒ silent; `feat-1234` vs `feat/1234` (only generic/digit tokens) ⇒ silent; `Foo-bar` vs `foo-bar` ⇒
+   silent; exit code asserted equal in every case.
 2. `hooks/session-handoff.js:320` and `hooks/session-start.js` reader take the `/clear` path from the resolver's
    exported function; `session-handoff.test.sh:28` and `session-start-handoff-inject.test.sh` stay green unchanged
    (same hash), which is the proof the key did not move.
 3. `skills/handoff/SKILL.md:30-36`: the fallback path line points at `resolve-repo-placement.js handoff --route
    manual` instead of the prose pattern. This changes how the path is found, not what the skill asks for
    (mechanism, CLAUDE.md "機制 vs 指引"); the requirement list is unchanged.
+4. Suites, one at a time: `session-mode.test.sh`, `session-handoff.test.sh`, `session-start-handoff-inject.test.sh`,
+   the resolver test, `stage-advance.test.sh`.
 
 ### P4 — the rule in one place; wiring (C7)
 
 1. `references/worktree-placement.md`: the rule (one root per repo; who creates what where; names; marker follows
    the session; handoff keys and why they differ; fallback; the owner's pull line for gap 8).
-2. Backlog file: each gap marked fixed (with the phase) or deferred (5, 8-wiring) with a trigger; a `docs/BACKLOG.md`
-   row for the finish-flow gap-8 line.
+2. Backlog file: each gap marked per the table below; a `docs/BACKLOG.md` row for the finish-flow gap-8 line.
+
+   | Gap | Disposition |
+   |---|---|
+   | 1 two unrelated roots | fixed — P2 (rails under `<main>/.claude/worktrees/`), P4.1 rule |
+   | 2 no per-repo grouping | fixed — P2 (the path names the repo's main checkout) |
+   | 3 name ↔ branch ↔ task unrelated | fixed as far as this plan goes — P3.1 advisory (never blocks) + P4.1 rule |
+   | 4 handoff keying | fixed — P2.1 resolver, P3.2/P3.3 |
+   | 5 cross-repo dispatch | deferred — trigger: a session in repo A dispatches a rail at repo B (BACKLOG row) |
+   | 6 marker `repo_root` fixed at creation | fixed — P1 (D5) |
+   | 6b stale `base_ref` | fixed — P1 (D6) |
+   | 7 orphan worktrees not discovered | out of scope — already filed (BACKLOG "Orphan leaf liveness…"); D10 keeps the sweep's `.claude/worktrees/` review flag from catching rail worktrees |
+   | 8 owner cannot pull from an isolated session | partly fixed — resolver `main` prints how far behind, P4.1 owner line; finish-flow wiring deferred (BACKLOG row, scorecard-first) |
 3. Wiring for the new script (CLAUDE.md four steps): reference doc, `docs/scripts-inventory.md` row, the grouped
    list in `CLAUDE.md` (Worktree & branch lifecycle), and `skills/handoff/SKILL.md` (P3.3).
    `check-claude-md-inventory.js` passes.
 4. CHANGELOG `## Unreleased` entry. No version bump (owner: hold the 3.0.0 line).
+5. Gates: `check-claude-md-inventory.js`, `check-tmp-residue-registry.js`, `check-reference-sizes.js`,
+   `check-plan-graduation.js`, `doc-drift-gate.js`, `check-backlog-entries.js`.
 
 ## 4. Verification map
 
@@ -179,14 +212,19 @@ time (memory: parallel suites interfere). Per-phase hetero code review (quality-
 | C4 | P2.1 resolver tests + P3.2 pinned hook tests unchanged |
 | C5 | P2.2/P2.3 per-rail location assertions; reaper/registry suites green |
 | C6 | P2.5 walker tests or recorded reasons; doc-drift/stage-vocab already skip |
-| C7 | P4 reference exists; backlog file gap dispositions; inventory gate green |
+| C7 | P4 reference exists; backlog file matches the P4.2 gap table; P4.5 gates green |
+| D3 | P2.2 red (`main_checkout_mutated` without D3) → green; P2.3 first-run test (no `.claude/`) green |
+| D7 | P2.3 marked ⇒ exempt, unmarked ⇒ gated (both directions) |
+| D10 | P2.3 sweep test: marked rail worktree not busy-skipped, unmarked one skipped |
+| D11 | sandbox `git status --porcelain` empty after a rail run; entries in `moved-assertions.md` (P2.0) |
+| P2.4 | `foreman-guard` test for the allowed path, or the recorded grep showing no change is needed |
 
 ## 5. Risks
 
 - **D3 weakens nothing the fingerprint covered for `/tmp` siblings, but does stop seeing sibling worktrees under
   `.claude/worktrees/`** — flagged for plan-review.
 - Sandbox repos in rail tests do not ignore `.claude/worktrees/`; a test asserting a clean `git status` of the
-  sandbox may change. D11's exclude covers it; P2.2's red run shows which tests are affected before assertions move.
+  sandbox may change. D11's exclude covers it; P2.0 lists them before any change, and the red run must not add one.
 - Hetero rail is long and runs detached children that re-declare functions (`main-checkout-boundary.sh:42`): any new
   function the detached child calls must join the `declare -f` list.
 - Editing a bash rail while a background run uses it corrupts that run (memory) — no rail dispatch from this

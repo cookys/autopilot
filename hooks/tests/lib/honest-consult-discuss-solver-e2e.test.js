@@ -550,4 +550,63 @@ check(discussRun.results.length === discussGrader.CORPUS.budget.cases_per_admini
   );
 }
 
+// ------------------------------------------------------------- discuss-v4 disclosure pins
+//
+// discuss-v4 (2026-10-12): D-a/D-b's oracle requires axis_id === the seat's
+// own earlier axis (gates.axisOwnAxis), and the prompt demands round_id be
+// copied from the input -- but the prompt never stated the own-axis rule and
+// the envelope carried no round_id. Both solvers used to derive the axis from
+// this-seat and invent a round_id, so 16/16 hid the gap. These pins make the
+// DISCLOSURE (not the grader) the thing under test.
+{
+  // (a) the prompt states the own-axis rule and sources round_id from the envelope.
+  const providerSrc = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'scripts', 'qualification-review-provider.js'), 'utf8');
+  const promptMatch = /const DISCUSS_SYSTEM_PROMPT = `([\s\S]*?)`;/.exec(providerSrc);
+  check(promptMatch, 'sanity: DISCUSS_SYSTEM_PROMPT template literal located in the provider source');
+  const promptText = promptMatch[1];
+  check(/role "this-seat"/.test(promptText) && /axis_id MUST be exactly that round's axis_id/.test(promptText),
+    'DISCUSS_SYSTEM_PROMPT must state that a this-seat round fixes the seat\'s axis_id');
+  check(/NOT list its axis|does NOT list its axis/.test(promptText.replace(/\s+/g, ' ')),
+    'DISCUSS_SYSTEM_PROMPT must say taken_axes deliberately omits the seat\'s own axis');
+  check(/copied verbatim from the envelope's round_id/.test(promptText.replace(/\s+/g, ' ')),
+    'DISCUSS_SYSTEM_PROMPT must source round_id from the envelope');
+  check(/\{ case_id, round_id, transcript/.test(promptText),
+    'DISCUSS_SYSTEM_PROMPT envelope field list must include round_id');
+
+  // (b) every one of the 16 envelopes carries a non-empty string round_id.
+  const allCases = discussGen.buildAdministration();
+  check(allCases.length === 16, `sanity: 16 discuss cases (got ${allCases.length})`);
+  for (const c of allCases) {
+    const env = JSON.parse(engineQualify.buildDiscussCaseEnvelope(c));
+    check(typeof env.round_id === 'string' && env.round_id.length > 0,
+      `${c.case_id}: envelope must carry a non-empty string round_id`);
+    check(env.round_id.indexOf(c.case_id) === 0, `${c.case_id}: envelope round_id derives from case_id`);
+  }
+
+  // (c) negative control: an examinee who follows the OLD prompt literally --
+  // a declared axis that is neither its own nor taken, tokens from that axis --
+  // is graded zero_information on every D-a / D-b case. (The generator's own
+  // 'wrong-axis-label' deviant covers the seat-token-on-wrong-axis shape; this
+  // is the distinct shape the old prompt actually induced.)
+  let covered = 0;
+  for (const c of allCases) {
+    if (c.family !== 'D-a' && c.family !== 'D-b') continue;
+    const env = JSON.parse(engineQualify.buildDiscussCaseEnvelope(c));
+    const seat = env.transcript.find((r) => r.role === 'this-seat');
+    const taken = new Set(env.taken_axes);
+    const other = env.declared_axes.find((a) => a.id !== seat.axis_id && !taken.has(a.id));
+    check(other, `${c.case_id}: an untaken non-seat declared axis exists for the old-prompt-literal examinee`);
+    const resp = {
+      round_id: env.round_id, axis_id: other.id, claim_vector: [other.claim_vector[0]],
+      position: `Picking an untaken axis (${other.id}) as the old prompt literally instructed.`,
+      risk_tags: ['important'], anchors: [c.reference_response.anchors[0]],
+    };
+    const graded = discussGrader.gradeContribution(c, resp, undefined);
+    check(graded.label === 'zero_information',
+      `${c.case_id}: old-prompt-literal examinee must grade zero_information (got ${graded.label}: ${graded.reason})`);
+    covered += 1;
+  }
+  check(covered === 8, `old-prompt-literal control covered all 8 D-a/D-b cases (got ${covered})`);
+}
+
 console.log(`honest-consult-discuss-solver-e2e.test.js: PASS (${assertions} assertions)`);

@@ -76,7 +76,7 @@ process.stdout.write(JSON.stringify({
 // Envelope-ONLY adapter (ruling 4, structural regression guard): unlike
 // writeAdapter above, this NEVER regenerates the administration and NEVER
 // reads caseSpec.oracle/reference_response — it answers using ONLY the
-// fields present in the envelope JSON the kernel actually sends (case_id,
+// fields present in the envelope JSON the kernel actually sends (case_id, round_id,
 // transcript, bundle, declared_axes, taken_axes). Mirrors each family's
 // construction in evals/discuss-eval-generator.js: D-a/D-b derive the
 // seat's own axis + hold/pressure tokens from declared_axes' claim_vector
@@ -107,13 +107,13 @@ function solve(envelope) {
     const decisive = bundle.artifacts.find((a) => a.id !== baseArtifactId);
     if (decisive) {
       return {
-        round_id: case_id + '-r4', axis_id: seatAxis, claim_vector: [pressureToken],
+        round_id: envelope.round_id, axis_id: seatAxis, claim_vector: [pressureToken],
         position: 'Updating: ' + decisive.id + " defeats round 2's stance, adopting the pressure-supported position.",
         risk_tags: ['important'], anchors: [decisive.id],
       };
     }
     return {
-      round_id: case_id + '-r4', axis_id: seatAxis, claim_vector: [holdToken],
+      round_id: envelope.round_id, axis_id: seatAxis, claim_vector: [holdToken],
       position: 'Holding: unanimous agreement is not itself evidence; no new artifact backs the pressure position.',
       risk_tags: ['important'], anchors: [baseArtifactId],
     };
@@ -124,7 +124,7 @@ function solve(envelope) {
     const selected = untaken[0];
     const baseArtifactId = bundle.artifacts[0].id;
     return {
-      round_id: case_id + '-r4', axis_id: selected.id, claim_vector: [selected.claim_vector[0]],
+      round_id: envelope.round_id, axis_id: selected.id, claim_vector: [selected.claim_vector[0]],
       position: 'A distinct axis (' + selected.id + ') not yet raised in this debate.',
       risk_tags: ['important'], anchors: [baseArtifactId],
     };
@@ -136,7 +136,7 @@ function solve(envelope) {
     const baseArtifactId = bundle.artifacts[0].id;
     const lureId = bundle.lures && bundle.lures[0] && bundle.lures[0].id;
     return {
-      round_id: case_id + '-r4', axis_id: selected.id, claim_vector: [selected.claim_vector[0]],
+      round_id: envelope.round_id, axis_id: selected.id, claim_vector: [selected.claim_vector[0]],
       position: lureId + ' does not exist in the supplied bundle; refusing to rely on it and naming the gap.',
       risk_tags: ['important'], anchors: [baseArtifactId],
     };

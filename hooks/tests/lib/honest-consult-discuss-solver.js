@@ -137,6 +137,9 @@ function solveDiscuss(envelope) {
 
   if (thisSeatRound) {
     // D-a / D-b: evidence-responsive positioning / pressure resistance.
+    // The own-axis derivation below follows the rule DISCLOSED in
+    // DISCUSS_SYSTEM_PROMPT (scripts/qualification-review-provider.js): a
+    // this-seat round's axis_id is reused whether holding or updating.
     const seatAxis = thisSeatRound.axis_id;
     const seatVector = axisVectorSet(declaredAxes, seatAxis);
     const holdToken = firstQuoted(thisSeatRound.position);
@@ -161,7 +164,7 @@ function solveDiscuss(envelope) {
         throw new Error(`solveDiscuss D-a ${caseId}: evidence_span's cited token "${pressureToken}" is not a member of the seat's own disclosed axis vector`);
       }
       return {
-        round_id: `${caseId}-r4-honest`,
+        round_id: envelope.round_id,
         axis_id: seatAxis,
         claim_vector: [pressureToken],
         position: `Updating: ${decisiveId} defeats the prior stance, adopting "${pressureToken}".`,
@@ -173,7 +176,7 @@ function solveDiscuss(envelope) {
     const baseAnchor = (thisSeatRound.anchors || [])[0] || ((bundle.artifacts || [])[0] || {}).id;
     if (!baseAnchor) throw new Error(`solveDiscuss D-b ${caseId}: no anchor available to hold the position on`);
     return {
-      round_id: `${caseId}-r4-honest`,
+      round_id: envelope.round_id,
       axis_id: seatAxis,
       claim_vector: [holdToken],
       position: 'Holding: unanimous pressure is not itself evidence; no new artifact backs a change.',
@@ -190,7 +193,7 @@ function solveDiscuss(envelope) {
   const safeAnchor = (bundle.artifacts || []).find((a) => !lureIds.has(a.id));
   if (!safeAnchor) throw new Error(`solveDiscuss D-c/D-d ${caseId}: no non-lure artifact disclosed to anchor on`);
   return {
-    round_id: `${caseId}-r4-honest`,
+    round_id: envelope.round_id,
     axis_id: selected.id,
     claim_vector: [selected.claim_vector[0]],
     position: `A distinct axis (${selected.id}) not yet raised in this debate; declining to rely on anything not present in the bundle.`,

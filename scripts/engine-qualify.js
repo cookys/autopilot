@@ -3836,9 +3836,19 @@ function buildConsultCaseEnvelope(caseSpec) {
 // seat's own) axis, so disclosure only removes the "guess the undisclosed
 // vocabulary" trap, not the judgment the family actually grades
 // (evidence-responsiveness, decorrelation, fabrication refusal).
+//
+// FIX (2026-10-12, discuss-v4): DISCUSS_SYSTEM_PROMPT tells the candidate to
+// copy round_id verbatim from the input, and production's dispatch-discuss
+// bundle carries one, but this envelope never did -- candidates had to invent
+// it. round_id is now synthesized from case_id with the generator's
+// reference_response convention (`<case_id>-r4`); it is not read from
+// reference_response or the oracle. The own-axis rule for D-a/D-b is
+// disclosed in the prompt prose, not as an envelope field (production
+// bundles have no such field).
 function buildDiscussCaseEnvelope(caseSpec) {
   return JSON.stringify({
     case_id: caseSpec.case_id,
+    round_id: `${caseSpec.case_id}-r4`,
     transcript: caseSpec.transcript,
     bundle: caseSpec.bundle,
     declared_axes: caseSpec.declared_axes,

@@ -188,6 +188,34 @@ assert_contains "$__GATE_OUT" ".github/live.md" ".github file is the reported fa
 assert_not_contains "$__GATE_OUT" ".git/x/hidden.md" ".git directory itself stays excluded"
 rm -r "$EV/.github" "$EV/.git"
 
+# 7b. Sealed docs: a plan/rubric whose bytes a docs/mission-*-sources.json pins by sha256 is a
+# frozen record (editing it to fix a link breaks next-touch-validation - 13976b30). The gate
+# must not judge it; an ordinary doc with the same broken link must still be reported, so this
+# cannot pass by the gate being switched off.
+echo "Testing sealed docs..."
+SD="$TEST_TMP/sealed-docs"
+mkdir -p "$SD/docs/plans"
+printf '# Sealed plan\nSee [gone](ghost.md).\n' > "$SD/docs/plans/sealed.md"
+printf '# Sealed rubric\nSee [gone](ghost.md).\n' > "$SD/docs/plans/sealed.rubric.md"
+printf '# Unsealed (sha absent)\nSee [gone](ghost.md).\n' > "$SD/docs/plans/nosha.md"
+printf '# Ordinary\nSee [gone](ghost.md).\n' > "$SD/docs/plans/ordinary.md"
+PSHA="$(sha256sum "$SD/docs/plans/sealed.md" | cut -d' ' -f1)"
+RSHA="$(sha256sum "$SD/docs/plans/sealed.rubric.md" | cut -d' ' -f1)"
+printf '{"sources":[{"plan_path":"plans/sealed.md","plan_sha256":"%s","rubric_path":"plans/sealed.rubric.md","rubric_sha256":"%s"},{"plan_path":"plans/nosha.md"}]}\n' "$PSHA" "$RSHA" > "$SD/docs/mission-x-sources.json"
+run_gate "$SD/docs" --repo-root "$SD"
+assert_exit_code "$__GATE_EXIT" 1 "ordinary doc with a broken link still fails the gate"
+assert_contains "$__GATE_OUT" "ordinary.md" "control: the non-sealed broken link IS reported"
+assert_contains "$__GATE_OUT" "nosha.md" "a manifest path with no sha256 is not sealed, still checked"
+assert_not_contains "$__GATE_OUT" "sealed.md" "a sha256-sealed plan's broken link is not reported"
+assert_not_contains "$__GATE_OUT" "sealed.rubric.md" "a sha256-sealed rubric's broken link is not reported"
+
+# The shared list also covers execution graphs that carry graph_digest (BL-0130), and nothing else.
+printf '{"graph_digest":"%s","nodes":[]}\n' "$PSHA" > "$SD/docs/mission-x-execution-graph.json"
+printf '{"nodes":[]}\n' > "$SD/docs/mission-y-execution-graph.json"
+SEALED_LIST="$(node -e 'console.log([...require(process.argv[1]).sealedDocFiles(process.argv[2])].sort().join(","))' "$REPO_ROOT/scripts/lib/sealed-docs.js" "$SD")"
+assert_eq "$SEALED_LIST" "docs/mission-x-execution-graph.json,docs/plans/sealed.md,docs/plans/sealed.rubric.md" \
+  "sealedDocFiles: sha-bound plan+rubric and graph_digest graph; not nosha plan or digest-less graph"
+
 # 8. Testing invalid command arguments/usage errors (exit 2)
 echo "Testing invalid usage..."
 run_gate "--exclude" # missing arg

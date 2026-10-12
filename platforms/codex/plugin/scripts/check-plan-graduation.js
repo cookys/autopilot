@@ -423,27 +423,14 @@ function frozenAssetFiles(repoRoot) {
       }
     }
   } catch { /* lib absent (e.g. a vendored copy): seal-file discovery above still applies */ }
-  // Mission sources manifests seal plan/rubric bytes (plan_sha256/rubric_sha256; paths are relative
-  // to docs/). The mission runtime re-derives those digests, so a rewrite inside one reds
+  // Mission sources manifests (plan_sha256/rubric_sha256) and execution graphs carrying a
+  // graph_digest seal bytes the mission runtime re-derives; a rewrite inside one reds
   // next-touch-validation ("active plan/rubric digest does not match source manifest") — the
-  // v2.36.80 incident that drifted 26 of them (restored in the v2.36.80 follow-up).
-  let sourceManifests = [];
+  // v2.36.80 incident (26 files) and BL-0130 (graphs). The list lives in ONE shared module so
+  // doc-drift-gate.js and this tool cannot drift apart again.
   try {
-    sourceManifests = execFileSync('git', ['-C', repoRoot, 'ls-files', '-z', '--', 'docs/mission-*-sources.json'],
-      { encoding: 'utf8' }).split('\0').filter(Boolean);
-  } catch { /* not a git checkout */ }
-  for (const rel of sourceManifests) {
-    try {
-      const manifest = JSON.parse(fs.readFileSync(path.join(repoRoot, rel), 'utf8'));
-      for (const src of (manifest && Array.isArray(manifest.sources) ? manifest.sources : [])) {
-        for (const key of ['plan_path', 'rubric_path']) {
-          if (src && typeof src[key] === 'string' && src[key]) {
-            frozen.add(path.posix.join('docs', src[key].split(path.sep).join('/')));
-          }
-        }
-      }
-    } catch { /* unreadable manifest: next-touch-validation reports it on its own */ }
-  }
+    for (const rel of require('./lib/sealed-docs.js').sealedDocFiles(repoRoot)) frozen.add(rel);
+  } catch { /* lib absent (e.g. a vendored copy): seal-file discovery above still applies */ }
   return frozen;
 }
 

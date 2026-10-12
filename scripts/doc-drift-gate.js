@@ -16,6 +16,9 @@
 
 const fs = require('fs');
 const path = require('path');
+// Guarded: a vendored copy of this gate without scripts/lib/ degrades to "nothing sealed".
+let sealedDocFiles = () => new Set();
+try { ({ sealedDocFiles } = require('./lib/sealed-docs.js')); } catch { /* lib absent */ }
 
 const DEFAULT_EXCLUDES = [
   ".git",
@@ -122,6 +125,10 @@ function isExcluded(fullPath, scanRoot, excludes) {
 
 function getMdFiles(roots, excludes) {
   const out = new Set();
+  // Sealed docs (a digest pins their bytes — see lib/sealed-docs.js) are frozen records, like
+  // docs/plans/evidence/: judged by no check, because the only "fix" is a byte edit that breaks
+  // the seal (13976b30 did exactly that to a plan locked by a mission sources manifest).
+  const sealed = sealedDocFiles(AUDIT_ROOT);
   let scanRoot = '.';
 
   function walk(dirpath) {
@@ -161,6 +168,7 @@ function getMdFiles(roots, excludes) {
         }
         walk(fullPath);
       } else if (isFile && entry.name.endsWith('.md')) {
+        if (sealed.has(path.relative(AUDIT_ROOT, path.resolve(fullPath)).split(path.sep).join('/'))) continue;
         out.add(fullPath);
       }
     }

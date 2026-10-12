@@ -303,6 +303,27 @@ assert.throws(
   () => graphApi.freezeMissionExecutionGraph(escapedDispatchGraph, resolvedMission),
   /inside an allowed path prefix/,
 );
+// Campaign intake joins verification_commands with ' && ' into verify_cmd and admits only plain
+// argv segments; the graph check must use the same function so READY never precedes an intake reject.
+for (const bad of ['npm test | tee out', 'node -e "1"', "echo 'x'", 'a; b', 'cat $(x)']) {
+  const verifyShapeGraph = clone(graph);
+  verifyShapeGraph.nodes[0].verification_commands = [bad];
+  assert.equal(
+    campaignChecker.validBoundedVerifyCommand(verifyShapeGraph.nodes[0].verification_commands.join(' && ')),
+    false,
+  );
+  assert.throws(
+    () => graphApi.freezeMissionExecutionGraph(verifyShapeGraph, resolvedMission),
+    /verification_commands must be bounded space-delimited argv/,
+  );
+}
+const multiVerifyGraph = clone(graph);
+multiVerifyGraph.nodes[0].verification_commands = ['node --test hooks/x.test.js', 'bash hooks/tests/a.test.sh'];
+assert.equal(
+  campaignChecker.validBoundedVerifyCommand(multiVerifyGraph.nodes[0].verification_commands.join(' && ')),
+  true,
+);
+graphApi.freezeMissionExecutionGraph(multiVerifyGraph, resolvedMission);
 
 let effects = 0;
 let incompletePolicyEffects = 0;

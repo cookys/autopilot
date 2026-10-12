@@ -383,7 +383,17 @@ function buildFixture({ root, scratch, rootRunId }) {
   fs.mkdirSync(orderDir, { recursive: true });
   fs.writeFileSync(
     path.join(orderDir, 'tsi-node-a1.json'),
-    JSON.stringify({ controller: { verification_receipt: verificationReceipt } }),
+    // Real shape (autopilot-engine.js verify result): a wrapper, not the bare receipt.
+    JSON.stringify({
+      controller: {
+        verification_receipt: {
+          passed: true,
+          cached: false,
+          receipt_digest: verificationReceipt.receipt_digest,
+          receipt: verificationReceipt,
+        },
+      },
+    }),
   );
 
   const missionState = writeMissionState({

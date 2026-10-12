@@ -79,7 +79,8 @@ Flags:
   --help, -h                        Show this help message and exit 0
 
 Chain rules (Mode A): every chain entry must be 'finalized' except an 'aborted' one (hetero-review-loop
-wrote it when the branch moved during collection or a seat's findings failed to parse). An aborted entry
+wrote it when the branch moved during collection, a seat's findings failed to parse, or a seat gap
+left the generation without a usable review: reasons seat_gap, seat_gap_below_min). An aborted entry
 is accepted only as a recorded non-review: it must not be the last entry, it carries no head, the next
 generation continues from its base, and its range.json (if present) names that base. It contributes no
 findings and closes none (review-chain-derive skips it). v2.36.3.

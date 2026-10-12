@@ -748,6 +748,18 @@ async function handleCollect(flags) {
     }
   }
 
+  // Read the caller's spec BEFORE g<N>/ exists: exiting after the mkdir strands the generation
+  // (dir present, no chain entry), the same shape as the seat-gap exit.
+  let specText = '';
+  if (flags['spec-file']) {
+    try {
+      specText = fs.readFileSync(path.resolve(flags['spec-file']), 'utf8');
+    } catch (e) {
+      console.error(`ERROR: Failed to read spec-file: ${e.message}`);
+      process.exit(1);
+    }
+  }
+
   // Range and diff
   fs.mkdirSync(reviewPhaseDir, { recursive: true });
   try {
@@ -836,18 +848,13 @@ async function handleCollect(flags) {
     if (siblings.length > 0) {
       const lines = [];
       if (specFile) {
-        try {
-          lines.push(fs.readFileSync(specFile, 'utf8').replace(/\s+$/, ''), '');
-        } catch (e) {
-          console.error(`ERROR: Failed to read spec-file: ${e.message}`);
-          process.exit(1);
-        }
+        lines.push(specText.replace(/\s+$/, ''), '');
       }
       lines.push(
         `Packet scope: you are reviewing packet '${packetCtx.id}' of review set '${packetCtx.set}'.`,
-        'Your diff contains ONLY the files of this packet. The files below belong to sibling packets,',
-        'which are reviewed separately: they are out of scope for this packet. A file or change that the',
-        'spec names but that is listed here is NOT missing or unimplemented; do not report it as a defect.',
+        'Your diff contains only the files of this packet. Files listed below are owned by sibling packets,',
+        'which are reviewed separately, and are out of this packet\'s scope. A file or change that the',
+        'spec names and that is listed below is delivered in its own packet, not missing or unimplemented.',
         ''
       );
       for (const [id, paths] of siblings) {

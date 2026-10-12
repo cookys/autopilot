@@ -1139,6 +1139,7 @@ function defaultGenerationClaim({
   base,
   campaignDispositionAuthority,
   repairRoundEstimateSeconds,
+  missionBinding,
 }) {
   let existing = null;
   let ledgerRows = [];
@@ -1566,8 +1567,35 @@ function defaultGenerationClaim({
       journal.error ? journal.error.message : String(journal.stderr || '').trim(),
     );
   }
+  // Bind the Mission claim to this campaign in the same lease, right behind the intake/resume
+  // row. Idempotent per claim. NOT fatal: the intake root is already durable, so failing here
+  // would strand a half-admitted campaign; a missing binding row is the safe direction (withdraw
+  // refuses as before) and a later resume writes it again. The outcome is reported on the step.
+  let missionBindingResult;
+  if (missionBinding && typeof missionBinding.claim_id === 'string' && missionBinding.claim_id.length > 0) {
+    const bindingArtifact = {
+      schema_version: 1,
+      artifact_type: 'campaign_mission_binding',
+      campaign_id: campaignId,
+      mission_claim_id: missionBinding.claim_id,
+      mission_campaign_id: missionBinding.campaign_id,
+    };
+    const bound = runLedger([
+      'journal-add', '--ledger', ledgerPath, '--run-id', campaignId, '--stage', 'campaign',
+      '--generation', String(lease.generation), '--nonce', lease.nonce,
+      '--idempotency-key', `campaign-mission-binding:${missionBinding.claim_id}`,
+      '--op', 'campaign_mission_binding', '--payload', JSON.stringify(bindingArtifact),
+    ], repo);
+    if (bound.error || bound.status !== 0) {
+      missionBindingResult = 'journal_failed';
+      process.stderr.write(`warning: campaign ${campaignId} admitted but the Mission binding row for claim ${missionBinding.claim_id} was not journaled (${bound.error ? bound.error.message : String(bound.stderr || '').trim()}); mission withdraw will refuse until a resume writes it\n`);
+    } else {
+      missionBindingResult = 'journaled';
+    }
+  }
   return step('campaign_generation', 'claimed', {
     campaign_id: campaignId,
+    mission_binding: missionBindingResult,
     generation: lease.generation,
     nonce: lease.nonce,
     ledger: ledgerPath,
@@ -2809,6 +2837,9 @@ function runCampaignIntake(input = {}, adapters = {}) {
       base: input.base,
       campaignDispositionAuthority: input.campaignDispositionAuthority,
       repairRoundEstimateSeconds: input.repairRoundEstimateSeconds,
+      missionBinding: missionClaim.status === 'claimed' && typeof missionClaim.claim_id === 'string'
+        ? { claim_id: missionClaim.claim_id, campaign_id: missionClaim.campaign_id }
+        : null,
     }), 'campaign_generation', new Set(['claimed', 'rejected']));
   } catch (error) {
     return releaseAfterRejection(rejected(

@@ -51,6 +51,17 @@ const tpStr = resolveCampaignForClaim([{ ...intake(`campaign-v1-${H('a')}`, 'T-1
 assert.strictEqual(tpStr.kind, 'ticket_present');
 // 10. v2 claim with NO draft ticket ⇒ unknown_v2 (never absent — review 🟡)
 assert.deepStrictEqual(resolveCampaignForClaim([], { claim_id: `claim-v1-${H('6')}`, identity_scheme: 'mission-subject-v2', campaign_id: `campaign-v2-${H('7')}`, campaign_contract_draft: null }), { kind: 'unknown_v2' });
+// 11. one claim id bound to two campaigns ⇒ explicit binding_ambiguous (never a pick, never a throw)
+const bind = (runId, claimId, mcid) => ({ kind: 'journal', op: 'campaign_mission_binding', run_id: runId,
+  payload: { schema_version: 1, artifact_type: 'campaign_mission_binding', campaign_id: runId, mission_claim_id: claimId, mission_campaign_id: mcid } });
+const c1 = v2Claim('T-1');
+const amb = resolveCampaignForClaim([bind(`campaign-v1-${H('a')}`, c1.claim_id, c1.campaign_id), bind(`campaign-v1-${H('b')}`, c1.claim_id, c1.campaign_id)], c1, c1.claim_id);
+assert.strictEqual(amb.kind, 'binding_ambiguous');
+assert.deepStrictEqual(amb.campaign_ids, [`campaign-v1-${H('a')}`, `campaign-v1-${H('b')}`]);
+// 12. a binding that names another mission campaign id is reported as a mismatch on the ticket guard
+const mm = resolveCampaignForClaim([intake(`campaign-v1-${H('a')}`, 'T-1'), bind(`campaign-v1-${H('a')}`, c1.claim_id, `campaign-v2-${H('8')}`)], c1, c1.claim_id);
+assert.strictEqual(mm.kind, 'ticket_present');
+assert.deepStrictEqual(mm.binding_mismatch, [{ campaign_id: `campaign-v1-${H('a')}`, mission_campaign_id: `campaign-v2-${H('8')}` }]);
 console.log('resolve-suite ok');
 NODE
 )"

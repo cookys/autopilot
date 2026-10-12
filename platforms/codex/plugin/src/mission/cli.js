@@ -443,7 +443,7 @@ function cmdWithdraw(flags) {
     // An ABSENT ledger file is unreadable, never "never started".
     if (!fs.existsSync(campaignLedger)) throw new Error(`ledger file does not exist: ${campaignLedger}`);
     rows = loadRows(campaignLedger);
-    resolved = resolveCampaignForClaim(rows, claim); // throws on a corrupt intake payload
+    resolved = resolveCampaignForClaim(rows, claim, claimId); // throws on a corrupt intake payload
   } catch (error) {
     emit({
       status: 'rejected',
@@ -470,14 +470,29 @@ function cmdWithdraw(flags) {
     });
     return 1;
   }
+  if (resolved.kind === 'binding_ambiguous') {
+    emit({
+      status: 'rejected',
+      code: 'mission_withdraw_binding_ambiguous',
+      reason: `withdraw: claim ${claimId} is bound to ${resolved.campaign_ids.length} campaigns in ${campaignLedger} (${resolved.campaign_ids.join(', ')}) — refusing to pick one`,
+      claim_id: claimId,
+      campaign_id: claim.campaign_id,
+      campaign_ids: resolved.campaign_ids,
+      phase: null,
+      state_hash: mission.stateHash(state),
+    });
+    return 1;
+  }
   if (resolved.kind === 'ticket_present') {
+    const bindingMismatch = resolved.binding_mismatch || [];
     emit({
       status: 'rejected',
       code: 'mission_withdraw_campaign_ticket_present',
-      reason: `withdraw: claim ${claimId} campaign ${claim.campaign_id} has no intake row under its own id, but ${campaignLedger} holds ${resolved.roots.length} intake root(s) for its contract ticket '${resolved.ticket}' (${resolved.roots.map((r) => `${r.campaign_id}@${r.phase || 'unknown'}`).join(', ')}) — the campaign may have run under the ICC campaign-v1 id; refusing a never-started release. Binding a campaign-v2 claim to its ICC intake needs the intake to journal the mission binding (BACKLOG).`,
+      reason: `withdraw: claim ${claimId} campaign ${claim.campaign_id} has no intake row under its own id, but ${campaignLedger} holds ${resolved.roots.length} intake root(s) for its contract ticket '${resolved.ticket}' (${resolved.roots.map((r) => `${r.campaign_id}@${r.phase || 'unknown'}`).join(', ')}) — the campaign may have run under the ICC campaign-v1 id; refusing a never-started release. ${bindingMismatch.length > 0 ? `This ledger DOES hold campaign_mission_binding row(s) for claim ${claimId}, but they name a different Mission campaign id (${bindingMismatch.map((b) => `${b.campaign_id} -> ${b.mission_campaign_id}`).join(', ')}) than the claim's ${claim.campaign_id}, so they are not trusted as its binding.` : 'This ledger holds no campaign_mission_binding row for the claim (the campaign was admitted before intake journaled one, or the row was never written), so the claim cannot be bound to that root.'}`,
       claim_id: claimId,
       campaign_id: claim.campaign_id,
       ledger_roots: resolved.roots,
+      binding_mismatch: bindingMismatch,
       phase: null,
       state_hash: mission.stateHash(state),
     });
@@ -499,7 +514,7 @@ function cmdWithdraw(flags) {
     }
     resolvedVia = 'never_started';
   } else {
-    resolvedVia = 'direct';
+    resolvedVia = resolved.via || 'direct';
     try {
       projection = projectCampaign(rows, resolved.campaign_id);
     } catch (error) {

@@ -317,6 +317,7 @@ function validateCampaignJournalLease(row, currentLease) {
 //                                                  strongest journaled fact. It is enough to REFUSE
 //                                                  a never-started release (the campaign may well
 //                                                  have run), never enough to bind the claim to it.
+//   { kind: 'binding_ambiguous', campaign_ids } — the claim id is bound to more than one campaign.
 //   { kind: 'absent' }                           — nothing under the id and (for v2) nothing
 //                                                  under the ticket: never started in this ledger.
 //   { kind: 'unknown_v2' }                       — a v2 claim carrying no contract draft ticket:
@@ -326,9 +327,35 @@ function validateCampaignJournalLease(row, currentLease) {
 // like any other row: after segment GC they can be the ONLY surviving copy of a live campaign
 // (review 🔴). Duplicates collapse on run_id.
 const CAMPAIGN_ID_SHAPE_RE = /^campaign-v[12]-[0-9a-f]{64}$/;
-function resolveCampaignForClaim(rows, claim) {
+function resolveCampaignForClaim(rows, claim, missionClaimId) {
   const claimId = claim && typeof claim.campaign_id === 'string' ? claim.campaign_id : null;
   if (claimId && projectCampaign(rows, claimId)) return { kind: 'direct', campaign_id: claimId };
+  // The intake journals a `campaign_mission_binding` row (same run, same lease, written right
+  // after the intake root) naming the Mission claim it was admitted for. An exact claim-id match
+  // against a campaign that has an intake root IS the binding. A ledger without such a row
+  // (campaign admitted before the binding existed) falls through to the ticket guard below.
+  const mismatched = [];
+  if (typeof missionClaimId === 'string' && missionClaimId.length > 0) {
+    const bound = new Set();
+    for (const row of rows) {
+      if (!row || row.kind !== 'journal' || row.op !== 'campaign_mission_binding'
+          || typeof row.run_id !== 'string') continue;
+      const payload = parsePayload(row); // throws on a corrupt payload — propagate
+      if (payload && payload.artifact_type === 'campaign_mission_binding'
+          && payload.mission_claim_id === missionClaimId
+          && payload.campaign_id === row.run_id) {
+        if (claimId === null || payload.mission_campaign_id === claimId) bound.add(row.run_id);
+        else mismatched.push({ campaign_id: row.run_id, mission_campaign_id: payload.mission_campaign_id });
+      }
+    }
+    if (bound.size > 1) {
+      return { kind: 'binding_ambiguous', campaign_ids: [...bound].sort() };
+    }
+    if (bound.size === 1) {
+      const [boundId] = bound;
+      if (projectCampaign(rows, boundId)) return { kind: 'direct', campaign_id: boundId, via: 'mission_binding' };
+    }
+  }
   const draft = claim && claim.campaign_contract_draft && typeof claim.campaign_contract_draft === 'object'
     ? claim.campaign_contract_draft : null;
   const ticket = draft && typeof draft.ticket === 'string' && draft.ticket.length > 0 ? draft.ticket : null;
@@ -352,7 +379,7 @@ function resolveCampaignForClaim(rows, claim) {
     try { const proj = projectCampaign(rows, runId); phase = proj ? proj.state.phase : null; } catch (_error) { phase = null; }
     roots.push({ campaign_id: runId, phase });
   }
-  return { kind: 'ticket_present', roots, ticket };
+  return { kind: 'ticket_present', roots, ticket, binding_mismatch: mismatched };
 }
 
 function projectCampaign(rows, campaignId) {

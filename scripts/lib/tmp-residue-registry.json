@@ -269,7 +269,7 @@
       "kind": "test-lockgated",
       "owner": "hooks/tests/lib/suite-residue-reap.sh",
       "retention_days": null,
-      "reason": "also dispatch worktrees (hetero-<branch>-XXXXXX); lock/marker-gated reaper only"
+      "reason": "also dispatch worktrees (hetero-<branch>-XXXXXX) when resolve-repo-placement.js has no main checkout (else under <main>/.claude/worktrees); lock/marker-gated reaper only"
     },
     {
       "pattern": "autopilot-test-*",
@@ -661,14 +661,14 @@
       "kind": "worktree",
       "owner": "scripts/dispatch-batch.sh",
       "retention_days": null,
-      "reason": "dispatch worktree path; reaped by the marker/lock reapers, never age-pruned"
+      "reason": "dispatch worktree path when resolve-repo-placement.js has no main checkout (else under <main>/.claude/worktrees); reaped by the marker/lock reapers, never age-pruned"
     },
     {
       "pattern": "foreman-*",
       "kind": "worktree",
       "owner": "scripts/dispatch-foreman.sh",
       "retention_days": null,
-      "reason": "dispatch worktree path; reaped by the marker/lock reapers, never age-pruned"
+      "reason": "dispatch worktree path when resolve-repo-placement.js has no main checkout (else under <main>/.claude/worktrees); reaped by the marker/lock reapers, never age-pruned"
     },
     {
       "pattern": "probe-mutation-*",

@@ -2918,7 +2918,10 @@ NODE
     || die_precondition "retained worktree lease expiry mismatch"
   WORKTREE_REUSED=1
 else
-  WT="$(mktemp -u -d -t "hetero-${BRANCH//\//-}-XXXXXX")"
+  # Under <main checkout>/.claude/worktrees/ (resolve-repo-placement.js; temp dir on its fallback).
+  _wt_template="$(node "$SELF_DIR/resolve-repo-placement.js" worktree --prefix hetero --slug "$BRANCH" --from "$_wt_repo_root")" \
+    || die_precondition "cannot resolve worktree placement"
+  WT="$(mktemp -u -d "$_wt_template")"
   WT="$(realpath -m "$WT" 2>/dev/null)" \
     || die_precondition "cannot canonicalize planned worktree path"
 fi

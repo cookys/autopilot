@@ -183,4 +183,17 @@ actual_pattern_ids=$(node -e "
 " "$SCAN_JS")
 assert_eq "$actual_pattern_ids" "$expected_kinds" "PATTERNS ids exactly match the dirty/ fixture-covered kinds"
 
+# 12. A directory walk skips <root>/.claude/worktrees: rail and session worktrees live there and
+# are other checkouts, not this tree. Only that path — a hit elsewhere under .claude still fires.
+echo "Testing a directory walk skips .claude/worktrees only..."
+WALK="$TEST_TMP/identifier-walk"
+mkdir -p "$WALK/.claude/worktrees/hetero-x-abc123" "$WALK/.claude/notes"
+cp "$CLEAN"/* "$WALK/" 2>/dev/null || true
+cp "$DIRTY/email.md" "$WALK/.claude/worktrees/hetero-x-abc123/email.md"
+run_scan --json "$WALK"
+assert_exit_code "$__SCAN_EXIT" 0 "a hit inside .claude/worktrees/ is not this tree's"
+cp "$DIRTY/email.md" "$WALK/.claude/notes/email.md"
+run_scan --json "$WALK"
+assert_exit_code "$__SCAN_EXIT" 1 "a hit elsewhere under .claude/ still fires"
+
 finalize_test

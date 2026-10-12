@@ -491,3 +491,27 @@ test('wrapper: Write and NotebookEdit paths are gated too', () => {
   n.tool_input = { notebook_path: path.join(repo, 'src', 'c.ipynb'), new_source: 'x' };
   assert.strictEqual(runHook(n, env).status, 2);
 });
+
+// D7 (worktree-placement plan): rail worktrees now sit under <repo>/.claude/worktrees/, and '.claude/'
+// is allowlisted. A target with an .autopilot-worktree marker above it is a dispatch worktree, not an
+// allowlisted repo path — depth-0 stays gated there. Without a marker (a native or another session's
+// worktree) it is an ordinary allowlisted .claude/ path, as before this change.
+test('wrapper: l5 + depth-0 + marked rail worktree under .claude/worktrees ⇒ gated as a dispatch worktree', () => {
+  const { repo, env } = setup();
+  setMarker(env, repo, 'l5');
+  const wt = path.join(repo, '.claude', 'worktrees', 'hetero-feat-x-abc123');
+  fs.mkdirSync(path.join(wt, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(wt, '.autopilot-worktree'), '{}');
+  const r = runHook(payload(path.join(wt, 'src', 'a.js')), env);
+  assert.strictEqual(r.status, 2);
+  assert.match(r.stderr, /a dispatch worktree/);
+});
+
+test('wrapper: l5 + depth-0 + unmarked worktree under .claude/worktrees ⇒ allowlisted .claude/ path as before', () => {
+  const { repo, env } = setup();
+  setMarker(env, repo, 'l5');
+  const wt = path.join(repo, '.claude', 'worktrees', 'session-x');
+  fs.mkdirSync(path.join(wt, 'src'), { recursive: true });
+  const r = runHook(payload(path.join(wt, 'src', 'a.js')), env);
+  assert.strictEqual(r.status, 0);
+});

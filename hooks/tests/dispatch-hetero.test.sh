@@ -284,6 +284,9 @@ assert_contains "$OUT" '"status": "committed"' "qoder committed status"
 assert_contains "$OUT" '"runner": "qoderclicn"' "qoder runner reported"
 
 # 4. committed path: stub commits → exit 0, JSON committed, branch survives, worktree removed
+# First run that places a worktree: the sandbox has no .claude/ yet, so this run creates the
+# placement directory — which must not read as a main-checkout mutation (status committed below).
+[ -e "$SBX/.claude" ] && fail "4: precondition — sandbox starts without .claude/" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
 DIRECT_AUTHORITY_BEFORE="$(
   git -C "$SBX" for-each-ref --format='%(refname)' refs/autopilot/lifecycle-roots/ \
     | wc -l
@@ -510,6 +513,8 @@ assert_eq "1" "$EXIT" "dirty path exit code"
 assert_contains "$OUT" '"status": "dirty"' "dirty status"
 DIRTY_WT="$(printf '%s' "$OUT" | grep -o '"worktree": "[^"]*"' | cut -d'"' -f4)"
 assert_file_exists "$DIRTY_WT/unstaged.txt" "dirty worktree kept with unstaged file"
+case "$DIRTY_WT" in "$(realpath "$SBX")/.claude/worktrees/hetero-feat-dirty-"??????) __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) ;; *) fail "dirty worktree sits under the sandbox's .claude/worktrees/ (got $DIRTY_WT)" ;; esac
+assert_eq "" "$(git -C "$SBX" status --porcelain)" "sandbox porcelain stays clean with a worktree inside it (.claude/worktrees/ excluded)"
 git -C "$SBX" worktree remove --force "$DIRTY_WT" >/dev/null 2>&1 || true
 
 # 5c. --keep-worktree is a bounded lease, never an ownerless boolean.

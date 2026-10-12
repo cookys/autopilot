@@ -163,7 +163,16 @@ assert_contains "$OUT" '"commit": null' "failure commit is null (non-whitespace 
 R6="$TEST_TMP/r6"; mkrepo "$R6"
 mkunit "$R6" ui  run6 "src/ui/a.ts"  "ui change"
 mkunit "$R6" api run6 "src/api/b.ts" "api change"
-OUT="$("$SCRIPT" merge-back --repo "$R6" --units "$TEST_TMP/units3.jsonl" --run-id run6 --base main)"; EXIT=$?
+# The integration worktree is transient; a post-checkout hook (run inside each new worktree)
+# records where it was placed. Run from an unrelated cwd: placement follows --repo, not the cwd.
+R6_HOOKLOG="$TEST_TMP/r6-checkouts.log"
+printf '#!/bin/sh\npwd -P >> "%s"\n' "$R6_HOOKLOG" > "$R6/.git/hooks/post-checkout"; chmod +x "$R6/.git/hooks/post-checkout"
+mkdir -p "$TEST_TMP/elsewhere"
+OUT="$(cd "$TEST_TMP/elsewhere" && "$SCRIPT" merge-back --repo "$R6" --units "$TEST_TMP/units3.jsonl" --run-id run6 --base main)"; EXIT=$?
+rm -f "$R6/.git/hooks/post-checkout"
+INTEG_PLACED="$(grep '/batch-integ-run6-' "$R6_HOOKLOG" 2>/dev/null | head -n 1)"
+case "$INTEG_PLACED" in "$(realpath "$R6")/.claude/worktrees/batch-integ-run6-"??????) __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) ;; *) fail "merge-back: integration worktree under --repo's .claude/worktrees/ (got '$INTEG_PLACED')" ;; esac
+grep -qxF '/.claude/worktrees/' "$R6/.git/info/exclude" && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "merge-back: .claude/worktrees/ excluded in the repo's info/exclude"
 assert_eq "0" "$EXIT" "merge-back all-good exit 0"
 assert_contains "$OUT" '"verdict": "merged"' "merge-back verdict merged"
 assert_contains "$OUT" '"merged": ["ui", "api"]' "merge-back merged both units"

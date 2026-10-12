@@ -257,6 +257,13 @@ main_checkout_seed_sibling_env_defaults
 # protocol.md below also tells the foreman to pass --sibling-ref-prefix explicitly, in case a
 # hand is spawned through a path that does not inherit FOREMAN_ENV.
 FOREMAN_SIBLING_REF_PREFIX="$(IFS=:; printf '%s' "${MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES[*]}")"
+# Placement under <main checkout>/.claude/worktrees/ (resolve-repo-placement.js; temp dir on its
+# fallback). Resolved BEFORE the fingerprint: the resolver creates that directory, and a first
+# run's new `.claude` entry must land before the snapshot, not count as a mutation.
+if [ "$RESUME" -eq 0 ]; then
+  WT_TEMPLATE="$(node "$SELF_DIR/resolve-repo-placement.js" worktree --prefix foreman --slug "$RUN_ID" --from "$MAIN_CHECKOUT")" \
+    || die_precondition "cannot resolve worktree placement"
+fi
 MAIN_CHECKOUT_BEFORE="$(main_checkout_fingerprint)"
 build_hands_git_env
 
@@ -265,7 +272,7 @@ if [ "$RESUME" -eq 0 ]; then
   mkdir -p "$RUN_DIR" || die_precondition "cannot create run dir $RUN_DIR"
   cp -- "$BRIEF_FILE" "$RUN_DIR/brief.md" && cp -- "$PLAN_FILE" "$RUN_DIR/plan.md" || die_precondition "cannot copy brief/plan into $RUN_DIR"
   chmod 0444 "$RUN_DIR/brief.md" "$RUN_DIR/plan.md"
-  WT="$(mktemp -u -d -t "foreman-${RUN_ID}-XXXXXX")"; WT="$(realpath -m "$WT")"
+  WT="$(mktemp -u -d "$WT_TEMPLATE")"; WT="$(realpath -m "$WT")"
   if ! git worktree add --quiet "$WT" -b "$BRANCH" "$BASE_SHA" >/dev/null 2>&1; then
     git update-ref -d "refs/heads/$BRANCH" >/dev/null 2>&1 || true
     die_precondition "git worktree add failed for $WT"

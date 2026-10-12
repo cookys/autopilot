@@ -167,6 +167,11 @@ assert_eq "$(printf '%s' "$OUT" | field learn_required.length)" "$(printf '%s' "
 mkdir -p "$TEST_TMP/proj/a/ledger" "$TEST_TMP/proj/b/ledger"; cp "$L" "$TEST_TMP/proj/a/ledger/decisions.jsonl"; cp "$L" "$TEST_TMP/proj/b/ledger/decisions.jsonl"
 OUT="$(node "$PROBE" report --project-dir "$TEST_TMP/proj")"
 assert_eq "$(printf '%s' "$OUT" | field ledgers.length)" "2" "--project-dir aggregates ledgers"
+# Other checkouts (.claude/worktrees) and installed packages (node_modules) are not this tree's ledgers.
+mkdir -p "$TEST_TMP/proj/.claude/worktrees/hetero-x-abc123/c/ledger" "$TEST_TMP/proj/node_modules/pkg/ledger"
+cp "$L" "$TEST_TMP/proj/.claude/worktrees/hetero-x-abc123/c/ledger/decisions.jsonl"; cp "$L" "$TEST_TMP/proj/node_modules/pkg/ledger/decisions.jsonl"
+OUT="$(node "$PROBE" report --project-dir "$TEST_TMP/proj")"
+assert_eq "$(printf '%s' "$OUT" | field ledgers.length)" "2" "--project-dir skips .claude/worktrees and node_modules"
 
 # ── ledger round-end report: Ladder section ──
 OUT="$(node "$LEDGER" report --ledger "$L")"

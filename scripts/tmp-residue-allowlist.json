@@ -182,6 +182,26 @@
       "file": "scripts/reap-dispatch-branches.sh",
       "match": "$disposition_dir/.disposition.",
       "reason": "Template inside the disposition state directory, not under the temp root; mv-consumed."
+    },
+    {
+      "file": "scripts/dispatch-hetero.sh",
+      "match": "WT=\"$(mktemp -u -d \"$_wt_template\")\"",
+      "reason": "The template comes from scripts/resolve-repo-placement.js worktree: <main checkout>/.claude/worktrees/<prefix>-<slug>-XXXXXX, or the registered temp prefix only on its no-main-checkout fallback. The worktree is reaped by the marker/lock reapers, not by this allocation site."
+    },
+    {
+      "file": "scripts/dispatch-foreman.sh",
+      "match": "WT=\"$(mktemp -u -d \"$WT_TEMPLATE\")\"",
+      "reason": "The template comes from scripts/resolve-repo-placement.js worktree: <main checkout>/.claude/worktrees/<prefix>-<slug>-XXXXXX, or the registered temp prefix only on its no-main-checkout fallback. The worktree is reaped by the marker/lock reapers, not by this allocation site."
+    },
+    {
+      "file": "scripts/dispatch-batch.sh",
+      "match": "INTEG_WT=\"$(mktemp -u -d \"$integ_template\")\"",
+      "reason": "The template comes from scripts/resolve-repo-placement.js worktree: <main checkout>/.claude/worktrees/<prefix>-<slug>-XXXXXX, or the registered temp prefix only on its no-main-checkout fallback. The worktree is reaped by the marker/lock reapers, not by this allocation site."
+    },
+    {
+      "file": "scripts/resolve-repo-placement.js",
+      "match": "template: path.join(os.tmpdir(), name), fallback: true",
+      "reason": "Prints a template only; the caller allocates. Its name is <prefix>-<slug>-XXXXXX, and the rail prefixes (hetero-, foreman-, batch-integ-) are registered for exactly this fallback."
     }
   ]
 }

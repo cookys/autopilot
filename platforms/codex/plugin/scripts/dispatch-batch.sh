@@ -385,7 +385,11 @@ if [ "$MODE" = merge-back ]; then
   # `branch -f` / `update-ref` on a checked-out branch): we find its worktree and
   # fast-forward there; if it is checked out nowhere we `update-ref` directly.
   base_sha="$(git -C "$REPO" rev-parse "$BASE")"
-  INTEG_WT="$(mktemp -u -d -t "batch-integ-${RUN_ID}-XXXXXX")"
+  # Under --repo's <main checkout>/.claude/worktrees/ (resolve-repo-placement.js; temp dir on its fallback).
+  if ! integ_template="$(node "$REPO_ROOT_GUESS/scripts/resolve-repo-placement.js" worktree --prefix batch-integ --slug "$RUN_ID" --from "$REPO")"; then
+    err_usage "could not resolve integration worktree placement"
+  fi
+  INTEG_WT="$(mktemp -u -d "$integ_template")"
   # detached worktree at base_sha — no integration branch ref to leak/collide.
   if ! git -C "$REPO" worktree add --quiet --detach "$INTEG_WT" "$base_sha" >/dev/null 2>&1; then
     err_usage "could not create integration worktree"

@@ -2143,6 +2143,16 @@ console.log("Starting independent verification tests for Controller Execution...
         receipt: { ...c.verification_receipt.receipt, exit_status: 1 },
       };
     }],
+    // Self-consistent but NOT the receipt the journal recorded: re-sealed RED body. Only the
+    // "body digest equals the journal's receipt_digest" check refuses it.
+    ['resealed RED body, journal digest differs', (c) => {
+      const { receipt_digest: ignored, ...unsealed } = c.verification_receipt.receipt;
+      const red = { ...unsealed, verdict: 'RED', exit_status: 1 };
+      const resealed = { ...red, receipt_digest: canonicalDigest(red) };
+      c.verification_receipt = {
+        passed: true, cached: false, receipt_digest: resealed.receipt_digest, receipt: resealed,
+      };
+    }],
   ]) {
     const mutated = JSON.parse(JSON.stringify(r1.controller));
     mutate(mutated);

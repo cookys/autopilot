@@ -1949,6 +1949,11 @@ function runCampaignComposition(input = {}, adapters = {}) {
       || resume.phase === 'AWAITING_DISPOSITION'),
   );
   let dispositionResumedEmitted = false;
+  // A final-panel park resumes through the same one-shot path, so the in-loop
+  // review is adjudicated again before the stored panel is. Captured before any
+  // persist so the in-loop failure below can tell the two parks apart.
+  const resumedFromFinalPark = dispositionOnlyResume
+    && controller.next_action === 'await_final_disposition_authority';
   if (dispositionOnlyResume) {
     trace.push('resume_disposition_only');
     candidate = resume.candidate;
@@ -2738,6 +2743,44 @@ function runCampaignComposition(input = {}, adapters = {}) {
       // AWAITING_DISPOSITION with no readable cause. Match the consumer exactly.
       if (adjudication.registry_complete !== true
           || !isCanonicalSha256(adjudication.registry_digest)) {
+        // Resumed from a final-panel park: the authority must cover the in-loop
+        // review digest as well as the panel digest (one authority file, two
+        // reviews[] entries). A missing in-loop entry is the same durable wait
+        // as the panel's, so park again instead of terminal-stopping. No ledger
+        // event: DISPOSITION_RESUMED was not emitted, so the journal is still in
+        // AWAITING_DISPOSITION and a second AWAITING_DISPOSITION is not a legal
+        // transition. Identity/malformed findings still fail closed below.
+        const reparkClass = resumedFromFinalPark && adjudication.registry_complete !== true
+          ? classifyIncompleteRegistry(adjudication, reviewForAdjudication)
+          : null;
+        if (reparkClass && reparkClass.kind === 'wait') {
+          const repark = awaitingDisposition(
+            'final-panel disposition resume re-adjudicates the in-loop review: '
+              + 'the authority must bind the in-loop review digest and the final panel '
+              + `review digest (${adjudication.reason
+                || (reparkClass.missing && reparkClass.missing.reason)
+                || 'in-loop authority missing'})`,
+            trace,
+            {
+              candidate,
+              verification,
+              review: lastReview,
+              findings: (reparkClass.missing && reparkClass.missing.findings) || [],
+              repair_generations: repairGeneration,
+              full_diff_barriers: fullDiffBarriers,
+              work_order_resumable: true,
+              controller,
+            },
+          );
+          appendRoundProgress(AWAITING_DISPOSITION, repark.reason);
+          persistController({
+            ...controller,
+            phase: AWAITING_DISPOSITION,
+            next_action: 'await_final_disposition_authority',
+          });
+          repark.controller = controller;
+          return repark;
+        }
         return blocked(
           'disposition_resume',
           'DISPOSITION_RESUMED requires a complete registry and real registry_digest',
@@ -3184,7 +3227,9 @@ function runCampaignComposition(input = {}, adapters = {}) {
       {
         candidate,
         verification,
-        review: lastReview,
+        // The receipt's review is the one the findings and the authority bind:
+        // the panel. review_payload below stays the in-loop review (resume input).
+        review: terminalReview,
         findings: (finalClass.missing && finalClass.missing.findings) || [],
         repair_generations: repairGeneration,
         full_diff_barriers: fullDiffBarriers,

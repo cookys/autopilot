@@ -25,9 +25,14 @@ Authority cannot be supplied up front: it binds the panel `review_digest`, which
    as for the in-loop park.
 4. Resume: existing `dispositionOnlyResume` restores candidate, verification and review, re-runs the loop with
    the journal-reused (no model call) full-diff review, reaches the final stage, reuses the stored panel from the
-   gate journal (`findReusableGate`), and calls `adjudicate({final: true})` again. The depth-0 provider
-   authority is bound to the stored panel `review_digest`. Complete registry reaches terminal ready/follow_up;
-   a missing, unbound or stale authority fails normalisation and parks again; it never reaches terminal success.
+   gate journal (`findReusableGate`), and calls `adjudicate({final: true})` again. The resume re-adjudicates the
+   in-loop review before the panel, so when the in-loop review had findings the depth-0 authority must carry
+   both digests, one `reviews[]` entry each: INLOOP (the in-loop `review_digest`) + PANEL (the panel
+   `review_digest`, which the park receipt's `campaign_receipt.review.review_digest` reports). A complete
+   registry reaches terminal ready/follow_up. A missing, unbound or stale PANEL entry fails normalisation and
+   parks again. A missing INLOOP entry also parks again (`next_action` stays
+   `await_final_disposition_authority`, no ledger event because the journal never left AWAITING_DISPOSITION);
+   it never terminal-stops and never reaches terminal success.
 5. Seat artifacts: parking is not terminal, so the terminal-only reaper does not run.
 
 ## Tests (`hooks/tests/final-panel-park.test.sh`)
@@ -37,6 +42,8 @@ Authority cannot be supplied up front: it binds the panel `review_digest`, which
 2. Resume with an authority bound to the panel digest: terminal `follow_up`/`ready`, final panel adapter not
    called again.
 3. Resume with an authority bound to another digest: parks again, no terminal status.
+3b. In-loop review with a finding: in-loop park, INLOOP authority, final park, PANEL-only authority parks again
+   (not `blocked`), INLOOP+PANEL authority reaches `follow_up` carrying both findings, no second panel call.
 4. A final-panel seat fault still fails at `final_panel` (blocked, terminalize).
 5. Final panel without findings: terminal `ready`, unchanged.
 

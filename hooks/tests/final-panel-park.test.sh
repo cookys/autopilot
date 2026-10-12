@@ -66,13 +66,18 @@ const engineAdjudicate = (provider) => ({ review, final }) => {
     now: '2026-10-13T00:00:00.000Z',
   });
 };
-const adapters = (finalPanel, provider, sink) => ({
+const inloopFinding = {
+  finding_id: 'il-001', claim: 'naming nit in the in-loop review', severity: '🔵', source: 'fixture',
+};
+const adapters = (finalPanel, provider, sink, inloopFindings = []) => ({
   preflight: () => ({ passed: true }),
   implement: () => candidate,
   scopeCheck: () => ({ passed: true }),
   verify: () => ({ passed: true, receipt_digest: '4'.repeat(64) }),
   review: () => ({
-    reviewed: true, success: true, verdict: 'SHIP-AS-IS', findings: '[]',
+    reviewed: true, success: true,
+    verdict: inloopFindings.length ? 'FIX-THEN-SHIP' : 'SHIP-AS-IS',
+    findings: JSON.stringify(inloopFindings),
     review_digest: FULL_DIFF_DIGEST,
   }),
   adjudicate: engineAdjudicate(provider),
@@ -84,21 +89,23 @@ const adapters = (finalPanel, provider, sink) => ({
 const input = (extra = {}) => ({
   promptBytes: 0, maxRepairGenerations: 1, minPanelSize: 1, jointReviewRosterDigest: ROSTER, ...extra,
 });
-const authorityFor = (digest) => compileCampaignDispositionProvider({
+// entries: [[review_digest, finding_id], ...] — one reviews[] entry each.
+const authorityOver = (entries) => compileCampaignDispositionProvider({
   schema_version: 1, artifact_type: 'campaign_disposition_authority', authority: 'depth-0',
   actor_id: 'owner/root', campaign_id: CAMPAIGN_ID, contract_digest: D,
-  reviews: [{
+  reviews: entries.map(([digest, findingId]) => ({
     review_digest: digest,
     decisions: [{
-      finding_id: blueFinding.finding_id,
+      finding_id: findingId,
       evidence: { kind: 'trace', trace_chain: ['test:final-park'], confirmed_by: 'owner/root' },
       disposition: {
         disposition: 'follow-up', context: 'naming nit', trigger: 'next touch of the file',
-        proposed_backlog_title: 'Rename the nit',
+        proposed_backlog_title: `Rename the nit ${findingId}`,
       },
     }],
-  }],
+  })),
 });
+const authorityFor = (digest) => authorityOver([[digest, blueFinding.finding_id]]);
 const sink = () => ({ controllers: [], events: [], panelCalls: 0 });
 const resumeFrom = (c) => ({
   phase: c.phase, repair_generation: 0, candidate: c.candidate, controller: c,
@@ -118,6 +125,11 @@ assert.strictEqual(pc.next_action, 'await_final_disposition_authority');
 assert.deepStrictEqual(pc.findings_snapshot, []);
 assert.strictEqual(s1.events.at(-1), 'AWAITING_DISPOSITION');
 console.log('final_panel_findings_park=true');
+// The receipt's review is the panel the findings and the authority bind; the
+// stored resume input stays the in-loop full-diff review.
+assert.strictEqual(parked.review.review_digest, PANEL_DIGEST);
+assert.strictEqual(pc.review_payload.review_digest, FULL_DIFF_DIGEST);
+console.log('final_panel_park_receipt_review_is_panel=true');
 
 // (2) resume with an authority bound to the stored panel digest => terminal, no new panel call.
 const s2 = sink();
@@ -153,12 +165,64 @@ const s5 = sink();
 const clean = runCampaignComposition(input(), adapters(panelWith([]), null, s5));
 assert.strictEqual(clean.status, 'ready', clean.reason);
 console.log('final_panel_clean_unchanged=true');
+
+// (6) in-loop review had a finding: in-loop park -> INLOOP authority -> final
+// park -> PANEL-only authority must park again (the resume re-adjudicates the
+// in-loop review), never terminal-stop; INLOOP+PANEL reaches follow_up.
+const s6a = sink();
+const inloopParked = runCampaignComposition(
+  input(), adapters(panelWith([blueFinding]), null, s6a, [inloopFinding]),
+);
+assert.strictEqual(inloopParked.status, 'awaiting_disposition', inloopParked.reason);
+const c6a = s6a.controllers.at(-1);
+assert.strictEqual(c6a.next_action, 'await_disposition_authority');
+assert.strictEqual(s6a.panelCalls, 0);
+const s6b = sink();
+const finalParked = runCampaignComposition(
+  input({ controller: c6a, resume: resumeFrom(c6a) }),
+  adapters(panelWith([blueFinding]), authorityOver([[FULL_DIFF_DIGEST, inloopFinding.finding_id]]),
+    s6b, [inloopFinding]),
+);
+assert.strictEqual(finalParked.status, 'awaiting_disposition', finalParked.reason);
+const c6b = s6b.controllers.at(-1);
+assert.strictEqual(c6b.next_action, 'await_final_disposition_authority');
+assert.strictEqual(s6b.panelCalls, 1);
+assert.strictEqual(finalParked.review.review_digest, PANEL_DIGEST);
+const s6c = sink();
+const panelOnly = runCampaignComposition(
+  input({ controller: c6b, resume: resumeFrom(c6b) }),
+  adapters(panelWith([blueFinding]), authorityFor(PANEL_DIGEST), s6c, [inloopFinding]),
+);
+assert.notStrictEqual(panelOnly.status, 'blocked', `panel-only authority terminal-stopped: ${panelOnly.reason}`);
+assert.strictEqual(panelOnly.status, 'awaiting_disposition', panelOnly.reason);
+assert.strictEqual(panelOnly.durable_wait, true);
+assert.notStrictEqual(panelOnly.resumable, false);
+const c6c = s6c.controllers.at(-1);
+assert.strictEqual(c6c.phase, 'awaiting_disposition');
+assert.strictEqual(c6c.next_action, 'await_final_disposition_authority');
+assert.deepStrictEqual(s6c.events, [], 'journal stays in AWAITING_DISPOSITION: no event');
+assert.strictEqual(s6c.panelCalls, 0);
+console.log('final_panel_inloop_authority_missing_reparks=true');
+const s6d = sink();
+const both = runCampaignComposition(
+  input({ controller: c6c, resume: resumeFrom(c6c) }),
+  adapters(panelWith([blueFinding]), authorityOver([
+    [FULL_DIFF_DIGEST, inloopFinding.finding_id], [PANEL_DIGEST, blueFinding.finding_id],
+  ]), s6d, [inloopFinding]),
+);
+assert.strictEqual(both.status, 'follow_up', both.reason);
+assert.strictEqual(s6d.panelCalls, 0);
+const followIds = both.follow_up.map((f) => f.id || f.finding_id).sort();
+assert.deepStrictEqual(followIds, [blueFinding.finding_id, inloopFinding.finding_id].sort());
+assert.ok(s6d.events.includes('DISPOSITION_RESUMED'));
+console.log('final_panel_inloop_and_panel_authority_follow_up=true');
 NODE
 )"
 assert_exit_code "$?" "0" "final-panel park process exits zero: $OUT"
 for key in final_panel_findings_park final_panel_resume_terminal_no_panel_call \
   final_panel_stale_authority_rejected final_panel_seat_fault_still_fails \
-  final_panel_clean_unchanged; do
+  final_panel_clean_unchanged final_panel_park_receipt_review_is_panel \
+  final_panel_inloop_authority_missing_reparks final_panel_inloop_and_panel_authority_follow_up; do
   assert_contains "$OUT" "$key=true" "final-panel park proves $key"
 done
 

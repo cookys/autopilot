@@ -1,0 +1,26 @@
+# P3 suites at the green working tree (on top of 5590b61b) — each alone, in order
+
+## P3.4
+session-mode rc=0
+session-handoff rc=0
+session-start-handoff-inject rc=0
+resolve-repo-placement rc=0
+stage-advance rc=0
+
+## other suites that load session-start.js / session-handoff.js
+session-start rc=0
+session-start-update-check rc=0
+all-hooks-fail-open rc=0
+hook-normalizers rc=0
+
+## red at 5590b61b (stage-advance.test.sh, before the advisory)
+FAIL: advisory: no shared word -> one line: expected [1] got [0]
+FAIL: advisory: names the worktree dir: [] lacks [wt-autocompact-detect]
+FAIL: advisory: names the branch: [] lacks [feat/worktree-placement-rule]
+FAIL: advisory: points at the rule: [] lacks [references/worktree-placement.md]
+stage-advance.test: pass=216 fail=4
+
+## P3.2 key unchanged
+session-handoff.test.sh and session-start-handoff-inject.test.sh are not in the P3 diff and pass: they
+compute sha1(realpath toplevel) on their own, so the hooks' clearHandoffKey(repoRoot) gives the same key.
+Requiring the resolver loads no other module at runtime (project-key is loaded on first identity use).

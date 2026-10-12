@@ -91,6 +91,8 @@ export type LiveSnapshot = {
   recent?: RecentGroup[] | null
   // what the session left running in the background: shell commands, Monitor watches, subagents (null / [] = none; undefined = no tick)
   activity?: ActivityItem[] | null
+  // the logged-in Claude account and its rate-limit windows (undefined = no tick)
+  account?: AccountSnap
 }
 
 export type SpendView = { session: string; host_all: string; host_all_n: number | null; brain: number | null; cap: number | null; mode: string; hourly?: number[] | null }
@@ -680,6 +682,7 @@ export type Sources = {
   qc?: QcView | null
   residue?: ResidueView | null
   stage?: StageWalkView | null
+  quota?: readonly QuotaWindow[] | null
   startMs: number | null
 }
 export const NO_SOURCES: Sources = { tasks: null, attention: null, turn: null, decisions: null, manifest: null, foreman: null, startMs: null }
@@ -808,7 +811,7 @@ export function bandView(env: Json, jobModel: JobModel | null, projectKey: strin
   const stalledN = (rowsOf(env) || []).filter(r => r.stall === true).length + (fm.stalled !== null ? 1 : 0)
   const slots = bandSlots({
     verdict: pick, marker: src.marker ?? null, live: counts === null ? 0 : counts.confirmed_live, stalled: stalledN, review: src.review ?? null, qc: src.qc ?? null,
-    decisions: src.decisions, spend: spendOf(env), loadSource: src.loadSource ?? null, residue: src.residue ?? null, stage: src.stage ?? null, nowMs,
+    decisions: src.decisions, spend: spendOf(env), loadSource: src.loadSource ?? null, residue: src.residue ?? null, stage: src.stage ?? null, quota: src.quota ?? null, nowMs,
     reason: kind === 'decide' || kind === 'stalled' ? reason : null,
   }, t)
   return {
@@ -1111,9 +1114,9 @@ const short = (sha: string | null): string => (sha === null ? '—' : sha.slice(
 // ================= stage-graph P7: the one-line band (contract ②) and the panel's facts =================
 // Colours are theme keys used as TEXT colour only (owner decision 5): no backgroundColor, no inverse, no raw colour.
 export type ThemeKey = 'claude' | 'warning' | 'error' | 'success' | 'suggestion' | 'inactive' | 'subtle'
-export type SlotId = 'verdict' | 'position' | 'unit' | 'dispatch' | 'review' | 'decisions' | 'spend' | 'hygiene'
+export type SlotId = 'verdict' | 'position' | 'unit' | 'dispatch' | 'review' | 'decisions' | 'spend' | 'quota' | 'hygiene'
 // tag: which part the width table may drop or shorten (age, k/N, 族, the bar, the stage text)
-export type SegTag = 'age' | 'kn' | 'fam' | 'bar' | 'stage' | 'live' | 'stalled' | 'chip' | 'wt' | 'walk' | 'arrow' | 'reason' | 'round' | 'qc' | 'amt' | 'pct' | 'bar10' | 'bar5' | 'bar3'
+export type SegTag = 'age' | 'kn' | 'fam' | 'bar' | 'stage' | 'live' | 'stalled' | 'chip' | 'wt' | 'walk' | 'arrow' | 'reason' | 'round' | 'qc' | 'amt' | 'pct' | 'bar10' | 'bar5' | 'bar3' | 'qx'
 export type Seg = { text: string; color?: ThemeKey; bold?: boolean; dim?: boolean; tag?: SegTag; slot?: SlotId } // slot: set by layoutBand on the band line (the Button it presses); a separator has none
 export type Slot = { id: SlotId; segs: Seg[] }
 
@@ -1442,13 +1445,14 @@ export type BandFacts = {
   spend: { brain: number; cap: number } | null; loadSource: LoadSourceView | null; residue: ResidueView | null
   stage?: StageWalkView | null
   reason?: string | null
+  quota?: readonly QuotaWindow[] | null
   nowMs: number
 }
 // Slots in priority order; an empty slot is left out.
 export function bandSlots(f: BandFacts, t: T = T_EN): Slot[] {
   return [
     slotVerdict(f.verdict, f.reason ?? null), slotPosition(f.marker, f.nowMs, f.stage ?? null), slotUnit(f.marker, t), slotDispatch(f.live, f.stalled),
-    slotReview(f.review, f.qc), slotDecisions(f.decisions), slotSpend(f.spend), slotHygiene(f.loadSource, f.residue),
+    slotReview(f.review, f.qc), slotDecisions(f.decisions), slotSpend(f.spend), slotQuota(f.quota), slotHygiene(f.loadSource, f.residue),
   ].filter((s): s is Slot => s !== null)
 }
 
@@ -1460,14 +1464,14 @@ export const BAND_INFO_LABEL = BAND_ICON + ' '
 export type BandLayout = { segs: Seg[]; text: string; width: number }
 
 // slots in one group read as one thing (single space between): the dispatch count with the review round and QC chip; every other slot is its own group; groups are separated by ` │ `
-const GROUP: Record<SlotId, number> = { verdict: 0, position: 1, unit: 2, dispatch: 3, review: 3, decisions: 4, spend: 5, hygiene: 6 }
+const GROUP: Record<SlotId, number> = { verdict: 0, position: 1, unit: 2, dispatch: 3, review: 3, decisions: 4, spend: 5, quota: 6, hygiene: 7 }
 const REASON_MAX = 48
 const REASON_MIN = 8
 
 // The width table (cumulative per band; the line is ONE row, groups separated by ` │ `, items inside a group by a space):
-//   >= 160  everything: stage walk, 10-cell spend bar + %, the verdict's reason phrase, load-source chip, age, families, decisions
-//   120-159 verdict, `size·level ▸ stage`, unit bar + k/N, `⚙ ⏸ ↺R QC`, `$N` + 5-cell bar, `⚑N`
-//   80-119  verdict, unit bar, `⚙N QC▲`, `$` + 3-cell bar, `⚑N`
+//   >= 160  everything: stage walk, 10-cell spend bar + %, the verdict's reason phrase, load-source chip, age, families, decisions, `5h N% 7d N%`
+//   120-159 verdict, `size·level ▸ stage`, unit bar + k/N, `⚙ ⏸ ↺R QC`, `$N` + 5-cell bar, `5h N% 7d N%`, `⚑N`
+//   80-119  verdict, unit bar, `⚙N QC▲`, `$` + 3-cell bar, the most used quota window, `⚑N`
 //   < 80    verdict, `⚙N ⏸N`, `⚑N`
 // Then, if the line still does not fit: the position's stage text is cut with `…`, then the unit bar, the ⏸ count and the ⚙ count go, then the
 // verdict WORD is shortened (the glyph stays). Never the verdict glyph, the ⓘ or `⚑N` (the owner reminder survives narrowing).
@@ -1478,8 +1482,8 @@ export function layoutBand(slots: Slot[], columns: number): BandLayout {
     for (const x of ['chip', 'reason', 'walk', 'pct', 'bar10', 'age', 'fam', 'decisions']) drop.add(x)
     if (columns >= 120) drop.add('bar3')
     else {
-      for (const x of ['bar5', 'kn', 'round', 'amt', 'position']) drop.add(x)
-      if (columns < 80) for (const x of ['unit', 'review', 'spend']) drop.add(x)
+      for (const x of ['bar5', 'kn', 'round', 'amt', 'position', 'qx']) drop.add(x)
+      if (columns < 80) for (const x of ['unit', 'review', 'spend', 'quota']) drop.add(x)
     }
   }
   const rs: { text: string | null } = { text: null }
@@ -1539,9 +1543,9 @@ export const NEXT_TAB_GLYPH = '▸' // the pane's first Button: Enter on it show
 export const PANE_TABS = ['now', 'dispatch', 'review', 'spend', 'hygiene', 'legend'] as const
 export type PaneTab = (typeof PANE_TABS)[number]
 // a band slot pressed opens the pane on the tab that explains it; position and unit live in Now's 目前位置 section, which the press also unfolds
-const SLOT_TAB: Record<SlotId, PaneTab> = { verdict: 'now', position: 'now', unit: 'now', dispatch: 'dispatch', review: 'review', decisions: 'review', spend: 'spend', hygiene: 'hygiene' }
+const SLOT_TAB: Record<SlotId, PaneTab> = { verdict: 'now', position: 'now', unit: 'now', dispatch: 'dispatch', review: 'review', decisions: 'review', spend: 'spend', quota: 'now', hygiene: 'hygiene' }
 export const slotTab = (id: SlotId): PaneTab => SLOT_TAB[id]
-export const slotUnfolds = (id: SlotId): string | null => (id === 'position' || id === 'unit' ? SECTION.where : null)
+export const slotUnfolds = (id: SlotId): string | null => (id === 'position' || id === 'unit' ? SECTION.where : id === 'quota' ? SECTION.account : null)
 export const tabLabel = (tab: PaneTab, t: T): string => t('tab.' + tab)
 
 // What a pane line is drawn with: the translator and the pane's width in cells (rules and bars size themselves to it)
@@ -1653,7 +1657,7 @@ export function rule(title: string, right: Seg[], cols: number, fold?: { id: str
 }
 
 // the Now tab's foldable sections (what waits for you never folds); the ids share the toggle channel with the recent groups, hence the prefix
-export const SECTION = { where: 'sec:where', working: 'sec:working', cost: 'sec:cost', recent: 'sec:recent' } as const
+export const SECTION = { where: 'sec:where', working: 'sec:working', cost: 'sec:cost', account: 'sec:account', recent: 'sec:recent' } as const
 export const isSectionId = (id: string): boolean => id.startsWith('sec:')
 const isFolded = (ctx: PaneCtx, id: string): boolean => ctx.folded !== undefined && ctx.folded.has(id)
 // a heading plus its body, or the heading alone when the person folded it
@@ -1796,6 +1800,8 @@ function nowLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
     const color = spendColor(sp_.brain, sp_.cap)
     out.push(BLANK, ...section(ctx, SECTION.cost, t('now.cost'), [], [kv(t(KEY_IDS.cost), seg(usd(sp_.brain), color), dseg(' / ' + usd(sp_.cap) + '  '), ...spendBarSegs(sp_.brain, sp_.cap, 24), dseg('  ' + pct + '%'))]))
   }
+  const account = accountLines(snap.account, d.now_ms, ctx)
+  if (account.length > 0) out.push(BLANK, ...account)
   if (snap.recent !== undefined) out.push(BLANK, ...recentLines(snap.recent, ctx))
   return out
 }
@@ -2006,6 +2012,90 @@ export function activityLines(items: readonly ActivityItem[] | null | undefined,
   }
   if (items.length > MAX_ACTIVITY_ROWS) out.push(row(dseg(padCells('', KEY_W) + t('bg.more', { n: items.length - MAX_ACTIVITY_ROWS }))))
   return out
+}
+
+// ================= Account and quota =================
+// The rate-limit windows come from `$.session.usage().rateLimits` (empty off a subscription or before the first reading); the account from
+// Claude Code's own `~/.claude.json` `oauthAccount` (verified by reading the real file; the mods API has no account getter, and `$.settings`
+// says it never reads that file). Only these fields are taken from it.
+export type QuotaWindow = { kind: string; pct: number; resetsAtMs: number | null }
+export type AccountView = { email: string | null; name: string | null; org: string | null; role: string | null; plan: string | null; extraUsage: boolean }
+// account: undefined = no tick / the file was not read; null = read, no Claude account (API key or a third-party provider)
+export type AccountSnap = { account: AccountView | null | undefined; quota: QuotaWindow[] }
+
+const QUOTA_ORDER = ['five_hour', 'seven_day', 'spend_limit']
+export function readQuota(v: unknown): QuotaWindow[] {
+  if (!Array.isArray(v)) return []
+  const out: QuotaWindow[] = []
+  for (const w of v) {
+    if (w === null || typeof w !== 'object') continue
+    const { kind, percentUsed, resetsAt } = w as { kind?: unknown; percentUsed?: unknown; resetsAt?: unknown }
+    if (typeof kind !== 'string' || kind === '' || typeof percentUsed !== 'number' || !Number.isFinite(percentUsed)) continue
+    const at = typeof resetsAt === 'string' ? Date.parse(resetsAt) : NaN
+    out.push({ kind, pct: Math.max(0, percentUsed), resetsAtMs: Number.isFinite(at) ? at : null })
+  }
+  const rank = (k: string) => { const i = QUOTA_ORDER.indexOf(k); return i < 0 ? QUOTA_ORDER.length : i }
+  return out.sort((a, b) => rank(a.kind) - rank(b.kind))
+}
+
+// `claude_max` + `default_claude_max_20x` -> `claude max · 20x`
+function planText(type: unknown, tier: unknown): string | null {
+  const ty = typeof type === 'string' && type !== '' ? type.replace(/_/g, ' ') : null
+  const mult = typeof tier === 'string' ? /_(\d+x)$/.exec(tier)?.[1] ?? null : null
+  if (ty === null) return mult
+  return mult === null ? ty : ty + ' · ' + mult
+}
+// null = the file has no `oauthAccount` (an API-key login); the email is shown whole (owner's call), every text goes through bgLabel (one line, masked)
+export function readAccount(text: string | null): AccountView | null | undefined {
+  if (text === null) return undefined
+  const parsed = parseJson(text)
+  if (!parsed.ok || !isObject(parsed.value)) return undefined
+  const a = parsed.value.oauthAccount
+  if (!isObject(a)) return null
+  const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? bgLabel(v) : null)
+  const email = str(a.emailAddress)
+  if (email === null && str(a.accountUuid) === null) return null
+  return { email, name: str(a.displayName), org: str(a.organizationName), role: str(a.organizationRole), plan: planText(a.organizationType, a.organizationRateLimitTier), extraUsage: a.hasExtraUsageEnabled === true }
+}
+
+// used share of a window: warning from 80 %, error from 100 % (the spend slot's thresholds)
+const quotaColor = (pct: number): ThemeKey | undefined => spendColor(pct, 100)
+const QUOTA_SHORT: Record<string, string> = { five_hour: '5h', seven_day: '7d', spend_limit: '$' }
+
+// `5h 42% 7d 18%`: the known windows only, each label dim and its percent coloured; below 120 columns only the most used window stays
+export function slotQuota(q: readonly QuotaWindow[] | null | undefined): Slot | null {
+  const known = (q ?? []).filter(w => QUOTA_SHORT[w.kind] !== undefined)
+  if (known.length === 0) return null
+  const top = known.reduce((m, w) => (w.pct > m.pct ? w : m), known[0])
+  const segs: Seg[] = []
+  for (const w of known) {
+    const tag = w === top ? undefined : 'qx'
+    const c = quotaColor(w.pct)
+    if (segs.length > 0) segs.push(sp(' ', { tag: 'qx' })) // a separator only matters while two windows show
+    segs.push(sp(QUOTA_SHORT[w.kind] + ' ', { dim: true, ...(tag === undefined ? {} : { tag }) }), sp(Math.round(w.pct) + '%', { ...(c === undefined ? {} : { color: c }), ...(tag === undefined ? {} : { tag }) }))
+  }
+  return { id: 'quota', segs }
+}
+
+const QUOTA_KEYS: Record<string, string> = { five_hour: 'label.quota_5h', seven_day: 'label.quota_7d', spend_limit: 'label.quota_spend' }
+export function accountLines(a: AccountSnap | undefined, nowMs: number | null, ctx: PaneCtx): PaneLine[] {
+  if (a === undefined || (a.account === undefined && a.quota.length === 0)) return []
+  const t = ctx.t
+  const rows: PaneLine[] = []
+  const acc = a.account
+  if (acc === null) rows.push(row(dseg(' ' + t('account.none'))))
+  else if (acc !== undefined) {
+    if (acc.email !== null) rows.push(kv(t('label.account'), seg(acc.email, undefined, true), dseg(acc.name === null ? '' : ' (' + acc.name + ')')))
+    if (acc.org !== null) rows.push(kv(t('label.org'), seg(acc.org), dseg(acc.role === null ? '' : ' · ' + acc.role)))
+    if (acc.plan !== null || acc.extraUsage) rows.push(kv(t('label.tier'), seg(acc.plan ?? '—'), dseg(acc.extraUsage ? ' · ' + t('account.extra_on') : '')))
+  }
+  for (const w of a.quota) {
+    const key = QUOTA_KEYS[w.kind]
+    const label = key === undefined ? bgLabel(w.kind.replace(/_/g, ' ')) : t(key)
+    const resets = w.resetsAtMs === null || nowMs === null || w.resetsAtMs <= nowMs ? '' : '  ' + t('quota.resets', { in: ageText((w.resetsAtMs - nowMs) / 1000) })
+    rows.push(kv(label, ...spendBarSegs(Math.min(w.pct, 100), 100, 12), seg('  ' + Math.round(w.pct) + '%', quotaColor(w.pct)), dseg(resets)))
+  }
+  return rows.length === 0 ? [] : section(ctx, SECTION.account, t('now.account'), [], rows)
 }
 
 // ================= Dispatch =================

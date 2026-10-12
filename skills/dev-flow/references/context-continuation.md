@@ -17,7 +17,12 @@ When resuming work on an existing feature branch with an active project:
 
 4. Identify the resume point (node + unit) from project docs, the handoff, or prior task state.
    Same session: `node scripts/session-mode.js status` shows `stage` and `unit`.
-   New session (the marker is per session): `node scripts/session-mode.js set --size <original size>
+   New session id, old marker still there (compaction, `claude --resume`): `node scripts/session-mode.js set
+   --size <original size>`, then `node scripts/stage-advance.js --resume-from <old session id>`. It copies size,
+   bug, urgent, stage, unit and base_ref from the old marker (read only, never changed) and works only while the new
+   marker has no stage. It exits 6 and writes nothing when the old marker is missing, expired, unreadable, has no
+   stage, or belongs to another repository; do not retry with a guessed stage, use the re-walk below.
+   Old marker gone (fallback; the marker is per session): `node scripts/session-mode.js set --size <original size>
    [--urgent] [--bug]`, then `stage-advance.js --to` each node of the `stage-graph.js nodes` walk up
    to the resume node — the first write must be the entry node, and each later call is a legal move
    (a replayed `implement` takes `--unit <unit_kind>:<i>/<N>:<label>` when `nodes` prints a non-null `unit_kind`:

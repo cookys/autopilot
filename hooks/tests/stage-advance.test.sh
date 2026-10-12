@@ -599,5 +599,42 @@ R="$TEST_TMP/r-onlylocal"; mkrepo "$R"; plant "$R" 1 1 a; C1=$(git -C "$R" rev-p
 git -C "$R" checkout -q -b feat/x; plant "$R" 1 1 f
 newsess; eq "base_ref: only a local develop -> develop" "$C1" "$(basesha "$R")"
 
+# ---------------------------------------------------------------- --resume-from <old-session-id>
+RR="$TEST_TMP/r-resume"; mkrepo "$RR"
+newsess; OLD_ID="$AUTOPILOT_SESSION_ID"; OLD_MARKER="$MARKER"
+sm set --size L --bug --repo-root "$RR" >/dev/null 2>&1
+adv --to "$(node "$SG" nodes --size L --bug | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).entry)')"; eq "resume setup: old session writes its entry node" "0" "$RC"
+for n in $(node "$SG" nodes --size L --bug | node -e 'const j=JSON.parse(require("fs").readFileSync(0,"utf8"));console.log((j.nodes||j.walk||[]).slice(1,3).join(" "))'); do adv --to "$n"; done
+OLD_STAGE=$(jf stage); OLD_SUM=$(cksum <"$OLD_MARKER")
+[ "$OLD_STAGE" != "<absent>" ] && ok "resume setup: old marker has a stage ($OLD_STAGE)" || bad "resume setup: old marker has no stage"
+
+# without --resume-from a fresh id is still refused (first write must be the entry node)
+newsess; sm set --size L --repo-root "$RR" >/dev/null 2>&1
+adv --to "$(echo "$OLD_STAGE" | tr -d '"')"; eq "no --resume-from: mid-graph first write still refused (rc)" "3" "$RC"
+eq "no --resume-from: stage stays absent" "<absent>" "$(jf stage)"
+
+# with --resume-from the position carries over; the old marker is untouched
+adv --resume-from "$OLD_ID"; eq "--resume-from continues (rc)" "0" "$RC"
+eq "resume: stage copied" "$OLD_STAGE" "$(jf stage)"
+eq "resume: size copied" '"L"' "$(jf size)"
+eq "resume: bug copied" "true" "$(jf bug)"
+eq "resume: old marker unchanged" "$OLD_SUM" "$(cksum <"$OLD_MARKER")"
+adv --to plan-review; eq "resume: the next legal node from the copied stage is accepted (rc)" "0" "$RC"
+NEW_ID="$AUTOPILOT_SESSION_ID"
+
+# fail closed
+newsess; sm set --size L --repo-root "$RR" >/dev/null 2>&1
+adv --resume-from no-such-session; eq "missing old marker refused (rc)" "6" "$RC"
+has "missing old marker names the re-walk fallback" "context-continuation.md" "$ERR"
+eq "missing old marker: nothing written" "<absent>" "$(jf stage)"
+adv --resume-from "$AUTOPILOT_SESSION_ID"; eq "resume from itself refused (rc)" "6" "$RC"
+RO="$TEST_TMP/r-resume-other"; mkrepo "$RO"; newsess; sm set --size L --repo-root "$RO" >/dev/null 2>&1
+adv --resume-from "$OLD_ID"; eq "old marker from another repo refused (rc)" "6" "$RC"
+eq "other repo: nothing written" "<absent>" "$(jf stage)"
+adv --resume-from "$NEW_ID" ; adv --resume-from "$OLD_ID"; eq "target already has a stage refused (rc)" "6" "$RC"
+newsess; sm set --size L --repo-root "$RR" >/dev/null 2>&1; node -e 'require("fs").writeFileSync(process.argv[1],"{not json")' "$AUTOPILOT_SESSION_MODE_DIR/corrupt-old.json"
+adv --resume-from corrupt-old; eq "unreadable old marker refused (rc)" "6" "$RC"
+adv --resume-from "$OLD_ID" --to plan; eq "--resume-from with --to is a usage error" "1" "$RC"
+
 echo "stage-advance.test: pass=$PASS fail=$FAIL"
 [ "$FAIL" -eq 0 ]

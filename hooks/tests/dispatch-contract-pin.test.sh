@@ -16,9 +16,11 @@
 # Immutable pre-change commit (campaign base_sha). Do not use HEAD — the harness
 # may have already committed this deliverable onto the branch.
 PRE_SHA="4aa1325bca17a0db68b5f69292bd601ba7ff58e1"
-PRE_JS="$REPO_ROOT/scripts/dispatch-contract.$$.pre.js"
-# trap first: a failed/killed write must not leave a pre file behind. The $$ name matches .gitignore's scripts/*.pre.js.
-trap 'rm -f "$PRE_JS"; cleanup_test_tmp' EXIT
+# Built in a symlinked repo-shaped tree under TEST_TMP, never in the real scripts/ (other suites'
+# inventory/mirror checks scan that dir); __dirname-relative requires resolve via symlinks.
+PRE_TREE="$TEST_TMP/pre"
+make_pre_tree "$PRE_TREE"
+PRE_JS="$PRE_TREE/scripts/dispatch-contract.pre.js"
 git -C "$REPO_ROOT" show "${PRE_SHA}:scripts/dispatch-contract.js" >"$PRE_JS"
 
 # Baselines are captured fresh every run, from the immutable PRE_SHA build

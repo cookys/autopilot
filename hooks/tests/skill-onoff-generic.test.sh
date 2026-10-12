@@ -33,7 +33,7 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 # (inode/mtime) is false-red noise under concurrency. What identifies a leak from THIS run is its own
 # unique names: the probe token every stub cell writes, and this run's TEST_TMP basename. Scan the
 # real roots recursively for those. Root-level leaks under any name are caught separately: the whole
-# test runs with a fake HOME and a fake XDG_RUNTIME_DIR, asserted empty at the end. (The T5 mutation
+# test runs with a fake HOME, and (only when a writable /dev/shm exists) a fake XDG_RUNTIME_DIR; both are asserted empty at the end. (The T5 mutation
 # control exercises the fake XDG store, not real_token_hits.)
 PROBE_TAG="evalx-$$-$RANDOM"; export ONOFF_PROBE_TAG="$PROBE_TAG"
 REAL_ROOTS=("/run/user/$(id -u)/autopilot" "$HOME/.autopilot")

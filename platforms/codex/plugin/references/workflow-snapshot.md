@@ -35,6 +35,10 @@ PreCompact stdout on exit 0 is merged into the compaction summarizer's custom in
 
 `node scripts/task-card.js set --goal <text> [--success <text>]... [--plan <path>] [--review-ledger <path>] [--ledger <decisions.jsonl>] [--requirement <text>]...` writes the card for the current session (`show`, `clear` also exist). The collector shows it. Having dev-flow call `set` at intake is a guidance change and needs eval ON/OFF evidence; until then the card exists only when someone writes it.
 
+## PostCompact check
+
+`state-checkpoint.js` also runs on `PostCompact` (payload `compact_summary`). It reads the branch and stage through `facts()` and checks that the summary names both (branch as a substring, stage as a whole word, case-insensitive). It always appends one line to `~/.autopilot/.state-checkpoint.log` (`postcompact_ok` or `postcompact_summary_missing`) and, on a miss, one `compact-summary-lost-state` advisory through `hooks/_shared/advisory-sink.js`. Advisory only: PostCompact has no decision control and the hook never exits non-zero. A source that is absent (no marker, no git work tree) means nothing to check. The stage check is weak for a common word used as a stage name; it is a smoke alarm, not a proof.
+
 ## Not done here
 
 `/handoff` reading the snapshot (guidance, eval); capturing the `Agent` description into the roster (touches the PostToolUse host); plan-review state lookup. See the plan, sections 2.4 and 2.5.

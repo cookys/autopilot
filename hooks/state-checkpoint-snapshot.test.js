@@ -134,3 +134,66 @@ test('SessionEnd /clear: the machine handoff carries the workflow state section'
     assert.ok(body.indexOf('## Workflow state') < body.indexOf('## Repo state'));
   } finally { sb.cleanup(); }
 });
+
+// --- P4: PostCompact check ---------------------------------------------------------------------
+function postCompact(sb, summary) {
+  const payload = { session_id: SID, transcript_path: sb.transcript, cwd: sb.repo, hook_event_name: 'PostCompact', trigger: 'auto', compact_summary: summary };
+  const r = spawnSync('node', [CHECKPOINT], { input: JSON.stringify(payload), encoding: 'utf8', env: sb.env });
+  const readJsonl = (f) => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []);
+  const adv = readJsonl(path.join(sb.root, 'live', 'advisories', `${SID}.jsonl`));
+  const log = readJsonl(path.join(sb.home, '.autopilot', '.state-checkpoint.log'));
+  return { r, adv, log };
+}
+
+test('PostCompact: a summary without the branch and the stage raises one advisory and writes no checkpoint', () => {
+  const sb = sandbox();
+  try {
+    const { r, adv, log } = postCompact(sb, 'We were fixing some hook behaviour.');
+    assert.strictEqual(r.status, 0, r.stderr);
+    assert.strictEqual(r.stdout, '');
+    assert.strictEqual(adv.length, 1);
+    assert.strictEqual(adv[0].kind, 'compact-summary-lost-state');
+    assert.match(adv[0].text, /branch feat\/snap or the stage implement/);
+    assert.strictEqual(log[log.length - 1].status, 'postcompact_summary_missing');
+    assert.deepStrictEqual(log[log.length - 1].missing, ['branch feat/snap', 'stage implement']);
+    assert.strictEqual(fs.existsSync(path.join(sb.home, '.autopilot', `compaction-state-${SID}.md`)), false);
+  } finally { sb.cleanup(); }
+});
+
+test('PostCompact: a summary that names the branch and the stage is silent', () => {
+  const sb = sandbox();
+  try {
+    const { r, adv, log } = postCompact(sb, 'On branch feat/snap, stage implement (phase 2 of 3).');
+    assert.strictEqual(r.status, 0);
+    assert.deepStrictEqual(adv, []);
+    assert.strictEqual(log[log.length - 1].status, 'postcompact_ok');
+  } finally { sb.cleanup(); }
+});
+
+test('PostCompact: a stage that only appears inside a longer stage name does not count', () => {
+  const sb = sandbox();
+  try {
+    fs.writeFileSync(path.join(sb.root, 'sm', `${SID}.json`), JSON.stringify({ session_id: SID, level: 'l4', size: 'L', stage: 'plan', expires_at: new Date(Date.now() + 3600e3).toISOString() }));
+    const { adv } = postCompact(sb, 'branch feat/snap is at plan-review now');
+    assert.strictEqual(adv.length, 1);
+    assert.match(adv[0].text, /stage plan/);
+  } finally { sb.cleanup(); }
+});
+
+test('PostCompact: no marker and no git work tree means nothing to check, nothing raised', () => {
+  const sb = sandbox();
+  try {
+    fs.rmSync(path.join(sb.root, 'sm'), { recursive: true });
+    fs.rmSync(path.join(sb.repo, '.git'), { recursive: true });
+    const { r, adv, log } = postCompact(sb, 'anything');
+    assert.strictEqual(r.status, 0);
+    assert.deepStrictEqual(adv, []);
+    assert.strictEqual(log[log.length - 1].status, 'postcompact_ok');
+  } finally { sb.cleanup(); }
+});
+
+test('hooks.json wires PostCompact to the same state-checkpoint hook', () => {
+  const hooks = JSON.parse(fs.readFileSync(path.join(__dirname, 'hooks.json'), 'utf8')).hooks;
+  const cmds = (hooks.PostCompact || []).flatMap((g) => g.hooks.map((h) => h.command));
+  assert.deepStrictEqual(cmds, ['node ${CLAUDE_PLUGIN_ROOT}/hooks/state-checkpoint.js']);
+});

@@ -140,6 +140,27 @@ function workflowSnapshot(input, maxBytes) {
   }
 }
 
+// PostCompact (plan §2.6, P4): did the summary keep the branch and the stage the session was on?
+// Advisory only: PostCompact has no decision control, and the model still gets the checkpoint file
+// from session-start. One advisory row for the owner when the summary lacks either; one log line always.
+function postCompactCheck(input) {
+  const summary = typeof input.compact_summary === 'string' ? input.compact_summary : '';
+  const { facts } = require('../scripts/lib/workflow-snapshot.js');
+  const f = facts({ sessionId: input.session_id, cwd: input.cwd });
+  const missing = [];
+  if (f.branch && !summary.includes(f.branch)) missing.push(`branch ${f.branch}`);
+  if (f.stage && !new RegExp(`(^|[^A-Za-z0-9_-])${f.stage.replace(/[^A-Za-z0-9_-]/g, '')}($|[^A-Za-z0-9_-])`, 'i').test(summary)) missing.push(`stage ${f.stage}`);
+  appendLog({ ts: new Date().toISOString(), hostname: os.hostname(), session_id: input.session_id || '<unknown>', status: missing.length ? 'postcompact_summary_missing' : 'postcompact_ok', missing, summary_bytes: Buffer.byteLength(summary) });
+  if (missing.length && input.session_id) {
+    require('./_shared/advisory-sink.js').writeAdvisory({
+      sid: input.session_id,
+      kind: 'compact-summary-lost-state',
+      severity: 'info',
+      text: `The compaction summary does not mention the ${missing.join(' or the ')} this session was on. The saved checkpoint is re-injected after compaction, so re-check it before continuing.`,
+    });
+  }
+}
+
 // === Main ===
 
 (function main() {
@@ -171,6 +192,10 @@ function workflowSnapshot(input, maxBytes) {
       throw err; // any other stdin read error → real catastrophic, fall through
     }
     const input = stdin.trim() ? JSON.parse(stdin) : {};
+    if (input.hook_event_name === 'PostCompact') {
+      try { postCompactCheck(input); } catch (err) { process.stderr.write(`[state-checkpoint] postcompact check failed: ${err.message}\n`); }
+      return process.exit(0);
+    }
     sessionId = input.session_id || '<unknown>';
     transcriptPath = input.transcript_path || '';
     const trigger = input.trigger === 'manual' ? 'manual' : 'automatic';

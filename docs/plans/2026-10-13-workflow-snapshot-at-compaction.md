@@ -54,7 +54,7 @@ Bounds: the stdout form is at most 3000 bytes, the file form at most 6000 bytes;
 
 ### 2.6 P4: PostCompact check
 
-`hooks/post-compact-check.js` (PostCompact, payload `compact_summary`): when the marker has a branch/stage and the summary contains neither the branch name nor the stage name, append one advisory through `hooks/_shared/advisory-sink.js`. Advisory only, never blocks (PostCompact has no decision control). Lands only if P1-P2 are green.
+Landed in `hooks/state-checkpoint.js` (a `PostCompact` entry in `hooks.json` reuses the same stem, so the hook count stays 37; no separate file). Payload `compact_summary`: when the marker or git gives a branch/stage and the summary lacks either (branch substring, stage whole word), append one `compact-summary-lost-state` advisory through `hooks/_shared/advisory-sink.js` and log `postcompact_*` to `.state-checkpoint.log`. Advisory only, never blocks (PostCompact has no decision control). The stage test is weak for common-word stage names.
 
 ## 2.5 Global Constraints (copied verbatim into every dispatch)
 
@@ -79,8 +79,8 @@ Bounds: the stdout form is at most 3000 bytes, the file form at most 6000 bytes;
 | `scripts/stage-graph.js` | export `nextNodes` (one-line mechanism change) |
 | `hooks/state-checkpoint.js`, `hooks/state-checkpoint-lib.js` | snapshot first, short last words, stdout |
 | `hooks/session-handoff.js` | use the collector at `/clear` |
-| `hooks/post-compact-check.js`, `hooks/hooks.json`, hook-classes | P4 |
-| `scripts/lib/workflow-snapshot.test.js`, `hooks/tests/state-checkpoint-snapshot.test.sh` | tests |
+| `hooks/state-checkpoint.js` (PostCompact branch), `hooks/hooks.json` | P4 |
+| `scripts/lib/workflow-snapshot.test.js`, `scripts/task-card.test.js`, `hooks/state-checkpoint-snapshot.test.js` | tests |
 | `CLAUDE.md`, `docs/scripts-inventory.md`, `references/`, `hooks/README.md`, `CHANGELOG.md` | wiring and docs |
 
 ## 4. Phases

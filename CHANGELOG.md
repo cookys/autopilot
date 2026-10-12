@@ -9,6 +9,7 @@
   - **壓縮前的 stdout**：實測 Claude Code 2.1.296，PreCompact 結束碼 0 的 stdout 會併進摘要模型的自訂指示，不會直接進主模型。現在印出不超過 3 KB 的快照，開頭一句請摘要保留這些狀態；用 `AUTOPILOT_PRECOMPACT_STDOUT=0` 關掉。壓縮後 session-start 注入的存檔檔案也以快照開頭（上限 6 KB）。
   - **對話尾巴縮小**：從 20 則 8 KB 改為 6 則 3 KB，並先去掉只有 `[tool_use]`、`[tool_result]` 佔位符的內容。
   - **`/clear`**：`session-handoff` 寫的機器 handoff 多一節「Workflow state」，用同一個收集器。
+  - **PostCompact 檢查**：`state-checkpoint.js` 同時掛在 PostCompact，壓縮完成後檢查摘要有沒有提到當時的分支和階段；沒有就寫一筆 `compact-summary-lost-state` advisory，並在 `.state-checkpoint.log` 記 `postcompact_ok` 或 `postcompact_summary_missing`。只提醒不阻擋，hook 數量不變。
   - **任務卡**：新增 `scripts/task-card.js set|show|clear`，記下目標、成功條件、plan 路徑、審查帳本路徑和使用者說過的要求，快照會讀進來。dev-flow 在 intake 自動呼叫它屬於指引變更，要先有 ON/OFF 評測，這次沒做，所以目前任務卡要有人寫才有。
   - 還沒做：`/handoff` 讀快照（指引，需評測）、子代理派工說明的記錄（要動 PostToolUse 主機，超過 S）。下一次真實自動壓縮要確認快照有出現在還原區塊和 Claude Code 自己的摘要裡。契約：`references/workflow-snapshot.md`；plan：`docs/plans/2026-10-13-workflow-snapshot-at-compaction.md`。
 

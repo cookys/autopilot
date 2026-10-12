@@ -325,8 +325,23 @@ function render(snapshot, { maxBytes = 3000 } = {}) {
   return out.join('\n');
 }
 
+// Structured facts for the PostCompact check: the branch and the stage as they are on disk right now.
+// null when a source is missing; the same sources and rules as collect().
+function facts(opts = {}) {
+  const ctx = { sessionId: opts.sessionId || '', cwd: opts.cwd || '', now: Number.isFinite(opts.now) ? opts.now : Date.now(), dirs: opts.dirs || {}, git: opts.git };
+  let stage = null;
+  try { const m = ctx.sessionId ? readMarker(ctx) : null; stage = m && m.stage ? String(m.stage) : null; } catch { stage = null; }
+  let branch = null;
+  try {
+    const g = srcGit(ctx);
+    const mm = g.ok ? /branch (\S+) @/.exec(g.lines[0]) : null;
+    branch = mm && mm[1] !== '(detached' ? mm[1] : null;
+  } catch { branch = null; }
+  return { branch, stage };
+}
+
 function snapshotText(opts = {}) {
   return render(collect(opts), { maxBytes: opts.maxBytes || 3000 });
 }
 
-module.exports = { collect, render, snapshotText, STALE_MS };
+module.exports = { collect, facts, render, snapshotText, STALE_MS };

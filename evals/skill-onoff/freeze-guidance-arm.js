@@ -5,7 +5,7 @@
 // arm manifest the harness installs (`run-skill-onoff-eval.sh --arm-manifest`, shape documented there).
 //
 //   freeze-guidance-arm.js base   [--suffix s] [--fixture-pack id,..]
-//       Write arms/stage-graph/base.json from the already-frozen `<skill>-sg-base` + `guidance-files-sg-base`
+//       Write arms/stage-graph/base.json (only when absent — an existing base arm is never touched) from the already-frozen `<skill>-sg-base` + `guidance-files-sg-base`
 //       packs (+ `guidance-files-sg-extra-base[-s]` when it exists). Freezes nothing.
 //   freeze-guidance-arm.js change [--extra p1,p2,..] [--suffix s] [--repo dir] [--allow-unlisted] [--fixture-pack ..]
 //       Freeze the CHANGE arm from the CURRENT working tree of --repo (default: this repo) for exactly the
@@ -14,7 +14,8 @@
 //                                            working-tree bytes (a listed file absent from the tree is a deletion)
 //         guidance-files-sg-change[-s]     = the prereg non_skill_files (+ extras) from the working tree
 //         guidance-files-sg-extra-base[-s] = the extras from guidance.base_ref (git), so base can ship them too
-//       Writes arms/stage-graph/{change,base}.json. A frozen pack is never mutated: an existing id is an error and
+//       Writes arms/stage-graph/change.json, and base.json only when absent (an existing base.json is never
+//       rewritten; to rebuild it, delete it by hand). A frozen pack is never mutated: an existing id is an error and
 //       re-freezing needs a new --suffix (which also leaves check-guidance-eval.js's hard-wired `-sg-change` ids
 //       behind — a suffixed arm is a NEW arm and needs its own gate wiring). --extra paths are NOT in
 //       prereg guidance.files: amend the prereg (before the first live cell) or the cut gate rejects them; the
@@ -127,6 +128,14 @@ const gitHead = () => { try { return cp.execFileSync('git', ['-C', repo, 'rev-pa
 
 // ───────────────────────────── base ─────────────────────────────
 function armBase() {
+  // The base arm is frozen once written: an existing base.json is never rewritten (not even byte-identically, so
+  // its mtime stays put). Rebuilding it would drop extras frozen under an older suffix (armBase only looks up the
+  // CURRENT suffix's extra-base id) — delete base.json by hand to rebuild on purpose.
+  const existing = path.join(armsDir, 'base.json');
+  if (fs.existsSync(existing)) {
+    if (opt('--fixture-pack')) console.error(`freeze-guidance-arm: ${existing} already exists and is never rewritten; --fixture-pack ignored (delete base.json to rebuild)`);
+    return existing;
+  }
   const man = readManifest();
   const skills = {};
   for (const s of G.skills) { if (!man.packs[ID.skillBase(s)]) die(`base pack missing: ${ID.skillBase(s)}`); skills[s] = ID.skillBase(s); }
@@ -150,6 +159,14 @@ function armChange() {
   for (const s of G.skills) assertFresh(ID.skillChange(s));
   assertFresh(ID.filesChange);
   if (extras.length) assertFresh(ID.extraBase);
+  // an existing base arm is never rewritten, so extras frozen now would leave the change arm with an extra-base pack
+  // the base arm does not list: refuse before freezing anything
+  const baseFile = path.join(armsDir, 'base.json');
+  if (extras.length && fs.existsSync(baseFile)) {
+    let listed = [];
+    try { listed = [].concat(JSON.parse(fs.readFileSync(baseFile, 'utf8')).files || []); } catch { /* unreadable = stale */ }
+    if (!listed.includes(ID.extraBase)) die(`base arm is stale: ${baseFile} does not list ${ID.extraBase}, which this change freeze would add; delete base.json and rebuild it (the two arms would otherwise be asymmetric)`);
+  }
   const wt = (rel) => { const p = path.join(repo, rel); return fs.existsSync(p) ? { data: fs.readFileSync(p), mode: fs.statSync(p).mode & 0o111 ? 0o755 : 0o644 } : null; };
   const head = gitHead();
   const dirty = cp.spawnSync('git', ['-C', repo, 'status', '--porcelain', '--', ...G.files, ...extras], { encoding: 'utf8' }).stdout.trim() ? '+worktree' : '';

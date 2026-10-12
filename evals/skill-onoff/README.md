@@ -114,7 +114,7 @@ Spend-free infrastructure for plan §4 P5 item 7 (proof: `hooks/tests/skill-onof
 - **`freeze-guidance-arm.js change [--extra a,b] [--suffix s]`** freezes `<skill>-sg-change` (base tree + the prereg's
   listed files from the working tree), `guidance-files-sg-change` (+ extras) and `guidance-files-sg-extra-base` (extras from
   `guidance.base_ref`). Run it ONLY once the guidance is final; extras need a prereg amendment (the result prints it).
-  `base` writes the base arm manifest; `red` builds the planted-red arm. Frozen packs are never mutated; a re-freeze needs `--suffix`.
+  `base` writes the base arm manifest only when `base.json` is absent (an existing one is never rewritten; delete it by hand to rebuild); `red` builds the planted-red arm. Frozen packs are never mutated; a re-freeze needs `--suffix`.
 - **Red arm**: `freeze-guidance-arm.js red [--require-text]` rotates XS<->L, S<->XL (M kept) in (1) the
   `references/stage-graph.json` of every fixture pack (`fixture-scripts-sg-red`): the `base` + `bug` rules swap while `unit_kind` and
   `bump_limits` stay, so the red agent's `stage-graph.js` / `stage-advance.js` serve rotated walks for the size it recorded (re-queried

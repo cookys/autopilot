@@ -124,11 +124,29 @@ node -e 'const m=require(process.argv[1]);for(const id of ["alpha-sg-change","gu
 before=$(sha "$PK/manifest.json")
 if FGA change --extra references/extra.md >/dev/null 2>&1; then fail "re-freeze of existing ids must be refused"; fi
 [ "$(sha "$PK/manifest.json")" = "$before" ] || fail "refused re-freeze mutated the manifest"
+# base.json (extra-base unsuffixed) is now stale for a v2 extras freeze: delete it as instructed, then put the original back
+cp "$ARMS/base.json" "$TMP/base.keep"; rm "$ARMS/base.json"
 FGA change --extra references/extra.md --suffix v2 >/dev/null || fail "suffix freeze"
+cp "$TMP/base.keep" "$ARMS/base.json"
 [ -d "$PK/beta-sg-change-v2" ] && [ "$(sha "$PK/beta-sg-change/SKILL.md")" = "$(dig beta-sg-change SKILL.md)" ] || fail "suffix must add new ids and keep old"
 if FGA change --extra references/extra.md --suffix v2 >/dev/null 2>&1; then fail "dup suffix"; fi
+# the base arm is frozen once written: a suffixed change freeze (and explicit `base` runs) must leave base.json
+# bytes AND mtime alone -- it used to be rewritten with the suffix-keyed extra-base lookup, dropping the extras pack.
+# base.json was restored from the pre-v2 copy above, so run a fresh suffixed freeze (no extras) against it now:
+FGA change --suffix v4 >/dev/null || fail "suffix v4 freeze"
+[ "$(pj files < "$ARMS/base.json")" = '["guidance-files-sg-base","guidance-files-sg-extra-base"]' ] || fail "suffixed freeze rewrote base.json: $(cat "$ARMS/base.json")"
+b_sha=$(sha "$ARMS/base.json"); b_mt=$(stat -c %.9Y "$ARMS/base.json")
+sleep 1
+FGA base >/dev/null; FGA base --suffix v9 >/dev/null
+[ "$(sha "$ARMS/base.json")" = "$b_sha" ] && [ "$(stat -c %.9Y "$ARMS/base.json")" = "$b_mt" ] || fail "repeated base runs must not touch base.json (bytes or mtime)"
+# a suffixed extras freeze whose extra-base id the existing base.json does not list is refused up front
+mkdir -p "$TMP/arms-stale"; cp "$ARMS/base.json" "$TMP/arms-stale/base.json"
+before=$(sha "$PK/manifest.json")
+if FGA change --extra references/extra.md --suffix v3 --arms-dir "$TMP/arms-stale" >/dev/null 2>"$TMP/e3"; then fail "stale base arm (extra-base-v3 unlisted) must be refused"; fi
+grep -q "base arm is stale" "$TMP/e3" || fail "stale-base reason: $(cat "$TMP/e3")"
+[ "$(sha "$PK/manifest.json")" = "$before" ] && [ ! -d "$PK/beta-sg-change-v3" ] || fail "a stale-base refusal must freeze nothing"
+FGA base --fixture-pack fixture-scripts-sg 2>"$TMP/e4" >/dev/null; grep -q "fixture-pack ignored" "$TMP/e4" || fail "ignored --fixture-pack must warn"
 # restore the canonical (unsuffixed) change arm manifest for the next sections
-FGA base >/dev/null
 node - "$ARMS/change.json" <<'NODE'
 const fs = require('fs'); const f = process.argv[2];
 const j = JSON.parse(fs.readFileSync(f, 'utf8'));

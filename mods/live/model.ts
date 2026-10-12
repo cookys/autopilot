@@ -1504,11 +1504,12 @@ export function layoutBand(slots: Slot[], columns: number): BandLayout {
   }
   const widthOf = (g: Seg[]) => g.reduce((n, x) => n + displayWidth(x.text), 0) + displayWidth(BAND_INFO_LABEL)
   let segs = join(kept)
+  // too long: the quota windows go first, before any other text is cut
+  if (widthOf(segs) > columns && kept.some(s => s.id === 'quota')) { kept = kept.filter(s => s.id !== 'quota'); segs = join(kept) }
   let over = widthOf(segs) - columns
   if (over > 0) segs = segs.map(g => (g.tag === 'stage' ? { ...g, text: truncateToWidth(g.text, Math.max(2, displayWidth(g.text) - over)) } : g))
-  // below the width table: still too long -> drop the quota windows, then the unit bar, then the ⏸ stalled count, then the ⚙ count (a slot left empty goes with its separator)
+  // below the width table: still too long -> drop the unit bar, then the ⏸ stalled count, then the ⚙ count (a slot left empty goes with its separator)
   const fallbacks: ((s: Slot) => Slot | null)[] = [
-    s => (s.id === 'quota' ? null : s),
     s => (s.id === 'unit' ? null : s),
     s => (s.id === 'dispatch' ? { ...s, segs: s.segs.filter(g => g.tag !== 'stalled') } : s),
     s => (s.id === 'dispatch' ? { ...s, segs: s.segs.filter(g => g.tag !== 'live') } : s),

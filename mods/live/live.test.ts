@@ -3878,6 +3878,13 @@ test('quota slot: a band still too long drops the quota windows before the ⏸ /
   expect(tight).not.toContain('85%')
   expect(displayWidth(tight)).toBeLessThanOrEqual(100)
   expect((slotQuota([win('spend_limit', 30)]) as Slot).segs.map(g => g.text).join('')).toBe('cap 30%')
+  // the quota goes before the stage text is cut
+  const staged = (q: QuotaWindow[] | null) => bandSlots({
+    verdict: { mark: '●', word: '進行中', key: 'suggestion' }, marker: readMarker({ size: 'M', level: 'l5', stage: 'implement-' + 'x'.repeat(100), stage_set_at: '2026-10-04T09:57:30.000Z' }),
+    live: 1, stalled: 0, review: null, qc: null, decisions: null, spend: null, loadSource: null, residue: null, quota: q, nowMs: Date.parse('2026-10-04T10:00:30.000Z'),
+  })
+  expect(layoutBand(staged([win('five_hour', 10)]), 125).text).toBe(layoutBand(staged(null), 125).text)
+  expect(layoutBand(staged([win('five_hour', 10)]), 209).text).toContain(' │ 5h 10% │ ')
 })
 
 test('quota slot: a window is plain below 80 %, warning from 80 %, error from 100 %; the label stays dim', () => {
@@ -3996,5 +4003,15 @@ for (const surface of SURFACES) {
     b = await body()
     expect(b).not.toContain('second@example.com')
     expect(b).toContain(t('label.quota_5h'))
+    // back, then grown over $.fs.read's 4 MiB cap: not read, and no stale account either
+    w.files[PATH] = other
+    w.stats[PATH] = { size: other.length, mtimeMs: NOW_FRESH + 2 }
+    await w.clock.advance(5000)
+    expect(await body()).toContain('second@example.com')
+    w.stats[PATH] = { size: 5 * 1024 * 1024, mtimeMs: NOW_FRESH + 3 }
+    const capped = reads()
+    await w.clock.advance(5000)
+    expect(reads()).toBe(capped)
+    expect(await body()).not.toContain('@example.com')
   })
 }

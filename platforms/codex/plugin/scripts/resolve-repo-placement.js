@@ -2,8 +2,8 @@
 'use strict';
 
 // resolve-repo-placement.js — where a repo's worktrees and handoffs live (plan
-// docs/plans/2026-10-12-worktree-placement.md, D1/D8/D12). Node built-ins only: the rails call
-// it on their dispatch path.
+// docs/plans/2026-10-12-worktree-placement.md, D1/D8/D12; the rule: references/worktree-placement.md).
+// Node built-ins only: the rails call it on their dispatch path.
 //
 //   main     [--from <dir>]                         → JSON {main_checkout, repo_identity, fallback, behind}
 //   worktree --prefix <p> --slug <s> --from <dir>   → one line: a `mktemp -u -d` template

@@ -20,13 +20,21 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/qc-gate-affected-suites.md
 - **Context**: full run past 30 min (stopped at 256/408); the 38 suites that reference the changed files passed in about 2 min. Keep the full suite for release preflight.
 
-### Worktree and handoff placement has no rule outside the dispatch rails
+### Cross-repo dispatch has no worktree or handoff rule
 - **Status**: open
-- **Trigger**: next task after feat/mods-pane-navigation merges (owner 2026-10-12: pick it up when the mod work is done)
-- **Effort**: L
-- **Source**: owner question 2026-10-12; repo-wide inventory in session a14bb1ea
+- **Trigger**: a session in repo A dispatches a rail at repo B
+- **Effort**: M
+- **Source**: worktree-placement gap 5, deferred by the plan (D12), 2026-10-12
 - **Pointer**: docs/backlog/worktree-and-handoff-placement-has-no-rule.md
-- **Context**: rails use $TMPDIR, native/hand-made worktrees use .claude/worktrees with no naming rule; handoff fallback keys by basename, the /clear hook by repo hash; no cross-repo rule.
+- **Context**: rails resolve placement from their own --from repo root; nothing says which repo's root, marker or handoff a cross-repo run uses.
+
+### finish-flow does not tell the owner how to update the main checkout after a push
+- **Status**: open
+- **Trigger**: owner approves a finish-flow guidance change (needs eval ON/OFF evidence first, scorecard-first)
+- **Effort**: S
+- **Source**: worktree-placement gap 8, deferred by the plan (D12), 2026-10-12
+- **Pointer**: docs/backlog/worktree-and-handoff-placement-has-no-rule.md
+- **Context**: an isolated worktree session cannot pull the main checkout; resolve-repo-placement.js main prints how far behind it is and references/worktree-placement.md gives the owner line.
 
 ### calendar-teeth-negative instant2: consult evidence fixture exceeds the expiry ceiling
 - **Status**: open

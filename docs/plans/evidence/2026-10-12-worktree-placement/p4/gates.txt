@@ -1,0 +1,47 @@
+=== node scripts/check-claude-md-inventory.js
+CLAUDE.md inventory: all 235 scripts named
+docs/scripts-inventory.md: all 235 scripts described
+CLAUDE.md size: 19742/40000 bytes
+rc=0
+=== node scripts/check-tmp-residue-registry.js
+check-tmp-residue-registry: OK (416 file(s) scanned, parity holds)
+rc=0
+=== node scripts/check-reference-sizes.js
+reference-size: all 45 skills/*/references/*.md under the 49152 numbered cap
+rc=0
+=== node scripts/check-plan-graduation.js
+plan_reference_dangling (report-only): docs/plans/2026-01-01-forgotten — 1 tracked file(s) reference docs/plans/evidence/2026-01-01-forgotten, which exists in neither the active nor the archived location
+plan_reference_dangling (report-only): docs/plans/2026-01-01-vanished — 1 tracked file(s) reference docs/plans/evidence/2026-01-01-vanished, which exists in neither the active nor the archived location
+plan_reference_dangling (report-only): docs/plans/2026-08-28-consult-discuss- — 1 tracked file(s) reference docs/plans/evidence/2026-08-28-consult-discuss-, which exists in neither the active nor the archived location
+plan_reference_dangling (report-only): docs/plans/2026-08-18-plugin-api — 1 tracked file(s) reference docs/plans/2026-08-18-plugin-api, which exists in neither the active nor the archived location
+plan_reference_dangling (report-only): docs/plans/2026-08-26-cursor-cli- — 2 tracked file(s) reference docs/plans/2026-08-26-cursor-cli-, which exists in neither the active nor the archived location
+plan_reference_dangling (report-only): docs/plans/2026-03-21-allowance-distribution-engine — 9 tracked file(s) reference docs/plans/2026-03-21-allowance-distribution-engine, which exists in neither the active nor the archived location
+rc=1
+=== node scripts/doc-drift-gate.js
+[FAIL] script-refs
+       - docs/BACKLOG.md: `scripts/dispatch-contract.pre.js` — no such file
+       - docs/backlog/peer-reported-revival3d-worktree-branch-accumulation.md: `scripts/check-unarchived-branches.mjs` — no such file
+       - references/evidence-discipline.md: `check-inputs-landed.sh` — did you mean scripts/check-inputs-landed.js? (renamed; bare ref)
+========================================
+3 check(s) FAILED
+rc=1
+=== node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md
+{"mode":"block","backlog":"/home/cookys/projects/autopilot/.claude/worktrees/autocompact-detect/docs/BACKLOG.md","style":"heading","entries":157,"bytes":94794,"violations":[{"code":"cap_exceeded","title":"agy `--input-format stream-json` raises the payload ceiling but does NOT remove it — and above it the failure is SILENT","field":"Title","detail":"121 > 120","allowed":true},{"code":"cap_exceeded","title":"autopilot effort vocabulary has no `minimal` — the muse-spark contributor tier cannot be examined at its cheapest setting","field":"Title","detail":"123 > 120","allowed":true},{"code":"cap_exceeded","title":"`src/engine/local-deployment.js` carries its own transport rule (TLS outside loopback) — align with `resolve-endpoint.sh` before it gets a live caller","field":"Title","detail":"152 > 120","allowed":true},{"code":"cap_exceeded","title":"certified-clean 語料庫重建 — evals/clean/ 已重定性為「已合併真實 diff 對照集」,絕對 specificity 門檻需要真 certified 集","field":"Title","detail":"149 > 120","allowed":true},{"code":"cap_exceeded","title":"`mission withdraw` cannot bind a `mission-subject-v2` claim to its ICC campaign — the intake journals no mission binding","field":"Title","detail":"122 > 120","allowed":true},{"code":"cap_exceeded","title":"context-budget falls back to inference after a long foreground tool call — live tick starves under the 120 s freshness cap","field":"Title","detail":"124 > 120","allowed":true},{"code":"cap_exceeded","title":"Stale `closed_findings` stamps on chain entries written by pre-v2.36.3 finalize have no repair path short of a new generation","field":"Title","detail":"125 > 120","allowed":true},{"code":"cap_exceeded","title":"CEO/dev-flow guidance proportionality — peer request to soften \"Boil the Lake\" / near-zero completion cost, TaskCreate-missing semantics, reversible-candidate release gates","field":"Title","detail":"174 > 120","allowed":true}],"new_count":0,"allowed_count":8,"exit":0}
+rc=0
+=== node scripts/check-supersession-anchors.js
+check-supersession-anchors: 6 anchors, 2 protected regions — ok
+rc=0
+=== bash scripts/sync-all.sh --check
+── check-js-syntax: node scripts/check-js-syntax.js
+── l1-cache-key-parity: node scripts/check-l1-cache-key-parity.js
+── check-backlog-entries: node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md
+── check-contract-schema: node scripts/check-contract-schema.js
+── check-profile-catalog: node scripts/build-profile-payload.js catalog --check --repo .
+{"mode":"check","changed":false,"ran":["sync-version","sync-agent-bodies","check-canonical-invariants","sync-model-routing","sync-codex-plugin-skills","sync-opencode-plugin","check-readme-parity","check-hook-inventory","check-claude-md-inventory","check-js-syntax","l1-cache-key-parity","check-backlog-entries","check-contract-schema","check-profile-catalog"],"skipped":[],"unknown_only":[],"failures":[],"ok":true}
+rc=0
+
+# Note (depth-0): the two rc=1 gates fail on develop too, on lines this branch did not write —
+# check-plan-graduation: backlog_row_has_plan "Run stage-graph v11 regression covering the packet guidance text"
+# (2026-10-11-review-packet-mode); doc-drift-gate script-refs: docs/BACKLOG.md `scripts/dispatch-contract.pre.js`,
+# docs/backlog/peer-reported-revival3d-worktree-branch-accumulation.md, references/evidence-discipline.md.
+# Each was confirmed present in `git show develop:<file>`. No violation names a file or row this phase added.

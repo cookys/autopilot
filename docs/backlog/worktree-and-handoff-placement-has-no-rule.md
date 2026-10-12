@@ -50,3 +50,19 @@ Second live example of gap 3 (2026-10-12): the next task (`feat/worktree-placeme
 - A check at session start / `stage-advance --to intent` (`--new-task`): worktree name and branch agree with the marker's task, or the session is told to open a fresh worktree.
 - Handoff keyed by the marker's `repo_identity` (+ worktree path) on both routes, so the manual skill and the `/clear` hook write to one predictable place.
 - The rails' `/tmp` worktrees either move under the same root or carry the repo slug in their prefix.
+
+## Disposition (2026-10-12, plan `docs/plans/2026-10-12-worktree-placement.md`, direction C)
+
+The rule now lives in [`references/worktree-placement.md`](../../references/worktree-placement.md).
+
+| Gap | Disposition |
+|---|---|
+| 1 two unrelated roots | fixed — P2: rails create worktrees under `<main checkout>/.claude/worktrees/` through `scripts/resolve-repo-placement.js`; P4 rule |
+| 2 no per-repo grouping | fixed — P2: the path names the repo's main checkout |
+| 3 name ↔ branch ↔ task unrelated | fixed as far as the plan goes — P3: `set --new-task` advisory (never blocks); P4 rule |
+| 4 handoff keying | fixed — one resolver for both routes (P2), used by the hooks and the handoff skill (P3); the keys differ on purpose (rule § Handoff files) |
+| 5 cross-repo dispatch | deferred — BACKLOG "Cross-repo dispatch has no worktree or handoff rule" |
+| 6 marker `repo_root` fixed at creation | fixed — P1: the marker follows the session into a worktree of the same repo |
+| 6b stale `base_ref` | fixed — P1: newer of the local / remote-tracking pair |
+| 7 orphan worktrees not discovered | out of scope — already filed (BACKLOG "Orphan leaf liveness…"); the sweep no longer busy-skips marked rail worktrees under `.claude/worktrees/` |
+| 8 owner cannot pull from an isolated session | partly fixed — `resolve-repo-placement.js main` prints how far behind the main checkout is, the rule gives the owner line; finish-flow wiring deferred (BACKLOG "finish-flow does not tell the owner…") |

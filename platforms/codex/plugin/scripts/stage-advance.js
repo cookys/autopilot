@@ -24,7 +24,8 @@
 //     `high_risk = (review_risk == "high")`, used for that move's legality. A sampling failure counts as high
 //     (the normal review order is never silently dropped) and says so on stderr;
 //   - E1 size bump: entering verify or qc-gate, the WORKING-TREE change against base_ref is measured, run in the
-//     marker repo_root: `git diff --numstat <base_ref>` (tracked, committed + staged + unstaged) plus every
+//     cwd's toplevel when it belongs to the marker's repository (repo_identity; a linked worktree of it), else in
+//     the marker repo_root: `git diff --numstat <base_ref>` (tracked, committed + staged + unstaged) plus every
 //     untracked non-ignored file (`git ls-files --others --exclude-standard`; 1 file + its line count). Binary
 //     files = 1 file, 0 lines; renames follow git's default; ignored files never count. (dev-flow runs qc-gate
 //     BEFORE commit, so a committed-only count would never fire; this deliberately deviates from the plan's
@@ -48,6 +49,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { withWriteLock } = require('./lib/jsonl-store');
 const sessionMode = require('./session-mode');
+const { scopeFromCwd } = require('../src/status/project-key');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 const STAGE_GRAPH = path.join(__dirname, 'stage-graph.js');
@@ -227,13 +229,25 @@ function unitViolation(marker, from, to, unitArg, unitKind) {
   return null;
 }
 
+// The cwd's toplevel when it belongs to the marker's repository (worktree-placement plan D5: a session that moved
+// into a linked worktree is measured there); null otherwise, so a cwd in another repository never takes over.
+function sessionRepoRoot(marker) {
+  if (typeof marker.repo_identity !== 'string' || !marker.repo_identity) return null;
+  const top = gitOut(process.cwd(), ['rev-parse', '--show-toplevel']);
+  const dir = top === null ? '' : top.toString('utf8').trim();
+  if (!dir) return null;
+  let identity = null;
+  try { identity = scopeFromCwd(dir).repo_identity; } catch (_e) { return null; }
+  return identity === marker.repo_identity ? dir : null;
+}
+
 // Pure decision over one marker snapshot. -> { code, out } | { write: patch, out }
 function decide(marker, opts, repoRootArg) {
   const to = opts.to;
   const ids = JSON.parse(fs.readFileSync(GRAPH_JSON, 'utf8')).node_ids;
   if (!ids.includes(to)) throw new Usage(`unknown node "${to}" (want one of ${ids.join('|')})`);
   const from = typeof marker.stage === 'string' ? marker.stage : null;
-  const repoRoot = repoRootArg || marker.repo_root || process.cwd();
+  const repoRoot = repoRootArg || sessionRepoRoot(marker) || marker.repo_root || process.cwd();
   const unitArg = opts.unit || null;
   const eff = unitArg || (marker.unit && typeof marker.unit === 'object' ? marker.unit : null);
 

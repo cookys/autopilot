@@ -108,7 +108,7 @@ time (memory: parallel suites interfere). Per-phase hetero code review (quality-
 1. `hooks/tests/stage-advance.test.sh`: marker created in a sandbox main checkout, linked worktree with N committed
    files on a branch, `stage-advance --to verify` from the worktree ⇒ `files = N`. Red at base (measures the main
    checkout).
-2. `hooks/tests/session-mode.test.sh`: (a) local `develop` behind `origin/develop` ⇒ stored `base_ref` is the remote
+2. `hooks/tests/stage-advance.test.sh` (where the `set --new-task` cases already live; `session-mode.test.sh` clones the repo per run): (a) local `develop` behind `origin/develop` ⇒ stored `base_ref` is the remote
    sha; (b) local ahead ⇒ local; (c) diverged ⇒ remote; (d) `set --new-task` from a linked worktree of the same repo
    ⇒ `repo_root` is the worktree; (e) from a different repo ⇒ `repo_root` unchanged; (f) plain `set` (no
    `--new-task`) from a linked worktree ⇒ `repo_root` follows, from a foreign repo ⇒ unchanged; (g) only

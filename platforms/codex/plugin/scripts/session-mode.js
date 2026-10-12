@@ -687,21 +687,52 @@ function cmdSetPlain(args) {
 const SIZES = Object.freeze(['XS', 'S', 'M', 'L', 'XL']);
 const INIT_FLAGS = ['size', 'urgent', 'bug', 'base-ref', 'new-task'];
 const BASE_REF_SHA = /^[0-9a-f]{7,64}$/u;
-// Default-branch candidates, same order as scripts/resolve-review-loop.sh probe_diff_bytes (develop, then main);
-// master and the origin/* spellings are added so a clone without a local develop still resolves.
-const DEFAULT_BRANCHES = Object.freeze(['develop', 'main', 'master', 'origin/develop', 'origin/main']);
+// Default-branch pairs, same order as scripts/resolve-review-loop.sh probe_diff_bytes (develop, then main), then
+// master. Each local branch is paired with its origin/* spelling so a stale local branch never wins over a newer
+// remote-tracking ref (worktree-placement plan D6). No fetch: whatever the refs say now.
+const DEFAULT_BRANCH_PAIRS = Object.freeze([['develop', 'origin/develop'], ['main', 'origin/main'], ['master', 'origin/master']]);
+const DEFAULT_BRANCHES = Object.freeze(DEFAULT_BRANCH_PAIRS.flat());
 
-// The merge-base of HEAD and the first default-branch candidate that resolves; null when none does.
+function mergeBaseWithHead(repoRoot, ref) {
+  try {
+    const sha = execFileSync('git', ['-C', repoRoot, 'merge-base', 'HEAD', ref], {
+      encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    return BASE_REF_SHA.test(sha) ? sha : null;
+  } catch (_error) { return null; }
+}
+
+function isAncestor(repoRoot, older, newer) {
+  try {
+    execFileSync('git', ['-C', repoRoot, 'merge-base', '--is-ancestor', older, newer], { stdio: 'ignore' });
+    return true;
+  } catch (_error) { return false; }
+}
+
+// The merge-base of HEAD and the newer branch of the first pair with a branch sharing history with HEAD; null when
+// none does. Both qualify: remote an ancestor of local (local ahead or equal) => local; local behind or diverged =>
+// remote (the integration target).
 function defaultBaseRef(repoRoot) {
-  for (const branch of DEFAULT_BRANCHES) {
-    try {
-      const sha = execFileSync('git', ['-C', repoRoot, 'merge-base', 'HEAD', branch], {
-        encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
-      }).trim();
-      if (BASE_REF_SHA.test(sha)) return sha;
-    } catch (_error) { /* try the next candidate */ }
+  for (const [local, remote] of DEFAULT_BRANCH_PAIRS) {
+    const localBase = mergeBaseWithHead(repoRoot, local);
+    const remoteBase = mergeBaseWithHead(repoRoot, remote);
+    if (localBase && remoteBase) return isAncestor(repoRoot, remote, local) ? localBase : remoteBase;
+    if (localBase || remoteBase) return localBase || remoteBase;
   }
   return null;
+}
+
+// A set run from a linked worktree of the marker's repository moves repo_root there, so E1 and the rails measure
+// where the session works (worktree-placement plan D5); a cwd in another repository leaves it.
+function followRepoRoot(marker, repoRoot) {
+  if (typeof marker.repo_root !== 'string' || marker.repo_root === repoRoot) return;
+  let want = typeof marker.repo_identity === 'string' && marker.repo_identity ? marker.repo_identity : null;
+  let have = null;
+  try {
+    if (!want && path.isAbsolute(marker.repo_root)) want = markerRepoIdentity(marker.repo_root);
+    have = scopeFromCwd(repoRoot).repo_identity;
+  } catch (_error) { return; }
+  if (want && have === want) marker.repo_root = repoRoot;
 }
 
 // Fields `set --new-task` drops from a live marker: the stage-advance position plus the task-scoped init fields.
@@ -785,7 +816,8 @@ function cmdSetInit(args) {
         }
         const next = { ...current };
         for (const k of NEW_TASK_CLEARED) delete next[k];
-        applyInitFields(next, init, repoRoot, null);
+        followRepoRoot(next, repoRoot);
+        applyInitFields(next, init, next.repo_root, null);
         next.task_seq = seqPrev + 1;
         next.task_started_at = new Date().toISOString();
         writeMarkerFile(file, next);
@@ -797,7 +829,9 @@ function cmdSetInit(args) {
           result = { refusal: `refusing --size ${init.size}: the marker is already ${current.size} and size only moves up (XS<S<M<L<XL)` };
           return;
         }
-        const next = applyInitFields({ ...current }, init, repoRoot, current);
+        const next = { ...current };
+        followRepoRoot(next, repoRoot);
+        applyInitFields(next, init, next.repo_root, current);
         writeMarkerFile(file, next);
         result = { marker: next, created: false };
         return;

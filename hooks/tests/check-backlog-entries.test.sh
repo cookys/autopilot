@@ -440,11 +440,25 @@ gate_run "$GATE" "$d"
 assert_eq "$GATE_RC:$(codes_of "$GATE_OUT")" "0:" "Id compat: a BL Id with no next-id mark and no required Id passes"
 IDC_NOMARK_DIR="$d"
 d="$(repo idc-h-dup)"
-{ idc_heading "$d" 25; printf '\n%s\n' '### Second numbered row' '- **Id**: 25' '- **Status**: open' '- **Trigger**: when tests run' \
+{ idc_heading "$d" 25; printf '\n'; printf '%s\n' '### Second numbered row' '- **Id**: 25' '- **Status**: open' '- **Trigger**: when tests run' \
     '- **Effort**: S' '- **Source**: suite' '- **Pointer**: docs/plans/ok.md' >> "$d/docs/BACKLOG.md"; }
 gate_run "$GATE" "$d"
 assert_eq "$GATE_RC:$(codes_of "$GATE_OUT")" "0:" "Id compat: a repeated legacy Id with no opt-in is not duplicate_id, as before"
 IDC_DUP_DIR="$d"
+# A checklist Id was always read by the old gate, so a repeated one stays duplicate_id.
+d="$(repo idc-c-dup)"
+{ idc_checklist "$d" T-12; printf '\n'; printf '%s\n' '- [ ] [Minor] Second numbered checklist row' '  - Id: T-12' '  - Status: open' \
+    '  - Trigger: when tests run' '  - Effort: S' '  - Source: suite' '  - Pointer: docs/plans/ok.md' >> "$d/docs/BACKLOG.md"; }
+printf '%s\n' '## Style' '- style: checklist' '## Mode' '- mode: block' > "$d/.claude/backlog-config.md"
+gate_run "$GATE" "$d" --config "$d/.claude/backlog-config.md"
+assert_eq "$GATE_RC:$(codes_of "$GATE_OUT")" "1:duplicate_id:Id:Second numbered checklist row" "Id compat: a repeated checklist Id is duplicate_id, as before"
+IDC_CDUP_DIR="$d"
+d="$(repo idc-c-uniq)"
+{ idc_checklist "$d" T-12; printf '\n'; printf '%s\n' '- [ ] [Minor] Second numbered checklist row' '  - Id: T-13' '  - Status: open' \
+    '  - Trigger: when tests run' '  - Effort: S' '  - Source: suite' '  - Pointer: docs/plans/ok.md' >> "$d/docs/BACKLOG.md"; }
+printf '%s\n' '## Style' '- style: checklist' '## Mode' '- mode: block' > "$d/.claude/backlog-config.md"
+gate_run "$GATE" "$d" --config "$d/.claude/backlog-config.md"
+assert_eq "$GATE_RC:$(codes_of "$GATE_OUT")" "0:" "Id compat: distinct checklist Ids pass"
 d="$(repo idc-c-nocfg)"
 idc_checklist "$d" T-12
 printf '%s\n' '## Style' '- style: checklist' > "$d/.claude/backlog-config.md"
@@ -503,9 +517,12 @@ assert_eq "$(json_has_code "$GATE_OUT" bad_id)" "yes" "Id compat mutation: enfor
 m="$(mutate idc-mark "s/blIds.length \&\& blIdEnforced(cfg)/blIds.length/")"
 gate_run "$m" "$IDC_NOMARK_DIR"
 assert_eq "$(json_has_code "$GATE_OUT" bad_id)" "yes" "Id compat mutation: demanding a next-id mark everywhere is caught"
-m="$(mutate idc-dup "s/if (ent.id \&\& (ent.tableId || blIdEnforced(ecfg))) {/if (ent.id) {/")"
+m="$(mutate idc-dup "s/if (ent.id \&\& (ent.tableId || style === 'checklist' || blIdEnforced(ecfg))) {/if (ent.id) {/")"
 gate_run "$m" "$IDC_DUP_DIR"
 assert_eq "$(json_has_code "$GATE_OUT" duplicate_id)" "yes" "Id compat mutation: duplicate_id on legacy Ids is caught"
+m="$(mutate idc-cdup "s/(ent.tableId || style === 'checklist' || blIdEnforced(ecfg))/(ent.tableId || blIdEnforced(ecfg))/")"
+gate_run "$m" "$IDC_CDUP_DIR" --config "$IDC_CDUP_DIR/.claude/backlog-config.md"
+assert_eq "$(json_has_code "$GATE_OUT" duplicate_id)" "no" "Id compat mutation: dropping the checklist duplicate check is caught"
 m="$(mutate idc-off "s/return Boolean(cfg \&\& (cfg.next_id_mark || (cfg.required_fields || \[\]).includes('Id')));/return false;/")"
 gate_run "$m" "$IDC_REQ_DIR" --config "$IDC_REQ_DIR/.claude/backlog-config.md"
 assert_eq "$(json_has_code "$GATE_OUT" bad_id)" "no" "Id opt-in mutation: never enforcing BL-NNNN is caught"

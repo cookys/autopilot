@@ -860,7 +860,8 @@ function checkNextId(text, entries, cfg) {
 }
 
 function collectViolations(text, cfg, repoRoot, now, existsFn) {
-  const entries = collectEntries(text, cfg.style || 'heading');
+  const style = cfg.style || 'heading';
+  const entries = collectEntries(text, style);
   const ecfg = NEXT_ID_RE.test(String(text || '')) ? { ...cfg, next_id_mark: true } : cfg;
   const violations = checkCapsRaised(cfg);
   const titles = new Map();
@@ -873,9 +874,10 @@ function collectViolations(text, cfg, repoRoot, now, existsFn) {
         violations.push({ code: 'duplicate_title', title: t, field: 'Title', detail: 'duplicate title' });
       } else titles.set(key, true);
     }
-    // A heading/checklist Id is checked for duplicates only once the file opts in (blIdEnforced):
-    // the old gate never read those Ids, so a project's own numbering must not start blocking.
-    if (ent.id && (ent.tableId || blIdEnforced(ecfg))) {
+    // Duplicate Ids: table and checklist Ids were always checked (the old gate read them); a
+    // heading Id only once the file opts in (blIdEnforced), since the old gate never read it and a
+    // project's own numbering must not start blocking.
+    if (ent.id && (ent.tableId || style === 'checklist' || blIdEnforced(ecfg))) {
       const id = String(ent.id).trim();
       if (ids.has(id)) {
         violations.push({ code: 'duplicate_id', title: t, field: 'Id', detail: id });

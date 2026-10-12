@@ -688,6 +688,14 @@ to_link() { # <migrator> -> exit code
 }
 assert_eq "$(to_link "$MIG")" "2" "to-reporter: --out via a symlink to the backlog is refused"
 assert_eq "$(sha256sum "$TR/docs/BACKLOG.md" | cut -c1-64)" "$before_sha" "to-reporter: the symlinked backlog is untouched"
+# --out as a hard link to the backlog is the same file: refused, nothing written.
+ln "$TR/docs/BACKLOG.md" "$TR/hard.md"
+to_hard() { # <migrator> -> exit code
+  set +e; node "$1" --backlog "$TR/docs/BACKLOG.md" --to-reporter-fields --drafts "$TR/drafts.json" --out "$TR/hard.md" >/dev/null 2>&1; local rc=$?; set -e
+  echo "$rc"
+}
+assert_eq "$(to_hard "$MIG")" "2" "to-reporter: --out as a hard link to the backlog is refused"
+assert_eq "$(sha256sum "$TR/docs/BACKLOG.md" | cut -c1-64)" "$before_sha" "to-reporter: the hard-linked backlog is untouched"
 # --rename-effort --to-reporter-fields --apply: the refusal comes before the rename writes.
 printf '%s\n' '### Fix effort row' '- **Status**: open' '- **Trigger**: t' '- **Effort**: Fix' '- **Source**: s' '- **Pointer**: none' > "$TR/effort.md"
 cp "$TR/effort.md" "$TR/effort.orig"
@@ -717,6 +725,11 @@ cp "$TR/docs/BACKLOG.md" "$TR/bl.keep"
 assert_eq "$(to_link "$MUTD/mig-link.js")" "0" "symlink mutation: comparing resolved paths only lets the write through (the suite can tell)"
 assert_neq "$(sha256sum "$TR/docs/BACKLOG.md" | cut -c1-64)" "$before_sha" "symlink mutation: the backlog was overwritten through the link"
 cp "$TR/bl.keep" "$TR/docs/BACKLOG.md"
+sed 's/    return sa.dev === sb.dev \&\& sa.ino === sb.ino; \/\/ a hard link is the same file too/    return false;/' "$MIG" > "$MUTD/mig-hard.js"
+if cmp -s "$MIG" "$MUTD/mig-hard.js"; then fail "hard-link mutation did not apply"; fi
+assert_eq "$(to_hard "$MUTD/mig-hard.js")" "0" "hard-link mutation: ignoring the inode lets the write through (the suite can tell)"
+assert_neq "$(sha256sum "$TR/docs/BACKLOG.md" | cut -c1-64)" "$before_sha" "hard-link mutation: the backlog was overwritten through the hard link"
+rm -f "$TR/hard.md"; cp "$TR/bl.keep" "$TR/docs/BACKLOG.md"
 sed '/^  if (args.toReporterFields) refuseReporterFieldWrites(args);$/d' "$MIG" > "$MUTD/mig-order.js"
 if cmp -s "$MIG" "$MUTD/mig-order.js"; then fail "order mutation did not apply"; fi
 combo "$MUTD/mig-order.js" >/dev/null
@@ -770,5 +783,28 @@ if cmp -s "$MIG" "$MUTD/mig-exempt.js"; then fail "exemption mutation did not ap
 cp "$RF/orig.md" "$RF/docs/BACKLOG.md"; rm -rf "$RF/docs/backlog"
 out="$(rf_apply "$MUTD/mig-exempt.js")"
 assert_eq "$(json_field "$out" totals.migrate)" "2" "exemption mutation: moving the over-cap-Problem row is caught (the suite can tell)"
+
+# A moved row with reporter fields is held to the 1600 B row cap, not 900 B: a rebuilt row between
+# the two keeps its full Trigger and Context.
+RC="$(repo reporter-rowcap)"
+RC_T="$(python3 -c 'print("t"*230)')"; RC_S="$(python3 -c 'print("s"*150)')"; RC_C="$(python3 -c 'print("c"*230)')"
+printf '%s\n' '# Backlog' '' '### Mid size reporter row' '- **Id**: BL-0001' '- **Status**: open' '- **Since**: 2026-09-05' \
+  '- **Origin**: self' "- **Problem**: $(python3 -c 'print("問"*96)')" "- **Impact**: $(python3 -c 'print("影"*50)')" \
+  "- **Trigger**: $RC_T" '- **Effort**: S' "- **Source**: $RC_S" '- **Pointer**: docs/plans/ok.md' "- **Context**: $RC_C" \
+  '- **Note**: extra prose that forces a move' '' > "$RC/docs/BACKLOG.md"
+cp "$RC/docs/BACKLOG.md" "$RC/orig.md"
+rc_apply() { # <migrator> -> rebuilt backlog text
+  cp "$RC/orig.md" "$RC/docs/BACKLOG.md"; rm -rf "$RC/docs/backlog"
+  node "$1" --backlog "$RC/docs/BACKLOG.md" --out-dir "$RC/docs/backlog" --apply --json >/dev/null 2>&1
+  cat "$RC/docs/BACKLOG.md"
+}
+rcout="$(rc_apply "$MIG")"
+rc_row_bytes="$(printf '%s' "$rcout" | python3 -c 'import sys; t=sys.stdin.read(); i=t.index("### Mid"); print(len(t[i:].encode()))')"
+assert_eq "$([ "$rc_row_bytes" -gt 900 ] && [ "$rc_row_bytes" -lt 1600 ] && echo in-band || echo "out:$rc_row_bytes")" "in-band" "row cap: the rebuilt reporter row is between 900 and 1600 B"
+assert_contains "$rcout" "- **Trigger**: $RC_T"$'\n' "row cap: Trigger is not truncated under the 1600 B cap"
+assert_contains "$rcout" "- **Context**: $RC_C" "row cap: Context is kept under the 1600 B cap"
+sed "s/    const rowCap = gate.effectiveCap(cfg, hasReporter ? 'row' : 'entry');/    const rowCap = 900;/" "$MIG" > "$MUTD/mig-rowcap.js"
+if cmp -s "$MIG" "$MUTD/mig-rowcap.js"; then fail "row-cap mutation did not apply"; fi
+assert_not_contains "$(rc_apply "$MUTD/mig-rowcap.js")" "- **Context**: $RC_C" "row-cap mutation: a 900 B cap on a reporter row is caught (the suite can tell)"
 
 finalize_test

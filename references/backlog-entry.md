@@ -55,7 +55,7 @@ Several reporters on one row: `；`-separated in Reporter, Report and Reply, pos
 |---|---|---|
 | missing_field | block | a required field (above) is absent |
 | bad_id | block | Id not `BL-NNNN` (heading/checklist; only with a next-id mark or Id required) · Id ≥ next-id · next-id mark malformed · BL Ids with no mark while Id is required |
-| duplicate_id | block | two rows share an Id (heading/checklist: only with a next-id mark or Id required) |
+| duplicate_id | block | two rows share an Id (heading rows: only with a next-id mark or Id required) |
 | bad_since | block | Since is not a real `YYYY-MM-DD` |
 | bad_origin | block | Origin is not peer/owner/self |
 | bad_reply | block | a Reply part is not `none` / `unknown` / `<date> <pointer>` |

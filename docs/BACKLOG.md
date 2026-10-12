@@ -979,14 +979,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/2026-10-11-review-packet-mode.md
 - **Context**: Gate blocks: hetero-review SKILL.md and code-loop.md are outside prereg guidance.files; hetero-loops.md hash differs from v10. Write a prereg revision adding both files (as P5 did), freeze v11, then run it.
 
-### freeze-guidance-arm.js rewrites the base arm on every freeze
-- **Status**: open
-- **Trigger**: before the next stage-graph version freeze
-- **Effort**: S
-- **Source**: stage-graph v7..v10 freezes, 2026-10
-- **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/README.md
-- **Context**: freeze-guidance-arm.js change/red end in armBase(), which only looks up extra-base id with the new suffix, so base.json loses extra-base-v5; restored by hand v7-v10. Base must not change.
-
 ### PEER-REPORTED (c4140 llm-playground): revise dev-flow SKILL.md foreground-wait advice
 - **Status**: open
 - **Trigger**: before the 3.0.0 final cut, with the v11 guidance eval

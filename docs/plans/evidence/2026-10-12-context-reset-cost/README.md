@@ -78,3 +78,44 @@ Nothing in the repo knows about `autoCompactWindow` yet. See the BACKLOG row
 3. Upgrade notice: the SessionStart update check (`hooks/session-start.js:164`) shows the CHANGELOG
    headings of every version since the user's last-seen one. Name the recommendation in the next
    release heading.
+
+## How Claude Code resolves the window (read from the 2.1.296 binary, 2026-10-12)
+
+The precedence proposed above ("env, then project settings, then user settings") was a guess. The
+binary's resolver does this:
+
+1. env `CLAUDE_CODE_AUTO_COMPACT_WINDOW`: below 100k is raised to 100k, above 1M is capped. A value
+   that is not a positive number is ignored and resolution falls through.
+2. Settings, merged in the order user → project → local → flag (`--settings`) → policy, later
+   wins. A file with a top-level `autoCompactWindow` replaces the default and drops the per-model
+   entries of earlier files; a file without one merges its `modelSettings.<model>.autoCompactWindow`
+   entries in. The model's own entry beats the default. `"auto"` means not set. `/autocompact`
+   writes the per-model entry, not the top-level key. `--autocompact <value>` overrides settings.
+3. With nothing set: a server-supplied window (client data), then an experiment, then the model
+   default. For a native 1M model the model default is the full 1M window. One exception in the
+   table: `claude-sonnet-5` on the cowork / local-agent surfaces defaults to 500k.
+
+Compaction is off when env `DISABLE_AUTO_COMPACT` or `DISABLE_COMPACT` is set, or when
+`autoCompactEnabled` is false. The statusline payload carries no auto-compact field, so a hook
+has to re-derive the window from these inputs.
+
+## Shipping, part 1: detection (branch `feat/autocompact-detect`)
+
+- `scripts/lib/autocompact-window.js` re-derives steps 1 and 2 and the off switches. It cannot see
+  `--settings`, `--autocompact` or a server-supplied window, so it reports "not set" rather than
+  guessing a number.
+- context-budget T1 adds one owner-facing line when the window is a known 1M, nothing sets a
+  window, and compaction is on.
+- `scripts/dev-setup.sh --check` prints the window in effect and its source file, and warns when
+  none is set.
+- Not done: the T2 wording (guidance, needs ON/OFF eval) and the release heading (version held at
+  3.0.0, so it waits for the next release).
+
+## Fresh-session test (session a14bb1ea, 2026-10-12)
+
+Host settings: `autoCompactWindow: 250000`, `context_budget.t2: 300000`. Claude Code 2.1.296,
+opus-5-5, 1M window per the statusline.
+
+- T1 fired at 106k and again at 160k (50k step). Both went to the advisory sink only
+  (`advisories/<sid>.jsonl`, kind `context-budget-t1`); neither reached the model.
+- `lastT2Context` stayed 0 past 160k, as expected with T2 at 300k.

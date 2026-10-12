@@ -6,6 +6,10 @@
 
 - **即時面板「現況」分頁多了「最近對話」**（merge `82d34da4`）：分頁最後列出這個 session 最近 3 則你輸入的 prompt，依時間排序，最新的在最下面。tool 結果和系統插入的訊息不算在內。每則預設收合成一行「▸ 你：…」（最多 60 字），點一下會展開，顯示完整 prompt 和 AI 的回覆，最多約 20 行。看起來像 secret 的字串（`sk-…`、`ghp_…`、`Bearer …`、`AKIA…`、`xox?-…`）在顯示前就由程式遮成 `***`，不經過模型。這段資料只有在 transcript 變動時才會重算；/clear 之後，原本展開的項目會全部收回。目前只能用滑鼠展開，還不能用鍵盤（BACKLOG 有列）。
 
+- **使用 1M context 卻沒設自動壓縮門檻時，T1 提醒會建議你設定**：沒設 `autoCompactWindow` 的話，1M context 的 session 要到接近 1M 才會自動壓縮。現在 context-budget 的 T1 提醒（100k）會多一行，建議在 `~/.claude/settings.json` 設 `"autoCompactWindow": 250000`，或執行 `/autocompact`。實測顯示，在 150k 到 300k 之間重置 context，大約可省下 20% 費用。以下情況不會出現這行：已經用任何方式設定門檻（env `CLAUDE_CODE_AUTO_COMPACT_WINDOW`、使用者或專案設定、`/autocompact` 寫入的單一模型設定）、視窗不是 1M、自動壓縮已關閉。
+  - `scripts/dev-setup.sh --check` 會列出目前生效的門檻和它來自哪個檔案；沒有設定時顯示 WARN。
+  - 新增的 `scripts/lib/autocompact-window.js` 依照 Claude Code 2.1.296 的規則推算門檻：env 優先，再依 user → project → local → policy 的順序合併設定檔。它讀不到命令列的 `--settings` 與 `--autocompact`，也讀不到伺服器下發的門檻。
+
 ### 修正
 
 - **discuss 資格考卷的題目說明和評分規則對不上**（merge `2e55f70f`）：D-a／D-b 的評分要求考生沿用自己上一輪（`this-seat`）的軸，但給考生的題目說明沒寫這條，還叫考生挑一條沒人用過的軸。另外，題目說明要求考生照抄 `round_id`，題目資料裡卻沒有這個欄位。兩個 solver 都自己補上了這條隱藏規則，所以先前 16/16 的結果沒有真正證到考卷沒問題。修正方式：

@@ -1170,13 +1170,13 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: the qualification prompt now states that a seat with a this-seat round keeps that round's axis; the production prompt (around lines 280–297) still only says pick a declared axis. Align the two so a qualified seat meets the same rule live.
 
-### Full-suite reds at 6e91be30: calendar-teeth instant2, statusline-live-tee T2, real-config reads
+### Full-suite reds at 6e91be30: calendar-teeth instant2, statusline-live-tee T2
 - **Status**: open
 - **Trigger**: next touch of context-budget, statusline-live-tee, or capability-evidence expiry
 - **Effort**: S
 - **Source**: discuss-exam-fix qc-gate full suite, 2026-10-12 (both reds reproduce at base 6e91be30)
 - **Pointer**: none
-- **Context**: instant2: expiry-ceiling throw (capability-evidence.js:171). statusline-live-tee 160k T2 e2e red with isolated HOME. hooks-live-state-misc and context-budget-window-memory read real ~/.autopilot t2; pin tiers via env.
+- **Context**: instant2: expiry-ceiling throw (capability-evidence.js:171). statusline-live-tee 160k T2 e2e red with isolated HOME. (hooks-live-state-misc and context-budget-window-memory now pin tiers via env, feat/autocompact-detect.)
 
 ### orchestration-eval full run rewrites the committed t7-config-rename fixture
 - **Status**: open
@@ -1200,7 +1200,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: context reset cost analysis, 2026-10-12
 - **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
-- **Context**: no repo check, doc or notice mentions autoCompactWindow; a 1M user hits T2 STOP instead of compaction. Detection + toast (mechanism), T2 wording (guidance, eval), release heading. Detail at Pointer.
+- **Context**: detection shipped (scripts/lib/autocompact-window.js, T1 tip, dev-setup --check). Left: T2 wording when a window at or below T2 is set (guidance, needs ON/OFF eval); name it in the next release heading. Detail at Pointer.
 
 ### hetero-review-loop collect: a seat gap without --allow-seat-gap strands generation 1
 - **Status**: open

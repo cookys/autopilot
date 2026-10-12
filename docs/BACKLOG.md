@@ -1185,3 +1185,11 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: discuss-exam-fix qc-gate full suite, 2026-10-12 (both reds reproduce at base 6e91be30)
 - **Pointer**: none
 - **Context**: instant2: expiry-ceiling throw (capability-evidence.js:171), clock-dependent. statusline-live-tee 160k T2 e2e red even with isolated HOME. hooks-live-state-misc reads real ~/.autopilot context_budget.t2; pin tiers via env.
+
+### orchestration-eval full run rewrites the committed t7-config-rename fixture
+- **Status**: open
+- **Trigger**: next touch of hooks/tests/orchestration-eval.test.sh or evals/orchestration
+- **Effort**: S
+- **Source**: discuss-exam-fix full suite in a hands worktree, 2026-10-12
+- **Pointer**: none
+- **Context**: after `bash hooks/tests/run.sh`, evals/orchestration/tasks/t7-config-rename/repo/config.json was rewritten to minified JSON. The suite copies the fixture to a temp dir (line 262), so some step still writes the source.

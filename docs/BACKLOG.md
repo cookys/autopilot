@@ -60,14 +60,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/worktree-and-handoff-placement-has-no-rule.md
 - **Context**: an isolated worktree session cannot pull the main checkout; resolve-repo-placement.js main prints how far behind it is and references/worktree-placement.md gives the owner line.
 
-### calendar-teeth-negative instant2: consult evidence fixture exceeds the expiry ceiling
-- **Status**: open
-- **Trigger**: next touch of src/engine/capability-evidence.js or the calendar-teeth suite
-- **Effort**: S
-- **Source**: feat/autocompact-detect qc-gate, 2026-10-12 (red at base 7586c8dd too)
-- **Pointer**: docs/backlog/calendar-teeth-instant2-expiry-ceiling.md
-- **Context**: expects qualified:1, gets empty; compile throws INVALID_CAPABILITY_EVIDENCE. Likely fixed-date stamps aged out; bisect, then derive stamps from the run clock.
-
 ### /l5 has no generator for the mission scaffold; depth-0 must hand-author plan, rubric, sources, graph and envelope
 - **Status**: open
 - **Trigger**: FIRED — mods P1W W4 gate runs l5c–l5i, 2026-10-05
@@ -976,14 +968,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/README.md
 - **Context**: Claude Code auto-updated mid-run (INSTRUMENT-INVALID); pinned by hand via PATH pin plus DISABLE_AUTOUPDATER=1.
 
-### Pre-existing red suite: hooks/tests/autopilot-cli.test.sh
-- **Status**: open
-- **Trigger**: when the suite is next touched
-- **Effort**: S
-- **Source**: stage-graph plan execution, 2026-10-06..08
-- **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/README.md
-- **Context**: 9 FAILs, identical before Train A; not caused by the stage-graph work.
-
 ### Pre-existing red gate: doc-drift-gate.js (3 failures)
 - **Status**: open
 - **Trigger**: when docs are next touched
@@ -1091,14 +1075,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: the qualification prompt now states that a seat with a this-seat round keeps that round's axis; the production prompt (around lines 280–297) still only says pick a declared axis. Align the two so a qualified seat meets the same rule live.
 
-### Full-suite reds at 6e91be30: calendar-teeth instant2, statusline-live-tee T2
-- **Status**: open
-- **Trigger**: next touch of context-budget, statusline-live-tee, or capability-evidence expiry
-- **Effort**: S
-- **Source**: discuss-exam-fix qc-gate full suite, 2026-10-12 (both reds reproduce at base 6e91be30)
-- **Pointer**: none
-- **Context**: instant2: expiry-ceiling throw (capability-evidence.js:171). statusline-live-tee 160k T2 e2e red with isolated HOME. (hooks-live-state-misc and context-budget-window-memory now pin tiers via env, feat/autocompact-detect.)
-
 ### orchestration-eval full run rewrites the committed t7-config-rename fixture
 - **Status**: open
 - **Trigger**: next touch of hooks/tests/orchestration-eval.test.sh or evals/orchestration
@@ -1138,14 +1114,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: hetero review g1 deferred findings, 2026-10-12
 - **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
 - **Context**: Hook and dev-setup paths read /etc/claude-code/managed-settings.json with no override (suites not isolated on a host that has one). truthyEnv treats DISABLE_AUTO_COMPACT=0 as unset; confirm against the binary.
-
-### Six hooks read only the '/dev/stdin' path (ENXIO under Claude Code)
-- **Status**: open
-- **Trigger**: next touch of any of them, or a report that one never fires
-- **Effort**: S
-- **Source**: autocompact live test, state-checkpoint fix `995bb329`, 2026-10-12
-- **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
-- **Context**: accumulator, log-error, intent-capture, capture-payload, design-quality, reload-watch open '/dev/stdin' with no fd 0 read; on a socket stdin that throws ENXIO, as it did for state-checkpoint. Check each fires; switch to readFileSync(0).
 
 ### hetero-review-loop collect: a seat gap without --allow-seat-gap strands generation 1
 - **Status**: open

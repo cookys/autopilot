@@ -160,6 +160,11 @@ assert_file_absent "$COMMON3/autopilot-scaffold" "failed run leaves no scaffold 
 gen "$R3" >/dev/null 2>&1
 G3=$(digest_of "$R3/docs/mission-$PLAN_STEM-execution-graph.json")
 assert_file_exists "$COMMON3/autopilot-scaffold/$PLAN_STEM-${G3:0:12}-authority.json" "default envelope name has the digest prefix"
+# A generated-but-uncommitted rubric must not make a rerun fail (rubric is exempt from the HEAD check).
+git -C "$R3" status --porcelain -- "docs/plans/$PLAN_STEM.rubric.md" | grep -q '^??'
+assert_exit_code "$?" "0" "precondition: rubric is untracked"
+OUT=$(gen "$R3" --force 2>&1); RC=$?
+assert_exit_code "$RC" "0" "rerun with an uncommitted generated rubric exits 0 ($OUT)"
 # --force over existing files: a late failure restores the old bytes exactly.
 printf 'OLD-GRAPH\n' > "$R3/docs/mission-$PLAN_STEM-execution-graph.json"
 printf 'OLD-SOURCES\n' > "$R3/docs/mission-$PLAN_STEM-sources.json"

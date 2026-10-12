@@ -375,19 +375,31 @@ function writeAll(b, g, o) {
   // Snapshot what exists so a failure restores it byte for byte (--force) or removes the new file.
   const before = new Map(targets.map(([file]) => [file, fs.existsSync(file) ? fs.readFileSync(file) : null]));
   const touched = [];
+  const madeDirs = [];
   try {
     for (const [file, content] of targets) {
       touched.push(file);
+      // Remember each directory this run creates (outermost first) so a failure removes only those.
+      const missing = [];
+      for (let d = path.dirname(file); !fs.existsSync(d); d = path.dirname(d)) missing.unshift(d);
       fs.mkdirSync(path.dirname(file), { recursive: true });
+      madeDirs.push(...missing);
       fs.writeFileSync(file, content);
     }
     validate(b, g.graphDigest, g.scratchDir);
   } catch (error) {
+    const unrestored = [];
     for (const file of touched) {
       try {
         if (before.get(file) === null) fs.rmSync(file, { force: true });
         else fs.writeFileSync(file, before.get(file));
-      } catch (_restoreError) { /* best effort; the original error is what matters */ }
+      } catch (restoreError) { unrestored.push(`${file} (${restoreError.message})`); }
+    }
+    for (const dir of madeDirs.reverse()) {
+      try { fs.rmdirSync(dir); } catch (_e) { /* only empty directories created by this run */ }
+    }
+    if (unrestored.length > 0) {
+      fs.writeSync(2, `scaffold-mission: ROLLBACK INCOMPLETE, restore by hand: ${unrestored.join('; ')}\n`);
     }
     throw error instanceof Refusal ? error : new Refusal(error.message);
   }

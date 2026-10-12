@@ -443,7 +443,7 @@ function cmdWithdraw(flags) {
     // An ABSENT ledger file is unreadable, never "never started".
     if (!fs.existsSync(campaignLedger)) throw new Error(`ledger file does not exist: ${campaignLedger}`);
     rows = loadRows(campaignLedger);
-    resolved = resolveCampaignForClaim(rows, claim); // throws on a corrupt intake payload
+    resolved = resolveCampaignForClaim(rows, claim, claimId); // throws on a corrupt intake payload
   } catch (error) {
     emit({
       status: 'rejected',
@@ -474,7 +474,7 @@ function cmdWithdraw(flags) {
     emit({
       status: 'rejected',
       code: 'mission_withdraw_campaign_ticket_present',
-      reason: `withdraw: claim ${claimId} campaign ${claim.campaign_id} has no intake row under its own id, but ${campaignLedger} holds ${resolved.roots.length} intake root(s) for its contract ticket '${resolved.ticket}' (${resolved.roots.map((r) => `${r.campaign_id}@${r.phase || 'unknown'}`).join(', ')}) — the campaign may have run under the ICC campaign-v1 id; refusing a never-started release. Binding a campaign-v2 claim to its ICC intake needs the intake to journal the mission binding (BACKLOG).`,
+      reason: `withdraw: claim ${claimId} campaign ${claim.campaign_id} has no intake row under its own id, but ${campaignLedger} holds ${resolved.roots.length} intake root(s) for its contract ticket '${resolved.ticket}' (${resolved.roots.map((r) => `${r.campaign_id}@${r.phase || 'unknown'}`).join(', ')}) — the campaign may have run under the ICC campaign-v1 id; refusing a never-started release. This ledger holds no campaign_mission_binding row for the claim (the campaign was admitted before intake journaled one), so the claim cannot be bound to that root.`,
       claim_id: claimId,
       campaign_id: claim.campaign_id,
       ledger_roots: resolved.roots,
@@ -499,7 +499,7 @@ function cmdWithdraw(flags) {
     }
     resolvedVia = 'never_started';
   } else {
-    resolvedVia = 'direct';
+    resolvedVia = resolved.via || 'direct';
     try {
       projection = projectCampaign(rows, resolved.campaign_id);
     } catch (error) {

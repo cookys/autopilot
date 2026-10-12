@@ -1139,6 +1139,7 @@ function defaultGenerationClaim({
   base,
   campaignDispositionAuthority,
   repairRoundEstimateSeconds,
+  missionBinding,
 }) {
   let existing = null;
   let ledgerRows = [];
@@ -1565,6 +1566,31 @@ function defaultGenerationClaim({
       'campaign_journal_rejected',
       journal.error ? journal.error.message : String(journal.stderr || '').trim(),
     );
+  }
+  // Bind the Mission claim to this campaign in the same lease, right behind the intake/resume
+  // row. Idempotent per claim, so a retry after a failed append (resume path) writes it again.
+  if (missionBinding && typeof missionBinding.claim_id === 'string' && missionBinding.claim_id.length > 0) {
+    const bindingArtifact = {
+      schema_version: 1,
+      artifact_type: 'campaign_mission_binding',
+      campaign_id: campaignId,
+      mission_claim_id: missionBinding.claim_id,
+      mission_campaign_id: missionBinding.campaign_id,
+    };
+    const bound = runLedger([
+      'journal-add', '--ledger', ledgerPath, '--run-id', campaignId, '--stage', 'campaign',
+      '--generation', String(lease.generation), '--nonce', lease.nonce,
+      '--idempotency-key', `campaign-mission-binding:${missionBinding.claim_id}`,
+      '--op', 'campaign_mission_binding', '--payload', JSON.stringify(bindingArtifact),
+    ], repo);
+    if (bound.error || bound.status !== 0) {
+      abandonCampaignLease({ campaignId, lease, ledgerPath, repo });
+      return rejected(
+        'campaign_generation',
+        'campaign_mission_binding_rejected',
+        bound.error ? bound.error.message : String(bound.stderr || '').trim(),
+      );
+    }
   }
   return step('campaign_generation', 'claimed', {
     campaign_id: campaignId,
@@ -2809,6 +2835,9 @@ function runCampaignIntake(input = {}, adapters = {}) {
       base: input.base,
       campaignDispositionAuthority: input.campaignDispositionAuthority,
       repairRoundEstimateSeconds: input.repairRoundEstimateSeconds,
+      missionBinding: missionClaim.status === 'claimed' && typeof missionClaim.claim_id === 'string'
+        ? { claim_id: missionClaim.claim_id, campaign_id: missionClaim.campaign_id }
+        : null,
     }), 'campaign_generation', new Set(['claimed', 'rejected']));
   } catch (error) {
     return releaseAfterRejection(rejected(

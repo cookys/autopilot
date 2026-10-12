@@ -672,6 +672,56 @@ const wdV2Ns = runCli([
 assert.strictEqual(wdV2Ns.status, 0, `v2 claim with no ticket root is releasable as never started: ${wdV2Ns.stdout}`);
 // The corrupt-payload propagation is unit-tested in hooks/tests/campaign-claim-resolve.test.sh.
 
+// (4) mission_binding: the intake journals which Mission claim a campaign was admitted for.
+// A v2 claim (campaign-v2-… id, never keying the ICC campaign-v1 row) is found by that exact
+// claim id and withdrawn under the ordinary terminal rule. The same ledger WITHOUT the binding
+// row (a campaign admitted before the binding existed) keeps today's ticket_present refusal.
+{
+  const boundLedger = path.join(tmp, 'bound-campaign.jsonl');
+  fs.copyFileSync(ledgerPath, boundLedger);
+  const stageRows = fs.readFileSync(boundLedger, 'utf8').split('\n').filter(Boolean)
+    .map((l) => JSON.parse(l)).filter((r) => r.kind === 'stage' && r.stage === 'campaign' && r.run_id === campaignId);
+  const lastStage = stageRows[stageRows.length - 1];
+  const v2CampaignId = v2State.claims[claimId].campaign_id;
+  const add = runLedger([
+    'journal-add', '--ledger', boundLedger, '--run-id', campaignId, '--stage', 'campaign',
+    '--generation', String(lastStage.generation), '--nonce', lastStage.nonce,
+    '--idempotency-key', `campaign-mission-binding:${claimId}`, '--op', 'campaign_mission_binding',
+    '--payload', JSON.stringify({
+      schema_version: 1, artifact_type: 'campaign_mission_binding', campaign_id: campaignId,
+      mission_claim_id: claimId, mission_campaign_id: v2CampaignId,
+    }),
+  ]);
+  assert.strictEqual(add.status, 'recorded', `binding row appended: ${JSON.stringify(add)}`);
+  const wdBound = runCli([
+    'mission', 'withdraw', '--state', v2StatePath, '--out', path.join(tmp, 'ms-out-bound.json'),
+    '--claim-id', claimId, '--campaign-ledger', boundLedger,
+  ]);
+  assert.strictEqual(wdBound.status, 0, `bound v2 claim must withdraw: ${wdBound.stdout} ${wdBound.stderr}`);
+  const wdBoundBody = JSON.parse(wdBound.stdout);
+  assert.strictEqual(wdBoundBody.status, 'withdrawn');
+  assert.strictEqual(wdBoundBody.resolved_via, 'mission_binding');
+  assert.strictEqual(wdBoundBody.ledger_campaign_id, campaignId);
+  // a binding naming a DIFFERENT claim id never binds this claim
+  const otherState = JSON.parse(JSON.stringify(v2State));
+  otherState.claims[claimId].campaign_id = `campaign-v2-${'b'.repeat(64)}`;
+  const otherPath = path.join(tmp, 'mission-state-v2-other.json');
+  fs.writeFileSync(otherPath, JSON.stringify(otherState));
+  const wdOther = runCli([
+    'mission', 'withdraw', '--state', otherPath, '--out', path.join(tmp, 'ms-out-other.json'),
+    '--claim-id', claimId, '--campaign-ledger', boundLedger,
+  ]);
+  assert.strictEqual(wdOther.status, 1, `binding naming another campaign-v2 id must not bind: ${wdOther.stdout}`);
+  assert.strictEqual(JSON.parse(wdOther.stdout).code, 'mission_withdraw_campaign_ticket_present');
+  // old ledger, no binding row: unchanged refusal
+  const wdOld = runCli([
+    'mission', 'withdraw', '--state', v2StatePath, '--out', path.join(tmp, 'ms-out-old.json'),
+    '--claim-id', claimId, '--campaign-ledger', ledgerPath, '--never-started', 'true',
+  ]);
+  assert.strictEqual(wdOld.status, 1, `ledger without binding row keeps the refusal: ${wdOld.stdout}`);
+  assert.strictEqual(JSON.parse(wdOld.stdout).code, 'mission_withdraw_campaign_ticket_present');
+}
+
 // Now use the ALREADY-terminalized ledger from above (`ledgerPath`) — its
 // campaign_id is the SAME campaignId the claim is bound to.
 const withdrawAfter = runCli([

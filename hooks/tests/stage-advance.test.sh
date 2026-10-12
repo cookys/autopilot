@@ -609,7 +609,7 @@ OLD_STAGE=$(jf stage); OLD_SUM=$(cksum <"$OLD_MARKER")
 [ "$OLD_STAGE" != "<absent>" ] && ok "resume setup: old marker has a stage ($OLD_STAGE)" || bad "resume setup: old marker has no stage"
 
 # without --resume-from a fresh id is still refused (first write must be the entry node)
-newsess; sm set --size L --repo-root "$RR" >/dev/null 2>&1
+newsess; sm set --size L --bug --repo-root "$RR" >/dev/null 2>&1
 adv --to "$(echo "$OLD_STAGE" | tr -d '"')"; eq "no --resume-from: mid-graph first write still refused (rc)" "3" "$RC"
 eq "no --resume-from: stage stays absent" "<absent>" "$(jf stage)"
 
@@ -620,21 +620,41 @@ eq "resume: size copied" '"L"' "$(jf size)"
 eq "resume: bug copied" "true" "$(jf bug)"
 eq "resume: old marker unchanged" "$OLD_SUM" "$(cksum <"$OLD_MARKER")"
 adv --to plan-review; eq "resume: the next legal node from the copied stage is accepted (rc)" "0" "$RC"
-NEW_ID="$AUTOPILOT_SESSION_ID"
+adv --resume-from "$OLD_ID"; eq "target already has a stage refused (rc)" "6" "$RC"
+has "target already has a stage: reason" "already has stage" "$ERR"
 
 # fail closed
-newsess; sm set --size L --repo-root "$RR" >/dev/null 2>&1
+newsess; sm set --size L --bug --repo-root "$RR" >/dev/null 2>&1
 adv --resume-from no-such-session; eq "missing old marker refused (rc)" "6" "$RC"
 has "missing old marker names the re-walk fallback" "context-continuation.md" "$ERR"
 eq "missing old marker: nothing written" "<absent>" "$(jf stage)"
 adv --resume-from "$AUTOPILOT_SESSION_ID"; eq "resume from itself refused (rc)" "6" "$RC"
-RO="$TEST_TMP/r-resume-other"; mkrepo "$RO"; newsess; sm set --size L --repo-root "$RO" >/dev/null 2>&1
+RO="$TEST_TMP/r-resume-other"; mkrepo "$RO"; newsess; sm set --size L --bug --repo-root "$RO" >/dev/null 2>&1
 adv --resume-from "$OLD_ID"; eq "old marker from another repo refused (rc)" "6" "$RC"
 eq "other repo: nothing written" "<absent>" "$(jf stage)"
-adv --resume-from "$NEW_ID" ; adv --resume-from "$OLD_ID"; eq "target already has a stage refused (rc)" "6" "$RC"
-newsess; sm set --size L --repo-root "$RR" >/dev/null 2>&1; node -e 'require("fs").writeFileSync(process.argv[1],"{not json")' "$AUTOPILOT_SESSION_MODE_DIR/corrupt-old.json"
+newsess; sm set --size L --bug --repo-root "$RR" >/dev/null 2>&1; node -e 'require("fs").writeFileSync(process.argv[1],"{not json")' "$AUTOPILOT_SESSION_MODE_DIR/corrupt-old.json"
 adv --resume-from corrupt-old; eq "unreadable old marker refused (rc)" "6" "$RC"
 adv --resume-from "$OLD_ID" --to plan; eq "--resume-from with --to is a usage error" "1" "$RC"
+
+# size / urgent / bug must match (a copy could never lower the new marker)
+newsess; sm set --size XL --bug --repo-root "$RR" >/dev/null 2>&1
+adv --resume-from "$OLD_ID"; eq "different size refused (rc)" "6" "$RC"
+has "different size: reason" "differ" "$ERR"
+eq "different size: nothing written" "<absent>" "$(jf stage)"
+newsess; sm set --size L --bug --urgent --repo-root "$RR" >/dev/null 2>&1
+adv --resume-from "$OLD_ID"; eq "different urgent refused (rc)" "6" "$RC"
+newsess; sm set --size L --repo-root "$RR" >/dev/null 2>&1
+adv --resume-from "$OLD_ID"; eq "different bug refused (rc)" "6" "$RC"
+
+# high_risk and review_families ride along: an urgent high-risk session parked at code-review can still reach qc-gate
+RH="$TEST_TMP/r-resume-hr"; mkrepo "$RH"
+newsess; HR_OLD="$AUTOPILOT_SESSION_ID"; sm set --size M --urgent --repo-root "$RH" >/dev/null 2>&1
+node -e 'const f=process.argv[1],m=JSON.parse(require("fs").readFileSync(f,"utf8"));Object.assign(m,{stage:"code-review",stage_set_at:new Date().toISOString(),high_risk:true,review_families:["fam-a"]});require("fs").writeFileSync(f,JSON.stringify(m))' "$MARKER"
+newsess; sm set --size M --urgent --repo-root "$RH" >/dev/null 2>&1
+adv --resume-from "$HR_OLD"; eq "high-risk resume (rc)" "0" "$RC"
+eq "high_risk copied" "true" "$(jf high_risk)"
+eq "review_families copied" '["fam-a"]' "$(jf review_families)"
+STUB_RISK=high adv --to qc-gate; eq "high-risk resume: code-review -> qc-gate accepted (rc)" "0" "$RC"
 
 echo "stage-advance.test: pass=$PASS fail=$FAIL"
 [ "$FAIL" -eq 0 ]

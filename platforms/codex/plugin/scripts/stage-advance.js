@@ -315,7 +315,7 @@ function fingerprint(m) {
 }
 
 const RESUME_HINT = 'fall back to the re-walk in skills/dev-flow/references/context-continuation.md (session-mode.js set, then stage-advance --to from the entry node)';
-const RESUME_COPY = ['size', 'bug', 'urgent', 'stage', 'unit', 'base_ref'];
+const RESUME_COPY = ['size', 'bug', 'urgent', 'stage', 'unit', 'base_ref', 'high_risk', 'review_families'];
 
 // -> { code, err } | { patch }. Pure over the two marker snapshots.
 function decideResume(marker, old, oldId) {
@@ -327,6 +327,12 @@ function decideResume(marker, old, oldId) {
   if (!sessionMode.SIZES.includes(old.size)) return refuse('the old marker has no size');
   if (typeof old.repo_identity !== 'string' || !old.repo_identity || old.repo_identity !== marker.repo_identity) {
     return refuse('the old marker belongs to a different (or unidentifiable) repository');
+  }
+  // size only moves up and urgent / bug only turn on (session-mode.js), so a copy that could lower the new marker is
+  // refused: the new session must first `set` the same size and flags as the old one.
+  if (old.size !== marker.size || (old.urgent === true) !== (marker.urgent === true) || (old.bug === true) !== (marker.bug === true)) {
+    const d = (m) => `${m.size}${m.urgent === true ? ' urgent' : ''}${m.bug === true ? ' bug' : ''}`;
+    return refuse(`size/urgent/bug differ (old ${d(old)}, new ${d(marker)}); run session-mode.js set in the new session with the same size/flags as the old session first`);
   }
   const patch = { stage_set_at: new Date().toISOString() };
   for (const k of RESUME_COPY) if (old[k] !== undefined) patch[k] = old[k];

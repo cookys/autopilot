@@ -34,6 +34,7 @@ move out of an urgent session's last `verify` (Urgent placement). From `research
 | 3 | Illegal move or unit-rule violation; stdout `{allowed:false, from, to, legal_next, reason}` | Go to a node in `legal_next`. Never force, never retry the refused `--to`. A first write must target the entry node for (size, bug) |
 | 4 | E1 bump required; stdout `{bump_to, files, lines}` | Bump protocol below |
 | 5 | Marker has no `size` | `session-mode.js set --size …`, then repeat the call |
+| 6 | `--resume-from <old id>` refused (nothing written): old marker missing / expired / stageless / other repo, this session already has a stage, or size/urgent/bug differ | `session-mode.js set` with the old session's size and flags, or fall back to the re-walk in `context-continuation.md` |
 | 1 | Usage / unwritable marker | Fix the call; the marker is telemetry, so a persistent failure is reported, not worked around |
 
 ## Bump protocol (E1)

@@ -39,7 +39,7 @@ Bounds: the stdout form is at most 3000 bytes, the file form at most 6000 bytes;
 
 ### 2.3 Hook wiring
 
-- `state-checkpoint.js`: the saved file now starts with `## Workflow Snapshot`. The transcript tail is **kept but shrunk**: the last 3 turns that have text after stripping `[tool_use...]` / `[tool_result...]` placeholders, at most 1500 bytes, under `## Last Words`. Rationale: the snapshot answers "where am I"; the last words answer "what was I about to say", which no disk source holds. The 20-turn tail and its 8 KB cap are retired.
+- `state-checkpoint.js`: the saved file now starts with `## Workflow Snapshot`. The transcript tail is **kept but shrunk**: the last 6 turns that have text after stripping `[tool_use...]` / `[tool_result...]` placeholder lines, at most 3 KB (the newest turn stays verbatim), under the existing `## Transcript Tail` heading. Rationale: the snapshot answers "where am I"; the last words answer "what was I about to say", which no disk source holds. The old 20-turn / 8 KB defaults are retired (env knobs `TRANSCRIPT_TAIL_N`, `TRANSCRIPT_BYTE_CAP` remain).
 - PreCompact stdout: `Preserve the following workflow state verbatim in the compaction summary:` plus the 3000-byte snapshot. Knob `AUTOPILOT_PRECOMPACT_STDOUT=0` turns it off (default on; reversible with no code change).
 - `session-handoff.js` (SessionEnd, `/clear`): the same collector output replaces its "Repo state / Last action" git+transcript guesses; its own git sections stay as the fallback when the collector throws.
 

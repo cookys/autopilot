@@ -39,6 +39,7 @@ const {
   extractTurn,
   parseTranscriptText,
   buildTranscriptTail: libBuildTranscriptTail,
+  dropToolNoise,
   selectFailureCounter,
   compactionStateName,
   PER_TURN_BUDGET,
@@ -49,8 +50,12 @@ const {
 const STATE_DIR = path.join(os.homedir(), '.autopilot');
 const LOG_FILE = path.join(STATE_DIR, '.state-checkpoint.log');
 const LOG_ROTATE_BYTES = 1 * 1024 * 1024; // 1 MB
-const TRANSCRIPT_TAIL_N = parseInt(process.env.TRANSCRIPT_TAIL_N || '20', 10);
-const TRANSCRIPT_BYTE_CAP = parseInt(process.env.TRANSCRIPT_BYTE_CAP || '8192', 10);
+// The tail is the supplement, not the state: the workflow snapshot leads the file (plan
+// docs/plans/2026-10-13-workflow-snapshot-at-compaction.md). 6 turns / 3 KB of text-bearing turns.
+const TRANSCRIPT_TAIL_N = parseInt(process.env.TRANSCRIPT_TAIL_N || '6', 10);
+const TRANSCRIPT_BYTE_CAP = parseInt(process.env.TRANSCRIPT_BYTE_CAP || '3072', 10);
+const SNAPSHOT_FILE_BYTES = 6000;
+const SNAPSHOT_STDOUT_BYTES = 3000;
 
 // === Helpers ===
 
@@ -118,10 +123,21 @@ function parseTranscript(transcriptPath) {
 // buildTranscriptTail moved to state-checkpoint-lib.js. Wrapper calls into the
 // lib with the env-overridable tail-N + byte-cap so the runtime knobs survive.
 function buildTranscriptTail(turns) {
-  return libBuildTranscriptTail(turns, {
+  return libBuildTranscriptTail(dropToolNoise(turns), {
     tailN: TRANSCRIPT_TAIL_N,
     byteCap: TRANSCRIPT_BYTE_CAP,
   });
+}
+
+// The workflow snapshot (scripts/lib/workflow-snapshot.js). Every source inside it is fail-open; this
+// wrapper covers the require itself, so a missing or broken collector never costs the checkpoint file.
+function workflowSnapshot(input, maxBytes) {
+  try {
+    const { snapshotText } = require('../scripts/lib/workflow-snapshot.js');
+    return snapshotText({ sessionId: input.session_id, cwd: input.cwd, maxBytes });
+  } catch (err) {
+    return `Workflow state: unavailable (collector failed: ${String(err && err.message).slice(0, 120)})`;
+  }
 }
 
 // === Main ===
@@ -167,7 +183,11 @@ function buildTranscriptTail(turns) {
 
     // Build machine state header
     const failureCount = readFailureCounter();
+    const snapshotFile = workflowSnapshot(input, SNAPSHOT_FILE_BYTES);
     let stateContent = `# Autopilot Compaction Checkpoint
+## Workflow Snapshot
+${snapshotFile}
+
 ## Machine State (guaranteed accurate)
 - Timestamp: ${timestamp}
 - Hostname: ${os.hostname()}
@@ -284,9 +304,15 @@ ${body}`;
       failureReason = `state_file_write: ${err.message}`;
     }
 
-    // No stdout: on exit 0 Claude Code appends PreCompact stdout to the
-    // compaction summarizer's instructions, so text addressed to Claude here
-    // would reach the summarizer instead. Diagnostics go to stderr and the log.
+    // stdout: on exit 0 Claude Code merges PreCompact stdout into the compaction summarizer's
+    // custom instructions (binary 2.1.296 + docs; plan §2.1). It never reaches the model directly,
+    // so it is addressed to the summarizer, bounded, and turned off by AUTOPILOT_PRECOMPACT_STDOUT=0.
+    // The model gets the same state a second time from the file session-start injects. Diagnostics
+    // stay on stderr and in the log.
+    if (input.session_id && process.env.AUTOPILOT_PRECOMPACT_STDOUT !== '0') {
+      const snap = workflowSnapshot(input, SNAPSHOT_STDOUT_BYTES);
+      process.stdout.write(`Preserve the following workflow state verbatim in the compaction summary (branch, stage, open tasks, dispatches, review state):\n${snap}\n`);
+    }
 
     // Final log entry
     appendLog({

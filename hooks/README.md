@@ -163,7 +163,7 @@ Registered in `hooks.json`. Active for all autopilot users. All are non-destruct
 
 | Hook | Event | Matcher | Behavior |
 |------|-------|---------|----------|
-| state-checkpoint | PreCompact | * | Node JSONL parser extracts last 20 user/assistant turns from `transcript_path`, writes verbatim to `~/.autopilot/compaction-state-<session_id>.md` (no LLM compliance dependency; session-start injects it only on `compact` for the same session id, then deletes it; nothing on stdout, which Claude Code would feed to the summarizer); JSONL log at `~/.autopilot/.state-checkpoint.log` (rotate 1MB); visible failure diag inline + stderr (v2.7.2) |
+| state-checkpoint | PreCompact | * | Writes `~/.autopilot/compaction-state-<session_id>.md` (no LLM compliance dependency; session-start injects it only on `compact` for the same session id, then deletes it). The file leads with `## Workflow Snapshot` (`scripts/lib/workflow-snapshot.js`, 6000 bytes: stage, next legal node, branch, task card, tasks, review, ledger tail, dispatches, subagents; a missing source is a named `absent` line), then machine state, then a short Node JSONL transcript tail (6 text-bearing turns / 3 KB, tool placeholders dropped). **stdout** (exit 0) is merged by Claude Code into the compaction summarizer's custom instructions (2.1.296 binary), so it carries the 3000-byte snapshot addressed to the summarizer; `AUTOPILOT_PRECOMPACT_STDOUT=0` silences it. Contract: `references/workflow-snapshot.md`; JSONL log at `~/.autopilot/.state-checkpoint.log` (rotate 1MB); visible failure diag inline + stderr (v2.7.2) |
 | session-start | SessionStart | startup\|clear\|compact | `session-start.js` priming: prints cross-session resume hint (reads intent-capture file) + `⚠ intent-capture hook disabled` warning when the self-disable flag is active |
 | intent-capture | PostToolUse | .* | Per-cwd intent file at `~/.autopilot/intent/<sha1(realpath(cwd))>.json` for cross-session resume hint (read by `session-start.js`). Tier A but env opt-out via `AUTOPILOT_INTENT_CAPTURE=false`. Circuit breaker: 10 consecutive fails → `~/.autopilot/intent-capture.disabled` flag (auto-clears at 24h or plugin version bump; manual clear: `rm` the flag) (v2.7.2) |
 | reload-watch | PostToolUse | .* | Detects on-disk catalog drift (`installed_plugins.json`, `dispatch-config.md`, `settings.local.json`); injects `/reload-plugins` reminder. Idempotent state at `~/.claude/plugins/.reload-watch-state.json` (v2.7.1). The advisory also reaches the model via `hookSpecificOutput.additionalContext` on the same event. |
@@ -196,6 +196,8 @@ Intra-`.*` matcher order is deterministic: `intent-capture → reload-watch → 
 `suggest-compact` runs in a separate `Write|Edit` matcher block — Claude Code may execute different matcher blocks in parallel / non-deterministic order. Only intra-matcher sequencing is guaranteed.
 
 ### Testing PreCompact: `/compact` ≠ real PreCompact
+
+> Caveat, 2026-10-13: the ENXIO reading below came from the `/dev/stdin` path bug that `state-checkpoint.js` no longer has (it reads fd 0). The hooks reference says a manual `/compact` also delivers a payload (`trigger: manual`, `custom_instructions`). That is not yet confirmed by a live run on this host; until then treat the paragraph as history and use the unit tests for extraction.
 
 The `/compact` **slash command** is not a faithful test of the `state-checkpoint`
 PreCompact hook. Manually triggering `/compact` does **not** pipe a JSON payload to

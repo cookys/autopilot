@@ -4,6 +4,14 @@
 
 ### 新增
 
+- **壓縮和 `/clear` 之後留下的是工作流程狀態，不再是對話尾巴**（branch `feat/workflow-snapshot-at-compaction`）：之前自動壓縮後還原的區塊只有最近 20 則對話，內容大多是 `[tool_use: Bash(...)]` 佔位符，看不出在哪個階段、哪個分支、還有什麼待辦。現在 PreCompact 存檔的開頭是一份從磁碟現有檔案讀出來的狀態快照：
+  - **快照內容**：session marker 的等級、大小、階段、單元，下一個合法階段，git 分支與 HEAD 與未提交的路徑數，任務卡，session 任務清單，程式碼審查這一輪的席位判定，決策帳本最後三筆，還在跑的派工，還在跑的子代理。每一項來源都是可有可無：讀不到、壞掉或已過期，就印一行 `<來源>: absent (原因)`，不會猜。
+  - **壓縮前的 stdout**：實測 Claude Code 2.1.296，PreCompact 結束碼 0 的 stdout 會併進摘要模型的自訂指示，不會直接進主模型。現在印出不超過 3 KB 的快照，開頭一句請摘要保留這些狀態；用 `AUTOPILOT_PRECOMPACT_STDOUT=0` 關掉。壓縮後 session-start 注入的存檔檔案也以快照開頭（上限 6 KB）。
+  - **對話尾巴縮小**：從 20 則 8 KB 改為 6 則 3 KB，並先去掉只有 `[tool_use]`、`[tool_result]` 佔位符的內容。
+  - **`/clear`**：`session-handoff` 寫的機器 handoff 多一節「Workflow state」，用同一個收集器。
+  - **任務卡**：新增 `scripts/task-card.js set|show|clear`，記下目標、成功條件、plan 路徑、審查帳本路徑和使用者說過的要求，快照會讀進來。dev-flow 在 intake 自動呼叫它屬於指引變更，要先有 ON/OFF 評測，這次沒做，所以目前任務卡要有人寫才有。
+  - 還沒做：`/handoff` 讀快照（指引，需評測）、子代理派工說明的記錄（要動 PostToolUse 主機，超過 S）。下一次真實自動壓縮要確認快照有出現在還原區塊和 Claude Code 自己的摘要裡。契約：`references/workflow-snapshot.md`；plan：`docs/plans/2026-10-13-workflow-snapshot-at-compaction.md`。
+
 - **即時面板顯示登入的帳號和剩餘額度**（branch `feat/mods-account`）：之前要另外開 `/usage` 才知道 5 小時和 7 天的額度用了多少。
   - **band**：多一格 `5h 42% 7d 18%`，數字是各時段已用的百分比，小數無條件捨去，所以看到的數字和顏色一致：80% 以上顯示警告色，100% 以上顯示錯誤色，還沒到上限不會顯示 100%。同一種時段收到兩筆資料時只顯示用量較高的那筆。寬度不到 120 欄時只留用量最高的一段，不到 80 欄時整格不顯示。點這一格會開「現況」分頁，並展開「帳號」區塊。
   - **「現況」分頁新增「帳號」區塊**：顯示 email（完整顯示）、顯示名稱、組織與角色、方案（例如 `claude max · 20x`）、是否開啟額外用量。每個時段各一列，有用量長條、百分比和多久後重置。用 API key 登入時，只顯示一行「未用 Claude 帳號登入」。

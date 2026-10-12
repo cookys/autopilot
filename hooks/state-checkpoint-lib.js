@@ -204,6 +204,18 @@ function buildTranscriptTail(turns, { tailN, byteCap } = {}) {
   return { body: result, metadata: { kept: reversedSelected.length, droppedToCap, bytesUsed } };
 }
 
+// Drop tool bookkeeping from turns before the tail is cut: the 2026-10-13 restore was mostly
+// `[tool_use: Bash(...)]` lines. A turn that is only placeholders disappears; a mixed turn keeps its text.
+const TOOL_NOISE = /^\[(?:tool_use|tool_result|image)[^\]]*\]$/;
+function dropToolNoise(turns) {
+  const out = [];
+  for (const t of turns) {
+    const kept = String(t.text || '').split('\n').filter((l) => !TOOL_NOISE.test(l.trim())).join('\n').trim();
+    if (kept) out.push({ ...t, text: kept });
+  }
+  return out;
+}
+
 // Per-session checkpoint file name. One global compaction-state.md let a
 // concurrent session (or a later startup) inject another session's state.
 // null when the id cannot be used safely as a file name: the caller then
@@ -226,6 +238,7 @@ module.exports = {
   extractTurn,
   parseTranscriptText,
   buildTranscriptTail,
+  dropToolNoise,
   selectFailureCounter,
   compactionStateName,
 };

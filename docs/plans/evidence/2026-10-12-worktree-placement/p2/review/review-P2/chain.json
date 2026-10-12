@@ -8,5 +8,44 @@
     "total_seats": 4,
     "min_reviewed_seats": 4,
     "min_reviewed_seats_source": "default: all seats"
+  },
+  {
+    "generation": 2,
+    "base": "5f5292cc",
+    "head": "b55b00684a31a0ea8ca6fe624dd2892fe7dbb98a",
+    "seats": [
+      {
+        "id": "s0",
+        "status": "reviewed"
+      },
+      {
+        "id": "s1",
+        "status": "reviewed"
+      },
+      {
+        "id": "s2",
+        "status": "reviewed"
+      },
+      {
+        "id": "s3",
+        "status": "reviewed"
+      }
+    ],
+    "reviewed_seats": 4,
+    "total_seats": 4,
+    "reviewed_seats_count": 4,
+    "total_seats_count": 4,
+    "status": "finalized",
+    "diff_sha256": "5134c7e601a01099d4276c6179722572db15f9d10d69ce816066e75bc1e474e3",
+    "full_range_sha256": "7bb1387b1f42fbf1ef4cd16abd17529ed7ea56226aaf6ca3acb8a2b01611a1b5",
+    "findings_sha256": "8a8d3f63dcb57cdefc5cfca8f85f6f90debc830fdd91f2ddf181c043427fc3e2",
+    "seat_artifact_sha256": {
+      "s0": "05bd558a71cba44ed71ac458f78e666892523059240b53ff17997df4cf57c10b",
+      "s1": "27d9daf80722d8a8959371e5d6d960b7c491ac43e115a936f8c328f1895629a9",
+      "s2": "a87504b9c6dd1c526bf3457ac90f56338dc72d3ced48d3dc068ea8cc64dfa844",
+      "s3": "7779c080cac6f31c663c55e22b989a997a5089d03da72ff975c12f2cfc5083ad"
+    },
+    "dispositions_path": "review-P2/g2/dispositions.json",
+    "dispositions_sha256": "9017982fb82c4773ed50735542d4e201a0cb529a7a33d73ce60b5ba8e796ebb7"
   }
 ]

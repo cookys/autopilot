@@ -1,0 +1,12 @@
+{
+  "runner": "cc-shim",
+  "model": "GLM-5.2",
+  "status": "reviewed",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": "🟠 [p26-suite-evidence-gap] MUST-FIX The README progress row (in this diff) asserts \"P2.6 suites green\", but the cited evidence `p2-green-B.txt` records rc for only 10 suites (resolver, identifier-scan, probe-unknown, worktree-activity, orchestrator-edit-gate, repo-residue-auto, the three rail suites + contract); the spec P2.6/C5 verification surfaces `dispatch-detach`, `dispatch-worktree-lifecycle`, `dispatch-hetero-gc`, `worktree-reap`, `repo-residue-sweep`, `tmp-residue-registry`, `check-tmp-residue-registry`, `suite-residue-reaper`, `prune-tmp-residue`, `foreman-guard` and `test-doc-drift-gate.sh` have no recorded run — and D9 edited the very files (`tmp-residue-allowlist.json`, registry JSON) those gates validate, while D10 changed `repo-residue-sweep.js` itself (only `repo-residue-auto` covers it). Impact: C5's \"every reaper, the residue registry and repo-residue-sweep still reclaim them\" and the D9/D10 surfaces are claimed green without evidence, so a reaper/registry regression ships under a passing record. Smallest remediation: run the missing suites one at a time and append their rc=0 lines to `p2-green-B.txt` (or amend the README row to name exactly which suites ran and that the rest are pending before P2 closes).\n🔵 [resolver-non-builtin-require] CUT/FOLLOW-UP Plan P2.1 pins \"Node, built-ins only\" for `resolve-repo-placement.js`, but it `require`s `../src/status/project-key`; behaviour is `--from`-based and pinned by tests (\"two repos named proj get different manual paths\") and every green rail suite exercises the path, so there is no current failure — verify that require graph stays dependency-free (or inline the identity computation) so the resolver keeps working in depless checkouts; excluded from this version because the module ships beside the script in-repo.\n🔵 [d10-invalid-marker] CUT/FOLLOW-UP `repo-residue-sweep.js` busy-skip now keys on `marker_valid !== true`, so a cwd-busy nested worktree whose marker file exists but is malformed is listed in needs_human rather than busy-skipped — a conservative, visible direction (nothing is reaped from a listing), no test exercises it; excluded from this version, note it in walkers.md or the D10 row if it matters later.",
+  "no_finding_proof": null,
+  "raw_log": "/tmp/dispatch-review-log-VNiOZu",
+  "error": null,
+  "usage": null,
+  "frame_closed_by": "end-marker"
+}

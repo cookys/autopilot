@@ -1,0 +1,12 @@
+{
+  "runner": "claude-native",
+  "model": "claude-fable-5-1",
+  "status": "reviewed",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": "🟠 [p26-suite-evidence-missing] MUST-FIX The README progress row claims \"P2.6 suites green\" and the verification map makes \"reaper/registry suites green\" the C5 evidence, but p2-green-B.txt records rc lines for only ten suites; dispatch-detach, dispatch-worktree-lifecycle, dispatch-hetero-gc, worktree-reap, repo-residue-sweep, tmp-residue-registry, check-tmp-residue-registry, suite-residue-reaper, prune-tmp-residue, foreman-guard and test-doc-drift-gate have no recorded run anywhere in the artifact, so the C5 claim that every reaper still reclaims the relocated worktrees is unverified and the g1 seat that raised this was never answered. Smallest remediation: run those suites one at a time and append their rc lines to p2-green-B.txt (or amend the README row to name exactly which suites ran and mark the rest pending before P2 closes).\n🔵 [resolver-non-builtin-require] CUT/FOLLOW-UP P2.1 pins \"Node, built-ins only\" for the resolver, yet it requires ../src/status/project-key for repo identity; the module ships in-repo and all green suites exercise it, so no failure today. Record the deviation in the README deviations list; excluded because reusing the stored identity function is what D5 already asked for and inlining it would fork the identity rule.\n🔵 [d10-invalid-marker-still-skipped] CUT/FOLLOW-UP The busy-skip in repo-residue-sweep.js keys on marker_valid !== true, so a cwd-busy nested worktree with a present-but-malformed marker is still hidden from needs_human, while D10 says \"without a marker\". Direction is conservative (nothing is reaped) and untested; excluded from this version.\n🔵 [batch-first-run-case] CUT/FOLLOW-UP No explicit batch first-run (no .claude/) case; batch has no main-checkout fingerprint so main_checkout_mutated cannot occur there, and the R6 sandbox is freshly created so the merge-back assertion is already a first-placement run. Add the one-line reason to moved-assertions.md; not a defect.",
+  "no_finding_proof": null,
+  "raw_log": "/tmp/dispatch-review-log-5OJwI7",
+  "error": null,
+  "usage": null,
+  "frame_closed_by": "end-marker"
+}

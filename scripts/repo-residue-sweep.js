@@ -1104,6 +1104,18 @@ function main() {
   const integrationRef = o.integrationRef || 'HEAD';
   const integrationSha = git(mainPath, ['rev-parse', '--verify', `${integrationRef}^{commit}`]);
   if (!integrationSha.ok) usage(`--integration-ref does not resolve: ${integrationRef}`);
+  // Default target only: the main checkout's local branch can sit behind its upstream (a HEAD merged and
+  // pushed from another worktree is already on origin/<branch> while local develop has not moved). When the
+  // local tip is an ancestor of its already-fetched upstream, measure against the upstream: a strict
+  // superset, so every HEAD that was integrated stays integrated and the only new "integrated" ones are
+  // real ancestors of a ref. No fetch. An explicit --integration-ref is taken literally.
+  if (!o.integrationRef) {
+    // Only a remote-tracking upstream widens: a LOCAL branch as upstream (set-upstream-to=hands/x) would
+    // make that branch "integrated" against itself and let reap drop its only ref.
+    const upName = git(mainPath, ['rev-parse', '--symbolic-full-name', '@{upstream}']);
+    const up = upName.ok && upName.out.startsWith('refs/remotes/') ? git(mainPath, ['rev-parse', '--verify', '--quiet', '@{upstream}^{commit}']) : { ok: false };
+    if (up.ok && up.out &&up.out !== integrationSha.out && isAncestor(mainPath, integrationSha.out, up.out) === true) integrationSha.out = up.out;
+  }
   const integrationBranch = git(mainPath, ['rev-parse', '--abbrev-ref', integrationRef]).out;
 
   const commonRaw = git(mainPath, ['rev-parse', '--path-format=absolute', '--git-common-dir']);

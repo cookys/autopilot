@@ -1,0 +1,12 @@
+{
+  "runner": "cc-shim",
+  "model": "MiniMax-M3",
+  "status": "no_verdict",
+  "verdict": "no_verdict",
+  "findings": "",
+  "no_finding_proof": null,
+  "raw_log": "/tmp/dispatch-review-log-iqnJin",
+  "error": "dispatch-review exited with status 1",
+  "usage": null,
+  "unratified_verdict": null
+}

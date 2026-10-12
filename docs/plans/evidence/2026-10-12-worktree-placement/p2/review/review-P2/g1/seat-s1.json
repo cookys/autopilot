@@ -1,0 +1,12 @@
+{
+  "runner": "cc-shim",
+  "model": "GLM-5.2",
+  "status": "reviewed",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": "🟠 [p26-suite-evidence-gap] MUST-FIX README progress row asserts \"P2.6 suites green\", but the cited evidence `docs/plans/evidence/2026-10-12-worktree-placement/p2-green-B.txt` records rc for only 10 suites; the P2.6-enumerated `dispatch-detach`, `dispatch-worktree-lifecycle`, `dispatch-hetero-gc`, `worktree-reap`, `repo-residue-sweep`, `tmp-residue-registry`, `suite-residue-reaper`, `prune-tmp-residue` and `foreman-guard` suites have no recorded run in the diff. Impact: C5's \"every reaper, the residue registry and repo-residue-sweep still reclaim them\" and the D9/D10 surfaces are claimed green without evidence, so a reaper/registry regression would ship under a passing record. Smallest remediation: run those suites one at a time and append their rc=0 lines to the green evidence file (or amend the README row to name exactly which suites ran and that the rest are pending before P2 closes).\n🔵 [resolver-non-builtin-require] CUT/FOLLOW-UP Plan P2.1 pins \"Node, built-ins only — it runs on rail paths\" for `scripts/resolve-repo-placement.js`, but the script `require`s `../src/status/project-key`; behavior is correctly `--from`-based (pinned by the \"two repos named proj get different manual paths\" test) and all suites pass, but if `project-key` or its transitive requires ever gain an npm dependency the resolver breaks in depless checkouts — verify that require graph stays dependency-free or inline the identity computation; excluded from the current version because the module ships beside the script in-repo and every green suite exercises the path.",
+  "no_finding_proof": null,
+  "raw_log": "/tmp/dispatch-review-log-evaW9M",
+  "error": null,
+  "usage": null,
+  "frame_closed_by": "end-marker"
+}

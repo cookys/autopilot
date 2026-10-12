@@ -1,0 +1,12 @@
+[
+  {
+    "generation": 1,
+    "base": "5f5292cc",
+    "status": "aborted",
+    "reason": "seat_gap_below_min",
+    "reviewed_seats": 3,
+    "total_seats": 4,
+    "min_reviewed_seats": 4,
+    "min_reviewed_seats_source": "default: all seats"
+  }
+]

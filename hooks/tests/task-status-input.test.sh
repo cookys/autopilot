@@ -114,6 +114,12 @@ node -e 'const fs=require("fs");const o=JSON.parse(fs.readFileSync(process.argv[
 refresh_into "$TEST_TMP/w-reused" "$TERMINAL_FILE"
 assert_eq "0" "$(ncamp "$TEST_TMP/w-reused/$ROOT_RUN_ID.json")" "gate-reused wrapper without receipt: no malformed receipt bound"
 cp "$WO_BAK" "$WO"
+# 4b-2b: a gate-REUSED verification now stores the full wrapper with cached:true; status reads it as valid
+node -e 'const fs=require("fs");const o=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));o.controller.verification_receipt.cached=true;fs.writeFileSync(process.argv[1],JSON.stringify(o))' "$WO"
+refresh_into "$TEST_TMP/w-cached" "$TERMINAL_FILE"
+( export AUTOPILOT_TASK_STATUS_DIR="$TEST_TMP/w-cached"; status_task "$ROOT_RUN_ID"; printf '%s' "$__OUT" > "$TEST_TMP/cached.json" )
+assert_eq "valid" "$(field "$(cat "$TEST_TMP/cached.json")" 'r.evidence.campaigns.status')" "reused (cached:true) wrapper with receipt: status valid"
+cp "$WO_BAK" "$WO"
 # 4b-3: prior-bundle fallback. Work order gone; the prior bundle holds the receipt as the OLD producer
 #       stored it (the whole wrapper). The refresh must unwrap it. Mutating the unwrap makes this red.
 rm -f "$WO"

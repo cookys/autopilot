@@ -6,7 +6,6 @@ Source: docs/BACKLOG.md@05f97302492d26112f877bc2a97acb2578aca8df, migrated 2026-
 - **Context**: <one-line problem>
 - **Effort**: S | M | L (estimate)
 - **Source**: <commit SHA / review-round / retro / plan ref>
-```
 
 ---
 

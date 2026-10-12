@@ -39,7 +39,13 @@ const DEFAULT_EXCLUDES = [
   // whose scripts/... references resolve against THEIR OWN root, not this scan's
   // AUDIT_ROOT — scanning them here produces false drift for whichever repo isn't
   // the one currently checked out there.
-  ".claude/worktrees"
+  ".claude/worktrees",
+  // Verbatim consult transcripts quoting ANOTHER machine's absolute paths (frozen evidence:
+  // rewriting them would falsify the record). Listed file by file on purpose — the rest of
+  // docs/plans/evidence/ is live (new evidence lands there) and stays scanned.
+  "docs/plans/evidence/2026-09-16-blind-review-redesign/consult-gpt-6-astra.md",
+  "docs/plans/evidence/2026-09-16-red-verification-repair/consult-codex-answer.md",
+  "docs/plans/evidence/2026-09-21-foreman-exam-design-consult/gpt-6-astra-via-codex.md"
 ];
 
 // Regex configuration
@@ -94,11 +100,32 @@ function isNestedGitRoot(dirpath) {
 /**
  * Traverse the directories recursively (using built-in fs synchronous APIs to replicate the behavior of os.walk).
  */
+// An exclude containing "/" is a path PREFIX, matched on whole segments ("docs/plans/x"
+// never hides "docs/plans/xy"), and is tried against the path relative to the scan root AND
+// the path relative to the audited repo root (AUDIT_ROOT) - so a default like
+// "platforms/codex/plugin" still applies when the scan root is a subdirectory such as "docs".
+// An exclude without "/" is a directory/file NAME matched as a whole segment at any depth
+// (".git", "_archive", ...) - not a substring, so ".git" does not hide ".github".
+function isExcluded(fullPath, scanRoot, excludes) {
+  const norm = rel => rel.split(path.sep).join('/');
+  const fromScan = norm(path.relative(scanRoot, fullPath));
+  const rels = [fromScan, norm(path.relative(AUDIT_ROOT, fullPath))]
+    .filter(r => r !== '' && r !== '.');
+  if (!rels.length) return false;
+  const segs = fromScan.split('/');
+  return excludes.some(x => {
+    const e = x.replace(/\/+$/, '');
+    if (e.includes('/')) return rels.some(r => r === e || r.startsWith(e + '/'));
+    return segs.includes(e);
+  });
+}
+
 function getMdFiles(roots, excludes) {
   const out = new Set();
+  let scanRoot = '.';
 
   function walk(dirpath) {
-    if (excludes.some(x => dirpath.includes(x))) {
+    if (isExcluded(dirpath, scanRoot, excludes)) {
       return;
     }
     let entries;
@@ -111,7 +138,7 @@ function getMdFiles(roots, excludes) {
 
     for (const entry of entries) {
       const fullPath = path.join(dirpath, entry.name);
-      if (excludes.some(x => fullPath.includes(x))) {
+      if (isExcluded(fullPath, scanRoot, excludes)) {
         continue;
       }
 
@@ -149,6 +176,7 @@ function getMdFiles(roots, excludes) {
     }
 
     if (stat.isDirectory()) {
+      scanRoot = root;
       walk(root);
     }
   }
@@ -363,12 +391,12 @@ function checkScriptRefs(files) {
 const HELP = `doc-drift-gate.js — deterministic doc-drift gate (links + fences + script refs).
 
 Usage:
-  scripts/doc-drift-gate.js [root ...] [--repo-root <path>] [--exclude <dir-substring> ...]
+  scripts/doc-drift-gate.js [root ...] [--repo-root <path>] [--exclude <name|path-prefix> ...]
 
   root        one or more paths to scan for .md files (default: ".")
   --repo-root repository against which repo-relative scripts/... refs resolve
               (default: current working directory)
-  --exclude   add a directory-name substring to the skip list (repeatable)
+  --exclude   add a skip entry (repeatable): a bare name matches a whole path segment at any depth; an entry with "/" is a path prefix relative to the scan root or the repo root
 
 Checks:
   links        intra-repo markdown links resolve

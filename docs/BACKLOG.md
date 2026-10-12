@@ -247,7 +247,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Trigger**: Codex 提供受支援的 native plugin lifecycle：在 plugin install **與** Git marketplace upgrade/refetch 兩條適用路徑上，都能於 payload discovery 前自動執行 deterministic generator，且 generator…
 - **Effort**: L
-- **Source**: health-roadmap P6 Decision Brief（2026-07-17）；[`codex-payload-residual-spike`](projects/_archive/2026-08-02-codex-payload-residual-spike/README.md)…
+- **Source**: health-roadmap P6 Decision Brief（2026-07-17）；[`codex-payload-residual-spike`](projects/_archive/2026/08/2026-08-02-codex-payload-residual-spike/README.md)…
 - **Pointer**: docs/backlog/codex-payload-install-time-generation-2026-08-02-residual-spike-no-go.md
 - **Context**: codex-cli 0.146.0 的 logged-in `codex exec` 已實證 installed Autopilot cache payload 與 linked support reference 可被讀取，且 audit 結果正確。殘餘 probe 同時反證把 local source 當 Git refresh：generation A…
 
@@ -295,7 +295,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Trigger**: An owner-approved corrective project is opened from the 2026-08-21 P6D incident record; before that project may claim completion, all three controls must have planted negative cases that demonstrate they can block (a) unjustified heavy…
 - **Effort**: L
-- **Source**: [`2026-08-21-p6d-orchestration-incident`](projects/_archive/2026-08-21-p6d-orchestration-incident/README.md), including the quoted Fable 5 independent judgment.
+- **Source**: [`2026-08-21-p6d-orchestration-incident`](projects/_archive/2026/08/2026-08-21-p6d-orchestration-incident/README.md), including the quoted Fable 5 independent judgment.
 - **Pointer**: docs/backlog/contract-first-escalation-and-local-repair-gates-p6d-incident-follow-up.md
 - **Context**: A bounded six-file/three-command consumer task was routed through strict L5 Mission governance.
 
@@ -1017,7 +1017,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: tmp-residue KR1 runs, 2026-10-12 (each passes standalone; first also red on develop)
 - **Pointer**: none
-- **Context**: skill-onoff-generic: real ~/.autopilot changed by concurrent sessions. dispatch-hetero-wall-timeout:181 host-wide pgrep sees sibling watchdogs. pending-revocation-fold reads scripts/dispatch-contract.pre.js another suite deletes.
+- **Context**: skill-onoff-generic: real ~/.autopilot changed by concurrent sessions. dispatch-hetero-wall-timeout:181 host-wide pgrep sees sibling watchdogs. pending-revocation-fold reads the dispatch-contract.pre.js temp file that another suite deletes.
 
 ### completeness-scan: mktemp XXXXXX templates read as markers; --files with several files scans 0
 - **Status**: open

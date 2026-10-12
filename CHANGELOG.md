@@ -8387,7 +8387,7 @@ prose-justification: baseline re-seeded this release; the measured prose delta v
 
 ## v2.31.11 — quality-floor engine Phase 1: the judgment-demotion ladder
 
-**Headline**: The first ship of the **quality-floor engine** — the methodology evolution from "clone cookys, remove cookys from the loop" to "make a weak orchestrating model sustain frontier-floor output quality on long tasks". Design: [`docs/plans/2026-07-04-quality-floor-engine.md`](docs/plans/2026-07-04-quality-floor-engine.md) — a **judgment-demotion ladder** (L0 script → L1 playbook match → L2 fan-out + mechanical aggregation → L3 probe-then-branch → L4 escalate + ledger), applied at DESIGN time per lifecycle stage so the weak model never self-selects a level. The design survived a **3-disjoint-family adversarial critique** (codex gpt-5.5 · agy/Gemini · MiniMax-M3) with all 13 major claims adjudicated in the plan's §9 — including dropping the R0 "ledger trends to zero" KPI that all three families independently called a Goodhart trap.
+**Headline**: The first ship of the **quality-floor engine** — the methodology evolution from "clone cookys, remove cookys from the loop" to "make a weak orchestrating model sustain frontier-floor output quality on long tasks". Design: [`docs/plans/2026-07-04-quality-floor-engine.md`](docs/plans/_archive/2026/07/2026-07-04-quality-floor-engine.md) — a **judgment-demotion ladder** (L0 script → L1 playbook match → L2 fan-out + mechanical aggregation → L3 probe-then-branch → L4 escalate + ledger), applied at DESIGN time per lifecycle stage so the weak model never self-selects a level. The design survived a **3-disjoint-family adversarial critique** (codex gpt-5.5 · agy/Gemini · MiniMax-M3) with all 13 major claims adjudicated in the plan's §9 — including dropping the R0 "ledger trends to zero" KPI that all three families independently called a Goodhart trap.
 
 ### Added
 - **`references/probe-playbook.md`** (L1) — 8 diagnostic probes indexed by symptom, each with a **discriminating check** (expected-if-match / expected-if-NOT-match) and a real incident citation; no-match ⇒ mandatory escalation (never invent silently); growth rule feeds from escalations via learn/distill.
@@ -8747,7 +8747,7 @@ Hardening (fail-closed measurement is the point of the gate): the 30% sample is 
 
 ### Verification / validation
 - Implemented by hetero dispatch (`gpt-5.3-codex-spark` implementation path), then reviewed/verified by a decorrelated `grok` + Gemini qc-panel path.
-- Plan: [`docs/plans/2026-06-30-hetero-engine-lifecycle-methodology.md`](docs/plans/2026-06-30-hetero-engine-lifecycle-methodology.md).
+- Plan: [`docs/plans/2026-06-30-hetero-engine-lifecycle-methodology.md`](docs/plans/_archive/2026/06/2026-06-30-hetero-engine-lifecycle-methodology.md).
 
 ## v2.26.10 — cc-shim reviewer + MiniMax-M3 reviewer calibration
 
@@ -9604,7 +9604,7 @@ Deliberately a **prose sharpening of the existing stance, not a new pipeline ste
 
 ## v2.11.0 — distill cross-machine consolidate (slug-normalize + proactive merge)
 
-**Headline**: when two fleet machines distil the **same** recurring procedure, `/distill` now converges them automatically instead of stopping on a raw git conflict. A deterministic **slug normalizer** (Step 4) makes independent namings of one procedure land on a single path (`fix-git-identity`, `git-identity-fix`, `ensure-git-identity` → `git-identity`), and Step 5 does a **proactive** divergence check (`compare` against the pack's `@{u}` *before* committing the push) so the human-gated LLM merge happens in the clean working tree — **never inside a held rebase/merge transaction**. Shipped after two dialectic review rounds that cut a held-rebase design (it inverted git's `:2:`/`:3:` stages and could wedge the pack) and a per-host-staging design (it regressed Claude Code skill loading and used a self-defeating content-hash key); see [`docs/plans/2026-06-04-distill-consolidate.md`](docs/plans/2026-06-04-distill-consolidate.md).
+**Headline**: when two fleet machines distil the **same** recurring procedure, `/distill` now converges them automatically instead of stopping on a raw git conflict. A deterministic **slug normalizer** (Step 4) makes independent namings of one procedure land on a single path (`fix-git-identity`, `git-identity-fix`, `ensure-git-identity` → `git-identity`), and Step 5 does a **proactive** divergence check (`compare` against the pack's `@{u}` *before* committing the push) so the human-gated LLM merge happens in the clean working tree — **never inside a held rebase/merge transaction**. Shipped after two dialectic review rounds that cut a held-rebase design (it inverted git's `:2:`/`:3:` stages and could wedge the pack) and a per-host-staging design (it regressed Claude Code skill loading and used a self-defeating content-hash key); see [`docs/plans/2026-06-04-distill-consolidate.md`](docs/plans/_archive/2026/06/2026-06-04-distill-consolidate.md).
 
 ### Added
 - `scripts/distill-consolidate.sh` (deterministic, no LLM): `normalize-slug <raw>` (lowercase + drop a tiny stopword set + **preserve token order** — converges naming divergence while keeping antonyms like `add-user`/`remove-user` distinct), `migrate [pack]` (one-time rename of existing dirs to normalized slugs; STOPs when two dirs collide on one slug — a real consolidation case), `compare <slug> [pack]` (proactive divergence check vs `@{u}` → JSON `identical`/`divergent`/`absent-theirs`/`absent-mine`; requires a configured upstream, never guesses `origin/<branch>`).
@@ -9821,7 +9821,7 @@ Deliberately a **prose sharpening of the existing stance, not a new pipeline ste
 
 ## v2.7.4 — Post-portability follow-ups (OpenCode parity + release-hygiene + agy fact correction)
 
-**Headline**: Three follow-ups from the v2.7.3 ship's out-of-scope list, executed as a CEO-triaged project ([docs/projects/_archive/2026-05-29-post-portability-followups](docs/projects/_archive/2026-05-29-post-portability-followups/README.md)). The headline is an **empirical correction**: installing real `agy` 1.0.1 overturned both the original PM claims AND v2.7.3's "fact-version" — `agy plugin validate` and the root-`plugin.json` requirement are genuine (v2.7.3 had wrongly labelled them fabricated). Spike-before-assert cuts both ways.
+**Headline**: Three follow-ups from the v2.7.3 ship's out-of-scope list, executed as a CEO-triaged project ([docs/projects/_archive/2026-05-29-post-portability-followups](docs/projects/_archive/2026/05/2026-05-29-post-portability-followups/README.md)). The headline is an **empirical correction**: installing real `agy` 1.0.1 overturned both the original PM claims AND v2.7.3's "fact-version" — `agy plugin validate` and the root-`plugin.json` requirement are genuine (v2.7.3 had wrongly labelled them fabricated). Spike-before-assert cuts both ways.
 
 ### Added
 - **`scripts/preflight-release.sh`** — release-hygiene gate (5 checks): canonical version parseable, CHANGELOG entry present, version mirrors in sync, INDEX references the version, all INDEX project-README links resolve. Wired into `finish-flow` L-5.5. Prevents the doc-drift class that bit v2.7.3 (version bump with no CHANGELOG entry / colliding INDEX labels). Negative-tested (phantom version fails checks 2/3/4).
@@ -9934,7 +9934,7 @@ The `hooks/README.md` "v2.7.4 disable batch" section header is retained as an **
 
 ### Review Loop（L-size dogfood）
 
-3 rounds plan review（Architect / QA Devil / Ops/SRE）。r0：原 3-layer 提案 (UserPromptSubmit + count_tokens / PreCompact exit 2 / TaskList rehydrate) 全票 REJECT，Architect 替代設計 adopted。r1-r3：CONDITIONAL trajectory（major redesigns → smaller refinements）。Plan v4 absorbed all r3 critical findings inline。Pre-merge review at L-5.2 將補上 implementation 風險。詳見 [project README](docs/projects/_archive/2026-05-14-context-handoff-hardening/README.md#review-background) + [plan §1.3-§2.3](docs/plans/2026-05-14-context-handoff-hardening.md)。
+3 rounds plan review（Architect / QA Devil / Ops/SRE）。r0：原 3-layer 提案 (UserPromptSubmit + count_tokens / PreCompact exit 2 / TaskList rehydrate) 全票 REJECT，Architect 替代設計 adopted。r1-r3：CONDITIONAL trajectory（major redesigns → smaller refinements）。Plan v4 absorbed all r3 critical findings inline。Pre-merge review at L-5.2 將補上 implementation 風險。詳見 [project README](docs/projects/_archive/2026/05/2026-05-14-context-handoff-hardening/README.md#review-background) + [plan §1.3-§2.3](docs/plans/_archive/2026/05/2026-05-14-context-handoff-hardening.md)。
 
 ### Rollback
 
@@ -10049,8 +10049,8 @@ v2.0's rule-setter model (autopilot sets rules, Superpowers executes tactics) re
 
 ### Plan + project tracking
 
-- Plan: [`docs/plans/2026-05-14-superpowers-coexistence.md`](docs/plans/2026-05-14-superpowers-coexistence.md)
-- Project: [`docs/projects/_archive/2026-05-14-superpowers-coexistence/README.md`](docs/projects/_archive/2026-05-14-superpowers-coexistence/README.md)
+- Plan: [`docs/plans/2026-05-14-superpowers-coexistence.md`](docs/plans/_archive/2026/05/2026-05-14-superpowers-coexistence.md)
+- Project: [`docs/projects/_archive/2026-05-14-superpowers-coexistence/README.md`](docs/projects/_archive/2026/05/2026-05-14-superpowers-coexistence/README.md)
 - Review loop: r1 (3 parallel reviewers, approve-with-revisions) + r2 (single focused reviewer, approve-with-minor-revisions). See plan §9 for findings.
 
 ---

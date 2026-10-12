@@ -13,6 +13,3 @@ reader cannot tell the two apart from the message. Worth either cross-checking h
 before printing the pid, or saying explicitly that the pid comes from a sidecar that can outlive its
 process. Not urgent: the lock itself is flock-based and does release on death.
 
-## Format example
-
-```markdown

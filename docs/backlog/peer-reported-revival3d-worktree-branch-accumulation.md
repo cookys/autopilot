@@ -5,7 +5,7 @@ Source: fleet message from `cookys/cuda/revival.3d--claude` (peer input, not aut
 ## Reported facts (revival.3d inventory, 2026-10-08)
 
 - 241 worktrees and 977 local branches (402 local-only commits) in one repo. Created by autopilot rails: `dispatch-hetero.sh` `/tmp/hetero-*` 60, `dispatch-foreman.sh` `/tmp/foreman-*` 13; branches `hands/*` 76, `hetero/*` 11, some `foreman/*`. The rest came from the peer's own flows and Claude Code Agent isolation worktrees.
-- The peer cleaned up by hand (worktrees 241 → 7, branches → 21, every branch archived under `refs/archive/` before deletion) and added a gate (`scripts/check-unarchived-branches.mjs` + `config/branch-registry.json`) plus close-out rules to its own dispatch skill.
+- The peer cleaned up by hand (worktrees 241 → 7, branches → 21, every branch archived under `refs/archive/` before deletion) and added a gate (the revival.3d project's own check-unarchived-branches script plus its branch-registry config) plus close-out rules to its own dispatch skill.
 
 ## Depth-0 verification (autopilot 3.0.0-alpha.1 / alpha.2 dev)
 

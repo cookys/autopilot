@@ -831,7 +831,7 @@ very family — and finding the gate was itself an instance:
 
 - **A parser that dies must not be readable as valid-but-empty input.**
 
-Their `check-inputs-landed.sh` had an embedded Python heredoc with a quoting error. The
+The peer project's own check-inputs-landed script (a shell script) had an embedded Python heredoc with a quoting error. The
 interpreter raised SyntaxError, `mapfile` read zero lines, and the gate printed
 `OK: all 0 declared input(s) are contained in HEAD.` and exited 0. That `--manifest`
 path is the entire purpose of the gate, and its commit message claimed it gated phase

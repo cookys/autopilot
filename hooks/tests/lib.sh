@@ -323,6 +323,26 @@ cleanup_test_tmp() {
 }
 trap cleanup_test_tmp EXIT
 
+# make_pre_tree <dir>: build a repo-shaped tree under <dir> (inside TEST_TMP) so a pre-change
+# script `git show`n into <dir>/scripts/ resolves its __dirname-relative requires (../src,
+# ./lib/..., ../hooks) through symlinks back to REPO_ROOT. Keeps the pre file OUT of the real
+# scripts/ dir, where check-claude-md-inventory.js (readdirSync) and
+# sync-codex-plugin-skills.sh --check (diff -qr) would see it and go red for sibling suites.
+make_pre_tree() {
+  local dir="$1" e b
+  mkdir -p "$dir/scripts"
+  for e in "$REPO_ROOT"/* "$REPO_ROOT"/.[!.]*; do
+    [ -e "$e" ] || continue
+    b="$(basename "$e")"
+    case "$b" in scripts|.git) continue ;; esac
+    ln -s "$e" "$dir/$b"
+  done
+  for e in "$REPO_ROOT"/scripts/*; do
+    [ -e "$e" ] || continue
+    ln -s "$e" "$dir/scripts/$(basename "$e")"
+  done
+}
+
 # Some legacy dispatch integration tests exercise behavior after the engine-admission
 # precondition. Production now projects every disk scorecard pass as provisional, so
 # those tests use a process-local Node preload to preserve their downstream coverage.

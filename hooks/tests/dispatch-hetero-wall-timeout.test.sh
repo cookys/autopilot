@@ -174,13 +174,18 @@ assert_r1_no_stray_watchdog() {
   mkdir -p "$runs"
   install_sleep_stub "$stub"
   # Repeat a zero-sleep worker so cancel races the sleeper pidfile write.
+  # pgrep is host-wide: sibling suites / sessions run their own watchdogs. Mark this test's runs with a
+  # unique env var (inherited by the setsid'd sleeper) and only count sleepers carrying our marker.
+  local owner="wdog-owner-$$-$RANDOM" p
   for i in 1 2 3 4 5; do
-    (cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$runs" HETERO_TEST_SLEEP=0 \
+    (cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$runs" HETERO_TEST_SLEEP=0 HETERO_TEST_WDOG_OWNER="$owner" \
       "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
       --branch "feat/wdog-fast-$i" --prompt-file "$PROMPT" --timeout 60s >/dev/null 2>&1) || true
-    if pgrep -f 'hetero-wall-watchdog' >/dev/null 2>&1; then
-      fail "assert_r1_no_stray_watchdog: leftover hetero-wall-watchdog sleeper after fast run $i"
-    fi
+    for p in $(pgrep -f 'hetero-wall-watchdog' 2>/dev/null || true); do
+      if tr '\0' '\n' < "/proc/$p/environ" 2>/dev/null | grep -qx "HETERO_TEST_WDOG_OWNER=$owner"; then
+        fail "assert_r1_no_stray_watchdog: leftover hetero-wall-watchdog sleeper (pid $p) after fast run $i"
+      fi
+    done
   done
 }
 

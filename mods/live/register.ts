@@ -4,12 +4,14 @@
 // terminal and a toast on an axis change. It is read-only: no file is written outside its own $.state value,
 // no program is started, nothing is sent to the model.
 //
-//   pointer  $HOME/.autopilot/live-pointer.json            (the only path built from $.env.get("HOME"))
+//   pointer  $HOME/.autopilot/live-pointer.json
 //   project  session marker <autopilot_home>/session-mode/<sid>.json  ->  <live_base>/runs/paths/*.json longest prefix
 //   roots    the marker's root_run_id + its `campaign_roots` (the Mission roots of the campaigns the session launched; P1W SCOPE):
 //            every root of the set is read like the marker root, one band is merged from them
 //   snapshot <live_base>/runs/<project_key>[--<root>].json, else the SSD copy <autopilot_home>/review/<key>/live/runs.<scope>.json
 //   context  <live_base>/context/<sanitised sid>.json      (this sid only)
+//   account  $HOME/.claude.json `oauthAccount` (Claude Code's own file: email, org, plan; re-read only when its size or mtime changed)
+//   quota    $.session.usage().rateLimits                  (polled each tick; the `session.measure` event is not used, the tick already redraws)
 //   job page <autopilot_home>/review/<key>/<date>/<job>/current/model.json   (acceptance axis + gate rows, optional)
 //   W3a      <live_base>/tasks/<sid>.json, attention/<sid>.json              (this sid only)
 //            <live_base>/runs/<scope>.decisions.json, <scope>.foreman.json, sources/<scope>.json   (scope-checked sidecars)
@@ -41,9 +43,9 @@ import {
   acceptanceToast, autoResidueCount, makeRecentTracker, bandLine1, bandView, buildSections, checkEnvelope, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
   headerText, hhmm, projectName as projectNameOf, isKey, isSectionId, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
   readForeman, readLoadSource, readSpendHistory, hourlySpend, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
-  slotTab, slotUnfolds, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, MAX_ACTIVITY_ROWS,
+  slotTab, slotUnfolds, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, MAX_ACTIVITY_ROWS, readQuota, readAccount,
 } from './model'
-import type { ActivityItem, Counts, DecisionsView, RecentGroup, EnvelopeCheck, JobModel, Json, LiveSnapshot, Manifest, PaneTab, SlotId, Sources } from './model'
+import type { AccountView, ActivityItem, Counts, DecisionsView, RecentGroup, EnvelopeCheck, JobModel, Json, LiveSnapshot, Manifest, PaneTab, SlotId, QuotaWindow, Sources } from './model'
 
 const TICK_MS = 5000
 const PANE_ID = 'autopilot-live'
@@ -69,6 +71,10 @@ let activity: ActivityItem[] | null = null // survives ticks like `recent`: a fa
 const tails = new Map<string, { size: number; mtimeMs: number; tail: string | null }>() // a background command's last output line, re-read only when its file changed
 const MAX_TAIL_BYTES = 1024 * 1024 // a bigger output file shows its quiet time, not its last line ($.fs.read takes the whole file)
 const LIVE_AGENT = new Set(['pending', 'running', 'waiting'])
+let quota: QuotaWindow[] = [] // the rate-limit windows; a usage() that throws keeps the last ones
+let account: AccountView | null | undefined = undefined // undefined until ~/.claude.json parsed once; a half-written read keeps the last value
+let accountFile: { size: number; mtimeMs: number } | null = null // the ~/.claude.json stat the account was parsed from (Claude Code rewrites it often)
+const MAX_ACCOUNT_BYTES = 4 * 1024 * 1024 // $.fs.read's cap
 let tr: T = T_EN // the active translator, set at the start of every tick (and read by the band / pane draws)
 let pressSeq = 0 // one number per ⓘ press, taken before any await; only the latest press may assign paneTab or end the chain
 let decided: Promise<PaneTab> | null = null // the tab the latest unfinished press chose: a press landing meanwhile steps on from it (N rapid presses = N tabs)
@@ -383,7 +389,7 @@ async function buildSnapshot($: EngineInterface, nowMs: number, t: T): Promise<{
   const residue = readResidue(await readText($, liveBase + '/runs/' + scope.key + '.residue.json'), scope.key)
   const stage = readStageWalk(await readText($, liveBase + '/stage/' + fileSid + '.json'), sid)
   const review = readReview(await readText($, liveBase + '/runs/' + scope.key + '.review.json'), scope.key)
-  const src: Sources = { tasks, attention, turn, decisions, manifest, foreman, loadSource, marker, review, qc, residue, stage, startMs: startMsOf(receiptRoot, env, tasks, scope.marker === null ? null : scope.marker.started_at, receiptMs) }
+  const src: Sources = { tasks, attention, turn, decisions, manifest, foreman, loadSource, marker, review, qc, residue, stage, quota, startMs: startMsOf(receiptRoot, env, tasks, scope.marker === null ? null : scope.marker.started_at, receiptMs) }
   const ctx = ctxShown(ctxText(await readText($, liveBase + '/context/' + fileSid + '.json'), nowMs), manifest, t)
   const band = bandView(env, jobModel, scope.key, nowMs, src, t)
   return {
@@ -461,11 +467,32 @@ async function readActivity($: EngineInterface, msgs: unknown, nowMs: number, pr
   return answered ? items : null
 }
 
+// The account and its rate-limit windows. Each source fails on its own and keeps its last value.
+async function readAccountQuota($: EngineInterface): Promise<void> {
+  try {
+    const usage = await $.session.usage()
+    quota = readQuota(isObject(usage) ? usage.rateLimits : null)
+  } catch (_e) { /* no reading: keep the last windows */ }
+  try {
+    const home = await $.env.get('HOME')
+    if (!home) return
+    const path = home + '/.claude.json'
+    const st = await $.fs.stat(path).catch(() => null)
+    if (st === null || st.kind !== 'file' || st.size > MAX_ACCOUNT_BYTES) { account = undefined; accountFile = null; return } // gone or unreadable: no stale account
+    if (accountFile !== null && accountFile.size === st.size && accountFile.mtimeMs === st.mtimeMs) return
+    const next = readAccount(await readText($, path))
+    if (next === undefined) return // unreadable or caught mid-rewrite: try again next tick
+    account = next
+    accountFile = { size: st.size, mtimeMs: st.mtimeMs }
+  } catch (_e) { /* a failed read: keep the last account */ }
+}
+
 async function refresh($: EngineInterface): Promise<void> {
   try {
     const nowMs = await $.clock.now()
     tr = await resolveT($)
     await pollAdvisories($, nowMs)
+    await readAccountQuota($)
     const built = await buildSnapshot($, nowMs, tr)
     let msgs: unknown = null
     try {
@@ -483,7 +510,7 @@ async function refresh($: EngineInterface): Promise<void> {
     } catch (_e) {
       // garnish too: keep the previous rows
     }
-    snapshot = { ...built.snap, recent, activity }
+    snapshot = { ...built.snap, recent, activity, account: { account, quota } }
     $.ui.invalidate('ui.render')
     // toasts: only between two fresh snapshots of the same scope
     if (built.snap.state === 'ok') {

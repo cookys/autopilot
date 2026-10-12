@@ -63,8 +63,8 @@
 // in-memory tree; a missing file makes the bottom hook throw, which the mod sees as a rejected read.
 import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
-import { readQc, qcChip, readReview, reviewSlot, displayWidth, truncateToWidth, layoutBand, readMarker, readResidue, readStageWalk, bandSlots, slotUnit, slotPosition, slotDispatch, slotDecisions, slotSpend, slotHygiene, slotReview, readLoadSource, PANE_TABS, verdictOf, reviewTabLines, wrapLines, legendLines, bandView, hygieneTabLines, dispatchLines, spendTabLines, readSpendHistory, hourlySpend, sparkText, SPARK_BARS, INJECTED_PREFIXES, RECENT_EXPANDED_LINES, collapsedPrompt, groupRecent, makeRecentTracker, recentLines, redactSecrets, scanBackground, lastOutputLine, activityLines, MAX_ACTIVITY_ROWS } from './model'
-import type { ActivityItem, SessionMsg } from './model'
+import { readQc, qcChip, readReview, reviewSlot, displayWidth, truncateToWidth, layoutBand, readMarker, readResidue, readStageWalk, bandSlots, slotUnit, slotPosition, slotDispatch, slotDecisions, slotSpend, slotHygiene, slotReview, readLoadSource, PANE_TABS, verdictOf, reviewTabLines, wrapLines, legendLines, bandView, hygieneTabLines, dispatchLines, spendTabLines, readSpendHistory, hourlySpend, sparkText, SPARK_BARS, INJECTED_PREFIXES, RECENT_EXPANDED_LINES, collapsedPrompt, groupRecent, makeRecentTracker, recentLines, redactSecrets, scanBackground, lastOutputLine, activityLines, MAX_ACTIVITY_ROWS, readQuota, readAccount, slotQuota, accountLines, slotTab, slotUnfolds, SECTION } from './model'
+import type { ActivityItem, SessionMsg, QuotaWindow, AccountSnap } from './model'
 import { makeT, resolveLocale, localeFromLanguage } from './i18n'
 import { EN, ZH_TW } from './locales'
 import type { Slot } from './model'
@@ -3817,3 +3817,201 @@ test('activity: an output file over 1 MiB shows no tail; an unread transcript ke
   expect(b).not.toContain(t('bg.quiet', { age: '5s' })) // a kept row's age would freeze: it shows none
   expect(b.split('審查 ***').length - 1).toBe(1) // the agent row is replaced, not kept beside the new one
 })
+
+// ---- account and quota: the logged-in Claude account (~/.claude.json oauthAccount) and the rate-limit windows ($.session.usage) ----
+const RESET_5H = '2026-10-04T12:30:30.000Z' // NOW_FRESH + 2h30m
+const USAGE = { startedAt: '2026-10-04T09:00:00.000Z', context: null, rateLimits: [{ kind: 'seven_day', percentUsed: 18.4 }, { kind: 'five_hour', percentUsed: 42, resetsAt: RESET_5H }] }
+const CLAUDE_JSON = JSON.stringify({
+  numStartups: 12, projects: { '/work/repo': { allowedTools: [] } },
+  oauthAccount: {
+    accountUuid: 'u-1', emailAddress: 'owner@example.com', organizationUuid: 'o-1', displayName: 'Owner', organizationName: 'Example Co',
+    organizationRole: 'admin', organizationType: 'claude_max', organizationRateLimitTier: 'default_claude_max_20x', hasExtraUsageEnabled: true, billingType: 'stripe_subscription',
+  },
+})
+const quotaSlots = (q: QuotaWindow[] | null) => bandSlots({
+  verdict: { mark: '●', word: '進行中', key: 'suggestion' }, marker: null, live: 1, stalled: 0, review: null, qc: null, decisions: null, spend: null,
+  loadSource: null, residue: readResidue(JSON.stringify({ schema: 'autopilot.residue/1', project_key: KEY, reapable_worktrees: 0, by_class: {}, needs_human_count: 2 }), KEY), quota: q, nowMs: 0,
+})
+const win = (kind: string, pct: number): QuotaWindow => ({ kind, pct, resetsAtMs: null })
+
+test('quota: readQuota keeps well-formed windows in 5h / 7d / spend order and parses the reset time', () => {
+  expect(readQuota(USAGE.rateLimits)).toEqual([{ kind: 'five_hour', pct: 42, resetsAtMs: Date.parse(RESET_5H) }, { kind: 'seven_day', pct: 18.4, resetsAtMs: null }])
+  expect(readQuota([{ kind: 'spend_limit', percentUsed: 130 }, { kind: 'x', percentUsed: 'a' }, null, { percentUsed: 3 }, { kind: 'five_hour', percentUsed: NaN }, { kind: 'seven_day', percentUsed: -2, resetsAt: 'soon' }]))
+    .toEqual([{ kind: 'seven_day', pct: 0, resetsAtMs: null }, { kind: 'spend_limit', pct: 130, resetsAtMs: null }])
+  expect(readQuota(undefined)).toEqual([])
+  expect(readQuota({ kind: 'five_hour' })).toEqual([])
+})
+
+test('account: readAccount takes the oauthAccount fields, the email whole; no oauthAccount is null, an unread or half-written file is undefined', () => {
+  expect(readAccount(CLAUDE_JSON)).toEqual({ email: 'owner@example.com', name: 'Owner', org: 'Example Co', role: 'admin', plan: 'claude max · 20x', extraUsage: true })
+  expect(readAccount(JSON.stringify({ numStartups: 1 }))).toBe(null) // an API-key login
+  expect(readAccount(JSON.stringify({ oauthAccount: { displayName: 'x' } }))).toBe(null) // no email and no account id: no account
+  expect(readAccount(CLAUDE_JSON.slice(0, 80))).toBe(undefined)
+  expect(readAccount(null)).toBe(undefined)
+  expect(readAccount(JSON.stringify({ oauthAccount: { emailAddress: 'a@b.c', displayName: 'two\nlines', organizationType: 'claude_pro' } })))
+    .toEqual({ email: 'a@b.c', name: 'two lines', org: null, role: null, plan: 'claude pro', extraUsage: false })
+})
+
+test('quota slot: absent without windows; both windows from 120 columns, the most used one below 120, none below 80', () => {
+  expect(slotQuota([])).toBe(null)
+  expect(slotQuota(null)).toBe(null)
+  expect(slotQuota([win('weekly_opus', 50)])).toBe(null) // an unknown kind has no short label: the Now tab lists it, the band does not
+  expect(layoutBand(quotaSlots([]), 209).text).toBe(layoutBand(quotaSlots(null), 209).text)
+  const q = [win('five_hour', 10), win('seven_day', 85)]
+  expect(layoutBand(quotaSlots(q), 209).text).toBe('● 進行中 │ ⚙1 │ 5h 10% 7d 85% │ ⚑2 │ ⓘ ')
+  expect(layoutBand(quotaSlots(q), 159).text).toBe('● 進行中 │ ⚙1 │ 5h 10% 7d 85% │ ⚑2 │ ⓘ ')
+  expect(layoutBand(quotaSlots(q), 119).text).toBe('● 進行中 │ ⚙1 │ 7d 85% │ ⚑2 │ ⓘ ')
+  expect(layoutBand(quotaSlots(q), 79).text).toBe('● 進行中 │ ⚙1 │ ⚑2 │ ⓘ ')
+  expect(slotTab('quota')).toBe('now')
+  expect(slotUnfolds('quota')).toBe(SECTION.account)
+})
+
+test('quota slot: a band still too long drops the quota windows before the ⏸ / ⚙ counts; the spend window is `cap`, never `$`', () => {
+  const slots = (word: string) => bandSlots({
+    verdict: { mark: '●', word, key: 'suggestion' }, marker: null, live: 12, stalled: 3, review: null, qc: null, decisions: null, spend: null,
+    loadSource: null, residue: null, quota: [win('five_hour', 10), win('seven_day', 85)], nowMs: 0,
+  })
+  const fits = layoutBand(slots('w'.repeat(60)), 100).text
+  expect(fits).toContain('⚙12 ⏸3 │ 7d 85% │ ⓘ ')
+  const tight = layoutBand(slots('w'.repeat(76)), 100).text // 102 cells: one step over; dropping ⏸3 alone would fit (99), so the old order kept the quota
+  expect(tight).toContain('⚙12 ⏸3 │ ⓘ ')
+  expect(tight).not.toContain('85%')
+  expect(displayWidth(tight)).toBeLessThanOrEqual(100)
+  expect((slotQuota([win('spend_limit', 30)]) as Slot).segs.map(g => g.text).join('')).toBe('cap 30%')
+  // the quota goes before the stage text is cut
+  const staged = (q: QuotaWindow[] | null) => bandSlots({
+    verdict: { mark: '●', word: '進行中', key: 'suggestion' }, marker: readMarker({ size: 'M', level: 'l5', stage: 'implement-' + 'x'.repeat(100), stage_set_at: '2026-10-04T09:57:30.000Z' }),
+    live: 1, stalled: 0, review: null, qc: null, decisions: null, spend: null, loadSource: null, residue: null, quota: q, nowMs: Date.parse('2026-10-04T10:00:30.000Z'),
+  })
+  expect(layoutBand(staged([win('five_hour', 10)]), 125).text).toBe(layoutBand(staged(null), 125).text)
+  expect(layoutBand(staged([win('five_hour', 10)]), 209).text).toContain(' │ 5h 10% │ ')
+})
+
+test('quota slot: a window is plain below 80 %, warning from 80 %, error from 100 %; the label stays dim', () => {
+  const colorOf = (pct: number) => (slotQuota([win('five_hour', pct)]) as Slot).segs.find(s => s.text.endsWith('%'))?.color
+  expect([colorOf(79.9), colorOf(80), colorOf(99.9), colorOf(100), colorOf(130)]).toEqual([undefined, 'warning', 'warning', 'error', 'error'])
+  expect((slotQuota([win('five_hour', 42)]) as Slot).segs[0]).toMatchObject({ text: '5h ', dim: true })
+})
+
+for (const locale of ['en', 'zh-TW'] as const) {
+  for (const cols of [48, 120]) {
+    test('account: the Now section lists account, organization, plan and each window, every wrapped row fits (' + locale + ', ' + cols + ' columns)', () => {
+      const t = makeT(locale)
+      const snap: AccountSnap = { account: readAccount(CLAUDE_JSON), quota: readQuota([...USAGE.rateLimits, { kind: 'spend_limit', percentUsed: 104 }]) }
+      const lines = accountLines(snap, NOW_FRESH, { t, cols })
+      const text = lines.map(l => l.text).join('\n')
+      expect(lines[0].text).toContain(t('now.account'))
+      expect(text).toContain('owner@example.com (Owner)')
+      expect(text).toContain('Example Co · admin')
+      expect(text).toContain('claude max · 20x · ' + t('account.extra_on'))
+      expect(text).toContain(t('label.quota_5h'))
+      expect(text).toContain('42%  ' + t('quota.resets', { in: '2h30m' }))
+      expect(text).toContain(t('label.quota_7d'))
+      expect(text).toContain('104%')
+      for (const l of wrapLines(lines, cols)) expect(displayWidth(l.text), l.text).toBeLessThanOrEqual(cols)
+    })
+  }
+}
+
+test('account: an API-key login is one dim line; nothing read and no windows is no section; folded shows the heading alone', () => {
+  const t = makeT('zh-TW')
+  const none = accountLines({ account: null, quota: [] }, NOW_FRESH, { t, cols: 120 })
+  expect(none.length).toBe(2)
+  expect(none[1].text.trim()).toBe(t('account.none'))
+  expect(accountLines({ account: undefined, quota: [] }, NOW_FRESH, { t, cols: 120 })).toEqual([])
+  expect(accountLines(undefined, NOW_FRESH, { t, cols: 120 })).toEqual([])
+  // windows without a readable file still show; a reset time already past or an unknown clock shows none
+  const resets = t('quota.resets', { in: 'X' }).replace('X', '').trim()
+  const past = accountLines({ account: undefined, quota: [{ kind: 'five_hour', pct: 5, resetsAtMs: NOW_FRESH - 1 }] }, NOW_FRESH, { t, cols: 120 })
+  expect(past.length).toBe(2)
+  expect(past[1].text).not.toContain(resets)
+  const noClock = accountLines({ account: undefined, quota: [{ kind: 'five_hour', pct: 5, resetsAtMs: NOW_FRESH + 60000 }] }, null, { t, cols: 120 })
+  expect(noClock[1].text).not.toContain(resets)
+  expect(accountLines({ account: null, quota: [] }, NOW_FRESH, { t, cols: 120, folded: new Set([SECTION.account]) }).length).toBe(1)
+})
+
+for (const surface of SURFACES) {
+  test('account: the band shows the windows and the Now tab the account; ~/.claude.json is read again only when it changed; pressing the slot opens Now (' + surface + ')', async ($, on) => {
+    const t = makeT('zh-TW')
+    const PATH = HOME + '/.claude.json'
+    let usage: unknown = USAGE
+    const w = world(on, { ...base(), [PATH]: CLAUDE_JSON })
+    w.stats[PATH] = { size: CLAUDE_JSON.length, mtimeMs: NOW_FRESH - 60000 }
+    on('session.usage', () => {
+      if (usage === null) throw new Error('no reading')
+      return { value: usage }
+    })
+    await start($, surface)
+    expect((await bandLine($, surface, 120)).text).toContain('5h 42% 7d 18%')
+    const narrow = (await bandLine($, surface, 100)).text
+    expect(narrow).toContain('5h 42%')
+    expect(narrow).not.toContain('7d')
+    const body = async () => (await paneParts($, surface, 'now')).texts.join('\n')
+    let b = await body()
+    expect(b).toContain(t('now.account'))
+    expect(b).toContain('owner@example.com (Owner)')
+    expect(b).toContain('Example Co · admin')
+    const reads = () => w.reads.filter(p => p === PATH).length
+    const before = reads()
+    expect(before).toBe(1)
+    // unchanged size and mtime: not read again; a usage() that throws keeps the last windows
+    usage = null
+    await w.clock.advance(5000)
+    expect(reads()).toBe(before)
+    expect((await bandLine($, surface, 120)).text).toContain('5h 42% 7d 18%')
+    // Claude Code rewrote the file mid-tick (half a JSON): read, ignored, the account stays; the finished write is read and shown
+    w.files[PATH] = CLAUDE_JSON.slice(0, 50)
+    w.stats[PATH] = { size: 50, mtimeMs: NOW_FRESH }
+    await w.clock.advance(5000)
+    expect(reads()).toBe(before + 1)
+    expect(await body()).toContain('owner@example.com')
+    await w.clock.advance(5000) // the same half-written stat: not cached, read again
+    expect(reads()).toBe(before + 2)
+    const other = CLAUDE_JSON.replace('owner@example.com', 'second@example.com')
+    w.files[PATH] = other
+    w.stats[PATH] = { size: other.length, mtimeMs: NOW_FRESH + 1 }
+    usage = { ...USAGE, rateLimits: [{ kind: 'five_hour', percentUsed: 91 }] }
+    await w.clock.advance(5000)
+    b = await body()
+    expect(b).toContain('second@example.com')
+    expect((await bandLine($, surface, 120)).text).toContain('5h 91%')
+    // fold the Account section, then press the slot: the Now tab opens with the section unfolded
+    const mountPane = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+    const rowsNow = async () => { const p = await mountPane(); const r = rowsOf((await p.drawn()) as Node); await p.unmount(); return r }
+    const at = (await rowsNow()).findIndex(r => r.startsWith('▾ ' + t('now.account')))
+    expect(at).toBeGreaterThan(0)
+    const fold = await mountPane()
+    await fold.press({ key: 'b' + at })
+    await fold.unmount()
+    expect((await rowsNow())[at].startsWith('▸ ' + t('now.account'))).toBe(true)
+    expect((await rowsNow()).join('\n')).not.toContain('second@example.com')
+    const elsewhere = await mountPane()
+    await elsewhere.press({ key: 'spend' })
+    await elsewhere.unmount()
+    const band = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: 209 }, viewport: { columns: 209, rows: 50, isFullscreen: true } })
+    await band.press({ key: 'quota' })
+    await band.unmount()
+    const pane = await mountPane()
+    const active = ((await pane.findAll({ type: 'Button' })) as Drawn[]).find(x => isActiveTab(x))?.props?.key
+    await pane.unmount()
+    expect(active).toBe('now')
+    expect((await rowsNow()).join('\n')).toContain('second@example.com')
+    // the file is gone (logged out, another HOME): the account leaves, the windows stay
+    delete w.files[PATH]
+    delete w.stats[PATH]
+    await w.clock.advance(5000)
+    b = await body()
+    expect(b).not.toContain('second@example.com')
+    expect(b).toContain(t('label.quota_5h'))
+    // back, then grown over $.fs.read's 4 MiB cap: not read, and no stale account either
+    w.files[PATH] = other
+    w.stats[PATH] = { size: other.length, mtimeMs: NOW_FRESH + 2 }
+    await w.clock.advance(5000)
+    expect(await body()).toContain('second@example.com')
+    w.stats[PATH] = { size: 5 * 1024 * 1024, mtimeMs: NOW_FRESH + 3 }
+    const capped = reads()
+    await w.clock.advance(5000)
+    expect(reads()).toBe(capped)
+    expect(await body()).not.toContain('@example.com')
+  })
+}

@@ -106,7 +106,7 @@ function usage() {
     --repo-root <repo> --plan-file <plan> --rubric-file <rubric> \\
     --ticket <id> --session-id <id> --generation <1|2> \\
     --manifest-file <manifest.json> [--disposition-file <decisions.json>] \\
-    [--context-file <repo-source-file>]... [--state-dir <dir>] [--now <ISO-8601>] \
+    [--context-file <repo-source-file>]... [--state-dir <dir>] [--now <ISO-8601>] \\
     [--allow-unregistered]
 
 --allow-unregistered: skip the plan_unregistered refusal (the plan must have a
@@ -114,7 +114,7 @@ function usage() {
   allowed with no flag needed when the repo has no docs/projects/INDEX.md at all.
 
 --context-file: optional, repeatable. Hands seats read-only repo source files so claims about
-  code can be checked (default stays cleanroom: plan + rubric text only). Files must live inside
+  code can be checked (default for non-codex seats: plan + rubric text only; codex seats can already read the repo tree). Files must live inside
   --repo-root, use an allowlisted source extension, and stay within 12 files / 64 KB each /
   256 KB total. Evidence, review-output, disposition and plan/rubric paths are refused (blind
   dispatch). The file list and hashes are sealed with the session: generation 2 must pass the
@@ -1047,6 +1047,13 @@ function dispatchSeat(
     }
     const descriptor = typeof seam === 'string' ? { file: seam } : seam;
     if (descriptor.delay_ms !== undefined) sleepMilliseconds(descriptor.delay_ms);
+    if (process.env.AUTOPILOT_PLAN_REVIEW_PROMPT_DUMP_DIR) {
+      // Test seam only (gated above): lets a test assert what the seat prompt actually contains.
+      fs.writeFileSync(
+        path.join(process.env.AUTOPILOT_PLAN_REVIEW_PROMPT_DUMP_DIR, `${target.id}-${attempt}.prompt.txt`),
+        prompt,
+      );
+    }
     const rawPath = canonicalFile(descriptor.file, 'response seam');
     const raw = fs.readFileSync(rawPath);
     const classification = descriptor.classification || 'success';
@@ -1685,13 +1692,15 @@ function main() {
       } else {
         state = loadState(statePath);
       }
+      if ((state.context_sha256 || null) !== contextSha) {
+        throw new CliError('frozen context drifted: --context-file set differs from the sealed session', 3);
+      }
       if (state.repo_identity !== repoIdentity
           || state.session_key !== sessionKey
           || state.ticket !== opts.ticket
           || state.logical_plan_id !== manifest.logical_plan_id
           || state.rubric_sha256 !== rubricSha
           || state.manifest_sha256 !== manifestSha
-          || (state.context_sha256 || null) !== contextSha
           || !Number.isSafeInteger(state.baseline_plan_bytes)
           || state.baseline_plan_bytes < 1) {
         throw new CliError('durable identity or frozen rubric/manifest drifted', 3);

@@ -16,8 +16,23 @@ const ALLOWED_EXTENSIONS = new Set([
   '.js', '.cjs', '.mjs', '.ts', '.tsx', '.jsx', '.json', '.sh', '.py', '.rs', '.go',
   '.md', '.toml', '.yaml', '.yml', '.css', '.html', '.txt',
 ]);
-const DENIED_DIRS = /(^|\/)(docs\/plans\/evidence|docs\/backlog|\.git|\.claude|node_modules)(\/|$)/;
-const DENIED_NAMES = /(disposition|decisions|findings|verdict|adjudicat|review[-_.]?(output|digest|result|receipt|round|loop)|qc[-_.]?(panel|verdict)|plan-review)/i;
+// Directories: evidence trees (live and archived, any depth under docs/plans), the backlog, VCS /
+// tooling state. Case-insensitive so docs/BACKLOG.md and docs/backlog/ both match.
+const DENIED_DIRS = new RegExp(
+  '(^|/)(docs/plans/(.*/)?evidence|docs/backlog|docs/BACKLOG\\.md|\\.git|\\.claude|node_modules'
+  + '|review-output)(/|$)', 'i');
+// Basenames: review artifacts only (round outputs, dispositions, findings, verdicts, receipts).
+// Source files that merely mention review/findings in their name (adjudicate-findings.js,
+// lib/plan-review-findings.js) stay usable.
+const DENIED_NAMES = [
+  /-out(\.[^/]*)?\.json$/i,                                  // plan-out.json, g1-out.json
+  /^g\d+-(dispositions?|artifact|receipt|envelope|stderr|stdout|out)\b/i,
+  /^(dispositions?|decisions|findings|verdicts?|adjudication)([-_.][^/]*)?\.(json|txt|log|md)$/i,
+  /-(dispositions?|findings|verdicts?)\.(json|txt|log|md)$/i,
+  /^review-[a-z0-9]+-r\d+/i,                                 // review-codex-r2.json
+  /\.review\.json$/i,
+  /\.as-reviewed-/i,
+];
 
 class ContextError extends Error {
   constructor(message) {
@@ -64,7 +79,7 @@ function loadContextFiles(rawPaths, { repoRoot, excluded = [] }) {
       throw new ContextError(`--context-file must be inside --repo-root: ${raw}`);
     }
     const rel = path.relative(root, real).split(path.sep).join('/');
-    if (DENIED_DIRS.test(rel) || DENIED_NAMES.test(rel)) {
+    if (DENIED_DIRS.test(rel) || DENIED_NAMES.some((re) => re.test(path.posix.basename(rel)))) {
       throw new ContextError(`--context-file path is not allowed as blind context: ${rel}`);
     }
     if (excludedReal.has(real)) {

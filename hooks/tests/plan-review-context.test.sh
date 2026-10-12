@@ -16,6 +16,15 @@ printf 'module.exports = 1;\n' >"$REPO/src/a.js"
 printf 'module.exports = 2;\n' >"$REPO/src/b.js"
 printf 'verdict: STOP\n' >"$REPO/docs/plans/evidence/x/round1.md"
 printf '{}\n' >"$REPO/decisions.json"
+mkdir -p "$REPO/docs/plans/_archive/2026/09/evidence/m" "$REPO/scripts/lib" "$TEST_TMP/dump"
+printf '{}\n' >"$REPO/docs/plans/_archive/2026/09/evidence/m/notes.json"
+printf '# backlog\n' >"$REPO/docs/BACKLOG.md"
+printf '{}\n' >"$REPO/src/g1-out.json"
+printf '{}\n' >"$REPO/src/g1-dispositions.json"
+printf '{}\n' >"$REPO/src/review-codex-r2.json"
+printf 'module.exports = "adj";\n' >"$REPO/scripts/adjudicate-findings.js"
+printf 'module.exports = "pf";\n' >"$REPO/scripts/lib/plan-review-findings.js"
+printf 'module.exports = "d";\n' >"$REPO/scripts/dispatch-plan-review.js"
 printf 'x\n' >"$REPO/src/a.bin"
 printf 'secret\n' >"$TEST_TMP/outside.js"
 ln -s "$TEST_TMP/outside.js" "$REPO/src/link.js"
@@ -41,7 +50,7 @@ run_ctx() {
   AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS=1 \
   AUTOPILOT_PLAN_REVIEW_RESPONSE_SEQUENCE="{\"architect\":[\"$FIXTURES/ready.json\"]}" \
     node "$SCRIPT" --repo-root "$REPO" --plan-file "$REPO/plan.md" --rubric-file "$REPO/rubric.md" \
-      --ticket "$ticket" --session-id "s-$ticket" --generation 1 --manifest-file "$MANIFEST" \
+      --ticket "$ticket" --session-id "s-$ticket" --generation 1 --manifest-file "${USE_MANIFEST:-$MANIFEST}" \
       --state-dir "$STATE_DIR" --allow-unregistered "$@" 2>&1
 }
 
@@ -55,6 +64,11 @@ refused() { # name expected-substring args...
 
 refused evidence "not allowed as blind context" --context-file docs/plans/evidence/x/round1.md
 refused disposition "not allowed as blind context" --context-file decisions.json
+refused archive "not allowed as blind context" --context-file docs/plans/_archive/2026/09/evidence/m/notes.json
+refused backlog "not allowed as blind context" --context-file docs/BACKLOG.md
+refused outjson "not allowed as blind context" --context-file src/g1-out.json
+refused gdisp "not allowed as blind context" --context-file src/g1-dispositions.json
+refused reviewr "not allowed as blind context" --context-file src/review-codex-r2.json
 refused plan "cannot be a plan/rubric" --context-file plan.md
 refused rubric "cannot be a plan/rubric" --context-file rubric.md
 refused ext "extension is not allowlisted" --context-file src/a.bin
@@ -68,14 +82,24 @@ cp "$REPO/src/m1.js" "$REPO/src/m5.js"; echo y >>"$REPO/src/m5.js"
 refused total "total exceeds" --context-file src/m1.js --context-file src/m2.js --context-file src/m3.js --context-file src/m4.js --context-file src/m5.js
 
 # Accepted run seals the context; the same set may be re-presented, a different or absent set may not.
-OUT="$(run_ctx ok --context-file src/a.js)"; RC=$?
-assert_exit_code "$RC" "0" "context run succeeds: $OUT"
+OUT="$(AUTOPILOT_PLAN_REVIEW_PROMPT_DUMP_DIR="$TEST_TMP/dump" run_ctx ok --context-file src/a.js --context-file scripts/adjudicate-findings.js --context-file scripts/lib/plan-review-findings.js --context-file scripts/dispatch-plan-review.js)"; RC=$?
+assert_exit_code "$RC" "0" "context run succeeds (review-related source files are usable): $OUT"
+PROMPT="$(cat "$TEST_TMP/dump/architect-1.prompt.txt")"
+assert_contains "$PROMPT" "<SOURCE_CONTEXT_" "seat prompt carries the context block"
+assert_contains "$PROMPT" "module.exports = 1;" "seat prompt carries file text"
+assert_contains "$PROMPT" 'path="scripts/adjudicate-findings.js"' "seat prompt lists adjudicate-findings.js"
 SKEY="$(ls "$STATE_DIR" | grep -v '\.' | head -1)"
 SDIR="$(dirname "$(find "$STATE_DIR" -name context-seal.json | head -1)")"
 assert_file_exists "$SDIR/context-seal.json" "context seal written"
 assert_contains "$(cat "$SDIR/state.json")" "context_sha256" "state records context hash"
 assert_contains "$(cat "$SDIR/context.json")" "src/a.js" "context manifest lists the file"
 
+sed 's/ctx-plan/ctx-late/' "$MANIFEST" >"$TEST_TMP/late.json"
+OUT="$(USE_MANIFEST="$TEST_TMP/late.json" run_ctx late)"; RC=$?
+assert_exit_code "$RC" "0" "late: gen1 without context ok: $OUT"
+OUT="$(USE_MANIFEST="$TEST_TMP/late.json" run_ctx late --context-file src/b.js)"; RC=$?
+assert_exit_code "$RC" "3" "context added later refused"
+assert_contains "$OUT" "frozen context drifted" "added-later message names context, not rubric/manifest"
 OUT="$(run_ctx ok --context-file src/b.js)"; RC=$?
 assert_exit_code "$RC" "3" "different context refused"
 assert_contains "$OUT" "drifted" "different context message"

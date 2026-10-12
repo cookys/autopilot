@@ -238,7 +238,7 @@ node scripts/validate-hook-multiplexer-benchmark.js .autopilot/evidence/hook-mul
 
 **Backlog entry**: A13.
 
-**Owner design**: [`2026-07-09-verify-strength-precursors.md`](_archive/2026/07/2026-07-09-verify-strength-precursors.md)
+**Owner design**: [`2026-07-09-verify-strength-precursors.md`](2026-07-09-verify-strength-precursors.md)
 Segments 2 and 3. Do not duplicate Segment 1, which is already shipped.
 
 **Implementation**

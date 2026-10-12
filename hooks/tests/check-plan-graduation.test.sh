@@ -530,6 +530,26 @@ assert_eq "$r" "same" "a mission-sources-sealed plan is byte-identical after --f
 assert_contains "$out" '"plan_reference_frozen"' "the frozen skip is reported (report-only)"
 assert_contains "$out" 'docs/plans/2026-02-02-sealed.md' "the report names the frozen file"
 
+# --- Frozen assets (mission graphs, BL-0130): an execution graph carrying graph_digest keeps its
+#     bytes even when it names the graduating plan, and is REPORTED as plan_reference_frozen. A graph
+#     with no graph_digest is not sealed and is still rewritten (control: the skip is discriminating,
+#     not "never rewrite json"). 6559da33 drifted such graphs; the old frozen list omitted them. ---
+d="$(fixture_repo rewrite-skips-graph-sealed)"
+printf '# Plan\n' > "$d/docs/plans/2026-01-01-widget.md"
+printf '{"graph_digest":"%064d","note":"docs/plans/2026-01-01-widget.md"}\n' 7 > "$d/docs/mission-x-execution-graph.json"
+printf '{"note":"docs/plans/2026-01-01-widget.md"}\n' > "$d/docs/mission-y-execution-graph.json"
+printf '# Changelog\n\n## v1.2.3 - ships widget\n\n- landed. See docs/plans/2026-01-01-widget.md.\n' > "$d/CHANGELOG.md"
+cp "$d/docs/mission-x-execution-graph.json" "$TEST_TMP/graph-sealed.before"
+git -C "$d" add -A >/dev/null
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+out="$(node "$GATE" --repo-root "$d" --fix --json)"
+assert_contains "$(cat "$d/docs/mission-y-execution-graph.json")" \
+  "docs/plans/_archive/2026/01/2026-01-01-widget.md" \
+  "control (graph case): a graph WITHOUT graph_digest IS rewritten"
+if cmp -s "$d/docs/mission-x-execution-graph.json" "$TEST_TMP/graph-sealed.before"; then r=same; else r=changed; fi
+assert_eq "$r" "same" "a graph_digest-sealed execution graph is byte-identical after --fix"
+assert_contains "$out" '"plan_reference_frozen","path":"docs/mission-x-execution-graph.json"' "the report names the frozen graph"
+
 # --- 🟡 fix (delta review): --fix must ALSO rewrite docs/plans/evidence/<stem> references,
 #     not just docs/plans/<stem> ones — planPathPrefixRegExp alone never matches the
 #     evidence shape, so a link INTO a moved evidence dir used to go stale. ---

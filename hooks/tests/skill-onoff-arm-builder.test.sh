@@ -127,8 +127,14 @@ if FGA change --extra references/extra.md >/dev/null 2>&1; then fail "re-freeze 
 FGA change --extra references/extra.md --suffix v2 >/dev/null || fail "suffix freeze"
 [ -d "$PK/beta-sg-change-v2" ] && [ "$(sha "$PK/beta-sg-change/SKILL.md")" = "$(dig beta-sg-change SKILL.md)" ] || fail "suffix must add new ids and keep old"
 if FGA change --extra references/extra.md --suffix v2 >/dev/null 2>&1; then fail "dup suffix"; fi
+# the base arm is frozen once written: a suffixed change freeze (and explicit `base` runs) must leave base.json
+# bytes AND mtime alone -- it used to be rewritten with the v2 extra-base id lookup, dropping the extras pack
+[ "$(pj files < "$ARMS/base.json")" = '["guidance-files-sg-base","guidance-files-sg-extra-base"]' ] || fail "suffixed freeze rewrote base.json: $(cat "$ARMS/base.json")"
+b_sha=$(sha "$ARMS/base.json"); b_mt=$(stat -c %.9Y "$ARMS/base.json")
+sleep 1
+FGA base >/dev/null; FGA base --suffix v9 >/dev/null
+[ "$(sha "$ARMS/base.json")" = "$b_sha" ] && [ "$(stat -c %.9Y "$ARMS/base.json")" = "$b_mt" ] || fail "repeated base runs must not touch base.json (bytes or mtime)"
 # restore the canonical (unsuffixed) change arm manifest for the next sections
-FGA base >/dev/null
 node - "$ARMS/change.json" <<'NODE'
 const fs = require('fs'); const f = process.argv[2];
 const j = JSON.parse(fs.readFileSync(f, 'utf8'));

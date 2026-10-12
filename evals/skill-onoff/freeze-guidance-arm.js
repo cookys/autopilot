@@ -5,7 +5,7 @@
 // arm manifest the harness installs (`run-skill-onoff-eval.sh --arm-manifest`, shape documented there).
 //
 //   freeze-guidance-arm.js base   [--suffix s] [--fixture-pack id,..]
-//       Write arms/stage-graph/base.json from the already-frozen `<skill>-sg-base` + `guidance-files-sg-base`
+//       Write arms/stage-graph/base.json (only when absent — an existing base arm is never touched) from the already-frozen `<skill>-sg-base` + `guidance-files-sg-base`
 //       packs (+ `guidance-files-sg-extra-base[-s]` when it exists). Freezes nothing.
 //   freeze-guidance-arm.js change [--extra p1,p2,..] [--suffix s] [--repo dir] [--allow-unlisted] [--fixture-pack ..]
 //       Freeze the CHANGE arm from the CURRENT working tree of --repo (default: this repo) for exactly the
@@ -127,6 +127,11 @@ const gitHead = () => { try { return cp.execFileSync('git', ['-C', repo, 'rev-pa
 
 // ───────────────────────────── base ─────────────────────────────
 function armBase() {
+  // The base arm is frozen once written: an existing base.json is never rewritten (not even byte-identically, so
+  // its mtime stays put). Rebuilding it would drop extras frozen under an older suffix (armBase only looks up the
+  // CURRENT suffix's extra-base id) — delete base.json by hand to rebuild on purpose.
+  const existing = path.join(armsDir, 'base.json');
+  if (fs.existsSync(existing)) return existing;
   const man = readManifest();
   const skills = {};
   for (const s of G.skills) { if (!man.packs[ID.skillBase(s)]) die(`base pack missing: ${ID.skillBase(s)}`); skills[s] = ID.skillBase(s); }

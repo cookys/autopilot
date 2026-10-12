@@ -1,0 +1,12 @@
+{
+  "runner": "qoderclicn",
+  "model": "Qwen3.8-Max-Preview",
+  "status": "reviewed",
+  "verdict": "SHIP-AS-IS",
+  "findings": "none",
+  "no_finding_proof": "checked=resolver (scripts/resolve-repo-placement.js), three rail scripts (dispatch-hetero.sh, dispatch-foreman.sh, dispatch-batch.sh), marker follow (session-mode.js followRepoRoot, stage-advance.js sessionRepoRoot), base_ref pairs (session-mode.js defaultBaseRef), new-task advisory (session-mode.js newTaskAdvisory), handoff keying (session-handoff.js, session-start.js using clearHandoffKey), edit gate (orchestrator-edit-gate.js inMarkedNestedWorktree), fingerprint prune (main-checkout-boundary.sh D3), residue sweep busy-skip (repo-residue-sweep.js D10), walkers (identifier-scan.js, probe-unknown.js, worktree-activity.js), info/exclude additions in all three rails, residue registry and allowlist updates, reference doc, BACKLOG disposition, CHANGELOG, CLAUDE.md inventory, scripts-inventory row; evidence=tests cover D1 (same answer from main checkout and linked worktree, bare/separate-git-dir fallback), D3 (first-run no .claude/ not main_checkout_mutated, fingerprint prune), D5 (marker follow in same repo, foreign repo leaves marker unchanged, for both --new-task and plain set), D6 (local-behind→remote, local-ahead→local, diverged→remote, only-remote, only-local), D7 (marked nested worktree gated, unmarked allowed), D8 (manual per-repo with distinct paths for same-basename repos, /clear per-worktree unchanged), D9 (allowlist entries match actual mktemp lines), D10 (marked rail worktree not busy-skipped), D11 (porcelain clean after rail run, info/exclude contains /.claude/worktrees/), C3 (advisory silent on match/main-checkout/detached-HEAD/generic-only tokens, one line on mismatch, exit code unchanged), C6 (identifier-scan, probe-unknown, worktree-activity skip .claude/worktrees); conclusion=every spec decision D1–D13 and success criterion C1–C7 have matching implementation and pinned tests; deferred items (gap 5, gap 8 finish-flow wiring) are recorded in BACKLOG with triggers per D12; no MUST-FIX remains.",
+  "raw_log": "/tmp/dispatch-review-log-hXY759",
+  "error": null,
+  "usage": null,
+  "frame_closed_by": "end-marker"
+}

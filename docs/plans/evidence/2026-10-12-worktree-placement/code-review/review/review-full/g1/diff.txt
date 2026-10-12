@@ -1,0 +1,1676 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 9048edfe..a59a2082 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -4,6 +4,14 @@
+ 
+ ### 新增
+ 
++- **worktree 和 handoff 有了固定位置**（branch `feat/worktree-placement-rule`）：同一個 repo 的 worktree 現在都放在 `<主 checkout>/.claude/worktrees/` 底下，看路徑就知道屬於哪個 repo。規則寫在 `references/worktree-placement.md`。
++  - hetero、foreman、batch 三條 rail 建的 worktree 從暫存目錄搬到這裡，和你自己或 Claude Code 開的 worktree 放在一起；不論從主 checkout 還是從哪個 worktree 呼叫，都放到同一個地方。沒有一般主 checkout 的 repo（例如 bare repo）照舊放在暫存目錄，stderr 會說明原因。
++  - 新增 `scripts/resolve-repo-placement.js`，統一回答三個問題：worktree 該放哪裡、主 checkout 落後上游幾個 commit、兩種 handoff 檔各在哪裡。
++  - session marker 會跟著 session 進 worktree：在同一個 repo 的 worktree 裡執行 `session-mode.js set`，marker 就改記那個 worktree，`stage-advance` 量的 diff 才會是你正在改的分支。
++  - `base_ref` 的預設值改取 `develop` 和 `origin/develop` 之中較新的那一個；主 checkout 沒有 pull 時，diff 不會再被高估。
++  - 執行 `set --new-task` 時，如果 worktree 目錄名稱和分支名稱沒有任何共同的字，會印一行提醒，建議你為新任務開新的 worktree。這只是提醒，不會擋下指令。
++  - `/handoff` 沒有進行中的專案時，handoff 檔改成每個 repo 一份，同名的兩個 repo 不會再寫到同一個檔案；`/clear` 的 handoff 仍是每個 worktree 一份，路徑沒有變。
++
+ - **即時面板「現況」分頁多了「最近對話」**（merge `82d34da4`）：分頁最後列出這個 session 最近 3 則你輸入的 prompt，依時間排序，最新的在最下面。tool 結果和系統插入的訊息不算在內。每則預設收合成一行「▸ 你：…」（最多 60 字），點一下會展開，顯示完整 prompt 和 AI 的回覆，最多約 20 行。看起來像 secret 的字串（`sk-…`、`ghp_…`、`Bearer …`、`AKIA…`、`xox?-…`）在顯示前就由程式遮成 `***`，不經過模型。這段資料只有在 transcript 變動時才會重算；/clear 之後，原本展開的項目會全部收回。目前只能用滑鼠展開，還不能用鍵盤（BACKLOG 有列）。
+ 
+ - **band 上的每一格都能點，點了直接開面板的對應分頁**（merge `1a2a903e`）：判定、位置、unit 開「現況」（位置與 unit 會順便展開「目前位置」區塊）；派工開「派工」；審查與決策開「審查」；用量開「用量」；殘留 `⚑N` 開「殘留」。面板一律取得焦點，按 Esc 關閉。鍵盤操作不變：Ctrl+x Tab 仍先停在 ⓘ，再用 Shift+Tab 移到各格。
+diff --git a/CLAUDE.md b/CLAUDE.md
+index c971af85..6a564d4d 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -22,7 +22,7 @@ A caution learned the hard way (2026-08-06): several of these were fully built,
+ 
+ **Routing & config resolution** — `resolve-dispatch.sh` `resolve-dispatch-topology.js` `resolve-doa.sh` `resolve-endpoint.sh` `resolve-knowledge-routing.sh` `resolve-project-paths.sh` `resolve-qc-gate.sh` `resolve-review-loop.sh` `resolve-worktree-teardown.sh` `resolve-execution-profile.js` `resolve-scaffold-tier.js` `lib/scaffold-envelope.sh` `lib/resolve-config.sh` `lib/autocompact-window.js` `load-endpoints-env.sh` `lib/load-endpoints-env.js`
+ 
+-**Worktree & branch lifecycle** — `reap-dispatch-branches.sh` `reap-dispatch-worktrees.sh` `repo-residue-sweep.js` `pin-evidence-anchors.js` `lifecycle-residue-receipt.js` `write-task-status-input.js` `record-integration.js` `check-inputs-landed.js` `check-containment.js` `lib/worktree-reap.sh` `lib/prune-tmp-residue.sh` `lib/worktree-activity.js` `lib/tmp-residue.js` `lib/tmp-residue-registry.json`
++**Worktree & branch lifecycle** — `reap-dispatch-branches.sh` `reap-dispatch-worktrees.sh` `repo-residue-sweep.js` `resolve-repo-placement.js` `pin-evidence-anchors.js` `lifecycle-residue-receipt.js` `write-task-status-input.js` `record-integration.js` `check-inputs-landed.js` `check-containment.js` `lib/worktree-reap.sh` `lib/prune-tmp-residue.sh` `lib/worktree-activity.js` `lib/tmp-residue.js` `lib/tmp-residue-registry.json`
+ 
+ **Mission, campaign & session state** — `check-blueprint-conformance.js` `decision-ledger.js` `open-decision.js` `probe-unknown.js` `build-rehydration-bundle.js` `check-stall-fuse.js` `next-pick.js` `mission-routing-admission.js` `mission-execution-graph-check.js` `mission-terminal-reconcile.js` `mission-convergence-check.js` `next-touch-validation.js` `validate-next-touch-reservation.js` `validate-next-touch-terminal.js` `session-mode.js` `stage-advance.js` `run-approval.js` `compaction-rehydrate.js` `run-ledger.sh` `watch-foreman.js` `agent-liveness-check.js` `implementation-campaign-check.js` `check-plan-authority-ownership.js` `check-repair-scope.js` `stage-graph.js` `lib/stage-write.js`
+ 
+diff --git a/docs/BACKLOG.md b/docs/BACKLOG.md
+index 0f52a149..9b3a4344 100644
+--- a/docs/BACKLOG.md
++++ b/docs/BACKLOG.md
+@@ -20,13 +20,21 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
+ - **Pointer**: docs/backlog/qc-gate-affected-suites.md
+ - **Context**: full run past 30 min (stopped at 256/408); the 38 suites that reference the changed files passed in about 2 min. Keep the full suite for release preflight.
+ 
+-### Worktree and handoff placement has no rule outside the dispatch rails
++### Cross-repo dispatch has no worktree or handoff rule
+ - **Status**: open
+-- **Trigger**: next task after feat/mods-pane-navigation merges (owner 2026-10-12: pick it up when the mod work is done)
+-- **Effort**: L
+-- **Source**: owner question 2026-10-12; repo-wide inventory in session a14bb1ea
++- **Trigger**: a session in repo A dispatches a rail at repo B
++- **Effort**: M
++- **Source**: worktree-placement gap 5, deferred by the plan (D12), 2026-10-12
++- **Pointer**: docs/backlog/worktree-and-handoff-placement-has-no-rule.md
++- **Context**: rails resolve placement from their own --from repo root; nothing says which repo's root, marker or handoff a cross-repo run uses.
++
++### finish-flow does not tell the owner how to update the main checkout after a push
++- **Status**: open
++- **Trigger**: owner approves a finish-flow guidance change (needs eval ON/OFF evidence first, scorecard-first)
++- **Effort**: S
++- **Source**: worktree-placement gap 8, deferred by the plan (D12), 2026-10-12
+ - **Pointer**: docs/backlog/worktree-and-handoff-placement-has-no-rule.md
+-- **Context**: rails use $TMPDIR, native/hand-made worktrees use .claude/worktrees with no naming rule; handoff fallback keys by basename, the /clear hook by repo hash; no cross-repo rule.
++- **Context**: an isolated worktree session cannot pull the main checkout; resolve-repo-placement.js main prints how far behind it is and references/worktree-placement.md gives the owner line.
+ 
+ ### calendar-teeth-negative instant2: consult evidence fixture exceeds the expiry ceiling
+ - **Status**: open
+diff --git a/docs/backlog/worktree-and-handoff-placement-has-no-rule.md b/docs/backlog/worktree-and-handoff-placement-has-no-rule.md
+index 7138ce01..1220c472 100644
+--- a/docs/backlog/worktree-and-handoff-placement-has-no-rule.md
++++ b/docs/backlog/worktree-and-handoff-placement-has-no-rule.md
+@@ -36,8 +36,13 @@ Repo identity exists (`scripts/lib/repo-identity.sh:20-30` → `git-common-dir:<
+ 4. **Handoff placement is prose and keyed inconsistently.** The manual fallback keys by directory basename (two repos with the same basename collide; not per worktree); the `/clear` hook keys by repo hash. A session cannot predict where the other route wrote.
+ 5. **Cross-repo dispatch has no rule.** A session in repo A working on repo B has `resolve-project-paths.sh --target <dir>` for documents and nothing for worktrees or handoff.
+ 6. **The session marker's `repo_root` is fixed at creation and never follows the session into a worktree.** Live example (2026-10-12): this session created its marker in the main checkout, then worked in `.claude/worktrees/autocompact-detect`; `stage-advance --to verify` measured E1 with `git diff --numstat <base_ref>` in `repo_root` (`scripts/stage-advance.js:173`), i.e. the main checkout's develop (34 files, 1184 lines — other sessions' merges) instead of the branch (8 files, ~500 lines), and demanded an M→L bump. Worked around by clearing and re-creating the marker from inside the worktree. The resolver above should give the marker the worktree the session actually works in, or E1 should measure the cwd's toplevel when it shares the marker's `repo_identity`.
++   6b. **`base_ref` defaults to a stale local branch.** `defaultBaseRef` (`scripts/session-mode.js:692-698`) tries `develop` before `origin/develop`. In a worktree whose main checkout has not pulled, local `develop` lags: on 2026-10-12, `set --new-task` right after a merge pushed `origin/develop` to `4abd667f` stored `base_ref 7586c8dd` (local `develop`, several merges behind), which would again inflate E1. Worked around with `--base-ref 4abd667f`. The default should prefer whichever of the local and remote-tracking branch is ahead, or the remote one when the local one is its ancestor.
+ 7. Related, already filed: orphan / never-registered worktrees are not discovered (BACKLOG "Orphan leaf liveness and resource reconstruction"); `repo-residue-sweep.js:644` only flags `<main>/.claude/worktrees/` for review.
+ 
++8. **A worktree-isolated session cannot bring the main checkout up to date, not even through the owner's `!` command.** After the mods merge was pushed (2026-10-12), the main checkout's `develop` (the live plugin) stayed two merges behind; `! git -C /home/cookys/projects/autopilot pull --ff-only` was refused by the session's worktree guard, and from inside the worktree git refuses to move a branch checked out elsewhere. The owner had to pull from another terminal. The finish step that pushes should tell the owner that line, or the rule should say where the integration checkout lives.
++
++Second live example of gap 3 (2026-10-12): the next task (`feat/worktree-placement-rule`) also branched inside `.claude/worktrees/autocompact-detect` — three tasks, one worktree name.
++
+ ## Direction (not decided — needs a plan, likely L)
+ 
+ - One resolver (`scripts/resolve-worktree-path.*` or a field on `resolve-project-paths.sh`) that every rail and every skill asks: `<root>/<repo-identity-slug>/<task-slug>`; root configurable, default chosen once (in-repo `.claude/worktrees/` vs `$XDG_DATA_HOME`/`~/.autopilot/worktrees/`).
+@@ -45,3 +50,19 @@ Repo identity exists (`scripts/lib/repo-identity.sh:20-30` → `git-common-dir:<
+ - A check at session start / `stage-advance --to intent` (`--new-task`): worktree name and branch agree with the marker's task, or the session is told to open a fresh worktree.
+ - Handoff keyed by the marker's `repo_identity` (+ worktree path) on both routes, so the manual skill and the `/clear` hook write to one predictable place.
+ - The rails' `/tmp` worktrees either move under the same root or carry the repo slug in their prefix.
++
++## Disposition (2026-10-12, plan `docs/plans/2026-10-12-worktree-placement.md`, direction C)
++
++The rule now lives in [`references/worktree-placement.md`](../../references/worktree-placement.md).
++
++| Gap | Disposition |
++|---|---|
++| 1 two unrelated roots | fixed — P2: rails create worktrees under `<main checkout>/.claude/worktrees/` through `scripts/resolve-repo-placement.js`; P4 rule |
++| 2 no per-repo grouping | fixed — P2: the path names the repo's main checkout |
++| 3 name ↔ branch ↔ task unrelated | fixed as far as the plan goes — P3: `set --new-task` advisory (never blocks); P4 rule |
++| 4 handoff keying | fixed — one resolver for both routes (P2), used by the hooks and the handoff skill (P3); the keys differ on purpose (rule § Handoff files) |
++| 5 cross-repo dispatch | deferred — BACKLOG "Cross-repo dispatch has no worktree or handoff rule" |
++| 6 marker `repo_root` fixed at creation | fixed — P1: the marker follows the session into a worktree of the same repo |
++| 6b stale `base_ref` | fixed — P1: newer of the local / remote-tracking pair |
++| 7 orphan worktrees not discovered | out of scope — already filed (BACKLOG "Orphan leaf liveness…"); the sweep no longer busy-skips marked rail worktrees under `.claude/worktrees/` |
++| 8 owner cannot pull from an isolated session | partly fixed — `resolve-repo-placement.js main` prints how far behind the main checkout is, the rule gives the owner line; finish-flow wiring deferred (BACKLOG "finish-flow does not tell the owner…") |
+diff --git a/docs/plans/2026-10-12-worktree-placement.md b/docs/plans/2026-10-12-worktree-placement.md
+new file mode 100644
+index 00000000..812daef6
+--- /dev/null
++++ b/docs/plans/2026-10-12-worktree-placement.md
+@@ -0,0 +1,231 @@
++# Worktree placement — one root per repo, a marker that follows the session, predictable handoffs
++
++**Date:** 2026-10-12
++**Status:** active — plan, awaiting plan-review
++**Size:** L (one deliverable, four phases that build on each other)
++**Branch:** `feat/worktree-placement-rule`
++**Project:** [`docs/projects/2026-10-12-worktree-placement/`](../projects/2026-10-12-worktree-placement/README.md) — goal and the seven success criteria live there; this plan references them as C1–C7.
++**Source:** [`docs/backlog/worktree-and-handoff-placement-has-no-rule.md`](../backlog/worktree-and-handoff-placement-has-no-rule.md) (gaps 1–8).
++**Spike:** [`evidence/2026-10-12-worktree-placement/spike-native-worktree.md`](evidence/2026-10-12-worktree-placement/spike-native-worktree.md).
++**Direction:** C (owner, decision `intent-17-2`): everything in A, plus the hetero / foreman / batch rails create their worktrees under `<main checkout>/.claude/worktrees/`. No `WorktreeCreate` takeover.
++
++Citations (`file:line`) are provenance, not reading assignments: every fact this plan needs is stated in the text.
++
++Success criteria (from the project README, abridged):
++- **C1** a marker created in the main checkout and used from a linked worktree of the same repo measures E1 in that worktree (test red at base).
++- **C2** `base_ref` defaults to the newer of `develop` / `origin/develop` (then main/master) (test red at base).
++- **C3** `set --new-task` prints one advisory line when worktree directory and branch share no task token, none when they match; exit code unchanged.
++- **C4** both handoff routes take their path from one resolver; manual keyed by repo identity, `/clear` stays per worktree with its pinned tests unchanged.
++- **C5** hetero, foreman and batch rails create worktrees under `<main checkout>/.claude/worktrees/` (also from a linked worktree) through one resolver; every reaper, the residue registry and `repo-residue-sweep` still reclaim them.
++- **C6** no repo-tree walker the rails or gates run from the main checkout descends into `.claude/worktrees/`.
++- **C7** the rule is written once in `references/worktree-placement.md`; each backlog gap is marked fixed or deferred.
++
++## 1. Facts this plan stands on
++
++Spike (official docs re-read by depth-0, plus one live run):
++
++- Claude Code's own worktrees default to `<repo>/.claude/worktrees/<name>`; nothing but a `WorktreeCreate` hook moves
++  them, and C does not take that over.
++- Its periodic sweep **keeps every worktree without its own git-metadata marker**, including any made by
++  `git worktree add` — rail worktrees under `.claude/worktrees/` are never swept.
++- A plain `claude -p` launched inside a `git worktree add` worktree under `.claude/worktrees/` is **not** isolated
++  (live run, 2.1.296: a compound command and a `git -C` into the main checkout both ran). Rail hands keep today's
++  command freedom.
++
++Repo survey (Explore subagent, file:line spot-checked where marked ✓):
++
++- All three rails take the caller's toplevel as "the repo": hetero `_wt_repo_root` / `MAIN_CHECKOUT` /
++  `IDENTITY_REPO_ROOT` (`scripts/dispatch-hetero.sh:2869`, `:3097`, `:3179`), foreman `MAIN_CHECKOUT`
++  (`scripts/dispatch-foreman.sh:195`), batch `REPO="."` (`scripts/dispatch-batch.sh:93`, `--repo` at `:272`). Called
++  from a linked worktree, that is the linked worktree, not the main checkout. No helper returns the main checkout
++  path today (`scripts/lib/repo-identity.sh:20-30` and `src/status/task-runtime.js:36` return an identity string).
++- ✓ `main_checkout_fingerprint` (`scripts/lib/main-checkout-boundary.sh:45-121`) stat-walks the whole
++  `$MAIN_CHECKOUT` with `find -xdev`, pruning only `.git` and `MAIN_CHECKOUT_FP_EXCLUDE_PATHS` (`:77-87`); it ignores
++  `.gitignore`. A rail worktree created under `$MAIN_CHECKOUT/.claude/worktrees/` after the before-fingerprint
++  (hetero `:3106`, foreman `:260`) would end every round as `main_checkout_mutated` (hetero `:4113-4115`, foreman
++  `:427-430`). The same walk already sees every other session's worktree under `.claude/worktrees/` today, so a
++  rail started from the main checkout while another session edits in its worktree is discarded for an edit that
++  never touched the main checkout.
++- ✓ `hooks/orchestrator-edit-gate.js:99-107` decides `inRepoRoot` by path containment under `marker.repo_root`
++  and grants the dispatch-worktree exemption only when `!inRepoRoot`. A rail worktree under the main checkout's
++  `.claude/worktrees/` would lose that exemption when the marker's `repo_root` is the main checkout.
++- ✓ Session marker `repo_root` consumers: `scripts/stage-advance.js:236` (E1 git directory),
++  `hooks/orchestrator-edit-gate.js:99-107`, `scripts/dispatch-hetero.sh:1004-1013` and `:1469-1478` and
++  `scripts/dispatch-author.sh:488` (marker active iff `repo_root` equals the caller's toplevel),
++  `scripts/mission-routing-admission.js:187-189` (compares repo identity), `hooks/runs-watch-autostart.js:272-276`
++  (plain marker from a cache).
++- `check-tmp-residue-registry.js` extracts prefixes only from `mktemp -t <template>`; a `mktemp -u -d
++  "$ROOT/hetero-…"` fails it as "unextractable prefix" (`r5`, ~`:118`).
++- Registry entries `hetero-*` (`scripts/lib/tmp-residue-registry.json:268`), `batch-integ-*` (`:660`), `foreman-*`
++  (`:667`) match the temp root only; `hooks/tests/lib/suite-residue-reap.sh:217` keeps parity with the
++  `test-lockgated` kinds (`check-tmp-residue-registry.js:20-21`).
++- `scripts/lib/worktree-reap.sh:613` recovers unmarked worktrees by basename `hetero-*` (location-independent:
++  it enumerates `git worktree list`). `scripts/reap-dispatch-worktrees.sh` enumerates `git worktree list` and keeps
++  state under the common dir — no temp assumption.
++- `scripts/repo-residue-sweep.js:644,668` skips a `cwd_busy` worktree under `<main>/.claude/worktrees/` by path.
++- `hooks/foreman-guard.js:187-196` (`isTmpSafePath`) allows close-out `rm` only under `/tmp`/`$TMPDIR`.
++- The marker/lock excludes are written to the shared `info/exclude` (hetero `:2929-2936`, foreman `:276-279`); a
++  consumer repo that does not gitignore `.claude/worktrees/` would show rail worktrees as untracked.
++- Tests: `hooks/tests/dispatch-hetero-contract.test.sh:151` counts leaked worktrees with `find "$CASE_TMP"
++  -maxdepth 1 -name 'hetero-*'` — vacuous after the move. `dispatch-foreman.test.sh:113` greps `git worktree list`
++  (location-agnostic). The rail suites run against sandbox repos that do not ignore `.claude/worktrees/`.
++- Walkers: `doc-drift-gate.js` (`:42`, `:77-90`) and `check-stage-vocab.js` (`:68`) already skip
++  `.claude/worktrees`; the `git ls-files` users are blind to it; `identifier-scan.js` (`walkDir`, `:99-112`) is not
++  (no automatic caller); `project-detect.js:651` unchecked.
++- session-mode: `repo_root` is `path.resolve(args['repo-root'] || gitToplevel())` (`scripts/session-mode.js:666`,
++  `:766`, `:862`); `--new-task` keeps the old one through `{...current}` (`:800`); `defaultBaseRef` (`:692-705`) takes
++  the first of `develop, main, master, origin/develop, origin/main` with a merge-base.
++- Handoff: `/clear` hook keys `sha1(realpath toplevel)` (`hooks/session-handoff.js:320`, reader
++  `hooks/session-start.js:273-277`, `:488-496`; pinned by `session-handoff.test.sh:28`,
++  `session-start-handoff-inject.test.sh:10,31`); the manual fallback is prose
++  `~/.autopilot/handoff-manual/<repo-or-cwd-name>.md` (`skills/handoff/SKILL.md:30-36`).
++
++## 2. Decisions
++
++| # | Question | Decision | Why |
++|---|---|---|---|
++| D1 | Which "main checkout" do rails place under? | The repo's real main checkout: `dirname` of `git rev-parse --path-format=absolute --git-common-dir`, accepted only when that basename is `.git` and the parent is a non-bare work tree. Otherwise (bare repo, separate `--git-dir`) the rail keeps today's temp-dir location and says so on stderr. | One root per repo regardless of where the rail was called from (C's point). The fallback keeps exotic layouts working instead of failing. |
++| D2 | What else moves to the real main checkout? | **Only the placement.** `MAIN_CHECKOUT` for the fingerprint, `IDENTITY_REPO_ROOT`, the boundary checks and the `.autopilot-worktree` root keep using the caller's toplevel, as today. | Keeps this task from silently changing what the boundary protects. |
++| D3 | Fingerprint vs worktrees under `.claude/worktrees/` | `main_checkout_fingerprint` always prunes `$MAIN_CHECKOUT/.claude/worktrees` in the stat walk — the directory entry itself and everything under it. Creating the directory is not a mutation either: the resolver's `worktree` subcommand runs `mkdir -p <main>/.claude/worktrees` and every rail calls it **before** its before-fingerprint, so the `.claude` entry or mtime change on a first run lands before the snapshot. | Each worktree there is a separate checkout with its own review; the boundary protects the main checkout's files. Pruning only this run's worktree would still trip on every concurrent rail and session (the existing false positive above). Trade-off stated for plan-review: an edit by a hand into a *sibling* worktree is no longer caught by this fingerprint (it never was for siblings in `/tmp`). |
++| D4 | Rail worktree names | Keep the prefixes: `hetero-<branch>-XXXXXX`, `foreman-<run_id>-XXXXXX`, `batch-integ-<run_id>-XXXXXX`, now under `<main>/.claude/worktrees/`. | Every basename matcher (`worktree-reap.sh:613`, registry, sweep) keeps working; the directory now says which repo. |
++| D5 | Marker for gap 6 | `set` and `set --new-task` re-resolve `repo_root` to the cwd's toplevel when its repo identity equals the marker's; `stage-advance` measures E1 in the cwd's toplevel when its identity equals the marker's, else in `marker.repo_root` as today. | The rail consumers compare `repo_root` to the caller's toplevel; following the session's worktree makes them match where the session works. Identity check keeps a cross-repo cwd from hijacking the marker. |
++| D6 | base_ref default (gap 6b) | Pairs in order `develop`/`origin/develop`, `main`/`origin/main`, `master`/`origin/master`. A ref qualifies only when it exists and has a merge-base with `HEAD` (today's filter, kept). The first pair with a qualifying member wins: both qualify → local is ancestor of remote ⇒ remote; remote ancestor of local ⇒ local; diverged ⇒ remote. One qualifies ⇒ that one. No fetch in `session-mode.js`. Behaviour change at base, pinned by a test: with only `origin/develop` and a local `main`, today's flat order picks `main`; D6 picks `origin/develop`. | The remote-tracking ref is the integration target; local ahead is legitimate unpushed work. |
++| D7 | `orchestrator-edit-gate` | A target under `<repoRoot>/.claude/worktrees/<name>/` whose `<name>/` holds an `.autopilot-worktree` marker is not `inRepoRoot`, so it is a dispatch worktree: depth-0 is gated there and subagents edit freely, exactly as for a rail worktree in the temp dir today. Without the marker (a native or another session's worktree) it stays `inRepoRoot`, where the `.claude/` allowlist allows it, also as today. *(Corrected at P2: the first draft said "exempt" / "gated"; `decide()` gates depth-0 in a dispatch worktree and allows allowlisted repo paths.)* | Nested worktrees are separate checkouts; without this, D4 moves rail worktrees under the `.claude/` allowlist and depth-0 could edit them inline. |
++| D8 | Handoff keying | One resolver prints both paths. Manual fallback: `~/.autopilot/handoff-manual/<basename>-<sha1(repo identity)[0:8]>.md` (one file per repo, shared by its worktrees). `/clear`: unchanged `sha1(realpath toplevel)` (per worktree — its consumer is the next session in the same worktree; keying it per repo would let a parallel session in a sibling worktree consume it). The hook calls the resolver's function instead of computing the hash itself. | Gap 4 is "a session cannot predict where the other route wrote"; one resolver fixes that. The two keys differ on purpose and the reference doc says why. The pinned `/clear` tests stay valid. |
++| D9 | Registry gate | Allowlist the three new `mktemp -u -d "$ROOT/…"` lines in `scripts/tmp-residue-allowlist.json` with the reason "under `<main>/.claude/worktrees/`, not the temp root". Keep the three registry entries (old residue still sits in `/tmp`); update their `reason`. | Smallest change; teaching the gate about absolute templates is a mechanism change with no second user yet. |
++| D10 | `repo-residue-sweep.js:668` busy-skip | Skip only worktrees **without** an `.autopilot-worktree` marker; rail worktrees keep marker/flock-based liveness. | Liveness of rail worktrees is the flock, not the cwd (memory: residue cleanup traps). |
++| D11 | Consumer repos that do not ignore `.claude/worktrees/` | The rails add `/.claude/worktrees/` to the shared `info/exclude` next to the marker excludes. | No untracked noise in the main checkout; no edit to the consumer's tracked `.gitignore`. |
++| D12 | Gap 5 (cross-repo dispatch), gap 8 (owner cannot pull from an isolated session) | Deferred. Gap 8: the resolver's `main` subcommand prints the main checkout and how far its branch is behind its upstream, and the reference doc gives the owner line; wiring it into finish-flow is a guidance change (scorecard-first) and becomes a backlog row. | Keeps L bounded. |
++| D13 | verify-red-green / test-integrity-L1 scratch worktrees | Stay in temp. | Short-lived, removed by their own script, never handed to a person. |
++
++## 3. Phases
++
++Each phase: red tests first (shown failing at the phase base), then the change, then the affected suites one at a
++time (memory: parallel suites interfere). Per-phase hetero code review (quality-pipeline per phase).
++
++### P1 — marker follows the session; fresh base_ref (C1, C2)
++
++1. `hooks/tests/stage-advance.test.sh`: marker created in a sandbox main checkout, linked worktree with N committed
++   files on a branch, `stage-advance --to verify` from the worktree ⇒ `files = N`. Red at base (measures the main
++   checkout).
++2. `hooks/tests/stage-advance.test.sh` (where the `set --new-task` cases already live; `session-mode.test.sh` clones the repo per run): (a) local `develop` behind `origin/develop` ⇒ stored `base_ref` is the remote
++   sha; (b) local ahead ⇒ local; (c) diverged ⇒ remote; (d) `set --new-task` from a linked worktree of the same repo
++   ⇒ `repo_root` is the worktree; (e) from a different repo ⇒ `repo_root` unchanged; (f) plain `set` (no
++   `--new-task`) from a linked worktree ⇒ `repo_root` follows, from a foreign repo ⇒ unchanged; (g) only
++   `origin/develop` plus a local `main` ⇒ `origin/develop`; (h) only local `develop` ⇒ `develop`. Red at base for
++   a, d, f (linked case), g. P1.1 also gets the negative case: `stage-advance --to verify` from an unrelated sandbox
++   repo with repo A's marker measures in `marker.repo_root` and leaves the marker unchanged.
++3. Implement D5 in `session-mode.js` (`applyInitFields` / new-task path, reusing the identity function the marker
++   already stores) and `stage-advance.js:231-236`; D6 in `defaultBaseRef`.
++4. Suites: `session-mode.test.sh`, `session-mode-phase`, `session-mode-watcher`, `session-mode-bind-campaign-root`,
++   `stage-advance.test.sh`, `hooks/plain-session-marker.test.js`, `mission-routing-admission.test.sh`.
++
++### P2 — one placement resolver; rails move under `<main>/.claude/worktrees/` (C5, C6)
++
++1. New `scripts/resolve-repo-placement.js` (Node, built-ins only — it runs on rail paths; CLAUDE.md language rule):
++   - `main [--from <dir>]` → JSON `{main_checkout, repo_identity, fallback, behind}` (D1, D12).
++   - `worktree --prefix <p> --slug <s> [--from <dir>]` → the `mktemp -u` template
++     `<main>/.claude/worktrees/<p>-<slug>-XXXXXX`, or the temp-dir template on fallback.
++   - `handoff --route manual|clear [--from <dir>]` → the path (D8).
++   Exports the same functions for hooks. Test file pins: call from the main checkout, from a linked worktree (same
++   answer), bare-repo fallback, two repos with the same basename (different manual paths), two worktrees of one repo
++   (same manual path, different `/clear` paths).
++0. Before any change: grep the rail and reaper suites for `git status` / `--porcelain` cleanliness assertions on the
++   sandbox and record each hit in `docs/plans/evidence/2026-10-12-worktree-placement/moved-assertions.md` with why it
++   moves or why D11's exclude keeps it. That file is the list of moved assertions; the red run in step 2 must not
++   add one that is not on it.
++2. Red first: run `dispatch-hetero-contract.test.sh`, `dispatch-foreman.test.sh`, `dispatch-batch*.test.sh` with the
++   rails pointed at the resolver but **without** D3 — expect `main_checkout_mutated`; this is the red that proves D3
++   is needed. Repoint `dispatch-hetero-contract.test.sh:151` to `git worktree list` (vacuous otherwise) and add an
++   assertion per rail that its worktree sits under `$SBX/.claude/worktrees/`.
++3. Implement: the three rails take the template from the resolver (hetero `:2921`, foreman `:268`, batch `:388`),
++   each passing `--from` its own resolved repo root (batch `$REPO`, hetero and foreman their caller toplevel) — the
++   resolver never falls back to the process cwd when a rail calls it — and calling it before the before-fingerprint
++   (D3). Batch test: run from an unrelated cwd with `--repo` at the sandbox ⇒ worktree under the sandbox's
++   `.claude/worktrees/`. First-run test per rail: sandbox with no `.claude/` ⇒ round is not `main_checkout_mutated`.
++   D3 in `main_checkout_fingerprint`; D11 exclude line; D7 in `orchestrator-edit-gate.js` with two tests (target
++   under `<repoRoot>/.claude/worktrees/x/` with a worktree marker ⇒ depth-0 gated as a dispatch worktree; same
++   without a marker ⇒ allowed by the `.claude/` allowlist as today); D9 allowlist + registry reason; D10 in `repo-residue-sweep.js` with a test.
++4. `foreman-guard.js:187-196`: grep the foreman protocol (`skills/`, `references/`, `scripts/dispatch-foreman.sh`
++   brief text) for an `rm` of its own worktree. Found ⇒ allow the run's own worktree path in `isTmpSafePath` with a
++   test; not found ⇒ record "no change needed" with the grep.
++5. Walkers (C6): enumerate first, reproducibly — a recorded grep over `scripts/`, `hooks/` and `bin/` + `src/` for
++   recursive walkers (`find` not scoped to `.git`, `readdirSync`/`readdir` with recursion or `{recursive: true}`,
++   recursive globs, `walk` helpers), kept as `walkers.md` in the evidence dir with the command. Each hit is
++   dispositioned `skips .claude/worktrees` / `uses git ls-files` / `cannot run from the main checkout (why)` /
++   `fixed here (test)`. Known so far: `identifier-scan.js` needs the skip (one test); `project-detect.js:651` to be
++   read; doc-drift-gate and check-stage-vocab already skip.
++6. Suites, one at a time: the three rail suites, `dispatch-detach`, `dispatch-worktree-lifecycle`,
++   `dispatch-hetero-gc`, `worktree-reap`, `repo-residue-sweep`, `repo-residue-auto`, `tmp-residue-registry`,
++   `check-tmp-residue-registry`, `suite-residue-reaper`, `prune-tmp-residue`, `orchestrator-edit-gate`,
++   `foreman-guard`, `test-doc-drift-gate.sh`.
++
++### P3 — new-task advisory; handoff through the resolver (C3, C4)
++
++1. `session-mode.js set --new-task`: when the cwd is a linked worktree, split its directory name and the current
++   branch on `[-_/.]`, lowercase every token, drop generic tokens (`feat`, `fix`, `hotfix`, `worktree`, `agent`,
++   `wip`, digits-only). Either filtered set empty ⇒ silent (nothing to compare). Both non-empty and no shared token ⇒
++   one stderr line `worktree <dir> is on branch <b>, which shares no word with it — open a fresh worktree for a new
++   task (references/worktree-placement.md)`. Exit code unchanged. Tests: match ⇒ silent; no match ⇒ one line; main
++   checkout ⇒ silent; `feat-1234` vs `feat/1234` (only generic/digit tokens) ⇒ silent; `Foo-bar` vs `foo-bar` ⇒
++   silent; exit code asserted equal in every case.
++2. `hooks/session-handoff.js:320` and `hooks/session-start.js` reader take the `/clear` path from the resolver's
++   exported function; `session-handoff.test.sh:28` and `session-start-handoff-inject.test.sh` stay green unchanged
++   (same hash), which is the proof the key did not move.
++3. `skills/handoff/SKILL.md:30-36`: the fallback path line points at `resolve-repo-placement.js handoff --route
++   manual` instead of the prose pattern. This changes how the path is found, not what the skill asks for
++   (mechanism, CLAUDE.md "機制 vs 指引"); the requirement list is unchanged.
++4. Suites, one at a time: `session-mode.test.sh`, `session-handoff.test.sh`, `session-start-handoff-inject.test.sh`,
++   the resolver test, `stage-advance.test.sh`.
++
++### P4 — the rule in one place; wiring (C7)
++
++1. `references/worktree-placement.md`: the rule (one root per repo; who creates what where; names; marker follows
++   the session; handoff keys and why they differ; fallback; the owner's pull line for gap 8).
++2. Backlog file: each gap marked per the table below; a `docs/BACKLOG.md` row for the finish-flow gap-8 line.
++
++   | Gap | Disposition |
++   |---|---|
++   | 1 two unrelated roots | fixed — P2 (rails under `<main>/.claude/worktrees/`), P4.1 rule |
++   | 2 no per-repo grouping | fixed — P2 (the path names the repo's main checkout) |
++   | 3 name ↔ branch ↔ task unrelated | fixed as far as this plan goes — P3.1 advisory (never blocks) + P4.1 rule |
++   | 4 handoff keying | fixed — P2.1 resolver, P3.2/P3.3 |
++   | 5 cross-repo dispatch | deferred — trigger: a session in repo A dispatches a rail at repo B (BACKLOG row) |
++   | 6 marker `repo_root` fixed at creation | fixed — P1 (D5) |
++   | 6b stale `base_ref` | fixed — P1 (D6) |
++   | 7 orphan worktrees not discovered | out of scope — already filed (BACKLOG "Orphan leaf liveness…"); D10 keeps the sweep's `.claude/worktrees/` review flag from catching rail worktrees |
++   | 8 owner cannot pull from an isolated session | partly fixed — resolver `main` prints how far behind, P4.1 owner line; finish-flow wiring deferred (BACKLOG row, scorecard-first) |
++3. Wiring for the new script (CLAUDE.md four steps): reference doc, `docs/scripts-inventory.md` row, the grouped
++   list in `CLAUDE.md` (Worktree & branch lifecycle), and `skills/handoff/SKILL.md` (P3.3).
++   `check-claude-md-inventory.js` passes.
++4. CHANGELOG `## Unreleased` entry. No version bump (owner: hold the 3.0.0 line).
++5. Gates: `check-claude-md-inventory.js`, `check-tmp-residue-registry.js`, `check-reference-sizes.js`,
++   `check-plan-graduation.js`, `doc-drift-gate.js`, `check-backlog-entries.js`.
++
++## 4. Verification map
++
++| Criterion | Evidence |
++|---|---|
++| C1 | P1.1 test red at base, green at head |
++| C2 | P1.2 (a) red at base, green at head; (b)(c) green |
++| C3 | P3.1 tests; exit code asserted unchanged |
++| C4 | P2.1 resolver tests + P3.2 pinned hook tests unchanged |
++| C5 | P2.2/P2.3 per-rail location assertions; reaper/registry suites green |
++| C6 | P2.5 walker tests or recorded reasons; doc-drift/stage-vocab already skip |
++| C7 | P4 reference exists; backlog file matches the P4.2 gap table; P4.5 gates green |
++| D3 | P2.2 red (`main_checkout_mutated` without D3) → green; P2.3 first-run test (no `.claude/`) green |
++| D7 | P2.3 marked ⇒ depth-0 gated as a dispatch worktree, unmarked ⇒ allowed as today (both directions) |
++| D10 | P2.3 sweep test: marked rail worktree not busy-skipped, unmarked one skipped |
++| D11 | sandbox `git status --porcelain` empty after a rail run; entries in `moved-assertions.md` (P2.0) |
++| P2.4 | `foreman-guard` test for the allowed path, or the recorded grep showing no change is needed |
++
++## 5. Risks
++
++- **D3 weakens nothing the fingerprint covered for `/tmp` siblings, but does stop seeing sibling worktrees under
++  `.claude/worktrees/`** — flagged for plan-review.
++- Sandbox repos in rail tests do not ignore `.claude/worktrees/`; a test asserting a clean `git status` of the
++  sandbox may change. D11's exclude covers it; P2.0 lists them before any change, and the red run must not add one.
++- Hetero rail is long and runs detached children that re-declare functions (`main-checkout-boundary.sh:42`): any new
++  function the detached child calls must join the `declare -f` list.
++- Editing a bash rail while a background run uses it corrupts that run (memory) — no rail dispatch from this
++  branch's files while P2 is in progress.
+diff --git a/docs/plans/2026-10-12-worktree-placement.rubric.md b/docs/plans/2026-10-12-worktree-placement.rubric.md
+new file mode 100644
+index 00000000..e44e18d0
+--- /dev/null
++++ b/docs/plans/2026-10-12-worktree-placement.rubric.md
+@@ -0,0 +1,14 @@
++# Rubric — 2026-10-12-worktree-placement.md
++
++> Source plan: docs/plans/2026-10-12-worktree-placement.md
++
++R1: C1 — a marker created in the main checkout and used from a linked worktree of the same repo measures E1 in that worktree; the plan's test is red at base and the D5 identity check keeps a different repo's cwd from taking over the marker.
++R2: C2 — the base_ref rule (D6) is fully specified for local-behind, local-ahead, diverged and one-side-missing, needs no fetch, and each case has a test.
++R3: C3 — the new-task advisory is advisory only (exit code unchanged), silent in the main checkout, and its token rule cannot fire on a matching worktree/branch pair.
++R4: C4 — both handoff routes take their path from one resolver; manual is keyed by repo identity, /clear stays per worktree, the reason for the difference is stated, and the existing pinned /clear tests prove the key did not move.
++R5: C5 — hetero, foreman and batch place worktrees under the real main checkout's .claude/worktrees/ also when called from a linked worktree (D1), with a stated fallback for bare / separate-git-dir layouts, and every reaper, registry entry and residue sweep still finds and reclaims them.
++R6: C5 safety — the main-checkout fingerprint (D3), the orchestrator-edit-gate exemption (D7), the residue-sweep busy-skip (D10), the foreman-guard rm allowlist and consumer-repo untracked noise (D11) are each handled, and no rail round is discarded as main_checkout_mutated because of the move.
++R7: C6 — every repo-tree walker that can run from the main checkout either skips .claude/worktrees/ or is shown unable to reach it.
++R8: C7 — the rule is written in one reference doc, each backlog gap is marked fixed or deferred with a trigger, and the new script is wired per CLAUDE.md's four steps.
++R9: Scope — D2 keeps fingerprint, identity, boundary and marker roots on the caller's toplevel; nothing outside the stated scope changes, and deferred items (gap 5, gap 8 wiring, scratch worktrees) are named.
++R10: Order and evidence — each phase writes red tests first, runs suites one at a time, and has a verification row; the plan names every test whose assertion moves and why (including the vacuous leak check).
+diff --git a/docs/projects/2026-10-12-worktree-placement/README.md b/docs/projects/2026-10-12-worktree-placement/README.md
+new file mode 100644
+index 00000000..a658a123
+--- /dev/null
++++ b/docs/projects/2026-10-12-worktree-placement/README.md
+@@ -0,0 +1,40 @@
++# worktree-placement — one rule for where worktrees and handoffs go
++
++Source: [`docs/backlog/worktree-and-handoff-placement-has-no-rule.md`](../../backlog/worktree-and-handoff-placement-has-no-rule.md) (owner question 2026-10-12, gaps 1–8).
++Spike: [`docs/plans/evidence/2026-10-12-worktree-placement/spike-native-worktree.md`](../../plans/evidence/2026-10-12-worktree-placement/spike-native-worktree.md).
++Plan: [`docs/plans/2026-10-12-worktree-placement.md`](../../plans/2026-10-12-worktree-placement.md).
++Direction: C — decision `intent-17-2` in the decision ledger (owner's answer; supersedes `intent-17-1`, which had recorded A on the owner's behalf).
++
++## Project Goal
++
++> **Final goal**: every worktree of a repo lives under one root, `<main checkout>/.claude/worktrees/`, whoever creates it (a person, Claude Code, or a dispatch rail); a handoff for a repo goes to one predictable place on both routes; and the session-mode marker measures the worktree the session actually works in.
++>
++> **Success criteria** (each with its verification):
++> 1. A marker created in the main checkout and then used from a worktree of the same repo measures E1 in that worktree — a test that creates the marker in repo A's main checkout, commits N files on a branch in a linked worktree and runs `stage-advance` there reports `files = N`, and fails on the current code (red at base).
++> 2. `base_ref` defaults to the newer of `develop` / `origin/develop` (then main/master) — a test with local `develop` behind `origin/develop` stores the remote sha; red at base.
++> 3. `session-mode.js set --new-task` prints one advisory line when the worktree directory name and the branch name share no task token, and none when they match — two-case test; exit code unchanged (advisory, never blocks).
++> 4. Both handoff routes take their path from one resolver: the manual fallback is keyed by repo identity (two repos with the same basename get different files; two worktrees of one repo share one), the `/clear` route stays keyed per worktree (its existing pinned tests pass unchanged) — resolver tests plus the unchanged hook tests (plan D8).
++> 5. The hetero, foreman and batch rails create their worktrees under `<main checkout>/.claude/worktrees/` (also when invoked from a linked worktree), through one placement resolver; every reaper, the residue registry and `repo-residue-sweep` still find and reclaim them — the rail, reaper and registry suites stay green with assertions moved to the new root, and a new resolver test pins the path for a call from the main checkout and from a linked worktree.
++> 6. No repo-tree walker the rails or gates run from the main checkout descends into `.claude/worktrees/` — a test per walker found in the plan's inventory, or a named walker shown to skip it already.
++> 7. The written rule exists in one place (`references/worktree-placement.md`) and the backlog file's gaps are each marked fixed or explicitly deferred.
++>
++> **Scope boundary**: includes the marker, base_ref, new-task advisory, handoff keying, rail relocation into `<main checkout>/.claude/worktrees/` with one resolver, walker/reaper/registry follow-through, one reference doc. Excludes taking over native worktree creation (`WorktreeCreate` hook — option B), the verify-red-green and test-integrity-L1 scratch worktrees (short-lived, removed by their own script — stay in temp unless the plan shows they are free to move), and cross-repo dispatch rules (gap 5 — deferred).
++
++## Deliverables
++
++| # | Deliverable | Status |
++|---|---|---|
++| 1 | worktree placement rule (marker follow, base_ref, new-task advisory, handoff keying, rail relocation, reference) | verify ✅ (P1–P4 ✅); next code-review |
++
++## Progress
++
++| Date | Step |
++|---|---|
++| 2026-10-12 | intent: spike done (U2 receipt in `ladder.jsonl`), direction A recorded on the owner's behalf |
++| 2026-10-12 | owner chose C (`intent-17-2`); sweep follow-up added to the spike: Claude Code's periodic sweep keeps worktrees without its own marker, so rail worktrees under `.claude/worktrees/` are safe from it |
++| 2026-10-12 | plan-review G1 (opus chair): CONDITIONAL, 9 non-blocking findings all folded (`2ce98cf4`); receipt check passes against the reviewed bytes — evidence `docs/plans/evidence/2026-10-12-worktree-placement/plan-review/` |
++| 2026-10-12 | P1 (marker follows the session, base_ref pairs): red `7ba74598` → green `d9aa4210`, `202211ce`; hetero review g2 SHIP-AS-IS, receipt `receipt-P1.json` (`5f5292cc`) |
++| 2026-10-12 | P2 (rail placement): lists `5534f2e5`; red `28ab4d92` (resolver + rails repointed + red tests, `p2-red-A.txt`); green `c90c3e3b` (D3, D11, D7, D10, P2.5 walkers, `p2-green-B.txt`); verify-red-green A..B VALIDATED (`p2-red-green.json`); the 14 remaining P2.6 suites green at `c90c3e3b`, each run alone (`p2-6-suites.txt`). The resolver reuses `src/status/project-key` for repo identity (D5); its transitive require graph is 17 in-repo files with no non-builtin module, so the rail-path "built-ins only" rule holds. Deviations: D9 allowlist moved into the red commit (the pre-commit registry gate refuses the new allocation sites; gate metadata only, no runtime effect); D7 plan wording corrected (a marked nested worktree is a dispatch worktree, so depth-0 is gated there as in the temp dir; an unmarked one is allowed by the `.claude/` allowlist as today); `dispatch-hetero.test.sh` case 4 moved its first-placement check to a fresh sandbox (case 3d already places a worktree in `$SBX`, so the old precondition could never hold — the replacement is strictly stronger). P2.4: no foreman-guard change (`p2-4-foreman-guard.md`). Finder check: every reaper enumerates with `git worktree list --porcelain` or markers; no temp-root glob finds rail worktrees. Hetero review: g1 aborted (a seat's no-finding proof lacked `evidence=`); g2 SHIP-AS-IS — three seats flagged the unrecorded P2.6 runs (verified, fixed by `p2-6-suites.txt`), the rest refuted; receipt `p2/review/receipt-P2.json` |
++| 2026-10-12 | P3 (new-task advisory, handoff through the resolver): red `5590b61b` (advisory tests in `stage-advance.test.sh`, next to the D5 fixtures); green `7bcef39c`; verify-red-green `19e4bb90..7bcef39c` VALIDATED (`p3-red-green.json`); P3.4 suites and the four other suites that load the two handoff hooks green, each alone (`p3-suites.txt`). Additions beyond the plan text: a detached-HEAD case (silent; `symbolic-ref` instead of `--abbrev-ref`, which prints `HEAD`); the resolver loads `project-key` on first identity use, so a hook requiring it for `clearHandoffKey` loads no other module. The `/clear` key is the hooks' own `repoRoot` passed to `clearHandoffKey`, not a re-resolved path. Hetero review g1 SHIP-AS-IS: four seats, two Suggestions from s0, both refuted (`crypto` is still used by both hooks; the volatile verify-script path is the receipt shape P1 and P2 share, the sha256 and argv carry the check); receipt `p3/review/receipt-P3.json` |
++| 2026-10-12 | P4 (the rule in one place, wiring): `references/worktree-placement.md` (the rule, what follows from one root, marker follow, handoff keys, the owner pull line, not covered); backlog sidecar disposition table for gaps 1–8; the old BACKLOG row replaced by two (gap 5 cross-repo dispatch, gap 8 finish-flow pull line); scripts-inventory row and resolver header point at the reference; CHANGELOG `## Unreleased` entry, no version bump. Gates in `p4/gates.txt`: inventory, residue registry, reference sizes, backlog entries, supersession anchors and `sync-all --check` pass; plan-graduation and doc-drift fail on develop too, on rows this branch did not write. Hetero review g1 SHIP-AS-IS: four Suggestions; two verified (the `tail -6` capture cut the blocking plan-graduation line the note names — appended from `--json`), two refuted (the native-worktree statements are sourced in the spike and the backlog note, now cited in the reference; the pre-existing gate reds are not this diff's); receipt `p4/review/receipt-P4.json` |
++| 2026-10-12 | verify at `20db1618`: 87 suites (every suite naming a changed code file, plus the two changed node:test files), each alone — 85 green; `autopilot-cli` red identically at base (BACKLOG pre-existing row), `skill-onoff-generic` red on the host live-store mtime check (BACKLOG concurrent-sessions row); completeness-scan hits are the mktemp `XXXXXX` template and exit codes (`verify-suites.txt`). No qualified verifier seat: the per-phase hetero receipts plus red-green stand as the verifier verdict, recorded as decision `verify-17-1` |
+diff --git a/docs/projects/2026-10-12-worktree-placement/ladder.jsonl b/docs/projects/2026-10-12-worktree-placement/ladder.jsonl
+new file mode 100644
+index 00000000..c69747de
+--- /dev/null
++++ b/docs/projects/2026-10-12-worktree-placement/ladder.jsonl
+@@ -0,0 +1 @@
++{"schema_version":1,"ts":"2026-10-12T10:50:14.154Z","kind":"ladder","repo_identity":"git-common-dir:/home/cookys/projects/autopilot/.git","root_run_id":"job-1791801229-2fbaed7a","rung":"U2","unknown_type":"how","terms":["WorktreeCreate","worktree.location"],"signal_ids":["S4"],"heterogeneous":false,"work_unit":"intent"}
+diff --git a/docs/projects/INDEX.md b/docs/projects/INDEX.md
+index 6b07b741..b081c576 100644
+--- a/docs/projects/INDEX.md
++++ b/docs/projects/INDEX.md
+@@ -8,6 +8,7 @@
+ 
+ | Date | Project | Target version | Branch |
+ |------|---------|----------------|--------|
++| 2026-10-12 | [worktree placement: the marker follows the session's worktree, one rule for worktree and handoff paths](../plans/2026-10-12-worktree-placement.md) | active | `feat/worktree-placement-rule` | [plan](../plans/2026-10-12-worktree-placement.md) · [project](2026-10-12-worktree-placement/README.md) |
+ | 2026-10-12 | [TMPDIR residue containment: contain test temp dirs, delete runtime temp files after use, gate unregistered prefixes](../plans/2026-10-12-tmp-residue-containment.md) | active | — | [plan](../plans/2026-10-12-tmp-residue-containment.md) |
+ | 2026-10-11 | [review packet mode: carry a range over the packet ceiling without slicing it away](../plans/2026-10-11-review-packet-mode.md) | active | — | [plan](../plans/2026-10-11-review-packet-mode.md) |
+ | 2026-10-06 | [dev-flow stage graph: one named graph, T-shirt sizes, a marker the band can read](../plans/2026-10-06-dev-flow-stage-graph.md) | active | — | [plan](../plans/2026-10-06-dev-flow-stage-graph.md) (R2 FROZEN) |
+diff --git a/docs/scripts-inventory.md b/docs/scripts-inventory.md
+index 90c88dc4..b1444907 100644
+--- a/docs/scripts-inventory.md
++++ b/docs/scripts-inventory.md
+@@ -97,6 +97,7 @@ This table is an INDEX, not a spec: one row = what it does + when to call it + p
+ | [`scripts/lib/plan-review-panel.js`](../scripts/lib/plan-review-panel.js) | Panel-level progress manifest (best-effort atomic writes at every seat transition) rendered by `dispatch-status.js --panels`; a manifest write failure never fails the review. |
+ | [`scripts/lib/dispatch-author-codex-transport.sh`](../scripts/lib/dispatch-author-codex-transport.sh) | Fail-closed Codex author transport; oracle: its focused hook test. |
+ | [`scripts/lib/dispatch-detach.sh`](../scripts/lib/dispatch-detach.sh) + [`scripts/lib/output-quiescence.sh`](../scripts/lib/output-quiescence.sh) | Detached read-only rail and late-output quiescence helpers. |
++| [`scripts/resolve-repo-placement.js`](../scripts/resolve-repo-placement.js) | Where worktrees and handoff files go: `main` prints `{main_checkout, repo_identity, fallback, behind}` (the non-bare `.git` parent, else fallback); `worktree --prefix P --slug S --from DIR` creates `<main checkout>/.claude/worktrees/` and prints a `mktemp -u -d` template under it (temp dir on fallback, stderr says so) — used by `dispatch-hetero.sh`, `dispatch-foreman.sh`, `dispatch-batch.sh`; `handoff --route manual\|clear` prints the handoff path (the handoff skill; the session hooks call `clearHandoffKey`). Exit 0 ok / 1 not a repo / 2 usage. Rule: [`references/worktree-placement.md`](../references/worktree-placement.md); contract: header comment; tests: [`hooks/tests/resolve-repo-placement.test.sh`](../hooks/tests/resolve-repo-placement.test.sh). |
+ | [`scripts/lib/dispatch-branch-ledger.sh`](../scripts/lib/dispatch-branch-ledger.sh) | Sourceable; `dispatch_branch_ledger_append` writes one branch->session row to `<git-common-dir>/autopilot/dispatch-branches.jsonl` when `dispatch-hetero.sh` / `dispatch-foreman.sh` create a branch (flock, fail-open). Read by `repo-residue-sweep.js close-session`. Contract: file header; tests: [`hooks/tests/close-session.test.sh`](../hooks/tests/close-session.test.sh). |
+ | [`scripts/lib/repo-identity.sh`](../scripts/lib/repo-identity.sh) | Sourceable shell twin of `task-runtime.js` `repoIdentity()`: `repo_identity_of <dir>` and the manifest-field resolver the three dispatch rails use for `repo_identity` / `repo_identity_source`. Contract: file header; parity test `hooks/tests/repo-identity-parity.test.sh`. |
+ | [`scripts/lib/cleanroom-launch.sh`](../scripts/lib/cleanroom-launch.sh) | Argv-only bwrap launcher for a cleanroom (codex, kimi, agy) review seat: `--args 9` boundary, `--preflight` probe (kimi/agy: `--profile`, model-free, reports the observed `runner_version`), JSON launch line. Called by `dispatch-review.sh` under blind mode, which warns (advisory) when `AUTOPILOT_CLEANROOM_EXPECTED_VERSION` differs from the observed version. Oracle: [`hooks/tests/cleanroom-launch.test.sh`](../hooks/tests/cleanroom-launch.test.sh). |
+diff --git a/hooks/orchestrator-edit-gate.js b/hooks/orchestrator-edit-gate.js
+index 97e9146b..6ab61d3d 100644
+--- a/hooks/orchestrator-edit-gate.js
++++ b/hooks/orchestrator-edit-gate.js
+@@ -79,6 +79,12 @@ function hasWorktreeMarkerAbove(target) {
+   return false;
+ }
+ 
++function inMarkedNestedWorktree(repoRoot, target) {
++  const parts = path.relative(path.join(repoRoot, '.claude', 'worktrees'), target).split(path.sep);
++  if (parts.length < 2 || parts[0] === '' || parts[0] === '..' || path.isAbsolute(parts[0])) return false;
++  try { fs.accessSync(path.join(repoRoot, '.claude', 'worktrees', parts[0], '.autopilot-worktree')); return true; } catch { return false; }
++}
++
+ (function main() {
+   let exitCode = 0;
+   try {
+@@ -97,7 +103,9 @@ function hasWorktreeMarkerAbove(target) {
+     if (!rawTarget) process.exit(0);
+     const target = resolveReal(rawTarget);
+     const repoRoot = resolveReal(marker.repo_root);
+-    const inRepoRoot = contains(repoRoot, target);
++    // A marked rail worktree under <repo>/.claude/worktrees/ is a dispatch worktree, not the repo
++    // (the .claude/ allowlist would otherwise let depth-0 edit it). Unmarked ones stay repo paths.
++    const inRepoRoot = contains(repoRoot, target) && !inMarkedNestedWorktree(repoRoot, target);
+ 
+     const d = decide({
+       markerLevel: marker.level,
+diff --git a/hooks/orchestrator-edit-gate.test.js b/hooks/orchestrator-edit-gate.test.js
+index 9969a835..be863017 100644
+--- a/hooks/orchestrator-edit-gate.test.js
++++ b/hooks/orchestrator-edit-gate.test.js
+@@ -491,3 +491,27 @@ test('wrapper: Write and NotebookEdit paths are gated too', () => {
+   n.tool_input = { notebook_path: path.join(repo, 'src', 'c.ipynb'), new_source: 'x' };
+   assert.strictEqual(runHook(n, env).status, 2);
+ });
++
++// D7 (worktree-placement plan): rail worktrees now sit under <repo>/.claude/worktrees/, and '.claude/'
++// is allowlisted. A target with an .autopilot-worktree marker above it is a dispatch worktree, not an
++// allowlisted repo path — depth-0 stays gated there. Without a marker (a native or another session's
++// worktree) it is an ordinary allowlisted .claude/ path, as before this change.
++test('wrapper: l5 + depth-0 + marked rail worktree under .claude/worktrees ⇒ gated as a dispatch worktree', () => {
++  const { repo, env } = setup();
++  setMarker(env, repo, 'l5');
++  const wt = path.join(repo, '.claude', 'worktrees', 'hetero-feat-x-abc123');
++  fs.mkdirSync(path.join(wt, 'src'), { recursive: true });
++  fs.writeFileSync(path.join(wt, '.autopilot-worktree'), '{}');
++  const r = runHook(payload(path.join(wt, 'src', 'a.js')), env);
++  assert.strictEqual(r.status, 2);
++  assert.match(r.stderr, /a dispatch worktree/);
++});
++
++test('wrapper: l5 + depth-0 + unmarked worktree under .claude/worktrees ⇒ allowlisted .claude/ path as before', () => {
++  const { repo, env } = setup();
++  setMarker(env, repo, 'l5');
++  const wt = path.join(repo, '.claude', 'worktrees', 'session-x');
++  fs.mkdirSync(path.join(wt, 'src'), { recursive: true });
++  const r = runHook(payload(path.join(wt, 'src', 'a.js')), env);
++  assert.strictEqual(r.status, 0);
++});
+diff --git a/hooks/session-handoff.js b/hooks/session-handoff.js
+index ffa75bd6..f6ba846e 100644
+--- a/hooks/session-handoff.js
++++ b/hooks/session-handoff.js
+@@ -26,6 +26,7 @@ const path = require('path');
+ const crypto = require('crypto');
+ const { spawnSync } = require('child_process');
+ const { parseTranscriptText } = require('./state-checkpoint-lib.js');
++const { clearHandoffKey } = require('../scripts/resolve-repo-placement.js');
+ 
+ const ACT_REASONS = new Set(['clear', 'logout']);
+ const MIN_USER_TURNS = parseInt(process.env.AUTOPILOT_HANDOFF_MIN_USER_TURNS || '3', 10);
+@@ -317,7 +318,7 @@ function publishAtomic(bodyPath, metaPath, content, meta) {
+       toolCalls: decision.toolCalls,
+     });
+ 
+-    const repoHash = crypto.createHash('sha1').update(repoRoot).digest('hex');
++    const repoHash = clearHandoffKey(repoRoot);
+     const bodyPath = path.join(HANDOFF_DIR, `${repoHash}.md`);
+     const metaPath = path.join(HANDOFF_DIR, `${repoHash}.meta.json`);
+     const meta = {
+diff --git a/hooks/session-start.js b/hooks/session-start.js
+index d3ac4b98..6bb8babf 100644
+--- a/hooks/session-start.js
++++ b/hooks/session-start.js
+@@ -15,6 +15,7 @@ const crypto = require('crypto');
+ const { spawnSync } = require('child_process');
+ const semver = require('../scripts/lib/semver');
+ const { compactionStateName } = require('./state-checkpoint-lib.js');
++const { clearHandoffKey } = require('../scripts/resolve-repo-placement.js');
+ const {
+   composeSessionStartContext,
+   buildSessionStartOutput,
+@@ -485,7 +486,7 @@ function run() {
+     if (handoffEnabled(homeDir) && ALLOWED_SOURCES.has(source)) {
+       const repoRoot = resolveRepoRoot(cwd);
+       if (repoRoot) {
+-        const repoHash = crypto.createHash('sha1').update(repoRoot).digest('hex');
++        const repoHash = clearHandoffKey(repoRoot);
+         const handoffDir = path.join(homeDir, '.autopilot', 'handoff');
+         if (!cleanStaleHandoff(handoffDir, repoHash)) {
+           // On a consume miss (no handoff / writer still mid-publish / a racing
+diff --git a/hooks/tests/dispatch-batch.test.sh b/hooks/tests/dispatch-batch.test.sh
+index 99543c14..23f8e9bc 100755
+--- a/hooks/tests/dispatch-batch.test.sh
++++ b/hooks/tests/dispatch-batch.test.sh
+@@ -163,7 +163,16 @@ assert_contains "$OUT" '"commit": null' "failure commit is null (non-whitespace
+ R6="$TEST_TMP/r6"; mkrepo "$R6"
+ mkunit "$R6" ui  run6 "src/ui/a.ts"  "ui change"
+ mkunit "$R6" api run6 "src/api/b.ts" "api change"
+-OUT="$("$SCRIPT" merge-back --repo "$R6" --units "$TEST_TMP/units3.jsonl" --run-id run6 --base main)"; EXIT=$?
++# The integration worktree is transient; a post-checkout hook (run inside each new worktree)
++# records where it was placed. Run from an unrelated cwd: placement follows --repo, not the cwd.
++R6_HOOKLOG="$TEST_TMP/r6-checkouts.log"
++printf '#!/bin/sh\npwd -P >> "%s"\n' "$R6_HOOKLOG" > "$R6/.git/hooks/post-checkout"; chmod +x "$R6/.git/hooks/post-checkout"
++mkdir -p "$TEST_TMP/elsewhere"
++OUT="$(cd "$TEST_TMP/elsewhere" && "$SCRIPT" merge-back --repo "$R6" --units "$TEST_TMP/units3.jsonl" --run-id run6 --base main)"; EXIT=$?
++rm -f "$R6/.git/hooks/post-checkout"
++INTEG_PLACED="$(grep '/batch-integ-run6-' "$R6_HOOKLOG" 2>/dev/null | head -n 1)"
++case "$INTEG_PLACED" in "$(realpath "$R6")/.claude/worktrees/batch-integ-run6-"??????) __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) ;; *) fail "merge-back: integration worktree under --repo's .claude/worktrees/ (got '$INTEG_PLACED')" ;; esac
++grep -qxF '/.claude/worktrees/' "$R6/.git/info/exclude" && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "merge-back: .claude/worktrees/ excluded in the repo's info/exclude"
+ assert_eq "0" "$EXIT" "merge-back all-good exit 0"
+ assert_contains "$OUT" '"verdict": "merged"' "merge-back verdict merged"
+ assert_contains "$OUT" '"merged": ["ui", "api"]' "merge-back merged both units"
+diff --git a/hooks/tests/dispatch-foreman.test.sh b/hooks/tests/dispatch-foreman.test.sh
+index 85827255..9577a272 100755
+--- a/hooks/tests/dispatch-foreman.test.sh
++++ b/hooks/tests/dispatch-foreman.test.sh
+@@ -113,6 +113,9 @@ assert_eq "$RC" "2" "1: resume of a non-run-dir → 2"
+ assert_eq "$(git -C "$SBX" worktree list --porcelain | grep -c '^worktree .*/foreman-')" "0" "1: preconditions created no worktree"
+ 
+ # ======================================================================= 2 completed
++# First real run: the sandbox has no .claude/ yet, so the placement directory is created by this
++# run — and must not read as a main-checkout mutation (status completed below).
++[ -e "$SBX/.claude" ] && fail "2: precondition — sandbox starts without .claude/" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
+ run_foreman complete r2 --env-passthrough PASS_ME --model kimi-code/k3
+ assert_eq "$RC" "0" "2: completed → exit 0"
+ assert_eq "$(field "$OUT" status)" "completed" "2: status completed"
+@@ -133,6 +136,7 @@ assert_contains "$(field "$OUT" env_passthrough)" 'PASS_ME' "2: passthrough list
+ assert_file_exists "$RD/foreman.stream.jsonl" "2: stream log in run dir"
+ assert_eq "$(field "$OUT" stream_log)" "$RD/foreman.stream.jsonl" "2: stream_log path reported"
+ WT2="$(field "$OUT" worktree)"
++case "$WT2" in "$(realpath "$SBX")/.claude/worktrees/foreman-r2-"??????) __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) ;; *) fail "2: worktree sits under the sandbox's .claude/worktrees/ (got $WT2)" ;; esac
+ case "$RD" in "$WT2"*) fail "2: run dir must be OUTSIDE the worktree" ;; *) __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) ;; esac
+ [ -d "$WT2" ] && fail "2: worktree removed after clean completion" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
+ assert_eq "$(stat -c %a "$RD/brief.md")" "444" "2: brief copied read-only"
+@@ -181,6 +185,7 @@ assert_eq "$(cat "$SD/cwd.1")" "$(cat "$SD/cwd.0")" "3: handoff turn runs in the
+ assert_file_exists "$RD/foreman.stream.handoff.jsonl" "3: handoff stream captured separately"
+ WT3="$(field "$OUT" worktree)"
+ [ -d "$WT3" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "3: worktree retained after cap"
++assert_eq "$(git -C "$SBX" status --porcelain)" "" "3: sandbox porcelain stays clean with a worktree inside it (.claude/worktrees/ excluded)"
+ # the spinning stub is dead (its process group was killed)
+ sleep 0.5
+ STUB_PID="$(cat "$SD/pid.0")"
+diff --git a/hooks/tests/dispatch-hetero-contract.test.sh b/hooks/tests/dispatch-hetero-contract.test.sh
+index b00d2668..9321bfa7 100755
+--- a/hooks/tests/dispatch-hetero-contract.test.sh
++++ b/hooks/tests/dispatch-hetero-contract.test.sh
+@@ -145,10 +145,11 @@ get_last_json() {
+     echo "$1" | grep '^{' | tail -n 1
+ }
+ 
++# The registry, not a directory listing: the rail places worktrees under the consuming repo's
++# .claude/worktrees/ (or the temp dir on fallback), so a find in one directory can miss them.
+ assert_no_hetero_worktrees() {
+-    local dir="$CASE_TMP"
+     local count
+-    count=$(find "$dir" -maxdepth 1 -name 'hetero-*' 2>/dev/null | grep -c . || true)
++    count=$(git -C "$MINI_REPO" worktree list --porcelain 2>/dev/null | grep -c '^worktree .*/hetero-' || true)
+     assert_eq "0" "$count"
+ }
+ 
+diff --git a/hooks/tests/dispatch-hetero.test.sh b/hooks/tests/dispatch-hetero.test.sh
+index 57fef9ff..d8e288c7 100755
+--- a/hooks/tests/dispatch-hetero.test.sh
++++ b/hooks/tests/dispatch-hetero.test.sh
+@@ -284,6 +284,17 @@ assert_contains "$OUT" '"status": "committed"' "qoder committed status"
+ assert_contains "$OUT" '"runner": "qoderclicn"' "qoder runner reported"
+ 
+ # 4. committed path: stub commits → exit 0, JSON committed, branch survives, worktree removed
++# First run that places a worktree, in a fresh sandbox (earlier cases already placed some in $SBX):
++# the run creates .claude/worktrees itself, which must not read as a main-checkout mutation.
++FIRST_SBX="$TEST_TMP/repo-first"
++mkdir -p "$FIRST_SBX"
++git -C "$FIRST_SBX" init -q -b develop
++git -C "$FIRST_SBX" -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
++[ -e "$FIRST_SBX/.claude" ] && fail "4: precondition — fresh sandbox starts without .claude/" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
++OUT="$(cd "$FIRST_SBX" && "$SCRIPT" --branch feat/first --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
++assert_eq "0" "$EXIT" "4: first placement in a sandbox without .claude/ exits 0"
++assert_contains "$OUT" '"status": "committed"' "4: first placement is committed, not main_checkout_mutated"
++assert_eq "" "$(git -C "$FIRST_SBX" status --porcelain)" "4: first placement leaves the sandbox porcelain clean"
+ DIRECT_AUTHORITY_BEFORE="$(
+   git -C "$SBX" for-each-ref --format='%(refname)' refs/autopilot/lifecycle-roots/ \
+     | wc -l
+@@ -510,6 +521,8 @@ assert_eq "1" "$EXIT" "dirty path exit code"
+ assert_contains "$OUT" '"status": "dirty"' "dirty status"
+ DIRTY_WT="$(printf '%s' "$OUT" | grep -o '"worktree": "[^"]*"' | cut -d'"' -f4)"
+ assert_file_exists "$DIRTY_WT/unstaged.txt" "dirty worktree kept with unstaged file"
++case "$DIRTY_WT" in "$(realpath "$SBX")/.claude/worktrees/hetero-feat-dirty-"??????) __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) ;; *) fail "dirty worktree sits under the sandbox's .claude/worktrees/ (got $DIRTY_WT)" ;; esac
++assert_eq "" "$(git -C "$SBX" status --porcelain)" "sandbox porcelain stays clean with a worktree inside it (.claude/worktrees/ excluded)"
+ git -C "$SBX" worktree remove --force "$DIRTY_WT" >/dev/null 2>&1 || true
+ 
+ # 5c. --keep-worktree is a bounded lease, never an ownerless boolean.
+diff --git a/hooks/tests/identifier-scan.test.sh b/hooks/tests/identifier-scan.test.sh
+index 1b1ae754..9583b0af 100755
+--- a/hooks/tests/identifier-scan.test.sh
++++ b/hooks/tests/identifier-scan.test.sh
+@@ -183,4 +183,17 @@ actual_pattern_ids=$(node -e "
+ " "$SCAN_JS")
+ assert_eq "$actual_pattern_ids" "$expected_kinds" "PATTERNS ids exactly match the dirty/ fixture-covered kinds"
+ 
++# 12. A directory walk skips <root>/.claude/worktrees: rail and session worktrees live there and
++# are other checkouts, not this tree. Only that path — a hit elsewhere under .claude still fires.
++echo "Testing a directory walk skips .claude/worktrees only..."
++WALK="$TEST_TMP/identifier-walk"
++mkdir -p "$WALK/.claude/worktrees/hetero-x-abc123" "$WALK/.claude/notes"
++cp "$CLEAN"/* "$WALK/" 2>/dev/null || true
++cp "$DIRTY/email.md" "$WALK/.claude/worktrees/hetero-x-abc123/email.md"
++run_scan --json "$WALK"
++assert_exit_code "$__SCAN_EXIT" 0 "a hit inside .claude/worktrees/ is not this tree's"
++cp "$DIRTY/email.md" "$WALK/.claude/notes/email.md"
++run_scan --json "$WALK"
++assert_exit_code "$__SCAN_EXIT" 1 "a hit elsewhere under .claude/ still fires"
++
+ finalize_test
+diff --git a/hooks/tests/probe-unknown.test.sh b/hooks/tests/probe-unknown.test.sh
+index 6ec635cf..3829ede2 100755
+--- a/hooks/tests/probe-unknown.test.sh
++++ b/hooks/tests/probe-unknown.test.sh
+@@ -167,6 +167,11 @@ assert_eq "$(printf '%s' "$OUT" | field learn_required.length)" "$(printf '%s' "
+ mkdir -p "$TEST_TMP/proj/a/ledger" "$TEST_TMP/proj/b/ledger"; cp "$L" "$TEST_TMP/proj/a/ledger/decisions.jsonl"; cp "$L" "$TEST_TMP/proj/b/ledger/decisions.jsonl"
+ OUT="$(node "$PROBE" report --project-dir "$TEST_TMP/proj")"
+ assert_eq "$(printf '%s' "$OUT" | field ledgers.length)" "2" "--project-dir aggregates ledgers"
++# Other checkouts (.claude/worktrees) and installed packages (node_modules) are not this tree's ledgers.
++mkdir -p "$TEST_TMP/proj/.claude/worktrees/hetero-x-abc123/c/ledger" "$TEST_TMP/proj/node_modules/pkg/ledger"
++cp "$L" "$TEST_TMP/proj/.claude/worktrees/hetero-x-abc123/c/ledger/decisions.jsonl"; cp "$L" "$TEST_TMP/proj/node_modules/pkg/ledger/decisions.jsonl"
++OUT="$(node "$PROBE" report --project-dir "$TEST_TMP/proj")"
++assert_eq "$(printf '%s' "$OUT" | field ledgers.length)" "2" "--project-dir skips .claude/worktrees and node_modules"
+ 
+ # ── ledger round-end report: Ladder section ──
+ OUT="$(node "$LEDGER" report --ledger "$L")"
+diff --git a/hooks/tests/repo-residue-auto.test.sh b/hooks/tests/repo-residue-auto.test.sh
+index ce7702d2..b126e05e 100755
+--- a/hooks/tests/repo-residue-auto.test.sh
++++ b/hooks/tests/repo-residue-auto.test.sh
+@@ -129,6 +129,11 @@ mk_wt b-mission unintegrated;   mk_marker "$TEST_TMP/wt-b-mission" b-mission "mi
+ mkdir -p "$SBX/.claude/worktrees"
+ G worktree add -q "$SBX/.claude/worktrees/session" -b session-branch "$BASE" 2>/dev/null; echo y > "$SBX/.claude/worktrees/session/dirty.txt"
+ ( cd "$SBX/.claude/worktrees/session" && exec sleep 600 ) & SESS_PID=$!
++# a RAIL worktree under .claude/worktrees (marker, expired lease, dirty) with a process inside: its
++# liveness is the flock, not a cwd, so it is still listed (D10)
++G worktree add -q "$SBX/.claude/worktrees/hetero-rail-busy-abc123" -b rail-busy "$BASE" 2>/dev/null; git -C "$SBX/.claude/worktrees/hetero-rail-busy-abc123" -c user.email=t@t -c user.name=t commit -q --allow-empty -m ahead-rail-busy
++mk_marker "$SBX/.claude/worktrees/hetero-rail-busy-abc123" rail-busy root-rb run-rb "retention_reason=dirty" "$EXPIRED"; echo z > "$SBX/.claude/worktrees/hetero-rail-busy-abc123/dirty.txt"
++( cd "$SBX/.claude/worktrees/hetero-rail-busy-abc123" && exec sleep 600 ) & RAIL_BUSY_PID=$!
+ 
+ # campaign journal + Mission registry (the authoritative signals)
+ mkdir -p "$COMMON/autopilot/mission/states"
+@@ -257,6 +262,7 @@ assert_not_contains "$NH_TXT" '/wt-b-live' "needs_human: live excluded"
+ assert_not_contains "$NH_TXT" '/wt-b-unexpired' "needs_human: unexpired default lease excluded"
+ assert_not_contains "$NH_TXT" '/wt-b-lease-unexpired' "needs_human: unexpired explicit lease excluded"
+ assert_not_contains "$NH_TXT" '.claude/worktrees/session' "needs_human: .claude/worktrees path with a live process excluded"
++assert_contains "$NH_TXT" '.claude/worktrees/hetero-rail-busy-abc123' "needs_human: a marked rail worktree under .claude/worktrees is judged by its marker, not a cwd inside it"
+ assert_not_contains "$NH_TXT" 'hands/young' "needs_human: young branch excluded"
+ assert_not_contains "$NH_TXT" 'feature/merged' "needs_human: integrated branch excluded"
+ assert_eq "$(jx "$OUT" 'j.needs_human.find(e=>e.path&&e.path.endsWith("/wt-b-dirty")).reason')" "dirty" "needs_human reason = retention_reason"
+@@ -368,5 +374,6 @@ MB="$(node "$MUTB/scripts/repo-residue-sweep.js" scan --repo "$SBX")"
+ assert_contains "$(jx "$MB" 'j.needs_human.map(e=>e.ref||"").join(" ")')" "$D30/hands/recent" "mutant: age gate removed -> the 30-day ref is listed (default-threshold assertion would fail)"
+ 
+ kill "$SESS_PID" 2>/dev/null; wait "$SESS_PID" 2>/dev/null
++kill "$RAIL_BUSY_PID" 2>/dev/null; wait "$RAIL_BUSY_PID" 2>/dev/null
+ 
+ finalize_test
+diff --git a/hooks/tests/resolve-repo-placement.test.sh b/hooks/tests/resolve-repo-placement.test.sh
+new file mode 100755
+index 00000000..be5c6d2c
+--- /dev/null
++++ b/hooks/tests/resolve-repo-placement.test.sh
+@@ -0,0 +1,91 @@
++#!/usr/bin/env bash
++# resolve-repo-placement.test.sh — one answer per repo for where its worktrees and handoffs go
++# (plan docs/plans/2026-10-12-worktree-placement.md, D1/D8/D12): the same answer from the main
++# checkout and from a linked worktree, a temp-dir fallback when there is no non-bare main checkout,
++# and handoff keys that are per repo (manual) and per worktree (/clear).
++
++set -uo pipefail
++. "$(dirname "$0")/lib.sh"
++SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
++REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
++R="$REPO_ROOT/scripts/resolve-repo-placement.js"
++
++PASS=0; FAIL=0
++ok() { PASS=$((PASS+1)); printf 'ok — %s\n' "$1"; }
++no() { FAIL=$((FAIL+1)); printf 'FAIL — %s\n     want: %s\n     got:  %s\n' "$1" "$2" "$3"; }
++eq() { [ "$2" = "$3" ] && ok "$1" || no "$1" "$2" "$3"; }
++ne() { [ "$2" != "$3" ] && ok "$1" || no "$1" "not $2" "$3"; }
++
++TMP="$(cd "$(mktemp -d)" && pwd -P)"; trap 'rm -rf "$TMP"; cleanup_test_tmp' EXIT
++export HOME="$TMP/home" TMPDIR="$TMP/tmp"; mkdir -p "$HOME" "$TMPDIR"
++export GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
++G() { git -C "$1" "${@:2}" >/dev/null 2>&1; }
++mkrepo() { mkdir -p "$1"; G "$1" init -q -b develop; G "$1" commit -q --allow-empty -m init; }
++field() { node -e 'const v=JSON.parse(require("fs").readFileSync(0,"utf8"))[process.argv[1]];process.stdout.write(v===null?"null":String(v))' "$1"; }
++rp() { node "$R" "$@" 2>/dev/null; }
++
++A="$TMP/a/proj"; mkrepo "$A"
++G "$A" worktree add -q -b feat/x "$TMP/a-wt1"
++G "$A" worktree add -q -b feat/y "$TMP/a-wt2"
++
++# 1. main: the same main checkout and identity from the main checkout and from a linked worktree.
++eq "main from the main checkout" "$A" "$(rp main --from "$A" | field main_checkout)"
++eq "main from a linked worktree is the main checkout" "$A" "$(rp main --from "$TMP/a-wt1" | field main_checkout)"
++eq "identity is the same from both" "$(rp main --from "$A" | field repo_identity)" "$(rp main --from "$TMP/a-wt1" | field repo_identity)"
++eq "not a fallback" "false" "$(rp main --from "$TMP/a-wt1" | field fallback)"
++eq "behind is null without an upstream" "null" "$(rp main --from "$A" | field behind)"
++
++# 2. behind counts the main checkout's branch against its upstream.
++U="$TMP/u"; G "$TMP" clone -q "$A" "$U"; G "$A" commit -q --allow-empty -m ahead
++G "$U" fetch -q origin
++eq "behind counts commits behind upstream" "1" "$(rp main --from "$U" | field behind)"
++
++# 3. worktree: a template under <main>/.claude/worktrees, the directory created, from either checkout.
++rm -rf "$A/.claude"
++T1="$(rp worktree --prefix hetero --slug feat/x --from "$TMP/a-wt1")"
++eq "template from a linked worktree is under the main checkout" "$A/.claude/worktrees/hetero-feat-x-XXXXXX" "$T1"
++[ -d "$A/.claude/worktrees" ] && ok "worktree creates <main>/.claude/worktrees" || no "worktree creates <main>/.claude/worktrees" "dir" "missing"
++eq "template from the main checkout is the same" "$T1" "$(rp worktree --prefix hetero --slug feat/x --from "$A")"
++W="$(mktemp -u -d "$T1")"; G "$A" worktree add -q --detach "$W" HEAD
++case "$W" in "$A/.claude/worktrees/hetero-feat-x-"??????) ok "mktemp fills the template" ;; *) no "mktemp fills the template" "$A/.claude/worktrees/hetero-feat-x-??????" "$W" ;; esac
++eq "a worktree inside .claude/worktrees still answers the main checkout" "$A" "$(rp main --from "$W" | field main_checkout)"
++
++# 4. Fallback: a bare repo has no main checkout; the template stays in the temp dir and says so.
++B="$TMP/bare.git"; G "$TMP" init -q --bare -b develop "$B"; G "$A" push -q "$B" develop
++G "$B" worktree add -q "$TMP/b-wt" develop
++eq "bare repo: fallback" "true" "$(rp main --from "$TMP/b-wt" | field fallback)"
++eq "bare repo: no main checkout" "null" "$(rp main --from "$TMP/b-wt" | field main_checkout)"
++eq "bare repo: temp-dir template" "$TMPDIR/foreman-r1-XXXXXX" "$(rp worktree --prefix foreman --slug r1 --from "$TMP/b-wt")"
++ERR="$(node "$R" worktree --prefix foreman --slug r1 --from "$TMP/b-wt" 2>&1 >/dev/null)"
++case "$ERR" in *"temp dir"*) ok "fallback says so on stderr" ;; *) no "fallback says so on stderr" "*temp dir*" "$ERR" ;; esac
++
++# 5. Separate --git-dir: the common dir is not `.git` ⇒ fallback.
++S="$TMP/sep"; mkdir -p "$S/wt"; git --git-dir="$S/store" --work-tree="$S/wt" init -q -b develop >/dev/null 2>&1
++eq "separate git dir: fallback" "true" "$(GIT_DIR="$S/store" GIT_WORK_TREE="$S/wt" node "$R" main --from "$S/wt" 2>/dev/null | field fallback)"
++
++# 6. Handoff: manual is per repo (shared by worktrees, distinct for same-named repos); /clear is per worktree.
++B2="$TMP/b/proj"; mkrepo "$B2"
++M_A="$(rp handoff --route manual --from "$A")"
++eq "manual: same path from a linked worktree" "$M_A" "$(rp handoff --route manual --from "$TMP/a-wt2")"
++ne "manual: two repos named proj get different paths" "$M_A" "$(rp handoff --route manual --from "$B2")"
++case "$M_A" in "$HOME/.autopilot/handoff-manual/proj-"????????.md) ok "manual: <basename>-<8 hex>.md under ~/.autopilot/handoff-manual" ;; *) no "manual path shape" "$HOME/.autopilot/handoff-manual/proj-XXXXXXXX.md" "$M_A" ;; esac
++G "$B" worktree add -q -b feat/z "$TMP/b-wt2"
++eq "manual: a bare repo's worktrees share one path" "$(rp handoff --route manual --from "$TMP/b-wt")" "$(rp handoff --route manual --from "$TMP/b-wt2")"
++case "$(rp handoff --route manual --from "$TMP/b-wt")" in "$HOME/.autopilot/handoff-manual/bare-"????????.md) ok "manual: a bare repo is named without .git" ;; *) no "manual: bare repo name" "bare-XXXXXXXX.md" "$(rp handoff --route manual --from "$TMP/b-wt")" ;; esac
++C1="$(rp handoff --route clear --from "$TMP/a-wt1")"
++ne "clear: two worktrees of one repo differ" "$C1" "$(rp handoff --route clear --from "$TMP/a-wt2")"
++eq "clear: sha1 of the realpath toplevel" "$HOME/.autopilot/handoff/$(printf '%s' "$TMP/a-wt1" | sha1sum | cut -d' ' -f1).md" "$C1"
++NR="$TMP/plain"; mkdir -p "$NR"
++case "$(rp handoff --route manual --from "$NR")" in "$HOME/.autopilot/handoff-manual/plain-"????????.md) ok "manual outside a repo: cwd name" ;; *) no "manual outside a repo" "plain-XXXXXXXX.md" "$(rp handoff --route manual --from "$NR")" ;; esac
++
++# 7. Exit codes.
++(node "$R" worktree --prefix hetero --slug x >/dev/null 2>&1); eq "worktree without --from exits 2" "2" "$?"
++(node "$R" worktree --prefix hetero --slug x --from "$NR" >/dev/null 2>&1); eq "worktree outside a repo exits 1" "1" "$?"
++(node "$R" handoff --route clear --from "$NR" >/dev/null 2>&1); eq "clear outside a repo exits 1" "1" "$?"
++(node "$R" handoff --route other --from "$A" >/dev/null 2>&1); eq "unknown route exits 2" "2" "$?"
++(node "$R" worktree --prefix 'a/b' --slug x --from "$A" >/dev/null 2>&1); eq "prefix with a slash exits 2" "2" "$?"
++(node "$R" nope >/dev/null 2>&1); eq "unknown subcommand exits 2" "2" "$?"
++(node "$R" main --from >/dev/null 2>&1); eq "flag without a value exits 2" "2" "$?"
++
++printf '\n%s passed, %s failed\n' "$PASS" "$FAIL"
++[ "$FAIL" -eq 0 ]
+diff --git a/hooks/tests/stage-advance.test.sh b/hooks/tests/stage-advance.test.sh
+index 7030bce5..a08df058 100755
+--- a/hooks/tests/stage-advance.test.sh
++++ b/hooks/tests/stage-advance.test.sh
+@@ -500,5 +500,104 @@ newsess; sm set --size M --repo-root "$RN" >/dev/null 2>&1; sm set --new-task --
+ eq "--new-task without --size clears size" "<absent>" "$(jf size)"
+ sm set --size L --repo-root "$RN" >/dev/null 2>&1; eq "later set --size on the new task works" '"L"' "$(jf size)"
+ 
++# ---------------------------------------------------------------- D5: the marker follows the session into a linked worktree
++# (plan docs/plans/2026-10-12-worktree-placement.md P1.1 / P1.2 d-f). No --repo-root: the cwd is what moves.
++RA="$TEST_TMP/r-follow"; mkrepo "$RA"; plant "$RA" 1 1 seed
++WA="$TEST_TMP/r-follow-wt"; git -C "$RA" worktree add -q -b feat/follow "$WA"
++RB="$TEST_TMP/r-foreign"; mkrepo "$RB"; plant "$RB" 7 1 foreign
++newsess; (cd "$RA" && node "$SM" set --size S >/dev/null 2>&1)
++eq "fixture: marker created in the main checkout" "\"$RA\"" "$(jf repo_root)"
++plant "$RA" 7 1 other    # other sessions' merges land on the main checkout's develop
++plant "$WA" 1 1 mine     # this session's work, in the linked worktree
++(cd "$WA" && node "$SA" --to implement >/dev/null 2>&1)
++OUT=$(cd "$WA" && node "$SA" --to verify 2>"$TEST_TMP/err"); RC=$?
++eq "E1 from a linked worktree measures that worktree (1 file fits S)" "0" "$RC"
++# negative: a cwd in another repository measures marker.repo_root and leaves the marker alone
++newsess; sm set --size S --repo-root "$RA" >/dev/null 2>&1
++(cd "$RB" && node "$SA" --to implement >/dev/null 2>&1)
++OUT=$(cd "$RB" && node "$SA" --to verify 2>"$TEST_TMP/err"); RC=$?
++eq "E1 from a foreign repo measures marker.repo_root (clean, fits)" "0" "$RC"
++eq "a foreign cwd leaves repo_root" "\"$RA\"" "$(jf repo_root)"
++# set --new-task: follows a linked worktree of the same repo, ignores a foreign repo
++newsess; (cd "$RA" && node "$SM" set --size S >/dev/null 2>&1)
++(cd "$WA" && node "$SM" set --new-task --size S >/dev/null 2>&1)
++eq "--new-task from a linked worktree: repo_root follows" "\"$WA\"" "$(jf repo_root)"
++(cd "$RB" && node "$SM" set --new-task --size S >/dev/null 2>&1)
++eq "--new-task from a foreign repo: repo_root unchanged" "\"$WA\"" "$(jf repo_root)"
++eq "--new-task from a foreign repo: base_ref derived in repo_root, not the cwd" \
++  "\"$(git -C "$WA" merge-base HEAD develop)\"" "$(jf base_ref)"
++# set (merge path, no --new-task): follows in both directions, ignores a foreign repo
++newsess; (cd "$RA" && node "$SM" set --size S >/dev/null 2>&1)
++(cd "$WA" && node "$SM" set --size M >/dev/null 2>&1)
++eq "set from a linked worktree: repo_root follows" "\"$WA\"" "$(jf repo_root)"
++(cd "$RB" && node "$SM" set --size L >/dev/null 2>&1)
++eq "set from a foreign repo: the write happened (size L)" '"L"' "$(jf size)"
++eq "set from a foreign repo: repo_root unchanged" "\"$WA\"" "$(jf repo_root)"
++(cd "$RA" && node "$SM" set --size XL >/dev/null 2>&1)
++eq "set back in the main checkout: the write happened (size XL)" '"XL"' "$(jf size)"
++eq "set back in the main checkout: repo_root follows back" "\"$RA\"" "$(jf repo_root)"
++
++# ---------------------------------------------------------------- P3.1: --new-task advisory when the worktree name and branch share no word
++# One stderr line, never a refusal: the exit code is 0 in every case.
++ADV='shares no word with it'
++newtask_in() { # dir -> RC: exit code of set --new-task run there, ERR: its stderr
++  newsess; (cd "$RA" && node "$SM" set --size S >/dev/null 2>&1)
++  (cd "$1" && node "$SM" set --new-task --size S >/dev/null 2>"$TEST_TMP/err"); RC=$?
++  ERR=$(cat "$TEST_TMP/err")
++}
++W="$TEST_TMP/wt-login-form"; git -C "$RA" worktree add -q -b feat/login-form "$W"
++newtask_in "$W"; eq "advisory: shared word -> exit 0" "0" "$RC"
++eq "advisory: shared word -> silent" "" "$ERR"
++W="$TEST_TMP/wt-autocompact-detect"; git -C "$RA" worktree add -q -b feat/worktree-placement-rule "$W"
++newtask_in "$W"; eq "advisory: no shared word -> exit 0" "0" "$RC"
++eq "advisory: no shared word -> one line" "1" "$(printf '%s\n' "$ERR" | grep -c "$ADV")"
++has "advisory: names the worktree dir" "wt-autocompact-detect" "$ERR"
++has "advisory: names the branch" "feat/worktree-placement-rule" "$ERR"
++has "advisory: points at the rule" "references/worktree-placement.md" "$ERR"
++git -C "$RA" checkout -q -b feat/unrelated-name; newtask_in "$RA"; git -C "$RA" checkout -q develop
++eq "advisory: main checkout -> exit 0" "0" "$RC"
++eq "advisory: main checkout -> silent" "" "$ERR"
++W="$TEST_TMP/feat-1234"; git -C "$RA" worktree add -q -b feat/1234 "$W"
++newtask_in "$W"; eq "advisory: only generic/digit tokens -> exit 0" "0" "$RC"
++eq "advisory: only generic/digit tokens -> silent" "" "$ERR"
++W="$TEST_TMP/Foo-bar"; git -C "$RA" worktree add -q -b foo-bar "$W"
++newtask_in "$W"; eq "advisory: case differs only -> exit 0" "0" "$RC"
++eq "advisory: case differs only -> silent" "" "$ERR"
++W="$TEST_TMP/wt-detached"; git -C "$RA" worktree add -q --detach "$W"
++newtask_in "$W"; eq "advisory: detached HEAD -> exit 0" "0" "$RC"
++eq "advisory: detached HEAD -> silent" "" "$ERR"
++
++# ---------------------------------------------------------------- D6: base_ref takes the newer of a local/remote pair
++# (plan P1.2 a-c, g, h). origin/* refs are planted with update-ref; no remote, no fetch.
++basesha() { sm set --size S --repo-root "$1" >/dev/null 2>&1; jf base_ref | tr -d '"'; }
++# (a) local develop behind origin/develop -> the remote's merge-base
++R="$TEST_TMP/r-behind"; mkrepo "$R"; plant "$R" 1 1 a; C1=$(git -C "$R" rev-parse HEAD)
++plant "$R" 1 1 b; C2=$(git -C "$R" rev-parse HEAD)
++git -C "$R" update-ref refs/remotes/origin/develop "$C2"; git -C "$R" checkout -q -b feat/x; plant "$R" 1 1 f
++git -C "$R" branch -f develop "$C1"
++newsess; eq "base_ref: local develop behind origin/develop -> remote" "$C2" "$(basesha "$R")"
++# (b) local ahead -> local
++R="$TEST_TMP/r-ahead"; mkrepo "$R"; plant "$R" 1 1 a; C1=$(git -C "$R" rev-parse HEAD)
++plant "$R" 1 1 b; C2=$(git -C "$R" rev-parse HEAD)
++git -C "$R" update-ref refs/remotes/origin/develop "$C1"; git -C "$R" checkout -q -b feat/x; plant "$R" 1 1 f
++newsess; eq "base_ref: local develop ahead of origin/develop -> local" "$C2" "$(basesha "$R")"
++# (c) diverged -> remote
++R="$TEST_TMP/r-diverged"; mkrepo "$R"; plant "$R" 1 1 a
++git -C "$R" checkout -q -b side; plant "$R" 1 1 r; CR=$(git -C "$R" rev-parse HEAD)
++git -C "$R" update-ref refs/remotes/origin/develop "$CR"
++git -C "$R" checkout -q develop; plant "$R" 1 1 l
++git -C "$R" checkout -q -b feat/x "$CR"; plant "$R" 1 1 f
++newsess; eq "base_ref: diverged develop / origin/develop -> remote" "$CR" "$(basesha "$R")"
++# (g) only origin/develop plus a local main -> origin/develop (today's flat order picked main)
++R="$TEST_TMP/r-onlyremote"; mkrepo "$R" main; plant "$R" 1 1 a; C1=$(git -C "$R" rev-parse HEAD)
++plant "$R" 1 1 b; C2=$(git -C "$R" rev-parse HEAD)
++git -C "$R" update-ref refs/remotes/origin/develop "$C2"; git -C "$R" checkout -q -b feat/x; plant "$R" 1 1 f
++git -C "$R" branch -f main "$C1"
++newsess; eq "base_ref: origin/develop beats a local main" "$C2" "$(basesha "$R")"
++# (h) only a local develop -> develop
++R="$TEST_TMP/r-onlylocal"; mkrepo "$R"; plant "$R" 1 1 a; C1=$(git -C "$R" rev-parse HEAD)
++git -C "$R" checkout -q -b feat/x; plant "$R" 1 1 f
++newsess; eq "base_ref: only a local develop -> develop" "$C1" "$(basesha "$R")"
++
+ echo "stage-advance.test: pass=$PASS fail=$FAIL"
+ [ "$FAIL" -eq 0 ]
+diff --git a/hooks/worktree-activity.test.js b/hooks/worktree-activity.test.js
+new file mode 100644
+index 00000000..e60ca88d
+--- /dev/null
++++ b/hooks/worktree-activity.test.js
+@@ -0,0 +1,38 @@
++/**
++ * Tests for scripts/lib/worktree-activity.js newestMtime vs nested worktrees (plan
++ * docs/plans/2026-10-12-worktree-placement.md, P2.5). Run: node --test hooks/worktree-activity.test.js
++ *
++ * Rail and session worktrees live under <main checkout>/.claude/worktrees/. Walking the main checkout
++ * must not read their writes as its own activity; a worktree that itself sits there is walked normally.
++ */
++'use strict';
++
++const test = require('node:test');
++const assert = require('node:assert/strict');
++const fs = require('fs');
++const os = require('os');
++const path = require('path');
++const { newestMtime } = require('../scripts/lib/worktree-activity');
++
++function touch(file, epochSeconds) {
++  fs.mkdirSync(path.dirname(file), { recursive: true });
++  fs.writeFileSync(file, 'x');
++  fs.utimesSync(file, epochSeconds, epochSeconds);
++}
++
++test('newestMtime skips <root>/.claude/worktrees but not the rest of .claude', () => {
++  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-activity-'));
++  try {
++    touch(path.join(root, 'src', 'a.js'), 1_000_000);
++    touch(path.join(root, '.claude', 'worktrees', 'hetero-x-abc123', 'b.js'), 2_000_000);
++    assert.equal(newestMtime(root).mtime, 1_000_000 * 1000, 'a nested worktree write is not the root\'s activity');
++
++    touch(path.join(root, '.claude', 'notes.md'), 1_500_000);
++    assert.equal(newestMtime(root).mtime, 1_500_000 * 1000, 'other .claude content still counts');
++
++    const nested = path.join(root, '.claude', 'worktrees', 'hetero-x-abc123');
++    assert.equal(newestMtime(nested).mtime, 2_000_000 * 1000, 'a worktree under .claude/worktrees is walked as its own root');
++  } finally {
++    fs.rmSync(root, { recursive: true, force: true });
++  }
++});
+diff --git a/references/worktree-placement.md b/references/worktree-placement.md
+new file mode 100644
+index 00000000..5a118508
+--- /dev/null
++++ b/references/worktree-placement.md
+@@ -0,0 +1,87 @@
++# Worktree and handoff placement
++
++Where a repo's worktrees and handoff files go, who puts them there, and why the two handoff routes use
++different keys. One resolver answers every path question: [`scripts/resolve-repo-placement.js`](../scripts/resolve-repo-placement.js).
++Decisions and evidence: [`docs/plans/2026-10-12-worktree-placement.md`](../docs/plans/2026-10-12-worktree-placement.md).
++
++## The rule
++
++**Every worktree of a repo lives under one root: `<main checkout>/.claude/worktrees/`**, whoever creates it.
++The main checkout is the parent of the repo's `.git` directory (`git rev-parse --git-common-dir`), found the same
++way from the main checkout and from any linked worktree, so every worktree of one repo shares one root and the
++path says which repo it belongs to.
++
++| Who creates it | Name under `.claude/worktrees/` | How |
++|---|---|---|
++| A person, `claude -w <name>`, `EnterWorktree`, a subagent with `isolation: "worktree"` | `<name>` (subagents: `agent-<id>`); branch `worktree-<name>` unless created by hand | Claude Code's own placement; autopilot does not take it over (no `WorktreeCreate` hook) |
++| `dispatch-hetero.sh` | `hetero-<branch>-XXXXXX` | `resolve-repo-placement.js worktree --prefix hetero --slug <branch> --from <repo root>` |
++| `dispatch-foreman.sh` | `foreman-<run_id>-XXXXXX` | same, `--prefix foreman` |
++| `dispatch-batch.sh` (integration worktree) | `batch-integ-<run_id>-XXXXXX` | same, `--prefix batch-integ` |
++
++Claude Code's own behaviour here (names, branch, sweep, prompts, isolation) is from the docs and runs recorded in
++[`spike-native-worktree.md`](../docs/plans/evidence/2026-10-12-worktree-placement/spike-native-worktree.md); the
++refused `!` pull is gap 8 of [the backlog note](../docs/backlog/worktree-and-handoff-placement-has-no-rule.md).
++
++- **Name a hand-made worktree after its task**, and open a fresh one for the next task instead of branching a new
++  task inside the old one. `session-mode.js set --new-task` prints one advisory line when the worktree's directory
++  name and its branch share no word (generic words such as `feat`, `fix`, `wip` and digit-only words do not count).
++  It never blocks.
++- **Fallback**: a repo with no non-bare main checkout (a bare repo, a separate `--git-dir`) keeps rail worktrees in
++  the temp dir, and the resolver says so on stderr. The residue registry still lists those temp prefixes.
++- **Stay in the temp dir**: the `verify-red-green.sh` and test-integrity-L1 scratch worktrees. They are
++  short-lived, removed by their own script, and never handed to a person.
++
++### What follows from one root
++
++- Rail worktrees carry the `.autopilot-worktree` marker; liveness is the marker's lock, not a process cwd.
++  `repo-residue-sweep.js` skips a busy worktree under `.claude/worktrees/` only when it has no valid marker.
++- `orchestrator-edit-gate` treats a marked worktree under `.claude/worktrees/` as a dispatch worktree (depth-0
++  gated, subagents free), exactly as it treats one in the temp dir. An unmarked one is part of the repo's
++  `.claude/` tree, which the gate already allows.
++- The main-checkout boundary fingerprint skips `.claude/worktrees/`: each worktree there is another checkout with
++  its own review.
++- Repo-tree walkers that start at the main checkout (`identifier-scan.js`, `probe-unknown.js`,
++  `lib/worktree-activity.js`) skip `.claude/worktrees/`.
++- The rails add `/.claude/worktrees/` to the repo's shared `info/exclude`, so a consumer repo that does not ignore
++  that path sees no untracked entries. Its tracked `.gitignore` is not edited.
++- Claude Code's periodic worktree sweep only removes worktrees it created itself, so it never removes a rail
++  worktree there; `EnterWorktree` into `.claude/worktrees/` needs no prompt.
++
++## The session marker follows the session
++
++`session-mode.js set` (with or without `--new-task`) moves the marker's `repo_root` to the toplevel it runs in
++when that toplevel belongs to the same repo (same repo identity), and `stage-advance.js` measures the E1 diff in
++that worktree. A cwd in another repo leaves the marker alone. `base_ref` defaults to the newer of `develop` and
++`origin/develop` (then `main`, `master`), so a main checkout that has not pulled does not inflate E1.
++
++## Handoff files
++
++| Route | Path | Key | Consumed by |
++|---|---|---|---|
++| Active project | `<projects_dir>/<project>/HANDOFF.md` | the project (`resolve-project-paths.sh`) | whoever resumes the project |
++| Manual (`/handoff` without a project) | `~/.autopilot/handoff-manual/<repo name>-<8 hex>.md` | `sha1(repo identity)` — **one file per repo**, shared by its worktrees; outside a repo, `sha1(cwd)` | a later session in any worktree of the repo |
++| `/clear` hook | `~/.autopilot/handoff/<sha1>.md` | `sha1(realpath of the worktree's toplevel)` — **one file per worktree** | the next session started in that same worktree |
++
++Ask for a path with `resolve-repo-placement.js handoff --route manual|clear [--from <dir>]`; the hooks call its
++`clearHandoffKey()`. The keys differ on purpose: the manual handoff is written for a person or a later session to
++find from anywhere in the repo, while the `/clear` handoff is injected automatically, and a per-repo key would let a
++parallel session in a sibling worktree consume it.
++
++## Bringing the main checkout up to date
++
++A Claude Code session isolated in a worktree (`--worktree`, `EnterWorktree`) cannot move the main checkout's
++branch: git refuses to update a branch checked out elsewhere, and the session's isolation refuses git commands
++aimed at the main checkout, including the owner's `!` commands typed into that session. After a push, the owner runs
++this from a terminal that is not the isolated session:
++
++```bash
++node <plugin>/scripts/resolve-repo-placement.js main --from <any worktree of the repo>
++# {"main_checkout": "...", "behind": N, ...}  — N commits behind its upstream
++git -C <main_checkout> pull --ff-only
++```
++
++## Not covered
++
++- A session in repo A dispatching a rail at repo B: no rule yet (BACKLOG row).
++- Telling the owner the pull line from finish-flow automatically: BACKLOG row (a guidance change, so it needs eval
++  evidence first).
+diff --git a/scripts/dispatch-batch.sh b/scripts/dispatch-batch.sh
+index 3301be14..40989556 100755
+--- a/scripts/dispatch-batch.sh
++++ b/scripts/dispatch-batch.sh
+@@ -385,7 +385,17 @@ if [ "$MODE" = merge-back ]; then
+   # `branch -f` / `update-ref` on a checked-out branch): we find its worktree and
+   # fast-forward there; if it is checked out nowhere we `update-ref` directly.
+   base_sha="$(git -C "$REPO" rev-parse "$BASE")"
+-  INTEG_WT="$(mktemp -u -d -t "batch-integ-${RUN_ID}-XXXXXX")"
++  # Under --repo's <main checkout>/.claude/worktrees/ (resolve-repo-placement.js; temp dir on its fallback).
++  if ! integ_template="$(node "$REPO_ROOT_GUESS/scripts/resolve-repo-placement.js" worktree --prefix batch-integ --slug "$RUN_ID" --from "$REPO")"; then
++    err_usage "could not resolve integration worktree placement"
++  fi
++  INTEG_WT="$(mktemp -u -d "$integ_template")"
++  # A worktree inside the main checkout must not show there as untracked.
++  case "$INTEG_WT" in */.claude/worktrees/*)
++    integ_excl="$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir)/info/exclude"
++    mkdir -p "$(dirname "$integ_excl")"
++    grep -qxF /.claude/worktrees/ "$integ_excl" 2>/dev/null || printf '%s\n' /.claude/worktrees/ >> "$integ_excl" ;;
++  esac
+   # detached worktree at base_sha — no integration branch ref to leak/collide.
+   if ! git -C "$REPO" worktree add --quiet --detach "$INTEG_WT" "$base_sha" >/dev/null 2>&1; then
+     err_usage "could not create integration worktree"
+diff --git a/scripts/dispatch-foreman.sh b/scripts/dispatch-foreman.sh
+index ccb9bead..dfe19e8d 100755
+--- a/scripts/dispatch-foreman.sh
++++ b/scripts/dispatch-foreman.sh
+@@ -257,6 +257,13 @@ main_checkout_seed_sibling_env_defaults
+ # protocol.md below also tells the foreman to pass --sibling-ref-prefix explicitly, in case a
+ # hand is spawned through a path that does not inherit FOREMAN_ENV.
+ FOREMAN_SIBLING_REF_PREFIX="$(IFS=:; printf '%s' "${MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES[*]}")"
++# Placement under <main checkout>/.claude/worktrees/ (resolve-repo-placement.js; temp dir on its
++# fallback). Resolved BEFORE the fingerprint: the resolver creates that directory, and a first
++# run's new `.claude` entry must land before the snapshot, not count as a mutation.
++if [ "$RESUME" -eq 0 ]; then
++  WT_TEMPLATE="$(node "$SELF_DIR/resolve-repo-placement.js" worktree --prefix foreman --slug "$RUN_ID" --from "$MAIN_CHECKOUT")" \
++    || die_precondition "cannot resolve worktree placement"
++fi
+ MAIN_CHECKOUT_BEFORE="$(main_checkout_fingerprint)"
+ build_hands_git_env
+ 
+@@ -265,7 +272,7 @@ if [ "$RESUME" -eq 0 ]; then
+   mkdir -p "$RUN_DIR" || die_precondition "cannot create run dir $RUN_DIR"
+   cp -- "$BRIEF_FILE" "$RUN_DIR/brief.md" && cp -- "$PLAN_FILE" "$RUN_DIR/plan.md" || die_precondition "cannot copy brief/plan into $RUN_DIR"
+   chmod 0444 "$RUN_DIR/brief.md" "$RUN_DIR/plan.md"
+-  WT="$(mktemp -u -d -t "foreman-${RUN_ID}-XXXXXX")"; WT="$(realpath -m "$WT")"
++  WT="$(mktemp -u -d "$WT_TEMPLATE")"; WT="$(realpath -m "$WT")"
+   if ! git worktree add --quiet "$WT" -b "$BRANCH" "$BASE_SHA" >/dev/null 2>&1; then
+     git update-ref -d "refs/heads/$BRANCH" >/dev/null 2>&1 || true
+     die_precondition "git worktree add failed for $WT"
+@@ -274,7 +281,10 @@ if [ "$RESUME" -eq 0 ]; then
+   dispatch_branch_ledger_append "$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" "$BRANCH" "$RUN_ID" "${AUTOPILOT_WORKTREE_ROOT_RUN_ID:-$RUN_ID}" "$BASE_SHA"
+   # Schema-2 marker + lifetime flock so reap-dispatch-worktrees.sh treats this like any rail's.
+   _excl="$(git rev-parse --git-common-dir)/info/exclude"; mkdir -p "$(dirname "$_excl")"
+-  for _name in .autopilot-worktree .autopilot-worktree.lock; do
++  _names=(.autopilot-worktree .autopilot-worktree.lock)
++  # A worktree inside the main checkout must not show there as untracked.
++  case "$WT" in */.claude/worktrees/*) _names+=(/.claude/worktrees/) ;; esac
++  for _name in "${_names[@]}"; do
+     grep -qxF "$_name" "$_excl" 2>/dev/null || printf '%s\n' "$_name" >> "$_excl"
+   done
+   {
+diff --git a/scripts/dispatch-hetero.sh b/scripts/dispatch-hetero.sh
+index 6708883b..22a19cca 100755
+--- a/scripts/dispatch-hetero.sh
++++ b/scripts/dispatch-hetero.sh
+@@ -2918,15 +2918,20 @@ NODE
+     || die_precondition "retained worktree lease expiry mismatch"
+   WORKTREE_REUSED=1
+ else
+-  WT="$(mktemp -u -d -t "hetero-${BRANCH//\//-}-XXXXXX")"
++  # Under <main checkout>/.claude/worktrees/ (resolve-repo-placement.js; temp dir on its fallback).
++  _wt_template="$(node "$SELF_DIR/resolve-repo-placement.js" worktree --prefix hetero --slug "$BRANCH" --from "$_wt_repo_root")" \
++    || die_precondition "cannot resolve worktree placement"
++  WT="$(mktemp -u -d "$_wt_template")"
+   WT="$(realpath -m "$WT" 2>/dev/null)" \
+     || die_precondition "cannot canonicalize planned worktree path"
+ fi
+ 
+ _wt_prepare_common_excludes() {
+   mkdir -p "$_wt_common_dir/info" || return 1
+-  local exclude="$_wt_common_dir/info/exclude" name
+-  for name in .autopilot-worktree .autopilot-worktree.lock; do
++  local exclude="$_wt_common_dir/info/exclude" name names=(.autopilot-worktree .autopilot-worktree.lock)
++  # A worktree inside the main checkout must not show there as untracked.
++  case "$WT" in */.claude/worktrees/*) names+=(/.claude/worktrees/) ;; esac
++  for name in "${names[@]}"; do
+     grep -qxF "$name" "$exclude" 2>/dev/null \
+       || printf '%s\n' "$name" >> "$exclude" \
+       || return 1
+diff --git a/scripts/identifier-scan.js b/scripts/identifier-scan.js
+index 1af00506..96feed85 100755
+--- a/scripts/identifier-scan.js
++++ b/scripts/identifier-scan.js
+@@ -96,7 +96,8 @@ function scanText(text, fileLabel) {
+   return findings;
+ }
+ 
+-function walkDir(dir, out) {
++// <root>/.claude/worktrees holds other checkouts (rail and session worktrees), not this tree.
++function walkDir(dir, out, root = dir) {
+   let ents;
+   try {
+     ents = fs.readdirSync(dir, { withFileTypes: true });
+@@ -107,7 +108,8 @@ function walkDir(dir, out) {
+     const full = path.join(dir, e.name);
+     if (e.isDirectory()) {
+       if (e.name === 'node_modules' || e.name === '.git') continue;
+-      walkDir(full, out);
++      if (full === path.join(root, '.claude', 'worktrees')) continue;
++      walkDir(full, out, root);
+     } else if (e.isFile() && SCAN_EXT_RE.test(e.name)) {
+       out.push(full);
+     }
+diff --git a/scripts/lib/main-checkout-boundary.sh b/scripts/lib/main-checkout-boundary.sh
+index 84a094fb..74ff7996 100644
+--- a/scripts/lib/main-checkout-boundary.sh
++++ b/scripts/lib/main-checkout-boundary.sh
+@@ -74,7 +74,10 @@ main_checkout_fingerprint() {
+     || { _fp_unverifiable dirty; return 0; }
+   # Every entry type, with type, mode and link target: a symlink planted over an empty
+   # ignored directory has no regular file to change (round 5, 2026-09-13).
+-  local -a _walk_prune=(-path "$MAIN_CHECKOUT/.git" -prune)
++  # .claude/worktrees holds linked worktrees (this rail's own, sibling rails', sessions'): each is
++  # another checkout with its own HEAD and index, so its writes are not this checkout's mutation.
++  # Its refs, config and hooks are shared and still measured below.
++  local -a _walk_prune=(-path "$MAIN_CHECKOUT/.git" -prune -o -path "$MAIN_CHECKOUT/.claude/worktrees" -prune)
+   # `[*]+set` is empty for a declared-but-empty array too; tolerated here (and for the ref
+   # prefixes above) because the guarded body is loop-only — never key an else-branch on it.
+   if [ "${MAIN_CHECKOUT_FP_EXCLUDE_PATHS[*]+set}" = set ]; then
+diff --git a/scripts/lib/tmp-residue-registry.json b/scripts/lib/tmp-residue-registry.json
+index d8c0e6b2..05280fe4 100644
+--- a/scripts/lib/tmp-residue-registry.json
++++ b/scripts/lib/tmp-residue-registry.json
+@@ -269,7 +269,7 @@
+       "kind": "test-lockgated",
+       "owner": "hooks/tests/lib/suite-residue-reap.sh",
+       "retention_days": null,
+-      "reason": "also dispatch worktrees (hetero-<branch>-XXXXXX); lock/marker-gated reaper only"
++      "reason": "also dispatch worktrees (hetero-<branch>-XXXXXX) when resolve-repo-placement.js has no main checkout (else under <main>/.claude/worktrees); lock/marker-gated reaper only"
+     },
+     {
+       "pattern": "autopilot-test-*",
+@@ -661,14 +661,14 @@
+       "kind": "worktree",
+       "owner": "scripts/dispatch-batch.sh",
+       "retention_days": null,
+-      "reason": "dispatch worktree path; reaped by the marker/lock reapers, never age-pruned"
++      "reason": "dispatch worktree path when resolve-repo-placement.js has no main checkout (else under <main>/.claude/worktrees); reaped by the marker/lock reapers, never age-pruned"
+     },
+     {
+       "pattern": "foreman-*",
+       "kind": "worktree",
+       "owner": "scripts/dispatch-foreman.sh",
+       "retention_days": null,
+-      "reason": "dispatch worktree path; reaped by the marker/lock reapers, never age-pruned"
++      "reason": "dispatch worktree path when resolve-repo-placement.js has no main checkout (else under <main>/.claude/worktrees); reaped by the marker/lock reapers, never age-pruned"
+     },
+     {
+       "pattern": "probe-mutation-*",
+diff --git a/scripts/lib/worktree-activity.js b/scripts/lib/worktree-activity.js
+index 89de21aa..cce6f81e 100644
+--- a/scripts/lib/worktree-activity.js
++++ b/scripts/lib/worktree-activity.js
+@@ -34,6 +34,8 @@ function newestMtime(root, { maxEntries = DEFAULT_MAX_ENTRIES } = {}) {
+   let seen = 0;
+   let truncated = false;
+   const stack = [root];
++  // Worktrees nested under <root>/.claude/worktrees are their own trees, not root's activity.
++  const nested = path.join(root, '.claude', 'worktrees');
+   while (stack.length) {
+     if (seen >= maxEntries) { truncated = true; break; }
+     const dir = stack.pop();
+@@ -46,7 +48,7 @@ function newestMtime(root, { maxEntries = DEFAULT_MAX_ENTRIES } = {}) {
+       if (entry.isSymbolicLink()) continue;
+       const full = path.join(dir, entry.name);
+       if (entry.isDirectory()) {
+-        if (SKIP_DIRS.has(entry.name)) continue;
++        if (SKIP_DIRS.has(entry.name) || full === nested) continue;
+         stack.push(full);
+         continue;
+       }
+diff --git a/scripts/probe-unknown.js b/scripts/probe-unknown.js
+index 2781d618..3a385eb4 100755
+--- a/scripts/probe-unknown.js
++++ b/scripts/probe-unknown.js
+@@ -533,13 +533,15 @@ function receipt(opts) {
+ function findLedgers(projectDir) {
+   const out = [];
+   const stack = [projectDir];
++  // Rail and session worktrees under .claude/worktrees are other checkouts; node_modules is not ours.
++  const nested = path.join(projectDir, '.claude', 'worktrees');
+   while (stack.length) {
+     const d = stack.pop();
+     let entries = [];
+     try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch (err) { continue; }
+     for (const e of entries) {
+       const p = path.join(d, e.name);
+-      if (e.isDirectory()) stack.push(p);
++      if (e.isDirectory()) { if (e.name !== 'node_modules' && p !== nested) stack.push(p); }
+       else if (e.name.endsWith('.jsonl')) out.push(p);
+     }
+   }
+diff --git a/scripts/repo-residue-sweep.js b/scripts/repo-residue-sweep.js
+index f1a781e2..d2e043e9 100755
+--- a/scripts/repo-residue-sweep.js
++++ b/scripts/repo-residue-sweep.js
+@@ -665,7 +665,8 @@ function computeNeedsHuman(rows, branches, ctx) {
+   for (const w of rows) if (w.marker_strict && w.marker_strict.valid && fs.existsSync(w.path)) markerBranches.set(w.marker_strict.branch, w);
+   for (const w of rows) {
+     if (w.class === 'live' || w.class === 'missing-dir') continue;
+-    if (w.cwd_busy === true && w.path.startsWith(wtRoot)) continue; // someone is working in it
++    // A session worktree with a process in it is in use; a marked rail worktree is judged by its marker and lock.
++    if (w.cwd_busy === true && w.path.startsWith(wtRoot) && w.marker_valid !== true) continue;
+     const entry = (command) => ({ kind: 'worktree', path: w.path, class: w.class, age_days: w.age_days, bytes: null, reason: w.retention_reason || (w.reason || '').slice(0, 120), command });
+     const needsInspect = w.class === 'dirty' || w.class === 'unverifiable';
+     if (w.marker_valid === true) {
+diff --git a/scripts/resolve-repo-placement.js b/scripts/resolve-repo-placement.js
+new file mode 100755
+index 00000000..d4530731
+--- /dev/null
++++ b/scripts/resolve-repo-placement.js
+@@ -0,0 +1,183 @@
++#!/usr/bin/env node
++'use strict';
++
++// resolve-repo-placement.js — where a repo's worktrees and handoffs live (plan
++// docs/plans/2026-10-12-worktree-placement.md, D1/D8/D12; the rule: references/worktree-placement.md).
++// Node built-ins only: the rails call it on their dispatch path.
++//
++//   main     [--from <dir>]                         → JSON {main_checkout, repo_identity, fallback, behind}
++//   worktree --prefix <p> --slug <s> --from <dir>   → one line: a `mktemp -u -d` template
++//   handoff  --route manual|clear [--from <dir>]    → one line: the handoff file path
++//
++// main_checkout is the dirname of the absolute git common dir, accepted only when that basename is
++// `.git` and its parent is a non-bare work tree; otherwise fallback is true and main_checkout is
++// null (bare repo, separate --git-dir). `worktree` then answers a temp-dir template and says so on
++// stderr; on the normal path it runs `mkdir -p <main>/.claude/worktrees` first, so a rail that
++// calls it before its before-fingerprint never sees that directory appear as a mutation.
++// `worktree` requires --from: a rail passes its own repo root, never the process cwd.
++//
++// Handoff keys differ on purpose. manual: one file per repo, shared by its worktrees —
++// ~/.autopilot/handoff-manual/<basename>-<sha1(repo_identity)[0:8]>.md. clear: one per worktree —
++// ~/.autopilot/handoff/<sha1(realpath toplevel)>.md, consumed by the next session in that same
++// worktree (a per-repo key would let a parallel session in a sibling worktree consume it).
++//
++// Exit: 0 answer printed; 1 --from is not inside a git repo (worktree, handoff clear); 2 usage.
++
++const childProcess = require('child_process');
++const crypto = require('crypto');
++const fs = require('fs');
++const os = require('os');
++const path = require('path');
++
++function git(cwd, args) {
++  try {
++    return childProcess.execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
++  } catch (_error) {
++    return null;
++  }
++}
++
++// Repo identity comes from project-key, loaded on first use: the hooks that only need clearHandoffKey
++// stay off its require graph.
++function repoIdentity(from) {
++  return require('../src/status/project-key').scopeFromCwd(from).repo_identity;
++}
++
++function realpathOr(dir) {
++  try { return fs.realpathSync(dir); } catch (_error) { return dir; }
++}
++
++function toplevel(from) {
++  const top = git(from, ['rev-parse', '--show-toplevel']);
++  return top ? realpathOr(top) : null;
++}
++
++function mainCheckout(from) {
++  const common = git(from, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
++  if (!common) return null;
++  const commonReal = realpathOr(common);
++  if (path.basename(commonReal) !== '.git') return null;
++  const parent = path.dirname(commonReal);
++  if (git(parent, ['rev-parse', '--is-bare-repository']) !== 'false') return null;
++  if (git(parent, ['rev-parse', '--is-inside-work-tree']) !== 'true') return null;
++  return toplevel(parent) === parent ? parent : null;
++}
++
++function behindUpstream(dir) {
++  const count = git(dir, ['rev-list', '--count', 'HEAD..@{upstream}']);
++  return count !== null && /^\d+$/.test(count) ? Number(count) : null;
++}
++
++function resolveMain(from) {
++  const main = mainCheckout(from);
++  return {
++    main_checkout: main,
++    repo_identity: repoIdentity(from),
++    fallback: main === null,
++    behind: main === null ? null : behindUpstream(main),
++  };
++}
++
++function worktreeTemplate(from, prefix, slug) {
++  const name = `${prefix}-${slug.replace(/\//g, '-')}-XXXXXX`;
++  const main = mainCheckout(from);
++  if (main === null) return { template: path.join(os.tmpdir(), name), fallback: true };
++  fs.mkdirSync(path.join(main, '.claude', 'worktrees'), { recursive: true });
++  return { template: path.join(main, '.claude', 'worktrees', name), fallback: false };
++}
++
++function sha1(text) {
++  return crypto.createHash('sha1').update(text).digest('hex');
++}
++
++// The /clear key: sha1 of the realpath toplevel. hooks/session-handoff.js and session-start.js call
++// this instead of hashing on their own.
++function clearHandoffKey(repoRoot) {
++  return sha1(repoRoot);
++}
++
++function handoffPath(from, route, homeDir = os.homedir()) {
++  if (route === 'clear') {
++    const top = toplevel(from);
++    return top ? path.join(homeDir, '.autopilot', 'handoff', `${clearHandoffKey(top)}.md`) : null;
++  }
++  const identity = repoIdentity(from);
++  if (!identity) {
++    const cwd = realpathOr(from);
++    return path.join(homeDir, '.autopilot', 'handoff-manual', `${path.basename(cwd)}-${sha1(cwd).slice(0, 8)}.md`);
++  }
++  return path.join(homeDir, '.autopilot', 'handoff-manual', `${repoName(from)}-${sha1(identity).slice(0, 8)}.md`);
++}
++
++// The repo's name, the same from every worktree: the main checkout's basename, or for a bare repo
++// (no main checkout) the common dir's basename without `.git`.
++function repoName(from) {
++  const common = realpathOr(git(from, ['rev-parse', '--path-format=absolute', '--git-common-dir']) || from);
++  const base = path.basename(common);
++  if (base === '.git') return path.basename(path.dirname(common));
++  return base.replace(/\.git$/, '') || base;
++}
++
++const USAGE = 'usage: resolve-repo-placement.js main [--from <dir>]\n'
++  + '       resolve-repo-placement.js worktree --prefix <p> --slug <s> --from <dir>\n'
++  + '       resolve-repo-placement.js handoff --route manual|clear [--from <dir>]\n';
++
++function parseArgs(argv) {
++  const opts = {};
++  for (let i = 0; i < argv.length; i += 2) {
++    const key = argv[i];
++    const value = argv[i + 1];
++    if (!/^--(from|prefix|slug|route)$/.test(key || '') || value === undefined || value === '') return null;
++    opts[key.slice(2)] = value;
++  }
++  return opts;
++}
++
++function main(argv) {
++  const [command, ...rest] = argv;
++  if (command === '--help' || command === '-h') {
++    process.stdout.write(USAGE);
++    return 0;
++  }
++  const opts = parseArgs(rest);
++  if (!opts || !['main', 'worktree', 'handoff'].includes(command)) {
++    process.stderr.write(USAGE);
++    return 2;
++  }
++  const from = path.resolve(opts.from || process.cwd());
++  if (command === 'main') {
++    process.stdout.write(`${JSON.stringify(resolveMain(from))}\n`);
++    return 0;
++  }
++  if (command === 'worktree') {
++    if (!opts.from || !opts.prefix || !opts.slug || !/^[A-Za-z0-9._-]+$/.test(opts.prefix)) {
++      process.stderr.write(USAGE);
++      return 2;
++    }
++    if (!toplevel(from)) {
++      process.stderr.write(`resolve-repo-placement: not inside a git repo: ${from}\n`);
++      return 1;
++    }
++    const answer = worktreeTemplate(from, opts.prefix, opts.slug);
++    if (answer.fallback) {
++      process.stderr.write('resolve-repo-placement: no non-bare main checkout; worktree stays in the temp dir\n');
++    }
++    process.stdout.write(`${answer.template}\n`);
++    return 0;
++  }
++  if (opts.route !== 'manual' && opts.route !== 'clear') {
++    process.stderr.write(USAGE);
++    return 2;
++  }
++  const answer = handoffPath(from, opts.route);
++  if (answer === null) {
++    process.stderr.write(`resolve-repo-placement: not inside a git repo: ${from}\n`);
++    return 1;
++  }
++  process.stdout.write(`${answer}\n`);
++  return 0;
++}
++
++module.exports = { mainCheckout, resolveMain, worktreeTemplate, clearHandoffKey, handoffPath };
++
++if (require.main === module) process.exitCode = main(process.argv.slice(2));
+diff --git a/scripts/session-mode.js b/scripts/session-mode.js
+index 871126f3..57a6595c 100644
+--- a/scripts/session-mode.js
++++ b/scripts/session-mode.js
+@@ -687,23 +687,76 @@ function cmdSetPlain(args) {
+ const SIZES = Object.freeze(['XS', 'S', 'M', 'L', 'XL']);
+ const INIT_FLAGS = ['size', 'urgent', 'bug', 'base-ref', 'new-task'];
+ const BASE_REF_SHA = /^[0-9a-f]{7,64}$/u;
+-// Default-branch candidates, same order as scripts/resolve-review-loop.sh probe_diff_bytes (develop, then main);
+-// master and the origin/* spellings are added so a clone without a local develop still resolves.
+-const DEFAULT_BRANCHES = Object.freeze(['develop', 'main', 'master', 'origin/develop', 'origin/main']);
++// Default-branch pairs, same order as scripts/resolve-review-loop.sh probe_diff_bytes (develop, then main), then
++// master. Each local branch is paired with its origin/* spelling so a stale local branch never wins over a newer
++// remote-tracking ref (worktree-placement plan D6). No fetch: whatever the refs say now.
++const DEFAULT_BRANCH_PAIRS = Object.freeze([['develop', 'origin/develop'], ['main', 'origin/main'], ['master', 'origin/master']]);
++const DEFAULT_BRANCHES = Object.freeze(DEFAULT_BRANCH_PAIRS.flat());
+ 
+-// The merge-base of HEAD and the first default-branch candidate that resolves; null when none does.
++function mergeBaseWithHead(repoRoot, ref) {
++  try {
++    const sha = execFileSync('git', ['-C', repoRoot, 'merge-base', 'HEAD', ref], {
++      encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
++    }).trim();
++    return BASE_REF_SHA.test(sha) ? sha : null;
++  } catch (_error) { return null; }
++}
++
++function isAncestor(repoRoot, older, newer) {
++  try {
++    execFileSync('git', ['-C', repoRoot, 'merge-base', '--is-ancestor', older, newer], { stdio: 'ignore' });
++    return true;
++  } catch (_error) { return false; }
++}
++
++// The merge-base of HEAD and the newer branch of the first pair with a branch sharing history with HEAD; null when
++// none does. Both qualify: remote an ancestor of local (local ahead or equal) => local; local behind or diverged =>
++// remote (the integration target).
+ function defaultBaseRef(repoRoot) {
+-  for (const branch of DEFAULT_BRANCHES) {
+-    try {
+-      const sha = execFileSync('git', ['-C', repoRoot, 'merge-base', 'HEAD', branch], {
+-        encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+-      }).trim();
+-      if (BASE_REF_SHA.test(sha)) return sha;
+-    } catch (_error) { /* try the next candidate */ }
++  for (const [local, remote] of DEFAULT_BRANCH_PAIRS) {
++    const localBase = mergeBaseWithHead(repoRoot, local);
++    const remoteBase = mergeBaseWithHead(repoRoot, remote);
++    if (localBase && remoteBase) return isAncestor(repoRoot, remote, local) ? localBase : remoteBase;
++    if (localBase || remoteBase) return localBase || remoteBase;
+   }
+   return null;
+ }
+ 
++// A set run from a linked worktree of the marker's repository moves repo_root there, so E1 and the rails measure
++// where the session works (worktree-placement plan D5); a cwd in another repository leaves it.
++function followRepoRoot(marker, repoRoot) {
++  if (typeof marker.repo_root !== 'string' || marker.repo_root === repoRoot) return;
++  let want = typeof marker.repo_identity === 'string' && marker.repo_identity ? marker.repo_identity : null;
++  let have = null;
++  try {
++    if (!want && path.isAbsolute(marker.repo_root)) want = markerRepoIdentity(marker.repo_root);
++    have = scopeFromCwd(repoRoot).repo_identity;
++  } catch (_error) { return; }
++  if (want && have === want) marker.repo_root = repoRoot;
++}
++
++// `set --new-task` in a linked worktree whose directory name and branch share no word: the worktree is probably
++// being reused for an unrelated task. Advisory only (references/worktree-placement.md); never changes the exit code.
++const GENERIC_TASK_TOKENS = new Set(['feat', 'fix', 'hotfix', 'worktree', 'agent', 'wip']);
++function taskTokens(text) {
++  return new Set(text.toLowerCase().split(/[-_/.]+/).filter((t) => t && !GENERIC_TASK_TOKENS.has(t) && !/^\d+$/.test(t)));
++}
++function newTaskAdvisory(repoRoot) {
++  const opts = { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] };
++  let branch;
++  try {
++    const gitDir = execFileSync('git', ['-C', repoRoot, 'rev-parse', '--path-format=absolute', '--git-dir'], opts).trim();
++    const commonDir = execFileSync('git', ['-C', repoRoot, 'rev-parse', '--path-format=absolute', '--git-common-dir'], opts).trim();
++    if (gitDir === commonDir) return null; // the main checkout
++    branch = execFileSync('git', ['-C', repoRoot, 'symbolic-ref', '--short', '-q', 'HEAD'], opts).trim();
++  } catch (_error) { return null; } // detached HEAD, or not a repository
++  const dir = path.basename(repoRoot);
++  const fromDir = taskTokens(dir);
++  const fromBranch = taskTokens(branch);
++  if (fromDir.size === 0 || fromBranch.size === 0 || [...fromDir].some((t) => fromBranch.has(t))) return null;
++  return `worktree ${dir} is on branch ${branch}, which shares no word with it — open a fresh worktree for a new task (references/worktree-placement.md)`;
++}
++
+ // Fields `set --new-task` drops from a live marker: the stage-advance position plus the task-scoped init fields.
+ const NEW_TASK_CLEARED = Object.freeze(['stage', 'stage_set_at', 'unit', 'review_families', 'high_risk', 'size', 'urgent', 'bug', 'base_ref']);
+ 
+@@ -785,7 +838,8 @@ function cmdSetInit(args) {
+         }
+         const next = { ...current };
+         for (const k of NEW_TASK_CLEARED) delete next[k];
+-        applyInitFields(next, init, repoRoot, null);
++        followRepoRoot(next, repoRoot);
++        applyInitFields(next, init, next.repo_root || repoRoot, null);
+         next.task_seq = seqPrev + 1;
+         next.task_started_at = new Date().toISOString();
+         writeMarkerFile(file, next);
+@@ -797,7 +851,9 @@ function cmdSetInit(args) {
+           result = { refusal: `refusing --size ${init.size}: the marker is already ${current.size} and size only moves up (XS<S<M<L<XL)` };
+           return;
+         }
+-        const next = applyInitFields({ ...current }, init, repoRoot, current);
++        const next = { ...current };
++        followRepoRoot(next, repoRoot);
++        applyInitFields(next, init, next.repo_root || repoRoot, current);
+         writeMarkerFile(file, next);
+         result = { marker: next, created: false };
+         return;
+@@ -825,6 +881,10 @@ function cmdSetInit(args) {
+   }
+   if (!result) { process.stderr.write('session-mode: marker not written\n'); return 1; }
+   if (result.refusal) { process.stderr.write(`session-mode: ${result.refusal}\n`); return 2; }
++  if (newTask) {
++    const advisory = newTaskAdvisory(repoRoot);
++    if (advisory) process.stderr.write(`session-mode: ${advisory}\n`);
++  }
+   if (result.created) {
+     try { writeLivePointer(); } catch (_error) { /* fail-open: pointer is advisory for the mod */ }
+     startProjectWatcher(result.marker, result.marker.repo_root);
+diff --git a/scripts/stage-advance.js b/scripts/stage-advance.js
+index 9f346e4b..525d17a7 100755
+--- a/scripts/stage-advance.js
++++ b/scripts/stage-advance.js
+@@ -24,7 +24,8 @@
+ //     `high_risk = (review_risk == "high")`, used for that move's legality. A sampling failure counts as high
+ //     (the normal review order is never silently dropped) and says so on stderr;
+ //   - E1 size bump: entering verify or qc-gate, the WORKING-TREE change against base_ref is measured, run in the
+-//     marker repo_root: `git diff --numstat <base_ref>` (tracked, committed + staged + unstaged) plus every
++//     cwd's toplevel when it belongs to the marker's repository (repo_identity; a linked worktree of it), else in
++//     the marker repo_root: `git diff --numstat <base_ref>` (tracked, committed + staged + unstaged) plus every
+ //     untracked non-ignored file (`git ls-files --others --exclude-standard`; 1 file + its line count). Binary
+ //     files = 1 file, 0 lines; renames follow git's default; ignored files never count. (dev-flow runs qc-gate
+ //     BEFORE commit, so a committed-only count would never fire; this deliberately deviates from the plan's
+@@ -48,6 +49,7 @@ const path = require('path');
+ const { spawnSync } = require('child_process');
+ const { withWriteLock } = require('./lib/jsonl-store');
+ const sessionMode = require('./session-mode');
++const { scopeFromCwd } = require('../src/status/project-key');
+ 
+ const REPO_ROOT = path.resolve(__dirname, '..');
+ const STAGE_GRAPH = path.join(__dirname, 'stage-graph.js');
+@@ -227,13 +229,25 @@ function unitViolation(marker, from, to, unitArg, unitKind) {
+   return null;
+ }
+ 
++// The cwd's toplevel when it belongs to the marker's repository (worktree-placement plan D5: a session that moved
++// into a linked worktree is measured there); null otherwise, so a cwd in another repository never takes over.
++function sessionRepoRoot(marker) {
++  if (typeof marker.repo_identity !== 'string' || !marker.repo_identity) return null;
++  const top = gitOut(process.cwd(), ['rev-parse', '--show-toplevel']);
++  const dir = top === null ? '' : top.toString('utf8').trim();
++  if (!dir) return null;
++  let identity = null;
++  try { identity = scopeFromCwd(dir).repo_identity; } catch (_e) { return null; }
++  return identity === marker.repo_identity ? dir : null;
++}
++
+ // Pure decision over one marker snapshot. -> { code, out } | { write: patch, out }
+ function decide(marker, opts, repoRootArg) {
+   const to = opts.to;
+   const ids = JSON.parse(fs.readFileSync(GRAPH_JSON, 'utf8')).node_ids;
+   if (!ids.includes(to)) throw new Usage(`unknown node "${to}" (want one of ${ids.join('|')})`);
+   const from = typeof marker.stage === 'string' ? marker.stage : null;
+-  const repoRoot = repoRootArg || marker.repo_root || process.cwd();
++  const repoRoot = repoRootArg || sessionRepoRoot(marker) || marker.repo_root || process.cwd();
+   const unitArg = opts.unit || null;
+   const eff = unitArg || (marker.unit && typeof marker.unit === 'object' ? marker.unit : null);
+ 
+diff --git a/scripts/tmp-residue-allowlist.json b/scripts/tmp-residue-allowlist.json
+index a0856103..ec8866b5 100644
+--- a/scripts/tmp-residue-allowlist.json
++++ b/scripts/tmp-residue-allowlist.json
+@@ -182,6 +182,26 @@
+       "file": "scripts/reap-dispatch-branches.sh",
+       "match": "$disposition_dir/.disposition.",
+       "reason": "Template inside the disposition state directory, not under the temp root; mv-consumed."
++    },
++    {
++      "file": "scripts/dispatch-hetero.sh",
++      "match": "WT=\"$(mktemp -u -d \"$_wt_template\")\"",
++      "reason": "The template comes from scripts/resolve-repo-placement.js worktree: <main checkout>/.claude/worktrees/<prefix>-<slug>-XXXXXX, or the registered temp prefix only on its no-main-checkout fallback. The worktree is reaped by the marker/lock reapers, not by this allocation site."
++    },
++    {
++      "file": "scripts/dispatch-foreman.sh",
++      "match": "WT=\"$(mktemp -u -d \"$WT_TEMPLATE\")\"",
++      "reason": "The template comes from scripts/resolve-repo-placement.js worktree: <main checkout>/.claude/worktrees/<prefix>-<slug>-XXXXXX, or the registered temp prefix only on its no-main-checkout fallback. The worktree is reaped by the marker/lock reapers, not by this allocation site."
++    },
++    {
++      "file": "scripts/dispatch-batch.sh",
++      "match": "INTEG_WT=\"$(mktemp -u -d \"$integ_template\")\"",
++      "reason": "The template comes from scripts/resolve-repo-placement.js worktree: <main checkout>/.claude/worktrees/<prefix>-<slug>-XXXXXX, or the registered temp prefix only on its no-main-checkout fallback. The worktree is reaped by the marker/lock reapers, not by this allocation site."
++    },
++    {
++      "file": "scripts/resolve-repo-placement.js",
++      "match": "template: path.join(os.tmpdir(), name), fallback: true",
++      "reason": "Prints a template only; the caller allocates. Its name is <prefix>-<slug>-XXXXXX, and the rail prefixes (hetero-, foreman-, batch-integ-) are registered for exactly this fallback."
+     }
+   ]
+ }
+diff --git a/skills/handoff/SKILL.md b/skills/handoff/SKILL.md
+index 83425468..b74c48f2 100644
+--- a/skills/handoff/SKILL.md
++++ b/skills/handoff/SKILL.md
+@@ -33,9 +33,9 @@ Triggered by "寫 handoff", "寫 handover", "ctx 太滿", "context 快滿", "cle
+    - Active project: `<projects_dir>/<project>/HANDOFF.md` — `projects_dir` from step 1's
+      `resolve-project-paths.sh`, **not** a literal `docs/`
+    - `projects_dir: none`, or no active project under it: the **manual route already
+-     defined below** — `~/.autopilot/handoff-manual/<repo-or-cwd-name>.md`. Do not invent a
++     defined below** — the path `node <plugin>/scripts/resolve-repo-placement.js handoff --route manual` prints. Do not invent a
+      doc root; a handoff nobody can find is worse than one outside the repo.
+-   - Repo not writable or no repo: `~/.autopilot/handoff-manual/<repo-or-cwd-name>.md`
++   - Repo not writable or no repo: the path `node <plugin>/scripts/resolve-repo-placement.js handoff --route manual` prints
+ 
+ 2.5. **Sweep the session, not just the document** (do this BEFORE drafting step 3):
+ 

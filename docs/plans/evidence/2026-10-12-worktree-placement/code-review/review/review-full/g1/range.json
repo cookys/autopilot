@@ -1,0 +1,11 @@
+{
+  "base": "4abd667f",
+  "head": "10c5c08655ae6617376a223e412ff12e74ddb3b9",
+  "diff_sha256": "5306fb16f7929c22a8b875d184c678db53502c0e8f085ca354a0a73c2ff20d9e",
+  "full_range_sha256": "bfc1db246b38222b61c133be912e117a81f4a6bd45e0121657cc6c4b4c81e458",
+  "excluded": [
+    "platforms/codex/plugin/**",
+    "docs/plans/evidence/**"
+  ],
+  "diff_bytes": 127698
+}

@@ -1,7 +1,7 @@
 # Worktree placement — one root per repo, a marker that follows the session, predictable handoffs
 
 **Date:** 2026-10-12
-**Status:** active — plan, awaiting plan-review
+**Status:** active — plan-review done; P1–P4 implemented and reviewed, verify done; in code-review (progress: [project README](../projects/2026-10-12-worktree-placement/README.md))
 **Size:** L (one deliverable, four phases that build on each other)
 **Branch:** `feat/worktree-placement-rule`
 **Project:** [`docs/projects/2026-10-12-worktree-placement/`](../projects/2026-10-12-worktree-placement/README.md) — goal and the seven success criteria live there; this plan references them as C1–C7.

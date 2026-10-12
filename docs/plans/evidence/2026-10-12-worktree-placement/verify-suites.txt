@@ -99,7 +99,8 @@ edited (verify-affected-suites.js), and the two node:test files the branch chang
 - skill-onoff-generic rc=1, also rc=1 when rerun alone: its only FAIL is "real /run/user/<uid>/autopilot or
   ~/.autopilot root changed during the test (inode/mtime diff)" — the live sessions on this host (this one
   included) write those roots on every tool call. BACKLOG row naming skill-onoff-generic (concurrent sessions).
-  Nothing this branch changed writes either root during that suite.
+  Run at base 4abd667f in a detached worktree (after the code-review collect): the same single FAIL, rc=1 —
+  PRE_EXISTING.
 
 ## Completeness scan (--range 4abd667f..HEAD)
 rc=1 with 84 "new" hits, all false positives: the `XXX` marker regex matching the mktemp template `-XXXXXX` in

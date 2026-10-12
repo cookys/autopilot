@@ -5,6 +5,7 @@
 //
 //   stage-advance.js --to <node> [--unit kind:i/N:label] [--review-families a,b]
 //                    [--session-id <id>] [--repo-root <dir>]
+//   stage-advance.js --resume-from <old-session-id> [--session-id <id>]
 //
 // Writes `stage`, `stage_set_at`, `unit`, `review_families`, `high_risk` into the session marker found the
 // same way session-mode.js finds it (AUTOPILOT_SESSION_MODE_DIR + the session id), under the marker lock with
@@ -35,11 +36,22 @@
 //   - high_risk sampling sees the same working-tree change: `git diff --unified=0 <base_ref>` plus each untracked
 //     file synthesized as an all-additions hunk is handed to classify-diff-risk.sh through `--diff-file`.
 //
+// Resume (`--resume-from <old-id>`, takes no --to): a session that came back with a NEW id (compaction, `claude
+// --resume`) has an empty marker (`session-mode.js set --size ..` first) and would have to re-walk from the entry
+// node. This copies size / bug / urgent / stage / unit / base_ref / high_risk / review_families from the OLD id's
+// marker instead, so the position is re-read from a record, never taken from the caller's word (ADR-0001). Fail closed
+// (exit 6, nothing written, no downgrade to a bare `--to`): the new marker already has a stage; the old marker is
+// absent / expired / unreadable / has no stage or size; the old id is the current id; the two markers do not share a
+// repo_identity; or size / urgent / bug differ from the old marker (the new session must `set` the same size and
+// flags first; if it already set a larger size or opened bug/urgent, `set --new-task --size <old> [flags]` lowers it
+// again because size only moves up otherwise). The old marker
+// is only read, never changed. The write takes the same marker lock as every other stage write.
+//
 // Test injection: AUTOPILOT_STAGE_ADVANCE_CLASSIFY / AUTOPILOT_STAGE_ADVANCE_RESOLVE replace the two sampling
 // scripts (executable paths receiving the same arguments).
 //
 // Exit codes: 0 written; 1 usage / unreadable marker write; 2 no marker; 3 illegal transition or unit-rule
-// violation (stdout {allowed:false, from, to, legal_next, reason}); 4 bump required (stdout {bump_to, files,
+// violation (stdout {allowed:false, from, to, legal_next, reason}); 6 `--resume-from` refused; 4 bump required (stdout {bump_to, files,
 // lines}); 5 `size` missing from the marker. One JSON object on stdout, diagnostics on stderr.
 // Node >= 20.10, built-ins only.
 
@@ -57,7 +69,7 @@ const GRAPH_JSON = path.join(REPO_ROOT, 'references', 'stage-graph.json');
 const LABEL_MAX = 64;
 const UNIT_RE = /^(phase|deliverable):(\d+)\/(\d+)(?::(.*))?$/su;
 const FAMILY_RE = /^[A-Za-z0-9._-]+$/u;
-const VALUED = new Set(['--to', '--unit', '--review-families', '--session-id', '--repo-root']);
+const VALUED = new Set(['--to', '--resume-from', '--unit', '--review-families', '--session-id', '--repo-root']);
 
 class Usage extends Error {}
 
@@ -69,7 +81,10 @@ function parseArgs(argv) {
     if (argv[i + 1] === undefined) throw new Usage(`${a} needs a value`);
     o[a.slice(2)] = argv[++i];
   }
-  if (!o.to) throw new Usage('--to <node> is required');
+  if (o['resume-from'] !== undefined) {
+    if (o.to) throw new Usage('--resume-from takes no --to (the stage comes from the old marker)');
+    if (o.unit || o['review-families']) throw new Usage('--resume-from takes no --unit / --review-families');
+  } else if (!o.to) throw new Usage('--to <node> is required');
   return o;
 }
 
@@ -302,6 +317,53 @@ function fingerprint(m) {
   return JSON.stringify([m.stage, m.unit, m.size, m.urgent, m.bug, m.high_risk, m.base_ref, m.level]);
 }
 
+const RESUME_HINT = 'fall back to the re-walk in skills/dev-flow/references/context-continuation.md (session-mode.js set, then stage-advance --to from the entry node)';
+const RESUME_COPY = ['size', 'bug', 'urgent', 'stage', 'unit', 'base_ref', 'high_risk', 'review_families'];
+
+// -> { code, err } | { patch }. Pure over the two marker snapshots.
+function decideResume(marker, old, oldId) {
+  const refuse = (why) => ({ code: 6, err: `stage-advance: --resume-from ${oldId} refused: ${why}; ${RESUME_HINT}` });
+  if (!old) return refuse('no unexpired readable marker for that session id');
+  if (sessionMode.normalizeSessionId(oldId) === sessionMode.getSessionId()) return refuse('that is the current session id');
+  if (typeof marker.stage === 'string') return refuse(`this session already has stage ${marker.stage}`);
+  if (typeof old.stage !== 'string') return refuse('the old marker has no stage yet');
+  if (!sessionMode.SIZES.includes(old.size)) return refuse('the old marker has no size');
+  if (typeof old.repo_identity !== 'string' || !old.repo_identity || old.repo_identity !== marker.repo_identity) {
+    return refuse('the old marker belongs to a different (or unidentifiable) repository');
+  }
+  // size only moves up and urgent / bug only turn on (session-mode.js), so a copy that could lower the new marker is
+  // refused: the new session must first `set` the same size and flags as the old one.
+  if (old.size !== marker.size || (old.urgent === true) !== (marker.urgent === true) || (old.bug === true) !== (marker.bug === true)) {
+    const d = (m) => `${m.size}${m.urgent === true ? ' urgent' : ''}${m.bug === true ? ' bug' : ''}`;
+    const fix = `node scripts/session-mode.js set --new-task --size ${old.size}${old.urgent === true ? ' --urgent' : ''}${old.bug === true ? ' --bug' : ''}`;
+    return refuse(`size/urgent/bug differ (old ${d(old)}, new ${d(marker)}); \`set\` cannot lower the new marker (size only moves up, urgent/bug only turn on), so run \`${fix}\` in the new session to match the old one, then retry`);
+  }
+  const patch = { stage_set_at: new Date().toISOString() };
+  for (const k of RESUME_COPY) if (old[k] !== undefined) patch[k] = old[k];
+  return { patch };
+}
+
+function runResume(opts, file) {
+  const oldId = opts['resume-from'];
+  const timeoutMs = Number(process.env.AUTOPILOT_SESSION_MODE_LOCK_TIMEOUT_MS) > 0
+    ? Number(process.env.AUTOPILOT_SESSION_MODE_LOCK_TIMEOUT_MS) : sessionMode.PHASE_LOCK_TIMEOUT_MS;
+  let result = null;
+  try {
+    withWriteLock({ storeDir: sessionMode.markerDir(), lockFile: `${file}.lock`, name: 'session-mode marker', timeoutMs }, () => {
+      const current = sessionMode.readSessionRecord();
+      if (!current) { result = { code: 2, err: 'stage-advance: no unexpired session marker for this session (run `session-mode.js set --size <S>` first)', out: null }; return; }
+      const d = decideResume(current, sessionMode.readSessionRecord(oldId), oldId);
+      if (d.err) { result = { code: d.code, err: d.err, out: null }; return; }
+      const next = { ...current, ...d.patch };
+      sessionMode.writeMarkerFile(file, next);
+      result = { code: 0, out: { allowed: true, resumed_from: sessionMode.normalizeSessionId(oldId), marker_path: file, stage: next.stage, stage_set_at: next.stage_set_at, unit: next.unit, size: next.size } };
+    });
+  } catch (e) {
+    return { code: 1, err: `stage-advance: marker not written: ${e.message}`, out: null };
+  }
+  return result;
+}
+
 function run(argv) {
   let opts;
   try {
@@ -315,6 +377,7 @@ function run(argv) {
   if (opts['session-id']) process.env.AUTOPILOT_SESSION_ID = opts['session-id'];
   const repoRootArg = opts['repo-root'] ? path.resolve(opts['repo-root']) : null;
   const file = sessionMode.markerPath();
+  if (opts['resume-from'] !== undefined) return runResume(opts, file);
 
   const timeoutMs = Number(process.env.AUTOPILOT_SESSION_MODE_LOCK_TIMEOUT_MS) > 0
     ? Number(process.env.AUTOPILOT_SESSION_MODE_LOCK_TIMEOUT_MS) : sessionMode.PHASE_LOCK_TIMEOUT_MS;

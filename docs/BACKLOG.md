@@ -60,14 +60,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/worktree-and-handoff-placement-has-no-rule.md
 - **Context**: an isolated worktree session cannot pull the main checkout; resolve-repo-placement.js main prints how far behind it is and references/worktree-placement.md gives the owner line.
 
-### /l5 has no generator for the mission scaffold; depth-0 must hand-author plan, rubric, sources, graph and envelope
-- **Status**: open
-- **Trigger**: FIRED — mods P1W W4 gate runs l5c–l5i, 2026-10-05
-- **Effort**: L
-- **Source**: depth-0 verified (hetero-impl-loop.md recipe ~120-283; no script builds the artifacts)
-- **Pointer**: docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/RESULTS.md
-- **Context**: a one-line change took five gate attempts (verify_cmd pipe, session id stripped, repo-bound envelope). P7 gate 2026-10-09: the /l6 foreman returned BLOCKED until depth-0 authored the task-authority envelope.
-
 ### l5 SKILL.md misstates AUTOPILOT_ROOT_RUN_ID; the engine requires the sealed mission root
 - **Status**: open
 - **Trigger**: FIRED — mods P1W SCOPE row, 2026-10-05

@@ -4,6 +4,11 @@
 
 ### 新增
 
+- **`/l5` 的 mission 骨架可以從計畫自動產生**（plan `docs/plans/2026-10-13-l5-mission-scaffold-generator.md`）：之前開一個 `/l5` mission，要照 recipe 手寫 rubric、sources、execution graph 三份檔案。手寫時漏一個欄位或路徑寫錯，就會白白燒掉一次 attempt。新增的 `scripts/scaffold-mission.js` 會從計畫和旗標產生這三份檔案。
+  - 寫檔前先檢查那些會燒 attempt 的規則，例如路徑必須落在 allowed prefix 底下、驗證指令的格式。
+  - 寫完用 `mission-execution-graph-check.js` 自我驗證。驗證失敗時，被覆寫的檔案逐位元組還原，本次新建的檔案和目錄刪除；還原不完整時，stderr 會印出 `ROLLBACK INCOMPLETE` 和還沒還原的檔案清單。
+  - stdout 回一個 JSON，`next_steps` 列出接下來要由 depth-0 自己決定的步驟（commit、在 base 跑驗證、改 routing config、legacy reconcile、prepare、grant）。腳本不會替你做這些，因為它們會改共用狀態或花掉 grant。
+
 - **即時面板顯示登入的帳號和剩餘額度**（branch `feat/mods-account`）：之前要另外開 `/usage` 才知道 5 小時和 7 天的額度用了多少。
   - **band**：多一格 `5h 42% 7d 18%`，數字是各時段已用的百分比，小數無條件捨去，所以看到的數字和顏色一致：80% 以上顯示警告色，100% 以上顯示錯誤色，還沒到上限不會顯示 100%。同一種時段收到兩筆資料時只顯示用量較高的那筆。寬度不到 120 欄時只留用量最高的一段，不到 80 欄時整格不顯示。點這一格會開「現況」分頁，並展開「帳號」區塊。
   - **「現況」分頁新增「帳號」區塊**：顯示 email（完整顯示）、顯示名稱、組織與角色、方案（例如 `claude max · 20x`）、是否開啟額外用量。每個時段各一列，有用量長條、百分比和多久後重置。用 API key 登入時，只顯示一行「未用 Claude 帳號登入」。

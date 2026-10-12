@@ -3838,6 +3838,9 @@ test('quota: readQuota keeps well-formed windows in 5h / 7d / spend order and pa
   expect(readQuota(USAGE.rateLimits)).toEqual([{ kind: 'five_hour', pct: 42, resetsAtMs: Date.parse(RESET_5H) }, { kind: 'seven_day', pct: 18.4, resetsAtMs: null }])
   expect(readQuota([{ kind: 'spend_limit', percentUsed: 130 }, { kind: 'x', percentUsed: 'a' }, null, { percentUsed: 3 }, { kind: 'five_hour', percentUsed: NaN }, { kind: 'seven_day', percentUsed: -2, resetsAt: 'soon' }]))
     .toEqual([{ kind: 'seven_day', pct: 0, resetsAtMs: null }, { kind: 'spend_limit', pct: 130, resetsAtMs: null }])
+  // the same kind twice: one row, the most used reading
+  expect(readQuota([{ kind: 'five_hour', percentUsed: 20 }, { kind: 'seven_day', percentUsed: 5 }, { kind: 'five_hour', percentUsed: 64, resetsAt: RESET_5H }, { kind: 'five_hour', percentUsed: 30 }]))
+    .toEqual([{ kind: 'five_hour', pct: 64, resetsAtMs: Date.parse(RESET_5H) }, { kind: 'seven_day', pct: 5, resetsAtMs: null }])
   expect(readQuota(undefined)).toEqual([])
   expect(readQuota({ kind: 'five_hour' })).toEqual([])
 })
@@ -3890,6 +3893,12 @@ test('quota slot: a band still too long drops the quota windows before the ⏸ /
 test('quota slot: a window is plain below 80 %, warning from 80 %, error from 100 %; the label stays dim', () => {
   const colorOf = (pct: number) => (slotQuota([win('five_hour', pct)]) as Slot).segs.find(s => s.text.endsWith('%'))?.color
   expect([colorOf(79.9), colorOf(80), colorOf(99.9), colorOf(100), colorOf(130)]).toEqual([undefined, 'warning', 'warning', 'error', 'error'])
+  // the text is floored, so it agrees with the colour: 79.9 is an uncoloured 79%, 99.9 a warning 99%, never 100% before the limit
+  const textOf = (pct: number) => (slotQuota([win('five_hour', pct)]) as Slot).segs.map(g => g.text).join('')
+  expect([textOf(79.9), textOf(80), textOf(99.9), textOf(100)]).toEqual(['5h 79%', '5h 80%', '5h 99%', '5h 100%'])
+  const nowText = accountLines({ account: undefined, quota: [win('five_hour', 79.9)] }, null, { t: makeT('en'), cols: 120 })[1].text
+  expect(nowText).toContain(' 79%')
+  expect(nowText).not.toContain('80%')
   expect((slotQuota([win('five_hour', 42)]) as Slot).segs[0]).toMatchObject({ text: '5h ', dim: true })
 })
 
@@ -3959,19 +3968,24 @@ for (const surface of SURFACES) {
     await w.clock.advance(5000)
     expect(reads()).toBe(before)
     expect((await bandLine($, surface, 120)).text).toContain('5h 42% 7d 18%')
-    // Claude Code rewrote the file mid-tick (half a JSON): read, ignored, the account stays; the finished write is read and shown
+    // Claude Code rewrote the file mid-tick (half a JSON), 10 s after the first read: left alone until 30 s have passed since that read,
+    // then read, ignored, the account stays; the finished write is read and shown
     w.files[PATH] = CLAUDE_JSON.slice(0, 50)
     w.stats[PATH] = { size: 50, mtimeMs: NOW_FRESH }
     await w.clock.advance(5000)
+    expect(reads()).toBe(before)
+    await w.clock.advance(20000)
     expect(reads()).toBe(before + 1)
     expect(await body()).toContain('owner@example.com')
-    await w.clock.advance(5000) // the same half-written stat: not cached, read again
+    await w.clock.advance(25000)
+    expect(reads()).toBe(before + 1)
+    await w.clock.advance(5000) // the same half-written stat: not cached, read again once the interval is up
     expect(reads()).toBe(before + 2)
     const other = CLAUDE_JSON.replace('owner@example.com', 'second@example.com')
     w.files[PATH] = other
     w.stats[PATH] = { size: other.length, mtimeMs: NOW_FRESH + 1 }
     usage = { ...USAGE, rateLimits: [{ kind: 'five_hour', percentUsed: 91 }] }
-    await w.clock.advance(5000)
+    await w.clock.advance(30000)
     b = await body()
     expect(b).toContain('second@example.com')
     expect((await bandLine($, surface, 120)).text).toContain('5h 91%')

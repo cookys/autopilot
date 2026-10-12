@@ -75,6 +75,8 @@ let quota: QuotaWindow[] = [] // the rate-limit windows; a usage() that throws k
 let account: AccountView | null | undefined = undefined // undefined until ~/.claude.json parsed once; a half-written read keeps the last value
 let accountFile: { size: number; mtimeMs: number } | null = null // the ~/.claude.json stat the account was parsed from (Claude Code rewrites it often)
 const MAX_ACCOUNT_BYTES = 4 * 1024 * 1024 // $.fs.read's cap
+const ACCOUNT_REPARSE_MS = 30_000 // a changed ~/.claude.json is read and parsed at most this often (it can be megabytes)
+let accountReadMs: number | null = null // when the last read of it started
 let tr: T = T_EN // the active translator, set at the start of every tick (and read by the band / pane draws)
 let pressSeq = 0 // one number per ⓘ press, taken before any await; only the latest press may assign paneTab or end the chain
 let decided: Promise<PaneTab> | null = null // the tab the latest unfinished press chose: a press landing meanwhile steps on from it (N rapid presses = N tabs)
@@ -468,7 +470,7 @@ async function readActivity($: EngineInterface, msgs: unknown, nowMs: number, pr
 }
 
 // The account and its rate-limit windows. Each source fails on its own and keeps its last value.
-async function readAccountQuota($: EngineInterface): Promise<void> {
+async function readAccountQuota($: EngineInterface, nowMs: number): Promise<void> {
   try {
     const usage = await $.session.usage()
     quota = readQuota(isObject(usage) ? usage.rateLimits : null)
@@ -478,8 +480,10 @@ async function readAccountQuota($: EngineInterface): Promise<void> {
     if (!home) return
     const path = home + '/.claude.json'
     const st = await $.fs.stat(path).catch(() => null)
-    if (st === null || st.kind !== 'file' || st.size > MAX_ACCOUNT_BYTES) { account = undefined; accountFile = null; return } // gone or unreadable: no stale account
+    if (st === null || st.kind !== 'file' || st.size > MAX_ACCOUNT_BYTES) { account = undefined; accountFile = null; accountReadMs = null; return } // gone or unreadable: no stale account, and a file back is read at once
     if (accountFile !== null && accountFile.size === st.size && accountFile.mtimeMs === st.mtimeMs) return
+    if (accountReadMs !== null && nowMs - accountReadMs < ACCOUNT_REPARSE_MS) return // changed again soon after a read: wait
+    accountReadMs = nowMs
     const next = readAccount(await readText($, path))
     if (next === undefined) return // unreadable or caught mid-rewrite: try again next tick
     account = next
@@ -492,7 +496,7 @@ async function refresh($: EngineInterface): Promise<void> {
     const nowMs = await $.clock.now()
     tr = await resolveT($)
     await pollAdvisories($, nowMs)
-    await readAccountQuota($)
+    await readAccountQuota($, nowMs)
     const built = await buildSnapshot($, nowMs, tr)
     let msgs: unknown = null
     try {

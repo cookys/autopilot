@@ -1536,7 +1536,7 @@ export type PaneTab = (typeof PANE_TABS)[number]
 export const tabLabel = (tab: PaneTab, t: T): string => t('tab.' + tab)
 
 // What a pane line is drawn with: the translator and the pane's width in cells (rules and bars size themselves to it)
-export type PaneCtx = { t: T; cols: number; expanded?: ReadonlySet<string> }
+export type PaneCtx = { t: T; cols: number; expanded?: ReadonlySet<string>; folded?: ReadonlySet<string> }
 export const DEFAULT_PANE_COLS = 76
 // the panel is exactly as wide as the body the host gives it (rules, bars and wrapping all size to it); no body width known -> the default
 export const paneWidth = (bodyColumns: number | null | undefined): number => (typeof bodyColumns === 'number' && Number.isFinite(bodyColumns) ? Math.max(20, Math.floor(bodyColumns)) : DEFAULT_PANE_COLS)
@@ -1628,16 +1628,29 @@ function wrapLine(l: PaneLine, cols: number): PaneLine[] {
     const flush = () => { if (run !== '') segs.push(at < 0 ? { text: run } : { ...base[at], text: run }); run = '' }
     for (const c of cs) { if (c.si !== at) { flush(); at = c.si } run += c.ch }
     flush()
-    return { text, segs }
+    return { text, segs, ...(l.toggle !== undefined ? { toggle: l.toggle } : {}) } // every piece of a wrapped toggle line stays pressable
   })
 }
 export const wrapLines = (lines: PaneLine[], cols: number): PaneLine[] => lines.flatMap(l => wrapLine(l, cols))
 
-// `▌ Title  right`: a section heading, a left accent block in `claude` then the bold title and an optional right-hand badge; no rule line is drawn
-export function rule(title: string, right: Seg[], _cols: number): PaneLine {
-  const segs: Seg[] = [seg('▌ ', 'claude'), seg(title, undefined, true)]
+// `▌ Title  right ────`: a section heading, a left accent block in `claude`, the bold title, an optional right-hand badge, then a `subtle` rule to the
+// pane's edge. A foldable heading (`fold`) shows `▾` open / `▸` folded instead of the block and carries the section id as its toggle.
+export function rule(title: string, right: Seg[], cols: number, fold?: { id: string; open: boolean }): PaneLine {
+  const segs: Seg[] = [seg(fold === undefined ? '▌ ' : fold.open ? '▾ ' : '▸ ', 'claude'), seg(title, undefined, true)]
   if (right.length > 0) segs.push(seg('  '), ...right)
-  return row(...segs)
+  const fill = cols - displayWidth(segs.map(s => s.text).join('')) - 1
+  if (fill >= 3) segs.push(seg(' ' + '─'.repeat(fill), 'subtle'))
+  return { ...row(...segs), ...(fold === undefined ? {} : { toggle: fold.id }) }
+}
+
+// the Now tab's foldable sections (what waits for you never folds); the ids share the toggle channel with the recent groups, hence the prefix
+export const SECTION = { where: 'sec:where', working: 'sec:working', cost: 'sec:cost', recent: 'sec:recent' } as const
+export const isSectionId = (id: string): boolean => id.startsWith('sec:')
+const isFolded = (ctx: PaneCtx, id: string): boolean => ctx.folded !== undefined && ctx.folded.has(id)
+// a heading plus its body, or the heading alone when the person folded it
+function section(ctx: PaneCtx, id: string, title: string, right: Seg[], body: PaneLine[]): PaneLine[] {
+  const open = !isFolded(ctx, id)
+  return [rule(title, right, ctx.cols, { id, open }), ...(open ? body : [])]
 }
 
 // the glyph + word of a published gate / seat verdict: pass-like green, open / failing amber, anything else quiet
@@ -1728,26 +1741,25 @@ function nowLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
   if (awaiting) out.push(...needs, BLANK)
 
   // Where you are: the walk diagram, then stage / unit / progress / phase as key-value rows
-  out.push(rule(t('now.where'), [], ctx.cols))
+  const where: PaneLine[] = []
   const m = d.marker
   const head = m === null ? '' : [m.size === null ? null : m.size + (m.urgent ? '!' : ''), m.level].filter((x): x is string => x !== null).join('·')
-  if (m !== null && m.stage !== null && d.stage !== null && walkSegs(d.stage, m.stage) !== null) out.push(...walkRows(d.stage, m.stage, head, ctx))
-  if (m === null || m.stage === null) out.push(NO_DATA(t, 'nodata.stage'))
+  if (m !== null && m.stage !== null && d.stage !== null && walkSegs(d.stage, m.stage) !== null) where.push(...walkRows(d.stage, m.stage, head, ctx))
+  if (m === null || m.stage === null) where.push(NO_DATA(t, 'nodata.stage'))
   else {
     const age = m.stage_set_at_ms === null ? '—' : elapsedFrom(m.stage_set_at_ms, d.now_ms ?? 0)
-    out.push(kv(t(KEY_IDS.stage), seg(m.stage, 'claude', true), dseg(age === '—' ? '' : ' · ' + t('now.in_stage', { e: age })), ...(head === '' ? [] : [dseg(' · ' + head)])))
+    where.push(kv(t(KEY_IDS.stage), seg(m.stage, 'claude', true), dseg(age === '—' ? '' : ' · ' + t('now.in_stage', { e: age })), ...(head === '' ? [] : [dseg(' · ' + head)])))
   }
   const unit = slotUnit(m, t)
-  if (unit === null || m === null || m.unit === null) out.push(NO_DATA(t, 'nodata.unit'))
+  if (unit === null || m === null || m.unit === null) where.push(NO_DATA(t, 'nodata.unit'))
   else {
     const bar = unitBarSegs(m.unit.index, m.unit.total)
     const extra = (m.unit.label === '' ? '' : ' ' + m.unit.label) + ' (' + m.unit.kind + ')' + (m.review_families.length > 0 ? ' · ' + t('now.families', { n: m.review_families.length }) : '')
-    out.push(kv(t(KEY_IDS.unit), ...bar, seg(' ' + m.unit.index, undefined, true), seg('/' + m.unit.total), dseg(extra)))
+    where.push(kv(t(KEY_IDS.unit), ...bar, seg(' ' + m.unit.index, undefined, true), seg('/' + m.unit.total), dseg(extra)))
   }
-  if (b !== null) {
-    out.push(kv(t(KEY_IDS.progress), b.progressDim ? dseg(b.progress) : seg(b.progress)))
-    if (!b.phase.includes('▸')) out.push(kv(t(KEY_IDS.phase), seg(b.phase)))
-  }
+  where.push(kv(t(KEY_IDS.progress), b.progressDim ? dseg(b.progress) : seg(b.progress)))
+  if (!b.phase.includes('▸')) where.push(kv(t(KEY_IDS.phase), seg(b.phase)))
+  out.push(...section(ctx, SECTION.where, t('now.where'), [], where))
 
   // Working now: dispatches, review / QC, the session's tasks
   const work: PaneLine[] = []
@@ -1756,19 +1768,15 @@ function nowLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
     work.push(kv(t(KEY_IDS.dispatch), seg('⚙', live > 0 ? 'suggestion' : 'inactive', live > 0), seg(' ' + t('now.running', { n: live }), undefined, live > 0), dseg('  ' + t('now.stalled', { n: d.stalled }))))
   }
   const round = reviewRound(snap.review)
-  if (round !== null || (d.qc !== null && qcChip(d.qc) !== null)) {
+  const chip = qcChip(d.qc)
+  if (round !== null || chip !== null) {
     const segs: Seg[] = []
     if (round !== null) segs.push(dseg('↺ '), seg('R' + round))
-    const chip = qcChip(d.qc)
     if (chip !== null) segs.push(seg(round === null ? '' : '  '), d.qc !== null && d.qc.state === 'owed' ? seg(chip, 'warning', true) : seg(chip, 'success'), d.qc !== null && d.qc.state === 'owed' ? seg(' ' + t('now.qc_owed'), 'warning') : dseg(' ' + t('now.qc_ok')))
-    out.push(BLANK)
-    out.push(rule(t('now.working'), [], ctx.cols))
-    out.push(...work, kv(t(KEY_IDS.review), ...segs))
-  } else if (work.length > 0) out.push(BLANK, rule(t('now.working'), [], ctx.cols), ...work)
-  if (snap.sections.tasks.length > 0) {
-    if (work.length === 0 && round === null) out.push(BLANK, rule(t('now.working'), [], ctx.cols))
-    out.push(...snap.sections.tasks)
+    work.push(kv(t(KEY_IDS.review), ...segs))
   }
+  work.push(...snap.sections.tasks)
+  if (work.length > 0) out.push(BLANK, ...section(ctx, SECTION.working, t('now.working'), [], work))
   if (!awaiting) out.push(BLANK, ...needs)
 
   // Cost today: brain-tier spend against the cap
@@ -1776,8 +1784,7 @@ function nowLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
   if (sp_ !== null && sp_.brain !== null && sp_.cap !== null) {
     const pct = Math.round((sp_.brain / sp_.cap) * 100)
     const color = spendColor(sp_.brain, sp_.cap)
-    out.push(BLANK, rule(t('now.cost'), [], ctx.cols))
-    out.push(kv(t(KEY_IDS.cost), seg(usd(sp_.brain), color), dseg(' / ' + usd(sp_.cap) + '  '), ...spendBarSegs(sp_.brain, sp_.cap, 24), dseg('  ' + pct + '%')))
+    out.push(BLANK, ...section(ctx, SECTION.cost, t('now.cost'), [], [kv(t(KEY_IDS.cost), seg(usd(sp_.brain), color), dseg(' / ' + usd(sp_.cap) + '  '), ...spendBarSegs(sp_.brain, sp_.cap, 24), dseg('  ' + pct + '%'))]))
   }
   if (snap.recent !== undefined) out.push(BLANK, ...recentLines(snap.recent, ctx))
   return out
@@ -1857,14 +1864,18 @@ export function collapsedPrompt(prompt: string): string {
 
 export function recentLines(recent: RecentGroup[] | null | undefined, ctx: PaneCtx): PaneLine[] {
   const t = ctx.t
-  const out: PaneLine[] = [rule(t('recent.title'), [], ctx.cols)]
+  const out: PaneLine[] = section(ctx, SECTION.recent, t('recent.title'), [], [])
+  if (isFolded(ctx, SECTION.recent)) return out
   if (recent === null || recent === undefined || recent.length === 0) return [...out, { text: ' ' + t('recent.empty'), dim: true }]
   const you = t('recent.you')
   const ai = t('recent.ai')
   const expanded = ctx.expanded
+  const fit = ctx.cols - displayWidth('▸ ' + you + ': ') // a collapsed group is one line: a wrapped piece would be a second row to aim at
   for (const g of recent) {
     if (expanded === undefined || !expanded.has(g.id)) {
-      out.push({ toggle: g.id, text: '▸ ' + you + ': ' + collapsedPrompt(g.prompt), segs: [seg('▸ ', 'suggestion'), seg(you + ': ', undefined, true), seg(collapsedPrompt(g.prompt))] })
+      const cut = collapsedPrompt(g.prompt)
+      const shown = displayWidth(cut) <= fit ? cut : truncateToWidth(oneLine(g.prompt), fit)
+      out.push({ toggle: g.id, text: '▸ ' + you + ': ' + shown, segs: [seg('▸ ', 'suggestion'), seg(you + ': ', undefined, true), seg(shown)] })
       continue
     }
     const body: PaneLine[] = []

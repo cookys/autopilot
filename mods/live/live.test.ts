@@ -1018,7 +1018,7 @@ for (const surface of SURFACES) {
     expect(pane.texts.find(t => t.startsWith('工作階段 $'))).toBe('工作階段 $0.42 · 本機 $3.10 · ctx 37%') // the header stays on top, dim
     const rule = pane.texts.findIndex(t => t.startsWith('▌ 待你處理')) // the awaited decision is the first section (before "where you are")
     expect(rule).toBeGreaterThan(0)
-    expect(rule).toBeLessThan(pane.texts.findIndex(t => t.startsWith('▌ 目前位置')))
+    expect(rule).toBeLessThan(pane.texts.findIndex(t => t.startsWith('▾ 目前位置'))) // a foldable section, open by default
     expect(pane.texts.slice(rule + 1, rule + 4)).toEqual([' ▲ 要合併 plan 還是拆開？', '   1. 合併 — 一次驗收', '   2. 拆開 — 兩次驗收'])
     expect(pane.texts[rule]).toContain('▲ 1') // the section badge counts what awaits you
     const disp = await paneParts($, surface, 'dispatch') // the table is still there, on its own tab, and so is the Link
@@ -2222,7 +2222,7 @@ for (const surface of SURFACES) {
     const texts = rowsOf((await pane.drawn()) as Node)
     // the keyboard lands on the first-drawn `▸` next-tab chip, whose Enter steps on (never on the active tab's own button: that Enter is a no-op)
     const tabButtons = (await pane.findAll({ type: 'Button' })) as Drawn[]
-    expect(tabButtons.length).toBe(7)
+    expect(tabButtons.filter(b => b.props?.key === 'next' || (PANE_TABS as readonly string[]).includes(b.props?.key as string)).length).toBe(7) // the section headings are Buttons too
     expect(tabButtons.filter(b => b.props?.autoFocus === true).map(b => b.props?.key)).toEqual(['next'])
     expect(tabButtons[0].props?.key).toBe('next')
     await pane.unmount()
@@ -2433,7 +2433,7 @@ for (const surface of SURFACES) {
     await start($, surface)
     const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
     const tree = (await pane.drawn()) as Drawn
-    const buttons = walkAll(tree).filter(n => n.type === 'Button').map(n => n.props?.key as string)
+    const buttons = walkAll(tree).filter(n => n.type === 'Button').map(n => n.props?.key as string).filter(k => !/^b\d+$/.test(k)) // the body's toggle lines (section headings, recent groups) are Buttons too
     expect(buttons).toEqual(['next', 'now', 'dispatch', 'review', 'spend', 'hygiene', 'legend']) // the ▸ chip first (it carries the autoFocus), then the six tabs in contract order
     // the strip (child 0): zh labels, a badge per tab that holds something for the owner: ⚙N live runs, ⚑N residue (QC is ok here, so no ▲ on Review)
     const strip = stripOf(tree as Node)
@@ -3341,7 +3341,7 @@ test('recent: a collapsed prompt is one line of at most 60 characters plus …',
   const exact = 'x'.repeat(60)
   expect(collapsedPrompt(exact)).toBe(exact)
   const lines = recentLines(groupRecent([U(long), A('reply')]), { t: makeT('en'), cols: 100, expanded: new Set() })
-  const g = lines.find(l => l.toggle !== undefined) as { text: string }
+  const g = lines.find(l => l.toggle === '0') as { text: string } // the group (id = its transcript index), not the foldable heading
   expect(g.text).toBe('▸ You: ' + c)
 })
 
@@ -3457,4 +3457,76 @@ test('recent: pressing a group Button expands it, pressing again collapses it', 
   rows = rowsOf((await pane.drawn()) as Node)
   await pane.unmount()
   expect(rows.slice(-1)).toEqual(['▸ You: synthetic question one'])
+})
+
+// ---- owner 2026-10-12: a wrapped group header stayed unpressable; sections fold ----
+test('wrap: a toggle line that wraps keeps its toggle on every line (each piece stays pressable)', () => {
+  const body = '測'.repeat(40)
+  const l = { toggle: 'g1', text: '▸ 你: ' + body, segs: [{ text: '▸ ' }, { text: '你: ' }, { text: body }] }
+  const out = wrapLines([l], 30)
+  expect(out.length).toBeGreaterThan(1)
+  expect(out.every(x => x.toggle === 'g1')).toBe(true)
+})
+
+test('recent: a collapsed CJK prompt wider than the pane is cut to one line that fits, and it is the toggle line', () => {
+  const groups = groupRecent([U('第一則'), A('a'), U('這是一個很長的中文問題'.repeat(8)), A('b')])
+  const lines = recentLines(groups, { t: makeT('zh-TW'), cols: 40, expanded: new Set() }).slice(1)
+  expect(lines.length).toBe(2)
+  for (const l of lines) {
+    expect(l.toggle).toBeDefined()
+    expect(displayWidth(l.text)).toBeLessThanOrEqual(40)
+  }
+  expect(lines[1].text.endsWith('…')).toBe(true)
+  expect(wrapLines(lines, 40).length).toBe(2) // nothing left for the pane's wrap to split
+})
+
+test('recent: on a narrow pane the long CJK group (the second one) opens on a press', async ($, on) => {
+  world(on, base(), NOW_FRESH, SID_A, 'zh-TW')
+  on('session.messages', () => ({ value: [U('第一則'), A('答一'), U('這是一個很長的中文問題'.repeat(8)), A('答二')] }))
+  await start($, 'terminal')
+  const mountPane = () => $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'Pane', requestId: 'autopilot-live', props: { ...PANE_PROPS, bodyColumns: 48 }, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+  const first = await mountPane()
+  await first.press({ key: 'now' })
+  await first.unmount()
+  const pane = await mountPane()
+  const rows = rowsOf((await pane.drawn()) as Node)
+  const at = rows.findIndex(r => r.startsWith('▸ 你: 這是一個'))
+  expect(at).toBeGreaterThan(0)
+  await pane.press({ key: 'b' + at })
+  await pane.unmount()
+  const again = await mountPane()
+  const after = rowsOf((await again.drawn()) as Node)
+  await again.unmount()
+  expect(after.some(r => r.trim() === '答二')).toBe(true)
+})
+
+test('now: a section heading runs a rule to the edge; pressing it folds the section to its heading, pressing again opens it', async ($, on) => {
+  worldEn(on, base())
+  await start($, 'terminal')
+  const mountPane = () => $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+  const first = await mountPane()
+  await first.press({ key: 'now' })
+  await first.unmount()
+  const draw = async (pressAt: number | null) => {
+    const pane = await mountPane()
+    if (pressAt !== null) await pane.press({ key: 'b' + pressAt })
+    await pane.unmount()
+    const again = await mountPane()
+    const rows = rowsOf((await again.drawn()) as Node)
+    await again.unmount()
+    return rows
+  }
+  const open = await draw(null)
+  const at = open.findIndex(r => r.startsWith('▾ Where you are'))
+  expect(at).toBeGreaterThan(0)
+  expect(open[at]).toMatch(/ ─{3,}$/)
+  expect(displayWidth(open[at])).toBe(PANE_PROPS.bodyColumns)
+  const next = open.findIndex((r, i) => i > at && /^[▾▸▌] /.test(r)) // the following section's heading
+  expect(next - at).toBeGreaterThan(2) // the open section has a body
+  const folded = await draw(at)
+  expect(folded[at].startsWith('▸ Where you are')).toBe(true)
+  expect(folded.length).toBe(open.length - (next - at - 2)) // the body is gone; the heading and the blank before the next section stay
+  expect(folded[at + 2]).toBe(open[next])
+  expect(await draw(at)).toEqual(open)
+  expect(open.some(r => r.startsWith('▾ Needs you') || r.startsWith('▸ Needs you'))).toBe(false) // what waits for you never folds away
 })

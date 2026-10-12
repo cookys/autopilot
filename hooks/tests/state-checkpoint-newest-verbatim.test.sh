@@ -17,9 +17,9 @@ run_hook state-checkpoint.js "$payload"
 
 assert_exit_code "$__RUN_EXIT" 0 "fail-open with large newest turn"
 
-state_content=$(cat "$HOOK_HOME/.autopilot/compaction-state.md" 2>/dev/null || echo "")
+state_content=$(cat "$HOOK_HOME/.autopilot/compaction-state-r10e.md" 2>/dev/null || echo "")
 # Newest verbatim: the 3000 X's appear AND no "turn truncated" marker for newest.
-big_count=$(grep -oE "X{3000}" "$HOOK_HOME/.autopilot/compaction-state.md" | wc -l)
+big_count=$(grep -oE "X{3000}" "$HOOK_HOME/.autopilot/compaction-state-r10e.md" | wc -l)
 assert_neq "$big_count" "0" "full 3000-char newest body preserved verbatim"
 assert_not_contains "$state_content" "[...turn truncated, original size: 3000B]" "newest NOT per-turn-truncated"
 

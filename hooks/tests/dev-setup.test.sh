@@ -225,4 +225,25 @@ assert_contains "$OUT" "pid(s): 999999999 (alive: none)" "doctor: .in_use pids l
 assert_contains "$OUT" "Safe to remove once no listed pid is alive" "doctor: removal guidance given"
 assert_file_exists "$SEMVER_DIR" "doctor never deletes the semver dir"
 
+# --- Auto-compact window (2026-10-12): with none set, a 1M session compacts only near 1M.
+# Run from the scratch HOME so $PWD has no project settings; the real config dir is never read.
+AC_HOME="$TEST_TMP/doctor-autocompact"
+doctor_home "$AC_HOME" directory
+run_ac_check() {
+  (cd "$AC_HOME" && env -u CLAUDE_CONFIG_DIR -u CLAUDE_PROJECT_DIR -u CLAUDE_CODE_AUTO_COMPACT_WINDOW \
+    -u DISABLE_AUTO_COMPACT -u DISABLE_COMPACT "$@" HOME="$AC_HOME" PATH="$CHECK_PATH" \
+    bash "$SCRIPT" --check --harness claude 2>&1)
+}
+OUT="$(run_ac_check)"; EXIT=$?
+assert_eq "$EXIT" "0" "doctor: no auto-compact window is a warning, not a failure"
+assert_contains "$OUT" 'WARN claude     no autoCompactWindow set' "doctor: unset auto-compact window warns"
+assert_contains "$OUT" '"autoCompactWindow": 250000' "doctor: warning names the setting"
+printf '{"autoCompactWindow": 250000}\n' > "$AC_HOME/.claude/settings.json"
+OUT="$(run_ac_check)"
+assert_contains "$OUT" "OK   claude     auto-compact window 250000 (settings: $AC_HOME/.claude/settings.json)" "doctor: set window reported with its file"
+OUT="$(run_ac_check CLAUDE_CODE_AUTO_COMPACT_WINDOW=400000)"
+assert_contains "$OUT" "auto-compact window 400000 (env: CLAUDE_CODE_AUTO_COMPACT_WINDOW)" "doctor: env window wins"
+OUT="$(run_ac_check DISABLE_AUTO_COMPACT=1)"
+assert_contains "$OUT" "auto-compact is off (env DISABLE_AUTO_COMPACT)" "doctor: disabled compaction reported"
+
 finalize_test

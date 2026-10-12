@@ -1170,13 +1170,13 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: the qualification prompt now states that a seat with a this-seat round keeps that round's axis; the production prompt (around lines 280–297) still only says pick a declared axis. Align the two so a qualified seat meets the same rule live.
 
-### Full-suite reds at 6e91be30: calendar-teeth instant2, statusline-live-tee T2, real-config reads
+### Full-suite reds at 6e91be30: calendar-teeth instant2, statusline-live-tee T2
 - **Status**: open
 - **Trigger**: next touch of context-budget, statusline-live-tee, or capability-evidence expiry
 - **Effort**: S
 - **Source**: discuss-exam-fix qc-gate full suite, 2026-10-12 (both reds reproduce at base 6e91be30)
 - **Pointer**: none
-- **Context**: instant2: expiry-ceiling throw (capability-evidence.js:171). statusline-live-tee 160k T2 e2e red with isolated HOME. hooks-live-state-misc and context-budget-window-memory read real ~/.autopilot t2; pin tiers via env.
+- **Context**: instant2: expiry-ceiling throw (capability-evidence.js:171). statusline-live-tee 160k T2 e2e red with isolated HOME. (hooks-live-state-misc and context-budget-window-memory now pin tiers via env, feat/autocompact-detect.)
 
 ### orchestration-eval full run rewrites the committed t7-config-rename fixture
 - **Status**: open
@@ -1196,11 +1196,35 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 
 ### autocompact: users never learn to set autoCompactWindow; T2 still says STOP
 - **Status**: open
-- **Trigger**: owner 2026-10-12 — after the fresh-session autocompact test confirms rehydrate is enough
+- **Trigger**: owner 2026-10-12 — fresh-session test done: Claude Code's summary was enough (see Pointer)
 - **Effort**: M
 - **Source**: context reset cost analysis, 2026-10-12
 - **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
-- **Context**: no repo check, doc or notice mentions autoCompactWindow; a 1M user hits T2 STOP instead of compaction. Detection + toast (mechanism), T2 wording (guidance, eval), release heading. Detail at Pointer.
+- **Context**: detection shipped (scripts/lib/autocompact-window.js, T1 tip, dev-setup --check). Left: T2 wording when a window at or below T2 is set (guidance, needs ON/OFF eval); name it in the next release heading. Detail at Pointer.
+
+### Workflow snapshot at compaction and /clear (replace the transcript tail)
+- **Status**: open
+- **Trigger**: owner 2026-10-12 — after the per-session checkpoint merges
+- **Effort**: L
+- **Source**: autocompact live test design talk, 2026-10-12
+- **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
+- **Context**: P1 lib collector over on-disk state, used by PreCompact stdout+file and /clear; P2 task card + subagent roster; P3 /handoff uses it (guidance, eval); P4 PostCompact checks the summary kept branch and stage.
+
+### autocompact-window resolver: managed path and DISABLE_* truthiness
+- **Status**: open
+- **Trigger**: next touch of scripts/lib/autocompact-window.js
+- **Effort**: S
+- **Source**: hetero review g1 deferred findings, 2026-10-12
+- **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
+- **Context**: Hook and dev-setup paths read /etc/claude-code/managed-settings.json with no override (suites not isolated on a host that has one). truthyEnv treats DISABLE_AUTO_COMPACT=0 as unset; confirm against the binary.
+
+### Six hooks read only the '/dev/stdin' path (ENXIO under Claude Code)
+- **Status**: open
+- **Trigger**: next touch of any of them, or a report that one never fires
+- **Effort**: S
+- **Source**: autocompact live test, state-checkpoint fix `995bb329`, 2026-10-12
+- **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
+- **Context**: accumulator, log-error, intent-capture, capture-payload, design-quality, reload-watch open '/dev/stdin' with no fd 0 read; on a socket stdin that throws ENXIO, as it did for state-checkpoint. Check each fires; switch to readFileSync(0).
 
 ### hetero-review-loop collect: a seat gap without --allow-seat-gap strands generation 1
 - **Status**: open

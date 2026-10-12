@@ -4,7 +4,7 @@
  *
  * v2.7.1 was bash + asked Claude to Edit-append context (best-effort, often
  * dropped under load). v2.7.2 rewrites this hook to PARSE THE TRANSCRIPT
- * ITSELF and write verbatim turns to compaction-state.md — no Claude
+ * ITSELF and write verbatim turns to compaction-state-<session_id>.md — no Claude
  * compliance dependency.
  *
  * Architecture (per docs/plans/_archive/2026/05/2026-05-14-context-handoff-hardening.md):
@@ -40,13 +40,13 @@ const {
   parseTranscriptText,
   buildTranscriptTail: libBuildTranscriptTail,
   selectFailureCounter,
+  compactionStateName,
   PER_TURN_BUDGET,
   THINKING_BLOCK_CAP,
   MAX_LINE_BYTES,
 } = lib;
 
 const STATE_DIR = path.join(os.homedir(), '.autopilot');
-const STATE_FILE = path.join(STATE_DIR, 'compaction-state.md');
 const LOG_FILE = path.join(STATE_DIR, '.state-checkpoint.log');
 const LOG_ROTATE_BYTES = 1 * 1024 * 1024; // 1 MB
 const TRANSCRIPT_TAIL_N = parseInt(process.env.TRANSCRIPT_TAIL_N || '20', 10);
@@ -136,22 +136,19 @@ function buildTranscriptTail(turns) {
 
   // Always log start
   try {
-    // Read stdin with ENXIO graceful handling:
-    // `/compact` slash command invokes PreCompact hook WITHOUT piping a JSON
-    // payload — fs.readFileSync('/dev/stdin') then throws ENXIO. This is not
-    // a real failure (Claude Code's auto-compact DOES pipe the payload); the
-    // /compact CLI path simply skips hook payload. Detect and skip gracefully
-    // without polluting the log with "catastrophic" entries.
-    // (Discovered 2026-05-14 method-B testing — `docs/BACKLOG.md` entry.)
+    // Read fd 0, not the '/dev/stdin' PATH: Claude Code hands hooks a socket,
+    // and opening /dev/stdin on a socket throws ENXIO. The 2026-05-14 reading
+    // ("/compact pipes no payload") was this bug; it skipped every real
+    // auto-compact too (live CC 2.1.296, 2026-10-12; #6305, context-budget.js).
+    // ENXIO/EAGAIN can still mean no usable stdin: skip without a checkpoint.
     let stdin = '';
     try {
-      stdin = fs.readFileSync('/dev/stdin', 'utf8');
+      stdin = fs.readFileSync(0, 'utf8');
     } catch (err) {
       if (err.code === 'ENXIO' || err.code === 'EAGAIN') {
-        // No payload available — typical for /compact slash invocation.
-        // Log as skip + exit cleanly without writing checkpoint (there's
-        // nothing useful we could capture without transcript_path).
-        process.stderr.write(`[state-checkpoint] /compact invocation (no stdin payload) — skipping\n`);
+        // No payload available: nothing useful to capture without
+        // transcript_path, so log a skip and exit cleanly.
+        process.stderr.write(`[state-checkpoint] no stdin payload — skipping\n`);
         appendLog({ ts: timestamp, hostname: os.hostname(), session_id: '<no-stdin>', status: 'no_payload_skip', reason: `${err.code}: stdin not piped` });
         return process.exit(0);
       }
@@ -160,6 +157,8 @@ function buildTranscriptTail(turns) {
     const input = stdin.trim() ? JSON.parse(stdin) : {};
     sessionId = input.session_id || '<unknown>';
     transcriptPath = input.transcript_path || '';
+    const trigger = input.trigger === 'manual' ? 'manual' : 'automatic';
+    const stateName = compactionStateName(input.session_id);
 
     // Ensure state dir exists
     if (!fs.existsSync(STATE_DIR)) fs.mkdirSync(STATE_DIR, { recursive: true, mode: 0o700 });
@@ -174,7 +173,7 @@ function buildTranscriptTail(turns) {
 - Hostname: ${os.hostname()}
 - Session: ${sessionId}
 - Failure counter: ${failureCount}
-- Compaction trigger: automatic
+- Compaction trigger: ${trigger}
 - Hook: state-checkpoint.js (v2.7.2+, Node JSONL parser)
 
 `;
@@ -268,11 +267,16 @@ ${body}`;
 `;
 
     // Write state file
-    let stateFileWritten = false;
-    try {
-      fs.writeFileSync(STATE_FILE, stateContent, { mode: 0o600 });
-      try { fs.chmodSync(STATE_FILE, 0o600); } catch { /* ignore */ }
-      stateFileWritten = true;
+    // No usable session id: session-start matches the file to the resuming
+    // session's id, so an unkeyed file could never be injected. Write nothing.
+    if (!stateName) {
+      process.stderr.write(`[state-checkpoint] no usable session_id in the payload — checkpoint not written\n`);
+      status = 'failed';
+      failureReason = 'no_session_id';
+    } else try {
+      const stateFile = path.join(STATE_DIR, stateName);
+      fs.writeFileSync(stateFile, stateContent, { mode: 0o600 });
+      try { fs.chmodSync(stateFile, 0o600); } catch { /* ignore */ }
     } catch (err) {
       // State file IO failure — diagnostic only goes to stderr + log
       process.stderr.write(`[state-checkpoint] CRITICAL: state file write failed: ${err.message}\n`);
@@ -280,23 +284,9 @@ ${body}`;
       failureReason = `state_file_write: ${err.message}`;
     }
 
-    // Stdout — instruction for Claude (reflects actual write result)
-    if (stateFileWritten) {
-      process.stdout.write(`[Autopilot State Checkpoint — PreCompact]
-Transcript tail extracted by hook to ~/.autopilot/compaction-state.md
-(${kept} turns, ${bytesUsed} bytes). The hook captures verbatim turns;
-the LLM-append section below is OPTIONAL supplement for hidden in-flight
-context (excluded reasoning paths etc.). Not critical — machine state +
-transcript tail are already guaranteed.
-`);
-    } else {
-      process.stdout.write(`[Autopilot State Checkpoint — PreCompact — WRITE FAILED]
-State file write to ~/.autopilot/compaction-state.md FAILED — see stderr
-for diagnostic. In-memory tail held ${kept} turns / ${bytesUsed} bytes but
-NOT persisted. Compact will proceed without hook-extracted handoff.
-Reason: ${failureReason || 'unknown'}
-`);
-    }
+    // No stdout: on exit 0 Claude Code appends PreCompact stdout to the
+    // compaction summarizer's instructions, so text addressed to Claude here
+    // would reach the summarizer instead. Diagnostics go to stderr and the log.
 
     // Final log entry
     appendLog({

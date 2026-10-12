@@ -16,7 +16,7 @@ run_hook state-checkpoint.js "$payload"
 
 assert_exit_code "$__RUN_EXIT" 0 "fail-open with CRLF transcript"
 
-state_content=$(cat "$HOOK_HOME/.autopilot/compaction-state.md" 2>/dev/null || echo "")
+state_content=$(cat "$HOOK_HOME/.autopilot/compaction-state-r10h.md" 2>/dev/null || echo "")
 assert_contains "$state_content" "crlf-line1" "first CRLF turn parsed"
 assert_contains "$state_content" "crlf-line2" "second CRLF turn parsed"
 

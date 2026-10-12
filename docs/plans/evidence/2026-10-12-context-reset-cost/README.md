@@ -78,3 +78,79 @@ Nothing in the repo knows about `autoCompactWindow` yet. See the BACKLOG row
 3. Upgrade notice: the SessionStart update check (`hooks/session-start.js:164`) shows the CHANGELOG
    headings of every version since the user's last-seen one. Name the recommendation in the next
    release heading.
+
+## How Claude Code resolves the window (read from the 2.1.296 binary, 2026-10-12)
+
+The precedence proposed above ("env, then project settings, then user settings") was a guess. The
+binary's resolver does this:
+
+1. env `CLAUDE_CODE_AUTO_COMPACT_WINDOW`: below 100k is raised to 100k, above 1M is capped. A value
+   that is not a positive number is ignored and resolution falls through.
+2. Settings, merged in the order user → project → local → flag (`--settings`) → policy, later
+   wins. A file with a top-level `autoCompactWindow` replaces the default and drops the per-model
+   entries of earlier files; a file without one merges its `modelSettings.<model>.autoCompactWindow`
+   entries in. The model's own entry beats the default. `"auto"` means not set. `/autocompact`
+   writes the per-model entry, not the top-level key. `--autocompact <value>` overrides settings.
+3. With nothing set: a server-supplied window (client data), then an experiment, then the model
+   default. For a native 1M model the model default is the full 1M window. One exception in the
+   table: `claude-sonnet-5` on the cowork / local-agent surfaces defaults to 500k.
+
+Compaction is off when env `DISABLE_AUTO_COMPACT` or `DISABLE_COMPACT` is set, or when
+`autoCompactEnabled` is false. The statusline payload carries no auto-compact field, so a hook
+has to re-derive the window from these inputs.
+
+## Shipping, part 1: detection (branch `feat/autocompact-detect`)
+
+- `scripts/lib/autocompact-window.js` re-derives steps 1 and 2 and the off switches. It cannot see
+  `--settings`, `--autocompact` or a server-supplied window, so it reports "not set" rather than
+  guessing a number.
+- context-budget T1 adds one owner-facing line when the window is a known 1M, nothing sets a
+  window, and compaction is on.
+- `scripts/dev-setup.sh --check` prints the window in effect and its source file, and warns when
+  none is set.
+- Not done: the T2 wording (guidance, needs ON/OFF eval) and the release heading (version held at
+  3.0.0, so it waits for the next release).
+
+## Fresh-session test (session a14bb1ea, 2026-10-12)
+
+Host settings: `autoCompactWindow: 250000`, `context_budget.t2: 300000`. Claude Code 2.1.296,
+opus-5-5, 1M window per the statusline.
+
+- T1 fired at 106k and again at 160k (50k step). Both went to the advisory sink only
+  (`advisories/<sid>.jsonl`, kind `context-budget-t1`); neither reached the model.
+- `lastT2Context` stayed 0 past 160k, as expected with T2 at 300k.
+- Auto-compaction ran at 08:02:22Z. The last context the budget hook saw was 216,763 (so
+  compaction triggers near 250k minus the reserved headroom, not at 250k). The first live
+  reading after it was 71,261 (cache_creation 43,925 + cache_read 27,334). The session kept
+  going and lost no work. `lastT2Context` was still 0, so T2 never fired.
+- PreCompact did **not** write `~/.autopilot/compaction-state.md`. `.state-checkpoint.log`
+  recorded `no_payload_skip` / `ENXIO: stdin not piped` at 08:02:22.528Z. All 21 PreCompact
+  runs since May were the same skip, and no success has been logged since July. Cause: the
+  hook opened the `/dev/stdin` path. Claude Code hands hooks a socket, and that open throws
+  ENXIO. The old comment read this as "/compact pipes no payload". Fixed on this branch: the
+  hook reads fd 0, and `hooks/tests/state-checkpoint-socket-stdin.test.sh` reproduces the
+  socket (4 of 6 checks red on the old hook).
+- Rehydration after compaction: no `<autopilot-restored-state>` was injected, because there
+  was no file to inject. The session still knew its branch, its node (the code-review leg
+  after verify) and its next command without re-reading any large file. Two sources covered
+  it: Claude Code's own summary, and session-start's `[Autopilot Resume Hint]` (branch plus
+  the last Bash command). On this evidence, Claude Code's summary alone was enough for a
+  single-branch task. Whether the checkpoint adds anything is a question for the next
+  compaction, now that it gets written.
+- Per-session checkpoint (same branch, follow-up). With fd 0 fixed, one global
+  `compaction-state.md` would have leaked: any session's startup or clear within the
+  4-hour TTL would inject another session's state. Now each session writes
+  `compaction-state-<sid>.md`. session-start injects it only on `source=compact` with the
+  same session id, then deletes it. PreCompact prints nothing to stdout, because Claude
+  Code appends that stdout to the summarizer's instructions.
+- **Verify at the next real compaction** (not yet observed). `.state-checkpoint.log` should
+  show `status: success` with a real session id, `compaction-state-<sid>.md` should exist
+  until the compact SessionStart, and `<autopilot-restored-state>` should appear right
+  after the compaction.
+- Next deliverable (backlog "Workflow snapshot at compaction"): replace the transcript tail
+  with a snapshot of the workflow state already on disk, used at PreCompact (stdout to the
+  summarizer, plus the file) and at /clear. The state comes from the dev-flow marker and
+  the next legal node, git, plan and code review, the task list, the decision tail and
+  in-flight dispatches. Gaps to land first: a task card holding the goal, success criteria,
+  plan path, review ledger path and stated requirements, and a subagent roster written
+  from SubagentStart and SubagentStop.

@@ -308,6 +308,33 @@ check_claude() {
   fi
 
   check_stale_version_dirs
+  check_autocompact_window
+}
+
+# The auto-compact window Claude Code will use (scripts/lib/autocompact-window.js). With none set, a
+# 1M-context session compacts only near 1M; resets between 150k and 300k cut cost about 20% in
+# docs/plans/evidence/2026-10-12-context-reset-cost/README.md. Project settings are read from $PWD.
+check_autocompact_window() {
+  if ! have_cmd node; then
+    status WARN "claude" "node not found; auto-compact window not checked"
+    return 0
+  fi
+  local line level message
+  line="$(node -e '
+    const r = require(process.argv[1]).resolve({ projectDir: process.argv[2] });
+    const models = Object.entries(r.per_model || {}).map(([m, w]) => `${m}=${w}`).join(", ");
+    if (!r.enabled) console.log(`OK\tauto-compact is off (${r.disabled_by}); context-budget T2 is the only reset prompt`);
+    else if (r.configured !== null) console.log(`OK\tauto-compact window ${r.configured} (${r.source}: ${r.origin})`);
+    else if (models) console.log(`OK\tauto-compact window set per model only: ${models}; other models compact near their full window`);
+    else console.log("WARN\tno autoCompactWindow set: a 1M-context session compacts only near 1M; set \"autoCompactWindow\": 250000 in ~/.claude/settings.json or run /autocompact");
+  ' "$REPO_DIR/scripts/lib/autocompact-window.js" "$PWD" 2>/dev/null)" || line=""
+  if [[ -z "$line" ]]; then
+    status WARN "claude" "auto-compact window could not be read"
+    return 0
+  fi
+  level="${line%%$'\t'*}"
+  message="${line#*$'\t'}"
+  status "$level" "claude" "$message"
 }
 
 # Idempotent: skip when already directory-sourced at this repo.

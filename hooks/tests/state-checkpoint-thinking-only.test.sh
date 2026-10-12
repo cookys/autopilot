@@ -13,7 +13,7 @@ run_hook state-checkpoint.js "$payload"
 
 assert_exit_code "$__RUN_EXIT" 0 "fail-open with thinking-only newest turn"
 
-state_content=$(cat "$HOOK_HOME/.autopilot/compaction-state.md" 2>/dev/null || echo "")
+state_content=$(cat "$HOOK_HOME/.autopilot/compaction-state-r10d.md" 2>/dev/null || echo "")
 assert_contains "$state_content" "<thinking>" "thinking block preserved (not binary-dropped)"
 assert_contains "$state_content" "internal reasoning" "thinking content rendered"
 

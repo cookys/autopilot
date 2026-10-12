@@ -6,7 +6,22 @@
 
 - **即時面板「現況」分頁多了「最近對話」**（merge `82d34da4`）：分頁最後列出這個 session 最近 3 則你輸入的 prompt，依時間排序，最新的在最下面。tool 結果和系統插入的訊息不算在內。每則預設收合成一行「▸ 你：…」（最多 60 字），點一下會展開，顯示完整 prompt 和 AI 的回覆，最多約 20 行。看起來像 secret 的字串（`sk-…`、`ghp_…`、`Bearer …`、`AKIA…`、`xox?-…`）在顯示前就由程式遮成 `***`，不經過模型。這段資料只有在 transcript 變動時才會重算；/clear 之後，原本展開的項目會全部收回。目前只能用滑鼠展開，還不能用鍵盤（BACKLOG 有列）。
 
+- **使用 1M context 卻沒設自動壓縮門檻時，T1 提醒會建議你設定**：沒設 `autoCompactWindow` 的話，1M context 的 session 要到接近 1M 才會自動壓縮。現在 context-budget 的 T1 提醒（100k）會多一行，建議在 `~/.claude/settings.json` 設 `"autoCompactWindow": 250000`，或執行 `/autocompact`。實測顯示，在 150k 到 300k 之間重置 context，大約可省下 20% 費用。以下情況不會出現這行：已經用任何方式設定門檻（env `CLAUDE_CODE_AUTO_COMPACT_WINDOW`、使用者或專案設定、`/autocompact` 寫入的單一模型設定）、視窗不是 1M、自動壓縮已關閉。
+  - `scripts/dev-setup.sh --check` 會列出目前生效的門檻和它來自哪個檔案；沒有設定時顯示 WARN。
+  - 新增的 `scripts/lib/autocompact-window.js` 依照 Claude Code 2.1.296 的規則推算門檻：env 優先，再依 user → project → local → policy 的順序合併設定檔。它讀不到命令列的 `--settings` 與 `--autocompact`，也讀不到伺服器下發的門檻。
+
 ### 修正
+
+- **自動壓縮前的狀態存檔從來沒寫出來過**（commit `995bb329`）：PreCompact hook 用 `/dev/stdin` 這個路徑讀 Claude Code 傳來的資料。Claude Code 交給 hook 的 stdin 是 socket，用路徑開啟 socket 會直接丟 ENXIO，所以每次自動壓縮，hook 都只記一筆「略過」，`~/.autopilot/compaction-state.md` 一次也沒寫出來。舊註解把這個錯誤解讀成「手動 `/compact` 不傳資料」。這次在新開的 session 實測自動壓縮時抓到。修正方式：
+  - 改成直接讀 fd 0。
+  - 新增測試，用 Node 啟動 hook，讓它真的拿到 socket stdin。舊版 hook 在這個測試有 4 項失敗。
+  - 另外還有 6 個 hook 也只用路徑讀 stdin，已登記在 BACKLOG。
+- **壓縮存檔不會再跨 session 外洩**：存檔原本是全機共用的單一檔案 `compaction-state.md`，而且任何 session 啟動時都會讀它。這個問題在存檔修好後才浮現：同時開著的別的 session，或 4 小時內新開、`/clear` 後的 session，都可能讀到不屬於自己的工作狀態。修正方式：
+  - 每個 session 各存一個檔（`compaction-state-<session_id>.md`）；payload 沒有 session id 時不寫檔。
+  - 只有在同一個 session 的壓縮之後（`source=compact` 且 session id 相同）才會讀回來；讀完由 hook 自己刪掉，不再要 Claude 記得去刪。
+  - 過期的檔案和舊的全域檔案會在 session 啟動時清掉。
+  - PreCompact 不再往 stdout 印任何東西：Claude Code 會把這段 stdout 當成壓縮摘要的額外指示。
+  - 新增測試涵蓋另一個 session、同 session 的 startup、重複讀取、過期清理。舊版讀取端在這些測試有 7 項失敗；拿掉 `source=compact` 檢查的突變版有 4 項失敗。
 
 - **discuss 資格考卷的題目說明和評分規則對不上**（merge `2e55f70f`）：D-a／D-b 的評分要求考生沿用自己上一輪（`this-seat`）的軸，但給考生的題目說明沒寫這條，還叫考生挑一條沒人用過的軸。另外，題目說明要求考生照抄 `round_id`，題目資料裡卻沒有這個欄位。兩個 solver 都自己補上了這條隱藏規則，所以先前 16/16 的結果沒有真正證到考卷沒問題。修正方式：
   - 題目說明寫明「沿用本席原軸」這條規則；守住立場時沿用原本的 claim token，更新立場時換成新 token，兩者不能同時出現。

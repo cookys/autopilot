@@ -12,6 +12,22 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 4. ~~foreman rail Shape B~~ v2.36.34 · 5. ~~`308-db` (a) residue sweep~~ v2.36.35 · 6. ~~2026-09-12 dogfood four defects~~ v2.36.36 ·
 7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41 · 9. ~~ledger flag burns a grant~~ v2.36.42 · 10. ~~reviewer no_verdict releases the claim~~ v2.36.43. Next: operator-named work, or the 308-8f dispatch-hetero reports.
 
+### qc-gate runs the whole suite serially; select the suites the diff touches
+- **Status**: open
+- **Trigger**: owner approves changing the M-XL test step (guidance change)
+- **Effort**: M
+- **Source**: feat/autocompact-detect qc-gate, 2026-10-12
+- **Pointer**: docs/backlog/qc-gate-affected-suites.md
+- **Context**: full run past 30 min (stopped at 256/408); the 38 suites that reference the changed files passed in about 2 min. Keep the full suite for release preflight.
+
+### calendar-teeth-negative instant2: consult evidence fixture exceeds the expiry ceiling
+- **Status**: open
+- **Trigger**: next touch of src/engine/capability-evidence.js or the calendar-teeth suite
+- **Effort**: S
+- **Source**: feat/autocompact-detect qc-gate, 2026-10-12 (red at base 7586c8dd too)
+- **Pointer**: docs/backlog/calendar-teeth-instant2-expiry-ceiling.md
+- **Context**: expects qualified:1, gets empty; compile throws INVALID_CAPABILITY_EVIDENCE. Likely fixed-date stamps aged out; bisect, then derive stamps from the run clock.
+
 ### dev-flow stage model is inconsistent and unrecorded; the band cannot say which stage a session is in
 - **Status**: open
 - **Trigger**: FIRED — owner 2026-10-06 (TUI band design)

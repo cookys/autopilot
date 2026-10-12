@@ -78,7 +78,10 @@ function transcriptAt(tokens) {
   return p;
 }
 
-test('end-to-end: 1M session at ~160k ⇒ T2 without the tee, silent after one tee tick', () => {
+// Tiers are absolute since 59c471ca (T2 = 150k whatever the window), so 159k is a T2 on a 1M window too;
+// what the tee changes is that the decision is made against the real window (a directive T2, exit 2) instead of
+// an unknown one (an advisory T2, exit 0).
+test('end-to-end: 1M session at ~160k ⇒ advisory T2 without the tee, T2 against the real 1M window after one tee tick', () => {
   const liveDir = shmTmp('tee-e2e-');
   const sid = 'tee-e2e-sid';
   const t = transcriptAt(159_000);
@@ -94,8 +97,9 @@ test('end-to-end: 1M session at ~160k ⇒ T2 without the tee, silent after one t
   assert.strictEqual(tee.status, 0, tee.stderr);
 
   const after = runHook({ transcript_path: t, session_id: sid }, liveDir);
-  assert.strictEqual(after.status, 0, `no T2 at 16% of a 1M window; stderr=${after.stderr}`);
-  assert.strictEqual(after.stderr.trim(), '');
+  assert.strictEqual(after.status, 2, `absolute T2 at 159k on a known window; stderr=${after.stderr}`);
+  assert.match(after.stderr, /~1000k window \(statusline\)/, 'the decision must be made against the real 1M window');
+  assert.doesNotMatch(after.stderr, /context window is unknown/);
 });
 
 test('end-to-end: a real 200K window at ~160k still gets T2 through the tee', () => {

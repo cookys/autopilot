@@ -273,6 +273,20 @@ cat > "$ROOT/.claude/mission-routing-config.json" <<CONFIGJSON
 }
 CONFIGJSON
 
+# The historical graph is sealed (its graph_digest is bound into the rollover
+# records), so its reservation paths cannot follow later file moves: it still
+# names hooks/tests/dispatch-review.test.sh and hooks/tests/resolve-review-loop.test.sh,
+# which were since split into per-topic suites. Admission requires every
+# required/output path the graph names to exist, so materialise any such
+# absent hooks/tests/*.test.sh path in the scratch clone (the clone is
+# disposable; the live tree is never touched).
+while IFS= read -r p; do
+  [ -n "$p" ] && [ ! -e "$ROOT/$p" ] && : > "$ROOT/$p"
+done < <(node -e '
+const g=require(process.argv[1]);const out=new Set();
+JSON.stringify(g,(k,v)=>{if(typeof v==="string"&&/^hooks\/tests\/[^/]+\.test\.sh$/.test(v))out.add(v);return v});
+console.log([...out].join("\n"))' "$ROOT/docs/mission-next-touch-debt-retirement-execution-graph.json")
+
 # requireExactLegacyTerminalDisposition() (mission-routing-admission.js) also
 # checks a legacy-terminal-dispositions.json artifact whose current_graph_digest
 # field must match the CONFIG's graph digest exactly. The copied snapshot's

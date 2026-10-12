@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0127 -->
+<!-- next-id: BL-0133 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1695,3 +1695,81 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: hetero review g1 deferred findings, 2026-10-12
 - **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
 - **Context**: Hook and dev-setup paths read /etc/claude-code/managed-settings.json with no override (suites not isolated on a host that has one). truthyEnv treats DISABLE_AUTO_COMPACT=0 as unset; confirm against the binary.
+
+### residue sweep records integration_ref HEAD after widening to the remote upstream
+- **Id**: BL-0127
+- **Status**: open
+- **Since**: 2026-10-13
+- **Origin**: self
+- **Problem**: 收尾清理判斷分支是否已整合時，如果改用遠端追蹤分支比對，報告上寫的比對對象仍是本地 HEAD，和實際比對的 commit 對不上。
+- **Impact**: 只影響報告上的文字，清理判斷本身正確；看報告的人可能被誤導。
+- **Trigger**: next touch of scripts/repo-residue-sweep.js
+- **Effort**: XS
+- **Source**: lane N review, 2026-10-13
+- **Pointer**: none
+- **Context**: integration_ref stays HEAD while integration_sha is the upstream's; :1116-1117 resolves @{upstream} twice.
+
+### repo-identity blames the git version for every rev-parse failure
+- **Id**: BL-0128
+- **Status**: open
+- **Since**: 2026-10-13
+- **Origin**: self
+- **Problem**: 判斷儲存庫身分的共用程式在查詢失敗時，一律印「git 版本太舊、需要 2.31 以上」，但這台的 git 是 2.53，真正的原因是別的。
+- **Impact**: 測試輸出出現誤導的警告，排查時會往錯的方向找；功能本身不受影響。
+- **Trigger**: next touch of scripts/lib/repo-identity.sh
+- **Effort**: XS
+- **Source**: lane A test runs, 2026-10-13
+- **Pointer**: none
+- **Context**: :33 prints the version hint on any failure (non-repo dir included); name the real cause, keep the hint only when the version is below 2.31.
+
+### mission-terminal-rollover tests read the live registry and sealed graph
+- **Id**: BL-0129
+- **Status**: open
+- **Since**: 2026-10-13
+- **Origin**: self
+- **Problem**: 收尾換軌的測試直接讀 repo 裡真正的登錄檔和已封存的工作圖，只要這些檔案被搬動或歸檔，測試就會變紅，跟測試要驗的程式無關。
+- **Impact**: 歸檔或整理文件時會讓不相干的測試轉紅，浪費排查時間。
+- **Trigger**: next red of mission-terminal-rollover tests not caused by its code
+- **Effort**: S
+- **Source**: lane A, 2026-10-13
+- **Pointer**: none
+- **Context**: Give the suite its own frozen graph + registry fixture instead of the host files.
+
+### plan archiving rewrites a sealed mission graph
+- **Id**: BL-0130
+- **Status**: open
+- **Since**: 2026-10-13
+- **Origin**: self
+- **Problem**: 計畫歸檔工具會改寫計畫裡提到的路徑，但沒有避開已封存、帶有內容指紋的工作圖；歸檔後指紋對不上，相關測試轉紅。
+- **Impact**: 每歸檔一份帶封存工作圖的計畫，就會再弄壞一次，上一次已經得手動復原。
+- **Trigger**: next plan archive that references a docs/mission-*-execution-graph.json
+- **Effort**: XS
+- **Source**: lane A review, 2026-10-13
+- **Pointer**: none
+- **Context**: check-plan-graduation.js frozenAssetFiles() (:396-441) omits graphs carrying graph_digest; add them. Root of 6559da33.
+
+### peer_report_lost misses a peer row deleted in the opt-in commit
+- **Id**: BL-0131
+- **Status**: open
+- **Since**: 2026-10-13
+- **Origin**: self
+- **Problem**: 推送前的檢查會抓「外部反映列沒回覆就被刪掉」，但如果刪除剛好發生在專案第一次啟用新格式的同一個提交，前後都看不到該列的反映者欄位，就抓不到。
+- **Impact**: 只有啟用新格式那一次會發生；這個 repo 已啟用且沒刪任何反映列，其他專案啟用時可能漏抓。
+- **Trigger**: a consumer project opts in to reporter fields
+- **Effort**: S
+- **Source**: lane F review round 5, 2026-10-13
+- **Pointer**: none
+- **Context**: Pre-opt-in commits parse legacy-style, so the (Id, Report) pair never appears before the opt-in commit.
+
+### backlog legacy-parity test skips --range for heading and checklist
+- **Id**: BL-0132
+- **Status**: open
+- **Since**: 2026-10-13
+- **Origin**: self
+- **Problem**: 新舊版 backlog 檢查的對照測試裡，heading 和 checklist 兩種格式的範例列沒有編號，推送範圍比對會略過它們，所以這兩種格式的這一項其實沒測到。另外文件沒寫清楚新欄位是逐欄啟用。
+- **Impact**: 這兩種格式若在推送範圍比對上和舊版不同，測試抓不到；手寫設定的專案可能看不懂為什麼某欄沒被檢查。
+- **Trigger**: next touch of check-backlog-entries.js
+- **Effort**: XS
+- **Source**: lane F review round 6, 2026-10-13
+- **Pointer**: none
+- **Context**: Add Ids to the collision rows (parity test :60,:73); note in backlog-entry.md that opt-in is per field (Since alone leaves Origin extra_content).

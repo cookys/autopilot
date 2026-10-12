@@ -141,6 +141,33 @@ assert_exit_code "$RC" "2" "required path absent at HEAD exits 2"
 assert_contains "$OUT" "src/missing-input.js" "missing required path is named"
 assert_file_absent "$R2/docs/mission-$PLAN_STEM-execution-graph.json" "no graph written on required-path refusal"
 
+# 9b. A failure AFTER writes began (envelope path under a regular file) rolls everything back.
+R3="$TEST_TMP/repo3"
+make_repo "$R3"
+register_plan "$R3"
+COMMON3=$(git -C "$R3" rev-parse --absolute-git-dir)
+gen "$R3" --check >/dev/null 2>&1
+assert_file_absent "$COMMON3/autopilot-scaffold" "--check leaves no scaffold directory behind"
+BLOCKER="$TEST_TMP/blocker"
+echo x > "$BLOCKER"
+OUT=$(gen "$R3" --authority-out "$BLOCKER/a.json" 2>&1); RC=$?
+assert_neq "$RC" "0" "write failure after partial writes exits non-zero"
+assert_file_absent "$R3/docs/mission-$PLAN_STEM-sources.json" "rollback removes new sources"
+assert_file_absent "$R3/docs/mission-$PLAN_STEM-execution-graph.json" "rollback removes new graph"
+assert_file_absent "$R3/docs/plans/$PLAN_STEM.rubric.md" "rollback removes new rubric"
+assert_file_absent "$COMMON3/autopilot-scaffold" "failed run leaves no scaffold directory behind"
+# Default envelope name carries the graph digest prefix.
+gen "$R3" >/dev/null 2>&1
+G3=$(digest_of "$R3/docs/mission-$PLAN_STEM-execution-graph.json")
+assert_file_exists "$COMMON3/autopilot-scaffold/$PLAN_STEM-${G3:0:12}-authority.json" "default envelope name has the digest prefix"
+# --force over existing files: a late failure restores the old bytes exactly.
+printf 'OLD-GRAPH\n' > "$R3/docs/mission-$PLAN_STEM-execution-graph.json"
+printf 'OLD-SOURCES\n' > "$R3/docs/mission-$PLAN_STEM-sources.json"
+OUT=$(gen "$R3" --force --authority-out "$BLOCKER/a.json" 2>&1); RC=$?
+assert_neq "$RC" "0" "forced write failure exits non-zero"
+assert_eq "$(cat "$R3/docs/mission-$PLAN_STEM-execution-graph.json")" "OLD-GRAPH" "--force rollback restores the old graph"
+assert_eq "$(cat "$R3/docs/mission-$PLAN_STEM-sources.json")" "OLD-SOURCES" "--force rollback restores the old sources"
+
 # 10. A mirrored output without codex-mirror closure would fail the checker: prove the rule is exercised.
 node -e '
 const fs = require("fs");

@@ -6,7 +6,7 @@
 // validators the rail runs. Plan: docs/plans/2026-10-13-l5-mission-scaffold-generator.md.
 //
 // Exit codes: 0 generated (or --check passed), 1 usage error, 2 pre-check / validation failure
-// (nothing is left half-written), 3 an output already exists (use --force).
+// (nothing is left half-written: a failed write restores or removes every touched file), 3 an output already exists (use --force).
 //
 // It never edits docs/projects/INDEX.md or .claude/mission-routing-config.json, never runs
 // `mission prepare|grant` or the legacy reconcile, and never runs the verification commands:
@@ -191,7 +191,8 @@ function build(o) {
   if (!fs.existsSync(governancePath)) throw new Refusal(`governance file not found: ${governancePath}`);
 
   const common = fs.realpathSync(path.resolve(repoRoot, (git(repoRoot, ['rev-parse', '--git-common-dir']) || '').trim()));
-  const authorityOut = path.resolve(o.authorityOut || path.join(common, 'autopilot-scaffold', `${slug}-authority.json`));
+  // null = default name, completed in generate() with the graph digest so two worktrees cannot overwrite each other.
+  const authorityOut = o.authorityOut ? path.resolve(o.authorityOut) : null;
 
   // Path closure: mirrors of every output, required = existing inputs only.
   const createSet = new Set(creates0);
@@ -209,7 +210,7 @@ function build(o) {
 
   // Pre-check 4: every required (existing-input) path exists at HEAD; a file the hand will CREATE
   // belongs in --create (listing it as required burned an attempt on 2026-09-15).
-  const absent = requiredList.filter((p) => !(!rubricExisted && p === rubric)
+  const absent = requiredList.filter((p) => p !== rubric
     && git(repoRoot, ['cat-file', '-e', `HEAD:${p}`], { allowFail: true }) === null);
   if (absent.length > 0) {
     throw new Refusal(`required path(s) absent at HEAD (pass --create for files the hand will create, or commit them): ${absent.join(', ')}`);
@@ -350,6 +351,9 @@ function generate(b, o) {
     },
     missionAuthority: { repoIdentity: `git-common-dir:${b.common}`, graphDigest: frozen.graph_digest },
   });
+  if (!b.authorityOut) {
+    b.authorityOut = path.join(b.common, 'autopilot-scaffold', `${b.slug}-${frozen.graph_digest.slice(0, 12)}-authority.json`);
+  }
   return { sources, graph: frozen.graph, graphDigest: frozen.graph_digest, authority: authority.envelope,
     planSha, rubricSha, rubricBytes, scratchDir, missionPolicy };
 }
@@ -368,17 +372,23 @@ function writeAll(b, g, o) {
       }
     }
   }
-  const written = [];
+  // Snapshot what exists so a failure restores it byte for byte (--force) or removes the new file.
+  const before = new Map(targets.map(([file]) => [file, fs.existsSync(file) ? fs.readFileSync(file) : null]));
+  const touched = [];
   try {
     for (const [file, content] of targets) {
+      touched.push(file);
       fs.mkdirSync(path.dirname(file), { recursive: true });
       fs.writeFileSync(file, content);
-      written.push(file);
     }
     validate(b, g.graphDigest, g.scratchDir);
   } catch (error) {
-    // Roll back only files that did not exist before this run, so a failed run leaves nothing half-written.
-    if (!o.force) for (const file of written) fs.rmSync(file, { force: true });
+    for (const file of touched) {
+      try {
+        if (before.get(file) === null) fs.rmSync(file, { force: true });
+        else fs.writeFileSync(file, before.get(file));
+      } catch (_restoreError) { /* best effort; the original error is what matters */ }
+    }
     throw error instanceof Refusal ? error : new Refusal(error.message);
   }
 }
@@ -434,7 +444,9 @@ function main() {
       writeAll(b, g, o);
     }
   } finally {
-    fs.rmSync(path.join(b.common, 'autopilot-scaffold', `scratch-${process.pid}`), { recursive: true, force: true });
+    const scaffoldDir = path.join(b.common, 'autopilot-scaffold');
+    fs.rmSync(path.join(scaffoldDir, `scratch-${process.pid}`), { recursive: true, force: true });
+    try { fs.rmdirSync(scaffoldDir); } catch (_e) { /* not empty (envelopes live here) or absent */ }
   }
   const out = {
     status: o.check ? 'CHECKED' : 'GENERATED',

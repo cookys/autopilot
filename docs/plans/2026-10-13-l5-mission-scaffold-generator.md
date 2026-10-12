@@ -36,7 +36,7 @@ Inputs (flags):
   `--baseline-churn 1600`, `--max-repair-generations 2`, wall 3600 s, reservation 10800 s / 450 tool calls / 2 engine attempts
 - `--rubric <file>` (default `<stem>.rubric.md`, generated through `plan-rubric-scaffold.js` when absent)
 - `--governance` (default `.claude/owner-kernel-governance.json`), `--repo-root`, `--out-dir` (default `docs`)
-- `--authority-out` (default `<git-common-dir>/autopilot-scaffold/<slug>-authority.json`, so it never dirties the tree and never gets committed)
+- `--authority-out` (default `<git-common-dir>/autopilot-scaffold/<slug>-<graph digest first 12>-authority.json`, so it never dirties the tree and never gets committed)
 - `--check` only validates, writes nothing; `--force` overwrites existing outputs (default: refuse)
 
 Derivations (all computed, never typed):
@@ -48,12 +48,12 @@ Derivations (all computed, never typed):
 Pre-checks that fail BEFORE any file is written (the rules that cost attempts):
 - each verify command passes `validBoundedVerifyCommand` (no pipe, quote, redirect, or `;`) and the joined projection is under 4096 chars
 - plan exists, has the `--spec-section` heading, and has a registered `active` INDEX row (prints the paste-ready row when not)
-- plan and rubric are committed and clean at HEAD (otherwise `spec.path missing at base`); warns, then fails with `--strict`
+- plan and rubric are committed and clean at HEAD (otherwise `spec.path missing at base`); the plan must be clean (an uncommitted rubric, sources and graph are expected and only listed in `next_steps`)
 - every `required_paths` entry exists at HEAD unless it is in `--create`
 
-Self-validation after generation: runs `inspect()` from `mission-execution-graph-check.js` (with mirror roots and repo root) on the files just written; any throw removes nothing but exits 2 with the validator's message.
+Self-validation after generation: runs `inspect()` from `mission-execution-graph-check.js` (with mirror roots and repo root) on the files just written; any failure restores overwritten files byte for byte, removes newly created ones, and exits 2 with the validator's message.
 
-Outputs: the three repo files (rubric if generated, sources, graph) and the envelope outside the repo. stdout is one JSON object: `status`, paths, `plan_sha256`, `rubric_sha256`, `graph_digest`, `lineage_id`, and `next_steps` (the exact INDEX row, routing-config edit, `mission-terminal-reconcile.js legacy --graph-digest <d>`, `mission prepare` and `mission grant` commands).
+Outputs: the three repo files (rubric if generated, sources, graph) and the envelope outside the repo. stdout is one JSON object: `status`, paths, `plan_sha256`, `rubric_sha256`, `graph_digest`, and `next_steps` (including `mission_lineage_id`) (the exact INDEX row, routing-config edit, `mission-terminal-reconcile.js legacy --graph-digest <d>`, `mission prepare` and `mission grant` commands).
 
 Deliberately NOT done: the script does not edit `docs/projects/INDEX.md`, `.claude/mission-routing-config.json`, run the legacy reconcile, run `prepare`/`grant`, or run the `verification_commands` at base. Those mutate shared state or spend a grant; they stay a depth-0 decision and are listed in `next_steps`. The detached-checkout base run of the verify commands also stays manual (recipe step 3).
 

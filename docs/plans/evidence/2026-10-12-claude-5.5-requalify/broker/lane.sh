@@ -10,7 +10,7 @@ case "$MODEL" in claude-haiku-5-5|claude-sonnet-5-5|claude-opus-5-5) ;; *) echo 
 case "$EFFORT" in low|medium|high) ;; *) echo "bad effort" >&2; exit 2;; esac
 SHORT="${MODEL#claude-}"; SHORT="${SHORT%-5-5}"; LANE="$SHORT-$EFFORT"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO=/home/cookys/projects/autopilot
+REPO="${REPO_OVERRIDE:-/home/cookys/projects/autopilot}"
 DRY="${DRY_RUN:-0}"
 LANE_DIR="$HOME/.autopilot/exam-claude-config-$LANE"
 OUT="$HERE/out/$LANE"

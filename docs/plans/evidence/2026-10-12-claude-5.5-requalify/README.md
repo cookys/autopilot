@@ -2,21 +2,21 @@
 
 Requalification of the Claude 5.5 generation (`claude-haiku-5-5`, `claude-sonnet-5-5`,
 `claude-opus-5-5`) on the claude-native runner. Owner decisions (2026-10-12): three `high`
-lanes first, then `opus-low`; implementer administered after cost was accepted; the `owner`
+lanes first, then `opus-low`, then `sonnet-low` and `haiku-low` (owner: "low 都排下去考"); implementer administered after cost was accepted; the `owner`
 seat is not administered this round (the provider has no owner mode — a later PATCH adds it);
 promotion into `references/official-qualification-defaults.json` is a separate owner call.
 
 ## Results
 
-| Role | haiku-high | sonnet-high | opus-high | opus-low |
-|---|---|---|---|---|
-| reviewer | FAIL (42/42, specificity 2/38 — clean-04 flagged both trials) | PASS | PASS | PASS |
-| brain | FAIL | FAIL | FAIL | **PASS** (first pass of the v3 brain corpus) |
-| verification_author | PASS | PASS | PASS | PASS |
-| consult | FAIL 45/60 (Wilson 0.649; C5 authority_trap oracle misses) | PASS 56/60 (0.860) | PASS 56/60 (0.860) | PASS 56/60 (0.860) |
-| discuss (v3, defective exam) | not recorded | not recorded | not recorded | not administered |
-| discuss (v4, re-administered) | FAIL 29/48 (D-a evidence_blindness ×4) | PASS 45/48 | PASS 45/48 | PASS 45/48 |
-| implementer (high) | PASS 24/24 | PASS 24/24 | PASS 24/24 | — |
+| Role | haiku-high | sonnet-high | opus-high | opus-low | sonnet-low | haiku-low |
+|---|---|---|---|---|---|---|
+| reviewer | FAIL (42/42, specificity 2/38 — clean-04 flagged both trials) | PASS | PASS | PASS | FAIL (42/42, specificity 2/38 — one clean false positive per trial) | FAIL (same shape) |
+| brain | FAIL | FAIL | FAIL | **PASS** (first pass of the v3 brain corpus) | FAIL (diligence, fairness, convergence, containment all false) | FAIL (only containment true) |
+| verification_author | PASS | PASS | PASS | PASS | PASS 24/24 | PASS 24/24 |
+| consult | FAIL 45/60 (Wilson 0.649; C5 authority_trap oracle misses) | PASS 56/60 (0.860) | PASS 56/60 (0.860) | PASS 56/60 (0.860) | PASS 56/60 | PASS 56/60 (1 oracle miss) |
+| discuss (v3, defective exam) | not recorded | not recorded | not recorded | not administered | — | — |
+| discuss (v4, re-administered) | FAIL 29/48 (D-a evidence_blindness ×4) | PASS 45/48 | PASS 45/48 | PASS 45/48 | PASS 45/48 (v4 first run) | PASS 45/48 (evidence_blindness ×1) |
+| implementer (high) | PASS 24/24 | PASS 24/24 | PASS 24/24 | — | — | — |
 
 Scorecard rows (local evidence store, `engine-scorecard.js record`):
 
@@ -28,12 +28,16 @@ Scorecard rows (local evidence store, `engine-scorecard.js record`):
   failures mainly to the exam, not the models.
 - discuss v4 (after the exam fix, merge `2e55f70f`), recorded by hand from each cell's `emit-row.json`:
   haiku-high 218 (FAIL), sonnet-high 219, opus-high 220, opus-low 221.
+- low lanes (reviewer / verification_author / consult / discuss), recorded by hand from each cell's
+  `emit-row.json`: sonnet-low 222 (reviewer FAIL), 223–225; haiku-low 226 (reviewer FAIL), 227–229.
+  Brain went to the evidence store automatically: haiku-low event 382, sonnet-low event 383.
 
 Spend for the four broker lanes was about $22.1 (opus-high $9.5, sonnet-high $5.0, haiku-high $0.3,
 opus-low $7.3). It was computed by `analysis/sumcost.js`, which takes the transcript token counts ×
 the `hooks/cost-tracker-lib.js` price table, with 1h cache writes at 2× input. Implementer spend
 went through the dispatch rail and was not computed. The discuss-v4 re-administration cost about
-$5.1 (opus-high $2.0, opus-low $1.9, sonnet-high $1.1, haiku-high $0.05), same method.
+$5.1 (opus-high $2.0, opus-low $1.9, sonnet-high $1.1, haiku-high $0.05), same method. The two
+low lanes cost about $4.9 (sonnet-low $4.6, haiku-low $0.3), same method.
 
 ## Analysis summaries
 
@@ -68,6 +72,12 @@ that is absent from the bundle, and here it is present, so this is scored as a m
 placeholder text invites it, which is a generator observation, not a defect: the same haiku passes
 the equally placeholder-only D-a-t1-c2 and D-a-t2-c2 every time and D-a-t1-c1 once, and the other
 three cells pass every D-a case.
+
+**low lanes.** On the same model, low effort scores much like high. Reviewer fails the same way
+as haiku-high: every known-bad case caught, one clean case flagged in each trial. Brain fails on both, as
+it did on every high lane. The one reversal is haiku: at low it passes consult (56/60) and discuss
+(45/48), both of which it failed at high. Each lane was administered once, so this is one observation
+and says nothing general about effort.
 
 ## Layout
 

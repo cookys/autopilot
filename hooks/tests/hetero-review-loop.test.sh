@@ -1481,6 +1481,15 @@ assert_contains "$PK_SCOPE" "- c.txt" "packet P1: P2's scope note lists a siblin
 assert_not_contains "$PK_SCOPE" "d/b.txt" "packet P1: P2's scope note does not list its own paths as siblings"
 bash "$REPO_ROOT/scripts/check-blind-evidence.sh" --payload "$PK_LEDGER/review-ps-P2/g1/packet-scope.md" >/dev/null 2>&1; PK_RC=$?
 assert_exit_code "$PK_RC" "0" "packet P1: the scope note passes the blind-evidence gate dispatch-review applies to the spec"
+bash "$REPO_ROOT/scripts/check-dispatch-suppression.sh" "$PK_LEDGER/review-ps-P2/g1/packet-scope.md" >/dev/null 2>&1; PK_RC=$?
+assert_exit_code "$PK_RC" "0" "packet P1: the scope note is a statement, not coaching (check-dispatch-suppression rc 0)"
+# An unreadable --spec-file must fail before g1/ exists, or the generation is stranded.
+PK_SPEC_LEDGER="$TEST_TMP/pk_spec_ledger"
+PK_OUT=$(pk_collect "$PK_SPEC_LEDGER" "$TEST_TMP/pk_packets.json" P1 --spec-file "$TEST_TMP/no-such-spec.md"); PK_RC=$?
+assert_exit_code "$PK_RC" "1" "packet P1: a missing --spec-file exits 1"
+assert_file_absent "$PK_SPEC_LEDGER/review-ps-P1/g1" "packet P1: a missing --spec-file leaves no g1 directory behind"
+PK_OUT=$(pk_collect "$PK_SPEC_LEDGER" "$TEST_TMP/pk_packets.json" P1); PK_RC=$?
+assert_exit_code "$PK_RC" "0" "packet P1: the same generation collects after the missing-spec failure (was: directory already exists)"
 PK_FULL=$(git -C "$PK_REPO" diff "$PK_BASE..work" | sha256sum | cut -d' ' -f1)
 assert_eq "$(node -e 'const r=require(process.argv[1]); console.log([r.full_range_sha256, r.excluded.length, r.packet.id].join("|"))' "$PK_LEDGER/review-ps-P2/g1/range.json")" "$PK_FULL|0|P2" "packet P1: range.json pins the full-range hash, no exclusions, names the packet"
 PK_OUT=$(pk_check "$CHK" "$PK_LEDGER" "$TEST_TMP/pk_packets.json"); PK_RC=$?

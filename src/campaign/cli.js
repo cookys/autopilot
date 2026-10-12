@@ -317,6 +317,7 @@ function validateCampaignJournalLease(row, currentLease) {
 //                                                  strongest journaled fact. It is enough to REFUSE
 //                                                  a never-started release (the campaign may well
 //                                                  have run), never enough to bind the claim to it.
+//   { kind: 'binding_ambiguous', campaign_ids } — the claim id is bound to more than one campaign.
 //   { kind: 'absent' }                           — nothing under the id and (for v2) nothing
 //                                                  under the ticket: never started in this ledger.
 //   { kind: 'unknown_v2' }                       — a v2 claim carrying no contract draft ticket:
@@ -333,6 +334,7 @@ function resolveCampaignForClaim(rows, claim, missionClaimId) {
   // after the intake root) naming the Mission claim it was admitted for. An exact claim-id match
   // against a campaign that has an intake root IS the binding. A ledger without such a row
   // (campaign admitted before the binding existed) falls through to the ticket guard below.
+  const mismatched = [];
   if (typeof missionClaimId === 'string' && missionClaimId.length > 0) {
     const bound = new Set();
     for (const row of rows) {
@@ -341,13 +343,13 @@ function resolveCampaignForClaim(rows, claim, missionClaimId) {
       const payload = parsePayload(row); // throws on a corrupt payload — propagate
       if (payload && payload.artifact_type === 'campaign_mission_binding'
           && payload.mission_claim_id === missionClaimId
-          && payload.campaign_id === row.run_id
-          && (claimId === null || payload.mission_campaign_id === claimId)) {
-        bound.add(row.run_id);
+          && payload.campaign_id === row.run_id) {
+        if (claimId === null || payload.mission_campaign_id === claimId) bound.add(row.run_id);
+        else mismatched.push({ campaign_id: row.run_id, mission_campaign_id: payload.mission_campaign_id });
       }
     }
     if (bound.size > 1) {
-      throw new Error(`mission claim ${missionClaimId} is bound to ${bound.size} campaigns in this ledger (${[...bound].join(', ')})`);
+      return { kind: 'binding_ambiguous', campaign_ids: [...bound].sort() };
     }
     if (bound.size === 1) {
       const [boundId] = bound;
@@ -377,7 +379,7 @@ function resolveCampaignForClaim(rows, claim, missionClaimId) {
     try { const proj = projectCampaign(rows, runId); phase = proj ? proj.state.phase : null; } catch (_error) { phase = null; }
     roots.push({ campaign_id: runId, phase });
   }
-  return { kind: 'ticket_present', roots, ticket };
+  return { kind: 'ticket_present', roots, ticket, binding_mismatch: mismatched };
 }
 
 function projectCampaign(rows, campaignId) {

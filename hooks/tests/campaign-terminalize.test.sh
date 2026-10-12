@@ -713,6 +713,22 @@ assert.strictEqual(wdV2Ns.status, 0, `v2 claim with no ticket root is releasable
   ]);
   assert.strictEqual(wdOther.status, 1, `binding naming another campaign-v2 id must not bind: ${wdOther.stdout}`);
   assert.strictEqual(JSON.parse(wdOther.stdout).code, 'mission_withdraw_campaign_ticket_present');
+  assert.ok(/name a different Mission campaign id/.test(JSON.parse(wdOther.stdout).reason), `mismatch is named: ${wdOther.stdout}`);
+  // the same claim id bound to TWO campaigns: explicit ambiguity code, no pick
+  const ambLedger = path.join(tmp, 'ambiguous-campaign.jsonl');
+  fs.copyFileSync(boundLedger, ambLedger);
+  const second = `campaign-v1-${'e'.repeat(64)}`;
+  fs.appendFileSync(ambLedger, `${JSON.stringify({
+    kind: 'journal', ts: '2026-08-31T00:00:00Z', run_id: second, stage: 'campaign', generation: 1, nonce: 'n',
+    op: 'campaign_mission_binding', idempotency_key: 'x', status: 'applied',
+    payload: JSON.stringify({ schema_version: 1, artifact_type: 'campaign_mission_binding', campaign_id: second, mission_claim_id: claimId, mission_campaign_id: v2CampaignId }),
+  })}\n`);
+  const wdAmb = runCli([
+    'mission', 'withdraw', '--state', v2StatePath, '--out', path.join(tmp, 'ms-out-amb.json'),
+    '--claim-id', claimId, '--campaign-ledger', ambLedger,
+  ]);
+  assert.strictEqual(wdAmb.status, 1, `ambiguous binding must refuse: ${wdAmb.stdout}`);
+  assert.strictEqual(JSON.parse(wdAmb.stdout).code, 'mission_withdraw_binding_ambiguous');
   // old ledger, no binding row: unchanged refusal
   const wdOld = runCli([
     'mission', 'withdraw', '--state', v2StatePath, '--out', path.join(tmp, 'ms-out-old.json'),
@@ -720,6 +736,7 @@ assert.strictEqual(wdV2Ns.status, 0, `v2 claim with no ticket root is releasable
   ]);
   assert.strictEqual(wdOld.status, 1, `ledger without binding row keeps the refusal: ${wdOld.stdout}`);
   assert.strictEqual(JSON.parse(wdOld.stdout).code, 'mission_withdraw_campaign_ticket_present');
+  assert.ok(/holds no campaign_mission_binding row/.test(JSON.parse(wdOld.stdout).reason), `no-row case is named: ${wdOld.stdout}`);
 }
 
 // Now use the ALREADY-terminalized ledger from above (`ledgerPath`) — its

@@ -114,6 +114,7 @@ const {
   runCampaignIntake,
 } = require(path.join(root, 'src', 'engine', 'campaign-intake'));
 const campaignCheck = require(path.join(root, 'scripts', 'implementation-campaign-check'));
+const { loadRows } = require(path.join(root, 'src', 'campaign', 'cli'));
 
 const lines = [];
 function check(id, cond) { lines.push(`${id}\t${cond ? 'PASS' : 'FAIL'}`); }
@@ -202,7 +203,7 @@ function intakeInput() {
 group('g1', () => {
   const calls = [];
   const adapters = {
-    missionClaim: () => { calls.push('mission'); return { owner: 'mission', status: 'claimed', claim_id: 'mission-claim-g1' }; },
+    missionClaim: () => { calls.push('mission'); return { owner: 'mission', status: 'claimed', claim_id: 'mission-claim-g1', campaign_id: 'campaign-v2-' + 'c'.repeat(64) }; },
     releaseMission: () => ({ owner: 'mission_release', status: 'released' }),
     readiness: () => { calls.push('provider_readiness'); return { owner: 'provider_readiness', status: 'ready' }; },
     contextGate: () => { calls.push('context_window'); return { owner: 'context_window', status: 'ready' }; },
@@ -219,6 +220,15 @@ group('g1', () => {
   check('g1-mission-before-generation', owners.indexOf('mission') < owners.indexOf('campaign_generation'));
   check('g1-claim-called-before-review-stages', calls[0] === 'mission');
   check('g1-no-pre-spend-release-on-admit', control.pre_spend_no_effect_receipt === null);
+  // runCampaignIntake hands the Mission claim to the generation claim, which journals it on the
+  // campaign's own ledger lease (mission withdraw binds a v2 claim to its campaign by this row).
+  const genStep = (control.steps || []).find((st) => st.owner === 'campaign_generation');
+  const bindRows = genStep && genStep.ledger
+    ? loadRows(genStep.ledger).filter((r) => r.kind === 'journal' && r.op === 'campaign_mission_binding'
+      && r.run_id === control.campaign_id)
+    : [];
+  check('g1-intake-journals-mission-binding', bindRows.length === 1
+    && JSON.parse(bindRows[0].payload).mission_claim_id === 'mission-claim-g1');
 });
 
 // ── Group 2: a Mission claim rejection has ZERO reservation/release/downstream
@@ -645,7 +655,7 @@ for id in \
   g1-intake-admitted g1-mission-claimed-first g1-mission-before-contract \
   g1-mission-before-readiness g1-mission-before-context g1-mission-before-occupancy \
   g1-mission-before-generation g1-claim-called-before-review-stages \
-  g1-no-pre-spend-release-on-admit \
+  g1-no-pre-spend-release-on-admit g1-intake-journals-mission-binding \
   g2-blocked g2-rejection-owner-mission g2-only-mission-ran g2-no-release-effect \
   g2-no-generation-step g2-no-pre-spend-receipt g2-no-campaign-id \
   g3-campaign_contract-blocked g3-campaign_contract-unique-owning-rejection \

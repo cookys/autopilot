@@ -20,6 +20,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/qc-gate-affected-suites.md
 - **Context**: full run past 30 min (stopped at 256/408); the 38 suites that reference the changed files passed in about 2 min. Keep the full suite for release preflight.
 
+### Worktree and handoff placement has no rule outside the dispatch rails
+- **Status**: open
+- **Trigger**: next task after feat/mods-pane-navigation merges (owner 2026-10-12: pick it up when the mod work is done)
+- **Effort**: L
+- **Source**: owner question 2026-10-12; repo-wide inventory in session a14bb1ea
+- **Pointer**: docs/backlog/worktree-and-handoff-placement-has-no-rule.md
+- **Context**: rails use $TMPDIR, native/hand-made worktrees use .claude/worktrees with no naming rule; handoff fallback keys by basename, the /clear hook by repo hash; no cross-repo rule.
+
 ### calendar-teeth-negative instant2: consult evidence fixture exceeds the expiry ceiling
 - **Status**: open
 - **Trigger**: next touch of src/engine/capability-evidence.js or the calendar-teeth suite

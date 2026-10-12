@@ -24,7 +24,7 @@ Direction: C — decision `intent-17-2` in the decision ledger (owner's answer; 
 
 | # | Deliverable | Status |
 |---|---|---|
-| 1 | worktree placement rule (marker follow, base_ref, new-task advisory, handoff keying, rail relocation, reference) | planning |
+| 1 | worktree placement rule (marker follow, base_ref, new-task advisory, handoff keying, rail relocation, reference) | implement (P1 ✅, P2 in review) |
 
 ## Progress
 
@@ -33,3 +33,5 @@ Direction: C — decision `intent-17-2` in the decision ledger (owner's answer; 
 | 2026-10-12 | intent: spike done (U2 receipt in `ladder.jsonl`), direction A recorded on the owner's behalf |
 | 2026-10-12 | owner chose C (`intent-17-2`); sweep follow-up added to the spike: Claude Code's periodic sweep keeps worktrees without its own marker, so rail worktrees under `.claude/worktrees/` are safe from it |
 | 2026-10-12 | plan-review G1 (opus chair): CONDITIONAL, 9 non-blocking findings all folded (`2ce98cf4`); receipt check passes against the reviewed bytes — evidence `docs/plans/evidence/2026-10-12-worktree-placement/plan-review/` |
+| 2026-10-12 | P1 (marker follows the session, base_ref pairs): red `7ba74598` → green `d9aa4210`, `202211ce`; hetero review g2 SHIP-AS-IS, receipt `receipt-P1.json` (`5f5292cc`) |
+| 2026-10-12 | P2 (rail placement): lists `5534f2e5`; red `28ab4d92` (resolver + rails repointed + red tests, `p2-red-A.txt`); green `c90c3e3b` (D3, D11, D7, D10, P2.5 walkers, `p2-green-B.txt`); verify-red-green A..B VALIDATED (`p2-red-green.json`); P2.6 suites green. Deviations: D9 allowlist moved into the red commit (the pre-commit registry gate refuses the new allocation sites; gate metadata only, no runtime effect); D7 plan wording corrected (a marked nested worktree is a dispatch worktree, so depth-0 is gated there as in the temp dir; an unmarked one is allowed by the `.claude/` allowlist as today); `dispatch-hetero.test.sh` case 4 moved its first-placement check to a fresh sandbox (case 3d already places a worktree in `$SBX`, so the old precondition could never hold — the replacement is strictly stronger). P2.4: no foreman-guard change (`p2-4-foreman-guard.md`). Finder check: every reaper enumerates with `git worktree list --porcelain` or markers; no temp-root glob finds rail worktrees |

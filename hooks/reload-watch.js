@@ -73,7 +73,8 @@ function friendlyName(f) {
 
 try {
   // Consume stdin so the harness doesn't block on us
-  try { fs.readFileSync('/dev/stdin', 'utf8'); } catch { /* no stdin */ }
+  try { fs.readFileSync(0, 'utf8'); }
+  catch { try { fs.readFileSync('/dev/stdin', 'utf8'); } catch { /* no stdin */ } }
 
   const current = getMtimes();
   const previous = loadState();

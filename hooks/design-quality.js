@@ -24,8 +24,14 @@ const SIGNALS = [
   { pattern: /font-family:.*\bRoboto\b/i, label: 'Roboto font (overused default)' },
 ];
 
+// fd 0, not the '/dev/stdin' PATH: Claude Code hands hooks a socket, and
+// opening the path on a socket throws ENXIO.
+function readStdin() {
+  try { return fs.readFileSync(0, 'utf8'); } catch { return fs.readFileSync('/dev/stdin', 'utf8'); }
+}
+
 try {
-  const input = JSON.parse(fs.readFileSync('/dev/stdin', 'utf8'));
+  const input = JSON.parse(readStdin());
   const toolInput = input.tool_input || {};
   const filePath = toolInput.file_path;
 

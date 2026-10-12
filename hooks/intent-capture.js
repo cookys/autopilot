@@ -198,7 +198,9 @@ function atomicWrite(target, content, mode = 0o600) {
     let toolSource = 'stdin';
     let rawPayload = null;
     try {
-      const stdin = fs.readFileSync('/dev/stdin', 'utf8');
+      // fd 0 first: the '/dev/stdin' PATH throws ENXIO on a socket stdin.
+      let stdin;
+      try { stdin = fs.readFileSync(0, 'utf8'); } catch { stdin = fs.readFileSync('/dev/stdin', 'utf8'); }
       if (stdin.trim()) {
         const input = JSON.parse(stdin);
         rawPayload = input;

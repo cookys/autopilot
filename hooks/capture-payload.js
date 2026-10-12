@@ -38,7 +38,9 @@ const KEEP = 50;
 if (process.env.AUTOPILOT_CAPTURE_PAYLOAD !== '1') process.exit(0);
 
 try {
-  const stdin = fs.readFileSync('/dev/stdin', 'utf8');
+  // fd 0 first: the '/dev/stdin' PATH throws ENXIO on a socket stdin.
+  let stdin;
+  try { stdin = fs.readFileSync(0, 'utf8'); } catch { stdin = fs.readFileSync('/dev/stdin', 'utf8'); }
   const marker = (process.argv[2] || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 32);
   const ts = Date.now();
 

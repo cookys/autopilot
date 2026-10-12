@@ -1162,10 +1162,26 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: short-circuit test cannot fail (assert a grown file's new row gets a rewritten sidecar's parent); no cycle/self-parent test; a node under a cycle can land on root as orphan; 5-char labels can collide.
 
-### discuss exam: candidate prompt and envelope disagree with the oracle (axis rule, round_id)
+### discuss exam: re-administer discuss-v4 for the four claude 5.5 cells
 - **Status**: open
-- **Trigger**: owner 2026-10-12 — fix the exam, then re-administer discuss for claude 5.5 haiku/sonnet/opus-high and opus-low
+- **Trigger**: owner 2026-10-12 — the exam fix merged (`2e55f70f`, corpus discuss-v4); re-administer haiku/sonnet/opus-high and opus-low
 - **Effort**: M
 - **Source**: Claude 5.5 requalification analysis, 2026-10-12
 - **Pointer**: docs/plans/evidence/2026-10-12-claude-5.5-requalify/README.md
-- **Context**: D-b zero_information grades "reuse own axis" but the prompt says pick an untaken axis; envelope lacks round_id. Fix prompt/envelope (sealed asset: new hash, solver 16/16, plan review); grader untouched. Detail in Pointer.
+- **Context**: lane.sh with ROLES_OVERRIDE=discuss; re-derive identity (derive-fingerprints.js) for the new prompt hash and discuss-v4 first; record only after reading; copy emit-row.json to emitted-row.json for build-qualification-defaults.js.
+
+### dispatch-discuss.js: production prompt lacks the own-axis rule the exam now discloses
+- **Status**: open
+- **Trigger**: before think-tank enables a discuss seat in production
+- **Effort**: S
+- **Source**: discuss exam fix `eec239a8`, 2026-10-12
+- **Pointer**: none
+- **Context**: the qualification prompt now states that a seat with a this-seat round keeps that round's axis; the production prompt (around lines 280–297) still only says pick a declared axis. Align the two so a qualified seat meets the same rule live.
+
+### Full-suite reds at 6e91be30: calendar-teeth instant2, statusline-live-tee T2, real-config reads
+- **Status**: open
+- **Trigger**: next touch of context-budget, statusline-live-tee, or capability-evidence expiry
+- **Effort**: S
+- **Source**: discuss-exam-fix qc-gate full suite, 2026-10-12 (both reds reproduce at base 6e91be30)
+- **Pointer**: none
+- **Context**: instant2: expiry-ceiling throw (capability-evidence.js:171), clock-dependent. statusline-live-tee 160k T2 e2e red even with isolated HOME. hooks-live-state-misc reads real ~/.autopilot context_budget.t2; pin tiers via env.

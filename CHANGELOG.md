@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### 修正
+
+- **discuss 資格考卷的題目說明和評分規則對不上**（merge `2e55f70f`）：D-a／D-b 的評分要求考生沿用自己上一輪（`this-seat`）的軸，但給考生的題目說明沒寫這條，還叫考生挑一條沒人用過的軸。另外，題目說明要求考生照抄 `round_id`，題目資料裡卻沒有這個欄位。兩個 solver 都自己補上了這條隱藏規則，所以先前 16/16 的結果沒有真正證到考卷沒問題。修正方式：
+  - 題目說明寫明「沿用本席原軸」這條規則；守住立場時沿用原本的 claim token，更新立場時換成新 token，兩者不能同時出現。
+  - 題目資料加上 `round_id`。
+  - 評分程式、題目產生器、rubric 一個 byte 都沒改，評分要求完全不變。
+  - `corpus_version` 從 discuss-v3 升到 discuss-v4，並重新封存考卷雜湊。
+  - 新增釘值測試，包括一個負向對照：照舊版題目說明作答的考生，在 D-a／D-b 全部被判 zero_information。這些新斷言在修正前的版本上會失敗。
+
+### 驗證
+
+- hetero code review 由 opus、GLM、MiniMax、Qwen 四席審查，結論是 SHIP-AS-IS，沒有未結的意見。
+- 完整測試套件有 4 個檔案失敗，都確認不是這次改動引入的：其中 2 個在 base `6e91be30` 上同樣失敗，另外 2 個是測試執行中途改動本機設定造成的，已記入 BACKLOG。
+- discuss 四格要用 discuss-v4 重考，追蹤項目見 BACKLOG。
+
 ## v3.0.0-alpha.6 — 同一個 session 開第二個任務可以用 `set --new-task` 重走階段流程，用量分頁多一條 24 小時走勢線，鍵盤也能切分頁（pre-release，供 owner 測試）
 
 這是 3.0.0 的第六個 pre-release，不是 stable。alpha.5 留下的三個畫面後續（第二個任務、鍵盤切分頁、用量走勢）這版都處理了。其中「第二個任務」同時動了 `session-mode.js` 與 dev-flow、`/l4`、`/l5`、`/l6` 的說明文字，所以另外做了一組事先登記的 ON/OFF 測驗。

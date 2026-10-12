@@ -100,6 +100,31 @@ OUT="$(node "$SCRIPT" reap --repo "$SBX" --yes --older-than-days 30)"
 [ -d "$TEST_TMP/wt-young-clean" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "older-than: young clean-integrated kept"
 assert_contains "$OUT" 'younger than 30 days' "older-than: reason named"
 
+# ---------------------------------------------------------------- stale local develop: integration = newer of local and upstream
+# Main checkout's local develop is BEHIND origin/develop (a HEAD merged+pushed elsewhere). A worktree whose
+# HEAD is only on origin/develop is integrated; one on neither is not; a dirty one is never removed.
+UP="$TEST_TMP/up"; mkdir -p "$UP"
+U() { git -C "$UP" -c user.email=t@t -c user.name=t "$@"; }
+ORIGIN="$TEST_TMP/origin.git"; git init -q --bare -b develop "$ORIGIN"
+git clone -q "$ORIGIN" "$UP" 2>/dev/null; U checkout -q -b develop 2>/dev/null; echo a > "$UP/a.txt"; U add a.txt; U commit -q -m base; U push -q -u origin develop 2>/dev/null
+echo b > "$UP/b.txt"; U add b.txt; U commit -q -m merged-elsewhere; PUSHED="$(U rev-parse HEAD)"; U push -q origin develop 2>/dev/null
+U reset -q --hard HEAD~1                     # local develop behind origin/develop by one commit
+U worktree add -q --detach "$TEST_TMP/up-wt-remote" "$PUSHED" 2>/dev/null          # HEAD only on origin/develop
+U worktree add -q --detach "$TEST_TMP/up-wt-dirty" "$PUSHED" 2>/dev/null; echo x >> "$TEST_TMP/up-wt-dirty/a.txt"
+U worktree add -q --detach "$TEST_TMP/up-wt-neither" "$PUSHED" 2>/dev/null; git -C "$TEST_TMP/up-wt-neither" -c user.email=t@t -c user.name=t commit -q --allow-empty -m unpushed
+assert_eq "$(U merge-base --is-ancestor "$PUSHED" develop >/dev/null 2>&1; echo $?)" "1" "stale fixture: pushed HEAD is NOT on local develop"
+assert_eq "$(U merge-base --is-ancestor "$PUSHED" origin/develop >/dev/null 2>&1; echo $?)" "0" "stale fixture: pushed HEAD is on origin/develop"
+OUT="$(node "$SCRIPT" scan --repo "$UP")"
+assert_eq "$(field "$OUT" summary.worktrees.clean-integrated)" "1" "stale develop: HEAD only on origin/develop is clean-integrated"
+assert_eq "$(field "$OUT" summary.worktrees.clean-unintegrated)" "1" "stale develop: HEAD on neither stays clean-unintegrated"
+assert_eq "$(field "$OUT" summary.worktrees.dirty)" "1" "stale develop: dirty stays dirty"
+OUT="$(node "$SCRIPT" scan --repo "$UP" --integration-ref develop)"
+assert_eq "$(field "$OUT" summary.worktrees.clean-integrated)" "<undef>" "explicit --integration-ref develop is literal (stale, not widened)"
+node "$SCRIPT" reap --repo "$UP" --yes >/dev/null
+[ -d "$TEST_TMP/up-wt-remote" ] && fail "stale develop: origin-only integrated worktree removed" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
+[ -d "$TEST_TMP/up-wt-dirty" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "stale develop: dirty worktree kept"
+[ -d "$TEST_TMP/up-wt-neither" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "stale develop: unintegrated worktree kept"
+
 # ---------------------------------------------------------------- argv hygiene
 node "$SCRIPT" reap --repo "$SBX" >/dev/null 2>&1; assert_eq "$?" "2" "reap without --yes → 2"
 node "$SCRIPT" preserve --repo "$SBX" >/dev/null 2>&1; assert_eq "$?" "2" "preserve without --out → 2"

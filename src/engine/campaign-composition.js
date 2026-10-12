@@ -805,6 +805,35 @@ function runCampaignComposition(input = {}, adapters = {}) {
     }
   };
 
+  // Shared by the in-loop and the final adjudication paths: why is the finding
+  // registry incomplete? Closed enums only (free-text matching is forbidden —
+  // false wait escape). Returns { kind: 'identity' | 'malformed' | 'wait' |
+  // 'blocked', missing } where only 'wait' is a durable disposition wait.
+  const classifyIncompleteRegistry = (adjudication, review) => {
+    const identityInvalid = adjudication.error_code === 'FINDING_IDENTITY_INVALID'
+      || adjudication.error_code === 'INVALID_FINDING_IDENTITY';
+    if (identityInvalid) return { kind: 'identity', missing: null };
+    const malformedFindings = adjudication.error_code === 'UNSTRUCTURED_FINDINGS'
+      || adjudication.error_code === 'INVALID_FINDINGS'
+      || adjudication.error_code === 'INVALID_FINDING'
+      || adjudication.error_code === 'DUPLICATE_FINDING';
+    if (malformedFindings) return { kind: 'malformed', missing: null };
+    // AUTHORITY_REQUIRED adjudications carry no `findings`; the fallback is
+    // review.findings, the normalized JSON STRING. classifyMissingDisposition
+    // only reads arrays, so hand it the parsed raw objects.
+    const missing = classifyMissingDisposition({
+      findings: adjudication.findings
+        || rawFindingsList(review && review.findings),
+      dispositionAuthority: adjudication.disposition_authority || null,
+      findingsIdentityOk: true,
+    });
+    const durable = missing.status === AWAITING_DISPOSITION
+      || adjudication.error_code === 'AUTHORITY_REQUIRED'
+      || (missing.status !== 'hard_fail'
+        && adjudication.disposition_authority == null);
+    return { kind: durable ? 'wait' : 'blocked', missing };
+  };
+
   if (resume && (resume.phase === AWAITING_CONVERGENCE
       || resume.phase === 'AWAITING_CONVERGENCE_ADJUDICATION')) {
     const receipt = resume.convergence_adjudication_receipt;
@@ -1920,6 +1949,11 @@ function runCampaignComposition(input = {}, adapters = {}) {
       || resume.phase === 'AWAITING_DISPOSITION'),
   );
   let dispositionResumedEmitted = false;
+  // A final-panel park resumes through the same one-shot path, so the in-loop
+  // review is adjudicated again before the stored panel is. Captured before any
+  // persist so the in-loop failure below can tell the two parks apart.
+  const resumedFromFinalPark = dispositionOnlyResume
+    && controller.next_action === 'await_final_disposition_authority';
   if (dispositionOnlyResume) {
     trace.push('resume_disposition_only');
     candidate = resume.candidate;
@@ -2722,6 +2756,44 @@ function runCampaignComposition(input = {}, adapters = {}) {
       // AWAITING_DISPOSITION with no readable cause. Match the consumer exactly.
       if (adjudication.registry_complete !== true
           || !isCanonicalSha256(adjudication.registry_digest)) {
+        // Resumed from a final-panel park: the authority must cover the in-loop
+        // review digest as well as the panel digest (one authority file, two
+        // reviews[] entries). A missing in-loop entry is the same durable wait
+        // as the panel's, so park again instead of terminal-stopping. No ledger
+        // event: DISPOSITION_RESUMED was not emitted, so the journal is still in
+        // AWAITING_DISPOSITION and a second AWAITING_DISPOSITION is not a legal
+        // transition. Identity/malformed findings still fail closed below.
+        const reparkClass = resumedFromFinalPark && adjudication.registry_complete !== true
+          ? classifyIncompleteRegistry(adjudication, reviewForAdjudication)
+          : null;
+        if (reparkClass && reparkClass.kind === 'wait') {
+          const repark = awaitingDisposition(
+            'final-panel disposition resume re-adjudicates the in-loop review: '
+              + 'the authority must bind the in-loop review digest and the final panel '
+              + `review digest (${adjudication.reason
+                || (reparkClass.missing && reparkClass.missing.reason)
+                || 'in-loop authority missing'})`,
+            trace,
+            {
+              candidate,
+              verification,
+              review: lastReview,
+              findings: (reparkClass.missing && reparkClass.missing.findings) || [],
+              repair_generations: repairGeneration,
+              full_diff_barriers: fullDiffBarriers,
+              work_order_resumable: true,
+              controller,
+            },
+          );
+          appendRoundProgress(AWAITING_DISPOSITION, repark.reason);
+          persistController({
+            ...controller,
+            phase: AWAITING_DISPOSITION,
+            next_action: 'await_final_disposition_authority',
+          });
+          repark.controller = controller;
+          return repark;
+        }
         return blocked(
           'disposition_resume',
           'DISPOSITION_RESUMED requires a complete registry and real registry_digest',
@@ -2739,11 +2811,10 @@ function runCampaignComposition(input = {}, adapters = {}) {
     }
     trace.push('adjudicate');
     if (adjudication.registry_complete !== true) {
-      // Closed enum only: identity-invalid findings never enter resumable wait.
-      // Free-text /authority|disposition/ matching is forbidden (false wait escape).
-      const identityInvalid = adjudication.error_code === 'FINDING_IDENTITY_INVALID'
-        || adjudication.error_code === 'INVALID_FINDING_IDENTITY';
-      if (identityInvalid) {
+      // Closed enums only (see classifyIncompleteRegistry): identity-invalid and
+      // malformed findings never enter resumable wait.
+      const incompleteClass = classifyIncompleteRegistry(adjudication, reviewForAdjudication);
+      if (incompleteClass.kind === 'identity') {
         return blocked(
           'adjudication',
           adjudication.reason || 'malformed or identity-mismatched findings remain fail-closed',
@@ -2756,14 +2827,7 @@ function runCampaignComposition(input = {}, adapters = {}) {
           },
         );
       }
-      // Closed enum from campaign-adjudication.normalizeFindings — never a
-      // resumable wait (rawFindingsList would snapshot []). Free-text matching
-      // is forbidden (same convention as identityInvalid above).
-      const malformedFindings = adjudication.error_code === 'UNSTRUCTURED_FINDINGS'
-        || adjudication.error_code === 'INVALID_FINDINGS'
-        || adjudication.error_code === 'INVALID_FINDING'
-        || adjudication.error_code === 'DUPLICATE_FINDING';
-      if (malformedFindings) {
+      if (incompleteClass.kind === 'malformed') {
         return blocked(
           'adjudication',
           adjudication.reason || 'malformed findings remain fail-closed',
@@ -2776,27 +2840,10 @@ function runCampaignComposition(input = {}, adapters = {}) {
           },
         );
       }
-      // Reach here only after identity-invalid error codes were rejected above.
-      // Pass an explicit identity verdict — never rely on the removed fail-open default.
-      // AUTHORITY_REQUIRED adjudications carry no `findings`; the fallback is
-      // review.findings, the normalized JSON STRING. classifyMissingDisposition
-      // only reads arrays, so hand it the parsed raw objects — otherwise the
-      // durable snapshot is `[]` and the disposition resume has nothing to bind.
-      const missing = classifyMissingDisposition({
-        findings: adjudication.findings
-          || rawFindingsList(reviewForAdjudication && reviewForAdjudication.findings),
-        dispositionAuthority: adjudication.disposition_authority || null,
-        findingsIdentityOk: true,
-      });
-      // Incomplete registry without identity failure is a durable disposition wait:
-      // - exact AWAITING_DISPOSITION from classifyMissingDisposition
-      // - closed AUTHORITY_REQUIRED enum
-      // - missing disposition_authority on an incomplete registry (no free-text match)
+      const missing = incompleteClass.missing;
+      // Incomplete registry without identity failure is a durable disposition wait.
       // Hard-fail classifications remain blocked. Never invent terminal success.
-      const incompleteIsDurableWait = missing.status === AWAITING_DISPOSITION
-        || adjudication.error_code === 'AUTHORITY_REQUIRED'
-        || (missing.status !== 'hard_fail'
-          && adjudication.disposition_authority == null);
+      const incompleteIsDurableWait = incompleteClass.kind === 'wait';
       if (incompleteIsDurableWait) {
         const wait = awaitingDisposition(
           adjudication.reason || missing.reason || 'awaiting disposition authority',
@@ -3176,7 +3223,59 @@ function runCampaignComposition(input = {}, adapters = {}) {
   }), 'adjudicate');
   trace.push('final_adjudicate');
   if (finalAdjudication.registry_complete !== true) {
-    return blocked('final_adjudication', 'final finding registry is incomplete', trace);
+    // Only a missing disposition authority parks; it binds the stored panel
+    // review_digest, which does not exist until this panel has run. The panel
+    // result stays in the joint_review gate journal, so the resume reuses it
+    // (no model call) and calls adjudicate({final: true}) again. Hard-fail
+    // classifications (identity/malformed/other) still terminalize.
+    const finalClass = classifyIncompleteRegistry(finalAdjudication, terminalReview);
+    if (finalClass.kind !== 'wait') {
+      return blocked('final_adjudication', 'final finding registry is incomplete', trace);
+    }
+    const finalWait = awaitingDisposition(
+      finalAdjudication.reason
+        || (finalClass.missing && finalClass.missing.reason)
+        || 'awaiting final disposition authority',
+      trace,
+      {
+        candidate,
+        verification,
+        // The receipt's review is the one the findings and the authority bind:
+        // the panel. review_payload below stays the in-loop review (resume input).
+        review: terminalReview,
+        findings: (finalClass.missing && finalClass.missing.findings) || [],
+        repair_generations: repairGeneration,
+        full_diff_barriers: fullDiffBarriers,
+        work_order_resumable: true,
+        controller,
+      },
+    );
+    // findings_snapshot/unresolved_findings stay EMPTY on purpose: the resume
+    // rebinds a non-empty snapshot onto the in-loop full-diff review, and these
+    // findings belong to the final panel (read back from the gate journal).
+    persistController({
+      ...controller,
+      unresolved_findings: [],
+      verification_receipt: verification || null,
+      review_payload: lastReview || null,
+      findings_snapshot: [],
+      full_diff_barriers: fullDiffBarriers,
+      candidate: candidate || null,
+      accepted_commit: candidate && (candidate.commit || null),
+    });
+    emitCampaignEvent('AWAITING_DISPOSITION', {
+      reason: finalWait.reason,
+      findings_digest: canonicalDigest(finalWait.findings),
+      candidate_ref: candidate && (candidate.commit || candidate.tree_sha) || null,
+    });
+    appendRoundProgress(AWAITING_DISPOSITION, finalWait.reason);
+    persistController({
+      ...controller,
+      phase: AWAITING_DISPOSITION,
+      next_action: 'await_final_disposition_authority',
+    });
+    finalWait.controller = controller;
+    return finalWait;
   }
   const finalRetention = retainAdjudication(finalAdjudication);
   if (finalRetention.passed !== true) {

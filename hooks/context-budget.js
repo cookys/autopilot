@@ -14,7 +14,9 @@
  * {t1,t2,step,mode} or env AUTOPILOT_CONTEXT_BUDGET_T1/T2/STEP/MODE):
  *  - Defaults are ABSOLUTE (100k/150k) whatever the window: cost is turns x context, so a 1M
  *    window does not move them up. Only a window smaller than 200K scales them down.
- *  - T1 (100k): stderr nudge, exit 0 (user-visible).
+ *  - T1 (100k): stderr nudge, exit 0 (user-visible). On a known 1M window with no auto-compact
+ *    window set and compaction on (scripts/lib/autocompact-window.js), it adds one line telling
+ *    the owner to set autoCompactWindow.
  *  - T2 (150k): escalated advisory, exit 2 (stderr fed to the MODEL): write a
  *    handoff NOW + user-facing "/clear after it lands".
  *  - Re-reminder throttle is per TOKEN STEP, not per call: a tier refires only after context
@@ -59,6 +61,7 @@ const {
 } = require('./context-budget-lib.js');
 const { resolveLiveDir, sanitizeSessionId, readLive } = require('../scripts/lib/live-state-dir.js');
 const { writeLiveRecord } = require('../scripts/statusline-live-tee.js');
+const autocompact = require('../scripts/lib/autocompact-window.js');
 
 const PARSE_EVERY_BELOW_T1 = 5;
 
@@ -179,6 +182,17 @@ function emitInjected(message) {
 
 // T1 is an owner nudge, not a model instruction (P7a advisory bridge): one advisory row for the live mod, no
 // additionalContext. AUTOPILOT_ADVISORY_BRIDGE_CONTEXT_BUDGET=inject restores the injection. T2 never comes here.
+// A 1M-window session with no auto-compact window set compacts only near 1M, so T1 also tells the
+// owner how to set one (evidence: docs/plans/evidence/2026-10-12-context-reset-cost/README.md).
+// Read only when T1 fires; any read failure leaves the message as it was.
+function withAutocompactTip(message, window, payload, model) {
+  try {
+    const projectDir = process.env.CLAUDE_PROJECT_DIR || (payload && typeof payload.cwd === 'string' ? payload.cwd : undefined);
+    const tip = autocompact.recommendation(autocompact.resolve({ projectDir, model }), window);
+    return tip ? `${message} ${tip}` : message;
+  } catch { return message; }
+}
+
 function emitT1(sid, message) {
   const sink = require('./_shared/advisory-sink.js');
   if (sink.advisoryMode('context_budget') === 'inject') { emitInjected(message); return; }
@@ -254,6 +268,7 @@ function emitT1(sid, message) {
       // window from observed usage and fires a spurious T2 (2026-09-09: "threshold 150k"
       // on a 1M window at 21% used; the same shape as the 2026-09-05 note above).
       st.knownWindow = liveWindow;
+      if (liveMain.model && typeof liveMain.model.id === 'string') st.knownModel = liveMain.model.id;
       const mustParse = st.lastContext >= liveCfg.t1 || st.calls % PARSE_EVERY_BELOW_T1 === 0 || st.calls === 1;
       let contextTokens = liveTotal;
       if (mustParse) {
@@ -277,8 +292,9 @@ function emitT1(sid, message) {
       );
       if (d.tier === 't1') {
         st.lastT1Context = contextTokens;
-        process.stderr.write(`${d.message}\n`);
-        emitT1(sid, d.message);
+        const message = withAutocompactTip(d.message, liveWindow, payload, st.knownModel);
+        process.stderr.write(`${message}\n`);
+        emitT1(sid, message);
       } else if (d.tier === 't2') {
         st.lastT2Context = contextTokens;
         process.stderr.write(`${d.message}\n`);
@@ -324,9 +340,11 @@ function emitT1(sid, message) {
           if (d.tier === 't1' || (d.tier === 't2' && d.advisory)) {
             if (d.tier === 't2') { st.lastT2Context = tokens; }
             else { st.lastT1Context = tokens; }
-            process.stderr.write(`${d.message}\n`);
-            if (d.tier === 't1') emitT1(sid, d.message);
-            else emitInjected(d.message); // the unknown-window T2 advisory stays model-facing
+            const message = d.tier === 't1'
+              ? withAutocompactTip(d.message, rememberedWindow, payload, st.knownModel) : d.message;
+            process.stderr.write(`${message}\n`);
+            if (d.tier === 't1') emitT1(sid, message);
+            else emitInjected(message); // the unknown-window T2 advisory stays model-facing
           } else if (d.tier === 't2') {
             st.lastT2Context = tokens;
             process.stderr.write(`${d.message}\n`);

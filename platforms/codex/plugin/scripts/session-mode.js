@@ -735,6 +735,28 @@ function followRepoRoot(marker, repoRoot) {
   if (want && have === want) marker.repo_root = repoRoot;
 }
 
+// `set --new-task` in a linked worktree whose directory name and branch share no word: the worktree is probably
+// being reused for an unrelated task. Advisory only (references/worktree-placement.md); never changes the exit code.
+const GENERIC_TASK_TOKENS = new Set(['feat', 'fix', 'hotfix', 'worktree', 'agent', 'wip']);
+function taskTokens(text) {
+  return new Set(text.toLowerCase().split(/[-_/.]+/).filter((t) => t && !GENERIC_TASK_TOKENS.has(t) && !/^\d+$/.test(t)));
+}
+function newTaskAdvisory(repoRoot) {
+  const opts = { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] };
+  let branch;
+  try {
+    const gitDir = execFileSync('git', ['-C', repoRoot, 'rev-parse', '--path-format=absolute', '--git-dir'], opts).trim();
+    const commonDir = execFileSync('git', ['-C', repoRoot, 'rev-parse', '--path-format=absolute', '--git-common-dir'], opts).trim();
+    if (gitDir === commonDir) return null; // the main checkout
+    branch = execFileSync('git', ['-C', repoRoot, 'symbolic-ref', '--short', '-q', 'HEAD'], opts).trim();
+  } catch (_error) { return null; } // detached HEAD, or not a repository
+  const dir = path.basename(repoRoot);
+  const fromDir = taskTokens(dir);
+  const fromBranch = taskTokens(branch);
+  if (fromDir.size === 0 || fromBranch.size === 0 || [...fromDir].some((t) => fromBranch.has(t))) return null;
+  return `worktree ${dir} is on branch ${branch}, which shares no word with it — open a fresh worktree for a new task (references/worktree-placement.md)`;
+}
+
 // Fields `set --new-task` drops from a live marker: the stage-advance position plus the task-scoped init fields.
 const NEW_TASK_CLEARED = Object.freeze(['stage', 'stage_set_at', 'unit', 'review_families', 'high_risk', 'size', 'urgent', 'bug', 'base_ref']);
 
@@ -859,6 +881,10 @@ function cmdSetInit(args) {
   }
   if (!result) { process.stderr.write('session-mode: marker not written\n'); return 1; }
   if (result.refusal) { process.stderr.write(`session-mode: ${result.refusal}\n`); return 2; }
+  if (newTask) {
+    const advisory = newTaskAdvisory(repoRoot);
+    if (advisory) process.stderr.write(`session-mode: ${advisory}\n`);
+  }
   if (result.created) {
     try { writeLivePointer(); } catch (_error) { /* fail-open: pointer is advisory for the mod */ }
     startProjectWatcher(result.marker, result.marker.repo_root);

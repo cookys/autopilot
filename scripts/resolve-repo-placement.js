@@ -28,7 +28,6 @@ const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { scopeFromCwd } = require('../src/status/project-key');
 
 function git(cwd, args) {
   try {
@@ -36,6 +35,12 @@ function git(cwd, args) {
   } catch (_error) {
     return null;
   }
+}
+
+// Repo identity comes from project-key, loaded on first use: the hooks that only need clearHandoffKey
+// stay off its require graph.
+function repoIdentity(from) {
+  return require('../src/status/project-key').scopeFromCwd(from).repo_identity;
 }
 
 function realpathOr(dir) {
@@ -67,7 +72,7 @@ function resolveMain(from) {
   const main = mainCheckout(from);
   return {
     main_checkout: main,
-    repo_identity: scopeFromCwd(from).repo_identity,
+    repo_identity: repoIdentity(from),
     fallback: main === null,
     behind: main === null ? null : behindUpstream(main),
   };
@@ -96,7 +101,7 @@ function handoffPath(from, route, homeDir = os.homedir()) {
     const top = toplevel(from);
     return top ? path.join(homeDir, '.autopilot', 'handoff', `${clearHandoffKey(top)}.md`) : null;
   }
-  const identity = scopeFromCwd(from).repo_identity;
+  const identity = repoIdentity(from);
   if (!identity) {
     const cwd = realpathOr(from);
     return path.join(homeDir, '.autopilot', 'handoff-manual', `${path.basename(cwd)}-${sha1(cwd).slice(0, 8)}.md`);

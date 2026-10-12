@@ -33,9 +33,9 @@ Triggered by "寫 handoff", "寫 handover", "ctx 太滿", "context 快滿", "cle
    - Active project: `<projects_dir>/<project>/HANDOFF.md` — `projects_dir` from step 1's
      `resolve-project-paths.sh`, **not** a literal `docs/`
    - `projects_dir: none`, or no active project under it: the **manual route already
-     defined below** — `~/.autopilot/handoff-manual/<repo-or-cwd-name>.md`. Do not invent a
+     defined below** — the path `node <plugin>/scripts/resolve-repo-placement.js handoff --route manual` prints. Do not invent a
      doc root; a handoff nobody can find is worse than one outside the repo.
-   - Repo not writable or no repo: `~/.autopilot/handoff-manual/<repo-or-cwd-name>.md`
+   - Repo not writable or no repo: the path `node <plugin>/scripts/resolve-repo-placement.js handoff --route manual` prints
 
 2.5. **Sweep the session, not just the document** (do this BEFORE drafting step 3):
 

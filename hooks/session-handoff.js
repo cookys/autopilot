@@ -26,6 +26,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 const { parseTranscriptText } = require('./state-checkpoint-lib.js');
+const { clearHandoffKey } = require('../scripts/resolve-repo-placement.js');
 
 const ACT_REASONS = new Set(['clear', 'logout']);
 const MIN_USER_TURNS = parseInt(process.env.AUTOPILOT_HANDOFF_MIN_USER_TURNS || '3', 10);
@@ -317,7 +318,7 @@ function publishAtomic(bodyPath, metaPath, content, meta) {
       toolCalls: decision.toolCalls,
     });
 
-    const repoHash = crypto.createHash('sha1').update(repoRoot).digest('hex');
+    const repoHash = clearHandoffKey(repoRoot);
     const bodyPath = path.join(HANDOFF_DIR, `${repoHash}.md`);
     const metaPath = path.join(HANDOFF_DIR, `${repoHash}.meta.json`);
     const meta = {

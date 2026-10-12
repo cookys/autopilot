@@ -68,14 +68,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/calendar-teeth-instant2-expiry-ceiling.md
 - **Context**: expects qualified:1, gets empty; compile throws INVALID_CAPABILITY_EVIDENCE. Likely fixed-date stamps aged out; bisect, then derive stamps from the run clock.
 
-### dev-flow stage model is inconsistent and unrecorded; the band cannot say which stage a session is in
-- **Status**: open
-- **Trigger**: FIRED — owner 2026-10-06 (TUI band design)
-- **Effort**: L
-- **Source**: depth-0 inventory (Explore pass, file:line)
-- **Pointer**: docs/plans/evidence/2026-10-06-dev-flow-stage-inventory/README.md
-- **Context**: S/Fix/L/H use four id styles, "L" and "phase" carry several meanings, closing steps live in two files; redesign one stage vocabulary + a marker writer (guidance change, eval first).
-
 ### /l5 has no generator for the mission scaffold; depth-0 must hand-author plan, rubric, sources, graph and envelope
 - **Status**: open
 - **Trigger**: FIRED — mods P1W W4 gate runs l5c–l5i, 2026-10-05
@@ -140,14 +132,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/foreman-guard-cost-shaped-gate.md
 - **Context**: role/call-count caps say nothing about cost; a clone-based foreman whose l4-l6 marker is INACTIVE is invisible to both today.
 
-### OpenCode Go needs a Responses-protocol transport and an `x-opencode-session` header
-- **Status**: open
-- **Trigger**: the next attempt to administer ANY non-implementer seat on an `opencode-go` model
-- **Effort**: M
-- **Source**: 2026-09-21 muse-spark seat probe (503 on both protocols looked like an outage; a per-model probe of all 31 ids showed per-model routing)
-- **Pointer**: docs/backlog/opencode-go-responses-transport.md
-- **Context**: 9 ids need only the session header; 5 (incl. both muse-spark contributors) are Responses-only; its truncation signal is `status:"incomplete"`, which the v2.36.83 budget diagnosis does not match.
-
 ### Foreman ↔ depth-0 coordination: typed `worker_condition` was planned (r6) and never built
 - **Status**: open
 - **Trigger**: a foreman wait loop that must tell "hand parked on a question" from "hand still working" without reading the transcript
@@ -179,13 +163,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: `docs/plans/2026-09-13-foreman-rail-b-build.md`, ship-time adjudication.
 - **Pointer**: docs/backlog/foreman-rail-residuals-v2-36-34-accepted-and-named-not-hidden.md
 
-### Dev mode layer ③ (marketplace clone) as a symlink — spike before changing dev-setup
-- **Status**: open
-- **Trigger**: **NOT FIRED — operator question 2026-09-13** after `/reload-plugins` loaded v2.34.5 skills because `~/.claude/plugins/marketplaces/autopilot` had not been pulled since 2026-08-07 (the same shape as the 2026-07-17 incident in…
-- **Effort**: S
-- **Source**: unknown
-- **Pointer**: docs/backlog/dev-mode-layer-marketplace-clone-as-a-symlink-spike-before-changing-dev-setup.md
-
 ### Blind review redesign: blind the packet and the process boundary, not the runner
 - **Status**: open
 - **Trigger**: owner asked 2026-09-16 how to keep review independence while tool-capable reviewers sit on the panel and the loop gets faster; gpt-6-astra and claude-fable-5-1 converged
@@ -210,14 +187,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/lab-ingress-preview-integration.md
 - **Context**: review server self-registers; a PreToolUse hook (not skill text) routes ad-hoc previews to `lab preview` with a LAN-bound registered fallback; registry format co-defined with hangar.
 
-### Managed rail: codex containment (bwrap) qualification spike so a codex seat can serve the blind final panel
-- **Status**: open
-- **Trigger**: operator wants a pinned codex qc seat to survive managed blind discovery without replacing the seat
-- **Effort**: S
-- **Source**: /l5 dogfood 2026-09-16 (cuda P1 consult, A2)
-- **Pointer**: docs/plans/evidence/2026-09-16-blind-review-redesign/bwrap-probe.md
-- **Context**: absorbed by redesign cut 1b (plan 2026-09-16-blind-review-packet §7). Probe 2026-09-16: codex with tools ran inside bwrap on a planted packet; left: timeout/exit/raw_log parity via dispatch-review.sh, other CLIs.
-
 ### PEER-REPORTED (openclaw): PreToolUse(Bash) guard — detach without wake-up, `pkill -f` self-match, zsh `=`/glob abort
 - **Status**: open
 - **Trigger**: operator decision on adoption; three regex rules on `tool_input.command`, must fire for depth-0 too
@@ -225,14 +194,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: `openclaw` msgs `msg_01M2KS2TXH2V1T90DQ7X8F2TB1`, `msg_01M2KS5WZKY5WTFXPGEKJ9QH8W`; replied `msg_01M2KS6RBYNB9X43MT9PMTKGVG`
 - **Pointer**: docs/projects/ongoing-maintenance/HANDOFF.md
 - **Context**: (1) `nohup`/`setsid`/`&` + rail entrypoint → deny (use `run_in_background`); (2) `pkill -f` without `[x]` → warn; (3) bare `=` token or unquoted glob → deny (zsh aborts the line).
-
-### CI `tests` workflow red before v2.36.54: `dispatch-detached-campaign-authority.test.sh` fails on the runner
-- **Status**: open
-- **Trigger**: every run since at least 2026-09-14 (the workflow runs only the changed test files, so the red is masked locally)
-- **Effort**: S
-- **Source**: `gh run list` 2026-09-16 while fixing the v2.36.54 executable-bit red
-- **Pointer**: none
-- **Context**: `detached campaign strict dispatch changes only the narrow subset: expected 'src/out.txt', got ''` on the GitHub runner; passes locally — environment coupling to reproduce in a clean clone.
 
 ### PEER-REPORTED (openclaw): agy flash/low implementer is no-go on real briefs — qualify on brief length + self-run tests
 - **Status**: open
@@ -322,21 +283,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/release-time-payload-branch-b.md
 - **Context**: Generic push/PR test CI 已存在，但 B 仍需新建 tag→payload publication→push-credential 的 release path；於多 PATCH/日的節奏下，每個 Codex 可見修復多四個失敗點；QA 判 test-signal 時點最差（user…
 
-### 🔵 suite oracle lock: a killed full-suite run leaves the next one refused (observed 2026-09-02)
-- **Status**: open
-- **Trigger**: see pointer
-- **Effort**: M
-- **Source**: unknown
-- **Pointer**: docs/backlog/suite-oracle-lock-a-killed-full-suite-run-leaves-the-next-one-refused-observed-2.md
-
-### Promote the depth-0 hetero-run watcher to a shipped dispatch-watch script
-- **Status**: open
-- **Trigger**: the next `/l4`–`/l6` session that has to wake parked foremen — depth-0 re-armed a scratch script ~40 times in v2.36.0 (report the first run whose `dispatch-status.js` phase flips from running to terminal)
-- **Effort**: S
-- **Source**: v2.36.0 session
-- **Pointer**: docs/backlog/promote-the-depth-0-hetero-run-watcher-to-a-shipped-dispatch-watch-script.md
-- **Context**: parked foremen are never woken by their own background children; a shipped watcher plus a documented `SendMessage` wake step would replace the hand-rolled loop.
-
 ### Lint hands diffs for fixture literals leaking into production code
 - **Status**: open
 - **Trigger**: next hands cut on a script with a test that names phases/ids (`p7`, `fixture`, `test`)
@@ -369,14 +315,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/src-engine-local-deployment-js-carries-its-own-transport-rule-tls-outside-loopba.md
 - **Context**: the named-endpoint resolver now owns the transport policy (loopback + disclosed `plaintext-private` for private-range IP literals).
 
-### `dispatch-review` raw-log deviation 採信判準必要但不充分 —— 回音的 prompt 樣板可冒充 verdict
-- **Status**: open
-- **Trigger**: 下一次 depth-0 依 P5 判準（2026-07-31）以 raw-log deviation 採信一個 `no_verdict` 席次時；或為 `dispatch-review.sh` 加任何 verdict 解析路徑時。
-- **Effort**: S
-- **Source**: codepower `f65f29a7` qc panel 裁決 §4b；raw log `/tmp/dispatch-review-log-WPI98b`（sol）與 `-WO5A1B`（MiniMax）
-- **Pointer**: docs/backlog/dispatch-review-raw-log-deviation-prompt-verdict.md
-- **Context**: P5 立的採信條件是「verdict block 完整、nonce 匹配、block 閉合」。2026-08-08 codepower 的 qc panel 出現一個**同時滿足這三條、但內容是被回音的 prompt 樣板**的案例：`gpt-5.6-sol@codex`…
-
 ### Contract-first escalation and local-repair gates — P6D incident follow-up
 - **Status**: open
 - **Trigger**: An owner-approved corrective project is opened from the 2026-08-21 P6D incident record; before that project may claim completion, all three controls must have planted negative cases that demonstrate they can block (a) unjustified heavy…
@@ -384,14 +322,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: [`2026-08-21-p6d-orchestration-incident`](projects/_archive/2026-08-21-p6d-orchestration-incident/README.md), including the quoted Fable 5 independent judgment.
 - **Pointer**: docs/backlog/contract-first-escalation-and-local-repair-gates-p6d-incident-follow-up.md
 - **Context**: A bounded six-file/three-command consumer task was routed through strict L5 Mission governance.
-
-### `probe-runner-coverage` parallel-only flake — fork-pressure suspected, residue ruled out
-- **Status**: open
-- **Trigger**: next time it reds in a `--parallel` run (it passes standalone).
-- **Effort**: S
-- **Source**: fix/suite-residue-reaper QC round, depth-0 panel + foreman reproduction logs, 2026-08-28.
-- **Pointer**: docs/backlog/probe-runner-coverage-parallel-only-flake-fork-pressure-suspected-residue-ruled.md
-- **Context**: 2026-08-28 suite-reaper reproduction split the old diagnosis — the residue leak
 
 ### Suite reaper — symlinked-TMPDIR hosts fall back to rm -rf (git-worktree-remove path never engages)
 - **Status**: open
@@ -609,14 +539,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/mission-runtime-retires-superseded-adoptions-at-closeout-not-after-the-fact.md
 - **Context**: v2.34.6 的 `mission-terminal-reconcile.js rollover` 是**事後清理**——它能指名已整合的 adoption 並退役其餘，但根因沒動：runtime 只在 mission UNRESOLVED 時圍籬，COMPLETE…
 
-### `next-touch-validation.test.sh` asserts against un-versioned local Mission state
-- **Status**: open
-- **Trigger**: 立刻——它在 CI 上**永遠**紅；或下次有人相信「本機全套綠」等於「CI 綠」時。
-- **Effort**: M
-- **Source**: 2026-08-08 CI triage（11/273 紅的最後一個，其餘十個已於 v2.34.8 修復）；2026-08-09 收尾。
-- **Pointer**: docs/backlog/next-touch-validation-test-sh-asserts-against-un-versioned-local-mission-state.md
-- **Context**: 該套件讀 `.git/autopilot/mission/next-touch-debt-retirement/successor-prepared.json` 並斷言 `validatePreparedReceipt(...).state === 'ACTIVE'`，另外還綁 `D8_PUBLICATION_SHA` 與…
-
 ### Dispatch-branch lifecycle — SHA-256 `check --ack` residual
 - **Status**: open
 - **Trigger**: 第一個 SHA-256 object-format repository 要使用 manual `check --ack`／restore acknowledgment。
@@ -784,14 +706,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/terminal-status-and-receipt-trust-boundary.md
 - **Context**: Enforce the closed terminal_status enum at receipt validation and Work Order classification, resolve the unused attached disposition, and document integrity-hash versus producer-attestation guarantees under the confused-controller…
 
-### Shared sealed zero-diff validator
-- **Status**: open
-- **Trigger**: 下次動 live-spend probe / capability 記錄 / engine preflight 時。
-- **Effort**: S
-- **Source**: depth-0-adjudication-760b
-- **Pointer**: docs/backlog/shared-sealed-zero-diff-validator.md
-- **Context**: 2026-07-31 codepower P4 U2 實測：probe 用 codex CLI 預設模型（gpt-5.5）回 PROBE_OK，實際 dispatch 的 `gpt-5.3-codex-spark` 池已 rate_limited → dispatch 跑 342s 中斷、產物 broken-by-construction（registry…
-
 ### HETO task-return detection can miss completed work
 - **Status**: open
 - **Trigger**: A second reproducible case where a completed HETO task produces no return event/notification, or before another HETO return-consumer is added.
@@ -847,15 +761,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: v2.35.5 qc panels + foremen, 2026-08-31.
 - **Pointer**: docs/backlog/v2-35-5-qc-panel-follow-ups-managed-campaign-rail-debt-2026-08-31.md
 - **Context**: four Suggestion-tier items from the three-seat panels, all excluded from the ship with rationale: (1) whitespace re-indent churn in `src/campaign/cli.js` ~412-437/598 pollutes blame in the projection path — revert cosmetically; (2)…
-
-### `peer-addressing.md` says message rows live forever; a spec says 7 days
-- **Status**: open
-- **Trigger**: hangar-bridge implements message-row retention. Today it has not — `packages/relay/src/purge.ts` deletes only `token` and `human` rows, `message` has no trigger or CASCADE, and a repo-wide search finds no `DELETE FROM message` — so…
-- **Effort**: M
-- **Source**: `autopilot:reviewer` round 4 on `0d3554e3`, 2026-09-01.
-- **Pointer**: docs/backlog/peer-addressing-md-says-message-rows-live-forever-a-spec-says-7-days.md
-- **Context**: `hangar-bridge/SUBJECT_ROUTING_SPEC.md:516,614` records an accepted 7-day retention/replay bound for subjected `@team` chat that was never built.
-
 
 ### No supported review-only entry: the managed final panel cannot adopt an externally produced candidate range
 - **Status**: open
@@ -975,14 +880,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/population-b-switch-suite-flakes-with-a-stale-entry-under-parallel-runs.md
 - **Context**: stale-entry report from the Population B switch suite is intermittent under --parallel; likely cause (w114 hand J): the suite uses `git grep`, which sees only tracked files — see the sidecar.
 
-### cost-tracker/cost-fuse pricing table has no fable row and opus-5.x rates are hard-coded unverified
-- **Status**: open
-- **Trigger**: next touch of hooks/cost-tracker-lib.js
-- **Effort**: S
-- **Source**: w113 hand I review
-- **Pointer**: docs/backlog/cost-tracker-cost-fuse-pricing-table-has-no-fable-row-and-opus-5-x-rates-a.md
-- **Context**: verify rates against official Anthropic pricing with URL; until then fable spend is undercounted in both hooks.
-
 ### cost-fuse dispatch exemption prefix and session-id collisions
 - **Status**: open
 - **Trigger**: next touch of hooks/cost-fuse.js
@@ -998,14 +895,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: peer-reported cuda/chatgpt-tunnel 2026-10-03
 - **Pointer**: docs/backlog/sealed-campaign-review-station-migration.md
 - **Context**: single+terminal panel works at intake; only in-place migration of a sealed campaign's review_station is missing.
-
-### import-aa-capabilities test is host-pinned: fails when /tmp is inside a git worktree
-- **Status**: fired 2026-10-03
-- **Trigger**: fired 2026-10-03 — 22 failures on aimax395 at origin/develop
-- **Effort**: S
-- **Source**: foreman landing run of v2.36.114 (aimax395)
-- **Pointer**: docs/backlog/import-aa-capabilities-test-host-pinned-tmp-in-worktree.md
-- **Context**: `/tmp/.git` exists, so the "AA cache directory must be outside a Git worktree" check fires.
 
 ### Final panel with non-empty findings terminal-stops instead of parking for depth-0 disposition
 - **Status**: open
@@ -1039,14 +928,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/plan-review-roster-resolves-to-a-single-family-on-this-repo.md
 - **Context**: seats were hand-picked from qc_panel; make plan review heterogeneous by default.
 
-### A rejected AUTOPILOT_LIVE_DIR override silently falls through to the real live dir
-- **Status**: open
-- **Trigger**: next touch of scripts/lib/live-state-dir.js, or the next suite that writes the live store
-- **Effort**: M
-- **Source**: mods P1a R1/R4/R6, 2026-10-04
-- **Pointer**: docs/backlog/a-rejected-autopilot-live-dir-override-silently-falls-through-to-the-real-live-dir.md
-- **Context**: resolveLiveDir skips a non-RAM or non-0700 override and continues to XDG, so suites on /tmp write the real store.
-
 ### mods P1a known follow-ups (hardening)
 - **Status**: open
 - **Trigger**: P1b start
@@ -1062,14 +943,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: owner request and C4 research, 2026-10-04
 - **Pointer**: docs/backlog/mods-p5-proxy-decision-reminders.md
 - **Context**: no live decision ledger exists and nothing writes proxy-decision rows, so the live band cannot show them yet; writer, then watcher sidecar, then display.
-
-### mods live band shows no phase for an in-progress campaign
-- **Status**: open
-- **Trigger**: after mods v2.37.0 ships
-- **Effort**: M
-- **Source**: mods P1c C3b, 2026-10-04
-- **Pointer**: docs/backlog/mods-live-campaign-phase.md
-- **Context**: the live campaign phase is not reachable from the renderer (no root_run_id to campaign id mapping); dev-flow L-stages and plan phases have no writer.
 
 ### `stage-advance --resume` for a resumed session with a new session id
 - **Status**: open
@@ -1102,14 +975,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: stage-graph plan execution, 2026-10-06..08
 - **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/README.md
 - **Context**: Claude Code auto-updated mid-run (INSTRUMENT-INVALID); pinned by hand via PATH pin plus DISABLE_AUTOUPDATER=1.
-
-### `check-guidance-eval.js` hard-wires `-sg-change` pack ids
-- **Status**: open
-- **Trigger**: before the 3.0.0-alpha.1 cut
-- **Effort**: S
-- **Source**: stage-graph plan execution, 2026-10-06..08
-- **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/README.md
-- **Context**: suffixed arms (v2..v5) need it to take the arm manifest or suffix.
 
 ### Pre-existing red suite: hooks/tests/autopilot-cli.test.sh
 - **Status**: open

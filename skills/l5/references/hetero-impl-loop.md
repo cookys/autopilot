@@ -217,7 +217,10 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
    Verify a candidate in a scratch checkout with `env -u AUTOPILOT_SESSION_ID` for the same reason. Watch the hands
    worktree from a report-only monitor; the artifact is the commit on `<branch>`. On
    `awaiting_disposition`, resume with `--resume --campaign-disposition-authority <file>` and
-   DROP `--campaign-disposition-policy` (the two cannot be combined; cuda 2026-09-16). The durable
+   DROP `--campaign-disposition-policy` (the two cannot be combined; cuda 2026-09-16). A park on the
+   final panel needs one `reviews[]` entry per review digest it binds: PANEL (the panel `review_digest`) and,
+   when the in-loop review also had findings, INLOOP (the in-loop `review_digest`); a panel-only file re-parks
+   with the missing digest named in the reason. The durable
    wait pauses the wall clock (v2.36.67) — before that a late resume was `WALL_BUDGET_EXCEEDED`. Panel seats
    launch together under the remaining panel pocket (`final_panel_reserve_seconds`); each seat's
    `--timeout` is the whole remainder, not a sequential share. When the snapshot seals

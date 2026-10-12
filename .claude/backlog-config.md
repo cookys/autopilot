@@ -16,6 +16,7 @@
 
 ## Mode
 - mode: block
+- required_fields: Id, Since, Origin, Problem, Impact
 
 ## Allowlist
 - allowlist_path: .claude/backlog-debt.json

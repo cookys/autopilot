@@ -9,6 +9,17 @@
 **Spike:** [`evidence/2026-10-12-worktree-placement/spike-native-worktree.md`](evidence/2026-10-12-worktree-placement/spike-native-worktree.md).
 **Direction:** C (owner, decision `intent-17-2`): everything in A, plus the hetero / foreman / batch rails create their worktrees under `<main checkout>/.claude/worktrees/`. No `WorktreeCreate` takeover.
 
+Citations (`file:line`) are provenance, not reading assignments: every fact this plan needs is stated in the text.
+
+Success criteria (from the project README, abridged):
+- **C1** a marker created in the main checkout and used from a linked worktree of the same repo measures E1 in that worktree (test red at base).
+- **C2** `base_ref` defaults to the newer of `develop` / `origin/develop` (then main/master) (test red at base).
+- **C3** `set --new-task` prints one advisory line when worktree directory and branch share no task token, none when they match; exit code unchanged.
+- **C4** both handoff routes take their path from one resolver; manual keyed by repo identity, `/clear` stays per worktree with its pinned tests unchanged.
+- **C5** hetero, foreman and batch rails create worktrees under `<main checkout>/.claude/worktrees/` (also from a linked worktree) through one resolver; every reaper, the residue registry and `repo-residue-sweep` still reclaim them.
+- **C6** no repo-tree walker the rails or gates run from the main checkout descends into `.claude/worktrees/`.
+- **C7** the rule is written once in `references/worktree-placement.md`; each backlog gap is marked fixed or deferred.
+
 ## 1. Facts this plan stands on
 
 Spike (official docs re-read by depth-0, plus one live run):

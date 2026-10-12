@@ -23,7 +23,7 @@ run_hook state-checkpoint.js "$payload"
 
 assert_exit_code "$__RUN_EXIT" 0 "fail-open on symlink rejection"
 
-state_content=$(cat "$HOOK_HOME/.autopilot/compaction-state.md" 2>/dev/null || echo "")
+state_content=$(cat "$HOOK_HOME/.autopilot/compaction-state-r10k.md" 2>/dev/null || echo "")
 # Reject path emits a diag (look for either "symlink" or "outside" marker)
 case "$state_content" in
   *"symlink"*|*"outside"*|*"resolves"*) __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) ;;

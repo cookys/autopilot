@@ -7,9 +7,9 @@ payload='{"transcript_path":"/nonexistent/path/to/transcript.jsonl","session_id"
 run_hook state-checkpoint.js "$payload"
 
 assert_exit_code "$__RUN_EXIT" 0 "fail-open on missing transcript file"
-assert_file_exists "$HOOK_HOME/.autopilot/compaction-state.md" "state file written"
+assert_file_exists "$HOOK_HOME/.autopilot/compaction-state-test-session.md" "state file written"
 
-state_content=$(cat "$HOOK_HOME/.autopilot/compaction-state.md" 2>/dev/null || echo "")
+state_content=$(cat "$HOOK_HOME/.autopilot/compaction-state-test-session.md" 2>/dev/null || echo "")
 assert_contains "$state_content" "transcript file not found" "state records the missing-file reason"
 
 finalize_test

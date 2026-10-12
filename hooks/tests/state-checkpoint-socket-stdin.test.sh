@@ -27,8 +27,8 @@ kind=$(node -e '
 ')
 assert_eq "$kind" "socket" "Node spawn stdio pipe is a socket on this platform"
 
-STATE_FILE="$HOOK_HOME/.autopilot/compaction-state.md"
-assert_file_exists "$STATE_FILE" "compaction-state.md written from a socket payload"
+STATE_FILE="$HOOK_HOME/.autopilot/compaction-state-socket-stdin.md"
+assert_file_exists "$STATE_FILE" "per-session checkpoint written from a socket payload"
 state_content=$(cat "$STATE_FILE" 2>/dev/null || echo "")
 assert_contains "$state_content" "socket stdin marker" "transcript tail captured"
 assert_contains "$state_content" "Session: socket-stdin" "session id parsed from the payload"

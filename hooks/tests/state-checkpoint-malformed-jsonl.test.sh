@@ -13,7 +13,7 @@ run_hook state-checkpoint.js "$payload"
 
 assert_exit_code "$__RUN_EXIT" 0 "fail-open on malformed lines"
 
-state_content=$(cat "$HOOK_HOME/.autopilot/compaction-state.md" 2>/dev/null || echo "")
+state_content=$(cat "$HOOK_HOME/.autopilot/compaction-state-r10c.md" 2>/dev/null || echo "")
 # The 2 valid lines should make it into the rendered tail
 assert_contains "$state_content" "valid" "first valid turn rendered"
 assert_contains "$state_content" "also valid" "second valid turn rendered"

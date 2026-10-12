@@ -184,8 +184,10 @@ fi
 set_plugin_root "$PLUGIN_ROOT" "2.1.1"
 set_last_seen "2.1.0"
 set_changelog "$PLUGIN_ROOT" $'## v2.1.1 — Small tweak\n'
-node -e "const fs = require('fs'); fs.writeFileSync(process.argv[1], 'x'.repeat(9400));" "$HOOK_HOME/.autopilot/compaction-state.md"
-run_session_start "$PLUGIN_ROOT" "$PAYLOAD"
+# The checkpoint injects only on source=compact for its own session id, and the
+# notice never shows on compact, so this case now pins the size cap on that path.
+node -e "const fs = require('fs'); fs.writeFileSync(process.argv[1], 'x'.repeat(9400));" "$HOOK_HOME/.autopilot/compaction-state-nearcap.md"
+run_session_start "$PLUGIN_ROOT" "{\"source\":\"compact\",\"session_id\":\"nearcap\",\"cwd\":\"$WORKSPACE\"}"
 CTX10=$(extract_context "$__RUN_STDOUT")
 if [ "${#CTX10}" -ge 10000 ]; then
   fail "near-cap: context should stay under 10000 chars"
@@ -194,7 +196,8 @@ else
 fi
 assert_not_contains "$CTX10" "[Autopilot updated:" "near-cap: notice skipped"
 assert_contains "$CTX10" "You have **Autopilot** lifecycle skills." "near-cap: existing base context remains"
-rm -f "$HOOK_HOME/.autopilot/compaction-state.md"
+assert_contains "$CTX10" "xxxxxxxxxx" "near-cap: the checkpoint was injected (the cap was actually exercised)"
+rm -f "$HOOK_HOME/.autopilot/compaction-state-nearcap.md"
 
 # 9. lock held (pre-created) → skip notice, no spin.
 set_plugin_root "$PLUGIN_ROOT" "2.2.1"

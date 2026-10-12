@@ -137,3 +137,20 @@ opus-5-5, 1M window per the statusline.
   the last Bash command). On this evidence, Claude Code's summary alone was enough for a
   single-branch task. Whether the checkpoint adds anything is a question for the next
   compaction, now that it gets written.
+- Per-session checkpoint (same branch, follow-up). With fd 0 fixed, one global
+  `compaction-state.md` would have leaked: any session's startup or clear within the
+  4-hour TTL would inject another session's state. Now each session writes
+  `compaction-state-<sid>.md`. session-start injects it only on `source=compact` with the
+  same session id, then deletes it. PreCompact prints nothing to stdout, because Claude
+  Code appends that stdout to the summarizer's instructions.
+- **Verify at the next real compaction** (not yet observed). `.state-checkpoint.log` should
+  show `status: success` with a real session id, `compaction-state-<sid>.md` should exist
+  until the compact SessionStart, and `<autopilot-restored-state>` should appear right
+  after the compaction.
+- Next deliverable (backlog "Workflow snapshot at compaction"): replace the transcript tail
+  with a snapshot of the workflow state already on disk, used at PreCompact (stdout to the
+  summarizer, plus the file) and at /clear. The state comes from the dev-flow marker and
+  the next legal node, git, plan and code review, the task list, the decision tail and
+  in-flight dispatches. Gaps to land first: a task card holding the goal, success criteria,
+  plan path, review ledger path and stated requirements, and a subagent roster written
+  from SubagentStart and SubagentStop.

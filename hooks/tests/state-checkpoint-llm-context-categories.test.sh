@@ -17,7 +17,7 @@ run_hook state-checkpoint.js "$payload"
 
 assert_exit_code "$__RUN_EXIT" 0 "fail-open on minimal transcript"
 
-state_content=$(cat "$HOOK_HOME/.autopilot/compaction-state.md" 2>/dev/null || echo "")
+state_content=$(cat "$HOOK_HOME/.autopilot/compaction-state-llm-ctx-categories.md" 2>/dev/null || echo "")
 
 assert_contains "$state_content" "Difficulties or problems encountered" "category 1 (difficulties) prompted"
 assert_contains "$state_content" "Options considered (including ones ruled out, and why)" "category 2 (options considered / ruled out) prompted"

@@ -204,6 +204,15 @@ function buildTranscriptTail(turns, { tailN, byteCap } = {}) {
   return { body: result, metadata: { kept: reversedSelected.length, droppedToCap, bytesUsed } };
 }
 
+// Per-session checkpoint file name. One global compaction-state.md let a
+// concurrent session (or a later startup) inject another session's state.
+// null when the id cannot be used safely as a file name: the caller then
+// writes nothing, because a file no reader can match is only residue.
+function compactionStateName(sessionId) {
+  if (typeof sessionId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(sessionId)) return null;
+  return `compaction-state-${sessionId}.md`;
+}
+
 module.exports = {
   // Constants
   PER_TURN_BUDGET,
@@ -218,4 +227,5 @@ module.exports = {
   parseTranscriptText,
   buildTranscriptTail,
   selectFailureCounter,
+  compactionStateName,
 };

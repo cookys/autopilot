@@ -1202,6 +1202,22 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
 - **Context**: detection shipped (scripts/lib/autocompact-window.js, T1 tip, dev-setup --check). Left: T2 wording when a window at or below T2 is set (guidance, needs ON/OFF eval); name it in the next release heading. Detail at Pointer.
 
+### Workflow snapshot at compaction and /clear (replace the transcript tail)
+- **Status**: open
+- **Trigger**: owner 2026-10-12 — after the per-session checkpoint merges
+- **Effort**: L
+- **Source**: autocompact live test design talk, 2026-10-12
+- **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
+- **Context**: P1 lib collector over on-disk state, used by PreCompact stdout+file and /clear; P2 task card + subagent roster; P3 /handoff uses it (guidance, eval); P4 PostCompact checks the summary kept branch and stage.
+
+### autocompact-window resolver: managed path and DISABLE_* truthiness
+- **Status**: open
+- **Trigger**: next touch of scripts/lib/autocompact-window.js
+- **Effort**: S
+- **Source**: hetero review g1 deferred findings, 2026-10-12
+- **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
+- **Context**: Hook and dev-setup paths read /etc/claude-code/managed-settings.json with no override (suites not isolated on a host that has one). truthyEnv treats DISABLE_AUTO_COMPACT=0 as unset; confirm against the binary.
+
 ### Six hooks read only the '/dev/stdin' path (ENXIO under Claude Code)
 - **Status**: open
 - **Trigger**: next touch of any of them, or a report that one never fires

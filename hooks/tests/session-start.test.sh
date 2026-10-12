@@ -35,32 +35,61 @@ wait "$stdin_holder_pid" 2>/dev/null || true
 assert_exit_code "$stdout_no_root_exit" 0 "no-root hook completes while parent stdin remains open"
 assert_contains "$stdout_no_root" '"additional_context"' "raw output structure when CLAUDE_PLUGIN_ROOT is absent"
 
-# 2. Test Compaction State Recovery (within TTL)
-echo "RestoreStateTestContent" > "$HOOK_HOME/.autopilot/compaction-state.md"
-run_hook session-start.js
+# 2. Compaction state recovery: per-session file, injected only on source=compact
+# for the same session id, consumed (deleted) by the hook.
+AP="$HOOK_HOME/.autopilot"
+mkdir -p "$AP"
+COMPACT_A='{"source":"compact","session_id":"sess-a"}'
+COMPACT_B='{"source":"compact","session_id":"sess-b"}'
+STARTUP_A='{"source":"startup","session_id":"sess-a"}'
+age_file() { node -e "const fs=require('fs');const t=Date.now()-Number(process.argv[2])*3600*1000;fs.utimesSync(process.argv[1],new Date(t),new Date(t));" "$1" "$2"; }
+
+echo "RestoreStateTestContent" > "$AP/compaction-state-sess-a.md"
+run_hook session-start.js "$COMPACT_B"
+assert_not_contains "$__RUN_STDOUT" "RestoreStateTestContent" "another session's compaction never injects this state"
+assert_file_exists "$AP/compaction-state-sess-a.md" "another session's compaction leaves the file alone"
+
+run_hook session-start.js "$STARTUP_A"
+assert_not_contains "$__RUN_STDOUT" "RestoreStateTestContent" "startup for the same session id does not inject"
+assert_file_exists "$AP/compaction-state-sess-a.md" "startup leaves a fresh file alone"
+
+run_hook session-start.js "$COMPACT_A"
 assert_contains "$__RUN_STDOUT" "[Autopilot State Recovery — Post-Compaction]" "contains recovery title"
 assert_contains "$__RUN_STDOUT" "RestoreStateTestContent" "contains compaction state content"
+assert_file_absent "$AP/compaction-state-sess-a.md" "the hook consumes the file after injecting"
+run_hook session-start.js "$COMPACT_A"
+assert_not_contains "$__RUN_STDOUT" "RestoreStateTestContent" "a consumed checkpoint is not injected twice"
 
-# 3. Test Compaction State Recovery (expired TTL - default 4h)
-# Modify mtime to 5 hours ago
-node -e "const fs = require('fs'); const file = '$HOOK_HOME/.autopilot/compaction-state.md'; const t = Date.now() - 5 * 3600 * 1000; fs.utimesSync(file, new Date(t), new Date(t));"
-run_hook session-start.js
+# 3. Expired TTL (default 4h): not injected, and removed.
+echo "RestoreStateTestContent" > "$AP/compaction-state-sess-a.md"
+age_file "$AP/compaction-state-sess-a.md" 5
+run_hook session-start.js "$COMPACT_A"
 assert_not_contains "$__RUN_STDOUT" "[Autopilot State Recovery — Post-Compaction]" "should not contain recovery since it is expired"
+assert_file_absent "$AP/compaction-state-sess-a.md" "an expired checkpoint is removed"
 
-# 4. Test Compaction State Recovery (expired TTL with custom TTL in config.json)
-# Custom TTL = 6 hours, file is 5 hours old -> should recover!
-echo '{"compaction_ttl_hours": 6}' > "$HOOK_HOME/.autopilot/config.json"
-run_hook session-start.js
+# 4. Custom TTL in config.json: 6h recovers a 5h-old file, not a 7h-old one.
+echo '{"compaction_ttl_hours": 6}' > "$AP/config.json"
+echo "RestoreStateTestContent" > "$AP/compaction-state-sess-a.md"
+age_file "$AP/compaction-state-sess-a.md" 5
+run_hook session-start.js "$COMPACT_A"
 assert_contains "$__RUN_STDOUT" "[Autopilot State Recovery — Post-Compaction]" "should recover with custom TTL 6 hours when age is 5 hours"
-
-# Custom TTL = 6 hours, file is 7 hours old -> should NOT recover!
-node -e "const fs = require('fs'); const file = '$HOOK_HOME/.autopilot/compaction-state.md'; const t = Date.now() - 7 * 3600 * 1000; fs.utimesSync(file, new Date(t), new Date(t));"
-run_hook session-start.js
+echo "RestoreStateTestContent" > "$AP/compaction-state-sess-a.md"
+age_file "$AP/compaction-state-sess-a.md" 7
+run_hook session-start.js "$COMPACT_A"
 assert_not_contains "$__RUN_STDOUT" "[Autopilot State Recovery — Post-Compaction]" "should not recover with custom TTL 6 hours when age is 7 hours"
+rm -f "$AP/config.json"
 
-# Clean up compaction state file for subsequent tests
-rm -f "$HOOK_HOME/.autopilot/compaction-state.md"
-rm -f "$HOOK_HOME/.autopilot/config.json"
+# 4b. Sweep: the legacy global file goes at any age; another session's file
+# goes only past the TTL.
+echo "legacy" > "$AP/compaction-state.md"
+echo "fresh" > "$AP/compaction-state-sess-c.md"
+echo "stale" > "$AP/compaction-state-sess-d.md"
+age_file "$AP/compaction-state-sess-d.md" 5
+run_hook session-start.js "$STARTUP_A"
+assert_file_absent "$AP/compaction-state.md" "legacy global checkpoint swept"
+assert_file_exists "$AP/compaction-state-sess-c.md" "another session's fresh checkpoint kept"
+assert_file_absent "$AP/compaction-state-sess-d.md" "another session's expired checkpoint swept"
+rm -f "$AP"/compaction-state-*.md
 
 # 5. Test Intent Resume Hint (Matching Hostname)
 cwd_hash=$(node -e "const fs = require('fs'); const crypto = require('crypto'); console.log(crypto.createHash('sha1').update(fs.realpathSync('.')).digest('hex'));")

@@ -73,11 +73,11 @@ const tails = new Map<string, { size: number; mtimeMs: number; tail: string | nu
 const MAX_TAIL_BYTES = 1024 * 1024 // a bigger output file shows its quiet time, not its last line ($.fs.read takes the whole file)
 const LIVE_AGENT = new Set(['pending', 'running', 'waiting'])
 let quota: QuotaWindow[] = [] // the rate-limit windows; a usage() that throws keeps the last ones
-let account: AccountView | null | undefined = undefined // undefined until ~/.claude.json parsed once; a half-written read keeps the last value
-let accountFile: { path: string; size: number; mtimeMs: number } | null = null // the ~/.claude.json stat the account was parsed from (Claude Code rewrites it often)
+let account: AccountView | null | undefined = undefined // undefined until .claude.json parsed once; a half-written read keeps the last value
+// the .claude.json the account was parsed from: its path, stat and when (Claude Code rewrites it often)
+let accountFile: { path: string; size: number; mtimeMs: number; parsedMs: number } | null = null
 const MAX_ACCOUNT_BYTES = 4 * 1024 * 1024 // $.fs.read's cap
-const ACCOUNT_REPARSE_MS = 30_000 // a changed ~/.claude.json is read and parsed at most this often (it can be megabytes)
-let accountReadMs: number | null = null // when the last read of it started
+const ACCOUNT_REPARSE_MS = 30_000 // a changed .claude.json is parsed again at most this often after a good parse (it can be megabytes)
 let tr: T = T_EN // the active translator, set at the start of every tick (and read by the band / pane draws)
 let pressSeq = 0 // one number per ⓘ press, taken before any await; only the latest press may assign paneTab or end the chain
 let decided: Promise<PaneTab> | null = null // the tab the latest unfinished press chose: a press landing meanwhile steps on from it (N rapid presses = N tabs)
@@ -481,7 +481,7 @@ async function readAccountQuota($: EngineInterface, nowMs: number): Promise<void
     const dir = (await $.env.get('CLAUDE_CONFIG_DIR')) || (await $.env.get('HOME'))
     if (!dir) return
     const path = dir.replace(/\/+$/, '') + '/.claude.json'
-    const clear = () => { account = undefined; accountFile = null; accountReadMs = null } // no stale account, and a file back is read at once
+    const clear = () => { account = undefined; accountFile = null } // no stale account, and a file back is read at once
     const st = await $.fs.stat(path).catch(() => null)
     if (st === null) {
       // the rejection carries only a message across the engine boundary (no `code`): ask whether the file is there instead.
@@ -490,13 +490,13 @@ async function readAccountQuota($: EngineInterface, nowMs: number): Promise<void
       return
     }
     if (st.kind !== 'file' || st.size > MAX_ACCOUNT_BYTES) { clear(); return }
-    if (accountFile !== null && accountFile.path === path && accountFile.size === st.size && accountFile.mtimeMs === st.mtimeMs) return
-    if (accountReadMs !== null && nowMs - accountReadMs < ACCOUNT_REPARSE_MS) return // changed again soon after a read: wait
-    accountReadMs = nowMs
+    const prev = accountFile !== null && accountFile.path === path ? accountFile : null // another directory is read at once
+    if (prev !== null && prev.size === st.size && prev.mtimeMs === st.mtimeMs) return
+    if (prev !== null && nowMs - prev.parsedMs < ACCOUNT_REPARSE_MS) return // changed again soon after a good parse: wait
     const next = readAccount(await readText($, path))
     if (next === undefined) return // unreadable or caught mid-rewrite: try again next tick
     account = next
-    accountFile = { path, size: st.size, mtimeMs: st.mtimeMs }
+    accountFile = { path, size: st.size, mtimeMs: st.mtimeMs, parsedMs: nowMs }
   } catch (_e) { /* a failed read: keep the last account */ }
 }
 

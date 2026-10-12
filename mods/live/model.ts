@@ -2034,10 +2034,10 @@ export function readQuota(v: unknown): QuotaWindow[] {
     const { kind, percentUsed, resetsAt } = w as { kind?: unknown; percentUsed?: unknown; resetsAt?: unknown }
     if (typeof kind !== 'string' || kind === '' || typeof percentUsed !== 'number' || !Number.isFinite(percentUsed)) continue
     const at = typeof resetsAt === 'string' ? Date.parse(resetsAt) : NaN
-    const w2 = { kind, pct: Math.max(0, percentUsed), resetsAtMs: Number.isFinite(at) ? at : null }
+    const reading = { kind, pct: Math.max(0, percentUsed), resetsAtMs: Number.isFinite(at) ? at : null }
     const i = out.findIndex(o => o.kind === kind)
-    if (i < 0) out.push(w2)
-    else if (w2.pct > out[i].pct) out[i] = w2 // one row per kind: the most used reading
+    if (i < 0) out.push(reading)
+    else if (reading.pct > out[i].pct) out[i] = reading // one row per kind: the most used reading
   }
   const rank = (k: string) => { const i = QUOTA_ORDER.indexOf(k); return i < 0 ? QUOTA_ORDER.length : i }
   return out.sort((a, b) => rank(a.kind) - rank(b.kind))

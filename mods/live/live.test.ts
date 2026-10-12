@@ -155,6 +155,8 @@ type World = {
   reads: string[]
   lists: string[]
   statErrors: Record<string, string> // $.fs.stat rejects with this message (the engine passes a message only, no `code`)
+  existsThrows: Set<string> // $.fs.exists rejects for these paths
+  env: Record<string, string> // what $.env.get answers; a test may change it between ticks
   clock: ReturnType<typeof mock.clock>
 }
 
@@ -163,16 +165,21 @@ const worldEn = (on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A) => world(o
 
 // Registers the bottom hooks (what the engine would answer) for one test.
 function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en' | 'zh-TW' | null = 'zh-TW', env: Record<string, string> = {}): World {
-  const w: World = { files, sid: { value: sid }, cwdReal: { value: CWD }, stats: {}, toasts: [], panes: [], opens: [], panesThrow: false, panesGate: null, openGate: null, writes: [], reads: [], lists: [], statErrors: {}, clock: undefined as never }
+  const w: World = { files, sid: { value: sid }, cwdReal: { value: CWD }, stats: {}, toasts: [], panes: [], opens: [], panesThrow: false, panesGate: null, openGate: null, writes: [], reads: [], lists: [], statErrors: {}, existsThrows: new Set(), env: { HOME, ...(locale === null ? {} : { AUTOPILOT_LOCALE: locale }), ...env }, clock: undefined as never }
   w.clock = mock.clock(on, { now: nowMs })
-  mock.env(on, { HOME, ...(locale === null ? {} : { AUTOPILOT_LOCALE: locale }), ...env }) // the suite pins zh-TW: the band words these cases assert are the zh-TW table's
+  // the suite pins zh-TW: the band words these cases assert are the zh-TW table's. Answered here rather than by mock.env, which keeps
+  // its own copy, so a test can change a variable between ticks
+  on('env.get', ($, e) => ({ value: w.env[e.name] }))
   on('fs.read', ($, e) => {
     w.reads.push(e.path)
     const t = w.files[e.path]
     if (t === undefined) throw new Error('ENOENT ' + e.path)
     return { value: t }
   })
-  on('fs.exists', ($, e) => ({ value: w.files[e.path] !== undefined }))
+  on('fs.exists', ($, e) => {
+    if (w.existsThrows.has(e.path)) throw new Error('EIO: i/o error, access')
+    return { value: w.files[e.path] !== undefined }
+  })
   on('fs.write', ($, e) => { w.writes.push(e.path); return { value: undefined } })
   on('fs.list', ($, e) => {
     w.lists.push(e.path)
@@ -3973,8 +3980,8 @@ for (const surface of SURFACES) {
     await w.clock.advance(5000)
     expect(reads()).toBe(before)
     expect((await bandLine($, surface, 120)).text).toContain('5h 42% 7d 18%')
-    // Claude Code rewrote the file mid-tick (half a JSON), 10 s after the first read: left alone until 30 s have passed since that read,
-    // then read, ignored, the account stays; the finished write is read and shown
+    // Claude Code rewrote the file (half a JSON) 10 s after the first parse: left alone until 30 s have passed since that parse,
+    // then read, ignored, the account stays; a failed parse starts no interval, so the next tick reads again
     w.files[PATH] = CLAUDE_JSON.slice(0, 50)
     w.stats[PATH] = { size: 50, mtimeMs: NOW_FRESH }
     await w.clock.advance(5000)
@@ -3982,15 +3989,13 @@ for (const surface of SURFACES) {
     await w.clock.advance(20000)
     expect(reads()).toBe(before + 1)
     expect(await body()).toContain('owner@example.com')
-    await w.clock.advance(25000)
-    expect(reads()).toBe(before + 1)
-    await w.clock.advance(5000) // the same half-written stat: not cached, read again once the interval is up
+    await w.clock.advance(5000)
     expect(reads()).toBe(before + 2)
     const other = CLAUDE_JSON.replace('owner@example.com', 'second@example.com')
     w.files[PATH] = other
     w.stats[PATH] = { size: other.length, mtimeMs: NOW_FRESH + 1 }
     usage = { ...USAGE, rateLimits: [{ kind: 'five_hour', percentUsed: 91 }] }
-    await w.clock.advance(30000)
+    await w.clock.advance(5000)
     b = await body()
     expect(b).toContain('second@example.com')
     expect((await bandLine($, surface, 120)).text).toContain('5h 91%')
@@ -4021,10 +4026,15 @@ for (const surface of SURFACES) {
     await w.clock.advance(5000)
     expect(reads()).toBe(refused)
     expect(await body()).toContain('second@example.com')
-    // the file is gone (logged out, another HOME): the account leaves, the windows stay
+    // the file is gone but exists() itself rejects: no way to tell, the account stays
     delete w.files[PATH]
     delete w.stats[PATH]
     w.statErrors[PATH] = "ENOENT: no such file or directory, lstat '" + PATH + "'"
+    w.existsThrows.add(PATH)
+    await w.clock.advance(5000)
+    expect(await body()).toContain('second@example.com')
+    // the file is gone (logged out, another HOME): the account leaves, the windows stay
+    w.existsThrows.delete(PATH)
     await w.clock.advance(5000)
     b = await body()
     expect(b).not.toContain('second@example.com')
@@ -4049,8 +4059,20 @@ test('account: with CLAUDE_CONFIG_DIR set the account comes from that directory,
   w.stats[HOME + '/.claude.json'] = { size: CLAUDE_JSON.length, mtimeMs: NOW_FRESH - 60000 }
   w.stats['/cfg/.claude.json'] = { size: moved.length, mtimeMs: NOW_FRESH - 60000 }
   await start($, 'terminal')
-  const b = (await paneParts($, 'terminal', 'now')).texts.join('\n')
+  const body = async () => (await paneParts($, 'terminal', 'now')).texts.join('\n')
+  const b = await body()
   expect(b).toContain('moved@example.com')
   expect(b).not.toContain('owner@example.com')
   expect(w.reads).not.toContain(HOME + '/.claude.json')
+  // the variable changes mid-session to a directory whose file has the same size and mtime: read at once, not taken for the cached one
+  const again = CLAUDE_JSON.replace('owner@example.com', 'again@example.com')
+  w.files['/cfg2/.claude.json'] = again
+  w.stats['/cfg2/.claude.json'] = { size: moved.length, mtimeMs: NOW_FRESH - 60000 }
+  w.env.CLAUDE_CONFIG_DIR = '/cfg2'
+  await w.clock.advance(5000)
+  expect(await body()).toContain('again@example.com')
+  // set but empty: HOME
+  w.env.CLAUDE_CONFIG_DIR = ''
+  await w.clock.advance(5000)
+  expect(await body()).toContain('owner@example.com')
 })

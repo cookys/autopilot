@@ -1193,3 +1193,19 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: now-recent-turns screenshot run, merge `82d34da4`, 2026-10-12
 - **Pointer**: none
 - **Context**: Ctrl+x Tab focuses the pane, but Enter then hits the leading next-tab Button; Tab/Down never reached a group Button in tmux. Mouse click expands. Check focus order of Buttons inside the pane.
+
+### autocompact: users never learn to set autoCompactWindow; T2 still says STOP
+- **Status**: open
+- **Trigger**: owner 2026-10-12 — after the fresh-session autocompact test confirms rehydrate is enough
+- **Effort**: M
+- **Source**: context reset cost analysis, 2026-10-12
+- **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
+- **Context**: no repo check, doc or notice mentions autoCompactWindow; a 1M user hits T2 STOP instead of compaction. Detection + toast (mechanism), T2 wording (guidance, eval), release heading. Detail at Pointer.
+
+### hetero-review-loop collect: a seat gap without --allow-seat-gap strands generation 1
+- **Status**: open
+- **Trigger**: next touch of scripts/hetero-review-loop.js collect
+- **Effort**: S
+- **Source**: discuss-exam-fix code review, 2026-10-12
+- **Pointer**: none
+- **Context**: collect exits 1 on a seat gap but leaves g1/ with no chain.json entry; g1 cannot be re-run (dir exists) and g2 fails (chain broken), so the only way out is a new ledger. Record it aborted instead.

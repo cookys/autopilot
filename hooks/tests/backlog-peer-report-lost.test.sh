@@ -206,6 +206,37 @@ if cmp -s "$GATE" "$MUT_NOFILE"; then fail "R6 mutation did not apply"; fi
 out="$(range_check "$d" "$BASE..$(git -C "$d" rev-parse HEAD~1)" "$MUT_NOFILE")"; rc=$?
 assert_eq "$rc" "0" "R6 mutation: without the head file gate the bad_id head passes (the suite can tell)"
 
+# Table compat: a legacy table whose extra columns happen to be called Origin/Reporter/Report/Reply
+# was never read by the old gate. Until the file opts in, deleting such a row is an ordinary delete,
+# not peer_report_lost. The opt-in control is the same history with `required_fields: Origin`
+# (Report is not requirable on its own; Reporter/Report/Reply follow a required Origin).
+tc_repo() { # <name> [required_fields] -> repo with two Id+Report table rows; HEAD deletes the first
+  local d; d="$(new_repo "$1")"
+  { printf '%s\n' '## Style' '- style: table' '## Mode' '- mode: block' '- id_pattern: ^\d{4}$'
+    if [ -n "${2:-}" ]; then printf -- '- required_fields: %s\n' "$2"; fi; } > "$d/.claude/backlog-config.md"
+  local hdr='| Id | Title | Status | Trigger | Effort | Source | Pointer | Origin | Reporter | Report | Reply |' sep='|---|---|---|---|---|---|---|---|---|---|---|'
+  local r1='| 0001 | Row one | open | when x | S | me | none | peer | cuda | ticket 12 | none |' r2='| 0002 | Row two | open | when y | S | me | none | peer | cuda | ticket 13 | none |'
+  printf '%s\n' '# Backlog' '' "$hdr" "$sep" "$r1" "$r2" > "$d/docs/BACKLOG.md"
+  commit_all "$d" base >/dev/null
+  printf '%s\n' '# Backlog' '' "$hdr" "$sep" "$r2" > "$d/docs/BACKLOG.md"
+  commit_all "$d" "drop row one" >/dev/null
+  echo "$d"
+}
+d="$(tc_repo tc-compat)"
+out="$(range_check "$d" HEAD~1..HEAD)"; rc=$?
+assert_eq "$rc" "0" "table compat: deleting a row with a legacy Report column passes --range without opt-in"
+assert_eq "$(json_count "$out" peer_report_lost)" "0" "table compat: no peer_report_lost without opt-in"
+TC_COMPAT_DIR="$d"
+d="$(tc_repo tc-optin Origin)"
+out="$(range_check "$d" HEAD~1..HEAD)"; rc=$?
+assert_eq "$rc:$(json_codes "$out")" "1:peer_report_lost" "table opt-in: with Origin in required_fields the same delete blocks"
+assert_eq "$(json_count "$out" peer_report_lost)" "1" "table opt-in: reported as peer_report_lost"
+MUT_NONORM="$MUTROOT/scripts/check-no-normalise.js"
+sed 's|^        if (NEW_FIELDS.includes(f) \&\& !tableFieldOptedIn(ocfg, f)) continue;$|        ;|' "$GATE" > "$MUT_NONORM"
+if cmp -s "$GATE" "$MUT_NONORM"; then fail "table compat mutation did not apply"; fi
+out="$(range_check "$TC_COMPAT_DIR" HEAD~1..HEAD "$MUT_NONORM")"; rc=$?
+assert_eq "$rc:$(json_count "$out" peer_report_lost)" "1:1" "table compat mutation: without parse-layer normalisation the legacy delete blocks (the suite can tell)"
+
 # No config (mode warn): reported, never blocks — a downstream repo is not wedged.
 d="$(new_repo warn)"
 rm -f "$d/.claude/backlog-config.md"

@@ -519,6 +519,25 @@ d="$(repo tc-since-req)"; tcol "$d" ' Since |' ' last week |' '' Since
 gate_run "$GATE" "$d" --config "$d/.claude/backlog-config.md"
 assert_eq "$GATE_RC:$(codes_of "$GATE_OUT")" "1:bad_since:Since:Table row" "table opt-in: Since in required_fields checks the Since column"
 TC_SINCE_REQ_DIR="$d"
+# Opted in: a row whose Problem/Impact columns carry it past 900 B (under 1600 B) is a reporter row,
+# so the row cap applies; the parse layer recounts the new-column bytes for it.
+d="$(repo tc-rowcap)"
+TC_T="$(python3 -c 'print("題"*39)')"; TC_TR="$(python3 -c 'print("觸"*79)')"; TC_S="$(python3 -c 'print("源"*53)')"
+TC_P="$(python3 -c 'print("問"*99)')"; TC_I="$(python3 -c 'print("響"*50)')"
+{ printf '# BACKLOG\n\n<!-- next-id: BL-0001 -->\n\n'
+  printf '%s\n' '| Title | Status | Trigger | Effort | Source | Pointer | Problem | Impact |' '| --- | --- | --- | --- | --- | --- | --- | --- |'
+  printf '| %s | open | %s | S | %s | none | %s | %s |\n' "$TC_T" "$TC_TR" "$TC_S" "$TC_P" "$TC_I"; } > "$d/docs/BACKLOG.md"
+printf '%s\n' '## Style' '- style: table' '## Mode' '- mode: block' > "$d/.claude/backlog-config.md"
+TC_ROWB="$(tail -n1 "$d/docs/BACKLOG.md" | wc -c)"
+assert_eq "$([ "$TC_ROWB" -gt 901 ] && [ "$TC_ROWB" -lt 1600 ] && echo in-band)" "in-band" "table row cap fixture: the row is between 900 B and 1600 B ($TC_ROWB)"
+gate_run "$GATE" "$d" --config "$d/.claude/backlog-config.md"
+assert_eq "$GATE_RC:$(codes_of "$GATE_OUT")" "0:" "table opt-in: Problem/Impact columns past 900 B take the 1600 B row cap"
+TC_ROWCAP_DIR="$d"
+# Origin in required_fields brings Reporter/Report/Reply along: a valid peer row passes.
+d="$(repo tc-origin-peer)"; tcol "$d" ' Origin | Reporter | Report | Reply |' ' peer | cuda | ticket 12 | 2026-10-01 msg_01R |' '' Origin
+gate_run "$GATE" "$d" --config "$d/.claude/backlog-config.md"
+assert_eq "$GATE_RC:$(codes_of "$GATE_OUT")" "0:" "table opt-in: required Origin also reads the Reporter/Report/Reply columns"
+TC_ORIGIN_PEER_DIR="$d"
 
 # --- mutation proofs: each rule's test goes red when the rule is removed from the gate.
 mutate() { # <name> <sed expr> -> path of a mutated gate copy (fails the test if sed did not bite)
@@ -556,11 +575,17 @@ m="$(mutate idc-off "s/return Boolean(cfg \&\& (cfg.next_id_mark || (cfg.require
 gate_run "$m" "$IDC_REQ_DIR" --config "$IDC_REQ_DIR/.claude/backlog-config.md"
 assert_eq "$(json_has_code "$GATE_OUT" bad_id)" "no" "Id opt-in mutation: never enforcing BL-NNNN is caught"
 
-m="$(mutate tc-view "s/^  if (entry \&\& entry.tableId) entry = tableReporterView(entry, cfg);$/  ;/")"
+m="$(mutate tc-view "s/^        if (NEW_FIELDS.includes(f) \&\& !tableFieldOptedIn(ocfg, f)) continue;$/        ;/")"
 gate_run "$m" "$TC_ORIGIN_DIR" --config "$TC_ORIGIN_DIR/.claude/backlog-config.md"
 assert_eq "$(json_has_code "$GATE_OUT" bad_origin)" "yes" "table compat mutation: reading table reporter columns without opt-in is caught"
 m="$(mutate tc-optin "s/^  return req.includes(f) || (PEER_FIELDS.includes(f) \&\& req.includes('Origin'));$/  return false;/")"
 gate_run "$m" "$TC_SINCE_REQ_DIR" --config "$TC_SINCE_REQ_DIR/.claude/backlog-config.md"
 assert_eq "$(json_has_code "$GATE_OUT" bad_since)" "no" "table opt-in mutation: ignoring required_fields for table columns is caught"
+m="$(mutate tc-rowcap "s/^        if (NEW_FIELDS.includes(f)) newFieldBytes += byteLen(fields\[f\]) + 3;$/        ;/")"
+gate_run "$m" "$TC_ROWCAP_DIR" --config "$TC_ROWCAP_DIR/.claude/backlog-config.md"
+assert_contains "$(codes_of "$GATE_OUT")" "cap_exceeded:entry:" "table row cap mutation: not recounting the new-column bytes drops the row to the 900 B cap (the suite can tell)"
+m="$(mutate tc-peer "s/(PEER_FIELDS.includes(f) \&\& req.includes('Origin'))/false/")"
+gate_run "$m" "$TC_ORIGIN_PEER_DIR" --config "$TC_ORIGIN_PEER_DIR/.claude/backlog-config.md"
+assert_contains "$(codes_of "$GATE_OUT")" "peer_field_missing:Reporter:" "table peer mutation: Origin alone without Reporter/Report/Reply reads as a peer row missing them (the suite can tell)"
 
 finalize_test

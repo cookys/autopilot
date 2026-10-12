@@ -472,10 +472,13 @@ function foreignEntryLines(text, style) {
   return out.map((line) => ({ unparseable: true, text: line, title: '' }));
 }
 
-function collectEntries(text, style) {
+// `cfg` (optional) only matters for tables: see tableFieldOptedIn. Without it a table row carries
+// no reporter-field column unless the text has a next-id mark.
+function collectEntries(text, style, cfg) {
   const out = [];
   if (style === 'table' || style === 'checklist') out.push(...foreignEntryLines(text, style));
   if (style === 'table') {
+    const ocfg = withNextIdMark(cfg, text);
     const { header, rows } = parseTable(text);
     if (!header) {
       if (text.trim()) out.push({ unparseable: true, text, title: '' });
@@ -494,6 +497,9 @@ function collectEntries(text, style) {
       for (const f of ALL_FIELDS) {
         // A table's Id column predates the reporter fields and stays governed by id_pattern.
         if (f === 'Id' || idx[f] == null) continue;
+        // Normalised here, once, so every consumer (checkEntry, rowPairs/peerReportLost, migrate,
+        // plan-graduation) sees the row the old gate saw until the file opts in.
+        if (NEW_FIELDS.includes(f) && !tableFieldOptedIn(ocfg, f)) continue;
         fields[f] = get(f);
         if (NEW_FIELDS.includes(f)) newFieldBytes += byteLen(fields[f]) + 3;
       }
@@ -634,29 +640,22 @@ function blIdEnforced(cfg) {
   return Boolean(cfg && (cfg.next_id_mark || (cfg.required_fields || []).includes('Id')));
 }
 
-// A table column that happens to be named Since, Origin, Problem, … was never read by the old
-// gate (it kept only the legacy columns). Such a column is checked — value, cap, row cap, pointer
-// threshold — only once the file opts in: a next-id mark, or the field in `required_fields`
+// The cfg a file is checked with: `next_id_mark` set when the text carries `<!-- next-id -->`.
+function withNextIdMark(cfg, text) {
+  const base = cfg || {};
+  return NEXT_ID_RE.test(String(text || '')) ? Object.assign({}, base, { next_id_mark: true }) : base;
+}
+
+// A table column that happens to be named Since, Origin, Reporter, Report, Reply, Problem or Impact
+// was never read by the old gate (it kept only the legacy columns). collectEntries keeps such a
+// column only once the file opts in: a next-id mark, or the field in `required_fields`
 // (Reporter/Report/Reply also follow a required Origin, since the peer rule reads them together).
-// Otherwise the table row is checked exactly as the old gate checked it.
+// Otherwise the row is parsed exactly as the old gate parsed it.
 function tableFieldOptedIn(cfg, f) {
   if (!cfg) return false;
   if (cfg.next_id_mark) return true;
   const req = cfg.required_fields || [];
   return req.includes(f) || (PEER_FIELDS.includes(f) && req.includes('Origin'));
-}
-
-function tableReporterView(entry, cfg) {
-  const fields = {};
-  let newFieldBytes = 0;
-  for (const [k, v] of Object.entries(entry.fields || {})) {
-    if (NEW_FIELDS.includes(k)) {
-      if (!tableFieldOptedIn(cfg, k)) continue;
-      newFieldBytes += byteLen(v) + 3;
-    }
-    fields[k] = v;
-  }
-  return Object.assign({}, entry, { fields, newFieldBytes });
 }
 
 function checkReporterFields(entry, fields, title, cfg) {
@@ -719,7 +718,6 @@ function checkReporterFields(entry, fields, title, cfg) {
 }
 
 function checkEntry(entry, cfg, repoRoot, now, existsFn) {
-  if (entry && entry.tableId) entry = tableReporterView(entry, cfg);
   const vios = [];
   if (entry.unparseable) {
     vios.push({
@@ -887,8 +885,8 @@ function checkNextId(text, entries, cfg) {
 
 function collectViolations(text, cfg, repoRoot, now, existsFn) {
   const style = cfg.style || 'heading';
-  const entries = collectEntries(text, style);
-  const ecfg = NEXT_ID_RE.test(String(text || '')) ? { ...cfg, next_id_mark: true } : cfg;
+  const entries = collectEntries(text, style, cfg);
+  const ecfg = withNextIdMark(cfg, text);
   const violations = checkCapsRaised(cfg);
   const titles = new Map();
   const ids = new Map();
@@ -1090,7 +1088,7 @@ function rowPairs(entries) {
 // touched the backlog in topological order, the LAST appearance's Reply wins (R4) — that is gone
 // at head (row deleted, or one reporter dropped from a surviving row: R5) while its last Reply was
 // none/unknown, and whose Id is not named by head's plans, CHANGELOG, or another BACKLOG row (R3).
-function peerReportLost(repoRoot, rel, baseSha, headSha, headEntries, style) {
+function peerReportLost(repoRoot, rel, baseSha, headSha, headEntries, style, cfg) {
   const listArgs = ['rev-list', '--reverse', '--topo-order', '--full-history',
     baseSha ? `${baseSha}..${headSha}` : headSha, '--', rel];
   const r = git(repoRoot, listArgs);
@@ -1100,7 +1098,7 @@ function peerReportLost(repoRoot, rel, baseSha, headSha, headEntries, style) {
   for (const sha of shas) {
     const text = showAt(repoRoot, sha, rel);
     if (text == null) continue;
-    for (const p of rowPairs(collectEntries(text, style))) last.set(p.key, Object.assign({ sha }, p));
+    for (const p of rowPairs(collectEntries(text, style, cfg))) last.set(p.key, Object.assign({ sha }, p));
   }
   const headKeys = new Set(rowPairs(headEntries).map((p) => p.key));
   const plansDir = resolvePlansDir(repoRoot);
@@ -1154,7 +1152,7 @@ function runRange(opts) {
     repoRoot,
     existsFn: existsAtFn(repoRoot, headSha),
   });
-  const lostRun = peerReportLost(repoRoot, rel, baseSha, headSha, checked.entries, checked.style);
+  const lostRun = peerReportLost(repoRoot, rel, baseSha, headSha, checked.entries, checked.style, checked.cfg);
   if (lostRun.error) {
     process.stderr.write(`${lostRun.error}\n`);
     process.exit(2);
@@ -1450,6 +1448,7 @@ module.exports = {
   parseEffortValue,
   LEGACY_EFFORT_MAP,
   collectEntries,
+  withNextIdMark,
   parseHeadingBlock,
   splitHeadingEntries,
   fieldLine,

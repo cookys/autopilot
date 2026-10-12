@@ -738,7 +738,7 @@ function planMigration(text, cfg, repoRoot, opts) {
     process.exit(2);
   }
   const { header, slices } = splitFile(text);
-  const entries = collectEntries(text, style);
+  const entries = collectEntries(text, style, cfg);
   const headingEntries = entries.filter((e) => !e.unparseable);
   if (headingEntries.length !== slices.length) {
     // Parser dropped or merged a block — still pair by title walk on slices.

@@ -27,7 +27,8 @@ refused `!` pull is gap 8 of [the backlog note](../docs/backlog/worktree-and-han
   name and its branch share no word (generic words such as `feat`, `fix`, `wip` and digit-only words do not count).
   It never blocks.
 - **Fallback**: a repo with no non-bare main checkout (a bare repo, a separate `--git-dir`) keeps rail worktrees in
-  the temp dir, and the resolver says so on stderr. The residue registry still lists those temp prefixes.
+  the temp dir, and the resolver says so on stderr. So does a main checkout where `.claude/worktrees` cannot be
+  created (read-only, or `.claude` is a file). The residue registry still lists those temp prefixes.
 - **Stay in the temp dir**: the `verify-red-green.sh` and test-integrity-L1 scratch worktrees. They are
   short-lived, removed by their own script, and never handed to a person.
 
@@ -51,8 +52,11 @@ refused `!` pull is gap 8 of [the backlog note](../docs/backlog/worktree-and-han
 
 `session-mode.js set` (with or without `--new-task`) moves the marker's `repo_root` to the toplevel it runs in
 when that toplevel belongs to the same repo (same repo identity), and `stage-advance.js` measures the E1 diff in
-that worktree. A cwd in another repo leaves the marker alone. `base_ref` defaults to the newer of `develop` and
-`origin/develop` (then `main`, `master`), so a main checkout that has not pulled does not inflate E1.
+that worktree. A cwd in another repo leaves the marker alone. Where `base_ref` is derived (a marker without one,
+`set --new-task`), it defaults to the newer of `develop` and `origin/develop` (then `main`, `master`), so a
+main checkout that has not pulled does not inflate E1. A plain `set` keeps the `base_ref` the marker already has (a
+size bump never moves the diff base): when the marker was created in a main checkout that lagged, run
+`set --new-task` (or pass `--base-ref`) inside the worktree to re-derive it.
 
 ## Handoff files
 

@@ -59,6 +59,13 @@ eq "bare repo: temp-dir template" "$TMPDIR/foreman-r1-XXXXXX" "$(rp worktree --p
 ERR="$(node "$R" worktree --prefix foreman --slug r1 --from "$TMP/b-wt" 2>&1 >/dev/null)"
 case "$ERR" in *"temp dir"*) ok "fallback says so on stderr" ;; *) no "fallback says so on stderr" "*temp dir*" "$ERR" ;; esac
 
+# 4b. mkdir fails (`.claude` is a file): temp-dir template, the reason on stderr, exit 0.
+M="$TMP/m"; mkrepo "$M"; : > "$M/.claude"
+eq "mkdir failure: temp-dir template" "$TMPDIR/batch-r2-XXXXXX" "$(rp worktree --prefix batch --slug r2 --from "$M")"
+ERR="$(node "$R" worktree --prefix batch --slug r2 --from "$M" 2>&1 >/dev/null)"
+case "$ERR" in *"cannot create"*"temp dir"*) ok "mkdir failure says why on stderr" ;; *) no "mkdir failure says why on stderr" "*cannot create*temp dir*" "$ERR" ;; esac
+(node "$R" worktree --prefix batch --slug r2 --from "$M" >/dev/null 2>&1); eq "mkdir failure exits 0" "0" "$?"
+
 # 5. Separate --git-dir: the common dir is not `.git` ⇒ fallback.
 S="$TMP/sep"; mkdir -p "$S/wt"; git --git-dir="$S/store" --work-tree="$S/wt" init -q -b develop >/dev/null 2>&1
 eq "separate git dir: fallback" "true" "$(GIT_DIR="$S/store" GIT_WORK_TREE="$S/wt" node "$R" main --from "$S/wt" 2>/dev/null | field fallback)"

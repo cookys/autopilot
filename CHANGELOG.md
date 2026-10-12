@@ -5,11 +5,12 @@
 ### 新增
 
 - **worktree 和 handoff 有了固定位置**（branch `feat/worktree-placement-rule`）：同一個 repo 的 worktree 現在都放在 `<主 checkout>/.claude/worktrees/` 底下，看路徑就知道屬於哪個 repo。規則寫在 `references/worktree-placement.md`。
-  - hetero、foreman、batch 三條 rail 建的 worktree 從暫存目錄搬到這裡，和你自己或 Claude Code 開的 worktree 放在一起；不論從主 checkout 還是從哪個 worktree 呼叫，都放到同一個地方。沒有一般主 checkout 的 repo（例如 bare repo）照舊放在暫存目錄，stderr 會說明原因。
+  - hetero、foreman、batch 三條 rail 建的 worktree 從暫存目錄搬到這裡，和你自己或 Claude Code 開的 worktree 放在一起；不論從主 checkout 還是從哪個 worktree 呼叫，都放到同一個地方。沒有一般主 checkout 的 repo（例如 bare repo），或主 checkout 裡建不出 `.claude/worktrees`（唯讀、或 `.claude` 是檔案），照舊放在暫存目錄，stderr 會說明原因。
   - 新增 `scripts/resolve-repo-placement.js`，統一回答三個問題：worktree 該放哪裡、主 checkout 落後上游幾個 commit、兩種 handoff 檔各在哪裡。
   - session marker 會跟著 session 進 worktree：在同一個 repo 的 worktree 裡執行 `session-mode.js set`，marker 就改記那個 worktree，`stage-advance` 量的 diff 才會是你正在改的分支。
-  - `base_ref` 的預設值改取 `develop` 和 `origin/develop` 之中較新的那一個；主 checkout 沒有 pull 時，diff 不會再被高估。
+  - 需要推導 `base_ref` 時（marker 還沒有、或執行 `set --new-task`），預設值改取 `develop` 和 `origin/develop` 之中較新的那一個；主 checkout 沒有 pull 時，diff 不會再被高估。一般的 `set` 會沿用 marker 原有的 `base_ref`：如果 marker 是在落後的主 checkout 建立的，請在 worktree 裡執行 `set --new-task`（或加 `--base-ref`）重新推導。
   - 執行 `set --new-task` 時，如果 worktree 目錄名稱和分支名稱沒有任何共同的字，會印一行提醒，建議你為新任務開新的 worktree。這只是提醒，不會擋下指令。
+  - 會走訪整個 repo 的工具（`identifier-scan`、`probe-unknown`、worktree 活動偵測）會跳過 `.claude/worktrees/`，不會把其他 worktree 的檔案算進來；`probe-unknown` 彙整 ledger 時也一併跳過 `node_modules`。
   - `/handoff` 沒有進行中的專案時，handoff 檔改成每個 repo 一份，同名的兩個 repo 不會再寫到同一個檔案；`/clear` 的 handoff 仍是每個 worktree 一份，路徑沒有變。
 
 - **即時面板「現況」分頁多了「最近對話」**（merge `82d34da4`）：分頁最後列出這個 session 最近 3 則你輸入的 prompt，依時間排序，最新的在最下面。tool 結果和系統插入的訊息不算在內。每則預設收合成一行「▸ 你：…」（最多 60 字），點一下會展開，顯示完整 prompt 和 AI 的回覆，最多約 20 行。看起來像 secret 的字串（`sk-…`、`ghp_…`、`Bearer …`、`AKIA…`、`xox?-…`）在顯示前就由程式遮成 `***`，不經過模型。這段資料只有在 transcript 變動時才會重算；/clear 之後，原本展開的項目會全部收回。目前只能用滑鼠展開，還不能用鍵盤（BACKLOG 有列）。

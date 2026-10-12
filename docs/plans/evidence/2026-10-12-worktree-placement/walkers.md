@@ -30,6 +30,9 @@ below are every hit that recursively walks a directory, plus the near-misses rea
 | `scripts/lib/kimi-containment.js:72`, `scripts/lib/agy-containment.js:183` | engine session dirs | cannot run from the main checkout (why): not a work tree |
 | `scripts/next-touch-validation.js:489`, `scripts/pin-evidence-anchors.js:170`, `src/engine/profile-runtime.js:187` | state / receipt / runtime dirs | cannot run from the main checkout (why): not a work tree |
 | `scripts/engine-scorecard.js:919`, `scripts/distill-scan.js:315` | transcript trees under `~` | cannot run from the main checkout (why): not a work tree |
+| `scripts/check-tmp-residue-registry.js:61` | repo root | uses the git index; the fallback walk roots are `src bin hooks scripts` (`:38`), none under `.claude` (added at qc-gate) |
+| `scripts/qualification-review-provider.js:1197` | `QRP_CLI_HOME` | cannot run from the main checkout (why): a CLI home, not a work tree (added at qc-gate) |
+| `scripts/check-foreman-polling.js:200` | one run dir | cannot run into worktrees (why): one level of a run dir, not recursive (added at qc-gate) |
 | `scripts/validate.sh:66` | a skill subtree | cannot run from the main checkout (why): root is `skills/<name>` |
 | `scripts/task-width-fleet.sh:67` | user roots, `-type d -name .git` | cannot run into worktrees (why): a linked worktree's `.git` is a file, excluded by `-type d` |
 | `scripts/probe-skill-frontmatter-portability.sh:339` | a plugin target, depth ≤ 4 | cannot run from the main checkout (why): plugin dir, not a consumer work tree |

@@ -28,6 +28,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/worktree-and-handoff-placement-has-no-rule.md
 - **Context**: rails resolve placement from their own --from repo root; nothing says which repo's root, marker or handoff a cross-repo run uses.
 
+### orchestrator-edit-gate stops gating the main checkout once the marker follows into a worktree
+- **Status**: open
+- **Trigger**: owner wants depth-0 edits to the main checkout gated while the session works in a worktree
+- **Effort**: S
+- **Source**: worktree-placement qc-gate reviewer, Suggestion 1, 2026-10-12
+- **Pointer**: docs/plans/evidence/2026-10-12-worktree-placement/qc-gate.md
+- **Context**: once D5 moves repo_root into a worktree, a main-checkout path is outside it with no marker above, so decide() allows it (orchestrator-edit-gate.js:108-115). Fix: treat repo_identity's main checkout as in-repo.
+
 ### finish-flow does not tell the owner how to update the main checkout after a push
 - **Status**: open
 - **Trigger**: owner approves a finish-flow guidance change (needs eval ON/OFF evidence first, scorecard-first)

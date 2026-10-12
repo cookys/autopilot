@@ -13,7 +13,8 @@
 // `.git` and its parent is a non-bare work tree; otherwise fallback is true and main_checkout is
 // null (bare repo, separate --git-dir). `worktree` then answers a temp-dir template and says so on
 // stderr; on the normal path it runs `mkdir -p <main>/.claude/worktrees` first, so a rail that
-// calls it before its before-fingerprint never sees that directory appear as a mutation.
+// calls it before its before-fingerprint never sees that directory appear as a mutation. When that
+// mkdir fails (read-only checkout, `.claude` is a file) it answers the temp-dir template too.
 // `worktree` requires --from: a rail passes its own repo root, never the process cwd.
 //
 // Handoff keys differ on purpose. manual: one file per repo, shared by its worktrees —
@@ -81,8 +82,13 @@ function resolveMain(from) {
 function worktreeTemplate(from, prefix, slug) {
   const name = `${prefix}-${slug.replace(/\//g, '-')}-XXXXXX`;
   const main = mainCheckout(from);
-  if (main === null) return { template: path.join(os.tmpdir(), name), fallback: true };
-  fs.mkdirSync(path.join(main, '.claude', 'worktrees'), { recursive: true });
+  const temp = path.join(os.tmpdir(), name);
+  if (main === null) return { template: temp, fallback: true, reason: 'no non-bare main checkout' };
+  try {
+    fs.mkdirSync(path.join(main, '.claude', 'worktrees'), { recursive: true });
+  } catch (err) {
+    return { template: temp, fallback: true, reason: `cannot create ${main}/.claude/worktrees (${err.code || err.message})` };
+  }
   return { template: path.join(main, '.claude', 'worktrees', name), fallback: false };
 }
 
@@ -160,7 +166,7 @@ function main(argv) {
     }
     const answer = worktreeTemplate(from, opts.prefix, opts.slug);
     if (answer.fallback) {
-      process.stderr.write('resolve-repo-placement: no non-bare main checkout; worktree stays in the temp dir\n');
+      process.stderr.write(`resolve-repo-placement: ${answer.reason}; worktree stays in the temp dir\n`);
     }
     process.stdout.write(`${answer.template}\n`);
     return 0;

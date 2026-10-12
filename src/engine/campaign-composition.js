@@ -2295,20 +2295,33 @@ function runCampaignComposition(input = {}, adapters = {}) {
         && reusableV.result.argv_hash === verificationArgvHash
         && reusableV.result.env_fingerprint === verificationEnvFingerprint
         && reusableV.result.request_digest === verificationRequestDigest;
-      if (reusableV
-          && reusableV.result
-          && reusableV.result.success === true
-          && reusableVerificationBound) {
+      // The gate journal records only digests. A reuse must hand the same wrapper shape as a fresh
+      // verify ({passed, cached, receipt_digest, receipt}) so the work order and `status task` get a
+      // receipt body. Recover it from persisted controller state or the previous iteration, accept it
+      // only after recomputing its digest and re-binding tree/argv/env/request; otherwise do not
+      // reuse and fall through to a real verification.
+      const reusedReceiptBody = reusableV && reusableV.result
+        && reusableV.result.success === true && reusableVerificationBound
+        ? [controller.verification_receipt, verification]
+          .map((wrapper) => (isObj(wrapper) && isObj(wrapper.receipt) ? wrapper.receipt : null))
+          .find((body) => {
+            if (!body || body.artifact_type !== 'implementation_campaign_verification'
+                || !isStr(reusableV.result.receipt_digest)
+                || body.receipt_digest !== reusableV.result.receipt_digest
+                || body.tree_sha !== candidateTreeSha
+                || body.argv_hash !== verificationArgvHash
+                || body.env_fingerprint !== verificationEnvFingerprint
+                || body.request_digest !== verificationRequestDigest) return false;
+            const { receipt_digest: ignored, ...unsealed } = body;
+            return canonicalDigest(unsealed) === body.receipt_digest;
+          })
+        : null;
+      if (reusedReceiptBody) {
         verification = {
           passed: true,
-          receipt_digest: reusableV.result.receipt_digest || null,
-          tree_sha: reusableV.result.candidate_tree_sha,
-          argv_hash: reusableV.result.argv_hash,
-          env_fingerprint: reusableV.result.env_fingerprint,
-          request_digest: reusableV.result.request_digest,
-          gate_reused: true,
-          started_at: reusableV.started_at,
-          finished_at: reusableV.finished_at,
+          cached: true,
+          receipt_digest: reusedReceiptBody.receipt_digest,
+          receipt: reusedReceiptBody,
         };
         trace.push('focused_verification_gate_reused');
       } else {

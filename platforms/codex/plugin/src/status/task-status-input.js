@@ -175,7 +175,8 @@ function campaignEvents(rows, campaignId) {
 // (src/engine/campaign-verification.js); the reader wants the bare receipt, whose exact key set it
 // checks. Bare receipts (and bundles written before this unwrap) pass through unchanged.
 function unwrapVerificationReceipt(value) {
-  if (value && typeof value === 'object' && value.receipt && typeof value.receipt === 'object'
+  if (value && typeof value === 'object' && value.passed === true
+      && value.receipt && typeof value.receipt === 'object'
       && !Array.isArray(value.receipt) && value.artifact_type === undefined) {
     return value.receipt;
   }
@@ -201,7 +202,10 @@ function workOrderVerification(root, ids, evidenceDigest) {
       const receipt = unwrapVerificationReceipt(
         order && order.controller && order.controller.verification_receipt,
       );
-      if (receipt && receipt.receipt_digest === evidenceDigest) return plain(receipt);
+      // A gate-reused wrapper (campaign-composition.js) carries the digest but no receipt body;
+      // it cannot satisfy the reader, so keep scanning for the work order holding the real one.
+      if (receipt && receipt.artifact_type === 'implementation_campaign_verification'
+          && receipt.receipt_digest === evidenceDigest) return plain(receipt);
     }
   }
   return null;

@@ -3,7 +3,7 @@
 const path = require('path');
 const { canonicalJson, cloneCanonical, isSha256, sha256 } = require('./owner-kernel/canonical');
 const { validateEffectiveMissionPolicy } = require('./mission-policy');
-const { validBoundedVerifyCommand } = require('../../scripts/implementation-campaign-check');
+const { validBoundedVerifyCommand, MAX_VERIFICATION_COMMANDS } = require('../../scripts/implementation-campaign-check');
 
 const MISSION_GRAPH_SCHEMA_VERSION = 1;
 const TOKEN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
@@ -303,6 +303,9 @@ function normalizeNode(raw, index) {
   ]), label);
   if (!Array.isArray(value.verification_commands) || value.verification_commands.length === 0) {
     fail(`${label}.verification_commands must be non-empty`);
+  }
+  if (value.verification_commands.length > MAX_VERIFICATION_COMMANDS) {
+    fail(`${label}.verification_commands must contain at most ${MAX_VERIFICATION_COMMANDS} entries`);
   }
   const verificationCommands = value.verification_commands.map((command, commandIndex) => {
     if (typeof command !== 'string' || command.trim() !== command || command.length === 0 || command.length > 4096) {

@@ -1737,6 +1737,21 @@ console.log("Starting independent verification tests for Controller Execution...
     s.receipt_digest = canonicalDigest(s);
     return s;
   };
+  // Real engine shape: wrapper + a self-digested receipt body (gate reuse needs the body).
+  const fakeVerification = () => {
+    const body = {
+      schema_version: 1,
+      artifact_type: 'implementation_campaign_verification',
+      tree_sha: tree,
+      argv_hash: verificationArgvHash,
+      env_fingerprint: verificationEnvFingerprint,
+      request_digest: verificationRequestDigest(),
+      verdict: 'GREEN',
+      exit_status: 0,
+    };
+    const receipt = { ...body, receipt_digest: canonicalDigest(body) };
+    return { passed: true, cached: false, receipt_digest: receipt.receipt_digest, receipt };
+  };
   const adapters = {
     preflight: () => ({ passed: true }),
     preEffectAdmit: ({ wouldCreateWorktree }) => {
@@ -1760,14 +1775,7 @@ console.log("Starting independent verification tests for Controller Execution...
     scopeCheck: () => ({ passed: true }),
     verify: () => {
       verifyCalls += 1;
-      return {
-        passed: true,
-        receipt_digest: 'c'.repeat(64),
-        tree_sha: tree,
-        argv_hash: verificationArgvHash,
-        env_fingerprint: verificationEnvFingerprint,
-        request_digest: verificationRequestDigest(),
-      };
+      return fakeVerification();
     },
     prepareReview: (reviewPayload) => ({
       prepared: true,
@@ -2090,6 +2098,71 @@ console.log("Starting independent verification tests for Controller Execution...
     firstEffectStages.length + 1,
     'resume adds exactly one explained non-gate effect',
   );
+  // Gate reuse stores the SAME wrapper shape as a fresh verify, receipt body included (status task
+  // needs it). Digest is re-derived from the body, never trusted from the journal.
+  const reusedWrapper = r2.controller.verification_receipt;
+  assert.deepStrictEqual(Object.keys(reusedWrapper).sort(), ['cached', 'passed', 'receipt', 'receipt_digest'],
+    'reused verification has the fresh-verify wrapper shape');
+  assert.strictEqual(reusedWrapper.cached, true);
+  assert.strictEqual(reusedWrapper.passed, true);
+  {
+    const { receipt_digest: ignored, ...unsealed } = reusedWrapper.receipt;
+    assert.strictEqual(canonicalDigest(unsealed), reusedWrapper.receipt.receipt_digest);
+    assert.strictEqual(reusedWrapper.receipt_digest, reusedWrapper.receipt.receipt_digest);
+  }
+  // No recoverable / trustworthy body: the journal hit is NOT used, a real verification runs.
+  const resumeFor = (controllerState) => ({
+    maxRepairGenerations: 1,
+    minPanelSize: 1,
+    promptFile: promptPath,
+    controller: controllerState,
+    frozenDenominator: frozen,
+    includeControllerMeta: true,
+    gitCwd: dir,
+    baseSha: base,
+    ...gateMaterialInput(),
+    resume: {
+      phase: 'ADJUDICATING',
+      repair_generation: 0,
+      candidate: { committed: true, commit: base, tree_sha: tree, base_sha: base },
+      verification: { passed: true, receipt_digest: 'c'.repeat(64) },
+      review: {
+        reviewed: true, success: true, review_input_mode: 'full_diff_generation',
+        review_digest: 'd'.repeat(64), findings: '[]',
+      },
+      full_diff_barriers: r1.full_diff_barriers || {
+        0: { success: true, review_digest: 'd'.repeat(64), candidate_ref: base, base_sha: base },
+      },
+    },
+  });
+  for (const [label, mutate] of [
+    ['body missing', (c) => { c.verification_receipt = null; }],
+    ['digest mismatch', (c) => {
+      c.verification_receipt = {
+        ...c.verification_receipt,
+        receipt: { ...c.verification_receipt.receipt, exit_status: 1 },
+      };
+    }],
+    // Self-consistent but NOT the receipt the journal recorded: re-sealed RED body. Only the
+    // "body digest equals the journal's receipt_digest" check refuses it.
+    ['resealed RED body, journal digest differs', (c) => {
+      const { receipt_digest: ignored, ...unsealed } = c.verification_receipt.receipt;
+      const red = { ...unsealed, verdict: 'RED', exit_status: 1 };
+      const resealed = { ...red, receipt_digest: canonicalDigest(red) };
+      c.verification_receipt = {
+        passed: true, cached: false, receipt_digest: resealed.receipt_digest, receipt: resealed,
+      };
+    }],
+  ]) {
+    const mutated = JSON.parse(JSON.stringify(r1.controller));
+    mutate(mutated);
+    const beforeMutatedVerify = verifyCalls;
+    const rm = runCampaignComposition(resumeFor(mutated), adapters);
+    assert.strictEqual(verifyCalls, beforeMutatedVerify + 1,
+      `reuse refused (${label}): real verification runs instead of a malformed wrapper`);
+    assert.strictEqual(rm.controller.verification_receipt.receipt.artifact_type,
+      'implementation_campaign_verification', `(${label}) stored wrapper is complete`);
+  }
 
   const exactResumeState = {
     phase: 'ADJUDICATING',
@@ -2448,7 +2521,7 @@ console.log("Starting independent verification tests for Controller Execution...
       candidate: { ...pendingCandidate, branch: null },
       verification: {
         passed: true,
-        receipt_digest: 'c'.repeat(64),
+        receipt_digest: fakeVerification().receipt_digest,
         tree_sha: tree,
         argv_hash: verificationArgvHash,
         env_fingerprint: verificationEnvFingerprint,

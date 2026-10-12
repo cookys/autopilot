@@ -20,7 +20,8 @@ move out of an urgent session's last `verify` (Urgent placement). From `research
 ## Record — `scripts/session-mode.js` and `scripts/stage-advance.js`
 
 - Init: `node scripts/session-mode.js set --size <XS|S|M|L|XL> [--urgent] [--bug] [--base-ref <sha>]` creates the
-  marker or merges into it (`level` kept). `base_ref` defaults to the merge-base with the default branch. Size only
+  marker or merges into it (`level` kept). `base_ref` defaults to the merge-base with the newer of the local and `origin/` default branch
+  ([`references/worktree-placement.md`](../../../references/worktree-placement.md)). Size only
   moves up. `node scripts/session-mode.js status` prints the marker.
 - Advance: `node scripts/stage-advance.js --to <node> [--unit <phase|deliverable>:<i>/<N>[:<label>]]
   [--review-families a,b]`. `--to <current stage>` is a same-node update (keeps `stage_set_at`); review rails use

@@ -50,11 +50,12 @@ refused `!` pull is gap 8 of [the backlog note](../docs/backlog/worktree-and-han
 
 ## The session marker follows the session
 
-`session-mode.js set` (with or without `--new-task`) moves the marker's `repo_root` to the toplevel it runs in
+`session-mode.js set --new-task`, or `set` with `--size`, `--urgent`, `--bug` or `--base-ref` (and no `--level`, or `--level none`),
+moves the marker's `repo_root` to the toplevel it runs in
 when that toplevel belongs to the same repo (same repo identity), and `stage-advance.js` measures the E1 diff in
 that worktree. A cwd in another repo leaves the marker alone. Where `base_ref` is derived (a marker without one,
 `set --new-task`), it defaults to the newer of `develop` and `origin/develop` (then `main`, `master`), so a
-main checkout that has not pulled does not inflate E1. A plain `set` keeps the `base_ref` the marker already has (a
+main checkout that has not pulled does not inflate E1. Any other `set` on an existing marker keeps the `base_ref` it already has (a
 size bump never moves the diff base): when the marker was created in a main checkout that lagged, run
 `set --new-task` (or pass `--base-ref`) inside the worktree to re-derive it.
 

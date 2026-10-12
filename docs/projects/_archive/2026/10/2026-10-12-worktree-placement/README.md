@@ -1,8 +1,8 @@
 # worktree-placement — one rule for where worktrees and handoffs go
 
-Source: [`docs/backlog/worktree-and-handoff-placement-has-no-rule.md`](../../backlog/worktree-and-handoff-placement-has-no-rule.md) (owner question 2026-10-12, gaps 1–8).
-Spike: [`docs/plans/evidence/2026-10-12-worktree-placement/spike-native-worktree.md`](../../plans/evidence/2026-10-12-worktree-placement/spike-native-worktree.md).
-Plan: [`docs/plans/2026-10-12-worktree-placement.md`](../../plans/2026-10-12-worktree-placement.md).
+Source: [`docs/backlog/worktree-and-handoff-placement-has-no-rule.md`](../../../../../backlog/worktree-and-handoff-placement-has-no-rule.md) (owner question 2026-10-12, gaps 1–8).
+Spike: [`docs/plans/evidence/2026-10-12-worktree-placement/spike-native-worktree.md`](../../../../../plans/evidence/2026-10-12-worktree-placement/spike-native-worktree.md).
+Plan: [`docs/plans/2026-10-12-worktree-placement.md`](../../../../../plans/2026-10-12-worktree-placement.md).
 Direction: C — decision `intent-17-2` in the decision ledger (owner's answer; supersedes `intent-17-1`, which had recorded A on the owner's behalf).
 
 ## Project Goal
@@ -24,7 +24,7 @@ Direction: C — decision `intent-17-2` in the decision ledger (owner's answer; 
 
 | # | Deliverable | Status |
 |---|---|---|
-| 1 | worktree placement rule (marker follow, base_ref, new-task advisory, handoff keying, rail relocation, reference) | qc-gate ✅ (P1–P4 ✅, verify ✅, code-review ✅); next finish |
+| 1 | worktree placement rule (marker follow, base_ref, new-task advisory, handoff keying, rail relocation, reference) | ✅ shipped — merged to develop as `598e363e` (Unreleased, 3.0.0 line) |
 
 ## Progress
 

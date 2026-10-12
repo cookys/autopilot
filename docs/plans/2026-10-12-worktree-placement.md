@@ -1,10 +1,10 @@
 # Worktree placement — one root per repo, a marker that follows the session, predictable handoffs
 
 **Date:** 2026-10-12
-**Status:** active — plan-review done; P1–P4 implemented and reviewed, verify done; in code-review (progress: [project README](../projects/2026-10-12-worktree-placement/README.md))
+**Status:** ✅ merged to develop as `598e363e` (Unreleased, 3.0.0 line) — project archived: [project README](../projects/_archive/2026/10/2026-10-12-worktree-placement/README.md)
 **Size:** L (one deliverable, four phases that build on each other)
 **Branch:** `feat/worktree-placement-rule`
-**Project:** [`docs/projects/2026-10-12-worktree-placement/`](../projects/2026-10-12-worktree-placement/README.md) — goal and the seven success criteria live there; this plan references them as C1–C7.
+**Project:** [`docs/projects/_archive/2026/10/2026-10-12-worktree-placement/`](../projects/_archive/2026/10/2026-10-12-worktree-placement/README.md) — goal and the seven success criteria live there; this plan references them as C1–C7.
 **Source:** [`docs/backlog/worktree-and-handoff-placement-has-no-rule.md`](../backlog/worktree-and-handoff-placement-has-no-rule.md) (gaps 1–8).
 **Spike:** [`evidence/2026-10-12-worktree-placement/spike-native-worktree.md`](evidence/2026-10-12-worktree-placement/spike-native-worktree.md).
 **Direction:** C (owner, decision `intent-17-2`): everything in A, plus the hetero / foreman / batch rails create their worktrees under `<main checkout>/.claude/worktrees/`. No `WorktreeCreate` takeover.

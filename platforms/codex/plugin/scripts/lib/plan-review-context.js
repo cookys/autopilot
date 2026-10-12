@@ -26,11 +26,15 @@ const DENIED_DIRS = new RegExp(
 // lib/plan-review-findings.js) stay usable.
 const DENIED_NAMES = [
   /-out(\.[^/]*)?\.json$/i,                                  // plan-out.json, g1-out.json
-  /^g\d+-(dispositions?|artifact|receipt|envelope|stderr|stdout|out)\b/i,
+  // gN-/rNgN- tags at the start or after a dot: <slug>.g1-artifact.json, r2g1-disposition.json,
+  // <slug>.glm-minimax.g1-disposition.json
+  /(^|\.)([a-z0-9-]*-)?(r\d+)?g\d+-(dispositions?|artifact|receipt|envelope|stderr|stdout|out)\b/i,
   /^(dispositions?|decisions|findings|verdicts?|adjudication)([-_.][^/]*)?\.(json|txt|log|md)$/i,
   /-(dispositions?|findings|verdicts?)\.(json|txt|log|md)$/i,
   /^review-[a-z0-9]+-r\d+/i,                                 // review-codex-r2.json
-  /\.review\.json$/i,
+  // plan-review companions: <slug>.review.md / .review.json receipts, review-config, manifests,
+  // supplemental review prompts
+  /\.(review|review-config|plan-review-manifest|supplemental-review-prompt)\.(json|md)$/i,
   /\.as-reviewed-/i,
 ];
 

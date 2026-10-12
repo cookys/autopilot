@@ -66,7 +66,21 @@ refused evidence "not allowed as blind context" --context-file docs/plans/eviden
 refused disposition "not allowed as blind context" --context-file decisions.json
 refused archive "not allowed as blind context" --context-file docs/plans/_archive/2026/09/evidence/m/notes.json
 refused backlog "not allowed as blind context" --context-file docs/BACKLOG.md
-refused outjson "not allowed as blind context" --context-file src/g1-out.json
+printf '# b\n' >"$REPO/docs/Backlog.md"
+refused backlogcase "not allowed as blind context" --context-file docs/Backlog.md
+# Real repo shapes of plan-review artifacts (git ls-files docs/plans): all refused.
+for shape in x.g1-artifact.json x.g2-dispositions.json x.g1-disposition.json x.r2g1-disposition.json \
+  x.glm-minimax-promptfix.g1-disposition.json x.plan-review-manifest.json x.review.md x.review.json \
+  x.review-config.md x.supplemental-review-prompt.md x.plan.as-reviewed-g1.md; do
+  printf '{}\n' >"$REPO/docs/plans/$shape"
+  refused "shape-$shape" "not allowed as blind context" --context-file "docs/plans/$shape"
+done
+# Authored plan docs are not review artifacts and stay usable (rejected only by extension/size rules).
+printf '# p\n' >"$REPO/docs/plans/2026-01-01-review-path-efficiency.md"
+sed 's/ctx-plan/ctx-planok/' "$MANIFEST" >"$TEST_TMP/planok.json"
+OUT="$(USE_MANIFEST="$TEST_TMP/planok.json" run_ctx t-planok --context-file docs/plans/2026-01-01-review-path-efficiency.md)"; RC=$?
+assert_exit_code "$RC" "0" "a plan doc whose slug mentions review is accepted: $OUT"
+refused outjson"not allowed as blind context" --context-file src/g1-out.json
 refused gdisp "not allowed as blind context" --context-file src/g1-dispositions.json
 refused reviewr "not allowed as blind context" --context-file src/review-codex-r2.json
 refused plan "cannot be a plan/rubric" --context-file plan.md
@@ -89,7 +103,7 @@ assert_contains "$PROMPT" "<SOURCE_CONTEXT_" "seat prompt carries the context bl
 assert_contains "$PROMPT" "module.exports = 1;" "seat prompt carries file text"
 assert_contains "$PROMPT" 'path="scripts/adjudicate-findings.js"' "seat prompt lists adjudicate-findings.js"
 SKEY="$(ls "$STATE_DIR" | grep -v '\.' | head -1)"
-SDIR="$(dirname "$(find "$STATE_DIR" -name context-seal.json | head -1)")"
+SDIR="$(dirname "$(grep -rl 'src/a.js' "$STATE_DIR" --include=context.json | head -1)")"
 assert_file_exists "$SDIR/context-seal.json" "context seal written"
 assert_contains "$(cat "$SDIR/state.json")" "context_sha256" "state records context hash"
 assert_contains "$(cat "$SDIR/context.json")" "src/a.js" "context manifest lists the file"

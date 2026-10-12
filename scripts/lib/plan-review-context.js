@@ -28,7 +28,9 @@ const DENIED_NAMES = [
   /-out(\.[^/]*)?\.json$/i,                                  // plan-out.json, g1-out.json
   // gN-/rNgN- tags at the start or after a dot: <slug>.g1-artifact.json, r2g1-disposition.json,
   // <slug>.glm-minimax.g1-disposition.json
-  /(^|\.)([a-z0-9-]*-)?(r\d+)?g\d+-(dispositions?|artifact|receipt|envelope|stderr|stdout|out)\b/i,
+  /(^|\.)(r\d+-?)?g\d+-(dispositions?|artifact|receipt|envelope|stderr|stdout|out)\b/i,
+  // plan-review manifests: <slug>.manifest.json, <slug>.r2-manifest.json (a bare manifest.json is not)
+  /\.(r\d+-)?manifest\.json$/i,
   /^(dispositions?|decisions|findings|verdicts?|adjudication)([-_.][^/]*)?\.(json|txt|log|md)$/i,
   /-(dispositions?|findings|verdicts?)\.(json|txt|log|md)$/i,
   /^review-[a-z0-9]+-r\d+/i,                                 // review-codex-r2.json

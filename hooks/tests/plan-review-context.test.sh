@@ -71,7 +71,8 @@ refused backlogcase "not allowed as blind context" --context-file docs/Backlog.m
 # Real repo shapes of plan-review artifacts (git ls-files docs/plans): all refused.
 for shape in x.g1-artifact.json x.g2-dispositions.json x.g1-disposition.json x.r2g1-disposition.json \
   x.glm-minimax-promptfix.g1-disposition.json x.plan-review-manifest.json x.review.md x.review.json \
-  x.review-config.md x.supplemental-review-prompt.md x.plan.as-reviewed-g1.md; do
+  x.review-config.md x.supplemental-review-prompt.md x.plan.as-reviewed-g1.md \
+  x.manifest.json x.r2-manifest.json x.r4-g1-disposition.json; do
   printf '{}\n' >"$REPO/docs/plans/$shape"
   refused "shape-$shape" "not allowed as blind context" --context-file "docs/plans/$shape"
 done
@@ -80,7 +81,13 @@ printf '# p\n' >"$REPO/docs/plans/2026-01-01-review-path-efficiency.md"
 sed 's/ctx-plan/ctx-planok/' "$MANIFEST" >"$TEST_TMP/planok.json"
 OUT="$(USE_MANIFEST="$TEST_TMP/planok.json" run_ctx t-planok --context-file docs/plans/2026-01-01-review-path-efficiency.md)"; RC=$?
 assert_exit_code "$RC" "0" "a plan doc whose slug mentions review is accepted: $OUT"
-refused outjson"not allowed as blind context" --context-file src/g1-out.json
+# Narrow anchors: plan slugs that merely contain g1-artifact, and a bare manifest.json, stay usable.
+printf '# p\n' >"$REPO/docs/plans/2026-01-01-g1-artifact-cleanup.md"
+printf '{}\n' >"$REPO/src/manifest.json"
+sed 's/ctx-plan/ctx-narrow/' "$MANIFEST" >"$TEST_TMP/narrow.json"
+OUT="$(USE_MANIFEST="$TEST_TMP/narrow.json" run_ctx t-narrow --context-file docs/plans/2026-01-01-g1-artifact-cleanup.md --context-file src/manifest.json)"; RC=$?
+assert_exit_code "$RC" "0" "slug containing g1-artifact and bare manifest.json are accepted: $OUT"
+refused outjson "not allowed as blind context" --context-file src/g1-out.json
 refused gdisp "not allowed as blind context" --context-file src/g1-dispositions.json
 refused reviewr "not allowed as blind context" --context-file src/review-codex-r2.json
 refused plan "cannot be a plan/rubric" --context-file plan.md

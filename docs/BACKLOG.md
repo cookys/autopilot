@@ -1019,14 +1019,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: depth-0 foreground sleep/tail polling now draws an advice-only warning (depth0-delegate-gate); the dev-flow SKILL.md foreground-wait (<=15 min) wording is guidance text and waits for eval evidence before it changes.
 
-### hetero-review-loop: a seat gap without --allow-seat-gap leaves the generation out of chain.json
-- **Status**: open
-- **Trigger**: next packet-mode or hetero code review that hits a no_verdict seat
-- **Effort**: S
-- **Source**: tmp-residue code review, packet P3-prune G1, 2026-10-12
-- **Pointer**: none
-- **Context**: collect exits "seat gap detected" and writes g1/ but no chain.json entry; collecting G2 then fails "Contiguous chain broken: missing generation 1". Record the generation as aborted instead.
-
 ### Packet set: a packet re-collected at a later head can never match the set's G1 head
 - **Status**: open
 - **Trigger**: next packet set where one packet's G1 must be re-collected after the branch moved
@@ -1034,14 +1026,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: tmp-residue code review, 2026-10-12
 - **Pointer**: none
 - **Context**: check-phase-review-receipt --packets requires every packet's G1 at one head. Workaround used: temp branch at the set head, re-collect with --branch. Allow a later G1 when that packet's files are unchanged between heads.
-
-### Packet reviewers flag files in sibling packets as missing
-- **Status**: open
-- **Trigger**: next packet-mode review brief
-- **Effort**: S
-- **Source**: tmp-residue code review G1, 2026-10-12: about 15 of 19 MUST-FIX were cross-packet
-- **Pointer**: none
-- **Context**: each seat sees only its packet's diff and reads absent spec files as unimplemented. The review prompt should list the sibling packets and their paths as out of this packet's scope.
 
 ### Full-suite --parallel reds that pass standalone: three suites
 - **Status**: open
@@ -1114,11 +1098,3 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: hetero review g1 deferred findings, 2026-10-12
 - **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
 - **Context**: Hook and dev-setup paths read /etc/claude-code/managed-settings.json with no override (suites not isolated on a host that has one). truthyEnv treats DISABLE_AUTO_COMPACT=0 as unset; confirm against the binary.
-
-### hetero-review-loop collect: a seat gap without --allow-seat-gap strands generation 1
-- **Status**: open
-- **Trigger**: next touch of scripts/hetero-review-loop.js collect
-- **Effort**: S
-- **Source**: discuss-exam-fix code review, 2026-10-12
-- **Pointer**: none
-- **Context**: collect exits 1 on a seat gap but leaves g1/ with no chain.json entry; g1 cannot be re-run (dir exists) and g2 fails (chain broken), so the only way out is a new ledger. Record it aborted instead.

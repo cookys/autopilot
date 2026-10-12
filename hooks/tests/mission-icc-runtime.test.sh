@@ -228,7 +228,9 @@ group('g1', () => {
       && r.run_id === control.campaign_id)
     : [];
   check('g1-intake-journals-mission-binding', bindRows.length === 1
-    && JSON.parse(bindRows[0].payload).mission_claim_id === 'mission-claim-g1');
+    && JSON.parse(bindRows[0].payload).mission_claim_id === 'mission-claim-g1'
+    && JSON.parse(bindRows[0].payload).mission_campaign_id === 'campaign-v2-' + 'c'.repeat(64)
+    && genStep.mission_binding === 'journaled');
 });
 
 // ── Group 2: a Mission claim rejection has ZERO reservation/release/downstream

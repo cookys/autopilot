@@ -876,6 +876,10 @@ else
   fi
   LINEAGE_DEPTH=0
 fi
+# The job-root lookup above was this rail's only legitimate read of the caller's explicit session
+# binding. Every runner launched below is a CHILD session: scrub the variable so it cannot make
+# session-mode.js getSessionId() resolve to the parent's id and overwrite the parent's marker.
+unset AUTOPILOT_SESSION_ID
 [ -n "$LINEAGE_PARENT" ] && LINEAGE_PARENT="$(printf '%s' "$LINEAGE_PARENT" | tr -c 'A-Za-z0-9._-' '-')"
 [ -n "$LINEAGE_ROOT" ] && LINEAGE_ROOT="$(printf '%s' "$LINEAGE_ROOT" | tr -c 'A-Za-z0-9._-' '-')"
 LINEAGE_DEPTH=$((10#$LINEAGE_DEPTH))

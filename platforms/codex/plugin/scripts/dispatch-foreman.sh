@@ -345,10 +345,18 @@ for _v in PATH HOME TERM LANG TMPDIR XDG_RUNTIME_DIR XDG_CONFIG_HOME; do
 done
 while IFS='=' read -r _k _val; do
   [ -n "$_k" ] || continue
-  case "$_k" in LC_*|KIMI_*|AUTOPILOT_*) FOREMAN_ENV+=("$_k=${!_k}") ;; esac
+  case "$_k" in
+    # The foreman is a CHILD session: never hand it the parent's explicit session binding
+    # (session-mode.js getSessionId() prefers it, so the child would clobber the parent's marker).
+    AUTOPILOT_SESSION_ID) ;;
+    LC_*|KIMI_*|AUTOPILOT_*) FOREMAN_ENV+=("$_k=${!_k}") ;;
+  esac
 done < <(env | grep -E '^(LC_[A-Z_]*|KIMI_[A-Za-z0-9_]*|AUTOPILOT_[A-Za-z0-9_]*)=' 2>/dev/null)
 if [ "${ENV_PASSTHROUGH[*]+set}" = set ]; then
-  for _n in "${ENV_PASSTHROUGH[@]}"; do [ -n "${!_n:-}" ] && FOREMAN_ENV+=("$_n=${!_n}"); done
+  for _n in "${ENV_PASSTHROUGH[@]}"; do
+    [ "$_n" = "AUTOPILOT_SESSION_ID" ] && continue   # same exclusion as the allowlist above
+    [ -n "${!_n:-}" ] && FOREMAN_ENV+=("$_n=${!_n}")
+  done
 fi
 FOREMAN_ENV+=("AUTOPILOT_DISPATCH_DEPTH=1" "AUTOPILOT_PARENT_RUN_ID=$RUN_ID")
 # 308 BACKLOG #46 gap 1 + gap 2: every hand this foreman spawns (a nested dispatch-hetero.sh,

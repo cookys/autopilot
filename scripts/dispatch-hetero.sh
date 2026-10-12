@@ -3614,6 +3614,10 @@ _verify_no_setsid_watchdog_or_disarm() {
 }
 
 run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + CONTAINMENT
+  # Every branch below launches the worker through `env -u AUTOPILOT_SESSION_ID`: the runner is a
+  # CHILD session, and session-mode.js getSessionId() prefers that variable, so a leaked parent id
+  # would let the child write its marker over the parent's. (This rail itself still reads it for
+  # the job-root lookup earlier on; only the spawn is scrubbed.)
   WORKER_TIMED_OUT=0
   WATCHDOG_PID=""
   WATCHDOG_TOKEN_FILE=""
@@ -3631,12 +3635,12 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
     # group so the watchdog never signals the dispatcher session.
     CONTAINMENT="setsid"
     if [ "${HETERO_TEST_NO_SETSID:-}" != "1" ] && command -v setsid >/dev/null 2>&1; then
-      setsid env "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 &
+      setsid env -u AUTOPILOT_SESSION_ID "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 &
       rp=$!
       WORKER_SID="$rp"
     else
       set -m 2>/dev/null || true
-      env "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 </dev/null &
+      env -u AUTOPILOT_SESSION_ID "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 </dev/null &
       rp=$!
       WORKER_SID="$(ps -o pgid= -p "$rp" 2>/dev/null | tr -d ' ' || true)"
       [ -z "$WORKER_SID" ] && WORKER_SID="$rp"
@@ -3650,7 +3654,7 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
     # Isolate the systemd-run job so its pgid can be a safe fallback if
     # systemctl --user kill fails (must not share the dispatcher group).
     set -m 2>/dev/null || true
-    systemd-run --user --scope --quiet --unit="$SCOPE_UNIT" -- env "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 </dev/null &
+    systemd-run --user --scope --quiet --unit="$SCOPE_UNIT" -- env -u AUTOPILOT_SESSION_ID "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 </dev/null &
     rp=$!
     local selfpg="" pg=""
     selfpg="$(_self_pgid)" || selfpg=""
@@ -3662,7 +3666,7 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
     _wait_worker_with_watchdog "$rp"
   elif [ "$HAVE_SETSID" -eq 1 ]; then
     CONTAINMENT="setsid"
-    setsid --wait env "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 &
+    setsid --wait env -u AUTOPILOT_SESSION_ID "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 &
     rp=$!
     WORKER_SID="$(_setsid_wait_worker_sid "$rp")"
     [ -z "$WORKER_SID" ] && WORKER_SID="$rp"
@@ -3670,12 +3674,12 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
   else
     CONTAINMENT="plain"
     if [ "${HETERO_TEST_NO_SETSID:-}" != "1" ] && command -v setsid >/dev/null 2>&1; then
-      setsid env "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 &
+      setsid env -u AUTOPILOT_SESSION_ID "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 &
       rp=$!
       WORKER_SID="$rp"
     else
       set -m 2>/dev/null || true
-      env "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 </dev/null &
+      env -u AUTOPILOT_SESSION_ID "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 </dev/null &
       rp=$!
       WORKER_SID="$(ps -o pgid= -p "$rp" 2>/dev/null | tr -d ' ' || true)"
       [ -z "$WORKER_SID" ] && WORKER_SID="$rp"

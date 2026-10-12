@@ -1,0 +1,282 @@
+diff --git a/docs/plans/evidence/2026-10-12-worktree-placement/p3-red-green.json b/docs/plans/evidence/2026-10-12-worktree-placement/p3-red-green.json
+new file mode 100644
+index 00000000..120612a7
+--- /dev/null
++++ b/docs/plans/evidence/2026-10-12-worktree-placement/p3-red-green.json
+@@ -0,0 +1,40 @@
++{
++  "verdict": "VALIDATED",
++  "red_green_validated": true,
++  "base_sha": "19e4bb90001ab0cffb4c2bc58ad9fa6c12eed8f8",
++  "head_sha": "7bcef39cfa7e820e6e29957ce713ea73a8ddac23",
++  "head_result": "green",
++  "base_result": "red",
++  "red_tests": [
++    "hooks/tests/stage-advance.test.sh"
++  ],
++  "reason": "",
++  "schema_version": 1,
++  "artifact_type": "red_green_polarity_receipt",
++  "test_command_digest": "9b11c37fd22cbf9ccb2aeab5262f7b8493bf503df55284784e58012dc59e53d7",
++  "verify_command_path": "/tmp/claude-1000/-home-cookys-projects-autopilot/a14bb1ea-4b8b-421d-9e3d-a7fa6e844a18/scratchpad/p3-verify.sh",
++  "verify_command_bytes_sha256": "726eb99b6408fc2c1f897bb1824262fe0163abd5f281c7595c9ea0f8ae17eaaf",
++  "verify_command_base_bytes_sha256": "726eb99b6408fc2c1f897bb1824262fe0163abd5f281c7595c9ea0f8ae17eaaf",
++  "verify_command_head_bytes_sha256": "726eb99b6408fc2c1f897bb1824262fe0163abd5f281c7595c9ea0f8ae17eaaf",
++  "execution_argv": [
++    "/tmp/claude-1000/-home-cookys-projects-autopilot/a14bb1ea-4b8b-421d-9e3d-a7fa6e844a18/scratchpad/p3-verify.sh",
++    "<detached-worktree>"
++  ],
++  "execution_artifacts": [
++    "hooks/tests/stage-advance.test.sh"
++  ],
++  "assertion_artifacts": [
++    {
++      "path": "hooks/tests/stage-advance.test.sh",
++      "sha256": "7a21efaa01e4f36cc0f7261355e39bf2cbb2536efd5e437d50e1bcd1653ec6ac"
++    }
++  ],
++  "assertion_artifact_path": "hooks/tests/stage-advance.test.sh",
++  "assertion_artifact_digest": "1050a9d90fa634ec3f52c59ed0d37b61eb18a992edcb7da88c9f7fb8e8f70350",
++  "expected_red_exit_class": "exact_exit_code",
++  "expected_red_exit_code": 1,
++  "green_result": "green",
++  "base_exit_code": 1,
++  "head_exit_code": 0,
++  "receipt_digest": "43398f9df47a976816d08f54c339424b36b3859e595d270a6faa655291775195"
++}
+diff --git a/docs/plans/evidence/2026-10-12-worktree-placement/p3-suites.txt b/docs/plans/evidence/2026-10-12-worktree-placement/p3-suites.txt
+new file mode 100644
+index 00000000..6189f193
+--- /dev/null
++++ b/docs/plans/evidence/2026-10-12-worktree-placement/p3-suites.txt
+@@ -0,0 +1,26 @@
++# P3 suites at the green working tree (on top of 5590b61b) — each alone, in order
++
++## P3.4
++session-mode rc=0
++session-handoff rc=0
++session-start-handoff-inject rc=0
++resolve-repo-placement rc=0
++stage-advance rc=0
++
++## other suites that load session-start.js / session-handoff.js
++session-start rc=0
++session-start-update-check rc=0
++all-hooks-fail-open rc=0
++hook-normalizers rc=0
++
++## red at 5590b61b (stage-advance.test.sh, before the advisory)
++FAIL: advisory: no shared word -> one line: expected [1] got [0]
++FAIL: advisory: names the worktree dir: [] lacks [wt-autocompact-detect]
++FAIL: advisory: names the branch: [] lacks [feat/worktree-placement-rule]
++FAIL: advisory: points at the rule: [] lacks [references/worktree-placement.md]
++stage-advance.test: pass=216 fail=4
++
++## P3.2 key unchanged
++session-handoff.test.sh and session-start-handoff-inject.test.sh are not in the P3 diff and pass: they
++compute sha1(realpath toplevel) on their own, so the hooks' clearHandoffKey(repoRoot) gives the same key.
++Requiring the resolver loads no other module at runtime (project-key is loaded on first identity use).
+diff --git a/docs/projects/2026-10-12-worktree-placement/README.md b/docs/projects/2026-10-12-worktree-placement/README.md
+index 78227490..a5fa87a9 100644
+--- a/docs/projects/2026-10-12-worktree-placement/README.md
++++ b/docs/projects/2026-10-12-worktree-placement/README.md
+@@ -24,7 +24,7 @@ Direction: C — decision `intent-17-2` in the decision ledger (owner's answer;
+ 
+ | # | Deliverable | Status |
+ |---|---|---|
+-| 1 | worktree placement rule (marker follow, base_ref, new-task advisory, handoff keying, rail relocation, reference) | implement (P1 ✅, P2 ✅) |
++| 1 | worktree placement rule (marker follow, base_ref, new-task advisory, handoff keying, rail relocation, reference) | implement (P1 ✅, P2 ✅, P3 in review) |
+ 
+ ## Progress
+ 
+@@ -35,3 +35,4 @@ Direction: C — decision `intent-17-2` in the decision ledger (owner's answer;
+ | 2026-10-12 | plan-review G1 (opus chair): CONDITIONAL, 9 non-blocking findings all folded (`2ce98cf4`); receipt check passes against the reviewed bytes — evidence `docs/plans/evidence/2026-10-12-worktree-placement/plan-review/` |
+ | 2026-10-12 | P1 (marker follows the session, base_ref pairs): red `7ba74598` → green `d9aa4210`, `202211ce`; hetero review g2 SHIP-AS-IS, receipt `receipt-P1.json` (`5f5292cc`) |
+ | 2026-10-12 | P2 (rail placement): lists `5534f2e5`; red `28ab4d92` (resolver + rails repointed + red tests, `p2-red-A.txt`); green `c90c3e3b` (D3, D11, D7, D10, P2.5 walkers, `p2-green-B.txt`); verify-red-green A..B VALIDATED (`p2-red-green.json`); the 14 remaining P2.6 suites green at `c90c3e3b`, each run alone (`p2-6-suites.txt`). The resolver reuses `src/status/project-key` for repo identity (D5); its transitive require graph is 17 in-repo files with no non-builtin module, so the rail-path "built-ins only" rule holds. Deviations: D9 allowlist moved into the red commit (the pre-commit registry gate refuses the new allocation sites; gate metadata only, no runtime effect); D7 plan wording corrected (a marked nested worktree is a dispatch worktree, so depth-0 is gated there as in the temp dir; an unmarked one is allowed by the `.claude/` allowlist as today); `dispatch-hetero.test.sh` case 4 moved its first-placement check to a fresh sandbox (case 3d already places a worktree in `$SBX`, so the old precondition could never hold — the replacement is strictly stronger). P2.4: no foreman-guard change (`p2-4-foreman-guard.md`). Finder check: every reaper enumerates with `git worktree list --porcelain` or markers; no temp-root glob finds rail worktrees. Hetero review: g1 aborted (a seat's no-finding proof lacked `evidence=`); g2 SHIP-AS-IS — three seats flagged the unrecorded P2.6 runs (verified, fixed by `p2-6-suites.txt`), the rest refuted; receipt `p2/review/receipt-P2.json` |
++| 2026-10-12 | P3 (new-task advisory, handoff through the resolver): red `5590b61b` (advisory tests in `stage-advance.test.sh`, next to the D5 fixtures); green `7bcef39c`; verify-red-green `19e4bb90..7bcef39c` VALIDATED (`p3-red-green.json`); P3.4 suites and the four other suites that load the two handoff hooks green, each alone (`p3-suites.txt`). Additions beyond the plan text: a detached-HEAD case (silent; `symbolic-ref` instead of `--abbrev-ref`, which prints `HEAD`); the resolver loads `project-key` on first identity use, so a hook requiring it for `clearHandoffKey` loads no other module. The `/clear` key is the hooks' own `repoRoot` passed to `clearHandoffKey`, not a re-resolved path |
+diff --git a/hooks/session-handoff.js b/hooks/session-handoff.js
+index ffa75bd6..f6ba846e 100644
+--- a/hooks/session-handoff.js
++++ b/hooks/session-handoff.js
+@@ -26,6 +26,7 @@ const path = require('path');
+ const crypto = require('crypto');
+ const { spawnSync } = require('child_process');
+ const { parseTranscriptText } = require('./state-checkpoint-lib.js');
++const { clearHandoffKey } = require('../scripts/resolve-repo-placement.js');
+ 
+ const ACT_REASONS = new Set(['clear', 'logout']);
+ const MIN_USER_TURNS = parseInt(process.env.AUTOPILOT_HANDOFF_MIN_USER_TURNS || '3', 10);
+@@ -317,7 +318,7 @@ function publishAtomic(bodyPath, metaPath, content, meta) {
+       toolCalls: decision.toolCalls,
+     });
+ 
+-    const repoHash = crypto.createHash('sha1').update(repoRoot).digest('hex');
++    const repoHash = clearHandoffKey(repoRoot);
+     const bodyPath = path.join(HANDOFF_DIR, `${repoHash}.md`);
+     const metaPath = path.join(HANDOFF_DIR, `${repoHash}.meta.json`);
+     const meta = {
+diff --git a/hooks/session-start.js b/hooks/session-start.js
+index d3ac4b98..6bb8babf 100644
+--- a/hooks/session-start.js
++++ b/hooks/session-start.js
+@@ -15,6 +15,7 @@ const crypto = require('crypto');
+ const { spawnSync } = require('child_process');
+ const semver = require('../scripts/lib/semver');
+ const { compactionStateName } = require('./state-checkpoint-lib.js');
++const { clearHandoffKey } = require('../scripts/resolve-repo-placement.js');
+ const {
+   composeSessionStartContext,
+   buildSessionStartOutput,
+@@ -485,7 +486,7 @@ function run() {
+     if (handoffEnabled(homeDir) && ALLOWED_SOURCES.has(source)) {
+       const repoRoot = resolveRepoRoot(cwd);
+       if (repoRoot) {
+-        const repoHash = crypto.createHash('sha1').update(repoRoot).digest('hex');
++        const repoHash = clearHandoffKey(repoRoot);
+         const handoffDir = path.join(homeDir, '.autopilot', 'handoff');
+         if (!cleanStaleHandoff(handoffDir, repoHash)) {
+           // On a consume miss (no handoff / writer still mid-publish / a racing
+diff --git a/hooks/tests/stage-advance.test.sh b/hooks/tests/stage-advance.test.sh
+index 44a47f67..a08df058 100755
+--- a/hooks/tests/stage-advance.test.sh
++++ b/hooks/tests/stage-advance.test.sh
+@@ -537,6 +537,36 @@ eq "set from a foreign repo: repo_root unchanged" "\"$WA\"" "$(jf repo_root)"
+ eq "set back in the main checkout: the write happened (size XL)" '"XL"' "$(jf size)"
+ eq "set back in the main checkout: repo_root follows back" "\"$RA\"" "$(jf repo_root)"
+ 
++# ---------------------------------------------------------------- P3.1: --new-task advisory when the worktree name and branch share no word
++# One stderr line, never a refusal: the exit code is 0 in every case.
++ADV='shares no word with it'
++newtask_in() { # dir -> RC: exit code of set --new-task run there, ERR: its stderr
++  newsess; (cd "$RA" && node "$SM" set --size S >/dev/null 2>&1)
++  (cd "$1" && node "$SM" set --new-task --size S >/dev/null 2>"$TEST_TMP/err"); RC=$?
++  ERR=$(cat "$TEST_TMP/err")
++}
++W="$TEST_TMP/wt-login-form"; git -C "$RA" worktree add -q -b feat/login-form "$W"
++newtask_in "$W"; eq "advisory: shared word -> exit 0" "0" "$RC"
++eq "advisory: shared word -> silent" "" "$ERR"
++W="$TEST_TMP/wt-autocompact-detect"; git -C "$RA" worktree add -q -b feat/worktree-placement-rule "$W"
++newtask_in "$W"; eq "advisory: no shared word -> exit 0" "0" "$RC"
++eq "advisory: no shared word -> one line" "1" "$(printf '%s\n' "$ERR" | grep -c "$ADV")"
++has "advisory: names the worktree dir" "wt-autocompact-detect" "$ERR"
++has "advisory: names the branch" "feat/worktree-placement-rule" "$ERR"
++has "advisory: points at the rule" "references/worktree-placement.md" "$ERR"
++git -C "$RA" checkout -q -b feat/unrelated-name; newtask_in "$RA"; git -C "$RA" checkout -q develop
++eq "advisory: main checkout -> exit 0" "0" "$RC"
++eq "advisory: main checkout -> silent" "" "$ERR"
++W="$TEST_TMP/feat-1234"; git -C "$RA" worktree add -q -b feat/1234 "$W"
++newtask_in "$W"; eq "advisory: only generic/digit tokens -> exit 0" "0" "$RC"
++eq "advisory: only generic/digit tokens -> silent" "" "$ERR"
++W="$TEST_TMP/Foo-bar"; git -C "$RA" worktree add -q -b foo-bar "$W"
++newtask_in "$W"; eq "advisory: case differs only -> exit 0" "0" "$RC"
++eq "advisory: case differs only -> silent" "" "$ERR"
++W="$TEST_TMP/wt-detached"; git -C "$RA" worktree add -q --detach "$W"
++newtask_in "$W"; eq "advisory: detached HEAD -> exit 0" "0" "$RC"
++eq "advisory: detached HEAD -> silent" "" "$ERR"
++
+ # ---------------------------------------------------------------- D6: base_ref takes the newer of a local/remote pair
+ # (plan P1.2 a-c, g, h). origin/* refs are planted with update-ref; no remote, no fetch.
+ basesha() { sm set --size S --repo-root "$1" >/dev/null 2>&1; jf base_ref | tr -d '"'; }
+diff --git a/scripts/resolve-repo-placement.js b/scripts/resolve-repo-placement.js
+index 8bb6db40..f8e29172 100755
+--- a/scripts/resolve-repo-placement.js
++++ b/scripts/resolve-repo-placement.js
+@@ -28,7 +28,6 @@ const crypto = require('crypto');
+ const fs = require('fs');
+ const os = require('os');
+ const path = require('path');
+-const { scopeFromCwd } = require('../src/status/project-key');
+ 
+ function git(cwd, args) {
+   try {
+@@ -38,6 +37,12 @@ function git(cwd, args) {
+   }
+ }
+ 
++// Repo identity comes from project-key, loaded on first use: the hooks that only need clearHandoffKey
++// stay off its require graph.
++function repoIdentity(from) {
++  return require('../src/status/project-key').scopeFromCwd(from).repo_identity;
++}
++
+ function realpathOr(dir) {
+   try { return fs.realpathSync(dir); } catch (_error) { return dir; }
+ }
+@@ -67,7 +72,7 @@ function resolveMain(from) {
+   const main = mainCheckout(from);
+   return {
+     main_checkout: main,
+-    repo_identity: scopeFromCwd(from).repo_identity,
++    repo_identity: repoIdentity(from),
+     fallback: main === null,
+     behind: main === null ? null : behindUpstream(main),
+   };
+@@ -96,7 +101,7 @@ function handoffPath(from, route, homeDir = os.homedir()) {
+     const top = toplevel(from);
+     return top ? path.join(homeDir, '.autopilot', 'handoff', `${clearHandoffKey(top)}.md`) : null;
+   }
+-  const identity = scopeFromCwd(from).repo_identity;
++  const identity = repoIdentity(from);
+   if (!identity) {
+     const cwd = realpathOr(from);
+     return path.join(homeDir, '.autopilot', 'handoff-manual', `${path.basename(cwd)}-${sha1(cwd).slice(0, 8)}.md`);
+diff --git a/scripts/session-mode.js b/scripts/session-mode.js
+index 846867a1..57a6595c 100644
+--- a/scripts/session-mode.js
++++ b/scripts/session-mode.js
+@@ -735,6 +735,28 @@ function followRepoRoot(marker, repoRoot) {
+   if (want && have === want) marker.repo_root = repoRoot;
+ }
+ 
++// `set --new-task` in a linked worktree whose directory name and branch share no word: the worktree is probably
++// being reused for an unrelated task. Advisory only (references/worktree-placement.md); never changes the exit code.
++const GENERIC_TASK_TOKENS = new Set(['feat', 'fix', 'hotfix', 'worktree', 'agent', 'wip']);
++function taskTokens(text) {
++  return new Set(text.toLowerCase().split(/[-_/.]+/).filter((t) => t && !GENERIC_TASK_TOKENS.has(t) && !/^\d+$/.test(t)));
++}
++function newTaskAdvisory(repoRoot) {
++  const opts = { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] };
++  let branch;
++  try {
++    const gitDir = execFileSync('git', ['-C', repoRoot, 'rev-parse', '--path-format=absolute', '--git-dir'], opts).trim();
++    const commonDir = execFileSync('git', ['-C', repoRoot, 'rev-parse', '--path-format=absolute', '--git-common-dir'], opts).trim();
++    if (gitDir === commonDir) return null; // the main checkout
++    branch = execFileSync('git', ['-C', repoRoot, 'symbolic-ref', '--short', '-q', 'HEAD'], opts).trim();
++  } catch (_error) { return null; } // detached HEAD, or not a repository
++  const dir = path.basename(repoRoot);
++  const fromDir = taskTokens(dir);
++  const fromBranch = taskTokens(branch);
++  if (fromDir.size === 0 || fromBranch.size === 0 || [...fromDir].some((t) => fromBranch.has(t))) return null;
++  return `worktree ${dir} is on branch ${branch}, which shares no word with it — open a fresh worktree for a new task (references/worktree-placement.md)`;
++}
++
+ // Fields `set --new-task` drops from a live marker: the stage-advance position plus the task-scoped init fields.
+ const NEW_TASK_CLEARED = Object.freeze(['stage', 'stage_set_at', 'unit', 'review_families', 'high_risk', 'size', 'urgent', 'bug', 'base_ref']);
+ 
+@@ -859,6 +881,10 @@ function cmdSetInit(args) {
+   }
+   if (!result) { process.stderr.write('session-mode: marker not written\n'); return 1; }
+   if (result.refusal) { process.stderr.write(`session-mode: ${result.refusal}\n`); return 2; }
++  if (newTask) {
++    const advisory = newTaskAdvisory(repoRoot);
++    if (advisory) process.stderr.write(`session-mode: ${advisory}\n`);
++  }
+   if (result.created) {
+     try { writeLivePointer(); } catch (_error) { /* fail-open: pointer is advisory for the mod */ }
+     startProjectWatcher(result.marker, result.marker.repo_root);
+diff --git a/skills/handoff/SKILL.md b/skills/handoff/SKILL.md
+index 83425468..b74c48f2 100644
+--- a/skills/handoff/SKILL.md
++++ b/skills/handoff/SKILL.md
+@@ -33,9 +33,9 @@ Triggered by "寫 handoff", "寫 handover", "ctx 太滿", "context 快滿", "cle
+    - Active project: `<projects_dir>/<project>/HANDOFF.md` — `projects_dir` from step 1's
+      `resolve-project-paths.sh`, **not** a literal `docs/`
+    - `projects_dir: none`, or no active project under it: the **manual route already
+-     defined below** — `~/.autopilot/handoff-manual/<repo-or-cwd-name>.md`. Do not invent a
++     defined below** — the path `node <plugin>/scripts/resolve-repo-placement.js handoff --route manual` prints. Do not invent a
+      doc root; a handoff nobody can find is worse than one outside the repo.
+-   - Repo not writable or no repo: `~/.autopilot/handoff-manual/<repo-or-cwd-name>.md`
++   - Repo not writable or no repo: the path `node <plugin>/scripts/resolve-repo-placement.js handoff --route manual` prints
+ 
+ 2.5. **Sweep the session, not just the document** (do this BEFORE drafting step 3):
+ 

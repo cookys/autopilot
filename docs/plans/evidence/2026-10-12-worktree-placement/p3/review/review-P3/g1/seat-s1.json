@@ -1,0 +1,12 @@
+{
+  "runner": "cc-shim",
+  "model": "GLM-5.2",
+  "status": "reviewed",
+  "verdict": "SHIP-AS-IS",
+  "findings": "none",
+  "no_finding_proof": "checked=C3 advisory semantics and exit code (scripts/session-mode.js newTaskAdvisory/taskTokens plus the nine new cases in hooks/tests/stage-advance.test.sh:537-569), C4/P3.2 handoff keying (hooks/session-handoff.js:321 and hooks/session-start.js:489 now call clearHandoffKey exported from scripts/resolve-repo-placement.js; pinned session-handoff.test.sh and session-start-handoff-inject.test.sh), P3.3 skills/handoff/SKILL.md fallback-path lines, P3.4 suite evidence (p3-suites.txt, p3-red-green.json), and the lazy project-key require change in resolve-repo-placement.js; evidence=advisory fires only for linked worktrees (absolute --git-dir vs --git-common-dir inequality), stays silent on shared token, main checkout, generic/digit-only names, case-only difference, and detached HEAD (symbolic-ref -q failure caught), with exit code asserted 0 in every case and token filtering matching the spec list (feat/fix/hotfix/worktree/agent/wip + digits-only, split on [-_/.], lowercased); red at base shows exactly the four advisory assertions failing (stage-advance.test pass=216 fail=4 at 5590b61b) and head 7bcef39c exits 0 per VALIDATED receipt (base_exit_code 1, head_exit_code 0, assertion digests pinned); the /clear key is unchanged — writer and reader both call clearHandoffKey(repoRoot) with the hooks' own resolved root, and both pinned tests pass rc=0 unmodified, which is the plan's stated proof; all five planned P3.4 suites plus the four other hook-loading suites report rc=0, each run alone; SKILL.md swaps only the path-finding mechanism to the resolver command and leaves the requirements list untouched; lazy-loading project-key keeps the hooks' require graph at Node built-ins with the resolver test rc=0; conclusion=every P3-scoped requirement (C3, the P3.2/P3.3 halves of C4, P3.4 evidence) is implemented, red-then-green tested, and no concrete in-scope failure remains; P4 items (references/worktree-placement.md itself, backlog gap table, wiring, CHANGELOG) are spec-phased deliverables outside this diff, and the advisory's reference to that doc is plan-sequenced to land in P4 before graduation.",
+  "raw_log": "/tmp/dispatch-review-log-1k43F6",
+  "error": null,
+  "usage": null,
+  "frame_closed_by": "end-marker"
+}

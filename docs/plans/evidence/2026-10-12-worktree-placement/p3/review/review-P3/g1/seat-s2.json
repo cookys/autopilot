@@ -1,0 +1,12 @@
+{
+  "runner": "cc-shim",
+  "model": "MiniMax-M3",
+  "status": "reviewed",
+  "verdict": "SHIP-AS-IS",
+  "findings": "none",
+  "no_finding_proof": "checked=C3 advisory behavior (split tokens, generic/digit drop, shared token, empty set, main-checkout, detached-HEAD), C4 `/clear` keying (session-handoff.js:320 reader, session-start.js reader use clearHandoffKey from resolver, same hash so pinned tests stay green per p3-suites.txt), P3.4 suites (session-mode, session-handoff, session-start-handoff-inject, resolve-repo-placement, stage-advance all rc=0; session-start, session-start-update-check, all-hooks-fail-open, hook-normalizers green each alone), test fixtures in stage-advance.test.sh (match silent, no-match one line naming dir+branch+rule, main-checkout silent, generic/digit-only silent, case-only silent, detached-HEAD silent, exit code 0), `verify-red-green` polarity receipt (base sha 19e4bb90 rc=1, head sha 7bcef39c rc=0, artifact sha256 pinned, expected_red_exit_code=1 matched), resolver lazy-load of project-key (clearHandoffKey path no longer pulls scopeFromCwd transitively), skill SKILL.md manual-route line now points at resolver; evidence=p3-red-green.json validated, p3-suites.txt all rc=0, newTaskAdvisory returns null on gitDir===commonDir / symbolic-ref throw / shared token / empty filtered set, message text contains worktree dir basename, branch name and references/worktree-placement.md as the test `has` checks require, session-handoff.js and session-start.js swap the inline `crypto.createHash('sha1').update(repoRoot)` for `clearHandoffKey(repoRoot)` with the same output per the pinned-by-test invariant; conclusion=every P3 deliverable in the spec (P3.1 advisory wording + exit-code unchanged, P3.2 hooks consume the resolver's exported function with same `/clear` key, P3.3 skill doc re-points at the resolver, P3.4 suites green) is satisfied with green tests and validated polarity, no MUST-FIX remains in scope.",
+  "raw_log": "/tmp/dispatch-review-log-760eQA",
+  "error": null,
+  "usage": null,
+  "frame_closed_by": "end-marker"
+}

@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "phase": "P3",
+  "generation": 1,
+  "findings": [
+    {
+      "id": "92fdf8d6f410ada46b6da07054cd40aa7ba029d4d188842485d536c29a311944",
+      "disposition": "refuted",
+      "rationale": "Not a dead import: hooks/session-start.js still calls crypto.createHash at lines 337, 373 and 507 (handoff body claim, gen check, intent cwdHash), and hooks/session-handoff.js at line 333 (the gen digest). Only the /clear key hash moved into clearHandoffKey."
+    },
+    {
+      "id": "83ea39aff75c7d06e5695d814a3c6f014e57be39c8dfdb909011f61da9818ea3",
+      "disposition": "refuted",
+      "rationale": "By design: verify-red-green.sh records the verify script's sha256 and argv, which is what makes the receipt checkable; the P1 and P2 receipts carry the same scratchpad path, and the plan does not require the verify script to be committed. The test it runs (hooks/tests/stage-advance.test.sh) is committed and named in red_tests."
+    }
+  ]
+}

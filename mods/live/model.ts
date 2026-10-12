@@ -89,6 +89,8 @@ export type LiveSnapshot = {
   detail: PaneDetail
   // the last RECENT_MAX prompts of this session, each with its reply (null / [] = nothing available; undefined = a snapshot built without the tick)
   recent?: RecentGroup[] | null
+  // what the session left running in the background: shell commands, Monitor watches, subagents (null / [] = none; undefined = no tick)
+  activity?: ActivityItem[] | null
 }
 
 export type SpendView = { session: string; host_all: string; host_all_n: number | null; brain: number | null; cap: number | null; mode: string; hourly?: number[] | null }
@@ -1768,7 +1770,7 @@ function nowLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
   if (!b.phase.includes('▸')) where.push(kv(t(KEY_IDS.phase), seg(b.phase)))
   out.push(...section(ctx, SECTION.where, t('now.where'), [], where))
 
-  // Working now: dispatches, review / QC, the session's tasks
+  // Working now: dispatches, review / QC, background work, the session's tasks
   const work: PaneLine[] = []
   if (d.counts !== null) {
     const live = d.counts.confirmed_live
@@ -1782,6 +1784,7 @@ function nowLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
     if (chip !== null) segs.push(seg(round === null ? '' : '  '), d.qc !== null && d.qc.state === 'owed' ? seg(chip, 'warning', true) : seg(chip, 'success'), d.qc !== null && d.qc.state === 'owed' ? seg(' ' + t('now.qc_owed'), 'warning') : dseg(' ' + t('now.qc_ok')))
     work.push(kv(t(KEY_IDS.review), ...segs))
   }
+  work.push(...activityLines(snap.activity, ctx))
   work.push(...snap.sections.tasks)
   if (work.length > 0) out.push(BLANK, ...section(ctx, SECTION.working, t('now.working'), [], work))
   if (!awaiting) out.push(BLANK, ...needs)
@@ -1899,8 +1902,108 @@ export function recentLines(recent: RecentGroup[] | null | undefined, ctx: PaneC
   return out
 }
 
+// ================= Background work (rows of the Now tab's working section) =================
+// What the session left running: background Bash commands (asked for, or moved to the background by a timeout) and Monitor watches, scanned from
+// $.session.messages(), plus the subagents $.agent.list() reports running. A task ends on a <task-notification> that carries a <status> (a Monitor
+// event notification has none), or on a TaskStop of its id. Known gap: a task that ends mid-turn keeps its row until the turn ends, because its
+// notification waits in the input queue, not in the messages.
+export type BgKind = 'shell' | 'monitor'
+export type BgTask = { id: string; kind: BgKind; label: string; output: string | null; lastEvent: string | null }
+export type ActivityItem = { kind: BgKind | 'agent'; label: string; detail: string | null; tail: string | null; quietMs: number | null }
+export const MAX_ACTIVITY_ROWS = 6
+const BG_LABEL_CHARS = 200
+const BG_TAIL_CHARS = 300
+
+const strOf = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v : null)
+const oneLineClip = (s: string, n: number): string => { const cps = [...oneLine(s)]; return cps.length > n ? cps.slice(0, n).join('') + '…' : cps.join('') }
+const tagOf = (chunk: string, tag: string): string | null => { const m = new RegExp('<' + tag + '>([\\s\\S]*?)</' + tag + '>').exec(chunk); return m === null ? null : m[1].trim() }
+
+// one task-notification block: its ids, its status (absent on a Monitor event) and its event text
+type BgNote = { taskId: string | null; toolUseId: string | null; status: string | null; event: string | null }
+function notesOf(text: string): BgNote[] {
+  return text.split('<task-notification>').slice(1).map(chunk => ({ taskId: tagOf(chunk, 'task-id'), toolUseId: tagOf(chunk, 'tool-use-id'), status: tagOf(chunk, 'status'), event: tagOf(chunk, 'event') }))
+}
+
+export function scanBackground(messages: readonly SessionMsg[]): BgTask[] {
+  const tasks: (BgTask & { toolUseId: string })[] = []
+  const ended = new Set<string>()
+  const events = new Map<string, string>()
+  for (const m of messages) {
+    if (m === null || typeof m !== 'object') continue
+    if (m.role === 'user' && typeof m.text === 'string' && m.text.includes('<task-notification>')) {
+      for (const n of notesOf(m.text)) {
+        if (n.status !== null && !/^(running|pending)$/i.test(n.status)) {
+          if (n.taskId !== null) ended.add(n.taskId)
+          if (n.toolUseId !== null) ended.add(n.toolUseId)
+        } else if (n.taskId !== null && n.event !== null) events.set(n.taskId, n.event)
+      }
+      continue
+    }
+    if (m.role !== 'assistant' || !Array.isArray(m.toolUses)) continue
+    for (const raw of m.toolUses) {
+      if (raw === null || typeof raw !== 'object') continue
+      const u = raw as { tool_use_id?: unknown; tool?: unknown; input?: unknown; result?: unknown; text?: unknown; isError?: unknown; agentId?: unknown }
+      if (u.isError === true || (typeof u.agentId === 'string' && u.agentId !== '')) continue // refused: nothing started; a subagent's own: its agent row covers it
+      const input = u.input !== null && typeof u.input === 'object' ? (u.input as Record<string, unknown>) : {}
+      const result = u.result !== null && typeof u.result === 'object' ? (u.result as Record<string, unknown>) : {}
+      const text = typeof u.text === 'string' ? u.text : ''
+      const toolUseId = typeof u.tool_use_id === 'string' ? u.tool_use_id : ''
+      if (u.tool === 'TaskStop') {
+        const id = strOf(input.task_id) ?? strOf(input.shell_id)
+        if (id !== null) ended.add(id)
+        continue
+      }
+      let kind: BgKind
+      let id: string | null
+      if (u.tool === 'Bash') {
+        kind = 'shell'
+        id = strOf(result.backgroundTaskId) ?? (/with ID: (\S+?)\./.exec(text)?.[1] ?? null) // keyed on the result: a timed-out foreground command moves to the background too
+      } else if (u.tool === 'Monitor') {
+        kind = 'monitor'
+        id = strOf(result.taskId) ?? (/\(task (\S+?),/.exec(text)?.[1] ?? null)
+      } else continue
+      if (id === null) continue
+      const label = strOf(input.description) ?? strOf(input.command) ?? id
+      const output = kind === 'shell' ? (/written to: (\S+\.output)/.exec(text)?.[1] ?? null) : null
+      tasks.push({ id, toolUseId, kind, label: oneLineClip(redactSecrets(label), BG_LABEL_CHARS), output, lastEvent: null })
+    }
+  }
+  return tasks
+    .filter(task => !ended.has(task.id) && !(task.toolUseId !== '' && ended.has(task.toolUseId)))
+    .map(({ toolUseId: _u, ...task }) => ({ ...task, lastEvent: events.has(task.id) ? oneLineClip(redactSecrets(events.get(task.id) as string), BG_TAIL_CHARS) : null }))
+}
+
+// The last line a background command printed: escape codes stripped, a progress bar's `\r` redraws reduced to the final one, secrets masked.
+export function lastOutputLine(text: string): string | null {
+  // eslint-disable-next-line no-control-regex
+  const plain = text.replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, '').replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '')
+  const lines = plain.split('\n')
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const parts = lines[i].split('\r').filter(p => p.trim() !== '')
+    if (parts.length > 0) return oneLineClip(redactSecrets(parts[parts.length - 1]), BG_TAIL_CHARS)
+  }
+  return null
+}
+
+const ACTIVITY_KEYS = { shell: 'label.bg_shell', monitor: 'label.bg_monitor', agent: 'label.bg_agent' } as const
+export function activityLines(items: readonly ActivityItem[] | null | undefined, ctx: PaneCtx): PaneLine[] {
+  if (items === null || items === undefined || items.length === 0) return []
+  const t = ctx.t
+  const out: PaneLine[] = []
+  for (const it of items.slice(0, MAX_ACTIVITY_ROWS)) {
+    const quiet = it.quietMs === null ? '' : ' · ' + t('bg.quiet', { age: ageText(Math.max(0, it.quietMs) / 1000) })
+    const detail = it.detail === null ? '' : ' (' + it.detail + ')'
+    const room = Math.max(8, ctx.cols - KEY_W - 2 - displayWidth(detail + quiet))
+    const label = displayWidth(it.label) <= room ? it.label : truncateToWidth(it.label, room)
+    out.push(kv(t(ACTIVITY_KEYS[it.kind]), seg('● ', 'suggestion'), seg(label), dseg(detail + quiet)))
+    if (it.tail !== null) out.push(row(dseg(padCells('', KEY_W) + '└ ' + truncateToWidth(it.tail, Math.max(8, ctx.cols - KEY_W - 2)))))
+  }
+  if (items.length > MAX_ACTIVITY_ROWS) out.push(row(dseg(padCells('', KEY_W) + t('bg.more', { n: items.length - MAX_ACTIVITY_ROWS }))))
+  return out
+}
+
 // ================= Dispatch =================
-const cell = (v: string | number | null | undefined): string => (v === null || v === undefined || v === '' ? '—' : String(v))
+const cell =(v: string | number | null | undefined): string => (v === null || v === undefined || v === '' ? '—' : String(v))
 
 function runState(r: LivePaneRow, t: T): { text: string; color?: ThemeKey } {
   if (r.stall) return { text: '⏸ ' + t('state.stalled'), color: 'error' }

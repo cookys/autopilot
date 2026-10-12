@@ -1176,7 +1176,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: discuss-exam-fix qc-gate full suite, 2026-10-12 (both reds reproduce at base 6e91be30)
 - **Pointer**: none
-- **Context**: instant2: expiry-ceiling throw (capability-evidence.js:171), clock-dependent. statusline-live-tee 160k T2 e2e red even with isolated HOME. hooks-live-state-misc reads real ~/.autopilot context_budget.t2; pin tiers via env.
+- **Context**: instant2: expiry-ceiling throw (capability-evidence.js:171). statusline-live-tee 160k T2 e2e red with isolated HOME. hooks-live-state-misc and context-budget-window-memory read real ~/.autopilot t2; pin tiers via env.
 
 ### orchestration-eval full run rewrites the committed t7-config-rename fixture
 - **Status**: open
@@ -1185,3 +1185,11 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: discuss-exam-fix full suite in a hands worktree, 2026-10-12
 - **Pointer**: none
 - **Context**: after `bash hooks/tests/run.sh`, evals/orchestration/tasks/t7-config-rename/repo/config.json was rewritten to minified JSON. The suite copies the fixture to a temp dir (line 262), so some step still writes the source.
+
+### mods/live recent conversation: groups expand by mouse only
+- **Status**: open
+- **Trigger**: next touch of mods/live pane keyboard focus, or an owner report of needing keyboard expand
+- **Effort**: S
+- **Source**: now-recent-turns screenshot run, merge `82d34da4`, 2026-10-12
+- **Pointer**: none
+- **Context**: Ctrl+x Tab focuses the pane, but Enter then hits the leading next-tab Button; Tab/Down never reached a group Button in tmux. Mouse click expands. Check focus order of Buttons inside the pane.

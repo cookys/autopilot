@@ -20,6 +20,22 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/qc-gate-affected-suites.md
 - **Context**: full run past 30 min (stopped at 256/408); the 38 suites that reference the changed files passed in about 2 min. Keep the full suite for release preflight.
 
+### mods Now tab: a background row may never end when no status notification follows
+- **Status**: open
+- **Trigger**: a stale 背景指令 or 監看 row is seen, or a session is resumed after quitting with background work running
+- **Effort**: S
+- **Source**: feat/mods-activity review, 2026-10-12 (UNVERIFIED live behavior)
+- **Pointer**: docs/backlog/mods-activity-row-never-ends.md
+- **Context**: rows end only on a `<task-notification>` status or a TaskStop (mods/live/model.ts scanBackground). Probe a resume after quitting mid `sleep 600`; Bash results with `backgroundEndsWithFinalResponse` say no notification follows.
+
+### probe-unknown default memory dir misses the main checkout's memory from a worktree
+- **Status**: open
+- **Trigger**: probe-unknown runs from a worktree session, or memory recall returns nothing there
+- **Effort**: XS
+- **Source**: feat/mods-activity session, 2026-10-12
+- **Pointer**: docs/backlog/probe-unknown-memory-dir-from-worktree.md
+- **Context**: scripts/probe-unknown.js:334-338 `defaultMemoryDir` slugs the worktree root, so it looks under `-home-…-autopilot--claude-worktrees-<name>` instead of the main project's memory dir.
+
 ### Cross-repo dispatch has no worktree or handoff rule
 - **Status**: open
 - **Trigger**: a session in repo A dispatches a rail at repo B

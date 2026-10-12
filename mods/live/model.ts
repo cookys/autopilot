@@ -1916,6 +1916,8 @@ const BG_TAIL_CHARS = 300
 
 const strOf = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v : null)
 const oneLineClip = (s: string, n: number): string => { const cps = [...oneLine(s)]; return cps.length > n ? cps.slice(0, n).join('') + '…' : cps.join('') }
+// A row label from text Claude or a subagent wrote: one line, secrets masked, clipped.
+export const bgLabel = (s: string): string => oneLineClip(redactSecrets(s), BG_LABEL_CHARS)
 const tagOf = (chunk: string, tag: string): string | null => { const m = new RegExp('<' + tag + '>([\\s\\S]*?)</' + tag + '>').exec(chunk); return m === null ? null : m[1].trim() }
 
 // one task-notification block: its ids, its status (absent on a Monitor event) and its event text
@@ -1942,11 +1944,14 @@ export function scanBackground(messages: readonly SessionMsg[]): BgTask[] {
     if (m.role !== 'assistant' || !Array.isArray(m.toolUses)) continue
     for (const raw of m.toolUses) {
       if (raw === null || typeof raw !== 'object') continue
-      const u = raw as { tool_use_id?: unknown; tool?: unknown; input?: unknown; result?: unknown; text?: unknown; isError?: unknown; agentId?: unknown }
-      if (u.isError === true || (typeof u.agentId === 'string' && u.agentId !== '')) continue // refused: nothing started; a subagent's own: its agent row covers it
+      const u = raw as { tool_use_id?: unknown; tool?: unknown; input?: unknown; result?: unknown; text?: unknown; isError?: unknown }
+      if (u.isError === true) continue // refused: nothing started
       const input = u.input !== null && typeof u.input === 'object' ? (u.input as Record<string, unknown>) : {}
-      const result = u.result !== null && typeof u.result === 'object' ? (u.result as Record<string, unknown>) : {}
+      const stored = u.result !== null && typeof u.result === 'object'
+      const result = stored ? (u.result as Record<string, unknown>) : {}
       const text = typeof u.text === 'string' ? u.text : ''
+      // The result text is the fallback only when no result was stored (headless): a stored foreground result's text is the command's own output.
+      const fromText = (re: RegExp): string | null => (stored ? null : (re.exec(text)?.[1] ?? null))
       const toolUseId = typeof u.tool_use_id === 'string' ? u.tool_use_id : ''
       if (u.tool === 'TaskStop') {
         const id = strOf(input.task_id) ?? strOf(input.shell_id)
@@ -1957,15 +1962,16 @@ export function scanBackground(messages: readonly SessionMsg[]): BgTask[] {
       let id: string | null
       if (u.tool === 'Bash') {
         kind = 'shell'
-        id = strOf(result.backgroundTaskId) ?? (/with ID: (\S+?)\./.exec(text)?.[1] ?? null) // keyed on the result: a timed-out foreground command moves to the background too
+        id = strOf(result.backgroundTaskId) ?? fromText(/^Command running in background with ID: (\S+?)\./) // keyed on the result: a timed-out foreground command moves to the background too
       } else if (u.tool === 'Monitor') {
         kind = 'monitor'
-        id = strOf(result.taskId) ?? (/\(task (\S+?),/.exec(text)?.[1] ?? null)
+        id = strOf(result.taskId) ?? fromText(/^Monitor started \(task (\S+?),/)
       } else continue
       if (id === null) continue
       const label = strOf(input.description) ?? strOf(input.command) ?? id
-      const output = kind === 'shell' ? (/written to: (\S+\.output)/.exec(text)?.[1] ?? null) : null
-      tasks.push({ id, toolUseId, kind, label: oneLineClip(redactSecrets(label), BG_LABEL_CHARS), output, lastEvent: null })
+      // The output file is named after the task id, so only a path ending in `<id>.output` is taken.
+      const output = kind === 'shell' ? (new RegExp('written to: (\\S+/' + id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\.output)').exec(text)?.[1] ?? null) : null
+      tasks.push({ id, toolUseId, kind, label: bgLabel(label), output, lastEvent: null })
     }
   }
   return tasks
@@ -2003,7 +2009,7 @@ export function activityLines(items: readonly ActivityItem[] | null | undefined,
 }
 
 // ================= Dispatch =================
-const cell =(v: string | number | null | undefined): string => (v === null || v === undefined || v === '' ? '—' : String(v))
+const cell = (v: string | number | null | undefined): string => (v === null || v === undefined || v === '' ? '—' : String(v))
 
 function runState(r: LivePaneRow, t: T): { text: string; color?: ThemeKey } {
   if (r.stall) return { text: '⏸ ' + t('state.stalled'), color: 'error' }

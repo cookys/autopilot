@@ -3661,18 +3661,27 @@ test('activity: a background Bash and a Monitor start rows; the output path come
   ])
 })
 
-test('activity: a foreground Bash moved to the background by its timeout is a row; a plain, refused or subagent call is not', () => {
+test('activity: a foreground Bash moved to the background by its timeout is a row; a plain or refused call is not', () => {
   const timedOut = bgUse('b1', { result: { stdout: '', backgroundTaskId: 'b1', timedOutAfterMs: 120000 } }, { command: 'make test' })
   const plain = { tool_use_id: 'toolu_p', tool: 'Bash', input: { command: 'ls' }, result: { stdout: 'a', stderr: '' }, text: 'a' }
   const refused = { ...bgUse('b2'), isError: true }
-  const sub = { ...bgUse('b3'), agentId: 'agent-1' }
-  expect(scanBackground([A('', [timedOut, plain, refused, sub])]).map(t => [t.id, t.label])).toEqual([['b1', 'make test']])
+  expect(scanBackground([A('', [timedOut, plain, refused])]).map(t => [t.id, t.label])).toEqual([['b1', 'make test']])
+})
+
+test('activity: a stored foreground result whose output reads like a start message is no row; a shell takes only its own output file', () => {
+  const docker = { tool_use_id: 'toolu_d', tool: 'Bash', input: { command: 'docker create alpine' }, result: { stdout: 'Created container with ID: 3f2a9c.', stderr: '' }, text: 'Created container with ID: 3f2a9c.' }
+  const grep = { tool_use_id: 'toolu_g', tool: 'Bash', input: { command: 'git diff' }, result: { stdout: bgText('zz', '/tmp/zz.output'), stderr: '' }, text: bgText('zz', '/tmp/zz.output') }
+  const watch = { tool_use_id: 'toolu_w', tool: 'Monitor', input: { command: 'cat log' }, result: { stdout: '' }, text: 'Monitor started (task m7, expires in 30s).' }
+  expect(scanBackground([A('', [docker, grep, watch])])).toEqual([])
+  const foreign = bgUse('b1', { text: 'Command running in background with ID: b1. Output is being written to: /etc/other.output.' })
+  expect(scanBackground([A('', [foreign])]).map(t => [t.id, t.output])).toEqual([['b1', null]])
 })
 
 test('activity: without a stored result (headless) the ids come from the result text', () => {
   const shell = { ...bgUse('b9'), result: undefined }
   const mon = { ...monUse('m9'), result: undefined }
-  expect(scanBackground([A('', [shell, mon])]).map(t => [t.id, t.kind, t.output])).toEqual([['b9', 'shell', '/tmp/claude-1000/proj/sid/tasks/b9.output'], ['m9', 'monitor', null]])
+  const echoed = { tool_use_id: 'toolu_e', tool: 'Bash', input: { command: 'docker create alpine' }, result: undefined, text: 'Created container with ID: 3f2a9c.' }
+  expect(scanBackground([A('', [shell, mon, echoed])]).map(t => [t.id, t.kind, t.output])).toEqual([['b9', 'shell', '/tmp/claude-1000/proj/sid/tasks/b9.output'], ['m9', 'monitor', null]])
 })
 
 test('activity: a status notification or a TaskStop ends a row; a Monitor event keeps it and becomes its tail', () => {
@@ -3755,6 +3764,13 @@ test('activity: the Now tab lists the running shell with its last line and quiet
   expect(body).toContain(t('label.bg_monitor'))
   expect(body).toContain('審查 phase 1 (autopilot:reviewer)')
   expect(body).not.toContain('已完成的')
+  // an unchanged output file (same size and mtime) is not read again
+  const outReads = () => w.reads.filter(p => p === BG_OUT).length
+  const before = outReads()
+  expect(before).toBeGreaterThan(0)
+  await w.clock.advance(5000)
+  await rows()
+  expect(outReads()).toBe(before)
   // the output grows: re-read; the shell finishes and the agent list fails: the shell leaves, the watch stays
   w.files[BG_OUT] = 'ℹ tests 336\nℹ pass 336\n'
   w.stats[BG_OUT] = { size: 30, mtimeMs: NOW_FRESH }
@@ -3768,4 +3784,29 @@ test('activity: the Now tab lists the running shell with its last line and quiet
   expect(after).not.toContain('full suite')
   expect(after).toContain('watch CI')
   expect(after).not.toContain('審查 phase 1') // the agent rows come from the list alone: no list, no agent rows
+})
+
+test('activity: an output file over 1 MiB shows no tail; an unread transcript keeps the shell rows; an agent description is one masked line', async ($, on) => {
+  const t = makeT('zh-TW')
+  let messagesThrow = false
+  const w = world(on, { ...base(), [BG_OUT]: 'never read\n' })
+  w.stats[BG_OUT] = { size: 2 * 1024 * 1024, mtimeMs: NOW_FRESH - 5000 }
+  on('session.messages', () => {
+    if (messagesThrow) throw new Error('no transcript')
+    return { value: [U('跑全套'), A('', [bgUse('bqd50316d')])] }
+  })
+  on('agent.list', () => ({ value: [{ id: 'a1', description: '審查\nghp_' + 'a'.repeat(30), type: 'autopilot:reviewer', status: 'running' }] }))
+  await start($, 'terminal')
+  const body = async () => (await paneParts($, 'terminal', 'now')).texts.join('\n')
+  let b = await body()
+  expect(b).toContain('full suite')
+  expect(b).toContain(t('bg.quiet', { age: '5s' }))
+  expect(b).not.toContain('└')
+  expect(w.reads).not.toContain(BG_OUT)
+  expect(b).toContain('審查 *** (autopilot:reviewer)')
+  messagesThrow = true
+  await w.clock.advance(5000)
+  b = await body()
+  expect(b).toContain('full suite')
+  expect(b).toContain('審查 ***')
 })

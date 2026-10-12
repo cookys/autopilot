@@ -41,7 +41,7 @@ import {
   acceptanceToast, autoResidueCount, makeRecentTracker, bandLine1, bandView, buildSections, checkEnvelope, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
   headerText, hhmm, projectName as projectNameOf, isKey, isSectionId, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
   readForeman, readLoadSource, readSpendHistory, hourlySpend, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
-  slotTab, slotUnfolds, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine,
+  slotTab, slotUnfolds, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, MAX_ACTIVITY_ROWS,
 } from './model'
 import type { ActivityItem, Counts, DecisionsView, RecentGroup, EnvelopeCheck, JobModel, Json, LiveSnapshot, Manifest, PaneTab, SlotId, Sources } from './model'
 
@@ -419,17 +419,19 @@ async function pollAdvisories($: EngineInterface, nowMs: number): Promise<void> 
 }
 
 // The background-work rows: the shells and watches scanned from the messages, each shell with its output file's last line and quiet time, then the
-// running subagents. Each source fails on its own; null = neither answered (the caller keeps the previous rows).
-async function readActivity($: EngineInterface, msgs: unknown, nowMs: number): Promise<ActivityItem[] | null> {
+// running subagents. Each source fails on its own: an unread transcript keeps the previous shell and watch rows; null = neither answered (the caller
+// keeps the previous rows). Only the rows the pane shows read their output file.
+async function readActivity($: EngineInterface, msgs: unknown, nowMs: number, prev: readonly ActivityItem[] | null): Promise<ActivityItem[] | null> {
   const items: ActivityItem[] = []
   let answered = false
-  if (Array.isArray(msgs)) {
+  if (!Array.isArray(msgs)) items.push(...(prev ?? []).filter(it => it.kind !== 'agent'))
+  else {
     answered = true
     const seen = new Set<string>()
-    for (const task of scanBackground(msgs as never)) {
+    for (const [i, task] of scanBackground(msgs as never).entries()) {
       let tail = task.lastEvent
       let quietMs: number | null = null
-      if (task.output !== null) {
+      if (task.output !== null && i < MAX_ACTIVITY_ROWS) {
         seen.add(task.output)
         try {
           const st = await $.fs.stat(task.output)
@@ -453,7 +455,7 @@ async function readActivity($: EngineInterface, msgs: unknown, nowMs: number): P
     const agents = await $.agent.list()
     if (Array.isArray(agents)) {
       answered = true
-      for (const a of agents) if (LIVE_AGENT.has(a.status)) items.push({ kind: 'agent', label: a.description || a.type, detail: a.description ? a.type : null, tail: null, quietMs: null })
+      for (const a of agents) if (LIVE_AGENT.has(a.status)) items.push({ kind: 'agent', label: bgLabel(a.description || a.type), detail: a.description ? bgLabel(a.type) : null, tail: null, quietMs: null })
     }
   } catch (_e) { /* no agent list: the shells still show */ }
   return answered ? items : null
@@ -476,7 +478,7 @@ async function refresh($: EngineInterface): Promise<void> {
       // the transcript is optional garnish: keep the previous value
     }
     try {
-      const next = await readActivity($, msgs, nowMs)
+      const next = await readActivity($, msgs, nowMs, activity)
       if (next !== null) activity = next
     } catch (_e) {
       // garnish too: keep the previous rows

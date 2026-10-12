@@ -10,6 +10,10 @@ set -u
 SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SELF_DIR/../.." && pwd)"
 HOOK="$REPO_ROOT/hooks/context-budget.js"
+# The hook reads ~/.autopilot/config.json context_budget; a host with its own tiers (t2 300000)
+# turned the 160k T2 cases into T1. Env beats config, so pin the defaults these cases assume.
+export AUTOPILOT_CONTEXT_BUDGET_T1=100000 AUTOPILOT_CONTEXT_BUDGET_T2=150000 AUTOPILOT_CONTEXT_BUDGET_STEP=50000
+unset AUTOPILOT_CONTEXT_BUDGET_MODE
 
 # The live dir must be RAM-backed or resolveLiveDir() rejects the override and
 # silently falls through to the host's real live dir (this host's /tmp is ext4).

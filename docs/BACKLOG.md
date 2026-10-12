@@ -856,14 +856,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/sealed-campaign-review-station-migration.md
 - **Context**: single+terminal panel works at intake; only in-place migration of a sealed campaign's review_station is missing.
 
-### Final panel with non-empty findings terminal-stops instead of parking for depth-0 disposition
-- **Status**: open
-- **Trigger**: next managed campaign whose final panel returns any finding (peer cuda hit it 2026-10-03)
-- **Effort**: M
-- **Source**: PEER-REPORTED cuda/chatgpt-tunnel 2026-10-03, msg 01M416P22N8XA90FX5YC8AQ3GV
-- **Pointer**: docs/backlog/final-panel-nonempty-findings-terminal-stop-instead-of-parking.md
-- **Context**: campaign-composition.js:3166 blocks final_adjudication with no durable wait; only in-loop adjudication parks; terminal campaigns cannot resume.
-
 ### Final review panel fans out all seats at once — no bounded concurrency
 - **Status**: open
 - **Trigger**: next peer/operator campaign on a host that cannot run every panel seat at once

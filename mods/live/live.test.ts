@@ -3322,6 +3322,10 @@ test('recent: every redaction pattern becomes ***, ordinary text is untouched', 
   const [g] = groupRecent([U('use sk-' + fake(20)), A('done with ghp_' + fake(30))])
   expect(g.prompt).toBe('use ***')
   expect(g.reply).toBe('done with ***')
+  // redaction runs before the 8000-char store clip, so a token straddling the clip never leaves a partial prefix
+  const [long] = groupRecent([U(fake(7990, 'x') + ' sk-' + fake(30, 'K'))])
+  expect(long.prompt).not.toContain('sk-')
+  expect(long.prompt.endsWith('***')).toBe(true)
 })
 
 test('recent: a collapsed prompt is one line of at most 60 characters plus …', () => {

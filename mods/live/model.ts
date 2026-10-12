@@ -1825,7 +1825,7 @@ export function groupRecent(messages: readonly SessionMsg[], max: number = RECEN
     if (isRealPrompt(m)) groups.push({ id: String(i), prompt: m.text.trim(), replies: [] })
     else if (m.role === 'assistant' && groups.length > 0 && typeof m.text === 'string' && m.text.trim() !== '') groups[groups.length - 1].replies.push(m.text.trim())
   })
-  return groups.slice(-max).map(g => ({ id: g.id, prompt: redactSecrets(clip(g.prompt)), reply: redactSecrets(clip(g.replies.join('\n\n'))) }))
+  return groups.slice(-max).map(g => ({ id: g.id, prompt: clip(redactSecrets(g.prompt)), reply: clip(redactSecrets(g.replies.join('\n\n'))) }))
 }
 
 // Recompute only when the transcript changed (message count, plus the newest message's length: the engine keeps just the newest 4096, so a full

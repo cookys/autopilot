@@ -68,14 +68,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/RESULTS.md
 - **Context**: a one-line change took five gate attempts (verify_cmd pipe, session id stripped, repo-bound envelope). P7 gate 2026-10-09: the /l6 foreman returned BLOCKED until depth-0 authored the task-authority envelope.
 
-### /l5 campaign status task reports can_merge and can_close false after a converged run
-- **Status**: open
-- **Trigger**: FIRED — mods P1W W4 gate runs l5h, l5i, l6
-- **Effort**: M
-- **Source**: depth-0 verified (status task output on three campaigns)
-- **Pointer**: docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/RESULTS.md
-- **Context**: campaign_binding_unmapped expects a campaign-v2 id while the receipt carries campaign-v1; merge and acceptance predicates stay unknown, so finish-flow cannot close an /l5 marker.
-
 ### l5 SKILL.md misstates AUTOPILOT_ROOT_RUN_ID; the engine requires the sealed mission root
 - **Status**: open
 - **Trigger**: FIRED — mods P1W SCOPE row, 2026-10-05
@@ -99,14 +91,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: depth-0 verified (dispatch-hetero.sh check_marker_campaign_admission_bridge scans all markers; clear needs a receipt)
 - **Pointer**: docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/RESULTS.md
 - **Context**: a dead session's l5 marker with no or stale mission_routing fails the bridge for everyone; clear and retire need receipts a never-spent run does not have, so the repo waits up to 24 h.
-
-### Mission graph checker passes verification commands that campaign intake rejects, burning the grant
-- **Status**: open
-- **Trigger**: FIRED — mods P1W W4 gate run l5c, 2026-10-05
-- **Effort**: S
-- **Source**: depth-0 verified (runtime.js:1368 joins with ' && '; implementation-campaign-check.js:298 admits plain argv segments only)
-- **Pointer**: docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/RESULTS.md
-- **Context**: a graph whose verification command has a pipe or quotes checks READY, prepares and grants, then intake rejects verify_cmd and the attempt is spent; the graph check should apply the same argv rule.
 
 ### Foreman exam harness deviates from its frozen spec; the branch is parked unmerged
 - **Status**: open

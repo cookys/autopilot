@@ -38,7 +38,7 @@ export type LiveGateRow = {
 export type LiveDecision = { question: string; options: { label: string; consequence: string }[]; stale: boolean; age_s: number | null }
 
 // one pane line: plain text plus how it is drawn
-export type PaneLine = { text: string; dim?: boolean; bold?: boolean; warn?: boolean; color?: ThemeKey; segs?: Seg[]; wrap?: boolean; hang?: number }
+export type PaneLine = { toggle?: string; text: string; dim?: boolean; bold?: boolean; warn?: boolean; color?: ThemeKey; segs?: Seg[]; wrap?: boolean; hang?: number }
 export type VerdictKind = 'decide' | 'stalled' | 'waiting' | 'running' | 'idle'
 // attention = something awaits the human (drawn first); waiting = idle / source-not-wired note; the rest follow the gate rows
 export type PaneSections = { attention: PaneLine[]; waiting: PaneLine[]; tasks: PaneLine[]; decisions: PaneLine[]; foreman: PaneLine[] }
@@ -87,6 +87,8 @@ export type LiveSnapshot = {
   host_as_of: string | null
   // P7: the facts the panel's tabs draw (null = the fact is not published: the tab says "no data")
   detail: PaneDetail
+  // the last RECENT_MAX prompts of this session, each with its reply (null / [] = nothing available; undefined = a snapshot built without the tick)
+  recent?: RecentGroup[] | null
 }
 
 export type SpendView = { session: string; host_all: string; host_all_n: number | null; brain: number | null; cap: number | null; mode: string; hourly?: number[] | null }
@@ -1534,7 +1536,7 @@ export type PaneTab = (typeof PANE_TABS)[number]
 export const tabLabel = (tab: PaneTab, t: T): string => t('tab.' + tab)
 
 // What a pane line is drawn with: the translator and the pane's width in cells (rules and bars size themselves to it)
-export type PaneCtx = { t: T; cols: number }
+export type PaneCtx = { t: T; cols: number; expanded?: ReadonlySet<string> }
 export const DEFAULT_PANE_COLS = 76
 // the panel is exactly as wide as the body the host gives it (rules, bars and wrapping all size to it); no body width known -> the default
 export const paneWidth = (bodyColumns: number | null | undefined): number => (typeof bodyColumns === 'number' && Number.isFinite(bodyColumns) ? Math.max(20, Math.floor(bodyColumns)) : DEFAULT_PANE_COLS)
@@ -1776,6 +1778,104 @@ function nowLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
     const color = spendColor(sp_.brain, sp_.cap)
     out.push(BLANK, rule(t('now.cost'), [], ctx.cols))
     out.push(kv(t(KEY_IDS.cost), seg(usd(sp_.brain), color), dseg(' / ' + usd(sp_.cap) + '  '), ...spendBarSegs(sp_.brain, sp_.cap, 24), dseg('  ' + pct + '%')))
+  }
+  if (snap.recent !== undefined) out.push(BLANK, ...recentLines(snap.recent, ctx))
+  return out
+}
+
+// ================= Recent prompts (the Now tab's trailing section) =================
+// The last RECENT_MAX real prompts of this session, each with the assistant's reply, from $.session.messages(). Pure functions only: grouping, redaction
+// (secret-shaped strings become ***, in code, no model call) and the line builders. The tick (register.ts) owns the cache and the expanded set.
+export type SessionMsg = { role: 'user' | 'assistant'; text: string; toolUses?: unknown[]; toolResults?: unknown[] }
+export type RecentGroup = { id: string; prompt: string; reply: string }
+export const RECENT_MAX = 3
+export const RECENT_COLLAPSED_CHARS = 60
+export const RECENT_EXPANDED_LINES = 20
+const RECENT_STORE_CHARS = 8000 // what one prompt / reply keeps: the pane shows at most ~20 lines of it
+// a user message that starts with one of these is something the harness injected, not something the person typed
+export const INJECTED_PREFIXES: readonly string[] = ['<system-reminder>', '<task-notification>', '<local-command-', '<command-name>', '<command-message>', '<command-args>']
+
+const REDACTIONS: { re: RegExp; to: string }[] = [
+  { re: /github_pat_[A-Za-z0-9_]{16,}/g, to: '***' },
+  { re: /\bgh[posu]_[A-Za-z0-9]{16,}/g, to: '***' },
+  { re: /\bsk-[A-Za-z0-9_-]{16,}/g, to: '***' },
+  { re: /\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/g, to: 'Bearer ***' },
+  { re: /\bAKIA[0-9A-Z]{16}\b/g, to: '***' },
+  { re: /\bxox[abprs]-[A-Za-z0-9-]{8,}/g, to: '***' },
+]
+export function redactSecrets(text: string): string {
+  let out = text
+  for (const r of REDACTIONS) out = out.replace(r.re, r.to)
+  return out
+}
+
+export function isRealPrompt(m: SessionMsg): boolean {
+  if (m.role !== 'user' || typeof m.text !== 'string') return false
+  const head = m.text.trim()
+  if (head === '') return false
+  if (Array.isArray(m.toolResults) && m.toolResults.length > 0) return false
+  return !INJECTED_PREFIXES.some(p => head.startsWith(p))
+}
+
+const clip = (s: string) => (s.length > RECENT_STORE_CHARS ? s.slice(0, RECENT_STORE_CHARS) : s)
+
+export function groupRecent(messages: readonly SessionMsg[], max: number = RECENT_MAX): RecentGroup[] {
+  const groups: { id: string; prompt: string; replies: string[] }[] = []
+  messages.forEach((m, i) => {
+    if (isRealPrompt(m)) groups.push({ id: String(i), prompt: m.text.trim(), replies: [] })
+    else if (m.role === 'assistant' && groups.length > 0 && typeof m.text === 'string' && m.text.trim() !== '') groups[groups.length - 1].replies.push(m.text.trim())
+  })
+  return groups.slice(-max).map(g => ({ id: g.id, prompt: redactSecrets(clip(g.prompt)), reply: redactSecrets(clip(g.replies.join('\n\n'))) }))
+}
+
+// Recompute only when the transcript changed (message count, plus the newest message's length: the engine keeps just the newest 4096, so a full
+// transcript's count stops moving). `computed` counts the recomputations.
+export function makeRecentTracker() {
+  let key = ''
+  let value: RecentGroup[] | null = null
+  const tracker = {
+    computed: 0,
+    update(sid: string, messages: readonly SessionMsg[]): RecentGroup[] | null {
+      const last = messages.length > 0 ? messages[messages.length - 1] : undefined
+      const k = sid + ':' + messages.length + ':' + (last === undefined || typeof last.text !== 'string' ? 0 : last.text.length)
+      if (k === key) return value
+      key = k
+      tracker.computed++
+      value = groupRecent(messages)
+      return value
+    },
+  }
+  return tracker
+}
+
+const oneLine = (s: string) => s.replace(/\s+/g, ' ').trim()
+export function collapsedPrompt(prompt: string): string {
+  const cps = [...oneLine(prompt)]
+  return cps.length > RECENT_COLLAPSED_CHARS ? cps.slice(0, RECENT_COLLAPSED_CHARS).join('') + '…' : cps.join('')
+}
+
+export function recentLines(recent: RecentGroup[] | null | undefined, ctx: PaneCtx): PaneLine[] {
+  const t = ctx.t
+  const out: PaneLine[] = [rule(t('recent.title'), [], ctx.cols)]
+  if (recent === null || recent === undefined || recent.length === 0) return [...out, { text: ' ' + t('recent.empty'), dim: true }]
+  const you = t('recent.you')
+  const ai = t('recent.ai')
+  const expanded = ctx.expanded
+  for (const g of recent) {
+    if (expanded === undefined || !expanded.has(g.id)) {
+      out.push({ toggle: g.id, text: '▸ ' + you + ': ' + collapsedPrompt(g.prompt), segs: [seg('▸ ', 'suggestion'), seg(you + ': ', undefined, true), seg(collapsedPrompt(g.prompt))] })
+      continue
+    }
+    const body: PaneLine[] = []
+    for (const l of g.prompt.split('\n')) body.push({ text: '  ' + l, wrap: true, hang: 2 })
+    body.push({ text: '  ' + ai + ':', bold: true, color: 'suggestion' })
+    const reply = g.reply === '' ? [] : g.reply.split('\n')
+    for (const l of reply) body.push({ text: '  ' + l, wrap: true, hang: 2, dim: true })
+    const wrapped = wrapLines(body, ctx.cols)
+    const room = RECENT_EXPANDED_LINES - 1 // the header takes one
+    out.push({ toggle: g.id, text: '▾ ' + you + ':', segs: [seg('▾ ', 'suggestion'), seg(you + ':', undefined, true)] })
+    if (wrapped.length <= room) out.push(...wrapped)
+    else out.push(...wrapped.slice(0, room - 1), { text: '  …', dim: true })
   }
   return out
 }

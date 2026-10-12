@@ -63,7 +63,8 @@
 // in-memory tree; a missing file makes the bottom hook throw, which the mod sees as a rejected read.
 import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
-import { readQc, qcChip, readReview, reviewSlot, displayWidth, truncateToWidth, layoutBand, readMarker, readResidue, readStageWalk, bandSlots, slotUnit, slotPosition, slotDispatch, slotDecisions, slotSpend, slotHygiene, slotReview, readLoadSource, PANE_TABS, verdictOf, reviewTabLines, wrapLines, legendLines, bandView, hygieneTabLines, dispatchLines, spendTabLines, readSpendHistory, hourlySpend, sparkText, SPARK_BARS } from './model'
+import { readQc, qcChip, readReview, reviewSlot, displayWidth, truncateToWidth, layoutBand, readMarker, readResidue, readStageWalk, bandSlots, slotUnit, slotPosition, slotDispatch, slotDecisions, slotSpend, slotHygiene, slotReview, readLoadSource, PANE_TABS, verdictOf, reviewTabLines, wrapLines, legendLines, bandView, hygieneTabLines, dispatchLines, spendTabLines, readSpendHistory, hourlySpend, sparkText, SPARK_BARS, INJECTED_PREFIXES, RECENT_EXPANDED_LINES, collapsedPrompt, groupRecent, makeRecentTracker, recentLines, redactSecrets } from './model'
+import type { SessionMsg } from './model'
 import { makeT, resolveLocale, localeFromLanguage } from './i18n'
 import { EN, ZH_TW } from './locales'
 import type { Slot } from './model'
@@ -3275,3 +3276,169 @@ for (const width of [60, 76, 90]) {
     })
   }
 }
+
+// ---- the Now tab's trailing section: the last 3 prompts of the session, each with a collapsible reply (all prompts here are synthetic) ----
+const U = (text: string, extra: Partial<SessionMsg> = {}): SessionMsg => ({ role: 'user', text, toolUses: [], ...extra })
+const A = (text: string, toolUses: unknown[] = []): SessionMsg => ({ role: 'assistant', text, toolUses })
+
+test('recent: grouping skips tool_result user messages and every injected-tag prefix', () => {
+  expect(INJECTED_PREFIXES).toEqual(['<system-reminder>', '<task-notification>', '<local-command-', '<command-name>', '<command-message>', '<command-args>'])
+  const injected = INJECTED_PREFIXES.map(p => U('  ' + p + 'synthetic body'))
+  const groups = groupRecent([U('first question'), A('first answer'), ...injected, U('', { toolResults: [] }), U('tool output', { toolResults: [{ tool_use_id: 'x', text: 'r', isError: false }] }), A('second answer'), U('   ')])
+  expect(groups.map(g => g.prompt)).toEqual(['first question']) // the injected / tool-result / blank user messages never open a group
+  expect(groups[0].reply).toBe('first answer\n\nsecond answer') // and their assistant follow-ups still belong to the open group
+})
+
+test('recent: assistant text is joined across messages; tool-use-only messages add nothing', () => {
+  const [g] = groupRecent([U('q'), A('part one'), A('', [{ name: 'Bash' }]), A('part two')])
+  expect(g.reply).toBe('part one\n\npart two')
+  expect(g.id).toBe('0')
+})
+
+test('recent: only the last 3 groups are kept, oldest first, ids are transcript indexes', () => {
+  const msgs: SessionMsg[] = []
+  for (const n of [1, 2, 3, 4, 5]) msgs.push(U('prompt ' + n), A('reply ' + n))
+  const groups = groupRecent(msgs)
+  expect(groups.map(g => g.prompt)).toEqual(['prompt 3', 'prompt 4', 'prompt 5'])
+  expect(groups.map(g => g.id)).toEqual(['4', '6', '8'])
+  expect(groups.map(g => g.reply)).toEqual(['reply 3', 'reply 4', 'reply 5'])
+})
+
+test('recent: every redaction pattern becomes ***, ordinary text is untouched', () => {
+  const fake = (n: number, c = 'a') => c.repeat(n)
+  const cases: [string, string][] = [
+    ['key sk-' + fake(20) + ' end', 'key *** end'],
+    ['key sk-ant-api03-' + fake(24, 'Z') + ' end', 'key *** end'],
+    ['ghp_' + fake(30), '***'], ['gho_' + fake(30), '***'], ['ghs_' + fake(30), '***'], ['ghu_' + fake(30), '***'],
+    ['github_pat_' + fake(30, 'B'), '***'],
+    ['Authorization: Bearer ' + fake(30), 'Authorization: Bearer ***'],
+    ['id AKIA' + fake(16, 'Q'), 'id ***'],
+    ['slack xoxb-' + fake(12, '1'), 'slack ***'], ['slack xoxp-' + fake(12, '1'), 'slack ***'],
+  ]
+  for (const [input, want] of cases) expect(redactSecrets(input), input).toBe(want)
+  const plain = 'the sk- prefix, a Bearer of news, AKIA short, ghp_ alone, task-1234 and skill-name-with-dashes-only are ordinary'
+  expect(redactSecrets(plain)).toBe(plain)
+  // and the group carries only the redacted text
+  const [g] = groupRecent([U('use sk-' + fake(20)), A('done with ghp_' + fake(30))])
+  expect(g.prompt).toBe('use ***')
+  expect(g.reply).toBe('done with ***')
+})
+
+test('recent: a collapsed prompt is one line of at most 60 characters plus …', () => {
+  const long = 'word '.repeat(40) + '\n\nsecond paragraph'
+  const c = collapsedPrompt(long)
+  expect([...c].length).toBe(61)
+  expect(c.endsWith('…')).toBe(true)
+  expect(c).not.toContain('\n')
+  expect(collapsedPrompt('short  prompt\nhere')).toBe('short prompt here')
+  const exact = 'x'.repeat(60)
+  expect(collapsedPrompt(exact)).toBe(exact)
+  const lines = recentLines(groupRecent([U(long), A('reply')]), { t: makeT('en'), cols: 100, expanded: new Set() })
+  const g = lines.find(l => l.toggle !== undefined) as { text: string }
+  expect(g.text).toBe('▸ You: ' + c)
+})
+
+test('recent: an expanded group is capped at 20 lines with a final … line; a short one is shown whole', () => {
+  const reply = Array.from({ length: 60 }, (_v, i) => 'reply line ' + i).join('\n')
+  const groups = groupRecent([U('a question\nin two lines'), A(reply)])
+  const ctx = { t: makeT('en'), cols: 80, expanded: new Set([groups[0].id]) }
+  const lines = recentLines(groups, ctx).slice(1) // without the section heading
+  expect(lines.length).toBe(RECENT_EXPANDED_LINES)
+  expect(lines[0].text).toBe('▾ You:')
+  expect(lines[lines.length - 1].text.trim()).toBe('…')
+  const text = lines.map(l => l.text).join('\n')
+  expect(text).toContain('a question')
+  expect(text).toContain('AI:')
+  expect(text).toContain('reply line 0')
+  expect(text).not.toContain('reply line 59')
+  const short = recentLines(groupRecent([U('hi'), A('hello')]), { ...ctx, expanded: new Set(['0']) }).slice(1).map(l => l.text.trim())
+  expect(short).toEqual(['▾ You:', 'hi', 'AI:', 'hello'])
+})
+
+test('recent: the tracker recomputes only when the message count (or the newest text) changes', () => {
+  const msgs = [U('q1'), A('a1')]
+  let calls = 0
+  const read = () => { calls++; return msgs }
+  const tr = makeRecentTracker()
+  const first = tr.update('s', read())
+  tr.update('s', read())
+  tr.update('s', read())
+  expect(calls).toBe(3)
+  expect(tr.computed).toBe(1)
+  msgs.push(U('q2'))
+  const grown = tr.update('s', read())
+  expect(tr.computed).toBe(2)
+  expect(grown).not.toBe(first)
+  expect(tr.update('s', read())).toBe(grown)
+  expect(tr.computed).toBe(2)
+  tr.update('other-session', read()) // a /clear gives a new sid: same count, still recomputed
+  expect(tr.computed).toBe(3)
+})
+
+for (const locale of ['en', 'zh-TW'] as const) {
+  test('recent: the Now tab ends with the section, empty state and filled, in ' + locale, async ($, on) => {
+    const t = makeT(locale)
+    let messages: SessionMsg[] = []
+    const w = world(on, base(), NOW_FRESH, SID_A, locale)
+    on('session.messages', () => ({ value: messages }))
+    await start($, 'terminal')
+    const empty = (await paneParts($, 'terminal', 'now')).texts
+    expect(empty.slice(-2)).toEqual([expect.stringContaining(t('recent.title')), ' ' + t('recent.empty')])
+    messages = [U('synthetic question one'), A('synthetic answer one'), U('<system-reminder>noise'), U('synthetic question two'), A('synthetic answer two')]
+    await w.clock.advance(5000)
+    const filled = (await paneParts($, 'terminal', 'now')).texts
+    expect(filled.slice(-3)).toEqual([expect.stringContaining(t('recent.title')), '▸ ' + t('recent.you') + ': synthetic question one', '▸ ' + t('recent.you') + ': synthetic question two'])
+  })
+}
+
+test('recent: the pane lists the section after a tick, and a throwing $.session.messages leaves the tick working', async ($, on) => {
+  let throwing = false
+  let messages: SessionMsg[] = [U('synthetic question one'), A('synthetic answer one')]
+  let calls = 0
+  const w = worldEn(on, base())
+  on('session.messages', () => { calls++; if (throwing) throw new Error('transcript unavailable'); return { value: messages } })
+  await start($, 'terminal')
+  const rows = async () => (await paneParts($, 'terminal', 'now')).texts
+  let r = await rows()
+  expect(r.slice(-2)).toEqual([expect.stringContaining('Recent conversation'), '▸ You: synthetic question one'])
+  throwing = true
+  messages = [...messages, U('synthetic question two')]
+  w.toasts.length = 0
+  await w.clock.advance(5000)
+  r = await rows()
+  expect(r.slice(-2)).toEqual([expect.stringContaining('Recent conversation'), '▸ You: synthetic question one']) // the previous value is kept
+  expect(r.some(x => x.includes('Needs you') || x.includes('Stalled'))).toBe(true) // and the rest of the tick still ran
+  throwing = false
+  await w.clock.advance(5000)
+  r = await rows()
+  expect(r.slice(-3)).toEqual([expect.stringContaining('Recent conversation'), '▸ You: synthetic question one', '▸ You: synthetic question two'])
+  const before = calls
+  await w.clock.advance(5000) // unchanged transcript: read again, not regrouped
+  expect(calls).toBeGreaterThan(before)
+  expect((await rows()).slice(-3).length).toBe(3)
+})
+
+test('recent: pressing a group Button expands it, pressing again collapses it', async ($, on) => {
+  const w = worldEn(on, base())
+  on('session.messages', () => ({ value: [U('synthetic question one'), A('synthetic answer one')] }))
+  await start($, 'terminal')
+  const mountPane = () => $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+  const first = await mountPane()
+  await first.press({ key: 'now' })
+  await first.unmount()
+  const press = async () => {
+    const pane = await mountPane()
+    const key = 'b' + rowsOf((await pane.drawn()) as Node).findIndex(r => /^[▸▾] You/.test(r)) // the line index of the group header
+    await pane.press({ key })
+    await pane.unmount()
+    const again = await mountPane()
+    const rows = rowsOf((await again.drawn()) as Node)
+    await again.unmount()
+    return rows
+  }
+  let rows = await press()
+  expect(rows.slice(-4)).toEqual(['▾ You:', '  synthetic question one', '  AI:', '  synthetic answer one'])
+  rows = await press()
+  expect(rows.slice(-1)).toEqual(['▸ You: synthetic question one'])
+  expect(w.toasts).toEqual([])
+})

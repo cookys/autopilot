@@ -236,5 +236,9 @@
   "legend.hygiene": "plugin load source (↓ = behind upstream) · ⚑ worktrees and branches that need you",
   "legend.icon": "opens this panel; with it open, shows the next tab",
   "legend.keys": "keyboard: Ctrl+x Tab, then Enter on ⓘ; each further Enter shows the next tab",
-  "legend.widths": "narrow terminals drop items: < 160 walk, reason, load-source chip · < 120 stage, round, amounts · < 80 all but verdict, ⚙ and ⚑"
+  "legend.widths": "narrow terminals drop items: < 160 walk, reason, load-source chip · < 120 stage, round, amounts · < 80 all but verdict, ⚙ and ⚑",
+  "recent.title": "Recent conversation",
+  "recent.you": "You",
+  "recent.ai": "AI",
+  "recent.empty": "(no conversation yet)"
 }

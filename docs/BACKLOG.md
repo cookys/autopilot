@@ -14,18 +14,18 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 4. ~~foreman rail Shape B~~ v2.36.34 · 5. ~~`308-db` (a) residue sweep~~ v2.36.35 · 6. ~~2026-09-12 dogfood four defects~~ v2.36.36 ·
 7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41 · 9. ~~ledger flag burns a grant~~ v2.36.42 · 10. ~~reviewer no_verdict releases the claim~~ v2.36.43. Next: operator-named work, or the 308-8f dispatch-hetero reports.
 
-### qc-gate runs the whole suite serially; select the suites the diff touches
+### qc-gate still runs the whole suite; wire the affected-suites selector into the M-XL test step
 - **Id**: BL-0001
 - **Status**: open
 - **Since**: 2026-10-12
 - **Origin**: self
-- **Problem**: 擁有者或工頭每次在送出前跑品質檢查（qc-gate）時，都會把整套測試從頭跑到尾，即使這次改動只碰到少數檔案，一輪常要花約 30 分鐘。目前沒有工具能依改動範圍只挑出相關的測試。 (draft)
-- **Impact**: 每次中大型改動多等約 30 分鐘。擁有者 2026-10-13 核准只跑相關測試；照規定先跑評測證明不會漏測。
-- **Trigger**: approved 2026-10-13: run the eval ON/OFF first (scorecard-first), then change the M-XL test step
+- **Problem**: 依改動挑測試的工具已經做好，但只是建議，品質檢查還是每次跑整套。另外活面板的測試不在主測試入口裡，所以改到活面板時工具判斷不了，只能整套跑。
+- **Impact**: 每次中大型改動仍多等約 30 分鐘。最近 10 個改到程式的提交全是整套跑；近 34 個裡只有 7 個能縮小範圍。
+- **Trigger**: phase 2, owner-approved 2026-10-13: run the eval ON/OFF first (scorecard-first), then change the M-XL test step
 - **Effort**: M
-- **Source**: feat/autocompact-detect qc-gate, 2026-10-12
+- **Source**: feat/autocompact-detect qc-gate, 2026-10-12; phase 1 merged 2026-10-13
 - **Pointer**: docs/backlog/qc-gate-affected-suites.md
-- **Context**: full run past 30 min (stopped at 256/408); the 38 suites that reference the changed files passed in about 2 min. Keep the full suite for release preflight. Once selection is shown not to miss a suite, it also unblocks BL-0087 option B.
+- **Context**: Phase 1 = selector + miss-check (28 cases, 0 missed). Phase 2: hook mods/live tests into the selector's map, eval ON/OFF, then change the gate step; keep the full suite for release preflight. Also unblocks BL-0087 option B.
 
 ### mods Now tab: a background row may never end when no status notification follows
 - **Id**: BL-0002

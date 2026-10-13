@@ -15,3 +15,9 @@ Source: feat/autocompact-detect qc-gate, 2026-10-12.
 - Owner, 2026-10-12: "full suite 是幹嘛? 真的有必要嗎? 跑太久了吧?"
 - 2026-10-13: BL-0087 option B (each campaign node runs only its affected suites) reuses this selection;
   it waits until the selection is shown not to miss a suite.
+- 2026-10-13, phase 1 merged: `scripts/affected-suites.js` selects the suites a diff can reach (dependency
+  walk + always-run content scanners), advisory only. Evidence: `docs/plans/evidence/2026-10-13-affected-suites/miss-check.md`
+  (28 historical cases, 0 missed; mutations missed 0). Measured on develop: the last 10 non-doc commits all came
+  out `full` (all touched `mods/live`, whose tests are not in `run.sh`, so the selector cannot map them); of 34
+  non-doc commits in the last 60, 7 were selective (17-454 suites). Phase 2 = map `mods/live` tests, eval ON/OFF,
+  then change the M-XL test step.

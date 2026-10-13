@@ -1198,7 +1198,18 @@ process.stdout.write(JSON.stringify(a));
     fi
   fi
 
-  if [[ "$CONSULT_DISPATCH" == "auto" ]]; then
+  # Under `auto`, a consult tuple the project DECLARED wins over topology discovery and
+  # over the sonnet native fallback - same rule as the plan chair (2026-09-13). The
+  # owner ruled this on 2026-10-13 (BL-0095): before it, the declared consult_* keys were
+  # read and then silently overwritten here. A partial tuple never reaches this point: the
+  # seat validation above refuses it (exit 3).
+  _consult_declared=0
+  if [[ "$CONSULT_DISPATCH" == "auto" && -n "$CONSULT_ENGINE" && -n "$CONSULT_RUNNER" && -n "$CONSULT_EFFORT" ]]; then
+    _consult_declared=1
+    CONSULT_RESOLVED_FROM="config-explicit"
+  fi
+
+  if [[ "$CONSULT_DISPATCH" == "auto" && "$_consult_declared" -eq 0 ]]; then
     _consult_picked=""
     if [[ "$_topo_ok" -eq 0 && -n "$_topo_json" ]]; then
       _qc_panel_arg="${QC_PANEL[*]:-}"

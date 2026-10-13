@@ -595,4 +595,24 @@ RC_R9_REVIEWER="$(ENGINE_CAPABILITY_DIR="$R9_CAP_DIR" ENGINE_SCORECARD_DIR="$R9_
   REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_R9_REVIEWER" bash "$SCRIPT" >/dev/null 2>&1; echo $?)"
 assert_eq "3" "$RC_R9_REVIEWER" "R9(c): the SAME planted consult row does NOT admit a DIFFERENT role (reviewer) for the same runner — list still gates other roles (per-role evidence, not a blanket unverified bit)"
 
+# ── BL-0095: under consult_dispatch auto, a DECLARED consult tuple wins ─────
+# Owner ruling 2026-10-13 (same rule as the plan chair, 2026-09-13): the topology
+# ladder and the sonnet native fallback must not silently replace declared keys.
+TOPO_C="$TEST_TMP/topo-consult-declared.json"
+cat > "$TOPO_C" <<'EOF'
+{ "plan_review_panel": [], "reviewer_ladder": [],
+  "consult_ladder": [ { "engine": "sonnet", "runner": "claude-native", "effort": "high" } ] }
+EOF
+CFG_CONSULT_DECL="$TEST_TMP/cfg-consult-declared.md"
+cat > "$CFG_CONSULT_DECL" <<'EOF'
+- consult_dispatch: auto
+- consult_engine: haiku
+- consult_effort: low
+- consult_runner: claude-native
+EOF
+json="$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_C" REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_CONSULT_DECL" bash "$SCRIPT" 2>/dev/null)"
+assert_contains "$json" '"consult_engine": "haiku"' "BL-0095: auto keeps the declared consult_engine over the topology ladder"
+assert_contains "$json" '"consult_effort": "low"' "BL-0095: auto keeps the declared consult_effort"
+assert_contains "$json" '"consult_resolved_from": "config-explicit"' "BL-0095: consult_resolved_from names config-explicit"
+
 finalize_test

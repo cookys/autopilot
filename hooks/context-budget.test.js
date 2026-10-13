@@ -158,6 +158,8 @@ function freshEnv(extra = {}) {
     // W2f: the hook now WRITES <live>/context/<sid>.json when no status line does, so a test
     // that omits an override would drop fixture rows into the host's real live dir.
     AUTOPILOT_LIVE_DIR: shmTmp('ctxbud-hermetic-live-'),
+    // The autocompact tip reads the policy file; a host's real /etc/claude-code one must not leak in.
+    AUTOPILOT_MANAGED_SETTINGS_FILE: path.join(dir, 'no-managed-settings.json'),
     CLAUDE_CODE_SESSION_ID: `t-${path.basename(dir)}`,
     ...extra,
   };

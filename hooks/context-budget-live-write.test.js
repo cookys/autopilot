@@ -52,6 +52,7 @@ function env(live, extra = {}) {
     ...process.env,
     HOME: home,
     AUTOPILOT_LIVE_DIR: live,
+    AUTOPILOT_MANAGED_SETTINGS_FILE: path.join(home, 'no-managed-settings.json'),
     AUTOPILOT_CONTEXT_BUDGET_DIR: path.join(home, 'state'),
     ...extra,
   };

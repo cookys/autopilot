@@ -9,6 +9,8 @@
 # # RED at 8edb870e: 0775 under a 0700 parent still rejected (other-bits carve-out);
 # production codeforge /run/user/<uid>/autopilot 0775 case fails until r3.
 set -u
+# Never read a host /etc/claude-code/managed-settings.json (autocompact resolver in the context-budget case).
+export AUTOPILOT_MANAGED_SETTINGS_FILE="${TMPDIR:-/tmp}/autopilot-no-managed-settings-$$.json"
 
 SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SELF_DIR/../.." && pwd)"

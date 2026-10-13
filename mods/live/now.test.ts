@@ -4,7 +4,7 @@
 import { test, expect } from 'claude-code/testing'
 import { makeT } from './i18n'
 import { NO_DETAIL, NO_SECTIONS, wrapLines } from './model'
-import { dispatchLines, headerLines, hygieneTabLines, legendLines, nowLines, reviewTabLines, spendTabLines, stripRows, treeRowCount, withOverflowHint } from './tabs'
+import { dispatchLines, headerLines, hygieneTabLines, legendLines, nowLines, reviewTabLines, spendTabLines, stripOf, stripRows, treeRowCount, withOverflowHint } from './tabs'
 import type { LiveSnapshot, PaneLine, Seg } from './model'
 import * as ui from './ui'
 import { violations } from './invariants.testkit'
@@ -484,4 +484,14 @@ test('every tab: the shared checker flags a hand-written number, a bold mark wit
   const legend = lines('legend')
   expect(tabViolations('legend', [{ text: 'hand made', kind: 'kv' } as PaneLine, ...legend], 120, t).some(v => v.includes(' I2 ')), 'legend I2').toBe(true)
   expect(tabViolations('legend', legend.map(l => ({ ...l, segs: [...(l.segs ?? []), { text: ' 7m', role: 'value' as const }] })), 120, t).some(v => v.includes(' I8 ')), 'legend I8').toBe(true)
+})
+
+test('strip: the active label and the ━ run are the here mark (I4 / I6); every bold or claude seg of the strip carries here', () => {
+  for (const [loc, t] of LOCALES) {
+    const sr = stripOf(snap(), ctxOf(t, 120), 'now', true)
+    const marked = [...sr.tabs.map(x => x.label), ...sr.tabs.flatMap(x => x.badge), ...sr.rule]
+    for (const s of marked) if (s.bold === true || s.color === 'claude') expect(s.here, loc + ': strip seg "' + s.text.trim() + '" is bold or claude without here').toBe(true)
+    expect(sr.tabs.filter(x => x.on).length).toBe(1)
+    expect(sr.rule.some(s => s.here === true && s.text.includes('━')), loc + ': the ━ run carries here').toBe(true)
+  }
 })

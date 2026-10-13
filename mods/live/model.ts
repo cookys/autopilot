@@ -11,8 +11,9 @@
 
 import { T_EN } from './i18n'
 import type { T } from './i18n'
-import { STATES, cellWidth, displayWidth, stateOf } from './ui'
-import type { FactId, FmtKind, LineKind, SegRole } from './ui'
+import * as ui from './ui'
+import { STATES, cellWidth, displayWidth, isStale, stateOf } from './ui'
+import type { Ctx as UiCtx, Column as UiColumn, FactId, FmtKind, Frag, LineKind, RunSubject, SegRole, Stated, TableListRow as UiTableListRow } from './ui'
 
 
 // ---- the snapshot the tick builds and the band / pane draw (module state in register.ts) ----
@@ -28,6 +29,12 @@ export type LivePaneRow = {
   rc: number | null
   final_status: string | null
   probe_age_s: number | null
+  ended_at: string | null
+  // the producer's own end test (runs-watch computeCounts: phase exited, ended_at or final_status; an rc is an end too) and its own freshness test
+  // (confirmed_live: alive === true and a probe no older than counts.fresh_bound_s). A row the producer never probed is not `fresh`, and a row that
+  // ended without an rc and without a final_status is `ended` and not `fresh`, so it reads ◌ 已停 and never ● 執行中 (design plan §2.5, §3.3 run row 6)
+  ended: boolean
+  fresh: boolean
 }
 
 export type LiveGateRow = {
@@ -870,14 +877,21 @@ export function paneRows(env: Json): LivePaneRow[] | null {
   const rows = rowsOf(env)
   if (rows === null) return null
   const str = (v: unknown) => (typeof v === 'string' && v ? v : null)
-  return rows.map(r => ({
-    stall: r.stall === true,
-    run_id: String(r.run_id === undefined || r.run_id === null ? '?' : r.run_id),
-    role: str(r.role), runner: str(r.runner), model: str(r.model), started_at: str(r.started_at),
-    elapsed_s: finite(r.elapsed_s) ? r.elapsed_s : null, phase: str(r.phase),
-    rc: Number.isInteger(r.rc) ? (r.rc as number) : null, final_status: str(r.final_status),
-    probe_age_s: finite(r.probe_age_s) ? r.probe_age_s : null,
-  }))
+  const bound = isObject(env.counts) && finite(env.counts.fresh_bound_s) ? env.counts.fresh_bound_s : null
+  return rows.map(r => {
+    const rc = Number.isInteger(r.rc) ? (r.rc as number) : null
+    const ended = r.phase === 'exited' || str(r.ended_at) !== null || str(r.final_status) !== null || rc !== null
+    const probe = finite(r.probe_age_s) ? r.probe_age_s : null
+    return {
+      stall: r.stall === true,
+      run_id: String(r.run_id === undefined || r.run_id === null ? '?' : r.run_id),
+      role: str(r.role), runner: str(r.runner), model: str(r.model), started_at: str(r.started_at),
+      elapsed_s: finite(r.elapsed_s) ? r.elapsed_s : null, phase: str(r.phase),
+      rc, final_status: str(r.final_status),
+      probe_age_s: probe, ended_at: str(r.ended_at), ended,
+      fresh: !ended && r.alive === true && probe !== null && (bound === null || probe <= bound),
+    }
+  })
 }
 
 export type JobModel = {
@@ -1632,7 +1646,7 @@ function wrapLine(l: PaneLine, cols: number): PaneLine[] {
     const flush = () => { if (run !== '') segs.push(at < 0 ? { text: run } : { ...base[at], text: run }); run = '' }
     for (const c of cs) { if (c.si !== at) { flush(); at = c.si } run += c.ch }
     flush()
-    return { text, segs, ...(l.toggle !== undefined ? { toggle: l.toggle } : {}) } // every piece of a wrapped toggle line stays pressable
+    return { text, segs, ...(l.toggle !== undefined ? { toggle: l.toggle } : {}), ...(l.goto !== undefined ? { goto: l.goto } : {}) } // every piece of a wrapped toggle line stays pressable
   })
 }
 export const wrapLines = (lines: PaneLine[], cols: number): PaneLine[] => lines.flatMap(l => wrapLine(l, cols))
@@ -1649,7 +1663,7 @@ export function rule(title: string, right: Seg[], cols: number, fold?: { id: str
 
 // the Now tab's foldable sections (what waits for you never folds); the ids share the toggle channel with the recent groups, hence the prefix
 export const SECTION = { where: 'sec:where', working: 'sec:working', cost: 'sec:cost', account: 'sec:account', recent: 'sec:recent' } as const
-export const isSectionId = (id: string): boolean => id.startsWith('sec:')
+export const isSectionId = (id: string): boolean => id.startsWith('sec:') || /^(now|dispatch|review|spend|hygiene|legend)\./.test(id)
 const isFolded = (ctx: PaneCtx, id: string): boolean => ctx.folded !== undefined && ctx.folded.has(id)
 // a heading plus its body, or the heading alone when the person folded it
 function section(ctx: PaneCtx, id: string, title: string, right: Seg[], body: PaneLine[]): PaneLine[] {
@@ -2097,79 +2111,82 @@ export function accountLines(a: AccountSnap | undefined, nowMs: number | null, c
 // ================= Dispatch =================
 const cell = (v: string | number | null | undefined): string => (v === null || v === undefined || v === '' ? '—' : String(v))
 
-function runState(r: LivePaneRow, t: T): { text: string; color?: ThemeKey } {
-  if (r.stall) return { text: '⊘ ' + t('state.stalled'), color: 'error' }
-  if (r.rc !== null) return r.rc === 0 ? { text: '✓ rc 0', color: 'success' } : { text: '✗ rc ' + r.rc, color: 'error' }
-  if (r.final_status !== null) return { text: r.final_status }
-  return { text: '● ' + t('state.run'), color: 'suggestion' }
+// the subject `stateOf('run', …)` classifies (design plan §3.3). `fresh` is the producer's own freshness test, read once in paneRows; an ended row is never fresh.
+export const runSubject = (r: LivePaneRow): RunSubject => ({ rc: r.rc, final_status: r.final_status, stall: r.stall, fresh: r.fresh })
+// when a run ended (ms): the manifest's ended_at, else started_at + elapsed_s (the producer freezes elapsed_s at the end); null = unknown
+export function runEndedMs(r: LivePaneRow): number | null {
+  const end = r.ended_at === null ? NaN : Date.parse(r.ended_at)
+  if (Number.isFinite(end)) return end
+  const start = r.started_at === null ? NaN : Date.parse(r.started_at)
+  return Number.isFinite(start) && r.elapsed_s !== null ? start + r.elapsed_s * 1000 : null
 }
+// F5 (§2.5): a finished run older than FRESH_MS.dispatch is counted in the section chip and not listed; unknown times keep the run listed
+export const runAgedOut = (r: LivePaneRow, nowMs: number | null): boolean => {
+  const end = runEndedMs(r)
+  return r.ended && nowMs !== null && end !== null && isStale('dispatch', nowMs - end)
+}
+const DISPATCH_SEC = { running: 'dispatch.running', finished: 'dispatch.finished', other: 'dispatch.other' } as const
 
 function dispatchLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
   const t = ctx.t
-  const out: PaneLine[] = []
+  const u: UiCtx = { t, cols: ctx.cols, ...(ctx.expanded === undefined ? {} : { expanded: ctx.expanded }) }
   const rows = snap.rows
-  out.push({ text: snap.header, dim: true })
-  if (rows === null) {
-    out.push(NO_DATA(t, 'nodata.runs'))
-  } else {
-    const c = snap.detail.counts
-    if (c !== null) out.push(row(seg('● ' + c.confirmed_live, c.confirmed_live > 0 ? 'suggestion' : 'inactive', c.confirmed_live > 0), seg(' ' + t('dispatch.running')), dseg('   ⊘ ' + snap.detail.stalled + ' ' + t('dispatch.stalled') + ' · ✓ ' + c.exited + ' ' + t('dispatch.done'))))
-    out.push(BLANK, rule(t('dispatch.runs'), [], ctx.cols))
-    if (rows.length === 0) out.push({ text: t('dispatch.no_runs'), dim: true })
-    else {
-      // columns are as wide as their widest cell (display cells: CJK = 2) plus two; the last column is not padded
-      const sts = rows.map(r => runState(r, t))
-      const cols: string[][] = [
-        rows.map(r => r.run_id),
-        rows.map(r => cell(r.role)),
-        rows.map(r => cell(r.runner) + ' / ' + cell(r.model)),
-        sts.map(x => x.text),
-        rows.map(r => (r.elapsed_s === null ? '—' : ageText(r.elapsed_s))),
-      ]
-      const heads = [t('dispatch.col_run'), t('dispatch.col_role'), t('dispatch.col_engine'), t('dispatch.col_state'), t('dispatch.col_elapsed')]
-      const widths = cols.map((c, i) => Math.max(displayWidth(heads[i]), ...c.map(displayWidth)) + 2)
-      const seen = rows.map(r => (r.probe_age_s === null ? '—' : agoText(r.probe_age_s, t)))
-      const tableW = 1 + widths.reduce((n, x) => n + x, 0) + Math.max(displayWidth(t('dispatch.col_seen')), ...rows.map((r, i) => displayWidth(seen[i]) + (r.phase === null ? 0 : 3 + displayWidth(r.phase))))
-      if (tableW > ctx.cols) {
-        // too wide for one aligned table (wrapping rows apart from the header would shear the columns): one block per run
-        rows.forEach((r, i) => {
-          if (i > 0) out.push(BLANK)
-          out.push(withHang(row(seg(' ' + cols[0][i], undefined, true)), 1))
-          out.push(kv(t('dispatch.col_role'), seg(cols[1][i])))
-          out.push(kv(t('label.engine'), seg(cols[2][i])))
-          out.push(kv(t('dispatch.col_state'), seg(sts[i].text, sts[i].color)))
-          out.push(kv(t('dispatch.col_elapsed'), seg(cols[4][i])))
-          out.push(kv(t('dispatch.col_seen'), dseg(seen[i])))
-          if (r.phase !== null) out.push(kv(t('label.phase'), seg(r.phase)))
-        })
-      } else {
-        out.push(row(dseg(' ' + heads.map((h, i) => padCells(h, widths[i])).join('') + t('dispatch.col_seen'))))
-        rows.forEach((r, i) => {
-          out.push(row(
-            seg(' ' + padCells(cols[0][i], widths[0])), seg(padCells(cols[1][i], widths[1])), seg(padCells(cols[2][i], widths[2])),
-            seg(padCells(cols[3][i], widths[3]), sts[i].color), seg(padCells(cols[4][i], widths[4])),
-            dseg(seen[i]), ...(r.phase === null ? [] : [dseg(' · ' + r.phase)]),
-          ))
-        })
+  const nowRaw = snap.detail.now_ms
+  const nowMs = typeof nowRaw === 'number' && Number.isFinite(nowRaw) ? nowRaw : null
+  const sec = (id: string, title: string, right: Frag | undefined, body: PaneLine[]): PaneLine[] => {
+    const open = !isFolded(ctx, id)
+    return [ui.header(u, title, { id, open }, right === undefined ? {} : { right, fact: 'dispatch.counts' }), ...(open ? body : [])]
+  }
+  const own = (line: PaneLine): PaneLine => (line.fact === undefined ? line : ui.ownerRow('dispatch', line.fact, line)) // a toggle row (more, header) carries no fact of its own
+  const col = (head: string, min: number, priority: number, cut: 'left' | 'right', flex = false): UiColumn => ({ head, min, priority, cut, ...(flex ? { flex: true } : {}) })
+  const columns = (last: string): UiColumn[] => [
+    col(t('dispatch.col_run'), 14, 1, 'left', true), col(t('dispatch.col_role'), 8, 5, 'right'), col(t('dispatch.col_engine'), 10, 4, 'right'),
+    col(t('dispatch.col_elapsed'), 3, 2, 'right'), col(last, 4, 3, 'right'),
+  ]
+  const baseCells = (r: LivePaneRow): string[] => [r.run_id, cell(r.role), cell(r.runner) + ' / ' + cell(r.model), r.elapsed_s === null ? '—' : ui.dur(r.elapsed_s * 1000)]
+  const out: PaneLine[] = [{ text: snap.header, dim: true }, ui.blank()]
+  const running: UiTableListRow[] = []
+  const finished: UiTableListRow[] = []
+  let finishedAll: Stated[] = []
+  if (rows !== null) {
+    for (const r of rows) {
+      const state = ui.stateOf('run', runSubject(r))
+      if (!r.ended) {
+        const startMs = r.started_at === null ? NaN : Date.parse(r.started_at)
+        running.push({ state, group: r.run_id, ts: Number.isFinite(startMs) ? startMs : 0, cells: [...baseCells(r), r.probe_age_s === null ? '—' : ui.ago(r.probe_age_s * 1000, t)] })
+        continue
       }
-    }
-    out.push(BLANK, rule(t('dispatch.gates'), [], ctx.cols))
-    const gates = snap.gates
-    if (gates === null) out.push({ text: t('dispatch.no_page'), dim: true })
-    else if (gates.length === 0) out.push({ text: t('dispatch.no_receipt'), dim: true })
-    else {
-      for (const g of gates) {
-        const mk = verdictMark(g.verdict)
-        out.push(row(seg(' ' + padCells(cell(g.phase), 8)), seg(padCells(t('dispatch.gen', { g: cell(g.generation) }), 9)), seg(mk.glyph + ' ' + cell(g.verdict), mk.color), dseg(g.status === null ? '' : '  ' + g.status)))
-      }
+      finishedAll.push(state)
+      if (runAgedOut(r, nowMs)) continue
+      const end = runEndedMs(r)
+      finished.push({ state, group: r.run_id, ts: end ?? 0, cells: [...baseCells(r), end === null || nowMs === null ? '—' : ui.ago(Math.max(0, nowMs - end), t)] })
     }
   }
-  out.push(...snap.sections.waiting, ...snap.sections.foreman)
+  // 執行中: running, stalled and a run nobody has confirmed alive (◌ 已停)
+  const runBody: PaneLine[] = []
+  if (rows === null) runBody.push(ui.empty(t('nodata.prefix', { what: t('nodata.runs') }), 'dispatch.runs'))
+  else if (running.length === 0) runBody.push(ui.empty(t(rows.length === 0 ? 'dispatch.no_runs' : 'dispatch.no_running'), 'dispatch.runs'))
+  else runBody.push(...ui.tableList(u, DISPATCH_SEC.running, t('dispatch.more_running'), columns(t('dispatch.col_seen')), running, { fact: 'dispatch.runs' }))
+  runBody.push(...snap.sections.waiting, ...snap.sections.foreman) // legacy hand-built lines until P4 turns buildSections into data
+  const runChip = running.length === 0 ? undefined : ui.countChip(u, ui.worst(running.map(r => r.state)), running.length, 'dispatch.counts')
+  out.push(...sec(DISPATCH_SEC.running, t('dispatch.running'), runChip, runBody.map(l => (l.kind === undefined ? l : own(l)))))
+  // 已完成: ended runs, the latest 5 and a toggle for the rest; a run older than a day is counted in the chip only
+  if (rows !== null) {
+    const finBody = finished.length === 0
+      ? [ui.empty(t('dispatch.no_finished'), 'dispatch.runs')]
+      : ui.tableList(u, DISPATCH_SEC.finished, t('dispatch.more_noun'), columns(t('dispatch.col_ended')), finished, { fact: 'dispatch.runs' })
+    const finChip = finishedAll.length === 0 ? undefined : ui.countChip(u, ui.worst(finishedAll), finishedAll.length, 'dispatch.counts')
+    out.push(...sec(DISPATCH_SEC.finished, t('dispatch.done'), finChip, finBody.map(own)))
+  }
+  // 其他分頁: one pointer row to 審查 (a projection, §2.6) and the snapshot note. No review verdict, no spend stamps.
+  const gates = snap.gates
+  const pointer = gates === null ? ui.val(t('dispatch.no_review_page'), { role: 'prose' }) : gates.length === 0 ? ui.val(t('dispatch.no_receipt'), { role: 'prose' }) : ui.fmtd('count', t('dispatch.gate_count', { n: gates.length }))
   const parts = [t('dispatch.note')]
   if (snap.published_at !== null) parts.push(t('dispatch.snapshot', { at: snap.published_at }))
-  if (snap.session_as_of) parts.push(t('dispatch.session_as_of', { at: snap.session_as_of }))
-  if (snap.host_as_of) parts.push(t('dispatch.host_as_of', { at: snap.host_as_of }))
-  out.push(BLANK, { text: ' ' + parts.join(' · '), dim: true })
+  out.push(...sec(DISPATCH_SEC.other, t('dispatch.others'), undefined, [
+    ui.projection('dispatch', 'review.gates', ui.kv(u, t('tab.review'), [pointer], { fact: 'review.gates', goto: 'review' })),
+    ...ui.detail(u, parts.join(' · '), { fact: 'dispatch.counts' }).map(own),
+  ]))
   return out
 }
 

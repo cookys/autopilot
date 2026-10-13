@@ -574,3 +574,25 @@ test('message: the exit-file watch recipe, the no-grep warning and no short Sche
   }
   assert.doesNotMatch(run('nohup scripts/dispatch-consult.sh x &').reason, /\.results\//); // no .exit file, no watch recipe
 });
+
+// ---- review FIX: more shapes that write no .exit file stay denied ----
+for (const cmd of [
+  'setsid -f scripts/dispatch-foreman.sh --resume --run-dir D --answer-file A --ledger L --run-id R > o 2>&1', // --resume runs inline
+  'setsid -f scripts/dispatch-review.sh x --ledger L --run-id R --stage 2>&1', // value is an fd redirection
+  'setsid -f scripts/dispatch-review.sh x --ledger L --run-id R --stage 2>/dev/null',
+  "DISPATCH_DETACH='0' setsid -f scripts/dispatch-review.sh x --ledger L --run-id R --stage S",
+  'DISPATCH_DETACH="0" setsid -f scripts/dispatch-review.sh x --ledger L --run-id R --stage S',
+]) {
+  test(`exit-file wake still denied (review FIX): ${JSON.stringify(cmd)}`, () => {
+    assert.strictEqual(run(cmd).deny, true);
+  });
+}
+test('message: the watch recipe is bounded by timeout, warns about stale .exit, and Monitor is depth-0 only', () => {
+  const r = run('setsid -f scripts/dispatch-review.sh x').reason;
+  assert.ok(r.includes("timeout <seconds> bash -c 'until [ -f <ledger>.results/<id>.<name>.exit ]; do sleep 30; done'"), r);
+  assert.match(r, /ALWAYS set the timeout/);
+  assert.match(r, /foreman --resume/);
+  assert.match(r, /fresh run-id per launch/);
+  assert.match(r, /must not contain `\.`/);
+  assert.match(r, /a subagent cannot/);
+});

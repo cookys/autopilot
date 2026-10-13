@@ -299,9 +299,11 @@ function writesExitFile(p) {
   const m = /dispatch-([a-z-]+)\.(?:sh|js)$/.exec(p.head);
   const kind = m ? LEDGER_RAILS[m[1]] : undefined;
   if (!kind) return false;
-  if (/(?:^|\s)DISPATCH_DETACH=(?:0|false|no|off)(?:\s|$)/i.test(p.seg.text)) return false;
+  if (/(?:^|\s)DISPATCH_DETACH=["']?(?:0|false|no|off)["']?(?:\s|$)/i.test(p.seg.text)) return false;
+  // foreman --resume re-enters a run inline (dispatch-foreman.sh detaches only when RESUME is 0): no .exit file.
+  if (kind === 'fixed' && p.rest.includes('--resume')) return false;
   const have = (flag) => p.rest.some((w, i) => w === flag && i + 1 < p.rest.length
-    && p.rest[i + 1] !== '' && !p.rest[i + 1].startsWith('-') && !/^[<>&|]/.test(p.rest[i + 1]));
+    && p.rest[i + 1] !== '' && !p.rest[i + 1].startsWith('-') && !/^\d*[<>&|]/.test(p.rest[i + 1]));
   return have('--ledger') && have('--run-id') && (kind === 'fixed' || have('--stage'));
 }
 
@@ -346,9 +348,12 @@ const LEDGER_RAILS = { review: 'stage', author: 'stage', hetero: 'stage', forema
 // ledger arg, then watch the .exit file from a separate call. The sleep runs in the shell, so it costs no tokens.
 const exitWatch = (key) => 'Or, when the harness may kill long background jobs: launch `setsid -f <rail> … ` with all its '
   + 'ledger args as its OWN call (allowed: the .exit file is the wake-up source), then in a SECOND call use '
-  + `run_in_background: true with \`until [ -f <ledger>.results/${key}.exit ]; do sleep 30; done\` (or the Monitor `
-  + 'tool on that file) — one completion notification, no tokens spent while waiting. Bad rail args exit before any '
-  + '.exit file exists, so read the rail log first and bound the loop (`timeout <seconds> bash -c …`). Do NOT grep a log '
+  + `run_in_background: true with \`timeout <seconds> bash -c 'until [ -f <ledger>.results/${key}.exit ]; do sleep 30; done'\` `
+  + '(a depth-0 session may use the Monitor tool on that file instead; a subagent cannot, so it uses the until loop) — '
+  + 'one completion notification, no tokens spent while waiting. ALWAYS set the timeout: any failed pre-check, a killed '
+  + 'supervisor, foreman --resume and an exit 2 after the hetero detach write no .exit file, so an unbounded loop hangs '
+  + 'forever. Use a fresh run-id per launch (or `rm -f` the .exit first) so a stale file cannot end the wait early; the '
+  + 'stage name must not contain `.`. Do NOT grep a log '
   + 'for a string such as `rc=` as the completion signal: test output can print the same string and be mistaken for '
   + 'completion. Do not poll with short-interval ScheduleWakeup.';
 

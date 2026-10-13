@@ -17,6 +17,8 @@ What each one does — purpose, when to call it, pointer to its contract — liv
 
 A caution learned the hard way (2026-08-06): several of these were fully built, tested and documented, yet doing nothing — an age threshold left at `0`, a hook never installed, a scanner keyed on an id the residue did not carry. **A script existing is not evidence it is running.** When one is supposed to be protecting something, check that it actually fires. It is one of a family — a module with zero callers, a suite that passes when you delete the gate it tests, a shadow derived from the answer it checks, an assertion pinned to one machine, a green test writing fixture rows into the real store. Each incident and its preventing artifact: [`references/evidence-discipline.md`](references/evidence-discipline.md). Read it before recording anything as verified.
 
+**Rule — negative control**: any new or modified check (gate, hook, scan, admission check) must ship with a negative control, a deliberately broken case that must be blocked and is shown red before green ([evidence-discipline §58](references/evidence-discipline.md)).
+
 **Dispatch rails** — `dispatch-hetero.sh` `dispatch-review.sh` `dispatch-author.sh` `dispatch-author-kimi.js` `dispatch-consult.sh` `dispatch-discuss.js` `dispatch-explore.sh` `dispatch-foreman.sh` `dispatch-batch.sh` `dispatch-anthropic-review.js` `dispatch-local-openai.js` `dispatch-plan-review.js` `dispatch-contract.js` `dispatch-status.js` `check-context-window.js` `lib/context-window.sh` `lib/dispatch-author-codex-transport.sh` `lib/dispatch-detach.sh` `lib/cleanroom-launch.sh` `lib/main-checkout-boundary.sh` `wait-dispatch-results.js` `lib/output-quiescence.sh` `lib/pi-rpc-run.js` `lib/grok-effort.sh` `lib/cursor-model.sh` `lib/agy-model-alias.sh` `lib/agy-argv-ceiling.sh` `lib/plan-review-findings.js` `lib/plan-review-normalize.js` `lib/plan-review-timeout.js`
 `lib/plan-review-panel.js` `lib/plan-review-context.js` `lib/review-fanout.js` `lib/repo-identity.sh` `lib/dispatch-branch-ledger.sh`
 
@@ -115,6 +117,10 @@ not drift.
 ## Coexistence with superpowers
 
 Autopilot is standalone-capable. When `superpowers` is installed, orchestrators (`ceo-agent`, `finish-flow`, `quality-pipeline`, `think-tank*`, `dev-flow`) consult `.claude/dispatch-config.md` to decide which methodology / reviewer / parallel dispatcher to delegate to. Defaults in [`project-config-template/dispatch-config.md`](project-config-template/dispatch-config.md). Per-scenario UX in [`docs/coexistence.md`](docs/coexistence.md).
+
+## Mission graph verification (campaign convention)
+
+In a Mission graph, each node's `verification_commands` hold only fast, fixed checks — never `bash hooks/tests/run.sh`. The whole suite runs once, alone, on this host before a campaign merges into `develop`; red means no merge. Sealed graphs keep their existing chain ([BL-0134](docs/BACKLOG.md)); details in `docs/backlog/hooks-tests-run-sh-is-red-on-develop-sealed-campaign-verify-cmd-is-unsatisfiable.md`.
 
 ## Where context lives
 

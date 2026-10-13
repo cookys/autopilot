@@ -156,7 +156,9 @@ test('negative controls of the checker: a hand-made line, a raw token in a value
   expect(i4(l => (l.kind === 'kv' && l.text.startsWith('範圍') ? { ...l, segs: (l.segs ?? []).map(s => (s.role === 'value' ? { ...s, bold: true } : s)) } : l)).length).toBeGreaterThan(0) // a bold value outside header / verdict
   expect(i4(l => (l.kind === 'kv' && l.text.startsWith('範圍') ? { ...l, segs: (l.segs ?? []).map(s => (s.role === 'value' ? { ...s, bold: true, dim: true } : s)) } : l)).length).toBeGreaterThan(0) // bold and dim on one segment
   // a findings item (△ 待修, also the warning colour) is not need_you: its bold mark must be caught
-  expect(i4(l => (l.kind === 'item' && l.text.includes('待修') ? { ...l, segs: (l.segs ?? []).map(s => (s.role === 'glyph' || s.role === 'state' ? { ...s, bold: true } : s)) } : l)).length).toBeGreaterThan(0)
+  for (const role of ['glyph', 'state'] as const) { // one bold mark at a time, so no other rule can be what catches it
+    expect(i4(l => (l.kind === 'item' && l.text.includes('待修') ? { ...l, segs: (l.segs ?? []).map(s => (s.role === role ? { ...s, bold: true } : s)) } : l)).length).toBeGreaterThan(0)
+  }
   // positives: a need_you item may bold its mark, word and body; a meter headline value may be bold
   const needYouItem = (l: PaneLine): PaneLine => (l.kind === 'item' && l.text.includes('待修')
     ? { ...l, segs: [{ text: STATES.need_you.glyph, role: 'glyph' as const, color: STATES.need_you.key, bold: true }, { text: ' ', role: 'prose' as const }, { text: l.text.trim(), role: 'prose' as const, bold: true }] }

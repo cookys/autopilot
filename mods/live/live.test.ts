@@ -3350,8 +3350,7 @@ const legendMissing = (lines: { text: string }[], t: ReturnType<typeof makeT>): 
   const all = lines.map(l => l.text).join('\n')
   const out: string[] = []
   for (const id of ui.STATE_IDS) {
-    if (!all.includes(ui.STATES[id].glyph)) out.push('state glyph ' + id)
-    if (!all.includes(t('ui.state.' + id))) out.push('state word ' + id)
+    if (!lines.some(l => l.fact === 'legend.states' && l.text.includes(ui.STATES[id].glyph) && l.text.includes(t('ui.state.' + id)))) out.push('state row ' + id) // the glyph and its word on one row: elsewhere on the tab does not count
   }
   for (const k of LEGEND_STRUCTURE) if (!all.includes(ui.GLYPHS.structure[k])) out.push('structure glyph ' + k)
   if (![...ui.GLYPHS.chart.meterOn].every(c => all.includes(c))) out.push('meter glyph')

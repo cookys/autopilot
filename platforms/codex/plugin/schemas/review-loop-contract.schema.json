@@ -880,7 +880,7 @@
       ],
       "x-shell-validated": true,
       "x-shell-var": "REVIEW_FRESH_CONTEXT",
-      "description": "Whether a reviewer must run in a brand-new provider session. on (default) = a review dispatch that would continue an existing session (a resumed session id, or the implementer's own session) is refused at dispatch with a named error; off = legal, but the review receipt is stamped review_fresh_context=off so the waiver stays visible afterwards. Resolver coerces garbage to on (fail-closed)."
+      "description": "Whether a reviewer must run in a brand-new provider session. on (default) = a review dispatch that would continue an existing session (a resumed session id, or the implementer's own session) is refused at dispatch with a named error; off = legal, but the review receipt is stamped review_fresh_context=off so the waiver stays visible afterwards. Resolver coerces garbage to on (fail-closed). The guarantee of `on` comes from a structural guard, hooks/tests/review-rail-no-session-reuse.test.sh: the review rail has no session-resume entry (it runs each runner against a fake binary and fails if any resume/continue argument appears or a claude --session-id repeats), so there is nothing to refuse at dispatch today. If a resume entry is ever added to a review path, this key MUST refuse it at dispatch."
     }
   },
   "required": [

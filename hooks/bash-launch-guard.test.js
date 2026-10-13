@@ -530,3 +530,47 @@ test('message: --timeout is the longest acceptable wait (never "short"), no stal
     assert.doesNotMatch(r, /keep --timeout|3600/);
   }
 });
+
+// ---- exit-file wake: a detached rail with every ledger arg lands <ledger>.results/<id>.<stage>.exit, and the
+// NEXT call (until-loop / Monitor on that file) is the wake-up, so the launch call itself needs no waiter ----
+for (const cmd of [
+  'setsid -f scripts/dispatch-review.sh x --ledger L --run-id R --stage S > o 2>&1', // stage rail, all three
+  'setsid -f bash scripts/dispatch-author.sh brief.md --ledger L --run-id R --stage S',
+  'setsid -f scripts/dispatch-hetero.sh --ledger L --run-id R --stage S --branch b',
+  'setsid -f scripts/dispatch-foreman.sh x --ledger L --run-id R', // fixed rail, two
+  'nohup setsid -f scripts/dispatch-foreman.sh x --ledger "$L" --run-id r1 > o 2>&1',
+]) {
+  test(`exit-file wake accepted: ${JSON.stringify(cmd)}`, () => {
+    assert.strictEqual(run(cmd).deny, false);
+  });
+}
+for (const cmd of [
+  'setsid -f scripts/dispatch-review.sh x', // no ledger args at all
+  'setsid -f scripts/dispatch-review.sh x --ledger L --run-id R', // stage rail missing --stage
+  'setsid -f scripts/dispatch-author.sh x --run-id R --stage S', // missing --ledger
+  'setsid -f scripts/dispatch-hetero.sh x --ledger L --stage S', // missing --run-id
+  'setsid -f scripts/dispatch-foreman.sh x --ledger L', // fixed rail missing --run-id
+  'setsid -f scripts/dispatch-review.sh x --ledger L --run-id R --stage', // --stage without a value
+  'setsid -f scripts/dispatch-review.sh x --ledger L --run-id R --stage --other', // value is another flag
+  'setsid -f scripts/dispatch-consult.sh x --ledger L --run-id R --stage S', // rail never writes .exit
+  'setsid -f scripts/dispatch-explore.sh x --ledger L --run-id R',
+  'DISPATCH_DETACH=0 setsid -f scripts/dispatch-review.sh x --ledger L --run-id R --stage S', // detach off: stays inline
+]) {
+  test(`exit-file wake still denied: ${JSON.stringify(cmd)}`, () => {
+    assert.strictEqual(run(cmd).deny, true);
+  });
+}
+test('exit-file wake: a plain `&` launch with full ledger args is not covered (only `setsid -f`)', () => {
+  assert.strictEqual(run('nohup scripts/dispatch-review.sh x --ledger L --run-id R --stage S &').deny, true);
+});
+test('message: the exit-file watch recipe, the no-grep warning and no short ScheduleWakeup', () => {
+  for (const [c, key] of [['setsid -f scripts/dispatch-review.sh x', '<id>.<name>'], ['nohup scripts/dispatch-author.sh x &', '<id>.<name>'], ['nohup scripts/dispatch-foreman.sh x &', '<id>.foreman']]) {
+    const r = run(c).reason;
+    assert.ok(r.includes(`until [ -f <ledger>.results/${key}.exit ]; do sleep 30; done`), r);
+    assert.match(r, /Monitor/);
+    assert.match(r, /Do NOT grep a log for a string such as `rc=`/);
+    assert.match(r, /test output can print the same string/);
+    assert.match(r, /Do not poll with short-interval ScheduleWakeup/);
+  }
+  assert.doesNotMatch(run('nohup scripts/dispatch-consult.sh x &').reason, /\.results\//); // no .exit file, no watch recipe
+});

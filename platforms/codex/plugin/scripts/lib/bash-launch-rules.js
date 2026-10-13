@@ -292,6 +292,19 @@ function waitsForAll(rest) {
   return args.length === 0 || (args.length === 1 && /^"?\$!"?$/.test(args[0]));
 }
 
+// Does this detached rail launch carry every ledger arg its kind needs (stage rails: --ledger/--run-id/--stage,
+// fixed rails: --ledger/--run-id, each followed by a real value word)? Only then does the rail write the .exit file.
+// DISPATCH_DETACH=0 (detach switched off) keeps the rail inline: no .exit file, so it does not qualify.
+function writesExitFile(p) {
+  const m = /dispatch-([a-z-]+)\.(?:sh|js)$/.exec(p.head);
+  const kind = m ? LEDGER_RAILS[m[1]] : undefined;
+  if (!kind) return false;
+  if (/(?:^|\s)DISPATCH_DETACH=(?:0|false|no|off)(?:\s|$)/i.test(p.seg.text)) return false;
+  const have = (flag) => p.rest.some((w, i) => w === flag && i + 1 < p.rest.length
+    && p.rest[i + 1] !== '' && !p.rest[i + 1].startsWith('-') && !/^[<>&|]/.test(p.rest[i + 1]));
+  return have('--ledger') && have('--run-id') && (kind === 'fixed' || have('--stage'));
+}
+
 // Rule 1. Returns { rule, why } or null.
 function detectDetachNoWake(cmd) {
   const text = executableText(typeof cmd === 'string' ? cmd : '');
@@ -306,6 +319,9 @@ function detectDetachNoWake(cmd) {
     const p = pos[idx];
     if (!p.head || !(p.detach || p.seg.bg)) continue;
     if (!isRail(p.head)) continue;
+    // A `setsid -f` rail launched with EVERY ledger arg its kind needs lands `<ledger>.results/<id>.<stage>.exit`;
+    // the NEXT call (an until-loop / Monitor on that file) is the wake-up, so this call needs no waiter.
+    if (p.detach && writesExitFile(p)) continue;
     const shape = p.detach ? 'setsid-f' : 'amp';
     if (shape === 'amp' && !p.seg.sub
       && pos.slice(idx + 1).some((q) => q.head === 'wait' && !q.seg.sub && !q.seg.bg && !q.seg.pipe && waitsForAll(q.rest))) continue;
@@ -326,6 +342,16 @@ function detectDetachNoWake(cmd) {
 // (dispatch-detach.sh via review/author/foreman, in-process in hetero). The other rails never write it.
 const LEDGER_RAILS = { review: 'stage', author: 'stage', hetero: 'stage', foreman: 'fixed' };
 
+// Second long-job recipe (the harness memory guard often kills run_in_background jobs): detach the rail with every
+// ledger arg, then watch the .exit file from a separate call. The sleep runs in the shell, so it costs no tokens.
+const exitWatch = (key) => 'Or, when the harness may kill long background jobs: launch `setsid -f <rail> … ` with all its '
+  + 'ledger args as its OWN call (allowed: the .exit file is the wake-up source), then in a SECOND call use '
+  + `run_in_background: true with \`until [ -f <ledger>.results/${key}.exit ]; do sleep 30; done\` (or the Monitor `
+  + 'tool on that file) — one completion notification, no tokens spent while waiting. Bad rail args exit before any '
+  + '.exit file exists, so read the rail log first and bound the loop (`timeout <seconds> bash -c …`). Do NOT grep a log '
+  + 'for a string such as `rc=` as the completion signal: test output can print the same string and be mistaken for '
+  + 'completion. Do not poll with short-interval ScheduleWakeup.';
+
 // Only options that literally work for this (shape, rail) pair — see the recipe tests.
 function launchAdvice(shape, rail, nested = false) {
   const parts = ["Short job (any rail): run it in the foreground with the Bash tool's run_in_background: true "
@@ -345,13 +371,15 @@ function launchAdvice(shape, rail, nested = false) {
       + 'is written) and chain the waiter with `&&` in the SAME command: `setsid -f <rail> … && node '
       + 'scripts/wait-dispatch-results.js --ledger <path> --expect <id>.<name> --timeout <seconds>` (bad rail args '
       + 'exit before any .exit file exists, so set --timeout to the longest wait you accept) — run that whole '
-      + "command with `run_in_background: true` (it can outlast the Bash tool's 600 s foreground limit).");
+      + "command with `run_in_background: true` (it can outlast the Bash tool's 600 s foreground limit). "
+      + exitWatch('<id>.<name>'));
   } else if (kind === 'fixed') {
     parts.push('Long job: pass `--ledger <path> --run-id <id>` (the stage is fixed) and chain the waiter with `&&` in '
       + 'the SAME command: `setsid -f <rail> … && node scripts/wait-dispatch-results.js --ledger <path> --expect '
       + '<id>.foreman --timeout <seconds>` (bad rail args exit before any .exit file exists, so set --timeout to '
       + 'the longest wait you accept) — run that whole command with `run_in_background: true` (it can outlast '
-      + "the Bash tool's 600 s foreground limit).");
+      + "the Bash tool's 600 s foreground limit). "
+      + exitWatch('<id>.foreman'));
   } else {
     parts.push(`dispatch-${rail || '…'} never writes the .exit file wait-dispatch-results.js waits for, so only the `
       + 'option(s) above work for it.');

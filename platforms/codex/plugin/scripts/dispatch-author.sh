@@ -466,9 +466,47 @@ die_precondition() {
   emit_result "precondition_failed" "null" "$1" "2"
 }
 
+# Bounded, secret-redacted tail of the runner's captured stderr (BL-0136). Prints
+# nothing when there is no stderr file. Redaction reuses hooks/_shared/secret-patterns.
+runner_stderr_excerpt() {
+  local err_file="${RUNNER_ERR_FILE:-}"
+  [[ -n "$err_file" && -s "$err_file" ]] || return 0
+  node -e '
+    const fs = require("fs"), path = require("path");
+    let redact = (t) => String(t);
+    try { redact = require(path.join(process.argv[2], "..", "hooks", "_shared", "secret-patterns")).redact; } catch (_e) {}
+    const b = fs.readFileSync(process.argv[1]);
+    const tail = b.subarray(Math.max(0, b.length - 2048)).toString("utf8");
+    process.stdout.write(redact(tail).replace(/\s+/g, " ").trim());
+  ' "$err_file" "$_AUTHOR_SELF_DIR" 2>/dev/null || true
+}
+
+# transport_status vocabulary matches dispatch-plan-review.js: quota | timeout | exit_failure.
+# Quota detection reuses engine-capability-state.js classify-error (402/balance/credits shapes).
+runner_transport_status() {
+  local exit_code="$1" scan cls
+  scan="$(mktemp -t dispatch-author-classify-XXXXXX)"
+  { [[ -s "${RUNNER_ERR_FILE:-}" ]] && cat "$RUNNER_ERR_FILE"; tail -c 4096 "$RAW_LOG" 2>/dev/null; } > "$scan" 2>/dev/null || true
+  cls="$(node "$_AUTHOR_SELF_DIR/engine-capability-state.js" classify-error --file "$scan" 2>/dev/null || true)"
+  rm -f "$scan"
+  if [[ "$cls" = "quota_exhausted" ]]; then echo quota
+  elif [[ "$exit_code" = "124" ]]; then echo timeout
+  else echo exit_failure; fi
+}
+
 die_runner_failed() {
   local -r runner_exit_code="$1"
-  emit_result "runner_failed" "$RAW_LOG" "runner exited $runner_exit_code" 3
+  local excerpt status msg
+  excerpt="$(runner_stderr_excerpt)"
+  status="$(runner_transport_status "$runner_exit_code")"
+  msg="runner exited $runner_exit_code"
+  if [[ -n "$excerpt" ]]; then
+    msg="$msg: $excerpt"
+    # Keep the same redacted excerpt in the raw log so the cause survives the JSON.
+    printf '\n--- runner stderr (redacted, last 2048 bytes) ---\n%s\n' "$excerpt" >> "$RAW_LOG" 2>/dev/null || true
+  fi
+  rm -f "${RUNNER_ERR_FILE:-}" 2>/dev/null || true
+  emit_result "runner_failed" "$RAW_LOG" "$msg" 3 ", \"transport_status\": \"$status\""
 }
 
 check_session_mode_gate() {
@@ -980,6 +1018,7 @@ QODER_CWD=""
 CNATIVE_CWD=""
 CURSOR_CWD=""
 CURSOR_ERR=""
+RUNNER_ERR_FILE=""
 AUTHOR_WRAP_FILE=""
 AUTHOR_PARSE_FILE=""
 AUTHOR_BLOCK_FILE=""
@@ -994,6 +1033,7 @@ cleanup() {
   [ -n "$CNATIVE_CWD" ] && rm -rf "$CNATIVE_CWD" || true
   [ -n "$CURSOR_CWD" ] && rm -rf "$CURSOR_CWD" || true
   [ -n "$CURSOR_ERR" ] && rm -f "$CURSOR_ERR" || true
+  [ -n "$RUNNER_ERR_FILE" ] && rm -f "$RUNNER_ERR_FILE" || true
   [ -n "$AUTHOR_WRAP_FILE" ] && rm -f "$AUTHOR_WRAP_FILE" || true
   [ -n "$AUTHOR_PARSE_FILE" ] && rm -f "$AUTHOR_PARSE_FILE" || true
   [ -n "$AUTHOR_BLOCK_FILE" ] && rm -f "$AUTHOR_BLOCK_FILE" || true
@@ -1062,6 +1102,10 @@ fi
 
 [ -n "${DISPATCH_QUIET:-}" ] || echo "dispatch-author: ${RUNNER}/${MODEL} (effort=${EFFORT}, timeout=${TIMEOUT})" >&2
 
+# Runner stderr capture (BL-0136): grok / qoderclicn / cc-shim / claude-native write here
+# instead of /dev/null; read only on failure, bounded + redacted, never salvaged as output.
+RUNNER_ERR_FILE="$(mktemp -t dispatch-author-runner-err-XXXXXX)"
+
 if [[ "$RUNNER" = "codex" ]]; then
   CODEX_BIN="${BIN:-codex}"
   command -v "$CODEX_BIN" >/dev/null 2>&1 || die_precondition "codex binary not found: $CODEX_BIN"
@@ -1108,7 +1152,7 @@ elif [[ "$RUNNER" = "grok" ]]; then
   grok_effort_note "$EFFORT" "dispatch-author" "$MODEL" "$GROK_BIN" "$GROK_EFFORT"
   timeout "$TIMEOUT" "$GROK_BIN" --prompt-file "$PROMPT_FILE" --cwd "$GROK_CWD" --model "$MODEL" \
     --reasoning-effort "$GROK_EFFORT" \
-    --no-alt-screen --output-format plain --disable-web-search > "$RAW_LOG" 2>/dev/null
+    --no-alt-screen --output-format plain --disable-web-search > "$RAW_LOG" 2>"$RUNNER_ERR_FILE"
   RUNNER_EXIT=$?
   set -e
   rm -rf "$GROK_CWD"; GROK_CWD=""
@@ -1117,13 +1161,13 @@ elif [[ "$RUNNER" = "qoderclicn" ]]; then
   command -v "$QODER_BIN" >/dev/null 2>&1 || die_precondition "qoder binary not found: $QODER_BIN (Qoder CLI CN)"
   # Read-only authoring, grok-shaped: scratch cwd (-w), --tools "" (no editor/tools — the
   # authored content is produced as STDOUT text, not repo edits), prompt via STDIN. STDERR is
-  # discarded (2>/dev/null) so qoder's benign non-git-cwd 'fatal: not a git repository' never
+  # captured to RUNNER_ERR_FILE (read only on failure) so qoder's benign non-git-cwd 'fatal: not a git repository' never
   # lands in the captured authored text. Enforced timeout is the hang backstop.
   QODER_CWD="$(mktemp -d -t dispatch-author-qodercwd-XXXXXX)"
   set +e
   timeout "$TIMEOUT" bash -c 'cd "$1" && exec "$2" -p --model "$3" -w "$1" \
     --reasoning-effort "$4" --tools "" --dangerously-skip-permissions --no-session-persistence < "$5"' \
-    _ "$QODER_CWD" "$QODER_BIN" "$MODEL" "$EFFORT" "$PROMPT_FILE" > "$RAW_LOG" 2>/dev/null
+    _ "$QODER_CWD" "$QODER_BIN" "$MODEL" "$EFFORT" "$PROMPT_FILE" > "$RAW_LOG" 2>"$RUNNER_ERR_FILE"
   RUNNER_EXIT=$?
   set -e
   rm -rf "$QODER_CWD"; QODER_CWD=""
@@ -1200,7 +1244,7 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
   set +e
   timeout "$TIMEOUT" env -u ANTHROPIC_API_KEY HOME="$CCSHIM_CWD" ${CLAUDE_CODE_SESSION_ID:+"AUTOPILOT_PARENT_SESSION_ID=$CLAUDE_CODE_SESSION_ID"} \
     bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "" < "$4"' \
-    _ "$CCSHIM_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" > "$RAW_LOG" 2>/dev/null
+    _ "$CCSHIM_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" > "$RAW_LOG" 2>"$RUNNER_ERR_FILE"
   RUNNER_EXIT=$?
   set -e
   rm -rf "$CCSHIM_CWD"; CCSHIM_CWD=""
@@ -1217,7 +1261,7 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
   CNATIVE_CWD="$(mktemp -d)"
   set +e
   timeout "$TIMEOUT" env ${CLAUDE_CODE_SESSION_ID:+"AUTOPILOT_PARENT_SESSION_ID=$CLAUDE_CODE_SESSION_ID"} bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "" < "$4"' \
-    _ "$CNATIVE_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" > "$RAW_LOG" 2>/dev/null
+    _ "$CNATIVE_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" > "$RAW_LOG" 2>"$RUNNER_ERR_FILE"
   RUNNER_EXIT=$?
   set -e
   rm -rf "$CNATIVE_CWD"; CNATIVE_CWD=""
@@ -1315,6 +1359,7 @@ fi
 if [[ "$RUNNER_EXIT" -ne 0 ]]; then
   die_runner_failed "$RUNNER_EXIT"
 fi
+rm -f "$RUNNER_ERR_FILE" 2>/dev/null || true
 
 # Codex transport gates (only after exit 0 + fully reaped tree).
 # Artifact integrity precedes settle; hardened content checks run after settle on

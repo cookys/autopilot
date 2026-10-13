@@ -1,6 +1,6 @@
 # Dispatch tree — follow every piece of work from the session, without guessing a parent
 
-Status: **draft, in plan review, G1 revision** (2026-10-13; `lane/w-dispatch-rail` merged as `544b654b`). Plan only; no product code changed.
+Status: **draft, G2 revision (final generation; G2 blockers ruled by the coordinator)** (2026-10-13; `lane/w-dispatch-rail` merged as `544b654b`). Plan only; no product code changed.
 Split out of [`2026-10-13-live-pane-design-system.md`](2026-10-13-live-pane-design-system.md) (its former P6 and §7.1) by owner ruling 2026-10-13: the dispatch tree is scheduled as its own plan, after the related branches merge. The live-pane plan keeps one pointer line and no dependency on this plan.
 Scope: run manifests, the dispatch rails' child launch, the session marker, the subagent records, and one read-only renderer in the 派工 tab (`mods/live`). It touches producers, so it is not a pane-only change.
 
@@ -42,6 +42,8 @@ An edge goes into the tree only when **both ends name each other**; never attach
 | session → rail (placement, depth 0) | membership exact, no `parent_run_id`, stamp (step 5) `session` | no stamp → 起點不明 (`origin_unstamped`); `depth ≥ 1` without `parent_run_id` → 來歷不明 (`parent_run_missing_at_depth`) |
 | rail → rail | child `parent_run_id` names manifest P placed in this tree; child `session_id` null or equal to P's | `parent_run_not_found`, `parent_run_other_session`, `cycle` |
 | rail → child claude session X | **exactly one** manifest has `child_session_id == X`, marker `X.json` has non-null `parent_session_id ==` that manifest's `session_id`, and `X ≠` it | `child_marker_absent`, `child_parent_mismatch`; two or more claimants → `duplicate_child_claim`, X under none of them |
+| child session X → rail B (nested Claude) | X placed exact under rail A (row above), `B.session_id == X`, `B.parent_run_id == A` | X not exact under A → `nested_via_untracked_child`; `B.session_id == A.child_session_id` but `B.parent_run_id ≠ A` → `nested_parent_mismatch` |
+| session → subagent (top level) | meta in the session's own `subagents/` dir (written there by Claude Code), no `parentAgentId`, `spawnDepth == 1`, and **exactly one** tool result in the session transcript has `toolUseResult.agentId ==` the id and `tool_use_id ==` meta `toolUseId` (second end; observed this revision) | 來歷不明: `agent_result_absent`, `agent_tool_use_mismatch`, `duplicate_agent_result`; `spawnDepth` 0 → `unexpected_spawn_depth` |
 | subagent → subagent | `parentAgentId` resolves | `legacy_record_no_parent_info`, `missing_parentAgentId`, `parent_agent_not_found`, `cycle` |
 | subagent → rail | manifest `origin_agent_id` (step 5) names an agent recorded in the session | absent → 起點不明 (`origin_unstamped`); no such record → `stamp_agent_not_found` |
 | fleet | never an edge (deferred, §4) | — |
@@ -52,7 +54,7 @@ An edge goes into the tree only when **both ends name each other**; never attach
 
 Each hand-off is its own commit. Acceptance is red before, green after, re-derived by running it (ADR-0001). `bash mods/live/run-tests.sh` accepts no producer commit.
 
-**Order.** Steps 2 and 3 shipped before any probe, so D0 is a **verification gate over shipped writers** (§7 rows a, c, e, f) and the **gate before every new writer**. Order: **D0 → 3a → 3b → 3c → 5 → R**; no new writer starts before the §7 rows that block it are recorded. **Re-open protocol**: if D0 falsifies step 2 or 3, (1) `hooks/tests/manifest-session-id.test.sh` or `child-session-identity.test.sh` is changed first and shown red on `develop`; (2) the writer is fixed in its own commit; (3) §2 is restated in that commit; (4) R's fixtures for that edge are re-derived after (2) is green.
+**Order.** Steps 2 and 3 shipped before any probe, so D0 is a **verification gate over shipped writers** (§7 rows a, c, e, f) and the **gate before every new writer**. Order: **D0 → 3a → 3b → 3c → 5 → R**; no new writer starts before the §7 rows that block it are recorded. A bad d1, d2 or f needs a producer change this plan does not hold: work stops, the plan is revised and plan-reviewed again before R (no conditional step here). **Re-open protocol**: if D0 falsifies step 2 or 3, (1) `hooks/tests/manifest-session-id.test.sh` or `child-session-identity.test.sh` is changed first and shown red on `develop`; (2) the writer is fixed in its own commit; (3) §2 is restated in that commit; (4) R's fixtures for that edge are re-derived after (2) is green.
 
 **Step 4 (fleet) is deferred out of this plan** (owner ruling 2026-10-13): low value, and the receiving side is an LLM relaying the value. Tracked in the backlog.
 
@@ -66,14 +68,15 @@ Each hand-off is its own commit. Acceptance is red before, green after, re-deriv
 - Accept: `hooks/tests/child-marker-sessionstart.test.sh` — stub `claude` runs the configured hook with `{session_id:<its --session-id>}`; per shape (author/review × native/cc-shim) with parent P: `<id>.json` exists in the marker dir, `parent_session_id == P`, `session_id ==` manifest `child_session_id`, scratch HOME gone, `P.json` byte-identical. Red on `develop`.
 - Negative control: hook flag removed → no marker. Live: rows a–b re-run per shape after landing.
 
-**3b — write-target resolver (D7, §6).** One resolver used by every §6 writer; rails export `AUTOPILOT_PARENT_SESSION_ID` to every child runner and unset `AUTOPILOT_SESSION_ID`; same for the probe's `claude -p`.
+**3b — write-target resolver (D7, §6).** One resolver used by every §6 writer; rails set the child env per §6 rule 3; same for the probe's `claude -p`.
 - Compat: with the parent variable unset, output equals today's `getSessionId()`; refusal = exit 3, one stderr line naming the source, no file touched. Consumers of `AUTOPILOT_SESSION_ID` below a rail (`src/engine/profile-runtime.js:588`, hooks in a hand, campaign intake) are enumerated and pinned in case (e). Rollback: revert.
 - Accept: `hooks/tests/session-marker-write-target.test.sh`, red on `develop`:
   (a) `node hooks/runs-watch-autostart.js` with SessionStart payload `{session_id:P}`, `AUTOPILOT_PARENT_SESSION_ID=P`, an **expired** `P.json` pre-seeded → bytes unchanged; same via `ensure-child`.
   (b) `CLAUDE_CODE_SESSION_ID=P` + parent P: `set --size S`, `set --level l3`, `clear`, `bind-campaign-root`, `stage-advance.js --resume-from` → exit 3, `P.json` unchanged.
   (c) `AUTOPILOT_SESSION_ID=X`, `CLAUDE_CODE_SESSION_ID=C`, parent P → `C.json` written, `X.json` unchanged. (d) `C` with parent P → `C.json` written.
   (e) stub codex under `dispatch-hetero.sh` and stub `claude` under `probe-engine-capability.sh` see parent P and no `AUTOPILOT_SESSION_ID`.
-- Negative control: `cmdSetPlain` back on `markerPath()` → (b) red.
+  (f) launcher with only `CLAUDE_SESSION_ID=L`: stub child sees parent L, no `CLAUDE_SESSION_ID`; its `set` → exit 3, `L.json` unchanged. (g) launcher with no id (cwd id W): child sees parent W; `set` in the same cwd → exit 3, `W.json` unchanged. (h) launcher with only `CODEX_THREAD_ID=T`: child keeps T; `set` → exit 3, `T.json` unchanged.
+- Negative controls: `cmdSetPlain` back on `markerPath()` → (b) red; rail takes P from `CLAUDE_CODE_SESSION_ID` only → (f)–(h) red.
 
 **3c — keep the cc-shim transcript (D3).** Before removing the scratch HOME, author and review copy `<scratch>/.claude/projects/*/<child_session_id>.jsonl` to `<runs>/<run_id>.child-transcript.jsonl` and set manifest `child_transcript` (null on failure). It is the child's record of itself, not the child end of an edge.
 - Compat: run status never depends on the copy. Rollback: revert; copies stay as plain files.
@@ -85,8 +88,8 @@ Each hand-off is its own commit. Acceptance is red before, green after, re-deriv
 - Accept: `hooks/tests/rail-agent-stamp.test.sh`, driven from `hooks/hooks.json`: run every Bash PreToolUse entry, assert only the stamp returns `updatedInput`, **execute the rewritten command** with a stub runner, read the manifest. Cases: A1 → `"A1"`; no agent → `"session"`; knob off → null; quote in id → none; non-rail → no output; A1 and A2 concurrent → each own id; nested rail → null. Red on `develop`; rows g–i re-run live after landing.
 
 **R — merged view and renderer (D1, D9).** `dispatch-tree.js` applies §3 (reads `child_session_id`, child markers, `origin_agent_id`), then a **hoist pass** moves every untracked node into its session's group, setting `untracked_bucket` and keeping `untracked_reason`. The tab renders groups with their own glyph. Codex mirror re-synced. Compat: §5. Rollback: revert (no stored state).
-- Accept: `node --test scripts/dispatch-tree.test.js`; the tests at `:85-107`, `:141-153` are rewritten, so red on `develop`. Fixtures: (1) exact loop-back → child under its rail, `edge:"exact"`; (2) no child marker → `child_marker_absent`; (3) two claimants → `duplicate_child_claim`, under neither; (4) null both sides → not exact; (5) fresh marker join → `joined_by_marker`, not in `root.children`; (6) expired → `joined_by_expired_marker`; (7) `parent_run_not_found`, `parent_run_other_session`; (8) old subagent record → `legacy_record_no_parent_info`; (9) unstamped → 起點不明, `session` → root, A1 → under A1, A9 → `stamp_agent_not_found`; (10) foreman R1 → R2 (`session_id` null) → G without marker: R2 under R1, G in 來歷不明; (11) depth 1 without parent → `parent_run_missing_at_depth`; (12) two concurrent rails → each child under its own.
-- Negative control: hoist off → (5)–(7) red. Then `bash mods/live/run-tests.sh`.
+- Accept: `node --test scripts/dispatch-tree.test.js`; the tests at `:85-107`, `:141-153` are rewritten, so red on `develop`. Fixtures: (1) exact loop-back → child under its rail, `edge:"exact"`; (2) no child marker → `child_marker_absent`; (3) two claimants → `duplicate_child_claim`, under neither; (4) null both sides → not exact; (5) fresh marker join → `joined_by_marker`, not in `root.children`; (6) expired → `joined_by_expired_marker`; (7) `parent_run_not_found`, `parent_run_other_session`; (8) old subagent record → `legacy_record_no_parent_info`; (9) unstamped → 起點不明, `session` → root, A1 → under A1, A9 → `stamp_agent_not_found`; (10) foreman R1 → R2 (`session_id` null) → G without marker: R2 under R1, G in 來歷不明; (11) depth 1 without parent → `parent_run_missing_at_depth`; (12) two concurrent rails → each child under its own; (13) top-level agent with one matching transcript result → under the session, `edge:"exact"`; no result → `agent_result_absent`; two → `duplicate_agent_result`; `toolUseId` differs → `agent_tool_use_mismatch`; (14) A → exact X → B (`session_id` X, `parent_run_id` A) → B under X; X without marker → `nested_via_untracked_child`; `parent_run_id` ≠ A → `nested_parent_mismatch`. On `develop` (13) "no result" sits under the session and (14) puts B under A: red.
+- Negative controls: hoist off → (5)–(7) red; transcript end ignored → (13) "no result" red; nested rule on `parent_run_id` alone → (14) mismatch red. Then `bash mods/live/run-tests.sh`.
 
 Display follows live-pane §2.4 (one line per top-level work, children folded behind `▸ N 個子工作`, live open, finished closed). This plan adds one bounded `tree` component (depth ≤ 4, deeper folded into `▸ 還有 N 層`) with its own invariants. Tree rows carry identity and lifetime only; seat verdicts stay in 審查 (live-pane §2.6).
 
@@ -94,7 +97,7 @@ Display follows live-pane §2.4 (one line per top-level work, children folded be
 
 ## 5. Data contract with `scripts/dispatch-tree.js`
 
-The hoist moves nodes out of `children`, which is not additive, so the script's own JSON `schema_version` becomes **2** (only its own test reads 1). `root.untracked_groups: [{bucket, children}]`, one per bucket, the only place untracked nodes appear. Every node: `edge: "exact"|"none"` (no `marker` kind), `untracked_bucket`, and the §3 reasons. New kind `child_session` with `parent_session_id`. Rails add `child_session_id`, `origin_agent_id`, `child_transcript`. A node without `edge` reads as `none`.
+The hoist moves nodes out of `children`, which is not additive, so the script's own JSON `schema_version` becomes **2** (only its own test reads 1). `root.untracked_groups: [{bucket, children}]`, one per bucket, the only place untracked nodes appear. Every node: `edge: "exact"|"none"` (no `marker` kind), `untracked_bucket`, and the §3 reasons. New kind `child_session` with `parent_session_id`; it may hold rail children (nested Claude, §3). Agents add `tool_use_id`. Rails add `child_session_id`, `origin_agent_id`, `child_transcript`. A node without `edge` reads as `none`.
 
 ## 6. Session marker write target (answers G1 R7 second finding and the minimax R7)
 
@@ -102,7 +105,7 @@ D7 states the problem. Design: one resolver `resolveMarkerWriteTarget({payloadId
 
 1. **P unset**: today's `getSessionId()` chain, unchanged.
 2. **P set**: accept `payload` and `explicit` (unless equal to P) and `env:CLAUDE_CODE_SESSION_ID` **only when it differs from P** (Claude replaces it in its children; row a re-checks). Refuse other env sources and cwd: a process with P set cannot tell its own value from an inherited one.
-3. **Every rail exports P = its own `CLAUDE_CODE_SESSION_ID` to every child runner** and unsets `AUTOPILOT_SESSION_ID`, so a non-Claude runner, including one below a Claude child, is caught by rule 2.
+3. **Every rail exports P = its own write target** (this resolver's id, whatever the source, cwd included) to every child runner, and removes `AUTOPILOT_SESSION_ID`, `CLAUDE_SESSION_ID`, and `CLAUDE_CODE_SESSION_ID` when it differs from P. A non-Claude runner, including one below a Claude child, is then caught by rule 2. `CODEX_THREAD_ID` stays (codex sets it): with P set, rule 2 refuses every `env:` source except a `CLAUDE_CODE_SESSION_ID` ≠ P, so an inherited thread id is never written under; a codex child's own is refused too (fail closed, no marker).
 4. Inherited ids are read-only: read to record `parent_session_id`, never written under.
 
 | Writer | Own id today | After 3b |
@@ -126,14 +129,15 @@ All measured by D0 unless named. Pass = the Unknown holds as written; anything e
 | a | `claude -p --session-id u`: SessionStart fires with payload `u`, and Bash sees `CLAUDE_CODE_SESSION_ID == u` (verifies step 3) | opted-in git temp dir; plugin path (`u.json` appears) and a `<cwd>/.claude/settings.json` sentinel; env dump. Not `--settings` (row b) | no SessionStart or wrong id: 3a dropped, all claude children `child_marker_absent`, §2 restated via re-open. Bash id inherited: rule 2 drops the `CLAUDE_CODE_SESSION_ID` acceptance | 3a, 3b |
 | b | Under author/review flags (and cc-shim HOME): do plugin, `--settings`, or `<cwd>/.claude/settings.json` hooks fire? | sentinel per shape; cc-shim needs an endpoint | none fires: that shape stays `child_marker_absent`, BL-0142 open. Only plugin: `runs-watch-autostart.js` ensures the marker for a non-git cwd when P is set | 3a |
 | c | A real hetero cc-shim child writes `u.json` with parent P (verifies step 3) | one real hetero run | re-open step 3; 3a's hook extended to hetero | 3a, R |
-| d1 | `dispatch-foreman.sh` nested rail: `session_id` null, `parent_run_id` = foreman run, depth 1 | foreman with a stub hand | fix the foreman allowlist before R | R |
-| d2 | Third-party harnesses: do `AUTOPILOT_PARENT_RUN_ID`, depth, `CLAUDE_CODE_SESSION_ID` reach their commands? | per harness, print them | all stripped: rails not shown, outer rail ends with a note. Session id kept but `AUTOPILOT_*` lost: the outer rail unsets `CLAUDE_CODE_SESSION_ID` for that harness (foreman pattern) | R |
+| d1 | `dispatch-foreman.sh` nested rail: `session_id` null, `parent_run_id` = foreman run, depth 1 | foreman with a stub hand | stop; plan revised and re-reviewed before R | R |
+| d2 | Claude → non-Claude harness → Claude, end to end: the inner `u.json` names the outer session as parent, the outer marker is unchanged, and the nested manifest has `parent_run_id` = the harness run | outer Claude session → `dispatch-hetero.sh --runner codex`; the codex task runs `claude -p --session-id u`, which starts a stub rail. Record env at codex and inner claude (`AUTOPILOT_PARENT_RUN_ID`, depth, `AUTOPILOT_PARENT_SESSION_ID`, `CLAUDE_CODE_SESSION_ID`), the inner SessionStart payload, `u.json`, the nested manifest. Same for kimi, agy, opencode when installed, else `not_run` (= bad). No manifest claims `u`, so R places the nested rail by §3 (a named reason), never by guess | stop; plan revised and re-reviewed before R | R |
 | e | Top-level and subagent Bash see the session's `CLAUDE_CODE_SESSION_ID` (verifies step 2; subagent observed) | env dumps | re-open step 2 | R |
-| f | Nested Claude: a rail from a rail's claude child writes the child's own id, depth 1, outer `parent_run_id` | one two-level run | if it writes the outer id: rails write `session_id: null` when `CLAUDE_CODE_SESSION_ID == AUTOPILOT_PARENT_SESSION_ID` | 3b, R |
+| f | Nested Claude: a rail from a rail's claude child writes the child's own id, depth 1, outer `parent_run_id` | one two-level run | stop; plan revised and re-reviewed before R | 3b, R |
 | g | `updatedInput` applied with no `permissionDecision` (undocumented)? | subagent `echo A` rewritten to `echo B` | step 5 not shipped | 5 |
 | h | Allow rules still match the rewritten rail command without a prompt? | allow rule + stamped run | step 5 not shipped | 5 |
 | i | Rewrite survives the other Bash PreToolUse hooks? | full plugin hook set | step 5 not shipped | 5 |
 | j | Lifetime of a copied transcript in the runs dir | step 3c live check, one day later | renderer shows `◦ 子工作紀錄已清除` when the file is gone | — |
+| k | The session transcript's Agent result carries `toolUseResult.agentId` and `tool_use_id` for foreground and background launches (background observed) | one launch of each | top-level agents go to 來歷不明 (`agent_result_absent`); no producer change | R |
 
 Non-git children (BL-0142) are rows a–b and step 3a. Fleet depth left with the deferred fleet step.
 
@@ -160,3 +164,13 @@ Live-pane plan G1 (sol R1, R6, R7a, R7b; minimax R7; owner's harness concern): a
 | `716fa4a5` untracked under nearest parent | R2 | accepted: hoist pass, schema 2 | §4 R, §5 |
 | `0edb5f52` D0 has no acceptance | R5 | accepted as a live probe with its own control | §4 D0 |
 | `cbf73c66` no re-open protocol | R6 | accepted | §4 Order |
+
+### G2 of this plan (sol_chair STOP, minimax_consult READY; blockers ruled by the coordinator)
+
+| Finding | Rubric | Disposition | Where |
+|---|---|---|---|
+| `48daef4f` session → top-level subagent edge missing | R2 | accepted: two-sided rule via the transcript's Agent result, named reasons; fixture 13; row k | §3, §4 R, §5, §7 |
+| `4a39b78d` nested Claude A → X → B has no exact rule | R2 | accepted: child session → rail edge, three conditions; fixture 14 | §3, §4 R, §5 |
+| `f00f02a8` P only from `CLAUDE_CODE_SESSION_ID` | R4 | accepted: P = launcher's resolved target, inherited ids removed, `CODEX_THREAD_ID` reasoned; cases f–h | §6 rule 3, §4 3b |
+| `723dddf8` d1, d2, f bad results need unowned producer work | R5 | accepted: a bad result stops for plan revision and re-review | §4 Order, §7 |
+| `f2eb5a77` d2 unspecified | R6 | accepted: codex end-to-end probe; other harnesses or `not_run` | §7 d2 |

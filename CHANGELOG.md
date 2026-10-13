@@ -8,6 +8,7 @@
   - 只看命令位置的那個字詞：`grep dispatch-review.sh x &`、`git log -- scripts/dispatch-review.sh &`、背景跑 `dispatch-*.test.sh` 都不會被擋。
   - 另外兩條只警告、不擋：`pkill -f`／`pgrep -f` 的 pattern 沒用 `[x]` 寫法（會比對到自己），以及 zsh 下以 `=` 開頭的字詞或沒有檔案符合的萬用字元（zsh 會中止整行）。萬用字元只查單層路徑，用 `opendirSync` 邊讀目錄邊看時間（總預算 50 ms），超時、目錄讀不到或輸入過長（超過 8 KiB）就不警告；`=` 開頭的字詞在輸入過長時也不檢查。
   - 規則放在 `scripts/lib/bash-launch-rules.js`，掛在既有的 `hooks/depth0-delegate-gate.js` 上，沒有新增 hook；`off` 模式會關掉全部。
+- **活面板的共用視覺語彙（P0）**（plan `docs/plans/2026-10-13-live-pane-design-system.md`）：新增 `mods/live/ui.ts`（符號表、狀態對應與嚴重度、新鮮度門檻、格式化函式、列元件），加上 glyph 與詞彙的 lint（`ui-lint.test.js`）。狀態列與面板符號改為 `⏸`→`⊘`、`⚙N`→`●N`、`⚠`→`▲`，因為舊符號在部分終端會被畫成彩色 emoji。`node mods/live/glyph-check.js` 讓你在自己的終端確認新符號只佔一格。
 
 - **`/l5` 的 mission 骨架可以從計畫自動產生**（plan `docs/plans/2026-10-13-l5-mission-scaffold-generator.md`）：之前開一個 `/l5` mission，要照 recipe 手寫 rubric、sources、execution graph 三份檔案。手寫時漏一個欄位或路徑寫錯，就會白白燒掉一次 attempt。新增的 `scripts/scaffold-mission.js` 會從計畫和旗標產生這三份檔案。
   - 寫檔前先檢查那些會燒 attempt 的規則，例如路徑必須落在 allowed prefix 底下、驗證指令的格式。

@@ -239,11 +239,25 @@ export const EN: Record<string, string> = {
   "legend.hygiene": "plugin load source (↓ = behind upstream) · ⚑ worktrees and branches that need you",
   "legend.icon": "opens this panel; with it open, shows the next tab",
   "legend.keys": "keyboard: Ctrl+x Tab, then Enter on ⓘ; each further Enter shows the next tab",
-  "legend.widths": "narrow terminals drop items: < 160 walk, reason, load-source chip · < 120 stage, round, amounts · < 80 all but verdict, ⚙ and ⚑",
+  "legend.widths": "narrow terminals drop items: < 160 walk, reason, load-source chip · < 120 stage, round, amounts · < 80 all but verdict, ● and ⚑",
   "recent.title": "Recent conversation",
   "recent.you": "You",
   "recent.ai": "AI",
-  "recent.empty": "(no conversation yet)"
+  "recent.empty": "(no conversation yet)",
+  "ui.state.need_you": "needs you",
+  "ui.state.failed": "failed",
+  "ui.state.stalled": "stalled",
+  "ui.state.findings": "to fix",
+  "ui.state.running": "running",
+  "ui.state.done": "done",
+  "ui.state.pending": "not started",
+  "ui.state.stopped": "stopped",
+  "ui.state.skipped": "not needed",
+  "ui.state.unknown": "unknown",
+  "ui.more": "{n} more {noun}",
+  "ui.collapse": "collapse",
+  "ui.reset": "resets in {age}",
+  "ui.table.state": "state"
 }
 
 export const ZH_TW: Record<string, string> = {
@@ -483,9 +497,23 @@ export const ZH_TW: Record<string, string> = {
   "legend.hygiene": "外掛載入來源（↓ = 落後 upstream）· ⚑ 要你處理的 worktree 與分支",
   "legend.icon": "開啟這個面板；面板開著時，切到下一個分頁",
   "legend.keys": "鍵盤：Ctrl+x Tab，再對 ⓘ 按 Enter；每按一次 Enter 切到下一個分頁",
-  "legend.widths": "終端機變窄時會省略：< 160 路徑圖、原因、載入來源 · < 120 階段、輪次、金額 · < 80 只留狀態字、⚙、⚑",
+  "legend.widths": "終端機變窄時會省略：< 160 路徑圖、原因、載入來源 · < 120 階段、輪次、金額 · < 80 只留狀態字、●、⚑",
   "recent.title": "最近對話",
   "recent.you": "你",
   "recent.ai": "AI",
-  "recent.empty": "（還沒有對話）"
+  "recent.empty": "（還沒有對話）",
+  "ui.state.need_you": "要你處理",
+  "ui.state.failed": "失敗",
+  "ui.state.stalled": "疑似卡住",
+  "ui.state.findings": "待修",
+  "ui.state.running": "執行中",
+  "ui.state.done": "完成",
+  "ui.state.pending": "未開始",
+  "ui.state.stopped": "已停",
+  "ui.state.skipped": "不需要",
+  "ui.state.unknown": "未知",
+  "ui.more": "還有 {n} {noun}",
+  "ui.collapse": "收起",
+  "ui.reset": "{age} 後重置",
+  "ui.table.state": "狀態"
 }

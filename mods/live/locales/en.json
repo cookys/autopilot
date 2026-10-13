@@ -251,9 +251,24 @@
   "legend.hygiene": "plugin load source (↓ = behind upstream) · ⚑ worktrees and branches that need you",
   "legend.icon": "opens this panel; with it open, shows the next tab",
   "legend.keys": "keyboard: Ctrl+x Tab, then Enter on ⓘ; each further Enter shows the next tab",
-  "legend.widths": "narrow terminals drop items: < 160 walk, reason, load-source chip · < 120 stage, round, amounts · < 80 all but verdict, ⚙ and ⚑",
+  "legend.widths": "narrow terminals drop items: < 160 walk, reason, load-source chip · < 120 stage, round, amounts · < 80 all but verdict, ● and ⚑",
   "recent.title": "Recent conversation",
   "recent.you": "You",
   "recent.ai": "AI",
-  "recent.empty": "(no conversation yet)"
+  "recent.empty": "(no conversation yet)",
+
+  "ui.state.need_you": "needs you",
+  "ui.state.failed": "failed",
+  "ui.state.stalled": "stalled",
+  "ui.state.findings": "to fix",
+  "ui.state.running": "running",
+  "ui.state.done": "done",
+  "ui.state.pending": "not started",
+  "ui.state.stopped": "stopped",
+  "ui.state.skipped": "not needed",
+  "ui.state.unknown": "unknown",
+  "ui.more": "{n} more {noun}",
+  "ui.collapse": "collapse",
+  "ui.reset": "resets in {age}",
+  "ui.table.state": "state"
 }

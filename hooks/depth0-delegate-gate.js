@@ -207,10 +207,10 @@ function classify(tool, input) {
       const detach = detectDetachNoWake(cmd);
       if (detach) {
         emitDeny(`bash-launch-guard (${detach.rule}): ${detach.why}. Short job: run the rail directly with the Bash `
-          + "tool's run_in_background: true (one completion notification). Long job: the rails detach themselves "
-          + '(DISPATCH_DETACH, default on, durable result file) — start the rail in the foreground of a '
-          + 'run_in_background call, or pair a detached launch with scripts/wait-dispatch-results.js / `wait` '
-          + 'in the same command so something wakes the session.');
+          + "tool's run_in_background: true (one completion notification). Long job: pair the detached launch with "
+          + 'scripts/wait-dispatch-results.js / `wait` in the same command so something wakes the session. '
+          + '(dispatch-review.sh / dispatch-author.sh detach themselves only when given ledger + run_id + stage '
+          + 'arguments — scripts/lib/dispatch-detach.sh.)');
         process.exit(0);
       }
       const pk = detectPkillSelfMatch(cmd);

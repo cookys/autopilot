@@ -23,7 +23,13 @@ const RAIL_PATH_RE = /(?:^|\/)scripts\/dispatch-[\w.-]*\.(?:sh|js)$/;
 const TEST_FILE_RE = /\.test\.(?:sh|js)$/;
 const WAKE_HEADS = new Set(['wait']);
 const WAKE_SCRIPT_RE = /(?:^|\/)wait-dispatch-results(?:\.[a-z]+)?$/;
-const PREFIX_CMDS = new Set(['time', 'exec', 'command', 'sudo', 'nice', 'nohup', 'setsid', 'env', 'bash', 'sh', 'zsh', 'dash', 'node', 'stdbuf']);
+const PREFIX_CMDS = new Set(['time', 'exec', 'command', 'sudo', 'nice', 'nohup', 'setsid', 'env', 'bash', 'sh', 'zsh', 'dash', 'node', 'stdbuf', 'timeout']);
+// Flags of a prefix command that consume the NEXT word as their value.
+const VALUE_FLAGS = {
+  nice: new Set(['-n']), sudo: new Set(['-u', '-g', '-h', '-p', '-C']), env: new Set(['-u', '-C', '-S']), timeout: new Set(['-s', '-k']),
+};
+// Shell keywords that precede a command: `for …; do CMD &`, `if …; then CMD`, `{ CMD; }`.
+const KEYWORDS = new Set(['do', 'then', 'else', 'elif', 'if', 'while', 'until', '{', '!', '(']);
 
 // Split into segments with their terminator. Quote-aware; `&&`, `||`, `|`, `;`, newline end a
 // segment; a single `&` (not `>&`, `&>`, `&&`) ends a segment AND marks it backgrounded.
@@ -32,7 +38,24 @@ function segments(text) {
   let cur = '';
   let q = null;
   const s = String(text);
-  const push = (bg) => { if (cur.trim()) out.push({ text: cur.trim(), bg }); cur = ''; };
+  // `listStart`: index of the first segment of the current `;`/newline-delimited list. A single `&`
+  // backgrounds the WHOLE list (`a && b | c &`), so every segment since listStart is marked.
+  let listStart = 0;
+  const push = (bg, endsList = false) => {
+    if (cur.trim()) out.push({ text: cur.trim(), bg });
+    cur = '';
+    if (bg) {
+      for (let k = listStart; k < out.length; k += 1) out[k].bg = true;
+      // `{ a; b; } &` — the `}` segment pulls back to its opening `{`.
+      const last = out[out.length - 1];
+      if (last && /^\}/.test(last.text)) {
+        for (let k = out.length - 1; k >= 0; k -= 1) {
+          if (/^\{(?:\s|$)/.test(out[k].text)) { for (let j = k; j < out.length; j += 1) out[j].bg = true; break; }
+        }
+      }
+    }
+    if (endsList) listStart = out.length;
+  };
   for (let i = 0; i < s.length; i += 1) {
     const c = s[i];
     if (q) {
@@ -43,16 +66,16 @@ function segments(text) {
     if (c === '\\' && i + 1 < s.length) { cur += c + s[i + 1]; i += 1; continue; }
     if (c === "'" || c === '"') { q = c; cur += c; continue; }
     if (c === '(' && cur.trim() === '') continue; // leading subshell paren
-    if (c === '\n' || c === ';') { push(false); continue; }
+    if (c === '\n' || c === ';') { push(false, true); continue; }
     if (c === '|') { push(false); if (s[i + 1] === '|') i += 1; continue; }
     if (c === '&') {
       if (s[i + 1] === '&') { push(false); i += 1; continue; }
       if (s[i - 1] === '>' || s[i + 1] === '>') { cur += c; continue; } // `2>&1`, `&>file`
-      push(true); continue;
+      push(true, true); continue;
     }
     cur += c;
   }
-  push(false);
+  push(false, true);
   return out;
 }
 
@@ -81,12 +104,12 @@ function expandSegments(text, depth = 0) {
     all.push(seg);
     if (depth >= 2) continue;
     const m = SHELL_C_RE.exec(seg.text);
-    if (m) all.push(...expandSegments(m[1] !== undefined ? m[1] : m[2], depth + 1).map((x) => ({ ...x, bg: x.bg || seg.bg })));
+    if (m) all.push(...expandSegments(m[1] !== undefined ? m[1] : m[2], depth + 1).map((x) => ({ ...x, bg: x.bg || seg.bg, sh: true })));
     const noSingle = seg.text.replace(/'[^']*'/g, (x) => ' '.repeat(x.length)); // '$(…)' is data
     const subRe = /\$\(([^()]*)\)|`([^`]*)`/g;
     let sm;
     while ((sm = subRe.exec(noSingle)) !== null) {
-      all.push(...expandSegments(sm[1] !== undefined ? sm[1] : sm[2], depth + 1).map((x) => ({ ...x, bg: false })));
+      all.push(...expandSegments(sm[1] !== undefined ? sm[1] : sm[2], depth + 1).map((x) => ({ ...x, bg: false, sh: x.sh || seg.sh })));
     }
   }
   return all;
@@ -103,27 +126,32 @@ function commandPosition(segText) {
   let i = 0;
   while (i < w.length) {
     const a = w[i];
-    if (/^[A-Za-z_]\w*=/.test(a)) { i += 1; continue; }
+    if (/^[A-Za-z_]\w*=/.test(a) || KEYWORDS.has(a)) { i += 1; continue; }
     const base = a.replace(/^.*\//, '');
     if (PREFIX_CMDS.has(base)) {
       if (base === 'nohup') detach = true;
       i += 1;
       let waitFlag = false;
       while (i < w.length && /^-/.test(w[i])) {
+        if (VALUE_FLAGS[base] && VALUE_FLAGS[base].has(w[i])) i += 1;
+        if (i >= w.length) break;
         if (base === 'setsid' && (w[i] === '-w' || w[i] === '--wait')) waitFlag = true;
         if (/^-[a-zA-Z]*c$/.test(w[i]) && ['bash', 'sh', 'zsh', 'dash'].includes(base)) return { head: null, detach, rest: [] };
         i += 1;
       }
       if (base === 'setsid' && !waitFlag) detach = true;
+      if (base === 'timeout' && i < w.length && /^\d/.test(w[i])) i += 1; // the duration
       continue;
     }
-    return { head: a, detach, rest: w.slice(i + 1) };
+    return { head: a.replace(/\)+$/, ''), detach, rest: w.slice(i + 1) };
   }
   return { head: null, detach, rest: [] };
 }
 
-function isRail(head) {
-  return !!head && RAIL_PATH_RE.test(head) && !TEST_FILE_RE.test(head);
+const REL_RAIL_RE = /^\.\/dispatch-[\w.-]*\.(?:sh|js)$/;
+function isRail(head, mentionsScripts) {
+  if (!head || TEST_FILE_RE.test(head)) return false;
+  return RAIL_PATH_RE.test(head) || (mentionsScripts && REL_RAIL_RE.test(head));
 }
 
 // Rule 1. Returns { rule, why } or null.
@@ -133,9 +161,10 @@ function detectDetachNoWake(cmd) {
   const pos = segs.map((s) => ({ seg: s, ...commandPosition(s.text) }));
   // Wake-up only counts when `wait` / the waiter script is itself a command word.
   if (pos.some((p) => p.head && (WAKE_HEADS.has(p.head) || WAKE_SCRIPT_RE.test(p.head)))) return null;
+  const mentionsScripts = pos.some((p) => p.head === 'cd' && /(?:^|\/)scripts\/?$/.test(unq(p.rest[0] || '')));
   for (const p of pos) {
     if (!p.head || !(p.detach || p.seg.bg)) continue;
-    if (isRail(p.head)) {
+    if (isRail(p.head, mentionsScripts)) {
       return {
         rule: 'detach-no-wake',
         why: 'a dispatch rail entrypoint is launched detached (nohup / setsid / trailing &) with no wake-up '
@@ -163,7 +192,7 @@ function detectPkillSelfMatch(cmd) {
     const mq = /\b(?:pkill|pgrep)\b(?:\s+-[^\s'"]*(?:\s+\d+)?)*\s+('([^']*)'|"([^"]*)"|(\S+))/.exec(seg.text);
     if (!mq) continue;
     const pattern = mq[2] !== undefined ? mq[2] : (mq[3] !== undefined ? mq[3] : mq[4]);
-    if (/\[[^\]\s]\]/.test(pattern)) continue; // `[f]oo`: the self-exclusion trick
+    if (/\[[^\]\s]\]/.test(pattern) || /\$/.test(pattern)) continue; // `[f]oo` self-exclusion; `$PAT` unknowable
     return {
       rule: 'pkill-self-match',
       pattern,
@@ -178,7 +207,11 @@ function detectPkillSelfMatch(cmd) {
 function detectZshExpansion(cmd, cwd) {
   let text = executableText(typeof cmd === 'string' ? cmd : '');
   text = text.replace(/\[\[[\s\S]*?\]\]/g, ' ').replace(/\$?\(\([\s\S]*?\)\)/g, ' ');
-  for (const seg of expandSegments(text)) {
+  const allSegs = expandSegments(text);
+  // A `cd`/`pushd` anywhere means globs are relative to a directory we do not know.
+  const hasCd = allSegs.some((sg) => { const h = commandPosition(sg.text).head; return h === 'cd' || h === 'pushd'; });
+  for (const seg of allSegs) {
+    if (seg.sh) continue; // `bash -c '…'` bodies run in bash, not zsh
     for (const { raw, masked } of tokens(seg.text)) {
       if (/^=./.test(masked)) { // `=y` is command-path lookup; a lone `=` / `==` is fine in `[`/`test`
         return {
@@ -191,7 +224,9 @@ function detectZshExpansion(cmd, cwd) {
       const bare = masked.replace(/\$\{[^}]*\}|\$\([^)]*\)?|\$[?*@#!$-]|`[^`]*`?/g, '');
       if (!/[*?]|\[[^\]]+\]/.test(bare)) continue;
       // Stay silent when we cannot judge: backslash/quote/brace in the word, `**`, or no globSync.
-      if (/[\\'"{]/.test(raw) || raw.includes('**') || bare !== masked) continue;
+      if (/[\\'"{$]/.test(raw) || raw.includes('**') || bare !== masked) continue;
+      if (hasCd || /^~/.test(raw)) continue; // cannot resolve / too broad: stay silent
+      if (raw.split('/').filter((part) => /[*?[]/.test(part)).length > 3) continue; // bound worst-case cost
       if (typeof fs.globSync !== 'function' || !cwd) continue;
       try {
         if (fs.globSync(raw, { cwd }).length > 0) continue;

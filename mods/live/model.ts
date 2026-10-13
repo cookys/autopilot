@@ -1706,6 +1706,54 @@ export function headerLines(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
   return wrapLines([...lines, ui.blank()], ctx.cols)
 }
 
+// ---- the overflow hint (live-pane height, coordinator ruling 2026-10-14): pane.tsx's own scroll state, not a fact of the session. While the window sits at the top
+// (`scroll.offset === 0`) over a tree taller than `scroll.bodyRows`, the header's last metrics line ends with `↓ N more rows below`; once the person scrolls the header
+// has left the window and the hint is gone. N = tree rows - bodyRows, the tree being the tab strip (its wrapped rows + the rule), the header, the body and a Link row: every
+// PaneLine is one drawn row (wrapLine already broke what was wider than the pane). A strip that wraps is the one height this file cannot be sure of, so then the hint says
+// "more" without a number. A header line too narrow for the hint drops it: the spend segments are never squeezed or cut.
+export type ScrollView = { offset: number; bodyRows: number }
+export function stripRows(snap: LiveSnapshot, ctx: PaneCtx, tab: PaneTab, hasButton: boolean): { rows: number; exact: boolean } {
+  const badges = tabBadges(snap)
+  const items: number[] = []
+  if (hasButton) items.push(displayWidth(NEXT_TAB_GLYPH) + 1)
+  for (const id of PANE_TABS) {
+    const on = id === tab
+    const b = badges[id]
+    items.push(displayWidth(' ' + tabLabel(id, ctx.t) + ' ') + (b === undefined ? 0 : displayWidth(b.text) + (on ? 1 : 0)) + 1)
+  }
+  let rows = 1
+  let w = 0
+  for (const x of items) {
+    if (w > 0 && w + x > ctx.cols) { rows++; w = 0 }
+    w += x
+  }
+  return { rows: rows + 1, exact: rows === 1 } // + the rule under the strip
+}
+export const treeRowCount = (strip: number, head: readonly PaneLine[], body: readonly PaneLine[], extra: number): number => strip + head.length + body.length + extra
+export function withOverflowHint(head: PaneLine[], ctx: PaneCtx, scroll: ScrollView | null | undefined, treeRows: number, exact: boolean): PaneLine[] {
+  if (scroll === null || scroll === undefined || scroll.offset !== 0 || treeRows <= scroll.bodyRows) return head
+  let at = -1
+  head.forEach((l, i) => { if (l.text !== '') at = i })
+  if (at < 0) return head
+  const hint = ui.GLYPHS.structure.overflow + ' ' + (exact ? ctx.t('pane.overflow', { n: treeRows - scroll.bodyRows }) : ctx.t('pane.overflow_more'))
+  const line = head[at]
+  const base: Seg[] = line.segs ?? [{ text: line.text }]
+  const hintSeg: Seg = { text: hint, dim: true, fact: 'pane.overflow' }
+  const gap = ctx.cols - 1 - displayWidth(line.text) - displayWidth(hint)
+  let segs: Seg[]
+  if (gap >= 2) segs = [...base, { text: ' '.repeat(gap) }, hintSeg] // the metrics line has room: the hint ends it, right-aligned like the one-line header
+  else {
+    // the one-line header (>= 110 columns) is already as wide as the pane, its metrics right-aligned behind a run of blanks: the hint sits in that run, nothing moves
+    const pad = base.findIndex((s, i) => i > 0 && i < base.length - 1 && /^ +$/.test(s.text) && s.text.length >= displayWidth(hint) + 4)
+    if (pad < 0) return head // no room: the hint goes first, the spend figures are neither squeezed nor cut
+    const n = base[pad].text.length
+    segs = [...base.slice(0, pad), { text: '  ' }, hintSeg, { text: ' '.repeat(n - 2 - displayWidth(hint)) }, ...base.slice(pad + 1)]
+  }
+  const out = head.slice()
+  out[at] = { ...line, text: segs.map(x => x.text).join(''), segs }
+  return out
+}
+
 // ---- 要你處理: the verdict's reason first when it asks something of the owner, then the open decision, the attention ask and the residue the owner has to act on ----
 function attentionPart(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
   const t = ctx.t

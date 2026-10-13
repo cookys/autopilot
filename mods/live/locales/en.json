@@ -252,6 +252,8 @@
   "header.session": "session",
   "header.host": "host today",
   "header.ctx": "ctx",
+  "pane.overflow": "{n} more rows below",
+  "pane.overflow_more": "more rows below",
   "now.sum_runs": "{n} runs",
   "now.sum_idle": "none running",
   "now.sum_last_end": "last ended {age} ago",

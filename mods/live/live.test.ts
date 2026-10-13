@@ -292,8 +292,8 @@ async function bandText($: any, surface: (typeof SURFACES)[number], columns = 12
 }
 
 // the pane on one tab (default: Dispatch, where the rows / gates / tasks / foreman live); the press only sets the tab and invalidates, the host then draws again (a fresh mount here)
-async function paneParts($: any, surface: (typeof SURFACES)[number], tab: string = 'dispatch', bodyColumns: number = PANE_PROPS.bodyColumns) {
-  const mountPane = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: { ...PANE_PROPS, bodyColumns }, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+async function paneParts($: any, surface: (typeof SURFACES)[number], tab: string = 'dispatch', bodyColumns: number = PANE_PROPS.bodyColumns, scroll: { offset: number; bodyRows: number } = PANE_PROPS.scroll) {
+  const mountPane = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: { ...PANE_PROPS, bodyColumns, scroll }, viewport: { columns: 160, rows: 50, isFullscreen: true } })
   const first = await mountPane()
   await first.press({ key: tab })
   await first.unmount()
@@ -4571,13 +4571,20 @@ for (const surface of SURFACES) {
   test('P4 mounted (I9 b): the global header lines are byte-identical on all six tabs, and the header is drawn above the body (' + surface + ')', async ($, on) => {
     world(on, richWorld())
     await start($, surface)
-    const heads: string[][] = []
-    for (const tab of ['now', 'dispatch', 'review', 'spend', 'hygiene', 'legend']) heads.push((await paneParts($, surface, tab)).head)
+    // bodyRows 8 puts every tab over its window, so every header carries its own overflow hint. `pane.overflow` is EXCLUDED from the comparison: it is each tab's own
+    // scroll state (how many rows lie below THIS tab's tree), not a fact of the session; everything else in the header must be byte-identical.
+    const OVERFLOW = /↓ 下方還有 (\d+) 行/
+    const rawHeads: string[][] = []
+    for (const tab of ['now', 'dispatch', 'review', 'spend', 'hygiene', 'legend']) rawHeads.push((await paneParts($, surface, tab, PANE_PROPS.bodyColumns, { offset: 0, bodyRows: 8 })).head)
+    const heads = rawHeads.map(h => h.map(l => l.replace(OVERFLOW, (_m, d: string) => " ".repeat(14 + d.length)).trimEnd())) // the hint is 14 + digits cells wide
     expect(heads[0].length, 'the header has a verdict line and the blank under it').toBeGreaterThanOrEqual(2)
     expect(heads[0][0]).toContain('⊘ 疑似卡住  repo')
     expect(heads[0].join('\n')).toContain('工作階段 $0.42 · 本機今日 $3.10 · ctx 37%')
     expect(heads[0][heads[0].length - 1]).toBe('')
     heads.forEach((h, i) => expect(h, 'tab ' + i).toEqual(heads[0]))
+    // the hint is the ONLY difference: every raw header carries exactly one, and the raw headers differ from one another (different tree heights)
+    rawHeads.forEach((h, i) => expect(h.filter(l => OVERFLOW.test(l)).length, 'tab ' + i + ' has one hint').toBe(1))
+    expect(new Set(rawHeads.map(h => h.join('\n'))).size, 'the hints differ per tab, so the exclusion is exercised').toBeGreaterThan(1)
     // negative control: the comparison sees one byte of difference
     expect(JSON.stringify(heads[0].map((l, i) => (i === 0 ? l + ' ' : l)))).not.toBe(JSON.stringify(heads[1]))
   })
@@ -4651,5 +4658,45 @@ for (const surface of SURFACES) {
     expect(flipped[start0[0].i].startsWith('▸ 要你處理')).toBe(true)
     await pressAt($, surface, 'b' + start0[0].i)
     expect(await nowRows($, surface)).toEqual(before)
+  })
+}
+
+// ---- the overflow hint (coordinator ruling 2026-10-14): `↓ 下方還有 N 行` on the header's last metrics line while the window is at the top over a taller tree ----
+for (const surface of SURFACES) {
+  test('P4 hint: N equals the rows the tree really has beyond bodyRows, on every tab; none when the tree fits, none once scrolled (' + surface + ')', async ($, on) => {
+    world(on, richWorld())
+    await start($, surface)
+    const HINT = /↓ 下方還有 (\d+) 行/
+    for (const tab of ['now', 'dispatch', 'review', 'spend', 'hygiene', 'legend']) {
+      // the tree's real height: the tab strip (one row of tabs + its rule at 120 columns) plus every other child of the pane's column Box, one row each
+      const tree = (await paneParts($, surface, tab)).tree
+      const total = 2 + allRows(tree).length
+      const hintOf = async (scroll: { offset: number; bodyRows: number }): Promise<number | null> => {
+        const line = (await paneParts($, surface, tab, PANE_PROPS.bodyColumns, scroll)).head.find(l => HINT.test(l))
+        const m = line === undefined ? null : HINT.exec(line)
+        return m === null ? null : Number(m[1])
+      }
+      expect(await hintOf({ offset: 0, bodyRows: total }), tab + ': a tree exactly the window high has no hint').toBeNull()
+      expect(await hintOf({ offset: 0, bodyRows: total - 1 }), tab + ': one row taller than the window says 1').toBe(1)
+      expect(await hintOf({ offset: 0, bodyRows: 5 }), tab + ': N = tree rows - bodyRows').toBe(total - 5)
+      expect(await hintOf({ offset: 3, bodyRows: 5 }), tab + ': the header has scrolled away, so no hint').toBeNull()
+    }
+  })
+
+  test('P4 hint: the hint ends the last metrics line and is dropped, not squeezed, when it does not fit (' + surface + ')', async ($, on) => {
+    world(on, richWorld())
+    await start($, surface)
+    const wide = (await paneParts($, surface, 'now', 120, { offset: 0, bodyRows: 5 })).head
+    // wide (the one-line header, already as wide as the pane): the hint sits in the blanks before the metrics, which do not move
+    expect(wide.some(l => /^⊘ 疑似卡住  repo · 已進行 10m +↓ 下方還有 \d+ 行 +工作階段 \$0\.42 · 本機今日 \$3\.10 · ctx 37%$/.test(l)), wide.join('\n')).toBe(true)
+    const plain = (await paneParts($, surface, 'now', 120, { offset: 0, bodyRows: 999 })).head
+    expect(wide[0].replace(/↓ 下方還有 (\d+) 行/, (_m, d: string) => ' '.repeat(14 + d.length)), 'only the hint differs from the header without it').toBe(plain[0])
+    // 76 columns (two header lines): the hint ends the metrics line
+    const mid = (await paneParts($, surface, 'now', 76, { offset: 0, bodyRows: 5 })).head
+    expect(mid.some(l => /^工作階段 \$0\.42 · 本機今日 \$3\.10 · ctx 37% +↓ 下方還有 \d+ 行$/.test(l)), mid.join('\n')).toBe(true)
+    // 30 columns: the metrics line is already wrapped over rows; whichever row is last has no room for the hint, so it is gone and the figures stay whole
+    const narrow = (await paneParts($, surface, 'now', 30, { offset: 0, bodyRows: 5 })).head
+    expect(narrow.some(l => l.includes('↓')), narrow.join('\n')).toBe(false)
+    expect(narrow.join('\n')).toContain('$3.10')
   })
 }

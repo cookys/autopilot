@@ -45,14 +45,14 @@ export type StateId = (typeof STATE_IDS)[number]
 // terminal (P0 b). `fallback` is the next candidate when a glyph fails that check (§8 Q2); it is linted like every other glyph.
 export const GLYPHS = {
   state: { need_you: '▲', failed: '✗', stalled: '⊘', findings: '△', running: '●', done: '✓', pending: '○', stopped: '◌', skipped: '∅', unknown: '?' },
-  structure: { open: '▾', folded: '▸', rule: '─', detail: '└', command: '$', goto: '›', bullet: '◦', empty: '—', tabMark: '━', residue: '⚑' },
+  structure: { open: '▾', folded: '▸', rule: '─', detail: '└', command: '$', goto: '›', bullet: '◦', empty: '—', tabMark: '━', residue: '⚑', overflow: '↓' },
   chart: { meterOn: '▰', meterOff: '▱', here: '◐' },
   spark: ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'],
   fallback: { stalled: '◍', findings: '!' },
-  verified: { '⊘': '2026-10-13 owner-ssh-tmux', '△': '2026-10-13 owner-ssh-tmux', '○': '2026-10-13 owner-ssh-tmux', '◌': '2026-10-13 owner-ssh-tmux', '∅': '2026-10-13 owner-ssh-tmux', '◦': '2026-10-13 owner-ssh-tmux', '›': '2026-10-13 owner-ssh-tmux', '━': '2026-10-13 owner-ssh-tmux', '◐': '2026-10-13 owner-ssh-tmux', '◍': '2026-10-13 owner-ssh-tmux' } as Record<string, string>,
+  verified: { '⊘': '2026-10-13 owner-ssh-tmux', '△': '2026-10-13 owner-ssh-tmux', '○': '2026-10-13 owner-ssh-tmux', '◌': '2026-10-13 owner-ssh-tmux', '∅': '2026-10-13 owner-ssh-tmux', '◦': '2026-10-13 owner-ssh-tmux', '›': '2026-10-13 owner-ssh-tmux', '━': '2026-10-13 owner-ssh-tmux', '◐': '2026-10-13 owner-ssh-tmux', '◍': '2026-10-13 owner-ssh-tmux', '↓': 'pending-owner' } as Record<string, string>,
 }
 // glyphs that are new to the pane's vocabulary: each must carry a `verified` entry (L3)
-export const NEW_GLYPHS = ['⊘', '△', '○', '◌', '∅', '◦', '›', '━', '◐', '◍'] as const
+export const NEW_GLYPHS = ['⊘', '△', '○', '◌', '∅', '◦', '›', '━', '◐', '◍', '↓'] as const
 // Extended_Pictographic glyphs a terminal may draw as an emoji box (§3.4); repeated so the rule survives a Unicode update
 export const EMOJI_BANNED = ['⏸', '⚙', '⚠', '✔', '✖', '▶', '⏹', '⏺', '▪', '▫'] as const
 
@@ -320,7 +320,7 @@ export function worst(states: readonly Stated[]): Stated {
 // ---------------------------------------------------------------------------------------------------------------------------------------------
 // fact ownership (§2.6): every fact has one home tab; any other tab shows it only as a projection (a line with `goto`)
 
-export type Owner = PaneTab | 'header'
+export type Owner = PaneTab | 'header' | 'pane'
 export const FACT_OWNER = {
   'dispatch.runs': 'dispatch', 'dispatch.counts': 'dispatch',
   'review.round': 'review', 'review.seats': 'review', 'review.qc': 'review', 'review.gates': 'review', 'review.plan': 'review',
@@ -331,6 +331,7 @@ export const FACT_OWNER = {
   'usage.window_other': 'spend', // any other rate-limit window the host reports (spend_limit, an unknown kind)
   'residue.groups': 'hygiene', 'residue.cleanup': 'hygiene', 'residue.source': 'hygiene',
   'header.verdict': 'header',
+  'pane.overflow': 'pane', // pane.tsx's own scroll state, not a fact of the session: the header's last metrics line says how many rows lie below
 } as const satisfies Record<string, Owner>
 export type FactId = keyof typeof FACT_OWNER
 

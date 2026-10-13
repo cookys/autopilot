@@ -3,8 +3,8 @@
 // `more`, the full I19) are in live.test.ts, named "P4 mounted ...". Each check ships with a negative control: a deliberately broken input that must be flagged.
 import { test, expect } from 'claude-code/testing'
 import { makeT } from './i18n'
-import { NO_DETAIL, NO_SECTIONS, dispatchLines, headerLines, hygieneTabLines, legendLines, nowLines, reviewTabLines, spendTabLines, wrapLines } from './model'
-import type { LiveSnapshot, PaneLine } from './model'
+import { NO_DETAIL, NO_SECTIONS, dispatchLines, headerLines, hygieneTabLines, legendLines, nowLines, reviewTabLines, spendTabLines, stripRows, treeRowCount, withOverflowHint, wrapLines } from './model'
+import type { LiveSnapshot, PaneLine, Seg } from './model'
 import * as ui from './ui'
 
 const NOW = Date.parse('2026-10-13T12:00:00Z')
@@ -228,4 +228,83 @@ test('wrap: a summary row that wraps keeps its goto on every piece (each piece s
   const out = wrapLines([long], 30)
   expect(out.length).toBeGreaterThan(2)
   expect(out.every(l => l.goto === 'review')).toBe(true)
+})
+
+// ---- the overflow hint (coordinator ruling 2026-10-14): pure halves. `pane.overflow` is pane.tsx's own scroll state: the header's last metrics line says how many rows lie below ----
+function hinted(t: ReturnType<typeof makeT>, cols: number, scroll: { offset: number; bodyRows: number } | null, delta: number | null = null) {
+  const c = ctxOf(t, cols)
+  const s = snap()
+  const sr = stripRows(s, c, 'now', true)
+  const head = headerLines(s, c)
+  const total = treeRowCount(sr.rows, head, nowLines(s, c), 0)
+  const win = scroll === null ? null : { offset: scroll.offset, bodyRows: delta === null ? scroll.bodyRows : total - delta }
+  return { total, sr, head, out: withOverflowHint(head, c, win, total, sr.exact) }
+}
+const hintSegOf = (ls: PaneLine[]) => ls.flatMap(l => l.segs ?? []).find(s => s.fact === 'pane.overflow')
+
+test('hint: a tree exactly the window high has none, one row taller says 1 (both locales)', () => {
+  for (const [loc, t] of LOCALES) {
+    const probe = hinted(t, 76, { offset: 0, bodyRows: 0 }, 0)
+    expect(hintSegOf(probe.out), loc + ': bodyRows == tree rows').toBeUndefined()
+    const one = hinted(t, 76, { offset: 0, bodyRows: 0 }, 1)
+    expect(hintSegOf(one.out)?.text, loc).toBe(loc === 'zh-TW' ? '↓ 下方還有 1 行' : '↓ 1 more rows below')
+    // negative control: a window taller than the tree has none either; and a window of 5 says total - 5
+    expect(hintSegOf(hinted(t, 76, { offset: 0, bodyRows: 0 }, -3).out), loc).toBeUndefined()
+    expect(hintSegOf(hinted(t, 76, { offset: 0, bodyRows: 5 }).out)?.text, loc).toContain(String(probe.total - 5))
+  }
+})
+
+test('hint: once the window has moved (offset > 0) there is none', () => {
+  for (const [loc, t] of LOCALES) {
+    expect(hintSegOf(hinted(t, 76, { offset: 0, bodyRows: 5 }).out), loc + ': at the top').toBeDefined()
+    expect(hintSegOf(hinted(t, 76, { offset: 1, bodyRows: 5 }).out), loc + ': scrolled one row').toBeUndefined()
+    expect(hintSegOf(hinted(t, 76, null).out), loc + ': no scroll known').toBeUndefined()
+  }
+})
+
+test('hint: its identity (own fact, owner pane, dim, glyph from GLYPHS) and the line is exactly as wide as the pane minus the edge', () => {
+  expect(ui.FACT_OWNER['pane.overflow']).toBe('pane')
+  expect(ui.GLYPHS.structure.overflow).toBe('↓')
+  expect(ui.NEW_GLYPHS).toContain('↓')
+  for (const [loc, t] of LOCALES) {
+    const r = hinted(t, 76, { offset: 0, bodyRows: 5 })
+    const seg = hintSegOf(r.out) as Seg
+    expect(seg.dim, loc).toBe(true)
+    expect(seg.text.startsWith(ui.GLYPHS.structure.overflow + ' '), loc).toBe(true)
+    const line = r.out.find(l => l.segs?.includes(seg)) as PaneLine
+    expect(ui.displayWidth(line.text), loc + ': right-aligned to cols - 1').toBe(75)
+    expect(line.text.endsWith(seg.text), loc).toBe(true)
+    // the spend segments are untouched: same text as without the hint
+    const plain = r.head.find(l => l.text.includes('$')) as PaneLine
+    expect(line.text.startsWith(plain.text), loc).toBe(true)
+  }
+})
+
+test('hint: no room means it is dropped, never squeezed into or cut out of the spend figures', () => {
+  for (const [loc, t] of LOCALES) {
+    const c = ctxOf(t, 76)
+    const full = { text: 'x'.repeat(70), segs: [{ text: 'x'.repeat(70) }] } as PaneLine
+    const out = withOverflowHint([full, ui.blank()], c, { offset: 0, bodyRows: 5 }, 50, true)
+    expect(out[0], loc).toBe(full)
+    expect(hintSegOf(out), loc).toBeUndefined()
+    // negative control: the same line with room gets its hint
+    const roomy = { text: 'x'.repeat(20), segs: [{ text: 'x'.repeat(20) }] } as PaneLine
+    expect(hintSegOf(withOverflowHint([roomy, ui.blank()], c, { offset: 0, bodyRows: 5 }, 50, true)), loc).toBeDefined()
+  }
+})
+
+test('hint: a tab strip that wraps makes the row count uncertain, so the hint says "more" without a number', () => {
+  for (const [loc, t] of LOCALES) {
+    const wide = hinted(t, 76, { offset: 0, bodyRows: 5 })
+    expect(wide.sr.exact, loc).toBe(true)
+    const c = ctxOf(t, 30)
+    const s = snap()
+    const sr = stripRows(s, c, 'now', true)
+    expect(sr.exact, loc + ': 30 columns wraps the strip').toBe(false)
+    expect(sr.rows, loc).toBeGreaterThan(2)
+    // the header line at 30 columns: the metrics wrap, so give the hint a roomy line to show the wording
+    const roomy = { text: 'x'.repeat(5), segs: [{ text: 'xxxxx' }] } as PaneLine
+    const out = withOverflowHint([roomy, ui.blank()], c, { offset: 0, bodyRows: 5 }, 50, false)
+    expect(hintSegOf(out)?.text, loc).toBe(loc === 'zh-TW' ? '↓ 下方還有更多' : '↓ more rows below')
+  }
 })

@@ -5,8 +5,8 @@
 
 import { T_EN } from './i18n'
 import type { T } from './i18n'
-import { NEXT_TAB_GLYPH, dispatchLines, headerLines, hygieneTabLines, legendLines, nowLines, paneWidth, PANE_TABS, reviewTabLines, spendTabLines, tabBadges, tabLabel } from './model'
-import type { LiveSnapshot, PaneLine, PaneTab, Seg } from './model'
+import { NEXT_TAB_GLYPH, dispatchLines, headerLines, hygieneTabLines, legendLines, nowLines, paneWidth, PANE_TABS, reviewTabLines, spendTabLines, stripRows, tabBadges, tabLabel, treeRowCount, withOverflowHint } from './model'
+import type { LiveSnapshot, PaneLine, PaneTab, ScrollView, Seg } from './model'
 
 export type { PaneTab } from './model'
 
@@ -47,7 +47,7 @@ function tabStrip(el: { Box: El; Text: El; Button?: El }, tab: PaneTab, onTab: (
   )
 }
 
-export function Pane(el: { Box: El; Text: El; Link: El; Button?: El }, snap: LiveSnapshot | null, tab: PaneTab = 'now', onTab: (t: PaneTab) => void = () => {}, t: T = T_EN, bodyColumns: number | null = null, onNext: () => void = () => {}, expanded: ReadonlySet<string> = new Set(), onToggle: (id: string) => void = () => {}, folded: ReadonlySet<string> = new Set()) {
+export function Pane(el: { Box: El; Text: El; Link: El; Button?: El }, snap: LiveSnapshot | null, tab: PaneTab = 'now', onTab: (t: PaneTab) => void = () => {}, t: T = T_EN, bodyColumns: number | null = null, onNext: () => void = () => {}, expanded: ReadonlySet<string> = new Set(), onToggle: (id: string) => void = () => {}, folded: ReadonlySet<string> = new Set(), scroll: ScrollView | null = null) {
   const { Box, Text, Link, Button } = el
   const cols = paneWidth(bodyColumns)
   const ctx = { t, cols, expanded, folded }
@@ -75,18 +75,18 @@ export function Pane(el: { Box: El; Text: El; Link: El; Button?: El }, snap: Liv
     )
   }
   // the global header (design plan §2.2): drawn here, once, on every tab; no tab builder emits it (I9)
-  const head = headerLines(snap, ctx).map((l, i) => line(l, i, 'h'))
-  if (tab === 'legend') return <Box flexDirection="column">{strip}{head}{legendLines(ctx).map((l, i) => line(l, i))}</Box>
-  if (tab === 'now') return <Box flexDirection="column">{strip}{head}{nowLines(snap, ctx).map((l, i) => line(l, i))}</Box>
-  if (tab === 'review') return <Box flexDirection="column">{strip}{head}{reviewTabLines(snap, ctx).map((l, i) => line(l, i))}</Box>
-  if (tab === 'spend') return <Box flexDirection="column">{strip}{head}{spendTabLines(snap, ctx).map((l, i) => line(l, i))}</Box>
-  if (tab === 'hygiene') return <Box flexDirection="column">{strip}{head}{hygieneTabLines(snap, ctx).map((l, i) => line(l, i))}</Box>
+  // (pane.overflow: this site's own scroll state, so the one thing allowed to differ between tabs: the last metrics line may end with the overflow hint)
+  const body: PaneLine[] = tab === 'legend' ? legendLines(ctx) : tab === 'now' ? nowLines(snap, ctx) : tab === 'review' ? reviewTabLines(snap, ctx) : tab === 'spend' ? spendTabLines(snap, ctx) : tab === 'hygiene' ? hygieneTabLines(snap, ctx) : dispatchLines(snap, ctx)
+  const link = tab === 'dispatch' && snap.link !== null
+  const stripH = stripRows(snap, ctx, tab, Button !== undefined)
+  const plainHead = headerLines(snap, ctx)
+  const head = withOverflowHint(plainHead, ctx, scroll, treeRowCount(stripH.rows, plainHead, body, link ? 1 : 0), stripH.exact).map((l, i) => line(l, i, 'h'))
   return (
     <Box flexDirection="column">
       {strip}
       {head}
-      {dispatchLines(snap, ctx).map((l, i) => line(l, i))}
-      {snap.link === null ? null : <Link href={snap.link} label={t('dispatch.link')} />}
+      {body.map((l, i) => line(l, i))}
+      {link ? <Link href={snap.link as string} label={t('dispatch.link')} /> : null}
     </Box>
   )
 }

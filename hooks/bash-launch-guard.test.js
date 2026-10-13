@@ -67,6 +67,7 @@ for (const cmd of [
   'if true; then scripts/dispatch-review.sh x; fi &',
   'while true; do for i in 1 2; do scripts/dispatch-review.sh $i; done; done &',
   'for i in 1 2; do scripts/dispatch-review.sh $i; done > /tmp/log 2>&1 &',
+  'scripts/dispatch-review.sh x |& tee /tmp/l &', // `|&` pipeline that IS backgrounded
 ]) {
   test(`rule1 denies: ${cmd}`, () => {
     const r = run(cmd);
@@ -109,6 +110,8 @@ for (const cmd of [
   'node scripts/dispatch-contract.js --check &',
   'nohup node scripts/dispatch-tree.js &',
   'cd scripts && ./dispatch-status.js &',
+  'bash scripts/dispatch-review.sh --base a --head b |& tee /tmp/log', // `|&` is a foreground pipe, not a background `&`
+  'scripts/dispatch-review.sh x |& tail -5 && echo done',
   'for i in 1 2; do echo $i; done &', // backgrounded loop without a rail
   'for i in 1 2; do scripts/dispatch-review.sh $i; done', // same loop in the foreground
   'if true; then echo hi; fi &',

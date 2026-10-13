@@ -94,7 +94,7 @@ function segments(text) {
     // re-parsed on its own by expandSegments), otherwise `echo $(rail &)` would be torn apart.
     if (inner > 0 && (c === '\n' || c === ';' || c === '|' || c === '&')) { cur += c; continue; }
     if (c === '\n' || c === ';') { push(false, true); continue; }
-    if (c === '|') { push(false); if (s[i + 1] === '|') i += 1; continue; }
+    if (c === '|') { push(false); if (s[i + 1] === '|' || s[i + 1] === '&') i += 1; continue; } // `||`, and `|&` (pipe stderr too)
     if (c === '&') {
       if (s[i + 1] === '&') { push(false); i += 1; continue; }
       if (s[i - 1] === '>' || s[i + 1] === '>') { cur += c; continue; } // `2>&1`, `&>file`

@@ -206,12 +206,7 @@ function classify(tool, input) {
       const cmd = payload.tool_input.command;
       const detach = detectDetachNoWake(cmd);
       if (detach) {
-        emitDeny(`bash-launch-guard (${detach.rule}): ${detach.why}. Short job: run the rail directly with the Bash `
-          + "tool's run_in_background: true (one completion notification). Long job: launch the rail with "
-          + '`--ledger <path> --run-id <id> --stage <name>` (without all three the rail writes no .exit file) and, '
-          + 'in the SAME command, block on `node scripts/wait-dispatch-results.js --ledger <path> --expect '
-          + '<id>.<stage>` (or a bare `wait`), e.g. `nohup scripts/dispatch-review.sh … --ledger L --run-id R '
-          + '--stage S > out.log 2>&1 & node scripts/wait-dispatch-results.js --ledger L --expect R.S`.');
+        emitDeny(`bash-launch-guard (${detach.rule}): ${detach.why}. ${detach.advice}`);
         process.exit(0);
       }
       const pk = detectPkillSelfMatch(cmd);

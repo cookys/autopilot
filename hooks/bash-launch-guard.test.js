@@ -191,33 +191,141 @@ test('warnings also reach subagent depth (agent_id present)', () => {
   assert.match(run('pkill -f foo', { extra: { agent_id: 'a1' } }).ctx, /pkill-self-match/);
 });
 
-test('deny message names both paths and the three ledger flags', () => {
+// The message offers only what literally works for this (shape, rail) pair.
+test('message: `&` + ledger rail offers run_in_background, `& wait` and the ledger waiter', () => {
   const r = run('nohup scripts/dispatch-review.sh x &');
   assert.match(r.reason, /run_in_background/);
-  assert.match(r.reason, /wait-dispatch-results/);
+  assert.match(r.reason, /put `wait` after it/);
   assert.match(r.reason, /--ledger.*--run-id.*--stage/);
+  assert.match(r.reason, /wait-dispatch-results\.js --ledger <path> --expect/);
+});
+test('message: `&` + non-ledger rail offers run_in_background and `& wait`, no ledger recipe', () => {
+  const r = run('nohup scripts/dispatch-consult.sh x &');
+  assert.match(r.reason, /run_in_background/);
+  assert.match(r.reason, /put `wait` after it/);
+  assert.doesNotMatch(r.reason, /--run-id/);
+  assert.match(r.reason, /dispatch-consult never writes the \.exit file/);
+});
+test('message: `setsid -f` + ledger rail offers the ledger waiter and says bare wait does not work', () => {
+  const r = run('setsid -f scripts/dispatch-author.sh x');
+  assert.match(r.reason, /does not wait for a `setsid -f` job/);
+  assert.doesNotMatch(r.reason, /put `wait` after it/);
+  assert.match(r.reason, /--ledger.*--run-id.*--stage/);
+});
+test('message: `setsid -f` + non-ledger rail offers run_in_background only', () => {
+  const r = run('setsid -f scripts/dispatch-explore.sh x');
+  assert.match(r.reason, /run_in_background/);
+  assert.doesNotMatch(r.reason, /put `wait` after it|--run-id/);
+});
+test('message: foreman has a fixed stage', () => {
+  const r = run('nohup scripts/dispatch-foreman.sh x &');
+  assert.match(r.reason, /--expect <id>\.foreman/);
+  assert.doesNotMatch(r.reason, /--stage/);
+});
+
+// ---- `$(…)` with parens / backticks / nesting in a heredoc body (commit & PR messages) ----
+const MSG2 = [
+  "git commit -m \"$(cat <<'EOF'\nfix: avoid `nohup scripts/dispatch-review.sh x &` (note)\nEOF\n)\"",
+  "git commit -m \"$(cat <<'EOF'\nsubject\n\nnohup scripts/dispatch-review.sh x & (see (a) and (b))\nEOF\n)\"",
+  "git commit -m \"$(cat <<'EOF'\nunbalanced ( paren and ) another ) )\n`nohup scripts/dispatch-review.sh x &`\nEOF\n)\"",
+  "git commit -m \"$(cat <<'EOF'\nopen ( only\n$(nohup scripts/dispatch-review.sh x &)\nEOF\n)\"",
+  "gh pr create --body \"$(cat <<'EOF'\n- item (one)\n- `setsid -f scripts/dispatch-review.sh x`\nEOF\n)\"",
+  "git commit -m \"$(cat <<-'EOF'\n\tnohup scripts/dispatch-review.sh x & (y\n\tEOF\n)\"",
+];
+for (const cmd of MSG2) {
+  test(`parens/backticks in a heredoc inside $(…) are data: ${JSON.stringify(cmd).slice(0, 60)}`, () => {
+    const r = run(cmd, { shell: 'zsh' });
+    assert.strictEqual(r.deny, false);
+    assert.doesNotMatch(r.ctx, /zsh-expansion|detach-no-wake/);
+  });
+}
+test('nested $( $( ) ) with a real detached rail inside is still denied', () => {
+  assert.strictEqual(run('echo "$(echo $(nohup scripts/dispatch-review.sh x &))"').deny, true);
+  assert.strictEqual(run('echo "$(echo "$(printf \'(\'; nohup scripts/dispatch-review.sh x &)")"').deny, true);
+});
+test('nested $( $( ) ) around a heredoc is data', () => {
+  assert.strictEqual(run("echo \"$(echo \"$(cat <<'EOF'\nnohup scripts/dispatch-review.sh x & (y\nEOF\n)\")\")\"").deny, false);
+});
+test('a quoted paren inside $(…) does not end it early', () => {
+  assert.strictEqual(run("echo \"$(printf ')' ; nohup scripts/dispatch-review.sh x &)\"").deny, true);
+});
+const { findSubstitutions } = require('../scripts/lib/bash-launch-rules.js');
+test('findSubstitutions: depth-aware, skips quotes and heredocs', () => {
+  assert.deepStrictEqual(findSubstitutions('a $(b $(c) d) e'), ['b $(c) d']);
+  assert.deepStrictEqual(findSubstitutions("x \"$(cat <<'E'\n) ( \nE\n)\" y"), ["cat <<'E'\n) ( \nE\n"]);
+  assert.deepStrictEqual(findSubstitutions("echo '$(no)' `yes`"), ['yes']);
+  assert.deepStrictEqual(findSubstitutions('echo $(unclosed ('), ['unclosed (']);
+});
+
+// ---- wake-up is only real for a trailing `&` in the same shell level followed by `wait` ----
+for (const cmd of [
+  'setsid -f scripts/dispatch-review.sh x; wait',
+  'setsid -f scripts/dispatch-review.sh x\nwait',
+  '(scripts/dispatch-review.sh x &); wait',
+  'wait; scripts/dispatch-review.sh x &', // wait BEFORE the launch waits for nothing
+  "bash -c 'scripts/dispatch-review.sh x &'; wait",
+  'echo $(scripts/dispatch-review.sh x &); wait',
+  'scripts/dispatch-review.sh x & (wait)', // wait inside a subshell cannot see the job
+  'scripts/dispatch-review.sh x & wait &',
+]) {
+  test(`wake tightened, still denied: ${JSON.stringify(cmd)}`, () => {
+    assert.strictEqual(run(cmd).deny, true);
+  });
+}
+for (const cmd of [
+  'scripts/dispatch-review.sh x & wait',
+  'scripts/dispatch-review.sh x &\nwait',
+  'scripts/dispatch-review.sh x & echo hi; wait $!',
+  '{ scripts/dispatch-review.sh x & }; wait',
+  'for s in a b; do scripts/dispatch-review.sh $s & done; wait',
+  'setsid -f scripts/dispatch-review.sh x --ledger L --run-id R --stage S; node scripts/wait-dispatch-results.js --ledger L --expect R.S',
+]) {
+  test(`wake accepted: ${JSON.stringify(cmd)}`, () => {
+    assert.strictEqual(run(cmd).deny, false);
+  });
+}
+
+test('recipe: `setsid -f` + ledger args + wait-dispatch-results lands in time', () => {
+  const { r } = recipe(true, WAIT, { launch: SETSID_F });
+  assert.strictEqual(r.status, 0, r.stdout + r.stderr);
+  assert.strictEqual(JSON.parse(r.stdout).complete, true);
+});
+test('recipe: a bare `wait` does NOT wait for a `setsid -f` job (why it is denied)', () => {
+  const { r, ms, dir } = recipe(true, () => 'wait', { launch: SETSID_F });
+  assert.strictEqual(r.status, 0);
+  assert.ok(ms < 700, `wait returned after ${ms} ms`);
+  assert.ok(!fs.existsSync(path.join(dir, 'L.results', 'r1.s1.exit')), 'job had not finished yet');
+});
+test('recipe: foreman shape (--ledger/--run-id only, fixed stage) lands under --expect <id>.foreman', () => {
+  const w = (dir) => `node ${REPO}/scripts/wait-dispatch-results.js --ledger ${dir}/L --expect r1.foreman --timeout 4 --poll 1`;
+  const { r } = recipe(true, w, { fixedStage: 'foreman' });
+  assert.strictEqual(r.status, 0, r.stdout + r.stderr);
+  assert.strictEqual(JSON.parse(r.stdout).complete, true);
 });
 
 // The recipe the deny message gives, executed for real: a stub rail that uses the real
 // scripts/lib/dispatch-detach.sh, then scripts/wait-dispatch-results.js in the same command.
 const REPO = path.join(__dirname, '..');
-function recipe(withLedgerArgs, waiter) {
+function recipe(withLedgerArgs, waiter, { launch, fixedStage } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'blg-recipe-'));
   const stub = path.join(dir, 'stub-rail.sh');
   fs.writeFileSync(stub, [
     '#!/usr/bin/env bash',
     'LEDGER=""; RUN_ID=""; STAGE=""; ORIG=("$@")',
     'while [ $# -gt 0 ]; do case "$1" in --ledger) LEDGER="$2"; shift 2;; --run-id) RUN_ID="$2"; shift 2;; --stage) STAGE="$2"; shift 2;; *) shift;; esac; done',
+    fixedStage ? `STAGE="${fixedStage}"` : ':',
     `. "${REPO}/scripts/lib/dispatch-detach.sh"`,
     `dispatch_detach_supervise "$0" "$LEDGER" "$RUN_ID" "$STAGE" "${REPO}/scripts" -- "\${ORIG[@]}"`,
     'sleep 1; echo \'{"ok":true}\'',
   ].join('\n'), { mode: 0o755 });
   const ledgerArgs = withLedgerArgs ? `--ledger ${dir}/L --run-id r1 --stage s1` : '';
-  const sh = `( nohup ${stub} ${ledgerArgs} > ${dir}/out 2>&1 & ${waiter(dir)} )`;
+  const launchCmd = launch ? launch(stub, ledgerArgs, dir) : `nohup ${stub} ${ledgerArgs} > ${dir}/out 2>&1 &`;
+  const sh = `( ${launchCmd} ${waiter(dir)} )`;
   const t0 = Date.now();
   const r = spawnSync('bash', ['-c', sh], { encoding: 'utf8' });
-  return { r, ms: Date.now() - t0 };
+  return { r, ms: Date.now() - t0, dir };
 }
+const SETSID_F = (stub, args, dir) => `setsid -f ${stub} ${args} > ${dir}/out 2>&1;`;
 const WAIT = (dir) => `node ${REPO}/scripts/wait-dispatch-results.js --ledger ${dir}/L --expect r1.s1 --timeout 4 --poll 1`;
 
 test('recipe: detached rail WITH ledger/run-id/stage + wait-dispatch-results lands in time', () => {

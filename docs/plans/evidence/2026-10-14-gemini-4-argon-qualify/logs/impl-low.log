@@ -1,0 +1,5 @@
+qualification-sweep.sh --execute: about to run 1 seat(s) = 25 real, paid dispatches (1 Stage-0 probe + up to 24 administration dispatches per seat, sequential).
+QUALIFICATION-SWEEP START 16:15:41Z (1 seats)
+SEAT argon-low DONE: qualified 24/24 score=1.000 wall=399s event=230
+QUALIFICATION-SWEEP COMPLETE 16:22:35Z
+rc=0

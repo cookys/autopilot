@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0141 -->
+<!-- next-id: BL-0144 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -105,19 +105,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/RESULTS.md
 - **Context**: first live author dispatch after an owner-authorized quota probe; 583-byte garbled log; a qualification signal for that seat, not a band defect.
 
-### An aborted /l5 session's marker fences every later /l5 dispatch in the repo until its TTL
-- **Id**: BL-0009
-- **Status**: open
-- **Since**: 2026-10-05
-- **Origin**: self
-- **Problem**: 某個 /l5 工作階段中途被中斷後，它留下的標記檔會一直擋住同一個專案之後所有 /l5 派工，直到標記到期，清除還需要收據。使用者之後再派工會莫名被拒。 (draft)
-- **Impact**: 中斷過一次 /l5 的專案，在標記到期前無法再派 /l5；需要手動處理。 (draft)
-- **Trigger**: FIRED — mods P1W W4 gate run l5e, 2026-10-05
-- **Effort**: M
-- **Source**: depth-0 verified (dispatch-hetero.sh check_marker_campaign_admission_bridge scans all markers; clear needs a receipt)
-- **Pointer**: docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/RESULTS.md
-- **Context**: a dead session's l5 marker with no or stale mission_routing fails the bridge for everyone; clear and retire need receipts a never-spent run does not have, so the repo waits up to 24 h.
-
 ### Foreman exam harness deviates from its frozen spec; the branch is parked unmerged
 - **Id**: BL-0010
 - **Status**: open
@@ -207,22 +194,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: owner request 2026-09-16 after v2.36.58
 - **Pointer**: docs/plans/evidence/2026-09-16-blind-review-redesign/consult-claude-fable-5-1.md
 - **Context**: packet (tree + git diff + spec, deny-list); packet/cleanroom tiers; intake canary; verify-once; parallel seats; quorum + snapshot; panel station; shared packet. Shipped: 1a-A..2-C v2.36.59-69. Open: 2-D overlap/pre-pass.
-
-### PEER-REPORTED (openclaw): briefs pairing `session-mode set --level l5` with non-strict dispatch burn foreman budgets
-- **Id**: BL-0017
-- **Status**: open
-- **Since**: 2026-09-17
-- **Origin**: peer
-- **Reporter**: openclaw
-- **Report**: msg_01M2PHM6PWH6VY7WP059Y0Q1TT
-- **Reply**: 2026-09-17 msg_01M2PHNG5TTNXQYJQ2G3EKANFW
-- **Problem**: openclaw 回報：簡報同時指定 l5 層級又用非嚴格派工時，工頭預算會被白白燒光。轉述的裁定是畫面印出被遮掉的那行並加簡報檢查，同一個拒絕連續兩次就停止升級。
-- **Impact**: 照這種簡報派工會浪費工頭預算。擁有者 2026-10-13 已親口確認轉述的裁定。
-- **Trigger**: ready: owner confirmed (a)=B and (b) in session 2026-10-13; wave 2 lane Q
-- **Effort**: S
-- **Source**: `openclaw` msg `msg_01M2PHM6PWH6VY7WP059Y0Q1TT` (2026-09-17, /l5 ×3 on fleet-comms + chatgpt-tunnel-host); replied `msg_01M2PHNG5TTNXQYJQ2G3EKANFW`
-- **Pointer**: docs/projects/ongoing-maintenance/HANDOFF.md
-- **Context**: ruling relayed by openclaw 2026-09-17 (`msg_01M2PWEZ8WAVJ8S4F032MFTVGQ`): (a)=B no seat exemption — ship mask-line print + brief linter; (b) same refusal twice → ladder stop. Peer relay only; operator confirms in-session first.
 
 ### PEER-REPORTED (hangar): register preview/review servers with lab-ingress instead of ad-hoc 0.0.0.0 ports
 - **Id**: BL-0018
@@ -1754,3 +1725,42 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: lane L review round 2 and lane Z review round 7, 2026-10-13
 - **Pointer**: none
 - **Context**: context-budget node tests (/dev/shm), hooks/depth0-delegate-gate.test.js (d0gate-home-*), context-budget-window-memory.test.sh, live-dir-xdg-inference.test.sh. Fix: cleanup in finally plus HOME/XDG isolation.
+
+### l5 brief lint warns even when the marker is set after the non-strict dispatches
+- **Id**: BL-0141
+- **Status**: open
+- **Since**: 2026-10-13
+- **Origin**: self
+- **Problem**: 派工前的簡報檢查，只要簡報裡同時出現「設 l5 標記」和「非嚴格派工」就提醒，不看先後順序。照提醒建議把標記放到派工之後，還是會被提醒。
+- **Impact**: 只是提醒、不會擋；但正確寫法也被提醒，久了大家會忽略這個提醒。
+- **Trigger**: a correctly ordered brief gets the warning in a real dispatch, or next touch of the brief lint
+- **Effort**: S
+- **Source**: lane W review round 1, 2026-10-13
+- **Pointer**: none
+- **Context**: hooks/dispatch-model-guard.js briefLintWarning tests SETS_MANAGED_MARKER_RE and NON_STRICT_RAIL_RE independently; compare match offsets and warn only when the marker line precedes a non-strict rail line. Negative control: reversed order.
+
+### claude children started in a non-git temp dir get no session marker
+- **Id**: BL-0142
+- **Status**: open
+- **Since**: 2026-10-13
+- **Origin**: self
+- **Problem**: 派工 rail 若在不是 git 專案的暫存目錄裡啟動 claude 子行程，子行程開場時不會建立自己的工作階段標記，它的身分只記在派工紀錄檔裡。
+- **Impact**: 派工樹要追子行程時，只能靠派工紀錄檔那一欄；那份紀錄遺失或沒寫成，這個子行程就和父行程斷線。
+- **Trigger**: the dispatch-tree plan wires child_session_id, or a child shows up unlinked in a tree view
+- **Effort**: S
+- **Source**: lane W review round 1, 2026-10-13
+- **Pointer**: docs/plans/2026-10-13-dispatch-tree.md
+- **Context**: hooks/runs-watch-autostart.js returns at "not a git repo" before ensurePlainMarker, so author/review children in a non-git cwd rely only on manifest child_session_id. Settle in the dispatch-tree plan.
+
+### two dispatch identity tests can pass without checking what they claim
+- **Id**: BL-0143
+- **Status**: open
+- **Since**: 2026-10-13
+- **Origin**: self
+- **Problem**: 子行程身分的分離派工測試，在沒有 setsid 的機器上會改走一般路徑，照樣綠燈；另一個測試的比對參數順序寫反，轉紅時預期值和實際值會顯示顛倒。
+- **Impact**: 前者在少數機器上等於沒驗到分離派工；後者只影響除錯時看錯訊息。
+- **Trigger**: next touch of either test file
+- **Effort**: XS
+- **Source**: lane W delta review, 2026-10-13
+- **Pointer**: none
+- **Context**: child-session-identity.test.sh:96-103 add an assert that manifest containment_planned is setsid-detached; blocked-dispatch-guidance.test.sh:122,127 swap assert_eq args (lib.sh:396 wants actual first).

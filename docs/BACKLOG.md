@@ -240,22 +240,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/lab-ingress-preview-integration.md
 - **Context**: review server self-registers; a PreToolUse hook (not skill text) routes ad-hoc previews to `lab preview` with a LAN-bound registered fallback; registry format co-defined with hangar.
 
-### PEER-REPORTED (openclaw): PreToolUse(Bash) guard — detach without wake-up, `pkill -f` self-match, zsh `=`/glob abort
-- **Id**: BL-0019
-- **Status**: open
-- **Since**: 2026-09-16
-- **Origin**: peer
-- **Reporter**: openclaw
-- **Report**: msg_01M2KS2TXH2V1T90DQ7X8F2TB1
-- **Reply**: 2026-09-16 msg_01M2KS6RBYNB9X43MT9PMTKGVG
-- **Problem**: openclaw 回報三種工具呼叫的踩雷：背景啟動卻沒有喚醒機制、pkill -f 會比對到自己、zsh 對等號與萬用字元直接中止。希望在執行前加一道防護，目前沒有。 (draft)
-- **Impact**: 使用者與代理仍可能重複踩到這些坑。擁有者 2026-10-13 同意採用，第三條先只警告。
-- **Trigger**: ready: owner adopted 2026-10-13: (1) deny, (2) warn, (3) warn only at first
-- **Effort**: S
-- **Source**: `openclaw` msgs `msg_01M2KS2TXH2V1T90DQ7X8F2TB1`, `msg_01M2KS5WZKY5WTFXPGEKJ9QH8W`; replied `msg_01M2KS6RBYNB9X43MT9PMTKGVG`
-- **Pointer**: docs/projects/ongoing-maintenance/HANDOFF.md
-- **Context**: (1) `nohup`/`setsid`/`&` + rail entrypoint → deny (use `run_in_background`); (2) `pkill -f` without `[x]` → warn; (3) bare `=` token or unquoted glob → deny (zsh aborts the line).
-
 ### PEER-REPORTED (openclaw): agy flash/low implementer is no-go on real briefs — qualify on brief length + self-run tests
 - **Id**: BL-0020
 - **Status**: open
@@ -1756,7 +1740,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: lane Z review round 4, 2026-10-13
 - **Pointer**: none
-- **Context**: Uncovered shapes: case...esac &, xargs -P ... rail &, ionice wrapper, coproc, f(){...}; f &. Each needs a negative control in hooks/bash-launch-guard.test.js.
+- **Context**: Uncovered: case...esac &, xargs -P, ionice/flock/time wrappers, coproc, f(){...}; f &, triple-nested $(), python os.system. False deny: bash -c 'rail & wait', wait >| f. Each needs a negative control.
 
 ### context-budget and depth0-gate tests leave temp dirs and read the real host config
 - **Id**: BL-0140

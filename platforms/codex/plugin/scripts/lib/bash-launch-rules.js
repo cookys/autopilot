@@ -16,6 +16,7 @@
 // source to detach THEMSELVES (setsid supervisor + durable result file). Nothing to allow here.
 
 const fs = require('fs');
+const path = require('path');
 const { executableText } = require('./bash-wait-rules.js');
 
 
@@ -356,11 +357,54 @@ function detectPkillSelfMatch(cmd) {
 }
 
 const GLOB_MAX_CHECKS = 3;
-const GLOB_BUDGET_MS = 50;
+const GLOB_BUDGET_MS = 50; // HARD total: directory reads below poll the clock and give up (silently) past it
+const ZSH_MAX_TEXT = 8192; // longer executable text: the zsh regexes can go quadratic — skip rule 3 entirely
+const ZSH_MAX_TOKEN = 512;
+
+// Does a single-level glob (`dir/*.ext`, `*.x`) match any entry? true / false, or null = cannot tell in
+// time (deadline hit, extended-glob syntax, unreadable dir). Streams the directory with opendirSync and
+// stops at the first match or the deadline — never a full listing of a huge directory.
+function globHasMatch(raw, cwd, deadline) {
+  const parts = raw.split('/');
+  const gi = parts.findIndex((x) => /[*?[]/.test(x));
+  if (gi !== parts.length - 1) return null; // a non-glob suffix after the glob part: not judged
+  const g = parts[gi];
+  if (/[(|<>~^#]/.test(g)) return null;
+  let re = '';
+  for (let i = 0; i < g.length; i += 1) {
+    const c = g[i];
+    if (c === '*') re += '[^/]*';
+    else if (c === '?') re += '[^/]';
+    else if (c === '[') {
+      const e = g.indexOf(']', i + 2);
+      if (e < 0) { re += '\\['; continue; }
+      let cls = g.slice(i + 1, e);
+      if (cls[0] === '!') cls = `^${cls.slice(1)}`;
+      re += `[${cls.replace(/\\/g, '\\\\')}]`;
+      i = e;
+    } else re += c.replace(/[.+^${}()|\\\]]/g, '\\$&');
+  }
+  let rx;
+  try { rx = new RegExp(`^${re}$`); } catch { return null; }
+  const dirPath = path.resolve(cwd, parts.slice(0, gi).join('/') || (raw.startsWith('/') ? '/' : '.'));
+  const dotOk = g.startsWith('.');
+  let d;
+  try { d = fs.opendirSync(dirPath); } catch (e) { return e && e.code === 'ENOENT' ? false : null; }
+  try {
+    for (let n = 0; ; n += 1) {
+      if ((n & 63) === 0 && Date.now() > deadline) return null;
+      const ent = d.readSync();
+      if (!ent) return false;
+      if (!dotOk && ent.name.startsWith('.')) continue;
+      if (rx.test(ent.name)) return true;
+    }
+  } catch { return null; } finally { try { d.closeSync(); } catch { /* closed */ } }
+}
 
 // Rule 3 (zsh only). Returns { rule, why, token } or null.
 function detectZshExpansion(cmd, cwd) {
   let text = executableText(typeof cmd === 'string' ? cmd : '');
+  if (text.length > ZSH_MAX_TEXT) return null; // before any regex: crafted `[a[a[a…` would be quadratic
   text = text.replace(/\[\[[\s\S]*?\]\]/g, ' ').replace(/\$?\(\([\s\S]*?\)\)/g, ' ');
   const allSegs = expandSegments(text);
   const t0 = Date.now();
@@ -390,12 +434,10 @@ function detectZshExpansion(cmd, cwd) {
       // Cost bounds (worst case was 5 s for `/*/*/*/*/*/*/*`): only single-level globs are resolved, at most
       // GLOB_MAX_CHECKS per command and GLOB_BUDGET_MS in total; past that we stay silent.
       if (raw.split('/').filter((part) => /[*?[]/.test(part)).length > 1) continue;
-      if (typeof fs.globSync !== 'function' || !cwd) continue;
+      if (!cwd || raw.length > ZSH_MAX_TOKEN) continue;
       if (globChecks >= GLOB_MAX_CHECKS || Date.now() - t0 > GLOB_BUDGET_MS) continue;
       globChecks += 1;
-      try {
-        if (fs.globSync(raw, { cwd }).length > 0) continue;
-      } catch { continue; }
+      if (globHasMatch(raw, cwd, t0 + GLOB_BUDGET_MS) !== false) continue; // matched, or could not tell
       return {
         rule: 'zsh-expansion', token: raw,
         why: `unquoted glob ${raw} matches nothing: zsh aborts the WHOLE line with "no matches found" `
@@ -406,4 +448,4 @@ function detectZshExpansion(cmd, cwd) {
   return null;
 }
 
-module.exports = { launchAdvice, findSubstitutions, detectDetachNoWake, detectPkillSelfMatch, detectZshExpansion, segments, expandSegments };
+module.exports = { globHasMatch, launchAdvice, findSubstitutions, detectDetachNoWake, detectPkillSelfMatch, detectZshExpansion, segments, expandSegments };

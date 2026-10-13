@@ -375,3 +375,44 @@ for (const f of fs.readdirSync(path.join(__dirname, '..', 'scripts'))) {
     assert.strictEqual(run(`nohup scripts/${f} x &`).deny, true);
   });
 }
+
+// ---- hard cost bounds (item: single glob lookups and crafted input) ----
+const { globHasMatch } = require('../scripts/lib/bash-launch-rules.js');
+test('globHasMatch: matches, no-match, missing dir, expired deadline => null', () => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'blg-gm-'));
+  fs.writeFileSync(path.join(d, 'a.zzq'), '');
+  fs.writeFileSync(path.join(d, '.hid'), '');
+  assert.strictEqual(globHasMatch(`${d}/*.zzq`, d, Date.now() + 1000), true);
+  assert.strictEqual(globHasMatch(`${d}/*.nope`, d, Date.now() + 1000), false);
+  assert.strictEqual(globHasMatch(`${d}/*`, d, Date.now() + 1000), true);
+  assert.strictEqual(globHasMatch('*.hid', d, Date.now() + 1000), false); // `*` skips dotfiles, like zsh
+  assert.strictEqual(globHasMatch('[a-b].zzq', d, Date.now() + 1000), true);
+  assert.strictEqual(globHasMatch(`${d}/nonexistent/*.x`, d, Date.now() + 1000), false);
+  assert.strictEqual(globHasMatch(`${d}/*.nope`, d, Date.now() - 1), null); // out of time => cannot tell
+});
+
+function wallMs(cmd) { // whole hook call, measured OUTSIDE the process
+  const t0 = process.hrtime.bigint();
+  const r = run(cmd, { shell: 'zsh' });
+  return { ms: Number(process.hrtime.bigint() - t0) / 1e6, r };
+}
+test('real hook under zsh: `ls <huge dir>/*` and `/*.zza` stay under 100 ms per call', () => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'blg-big-'));
+  for (let i = 0; i < 60000; i += 1) fs.closeSync(fs.openSync(path.join(d, `f${i}.txt`), 'w'));
+  run('true', { shell: 'zsh' }); // warm the file cache / node
+  for (const cmd of [`ls ${d}/*`, `ls ${d}/*.zza`]) {
+    const best = Math.min(...[1, 2, 3].map(() => wallMs(cmd).ms));
+    assert.ok(best < 100, `${cmd.slice(0, 12)}… took ${best.toFixed(0)} ms`);
+  }
+  fs.rmSync(d, { recursive: true, force: true });
+});
+test('crafted quadratic input (`[a` x 25000): still fast, zsh rule skipped, rail rule still runs', () => {
+  const bomb = '[a'.repeat(25000);
+  const { ms, r } = wallMs(`ls ${bomb}`);
+  assert.ok(ms < 100, `took ${ms.toFixed(0)} ms`);
+  assert.doesNotMatch(r.ctx, /zsh-expansion/);
+  assert.strictEqual(run(`ls ${bomb}; nohup scripts/dispatch-review.sh x &`, { shell: 'zsh' }).deny, true);
+});
+test('a huge token is not judged (no warning, no cost)', () => {
+  assert.doesNotMatch(run(`ls /nonexistent-dir-blg/${'a'.repeat(600)}*.zzq`, { shell: 'zsh' }).ctx, /zsh-expansion/);
+});

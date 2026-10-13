@@ -87,7 +87,7 @@ Hard rules:
   implementation dispatch as `AUTOPILOT_WORKTREE_ROOT_RUN_ID`. This resource
   identity is separate from `AUTOPILOT_ROOT_RUN_ID`, which the managed engine
   requires to equal the sealed mission root (`contract.mission_runtime.root_run_id`);
-  any other value is rejected as `managed_strict_root_identity_mismatch`.
+  any other well-formed value is rejected as `managed_strict_root_identity_mismatch`.
   Managed dispatch depth is normalized to at least `1`, so an inherited zero/malformed depth cannot bypass occupancy admission.
   Never substitute a foreman/stage/leaf run id or an ambient checkout path.
   `max_leaf_worktrees_per_root` is a hard occupancy cap (default `4`), so a

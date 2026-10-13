@@ -58,7 +58,9 @@ Hard rules:
   derives from the sealed `campaign_id` and injects on every initial, repair,
   and resumed implementation dispatch as
   `AUTOPILOT_WORKTREE_ROOT_RUN_ID`. It is separate from
-  `AUTOPILOT_ROOT_RUN_ID`, which remains the foreman/watcher trace root. Never
+  `AUTOPILOT_ROOT_RUN_ID`, which the managed engine requires to equal the sealed
+  mission root (`contract.mission_runtime.root_run_id`); any other well-formed
+  value is rejected as `managed_strict_root_identity_mismatch`. Never
   substitute a foreman/stage/leaf run id or an ambient checkout path. Managed
   dispatch depth is normalized to at least `1`, so an inherited zero/malformed
   depth cannot bypass occupancy admission.

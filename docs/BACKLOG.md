@@ -92,19 +92,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/worktree-and-handoff-placement-has-no-rule.md
 - **Context**: an isolated worktree session cannot pull the main checkout; resolve-repo-placement.js main prints how far behind it is and references/worktree-placement.md gives the owner line.
 
-### l5 SKILL.md misstates AUTOPILOT_ROOT_RUN_ID; the engine requires the sealed mission root
-- **Id**: BL-0007
-- **Status**: open
-- **Since**: 2026-10-06
-- **Origin**: self
-- **Problem**: l5 的說明文件把 AUTOPILOT_ROOT_RUN_ID 描述成工頭追蹤用的根編號，但引擎實際要求它必須是任務封存的根編號，填錯會被拒絕。照說明做的人會踩到。 (draft)
-- **Impact**: 照文件操作的 /l5 使用者會被引擎拒絕。擁有者 2026-10-13 同意當成事實更正直接改，不另跑評測。
-- **Trigger**: ready: owner approved as a factual correction, no eval (2026-10-13)
-- **Effort**: S
-- **Source**: depth-0 verified (autopilot-engine.js managed_strict_root_identity_mismatch)
-- **Pointer**: docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/RESULTS.md
-- **Context**: skills/l5/SKILL.md:43-46 vs skills/l5/references/hetero-impl-loop.md:201; the engine enforces the recipe; correct the SKILL wording (guidance text).
-
 ### Qwen3.8-Max-Preview via qoderclicn returned truncated output as the /l6 verification author
 - **Id**: BL-0008
 - **Status**: open
@@ -775,19 +762,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/mission-authority-store-cross-harness-enforcement-hardening.md
 - **Context**: 本次只實作 current-host 可驗證的 Git-common-dir durable registry、CAS 與 fail-closed adapter。防惡意本機程序需要獨立 UID、root-owned/remote daemon 或具 authenticity 的 authority service；精確 provider…
 
-### Every gate needs a negative control — the caution needs a routine behind it
-- **Id**: BL-0058
-- **Status**: open
-- **Since**: 2026-08-08
-- **Origin**: self
-- **Problem**: 一天內就發現三個檢查雖然存在卻沒真正擋東西，卻都通過了 CI。需要一套固定做法，要求每個檢查都要配一個「應該失敗」的對照測試。 (draft)
-- **Impact**: 檢查形同虛設卻沒人發現的情形可能再發生。擁有者 2026-10-13 同意寫成開發規則。
-- **Trigger**: ready: owner approved 2026-10-13: any gate change ships with a negative control that must fail
-- **Effort**: M
-- **Source**: 2026-08-08 CI triage（11/273 → 1/273）三起獨立成因的共同模式；本檔另有三條各自的條目。
-- **Pointer**: docs/backlog/every-gate-needs-a-negative-control-the-caution-needs-a-routine-behind-it.md
-- **Context**: CLAUDE.md 已經寫著「腳本存在不是它在運作的證據」，但 2026-08-08 一天之內出現三次同一種形狀，全部通過既有 CI 而沒被發現——(1) managed dev-flow admission 對 bounded 非 Mission campaign…
-
 ### Test-integrity L0 cannot see an early `exit 0` spliced into a shell suite
 - **Id**: BL-0059
 - **Status**: open
@@ -1160,8 +1134,8 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Since**: 2026-08-30
 - **Origin**: self
 - **Problem**: 開發主線上的全套測試在 2026-10-13 已經全綠，但單獨跑一次約 56 分鐘；每個 campaign 的驗收命令和 CI 都要跑完整套，而 CI 上限是 15 分鐘，所以仍然跑不完。
-- **Impact**: 用整套測試當驗收命令的 campaign 會因逾時失敗，CI 也會被取消。擁有者 2026-10-13 選了方案 C（見說明檔），尚未實作。
-- **Trigger**: wave 2 is scheduled (decision made 2026-10-13, see the pointer file)
+- **Impact**: 用整套測試當驗收命令的 campaign 會因逾時失敗，CI 也會被取消。方案 C 已於 2026-10-13 寫進 CLAUDE.md；剩方案 B，等 BL-0001。
+- **Trigger**: BL-0001 ships and is shown not to miss suites (then add option B on top of C)
 - **Effort**: M
 - **Source**: l6-verdict-stability-p1 salvage campaign 2026-08-29.
 - **Pointer**: docs/backlog/hooks-tests-run-sh-is-red-on-develop-sealed-campaign-verify-cmd-is-unsatisfiable.md

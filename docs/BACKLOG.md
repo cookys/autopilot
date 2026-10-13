@@ -1330,19 +1330,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/final-review-panel-fans-out-all-seats-at-once-no-bounded-concurrency.md
 - **Context**: `scripts/lib/review-fanout.js` main() uses Promise.all over all seats; add a named concurrency config, default all seats.
 
-### Plan review silently falls back to one family when the topology lacks a plan-review panel
-- **Id**: BL-0108
-- **Status**: open
-- **Since**: 2026-10-03
-- **Origin**: self
-- **Problem**: 計畫審查的名單取自機器上的拓樸檔。拓樸檔是舊版產生、少了計畫審查名單那一欄時，系統默默退回只用 opus 一個家族，不報錯。10/13 重新產生後，這台機器已恢復成兩個家族。
-- **Impact**: 拓樸檔一舊，計畫審查就默默變成單一家族，同家族審查者容易有相同盲點。換機器或升級後最容易發生。
-- **Trigger**: owner ruled 2026-10-13: stop and show the available seats so the user can complete the config, instead of the silent fallback
-- **Effort**: M
-- **Source**: mods plan G1+G2 reviews
-- **Pointer**: docs/backlog/plan-review-roster-resolves-to-a-single-family-on-this-repo.md
-- **Context**: Scripts cannot prompt (agy sandbox, headless -p): exit with a named code, list qualified seats, a recommended default and the command that writes them; depth-0 asks the owner, or headless takes the default and logs a decision.
-
 ### mods P1a known follow-ups (hardening)
 - **Id**: BL-0109
 - **Status**: open
@@ -1751,15 +1738,3 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: dispatch tree plan, step 4 deferred by owner ruling 2026-10-13
 - **Pointer**: docs/plans/2026-10-13-dispatch-tree.md
 - **Context**: Plan §4, D4. Carry root/parent/depth as remote-reported telemetry, never an edge (the far side is an LLM relaying it; G1 finding 56a3391e). Needs a fleet dispatch field plus a receiver record, shown as a labelled hint.
-### Plan-review seats never get fallbacks, so a seat out of quota is not replaced
-- **Id**: BL-0145
-- **Status**: open
-- **Since**: 2026-10-14
-- **Origin**: self
-- **Problem**: 計畫審查有「席位失敗就換另一家」的機制，程式也接上了，但每次的審查設定都把替補名單留空，拓樸檔也不提供替補。所以 grok 額度用完時沒有人可以換上去，那一席就直接失敗。
-- **Impact**: 一家額度用完或掉線，審查就少一家或整輪失敗，要人工改設定重跑。10/13 grok 兩次空手就是這樣。
-- **Trigger**: together with BL-0108 (same plan-review admission step), or the next plan review
-- **Effort**: S
-- **Source**: grok quota investigation, 2026-10-13
-- **Pointer**: docs/plans/evidence/2026-10-13-live-pane/plan-review/README.md
-- **Context**: Substitution is live (dispatch-plan-review.js reviewSeat swaps after any attempt-1 failure), but manifests are hand-written with fallbacks [] and topology ladders go unread. Fill fallbacks from topology; warn when a required seat has none.

@@ -140,14 +140,14 @@ test('a REAL detached rail inside a substitution is still denied', () => {
 });
 
 // ---- Rule 2: pkill/pgrep -f without [x] => warn only ----
-for (const cmd of ['pkill -f dispatch-review', 'pgrep -fa "my server"', 'sudo pkill -9 -f foo', 'kill $(pgrep -f myserver)', 'echo `pgrep -f foo`']) {
+for (const cmd of ['pkill -f dispatch-review', 'pgrep -fa "my server"', 'sudo pkill -9 -f foo', 'kill $(pgrep -f myserver)', 'echo `pgrep -f foo`', 'pgrep -u me -f foo', 'pkill -u me -f "my server"']) {
   test(`rule2 warns: ${cmd}`, () => {
     const r = run(cmd);
     assert.strictEqual(r.deny, false);
     assert.match(r.ctx, /pkill-self-match/);
   });
 }
-for (const cmd of ["pkill -f '[d]ispatch-review'", 'pgrep -f "[f]oo bar"', 'pkill node', 'pkill -x node', 'echo "pkill -f foo"', 'pkill -f "$PAT"']) {
+for (const cmd of ["pkill -f '[d]ispatch-review'", 'pgrep -f "[f]oo bar"', 'pkill node', 'pkill -x node', 'echo "pkill -f foo"', 'pkill -f "$PAT"', 'pgrep -u me -f "[f]oo"', 'pkill -P 1 -fa "[f]oo"', 'pgrep -f --uid me "[f]oo"']) {
   test(`rule2 silent: ${cmd}`, () => {
     assert.doesNotMatch(run(cmd).ctx, /pkill-self-match/);
   });
@@ -164,7 +164,7 @@ for (const cmd of ['git config a =b', 'echo foo ==x', 'curl https://x.test/a?b=1
     assert.doesNotMatch(run(cmd, { shell: 'bash' }).ctx, /zsh-expansion/);
   });
 }
-for (const cmd of ["echo '=' x", 'echo "a = b"', 'echo foo = bar', '[ "$x" = y ]', 'test a = a', 'echo "a"=b', 'ls "$HOME"/projects/*', 'ls ~/.claude/*.json', 'ls $HOME/.claude/*.json', 'cd hooks && ls *.test.js', "bash -c 'ls /nonexistent-dir-blg/*.zzz'", "bash -c 'echo =x'", 'ls /*/*/*/*/*/*/*.zzqq', 'ls a*/b*/c*/d*/e*.zzqq', 'ls nonexistent-a*/b*.zzqq', 'ls /nonexistent-dir-blg/**/*.zzz', 'FOO=bar env', 'ls --color=auto', 'grep -E "[a-z]+" f', "ls '*.js'", 'echo $?', '[[ a == b ]] && echo y', 'echo $((1*2))', 'cat <<EOF\n= x\n*.zzz\nEOF']) {
+for (const cmd of ["echo '=' x", 'echo "a = b"', 'echo foo = bar', '[ "$x" = y ]', 'test a = a', 'echo "a"=b', 'ls "$HOME"/projects/*', 'ls ~/.claude/*.json', 'ls $HOME/.claude/*.json', 'cd hooks && ls *.test.js', "bash -c 'ls /nonexistent-dir-blg/*.zzz'", "bash -c 'echo =x'", 'ls /*/*/*/*/*/*/*.zzqq', 'ls a*/b*/c*/d*/e*.zzqq', 'ls nonexistent-a*/b*.zzqq', 'ls /nonexistent-dir-blg/**/*.zzz', 'FOO=bar env', 'ls --color=auto', 'grep -E "[a-z]+" f', "ls '*.js'", 'echo $?', '[[ a == b ]] && echo y', 'echo $((1*2))', 'cat <<EOF\n= x\n*.zzz\nEOF', 'case $x in\n  *) echo y;;\nesac', 'case $x in a|*.zzq) echo y;; esac', 'x=*.zzq', 'export X=*.zzq; echo $X']) {
   test(`rule3 silent under zsh: ${JSON.stringify(cmd)}`, () => {
     assert.doesNotMatch(run(cmd, { shell: 'zsh' }).ctx, /zsh-expansion/);
   });

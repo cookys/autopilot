@@ -193,6 +193,9 @@ function detectDetachNoWake(cmd) {
   return null;
 }
 
+const PGREP_VALUE_FLAGS = new Set(['u', 'U', 'g', 'G', 'P', 's', 't', 'F']);
+const PGREP_LONG_VALUE = new Set(['--euid', '--uid', '--group', '--pgroup', '--parent', '--session', '--terminal', '--pidfile', '--signal']);
+
 // Rule 2. Returns { rule, why, pattern } or null.
 function detectPkillSelfMatch(cmd) {
   const text = executableText(typeof cmd === 'string' ? cmd : '');
@@ -207,9 +210,20 @@ function detectPkillSelfMatch(cmd) {
     }
     if (!full) continue;
     // The pattern is the first non-option word after the command; recover quoted multi-word patterns.
-    const mq = /\b(?:pkill|pgrep)\b(?:\s+-[^\s'"]*(?:\s+\d+)?)*\s+('([^']*)'|"([^"]*)"|(\S+))/.exec(seg.text);
-    if (!mq) continue;
-    const pattern = mq[2] !== undefined ? mq[2] : (mq[3] !== undefined ? mq[3] : mq[4]);
+    // Walk the words after the command: options that take a value (`-u me`, `-P 1`, `--uid me`) skip that
+    // value, so `me` is never mistaken for the pattern.
+    const toks = tokens(seg.text).map((t) => t.raw);
+    const hi = toks.findIndex((t) => t.replace(/^.*\//, '') === name);
+    let word;
+    for (let i = hi + 1; i < toks.length; i++) {
+      const t = toks[i];
+      if (/^--[a-z-]+$/.test(t)) { if (PGREP_LONG_VALUE.has(t)) i += 1; continue; }
+      if (/^-[a-zA-Z0-9]+$/.test(t)) { if (PGREP_VALUE_FLAGS.has(t[t.length - 1]) && !/^-[0-9]/.test(t)) i += 1; continue; }
+      if (t.startsWith('-')) continue;
+      word = t; break;
+    }
+    if (word === undefined) continue;
+    const pattern = word.replace(/^(['"])([\s\S]*)\1$/, '$2');
     if (/\[[^\]\s]\]/.test(pattern) || /\$/.test(pattern)) continue; // `[f]oo` self-exclusion; `$PAT` unknowable
     return {
       rule: 'pkill-self-match',
@@ -236,7 +250,9 @@ function detectZshExpansion(cmd, cwd) {
   for (const seg of allSegs) {
     if (seg.sh) continue; // `bash -c '…'` bodies run in bash, not zsh
     for (const { raw, masked } of tokens(seg.text)) {
-      if (/^=./.test(masked)) { // `=y` is command-path lookup; a lone `=` / `==` is fine in `[`/`test`
+      // zsh `=word` is command-path lookup and aborts the line (`=x` and `==` both report "= not found"
+      // / "x not found"); only a lone `=` (e.g. `[ a = b ]`) is harmless.
+      if (/^=./.test(masked)) {
         return {
           rule: 'zsh-expansion', token: raw,
           why: `zsh expands a word starting with "=" (${raw}) as a command-path lookup and aborts the line `
@@ -246,6 +262,8 @@ function detectZshExpansion(cmd, cwd) {
       // Drop parameter forms (`$?`, `$*`, `${x:-*}`) and command substitutions before looking for globs.
       const bare = masked.replace(/\$\{[^}]*\}|\$\([^)]*\)?|\$[?*@#!$-]|`[^`]*`?/g, '');
       if (!/[*?]|\[[^\]]+\]/.test(bare)) continue;
+      if (/\)$/.test(masked)) continue; // `case x in *)` branch label, not a word to expand
+      if (/^[A-Za-z_][A-Za-z0-9_]*\+?=/.test(masked)) continue; // `x=*.zzq` assignment is not globbed
       // Stay silent when we cannot judge: backslash/quote/brace in the word, `**`, or no globSync.
       if (/[\\'"{$]/.test(raw) || raw.includes('**') || bare !== masked) continue;
       if (hasCd || /^~/.test(raw)) continue; // cannot resolve / too broad: stay silent

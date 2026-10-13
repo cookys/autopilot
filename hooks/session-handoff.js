@@ -171,7 +171,7 @@ function inferNextStep(reasons) {
   return 'Resume from the last action above.';
 }
 
-function renderHandoff({ timestamp, branch, statusSb, recentCommits, lastAssistant, lastTool, nextStep, reasons, userTurns, toolCalls }) {
+function renderHandoff({ workflow, timestamp, branch, statusSb, recentCommits, lastAssistant, lastTool, nextStep, reasons, userTurns, toolCalls }) {
   const lines = [];
   lines.push(`# Session Handoff — ${timestamp} (auto-generated)`);
   lines.push('');
@@ -180,6 +180,14 @@ function renderHandoff({ timestamp, branch, statusSb, recentCommits, lastAssista
   lines.push('');
   lines.push('> Resuming after `/clear`: read this, run the Verification block, then continue.');
   lines.push('');
+  if (workflow) {
+    lines.push('## Workflow state');
+    lines.push('');
+    lines.push('```');
+    lines.push(workflow);
+    lines.push('```');
+    lines.push('');
+  }
   lines.push('## Repo state');
   lines.push('');
   lines.push(`- Branch \`${branch || '(unknown)'}\`, snapshot at ${timestamp}.`);
@@ -305,7 +313,16 @@ function publishAtomic(bodyPath, metaPath, content, meta) {
     const { lastAssistant, lastTool } = inferLastAction(parsed);
     const nextStep = inferNextStep(decision.reasons);
 
+    // The same collector the PreCompact checkpoint uses (plan 2026-10-13-workflow-snapshot-at-compaction).
+    // Fail-open: without it the handoff is the old git + transcript form.
+    let workflow = '';
+    try {
+      workflow = require('../scripts/lib/workflow-snapshot.js')
+        .snapshotText({ sessionId: input.session_id, cwd: payloadCwd, maxBytes: 4000 });
+    } catch { workflow = ''; }
+
     const content = renderHandoff({
+      workflow,
       timestamp: ts,
       branch,
       statusSb,

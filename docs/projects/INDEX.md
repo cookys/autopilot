@@ -12,6 +12,7 @@
 | 2026-10-13 | [l5 mission scaffold generator](../plans/2026-10-13-l5-mission-scaffold-generator.md) | active | — | [plan](../plans/2026-10-13-l5-mission-scaffold-generator.md) |
 | 2026-10-13 | [final panel with findings parks for depth-0 disposition instead of terminal-stopping](../plans/2026-10-13-final-panel-park.md) | active | — | [plan](../plans/2026-10-13-final-panel-park.md) |
 | 2026-10-13 | [review-only entry: host-admitted final panel over an externally produced candidate range](../plans/2026-10-13-review-only-external-candidate.md) | active | — | [plan](../plans/2026-10-13-review-only-external-candidate.md) |
+| 2026-10-13 | [workflow snapshot at compaction](../plans/2026-10-13-workflow-snapshot-at-compaction.md) | active | — | [plan](../plans/2026-10-13-workflow-snapshot-at-compaction.md) |
 | 2026-10-12 | [TMPDIR residue containment: contain test temp dirs, delete runtime temp files after use, gate unregistered prefixes](../plans/2026-10-12-tmp-residue-containment.md) | active | — | [plan](../plans/2026-10-12-tmp-residue-containment.md) |
 | 2026-10-11 | [review packet mode: carry a range over the packet ceiling without slicing it away](../plans/2026-10-11-review-packet-mode.md) | active | — | [plan](../plans/2026-10-11-review-packet-mode.md) |
 | 2026-10-06 | [dev-flow stage graph: one named graph, T-shirt sizes, a marker the band can read](../plans/2026-10-06-dev-flow-stage-graph.md) | active | — | [plan](../plans/2026-10-06-dev-flow-stage-graph.md) (R2 FROZEN) |

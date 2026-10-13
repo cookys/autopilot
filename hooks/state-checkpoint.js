@@ -39,6 +39,7 @@ const {
   extractTurn,
   parseTranscriptText,
   buildTranscriptTail: libBuildTranscriptTail,
+  dropToolNoise,
   selectFailureCounter,
   compactionStateName,
   PER_TURN_BUDGET,
@@ -49,8 +50,12 @@ const {
 const STATE_DIR = path.join(os.homedir(), '.autopilot');
 const LOG_FILE = path.join(STATE_DIR, '.state-checkpoint.log');
 const LOG_ROTATE_BYTES = 1 * 1024 * 1024; // 1 MB
-const TRANSCRIPT_TAIL_N = parseInt(process.env.TRANSCRIPT_TAIL_N || '20', 10);
-const TRANSCRIPT_BYTE_CAP = parseInt(process.env.TRANSCRIPT_BYTE_CAP || '8192', 10);
+// The tail is the supplement, not the state: the workflow snapshot leads the file (plan
+// docs/plans/2026-10-13-workflow-snapshot-at-compaction.md). 6 turns / 3 KB of text-bearing turns.
+const TRANSCRIPT_TAIL_N = parseInt(process.env.TRANSCRIPT_TAIL_N || '6', 10);
+const TRANSCRIPT_BYTE_CAP = parseInt(process.env.TRANSCRIPT_BYTE_CAP || '3072', 10);
+const SNAPSHOT_FILE_BYTES = 6000;
+const SNAPSHOT_STDOUT_BYTES = 3000;
 
 // === Helpers ===
 
@@ -118,10 +123,42 @@ function parseTranscript(transcriptPath) {
 // buildTranscriptTail moved to state-checkpoint-lib.js. Wrapper calls into the
 // lib with the env-overridable tail-N + byte-cap so the runtime knobs survive.
 function buildTranscriptTail(turns) {
-  return libBuildTranscriptTail(turns, {
+  return libBuildTranscriptTail(dropToolNoise(turns), {
     tailN: TRANSCRIPT_TAIL_N,
     byteCap: TRANSCRIPT_BYTE_CAP,
   });
+}
+
+// The workflow snapshot (scripts/lib/workflow-snapshot.js). Every source inside it is fail-open; this
+// wrapper covers the require itself, so a missing or broken collector never costs the checkpoint file.
+function workflowSnapshot(input, maxBytes) {
+  try {
+    const { snapshotText } = require('../scripts/lib/workflow-snapshot.js');
+    return snapshotText({ sessionId: input.session_id, cwd: input.cwd, maxBytes });
+  } catch (err) {
+    return `Workflow state: unavailable (collector failed: ${String(err && err.message).slice(0, 120)})`;
+  }
+}
+
+// PostCompact (plan §2.6, P4): did the summary keep the branch and the stage the session was on?
+// Advisory only: PostCompact has no decision control, and the model still gets the checkpoint file
+// from session-start. One advisory row for the owner when the summary lacks either; one log line always.
+function postCompactCheck(input) {
+  const summary = typeof input.compact_summary === 'string' ? input.compact_summary : '';
+  const { facts } = require('../scripts/lib/workflow-snapshot.js');
+  const f = facts({ sessionId: input.session_id, cwd: input.cwd });
+  const missing = [];
+  if (f.branch && !summary.includes(f.branch)) missing.push(`branch ${f.branch}`);
+  if (f.stage && !new RegExp(`(^|[^A-Za-z0-9_-])${f.stage.replace(/[^A-Za-z0-9_-]/g, '')}($|[^A-Za-z0-9_-])`, 'i').test(summary)) missing.push(`stage ${f.stage}`);
+  appendLog({ ts: new Date().toISOString(), hostname: os.hostname(), session_id: input.session_id || '<unknown>', status: missing.length ? 'postcompact_summary_missing' : 'postcompact_ok', missing, summary_bytes: Buffer.byteLength(summary) });
+  if (missing.length && input.session_id) {
+    require('./_shared/advisory-sink.js').writeAdvisory({
+      sid: input.session_id,
+      kind: 'compact-summary-lost-state',
+      severity: 'info',
+      text: `The compaction summary does not mention the ${missing.join(' or the ')} this session was on. The saved checkpoint is re-injected after compaction, so re-check it before continuing.`,
+    });
+  }
 }
 
 // === Main ===
@@ -155,6 +192,10 @@ function buildTranscriptTail(turns) {
       throw err; // any other stdin read error → real catastrophic, fall through
     }
     const input = stdin.trim() ? JSON.parse(stdin) : {};
+    if (input.hook_event_name === 'PostCompact') {
+      try { postCompactCheck(input); } catch (err) { process.stderr.write(`[state-checkpoint] postcompact check failed: ${err.message}\n`); }
+      return process.exit(0);
+    }
     sessionId = input.session_id || '<unknown>';
     transcriptPath = input.transcript_path || '';
     const trigger = input.trigger === 'manual' ? 'manual' : 'automatic';
@@ -167,7 +208,11 @@ function buildTranscriptTail(turns) {
 
     // Build machine state header
     const failureCount = readFailureCounter();
+    const snapshotFile = workflowSnapshot(input, SNAPSHOT_FILE_BYTES);
     let stateContent = `# Autopilot Compaction Checkpoint
+## Workflow Snapshot
+${snapshotFile}
+
 ## Machine State (guaranteed accurate)
 - Timestamp: ${timestamp}
 - Hostname: ${os.hostname()}
@@ -284,9 +329,15 @@ ${body}`;
       failureReason = `state_file_write: ${err.message}`;
     }
 
-    // No stdout: on exit 0 Claude Code appends PreCompact stdout to the
-    // compaction summarizer's instructions, so text addressed to Claude here
-    // would reach the summarizer instead. Diagnostics go to stderr and the log.
+    // stdout: on exit 0 Claude Code merges PreCompact stdout into the compaction summarizer's
+    // custom instructions (binary 2.1.296 + docs; plan §2.1). It never reaches the model directly,
+    // so it is addressed to the summarizer, bounded, and turned off by AUTOPILOT_PRECOMPACT_STDOUT=0.
+    // The model gets the same state a second time from the file session-start injects. Diagnostics
+    // stay on stderr and in the log.
+    if (input.session_id && process.env.AUTOPILOT_PRECOMPACT_STDOUT !== '0') {
+      const snap = workflowSnapshot(input, SNAPSHOT_STDOUT_BYTES);
+      process.stdout.write(`Preserve the following workflow state verbatim in the compaction summary (branch, stage, open tasks, dispatches, review state):\n${snap}\n`);
+    }
 
     // Final log entry
     appendLog({

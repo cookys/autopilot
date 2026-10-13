@@ -55,6 +55,7 @@ function segments(text) {
   let listStart = 0;
   let subDepth = 0; // inside a `( … )` subshell: its background jobs are NOT waitable by the outer shell
   let inner = 0; // unquoted `(` that is not a subshell opener (`$(`, `f(`)
+  let bt = false; // inside an unquoted backtick substitution
   const push = (bg, endsList = false) => {
     if (cur.trim()) out.push({ text: cur.trim(), bg, sub: subDepth > 0 });
     cur = '';
@@ -85,6 +86,7 @@ function segments(text) {
     }
     if (c === '\\' && i + 1 < s.length) { cur += c + s[i + 1]; i += 1; continue; }
     if (c === "'" || c === '"') { q = c; cur += c; continue; }
+    if (c === '`') { bt = !bt; cur += c; continue; }
     if (c === '(' && cur.trim() === '') { subDepth += 1; continue; } // leading subshell paren
     if (c === '(') { inner += 1; cur += c; continue; }
     if (c === ')') {
@@ -92,9 +94,9 @@ function segments(text) {
       else if (subDepth > 0) { push(false); subDepth -= 1; continue; } // closes a subshell
       cur += c; continue;
     }
-    // Inside an unquoted `$( … )` the separators belong to that substitution: keep it one segment (it is
+    // Inside an unquoted `$( … )` or backtick pair the separators belong to that substitution: keep it one segment (it is
     // re-parsed on its own by expandSegments), otherwise `echo $(rail &)` would be torn apart.
-    if (inner > 0 && (c === '\n' || c === ';' || c === '|' || c === '&')) { cur += c; continue; }
+    if ((inner > 0 || bt) && (c === '\n' || c === ';' || c === '|' || c === '&')) { cur += c; continue; }
     if (c === '\n' || c === ';') { push(false, true); continue; }
     if (c === '|') { push(false); if (s[i + 1] === '|' || s[i + 1] === '&') i += 1; continue; } // `||`, and `|&` (pipe stderr too)
     if (c === '&') {

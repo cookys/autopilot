@@ -68,6 +68,9 @@ for (const cmd of [
   'while true; do for i in 1 2; do scripts/dispatch-review.sh $i; done; done &',
   'for i in 1 2; do scripts/dispatch-review.sh $i; done > /tmp/log 2>&1 &',
   'scripts/dispatch-review.sh x |& tee /tmp/l &', // `|&` pipeline that IS backgrounded
+  'echo `nohup scripts/dispatch-review.sh x &`', // unquoted backtick substitution
+  'x=`setsid -f scripts/dispatch-review.sh x`; echo $x',
+  'echo `date; scripts/dispatch-review.sh x &`',
 ]) {
   test(`rule1 denies: ${cmd}`, () => {
     const r = run(cmd);
@@ -112,6 +115,8 @@ for (const cmd of [
   'cd scripts && ./dispatch-status.js &',
   'bash scripts/dispatch-review.sh --base a --head b |& tee /tmp/log', // `|&` is a foreground pipe, not a background `&`
   'scripts/dispatch-review.sh x |& tail -5 && echo done',
+  "echo '`nohup scripts/dispatch-review.sh x &`'", // single-quoted backticks are data
+  'echo `date`; scripts/dispatch-review.sh x', // backtick substitution without a rail launch
   'for i in 1 2; do echo $i; done &', // backgrounded loop without a rail
   'for i in 1 2; do scripts/dispatch-review.sh $i; done', // same loop in the foreground
   'if true; then echo hi; fi &',

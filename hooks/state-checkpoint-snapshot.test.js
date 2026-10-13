@@ -164,6 +164,50 @@ test('SessionEnd /clear: a task card goal holding a ``` run cannot break the wor
   } finally { sb.cleanup(); }
 });
 
+// Handoff body for a sandbox repo after `prep(sb)` has shaped it.
+function handoffBody(sb, prep) {
+  prep(sb);
+  fs.writeFileSync(path.join(sb.home, '.autopilot', 'config.json'), JSON.stringify({ handoff_inject: true }));
+  const payload = { session_id: SID, transcript_path: sb.transcript, cwd: sb.repo, hook_event_name: 'SessionEnd', reason: 'clear' };
+  const r = spawnSync('node', [HANDOFF], { input: JSON.stringify(payload), encoding: 'utf8', env: sb.env });
+  assert.strictEqual(r.status, 0, r.stderr);
+  const dir = path.join(sb.home, '.autopilot', 'handoff');
+  return fs.readdirSync(dir).filter((n) => n.endsWith('.md')).map((n) => fs.readFileSync(path.join(dir, n), 'utf8'))[0];
+}
+// The lines between the "## <from>" heading and the "## <to>" heading. (`git status -sb` itself prints
+// a "## branch" line, so "any ## line" cannot end a section.)
+function section(body, from, to) {
+  const a = body.indexOf(from);
+  return body.slice(a, body.indexOf(to, a)).split('\n');
+}
+function assertDynamicFence(sec, marker) {
+  const fences = sec.filter((l) => /^`{3,}\s*$/.test(l));
+  assert.strictEqual(fences.length, 2, `exactly one open and one close fence, got ${JSON.stringify(fences)}`);
+  assert.strictEqual(fences[0], fences[1], 'open and close fence are the same');
+  assert.ok(fences[0].length >= 4, `fence longer than the ${marker.length}-backtick run inside (got ${fences[0].length})`);
+  assert.ok(sec.some((l) => l.includes(marker)), 'the content is intact');
+}
+
+test('SessionEnd /clear: a commit subject holding ``` gets a longer fence in Recent commits', () => {
+  const sb = sandbox();
+  try {
+    const body = handoffBody(sb, (x) => {
+      spawnSync('git', ['-C', x.repo, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'fix the ``` fence']);
+    });
+    assertDynamicFence(section(body, '## Recent commits', '## Last action'), '```');
+  } finally { sb.cleanup(); }
+});
+
+test('SessionEnd /clear: a file name holding ``` gets a longer fence in the git status block', () => {
+  const sb = sandbox();
+  try {
+    const body = handoffBody(sb, (x) => fs.writeFileSync(path.join(x.repo, 'a```b.txt'), 'x'));
+    const sec = section(body, '## Repo state', '## Recent commits');
+    // Only the git status block sits in Repo state; the Recent commits block starts at the next heading.
+    assertDynamicFence(sec, 'a```b.txt');
+  } finally { sb.cleanup(); }
+});
+
 test('SessionEnd /clear: the machine handoff carries the workflow state section', () => {
   const sb = sandbox();
   try {

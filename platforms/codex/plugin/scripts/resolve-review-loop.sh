@@ -37,7 +37,16 @@
 #  implementer family. qc_panel_aggregation: union-on-verified-critical; majority forbidden.
 #  review_diff_scope: how much the per-round reviewer reads — full | incremental-mitigated.)
 #
-# Exit codes: 0 success / 2 usage / 3 invalid or inconsistent config.
+#   --require-plan-panel  # OPT-IN admission stop for plan review: with plan_review=auto, when the roster
+#              # cannot be resolved from the config or topology (stale topology without
+#              # plan_review_panel, or no qualified seat) the resolver would silently fall back to
+#              # opus@claude-native, the depth-0 family. With this flag it exits 4 (still emits
+#              # JSON/field) and prints on stderr the qualified seats, a recommended pair and the
+#              # command that writes it. Scripts cannot prompt (agy sandbox, headless -p): the
+#              # CALLER asks the owner, or headless applies the recommended pair and logs a decision.
+#
+# Exit codes: 0 success / 2 usage / 3 invalid or inconsistent config / 4 plan-review roster
+#   incomplete (--require-plan-panel only; 3 wins when both apply).
 
 set -uo pipefail
 
@@ -181,6 +190,7 @@ ORACLE_AVAILABLE=1
 SECURITY_SURFACE=0
 PRIOR_STATUS="none"
 ENFORCE=0
+REQUIRE_PLAN_PANEL=0
 CHECK_SCORECARD=0
 SCORECARD_SCOPE_FILE=""
 SCORECARD_IDENTITY_FILE=""
@@ -242,8 +252,9 @@ while [[ $# -gt 0 ]]; do
     --scorecard-scope-file) SCORECARD_SCOPE_FILE="${2:-}"; shift 2 ;;
     --scorecard-identity-file) SCORECARD_IDENTITY_FILE="${2:-}"; shift 2 ;;
     --enforce) ENFORCE=1; shift ;;
+    --require-plan-panel) REQUIRE_PLAN_PANEL=1; shift ;;
     --scale-by-capability) SCALE_BY_CAPABILITY=1; shift ;;
-    -h|--help) sed -n '2,31p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,39p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -1571,6 +1582,70 @@ ENFORCE_EXIT=0
 if [[ "$ENFORCE" == "1" && "$CROSS_FAMILY_REQUIRED" == "true" \
       && "$CROSS_FAMILY_SATISFIED" == "false" && ( "$REVIEW_RISK" == "high" || "$REQUIRED_REVIEW_FAMILIES" -ge 2 ) ]]; then
   ENFORCE_EXIT=3
+fi
+
+# --require-plan-panel (opt-in admission stop, BL-0108). A plan review that resolved to the
+# native fallback is a single-family review by the depth-0 family; the resolver already warned
+# in capability_warnings, but nothing STOPPED. Here the caller can ask for the stop: exit 4, and
+# a stderr block that is the whole menu — seats the topology qualifies, a recommended pair of
+# distinct families, and the one command that writes it. This script never prompts (it runs under
+# agy and headless -p); depth-0 shows the menu to the owner, or applies the recommendation and
+# logs a decision when nobody can be asked.
+if [[ "$REQUIRE_PLAN_PANEL" == "1" && "$PLAN_REVIEW" == "auto" \
+      && "$PLAN_REVIEW_RESOLVED_FROM" == "native-fallback" ]]; then
+  _cfg_target="${CONFIG_PATH:-.claude/review-loop-config.md}"
+  [[ "$_cfg_target" == "builtin-default" || "$_cfg_target" == *"project-config-template"* ]] && _cfg_target=".claude/review-loop-config.md"
+  node -e '
+let d = {};
+try { d = JSON.parse(process.argv[1] || "{}"); } catch { d = {}; }
+const cfg = process.argv[2];
+const seen = new Set();
+const seats = [];
+for (const key of ["plan_review_panel", "reviewer_ladder", "consult_ladder"]) {
+  for (const s of Array.isArray(d[key]) ? d[key] : []) {
+    if (!s || !s.engine || !s.runner || !s.effort) continue;
+    const id = `${s.engine}/${s.effort}@${s.runner}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    seats.push({ id, s });
+  }
+}
+const out = [];
+out.push("resolve-review-loop: STOP (exit 4) plan_review=auto has no usable plan-review roster; the silent fallback would be opus/high@claude-native, the depth-0 family.");
+if (d.missing_plan_review_panel) out.push("  cause: the topology file has no plan_review_panel key (stale cache) - regenerate it first: node scripts/resolve-dispatch-topology.js");
+if (seats.length === 0) {
+  out.push("  available qualified seats: none found in the topology (absent, malformed, or zero qualified reviewer/consult seats).");
+  out.push("  options: qualify a heterogeneous seat (scripts/engine-qualify.sh), or set plan_review: off in " + cfg + " to opt out explicitly.");
+} else {
+  out.push("  available qualified seats (engine/effort@runner [family]):");
+  for (const { id, s } of seats) out.push("    - " + id + " [" + (s.family || "unknown") + "]");
+  const pick = [];
+  const fam = new Set();
+  for (const { s } of seats) {
+    const f = s.family || ("runner:" + s.runner);
+    if (fam.has(f)) continue;
+    fam.add(f);
+    pick.push(s);
+    if (pick.length === 2) break;
+  }
+  out.push("  recommended: " + pick.map((s) => s.engine + "/" + s.effort + "@" + s.runner).join(" + ") + (pick.length < 2 ? " (single qualified family: a one-seat plan review)" : " (distinct families)"));
+  const lines = [];
+  const emit = (prefix, s) => {
+    lines.push("- " + prefix + "_engine: " + s.engine);
+    lines.push("- " + prefix + "_effort: " + s.effort);
+    lines.push("- " + prefix + "_runner: " + s.runner);
+    if (s.endpoint) lines.push("- " + prefix + "_endpoint: " + s.endpoint);
+  };
+  emit("plan_reviewer", pick[0]);
+  if (pick[1]) emit("plan_deep_reviewer", pick[1]);
+  const Q = "\x27";
+  const q = (t) => Q + t.split(Q).join(Q + "\\" + Q + Q) + Q;
+  out.push("  write the recommendation: printf " + Q + "%s\\n" + Q + " " + lines.map(q).join(" ") + " >> " + cfg);
+  out.push("  caller: ask the owner which seats to use; with nobody to ask (headless), apply the recommendation and log it as a decision.");
+}
+process.stderr.write(out.join("\n") + "\n");
+' "${_topo_json:-}" "$_cfg_target"
+  [[ "$ENFORCE_EXIT" -eq 0 ]] && ENFORCE_EXIT=4
 fi
 
 probe_diff_bytes() {

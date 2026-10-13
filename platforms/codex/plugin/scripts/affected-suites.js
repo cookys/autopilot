@@ -66,10 +66,17 @@ const ALWAYS_RUN = [
   ['hooks/tests/check-claude-md-inventory.test.sh', 'every shipped script must be named in CLAUDE.md'],
   ['hooks/tests/check-hook-inventory.test.sh', 'hook files vs hooks.json vs docs'],
   ['hooks/tests/check-canonical-invariants.test.sh', 'cross-file invariants over the real tree'],
+  ['hooks/tests/p6d-gates-repair-ladder.test.sh', 'grep -rln repair_lock over all of src/'],
+  ['hooks/tests/qualify-scorecard-vocabulary.test.sh', 'grep -rl a model-id charset over scripts/ and src/'],
+  ['hooks/tests/skill-onoff-stage-graph.test.sh', 'grep -rl eligible_max over all of scripts/'],
+  ['hooks/tests/skill-count-metadata.test.sh', 'counts the skills/ directories against the documented count (a new skill dir changes it)'],
+  ['hooks/tests/qualify-recipe-credential-staging.test.sh', 'greps every docs/plans/evidence/*/administration/*/run.sh for staging variables'],
 ];
 // Prose cannot break a suite; mirrors are covered by the always-run codex-plugin-package suite.
 const PURE_DOC = /^(docs|website|skill-creator-workspace)\/|^[^/]+\.(md|txt)$/;
 const MIRROR = /^platforms\//;
+// A script under docs/ is code, not prose (a suite may scan it).
+const isProse = (p) => PURE_DOC.test(p) && !isCode(p);
 
 function isSuite(p) {
   return /^hooks\/[^/]+\.test\.js$/.test(p) || /^scripts\/[^/]+\.test\.js$/.test(p) ||
@@ -234,10 +241,10 @@ function select(changed, headTree, maxWeak = DEFAULT_MAX_WEAK) {
   }
   // A changed file that no selected suite reaches and that is not prose cannot be judged: run everything.
   const reached = new Set(suites.flatMap((s) => chains[s]));
-  const unreferenced = changed.filter((p) => !PURE_DOC.test(p) && !MIRROR.test(p) && !reached.has(p));
+  const unreferenced = changed.filter((p) => !isProse(p) && !MIRROR.test(p) && !reached.has(p));
   for (const p of unreferenced) fullReasons.push(`unreferenced change (no suite reaches it): ${p}`);
   // Content-scanning suites ride along with every selective result that has a non-prose change.
-  const alwaysRun = changed.some((p) => !PURE_DOC.test(p)) ? ALWAYS_RUN.map(([f]) => f).filter((f) => present.has(f)) : [];
+  const alwaysRun = changed.some((p) => !isProse(p)) ? ALWAYS_RUN.map(([f]) => f).filter((f) => present.has(f)) : [];
   for (const f of alwaysRun) if (!chains[f]) chains[f] = [f];
   const all = [...new Set([...suites, ...alwaysRun])].sort();
   return { suites: all, alwaysRun, chains, fullReasons, unreferenced, graphFiles: graph.refs.size };

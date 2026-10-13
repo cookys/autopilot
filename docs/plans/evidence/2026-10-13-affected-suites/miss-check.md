@@ -36,13 +36,13 @@ Result at the default `--max-weak 2` (28 pairs; raw rows in the scratchpad `caus
 | selective, chain ends at a causal file | 3 | context-budget.test.js (hooks/context-budget-lib.js); context-window.test.sh and hetero-review-loop.test.sh (.claude/review-loop-config.md) |
 | selective, always-run list | 2 | resolve-review-loop-consult-discuss-switch.test.sh broken by another test file (1b2e2485, d2bdccba) |
 | selective, hit through a non-causal file ("lucky") | 2 | statusline-live-tee.test.js (S = hooks/context-budget-lib.js), calibration.test.sh (S = .claude/review-loop-config.md) |
-| not attributable | 1 | d2bdccba autopilot-cli.test.sh: reverting B's diff does not make it green (host state) - dropped |
+| selective, hit without a ddmin set | 1 | d2bdccba autopilot-cli.test.sh. A real case: green on the parent c14d620a (117 assertions), red on d2bdccba twice. The ddmin step failed (reverting B's whole diff did not turn it green), so no causal set S was derived; the selector on `B^..B` selects it through `.claude/review-loop-config.md`. Counted as a hit, with that gap stated |
 
-Misses: **0** of 27 attributable pairs. The two "lucky" pairs were re-run with S alone as the only changed file:
+Misses: **0** of 28 pairs (27 with a verified causal set, 1 without). The two "lucky" pairs were re-run with S alone as the only changed file:
 `--files hooks/context-budget-lib.js` selects statusline-live-tee.test.js (chain test -> context-budget.js -> lib);
 `--files .claude/review-loop-config.md` selects calibration.test.sh (chain length 2). Both are causal in isolation.
 
-Honest reading: **20 of 27 are "full"**, so on real multi-file commits the tool mostly says "run everything"; only 5
+Honest reading: **20 of 28 are "full"**, so on real multi-file commits the tool mostly says "run everything"; only 8
 pairs test the graph itself. The graph is exercised harder by the mutation oracle below and by the unit tests.
 Round 1 listed the same pairs as "19 selective + 10 full"; most of the 19 selective pairs moved to full; that is
 the effect of the new rule "an unreached non-prose change forces full".
@@ -50,8 +50,9 @@ the effect of the new rule "an unreached non-prose change forces full".
 ### What `--max-weak` is supported by
 
 The historical sample cannot discriminate depth (at `--max-weak 1` every pair is still a hit, by "full"). Isolation
-checks can: `--files .claude/review-loop-config.md` selects 0/3 of {context-window, hetero-review-loop,
-calibration} at `--max-weak 0`, 2/3 at 1 (calibration is missed) and 3/3 at 2. So 2 is the smallest value that
+checks can: `--files .claude/review-loop-config.md` selects, for {context-window, hetero-review-loop,
+calibration}: at `--max-weak 0` the tool returns `mode: full` (not a miss), at 1 it misses calibration (2/3), at 2 it
+selects all 3. So 2 is the smallest value that
 does not miss in that check; no pair needed 3. Round 1's claim "2 is the minimum of the 19 selective cases"
 is withdrawn: those cases are no longer selective.
 
@@ -110,8 +111,27 @@ turn them red). They are added to every selective result that has a non-prose ch
 | check-hook-inventory | hook files vs hooks.json vs docs |
 | check-canonical-invariants | cross-file invariants over the real tree |
 
-The list comes from a survey of tests that use `git ls-files`/`git grep`/recursive grep/find over the repo or
-`*.test.sh` globs; it is a survey, not a proof of completeness - a new content-scanning suite must be added by hand.
+Added after the second review (found by grep; the first two were reproduced red by the reviewer):
+
+| Suite | Why |
+|-------|-----|
+| p6d-gates-repair-ladder | `grep -rln repair_lock` over all of `src/` |
+| qualify-scorecard-vocabulary | `grep -rl` of a model-id charset over `scripts/` and `src/` |
+| skill-onoff-stage-graph | `grep -rl eligible_max` over all of `scripts/` |
+| skill-count-metadata | counts the `skills/` directories against the documented count (`--files skills/zz-new/SKILL.md` stayed selective without it) |
+| qualify-recipe-credential-staging | greps every `docs/plans/evidence/*/administration/*/run.sh` (a script under `docs/` is code, not prose, for this tool) |
+
+The list comes from a survey, re-runnable with these commands (a hit is only a candidate: read the matched line to
+see whether it scans repo content or a test's own fixture directory):
+
+```
+grep -nE "grep +-[a-zA-Z]*[rR][a-zA-Z]* |git (-C [^ ]+ )?(grep|ls-files)|find +\"?\$\{?(REPO|ROOT|TESTS|HOOKS|SCRIPTS|PLUGIN|SRC)[A-Z_]*\}?\"?" hooks/tests/*.test.sh scripts/*.test.sh
+grep -lE "ls-files|git grep|grep -r|readdirSync" hooks/*.test.js scripts/*.test.js scripts/lib/*.test.js
+```
+
+It is a survey, not a proof of completeness - a new content-scanning suite must be added by hand. Round 2's
+survey was a spot check and missed the five above; this one ran the grep over every `hooks/tests` and `scripts`
+suite. Candidates read and not added: `capability-evidence` (copies `src/engine/owner-kernel/`, no content scan).
 
 ## Limits (read before relying on it)
 
@@ -120,7 +140,7 @@ The list comes from a survey of tests that use `git ls-files`/`git grep`/recursi
   not for hub changes. This is the price of "never guess": over-select, never under-select.
 - **Static text reference, not execution.** A suite that builds the script name at run time with no literal file
   name in any file on the path (`scripts/dispatch-$rail.sh` with the rail name from a table elsewhere) is invisible
-  unless a directory glob or a mention elsewhere catches it. No such miss was found in 27 attributable historical pairs, 14 L1
+  unless a directory glob or a mention elsewhere catches it. No such miss was found in 28 historical pairs, 14 L1
   mutants and 4 L2 mutants; that is evidence, not proof (and the tool answers "full" for most multi-file commits).
 - **Default depth 2 weak hops.** Three weak hops were needed in none of the checks; raising to 3 costs ~40% more
   suites. `--max-weak` is exposed so the gate can choose.

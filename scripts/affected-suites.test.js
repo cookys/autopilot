@@ -184,8 +184,25 @@ test('--files mode reads the working tree', () => {
   } finally { r.cleanup(); }
 });
 
+// The real repo root; negative controls run a mutated copy elsewhere and point this at the repo.
+const REAL_ROOT = process.env.AFFECTED_SUITES_REAL_ROOT || path.join(__dirname, '..');
+
+test('real tree: files scanned by content-grepping suites select those suites (reviewer repros)', () => {
+  const cases = [
+    ['src/hooks/handlers/session-start.js', 'hooks/tests/p6d-gates-repair-ladder.test.sh'],
+    ['src/hooks/handlers/intent-capture.js', 'hooks/tests/qualify-scorecard-vocabulary.test.sh'],
+    ['scripts/probe-unknown.js', 'hooks/tests/skill-onoff-stage-graph.test.sh'],
+    ['skills/zz-new/SKILL.md', 'hooks/tests/skill-count-metadata.test.sh'],
+    ['docs/plans/evidence/x/administration/y/run.sh', 'hooks/tests/qualify-recipe-credential-staging.test.sh'],
+  ];
+  for (const [file, suite] of cases) {
+    const out = JSON.parse(execFileSync('node', [SEL, '--root', REAL_ROOT, '--files', file, '--json'], { stdio: 'pipe' }).toString());
+    assert.ok(out.mode === 'full' || out.always_run.includes(suite), `${file} must run ${suite}`);
+  }
+});
+
 test('real tree: every suite run.sh discovers is a known suite path', () => {
-  const root = path.join(__dirname, '..');
+  const root = REAL_ROOT;
   const out = execFileSync('node', [SEL, '--root', root, '--list-all'], { stdio: 'pipe' }).toString().trim().split('\n');
   assert.ok(out.length > 100);
   assert.ok(out.every((p) => /\.test\.(sh|js)$/.test(p)));

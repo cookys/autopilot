@@ -1122,15 +1122,16 @@ for (const surface of SURFACES) {
     }
   })
 
-  test('elapsed: now minus the earliest start in the scope, 38m / 2h14m / 1d3h, an em dash when no run has a start (' + surface + ')', async ($, on) => {
+  test('elapsed: now minus the earliest start in the scope, 38m / 2h14m / 1d03h, an em dash when no run has a start (' + surface + ')', async ($, on) => {
     const ago = (s: number) => new Date(NOW_FRESH - s * 1000).toISOString()
     const at = (s: number) => row({ run_id: 'r' + s, started_at: ago(s), fact_at: ago(s) })
     const cases: [unknown[], string][] = [
       [[at(38 * 60)], '38m'],
       [[at(2 * 3600 + 14 * 60 + 5)], '2h14m'],
-      [[at(27 * 3600 + 59)], '1d3h'],
+      [[at(27 * 3600 + 59)], '1d03h'],
+      [[at(24 * 3600 + 5)], '1d00h'], // the hour is padded like the minute (the 1d0h shot finding)
       [[at(59 * 60 + 5)], '59m'],
-      [[at(3600)], '1h0m'],
+      [[at(3600)], '1h00m'],
       [[at(5)], '0m'],
       [[at(600), at(2 * 3600 + 14 * 60), at(1200)], '2h14m'], // the earliest one, whatever the order
       [[row({ run_id: 'x', started_at: null, fact_at: null })], '—'],
@@ -1540,7 +1541,7 @@ for (const surface of SURFACES) {
     expect((await bandParts($, surface)).line1.split(' · ')[2]).toBe('30m') // tasks first_created_at 09:30
     delete files[P_TASKS()]
     await w.clock.advance(5000)
-    expect((await bandParts($, surface)).line1.split(' · ')[2]).toBe('1h0m') // marker started_at 09:00
+    expect((await bandParts($, surface)).line1.split(' · ')[2]).toBe('1h00m') // marker started_at 09:00
     files[AHOME + '/session-mode/' + SID_A + '.json'] = j({ session_id: SID_A, level: null, project_key: KEY, root_run_id: null, expires_at: '2026-10-05T10:00:00.000Z' })
     await w.clock.advance(5000)
     expect((await bandParts($, surface)).line1.split(' · ')[2]).toBe('10m') // earliest run
@@ -1561,10 +1562,10 @@ for (const surface of SURFACES) {
     expect(await elapsed()).toBe('30m') // root, no runs, no receipt: tasks first_created_at 09:30 (not an em dash)
     delete files[P_TASKS()]
     await w.clock.advance(5000)
-    expect(await elapsed()).toBe('1h0m') // no tasks: marker started_at 09:00
+    expect(await elapsed()).toBe('1h00m') // no tasks: marker started_at 09:00
     files[AHOME + '/session-mode/' + SID_A + '.json'] = marker({ started_at: '2026-10-04T09:00:00.000Z' }, 'l4')
     await w.clock.advance(5000)
-    expect(await elapsed()).toBe('1h0m') // a fresh /l4 marker with a root and no dispatch behaves the same
+    expect(await elapsed()).toBe('1h00m') // a fresh /l4 marker with a root and no dispatch behaves the same
     const dir = COMMON + '/autopilot/work-orders/' + R + '/'
     files[dir + 'n1-a1.json'] = j(REC(R, '2026-10-04T09:10:00.000Z', {}))
     files[P_TASKS()] = j(tasksFile())
@@ -2108,7 +2109,7 @@ for (const surface of SURFACES) {
     })
     world(on, files)
     await start($, surface)
-    expect((await bandParts($, surface)).line1).toContain(' · 2h0m · ')
+    expect((await bandParts($, surface)).line1).toContain(' · 2h00m · ')
   })
 }
 
@@ -3541,6 +3542,31 @@ test('dispatch tab: ownership (I17, M31, M38): no spend or usage fact, no seat v
   }
 })
 
+// the g4 docked finding: at a narrow pane the heading row used to wrap while the rows did not, so the columns no longer lined up
+const cellStarts = (text: string): number[] => {
+  const out: number[] = []
+  let pos = 0
+  let prev = '  ' // a cell starts after two spaces (a cell's own text has single spaces, `3m ago`)
+  for (const ch of [...text]) { if (ch !== ' ' && prev === '  ') out.push(pos); pos += displayWidth(ch); prev = (prev + ch).slice(-2) }
+  return out
+}
+test('dispatch tab: the heading row of a table is one line and its columns start where the cells beneath them start, at every width 30 to 140 (en and zh-TW)', () => {
+  for (const locale of tabLocales) {
+    const t = makeT(locale)
+    for (let cols = 30; cols <= 140; cols += 1) {
+      const lines = dispatchLines(dispatchSnap(busyDispatchRows()), { t, cols })
+      const tables = lines.filter(l => l.kind === 'table')
+      expect(tables.length).toBeGreaterThan(1)
+      for (const l of tables) expect(displayWidth(l.text), locale + ' ' + cols + ' ' + l.text).toBeLessThanOrEqual(cols - 1)
+      const head = tables[0]
+      const heads = cellStarts(head.text)
+      // a data row's first cell starts at the state column (col 0 holds its glyph); every later cell of the same table starts under a heading
+      const rows = tables.filter(l => l !== head && cellStarts(l.text).length >= 1 && lines.indexOf(l) < lines.findIndex((x, i) => i > lines.indexOf(head) && x.kind === 'header'))
+      for (const r of rows) for (const c of cellStarts(r.text).slice(2)) expect(heads, locale + ' ' + cols + ' row `' + r.text + '` vs head `' + head.text + '`').toContain(c)
+    }
+  }
+})
+
 test('dispatch tab: grouping and order (I22, M54): one row per group, severity then newest first, sections in SECTION_ORDER.dispatch', () => {
   const t = makeT('zh-TW')
   const lines = dispatchLines(dispatchSnap(busyDispatchRows()), { t, cols: 120, expanded: new Set(['more:dispatch.finished']) })
@@ -4685,6 +4711,70 @@ for (const surface of SURFACES) {
     expect(flipped[start0[0].i].startsWith('▸ 要你處理')).toBe(true)
     await pressAt($, surface, 'b' + start0[0].i)
     expect(await nowRows($, surface)).toEqual(before)
+  })
+}
+
+// ---- P5 (live-pane plan §7): the mounted I18 / I19 / I23 for the residue toggles ----
+for (const surface of SURFACES) {
+  const hyg = async ($: any, cols?: number): Promise<string[]> => (await paneParts($, surface, 'hygiene', cols)).texts
+  test('P5 mounted (I18): a residue group opens its items, an item opens its reason and command, a second press restores each (' + surface + ')', async ($, on) => {
+    world(on, richWorld())
+    await start($, surface)
+    const closed = await hyg($)
+    expect(closed.some(t => t.includes('hands-x')), 'the default render lists no item').toBe(false)
+    expect(closed.some(t => t.includes('git -C /home/u/proj worktree remove')), 'the default render has no command').toBe(false)
+    const isGroup = (t: string) => t.startsWith('▲ worktree') && t.trimEnd().endsWith('▸')
+    await pressRow($, surface, 'hygiene', isGroup)
+    const group = await hyg($)
+    expect(group.length, 'the group adds exactly its item row').toBe(closed.length + 1)
+    expect(group.some(t => t.startsWith('▲ worktree') && t.trimEnd().endsWith('▾'))).toBe(true)
+    const itemRow = (t: string) => t.startsWith('◦ hands-x') && t.trimEnd().endsWith('▸')
+    expect(group.some(itemRow), group.join('\n')).toBe(true)
+    await pressRow($, surface, 'hygiene', itemRow)
+    const item = await hyg($)
+    expect(item.some(t => t.includes('└ failure')), 'the reason is an attached detail').toBe(true)
+    expect(item.some(t => t.startsWith('  $ git -C /home/u/proj worktree remove --force')), 'the command sits under its own item').toBe(true)
+    await pressRow($, surface, 'hygiene', t => t.startsWith('◦ hands-x') && t.trimEnd().endsWith('▾'))
+    expect(await hyg($)).toEqual(group)
+    await pressRow($, surface, 'hygiene', t => t.startsWith('▲ worktree') && t.trimEnd().endsWith('▾'))
+    expect(await hyg($)).toEqual(closed)
+  })
+
+  test('P5 mounted (I19): each residue section header flips its fold and a second press restores it; the default is SECTION_DEFAULTS (' + surface + ')', async ($, on) => {
+    world(on, richWorld())
+    await start($, surface)
+    const first = await hyg($)
+    const heads = first.filter(t => /^[▾▸] \S/.test(t))
+    expect(heads.length).toBe(3)
+    for (const h of heads) expect(h.startsWith('▾'), 'residue sections start open: ' + h).toBe(true)
+    for (const prefix of ['▾ 要你處理', '▾ 自動清理', '▾ 外掛來源']) {
+      await pressRow($, surface, 'hygiene', t => t.startsWith(prefix))
+      const folded = await hyg($)
+      expect(folded.some(t => t.startsWith('▸' + prefix.slice(1))), prefix).toBe(true)
+      expect(folded.length, prefix).toBeLessThan(first.length)
+      await pressRow($, surface, 'hygiene', t => t.startsWith('▸' + prefix.slice(1)))
+      expect(await hyg($), prefix).toEqual(first)
+    }
+  })
+
+  test('P5 mounted (I23 golden): the 殘留 tab at 76 columns with the first group and its item opened (' + surface + ')', async ($, on) => {
+    world(on, richWorld())
+    await start($, surface)
+    await pressRow($, surface, 'hygiene', t => t.startsWith('▲ worktree') && t.trimEnd().endsWith('▸'))
+    await pressRow($, surface, 'hygiene', t => t.startsWith('◦ hands-x'))
+    expect(await hyg($, 76)).toEqual([
+      "▾ 要你處理  ▲ 2 · 3.0 MB ──────────────────────────────────────────────────",
+      "▲ worktree  有未提交變更 · 1 個 · 2.0 MB                                  ▾",
+      "◦ hands-x · 4d04h · 2.0 MB                                                ▾",
+      "  └ failure",
+      "  $ git -C /home/u/proj worktree remove --force /home/u/proj/.claude/",
+      "    worktrees/hands-x",
+      "▲ 分支  分支未整合 · 1 條                                                 ▸",
+      "▾ 自動清理 ────────────────────────────────────────────────────────────────",
+      "✓ 完成  3h00m 前：刪 2 個 worktree、封存 1 條分支",
+      "▾ 外掛來源  ▲ 要你處理 ────────────────────────────────────────────────────",
+      "▲ dev · v2.37.0 · 落後 upstream 3                                         ▸",
+    ])
   })
 }
 

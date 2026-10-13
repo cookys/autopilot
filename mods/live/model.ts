@@ -281,14 +281,11 @@ export function projectName(identity: unknown, projectKey: string): string {
   return name ? name : fallback
 }
 
-// "38m" / "2h14m" / "1d3h": now minus the start of this piece of work; no start -> an em dash.
+// "38m" / "2h14m" / "1d03h" (ui.dur, the one duration format): now minus the start of this piece of work; no start -> an em dash.
 export function elapsedFrom(startMs: number | null, nowMs: number): string {
   if (startMs === null || !Number.isFinite(startMs) || !Number.isFinite(nowMs) || nowMs < startMs) return '—'
-  const minutes = Math.floor((nowMs - startMs) / 60000)
-  if (minutes < 60) return minutes + 'm'
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return hours + 'h' + (minutes % 60) + 'm'
-  return Math.floor(hours / 24) + 'd' + (hours % 24) + 'h'
+  const minutes = Math.floor((nowMs - startMs) / 60000) // the band's elapsed never shows seconds
+  return minutes < 1 ? '0m' : ui.dur(minutes * 60000)
 }
 
 // the earliest start among the scope's runs (null: none has one)
@@ -304,12 +301,7 @@ export function earliestRunMs(env: Json): number | null {
 // "seconds ago" in the same shorthand as the band: 45s / 20m / 3h5m / 2d1h
 export function ageText(s: number): string {
   if (!Number.isFinite(s) || s < 0) return '—'
-  if (s < 60) return Math.floor(s) + 's'
-  const m = Math.floor(s / 60)
-  if (m < 60) return m + 'm'
-  const h = Math.floor(m / 60)
-  if (h < 24) return h + 'h' + (m % 60) + 'm'
-  return Math.floor(h / 24) + 'd' + (h % 24) + 'h'
+  return ui.dur(s * 1000)
 }
 
 export type JobProgress = { frozen: boolean; percent: number | null; done: number | null; total: number | null }

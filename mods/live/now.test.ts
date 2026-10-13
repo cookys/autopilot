@@ -326,3 +326,95 @@ test('hint: a tab strip that wraps makes the row count uncertain, so the hint sa
     expect(hintSegOf(out)?.text, loc).toBe(loc === 'zh-TW' ? '⇣ 下方還有更多' : '⇣ more rows below')
   }
 })
+
+// ---- the usage row with several quota windows (P4 review follow-up): the one 用量 row shows the most-used window, whichever it is ----
+const withQuota = (quota: { kind: string; pct: number; resetsAtMs: number | null }[], brain: number | null = 120.4): LiveSnapshot => {
+  const s = snap() as never as { account: unknown; detail: { spend: unknown } }
+  s.account = { account: null, quota }
+  if (brain === null) s.detail.spend = { session: '$0.42', host_all: '$3.10', host_all_n: null, brain: null, cap: null, mode: 'warn', hourly: null }
+  return s as never
+}
+const usageRow = (ls: PaneLine[]): PaneLine[] => ls.filter(l => l.fact === 'usage.limit_max')
+test('usage row: with a brain cap and four quota windows the row is the single most-used one, and it is the only line of usage.limit_max', () => {
+  const reset = NOW + 3 * 3_600_000
+  const cases: { quota: { kind: string; pct: number; resetsAtMs: number | null }[]; brain?: number | null; key: string }[] = [
+    { quota: [{ kind: 'five_hour', pct: 40, resetsAtMs: reset }, { kind: 'seven_day', pct: 92, resetsAtMs: reset }, { kind: 'spend_limit', pct: 60, resetsAtMs: null }, { kind: 'seven_day_opus', pct: 70, resetsAtMs: null }], key: 'label.quota_7d' },
+    { quota: [{ kind: 'five_hour', pct: 97, resetsAtMs: reset }, { kind: 'seven_day', pct: 92, resetsAtMs: reset }, { kind: 'spend_limit', pct: 60, resetsAtMs: null }], key: 'label.quota_5h' },
+    { quota: [{ kind: 'five_hour', pct: 10, resetsAtMs: reset }, { kind: 'spend_limit', pct: 99, resetsAtMs: null }], key: 'label.quota_spend' },
+    { quota: [{ kind: 'five_hour', pct: 10, resetsAtMs: reset }, { kind: 'seven_day', pct: 20, resetsAtMs: null }], key: 'label.brain_today' }, // brain 120.4 / 150 = 80% beats both
+    { quota: [{ kind: 'five_hour', pct: 10, resetsAtMs: reset }, { kind: 'seven_day', pct: 20, resetsAtMs: null }], brain: null, key: 'label.quota_7d' }, // no brain cap published: the windows alone
+  ]
+  for (const [loc, t] of LOCALES) for (const c of cases) {
+    const ls = nowLines(withQuota(c.quota, c.brain), ctxOf(t, 76))
+    const rows = usageRow(ls)
+    expect(rows.length, loc + ' ' + c.key).toBe(1)
+    expect(rows[0].goto).toBe('spend')
+    // the brain window prints its amount, a quota window its label; both name the window they show
+    if (c.key === 'label.brain_today') expect(rows[0].text, loc).toContain('$120.40')
+    else expect(rows[0].text, loc + ' ' + rows[0].text).toContain(t(c.key))
+    expect(i17(ls), loc + ' ' + c.key).toEqual([])
+    // negative control: the least-used window is not the one shown
+    expect(rows[0].text.includes(t('label.quota_5h')) && c.key !== 'label.quota_5h', loc + ' ' + c.key).toBe(false)
+  }
+})
+
+// ---- P5: every structural invariant over every tab (plan §7: "every invariant over every tab") ----
+const ALL_TABS = ['now', 'dispatch', 'review', 'spend', 'hygiene', 'legend'] as const
+const richSnap = (): LiveSnapshot => {
+  const s = withQuota([{ kind: 'five_hour', pct: 40, resetsAtMs: NOW + 3_600_000 }, { kind: 'seven_day', pct: 92, resetsAtMs: null }]) as never as { detail: { residue: object } }
+  s.detail.residue = { reapable: 0, by_class: {}, at: null, needs_human_count: 2, needs_human_bytes: 3_000_000, auto_ran_at: iso(3_600_000), auto_removed_count: 2, auto_archived_count: 1,
+    needs_human: [
+      { kind: 'worktree', target: '/home/u/proj/.claude/worktrees/hands-x', class: 'dirty', age_days: 4, bytes: 2_000_000, reason: 'uncommitted work', command: 'git worktree remove --force /home/u/proj/.claude/worktrees/hands-x' },
+      { kind: 'branch', target: 'feature/old', class: 'unintegrated-branch', age_days: 20, bytes: null, reason: null, command: 'git branch -D feature/old' },
+    ] }
+  return s as never
+}
+const tabLinesOf = (tab: (typeof ALL_TABS)[number], s: LiveSnapshot, c: ReturnType<typeof ctxOf>): PaneLine[] =>
+  tab === 'now' ? nowLines(s, c) : tab === 'dispatch' ? dispatchLines(s, c) : tab === 'review' ? reviewTabLines(s, c) : tab === 'spend' ? spendTabLines(s, c) : tab === 'hygiene' ? hygieneTabLines(s, c) : legendLines(c)
+// the invariants of the plan that hold on every tab, as a list of violations (empty = holds)
+const ONE_LINE_KINDS = new Set(['header', 'item', 'bullet', 'table', 'more'])
+const everyTab = (tab: (typeof ALL_TABS)[number], ls: PaneLine[], cols: number, expanded: boolean): string[] => {
+  const out: string[] = []
+  const seenToggle = new Set<string>()
+  let emptiesInSection = 0
+  const foreign = new Map<string, number>()
+  ls.forEach((l, i) => {
+    const at = tab + ' line ' + i + ' ' + JSON.stringify(l.text.trimEnd())
+    if (!ui.isMade(l)) out.push(at + ' is not made by a component (made)')
+    if (l.kind === undefined || l.fact === undefined) out.push(at + ' has no kind or no fact (type lock)')
+    if (ONE_LINE_KINDS.has(l.kind) && ui.displayWidth(l.text) > cols - 1) out.push(at + ' is a one-line kind wider than the pane (width)') // kv, detail, command and chart lines wrap by their hang, these never do
+    if (l.kind === 'header') { emptiesInSection = 0; if (l.toggle === undefined) out.push(at + ' is a header with no toggle (fold)') }
+    if (l.kind === 'empty' && l.text.startsWith(ui.GLYPHS.structure.empty) && ++emptiesInSection > 1) out.push(at + ' is a second empty line in one section (empty)')
+    if (l.toggle !== undefined) { if (seenToggle.has(l.toggle)) out.push(at + ' repeats toggle ' + l.toggle); seenToggle.add(l.toggle) }
+    if (!expanded && l.kind === 'command') out.push(at + ' is a command in the default render (command)')
+    if (l.fact === 'pane.chrome' || l.fact === 'pane.overflow') return
+    const owner = ui.FACT_OWNER[l.fact]
+    if (owner !== tab) {
+      if (l.goto === undefined) out.push(at + ' shows ' + l.fact + ' (owner ' + owner + ') without goto (owner)')
+      if (!(l.kind === 'kv' && l.text.startsWith(' '.repeat(ui.KEY_W)))) foreign.set(l.fact, (foreign.get(l.fact) ?? 0) + 1) // a wrapped continuation row is the same row
+    }
+  })
+  for (const [f, n] of foreign) if (n > 1) out.push(tab + ': ' + f + ' is drawn ' + n + ' times (owner)')
+  return out
+}
+test('every tab: made lines, kind and fact, width, one empty per section, unique toggles, no command by default, foreign facts carry goto and appear once', () => {
+  const ids = (tab: (typeof ALL_TABS)[number], ls: PaneLine[]) => ls.filter(l => l.kind === 'item' && l.toggle !== undefined).map(l => l.toggle as string).concat(tab === 'hygiene' ? ['res:worktree|dirty', 'res:branch|unintegrated-branch'] : [])
+  for (const [loc, t] of LOCALES) for (const cols of [40, 60, 76, 120, 160]) for (const tab of ALL_TABS) {
+    const dflt = tabLinesOf(tab, richSnap(), ctxOf(t, cols))
+    expect(everyTab(tab, dflt, cols, false), loc + ' ' + cols + ' default').toEqual([])
+    // every toggle the default render offers, plus the residue ones, opened at once
+    const open = ctxOf(t, cols, { expanded: [...ids(tab, dflt), ...dflt.filter(l => l.toggle !== undefined).map(l => l.toggle as string), 'resitem:/home/u/proj/.claude/worktrees/hands-x', 'resitem:feature/old'] })
+    expect(everyTab(tab, tabLinesOf(tab, richSnap(), open), cols, true), loc + ' ' + cols + ' expanded').toEqual([])
+  }
+})
+test('every tab: negative controls, each invariant is reported when its line is broken', () => {
+  const t = makeT('en')
+  const ls = tabLinesOf('hygiene', richSnap(), ctxOf(t, 76))
+  const first = ls.findIndex(l => l.kind === 'item')
+  const bent = (f: (l: PaneLine) => PaneLine): string[] => everyTab('hygiene', ls.map((l, i) => (i === first ? f(l) : l)), 76, false)
+  expect(bent(l => ({ ...l, text: l.text })).length, 'copy').toBeGreaterThan(0) // spread drops the brand
+  expect(bent(l => ui.carry(l, { ...l, text: 'x'.repeat(80) }) /* an item 80 wide */).some(v => v.includes('(width)')), 'width').toBe(true)
+  expect(bent(l => Object.assign(ui.carry(l, { ...l }), { fact: 'review.round' as const, goto: undefined })).some(v => v.includes('(owner)')), 'owner').toBe(true)
+  expect(everyTab('hygiene', [...ls, ui.empty('x', 'residue.groups'), ui.empty('y', 'residue.groups')], 76, false).some(v => v.includes('(empty)')), 'empty').toBe(true)
+  expect(everyTab('hygiene', [...ls, ...ui.command(({ t, cols: 76 }) as never, 'git status')], 76, false).some(v => v.includes('(command)')), 'command').toBe(true)
+})

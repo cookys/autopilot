@@ -603,11 +603,12 @@ export function table(u: Ctx, columns: readonly Column[], rows: readonly TableRo
   const stateW = Math.max(displayWidth(stateHead), ...rows.map(r => displayWidth(u.t('ui.state.' + r.state.id)))) // the word column; the glyph and a space precede it
   const lead = 2 + stateW
   const w = columns.map((c, i) => Math.max(displayWidth(c.head), ...rows.map(r => displayWidth(r.cells[i] ?? ''))))
+  const floor = columns.map((c, i) => Math.max(c.min, Math.min(w[i], displayWidth(c.head)))) // a column never narrows below its own heading: the heading row must not wrap or clip, or it stops lining up with the cells under it
   const keep = columns.map((_, i) => i)
   const total = (): number => lead + keep.reduce((n, i) => n + 2 + w[i], 0)
   // 1. drop whole columns, the largest priority number first, only while the table cannot fit even with every kept column cut to its `min`
   //    (the state column is never dropped; one data column stays)
-  const minTotal = (): number => lead + keep.reduce((n, i) => n + 2 + Math.min(w[i], columns[i].min), 0)
+  const minTotal = (): number => lead + keep.reduce((n, i) => n + 2 + Math.min(w[i], floor[i]), 0)
   while (minTotal() > u.cols - 1 && keep.length > 1) {
     let drop = keep[0]
     for (const i of keep) if (columns[i].priority > columns[drop].priority) drop = i
@@ -619,7 +620,7 @@ export function table(u: Ctx, columns: readonly Column[], rows: readonly TableRo
     for (const i of keep) {
       if (over <= 0) break
       if ((columns[i].flex === true) !== flexPass) continue
-      const take = Math.max(0, Math.min(w[i] - columns[i].min, over))
+      const take = Math.max(0, Math.min(w[i] - floor[i], over))
       w[i] -= take
       over -= take
     }

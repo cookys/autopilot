@@ -224,7 +224,7 @@ function tabsPart(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
     if (rs === null) body.push(ui.kv(u, t('tab.hygiene'), [ui.absent(t('nodata.prefix', { what: t('nodata.residue') }))], { fact: 'residue.groups', goto: 'hygiene' }))
     else if (rs.needs_human_count === 0) body.push(ui.kv(u, t('tab.hygiene'), [ui.stateLead(u, ui.worst([])), ui.val('  '), ui.val(t('now.sum_no_residue'), { role: 'prose' })], { fact: 'residue.groups', goto: 'hygiene' }))
     else {
-      const parts: Frag[] = [ui.stateLead(u, ui.stateOf('residueGroup', 'dirty')), ui.val('  '), ui.fmtd('count', t('now.sum_residue', { n: rs.needs_human_count }))]
+      const parts: Frag[] = [ui.stateLead(u, ui.stateOf('residueGroup', 'dirty')), ui.val('  '), ui.fmtd('count', ui.count(rs.needs_human_count, t('now.sum_residue_unit')))]
       if (rs.needs_human_bytes !== null) parts.push(dotFrag(), ui.fmtd('size', ui.size(rs.needs_human_bytes)))
       body.push(ui.kv(u, t('tab.hygiene'), parts, { fact: 'residue.groups', goto: 'hygiene' }))
     }

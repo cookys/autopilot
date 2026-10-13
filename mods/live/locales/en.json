@@ -236,7 +236,7 @@
   "now.sum_idle": "none running",
   "now.sum_last_end": "last ended {age} ago",
   "now.sum_review_fix": "{n} seats to fix",
-  "now.sum_residue": "{n} worktrees",
+  "now.sum_residue_unit": "worktrees",
   "now.sum_no_residue": "nothing to clean up",
   "bg.noun_live": "background items",
   "tasks.noun_open": "tasks",

@@ -35,10 +35,11 @@ export function violations(lines: PaneLine[], cols: number, t: Tr): string[] {
     }
     if (l.text.includes('▌')) out.push('I4 ' + at + ' contains ▌')
     for (const v of emphasisViolations(l)) out.push('I4 ' + at + ' ' + v)
-    const needYouItem = (l.kind === 'item' || l.kind === 'kv') && (l.segs ?? []).some(g => g.role === 'glyph' && g.text === STATES.need_you.glyph) // the plan lets a need_you item bold its mark, word and body (§3.6); a 各分頁 summary row is the same state made by worst(), so a need_you aggregate (kv) bolds alike
+    const needYouRow = (l.kind === 'item' || l.kind === 'kv') && (l.segs ?? []).some(g => g.role === 'glyph' && g.text === STATES.need_you.glyph) // the plan lets a need_you item bold its mark, word and body (§3.6); a 各分頁 summary row is the same state made by worst(), so a need_you aggregate (kv) bolds alike
+    const needYouBold = (s: { role?: string }): boolean => needYouRow && (l.kind === 'item' || s.role === 'glyph' || s.role === 'state') // an item may bold mark, word and body; a kv summary row only its state mark and word (§3.6: bold is for the need_you item text), never its values
     for (const s of l.segs ?? []) { // a bold segment only in a header, a verdict, a here segment, a need_you item, or a meter headline value (fmt pct)
       const meterHeadline = s.role === 'value' && s.fmt === 'pct' && l.kind === 'meter' // a meter is a line KIND (ui.meter), not a line that happens to draw filled cells: a 0% meter has none
-      if (s.bold === true && l.kind !== 'header' && l.kind !== 'verdict' && s.here !== true && !needYouItem && !meterHeadline) out.push('I4 ' + at + ' seg ' + JSON.stringify(s.text) + ' is bold outside header / verdict / need_you / here / meter headline')
+      if (s.bold === true && l.kind !== 'header' && l.kind !== 'verdict' && s.here !== true && !needYouBold(s) && !meterHeadline) out.push('I4 ' + at + ' seg ' + JSON.stringify(s.text) + ' is bold outside header / verdict / need_you / here / meter headline')
     }
     if (l.kind !== 'detail' && emojiViolations(l.text).length > 0) out.push('I5 ' + at + ' ' + emojiViolations(l.text).join(','))
     if (/[️⃣]/u.test(l.text)) out.push('I5 ' + at + ' has VS16 or keycap')

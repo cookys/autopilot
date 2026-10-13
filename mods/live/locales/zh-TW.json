@@ -236,7 +236,7 @@
   "now.sum_idle": "沒有派工在跑",
   "now.sum_last_end": "最近一筆 {age} 前結束",
   "now.sum_review_fix": "{n} 席待修",
-  "now.sum_residue": "{n} 個 worktree",
+  "now.sum_residue_unit": "個 worktree",
   "now.sum_no_residue": "沒有殘留要處理",
   "bg.noun_live": "項背景工作",
   "tasks.noun_open": "項任務",

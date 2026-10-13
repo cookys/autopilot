@@ -480,6 +480,12 @@ test('every tab: the shared checker flags a hand-written number, a bold mark wit
     tabViolations(tab, lines(tab).map(l => ({ ...l, segs: (l.segs ?? []).map(s => (s.role === 'value' && s.text.trim() !== '' ? { ...s, ...f(s) } : s)) })) as PaneLine[], 120, t)
   expect(bent('dispatch', () => ({ bold: true })).some(v => v.includes(' I4 ')), 'bold without here').toBe(true)
   expect(bent('dispatch', () => ({ color: 'claude' })).some(v => v.includes(' I6 ')), 'claude without here').toBe(true)
+  // a need_you kv summary row may bold its state mark and word only; a bold value on it is flagged (§3.6)
+  const kvRow = (tab: (typeof ALL_TABS)[number]): PaneLine => lines(tab).find(l => l.kind === 'kv' && (l.segs ?? []).some(g => g.role === 'glyph' && g.text === ui.STATES.need_you.glyph)) as PaneLine
+  const needKv = kvRow('now')
+  expect(needKv, 'the fixture has a need_you kv summary row on the now tab').toBeDefined()
+  const boldValue = { ...needKv, segs: (needKv.segs ?? []).map(s => (s.role === 'value' && s.text.trim() !== '' ? { ...s, bold: true } : s)) } as PaneLine
+  expect(tabViolations('now', [boldValue], 120, t).some(v => v.includes(' I4 ')), 'bold value on a need_you kv row').toBe(true)
   // the legend exemption is only I3 and the "no data" sentence: a hand-made line in the legend is still caught
   const legend = lines('legend')
   expect(tabViolations('legend', [{ text: 'hand made', kind: 'kv' } as PaneLine, ...legend], 120, t).some(v => v.includes(' I2 ')), 'legend I2').toBe(true)

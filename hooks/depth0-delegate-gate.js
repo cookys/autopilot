@@ -3,7 +3,8 @@
  * depth0-delegate-gate — PreToolUse WebFetch|WebSearch|Read|Grep|Glob|Bash|Agent|Task|Skill
  * (default-on, v2.36.1 P3; foreground-wait advisory added later)
  *
- * Nudges DEPTH-0 (never a subagent — skip whenever the payload carries `agent_id`, SPIKE-1)
+ * Nudges DEPTH-0 (the read-burst and wait nudges skip subagents — payload carries `agent_id`, SPIKE-1;
+ * the Bash-launch guard below is the exception and runs at every depth)
  * away from doing its own long read bursts instead of delegating to an Explore/survey
  * subagent. Companion to foreman-guard.js (which governs depth-1 foremen/workers); this one
  * governs the orchestrator itself and is deliberately NOT bound to the l3-l6 session marker
@@ -198,14 +199,18 @@ function classify(tool, input) {
     try { payload = raw.trim() ? JSON.parse(raw) : {}; } catch { process.exit(0); }
     if (!payload || typeof payload !== 'object') process.exit(0);
     // BASH-LAUNCH GUARD (all depths — runs BEFORE the depth-0-only skip below). See header.
+    // Rule 1 denies here; rules 2/3 only collect warnings, which ride along with whatever the
+    // rest of this hook emits (the read counter and the wait advisory still run).
+    const launchWarns = [];
     if (payload.tool_name === 'Bash' && payload.tool_input && typeof payload.tool_input.command === 'string') {
-      const launchWarns = [];
       const cmd = payload.tool_input.command;
       const detach = detectDetachNoWake(cmd);
       if (detach) {
-        emitDeny(`bash-launch-guard (${detach.rule}): ${detach.why}. Run the rail directly with the Bash tool's `
-          + 'run_in_background: true (you get one completion notification), or pair the detached launch with a '
-          + 'waiter in the same command (scripts/wait-dispatch-results.js).');
+        emitDeny(`bash-launch-guard (${detach.rule}): ${detach.why}. Short job: run the rail directly with the Bash `
+          + "tool's run_in_background: true (one completion notification). Long job: the rails detach themselves "
+          + '(DISPATCH_DETACH, default on, durable result file) — start the rail in the foreground of a '
+          + 'run_in_background call, or pair a detached launch with scripts/wait-dispatch-results.js / `wait` '
+          + 'in the same command so something wakes the session.');
         process.exit(0);
       }
       const pk = detectPkillSelfMatch(cmd);
@@ -215,15 +220,17 @@ function classify(tool, input) {
         const z = detectZshExpansion(cmd, typeof payload.cwd === 'string' ? payload.cwd : process.cwd());
         if (z) launchWarns.push(`bash-launch-guard (${z.rule}, warn only): ${z.why}`);
       }
-      if (launchWarns.length) {
-        const advisory = launchWarns.join('\n');
-        process.stderr.write(`${advisory}\n`);
-        process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: advisory } })}\n`);
-        process.exit(0); // advisory-only; the depth-0 counters below are skipped for this one call
-      }
     }
+    const emitAdvisory = (lines) => {
+      const advisory = lines.join('\n');
+      process.stderr.write(`${advisory}\n`);
+      process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: advisory } })}\n`);
+    };
     // Presence, not truthiness: an empty/null agent_id still marks a subagent fire (review 🟠 agent-id-presence).
-    if (Object.prototype.hasOwnProperty.call(payload, 'agent_id')) process.exit(0); // depth-1+: foreman-guard's territory
+    if (Object.prototype.hasOwnProperty.call(payload, 'agent_id')) { // depth-1+: foreman-guard's territory
+      if (launchWarns.length) emitAdvisory(launchWarns);
+      process.exit(0);
+    }
 
     const tool = payload.tool_name || '';
     const kind = classify(tool, payload.tool_input);
@@ -232,7 +239,10 @@ function classify(tool, input) {
     const waitRule = tool === 'Bash' && payload.tool_input
       ? detectForegroundWait(payload.tool_input.command, payload.tool_input.run_in_background, WAIT_MIN_SLEEP_SECONDS)
       : null;
-    if (kind === 'other' && !waitRule) process.exit(0); // no-op: counter untouched
+    if (kind === 'other' && !waitRule) { // no-op: counter untouched
+      if (launchWarns.length) emitAdvisory(launchWarns);
+      process.exit(0);
+    }
 
     const live = resolveLiveDir();
     const sid = getSessionId(payload);
@@ -284,7 +294,7 @@ function classify(tool, input) {
       // unguarded / unknown model past 2x: only the periodic nudge rule applies
     }
 
-    const advisories = [];
+    const advisories = [...launchWarns];
     if (verdict.nudge) {
       advisories.push(`depth0-delegate-gate: ${verdict.reads} consecutive read-class calls at depth-0 — `
         + 'delegate to an Explore/survey subagent (model: sonnet) and read only its conclusion');

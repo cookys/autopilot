@@ -46,6 +46,9 @@ for (const cmd of [
   'bash scripts/dispatch-hetero.sh foo &',
   'cd /repo && nohup node scripts/dispatch-plan-review.js --x y &',
   "bash -c 'nohup scripts/dispatch-explore.sh q &'",
+  'nohup scripts/dispatch-review.sh x & echo wait;', // `wait` as an argument is not a waiter
+  '(setsid nohup "$ROOT/scripts/dispatch-review.sh" x &)',
+  'env FOO=1 nohup bash scripts/dispatch-consult.sh q &',
 ]) {
   test(`rule1 denies: ${cmd}`, () => {
     const r = run(cmd);
@@ -68,6 +71,12 @@ for (const cmd of [
   'cat <<EOF\nnohup scripts/dispatch-review.sh &\nEOF', // heredoc body is data
   'grep -n dispatch-review.sh docs/x.md &&  echo ok', // && is not background
   'scripts/dispatch-review.sh x 2>&1 | tail -5', // 2>&1 is not background
+  'grep dispatch-hetero.sh foo &', // rail name only as an argument
+  'git log -- scripts/dispatch-review.sh &',
+  'ps aux | grep dispatch-review.sh &',
+  "bash -c 'grep dispatch-review.sh docs' &",
+  'setsid nohup bash hooks/tests/dispatch-contract-pin.test.sh > /tmp/o 2>&1 &', // test file, not a rail
+  'node --test scripts/dispatch-review.test.js &',
 ]) {
   test(`rule1 allows: ${JSON.stringify(cmd)}`, () => {
     const r = run(cmd);
@@ -77,7 +86,7 @@ for (const cmd of [
 }
 
 // ---- Rule 2: pkill/pgrep -f without [x] => warn only ----
-for (const cmd of ['pkill -f dispatch-review', 'pgrep -fa "my server"', 'sudo pkill -9 -f foo']) {
+for (const cmd of ['pkill -f dispatch-review', 'pgrep -fa "my server"', 'sudo pkill -9 -f foo', 'kill $(pgrep -f myserver)', 'echo `pgrep -f foo`']) {
   test(`rule2 warns: ${cmd}`, () => {
     const r = run(cmd);
     assert.strictEqual(r.deny, false);
@@ -91,7 +100,7 @@ for (const cmd of ["pkill -f '[d]ispatch-review'", 'pgrep -f "[f]oo bar"', 'pkil
 }
 
 // ---- Rule 3: zsh only, warn only ----
-for (const cmd of ['git config a =b', 'echo foo = bar', 'curl https://x.test/a?b=1', 'ls /nonexistent-dir-blg/*.zzz', 'grep -r foo --include=*.zzz .']) {
+for (const cmd of ['git config a =b', 'echo foo ==x', 'curl https://x.test/a?b=1', 'ls /nonexistent-dir-blg/*.zzz', 'grep -r foo --include=*.zzz .']) {
   test(`rule3 warns under zsh: ${cmd}`, () => {
     const r = run(cmd, { shell: 'zsh' });
     assert.strictEqual(r.deny, false);
@@ -101,7 +110,7 @@ for (const cmd of ['git config a =b', 'echo foo = bar', 'curl https://x.test/a?b
     assert.doesNotMatch(run(cmd, { shell: 'bash' }).ctx, /zsh-expansion/);
   });
 }
-for (const cmd of ["echo '=' x", 'echo "a = b"', 'FOO=bar env', 'ls --color=auto', 'grep -E "[a-z]+" f', "ls '*.js'", 'echo $?', '[[ a == b ]] && echo y', 'echo $((1*2))', 'cat <<EOF\n= x\n*.zzz\nEOF']) {
+for (const cmd of ["echo '=' x", 'echo "a = b"', 'echo foo = bar', '[ "$x" = y ]', 'test a = a', 'echo "a"=b', 'ls "$HOME"/projects/*', 'ls /nonexistent-dir-blg/**/*.zzz', 'FOO=bar env', 'ls --color=auto', 'grep -E "[a-z]+" f', "ls '*.js'", 'echo $?', '[[ a == b ]] && echo y', 'echo $((1*2))', 'cat <<EOF\n= x\n*.zzz\nEOF']) {
   test(`rule3 silent under zsh: ${JSON.stringify(cmd)}`, () => {
     assert.doesNotMatch(run(cmd, { shell: 'zsh' }).ctx, /zsh-expansion/);
   });
@@ -116,4 +125,20 @@ test('rule1 still denies in block and warn modes', () => {
   for (const mode of ['warn', 'block']) {
     assert.strictEqual(run('setsid scripts/dispatch-review.sh x', { env: { AUTOPILOT_DEPTH0_DELEGATE_GATE_MODE: mode } }).deny, true);
   }
+});
+
+test('pkill warning merges with the wait advisory (no early return)', () => {
+  const r = run('pkill -f foo; tail -f /tmp/x.log');
+  assert.match(r.ctx, /pkill-self-match/);
+  assert.match(r.ctx, /foreground wait/);
+});
+
+test('warnings also reach subagent depth (agent_id present)', () => {
+  assert.match(run('pkill -f foo', { extra: { agent_id: 'a1' } }).ctx, /pkill-self-match/);
+});
+
+test('deny message names both paths', () => {
+  const r = run('nohup scripts/dispatch-review.sh x &');
+  assert.match(r.reason, /run_in_background/);
+  assert.match(r.reason, /wait-dispatch-results/);
 });

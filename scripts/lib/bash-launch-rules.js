@@ -3,20 +3,27 @@
 // scripts/lib/bash-launch-rules.js — the ONE definition of three Bash-launch hazards that
 // hooks/depth0-delegate-gate.js checks on every Bash call (all depths, BL-0019):
 //   1. detach-no-wake (DENY)  — nohup / setsid / trailing `&` starting a dispatch RAIL entrypoint
-//      (scripts/dispatch-*.sh|js) with nothing in the same command that wakes the session.
-//   2. pkill-self-match (WARN) — `pkill -f` / `pgrep -f` whose pattern lacks the `[x]` self-exclusion
-//      trick, so the pattern matches the Bash tool's own command line.
-//   3. zsh-expansion (WARN, zsh only, never a deny) — a word starting with `=` (zsh EQUALS expansion)
-//      or an unquoted glob that matches nothing (zsh `nomatch` aborts the whole line).
+//      (scripts/dispatch-*.sh|js, never *.test.*) with nothing in the same command that wakes the session.
+//      Only the COMMAND-POSITION word counts: `grep dispatch-review.sh x &` is not a launch.
+//   2. pkill-self-match (WARN) — `pkill -f` / `pgrep -f` (also inside `$(…)`) whose pattern lacks the
+//      `[x]` self-exclusion trick, so the pattern matches the Bash tool's own command line.
+//   3. zsh-expansion (WARN, zsh only, never a deny) — a word starting with `=<char>` (zsh EQUALS
+//      expansion) or an unquoted glob that matches nothing (zsh `nomatch` aborts the whole line).
+//      Prefers silence: no fs.globSync, `**`, or a partly-quoted word ⇒ no warning.
 // Rules run on EXECUTABLE text (heredoc bodies / comments stripped by bash-wait-rules.js).
+//
+// scripts/lib/dispatch-detach.sh is NOT a launcher: it is a sourceable helper the read rails
+// source to detach THEMSELVES (setsid supervisor + durable result file). Nothing to allow here.
 
 const fs = require('fs');
 const { executableText } = require('./bash-wait-rules.js');
 
-// Rail entrypoint: a path word whose basename is dispatch-<x>.sh|js (scripts/ or scripts/lib/).
-const RAIL_RE = /(?:^|[\s/=])dispatch-[\w.-]*\.(?:sh|js)(?=$|[\s;&|)])/;
-// Anything in the same command that supplies a wake-up: the sanctioned waiter script, or `wait`.
-const WAKE_RE = /(?:wait-dispatch-results|(?:^|[;&|(\s])wait(?:\s|$|;)|\bMonitor\b)/;
+// Rail entrypoint path: .../scripts/dispatch-<x>.sh|js, not a *.test.* file.
+const RAIL_PATH_RE = /(?:^|\/)scripts\/dispatch-[\w.-]*\.(?:sh|js)$/;
+const TEST_FILE_RE = /\.test\.(?:sh|js)$/;
+const WAKE_HEADS = new Set(['wait']);
+const WAKE_SCRIPT_RE = /(?:^|\/)wait-dispatch-results(?:\.[a-z]+)?$/;
+const PREFIX_CMDS = new Set(['time', 'exec', 'command', 'sudo', 'nice', 'nohup', 'setsid', 'env', 'bash', 'sh', 'zsh', 'dash', 'node', 'stdbuf']);
 
 // Split into segments with their terminator. Quote-aware; `&&`, `||`, `|`, `;`, newline end a
 // segment; a single `&` (not `>&`, `&>`, `&&`) ends a segment AND marks it backgrounded.
@@ -35,6 +42,7 @@ function segments(text) {
     }
     if (c === '\\' && i + 1 < s.length) { cur += c + s[i + 1]; i += 1; continue; }
     if (c === "'" || c === '"') { q = c; cur += c; continue; }
+    if (c === '(' && cur.trim() === '') continue; // leading subshell paren
     if (c === '\n' || c === ';') { push(false); continue; }
     if (c === '|') { push(false); if (s[i + 1] === '|') i += 1; continue; }
     if (c === '&') {
@@ -48,48 +56,86 @@ function segments(text) {
   return out;
 }
 
-// Replace quoted spans with blanks (keeps word boundaries) so a quoted mention is not a command.
+// Quoted spans become a same-length run of `x` (NOT blanks): a word like `"a"=b` stays one word and
+// its quoted part can never look like `=`/glob syntax.
 function maskQuotes(seg) {
-  return seg.replace(/'[^']*'|"(?:\\.|[^"\\])*"/g, (m) => ' '.repeat(m.length));
+  return seg.replace(/'[^']*'|"(?:\\.|[^"\\])*"/g, (m) => 'x'.repeat(m.length));
+}
+
+// Tokens of a segment: { raw, masked } pairs (masking preserves length, so offsets line up).
+function tokens(segText) {
+  const masked = maskQuotes(segText);
+  const out = [];
+  const re = /\S+/g;
+  let m;
+  while ((m = re.exec(masked)) !== null) out.push({ raw: segText.slice(m.index, m.index + m[0].length), masked: m[0] });
+  return out;
 }
 
 const SHELL_C_RE = /^(?:\S*\/)?(?:bash|sh|zsh|dash)\s+(?:-[a-zA-Z]*\s+)*-[a-zA-Z]*c\s+(?:'([^']*)'|"((?:\\.|[^"\\])*)")/;
 
-// Flatten `bash -c '…'` bodies into extra segments (they are executed).
+// Flatten `bash -c '…'` bodies and `$(…)` / backtick bodies into extra segments (they are executed).
 function expandSegments(text, depth = 0) {
   const all = [];
   for (const seg of segments(text)) {
     all.push(seg);
-    const m = depth < 2 ? SHELL_C_RE.exec(seg.text) : null;
+    if (depth >= 2) continue;
+    const m = SHELL_C_RE.exec(seg.text);
     if (m) all.push(...expandSegments(m[1] !== undefined ? m[1] : m[2], depth + 1).map((x) => ({ ...x, bg: x.bg || seg.bg })));
+    const noSingle = seg.text.replace(/'[^']*'/g, (x) => ' '.repeat(x.length)); // '$(…)' is data
+    const subRe = /\$\(([^()]*)\)|`([^`]*)`/g;
+    let sm;
+    while ((sm = subRe.exec(noSingle)) !== null) {
+      all.push(...expandSegments(sm[1] !== undefined ? sm[1] : sm[2], depth + 1).map((x) => ({ ...x, bg: false })));
+    }
   }
   return all;
 }
 
-// Words of a masked segment, skipping leading VAR=val assignments and `time`/`exec`/`env`.
-function words(masked) {
-  const w = masked.split(/\s+/).filter(Boolean);
-  while (w.length && (/^[A-Za-z_]\w*=/.test(w[0]) || ['time', 'exec', 'command', 'sudo', 'nice'].includes(w[0]))) w.shift();
-  return w;
+const unq = (w) => w.replace(/^['"]|['"]$/g, '');
+
+// Command position of a segment: strips VAR=val assignments and launcher/interpreter prefixes (with
+// their flags). Returns { head, detach, rest }: head is the first real command word, detach is true when
+// a nohup / setsid (not -w) prefix was stripped.
+function commandPosition(segText) {
+  const w = tokens(segText).map((t) => unq(t.raw));
+  let detach = false;
+  let i = 0;
+  while (i < w.length) {
+    const a = w[i];
+    if (/^[A-Za-z_]\w*=/.test(a)) { i += 1; continue; }
+    const base = a.replace(/^.*\//, '');
+    if (PREFIX_CMDS.has(base)) {
+      if (base === 'nohup') detach = true;
+      i += 1;
+      let waitFlag = false;
+      while (i < w.length && /^-/.test(w[i])) {
+        if (base === 'setsid' && (w[i] === '-w' || w[i] === '--wait')) waitFlag = true;
+        if (/^-[a-zA-Z]*c$/.test(w[i]) && ['bash', 'sh', 'zsh', 'dash'].includes(base)) return { head: null, detach, rest: [] };
+        i += 1;
+      }
+      if (base === 'setsid' && !waitFlag) detach = true;
+      continue;
+    }
+    return { head: a, detach, rest: w.slice(i + 1) };
+  }
+  return { head: null, detach, rest: [] };
+}
+
+function isRail(head) {
+  return !!head && RAIL_PATH_RE.test(head) && !TEST_FILE_RE.test(head);
 }
 
 // Rule 1. Returns { rule, why } or null.
 function detectDetachNoWake(cmd) {
   const text = executableText(typeof cmd === 'string' ? cmd : '');
-  if (WAKE_RE.test(maskQuotes(text))) return null;
-  for (const seg of expandSegments(text)) {
-    const masked = maskQuotes(seg.text);
-    const w = words(masked);
-    if (!w.length) continue;
-    // `sh -c '…'` wrappers are expanded separately; skip the wrapper line itself for the rail test.
-    if (SHELL_C_RE.test(seg.text) && !seg.bg) continue;
-    const head = w[0].replace(/^.*\//, '');
-    let launcher = seg.bg;
-    if (head === 'nohup') launcher = true;
-    if (head === 'setsid' && !w.slice(1).some((a) => a === '-w' || a === '--wait')) launcher = true;
-    if (!launcher) continue;
-    const rest = w.join(' ');
-    if (RAIL_RE.test(` ${rest}`)) {
+  const segs = expandSegments(text);
+  const pos = segs.map((s) => ({ seg: s, ...commandPosition(s.text) }));
+  // Wake-up only counts when `wait` / the waiter script is itself a command word.
+  if (pos.some((p) => p.head && (WAKE_HEADS.has(p.head) || WAKE_SCRIPT_RE.test(p.head)))) return null;
+  for (const p of pos) {
+    if (!p.head || !(p.detach || p.seg.bg)) continue;
+    if (isRail(p.head)) {
       return {
         rule: 'detach-no-wake',
         why: 'a dispatch rail entrypoint is launched detached (nohup / setsid / trailing &) with no wake-up '
@@ -104,29 +150,24 @@ function detectDetachNoWake(cmd) {
 function detectPkillSelfMatch(cmd) {
   const text = executableText(typeof cmd === 'string' ? cmd : '');
   for (const seg of expandSegments(text)) {
-    const w = words(maskQuotes(seg.text));
-    const raw = words(seg.text);
-    if (!w.length) continue;
-    const head = w[0].replace(/^.*\//, '');
-    if (head !== 'pkill' && head !== 'pgrep') continue;
+    const { head, rest } = commandPosition(seg.text);
+    if (!head) continue;
+    const name = head.replace(/^.*\//, '');
+    if (name !== 'pkill' && name !== 'pgrep') continue;
     let full = false;
-    let pat = null;
-    for (let i = 1; i < raw.length; i += 1) {
-      const a = raw[i];
+    for (const a of rest) {
       if (a === '--full' || /^-[a-zA-Z]*f[a-zA-Z]*$/.test(a)) full = true;
-      else if (/^-/.test(a)) {
-        if (/^-[uUgGnoPstT]$/.test(a)) i += 1; // option that takes a value
-      } else { pat = a; break; }
     }
-    if (!full || pat === null) continue;
-    // Quoted patterns can contain spaces; recover the full quoted token from the raw segment.
-    const mq = /(?:^|\s)(?:pkill|pgrep)\b[^|]*?\s('([^']*)'|"([^"]*)")/.exec(seg.text);
-    const pattern = mq ? (mq[2] !== undefined ? mq[2] : mq[3]) : pat.replace(/^['"]|['"]$/g, '');
+    if (!full) continue;
+    // The pattern is the first non-option word after the command; recover quoted multi-word patterns.
+    const mq = /\b(?:pkill|pgrep)\b(?:\s+-[^\s'"]*(?:\s+\d+)?)*\s+('([^']*)'|"([^"]*)"|(\S+))/.exec(seg.text);
+    if (!mq) continue;
+    const pattern = mq[2] !== undefined ? mq[2] : (mq[3] !== undefined ? mq[3] : mq[4]);
     if (/\[[^\]\s]\]/.test(pattern)) continue; // `[f]oo`: the self-exclusion trick
     return {
       rule: 'pkill-self-match',
       pattern,
-      why: `${head} -f pattern "${pattern}" also matches this Bash call's own command line — write it as `
+      why: `${name} -f pattern "${pattern}" also matches this Bash call's own command line — write it as `
         + "'[f]oo' (bracket one character) or kill by PID",
     };
   }
@@ -138,31 +179,28 @@ function detectZshExpansion(cmd, cwd) {
   let text = executableText(typeof cmd === 'string' ? cmd : '');
   text = text.replace(/\[\[[\s\S]*?\]\]/g, ' ').replace(/\$?\(\([\s\S]*?\)\)/g, ' ');
   for (const seg of expandSegments(text)) {
-    const w = words(maskQuotes(seg.text));
-    if (!w.length) continue;
-    const head = w[0];
-    for (let i = 0; i < w.length; i += 1) {
-      const t = w[i];
-      if (/^=/.test(t)) {
+    for (const { raw, masked } of tokens(seg.text)) {
+      if (/^=./.test(masked)) { // `=y` is command-path lookup; a lone `=` / `==` is fine in `[`/`test`
         return {
-          rule: 'zsh-expansion', token: t,
-          why: `zsh expands a word starting with "=" (${t}) as a command-path lookup and aborts the line `
-            + `("${t.replace(/^=+/, '') || '='} not found") — quote it ('${t}') or use bash -c`,
+          rule: 'zsh-expansion', token: raw,
+          why: `zsh expands a word starting with "=" (${raw}) as a command-path lookup and aborts the line `
+            + `("${raw.replace(/^=+/, '')} not found") — quote it ('${raw}') or use bash -c`,
         };
       }
-      if (i === 0 && /^[A-Za-z_]\w*=/.test(head)) continue;
       // Drop parameter forms (`$?`, `$*`, `${x:-*}`) and command substitutions before looking for globs.
-      const bare = t.replace(/\$\{[^}]*\}|\$\([^)]*\)?|\$[?*@#!$-]|`[^`]*`?/g, '');
-      if (/[*?]|\[[^\]]+\]/.test(bare)) {
-        if (cwd && typeof fs.globSync === 'function') {
-          try { if (fs.globSync(t, { cwd }).length > 0) continue; } catch { /* unknown: warn */ }
-        }
-        return {
-          rule: 'zsh-expansion', token: t,
-          why: `unquoted glob ${t}: zsh aborts the WHOLE line with "no matches found" when it matches nothing `
-            + '(bash passes it through literally) — quote it, or setopt nonomatch',
-        };
-      }
+      const bare = masked.replace(/\$\{[^}]*\}|\$\([^)]*\)?|\$[?*@#!$-]|`[^`]*`?/g, '');
+      if (!/[*?]|\[[^\]]+\]/.test(bare)) continue;
+      // Stay silent when we cannot judge: backslash/quote/brace in the word, `**`, or no globSync.
+      if (/[\\'"{]/.test(raw) || raw.includes('**') || bare !== masked) continue;
+      if (typeof fs.globSync !== 'function' || !cwd) continue;
+      try {
+        if (fs.globSync(raw, { cwd }).length > 0) continue;
+      } catch { continue; }
+      return {
+        rule: 'zsh-expansion', token: raw,
+        why: `unquoted glob ${raw} matches nothing: zsh aborts the WHOLE line with "no matches found" `
+          + '(bash passes it through literally) — quote it, or setopt nonomatch',
+      };
     }
   }
   return null;

@@ -728,7 +728,7 @@ The dispatch tree (the former P6 and §7.1: nested dispatch lineage across subag
 
 **Owner rulings 2026-10-14** (after P0-P5 merged):
 
-6. **The overflow hint carries no arrow.** `下方還有 N 行` is text only. The `⇣` glyph (`GLYPHS.structure.overflow`), its `NEW_GLYPHS` entry, its pending-owner mark and its `?` legend row are removed. `↓` (behind upstream) stays, with that one meaning, and is settled (`verified: '2026-10-14 owner-ruling'`). The hint's position, its condition and the way N is counted are unchanged.
+6. **The overflow hint carries no arrow.** `下方還有 N 行` is text only. The `⇣` glyph (`GLYPHS.structure.overflow`), its `NEW_GLYPHS` entry, its pending-owner mark and its `?` legend row are removed. `↓` (behind upstream) stays with that one meaning (the meaning is settled; its one-cell width in the owner's terminal is still `pending-owner`). The hint's position, its condition and the way N is counted are unchanged.
 7. **The band position slot reads `size·level·stage`.** The `▸` that joined level and stage is replaced by the band's `·` separator (the wide band still swaps it for the stage walk). `▸` now means only "folded", in band and pane alike (§3.4 rule 2). A band lint in `live.test.ts` fails if any band output draws `▸`; its negative control puts the arrow back.
 8. **The three P5 trade-offs are approved as built, no code change:** (a) on a narrow column the low-priority columns go first; (b) durations are zero-padded (`1d00h`, `3h05m`, `Nd`); (c) no data reads `沒有資料`.
 
@@ -737,8 +737,8 @@ The dispatch tree (the former P6 and §7.1: nested dispatch lineage across subag
 Verified as of 2026-10-14 (struck items below):
 - ~~One-cell rendering of `⊘ △ ○ ◌ ∅ ◦ › ━ ◐`~~ confirmed by the owner in ssh + tmux on 2026-10-13 (`GLYPHS.verified`, `glyph-check.js`).
 - ~~The `━` under-segment in a wrapped strip~~ the strip falls back to bold `claude` text alone when it wraps (Q1); covered by the P5 strip tests in `live.test.ts`.
-- ~~Residue screenshot vs. producer fix~~ the classifier measures against the newer of local `develop` and `origin/develop` (`dc30d96c`, `793880e6`; stale-develop case in `hooks/tests/repo-residue-sweep.test.sh`).
 
+- Whether the owner's 殘留 screenshot (17 lane worktrees as unintegrated) predates the producer fix: awaiting confirmation on the owner's machine (P5 acceptance); the producer is fixed (`dc30d96c`, `793880e6`; stale-develop case in `hooks/tests/repo-residue-sweep.test.sh`).
 - `bodyColumns` overstating the drawable width (P0 a).
 - Why `scanBackground` misses the end of these tasks (separate bug; P4 makes the pane right regardless).
 - The quota numbers, reset times and residue row in the mockups are illustrative, not from the screenshots.

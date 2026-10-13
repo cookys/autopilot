@@ -321,6 +321,12 @@ test('hint: a tab strip that wraps makes the row count uncertain, so the hint sa
     const sr = stripRows(s, c, 'now', true)
     expect(sr.exact, loc + ': 30 columns wraps the strip').toBe(false)
     expect(sr.rows, loc).toBeGreaterThan(2)
+    const st = stripOf(s, c, 'now', true)
+    expect(st.rule.some(g => g.text.includes('━')), loc + ': a wrapped strip draws no ━ under-mark').toBe(false)
+    const on = st.tabs.find(x => x.on)!
+    expect(on.label.bold === true && on.label.color === 'claude', loc + ': the active label falls back to bold claude').toBe(true)
+    const one = stripOf(s, ctxOf(t, 76), 'now', true)
+    expect(one.rule.some(g => g.text.includes('━')), loc + ': control: an unwrapped strip does draw it').toBe(true)
     // the header line at 30 columns: the metrics wrap, so give the hint a roomy line to show the wording
     const roomy = { text: 'x'.repeat(5), segs: [{ text: 'xxxxx' }] } as PaneLine
     const out = withOverflowHint([roomy, ui.blank()], c, { offset: 0, bodyRows: 5 }, 50, false)

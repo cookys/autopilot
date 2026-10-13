@@ -42,14 +42,14 @@ export type StateId = (typeof STATE_IDS)[number]
 
 // The glyph tables (§3.2, §3.4). Three groups that do not cross: state glyphs, structure glyphs, chart glyphs. `verified` records, per glyph that is new to
 // the vocabulary, where it was checked to draw in ONE cell: confirmed 2026-10-13 by the owner (ssh + tmux, all ten single-cell); was `pending-owner` until the owner ran `node mods/live/glyph-check.js` in the real ssh + tmux
-// terminal (P0 b). `fallback` is the next candidate when a glyph fails that check (§8 Q2); it is linted like every other glyph.
+// terminal (P0 b). `↓` is East Asian Ambiguous and its width is still unchecked (`pending-owner`); the owner's 2026-10-14 ruling settled only its meaning (behind upstream, nothing else), see the plan §8. `fallback` is the next candidate when a glyph fails that check (§8 Q2); it is linted like every other glyph.
 export const GLYPHS = {
   state: { need_you: '▲', failed: '✗', stalled: '⊘', findings: '△', running: '●', done: '✓', pending: '○', stopped: '◌', skipped: '∅', unknown: '?' },
   structure: { open: '▾', folded: '▸', rule: '─', detail: '└', command: '$', goto: '›', bullet: '◦', empty: '—', tabMark: '━', residue: '⚑', behind: '↓', bandSep: '│', info: 'ⓘ', round: '↺', decisions: '◆', age: '◷' },
   chart: { meterOn: '▰', meterOff: '▱', here: '◐' },
   spark: ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'],
   fallback: { stalled: '◍', findings: '!' },
-  verified: { '⊘': '2026-10-13 owner-ssh-tmux', '△': '2026-10-13 owner-ssh-tmux', '○': '2026-10-13 owner-ssh-tmux', '◌': '2026-10-13 owner-ssh-tmux', '∅': '2026-10-13 owner-ssh-tmux', '◦': '2026-10-13 owner-ssh-tmux', '›': '2026-10-13 owner-ssh-tmux', '━': '2026-10-13 owner-ssh-tmux', '◐': '2026-10-13 owner-ssh-tmux', '◍': '2026-10-13 owner-ssh-tmux', '↓': '2026-10-14 owner-ruling' } as Record<string, string>,
+  verified: { '⊘': '2026-10-13 owner-ssh-tmux', '△': '2026-10-13 owner-ssh-tmux', '○': '2026-10-13 owner-ssh-tmux', '◌': '2026-10-13 owner-ssh-tmux', '∅': '2026-10-13 owner-ssh-tmux', '◦': '2026-10-13 owner-ssh-tmux', '›': '2026-10-13 owner-ssh-tmux', '━': '2026-10-13 owner-ssh-tmux', '◐': '2026-10-13 owner-ssh-tmux', '◍': '2026-10-13 owner-ssh-tmux', '↓': 'pending-owner' } as Record<string, string>,
 }
 // glyphs that are new to the pane's vocabulary: each must carry a `verified` entry (L3)
 export const NEW_GLYPHS = ['⊘', '△', '○', '◌', '∅', '◦', '›', '━', '◐', '◍', '↓'] as const

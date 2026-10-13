@@ -2540,7 +2540,7 @@ for (const surface of SURFACES) {
   // The first-drawn Button is now the `▸` next-tab chip and it alone carries autoFocus.
   const paneTabs = async ($: any, surface: any) => $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
 
-  test('keyboard: Enter on the ▸ chip (where the ring lands) steps through all six tabs and wraps, whatever tab shows (' + surface + ')', async ($, on) => {
+  test('keyboard: Enter on the › chip (where the ring lands) steps through all six tabs and wraps, whatever tab shows (' + surface + ')', async ($, on) => {
     const w = world(on, richWorld())
     await start($, surface)
     for (const want of ['dispatch', 'review', 'spend', 'hygiene', 'legend', 'now', 'dispatch']) {
@@ -2561,7 +2561,7 @@ for (const surface of SURFACES) {
     expect(await shownTabOf($, surface)).toBe('hygiene')
   })
 
-  test('keyboard: ▸ and the ⓘ share one order: a ⓘ press after a ▸ press continues from the tab showing (' + surface + ')', async ($, on) => {
+  test('keyboard: › and the ⓘ share one order: a ⓘ press after a ▸ press continues from the tab showing (' + surface + ')', async ($, on) => {
     const w = world(on, richWorld())
     await start($, surface)
     const band = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
@@ -2707,7 +2707,7 @@ for (const surface of SURFACES) {
     const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
     const tree = (await pane.drawn()) as Drawn
     const buttons = walkAll(tree).filter(n => n.type === 'Button').map(n => n.props?.key as string).filter(k => !/^[bg]\d+$/.test(k)) // the body's toggle lines (and the summary rows' goto Buttons) (section headings, recent groups) are Buttons too
-    expect(buttons).toEqual(['next', 'now', 'dispatch', 'review', 'spend', 'hygiene', 'legend']) // the ▸ chip first (it carries the autoFocus), then the six tabs in contract order
+    expect(buttons).toEqual(['next', 'now', 'dispatch', 'review', 'spend', 'hygiene', 'legend']) // the › chip first (it carries the autoFocus), then the six tabs in contract order
     // the strip (child 0): zh labels, a badge per tab that holds something for the owner: ●N live runs, ⚑N residue (QC is ok here, so no ▲ on Review)
     const strip = stripOf(tree as Node)
     expect(strip).toContain('現況')
@@ -4821,8 +4821,8 @@ for (const surface of SURFACES) {
     // 76 columns (two header lines): the hint ends the metrics line
     const mid = (await paneParts($, surface, 'now', 76, { offset: 0, bodyRows: 5 })).head
     expect(mid.some(l => /^工作階段 \$0\.42 · 本機今日 \$3\.10 · ctx 37% +下方還有 \d+ 行$/.test(l)), mid.join('\n')).toBe(true)
-    // 26 columns (the hint is now 2 cells narrower, so 30 would fit it): the metrics line is already wrapped over rows; whichever row is last has no room for the hint, so it is gone and the figures stay whole
-    const narrow = (await paneParts($, surface, 'now', 26, { offset: 0, bodyRows: 5 })).head
+    // 28 columns (the hint is now 2 cells narrower than with its arrow; 28 leaves gap 0, as tight as 30 did, so loosening `gap >= 2` is caught): the metrics line is already wrapped over rows; whichever row is last has no room for the hint, so it is gone and the figures stay whole
+    const narrow = (await paneParts($, surface, 'now', 28, { offset: 0, bodyRows: 5 })).head
     expect(narrow.some(l => l.includes('下方還有')), narrow.join('\n')).toBe(false)
     expect(narrow.join('\n')).toContain('$3.10')
   })

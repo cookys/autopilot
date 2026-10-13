@@ -555,7 +555,7 @@ async function refresh($: EngineInterface): Promise<void> {
 
 const nextTab = (t: PaneTab): PaneTab => PANE_TABS[(PANE_TABS.indexOf(t) + 1) % PANE_TABS.length]
 
-// After a press on a tab Button (a click, or Tab / arrows + Enter) the keyboard ring returns to the `▸` chip, so the next Enter steps on instead of
+// After a press on a tab Button (a click, or Tab / arrows + Enter) the keyboard ring returns to the `›` chip, so the next Enter steps on instead of
 // re-pressing the tab that was just chosen. Best effort: a pane that does not hold the keys refuses, and the tab has switched anyway.
 async function ringToNext($: EngineInterface): Promise<void> {
   try {

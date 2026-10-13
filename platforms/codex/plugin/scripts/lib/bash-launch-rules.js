@@ -4,7 +4,7 @@
 // hooks/depth0-delegate-gate.js checks on every Bash call (all depths, BL-0019):
 //   1. detach-no-wake (DENY)  — a trailing `&` or `setsid -f` (with or without nohup) starting a dispatch RAIL entrypoint
 //      (one of the explicit RAIL_NAMES list below — observers such as dispatch-status.js and *.test.* files are
-//      not rails) with nothing in the same command that wakes the session.
+//      not rails, and never match the exact-name pattern) with nothing in the same command that wakes the session.
 //      Only the COMMAND-POSITION word counts: `grep dispatch-review.sh x &` is not a launch.
 //   2. pkill-self-match (WARN) — `pkill -f` / `pgrep -f` (also inside `$(…)`) whose pattern lacks the
 //      `[x]` self-exclusion trick, so the pattern matches the Bash tool's own command line.
@@ -27,7 +27,6 @@ const { executableText } = require('./bash-wait-rules.js');
 const RAIL_NAMES = 'hetero|review|author|author-kimi|consult|discuss|explore|foreman|batch|anthropic-review|local-openai|plan-review|experience-critic';
 // Any path (or none) in front of a listed rail file name counts: `cd scripts && bash dispatch-review.sh &`.
 const RAIL_PATH_RE = new RegExp(`(?:^|/)dispatch-(?:${RAIL_NAMES})\\.(?:sh|js)$`);
-const TEST_FILE_RE = /\.test\.(?:sh|js)$/;
 const WAKE_HEADS = new Set(['wait']);
 const WAKE_SCRIPT_RE = /(?:^|\/)wait-dispatch-results(?:\.[a-z]+)?$/;
 const PREFIX_CMDS = new Set(['time', 'exec', 'command', 'sudo', 'nice', 'nohup', 'setsid', 'env', 'bash', 'sh', 'zsh', 'dash', 'node', 'stdbuf', 'timeout']);
@@ -220,7 +219,15 @@ function findSubstitutions(text) {
 }
 
 // Flatten `bash -c '…'` bodies and `$(…)` / backtick bodies into extra segments (they are executed).
+// One-entry cache: rules 1 and 2 expand the very same executable text in the same hook call (read-only).
+let lastExpanded = { text: null, out: null };
 function expandSegments(text, depth = 0) {
+  if (depth === 0 && lastExpanded.text === text) return lastExpanded.out;
+  const out = expandSegmentsUncached(text, depth);
+  if (depth === 0) lastExpanded = { text, out };
+  return out;
+}
+function expandSegmentsUncached(text, depth) {
   const all = [];
   for (const seg of segments(text)) {
     all.push(seg);
@@ -268,14 +275,20 @@ function commandPosition(segText) {
 }
 
 function isRail(head) {
-  if (!head || TEST_FILE_RE.test(head)) return false;
-  return RAIL_PATH_RE.test(head);
+  // `dispatch-<rail>.test.sh` never matches: the pattern needs the exact `<name>.sh|js` tail.
+  return !!head && RAIL_PATH_RE.test(head);
 }
 
 // Only a bare `wait` or `wait $!` / `wait "$!"` is guaranteed to wait for the rail just launched
 // (`wait 999` waits for pid 999; redirections do not change that).
 function waitsForAll(rest) {
-  const args = rest.filter((a) => !/^\d*[<>]/.test(a));
+  const args = [];
+  for (let i = 0; i < rest.length; i += 1) {
+    const a = rest[i];
+    if (/^(?:\d*[<>]{1,2}&?|&>>?)$/.test(a)) { i += 1; continue; } // bare operator: skip its target word too
+    if (/^(?:\d*[<>]|&>)/.test(a)) continue; // operator with the target attached
+    args.push(a);
+  }
   return args.length === 0 || (args.length === 1 && /^"?\$!"?$/.test(args[0]));
 }
 
@@ -303,7 +316,7 @@ function detectDetachNoWake(cmd) {
       rail: rm ? rm[1] : null,
       why: 'a dispatch rail entrypoint is launched in the background (trailing & / setsid -f) with nothing '
         + 'that can wake the session when it finishes',
-      advice: launchAdvice(shape, rm ? rm[1] : null),
+      advice: launchAdvice(shape, rm ? rm[1] : null, !!p.seg.sub),
     };
   }
   return null;
@@ -314,10 +327,13 @@ function detectDetachNoWake(cmd) {
 const LEDGER_RAILS = { review: 'stage', author: 'stage', hetero: 'stage', foreman: 'fixed' };
 
 // Only options that literally work for this (shape, rail) pair — see the recipe tests.
-function launchAdvice(shape, rail) {
+function launchAdvice(shape, rail, nested = false) {
   const parts = ["Short job (any rail): run it in the foreground with the Bash tool's run_in_background: true "
     + '(no nohup / setsid / &) — one completion notification.'];
-  if (shape === 'amp') {
+  if (shape === 'amp' && nested) {
+    parts.push('Or move the launch out of the `( )` / `$( )` / `bash -c` to the outermost shell, keep its `&` and put '
+      + '`wait` after it (a `wait` outside cannot see a job started inside).');
+  } else if (shape === 'amp') {
     parts.push('Or keep the `&` and put `wait` after it in the same command (the call blocks until the rail exits, '
       + 'bounded by the Bash tool timeout).');
   } else {
@@ -326,12 +342,15 @@ function launchAdvice(shape, rail) {
   const kind = LEDGER_RAILS[rail];
   if (kind === 'stage') {
     parts.push('Long job: pass `--ledger <path> --run-id <id> --stage <name>` (all three — without them no .exit file '
-      + 'is written) and in the SAME command run `node scripts/wait-dispatch-results.js --ledger <path> --expect '
-      + '<id>.<name>` — run that whole command with `run_in_background: true` (the waiter waits up to 3600 s by '
+      + 'is written) and chain the waiter with `&&` in the SAME command: `setsid -f <rail> … && node '
+      + 'scripts/wait-dispatch-results.js --ledger <path> --expect <id>.<name> --timeout <seconds>` (bad rail args '
+      + 'exit before any .exit file exists, so set --timeout to the longest wait you accept) — run that whole command with `run_in_background: true` (the waiter waits up to 3600 s by '
       + "default, past the Bash tool's 600 s foreground limit).");
   } else if (kind === 'fixed') {
-    parts.push('Long job: pass `--ledger <path> --run-id <id>` (the stage is fixed) and in the SAME command run '
-      + '`node scripts/wait-dispatch-results.js --ledger <path> --expect <id>.foreman` — run that whole command '
+    parts.push('Long job: pass `--ledger <path> --run-id <id>` (the stage is fixed) and chain the waiter with `&&` in '
+      + 'the SAME command: `setsid -f <rail> … && node scripts/wait-dispatch-results.js --ledger <path> --expect '
+      + '<id>.foreman --timeout <seconds>` (bad rail args exit before any .exit file exists, so keep --timeout '
+      + 'short) — run that whole command '
       + "with `run_in_background: true` (the waiter waits up to 3600 s by default, past the Bash tool's 600 s "
       + 'foreground limit).');
   } else {

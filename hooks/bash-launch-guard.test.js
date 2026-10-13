@@ -15,9 +15,20 @@ const { spawnSync } = require('child_process');
 
 const HOOK = path.join(__dirname, 'depth0-delegate-gate.js');
 
+// Every temp dir this file creates is removed when the file ends (pass or fail) — never leave blg-* behind.
+const made = [];
+function mk(prefix) {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  made.push(d);
+  return d;
+}
+function rmAll() { for (const d of made.splice(0)) fs.rmSync(d, { recursive: true, force: true }); }
+test.after(rmAll);
+process.on('exit', rmAll);
+
 function run(cmd, { shell = 'bash', extra = {}, env = {} } = {}) {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'blg-home-'));
-  const live = fs.mkdtempSync(path.join(os.tmpdir(), 'blg-live-'));
+  const home = mk('blg-home-');
+  const live = mk('blg-live-');
   const r = spawnSync('node', [HOOK], {
     input: JSON.stringify({
       tool_name: 'Bash', session_id: 'blg', hook_event_name: 'PreToolUse', cwd: home,
@@ -77,6 +88,7 @@ for (const cmd of [
   'scripts/dispatch-review.sh x & wait | cat', // a pipeline member waits for nothing
   'scripts/dispatch-review.sh x & wait |& tee /tmp/l',
   'scripts/dispatch-review.sh x & wait 123 456',
+  'scripts/dispatch-review.sh x & wait 999 > /dev/null', // redirected, but still a different pid
   'echo `nohup scripts/dispatch-review.sh x &`', // unquoted backtick substitution
   'x=`setsid -f scripts/dispatch-review.sh x`; echo $x',
   'echo `date; scripts/dispatch-review.sh x &`',
@@ -140,6 +152,10 @@ for (const cmd of [
   'scripts/dispatch-review.sh x & wait $!',
   'scripts/dispatch-review.sh x & wait "$!"',
   'scripts/dispatch-review.sh x & wait 2>/dev/null',
+  'scripts/dispatch-review.sh x & wait > /dev/null',
+  'scripts/dispatch-review.sh x & wait 2> /dev/null',
+  'scripts/dispatch-review.sh x & wait &>/dev/null',
+  'scripts/dispatch-review.sh x & wait $! > /tmp/o 2>&1',
 ]) {
   test(`rule1 allows: ${JSON.stringify(cmd)}`, () => {
     const r = run(cmd);
@@ -324,6 +340,8 @@ test('recipe: a bare `wait` does NOT wait for a `setsid -f` job (why it is denie
   assert.strictEqual(r.status, 0);
   assert.ok(ms < 700, `wait returned after ${ms} ms`);
   assert.ok(!fs.existsSync(path.join(dir, 'L.results', 'r1.s1.exit')), 'job had not finished yet');
+  const until = Date.now() + 5000; // let the orphan finish so it cannot write into a removed dir
+  while (!fs.existsSync(path.join(dir, 'L.results', 'r1.s1.exit')) && Date.now() < until) { /* spin */ }
 });
 test('recipe: foreman shape (--ledger/--run-id only, fixed stage) lands under --expect <id>.foreman', () => {
   const w = (dir) => `node ${REPO}/scripts/wait-dispatch-results.js --ledger ${dir}/L --expect r1.foreman --timeout 4 --poll 1`;
@@ -336,7 +354,7 @@ test('recipe: foreman shape (--ledger/--run-id only, fixed stage) lands under --
 // scripts/lib/dispatch-detach.sh, then scripts/wait-dispatch-results.js in the same command.
 const REPO = path.join(__dirname, '..');
 function recipe(withLedgerArgs, waiter, { launch, fixedStage } = {}) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'blg-recipe-'));
+  const dir = mk('blg-recipe-');
   const stub = path.join(dir, 'stub-rail.sh');
   fs.writeFileSync(stub, [
     '#!/usr/bin/env bash',
@@ -408,7 +426,7 @@ for (const f of fs.readdirSync(path.join(__dirname, '..', 'scripts'))) {
 // ---- hard cost bounds (item: single glob lookups and crafted input) ----
 const { globHasMatch } = require('../scripts/lib/bash-launch-rules.js');
 test('globHasMatch: matches, no-match, missing dir, expired deadline => null', () => {
-  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'blg-gm-'));
+  const d = mk('blg-gm-');
   fs.writeFileSync(path.join(d, 'a.zzq'), '');
   fs.writeFileSync(path.join(d, '.hid'), '');
   assert.strictEqual(globHasMatch(`${d}/*.zzq`, d, Date.now() + 1000), true);
@@ -426,14 +444,13 @@ function wallMs(cmd) { // whole hook call, measured OUTSIDE the process
   return { ms: Number(process.hrtime.bigint() - t0) / 1e6, r };
 }
 test('real hook under zsh: `ls <huge dir>/*` and `/*.zza` stay under 100 ms per call', () => {
-  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'blg-big-'));
+  const d = mk('blg-big-');
   for (let i = 0; i < 60000; i += 1) fs.closeSync(fs.openSync(path.join(d, `f${i}.txt`), 'w'));
   run('true', { shell: 'zsh' }); // warm the file cache / node
   for (const cmd of [`ls ${d}/*`, `ls ${d}/*.zza`]) {
     const best = Math.min(...[1, 2, 3].map(() => wallMs(cmd).ms));
     assert.ok(best < 100, `${cmd.slice(0, 12)}… took ${best.toFixed(0)} ms`);
   }
-  fs.rmSync(d, { recursive: true, force: true });
 });
 test('crafted quadratic input (`[a` x 25000): still fast, zsh rule skipped, rail rule still runs', () => {
   const bomb = '[a'.repeat(25000);
@@ -459,3 +476,48 @@ test('oversized input: the plain trailing-& rail check still runs', () => {
 test('a closer pull-back within the scan window still backgrounds the whole block', () => {
   assert.strictEqual(run(`${'a;'.repeat(20)} for i in 1 2; do ${'echo x; '.repeat(10)}scripts/dispatch-review.sh $i; done &`).deny, true);
 });
+
+// ---- nested launches: the advice must not tell the user to do what is still denied ----
+for (const cmd of ['(scripts/dispatch-review.sh x &); wait', "bash -c 'scripts/dispatch-review.sh x &'; wait", 'echo $(scripts/dispatch-review.sh x &); wait']) {
+  test(`nested launch advice says to move it out: ${JSON.stringify(cmd)}`, () => {
+    const r = run(cmd);
+    assert.strictEqual(r.deny, true);
+    assert.match(r.reason, /move the launch out of the/);
+    assert.doesNotMatch(r.reason, /Or keep the `&` and put `wait`/);
+  });
+  test(`the advised outermost form is accepted: ${JSON.stringify(cmd)}`, () => {
+    assert.strictEqual(run('scripts/dispatch-review.sh x & wait').deny, false);
+  });
+}
+
+// ---- item 4: the recipe chains the waiter with && and bounds it with --timeout ----
+test('message: ledger recipe chains with && and carries --timeout', () => {
+  for (const c of ['setsid -f scripts/dispatch-review.sh x', 'nohup scripts/dispatch-author.sh x &', 'nohup scripts/dispatch-foreman.sh x &']) {
+    const r = run(c);
+    assert.match(r.reason, /&& (?:node )?scripts\/wait-dispatch-results\.js|&& node\s+scripts\/wait-dispatch-results\.js/);
+    assert.match(r.reason, /--timeout <seconds>/);
+  }
+});
+const SETSID_F_AND = (stub, args, dir) => `setsid -f ${stub} ${args} > ${dir}/out 2>&1 &&`;
+test('recipe: `setsid -f rail … && wait-dispatch-results --timeout` lands', () => {
+  const { r } = recipe(true, WAIT, { launch: SETSID_F_AND });
+  assert.strictEqual(r.status, 0, r.stdout + r.stderr);
+  assert.strictEqual(JSON.parse(r.stdout).complete, true);
+});
+test('recipe: the same with bad args (no .exit ever) is bounded by --timeout, not 3600 s', () => {
+  const w = (dir) => `node ${REPO}/scripts/wait-dispatch-results.js --ledger ${dir}/L --expect r1.s1 --timeout 2 --poll 1`;
+  const { r, ms } = recipe(false, w, { launch: SETSID_F_AND });
+  assert.strictEqual(r.status, 1);
+  assert.ok(ms < 8000, `${ms} ms`);
+});
+test('the chained recipe form is accepted by the guard', () => {
+  assert.strictEqual(run('setsid -f scripts/dispatch-review.sh x --ledger L --run-id R --stage S > o 2>&1 && node scripts/wait-dispatch-results.js --ledger L --expect R.S --timeout 600').deny, false);
+});
+
+// ---- item 5: look-alike test files never match the exact rail-name pattern (TEST_FILE_RE was redundant) ----
+for (const f of ['dispatch-review.test.sh', 'dispatch-review.test.js', 'dispatch-hetero.test.sh']) {
+  test(`test file is not a rail: ${f}`, () => {
+    assert.strictEqual(run(`nohup scripts/${f} x &`).deny, false);
+    assert.strictEqual(run(`cd scripts && setsid -f ./${f} x`).deny, false);
+  });
+}

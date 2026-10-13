@@ -3304,8 +3304,9 @@ test('dispatch tab: every run is ONE table line at every width, 執行中 / 已�
   for (const locale of tabLocales) {
     const t = makeT(locale)
     for (const cols of [40, 60, 76, 100, 120, 160]) {
-      const lines = dispatchLines(dispatchSnap(busyDispatchRows()), { t, cols })
+      const lines = dispatchLines(dispatchSnap(busyDispatchRows(), { gates: [{ phase: 'plan', generation: 1, verdict: 'PASS', status: 'LIVE GATE' }] }), { t, cols })
       for (const l of lines) expect(displayWidth(l.text), locale + ' ' + cols + ' ' + l.text).toBeLessThanOrEqual(cols)
+      for (const l of lines.filter(x => x.kind !== 'table')) expect(l.text.includes('…'), 'only a table row may cut a cell: ' + l.text).toBe(false)
       const at = (id: string) => lines.findIndex(l => l.toggle === id)
       const [r0, f0, o0] = [at('dispatch.running'), at('dispatch.finished'), at('dispatch.other')]
       expect(r0 > 0 && f0 > r0 && o0 > f0, locale + ' ' + cols + ' section order').toBe(true)

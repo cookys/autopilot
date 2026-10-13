@@ -43,6 +43,12 @@ const CLOSERS = [
   { close: /^fi(?:\s|$)/, open: /^if\s/ },
 ];
 
+// Cost bounds: the closer pull-back below scans backwards (quadratic over `} & } & …`), and `$(…)` scans
+// run per segment. Past SEG_MAX_TEXT the structural passes are skipped (plain `&`/list marking only);
+// within it the pull-back looks at most CLOSER_SCAN_MAX segments back.
+const SEG_MAX_TEXT = 16384;
+const CLOSER_SCAN_MAX = 64;
+
 // Split into segments with their terminator. Quote-aware; `&&`, `||`, `|`, `;`, newline end a
 // segment; a single `&` (not `>&`, `&>`, `&&`) ends a segment AND marks it backgrounded.
 function segments(text) {
@@ -53,6 +59,7 @@ function segments(text) {
   // `listStart`: index of the first segment of the current `;`/newline-delimited list. A single `&`
   // backgrounds the WHOLE list (`a && b | c &`), so every segment since listStart is marked.
   let listStart = 0;
+  const big = s.length > SEG_MAX_TEXT;
   let subDepth = 0; // inside a `( … )` subshell: its background jobs are NOT waitable by the outer shell
   let inner = 0; // unquoted `(` that is not a subshell opener (`$(`, `f(`)
   let bt = false; // inside an unquoted backtick substitution
@@ -64,10 +71,10 @@ function segments(text) {
       // `{ a; } &`, `for …; do …; done &`, `if …; then …; fi &` — a closer segment pulls back to its
       // matching opener (nesting counted), and everything in between is backgrounded too.
       const last = out[out.length - 1];
-      const closer = last && CLOSERS.find((c) => c.close.test(last.text));
+      const closer = !big && last && CLOSERS.find((c) => c.close.test(last.text));
       if (closer) {
         let depthN = 0;
-        for (let k = out.length - 1; k >= 0; k -= 1) {
+        for (let k = out.length - 1; k >= 0 && k >= out.length - CLOSER_SCAN_MAX; k -= 1) {
           const t = out[k].text.replace(/^(?:do|then|else)\s+/, "");
           if (closer.close.test(t)) depthN += 1;
           else if (closer.open.test(t)) depthN -= 1;
@@ -212,7 +219,7 @@ function expandSegments(text, depth = 0) {
     if (depth >= 2) continue;
     const m = SHELL_C_RE.exec(seg.text);
     if (m) all.push(...expandSegments(m[1] !== undefined ? m[1] : m[2], depth + 1).map((x) => ({ ...x, bg: x.bg || seg.bg, sh: true, sub: true })));
-    for (const sub of findSubstitutions(seg.text)) {
+    for (const sub of (seg.text.length > SEG_MAX_TEXT ? [] : findSubstitutions(seg.text))) {
       // The body of `$(…)` / backticks is a fresh script: strip ITS heredoc bodies and comments too
       // (`git commit -m "$(cat <<'EOF' … EOF)"` — the outer lexer treats the heredoc as quoted data).
       all.push(...expandSegments(executableText(sub), depth + 1).map((x) => ({ ...x, sh: x.sh || seg.sh, sub: true })));

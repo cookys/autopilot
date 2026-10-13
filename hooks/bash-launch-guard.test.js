@@ -426,3 +426,17 @@ test('crafted quadratic input (`[a` x 25000): still fast, zsh rule skipped, rail
 test('a huge token is not judged (no warning, no cost)', () => {
   assert.doesNotMatch(run(`ls /nonexistent-dir-blg/${'a'.repeat(600)}*.zzq`, { shell: 'zsh' }).ctx, /zsh-expansion/);
 });
+
+test('segments() stays linear-ish: `} & ` x 4000 and a 64 KB input are each < 100 ms through the real hook', () => {
+  for (const cmd of ['} & '.repeat(4000), 'fi & '.repeat(13000), 'done & '.repeat(9300), '$('.repeat(32000)]) {
+    const best = Math.min(...[1, 2, 3].map(() => wallMs(cmd).ms));
+    assert.ok(best < 100, `${cmd.length} chars took ${best.toFixed(0)} ms`);
+  }
+});
+test('oversized input: the plain trailing-& rail check still runs', () => {
+  assert.strictEqual(run(`${'a;'.repeat(9000)} nohup scripts/dispatch-review.sh x &`).deny, true);
+  assert.strictEqual(run(`${'a;'.repeat(9000)} scripts/dispatch-review.sh x`).deny, false);
+});
+test('a closer pull-back within the scan window still backgrounds the whole block', () => {
+  assert.strictEqual(run(`${'a;'.repeat(20)} for i in 1 2; do ${'echo x; '.repeat(10)}scripts/dispatch-review.sh $i; done &`).deny, true);
+});

@@ -263,7 +263,6 @@
   "legend.walk": "階段路徑：已完成、你在這裡、未到",
   "legend.badges": "分頁角標：進行中數量、卡住數量、要你處理的項目",
   "legend.behind": "外掛來源落後 upstream",
-  "legend.overflow": "視窗下方還有更多列",
   "legend.sec_states": "狀態",
   "legend.sec_structure": "符號",
   "legend.sec_keys": "按鍵",

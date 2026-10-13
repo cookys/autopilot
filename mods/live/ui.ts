@@ -45,14 +45,14 @@ export type StateId = (typeof STATE_IDS)[number]
 // terminal (P0 b). `fallback` is the next candidate when a glyph fails that check (§8 Q2); it is linted like every other glyph.
 export const GLYPHS = {
   state: { need_you: '▲', failed: '✗', stalled: '⊘', findings: '△', running: '●', done: '✓', pending: '○', stopped: '◌', skipped: '∅', unknown: '?' },
-  structure: { open: '▾', folded: '▸', rule: '─', detail: '└', command: '$', goto: '›', bullet: '◦', empty: '—', tabMark: '━', residue: '⚑', overflow: '⇣', behind: '↓', bandSep: '│', info: 'ⓘ', round: '↺', decisions: '◆', age: '◷' },
+  structure: { open: '▾', folded: '▸', rule: '─', detail: '└', command: '$', goto: '›', bullet: '◦', empty: '—', tabMark: '━', residue: '⚑', behind: '↓', bandSep: '│', info: 'ⓘ', round: '↺', decisions: '◆', age: '◷' },
   chart: { meterOn: '▰', meterOff: '▱', here: '◐' },
   spark: ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'],
   fallback: { stalled: '◍', findings: '!' },
-  verified: { '⊘': '2026-10-13 owner-ssh-tmux', '△': '2026-10-13 owner-ssh-tmux', '○': '2026-10-13 owner-ssh-tmux', '◌': '2026-10-13 owner-ssh-tmux', '∅': '2026-10-13 owner-ssh-tmux', '◦': '2026-10-13 owner-ssh-tmux', '›': '2026-10-13 owner-ssh-tmux', '━': '2026-10-13 owner-ssh-tmux', '◐': '2026-10-13 owner-ssh-tmux', '◍': '2026-10-13 owner-ssh-tmux', '↓': 'pending-owner', '⇣': 'pending-owner' } as Record<string, string>,
+  verified: { '⊘': '2026-10-13 owner-ssh-tmux', '△': '2026-10-13 owner-ssh-tmux', '○': '2026-10-13 owner-ssh-tmux', '◌': '2026-10-13 owner-ssh-tmux', '∅': '2026-10-13 owner-ssh-tmux', '◦': '2026-10-13 owner-ssh-tmux', '›': '2026-10-13 owner-ssh-tmux', '━': '2026-10-13 owner-ssh-tmux', '◐': '2026-10-13 owner-ssh-tmux', '◍': '2026-10-13 owner-ssh-tmux', '↓': '2026-10-14 owner-ruling' } as Record<string, string>,
 }
 // glyphs that are new to the pane's vocabulary: each must carry a `verified` entry (L3)
-export const NEW_GLYPHS = ['⊘', '△', '○', '◌', '∅', '◦', '›', '━', '◐', '◍', '↓', '⇣'] as const
+export const NEW_GLYPHS = ['⊘', '△', '○', '◌', '∅', '◦', '›', '━', '◐', '◍', '↓'] as const
 // Extended_Pictographic glyphs a terminal may draw as an emoji box (§3.4); repeated so the rule survives a Unicode update
 export const EMOJI_BANNED = ['⏸', '⚙', '⚠', '✔', '✖', '▶', '⏹', '⏺', '▪', '▫'] as const
 
@@ -845,8 +845,8 @@ export function appendRight(u: Ctx, line: PaneLine, hint: string, fact: FactId):
   return carry(line, { text: segs.map(x => x.text).join(''), segs })
 }
 
-// the overflow hint (live-pane height): `⇣ N more rows below` at the right edge of the header's last metrics line
-export const overflowHint = (u: Ctx, line: PaneLine, text: string): PaneLine | null => appendRight(u, line, GLYPHS.structure.overflow + ' ' + text, 'pane.overflow')
+// the overflow hint (live-pane height): `N more rows below` (text only, no glyph; owner ruling 2026-10-14) at the right edge of the header's last metrics line
+export const overflowHint = (u: Ctx, line: PaneLine, text: string): PaneLine | null => appendRight(u, line, text, 'pane.overflow')
 
 // a row of the `?` tab: the example (a fragment) padded to the key column, then the explanation
 export function legendRow(u: Ctx, example: Frag, body: string, fact: FactId): PaneLine {
@@ -880,7 +880,6 @@ export function legendParts(u: Ctx, folded: ReadonlySet<string> | undefined): Re
     legendRow(u, walk, t('legend.walk'), 'legend.structure'),
     legendRow(u, badges, t('legend.badges'), 'legend.structure'),
     legendRow(u, ex(dim(S.behind, { role: 'glyph' })), t('legend.behind'), 'legend.structure'),
-    legendRow(u, ex(dim(S.overflow, { role: 'glyph' })), t('legend.overflow'), 'legend.structure'),
   ]
   return {
     states: part('states', t('legend.sec_states'), states),

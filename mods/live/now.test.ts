@@ -266,7 +266,7 @@ test('hint: a tree exactly the window high has none, one row taller says 1 (both
     const probe = hinted(t, 76, { offset: 0, bodyRows: 0 }, 0)
     expect(hintSegOf(probe.out), loc + ': bodyRows == tree rows').toBeUndefined()
     const one = hinted(t, 76, { offset: 0, bodyRows: 0 }, 1)
-    expect(hintSegOf(one.out)?.text, loc).toBe(loc === 'zh-TW' ? '⇣ 下方還有 1 行' : '⇣ 1 more rows below')
+    expect(hintSegOf(one.out)?.text, loc).toBe(loc === 'zh-TW' ? '下方還有 1 行' : '1 more rows below')
     // negative control: a window taller than the tree has none either; and a window of 5 says total - 5
     expect(hintSegOf(hinted(t, 76, { offset: 0, bodyRows: 0 }, -3).out), loc).toBeUndefined()
     expect(hintSegOf(hinted(t, 76, { offset: 0, bodyRows: 5 }).out)?.text, loc).toContain(String(probe.total - 5))
@@ -281,15 +281,15 @@ test('hint: once the window has moved (offset > 0) there is none', () => {
   }
 })
 
-test('hint: its identity (own fact, owner pane, dim, glyph from GLYPHS) and the line is exactly as wide as the pane minus the edge', () => {
+test('hint: its identity (own fact, owner pane, dim, text only, no glyph) and the line is exactly as wide as the pane minus the edge', () => {
   expect(ui.FACT_OWNER['pane.overflow']).toBe('pane')
-  expect(ui.GLYPHS.structure.overflow).toBe('⇣')
-  expect(ui.NEW_GLYPHS).toContain('⇣')
+  expect('overflow' in ui.GLYPHS.structure, 'owner ruling 2026-10-14: no glyph for the overflow hint').toBe(false)
+  expect(ui.NEW_GLYPHS).not.toContain('⇣')
   for (const [loc, t] of LOCALES) {
     const r = hinted(t, 76, { offset: 0, bodyRows: 5 })
     const seg = hintSegOf(r.out) as Seg
     expect(seg.dim, loc).toBe(true)
-    expect(seg.text.startsWith(ui.GLYPHS.structure.overflow + ' '), loc).toBe(true)
+    expect(/^[^\s\p{S}]/u.test(seg.text) && !seg.text.includes('⇣'), loc + ': the hint starts with its words, not an arrow').toBe(true)
     const line = r.out.find(l => l.segs?.includes(seg)) as PaneLine
     expect(ui.displayWidth(line.text), loc + ': right-aligned to cols - 1').toBe(75)
     expect(line.text.endsWith(seg.text), loc).toBe(true)
@@ -324,7 +324,7 @@ test('hint: a tab strip that wraps makes the row count uncertain, so the hint sa
     // the header line at 30 columns: the metrics wrap, so give the hint a roomy line to show the wording
     const roomy = { text: 'x'.repeat(5), segs: [{ text: 'xxxxx' }] } as PaneLine
     const out = withOverflowHint([roomy, ui.blank()], c, { offset: 0, bodyRows: 5 }, 50, false)
-    expect(hintSegOf(out)?.text, loc).toBe(loc === 'zh-TW' ? '⇣ 下方還有更多' : '⇣ more rows below')
+    expect(hintSegOf(out)?.text, loc).toBe(loc === 'zh-TW' ? '下方還有更多' : 'more rows below')
   }
 })
 

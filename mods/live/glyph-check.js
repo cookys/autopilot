@@ -3,7 +3,7 @@
 // Run it in the REAL terminal (ssh + tmux): `node mods/live/glyph-check.js`
 // Each glyph sits between two `|` markers, once with ASCII neighbours and once next to a CJK character. If the glyph takes ONE cell, the two `|`
 // of a row line up with the `|` of the ruler row on top; a glyph drawn wide pushes the second `|` one cell to the right, a clipped one pulls it left.
-// Report which glyphs look off. Nothing is written; GLYPHS.verified in ui.ts stays `pending-owner` until the owner answers.
+// Report which glyphs look off. Nothing is written; GLYPHS.verified in ui.ts was `pending-owner` until the owner ran this on 2026-10-13 (ssh + tmux: all ten single-cell).
 const GLYPHS = ['⊘', '△', '○', '◌', '∅', '◦', '›', '━', '◐', '◍']
 const out = []
 out.push('one cell each: the | after the glyph must sit exactly under the | of the ruler')

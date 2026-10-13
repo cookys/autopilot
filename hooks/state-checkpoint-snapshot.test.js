@@ -209,6 +209,28 @@ test('PostCompact: the stage after a hyphen (re-implement) does not count', () =
   } finally { sb.cleanup(); }
 });
 
+test('PostCompact: a summary that starts with the stage name counts (the ^ anchor)', () => {
+  const sb = sandbox();
+  try {
+    const { adv } = postCompact(sb, 'implement is where we are; branch feat/snap');
+    assert.deepStrictEqual(adv, []);
+  } finally { sb.cleanup(); }
+});
+
+// Each spelling glues a word character to the stage on one side. Dropping `0-9` or `_` from either
+// side's character class, or dropping the `^|` start alternative, must turn one of these red.
+for (const word of ['plan2', 'plan_x', '2plan', 'pre_plan']) {
+  test(`PostCompact: the stage glued to a digit or underscore (${word}) does not count`, () => {
+    const sb = sandbox();
+    try {
+      fs.writeFileSync(path.join(sb.root, 'sm', `${SID}.json`), JSON.stringify({ session_id: SID, level: 'l4', size: 'L', stage: 'plan', expires_at: new Date(Date.now() + 3600e3).toISOString() }));
+      const { adv } = postCompact(sb, `branch feat/snap, now at ${word} here`);
+      assert.strictEqual(adv.length, 1);
+      assert.match(adv[0].text, /stage plan/);
+    } finally { sb.cleanup(); }
+  });
+}
+
 test('PostCompact: the stage match ignores case', () => {
   const sb = sandbox();
   try {

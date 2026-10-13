@@ -68,7 +68,7 @@ import type { ActivityItem, SessionMsg, QuotaWindow, AccountSnap } from './model
 import { makeT, resolveLocale, localeFromLanguage } from './i18n'
 import { EN, ZH_TW } from './locales'
 import type { Slot } from './model'
-import { paneRows, runAgedOut, runSubject } from './model'
+import { paneRows, runAgedOut, runEndedMs, runSubject } from './model'
 import * as ui from './ui'
 
 const SURFACES = ['terminal', 'desktop'] as const
@@ -3093,7 +3093,7 @@ for (const surface of SURFACES) {
           const parts = await paneParts($, surface, id, width)
           for (const text of [stripOf(parts.tree), ...parts.texts]) {
             expect(displayWidth(text), width + ' ' + id + ': ' + text).toBeLessThanOrEqual(width)
-            if (id !== 'dispatch') expect(text.includes('…'), width + ' ' + id + ': ' + text).toBe(false) // 派工's tables cut a cell to its column `min` (design plan §3.5: one line per run), so they are exempt
+            if (id !== 'dispatch' || !/^[⊘●✓◌○✗?▲△∅] /.test(text)) expect(text.includes('…'), width + ' ' + id + ': ' + text).toBe(false) // only a 派工 table ROW may cut a cell (§4 table, §3.5); the strip, headers, the pointer row and the footer must not
           }
         }
       }
@@ -3275,7 +3275,7 @@ test('hygiene tab: a long cache dir, worktree path and reason wrap in full at 60
 const D_NOW = Date.parse('2026-10-13T08:00:00.000Z')
 const D_DAY = 86_400_000
 const dispatchSnap = (rows: object[] | null, over: object = {}) => ({
-  header: 'h', rows, gates: null, link: null, published_at: '01:42', session_as_of: null, host_as_of: null,
+  header: 'h', rows, gates: null, link: null, published_at: '2026-10-13T07:59:55.000Z', session_as_of: null, host_as_of: null,
   sections: { attention: [], waiting: [], tasks: [], decisions: [], foreman: [] },
   detail: { counts: null, stalled: 0, now_ms: D_NOW },
   ...over,
@@ -3419,7 +3419,10 @@ test('dispatch tab: who computes `fresh` (§2.5 gap): a row that ended with no r
   const cases: [string, object, string, boolean][] = [
     ['alive and probed inside the bound', { alive: true, probe_age_s: 5, phase: 'running' }, 'running', true],
     ['probe older than the bound', { alive: true, probe_age_s: 31, phase: 'running' }, 'stopped', false],
-    ['never probed', { alive: true, probe_age_s: null, phase: 'running' }, 'stopped', false],
+    ['never probed, launched longer ago than the bound', { alive: true, probe_age_s: null, phase: 'running', elapsed_s: 31 }, 'stopped', false],
+    ['never probed, launched inside the bound: not started yet, not stopped', { alive: true, probe_age_s: null, phase: 'running', elapsed_s: 20 }, 'pending', false],
+    ['never probed at exactly the bound', { alive: true, probe_age_s: null, phase: 'running', elapsed_s: 30 }, 'pending', false],
+    ['probed once but the probe is stale, launched inside the bound', { alive: true, probe_age_s: 31, phase: 'running', elapsed_s: 20 }, 'stopped', false],
     ['not alive, not ended', { alive: false, probe_age_s: 5, phase: 'running' }, 'stopped', false],
     ['exited with no rc and no final_status', { alive: true, probe_age_s: 5, phase: 'exited' }, 'stopped', false],
     ['ended_at set, alive flag still true', { alive: true, probe_age_s: 5, phase: 'running', ended_at: '2026-10-13T07:05:00.000Z' }, 'stopped', false],
@@ -3437,6 +3440,30 @@ test('dispatch tab: who computes `fresh` (§2.5 gap): a row that ended with no r
   // no bound published: any probe counts as fresh
   const [noBound] = paneRows({ runs: [{ ...base, alive: true, probe_age_s: 900, phase: 'running' }] } as never) as never[]
   expect((noBound as { fresh: boolean }).fresh).toBe(true)
+})
+
+test('dispatch tab: a dead run with no ended_at and no final_status is dated by nothing: the ended cell is — and the row stays listed, never "0s 前" (runEndedMs)', () => {
+  const t = makeT('zh-TW')
+  const env = { counts: { fresh_bound_s: 30 }, runs: [{ run_id: 'dead-3d', role: 'hands', runner: 'codex', model: 'gpt', started_at: new Date(D_NOW - 3 * D_DAY).toISOString(), elapsed_s: 3 * 86400, stall: false, rc: null, final_status: null, phase: 'exited', alive: false, probe_age_s: null }] } as never
+  const rows = paneRows(env) as never[]
+  const lines = dispatchLines(dispatchSnap(rows), { t, cols: 120 })
+  const body = bodyRows(lines)
+  expect(body.length, 'listed, not aged out').toBe(1)
+  expect(body[0].text.includes('0s 前')).toBe(false)
+  expect(body[0].text.trimEnd().endsWith('—')).toBe(true)
+  expect(runEndedMs(rows[0])).toBeNull()
+  // with a final_status the frozen elapsed_s does date the end
+  const dated = paneRows({ counts: { fresh_bound_s: 30 }, runs: [{ run_id: 'x', started_at: new Date(D_NOW - 3 * D_DAY).toISOString(), elapsed_s: 60, rc: null, final_status: 'done', phase: 'exited', alive: false }] } as never) as never[]
+  expect(runEndedMs(dated[0])).toBe(D_NOW - 3 * D_DAY + 60_000)
+})
+
+test('dispatch tab: the footer snapshot stamp is HH:MM (or MM-DD), never the raw ISO string the producer publishes (§3.5)', () => {
+  for (const locale of tabLocales) {
+    const lines = dispatchLines(dispatchSnap([RUN_LIVE('a')]), { t: makeT(locale), cols: 100 })
+    const note = lines.find(l => l.kind === 'detail') as { text: string }
+    expect(/\d\d:\d\d$/.test(note.text), note.text).toBe(true)
+    expect(/T\d\d|Z|2026-/.test(note.text), note.text).toBe(false)
+  }
 })
 
 for (const surface of SURFACES) {

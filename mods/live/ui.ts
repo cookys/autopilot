@@ -221,7 +221,7 @@ const stated = (id: StateId): Stated => STATED_OBJS[id]
 export const isStated = (v: unknown): v is Stated => typeof v === 'object' && v !== null && Object.values(STATED_OBJS).includes(v as Stated)
 
 export type Domain = 'verdict' | 'run' | 'seat' | 'round' | 'gate' | 'qc' | 'background' | 'task' | 'loadSource' | 'attention' | 'residueGroup' | 'cleanup'
-export type RunSubject = { rc: number | null; final_status: string | null; stall: boolean; fresh: boolean }
+export type RunSubject = { rc: number | null; final_status: string | null; stall: boolean; fresh: boolean; starting?: boolean } // `starting`: never probed yet, but inside the freshness bound since launch
 export type SeatSubject = { kind: 'code' | 'plan'; verdict: string | null; status: string | null }
 export type RoundSubject = { stale: boolean; converged: boolean; seats: readonly Stated[] }
 export type BackgroundSubject = { exit: number | null; quietMs: number }
@@ -247,7 +247,7 @@ const CLASSIFY: { [D in Domain]: (s: Subject[D]) => string } = {
     if (r.rc === 0 || (fs !== null && DONE_FINAL.includes(fs))) return 'done'
     if (fs !== null) return 'weird' // a final_status in neither set beats stall and freshness; the raw text goes to detail
     if (r.stall) return 'stall'
-    return r.fresh ? 'running' : 'stopped'
+    return r.fresh ? 'running' : r.starting === true ? 'starting' : 'stopped'
   },
   seat: s => {
     if (present(s.verdict)) return s.kind + ':' + norm(s.verdict)
@@ -283,7 +283,7 @@ const CLASSIFY: { [D in Domain]: (s: Subject[D]) => string } = {
 const ATTENTION_FROM = Object.fromEntries(STATE_IDS.map(id => ['from:' + id, id])) as Record<string, StateId>
 export const STATUS_MAP: { [D in Domain]: Record<string, StateId> } = {
   verdict: { DECIDE: 'need_you', STALLED: 'stalled', WAITING: 'done', RUNNING: 'running', IDLE: 'stopped' },
-  run: { failed: 'failed', done: 'done', weird: 'unknown', stall: 'stalled', running: 'running', stopped: 'stopped' },
+  run: { failed: 'failed', done: 'done', weird: 'unknown', stall: 'stalled', running: 'running', starting: 'pending', stopped: 'stopped' },
   seat: {
     'code:SHIP-AS-IS': 'done', 'code:FIX-THEN-SHIP': 'findings', 'code:BLOCK': 'failed', 'code:REJECT': 'failed',
     'plan:READY': 'done', 'plan:APPROVE': 'done', 'plan:PASS': 'done', 'plan:CONDITIONAL': 'findings', 'plan:STOP': 'findings', 'plan:REJECT': 'failed',

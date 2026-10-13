@@ -35,6 +35,7 @@ export type LivePaneRow = {
   // ended without an rc and without a final_status is `ended` and not `fresh`, so it reads ◌ 已停 and never ● 執行中 (design plan §2.5, §3.3 run row 6)
   ended: boolean
   fresh: boolean
+  starting: boolean
 }
 
 export type LiveGateRow = {
@@ -890,6 +891,7 @@ export function paneRows(env: Json): LivePaneRow[] | null {
       rc, final_status: str(r.final_status),
       probe_age_s: probe, ended_at: str(r.ended_at), ended,
       fresh: !ended && r.alive === true && probe !== null && (bound === null || probe <= bound),
+      starting: !ended && probe === null && bound !== null && finite(r.elapsed_s) && r.elapsed_s <= bound, // never probed, launched inside the bound: ○ not started yet, not ◌ stopped
     }
   })
 }
@@ -2112,11 +2114,12 @@ export function accountLines(a: AccountSnap | undefined, nowMs: number | null, c
 const cell = (v: string | number | null | undefined): string => (v === null || v === undefined || v === '' ? '—' : String(v))
 
 // the subject `stateOf('run', …)` classifies (design plan §3.3). `fresh` is the producer's own freshness test, read once in paneRows; an ended row is never fresh.
-export const runSubject = (r: LivePaneRow): RunSubject => ({ rc: r.rc, final_status: r.final_status, stall: r.stall, fresh: r.fresh })
+export const runSubject = (r: LivePaneRow): RunSubject => ({ rc: r.rc, final_status: r.final_status, stall: r.stall, fresh: r.fresh, starting: r.starting })
 // when a run ended (ms): the manifest's ended_at, else started_at + elapsed_s (the producer freezes elapsed_s at the end); null = unknown
 export function runEndedMs(r: LivePaneRow): number | null {
   const end = r.ended_at === null ? NaN : Date.parse(r.ended_at)
   if (Number.isFinite(end)) return end
+  if (r.final_status === null) return null // the producer freezes elapsed_s only for a run that really ended; a dead process without ended_at keeps counting, so it cannot date the end
   const start = r.started_at === null ? NaN : Date.parse(r.started_at)
   return Number.isFinite(start) && r.elapsed_s !== null ? start + r.elapsed_s * 1000 : null
 }
@@ -2182,7 +2185,8 @@ function dispatchLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
   const gates = snap.gates
   const pointer = gates === null ? ui.val(t('dispatch.no_review_page'), { role: 'prose' }) : gates.length === 0 ? ui.val(t('dispatch.no_receipt'), { role: 'prose' }) : ui.fmtd('count', t('dispatch.gate_count', { n: gates.length }))
   const parts = [t('dispatch.note')]
-  if (snap.published_at !== null) parts.push(t('dispatch.snapshot', { at: snap.published_at }))
+  const pubMs = snap.published_at === null ? NaN : Date.parse(snap.published_at)
+  if (Number.isFinite(pubMs)) parts.push(t('dispatch.snapshot', { at: ui.clock(pubMs, nowMs ?? pubMs) })) // the producer publishes an ISO string; HH:MM per §3.5
   out.push(...sec(DISPATCH_SEC.other, t('dispatch.others'), undefined, [
     ui.projection('dispatch', 'review.gates', ui.kv(u, t('tab.review'), [pointer], { fact: 'review.gates', goto: 'review' })),
     ...ui.detail(u, parts.join(' · '), { fact: 'dispatch.counts' }).map(own),

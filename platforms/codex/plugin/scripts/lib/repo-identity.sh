@@ -52,6 +52,32 @@ manifest_session_id_json() {
   fi
 }
 
+# child_session_mint -- identity hand-off step 3 (live-pane plan section 7.1). A rail that starts a
+# `claude` child mints the child's session id ITSELF, passes it as `--session-id`, and records it in the
+# run manifest as "child_session_id", so child -> run no longer depends on an unexpired marker. Sets
+# CHILD_SESSION_ID (idempotent: a second call keeps the first id). The rail also hands the child
+# AUTOPILOT_PARENT_SESSION_ID=$CLAUDE_CODE_SESSION_ID (only when set) on the claude command line itself;
+# hooks/runs-watch-autostart.js turns that into the child marker's parent_session_id.
+child_session_mint() {
+  [ -n "${CHILD_SESSION_ID:-}" ] && return 0
+  local u=""
+  u="$(cat /proc/sys/kernel/random/uuid 2>/dev/null || true)"
+  [ -n "$u" ] || u="$(uuidgen 2>/dev/null || true)"
+  [ -n "$u" ] || u="$(node -e 'process.stdout.write(require("crypto").randomUUID())' 2>/dev/null || true)"
+  CHILD_SESSION_ID="$(printf '%s' "$u" | tr 'A-Z' 'a-z')"
+  return 0
+}
+
+# manifest_child_session_json -- the JSON value for a manifest's "child_session_id": the minted id as a
+# quoted string, else the bare literal null (runners that start no claude child, or no mint yet).
+manifest_child_session_json() {
+  if [ -n "${CHILD_SESSION_ID:-}" ]; then
+    printf '"%s"' "$(_repo_identity_json_str "$CHILD_SESSION_ID")"
+  else
+    printf 'null'
+  fi
+}
+
 repo_identity_resolve_fields() {
   [ -n "${REPO_IDENTITY_FIELDS:-}" ] && return 0
   local root="${1:-}" consuming="${2:-}" dir="" src="" id=""

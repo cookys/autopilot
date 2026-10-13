@@ -601,7 +601,7 @@ function resolveJobRoot({ explicit = '', now = Date.now(), env = process.env } =
 
 // A plain-session marker (level null): the per-session record without orchestrator mode. No Mission routing,
 // no entry_level. root_run_id is decided by the caller through resolveJobRoot (every plain marker has a job root).
-function buildPlainMarker({ sessionId, repoRoot, scope, now, ttlHours = DEFAULT_TTL_HOURS, rootRunId = null }) {
+function buildPlainMarker({ sessionId, repoRoot, scope, now, ttlHours = DEFAULT_TTL_HOURS, rootRunId = null, parentSessionId = null }) {
   const marker = {
     session_id: sessionId,
     level: null,
@@ -612,6 +612,8 @@ function buildPlainMarker({ sessionId, repoRoot, scope, now, ttlHours = DEFAULT_
     project_key: scope && scope.project_key ? scope.project_key : null,
     root_run_id: rootRunId || null,
   };
+  // Identity hand-off step 3: a child session started by a dispatch rail records which session launched it.
+  if (parentSessionId) marker.parent_session_id = parentSessionId;
   return marker;
 }
 
@@ -628,9 +630,14 @@ function writeMarkerFile(file, marker) {
 // an unreadable or malformed one is left untouched (not ours to destroy; fail-open). Takes the same
 // <marker>.lock as the `set --size` init so a concurrent writer cannot interleave.
 // -> 'created' | 'replaced_expired' | 'kept' | 'kept_unreadable' | 'skipped' (no usable session id).
-function ensurePlainMarker({ sessionId, repoRoot, scope, now = Date.now(), dir = markerDir() }) {
+// parentSessionId: the launching session's id. Only the SessionStart path reads AUTOPILOT_PARENT_SESSION_ID
+// (exported by the rails onto the claude command line); `session-mode set` never does, so an explicit set cannot
+// claim a parent. Ignored when it is empty or equals this session's own id.
+function ensurePlainMarker({ sessionId, repoRoot, scope, now = Date.now(), dir = markerDir(), parentSessionId = process.env.AUTOPILOT_PARENT_SESSION_ID }) {
   const sid = normalizeSessionId(sessionId);
   if (!sid) return 'skipped';
+  const parent = typeof parentSessionId === 'string' && parentSessionId.trim() && parentSessionId.trim() !== sessionId
+    ? parentSessionId.trim().slice(0, 128) : null;
   const file = path.join(dir, `${sid}.json`);
   let result = 'kept';
   fs.mkdirSync(dir, { recursive: true });
@@ -647,7 +654,7 @@ function ensurePlainMarker({ sessionId, repoRoot, scope, now = Date.now(), dir =
     if (state === 'live') { result = 'kept'; return; }
     if (state === 'unreadable') { result = 'kept_unreadable'; return; }
     const rootRunId = resolveJobRoot({ now });
-    writeMarkerFile(file, buildPlainMarker({ sessionId: sid, repoRoot, scope, now, rootRunId }));
+    writeMarkerFile(file, buildPlainMarker({ sessionId: sid, repoRoot, scope, now, rootRunId, parentSessionId: parent }));
     result = state === 'expired' ? 'replaced_expired' : 'created';
   });
   return result;

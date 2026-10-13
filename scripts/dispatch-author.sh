@@ -736,6 +736,7 @@ if [[ "$STRICT_ROSTER" -eq 1 ]]; then
 fi
 
 [[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|kimi|cc-shim|anthropic-compatible|claude-native|qoderclicn|cursor)"
+case "$RUNNER" in cc-shim|claude-native) declare -F child_session_mint >/dev/null 2>&1 && child_session_mint ;; esac
 case "$RUNNER" in codex|agy|grok|kimi|cc-shim|anthropic-compatible|claude-native|qoderclicn|cursor) ;; *) die_precondition "--runner must be codex, agy, grok, kimi, cc-shim, anthropic-compatible, claude-native, qoderclicn, or cursor (got: $RUNNER)" ;; esac
 [[ -n "$MODEL" ]] || die_precondition "--model is required"
 if [[ "$RUNNER" = "cursor" ]]; then
@@ -919,14 +920,15 @@ write_author_manifest() {
   if declare -F repo_identity_resolve_fields >/dev/null 2>&1; then repo_identity_resolve_fields "${AUTHOR_REPO_ROOT_EXPLICIT:-}" "" || true; fi
   [ -n "${REPO_IDENTITY_FIELDS:-}" ] || REPO_IDENTITY_FIELDS='"repo_identity": null, "repo_identity_source": null'
   {
-    printf '{ "schema": 1, "run_id": "%s", "role": "author", "allow_narrative": null, "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "log_format": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "diff_file": null, "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, %s, "session_id": %s }\n' \
+    printf '{ "schema": 1, "run_id": "%s", "role": "author", "allow_narrative": null, "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "log_format": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "diff_file": null, "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, %s, "session_id": %s, "child_session_id": %s }\n' \
       "$(json_escape "$AUTHOR_RUN_ID")" "$RUNNER" "$(json_escape "$MODEL")" \
       "$(json_escape "$RAW_LOG")" "$log_format" "$aux_json" "$$" \
       "$AUTHOR_STARTED_AT" "$AUTHOR_STARTED_EPOCH" \
       "$(json_escape "${PROMPT_FILE_ORIG:-$PROMPT_FILE}")" \
       "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" \
       "$parent_json" "$root_json" "$depth_json" "$REPO_IDENTITY_FIELDS" \
-      "$(declare -F manifest_session_id_json >/dev/null 2>&1 && manifest_session_id_json || printf null)" > "$tmp"
+      "$(declare -F manifest_session_id_json >/dev/null 2>&1 && manifest_session_id_json || printf null)" \
+      "$(declare -F manifest_child_session_json >/dev/null 2>&1 && manifest_child_session_json || printf null)" > "$tmp"
   } 2>/dev/null && mv -f "$tmp" "$AUTHOR_MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
   return 0
 }
@@ -1196,9 +1198,9 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
   # blast-radius controls and keeps request context constrained to prompt + auth + model.
   CCSHIM_CWD="$(mktemp -d -t dispatch-author-ccshimcwd-XXXXXX)"
   set +e
-  timeout "$TIMEOUT" env -u ANTHROPIC_API_KEY HOME="$CCSHIM_CWD" \
-    bash -c 'cd "$1" && exec "$2" -p --model "$3" --setting-sources project --strict-mcp-config --tools "" < "$4"' \
-    _ "$CCSHIM_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" > "$RAW_LOG" 2>/dev/null
+  timeout "$TIMEOUT" env -u ANTHROPIC_API_KEY HOME="$CCSHIM_CWD" ${CLAUDE_CODE_SESSION_ID:+"AUTOPILOT_PARENT_SESSION_ID=$CLAUDE_CODE_SESSION_ID"} \
+    bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "" < "$4"' \
+    _ "$CCSHIM_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" > "$RAW_LOG" 2>/dev/null
   RUNNER_EXIT=$?
   set -e
   rm -rf "$CCSHIM_CWD"; CCSHIM_CWD=""
@@ -1214,8 +1216,8 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
   # otherwise uses the same scratch-cwd/no-tools posture as the reviewer rail.
   CNATIVE_CWD="$(mktemp -d)"
   set +e
-  timeout "$TIMEOUT" bash -c 'cd "$1" && exec "$2" -p --model "$3" --setting-sources project --strict-mcp-config --tools "" < "$4"' \
-    _ "$CNATIVE_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" > "$RAW_LOG" 2>/dev/null
+  timeout "$TIMEOUT" env ${CLAUDE_CODE_SESSION_ID:+"AUTOPILOT_PARENT_SESSION_ID=$CLAUDE_CODE_SESSION_ID"} bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "" < "$4"' \
+    _ "$CNATIVE_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" > "$RAW_LOG" 2>/dev/null
   RUNNER_EXIT=$?
   set -e
   rm -rf "$CNATIVE_CWD"; CNATIVE_CWD=""

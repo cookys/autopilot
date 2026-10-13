@@ -1369,19 +1369,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/mods-p5-proxy-decision-reminders.md
 - **Context**: no live decision ledger exists and nothing writes proxy-decision rows, so the live band cannot show them yet; writer, then watcher sidecar, then display.
 
-### G1 default (low-risk review, one family, fresh-context) has no resolver key
-- **Id**: BL-0111
-- **Status**: open
-- **Since**: 2026-10-08
-- **Origin**: self
-- **Problem**: 低風險審查的預設做法（單一模型家族、審查者用全新 session）只寫在文件裡，審查路由設定沒有對應的鍵，程式無法強制。
-- **Impact**: 預設做法靠人遵守，沒有機制保證；審查者如果沿用實作者的上下文，容易跟著實作者的盲點走。
-- **Trigger**: owner ruled 2026-10-13: add review_fresh_context on|off, default on; on refuses a reused reviewer session at dispatch; off stays legal but is stamped in the review receipt
-- **Effort**: S
-- **Source**: stage-graph plan execution, 2026-10-06..08
-- **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/README.md
-- **Context**: The key lives in scripts/resolve-review-loop.sh. It is a resolver contract whose suites drift together, so run the full suite once, alone, after the change.
-
 ### Eval campaigns should fail fast on auth and quota errors
 - **Id**: BL-0112
 - **Status**: open

@@ -107,11 +107,17 @@ function usage() {
     --ticket <id> --session-id <id> --generation <1|2> \\
     --manifest-file <manifest.json> [--disposition-file <decisions.json>] \\
     [--context-file <repo-source-file>]... [--state-dir <dir>] [--now <ISO-8601>] \\
-    [--allow-unregistered]
+    [--allow-unregistered] [--no-topology-fallbacks]
 
 --allow-unregistered: skip the plan_unregistered refusal (the plan must have a
   docs/projects/INDEX.md row with Version "active") — for a scratch/consumer repo. Auto-
   allowed with no flag needed when the repo has no docs/projects/INDEX.md at all.
+
+--no-topology-fallbacks: do not fill a seat's empty fallbacks from the topology
+  (AUTOPILOT_TOPOLOGY_FILE or ~/.autopilot/topology.json). By default, generation 1 adds up to two
+  qualified, ready, different-family candidates to every seat whose fallbacks are empty, BEFORE the
+  manifest is sealed; later generations use the sealed copy. A required seat that still has no
+  fallback prints "required seat has no fallback" on stderr.
 
 --context-file: optional, repeatable. Hands seats read-only repo source files so claims about
   code can be checked (default for non-codex seats: plan + rubric text only; codex seats can already read the repo tree). Files must live inside
@@ -179,6 +185,10 @@ function parseArgs(argv) {
     }
     if (arg === '--allow-unregistered') {
       opts.allowUnregistered = true;
+      continue;
+    }
+    if (arg === '--no-topology-fallbacks') {
+      opts.noTopologyFallbacks = true;
       continue;
     }
     const key = flags.get(arg);
@@ -769,6 +779,150 @@ function loadManifest(opts) {
     throw new CliError(`manifest is not valid JSON: ${error.message}`);
   }
   return { manifest: validateManifest(parsed), bytes, legacy: false };
+}
+
+// ---- BL-0145: topology-derived fallbacks ------------------------------------------------
+// Substitution is live in reviewSeat (primary_unavailable / retry_substitution) but a manifest
+// that arrives with `fallbacks: []` gave it nothing to swap in, and the topology's
+// plan_review_panel / reviewer_ladder / consult_ladder were never read: one seat out of quota
+// failed the whole panel (grok, 2026-10-13). A seat with NO fallbacks now gets up to
+// AUTO_FALLBACK_MAX qualified, ready candidates from the topology: a family none of the primary
+// seats already uses, never the same runner+model, never the implementer's runner.
+//
+// WHEN: only while the session has no sealed manifest copy yet (generation 1, before the seal).
+// The filled manifest is what gets sealed, and every later generation reads THAT copy
+// (effectiveManifest), so a topology that changes between generations cannot change a sealed
+// panel. Auto-filled ids carry AUTO_FALLBACK_PREFIX so the copy can still be compared with the
+// manifest file the caller passes (identity drift detection is unchanged).
+const AUTO_FALLBACK_PREFIX = 'auto-fb-';
+const AUTO_FALLBACK_MAX = 2;
+
+function loadTopologyCandidates() {
+  // Under the test seam the host's real ~/.autopilot is never consulted: only an explicit
+  // AUTOPILOT_TOPOLOGY_FILE counts, so a suite cannot change result with the machine it runs on.
+  const file = process.env.AUTOPILOT_TOPOLOGY_FILE
+    || (process.env.AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS === '1'
+      ? null : path.join(os.homedir(), '.autopilot', 'topology.json'));
+  if (!file) return [];
+  let doc;
+  try {
+    doc = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (error) {
+    return [];
+  }
+  const seen = new Set();
+  const out = [];
+  for (const key of ['plan_review_panel', 'reviewer_ladder', 'consult_ladder']) {
+    for (const entry of Array.isArray(doc && doc[key]) ? doc[key] : []) {
+      if (!entry || typeof entry.engine !== 'string' || entry.engine === ''
+          || typeof entry.family !== 'string' || entry.family === ''
+          || !RUNNERS.has(entry.runner) || !EFFORTS.has(entry.effort)) continue;
+      const endpoint = typeof entry.endpoint === 'string' && entry.endpoint !== ''
+        ? entry.endpoint : 'default';
+      const id = `${entry.runner}\0${entry.engine}\0${entry.effort}\0${endpoint}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      out.push({
+        runner: entry.runner,
+        model: entry.engine,
+        effort: entry.effort,
+        endpoint,
+        family: entry.family,
+      });
+    }
+  }
+  return out;
+}
+
+function stripAutoFallbacks(manifest) {
+  return {
+    ...manifest,
+    seats: manifest.seats.map((seat) => ({
+      ...seat,
+      fallbacks: seat.fallbacks.filter((fallback) => !fallback.id.startsWith(AUTO_FALLBACK_PREFIX)),
+    })),
+  };
+}
+
+function fillFallbacksFromTopology(manifest, opts) {
+  if (opts.noTopologyFallbacks) return { manifest, added: [] };
+  const needy = manifest.seats.filter((seat) => seat.fallbacks.length === 0);
+  if (needy.length === 0) return { manifest, added: [] };
+  const candidates = loadTopologyCandidates();
+  if (candidates.length === 0) return { manifest, added: [] };
+  const impl = resolverField('implementer_runner');
+  const allowSameRunner = resolverField('allow_same_runner_dual_seat') === 'on';
+  const takenIds = new Set();
+  for (const seat of manifest.seats) {
+    takenIds.add(seat.id);
+    for (const fallback of seat.fallbacks) takenIds.add(fallback.id);
+  }
+  const usedFamilies = new Set(manifest.seats.map((seat) => seat.family));
+  const usedTuples = new Set(manifest.seats.map((seat) => `${seat.runner}\0${seat.model}`));
+  const added = [];
+  const seats = manifest.seats.map((seat) => {
+    if (seat.fallbacks.length > 0) return seat;
+    const fallbacks = [];
+    for (const candidate of candidates) {
+      if (fallbacks.length >= AUTO_FALLBACK_MAX) break;
+      if (usedFamilies.has(candidate.family)
+          || usedTuples.has(`${candidate.runner}\0${candidate.model}`)
+          || seat.excluded_families.includes(candidate.family)) continue;
+      if (impl && impl !== 'auto' && !allowSameRunner
+          && normRunner(candidate.runner) === normRunner(impl)) continue;
+      const id = `${AUTO_FALLBACK_PREFIX}${seat.id}-${fallbacks.length + 1}`.slice(0, 64);
+      if (takenIds.has(id)) continue;
+      const tuple = {
+        id,
+        runner: candidate.runner,
+        model: candidate.model,
+        effort: candidate.effort,
+        endpoint: candidate.endpoint,
+        role: seat.role,
+        family: candidate.family,
+        readiness_status: 'ready',
+        qualification_status: 'qualified',
+      };
+      if (!fallbackEligible(manifest, seat, tuple, new Map())) continue;
+      fallbacks.push(tuple);
+      takenIds.add(id);
+      usedFamilies.add(candidate.family);
+      usedTuples.add(`${candidate.runner}\0${candidate.model}`);
+      added.push({ seat_id: seat.id, fallback_id: id, family: candidate.family });
+    }
+    return fallbacks.length > 0 ? { ...seat, fallbacks } : seat;
+  });
+  if (added.length === 0) return { manifest, added };
+  return { manifest: validateManifest({ ...manifest, seats }), added };
+}
+
+// The manifest this run actually uses. A session that already sealed a copy keeps it (it may
+// carry auto-filled fallbacks); the caller's file must still describe the same panel, else the
+// loaded manifest is returned unchanged and the ordinary durable-identity check refuses it.
+function effectiveManifest(loaded, manifestCopy, opts) {
+  if (fs.existsSync(manifestCopy)) {
+    const bytes = fs.readFileSync(manifestCopy);
+    let sealed;
+    try {
+      sealed = validateManifest(JSON.parse(bytes.toString('utf8')));
+    } catch (error) {
+      return { manifest: loaded.manifest, bytes: loaded.bytes, added: [] };
+    }
+    const stripped = JSON.stringify(canonical(stripAutoFallbacks(sealed)));
+    const hasAuto = stripped !== JSON.stringify(canonical(sealed));
+    const sameInput = stripped === JSON.stringify(canonical(loaded.manifest));
+    if (hasAuto && sameInput) return { manifest: sealed, bytes, added: [] };
+    return { manifest: loaded.manifest, bytes: loaded.bytes, added: [] };
+  }
+  const filled = fillFallbacksFromTopology(loaded.manifest, opts);
+  if (filled.added.length === 0) {
+    return { manifest: loaded.manifest, bytes: loaded.bytes, added: [] };
+  }
+  return {
+    manifest: filled.manifest,
+    bytes: Buffer.from(`${JSON.stringify(canonical(filled.manifest))}\n`),
+    added: filled.added,
+  };
 }
 
 function extractRubricIds(bytes) {
@@ -1593,8 +1747,6 @@ function main() {
     throw error;
   }
   const loaded = loadManifest(opts);
-  const manifest = loaded.manifest;
-  const manifestSha = sha256(loaded.bytes);
   const repoIdentity = canonicalRepoIdentity(opts.repoRoot);
   const sessionKey = sha256(`${repoIdentity}\0${opts.ticket}`);
   const sessionDir = path.join(opts.stateDir, sessionKey);
@@ -1602,6 +1754,19 @@ function main() {
   const rubricSeal = path.join(sessionDir, 'rubric-seal.json');
   const manifestCopy = path.join(sessionDir, 'manifest.json');
   const manifestSeal = path.join(sessionDir, 'manifest-seal.json');
+  // BL-0145: generation 1 fills empty fallbacks from the topology BEFORE the seal below; later
+  // generations read the sealed copy back, so the panel cannot change under a sealed session.
+  const effective = effectiveManifest(loaded, manifestCopy, opts);
+  const manifest = effective.manifest;
+  const manifestSha = sha256(effective.bytes);
+  for (const added of effective.added) {
+    process.stderr.write(`dispatch-plan-review: seat ${added.seat_id} had no fallbacks; added ${added.fallback_id} (family ${added.family}) from the topology\n`);
+  }
+  for (const seat of manifest.seats) {
+    if (seat.required && seat.fallbacks.length === 0) {
+      process.stderr.write(`dispatch-plan-review: warning: required seat has no fallback: ${seat.id} (a failed first attempt cannot be substituted)\n`);
+    }
+  }
   const planBytes = fs.readFileSync(opts.planFile);
   if (planBytes.length === 0 || planBytes.toString('utf8').trim() === '') {
     throw new CliError('plan file must contain non-whitespace content');
@@ -1651,7 +1816,7 @@ function main() {
     withLock(sessionDir, '.claim.lock', () => {
       if (!fs.existsSync(statePath)) {
         if (opts.generation !== 1) throw new CliError('new session must acquire generation 1', 3);
-        fs.writeFileSync(manifestCopy, loaded.bytes, { mode: 0o600 });
+        fs.writeFileSync(manifestCopy, effective.bytes, { mode: 0o600 });
         if (contextBundle) {
           fs.writeFileSync(contextCopy, contextBundle.manifestBytes, { mode: 0o600 });
           if (sealSpec('seal', contextCopy, contextSeal) !== contextSha) {

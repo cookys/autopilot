@@ -37,7 +37,20 @@
 #  implementer family. qc_panel_aggregation: union-on-verified-critical; majority forbidden.
 #  review_diff_scope: how much the per-round reviewer reads — full | incremental-mitigated.)
 #
-# Exit codes: 0 success / 2 usage / 3 invalid or inconsistent config.
+#   plan-review roster stop (default, no flag): a `--field` query for a plan-review roster field
+#              # (plan_review, plan_review_resolved_from, plan_review_same_family_as_depth0,
+#              # plan_reviewer_*, plan_deep_reviewer_*) with plan_review=auto whose roster cannot be
+#              # resolved from config or topology (stale topology without plan_review_panel, or no
+#              # qualified seat) would silently fall back to opus@claude-native, the depth-0 family.
+#              # It exits 4 instead (still prints the field) and lists on stderr the qualified seats,
+#              # a recommended pair and the command that writes it. The whole-JSON output and every
+#              # other field are unchanged, so hooks keep working. Scripts cannot prompt (agy
+#              # sandbox, headless -p): the CALLER asks the owner, or headless applies the
+#              # recommended pair and logs a decision. To accept the single-family fallback
+#              # deliberately, set `plan_review_allow_native_fallback: on` in the review-loop config.
+#
+# Exit codes: 0 success / 2 usage / 3 invalid or inconsistent config / 4 plan-review roster
+#   incomplete (plan-review roster --field query only; 3 wins when both apply).
 
 set -uo pipefail
 
@@ -243,7 +256,7 @@ while [[ $# -gt 0 ]]; do
     --scorecard-identity-file) SCORECARD_IDENTITY_FILE="${2:-}"; shift 2 ;;
     --enforce) ENFORCE=1; shift ;;
     --scale-by-capability) SCALE_BY_CAPABILITY=1; shift ;;
-    -h|--help) sed -n '2,31p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,53p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -413,6 +426,7 @@ MAX_ROUNDS="$(read_field "$CONFIG" loop_max_rounds "$DEF_MAX_ROUNDS")"
 CONVERGE="$(read_field "$CONFIG" loop_convergence_verdict "$DEF_CONVERGE")"
 SPEC_REVIEW="$(read_field "$CONFIG" spec_review "$DEF_SPEC_REVIEW")"
 PLAN_REVIEW="$(read_field "$CONFIG" plan_review "$DEF_PLAN_REVIEW")"
+PLAN_ALLOW_NATIVE="$(read_field "$CONFIG" plan_review_allow_native_fallback "off")"
 HETERO_REVIEW="$(read_field "$CONFIG" hetero_review "$DEF_HETERO_REVIEW")"
 PLAN_REV_ENGINE="$(read_field "$CONFIG" plan_reviewer_engine "")"
 PLAN_REV_EFFORT="$(read_field "$CONFIG" plan_reviewer_effort "")"
@@ -1571,6 +1585,90 @@ ENFORCE_EXIT=0
 if [[ "$ENFORCE" == "1" && "$CROSS_FAMILY_REQUIRED" == "true" \
       && "$CROSS_FAMILY_SATISFIED" == "false" && ( "$REVIEW_RISK" == "high" || "$REQUIRED_REVIEW_FAMILIES" -ge 2 ) ]]; then
   ENFORCE_EXIT=3
+fi
+
+# Plan-review roster stop (BL-0108). A plan review that resolved to the native fallback is a
+# single-family review by the depth-0 family; the resolver already warned in capability_warnings,
+# but nothing STOPPED, and an opt-in flag was never passed by the real path (depth-0 reads
+# `--field plan_reviewer_engine` per skills/hetero-review). So the stop is the DEFAULT for a
+# plan-review roster field query; the whole-JSON output and other fields stay data-only. Exit 4, and
+# a stderr block that is the whole menu — seats the topology qualifies, a recommended pair of
+# distinct families, and the one command that writes it. This script never prompts (it runs under
+# agy and headless -p); depth-0 shows the menu to the owner, or applies the recommendation and
+# logs a decision when nobody can be asked.
+_plan_roster_field=0
+case "$FIELD" in
+  plan_review|plan_review_resolved_from|plan_review_same_family_as_depth0|plan_reviewer_*|plan_deep_reviewer_*) _plan_roster_field=1 ;;
+esac
+if [[ "$_plan_roster_field" == "1" && "$PLAN_REVIEW" == "auto" \
+      && "$PLAN_REVIEW_RESOLVED_FROM" == "native-fallback" \
+      && "$PLAN_ALLOW_NATIVE" != "on" ]]; then
+  _cfg_target="${CONFIG_PATH:-.claude/review-loop-config.md}"
+  [[ "$_cfg_target" == "builtin-default" || "$_cfg_target" == *"project-config-template"* ]] && _cfg_target=".claude/review-loop-config.md"
+  node -e '
+let d = {};
+try { d = JSON.parse(process.argv[1] || "{}"); } catch { d = {}; }
+const cfg = process.argv[2];
+// Same filter the topology resolution above applies: a seat on the implementer runner would be
+// refused by the same-runner-dual-seat guard (exit 3) once written, unless the operator allowed it.
+const normRunner = (r) => (r === "codex-cli" ? "codex" : r);
+const implRunner = process.argv[3] || "";
+const allowDual = process.argv[4] === "on";
+const onImpl = (r) => !allowDual && implRunner && implRunner !== "auto" && normRunner(r) === normRunner(implRunner);
+const seen = new Set();
+const seats = [];
+for (const key of ["plan_review_panel", "reviewer_ladder", "consult_ladder"]) {
+  for (const s of Array.isArray(d[key]) ? d[key] : []) {
+    if (!s || !s.engine || !s.runner || !s.effort || onImpl(s.runner)) continue;
+    const id = `${s.engine}/${s.effort}@${s.runner}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    seats.push({ id, s });
+  }
+}
+const Q = "\x27";
+// Paste-ready, idempotent, shell-neutral (bash, zsh, BSD/GNU): a one-line node script in single quotes
+// with no dollar, bang or bracket characters, so no shell expands anything. REPLACES every matching key
+// line (read_field takes the FIRST match), appends when absent, creates the file when missing.
+const JS = String.raw`var fs=require("fs"),p=require("path"),a=process.argv.slice(1),f=a.shift(),t="";try{t=fs.readFileSync(f,"utf8")}catch(e){fs.mkdirSync(p.dirname(f),{recursive:true})}a.forEach(function(kv){var i=kv.indexOf("="),k=kv.slice(0,i),v=kv.slice(i+1),n=0;t=t.replace(new RegExp("^(\\s*-?\\s*"+k+"\\s*:).*","gim"),function(m,h){n=n+1;return h+" "+v});if(n===0){t=t+(t===""||t.slice(-1)==="\n"?"":"\n")+"- "+k+": "+v+"\n"}});fs.writeFileSync(f,t)`;
+// POSIX single-quote escaping shared by every printed command: a quote inside becomes close, backslash-quote, reopen.
+const shq = (x) => Q + String(x).replace(/\x27/g, Q + "\\" + Q + Q) + Q;
+const setCmd = (pairs) => "node -e " + Q + JS + Q + " " + shq(cfg) + " " + pairs.map(shq).join(" ");
+const out = [];
+out.push("resolve-review-loop: STOP (exit 4) plan_review=auto has no usable plan-review roster; the silent fallback would be opus/high@claude-native, the depth-0 family.");
+if (d.missing_plan_review_panel) out.push("  cause: the topology file has no plan_review_panel key (stale cache) - regenerate it first: node scripts/resolve-dispatch-topology.js");
+if (seats.length === 0) {
+  out.push("  available qualified seats: none found in the topology (absent, malformed, or zero qualified reviewer/consult seats).");
+  out.push("  options: qualify a heterogeneous seat (scripts/engine-qualify.sh), set plan_review: off in " + cfg + " to opt out, or accept the single-family fallback (command below).");
+} else {
+  out.push("  available qualified seats (engine/effort@runner [family]):");
+  for (const { id, s } of seats) out.push("    - " + id + " [" + (s.family || "unknown") + "]");
+  const pick = [];
+  const fam = new Set();
+  for (const { s } of seats) {
+    const f = s.family || ("runner:" + s.runner);
+    if (fam.has(f)) continue;
+    fam.add(f);
+    pick.push(s);
+    if (pick.length === 2) break;
+  }
+  out.push("  recommended: " + pick.map((s) => s.engine + "/" + s.effort + "@" + s.runner).join(" + ") + (pick.length < 2 ? " (single qualified family: a one-seat plan review)" : " (distinct families)"));
+  const kv = [];
+  const emit = (prefix, s) => {
+    kv.push(prefix + "_engine=" + s.engine);
+    kv.push(prefix + "_effort=" + s.effort);
+    kv.push(prefix + "_runner=" + s.runner);
+    if (s.endpoint) kv.push(prefix + "_endpoint=" + s.endpoint);
+  };
+  emit("plan_reviewer", pick[0]);
+  if (pick[1]) emit("plan_deep_reviewer", pick[1]);
+  out.push("  write the recommendation: " + setCmd(kv));
+  out.push("  caller: ask the owner which seats to use; with nobody to ask (headless), apply the recommendation and log it as a decision.");
+}
+out.push("  accept the single-family opus@claude-native fallback instead (owner decision): " + setCmd(["plan_review_allow_native_fallback=on"]));
+process.stderr.write(out.join("\n") + "\n");
+' "${_topo_json:-}" "$_cfg_target" "$IMPL_RUNNER" "$ALLOW_DUAL_SEAT"
+  [[ "$ENFORCE_EXIT" -eq 0 ]] && ENFORCE_EXIT=4
 fi
 
 probe_diff_bytes() {

@@ -1,6 +1,6 @@
 # Plan — review-only entry: a host-admitted final panel over an externally produced candidate range
 
-> Status: **draft, size L** · Owner: depth-0 · Source: BACKLOG BL-0090 (peer-reported, cuda/chatgpt-tunnel, fleet 2026-10-03; owner approved 2026-10-13) · Pointer: `docs/backlog/review-only-adoption-of-external-candidate.md` · Version: stays on the 3.0.0 line (no bump) · Code read at `459dd869`.
+> Status: **ruled, size L — Q1′ ruled 2026-10-14 (caller chooses at disposition, §10); P1 open** · Owner: depth-0 · Source: BACKLOG BL-0090 (peer-reported, cuda/chatgpt-tunnel, fleet 2026-10-03; owner approved 2026-10-13) · Pointer: `docs/backlog/review-only-adoption-of-external-candidate.md` · Version: stays on the 3.0.0 line (no bump) · Code read at `459dd869`.
 
 ## 1. Why
 
@@ -44,19 +44,20 @@ Each criterion names its threshold, check and negative control (ids from `refere
 - RO5 — Verification runs on the adopted tree, not the operator checkout. Check (A2): an untracked file in the operator worktree that would make `verify_cmd` pass does not; the run is not-ready.
 - RO6 — Modes cannot cross. An adoption contract under `implement-review`, an implementation contract under `review-candidate`, and an adoption contract carrying mission or strict-dispatch fields are each refused before spend. Check: A5.
 - RO7 — A declaration cannot weaken the panel. Undeclared author → unknown family. A declared author family may only add an exclusion; if that leaves fewer than the required families the panel fails. Check: A2 on the declared-family case.
-- RO8 — Honest terminal outcome. Zero findings, green verify, met quorum → ready, exit 0. Red verify, unmet quorum, or must-fix findings → terminal not-ready naming the reason and the findings, exit non-zero. No campaign waits on a state whose only exit is a repair. Check: A5 per outcome; `autopilot campaign inspect` reads each receipt.
+- RO8 — Honest terminal outcome. Zero findings, green verify, met quorum → ready, exit 0. Red verify, unmet quorum, or must-fix findings that the disposition does not clear (`end`, `repair`) → terminal not-ready naming the reason and the findings, exit non-zero. Findings park for disposition (RO13). No campaign waits on a state whose only exit is an autopilot repair. Check: A5 per outcome; `autopilot campaign inspect` reads each receipt.
 - RO9 — No regression: `hooks/tests/autopilot-engine*.test.sh`, `hooks/tests/campaign-*.test.sh`, `hooks/tests/final-panel-park.test.sh`, `hooks/tests/autopilot-cli.test.sh` stay green; any red is classified with A7 before merge.
 - RO10 — Live (A6). One real-engine run over a trivial range in a throwaway repo reaches ready with ≥ 1 reviewed seat and 0 implementer calls; one live run over a planted-defect range ends not-ready. Engine and version recorded.
 - RO11 (P2) — An interrupted or parked review resumes without re-spending reviewed seats and without trusting the stored range: head, tree and ancestry are re-derived first. Check: A5 interrupt-then-resume case plus RO3's resume moment.
+- RO13 (P2) — Caller-chosen continuation (Q1′ ruling). A parked review offers exactly three dispositions: `return`, `end` and `repair`. `return` re-reviews a head that moved forward from the reviewed head inside the same campaign and spends seats only on the delta. `end` terminalizes not-ready with the findings listed. `repair` is P5. A head that is not a descendant of the reviewed head is a named refusal. A contract preset applies its choice with no wait. Check: A5 per choice, plus the preset path. Control: a non-descendant head and an unknown choice value are each refused before spend.
 - RO12 (P3) — At l5/l6 review-only admission neither requires nor probes the implementer or verification-author seat, while `implement-review` at l5 still requires both. Check: probe-log count; A2 on the l5 implement path.
 
 ## 4. Scope boundary
 
-In: one `engine` subcommand; an adoption section in the campaign contract; an adoption admission step; a candidate record kind for adopted ranges; adoption resume; a review-only readiness profile; a usage doc for external operators.
+In: one `engine` subcommand; an adoption section in the campaign contract; an adoption admission step; a candidate record kind for adopted ranges; adoption resume; a review-only readiness profile; a caller-chosen continuation after a park (`return`, `end`, and `repair` as a handoff); a usage doc for external operators.
 
 Out, each with the trigger to revisit:
 - Mission-routed review-only campaigns (`mission_runtime`): refused in v1. Trigger: a Mission graph needs a review-only node.
-- Re-review of an amended range inside one campaign: each new head is a new campaign. Trigger: a requester shows the per-campaign cost blocks them.
+- ~~Re-review of an amended range inside one campaign~~: **moved In on 2026-10-14.** The trigger fired: the reporter said a second campaign's spend blocks them (§12), and the owner ruled Q1′. It is the `return` choice (RO13, P2).
 - `hetero-review-loop` and `skills/hetero-review` routing: unchanged; routing text is guidance and needs eval evidence first. Trigger: a recorded dogfood run where a session picks the wrong loop.
 - `--legacy-unmanaged --resume` (D2): no shim, no extension.
 - Trust machinery (ADR-0001): no fence, signature or digest chain over the external author's claims. Git object ids are re-read from Git at each use; nothing the author states is recorded as true.
@@ -93,8 +94,12 @@ Before any spend, intake re-derives the range with read-only probes (D9): the br
 | Situation | Outcome |
 |---|---|
 | Zero findings, green verify, quorum met | terminal ready, exit 0 |
-| In-loop findings (with a panel station this is the panel) | per Q1: park for disposition, or terminal not-ready |
-| Final-panel findings | as `final-panel-park` defines once shipped; terminal not-ready before that |
+| In-loop findings (with a panel station this is the panel) | park for disposition (Q1 B), unless the contract preset names a choice |
+| Parked, caller disposes `return` | wait for a new head; the head must descend from the reviewed head; re-derive it, then re-review the delta in the same campaign and reuse seat verdicts (RO13) |
+| Parked, caller disposes `end` | terminal not-ready, findings listed (RO13) |
+| Parked, caller disposes `repair` | P5 handoff: terminal not-ready here, plus an `implement-review` contract seeded from the reviewed head (RO13) |
+| New head after `return` that does not descend from the reviewed head | named refusal, no review call |
+| Final-panel findings | park for disposition, as shipped by `final-panel-park` (merge 2561e59f); same three choices |
 | Disposition supplied, must-fix remains | terminal not-ready at the 0-repair ceiling, findings listed |
 | Red verify | terminal not-ready, no review spend |
 | Quorum or family minimum unmet | terminal not-ready, named |
@@ -107,7 +112,7 @@ Before any spend, intake re-derives the range with read-only probes (D9): the br
 ### 5.6 Relationship to existing rails
 
 - Managed `implement-review`: unchanged; shares intake, composition and final panel.
-- `final-panel-park` (active): same final path; P1 rebases on it if it lands first, and RO8 tests pin whichever behavior Q1 picks.
+- `final-panel-park`: shipped (merge 2561e59f), so P1 builds on it; RO8 and RO13 pin the park.
 - `hetero-review-loop`: unchanged (D15).
 
 ## 6. Phases
@@ -123,9 +128,9 @@ Before any spend, intake re-derives the range with read-only probes (D9): the br
 ### P2 — Resume from Git (depends on P1)
 - Goal: `review-candidate --resume` continues an interrupted or parked review-only campaign.
 - Scope: `src/engine/campaign-intake.js` (adoption branch beside `verifyResumeCandidate`); `src/engine/autopilot-engine.js` resume setup (`:5109-5120`); `src/engine/final-panel-seat-store.js` only if U4 says so; `hooks/tests/review-candidate-resume.test.sh`.
-- Input: P1 candidate kind; Q1 ruling.
-- Output: resume with drift refusal and seat-verdict reuse.
-- Acceptance: RO11, RO3 (resume moment), RO9.
+- Input: P1 candidate kind; the Q1′ ruling (§10).
+- Output: resume with drift refusal and seat-verdict reuse. The `return` and `end` dispositions. An optional contract preset (adoption section) that applies a choice without waiting. The adoption-contract preset field shares its schema, checker and intake updates with P1's section.
+- Acceptance: RO11, RO13 (`return`, `end`, preset), RO3 (resume moment), RO9.
 - Boundaries: same-campaign `git_candidate` resume unchanged; existing resume suites untouched.
 
 ### P3 — Review-only readiness profile (depends on P1)
@@ -144,7 +149,14 @@ Before any spend, intake re-derives the range with read-only probes (D9): the br
 - Acceptance: a fresh session that has not seen this plan follows the doc in a scratch repo to a ready receipt (recorded).
 - Boundaries: no `skills/` edits.
 
-Order: P1 → {P2 ∥ P3} → P4. If Q1 picks the park, findings ranges are only usable after P2, so the critical path becomes P1 → P2 → P4. Each phase ships on its own branch (`lane/review-candidate-p<N>`) with one merge commit, which is its rollback point.
+### P5 — `repair` handoff (depends on P2)
+- Goal: a caller who disposes `repair` gets autopilot's writer without a writer on the adopted range.
+- Design: `repair` terminalizes the review-only campaign not-ready, which is honest because the range did not pass. It then emits a seeded `implement-review` contract. In that contract, base is the reviewed head, the task is the accepted findings, and paths and verify come from the adoption contract. The caller seals and runs it as a normal campaign. Our writer writes on top of the external head under the existing writer fence and repair lineage. D11 and D12 are untouched, and RO1 holds for the review-only campaign.
+- Cost, stated to the caller: one writer run, plus that campaign's own review. Seat verdicts are not reused across campaigns.
+- Acceptance: RO13 (`repair`); RO1 still 0 writer calls in the review-only campaign; the seeded contract passes `implementation-campaign-check.js`; control: a seeded contract whose base is not the reviewed head is refused.
+- Boundaries: no change to `git_candidate`, writer fence or repair-lineage code.
+
+Order: P1 → P2 → P4 is the critical path, because the park only becomes usable once P2 ships. P3 runs in parallel with P2 after P1, and P5 runs after P2. P4 ships the `return`/`end` doc and the cuda reply. P5 adds a doc section when it lands. Each phase ships on its own branch (`lane/review-candidate-p<N>`) with one merge commit, which is its rollback point.
 
 ## 7. Test strategy
 
@@ -180,6 +192,12 @@ Order: P1 → {P2 ∥ P3} → P4. If Q1 picks the park, findings ranges are only
   - (R1) autopilot's own implementer repairs the adopted range (`max_repair_generations` > 0 on an adopted candidate). This contradicts §12: the reporter's writer is outside autopilot on purpose. It also needs a repair lineage on a range this campaign did not write (D11, D12).
   - (R2) Findings go to the requester's depth-0. After disposition, their own writer fixes and pushes a new head; the same campaign re-derives the new head (RO3 checks become "moved forward from the reviewed head") and re-reviews, reusing seat verdicts per RO11. This keeps "no autopilot writer" and fires the §4 Out trigger for in-campaign re-review (the reporter said a second campaign's spend blocks them).
   - Recommendation: R2, with B's park as the place the findings wait. Pending the owner's confirmation; the reporter is told only after it.
+  - **Ruled 2026-10-14: the caller chooses, at disposition time.** Q1 resolves to B: findings park. The disposition then picks one of three choices:
+    - `return`: R2. The caller's writer fixes, and the same campaign re-reviews the delta.
+    - `end`: terminal not-ready, the reporter's own ask in §12.
+    - `repair`: R1 as a handoff, not as an in-place repair. It seeds a normal `implement-review` campaign from the reviewed head (P5), so D11 and D12 stay untouched.
+
+    An optional contract preset lets a caller with no human present pick ahead of time. RO13 pins all of this. `return` and `end` ship in P2; `repair` ships in P5. U8 is moot, because `end` is an explicit choice and not `deny-nonempty`.
 
 ## 11. Unverified
 
@@ -192,7 +210,7 @@ Order: P1 → {P2 ∥ P3} → P4. If Q1 picks the park, findings ranges are only
 | U5 | Whether `campaign inspect` and `status task` read fields that assume an implementation chain | P1 |
 | U6 | Whether `stageVerifyOnConverge` should write a stage unit for a review-only run (fail-open today) | P1 |
 | U7 | Answered 2026-10-13, see §12 | — |
-| U8 | What `deny-nonempty` does in the composition when findings are non-empty (the policy throws, `src/engine/campaign-disposition-authority.js:182-187`) | before Q1 is ruled |
+| U8 | Moot after the Q1′ ruling (2026-10-14): `end` is an explicit disposition choice | — |
 
 ## 12. Reporter answers (cuda chatgpt-tunnel, fleet 2026-10-13)
 

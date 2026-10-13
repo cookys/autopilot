@@ -199,6 +199,12 @@ Order: P1 → P2 → P4 is the critical path, because the park only becomes usab
 
     An optional contract preset lets a caller with no human present pick ahead of time. RO13 pins all of this. `return` and `end` ship in P2; `repair` ships in P5. U8 is moot, because `end` is an explicit choice and not `deny-nonempty`.
 
+- Q3 — open, P2 design; the reporter asked on 2026-10-14. On `return`, what does "re-review only the delta" cover when the fix touches files or behavior an earlier seat already passed? There are two candidates:
+  - (a) Seats review `reviewed_head..new_head` with the cumulative `base..new_head` as read-only context. The final panel judges the cumulative range, and a seat verdict is reused only for a seat whose reviewed files the delta does not touch.
+  - (b) Seats review only `reviewed_head..new_head`.
+
+  Leaning (a): a fix that edits a reviewed file would otherwise keep a stale pass. P2 decides this with evidence and pins it in RO13. The reporter is told the result in the P4 doc.
+
 ## 11. Unverified
 
 | # | Not yet checked | Checked in |

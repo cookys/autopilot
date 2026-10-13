@@ -104,6 +104,29 @@ node "$LEDGER" append --ledger "$LC" --kind hypothesis --json '{"hypothesis_id":
 OUT="$(node "$PROBE" classify --ledger "$LC" --work-unit cw "${PIN[@]}")"
 assert_eq "repeated-refusal" "$(printf '%s' "$OUT" | field reason)" "(b) end to end: two consult refusals stop the ladder"
 
+# the cause is cut only at " (" or ". " -- a dot inside a token (resolved_engine.model vs .runner) is not a cut
+STUB2="$TEST_TMP/author-refuse2.sh"
+cat > "$STUB2" <<'EOS'
+#!/usr/bin/env bash
+printf '{ "runner": "agy", "model": "m", "status": "precondition_failed", "raw_log": null, "error": "%s", "selection_source": "explicit_cli", "selection_path": null, "verification_author": null }\n' "$STUB_ERR"
+exit 2
+EOS
+chmod +x "$STUB2"
+LD="$TEST_TMP/consult-ledger-dot.jsonl"
+consult_once() { # <err>
+  STUB_ERR="$1" REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" AUTOPILOT_TOPOLOGY_FILE="$TOPO" bash "$REPO_ROOT/scripts/dispatch-consult.sh" \
+    --question-file "$Q" --artifact "$ART" --dispatch-author-bin "$STUB2" --ladder-receipt "$LD" \
+    --ladder-terms dead --ladder-unknown-type why --ladder-signals S1 --ladder-work-unit dw >/dev/null 2>&1
+}
+consult_once 'resolved_engine.model is unavailable (repo=/x). hint one'
+consult_once 'resolved_engine.runner is unavailable (repo=/y). hint two'
+DOTC="$(node -e 'const rows=require("fs").readFileSync(process.argv[1],"utf8").trim().split("\n").map(JSON.parse).filter(r=>r.kind==="ladder");process.stdout.write(rows.map(r=>r.cause).join("|"))' "$LD")"
+assert_eq "precondition_failed: resolved_engine.model is unavailable|precondition_failed: resolved_engine.runner is unavailable" "$DOTC" "(b) cause keeps dotted tokens and drops only the ' (' / '. ' tails"
+node "$LEDGER" append --ledger "$LD" --kind hypothesis --json '{"hypothesis_id":"dwa","text":"x","status":"refuted","work_unit":"dw"}' >/dev/null
+node "$LEDGER" append --ledger "$LD" --kind hypothesis --json '{"hypothesis_id":"dwb","text":"y","status":"refuted","work_unit":"dw"}' >/dev/null
+OUT="$(node "$PROBE" classify --ledger "$LD" --work-unit dw "${PIN[@]}")"
+assert_eq "U2" "$(printf '%s' "$OUT" | field recommend)" "(b) .model vs .runner refusals are different causes: the ladder still climbs"
+
 # --- (c) dispatch-model-guard brief lint: warn, never block --------------------------------------
 mkpayload() { # <prompt text, with \n escapes already JSON-encoded>
   printf '{"tool_name":"Agent","tool_input":{"model":"sonnet","prompt":"Engine: sonnet\\n%s"},"hook_event_name":"PreToolUse","cwd":"%s"}' "$1" "$TEST_TMP"

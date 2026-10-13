@@ -300,7 +300,8 @@ if [ "$AUTHOR_RC" -ne 0 ] || [ "$AUTHOR_STATUS" != "authored" ]; then
     _consult_err="$(printf '%s' "$AUTHOR_OUT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(String(JSON.parse(s).error||""));}catch{}})' 2>/dev/null || true)"
     # The cause is the dispatcher's own reason up to its first " (" / ". " tail, so two refusals of the
     # same gate compare equal even when the repo path or the appended hint differs.
-    _consult_cause="precondition_failed: ${_consult_err%%[(.]*}"
+    _consult_err="${_consult_err%% (*}"; _consult_err="${_consult_err%%. *}"
+    _consult_cause="precondition_failed: ${_consult_err}"
   fi
   ladder_receipt "rail-failed" "$_consult_cause"
   emit "transport_failed" "$CONSULT_ENGINE" "$CONSULT_RUNNER" "$CONSULT_EFFORT" "$CONSULT_ENDPOINT" "" "transport status=${AUTHOR_STATUS:-unknown}${_consult_cause:+ ($_consult_cause)}" 5

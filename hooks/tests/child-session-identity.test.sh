@@ -89,6 +89,18 @@ for name in author-native author-ccshim review-native review-ccshim hetero-ccshi
   check_case "$name (parent unset)" "$TEST_TMP/runs-$name-np" "$TEST_TMP/log-$name-np" ""
 done
 
+# Detached hetero (--ledger/--run-id/--stage, the foreman hands path): the state serialized across the
+# setsid boundary must carry CHILD_SESSION_ID and the manifest helpers, or the child loses --session-id and
+# the final manifest rewrite nulls session_id/child_session_id.
+LEDGER="$TEST_TMP/detach-ledger.jsonl"
+bash "$REPO_ROOT/scripts/run-ledger.sh" init --ledger "$LEDGER" >/dev/null
+DRUNS="$TEST_TMP/runs-detached"; DLOG="$TEST_TMP/log-detached"; mkdir -p "$DRUNS"; : > "$DLOG"
+( cd "$SBX" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT AUTOPILOT_DISPATCH_RUNS_DIR="$DRUNS" STUB_LOG="$DLOG" DISPATCH_DETACH=1 \
+    ANTHROPIC_BASE_URL=http://127.0.0.1:9 ANTHROPIC_AUTH_TOKEN=test PATH="$BINDIR:$PATH" CLAUDE_CODE_SESSION_ID="$PARENT" \
+    "$HETERO" --runner cc-shim --model MiniMax-M3 --effort high --branch feat/csid-det --prompt-file "$PROMPT" \
+    --ledger "$LEDGER" --run-id det-1 --stage implement >/dev/null 2>&1 ) || true
+check_case "hetero-ccshim detached" "$DRUNS" "$DLOG" "$PARENT"
+
 # A rail that starts no claude child leaves child_session_id null and still has the key.
 GROK_STUB="$TEST_TMP/grok-stub"
 printf '#!/usr/bin/env bash\nif [ "${1:-}" = "--list-models" ]; then printf "Available models\\n\\ngrok-4.5 - Grok 4.5\\n"; fi\nexit 0\n' > "$GROK_STUB"; chmod +x "$GROK_STUB"

@@ -601,44 +601,10 @@ Each phase ships on its own. Each runs `bash mods/live/run-tests.sh` alone (600 
 | **P4 現況 + global header** | `buildSections` returns data; summary rows with `goto`; background freshness (exit marker, 30 min); tasks show unfinished only; the reason becomes an item; `verdictHeader` in `pane.tsx` on every tab | the Now-tab cases (W3a tasks, attention, foreman rows, the activity cases) are re-pinned to the new lines; I9, I11, I16 enabled |
 | **P5 殘留 + strip + lock** | 殘留 on components; the tab strip active mark (per Q1); `kind` becomes required in the type; `seg`/`row`/`rule`/`kv` removed from `model.ts`; L1, L2, L4 switched on; every invariant over every tab | `expectThemeOnly(tree, allowTabBackground)` loses the background allowance if Q1 is accepted; `isActiveTab` (live.test.ts ~2139) keys on the new mark |
 
-| **P6 派工樹** (scheduled after the 2026-10-13 backlog wave; owner ruling 2026-10-13) | The 派工 tab shows every piece of work under the session as one tree (§7.1). Built on the identity hand-offs in §7.1 step 2–4, which ship first as their own commits | dispatch-tab cases gain nested rows; new fixtures for a loop-back (`claude -p` started by a rail) and for an untracked process |
 
 The separate scanner defect (diagnosis 11: why `scanBackground` never ended these tasks) is a bug fix with its own red test, outside this plan. The freshness rule in P4 makes the pane right even while that bug exists.
 
-### 7.1 Dispatch tree (P6)
-
-Owner ask (2026-10-13): when dispatched work dispatches again — including a shell that starts a harness that starts Claude Code again — can every piece be followed from the session? Evaluated before planning (evaluation notes: session scratchpad `nested-dispatch-tracking-eval.md`; facts below carry their own pointers).
-
-**What exists today**
-
-| Path | Record | Link to parent | After the fact | While running |
-|---|---|---|---|---|
-| Subagent → subagent | `~/.claude/projects/<proj>/<session>/subagents/agent-<id>.meta.json`, all depths in one directory | `parentAgentId` (depth ≥ 2), `toolUseId` matches the parent transcript's `tool_use.id`; already read by `hooks/cost-tracker-lib.js:182-194` `readAgentTree` and `scripts/cost-digest.js --tree` | yes (a few old records lack `parentAgentId`) | partly: liveness stamps under `<live>/agents/<sid>/` carry no parent |
-| Session or subagent → rail (codex, kimi, grok, agy, opencode, cursor) | run manifest `<run_id>.manifest.json`, `dispatch-branches.jsonl` | manifest `parent_run_id` / `root_run_id` / `depth` via `AUTOPILOT_PARENT_RUN_ID` / `AUTOPILOT_ROOT_RUN_ID` / `AUTOPILOT_DISPATCH_DEPTH`; the manifest has no `session_id` (the branch ledger does) | rail→rail yes; session→rail only by joining the session marker's `root_run_id` | yes (`dispatch-status.js --list`, the runs watcher) |
-| Loop-back: rail → `claude -p` / cc-shim / claude-native | the child's own transcript; with a dedicated `CLAUDE_CONFIG_DIR` it lands there; cc-shim deletes its scratch HOME, transcript included (`dispatch-review.sh:1531-1536`, `dispatch-author.sh:1194`) | none structured. Measured: `CLAUDE_CODE_SESSION_ID` is replaced by a new id; every `AUTOPILOT_*` variable is inherited unchanged | weak (time window + cwd); cc-shim: nothing | weak |
-| fleet dispatch | `message_id`, reply `meta.reply_to` | one request/reply pair; no root, parent or depth; the far side's records are on the far machine | one hop | one hop |
-| Process started with `nohup` / `setsid` / `&`, no rail | none | `/proc/<pid>` ppid and environ while alive; `setsid` breaks the ppid chain | no | partly |
-
-The 派工 tab reads none of the subagent records today; only cost tracking does.
-
-**Identity hand-offs (ship before P6, cheapest first)**
-
-1. Read-only merged view from existing fields: subagent tree (`parentAgentId`) + rail tree (`parent_run_id`) + session→rail via the marker's `root_run_id`. No behaviour change.
-2. Add `session_id` (`$CLAUDE_CODE_SESSION_ID`) to the run manifest, so session→rail no longer depends on an unexpired marker (24 h TTL).
-3. Loop-back: every rail that starts `claude` exports `AUTOPILOT_PARENT_SESSION_ID=$CLAUDE_CODE_SESSION_ID` (a dedicated name; `AUTOPILOT_SESSION_ID` would hijack the child's marker), and the child writes it into its marker as `parent_session_id`. The rail also records the child's `CLAUDE_CONFIG_DIR` in the manifest so a transcript outside `~/.claude/projects` can be found. cc-shim keeps the child transcript (copy it out before deleting the scratch HOME).
-4. fleet: the dispatch body carries `root_run_id` / `parent_run_id` by convention; the receiver adopts them with `session-mode.js --root-run-id`. One hop is all the local machine can show.
-5. Which subagent started a rail: Claude Code gives a subagent's Bash no agent id. A PreToolUse hook (its payload has `agent_id`, `hooks/awaiting-owner.js:76`) can prefix the id onto Bash commands. Until then, rails a subagent starts hang directly under the session.
-
-**Cannot be traced, by nature** — shown, not hidden: a process started outside any rail after it exits; the far side of a fleet dispatch; cc-shim children from before step 3. The tree ends those branches with one note line (`◦ 之後的工作沒有紀錄`) so a missing branch never reads as "nothing happened".
-
-**Display** follows §2.4: one line per top-level piece of work, children folded behind `▸ N 個子工作`; live branches open by default, finished ones closed; depth shown by indent, not by a column.
-
-**Unverified (checked in P6):** whether a `claude -p` child runs the SessionStart hook (decides where step 3 writes `parent_session_id`); whether `claude -p --session-id <uuid>` can pre-assign the child id; how `lib/cleanroom-launch.sh` treats the environment; nested rail manifests (every local manifest is depth 0, so the nested path is read from code only).
-
-**Found during the evaluation, fixed separately (not P6):** rails pass every `AUTOPILOT_*` variable to a `claude` child, `AUTOPILOT_SESSION_ID` included (`dispatch-foreman.sh:339-353` allow-lists the prefix). `session-mode.js:170-173` reads that variable first, so a child launched from a session that has it set writes its marker under the parent's session id. Today only caller discipline prevents it; the rails should unset it. Fixed on `lane/p2-session-id-leak` (dispatch rails and `profile-runtime.js` `invokeClaude`). Two cases its review left for P6 step 3:
-
-- `scripts/probe-engine-capability.sh:456,462` starts `claude -p` without unsetting it. It is not a dispatch rail, and the marker hook keys on its own session id (`hooks/runs-watch-autostart.js:265`), so no parent marker is overwritten today.
-- Children still inherit `CLAUDE_CODE_SESSION_ID`, the second source in `getSessionId()` (`session-mode.js:171`). A non-claude runner that calls `session-mode.js` inside its child process may resolve to the parent's id (not measured). Design it together with `AUTOPILOT_PARENT_SESSION_ID`; campaign intake relies on `CLAUDE_CODE_SESSION_ID`, so it cannot simply be unset.
+The dispatch tree (the former P6 and §7.1: nested dispatch lineage across subagents, rails, loop-back Claude children and fleet) is a separate plan by owner ruling 2026-10-13: [`2026-10-13-dispatch-tree.md`](2026-10-13-dispatch-tree.md). This plan has no dependency on it.
 
 ## 8. Open questions for the owner
 

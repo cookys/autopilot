@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-10-13 | [dispatch tree: follow every piece of work from the session, without guessing a parent](../plans/2026-10-13-dispatch-tree.md) | active | — | [plan](../plans/2026-10-13-dispatch-tree.md) |
 | 2026-10-13 | [live pane design system: one IA, one visual vocabulary, enforced in code](../plans/2026-10-13-live-pane-design-system.md) | active | — | [plan](../plans/2026-10-13-live-pane-design-system.md) |
 | 2026-10-13 | [l5 mission scaffold generator](../plans/2026-10-13-l5-mission-scaffold-generator.md) | active | — | [plan](../plans/2026-10-13-l5-mission-scaffold-generator.md) |
 | 2026-10-13 | [final panel with findings parks for depth-0 disposition instead of terminal-stopping](../plans/2026-10-13-final-panel-park.md) | active | — | [plan](../plans/2026-10-13-final-panel-park.md) |

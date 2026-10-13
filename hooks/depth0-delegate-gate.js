@@ -50,6 +50,9 @@
  *   1. DENY  trailing `&` or `setsid -f` launching a dispatch rail entrypoint (see bash-launch-rules.js)
  *            with no wake-up in the same command (wait-dispatch-results / `wait`) — use the Bash
  *            tool's run_in_background. Non-rail detaches (`setsid nohup bash x.sh`) are untouched.
+ *            Exception: a `setsid -f` review/author/hetero/foreman launch carrying every ledger arg
+ *            (--ledger --run-id [--stage]) is allowed — its <ledger>.results/<id>.<stage>.exit file is
+ *            the wake-up source for the next call (foreman --resume and DISPATCH_DETACH=0 excluded).
  *   2. WARN  `pkill -f` / `pgrep -f` whose pattern has no `[x]` self-exclusion bracket.
  *   3. WARN  (only when the shell is zsh; never a deny, by owner ruling) a word starting with `=`
  *            or an unquoted glob that matches nothing — zsh aborts the whole line.

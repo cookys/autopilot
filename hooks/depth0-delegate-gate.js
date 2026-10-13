@@ -3,7 +3,8 @@
  * depth0-delegate-gate — PreToolUse WebFetch|WebSearch|Read|Grep|Glob|Bash|Agent|Task|Skill
  * (default-on, v2.36.1 P3; foreground-wait advisory added later)
  *
- * Nudges DEPTH-0 (never a subagent — skip whenever the payload carries `agent_id`, SPIKE-1)
+ * Nudges DEPTH-0 (the read-burst and wait nudges skip subagents — payload carries `agent_id`, SPIKE-1;
+ * the Bash-launch guard below is the exception and runs at every depth)
  * away from doing its own long read bursts instead of delegating to an Explore/survey
  * subagent. Companion to foreman-guard.js (which governs depth-1 foremen/workers); this one
  * governs the orchestrator itself and is deliberately NOT bound to the l3-l6 session marker
@@ -44,6 +45,16 @@
  * advises, because the foreground-wait guidance text (dev-flow SKILL.md) is still awaiting its
  * eval and an unevidenced deny would enforce guidance nobody has measured. Mode `off` silences it.
  *
+ * BASH-LAUNCH GUARD (BL-0019; applies at EVERY depth, subagents included, and runs before the
+ * depth-0-only skip; scripts/lib/bash-launch-rules.js defines the rules):
+ *   1. DENY  trailing `&` or `setsid -f` launching a dispatch rail entrypoint (see bash-launch-rules.js)
+ *            with no wake-up in the same command (wait-dispatch-results / `wait`) — use the Bash
+ *            tool's run_in_background. Non-rail detaches (`setsid nohup bash x.sh`) are untouched.
+ *   2. WARN  `pkill -f` / `pgrep -f` whose pattern has no `[x]` self-exclusion bracket.
+ *   3. WARN  (only when the shell is zsh; never a deny, by owner ruling) a word starting with `=`
+ *            or an unquoted glob that matches nothing — zsh aborts the whole line.
+ * Mode `off` silences all three. Rule 1 denies in `warn` and `block` modes alike.
+ *
  * MODES: ~/.autopilot/config.json {"depth0_delegate_gate": {"mode": "off"|"warn"|"block",
  * "threshold": 8, "guarded_models": ["fable","opus"], "wait_advice_every": 5}} or
  * AUTOPILOT_DEPTH0_DELEGATE_GATE_MODE / AUTOPILOT_DEPTH0_WAIT_ADVICE_EVERY.
@@ -58,6 +69,8 @@ const path = require('path');
 const { resolveLiveDir, sanitizeSessionId, readLive, modelFamily } = require('../scripts/lib/live-state-dir.js');
 // Executable-text lexer + foreground-wait rules are shared with foreman-guard.js.
 const { executableText, detectForegroundWait } = require('../scripts/lib/bash-wait-rules.js');
+// Bash-launch hazards (BL-0019): detach-without-wake (deny), pkill -f self-match (warn), zsh `=`/glob (warn).
+const { detectDetachNoWake, detectPkillSelfMatch, detectZshExpansion } = require('../scripts/lib/bash-launch-rules.js');
 
 const DEFAULT_THRESHOLD = 8;
 const DEFAULT_GUARDED = ['fable', 'opus'];
@@ -185,8 +198,35 @@ function classify(tool, input) {
     let payload = {};
     try { payload = raw.trim() ? JSON.parse(raw) : {}; } catch { process.exit(0); }
     if (!payload || typeof payload !== 'object') process.exit(0);
+    // BASH-LAUNCH GUARD (all depths — runs BEFORE the depth-0-only skip below). See header.
+    // Rule 1 denies here; rules 2/3 only collect warnings, which ride along with whatever the
+    // rest of this hook emits (the read counter and the wait advisory still run).
+    const launchWarns = [];
+    if (payload.tool_name === 'Bash' && payload.tool_input && typeof payload.tool_input.command === 'string') {
+      const cmd = payload.tool_input.command;
+      const detach = detectDetachNoWake(cmd);
+      if (detach) {
+        emitDeny(`bash-launch-guard (${detach.rule}): ${detach.why}. ${detach.advice}`);
+        process.exit(0);
+      }
+      const pk = detectPkillSelfMatch(cmd);
+      if (pk) launchWarns.push(`bash-launch-guard (${pk.rule}): ${pk.why}`);
+      const shellName = path.basename(process.env.AUTOPILOT_BASH_GUARD_SHELL || process.env.SHELL || '');
+      if (shellName === 'zsh') {
+        const z = detectZshExpansion(cmd, typeof payload.cwd === 'string' ? payload.cwd : process.cwd());
+        if (z) launchWarns.push(`bash-launch-guard (${z.rule}, warn only): ${z.why}`);
+      }
+    }
+    const emitAdvisory = (lines) => {
+      const advisory = lines.join('\n');
+      process.stderr.write(`${advisory}\n`);
+      process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: advisory } })}\n`);
+    };
     // Presence, not truthiness: an empty/null agent_id still marks a subagent fire (review 🟠 agent-id-presence).
-    if (Object.prototype.hasOwnProperty.call(payload, 'agent_id')) process.exit(0); // depth-1+: foreman-guard's territory
+    if (Object.prototype.hasOwnProperty.call(payload, 'agent_id')) { // depth-1+: foreman-guard's territory
+      if (launchWarns.length) emitAdvisory(launchWarns);
+      process.exit(0);
+    }
 
     const tool = payload.tool_name || '';
     const kind = classify(tool, payload.tool_input);
@@ -195,7 +235,10 @@ function classify(tool, input) {
     const waitRule = tool === 'Bash' && payload.tool_input
       ? detectForegroundWait(payload.tool_input.command, payload.tool_input.run_in_background, WAIT_MIN_SLEEP_SECONDS)
       : null;
-    if (kind === 'other' && !waitRule) process.exit(0); // no-op: counter untouched
+    if (kind === 'other' && !waitRule) { // no-op: counter untouched
+      if (launchWarns.length) emitAdvisory(launchWarns);
+      process.exit(0);
+    }
 
     const live = resolveLiveDir();
     const sid = getSessionId(payload);
@@ -247,7 +290,7 @@ function classify(tool, input) {
       // unguarded / unknown model past 2x: only the periodic nudge rule applies
     }
 
-    const advisories = [];
+    const advisories = [...launchWarns];
     if (verdict.nudge) {
       advisories.push(`depth0-delegate-gate: ${verdict.reads} consecutive read-class calls at depth-0 — `
         + 'delegate to an Explore/survey subagent (model: sonnet) and read only its conclusion');

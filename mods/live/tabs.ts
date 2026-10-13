@@ -138,7 +138,7 @@ function positionPart(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
     if (m === null || m.stage === null) body.push(ui.kv(u, t(KEY_IDS.stage), [ui.absent(t('nodata.stage'))], { fact: F }))
     else {
       const age = m.stage_set_at_ms === null ? '—' : elapsedFrom(m.stage_set_at_ms, d.now_ms ?? 0)
-      body.push(ui.kv(u, t(KEY_IDS.stage), [ui.val(m.stage, { tone: 'strong' }), ...(age === '—' ? [] : [ui.val(' · ' + t('now.in_stage', { e: age }), { tone: 'dim', fmt: 'dur' })]), ...(head === '' ? [] : [ui.val(' · ' + head, { tone: 'dim', fmt: 'id' })])], { fact: F }))
+      body.push(ui.kv(u, t(KEY_IDS.stage), [ui.val(m.stage, { tone: 'strong', here: true }), ...(age === '—' ? [] : [ui.val(' · ' + t('now.in_stage', { e: age }), { tone: 'dim', fmt: 'dur' })]), ...(head === '' ? [] : [ui.val(' · ' + head, { tone: 'dim', fmt: 'id' })])], { fact: F }))
     }
     if (m === null || m.unit === null || slotUnit(m, t) === null) body.push(ui.kv(u, t(KEY_IDS.unit), [ui.absent(t('nodata.unit'))], { fact: F }))
     else {
@@ -215,7 +215,7 @@ function tabsPart(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
     if (wins.length === 0) body.push(ui.kv(u, t('tab.spend'), [ui.absent(t('nodata.prefix', { what: t(d.spend === null ? 'nodata.spend' : 'nodata.brain') }))], { fact: 'usage.limit_max', goto: 'spend' }))
     else {
       const top = wins.reduce((a, w) => ((w.cap > 0 ? w.value / w.cap : 0) > (a.cap > 0 ? a.value / a.cap : 0) ? w : a))
-      body.push(ui.kv(u, t('tab.spend'), [ui.meterValue(top.value, top.cap, { cells: 10 }), ui.val('  '), top.amount ?? ui.val(top.key, { role: 'prose', tone: 'dim' })], { fact: 'usage.limit_max', goto: 'spend' }))
+      body.push(ui.meter(u, t('tab.spend'), top.value, top.cap, { cells: 10, amount: top.amount ?? ui.val(top.key, { role: 'prose', tone: 'dim' }), fact: 'usage.limit_max', goto: 'spend' }))
     }
   }
   // 殘留 ›
@@ -244,7 +244,7 @@ function backgroundPart(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] 
     const state = ui.stateOf('background', { exit: exitCodeOf(it.tail), quietMs: it.quietMs ?? 0 }) // an item with no output file has no clock: it counts as live
     const key = 'bg:' + i + ':' + it.label.slice(0, 24)
     const showQuiet = (ui.isRunning(state) || ui.isStopped(state)) && it.quietMs !== null
-    const meta = [t(ACTIVITY_KEYS[it.kind]), ...(it.detail === null ? [] : [it.detail]), ...(showQuiet ? [t('bg.quiet', { age: ui.dur(it.quietMs as number) })] : [])].join(' · ')
+    const meta: ui.MetaPart[] = [t(ACTIVITY_KEYS[it.kind]), ...(it.detail === null ? [] : [it.detail]), ...(showQuiet ? [{ text: t('bg.quiet', { age: ui.dur(it.quietMs as number) }), fmt: 'ago' as const }] : [])]
     const spec: U.RowSpec = {
       group: key, ts: nowMs - (it.quietMs ?? 0) + i / 1000, state, fact: 'now.background', body: it.label, meta,
       ...(it.tail === null ? {} : { toggle: key, children: ui.detail(u, it.tail, { attached: true }) }),
@@ -336,7 +336,7 @@ function foremanLines(u: UiCtx, snap: LiveSnapshot, nowMs: number | null): PaneL
   const rows: U.RowSpec[] = f.agents.map((g, i) => ({
     group: 'fm:' + i, ts: g.at_ms ?? 0, fact, body: g.description || g.id,
     state: ui.stateOf('run', { rc: g.ended ? 0 : null, final_status: null, stall: false, fresh: !g.stale }),
-    meta: (g.label || '—') + ' · ' + age(g.at_ms, g.age_s) + (g.stale ? ' · ' + t('foreman.quiet') : ''),
+    meta: [{ text: g.label || '—', fmt: 'id' as const }, { text: age(g.at_ms, g.age_s), fmt: 'ago' as const }, ...(g.stale ? [t('foreman.quiet')] : [])],
   }))
   if (rows.length > 0) out.push(...ui.list(u, 'dispatch.foreman', t('foreman.noun'), rows))
   if (f.stage !== null) out.push(...ui.detail(u, f.stage_source === null ? t('foreman.stage', { stage: f.stage, age: age(f.stage_at_ms, f.stage_age_s) }) : t('foreman.stage_src', { stage: f.stage, age: age(f.stage_at_ms, f.stage_age_s), src: f.stage_source }), { fact }))
@@ -360,7 +360,7 @@ function dispatchLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
     col(t('dispatch.col_run'), 14, 1, 'left', true), col(t('dispatch.col_role'), 8, 5, 'right'), col(t('dispatch.col_engine'), 10, 4, 'right'),
     col(t('dispatch.col_elapsed'), 3, 2, 'right'), col(last, 4, 3, 'right'),
   ]
-  const baseCells = (r: LivePaneRow): string[] => [r.run_id, cell(r.role), cell(r.runner) + ' / ' + cell(r.model), r.elapsed_s === null ? '—' : ui.dur(r.elapsed_s * 1000)]
+  const baseCells = (r: LivePaneRow): ui.Cell[] => [{ text: r.run_id, fmt: 'id' }, cell(r.role), { text: cell(r.runner) + ' / ' + cell(r.model), fmt: 'id' }, r.elapsed_s === null ? '—' : { text: ui.dur(r.elapsed_s * 1000), fmt: 'dur' }]
   const out: PaneLine[] = []
   const running: UiTableListRow[] = []
   const finished: UiTableListRow[] = []
@@ -370,13 +370,13 @@ function dispatchLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
       const state = ui.stateOf('run', runSubject(r))
       if (!r.ended) {
         const startMs = r.started_at === null ? NaN : Date.parse(r.started_at)
-        running.push({ state, group: r.run_id, ts: Number.isFinite(startMs) ? startMs : 0, cells: [...baseCells(r), r.probe_age_s === null ? '—' : ui.ago(r.probe_age_s * 1000, t)] })
+        running.push({ state, group: r.run_id, ts: Number.isFinite(startMs) ? startMs : 0, cells: [...baseCells(r), r.probe_age_s === null ? '—' : { text: ui.ago(r.probe_age_s * 1000, t), fmt: 'ago' }] })
         continue
       }
       finishedAll.push(state)
       if (runAgedOut(r, nowMs)) continue
       const end = runEndedMs(r)
-      finished.push({ state, group: r.run_id, ts: end ?? 0, cells: [...baseCells(r), end === null || nowMs === null ? '—' : ui.ago(Math.max(0, nowMs - end), t)] })
+      finished.push({ state, group: r.run_id, ts: end ?? 0, cells: [...baseCells(r), end === null || nowMs === null ? '—' : { text: ui.ago(Math.max(0, nowMs - end), t), fmt: 'ago' }] })
     }
   }
   // 執行中: running, stalled and a run nobody has confirmed alive (◌ 已停)
@@ -700,7 +700,7 @@ function residueSource(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
   const behind = ls.behind_upstream
   const s = ui.stateOf('loadSource', { source: ls.source, behind: behind ?? 0, flags: ls.flags.length + (ls.marketplace === 'missing' ? 1 : 0) })
   const isOpen = u.expanded?.has('residue:source') === true
-  const meta = ['v' + (ls.plugin_version ?? '—'), ...(behind !== null && behind > 0 ? [t('hygiene.behind') + ' ' + behind] : [])].join(' · ')
+  const meta: ui.MetaPart[] = [{ text: 'v' + (ls.plugin_version ?? '—'), fmt: 'id' }, ...(behind !== null && behind > 0 ? [{ text: t('hygiene.behind') + ' ' + behind, fmt: 'count' as const }] : [])]
   const details: PaneLine[] = []
   if (isOpen) {
     details.push(...ui.detail(u, t('label.marketplace') + ' ' + ls.marketplace, { attached: true }))

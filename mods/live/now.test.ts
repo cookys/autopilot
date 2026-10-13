@@ -7,6 +7,7 @@ import { NO_DETAIL, NO_SECTIONS, wrapLines } from './model'
 import { dispatchLines, headerLines, hygieneTabLines, legendLines, nowLines, reviewTabLines, spendTabLines, stripRows, treeRowCount, withOverflowHint } from './tabs'
 import type { LiveSnapshot, PaneLine, Seg } from './model'
 import * as ui from './ui'
+import { violations } from './invariants.testkit'
 
 const NOW = Date.parse('2026-10-13T12:00:00Z')
 const iso = (agoMs: number): string => new Date(NOW - agoMs).toISOString()
@@ -123,10 +124,10 @@ test('I16: 現況 at 76 columns has no 今日花費 or 帳號 section and four s
   for (const [loc, t] of LOCALES) {
     const ls = nowLines(snap(), ctxOf(t, 76))
     expect(i16(ls, t), loc).toEqual([])
-    const goto = ls.filter(l => l.kind === 'kv' && l.goto !== undefined).map(l => l.goto)
+    const goto = ls.filter(l => (l.kind === 'kv' || l.kind === 'meter') && l.goto !== undefined).map(l => l.goto)
     expect(goto, loc).toEqual(['dispatch', 'review', 'spend', 'hygiene'])
     // negative controls
-    expect(i16(ls.map(l => (l.kind === 'kv' && l.goto === 'spend' ? { ...l, goto: undefined } : l)), t).length).toBeGreaterThan(0)
+    expect(i16(ls.map(l => ((l.kind === 'kv' || l.kind === 'meter') && l.goto === 'spend' ? { ...l, goto: undefined } : l)), t).length).toBeGreaterThan(0)
     expect(i16([...ls, { ...ls.find(l => l.kind === 'header') as PaneLine, text: '▾ ' + t('now.account') + ' ───', toggle: 'sec:now.account' }], t).length).toBeGreaterThan(0)
   }
 })
@@ -143,7 +144,7 @@ const i17 = (ls: PaneLine[]): string[] => {
     if (l.fact === undefined || l.fact === 'pane.chrome') return // a heading, a toggle row or a spacer carries no fact of the session
     if (ui.FACT_OWNER[l.fact] !== 'now') {
       if (l.goto === undefined) out.push(at + ' shows ' + l.fact + ' (owned by ' + ui.FACT_OWNER[l.fact] + ') without goto')
-      if (l.kind !== 'kv' && l.kind !== 'item') out.push(at + ' is a projection that is not kv / item')
+      if (l.kind !== 'kv' && l.kind !== 'meter' && l.kind !== 'item') out.push(at + ' is a projection that is not kv / item')
       seenForeign.set(l.fact, (seenForeign.get(l.fact) ?? 0) + 1)
     }
   })
@@ -164,7 +165,7 @@ const bareMismatch = (ls: PaneLine[]): string[] => {
 const GOLDEN_NOW = [
   'now.attention||header', 'now.attention||item', 'now.attention||item', 'now.attention|hygiene|item',
   'now.position||chart', 'now.position||chart', 'now.position||kv', 'now.position||kv', 'now.position||kv', 'now.position||kv',
-  'dispatch.counts|dispatch|kv', 'review.round|review|kv', 'usage.limit_max|spend|kv', 'residue.groups|hygiene|kv',
+  'dispatch.counts|dispatch|kv', 'review.round|review|kv', 'usage.limit_max|spend|meter', 'residue.groups|hygiene|kv',
   'now.background||item', 'now.tasks||header', 'now.tasks||item', 'now.tasks||item',
 ]
 test('I17: every data line of 現況 has a fact; a foreign fact is a kv / item projection with goto and the only line for it; the header spend segments carry spend.* and no goto', () => {
@@ -232,9 +233,9 @@ test('wrap: a summary row that wraps keeps its goto on every piece (each piece s
   for (const [loc, t] of LOCALES) {
     const wide = nowLines(snap(), ctxOf(t, 120))
     const narrow = nowLines(snap(), ctxOf(t, 30))
-    const want = wide.filter(l => l.kind === 'kv' && l.goto !== undefined).map(l => l.goto)
+    const want = wide.filter(l => (l.kind === 'kv' || l.kind === 'meter') && l.goto !== undefined).map(l => l.goto)
     expect(want, loc).toEqual(['dispatch', 'review', 'spend', 'hygiene'])
-    const pieces = narrow.filter(l => l.kind === 'kv' && l.goto !== undefined)
+    const pieces = narrow.filter(l => (l.kind === 'kv' || l.kind === 'meter') && l.goto !== undefined)
     expect(pieces.length, loc + ': at 30 columns at least one summary row wraps').toBeGreaterThan(want.length)
     const gotoOfLines = (ls: PaneLine[]) => ls.map(l => l.goto)
     const tabsFrom = narrow.findIndex(l => l.toggle === 'sec:now.tabs')
@@ -391,7 +392,7 @@ const everyTab = (tab: (typeof ALL_TABS)[number], ls: PaneLine[], cols: number, 
     const owner = ui.FACT_OWNER[l.fact]
     if (owner !== tab) {
       if (l.goto === undefined) out.push(at + ' shows ' + l.fact + ' (owner ' + owner + ') without goto (owner)')
-      if (!(l.kind === 'kv' && l.text.startsWith(' '.repeat(ui.KEY_W)))) foreign.set(l.fact, (foreign.get(l.fact) ?? 0) + 1) // a wrapped continuation row is the same row
+      if (!((l.kind === 'kv' || l.kind === 'meter') && l.text.startsWith(' '.repeat(ui.KEY_W)))) foreign.set(l.fact, (foreign.get(l.fact) ?? 0) + 1) // a wrapped continuation row is the same row
     }
   })
   for (const [f, n] of foreign) if (n > 1) out.push(tab + ': ' + f + ' is drawn ' + n + ' times (owner)')
@@ -417,4 +418,70 @@ test('every tab: negative controls, each invariant is reported when its line is 
   expect(bent(l => Object.assign(ui.carry(l, { ...l }), { fact: 'review.round' as const, goto: undefined })).some(v => v.includes('(owner)')), 'owner').toBe(true)
   expect(everyTab('hygiene', [...ls, ui.empty('x', 'residue.groups'), ui.empty('y', 'residue.groups')], 76, false).some(v => v.includes('(empty)')), 'empty').toBe(true)
   expect(everyTab('hygiene', [...ls, ...ui.command(({ t, cols: 76 }) as never, 'git status')], 76, false).some(v => v.includes('(command)')), 'command').toBe(true)
+})
+
+// ---- P5: I1-I8 and I10 (the checker review.test.ts runs over the Review tab) over EVERY tab, fixtures x locales x widths, default and with every toggle open ----
+// The one exemption: the legend is a sample column (the mark at column 0, its meaning hanging at 12, wrapped rows at 14) and its `—` row explains the empty mark by
+// the sentence "no data", so I3 (kv hang 12, indent set) and the I10 "says no data" half are not asked of it. Nothing else is exempt: a hand-written number on any
+// other tab is I8, a bold or claude segment without `here` is I4 / I6.
+const EXEMPT: Record<string, RegExp> = { legend: /^(I3 |I10 .* says no data outside an empty line)/ }
+const tabViolations = (tab: (typeof ALL_TABS)[number], ls: PaneLine[], cols: number, t: ReturnType<typeof makeT>): string[] =>
+  violations(ls, cols, t).filter(v => !(EXEMPT[tab] ?? /^$/).test(v)).map(v => tab + ' ' + v)
+test('every tab: I1-I8 and I10 hold on all six tabs, in both locales, at 40-160 columns, default and with every toggle open', () => {
+  const found = new Set<string>()
+  const ids = (ls: PaneLine[]) => ls.filter(l => l.toggle !== undefined).map(l => l.toggle as string)
+  for (const [, t] of LOCALES) for (const cols of [40, 60, 76, 120, 160]) for (const tab of ALL_TABS) {
+    const dflt = tabLinesOf(tab, richSnap(), ctxOf(t, cols))
+    const open = ctxOf(t, cols, { expanded: [...ids(dflt), 'resitem:/home/u/proj/.claude/worktrees/hands-x', 'resitem:feature/old'] })
+    for (const ls of [dflt, tabLinesOf(tab, richSnap(), open)]) for (const v of tabViolations(tab, ls, cols, t)) found.add(v.replace(/ line \d+/, ''))
+  }
+  expect([...found]).toEqual([])
+})
+test('every tab: a percentage is never written with a space before the sign (§3.5), in either locale, on any tab', () => {
+  for (const [loc, t] of LOCALES) for (const tab of ALL_TABS) {
+    const text = tabLinesOf(tab, richSnap(), ctxOf(t, 160)).map(l => l.text).join('\n')
+    expect(/\d\s%/.test(text), loc + ' ' + tab).toBe(false)
+  }
+  // control: the checked pattern does catch the old legend wording
+  expect(/\d\s%/.test('warns at 80 % and 100 %')).toBe(true)
+})
+test('hygiene: a residue class the status map has no row for is the unknown state with the producer text in a detail line, never a raw string id', () => {
+  const withClass = (cls: string): LiveSnapshot => {
+    const s = richSnap() as never as { detail: { residue: { needs_human: { class: string }[] } } }
+    s.detail.residue.needs_human = [{ ...s.detail.residue.needs_human[0], class: cls }]
+    return s as never
+  }
+  for (const [loc, t] of LOCALES) {
+    const open = ctxOf(t, 76, { expanded: ['res:worktree|weird-class'] })
+    const lines = hygieneTabLines(withClass('weird-class'), open)
+    const text = lines.map(l => l.text).join('\n')
+    expect(/residue\.class/.test(text), loc + ' raw id').toBe(false)
+    expect(text, loc + ' word').toContain(t('residue.class.unknown'))
+    expect(text, loc + ' producer text').toContain('weird-class')
+    expect(lines.some(l => l.kind === 'detail' && l.text.includes('weird-class')), loc + ' detail line').toBe(true)
+    expect(lines.some(l => l.kind === 'item' && l.text.includes(t('ui.state.unknown'))), loc + ' unknown state').toBe(true)
+    // control: a class the map knows keeps its own word and has no detail line for it
+    const known = hygieneTabLines(withClass('dirty'), ctxOf(t, 76, { expanded: ['res:worktree|dirty'] }))
+    expect(known.some(l => l.text.includes(t('residue.class_raw', { cls: 'dirty' }))), loc + ' known has no raw line').toBe(false)
+    expect(known.map(l => l.text).join('\n'), loc + ' known word').toContain(t('residue.class.dirty'))
+  }
+})
+test('every tab: the shared checker flags a hand-written number, a bold mark without here and a claude mark without here on any tab; the legend exemption covers nothing else', () => {
+  const t = makeT('en')
+  const lines = (tab: (typeof ALL_TABS)[number]): PaneLine[] => tabLinesOf(tab, richSnap(), ctxOf(t, 120))
+  for (const tab of ['now', 'dispatch', 'spend', 'hygiene'] as const) {
+    const ls = lines(tab)
+    expect(tabViolations(tab, ls, 120, t), tab + ' control').toEqual([])
+    // the number below is what a formatter makes ('7m'), but written by hand: no `fmt` names who made it
+    const typed = ls.map((l, i) => (i === ls.findIndex(x => ['item', 'table', 'kv', 'meter', 'bullet'].includes(x.kind)) ? { ...l, segs: [...(l.segs ?? []), { text: ' · 7m', role: 'value' as const }] } : l))
+    expect(tabViolations(tab, typed, 120, t).some(v => v.includes(' I8 ')), tab + ' hand-written number').toBe(true)
+  }
+  const bent = (tab: (typeof ALL_TABS)[number], f: (s: Seg) => object): string[] =>
+    tabViolations(tab, lines(tab).map(l => ({ ...l, segs: (l.segs ?? []).map(s => (s.role === 'value' && s.text.trim() !== '' ? { ...s, ...f(s) } : s)) })) as PaneLine[], 120, t)
+  expect(bent('dispatch', () => ({ bold: true })).some(v => v.includes(' I4 ')), 'bold without here').toBe(true)
+  expect(bent('dispatch', () => ({ color: 'claude' })).some(v => v.includes(' I6 ')), 'claude without here').toBe(true)
+  // the legend exemption is only I3 and the "no data" sentence: a hand-made line in the legend is still caught
+  const legend = lines('legend')
+  expect(tabViolations('legend', [{ text: 'hand made', kind: 'kv' } as PaneLine, ...legend], 120, t).some(v => v.includes(' I2 ')), 'legend I2').toBe(true)
+  expect(tabViolations('legend', legend.map(l => ({ ...l, segs: [...(l.segs ?? []), { text: ' 7m', role: 'value' as const }] })), 120, t).some(v => v.includes(' I8 ')), 'legend I8').toBe(true)
 })

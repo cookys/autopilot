@@ -378,7 +378,7 @@ const dim = (text: string, o: SegOpts = {}): Seg => sg(text, { ...o, dim: true }
 export type Ctx = { t: Translate; cols: number; expanded?: ReadonlySet<string> }
 
 // inline fragments: they exist only as arguments of a builder
-export const val = (s: string, o: { role?: 'value' | 'prose'; fmt?: FmtKind; bold?: boolean; dim?: boolean; tone?: 'dim' | 'strong'; fact?: FactId } = {}): Frag => frag([sg(s, { role: o.role ?? 'value', ...(o.fmt ? { fmt: o.fmt } : {}), ...(o.bold || o.tone === 'strong' ? { bold: true } : {}), ...(o.dim || o.tone === 'dim' ? { dim: true } : {}) })], o.fact)
+export const val = (s: string, o: { role?: 'value' | 'prose'; fmt?: FmtKind; bold?: boolean; dim?: boolean; here?: boolean; tone?: 'dim' | 'strong'; fact?: FactId } = {}): Frag => frag([sg(s, { role: o.role ?? 'value', ...(o.fmt ? { fmt: o.fmt } : {}), ...(o.here ? { here: true } : {}), ...(o.bold || o.tone === 'strong' ? { bold: true } : {}), ...(o.dim || o.tone === 'dim' ? { dim: true } : {}) })], o.fact)
 export const fmtd = (kind: FmtKind, s: string, fact?: FactId): Frag => frag([sg(s, { role: 'value', fmt: kind })], fact)
 // the state glyph (state colour) and, unless `word: false`, its word (same colour)
 export function stateLead(u: Ctx, s: Stated, o: { word?: boolean; wordW?: number } = {}): Frag {
@@ -462,21 +462,30 @@ export function kv(u: Ctx, key: string, value: readonly Frag[], o: { fact: FactI
 export const absent = (reason: string): Frag => frag([dim(GLYPHS.structure.empty, { role: 'value' }), dim(' ' + reason, { role: 'prose' })])
 
 // state glyph, state word (padded to the widest in the list), text, dim meta after ` · `, a toggle at the right edge
-export function item(u: Ctx, s: Stated, body: string, meta: string | undefined, o: { fact: FactId; at?: 0 | 12; goto?: PaneTab; toggle?: { id: string; open: boolean }; word?: boolean; wordW?: number }): PaneLine {
+export function item(u: Ctx, s: Stated, body: string, meta: Meta | undefined, o: { fact: FactId; at?: 0 | 12; goto?: PaneTab; toggle?: { id: string; open: boolean }; word?: boolean; wordW?: number }): PaneLine {
   const st = STATES[s.id]
   const at = o.at ?? 0
   const segs: Seg[] = []
   if (at > 0) segs.push(sg(' '.repeat(at)))
   segs.push(...stateLead(u, s, { word: o.word, wordW: o.wordW }).segs, sg(o.word === false ? ' ' : '  ')) // §5 mockups: two cells after the state word, one after a bare glyph
   segs.push(sg(body, { role: 'prose', ...(s.id === 'need_you' ? { bold: true } : {}), ...(s.id === 'stopped' ? { dim: true } : {}) }))
-  if (meta !== undefined && meta !== '') segs.push(dim(' · ' + meta, { role: 'value' }))
+  segs.push(...metaSegs(meta))
   return withToggle(u, 'item', segs, o)
 }
 // a neutral `◦` row that has no state
-export function bullet(u: Ctx, body: string, meta: string | undefined, o: { fact: FactId; toggle?: { id: string; open: boolean } }): PaneLine {
+export function bullet(u: Ctx, body: string, meta: Meta | undefined, o: { fact: FactId; toggle?: { id: string; open: boolean } }): PaneLine {
   const segs: Seg[] = [dim(GLYPHS.structure.bullet, { role: 'glyph' }), sg(' '), sg(body, { role: 'prose' })]
-  if (meta !== undefined && meta !== '') segs.push(dim(' · ' + meta, { role: 'value' }))
+  segs.push(...metaSegs(meta))
   return withToggle(u, 'bullet', segs, o)
+}
+// the dim meta after a row's body: parts joined by ` · `, each its own segment so a number keeps the formatter that made it (I8). A bare string is one part
+// with no formatter (it must hold no number); `{ text, fmt }` names the formatter. Nothing concatenates a number into a string and hides it from the checker.
+export type MetaPart = string | { text: string; fmt: FmtKind }
+export type Meta = string | readonly MetaPart[]
+const partText = (p: MetaPart): string => (typeof p === 'string' ? p : p.text)
+const metaSegs = (meta: Meta | undefined): Seg[] => {
+  const parts = meta === undefined ? [] : typeof meta === 'string' ? [meta] : meta
+  return parts.filter(p => partText(p) !== '').flatMap(p => [dim(' · ', { role: 'prose' }), dim(partText(p), { role: 'value', ...(typeof p === 'string' ? {} : { fmt: p.fmt }) })])
 }
 function withToggle(u: Ctx, kind: 'item' | 'bullet', segs: Seg[], o: { fact: FactId; goto?: PaneTab; toggle?: { id: string; open: boolean } }): PaneLine {
   const extra: Partial<PaneLine> = { fact: o.fact, ...(o.goto === undefined ? {} : { goto: o.goto }) }
@@ -484,7 +493,9 @@ function withToggle(u: Ctx, kind: 'item' | 'bullet', segs: Seg[], o: { fact: Fac
   const mark = o.toggle !== undefined ? (o.toggle.open ? GLYPHS.structure.open : GLYPHS.structure.folded) : o.goto !== undefined ? tabName(o.goto, u) : ''
   fitSegs(segs, u.cols - 1 - (mark === '' ? 0 : 1 + displayWidth(mark))) // one item is one line (§2.4): too long = the body is cut so the line (and its mark) still fits
   if (mark !== '') {
-    segs.push(sg(' '.repeat(Math.max(1, u.cols - 1 - widthOf() - displayWidth(mark)))), dim(mark, { role: 'glyph' }))
+    segs.push(sg(' '.repeat(Math.max(1, u.cols - 1 - widthOf() - displayWidth(mark)))))
+    if (o.toggle === undefined && o.goto !== undefined) segs.push(dim(u.t('tab.' + o.goto), { role: 'prose' }), sg(' '), dim(GLYPHS.structure.goto, { role: 'glyph' })) // the press target: the tab's name, then the `›` glyph
+    else segs.push(dim(mark, { role: 'glyph' }))
     if (o.toggle !== undefined) extra.toggle = o.toggle.id
   }
   return lineOf(kind, segs, extra)
@@ -495,9 +506,10 @@ function fitSegs(segs: Seg[], limit: number): void {
   const cutBy = (i: number, by: number): void => { segs[i] = { ...segs[i], text: cutProse(segs[i].text, Math.max(1, displayWidth(segs[i].text) - by)) } }
   if (widthOf() <= limit) return
   const b = segs.findIndex(s => s.role === 'prose')
-  const m = b < 0 ? -1 : segs.findIndex((s, i) => i > b && s.dim === true && s.role === 'value')
   if (b >= 0) cutBy(b, Math.min(widthOf() - limit, Math.max(0, displayWidth(segs[b].text) - 8)))
-  if (widthOf() > limit && m >= 0) cutBy(m, widthOf() - limit)
+  // the meta is ` · ` + part pairs after the body: the last parts go whole first, then the one left is cut
+  while (b >= 0 && widthOf() > limit && segs.length - (b + 1) > 2) segs.splice(segs.length - 2, 2)
+  if (b >= 0 && widthOf() > limit && segs.length - (b + 1) === 2) cutBy(segs.length - 1, widthOf() - limit)
   if (widthOf() > limit && b >= 0) cutBy(b, widthOf() - limit)
 }
 const tabName = (tab: PaneTab, u: Ctx): string => u.t('tab.' + tab) + ' ' + GLYPHS.structure.goto
@@ -561,11 +573,11 @@ export function detail(u: Ctx, body: string, o: { attached: true; at?: 0 | 12; f
 }
 
 // a full-row meter: key, bar, percent, amount, then (when `resetMs` is given) the relative reset time
-export function meter(u: Ctx, key: string, value: number, cap: number, o: { cells: number; amount?: Frag; resetMs?: number; fact: FactId }): PaneLine {
-  const segs: Seg[] = [dim(padCells(key, KEY_W), { role: 'key' }), ...meterValue(value, cap, { cells: o.cells }).segs]
+export function meter(u: Ctx, key: string, value: number, cap: number, o: { cells: number; amount?: Frag; resetMs?: number; fact: FactId; goto?: PaneTab }): PaneLine {
+  const segs: Seg[] = [dim(padCells(o.goto === undefined ? key : key + ' ' + GLYPHS.structure.goto, KEY_W), { role: 'key' }), ...meterValue(value, cap, { cells: o.cells }).segs]
   if (o.amount !== undefined) segs.push(sg('  '), ...o.amount.segs)
   if (o.resetMs !== undefined) segs.push(sg('  '), dim(u.t('ui.reset', { age: dur(o.resetMs) }), { role: 'value', fmt: 'ago' }))
-  return lineOf('meter', segs, { hang: KEY_W, fact: o.fact })
+  return lineOf('meter', segs, { hang: KEY_W, fact: o.fact, ...(o.goto === undefined ? {} : { goto: o.goto }) })
 }
 
 // charts: a two-line unit (value line + caption), both from column 12
@@ -597,12 +609,15 @@ export function sparkValue(values: readonly number[]): Frag {
 // always kept). When the table is still too wide, the `flex` column is cut to fit (an identifier from the left), then the others down to `min`. It never falls
 // back to key/value blocks.
 export type Column = { head: string; min: number; priority: number; flex?: boolean; cut: 'left' | 'right' }
-export type TableRow = { state: Stated; cells: readonly string[]; group?: string; ts?: number } // group / ts are stamped on the line (I22); tableList() requires them
+export type Cell = string | { text: string; fmt: FmtKind } // a cell holding a number names the formatter that made it (I8)
+const cellText = (c: Cell | undefined): string => (c === undefined ? '' : typeof c === 'string' ? c : c.text)
+const cellFmt = (c: Cell | undefined): { fmt?: FmtKind } => (c === undefined || typeof c === 'string' ? {} : { fmt: c.fmt })
+export type TableRow = { state: Stated; cells: readonly Cell[]; group?: string; ts?: number } // group / ts are stamped on the line (I22); tableList() requires them
 export function table(u: Ctx, columns: readonly Column[], rows: readonly TableRow[], o: { fact: FactId }): PaneLine[] {
   const stateHead = u.t('ui.table.state')
   const stateW = Math.max(displayWidth(stateHead), ...rows.map(r => displayWidth(u.t('ui.state.' + r.state.id)))) // the word column; the glyph and a space precede it
   const lead = 2 + stateW
-  const w = columns.map((c, i) => Math.max(displayWidth(c.head), ...rows.map(r => displayWidth(r.cells[i] ?? ''))))
+  const w = columns.map((c, i) => Math.max(displayWidth(c.head), ...rows.map(r => displayWidth(cellText(r.cells[i])))))
   const floor = columns.map((c, i) => Math.max(c.min, Math.min(w[i], displayWidth(c.head)))) // a column never narrows below its own heading: the heading row must not wrap or clip, or it stops lining up with the cells under it
   const keep = columns.map((_, i) => i)
   const total = (): number => lead + keep.reduce((n, i) => n + 2 + w[i], 0)
@@ -631,7 +646,7 @@ export function table(u: Ctx, columns: readonly Column[], rows: readonly TableRo
     const st = STATES[r.state.id]
     return lineOf('table', [
       sg(st.glyph, { color: st.key, role: 'glyph' }), sg(' '), sg(padCells(u.t('ui.state.' + r.state.id), stateW), { color: st.key, role: 'state' }),
-      ...keep.flatMap(i => [sg('  '), sg(fit(r.cells[i] ?? '', i), { role: 'value' })]),
+      ...keep.flatMap(i => [sg('  '), sg(fit(cellText(r.cells[i]), i), { role: 'value', ...cellFmt(r.cells[i]) })]),
     ], { fact: o.fact, ...(r.group === undefined ? {} : { group: r.group }), ...(r.ts === undefined ? {} : { ts: r.ts }) })
   })
   return [head, ...body]
@@ -641,12 +656,12 @@ export function table(u: Ctx, columns: readonly Column[], rows: readonly TableRo
 // Every list of rows goes through list(): equal `group` keys fold into one counted row, rows run needs-you -> live -> finished and newest first inside a
 // state, the cap applies to the grouped rows, and a `more` toggle carries the rest.
 export type RowSpec = {
-  group: string; ts: number; state: Stated; fact: FactId; body: string; meta?: string
+  group: string; ts: number; state: Stated; fact: FactId; body: string; meta?: Meta
   groupBody?: (n: number) => string // the text of a folded group of n rows
   shape?: 'item' | 'bullet'; toggle?: string; goto?: PaneTab; word?: boolean
   at?: 0 | 12 // the column the row starts at (a seat `item` under the valueless `席位` key sits at 12)
   children?: readonly PaneLine[] // the detail / command lines that follow the row while its toggle is open
-  bodyOpen?: string; metaOpen?: string // the row's own text while its toggle is open (an opened decision reads `id` + `可逆 · writer`)
+  bodyOpen?: string; metaOpen?: Meta // the row's own text while its toggle is open (an opened decision reads `id` + `可逆 · writer`)
 }
 // `keepOrder`: the rows stay in the order given (seats are a panel in seat order, not a queue; §5.3 draws s0, s1, s2, s3). Grouping and the cap still apply.
 export function list(u: Ctx, id: string, noun: string, rows: readonly RowSpec[], o: { cap?: number; keepOrder?: boolean } = {}): PaneLine[] {
@@ -791,7 +806,7 @@ export function strip(u: Ctx, active: PaneTab, tabs: readonly StripTab[], hasNex
   const next = hasNext ? sg(GLYPHS.structure.goto, { color: 'claude', role: 'glyph' }) : null
   const built = tabs.map(tb => {
     const on = tb.id === active
-    const label = sg(' ' + tb.label + ' ', on ? { color: 'claude', bold: true, role: 'value' } : { dim: true, role: 'value' })
+    const label = sg(' ' + tb.label + ' ', on ? { color: 'claude', bold: true, here: true, role: 'value' } : { dim: true, role: 'value' })
     const badge: readonly Seg[] = tb.badge === undefined ? [] : tb.badge.segs
     return { id: tb.id, on, label, badge, width: displayWidth(label.text) + displayWidth(badge.map(s => s.text).join('')) + 1 }
   })
@@ -809,7 +824,7 @@ export function strip(u: Ctx, active: PaneTab, tabs: readonly StripTab[], hasNex
   const exact = rows === 1
   const bar = (n: number, glyph: string, o: SegOpts): Seg[] => (n > 0 ? [sg(glyph.repeat(n), { role: 'rule', ...o })] : [])
   const rule: Seg[] = exact && markAt >= 0
-    ? [...bar(markAt, GLYPHS.structure.rule, { color: 'subtle' }), ...bar(markW, GLYPHS.structure.tabMark, { color: 'claude', bold: true }), ...bar(u.cols - markAt - markW, GLYPHS.structure.rule, { color: 'subtle' })]
+    ? [...bar(markAt, GLYPHS.structure.rule, { color: 'subtle' }), ...bar(markW, GLYPHS.structure.tabMark, { color: 'claude', bold: true, here: true }), ...bar(u.cols - markAt - markW, GLYPHS.structure.rule, { color: 'subtle' })]
     : bar(u.cols, GLYPHS.structure.rule, { color: 'subtle' })
   return { next, tabs: built.map(({ id, on, label, badge }) => ({ id, on, label, badge })), rule, rows: rows + 1, exact }
 }
@@ -853,14 +868,14 @@ export function legendParts(u: Ctx, folded: ReadonlySet<string> | undefined): Re
   states.push(legendRow(u, frag([dim(S.empty, { role: 'glyph' })]), t('legend.nodata'), 'legend.states'))
   const ex = (...segs: Seg[]): Frag => frag(segs)
   const bar = ex(sg(GLYPHS.chart.meterOn, { color: meterKey(0.5), role: 'glyph' }), sg(GLYPHS.chart.meterOn, { color: meterKey(0.9), role: 'glyph' }), sg(GLYPHS.chart.meterOn, { color: meterKey(1), role: 'glyph' }), sg(GLYPHS.chart.meterOff, { color: 'inactive', role: 'glyph' }))
-  const walk = ex(sg(GLYPHS.state.done, { color: STATES.done.key, role: 'glyph' }), dim(S.rule, { role: 'glyph' }), sg(GLYPHS.chart.here, { color: 'claude', role: 'glyph' }), dim(S.rule, { role: 'glyph' }), sg(GLYPHS.state.pending, { color: STATES.pending.key, role: 'glyph' }))
+  const walk = ex(sg(GLYPHS.state.done, { color: STATES.done.key, role: 'glyph' }), dim(S.rule, { role: 'glyph' }), sg(GLYPHS.chart.here, { color: 'claude', here: true, role: 'glyph' }), dim(S.rule, { role: 'glyph' }), sg(GLYPHS.state.pending, { color: STATES.pending.key, role: 'glyph' }))
   const badges = cat(stateBadge(stated('running') as BadgeStated, 2, 'legend.structure'), val(' '), stateBadge(stated('stalled') as BadgeStated, 1, 'legend.structure'), val(' '), residueBadge(1, 'legend.structure'))
   const structure = [
     legendRow(u, ex(dim(S.open, { role: 'glyph' }), sg(' '), dim(S.folded, { role: 'glyph' })), t('legend.fold'), 'legend.structure'),
     legendRow(u, ex(dim(S.goto, { role: 'glyph' })), t('legend.goto'), 'legend.structure'),
     legendRow(u, ex(dim(S.bullet, { role: 'glyph' })), t('legend.bullet'), 'legend.structure'),
     legendRow(u, ex(dim(S.detail, { role: 'glyph' }), sg(' '), dim(S.command, { role: 'glyph' })), t('legend.detail'), 'legend.structure'),
-    legendRow(u, ex(sg(S.tabMark, { color: 'claude', bold: true, role: 'glyph' })), t('legend.tabmark'), 'legend.structure'),
+    legendRow(u, ex(sg(S.tabMark, { color: 'claude', bold: true, here: true, role: 'glyph' })), t('legend.tabmark'), 'legend.structure'),
     legendRow(u, bar, t('legend.meter'), 'legend.structure'),
     legendRow(u, walk, t('legend.walk'), 'legend.structure'),
     legendRow(u, badges, t('legend.badges'), 'legend.structure'),
@@ -887,21 +902,23 @@ export function residueGroups(u: Ctx, entries: readonly ResidueEntry[], chip: St
     const bytes = es.every(e => e.bytes === null) ? null : es.reduce((a, e) => a + (e.bytes ?? 0), 0)
     const id = 'res:' + key
     const open = u.expanded?.has(id) === true
-    const children = open ? es.flatMap(e => {
+    // §3.3: a class the status map has no row for is the `unknown` state; its word is "unknown" and the producer's own text goes into a detail line
+    const knownCls = Object.prototype.hasOwnProperty.call(STATUS_MAP.residueGroup, norm(es[0].cls).toLowerCase())
+    const children = open ? [...(knownCls ? [] : detail(u, t('residue.class_raw', { cls: es[0].cls }), { fact: 'residue.groups' })), ...es.flatMap(e => {
       const itemId = 'resitem:' + e.target
       const itemOpen = u.expanded?.has(itemId) === true
       const name = idTail(e.target.split('/').filter(x => x !== '').pop() ?? e.target, 14)
-      const meta = [e.ageMs === null ? null : dur(e.ageMs), e.bytes === null ? null : size(e.bytes)].filter((x): x is string => x !== null).join(' · ')
-      const lines: PaneLine[] = [bullet(u, name, meta === '' ? undefined : meta, { fact: 'residue.groups', toggle: { id: itemId, open: itemOpen } })]
+      const meta: MetaPart[] = [...(e.ageMs === null ? [] : [{ text: dur(e.ageMs), fmt: 'dur' as const }]), ...(e.bytes === null ? [] : [{ text: size(e.bytes), fmt: 'size' as const }])]
+      const lines: PaneLine[] = [bullet(u, name, meta, { fact: 'residue.groups', toggle: { id: itemId, open: itemOpen } })]
       if (itemOpen) {
         if (e.reason !== null) lines.push(...detail(u, e.reason, { attached: true }))
         if (e.command !== null) lines.push(...command(u, e.command))
       }
       return lines
-    }) : []
+    })] : []
     return {
       group: key, ts: -Math.min(...es.map(e => e.ageMs ?? 0)), state, fact: 'residue.groups', toggle: id, ...(state.id === chip.id ? { word: false } : {}),
-      body: t('residue.kind.' + es[0].kind) + '  ' + t('residue.class.' + es[0].cls.replace(/-/g, '_')), meta: count(es.length, t('residue.measure.' + es[0].kind)) + (bytes === null ? '' : ' · ' + size(bytes)), children,
+      body: t('residue.kind.' + es[0].kind) + '  ' + t(knownCls ? 'residue.class.' + norm(es[0].cls).toLowerCase().replace(/-/g, '_') : 'residue.class.unknown'), meta: [{ text: count(es.length, t('residue.measure.' + es[0].kind)), fmt: 'count' as const }, ...(bytes === null ? [] : [{ text: size(bytes), fmt: 'size' as const }])], children,
     } satisfies RowSpec
   })
   return list(u, 'residue.groups', t('residue.noun'), rows, { ...(o.cap === undefined ? {} : { cap: o.cap }) })

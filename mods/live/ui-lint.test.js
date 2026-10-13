@@ -125,6 +125,8 @@ const L6 = src => [
   ...hits(src, /toFixed|toLocaleString/),
   ...hits(src, /Math\.(round|floor)\([^)]*\)\s*\+\s*['"` ]*\s*(%|MB|GB|KB|h|m)\b/),
   ...hits(src, /(['"`])(%| %|\$| MB| GB| KB|h|m|\*)\1/),
+  ...hits(src, /\$\{[^}]*\}\s?(%|[KMGT]B|ms|s|m|h|d)(?![A-Za-z0-9_])/), // a unit written after a template placeholder: `${n} MB`
+  ...hits(src, /\$\$\{/), // a currency sign before a placeholder: `$${n}`
 ]
 const L7 = src => [...hits(src, new RegExp(`['"\`](${STATE_IDS_RE})['"\`]`)), ...hits(src, /\b(GLYPHS|STATES)\b/)]
 
@@ -142,7 +144,7 @@ test('L1 control: each planted violation is reported', () => {
 })
 
 test('L2: outside ui.ts no source file carries a glyph; glyphs come from GLYPHS', () => {
-  const files = fs.readdirSync(__dirname).filter(f => /\.(ts|tsx)$/.test(f) && !/\.test\.ts$/.test(f) && f !== 'ui.ts' && f !== 'locales.ts')
+  const files = fs.readdirSync(__dirname).filter(f => /\.(ts|tsx)$/.test(f) && !/\.(test|testkit)\.ts$/.test(f) && f !== 'ui.ts' && f !== 'locales.ts')
   assert.ok(files.includes('model.ts') && files.includes('tabs.ts') && files.includes('band.tsx'))
   for (const f of files) assert.deepEqual(L2(read(f)), [], f)
 })
@@ -185,8 +187,12 @@ test('L6: tabs.ts formats no number by hand', () => {
   assert.deepEqual(L6(read(TABS)), [])
 })
 test('L6 control: toFixed, toLocaleString and a hand-typed unit are reported', () => {
-  for (const bad of ['x.toFixed(1)', 'x.toLocaleString()', "const s = n + ' MB'", "const s = n + '%'", "const s = '$' + n", "const s = n + 'h'", "const s = n + 'm'"]) assert.ok(L6(bad).length > 0, bad)
+  for (const bad of ['x.toFixed(1)', 'x.toLocaleString()', "const s = n + ' MB'", "const s = n + '%'", "const s = '$' + n", "const s = n + 'h'", "const s = n + 'm'", 'const s = `${n} MB`', 'const s = `${n}%`', 'const s = `${n}m`', 'const s = `${a} ${b}h`', 'const s = `$${n}`']) assert.ok(L6(bad).length > 0, bad)
   assert.deepEqual(L6('const s = ui.size(n)'), [])
+  // the template rule leaves ordinary placeholders alone: a word that merely starts with a unit letter, and a plain id
+  assert.deepEqual(L6('const s = `${n} more`'), [])
+  assert.deepEqual(L6('const s = `lane ${id}`'), [])
+  assert.deepEqual(L6('const s = `${a}/${b}`'), [])
 })
 
 test('L7: tabs.ts holds no StateId literal and never reads GLYPHS or STATES', () => {

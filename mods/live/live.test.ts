@@ -3322,6 +3322,17 @@ test('dispatch tab: every run is ONE table line at every width, 執行中 / 已�
   }
 })
 
+test('dispatch tab: eight live runs show the five loudest and one `more` (the running table is capped too, M52a)', () => {
+  const t = makeT('zh-TW')
+  const rows = [...Array.from({ length: 7 }, (_, i) => RUN_LIVE('live-' + i)), RUN_LIVE('stall-0', { stall: true })]
+  const lines = dispatchLines(dispatchSnap(rows), { t, cols: 100 })
+  const running = lines.slice(lines.findIndex(l => l.toggle === 'dispatch.running'), lines.findIndex(l => l.toggle === 'dispatch.finished'))
+  expect(bodyRows(running).length).toBe(5)
+  expect(bodyRows(running)[0].text.startsWith('⊘')).toBe(true) // the stalled one outranks the live ones
+  expect(running.filter(l => l.kind === 'more').length).toBe(1)
+  expect(running.find(l => l.kind === 'more')?.text.includes('還有 3 筆執行中')).toBe(true)
+})
+
 test('dispatch tab: opening `more` lists every finished run still inside the day (the one older than a day stays out), the toggle then reads 收起', () => {
   const t = makeT('zh-TW')
   const snap = dispatchSnap(busyDispatchRows())

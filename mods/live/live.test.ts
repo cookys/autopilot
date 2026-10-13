@@ -3477,6 +3477,22 @@ test('dispatch tab: the footer snapshot stamp is HH:MM (or MM-DD), never the raw
 })
 
 for (const surface of SURFACES) {
+  test('P2 wiring: the mod passes its clock to paneRows: a never-probed run reads ○ 未開始 inside fresh_bound_s and ◌ 已停 once the clock is past it (' + surface + ')', async ($, on) => {
+    const files = base()
+    const runs = [row({ run_id: 'never-probed', alive: true, probe_age_s: null, phase: 'running', started_at: '2026-10-04T10:00:20.000Z', elapsed_s: 10 })]
+    const env = envelope({ runs, counts: { confirmed_live: 0, exited: 0, unknown: 1, fresh_bound_s: 30 } })
+    files[LIVE + '/runs/' + KEY + '--' + ROOT + '.json'] = j(env)
+    files[LIVE + '/runs/' + KEY + '.json'] = j(envelope({ runs, counts: { confirmed_live: 0, exited: 0, unknown: 1, fresh_bound_s: 30 } }, null))
+    const w = world(on, files)
+    await start($, surface)
+    const runRow = async () => (await paneParts($, surface, 'dispatch')).texts.find(x => x.includes('never-probed')) as string
+    expect((await runRow()).startsWith('○ 未開始'), await runRow()).toBe(true) // 10 s after launch, bound 30
+    for (let i = 0; i < 7; i++) await w.clock.advance(5000) // 35 s on: 45 s after launch, and the envelope (valid 180 s) is still fresh
+    expect((await runRow()).startsWith('◌ 已停'), await runRow()).toBe(true)
+  })
+}
+
+for (const surface of SURFACES) {
   test('P2 mounted (I18, I19): pressing the finished-runs `more` row lists every finished run and pressing it again restores the five; pressing the 審查 row calls onTab review (' + surface + ')', async ($, on) => {
     const files = base()
     const runs = [

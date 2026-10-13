@@ -442,9 +442,9 @@ With a live run, the 執行中 table adds a `最後回報` column (priority 3) i
 ▾ 推送前 QC  ∅ 不需要 ─────────────────────────────────────────────────────
 範圍        5a2706ad..HEAD · 0 個受保護檔案
 ▾ 代你決定  3 件 · 0 件不可逆 ─────────────────────────────────────────────
-◦ intent-17-1  #17 direction: A (keep the native <repo>/.claude/w…        ▸
-◦ intent-17-2  Owner answered (supersedes intent-17-1): directio…         ▸
 ◦ verify-17-1  verify node, no qualified verifier seat (engine-s…         ▸
+◦ intent-17-2  Owner answered (supersedes intent-17-1): directio…         ▸
+◦ intent-17-1  #17 direction: A (keep the native <repo>/.claude/w…        ▸
 未記錄      32 件派工沒有決策紀錄
 升級階梯    — 沒有紀錄
 ▸ 計畫審查  ◌ 已停 · 27d 前 ───────────────────────────────────────────────
@@ -459,9 +459,11 @@ A decision opened by a press (`toggle` id `dec:<id>`). The bullet row stays wher
     hand/native worktrees, no WorktreeCreate takeover; rail worktrees
     carry the repo slug; …). Owner did not answer within 60s; A is
     reversible and the smallest surface.
-  $ decision-ledger.js veto --ledger /home/cookys/projects/autopilot/
-    .git/autopilot/ledger/decisions.jsonl --id intent-17-1
+  $ decision-ledger.js veto --ledger /home/cookys/projects/autopilot/.git/
+    autopilot/ledger/decisions.jsonl --id intent-17-1
 ```
+
+2026-10-13 依 P1 實作更正：veto 斷點依 ui.ts 寬度規則、席位無時間（producer 不提供）。決定列同日改為最新在前（§2.4 優先於舊 mockup 的帳本順序；超過 5 筆時收進 `more` 的是最舊的）。
 
 <!-- cols:120 -->
 ```
@@ -477,9 +479,9 @@ A decision opened by a press (`toggle` id `dec:<id>`). The bullet row stays wher
 ▾ 推送前 QC  ∅ 不需要 ─────────────────────────────────────────────────────────────────────────────────────────────────
 範圍        5a2706ad..HEAD · 0 個受保護檔案
 ▾ 代你決定  3 件 · 0 件不可逆 ─────────────────────────────────────────────────────────────────────────────────────────
-◦ intent-17-1  #17 direction: A (keep the native <repo>/.claude/worktrees root for hand/native worktrees, no Worktr…  ▸
-◦ intent-17-2  Owner answered (supersedes intent-17-1): direction C = A plus moving the dispatch-rail worktrees (h…   ▸
 ◦ verify-17-1  verify node, no qualified verifier seat (engine-scorecard current --role verifier: none admissible…    ▸
+◦ intent-17-2  Owner answered (supersedes intent-17-1): direction C = A plus moving the dispatch-rail worktrees (h…   ▸
+◦ intent-17-1  #17 direction: A (keep the native <repo>/.claude/worktrees root for hand/native worktrees, no Worktr…  ▸
 未記錄      32 件派工沒有決策紀錄
 升級階梯    — 沒有紀錄
 ▸ 計畫審查  ◌ 已停 · 27d 前 ───────────────────────────────────────────────────────────────────────────────────────────
@@ -490,7 +492,7 @@ Seats are a valueless `席位` key (`kv` with no value) followed by one `item` p
 ```
 席位
             ✓ 完成  s0 · anthropic                                        ▾
-              └ SHIP-AS-IS · reviewed · 1m
+              └ SHIP-AS-IS · reviewed
             △ 待修  s1 · zhipu                                            ▸
             ✓ 完成  s2 · minimax                                          ▸
             ✓ 完成  s3 · alibaba                                          ▸

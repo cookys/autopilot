@@ -1,15 +1,16 @@
-# gemini-4-argon via agy 1.3.4 — full qualification (2026-10-14) — DRAFT
+# gemini-4-argon via agy 1.3.4 — full qualification (2026-10-14)
 
 Owner order 2026-10-14: qualify Gemini 4 Argon via agy at effort {low, high}, every exam, sequentially,
-one cell at a time. Status: running; results appended below as each cell lands.
+one cell at a time. Status: complete — 12 cells run; 10 PASS, brain FAIL at both efforts (diligence); owner not
+administrable. Verified by autopilot:reviewer on 2026-10-14.
 
 ## Seat identity
 
 - Model ids (`agy models`, agy 1.3.4): `gemini-4-argon-low`, `gemini-4-argon-high` (the tier is IN the id; `-medium`
   exists and is not run). runner `agy`, family `google`, version_source `operator-asserted`.
-- Effort reaches agy only through the model id: the provider adapter passes NO `--effort` to agy
-  (`scripts/qualification-review-provider.js:46-50`, `:961-963`), and the implementer rail folds effort into the id
-  (`scripts/dispatch-hetero.sh:3912-3916`, `agy_effort_for_model`). So low and high are two genuinely different
+- Effort reaches agy through the model id: the provider adapter passes NO `--effort` to agy
+  (`scripts/qualification-review-provider.js:46-50`, `:961-963`); the implementer rail does pass `--effort`, but
+  derives its value from the id via `agy_effort_for_model` (`scripts/dispatch-hetero.sh:3912-3922`). So low and high are two genuinely different
   cells for every role, and no role needs the "same score twice" exception.
 
 ## Exam list (all exams `engine-qualify.js` supports) and order

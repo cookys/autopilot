@@ -1628,19 +1628,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
 - **Context**: detection shipped (scripts/lib/autocompact-window.js, T1 tip, dev-setup --check). Left: T2 wording when a window at or below T2 is set (guidance, needs ON/OFF eval); name it in the next release heading. Detail at Pointer.
 
-### Workflow snapshot at compaction and /clear (replace the transcript tail)
-- **Id**: BL-0125
-- **Status**: open
-- **Since**: 2026-10-12
-- **Origin**: owner
-- **Problem**: 擁有者希望在壓縮對話與 /clear 時，改為保存「工作流程快照」（分支、階段、任務、子代理名單），取代只保留逐字稿尾段，這樣壓縮後能更完整接續。 (draft)
-- **Impact**: 壓縮後還原資訊不足，要靠人補述；規模較大，排在每個 session 的檢查點合併之後。 (draft)
-- **Trigger**: owner 2026-10-12 — after the per-session checkpoint merges
-- **Effort**: L
-- **Source**: autocompact live test design talk, 2026-10-12
-- **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
-- **Context**: P1 lib collector over on-disk state, used by PreCompact stdout+file and /clear; P2 task card + subagent roster; P3 /handoff uses it (guidance, eval); P4 PostCompact checks the summary kept branch and stage.
-
 ### autocompact-window resolver: managed path and DISABLE_* truthiness
 - **Id**: BL-0126
 - **Status**: open

@@ -13,7 +13,10 @@ import { T_EN } from './i18n'
 import type { T } from './i18n'
 import * as ui from './ui' // the design system's builders; `ui.kv` etc. keep clear of this file's own legacy `kv` / `row`
 import * as U from './ui'
-import { STATES, carry, cellWidth, displayWidth, isStale, stateOf } from './ui'
+import { GLYPHS, STATES, carry, cellWidth, displayWidth, isStale, stateOf } from './ui'
+const GS = GLYPHS.state
+const GT = GLYPHS.structure
+const GC = GLYPHS.chart
 import type { Ctx as UiCtx, Column as UiColumn, FactId, FmtKind, Frag, LineKind, RunSubject, SegRole, Stated, TableListRow as UiTableListRow } from './ui'
 
 
@@ -48,10 +51,9 @@ export type LiveGateRow = {
 
 export type LiveDecision = { question: string; options: { label: string; consequence: string }[]; stale: boolean; age_s: number | null }
 
-// one pane line: plain text plus how it is drawn
-// `kind`, `fact`, `goto`, `group` and `ts` are stamped by the ui.ts components (the design system, docs/plans/2026-10-13-live-pane-design-system.md §6.1); kind is
-// optional until P5 forces every tab line through a component.
-export type PaneLine = { toggle?: string; text: string; dim?: boolean; bold?: boolean; warn?: boolean; color?: ThemeKey; segs?: Seg[]; wrap?: boolean; hang?: number; kind?: LineKind; fact?: FactId; goto?: PaneTab; group?: string; ts?: number }
+// `kind`, `fact`, `goto`, `group` and `ts` are stamped by the ui.ts components (the design system, docs/plans/2026-10-13-live-pane-design-system.md §6.1); `kind` and
+// `fact` are required: a line no component made does not type-check.
+export type PaneLine = { toggle?: string; text: string; dim?: boolean; bold?: boolean; warn?: boolean; color?: ThemeKey; segs?: Seg[]; wrap?: boolean; hang?: number; kind: LineKind; fact: FactId; goto?: PaneTab; group?: string; ts?: number }
 export type VerdictKind = 'decide' | 'stalled' | 'waiting' | 'running' | 'idle'
 // P4: the sections are DATA, the tab builders turn them into lines (design plan §7). attention = a permission / question the session waits on; the notes say why a
 // source has nothing to show (its writer is not wired); the rest is the source view as read.
@@ -138,7 +140,7 @@ export const NO_DETAIL: PaneDetail = { counts: null, stalled: 0, now_ms: null, p
 
 // ---- the host-wide spend history (<live>/runs/spend-history.json, schema autopilot.spend-history/1) -> the Spend tab's hourly sparkline ----
 export const SPEND_HISTORY_SCHEMA = 'autopilot.spend-history/1'
-export const SPARK_BARS = '▁▂▃▄▅▆▇█'
+export const SPARK_BARS = GLYPHS.spark.join('')
 const HOUR_MS = 3600 * 1000
 export const SPEND_BUCKETS = 24
 export type SpendSample = { ms: number; usd: number }
@@ -279,14 +281,11 @@ export function projectName(identity: unknown, projectKey: string): string {
   return name ? name : fallback
 }
 
-// "38m" / "2h14m" / "1d3h": now minus the start of this piece of work; no start -> an em dash.
+// "38m" / "2h14m" / "1d03h" (ui.dur, the one duration format): now minus the start of this piece of work; no start -> an em dash.
 export function elapsedFrom(startMs: number | null, nowMs: number): string {
   if (startMs === null || !Number.isFinite(startMs) || !Number.isFinite(nowMs) || nowMs < startMs) return '—'
-  const minutes = Math.floor((nowMs - startMs) / 60000)
-  if (minutes < 60) return minutes + 'm'
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return hours + 'h' + (minutes % 60) + 'm'
-  return Math.floor(hours / 24) + 'd' + (hours % 24) + 'h'
+  const minutes = Math.floor((nowMs - startMs) / 60000) // the band's elapsed never shows seconds
+  return minutes < 1 ? '0m' : ui.dur(minutes * 60000)
 }
 
 // the earliest start among the scope's runs (null: none has one)
@@ -302,12 +301,7 @@ export function earliestRunMs(env: Json): number | null {
 // "seconds ago" in the same shorthand as the band: 45s / 20m / 3h5m / 2d1h
 export function ageText(s: number): string {
   if (!Number.isFinite(s) || s < 0) return '—'
-  if (s < 60) return Math.floor(s) + 's'
-  const m = Math.floor(s / 60)
-  if (m < 60) return m + 'm'
-  const h = Math.floor(m / 60)
-  if (h < 24) return h + 'h' + (m % 60) + 'm'
-  return Math.floor(h / 24) + 'd' + (h % 24) + 'h'
+  return ui.dur(s * 1000)
 }
 
 export type JobProgress = { frozen: boolean; percent: number | null; done: number | null; total: number | null }
@@ -599,7 +593,7 @@ export function readQc(text: string | null, want: ScopeWant): QcView | null {
 // the review-slot chip: `QC✓` (evidence present), `QC▲` (protected diff, no evidence: it awaits a person); nothing owed or unknown = no chip
 export function qcChip(q: QcView | null): string | null {
   if (q === null) return null
-  return q.state === 'ok' ? 'QC✓' : q.state === 'owed' ? 'QC▲' : null
+  return q.state === 'ok' ? 'QC' + GS.done : q.state === 'owed' ? 'QC' + GS.need_you : null
 }
 
 // `git-common-dir:<abs path>` -> the path (only an absolute one); anything else -> null
@@ -685,12 +679,12 @@ export function hygieneChip(v: LoadSourceView | null, sessionPid: number | strin
   if (v === null) return null
   const src = loadSourceFor(v, sessionPid)
   const marketplaceBad = v.flags.includes('marketplace_not_directory') || v.flags.includes('marketplace_not_this_repo')
-  if (src.startsWith('cache:')) return { text: 'cache ' + src.slice('cache:'.length) + ' ▲', warn: true }
+  if (src.startsWith('cache:')) return { text: 'cache ' + src.slice('cache:'.length) + ' ' + GS.need_you, warn: true }
   if (src === 'dev') {
-    const behind = v.behind_upstream !== null && v.behind_upstream > 0 ? ' ↓' + v.behind_upstream : ''
-    return { text: 'dev' + behind + (marketplaceBad ? ' ▲' : ''), warn: marketplaceBad }
+    const behind = v.behind_upstream !== null && v.behind_upstream > 0 ? ' ' + GT.behind + v.behind_upstream : ''
+    return { text: 'dev' + behind + (marketplaceBad ? ' ' + GS.need_you : ''), warn: marketplaceBad }
   }
-  return { text: 'src ? ▲', warn: true }
+  return { text: 'src ' + GS.unknown + ' ' + GS.need_you, warn: true }
 }
 
 export type Sources = {
@@ -1013,7 +1007,7 @@ export const stateText = (t: T) => ({
   noPointer: t('state.no_pointer', { hint: RUNS_HINT }),
   noProject: t('state.no_project', { hint: RUNS_HINT }),
   // a repo with no watcher scope still shows its residue reminder: ⚑N from <git-common-dir>/autopilot-residue-auto.json
-  noProjectWt: (wt: number) => t('state.no_project_wt', { n: wt, hint: RUNS_HINT }),
+  noProjectWt: (wt: number) => t('state.no_project_wt', { wt: GT.residue, n: wt, hint: RUNS_HINT }),
   unreadable: t('state.unreadable'),
   stale: (key: string, publishedAt: string | null) => (publishedAt ? t('state.stale_at', { at: publishedAt, hint: RUNS_HINT, key }) : t('state.stale', { hint: RUNS_HINT, key })),
   unavailable: (key: string) => t('state.unavailable', { hint: RUNS_HINT, key }),
@@ -1093,7 +1087,7 @@ export function reviewRound(r: ReviewView | null): number | null {
 // The band's review slot text: `↺ R<n>`; null = no slot.
 export function reviewSlot(r: ReviewView | null): string | null {
   const n = reviewRound(r)
-  return n === null ? null : '↺ R' + n
+  return n === null ? null : GT.round + ' R' + n
 }
 
 const short = (sha: string | null): string => (sha === null ? '—' : sha.slice(0, 8))
@@ -1281,8 +1275,8 @@ export function walkSegs(w: StageWalkView | null, current: string | null): Seg[]
   if (at < 0 || w.walk.length < 2 || w.walk.length > WALK_MAX) return null
   const out: Seg[] = []
   w.walk.forEach((_n, i) => {
-    if (i > 0) out.push(sp('─', { color: 'subtle', tag: 'walk' }))
-    out.push(i < at ? sp('●', { color: 'success', tag: 'walk' }) : i === at ? sp('◐', { color: 'claude', bold: true, tag: 'walk' }) : sp('○', { color: 'inactive', tag: 'walk' }))
+    if (i > 0) out.push(sp(GT.rule, { color: 'subtle', tag: 'walk' }))
+    out.push(i < at ? sp(GS.running, { color: 'success', tag: 'walk' }) : i === at ? sp(GC.here, { color: 'claude', bold: true, tag: 'walk' }) : sp(GS.pending, { color: 'inactive', tag: 'walk' }))
   })
   return out
 }
@@ -1294,11 +1288,11 @@ export function slotPosition(m: MarkerView | null, nowMs: number, w: StageWalkVi
   const segs: Seg[] = []
   if (head !== '') segs.push(sp(head + ' '))
   const walk = walkSegs(w, m.stage)
-  if (walk === null) segs.push(sp('▸ ', { dim: true }))
-  else segs.push(sp('▸ ', { dim: true, tag: 'arrow' }), ...walk, sp(' ', { tag: 'walk' }))
+  if (walk === null) segs.push(sp(GT.folded + ' ', { dim: true }))
+  else segs.push(sp(GT.folded + ' ', { dim: true, tag: 'arrow' }), ...walk, sp(' ', { tag: 'walk' }))
   segs.push(sp(m.stage, { color: 'claude', bold: true, tag: 'stage' }))
   const age = m.stage_set_at_ms === null ? '—' : elapsedFrom(m.stage_set_at_ms, nowMs)
-  if (age !== '—') segs.push(sp(' ◷' + age, { dim: true, tag: 'age' }))
+  if (age !== '—') segs.push(sp(' ' + GT.age + age, { dim: true, tag: 'age' }))
   return { id: 'position', segs }
 }
 
@@ -1308,9 +1302,9 @@ export function unitBarSegs(index: number, total: number): Seg[] {
   const k = Math.min(Math.max(index, 1), total)
   const cur = total > 10 ? Math.max(1, Math.min(10, Math.ceil((k * 10) / total))) : k
   const segs: Seg[] = []
-  if (cur > 1) segs.push(sp('▰'.repeat(cur - 1), { color: 'success', tag: 'bar' }))
-  segs.push(sp('▰', { color: 'claude', tag: 'bar' }))
-  if (cells > cur) segs.push(sp('▱'.repeat(cells - cur), { color: 'inactive', tag: 'bar' }))
+  if (cur > 1) segs.push(sp(GC.meterOn.repeat(cur - 1), { color: 'success', tag: 'bar' }))
+  segs.push(sp(GC.meterOn, { color: 'claude', tag: 'bar' }))
+  if (cells > cur) segs.push(sp(GC.meterOff.repeat(cells - cur), { color: 'inactive', tag: 'bar' }))
   return segs
 }
 export function slotUnit(m: MarkerView | null, t: T = T_EN): Slot | null {
@@ -1325,8 +1319,8 @@ export function slotUnit(m: MarkerView | null, t: T = T_EN): Slot | null {
 export function slotDispatch(live: number, stalled: number): Slot | null {
   if (live <= 0 && stalled <= 0) return null
   const segs: Seg[] = []
-  if (live > 0) segs.push(sp('●' + live, { tag: 'live' }))
-  if (stalled > 0) segs.push(sp((segs.length > 0 ? ' ' : '') + '⊘' + stalled, { color: 'error', tag: 'stalled' }))
+  if (live > 0) segs.push(sp(GS.running + live, { tag: 'live' }))
+  if (stalled > 0) segs.push(sp((segs.length > 0 ? ' ' : '') + GS.stalled + stalled, { color: 'error', tag: 'stalled' }))
   return { id: 'dispatch', segs }
 }
 
@@ -1336,10 +1330,10 @@ export function slotReview(r: ReviewView | null, q: QcView | null): Slot | null 
   const chip = qcChip(q)
   if (round === null && chip === null) return null
   const segs: Seg[] = []
-  if (round !== null) segs.push(sp('↺ ', { dim: true, tag: 'round' }), sp('R' + round, { tag: 'round' }))
+  if (round !== null) segs.push(sp(GT.round + ' ', { dim: true, tag: 'round' }), sp('R' + round, { tag: 'round' }))
   if (chip !== null) {
     if (round !== null) segs.push(sp(' ', { tag: 'round' }))
-    segs.push(sp(chip, chip === 'QC✓' ? { color: 'success', tag: 'qc' } : { color: 'warning', bold: true, tag: 'qc' }))
+    segs.push(sp(chip, chip === 'QC' + GS.done ? { color: 'success', tag: 'qc' } : { color: 'warning', bold: true, tag: 'qc' }))
   }
   return { id: 'review', segs }
 }
@@ -1348,7 +1342,7 @@ export function slotReview(r: ReviewView | null, q: QcView | null): Slot | null 
 export function slotDecisions(d: DecisionsView | null): Slot | null {
   if (d === null) return null
   const parts: Seg[] = []
-  if (d.count > 0) parts.push(sp('◆' + d.count))
+  if (d.count > 0) parts.push(sp(GT.decisions + d.count))
   if (d.undocumented > 0) parts.push(sp('?' + d.undocumented, { color: 'inactive' }))
   if (d.ladder !== null) parts.push(sp(d.ladder.rung))
   if (parts.length === 0) return null
@@ -1366,8 +1360,8 @@ export const spendState = (brain: number, cap: number): ThemeKey => spendColor(b
 export function spendBarSegs(brain: number, cap: number, n: number, tag?: SegTag): Seg[] {
   const f = Math.min(n, Math.max(0, Math.round((brain / cap) * n)))
   const segs: Seg[] = []
-  if (f > 0) segs.push(sp('▰'.repeat(f), { color: spendState(brain, cap), ...(tag === undefined ? {} : { tag }) }))
-  if (n > f) segs.push(sp('▱'.repeat(n - f), { color: 'inactive', ...(tag === undefined ? {} : { tag }) }))
+  if (f > 0) segs.push(sp(GC.meterOn.repeat(f), { color: spendState(brain, cap), ...(tag === undefined ? {} : { tag }) }))
+  if (n > f) segs.push(sp(GC.meterOff.repeat(n - f), { color: 'inactive', ...(tag === undefined ? {} : { tag }) }))
   return segs
 }
 
@@ -1395,19 +1389,19 @@ export function slotHygiene(ls: LoadSourceView | null, residue: ResidueView | nu
   if (chip === null && wt === 0) return null
   const segs: Seg[] = []
   if (chip !== null) {
-    const text = chip.text.replace(' ↓', '↓')
-    const arrow = text.indexOf('↓')
+    const text = chip.text.replace(' ' + GT.behind, GT.behind)
+    const arrow = text.indexOf(GT.behind)
     const col = chip.warn ? { color: 'warning' as ThemeKey } : {}
     if (arrow < 0) segs.push(sp(text, { ...col, tag: 'chip' }))
     else {
-      const m = /^(\S*↓\d+)(.*)$/.exec(text.slice(arrow))
+      const m = new RegExp('^(\\S*' + GT.behind + '\\d+)(.*)$').exec(text.slice(arrow))
       segs.push(sp(text.slice(0, arrow), { ...col, tag: 'chip' }), sp(m === null ? text.slice(arrow) : m[1], { dim: true, tag: 'chip' }))
       if (m !== null && m[2] !== '') segs.push(sp(m[2], { ...col, tag: 'chip' }))
     }
   }
   if (wt > 0) {
     if (chip !== null) segs.push(sp(' ', { tag: 'chip' })) // the separator goes with the chip: a lone `⚑N` has no leading space
-    segs.push(sp('⚑' + wt, { color: 'warning', bold: true, tag: 'wt' }))
+    segs.push(sp(GT.residue + wt, { color: 'warning', bold: true, tag: 'wt' }))
   }
   return { id: 'hygiene', segs }
 }
@@ -1430,8 +1424,8 @@ export function bandSlots(f: BandFacts, t: T = T_EN): Slot[] {
   ].filter((s): s is Slot => s !== null)
 }
 
-export const BAND_SEP = ' │ '
-export const BAND_ICON = 'ⓘ'
+export const BAND_SEP = ' ' + GT.bandSep + ' '
+export const BAND_ICON = GT.info
 // the ⓘ Button's label: the glyph plus a space. ⓘ (U+24D8) is East Asian Width Ambiguous: displayWidth counts it one cell, a CJK-locale terminal
 // (the owner's) draws it two, so a one-cell Button left the glyph's right half outside the control. The space makes the Button two cells either way.
 export const BAND_INFO_LABEL = BAND_ICON + ' '
@@ -1515,7 +1509,6 @@ export function plainBandText(reason: string, columns: number): string {
 }
 
 // ---- the panel's tabs: Now (absorbs the stage walk) · Dispatch · Review (absorbs the decisions) · Spend · Hygiene · ? (the legend) ----
-export const NEXT_TAB_GLYPH = '▸' // the pane's first Button: Enter on it shows the next tab (pane.tsx tabStrip)
 export const PANE_TABS = ['now', 'dispatch', 'review', 'spend', 'hygiene', 'legend'] as const
 export type PaneTab = (typeof PANE_TABS)[number]
 // a band slot pressed opens the pane on the tab that explains it; position and unit live in Now's 目前位置 section, which the press also unfolds
@@ -1530,15 +1523,6 @@ export const DEFAULT_PANE_COLS = 76
 // the panel is exactly as wide as the body the host gives it (rules, bars and wrapping all size to it); no body width known -> the default
 export const paneWidth = (bodyColumns: number | null | undefined): number => (typeof bodyColumns === 'number' && Number.isFinite(bodyColumns) ? Math.max(20, Math.floor(bodyColumns)) : DEFAULT_PANE_COLS)
 
-const KEY_W = 12 // the key column of a key/value row, in DISPLAY cells (zh labels up to 6 characters, en up to 12)
-const padCells = (text: string, width: number): string => text + ' '.repeat(Math.max(0, width - displayWidth(text)))
-const seg = (text: string, color?: ThemeKey, bold?: boolean, dim?: boolean): Seg => ({ text, ...(color === undefined ? {} : { color }), ...(bold ? { bold } : {}), ...(dim ? { dim } : {}) })
-const dseg = (text: string): Seg => seg(text, undefined, false, true)
-const row = (...segs: Seg[]): PaneLine => ({ text: segs.map(s => s.text).join(''), segs })
-const kv = (label: string, ...segs: Seg[]): PaneLine => ({ ...row(dseg(padCells(label, KEY_W)), ...segs), hang: KEY_W })
-const withHang = (l: PaneLine, hang: number): PaneLine => ({ ...l, hang })
-const BLANK: PaneLine = { text: '' }
-const NO_DATA = (t: T, what: string): PaneLine => ({ text: t('nodata.prefix', { what: t(what) }), dim: true })
 
 
 // ---- wrapping: panel text is never clipped. A line wider than the pane breaks at spaces, after a `/`, and between CJK characters; its continuation
@@ -1610,7 +1594,7 @@ function wrapLine(l: PaneLine, cols: number): PaneLine[] {
   }
   return lines.map(cs => {
     const text = cs.map(c => c.ch).join('')
-    if (l.segs === undefined) return carry(l, { ...l, text, hang: undefined, wrap: undefined })
+    if (l.segs === undefined) return carry(l, Object.assign({}, l, { text, hang: undefined, wrap: undefined }))
     const segs: Seg[] = []
     let run = ''
     let at = -2
@@ -1622,348 +1606,14 @@ function wrapLine(l: PaneLine, cols: number): PaneLine[] {
 }
 export const wrapLines = (lines: PaneLine[], cols: number): PaneLine[] => lines.flatMap(l => wrapLine(l, cols))
 
-// `▌ Title  right ────`: a section heading, a left accent block in `claude`, the bold title, an optional right-hand badge, then a `subtle` rule to the
-// pane's edge. A foldable heading (`fold`) shows `▾` open / `▸` folded instead of the block and carries the section id as its toggle.
-export function rule(title: string, right: Seg[], cols: number, fold?: { id: string; open: boolean }): PaneLine {
-  const segs: Seg[] = [seg(fold === undefined ? '▌ ' : fold.open ? '▾ ' : '▸ ', 'claude'), seg(title, undefined, true)]
-  if (right.length > 0) segs.push(seg('  '), ...right)
-  const fill = cols - displayWidth(segs.map(s => s.text).join('')) - 1
-  if (fill >= 3) segs.push(seg(' ' + '─'.repeat(fill), 'subtle'))
-  return { ...row(...segs), ...(fold === undefined ? {} : { toggle: fold.id }) }
-}
-
 // the Now tab's foldable sections (what waits for you never folds); the ids share the toggle channel with the recent groups, hence the prefix
 export const SECTION = { where: 'sec:now.where', account: 'sec:account', recent: 'sec:now.recent', limits: 'sec:limits', today: 'sec:today', last24: 'sec:last24' } as const
 export const isSectionId = (id: string): boolean => id.startsWith('sec:') || /^(now|dispatch|review|spend|hygiene|legend)\./.test(id)
-const isFolded = (ctx: PaneCtx, id: string): boolean => ctx.folded !== undefined && ctx.folded.has(id)
-// a heading plus its body, or the heading alone when the person folded it
-function section(ctx: PaneCtx, id: string, title: string, right: Seg[], body: PaneLine[]): PaneLine[] {
-  const open = !isFolded(ctx, id)
-  return [rule(title, right, ctx.cols, { id, open }), ...(open ? body : [])]
-}
-
-// the glyph + word of a published gate / seat verdict: pass-like green, open / failing amber, anything else quiet
-function verdictMark(v: string | null): { glyph: string; color: ThemeKey } {
-  if (v === null) return { glyph: '·', color: 'inactive' }
-  if (/^(pass|ok|accept|approv|done|converged)/i.test(v)) return { glyph: '✓', color: 'success' }
-  if (/^(open|fail|reject|block|needs|owed)/i.test(v)) return { glyph: '▲', color: 'warning' }
-  return { glyph: '●', color: 'inactive' }
-}
-
-// ---- tab badges: which tab holds something for the owner, visible without opening it ----
-export type TabBadge = { text: string; color: ThemeKey }
-// ▲ = something awaits a person (Review: pre-push QC owed), ⚑N = residue that needs a person, ●N = live dispatches
-export function tabBadges(snap: LiveSnapshot): Partial<Record<PaneTab, TabBadge>> {
-  const out: Partial<Record<PaneTab, TabBadge>> = {}
-  const live = snap.detail.counts === null ? 0 : snap.detail.counts.confirmed_live
-  if (live > 0) out.dispatch = { text: '●' + live, color: 'suggestion' }
-  if (snap.detail.qc !== null && snap.detail.qc.state === 'owed') out.review = { text: '▲', color: 'warning' }
-  const wt = snap.detail.residue === null ? 0 : snap.detail.residue.needs_human_count
-  if (wt > 0) out.hygiene = { text: '⚑' + wt, color: 'warning' }
-  return out
-}
-
-// ================= Now =================
-const KEY_IDS = { stage: 'label.stage', unit: 'label.unit', progress: 'label.progress', phase: 'label.phase' } as const
-
-// P4: the 現況 tab and the global header, built from ui.ts components only (design plan §2.1-§2.3, §5.1). The section order, ids and defaults come from SECTION_ORDER /
-// SECTION_DEFAULTS. A summary row is a projection of another tab's fact (a `kv` with `goto`); the tab's own facts are 要你處理, 位置, 背景工作, 任務 and 最近對話.
-const nowId = (key: string): string => 'sec:now.' + key
-const uiCtxOf = (ctx: PaneCtx): UiCtx => ({ t: ctx.t, cols: ctx.cols, ...(ctx.expanded === undefined ? {} : { expanded: ctx.expanded }) })
-const nowMsOf = (snap: LiveSnapshot): number => (typeof snap.detail.now_ms === 'number' && Number.isFinite(snap.detail.now_ms) ? snap.detail.now_ms : 0)
-const dotFrag = (): Frag => ui.val(' · ', { dim: true })
-
-// a foldable section: the header (its chip needs a fact), then the body while it is open
-function nowSection(u: UiCtx, ctx: PaneCtx, key: string, title: string, body: readonly PaneLine[], o: { right?: Frag; fact?: FactId; defaultFolded?: boolean } = {}): PaneLine[] {
-  const id = nowId(key)
-  const open = U.sectionOpen(ctx.folded, id, o.defaultFolded === true)
-  const head = ui.header(u, title, { id, open }, o.right === undefined ? {} : { right: o.right, fact: o.fact })
-  return open ? [head, ...body] : [head]
-}
-
-// ---- the global header (§2.2): drawn by pane.tsx above every tab, never by a tab builder ----
-export function headerLines(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
-  const b = snap.band
-  if (b === null) return [{ text: snap.header, dim: true }, ui.blank()] // a non-ok snapshot: the state text, nothing invented around it
-  const t = ctx.t
-  const u = uiCtxOf(ctx)
-  const sp = snap.detail.spend
-  const ctxFigure = snap.metrics === undefined ? '—' : snap.metrics.ctx
-  const metrics: Frag[] = [
-    ui.headerProjection('spend.session', sp === null ? '$—' : sp.session, t('header.session')),
-    ui.headerProjection('spend.local_today', sp === null ? '$—' : sp.host_all, t('header.host')),
-    ui.val(t('header.ctx') + ' ' + ctxFigure, { fmt: 'pct', fact: 'header.verdict' }),
-  ]
-  const verdict = ui.stateOf('verdict', b.kind.toUpperCase())
-  const lines = ui.verdictHeader(u, { state: verdict, word: b.verdict, project: snap.detail.project ?? b.project, elapsed: b.elapsed === '—' ? '' : t('now.since', { e: b.elapsed }), metrics })
-  return wrapLines([...lines, ui.blank()], ctx.cols)
-}
-
-// ---- the overflow hint (live-pane height, coordinator ruling 2026-10-14): pane.tsx's own scroll state, not a fact of the session. While the window sits at the top
-// (`scroll.offset === 0`) over a tree taller than `scroll.bodyRows`, the header's last metrics line ends with `↓ N more rows below`; once the person scrolls the header
-// has left the window and the hint is gone. N = tree rows - bodyRows, the tree being the tab strip (its wrapped rows + the rule), the header, the body and a Link row: every
-// PaneLine is one drawn row (wrapLine already broke what was wider than the pane). A strip that wraps is the one height this file cannot be sure of, so then the hint says
-// "more" without a number. A header line too narrow for the hint drops it: the spend segments are never squeezed or cut.
-export type ScrollView = { offset: number; bodyRows: number }
-export function stripRows(snap: LiveSnapshot, ctx: PaneCtx, tab: PaneTab, hasButton: boolean): { rows: number; exact: boolean } {
-  const badges = tabBadges(snap)
-  const items: number[] = []
-  if (hasButton) items.push(displayWidth(NEXT_TAB_GLYPH) + 1)
-  for (const id of PANE_TABS) {
-    const on = id === tab
-    const b = badges[id]
-    items.push(displayWidth(' ' + tabLabel(id, ctx.t) + ' ') + (b === undefined ? 0 : displayWidth(b.text) + (on ? 1 : 0)) + 1)
-  }
-  let rows = 1
-  let w = 0
-  for (const x of items) {
-    if (w > 0 && w + x > ctx.cols) { rows++; w = 0 }
-    w += x
-  }
-  return { rows: rows + 1, exact: rows === 1 } // + the rule under the strip
-}
-// an empty-text line is drawn as an empty Text, which takes no row on screen (the header's trailing blank is one): count only the rows that are really drawn
-export const treeRowCount = (strip: number, head: readonly PaneLine[], body: readonly PaneLine[], extra: number): number => strip + [...head, ...body].filter(l => l.text !== '').length + extra
-export function withOverflowHint(head: PaneLine[], ctx: PaneCtx, scroll: ScrollView | null | undefined, treeRows: number, exact: boolean): PaneLine[] {
-  if (scroll === null || scroll === undefined || scroll.offset !== 0 || treeRows <= scroll.bodyRows) return head
-  let at = -1
-  head.forEach((l, i) => { if (l.text !== '') at = i })
-  if (at < 0) return head
-  const hint = ui.GLYPHS.structure.overflow + ' ' + (exact ? ctx.t('pane.overflow', { n: treeRows - scroll.bodyRows }) : ctx.t('pane.overflow_more'))
-  const line = head[at]
-  const base: Seg[] = line.segs ?? [{ text: line.text }]
-  const hintSeg: Seg = { text: hint, dim: true, fact: 'pane.overflow' }
-  const gap = ctx.cols - 1 - displayWidth(line.text) - displayWidth(hint)
-  let segs: Seg[]
-  if (gap >= 2) segs = [...base, { text: ' '.repeat(gap) }, hintSeg] // the metrics line has room: the hint ends it, right-aligned like the one-line header
-  else {
-    // the one-line header (>= 110 columns) is already as wide as the pane, its metrics right-aligned behind a run of blanks: the hint sits in that run, nothing moves
-    const pad = base.findIndex((s, i) => i > 0 && i < base.length - 1 && /^ +$/.test(s.text) && s.text.length >= displayWidth(hint) + 4)
-    if (pad < 0) return head // no room: the hint goes first, the spend figures are neither squeezed nor cut
-    const n = base[pad].text.length
-    segs = [...base.slice(0, pad), { text: '  ' }, hintSeg, { text: ' '.repeat(n - 2 - displayWidth(hint)) }, ...base.slice(pad + 1)]
-  }
-  const out = head.slice()
-  out[at] = { ...line, text: segs.map(x => x.text).join(''), segs }
-  return out
-}
-
-// ---- 要你處理: the verdict's reason first when it asks something of the owner, then the open decision, the attention ask and the residue the owner has to act on ----
-function attentionPart(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
-  const t = ctx.t
-  const b = snap.band as BandView
-  const nowMs = nowMsOf(snap)
-  const d = snap.decision
-  const a = snap.sections.attention
-  const needYou = ui.stateOf('verdict', 'DECIDE')
-  const entries: { s: Stated, make: (bare: boolean) => PaneLine, children: readonly PaneLine[] }[] = []
-  const put = (s: Stated, make: (bare: boolean) => PaneLine, children: readonly PaneLine[] = []): void => { entries.push({ s, make, children }) } // bare = the item's state is the chip's: the chip already says the word, so the row keeps only the glyph
-  const asks = b.kind === 'decide' || b.kind === 'stalled' || b.kind === 'waiting'
-  if (asks && !(b.kind === 'decide' && (d !== null || a !== null))) { // a decision question or an attention ask IS the reason of a 要你決定 verdict; do not say it twice
-    const s = b.kind === 'stalled' ? ui.stateOf('verdict', 'STALLED') : b.kind === 'waiting' ? ui.stateOf('attention', { source: null }) : needYou
-    put(s, bare => ui.item(u, s, b.why, undefined, { fact: 'now.attention', word: !bare }))
-  }
-  if (d !== null) {
-    const open = d.options.length > 0 && u.expanded?.has('now:decision') === true
-    put(needYou, bare => ui.item(u, needYou, d.question + staleSuffix(d, t), undefined, { fact: 'now.attention', word: !bare, ...(d.options.length > 0 ? { toggle: { id: 'now:decision', open } } : {}) }),
-      open ? d.options.flatMap((o, i) => ui.detail(u, (i + 1) + '. ' + o.label + (o.consequence ? ' — ' + o.consequence : ''), { attached: true })) : [])
-  }
-  if (a !== null) put(needYou, bare => ui.item(u, needYou, attentionReason(a, nowMs, t), undefined, { fact: 'now.attention', word: !bare }))
-  const wt = snap.detail.residue === null ? 0 : snap.detail.residue.needs_human_count
-  if (wt > 0) put(needYou, bare => ui.projection('now', 'residue.cleanup', ui.item(u, needYou, t('now.residue', { n: wt }), undefined, { fact: 'residue.cleanup', word: !bare, goto: 'hygiene' })))
-  if (entries.length === 0) return nowSection(u, ctx, 'attention', t('now.needs_you'), [ui.empty(t('now.nothing_waits'), 'now.attention')])
-  const chip = ui.worst(entries.map(e => e.s))
-  const lines = entries.flatMap(e => [e.make(e.s.id === chip.id), ...e.children])
-  return nowSection(u, ctx, 'attention', t('now.needs_you'), lines, { right: ui.countChip(u, chip, entries.length, 'now.attention'), fact: 'now.attention' })
-}
-
-// ---- 位置: the walk, stage, unit, progress and phase; the reason is the first row when the verdict asks nothing of the owner ----
-function positionPart(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
-  const t = ctx.t
-  const b = snap.band as BandView
-  const d = snap.detail
-  const m = d.marker
-  const F = 'now.position' as const
-  const body: PaneLine[] = []
-  if (b.kind === 'running' || b.kind === 'idle') body.push(ui.kv(u, t('label.reason'), [ui.val(b.why, { role: 'prose' })], { fact: F }))
-  if (snap.sections.attentionNotWired) body.push(ui.kv(u, t('label.waiting'), [ui.absent(t(NOT_WIRED_ID))], { fact: F }))
-  const head = m === null ? '' : [m.size === null ? null : m.size + (m.urgent ? '!' : ''), m.level].filter((x): x is string => x !== null).join('·')
-  const noStage = m === null || m.stage === null
-  const noUnit = m === null || m.unit === null || slotUnit(m, t) === null
-  if (m !== null && m.stage !== null && d.stage !== null && walkSegs(d.stage, m.stage) !== null) {
-    const labels = d.stage.walk.map(id => { const key = 'stage.' + id; const text = t(key); return text === key ? id : text })
-    const at = d.stage.walk.indexOf(m.stage)
-    const all = labels.join(' ')
-    body.push(...ui.chart(u, head, ui.walkValue(at, d.stage.walk.length), ui.KEY_W + displayWidth(all) <= ctx.cols - 1 ? all : labels[at], F))
-  }
-  if (noStage && noUnit) body.push(ui.empty(t('nodata.stage_unit'), F))
-  else {
-    if (m === null || m.stage === null) body.push(ui.kv(u, t(KEY_IDS.stage), [ui.absent(t('nodata.stage'))], { fact: F }))
-    else {
-      const age = m.stage_set_at_ms === null ? '—' : elapsedFrom(m.stage_set_at_ms, d.now_ms ?? 0)
-      body.push(ui.kv(u, t(KEY_IDS.stage), [ui.val(m.stage, { bold: true }), ...(age === '—' ? [] : [ui.val(' · ' + t('now.in_stage', { e: age }), { dim: true, fmt: 'dur' })]), ...(head === '' ? [] : [ui.val(' · ' + head, { dim: true, fmt: 'id' })])], { fact: F }))
-    }
-    if (m === null || m.unit === null || slotUnit(m, t) === null) body.push(ui.kv(u, t(KEY_IDS.unit), [ui.absent(t('nodata.unit'))], { fact: F }))
-    else {
-      const { index, total } = m.unit
-      const k = Math.min(Math.max(index, 1), total)
-      const cells = Math.min(total, 10)
-      const on = total > 10 ? Math.max(1, Math.min(10, Math.ceil((k * 10) / total))) : k
-      const extra = (m.unit.label === '' ? '' : ' ' + m.unit.label) + ' (' + m.unit.kind + ')' + (m.review_families.length > 0 ? ' · ' + t('now.families', { n: m.review_families.length }) : '')
-      body.push(ui.kv(u, t(KEY_IDS.unit), [ui.stepBar(cells, on, { here: true }), ui.fmtd('count', ' ' + index + '/' + total), ui.val(extra, { role: 'prose', dim: true })], { fact: F }))
-    }
-  }
-  body.push(ui.kv(u, t(KEY_IDS.progress), [ui.val(b.progress, { role: 'prose', ...(b.progressDim ? { dim: true } : {}) })], { fact: F }))
-  if (!b.phase.includes('▸')) body.push(ui.kv(u, t(KEY_IDS.phase), [ui.val(b.phase, { role: 'prose' })], { fact: F }))
-  return nowSection(u, ctx, 'where', t('now.where'), body.map(l => (l.fact === undefined ? l : ui.ownerRow('now', l.fact, l))))
-}
-
-// ---- 各分頁: one projection row per other tab (§2.3), each a `kv` with `goto` and its own fact ----
-// the code-review round as the review tab and this tab's one review row both read it (§3.3), so the two cannot disagree
-function codeRound(c: CodeReviewView, snap: LiveSnapshot): { age: number | null; stale: boolean; states: Stated[]; round: Stated; findings: number; unknown: number } {
-  const age = ageMsOf(snap.detail.now_ms, c.at)
-  const stale = !c.converged && age !== null && U.isStale('codeReview', age) // F4
-  const states = c.seats.map(s => U.stateOf('seat', seatSubject('code', s)))
-  const round = U.stateOf('round', { stale, converged: c.converged, seats: states })
-  return { age, stale, states, round, findings: states.filter(s => s.id === 'findings').length, unknown: states.filter(s => s.id === 'unknown').length }
-}
-
-function limitWins(t: T, s: SpendView | null, quota: readonly QuotaWindow[], nowMs: number | null): LimitWin[] {
-  const wins: LimitWin[] = []
-  if (s !== null && s.brain !== null && s.cap !== null) {
-    wins.push({ key: t('label.brain_today'), value: s.brain, cap: s.cap, fact: 'usage.brain', amount: ui.cat(ui.fmtd('money', ui.money(s.brain)), ui.val(' / ', { role: 'prose', dim: true }), ui.fmtd('money', ui.money(s.cap))) })
-  }
-  for (const w of quota) {
-    const k = QUOTA_KEYS[w.kind]
-    const fact: FactId = w.kind === 'five_hour' ? 'usage.window5h' : w.kind === 'seven_day' ? 'usage.window7d' : 'usage.window_other'
-    wins.push({ key: k === undefined ? bgLabel(w.kind.replace(/_/g, ' ')) : t(k), value: w.pct, cap: 100, fact, ...(w.resetsAtMs === null || nowMs === null || w.resetsAtMs <= nowMs ? {} : { resetMs: w.resetsAtMs - nowMs }) })
-  }
-  return wins
-}
-
-function tabsPart(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
-  const t = ctx.t
-  const d = snap.detail
-  const nowMs = nowMsOf(snap)
-  const body: PaneLine[] = []
-  // 派工 ›
-  {
-    const rows = snap.rows
-    if (rows === null) body.push(ui.kv(u, t('tab.dispatch'), [ui.absent(t('nodata.prefix', { what: t('nodata.runs') }))], { fact: 'dispatch.counts', goto: 'dispatch' }))
-    else if (rows.length === 0) body.push(ui.kv(u, t('tab.dispatch'), [ui.absent(t('dispatch.no_runs'))], { fact: 'dispatch.counts', goto: 'dispatch' }))
-    else {
-      const st = ui.worst(rows.map(r => ui.stateOf('run', runSubject(r))))
-      const live = d.counts === null ? rows.filter(r => !r.ended && r.fresh).length : d.counts.confirmed_live
-      const parts: Frag[] = [ui.stateLead(u, st), ui.val('  '), ui.fmtd('count', t('now.sum_runs', { n: rows.length })), dotFrag(), ui.fmtd('count', live > 0 ? t('now.running', { n: live }) : t('now.sum_idle'))]
-      if (d.stalled > 0) parts.push(dotFrag(), ui.fmtd('count', t('now.stalled', { n: d.stalled })))
-      const ended = rows.map(runEndedMs).filter((x): x is number => x !== null)
-      if (ctx.cols >= 100 && ended.length > 0 && nowMs > 0) parts.push(dotFrag(), ui.fmtd('ago', t('now.sum_last_end', { age: ui.dur(Math.max(0, nowMs - Math.max(...ended))) })))
-      body.push(ui.kv(u, t('tab.dispatch'), parts, { fact: 'dispatch.counts', goto: 'dispatch' }))
-    }
-  }
-  // 審查 ›: the code-review round only (§2.6): its state, the round id and how many seats have findings
-  {
-    const c = snap.review === null ? null : snap.review.code
-    if (c === null) body.push(ui.kv(u, t('tab.review'), [ui.absent(t('nodata.review'))], { fact: 'review.round', goto: 'review' }))
-    else {
-      const r = codeRound(c, snap)
-      const parts: Frag[] = [ui.stateLead(u, r.round), ui.val('  '), ui.val(t('review.code'), { role: 'prose' }), ui.val(' '), ui.fmtd('id', c.generation === null ? 'R—' : 'R' + c.generation)]
-      if (r.findings > 0) parts.push(dotFrag(), ui.fmtd('count', t('now.sum_review_fix', { n: r.findings })))
-      body.push(ui.kv(u, t('tab.review'), parts, { fact: 'review.round', goto: 'review' }))
-    }
-  }
-  // 用量 ›: the most-used of the brain cap, 5 h and 7 d (one fact, `usage.limit_max`)
-  {
-    const wins = limitWins(t, d.spend, snap.account === undefined ? [] : snap.account.quota, d.now_ms)
-    if (wins.length === 0) body.push(ui.kv(u, t('tab.spend'), [ui.absent(t('nodata.prefix', { what: t(d.spend === null ? 'nodata.spend' : 'nodata.brain') }))], { fact: 'usage.limit_max', goto: 'spend' }))
-    else {
-      const top = wins.reduce((a, w) => ((w.cap > 0 ? w.value / w.cap : 0) > (a.cap > 0 ? a.value / a.cap : 0) ? w : a))
-      body.push(ui.kv(u, t('tab.spend'), [ui.meterValue(top.value, top.cap, { cells: 10 }), ui.val('  '), top.amount ?? ui.val(top.key, { role: 'prose', dim: true })], { fact: 'usage.limit_max', goto: 'spend' }))
-    }
-  }
-  // 殘留 ›
-  {
-    const rs = d.residue
-    if (rs === null) body.push(ui.kv(u, t('tab.hygiene'), [ui.absent(t('nodata.prefix', { what: t('nodata.residue') }))], { fact: 'residue.groups', goto: 'hygiene' }))
-    else if (rs.needs_human_count === 0) body.push(ui.kv(u, t('tab.hygiene'), [ui.stateLead(u, ui.stateOf('cleanup', { errors: 0, done: 0 })), ui.val('  '), ui.val(t('now.sum_no_residue'), { role: 'prose' })], { fact: 'residue.groups', goto: 'hygiene' }))
-    else {
-      const parts: Frag[] = [ui.stateLead(u, ui.stateOf('residueGroup', 'dirty')), ui.val('  '), ui.fmtd('count', t('now.sum_residue', { n: rs.needs_human_count }))]
-      if (rs.needs_human_bytes !== null) parts.push(dotFrag(), ui.fmtd('size', ui.size(rs.needs_human_bytes)))
-      body.push(ui.kv(u, t('tab.hygiene'), parts, { fact: 'residue.groups', goto: 'hygiene' }))
-    }
-  }
-  return nowSection(u, ctx, 'tabs', t('now.tabs'), body.map(l => ui.projection('now', l.fact as FactId, l)))
-}
-
-// ---- 背景工作: live rows first; the ended and the quiet ones sit behind one `▸ N 項已結束` toggle (F1, X0, X1) ----
 const BG_EXIT = /^\[exited with code (\d+)\]$/
 export const exitCodeOf = (tail: string | null): number | null => {
   if (tail === null) return null
   const m = BG_EXIT.exec(tail.trim())
   return m === null ? null : Number(m[1])
-}
-const ACTIVITY_KEYS = { shell: 'label.bg_shell', monitor: 'label.bg_monitor', agent: 'label.bg_agent' } as const
-
-function backgroundPart(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
-  const t = ctx.t
-  const nowMs = nowMsOf(snap)
-  const live: U.RowSpec[] = []
-  const gone: U.RowSpec[] = []
-  ;(snap.activity ?? []).forEach((it, i) => {
-    const state = ui.stateOf('background', { exit: exitCodeOf(it.tail), quietMs: it.quietMs ?? 0 }) // an item with no output file has no clock: it counts as live
-    const key = 'bg:' + i + ':' + it.label.slice(0, 24)
-    const showQuiet = (state.id === 'running' || state.id === 'stopped') && it.quietMs !== null
-    const meta = [t(ACTIVITY_KEYS[it.kind]), ...(it.detail === null ? [] : [it.detail]), ...(showQuiet ? [t('bg.quiet', { age: ui.dur(it.quietMs as number) })] : [])].join(' · ')
-    const spec: U.RowSpec = {
-      group: key, ts: nowMs - (it.quietMs ?? 0) + i / 1000, state, fact: 'now.background', body: it.label, meta,
-      ...(it.tail === null ? {} : { toggle: key, children: ui.detail(u, it.tail, { attached: true }) }),
-    }
-    ;(state.id === 'running' ? live : gone).push(spec)
-  })
-  const body: PaneLine[] = live.length === 0 ? [ui.empty(t('bg.none'), 'now.background')] : ui.list(u, 'now.background', t('bg.noun_live'), live)
-  if (gone.length > 0) {
-    const open = u.expanded?.has('more:now.background.ended') === true
-    body.push(ui.more(u, gone.length, t('bg.noun_ended'), 'more:now.background.ended', open, true))
-    if (open) body.push(...ui.list(u, 'now.background.gone', t('bg.noun_live'), gone))
-  }
-  return nowSection(u, ctx, 'background', t('now.background'), body)
-}
-
-// ---- 任務: the unfinished ones; the finished ones sit behind one `▸ N 項已完成` toggle ----
-function tasksPart(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
-  const t = ctx.t
-  const tk = snap.sections.tasks
-  if (tk === null) {
-    const note = snap.sections.tasksNote
-    if (note === null) return []
-    return nowSection(u, ctx, 'tasks', t('now.tasks'), [ui.empty(note === 'todo_hint' ? t(TODO_TOOLS_ID) : t('tasks.not_wired', { nw: t(NOT_WIRED_ID) }), 'now.tasks')])
-  }
-  const chip = ui.fmtd('count', tk.completed + '/' + tk.total, 'now.tasks')
-  if (tk.total === 0) return nowSection(u, ctx, 'tasks', t('now.tasks'), [ui.empty(t('tasks.none'), 'now.tasks')], { right: chip, fact: 'now.tasks' })
-  const spec = (r: { subject: string; status: string }, i: number): U.RowSpec => ({ group: 'task:' + i, ts: i, state: ui.stateOf('task', r.status), fact: 'now.tasks', body: r.subject, word: false })
-  const rows = tk.rows.map((r, i) => ({ r, i }))
-  const open = rows.filter(x => x.r.status !== 'completed').sort((a, b) => Number(b.r.status === 'in_progress') - Number(a.r.status === 'in_progress') || a.i - b.i).map(x => spec(x.r, x.i))
-  const done = rows.filter(x => x.r.status === 'completed').map(x => spec(x.r, x.i))
-  const body: PaneLine[] = open.length === 0 ? [ui.empty(t('tasks.all_done'), 'now.tasks')] : ui.list(u, 'now.tasks', t('tasks.noun_open'), open, { keepOrder: true })
-  if (tk.completed > 0) {
-    const shown = u.expanded?.has('more:now.tasks.done') === true
-    body.push(ui.more(u, tk.completed, t('tasks.noun_done'), 'more:now.tasks.done', shown, true))
-    if (shown) body.push(...ui.list(u, 'now.tasks.shown', t('tasks.noun_done'), done, { keepOrder: true }))
-  }
-  return nowSection(u, ctx, 'tasks', t('now.tasks'), body, { right: chip, fact: 'now.tasks' })
-}
-
-function nowLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
-  if (snap.band === null) return [] // a non-ok snapshot: the header line is the state text, there is no body
-  const u = uiCtxOf(ctx)
-  return U.sections('now', {
-    attention: attentionPart(u, ctx, snap),
-    where: positionPart(u, ctx, snap),
-    tabs: tabsPart(u, ctx, snap),
-    background: backgroundPart(u, ctx, snap),
-    tasks: tasksPart(u, ctx, snap),
-    recent: snap.recent === undefined ? [] : recentLines(snap.recent, ctx),
-  })
 }
 
 // ================= Recent prompts (the Now tab's trailing section) =================
@@ -2032,41 +1682,10 @@ export function makeRecentTracker() {
   return tracker
 }
 
-const oneLine = (s: string) => s.replace(/\s+/g, ' ').trim()
+export const oneLine = (s: string) => s.replace(/\s+/g, ' ').trim()
 export function collapsedPrompt(prompt: string): string {
   const cps = [...oneLine(prompt)]
   return cps.length > RECENT_COLLAPSED_CHARS ? cps.slice(0, RECENT_COLLAPSED_CHARS).join('') + '…' : cps.join('')
-}
-
-export function recentLines(recent: RecentGroup[] | null | undefined, ctx: PaneCtx): PaneLine[] {
-  const t = ctx.t
-  const open = U.sectionOpen(ctx.folded, SECTION.recent, true) // the history starts folded (SECTION_DEFAULTS)
-  const out: PaneLine[] = [ui.header(uiCtxOf(ctx), t('recent.title'), { id: SECTION.recent, open })]
-  if (!open) return out
-  if (recent === null || recent === undefined || recent.length === 0) return [...out, { text: ' ' + t('recent.empty'), dim: true }]
-  const you = t('recent.you')
-  const ai = t('recent.ai')
-  const expanded = ctx.expanded
-  const fit = ctx.cols - displayWidth('▸ ' + you + ': ') // a collapsed group is one line: a wrapped piece would be a second row to aim at
-  for (const g of recent) {
-    if (expanded === undefined || !expanded.has(g.id)) {
-      const cut = collapsedPrompt(g.prompt)
-      const shown = displayWidth(cut) <= fit ? cut : truncateToWidth(oneLine(g.prompt), fit)
-      out.push({ toggle: g.id, text: '▸ ' + you + ': ' + shown, segs: [seg('▸ ', 'suggestion'), seg(you + ': ', undefined, true), seg(shown)] })
-      continue
-    }
-    const body: PaneLine[] = []
-    for (const l of g.prompt.split('\n')) body.push({ text: '  ' + l, wrap: true, hang: 2 })
-    body.push({ text: '  ' + ai + ':', bold: true, color: 'suggestion' })
-    const reply = g.reply === '' ? [] : g.reply.split('\n')
-    for (const l of reply) body.push({ text: '  ' + l, wrap: true, hang: 2, dim: true })
-    const wrapped = wrapLines(body, ctx.cols)
-    const room = RECENT_EXPANDED_LINES - 1 // the header takes one
-    out.push({ toggle: g.id, text: '▾ ' + you + ':', segs: [seg('▾ ', 'suggestion'), seg(you + ':', undefined, true)] })
-    if (wrapped.length <= room) out.push(...wrapped)
-    else out.push(...wrapped.slice(0, room - 1), { text: '  …', dim: true })
-  }
-  return out
 }
 
 // ================= Background work (rows of the Now tab's working section) =================
@@ -2225,10 +1844,9 @@ export function slotQuota(q: readonly QuotaWindow[] | null | undefined): Slot | 
   return { id: 'quota', segs }
 }
 
-const QUOTA_KEYS: Record<string, string> = { five_hour: 'label.quota_5h', seven_day: 'label.quota_7d', spend_limit: 'label.quota_spend' }
+export const QUOTA_KEYS: Record<string, string> = { five_hour: 'label.quota_5h', seven_day: 'label.quota_7d', spend_limit: 'label.quota_spend' }
 
 // ================= Dispatch =================
-const cell = (v: string | number | null | undefined): string => (v === null || v === undefined || v === '' ? '—' : String(v))
 
 // the subject `stateOf('run', …)` classifies (design plan §3.3). `fresh` is the producer's own freshness test, read once in paneRows; an ended row is never fresh.
 export const runSubject = (r: LivePaneRow): RunSubject => ({ rc: r.rc, final_status: r.final_status, stall: r.stall, fresh: r.fresh, starting: r.starting })
@@ -2245,421 +1863,10 @@ export const runAgedOut = (r: LivePaneRow, nowMs: number | null): boolean => {
   const end = runEndedMs(r)
   return r.ended && nowMs !== null && end !== null && isStale('dispatch', nowMs - end)
 }
-const DISPATCH_SEC = { running: 'dispatch.running', finished: 'dispatch.finished', other: 'dispatch.other' } as const
 
-// the foreman sidecar (a job's agents and stage) as rows of 執行中: one `item` per agent, notes for the binding, the stage and the empty case (P4: was hand-built text in buildSections)
-function foremanLines(u: UiCtx, snap: LiveSnapshot, nowMs: number | null): PaneLine[] {
-  const t = u.t
-  const f = snap.sections.foreman
-  const fact = 'dispatch.runs' as const
-  if (f === null) return snap.sections.foremanNotWired ? ui.detail(u, t('foreman.not_wired', { nw: t(NOT_WIRED_ID) }), { fact }) : []
-  const out: PaneLine[] = ui.detail(u, f.binding === 'session' ? t('foreman.head_session') : t('foreman.head_bound', { b: f.binding }), { fact })
-  const age = (at: number | null, published: number | null): string => ui.ago(at !== null && nowMs !== null ? Math.max(0, nowMs - at) : published === null ? NaN : published * 1000, t)
-  const rows: U.RowSpec[] = f.agents.map((g, i) => ({
-    group: 'fm:' + i, ts: g.at_ms ?? 0, fact, body: g.description || g.id,
-    state: ui.stateOf('run', { rc: g.ended ? 0 : null, final_status: null, stall: false, fresh: !g.stale }),
-    meta: (g.label || '—') + ' · ' + age(g.at_ms, g.age_s) + (g.stale ? ' · ' + t('foreman.quiet') : ''),
-  }))
-  if (rows.length > 0) out.push(...ui.list(u, 'dispatch.foreman', t('foreman.noun'), rows))
-  if (f.stage !== null) out.push(...ui.detail(u, f.stage_source === null ? t('foreman.stage', { stage: f.stage, age: age(f.stage_at_ms, f.stage_age_s) }) : t('foreman.stage_src', { stage: f.stage, age: age(f.stage_at_ms, f.stage_age_s), src: f.stage_source }), { fact }))
-  if (f.agents.length === 0 && f.stage === null) out.push(...ui.detail(u, t('foreman.empty'), { fact }))
-  return out
-}
-
-function dispatchLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
-  const t = ctx.t
-  const u: UiCtx = { t, cols: ctx.cols, ...(ctx.expanded === undefined ? {} : { expanded: ctx.expanded }) }
-  const rows = snap.rows
-  const nowRaw = snap.detail.now_ms
-  const nowMs = typeof nowRaw === 'number' && Number.isFinite(nowRaw) ? nowRaw : null
-  const sec = (id: string, title: string, right: Frag | undefined, body: PaneLine[]): PaneLine[] => {
-    const open = !isFolded(ctx, id)
-    return [ui.header(u, title, { id, open }, right === undefined ? {} : { right, fact: 'dispatch.counts' }), ...(open ? body : [])]
-  }
-  const own = (line: PaneLine): PaneLine => (line.fact === undefined ? line : ui.ownerRow('dispatch', line.fact, line)) // a toggle row (more, header) carries no fact of its own
-  const col = (head: string, min: number, priority: number, cut: 'left' | 'right', flex = false): UiColumn => ({ head, min, priority, cut, ...(flex ? { flex: true } : {}) })
-  const columns = (last: string): UiColumn[] => [
-    col(t('dispatch.col_run'), 14, 1, 'left', true), col(t('dispatch.col_role'), 8, 5, 'right'), col(t('dispatch.col_engine'), 10, 4, 'right'),
-    col(t('dispatch.col_elapsed'), 3, 2, 'right'), col(last, 4, 3, 'right'),
-  ]
-  const baseCells = (r: LivePaneRow): string[] => [r.run_id, cell(r.role), cell(r.runner) + ' / ' + cell(r.model), r.elapsed_s === null ? '—' : ui.dur(r.elapsed_s * 1000)]
-  const out: PaneLine[] = []
-  const running: UiTableListRow[] = []
-  const finished: UiTableListRow[] = []
-  let finishedAll: Stated[] = []
-  if (rows !== null) {
-    for (const r of rows) {
-      const state = ui.stateOf('run', runSubject(r))
-      if (!r.ended) {
-        const startMs = r.started_at === null ? NaN : Date.parse(r.started_at)
-        running.push({ state, group: r.run_id, ts: Number.isFinite(startMs) ? startMs : 0, cells: [...baseCells(r), r.probe_age_s === null ? '—' : ui.ago(r.probe_age_s * 1000, t)] })
-        continue
-      }
-      finishedAll.push(state)
-      if (runAgedOut(r, nowMs)) continue
-      const end = runEndedMs(r)
-      finished.push({ state, group: r.run_id, ts: end ?? 0, cells: [...baseCells(r), end === null || nowMs === null ? '—' : ui.ago(Math.max(0, nowMs - end), t)] })
-    }
-  }
-  // 執行中: running, stalled and a run nobody has confirmed alive (◌ 已停)
-  const runBody: PaneLine[] = []
-  if (rows === null) runBody.push(ui.empty(t('nodata.prefix', { what: t('nodata.runs') }), 'dispatch.runs'))
-  else if (running.length === 0) runBody.push(ui.empty(t(rows.length === 0 ? 'dispatch.no_runs' : 'dispatch.no_running'), 'dispatch.runs'))
-  else runBody.push(...ui.tableList(u, DISPATCH_SEC.running, t('dispatch.more_running'), columns(t('dispatch.col_seen')), running, { fact: 'dispatch.runs' }))
-  runBody.push(...foremanLines(u, snap, nowMs))
-  const runChip = running.length === 0 ? undefined : ui.countChip(u, ui.worst(running.map(r => r.state)), running.length, 'dispatch.counts')
-  out.push(...sec(DISPATCH_SEC.running, t('dispatch.running'), runChip, runBody.map(l => (l.kind === undefined ? l : own(l)))))
-  // 已完成: ended runs, the latest 5 and a toggle for the rest; a run older than a day is counted in the chip only
-  if (rows !== null) {
-    const finBody = finished.length === 0
-      ? [ui.empty(t('dispatch.no_finished'), 'dispatch.runs')]
-      : ui.tableList(u, DISPATCH_SEC.finished, t('dispatch.more_noun'), columns(t('dispatch.col_ended')), finished, { fact: 'dispatch.runs' })
-    const finChip = finishedAll.length === 0 ? undefined : ui.countChip(u, ui.worst(finishedAll), finishedAll.length, 'dispatch.counts')
-    out.push(...sec(DISPATCH_SEC.finished, t('dispatch.done'), finChip, finBody.map(own)))
-  }
-  // 其他分頁: one pointer row to 審查 (a projection, §2.6) and the snapshot note. No review verdict, no spend stamps.
-  const gates = snap.gates
-  const pointer = gates === null ? ui.val(t('dispatch.no_review_page'), { role: 'prose' }) : gates.length === 0 ? ui.val(t('dispatch.no_receipt'), { role: 'prose' }) : ui.fmtd('count', t('dispatch.gate_count', { n: gates.length }))
-  const parts = [t('dispatch.note')]
-  const pubMs = snap.published_at === null ? NaN : Date.parse(snap.published_at)
-  if (Number.isFinite(pubMs)) parts.push(t('dispatch.snapshot', { at: ui.clock(pubMs, nowMs ?? pubMs) })) // the producer publishes an ISO string; HH:MM per §3.5
-  out.push(...sec(DISPATCH_SEC.other, t('dispatch.others'), undefined, [
-    ui.projection('dispatch', 'review.gates', ui.kv(u, t('tab.review'), [pointer], { fact: 'review.gates', goto: 'review' })),
-    ...ui.detail(u, parts.join(' · '), { fact: 'dispatch.counts' }).map(own),
-  ]))
-  return out
-}
-
-// ================= Review (absorbs the decisions) =================
-// P1: built from ui.ts components only (§4); the section order, ids and defaults come from SECTION_ORDER / SECTION_DEFAULTS (§2.1).
-type SeatKind = 'code' | 'plan'
-const secId = (key: string): string => 'sec:review.' + key
-
-// a code seat reports a `verdict` and a `status`; a plan seat's `status` field holds its verdict (READY, STOP, ...) except while it is `running` / `reviewed`
-function seatSubject(kind: SeatKind, s: ReviewSeat): U.SeatSubject {
-  if (kind === 'code') return { kind, verdict: s.verdict ?? null, status: s.status }
-  const raw = s.status ?? null
-  const isStatus = raw !== null && /^\s*(running|reviewed)\s*$/i.test(raw)
-  return { kind, verdict: isStatus ? null : raw, status: isStatus ? raw : null }
-}
-// whole ms since an ISO timestamp, or null when there is no clock or the timestamp does not parse (then nothing is judged stale)
-function ageMsOf(nowMs: number | null, at: string | null): number | null {
-  if (nowMs === null || at === null) return null
-  const then = Date.parse(at)
-  return Number.isFinite(then) ? Math.max(0, nowMs - then) : null
-}
-
-// seats: a valueless `席位` key, then one `item` per seat at column 12 in seat order, each with its own toggle; the raw verdict / status is the attached detail
-function seatLines(u: U.Ctx, kind: SeatKind, seats: readonly ReviewSeat[], states: readonly U.Stated[]): PaneLine[] {
-  const t = u.t
-  if (seats.length === 0) return [U.kv(u, t('label.seats'), [U.absent(t('review.no_seats'))], { fact: 'review.seats' })]
-  const rows: U.RowSpec[] = seats.map((s, i) => {
-    const raw = (kind === 'code' ? [s.verdict, s.status] : [s.status]).filter((x): x is string => typeof x === 'string' && x.trim() !== '').join(' · ')
-    return {
-      group: String(i), ts: i, state: states[i], fact: 'review.seats', body: s.id, ...(s.family ? { meta: s.family } : {}),
-      toggle: 'seat:' + kind + ':' + s.id, at: 12, ...(raw === '' ? {} : { children: U.detail(u, raw, { attached: true, at: 12 }) }),
-    }
-  })
-  return [U.kv(u, t('label.seats'), [], { fact: 'review.seats' }), ...U.list(u, 'review.seats.' + kind, t('review.noun_seats'), rows, { keepOrder: true })]
-}
-
-function codeSection(u: U.Ctx, c: CodeReviewView | null, snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
-  const t = u.t
-  const id = secId('code')
-  if (c === null) return snap.review === null ? [U.header(u, t('review.code'), { id, open: U.sectionOpen(ctx.folded, id) }), ...(U.sectionOpen(ctx.folded, id) ? [U.empty(t('nodata.review'), 'review.round')] : [])] : []
-  const { age, stale, states, round, findings, unknown } = codeRound(c, snap)
-  const meta = stale && age !== null ? U.ago(age, t) : round.id === 'running' && findings > 0 ? t('review.findings_running', { n: findings }) : round.id === 'unknown' && unknown > 0 ? t('review.unknown_seats', { n: unknown }) : undefined
-  const metaFmt: U.FmtKind = stale ? 'ago' : 'count'
-  const open = U.sectionOpen(ctx.folded, id, stale)
-  const head = U.header(u, t('review.code'), { id, open }, { right: U.chip(u, round, meta, metaFmt), fact: 'review.round' })
-  if (!open) return [head]
-  const range = c.base === null && c.head === null ? null : U.sha((c.base ?? '—') + '..' + (c.head ?? '—'))
-  const sep = (): U.Frag => U.val(' · ', { dim: true })
-  const value: U.Frag[] = [U.fmtd('id', c.generation === null ? 'R—' : 'R' + c.generation)]
-  if (range !== null) value.push(sep(), U.fmtd('sha', range))
-  if (c.phase !== null) value.push(sep(), U.val(c.phase, { role: 'prose' }))
-  if (ctx.cols >= 100 && c.seats.length > 0) value.push(sep(), U.fmtd('count', t('review.seat_count', { n: c.seats.length })))
-  return [head, U.kv(u, t('label.round'), value, { fact: 'review.round' }), ...seatLines(u, 'code', c.seats, states)]
-}
-
-function qcSection(u: U.Ctx, snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
-  const t = u.t
-  const id = secId('qc')
-  const open = U.sectionOpen(ctx.folded, id)
-  const q = snap.detail.qc
-  if (q === null) return [U.header(u, t('review.qc'), { id, open }), ...(open ? [U.empty(t('nodata.qc'), 'review.qc')] : [])]
-  const head = U.header(u, t('review.qc'), { id, open }, { right: U.chip(u, U.stateOf('qc', q.state)), fact: 'review.qc' })
-  if (!open) return [head]
-  const value: U.Frag[] = []
-  if (q.range !== null) value.push(U.fmtd('sha', U.sha(q.range)), U.val(' · ', { dim: true }))
-  value.push(U.fmtd('count', t('review.protected', { n: q.protected_files_count })))
-  return [head, U.kv(u, t('label.scope'), value, { fact: 'review.qc' })]
-}
-
-function decisionsSection(u: U.Ctx, snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
-  const t = u.t
-  const id = secId('decisions')
-  const open = U.sectionOpen(ctx.folded, id)
-  const dv = snap.detail.decisions
-  const chip = dv !== null && dv.count > 0 ? U.fmtd('count', t('review.chip_decisions', { n: dv.count, irr: dv.irreversible }), 'review.decisions') : undefined
-  const head = U.header(u, t('review.decided'), { id, open }, chip === undefined ? {} : { right: chip, fact: 'review.decisions' })
-  if (!open) return [head]
-  if (dv === null) {
-    return [head, U.empty(snap.sections.decisionsNotWired ? t('decisions.not_wired', { nw: t(NOT_WIRED_ID) }) : t('nodata.decisions'), 'review.decisions')]
-  }
-  const out: PaneLine[] = [head]
-  if (dv.count === 0) out.push(U.empty(t('review.none_decided'), 'review.decisions'))
-  const common = commonDirOf(dv.identity)
-  // newest first (§2.4), keyed like src/status/decisions-sidecar.js: time in ms * 1000 + min(position, 999); a row with no time sinks to the oldest, the position breaks ties (later first)
-  const rows: U.RowSpec[] = dv.rows.map((r, i) => {
-    const rid = r.decision_id ?? '—'
-    const step = vetoStep(r, common, dv.root, t)
-    const children = [...U.detail(u, r.decision, { attached: true }), ...('cmd' in step ? U.command(u, step.cmd) : U.detail(u, step.note, { attached: true }))]
-    return {
-      group: String(i), ts: (Date.parse(r.at ?? '') || 0) * 1000 + Math.min(i, 999), state: U.worst([]), fact: 'review.decisions', kind: 'bullet', body: rid + '  ' + r.decision,
-      bodyOpen: rid + '  ' + t(r.irreversible ? 'decision.irreversible' : 'decision.reversible') + (r.writer === null ? '' : ' · ' + r.writer),
-      toggle: 'dec:' + (r.decision_id ?? '#' + i), children,
-    }
-  })
-  out.push(...U.list(u, 'review.decisions', t('review.noun_decisions'), rows, {})) // §2.4: newest first (the ledger is oldest first, so a row's index is its time); past the cap the oldest go behind more
-  if (dv.undocumented > 0) out.push(U.kv(u, t('label.undocumented'), [U.fmtd('count', t('review.undocumented', { n: dv.undocumented }))], { fact: 'review.undocumented' }))
-  if (dv.ladder === null) out.push(U.kv(u, t('label.ladder'), [U.absent(t('nodata.ladder'))], { fact: 'review.ladder' }))
-  else {
-    const rung = dv.ladder.rung
-    const n = Math.max(0, Math.min(5, Number(rung.slice(1)) || 0))
-    const age = ageMsOf(snap.detail.now_ms, dv.ladder.at)
-    const value: U.Frag[] = [U.stepBar(6, n + 1), U.val('  '), U.fmtd('id', rung), U.val('  U0 ─ U5', { fmt: 'id', dim: true })]
-    if (age !== null) value.push(U.val(' · ' + U.ago(age, t), { fmt: 'ago', dim: true }))
-    out.push(U.kv(u, t('label.ladder'), value, { fact: 'review.ladder' }))
-  }
-  return out
-}
-
-function planSection(u: U.Ctx, p: PlanReviewView | null, snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
-  const t = u.t
-  if (p === null) return []
-  const id = secId('plan')
-  const age = ageMsOf(snap.detail.now_ms, p.updated_at)
-  if (p.terminal && age !== null && U.isStale('terminalPlan', age)) { // F3: a finished plan review fades to one history line
-    return U.detail(u, t('review.plan_history', { id: p.logical_plan_id ?? '—', ago: U.ago(age, t) }), { fact: 'review.plan' })
-  }
-  const stale = !p.terminal && age !== null && U.isStale('planReview', age) // F2
-  const states = p.seats.map(s => U.stateOf('seat', seatSubject('plan', s)))
-  const round = U.stateOf('round', { stale, converged: p.terminal, seats: states })
-  const open = U.sectionOpen(ctx.folded, id, stale)
-  const head = U.header(u, t('review.plan'), { id, open }, { right: U.chip(u, round, stale && age !== null ? U.ago(age, t) : undefined, 'ago'), fact: 'review.plan' })
-  if (!open) return [head]
-  const plan: U.Frag[] = [U.val(p.logical_plan_id || '—', { fmt: 'id' })]
-  if (p.verdict !== null && p.verdict.trim() !== '') plan.push(U.val(' · ', { dim: true }), U.stateLead(u, U.stateOf('seat', { kind: 'plan', verdict: p.verdict, status: null })))
-  const max = p.max_generations
-  const roundText = t(max === null ? 'review.round' : 'review.round_of', { g: p.generation, max: max ?? 0 })
-  const rounds: U.Frag[] = max !== null && max >= 1 && max <= 12 ? [U.stepBar(max, Math.min(Math.max(p.generation, 1), max), { here: true }), U.val('  '), U.fmtd('id', roundText)] : [U.fmtd('id', roundText)]
-  return [head, U.kv(u, t('label.plan'), plan, { fact: 'review.plan' }), U.kv(u, t('label.round'), rounds, { fact: 'review.plan' }), ...seatLines(u, 'plan', p.seats, states)]
-}
-
-function reviewTabLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
-  const u: U.Ctx = { t: ctx.t, cols: ctx.cols, ...(ctx.expanded === undefined ? {} : { expanded: ctx.expanded }) }
-  const r = snap.review
-  return [
-    ...U.sections('review', {
-      code: codeSection(u, r === null ? null : r.code, snap, ctx),
-      qc: qcSection(u, snap, ctx),
-      decisions: decisionsSection(u, snap, ctx),
-      plan: planSection(u, r === null ? null : r.plan, snap, ctx),
-    }),
-  ]
-}
-
-// ================= Spend (用量): limits, today, last 24 h, account — drawn through the design system's components (ui.ts), docs/plans/2026-10-13-live-pane-design-system.md §5.4 =================
-const METER_CELLS = (cols: number): number => (cols >= 100 ? 40 : 20) // meter and share bars: 20 cells below 100 columns, 40 at or above
-const MARK = '\u0001'
-// a string-table sentence with one money amount in it: the words stay prose, the amount is the formatter's (fmt-tagged) fragment
-function withMoney(template: string, amount: ui.Frag): ui.Frag {
-  const [head, tail = ''] = template.split(MARK)
-  return ui.cat(ui.val(head, { role: 'prose', dim: true }), amount, ui.val(tail, { role: 'prose', dim: true }))
-}
-
-type LimitWin = { key: string; value: number; cap: number; amount?: ui.Frag; resetMs?: number; fact: FactId }
-function limitsSection(u: ui.Ctx, ctx: PaneCtx, s: SpendView | null, quota: readonly QuotaWindow[], nowMs: number | null): PaneLine[] {
-  const t = ctx.t
-  const wins = limitWins(t, s, quota, nowMs)
-  const open = !isFolded(ctx, SECTION.limits)
-  if (wins.length === 0) {
-    const what = s === null ? 'nodata.spend' : 'nodata.brain'
-    return [ui.header(u, t('usage.limits'), { id: SECTION.limits, open }), ...(open ? [ui.empty(t('nodata.prefix', { what: t(what) }), 'usage.brain')] : [])]
-  }
-  const worst = Math.max(...wins.map(w => (w.cap > 0 ? w.value / w.cap : 0)))
-  const chip = ui.levelChip(worst, t(worst >= 1 ? 'spend.over' : worst >= 0.8 ? 'spend.warn' : 'spend.ok'), 'usage.limit_max')
-  const head = ui.header(u, t('usage.limits'), { id: SECTION.limits, open }, { right: chip, fact: 'usage.limit_max' })
-  if (!open) return [head]
-  // every bar is as long as the longest tail allows, so the rows compare by length; a narrow pane shortens the bars, never wraps the row
-  const tail = Math.max(...wins.map(w => (w.amount === undefined ? 0 : 2 + displayWidth(w.amount.text)) + (w.resetMs === undefined ? 0 : 2 + displayWidth(t('ui.reset', { age: ui.dur(w.resetMs) })))))
-  const cells = Math.max(4, Math.min(METER_CELLS(ctx.cols), ctx.cols - 1 - ui.KEY_W - 7 - tail))
-  const body = wins.map(w => ui.ownerRow('spend', w.fact, ui.meter(u, w.key, w.value, w.cap, { cells, fact: w.fact, ...(w.amount === undefined ? {} : { amount: w.amount }), ...(w.resetMs === undefined ? {} : { resetMs: w.resetMs }) })))
-  if (s !== null && s.brain !== null && s.cap !== null) body.push(...ui.detail(u, t('spend.note', { mode: t('spend.mode_' + s.mode) }), { fact: 'usage.brain' }))
-  return [head, ...body]
-}
-
-function todaySection(u: ui.Ctx, ctx: PaneCtx, s: SpendView | null): PaneLine[] {
-  const t = ctx.t
-  const open = !isFolded(ctx, SECTION.today)
-  const head = ui.header(u, t('now.cost'), { id: SECTION.today, open })
-  if (!open) return [head]
-  if (s === null) return [head, ui.empty(t('nodata.prefix', { what: t('nodata.spend') }), 'usage.today')]
-  const hostN = s.host_all_n
-  const rows: PaneLine[] = [ui.kv(u, t('label.host'), [ui.fmtd('money', hostN === null ? s.host_all : ui.money(hostN), 'spend.local_today'), ui.val('  ' + t('spend.all_tiers'), { role: 'prose', dim: true })], { fact: 'spend.local_today' })]
-  if (hostN !== null && s.brain !== null && hostN >= s.brain && hostN > 0) {
-    // the two share bars use one scale, so brain and the other tiers compare by length
-    const brainTxt = ui.money(s.brain)
-    const otherTxt = ui.money(hostN - s.brain)
-    const w = Math.max(displayWidth(brainTxt), displayWidth(otherTxt)) + 2
-    const total = Math.max(2, Math.min(METER_CELLS(ctx.cols), ctx.cols - 1 - ui.KEY_W - w))
-    let brainCells = Math.round((s.brain / hostN) * total)
-    if (hostN - s.brain >= 0.005 && brainCells >= total) brainCells = total - 1 // a non-zero remainder keeps at least one cell
-    const pad = (txt: string) => ui.val(' '.repeat(w - displayWidth(txt)), { role: 'prose' })
-    rows.push(
-      ui.kv(u, t('label.brain'), [ui.fmtd('money', brainTxt), pad(brainTxt), ui.barValue(brainCells)], { fact: 'usage.today' }),
-      ui.kv(u, t('label.other_tiers'), [ui.fmtd('money', otherTxt), pad(otherTxt), ui.barValue(total - brainCells)], { fact: 'usage.today' }),
-    )
-  }
-  rows.push(ui.kv(u, t('label.session'), [ui.fmtd('money', s.session)], { fact: 'spend.session' }))
-  return [head, ...rows]
-}
-
-function last24Section(u: ui.Ctx, ctx: PaneCtx, s: SpendView | null): PaneLine[] {
-  const t = ctx.t
-  const open = !isFolded(ctx, SECTION.last24)
-  const hourly = s === null ? null : s.hourly ?? null
-  if (hourly === null) return [ui.header(u, t('usage.last24'), { id: SECTION.last24, open }), ...(open ? [ui.empty(t('spend.no_history'), 'usage.history')] : [])]
-  const total = hourly.reduce((a, b) => a + b, 0)
-  const head = ui.header(u, t('usage.last24'), { id: SECTION.last24, open }, { right: ui.fmtd('money', ui.money(total), 'usage.history'), fact: 'usage.history' })
-  if (!open) return [head]
-  const peak = withMoney(t('spend.peak', { v: MARK }), ui.fmtd('money', ui.money(Math.max(...hourly))))
-  const hint = t('spend.hint')
-  const spark = ui.sparkValue(hourly)
-  // one line when the sparkline, the peak and the hint all fit beside the key; otherwise the hint drops under the sparkline (both from column 12)
-  const oneLine = ui.KEY_W + hourly.length + 2 + displayWidth(peak.text) + 3 + displayWidth(hint) <= ctx.cols - 1
-  const gap = ui.val('  ', { role: 'prose' })
-  const lines = oneLine
-    ? ui.chart(u, t('label.brain'), ui.cat(spark, gap, peak, ui.val(' · ' + hint, { role: 'prose', dim: true })), undefined, 'usage.history')
-    : ui.chart(u, t('label.brain'), ui.cat(spark, gap, peak), hint, 'usage.history')
-  return [head, ...lines]
-}
-
-// account: email (name), organization · role, plan · extra use. Where all of it fits on one row it is one row (§5.4 at 120 columns), else one row each.
-function accountSection(u: ui.Ctx, ctx: PaneCtx, a: AccountSnap | undefined): PaneLine[] {
-  const t = ctx.t
-  const open = !isFolded(ctx, SECTION.account)
-  const head = ui.header(u, t('now.account'), { id: SECTION.account, open })
-  if (!open) return [head]
-  const acc = a === undefined ? undefined : a.account
-  if (acc === undefined) return [head, ui.empty(t('nodata.account'), 'usage.account')]
-  if (acc === null) return [head, ui.kv(u, t('label.account'), [ui.absent(t('account.none'))], { fact: 'usage.account' })]
-  const prose = (s: string, dim = false) => ui.val(s, { role: 'prose', ...(dim ? { dim: true } : {}) })
-  const parts: { label: string; frags: ui.Frag[] }[] = []
-  if (acc.email !== null) parts.push({ label: t('label.account'), frags: [prose(acc.email), ...(acc.name === null ? [] : [prose(' (' + acc.name + ')', true)])] })
-  if (acc.org !== null) parts.push({ label: t('label.org'), frags: [prose(acc.org), ...(acc.role === null ? [] : [prose(' · ' + acc.role, true)])] })
-  if (acc.plan !== null || acc.extraUsage) parts.push({ label: t('label.tier'), frags: [prose(acc.plan ?? '—'), ...(acc.extraUsage ? [prose(' · ' + t('account.extra_on'), true)] : [])] })
-  if (parts.length === 0) return [head, ui.kv(u, t('label.account'), [ui.absent(t('account.partial'))], { fact: 'usage.account' })]
-  const merged = parts.flatMap((p, i) => (i === 0 ? p.frags : [prose(' · ' + p.label + ' ', true), ...p.frags]))
-  if (parts.length > 1 && ui.KEY_W + displayWidth(merged.map(f => f.text).join('')) <= ctx.cols - 1) return [head, ui.kv(u, parts[0].label, merged, { fact: 'usage.account' })]
-  return [head, ...parts.map(p => ui.kv(u, p.label, p.frags, { fact: 'usage.account' }))]
-}
-
-function spendTabLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
-  const u: ui.Ctx = { t: ctx.t, cols: ctx.cols, ...(ctx.expanded === undefined ? {} : { expanded: ctx.expanded }) }
-  const s = snap.detail.spend
-  return [
-    ...ui.sections('spend', {
-      limits: limitsSection(u, ctx, s, snap.account === undefined ? [] : snap.account.quota, snap.detail.now_ms),
-      today: todaySection(u, ctx, s),
-      last24: last24Section(u, ctx, s),
-      account: accountSection(u, ctx, snap.account),
-    }),
-  ]
-}
-
-// ================= Hygiene =================
-const sizeText = (b: number | null): string => (b === null ? '—' : b >= 1073741824 ? (b / 1073741824).toFixed(1) + ' GB' : b >= 1048576 ? Math.round(b / 1048576) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB')
-function hygieneTabLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
-  const t = ctx.t
-  const ls = snap.detail.load_source
-  const residue = snap.detail.residue
-  const nowMs = snap.detail.now_ms
-  const out: PaneLine[] = []
-  if (ls === null) out.push(NO_DATA(t, 'nodata.load_source'))
-  else {
-    const chip = hygieneChip(ls)
-    out.push(rule(t('hygiene.load'), [chip !== null && chip.warn ? seg('▲ ' + chip.text, 'warning') : seg(chip === null ? '—' : chip.text, 'success')], ctx.cols))
-    const behind = ls.behind_upstream
-    out.push(kv(t('label.source'), seg(loadSourceFor(ls, null), undefined, true), seg('  v' + (ls.plugin_version ?? '—')), ...(behind !== null && behind > 0 ? [seg('  ↓' + behind, 'warning'), dseg(' ' + t('hygiene.behind'))] : [])))
-    out.push(kv(t('label.marketplace'), ls.marketplace === 'missing' ? seg('✗ ' + ls.marketplace, 'warning') : seg('✓ ' + ls.marketplace, 'success')))
-    if (ls.flags.length > 0) out.push(kv(t('label.flags'), seg(ls.flags.join(', '), 'warning')))
-    for (const dir of ls.stale_cache_dirs) out.push({ text: '  ' + t('hygiene.cache_dir', { dir: dir.dir, pids: dir.in_use_pids.join(', ') || '—', alive: dir.alive.join(', ') || '—' }), dim: true })
-    out.push(BLANK)
-  }
-  if (residue === null) out.push(NO_DATA(t, 'nodata.residue'))
-  else {
-    const n = residue.needs_human_count
-    out.push(rule(t('hygiene.residue'), n > 0 ? [seg('⚑ ' + n, 'warning', true), dseg('  ' + sizeText(residue.needs_human_bytes))] : [seg('✓', 'success')], ctx.cols))
-    let auto = t('hygiene.no_auto')
-    if (residue.auto_ran_at !== null) {
-      const ms = Date.parse(residue.auto_ran_at)
-      const ago = nowMs !== null && Number.isFinite(ms) ? agoText((nowMs - ms) / 1000, t) : '—'
-      auto = t('hygiene.auto', { ago, wt: residue.auto_removed_count ?? 0, br: residue.auto_archived_count ?? 0 })
-    }
-    out.push({ text: t('hygiene.need_you_line', { n, size: sizeText(residue.needs_human_bytes), auto }), bold: n > 0 })
-    for (const e of residue.needs_human) {
-      out.push(withHang(row(seg(' ⚑ ', 'warning', true), seg(padCells(e.kind, 9)), seg(e.target), dseg(' · ' + e.class + ' · ' + (e.age_days === null ? '—' : Math.floor(e.age_days) + 'd') + ' · ' + sizeText(e.bytes) + (e.reason === null ? '' : ' · ' + e.reason))), KEY_W))
-      out.push({ text: '   ' + (e.command ?? '—'), dim: true, wrap: true }) // the command is copied by hand: it wraps over lines, never cut at the pane edge
-    }
-    if (n > residue.needs_human.length) out.push({ text: '  ' + t('hygiene.more', { n: n - residue.needs_human.length }), dim: true })
-  }
-  return out
-}
-
-// ================= ? (the legend: drawn from the same vocabulary the band uses) =================
-export function legendLines(ctx: PaneCtx = { t: T_EN, cols: DEFAULT_PANE_COLS }): PaneLine[] {
-  const t = ctx.t
-  const verdicts = (['decide', 'stalled', 'waiting', 'running', 'idle'] as VerdictKind[]).map(k => {
-    const v = verdictOf(k, t)
-    return { glyph: [seg(v.mark + ' ' + v.word, v.key, k !== 'idle')], id: 'verdict_' + k }
-  })
-  const entries: { glyph: Seg[]; id: string }[] = [
-    ...verdicts,
-    { glyph: [seg('M!·l5 '), seg('●─●─', 'success'), seg('◐', 'claude', true), seg('─○─○ ', 'inactive'), seg('implement', 'claude', true), dseg(' ◷3m')], id: 'position' },
-    { glyph: [seg('▰▰', 'success'), seg('▰', 'claude'), seg('▱▱', 'inactive'), seg(' 3/5 '), dseg(t('band.fam', { n: 2 }))], id: 'unit' },
-    { glyph: [seg('●2'), seg(' ⊘1', 'error')], id: 'dispatch' },
-    { glyph: [dseg('↺ '), seg('R2 '), seg('QC✓', 'success'), seg(' / '), seg('QC▲', 'warning', true)], id: 'review' },
-    { glyph: [seg('◆3 '), seg('?1', 'inactive'), seg(' U2')], id: 'decisions' },
-    { glyph: [seg('$85 '), seg('▰▰▰▰▰▰▰▰', 'warning'), seg('▱▱', 'inactive'), dseg(' 85%')], id: 'spend' },
-    { glyph: [seg('dev'), dseg('↓3 '), seg('⚑3', 'warning', true)], id: 'hygiene' },
-    { glyph: [seg('ⓘ')], id: 'icon' },
-  ]
-  // one entry = one example + its explanation. Examples up to LEGEND_EX_MAX cells share a column, the explanation wrapping under itself; a wider
-  // example (the position walk) is its own line, its explanation indented below it. A pane too narrow for a column stacks every entry.
-  const LEGEND_EX_MAX = 20
-  const wOf = (g: Seg[]) => g.reduce((n, x) => n + displayWidth(x.text), 0)
-  const narrow = entries.map(e => wOf(e.glyph)).filter(x => x <= LEGEND_EX_MAX)
-  const colW = Math.max(...narrow) + 2
-  const stacked = colW > Math.floor(ctx.cols / 2)
-  const out: PaneLine[] = [rule(t('legend.title'), [], ctx.cols), row(dseg(t('legend.note')))]
-  for (const e of entries) {
-    const gw = wOf(e.glyph)
-    const text = t('legend.' + e.id)
-    if (stacked || gw > LEGEND_EX_MAX) out.push(row(...e.glyph), withHang(row(seg('  ' + text)), 2))
-    else out.push(withHang(row(...e.glyph, seg(' '.repeat(colW - gw) + text)), colW))
-  }
-  out.push(BLANK, { text: t('legend.keys'), dim: true }, { text: t('legend.widths'), dim: true })
-  return wrapLines(out, ctx.cols)
-}
-
-export const nowLines = (snap: LiveSnapshot, ctx: PaneCtx = { t: T_EN, cols: DEFAULT_PANE_COLS }): PaneLine[] => wrapLines(nowLinesRaw(snap, ctx), ctx.cols)
-
-export const dispatchLines = (snap: LiveSnapshot, ctx: PaneCtx = { t: T_EN, cols: DEFAULT_PANE_COLS }): PaneLine[] => wrapLines(dispatchLinesRaw(snap, ctx), ctx.cols)
-
-export const reviewTabLines = (snap: LiveSnapshot, ctx: PaneCtx = { t: T_EN, cols: DEFAULT_PANE_COLS }): PaneLine[] => wrapLines(reviewTabLinesRaw(snap, ctx), ctx.cols)
-
-export const spendTabLines = (snap: LiveSnapshot, ctx: PaneCtx = { t: T_EN, cols: DEFAULT_PANE_COLS }): PaneLine[] => wrapLines(spendTabLinesRaw(snap, ctx), ctx.cols)
-
-export const hygieneTabLines = (snap: LiveSnapshot, ctx: PaneCtx = { t: T_EN, cols: DEFAULT_PANE_COLS }): PaneLine[] => wrapLines(hygieneTabLinesRaw(snap, ctx), ctx.cols)
+// band-kind predicates: tabs.ts asks the band what it is without spelling a state word (lint L7)
+export const bandAsks = (b: BandView): boolean => b.kind === 'decide' || b.kind === 'stalled' || b.kind === 'waiting'
+export const bandIsDecide = (b: BandView): boolean => b.kind === 'decide'
+export const bandIsStalled = (b: BandView): boolean => b.kind === 'stalled'
+export const bandIsWaiting = (b: BandView): boolean => b.kind === 'waiting'
+export const bandIsQuiet = (b: BandView): boolean => b.kind === 'running' || b.kind === 'idle'

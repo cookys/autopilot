@@ -63,7 +63,8 @@
 // in-memory tree; a missing file makes the bottom hook throw, which the mod sees as a rejected read.
 import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
-import { readQc, qcChip, readReview, reviewSlot, displayWidth, truncateToWidth, layoutBand, readMarker, readResidue, readStageWalk, bandSlots, slotUnit, slotPosition, slotDispatch, slotDecisions, slotSpend, slotHygiene, slotReview, readLoadSource, PANE_TABS, verdictOf, reviewTabLines, wrapLines, legendLines, bandView, hygieneTabLines, dispatchLines, spendTabLines, readSpendHistory, hourlySpend, sparkText, SPARK_BARS, INJECTED_PREFIXES, RECENT_EXPANDED_LINES, collapsedPrompt, groupRecent, makeRecentTracker, recentLines, redactSecrets, scanBackground, lastOutputLine, NO_SECTIONS, readQuota, readAccount, slotQuota, slotTab, slotUnfolds, SECTION, proxySegments } from './model'
+import { readQc, qcChip, readReview, reviewSlot, displayWidth, truncateToWidth, layoutBand, readMarker, readResidue, readStageWalk, bandSlots, slotUnit, slotPosition, slotDispatch, slotDecisions, slotSpend, slotHygiene, slotReview, readLoadSource, PANE_TABS, verdictOf, wrapLines, bandView, readSpendHistory, hourlySpend, sparkText, SPARK_BARS, INJECTED_PREFIXES, RECENT_EXPANDED_LINES, collapsedPrompt, groupRecent, makeRecentTracker, redactSecrets, scanBackground, lastOutputLine, NO_SECTIONS, readQuota, readAccount, slotQuota, slotTab, slotUnfolds, SECTION, proxySegments } from './model'
+import { reviewTabLines, legendLines, hygieneTabLines, dispatchLines, spendTabLines, recentLines } from './tabs'
 import type { SessionMsg, QuotaWindow, AccountSnap } from './model'
 import { makeT, resolveLocale, localeFromLanguage } from './i18n'
 import { EN, ZH_TW } from './locales'
@@ -246,7 +247,9 @@ async function bandParts($: any, surface: (typeof SURFACES)[number], columns = 1
   await pane.unmount()
   const kids = (tree.children || []) as Node[] // [0] = the tab strip, then the Now tab's lines
   const head = kids[1]
-  if (head && head.type === 'Box') {
+  // P5: a snapshot that is not ok also draws its state text as a Box of segments, so the Now branch is taken only when kids[1] reads as the verdict header
+  const heroOf = (n: Node): string => walkTexts(n).map(textOf).join('').replace(/ {3,}(工作階段|session) .*$/, '')
+  if (head && head.type === 'Box' && /^(.+?) {2}(.+?)(?: · (?:已進行 (\S+)|(\S+) since start))?$/.test(heroOf(head))) {
     // TUI v2 Now tab: hero = `<verdict>  <project> · <since elapsed>`; the reason is its own dim line; progress and phase are key/value rows
     // (phase is absent when the marker produced it: it is the stage row)
     // P4: kids[1] is the global verdict header (pane.tsx draws it on every tab); its right end carries the spend / ctx metrics, which paneHeader reads
@@ -313,7 +316,7 @@ const rowsOf = (tree: Node): string[] => { const r = allRows(tree); return r.sli
 const headOf = (tree: Node): string[] => { const r = allRows(tree); return r.slice(0, headEnd(r)) }
 // the tab strip: one entry per tab, `[label, badge]` as drawn
 const fullText = (n: Node): string => (n.type === 'Button' && typeof n.props?.label === 'string' ? (n.props.label as string) : (n.children || []).map(c => (typeof c === 'string' ? c : fullText(c as Node))).join(''))
-const stripOf = (tree: Node): string => fullText(((tree.children || []) as Node[])[0]).replace(/\s*─+$/, '') // without the baseline rule
+const stripOf = (tree: Node): string => fullText(((tree.children || []) as Node[])[0]).replace(/\s*[─━]+$/, '') // without the baseline rule
 
 // a mounted pane on one tab (the caller unmounts it)
 async function paneOn($: any, surface: (typeof SURFACES)[number], tab: string) {
@@ -868,13 +871,13 @@ for (const surface of SURFACES) {
     await w.clock.advance(5000)
     expect(w.toasts.length).toBe(1)
     expect(w.toasts[0]).toContain('execution axis')
-    expect(w.toasts[0]).toContain('RUNNING 2→1')
-    expect(w.toasts[0]).toContain('EXITED 1→2')
+    expect(w.toasts[0]).toContain('RUNNING 2 to 1')
+    expect(w.toasts[0]).toContain('EXITED 1 to 2')
     w.files[AHOME + '/review/' + KEY + '/2026-10-04/' + ROOT + '/current/model.json'] = j(model({ axes: { execution: { running: 1, exited: 2, unknown: 0 }, acceptance: 'accepted', can_close: true } }))
     await w.clock.advance(5000)
     expect(w.toasts.length).toBe(2)
     expect(w.toasts[1]).toContain('acceptance axis')
-    expect(w.toasts[1]).toContain('PENDING → ACCEPTED')
+    expect(w.toasts[1]).toContain('PENDING to ACCEPTED')
     await w.clock.advance(5000)
     expect(w.toasts.length).toBe(2) // no repeat
   })
@@ -915,7 +918,7 @@ for (const surface of SURFACES) {
     const p = await bandParts($, surface)
     expect(p.line1).toBe('▲ 要你決定 repo · — · 10m · —')
     expect(p.line2).toBe('要合併 plan 還是拆開？')
-    const lead = walkTexts(p.tree).find(n => /^[▲⊘✓●◌]/.test(textOf(n))) as Node
+    const lead = walkTexts(p.tree).find(n => textOf(n) === '要你決定') as Node // the verdict word (the tab strip's badges also start with a state glyph)
     expect(lead.props?.bold).toBe(true) // the word is drawn loud, not dim
     expect(lead.props?.dimColor).not.toBe(true)
   })
@@ -1004,7 +1007,7 @@ for (const surface of SURFACES) {
     expect(p.line1).toBe('◌ 待命 repo · — · 10m · 62.5%（5/8）')
     expect(p.line2).toBe('沒有派工在跑')
     expect(p.line1).not.toContain('○')
-    const lead = walkTexts(p.tree).find(n => /^[▲⊘✓●◌]/.test(textOf(n))) as Node
+    const lead = walkTexts(p.tree).find(n => textOf(n) === '待命') as Node // the verdict word (the tab strip's badges also start with a state glyph)
     expect(lead.props?.bold).toBe(true) // P4: the global header draws every verdict glyph bold (§2.2)
     // no job page at all: still the idle word, with an em dash progress
     delete w.files[MODEL_PATH]
@@ -1119,15 +1122,16 @@ for (const surface of SURFACES) {
     }
   })
 
-  test('elapsed: now minus the earliest start in the scope, 38m / 2h14m / 1d3h, an em dash when no run has a start (' + surface + ')', async ($, on) => {
+  test('elapsed: now minus the earliest start in the scope, 38m / 2h14m / 1d03h, an em dash when no run has a start (' + surface + ')', async ($, on) => {
     const ago = (s: number) => new Date(NOW_FRESH - s * 1000).toISOString()
     const at = (s: number) => row({ run_id: 'r' + s, started_at: ago(s), fact_at: ago(s) })
     const cases: [unknown[], string][] = [
       [[at(38 * 60)], '38m'],
       [[at(2 * 3600 + 14 * 60 + 5)], '2h14m'],
-      [[at(27 * 3600 + 59)], '1d3h'],
+      [[at(27 * 3600 + 59)], '1d03h'],
+      [[at(24 * 3600 + 5)], '1d00h'], // the hour is padded like the minute (the 1d0h shot finding)
       [[at(59 * 60 + 5)], '59m'],
-      [[at(3600)], '1h0m'],
+      [[at(3600)], '1h00m'],
       [[at(5)], '0m'],
       [[at(600), at(2 * 3600 + 14 * 60), at(1200)], '2h14m'], // the earliest one, whatever the order
       [[row({ run_id: 'x', started_at: null, fact_at: null })], '—'],
@@ -1468,8 +1472,8 @@ for (const surface of SURFACES) {
     expect(last.props?.dimColor).toBe(true)
     const pane = await paneParts($, surface, 'now')
     expect(pane.texts.some(t => t.startsWith('▾ 任務  1/3'))).toBe(true) // the section chip counts completed / total
-    expect(pane.texts).toContain('● 接線') // unfinished only, the one in progress first
-    expect(pane.texts).toContain('○ 收尾')
+    expect(pane.texts).toContain('● 執行中  接線') // unfinished only, the one in progress first
+    expect(pane.texts).toContain('○ 未開始  收尾')
     expect(pane.texts.some(t => t.includes('寫測試'))).toBe(false) // the completed task leaves the list (P4: 任務 shows unfinished only)
     expect(pane.texts.some(t => t.includes('1 項已完成'))).toBe(true) // and sits behind one bare `more`
     files[P_TASKS()] = j(allDone())
@@ -1537,7 +1541,7 @@ for (const surface of SURFACES) {
     expect((await bandParts($, surface)).line1.split(' · ')[2]).toBe('30m') // tasks first_created_at 09:30
     delete files[P_TASKS()]
     await w.clock.advance(5000)
-    expect((await bandParts($, surface)).line1.split(' · ')[2]).toBe('1h0m') // marker started_at 09:00
+    expect((await bandParts($, surface)).line1.split(' · ')[2]).toBe('1h00m') // marker started_at 09:00
     files[AHOME + '/session-mode/' + SID_A + '.json'] = j({ session_id: SID_A, level: null, project_key: KEY, root_run_id: null, expires_at: '2026-10-05T10:00:00.000Z' })
     await w.clock.advance(5000)
     expect((await bandParts($, surface)).line1.split(' · ')[2]).toBe('10m') // earliest run
@@ -1558,10 +1562,10 @@ for (const surface of SURFACES) {
     expect(await elapsed()).toBe('30m') // root, no runs, no receipt: tasks first_created_at 09:30 (not an em dash)
     delete files[P_TASKS()]
     await w.clock.advance(5000)
-    expect(await elapsed()).toBe('1h0m') // no tasks: marker started_at 09:00
+    expect(await elapsed()).toBe('1h00m') // no tasks: marker started_at 09:00
     files[AHOME + '/session-mode/' + SID_A + '.json'] = marker({ started_at: '2026-10-04T09:00:00.000Z' }, 'l4')
     await w.clock.advance(5000)
-    expect(await elapsed()).toBe('1h0m') // a fresh /l4 marker with a root and no dispatch behaves the same
+    expect(await elapsed()).toBe('1h00m') // a fresh /l4 marker with a root and no dispatch behaves the same
     const dir = COMMON + '/autopilot/work-orders/' + R + '/'
     files[dir + 'n1-a1.json'] = j(REC(R, '2026-10-04T09:10:00.000Z', {}))
     files[P_TASKS()] = j(tasksFile())
@@ -2105,7 +2109,7 @@ for (const surface of SURFACES) {
     })
     world(on, files)
     await start($, surface)
-    expect((await bandParts($, surface)).line1).toContain(' · 2h0m · ')
+    expect((await bandParts($, surface)).line1).toContain(' · 2h00m · ')
   })
 }
 
@@ -2271,20 +2275,19 @@ function walkAll(n: Drawn, out: Drawn[] = []): Drawn[] {
   return out
 }
 // every drawn node uses theme keys as text colour only: no backgroundColor, no inverse, no raw colour
-// (the panel's active tab is the one allowed background: the theme key `subtle`, never inverse; the band has none)
-function expectThemeOnly(tree: Drawn, allowTabBackground = false) {
+// (P5: the panel's active tab is bold `claude` text with a `━` under it; no background anywhere, so the second argument is kept only for the callers' sake)
+function expectThemeOnly(tree: Drawn, _allowTabBackground = false) {
   for (const n of walkAll(tree)) {
     const p = n.props || {}
-    if (allowTabBackground && p.backgroundColor === 'subtle') expect(n.type).toBe('Text')
-    else expect(p.backgroundColor).toBeUndefined()
+    expect(p.backgroundColor).toBeUndefined()
     expect(p.inverse).toBeUndefined()
     if (p.color !== undefined) expect(THEME).toContain(p.color as string)
   }
 }
 const joined = (texts: string[]) => texts.join('')
 
-// the tab showing: its Button wraps a Text (the subtle-background label); the others hold a bare string, and the `next` chip is no tab
-const isActiveTab = (b: Drawn): boolean => b.props?.key !== 'next' && (b.children || []).some((c: unknown) => typeof c !== 'string')
+// the tab showing: its Button wraps a bold Text (bold `claude`); the others wrap a plain one, and the `next` chip is no tab
+const isActiveTab = (b: Drawn): boolean => b.props?.key !== 'next' && (b.children || []).some((c: unknown) => typeof c !== 'string' && (c as Drawn).props?.bold === true)
 
 async function shownTabOf($: any, surface: any) {
   const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
@@ -2392,7 +2395,7 @@ for (const surface of SURFACES) {
     await pane.unmount()
     expect(texts[0]).toContain('⊘ 疑似卡住') // the Now tab: its hero row, then the dim header
     expect(texts[0]).toContain('工作階段 $') // and the spend / ctx metrics on its right (P4: one global header)
-    expect(texts.some(t => t.startsWith('▌ 狀態列符號'))).toBe(false) // not the legend
+    expect(texts.some(t => t.startsWith('▾ 狀態 ') || t.startsWith('▾ 符號 '))).toBe(false) // not the legend
   })
 
   test('P8 band: the ⓘ label is two cells, so the right half of a glyph the terminal draws wide is still the Button (' + surface + ')', async ($, on) => {
@@ -2698,7 +2701,7 @@ for (const surface of SURFACES) {
     expect(now.some(t => /^▲ 要合併 plan 還是拆開？ +▸$/.test(t))).toBe(true)
   })
 
-  test('P7 panel: the tab strip is six Buttons in contract order, the active one on a subtle background, with badges (' + surface + ')', async ($, on) => {
+  test('P7 panel: the tab strip is six Buttons in contract order, the active one bold, with badges (' + surface + ')', async ($, on) => {
     world(on, richWorld())
     await start($, surface)
     const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
@@ -2715,12 +2718,13 @@ for (const surface of SURFACES) {
     expect(strip).toContain('殘留')
     expect(strip).toContain('⚑2')
     expect(strip.trim().endsWith('?')).toBe(true)
-    // the active tab (Now) is bold on the `subtle` background; the inactive ones are dim and carry no background
-    const bgNodes = walkAll(((tree.children || [])[0]) as Drawn).filter(n => n.props?.backgroundColor !== undefined)
-    expect(bgNodes.length).toBeGreaterThan(0)
-    expect(bgNodes.every(n => n.type === 'Text' && n.props?.backgroundColor === 'subtle')).toBe(true)
-    expect(bgNodes.some(n => textOf(n as Node).includes('現況'))).toBe(true)
-    expect(bgNodes.some(n => textOf(n as Node).includes('派工'))).toBe(false)
+    // the active tab (Now) is bold `claude` text with a `━` run in the rule under it; the inactive ones are dim; nothing carries a background (§8 Q1)
+    const stripNodes = walkAll(((tree.children || [])[0]) as Drawn)
+    expect(stripNodes.filter(n => n.props?.backgroundColor !== undefined).length).toBe(0)
+    const boldNodes = stripNodes.filter(n => n.type === 'Text' && n.props?.bold === true)
+    expect(boldNodes.some(n => textOf(n as Node).includes('現況') && n.props?.color === 'claude')).toBe(true)
+    expect(boldNodes.some(n => textOf(n as Node).includes('派工'))).toBe(false)
+    expect(fullText(((tree.children || []) as Node[])[0])).toContain('━')
     await pane.unmount()
   })
 
@@ -2750,8 +2754,9 @@ for (const surface of SURFACES) {
     const tab = async (id: string) => paneParts($, surface, id)
     const has = (texts: string[], ...parts: string[]) => { const ok = texts.some(t => parts.every(p => t.includes(p))); if (!ok) throw new Error('no line has: ' + parts.join(' | ')); return ok }
     const legend = await tab('legend')
-    expect(legend.texts[0]).toContain('狀態列符號')
-    for (const glyph of ['▲ 要你決定', '⊘ 疑似卡住', '✓ 完成待驗收', '● 進行中', '◌ 待命', '●2', '↺', 'QC✓', 'QC▲', '◆3', '?1', '$85', '⚑3', 'ⓘ', '◐']) expect(joined(legend.texts)).toContain(glyph)
+    expect(legend.texts[0]).toContain('狀態') // the generated `?` tab (I15) opens on its states section
+    for (const id of ui.STATE_IDS) expect(joined(legend.texts)).toContain(ui.STATES[id].glyph + ' ' + makeT('zh-TW')('ui.state.' + id)) // every state glyph with its word
+    for (const k of ['open', 'folded', 'goto', 'bullet', 'detail', 'command', 'tabMark', 'residue', 'behind', 'overflow'] as const) expect(joined(legend.texts)).toContain(ui.GLYPHS.structure[k])
     expect(legend.texts.some(t => t.includes('Ctrl+x Tab'))).toBe(true)
     expectThemeOnly(legend.tree as Drawn, true)
 
@@ -2794,18 +2799,14 @@ for (const surface of SURFACES) {
     expectThemeOnly(spend.tree as Drawn, true)
 
     const hygiene = await tab('hygiene')
-    expect(has(hygiene.texts, '外掛來源', 'dev ↓3')).toBe(true)
-    expect(has(hygiene.texts, '來源', 'dev', 'v2.37.0', '↓3', '落後 upstream')).toBe(true)
-    expect(has(hygiene.texts, '市集', '✓ directory')).toBe(true)
-    expect(has(hygiene.texts, '待清殘留', '⚑ 2', '3 MB')).toBe(true)
-    expect(hygiene.texts).toContain('2 項要你處理 · 3 MB · 3h0m 前自動清理：刪 2 個 worktree、封存 1 條分支')
-    expect(has(hygiene.texts, '⚑', 'worktree', '/home/u/proj/.claude/worktrees/hands-x', 'dirty · 4d · 2 MB · failure')).toBe(true)
-    expect(hygiene.texts).toContain('   git -C /home/u/proj worktree remove --force /home/u/proj/.claude/worktrees/hands-x')
-    // the needs_human command wraps (never cut at the pane edge); the neighbouring row lines stay single-line
-    const cmdNode = walkTexts(hygiene.tree).find(n => textOf(n).startsWith('   git -C /home/u/proj worktree remove'))
-    expect(cmdNode?.props?.wrap).toBe('wrap')
-    expect(walkTexts(hygiene.tree).find(n => textOf(n).includes('dirty · 4d'))?.props?.wrap).toBe('truncate')
-    expect(has(hygiene.texts, '⚑', 'branch', 'feature/old', 'unintegrated-branch · 20d · —')).toBe(true)
+    // P5: the groups, the cleanup row and the plugin source are `item` rows on the shared components; a group is folded until its toggle is pressed
+    expect(has(hygiene.texts, '要你處理', '▲ 2', '3.0 MB')).toBe(true)
+    expect(has(hygiene.texts, '▲ worktree', '有未提交變更', '1 個', '2.0 MB')).toBe(true)
+    expect(has(hygiene.texts, '▲ 分支', '分支未整合', '1 條')).toBe(true)
+    expect(hygiene.texts).toContain('✓ 完成  3h00m 前：刪 2 個 worktree、封存 1 條分支')
+    expect(has(hygiene.texts, '外掛來源', '要你處理')).toBe(true)
+    expect(has(hygiene.texts, '▲ dev', 'v2.37.0', '落後 upstream 3')).toBe(true)
+    expect(hygiene.texts.some(t => t.includes('/home/u/proj/.claude/worktrees/hands-x')), 'the worktree path is behind the folded group').toBe(false)
     expectThemeOnly(hygiene.tree as Drawn, true)
   })
 
@@ -2816,7 +2817,7 @@ for (const surface of SURFACES) {
     expect((await paneParts($, surface, 'now')).texts).toContain('— this session has no stage or unit recorded') // one Position line (P4)
     expect((await paneParts($, surface, 'review')).texts.filter(t => t.startsWith('— no '))).toEqual(['— no review published', '— no QC status published', '— no decisions sidecar published'])
     expect(await ndata('spend')).toEqual(['— no data · brain-tier spend today is not published'])
-    expect(await ndata('hygiene')).toEqual(['no data · no load source published', 'no data · no worktree residue published'])
+    expect(await ndata('hygiene')).toEqual(['— no data · no worktree residue published', '— no data · no automatic cleanup record published', '— no data · no load source published']) // one empty line per section, in SECTION_ORDER
     for (const id of ['now', 'dispatch', 'review', 'spend', 'hygiene', 'legend']) {
       expect((await paneParts($, surface, id)).texts.length).toBeGreaterThan(1) // never just the header
     }
@@ -3342,7 +3343,20 @@ test('wrapLines: a kv row wraps with a hanging indent of 12 cells, a long path b
   expect(wrapLines([fits], 40)[0]).toBe(fits)
 })
 
-test('legend: every entry is one example plus its explanation, wrapped, at widths 40 to 100 in en and zh-TW', () => {
+// I15 (plan section 5.6): the `?` tab is generated from the tables the pane draws from. Every state of STATES (glyph + word) and every structure glyph a tab draws
+// is on it, in both locales, at every width, and each entry is one example plus its explanation.
+const LEGEND_STRUCTURE = ['open', 'folded', 'detail', 'command', 'goto', 'bullet', 'empty', 'tabMark', 'residue', 'behind', 'overflow'] as const // the glyphs the tabs draw (the band's own symbols are not tab symbols)
+const legendMissing = (lines: { text: string }[], t: ReturnType<typeof makeT>): string[] => {
+  const all = lines.map(l => l.text).join('\n')
+  const out: string[] = []
+  for (const id of ui.STATE_IDS) {
+    if (!lines.some(l => l.fact === 'legend.states' && l.text.includes(ui.STATES[id].glyph) && l.text.includes(t('ui.state.' + id)))) out.push('state row ' + id) // the glyph and its word on one row: elsewhere on the tab does not count
+  }
+  for (const k of LEGEND_STRUCTURE) if (!all.includes(ui.GLYPHS.structure[k])) out.push('structure glyph ' + k)
+  if (![...ui.GLYPHS.chart.meterOn].every(c => all.includes(c))) out.push('meter glyph')
+  return out
+}
+test('I15: the legend lists every state and every structure glyph a tab draws, wrapped to the width, in en and zh-TW at widths 40 to 100', () => {
   for (const locale of ['en', 'zh-TW'] as const) {
     const t = makeT(locale)
     for (const cols of [40, 60, 76, 90, 100]) {
@@ -3350,15 +3364,24 @@ test('legend: every entry is one example plus its explanation, wrapped, at width
       for (const l of lines) {
         expect(displayWidth(l.text), locale + ' ' + cols + ': ' + l.text).toBeLessThanOrEqual(cols)
         expect(l.text.includes('…'), locale + ' ' + cols + ': ' + l.text).toBe(false)
+        expect(ui.isMade(l), locale + ' ' + cols + ': ' + l.text).toBe(true)
       }
-      const all = lines.map(l => l.text).join('\n').replace(/\s+/g, '')
-      for (const id of ['position', 'unit', 'spend']) expect(all.includes(t('legend.' + id).replace(/\s+/g, '').slice(0, 6)), locale + ' ' + cols + ' ' + id).toBe(true)
-      const pos = lines.findIndex(l => l.text.startsWith('M!·l5')) // the stage walk example sits on its own line, its explanation below it
-      expect(pos, locale + ' ' + cols).toBeGreaterThan(0)
-      expect(lines[pos].text.includes('implement'), locale + ' ' + cols).toBe(true)
-      expect(lines[pos + 1].text.startsWith('  ') && !lines[pos + 1].text.includes('M!'), locale + ' ' + cols).toBe(true)
+      expect(legendMissing(lines, t), locale + ' ' + cols).toEqual([])
+      // each example row is a kv: the example at the key column, the explanation after it
+      expect(lines.filter(l => l.kind === 'kv').length, locale + ' ' + cols).toBeGreaterThanOrEqual(ui.STATE_IDS.length + LEGEND_STRUCTURE.length - 1)
+      // negative control: a legend that lost one state row is reported
+      const withoutDone = lines.filter(l => !l.text.includes(ui.STATES.done.glyph) && !l.text.includes(t('ui.state.done')))
+      expect(legendMissing(withoutDone, t).length, 'control ' + locale + ' ' + cols).toBeGreaterThan(0)
     }
   }
+})
+test('I15: the legend sections fold on their header and the generated rows follow SECTION_ORDER.legend', () => {
+  const t = makeT('en')
+  const open = legendLines({ t, cols: 76 })
+  const folded = legendLines({ t, cols: 76, folded: new Set(['sec:legend.states']) })
+  expect(folded.length).toBeLessThan(open.length)
+  expect(folded.some(l => l.kind === 'header' && l.text.startsWith(ui.GLYPHS.structure.folded + ' ' + t('legend.sec_states')))).toBe(true)
+  expect(open.filter(l => l.kind === 'header').map(l => l.toggle)).toEqual(ui.SECTION_ORDER.legend.map(k => 'sec:legend.' + k))
 })
 
 test('wrapLines: no continuation line is only a closing punctuation mark or a single glyph, widths 30 to 130 in en and zh-TW', () => {
@@ -3403,16 +3426,18 @@ test('hygiene tab: a long cache dir, worktree path and reason wrap in full at 60
     detail: {
       now_ms: 1000,
       load_source: { source: 'dev', plugin_version: '3.0.0', marketplace: 'directory', flags: [], behind_upstream: null, stale_cache_dirs: [{ dir, in_use_pids: [18089, 18090], alive: [18089] }] },
-      residue: { needs_human_count: 1, needs_human_bytes: 1000, needs_human: [{ kind: 'worktree', target, class: 'dirty', age_days: 4, bytes: 1000, reason: 'a long explanatory reason that must stay readable to the end', command: null }], auto_ran_at: null, auto_removed_count: null, auto_archived_count: null },
+      residue: { needs_human_count: 1, needs_human_bytes: 1000, needs_human: [{ kind: 'worktree', target, class: 'dirty', age_days: 4, bytes: 1000, reason: 'a long explanatory reason that must stay readable to the end', command: 'git worktree remove ' + target }], auto_ran_at: null, auto_removed_count: null, auto_archived_count: null },
     },
   } as never
   for (const locale of ['en', 'zh-TW'] as const) {
-    const lines = hygieneTabLines(snap, { t: makeT(locale), cols: 60 })
+    // the group, the item and the plugin source are collapsed by default (P5); the long strings are what an owner sees once they open them
+    const lines = hygieneTabLines(snap, { t: makeT(locale), cols: 60, expanded: new Set(['res:worktree|dirty', 'resitem:' + target, 'residue:source']) })
     const flat = lines.map(l => l.text.trim()).join('')
-    for (const l of lines) { expect(displayWidth(l.text), l.text).toBeLessThanOrEqual(60); expect(l.text.includes('…'), l.text).toBe(false) }
+    // a residue item's bullet shows the id tail by design (plan 5.5: `agent-a3379d38`); the full path is the command beneath it, which is what must never clip
+    for (const l of lines) { expect(displayWidth(l.text), l.text).toBeLessThanOrEqual(60); if (l.kind !== 'bullet') expect(l.text.includes('…'), l.text).toBe(false) }
     expect(flat.replace(/\s/g, '').includes(dir.replace(/\s/g, ''))).toBe(true)
     expect(flat.replace(/\s/g, '').includes(target)).toBe(true)
-    expect(flat.replace(/\s/g, '').includes('mustremainreadabletotheend'.replace(/\s/g, '')) || flat.includes('readable to the end')).toBe(true)
+    expect(flat.replace(/\s/g, '').includes('mustreadabletotheend'.replace(/\s/g, '')) || flat.replace(/\s/g, '').includes('readabletotheend')).toBe(true)
   }
 })
 
@@ -3500,7 +3525,7 @@ test('dispatch tab: ownership (I17, M31, M38): no spend or usage fact, no seat v
     const snap = dispatchSnap(busyDispatchRows(), { gates, session_as_of: '01:40', host_as_of: '01:41' })
     const lines = dispatchLines(snap, { t, cols: 76 })
     for (const l of lines) {
-      if (l.fact === undefined) continue
+      if (l.fact === 'pane.chrome') continue // spacers, headings and toggles carry no data
       expect(l.fact.startsWith('spend.') || l.fact.startsWith('usage.'), l.text).toBe(false)
       const owner = ui.FACT_OWNER[l.fact]
       if (owner !== 'dispatch') { expect(l.goto, l.text + ' is a projection and must carry goto').toBe('review'); expect(l.kind).toBe('kv') }
@@ -3513,6 +3538,31 @@ test('dispatch tab: ownership (I17, M31, M38): no spend or usage fact, no seat v
     expect(/SHIP|CONDITIONAL|STOP|PASS|FIX-THEN/.test(flat), 'no seat or gate verdict word').toBe(false)
     expect(/\$\d|01:40|01:41/.test(flat), 'no spend or session / host as-of stamp').toBe(false)
     expect(lines.filter(l => l.kind === 'detail').length).toBe(1)
+  }
+})
+
+// the g4 docked finding: at a narrow pane the heading row used to wrap while the rows did not, so the columns no longer lined up
+const cellStarts = (text: string): number[] => {
+  const out: number[] = []
+  let pos = 0
+  let prev = '  ' // a cell starts after two spaces (a cell's own text has single spaces, `3m ago`)
+  for (const ch of [...text]) { if (ch !== ' ' && prev === '  ') out.push(pos); pos += displayWidth(ch); prev = (prev + ch).slice(-2) }
+  return out
+}
+test('dispatch tab: the heading row of a table is one line and its columns start where the cells beneath them start, at every width 30 to 140 (en and zh-TW)', () => {
+  for (const locale of tabLocales) {
+    const t = makeT(locale)
+    for (let cols = 30; cols <= 140; cols += 1) {
+      const lines = dispatchLines(dispatchSnap(busyDispatchRows()), { t, cols })
+      const tables = lines.filter(l => l.kind === 'table')
+      expect(tables.length).toBeGreaterThan(1)
+      for (const l of tables) expect(displayWidth(l.text), locale + ' ' + cols + ' ' + l.text).toBeLessThanOrEqual(cols - 1)
+      const head = tables[0]
+      const heads = cellStarts(head.text)
+      // a data row's first cell starts at the state column (col 0 holds its glyph); every later cell of the same table starts under a heading
+      const rows = tables.filter(l => l !== head && cellStarts(l.text).length >= 1 && lines.indexOf(l) < lines.findIndex((x, i) => i > lines.indexOf(head) && x.kind === 'header'))
+      for (const r of rows) for (const c of cellStarts(r.text).slice(2)) expect(heads, locale + ' ' + cols + ' row `' + r.text + '` vs head `' + head.text + '`').toContain(c)
+    }
   }
 })
 
@@ -3906,6 +3956,8 @@ test('recent: every redaction pattern becomes ***, ordinary text is untouched', 
 })
 
 const OPEN_RECENT: ReadonlySet<string> = new Set(['sec:now.recent']) // membership = toggled away from its folded default = open
+// P5: a recent group is a `bullet` with its toggle at the right edge; the tests compare it with the padding squeezed to one space
+const squash = (x: string): string => x.trimEnd().replace(/ {2,}([▸▾])$/, ' $1')
 
 test('recent: a collapsed prompt is one line of at most 60 characters plus …', () => {
   const long = 'word '.repeat(40) + '\n\nsecond paragraph'
@@ -3918,7 +3970,7 @@ test('recent: a collapsed prompt is one line of at most 60 characters plus …',
   expect(collapsedPrompt(exact)).toBe(exact)
   const lines = recentLines(groupRecent([U(long), A('reply')]), { t: makeT('en'), cols: 100, expanded: new Set(), folded: OPEN_RECENT })
   const g = lines.find(l => l.toggle === '0') as { text: string } // the group (id = its transcript index), not the foldable heading
-  expect(g.text).toBe('▸ You: ' + c)
+  expect(squash(g.text)).toBe('◦ You: ' + c + ' ▸')
 })
 
 test('recent: an expanded group is capped at 20 lines with a final … line; a short one is shown whole', () => {
@@ -3927,7 +3979,7 @@ test('recent: an expanded group is capped at 20 lines with a final … line; a s
   const ctx = { t: makeT('en'), cols: 80, expanded: new Set([groups[0].id]), folded: OPEN_RECENT }
   const lines = recentLines(groups, ctx).slice(1) // without the section heading
   expect(lines.length).toBe(RECENT_EXPANDED_LINES)
-  expect(lines[0].text).toBe('▾ You:')
+  expect(squash(lines[0].text)).toBe('◦ You: ▾')
   expect(lines[lines.length - 1].text.trim()).toBe('…')
   const text = lines.map(l => l.text).join('\n')
   expect(text).toContain('a question')
@@ -3935,7 +3987,7 @@ test('recent: an expanded group is capped at 20 lines with a final … line; a s
   expect(text).toContain('reply line 0')
   expect(text).not.toContain('reply line 59')
   const short = recentLines(groupRecent([U('hi'), A('hello')]), { ...ctx, expanded: new Set(['0']) }).slice(1).map(l => l.text.trim())
-  expect(short).toEqual(['▾ You:', 'hi', 'AI:', 'hello'])
+  expect([squash(short[0]), ...short.slice(1)]).toEqual(['◦ You: ▾', 'hi', 'AI:', 'hello'])
 })
 
 test('recent: the tracker recomputes only when the message count (or the newest text) changes', () => {
@@ -3967,11 +4019,11 @@ for (const locale of ['en', 'zh-TW'] as const) {
     await start($, 'terminal')
     await openRecent($)
     const empty = (await paneParts($, 'terminal', 'now')).texts
-    expect(empty.slice(-2)).toEqual([expect.stringContaining(t('recent.title')), ' ' + t('recent.empty')])
+    expect(empty.slice(-2)).toEqual([expect.stringContaining(t('recent.title')), expect.stringContaining(t('recent.empty'))])
     messages = [U('synthetic question one'), A('synthetic answer one'), U('<system-reminder>noise'), U('synthetic question two'), A('synthetic answer two')]
     await w.clock.advance(5000)
     const filled = (await paneParts($, 'terminal', 'now')).texts
-    expect(filled.slice(-3)).toEqual([expect.stringContaining(t('recent.title')), '▸ ' + t('recent.you') + ': synthetic question one', '▸ ' + t('recent.you') + ': synthetic question two'])
+    expect([filled.slice(-3)[0], ...filled.slice(-2).map(squash)]).toEqual([expect.stringContaining(t('recent.title')), '◦ ' + t('recent.you') + ': synthetic question one ▸', '◦ ' + t('recent.you') + ': synthetic question two ▸'])
   })
 }
 
@@ -3985,18 +4037,18 @@ test('recent: the pane lists the section after a tick, and a throwing $.session.
   await openRecent($)
   const rows = async () => (await paneParts($, 'terminal', 'now')).texts
   let r = await rows()
-  expect(r.slice(-2)).toEqual([expect.stringContaining('Recent conversation'), '▸ You: synthetic question one'])
+  expect([r.slice(-2)[0], squash(r[r.length - 1])]).toEqual([expect.stringContaining('Recent conversation'), '◦ You: synthetic question one ▸'])
   throwing = true
   messages = [...messages, U('synthetic question two')]
   w.toasts.length = 0
   await w.clock.advance(5000)
   r = await rows()
-  expect(r.slice(-2)).toEqual([expect.stringContaining('Recent conversation'), '▸ You: synthetic question one']) // the previous value is kept
+  expect([r.slice(-2)[0], squash(r[r.length - 1])]).toEqual([expect.stringContaining('Recent conversation'), '◦ You: synthetic question one ▸']) // the previous value is kept
   expect(r.some(x => x.includes('Needs you') || x.includes('Stalled'))).toBe(true) // and the rest of the tick still ran
   throwing = false
   await w.clock.advance(5000)
   r = await rows()
-  expect(r.slice(-3)).toEqual([expect.stringContaining('Recent conversation'), '▸ You: synthetic question one', '▸ You: synthetic question two'])
+  expect([r.slice(-3)[0], ...r.slice(-2).map(squash)]).toEqual([expect.stringContaining('Recent conversation'), '◦ You: synthetic question one ▸', '◦ You: synthetic question two ▸'])
   const before = calls
   await w.clock.advance(5000) // unchanged transcript: read again, not regrouped
   expect(calls).toBeGreaterThan(before)
@@ -4014,7 +4066,7 @@ test('recent: pressing a group Button expands it, pressing again collapses it', 
   await first.unmount()
   const press = async () => {
     const pane = await mountPane()
-    const key = 'b' + rowsOf((await pane.drawn()) as Node).findIndex(r => /^[▸▾] You/.test(r)) // the line index of the group header
+    const key = 'b' + rowsOf((await pane.drawn()) as Node).findIndex(r => /^◦ You/.test(r)) // the line index of the group header
     await pane.press({ key })
     await pane.unmount()
     const again = await mountPane()
@@ -4023,19 +4075,19 @@ test('recent: pressing a group Button expands it, pressing again collapses it', 
     return rows
   }
   let rows = await press()
-  expect(rows.slice(-4)).toEqual(['▾ You:', '  synthetic question one', '  AI:', '  synthetic answer one'])
+  expect([squash(rows.slice(-4)[0]), ...rows.slice(-3)]).toEqual(['◦ You: ▾', '  synthetic question one', '  AI:', '  synthetic answer one'])
   rows = await press()
-  expect(rows.slice(-1)).toEqual(['▸ You: synthetic question one'])
+  expect(rows.slice(-1).map(squash)).toEqual(['◦ You: synthetic question one ▸'])
   expect(w.toasts).toEqual([])
   // a new session id (/clear) reuses transcript indexes: an opened group must not stay open for the new session
   rows = await press()
-  expect(rows.slice(-4)[0]).toBe('▾ You:')
+  expect(squash(rows.slice(-4)[0])).toBe('◦ You: ▾')
   w.sid.value = SID_B
   await w.clock.advance(5000)
   const pane = await mountPane()
   rows = rowsOf((await pane.drawn()) as Node)
   await pane.unmount()
-  expect(rows.slice(-1)).toEqual(['▸ You: synthetic question one'])
+  expect(rows.slice(-1).map(squash)).toEqual(['◦ You: synthetic question one ▸'])
 })
 
 // ---- owner 2026-10-12: a wrapped group header stayed unpressable; sections fold ----
@@ -4055,7 +4107,7 @@ test('recent: a collapsed CJK prompt wider than the pane is cut to one line that
     expect(l.toggle).toBeDefined()
     expect(displayWidth(l.text)).toBeLessThanOrEqual(40)
   }
-  expect(lines[1].text.endsWith('…')).toBe(true)
+  expect(lines[1].text.includes('…') && lines[1].text.trimEnd().endsWith('▸')).toBe(true) // the prompt is cut, the toggle stays at the right edge
   expect(wrapLines(lines, 40).length).toBe(2) // nothing left for the pane's wrap to split
 })
 
@@ -4070,7 +4122,7 @@ test('recent: on a narrow pane the long CJK group (the second one) opens on a pr
   await first.unmount()
   const pane = await mountPane()
   const rows = rowsOf((await pane.drawn()) as Node)
-  const at = rows.findIndex(r => r.startsWith('▸ 你: 這是一個'))
+  const at = rows.findIndex(r => r.startsWith('◦ 你: 這是一個'))
   expect(at).toBeGreaterThan(0)
   await pane.press({ key: 'b' + at })
   await pane.unmount()
@@ -4573,7 +4625,7 @@ for (const surface of SURFACES) {
     await start($, surface)
     // bodyRows 8 puts every tab over its window, so every header carries its own overflow hint. `pane.overflow` is EXCLUDED from the comparison: it is each tab's own
     // scroll state (how many rows lie below THIS tab's tree), not a fact of the session; everything else in the header must be byte-identical.
-    const OVERFLOW = /↓ 下方還有 (\d+) 行/
+    const OVERFLOW = /⇣ 下方還有 (\d+) 行/
     const rawHeads: string[][] = []
     for (const tab of ['now', 'dispatch', 'review', 'spend', 'hygiene', 'legend']) rawHeads.push((await paneParts($, surface, tab, PANE_PROPS.bodyColumns, { offset: 0, bodyRows: 8 })).head)
     const heads = rawHeads.map(h => h.map(l => l.replace(OVERFLOW, (_m, d: string) => " ".repeat(14 + d.length)).trimEnd())) // the hint is 14 + digits cells wide
@@ -4661,12 +4713,76 @@ for (const surface of SURFACES) {
   })
 }
 
-// ---- the overflow hint (coordinator ruling 2026-10-14): `↓ 下方還有 N 行` on the header's last metrics line while the window is at the top over a taller tree ----
+// ---- P5 (live-pane plan §7): the mounted I18 / I19 / I23 for the residue toggles ----
+for (const surface of SURFACES) {
+  const hyg = async ($: any, cols?: number): Promise<string[]> => (await paneParts($, surface, 'hygiene', cols)).texts
+  test('P5 mounted (I18): a residue group opens its items, an item opens its reason and command, a second press restores each (' + surface + ')', async ($, on) => {
+    world(on, richWorld())
+    await start($, surface)
+    const closed = await hyg($)
+    expect(closed.some(t => t.includes('hands-x')), 'the default render lists no item').toBe(false)
+    expect(closed.some(t => t.includes('git -C /home/u/proj worktree remove')), 'the default render has no command').toBe(false)
+    const isGroup = (t: string) => t.startsWith('▲ worktree') && t.trimEnd().endsWith('▸')
+    await pressRow($, surface, 'hygiene', isGroup)
+    const group = await hyg($)
+    expect(group.length, 'the group adds exactly its item row').toBe(closed.length + 1)
+    expect(group.some(t => t.startsWith('▲ worktree') && t.trimEnd().endsWith('▾'))).toBe(true)
+    const itemRow = (t: string) => t.startsWith('◦ hands-x') && t.trimEnd().endsWith('▸')
+    expect(group.some(itemRow), group.join('\n')).toBe(true)
+    await pressRow($, surface, 'hygiene', itemRow)
+    const item = await hyg($)
+    expect(item.some(t => t.includes('└ failure')), 'the reason is an attached detail').toBe(true)
+    expect(item.some(t => t.startsWith('  $ git -C /home/u/proj worktree remove --force')), 'the command sits under its own item').toBe(true)
+    await pressRow($, surface, 'hygiene', t => t.startsWith('◦ hands-x') && t.trimEnd().endsWith('▾'))
+    expect(await hyg($)).toEqual(group)
+    await pressRow($, surface, 'hygiene', t => t.startsWith('▲ worktree') && t.trimEnd().endsWith('▾'))
+    expect(await hyg($)).toEqual(closed)
+  })
+
+  test('P5 mounted (I19): each residue section header flips its fold and a second press restores it; the default is SECTION_DEFAULTS (' + surface + ')', async ($, on) => {
+    world(on, richWorld())
+    await start($, surface)
+    const first = await hyg($)
+    const heads = first.filter(t => /^[▾▸] \S/.test(t))
+    expect(heads.length).toBe(3)
+    for (const h of heads) expect(h.startsWith('▾'), 'residue sections start open: ' + h).toBe(true)
+    for (const prefix of ['▾ 要你處理', '▾ 自動清理', '▾ 外掛來源']) {
+      await pressRow($, surface, 'hygiene', t => t.startsWith(prefix))
+      const folded = await hyg($)
+      expect(folded.some(t => t.startsWith('▸' + prefix.slice(1))), prefix).toBe(true)
+      expect(folded.length, prefix).toBeLessThan(first.length)
+      await pressRow($, surface, 'hygiene', t => t.startsWith('▸' + prefix.slice(1)))
+      expect(await hyg($), prefix).toEqual(first)
+    }
+  })
+
+  test('P5 mounted (I23 golden): the 殘留 tab at 76 columns with the first group and its item opened (' + surface + ')', async ($, on) => {
+    world(on, richWorld())
+    await start($, surface)
+    await pressRow($, surface, 'hygiene', t => t.startsWith('▲ worktree') && t.trimEnd().endsWith('▸'))
+    await pressRow($, surface, 'hygiene', t => t.startsWith('◦ hands-x'))
+    expect(await hyg($, 76)).toEqual([
+      "▾ 要你處理  ▲ 2 · 3.0 MB ──────────────────────────────────────────────────",
+      "▲ worktree  有未提交變更 · 1 個 · 2.0 MB                                  ▾",
+      "◦ hands-x · 4d04h · 2.0 MB                                                ▾",
+      "  └ failure",
+      "  $ git -C /home/u/proj worktree remove --force /home/u/proj/.claude/",
+      "    worktrees/hands-x",
+      "▲ 分支  分支未整合 · 1 條                                                 ▸",
+      "▾ 自動清理 ────────────────────────────────────────────────────────────────",
+      "✓ 完成  3h00m 前：刪 2 個 worktree、封存 1 條分支",
+      "▾ 外掛來源  ▲ 要你處理 ────────────────────────────────────────────────────",
+      "▲ dev · v2.37.0 · 落後 upstream 3                                         ▸",
+    ])
+  })
+}
+
+// ---- the overflow hint (coordinator ruling 2026-10-14): `⇣ 下方還有 N 行` on the header's last metrics line while the window is at the top over a taller tree ----
 for (const surface of SURFACES) {
   test('P4 hint: N equals the rows the tree really has beyond bodyRows, on every tab; none when the tree fits, none once scrolled (' + surface + ')', async ($, on) => {
     world(on, richWorld())
     await start($, surface)
-    const HINT = /↓ 下方還有 (\d+) 行/
+    const HINT = /⇣ 下方還有 (\d+) 行/
     for (const tab of ['now', 'dispatch', 'review', 'spend', 'hygiene', 'legend']) {
       // the tree's real height: the tab strip (one row of tabs + its rule at 120 columns) plus every other child of the pane's column Box, one row each
       const tree = (await paneParts($, surface, tab)).tree
@@ -4688,15 +4804,15 @@ for (const surface of SURFACES) {
     await start($, surface)
     const wide = (await paneParts($, surface, 'now', 120, { offset: 0, bodyRows: 5 })).head
     // wide (the one-line header, already as wide as the pane): the hint sits in the blanks before the metrics, which do not move
-    expect(wide.some(l => /^⊘ 疑似卡住  repo · 已進行 10m +↓ 下方還有 \d+ 行 +工作階段 \$0\.42 · 本機今日 \$3\.10 · ctx 37%$/.test(l)), wide.join('\n')).toBe(true)
+    expect(wide.some(l => /^⊘ 疑似卡住  repo · 已進行 10m +⇣ 下方還有 \d+ 行 +工作階段 \$0\.42 · 本機今日 \$3\.10 · ctx 37%$/.test(l)), wide.join('\n')).toBe(true)
     const plain = (await paneParts($, surface, 'now', 120, { offset: 0, bodyRows: 999 })).head
-    expect(wide[0].replace(/↓ 下方還有 (\d+) 行/, (_m, d: string) => ' '.repeat(14 + d.length)), 'only the hint differs from the header without it').toBe(plain[0])
+    expect(wide[0].replace(/⇣ 下方還有 (\d+) 行/, (_m, d: string) => ' '.repeat(14 + d.length)), 'only the hint differs from the header without it').toBe(plain[0])
     // 76 columns (two header lines): the hint ends the metrics line
     const mid = (await paneParts($, surface, 'now', 76, { offset: 0, bodyRows: 5 })).head
-    expect(mid.some(l => /^工作階段 \$0\.42 · 本機今日 \$3\.10 · ctx 37% +↓ 下方還有 \d+ 行$/.test(l)), mid.join('\n')).toBe(true)
+    expect(mid.some(l => /^工作階段 \$0\.42 · 本機今日 \$3\.10 · ctx 37% +⇣ 下方還有 \d+ 行$/.test(l)), mid.join('\n')).toBe(true)
     // 30 columns: the metrics line is already wrapped over rows; whichever row is last has no room for the hint, so it is gone and the figures stay whole
     const narrow = (await paneParts($, surface, 'now', 30, { offset: 0, bodyRows: 5 })).head
-    expect(narrow.some(l => l.includes('↓')), narrow.join('\n')).toBe(false)
+    expect(narrow.some(l => l.includes('⇣')), narrow.join('\n')).toBe(false)
     expect(narrow.join('\n')).toContain('$3.10')
   })
 }

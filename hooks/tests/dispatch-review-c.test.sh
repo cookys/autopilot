@@ -934,7 +934,7 @@ OUT="$(AUTOPILOT_SETTLE_MS=0 \
   --endpoint TESTEP 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "review cc-shim argv capture exit 0"
 assert_eq "$(normalize_argv < "$REVIEW_CC_ARGV")" "$(printf '%s\n' \
-  -p --model mini --setting-sources project --strict-mcp-config --tools '')" \
+  -p --session-id UUID --model mini --setting-sources project --strict-mcp-config --tools '')" \
   "review cc-shim argv matches frozen literal (preservation, green at base)"
 
 # RED at base 004cb2da: stdout "/poison|poison" (ambient packet env inherited)

@@ -171,6 +171,7 @@ function buildRunRows({ list, probeRun, enrichCap = DEFAULT_ENRICH_CAP, dir = ''
     entry.rc = readRc(exitFile);
     entry.final_status = m.final_status || row.final_status || null;
     entry.project = typeof m.repo_identity === 'string' && m.repo_identity ? m.repo_identity : null;
+    entry.session_id = typeof m.session_id === 'string' && m.session_id ? m.session_id : null;
     if (entry.stall === undefined) entry.stall = null;
     if (entry.alive === undefined) entry.alive = null;
     entry.source = {

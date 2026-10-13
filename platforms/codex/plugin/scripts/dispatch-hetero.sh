@@ -1036,7 +1036,7 @@ NODE
       die_precondition "authoritative session-mode marker is invalid: ${marker_state:-marker could not be classified}"
     fi
     if [[ "$marker_state" == ACTIVE:* ]]; then
-      die_precondition "active session-mode=${marker_state#ACTIVE:} requires a sealed campaign strict projection (repo=$consumed_repo)"
+      die_precondition "active session-mode=${marker_state#ACTIVE:} requires a sealed campaign strict projection (repo=$consumed_repo). To run a non-strict dispatch in this session, prefix that one command with: AUTOPILOT_SESSION_MODE_DIR=\$(mktemp -d)"
     fi
   done
 }
@@ -1414,10 +1414,13 @@ NODE
 }
 
 # Marker → sealed campaign admission bridge (zero-runner under enforce mismatch).
-# Active L5/L6 markers and L3 fallbacks whose entry_level is L4-L6 must carry the
-# same repo/policy/graph digests as the sealed campaign mission_runtime. Caller
-# flags and environment variables are never substitutes for sealed contract bytes
-# or marker admission bytes.
+# The CALLER'S OWN active L5/L6 marker (and its L3 fallback whose entry_level is L4-L6)
+# must carry the same repo/policy/graph digests as the sealed campaign mission_runtime.
+# "Own" = the marker whose session_id equals CLAUDE_CODE_SESSION_ID: another session's
+# marker (an aborted /l5 run's leftover) is none of this dispatch's business and no longer
+# fences it (BL-0009). With CLAUDE_CODE_SESSION_ID unset the bridge cannot tell whose
+# marker is whose and keeps scanning the whole directory (never relaxed). Caller flags and
+# environment variables are never substitutes for sealed contract bytes or marker admission bytes.
 check_marker_campaign_admission_bridge() {
   local marker_dir="${AUTOPILOT_SESSION_MODE_DIR:-${HOME:-}/.autopilot/session-mode}"
   local marker bridge_state bridge_rc consumed_repo normalized_repo
@@ -1440,7 +1443,7 @@ check_marker_campaign_admission_bridge() {
       || die_precondition "authoritative session-mode marker is not a regular file: $marker"
     bridge_state="$(
       node - "$marker" "$normalized_repo" "$CAMPAIGN_CONTRACT_FILE" \
-        "$CAMPAIGN_MISSION_MODE" "$SELF_DIR/session-mode.js" <<'NODE' 2>&1
+        "$CAMPAIGN_MISSION_MODE" "$SELF_DIR/session-mode.js" "${CLAUDE_CODE_SESSION_ID:-}" <<'NODE' 2>&1
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -1450,6 +1453,7 @@ const [
   campaignPath,
   missionMode,
   sessionModePath,
+  callerSession,
 ] = process.argv.slice(2);
 const managedLevels = new Set(['l5', 'l6']);
 const fallbackEntryLevels = new Set(['l4', 'l5', 'l6']);
@@ -1478,6 +1482,14 @@ try {
       || path.resolve(data.repo_root) !== path.resolve(repo)) {
     process.stdout.write('INACTIVE');
     process.exit(0);
+  }
+  if (callerSession) {
+    // Same normalisation as session-mode.js normalizeSessionId (markers store the normalised id).
+    const own = String(callerSession).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
+    if (data.session_id !== own && path.basename(markerPath) !== `${own}.json`) {
+      process.stdout.write('INACTIVE');
+      process.exit(0);
+    }
   }
   const isManaged = managedLevels.has(data.level)
     || (data.level === 'l3' && fallbackEntryLevels.has(data.entry_level));
@@ -1781,13 +1793,15 @@ write_manifest() {
   fi
   [ "${WATCHDOG_DISARMED:-0}" -eq 1 ] && mf_timeout_enforced="false"
   {
-    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "scaffold_tier": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, "timeout_seconds": %s, "timeout_source": "%s", "timeout_enforced": %s%s%s, %s }\n' \
+    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "scaffold_tier": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, "timeout_seconds": %s, "timeout_source": "%s", "timeout_enforced": %s%s%s, %s, "session_id": %s, "child_session_id": %s }\n' \
       "$(_flat_json_escape "$DISPATCH_RUN_ID")" "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
       "${BASE_SHA:-}" "$(_flat_json_escape "${WT:-}")" "$(_flat_json_escape "${WT:-}/.autopilot-worktree.lock")" "$(_flat_json_escape "${LOG:-}")" \
       "$log_format" "$duplex_json" "$pid_json" "$scope_json" "${MANIFEST_CONTAINMENT:-plain}" \
       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${DISPATCH_STARTED_EPOCH:-null}" "$(_flat_json_escape "${PROMPT_FILE:-}")" "${SCAFFOLD_TIER_EFFECTIVE:-off}" \
       "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$parent_json" "$root_json" "$depth_json" \
-      "$mf_timeout_secs" "$(_flat_json_escape "$mf_timeout_source")" "$mf_timeout_enforced" "$strict_manifest_fields" "$strike_suppressed_fields" "$REPO_IDENTITY_FIELDS" > "$tmp"
+      "$mf_timeout_secs" "$(_flat_json_escape "$mf_timeout_source")" "$mf_timeout_enforced" "$strict_manifest_fields" "$strike_suppressed_fields" "$REPO_IDENTITY_FIELDS" \
+      "$(declare -F manifest_session_id_json >/dev/null 2>&1 && manifest_session_id_json || printf null)" \
+      "$(declare -F manifest_child_session_json >/dev/null 2>&1 && manifest_child_session_json || printf null)" > "$tmp"
   } 2>/dev/null && mv -f "$tmp" "$MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
   return 0
 }
@@ -1984,7 +1998,7 @@ set_runner_flags() {
     codex)   IS_CODEX=1 ;;
     agy)     ;;
     grok)    IS_GROK=1 ;;
-    cc-shim) IS_CCSHIM=1 ;;   # EXPLICIT only (never auto) — it needs ANTHROPIC_BASE_URL set
+    cc-shim) IS_CCSHIM=1; declare -F child_session_mint >/dev/null 2>&1 && child_session_mint ;;   # EXPLICIT only (never auto) — it needs ANTHROPIC_BASE_URL set
     pi)      IS_PI=1 ;;        # EXPLICIT only (never auto) — it requires v0.80.6 + models.json
     qoderclicn) IS_QODER=1 ;;  # Qoder CLI CN (Qwen); honors -w/--cwd + edit-only (grok-shaped rail)
     cursor)  IS_CURSOR=1 ;;    # Cursor CLI (cursor-agent). EXPLICIT only, never auto — see the
@@ -3720,8 +3734,8 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
 "
   CCSHIM_PROMPT_FILE="$(mktemp -t dispatch-hetero-ccshim-prompt-XXXXXX)"
   printf '%s' "${CCSHIM_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$CCSHIM_PROMPT_FILE"
-  run_worker bash -c 'cd "$1" && exec env -u ANTHROPIC_API_KEY claude -p --model "$2" \
-      --dangerously-skip-permissions < "$3"' _ "$WT" "$MODEL" "$CCSHIM_PROMPT_FILE"
+  run_worker bash -c 'cd "$1" && exec env -u ANTHROPIC_API_KEY ${4:+AUTOPILOT_PARENT_SESSION_ID="$4"} claude -p ${5:+--session-id "$5"} --model "$2" \
+      --dangerously-skip-permissions < "$3"' _ "$WT" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CLAUDE_CODE_SESSION_ID:-}" "${CHILD_SESSION_ID:-}"
   rm -f "$CCSHIM_PROMPT_FILE"
 elif [ "$IS_GROK" -eq 1 ]; then
   # grok (xAI Grok Build CLI; models grok-4.5 (ex-grok-build) / grok-composer-2.5-fast). Unlike agy,
@@ -4919,7 +4933,7 @@ dispatch_detached_run() {
       STRICT_SCOPE_ALLOW_PATHS STRICT_SCOPE_DENY_PATHS STRICT_SCOPE_GENERATED_MIRROR_ALLOW_PATHS STRICT_SCOPE_MAX_FILES STRICT_SCOPE_MAX_DIFF_LINES STRICT_OUTPUT_PATHS STRICT_REQUIRED_CHANGE_PATHS STRICT_POSTCHECK_OK STRICT_POSTCHECK_STATUS STRICT_POSTCHECK_ERROR \
       DISPATCH_RUN_ID DISPATCH_STARTED_EPOCH MANIFEST_DIR_PATH MANIFEST_FILE MANIFEST_CONTAINMENT \
       MANIFEST_SCOPE_UNIT MANIFEST_PID_RECORDED MANIFEST_ENDED_AT MANIFEST_ENDED_EPOCH MANIFEST_FINAL_STATUS \
-      TIMEOUT_SOURCE TIMEOUT_SUPPLIED WORKER_TIMED_OUT REPO_IDENTITY_FIELDS 2>/dev/null
+      TIMEOUT_SOURCE TIMEOUT_SUPPLIED WORKER_TIMED_OUT REPO_IDENTITY_FIELDS CHILD_SESSION_ID 2>/dev/null
     # Hands boundary gates (item (E)): the pre-hands main-checkout fingerprint MUST cross the
     # detach boundary as the parent measured it, and the push-blocking env with it.
     declare -p MAIN_CHECKOUT MAIN_CHECKOUT_BEFORE HANDS_GIT_ENV HANDS_BOUNDARY_ERROR HANDS_BOUNDARY_CODE 2>/dev/null || true
@@ -4935,7 +4949,7 @@ dispatch_detached_run() {
     # Preserve pi supervisor poll/stall bounds across setsid detach.
     declare -p PI_RPC_DIRECTIVE_POLL_SECS PI_RPC_STALL_PROBE_SECS PI_RPC_MAX_SECS PI_RPC_PROVIDER PI_MODELS_JSON 2>/dev/null || true
     declare -p STRIKE_DETECTOR_VERSION 2>/dev/null || true
-    declare -f repo_identity_of _repo_identity_json_str repo_identity_resolve_fields json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _watchdog_sleeppid_cmdline_has_tag _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_pgid_has_live _watchdog_worker_alive _watchdog_signal_worker _arm_worker_watchdog _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts passive_capture \
+    declare -f repo_identity_of _repo_identity_json_str repo_identity_resolve_fields manifest_session_id_json manifest_child_session_json child_session_mint json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _watchdog_sleeppid_cmdline_has_tag _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_pgid_has_live _watchdog_worker_alive _watchdog_signal_worker _arm_worker_watchdog _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts passive_capture \
       _is_engine_unavailable _hetero_runner_token seat_strike_capture classify_outcome heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks _fp_unverifiable main_checkout_fingerprint check_main_checkout_boundary run_hands_content_gate \
       _cont_terminal_on_exit _cont_finalize_or_die \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \

@@ -63,7 +63,7 @@
 // in-memory tree; a missing file makes the bottom hook throw, which the mod sees as a rejected read.
 import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
-import { readQc, qcChip, readReview, reviewSlot, displayWidth, truncateToWidth, layoutBand, readMarker, readResidue, readStageWalk, bandSlots, slotUnit, slotPosition, slotDispatch, slotDecisions, slotSpend, slotHygiene, slotReview, readLoadSource, PANE_TABS, verdictOf, reviewTabLines, wrapLines, legendLines, bandView, hygieneTabLines, dispatchLines, spendTabLines, readSpendHistory, hourlySpend, sparkText, SPARK_BARS, INJECTED_PREFIXES, RECENT_EXPANDED_LINES, collapsedPrompt, groupRecent, makeRecentTracker, recentLines, redactSecrets, scanBackground, lastOutputLine, activityLines, MAX_ACTIVITY_ROWS, readQuota, readAccount, slotQuota, accountLines, slotTab, slotUnfolds, SECTION } from './model'
+import { readQc, qcChip, readReview, reviewSlot, displayWidth, truncateToWidth, layoutBand, readMarker, readResidue, readStageWalk, bandSlots, slotUnit, slotPosition, slotDispatch, slotDecisions, slotSpend, slotHygiene, slotReview, readLoadSource, PANE_TABS, verdictOf, reviewTabLines, wrapLines, legendLines, bandView, hygieneTabLines, dispatchLines, spendTabLines, readSpendHistory, hourlySpend, sparkText, SPARK_BARS, INJECTED_PREFIXES, RECENT_EXPANDED_LINES, collapsedPrompt, groupRecent, makeRecentTracker, recentLines, redactSecrets, scanBackground, lastOutputLine, activityLines, MAX_ACTIVITY_ROWS, readQuota, readAccount, slotQuota, slotTab, slotUnfolds, SECTION } from './model'
 import type { ActivityItem, SessionMsg, QuotaWindow, AccountSnap } from './model'
 import { makeT, resolveLocale, localeFromLanguage } from './i18n'
 import { EN, ZH_TW } from './locales'
@@ -2638,12 +2638,11 @@ for (const surface of SURFACES) {
     expectThemeOnly(review.tree as Drawn, true)
 
     const spend = await tab('spend')
-    expect(has(spend.texts, '今日額度', '接近上限')).toBe(true)
-    expect(has(spend.texts, '$120.40', '/ $150.00')).toBe(true)
-    expect(has(spend.texts, '80 %')).toBe(true)
-    expect(has(spend.texts, '本機今日', '$3.10', '所有層')).toBe(true)
+    expect(has(spend.texts, '▾ 額度', '接近上限')).toBe(true)
+    expect(has(spend.texts, 'brain 今日', '80%', '$120.40 / $150.00')).toBe(true)
+    expect(has(spend.texts, 'brain 到 80% 開始提醒', '保險絲只提醒、不擋')).toBe(true)
+    expect(has(spend.texts, '本機', '$3.10', '所有層')).toBe(true)
     expect(has(spend.texts, '工作階段', '$0.42')).toBe(true)
-    expect(has(spend.texts, '花費保險絲', 'warn 模式', '只提醒、不擋')).toBe(true)
     expectThemeOnly(spend.tree as Drawn, true)
 
     const hygiene = await tab('hygiene')
@@ -2665,10 +2664,10 @@ for (const surface of SURFACES) {
   test('P7 panel: a missing fact is an explicit "no data" line, never an empty tab (' + surface + ')', async ($, on) => {
     worldEn(on, base())
     await start($, surface)
-    const ndata = async (id: string) => (await paneParts($, surface, id)).texts.filter(t => t.startsWith('no data'))
+    const ndata = async (id: string) => (await paneParts($, surface, id)).texts.filter(t => t.replace(/^— /, '').startsWith('no data'))
     expect(await ndata('now')).toEqual(['no data · no stage recorded for this session', 'no data · no unit recorded'])
     expect(await ndata('review')).toEqual(['no data · no review published', 'no data · no QC status published', 'no data · no decisions sidecar published'])
-    expect(await ndata('spend')).toEqual(['no data · brain-tier spend today is not published'])
+    expect(await ndata('spend')).toEqual(['— no data · brain-tier spend today is not published'])
     expect(await ndata('hygiene')).toEqual(['no data · no load source published', 'no data · no worktree residue published'])
     for (const id of ['now', 'dispatch', 'review', 'spend', 'hygiene', 'legend']) {
       expect((await paneParts($, surface, id)).texts.length).toBeGreaterThan(1) // never just the header
@@ -2680,11 +2679,11 @@ for (const surface of SURFACES) {
     files[AHOME + '/config.json'] = j({ cost_fuse: { mode: 'block' } })
     const w = worldEn(on, files)
     await start($, surface)
-    const fuse = async () => (await paneParts($, surface, 'spend')).texts.find(t => t.startsWith('cost fuse')) as string
-    expect(await fuse()).toContain('block mode — blocks at the cap')
+    const fuse = async () => (await paneParts($, surface, 'spend')).texts.find(t => t.includes('fuse:')) as string
+    expect(await fuse()).toContain('fuse: blocks at the cap')
     files[AHOME + '/config.json'] = j({ cost_fuse: { mode: 'loud' } })
     await w.clock.advance(5000)
-    expect(await fuse()).toContain('warn mode — warns, never blocks')
+    expect(await fuse()).toContain('fuse: warns, never blocks')
   })
 
   test('P7 panel: no drawn node uses inverse or a non-theme colour; the only background is the active tab, `subtle`, and the band has none (' + surface + ')', async ($, on) => {
@@ -2833,15 +2832,14 @@ for (const surface of SURFACES) {
       files[LIVE + '/runs/' + KEY + '--' + ROOT + '.json'] = j(envelope({ host_today_brain_usd: brain, brain_cap_usd: 150 }))
       await w.clock.advance(5000)
       const band = walkTexts((await bandLine($, surface, 209)).tree).find(n => textOf(n) === String(Math.round(brain)))
-      const tab = walkTexts((await paneParts($, surface, 'spend')).tree).find(n => textOf(n) === '$' + brain.toFixed(2))
-      const pct = walkTexts((await paneParts($, surface, 'spend')).tree).find(n => /^\d+ %$/.test(textOf(n)))
-      return [band?.props?.color, tab?.props?.color, textOf(tab as Node), textOf(pct as Node)] as const
+      // the tab draws the level on the meter: the bar and the percent take the level's theme key (the amount stays default text)
+      const pct = walkTexts((await paneParts($, surface, 'spend')).tree).find(n => /^\s*\d+%$/.test(textOf(n)))
+      return [band?.props?.color, pct?.props?.color, textOf(pct as Node).trim()] as const
     }
     const a = await spendNode(119.6) // rounds to 80 % but is below 0.8 of the cap
     expect(a[0]).toBeUndefined()
-    expect(a[1]).toBeUndefined()
-    expect(a[2]).toBe('$119.60')
-    expect(a[3]).toBe('80 %')
+    expect(a[1]).toBe('success')
+    expect(a[2]).toBe('79%') // floored, so it never reads 80% before the threshold
     const b = await spendNode(120)
     expect([b[0], b[1]]).toEqual(['warning', 'warning'])
     const c = await spendNode(150)
@@ -3585,17 +3583,20 @@ for (const width of [60, 76, 90]) {
       const t = makeT(locale)
       const lines = spendTabLines(spendSnap(HOURLY), { t, cols: width })
       for (const l of lines) expect(displayWidth(l.text), l.text).toBeLessThanOrEqual(width)
-      const bars = lines.find(l => l.text.length > 0 && [...l.text.trim()].every(c => SPARK_BARS.includes(c)))
-      expect(bars, 'a row of only spark bars').toBeDefined()
-      expect([...(bars as { text: string }).text.trim()].length).toBe(24)
-      expect((bars as { text: string }).text.trim()).toBe(sparkText(HOURLY))
-      // the bars carry the brain-tier theme colour (suggestion), the current hour bold; text colour only
-      expect((bars as { segs: { color?: string }[] }).segs.filter(x => x.color !== undefined).every(x => x.color === 'suggestion')).toBe(true)
+      const bars = lines.find(l => [...l.text].some(c => SPARK_BARS.includes(c)))
+      expect(bars, 'the sparkline row').toBeDefined()
+      const spark = [...(bars as { text: string }).text].filter(c => SPARK_BARS.includes(c)).join('')
+      expect([...spark].length).toBe(24)
+      expect(spark).toBe(sparkText(HOURLY)) // the design system's sparkValue scales like the legacy sparkText
+      // chart glyphs are default text (a sparkline is not a running state): no colour, no bold
+      expect((bars as { segs: { color?: string; bold?: boolean }[] }).segs.every(x => x.color === undefined && x.bold !== true)).toBe(true)
       const total = HOURLY.reduce((a, c) => a + c, 0)
-      const ruleLine = lines.find(l => l.text.includes(t('spend.hourly')))
-      expect(ruleLine?.text).toContain('+$' + total.toFixed(2))
+      const head = lines.find(l => l.text.includes(t('usage.last24')))
+      expect(head?.text).toContain('$' + total.toFixed(2))
+      expect(head?.text.startsWith('▾ ')).toBe(true)
       const caption = lines.map(l => l.text).join('\n')
       expect(caption).toContain('$4.00')
+      expect(caption).toContain(t('spend.hint').slice(0, 6))
       expect(lines.some(l => l.text.includes(t('spend.no_history')))).toBe(false)
     })
 
@@ -3608,6 +3609,72 @@ for (const width of [60, 76, 90]) {
     })
   }
 }
+
+const shareSnap = () => ({
+  header: 'h', rows: null, gates: null, link: null, published_at: null, session_as_of: null, host_as_of: null,
+  sections: { attention: [], waiting: [], tasks: [], decisions: [], foreman: [] },
+  detail: { counts: null, stalled: 0, now_ms: SH_NOW, spend: { session: '$1.00', host_all: '$112.40', host_all_n: 112.4, brain: 87.2, cap: 150, mode: 'warn', hourly: HOURLY } },
+}) as never
+
+for (const [cols, cells] of [[76, 20], [120, 40]] as const) {
+  test('usage tab: the brain and other-tier share bars use one scale, their filled cells add up to the meter width (' + cols + ' columns, ' + cells + ' cells)', () => {
+    const t = makeT('zh-TW')
+    const lines = spendTabLines(shareSnap(), { t, cols })
+    const on = (key: string) => {
+      const row = lines.find(l => l.fact === 'usage.today' && l.text.startsWith(key))
+      expect(row, key).toBeDefined()
+      return [...(row as { text: string }).text].filter(c => c === '▰').length
+    }
+    const brain = on(t('label.brain') + ' ')
+    const other = on(t('label.other_tiers'))
+    expect(brain).toBeGreaterThan(other) // 87.20 of 112.40
+    expect(other).toBeGreaterThanOrEqual(1) // a non-zero remainder keeps a cell
+    expect(brain + other).toBe(cells)
+    expect(brain).toBe(Math.round((87.2 / 112.4) * cells)) // the share of the host total, not of the cap
+  })
+}
+
+for (const [cols, rowsExpected] of [[120, 1], [84, 1], [83, 2], [60, 2]] as const) {
+  test('usage tab: the sparkline, its peak and its hint share one row when they fit, else the hint drops to a second (' + cols + ' columns: ' + rowsExpected + ' row(s))', () => {
+    const t = makeT('zh-TW')
+    const lines = spendTabLines(shareSnap(), { t, cols })
+    const at = lines.findIndex(l => l.text.includes(t('usage.last24')))
+    expect(at).toBeGreaterThan(-1)
+    const rest = lines.slice(at + 1)
+    const end = rest.findIndex(l => l.text.startsWith('▾ ') || l.text.startsWith('▸ '))
+    const chart = (end === -1 ? rest : rest.slice(0, end)).filter(l => l.text.trim() !== '')
+    expect(chart.length).toBe(rowsExpected)
+    if (rowsExpected === 2) {
+      expect(chart[1].text).toBe(' '.repeat(12) + t('spend.hint')) // the hint alone, indented under the sparkline
+      expect(chart[0].text).not.toContain(t('spend.hint'))
+    } else expect(chart[0].text).toContain(t('spend.hint'))
+  })
+}
+
+test('usage tab: folding 今日花費 or 近 24 小時 leaves the heading alone and shows the arrow ▸', () => {
+  const t = makeT('zh-TW')
+  for (const [id, title, inner] of [[SECTION.today, t('now.cost'), t('label.host')], [SECTION.last24, t('usage.last24'), t('label.brain') + ' ']] as const) {
+    const open = spendTabLines(shareSnap(), { t, cols: 120 })
+    expect(open.some(l => l.text.startsWith('▾ ' + title))).toBe(true)
+    expect(open.some(l => l.text.startsWith(inner))).toBe(true)
+    const shut = spendTabLines(shareSnap(), { t, cols: 120, folded: new Set([id]) })
+    expect(shut.some(l => l.text.startsWith('▸ ' + title))).toBe(true)
+    expect(shut.some(l => l.text.startsWith('▾ ' + title))).toBe(false)
+    if (id === SECTION.today) expect(shut.some(l => l.text.startsWith(inner))).toBe(false)
+    else expect(shut.some(l => [...l.text].some(c => SPARK_BARS.includes(c)))).toBe(false)
+  }
+})
+
+test('usage tab: an OAuth account with no email, organization or plan reads "signed in, details incomplete", never "not logged in"', () => {
+  for (const locale of ['en', 'zh-TW'] as const) {
+    const t = makeT(locale)
+    const acc = readAccount(JSON.stringify({ oauthAccount: { accountUuid: 'u-1' } }))
+    expect(acc, 'an account id alone is a signed-in account').not.toBe(null)
+    const text = spendTabLines(usageSnap({ account: acc, quota: [] }), { t, cols: 120 }).map(l => l.text).join('\n')
+    expect(text).toContain(t('account.partial'))
+    expect(text).not.toContain(t('account.none'))
+  }
+})
 
 // ---- the Now tab's trailing section: the last 3 prompts of the session, each with a collapsible reply (all prompts here are synthetic) ----
 const U = (text: string, extra: Partial<SessionMsg> = {}): SessionMsg => ({ role: 'user', text, toolUses: [], ...extra })
@@ -4054,6 +4121,12 @@ const quotaSlots = (q: QuotaWindow[] | null) => bandSlots({
   loadSource: null, residue: readResidue(JSON.stringify({ schema: 'autopilot.residue/1', project_key: KEY, reapable_worktrees: 0, by_class: {}, needs_human_count: 2 }), KEY), quota: q, nowMs: 0,
 })
 const win = (kind: string, pct: number): QuotaWindow => ({ kind, pct, resetsAtMs: null })
+// a snapshot for the 用量 tab: the account and the quota windows ride in `account`, the spend in `detail.spend` (null = nothing published)
+const usageSnap = (account: AccountSnap | undefined, spend: unknown = null) => ({
+  header: 'h', rows: null, gates: null, link: null, published_at: null, session_as_of: null, host_as_of: null,
+  sections: { attention: [], waiting: [], tasks: [], decisions: [], foreman: [] }, account,
+  detail: { counts: null, stalled: 0, now_ms: NOW_FRESH, spend },
+}) as never
 
 test('quota: readQuota keeps well-formed windows in 5h / 7d / spend order and parses the reset time', () => {
   expect(readQuota(USAGE.rateLimits)).toEqual([{ kind: 'five_hour', pct: 42, resetsAtMs: Date.parse(RESET_5H) }, { kind: 'seven_day', pct: 18.4, resetsAtMs: null }])
@@ -4086,8 +4159,8 @@ test('quota slot: absent without windows; both windows from 120 columns, the mos
   expect(layoutBand(quotaSlots(q), 159).text).toBe('● 進行中 │ ●1 │ 5h 10% 7d 85% │ ⚑2 │ ⓘ ')
   expect(layoutBand(quotaSlots(q), 119).text).toBe('● 進行中 │ ●1 │ 7d 85% │ ⚑2 │ ⓘ ')
   expect(layoutBand(quotaSlots(q), 79).text).toBe('● 進行中 │ ●1 │ ⚑2 │ ⓘ ')
-  expect(slotTab('quota')).toBe('now')
-  expect(slotUnfolds('quota')).toBe(SECTION.account)
+  expect(slotTab('quota')).toBe('spend') // the quota slot opens 用量 (P3), no longer 現況
+  expect(slotUnfolds('quota')).toBe(SECTION.limits)
 })
 
 test('quota slot: a band still too long drops the quota windows before the ⊘ / ● counts; the spend window is `cap`, never `$`', () => {
@@ -4117,51 +4190,70 @@ test('quota slot: a window is plain below 80 %, warning from 80 %, error from 10
   // the text is floored, so it agrees with the colour: 79.9 is an uncoloured 79%, 99.9 a warning 99%, never 100% before the limit
   const textOf = (pct: number) => (slotQuota([win('five_hour', pct)]) as Slot).segs.map(g => g.text).join('')
   expect([textOf(79.9), textOf(80), textOf(99.9), textOf(100)]).toEqual(['5h 79%', '5h 80%', '5h 99%', '5h 100%'])
-  const nowText = accountLines({ account: undefined, quota: [win('five_hour', 79.9)] }, null, { t: makeT('en'), cols: 120 })[1].text
-  expect(nowText).toContain(' 79%')
-  expect(nowText).not.toContain('80%')
+  const tabLine = spendTabLines(usageSnap({ account: undefined, quota: [win('five_hour', 79.9)] }), { t: makeT('en'), cols: 120 }).find(l => l.kind === 'meter') as { text: string; segs: { text: string; color?: string }[] }
+  expect(tabLine.text).toContain(' 79%')
+  expect(tabLine.text).not.toContain('80%')
+  expect(tabLine.segs.find(s => s.text.endsWith('79%'))?.color).toBe('success') // the tab's meter judges the raw ratio too: 79.9 is not yet a warning
   expect((slotQuota([win('five_hour', 42)]) as Slot).segs[0]).toMatchObject({ text: '5h ', dim: true })
 })
 
 for (const locale of ['en', 'zh-TW'] as const) {
   for (const cols of [48, 120]) {
-    test('account: the Now section lists account, organization, plan and each window, every wrapped row fits (' + locale + ', ' + cols + ' columns)', () => {
+    test('usage tab: 帳號 lists account, organization and plan, 額度 each window as a meter with its reset time, every row fits (' + locale + ', ' + cols + ' columns)', () => {
       const t = makeT(locale)
       const snap: AccountSnap = { account: readAccount(CLAUDE_JSON), quota: readQuota([...USAGE.rateLimits, { kind: 'spend_limit', percentUsed: 104 }]) }
-      const lines = accountLines(snap, NOW_FRESH, { t, cols })
+      const lines = spendTabLines(usageSnap(snap), { t, cols })
       const text = lines.map(l => l.text).join('\n')
-      expect(lines[0].text).toContain(t('now.account'))
+      expect(lines.some(l => l.text.startsWith('▾ ' + t('now.account')))).toBe(true)
+      expect(lines.some(l => l.text.startsWith('▾ ' + t('usage.limits')))).toBe(true)
       expect(text).toContain('owner@example.com (Owner)')
       expect(text).toContain('Example Co · admin')
       expect(text).toContain('claude max · 20x · ' + t('account.extra_on'))
       expect(text).toContain(t('label.quota_5h'))
-      expect(text).toContain('42%  ' + t('quota.resets', { in: '2h30m' }))
+      expect(text).toContain('42%')
+      expect(text).toContain(t('ui.reset', { age: '2h30m' })) // the formatter's duration, then the string table's direction word
       expect(text).toContain(t('label.quota_7d'))
       expect(text).toContain('104%')
-      for (const l of wrapLines(lines, cols)) expect(displayWidth(l.text), l.text).toBeLessThanOrEqual(cols)
+      const meters = lines.filter(l => l.kind === 'meter')
+      expect(meters.length).toBe(3) // 5h, 7d, spend_limit: one meter row each, nothing else is a limit row
+      expect(meters.map(l => l.fact)).toEqual(['usage.window5h', 'usage.window7d', 'usage.window_other'])
+      expect(new Set(meters.map(l => (l.segs ?? []).filter(s => s.role === 'glyph').map(s => s.text).join('').length)).size).toBe(1) // equal bar length: the rows compare by length
+      // the account is one fact: all of it on one row where it fits (the §5.4 120-column form), else one row each
+      const account = lines.filter(l => l.fact === 'usage.account')
+      expect(account.length).toBe(cols === 120 ? 1 : 3)
+      for (const l of lines) expect(displayWidth(l.text), l.text).toBeLessThanOrEqual(cols)
     })
   }
 }
 
-test('account: an API-key login is one dim line; nothing read and no windows is no section; folded shows the heading alone', () => {
+test('usage tab: an API-key login is one absent row; no account read is one empty line; no windows and no spend is one empty line; folded shows the heading alone', () => {
   const t = makeT('zh-TW')
-  const none = accountLines({ account: null, quota: [] }, NOW_FRESH, { t, cols: 120 })
-  expect(none.length).toBe(2)
-  expect(none[1].text.trim()).toBe(t('account.none'))
-  expect(accountLines({ account: undefined, quota: [] }, NOW_FRESH, { t, cols: 120 })).toEqual([])
-  expect(accountLines(undefined, NOW_FRESH, { t, cols: 120 })).toEqual([])
+  const cols = 120
+  const none = spendTabLines(usageSnap({ account: null, quota: [] }), { t, cols })
+  expect(none.find(l => l.fact === 'usage.account')?.text.trim()).toBe(t('label.account') + '        — ' + t('account.none'))
+  const unread = spendTabLines(usageSnap({ account: undefined, quota: [] }), { t, cols })
+  expect(unread.filter(l => l.kind === 'empty').map(l => l.text)).toContain('— ' + t('nodata.account'))
+  expect(unread.filter(l => l.kind === 'empty' && l.fact === 'usage.brain').length).toBe(1) // limits: exactly one empty line, not one per missing source
+  expect(spendTabLines(usageSnap(undefined), { t, cols }).filter(l => l.kind === 'empty').length).toBe(4) // limits, today, last 24 h, account
   // windows without a readable file still show; a reset time already past or an unknown clock shows none
-  const resets = t('quota.resets', { in: 'X' }).replace('X', '').trim()
-  const past = accountLines({ account: undefined, quota: [{ kind: 'five_hour', pct: 5, resetsAtMs: NOW_FRESH - 1 }] }, NOW_FRESH, { t, cols: 120 })
-  expect(past.length).toBe(2)
-  expect(past[1].text).not.toContain(resets)
-  const noClock = accountLines({ account: undefined, quota: [{ kind: 'five_hour', pct: 5, resetsAtMs: NOW_FRESH + 60000 }] }, null, { t, cols: 120 })
-  expect(noClock[1].text).not.toContain(resets)
-  expect(accountLines({ account: null, quota: [] }, NOW_FRESH, { t, cols: 120, folded: new Set([SECTION.account]) }).length).toBe(1)
+  const resets = t('ui.reset', { age: 'X' }).replace('X', '').trim()
+  const meterOf = (quota: QuotaWindow[], now: number | null) => (spendTabLines({ ...(usageSnap({ account: undefined, quota }) as object), detail: { counts: null, stalled: 0, now_ms: now, spend: null } } as never, { t, cols }).find(l => l.kind === 'meter') as { text: string })
+  expect(meterOf([{ kind: 'five_hour', pct: 5, resetsAtMs: NOW_FRESH + 60000 }], NOW_FRESH).text).toContain(resets)
+  expect(meterOf([{ kind: 'five_hour', pct: 5, resetsAtMs: NOW_FRESH - 1 }], NOW_FRESH).text).not.toContain(resets)
+  expect(meterOf([{ kind: 'five_hour', pct: 5, resetsAtMs: NOW_FRESH + 60000 }], null).text).not.toContain(resets)
+  const folded = spendTabLines(usageSnap({ account: null, quota: [] }), { t, cols, folded: new Set([SECTION.account]) })
+  expect(folded.filter(l => l.fact === 'usage.account').length).toBe(0)
+  expect(folded.some(l => l.text.startsWith('▸ ' + t('now.account')))).toBe(true)
+})
+
+test('usage tab: the limits chip names the worst level; a window over its cap makes it 已超過, and the meter bar and percent take the level colour', () => {
+  const t = makeT('zh-TW')
+  const chipOf = (pct: number) => (spendTabLines(usageSnap({ account: undefined, quota: [win('five_hour', pct)] }), { t, cols: 76 }).find(l => l.kind === 'header' && l.text.startsWith('▾ ' + t('usage.limits'))) as { segs: { text: string; color?: string }[] }).segs.find(s => s.role === 'value')
+  expect([chipOf(10), chipOf(79.9), chipOf(80), chipOf(100)].map(c => [c?.text, c?.color])).toEqual([[t('spend.ok'), 'success'], [t('spend.ok'), 'success'], [t('spend.warn'), 'warning'], [t('spend.over'), 'error']])
 })
 
 for (const surface of SURFACES) {
-  test('account: the band shows the windows and the Now tab the account; ~/.claude.json is read again only when it changed; pressing the slot opens Now (' + surface + ')', async ($, on) => {
+  test('account: the band shows the windows and the Usage tab the account; ~/.claude.json is read again only when it changed; pressing the slot opens Usage (' + surface + ')', async ($, on) => {
     const t = makeT('zh-TW')
     const PATH = HOME + '/.claude.json'
     let usage: unknown = USAGE
@@ -4176,8 +4268,9 @@ for (const surface of SURFACES) {
     const narrow = (await bandLine($, surface, 100)).text
     expect(narrow).toContain('5h 42%')
     expect(narrow).not.toContain('7d')
-    const body = async () => (await paneParts($, surface, 'now')).texts.join('\n')
+    const body = async () => (await paneParts($, surface, 'spend')).texts.join('\n')
     let b = await body()
+    expect((await paneParts($, surface, 'now')).texts.join('\n')).not.toContain('owner@example.com') // Now no longer shows the account (I16)
     expect(b).toContain(t('now.account'))
     expect(b).toContain('owner@example.com (Owner)')
     expect(b).toContain('Example Co · admin')
@@ -4208,18 +4301,18 @@ for (const surface of SURFACES) {
     b = await body()
     expect(b).toContain('second@example.com')
     expect((await bandLine($, surface, 120)).text).toContain('5h 91%')
-    // fold the Account section, then press the slot: the Now tab opens with the section unfolded
+    // fold the Limits section, then press the slot: the Usage tab opens with the section unfolded
     const mountPane = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
-    const rowsNow = async () => { const p = await mountPane(); const r = rowsOf((await p.drawn()) as Node); await p.unmount(); return r }
-    const at = (await rowsNow()).findIndex(r => r.startsWith('▾ ' + t('now.account')))
+    const rowsNow = async () => { const q = await mountPane(); await q.press({ key: 'spend' }); await q.unmount(); const p = await mountPane(); const r = rowsOf((await p.drawn()) as Node); await p.unmount(); return r }
+    const at = (await rowsNow()).findIndex(r => r.startsWith('▾ ' + t('usage.limits')))
     expect(at).toBeGreaterThan(0)
     const fold = await mountPane()
     await fold.press({ key: 'b' + at })
     await fold.unmount()
-    expect((await rowsNow())[at].startsWith('▸ ' + t('now.account'))).toBe(true)
-    expect((await rowsNow()).join('\n')).not.toContain('second@example.com')
+    expect((await rowsNow())[at].startsWith('▸ ' + t('usage.limits'))).toBe(true)
+    expect((await rowsNow()).join('\n')).not.toContain('91%')
     const elsewhere = await mountPane()
-    await elsewhere.press({ key: 'spend' })
+    await elsewhere.press({ key: 'dispatch' })
     await elsewhere.unmount()
     const band = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: 209 }, viewport: { columns: 209, rows: 50, isFullscreen: true } })
     await band.press({ key: 'quota' })
@@ -4227,7 +4320,7 @@ for (const surface of SURFACES) {
     const pane = await mountPane()
     const active = ((await pane.findAll({ type: 'Button' })) as Drawn[]).find(x => isActiveTab(x))?.props?.key
     await pane.unmount()
-    expect(active).toBe('now')
+    expect(active).toBe('spend')
     expect((await rowsNow()).join('\n')).toContain('second@example.com')
     // stat refused while the file is still there (a permission or passing I/O error): the account stays, nothing is read
     w.statErrors[PATH] = "EACCES: permission denied, lstat '" + PATH + "'"
@@ -4273,7 +4366,7 @@ test('account: with CLAUDE_CONFIG_DIR set the account comes from that directory,
   w.stats[HOME + '/.claude.json'] = { size: CLAUDE_JSON.length, mtimeMs: NOW_FRESH - 60000 }
   w.stats['/cfg/.claude.json'] = { size: moved.length, mtimeMs: NOW_FRESH - 60000 }
   await start($, 'terminal')
-  const body = async () => (await paneParts($, 'terminal', 'now')).texts.join('\n')
+  const body = async () => (await paneParts($, 'terminal', 'spend')).texts.join('\n')
   const b = await body()
   expect(b).toContain('moved@example.com')
   expect(b).not.toContain('owner@example.com')

@@ -10,6 +10,8 @@
   - 規則放在 `scripts/lib/bash-launch-rules.js`，掛在既有的 `hooks/depth0-delegate-gate.js` 上，沒有新增 hook；`off` 模式會關掉全部。
 - **活面板的共用視覺語彙（P0）**（plan `docs/plans/2026-10-13-live-pane-design-system.md`）：新增 `mods/live/ui.ts`（符號表、狀態對應與嚴重度、新鮮度門檻、格式化函式、列元件），加上 glyph 與詞彙的 lint（`ui-lint.test.js`）。狀態列與面板符號改為 `⏸`→`⊘`、`⚙N`→`●N`、`⚠`→`▲`，因為舊符號在部分終端會被畫成彩色 emoji。`node mods/live/glyph-check.js` 讓你在自己的終端確認新符號只佔一格。
 
+- **活面板用量分頁（P3）**（plan `docs/plans/2026-10-13-live-pane-design-system.md` §5.4）：帳號與額度從「現況」搬到「用量」分頁；額度改畫成 meter（含重設倒數與等級標籤），今日花費加上 brain／其他層的份額條，近 24 小時改用 sparkline。狀態列的額度欄位按下改開「用量」分頁（`SLOT_TAB.quota = spend`），並展開額度區段。過渡期：現況仍保留「今日花費」區段，由 P4 的用量摘要取代。
+
 - **`/l5` 的 mission 骨架可以從計畫自動產生**（plan `docs/plans/2026-10-13-l5-mission-scaffold-generator.md`）：之前開一個 `/l5` mission，要照 recipe 手寫 rubric、sources、execution graph 三份檔案。手寫時漏一個欄位或路徑寫錯，就會白白燒掉一次 attempt。新增的 `scripts/scaffold-mission.js` 會從計畫和旗標產生這三份檔案。
   - 寫檔前先檢查那些會燒 attempt 的規則，例如路徑必須落在 allowed prefix 底下、驗證指令的格式。
   - 寫完用 `mission-execution-graph-check.js` 自我驗證。驗證失敗時，被覆寫的檔案逐位元組還原，本次新建的檔案和目錄刪除；還原不完整時，stderr 會印出 `ROLLBACK INCOMPLETE` 和還沒還原的檔案清單。
@@ -5391,7 +5393,6 @@ review 抓住。鎖機器退場,拒絕本身扛起整個閘。
   713→717 = v2.34.23;harness-maintenance 58→59 = v2.34.28),justification 見各該版節。
 
 
-<<<<<<< HEAD
 ## v2.34.31 — QRP_CLI_HOME 要 per-invocation clone:共用一個會讓考試把傳輸故障記成模型失分
 
 agy 連兩次資格考卡在 `provider_process_failed`(2/4 輪)。我原本判它「傳輸不可靠」,
@@ -5429,6 +5430,7 @@ agy 每次執行都寫 `$HOME/.gemini/config/{config.json,mcp_config.json,projec
 | MiniMax-M3 | 26/42 | 15/38 | 2 | ❌ degraded |
 
 四筆已 record(scorecard 34 → 38)。
+
 ## v2.34.31 — plan-review PANEL 層可觀測性:哪席在飛、deadline 剩多少,一條指令
 
 **Headline**: v2.34.21 讓席位可觀測,但 PANEL 層仍是黑箱——循序三席 20m/席,驅動端到最後
@@ -5466,7 +5468,6 @@ agy 每次執行都寫 `$HOME/.gemini/config/{config.json,mcp_config.json,projec
   prose-justification: 本版零 skill prose 變動;ratchet 差額為既往版本之遺留
   (dev-flow 713→717 = v2.34.23 gate advisory;harness-maintenance 58→59 = v2.34.28
   probe row),justification 見各該版節。
->>>>>>> origin/develop
 
 ## v2.34.30 — QRP_CLI_HOME:只吃 HOME 的 CLI 也能送考(推翻我自己的「不可考」)
 

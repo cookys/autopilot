@@ -121,8 +121,8 @@ done
 # attempt in the decision ledger. On success the row is a climb; on a transport /
 # protocol / verdict failure it carries reason=rail-failed so the probe consumes the
 # rung's budget instead of recommending a dead seat forever (P4 dogfood finding).
-ladder_receipt() { # <reason-or-empty>
-  local reason="$1"
+ladder_receipt() { # <reason-or-empty> [cause]
+  local reason="$1" cause="${2:-}"
   [ -n "$LADDER_RECEIPT" ] || return 0
   if [ -z "$LADDER_TERMS" ] || [ -z "$LADDER_UNKNOWN_TYPE" ]; then
     echo "dispatch-consult: --ladder-receipt requires --ladder-terms and --ladder-unknown-type — receipt NOT written" >&2
@@ -131,6 +131,8 @@ ladder_receipt() { # <reason-or-empty>
   local hetero="true"; [ "${CONSULT_RESOLVED_FROM:-}" = "native-fallback" ] && hetero="false"
   local -a args=(receipt --ledger "$LADDER_RECEIPT" --rung U1 --unknown-type "$LADDER_UNKNOWN_TYPE" --terms "$LADDER_TERMS" --signals "${LADDER_SIGNALS}" --heterogeneous "$hetero" --run-id "consult-$(date -u +%Y%m%dT%H%M%SZ)-$$")
   [ -n "$reason" ] && args+=(--reason "$reason")
+  # BL-0017 (b): the refusal's cause lets probe-unknown.js classify stop climbing after the same one twice.
+  [ -n "$cause" ] && args+=(--cause "$cause")
   [ -n "$LADDER_WORK_UNIT" ] && args+=(--work-unit "$LADDER_WORK_UNIT")
   [ -n "$LADDER_ROUND" ] && args+=(--round "$LADDER_ROUND")
   local err="$CONSULT_TMP/receipt.err"
@@ -293,8 +295,16 @@ AUTHOR_RAW_LOG="$(printf '%s' "$AUTHOR_OUT" | node -e 'let s="";process.stdin.on
 
 if [ "$AUTHOR_RC" -ne 0 ] || [ "$AUTHOR_STATUS" != "authored" ]; then
   echo "dispatch-consult: transport did not produce an authored result (status=${AUTHOR_STATUS:-unknown}, exit=$AUTHOR_RC)" >&2
-  ladder_receipt "rail-failed"
-  emit "transport_failed" "$CONSULT_ENGINE" "$CONSULT_RUNNER" "$CONSULT_EFFORT" "$CONSULT_ENDPOINT" "" "transport status=${AUTHOR_STATUS:-unknown}" 5
+  _consult_cause=""
+  if [ "$AUTHOR_STATUS" = "precondition_failed" ]; then
+    _consult_err="$(printf '%s' "$AUTHOR_OUT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(String(JSON.parse(s).error||""));}catch{}})' 2>/dev/null || true)"
+    # The cause is the dispatcher's own reason up to its first " (" / ". " tail, so two refusals of the
+    # same gate compare equal even when the repo path or the appended hint differs.
+    _consult_err="${_consult_err%% (*}"; _consult_err="${_consult_err%%. *}"
+    _consult_cause="precondition_failed: ${_consult_err}"
+  fi
+  ladder_receipt "rail-failed" "$_consult_cause"
+  emit "transport_failed" "$CONSULT_ENGINE" "$CONSULT_RUNNER" "$CONSULT_EFFORT" "$CONSULT_ENDPOINT" "" "transport status=${AUTHOR_STATUS:-unknown}${_consult_cause:+ ($_consult_cause)}" 5
 fi
 
 [ -n "$AUTHOR_RAW_LOG" ] && [ -r "$AUTHOR_RAW_LOG" ] || {

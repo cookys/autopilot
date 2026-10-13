@@ -38,6 +38,10 @@
  *                  --ladder-receipt on a transport/protocol/qualification failure, or by the
  *                  caller after a failed survey/think-tank rail) consumes that rung's budget
  *                  without counting as a climb — a dead seat is retried at most budget times.
+ *                  BL-0017 (b): a rail-failed row may carry `--cause <text>` (dispatch-consult
+ *                  records the dispatcher's precondition_failed reason). Two consecutive rail-failed
+ *                  rows with the SAME cause stop classify (recommend none, reason repeated-refusal,
+ *                  stop.cause): another seat would buy the same refusal. No cause = budget-only.
  *
  * Modes (stdout is always exactly one JSON object; diagnostics on stderr):
  *   classify --ledger <file> [--work-unit <id>] [--round <n>] [--terms a,b,c] [--fast-moving]
@@ -50,7 +54,7 @@
  *        eligible_max, budget:{u1,u2,u3,used:{U1,U2,U3}}, knob, knob_resolved_from: argv|explicit|default|off, terms_hits}
  *     exit 0 always; 2 on usage; with --strict, 2 when recommend ∈ {U2,U3}.
  *   receipt  --ledger <file> --rung Ux --unknown-type <t> --terms a,b,c --signals S1,S3   (--signals "" ⇒ [] = judgment-only climb, visible in report.judgment_only)
- *            [--reason knob-off|budget-exhausted|not-heterogeneous|rail-failed] [--run-id <id>]
+ *            [--reason knob-off|budget-exhausted|not-heterogeneous|rail-failed] [--cause <text>] [--run-id <id>]
  *            [--heterogeneous true|false] [--work-unit <id>] [--round <n>]
  *     → runs decision-ledger.js append --kind ladder (one writer, existing lock),
  *       captures its stdout and prints exactly the appended row.
@@ -108,6 +112,20 @@ const U4_RESULTS = new Set(['pass', 'fail', 'inconclusive']);
 const SKIP_REASONS = new Set(['knob-off', 'budget-exhausted', 'not-heterogeneous', 'rail-failed']);
 const STRICT_SET = new Set(['U2', 'U3', 'U4']);
 
+// BL-0017 (b) ladder stop. A rail-failed row may carry the refusal's `cause` (dispatch-consult.sh
+// --ladder-receipt records the dispatcher's precondition_failed reason). When the latest two ladder rows
+// of the work unit are rail-failed with the SAME non-empty cause, a further climb would only buy the
+// same refusal on another seat: classify stops (recommend none, reason repeated-refusal) and names the
+// cause so the caller reports it instead of spending the next rung.
+function repeatedRefusal(rows) {
+  const ladder = rows.filter((r) => r.kind === 'ladder');
+  if (ladder.length < 2) return null;
+  const [a, b] = ladder.slice(-2);
+  const same = (r) => r.reason === 'rail-failed' && typeof r.cause === 'string' && r.cause.length > 0;
+  if (!same(a) || !same(b) || a.cause !== b.cause) return null;
+  return { cause: b.cause, count: 2 };
+}
+
 // The U5 owner rung a caller records when it stops; classify never emits it.
 const OWNER_RUNG = 'U5';
 
@@ -160,6 +178,7 @@ function parseArgs(argv) {
       case '--unknown-type': opts.unknownType = value; break;
       case '--signals': opts.signals = value.split(',').map((t) => t.trim()).filter(Boolean); break;
       case '--reason': opts.reason = value; break;
+      case '--cause': opts.cause = value; break;
       case '--run-id': opts.runId = value; break;
       case '--heterogeneous': opts.heterogeneous = value; break;
       default: usage(`unknown argument: ${arg}`);
@@ -422,6 +441,13 @@ function classify(opts) {
     recordKnobOff(ledger, rows, opts, unknownType);
     return finish(out, opts);
   }
+  const refusal = repeatedRefusal(rows);
+  if (refusal) {
+    out.recommend = 'none';
+    out.reason = 'repeated-refusal';
+    out.stop = refusal;
+    return finish(out, opts);
+  }
   if (unknownType === 'none') {
     out.recommend = opts.terms && opts.terms.length ? 'U0' : 'none';
     if (out.recommend === 'U0') out.reason_detail = 'all terms have local hits — read them first';
@@ -521,6 +547,7 @@ function receipt(opts) {
     row.question = opts.question; row.criterion = opts.criterion; row.result = opts.result;
   } else if (opts.rung === 'U4' && !opts.reason) usage('an experiment receipt needs --question --criterion --result');
   if (opts.reason) row.reason = opts.reason;
+  if (opts.cause) row.cause = String(opts.cause).replace(/\s+/g, ' ').trim().slice(0, 200);
   if (opts.runId) row.dispatch_run_id = opts.runId;
   if (opts.workUnit) row.work_unit = opts.workUnit;
   if (Number.isFinite(opts.round)) row.round = opts.round;

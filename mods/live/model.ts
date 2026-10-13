@@ -11,7 +11,7 @@
 
 import { T_EN } from './i18n'
 import type { T } from './i18n'
-import * as ui from './ui'
+import * as ui from './ui' // the design system's builders; `ui.kv` etc. keep clear of this file's own legacy `kv` / `row`
 import { STATES, cellWidth, displayWidth, isStale, stateOf } from './ui'
 import type { Ctx as UiCtx, Column as UiColumn, FactId, FmtKind, Frag, LineKind, RunSubject, SegRole, Stated, TableListRow as UiTableListRow } from './ui'
 
@@ -1550,9 +1550,9 @@ export const NEXT_TAB_GLYPH = '▸' // the pane's first Button: Enter on it show
 export const PANE_TABS = ['now', 'dispatch', 'review', 'spend', 'hygiene', 'legend'] as const
 export type PaneTab = (typeof PANE_TABS)[number]
 // a band slot pressed opens the pane on the tab that explains it; position and unit live in Now's 目前位置 section, which the press also unfolds
-const SLOT_TAB: Record<SlotId, PaneTab> = { verdict: 'now', position: 'now', unit: 'now', dispatch: 'dispatch', review: 'review', decisions: 'review', spend: 'spend', quota: 'now', hygiene: 'hygiene' }
+const SLOT_TAB: Record<SlotId, PaneTab> = { verdict: 'now', position: 'now', unit: 'now', dispatch: 'dispatch', review: 'review', decisions: 'review', spend: 'spend', quota: 'spend', hygiene: 'hygiene' }
 export const slotTab = (id: SlotId): PaneTab => SLOT_TAB[id]
-export const slotUnfolds = (id: SlotId): string | null => (id === 'position' || id === 'unit' ? SECTION.where : id === 'quota' ? SECTION.account : null)
+export const slotUnfolds = (id: SlotId): string | null => (id === 'position' || id === 'unit' ? SECTION.where : id === 'quota' ? SECTION.limits : null)
 export const tabLabel = (tab: PaneTab, t: T): string => t('tab.' + tab)
 
 // What a pane line is drawn with: the translator and the pane's width in cells (rules and bars size themselves to it)
@@ -1664,7 +1664,7 @@ export function rule(title: string, right: Seg[], cols: number, fold?: { id: str
 }
 
 // the Now tab's foldable sections (what waits for you never folds); the ids share the toggle channel with the recent groups, hence the prefix
-export const SECTION = { where: 'sec:where', working: 'sec:working', cost: 'sec:cost', account: 'sec:account', recent: 'sec:recent' } as const
+export const SECTION = { where: 'sec:where', working: 'sec:working', cost: 'sec:cost', account: 'sec:account', recent: 'sec:recent', limits: 'sec:limits', today: 'sec:today', last24: 'sec:last24' } as const
 export const isSectionId = (id: string): boolean => id.startsWith('sec:') || /^(now|dispatch|review|spend|hygiene|legend)\./.test(id)
 const isFolded = (ctx: PaneCtx, id: string): boolean => ctx.folded !== undefined && ctx.folded.has(id)
 // a heading plus its body, or the heading alone when the person folded it
@@ -1807,8 +1807,6 @@ function nowLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
     const color = spendColor(sp_.brain, sp_.cap)
     out.push(BLANK, ...section(ctx, SECTION.cost, t('now.cost'), [], [kv(t(KEY_IDS.cost), seg(usd(sp_.brain), color), dseg(' / ' + usd(sp_.cap) + '  '), ...spendBarSegs(sp_.brain, sp_.cap, 24), dseg('  ' + pct + '%'))]))
   }
-  const account = accountLines(snap.account, d.now_ms, ctx)
-  if (account.length > 0) out.push(BLANK, ...account)
   if (snap.recent !== undefined) out.push(BLANK, ...recentLines(snap.recent, ctx))
   return out
 }
@@ -2090,25 +2088,6 @@ export function slotQuota(q: readonly QuotaWindow[] | null | undefined): Slot | 
 }
 
 const QUOTA_KEYS: Record<string, string> = { five_hour: 'label.quota_5h', seven_day: 'label.quota_7d', spend_limit: 'label.quota_spend' }
-export function accountLines(a: AccountSnap | undefined, nowMs: number | null, ctx: PaneCtx): PaneLine[] {
-  if (a === undefined || (a.account === undefined && a.quota.length === 0)) return []
-  const t = ctx.t
-  const rows: PaneLine[] = []
-  const acc = a.account
-  if (acc === null) rows.push(row(dseg(' ' + t('account.none'))))
-  else if (acc !== undefined) {
-    if (acc.email !== null) rows.push(kv(t('label.account'), seg(acc.email, undefined, true), dseg(acc.name === null ? '' : ' (' + acc.name + ')')))
-    if (acc.org !== null) rows.push(kv(t('label.org'), seg(acc.org), dseg(acc.role === null ? '' : ' · ' + acc.role)))
-    if (acc.plan !== null || acc.extraUsage) rows.push(kv(t('label.tier'), seg(acc.plan ?? '—'), dseg(acc.extraUsage ? ' · ' + t('account.extra_on') : '')))
-  }
-  for (const w of a.quota) {
-    const key = QUOTA_KEYS[w.kind]
-    const label = key === undefined ? bgLabel(w.kind.replace(/_/g, ' ')) : t(key)
-    const resets = w.resetsAtMs === null || nowMs === null || w.resetsAtMs <= nowMs ? '' : '  ' + t('quota.resets', { in: ageText((w.resetsAtMs - nowMs) / 1000) })
-    rows.push(kv(label, ...spendBarSegs(Math.min(w.pct, 100), 100, 12), seg('  ' + quotaPct(w.pct) + '%', quotaColor(w.pct)), dseg(resets)))
-  }
-  return rows.length === 0 ? [] : section(ctx, SECTION.account, t('now.account'), [], rows)
-}
 
 // ================= Dispatch =================
 const cell = (v: string | number | null | undefined): string => (v === null || v === undefined || v === '' ? '—' : String(v))
@@ -2274,45 +2253,122 @@ function reviewTabLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
   return out
 }
 
-// ================= Spend =================
-function spendTabLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
+// ================= Spend (用量): limits, today, last 24 h, account — drawn through the design system's components (ui.ts), docs/plans/2026-10-13-live-pane-design-system.md §5.4 =================
+const METER_CELLS = (cols: number): number => (cols >= 100 ? 40 : 20) // meter and share bars: 20 cells below 100 columns, 40 at or above
+const MARK = '\u0001'
+// a string-table sentence with one money amount in it: the words stay prose, the amount is the formatter's (fmt-tagged) fragment
+function withMoney(template: string, amount: ui.Frag): ui.Frag {
+  const [head, tail = ''] = template.split(MARK)
+  return ui.cat(ui.val(head, { role: 'prose', dim: true }), amount, ui.val(tail, { role: 'prose', dim: true }))
+}
+
+type LimitWin = { key: string; value: number; cap: number; amount?: ui.Frag; resetMs?: number; fact: FactId }
+function limitsSection(u: ui.Ctx, ctx: PaneCtx, s: SpendView | null, quota: readonly QuotaWindow[], nowMs: number | null): PaneLine[] {
   const t = ctx.t
+  const wins: LimitWin[] = []
+  if (s !== null && s.brain !== null && s.cap !== null) {
+    wins.push({ key: t('label.brain_today'), value: s.brain, cap: s.cap, fact: 'usage.brain', amount: ui.cat(ui.fmtd('money', ui.money(s.brain)), ui.val(' / ', { role: 'prose', dim: true }), ui.fmtd('money', ui.money(s.cap))) })
+  }
+  for (const w of quota) {
+    const k = QUOTA_KEYS[w.kind]
+    const fact: FactId = w.kind === 'five_hour' ? 'usage.window5h' : w.kind === 'seven_day' ? 'usage.window7d' : 'usage.window_other'
+    wins.push({ key: k === undefined ? bgLabel(w.kind.replace(/_/g, ' ')) : t(k), value: w.pct, cap: 100, fact, ...(w.resetsAtMs === null || nowMs === null || w.resetsAtMs <= nowMs ? {} : { resetMs: w.resetsAtMs - nowMs }) })
+  }
+  const open = !isFolded(ctx, SECTION.limits)
+  if (wins.length === 0) {
+    const what = s === null ? 'nodata.spend' : 'nodata.brain'
+    return [ui.header(u, t('usage.limits'), { id: SECTION.limits, open }), ...(open ? [ui.empty(t('nodata.prefix', { what: t(what) }), 'usage.brain')] : [])]
+  }
+  const worst = Math.max(...wins.map(w => (w.cap > 0 ? w.value / w.cap : 0)))
+  const chip = ui.levelChip(worst, t(worst >= 1 ? 'spend.over' : worst >= 0.8 ? 'spend.warn' : 'spend.ok'), 'usage.limit_max')
+  const head = ui.header(u, t('usage.limits'), { id: SECTION.limits, open }, { right: chip, fact: 'usage.limit_max' })
+  if (!open) return [head]
+  // every bar is as long as the longest tail allows, so the rows compare by length; a narrow pane shortens the bars, never wraps the row
+  const tail = Math.max(...wins.map(w => (w.amount === undefined ? 0 : 2 + displayWidth(w.amount.text)) + (w.resetMs === undefined ? 0 : 2 + displayWidth(t('ui.reset', { age: ui.dur(w.resetMs) })))))
+  const cells = Math.max(4, Math.min(METER_CELLS(ctx.cols), ctx.cols - 1 - ui.KEY_W - 7 - tail))
+  const body = wins.map(w => ui.ownerRow('spend', w.fact, ui.meter(u, w.key, w.value, w.cap, { cells, fact: w.fact, ...(w.amount === undefined ? {} : { amount: w.amount }), ...(w.resetMs === undefined ? {} : { resetMs: w.resetMs }) })))
+  if (s !== null && s.brain !== null && s.cap !== null) body.push(...ui.detail(u, t('spend.note', { mode: t('spend.mode_' + s.mode) }), { fact: 'usage.brain' }))
+  return [head, ...body]
+}
+
+function todaySection(u: ui.Ctx, ctx: PaneCtx, s: SpendView | null): PaneLine[] {
+  const t = ctx.t
+  const open = !isFolded(ctx, SECTION.today)
+  const head = ui.header(u, t('now.cost'), { id: SECTION.today, open })
+  if (!open) return [head]
+  if (s === null) return [head, ui.empty(t('nodata.prefix', { what: t('nodata.spend') }), 'usage.today')]
+  const hostN = s.host_all_n
+  const rows: PaneLine[] = [ui.kv(u, t('label.host'), [ui.fmtd('money', hostN === null ? s.host_all : ui.money(hostN), 'spend.local_today'), ui.val('  ' + t('spend.all_tiers'), { role: 'prose', dim: true })], { fact: 'spend.local_today' })]
+  if (hostN !== null && s.brain !== null && hostN >= s.brain && hostN > 0) {
+    // the two share bars use one scale, so brain and the other tiers compare by length
+    const brainTxt = ui.money(s.brain)
+    const otherTxt = ui.money(hostN - s.brain)
+    const w = Math.max(displayWidth(brainTxt), displayWidth(otherTxt)) + 2
+    const total = Math.max(2, Math.min(METER_CELLS(ctx.cols), ctx.cols - 1 - ui.KEY_W - w))
+    let brainCells = Math.round((s.brain / hostN) * total)
+    if (hostN - s.brain >= 0.005 && brainCells >= total) brainCells = total - 1 // a non-zero remainder keeps at least one cell
+    const pad = (txt: string) => ui.val(' '.repeat(w - displayWidth(txt)), { role: 'prose' })
+    rows.push(
+      ui.kv(u, t('label.brain'), [ui.fmtd('money', brainTxt), pad(brainTxt), ui.barValue(brainCells)], { fact: 'usage.today' }),
+      ui.kv(u, t('label.other_tiers'), [ui.fmtd('money', otherTxt), pad(otherTxt), ui.barValue(total - brainCells)], { fact: 'usage.today' }),
+    )
+  }
+  rows.push(ui.kv(u, t('label.session'), [ui.fmtd('money', s.session)], { fact: 'spend.session' }))
+  return [head, ...rows]
+}
+
+function last24Section(u: ui.Ctx, ctx: PaneCtx, s: SpendView | null): PaneLine[] {
+  const t = ctx.t
+  const open = !isFolded(ctx, SECTION.last24)
+  const hourly = s === null ? null : s.hourly ?? null
+  if (hourly === null) return [ui.header(u, t('usage.last24'), { id: SECTION.last24, open }), ...(open ? [ui.empty(t('spend.no_history'), 'usage.history')] : [])]
+  const total = hourly.reduce((a, b) => a + b, 0)
+  const head = ui.header(u, t('usage.last24'), { id: SECTION.last24, open }, { right: ui.fmtd('money', ui.money(total), 'usage.history'), fact: 'usage.history' })
+  if (!open) return [head]
+  const peak = withMoney(t('spend.peak', { v: MARK }), ui.fmtd('money', ui.money(Math.max(...hourly))))
+  const hint = t('spend.hint')
+  const spark = ui.sparkValue(hourly)
+  // one line when the sparkline, the peak and the hint all fit beside the key; otherwise the hint drops under the sparkline (both from column 12)
+  const oneLine = ui.KEY_W + hourly.length + 2 + displayWidth(peak.text) + 3 + displayWidth(hint) <= ctx.cols - 1
+  const gap = ui.val('  ', { role: 'prose' })
+  const lines = oneLine
+    ? ui.chart(u, t('label.brain'), ui.cat(spark, gap, peak, ui.val(' · ' + hint, { role: 'prose', dim: true })), undefined, 'usage.history')
+    : ui.chart(u, t('label.brain'), ui.cat(spark, gap, peak), hint, 'usage.history')
+  return [head, ...lines]
+}
+
+// account: email (name), organization · role, plan · extra use. Where all of it fits on one row it is one row (§5.4 at 120 columns), else one row each.
+function accountSection(u: ui.Ctx, ctx: PaneCtx, a: AccountSnap | undefined): PaneLine[] {
+  const t = ctx.t
+  const open = !isFolded(ctx, SECTION.account)
+  const head = ui.header(u, t('now.account'), { id: SECTION.account, open })
+  if (!open) return [head]
+  const acc = a === undefined ? undefined : a.account
+  if (acc === undefined) return [head, ui.empty(t('nodata.account'), 'usage.account')]
+  if (acc === null) return [head, ui.kv(u, t('label.account'), [ui.absent(t('account.none'))], { fact: 'usage.account' })]
+  const prose = (s: string, dim = false) => ui.val(s, { role: 'prose', ...(dim ? { dim: true } : {}) })
+  const parts: { label: string; frags: ui.Frag[] }[] = []
+  if (acc.email !== null) parts.push({ label: t('label.account'), frags: [prose(acc.email), ...(acc.name === null ? [] : [prose(' (' + acc.name + ')', true)])] })
+  if (acc.org !== null) parts.push({ label: t('label.org'), frags: [prose(acc.org), ...(acc.role === null ? [] : [prose(' · ' + acc.role, true)])] })
+  if (acc.plan !== null || acc.extraUsage) parts.push({ label: t('label.tier'), frags: [prose(acc.plan ?? '—'), ...(acc.extraUsage ? [prose(' · ' + t('account.extra_on'), true)] : [])] })
+  if (parts.length === 0) return [head, ui.kv(u, t('label.account'), [ui.absent(t('account.partial'))], { fact: 'usage.account' })]
+  const merged = parts.flatMap((p, i) => (i === 0 ? p.frags : [prose(' · ' + p.label + ' ', true), ...p.frags]))
+  if (parts.length > 1 && ui.KEY_W + displayWidth(merged.map(f => f.text).join('')) <= ctx.cols - 1) return [head, ui.kv(u, parts[0].label, merged, { fact: 'usage.account' })]
+  return [head, ...parts.map(p => ui.kv(u, p.label, p.frags, { fact: 'usage.account' }))]
+}
+
+function spendTabLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
+  const u: ui.Ctx = { t: ctx.t, cols: ctx.cols, ...(ctx.expanded === undefined ? {} : { expanded: ctx.expanded }) }
   const s = snap.detail.spend
-  const out: PaneLine[] = [{ text: snap.header, dim: true }, BLANK]
-  if (s === null) return [...out, NO_DATA(t, 'nodata.spend')]
-  const barW = Math.max(20, Math.min(40, ctx.cols - 6))
-  if (s.brain === null || s.cap === null) out.push(NO_DATA(t, 'nodata.brain'))
-  else {
-    const state = spendState(s.brain, s.cap)
-    const pct = Math.round((s.brain / s.cap) * 100)
-    const color = spendColor(s.brain, s.cap)
-    out.push(rule(t('spend.cap'), [seg(t(state === 'error' ? 'spend.over' : state === 'warning' ? 'spend.warn' : 'spend.ok'), state)], ctx.cols))
-    out.push(kv('', seg(usd(s.brain), color, true), seg(' / ' + usd(s.cap))))
-    out.push(row(seg(' '), ...spendBarSegs(s.brain, s.cap, barW), seg('  '), seg(pct + ' %', color, true)))
-    out.push(row(seg(' ' + ' '.repeat(Math.round(barW * 0.8)) + '▲', 'subtle')))
-    out.push(row(dseg(' ' + ' '.repeat(Math.max(0, Math.round(barW * 0.8) - 6)) + t('spend.warn_at'))))
-    out.push(BLANK)
-  }
-  out.push(rule(t('spend.where'), [], ctx.cols))
-  out.push(kv(t('label.host'), seg(s.host_all, undefined, true), dseg(' ' + t('spend.all_tiers'))))
-  if (s.host_all_n !== null && s.brain !== null && s.host_all_n >= s.brain && s.host_all_n > 0) {
-    const brainCells = Math.min(barW, Math.round((s.brain / s.host_all_n) * barW))
-    out.push(row(seg(' '), ...(brainCells > 0 ? [seg('▰'.repeat(brainCells), 'suggestion')] : []), ...(barW > brainCells ? [seg('▰'.repeat(barW - brainCells), 'inactive')] : [])))
-    out.push(row(seg(' '), seg('▰ ', 'suggestion'), seg(t('spend.brain', { v: usd(s.brain) })), seg('   '), seg('▰ ', 'inactive'), seg(t('spend.other', { v: usd(s.host_all_n - s.brain) }))))
-  }
-  out.push(BLANK)
-  out.push(kv(t('label.session'), seg(s.session)))
-  out.push(kv(t('label.fuse'), seg(t('spend.mode', { mode: s.mode })), dseg(' — ' + t('spend.mode_' + s.mode))))
-  const hourly = s.hourly ?? null
-  if (hourly === null) out.push({ text: ' ' + t('spend.no_history'), dim: true })
-  else {
-    const total = hourly.reduce((a, b) => a + b, 0)
-    out.push(BLANK)
-    out.push(rule(t('spend.hourly'), [seg('+' + usd(total), undefined, true)], ctx.cols))
-    out.push(row(seg(' '), seg(sparkText(hourly).slice(0, -1), 'suggestion'), seg(sparkText(hourly).slice(-1), 'suggestion', true)))
-    out.push({ text: ' ' + t('spend.hourly_caption', { peak: usd(Math.max(...hourly)) }), dim: true, wrap: true })
-  }
-  return out
+  return [
+    { text: snap.header, dim: true }, BLANK, // the global header is P4's (§2.2): until then the tab keeps its legacy header line
+    ...ui.sections('spend', {
+      limits: limitsSection(u, ctx, s, snap.account === undefined ? [] : snap.account.quota, snap.detail.now_ms),
+      today: todaySection(u, ctx, s),
+      last24: last24Section(u, ctx, s),
+      account: accountSection(u, ctx, snap.account),
+    }),
+  ]
 }
 
 // ================= Hygiene =================

@@ -905,6 +905,7 @@ function main(argv) {
           ended_at: m.ended_at || null,
           parent_run_id: m.parent_run_id || null,
           root_run_id: m.root_run_id || null,
+          session_id: typeof m.session_id === 'string' && m.session_id ? m.session_id : null,
           depth: typeof m.depth === 'number' ? m.depth : (m.depth != null ? Number(m.depth) : null),
           manifest: path.join(dir, f),
         });

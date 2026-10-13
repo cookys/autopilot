@@ -192,12 +192,14 @@ test('real tree: files scanned by content-grepping suites select those suites (r
     ['src/hooks/handlers/session-start.js', 'hooks/tests/p6d-gates-repair-ladder.test.sh'],
     ['src/hooks/handlers/intent-capture.js', 'hooks/tests/qualify-scorecard-vocabulary.test.sh'],
     ['scripts/probe-unknown.js', 'hooks/tests/skill-onoff-stage-graph.test.sh'],
+    ['platforms/codex/plugin/mods/x.js', 'hooks/tests/check-hook-inventory.test.sh'],
     ['skills/zz-new/SKILL.md', 'hooks/tests/skill-count-metadata.test.sh'],
     ['docs/plans/evidence/x/administration/y/run.sh', 'hooks/tests/qualify-recipe-credential-staging.test.sh'],
   ];
   for (const [file, suite] of cases) {
     const out = JSON.parse(execFileSync('node', [SEL, '--root', REAL_ROOT, '--files', file, '--json'], { stdio: 'pipe' }).toString());
-    assert.ok(out.mode === 'full' || out.always_run.includes(suite), `${file} must run ${suite}`);
+    assert.strictEqual(out.mode, 'selective', `${file}: expected a selective result`);
+    assert.ok(out.always_run.includes(suite), `${file} must run ${suite}`);
   }
 });
 

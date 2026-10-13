@@ -42,8 +42,8 @@ Misses: **0** of 28 pairs (27 with a verified causal set, 1 without). The two "l
 `--files hooks/context-budget-lib.js` selects statusline-live-tee.test.js (chain test -> context-budget.js -> lib);
 `--files .claude/review-loop-config.md` selects calibration.test.sh (chain length 2). Both are causal in isolation.
 
-Honest reading: **20 of 28 are "full"**, so on real multi-file commits the tool mostly says "run everything"; only 8
-pairs test the graph itself. The graph is exercised harder by the mutation oracle below and by the unit tests.
+Honest reading: **20 of 28 are "full"**, so on real multi-file commits the tool mostly says "run everything"; only 6
+pairs test the graph itself (3 selective with a causal file, 2 selective through a non-causal file, 1 autopilot-cli). The graph is exercised harder by the mutation oracle below and by the unit tests.
 Round 1 listed the same pairs as "19 selective + 10 full"; most of the 19 selective pairs moved to full; that is
 the effect of the new rule "an unreached non-prose change forces full".
 
@@ -125,13 +125,13 @@ The list comes from a survey, re-runnable with these commands (a hit is only a c
 see whether it scans repo content or a test's own fixture directory):
 
 ```
-grep -nE "grep +-[a-zA-Z]*[rR][a-zA-Z]* |git (-C [^ ]+ )?(grep|ls-files)|find +\"?\$\{?(REPO|ROOT|TESTS|HOOKS|SCRIPTS|PLUGIN|SRC)[A-Z_]*\}?\"?" hooks/tests/*.test.sh scripts/*.test.sh
-grep -lE "ls-files|git grep|grep -r|readdirSync" hooks/*.test.js scripts/*.test.js scripts/lib/*.test.js
+grep -nE 'grep +-[a-zA-Z]*[rR][a-zA-Z]* |git (-C [^ ]+ )?(grep|ls-files)|find +"?\$\{?(REPO|ROOT|TESTS|HOOKS|SCRIPTS|PLUGIN|SRC)[A-Z_]*\}?"?' hooks/tests/*.test.sh scripts/*.test.sh
+grep -lE 'ls-files|git grep|grep -r|readdirSync' hooks/*.test.js scripts/*.test.js scripts/lib/*.test.js
 ```
 
 It is a survey, not a proof of completeness - a new content-scanning suite must be added by hand. Round 2's
 survey was a spot check and missed the five above; this one ran the grep over every `hooks/tests` and `scripts`
-suite. Candidates read and not added: `capability-evidence` (copies `src/engine/owner-kernel/`, no content scan).
+suite. The first version of this command was double-quoted, so the shell turned `\$` into `$` and the `find` branch matched nothing; it is now single-quoted and was re-run as written. The re-run added three `find` hits, all read: `skill-count-metadata` (already added), `check-hook-inventory` (`find` for a `mods/` directory inside the codex and opencode mirrors; already on the list, now pinned by a real-tree case on `platforms/codex/plugin/mods/x.js`), and `task-status-input` (its `find` runs inside a fixture repo made by `fx repo`, not the real tree: not added). Candidates read and not added: `capability-evidence` (copies `src/engine/owner-kernel/`, no content scan).
 
 ## Limits (read before relying on it)
 

@@ -42,7 +42,8 @@ function run(cmd, { shell = 'bash', extra = {}, env = {} } = {}) {
 // ---- Rule 1: detach rail without wake-up => deny ----
 for (const cmd of [
   'nohup scripts/dispatch-review.sh --base a --head b > /tmp/x.log 2>&1 &',
-  'setsid bash scripts/dispatch-author.sh brief.md',
+  'setsid -f bash scripts/dispatch-author.sh brief.md',
+  'setsid --fork scripts/dispatch-review.sh x',
   'bash scripts/dispatch-hetero.sh foo &',
   'cd /repo && nohup node scripts/dispatch-plan-review.js --x y &',
   "bash -c 'nohup scripts/dispatch-explore.sh q &'",
@@ -86,6 +87,9 @@ for (const cmd of [
   'nohup scripts/dispatch-review.sh x --ledger L --run-id R --stage S > out.log 2>&1 & node scripts/wait-dispatch-results.js --ledger L --expect R.S', // the deny message's own recipe
   'scripts/dispatch-review.sh x & wait $!', // builtin wait
   'setsid -w scripts/dispatch-review.sh x', // setsid --wait is foreground
+  'setsid bash scripts/dispatch-author.sh brief.md', // bare setsid runs in the foreground
+  'nohup scripts/dispatch-review.sh x > /tmp/o 2>&1', // bare nohup runs in the foreground
+  'nohup bash scripts/dispatch-review.sh x',
   'cat <<EOF\nnohup scripts/dispatch-review.sh &\nEOF', // heredoc body is data
   'grep -n dispatch-review.sh docs/x.md &&  echo ok', // && is not background
   'nohup node scripts/dispatch-status.js --run x > /tmp/o 2>&1 &',
@@ -173,7 +177,7 @@ test('mode off silences the guard', () => {
 
 test('rule1 still denies in block and warn modes', () => {
   for (const mode of ['warn', 'block']) {
-    assert.strictEqual(run('setsid scripts/dispatch-review.sh x', { env: { AUTOPILOT_DEPTH0_DELEGATE_GATE_MODE: mode } }).deny, true);
+    assert.strictEqual(run('setsid -f scripts/dispatch-review.sh x', { env: { AUTOPILOT_DEPTH0_DELEGATE_GATE_MODE: mode } }).deny, true);
   }
 });
 

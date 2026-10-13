@@ -47,7 +47,7 @@
  *
  * BASH-LAUNCH GUARD (BL-0019; applies at EVERY depth, subagents included, and runs before the
  * depth-0-only skip; scripts/lib/bash-launch-rules.js defines the rules):
- *   1. DENY  nohup / setsid / trailing `&` launching a dispatch rail entrypoint (dispatch-*.sh|js)
+ *   1. DENY  trailing `&` or `setsid -f` launching a dispatch rail entrypoint (see bash-launch-rules.js)
  *            with no wake-up in the same command (wait-dispatch-results / `wait`) — use the Bash
  *            tool's run_in_background. Non-rail detaches (`setsid nohup bash x.sh`) are untouched.
  *   2. WARN  `pkill -f` / `pgrep -f` whose pattern has no `[x]` self-exclusion bracket.

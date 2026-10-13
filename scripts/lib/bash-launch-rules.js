@@ -2,7 +2,7 @@
 
 // scripts/lib/bash-launch-rules.js — the ONE definition of three Bash-launch hazards that
 // hooks/depth0-delegate-gate.js checks on every Bash call (all depths, BL-0019):
-//   1. detach-no-wake (DENY)  — nohup / setsid / trailing `&` starting a dispatch RAIL entrypoint
+//   1. detach-no-wake (DENY)  — a trailing `&` or `setsid -f` (with or without nohup) starting a dispatch RAIL entrypoint
 //      (scripts/dispatch-*.sh|js, never *.test.*) with nothing in the same command that wakes the session.
 //      Only the COMMAND-POSITION word counts: `grep dispatch-review.sh x &` is not a launch.
 //   2. pkill-self-match (WARN) — `pkill -f` / `pgrep -f` (also inside `$(…)`) whose pattern lacks the
@@ -129,7 +129,7 @@ function expandSegments(text, depth = 0) {
       // (noSingle only blanked quoted spans for matching; slice the ORIGINAL text so quotes survive.)
       const open = sm[1] !== undefined ? 2 : 1;
       const body = executableText(seg.text.slice(sm.index + open, sm.index + sm[0].length - 1));
-      all.push(...expandSegments(body, depth + 1).map((x) => ({ ...x, bg: false, sh: x.sh || seg.sh })));
+      all.push(...expandSegments(body, depth + 1).map((x) => ({ ...x, sh: x.sh || seg.sh })));
     }
   }
   return all;
@@ -139,7 +139,8 @@ const unq = (w) => w.replace(/^['"]|['"]$/g, '');
 
 // Command position of a segment: strips VAR=val assignments and launcher/interpreter prefixes (with
 // their flags). Returns { head, detach, rest }: head is the first real command word, detach is true when
-// a nohup / setsid (not -w) prefix was stripped.
+// `setsid -f` / `--fork` (a real background fork) was stripped. A bare `nohup X` or `setsid X` runs in the
+// FOREGROUND (the tool call waits for it) and is not a detach; only a trailing `&` or `setsid -f` is.
 function commandPosition(segText) {
   const w = tokens(segText).map((t) => unq(t.raw));
   let detach = false;
@@ -149,17 +150,14 @@ function commandPosition(segText) {
     if (/^[A-Za-z_]\w*=/.test(a) || KEYWORDS.has(a)) { i += 1; continue; }
     const base = a.replace(/^.*\//, '');
     if (PREFIX_CMDS.has(base)) {
-      if (base === 'nohup') detach = true;
       i += 1;
-      let waitFlag = false;
       while (i < w.length && /^-/.test(w[i])) {
         if (VALUE_FLAGS[base] && VALUE_FLAGS[base].has(w[i])) i += 1;
         if (i >= w.length) break;
-        if (base === 'setsid' && (w[i] === '-w' || w[i] === '--wait')) waitFlag = true;
+        if (base === 'setsid' && (w[i] === '-f' || w[i] === '--fork')) detach = true;
         if (/^-[a-zA-Z]*c$/.test(w[i]) && ['bash', 'sh', 'zsh', 'dash'].includes(base)) return { head: null, detach, rest: [] };
         i += 1;
       }
-      if (base === 'setsid' && !waitFlag) detach = true;
       if (base === 'timeout' && i < w.length && /^\d/.test(w[i])) i += 1; // the duration
       continue;
     }

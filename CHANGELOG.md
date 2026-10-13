@@ -4,7 +4,7 @@
 
 ### 新增
 
-- **背景啟動 dispatch rail 卻沒有喚醒機制，現在會被擋下**（BL-0019，openclaw 回報）：用 `nohup`、`setsid` 或結尾 `&` 把 `scripts/dispatch-*.sh|js` 丟到背景，而同一個指令裡沒有 `wait` 或 `wait-dispatch-results.js` 時，session 永遠不會知道它跑完。這個檢查預設就生效，連 warn 模式也會擋，所有深度（包含 depth-0 和子代理）都適用；擋下時的訊息會列出改用 `run_in_background`，或搭配等待者的做法。
+- **背景啟動 dispatch rail 卻沒有喚醒機制，現在會被擋下**（BL-0019，openclaw 回報）：用結尾 `&` 或 `setsid -f` 把會啟動 worker 的 dispatch rail（`dispatch-review.sh` 等；`dispatch-status.js` 這類觀察工具不算）丟到背景，而同一個指令裡沒有 `wait` 或 `wait-dispatch-results.js` 時，session 永遠不會知道它跑完。這個檢查預設就生效，連 warn 模式也會擋，所有深度（包含 depth-0 和子代理）都適用；擋下時的訊息會列出改用 `run_in_background`，或搭配等待者的做法。
   - 只看命令位置的那個字詞：`grep dispatch-review.sh x &`、`git log -- scripts/dispatch-review.sh &`、背景跑 `dispatch-*.test.sh` 都不會被擋。
   - 另外兩條只警告、不擋：`pkill -f`／`pgrep -f` 的 pattern 沒用 `[x]` 寫法（會比對到自己），以及 zsh 下以 `=` 開頭的字詞或沒有檔案符合的萬用字元（zsh 會中止整行）。zsh 那條的萬用字元部分在沒有 `fs.globSync` 的 Node 版本不警告（`=` 開頭的字詞照樣警告）。
   - 規則放在 `scripts/lib/bash-launch-rules.js`，掛在既有的 `hooks/depth0-delegate-gate.js` 上，沒有新增 hook；`off` 模式會關掉全部。

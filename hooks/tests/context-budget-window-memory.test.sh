@@ -18,6 +18,7 @@ unset AUTOPILOT_CONTEXT_BUDGET_MODE
 # The live dir must be RAM-backed or resolveLiveDir() rejects the override and
 # silently falls through to the host's real live dir (this host's /tmp is ext4).
 TMP="$(mktemp -d "/dev/shm/context-budget-window-memory-XXXXXX")"
+export AUTOPILOT_MANAGED_SETTINGS_FILE="$TMP/.no-managed-settings.json"  # isolate from a host /etc/claude-code
 trap 'rm -rf "$TMP"' EXIT
 
 SID="11111111-2222-3333-4444-555555555555"

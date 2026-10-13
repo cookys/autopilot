@@ -91,6 +91,27 @@ reset_files
 assert_eq "$(r enabled claude-opus-5-5 DISABLE_AUTO_COMPACT=1)" "false" "env DISABLE_AUTO_COMPACT: disabled"
 assert_eq "$(r disabled_by claude-opus-5-5 DISABLE_COMPACT=1)" '"env DISABLE_COMPACT"' "env DISABLE_COMPACT named"
 
+# DISABLE_* use Claude Code's own predicate (2.1.296 binary `Ne`): only 1/true/yes/on, trimmed, any case.
+for v in 0 false no off banana ""; do
+  assert_eq "$(r enabled claude-opus-5-5 DISABLE_AUTO_COMPACT="$v")" "true" "DISABLE_AUTO_COMPACT='$v': not disabled"
+  assert_eq "$(r enabled claude-opus-5-5 DISABLE_COMPACT="$v")" "true" "DISABLE_COMPACT='$v': not disabled"
+done
+for v in 1 true TRUE yes on " On "; do
+  assert_eq "$(r enabled claude-opus-5-5 DISABLE_AUTO_COMPACT="$v")" "false" "DISABLE_AUTO_COMPACT='$v': disabled"
+done
+
+# --- managed path override via env (no managedPath option): the file is honoured, and absent means unset
+echo '{"autoCompactWindow": 640000}' > "$MANAGED"
+ov() {
+  env -u CLAUDE_CODE_AUTO_COMPACT_WINDOW -u CLAUDE_CONFIG_DIR -u CLAUDE_PROJECT_DIR "$@" node -e '
+    const { resolve } = require(process.argv[1]);
+    process.stdout.write(JSON.stringify(resolve({ home: process.argv[2], configDir: process.argv[3], claudeJsonPath: process.argv[4] }).configured));
+  ' "$LIB" "$TEST_TMP" "$CFG" "$TEST_TMP/claude.json"
+}
+assert_eq "$(ov AUTOPILOT_MANAGED_SETTINGS_FILE="$MANAGED")" "640000" "env managed path override is read"
+assert_eq "$(ov AUTOPILOT_MANAGED_SETTINGS_FILE="$TEST_TMP/nope.json")" "null" "env managed path override to a missing file: not set"
+reset_files
+
 # --- corrupt settings file: treated as absent
 echo '{not json' > "$CFG/settings.json"
 assert_eq "$(r configured claude-opus-5-5)" "null" "corrupt settings: not set, no throw"

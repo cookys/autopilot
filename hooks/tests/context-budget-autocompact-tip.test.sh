@@ -13,6 +13,7 @@ HOOK="$REPO_ROOT/hooks/context-budget.js"
 
 # The live dir must be RAM-backed or resolveLiveDir() rejects the override (this host's /tmp is ext4).
 TMP="$(mktemp -d "/dev/shm/context-budget-autocompact-tip-XXXXXX")"
+export AUTOPILOT_MANAGED_SETTINGS_FILE="$TMP/.no-managed-settings.json"  # isolate from a host /etc/claude-code
 trap 'rm -rf "$TMP"' EXIT
 
 SID="22222222-3333-4444-5555-666666666666"

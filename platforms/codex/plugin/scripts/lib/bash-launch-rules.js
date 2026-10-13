@@ -221,11 +221,16 @@ function detectPkillSelfMatch(cmd) {
   return null;
 }
 
+const GLOB_MAX_CHECKS = 3;
+const GLOB_BUDGET_MS = 50;
+
 // Rule 3 (zsh only). Returns { rule, why, token } or null.
 function detectZshExpansion(cmd, cwd) {
   let text = executableText(typeof cmd === 'string' ? cmd : '');
   text = text.replace(/\[\[[\s\S]*?\]\]/g, ' ').replace(/\$?\(\([\s\S]*?\)\)/g, ' ');
   const allSegs = expandSegments(text);
+  const t0 = Date.now();
+  let globChecks = 0;
   // A `cd`/`pushd` anywhere means globs are relative to a directory we do not know.
   const hasCd = allSegs.some((sg) => { const h = commandPosition(sg.text).head; return h === 'cd' || h === 'pushd'; });
   for (const seg of allSegs) {
@@ -244,8 +249,12 @@ function detectZshExpansion(cmd, cwd) {
       // Stay silent when we cannot judge: backslash/quote/brace in the word, `**`, or no globSync.
       if (/[\\'"{$]/.test(raw) || raw.includes('**') || bare !== masked) continue;
       if (hasCd || /^~/.test(raw)) continue; // cannot resolve / too broad: stay silent
-      if (raw.split('/').filter((part) => /[*?[]/.test(part)).length > 3) continue; // bound worst-case cost
+      // Cost bounds (worst case was 5 s for `/*/*/*/*/*/*/*`): only single-level globs are resolved, at most
+      // GLOB_MAX_CHECKS per command and GLOB_BUDGET_MS in total; past that we stay silent.
+      if (raw.split('/').filter((part) => /[*?[]/.test(part)).length > 1) continue;
       if (typeof fs.globSync !== 'function' || !cwd) continue;
+      if (globChecks >= GLOB_MAX_CHECKS || Date.now() - t0 > GLOB_BUDGET_MS) continue;
+      globChecks += 1;
       try {
         if (fs.globSync(raw, { cwd }).length > 0) continue;
       } catch { continue; }

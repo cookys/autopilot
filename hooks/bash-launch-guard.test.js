@@ -164,7 +164,7 @@ for (const cmd of ['git config a =b', 'echo foo ==x', 'curl https://x.test/a?b=1
     assert.doesNotMatch(run(cmd, { shell: 'bash' }).ctx, /zsh-expansion/);
   });
 }
-for (const cmd of ["echo '=' x", 'echo "a = b"', 'echo foo = bar', '[ "$x" = y ]', 'test a = a', 'echo "a"=b', 'ls "$HOME"/projects/*', 'ls ~/.claude/*.json', 'ls $HOME/.claude/*.json', 'cd hooks && ls *.test.js', "bash -c 'ls /nonexistent-dir-blg/*.zzz'", "bash -c 'echo =x'", 'ls /*/*/*/*/*/*/*.zzqq', 'ls a*/b*/c*/d*/e*.zzqq', 'ls /nonexistent-dir-blg/**/*.zzz', 'FOO=bar env', 'ls --color=auto', 'grep -E "[a-z]+" f', "ls '*.js'", 'echo $?', '[[ a == b ]] && echo y', 'echo $((1*2))', 'cat <<EOF\n= x\n*.zzz\nEOF']) {
+for (const cmd of ["echo '=' x", 'echo "a = b"', 'echo foo = bar', '[ "$x" = y ]', 'test a = a', 'echo "a"=b', 'ls "$HOME"/projects/*', 'ls ~/.claude/*.json', 'ls $HOME/.claude/*.json', 'cd hooks && ls *.test.js', "bash -c 'ls /nonexistent-dir-blg/*.zzz'", "bash -c 'echo =x'", 'ls /*/*/*/*/*/*/*.zzqq', 'ls a*/b*/c*/d*/e*.zzqq', 'ls nonexistent-a*/b*.zzqq', 'ls /nonexistent-dir-blg/**/*.zzz', 'FOO=bar env', 'ls --color=auto', 'grep -E "[a-z]+" f', "ls '*.js'", 'echo $?', '[[ a == b ]] && echo y', 'echo $((1*2))', 'cat <<EOF\n= x\n*.zzz\nEOF']) {
   test(`rule3 silent under zsh: ${JSON.stringify(cmd)}`, () => {
     assert.doesNotMatch(run(cmd, { shell: 'zsh' }).ctx, /zsh-expansion/);
   });
@@ -242,6 +242,20 @@ test('deep glob is bounded (worst case stays fast)', () => {
   const t0 = Date.now();
   run('ls /*/*/*/*/*/*/*.zzqq', { shell: 'zsh' });
   assert.ok(Date.now() - t0 < 1500);
+});
+
+// In-process timing of the rule itself: five deep globs must cost well under 200 ms in total.
+const { detectZshExpansion } = require('../scripts/lib/bash-launch-rules.js');
+test('five deep globs cost < 200 ms in total', () => {
+  const t0 = Date.now();
+  const r = detectZshExpansion('ls /*/*/* /*/*/*/* /*/*/*/*/* /*/*/*/*/*/* /*/*/*/*/*/*/*.zzqq', os.tmpdir());
+  assert.ok(Date.now() - t0 < 200, `took ${Date.now() - t0} ms`);
+  assert.strictEqual(r, null);
+});
+test('only the first few globs per command are resolved (stay silent past the cap)', () => {
+  const r = detectZshExpansion('ls /* /* /* /* /nonexistent-dir-blg/*.zzq', os.tmpdir());
+  assert.strictEqual(r, null);
+  assert.ok(detectZshExpansion('ls /nonexistent-dir-blg/*.zzq', os.tmpdir()));
 });
 
 // Drift guard: every launching rail script in scripts/ is on the guard's explicit list. A new

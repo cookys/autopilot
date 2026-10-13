@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0144 -->
+<!-- next-id: BL-0145 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1764,3 +1764,16 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: lane W delta review, 2026-10-13
 - **Pointer**: none
 - **Context**: child-session-identity.test.sh:96-103 add an assert that manifest containment_planned is setsid-detached; blocked-dispatch-guidance.test.sh:122,127 swap assert_eq args (lib.sh:396 wants actual first).
+
+### fleet dispatch carries no lineage, so work sent to a peer drops out of the dispatch tree
+- **Id**: BL-0144
+- **Status**: open
+- **Since**: 2026-10-13
+- **Origin**: self
+- **Problem**: 用 fleet 把工作派給另一個 session 時，派工樹在那裡就斷了：fleet 的派工只帶收件人和工作內容，不帶「這是誰底下的工作、第幾層」。
+- **Impact**: 派去別的 session 的工作，派工分頁只會顯示「之後的工作沒有紀錄」。目前很少這樣派，影響小。
+- **Trigger**: fleet 跨 session 派工變成常態（一週數次以上），或派工樹計畫出貨後擁有者要求追到對方那一端
+- **Effort**: M
+- **Source**: dispatch tree plan, step 4 deferred by owner ruling 2026-10-13
+- **Pointer**: docs/plans/2026-10-13-dispatch-tree.md
+- **Context**: Plan §4, D4. Carry root/parent/depth as remote-reported telemetry, never an edge (the far side is an LLM relaying it; G1 finding 56a3391e). Needs a fleet dispatch field plus a receiver record, shown as a labelled hint.

@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "dispatch-tree-2026-10-13",
+  "generation": 1,
+  "findings": [
+    {
+      "fingerprint": "54becd7a8ccbe76ddb968d23b9e0b35f5350a6e410213e0261d86e0868e6da26",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: scripts/lib/repo-identity.sh defines manifest_session_id_json and child_session_mint, and session-mode.js ensurePlainMarker records parent_session_id, so the old D2 described pre-merge code; the marker-overwrite gap appeared only in section 6. Section 1 now describes develop after the lane W merge: D2 is restated as the remaining one-sided child end per launch shape (BL-0142), D7 (marker write target, with every env-keyed writer cited), D8 (intermediate harness, dispatch-foreman.sh env allowlist) and D9 (dispatch-tree.js draws marker joins and untracked nodes as ordinary children) are added, and a step-to-diagnosis map ties D0, 3a, 3b, 3c, 5 and R to D-ids; D4 (fleet) is mapped to the deferred fleet step."
+    },
+    {
+      "fingerprint": "1a41c6fc768aa6680640e17268c8515099340753584b14a1803b95c9102faeb8",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: dispatch-tree.js attachRails sets joined_by marker and pushes the rail under the session root with untracked false, expired markers included, and dispatch-tree.test.js:85-107 and 141-153 pin that. Section 3 now makes the marker join membership-only: the rail is shown only in the unknown-origin group with untracked_reason joined_by_marker or joined_by_expired_marker; section 5 removes the marker edge kind; step R fixtures 5 and 6 pin fresh and expired joins outside root.children, with a hoist-disabled negative control."
+    },
+    {
+      "fingerprint": "188483affcb4915be87ad2a58fe395d02ef3f27fa85964d138388966418e85c1",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: the old rail-to-child predicate was satisfied by every manifest claiming the same child_session_id, and section 7 claimed an undefined exact-to-session skip-level edge. Section 3 now requires exactly one claimant manifest, non-null ids on both sides (null never matches) and X distinct from the manifest session; zero or several claimants go untracked (duplicate_child_claim). The skip-level wording is removed: a grandchild across a non-Claude harness is untracked unless its own rail-to-child predicate holds. Step R fixtures 3, 4 and 10 pin these outcomes."
+    },
+    {
+      "fingerprint": "c3da93e558f2fd63d7bf17117904cfdeba891c61c1e43ff46abaf6cd4a349913",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: dispatch-author.sh:1199-1223 and dispatch-review.sh:1537-1570 start claude -p --setting-sources project in a fresh mktemp dir (cc-shim also redirects HOME, which moves both the plugin install and the default marker dir into the deleted scratch dir); runs-watch-autostart.js:288 returns before ensurePlainMarker for a non-git cwd; the shipped test's stub claude never runs SessionStart. Section 2 now claims only the rail end. New step 3a installs a SessionStart hook the child loads regardless of user plugins (--settings, or a project settings file if D0 row b requires it) writing a payload-keyed marker into an explicit marker dir; its suite test drives each launch shape, and D0 rows a-c measure the real CLI per shape, with a bad branch that leaves those children untracked."
+    },
+    {
+      "fingerprint": "6e3251629549af9352b2efa998a1b1e6cfa33dd8fd76f63f7013ac4efc560eb1",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: getSessionId (session-mode.js:175-182) resolves AUTOPILOT_SESSION_ID, harness ids or cwd, and set, set --level, set --size init, clear, bind-campaign-root (also from the engine) and stage-advance --resume-from all key on it, while only ensurePlainMarker uses the payload id. Section 6 now defines one resolver with source classes; with AUTOPILOT_PARENT_SESSION_ID set only payload, explicit, or a CLAUDE_CODE_SESSION_ID differing from the parent is accepted, and every other env source or cwd is refused. A per-writer table names each own-id source, including the probe-engine-capability claude -p launch. Step 3b acceptance has negative controls on the real SessionStart hook path (expired parent marker pre-seeded so the unguarded path would overwrite it), every env-keyed writer, and the rail and probe launches."
+    },
+    {
+      "fingerprint": "56a3391ef44985f6337c95e721cb7f68630253ce2d9470e9dcf42231bc114570",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: steps 3b-R lacked rollback actions, 3c and R had prose or placeholder acceptance, and session-mode.js --root-run-id writes the local marker root_run_id. Section 4 now gives each remaining step a change, compatibility, rollback and a named test with literal assertions and a negative control (session-marker-write-target, child-marker-sessionstart, ccshim-child-transcript, rail-agent-stamp, dispatch-tree.test.js with twelve pinned fixtures). The fleet step that wrote the local marker root_run_id is moved out of this plan by owner ruling (low value; the receiving side is an LLM relaying the value): section 4 keeps one deferred line, section 3 makes fleet never an edge, and the backlog tracks it, so no step in this plan writes a remote lineage into the local marker."
+    },
+    {
+      "fingerprint": "5341e4145e9a728649e77973515bb3b909b18f8972e5affc8223ef45ef6eb486",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: opt-in-multiplexer.js:153-176 forwards only additionalContext and permissionDecision and drops any input rewrite; the hooks reference documents updatedInput only together with allow or ask, and allow skips the permission prompt. Step 5 now registers the stamp hook directly in hooks.json under Bash, returns updatedInput with an export prefix built from a validated agent_id (or session at depth 0), never returns a permissionDecision, and rails copy it to manifest origin_agent_id and unset it for nested rails. Acceptance runs every Bash PreToolUse entry from hooks.json, executes the rewritten command, and checks concurrent manifests. D0 rows g-i measure whether updatedInput applies without a decision, whether allow rules still match, and whether the rewrite survives the other hooks; any bad answer drops step 5 with no guessing fallback."
+    },
+    {
+      "fingerprint": "6fc53ca488ed206f1ddc5014b9f2787e621798f94856b2244f099a412d6f8f5c",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: steps 2 and 3 are on develop, so a probe-before-every-writer order was impossible as written. Section 4 now states the honest order: D0 verifies the shipped writers (rows a, c, e, f) and gates every new writer, with a four-step re-open protocol. Section 7 is an outcome table whose rows each name the measurement, pass criterion, concrete bad-result design change and the steps it blocks, covering SessionStart in -p, the author/review launch flags, the hetero shape, owned and third-party intermediate harnesses, nested depth, the updatedInput questions and transcript lifetime; fleet depth left this plan with the deferred fleet step."
+    },
+    {
+      "fingerprint": "716fa4a578e2b184ca50b9bd8a24aa43d85666226c3a43a6be913fe3277fdd81",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Verified: attachAgents and attachRails push untracked nodes onto the nearest parent's children. Step R now adds a hoist pass in dispatch-tree.js itself that moves every untracked node into its session's untracked_groups entry, sets untracked_bucket and keeps untracked_reason; section 5 raises the script's JSON schema_version to 2 because the move is not additive."
+    },
+    {
+      "fingerprint": "0edb5f527d7df6ba0ba028ffdb723ea126a86b13dcad544992b35d4965714a30",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Verified: D0 had no acceptance command. Section 4 adds step D0 with its own command (d0-probe.sh writing d0-result.json with raw evidence per row) and a negative control (sentinel hook omitted must report row a as bad). It is a live probe rather than a hooks/tests suite because it needs an authenticated claude; the suite stays offline, and steps 3a and 3b are blocked until the rows they depend on are recorded."
+    },
+    {
+      "fingerprint": "cbf73c66bcf5b24d3bf5da6cfe21177ef3e27394a20c0e7c03e8a764120cd101",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted: section 4 Order adds the re-open protocol for shipped steps 2 and 3: update manifest-session-id.test.sh or child-session-identity.test.sh first and show it red, fix the writer in its own commit, restate the section 2 row in that commit, and re-derive and re-accept step R's fixtures only after the fix is green."
+    }
+  ]
+}

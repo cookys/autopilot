@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "dispatch-tree-2026-10-13",
+  "generation": 2,
+  "findings": [
+    {
+      "fingerprint": "48daef4f468223d856bb190609ef50c17b461623c26721ef506722e8dfb8dae6",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: scripts/dispatch-tree.js attachAgents pushes an agent with no parentAgentId and spawnDepth 0 or 1 onto the session root with no untracked reason, while section 3 had no session-to-subagent row. Also verified on a live session that the subagent meta carries toolUseId and spawnDepth 1, and that the session transcript holds a tool result whose tool_use_id equals that toolUseId and whose toolUseResult.agentId equals the agent id. Section 3 adds a session-to-top-level-subagent row: meta in the session own subagents directory, no parentAgentId, spawnDepth 1, and exactly one transcript result naming the agent with the matching tool_use_id; otherwise agent_result_absent, agent_tool_use_mismatch, duplicate_agent_result or unexpected_spawn_depth into the unknown-origin group. Step R adds fixture 13 (red on develop) with a negative control, section 5 adds tool_use_id, and section 7 row k measures the foreground result shape."
+    },
+    {
+      "fingerprint": "4a39b78d8f64530e33410904db731e10717af776813c30f5b750a7d90b291da1",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: with outer rail A (session S) and nested rail B carrying session_id X and parent_run_id A, the rail-to-rail predicate rejects B (X is neither null nor S) and no child-session-to-rail edge existed, so a row f pass could not place B exactly. Section 3 adds a child-session-to-rail row, exact only when X is placed exact under A, B.session_id equals X and B.parent_run_id equals A; otherwise nested_via_untracked_child or nested_parent_mismatch. Section 5 lets a child_session node hold rail children; step R adds fixture 14 (develop puts B under A, so red) with a negative control."
+    },
+    {
+      "fingerprint": "f00f02a83974c193401ad148c4a441569849a726c6093676fa5132fb2af6f443",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: getSessionId (session-mode.js:175-182) falls through AUTOPILOT_SESSION_ID, CLAUDE_CODE_SESSION_ID, CLAUDE_SESSION_ID, CODEX_THREAD_ID and cwd, while section 6 rule 3 derived P only from CLAUDE_CODE_SESSION_ID, leaving P unset for the other sources. Rule 3 now exports P as the launcher resolved write target from any source, cwd included, and removes AUTOPILOT_SESSION_ID, CLAUDE_SESSION_ID and a CLAUDE_CODE_SESSION_ID that differs from P from the child environment. CODEX_THREAD_ID is kept because codex sets it; rule 2 refuses every env source except a CLAUDE_CODE_SESSION_ID different from P, so an inherited thread id is never written under. Step 3b adds cases f (CLAUDE_SESSION_ID-only launcher), g (cwd-only launcher) and h (CODEX_THREAD_ID-only launcher) with a negative control that takes P from CLAUDE_CODE_SESSION_ID only."
+    },
+    {
+      "fingerprint": "723dddf818be70d9c9c9575ef4ec8e3509fa26e605d87c76231797ffb70a7265",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: section 7 rows d1, d2 and f prescribed producer changes (foreman allowlist, outer rail environment, manifest session_id emission) that no step owned, and D0 writes no product code. Section 7 now records a bad result on any of these rows as a stop: the plan is revised and plan-reviewed again before step R, and section 4 Order states this; no conditional producer step is written into this plan."
+    },
+    {
+      "fingerprint": "f2eb5a775144e703d7ac394d221e1a45be4511ee1a97b7c4c3163202013ede90",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: row d2 said only per harness and printed three variables, without naming a harness or launching an inner Claude session; codex, kimi, agy and opencode are installed on this host and dispatch-hetero.sh accepts --runner codex. Section 7 row d2 is now an end-to-end probe: outer Claude session, dispatch-hetero.sh --runner codex, the codex task runs claude -p --session-id u, which starts a stub rail; it records the environment at codex and the inner claude, the inner SessionStart payload, u.json and the nested manifest, repeats for kimi, agy and opencode when installed, and records not_run (treated as bad) otherwise. A bad result stops for plan revision."
+    }
+  ]
+}

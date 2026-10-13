@@ -1,6 +1,6 @@
 # Dispatch tree — follow every piece of work from the session, without guessing a parent
 
-Status: **draft, G2 revision (final generation; G2 blockers ruled by the coordinator)** (2026-10-13; `lane/w-dispatch-rail` merged as `544b654b`). Plan only; no product code changed.
+Status: **frozen** (2026-10-13) after two plan-review generations (G2 blockers ruled by the coordinator; receipts in [`evidence/2026-10-13-dispatch-tree/plan-review/`](evidence/2026-10-13-dispatch-tree/plan-review/README.md); `lane/w-dispatch-rail` merged as `544b654b`). Plan only; no product code changed.
 Split out of [`2026-10-13-live-pane-design-system.md`](2026-10-13-live-pane-design-system.md) (its former P6 and §7.1) by owner ruling 2026-10-13: the dispatch tree is scheduled as its own plan, after the related branches merge. The live-pane plan keeps one pointer line and no dependency on this plan.
 Scope: run manifests, the dispatch rails' child launch, the session marker, the subagent records, and one read-only renderer in the 派工 tab (`mods/live`). It touches producers, so it is not a pane-only change.
 

@@ -1,0 +1,306 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "dispatch-tree-2026-10-13",
+  "logical_plan_id": "dispatch-tree-2026-10-13",
+  "session_id": "a14bb1ea-4b8b-421d-9e3d-a7fa6e844a18",
+  "session_key": "c2943cb15230571bd29845f4ad870f9996518177a905e146c7c98cfd0959c3cd",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "4d07d7526e4623ec0583aff2546b8b24fedaa86cf8f76d876bcea6735454c0a5",
+  "manifest_sha256": "98a95884fd9fe7faabbdad3cd8d6748e6ed6e30436101c73aabe595af773eaeb",
+  "plan_sha256": "fb57d36c936c88f30d07afcf7bbbaa1b6b371ed51324d851583b86f1cfe018e7",
+  "growth_ratio": {
+    "numerator": 3436,
+    "denominator": 2341
+  },
+  "growth_warning": true,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "be7ec12203f8d48cc86d1d894abdacf0291b8ced896c2749a0d9556f61d15fdc"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "5b7e03cc64acd3be2d73388b45ad865cf69fe3c621ea928bdc31f7da444d74e7",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-putYVZ/stdout",
+          "digest": "5b7e03cc64acd3be2d73388b45ad865cf69fe3c621ea928bdc31f7da444d74e7"
+        },
+        "receipt_digest": "6430be3eb445b94938dd91f32f6cd8530b811f7f8734a0fbc7b350c2b7fa4648"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "kimi_deep",
+      "target_id": "kimi_deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "kimi",
+          "model": "kimi-code-k3",
+          "operation": "plan-review",
+          "request_digest": "bb996e94a639d1770c0c9bdc79c5abd85e52adfbc77fe0a7904115257667dd85"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 3,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "aa8f8ec0cbe749e3ef2d545d87afb9d30fc144de57cc2ff840f85822be87b9f0",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-Ky3Yje",
+          "digest": "aa8f8ec0cbe749e3ef2d545d87afb9d30fc144de57cc2ff840f85822be87b9f0"
+        },
+        "receipt_digest": "48b537d493ac343c6a197c1a9826a3fd642ebba786a83633708c70c2101591f8"
+      },
+      "transport_status": "exit_failure",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "kimi_deep",
+      "target_id": "kimi_deep",
+      "attempt": 2,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "kimi",
+          "model": "kimi-code-k3",
+          "operation": "plan-review",
+          "request_digest": "a97a8cc5cd97dd608452126fae055fabe2a92b8919ada14fb5bda50c909a2344"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 3,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "aa8f8ec0cbe749e3ef2d545d87afb9d30fc144de57cc2ff840f85822be87b9f0",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-VbhMf8",
+          "digest": "aa8f8ec0cbe749e3ef2d545d87afb9d30fc144de57cc2ff840f85822be87b9f0"
+        },
+        "receipt_digest": "a577e1c981b1d310f15ffe2fafac82f48a868a5bf27d19ae52ea4c2d112cad7a"
+      },
+      "transport_status": "exit_failure",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_consult",
+      "target_id": "minimax_consult",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "759c44a41841d1bec167967cead766a34790571c5dd76c2942101ac9e69f2ea8"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-Rf6FZQ",
+          "digest": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d"
+        },
+        "receipt_digest": "d7f94a667bb72c12cac7c5d0f2b7971a465c7b707c9b1e011070c96496be8413"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "family": "openai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "minimax_consult",
+      "target_id": "minimax_consult",
+      "family": "minimax",
+      "verdict": "READY"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Section 3 edge contract and scripts/dispatch-tree.js agent placement",
+      "claim": "The supposedly total edge table omits the session-to-top-level-subagent edge that the current renderer draws.",
+      "evidence": "Current attachAgents places an agent directly under the session when parentAgentId is absent and spawnDepth is 0 or 1. Section 3 defines only subagent-to-subagent and subagent-to-rail edges, so preserving current behavior draws an edge with no exact predicate, while changing it to untracked has no specified reason or acceptance case.",
+      "evidence_reference": "scripts/dispatch-tree.js attachAgents; plan section 3 edge table; step R fixtures 8-9",
+      "repair": "Add an explicit session-to-subagent predicate with uniqueness and failure reasons, or require all such records to enter a named untracked bucket. Add red-before/green-after fixtures for valid top-level agents, missing identity, and ambiguous identity.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "48daef4f468223d856bb190609ef50c17b461623c26721ef506722e8dfb8dae6"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Nested Claude lineage in sections 3, 5, and 7 row f",
+      "claim": "The planned good result for a nested Claude dispatch has no exact placement rule.",
+      "evidence": "Row f expects nested rail B to carry the child Claude session id X and parent_run_id A, where outer rail A carries the original session id S. The rail-to-rail predicate rejects B because X is neither null nor equal to S; the session-to-rail depth-zero predicate also rejects B because it has parent_run_id A; and no child_session-to-rail edge is defined. Thus an observed pass from row f cannot produce the exact A-to-X-to-B lineage.",
+      "evidence_reference": "Plan section 3 rail-to-rail and rail-to-child predicates; section 7 row f; step R fixture list",
+      "repair": "Define a composite exact child_session-to-rail rule using A.child_session_id, marker X.parent_session_id, B.session_id, and B.parent_run_id, including uniqueness and mismatch reasons. Add a fixture for A to child session X to nested rail B and its negative controls.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "4a39b78d8f64530e33410904db731e10717af776813c30f5b750a7d90b291da1"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Section 6 marker write-target resolver and step 3b launch environment",
+      "claim": "The guard remains unsafe when the launching session identity comes from CLAUDE_SESSION_ID, CODEX_THREAD_ID, or cwd rather than CLAUDE_CODE_SESSION_ID.",
+      "evidence": "Diagnosis D7 states that marker identity can fall through to CLAUDE_SESSION_ID, CODEX_THREAD_ID, or cwd. Section 6 rule 3 nevertheless derives AUTOPILOT_PARENT_SESSION_ID only from the launcher's CLAUDE_CODE_SESSION_ID and unsets only AUTOPILOT_SESSION_ID. If CLAUDE_CODE_SESSION_ID is absent, P remains unset, rule 1 accepts the inherited fallback identity, and a shell or non-Claude child can still target the parent's marker. Every listed 3b safety case supplies P, so the negative control does not cover this path.",
+      "evidence_reference": "Plan D7; section 6 rules 1-3; step 3b acceptance cases a-e",
+      "repair": "Resolve and export the launcher's actual marker identity regardless of its source, or fail closed while clearing every inherited marker-id candidate. Add negative controls for CLAUDE_SESSION_ID, CODEX_THREAD_ID, and cwd-derived parent identities with CLAUDE_CODE_SESSION_ID absent, for both Claude and non-Claude child launch paths.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "f00f02a83974c193401ad148c4a441569849a726c6093676fa5132fb2af6f443"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "D0 bad-result branches for foreman, third-party harnesses, and nested rails",
+      "claim": "Several D0 outcomes require producer changes that have no owned implementation step, compatibility rule, rollback rule, or red-before/green-after acceptance command.",
+      "evidence": "Row d1 says to fix the foreman allowlist before R; row d2 can require changing the outer rail environment; and row f can require changing manifest session_id emission. None is assigned to steps 3a, 3b, 3c, or 5 with an acceptance test, while D0 itself is explicitly no-product-code and accepts bad results.",
+      "evidence_reference": "Plan section 4 D0 and order; section 7 rows d1, d2, and f",
+      "repair": "Either make each such bad result terminal pending a revised plan, or add bounded conditional producer steps with explicit compatibility, rollback, negative control, and acceptance commands before R.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "723dddf818be70d9c9c9575ef4ec8e3509fa26e605d87c76231797ffb70a7265"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "D0 row d2 intermediate-harness probe",
+      "claim": "The plan does not actually specify the required non-Claude-harness-between-two-Claude-sessions measurement.",
+      "evidence": "Row d2 says only 'per harness' and prints three environment variables. It names no harness or reproducible invocation and never launches the inner Claude session, checks its SessionStart payload, marker, or nested rail manifest. Consequently it cannot distinguish a working Claude-to-harness-to-Claude hand-off from an environment print that succeeds while the inner lineage fails.",
+      "evidence_reference": "Plan section 7 row d2; section 3 no-skip-level rule; frozen rubric R6",
+      "repair": "Name at least one supported non-Claude harness and define an end-to-end outer-Claude to harness to inner-Claude probe that inspects environment propagation, inner session identity, marker write target, and resulting rail placement. Specify fail-closed behavior for each bad observation.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "f2eb5a775144e703d7ac394d221e1a45be4511ee1a97b7c4c3163202013ede90"
+    }
+  ],
+  "backlog_candidates": [],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-10-13T11:10:22.122Z"
+}

@@ -1631,7 +1631,9 @@ const Q = "\x27";
 // with no dollar, bang or bracket characters, so no shell expands anything. REPLACES every matching key
 // line (read_field takes the FIRST match), appends when absent, creates the file when missing.
 const JS = String.raw`var fs=require("fs"),p=require("path"),a=process.argv.slice(1),f=a.shift(),t="";try{t=fs.readFileSync(f,"utf8")}catch(e){fs.mkdirSync(p.dirname(f),{recursive:true})}a.forEach(function(kv){var i=kv.indexOf("="),k=kv.slice(0,i),v=kv.slice(i+1),n=0;t=t.replace(new RegExp("^(\\s*-?\\s*"+k+"\\s*:).*","gim"),function(m,h){n=n+1;return h+" "+v});if(n===0){t=t+(t===""||t.slice(-1)==="\n"?"":"\n")+"- "+k+": "+v+"\n"}});fs.writeFileSync(f,t)`;
-const setCmd = (pairs) => "node -e " + Q + JS + Q + " " + Q + cfg + Q + " " + pairs.map((t) => Q + t + Q).join(" ");
+// POSIX single-quote escaping shared by every printed command: a quote inside becomes close, backslash-quote, reopen.
+const shq = (x) => Q + String(x).replace(/\x27/g, Q + "\\" + Q + Q) + Q;
+const setCmd = (pairs) => "node -e " + Q + JS + Q + " " + shq(cfg) + " " + pairs.map(shq).join(" ");
 const out = [];
 out.push("resolve-review-loop: STOP (exit 4) plan_review=auto has no usable plan-review roster; the silent fallback would be opus/high@claude-native, the depth-0 family.");
 if (d.missing_plan_review_panel) out.push("  cause: the topology file has no plan_review_panel key (stale cache) - regenerate it first: node scripts/resolve-dispatch-topology.js");

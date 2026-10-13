@@ -148,6 +148,42 @@ OLDEOF
   assert_eq "$R_EXIT" "4" "negative control: the old sed command under zsh leaves the stop in place (red)"
 fi
 
+# hostile config paths: a single quote and a space in the path. The printed commands must quote them
+# (POSIX close-escape-reopen) and run under bash, zsh and dash, then the query returns exit 0.
+QDIR="$TEST_TMP/it's a dir"; mkdir -p "$QDIR"
+SDIR="$TEST_TMP/spaced dir"; mkdir -p "$SDIR"
+PATHSHELLS="bash"
+command -v zsh >/dev/null 2>&1 && PATHSHELLS="$PATHSHELLS zsh" || echo "SKIP: zsh not installed, hostile-path zsh runs skipped"
+command -v dash >/dev/null 2>&1 && PATHSHELLS="$PATHSHELLS dash" || echo "SKIP: dash not installed, hostile-path sh runs skipped"
+for D in "$QDIR" "$SDIR"; do
+  for PSH in $PATHSHELLS; do
+    HC="$D/cfg-$PSH.md"; cp "$TEMPLATE" "$HC"
+    for MARK in "accept the single-family" "write the recommendation"; do
+      cp "$TEMPLATE" "$HC"
+      CFG_USE="$HC" run_resolver "$STALE_TOPO" --field plan_reviewer_engine
+      assert_eq "$R_EXIT" "4" "[$PSH] hostile path ($(basename "$D")): stop before the printed command"
+      PSH_RUN="$PSH"; [ "$PSH" = zsh ] && PSH_RUN="zsh -f"
+      PSH="$PSH_RUN" run_printed "$MARK" "$HC"
+      CFG_USE="$HC" run_resolver "$STALE_TOPO" --field plan_reviewer_engine
+      assert_eq "$R_EXIT" "0" "[$PSH] hostile path ($(basename "$D")) '$MARK' command reaches exit 0"
+    done
+  done
+done
+unset PSH
+# NEGATIVE CONTROL: with the quote escaping removed, the single-quote path must go red.
+NC="$TEST_TMP/nc"; mkdir -p "$NC"; cp -r "$REPO_ROOT/scripts" "$NC/scripts"
+sed -i 's#replace(/\\x27/g, Q + "\\\\" + Q + Q)#replace(/ZZZ/g, "")#' "$NC/scripts/resolve-review-loop.sh"
+if grep -q 'ZZZ' "$NC/scripts/resolve-review-loop.sh"; then
+  NCC="$QDIR/nc.md"; cp "$TEMPLATE" "$NCC"
+  AUTOPILOT_TOPOLOGY_FILE="$STALE_TOPO" REVIEW_LOOP_CONFIG_OVERRIDE="$NCC" bash "$NC/scripts/resolve-review-loop.sh" --field plan_reviewer_engine >/dev/null 2>"$TEST_TMP/nc.err"
+  NCL="$(grep -F 'accept the single-family' "$TEST_TMP/nc.err" | head -1)"
+  bash -c "${NCL#*: }" >/dev/null 2>&1
+  AUTOPILOT_TOPOLOGY_FILE="$STALE_TOPO" REVIEW_LOOP_CONFIG_OVERRIDE="$NCC" bash "$NC/scripts/resolve-review-loop.sh" --field plan_reviewer_engine >/dev/null 2>&1
+  assert_eq "$?" "4" "negative control: without the escaping the quoted-path command breaks and the stop stays"
+else
+  fail "negative control sed did not apply"
+fi
+
 # implementer runner filter: implementer on grok, topology offers only grok => nothing recommended
 IMPL="$TEST_TMP/impl.md"
 printf -- '- plan_review: auto\n- implementer_runner: grok\n- implementer_engine: grok-fixture\n- implementer_effort: high\n' > "$IMPL"

@@ -256,7 +256,7 @@ while [[ $# -gt 0 ]]; do
     --scorecard-identity-file) SCORECARD_IDENTITY_FILE="${2:-}"; shift 2 ;;
     --enforce) ENFORCE=1; shift ;;
     --scale-by-capability) SCALE_BY_CAPABILITY=1; shift ;;
-    -h|--help) sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,53p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -1609,23 +1609,36 @@ if [[ "$_plan_roster_field" == "1" && "$PLAN_REVIEW" == "auto" \
 let d = {};
 try { d = JSON.parse(process.argv[1] || "{}"); } catch { d = {}; }
 const cfg = process.argv[2];
+// Same filter the topology resolution above applies: a seat on the implementer runner would be
+// refused by the same-runner-dual-seat guard (exit 3) once written, unless the operator allowed it.
+const normRunner = (r) => (r === "codex-cli" ? "codex" : r);
+const implRunner = process.argv[3] || "";
+const allowDual = process.argv[4] === "on";
+const onImpl = (r) => !allowDual && implRunner && implRunner !== "auto" && normRunner(r) === normRunner(implRunner);
 const seen = new Set();
 const seats = [];
 for (const key of ["plan_review_panel", "reviewer_ladder", "consult_ladder"]) {
   for (const s of Array.isArray(d[key]) ? d[key] : []) {
-    if (!s || !s.engine || !s.runner || !s.effort) continue;
+    if (!s || !s.engine || !s.runner || !s.effort || onImpl(s.runner)) continue;
     const id = `${s.engine}/${s.effort}@${s.runner}`;
     if (seen.has(id)) continue;
     seen.add(id);
     seats.push({ id, s });
   }
 }
+const Q = "\x27";
+// Paste-ready, idempotent: REPLACE the key when the file already has it (read_field takes the FIRST
+// match, so an appended duplicate would never be read), append otherwise.
+const setCmd = (pairs) => "for kv in " + pairs.map((t) => Q + t + Q).join(" ")
+  + "; do k=${kv%%=*}; v=${kv#*=}; if grep -qiE \"^[[:space:]]*-?[[:space:]]*$k[[:space:]]*:\" " + Q + cfg + Q
+  + "; then sed -i -E \"s#^([[:space:]]*-?[[:space:]]*$k[[:space:]]*:).*#\\\\1 $v#I\" " + Q + cfg + Q
+  + "; else printf -- " + Q + "- %s: %s\\n" + Q + " \"$k\" \"$v\" >> " + Q + cfg + Q + "; fi; done";
 const out = [];
 out.push("resolve-review-loop: STOP (exit 4) plan_review=auto has no usable plan-review roster; the silent fallback would be opus/high@claude-native, the depth-0 family.");
 if (d.missing_plan_review_panel) out.push("  cause: the topology file has no plan_review_panel key (stale cache) - regenerate it first: node scripts/resolve-dispatch-topology.js");
 if (seats.length === 0) {
   out.push("  available qualified seats: none found in the topology (absent, malformed, or zero qualified reviewer/consult seats).");
-  out.push("  options: qualify a heterogeneous seat (scripts/engine-qualify.sh), set plan_review: off in " + cfg + " to opt out, or plan_review_allow_native_fallback: on to accept the single-family fallback.");
+  out.push("  options: qualify a heterogeneous seat (scripts/engine-qualify.sh), set plan_review: off in " + cfg + " to opt out, or accept the single-family fallback (command below).");
 } else {
   out.push("  available qualified seats (engine/effort@runner [family]):");
   for (const { id, s } of seats) out.push("    - " + id + " [" + (s.family || "unknown") + "]");
@@ -1639,23 +1652,21 @@ if (seats.length === 0) {
     if (pick.length === 2) break;
   }
   out.push("  recommended: " + pick.map((s) => s.engine + "/" + s.effort + "@" + s.runner).join(" + ") + (pick.length < 2 ? " (single qualified family: a one-seat plan review)" : " (distinct families)"));
-  const lines = [];
+  const kv = [];
   const emit = (prefix, s) => {
-    lines.push("- " + prefix + "_engine: " + s.engine);
-    lines.push("- " + prefix + "_effort: " + s.effort);
-    lines.push("- " + prefix + "_runner: " + s.runner);
-    if (s.endpoint) lines.push("- " + prefix + "_endpoint: " + s.endpoint);
+    kv.push(prefix + "_engine=" + s.engine);
+    kv.push(prefix + "_effort=" + s.effort);
+    kv.push(prefix + "_runner=" + s.runner);
+    if (s.endpoint) kv.push(prefix + "_endpoint=" + s.endpoint);
   };
   emit("plan_reviewer", pick[0]);
   if (pick[1]) emit("plan_deep_reviewer", pick[1]);
-  const Q = "\x27";
-  const q = (t) => Q + t.split(Q).join(Q + "\\" + Q + Q) + Q;
-  out.push("  write the recommendation: printf " + Q + "%s\\n" + Q + " " + lines.map(q).join(" ") + " >> " + cfg);
-  out.push("  to accept the single-family opus@claude-native fallback instead: printf -- " + Q + "- plan_review_allow_native_fallback: on\\n" + Q + " >> " + cfg);
+  out.push("  write the recommendation: " + setCmd(kv));
   out.push("  caller: ask the owner which seats to use; with nobody to ask (headless), apply the recommendation and log it as a decision.");
 }
+out.push("  accept the single-family opus@claude-native fallback instead (owner decision): " + setCmd(["plan_review_allow_native_fallback=on"]));
 process.stderr.write(out.join("\n") + "\n");
-' "${_topo_json:-}" "$_cfg_target"
+' "${_topo_json:-}" "$_cfg_target" "$IMPL_RUNNER" "$ALLOW_DUAL_SEAT"
   [[ "$ENFORCE_EXIT" -eq 0 ]] && ENFORCE_EXIT=4
 fi
 

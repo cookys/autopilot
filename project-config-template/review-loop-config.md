@@ -70,7 +70,6 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 - min_panel_size: 3
 - density_scaling: off
 - plan_review: auto
-- plan_review_allow_native_fallback: off
 - hetero_review: auto
 - consult_engine:
 - consult_effort:

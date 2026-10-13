@@ -57,28 +57,67 @@ assert_contains "$R_ERR" "gpt-fixture/max@codex [openai]" "stop lists the qualif
 assert_contains "$R_ERR" "grok-fixture/xhigh@grok [xai]" "stop lists a second-family seat"
 assert_contains "$R_ERR" "recommended: gpt-fixture/max@codex + minimax-fixture/high@cc-shim" \
   "recommendation takes two DISTINCT families (the second openai seat is skipped)"
-assert_contains "$R_ERR" "_engine: gpt-fixture" "stop prints the config lines to write"
-assert_contains "$R_ERR" "plan_deep_reviewer_runner: cc-shim" "stop prints the deep seat lines"
+assert_contains "$R_ERR" "plan_reviewer_engine=gpt-fixture" "stop prints the config values to write"
 assert_contains "$R_ERR" "no plan_review_panel key" "stop names the stale-topology cause"
 
-# the explicit opt-out knob: accepting the single-family fallback is a recorded config decision
-ALLOW_CFG="$TEST_TMP/allow.md"
-printf -- '- plan_review: auto\n- implementer_runner: auto\n- plan_review_allow_native_fallback: on\n' > "$ALLOW_CFG"
-CFG_USE="$ALLOW_CFG" run_resolver "$STALE_TOPO" --field plan_reviewer_engine
-assert_eq "$R_EXIT" "0" "plan_review_allow_native_fallback: on lets the native fallback through"
-assert_eq "$R_OUT" "opus" "and the fallback seat is the documented opus"
-run_resolver "$STALE_TOPO" --field plan_reviewer_engine
-assert_contains "$R_ERR" "plan_review_allow_native_fallback: on" "the stop names the opt-out knob and its write command"
+# Round trips on a COPY OF THE FULL SHIPPED TEMPLATE (it carries the keys already, which is where
+# an appended duplicate is silently ignored: read_field takes the first match). Each printed
+# command must take the same query from exit 4 to exit 0 with no exit 3 on the way.
+TEMPLATE="$REPO_ROOT/project-config-template/review-loop-config.md"
+run_printed() {  # run_printed <stderr-marker> <config> ; applies the printed command to <config>
+  local line cmd
+  line="$(printf '%s\n' "$R_ERR" | grep -F "$1" | head -1)"
+  cmd="${line#*: }"
+  bash -c "$cmd"
+}
 
-# the printed command is real: run it into a config and the same resolver call passes
-cmd="$(printf '%s\n' "$R_ERR" | sed -n 's/^  write the recommendation: //p')"
-WRITTEN="$TEST_TMP/written.md"
-printf -- '- plan_review: auto\n- implementer_runner: auto\n' > "$WRITTEN"
-cmd="${cmd//>> $CFG/>> $WRITTEN}"
-bash -c "$cmd"
-CFG_USE="$WRITTEN" run_resolver "$STALE_TOPO" --field plan_review_resolved_from
-assert_eq "$R_EXIT" "0" "applying the printed command satisfies the admission"
+# accept the single-family fallback
+ACC="$TEST_TMP/accept.md"; cp "$TEMPLATE" "$ACC"
+CFG_USE="$ACC" run_resolver "$STALE_TOPO" --field plan_reviewer_engine
+assert_eq "$R_EXIT" "4" "template copy on a stale topology stops"
+run_printed "accept the single-family" "$ACC"
+CFG_USE="$ACC" run_resolver "$STALE_TOPO" --field plan_reviewer_engine
+assert_eq "$R_EXIT" "0" "the printed accept command reaches exit 0 even though the template already has the key"
+assert_eq "$R_OUT" "opus" "accepted fallback resolves to opus"
+assert_eq "$(grep -cE '^- plan_review_allow_native_fallback' "$ACC")" "1" "exactly one key line after appending"
+# the key already present as off (first match wins in read_field): the command must REPLACE, not append
+ACC2="$TEST_TMP/accept2.md"
+{ printf -- '- plan_review_allow_native_fallback: off\n'; cat "$TEMPLATE"; } > "$ACC2"
+CFG_USE="$ACC2" run_resolver "$STALE_TOPO" --field plan_reviewer_engine
+assert_eq "$R_EXIT" "4" "an explicit off keeps the stop"
+run_printed "accept the single-family" "$ACC2"
+CFG_USE="$ACC2" run_resolver "$STALE_TOPO" --field plan_reviewer_engine
+assert_eq "$R_EXIT" "0" "the printed command replaces an existing off line (appending would never be read)"
+assert_eq "$(grep -cE '^- plan_review_allow_native_fallback' "$ACC2")" "1" "replaced in place, no duplicate"
+
+# write the recommended seats
+WR="$TEST_TMP/written.md"; cp "$TEMPLATE" "$WR"
+CFG_USE="$WR" run_resolver "$STALE_TOPO" --field plan_review_resolved_from
+assert_contains "$R_ERR" "plan_deep_reviewer_runner=cc-shim" "stop prints the deep seat values"
+run_printed "write the recommendation" "$WR"
+CFG_USE="$WR" run_resolver "$STALE_TOPO" --field plan_review_resolved_from
+assert_eq "$R_EXIT" "0" "the printed seat command reaches exit 0 on the full template"
 assert_eq "$R_OUT" "config-explicit" "the written seats resolve as config-explicit"
+CFG_USE="$WR" run_resolver "$STALE_TOPO"
+assert_eq "$R_EXIT" "0" "whole resolve after writing the seats has no exit 3"
+
+# implementer runner filter: implementer on grok, topology offers only grok => nothing recommended
+IMPL="$TEST_TMP/impl.md"
+printf -- '- plan_review: auto\n- implementer_runner: grok\n- implementer_engine: grok-fixture\n- implementer_effort: high\n' > "$IMPL"
+GROK_TOPO="$TEST_TMP/grok-topology.json"
+printf '%s' '{"schema_version":1,"consult_ladder":[{"engine":"grok-fixture","effort":"high","runner":"grok","family":"xai","endpoint":""}]}' > "$GROK_TOPO"
+CFG_USE="$IMPL" run_resolver "$GROK_TOPO" --field plan_reviewer_engine
+assert_eq "$R_EXIT" "4" "implementer-runner-only topology still stops"
+assert_not_contains "$R_ERR" "grok-fixture/high@grok" "the menu never offers a seat on the implementer runner"
+assert_contains "$R_ERR" "none found" "and says no usable seat exists"
+# a mixed topology recommends the non-implementer seat only, and the round trip has no exit 3
+MIX_TOPO="$TEST_TMP/mix-topology.json"
+printf '%s' '{"schema_version":1,"consult_ladder":[{"engine":"grok-fixture","effort":"high","runner":"grok","family":"xai","endpoint":""},{"engine":"gpt-fixture","effort":"max","runner":"codex","family":"openai","endpoint":""}]}' > "$MIX_TOPO"
+CFG_USE="$IMPL" run_resolver "$MIX_TOPO" --field plan_reviewer_engine
+assert_not_contains "$R_ERR" "grok-fixture/high@grok" "mixed topology: grok seat filtered out"
+run_printed "write the recommendation" "$IMPL"
+CFG_USE="$IMPL" run_resolver "$MIX_TOPO" --field plan_reviewer_engine
+assert_eq "$R_EXIT" "0" "mixed topology round trip: no exit 3 after writing the recommendation"
 
 # no topology at all: still a stop, with the opt-out named
 run_resolver "$TEST_TMP/none.json" --field plan_reviewer_runner

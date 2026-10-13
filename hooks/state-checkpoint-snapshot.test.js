@@ -94,6 +94,29 @@ test('PreCompact: AUTOPILOT_PRECOMPACT_STDOUT=0 prints nothing but the file stil
   } finally { sb.cleanup(); }
 });
 
+// A `git` shim on PATH that logs each call, then runs the real one. The snapshot's git source must
+// run once per PreCompact however many sizes it is rendered at (file and stdout).
+function gitCalls(sb, extraEnv = {}) {
+  const real = spawnSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).stdout.trim();
+  const bin = path.join(sb.root, 'shim'); fs.mkdirSync(bin);
+  const log = path.join(sb.root, 'git-calls.log');
+  fs.writeFileSync(path.join(bin, 'git'), `#!/bin/sh\necho "$@" >> "${log}"\nexec "${real}" "$@"\n`, { mode: 0o755 });
+  const { r } = checkpoint(sb, { PATH: `${bin}:${process.env.PATH}`, ...extraEnv });
+  assert.strictEqual(r.status, 0, r.stderr);
+  const lines = fs.existsSync(log) ? fs.readFileSync(log, 'utf8').split('\n').filter(Boolean) : [];
+  return lines.filter((l) => /status --porcelain=v2/.test(l)).length;
+}
+
+test('PreCompact: the snapshot is collected once (git runs once) with the stdout copy on', () => {
+  const sb = sandbox();
+  try { assert.strictEqual(gitCalls(sb), 1); } finally { sb.cleanup(); }
+});
+
+test('PreCompact: the snapshot is collected once (git runs once) with the stdout copy off', () => {
+  const sb = sandbox();
+  try { assert.strictEqual(gitCalls(sb, { AUTOPILOT_PRECOMPACT_STDOUT: '0' }), 1); } finally { sb.cleanup(); }
+});
+
 test('PreCompact: tool placeholders are gone from the tail, text turns stay', () => {
   const sb = sandbox();
   try {

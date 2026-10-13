@@ -1794,4 +1794,35 @@ PK_M=$(pk_mutant swallow check-phase-review-receipt.js 'if (err instanceof ExitS
 PK_OUT=$(pk_check "$PK_M/scripts/check-phase-review-receipt.js" "$PK_LEDGER6" "$TEST_TMP/pk_packets.json"); PK_RC=$?
 assert_contains "$PK_OUT" "Failed to read or parse receipt file" "packet Q6 (mutation): without the re-throw the catch reports a misleading second error"
 
+# BL-0111: review_fresh_context — off is legal but stamped on the review receipt; on leaves it unchanged
+fc_resolver() { # $1 = value printed for review_fresh_context
+  local f="$TEST_TMP/bin/resolve-fc-$1.sh"
+  cat > "$f" <<FCEOF
+#!/usr/bin/env bash
+case "\$2" in
+  review_fresh_context) echo "$1" ;;
+  hetero_review_resolved_from) echo explicit ;;
+  *) echo "" ;;
+esac
+FCEOF
+  chmod +x "$f"; echo "$f"
+}
+fc_finalize() { # $1 = phase, $2 = resolver, $3 = script
+  mkdir -p "$LEDGER/review-$1/g1"
+  printf '[{"generation":1,"base":"b1","head":"h1","seats":["s0"],"status":"pending"}]\n' > "$LEDGER/review-$1/chain.json"
+  printf '{"base":"b1","head":"h1"}\n' > "$LEDGER/review-$1/g1/range.json"
+  printf '{"findings":[{"id":"f1","severity":"Minor","seat":"s0","text":"x"}]}\n' > "$LEDGER/review-$1/g1/findings.json"
+  printf '{"schema_version":1,"phase":"%s","generation":1,"findings":[{"id":"f1","disposition":"refuted","rationale":"not a bug"}]}\n' "$1" > "$TEST_TMP/disp_$1.json"
+  AUTOPILOT_REVIEW_LOOP_RESOLVER="$2" node "$3" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase "$1" --generation 1 --dispositions "$TEST_TMP/disp_$1.json" 2>&1
+}
+FC_OUT=$(fc_finalize p_fc_off "$(fc_resolver off)" "$SCRIPT"); FC_RC=$?
+assert_exit_code "$FC_RC" "0" "fresh-context: finalize with review_fresh_context=off exits 0 (off is legal)"
+assert_contains "$(cat "$LEDGER/receipt-p_fc_off.json")" '"review_fresh_context": "off"' "fresh-context: off is stamped on the review receipt"
+FC_OUT=$(fc_finalize p_fc_on "$(fc_resolver on)" "$SCRIPT"); FC_RC=$?
+assert_exit_code "$FC_RC" "0" "fresh-context: finalize with review_fresh_context=on exits 0"
+assert_not_contains "$(cat "$LEDGER/receipt-p_fc_on.json")" 'review_fresh_context' "fresh-context: on leaves the receipt unchanged"
+FC_M=$(pk_mutant fcstamp hetero-review-loop.js "...(freshContext === 'off' ? { review_fresh_context: 'off' } : {})," "...({}),") || fail "mutation setup failed (fresh-context)"
+FC_OUT=$(fc_finalize p_fc_mut "$(fc_resolver off)" "$FC_M/scripts/hetero-review-loop.js"); FC_RC=$?
+assert_not_contains "$(cat "$LEDGER/receipt-p_fc_mut.json")" 'review_fresh_context' "fresh-context (mutation): without the stamp an off receipt shows nothing"
+
 finalize_test

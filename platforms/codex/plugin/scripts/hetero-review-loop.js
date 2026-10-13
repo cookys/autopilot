@@ -1374,6 +1374,9 @@ async function handleFinalize(flags) {
   if (!resolvedFrom) {
     resolvedFrom = 'unknown';
   }
+  // review_fresh_context (BL-0111): resolved with the other provenance, before any write. Only a
+  // literal "off" is stamped; anything else (on, empty from a stub resolver) leaves the receipt as it was.
+  const freshContext = resolveField(resolverPath, repoRoot, 'review_fresh_context') === 'off' ? 'off' : 'on';
 
   // Snapshot dispositions file into the generation's ledger directory as dispositions.json
   const snapshotRelPath = path.join(`review-${phase}`, `g${generation}`, 'dispositions.json');
@@ -1527,6 +1530,7 @@ async function handleFinalize(flags) {
     verdict,
     open_findings: openFindings,
     resolved_from: resolvedFrom,
+    ...(freshContext === 'off' ? { review_fresh_context: 'off' } : {}),
     written_at: new Date().toISOString(),
   };
 

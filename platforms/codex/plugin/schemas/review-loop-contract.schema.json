@@ -95,7 +95,8 @@
     "unknown_resolved_from",
     "allow_same_runner_dual_seat",
     "same_runner_dual_seat",
-    "override_admitted_seats"
+    "override_admitted_seats",
+    "review_fresh_context"
   ],
   "properties": {
     "reviewer_engine": {
@@ -870,6 +871,16 @@
         "type": "string"
       },
       "description": "Seat roles (e.g. \"reviewer\", \"consult\", \"qc_panel[1]\") whose runner has NO recorded role qualification and was admitted ONLY by a matching AUTOPILOT_QUALIFICATION_OVERRIDE entry. Empty on every qualified roster. This is the recorded-operator-decision surface Board ruling 1 requires \u2014 it is NOT evidence of qualification, and nothing downstream may read it as such. ADR-0001: an override is a recorded decision re-derived from the override file on every resolve, never an attestation."
+    },
+    "review_fresh_context": {
+      "type": "string",
+      "enum": [
+        "on",
+        "off"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "REVIEW_FRESH_CONTEXT",
+      "description": "Whether a reviewer must run in a brand-new provider session. on (default) = a review dispatch that would continue an existing session (a resumed session id, or the implementer's own session) is refused at dispatch with a named error; off = legal, but the review receipt is stamped review_fresh_context=off so the waiver stays visible afterwards. Resolver coerces garbage to on (fail-closed)."
     }
   },
   "required": [
@@ -962,7 +973,8 @@
     "unknown_resolved_from",
     "allow_same_runner_dual_seat",
     "same_runner_dual_seat",
-    "override_admitted_seats"
+    "override_admitted_seats",
+    "review_fresh_context"
   ],
   "additionalProperties": true
 }

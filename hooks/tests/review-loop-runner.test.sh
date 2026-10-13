@@ -187,6 +187,7 @@ const valid = {
   allow_same_runner_dual_seat: 'off',
   same_runner_dual_seat: false,
   override_admitted_seats: [],
+  review_fresh_context: 'on',
 };
 const parsed = parseReviewLoopOutput([
   '{not valid json}',
@@ -297,6 +298,7 @@ const valid = {
   allow_same_runner_dual_seat: 'off',
   same_runner_dual_seat: false,
   override_admitted_seats: [],
+  review_fresh_context: 'on',
 };
 const parsed = parseReviewLoopOutput([
   'resolver preface',
@@ -426,6 +428,7 @@ const partial = {
   allow_same_runner_dual_seat: 'off',
   same_runner_dual_seat: false,
   override_admitted_seats: [],
+  review_fresh_context: 'on',
 };
 try {
   parseReviewLoopOutput(JSON.stringify(partial));
@@ -534,6 +537,7 @@ const invalid = {
   allow_same_runner_dual_seat: 'off',
   same_runner_dual_seat: false,
   override_admitted_seats: [],
+  review_fresh_context: 'on',
 };
 try {
   parseReviewLoopOutput(JSON.stringify(invalid, null, 2));
@@ -642,6 +646,7 @@ const valid = {
   allow_same_runner_dual_seat: 'off',
   same_runner_dual_seat: false,
   override_admitted_seats: [],
+  review_fresh_context: 'on',
 };
 const parsed = parseReviewLoopOutput(`${JSON.stringify(valid)}\nlog line with {debug braces}`);
 console.log(parsed.reviewer_engine);
@@ -746,6 +751,7 @@ const valid = {
   allow_same_runner_dual_seat: 'off',
   same_runner_dual_seat: false,
   override_admitted_seats: [],
+  review_fresh_context: 'on',
 };
 try {
   parseReviewLoopOutput(`${JSON.stringify(valid)}\n{"reviewer_engine":"bad"}`);
@@ -854,6 +860,7 @@ const valid = {
   allow_same_runner_dual_seat: 'off',
   same_runner_dual_seat: false,
   override_admitted_seats: [],
+  review_fresh_context: 'on',
 };
 try {
   parseReviewLoopOutput(`${JSON.stringify(valid)}\n{"reviewer_engine":`);

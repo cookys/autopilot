@@ -11,6 +11,8 @@
 
 import { T_EN } from './i18n'
 import type { T } from './i18n'
+import { STATES, cellWidth, displayWidth, stateOf } from './ui'
+import type { FactId, FmtKind, LineKind, SegRole } from './ui'
 
 
 // ---- the snapshot the tick builds and the band / pane draw (module state in register.ts) ----
@@ -38,7 +40,9 @@ export type LiveGateRow = {
 export type LiveDecision = { question: string; options: { label: string; consequence: string }[]; stale: boolean; age_s: number | null }
 
 // one pane line: plain text plus how it is drawn
-export type PaneLine = { toggle?: string; text: string; dim?: boolean; bold?: boolean; warn?: boolean; color?: ThemeKey; segs?: Seg[]; wrap?: boolean; hang?: number }
+// `kind`, `fact`, `goto`, `group` and `ts` are stamped by the ui.ts components (the design system, docs/plans/2026-10-13-live-pane-design-system.md §6.1); kind is
+// optional until P5 forces every tab line through a component.
+export type PaneLine = { toggle?: string; text: string; dim?: boolean; bold?: boolean; warn?: boolean; color?: ThemeKey; segs?: Seg[]; wrap?: boolean; hang?: number; kind?: LineKind; fact?: FactId; goto?: PaneTab; group?: string; ts?: number }
 export type VerdictKind = 'decide' | 'stalled' | 'waiting' | 'running' | 'idle'
 // attention = something awaits the human (drawn first); waiting = idle / source-not-wired note; the rest follow the gate rows
 export type PaneSections = { attention: PaneLine[]; waiting: PaneLine[]; tasks: PaneLine[]; decisions: PaneLine[]; foreman: PaneLine[] }
@@ -98,7 +102,7 @@ export type LiveSnapshot = {
 export type SpendView = { session: string; host_all: string; host_all_n: number | null; brain: number | null; cap: number | null; mode: string; hourly?: number[] | null }
 export type PaneDetail = {
   counts: Counts | null // the envelope's dispatch counts (merged over the root set); null = not published
-  stalled: number // stalled runs + a stalled foreman (the band's ⏸ count)
+  stalled: number // stalled runs + a stalled foreman (the band's ⊘ count)
   now_ms: number | null
   project: string | null
   marker: MarkerView | null
@@ -235,13 +239,11 @@ const rowsOf = (env: Json): Json[] | null => (Array.isArray(env.runs) ? env.runs
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 const startedMs = (r: Json): number => Date.parse(String(r.started_at || r.fact_at || ''))
 
-const VERDICT_MARK: Record<VerdictKind, { mark: string; key: ThemeKey }> = {
-  decide: { mark: '▲', key: 'warning' },
-  stalled: { mark: '⏸', key: 'error' },
-  waiting: { mark: '✓', key: 'success' },
-  running: { mark: '●', key: 'suggestion' },
-  idle: { mark: '◌', key: 'inactive' },
-}
+// the band's verdict mark and colour come from the design system's state table: the five owner-approved words map onto states (§3.2)
+const VERDICT_MARK = Object.fromEntries((['decide', 'stalled', 'waiting', 'running', 'idle'] as const).map(k => {
+  const st = STATES[stateOf('verdict', k).id]
+  return [k, { mark: st.glyph, key: st.key }]
+})) as Record<VerdictKind, { mark: string; key: ThemeKey }>
 export const verdictOf = (kind: VerdictKind, t: T): { kind: VerdictKind; mark: string; word: string; key: ThemeKey } => ({ kind, mark: VERDICT_MARK[kind].mark, word: t('verdict.' + kind), key: VERDICT_MARK[kind].key })
 
 // "<project>": the last directory of a normal repo's git common dir. Any other shape (bare repo, no prefix, a path
@@ -655,18 +657,18 @@ export function loadSourceFor(v: LoadSourceView, sessionPid: number | string | n
   return v.flags.includes('dev_link_missing_or_stale') ? 'unknown' : 'dev'
 }
 
-// The hygiene slot's load-source chip: `dev` / `dev ↓3` (behind upstream by 3), `dev ⚠` (the marketplace is not this repo's directory),
-// `cache 2.36.36 ⚠` (a stale cache copy is what loads), `src ? ⚠` (unknown). warn = the chip carries ⚠ (the renderer picks the warning colour).
+// The hygiene slot's load-source chip: `dev` / `dev ↓3` (behind upstream by 3), `dev ▲` (the marketplace is not this repo's directory),
+// `cache 2.36.36 ▲` (a stale cache copy is what loads), `src ? ▲` (unknown). warn = the chip carries ▲ (the renderer picks the warning colour).
 export function hygieneChip(v: LoadSourceView | null, sessionPid: number | string | null = null): { text: string; warn: boolean } | null {
   if (v === null) return null
   const src = loadSourceFor(v, sessionPid)
   const marketplaceBad = v.flags.includes('marketplace_not_directory') || v.flags.includes('marketplace_not_this_repo')
-  if (src.startsWith('cache:')) return { text: 'cache ' + src.slice('cache:'.length) + ' ⚠', warn: true }
+  if (src.startsWith('cache:')) return { text: 'cache ' + src.slice('cache:'.length) + ' ▲', warn: true }
   if (src === 'dev') {
     const behind = v.behind_upstream !== null && v.behind_upstream > 0 ? ' ↓' + v.behind_upstream : ''
-    return { text: 'dev' + behind + (marketplaceBad ? ' ⚠' : ''), warn: marketplaceBad }
+    return { text: 'dev' + behind + (marketplaceBad ? ' ▲' : ''), warn: marketplaceBad }
   }
-  return { text: 'src ? ⚠', warn: true }
+  return { text: 'src ? ▲', warn: true }
 }
 
 export type Sources = {
@@ -708,7 +710,7 @@ export function foremanNow(f: ForemanView | null, nowMs: number): ForemanNow {
   return out
 }
 
-// the band's ⏸ count: the producer's stalled runs plus a stalled foreman
+// the band's ⊘ count: the producer's stalled runs plus a stalled foreman
 export function stalledCount(env: Json, foreman: ForemanView | null, nowMs: number): number {
   return (rowsOf(env) || []).filter(r => r.stall === true).length + (foremanNow(foreman, nowMs).stalled !== null ? 1 : 0)
 }
@@ -1117,24 +1119,11 @@ export type ThemeKey = 'claude' | 'warning' | 'error' | 'success' | 'suggestion'
 export type SlotId = 'verdict' | 'position' | 'unit' | 'dispatch' | 'review' | 'decisions' | 'spend' | 'quota' | 'hygiene'
 // tag: which part the width table may drop or shorten (age, k/N, 族, the bar, the stage text)
 export type SegTag = 'age' | 'kn' | 'fam' | 'bar' | 'stage' | 'live' | 'stalled' | 'chip' | 'wt' | 'walk' | 'arrow' | 'reason' | 'round' | 'qc' | 'amt' | 'pct' | 'bar10' | 'bar5' | 'bar3' | 'qx'
-export type Seg = { text: string; color?: ThemeKey; bold?: boolean; dim?: boolean; tag?: SegTag; slot?: SlotId } // slot: set by layoutBand on the band line (the Button it presses); a separator has none
+export type Seg = { text: string; color?: ThemeKey; bold?: boolean; dim?: boolean; tag?: SegTag; slot?: SlotId; role?: SegRole; here?: boolean; fmt?: FmtKind } // slot: set by layoutBand on the band line (the Button it presses); a separator has none
 export type Slot = { id: SlotId; segs: Seg[] }
 
-// Terminal cell width of a string: East Asian Wide / Fullwidth = 2, combining and zero-width = 0, everything else (the band glyphs
-// ▲⏸✓●◌▸◷▰▱⚙◆↺ⓘ│… included) = 1.
-export function displayWidth(text: string): number {
-  let w = 0
-  for (const ch of text) w += cellWidth(ch.codePointAt(0) as number)
-  return w
-}
-function cellWidth(c: number): number {
-  if (c === 0 || (c >= 0x0300 && c <= 0x036f) || (c >= 0x200b && c <= 0x200f) || (c >= 0xfe00 && c <= 0xfe0f) || (c >= 0x20d0 && c <= 0x20ff)) return 0
-  if ((c >= 0x1100 && c <= 0x115f) || (c >= 0x2e80 && c <= 0x303e) || (c >= 0x3041 && c <= 0x33ff) || (c >= 0x3400 && c <= 0x4dbf)
-    || (c >= 0x4e00 && c <= 0x9fff) || (c >= 0xa000 && c <= 0xa4cf) || (c >= 0xac00 && c <= 0xd7a3) || (c >= 0xf900 && c <= 0xfaff)
-    || (c >= 0xfe30 && c <= 0xfe4f) || (c >= 0xff00 && c <= 0xff60) || (c >= 0xffe0 && c <= 0xffe6)
-    || (c >= 0x1f300 && c <= 0x1f64f) || (c >= 0x1f900 && c <= 0x1f9ff) || (c >= 0x20000 && c <= 0x3fffd)) return 2
-  return 1
-}
+// displayWidth / cellWidth live in ui.ts (the design system owns the width rules); displayWidth is re-exported for the band and the tests.
+export { displayWidth }
 
 // the longest prefix of `text` that fits `width` cells, ending in `…` when it was cut (width < 1 -> empty)
 export function truncateToWidth(text: string, width: number): string {
@@ -1351,8 +1340,8 @@ export function slotUnit(m: MarkerView | null, t: T = T_EN): Slot | null {
 export function slotDispatch(live: number, stalled: number): Slot | null {
   if (live <= 0 && stalled <= 0) return null
   const segs: Seg[] = []
-  if (live > 0) segs.push(sp('⚙' + live, { tag: 'live' }))
-  if (stalled > 0) segs.push(sp((segs.length > 0 ? ' ' : '') + '⏸' + stalled, { color: 'error', tag: 'stalled' }))
+  if (live > 0) segs.push(sp('●' + live, { tag: 'live' }))
+  if (stalled > 0) segs.push(sp((segs.length > 0 ? ' ' : '') + '⊘' + stalled, { color: 'error', tag: 'stalled' }))
   return { id: 'dispatch', segs }
 }
 
@@ -1470,10 +1459,10 @@ const REASON_MIN = 8
 
 // The width table (cumulative per band; the line is ONE row, groups separated by ` │ `, items inside a group by a space):
 //   >= 160  everything: stage walk, 10-cell spend bar + %, the verdict's reason phrase, load-source chip, age, families, decisions, `5h N% 7d N%`
-//   120-159 verdict, `size·level ▸ stage`, unit bar + k/N, `⚙ ⏸ ↺R QC`, `$N` + 5-cell bar, `5h N% 7d N%`, `⚑N`
-//   80-119  verdict, unit bar, `⚙N QC▲`, `$` + 3-cell bar, the most used quota window, `⚑N`
-//   < 80    verdict, `⚙N ⏸N`, `⚑N`
-// Then, if the line still does not fit: the position's stage text is cut with `…`, then the unit bar, the ⏸ count and the ⚙ count go, then the
+//   120-159 verdict, `size·level ▸ stage`, unit bar + k/N, `● ⊘ ↺R QC`, `$N` + 5-cell bar, `5h N% 7d N%`, `⚑N`
+//   80-119  verdict, unit bar, `●N QC▲`, `$` + 3-cell bar, the most used quota window, `⚑N`
+//   < 80    verdict, `●N ⊘N`, `⚑N`
+// Then, if the line still does not fit: the position's stage text is cut with `…`, then the unit bar, the ⊘ count and the ● count go, then the
 // verdict WORD is shortened (the glyph stays). Never the verdict glyph, the ⓘ or `⚑N` (the owner reminder survives narrowing).
 export function layoutBand(slots: Slot[], columns: number): BandLayout {
   const drop = new Set<string>()
@@ -1508,7 +1497,7 @@ export function layoutBand(slots: Slot[], columns: number): BandLayout {
   if (widthOf(segs) > columns && kept.some(s => s.id === 'quota')) { kept = kept.filter(s => s.id !== 'quota'); segs = join(kept) }
   let over = widthOf(segs) - columns
   if (over > 0) segs = segs.map(g => (g.tag === 'stage' ? { ...g, text: truncateToWidth(g.text, Math.max(2, displayWidth(g.text) - over)) } : g))
-  // below the width table: still too long -> drop the unit bar, then the ⏸ stalled count, then the ⚙ count (a slot left empty goes with its separator)
+  // below the width table: still too long -> drop the unit bar, then the ⊘ stalled count, then the ● count (a slot left empty goes with its separator)
   const fallbacks: ((s: Slot) => Slot | null)[] = [
     s => (s.id === 'unit' ? null : s),
     s => (s.id === 'dispatch' ? { ...s, segs: s.segs.filter(g => g.tag !== 'stalled') } : s),
@@ -1678,11 +1667,11 @@ function verdictMark(v: string | null): { glyph: string; color: ThemeKey } {
 
 // ---- tab badges: which tab holds something for the owner, visible without opening it ----
 export type TabBadge = { text: string; color: ThemeKey }
-// ▲ = something awaits a person (Review: pre-push QC owed), ⚑N = residue that needs a person, ⚙N = live dispatches
+// ▲ = something awaits a person (Review: pre-push QC owed), ⚑N = residue that needs a person, ●N = live dispatches
 export function tabBadges(snap: LiveSnapshot): Partial<Record<PaneTab, TabBadge>> {
   const out: Partial<Record<PaneTab, TabBadge>> = {}
   const live = snap.detail.counts === null ? 0 : snap.detail.counts.confirmed_live
-  if (live > 0) out.dispatch = { text: '⚙' + live, color: 'suggestion' }
+  if (live > 0) out.dispatch = { text: '●' + live, color: 'suggestion' }
   if (snap.detail.qc !== null && snap.detail.qc.state === 'owed') out.review = { text: '▲', color: 'warning' }
   const wt = snap.detail.residue === null ? 0 : snap.detail.residue.needs_human_count
   if (wt > 0) out.hygiene = { text: '⚑' + wt, color: 'warning' }
@@ -1780,7 +1769,7 @@ function nowLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
   const work: PaneLine[] = []
   if (d.counts !== null) {
     const live = d.counts.confirmed_live
-    work.push(kv(t(KEY_IDS.dispatch), seg('⚙', live > 0 ? 'suggestion' : 'inactive', live > 0), seg(' ' + t('now.running', { n: live }), undefined, live > 0), dseg('  ' + t('now.stalled', { n: d.stalled }))))
+    work.push(kv(t(KEY_IDS.dispatch), seg('●', live > 0 ? 'suggestion' : 'inactive', live > 0), seg(' ' + t('now.running', { n: live }), undefined, live > 0), dseg('  ' + t('now.stalled', { n: d.stalled }))))
   }
   const round = reviewRound(snap.review)
   const chip = qcChip(d.qc)
@@ -2109,7 +2098,7 @@ export function accountLines(a: AccountSnap | undefined, nowMs: number | null, c
 const cell = (v: string | number | null | undefined): string => (v === null || v === undefined || v === '' ? '—' : String(v))
 
 function runState(r: LivePaneRow, t: T): { text: string; color?: ThemeKey } {
-  if (r.stall) return { text: '⏸ ' + t('state.stalled'), color: 'error' }
+  if (r.stall) return { text: '⊘ ' + t('state.stalled'), color: 'error' }
   if (r.rc !== null) return r.rc === 0 ? { text: '✓ rc 0', color: 'success' } : { text: '✗ rc ' + r.rc, color: 'error' }
   if (r.final_status !== null) return { text: r.final_status }
   return { text: '● ' + t('state.run'), color: 'suggestion' }
@@ -2124,7 +2113,7 @@ function dispatchLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
     out.push(NO_DATA(t, 'nodata.runs'))
   } else {
     const c = snap.detail.counts
-    if (c !== null) out.push(row(seg('⚙ ' + c.confirmed_live, c.confirmed_live > 0 ? 'suggestion' : 'inactive', c.confirmed_live > 0), seg(' ' + t('dispatch.running')), dseg('   ⏸ ' + snap.detail.stalled + ' ' + t('dispatch.stalled') + ' · ✓ ' + c.exited + ' ' + t('dispatch.done'))))
+    if (c !== null) out.push(row(seg('● ' + c.confirmed_live, c.confirmed_live > 0 ? 'suggestion' : 'inactive', c.confirmed_live > 0), seg(' ' + t('dispatch.running')), dseg('   ⊘ ' + snap.detail.stalled + ' ' + t('dispatch.stalled') + ' · ✓ ' + c.exited + ' ' + t('dispatch.done'))))
     out.push(BLANK, rule(t('dispatch.runs'), [], ctx.cols))
     if (rows.length === 0) out.push({ text: t('dispatch.no_runs'), dim: true })
     else {
@@ -2316,7 +2305,7 @@ function hygieneTabLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
   if (ls === null) out.push(NO_DATA(t, 'nodata.load_source'))
   else {
     const chip = hygieneChip(ls)
-    out.push(rule(t('hygiene.load'), [chip !== null && chip.warn ? seg('⚠ ' + chip.text, 'warning') : seg(chip === null ? '—' : chip.text, 'success')], ctx.cols))
+    out.push(rule(t('hygiene.load'), [chip !== null && chip.warn ? seg('▲ ' + chip.text, 'warning') : seg(chip === null ? '—' : chip.text, 'success')], ctx.cols))
     const behind = ls.behind_upstream
     out.push(kv(t('label.source'), seg(loadSourceFor(ls, null), undefined, true), seg('  v' + (ls.plugin_version ?? '—')), ...(behind !== null && behind > 0 ? [seg('  ↓' + behind, 'warning'), dseg(' ' + t('hygiene.behind'))] : [])))
     out.push(kv(t('label.marketplace'), ls.marketplace === 'missing' ? seg('✗ ' + ls.marketplace, 'warning') : seg('✓ ' + ls.marketplace, 'success')))
@@ -2355,7 +2344,7 @@ export function legendLines(ctx: PaneCtx = { t: T_EN, cols: DEFAULT_PANE_COLS })
     ...verdicts,
     { glyph: [seg('M!·l5 '), seg('●─●─', 'success'), seg('◐', 'claude', true), seg('─○─○ ', 'inactive'), seg('implement', 'claude', true), dseg(' ◷3m')], id: 'position' },
     { glyph: [seg('▰▰', 'success'), seg('▰', 'claude'), seg('▱▱', 'inactive'), seg(' 3/5 '), dseg(t('band.fam', { n: 2 }))], id: 'unit' },
-    { glyph: [seg('⚙2'), seg(' ⏸1', 'error')], id: 'dispatch' },
+    { glyph: [seg('●2'), seg(' ⊘1', 'error')], id: 'dispatch' },
     { glyph: [dseg('↺ '), seg('R2 '), seg('QC✓', 'success'), seg(' / '), seg('QC▲', 'warning', true)], id: 'review' },
     { glyph: [seg('◆3 '), seg('?1', 'inactive'), seg(' U2')], id: 'decisions' },
     { glyph: [seg('$85 '), seg('▰▰▰▰▰▰▰▰', 'warning'), seg('▱▱', 'inactive'), dseg(' 85%')], id: 'spend' },

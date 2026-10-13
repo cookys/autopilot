@@ -21,15 +21,15 @@ test('P7b chip: the real dev tree reads `dev`, behind upstream adds the count', 
   expect(hygieneChip(readLoadSource(fact({ behind_upstream: null })))).toEqual({ text: 'dev', warn: false })
 })
 
-test('P7b chip: a planted semver cache dir in use by a live pid reads `cache <semver> ⚠`', () => {
+test('P7b chip: a planted semver cache dir in use by a live pid reads `cache <semver> ▲`', () => {
   const v = readLoadSource(cacheFact())
   expect(v?.source).toBe('cache:2.36.36')
-  expect(hygieneChip(v)).toEqual({ text: 'cache 2.36.36 ⚠', warn: true })
+  expect(hygieneChip(v)).toEqual({ text: 'cache 2.36.36 ▲', warn: true })
 })
 
 test('P7b chip: a non-directory marketplace is flagged even when the dev link loads', () => {
   const v = readLoadSource(fact({ marketplace: 'github', marketplace_is_dev: false, flags: ['marketplace_not_directory'] }))
-  expect(hygieneChip(v)).toEqual({ text: 'dev ⚠', warn: true })
+  expect(hygieneChip(v)).toEqual({ text: 'dev ▲', warn: true })
 })
 
 test('P7b chip: the session pid narrows the watcher reading to the copy that session listed', () => {
@@ -41,7 +41,7 @@ test('P7b chip: the session pid narrows the watcher reading to the copy that ses
 })
 
 test('P7b chip: unknown source, an absent file and a foreign schema', () => {
-  expect(hygieneChip(readLoadSource(fact({ source: 'unknown', source_basis: 'none', dev_link_ok: false })))).toEqual({ text: 'src ? ⚠', warn: true })
+  expect(hygieneChip(readLoadSource(fact({ source: 'unknown', source_basis: 'none', dev_link_ok: false })))).toEqual({ text: 'src ? ▲', warn: true })
   expect(hygieneChip(readLoadSource(null))).toBeNull()
   expect(readLoadSource(fact({ schema: 'something/else' }))).toBeNull()
   expect(readLoadSource('not json')).toBeNull()

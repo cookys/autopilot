@@ -179,6 +179,8 @@ const expectedAdded = [
   'review_packet_deny_extra',
   // in-loop review station selector (316c1d4b, 2026-09-18)
   'in_rail_review',
+  // reviewer fresh-session switch (BL-0111, 2026-10-13)
+  'review_fresh_context',
 ].sort();
 if (JSON.stringify(addedKeys) !== JSON.stringify(expectedAdded)) {
   problems.push(`unexpected-added-keys:${addedKeys.join(',')}`);

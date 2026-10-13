@@ -4097,6 +4097,7 @@ const validPayload = {
   allow_same_runner_dual_seat: 'off',
   same_runner_dual_seat: false,
   override_admitted_seats: [],
+  review_fresh_context: 'on',
   strict_l5_policy_override: '',
   brain_seat: null,
 };
@@ -5697,6 +5698,7 @@ const roster = {
   qc_panel_seats_complete: true,
   qc_panel_seats: seats,
   override_admitted_seats: ['qc_panel[0]', 'qc_panel[1]', 'qc_panel[2]'],
+  review_fresh_context: 'on',
 };
 function writeContract(target, extra) {
   fs.writeFileSync(target, `${JSON.stringify({
@@ -5749,6 +5751,7 @@ function runCase({ ticket, reserve, reuse, clock, collect, verifyStatus, onRevie
       ? { ...roster, reviewer_engine: 'inrail-x', reviewer_runner: seatsOverride[0].runner, qc_panel_seats: seatsOverride }
       : roster),
     override_admitted_seats: caseSeats.map((_, index) => `qc_panel[${index}]`),
+    review_fresh_context: 'on',
     qc_panel_seats: caseSeats,
     ...(typeof rosterMutate === 'function' ? rosterMutate(roster) : {}),
   };
@@ -6232,6 +6235,7 @@ runCase({
     return {
       qc_panel_seats: [seats[0], seats[1], seatD],
       override_admitted_seats: ['qc_panel[0]', 'qc_panel[1]', 'qc_panel[2]'],
+      review_fresh_context: 'on',
     };
   },
   collect({ result, reviewModels }) {
@@ -6528,6 +6532,7 @@ const roster = {
   qc_panel_seats_complete: true,
   qc_panel_seats: seats,
   override_admitted_seats: ['qc_panel[0]'],
+  review_fresh_context: 'on',
 };
 const ticket = 'accept-fail-hand';
 const branch = `feat/${ticket}`;

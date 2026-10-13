@@ -137,6 +137,10 @@ DEF_ALLOW_DUAL_SEAT="off"
 # cross-family qualified scorecard ladder; block = hard-block (pre-v2.32.25 behavior).
 # Garbage → block (fail-closed: the engine treats anything but "fallback" as block).
 DEF_ON_FAMILY_CONFLICT="fallback"
+# review_fresh_context (BL-0111, owner ruling 2026-10-13): on = a reviewer dispatch that
+# would continue an existing provider session is refused at dispatch; off = legal but the
+# review receipt is stamped. Garbage -> on (fail-closed: keep the stricter posture).
+DEF_REVIEW_FRESH_CONTEXT="on"
 
 # ── UNQUALIFIED RUNNERS (role-admission table) ──────────────────────────────
 # A runner listed here is nameable in a roster (its token is in the runner enums)
@@ -377,6 +381,11 @@ ON_FAMILY_CONFLICT="$(read_field "$CONFIG" on_family_conflict "$DEF_ON_FAMILY_CO
 case "$ON_FAMILY_CONFLICT" in
   fallback|block) ;;
   *) echo "resolve-review-loop: invalid on_family_conflict (must be fallback|block): $ON_FAMILY_CONFLICT — using block (fail-closed)" >&2; ON_FAMILY_CONFLICT="block" ;;
+esac
+REVIEW_FRESH_CONTEXT="$(read_field "$CONFIG" review_fresh_context "$DEF_REVIEW_FRESH_CONTEXT")"
+case "$REVIEW_FRESH_CONTEXT" in
+  on|off) ;;
+  *) echo "resolve-review-loop: invalid review_fresh_context (must be on|off): $REVIEW_FRESH_CONTEXT — using on (fail-closed)" >&2; REVIEW_FRESH_CONTEXT="on" ;;
 esac
 # Fallback preference lists (v2.32.26): HUMAN-ordered engine ids consulted by the
 # engine's family-conflict fallback BEFORE ladder order (every candidate still
@@ -2666,6 +2675,7 @@ if [[ -n "$FIELD" ]]; then
     reviewer_engine_low_risk) printf '%s\n' "$REV_ENGINE_LOW_RISK" ;;
     reviewer_effort_low_risk) printf '%s\n' "$REV_EFFORT_LOW_RISK" ;;
     on_family_conflict) printf '%s\n' "$ON_FAMILY_CONFLICT" ;;
+    review_fresh_context) printf '%s\n' "$REVIEW_FRESH_CONTEXT" ;;
     reviewer_fallback_preference) printf '%s\n' "$REV_FB_PREF_JSON" ;;
     reviewer_fallback_preference_low_risk) printf '%s\n' "$REV_FB_PREF_LOW_JSON" ;;
     loop_max_rounds) printf '%s\n' "$MAX_ROUNDS" ;;
@@ -2802,13 +2812,14 @@ READINESS_ARGS=(
   "$(json_escape "$STRICT_L5_POLICY_OVERRIDE")"
   "$BRAIN_SEAT_JSON"
 )
-SEATS_FMT=', "consult_engine": "%s", "consult_effort": "%s", "consult_runner": "%s", "consult_endpoint": "%s", "discuss_engine": "%s", "discuss_effort": "%s", "discuss_runner": "%s", "discuss_endpoint": "%s", "consult_dispatch": "%s", "consult_resolved_from": "%s", "discuss_dispatch": "%s", "unknown_escalation": "%s", "unknown_budget_u1": %s, "unknown_budget_u2": %s, "unknown_budget_u3": %s, "unknown_resolved_from": "%s", "allow_same_runner_dual_seat": "%s", "same_runner_dual_seat": %s, "override_admitted_seats": %s'
+SEATS_FMT=', "consult_engine": "%s", "consult_effort": "%s", "consult_runner": "%s", "consult_endpoint": "%s", "discuss_engine": "%s", "discuss_effort": "%s", "discuss_runner": "%s", "discuss_endpoint": "%s", "consult_dispatch": "%s", "consult_resolved_from": "%s", "discuss_dispatch": "%s", "unknown_escalation": "%s", "unknown_budget_u1": %s, "unknown_budget_u2": %s, "unknown_budget_u3": %s, "unknown_resolved_from": "%s", "allow_same_runner_dual_seat": "%s", "same_runner_dual_seat": %s, "override_admitted_seats": %s, "review_fresh_context": "%s"'
 SEATS_ARGS=(
   "$(json_escape "$CONSULT_ENGINE")" "$CONSULT_EFFORT" "$CONSULT_RUNNER" "$CONSULT_ENDPOINT"
   "$(json_escape "$DISCUSS_ENGINE")" "$DISCUSS_EFFORT" "$DISCUSS_RUNNER" "$DISCUSS_ENDPOINT"
   "$CONSULT_DISPATCH" "$CONSULT_RESOLVED_FROM" "$DISCUSS_DISPATCH"
   "$UNKNOWN_ESCALATION" "$UNKNOWN_BUDGET_U1" "$UNKNOWN_BUDGET_U2" "$UNKNOWN_BUDGET_U3" "$UNKNOWN_RESOLVED_FROM"
   "$ALLOW_DUAL_SEAT" "$SAME_RUNNER_DUAL_SEAT" "$OVERRIDE_ADMITTED_JSON"
+  "$REVIEW_FRESH_CONTEXT"
 )
 PLAN_FMT=', "plan_review": "%s", "plan_review_resolved_from": "%s", "plan_review_same_family_as_depth0": %s, "hetero_review": "%s", "hetero_review_resolved_from": "%s", "plan_reviewer_engine": "%s", "plan_reviewer_effort": "%s", "plan_reviewer_runner": "%s", "plan_reviewer_endpoint": "%s", "plan_deep_reviewer_engine": "%s", "plan_deep_reviewer_effort": "%s", "plan_deep_reviewer_runner": "%s", "plan_deep_reviewer_endpoint": "%s", "plan_review_max_generations": %s, "plan_review_max_wall_seconds": %s, "plan_review_growth_warn_ratio": %s, "plan_review_growth_stop_ratio": %s'
 PLAN_ARGS=(

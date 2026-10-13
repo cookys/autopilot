@@ -38,6 +38,20 @@ _repo_identity_json_str() {
   printf '%s' "$1" | tr '\n' ' ' | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
 }
 
+# manifest_session_id_json -- prints the JSON value for a manifest's "session_id" member: the
+# launching Claude Code session id (CLAUDE_CODE_SESSION_ID) as a quoted string, else the bare
+# literal null (never an error -- a manifest write must not fail on a missing or odd id).
+# Live-pane plan section 7.1 identity hand-off 2: session -> rail no longer depends on an
+# unexpired marker. AUTOPILOT_SESSION_ID is deliberately not consulted: rails scrub it for children.
+manifest_session_id_json() {
+  local sid="${CLAUDE_CODE_SESSION_ID:-}"
+  if [ -n "$sid" ]; then
+    printf '"%s"' "$(_repo_identity_json_str "$sid")"
+  else
+    printf 'null'
+  fi
+}
+
 repo_identity_resolve_fields() {
   [ -n "${REPO_IDENTITY_FIELDS:-}" ] && return 0
   local root="${1:-}" consuming="${2:-}" dir="" src="" id=""

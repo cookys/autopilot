@@ -263,7 +263,6 @@
   "legend.walk": "stage walk: done, you are here, to come",
   "legend.badges": "tab badge: running count, stalled count, items that need you",
   "legend.behind": "plugin source is behind upstream",
-  "legend.overflow": "more rows hidden below the window",
   "legend.sec_states": "States",
   "legend.sec_structure": "Symbols",
   "legend.sec_keys": "Keys",

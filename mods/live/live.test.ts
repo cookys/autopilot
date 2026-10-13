@@ -2252,7 +2252,7 @@ function richWorld(): Tree {
 
 // TUI v2 grammar: groups separated by ` │ `, items inside a group by a space; the wide band carries the stage walk, a 10-cell spend bar + %, the verdict's reason
 const RICH_209 = '⊘ 疑似卡住 最久的派工 4m 沒有輸出 │ M!·l5 ●─●─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ●2 ⊘1 ↺ R3 QC✓ │ ◆3 ?1 U2 │ $120 ▰▰▰▰▰▰▰▰▱▱ 80% │ dev↓3 ⚑2 │ ⓘ '
-const RICH_MID = '⊘ 疑似卡住 │ M!·l5 ▸ implement │ ▰▰▰▱▱ 3/5 │ ●2 ⊘1 ↺ R3 QC✓ │ $120 ▰▰▰▰▱ │ ⚑2 │ ⓘ '
+const RICH_MID = '⊘ 疑似卡住 │ M!·l5·implement │ ▰▰▰▱▱ 3/5 │ ●2 ⊘1 ↺ R3 QC✓ │ $120 ▰▰▰▰▱ │ ⚑2 │ ⓘ '
 const RICH_SMALL = '⊘ 疑似卡住 │ ▰▰▰▱▱ │ ●2 ⊘1 QC✓ │ $▰▰▱ │ ⚑2 │ ⓘ '
 const RICH_NARROW = '⊘ 疑似卡住 │ ●2 ⊘1 │ ⚑2 │ ⓘ '
 const RICH_WIDTHS: [number, string][] = [
@@ -2540,7 +2540,7 @@ for (const surface of SURFACES) {
   // The first-drawn Button is now the `▸` next-tab chip and it alone carries autoFocus.
   const paneTabs = async ($: any, surface: any) => $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
 
-  test('keyboard: Enter on the ▸ chip (where the ring lands) steps through all six tabs and wraps, whatever tab shows (' + surface + ')', async ($, on) => {
+  test('keyboard: Enter on the › chip (where the ring lands) steps through all six tabs and wraps, whatever tab shows (' + surface + ')', async ($, on) => {
     const w = world(on, richWorld())
     await start($, surface)
     for (const want of ['dispatch', 'review', 'spend', 'hygiene', 'legend', 'now', 'dispatch']) {
@@ -2561,7 +2561,7 @@ for (const surface of SURFACES) {
     expect(await shownTabOf($, surface)).toBe('hygiene')
   })
 
-  test('keyboard: ▸ and the ⓘ share one order: a ⓘ press after a ▸ press continues from the tab showing (' + surface + ')', async ($, on) => {
+  test('keyboard: › and the ⓘ share one order: a ⓘ press after a ▸ press continues from the tab showing (' + surface + ')', async ($, on) => {
     const w = world(on, richWorld())
     await start($, surface)
     const band = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
@@ -2707,7 +2707,7 @@ for (const surface of SURFACES) {
     const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
     const tree = (await pane.drawn()) as Drawn
     const buttons = walkAll(tree).filter(n => n.type === 'Button').map(n => n.props?.key as string).filter(k => !/^[bg]\d+$/.test(k)) // the body's toggle lines (and the summary rows' goto Buttons) (section headings, recent groups) are Buttons too
-    expect(buttons).toEqual(['next', 'now', 'dispatch', 'review', 'spend', 'hygiene', 'legend']) // the ▸ chip first (it carries the autoFocus), then the six tabs in contract order
+    expect(buttons).toEqual(['next', 'now', 'dispatch', 'review', 'spend', 'hygiene', 'legend']) // the › chip first (it carries the autoFocus), then the six tabs in contract order
     // the strip (child 0): zh labels, a badge per tab that holds something for the owner: ●N live runs, ⚑N residue (QC is ok here, so no ▲ on Review)
     const strip = stripOf(tree as Node)
     expect(strip).toContain('現況')
@@ -2756,7 +2756,7 @@ for (const surface of SURFACES) {
     const legend = await tab('legend')
     expect(legend.texts[0]).toContain('狀態') // the generated `?` tab (I15) opens on its states section
     for (const id of ui.STATE_IDS) expect(joined(legend.texts)).toContain(ui.STATES[id].glyph + ' ' + makeT('zh-TW')('ui.state.' + id)) // every state glyph with its word
-    for (const k of ['open', 'folded', 'goto', 'bullet', 'detail', 'command', 'tabMark', 'residue', 'behind', 'overflow'] as const) expect(joined(legend.texts)).toContain(ui.GLYPHS.structure[k])
+    for (const k of ['open', 'folded', 'goto', 'bullet', 'detail', 'command', 'tabMark', 'residue', 'behind'] as const) expect(joined(legend.texts)).toContain(ui.GLYPHS.structure[k])
     expect(legend.texts.some(t => t.includes('Ctrl+x Tab'))).toBe(true)
     expectThemeOnly(legend.tree as Drawn, true)
 
@@ -2872,10 +2872,10 @@ test('P7 model: slot texts and theme keys', () => {
   const NOW = Date.parse('2026-10-04T10:00:30.000Z')
   const mk = (over: Record<string, unknown>) => readMarker({ size: 'M', level: 'l5', stage: 'implement', stage_set_at: '2026-10-04T09:57:30.000Z', ...over })
   const text = (s: Slot | null) => (s === null ? null : s.segs.map(g => g.text).join(''))
-  // position: size[!]·level ▸ stage ◷age; level omitted when null; no stage = no slot
-  expect(text(slotPosition(mk({}), NOW))).toBe('M·l5 ▸ implement ◷3m')
-  expect(text(slotPosition(mk({ urgent: true, level: null }), NOW))).toBe('M! ▸ implement ◷3m')
-  expect(text(slotPosition(mk({ stage_set_at: undefined }), NOW))).toBe('M·l5 ▸ implement')
+  // position: size[!]·level·stage ◷age; level omitted when null; no stage = no slot
+  expect(text(slotPosition(mk({}), NOW))).toBe('M·l5·implement ◷3m')
+  expect(text(slotPosition(mk({ urgent: true, level: null }), NOW))).toBe('M!·implement ◷3m')
+  expect(text(slotPosition(mk({ stage_set_at: undefined }), NOW))).toBe('M·l5·implement')
   expect(slotPosition(mk({ stage: null }), NOW)).toBeNull()
   expect(slotPosition(null, NOW)).toBeNull()
   expect(slotPosition(mk({}), NOW)?.segs.find(g => g.tag === 'stage')?.color).toBe('claude')
@@ -2946,12 +2946,12 @@ test('P7 model: the stage text is cut with … when the line still does not fit,
     verdict: { mark: '●', word: '進行中', key: 'suggestion' }, marker: readMarker({ size: 'M', level: 'l5', stage: 'implement-' + 'x'.repeat(100), stage_set_at: '2026-10-04T09:57:30.000Z' }),
     live: 1, stalled: 0, review: null, qc: null, decisions: null, spend: null, loadSource: null, residue: null, nowMs: Date.parse('2026-10-04T10:00:30.000Z'),
   })
-  const line = layoutBand(slots, 125) // 120-159: the position slot is `size·level ▸ stage`
+  const line = layoutBand(slots, 125) // 120-159: the position slot is `size·level·stage`
   expect(displayWidth(line.text)).toBeLessThanOrEqual(125)
   expect(displayWidth(line.text)).toBeGreaterThanOrEqual(123) // cut as little as needed
-  expect(line.text.startsWith('● 進行中 │ M·l5 ▸ implement')).toBe(true)
+  expect(line.text.startsWith('● 進行中 │ M·l5·implement')).toBe(true)
   expect(line.text.endsWith('… │ ●1 │ ⓘ ')).toBe(true)
-  expect(layoutBand(slots, 209).text).toBe('● 進行中 │ M·l5 ▸ implement-' + 'x'.repeat(100) + ' ◷3m │ ●1 │ ⓘ ')
+  expect(layoutBand(slots, 209).text).toBe('● 進行中 │ M·l5·implement-' + 'x'.repeat(100) + ' ◷3m │ ●1 │ ⓘ ')
   expect(layoutBand(slots, 100).text).toBe('● 進行中 │ ●1 │ ⓘ ') // 80-119: no position slot at all
 })
 
@@ -3035,10 +3035,10 @@ for (const surface of SURFACES) {
 test('P7 fix D: a level with no valid size has no leading ·', () => {
   const NOW = Date.parse('2026-10-04T10:00:30.000Z')
   const text = (m: Record<string, unknown>) => slotPosition(readMarker({ stage: 'implement', stage_set_at: '2026-10-04T09:57:30.000Z', ...m }), NOW)?.segs.map(g => g.text).join('')
-  expect(text({ level: 'l5' })).toBe('l5 ▸ implement ◷3m')
-  expect(text({ size: 'HUGE', level: 'l5', urgent: true })).toBe('l5 ▸ implement ◷3m')
-  expect(text({ size: 'S', level: 'l4' })).toBe('S·l4 ▸ implement ◷3m')
-  expect(text({})).toBe('▸ implement ◷3m')
+  expect(text({ level: 'l5' })).toBe('l5·implement ◷3m')
+  expect(text({ size: 'HUGE', level: 'l5', urgent: true })).toBe('l5·implement ◷3m')
+  expect(text({ size: 'S', level: 'l4' })).toBe('S·l4·implement ◷3m')
+  expect(text({})).toBe('implement ◷3m')
 })
 
 // ==================== TUI v2: locale tables, locale choice, the band grid in both locales, CJK-aware columns ====================
@@ -3124,19 +3124,19 @@ const GRID: Record<string, string> = {
   'en idle 80': '◌ Idle │ $▱▱▱ │ ⓘ ',
   'en running 209': '● Running │ M·l5 ●─●─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2fam │ ●2 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev↓3 │ ⓘ ',
   'en running 160': '● Running │ M·l5 ●─●─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2fam │ ●2 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev↓3 │ ⓘ ',
-  'en running 140': '● Running │ M·l5 ▸ implement │ ▰▰▰▱▱ 3/5 │ ●2 ↺ R2 QC▲ │ $60 ▰▰▰▱▱ │ ⓘ ',
-  'en running 120': '● Running │ M·l5 ▸ implement │ ▰▰▰▱▱ 3/5 │ ●2 ↺ R2 QC▲ │ $60 ▰▰▰▱▱ │ ⓘ ',
+  'en running 140': '● Running │ M·l5·implement │ ▰▰▰▱▱ 3/5 │ ●2 ↺ R2 QC▲ │ $60 ▰▰▰▱▱ │ ⓘ ',
+  'en running 120': '● Running │ M·l5·implement │ ▰▰▰▱▱ 3/5 │ ●2 ↺ R2 QC▲ │ $60 ▰▰▰▱▱ │ ⓘ ',
   'en running 80': '● Running │ ▰▰▰▱▱ │ ●2 QC▲ │ $▰▰▱ │ ⓘ ',
   'en blocked 209': '▲ Needs you pick adapter A or B │ M·l5 ●─●─●─◐─○ review ◷3m │ ▰▰▰▱▱ 3/5 ·2fam │ ●1 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $85 ▰▰▰▰▰▰▰▰▰▱ 85% │ dev↓3 ⚑3 │ ⓘ ',
-  'en blocked 140': '▲ Needs you │ M·l5 ▸ review │ ▰▰▰▱▱ 3/5 │ ●1 ↺ R2 QC▲ │ $85 ▰▰▰▰▱ │ ⚑3 │ ⓘ ',
+  'en blocked 140': '▲ Needs you │ M·l5·review │ ▰▰▰▱▱ 3/5 │ ●1 ↺ R2 QC▲ │ $85 ▰▰▰▰▱ │ ⚑3 │ ⓘ ',
   'en blocked 80': '▲ Needs you │ ▰▰▰▱▱ │ ●1 QC▲ │ $▰▰▰ │ ⚑3 │ ⓘ ',
   'zh-TW idle 209': '◌ 待命 │ $12 ▰▱▱▱▱▱▱▱▱▱ 12% │ dev↓3 │ ⓘ ',
   'zh-TW idle 80': '◌ 待命 │ $▱▱▱ │ ⓘ ',
   'zh-TW running 209': '● 進行中 │ M·l5 ●─●─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ●2 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev↓3 │ ⓘ ',
-  'zh-TW running 120': '● 進行中 │ M·l5 ▸ implement │ ▰▰▰▱▱ 3/5 │ ●2 ↺ R2 QC▲ │ $60 ▰▰▰▱▱ │ ⓘ ',
+  'zh-TW running 120': '● 進行中 │ M·l5·implement │ ▰▰▰▱▱ 3/5 │ ●2 ↺ R2 QC▲ │ $60 ▰▰▰▱▱ │ ⓘ ',
   'zh-TW running 80': '● 進行中 │ ▰▰▰▱▱ │ ●2 QC▲ │ $▰▰▱ │ ⓘ ',
   'zh-TW blocked 209': '▲ 要你決定 選 adapter 方案 A 或 B │ M·l5 ●─●─●─◐─○ review ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ●1 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $85 ▰▰▰▰▰▰▰▰▰▱ 85% │ dev↓3 ⚑3 │ ⓘ ',
-  'zh-TW blocked 140': '▲ 要你決定 │ M·l5 ▸ review │ ▰▰▰▱▱ 3/5 │ ●1 ↺ R2 QC▲ │ $85 ▰▰▰▰▱ │ ⚑3 │ ⓘ ',
+  'zh-TW blocked 140': '▲ 要你決定 │ M·l5·review │ ▰▰▰▱▱ 3/5 │ ●1 ↺ R2 QC▲ │ $85 ▰▰▰▰▱ │ ⚑3 │ ⓘ ',
   'zh-TW blocked 80': '▲ 要你決定 │ ▰▰▰▱▱ │ ●1 QC▲ │ $▰▰▰ │ ⚑3 │ ⓘ ',
 }
 
@@ -3156,7 +3156,8 @@ test('TUI v2 band grid: idle / running / blocked at 209 / 160 / 140 / 120 / 80 i
         expect(line.text.includes('%'), where).toBe(cols >= 160)
         expect(line.text.includes('pick adapter') || line.text.includes('選 adapter'), where).toBe(cols >= 160 && state === 'blocked')
         expect(/\$\d/.test(line.text), where).toBe(cols >= 120)
-        expect(line.text.includes('▸'), where).toBe(cols >= 120 && cols < 160 && state !== 'idle')
+        expect(line.text.includes('▸'), where + ': `▸` means only "folded", so the band never draws it (plan 3.4 rule 2, owner ruling 2026-10-14)').toBe(false)
+        expect(/·l5·(implement|review)/.test(line.text), where).toBe(cols >= 120 && cols < 160 && state !== 'idle') // `size·level·stage` without the walk
         expect(line.text.includes('◷'), where).toBe(cols >= 160 && state !== 'idle')
       }
     }
@@ -3165,6 +3166,16 @@ test('TUI v2 band grid: idle / running / blocked at 209 / 160 / 140 / 120 / 80 i
     const [locale, state, cols] = key.split(' ')
     expect(gridLine(locale as 'en' | 'zh-TW', state as 'idle' | 'running' | 'blocked', Number(cols)).text, key).toBe(want)
   }
+})
+
+// band lint: `▸` is the fold mark only. The control feeds the same check a band whose position slot still joins with the old arrow.
+const bandFoldMarks = (texts: string[]): string[] => texts.filter(x => x.includes('▸'))
+test('band lint: no band output at any width, state or locale draws `▸`; a planted `size·level ▸ stage` is caught (negative control)', () => {
+  const texts: string[] = []
+  for (const locale of ['en', 'zh-TW'] as const) for (const state of ['idle', 'running', 'blocked'] as const) for (let cols = 20; cols <= 240; cols += 7) texts.push(gridLine(locale, state, cols).text)
+  expect(bandFoldMarks(texts)).toEqual([])
+  expect(bandFoldMarks(texts.map(x => x.replace('l5·implement', 'l5 ▸ implement'))).length, 'control: the old arrow is found').toBeGreaterThan(0)
+  expect(slotPosition(readMarker({ size: 'M', level: 'l5', stage: 'implement' }), 0)?.segs.map(g => g.text).join('')).not.toContain('▸')
 })
 
 test('TUI v2 band: the budget is in display cells for CJK too (a wide-character reason is clipped by cells, not characters)', () => {
@@ -3345,7 +3356,7 @@ test('wrapLines: a kv row wraps with a hanging indent of 12 cells, a long path b
 
 // I15 (plan section 5.6): the `?` tab is generated from the tables the pane draws from. Every state of STATES (glyph + word) and every structure glyph a tab draws
 // is on it, in both locales, at every width, and each entry is one example plus its explanation.
-const LEGEND_STRUCTURE = ['open', 'folded', 'detail', 'command', 'goto', 'bullet', 'empty', 'tabMark', 'residue', 'behind', 'overflow'] as const // the glyphs the tabs draw (the band's own symbols are not tab symbols)
+const LEGEND_STRUCTURE = ['open', 'folded', 'detail', 'command', 'goto', 'bullet', 'empty', 'tabMark', 'residue', 'behind'] as const // the glyphs the tabs draw (the band's own symbols are not tab symbols)
 const legendMissing = (lines: { text: string }[], t: ReturnType<typeof makeT>): string[] => {
   const all = lines.map(l => l.text).join('\n')
   const out: string[] = []
@@ -4625,10 +4636,10 @@ for (const surface of SURFACES) {
     await start($, surface)
     // bodyRows 8 puts every tab over its window, so every header carries its own overflow hint. `pane.overflow` is EXCLUDED from the comparison: it is each tab's own
     // scroll state (how many rows lie below THIS tab's tree), not a fact of the session; everything else in the header must be byte-identical.
-    const OVERFLOW = /⇣ 下方還有 (\d+) 行/
+    const OVERFLOW = /下方還有 (\d+) 行/
     const rawHeads: string[][] = []
     for (const tab of ['now', 'dispatch', 'review', 'spend', 'hygiene', 'legend']) rawHeads.push((await paneParts($, surface, tab, PANE_PROPS.bodyColumns, { offset: 0, bodyRows: 8 })).head)
-    const heads = rawHeads.map(h => h.map(l => l.replace(OVERFLOW, (_m, d: string) => " ".repeat(14 + d.length)).trimEnd())) // the hint is 14 + digits cells wide
+    const heads = rawHeads.map(h => h.map(l => l.replace(OVERFLOW, (_m, d: string) => " ".repeat(12 + d.length)).trimEnd())) // the hint is 12 + digits cells wide
     expect(heads[0].length, 'the header has a verdict line and the blank under it').toBeGreaterThanOrEqual(2)
     expect(heads[0][0]).toContain('⊘ 疑似卡住  repo')
     expect(heads[0].join('\n')).toContain('工作階段 $0.42 · 本機今日 $3.10 · ctx 37%')
@@ -4777,12 +4788,12 @@ for (const surface of SURFACES) {
   })
 }
 
-// ---- the overflow hint (coordinator ruling 2026-10-14): `⇣ 下方還有 N 行` on the header's last metrics line while the window is at the top over a taller tree ----
+// ---- the overflow hint (coordinator ruling 2026-10-14): `下方還有 N 行` on the header's last metrics line while the window is at the top over a taller tree ----
 for (const surface of SURFACES) {
   test('P4 hint: N equals the rows the tree really has beyond bodyRows, on every tab; none when the tree fits, none once scrolled (' + surface + ')', async ($, on) => {
     world(on, richWorld())
     await start($, surface)
-    const HINT = /⇣ 下方還有 (\d+) 行/
+    const HINT = /下方還有 (\d+) 行/
     for (const tab of ['now', 'dispatch', 'review', 'spend', 'hygiene', 'legend']) {
       // the tree's real height: the tab strip (one row of tabs + its rule at 120 columns) plus every other child of the pane's column Box, one row each
       const tree = (await paneParts($, surface, tab)).tree
@@ -4804,15 +4815,15 @@ for (const surface of SURFACES) {
     await start($, surface)
     const wide = (await paneParts($, surface, 'now', 120, { offset: 0, bodyRows: 5 })).head
     // wide (the one-line header, already as wide as the pane): the hint sits in the blanks before the metrics, which do not move
-    expect(wide.some(l => /^⊘ 疑似卡住  repo · 已進行 10m +⇣ 下方還有 \d+ 行 +工作階段 \$0\.42 · 本機今日 \$3\.10 · ctx 37%$/.test(l)), wide.join('\n')).toBe(true)
+    expect(wide.some(l => /^⊘ 疑似卡住  repo · 已進行 10m +下方還有 \d+ 行 +工作階段 \$0\.42 · 本機今日 \$3\.10 · ctx 37%$/.test(l)), wide.join('\n')).toBe(true)
     const plain = (await paneParts($, surface, 'now', 120, { offset: 0, bodyRows: 999 })).head
-    expect(wide[0].replace(/⇣ 下方還有 (\d+) 行/, (_m, d: string) => ' '.repeat(14 + d.length)), 'only the hint differs from the header without it').toBe(plain[0])
+    expect(wide[0].replace(/下方還有 (\d+) 行/, (_m, d: string) => ' '.repeat(12 + d.length)), 'only the hint differs from the header without it').toBe(plain[0])
     // 76 columns (two header lines): the hint ends the metrics line
     const mid = (await paneParts($, surface, 'now', 76, { offset: 0, bodyRows: 5 })).head
-    expect(mid.some(l => /^工作階段 \$0\.42 · 本機今日 \$3\.10 · ctx 37% +⇣ 下方還有 \d+ 行$/.test(l)), mid.join('\n')).toBe(true)
-    // 30 columns: the metrics line is already wrapped over rows; whichever row is last has no room for the hint, so it is gone and the figures stay whole
-    const narrow = (await paneParts($, surface, 'now', 30, { offset: 0, bodyRows: 5 })).head
-    expect(narrow.some(l => l.includes('⇣')), narrow.join('\n')).toBe(false)
+    expect(mid.some(l => /^工作階段 \$0\.42 · 本機今日 \$3\.10 · ctx 37% +下方還有 \d+ 行$/.test(l)), mid.join('\n')).toBe(true)
+    // 28 columns (the hint is now 2 cells narrower than with its arrow; 28 leaves gap 0, as tight as 30 did, so loosening `gap >= 2` is caught): the metrics line is already wrapped over rows; whichever row is last has no room for the hint, so it is gone and the figures stay whole
+    const narrow = (await paneParts($, surface, 'now', 28, { offset: 0, bodyRows: 5 })).head
+    expect(narrow.some(l => l.includes('下方還有')), narrow.join('\n')).toBe(false)
     expect(narrow.join('\n')).toContain('$3.10')
   })
 }

@@ -818,7 +818,7 @@ export function bandView(env: Json, jobModel: JobModel | null, projectKey: strin
   const tail = proxySegments(src.decisions, t)
   const line2 = [reason, ...tail].join(' · ')
   const identity = isObject(env.scope) ? env.scope.repo_identity : null
-  // the phase is the job model's `phase.label` (campaign > receipt > marker stage `size·level ▸ stage` + `unit k/N` > task in progress > deliverable); absent / malformed: an em dash, never the process phase.
+  // the phase is the job model's `phase.label` (campaign > receipt > marker stage `size·level ▸ stage` + `unit k/N` (the producer's format, scripts/render-review-page.js; tabs.ts and ui.hasStageArrow read that `▸`; it is never drawn into the band, whose position slot reads `size·level·stage`) > task in progress > deliverable); absent / malformed: an em dash, never the process phase.
   // No writer of a stage live per the sources manifest: 來源未接 (a phase the model really carries is shown whatever the manifest says).
   const phase = jobModel !== null && jobModel.phase !== null ? phaseText(jobModel.phase, t) : notWired(src.manifest, ['stage', 'progress', 'task_status_input']) ? t(NOT_WIRED_ID) : '—'
   let prog = progressView(progress, t)
@@ -1097,7 +1097,7 @@ const short = (sha: string | null): string => (sha === null ? '—' : sha.slice(
 export type ThemeKey = 'claude' | 'warning' | 'error' | 'success' | 'suggestion' | 'inactive' | 'subtle'
 export type SlotId = 'verdict' | 'position' | 'unit' | 'dispatch' | 'review' | 'decisions' | 'spend' | 'quota' | 'hygiene'
 // tag: which part the width table may drop or shorten (age, k/N, 族, the bar, the stage text)
-export type SegTag = 'age' | 'kn' | 'fam' | 'bar' | 'stage' | 'live' | 'stalled' | 'chip' | 'wt' | 'walk' | 'arrow' | 'reason' | 'round' | 'qc' | 'amt' | 'pct' | 'bar10' | 'bar5' | 'bar3' | 'qx'
+export type SegTag = 'age' | 'kn' | 'fam' | 'bar' | 'stage' | 'live' | 'stalled' | 'chip' | 'wt' | 'walk' | 'dot' | 'reason' | 'round' | 'qc' | 'amt' | 'pct' | 'bar10' | 'bar5' | 'bar3' | 'qx'
 export type Seg = { text: string; color?: ThemeKey; bold?: boolean; dim?: boolean; tag?: SegTag; slot?: SlotId; role?: SegRole; here?: boolean; fmt?: FmtKind; fact?: FactId } // slot: set by layoutBand on the band line (the Button it presses); a separator has none
 export type Slot = { id: SlotId; segs: Seg[] }
 
@@ -1281,15 +1281,15 @@ export function walkSegs(w: StageWalkView | null, current: string | null): Seg[]
   return out
 }
 
-// `<size>[!]·<level> ▸ <stage>` + ` ◷<age>`; with a stage walk the wide band draws `<size>·<level> <walk> <stage> ◷<age>`; no marker stage = no slot
+// `<size>[!]·<level>·<stage>` + ` ◷<age>`; with a stage walk the wide band draws `<size>·<level> <walk> <stage> ◷<age>`; no marker stage = no slot
 export function slotPosition(m: MarkerView | null, nowMs: number, w: StageWalkView | null = null): Slot | null {
   if (m === null || m.stage === null) return null
   const head = [m.size === null ? null : m.size + (m.urgent ? '!' : ''), m.level].filter((x): x is string => x !== null).join('·') // no size: no leading `·`
   const segs: Seg[] = []
-  if (head !== '') segs.push(sp(head + ' '))
   const walk = walkSegs(w, m.stage)
-  if (walk === null) segs.push(sp(GT.folded + ' ', { dim: true }))
-  else segs.push(sp(GT.folded + ' ', { dim: true, tag: 'arrow' }), ...walk, sp(' ', { tag: 'walk' }))
+  if (head !== '') segs.push(sp(head)) // `size·level·stage`: the `·` is the band's separator (`▸` only ever means folded); the wide band swaps it for the walk
+  if (walk === null) { if (head !== '') segs.push(sp('·')) }
+  else { if (head !== '') segs.push(sp('·', { tag: 'dot' })); segs.push(sp(' ', { tag: 'walk' }), ...walk, sp(' ', { tag: 'walk' })) }
   segs.push(sp(m.stage, { color: 'claude', bold: true, tag: 'stage' }))
   const age = m.stage_set_at_ms === null ? '—' : elapsedFrom(m.stage_set_at_ms, nowMs)
   if (age !== '—') segs.push(sp(' ' + GT.age + age, { dim: true, tag: 'age' }))
@@ -1438,14 +1438,14 @@ const REASON_MIN = 8
 
 // The width table (cumulative per band; the line is ONE row, groups separated by ` │ `, items inside a group by a space):
 //   >= 160  everything: stage walk, 10-cell spend bar + %, the verdict's reason phrase, load-source chip, age, families, decisions, `5h N% 7d N%`
-//   120-159 verdict, `size·level ▸ stage`, unit bar + k/N, `● ⊘ ↺R QC`, `$N` + 5-cell bar, `5h N% 7d N%`, `⚑N`
+//   120-159 verdict, `size·level·stage`, unit bar + k/N, `● ⊘ ↺R QC`, `$N` + 5-cell bar, `5h N% 7d N%`, `⚑N`
 //   80-119  verdict, unit bar, `●N QC▲`, `$` + 3-cell bar, the most used quota window, `⚑N`
 //   < 80    verdict, `●N ⊘N`, `⚑N`
 // Then, if the line still does not fit: the position's stage text is cut with `…`, then the unit bar, the ⊘ count and the ● count go, then the
 // verdict WORD is shortened (the glyph stays). Never the verdict glyph, the ⓘ or `⚑N` (the owner reminder survives narrowing).
 export function layoutBand(slots: Slot[], columns: number): BandLayout {
   const drop = new Set<string>()
-  if (columns >= 160) { drop.add('arrow'); drop.add('bar5'); drop.add('bar3') }
+  if (columns >= 160) { drop.add('dot'); drop.add('bar5'); drop.add('bar3') }
   else {
     for (const x of ['chip', 'reason', 'walk', 'pct', 'bar10', 'age', 'fam', 'decisions']) drop.add(x)
     if (columns >= 120) drop.add('bar3')

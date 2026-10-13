@@ -14,7 +14,7 @@
   - **決定**：每筆決定一行，按下去才出現「可逆或不可逆 · 寫入者」、決策文字和真正的 veto 指令；沒有編號的決定說明無法 veto。最新的在前；超過 5 筆時，最舊的收在「還有 N 件決定」之後。
   - **寬度**：`item`、`kv`、`header` 在 40 欄以內不再溢出：`item` 先切本文再切附註，切完一定是一行，右緣的展開記號保留；`kv` 的值換行時接在鍵欄之後；`header` 先切標題再切右側標籤。`item` 的狀態字與本文之間改為兩格（只有符號時一格），這會影響 P0 的呈現。
   - **新增共用函式**（放在 `ui.ts` 底部）：`chip`、`barValue`、`sectionOpen`、`carry`。計畫審查段只在過期時預設收合（由 `sectionOpen` 的參數決定）；`SECTION_DEFAULTS` 沒有改。
-  - **測試**：新增 `mods/live/review.test.ts`（21 項：I1、I2、I3、I5、I6、I7、I8、I10 的檢查器、負向對照與金樣）；`live.test.ts` 的審查分頁舊案例改寫，並新增掛載測試（席位展開、標頭收合、`more`、76 欄金樣）。
+  - **測試**：新增 `mods/live/review.test.ts`（24 項：I1、I2、I3、I4、I5、I6、I7、I8、I10 的檢查器、負向對照與金樣）；`live.test.ts` 的審查分頁舊案例改寫，並新增掛載測試（席位展開、標頭收合、`more`、76 欄金樣）。
 
 - **`/l5` 的 mission 骨架可以從計畫自動產生**（plan `docs/plans/2026-10-13-l5-mission-scaffold-generator.md`）：之前開一個 `/l5` mission，要照 recipe 手寫 rubric、sources、execution graph 三份檔案。手寫時漏一個欄位或路徑寫錯，就會白白燒掉一次 attempt。新增的 `scripts/scaffold-mission.js` 會從計畫和旗標產生這三份檔案。
   - 寫檔前先檢查那些會燒 attempt 的規則，例如路徑必須落在 allowed prefix 底下、驗證指令的格式。

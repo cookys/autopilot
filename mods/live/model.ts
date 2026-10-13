@@ -441,7 +441,7 @@ export function notWired(m: Manifest | null, names: string[]): boolean {
   return names.every(n => liveSource(m, n) === false)
 }
 
-export type DecisionRow = { round: number | null; decision: string; irreversible: boolean; writer: string | null; decision_id: string | null; source: string | null; root: string | null }
+export type DecisionRow = { round: number | null; decision: string; irreversible: boolean; writer: string | null; decision_id: string | null; source: string | null; root: string | null; at?: string | null }
 export type LadderView = { rung: string; at: string }
 export type DecisionsView = { rows: DecisionRow[]; count: number; irreversible: number; writers: string[]; undocumented: number; identity: string | null; root: string | null; ladder: LadderView | null }
 
@@ -457,6 +457,7 @@ export function readDecisions(text: string | null, want: ScopeWant): DecisionsVi
     decision: str(r.decision) || '—',
     irreversible: r.irreversible === true,
     writer: str(r.writer), decision_id: str(r.decision_id), source: str(r.source), root: want.root_run_id,
+    at: typeof r.at === 'string' && Number.isFinite(Date.parse(r.at)) ? r.at : null, // kept for ordering: roots are concatenated, so position is not time across roots
   }))
   const scope = v.scope as Json
   return {
@@ -2264,12 +2265,14 @@ function decisionsSection(u: U.Ctx, snap: LiveSnapshot, ctx: PaneCtx): PaneLine[
   const out: PaneLine[] = [head]
   if (dv.count === 0) out.push(U.empty(t('review.none_decided'), 'review.decisions'))
   const common = commonDirOf(dv.identity)
+  // newest first (§2.4): by `at` when every row has a parseable one (the position breaks ties, later first), else by position (one root's sidecar is oldest first)
+  const timed = dv.rows.length > 0 && dv.rows.every(r => typeof r.at === 'string' && Number.isFinite(Date.parse(r.at)))
   const rows: U.RowSpec[] = dv.rows.map((r, i) => {
     const rid = r.decision_id ?? '—'
     const step = vetoStep(r, common, dv.root, t)
     const children = [...U.detail(u, r.decision, { attached: true }), ...('cmd' in step ? U.command(u, step.cmd) : U.detail(u, step.note, { attached: true }))]
     return {
-      group: String(i), ts: i, state: U.worst([]), fact: 'review.decisions', kind: 'bullet', body: rid + '  ' + r.decision,
+      group: String(i), ts: timed ? Date.parse(r.at as string) * 1000 + Math.min(i, 999) : i, state: U.worst([]), fact: 'review.decisions', kind: 'bullet', body: rid + '  ' + r.decision,
       bodyOpen: rid + '  ' + t(r.irreversible ? 'decision.irreversible' : 'decision.reversible') + (r.writer === null ? '' : ' · ' + r.writer),
       toggle: 'dec:' + (r.decision_id ?? '#' + i), children,
     }

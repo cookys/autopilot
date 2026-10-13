@@ -94,9 +94,10 @@ function violations(lines: PaneLine[], cols: number, t: typeof zh): string[] {
     }
     if (l.text.includes('▌')) out.push('I4 ' + at + ' contains ▌')
     for (const v of emphasisViolations(l)) out.push('I4 ' + at + ' ' + v)
-    for (const s of l.segs ?? []) { // a bold segment only in a header, a verdict, a here segment, or the state mark of a need_you item
-      const needYou = l.kind === 'item' && (s.role === 'state' || s.role === 'glyph') && s.color === STATES.need_you.key
-      if (s.bold === true && l.kind !== 'header' && l.kind !== 'verdict' && s.here !== true && !needYou) out.push('I4 ' + at + ' seg ' + JSON.stringify(s.text) + ' is bold outside header / verdict / need_you / here')
+    const needYouItem = l.kind === 'item' && (l.segs ?? []).some(g => g.role === 'glyph' && g.text === STATES.need_you.glyph) // the plan lets a need_you item bold its mark, word and body (§3.6)
+    for (const s of l.segs ?? []) { // a bold segment only in a header, a verdict, a here segment, a need_you item, or a meter headline value (fmt pct)
+      const meterHeadline = s.role === 'value' && s.fmt === 'pct'
+      if (s.bold === true && l.kind !== 'header' && l.kind !== 'verdict' && s.here !== true && !needYouItem && !meterHeadline) out.push('I4 ' + at + ' seg ' + JSON.stringify(s.text) + ' is bold outside header / verdict / need_you / here / meter headline')
     }
     if (l.kind !== 'detail' && emojiViolations(l.text).length > 0) out.push('I5 ' + at + ' ' + emojiViolations(l.text).join(','))
     if (/[️⃣]/u.test(l.text)) out.push('I5 ' + at + ' has VS16 or keycap')
@@ -154,6 +155,14 @@ test('negative controls of the checker: a hand-made line, a raw token in a value
   expect(i4(l => l)).toEqual([]) // control: the unmodified render is I4-clean
   expect(i4(l => (l.kind === 'kv' && l.text.startsWith('範圍') ? { ...l, segs: (l.segs ?? []).map(s => (s.role === 'value' ? { ...s, bold: true } : s)) } : l)).length).toBeGreaterThan(0) // a bold value outside header / verdict
   expect(i4(l => (l.kind === 'kv' && l.text.startsWith('範圍') ? { ...l, segs: (l.segs ?? []).map(s => (s.role === 'value' ? { ...s, bold: true, dim: true } : s)) } : l)).length).toBeGreaterThan(0) // bold and dim on one segment
+  // a findings item (△ 待修, also the warning colour) is not need_you: its bold mark must be caught
+  expect(i4(l => (l.kind === 'item' && l.text.includes('待修') ? { ...l, segs: (l.segs ?? []).map(s => (s.role === 'glyph' || s.role === 'state' ? { ...s, bold: true } : s)) } : l)).length).toBeGreaterThan(0)
+  // positives: a need_you item may bold its mark, word and body; a meter headline value may be bold
+  const needYouItem = (l: PaneLine): PaneLine => (l.kind === 'item' && l.text.includes('待修')
+    ? { ...l, segs: [{ text: STATES.need_you.glyph, role: 'glyph' as const, color: STATES.need_you.key, bold: true }, { text: ' ', role: 'prose' as const }, { text: l.text.trim(), role: 'prose' as const, bold: true }] }
+    : l)
+  expect(i4(needYouItem)).toEqual([])
+  expect(i4(l => (l.kind === 'kv' && l.text.startsWith('範圍') ? { ...l, segs: [...(l.segs ?? []), { text: ' 80%', role: 'value' as const, fmt: 'pct' as const, bold: true, color: 'warning' as const }] } : l))).toEqual([])
   expect(i4(l => (l.kind === 'kv' ? { ...l, text: l.text + '▌' } : l)).length).toBeGreaterThan(0)
   expect(i4(l => (l.kind === 'header' ? { ...l, text: l.text.slice(0, -1) } : l)).length).toBeGreaterThan(0) // a header one cell short
   expect(i4(l => (l.kind === 'header' ? { ...l, text: l.text.replace(/^[▾▸] /u, '') } : l)).length).toBeGreaterThan(0) // a header without its fold mark
@@ -192,6 +201,25 @@ test('decisions are newest first (§2.4): with 7 the 7th shows and the 1st sits 
   const ids = (lines: PaneLine[]): string[] => lines.filter(l => l.toggle?.startsWith('dec:') === true).map(l => l.toggle as string)
   expect(ids(render(s, 76))).toEqual(['dec:intent-17-7', 'dec:intent-17-6', 'dec:intent-17-5', 'dec:intent-17-4', 'dec:intent-17-3'])
   expect(ids(render(s, 76, { expanded: ['more:review.decisions'] }))).toEqual([7, 6, 5, 4, 3, 2, 1].map(n => 'dec:intent-17-' + n))
+})
+
+test('decisions from several roots are ordered by their time, not by position: marker roots come first in the merged list but a later row from them still shows first', () => {
+  const at = (h: number): string => new Date(Date.UTC(2026, 9, 13, h)).toISOString()
+  const row = (id: string, h: number) => decision(1, 'decision ' + id, { decision_id: id, at: at(h) } as Partial<DecisionRow>)
+  const rows = [row('m1', 1), row('m2', 7), row('c2', 2), row('c3', 3), row('c4', 4), row('c5', 5), row('c6', 6)] // marker root (m1, m2), then the campaign (c2..c6)
+  const s = snap({ review: null, decisions: busyDecisions({ rows, count: 7, undocumented: 0 }) })
+  const ids = (lines: PaneLine[]): string[] => lines.filter(l => l.toggle?.startsWith('dec:') === true).map(l => l.toggle as string)
+  expect(ids(render(s, 76))).toEqual(['dec:m2', 'dec:c6', 'dec:c5', 'dec:c4', 'dec:c3'])
+  expect(ids(render(s, 76, { expanded: ['more:review.decisions'] })).slice(-2)).toEqual(['dec:c2', 'dec:m1'])
+})
+
+test('decisions without a parseable time fall back to position order, stably: a missing or bad time on any row means newest = last in the list', () => {
+  const at = (h: number): string => new Date(Date.UTC(2026, 9, 13, h)).toISOString()
+  const mk = (ids: string[], times: (string | null | undefined)[]) => snap({ review: null, decisions: busyDecisions({ rows: ids.map((id, i) => decision(1, 'x ' + id, { decision_id: id, at: times[i] } as Partial<DecisionRow>)), count: ids.length, undocumented: 0 }) })
+  const ids = (lines: PaneLine[]): string[] => lines.filter(l => l.toggle?.startsWith('dec:') === true).map(l => l.toggle as string)
+  expect(ids(render(mk(['a', 'b', 'c'], [undefined, undefined, undefined]), 76))).toEqual(['dec:c', 'dec:b', 'dec:a'])
+  expect(ids(render(mk(['a', 'b', 'c'], [at(9), 'not a time', at(1)]), 76))).toEqual(['dec:c', 'dec:b', 'dec:a']) // a bad time: the whole list falls back
+  expect(ids(render(mk(['a', 'b', 'c'], [at(3), at(3), at(3)]), 76))).toEqual(['dec:c', 'dec:b', 'dec:a']) // equal times: later position first
 })
 
 test('I23 golden: the opened decision and the first opened seat equal the §5.3 mockup lines, every line is made, with the kinds drawn there', () => {

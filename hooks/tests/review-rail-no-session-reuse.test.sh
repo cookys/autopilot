@@ -37,7 +37,7 @@ run_runner() { # <script> <runner> <model> <log>
   local script="$1" runner="$2" model="$3" log="$4"
   local -a ep=()
   [ "$runner" = cc-shim ] && ep=(--endpoint GUARDEP)
-  FAKE_ARGV_LOG="$log" AUTOPILOT_SETTLE_MS=1 timeout 120 bash "$script" --runner "$runner" --model "$model" \
+  FAKE_ARGV_LOG="$log" AUTOPILOT_SETTLE_MS=1 AUTOPILOT_GROK_EFFORT_PROBE="${AUTOPILOT_GROK_EFFORT_PROBE:-0}" timeout 120 bash "$script" --runner "$runner" --model "$model" \
     --effort high --diff-file "$TEST_TMP/review.diff" --timeout 60s --bin "$FAKEBIN/fake-runner" \
     ${ep[@]+"${ep[@]}"} >/dev/null 2>&1 < /dev/null
 }
@@ -48,12 +48,23 @@ resume_hits() { # <log> <runner>
   } | sort -u | tr '\n' ' '
 }
 
+# "Observed" means the REAL review launch reached the fake binary, judged by an argument only that
+# launch carries (an effort probe or --version call must not count): grok --prompt-file, codex exec,
+# claude family --setting-sources.
+launched() { # <log> <runner>
+  case "$2" in
+    grok) grep -qx -e '--prompt-file' "$1" ;;
+    codex) grep -qx 'exec' "$1" ;;
+    claude-native|cc-shim) grep -qx -e '--setting-sources' "$1" ;;
+  esac
+}
+
 SEEN_RUNNERS=0
 for spec in "claude-native:claude-haiku" "cc-shim:GLM-5.2" "codex:gpt-5.5" "grok:grok-4.5"; do
   runner="${spec%%:*}"; model="${spec#*:}"
   LOG="$TEST_TMP/argv-$runner.log"; : > "$LOG"
   run_runner "$DR" "$runner" "$model" "$LOG"
-  if grep -q '^--- argv\|^-p$' "$LOG"; then
+  if launched "$LOG" "$runner"; then
     SEEN_RUNNERS=$((SEEN_RUNNERS + 1))
     assert_eq "" "$(resume_hits "$LOG" "$runner")" "review rail ($runner): no session-continuation argument reaches the runner"
   else
@@ -75,10 +86,20 @@ done
 # Source-level backstop for argv builders the runtime runs above do not execute.
 SRC_HITS="$(grep -nE -e '--resume|--continue|exec resume|resume-session' \
   "$REPO_ROOT/scripts/dispatch-review.sh" "$REPO_ROOT/scripts/hetero-review-loop.js" \
-  "$REPO_ROOT/scripts/lib/review-fanout.js" 2>/dev/null | grep -vE '^[^:]*:[0-9]+:[[:space:]]*(#|//)')"
+  "$REPO_ROOT/scripts/lib/review-fanout.js" "$REPO_ROOT/scripts/qc-panel.js" \
+  "$REPO_ROOT/scripts/dispatch-plan-review.js" "$REPO_ROOT/scripts/dispatch-author.sh" 2>/dev/null | grep -vE '^[^:]*:[0-9]+:[[:space:]]*(#|//)')"
 assert_eq "" "$SRC_HITS" "review dispatch sources contain no resume/continue flag (comment lines excluded)"
 
-# NEGATIVE CONTROL: a copy of the rail whose claude argv gains --resume must turn the guard red.
+# NEGATIVE CONTROL 1: a grok launch pointed at a nonexistent binary must NOT count as observed
+# (the effort probe alone, if it ran, would otherwise make the guard look satisfied).
+MUTG="$TEST_TMP/mutg"; mkdir -p "$MUTG"; cp -r "$REPO_ROOT/scripts" "$MUTG/scripts"
+for d in src schemas references .claude-plugin; do [ -e "$REPO_ROOT/$d" ] && ln -s "$REPO_ROOT/$d" "$MUTG/$d"; done
+sed -i 's|timeout "\$TIMEOUT" "\$GROK_BIN" --prompt-file|timeout "$TIMEOUT" /nonexistent/grok --prompt-file|' "$MUTG/scripts/dispatch-review.sh"
+LOGG="$TEST_TMP/argv-mutg.log"; : > "$LOGG"
+AUTOPILOT_GROK_EFFORT_PROBE=1 run_runner "$MUTG/scripts/dispatch-review.sh" grok grok-4.5 "$LOGG"
+if launched "$LOGG" grok; then fail "negative control: a grok launch to /nonexistent/grok still counted as observed"; else pass_msg=1; assert_eq "no" "no" "negative control: grok launch to a nonexistent binary is not counted as observed"; fi
+
+# NEGATIVE CONTROL 2: a copy of the rail whose claude argv gains --resume must turn the guard red.
 MUT="$TEST_TMP/mut"; mkdir -p "$MUT"; cp -r "$REPO_ROOT/scripts" "$MUT/scripts"
 for d in src schemas references .claude-plugin; do [ -e "$REPO_ROOT/$d" ] && ln -s "$REPO_ROOT/$d" "$MUT/$d"; done
 sed -i 's|exec "\$2" -p \${5:+--session-id "\$5"}|exec "$2" -p --resume 00000000-0000-4000-8000-000000000000 ${5:+--session-id "$5"}|' "$MUT/scripts/dispatch-review.sh"

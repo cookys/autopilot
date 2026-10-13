@@ -190,6 +190,33 @@ test('PostCompact: a stage that only appears as the tail of a longer word does n
   } finally { sb.cleanup(); }
 });
 
+test('PostCompact: the stage as the head of a longer word (planning) does not count', () => {
+  const sb = sandbox();
+  try {
+    fs.writeFileSync(path.join(sb.root, 'sm', `${SID}.json`), JSON.stringify({ session_id: SID, level: 'l4', size: 'L', stage: 'plan', expires_at: new Date(Date.now() + 3600e3).toISOString() }));
+    const { adv } = postCompact(sb, 'branch feat/snap, we are still planning');
+    assert.strictEqual(adv.length, 1);
+    assert.match(adv[0].text, /stage plan/);
+  } finally { sb.cleanup(); }
+});
+
+test('PostCompact: the stage after a hyphen (re-implement) does not count', () => {
+  const sb = sandbox();
+  try {
+    const { adv } = postCompact(sb, 'branch feat/snap, we will re-implement it');
+    assert.strictEqual(adv.length, 1);
+    assert.match(adv[0].text, /stage implement/);
+  } finally { sb.cleanup(); }
+});
+
+test('PostCompact: the stage match ignores case', () => {
+  const sb = sandbox();
+  try {
+    const { adv } = postCompact(sb, 'branch feat/snap, Stage: IMPLEMENT');
+    assert.deepStrictEqual(adv, []);
+  } finally { sb.cleanup(); }
+});
+
 test('PostCompact: no marker and no git work tree means nothing to check, nothing raised', () => {
   const sb = sandbox();
   try {

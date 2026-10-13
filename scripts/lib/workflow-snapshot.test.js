@@ -169,7 +169,9 @@ test('code review: a round recorded at another head is flagged, one at this chec
     const t = text(run(f));
     assert.match(t, /code review: phase full generation 1 head fedcba98 converged.*\[head differs: round reviewed fedcba98, this checkout is at 12345678;/);
     const noGit = text(run(f, { git: () => null }));
-    assert.doesNotMatch(noGit, /head differs/); // HEAD unknown: no claim either way
+    assert.doesNotMatch(noGit, /head differs/);
+    assert.match(noGit, /code review: .*\[head not compared; shared by every worktree\]/); // HEAD unknown: say the round was not compared
+    assert.doesNotMatch(text(run(f)), /head not compared/);
   } finally { f.cleanup(); }
 });
 
@@ -239,9 +241,11 @@ test('no session id: one absent line, the other session-keyed sources are not re
 test('the decision ledger without a task card falls back to the newest project ledger under 24h, and says so', () => {
   const f = mk();
   try {
-    // The fallback compares file mtime (real clock) with now, so this test runs on the real clock and its marker must expire relative to it.
-    fullFixture(f, { card: { ledger: null }, marker: { expires_at: iso(Date.now() + 3600e3) } });
-    const t = text(run(f, { now: Date.now() }));
-    assert.match(t, /decision ledger \(newest docs\/projects\/\*\/ledger by mtime, under 24h\)/);
+    fullFixture(f);
+    fs.rmSync(path.join(f.dirs.taskCard, `${SID}.json`));
+    const led = path.join(f.cwd, 'docs/projects/p1/ledger/decisions.jsonl');
+    fs.utimesSync(led, new Date(NOW - 60e3), new Date(NOW - 60e3)); // mtime pinned to the fixed clock
+    const t = text(run(f));
+    assert.match(t, /decision ledger \(newest docs\/projects\/\*\/ledger by mtime, under 24h, may be another session's in this checkout\)/);
   } finally { f.cleanup(); }
 });

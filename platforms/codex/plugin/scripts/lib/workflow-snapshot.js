@@ -175,7 +175,7 @@ function srcCodeReview(ctx) {
   const recorded = String(r.head || '');
   const cur = ctx.headOid ? String(ctx.headOid) : '';
   const differs = recorded && cur && !(cur.startsWith(recorded) || recorded.startsWith(cur));
-  const headNote = differs ? ` [head differs: round reviewed ${recorded.slice(0, 8)}, this checkout is at ${cur.slice(0, 8)}; may be another worktree's or an older round]` : '';
+  const headNote = differs ? ` [head differs: round reviewed ${recorded.slice(0, 8)}, this checkout is at ${cur.slice(0, 8)}; may be another worktree's or an older round]` : (!cur ? ' [head not compared; shared by every worktree]' : '');
   return ok('code review', [`code review: phase ${clip(r.phase, 24)} generation ${clip(r.generation, 4)} head ${recorded.slice(0, 8)} ${r.converged ? 'converged' : 'not converged'}${verdicts ? `; ${verdicts}` : ''}${when ? ` (${when})` : ''}${stale}${headNote}`]);
 }
 
@@ -209,7 +209,7 @@ function srcLedger(ctx) {
         let st; try { st = fs.statSync(f); } catch { continue; }
         if (ctx.now - st.mtimeMs <= STALE_MS && (!best || st.mtimeMs > best.m)) best = { f, m: st.mtimeMs };
       }
-      if (best) { file = best.f; how = 'newest docs/projects/*/ledger by mtime, under 24h'; }
+      if (best) { file = best.f; how = 'newest docs/projects/*/ledger by mtime, under 24h, may be another session\'s in this checkout'; }
     } catch { /* no projects dir */ }
   }
   if (!file) return absent('decision ledger', 'no ledger path in the task card and none modified in the last 24h');

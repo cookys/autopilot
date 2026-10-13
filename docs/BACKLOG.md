@@ -1742,7 +1742,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: next touch of dispatch-author.sh runner branches, or the next seat failure whose cause is not in the receipt
 - **Effort**: S
 - **Source**: live-pane plan review G1 transport stop, 2026-10-13
-- **Pointer**: docs/plans/2026-10-13-live-pane-design-system.md
+- **Pointer**: docs/plans/evidence/2026-10-13-live-pane/plan-review/README.md
 - **Context**: grok, cc-shim, claude-native and qoderclicn branches (~lines 1100-1200) discard stderr; die_runner_failed at ~469. Keep a bounded stderr excerpt in error and raw_log, and classify HTTP 402 or "balance exhausted" as quota.
 
 ### withLock busy-waits in foreman-guard and depth0-delegate-gate

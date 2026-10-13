@@ -342,8 +342,8 @@ export const SECTION_ORDER: Record<PaneTab, readonly string[]> = {
   hygiene: ['attention', 'auto', 'source'],
   legend: ['states', 'structure', 'keys'],
 }
-// review.plan folds only while its review is stale (F2, I11), so the static default is open and the model passes `stale` to sectionOpen
-export const SECTION_DEFAULTS: Record<string, { folded: boolean }> = { 'now.recent': { folded: true }, 'review.plan': { folded: false } }
+// review.plan: P0's value, kept. Nothing reads this table yet: the review tab folds the plan section only while it is stale (F2, I11) by passing `stale` to sectionOpen
+export const SECTION_DEFAULTS: Record<string, { folded: boolean }> = { 'now.recent': { folded: true }, 'review.plan': { folded: true } }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------
 // the brand: a PaneLine / Frag exists only if a component made it. `mk` and `frag` are not exported as makers for tab code to call by hand; the WeakSets are private.

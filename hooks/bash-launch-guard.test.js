@@ -87,6 +87,7 @@ for (const cmd of [
   'setsid -w scripts/dispatch-review.sh x', // setsid --wait is foreground
   'cat <<EOF\nnohup scripts/dispatch-review.sh &\nEOF', // heredoc body is data
   'grep -n dispatch-review.sh docs/x.md &&  echo ok', // && is not background
+  'nohup node scripts/dispatch-status.js --run x > /tmp/o 2>&1 &',
   'scripts/dispatch-review.sh x 2>&1 | tail -5', // 2>&1 is not background
   'grep dispatch-hetero.sh foo &', // rail name only as an argument
   'git log -- scripts/dispatch-review.sh &',
@@ -99,6 +100,10 @@ for (const cmd of [
   '{ scripts/dispatch-review.sh x; }', // foreground group
   'cd hooks/tests && ./dispatch-contract-pin.test.sh &', // test file via ./
   'echo hi | tee /tmp/x &', // pipeline without a rail
+  'node scripts/dispatch-status.js --run x &', // observers / validators are not launchers
+  'node scripts/dispatch-contract.js --check &',
+  'nohup node scripts/dispatch-tree.js &',
+  'cd scripts && ./dispatch-status.js &',
   'for i in 1 2; do echo $i; done &', // backgrounded loop without a rail
   'for i in 1 2; do scripts/dispatch-review.sh $i; done', // same loop in the foreground
   'if true; then echo hi; fi &',
@@ -192,3 +197,13 @@ test('deep glob is bounded (worst case stays fast)', () => {
   run('ls /*/*/*/*/*/*/*.zzqq', { shell: 'zsh' });
   assert.ok(Date.now() - t0 < 1500);
 });
+
+// Drift guard: every launching rail script in scripts/ is on the guard's explicit list. A new
+// scripts/dispatch-*.sh|js must either be a rail (add it to RAIL_NAMES) or an observer (add it here).
+const OBSERVERS = new Set(['dispatch-status.js', 'dispatch-contract.js', 'dispatch-tree.js']);
+for (const f of fs.readdirSync(path.join(__dirname, '..', 'scripts'))) {
+  if (!/^dispatch-.*\.(sh|js)$/.test(f) || /\.test\./.test(f) || OBSERVERS.has(f)) continue;
+  test(`rail on the explicit list: ${f}`, () => {
+    assert.strictEqual(run(`nohup scripts/${f} x &`).deny, true);
+  });
+}

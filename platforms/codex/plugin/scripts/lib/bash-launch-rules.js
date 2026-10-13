@@ -19,8 +19,10 @@ const fs = require('fs');
 const { executableText } = require('./bash-wait-rules.js');
 
 
-// Rail entrypoint path: .../scripts/dispatch-<x>.sh|js, not a *.test.* file.
-const RAIL_PATH_RE = /(?:^|\/)scripts\/dispatch-[\w.-]*\.(?:sh|js)$/;
+// Rail entrypoints that LAUNCH a worker (an explicit list: dispatch-status.js / dispatch-contract.js /
+// dispatch-tree.js are observers and validators, not launchers). Never a *.test.* file.
+const RAIL_NAMES = 'hetero|review|author|author-kimi|consult|discuss|explore|foreman|batch|anthropic-review|local-openai|plan-review|experience-critic';
+const RAIL_PATH_RE = new RegExp(`(?:^|/)scripts/dispatch-(?:${RAIL_NAMES})\\.(?:sh|js)$`);
 const TEST_FILE_RE = /\.test\.(?:sh|js)$/;
 const WAKE_HEADS = new Set(['wait']);
 const WAKE_SCRIPT_RE = /(?:^|\/)wait-dispatch-results(?:\.[a-z]+)?$/;
@@ -166,7 +168,7 @@ function commandPosition(segText) {
   return { head: null, detach, rest: [] };
 }
 
-const REL_RAIL_RE = /^\.\/dispatch-[\w.-]*\.(?:sh|js)$/;
+const REL_RAIL_RE = new RegExp(`^\\./dispatch-(?:${RAIL_NAMES})\\.(?:sh|js)$`);
 function isRail(head, mentionsScripts) {
   if (!head || TEST_FILE_RE.test(head)) return false;
   return RAIL_PATH_RE.test(head) || (mentionsScripts && REL_RAIL_RE.test(head));

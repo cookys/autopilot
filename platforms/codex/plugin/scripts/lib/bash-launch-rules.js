@@ -3,13 +3,15 @@
 // scripts/lib/bash-launch-rules.js — the ONE definition of three Bash-launch hazards that
 // hooks/depth0-delegate-gate.js checks on every Bash call (all depths, BL-0019):
 //   1. detach-no-wake (DENY)  — a trailing `&` or `setsid -f` (with or without nohup) starting a dispatch RAIL entrypoint
-//      (scripts/dispatch-*.sh|js, never *.test.*) with nothing in the same command that wakes the session.
+//      (one of the explicit RAIL_NAMES list below — observers such as dispatch-status.js and *.test.* files are
+//      not rails) with nothing in the same command that wakes the session.
 //      Only the COMMAND-POSITION word counts: `grep dispatch-review.sh x &` is not a launch.
 //   2. pkill-self-match (WARN) — `pkill -f` / `pgrep -f` (also inside `$(…)`) whose pattern lacks the
 //      `[x]` self-exclusion trick, so the pattern matches the Bash tool's own command line.
 //   3. zsh-expansion (WARN, zsh only, never a deny) — a word starting with `=<char>` (zsh EQUALS
 //      expansion) or an unquoted glob that matches nothing (zsh `nomatch` aborts the whole line).
-//      Prefers silence: no fs.globSync, `**`, or a partly-quoted word ⇒ no warning.
+//      Prefers silence: `**`, a partly-quoted word, a directory that cannot be read within the 50 ms budget,
+//      or oversized input ⇒ no warning.
 // Rules run on EXECUTABLE text (heredoc bodies / comments stripped by bash-wait-rules.js).
 //
 // scripts/lib/dispatch-detach.sh is NOT a launcher: it is a sourceable helper the read rails
@@ -431,7 +433,7 @@ function detectZshExpansion(cmd, cwd) {
       if (!/[*?]|\[[^\]]+\]/.test(bare)) continue;
       if (/\)$/.test(masked)) continue; // `case x in *)` branch label, not a word to expand
       if (/^[A-Za-z_][A-Za-z0-9_]*\+?=/.test(masked)) continue; // `x=*.zzq` assignment is not globbed
-      // Stay silent when we cannot judge: backslash/quote/brace in the word, `**`, or no globSync.
+      // Stay silent when we cannot judge: backslash/quote/brace in the word, `**`, or the lookup runs out of time.
       if (/[\\'"{$]/.test(raw) || raw.includes('**') || bare !== masked) continue;
       if (hasCd || /^~/.test(raw)) continue; // cannot resolve / too broad: stay silent
       // Cost bounds (worst case was 5 s for `/*/*/*/*/*/*/*`): only single-level globs are resolved, at most

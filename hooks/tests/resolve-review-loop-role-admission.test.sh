@@ -595,4 +595,64 @@ RC_R9_REVIEWER="$(ENGINE_CAPABILITY_DIR="$R9_CAP_DIR" ENGINE_SCORECARD_DIR="$R9_
   REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_R9_REVIEWER" bash "$SCRIPT" >/dev/null 2>&1; echo $?)"
 assert_eq "3" "$RC_R9_REVIEWER" "R9(c): the SAME planted consult row does NOT admit a DIFFERENT role (reviewer) for the same runner — list still gates other roles (per-role evidence, not a blanket unverified bit)"
 
+# ── BL-0095: under consult_dispatch auto, a DECLARED consult tuple wins ─────
+# Owner ruling 2026-10-13 (same rule as the plan chair, 2026-09-13): the topology
+# ladder and the sonnet native fallback must not silently replace declared keys.
+TOPO_C="$TEST_TMP/topo-consult-declared.json"
+cat > "$TOPO_C" <<'EOF'
+{ "plan_review_panel": [], "reviewer_ladder": [],
+  "consult_ladder": [ { "engine": "sonnet", "runner": "claude-native", "effort": "high" } ] }
+EOF
+mk_cfg_consult() { # file engine effort runner [qc_panel engine] [qc runner] [qc effort]
+  { printf -- '- consult_dispatch: auto\n- consult_engine: %s\n- consult_effort: %s\n- consult_runner: %s\n' "$2" "$3" "$4"
+    [ -n "${5:-}" ] && printf -- '- qc_panel: %s\n- qc_panel_runners: %s\n- qc_panel_efforts: %s\n' "$5" "$6" "$7"
+  } > "$1"
+}
+OVR_CONSULT="$TEST_TMP/ovr-consult-declared.json"
+mk_override "$OVR_CONSULT" consult
+
+# positive: a declared, QUALIFIED (override-admitted) seat wins over the topology ladder
+CFG_CONSULT_DECL="$TEST_TMP/cfg-consult-declared.md"
+mk_cfg_consult "$CFG_CONSULT_DECL" cursor-grok-4.6-high high cursor
+json="$(AUTOPILOT_QUALIFICATION_OVERRIDE="$OVR_CONSULT" AUTOPILOT_TOPOLOGY_FILE="$TOPO_C" REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_CONSULT_DECL" bash "$SCRIPT" 2>/dev/null)"
+assert_contains "$json" '"consult_engine": "cursor-grok-4.6-high"' "BL-0095: auto keeps the declared consult_engine over the topology ladder"
+assert_contains "$json" '"consult_resolved_from": "config-explicit"' "BL-0095: consult_resolved_from names config-explicit"
+
+# negative 1: a declared UNQUALIFIED seat is refused exactly like consult_dispatch: on
+CFG_CONSULT_UNQ="$TEST_TMP/cfg-consult-unqualified.md"
+mk_cfg_consult "$CFG_CONSULT_UNQ" totally-unqualified-model high codex
+out="$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_C" REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_CONSULT_UNQ" bash "$SCRIPT" 2>&1)"; rc=$?
+assert_eq "3" "$rc" "BL-0095: auto + declared unqualified consult seat exits 3 (qualification gate not bypassed)"
+
+# negative 2: a declared seat equal to a qc_panel seat is refused
+# The qc_panel seat itself is admitted by an override, so ONLY the qc_panel rule can refuse it.
+OVR_CONSULT_QC="$TEST_TMP/ovr-consult-qcseat.json"
+printf '{ "schema": 1, "overrides": [{"engine":"claude-opus","runner":"claude-native","role":"consult","reason":"test","operator":"board","expires":"2099-12-31"}] }\n' > "$OVR_CONSULT_QC"
+CFG_CONSULT_QC="$TEST_TMP/cfg-consult-qcseat.md"
+mk_cfg_consult "$CFG_CONSULT_QC" claude-opus high claude-native claude-opus claude-native high
+out="$(AUTOPILOT_QUALIFICATION_OVERRIDE="$OVR_CONSULT_QC" AUTOPILOT_TOPOLOGY_FILE="$TOPO_C" REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_CONSULT_QC" bash "$SCRIPT" 2>&1)"; rc=$?
+assert_eq "3" "$rc" "BL-0095: auto + declared consult seat that is also a qc_panel seat exits 3"
+assert_contains "$out" "must not be a qc_panel seat" "BL-0095: the qc_panel refusal names the rule"
+
+# consult_dispatch: on gets the same qc_panel exclusion (quality-pipeline SKILL.md: resolver enforces)
+CFG_ON_QC="$TEST_TMP/cfg-consult-on-qcseat.md"
+mk_cfg_consult "$CFG_ON_QC" claude-opus high claude-native claude-opus claude-native high
+sed -i 's/^- consult_dispatch: auto$/- consult_dispatch: on/' "$CFG_ON_QC"
+out="$(AUTOPILOT_QUALIFICATION_OVERRIDE="$OVR_CONSULT_QC" AUTOPILOT_TOPOLOGY_FILE="$TOPO_C" REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_ON_QC" bash "$SCRIPT" 2>&1)"; rc=$?
+assert_eq "3" "$rc" "consult_dispatch on + declared qc_panel seat exits 3"
+assert_contains "$out" "must not be a qc_panel seat" "on: the qc_panel refusal names the rule"
+CFG_ON_OK="$TEST_TMP/cfg-consult-on-ok.md"
+mk_cfg_consult "$CFG_ON_OK" cursor-grok-4.6-high high cursor claude-opus claude-native high
+sed -i 's/^- consult_dispatch: auto$/- consult_dispatch: on/' "$CFG_ON_OK"
+out="$(AUTOPILOT_QUALIFICATION_OVERRIDE="$OVR_CONSULT" AUTOPILOT_TOPOLOGY_FILE="$TOPO_C" REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_ON_OK" bash "$SCRIPT" 2>/dev/null)"; rc=$?
+assert_eq "0" "$rc" "consult_dispatch on + declared non-qc seat passes"
+assert_contains "$out" '"consult_resolved_from": "explicit"' "on: origin stays explicit"
+
+# schema: both declared-wins origins are legal enum values
+SCHEMA_OK="$(node -e '
+const s = require(process.argv[1]);
+const ok = ["plan_review_resolved_from", "consult_resolved_from"].every((k) => s.properties[k].enum.includes("config-explicit"));
+process.stdout.write(ok ? "ok" : "missing");' "$REPO_ROOT/schemas/review-loop-contract.schema.json")"
+assert_eq "ok" "$SCHEMA_OK" "BL-0095: schema enums for plan_review_resolved_from/consult_resolved_from include config-explicit"
+
 finalize_test

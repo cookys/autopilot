@@ -551,6 +551,7 @@
       "type": "string",
       "enum": [
         "explicit",
+        "config-explicit",
         "topology",
         "native-fallback",
         "off"
@@ -798,6 +799,7 @@
       "type": "string",
       "enum": [
         "explicit",
+        "config-explicit",
         "topology",
         "native-fallback",
         "off"

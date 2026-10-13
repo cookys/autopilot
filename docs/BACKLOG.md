@@ -25,7 +25,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: feat/autocompact-detect qc-gate, 2026-10-12
 - **Pointer**: docs/backlog/qc-gate-affected-suites.md
-- **Context**: full run past 30 min (stopped at 256/408); the 38 suites that reference the changed files passed in about 2 min. Keep the full suite for release preflight.
+- **Context**: full run past 30 min (stopped at 256/408); the 38 suites that reference the changed files passed in about 2 min. Keep the full suite for release preflight. Once selection is shown not to miss a suite, it also unblocks BL-0087 option B.
 
 ### mods Now tab: a background row may never end when no status notification follows
 - **Id**: BL-0002
@@ -1154,18 +1154,18 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/peer-coordination-skill-ruled-in-blocked-on-a-spike-sweep.md
 - **Context**: autopilot models subordinates (`team`, `l3`–`l6`) and future-self (`handoff`) but has
 
-### Sealed campaign `verify_cmd` runs the whole suite — green since 2026-10-13, but about 56 min against a 15 min CI cap
+### Sealed campaign `verify_cmd` runs the whole suite — green since 2026-10-13, but about 56 min; owner chose option C
 - **Id**: BL-0087
 - **Status**: open
 - **Since**: 2026-08-30
 - **Origin**: self
 - **Problem**: 開發主線上的全套測試在 2026-10-13 已經全綠，但單獨跑一次約 56 分鐘；每個 campaign 的驗收命令和 CI 都要跑完整套，而 CI 上限是 15 分鐘，所以仍然跑不完。
-- **Impact**: 用整套測試當驗收命令的 campaign 會因逾時失敗，CI 也會被取消；要改驗收命令的做法需要擁有者選定方案。
-- **Trigger**: owner picks option B or C in the pointer file (A, wait for green, was reached 2026-10-13)
-- **Effort**: L
+- **Impact**: 用整套測試當驗收命令的 campaign 會因逾時失敗，CI 也會被取消。擁有者 2026-10-13 選了方案 C（見說明檔），尚未實作。
+- **Trigger**: wave 2 is scheduled (decision made 2026-10-13, see the pointer file)
+- **Effort**: M
 - **Source**: l6-verdict-stability-p1 salvage campaign 2026-08-29.
 - **Pointer**: docs/backlog/hooks-tests-run-sh-is-red-on-develop-sealed-campaign-verify-cmd-is-unsatisfiable.md
-- **Context**: Full run green at f108ec42 (480/480, ~56 min serial). Every Mission node inherits the six-command chain as verify_cmd. Related: BL-0001 (affected-suite selection).
+- **Context**: Full run green at f108ec42 (480/480, ~56 min serial). Graph authors write each node's verification_commands by hand (no scaffold default names the suite). Option B (per-node affected suites) waits on BL-0001.
 
 ### `hooks/tests/run.sh` TIMEOUT marker collides with a suite that self-exits 124/137
 - **Id**: BL-0088

@@ -17,3 +17,17 @@ Source: docs/BACKLOG.md@05f97302492d26112f877bc2a97acb2578aca8df, migrated 2026-
   - B. Each node's `verification_commands` name only the suites it touches, plus the light checks. Editing a sealed graph breaks its digest, so this applies to new graphs only (see BL-0134 for what editing sealed files costs).
   - C. Run the whole suite as a separate, non-blocking gate outside campaign acceptance (release preflight, nightly).
 - Related: BL-0001 (select the suites a diff touches in qc-gate).
+
+## 2026-10-13 decision
+
+Owner chose **C**, with one change from the option as listed above: the whole suite does not block a
+campaign node or campaign close, but it does block the merge into `develop`.
+
+- Each node's `verification_commands` hold only fast, fixed checks; no node starts with
+  `bash hooks/tests/run.sh`. New graphs only: a sealed graph keeps its chain (BL-0134).
+- The whole suite runs once, alone, before the merge into `develop` (the qc-gate test step already
+  names it for M–XL); red means no merge.
+- CI cannot carry it under the 15 min cap, so the run happens on a host without that cap.
+- Why not B now: B needs the suite selection of BL-0001, which does not exist yet; a wrong selection
+  passes green without running the suite that would have failed. B comes back on top of C once
+  BL-0001 is shown not to miss suites.

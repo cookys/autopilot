@@ -13,3 +13,5 @@ Source: feat/autocompact-detect qc-gate, 2026-10-12.
   shared lib is required by), with the full suite kept for the release preflight. Changing what the gate
   requires is a guidance change: owner approval and eval evidence first.
 - Owner, 2026-10-12: "full suite 是幹嘛? 真的有必要嗎? 跑太久了吧?"
+- 2026-10-13: BL-0087 option B (each campaign node runs only its affected suites) reuses this selection;
+  it waits until the selection is shown not to miss a suite.

@@ -18,45 +18,42 @@ Candidate fix commits were mined from `git log` (subjects `fix(`/`test(` touchin
 dropped as not clean (red at `F^` only on this host's state, or not green at F): 7a75f018, 9c80193e, 591093b0,
 d750d200, d08eb1e1, 68f3e2b7, 940192ff, f28b1176, c734fad5, b1f1817a, b4c0e057.
 
-## 1. Historical cases: 29 verified, 0 missed
+## 1. Historical cases: 28 breaker/test pairs re-run with causal-file verification (round 2)
 
-`mode` selective = a list of suites; full = the selector said "run everything" (hooks.json or plugin manifest in
-the breaker). A full hit is by rule, not by analysis, so the 19 selective rows are the real evidence.
+Round 1 only checked "T is in the selector's list". The review showed that is not enough: two cases were hit by a
+file that was not the one that broke the test. Round 2 therefore finds the **causal file set** for every pair:
+in a scratch worktree at breaker B, revert files of B's diff to `B^1` (ddmin, a real test run per step) until a
+1-minimal set S remains whose revert turns T green. The selector (run on `B^1..B`) counts as a hit only if
+(a) `mode: full`, (b) T's chain ends at a file in S, or (c) T is on the fixed always-run list. A hit through a
+file outside S is "lucky" and is re-checked with S alone.
 
-| Fix | Test that broke | Breaker B (subject) | Result |
-|-----|-----------------|---------------------|--------|
-| 93202c74 | scaffold-config.test.sh | 37630d5e (lane commit, 29 files; added `.claude/backlog-config.md`) | hit, 83/480, via the config file |
-| cdba2f61 | mission-runtime-v2.test.sh | 30b69a1a (lane commit, 31 files) | hit, 263/480 |
-| a7355408 | statusline-live-tee.test.js | 4026c1e3 context-budget unknown window | hit, 39/480, lib -> hook -> test |
-| 83ccca58 | context-budget.test.js | 4026c1e3 | hit, 39/480 |
-| f25663da | implementation-campaign-state.test.sh | 620ef6ed (managed-rail lane commit) | hit, 239/480 |
-| 5eb415e4 | context-window.test.sh | d2bdccba review-loop standing pin | hit, 262/480 |
-| fc44b910 | resolve-review-loop-consult-discuss-switch.test.sh | d2bdccba | hit, 262/480 |
-| 18e0c164 | hetero-review-loop.test.sh | d2bdccba | hit, 262/480 |
-| 09a8104a | calibration.test.sh | d2bdccba | hit, 262/480 |
-| 04b003ad | autopilot-cli.test.sh | d2bdccba | hit, 262/480 |
-| 2b598435 | resolve-review-loop-consult-discuss-switch.test.sh | 1b2e2485 dispatch-contract quota | hit, 151/480, chain length 3 (needs 2 weak hops) |
-| 2d7eb039 | autopilot-engine.test.sh | 21112e79 delete review-loop diffs | hit, 330/480 |
-| 226ff49d | resolve-review-loop-consult-discuss-switch.test.sh | 21112e79 | hit, 330/480 |
-| 4936e27c | dispatch-review.test.sh | 6d7dc38c depth-0 repair | hit, 222/480, direct mention |
-| bda1be2c | resolve-review-loop-consult-discuss-switch.test.sh | 31439693 proxy decisions ledger | hit, 286/480, chain length 3 (test -> test -> mirror file) |
-| 580f535a | implementation-campaign-routing.test.sh | ea81dcdb managed-rail Mission claim | hit, 269/480 |
-| a747ef43 | dispatch-author-strict-roster.test.sh | fa2a0c50 final panel pins | hit, 336/480, chain length 3 |
-| 61a9d059 | resolve-review-loop-consult-discuss-switch.test.sh | 911b9a65 resume final-panel review | hit, 284/480, chain length 3 |
-| 34ce65a9 | resolve-review-loop-consult-discuss-switch.test.sh | 911b9a65 | hit, 284/480 |
+Result at the default `--max-weak 2` (28 pairs; raw rows in the scratchpad `causal.jsonl`):
 
-Full-suite hits (breaker touched `hooks/hooks.json` or `.claude-plugin/*`): 2f914725 check-hook-inventory
-(023d74a8), 33df875a brain-eval-generator (a2b8b95f), 3641fc7c engine-qualify-verdict-stability (5f3aa3b1),
-cdd461f6 qualification-asset-seals and engine-qualify-consult (5f3aa3b1), 07d85b27 mission-graph-path-authorization
-and c7035da2 mission-authority-ownership (6559da33), ebec83fd sync-version-round-trip (907023a3), 448b75da
-dispatch-worktree-lifecycle (3f5c8588), a6857016 dispatch-detached-campaign-authority (86c168c5).
+| Verdict | Pairs | Meaning |
+|---------|-------|---------|
+| full: unjudgeable file | 10 | breaker touched hooks.json / `.claude-plugin/` (by rule) |
+| full: unreferenced change | 10 | some changed non-prose file reached no suite (by rule, added in round 2) |
+| selective, chain ends at a causal file | 3 | context-budget.test.js (hooks/context-budget-lib.js); context-window.test.sh and hetero-review-loop.test.sh (.claude/review-loop-config.md) |
+| selective, always-run list | 2 | resolve-review-loop-consult-discuss-switch.test.sh broken by another test file (1b2e2485, d2bdccba) |
+| selective, hit through a non-causal file ("lucky") | 2 | statusline-live-tee.test.js (S = hooks/context-budget-lib.js), calibration.test.sh (S = .claude/review-loop-config.md) |
+| not attributable | 1 | d2bdccba autopilot-cli.test.sh: reverting B's diff does not make it green (host state) - dropped |
 
-### What the sweep over `--max-weak` shows
+Misses: **0** of 27 attributable pairs. The two "lucky" pairs were re-run with S alone as the only changed file:
+`--files hooks/context-budget-lib.js` selects statusline-live-tee.test.js (chain test -> context-budget.js -> lib);
+`--files .claude/review-loop-config.md` selects calibration.test.sh (chain length 2). Both are causal in isolation.
 
-Same 19 selective cases at `--max-weak 1`: 17 hit, **2 miss** (2b598435 and bda1be2c, both chain length 3). At 2:
-19/19. At 3: 19/19 but 251-445 of 480 suites. So the default of 2 is the smallest value that does not miss
-anything in this set, and the margin is one case deep: a real dependency three mention hops away would be missed.
-That is the known limit of the default (see Limits).
+Honest reading: **20 of 27 are "full"**, so on real multi-file commits the tool mostly says "run everything"; only 5
+pairs test the graph itself. The graph is exercised harder by the mutation oracle below and by the unit tests.
+Round 1 listed the same pairs as "19 selective + 10 full"; most of the 19 selective pairs moved to full; that is
+the effect of the new rule "an unreached non-prose change forces full".
+
+### What `--max-weak` is supported by
+
+The historical sample cannot discriminate depth (at `--max-weak 1` every pair is still a hit, by "full"). Isolation
+checks can: `--files .claude/review-loop-config.md` selects 0/3 of {context-window, hetero-review-loop,
+calibration} at `--max-weak 0`, 2/3 at 1 (calibration is missed) and 3/3 at 2. So 2 is the smallest value that
+does not miss in that check; no pair needed 3. Round 1's claim "2 is the minimum of the 19 selective cases"
+is withdrawn: those cases are no longer selective.
 
 ## 2. Mutation oracle
 
@@ -81,9 +78,40 @@ L1 (throw injected at the top of the file; every L1 test file run; baseline all 
 
 14 mutants, 0 missed.
 
-L2 (`exit 97` injected at the top of `scripts/lib/output-quiescence.sh`; every L2 suite run): 8 went red,
-6 of them selected (58 chosen), the other 2 (`check-hook-inventory`, `dev-setup`) were also red on the unmutated
-tree. Missed: 0.
+L2 (a throw / `exit 97` at the top of the file, or a one-line drift appended; every `.test.sh` under hooks/tests and
+scripts run, 417 suites; reds not selected are re-run unmutated to separate pre-existing reds):
+
+| Mutant | Kind | Suites red | Selector chose | Missed |
+|--------|------|-----------|----------------|--------|
+| scripts/lib/output-quiescence.sh (round 1) | exit 97 | 8 (2 pre-existing) | 58 | 0 |
+| scripts/lib/qualification-feed.js, mirror NOT synced | throw | 8 | 425 | 0 |
+| platforms/codex/plugin/scripts/lib/qualification-feed.js (mirror-only edit) | drift | 5 | 425 | 0 |
+| scripts/lib/live-state-dir.js | throw | 101 | 464 | 0 |
+
+The mirror cases are covered by the always-run `codex-plugin-package.test.sh` (confirmed present in the selection
+for a mirror-only file list). 4 L2 mutants, 0 missed. The L1 table above was produced by round-1 code; round 2 only
+adds suites or switches to full, never removes one, so it stays a valid lower bound.
+
+## Always-run list (added in round 2)
+
+These suites read repo files by content, so no reference graph can see what breaks them (a new file anywhere can
+turn them red). They are added to every selective result that has a non-prose change; reported in `always_run`.
+
+| Suite | Why |
+|-------|-----|
+| resolve-review-loop-consult-discuss-switch | scans every file under hooks/ for `reviewer_engine:` lines (broken twice in the history above by an unrelated test file) |
+| check-js-syntax | syntax-checks every tracked JS file |
+| codex-plugin-package | codex mirror must equal its sources |
+| test-identity-guard | scans every `*.test.sh` for git identity writes |
+| test-suite-finalize-gate | scans every `*.test.sh` for the finalize counter |
+| check-test-integrity | real config must match every real suite file |
+| check-tmp-residue-registry | scans the git index for tmp residue |
+| check-claude-md-inventory | every shipped script must be named in CLAUDE.md |
+| check-hook-inventory | hook files vs hooks.json vs docs |
+| check-canonical-invariants | cross-file invariants over the real tree |
+
+The list comes from a survey of tests that use `git ls-files`/`git grep`/recursive grep/find over the repo or
+`*.test.sh` globs; it is a survey, not a proof of completeness - a new content-scanning suite must be added by hand.
 
 ## Limits (read before relying on it)
 
@@ -92,9 +120,9 @@ tree. Missed: 0.
   not for hub changes. This is the price of "never guess": over-select, never under-select.
 - **Static text reference, not execution.** A suite that builds the script name at run time with no literal file
   name in any file on the path (`scripts/dispatch-$rail.sh` with the rail name from a table elsewhere) is invisible
-  unless a directory glob or a mention elsewhere catches it. No such miss was found in 29 historical cases, 14 L1
-  mutants and 1 L2 mutant; that is evidence, not proof.
-- **Default depth 2 weak hops.** Three weak hops were needed in none of the cases; raising to 3 costs ~40% more
+  unless a directory glob or a mention elsewhere catches it. No such miss was found in 27 attributable historical pairs, 14 L1
+  mutants and 4 L2 mutants; that is evidence, not proof (and the tool answers "full" for most multi-file commits).
+- **Default depth 2 weak hops.** Three weak hops were needed in none of the checks; raising to 3 costs ~40% more
   suites. `--max-weak` is exposed so the gate can choose.
 - Release commits (plugin manifest) and hooks.json changes return `full`, as asked.
 - The candidate tests were found from fix commits that exist; a test that went red and was never fixed on develop

@@ -91,7 +91,7 @@ test('unjudgeable change (hooks.json) => full suite, no guessing', () => {
     const out = r.select(head);
     assert.strictEqual(out.mode, 'full');
     assert.deepStrictEqual(out.suites, []);
-    assert.match(out.full_reasons[0], /hooks\/hooks\.json/);
+    assert.match(out.full_reasons[0], /^unjudgeable change: hooks\/hooks\.json/);
     const plain = execFileSync('node', [SEL, '--root', r.dir, '--base', r.base, '--head', head], { stdio: 'pipe' }).toString();
     assert.strictEqual(plain.trim(), 'FULL');
   } finally { r.cleanup(); }
@@ -124,12 +124,56 @@ test('docs-only change selects nothing and is not full', () => {
   } finally { r.cleanup(); }
 });
 
-test('changed shipped code that no suite reaches is reported as unreferenced', () => {
+test('changed code that no suite reaches is reported as unreferenced and forces the full suite', () => {
   const r = makeRepo({ ...LAYOUT, 'scripts/orphan.js': 'x\n' });
   try {
     const out = r.select(r.change({ 'scripts/orphan.js': 'y\n' }));
     assert.deepStrictEqual(out.unreferenced, ['scripts/orphan.js']);
+    assert.strictEqual(out.mode, 'full');
+    assert.ok(out.full_reasons.some((x) => x.includes('scripts/orphan.js')));
   } finally { r.cleanup(); }
+});
+
+test('a data file is reached through the directory its tests name', () => {
+  const r = makeRepo({ ...LAYOUT, 'hooks/tests/fixtures/marker/ok.json': '{}\n', 'hooks/tests/marker.test.sh': '#!/usr/bin/env bash\nFX="$ROOT/hooks/tests/fixtures"\nfor f in "$FX"/marker/$NAME; do cat "$f"; done\n' });
+  try {
+    const out = r.select(r.change({ 'hooks/tests/fixtures/marker/ok.json': '{"a":1}\n' }));
+    assert.strictEqual(out.mode, 'selective');
+    assert.deepStrictEqual(out.suites, ['hooks/tests/marker.test.sh']);
+  } finally { r.cleanup(); }
+});
+
+test('a data file nobody names forces the full suite instead of an empty list', () => {
+  const r = makeRepo({ ...LAYOUT, 'hooks/tests/fixtures/stray/x.json': '{}\n' });
+  try {
+    const out = r.select(r.change({ 'hooks/tests/fixtures/stray/x.json': '{"a":1}\n' }));
+    assert.strictEqual(out.mode, 'full');
+  } finally { r.cleanup(); }
+});
+
+test('content-scanning suites always run on a selective result, but not on a docs-only change', () => {
+  const scan = 'hooks/tests/check-js-syntax.test.sh';
+  const r = makeRepo({ ...LAYOUT, [scan]: '#!/usr/bin/env bash\necho scan\n' });
+  try {
+    const out = r.select(r.change({ 'scripts/other.js': 'console.log("changed");\n' }));
+    assert.ok(out.suites.includes(scan));
+    assert.deepStrictEqual(out.always_run, [scan]);
+  } finally { r.cleanup(); }
+  const d = makeRepo({ ...LAYOUT, [scan]: '#!/usr/bin/env bash\necho scan\n' });
+  try {
+    const out = d.select(d.change({ 'docs/note.md': 'more\n' }));
+    assert.deepStrictEqual(out.suites, []);
+  } finally { d.cleanup(); }
+});
+
+test('glob spelled with a quoted or bare variable prefix still means the repo directory', () => {
+  for (const spelling of ['"$REPO_ROOT"/scripts/*', '$REPO_ROOT/scripts/*.js', '${ROOT}/scripts/*']) {
+    const r = makeRepo({ ...LAYOUT, 'hooks/tests/sweep.test.sh': `#!/usr/bin/env bash\nfor f in ${spelling}; do node --check "$f"; done\n` });
+    try {
+      const out = r.select(r.change({ 'scripts/other.js': 'console.log("changed");\n' }));
+      assert.ok(out.suites.includes('hooks/tests/sweep.test.sh'), spelling);
+    } finally { r.cleanup(); }
+  }
 });
 
 test('--files mode reads the working tree', () => {

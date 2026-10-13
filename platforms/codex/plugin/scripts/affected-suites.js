@@ -10,7 +10,7 @@
 //
 // Output (default): one test path per line; the single line `FULL` when the diff cannot be judged.
 // Output (--json): {schema:1, mode:"selective"|"full", base, head, changed:[], suites:[],
-//   full_reasons:[], unreferenced:[], chains:{suite:[path...]}, stats:{}}.
+//   always_run:[], full_reasons:[], unreferenced:[], chains:{suite:[path...]}, stats:{}}.
 //   mode "full" means: run the whole suite (hooks/tests/run.sh); `suites` is then empty.
 // Exit: 0 ok (selective or full), 2 usage/git error.
 //
@@ -23,9 +23,15 @@
 //      Non-code files (docs, json, md) are seeds only, never intermediates.
 //   3. The result is the affected files that run.sh runs as suites: hooks/*.test.js,
 //      scripts/*.test.js, scripts/lib/*.test.js, hooks/tests/*.test.sh, scripts/*.test.sh.
+//      A data file (fixture, golden) is reached through the non-generic directory names a test uses
+//      to build its path.
 //   4. Anything that cannot be judged statically (hooks/hooks.json, package files, run.sh, plugin
-//      manifest, CI) => mode "full".
-// Contract/evidence: docs/backlog/qc-gate-affected-suites.md, docs/evidence/qc-gate-affected-suites.md.
+//      manifest, CI) => mode "full". So is any changed file that no selected suite reaches and that
+//      is not prose (docs/, root *.md) or a platforms/ mirror: an empty list is never returned for a
+//      change that could matter.
+//   5. A fixed always-run list (ALWAYS_RUN, with a reason each) is added to every selective result
+//      that has a non-prose change: tests that scan the repo by content, which no graph can see.
+// Contract/evidence: docs/backlog/qc-gate-affected-suites.md, docs/plans/evidence/2026-10-13-affected-suites/miss-check.md.
 
 const { execFileSync } = require('child_process');
 const fs = require('fs');
@@ -45,6 +51,25 @@ const FULL_TRIGGERS = [
   /^\.githooks\//,
   /^\.claude\/quality-gate-config\.md$/,
 ];
+
+// Suites that read repo files by CONTENT or compare whole trees: no reference graph can see what
+// breaks them (a new file anywhere can turn them red), so they run on every selective result.
+// [path, why]
+const ALWAYS_RUN = [
+  ['hooks/tests/resolve-review-loop-consult-discuss-switch.test.sh', 'Population B scans every file under hooks/ for reviewer_engine lines'],
+  ['hooks/tests/check-js-syntax.test.sh', 'syntax-checks every tracked JS file'],
+  ['hooks/tests/codex-plugin-package.test.sh', 'codex mirror must equal its sources (source edit without mirror sync, or mirror-only edit)'],
+  ['hooks/tests/test-identity-guard.test.sh', 'scans every *.test.sh for git identity writes'],
+  ['hooks/tests/test-suite-finalize-gate.test.sh', 'scans every *.test.sh for the finalize counter'],
+  ['hooks/tests/check-test-integrity.test.sh', 'real config must match every real suite file'],
+  ['hooks/tests/check-tmp-residue-registry.test.sh', 'scans the git index for tmp residue'],
+  ['hooks/tests/check-claude-md-inventory.test.sh', 'every shipped script must be named in CLAUDE.md'],
+  ['hooks/tests/check-hook-inventory.test.sh', 'hook files vs hooks.json vs docs'],
+  ['hooks/tests/check-canonical-invariants.test.sh', 'cross-file invariants over the real tree'],
+];
+// Prose cannot break a suite; mirrors are covered by the always-run codex-plugin-package suite.
+const PURE_DOC = /^(docs|website|skill-creator-workspace)\/|^[^/]+\.(md|txt)$/;
+const MIRROR = /^platforms\//;
 
 function isSuite(p) {
   return /^hooks\/[^/]+\.test\.js$/.test(p) || /^scripts\/[^/]+\.test\.js$/.test(p) ||
@@ -101,24 +126,31 @@ function diskTree(root) {
 }
 
 // Tokens a text can use to refer to other files.
-const RE_EXT = /[A-Za-z0-9_][A-Za-z0-9_.\-]*\.[A-Za-z0-9]{1,5}\b/g;
+const RE_EXT = /[A-Za-z0-9_][A-Za-z0-9_.\-]*\.[A-Za-z0-9]{1,12}\b/g;
+// A directory name used as a path segment ("$FX"/session-marker/...): a data file under that directory
+// is referenced by any text that names the directory (tests build fixture paths from a dir variable).
+const RE_SEG = /\/([A-Za-z0-9_][A-Za-z0-9_.\-]*)(?=[\/"'\s)}\]$]|$)/g;
 const RE_BARE = /(?:^|[\/'"`])([A-Za-z0-9_][A-Za-z0-9_\-]*)(?=['"`)\/\s,;:]|$)/gm;
-const RE_GLOB = /([A-Za-z0-9_.\-\/]+)\/\*(\.[A-Za-z0-9]+)?/g;
+const RE_GLOB = /((?:"?\$\{?[A-Za-z_]\w*\}?"?)?[A-Za-z0-9_.\-\/]*)\/\*(\.[A-Za-z0-9]+)?/g;
+// "$REPO_ROOT"/scripts/* and $REPO_ROOT/scripts/*.sh both mean the repo-relative directory scripts.
+const globDir = (d) => d.replace(/^"?\$\{?\w+\}?"?/, '').replace(/^\/+/, '').replace(/^\.\//, '');
 
 // Strong edges: the text loads the file (require/import/source), so a change reaches it for sure.
 const RE_REQ = /(?:require\(\s*|import\s+[^'"\n]*?from\s+|import\(\s*|import\s+)['"]([^'"\n]+)['"]/g;
 const RE_SRC = /(?:^|[;&|(]|\bthen\b|\bdo\b)[ \t]*(?:source|\.)[ \t]+["']?([^\s"';)]+)/gm;
 
 function mentions(text) {
-  const exts = new Set(), bares = new Set(), globs = [], strong = new Set();
+  const exts = new Set(), bares = new Set(), globs = [], strong = new Set(), segs = new Set();
+  for (const m of text.matchAll(RE_SEG)) segs.add(m[1]);
   for (const m of text.matchAll(RE_REQ)) if (/^[.\/]/.test(m[1])) strong.add(base(m[1]).replace(/\.(js|mjs|cjs|json)$/, ''));
   for (const m of text.matchAll(RE_SRC)) strong.add(base(m[1]).replace(/\.(sh|bash|zsh)$/, ''));
   for (const m of text.matchAll(RE_EXT)) exts.add(m[0]);
   for (const m of text.matchAll(RE_BARE)) bares.add(m[1]);
-  for (const m of text.matchAll(RE_GLOB)) globs.push({ dir: m[1].replace(/^\.\//, ''), ext: m[2] || '' });
-  return { exts, bares, globs, strong };
+  for (const m of text.matchAll(RE_GLOB)) globs.push({ dir: globDir(m[1]), ext: m[2] || '' });
+  return { exts, bares, globs, strong, segs };
 }
 
+const GENERIC_DIRS = new Set(['fixtures', 'fixture', 'golden', 'data', 'lib', 'tests', 'scripts', 'hooks', 'src', 'bin', 'docs', 'evals', 'platforms', 'skills', 'agents', 'references', 'schemas', 'profiles', 'mods', 'plugin', 'codex', '.claude', 'node_modules']);
 // Mirrors, eval fixtures and docs are copies or prose: they never propagate a change to a suite.
 const NOT_PROPAGATING = /^(platforms|evals|docs|website|skill-creator-workspace|\.opencode)\//;
 const stripComments = (t) => t.replace(/^[ \t]*(#|\/\/).*$/gm, '');
@@ -130,15 +162,16 @@ function buildGraph(tree) {
     const t = tree.read(f);
     if (t != null) refs.set(f, mentions(stripComments(t)));
   }
-  const byExt = new Map(), byBare = new Map(); // token -> Set(referrer)
+  const byExt = new Map(), byBare = new Map(), bySeg = new Map(); // token -> Set(referrer)
   const add = (m, k, f) => { if (!m.has(k)) m.set(k, new Set()); m.get(k).add(f); };
   for (const [f, r] of refs) {
     for (const t of r.exts) add(byExt, t, f);
     for (const t of r.bares) add(byBare, t, f);
+    for (const t of r.segs) add(bySeg, t, f);
   }
   const globRefs = []; // {file, dir, ext}
   for (const [f, r] of refs) for (const g of r.globs) globRefs.push({ file: f, ...g });
-  return { refs, byExt, byBare, globRefs };
+  return { refs, byExt, byBare, bySeg, globRefs };
 }
 
 // -> Map(referrer -> 'strong'|'weak')
@@ -151,6 +184,14 @@ function referrersOf(graph, p) {
   if (isCode(p)) {
     const bare = b.replace(/\.[^.]+$/, '');
     for (const f of graph.byBare.get(bare) || []) if (!out.has(f)) out.set(f, kind(f));
+  }
+  if (!isCode(p)) {
+    // data file: any text naming one of its ancestor directories (except generic top-level ones) refers to it
+    const parts = p.split('/').slice(0, -1);
+    for (const c of parts) {
+      if (GENERIC_DIRS.has(c)) continue;
+      for (const f of graph.bySeg.get(c) || []) if (!out.has(f)) out.set(f, 'weak');
+    }
   }
   for (const g of graph.globRefs) {
     if (g.dir && p.slice(0, Math.max(p.lastIndexOf('/'), 0)) === g.dir && (!g.ext || p.endsWith(g.ext)) && !out.has(g.file)) out.set(g.file, 'weak');
@@ -191,10 +232,15 @@ function select(changed, headTree, maxWeak = DEFAULT_MAX_WEAK) {
     for (let c = s; c != null; c = parent.get(c)) chain.push(c);
     chains[s] = chain;
   }
-  // changed shipped code that no suite reaches: reported, not guessed at.
+  // A changed file that no selected suite reaches and that is not prose cannot be judged: run everything.
   const reached = new Set(suites.flatMap((s) => chains[s]));
-  const unreferenced = changed.filter((p) => isCode(p) && /^(scripts|hooks|src|bin|mods|skills|agents)\//.test(p) && !reached.has(p) && !isSuite(p));
-  return { suites, chains, fullReasons, unreferenced, graphFiles: graph.refs.size };
+  const unreferenced = changed.filter((p) => !PURE_DOC.test(p) && !MIRROR.test(p) && !reached.has(p));
+  for (const p of unreferenced) fullReasons.push(`unreferenced change (no suite reaches it): ${p}`);
+  // Content-scanning suites ride along with every selective result that has a non-prose change.
+  const alwaysRun = changed.some((p) => !PURE_DOC.test(p)) ? ALWAYS_RUN.map(([f]) => f).filter((f) => present.has(f)) : [];
+  for (const f of alwaysRun) if (!chains[f]) chains[f] = [f];
+  const all = [...new Set([...suites, ...alwaysRun])].sort();
+  return { suites: all, alwaysRun, chains, fullReasons, unreferenced, graphFiles: graph.refs.size };
 }
 
 function allSuites(tree) { return tree.files.filter(isSuite).sort(); }
@@ -244,7 +290,7 @@ function main(argv) {
     const full = r.fullReasons.length > 0;
     const doc = {
       schema: 1, mode: full ? 'full' : 'selective', base: baseRef, head: headRef, changed: changed.slice().sort(),
-      suites: full ? [] : r.suites, full_reasons: r.fullReasons, unreferenced: r.unreferenced,
+      suites: full ? [] : r.suites, always_run: full ? [] : r.alwaysRun, full_reasons: r.fullReasons, unreferenced: r.unreferenced,
       chains: full ? {} : r.chains, stats: { changed: changed.length, selected: full ? null : r.suites.length, total_suites: allSuites(tree).length, graph_files: r.graphFiles },
     };
     process.stdout.write(a.json ? JSON.stringify(doc, null, 2) + '\n' : (full ? 'FULL\n' : r.suites.join('\n') + (r.suites.length ? '\n' : '')));

@@ -603,16 +603,42 @@ cat > "$TOPO_C" <<'EOF'
 { "plan_review_panel": [], "reviewer_ladder": [],
   "consult_ladder": [ { "engine": "sonnet", "runner": "claude-native", "effort": "high" } ] }
 EOF
+mk_cfg_consult() { # file engine effort runner [qc_panel engine] [qc runner] [qc effort]
+  { printf -- '- consult_dispatch: auto\n- consult_engine: %s\n- consult_effort: %s\n- consult_runner: %s\n' "$2" "$3" "$4"
+    [ -n "${5:-}" ] && printf -- '- qc_panel: %s\n- qc_panel_runners: %s\n- qc_panel_efforts: %s\n' "$5" "$6" "$7"
+  } > "$1"
+}
+OVR_CONSULT="$TEST_TMP/ovr-consult-declared.json"
+mk_override "$OVR_CONSULT" consult
+
+# positive: a declared, QUALIFIED (override-admitted) seat wins over the topology ladder
 CFG_CONSULT_DECL="$TEST_TMP/cfg-consult-declared.md"
-cat > "$CFG_CONSULT_DECL" <<'EOF'
-- consult_dispatch: auto
-- consult_engine: haiku
-- consult_effort: low
-- consult_runner: claude-native
-EOF
-json="$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_C" REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_CONSULT_DECL" bash "$SCRIPT" 2>/dev/null)"
-assert_contains "$json" '"consult_engine": "haiku"' "BL-0095: auto keeps the declared consult_engine over the topology ladder"
-assert_contains "$json" '"consult_effort": "low"' "BL-0095: auto keeps the declared consult_effort"
+mk_cfg_consult "$CFG_CONSULT_DECL" cursor-grok-4.6-high high cursor
+json="$(AUTOPILOT_QUALIFICATION_OVERRIDE="$OVR_CONSULT" AUTOPILOT_TOPOLOGY_FILE="$TOPO_C" REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_CONSULT_DECL" bash "$SCRIPT" 2>/dev/null)"
+assert_contains "$json" '"consult_engine": "cursor-grok-4.6-high"' "BL-0095: auto keeps the declared consult_engine over the topology ladder"
 assert_contains "$json" '"consult_resolved_from": "config-explicit"' "BL-0095: consult_resolved_from names config-explicit"
+
+# negative 1: a declared UNQUALIFIED seat is refused exactly like consult_dispatch: on
+CFG_CONSULT_UNQ="$TEST_TMP/cfg-consult-unqualified.md"
+mk_cfg_consult "$CFG_CONSULT_UNQ" totally-unqualified-model high codex
+out="$(AUTOPILOT_TOPOLOGY_FILE="$TOPO_C" REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_CONSULT_UNQ" bash "$SCRIPT" 2>&1)"; rc=$?
+assert_eq "3" "$rc" "BL-0095: auto + declared unqualified consult seat exits 3 (qualification gate not bypassed)"
+
+# negative 2: a declared seat equal to a qc_panel seat is refused
+# The qc_panel seat itself is admitted by an override, so ONLY the qc_panel rule can refuse it.
+OVR_CONSULT_QC="$TEST_TMP/ovr-consult-qcseat.json"
+printf '{ "schema": 1, "overrides": [{"engine":"claude-opus","runner":"claude-native","role":"consult","reason":"test","operator":"board","expires":"2099-12-31"}] }\n' > "$OVR_CONSULT_QC"
+CFG_CONSULT_QC="$TEST_TMP/cfg-consult-qcseat.md"
+mk_cfg_consult "$CFG_CONSULT_QC" claude-opus high claude-native claude-opus claude-native high
+out="$(AUTOPILOT_QUALIFICATION_OVERRIDE="$OVR_CONSULT_QC" AUTOPILOT_TOPOLOGY_FILE="$TOPO_C" REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_CONSULT_QC" bash "$SCRIPT" 2>&1)"; rc=$?
+assert_eq "3" "$rc" "BL-0095: auto + declared consult seat that is also a qc_panel seat exits 3"
+assert_contains "$out" "must not be a qc_panel seat" "BL-0095: the qc_panel refusal names the rule"
+
+# schema: both declared-wins origins are legal enum values
+SCHEMA_OK="$(node -e '
+const s = require(process.argv[1]);
+const ok = ["plan_review_resolved_from", "consult_resolved_from"].every((k) => s.properties[k].enum.includes("config-explicit"));
+process.stdout.write(ok ? "ok" : "missing");' "$REPO_ROOT/schemas/review-loop-contract.schema.json")"
+assert_eq "ok" "$SCHEMA_OK" "BL-0095: schema enums for plan_review_resolved_from/consult_resolved_from include config-explicit"
 
 finalize_test

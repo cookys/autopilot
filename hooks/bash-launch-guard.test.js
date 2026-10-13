@@ -155,6 +155,7 @@ for (const cmd of [
   'scripts/dispatch-review.sh x & wait > /dev/null',
   'scripts/dispatch-review.sh x & wait 2> /dev/null',
   'scripts/dispatch-review.sh x & wait &>/dev/null',
+  'scripts/dispatch-review.sh x & wait &> /dev/null', // space-separated target
   'scripts/dispatch-review.sh x & wait $! > /tmp/o 2>&1',
 ]) {
   test(`rule1 allows: ${JSON.stringify(cmd)}`, () => {
@@ -521,3 +522,11 @@ for (const f of ['dispatch-review.test.sh', 'dispatch-review.test.js', 'dispatch
     assert.strictEqual(run(`cd scripts && setsid -f ./${f} x`).deny, false);
   });
 }
+
+test('message: --timeout is the longest acceptable wait (never "short"), no stale 3600 s default', () => {
+  for (const c of ['nohup scripts/dispatch-review.sh x &', 'nohup scripts/dispatch-foreman.sh x &']) {
+    const r = run(c).reason;
+    assert.match(r, /set --timeout to\s+the longest wait you accept|set --timeout to the longest wait you accept/);
+    assert.doesNotMatch(r, /keep --timeout|3600/);
+  }
+});

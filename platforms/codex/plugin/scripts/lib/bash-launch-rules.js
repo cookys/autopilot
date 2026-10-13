@@ -344,15 +344,14 @@ function launchAdvice(shape, rail, nested = false) {
     parts.push('Long job: pass `--ledger <path> --run-id <id> --stage <name>` (all three — without them no .exit file '
       + 'is written) and chain the waiter with `&&` in the SAME command: `setsid -f <rail> … && node '
       + 'scripts/wait-dispatch-results.js --ledger <path> --expect <id>.<name> --timeout <seconds>` (bad rail args '
-      + 'exit before any .exit file exists, so set --timeout to the longest wait you accept) — run that whole command with `run_in_background: true` (the waiter waits up to 3600 s by '
-      + "default, past the Bash tool's 600 s foreground limit).");
+      + 'exit before any .exit file exists, so set --timeout to the longest wait you accept) — run that whole '
+      + "command with `run_in_background: true` (it can outlast the Bash tool's 600 s foreground limit).");
   } else if (kind === 'fixed') {
     parts.push('Long job: pass `--ledger <path> --run-id <id>` (the stage is fixed) and chain the waiter with `&&` in '
       + 'the SAME command: `setsid -f <rail> … && node scripts/wait-dispatch-results.js --ledger <path> --expect '
-      + '<id>.foreman --timeout <seconds>` (bad rail args exit before any .exit file exists, so keep --timeout '
-      + 'short) — run that whole command '
-      + "with `run_in_background: true` (the waiter waits up to 3600 s by default, past the Bash tool's 600 s "
-      + 'foreground limit).');
+      + '<id>.foreman --timeout <seconds>` (bad rail args exit before any .exit file exists, so set --timeout to '
+      + 'the longest wait you accept) — run that whole command with `run_in_background: true` (it can outlast '
+      + "the Bash tool's 600 s foreground limit).");
   } else {
     parts.push(`dispatch-${rail || '…'} never writes the .exit file wait-dispatch-results.js waits for, so only the `
       + 'option(s) above work for it.');

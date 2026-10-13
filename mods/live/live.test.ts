@@ -3401,6 +3401,67 @@ for (const width of [60, 76, 90]) {
   }
 }
 
+const shareSnap = () => ({
+  header: 'h', rows: null, gates: null, link: null, published_at: null, session_as_of: null, host_as_of: null,
+  sections: { attention: [], waiting: [], tasks: [], decisions: [], foreman: [] },
+  detail: { counts: null, stalled: 0, now_ms: SH_NOW, spend: { session: '$1.00', host_all: '$112.40', host_all_n: 112.4, brain: 87.2, cap: 150, mode: 'warn', hourly: HOURLY } },
+}) as never
+
+for (const [cols, cells] of [[76, 20], [120, 40]] as const) {
+  test('usage tab: the brain and other-tier share bars use one scale, their filled cells add up to the meter width (' + cols + ' columns, ' + cells + ' cells)', () => {
+    const t = makeT('zh-TW')
+    const lines = spendTabLines(shareSnap(), { t, cols })
+    const on = (key: string) => {
+      const row = lines.find(l => l.fact === 'usage.today' && l.text.startsWith(key))
+      expect(row, key).toBeDefined()
+      return [...(row as { text: string }).text].filter(c => c === '▰').length
+    }
+    const brain = on(t('label.brain') + ' ')
+    const other = on(t('label.other_tiers'))
+    expect(brain).toBeGreaterThan(other) // 87.20 of 112.40
+    expect(other).toBeGreaterThanOrEqual(1) // a non-zero remainder keeps a cell
+    expect(brain + other).toBe(cells)
+  })
+}
+
+for (const [cols, rowsExpected] of [[120, 1], [60, 2]] as const) {
+  test('usage tab: the sparkline, its peak and its hint share one row when they fit, else the hint drops to a second (' + cols + ' columns: ' + rowsExpected + ' row(s))', () => {
+    const t = makeT('zh-TW')
+    const lines = spendTabLines(shareSnap(), { t, cols })
+    const at = lines.findIndex(l => l.text.includes(t('usage.last24')))
+    expect(at).toBeGreaterThan(-1)
+    const rest = lines.slice(at + 1)
+    const end = rest.findIndex(l => l.text.startsWith('▾ ') || l.text.startsWith('▸ '))
+    const chart = (end === -1 ? rest : rest.slice(0, end)).filter(l => l.text.trim() !== '')
+    expect(chart.length).toBe(rowsExpected)
+  })
+}
+
+test('usage tab: folding 今日花費 or 近 24 小時 leaves the heading alone and shows the arrow ▸', () => {
+  const t = makeT('zh-TW')
+  for (const [id, title, inner] of [[SECTION.today, t('now.cost'), t('label.host')], [SECTION.last24, t('usage.last24'), t('label.brain') + ' ']] as const) {
+    const open = spendTabLines(shareSnap(), { t, cols: 120 })
+    expect(open.some(l => l.text.startsWith('▾ ' + title))).toBe(true)
+    expect(open.some(l => l.text.startsWith(inner))).toBe(true)
+    const shut = spendTabLines(shareSnap(), { t, cols: 120, folded: new Set([id]) })
+    expect(shut.some(l => l.text.startsWith('▸ ' + title))).toBe(true)
+    expect(shut.some(l => l.text.startsWith('▾ ' + title))).toBe(false)
+    if (id === SECTION.today) expect(shut.some(l => l.text.startsWith(inner))).toBe(false)
+    else expect(shut.some(l => [...l.text].some(c => SPARK_BARS.includes(c)))).toBe(false)
+  }
+})
+
+test('usage tab: an OAuth account with no email, organization or plan reads "signed in, details incomplete", never "not logged in"', () => {
+  for (const locale of ['en', 'zh-TW'] as const) {
+    const t = makeT(locale)
+    const acc = readAccount(JSON.stringify({ oauthAccount: { accountUuid: 'u-1' } }))
+    expect(acc, 'an account id alone is a signed-in account').not.toBe(null)
+    const text = spendTabLines(usageSnap({ account: acc, quota: [] }), { t, cols: 120 }).map(l => l.text).join('\n')
+    expect(text).toContain(t('account.partial'))
+    expect(text).not.toContain(t('account.none'))
+  }
+})
+
 // ---- the Now tab's trailing section: the last 3 prompts of the session, each with a collapsible reply (all prompts here are synthetic) ----
 const U = (text: string, extra: Partial<SessionMsg> = {}): SessionMsg => ({ role: 'user', text, toolUses: [], ...extra })
 const A = (text: string, toolUses: unknown[] = []): SessionMsg => ({ role: 'assistant', text, toolUses })

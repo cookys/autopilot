@@ -140,6 +140,7 @@
   "label.quota_7d": "7 天",
   "label.quota_spend": "花費上限",
   "account.none": "未用 Claude 帳號登入",
+  "account.partial": "已登入，帳號資訊不完整",
   "account.extra_on": "額外用量已開",
   "dispatch.running": "執行中",
   "dispatch.stalled": "疑似卡住",

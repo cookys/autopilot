@@ -140,6 +140,7 @@
   "label.quota_7d": "7 days",
   "label.quota_spend": "spend limit",
   "account.none": "not logged in with a Claude account",
+  "account.partial": "signed in, account details incomplete",
   "account.extra_on": "extra usage on",
   "dispatch.running": "running",
   "dispatch.stalled": "stalled",

@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "dispatch-tree-2026-10-13",
+  "logical_plan_id": "dispatch-tree-2026-10-13",
+  "session_id": "a14bb1ea-4b8b-421d-9e3d-a7fa6e844a18",
+  "session_key": "c2943cb15230571bd29845f4ad870f9996518177a905e146c7c98cfd0959c3cd",
+  "generation": 2,
+  "verdict": "STOP",
+  "semantic_verdict": null,
+  "terminal": true,
+  "policy_reason": "plan_growth_hard_stop",
+  "rubric_sha256": "4d07d7526e4623ec0583aff2546b8b24fedaa86cf8f76d876bcea6735454c0a5",
+  "manifest_sha256": "98a95884fd9fe7faabbdad3cd8d6748e6ed6e30436101c73aabe595af773eaeb",
+  "plan_sha256": "01da5034421a513c9ccb92d066b50edc08f40d38150a011fd9fee97b441707d5",
+  "growth_ratio": {
+    "numerator": 6453,
+    "denominator": 2341
+  },
+  "growth_warning": true,
+  "transport_status": "policy_stop",
+  "attempts": [],
+  "substitutions": [],
+  "reviewer_verdicts": [],
+  "findings": [],
+  "backlog_candidates": [],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-10-13T10:54:58.019Z"
+}

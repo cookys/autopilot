@@ -1,0 +1,475 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "dispatch-tree-2026-10-13",
+  "logical_plan_id": "dispatch-tree-2026-10-13",
+  "session_id": "a14bb1ea-4b8b-421d-9e3d-a7fa6e844a18",
+  "session_key": "c2943cb15230571bd29845f4ad870f9996518177a905e146c7c98cfd0959c3cd",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "4d07d7526e4623ec0583aff2546b8b24fedaa86cf8f76d876bcea6735454c0a5",
+  "manifest_sha256": "98a95884fd9fe7faabbdad3cd8d6748e6ed6e30436101c73aabe595af773eaeb",
+  "plan_sha256": "dd7729f98f8e8574eef308361609cc4a33b0ffe154887510a8ec462ee3a5f6e2",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "6e52f0f11f8127cb61a5342a4558ce201d4a9f15fd378afed0f24a5ee2e69615"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "a1fa9192516b3e2f132a06ca7d54a2761c7b626bbe518d275ba99e218f606b47",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-vQm6mq/stdout",
+          "digest": "a1fa9192516b3e2f132a06ca7d54a2761c7b626bbe518d275ba99e218f606b47"
+        },
+        "receipt_digest": "92164c8418d46a20b1d8dc77ef0a17c7be4c29af9c8000a1390cfb9c7833f6ba"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "kimi_deep",
+      "target_id": "kimi_deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "kimi",
+          "model": "kimi-code-k3",
+          "operation": "plan-review",
+          "request_digest": "5e340be9c247c3a43517a3df290766ce08c798b49a6959089e00a567d7fa493c"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 3,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "aa8f8ec0cbe749e3ef2d545d87afb9d30fc144de57cc2ff840f85822be87b9f0",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-1Kk1r9",
+          "digest": "aa8f8ec0cbe749e3ef2d545d87afb9d30fc144de57cc2ff840f85822be87b9f0"
+        },
+        "receipt_digest": "5e21d16a036d160e19423c084157a2feaa68f0d050f0724fe04265dda3b671f3"
+      },
+      "transport_status": "exit_failure",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "kimi_deep",
+      "target_id": "kimi_deep",
+      "attempt": 2,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "kimi",
+          "model": "kimi-code-k3",
+          "operation": "plan-review",
+          "request_digest": "e27bc699b700fc5f260581d93eee13ef33de309ff1f53575758672b74dae1843"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 3,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "aa8f8ec0cbe749e3ef2d545d87afb9d30fc144de57cc2ff840f85822be87b9f0",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-rBSIPw",
+          "digest": "aa8f8ec0cbe749e3ef2d545d87afb9d30fc144de57cc2ff840f85822be87b9f0"
+        },
+        "receipt_digest": "51fb41a08bc0ed62b3dddee8cafd7e5d08efbf7b0b44a29b04fe581a66a3166a"
+      },
+      "transport_status": "exit_failure",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_consult",
+      "target_id": "minimax_consult",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "97e9faf8541861e0587c94e08c42281a5a5bbed590dd2dc489dede59bee54670"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "41e30fed682d5e4bdf6395d6ea5288183b9bbf81cd527043b9c9d6ac88c2f0e9",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-UA7QeT",
+          "digest": "41e30fed682d5e4bdf6395d6ea5288183b9bbf81cd527043b9c9d6ac88c2f0e9"
+        },
+        "receipt_digest": "144c73470ddb0251b994aacafab14cfe8f30d8591b3a027b500f48334d6835d0"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "family": "openai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "minimax_consult",
+      "target_id": "minimax_consult",
+      "family": "minimax",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Diagnosis D2 and step-to-diagnosis traceability",
+      "claim": "The Diagnosis does not describe the current code, and step 3b has no diagnosed source gap.",
+      "evidence": "D2 says a Claude-starting rail currently leaves no structured link, while the next section says develop already records session_id, child_session_id, the explicit child session argument, and parent_session_id. Those fields are present in the cited rail and marker code. Separately, the marker-overwrite defect motivating step 3b appears only in section 6 and is not one of D1 through D6.",
+      "evidence_reference": "Plan sections 1 D2, 2 hand-offs 2-3, 4 step 3b, and 6; scripts/lib/repo-identity.sh manifest_session_id_json and child_session_mint; scripts/session-mode.js:604-640",
+      "repair": "Rebase the Diagnosis onto current develop: mark the original D2 gap as resolved, diagnose the remaining one-sided or missing-marker cases precisely, add a numbered marker-write-target gap, and map every remaining step to one or more current diagnosis IDs.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "54becd7a8ccbe76ddb968d23b9e0b35f5350a6e410213e0261d86e0868e6da26"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Legacy marker-based session-to-rail joins",
+      "claim": "The plan permits a non-exact marker join to appear as an ordinary tree edge instead of placing it in the separate untracked group.",
+      "evidence": "The session-to-rail row explicitly calls the marker root_run_id fallback not exact but says it is drawn with joined_by marker. The proposed schema preserves edge marker, while only untracked:true nodes are moved into 來歷不明. Current dispatch-tree.js likewise adds marker-matched rails with untracked false, including matches from expired markers.",
+      "evidence_reference": "Plan sections 3 session-to-rail row and renderer consequence, and 5; scripts/dispatch-tree.js:191-223; scripts/dispatch-tree.test.js:85-107 and 141-153",
+      "repair": "Either define and justify a genuinely exact two-ended marker predicate, or mark every marker-only join untracked with a dedicated reason and render it solely in the separate unknown-origin group. Add fresh and expired-marker negative controls that reject an ordinary parent edge.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "1a41c6fc768aa6680640e17268c8515099340753584b14a1803b95c9102faeb8"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Rail-to-child-session edges, duplicate claims, and intermediate-harness lineage",
+      "claim": "The proposed exact-edge contract is ambiguous for duplicate child claims and invents an undefined skip-level edge for the intermediate-harness case.",
+      "evidence": "Two manifests from the same parent session can claim the same child_session_id and both satisfy the stated marker parent_session_id comparison; the duplicate fixture is named but no required disposition is specified. Section 7 also says a grandchild can be exact-to-session across a missing intermediate harness, but section 3 defines no session-to-child-session edge, and its rail-to-child predicate cannot pass when the intermediate rail has no session_id.",
+      "evidence_reference": "Plan sections 3 rail-to-child-session row, 4 renderer fixtures, and 7 intermediate-harness unknown",
+      "repair": "Make the predicates total and injective. Require exactly one eligible manifest claimant or add parent_run_id to the child-side record; route zero or multiple claimants to untracked. Define the skip-level edge and its reciprocal evidence explicitly, or classify the grandchild as unknown-origin. Pin every outcome in the duplicate and intermediate-harness fixtures.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "188483affcb4915be87ad2a58fe395d02ef3f27fa85964d138388966418e85c1"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Shipped loop-back identity premise for dispatch-author and dispatch-review",
+      "claim": "The shipped premise overstates an exact rail-to-child-session link for the actual scratch-directory launch paths.",
+      "evidence": "Both dispatch-author runners and both dispatch-review runners start Claude from newly created non-git directories. runs-watch-autostart returns when scope.project_key is absent, before calling ensurePlainMarker. The shipped child-session test uses a stub Claude that never runs SessionStart and then tests ensurePlainMarker separately, so it does not establish the two-sided production edge. The plan itself acknowledges this failure in section 7.",
+      "evidence_reference": "Plan sections 2 hand-off 3 and 7 non-git children; scripts/dispatch-author.sh:1199-1223; scripts/dispatch-review.sh:1537-1570; hooks/runs-watch-autostart.js:258-297; hooks/tests/child-session-identity.test.sh:29-124",
+      "repair": "Describe the shipped state as a one-sided manifest identity for non-git launches. Before claiming an exact edge, add an end-to-end acceptance that invokes the real SessionStart path from each launch shape and either produces the child marker safely or proves the renderer places that child in the untracked group.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c3da93e558f2fd63d7bf17117904cfdeba891c61c1e43ff46abaf6cd4a349913"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Session marker write-target resolution and negative controls",
+      "claim": "The write-target rules do not define an authoritative own identity for every writer and the proposed negative control covers only one write path.",
+      "evidence": "Rule 1 forbids environment-derived marker targets whenever AUTOPILOT_PARENT_SESSION_ID is set, but rule 2 only rejects equality with that parent and session-mode set has no stated non-environment own-id source. getSessionId can resolve AUTOPILOT_SESSION_ID, several harness IDs, or cwd. The sole concrete negative control exercises a non-Claude child calling set; it does not exercise SessionStart through runs-watch-autostart, ensurePlainMarker, other marker writers, or the separately named probe-engine-capability launch.",
+      "evidence_reference": "Plan section 6 rules 1-6 and section 4 step 3b; scripts/session-mode.js:172-185 and 627-655; hooks/runs-watch-autostart.js:258-297; scripts/probe-engine-capability.sh:449-463",
+      "repair": "Define one centralized write-target resolver with an explicit source classification. When a parent id is present, require an authoritative payload or explicit own id and refuse environment or cwd fallback. Apply it to every marker-writing entry point and add red-without-guard controls for both the Claude SessionStart path and a non-Claude set path, including the probe launch.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "6e3251629549af9352b2efa998a1b1e6cfa33dd8fd76f63f7013ac4efc560eb1"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Remaining hand-off compatibility, rollback, and acceptance matrix",
+      "claim": "Several remaining hand-offs lack the required explicit rollback rule or an executable acceptance command that reaches the real producer and consumer.",
+      "evidence": "Step 3c gives only prose for its fake run, renderer step R contains a fixture placeholder rather than a pinned command and assertions, and steps 3b through R do not each state a rollback action. The fleet step names no owned sender or receiver component and ambiguously mentions session-mode --root-run-id, which writes the local marker root, while the proposed renderer field is remote_parent_run_id on a rail.",
+      "evidence_reference": "Plan section 4 steps 3b, 3c, 4, 5, and R; section 5; scripts/session-mode.js:970-975",
+      "repair": "For every remaining row, name the producer and consumer files, old-record behavior, exact rollback operation, and a literal executable red-before/green-after command with assertions. For fleet, define an owned sender-to-parser-to-telemetry-record path that never rewrites the local root or parent fields, then exercise that full path including missing and foreign-scope input.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "56a3391ef44985f6337c95e721cb7f68630253ce2d9470e9dcf42231bc114570"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Subagent-to-rail PreToolUse stamping",
+      "claim": "The plan does not specify a viable integration path by which an opt-in PreToolUse hook changes the Bash environment seen by a rail.",
+      "evidence": "The plan says the hook stamps agent_id onto the Bash environment and must be opt-in, but does not specify command rewriting, updated tool input, or a sidecar hand-off. The existing opt-in PreToolUse path runs through opt-in-multiplexer.js, which only forwards additionalContext and permission decisions; it discards any input mutation. A unit test of the child hook could therefore pass while the actual Bash command and manifest remain unstamped.",
+      "evidence_reference": "Plan sections 3 subagent-to-rail row and 4 step 5; hooks/hooks.json:91-99; hooks/opt-in-multiplexer.js:132-178",
+      "repair": "Choose and document the actual mutation contract, including safe shell quoting and top-level calls without agent_id. If updated Bash input is used, extend the multiplexer deliberately. Make acceptance traverse hooks.json through the multiplexer, execute the resulting Bash command, and verify concurrent rail manifests receive only their own agent ids.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "5341e4145e9a728649e77973515bb3b909b18f8972e5affc8223ef45ef6eb486"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "D0 ordering and unknown-outcome decision table",
+      "claim": "The stated probe-first ordering is impossible as written because the writers whose identity it decides are already shipped, and several bad probe outcomes have no concrete design disposition.",
+      "evidence": "Section 4 says D0 precedes every writer, while section 7 says shipped steps 2 and 3 assume the answer that D0 will later confirm. If SessionStart does not run or reports the inherited id, the plan only says those steps reopen. The intermediate-harness probe is not assigned unambiguously to a step, the nested-depth probe has no bad-answer action, and fleet depth names neither a measuring step nor a resulting record rule.",
+      "evidence_reference": "Plan sections 4 ordering paragraph and 7 unknowns",
+      "repair": "Run and record D0 before plan approval, or rewrite the ordering honestly as a verification gate over already-shipped writers with a compensating repair step before any dependent work. Add an outcome table for every unknown naming the measuring command, owning step, pass criterion, bad-result design, and which later steps are blocked.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "6fc53ca488ed206f1ddc5014b9f2787e621798f94856b2244f099a412d6f8f5c"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "scripts/dispatch-tree.js attachAgents and attachRails; renderer group rendering for the 派工 tab in mods/live",
+      "claim": "The current dispatch-tree.js attaches every untracked node under the nearest known parent and only flags it with untracked:true, which is exactly the placement R2 forbids; the plan's step R must implement a visibly separate untracked group per session for the rule to hold.",
+      "evidence": "scripts/dispatch-tree.js attachAgents pushes every agent onto parent.children regardless of the a.untracked branch; attachRails does the same for rails. The plan's §3 promises the renderer groups every untracked:true node into one 「來歷不明」 group per session and never draws it as an ordinary child, and §5 adds untracked_bucket as the carrier. The shipped renderer does not yet produce that bucket or that group.",
+      "evidence_reference": "scripts/dispatch-tree.js attachAgents and attachRails in the supplied source context; plan §3 untracked-grouping promise; plan §5 untracked_bucket schema addition; plan §4 step R acceptance line.",
+      "repair": "In step R, add a second pass over the built tree that hoists every node with untracked:true out of its current parent and into a per-session untracked group keyed by untracked_bucket (unknown_origin or origin_subagent_unknown). The renderer must render that group with a distinct glyph and never as an ordinary child, and must keep the existing untracked_reason field on each hoisted node so the test fixtures for missing parent, foreign-scope parent and old subagent record still surface their reasons. Set untracked_bucket on every hoisted node; do not rely on a renderer-only post-process.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_consult",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "716fa4a578e2b184ca50b9bd8a24aa43d85666226c3a43a6be913fe3277fdd81"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Plan §4 step list and the D0 probe in §7; no command currently exercises the SessionStart session_id question on a `claude -p` child.",
+      "claim": "Every other step in §4 has an explicit acceptance command and a named test, but the D0 probe — the very first step and the one that decides whether rule 1 of §6 has a payload to use — has no acceptance command of its own; R5 wants the probe to be exercised by a red-before, green-after test like every other hand-off.",
+      "evidence": "Plan §7 describes D0 as confirming with a real run but names no pass/fail signal and no test file. §4 lists acceptance commands for steps 2, 3, 3b, 3c, 4, 5 and R, and the only D0 mention is the ordering line and the §7 paragraph. The owner-asked probe (does a `claude -p` child fire SessionStart with the own id, not the inherited CLAUDE_CODE_SESSION_ID) is the gate for step 3b and for steps 2/3 staying closed, so it must be a test, not only a manual run.",
+      "evidence_reference": "Plan §4 step table; plan §7 D0 probe paragraph; plan §6 rule 1 and the line Steps 2 and 3 are not re-opened by this plan unless the D0 probe falsifies them.",
+      "repair": "Add an acceptance line for D0 in §4: a `claude -p` child fires SessionStart whose payload session_id equals the manifest child_session_id (the minted uuid) and not the inherited CLAUDE_CODE_SESSION_ID; the test is hooks/tests/session-start-own-id.test.sh, red on a child that inherits the parent's id and green when it carries the own id. State explicitly that step 3b and the write-target guard in §6 only land after this test is green.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_consult",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0edb5f527d7df6ba0ba028ffdb723ea126a86b13dcad544992b35d4965714a30"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Plan §4 step order and the re-open path for already-shipped steps 2 and 3; plan §7 D0 paragraph.",
+      "claim": "Steps 2 and 3 are already on develop, so two writers (manifest session_id and the child-session identity triple child_session_id / --session-id / AUTOPILOT_PARENT_SESSION_ID / marker parent_session_id) land before the D0 probe that decides where and under which identity they write; the plan names the probe as the falsifier but does not name the re-open protocol (which commit changes, which test is updated, how the renderer is re-accepted), so R6 is satisfied for the remaining writers but only conditional for the two already-shipped ones.",
+      "evidence": "Plan §4 step 2 and step 3 rows are marked shipped; plan §7 D0 paragraph says Steps 2 and 3 as shipped assume own id; the probe confirms with a real run, and the only re-open sentence is Steps 2 and 3 are not re-opened by this plan unless the D0 probe falsifies them. There is no re-open command, no updated test name, and no rule for the renderer's re-acceptance.",
+      "evidence_reference": "Plan §4 step 2 row and step 3 row; plan §7 D0 paragraph and the re-open sentence; plan §6 rule 1 dependency on the probe's payload.",
+      "repair": "Add a one-line re-open protocol next to the D0 paragraph in §7: if D0 falsifies step 2 or step 3, the corresponding test in hooks/tests/ (manifest-session-id.test.sh or child-session-identity.test.sh) is updated first to encode the correct behavior, the manifest or marker writer is adjusted in a follow-up commit, and the renderer step R is re-accepted only after the updated test is green and the §5 schema additions still describe the new fields. This makes the re-open an executable plan step rather than a sentence.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_consult",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "cbf73c66bcf5b24d3bf5da6cfe21177ef3e27394a20c0e7c03e8a764120cd101"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "716fa4a578e2b184ca50b9bd8a24aa43d85666226c3a43a6be913fe3277fdd81",
+      "rubric_id": "R2",
+      "affected_surface": "scripts/dispatch-tree.js attachAgents and attachRails; renderer group rendering for the 派工 tab in mods/live",
+      "claim": "The current dispatch-tree.js attaches every untracked node under the nearest known parent and only flags it with untracked:true, which is exactly the placement R2 forbids; the plan's step R must implement a visibly separate untracked group per session for the rule to hold.",
+      "evidence_reference": "scripts/dispatch-tree.js attachAgents and attachRails in the supplied source context; plan §3 untracked-grouping promise; plan §5 untracked_bucket schema addition; plan §4 step R acceptance line.",
+      "disposition": null
+    },
+    {
+      "fingerprint": "0edb5f527d7df6ba0ba028ffdb723ea126a86b13dcad544992b35d4965714a30",
+      "rubric_id": "R5",
+      "affected_surface": "Plan §4 step list and the D0 probe in §7; no command currently exercises the SessionStart session_id question on a `claude -p` child.",
+      "claim": "Every other step in §4 has an explicit acceptance command and a named test, but the D0 probe — the very first step and the one that decides whether rule 1 of §6 has a payload to use — has no acceptance command of its own; R5 wants the probe to be exercised by a red-before, green-after test like every other hand-off.",
+      "evidence_reference": "Plan §4 step table; plan §7 D0 probe paragraph; plan §6 rule 1 and the line Steps 2 and 3 are not re-opened by this plan unless the D0 probe falsifies them.",
+      "disposition": null
+    },
+    {
+      "fingerprint": "cbf73c66bcf5b24d3bf5da6cfe21177ef3e27394a20c0e7c03e8a764120cd101",
+      "rubric_id": "R6",
+      "affected_surface": "Plan §4 step order and the re-open path for already-shipped steps 2 and 3; plan §7 D0 paragraph.",
+      "claim": "Steps 2 and 3 are already on develop, so two writers (manifest session_id and the child-session identity triple child_session_id / --session-id / AUTOPILOT_PARENT_SESSION_ID / marker parent_session_id) land before the D0 probe that decides where and under which identity they write; the plan names the probe as the falsifier but does not name the re-open protocol (which commit changes, which test is updated, how the renderer is re-accepted), so R6 is satisfied for the remaining writers but only conditional for the two already-shipped ones.",
+      "evidence_reference": "Plan §4 step 2 row and step 3 row; plan §7 D0 paragraph and the re-open sentence; plan §6 rule 1 dependency on the probe's payload.",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-10-13T10:35:39.789Z"
+}

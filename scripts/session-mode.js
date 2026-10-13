@@ -65,11 +65,13 @@
  *   node scripts/session-mode.js status
  *
  * retire (v2.36.48): retire ANOTHER session's managed marker for this repo once its
- * deliverable is integrated. The marker-to-campaign bridge in dispatch-hetero.sh scans
- * every marker in the directory and refuses a live one whose graph digest differs from
- * the sealed campaign's — correct as a concurrency guard, but a finished deliverable's
- * marker used to have no exit short of its 24h TTL (or hand deletion, which is
- * gate-input deletion). `retire` re-derives completion instead of trusting a claim
+ * deliverable is integrated. The marker-to-campaign bridge in dispatch-hetero.sh checks
+ * only the CALLER'S OWN marker (session_id == CLAUDE_CODE_SESSION_ID; with that variable
+ * unset it still scans every marker in the directory) and refuses a live one whose graph
+ * digest differs from the sealed campaign's. A finished deliverable's marker used to have
+ * no exit short of its 24h TTL (or hand deletion, which is gate-input deletion); since
+ * BL-0009 another session's leftover no longer fences this one, but `retire` remains the
+ * evidence-backed way to remove a marker. `retire` re-derives completion instead of trusting a claim
  * (ADR-0001): the marker's graph digest names a Mission lineage in the repo's
  * registry; that lineage holds a claim for `unit_id`; the receipt from
  * `scripts/record-integration.js` names that claim's branch as source_ref; and git
@@ -153,6 +155,10 @@ const NOOP_ADOPTION_KEYS = Object.freeze([
   'source_work_order_id',
   'source_work_order_digest',
 ]);
+
+// BL-0017 (a): the same one-line hint is in dispatch-author.sh, dispatch-hetero.sh and
+// hooks/dispatch-model-guard.js (hooks/tests/blocked-dispatch-guidance.test.sh pins all four equal).
+const MASK_LINE = 'To run a non-strict dispatch in this session, prefix that one command with: AUTOPILOT_SESSION_MODE_DIR=$(mktemp -d)';
 
 function markerDir() {
   return process.env.AUTOPILOT_SESSION_MODE_DIR
@@ -595,7 +601,7 @@ function resolveJobRoot({ explicit = '', now = Date.now(), env = process.env } =
 
 // A plain-session marker (level null): the per-session record without orchestrator mode. No Mission routing,
 // no entry_level. root_run_id is decided by the caller through resolveJobRoot (every plain marker has a job root).
-function buildPlainMarker({ sessionId, repoRoot, scope, now, ttlHours = DEFAULT_TTL_HOURS, rootRunId = null }) {
+function buildPlainMarker({ sessionId, repoRoot, scope, now, ttlHours = DEFAULT_TTL_HOURS, rootRunId = null, parentSessionId = null }) {
   const marker = {
     session_id: sessionId,
     level: null,
@@ -606,6 +612,8 @@ function buildPlainMarker({ sessionId, repoRoot, scope, now, ttlHours = DEFAULT_
     project_key: scope && scope.project_key ? scope.project_key : null,
     root_run_id: rootRunId || null,
   };
+  // Identity hand-off step 3: a child session started by a dispatch rail records which session launched it.
+  if (parentSessionId) marker.parent_session_id = parentSessionId;
   return marker;
 }
 
@@ -622,9 +630,14 @@ function writeMarkerFile(file, marker) {
 // an unreadable or malformed one is left untouched (not ours to destroy; fail-open). Takes the same
 // <marker>.lock as the `set --size` init so a concurrent writer cannot interleave.
 // -> 'created' | 'replaced_expired' | 'kept' | 'kept_unreadable' | 'skipped' (no usable session id).
-function ensurePlainMarker({ sessionId, repoRoot, scope, now = Date.now(), dir = markerDir() }) {
+// parentSessionId: the launching session's id. Only the SessionStart path reads AUTOPILOT_PARENT_SESSION_ID
+// (exported by the rails onto the claude command line); `session-mode set` never does, so an explicit set cannot
+// claim a parent. Ignored when it is empty or equals this session's own id.
+function ensurePlainMarker({ sessionId, repoRoot, scope, now = Date.now(), dir = markerDir(), parentSessionId = process.env.AUTOPILOT_PARENT_SESSION_ID }) {
   const sid = normalizeSessionId(sessionId);
   if (!sid) return 'skipped';
+  const parent = typeof parentSessionId === 'string' && parentSessionId.trim() && parentSessionId.trim() !== sessionId
+    ? parentSessionId.trim().slice(0, 128) : null;
   const file = path.join(dir, `${sid}.json`);
   let result = 'kept';
   fs.mkdirSync(dir, { recursive: true });
@@ -641,7 +654,7 @@ function ensurePlainMarker({ sessionId, repoRoot, scope, now = Date.now(), dir =
     if (state === 'live') { result = 'kept'; return; }
     if (state === 'unreadable') { result = 'kept_unreadable'; return; }
     const rootRunId = resolveJobRoot({ now });
-    writeMarkerFile(file, buildPlainMarker({ sessionId: sid, repoRoot, scope, now, rootRunId }));
+    writeMarkerFile(file, buildPlainMarker({ sessionId: sid, repoRoot, scope, now, rootRunId, parentSessionId: parent }));
     result = state === 'expired' ? 'replaced_expired' : 'created';
   });
   return result;
@@ -1015,6 +1028,9 @@ function cmdSet(args) {
   try { writeLivePointer(); } catch (_error) { /* fail-open: pointer is advisory for the mod */ }
   startProjectWatcher(marker, repoRoot);
   process.stdout.write(`${JSON.stringify({ ok: true, marker_path: markerPath(), ...marker }, null, 2)}\n`);
+  if (marker.level === 'l5' || marker.level === 'l6') {
+    process.stderr.write(`session-mode: ${marker.level} marker set — non-strict dispatch (dispatch-author/consult/plan-review seats) is refused while it is live. ${MASK_LINE}\n`);
+  }
   return 0;
 }
 

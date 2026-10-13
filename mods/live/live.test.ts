@@ -63,11 +63,13 @@
 // in-memory tree; a missing file makes the bottom hook throw, which the mod sees as a rejected read.
 import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
-import { readQc, qcChip, readReview, reviewSlot, displayWidth, truncateToWidth, layoutBand, readMarker, readResidue, readStageWalk, bandSlots, slotUnit, slotPosition, slotDispatch, slotDecisions, slotSpend, slotHygiene, slotReview, readLoadSource, PANE_TABS, verdictOf, reviewTabLines, wrapLines, legendLines, bandView, hygieneTabLines, dispatchLines, spendTabLines, readSpendHistory, hourlySpend, sparkText, SPARK_BARS, INJECTED_PREFIXES, RECENT_EXPANDED_LINES, collapsedPrompt, groupRecent, makeRecentTracker, recentLines, redactSecrets, scanBackground, lastOutputLine, activityLines, MAX_ACTIVITY_ROWS, readQuota, readAccount, slotQuota, accountLines, slotTab, slotUnfolds, SECTION } from './model'
+import { readQc, qcChip, readReview, reviewSlot, displayWidth, truncateToWidth, layoutBand, readMarker, readResidue, readStageWalk, bandSlots, slotUnit, slotPosition, slotDispatch, slotDecisions, slotSpend, slotHygiene, slotReview, readLoadSource, PANE_TABS, verdictOf, reviewTabLines, wrapLines, legendLines, bandView, hygieneTabLines, dispatchLines, spendTabLines, readSpendHistory, hourlySpend, sparkText, SPARK_BARS, INJECTED_PREFIXES, RECENT_EXPANDED_LINES, collapsedPrompt, groupRecent, makeRecentTracker, recentLines, redactSecrets, scanBackground, lastOutputLine, activityLines, MAX_ACTIVITY_ROWS, readQuota, readAccount, slotQuota, slotTab, slotUnfolds, SECTION } from './model'
 import type { ActivityItem, SessionMsg, QuotaWindow, AccountSnap } from './model'
 import { makeT, resolveLocale, localeFromLanguage } from './i18n'
 import { EN, ZH_TW } from './locales'
 import type { Slot } from './model'
+import { paneRows, runAgedOut, runEndedMs, runSubject } from './model'
+import * as ui from './ui'
 
 const SURFACES = ['terminal', 'desktop'] as const
 
@@ -589,9 +591,10 @@ for (const surface of SURFACES) {
     expect(r1).toContain('codex / gpt')
     expect(r1).toContain('● 執行')
     expect(r2).toContain('⊘ 疑似卡住')
-    expect(r3).toContain('✓ rc 0')
+    expect(r3).toContain('✓ 完成') // the exited run (rc 0) is in the finished table, drawn as a state word, never as `rc 0`
     expect(rows.some(t => t.includes('這是執行狀態，不是進度'))).toBe(true)
-    expect(rows.some(t => t.trim().startsWith('plan') && t.includes('第 1 版') && t.includes('PASS'))).toBe(true) // gate row from model.json
+    expect(rows.some(t => t.startsWith('審查 ›') && t.includes('1 道審查關卡'))).toBe(true) // 派工 carries a count and a pointer to 審查, no gate verdict (design plan §2.6 rule 3)
+    expect(rows.some(t => t.includes('PASS'))).toBe(false)
     const link = await pane.find({ type: 'Link' })
     expect(link?.props.href).toBe('http://localhost:9123/' + KEY + '/2026-10-04/' + ROOT + '/current/')
     expect(JSON.stringify(await pane.drawn())).not.toContain('"Image"')
@@ -1146,7 +1149,7 @@ for (const surface of SURFACES) {
     expect(pane.texts[rule]).toContain('▲ 1') // the section badge counts what awaits you
     const disp = await paneParts($, surface, 'dispatch') // the table is still there, on its own tab, and so is the Link
     expect(disp.texts.some(t => t.includes('這是執行狀態，不是進度'))).toBe(true)
-    expect(disp.texts.some(t => t.startsWith('▌ 審查關卡'))).toBe(true)
+    expect(disp.texts.some(t => t.startsWith('審查 ›'))).toBe(true) // the former 審查關卡 section is one pointer row to 審查
     expect(disp.texts.some(t => t.includes('要合併 plan 還是拆開？'))).toBe(false)
     expect(disp.href).toBe('http://localhost:8787/' + KEY + '/2026-10-04/' + ROOT + '/current/')
     // fields that do not exist are not shown: a question with no options, then no decision at all
@@ -2745,7 +2748,8 @@ for (const surface of SURFACES) {
 
     const dispatch = await tab('dispatch')
     expect(has(dispatch.texts, ' r1 ', 'implementer', '● 執行')).toBe(true)
-    expect(has(dispatch.texts, '● 2', '執行中', '⊘ 1 疑似卡住', '✓ 1 已完成')).toBe(true)
+    expect(has(dispatch.texts, '▾ 執行中', '⊘ 2')).toBe(true) // the section chip: the worst state of the two live rows (one is stalled) and their count
+    expect(has(dispatch.texts, '▾ 已完成', '✓ 1')).toBe(true)
 
     const review = await tab('review')
     expect(has(review.texts, '程式碼審查', '△ 待修')).toBe(true)
@@ -2760,12 +2764,11 @@ for (const surface of SURFACES) {
     expectThemeOnly(review.tree as Drawn, true)
 
     const spend = await tab('spend')
-    expect(has(spend.texts, '今日額度', '接近上限')).toBe(true)
-    expect(has(spend.texts, '$120.40', '/ $150.00')).toBe(true)
-    expect(has(spend.texts, '80 %')).toBe(true)
-    expect(has(spend.texts, '本機今日', '$3.10', '所有層')).toBe(true)
+    expect(has(spend.texts, '▾ 額度', '接近上限')).toBe(true)
+    expect(has(spend.texts, 'brain 今日', '80%', '$120.40 / $150.00')).toBe(true)
+    expect(has(spend.texts, 'brain 到 80% 開始提醒', '保險絲只提醒、不擋')).toBe(true)
+    expect(has(spend.texts, '本機', '$3.10', '所有層')).toBe(true)
     expect(has(spend.texts, '工作階段', '$0.42')).toBe(true)
-    expect(has(spend.texts, '花費保險絲', 'warn 模式', '只提醒、不擋')).toBe(true)
     expectThemeOnly(spend.tree as Drawn, true)
 
     const hygiene = await tab('hygiene')
@@ -2787,10 +2790,10 @@ for (const surface of SURFACES) {
   test('P7 panel: a missing fact is an explicit "no data" line, never an empty tab (' + surface + ')', async ($, on) => {
     worldEn(on, base())
     await start($, surface)
-    const ndata = async (id: string) => (await paneParts($, surface, id)).texts.filter(t => t.startsWith('no data'))
+    const ndata = async (id: string) => (await paneParts($, surface, id)).texts.filter(t => t.replace(/^— /, '').startsWith('no data'))
     expect(await ndata('now')).toEqual(['no data · no stage recorded for this session', 'no data · no unit recorded'])
     expect((await paneParts($, surface, 'review')).texts.filter(t => t.startsWith('— no '))).toEqual(['— no review published', '— no QC status published', '— no decisions sidecar published'])
-    expect(await ndata('spend')).toEqual(['no data · brain-tier spend today is not published'])
+    expect(await ndata('spend')).toEqual(['— no data · brain-tier spend today is not published'])
     expect(await ndata('hygiene')).toEqual(['no data · no load source published', 'no data · no worktree residue published'])
     for (const id of ['now', 'dispatch', 'review', 'spend', 'hygiene', 'legend']) {
       expect((await paneParts($, surface, id)).texts.length).toBeGreaterThan(1) // never just the header
@@ -2802,11 +2805,11 @@ for (const surface of SURFACES) {
     files[AHOME + '/config.json'] = j({ cost_fuse: { mode: 'block' } })
     const w = worldEn(on, files)
     await start($, surface)
-    const fuse = async () => (await paneParts($, surface, 'spend')).texts.find(t => t.startsWith('cost fuse')) as string
-    expect(await fuse()).toContain('block mode — blocks at the cap')
+    const fuse = async () => (await paneParts($, surface, 'spend')).texts.find(t => t.includes('fuse:')) as string
+    expect(await fuse()).toContain('fuse: blocks at the cap')
     files[AHOME + '/config.json'] = j({ cost_fuse: { mode: 'loud' } })
     await w.clock.advance(5000)
-    expect(await fuse()).toContain('warn mode — warns, never blocks')
+    expect(await fuse()).toContain('fuse: warns, never blocks')
   })
 
   test('P7 panel: no drawn node uses inverse or a non-theme colour; the only background is the active tab, `subtle`, and the band has none (' + surface + ')', async ($, on) => {
@@ -2955,15 +2958,14 @@ for (const surface of SURFACES) {
       files[LIVE + '/runs/' + KEY + '--' + ROOT + '.json'] = j(envelope({ host_today_brain_usd: brain, brain_cap_usd: 150 }))
       await w.clock.advance(5000)
       const band = walkTexts((await bandLine($, surface, 209)).tree).find(n => textOf(n) === String(Math.round(brain)))
-      const tab = walkTexts((await paneParts($, surface, 'spend')).tree).find(n => textOf(n) === '$' + brain.toFixed(2))
-      const pct = walkTexts((await paneParts($, surface, 'spend')).tree).find(n => /^\d+ %$/.test(textOf(n)))
-      return [band?.props?.color, tab?.props?.color, textOf(tab as Node), textOf(pct as Node)] as const
+      // the tab draws the level on the meter: the bar and the percent take the level's theme key (the amount stays default text)
+      const pct = walkTexts((await paneParts($, surface, 'spend')).tree).find(n => /^\s*\d+%$/.test(textOf(n)))
+      return [band?.props?.color, pct?.props?.color, textOf(pct as Node).trim()] as const
     }
     const a = await spendNode(119.6) // rounds to 80 % but is below 0.8 of the cap
     expect(a[0]).toBeUndefined()
-    expect(a[1]).toBeUndefined()
-    expect(a[2]).toBe('$119.60')
-    expect(a[3]).toBe('80 %')
+    expect(a[1]).toBe('success')
+    expect(a[2]).toBe('79%') // floored, so it never reads 80% before the threshold
     const b = await spendNode(120)
     expect([b[0], b[1]]).toEqual(['warning', 'warning'])
     const c = await spendNode(150)
@@ -3215,7 +3217,7 @@ for (const surface of SURFACES) {
           const parts = await paneParts($, surface, id, width)
           for (const text of [stripOf(parts.tree), ...parts.texts]) {
             expect(displayWidth(text), width + ' ' + id + ': ' + text).toBeLessThanOrEqual(width)
-            expect(text.includes('…'), width + ' ' + id + ': ' + text).toBe(false)
+            if (id !== 'dispatch' || !/^[⊘●✓◌○✗?▲△∅] /.test(text)) expect(text.includes('…'), width + ' ' + id + ': ' + text).toBe(false) // only a 派工 table ROW may cut a cell (§4 table, §3.5); the strip, headers, the pointer row and the footer must not
           }
         }
       }
@@ -3227,13 +3229,15 @@ for (const surface of SURFACES) {
       world(on, richWorld(), NOW_FRESH, SID_A, locale)
       await start($, surface)
       const table = await paneParts($, surface, 'dispatch')
-      const header = table.texts.find(t => t.startsWith(' ' + (locale === 'en' ? 'run' : '編號'))) as string
-      expect(header).toBeDefined()
-      const stateWord = locale === 'en' ? 'state' : '狀態'
+      // two tables now (執行中, 已完成): in each, the id column starts where its header's does, whatever the script of the state word
+      const headers = table.texts.filter(t => t.startsWith('  ' + (locale === 'en' ? 'state' : '狀態')))
+      expect(headers.length).toBe(2)
       const rows = table.texts.filter(t => / r[123] /.test(t))
       expect(rows.length).toBe(3)
       const at = (line: string, needle: string) => displayWidth(line.slice(0, line.indexOf(needle)))
-      for (const r of rows) expect(at(r, r.includes('✓ rc') ? '✓ rc' : r.includes('⊘') ? '⊘' : '● '), r).toBe(at(header, stateWord))
+      const idHead = locale === 'en' ? 'run' : '編號'
+      const idOf = (r: string) => (/ (r[123]) /.exec(r) as RegExpExecArray)[1]
+      for (const r of rows) expect(at(r, idOf(r)), r).toBe(at(headers[idOf(r) === 'r3' ? 1 : 0], idHead))
       // key/value rows: the value starts at display cell 12 whatever the label's script
       const now = await paneParts($, surface, 'now')
       const kvRow = now.texts.find(t => t.startsWith(locale === 'en' ? 'stage' : '階段')) as string
@@ -3390,43 +3394,273 @@ test('hygiene tab: a long cache dir, worktree path and reason wrap in full at 60
   }
 })
 
-// ---- dispatch table: aligned when it fits, one block per run when it does not ----
-const dispatchSnap = (rows: object[]) => ({
-  header: 'h', rows, gates: null, link: null, published_at: null, session_as_of: null, host_as_of: null,
+// ---- P2 派工 (design plan §5.2, §7): the runs are two tables (執行中 / 已完成), one line per run, the latest 5 finished + `more`, one pointer row to 審查 ----
+// Local fixtures (no global busyWorld): rows are LivePaneRow-shaped, `detail.now_ms` is the clock F5 reads.
+const D_NOW = Date.parse('2026-10-13T08:00:00.000Z')
+const D_DAY = 86_400_000
+const dispatchSnap = (rows: object[] | null, over: object = {}) => ({
+  header: 'h', rows, gates: null, link: null, published_at: '2026-10-13T07:59:55.000Z', session_as_of: null, host_as_of: null,
   sections: { attention: [], waiting: [], tasks: [], decisions: [], foreman: [] },
-  detail: { counts: { confirmed_live: 1, exited: 1, unknown: 0 }, stalled: 0 },
+  detail: { counts: null, stalled: 0, now_ms: D_NOW },
+  ...over,
 }) as never
-const RUN = (id: string, runner: string, model: string) => ({ run_id: id, role: 'hands', runner, model, stall: false, rc: null, final_status: null, elapsed_s: 90, probe_age_s: 5, phase: null })
+const RUN_FIN = (id: string, endedAgoMs: number, over: object = {}) => ({
+  run_id: id, role: 'reviewer', runner: 'claude-native', model: 'claude-fable-5-1', stall: false, rc: 0, final_status: 'reviewed', elapsed_s: 60, probe_age_s: null, phase: 'exited',
+  started_at: new Date(D_NOW - endedAgoMs - 60_000).toISOString(), ended_at: new Date(D_NOW - endedAgoMs).toISOString(), ended: true, fresh: false, ...over,
+})
+const RUN_LIVE = (id: string, over: object = {}) => ({
+  run_id: id, role: 'implementer', runner: 'codex', model: 'gpt-5', stall: false, rc: null, final_status: null, elapsed_s: 90, probe_age_s: 5, phase: 'running',
+  started_at: new Date(D_NOW - 90_000).toISOString(), ended_at: null, ended: false, fresh: true, ...over,
+})
+// the owner's busy screenshot: 32 finished reviewer runs with ~30-cell ids, a live run, a stalled one, one nobody confirmed, one that ended with no verdict, one older than a day
+const busyDispatchRows = () => [
+  ...Array.from({ length: 31 }, (_, i) => RUN_FIN('review-1791803964-24184' + String(10 + i).padStart(2, '0') + '-c58e', (5 * 3600 + i * 120) * 1000)),
+  RUN_FIN('review-old-run-from-three-days-ago-x', 3 * D_DAY),
+  RUN_LIVE('run-live-1'),
+  RUN_LIVE('run-stall-1', { stall: true, probe_age_s: 200 }),
+  RUN_LIVE('run-unconfirmed-1', { fresh: false, probe_age_s: 400 }),
+  RUN_FIN('run-endednoverdict', 600_000, { rc: null, final_status: null }),
+]
+const bodyRows = (lines: { kind?: string; group?: string }[]) => lines.filter(l => l.kind === 'table' && l.group !== undefined)
+const tabLocales = ['en', 'zh-TW'] as const
 
-test('dispatch tab: a table wider than the pane becomes one block per run (kv rows, hang 12), never rows wrapped apart from the header', () => {
-  const long = [RUN('r-' + 'a'.repeat(40), 'opencode-with-a-long-name', 'some-vendor/a-very-long-model-id-v2'), RUN('r2', 'codex', 'gpt')]
-  for (const locale of ['en', 'zh-TW'] as const) {
+test('dispatch tab: every run is ONE table line at every width, 執行中 / 已完成 are separate tables, the latest 5 finished then one `more`, no kv line among the runs (I12, M25, M52a)', () => {
+  for (const locale of tabLocales) {
     const t = makeT(locale)
-    const lines = dispatchLines(dispatchSnap(long), { t, cols: 60 })
-    for (const l of lines) expect(displayWidth(l.text), l.text).toBeLessThanOrEqual(60)
-    expect(lines.some(l => l.text.startsWith(' ' + t('dispatch.col_run') + '  ')), locale + ' no table header').toBe(false)
-    const head = lines.findIndex(l => l.text.startsWith(' r-' + 'a'.repeat(40)))
-    expect(head, locale).toBeGreaterThan(0)
-    expect(lines[head + 1].text.startsWith(t('dispatch.col_role')), locale).toBe(true)
-    expect(lines[head + 1].hang, locale).toBe(12)
-    expect(lines.map(l => l.text).join('').replace(/\s/g, '').includes('some-vendor/a-very-long-model-id-v2'), locale + ' nothing clipped').toBe(true)
+    for (const cols of [40, 60, 76, 100, 120, 160]) {
+      const lines = dispatchLines(dispatchSnap(busyDispatchRows(), { gates: [{ phase: 'plan', generation: 1, verdict: 'PASS', status: 'LIVE GATE' }] }), { t, cols })
+      for (const l of lines) expect(displayWidth(l.text), locale + ' ' + cols + ' ' + l.text).toBeLessThanOrEqual(cols)
+      for (const l of lines.filter(x => x.kind !== 'table')) expect(l.text.includes('…'), 'only a table row may cut a cell: ' + l.text).toBe(false)
+      const at = (id: string) => lines.findIndex(l => l.toggle === id)
+      const [r0, f0, o0] = [at('dispatch.running'), at('dispatch.finished'), at('dispatch.other')]
+      expect(r0 > 0 && f0 > r0 && o0 > f0, locale + ' ' + cols + ' section order').toBe(true)
+      const running = lines.slice(r0, f0)
+      const finished = lines.slice(f0, o0)
+      expect(running.filter(l => l.kind === 'kv').length, 'no kv among the runs').toBe(0)
+      expect(finished.filter(l => l.kind === 'kv').length).toBe(0)
+      expect(bodyRows(running).length, locale + ' ' + cols + ' running rows').toBe(3) // live, stalled, unconfirmed
+      expect(bodyRows(finished).length, locale + ' ' + cols + ' finished rows (the 5-row cap)').toBe(5)
+      expect(finished.filter(l => l.kind === 'more').length).toBe(1)
+      expect(finished.filter(l => l.kind === 'more')[0].toggle).toBe('more:dispatch.finished')
+      if (cols === 76) expect(lines.length, 'at most 22 lines at 76 columns').toBeLessThanOrEqual(22)
+    }
   }
 })
 
-test('dispatch tab: a table that fits stays aligned: every row\'s state column starts where the header\'s does', () => {
-  const normal = [RUN('r1', 'codex', 'gpt-5'), { ...RUN('r2', 'claude', 'sonnet'), rc: 0 }, { ...RUN('r3', 'kimi', 'k2'), stall: true }]
-  for (const locale of ['en', 'zh-TW'] as const) {
+test('dispatch tab: eight live runs show the five loudest and one `more` (the running table is capped too, M52a)', () => {
+  const t = makeT('zh-TW')
+  const rows = [...Array.from({ length: 7 }, (_, i) => RUN_LIVE('live-' + i)), RUN_LIVE('stall-0', { stall: true })]
+  const lines = dispatchLines(dispatchSnap(rows), { t, cols: 100 })
+  const running = lines.slice(lines.findIndex(l => l.toggle === 'dispatch.running'), lines.findIndex(l => l.toggle === 'dispatch.finished'))
+  expect(bodyRows(running).length).toBe(5)
+  expect(bodyRows(running)[0].text.startsWith('⊘')).toBe(true) // the stalled one outranks the live ones
+  expect(running.filter(l => l.kind === 'more').length).toBe(1)
+  expect(running.find(l => l.kind === 'more')?.text.includes('還有 3 筆執行中')).toBe(true)
+})
+
+test('dispatch tab: opening `more` lists every finished run still inside the day (the one older than a day stays out), the toggle then reads 收起', () => {
+  const t = makeT('zh-TW')
+  const snap = dispatchSnap(busyDispatchRows())
+  const folded = dispatchLines(snap, { t, cols: 120 })
+  const opened = dispatchLines(snap, { t, cols: 120, expanded: new Set(['more:dispatch.finished']) })
+  expect(bodyRows(folded).filter(l => l.group?.startsWith('review-') || l.group === 'run-endednoverdict').length).toBe(5)
+  const finished = bodyRows(opened).filter(l => l.group?.startsWith('review-17') || l.group === 'run-endednoverdict')
+  expect(finished.length).toBe(32) // 31 + the verdictless one; review-old-run is aged out (F5)
+  expect(opened.some(l => l.group === 'review-old-run-from-three-days-ago-x')).toBe(false)
+  expect(opened.find(l => l.kind === 'more')?.text.includes('收起')).toBe(true)
+  expect(folded.find(l => l.kind === 'more')?.text.includes('還有 27 筆已完成')).toBe(true)
+})
+
+test('dispatch tab: ownership (I17, M31, M38): no spend or usage fact, no seat verdict word, the review pointer is the one goto row, the footer carries no spend or as-of stamps', () => {
+  for (const locale of tabLocales) {
     const t = makeT(locale)
-    const lines = dispatchLines(dispatchSnap(normal), { t, cols: 90 }).map(l => l.text)
-    const header = lines.find(l => l.startsWith(' ' + t('dispatch.col_run') + '  ')) as string
-    expect(header, locale).toBeDefined()
-    const at = (line: string, needle: string) => displayWidth(line.slice(0, line.indexOf(needle)))
-    const want = at(header, t('dispatch.col_state'))
-    const rowsTxt = lines.filter(l => / r[123] /.test(l))
-    expect(rowsTxt.length).toBe(3)
-    for (const r of rowsTxt) expect(at(r, r.includes('✓ rc') ? '✓ rc' : r.includes('⊘') ? '⊘' : '● '), r).toBe(want)
+    const gates = [{ phase: 'plan', generation: 1, verdict: 'PASS', status: 'LIVE GATE' }]
+    const snap = dispatchSnap(busyDispatchRows(), { gates, session_as_of: '01:40', host_as_of: '01:41' })
+    const lines = dispatchLines(snap, { t, cols: 76 })
+    for (const l of lines) {
+      if (l.fact === undefined) continue
+      expect(l.fact.startsWith('spend.') || l.fact.startsWith('usage.'), l.text).toBe(false)
+      const owner = ui.FACT_OWNER[l.fact]
+      if (owner !== 'dispatch') { expect(l.goto, l.text + ' is a projection and must carry goto').toBe('review'); expect(l.kind).toBe('kv') }
+    }
+    const projections = lines.filter(l => l.fact === 'review.gates')
+    expect(projections.length, 'the only line for that fact on the tab').toBe(1)
+    expect(projections[0].goto).toBe('review')
+    expect(projections[0].text.includes(t('tab.review'))).toBe(true)
+    const flat = lines.map(l => l.text).join('\n')
+    expect(/SHIP|CONDITIONAL|STOP|PASS|FIX-THEN/.test(flat), 'no seat or gate verdict word').toBe(false)
+    expect(/\$\d|01:40|01:41/.test(flat), 'no spend or session / host as-of stamp').toBe(false)
+    expect(lines.filter(l => l.kind === 'detail').length).toBe(1)
   }
 })
+
+test('dispatch tab: grouping and order (I22, M54): one row per group, severity then newest first, sections in SECTION_ORDER.dispatch', () => {
+  const t = makeT('zh-TW')
+  const lines = dispatchLines(dispatchSnap(busyDispatchRows()), { t, cols: 120, expanded: new Set(['more:dispatch.finished']) })
+  expect(lines.filter(l => l.kind === 'header').map(l => (l.toggle as string).replace('dispatch.', ''))).toEqual([...ui.SECTION_ORDER.dispatch])
+  for (const id of ['dispatch.running', 'dispatch.finished']) {
+    const from = lines.findIndex(l => l.toggle === id)
+    const rows = bodyRows(lines.slice(from + 1, lines.findIndex((l, i) => i > from && l.kind === 'header')))
+    expect(new Set(rows.map(r => r.group)).size, id + ' no two rows share a group').toBe(rows.length)
+    const sev = rows.map(r => ui.SEVERITY.indexOf((r.text.startsWith('⊘') ? 'stalled' : r.text.startsWith('●') ? 'running' : r.text.startsWith('◌') ? 'stopped' : 'done') as never))
+    for (let i = 1; i < rows.length; i++) {
+      expect(sev[i] >= sev[i - 1], id + ' severity order at ' + i).toBe(true)
+      if (sev[i] === sev[i - 1]) expect(rows[i].ts as number, id + ' newest first at ' + i).toBeLessThanOrEqual(rows[i - 1].ts as number)
+    }
+  }
+  const same = [RUN_FIN('dup', 1000), RUN_FIN('dup', 2000)]
+  expect(bodyRows(dispatchLines(dispatchSnap(same), { t, cols: 120 })).length, 'rows of one group fold into one').toBe(1)
+})
+
+test('tableList refuses a row without group or ts (M53)', () => {
+  const t = makeT('en')
+  const u = { t, cols: 80 }
+  const cols = [{ head: 'run', min: 4, priority: 1, cut: 'left' as const }]
+  const ok = { state: ui.stateOf('run', { rc: 0, final_status: null, stall: false, fresh: false }), cells: ['a'], group: 'a', ts: 1 }
+  expect(() => ui.tableList(u, 'x', 'n', cols, [ok], { fact: 'dispatch.runs' })).not.toThrow()
+  expect(() => ui.tableList(u, 'x', 'n', cols, [{ state: ok.state, cells: ['a'], ts: 1 } as never], { fact: 'dispatch.runs' })).toThrow(/group or ts/)
+  expect(() => ui.tableList(u, 'x', 'n', cols, [{ state: ok.state, cells: ['a'], group: 'a' } as never], { fact: 'dispatch.runs' })).toThrow(/group or ts/)
+})
+
+test('dispatch tab: F5 a finished run older than a day is counted in the chip, not listed (I11 at T-1, T, T+1 ms; M24e, M24j)', () => {
+  const t = makeT('zh-TW')
+  const T = ui.FRESH_MS.dispatch
+  expect(T).toBe(D_DAY)
+  for (const [delta, listed] of [[-1, true], [0, true], [1, false]] as const) {
+    const row = RUN_FIN('edge', T + delta)
+    const lines = dispatchLines(dispatchSnap([row]), { t, cols: 120 })
+    expect(bodyRows(lines).length, 'T' + (delta < 0 ? delta : '+' + delta)).toBe(listed ? 1 : 0)
+    const head = lines.find(l => l.toggle === 'dispatch.finished') as { text: string }
+    expect(head.text.includes('✓ 1'), 'the chip still counts it').toBe(true)
+    if (!listed) expect(lines.some(l => l.text.includes(t('dispatch.no_finished')))).toBe(true)
+    expect(runAgedOut(paneRows({ runs: [{ ...row, phase: 'exited' }] } as never)?.[0] as never, D_NOW)).toBe(!listed)
+  }
+})
+
+test('dispatch tab: who computes `fresh` (§2.5 gap): a row that ended with no rc and no final_status is stopped, never running; a stale probe is not running either', () => {
+  const t = makeT('zh-TW')
+  const env = (runs: object[]) => ({ counts: { fresh_bound_s: 30 }, runs }) as never
+  const base = { run_id: 'x', role: 'hands', runner: 'codex', model: 'gpt', started_at: '2026-10-13T07:00:00.000Z', elapsed_s: 100, stall: false, rc: null, final_status: null }
+  const cases: [string, object, string, boolean][] = [
+    ['alive and probed inside the bound', { alive: true, probe_age_s: 5, phase: 'running' }, 'running', true],
+    ['probe older than the bound', { alive: true, probe_age_s: 31, phase: 'running' }, 'stopped', false],
+    ['never probed, launched longer ago than the bound', { alive: true, probe_age_s: null, phase: 'running', elapsed_s: 31 }, 'stopped', false],
+    ['never probed, launched inside the bound: not started yet, not stopped', { alive: true, probe_age_s: null, phase: 'running', elapsed_s: 20 }, 'pending', false],
+    ['never probed at exactly the bound', { alive: true, probe_age_s: null, phase: 'running', elapsed_s: 30 }, 'pending', false],
+    ['probed once but the probe is stale, launched inside the bound', { alive: true, probe_age_s: 31, phase: 'running', elapsed_s: 20 }, 'stopped', false],
+    ['not alive, not ended', { alive: false, probe_age_s: 5, phase: 'running' }, 'stopped', false],
+    ['exited with no rc and no final_status', { alive: true, probe_age_s: 5, phase: 'exited' }, 'stopped', false],
+    ['ended_at set, alive flag still true', { alive: true, probe_age_s: 5, phase: 'running', ended_at: '2026-10-13T07:05:00.000Z' }, 'stopped', false],
+    ['unrecognised final_status on a fresh row', { alive: true, probe_age_s: 5, phase: 'running', final_status: 'WEIRD' }, 'unknown', false],
+  ]
+  for (const [name, over, want, fresh] of cases) {
+    const nowAt = Date.parse(base.started_at) + (((over as { elapsed_s?: number }).elapsed_s ?? base.elapsed_s) * 1000) // the clock the case means: `elapsed_s` seconds after launch
+    const [row] = paneRows(env([{ ...base, ...over }]), nowAt) as ReturnType<typeof paneRows> & object
+    expect(row.fresh, name).toBe(fresh)
+    expect(ui.stateOf('run', runSubject(row)).id, name).toBe(want)
+    const text = dispatchLines(dispatchSnap([row], { detail: { counts: null, stalled: 0, now_ms: Date.parse('2026-10-13T08:00:00.000Z') } }), { t, cols: 120 }).map(l => l.text).join('\n')
+    const drawnRunning = text.split('\n').some(l => l.startsWith('● ') && l.includes(' x '))
+    expect(drawnRunning, name + ' drawn as running').toBe(want === 'running')
+  }
+  // elapsed_s is frozen in a heartbeat rewrite: a stale copy of 5 s must not keep a never-probed run "not started" once the CLOCK is past the bound
+  const stale = { ...base, alive: true, probe_age_s: null, phase: 'running', elapsed_s: 5 }
+  const startMs = Date.parse(base.started_at)
+  const [late] = paneRows(env([stale]), startMs + 31_000) as never[]
+  expect(ui.stateOf('run', runSubject(late)).id, 'elapsed_s 5 but the clock is 31 s past launch').toBe('stopped')
+  const [early] = paneRows(env([stale]), startMs + 30_000) as never[]
+  expect(ui.stateOf('run', runSubject(early)).id, 'exactly at the bound').toBe('pending')
+  const [noClock] = paneRows(env([stale])) as never[]
+  expect(ui.stateOf('run', runSubject(noClock)).id, 'no clock, no starting').toBe('stopped')
+  const [noStart] = paneRows(env([{ ...stale, started_at: null }]), startMs + 1000) as never[]
+  expect(ui.stateOf('run', runSubject(noStart)).id, 'no started_at, no starting').toBe('stopped')
+  // no bound published: any probe counts as fresh
+  const [noBound] = paneRows({ runs: [{ ...base, alive: true, probe_age_s: 900, phase: 'running' }] } as never) as never[]
+  expect((noBound as { fresh: boolean }).fresh).toBe(true)
+})
+
+test('dispatch tab: a dead run with no ended_at and no final_status is dated by nothing: the ended cell is — and the row stays listed, never "0s 前" (runEndedMs)', () => {
+  const t = makeT('zh-TW')
+  const env = { counts: { fresh_bound_s: 30 }, runs: [{ run_id: 'dead-3d', role: 'hands', runner: 'codex', model: 'gpt', started_at: new Date(D_NOW - 3 * D_DAY).toISOString(), elapsed_s: 3 * 86400, stall: false, rc: null, final_status: null, phase: 'exited', alive: false, probe_age_s: null }] } as never
+  const rows = paneRows(env) as never[]
+  const lines = dispatchLines(dispatchSnap(rows), { t, cols: 120 })
+  const body = bodyRows(lines)
+  expect(body.length, 'listed, not aged out').toBe(1)
+  expect(body[0].text.includes('0s 前')).toBe(false)
+  expect(body[0].text.trimEnd().endsWith('—')).toBe(true)
+  expect(runEndedMs(rows[0])).toBeNull()
+  // with a final_status the frozen elapsed_s does date the end
+  const dated = paneRows({ counts: { fresh_bound_s: 30 }, runs: [{ run_id: 'x', started_at: new Date(D_NOW - 3 * D_DAY).toISOString(), elapsed_s: 60, rc: null, final_status: 'done', phase: 'exited', alive: false }] } as never) as never[]
+  expect(runEndedMs(dated[0])).toBe(D_NOW - 3 * D_DAY + 60_000)
+})
+
+test('dispatch tab: the footer snapshot stamp is HH:MM (or MM-DD), never the raw ISO string the producer publishes (§3.5)', () => {
+  for (const locale of tabLocales) {
+    const lines = dispatchLines(dispatchSnap([RUN_LIVE('a')]), { t: makeT(locale), cols: 100 })
+    const note = lines.find(l => l.kind === 'detail') as { text: string }
+    expect(/\d\d:\d\d$/.test(note.text), note.text).toBe(true)
+    expect(/T\d\d|Z|2026-/.test(note.text), note.text).toBe(false)
+  }
+})
+
+for (const surface of SURFACES) {
+  test('P2 wiring: the mod passes its clock to paneRows: a never-probed run reads ○ 未開始 inside fresh_bound_s and ◌ 已停 once the clock is past it (' + surface + ')', async ($, on) => {
+    const files = base()
+    const runs = [row({ run_id: 'never-probed', alive: true, probe_age_s: null, phase: 'running', started_at: '2026-10-04T10:00:20.000Z', elapsed_s: 10 })]
+    const env = envelope({ runs, counts: { confirmed_live: 0, exited: 0, unknown: 1, fresh_bound_s: 30 } })
+    files[LIVE + '/runs/' + KEY + '--' + ROOT + '.json'] = j(env)
+    files[LIVE + '/runs/' + KEY + '.json'] = j(envelope({ runs, counts: { confirmed_live: 0, exited: 0, unknown: 1, fresh_bound_s: 30 } }, null))
+    const w = world(on, files)
+    await start($, surface)
+    const runRow = async () => (await paneParts($, surface, 'dispatch')).texts.find(x => x.includes('never-probed')) as string
+    expect((await runRow()).startsWith('○ 未開始'), await runRow()).toBe(true) // 10 s after launch, bound 30
+    for (let i = 0; i < 7; i++) await w.clock.advance(5000) // 35 s on: 45 s after launch, and the envelope (valid 180 s) is still fresh
+    expect((await runRow()).startsWith('◌ 已停'), await runRow()).toBe(true)
+  })
+}
+
+for (const surface of SURFACES) {
+  test('P2 mounted (I18, I19): pressing the finished-runs `more` row lists every finished run and pressing it again restores the five; pressing the 審查 row calls onTab review (' + surface + ')', async ($, on) => {
+    const files = base()
+    const runs = [
+      row({ run_id: 'live-1' }),
+      ...Array.from({ length: 8 }, (_, i) => row({ run_id: 'done-' + i, phase: 'exited', alive: false, rc: 0, final_status: 'done', started_at: '2026-10-04T09:40:00.000Z', ended_at: '2026-10-04T09:' + String(41 + i).padStart(2, '0') + ':00.000Z', elapsed_s: 60 })),
+    ]
+    files[LIVE + '/runs/' + KEY + '--' + ROOT + '.json'] = j(envelope({ runs }))
+    files[LIVE + '/runs/' + KEY + '.json'] = j(envelope({ runs }, null))
+    world(on, files)
+    await start($, surface)
+    const mountPane = (props: object = PANE_PROPS) => $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+    const first = await mountPane()
+    await first.press({ key: 'dispatch' })
+    await first.unmount()
+    const rowsNow = async () => { const p = await mountPane(); const r = rowsOf((await p.drawn()) as Node); await p.unmount(); return r }
+    const doneCount = (r: string[]) => r.filter(x => / done-\d/.test(x)).length
+    const before = await rowsNow()
+    expect(doneCount(before)).toBe(5)
+    const at = before.findIndex(x => x.includes('還有 3 筆已完成'))
+    expect(at, before.join('\n')).toBeGreaterThan(0)
+    const press = await mountPane()
+    await press.press({ key: 'b' + at })
+    await press.unmount()
+    const opened = await rowsNow()
+    expect(doneCount(opened)).toBe(8)
+    expect(opened.some(x => x.includes('收起'))).toBe(true)
+    const again = await mountPane()
+    await again.press({ key: 'b' + opened.findIndex(x => x.includes('收起')) })
+    await again.unmount()
+    expect(await rowsNow()).toEqual(before)
+    // the pointer row: a Button whose press switches the pane to 審查
+    const ptr = before.findIndex(x => x.startsWith('審查 ›'))
+    expect(ptr).toBeGreaterThan(0)
+    const nav = await mountPane()
+    await nav.press({ key: 'g' + ptr })
+    await nav.unmount()
+    const review = await mountPane()
+    const active = ((await review.findAll({ type: 'Button' })) as Drawn[]).find(b => isActiveTab(b))?.props?.key
+    await review.unmount()
+    expect(active).toBe('review')
+  })
+}
 
 // ---- follow-up C: the Spend tab's hourly sparkline (source: <live>/runs/spend-history.json, published by the runs watcher) ----
 const SH_NOW = Date.parse('2026-10-10T12:30:00.000Z')
@@ -3502,17 +3736,20 @@ for (const width of [60, 76, 90]) {
       const t = makeT(locale)
       const lines = spendTabLines(spendSnap(HOURLY), { t, cols: width })
       for (const l of lines) expect(displayWidth(l.text), l.text).toBeLessThanOrEqual(width)
-      const bars = lines.find(l => l.text.length > 0 && [...l.text.trim()].every(c => SPARK_BARS.includes(c)))
-      expect(bars, 'a row of only spark bars').toBeDefined()
-      expect([...(bars as { text: string }).text.trim()].length).toBe(24)
-      expect((bars as { text: string }).text.trim()).toBe(sparkText(HOURLY))
-      // the bars carry the brain-tier theme colour (suggestion), the current hour bold; text colour only
-      expect((bars as { segs: { color?: string }[] }).segs.filter(x => x.color !== undefined).every(x => x.color === 'suggestion')).toBe(true)
+      const bars = lines.find(l => [...l.text].some(c => SPARK_BARS.includes(c)))
+      expect(bars, 'the sparkline row').toBeDefined()
+      const spark = [...(bars as { text: string }).text].filter(c => SPARK_BARS.includes(c)).join('')
+      expect([...spark].length).toBe(24)
+      expect(spark).toBe(sparkText(HOURLY)) // the design system's sparkValue scales like the legacy sparkText
+      // chart glyphs are default text (a sparkline is not a running state): no colour, no bold
+      expect((bars as { segs: { color?: string; bold?: boolean }[] }).segs.every(x => x.color === undefined && x.bold !== true)).toBe(true)
       const total = HOURLY.reduce((a, c) => a + c, 0)
-      const ruleLine = lines.find(l => l.text.includes(t('spend.hourly')))
-      expect(ruleLine?.text).toContain('+$' + total.toFixed(2))
+      const head = lines.find(l => l.text.includes(t('usage.last24')))
+      expect(head?.text).toContain('$' + total.toFixed(2))
+      expect(head?.text.startsWith('▾ ')).toBe(true)
       const caption = lines.map(l => l.text).join('\n')
       expect(caption).toContain('$4.00')
+      expect(caption).toContain(t('spend.hint').slice(0, 6))
       expect(lines.some(l => l.text.includes(t('spend.no_history')))).toBe(false)
     })
 
@@ -3525,6 +3762,72 @@ for (const width of [60, 76, 90]) {
     })
   }
 }
+
+const shareSnap = () => ({
+  header: 'h', rows: null, gates: null, link: null, published_at: null, session_as_of: null, host_as_of: null,
+  sections: { attention: [], waiting: [], tasks: [], decisions: [], foreman: [] },
+  detail: { counts: null, stalled: 0, now_ms: SH_NOW, spend: { session: '$1.00', host_all: '$112.40', host_all_n: 112.4, brain: 87.2, cap: 150, mode: 'warn', hourly: HOURLY } },
+}) as never
+
+for (const [cols, cells] of [[76, 20], [120, 40]] as const) {
+  test('usage tab: the brain and other-tier share bars use one scale, their filled cells add up to the meter width (' + cols + ' columns, ' + cells + ' cells)', () => {
+    const t = makeT('zh-TW')
+    const lines = spendTabLines(shareSnap(), { t, cols })
+    const on = (key: string) => {
+      const row = lines.find(l => l.fact === 'usage.today' && l.text.startsWith(key))
+      expect(row, key).toBeDefined()
+      return [...(row as { text: string }).text].filter(c => c === '▰').length
+    }
+    const brain = on(t('label.brain') + ' ')
+    const other = on(t('label.other_tiers'))
+    expect(brain).toBeGreaterThan(other) // 87.20 of 112.40
+    expect(other).toBeGreaterThanOrEqual(1) // a non-zero remainder keeps a cell
+    expect(brain + other).toBe(cells)
+    expect(brain).toBe(Math.round((87.2 / 112.4) * cells)) // the share of the host total, not of the cap
+  })
+}
+
+for (const [cols, rowsExpected] of [[120, 1], [84, 1], [83, 2], [60, 2]] as const) {
+  test('usage tab: the sparkline, its peak and its hint share one row when they fit, else the hint drops to a second (' + cols + ' columns: ' + rowsExpected + ' row(s))', () => {
+    const t = makeT('zh-TW')
+    const lines = spendTabLines(shareSnap(), { t, cols })
+    const at = lines.findIndex(l => l.text.includes(t('usage.last24')))
+    expect(at).toBeGreaterThan(-1)
+    const rest = lines.slice(at + 1)
+    const end = rest.findIndex(l => l.text.startsWith('▾ ') || l.text.startsWith('▸ '))
+    const chart = (end === -1 ? rest : rest.slice(0, end)).filter(l => l.text.trim() !== '')
+    expect(chart.length).toBe(rowsExpected)
+    if (rowsExpected === 2) {
+      expect(chart[1].text).toBe(' '.repeat(12) + t('spend.hint')) // the hint alone, indented under the sparkline
+      expect(chart[0].text).not.toContain(t('spend.hint'))
+    } else expect(chart[0].text).toContain(t('spend.hint'))
+  })
+}
+
+test('usage tab: folding 今日花費 or 近 24 小時 leaves the heading alone and shows the arrow ▸', () => {
+  const t = makeT('zh-TW')
+  for (const [id, title, inner] of [[SECTION.today, t('now.cost'), t('label.host')], [SECTION.last24, t('usage.last24'), t('label.brain') + ' ']] as const) {
+    const open = spendTabLines(shareSnap(), { t, cols: 120 })
+    expect(open.some(l => l.text.startsWith('▾ ' + title))).toBe(true)
+    expect(open.some(l => l.text.startsWith(inner))).toBe(true)
+    const shut = spendTabLines(shareSnap(), { t, cols: 120, folded: new Set([id]) })
+    expect(shut.some(l => l.text.startsWith('▸ ' + title))).toBe(true)
+    expect(shut.some(l => l.text.startsWith('▾ ' + title))).toBe(false)
+    if (id === SECTION.today) expect(shut.some(l => l.text.startsWith(inner))).toBe(false)
+    else expect(shut.some(l => [...l.text].some(c => SPARK_BARS.includes(c)))).toBe(false)
+  }
+})
+
+test('usage tab: an OAuth account with no email, organization or plan reads "signed in, details incomplete", never "not logged in"', () => {
+  for (const locale of ['en', 'zh-TW'] as const) {
+    const t = makeT(locale)
+    const acc = readAccount(JSON.stringify({ oauthAccount: { accountUuid: 'u-1' } }))
+    expect(acc, 'an account id alone is a signed-in account').not.toBe(null)
+    const text = spendTabLines(usageSnap({ account: acc, quota: [] }), { t, cols: 120 }).map(l => l.text).join('\n')
+    expect(text).toContain(t('account.partial'))
+    expect(text).not.toContain(t('account.none'))
+  }
+})
 
 // ---- the Now tab's trailing section: the last 3 prompts of the session, each with a collapsible reply (all prompts here are synthetic) ----
 const U = (text: string, extra: Partial<SessionMsg> = {}): SessionMsg => ({ role: 'user', text, toolUses: [], ...extra })
@@ -3971,6 +4274,12 @@ const quotaSlots = (q: QuotaWindow[] | null) => bandSlots({
   loadSource: null, residue: readResidue(JSON.stringify({ schema: 'autopilot.residue/1', project_key: KEY, reapable_worktrees: 0, by_class: {}, needs_human_count: 2 }), KEY), quota: q, nowMs: 0,
 })
 const win = (kind: string, pct: number): QuotaWindow => ({ kind, pct, resetsAtMs: null })
+// a snapshot for the 用量 tab: the account and the quota windows ride in `account`, the spend in `detail.spend` (null = nothing published)
+const usageSnap = (account: AccountSnap | undefined, spend: unknown = null) => ({
+  header: 'h', rows: null, gates: null, link: null, published_at: null, session_as_of: null, host_as_of: null,
+  sections: { attention: [], waiting: [], tasks: [], decisions: [], foreman: [] }, account,
+  detail: { counts: null, stalled: 0, now_ms: NOW_FRESH, spend },
+}) as never
 
 test('quota: readQuota keeps well-formed windows in 5h / 7d / spend order and parses the reset time', () => {
   expect(readQuota(USAGE.rateLimits)).toEqual([{ kind: 'five_hour', pct: 42, resetsAtMs: Date.parse(RESET_5H) }, { kind: 'seven_day', pct: 18.4, resetsAtMs: null }])
@@ -4003,8 +4312,8 @@ test('quota slot: absent without windows; both windows from 120 columns, the mos
   expect(layoutBand(quotaSlots(q), 159).text).toBe('● 進行中 │ ●1 │ 5h 10% 7d 85% │ ⚑2 │ ⓘ ')
   expect(layoutBand(quotaSlots(q), 119).text).toBe('● 進行中 │ ●1 │ 7d 85% │ ⚑2 │ ⓘ ')
   expect(layoutBand(quotaSlots(q), 79).text).toBe('● 進行中 │ ●1 │ ⚑2 │ ⓘ ')
-  expect(slotTab('quota')).toBe('now')
-  expect(slotUnfolds('quota')).toBe(SECTION.account)
+  expect(slotTab('quota')).toBe('spend') // the quota slot opens 用量 (P3), no longer 現況
+  expect(slotUnfolds('quota')).toBe(SECTION.limits)
 })
 
 test('quota slot: a band still too long drops the quota windows before the ⊘ / ● counts; the spend window is `cap`, never `$`', () => {
@@ -4034,51 +4343,70 @@ test('quota slot: a window is plain below 80 %, warning from 80 %, error from 10
   // the text is floored, so it agrees with the colour: 79.9 is an uncoloured 79%, 99.9 a warning 99%, never 100% before the limit
   const textOf = (pct: number) => (slotQuota([win('five_hour', pct)]) as Slot).segs.map(g => g.text).join('')
   expect([textOf(79.9), textOf(80), textOf(99.9), textOf(100)]).toEqual(['5h 79%', '5h 80%', '5h 99%', '5h 100%'])
-  const nowText = accountLines({ account: undefined, quota: [win('five_hour', 79.9)] }, null, { t: makeT('en'), cols: 120 })[1].text
-  expect(nowText).toContain(' 79%')
-  expect(nowText).not.toContain('80%')
+  const tabLine = spendTabLines(usageSnap({ account: undefined, quota: [win('five_hour', 79.9)] }), { t: makeT('en'), cols: 120 }).find(l => l.kind === 'meter') as { text: string; segs: { text: string; color?: string }[] }
+  expect(tabLine.text).toContain(' 79%')
+  expect(tabLine.text).not.toContain('80%')
+  expect(tabLine.segs.find(s => s.text.endsWith('79%'))?.color).toBe('success') // the tab's meter judges the raw ratio too: 79.9 is not yet a warning
   expect((slotQuota([win('five_hour', 42)]) as Slot).segs[0]).toMatchObject({ text: '5h ', dim: true })
 })
 
 for (const locale of ['en', 'zh-TW'] as const) {
   for (const cols of [48, 120]) {
-    test('account: the Now section lists account, organization, plan and each window, every wrapped row fits (' + locale + ', ' + cols + ' columns)', () => {
+    test('usage tab: 帳號 lists account, organization and plan, 額度 each window as a meter with its reset time, every row fits (' + locale + ', ' + cols + ' columns)', () => {
       const t = makeT(locale)
       const snap: AccountSnap = { account: readAccount(CLAUDE_JSON), quota: readQuota([...USAGE.rateLimits, { kind: 'spend_limit', percentUsed: 104 }]) }
-      const lines = accountLines(snap, NOW_FRESH, { t, cols })
+      const lines = spendTabLines(usageSnap(snap), { t, cols })
       const text = lines.map(l => l.text).join('\n')
-      expect(lines[0].text).toContain(t('now.account'))
+      expect(lines.some(l => l.text.startsWith('▾ ' + t('now.account')))).toBe(true)
+      expect(lines.some(l => l.text.startsWith('▾ ' + t('usage.limits')))).toBe(true)
       expect(text).toContain('owner@example.com (Owner)')
       expect(text).toContain('Example Co · admin')
       expect(text).toContain('claude max · 20x · ' + t('account.extra_on'))
       expect(text).toContain(t('label.quota_5h'))
-      expect(text).toContain('42%  ' + t('quota.resets', { in: '2h30m' }))
+      expect(text).toContain('42%')
+      expect(text).toContain(t('ui.reset', { age: '2h30m' })) // the formatter's duration, then the string table's direction word
       expect(text).toContain(t('label.quota_7d'))
       expect(text).toContain('104%')
-      for (const l of wrapLines(lines, cols)) expect(displayWidth(l.text), l.text).toBeLessThanOrEqual(cols)
+      const meters = lines.filter(l => l.kind === 'meter')
+      expect(meters.length).toBe(3) // 5h, 7d, spend_limit: one meter row each, nothing else is a limit row
+      expect(meters.map(l => l.fact)).toEqual(['usage.window5h', 'usage.window7d', 'usage.window_other'])
+      expect(new Set(meters.map(l => (l.segs ?? []).filter(s => s.role === 'glyph').map(s => s.text).join('').length)).size).toBe(1) // equal bar length: the rows compare by length
+      // the account is one fact: all of it on one row where it fits (the §5.4 120-column form), else one row each
+      const account = lines.filter(l => l.fact === 'usage.account')
+      expect(account.length).toBe(cols === 120 ? 1 : 3)
+      for (const l of lines) expect(displayWidth(l.text), l.text).toBeLessThanOrEqual(cols)
     })
   }
 }
 
-test('account: an API-key login is one dim line; nothing read and no windows is no section; folded shows the heading alone', () => {
+test('usage tab: an API-key login is one absent row; no account read is one empty line; no windows and no spend is one empty line; folded shows the heading alone', () => {
   const t = makeT('zh-TW')
-  const none = accountLines({ account: null, quota: [] }, NOW_FRESH, { t, cols: 120 })
-  expect(none.length).toBe(2)
-  expect(none[1].text.trim()).toBe(t('account.none'))
-  expect(accountLines({ account: undefined, quota: [] }, NOW_FRESH, { t, cols: 120 })).toEqual([])
-  expect(accountLines(undefined, NOW_FRESH, { t, cols: 120 })).toEqual([])
+  const cols = 120
+  const none = spendTabLines(usageSnap({ account: null, quota: [] }), { t, cols })
+  expect(none.find(l => l.fact === 'usage.account')?.text.trim()).toBe(t('label.account') + '        — ' + t('account.none'))
+  const unread = spendTabLines(usageSnap({ account: undefined, quota: [] }), { t, cols })
+  expect(unread.filter(l => l.kind === 'empty').map(l => l.text)).toContain('— ' + t('nodata.account'))
+  expect(unread.filter(l => l.kind === 'empty' && l.fact === 'usage.brain').length).toBe(1) // limits: exactly one empty line, not one per missing source
+  expect(spendTabLines(usageSnap(undefined), { t, cols }).filter(l => l.kind === 'empty').length).toBe(4) // limits, today, last 24 h, account
   // windows without a readable file still show; a reset time already past or an unknown clock shows none
-  const resets = t('quota.resets', { in: 'X' }).replace('X', '').trim()
-  const past = accountLines({ account: undefined, quota: [{ kind: 'five_hour', pct: 5, resetsAtMs: NOW_FRESH - 1 }] }, NOW_FRESH, { t, cols: 120 })
-  expect(past.length).toBe(2)
-  expect(past[1].text).not.toContain(resets)
-  const noClock = accountLines({ account: undefined, quota: [{ kind: 'five_hour', pct: 5, resetsAtMs: NOW_FRESH + 60000 }] }, null, { t, cols: 120 })
-  expect(noClock[1].text).not.toContain(resets)
-  expect(accountLines({ account: null, quota: [] }, NOW_FRESH, { t, cols: 120, folded: new Set([SECTION.account]) }).length).toBe(1)
+  const resets = t('ui.reset', { age: 'X' }).replace('X', '').trim()
+  const meterOf = (quota: QuotaWindow[], now: number | null) => (spendTabLines({ ...(usageSnap({ account: undefined, quota }) as object), detail: { counts: null, stalled: 0, now_ms: now, spend: null } } as never, { t, cols }).find(l => l.kind === 'meter') as { text: string })
+  expect(meterOf([{ kind: 'five_hour', pct: 5, resetsAtMs: NOW_FRESH + 60000 }], NOW_FRESH).text).toContain(resets)
+  expect(meterOf([{ kind: 'five_hour', pct: 5, resetsAtMs: NOW_FRESH - 1 }], NOW_FRESH).text).not.toContain(resets)
+  expect(meterOf([{ kind: 'five_hour', pct: 5, resetsAtMs: NOW_FRESH + 60000 }], null).text).not.toContain(resets)
+  const folded = spendTabLines(usageSnap({ account: null, quota: [] }), { t, cols, folded: new Set([SECTION.account]) })
+  expect(folded.filter(l => l.fact === 'usage.account').length).toBe(0)
+  expect(folded.some(l => l.text.startsWith('▸ ' + t('now.account')))).toBe(true)
+})
+
+test('usage tab: the limits chip names the worst level; a window over its cap makes it 已超過, and the meter bar and percent take the level colour', () => {
+  const t = makeT('zh-TW')
+  const chipOf = (pct: number) => (spendTabLines(usageSnap({ account: undefined, quota: [win('five_hour', pct)] }), { t, cols: 76 }).find(l => l.kind === 'header' && l.text.startsWith('▾ ' + t('usage.limits'))) as { segs: { text: string; color?: string }[] }).segs.find(s => s.role === 'value')
+  expect([chipOf(10), chipOf(79.9), chipOf(80), chipOf(100)].map(c => [c?.text, c?.color])).toEqual([[t('spend.ok'), 'success'], [t('spend.ok'), 'success'], [t('spend.warn'), 'warning'], [t('spend.over'), 'error']])
 })
 
 for (const surface of SURFACES) {
-  test('account: the band shows the windows and the Now tab the account; ~/.claude.json is read again only when it changed; pressing the slot opens Now (' + surface + ')', async ($, on) => {
+  test('account: the band shows the windows and the Usage tab the account; ~/.claude.json is read again only when it changed; pressing the slot opens Usage (' + surface + ')', async ($, on) => {
     const t = makeT('zh-TW')
     const PATH = HOME + '/.claude.json'
     let usage: unknown = USAGE
@@ -4093,8 +4421,9 @@ for (const surface of SURFACES) {
     const narrow = (await bandLine($, surface, 100)).text
     expect(narrow).toContain('5h 42%')
     expect(narrow).not.toContain('7d')
-    const body = async () => (await paneParts($, surface, 'now')).texts.join('\n')
+    const body = async () => (await paneParts($, surface, 'spend')).texts.join('\n')
     let b = await body()
+    expect((await paneParts($, surface, 'now')).texts.join('\n')).not.toContain('owner@example.com') // Now no longer shows the account (I16)
     expect(b).toContain(t('now.account'))
     expect(b).toContain('owner@example.com (Owner)')
     expect(b).toContain('Example Co · admin')
@@ -4125,18 +4454,18 @@ for (const surface of SURFACES) {
     b = await body()
     expect(b).toContain('second@example.com')
     expect((await bandLine($, surface, 120)).text).toContain('5h 91%')
-    // fold the Account section, then press the slot: the Now tab opens with the section unfolded
+    // fold the Limits section, then press the slot: the Usage tab opens with the section unfolded
     const mountPane = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
-    const rowsNow = async () => { const p = await mountPane(); const r = rowsOf((await p.drawn()) as Node); await p.unmount(); return r }
-    const at = (await rowsNow()).findIndex(r => r.startsWith('▾ ' + t('now.account')))
+    const rowsNow = async () => { const q = await mountPane(); await q.press({ key: 'spend' }); await q.unmount(); const p = await mountPane(); const r = rowsOf((await p.drawn()) as Node); await p.unmount(); return r }
+    const at = (await rowsNow()).findIndex(r => r.startsWith('▾ ' + t('usage.limits')))
     expect(at).toBeGreaterThan(0)
     const fold = await mountPane()
     await fold.press({ key: 'b' + at })
     await fold.unmount()
-    expect((await rowsNow())[at].startsWith('▸ ' + t('now.account'))).toBe(true)
-    expect((await rowsNow()).join('\n')).not.toContain('second@example.com')
+    expect((await rowsNow())[at].startsWith('▸ ' + t('usage.limits'))).toBe(true)
+    expect((await rowsNow()).join('\n')).not.toContain('91%')
     const elsewhere = await mountPane()
-    await elsewhere.press({ key: 'spend' })
+    await elsewhere.press({ key: 'dispatch' })
     await elsewhere.unmount()
     const band = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: 209 }, viewport: { columns: 209, rows: 50, isFullscreen: true } })
     await band.press({ key: 'quota' })
@@ -4144,7 +4473,7 @@ for (const surface of SURFACES) {
     const pane = await mountPane()
     const active = ((await pane.findAll({ type: 'Button' })) as Drawn[]).find(x => isActiveTab(x))?.props?.key
     await pane.unmount()
-    expect(active).toBe('now')
+    expect(active).toBe('spend')
     expect((await rowsNow()).join('\n')).toContain('second@example.com')
     // stat refused while the file is still there (a permission or passing I/O error): the account stays, nothing is read
     w.statErrors[PATH] = "EACCES: permission denied, lstat '" + PATH + "'"
@@ -4190,7 +4519,7 @@ test('account: with CLAUDE_CONFIG_DIR set the account comes from that directory,
   w.stats[HOME + '/.claude.json'] = { size: CLAUDE_JSON.length, mtimeMs: NOW_FRESH - 60000 }
   w.stats['/cfg/.claude.json'] = { size: moved.length, mtimeMs: NOW_FRESH - 60000 }
   await start($, 'terminal')
-  const body = async () => (await paneParts($, 'terminal', 'now')).texts.join('\n')
+  const body = async () => (await paneParts($, 'terminal', 'spend')).texts.join('\n')
   const b = await body()
   expect(b).toContain('moved@example.com')
   expect(b).not.toContain('owner@example.com')

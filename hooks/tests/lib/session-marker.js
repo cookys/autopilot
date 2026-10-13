@@ -9,9 +9,9 @@
 //
 // Two details decide how a fixture has to be shaped:
 //   - Admission resolves exactly ONE marker file, <session id>.json. The
-//     marker-to-campaign bridge that runs after it instead scans every marker
-//     in the directory, so the two gates do not see the same set and a marker
-//     named after a test case is invisible to admission.
+//     marker-to-campaign bridge that runs after it checks the caller's own marker
+//     (session_id == CLAUDE_CODE_SESSION_ID; every marker when that is unset), so a
+//     marker named after a test case is invisible to admission.
 //   - Admission reads only three fields off the contract. A test that has no
 //     real sealed campaign can pass `contract: null` and get a synthetic one
 //     that carries exactly those three.

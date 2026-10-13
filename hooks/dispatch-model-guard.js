@@ -37,6 +37,21 @@ const path = require('path');
 // subagents inherited the session's [1m] Fable model because nothing asked.
 if (process.env.AUTOPILOT_DISPATCH_MODEL_GUARD_MODE === 'off') process.exit(0);
 
+// BL-0017 (c): a brief that sets an l5/l6 marker AND names a non-strict dispatch rail burns foreman
+// budget on a refusal. Advisory only (never blocks); the line is the same one session-mode.js prints
+// (hooks/tests/blocked-dispatch-guidance.test.sh pins them equal).
+const MASK_LINE = 'To run a non-strict dispatch in this session, prefix that one command with: AUTOPILOT_SESSION_MODE_DIR=$(mktemp -d)';
+const SETS_MANAGED_MARKER_RE = /session-mode(?:\.js)?\s+set\s+--level\s+l[56]\b/;
+// Rails the l5/l6 marker refuses unless strict: dispatch-author (and dispatch-consult /
+// dispatch-plan-review, which ride it). `--strict-contract` on the same line marks a strict call.
+const NON_STRICT_RAIL_RE = /^(?!.*--strict-contract).*\bdispatch-(?:author|consult|plan-review)(?:\.sh|\.js)?\b/m;
+function briefLintWarning(prompt) {
+  if (!SETS_MANAGED_MARKER_RE.test(prompt) || !NON_STRICT_RAIL_RE.test(prompt)) return '';
+  return 'dispatch-model-guard: this brief sets an l5/l6 session-mode marker AND runs a non-strict dispatch '
+    + '(dispatch-author/consult/plan-review) - the marker refuses it with precondition_failed and the foreman burns '
+    + 'budget on the refusal. Set the marker AFTER those dispatches, or mask it for that command. ' + MASK_LINE;
+}
+
 const DEFAULTS = {
   guarded_models: ['fable'],
   guarded_models_implementing: ['fable', 'opus'],
@@ -236,6 +251,15 @@ try {
   }
 
   const toolInput = input.tool_input || {};
+  const briefWarning = briefLintWarning(typeof toolInput.prompt === 'string' ? toolInput.prompt : '');
+  // Advisory exit: the dispatch proceeds; the warning rides additionalContext (and stderr).
+  const exitAllow = () => {
+    if (briefWarning) {
+      process.stderr.write(briefWarning + '\n');
+      process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: briefWarning } })}\n`);
+    }
+    process.exit(0);
+  };
   const modelRaw = String(toolInput.model || '').trim();
   const model = modelRaw.toLowerCase();
 
@@ -245,7 +269,7 @@ try {
   // denied before allow could take effect).
   if (!model) {
     if (config.on_missing_model === 'allow') {
-      process.exit(0);
+      exitAllow();
     }
     // v2.36.2: default is DENY, not ask. A missing model: is never a judgment for the
     // user — the only correct next action is the model's own re-dispatch with model:
@@ -312,7 +336,7 @@ try {
       { acknowledged },
     );
   }
-  process.exit(0);
+  exitAllow();
 } catch (e) {
   process.stderr.write(
     `dispatch-model-guard: unexpected error — allowing (fail-open): ${e.message}\n`

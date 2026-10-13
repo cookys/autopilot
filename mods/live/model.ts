@@ -11,9 +11,10 @@
 
 import { T_EN } from './i18n'
 import type { T } from './i18n'
-import { STATES, carry, cellWidth, displayWidth, stateOf } from './ui'
+import * as ui from './ui' // the design system's builders; `ui.kv` etc. keep clear of this file's own legacy `kv` / `row`
 import * as U from './ui'
-import type { FactId, FmtKind, LineKind, SegRole } from './ui'
+import { STATES, carry, cellWidth, displayWidth, isStale, stateOf } from './ui'
+import type { Ctx as UiCtx, Column as UiColumn, FactId, FmtKind, Frag, LineKind, RunSubject, SegRole, Stated, TableListRow as UiTableListRow } from './ui'
 
 
 // ---- the snapshot the tick builds and the band / pane draw (module state in register.ts) ----
@@ -29,6 +30,13 @@ export type LivePaneRow = {
   rc: number | null
   final_status: string | null
   probe_age_s: number | null
+  ended_at: string | null
+  // the producer's own end test (runs-watch computeCounts: phase exited, ended_at or final_status; an rc is an end too) and its own freshness test
+  // (confirmed_live: alive === true and a probe no older than counts.fresh_bound_s). A row the producer never probed is not `fresh`, and a row that
+  // ended without an rc and without a final_status is `ended` and not `fresh`, so it reads ◌ 已停 and never ● 執行中 (design plan §2.5, §3.3 run row 6)
+  ended: boolean
+  fresh: boolean
+  starting: boolean
 }
 
 export type LiveGateRow = {
@@ -868,18 +876,26 @@ export function headerText(env: Json, sid: string, ctx: string, t: T = T_EN): st
   return t('pane.header', { session: sessionUsd(env, sid).text, host: usd(env.host_today_usd), ctx })
 }
 
-export function paneRows(env: Json): LivePaneRow[] | null {
+export function paneRows(env: Json, nowMs: number | null = null): LivePaneRow[] | null {
   const rows = rowsOf(env)
   if (rows === null) return null
   const str = (v: unknown) => (typeof v === 'string' && v ? v : null)
-  return rows.map(r => ({
-    stall: r.stall === true,
-    run_id: String(r.run_id === undefined || r.run_id === null ? '?' : r.run_id),
-    role: str(r.role), runner: str(r.runner), model: str(r.model), started_at: str(r.started_at),
-    elapsed_s: finite(r.elapsed_s) ? r.elapsed_s : null, phase: str(r.phase),
-    rc: Number.isInteger(r.rc) ? (r.rc as number) : null, final_status: str(r.final_status),
-    probe_age_s: finite(r.probe_age_s) ? r.probe_age_s : null,
-  }))
+  const bound = isObject(env.counts) && finite(env.counts.fresh_bound_s) ? env.counts.fresh_bound_s : null
+  return rows.map(r => {
+    const rc = Number.isInteger(r.rc) ? (r.rc as number) : null
+    const ended = r.phase === 'exited' || str(r.ended_at) !== null || str(r.final_status) !== null || rc !== null
+    const probe = finite(r.probe_age_s) ? r.probe_age_s : null
+    return {
+      stall: r.stall === true,
+      run_id: String(r.run_id === undefined || r.run_id === null ? '?' : r.run_id),
+      role: str(r.role), runner: str(r.runner), model: str(r.model), started_at: str(r.started_at),
+      elapsed_s: finite(r.elapsed_s) ? r.elapsed_s : null, phase: str(r.phase),
+      rc, final_status: str(r.final_status),
+      probe_age_s: probe, ended_at: str(r.ended_at), ended,
+      fresh: !ended && r.alive === true && probe !== null && (bound === null || probe <= bound),
+      starting: !ended && probe === null && bound !== null && nowMs !== null && Number.isFinite(Date.parse(str(r.started_at) ?? '')) && nowMs - Date.parse(str(r.started_at) as string) <= bound * 1000, // never probed, launched inside the bound as of NOW (elapsed_s is a stale copy in a heartbeat rewrite): ○ not started yet, not ◌ stopped
+    }
+  })
 }
 
 export type JobModel = {
@@ -1540,9 +1556,9 @@ export const NEXT_TAB_GLYPH = '▸' // the pane's first Button: Enter on it show
 export const PANE_TABS = ['now', 'dispatch', 'review', 'spend', 'hygiene', 'legend'] as const
 export type PaneTab = (typeof PANE_TABS)[number]
 // a band slot pressed opens the pane on the tab that explains it; position and unit live in Now's 目前位置 section, which the press also unfolds
-const SLOT_TAB: Record<SlotId, PaneTab> = { verdict: 'now', position: 'now', unit: 'now', dispatch: 'dispatch', review: 'review', decisions: 'review', spend: 'spend', quota: 'now', hygiene: 'hygiene' }
+const SLOT_TAB: Record<SlotId, PaneTab> = { verdict: 'now', position: 'now', unit: 'now', dispatch: 'dispatch', review: 'review', decisions: 'review', spend: 'spend', quota: 'spend', hygiene: 'hygiene' }
 export const slotTab = (id: SlotId): PaneTab => SLOT_TAB[id]
-export const slotUnfolds = (id: SlotId): string | null => (id === 'position' || id === 'unit' ? SECTION.where : id === 'quota' ? SECTION.account : null)
+export const slotUnfolds = (id: SlotId): string | null => (id === 'position' || id === 'unit' ? SECTION.where : id === 'quota' ? SECTION.limits : null)
 export const tabLabel = (tab: PaneTab, t: T): string => t('tab.' + tab)
 
 // What a pane line is drawn with: the translator and the pane's width in cells (rules and bars size themselves to it)
@@ -1638,7 +1654,7 @@ function wrapLine(l: PaneLine, cols: number): PaneLine[] {
     const flush = () => { if (run !== '') segs.push(at < 0 ? { text: run } : { ...base[at], text: run }); run = '' }
     for (const c of cs) { if (c.si !== at) { flush(); at = c.si } run += c.ch }
     flush()
-    return carry(l, { text, segs, ...(l.toggle !== undefined ? { toggle: l.toggle } : {}) }) // every piece of a wrapped toggle line stays pressable; a made line's pieces stay made
+    return carry(l, { text, segs, ...(l.toggle !== undefined ? { toggle: l.toggle } : {}), ...(l.goto !== undefined ? { goto: l.goto } : {}) }) // every piece of a wrapped toggle line stays pressable and keeps its goto; a made line's pieces stay made
   })
 }
 export const wrapLines = (lines: PaneLine[], cols: number): PaneLine[] => lines.flatMap(l => wrapLine(l, cols))
@@ -1654,8 +1670,8 @@ export function rule(title: string, right: Seg[], cols: number, fold?: { id: str
 }
 
 // the Now tab's foldable sections (what waits for you never folds); the ids share the toggle channel with the recent groups, hence the prefix
-export const SECTION = { where: 'sec:where', working: 'sec:working', cost: 'sec:cost', account: 'sec:account', recent: 'sec:recent' } as const
-export const isSectionId = (id: string): boolean => id.startsWith('sec:')
+export const SECTION = { where: 'sec:where', working: 'sec:working', cost: 'sec:cost', account: 'sec:account', recent: 'sec:recent', limits: 'sec:limits', today: 'sec:today', last24: 'sec:last24' } as const
+export const isSectionId = (id: string): boolean => id.startsWith('sec:') || /^(now|dispatch|review|spend|hygiene|legend)\./.test(id)
 const isFolded = (ctx: PaneCtx, id: string): boolean => ctx.folded !== undefined && ctx.folded.has(id)
 // a heading plus its body, or the heading alone when the person folded it
 function section(ctx: PaneCtx, id: string, title: string, right: Seg[], body: PaneLine[]): PaneLine[] {
@@ -1797,8 +1813,6 @@ function nowLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
     const color = spendColor(sp_.brain, sp_.cap)
     out.push(BLANK, ...section(ctx, SECTION.cost, t('now.cost'), [], [kv(t(KEY_IDS.cost), seg(usd(sp_.brain), color), dseg(' / ' + usd(sp_.cap) + '  '), ...spendBarSegs(sp_.brain, sp_.cap, 24), dseg('  ' + pct + '%'))]))
   }
-  const account = accountLines(snap.account, d.now_ms, ctx)
-  if (account.length > 0) out.push(BLANK, ...account)
   if (snap.recent !== undefined) out.push(BLANK, ...recentLines(snap.recent, ctx))
   return out
 }
@@ -2080,102 +2094,88 @@ export function slotQuota(q: readonly QuotaWindow[] | null | undefined): Slot | 
 }
 
 const QUOTA_KEYS: Record<string, string> = { five_hour: 'label.quota_5h', seven_day: 'label.quota_7d', spend_limit: 'label.quota_spend' }
-export function accountLines(a: AccountSnap | undefined, nowMs: number | null, ctx: PaneCtx): PaneLine[] {
-  if (a === undefined || (a.account === undefined && a.quota.length === 0)) return []
-  const t = ctx.t
-  const rows: PaneLine[] = []
-  const acc = a.account
-  if (acc === null) rows.push(row(dseg(' ' + t('account.none'))))
-  else if (acc !== undefined) {
-    if (acc.email !== null) rows.push(kv(t('label.account'), seg(acc.email, undefined, true), dseg(acc.name === null ? '' : ' (' + acc.name + ')')))
-    if (acc.org !== null) rows.push(kv(t('label.org'), seg(acc.org), dseg(acc.role === null ? '' : ' · ' + acc.role)))
-    if (acc.plan !== null || acc.extraUsage) rows.push(kv(t('label.tier'), seg(acc.plan ?? '—'), dseg(acc.extraUsage ? ' · ' + t('account.extra_on') : '')))
-  }
-  for (const w of a.quota) {
-    const key = QUOTA_KEYS[w.kind]
-    const label = key === undefined ? bgLabel(w.kind.replace(/_/g, ' ')) : t(key)
-    const resets = w.resetsAtMs === null || nowMs === null || w.resetsAtMs <= nowMs ? '' : '  ' + t('quota.resets', { in: ageText((w.resetsAtMs - nowMs) / 1000) })
-    rows.push(kv(label, ...spendBarSegs(Math.min(w.pct, 100), 100, 12), seg('  ' + quotaPct(w.pct) + '%', quotaColor(w.pct)), dseg(resets)))
-  }
-  return rows.length === 0 ? [] : section(ctx, SECTION.account, t('now.account'), [], rows)
-}
 
 // ================= Dispatch =================
 const cell = (v: string | number | null | undefined): string => (v === null || v === undefined || v === '' ? '—' : String(v))
 
-function runState(r: LivePaneRow, t: T): { text: string; color?: ThemeKey } {
-  if (r.stall) return { text: '⊘ ' + t('state.stalled'), color: 'error' }
-  if (r.rc !== null) return r.rc === 0 ? { text: '✓ rc 0', color: 'success' } : { text: '✗ rc ' + r.rc, color: 'error' }
-  if (r.final_status !== null) return { text: r.final_status }
-  return { text: '● ' + t('state.run'), color: 'suggestion' }
+// the subject `stateOf('run', …)` classifies (design plan §3.3). `fresh` is the producer's own freshness test, read once in paneRows; an ended row is never fresh.
+export const runSubject = (r: LivePaneRow): RunSubject => ({ rc: r.rc, final_status: r.final_status, stall: r.stall, fresh: r.fresh, starting: r.starting })
+// when a run ended (ms): the manifest's ended_at, else started_at + elapsed_s (the producer freezes elapsed_s at the end); null = unknown
+export function runEndedMs(r: LivePaneRow): number | null {
+  const end = r.ended_at === null ? NaN : Date.parse(r.ended_at)
+  if (Number.isFinite(end)) return end
+  if (r.final_status === null) return null // the producer freezes elapsed_s only for a run that really ended; a dead process without ended_at keeps counting, so it cannot date the end
+  const start = r.started_at === null ? NaN : Date.parse(r.started_at)
+  return Number.isFinite(start) && r.elapsed_s !== null ? start + r.elapsed_s * 1000 : null
 }
+// F5 (§2.5): a finished run older than FRESH_MS.dispatch is counted in the section chip and not listed; unknown times keep the run listed
+export const runAgedOut = (r: LivePaneRow, nowMs: number | null): boolean => {
+  const end = runEndedMs(r)
+  return r.ended && nowMs !== null && end !== null && isStale('dispatch', nowMs - end)
+}
+const DISPATCH_SEC = { running: 'dispatch.running', finished: 'dispatch.finished', other: 'dispatch.other' } as const
 
 function dispatchLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
   const t = ctx.t
-  const out: PaneLine[] = []
+  const u: UiCtx = { t, cols: ctx.cols, ...(ctx.expanded === undefined ? {} : { expanded: ctx.expanded }) }
   const rows = snap.rows
-  out.push({ text: snap.header, dim: true })
-  if (rows === null) {
-    out.push(NO_DATA(t, 'nodata.runs'))
-  } else {
-    const c = snap.detail.counts
-    if (c !== null) out.push(row(seg('● ' + c.confirmed_live, c.confirmed_live > 0 ? 'suggestion' : 'inactive', c.confirmed_live > 0), seg(' ' + t('dispatch.running')), dseg('   ⊘ ' + snap.detail.stalled + ' ' + t('dispatch.stalled') + ' · ✓ ' + c.exited + ' ' + t('dispatch.done'))))
-    out.push(BLANK, rule(t('dispatch.runs'), [], ctx.cols))
-    if (rows.length === 0) out.push({ text: t('dispatch.no_runs'), dim: true })
-    else {
-      // columns are as wide as their widest cell (display cells: CJK = 2) plus two; the last column is not padded
-      const sts = rows.map(r => runState(r, t))
-      const cols: string[][] = [
-        rows.map(r => r.run_id),
-        rows.map(r => cell(r.role)),
-        rows.map(r => cell(r.runner) + ' / ' + cell(r.model)),
-        sts.map(x => x.text),
-        rows.map(r => (r.elapsed_s === null ? '—' : ageText(r.elapsed_s))),
-      ]
-      const heads = [t('dispatch.col_run'), t('dispatch.col_role'), t('dispatch.col_engine'), t('dispatch.col_state'), t('dispatch.col_elapsed')]
-      const widths = cols.map((c, i) => Math.max(displayWidth(heads[i]), ...c.map(displayWidth)) + 2)
-      const seen = rows.map(r => (r.probe_age_s === null ? '—' : agoText(r.probe_age_s, t)))
-      const tableW = 1 + widths.reduce((n, x) => n + x, 0) + Math.max(displayWidth(t('dispatch.col_seen')), ...rows.map((r, i) => displayWidth(seen[i]) + (r.phase === null ? 0 : 3 + displayWidth(r.phase))))
-      if (tableW > ctx.cols) {
-        // too wide for one aligned table (wrapping rows apart from the header would shear the columns): one block per run
-        rows.forEach((r, i) => {
-          if (i > 0) out.push(BLANK)
-          out.push(withHang(row(seg(' ' + cols[0][i], undefined, true)), 1))
-          out.push(kv(t('dispatch.col_role'), seg(cols[1][i])))
-          out.push(kv(t('label.engine'), seg(cols[2][i])))
-          out.push(kv(t('dispatch.col_state'), seg(sts[i].text, sts[i].color)))
-          out.push(kv(t('dispatch.col_elapsed'), seg(cols[4][i])))
-          out.push(kv(t('dispatch.col_seen'), dseg(seen[i])))
-          if (r.phase !== null) out.push(kv(t('label.phase'), seg(r.phase)))
-        })
-      } else {
-        out.push(row(dseg(' ' + heads.map((h, i) => padCells(h, widths[i])).join('') + t('dispatch.col_seen'))))
-        rows.forEach((r, i) => {
-          out.push(row(
-            seg(' ' + padCells(cols[0][i], widths[0])), seg(padCells(cols[1][i], widths[1])), seg(padCells(cols[2][i], widths[2])),
-            seg(padCells(cols[3][i], widths[3]), sts[i].color), seg(padCells(cols[4][i], widths[4])),
-            dseg(seen[i]), ...(r.phase === null ? [] : [dseg(' · ' + r.phase)]),
-          ))
-        })
+  const nowRaw = snap.detail.now_ms
+  const nowMs = typeof nowRaw === 'number' && Number.isFinite(nowRaw) ? nowRaw : null
+  const sec = (id: string, title: string, right: Frag | undefined, body: PaneLine[]): PaneLine[] => {
+    const open = !isFolded(ctx, id)
+    return [ui.header(u, title, { id, open }, right === undefined ? {} : { right, fact: 'dispatch.counts' }), ...(open ? body : [])]
+  }
+  const own = (line: PaneLine): PaneLine => (line.fact === undefined ? line : ui.ownerRow('dispatch', line.fact, line)) // a toggle row (more, header) carries no fact of its own
+  const col = (head: string, min: number, priority: number, cut: 'left' | 'right', flex = false): UiColumn => ({ head, min, priority, cut, ...(flex ? { flex: true } : {}) })
+  const columns = (last: string): UiColumn[] => [
+    col(t('dispatch.col_run'), 14, 1, 'left', true), col(t('dispatch.col_role'), 8, 5, 'right'), col(t('dispatch.col_engine'), 10, 4, 'right'),
+    col(t('dispatch.col_elapsed'), 3, 2, 'right'), col(last, 4, 3, 'right'),
+  ]
+  const baseCells = (r: LivePaneRow): string[] => [r.run_id, cell(r.role), cell(r.runner) + ' / ' + cell(r.model), r.elapsed_s === null ? '—' : ui.dur(r.elapsed_s * 1000)]
+  const out: PaneLine[] = [{ text: snap.header, dim: true }, ui.blank()]
+  const running: UiTableListRow[] = []
+  const finished: UiTableListRow[] = []
+  let finishedAll: Stated[] = []
+  if (rows !== null) {
+    for (const r of rows) {
+      const state = ui.stateOf('run', runSubject(r))
+      if (!r.ended) {
+        const startMs = r.started_at === null ? NaN : Date.parse(r.started_at)
+        running.push({ state, group: r.run_id, ts: Number.isFinite(startMs) ? startMs : 0, cells: [...baseCells(r), r.probe_age_s === null ? '—' : ui.ago(r.probe_age_s * 1000, t)] })
+        continue
       }
-    }
-    out.push(BLANK, rule(t('dispatch.gates'), [], ctx.cols))
-    const gates = snap.gates
-    if (gates === null) out.push({ text: t('dispatch.no_page'), dim: true })
-    else if (gates.length === 0) out.push({ text: t('dispatch.no_receipt'), dim: true })
-    else {
-      for (const g of gates) {
-        const mk = verdictMark(g.verdict)
-        out.push(row(seg(' ' + padCells(cell(g.phase), 8)), seg(padCells(t('dispatch.gen', { g: cell(g.generation) }), 9)), seg(mk.glyph + ' ' + cell(g.verdict), mk.color), dseg(g.status === null ? '' : '  ' + g.status)))
-      }
+      finishedAll.push(state)
+      if (runAgedOut(r, nowMs)) continue
+      const end = runEndedMs(r)
+      finished.push({ state, group: r.run_id, ts: end ?? 0, cells: [...baseCells(r), end === null || nowMs === null ? '—' : ui.ago(Math.max(0, nowMs - end), t)] })
     }
   }
-  out.push(...snap.sections.waiting, ...snap.sections.foreman)
+  // 執行中: running, stalled and a run nobody has confirmed alive (◌ 已停)
+  const runBody: PaneLine[] = []
+  if (rows === null) runBody.push(ui.empty(t('nodata.prefix', { what: t('nodata.runs') }), 'dispatch.runs'))
+  else if (running.length === 0) runBody.push(ui.empty(t(rows.length === 0 ? 'dispatch.no_runs' : 'dispatch.no_running'), 'dispatch.runs'))
+  else runBody.push(...ui.tableList(u, DISPATCH_SEC.running, t('dispatch.more_running'), columns(t('dispatch.col_seen')), running, { fact: 'dispatch.runs' }))
+  runBody.push(...snap.sections.waiting, ...snap.sections.foreman) // legacy hand-built lines until P4 turns buildSections into data
+  const runChip = running.length === 0 ? undefined : ui.countChip(u, ui.worst(running.map(r => r.state)), running.length, 'dispatch.counts')
+  out.push(...sec(DISPATCH_SEC.running, t('dispatch.running'), runChip, runBody.map(l => (l.kind === undefined ? l : own(l)))))
+  // 已完成: ended runs, the latest 5 and a toggle for the rest; a run older than a day is counted in the chip only
+  if (rows !== null) {
+    const finBody = finished.length === 0
+      ? [ui.empty(t('dispatch.no_finished'), 'dispatch.runs')]
+      : ui.tableList(u, DISPATCH_SEC.finished, t('dispatch.more_noun'), columns(t('dispatch.col_ended')), finished, { fact: 'dispatch.runs' })
+    const finChip = finishedAll.length === 0 ? undefined : ui.countChip(u, ui.worst(finishedAll), finishedAll.length, 'dispatch.counts')
+    out.push(...sec(DISPATCH_SEC.finished, t('dispatch.done'), finChip, finBody.map(own)))
+  }
+  // 其他分頁: one pointer row to 審查 (a projection, §2.6) and the snapshot note. No review verdict, no spend stamps.
+  const gates = snap.gates
+  const pointer = gates === null ? ui.val(t('dispatch.no_review_page'), { role: 'prose' }) : gates.length === 0 ? ui.val(t('dispatch.no_receipt'), { role: 'prose' }) : ui.fmtd('count', t('dispatch.gate_count', { n: gates.length }))
   const parts = [t('dispatch.note')]
-  if (snap.published_at !== null) parts.push(t('dispatch.snapshot', { at: snap.published_at }))
-  if (snap.session_as_of) parts.push(t('dispatch.session_as_of', { at: snap.session_as_of }))
-  if (snap.host_as_of) parts.push(t('dispatch.host_as_of', { at: snap.host_as_of }))
-  out.push(BLANK, { text: ' ' + parts.join(' · '), dim: true })
+  const pubMs = snap.published_at === null ? NaN : Date.parse(snap.published_at)
+  if (Number.isFinite(pubMs)) parts.push(t('dispatch.snapshot', { at: ui.clock(pubMs, nowMs ?? pubMs) })) // the producer publishes an ISO string; HH:MM per §3.5
+  out.push(...sec(DISPATCH_SEC.other, t('dispatch.others'), undefined, [
+    ui.projection('dispatch', 'review.gates', ui.kv(u, t('tab.review'), [pointer], { fact: 'review.gates', goto: 'review' })),
+    ...ui.detail(u, parts.join(' · '), { fact: 'dispatch.counts' }).map(own),
+  ]))
   return out
 }
 
@@ -2283,7 +2283,7 @@ function decisionsSection(u: U.Ctx, snap: LiveSnapshot, ctx: PaneCtx): PaneLine[
     const rung = dv.ladder.rung
     const n = Math.max(0, Math.min(5, Number(rung.slice(1)) || 0))
     const age = ageMsOf(snap.detail.now_ms, dv.ladder.at)
-    const value: U.Frag[] = [U.barValue(6, n + 1), U.val('  '), U.fmtd('id', rung), U.val('  U0 ─ U5', { fmt: 'id', dim: true })]
+    const value: U.Frag[] = [U.stepBar(6, n + 1), U.val('  '), U.fmtd('id', rung), U.val('  U0 ─ U5', { fmt: 'id', dim: true })]
     if (age !== null) value.push(U.val(' · ' + U.ago(age, t), { fmt: 'ago', dim: true }))
     out.push(U.kv(u, t('label.ladder'), value, { fact: 'review.ladder' }))
   }
@@ -2308,7 +2308,7 @@ function planSection(u: U.Ctx, p: PlanReviewView | null, snap: LiveSnapshot, ctx
   if (p.verdict !== null && p.verdict.trim() !== '') plan.push(U.val(' · ', { dim: true }), U.stateLead(u, U.stateOf('seat', { kind: 'plan', verdict: p.verdict, status: null })))
   const max = p.max_generations
   const roundText = t(max === null ? 'review.round' : 'review.round_of', { g: p.generation, max: max ?? 0 })
-  const rounds: U.Frag[] = max !== null && max >= 1 && max <= 12 ? [U.barValue(max, Math.min(Math.max(p.generation, 1), max), { here: true }), U.val('  '), U.fmtd('id', roundText)] : [U.fmtd('id', roundText)]
+  const rounds: U.Frag[] = max !== null && max >= 1 && max <= 12 ? [U.stepBar(max, Math.min(Math.max(p.generation, 1), max), { here: true }), U.val('  '), U.fmtd('id', roundText)] : [U.fmtd('id', roundText)]
   return [head, U.kv(u, t('label.plan'), plan, { fact: 'review.plan' }), U.kv(u, t('label.round'), rounds, { fact: 'review.plan' }), ...seatLines(u, 'plan', p.seats, states)]
 }
 
@@ -2327,45 +2327,122 @@ function reviewTabLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
   ]
 }
 
-// ================= Spend =================
-function spendTabLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
+// ================= Spend (用量): limits, today, last 24 h, account — drawn through the design system's components (ui.ts), docs/plans/2026-10-13-live-pane-design-system.md §5.4 =================
+const METER_CELLS = (cols: number): number => (cols >= 100 ? 40 : 20) // meter and share bars: 20 cells below 100 columns, 40 at or above
+const MARK = '\u0001'
+// a string-table sentence with one money amount in it: the words stay prose, the amount is the formatter's (fmt-tagged) fragment
+function withMoney(template: string, amount: ui.Frag): ui.Frag {
+  const [head, tail = ''] = template.split(MARK)
+  return ui.cat(ui.val(head, { role: 'prose', dim: true }), amount, ui.val(tail, { role: 'prose', dim: true }))
+}
+
+type LimitWin = { key: string; value: number; cap: number; amount?: ui.Frag; resetMs?: number; fact: FactId }
+function limitsSection(u: ui.Ctx, ctx: PaneCtx, s: SpendView | null, quota: readonly QuotaWindow[], nowMs: number | null): PaneLine[] {
   const t = ctx.t
+  const wins: LimitWin[] = []
+  if (s !== null && s.brain !== null && s.cap !== null) {
+    wins.push({ key: t('label.brain_today'), value: s.brain, cap: s.cap, fact: 'usage.brain', amount: ui.cat(ui.fmtd('money', ui.money(s.brain)), ui.val(' / ', { role: 'prose', dim: true }), ui.fmtd('money', ui.money(s.cap))) })
+  }
+  for (const w of quota) {
+    const k = QUOTA_KEYS[w.kind]
+    const fact: FactId = w.kind === 'five_hour' ? 'usage.window5h' : w.kind === 'seven_day' ? 'usage.window7d' : 'usage.window_other'
+    wins.push({ key: k === undefined ? bgLabel(w.kind.replace(/_/g, ' ')) : t(k), value: w.pct, cap: 100, fact, ...(w.resetsAtMs === null || nowMs === null || w.resetsAtMs <= nowMs ? {} : { resetMs: w.resetsAtMs - nowMs }) })
+  }
+  const open = !isFolded(ctx, SECTION.limits)
+  if (wins.length === 0) {
+    const what = s === null ? 'nodata.spend' : 'nodata.brain'
+    return [ui.header(u, t('usage.limits'), { id: SECTION.limits, open }), ...(open ? [ui.empty(t('nodata.prefix', { what: t(what) }), 'usage.brain')] : [])]
+  }
+  const worst = Math.max(...wins.map(w => (w.cap > 0 ? w.value / w.cap : 0)))
+  const chip = ui.levelChip(worst, t(worst >= 1 ? 'spend.over' : worst >= 0.8 ? 'spend.warn' : 'spend.ok'), 'usage.limit_max')
+  const head = ui.header(u, t('usage.limits'), { id: SECTION.limits, open }, { right: chip, fact: 'usage.limit_max' })
+  if (!open) return [head]
+  // every bar is as long as the longest tail allows, so the rows compare by length; a narrow pane shortens the bars, never wraps the row
+  const tail = Math.max(...wins.map(w => (w.amount === undefined ? 0 : 2 + displayWidth(w.amount.text)) + (w.resetMs === undefined ? 0 : 2 + displayWidth(t('ui.reset', { age: ui.dur(w.resetMs) })))))
+  const cells = Math.max(4, Math.min(METER_CELLS(ctx.cols), ctx.cols - 1 - ui.KEY_W - 7 - tail))
+  const body = wins.map(w => ui.ownerRow('spend', w.fact, ui.meter(u, w.key, w.value, w.cap, { cells, fact: w.fact, ...(w.amount === undefined ? {} : { amount: w.amount }), ...(w.resetMs === undefined ? {} : { resetMs: w.resetMs }) })))
+  if (s !== null && s.brain !== null && s.cap !== null) body.push(...ui.detail(u, t('spend.note', { mode: t('spend.mode_' + s.mode) }), { fact: 'usage.brain' }))
+  return [head, ...body]
+}
+
+function todaySection(u: ui.Ctx, ctx: PaneCtx, s: SpendView | null): PaneLine[] {
+  const t = ctx.t
+  const open = !isFolded(ctx, SECTION.today)
+  const head = ui.header(u, t('now.cost'), { id: SECTION.today, open })
+  if (!open) return [head]
+  if (s === null) return [head, ui.empty(t('nodata.prefix', { what: t('nodata.spend') }), 'usage.today')]
+  const hostN = s.host_all_n
+  const rows: PaneLine[] = [ui.kv(u, t('label.host'), [ui.fmtd('money', hostN === null ? s.host_all : ui.money(hostN), 'spend.local_today'), ui.val('  ' + t('spend.all_tiers'), { role: 'prose', dim: true })], { fact: 'spend.local_today' })]
+  if (hostN !== null && s.brain !== null && hostN >= s.brain && hostN > 0) {
+    // the two share bars use one scale, so brain and the other tiers compare by length
+    const brainTxt = ui.money(s.brain)
+    const otherTxt = ui.money(hostN - s.brain)
+    const w = Math.max(displayWidth(brainTxt), displayWidth(otherTxt)) + 2
+    const total = Math.max(2, Math.min(METER_CELLS(ctx.cols), ctx.cols - 1 - ui.KEY_W - w))
+    let brainCells = Math.round((s.brain / hostN) * total)
+    if (hostN - s.brain >= 0.005 && brainCells >= total) brainCells = total - 1 // a non-zero remainder keeps at least one cell
+    const pad = (txt: string) => ui.val(' '.repeat(w - displayWidth(txt)), { role: 'prose' })
+    rows.push(
+      ui.kv(u, t('label.brain'), [ui.fmtd('money', brainTxt), pad(brainTxt), ui.barValue(brainCells)], { fact: 'usage.today' }),
+      ui.kv(u, t('label.other_tiers'), [ui.fmtd('money', otherTxt), pad(otherTxt), ui.barValue(total - brainCells)], { fact: 'usage.today' }),
+    )
+  }
+  rows.push(ui.kv(u, t('label.session'), [ui.fmtd('money', s.session)], { fact: 'spend.session' }))
+  return [head, ...rows]
+}
+
+function last24Section(u: ui.Ctx, ctx: PaneCtx, s: SpendView | null): PaneLine[] {
+  const t = ctx.t
+  const open = !isFolded(ctx, SECTION.last24)
+  const hourly = s === null ? null : s.hourly ?? null
+  if (hourly === null) return [ui.header(u, t('usage.last24'), { id: SECTION.last24, open }), ...(open ? [ui.empty(t('spend.no_history'), 'usage.history')] : [])]
+  const total = hourly.reduce((a, b) => a + b, 0)
+  const head = ui.header(u, t('usage.last24'), { id: SECTION.last24, open }, { right: ui.fmtd('money', ui.money(total), 'usage.history'), fact: 'usage.history' })
+  if (!open) return [head]
+  const peak = withMoney(t('spend.peak', { v: MARK }), ui.fmtd('money', ui.money(Math.max(...hourly))))
+  const hint = t('spend.hint')
+  const spark = ui.sparkValue(hourly)
+  // one line when the sparkline, the peak and the hint all fit beside the key; otherwise the hint drops under the sparkline (both from column 12)
+  const oneLine = ui.KEY_W + hourly.length + 2 + displayWidth(peak.text) + 3 + displayWidth(hint) <= ctx.cols - 1
+  const gap = ui.val('  ', { role: 'prose' })
+  const lines = oneLine
+    ? ui.chart(u, t('label.brain'), ui.cat(spark, gap, peak, ui.val(' · ' + hint, { role: 'prose', dim: true })), undefined, 'usage.history')
+    : ui.chart(u, t('label.brain'), ui.cat(spark, gap, peak), hint, 'usage.history')
+  return [head, ...lines]
+}
+
+// account: email (name), organization · role, plan · extra use. Where all of it fits on one row it is one row (§5.4 at 120 columns), else one row each.
+function accountSection(u: ui.Ctx, ctx: PaneCtx, a: AccountSnap | undefined): PaneLine[] {
+  const t = ctx.t
+  const open = !isFolded(ctx, SECTION.account)
+  const head = ui.header(u, t('now.account'), { id: SECTION.account, open })
+  if (!open) return [head]
+  const acc = a === undefined ? undefined : a.account
+  if (acc === undefined) return [head, ui.empty(t('nodata.account'), 'usage.account')]
+  if (acc === null) return [head, ui.kv(u, t('label.account'), [ui.absent(t('account.none'))], { fact: 'usage.account' })]
+  const prose = (s: string, dim = false) => ui.val(s, { role: 'prose', ...(dim ? { dim: true } : {}) })
+  const parts: { label: string; frags: ui.Frag[] }[] = []
+  if (acc.email !== null) parts.push({ label: t('label.account'), frags: [prose(acc.email), ...(acc.name === null ? [] : [prose(' (' + acc.name + ')', true)])] })
+  if (acc.org !== null) parts.push({ label: t('label.org'), frags: [prose(acc.org), ...(acc.role === null ? [] : [prose(' · ' + acc.role, true)])] })
+  if (acc.plan !== null || acc.extraUsage) parts.push({ label: t('label.tier'), frags: [prose(acc.plan ?? '—'), ...(acc.extraUsage ? [prose(' · ' + t('account.extra_on'), true)] : [])] })
+  if (parts.length === 0) return [head, ui.kv(u, t('label.account'), [ui.absent(t('account.partial'))], { fact: 'usage.account' })]
+  const merged = parts.flatMap((p, i) => (i === 0 ? p.frags : [prose(' · ' + p.label + ' ', true), ...p.frags]))
+  if (parts.length > 1 && ui.KEY_W + displayWidth(merged.map(f => f.text).join('')) <= ctx.cols - 1) return [head, ui.kv(u, parts[0].label, merged, { fact: 'usage.account' })]
+  return [head, ...parts.map(p => ui.kv(u, p.label, p.frags, { fact: 'usage.account' }))]
+}
+
+function spendTabLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
+  const u: ui.Ctx = { t: ctx.t, cols: ctx.cols, ...(ctx.expanded === undefined ? {} : { expanded: ctx.expanded }) }
   const s = snap.detail.spend
-  const out: PaneLine[] = [{ text: snap.header, dim: true }, BLANK]
-  if (s === null) return [...out, NO_DATA(t, 'nodata.spend')]
-  const barW = Math.max(20, Math.min(40, ctx.cols - 6))
-  if (s.brain === null || s.cap === null) out.push(NO_DATA(t, 'nodata.brain'))
-  else {
-    const state = spendState(s.brain, s.cap)
-    const pct = Math.round((s.brain / s.cap) * 100)
-    const color = spendColor(s.brain, s.cap)
-    out.push(rule(t('spend.cap'), [seg(t(state === 'error' ? 'spend.over' : state === 'warning' ? 'spend.warn' : 'spend.ok'), state)], ctx.cols))
-    out.push(kv('', seg(usd(s.brain), color, true), seg(' / ' + usd(s.cap))))
-    out.push(row(seg(' '), ...spendBarSegs(s.brain, s.cap, barW), seg('  '), seg(pct + ' %', color, true)))
-    out.push(row(seg(' ' + ' '.repeat(Math.round(barW * 0.8)) + '▲', 'subtle')))
-    out.push(row(dseg(' ' + ' '.repeat(Math.max(0, Math.round(barW * 0.8) - 6)) + t('spend.warn_at'))))
-    out.push(BLANK)
-  }
-  out.push(rule(t('spend.where'), [], ctx.cols))
-  out.push(kv(t('label.host'), seg(s.host_all, undefined, true), dseg(' ' + t('spend.all_tiers'))))
-  if (s.host_all_n !== null && s.brain !== null && s.host_all_n >= s.brain && s.host_all_n > 0) {
-    const brainCells = Math.min(barW, Math.round((s.brain / s.host_all_n) * barW))
-    out.push(row(seg(' '), ...(brainCells > 0 ? [seg('▰'.repeat(brainCells), 'suggestion')] : []), ...(barW > brainCells ? [seg('▰'.repeat(barW - brainCells), 'inactive')] : [])))
-    out.push(row(seg(' '), seg('▰ ', 'suggestion'), seg(t('spend.brain', { v: usd(s.brain) })), seg('   '), seg('▰ ', 'inactive'), seg(t('spend.other', { v: usd(s.host_all_n - s.brain) }))))
-  }
-  out.push(BLANK)
-  out.push(kv(t('label.session'), seg(s.session)))
-  out.push(kv(t('label.fuse'), seg(t('spend.mode', { mode: s.mode })), dseg(' — ' + t('spend.mode_' + s.mode))))
-  const hourly = s.hourly ?? null
-  if (hourly === null) out.push({ text: ' ' + t('spend.no_history'), dim: true })
-  else {
-    const total = hourly.reduce((a, b) => a + b, 0)
-    out.push(BLANK)
-    out.push(rule(t('spend.hourly'), [seg('+' + usd(total), undefined, true)], ctx.cols))
-    out.push(row(seg(' '), seg(sparkText(hourly).slice(0, -1), 'suggestion'), seg(sparkText(hourly).slice(-1), 'suggestion', true)))
-    out.push({ text: ' ' + t('spend.hourly_caption', { peak: usd(Math.max(...hourly)) }), dim: true, wrap: true })
-  }
-  return out
+  return [
+    { text: snap.header, dim: true }, BLANK, // the global header is P4's (§2.2): until then the tab keeps its legacy header line
+    ...ui.sections('spend', {
+      limits: limitsSection(u, ctx, s, snap.account === undefined ? [] : snap.account.quota, snap.detail.now_ms),
+      today: todaySection(u, ctx, s),
+      last24: last24Section(u, ctx, s),
+      account: accountSection(u, ctx, snap.account),
+    }),
+  ]
 }
 
 // ================= Hygiene =================

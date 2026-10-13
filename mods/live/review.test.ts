@@ -3,8 +3,8 @@
 // Enabled here for 審查: I1 to I8, I10 and I13 over every line of the tab, I11 rows F2 to F4, the QC chip, the toggles. The mounted I18 / I19 / I23 are in live.test.ts.
 import { test, expect } from 'claude-code/testing'
 import { makeT } from './i18n'
-import { NO_DETAIL, NO_SECTIONS, reviewTabLines } from './model'
-import type { DecisionRow, LiveSnapshot, PaneLine, ReviewSeat } from './model'
+import { NO_DETAIL, NO_SECTIONS, mergeDecisions, readDecisions, reviewTabLines } from './model'
+import type { DecisionRow, DecisionsView, LiveSnapshot, PaneLine, ReviewSeat } from './model'
 import { GLYPHS, STATES, displayWidth, emojiViolations, emphasisViolations, isMade } from './ui'
 
 const NOW = Date.parse('2026-10-13T12:00:00Z')
@@ -96,7 +96,7 @@ function violations(lines: PaneLine[], cols: number, t: typeof zh): string[] {
     for (const v of emphasisViolations(l)) out.push('I4 ' + at + ' ' + v)
     const needYouItem = l.kind === 'item' && (l.segs ?? []).some(g => g.role === 'glyph' && g.text === STATES.need_you.glyph) // the plan lets a need_you item bold its mark, word and body (§3.6)
     for (const s of l.segs ?? []) { // a bold segment only in a header, a verdict, a here segment, a need_you item, or a meter headline value (fmt pct)
-      const meterHeadline = s.role === 'value' && s.fmt === 'pct'
+      const meterHeadline = s.role === 'value' && s.fmt === 'pct' && (l.segs ?? []).some(g => g.role === 'glyph' && g.text.includes(GLYPHS.chart.meterOn)) // a meter: the same line carries the filled cells
       if (s.bold === true && l.kind !== 'header' && l.kind !== 'verdict' && s.here !== true && !needYouItem && !meterHeadline) out.push('I4 ' + at + ' seg ' + JSON.stringify(s.text) + ' is bold outside header / verdict / need_you / here / meter headline')
     }
     if (l.kind !== 'detail' && emojiViolations(l.text).length > 0) out.push('I5 ' + at + ' ' + emojiViolations(l.text).join(','))
@@ -164,7 +164,10 @@ test('negative controls of the checker: a hand-made line, a raw token in a value
     ? { ...l, segs: [{ text: STATES.need_you.glyph, role: 'glyph' as const, color: STATES.need_you.key, bold: true }, { text: ' ', role: 'prose' as const }, { text: l.text.trim(), role: 'prose' as const, bold: true }] }
     : l)
   expect(i4(needYouItem)).toEqual([])
-  expect(i4(l => (l.kind === 'kv' && l.text.startsWith('範圍') ? { ...l, segs: [...(l.segs ?? []), { text: ' 80%', role: 'value' as const, fmt: 'pct' as const, bold: true, color: 'warning' as const }] } : l))).toEqual([])
+  const pct = { text: ' 80%', role: 'value' as const, fmt: 'pct' as const, bold: true, color: 'warning' as const }
+  const meterRow = (l: PaneLine): PaneLine => (l.kind === 'kv' && l.text.startsWith('範圍') ? { ...l, segs: [{ text: GLYPHS.chart.meterOn.repeat(4), role: 'glyph' as const, color: 'warning' as const }, pct] } : l) // a synthetic meter line: filled cells, then the bold value
+  expect(i4(meterRow)).toEqual([])
+  expect(i4(l => (l.kind === 'kv' && l.text.startsWith('範圍') ? { ...l, segs: [...(l.segs ?? []), pct] } : l)).length).toBeGreaterThan(0) // a bold pct on a plain kv row is not a meter
   expect(i4(l => (l.kind === 'kv' ? { ...l, text: l.text + '▌' } : l)).length).toBeGreaterThan(0)
   expect(i4(l => (l.kind === 'header' ? { ...l, text: l.text.slice(0, -1) } : l)).length).toBeGreaterThan(0) // a header one cell short
   expect(i4(l => (l.kind === 'header' ? { ...l, text: l.text.replace(/^[▾▸] /u, '') } : l)).length).toBeGreaterThan(0) // a header without its fold mark
@@ -215,13 +218,32 @@ test('decisions from several roots are ordered by their time, not by position: m
   expect(ids(render(s, 76, { expanded: ['more:review.decisions'] })).slice(-2)).toEqual(['dec:c2', 'dec:m1'])
 })
 
-test('decisions without a parseable time fall back to position order, stably: a missing or bad time on any row means newest = last in the list', () => {
+test('decisions without a parseable time sink to the oldest, stably; a mixed list keeps the timed rows in time order and the newest first', () => {
   const at = (h: number): string => new Date(Date.UTC(2026, 9, 13, h)).toISOString()
   const mk = (ids: string[], times: (string | null | undefined)[]) => snap({ review: null, decisions: busyDecisions({ rows: ids.map((id, i) => decision(1, 'x ' + id, { decision_id: id, at: times[i] } as Partial<DecisionRow>)), count: ids.length, undocumented: 0 }) })
   const ids = (lines: PaneLine[]): string[] => lines.filter(l => l.toggle?.startsWith('dec:') === true).map(l => l.toggle as string)
-  expect(ids(render(mk(['a', 'b', 'c'], [undefined, undefined, undefined]), 76))).toEqual(['dec:c', 'dec:b', 'dec:a'])
-  expect(ids(render(mk(['a', 'b', 'c'], [at(9), 'not a time', at(1)]), 76))).toEqual(['dec:c', 'dec:b', 'dec:a']) // a bad time: the whole list falls back
+  expect(ids(render(mk(['a', 'b', 'c'], [undefined, undefined, undefined]), 76))).toEqual(['dec:c', 'dec:b', 'dec:a']) // no time at all: position order
   expect(ids(render(mk(['a', 'b', 'c'], [at(3), at(3), at(3)]), 76))).toEqual(['dec:c', 'dec:b', 'dec:a']) // equal times: later position first
+  // mixed: a row with a bad time or none sinks below every timed row, however late its position
+  expect(ids(render(mk(['a', 'b', 'c'], [at(9), 'not a time', at(1)]), 76))).toEqual(['dec:a', 'dec:c', 'dec:b'])
+  expect(ids(render(mk(['m1', 'm2', 'c1', 'c2', 'c3'], [at(1), at(7), null, at(2), undefined]), 76))).toEqual(['dec:m2', 'dec:c2', 'dec:m1', 'dec:c3', 'dec:c1']) // multi-root, two rows untimed: the newest (m2) is still first
+})
+
+test('the real path: readDecisions keeps `at` and mergeDecisions concatenates the roots, so the newest row shows first although it sits early in the merged list', () => {
+  const at = (h: number): string => new Date(Date.UTC(2026, 9, 13, h)).toISOString()
+  const want = (root: string) => ({ project_key: 'k', root_run_id: root })
+  const sidecar = (root: string, rows: [string, number][]): string => JSON.stringify({
+    schema: 'autopilot.decisions-sidecar/1', scope: { project_key: 'k', repo_identity: 'git-common-dir:/work/repo/.git', root_run_id: root },
+    count: rows.length, irreversible_count: 0, undocumented_dispatches: 0, writers_wired: ['depth0'],
+    rows: rows.map(([id, h]) => ({ round: 1, decision: 'row ' + id, irreversible: false, writer: 'depth0', decision_id: id, source: 'ledger_root', at: at(h) })),
+  })
+  // time order: a2, b2, b3, b1, a1; position order (merged): a1, a2, b1, b2, b3
+  const views = [readDecisions(sidecar('A', [['a1', 1], ['a2', 7]]), want('A')), readDecisions(sidecar('B', [['b1', 3], ['b2', 5], ['b3', 4]]), want('B'))]
+  expect(views.every(v => v !== null)).toBe(true)
+  const merged = mergeDecisions(views as DecisionsView[])
+  const s = snap({ review: null, decisions: merged })
+  const ids = (lines: PaneLine[]): string[] => lines.filter(l => l.toggle?.startsWith('dec:') === true).map(l => l.toggle as string)
+  expect(ids(render(s, 76))).toEqual(['dec:a2', 'dec:b2', 'dec:b3', 'dec:b1', 'dec:a1'])
 })
 
 test('I23 golden: the opened decision and the first opened seat equal the §5.3 mockup lines, every line is made, with the kinds drawn there', () => {

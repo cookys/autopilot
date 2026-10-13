@@ -2265,14 +2265,13 @@ function decisionsSection(u: U.Ctx, snap: LiveSnapshot, ctx: PaneCtx): PaneLine[
   const out: PaneLine[] = [head]
   if (dv.count === 0) out.push(U.empty(t('review.none_decided'), 'review.decisions'))
   const common = commonDirOf(dv.identity)
-  // newest first (§2.4): by `at` when every row has a parseable one (the position breaks ties, later first), else by position (one root's sidecar is oldest first)
-  const timed = dv.rows.length > 0 && dv.rows.every(r => typeof r.at === 'string' && Number.isFinite(Date.parse(r.at)))
+  // newest first (§2.4), keyed like src/status/decisions-sidecar.js: time in ms * 1000 + min(position, 999); a row with no time sinks to the oldest, the position breaks ties (later first)
   const rows: U.RowSpec[] = dv.rows.map((r, i) => {
     const rid = r.decision_id ?? '—'
     const step = vetoStep(r, common, dv.root, t)
     const children = [...U.detail(u, r.decision, { attached: true }), ...('cmd' in step ? U.command(u, step.cmd) : U.detail(u, step.note, { attached: true }))]
     return {
-      group: String(i), ts: timed ? Date.parse(r.at as string) * 1000 + Math.min(i, 999) : i, state: U.worst([]), fact: 'review.decisions', kind: 'bullet', body: rid + '  ' + r.decision,
+      group: String(i), ts: (Date.parse(r.at ?? '') || 0) * 1000 + Math.min(i, 999), state: U.worst([]), fact: 'review.decisions', kind: 'bullet', body: rid + '  ' + r.decision,
       bodyOpen: rid + '  ' + t(r.irreversible ? 'decision.irreversible' : 'decision.reversible') + (r.writer === null ? '' : ' · ' + r.writer),
       toggle: 'dec:' + (r.decision_id ?? '#' + i), children,
     }

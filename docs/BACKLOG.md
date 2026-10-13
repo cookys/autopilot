@@ -1224,19 +1224,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/ci-repair-2026-09-23-followups.md
 - **Context**: release-gating is deliberate (header comment). A cheap develop-triggered `dispatch-detach` smoke + `sync-all --check` would catch drift weeks earlier; the full suite can stay release-gated.
 
-### `auto` consult seat silently overrides a DECLARED consult seat (same class as the fixed plan-chair "declared wins")
-- **Id**: BL-0095
-- **Status**: open
-- **Since**: 2026-09-23
-- **Origin**: self
-- **Problem**: 設定檔裡明明指定了某個諮詢（consult）模型，但派工時選到「auto」自動模式，系統會悄悄換成別的模型，不照指定的來。同類問題在計畫主席那邊已修成「指定的優先」。 (draft)
-- **Impact**: 指定的諮詢模型可能沒被用到而不自知。擁有者 2026-10-13 裁定：指定的優先。
-- **Trigger**: ready: owner ruled declared wins (2026-10-13); schedule in wave 2
-- **Effort**: S
-- **Source**: 2026-09-23 CI repair, review-loop cluster (5679a392 made consult default `auto`; resolve-review-loop-role-admission)
-- **Pointer**: docs/backlog/ci-repair-2026-09-23-followups.md
-- **Context**: plan chair was changed to declared-wins on 09-13; consult still follows the plan's Knob transition table. Tests were updated to current design, resolver untouched.
-
 ### Archive rewriter still rewrites UNSEALED frozen evidence (e.g. historical `observed_paths` in audits)
 - **Id**: BL-0096
 - **Status**: open
@@ -1406,13 +1393,13 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: fired 2026-10-03
 - **Since**: 2026-10-03
 - **Origin**: self
-- **Problem**: 在這個專案裡審查計畫時，系統自動挑出的審查名單只有單一模型家族（只剩 opus），沒有異質多樣性；mods 計畫的審查席位是人工另外挑的。 (draft)
-- **Impact**: 同一家族的審查者容易有相同盲點，降低計畫審查的可信度。 (draft)
-- **Trigger**: fired 2026-10-03 — resolve-review-loop.sh gave native-fallback (opus only) for mods plan review
+- **Problem**: 計畫審查的名單取自機器上的拓樸檔。這台機器的拓樸檔是舊版產生的，少了計畫審查名單那一欄，系統就默默退回只用 opus 一個家族、不報錯。10/13 重新產生後已恢復成兩個家族。
+- **Impact**: 拓樸檔一旦是舊的，計畫審查就默默變成單一家族，同一家族的審查者容易有相同盲點。換機器或升級之後最容易發生。
+- **Trigger**: needs owner decision — A keep as is (rely on manual regeneration), B auto-regenerate the topology file when the key is missing, C plan-review path refuses to run and names the regenerate command (recommended: C)
 - **Effort**: S
 - **Source**: mods plan G1+G2 reviews
 - **Pointer**: docs/backlog/plan-review-roster-resolves-to-a-single-family-on-this-repo.md
-- **Context**: seats were hand-picked from qc_panel; make plan review heterogeneous by default.
+- **Context**: root cause 2026-10-13: stale ~/.autopilot/topology.json lacked `plan_review_panel`; regenerated, backup in session scratchpad (topology.json.bak-1013). Seats for mods plan were hand-picked from qc_panel.
 
 ### mods P1a known follow-ups (hardening)
 - **Id**: BL-0109
@@ -1445,13 +1432,13 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-08
 - **Origin**: self
-- **Problem**: 低風險審查的預設做法（單一模型家族、全新上下文）目前只寫在文件裡，審查路由設定檔裡沒有對應的設定鍵，無法由程式強制。 (draft)
-- **Impact**: 預設做法靠人遵守，沒有機制保證；影響在日後調整低風險審查路由時才顯現。 (draft)
-- **Trigger**: when low-risk review routing is next touched
+- **Problem**: 低風險審查的預設做法（單一模型家族、審查者用全新 session）只寫在文件裡，審查路由設定沒有對應的鍵，程式無法強制。提案：新增一個「審查者用全新 session」開關，預設開。
+- **Impact**: 預設做法靠人遵守，沒有機制保證；審查者如果沿用實作者的上下文，容易跟著實作者的盲點走。
+- **Trigger**: needs owner decision — (1) should `off` exist at all; (2) enforce at dispatch time (refuse a reused session) or only flag it in the review receipt
 - **Effort**: S
 - **Source**: stage-graph plan execution, 2026-10-06..08
 - **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/README.md
-- **Context**: "fresh-context reviewer" is documentation only; scripts/resolve-review-loop.sh has no key for it.
+- **Context**: "fresh-context reviewer" is documentation only; scripts/resolve-review-loop.sh has no key for it. Proposal: `review_fresh_context: on|off`, default on.
 
 ### Eval campaigns should fail fast on auth and quota errors
 - **Id**: BL-0112

@@ -5,7 +5,7 @@
 # RED/GREEN record (lane a2, 2026-10-14):
 #   BL-0108 base: `resolve-review-loop.sh` on a topology without plan_review_panel exits 0,
 #     plan_review_resolved_from=native-fallback, opus/high@claude-native, and the only trace is a
-#     capability_warnings line; `--require-plan-panel` is an unknown arg (exit 2).
+#     capability_warnings line; `--field plan_reviewer_engine` prints opus with exit 0.
 #   BL-0145 base: a required seat with fallbacks [] whose first attempt returns quota ends the
 #     panel as required_seat_transport_exhausted (no substitution is possible).
 # Negative controls are asserted below: removing the stop or the fill turns these red.
@@ -35,22 +35,40 @@ run_resolver() {
   R_EXIT=$?; R_OUT="$(cat "$TEST_TMP/r.out")"; R_ERR="$(cat "$TEST_TMP/r.err")"
 }
 
-# default mode keeps reporting (no flag => no behavior change for every other caller)
-run_resolver "$STALE_TOPO" --field plan_review_resolved_from
-assert_eq "$R_EXIT" "0" "without the flag the resolver stays data-only (exit 0)"
-assert_eq "$R_OUT" "native-fallback" "stale topology still resolves to native-fallback in data mode"
+# data-only surfaces stay exit 0 on the same stale topology (hooks read these every session)
+run_resolver "$STALE_TOPO"
+assert_eq "$R_EXIT" "0" "whole-JSON output on a stale topology stays exit 0"
+assert_contains "$R_OUT" '"plan_review_resolved_from": "native-fallback"' "whole JSON still reports native-fallback"
+run_resolver "$STALE_TOPO" --field reviewer_engine
+assert_eq "$R_EXIT" "0" "a non-plan field on a stale topology stays exit 0"
+run_resolver "$STALE_TOPO" --field plan_review_max_generations
+assert_eq "$R_EXIT" "0" "a plan-review numeric knob (not a roster field) stays exit 0"
 
-# the stop
-run_resolver "$STALE_TOPO" --require-plan-panel --field plan_review_resolved_from
-assert_eq "$R_EXIT" "4" "stale topology + --require-plan-panel stops with exit 4"
-assert_eq "$R_OUT" "native-fallback" "the stop still emits the field"
+# NEGATIVE CONTROL: the default stop. Base behavior was exit 0 + opus; setting the stop back to
+# pass-through turns these red.
+run_resolver "$STALE_TOPO" --field plan_reviewer_engine
+assert_eq "$R_EXIT" "4" "stale topology + --field plan_reviewer_engine stops with exit 4 by default"
+assert_eq "$R_OUT" "opus" "the stop still prints the field (the value the silent fallback would use)"
+for f in plan_review plan_review_resolved_from plan_reviewer_runner plan_deep_reviewer_engine plan_review_same_family_as_depth0; do
+  run_resolver "$STALE_TOPO" --field "$f"
+  assert_eq "$R_EXIT" "4" "--field $f stops with exit 4"
+done
 assert_contains "$R_ERR" "gpt-fixture/max@codex [openai]" "stop lists the qualified seats"
 assert_contains "$R_ERR" "grok-fixture/xhigh@grok [xai]" "stop lists a second-family seat"
 assert_contains "$R_ERR" "recommended: gpt-fixture/max@codex + minimax-fixture/high@cc-shim" \
   "recommendation takes two DISTINCT families (the second openai seat is skipped)"
-assert_contains "$R_ERR" "plan_reviewer_engine: gpt-fixture" "stop prints the config lines to write"
+assert_contains "$R_ERR" "_engine: gpt-fixture" "stop prints the config lines to write"
 assert_contains "$R_ERR" "plan_deep_reviewer_runner: cc-shim" "stop prints the deep seat lines"
 assert_contains "$R_ERR" "no plan_review_panel key" "stop names the stale-topology cause"
+
+# the explicit opt-out knob: accepting the single-family fallback is a recorded config decision
+ALLOW_CFG="$TEST_TMP/allow.md"
+printf -- '- plan_review: auto\n- implementer_runner: auto\n- plan_review_allow_native_fallback: on\n' > "$ALLOW_CFG"
+CFG_USE="$ALLOW_CFG" run_resolver "$STALE_TOPO" --field plan_reviewer_engine
+assert_eq "$R_EXIT" "0" "plan_review_allow_native_fallback: on lets the native fallback through"
+assert_eq "$R_OUT" "opus" "and the fallback seat is the documented opus"
+run_resolver "$STALE_TOPO" --field plan_reviewer_engine
+assert_contains "$R_ERR" "plan_review_allow_native_fallback: on" "the stop names the opt-out knob and its write command"
 
 # the printed command is real: run it into a config and the same resolver call passes
 cmd="$(printf '%s\n' "$R_ERR" | sed -n 's/^  write the recommendation: //p')"
@@ -58,13 +76,13 @@ WRITTEN="$TEST_TMP/written.md"
 printf -- '- plan_review: auto\n- implementer_runner: auto\n' > "$WRITTEN"
 cmd="${cmd//>> $CFG/>> $WRITTEN}"
 bash -c "$cmd"
-CFG_USE="$WRITTEN" run_resolver "$STALE_TOPO" --require-plan-panel --field plan_review_resolved_from
+CFG_USE="$WRITTEN" run_resolver "$STALE_TOPO" --field plan_review_resolved_from
 assert_eq "$R_EXIT" "0" "applying the printed command satisfies the admission"
 assert_eq "$R_OUT" "config-explicit" "the written seats resolve as config-explicit"
 
 # no topology at all: still a stop, with the opt-out named
-run_resolver "$TEST_TMP/none.json" --require-plan-panel
-assert_eq "$R_EXIT" "4" "absent topology + --require-plan-panel stops with exit 4"
+run_resolver "$TEST_TMP/none.json" --field plan_reviewer_runner
+assert_eq "$R_EXIT" "4" "absent topology + a plan roster field stops with exit 4"
 assert_contains "$R_ERR" "plan_review: off" "no seats: the stop names the explicit opt-out"
 
 # negative control: a topology that DOES carry a panel passes the same flag
@@ -76,7 +94,7 @@ cat > "$GOOD_TOPO" <<'JSON'
   {"engine":"grok-fixture","effort":"xhigh","runner":"grok","family":"xai","endpoint":""}],
  "reviewer_ladder":[],"consult_ladder":[]}
 JSON
-run_resolver "$GOOD_TOPO" --require-plan-panel --field plan_review_resolved_from
+run_resolver "$GOOD_TOPO" --field plan_review_resolved_from
 assert_eq "$R_EXIT" "0" "a topology with plan_review_panel is not stopped"
 assert_eq "$R_OUT" "topology" "resolved from topology"
 
@@ -163,7 +181,7 @@ assert_contains "$PR_OUT" "retry_substitution" "topology fill: substitution.reas
 assert_contains "$PR_OUT" "auto-fb-architect-1" "topology fill: the substitute is the auto-filled seat"
 assert_contains "$PR_ERR" "family xai" "topology fill: the xai candidate was chosen, not the openai one"
 assert_not_contains "$PR_ERR" "required seat has no fallback" "topology fill: no warning when a fallback exists"
-SEALED="$(find "$STATE" -name manifest.json | head -1)"
+SEALED="$(grep -rl "auto-fb-architect-1" "$STATE" --include=manifest.json | head -1)"
 assert_contains "$(cat "$SEALED")" "auto-fb-architect-1" "the filled manifest is the sealed copy (fill happens before the seal)"
 
 # negative control 2: the only candidate shares the primary's family => must NOT be added

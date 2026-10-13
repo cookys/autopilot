@@ -37,16 +37,20 @@
 #  implementer family. qc_panel_aggregation: union-on-verified-critical; majority forbidden.
 #  review_diff_scope: how much the per-round reviewer reads — full | incremental-mitigated.)
 #
-#   --require-plan-panel  # OPT-IN admission stop for plan review: with plan_review=auto, when the roster
-#              # cannot be resolved from the config or topology (stale topology without
-#              # plan_review_panel, or no qualified seat) the resolver would silently fall back to
-#              # opus@claude-native, the depth-0 family. With this flag it exits 4 (still emits
-#              # JSON/field) and prints on stderr the qualified seats, a recommended pair and the
-#              # command that writes it. Scripts cannot prompt (agy sandbox, headless -p): the
-#              # CALLER asks the owner, or headless applies the recommended pair and logs a decision.
+#   plan-review roster stop (default, no flag): a `--field` query for a plan-review roster field
+#              # (plan_review, plan_review_resolved_from, plan_review_same_family_as_depth0,
+#              # plan_reviewer_*, plan_deep_reviewer_*) with plan_review=auto whose roster cannot be
+#              # resolved from config or topology (stale topology without plan_review_panel, or no
+#              # qualified seat) would silently fall back to opus@claude-native, the depth-0 family.
+#              # It exits 4 instead (still prints the field) and lists on stderr the qualified seats,
+#              # a recommended pair and the command that writes it. The whole-JSON output and every
+#              # other field are unchanged, so hooks keep working. Scripts cannot prompt (agy
+#              # sandbox, headless -p): the CALLER asks the owner, or headless applies the
+#              # recommended pair and logs a decision. To accept the single-family fallback
+#              # deliberately, set `plan_review_allow_native_fallback: on` in the review-loop config.
 #
 # Exit codes: 0 success / 2 usage / 3 invalid or inconsistent config / 4 plan-review roster
-#   incomplete (--require-plan-panel only; 3 wins when both apply).
+#   incomplete (plan-review roster --field query only; 3 wins when both apply).
 
 set -uo pipefail
 
@@ -190,7 +194,6 @@ ORACLE_AVAILABLE=1
 SECURITY_SURFACE=0
 PRIOR_STATUS="none"
 ENFORCE=0
-REQUIRE_PLAN_PANEL=0
 CHECK_SCORECARD=0
 SCORECARD_SCOPE_FILE=""
 SCORECARD_IDENTITY_FILE=""
@@ -252,9 +255,8 @@ while [[ $# -gt 0 ]]; do
     --scorecard-scope-file) SCORECARD_SCOPE_FILE="${2:-}"; shift 2 ;;
     --scorecard-identity-file) SCORECARD_IDENTITY_FILE="${2:-}"; shift 2 ;;
     --enforce) ENFORCE=1; shift ;;
-    --require-plan-panel) REQUIRE_PLAN_PANEL=1; shift ;;
     --scale-by-capability) SCALE_BY_CAPABILITY=1; shift ;;
-    -h|--help) sed -n '2,39p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -424,6 +426,7 @@ MAX_ROUNDS="$(read_field "$CONFIG" loop_max_rounds "$DEF_MAX_ROUNDS")"
 CONVERGE="$(read_field "$CONFIG" loop_convergence_verdict "$DEF_CONVERGE")"
 SPEC_REVIEW="$(read_field "$CONFIG" spec_review "$DEF_SPEC_REVIEW")"
 PLAN_REVIEW="$(read_field "$CONFIG" plan_review "$DEF_PLAN_REVIEW")"
+PLAN_ALLOW_NATIVE="$(read_field "$CONFIG" plan_review_allow_native_fallback "off")"
 HETERO_REVIEW="$(read_field "$CONFIG" hetero_review "$DEF_HETERO_REVIEW")"
 PLAN_REV_ENGINE="$(read_field "$CONFIG" plan_reviewer_engine "")"
 PLAN_REV_EFFORT="$(read_field "$CONFIG" plan_reviewer_effort "")"
@@ -1584,15 +1587,22 @@ if [[ "$ENFORCE" == "1" && "$CROSS_FAMILY_REQUIRED" == "true" \
   ENFORCE_EXIT=3
 fi
 
-# --require-plan-panel (opt-in admission stop, BL-0108). A plan review that resolved to the
-# native fallback is a single-family review by the depth-0 family; the resolver already warned
-# in capability_warnings, but nothing STOPPED. Here the caller can ask for the stop: exit 4, and
+# Plan-review roster stop (BL-0108). A plan review that resolved to the native fallback is a
+# single-family review by the depth-0 family; the resolver already warned in capability_warnings,
+# but nothing STOPPED, and an opt-in flag was never passed by the real path (depth-0 reads
+# `--field plan_reviewer_engine` per skills/hetero-review). So the stop is the DEFAULT for a
+# plan-review roster field query; the whole-JSON output and other fields stay data-only. Exit 4, and
 # a stderr block that is the whole menu — seats the topology qualifies, a recommended pair of
 # distinct families, and the one command that writes it. This script never prompts (it runs under
 # agy and headless -p); depth-0 shows the menu to the owner, or applies the recommendation and
 # logs a decision when nobody can be asked.
-if [[ "$REQUIRE_PLAN_PANEL" == "1" && "$PLAN_REVIEW" == "auto" \
-      && "$PLAN_REVIEW_RESOLVED_FROM" == "native-fallback" ]]; then
+_plan_roster_field=0
+case "$FIELD" in
+  plan_review|plan_review_resolved_from|plan_review_same_family_as_depth0|plan_reviewer_*|plan_deep_reviewer_*) _plan_roster_field=1 ;;
+esac
+if [[ "$_plan_roster_field" == "1" && "$PLAN_REVIEW" == "auto" \
+      && "$PLAN_REVIEW_RESOLVED_FROM" == "native-fallback" \
+      && "$PLAN_ALLOW_NATIVE" != "on" ]]; then
   _cfg_target="${CONFIG_PATH:-.claude/review-loop-config.md}"
   [[ "$_cfg_target" == "builtin-default" || "$_cfg_target" == *"project-config-template"* ]] && _cfg_target=".claude/review-loop-config.md"
   node -e '
@@ -1615,7 +1625,7 @@ out.push("resolve-review-loop: STOP (exit 4) plan_review=auto has no usable plan
 if (d.missing_plan_review_panel) out.push("  cause: the topology file has no plan_review_panel key (stale cache) - regenerate it first: node scripts/resolve-dispatch-topology.js");
 if (seats.length === 0) {
   out.push("  available qualified seats: none found in the topology (absent, malformed, or zero qualified reviewer/consult seats).");
-  out.push("  options: qualify a heterogeneous seat (scripts/engine-qualify.sh), or set plan_review: off in " + cfg + " to opt out explicitly.");
+  out.push("  options: qualify a heterogeneous seat (scripts/engine-qualify.sh), set plan_review: off in " + cfg + " to opt out, or plan_review_allow_native_fallback: on to accept the single-family fallback.");
 } else {
   out.push("  available qualified seats (engine/effort@runner [family]):");
   for (const { id, s } of seats) out.push("    - " + id + " [" + (s.family || "unknown") + "]");
@@ -1641,6 +1651,7 @@ if (seats.length === 0) {
   const Q = "\x27";
   const q = (t) => Q + t.split(Q).join(Q + "\\" + Q + Q) + Q;
   out.push("  write the recommendation: printf " + Q + "%s\\n" + Q + " " + lines.map(q).join(" ") + " >> " + cfg);
+  out.push("  to accept the single-family opus@claude-native fallback instead: printf -- " + Q + "- plan_review_allow_native_fallback: on\\n" + Q + " >> " + cfg);
   out.push("  caller: ask the owner which seats to use; with nobody to ask (headless), apply the recommendation and log it as a decision.");
 }
 process.stderr.write(out.join("\n") + "\n");

@@ -2274,7 +2274,7 @@ function decisionsSection(u: U.Ctx, snap: LiveSnapshot, ctx: PaneCtx): PaneLine[
       toggle: 'dec:' + (r.decision_id ?? '#' + i), children,
     }
   })
-  out.push(...U.list(u, 'review.decisions', t('review.noun_decisions'), rows, { keepOrder: true }))
+  out.push(...U.list(u, 'review.decisions', t('review.noun_decisions'), rows, {})) // §2.4: newest first (the ledger is oldest first, so a row's index is its time); past the cap the oldest go behind more
   if (dv.undocumented > 0) out.push(U.kv(u, t('label.undocumented'), [U.fmtd('count', t('review.undocumented', { n: dv.undocumented }))], { fact: 'review.undocumented' }))
   if (dv.ladder === null) out.push(U.kv(u, t('label.ladder'), [U.absent(t('nodata.ladder'))], { fact: 'review.ladder' }))
   else {

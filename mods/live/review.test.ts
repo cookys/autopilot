@@ -5,7 +5,7 @@ import { test, expect } from 'claude-code/testing'
 import { makeT } from './i18n'
 import { NO_DETAIL, NO_SECTIONS, reviewTabLines } from './model'
 import type { DecisionRow, LiveSnapshot, PaneLine, ReviewSeat } from './model'
-import { GLYPHS, STATES, displayWidth, emojiViolations, isMade } from './ui'
+import { GLYPHS, STATES, displayWidth, emojiViolations, emphasisViolations, isMade } from './ui'
 
 const NOW = Date.parse('2026-10-13T12:00:00Z')
 const DAY = 86_400_000
@@ -88,6 +88,16 @@ function violations(lines: PaneLine[], cols: number, t: typeof zh): string[] {
       if (![0, 2, 4, 12].includes(lead) && !attached) out.push('I3 ' + at + ' starts at ' + lead)
       if (l.kind === 'kv' && l.hang !== 12) out.push('I3 ' + at + ' kv without hang 12')
     }
+    if (l.kind === 'header') { // I4: `^[▾▸] \S.*─+$`, width cols - 1, column 0
+      if (!/^[▾▸] \S.*─+$/u.test(l.text)) out.push('I4 ' + at + ' is not a header line')
+      if (displayWidth(l.text) !== cols - 1) out.push('I4 ' + at + ' is ' + displayWidth(l.text) + ' wide, not ' + (cols - 1))
+    }
+    if (l.text.includes('▌')) out.push('I4 ' + at + ' contains ▌')
+    for (const v of emphasisViolations(l)) out.push('I4 ' + at + ' ' + v)
+    for (const s of l.segs ?? []) { // a bold segment only in a header, a verdict, a here segment, or the state mark of a need_you item
+      const needYou = l.kind === 'item' && (s.role === 'state' || s.role === 'glyph') && s.color === STATES.need_you.key
+      if (s.bold === true && l.kind !== 'header' && l.kind !== 'verdict' && s.here !== true && !needYou) out.push('I4 ' + at + ' seg ' + JSON.stringify(s.text) + ' is bold outside header / verdict / need_you / here')
+    }
     if (l.kind !== 'detail' && emojiViolations(l.text).length > 0) out.push('I5 ' + at + ' ' + emojiViolations(l.text).join(','))
     if (/[️⃣]/u.test(l.text)) out.push('I5 ' + at + ' has VS16 or keycap')
     for (const s of l.segs ?? []) {
@@ -140,6 +150,13 @@ test('negative controls of the checker: a hand-made line, a raw token in a value
   expect(violations(withSeg({ text: ' 12 MB', role: 'value' }), 76, zh).some(v => v.startsWith('I8'))).toBe(true)
   expect(violations(lines.map(l => (l.kind === 'kv' ? { ...l, text: ' ' + l.text } : l)), 76, zh).some(v => v.startsWith('I3'))).toBe(true)
   expect(violations(lines.map(l => (l.kind === 'kv' ? { ...l, text: l.text + 'x'.repeat(80) } : l)), 76, zh).some(v => v.startsWith('I1'))).toBe(true)
+  const i4 = (map: (l: PaneLine) => PaneLine): string[] => violations(lines.map(map), 76, zh).filter(v => v.startsWith('I4'))
+  expect(i4(l => l)).toEqual([]) // control: the unmodified render is I4-clean
+  expect(i4(l => (l.kind === 'kv' && l.text.startsWith('範圍') ? { ...l, segs: (l.segs ?? []).map(s => (s.role === 'value' ? { ...s, bold: true } : s)) } : l)).length).toBeGreaterThan(0) // a bold value outside header / verdict
+  expect(i4(l => (l.kind === 'kv' && l.text.startsWith('範圍') ? { ...l, segs: (l.segs ?? []).map(s => (s.role === 'value' ? { ...s, bold: true, dim: true } : s)) } : l)).length).toBeGreaterThan(0) // bold and dim on one segment
+  expect(i4(l => (l.kind === 'kv' ? { ...l, text: l.text + '▌' } : l)).length).toBeGreaterThan(0)
+  expect(i4(l => (l.kind === 'header' ? { ...l, text: l.text.slice(0, -1) } : l)).length).toBeGreaterThan(0) // a header one cell short
+  expect(i4(l => (l.kind === 'header' ? { ...l, text: l.text.replace(/^[▾▸] /u, '') } : l)).length).toBeGreaterThan(0) // a header without its fold mark
   const world = render(empty(), 76)
   const firstEmpty = world.findIndex(l => l.kind === 'empty')
   expect(violations(world, 76, zh)).toEqual([]) // control: the empty world itself is clean
@@ -158,15 +175,23 @@ const GOLDEN_DEFAULT = [
   '▾ 推送前 QC  ∅ 不需要 ─────────────────────────────────────────────────────',
   '範圍        5a2706ad..HEAD · 0 個受保護檔案',
   '▾ 代你決定  3 件 · 0 件不可逆 ─────────────────────────────────────────────',
-  '◦ intent-17-1  #17 direction: A (keep the native <repo>/.claude/worktree… ▸',
-  '◦ intent-17-2  Owner answered (supersedes intent-17-1): direction C = A … ▸',
   '◦ verify-17-1  verify node, no qualified verifier seat (engine-scorecard… ▸',
+  '◦ intent-17-2  Owner answered (supersedes intent-17-1): direction C = A … ▸',
+  '◦ intent-17-1  #17 direction: A (keep the native <repo>/.claude/worktree… ▸',
   '未記錄      32 件派工沒有決策紀錄',
   '升級階梯    — 沒有紀錄',
   '▸ 計畫審查  ◌ 已停 · 27d 前 ───────────────────────────────────────────────',
 ]
 test('golden (76 columns, zh-TW): the default render of the owner\'s busy world is the §5.3 mockup', () => {
   expect(textsOf(render(busy(), 76))).toEqual(GOLDEN_DEFAULT)
+})
+
+test('decisions are newest first (§2.4): with 7 the 7th shows and the 1st sits behind more; opening more lists all 7 newest first', () => {
+  const rows = [1, 2, 3, 4, 5, 6, 7].map(n => decision(n, 'decision number ' + n))
+  const s = snap({ review: null, decisions: busyDecisions({ rows, count: 7, undocumented: 0 }) })
+  const ids = (lines: PaneLine[]): string[] => lines.filter(l => l.toggle?.startsWith('dec:') === true).map(l => l.toggle as string)
+  expect(ids(render(s, 76))).toEqual(['dec:intent-17-7', 'dec:intent-17-6', 'dec:intent-17-5', 'dec:intent-17-4', 'dec:intent-17-3'])
+  expect(ids(render(s, 76, { expanded: ['more:review.decisions'] }))).toEqual([7, 6, 5, 4, 3, 2, 1].map(n => 'dec:intent-17-' + n))
 })
 
 test('I23 golden: the opened decision and the first opened seat equal the §5.3 mockup lines, every line is made, with the kinds drawn there', () => {

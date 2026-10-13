@@ -1722,7 +1722,8 @@ export function stripRows(snap: LiveSnapshot, ctx: PaneCtx, tab: PaneTab, hasBut
   }
   return { rows: rows + 1, exact: rows === 1 } // + the rule under the strip
 }
-export const treeRowCount = (strip: number, head: readonly PaneLine[], body: readonly PaneLine[], extra: number): number => strip + head.length + body.length + extra
+// an empty-text line is drawn as an empty Text, which takes no row on screen (the header's trailing blank is one): count only the rows that are really drawn
+export const treeRowCount = (strip: number, head: readonly PaneLine[], body: readonly PaneLine[], extra: number): number => strip + [...head, ...body].filter(l => l.text !== '').length + extra
 export function withOverflowHint(head: PaneLine[], ctx: PaneCtx, scroll: ScrollView | null | undefined, treeRows: number, exact: boolean): PaneLine[] {
   if (scroll === null || scroll === undefined || scroll.offset !== 0 || treeRows <= scroll.bodyRows) return head
   let at = -1

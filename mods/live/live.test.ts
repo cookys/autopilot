@@ -4670,7 +4670,7 @@ for (const surface of SURFACES) {
     for (const tab of ['now', 'dispatch', 'review', 'spend', 'hygiene', 'legend']) {
       // the tree's real height: the tab strip (one row of tabs + its rule at 120 columns) plus every other child of the pane's column Box, one row each
       const tree = (await paneParts($, surface, tab)).tree
-      const total = 2 + allRows(tree).length
+      const total = 2 + ((tree.children || []) as Node[]).slice(1).filter(k => textOf(k) !== '' || k.type === 'Link').length // drawn rows, not elements: an empty Text takes no row, a Link does
       const hintOf = async (scroll: { offset: number; bodyRows: number }): Promise<number | null> => {
         const line = (await paneParts($, surface, tab, PANE_PROPS.bodyColumns, scroll)).head.find(l => HINT.test(l))
         const m = line === undefined ? null : HINT.exec(line)

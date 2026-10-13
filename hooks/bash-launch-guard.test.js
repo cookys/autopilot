@@ -83,6 +83,7 @@ for (const cmd of [
   'scripts/dispatch-review.sh --base a --head b', // foreground rail
   'echo "nohup scripts/dispatch-review.sh &"', // quoted mention
   'nohup scripts/dispatch-review.sh x & scripts/wait-dispatch-results.js --dir d', // has a waiter
+  'nohup scripts/dispatch-review.sh x --ledger L --run-id R --stage S > out.log 2>&1 & node scripts/wait-dispatch-results.js --ledger L --expect R.S', // the deny message's own recipe
   'scripts/dispatch-review.sh x & wait $!', // builtin wait
   'setsid -w scripts/dispatch-review.sh x', // setsid --wait is foreground
   'cat <<EOF\nnohup scripts/dispatch-review.sh &\nEOF', // heredoc body is data
@@ -186,10 +187,51 @@ test('warnings also reach subagent depth (agent_id present)', () => {
   assert.match(run('pkill -f foo', { extra: { agent_id: 'a1' } }).ctx, /pkill-self-match/);
 });
 
-test('deny message names both paths', () => {
+test('deny message names both paths and the three ledger flags', () => {
   const r = run('nohup scripts/dispatch-review.sh x &');
   assert.match(r.reason, /run_in_background/);
   assert.match(r.reason, /wait-dispatch-results/);
+  assert.match(r.reason, /--ledger.*--run-id.*--stage/);
+});
+
+// The recipe the deny message gives, executed for real: a stub rail that uses the real
+// scripts/lib/dispatch-detach.sh, then scripts/wait-dispatch-results.js in the same command.
+const REPO = path.join(__dirname, '..');
+function recipe(withLedgerArgs, waiter) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'blg-recipe-'));
+  const stub = path.join(dir, 'stub-rail.sh');
+  fs.writeFileSync(stub, [
+    '#!/usr/bin/env bash',
+    'LEDGER=""; RUN_ID=""; STAGE=""; ORIG=("$@")',
+    'while [ $# -gt 0 ]; do case "$1" in --ledger) LEDGER="$2"; shift 2;; --run-id) RUN_ID="$2"; shift 2;; --stage) STAGE="$2"; shift 2;; *) shift;; esac; done',
+    `. "${REPO}/scripts/lib/dispatch-detach.sh"`,
+    `dispatch_detach_supervise "$0" "$LEDGER" "$RUN_ID" "$STAGE" "${REPO}/scripts" -- "\${ORIG[@]}"`,
+    'sleep 1; echo \'{"ok":true}\'',
+  ].join('\n'), { mode: 0o755 });
+  const ledgerArgs = withLedgerArgs ? `--ledger ${dir}/L --run-id r1 --stage s1` : '';
+  const sh = `( nohup ${stub} ${ledgerArgs} > ${dir}/out 2>&1 & ${waiter(dir)} )`;
+  const t0 = Date.now();
+  const r = spawnSync('bash', ['-c', sh], { encoding: 'utf8' });
+  return { r, ms: Date.now() - t0 };
+}
+const WAIT = (dir) => `node ${REPO}/scripts/wait-dispatch-results.js --ledger ${dir}/L --expect r1.s1 --timeout 4 --poll 1`;
+
+test('recipe: detached rail WITH ledger/run-id/stage + wait-dispatch-results lands in time', () => {
+  const { r } = recipe(true, WAIT);
+  assert.strictEqual(r.status, 0, r.stdout + r.stderr);
+  assert.strictEqual(JSON.parse(r.stdout).complete, true);
+});
+
+test('recipe: the same without the three ledger args never lands (waiter times out)', () => {
+  const { r } = recipe(false, WAIT);
+  assert.strictEqual(r.status, 1);
+  assert.strictEqual(JSON.parse(r.stdout).complete, false);
+});
+
+test('recipe: bare `wait` also wakes after a detached rail', () => {
+  const { r, ms } = recipe(true, () => 'wait');
+  assert.strictEqual(r.status, 0);
+  assert.ok(ms >= 900 && ms < 10000);
 });
 
 test('deep glob is bounded (worst case stays fast)', () => {

@@ -2765,7 +2765,7 @@ for (const surface of SURFACES) {
     expect(now.texts.some(t => t.includes('實作') && !t.includes('◐') && !t.includes('階段') && !t.includes('⊘'))).toBe(true) // the label row under the diagram (stage ids are translated labels)
     expect(has(now.texts, '派工 ›', '2 個執行中', '1 個疑似卡住')).toBe(true)
     expect(has(now.texts, '審查 ›', '待修', '程式碼審查 R3', '1 席待修')).toBe(true)
-    expect(now.texts[1]).toBe('⊘ 最久的派工 4m 沒有輸出') // the verdict reason is the first item of 要你處理 (P4)
+    expect(now.texts[1]).toBe('⊘ 疑似卡住  最久的派工 4m 沒有輸出') // the verdict reason is the first item of 要你處理 (P4); its state differs from the chip's, so it says the word
     expectThemeOnly(now.tree as Drawn, true)
 
     const dispatch = await tab('dispatch')

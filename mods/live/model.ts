@@ -1033,13 +1033,6 @@ export function vetoStep(r: DecisionRow, common: string | null, root: string | n
   if (path === null && r.source === 'ledger_root') return { note: t('veto.no_path') }
   return { cmd: 'decision-ledger.js veto ' + (path === null ? '' : '--ledger ' + path + ' ') + '--id ' + r.decision_id }
 }
-export function vetoLine(r: DecisionRow, common: string | null, root: string | null, t: T = T_EN): string {
-  const step = vetoStep(r, common, root, t)
-  return 'cmd' in step ? '  veto: ' + step.cmd : '  ' + step.note
-}
-
-const MAX_DECISION_ROWS = 12
-const MAX_TASK_ROWS = 8
 
 // "<age> ago" / "<age> 前": the one place a time and its direction word live together (word order differs per language)
 export const agoText = (s: number, t: T = T_EN): string => t('ago', { age: ageText(s) })
@@ -1671,7 +1664,7 @@ export function tabBadges(snap: LiveSnapshot): Partial<Record<PaneTab, TabBadge>
 }
 
 // ================= Now =================
-const KEY_IDS = { stage: 'label.stage', unit: 'label.unit', progress: 'label.progress', phase: 'label.phase', dispatch: 'label.dispatch', review: 'label.review', cost: 'label.cost' } as const
+const KEY_IDS = { stage: 'label.stage', unit: 'label.unit', progress: 'label.progress', phase: 'label.phase' } as const
 
 // P4: the 現況 tab and the global header, built from ui.ts components only (design plan §2.1-§2.3, §5.1). The section order, ids and defaults come from SECTION_ORDER /
 // SECTION_DEFAULTS. A summary row is a projection of another tab's fact (a `kv` with `goto`); the tab's own facts are 要你處理, 位置, 背景工作, 任務 and 最近對話.
@@ -1762,24 +1755,25 @@ function attentionPart(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
   const d = snap.decision
   const a = snap.sections.attention
   const needYou = ui.stateOf('verdict', 'DECIDE')
-  const lines: PaneLine[] = []
-  const states: Stated[] = []
-  const put = (s: Stated, line: PaneLine, children: readonly PaneLine[] = []): void => { states.push(s); lines.push(line, ...children) }
+  const entries: { s: Stated, make: (bare: boolean) => PaneLine, children: readonly PaneLine[] }[] = []
+  const put = (s: Stated, make: (bare: boolean) => PaneLine, children: readonly PaneLine[] = []): void => { entries.push({ s, make, children }) } // bare = the item's state is the chip's: the chip already says the word, so the row keeps only the glyph
   const asks = b.kind === 'decide' || b.kind === 'stalled' || b.kind === 'waiting'
   if (asks && !(b.kind === 'decide' && (d !== null || a !== null))) { // a decision question or an attention ask IS the reason of a 要你決定 verdict; do not say it twice
     const s = b.kind === 'stalled' ? ui.stateOf('verdict', 'STALLED') : b.kind === 'waiting' ? ui.stateOf('attention', { source: null }) : needYou
-    put(s, ui.item(u, s, b.why, undefined, { fact: 'now.attention', word: false }))
+    put(s, bare => ui.item(u, s, b.why, undefined, { fact: 'now.attention', word: !bare }))
   }
   if (d !== null) {
     const open = d.options.length > 0 && u.expanded?.has('now:decision') === true
-    put(needYou, ui.item(u, needYou, d.question + staleSuffix(d, t), undefined, { fact: 'now.attention', word: false, ...(d.options.length > 0 ? { toggle: { id: 'now:decision', open } } : {}) }),
+    put(needYou, bare => ui.item(u, needYou, d.question + staleSuffix(d, t), undefined, { fact: 'now.attention', word: !bare, ...(d.options.length > 0 ? { toggle: { id: 'now:decision', open } } : {}) }),
       open ? d.options.flatMap((o, i) => ui.detail(u, (i + 1) + '. ' + o.label + (o.consequence ? ' — ' + o.consequence : ''), { attached: true })) : [])
   }
-  if (a !== null) put(needYou, ui.item(u, needYou, attentionReason(a, nowMs, t), undefined, { fact: 'now.attention', word: false }))
+  if (a !== null) put(needYou, bare => ui.item(u, needYou, attentionReason(a, nowMs, t), undefined, { fact: 'now.attention', word: !bare }))
   const wt = snap.detail.residue === null ? 0 : snap.detail.residue.needs_human_count
-  if (wt > 0) put(needYou, ui.projection('now', 'residue.cleanup', ui.item(u, needYou, t('now.residue', { n: wt }), undefined, { fact: 'residue.cleanup', word: false, goto: 'hygiene' })))
-  if (lines.length === 0) return nowSection(u, ctx, 'attention', t('now.needs_you'), [ui.empty(t('now.nothing_waits'), 'now.attention')])
-  return nowSection(u, ctx, 'attention', t('now.needs_you'), lines, { right: ui.countChip(u, ui.worst(states), states.length, 'now.attention'), fact: 'now.attention' })
+  if (wt > 0) put(needYou, bare => ui.projection('now', 'residue.cleanup', ui.item(u, needYou, t('now.residue', { n: wt }), undefined, { fact: 'residue.cleanup', word: !bare, goto: 'hygiene' })))
+  if (entries.length === 0) return nowSection(u, ctx, 'attention', t('now.needs_you'), [ui.empty(t('now.nothing_waits'), 'now.attention')])
+  const chip = ui.worst(entries.map(e => e.s))
+  const lines = entries.flatMap(e => [e.make(e.s.id === chip.id), ...e.children])
+  return nowSection(u, ctx, 'attention', t('now.needs_you'), lines, { right: ui.countChip(u, chip, entries.length, 'now.attention'), fact: 'now.attention' })
 }
 
 // ---- 位置: the walk, stage, unit, progress and phase; the reason is the first row when the verdict asks nothing of the owner ----

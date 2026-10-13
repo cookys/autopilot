@@ -94,6 +94,8 @@ export function emojiViolations(text: string, allowPictographic = false): string
   return out
 }
 const tableGlyphs = (g: GlyphTables): string[] => [...Object.values(g.state), ...Object.values(g.structure), ...Object.values(g.chart), ...(g.spark ?? []), ...Object.values(g.fallback ?? {})]
+// a `verified` entry is `pending-owner` or `<YYYY-MM-DD> <terminal>`; anything else (`yes`, ``, `pending`) is refused
+export const verifiedOk = (v: unknown): boolean => typeof v === 'string' && (v === 'pending-owner' || /^\d{4}-\d{2}-\d{2} \S/.test(v))
 // I5 (a) + L3: every glyph is non-emoji, and each new-to-vocabulary glyph carries a `verified` entry
 export function glyphTableViolations(g: GlyphTables = GLYPHS): string[] {
   const out: string[] = []
@@ -101,7 +103,7 @@ export function glyphTableViolations(g: GlyphTables = GLYPHS): string[] {
   for (const glyph of NEW_GLYPHS) {
     if (!tableGlyphs(g).includes(glyph)) continue
     const v = g.verified?.[glyph]
-    if (typeof v !== 'string' || v.trim() === '') out.push(`glyph ${glyph} is new to the vocabulary and has no \`verified\` entry`)
+    if (!verifiedOk(v)) out.push(`glyph ${glyph} is new to the vocabulary and has no \`verified\` entry`)
   }
   return out
 }
@@ -241,7 +243,7 @@ const CLASSIFY: { [D in Domain]: (s: Subject[D]) => string } = {
   verdict: s => norm(s),
   run: r => {
     const fs = present(r.final_status) ? norm(r.final_status) : null
-    if ((r.rc !== null && r.rc !== 0) || (fs !== null && FAILED_FINAL.includes(fs))) return 'failed'
+    if ((typeof r.rc === 'number' && r.rc !== 0) || (fs !== null && FAILED_FINAL.includes(fs))) return 'failed'
     if (r.rc === 0 || (fs !== null && DONE_FINAL.includes(fs))) return 'done'
     if (fs !== null) return 'weird' // a final_status in neither set beats stall and freshness; the raw text goes to detail
     if (r.stall) return 'stall'
@@ -388,10 +390,13 @@ export function meterValue(value: number, cap: number, o: { cells: number; fact?
     sg(padLeft(pct(ratio), 4), { color: key, bold: true, role: 'value', fmt: 'pct' }),
   ], o.fact)
 }
-const BADGE_STATES: readonly StateId[] = ['need_you', 'running', 'stalled']
+const BADGE_STATES = ['need_you', 'running', 'stalled'] as const
+export type BadgeStated = Stated & { readonly id: (typeof BADGE_STATES)[number] }
+// narrows a Stated to the three states that have a badge form, so `stateBadge` rejects the other seven at the type level
+export const isBadgeState = (s: Stated): s is BadgeStated => (BADGE_STATES as readonly string[]).includes(s.id)
 // the only two badge constructors (§3.2 b, I14): ▲, ●N, ⊘N for a state; ⚑N for residue. Any other state is refused.
-export function stateBadge(s: Stated, n: number | undefined, fact: FactId): Frag {
-  if (!BADGE_STATES.includes(s.id)) throw new Error('badge: state ' + s.id + ' has no badge form')
+export function stateBadge(s: BadgeStated, n: number | undefined, fact: FactId): Frag {
+  if (!isBadgeState(s)) throw new Error('badge: state ' + (s as Stated).id + ' has no badge form')
   const st = STATES[s.id]
   if (s.id !== 'need_you' && (n === undefined || n < 1)) throw new Error('badge: ' + s.id + ' needs a count')
   return frag([sg(st.glyph + (s.id === 'need_you' || n === undefined ? '' : String(n)), { color: st.key, role: 'glyph' })], fact)

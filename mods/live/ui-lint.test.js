@@ -23,7 +23,7 @@ test('L3: the real glyph tables keep one glyph to one meaning', () => {
 
 test('L3: every new-to-vocabulary glyph is recorded, and none is claimed verified before the owner ran glyph-check', () => {
   for (const g of ui.NEW_GLYPHS) assert.equal(typeof ui.GLYPHS.verified[g], 'string', 'verified entry for ' + g)
-  for (const g of ui.NEW_GLYPHS) assert.equal(ui.GLYPHS.verified[g], 'pending-owner', g + ' stays pending-owner until the owner runs the check')
+  for (const g of ui.NEW_GLYPHS) assert.ok(ui.verifiedOk(ui.GLYPHS.verified[g]), g + ' verified entry is pending-owner or "<YYYY-MM-DD> <terminal>"')
 })
 
 test('M7 control: stalled = the emoji-prone pause glyph is reported', () => {
@@ -61,4 +61,30 @@ test('control: two states sharing one glyph are reported', () => {
   const g = clone()
   g.state.failed = g.state.done
   assert.ok(ui.vocabularyViolations(g).length > 0)
+})
+
+test('verified format: pending-owner and "<date> <terminal>" pass; yes, empty, pending and a bare date are refused (negative controls)', () => {
+  assert.equal(ui.verifiedOk('pending-owner'), true)
+  assert.equal(ui.verifiedOk('2026-10-13 tmux-ssh'), true)
+  for (const bad of ['yes', '', 'pending', '2026-10-13', ' 2026-10-13 x', undefined, 3]) assert.equal(ui.verifiedOk(bad), false, JSON.stringify(bad))
+  const ok = clone()
+  ok.verified['⊘'] = '2026-10-13 tmux-ssh'
+  assert.deepEqual(ui.glyphTableViolations(ok), [])
+  for (const bad of ['yes', '', 'pending']) {
+    const g = clone()
+    g.verified['⊘'] = bad
+    assert.ok(ui.glyphTableViolations(g).some(x => x.includes('⊘')), 'refused: ' + JSON.stringify(bad))
+  }
+})
+
+test('glyph-check.js lists exactly the NEW_GLYPHS, in order', () => {
+  const src = require('node:fs').readFileSync(path.join(__dirname, 'glyph-check.js'), 'utf8')
+  const m = src.match(/^const GLYPHS = (\[.*\])$/m)
+  assert.ok(m, 'glyph-check.js has a GLYPHS array literal')
+  assert.deepEqual(JSON.parse(m[1].replace(/'/g, '"')), [...ui.NEW_GLYPHS])
+  assert.notDeepEqual(['⊘', '△'], [...ui.NEW_GLYPHS]) // control: a shortened list would not compare equal
+})
+
+test('FRESH_MS pins the five freshness thresholds (section 2.5)', () => {
+  assert.deepEqual({ ...ui.FRESH_MS }, { quiet: 1_800_000, planReview: 86_400_000, terminalPlan: 604_800_000, codeReview: 86_400_000, dispatch: 86_400_000 })
 })

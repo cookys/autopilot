@@ -4,19 +4,19 @@
 import { test, expect } from 'claude-code/testing'
 import {
   GLYPHS, STATES, SEVERITY, STATE_IDS, FRESH_MS, isStale, stateOf, worst, classify, isMade, isFrag, blank, header, kv, item, bullet, empty, more, command, detail, meter, table, val,
-  stateLead, displayWidth, emojiViolations, glyphTableViolations, vocabularyViolations, emphasisViolations, GRID, KEY_W,
+  stateLead, stateBadge, isBadgeState, verifiedOk, displayWidth, emojiViolations, glyphTableViolations, vocabularyViolations, emphasisViolations, GRID, KEY_W,
 } from './ui'
-import type { Ctx } from './ui'
+import type { Ctx, BadgeStated } from './ui'
 
 const T: Record<string, string> = { 'ui.state.running': 'running', 'ui.state.done': 'done', 'ui.state.need_you': 'needs you', 'ui.more': '{n} more {noun}', 'ui.table.state': 'state', ago: '{age} ago' }
 const t = (id: string, v?: Record<string, string | number>): string => (T[id] ?? id).replace(/\{(\w+)\}/g, (_m, k) => String(v?.[k]))
 const ctx = (cols: number): Ctx => ({ t, cols })
 
-test('I5 (a): the real glyph tables have no emoji hazard; new glyphs stay pending-owner; I20: one glyph, one meaning', () => {
+test('I5 (a): the real glyph tables have no emoji hazard; new glyphs carry a well-formed verified entry; I20: one glyph, one meaning', () => {
   expect(glyphTableViolations(GLYPHS)).toEqual([])
   expect(vocabularyViolations(GLYPHS)).toEqual([])
   expect(GLYPHS.state.stalled).toBe('⊘')
-  expect(GLYPHS.verified['⊘']).toBe('pending-owner')
+  expect(verifiedOk(GLYPHS.verified['⊘'])).toBe(true)
   for (const id of STATE_IDS) expect(STATES[id].glyph).toBe(GLYPHS.state[id])
 })
 
@@ -104,4 +104,21 @@ test('FRESH_MS: exactly at the threshold is fresh, one ms over is stale (T-1, T,
   }
   expect(classify('background', { exit: null, quietMs: FRESH_MS.quiet })).toBe('fresh')
   expect(classify('background', { exit: null, quietMs: FRESH_MS.quiet + 1 })).toBe('quiet')
+})
+
+test('classify run: an undefined or missing rc is no exit code; only a number counts', () => {
+  const run = (rc: unknown) => classify('run', { rc: rc as number | null, final_status: null, stall: false, fresh: true })
+  expect(run(undefined)).toBe('running')
+  expect(run(null)).toBe('running')
+  expect(run(0)).toBe('done')
+  expect(run(2)).toBe('failed')
+  expect(run('1')).toBe('running')
+})
+
+test('stateBadge: only need_you, running and stalled have a badge form; the runtime refusal stays', () => {
+  expect(stateBadge(stateOf('verdict', 'DECIDE') as BadgeStated, undefined, 'header.verdict' as never).text).toBe('▲')
+  expect(stateBadge(stateOf('verdict', 'STALLED') as BadgeStated, 2, 'header.verdict' as never).text).toBe('⊘2')
+  expect(() => stateBadge(stateOf('qc', 'ok') as BadgeStated, 1, 'header.verdict' as never)).toThrow()
+  expect(isBadgeState(stateOf('qc', 'ok'))).toBe(false)
+  expect(isBadgeState(stateOf('verdict', 'RUNNING'))).toBe(true)
 })

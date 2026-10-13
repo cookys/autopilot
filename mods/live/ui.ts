@@ -324,6 +324,7 @@ export const FACT_OWNER = {
   'now.attention': 'now', 'now.position': 'now', 'now.background': 'now', 'now.tasks': 'now', 'now.recent': 'now',
   'usage.limit_max': 'spend', 'usage.brain': 'spend', 'usage.window5h': 'spend', 'usage.window7d': 'spend', 'usage.today': 'spend', 'usage.history': 'spend', 'usage.account': 'spend',
   'spend.session': 'spend', 'spend.local_today': 'spend',
+  'usage.window_other': 'spend', // any other rate-limit window the host reports (spend_limit, an unknown kind)
   'residue.groups': 'hygiene', 'residue.cleanup': 'hygiene', 'residue.source': 'hygiene',
   'header.verdict': 'header',
 } as const satisfies Record<string, Owner>
@@ -659,3 +660,13 @@ export function verdictHeader(u: Ctx, v: { state: Stated; word: string; project:
   if (u.cols >= 110 && lw + 4 + mw <= u.cols - 1) return [lineOf('verdict', [...left, sg(' '.repeat(u.cols - 1 - lw - mw)), ...metrics])]
   return [lineOf('verdict', left), lineOf('verdict', metrics)]
 }
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// P3 (用量) helpers: fragments a tab joins into one value
+
+// several fragments as one (a `chart` takes a single value fragment)
+export const cat = (...fs: Frag[]): Frag => frag(fs.flatMap(f => [...f.segs]))
+// a header chip naming a meter level (正常 / 接近上限 / 已超過), in the level's theme key; the word is the chip, there is no glyph
+export const levelChip = (ratio: number, word: string, fact: FactId): Frag => frag([sg(word, { color: meterKey(ratio), role: 'value' })], fact)
+// a plain share bar of `cells` cells (default text colour: a share is not a level)
+export const barValue = (cells: number): Frag => frag([sg(GLYPHS.chart.meterOn.repeat(Math.max(0, cells)), { role: 'glyph' })])

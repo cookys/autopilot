@@ -3421,10 +3421,11 @@ for (const [cols, cells] of [[76, 20], [120, 40]] as const) {
     expect(brain).toBeGreaterThan(other) // 87.20 of 112.40
     expect(other).toBeGreaterThanOrEqual(1) // a non-zero remainder keeps a cell
     expect(brain + other).toBe(cells)
+    expect(brain).toBe(Math.round((87.2 / 112.4) * cells)) // the share of the host total, not of the cap
   })
 }
 
-for (const [cols, rowsExpected] of [[120, 1], [60, 2]] as const) {
+for (const [cols, rowsExpected] of [[120, 1], [84, 1], [83, 2], [60, 2]] as const) {
   test('usage tab: the sparkline, its peak and its hint share one row when they fit, else the hint drops to a second (' + cols + ' columns: ' + rowsExpected + ' row(s))', () => {
     const t = makeT('zh-TW')
     const lines = spendTabLines(shareSnap(), { t, cols })
@@ -3434,6 +3435,10 @@ for (const [cols, rowsExpected] of [[120, 1], [60, 2]] as const) {
     const end = rest.findIndex(l => l.text.startsWith('▾ ') || l.text.startsWith('▸ '))
     const chart = (end === -1 ? rest : rest.slice(0, end)).filter(l => l.text.trim() !== '')
     expect(chart.length).toBe(rowsExpected)
+    if (rowsExpected === 2) {
+      expect(chart[1].text).toBe(' '.repeat(12) + t('spend.hint')) // the hint alone, indented under the sparkline
+      expect(chart[0].text).not.toContain(t('spend.hint'))
+    } else expect(chart[0].text).toContain(t('spend.hint'))
   })
 }
 

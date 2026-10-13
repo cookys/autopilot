@@ -1167,22 +1167,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/v2-35-5-qc-panel-follow-ups-managed-campaign-rail-debt-2026-08-31.md
 - **Context**: four Suggestion-tier items from the three-seat panels, all excluded from the ship with rationale: (1) whitespace re-indent churn in `src/campaign/cli.js` ~412-437/598 pollutes blame in the projection path — revert cosmetically; (2)…
 
-### No supported review-only entry: the managed final panel cannot adopt an externally produced candidate range
-- **Id**: BL-0090
-- **Status**: open
-- **Since**: 2026-10-03
-- **Origin**: peer
-- **Reporter**: cuda chatgpt-tunnel
-- **Report**: 2026-10-03 fleet
-- **Reply**: 2026-10-02 session 7236b3c6:2745
-- **Problem**: cuda 專案經 fleet 要求：希望能只審查他們自己寫好的程式範圍，但目前最終審查只能經由完整的實作流程進入，會強制先跑一次寫程式階段，無法採用外部已寫好的提交。 (draft)
-- **Impact**: 外部專案無法單獨使用我方的最終審查。擁有者 2026-10-13 同意做，先寫計畫。
-- **Trigger**: ready: write the plan after the dispatch-tree plan (owner 2026-10-13)
-- **Effort**: L
-- **Source**: PEER-REPORTED cuda/chatgpt-tunnel (fleet, 2026-10-03), verified by reading code
-- **Pointer**: docs/backlog/review-only-adoption-of-external-candidate.md
-- **Context**: the final panel is reachable only through managed `implement-review` (writer stage always runs); intake only resumes candidates minted by the same campaign.
-
 ### context-budget falls back to inference after a long foreground tool call — live tick starves under the 120 s freshness cap
 - **Id**: BL-0091
 - **Status**: open

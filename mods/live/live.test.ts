@@ -3428,14 +3428,25 @@ test('dispatch tab: who computes `fresh` (§2.5 gap): a row that ended with no r
     ['unrecognised final_status on a fresh row', { alive: true, probe_age_s: 5, phase: 'running', final_status: 'WEIRD' }, 'unknown', false],
   ]
   for (const [name, over, want, fresh] of cases) {
-    const [row] = paneRows(env([{ ...base, ...over }])) as ReturnType<typeof paneRows> & object
+    const nowAt = Date.parse(base.started_at) + (((over as { elapsed_s?: number }).elapsed_s ?? base.elapsed_s) * 1000) // the clock the case means: `elapsed_s` seconds after launch
+    const [row] = paneRows(env([{ ...base, ...over }]), nowAt) as ReturnType<typeof paneRows> & object
     expect(row.fresh, name).toBe(fresh)
     expect(ui.stateOf('run', runSubject(row)).id, name).toBe(want)
     const text = dispatchLines(dispatchSnap([row], { detail: { counts: null, stalled: 0, now_ms: Date.parse('2026-10-13T08:00:00.000Z') } }), { t, cols: 120 }).map(l => l.text).join('\n')
     const drawnRunning = text.split('\n').some(l => l.startsWith('● ') && l.includes(' x '))
     expect(drawnRunning, name + ' drawn as running').toBe(want === 'running')
   }
-  expect(paneRows(env([{ ...base, alive: true, probe_age_s: 31, phase: 'running' }]) ) !== null).toBe(true)
+  // elapsed_s is frozen in a heartbeat rewrite: a stale copy of 5 s must not keep a never-probed run "not started" once the CLOCK is past the bound
+  const stale = { ...base, alive: true, probe_age_s: null, phase: 'running', elapsed_s: 5 }
+  const startMs = Date.parse(base.started_at)
+  const [late] = paneRows(env([stale]), startMs + 31_000) as never[]
+  expect(ui.stateOf('run', runSubject(late)).id, 'elapsed_s 5 but the clock is 31 s past launch').toBe('stopped')
+  const [early] = paneRows(env([stale]), startMs + 30_000) as never[]
+  expect(ui.stateOf('run', runSubject(early)).id, 'exactly at the bound').toBe('pending')
+  const [noClock] = paneRows(env([stale])) as never[]
+  expect(ui.stateOf('run', runSubject(noClock)).id, 'no clock, no starting').toBe('stopped')
+  const [noStart] = paneRows(env([{ ...stale, started_at: null }]), startMs + 1000) as never[]
+  expect(ui.stateOf('run', runSubject(noStart)).id, 'no started_at, no starting').toBe('stopped')
   // no bound published: any probe counts as fresh
   const [noBound] = paneRows({ runs: [{ ...base, alive: true, probe_age_s: 900, phase: 'running' }] } as never) as never[]
   expect((noBound as { fresh: boolean }).fresh).toBe(true)

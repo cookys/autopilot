@@ -347,7 +347,7 @@ async function buildSnapshot($: EngineInterface, nowMs: number, t: T): Promise<{
   const common = {
     ...keyed,
     link: reviewLink(port, scope.key, baseJob.date, baseJob.job),
-    rows: paneRows(env),
+    rows: paneRows(env, nowMs),
     gates: jobModel === null ? null : jobModel.gates,
     published_at: published,
     session_as_of: sessionUsd(env, sid).as_of,

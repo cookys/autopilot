@@ -874,7 +874,7 @@ export function headerText(env: Json, sid: string, ctx: string, t: T = T_EN): st
   return t('pane.header', { session: sessionUsd(env, sid).text, host: usd(env.host_today_usd), ctx })
 }
 
-export function paneRows(env: Json): LivePaneRow[] | null {
+export function paneRows(env: Json, nowMs: number | null = null): LivePaneRow[] | null {
   const rows = rowsOf(env)
   if (rows === null) return null
   const str = (v: unknown) => (typeof v === 'string' && v ? v : null)
@@ -891,7 +891,7 @@ export function paneRows(env: Json): LivePaneRow[] | null {
       rc, final_status: str(r.final_status),
       probe_age_s: probe, ended_at: str(r.ended_at), ended,
       fresh: !ended && r.alive === true && probe !== null && (bound === null || probe <= bound),
-      starting: !ended && probe === null && bound !== null && finite(r.elapsed_s) && r.elapsed_s <= bound, // never probed, launched inside the bound: ○ not started yet, not ◌ stopped
+      starting: !ended && probe === null && bound !== null && nowMs !== null && Number.isFinite(Date.parse(str(r.started_at) ?? '')) && nowMs - Date.parse(str(r.started_at) as string) <= bound * 1000, // never probed, launched inside the bound as of NOW (elapsed_s is a stale copy in a heartbeat rewrite): ○ not started yet, not ◌ stopped
     }
   })
 }

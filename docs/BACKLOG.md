@@ -1661,19 +1661,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: Case 1c stub calls REAL_SETSID=$(command -v setsid); skip 1c when it is empty.
 
-### dispatch-author drops runner stderr and cannot tell quota exhaustion apart
-- **Id**: BL-0136
-- **Status**: open
-- **Since**: 2026-10-13
-- **Origin**: self
-- **Problem**: 派工 rail 在幾種執行器失敗時把錯誤輸出整段丟掉，只回一句「執行器失敗」。這次 grok 帳戶餘額用完，回報看不出原因，要另外手動重跑才查到是付費額度問題。
-- **Impact**: 額度用完、金鑰失效這類非程式問題會被當成一般失敗，浪費重試與排查時間；審查席位掉線時也無法自動換家族。
-- **Trigger**: next touch of dispatch-author.sh runner branches, or the next seat failure whose cause is not in the receipt
-- **Effort**: S
-- **Source**: live-pane plan review G1 transport stop, 2026-10-13
-- **Pointer**: docs/plans/evidence/2026-10-13-live-pane/plan-review/README.md
-- **Context**: grok, cc-shim, claude-native and qoderclicn branches (~lines 1100-1200) discard stderr; die_runner_failed at ~469. Keep a bounded stderr excerpt in error and raw_log, and classify HTTP 402 or "balance exhausted" as quota.
-
 ### withLock busy-waits in foreman-guard and depth0-delegate-gate
 - **Id**: BL-0137
 - **Status**: open

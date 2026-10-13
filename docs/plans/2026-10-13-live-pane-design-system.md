@@ -717,3 +717,7 @@ Source: the G1 plan review (seats `sol_deep`, STOP, 10 findings; `minimax_consul
 | 12 | minimax R5b: no component produces a horizontal seat row | adopted, by changing the mockup (fewest additions): seats stack one per line at every width. The grid's column 14 entry, which this exposed as unused by any mockup, is removed; the nested seat starts at 12 | §3.1, §5.3 |
 | 13 | minimax R5c: identifier cut from the right in the 殘留 mockup | modified: the 14-cell worktree names fit, so they are shown whole; the rule is restated (a longer identifier is cut from the left; a command is never cut), and the expanded command is shown wrapped and complete | §5.5 |
 | 14 | minimax R7: `getSessionId()` inheritance is not on the unverified list | adopted by moving it out; the new plan names the check and gives it a phase | dispatch-tree plan §6, §7 |
+
+## 11. Review log
+
+- 2026-10-13, G1 attempt at 459dd869: terminal `required_seat_transport_exhausted`. The required chair (grok-4.6) returned HTTP 402 (xAI usage balance exhausted) on both attempts; `sol_deep` and `minimax_consult` completed, but their results stayed unratified, so §10 treats them as input, not as dispositions. The sealed state directory was moved aside with the suffix `.g1-transport-stop` (no seat produced a ratified result, so this is a legal reset). The re-run panel is `sol_chair` (codex gpt-5.6-sol, required), `kimi_deep` (kimi-code-k3), and `minimax_consult` (MiniMax-M3).

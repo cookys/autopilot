@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0145 -->
+<!-- next-id: BL-0146 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1330,18 +1330,18 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/final-review-panel-fans-out-all-seats-at-once-no-bounded-concurrency.md
 - **Context**: `scripts/lib/review-fanout.js` main() uses Promise.all over all seats; add a named concurrency config, default all seats.
 
-### Plan-review roster resolves to a single family on this repo
+### Plan review silently falls back to one family when the topology lacks a plan-review panel
 - **Id**: BL-0108
-- **Status**: fired 2026-10-03
+- **Status**: open
 - **Since**: 2026-10-03
 - **Origin**: self
-- **Problem**: 計畫審查的名單取自機器上的拓樸檔。這台機器的拓樸檔是舊版產生的，少了計畫審查名單那一欄，系統就默默退回只用 opus 一個家族、不報錯。10/13 重新產生後已恢復成兩個家族。
-- **Impact**: 拓樸檔一旦是舊的，計畫審查就默默變成單一家族，同一家族的審查者容易有相同盲點。換機器或升級之後最容易發生。
-- **Trigger**: needs owner decision — A keep as is (rely on manual regeneration), B auto-regenerate the topology file when the key is missing, C plan-review path refuses to run and names the regenerate command (recommended: C)
-- **Effort**: S
+- **Problem**: 計畫審查的名單取自機器上的拓樸檔。拓樸檔是舊版產生、少了計畫審查名單那一欄時，系統默默退回只用 opus 一個家族，不報錯。10/13 重新產生後，這台機器已恢復成兩個家族。
+- **Impact**: 拓樸檔一舊，計畫審查就默默變成單一家族，同家族審查者容易有相同盲點。換機器或升級後最容易發生。
+- **Trigger**: owner ruled 2026-10-13: stop and show the available seats so the user can complete the config, instead of the silent fallback
+- **Effort**: M
 - **Source**: mods plan G1+G2 reviews
 - **Pointer**: docs/backlog/plan-review-roster-resolves-to-a-single-family-on-this-repo.md
-- **Context**: root cause 2026-10-13: stale ~/.autopilot/topology.json lacked `plan_review_panel`; regenerated, backup in session scratchpad (topology.json.bak-1013). Seats for mods plan were hand-picked from qc_panel.
+- **Context**: Scripts cannot prompt (agy sandbox, headless -p): exit with a named code, list qualified seats, a recommended default and the command that writes them; depth-0 asks the owner, or headless takes the default and logs a decision.
 
 ### mods P1a known follow-ups (hardening)
 - **Id**: BL-0109
@@ -1374,13 +1374,13 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-08
 - **Origin**: self
-- **Problem**: 低風險審查的預設做法（單一模型家族、審查者用全新 session）只寫在文件裡，審查路由設定沒有對應的鍵，程式無法強制。提案：新增一個「審查者用全新 session」開關，預設開。
+- **Problem**: 低風險審查的預設做法（單一模型家族、審查者用全新 session）只寫在文件裡，審查路由設定沒有對應的鍵，程式無法強制。
 - **Impact**: 預設做法靠人遵守，沒有機制保證；審查者如果沿用實作者的上下文，容易跟著實作者的盲點走。
-- **Trigger**: needs owner decision — (1) should `off` exist at all; (2) enforce at dispatch time (refuse a reused session) or only flag it in the review receipt
+- **Trigger**: owner ruled 2026-10-13: add review_fresh_context on|off, default on; on refuses a reused reviewer session at dispatch; off stays legal but is stamped in the review receipt
 - **Effort**: S
 - **Source**: stage-graph plan execution, 2026-10-06..08
 - **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/README.md
-- **Context**: "fresh-context reviewer" is documentation only; scripts/resolve-review-loop.sh has no key for it. Proposal: `review_fresh_context: on|off`, default on.
+- **Context**: The key lives in scripts/resolve-review-loop.sh. It is a resolver contract whose suites drift together, so run the full suite once, alone, after the change.
 
 ### Eval campaigns should fail fast on auth and quota errors
 - **Id**: BL-0112
@@ -1777,3 +1777,15 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: dispatch tree plan, step 4 deferred by owner ruling 2026-10-13
 - **Pointer**: docs/plans/2026-10-13-dispatch-tree.md
 - **Context**: Plan §4, D4. Carry root/parent/depth as remote-reported telemetry, never an edge (the far side is an LLM relaying it; G1 finding 56a3391e). Needs a fleet dispatch field plus a receiver record, shown as a labelled hint.
+### Plan-review seats never get fallbacks, so a seat out of quota is not replaced
+- **Id**: BL-0145
+- **Status**: open
+- **Since**: 2026-10-14
+- **Origin**: self
+- **Problem**: 計畫審查有「席位失敗就換另一家」的機制，程式也接上了，但每次的審查設定都把替補名單留空，拓樸檔也不提供替補。所以 grok 額度用完時沒有人可以換上去，那一席就直接失敗。
+- **Impact**: 一家額度用完或掉線，審查就少一家或整輪失敗，要人工改設定重跑。10/13 grok 兩次空手就是這樣。
+- **Trigger**: together with BL-0108 (same plan-review admission step), or the next plan review
+- **Effort**: S
+- **Source**: grok quota investigation, 2026-10-13
+- **Pointer**: docs/plans/evidence/2026-10-13-live-pane/plan-review/README.md
+- **Context**: Substitution is live (dispatch-plan-review.js reviewSeat swaps after any attempt-1 failure), but manifests are hand-written with fallbacks [] and topology ladders go unread. Fill fallbacks from topology; warn when a required seat has none.

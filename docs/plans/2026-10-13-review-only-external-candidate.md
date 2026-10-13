@@ -175,7 +175,11 @@ Order: P1 → {P2 ∥ P3} → P4. If Q1 picks the park, findings ranges are only
 ## 10. Open questions for the owner
 
 - Q1 — What happens to findings when no repair can follow. (A) Terminal not-ready, findings listed as unadjudicated; the external depth-0 adjudicates on its side. This needs new code to suppress the existing in-loop park (D10) in review-only mode; whether `--campaign-disposition-policy deny-nonempty` already yields that outcome is unverified (U8). (B) Keep the existing park: the campaign waits for the external depth-0's disposition authority, then `--resume` ends it ready (all findings rejected) or not-ready (must-fix at the 0-repair ceiling). B matches current behavior and ADR-0001 (a reviewer verdict stays a claim until depth-0 adjudicates), but puts P2 on the critical path. Recommendation: B.
-- Q2 — Panel strength at l4. (A) Follow l4 `implement-review` (QC panel optional; a single reviewer may stand as the panel). (B) Require a complete QC panel at every level, since a final panel is what was asked for. Recommendation: B.
+- Q2 — Panel strength at l4. (A) Follow l4 `implement-review` (QC panel optional; a single reviewer may stand as the panel). (B) Require a complete QC panel at every level, since a final panel is what was asked for. Recommendation: B. **Ruled 2026-10-13: B.** P1 must require the sealed panel minimum and family count at l4 as well.
+- Q1′ — Owner reframe (2026-10-13), superseding Q1 once confirmed. The owner asked whether, since the review already found the problems, the findings should go back to a depth-0 that dispatches the fix, instead of a review that can only end. Two readings:
+  - (R1) autopilot's own implementer repairs the adopted range (`max_repair_generations` > 0 on an adopted candidate). This contradicts §12: the reporter's writer is outside autopilot on purpose. It also needs a repair lineage on a range this campaign did not write (D11, D12).
+  - (R2) Findings go to the requester's depth-0. After disposition, their own writer fixes and pushes a new head; the same campaign re-derives the new head (RO3 checks become "moved forward from the reviewed head") and re-reviews, reusing seat verdicts per RO11. This keeps "no autopilot writer" and fires the §4 Out trigger for in-campaign re-review (the reporter said a second campaign's spend blocks them).
+  - Recommendation: R2, with B's park as the place the findings wait. Pending the owner's confirmation; the reporter is told only after it.
 
 ## 11. Unverified
 

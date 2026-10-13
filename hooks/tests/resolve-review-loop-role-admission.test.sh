@@ -634,6 +634,20 @@ out="$(AUTOPILOT_QUALIFICATION_OVERRIDE="$OVR_CONSULT_QC" AUTOPILOT_TOPOLOGY_FIL
 assert_eq "3" "$rc" "BL-0095: auto + declared consult seat that is also a qc_panel seat exits 3"
 assert_contains "$out" "must not be a qc_panel seat" "BL-0095: the qc_panel refusal names the rule"
 
+# consult_dispatch: on gets the same qc_panel exclusion (quality-pipeline SKILL.md: resolver enforces)
+CFG_ON_QC="$TEST_TMP/cfg-consult-on-qcseat.md"
+mk_cfg_consult "$CFG_ON_QC" claude-opus high claude-native claude-opus claude-native high
+sed -i 's/^- consult_dispatch: auto$/- consult_dispatch: on/' "$CFG_ON_QC"
+out="$(AUTOPILOT_QUALIFICATION_OVERRIDE="$OVR_CONSULT_QC" AUTOPILOT_TOPOLOGY_FILE="$TOPO_C" REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_ON_QC" bash "$SCRIPT" 2>&1)"; rc=$?
+assert_eq "3" "$rc" "consult_dispatch on + declared qc_panel seat exits 3"
+assert_contains "$out" "must not be a qc_panel seat" "on: the qc_panel refusal names the rule"
+CFG_ON_OK="$TEST_TMP/cfg-consult-on-ok.md"
+mk_cfg_consult "$CFG_ON_OK" cursor-grok-4.6-high high cursor claude-opus claude-native high
+sed -i 's/^- consult_dispatch: auto$/- consult_dispatch: on/' "$CFG_ON_OK"
+out="$(AUTOPILOT_QUALIFICATION_OVERRIDE="$OVR_CONSULT" AUTOPILOT_TOPOLOGY_FILE="$TOPO_C" REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_ON_OK" bash "$SCRIPT" 2>/dev/null)"; rc=$?
+assert_eq "0" "$rc" "consult_dispatch on + declared non-qc seat passes"
+assert_contains "$out" '"consult_resolved_from": "explicit"' "on: origin stays explicit"
+
 # schema: both declared-wins origins are legal enum values
 SCHEMA_OK="$(node -e '
 const s = require(process.argv[1]);

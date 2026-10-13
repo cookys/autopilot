@@ -1207,22 +1207,10 @@ process.stdout.write(JSON.stringify(a));
   if [[ "$CONSULT_DISPATCH" == "auto" && -n "$CONSULT_ENGINE" && -n "$CONSULT_RUNNER" && -n "$CONSULT_EFFORT" ]]; then
     _consult_declared=1
     CONSULT_RESOLVED_FROM="config-explicit"
-    # A declared seat is exempt from topology discovery, NOT from the two rules every
-    # consult seat obeys: (1) the qualification gate (_consult_discuss_switch_on admits
-    # config-explicit like `on`; enforced in the seat loop below), and (2) a consult seat
-    # must never be a qc_panel seat - the topology pick excludes them, so a declared one
-    # is refused here by the same (engine, runner, effort) key with the same aliases.
-    _norm_r() { [[ "$1" == "codex-cli" ]] && echo codex || echo "$1"; }
-    _norm_e() { [[ "$1" == "gemini-flash" ]] && echo gemini-3.6-flash-high || echo "$1"; }
-    _cq_n=${#QC_PANEL[@]}
-    [[ ${#QC_PANEL_RUNNERS[@]} -lt $_cq_n ]] && _cq_n=${#QC_PANEL_RUNNERS[@]}
-    [[ ${#QC_PANEL_EFFORTS[@]} -lt $_cq_n ]] && _cq_n=${#QC_PANEL_EFFORTS[@]}
-    for ((_cq_i = 0; _cq_i < _cq_n; _cq_i++)); do
-      if [[ "$(_norm_e "${QC_PANEL[$_cq_i]}")|$(_norm_r "${QC_PANEL_RUNNERS[$_cq_i]}")|${QC_PANEL_EFFORTS[$_cq_i]}" == "$(_norm_e "$CONSULT_ENGINE")|$(_norm_r "$CONSULT_RUNNER")|$CONSULT_EFFORT" ]]; then
-        echo "resolve-review-loop: declared consult seat ($CONSULT_ENGINE/$CONSULT_RUNNER/$CONSULT_EFFORT) is also qc_panel[$_cq_i] - a consult seat must not be a qc_panel seat; declare a different consult seat" >&2
-        exit 3
-      fi
-    done
+    # A declared seat is exempt from topology discovery, NOT from the rules every consult
+    # seat obeys: the qualification gate (_consult_discuss_switch_on admits config-explicit
+    # like `on`; enforced in the seat loop below) and the qc_panel exclusion (checked after
+    # this block, shared with `on`).
   fi
 
   if [[ "$CONSULT_DISPATCH" == "auto" && "$_consult_declared" -eq 0 ]]; then
@@ -1326,6 +1314,23 @@ if [[ "$CONSULT_DISPATCH" == "on" ]]; then
   CONSULT_RESOLVED_FROM="explicit"
 elif [[ "$CONSULT_DISPATCH" == "off" ]]; then
   CONSULT_RESOLVED_FROM="off"
+fi
+# A consult seat must never be a qc_panel seat (skills/quality-pipeline/SKILL.md: the
+# resolver enforces the exclusion). The topology pick excludes qc_panel seats itself; a
+# seat the config DECLARES - under `on`, or under `auto` (config-explicit) - is refused
+# here by the same (engine, runner, effort) key with the same aliases.
+if [[ "$CONSULT_DISPATCH" == "on" || "$CONSULT_RESOLVED_FROM" == "config-explicit" ]]; then
+  _norm_r() { [[ "$1" == "codex-cli" ]] && echo codex || echo "$1"; }
+  _norm_e() { [[ "$1" == "gemini-flash" ]] && echo gemini-3.6-flash-high || echo "$1"; }
+  _cq_n=${#QC_PANEL[@]}
+  [[ ${#QC_PANEL_RUNNERS[@]} -lt $_cq_n ]] && _cq_n=${#QC_PANEL_RUNNERS[@]}
+  [[ ${#QC_PANEL_EFFORTS[@]} -lt $_cq_n ]] && _cq_n=${#QC_PANEL_EFFORTS[@]}
+  for ((_cq_i = 0; _cq_i < _cq_n; _cq_i++)); do
+    if [[ "$(_norm_e "${QC_PANEL[$_cq_i]}")|$(_norm_r "${QC_PANEL_RUNNERS[$_cq_i]}")|${QC_PANEL_EFFORTS[$_cq_i]}" == "$(_norm_e "$CONSULT_ENGINE")|$(_norm_r "$CONSULT_RUNNER")|$CONSULT_EFFORT" ]]; then
+      echo "resolve-review-loop: declared consult seat ($CONSULT_ENGINE/$CONSULT_RUNNER/$CONSULT_EFFORT) is also qc_panel[$_cq_i] - a consult seat must not be a qc_panel seat; declare a different consult seat" >&2
+      exit 3
+    fi
+  done
 fi
 case "$SPEC_REVIEW" in on|off) ;; *) SPEC_REVIEW="$DEF_SPEC_REVIEW" ;; esac
 case "$HARNESS" in on|off) ;; *) HARNESS="$DEF_HARNESS" ;; esac

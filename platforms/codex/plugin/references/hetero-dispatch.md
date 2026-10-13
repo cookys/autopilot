@@ -578,6 +578,7 @@ scripts/dispatch-status.js --run <run-id>      # one JSON line: phase/alive/stal
 scripts/dispatch-status.js --list              # all manifests (started/ended)
 scripts/dispatch-status.js --log <p> --summary # parse-only (events/tool_calls/tokens)
 scripts/dispatch-status.js --reap [--days N] [--dry-run]  # retention reaper (see below)
+scripts/dispatch-tree.js [--session <id>] [--json]  # read-only tree: subagents + nested rails under one session; unconnected branches flagged untracked
 ```
 
 - **Liveness** (advisory ordering): flock probe on the worktree lifetime lock (same contract as

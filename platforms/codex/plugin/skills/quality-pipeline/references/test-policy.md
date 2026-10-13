@@ -84,6 +84,12 @@ Summary:
 | Multiple failures or unclear root cause | Dispatch `Explore` agent for deep investigation |
 | Possible cross-module impact | Dispatch `general-purpose` agent for full analysis |
 
+## Affected-suite selector (evidence stage — not a gate)
+
+`scripts/affected-suites.js --base <ref> --head <ref> [--json]` lists the test files a diff can affect: tests that name a changed file, plus lib -> script -> test chains (two mention hops; require/source hops are free). Changes it cannot judge (`hooks/hooks.json`, package files, `hooks/tests/run.sh`, plugin manifest, CI config) return `mode: full`, meaning run the whole suite. `unreferenced` lists changed shipped code no suite reaches — treat it as a coverage gap, not as green.
+
+Status: BL-0001 stage 1. The tool and its miss-rate evidence (`docs/plans/evidence/2026-10-13-affected-suites/miss-check.md`) exist; the gate (`.claude/quality-gate-config.md`) and `hooks/tests/run.sh` still run everything. Switching the gate to the selection is a separate guidance change.
+
 ## Prohibited Behaviors
 
 Test failure prohibitions: skip pre-existing, skip even 1 failure, commit before fixing, assume unrelated.

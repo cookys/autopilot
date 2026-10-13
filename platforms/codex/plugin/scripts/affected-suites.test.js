@@ -1,0 +1,148 @@
+'use strict';
+// node --test scripts/affected-suites.test.js
+// Builds a throwaway git repo with a fixed layout and checks what the selector picks for a diff.
+const test = require('node:test');
+const assert = require('node:assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { execFileSync } = require('child_process');
+
+const SEL = path.join(__dirname, 'affected-suites.js');
+
+function makeRepo(files) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'affected-suites-test-'));
+  const git = (...a) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...a], { cwd: dir, stdio: 'pipe' }).toString().trim();
+  git('init', '-q');
+  const write = (m) => {
+    for (const [p, body] of Object.entries(m)) {
+      const full = path.join(dir, p);
+      fs.mkdirSync(path.dirname(full), { recursive: true });
+      if (body === null) fs.rmSync(full, { force: true }); else fs.writeFileSync(full, body);
+    }
+  };
+  write(files);
+  git('add', '-A'); git('commit', '-qm', 'base');
+  const base = git('rev-parse', 'HEAD');
+  return {
+    dir, base,
+    change(m) { write(m); git('add', '-A'); git('commit', '-qm', 'change'); return git('rev-parse', 'HEAD'); },
+    select(head, extra = []) {
+      const out = execFileSync('node', [SEL, '--root', dir, '--base', base, '--head', head, '--json', ...extra], { stdio: 'pipe' }).toString();
+      return JSON.parse(out);
+    },
+    cleanup() { fs.rmSync(dir, { recursive: true, force: true }); },
+  };
+}
+
+const LAYOUT = {
+  'scripts/lib/core.js': 'module.exports = 1;\n',
+  'scripts/tool.js': "const core = require('./lib/core.js');\nconsole.log(core);\n",
+  'scripts/other.js': 'console.log("other");\n',
+  'hooks/tests/tool.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/tool.js"\n',
+  'hooks/tests/other.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/other.js"\n',
+  'hooks/tests/lone.test.sh': '#!/usr/bin/env bash\necho nothing\n',
+  'hooks/hooks.json': '{}\n',
+  'docs/note.md': 'text\n',
+};
+
+test('direct reference: a test that names the changed script is selected, others are not', () => {
+  const r = makeRepo(LAYOUT);
+  try {
+    const head = r.change({ 'scripts/other.js': 'console.log("changed");\n' });
+    const out = r.select(head);
+    assert.strictEqual(out.mode, 'selective');
+    assert.deepStrictEqual(out.suites, ['hooks/tests/other.test.sh']);
+    assert.strictEqual(out.schema, 1);
+  } finally { r.cleanup(); }
+});
+
+test('two-layer chain: shared lib -> script -> test', () => {
+  const r = makeRepo(LAYOUT);
+  try {
+    const head = r.change({ 'scripts/lib/core.js': 'module.exports = 2;\n' });
+    const out = r.select(head);
+    assert.deepStrictEqual(out.suites, ['hooks/tests/tool.test.sh']);
+    assert.deepStrictEqual(out.chains['hooks/tests/tool.test.sh'],
+      ['hooks/tests/tool.test.sh', 'scripts/tool.js', 'scripts/lib/core.js']);
+  } finally { r.cleanup(); }
+});
+
+test('a changed test selects itself', () => {
+  const r = makeRepo(LAYOUT);
+  try {
+    const head = r.change({ 'hooks/tests/lone.test.sh': '#!/usr/bin/env bash\necho changed\n' });
+    assert.deepStrictEqual(r.select(head).suites, ['hooks/tests/lone.test.sh']);
+  } finally { r.cleanup(); }
+});
+
+test('a deleted script still selects the tests that named it', () => {
+  const r = makeRepo(LAYOUT);
+  try {
+    const head = r.change({ 'scripts/other.js': null });
+    assert.deepStrictEqual(r.select(head).suites, ['hooks/tests/other.test.sh']);
+  } finally { r.cleanup(); }
+});
+
+test('unjudgeable change (hooks.json) => full suite, no guessing', () => {
+  const r = makeRepo(LAYOUT);
+  try {
+    const head = r.change({ 'hooks/hooks.json': '{"a":1}\n' });
+    const out = r.select(head);
+    assert.strictEqual(out.mode, 'full');
+    assert.deepStrictEqual(out.suites, []);
+    assert.match(out.full_reasons[0], /hooks\/hooks\.json/);
+    const plain = execFileSync('node', [SEL, '--root', r.dir, '--base', r.base, '--head', head], { stdio: 'pipe' }).toString();
+    assert.strictEqual(plain.trim(), 'FULL');
+  } finally { r.cleanup(); }
+});
+
+test('a directory glob in a test selects it when any file in that directory changes', () => {
+  const r = makeRepo({ ...LAYOUT, 'hooks/tests/sweep.test.sh': '#!/usr/bin/env bash\nfor f in scripts/*.js; do node --check "$f"; done\n' });
+  try {
+    const head = r.change({ 'scripts/other.js': 'console.log("changed");\n' });
+    const out = r.select(head);
+    assert.ok(out.suites.includes('hooks/tests/sweep.test.sh'));
+    assert.ok(out.suites.includes('hooks/tests/other.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('a mention only in a comment is not a dependency', () => {
+  const r = makeRepo({ ...LAYOUT, 'hooks/tests/lone.test.sh': '#!/usr/bin/env bash\n# see scripts/other.js\necho nothing\n' });
+  try {
+    const head = r.change({ 'scripts/other.js': 'console.log("changed");\n' });
+    assert.ok(!r.select(head).suites.includes('hooks/tests/lone.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('docs-only change selects nothing and is not full', () => {
+  const r = makeRepo(LAYOUT);
+  try {
+    const out = r.select(r.change({ 'docs/note.md': 'more text\n' }));
+    assert.strictEqual(out.mode, 'selective');
+    assert.deepStrictEqual(out.suites, []);
+  } finally { r.cleanup(); }
+});
+
+test('changed shipped code that no suite reaches is reported as unreferenced', () => {
+  const r = makeRepo({ ...LAYOUT, 'scripts/orphan.js': 'x\n' });
+  try {
+    const out = r.select(r.change({ 'scripts/orphan.js': 'y\n' }));
+    assert.deepStrictEqual(out.unreferenced, ['scripts/orphan.js']);
+  } finally { r.cleanup(); }
+});
+
+test('--files mode reads the working tree', () => {
+  const r = makeRepo(LAYOUT);
+  try {
+    const out = JSON.parse(execFileSync('node', [SEL, '--root', r.dir, '--files', 'scripts/lib/core.js', '--json'], { stdio: 'pipe' }).toString());
+    assert.deepStrictEqual(out.suites, ['hooks/tests/tool.test.sh']);
+  } finally { r.cleanup(); }
+});
+
+test('real tree: every suite run.sh discovers is a known suite path', () => {
+  const root = path.join(__dirname, '..');
+  const out = execFileSync('node', [SEL, '--root', root, '--list-all'], { stdio: 'pipe' }).toString().trim().split('\n');
+  assert.ok(out.length > 100);
+  assert.ok(out.every((p) => /\.test\.(sh|js)$/.test(p)));
+});

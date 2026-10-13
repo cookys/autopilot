@@ -312,6 +312,17 @@ async function paneOn($: any, surface: (typeof SURFACES)[number], tab: string) {
   return mountPane()
 }
 
+// P1: press the first line of a tab for which `want` holds (its toggle button is keyed 'b' + the line index); returns the line that was pressed
+async function pressRow($: any, surface: (typeof SURFACES)[number], tab: string, want: (line: string) => boolean): Promise<string> {
+  const at = (await paneParts($, surface, tab)).texts.findIndex(want)
+  if (at < 0) throw new Error('pressRow: no line to press on ' + tab)
+  const pane = await paneOn($, surface, tab)
+  const line = rowsOf((await pane.drawn()) as Node)[at]
+  await pane.press({ key: 'b' + at })
+  await pane.unmount()
+  return line
+}
+
 // the header line of the Dispatch tab (its first line): `session … · host … · ctx …`, or the state text of a non-ok snapshot
 const paneHeader = async ($: any, surface: (typeof SURFACES)[number]) => (await paneParts($, surface)).texts[0] as string
 
@@ -621,14 +632,15 @@ for (const surface of SURFACES) {
     await start($, surface)
     const texts = await reviewTab($, w)
     const has = (...parts: string[]) => texts.some(t => parts.every(p => t.includes(p)))
-    expect(has('Plan review', '● active')).toBe(true)
-    expect(has('plan', 'plan-x', 'CONDITIONAL')).toBe(true)
+    expect(has('Plan review', '△ to fix')).toBe(true)
+    expect(has('plan', 'plan-x', '△ to fix')).toBe(true)
     expect(has('round', '▰▰', 'R2 of 2')).toBe(true)
-    expect(has('sol_chair', 'openai', 'STOP')).toBe(true)
-    expect(has('grok_deep', 'xai', 'CONDITIONAL')).toBe(true)
-    expect(has('Code review', '▲ open')).toBe(true)
+    expect(has('△ to fix', 'sol_chair', 'openai')).toBe(true)
+    expect(has('△ to fix', 'grok_deep', 'xai')).toBe(true)
+    expect(has('Code review', '△ to fix')).toBe(true)
     expect(has('round', 'R3', '11111111..aaaaaaaa', 'p7d')).toBe(true)
-    expect(has('s0', 'minimax', 'FIX-THEN-SHIP')).toBe(true)
+    expect(has('△ to fix', 's0', 'minimax')).toBe(true)
+    for (const raw of ['FIX-THEN-SHIP', 'CONDITIONAL', 'STOP']) expect(texts.some(t => t.includes(raw))).toBe(false) // a raw verdict word is only in the opened seat (I7)
     expect(texts.some(t => t.includes('no data · no review published'))).toBe(false)
     expect(texts.some(t => t.includes(' r1 '))).toBe(false) // the dispatch table is the other tab
   })
@@ -636,33 +648,131 @@ for (const surface of SURFACES) {
   test('P7d review tab: a terminal plan review and a converged round are worded as such (' + surface + ')', async ($, on) => {
     const files = base()
     files[LIVE + '/runs/' + KEY + '.review.json'] = j(reviewFact({
-      plan: { logical_plan_id: 'plan-y', generation: 1, max_generations: 2, terminal: true, verdict: 'GO', seats: [], updated_at: PUBLISHED },
+      plan: { logical_plan_id: 'plan-y', generation: 1, max_generations: 2, terminal: true, verdict: 'READY', seats: [], updated_at: PUBLISHED },
       code: { phase: 'p1', generation: 1, base: null, head: null, converged: true, at: PUBLISHED, seats: [] },
     }))
     const w = worldEn(on, files)
     await start($, surface)
     const texts = await reviewTab($, w)
     const has = (...parts: string[]) => texts.some(t => parts.every(p => t.includes(p)))
-    expect(has('Plan review', '✓ terminal')).toBe(true)
-    expect(has('plan', 'plan-y', 'GO')).toBe(true)
+    expect(has('Plan review', '✓ done')).toBe(true)
+    expect(has('plan', 'plan-y', '✓ done')).toBe(true)
     expect(has('round', 'R1 of 2')).toBe(true)
-    expect(texts).toContain('  no seat verdicts yet')
-    expect(has('Code review', '✓ converged')).toBe(true)
-    expect(has('round', 'R1', '—..—', 'p1')).toBe(true)
-    expect(texts).toContain('  no seats')
+    expect(has('Code review', '✓ done')).toBe(true)
+    expect(has('round', 'R1', 'p1')).toBe(true)
+    expect(texts.filter(t => t === 'seats       — no seats').length).toBe(2) // both sections say it, in the same words
   })
 
   test('P7d review tab: no review file is "no review"; a file of another project or schema is no review either (' + surface + ')', async ($, on) => {
     const files = base()
     const w = worldEn(on, files)
     await start($, surface)
-    expect(await reviewTab($, w)).toContain('no data · no review published')
+    expect(await reviewTab($, w)).toContain('— no review published')
     w.files[LIVE + '/runs/' + KEY + '.review.json'] = j(reviewFact({ project_key: OTHER_KEY }))
     await w.clock.advance(5000)
-    expect(await reviewTab($, w)).toContain('no data · no review published')
+    expect(await reviewTab($, w)).toContain('— no review published')
     w.files[LIVE + '/runs/' + KEY + '.review.json'] = j(reviewFact({ schema: 'autopilot.review/9' }))
     await w.clock.advance(5000)
-    expect(await reviewTab($, w)).toContain('no data · no review published')
+    expect(await reviewTab($, w)).toContain('— no review published')
+  })
+
+  // P1 (live-pane plan §7): the first mounted toggles. I18 = the opened row adds its own detail and a second press restores the default render; I19 = a header press flips its fold
+  test('P1 I18 seat toggle: pressing a seat opens its verdict and status, pressing again restores the default render (' + surface + ')', async ($, on) => {
+    const files = base()
+    files[LIVE + '/runs/' + KEY + '.review.json'] = j(reviewFact())
+    worldEn(on, files)
+    await start($, surface)
+    const closed = (await paneParts($, surface, 'review')).texts
+    expect(closed.some(t => t.includes('s0') && t.includes('minimax') && t.trimEnd().endsWith('▸'))).toBe(true)
+    expect(closed.some(t => t.includes('FIX-THEN-SHIP'))).toBe(false)
+    await pressRow($, surface, 'review', t => t.includes('s0') && t.includes('minimax'))
+    const opened = (await paneParts($, surface, 'review')).texts
+    expect(opened.some(t => t.includes('s0') && t.includes('minimax') && t.trimEnd().endsWith('▾'))).toBe(true)
+    expect(opened.length).toBe(closed.length + 1)
+    expect(opened.some(t => t.includes('FIX-THEN-SHIP') && t.includes('reviewed'))).toBe(true) // the raw words live in the detail only
+    expect(opened.filter(t => t.includes('FIX-THEN-SHIP')).length).toBe(1)
+    await pressRow($, surface, 'review', t => t.includes('s0') && t.includes('minimax'))
+    expect((await paneParts($, surface, 'review')).texts).toEqual(closed)
+  })
+
+  test('P1 I19 header fold: a press flips its section, a second press restores it; a stale plan review starts folded and a fresh one open (' + surface + ')', async ($, on) => {
+    const files = base()
+    files[LIVE + '/runs/' + KEY + '.review.json'] = j(reviewFact())
+    const w = worldEn(on, files)
+    await start($, surface)
+    const first = (await paneParts($, surface, 'review')).texts
+    expect(first.some(t => t.startsWith('▾ Plan review'))).toBe(true) // fresh: open
+    expect(first.some(t => t.startsWith('▾ Code review'))).toBe(true)
+    await pressRow($, surface, 'review', t => t.startsWith('▾ Code review'))
+    const folded = (await paneParts($, surface, 'review')).texts
+    expect(folded.some(t => t.startsWith('▸ Code review'))).toBe(true)
+    expect(folded.some(t => t.startsWith('round       R3'))).toBe(false)
+    expect(folded.some(t => t.includes('s0') && t.includes('minimax'))).toBe(false)
+    expect(folded.some(t => t.startsWith('▾ Plan review'))).toBe(true) // the other sections are untouched
+    await pressRow($, surface, 'review', t => t.startsWith('▸ Code review'))
+    expect((await paneParts($, surface, 'review')).texts).toEqual(first)
+    // the same plan review, 27 days old (F2): its section starts folded, and a press opens it
+    files[LIVE + '/runs/' + KEY + '.review.json'] = j(reviewFact({ plan: { ...(reviewFact().plan as object), updated_at: '2026-09-07T10:00:00.000Z' } }))
+    await w.clock.advance(5000)
+    const stale = (await paneParts($, surface, 'review')).texts
+    expect(stale.some(t => t.startsWith('▸ Plan review'))).toBe(true)
+    expect(stale.some(t => t.includes('sol_chair'))).toBe(false)
+    await pressRow($, surface, 'review', t => t.startsWith('▸ Plan review'))
+    const open = (await paneParts($, surface, 'review')).texts
+    expect(open.some(t => t.startsWith('▾ Plan review'))).toBe(true)
+    expect(open.some(t => t.includes('sol_chair'))).toBe(true)
+  })
+
+  test('P1 I18 more: with more than 5 decisions the rest sit behind one more row; a press shows all, a second press restores (' + surface + ')', async ($, on) => {
+    const files = quietWorld()
+    const mk = (i: number) => ({ round: i, decision: '決定 ' + i, irreversible: false, at: '2026-10-04T09:4' + (i % 10) + ':00.000Z', writer: 'engine', kind: 'decision', decision_id: 'd-' + i, source: 'ledger_default' })
+    files[P_DEC] = j(decisionsSidecar({ rows: [1, 2, 3, 4, 5, 6, 7].map(mk), count: 7, irreversible_count: 0 }))
+    world(on, files)
+    await start($, surface)
+    const rowsOfDec = (texts: string[]) => texts.filter(t => /^◦ d-\d/.test(t))
+    const closed = (await paneParts($, surface, 'review')).texts
+    expect(rowsOfDec(closed).length).toBe(5)
+    expect(closed.filter(t => t === '  ▸ 還有 2 件決定').length).toBe(1)
+    await pressRow($, surface, 'review', t => t === '  ▸ 還有 2 件決定')
+    const all = (await paneParts($, surface, 'review')).texts
+    expect(rowsOfDec(all).length).toBe(7)
+    expect(all).toContain('  ▾ 收起')
+    await pressRow($, surface, 'review', t => t === '  ▾ 收起')
+    expect((await paneParts($, surface, 'review')).texts).toEqual(closed)
+  })
+
+  test('P1 I23 golden: the Review tab at 76 columns with the first decision and the first seat opened (' + surface + ')', async ($, on) => {
+    const files = quietWorld()
+    files[LIVE + '/runs/' + KEY + '.review.json'] = j(reviewFact())
+    files[P_DEC] = j(decisionsSidecar())
+    world(on, files)
+    await start($, surface)
+    await pressRow($, surface, 'review', t => t.includes('d-1') && t.includes('先拆 plan 再實作'))
+    await pressRow($, surface, 'review', t => t.includes('s0') && t.includes('minimax'))
+    expect((await paneParts($, surface, 'review', 76)).texts).toEqual([
+      "工作階段 $0.42 · 本機 $3.10 · ctx 37%",
+      "",
+      "▾ 程式碼審查  △ 待修 ──────────────────────────────────────────────────────",
+      "輪次        R3 · 11111111..aaaaaaaa · p7d",
+      "席位        ",
+      "            △ 待修  s0 · minimax                                          ▾",
+      "              └ FIX-THEN-SHIP · reviewed",
+      "▾ 推送前 QC ───────────────────────────────────────────────────────────────",
+      "— 沒有 QC 狀態",
+      "▾ 代你決定  2 件 · 1 件不可逆 ─────────────────────────────────────────────",
+      "◦ d-2  刪掉舊分支                                                         ▸",
+      "◦ d-1  可逆 · engine                                                      ▾",
+      "  └ 先拆 plan 再實作",
+      "  $ decision-ledger.js veto --ledger /work/repo/.git/autopilot/ledger/",
+      "    decisions.jsonl --id d-1",
+      "升級階梯    — 沒有紀錄",
+      "▾ 計畫審查  △ 待修 ────────────────────────────────────────────────────────",
+      "計畫        plan-x · △ 待修",
+      "輪次        ▰▰  R2／上限 2",
+      "席位        ",
+      "            △ 待修  sol_chair · openai                                    ▸",
+      "            △ 待修  grok_deep · xai                                       ▸",
+    ])
   })
 
   if (surface === 'terminal') {
@@ -686,7 +796,7 @@ for (const surface of SURFACES) {
     const w = world(on, files)
     await start($, surface)
     const parts = await paneParts($, surface)
-    expect(parts.texts).not.toContain('no data · no review published')
+    expect(parts.texts).not.toContain('— no review published')
     expect(parts.texts.some(t => t.includes('Plan review'))).toBe(false)
     expect(parts.texts.some(t => t.includes(' r1 '))).toBe(true)
     expect(JSON.stringify(parts.tree)).toContain('"Button"')
@@ -1511,15 +1621,28 @@ for (const surface of SURFACES) {
     files[P_DEC] = j(decisionsSidecar({ rows: [...rows, { round: 3, decision: '沒有編號的決定', irreversible: false, at: '2026-10-04T09:50:00.000Z', writer: 'engine', kind: 'pick', decision_id: null, source: 'ledger_default' }], count: 3 }))
     world(on, files)
     await start($, surface)
-    const t = (await paneParts($, surface, 'review')).texts // TUI v2: the proxy-decision rows live in the Review tab
-    expect(t).toContain('代你決定 3 件（1 件不可逆）')
-    expect(t.some(x => x.includes('先拆 plan 再實作') && x.includes('d-1') && x.includes(' · 可逆 · '))).toBe(true)
-    expect(t.some(x => x.includes('刪掉舊分支') && x.includes('不可逆'))).toBe(true)
-    expect(t).toContain('  veto: decision-ledger.js veto --ledger ' + COMMON + '/autopilot/ledger/decisions.jsonl --id d-1')
-    expect(t).toContain('  veto: decision-ledger.js veto --ledger ' + COMMON + '/autopilot/work-orders/' + ROOT + '/decision-ledger.jsonl --id d-2')
-    const noId = t.findIndex(x => x.includes('沒有編號的決定'))
+    const t0 = (await paneParts($, surface, 'review')).texts // TUI v2: the proxy-decision rows live in the Review tab
+    expect(t0.some(x => x.startsWith('▾ 代你決定') && x.includes('3 件 · 1 件不可逆'))).toBe(true)
+    expect(t0.some(x => x.includes('d-1') && x.includes('先拆 plan 再實作'))).toBe(true)
+    expect(t0.some(x => x.includes('d-2') && x.includes('刪掉舊分支'))).toBe(true)
+    expect(t0.some(x => x.includes('veto'))).toBe(false) // closed rows carry no command (I18: the default render is the summary)
+    await pressRow($, surface, 'review', x => x.includes('d-1') && x.includes('先拆 plan 再實作'))
+    const t1 = (await paneParts($, surface, 'review')).texts
+    expect(t1.some(x => x.startsWith('◦ d-1  可逆 · engine') && x.trimEnd().endsWith('▾'))).toBe(true)
+    expect(t1).toContain('  └ 先拆 plan 再實作')
+    expect(t1).toContain('  $ decision-ledger.js veto --ledger ' + COMMON + '/autopilot/ledger/decisions.jsonl --id d-1')
+    expect(t1.filter(x => x.includes('veto')).length).toBe(1) // only the opened row shows its command
+    await pressRow($, surface, 'review', x => x.includes('d-2') && x.includes('刪掉舊分支'))
+    const t2 = (await paneParts($, surface, 'review')).texts
+    expect(t2).toContain('  $ decision-ledger.js veto --ledger ' + COMMON + '/autopilot/work-orders/' + ROOT + '/decision-ledger.jsonl --id d-2')
+    expect(t2.some(x => x.startsWith('◦ d-2  不可逆'))).toBe(true)
+    await pressRow($, surface, 'review', x => x.includes('沒有編號的決定'))
+    const t3 = (await paneParts($, surface, 'review')).texts
+    const noId = t3.findIndex(x => x.includes('沒有編號的決定') || x.startsWith('◦ —'))
     expect(noId).toBeGreaterThan(0)
-    expect(t[noId + 1]).toBe('  （沒有 decision_id，無法 veto）')
+    expect(t3.slice(noId, noId + 4).join('\n')).toContain('沒有 decision_id，無法 veto')
+    await pressRow($, surface, 'review', x => x.startsWith('◦ d-1')) // pressing again restores the default render
+    expect((await paneParts($, surface, 'review')).texts.filter(x => x.includes('decision-ledger.js veto')).length).toBe(1)
   })
 
   test('W3a decisions sources: both ledger writers not installed and no sidecar = 來源未接 in the pane; installed = nothing (' + surface + ')', async ($, on) => {
@@ -1527,11 +1650,11 @@ for (const surface of SURFACES) {
     files[P_SOURCES] = j(manifest({ ledger_engine: OFF, ledger_depth0: OFF }))
     const w = world(on, files)
     await start($, surface)
-    expect((await paneParts($, surface, 'review')).texts).toContain('代你決定：來源未接')
+    expect((await paneParts($, surface, 'review')).texts).toContain('— 代你決定：來源未接')
     expect((await bandParts($, surface)).line2).toBe('沒有派工在跑')
     files[P_SOURCES] = j(manifest({ ledger_engine: OFF })) // one writer installed: wired, currently empty
     await w.clock.advance(5000)
-    expect((await paneParts($, surface, 'review')).texts.some(x => x.startsWith('代你決定'))).toBe(false)
+    expect((await paneParts($, surface, 'review')).texts.some(x => x.includes('來源未接'))).toBe(false)
   })
 
   test('W3a foreman: rows with description, label and age; stale rows dim; binding stated; stage line (' + surface + ')', async ($, on) => {
@@ -2629,12 +2752,15 @@ for (const surface of SURFACES) {
     expect(has(dispatch.texts, '▾ 已完成', '✓ 1')).toBe(true)
 
     const review = await tab('review')
-    expect(has(review.texts, '程式碼審查', '▲ 未收斂')).toBe(true)
+    expect(has(review.texts, '程式碼審查', '△ 待修')).toBe(true)
     expect(has(review.texts, '輪次', 'R3', '11111111..aaaaaaaa', 'p7')).toBe(true)
-    expect(has(review.texts, '推送前 QC', '✓ 證據齊全')).toBe(true)
-    expect(has(review.texts, '證據', 'trailer', '2 個受保護檔案在範圍內', '11111111..aaaaaaaa')).toBe(true)
-    expect(has(review.texts, '決定', '◆ 3', '個已做', '? 1', '個派工沒有紀錄')).toBe(true)
+    expect(has(review.texts, '△ 待修', 's0', 'minimax')).toBe(true)
+    expect(has(review.texts, '推送前 QC', '✓ 完成')).toBe(true)
+    expect(has(review.texts, '範圍', '2 個受保護檔案', '11111111..aaaaaaaa')).toBe(true)
+    expect(has(review.texts, '代你決定', '3 件 · 1 件不可逆')).toBe(true)
+    expect(has(review.texts, '未記錄', '1 件派工沒有決策紀錄')).toBe(true)
     expect(has(review.texts, '升級階梯', '▰▰▰▱▱▱', 'U2', 'U0 ─ U5', '5m 前')).toBe(true)
+    expect(has(review.texts, '計畫審查', '△ 待修')).toBe(true)
     expectThemeOnly(review.tree as Drawn, true)
 
     const spend = await tab('spend')
@@ -2666,7 +2792,7 @@ for (const surface of SURFACES) {
     await start($, surface)
     const ndata = async (id: string) => (await paneParts($, surface, id)).texts.filter(t => t.replace(/^— /, '').startsWith('no data'))
     expect(await ndata('now')).toEqual(['no data · no stage recorded for this session', 'no data · no unit recorded'])
-    expect(await ndata('review')).toEqual(['no data · no review published', 'no data · no QC status published', 'no data · no decisions sidecar published'])
+    expect((await paneParts($, surface, 'review')).texts.filter(t => t.startsWith('— no '))).toEqual(['— no review published', '— no QC status published', '— no decisions sidecar published'])
     expect(await ndata('spend')).toEqual(['— no data · brain-tier spend today is not published'])
     expect(await ndata('hygiene')).toEqual(['no data · no load source published', 'no data · no worktree residue published'])
     for (const id of ['now', 'dispatch', 'review', 'spend', 'hygiene', 'legend']) {

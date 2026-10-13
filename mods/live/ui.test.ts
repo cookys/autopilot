@@ -7,6 +7,7 @@ import {
   stateLead, stateBadge, isBadgeState, verifiedOk, displayWidth, emojiViolations, glyphTableViolations, vocabularyViolations, emphasisViolations, GRID, KEY_W,
 } from './ui'
 import type { Ctx, BadgeStated } from './ui'
+import { wrapLines } from './model'
 
 const T: Record<string, string> = { 'ui.state.running': 'running', 'ui.state.done': 'done', 'ui.state.need_you': 'needs you', 'ui.more': '{n} more {noun}', 'ui.table.state': 'state', ago: '{age} ago' }
 const t = (id: string, v?: Record<string, string | number>): string => (T[id] ?? id).replace(/\{(\w+)\}/g, (_m, k) => String(v?.[k]))
@@ -121,4 +122,101 @@ test('stateBadge: only need_you, running and stalled have a badge form; the runt
   expect(() => stateBadge(stateOf('qc', 'ok') as BadgeStated, 1, 'header.verdict' as never)).toThrow()
   expect(isBadgeState(stateOf('qc', 'ok'))).toBe(false)
   expect(isBadgeState(stateOf('verdict', 'RUNNING'))).toBe(true)
+})
+
+// ---- P1: the three P0 review findings, and the pairwise precedence fixtures of I13 ----
+test('plan-review BLOCK and REJECT are both a failure, STOP and CONDITIONAL are findings (§8 Q5); a code seat maps the same way', () => {
+  const seat = (kind: 'code' | 'plan', verdict: string | null, status: string | null = null) => stateOf('seat', { kind, verdict, status }).id
+  expect(seat('plan', 'BLOCK')).toBe('failed')
+  expect(seat('plan', 'REJECT')).toBe('failed')
+  expect(seat('plan', 'STOP')).toBe('findings')
+  expect(seat('plan', 'CONDITIONAL')).toBe('findings')
+  expect(seat('plan', 'READY')).toBe('done')
+  expect(seat('code', 'BLOCK')).toBe('failed')
+  expect(seat('plan', ' block ')).toBe('failed') // padded and lower-case classify like upper-case
+  expect(seat('plan', 'WEIRD')).toBe('unknown')
+})
+
+test('classify round: a round holding an unknown seat is unknown, not stopped; running, failed and findings still beat it; no seats stays stopped', () => {
+  const s = (verdict: string) => stateOf('seat', { kind: 'code', verdict, status: null })
+  const round = (seats: ReturnType<typeof s>[], over: { stale?: boolean; converged?: boolean } = {}) => stateOf('round', { stale: false, converged: false, seats, ...over }).id
+  const done = s('SHIP-AS-IS')
+  const unknown = s('WEIRD')
+  expect(round([done, unknown])).toBe('unknown')
+  expect(round([unknown])).toBe('unknown')
+  expect(round([unknown, stateOf('seat', { kind: 'code', verdict: null, status: 'running' })])).toBe('running')
+  expect(round([unknown, s('BLOCK')])).toBe('failed')
+  expect(round([unknown, s('FIX-THEN-SHIP')])).toBe('findings')
+  expect(round([done, done])).toBe('done')
+  expect(round([])).toBe('stopped')
+  expect(round([done, unknown], { stale: true })).toBe('stopped') // a stale round is stopped whatever its seats say
+})
+
+test('I13 pairwise precedence: round, background, loadSource, run and gate conflict fixtures', () => {
+  const seat = (verdict: string | null, status: string | null = null) => stateOf('seat', { kind: 'code', verdict, status })
+  const round = (seats: ReturnType<typeof seat>[]) => stateOf('round', { stale: false, converged: false, seats }).id
+  expect(round([seat('FIX-THEN-SHIP'), seat(null, 'running')])).toBe('running') // findings + a running seat
+  expect(round([seat('FIX-THEN-SHIP'), seat('BLOCK')])).toBe('failed') // a failed seat + findings
+  const bg = (exit: number | null, quietMs: number) => stateOf('background', { exit, quietMs }).id
+  expect(bg(0, 6 * 3_600_000)).toBe('done') // exit marker 0 + quiet 6 h
+  expect(bg(1, 0)).toBe('failed')
+  expect(bg(null, 6 * 3_600_000)).toBe('stopped')
+  const load = (source: string, behind: number, flags = 0) => stateOf('loadSource', { source, behind, flags }).id
+  expect(load('dev', 54)).toBe('need_you')
+  expect(load('dev', 0)).toBe('done')
+  expect(load('cache:x', 0)).toBe('need_you')
+  const run = (o: Partial<{ rc: number | null; final_status: string | null; stall: boolean; fresh: boolean }>) => stateOf('run', { rc: null, final_status: null, stall: false, fresh: true, ...o }).id
+  expect(run({ stall: true, rc: 0 })).toBe('done')
+  expect(run({ final_status: 'WEIRD' })).toBe('unknown')
+  expect(run({ final_status: 'WEIRD', stall: true })).toBe('unknown')
+  expect(run({ final_status: 'WEIRD', rc: 0 })).toBe('done')
+  expect(run({ final_status: 'WEIRD', rc: 1 })).toBe('failed')
+  expect(run({})).toBe('running')
+  expect(run({ stall: true, rc: 1 })).toBe('failed')
+  expect(run({ rc: 0, final_status: 'failed' })).toBe('failed')
+  expect(stateOf('gate', ' needs_fix ').id).toBe('need_you')
+  expect(stateOf('qc', ' Not_Needed ').id).toBe('skipped')
+  expect(stateOf('seat', { kind: 'plan', verdict: ' ready ', status: null }).id).toBe('done')
+})
+
+// ---- P1: fit at 40 columns (§3.1): one item is one line, a kv wraps at its hang, a header never overflows ----
+test('item: a body of 98 cells is cut so the line and its toggle mark fit 40 columns (one item is one line); the meta goes first, the bare-glyph form keeps one space', () => {
+  const long = 'x'.repeat(70) + ' 中文很長很長很長很長很長很長很長很長很長很長很長'
+  const u = ctx(40)
+  const line = item(u, stateOf('qc', 'ok'), long, 'family-name', { fact: 'review.seats', at: 12, toggle: { id: 'seat:code:s0', open: false } })
+  expect(displayWidth(line.text)).toBeLessThanOrEqual(39)
+  expect(line.text.trimEnd().endsWith('▸')).toBe(true)
+  expect(line.toggle).toBe('seat:code:s0')
+  const plain = item(u, stateOf('qc', 'ok'), long, undefined, { fact: 'review.seats' })
+  expect(displayWidth(plain.text)).toBeLessThanOrEqual(39)
+  expect(plain.text.endsWith('…')).toBe(true)
+  const bullet40 = bullet(u, long, 'meta', { fact: 'review.decisions', toggle: { id: 'dec:x', open: true } })
+  expect(displayWidth(bullet40.text)).toBeLessThanOrEqual(39)
+  expect(bullet40.text.trimEnd().endsWith('▾')).toBe(true)
+  const bare = item(ctx(76), stateOf('qc', 'ok'), 'body', undefined, { fact: 'review.seats', word: false })
+  expect(bare.text).toBe('✓ body')
+  expect(item(ctx(76), stateOf('qc', 'ok'), 'body', undefined, { fact: 'review.seats' }).text).toBe('✓ done  body')
+})
+
+test('kv: a value wider than the pane wraps at the key column through wrapLines; no piece is wider than the pane, every continuation hangs at 12', () => {
+  const u = ctx(40)
+  const line = kv(u, 'scope', [val('5a2706ad..HEAD · a value that is far too long to fit in the remaining twenty-seven cells', { role: 'prose' })], { fact: 'review.qc' })
+  expect(line.hang).toBe(12)
+  const pieces = wrapLines([line], 40)
+  expect(pieces.length).toBeGreaterThan(1)
+  for (const p of pieces) expect(displayWidth(p.text)).toBeLessThanOrEqual(40)
+  for (const p of pieces.slice(1)) expect(p.text.startsWith(' '.repeat(12))).toBe(true)
+  for (const p of pieces) expect(isMade(p)).toBe(true) // a wrapped piece keeps the brand (I2) and the line's identity
+  expect(pieces.every(p => p.kind === 'kv' && p.fact === 'review.qc')).toBe(true)
+})
+
+test('header: a title and a chip too wide for the pane are cut so the line is cols - 1 wide with a rule of at least 3 cells', () => {
+  const u = ctx(40)
+  const chip = stateLead(u, stateOf('qc', 'ok'))
+  const h = header(u, 'A section title that is much too long for forty columns', { id: 'sec:x', open: true }, { right: chip, fact: 'review.qc' })
+  expect(displayWidth(h.text)).toBeLessThanOrEqual(39)
+  expect(h.text.endsWith('───')).toBe(true)
+  const small = header(ctx(76), 'Review', { id: 'sec:x', open: false })
+  expect(small.text.startsWith('▸ Review ')).toBe(true)
+  expect(displayWidth(small.text)).toBe(75)
 })

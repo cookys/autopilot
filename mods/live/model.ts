@@ -12,7 +12,8 @@
 import { T_EN } from './i18n'
 import type { T } from './i18n'
 import * as ui from './ui' // the design system's builders; `ui.kv` etc. keep clear of this file's own legacy `kv` / `row`
-import { STATES, cellWidth, displayWidth, isStale, stateOf } from './ui'
+import * as U from './ui'
+import { STATES, carry, cellWidth, displayWidth, isStale, stateOf } from './ui'
 import type { Ctx as UiCtx, Column as UiColumn, FactId, FmtKind, Frag, LineKind, RunSubject, SegRole, Stated, TableListRow as UiTableListRow } from './ui'
 
 
@@ -448,7 +449,7 @@ export function notWired(m: Manifest | null, names: string[]): boolean {
   return names.every(n => liveSource(m, n) === false)
 }
 
-export type DecisionRow = { round: number | null; decision: string; irreversible: boolean; writer: string | null; decision_id: string | null; source: string | null; root: string | null }
+export type DecisionRow = { round: number | null; decision: string; irreversible: boolean; writer: string | null; decision_id: string | null; source: string | null; root: string | null; at?: string | null }
 export type LadderView = { rung: string; at: string }
 export type DecisionsView = { rows: DecisionRow[]; count: number; irreversible: number; writers: string[]; undocumented: number; identity: string | null; root: string | null; ladder: LadderView | null }
 
@@ -464,6 +465,7 @@ export function readDecisions(text: string | null, want: ScopeWant): DecisionsVi
     decision: str(r.decision) || '—',
     irreversible: r.irreversible === true,
     writer: str(r.writer), decision_id: str(r.decision_id), source: str(r.source), root: want.root_run_id,
+    at: typeof r.at === 'string' && Number.isFinite(Date.parse(r.at)) ? r.at : null, // kept for ordering: roots are concatenated, so position is not time across roots
   }))
   const scope = v.scope as Json
   return {
@@ -1012,11 +1014,15 @@ const ledgerPath = (source: string | null, common: string | null, root: string |
 }
 
 // the veto verb is decision-ledger.js `veto --ledger <ledger> --id <decision_id>` (its own round report prints the same line)
-export function vetoLine(r: DecisionRow, common: string | null, root: string | null, t: T = T_EN): string {
-  if (r.decision_id === null) return '  ' + t('veto.no_id')
+export function vetoStep(r: DecisionRow, common: string | null, root: string | null, t: T = T_EN): { cmd: string } | { note: string } {
+  if (r.decision_id === null) return { note: t('veto.no_id') }
   const path = ledgerPath(r.source, common, r.root !== null ? r.root : root) // a merged view carries rows of several roots: each names its own
-  if (path === null && r.source === 'ledger_root') return '  ' + t('veto.no_path')
-  return '  veto: decision-ledger.js veto ' + (path === null ? '' : '--ledger ' + path + ' ') + '--id ' + r.decision_id
+  if (path === null && r.source === 'ledger_root') return { note: t('veto.no_path') }
+  return { cmd: 'decision-ledger.js veto ' + (path === null ? '' : '--ledger ' + path + ' ') + '--id ' + r.decision_id }
+}
+export function vetoLine(r: DecisionRow, common: string | null, root: string | null, t: T = T_EN): string {
+  const step = vetoStep(r, common, root, t)
+  return 'cmd' in step ? '  veto: ' + step.cmd : '  ' + step.note
 }
 
 const MAX_DECISION_ROWS = 12
@@ -1641,14 +1647,14 @@ function wrapLine(l: PaneLine, cols: number): PaneLine[] {
   }
   return lines.map(cs => {
     const text = cs.map(c => c.ch).join('')
-    if (l.segs === undefined) return { ...l, text, hang: undefined, wrap: undefined }
+    if (l.segs === undefined) return carry(l, { ...l, text, hang: undefined, wrap: undefined })
     const segs: Seg[] = []
     let run = ''
     let at = -2
     const flush = () => { if (run !== '') segs.push(at < 0 ? { text: run } : { ...base[at], text: run }); run = '' }
     for (const c of cs) { if (c.si !== at) { flush(); at = c.si } run += c.ch }
     flush()
-    return { text, segs, ...(l.toggle !== undefined ? { toggle: l.toggle } : {}), ...(l.goto !== undefined ? { goto: l.goto } : {}) } // every piece of a wrapped toggle line stays pressable
+    return carry(l, { text, segs, ...(l.toggle !== undefined ? { toggle: l.toggle } : {}), ...(l.goto !== undefined ? { goto: l.goto } : {}) }) // every piece of a wrapped toggle line stays pressable and keeps its goto; a made line's pieces stay made
   })
 }
 export const wrapLines = (lines: PaneLine[], cols: number): PaneLine[] => lines.flatMap(l => wrapLine(l, cols))
@@ -2174,83 +2180,151 @@ function dispatchLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
 }
 
 // ================= Review (absorbs the decisions) =================
-const shortSha = (s: string | null): string => (s === null ? '—' : s.slice(0, 8))
+// P1: built from ui.ts components only (§4); the section order, ids and defaults come from SECTION_ORDER / SECTION_DEFAULTS (§2.1).
+type SeatKind = 'code' | 'plan'
+const secId = (key: string): string => 'sec:review.' + key
 
-// `▰▰▱`: g of max cells filled (the current round is the one in progress, claude), max unknown = no bar
-function roundBar(g: number, max: number | null): Seg[] {
-  if (max === null || max < 1 || max > 12) return []
-  const k = Math.min(Math.max(g, 1), max)
-  const segs: Seg[] = []
-  if (k > 1) segs.push(seg('▰'.repeat(k - 1), 'success'))
-  segs.push(seg('▰', 'claude'))
-  if (max > k) segs.push(seg('▱'.repeat(max - k), 'inactive'))
-  return segs
+// a code seat reports a `verdict` and a `status`; a plan seat's `status` field holds its verdict (READY, STOP, ...) except while it is `running` / `reviewed`
+function seatSubject(kind: SeatKind, s: ReviewSeat): U.SeatSubject {
+  if (kind === 'code') return { kind, verdict: s.verdict ?? null, status: s.status }
+  const raw = s.status ?? null
+  const isStatus = raw !== null && /^\s*(running|reviewed)\s*$/i.test(raw)
+  return { kind, verdict: isStatus ? null : raw, status: isStatus ? raw : null }
+}
+// whole ms since an ISO timestamp, or null when there is no clock or the timestamp does not parse (then nothing is judged stale)
+function ageMsOf(nowMs: number | null, at: string | null): number | null {
+  if (nowMs === null || at === null) return null
+  const then = Date.parse(at)
+  return Number.isFinite(then) ? Math.max(0, nowMs - then) : null
 }
 
-function seatRows(seats: ReviewSeat[], t: T): PaneLine[] {
-  const out: PaneLine[] = []
-  seats.forEach((s, i) => {
-    const status = (s.status ?? '').toLowerCase()
-    const verdict = s.verdict ?? null
-    const done = verdict !== null && verdictMark(verdict).glyph === '✓'
-    const running = status === 'running'
-    const mark = done ? seg('●', 'success') : running ? seg('●', 'suggestion') : seg('●', 'inactive')
-    const word = done ? seg(cell(verdict), 'success') : running ? seg(t('seat.running'), 'suggestion') : verdict !== null ? seg(verdict, verdictMark(verdict).color) : dseg(cell(s.status)) // a plan seat's status is its verdict
-    out.push(kv(i === 0 ? t('label.seats') : '', mark, seg(' ' + s.id), dseg(' · ' + (s.family || '—')), seg('  '), word))
+// seats: a valueless `席位` key, then one `item` per seat at column 12 in seat order, each with its own toggle; the raw verdict / status is the attached detail
+function seatLines(u: U.Ctx, kind: SeatKind, seats: readonly ReviewSeat[], states: readonly U.Stated[]): PaneLine[] {
+  const t = u.t
+  if (seats.length === 0) return [U.kv(u, t('label.seats'), [U.absent(t('review.no_seats'))], { fact: 'review.seats' })]
+  const rows: U.RowSpec[] = seats.map((s, i) => {
+    const raw = (kind === 'code' ? [s.verdict, s.status] : [s.status]).filter((x): x is string => typeof x === 'string' && x.trim() !== '').join(' · ')
+    return {
+      group: String(i), ts: i, state: states[i], fact: 'review.seats', body: s.id, ...(s.family ? { meta: s.family } : {}),
+      toggle: 'seat:' + kind + ':' + s.id, at: 12, ...(raw === '' ? {} : { children: U.detail(u, raw, { attached: true, at: 12 }) }),
+    }
   })
+  return [U.kv(u, t('label.seats'), [], { fact: 'review.seats' }), ...U.list(u, 'review.seats.' + kind, t('review.noun_seats'), rows, { keepOrder: true })]
+}
+
+function codeSection(u: U.Ctx, c: CodeReviewView | null, snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
+  const t = u.t
+  const id = secId('code')
+  if (c === null) return snap.review === null ? [U.header(u, t('review.code'), { id, open: U.sectionOpen(ctx.folded, id) }), ...(U.sectionOpen(ctx.folded, id) ? [U.empty(t('nodata.review'), 'review.round')] : [])] : []
+  const age = ageMsOf(snap.detail.now_ms, c.at)
+  const stale = !c.converged && age !== null && U.isStale('codeReview', age) // F4
+  const states = c.seats.map(s => U.stateOf('seat', seatSubject('code', s)))
+  const round = U.stateOf('round', { stale, converged: c.converged, seats: states })
+  const findings = states.filter(s => s.id === 'findings').length
+  const unknown = states.filter(s => s.id === 'unknown').length
+  const meta = stale && age !== null ? U.ago(age, t) : round.id === 'running' && findings > 0 ? t('review.findings_running', { n: findings }) : round.id === 'unknown' && unknown > 0 ? t('review.unknown_seats', { n: unknown }) : undefined
+  const metaFmt: U.FmtKind = stale ? 'ago' : 'count'
+  const open = U.sectionOpen(ctx.folded, id, stale)
+  const head = U.header(u, t('review.code'), { id, open }, { right: U.chip(u, round, meta, metaFmt), fact: 'review.round' })
+  if (!open) return [head]
+  const range = c.base === null && c.head === null ? null : U.sha((c.base ?? '—') + '..' + (c.head ?? '—'))
+  const sep = (): U.Frag => U.val(' · ', { dim: true })
+  const value: U.Frag[] = [U.fmtd('id', c.generation === null ? 'R—' : 'R' + c.generation)]
+  if (range !== null) value.push(sep(), U.fmtd('sha', range))
+  if (c.phase !== null) value.push(sep(), U.val(c.phase, { role: 'prose' }))
+  if (ctx.cols >= 100 && c.seats.length > 0) value.push(sep(), U.fmtd('count', t('review.seat_count', { n: c.seats.length })))
+  return [head, U.kv(u, t('label.round'), value, { fact: 'review.round' }), ...seatLines(u, 'code', c.seats, states)]
+}
+
+function qcSection(u: U.Ctx, snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
+  const t = u.t
+  const id = secId('qc')
+  const open = U.sectionOpen(ctx.folded, id)
+  const q = snap.detail.qc
+  if (q === null) return [U.header(u, t('review.qc'), { id, open }), ...(open ? [U.empty(t('nodata.qc'), 'review.qc')] : [])]
+  const head = U.header(u, t('review.qc'), { id, open }, { right: U.chip(u, U.stateOf('qc', q.state)), fact: 'review.qc' })
+  if (!open) return [head]
+  const value: U.Frag[] = []
+  if (q.range !== null) value.push(U.fmtd('sha', U.sha(q.range)), U.val(' · ', { dim: true }))
+  value.push(U.fmtd('count', t('review.protected', { n: q.protected_files_count })))
+  return [head, U.kv(u, t('label.scope'), value, { fact: 'review.qc' })]
+}
+
+function decisionsSection(u: U.Ctx, snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
+  const t = u.t
+  const id = secId('decisions')
+  const open = U.sectionOpen(ctx.folded, id)
+  const dv = snap.detail.decisions
+  const chip = dv !== null && dv.count > 0 ? U.fmtd('count', t('review.chip_decisions', { n: dv.count, irr: dv.irreversible }), 'review.decisions') : undefined
+  const head = U.header(u, t('review.decided'), { id, open }, chip === undefined ? {} : { right: chip, fact: 'review.decisions' })
+  if (!open) return [head]
+  if (dv === null) {
+    const note = snap.sections.decisions[0]
+    return [head, U.empty(note !== undefined ? note.text : t('nodata.decisions'), 'review.decisions')] // the W3a note ("來源未接") is reused as is until P4 rebuilds the sections
+  }
+  const out: PaneLine[] = [head]
+  if (dv.count === 0) out.push(U.empty(t('review.none_decided'), 'review.decisions'))
+  const common = commonDirOf(dv.identity)
+  // newest first (§2.4), keyed like src/status/decisions-sidecar.js: time in ms * 1000 + min(position, 999); a row with no time sinks to the oldest, the position breaks ties (later first)
+  const rows: U.RowSpec[] = dv.rows.map((r, i) => {
+    const rid = r.decision_id ?? '—'
+    const step = vetoStep(r, common, dv.root, t)
+    const children = [...U.detail(u, r.decision, { attached: true }), ...('cmd' in step ? U.command(u, step.cmd) : U.detail(u, step.note, { attached: true }))]
+    return {
+      group: String(i), ts: (Date.parse(r.at ?? '') || 0) * 1000 + Math.min(i, 999), state: U.worst([]), fact: 'review.decisions', kind: 'bullet', body: rid + '  ' + r.decision,
+      bodyOpen: rid + '  ' + t(r.irreversible ? 'decision.irreversible' : 'decision.reversible') + (r.writer === null ? '' : ' · ' + r.writer),
+      toggle: 'dec:' + (r.decision_id ?? '#' + i), children,
+    }
+  })
+  out.push(...U.list(u, 'review.decisions', t('review.noun_decisions'), rows, {})) // §2.4: newest first (the ledger is oldest first, so a row's index is its time); past the cap the oldest go behind more
+  if (dv.undocumented > 0) out.push(U.kv(u, t('label.undocumented'), [U.fmtd('count', t('review.undocumented', { n: dv.undocumented }))], { fact: 'review.undocumented' }))
+  if (dv.ladder === null) out.push(U.kv(u, t('label.ladder'), [U.absent(t('nodata.ladder'))], { fact: 'review.ladder' }))
+  else {
+    const rung = dv.ladder.rung
+    const n = Math.max(0, Math.min(5, Number(rung.slice(1)) || 0))
+    const age = ageMsOf(snap.detail.now_ms, dv.ladder.at)
+    const value: U.Frag[] = [U.stepBar(6, n + 1), U.val('  '), U.fmtd('id', rung), U.val('  U0 ─ U5', { fmt: 'id', dim: true })]
+    if (age !== null) value.push(U.val(' · ' + U.ago(age, t), { fmt: 'ago', dim: true }))
+    out.push(U.kv(u, t('label.ladder'), value, { fact: 'review.ladder' }))
+  }
   return out
+}
+
+function planSection(u: U.Ctx, p: PlanReviewView | null, snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
+  const t = u.t
+  if (p === null) return []
+  const id = secId('plan')
+  const age = ageMsOf(snap.detail.now_ms, p.updated_at)
+  if (p.terminal && age !== null && U.isStale('terminalPlan', age)) { // F3: a finished plan review fades to one history line
+    return U.detail(u, t('review.plan_history', { id: p.logical_plan_id ?? '—', ago: U.ago(age, t) }), { fact: 'review.plan' })
+  }
+  const stale = !p.terminal && age !== null && U.isStale('planReview', age) // F2
+  const states = p.seats.map(s => U.stateOf('seat', seatSubject('plan', s)))
+  const round = U.stateOf('round', { stale, converged: p.terminal, seats: states })
+  const open = U.sectionOpen(ctx.folded, id, stale)
+  const head = U.header(u, t('review.plan'), { id, open }, { right: U.chip(u, round, stale && age !== null ? U.ago(age, t) : undefined, 'ago'), fact: 'review.plan' })
+  if (!open) return [head]
+  const plan: U.Frag[] = [U.val(p.logical_plan_id || '—', { fmt: 'id' })]
+  if (p.verdict !== null && p.verdict.trim() !== '') plan.push(U.val(' · ', { dim: true }), U.stateLead(u, U.stateOf('seat', { kind: 'plan', verdict: p.verdict, status: null })))
+  const max = p.max_generations
+  const roundText = t(max === null ? 'review.round' : 'review.round_of', { g: p.generation, max: max ?? 0 })
+  const rounds: U.Frag[] = max !== null && max >= 1 && max <= 12 ? [U.stepBar(max, Math.min(Math.max(p.generation, 1), max), { here: true }), U.val('  '), U.fmtd('id', roundText)] : [U.fmtd('id', roundText)]
+  return [head, U.kv(u, t('label.plan'), plan, { fact: 'review.plan' }), U.kv(u, t('label.round'), rounds, { fact: 'review.plan' }), ...seatLines(u, 'plan', p.seats, states)]
 }
 
 function reviewTabLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
-  const t = ctx.t
-  const d = snap.detail
+  const u: U.Ctx = { t: ctx.t, cols: ctx.cols, ...(ctx.expanded === undefined ? {} : { expanded: ctx.expanded }) }
   const r = snap.review
-  const out: PaneLine[] = [{ text: snap.header, dim: true }, BLANK]
-  if (r === null) out.push(NO_DATA(t, 'nodata.review'))
-  if (r !== null && r.plan !== null) {
-    const p = r.plan
-    out.push(rule(t('review.plan'), [p.terminal ? seg('✓ ' + t('review.terminal'), 'success') : seg('● ' + t('review.active'), 'suggestion')], ctx.cols))
-    out.push(kv(t('label.plan'), seg(p.logical_plan_id || '—'), dseg(' · ' + (p.verdict || '—'))))
-    out.push(kv(t('label.round'), ...roundBar(p.generation, p.max_generations), seg((roundBar(p.generation, p.max_generations).length > 0 ? '  ' : '') + t(p.max_generations === null ? 'review.round' : 'review.round_of', { g: p.generation, max: p.max_generations ?? 0 }))))
-    if (p.seats.length === 0) out.push({ text: '  ' + t('review.no_verdicts'), dim: true })
-    else out.push(...seatRows(p.seats, t))
-    out.push(BLANK)
-  }
-  if (r !== null && r.code !== null) {
-    const c = r.code
-    out.push(rule(t('review.code'), [c.converged ? seg('✓ ' + t('review.converged'), 'success') : seg('▲ ' + t('review.open'), 'warning')], ctx.cols))
-    out.push(kv(t('label.round'), seg(c.generation === null ? 'R—' : 'R' + c.generation), dseg('   ' + shortSha(c.base) + '..' + shortSha(c.head) + (c.phase === null ? '' : ' · ' + c.phase))))
-    if (c.seats.length === 0) out.push({ text: '  ' + t('review.no_seats'), dim: true })
-    else out.push(...seatRows(c.seats, t))
-    out.push(BLANK)
-  }
-  // pre-push QC
-  const q = d.qc
-  if (q === null) out.push(NO_DATA(t, 'nodata.qc'))
-  else {
-    const owed = q.state === 'owed'
-    out.push(rule(t('review.qc'), [owed ? seg('▲ ' + t('review.qc_owed'), 'warning', true) : q.state === 'ok' ? seg('✓ ' + t('review.qc_ok'), 'success') : dseg(q.state)], ctx.cols))
-    out.push(kv(t('label.evidence'), owed ? seg(t('review.missing'), 'warning', true) : seg(q.evidence ?? '—'), dseg('  ' + t('review.protected', { n: q.protected_files_count }) + (q.range === null ? '' : ' · ' + q.range.split('..').map(shortSha).join('..')))))
-  }
-  out.push(BLANK)
-  // decided on your behalf
-  const dv = d.decisions
-  out.push(rule(t('review.decided'), [], ctx.cols))
-  if (dv === null && snap.sections.decisions.length === 0) out.push(NO_DATA(t, 'nodata.decisions'))
-  else {
-    if (dv !== null) {
-      out.push(kv(t('label.decisions'), seg('◆ ' + dv.count, undefined, true), seg(' ' + t('review.made')), dseg('   ? ' + dv.undocumented + ' ' + t('review.undocumented'))))
-      if (dv.ladder === null) out.push(NO_DATA(t, 'nodata.ladder'))
-      else {
-        const n = Math.max(0, Math.min(5, Number(dv.ladder.rung.slice(1)) || 0))
-        const ago = d.now_ms !== null ? ' · ' + agoText((d.now_ms - Date.parse(dv.ladder.at)) / 1000, t) : ''
-        out.push(kv(t('label.ladder'), seg('▰'.repeat(n + 1), 'success'), seg('▱'.repeat(5 - n), 'inactive'), seg('  '), seg(dv.ladder.rung, undefined, true), dseg('  U0 ─ U5' + ago)))
-      }
-      if (dv.count === 0) out.push({ text: ' ' + t('review.none_decided'), dim: true })
-    }
-    out.push(...snap.sections.decisions)
-  }
-  return out
+  return [
+    { text: snap.header, dim: true }, // the legacy global header line: P4 replaces it with the verdict header
+    U.blank(),
+    ...U.sections('review', {
+      code: codeSection(u, r === null ? null : r.code, snap, ctx),
+      qc: qcSection(u, snap, ctx),
+      decisions: decisionsSection(u, snap, ctx),
+      plan: planSection(u, r === null ? null : r.plan, snap, ctx),
+    }),
+  ]
 }
 
 // ================= Spend (用量): limits, today, last 24 h, account — drawn through the design system's components (ui.ts), docs/plans/2026-10-13-live-pane-design-system.md §5.4 =================

@@ -171,6 +171,13 @@ function inferNextStep(reasons) {
   return 'Resume from the last action above.';
 }
 
+// A fenced block whose fence is longer than any backtick run inside the text (CommonMark), so a task
+// card, task title or commit subject holding ``` cannot close the block early and spill into the page.
+function fenceFor(text) {
+  const runs = String(text).match(/`+/g) || [];
+  return '`'.repeat(Math.max(3, ...runs.map((r) => r.length + 1)));
+}
+
 function renderHandoff({ workflow, timestamp, branch, statusSb, recentCommits, lastAssistant, lastTool, nextStep, reasons, userTurns, toolCalls }) {
   const lines = [];
   lines.push(`# Session Handoff — ${timestamp} (auto-generated)`);
@@ -183,9 +190,10 @@ function renderHandoff({ workflow, timestamp, branch, statusSb, recentCommits, l
   if (workflow) {
     lines.push('## Workflow state');
     lines.push('');
-    lines.push('```');
+    const wf = fenceFor(workflow);
+    lines.push(wf);
     lines.push(workflow);
-    lines.push('```');
+    lines.push(wf);
     lines.push('');
   }
   lines.push('## Repo state');
@@ -193,15 +201,17 @@ function renderHandoff({ workflow, timestamp, branch, statusSb, recentCommits, l
   lines.push(`- Branch \`${branch || '(unknown)'}\`, snapshot at ${timestamp}.`);
   lines.push('- `git status -sb`:');
   lines.push('');
-  lines.push('```');
+  const stFence = fenceFor(statusSb || '');
+  lines.push(stFence);
   lines.push(statusSb || '(unavailable)');
-  lines.push('```');
+  lines.push(stFence);
   lines.push('');
   lines.push('## Recent commits');
   lines.push('');
-  lines.push('```');
+  const cmFence = fenceFor(recentCommits || '');
+  lines.push(cmFence);
   lines.push(recentCommits || '(no commits)');
-  lines.push('```');
+  lines.push(cmFence);
   lines.push('');
   lines.push('## Last action');
   lines.push('');

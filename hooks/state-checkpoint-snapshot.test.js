@@ -142,6 +142,28 @@ test('PreCompact: with every disk source missing the file is still written, each
   } finally { sb.cleanup(); }
 });
 
+test('SessionEnd /clear: a task card goal holding a ``` run cannot break the workflow fence', () => {
+  const sb = sandbox();
+  try {
+    fs.writeFileSync(path.join(sb.root, 'tc', `${SID}.json`), JSON.stringify({ schema: 'autopilot.task-card/1', goal: 'fix the ```json fence\n```` and the rest' }));
+    fs.writeFileSync(path.join(sb.home, '.autopilot', 'config.json'), JSON.stringify({ handoff_inject: true }));
+    const payload = { session_id: SID, transcript_path: sb.transcript, cwd: sb.repo, hook_event_name: 'SessionEnd', reason: 'clear' };
+    const r = spawnSync('node', [HANDOFF], { input: JSON.stringify(payload), encoding: 'utf8', env: sb.env });
+    assert.strictEqual(r.status, 0, r.stderr);
+    const dir = path.join(sb.home, '.autopilot', 'handoff');
+    const body = fs.readdirSync(dir).filter((n) => n.endsWith('.md')).map((n) => fs.readFileSync(path.join(dir, n), 'utf8'))[0];
+    const start = body.indexOf('## Workflow state');
+    const end = body.indexOf('## Repo state');
+    const sec = body.slice(start, end).split('\n');
+    const opener = sec.find((l) => /^`{3,}$/.test(l));
+    assert.ok(opener, 'a fence opens the block');
+    assert.ok(opener.length >= 5, `fence is longer than the longest inner run (got ${opener.length})`);
+    const fences = sec.filter((l) => /^`{3,}\s*$/.test(l));
+    assert.deepStrictEqual(fences, [opener, opener], 'exactly one open and one close, same length');
+    assert.ok(sec.some((l) => l.includes('```json fence')), 'the content is intact');
+  } finally { sb.cleanup(); }
+});
+
 test('SessionEnd /clear: the machine handoff carries the workflow state section', () => {
   const sb = sandbox();
   try {

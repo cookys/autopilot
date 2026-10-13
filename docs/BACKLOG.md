@@ -1154,18 +1154,18 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/peer-coordination-skill-ruled-in-blocked-on-a-spike-sweep.md
 - **Context**: autopilot models subordinates (`team`, `l3`–`l6`) and future-self (`handoff`) but has
 
-### `hooks/tests/run.sh` is red on `develop` — sealed campaign `verify_cmd` is unsatisfiable
+### Sealed campaign `verify_cmd` runs the whole suite — green since 2026-10-13, but about 56 min against a 15 min CI cap
 - **Id**: BL-0087
 - **Status**: open
 - **Since**: 2026-08-30
 - **Origin**: self
-- **Problem**: 開發主線上的全套測試無法全綠或在 CI 15 分鐘上限內跑完，導致每個 campaign 的驗收命令都失敗。最近五次 CI 都被取消。 (draft)
-- **Impact**: 所有使用該驗收命令的 campaign 都會失敗，CI 也無法完成，影響所有開發者。 (draft)
-- **Trigger**: already fired (salvage campaign `campaign-v1-e9bcae52…` `acceptance_failed` on `bash hooks/tests/run.sh` with a byte-identical cherry-pick; seven suites red on base 500703b1: codex-plugin-package, execution-profile,…
+- **Problem**: 開發主線上的全套測試在 2026-10-13 已經全綠，但單獨跑一次約 56 分鐘；每個 campaign 的驗收命令和 CI 都要跑完整套，而 CI 上限是 15 分鐘，所以仍然跑不完。
+- **Impact**: 用整套測試當驗收命令的 campaign 會因逾時失敗，CI 也會被取消；要改驗收命令的做法需要擁有者選定方案。
+- **Trigger**: owner picks option B or C in the pointer file (A, wait for green, was reached 2026-10-13)
 - **Effort**: L
 - **Source**: l6-verdict-stability-p1 salvage campaign 2026-08-29.
 - **Pointer**: docs/backlog/hooks-tests-run-sh-is-red-on-develop-sealed-campaign-verify-cmd-is-unsatisfiable.md
-- **Context**: every Mission node inherits the six-command chain as `verify_cmd`, so every campaign fails acceptance. Host-red set at v2.36.71 (16/358, all pre-existing): `docs/plans/evidence/2026-09-19-parallel-sonnet-foremen/full-run-summary.txt`.
+- **Context**: Full run green at f108ec42 (480/480, ~56 min serial). Every Mission node inherits the six-command chain as verify_cmd. Related: BL-0001 (affected-suite selection).
 
 ### `hooks/tests/run.sh` TIMEOUT marker collides with a suite that self-exits 124/137
 - **Id**: BL-0088

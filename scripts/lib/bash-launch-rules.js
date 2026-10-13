@@ -32,6 +32,12 @@ const VALUE_FLAGS = {
 // Shell keywords that precede a command: `for …; do CMD &`, `if …; then CMD`, `{ CMD; }`.
 const KEYWORDS = new Set(['do', 'then', 'else', 'elif', 'if', 'while', 'until', '{', '!', '(']);
 
+const CLOSERS = [
+  { close: /^\}(?:\s|$)/, open: /^\{(?:\s|$)/ },
+  { close: /^done(?:\s|$)/, open: /^(?:for|while|until|select)\s/ },
+  { close: /^fi(?:\s|$)/, open: /^if\s/ },
+];
+
 // Split into segments with their terminator. Quote-aware; `&&`, `||`, `|`, `;`, newline end a
 // segment; a single `&` (not `>&`, `&>`, `&&`) ends a segment AND marks it backgrounded.
 function segments(text) {
@@ -47,11 +53,17 @@ function segments(text) {
     cur = '';
     if (bg) {
       for (let k = listStart; k < out.length; k += 1) out[k].bg = true;
-      // `{ a; b; } &` — the `}` segment pulls back to its opening `{`.
+      // `{ a; } &`, `for …; do …; done &`, `if …; then …; fi &` — a closer segment pulls back to its
+      // matching opener (nesting counted), and everything in between is backgrounded too.
       const last = out[out.length - 1];
-      if (last && /^\}/.test(last.text)) {
+      const closer = last && CLOSERS.find((c) => c.close.test(last.text));
+      if (closer) {
+        let depthN = 0;
         for (let k = out.length - 1; k >= 0; k -= 1) {
-          if (/^\{(?:\s|$)/.test(out[k].text)) { for (let j = k; j < out.length; j += 1) out[j].bg = true; break; }
+          const t = out[k].text.replace(/^(?:do|then|else)\s+/, "");
+          if (closer.close.test(t)) depthN += 1;
+          else if (closer.open.test(t)) depthN -= 1;
+          if (depthN === 0) { for (let j = k; j < out.length; j += 1) out[j].bg = true; break; }
         }
       }
     }

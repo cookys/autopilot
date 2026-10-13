@@ -61,6 +61,11 @@ for (const cmd of [
   'nice -n 5 scripts/dispatch-review.sh x &',
   'sudo -u bob scripts/dispatch-review.sh x &',
   'cd scripts && nohup ./dispatch-review.sh x &',
+  // whole loop / conditional backgrounded
+  'for i in 1 2; do scripts/dispatch-review.sh $i; done &',
+  'if true; then scripts/dispatch-review.sh x; fi &',
+  'while true; do for i in 1 2; do scripts/dispatch-review.sh $i; done; done &',
+  'for i in 1 2; do scripts/dispatch-review.sh $i; done > /tmp/log 2>&1 &',
 ]) {
   test(`rule1 denies: ${cmd}`, () => {
     const r = run(cmd);
@@ -94,6 +99,9 @@ for (const cmd of [
   '{ scripts/dispatch-review.sh x; }', // foreground group
   'cd hooks/tests && ./dispatch-contract-pin.test.sh &', // test file via ./
   'echo hi | tee /tmp/x &', // pipeline without a rail
+  'for i in 1 2; do echo $i; done &', // backgrounded loop without a rail
+  'for i in 1 2; do scripts/dispatch-review.sh $i; done', // same loop in the foreground
+  'if true; then echo hi; fi &',
   './dispatch-review.sh x &', // ./ form only counts after a cd scripts
 ]) {
   test(`rule1 allows: ${JSON.stringify(cmd)}`, () => {

@@ -1,6 +1,6 @@
 # Live pane design system — one IA, one visual vocabulary, enforced in code
 
-Status: **draft for owner review** (2026-10-13). Plan only; no product code changed.
+Status: **draft for owner review** (2026-10-13), revised once after the G1 plan review (§10). Plan only; no product code changed. The dispatch tree (formerly P6) moved to [`2026-10-13-dispatch-tree.md`](2026-10-13-dispatch-tree.md).
 Scope: the live mod's pane (`mods/live/pane.tsx`, `mods/live/model.ts`) and the glyphs it shares with the band (`mods/live/band.tsx`).
 Builds on the approved TUI v2 design: [`evidence/2026-10-10-tui-v2/ia.md`](evidence/2026-10-10-tui-v2/ia.md) (colour semantics, glyph vocabulary) and [`i18n.md`](evidence/2026-10-10-tui-v2/i18n.md).
 
@@ -22,7 +22,7 @@ Checked against the code at `5a2706ad` and the owner's screenshots of 現況, �
 | 4 | `●` means running, seat done, seat unknown and plan review active | `seatRows` 2208, `activityLines` 2012, the plan-review badge 2223 | §3.2 states |
 | 5 | Every seat is a grey `●` whatever its verdict | `verdictMark` 1672 matches only `pass/ok/accept/…` and `open/fail/…`; `SHIP-AS-IS`, `FIX-THEN-SHIP`, `CONDITIONAL`, `READY`, `STOP` fall through to grey, so `seatRows` 2206 never sees "done" | §3.3 mapping table |
 | 6 | `▲` means needs you, QC owed, open review and the 80 % tick | `needsYouLines` 1729, `tabBadges` 1686, review rule 2232, spend tick 2282 | §3.2 |
-| 7 | `⏸` draws as a blue emoji box (screenshot 4) | U+23F8 has the Unicode `Emoji` property, and so do `⚙` U+2699 (dispatch) and `⚠` U+26A0 (hygiene chip 663-666). Checked with `\p{Emoji}`; a terminal may give any of them emoji presentation | §3.4 glyph rules |
+| 7 | `⏸` draws as a blue emoji box (screenshot 4) | U+23F8 has the Unicode `Emoji` property, and so do `⚙` U+2699 (dispatch) and `⚠` U+26A0 (hygiene chip 663-666). Checked with `\p{Extended_Pictographic}` (all three match; `\p{Emoji}` also matches them but is unusable as a rule, see §3.4); a terminal may give any of them emoji presentation | §3.4 glyph rules |
 | 8 | Raw machine tokens on screen: `reviewed`, `SHIP-AS-IS`, `FIX-THEN-SHIP`, `CONDITIONAL`, `READY`, `STOP`, `not_needed`, `full`, `rc 0`, `warn` mode, `[exited with code 0]` | `runState` 2114 prints `final_status`; `seatRows` 2209; `reviewTabLinesRaw` 2224/2233/2243; `spend.mode` 2295; the background tail 2013 | §3.3 (raw tokens only in detail) |
 | 9 | Decision rationales: walls of English text plus full veto command lines (審查) | `buildSections` 1046-1047 pushes every row's full text and its `vetoLine` | §2.4 collapse, §4 `more` and `detail` |
 | 10 | A plan review from 2026-09-16 shows `● 進行中` | plan badge 2223 looks only at `p.terminal`; `updated_at` is read (1073) but never aged | §2.5 freshness |
@@ -44,8 +44,8 @@ Reading 18 against the code also explains a related trap: moving the focus ring 
 | Tab | The one question | Order inside the tab |
 |---|---|---|
 | 現況 | What do I need to do, and where is the work? | needs you → position → one row per other tab → live background work → unfinished tasks → recent prompts (history) |
-| 派工 | Who is running, and how did the runs end? | running and stalled → finished (latest 5, rest collapsed) → review gates → snapshot note |
-| 審查 | Can this be pushed, and what was decided for me? | code review → pre-push QC → decisions made for you → plan review (folded when stale) |
+| 派工 | Who is running, and how did the runs end? | running and stalled → finished (latest 5, rest collapsed) → one pointer row to 審查 (a projection, §2.6) → snapshot note |
+| 審查 | Can this be pushed, and what was decided for me? | code review → pre-push QC → review pages (gates) → decisions made for you → plan review (folded when stale) |
 | 用量 | How much have I spent, and how much is left? | limits (brain cap, 5 h, 7 d) → today's breakdown → last 24 h → account |
 | 殘留 | What do I have to clean up? | needs you → automatic cleanup → plugin load source |
 | ? | What does each mark mean? | states → structure glyphs → keys (generated from the token tables) |
@@ -110,19 +110,40 @@ The rules apply in the model, before any glyph is chosen. A line can only show `
 
 Thresholds live in one table in the ui module (§6), not in each tab.
 
+### 2.6 Ownership: every fact has one home tab (answers G1 R2)
+
+Each fact has exactly one **owner tab**, where its rows, its raw detail and its verdict live. Any other tab may show it only as a **projection**: a line that points to the owner, derives its state from the same `stateOf` call, and carries no detail of its own.
+
+| Fact | Owner | May be projected on | Projection carries |
+|---|---|---|---|
+| run lineage, run state, age, engine and model (dispatch rows) | 派工 | 現況 | worst state, counts, last-ended age |
+| code-review round, seat verdicts, pre-push QC, review pages (gates), plan review | 審查 | 現況, 派工 | worst state, a count, the round id. **Never** a seat row or a verdict word |
+| decisions made for the owner, escalation ladder, undocumented dispatch count | 審查 | 現況 | a count |
+| background commands, tasks, recent prompts, stage walk, needs-you list | 現況 | none | n/a |
+| brain cap, 5 h and 7 d quota, spend, hourly history, account | 用量 | 現況 | the most-used window, percent, amount |
+| residue groups, cleanup, plugin load source | 殘留 | 現況 | worst state, count, size |
+| global header (verdict, project, elapsed, metrics) | `pane.tsx` | n/a | drawn once, above every tab |
+
+Rules:
+
+1. A projection is a `kv` or `item` line with `goto` (§4) and a `fact` tag. A line whose `fact` is owned by another tab without `goto` is a defect.
+2. A projection is one line per fact. It never lists the owner's rows.
+3. 派工 draws no review verdict. Its former 「審查關卡」 section becomes one pointer row, `審查 ›  <count of review pages or 還沒有審查頁>`, in a section 其他分頁.
+4. The 要你處理 list in 現況 is the one place that mixes owners; each of its items is either 現況's own (tasks) or a projection with `goto`.
+5. The ownership table is data in `ui.ts` (`FACT_OWNER`), and invariant I17 checks it (§6.3).
+
 ## 3. Tokens
 
 ### 3.1 Layout grid
 
-Every body line starts at one of five columns (display cells; a CJK character is 2):
+Every body line starts at one of four columns (display cells; a CJK character is 2):
 
 | Column | What starts there |
 |---|---|
-| 0 | section header, key of a key/value row, glyph of a list item or table row, the empty-state dash |
+| 0 | section header, key of a key/value row, glyph of a list item or bullet or table row, the empty-state dash |
 | 2 | text of a list item, table header, `more` toggle, standalone note, `└` of a detail line, `$` of a command |
 | 4 | text of a detail or command line, including its wrapped continuation lines |
-| 12 | value of a key/value row (`KEY_W` stays 12: zh labels up to 6 characters) |
-| 14 | text of a list item nested in a value (a seat under `席位`) |
+| 12 | value of a key/value row (`KEY_W` stays 12: zh labels up to 6 characters), and a list item nested in a value (the second and later seats under `席位`) |
 
 Wrapped lines hang at the column their own text started at. No line is wider than `cols`. A table's internal columns are computed per table, but its first glyph is at 0 and its header at 2.
 
@@ -147,28 +168,36 @@ The empty-state dash `—` (inactive) is not a state: it marks missing data.
 
 The band's verdict keeps its five owner-approved words and maps them onto states for glyph and colour: 要你決定 → `▲`, 疑似卡住 → `⊘` (was `⏸`), 完成待驗收 → `✓`, 進行中 → `●`, 待命 → `◌`.
 
-### 3.3 One mapping table from domain tokens to states
+### 3.3 One mapping table from domain objects to states (answers G1 R3)
 
-`ui.ts` exports `STATUS_MAP: Record<Domain, Record<string, StateId>>`, and `stateOf(domain, token)` is the only way a tab turns a token into a glyph. Case-insensitive matching on the whole token.
+A domain object can satisfy several conditions at once (a run with `stall`, `rc` and `final_status`; a review round with findings and a running seat; a load source that is `dev` and behind). So the mapping has two steps, and the first one is an ordered classifier, not a lookup.
 
-| Domain | Token → state |
+```ts
+type Domain = 'verdict' | 'run' | 'seat' | 'round' | 'gate' | 'qc' | 'background' | 'task' | 'loadSource'
+stateOf<D extends Domain>(domain: D, subject: Subject[D]): Stated   // Stated is branded; only stateOf makes one
+```
+
+`Subject[D]` is the structured object the model already has (a `LiveRunRow`, a `ReviewRound`, a `LoadSource`), or a bare token for the token-only domains (`seat`, `gate`, `qc`, `task`, `verdict`). Step 1: `classify<D>(subject)` returns one **atom** by walking the precedence list below top to bottom; the first condition that holds wins. Step 2: `STATUS_MAP[D][atom]` gives the `StateId`. Token normalisation happens once, in `classify`: `trim()` then upper-case, and a prefix class (`NEEDS*`, `CACHE:*`) becomes one atom. An atom that is not in the map is `unknown`; the raw text goes to `detail`. `stateOf` is the only producer of `Stated`, and the components accept only `Stated` (§6.1), so a tab cannot pick a state by hand.
+
+| Domain | Precedence (first match wins) → state |
 |---|---|
-| verdict | `decide`→need_you · `stalled`→stalled · `waiting`→done · `running`→running · `idle`→stopped |
-| run (dispatch row) | `stall:true`→stalled · `rc 0`→done · `rc ≠ 0`→failed · `final_status reviewed / done / ok`→done · `failed / error / killed`→failed · no rc and fresh→running · no rc, not fresh→stopped |
-| code-review seat verdict | `SHIP-AS-IS`→done · `FIX-THEN-SHIP`→findings · `BLOCK / REJECT`→failed · status `running`→running · status `reviewed` without verdict→done |
-| plan-review seat / verdict | `READY / APPROVE / PASS`→done · `CONDITIONAL / STOP`→findings · `REJECT`→failed |
-| review round | converged→done · open with any `findings` seat→findings · open with any running seat→running · stale (§2.5)→stopped |
-| gate (`LiveGateRow.verdict`) | `pass / ok / accept / approved / converged`→done · `open / owed / needs*`→need_you · `fail / reject / block`→failed |
-| QC (`QcView.state`) | `ok`→done · `owed`→need_you · `not_needed`→skipped · `unknown`→unknown |
-| background item | exit marker 0→done · exit marker ≠ 0→failed · quiet ≤ 30 min→running · quiet > 30 min→stopped |
-| task | `completed`→done · `in_progress`→running · `pending`→pending |
-| load source / marketplace | `dev`, `directory`→done · `cache:*`, `missing`, any flag→need_you |
+| verdict | `DECIDE`→need_you · `STALLED`→stalled · `WAITING`→done · `RUNNING`→running · `IDLE`→stopped |
+| run (dispatch row) | 1 `rc ≠ 0`, or `final_status` in `failed / error / killed`→failed · 2 `rc = 0`, or `final_status` in `reviewed / done / ok`→done · 3 `stall:true`→stalled · 4 no `rc`, fresh→running · 5 otherwise→stopped. An ended fact (1, 2) beats `stall`; failure beats success when `rc` and `final_status` disagree |
+| seat (code or plan review) | code: `SHIP-AS-IS`→done · `FIX-THEN-SHIP`→findings · `BLOCK`, `REJECT`→failed. plan: `READY`, `APPROVE`, `PASS`→done · `CONDITIONAL`, `STOP`→findings (Q5) · `REJECT`→failed. No verdict: status `running`→running, status `reviewed`→done, otherwise→unknown |
+| round (code or plan review) | 1 stale (§2.5) and not converged→stopped · 2 any seat running→running · 3 any seat failed→failed · 4 any seat findings→findings · 5 all seats done, or `converged`→done. A round with findings **and** a running seat is `running`: the round is not over, and the findings count rides in the header chip's meta (`● 執行中 · 1 席已有發現`) |
+| gate (`LiveGateRow.verdict`) | `PASS / OK / ACCEPT / APPROVED / CONVERGED`→done · `OPEN / OWED / NEEDS*`→need_you · `FAIL / REJECT / BLOCK`→failed |
+| QC (`QcView.state`) | `OK`→done · `OWED`→need_you · `NOT_NEEDED`→skipped · `UNKNOWN`→unknown |
+| background item | 1 exit marker `≠ 0`→failed · 2 exit marker `0`→done · 3 quiet ≤ 30 min→running · 4 otherwise→stopped. The marker beats the quiet clock |
+| task | `COMPLETED`→done · `IN_PROGRESS`→running · `PENDING`→pending |
+| loadSource (source + `behind` + flags) | 1 source `CACHE:*` or `MISSING`→need_you · 2 `behind > 0`, or any flag→need_you · 3 source `DEV` or `DIRECTORY`→done. So `dev` + behind is `need_you`, which is what the 殘留 mockup draws |
+
+Aggregates (the 各分頁 summary rows, a header chip over several rows) take the **worst** state under one total order, defined once as `SEVERITY`: `need_you > failed > stalled > findings > running > stopped > pending > done > skipped > unknown`. `unknown` ranks last so a missing mapping never hides a real finding, and it is still counted in the chip so it is not silent.
 
 A raw token (`SHIP-AS-IS`, `reviewed`, `not_needed`, `[exited with code 0]`, `warn`) may appear **only** in a `detail` line, which the owner opens on purpose. Tokens that are identifiers, not states (run ids, engine and model ids, family names, shas, commands, paths), stay as they are: the i18n plan already keeps them untranslated. Residue classes (`dirty`, `clean-integrated`, `unintegrated-branch`, `missing-dir`) and the fuse mode get string-table labels (`有未提交變更`, `只提醒、不擋`).
 
 ### 3.4 Glyph rules
 
-1. **No codepoint with the Unicode `Emoji` property, ever.** Banned in the vocabulary: `⏸ ⚙ ⚠ ✔ ✖ ▶ ⏹ ⏺ ▪ ▫`. The ui module's glyph table is checked with `/\p{Emoji}/u` in a test (§6, I5). Replacements: stalled `⏸` → `⊘`; dispatch count `⚙N` → `●N` (the running state, counted); the hygiene chip's `⚠` → `▲`.
+1. **No glyph that a terminal may draw as an emoji.** The test is `\p{Extended_Pictographic}`, not `\p{Emoji}`: the `Emoji` property also matches every ASCII digit, `#` and `*` (keycap-sequence bases), which would reject the pane's own numbers. Measured in Node: `⏸ ⚙ ⚠ ✔ ✖ ▶ ⏹ ⏺ ▪ ▫` are Extended_Pictographic; every glyph in §3.2 and the structure/chart tables (`▲ ✗ ⊘ △ ● ✓ ○ ◌ ∅ ◦ › ▾ ▸ └ ─ ━ ▰ ▱ ◐ ⚑ ↺ ◆`) is not. The explicit `EMOJI_BANNED` list repeats the ten above so the rule still holds if a Unicode update moves a property. It is checked on the glyph table and on glyph segments only, plus a separate check for the emoji variation selector U+FE0F and the keycap mark U+20E3 anywhere (§6, I5). Replacements: stalled `⏸` → `⊘`; dispatch count `⚙N` → `●N` (the running state, counted); the hygiene chip's `⚠` → `▲`.
 2. **One glyph, one meaning, across band and pane.** Glyphs fall into three groups and do not cross: state glyphs (§3.2), structure glyphs (`▾ ▸` fold, `─` rule, `└` detail, `$` command, `›` go to tab, `◦` neutral bullet), and chart glyphs (`▰ ▱` meter, `▁…█` sparkline, `◐` "you are here" in the stage walk). `⚑N` stays as the residue count in the band and on the 殘留 tab badge only (owner-approved 10-10); the pane body uses `▲`. The strip's `▸` "next" chip (`pane.tsx` `tabStrip`) is the one exception left; P5 replaces it with `›` so that `▸` means only "folded".
 3. **The stage walk uses state glyphs for its nodes:** done `✓` success, current `◐` claude bold, to come `○` inactive (`✓─✓─◐─○─○`). `●` (running) no longer means "done node".
 4. **Width.** `◐ ● ○ ▲ △ ◆ ─ ━ └ · …` are East Asian *Ambiguous*: a CJK-locale terminal may draw them 2 cells wide (the `ⓘ` comment at `model.ts` 1461 records this happening for `ⓘ` on the owner's terminal). The owner's screenshots show `● ▲ ─ · └ ◆ ▰ ▱ ✓ ▾ ⚑ ↺` at one cell. Every glyph that is new to the vocabulary must pass the real-terminal check in P0 before it ships: `⊘ △ ○ ◌ ∅ ◦ › ━ ◐`.
@@ -208,7 +237,7 @@ Emphasis:
 
 ## 4. Components: the only line builders tab code may call
 
-Every component returns `PaneLine`s stamped with a `kind`, and the tests check per kind (§6). Examples are at 76 columns.
+Every component returns `PaneLine`s stamped with a `kind`, and the tests check per kind (§6). A `PaneLine` can only be made by these components (§6.1: branded, unexported constructor). Components take a `Stated` (from `stateOf`, §3.3), never a raw `StateId` or glyph. Examples are at 76 columns.
 
 **`header(title, right?, fold)`** (kind `header`): `▾`/`▸` (subtle), the title (bold), optionally two spaces and a right-hand chip (a state, a count or a meter level), then a `subtle` rule to `cols - 1`. Every section uses it, and every section folds, 要你處理 included (it never starts folded), so `▾ ▸` always mean the same thing.
 
@@ -217,20 +246,22 @@ Every component returns `PaneLine`s stamped with a `kind`, and the tests check p
 ▸ 計畫審查  ◌ 已停 · 27d 前 ──────────────────────────────────────────────
 ```
 
-**`kv(key, …value)`** (kind `kv`): key dim, padded to 12 cells; value at column 12. An absent value is `—` followed by a dim reason.
+**`kv(key, …value, {goto?, fact?})`** (kind `kv`): key dim, padded to 12 cells; value at column 12. An absent value is `—` followed by a dim reason. With `goto`, the key gets a trailing ` ›`, the whole row is a press target, and `fact` names the projected fact (§2.6); the summary rows in 現況 are these.
 
 ```
 輪次        R1 · 4abd667f..10c5c086
 升級階梯    — 沒有紀錄
 ```
 
-**`item(state, text, meta?, {at: 0 | 12, goto?, toggle?})`** (kind `item`): state glyph, the state word padded to the widest word in the list, the text, then dim meta after ` · `.
+**`item(stated, text, meta?, {at: 0 | 12, goto?, toggle?, word?, fact?})`** (kind `item`): state glyph, the state word padded to the widest word in the list, the text, then dim meta after ` · `. A `toggle` puts `▸`/`▾` at the right edge of the row. The state word is required, with one exception: `word: false` is allowed only inside a list whose section header chip already names the same state (the 要你處理 list under `▲ 要你處理`, the 殘留 groups under their chip), so the word is never lost, only not repeated on every line. I21 checks that the chip state equals the item state.
 
 ```
 ▲ 1 個 worktree 要你處理                                            殘留 ›
 席位        ✓ 完成  s0 · anthropic
             △ 待修  s1 · zhipu
 ```
+
+**`bullet(text, meta?, {toggle?})`** (kind `bullet`): a neutral `◦` at column 0 for a row that has no state (a decision made for the owner, a residue item), text at 2, dim meta after ` · `. With `toggle` the right edge shows `▸`; open, it shows `▾` and the row's `detail` and `command` lines follow it. An opened row keeps its own bullet line; there is no separate bespoke header row.
 
 **`table(columns, rows)`** (kind `table`). Each column has `{head, min, priority, flex?, cut: 'left' | 'right'}`. If the table is too wide, the lowest-priority column is dropped first; then the `flex` column is cut to fit (an identifier from the left); the remaining columns are cut down to their `min`. It **never** falls back to key/value blocks. The first column is always the state glyph and word.
 
@@ -278,13 +309,13 @@ Blank lines: one between the global header and the first section; none inside th
 
 ## 5. Mockups
 
-The tab strip and global header are the same on every tab. They are drawn in full for 現況 and shortened to `‹strip + header›` elsewhere. The active tab is shown as proposed in Q1: bold `claude` text with `━` under it in the strip's baseline, and no background. Data follows the owner's screenshots of 2026-10-13. Quota percentages, reset times and the residue row are illustrative.
+The tab strip and global header are the same on every tab. They are drawn in full for 現況 and shortened to `‹strip + header›` elsewhere; at 120 columns `‹strip + header›` stands for the merged one-line header drawn in the 現況 mockup (§2.2). The strip's leading chip is `›` (P5 replaces today's `▸` with it). The active tab is shown as proposed in Q1: bold `claude` text with `━` under it in the strip's baseline, and no background. Data follows the owner's screenshots of 2026-10-13. Quota percentages, reset times and the residue row are illustrative.
 
 ### 5.1 現況
 
 <!-- cols:76 -->
 ```
-▸  現況   派工   審查   用量   殘留 ⚑1   ?
+›  現況   派工   審查   用量   殘留 ⚑1   ?
 ──━━━━━━───────────────────────────────────────────────────────────────────
 ✓ 完成待驗收  autopilot · 已進行 8h05m
 工作階段 $100.72 · 本機今日 $216.44 · ctx 22%
@@ -311,7 +342,7 @@ The tab strip and global header are the same on every tab. They are drawn in ful
 
 <!-- cols:120 -->
 ```
-▸  現況   派工   審查   用量   殘留 ⚑1   ?
+›  現況   派工   審查   用量   殘留 ⚑1   ?
 ──━━━━━━───────────────────────────────────────────────────────────────────────────────────────────────────────────────
 ✓ 完成待驗收  autopilot · 已進行 8h05m                                    工作階段 $100.72 · 本機今日 $216.44 · ctx 22%
 
@@ -353,8 +384,8 @@ With live work, the 背景工作 section reads `● 執行中  等 P2 collect �
 ✓ 完成  …2031597-f2e4  reviewer  cc-shim / GLM-5.2           5m    6h02m 前
 ✓ 完成  …2031596-3077  reviewer  claude-native / claude-fa…  1m    6h04m 前
   ▸ 還有 27 筆已完成
-▾ 審查關卡 ────────────────────────────────────────────────────────────────
-— 還沒有審查頁
+▾ 其他分頁 ────────────────────────────────────────────────────────────────
+審查 ›      還沒有審查頁
   這是執行狀態，不是進度 · 快照 01:42
 ```
 
@@ -372,8 +403,8 @@ With live work, the 背景工作 section reads `● 執行中  等 P2 collect �
 ✓ 完成  review-1791801313-2031597-f2e4  reviewer  cc-shim / GLM-5.2                       5m    6h02m 前
 ✓ 完成  review-1791801313-2031596-3077  reviewer  claude-native / claude-fable-5-1        1m    6h04m 前
   ▸ 還有 27 筆已完成
-▾ 審查關卡 ────────────────────────────────────────────────────────────────────────────────────────────────────────────
-— 還沒有審查頁
+▾ 其他分頁 ────────────────────────────────────────────────────────────────────────────────────────────────────────────
+審查 ›      還沒有審查頁
   這是執行狀態，不是進度 · 快照 01:42 · 工作階段花費截至 01:41 · 本機花費截至 01:40
 ```
 
@@ -394,19 +425,19 @@ With a live run, the 執行中 table adds a `最後回報` column (priority 3) i
 ▾ 推送前 QC  ∅ 不需要 ─────────────────────────────────────────────────────
 範圍        5a2706ad..HEAD · 0 個受保護檔案
 ▾ 代你決定  3 件 · 0 件不可逆 ─────────────────────────────────────────────
-◦ intent-17-1  #17 direction: A (keep the native <repo>/.claude/workt…
-◦ intent-17-2  Owner answered (supersedes intent-17-1): direction C …
-◦ verify-17-1  verify node, no qualified verifier seat (engine-scorec…
+◦ intent-17-1  #17 direction: A (keep the native <repo>/.claude/w…        ▸
+◦ intent-17-2  Owner answered (supersedes intent-17-1): directio…         ▸
+◦ verify-17-1  verify node, no qualified verifier seat (engine-s…         ▸
 未記錄      32 件派工沒有決策紀錄
 升級階梯    — 沒有紀錄
 ▸ 計畫審查  ◌ 已停 · 27d 前 ───────────────────────────────────────────────
 ```
 
-A decision opened by a press (`toggle` id `dec:<id>`):
+A decision opened by a press (`toggle` id `dec:<id>`). The bullet row stays where it was and gains `▾`; the rationale is a `detail` line (prose, so it may hold English text) and the veto is a `command`:
 
 <!-- cols:76 -->
 ```
-▾ intent-17-1  可逆 · depth0
+◦ intent-17-1  可逆 · depth0                                              ▾
     #17 direction: A (keep the native <repo>/.claude/worktrees root for
     hand/native worktrees, no WorktreeCreate takeover; rail worktrees
     carry the repo slug; …). Owner did not answer within 60s; A is
@@ -421,19 +452,22 @@ A decision opened by a press (`toggle` id `dec:<id>`):
 
 ▾ 程式碼審查  △ 待修 ──────────────────────────────────────────────────────────────────────────────────────────────────
 輪次        R1 · 4abd667f..10c5c086 · 4 席
-席位        ✓ 完成  s0 · anthropic        △ 待修  s1 · zhipu        ✓ 完成  s2 · minimax        ✓ 完成  s3 · alibaba
+席位        ✓ 完成  s0 · anthropic
+            △ 待修  s1 · zhipu
+            ✓ 完成  s2 · minimax
+            ✓ 完成  s3 · alibaba
 ▾ 推送前 QC  ∅ 不需要 ─────────────────────────────────────────────────────────────────────────────────────────────────
 範圍        5a2706ad..HEAD · 0 個受保護檔案
 ▾ 代你決定  3 件 · 0 件不可逆 ─────────────────────────────────────────────────────────────────────────────────────────
-◦ intent-17-1  #17 direction: A (keep the native <repo>/.claude/worktrees root for hand/native worktrees, no Worktr…
-◦ intent-17-2  Owner answered (supersedes intent-17-1): direction C = A plus moving the dispatch-rail worktrees (h…
-◦ verify-17-1  verify node, no qualified verifier seat (engine-scorecard current --role verifier: none admissible…
+◦ intent-17-1  #17 direction: A (keep the native <repo>/.claude/worktrees root for hand/native worktrees, no Worktr…  ▸
+◦ intent-17-2  Owner answered (supersedes intent-17-1): direction C = A plus moving the dispatch-rail worktrees (h…   ▸
+◦ verify-17-1  verify node, no qualified verifier seat (engine-scorecard current --role verifier: none admissible…    ▸
 未記錄      32 件派工沒有決策紀錄
 升級階梯    — 沒有紀錄
 ▸ 計畫審查  ◌ 已停 · 27d 前 ───────────────────────────────────────────────────────────────────────────────────────────
 ```
 
-At ≥ 110 columns, seat items flow across the value column in fixed-width cells. Opened, the stale plan review shows `計畫  blind-review-packet-2026-09-16 · △ 待修`, `輪次  ▰▱ R1／上限 2`, and its seats `✓ 完成 glm_architecture`, `△ 待修 codex_operations_skeptic`. The raw `CONDITIONAL`, `READY` and `STOP` sit in each item's detail.
+Seats stack one per line at every width (no horizontal seat row exists in the component set). Opened, the stale plan review shows `計畫  blind-review-packet-2026-09-16 · △ 待修`, `輪次  ▰▱ R1／上限 2`, and its seats `✓ 完成 glm_architecture`, `△ 待修 codex_operations_skeptic`. The raw `CONDITIONAL`, `READY` and `STOP` sit in each item's detail.
 
 ### 5.4 用量
 
@@ -494,7 +528,7 @@ Meter bars are 20 cells below 100 columns and 40 at or above. The share bars use
 ▲ worktree  未整合（分支還在）      4 個 · 31 MB                    ▸
 ▾ 自動清理 ────────────────────────────────────────────────────────────────
 ✓ 完成  3h 前刪 2 個 worktree、封存 1 條分支
-▾ 外掛來源 ────────────────────────────────────────────────────────────────
+▾ 外掛來源  ▲ 要你處理 ───────────────────────────────────────────────────
 ▲ dev · v3.0.0-alpha.6 · 落後 upstream 54                           ▸
 ```
 
@@ -502,14 +536,15 @@ Expanding a group lists its items one line each; expanding an item shows its rea
 
 ```
 ▾ 已整合，可清理  12 個 · 280 MB
-  ◦ agent-a242acf7…  0d · 24 MB                                    ▸
-  ◦ agent-a3379d38…  0d · 22 MB                                    ▾
+  ◦ agent-a242acf7  0d · 24 MB                                     ▸
+  ◦ agent-a3379d38  0d · 22 MB                                     ▾
     └ clean · HEAD 已在 origin/develop
-    $ git -C /home/u/proj worktree remove /home/u/proj/.claude/worktrees/agent-a3379d38…
+  $ git -C /home/u/proj worktree remove
+    /home/u/proj/.claude/worktrees/agent-a3379d38
   ▸ 還有 10 個
 ```
 
-At 120 columns the lines are the same; only the rules are longer, and an expanded command fits on one line.
+At 120 columns the lines are the same; only the rules are longer, and an expanded command fits on one line. Worktree names are 14 cells and are never cut; a longer identifier is cut from the left (§3.5), and a command is never cut.
 
 "已整合" is measured against the newer of `develop` and `origin/develop` (the same rule `session-mode.js` uses for `base_ref`). The 2026-10-13 screenshot showed 17 lane worktrees as `clean-unintegrated` although their commits were on `origin/develop`: the main checkout's `develop` was 54 commits behind. That classifier fix is a separate bug with its own red test, like diagnosis 11.
 
@@ -550,9 +585,9 @@ This is a mechanism change (CLAUDE.md, 機制 vs 指引). Rules that `ia.md` alr
 
 ### 6.1 Structure
 
-- **`mods/live/ui.ts` (new)** owns: `STATES`, `STATUS_MAP` + `stateOf`, `GLYPHS` (state, structure and chart tables), `FRESHNESS` thresholds, `GRID = [0, 2, 4, 12, 14]`, `KEY_W`, the formatters (`money`, `pct`, `dur`, `ago`, `clock`, `size`, `sha`, `idTail`, `count`) and the components in §4. `seg`, `row`, `padCells` and the `ThemeKey` strings exist only here and are not exported.
+- **`mods/live/ui.ts` (new)** owns: `STATES`, `STATUS_MAP` + `classify*` + `stateOf` + `SEVERITY` (§3.3), `GLYPHS` (state, structure and chart tables) + `EMOJI_BANNED`, `FRESHNESS` thresholds, `FACT_OWNER` (§2.6), `SECTION_DEFAULTS` (which sections start folded), `GRID = [0, 2, 4, 12]`, `KEY_W`, the formatters (`money`, `pct`, `dur`, `ago`, `clock`, `size`, `sha`, `idTail`, `count`) and the components in §4. `seg`, `row`, `padCells` and the `ThemeKey` strings exist only here and are not exported.
 - **`mods/live/tabs.ts` (new)** holds the tab builders, moved out of `model.ts` (`nowLinesRaw`, `dispatchLinesRaw`, `reviewTabLinesRaw`, `spendTabLinesRaw`, `hygieneTabLinesRaw`, `legendLines`, `activityLines`, `accountLines`, `recentLines`, `needsYouLines`). It imports components and formatters from `ui.ts` and data types from `model.ts`. It never imports `seg`, `row` or theme keys, and it never writes a glyph literal.
-- **`PaneLine.kind`** becomes a required field (`'verdict' | 'header' | 'kv' | 'item' | 'table' | 'meter' | 'empty' | 'more' | 'command' | 'detail' | 'chart' | 'blank'`), and `PaneLine` gains `goto?: PaneTab`. Only components set `kind`, so a line without one shows that code went around the components.
+- **`PaneLine` is opaque (answers G1 R4).** `kind` becomes a required field (`'verdict' | 'header' | 'kv' | 'item' | 'bullet' | 'table' | 'meter' | 'empty' | 'more' | 'command' | 'detail' | 'chart' | 'blank'`), and `PaneLine` gains `goto?: PaneTab` and `fact?: FactId`. Making one is possible only through `ui.ts`: the constructor `mk()` is not exported; it adds the line to a module-private `WeakSet` and the type carries a brand from a non-exported `unique symbol`, so `{kind:'kv', text:'x'}` neither type-checks nor passes at run time. `ui.ts` exports one read-only predicate, `isMade(line)`, for the tests. A `kind` field alone proved nothing (a hand-built object can carry it), which is why the brand and the `WeakSet` replace it as the evidence of "built by a component".
 - **`buildSections` returns data, not lines.** `PaneSections` (`attention`, `waiting`, `tasks`, `decisions`, `foreman`) becomes `{ tasks: TasksView | null, decisions: DecisionsView | null, foreman: ForemanView | null, attention: AttentionView | null, notWired: … }`, and the tabs render it through components. Without this change, the tick path keeps producing hand-made bold lines that no rule can reach (diagnosis 1).
 - **`pane.tsx`** draws the tab strip, the global header (`verdictHeader`) and the body lines. Its own Text props come from one `drawSeg` function in `ui.ts`, so `pane.tsx` itself carries no colour decisions.
 
@@ -560,33 +595,71 @@ This is a mechanism change (CLAUDE.md, 機制 vs 指引). Rules that `ia.md` alr
 
 - L1: `tabs.ts`, `pane.tsx` and `band.tsx` contain no theme-key string literal (`'claude' 'warning' 'error' 'success' 'suggestion' 'inactive' 'subtle'`), no `color:`, `bold:` or `dim:` property, and no `backgroundColor` / `inverse`.
 - L2: outside `ui.ts`, the source contains no codepoint in U+2190–U+2BFF or U+25A0–U+25FF. Glyphs come only from `GLYPHS`. String-table JSON files are checked too: a locale string may not carry a state or structure glyph. Strings that carry one today and must lose it (zh-TW and en alike): `state.no_project_wt` (`⚑`), `legend.hygiene` (`⚑`, `↓`), `legend.widths` (`⚙`, `⚑`), `now.see_hygiene` (`→`), and the `toast.*` arrows (`→`, kept as text `至` / `to`, or allowlisted as a non-state arrow). P5 lists the final set.
-- L3: every `GLYPHS` entry fails `/\p{Emoji}/u`, and the new-to-vocabulary entries carry a `verified: '<date> <terminal>'` field that P0 fills in.
+- L3: every `GLYPHS` entry fails `/\p{Extended_Pictographic}/u`, is not in `EMOJI_BANNED`, and contains no U+FE0F or U+20E3; the new-to-vocabulary entries carry a `verified: '<date> <terminal>'` field that P0 fills in. (`\p{Emoji}` is not used: it matches digits, `#` and `*`.)
 - L4: `tabs.ts` does not import `seg`, `row`, `rule`, `kv`, `padCells` or `NO_DATA` from `model.ts` (after P5 these no longer exist there).
+- L5: outside `ui.ts`, no source file builds a line by hand: no `kind:` property, no `as PaneLine`, no `: PaneLine = {`, no spread of a `PaneLine`. A static backstop for the run-time brand (I2); it fails on `{kind:'kv', text:'x'}` in `tabs.ts`.
+- L6: `tabs.ts` carries no number formatting of its own: no `toFixed`, `toLocaleString`, `Math.round` / `Math.floor` next to a unit literal, and no string literal `'%'`, `' %'`, `'$'`, `' MB'`, `' GB'`, `'h'`, `'m'`, `'*'` used as a unit. Units come from the formatters.
+- L7: `tabs.ts` carries no `StateId` string literal (`'need_you'`, `'failed'`, `'stalled'`, `'findings'`, `'running'`, `'done'`, `'pending'`, `'stopped'`, `'skipped'`, `'unknown'`) and no access to `GLYPHS` or `STATES`; a state arrives only as the `Stated` that `stateOf` returned.
 
 ### 6.3 Render invariants in `mods/live/live.test.ts`
 
-These are pure calls of the tab builders over fixture snapshots; no mount is needed except for the strip. Matrix: fixtures {`richWorld` (existing), `busyWorld` (new), `emptyWorld` (new: every source missing)} × locale {zh-TW, en} × cols {40, 60, 76, 100, 120, 160}. `busyWorld` reproduces the owner's screenshots: 32 finished reviewer runs with ~30-cell ids, 4 code seats (3 × SHIP-AS-IS, 1 × FIX-THEN-SHIP), a plan review with `updated_at` 27 days before `NOW` (CONDITIONAL, seats READY / STOP), 3 decisions with long English rationales (`richWorld` has `rows: []`), 32 undocumented dispatches, brain 175.33 / 150, a 24-sample history crossing the day reset, 16 background shells whose tails are `[exited with code 0]`, 39/39 tasks, account plus two quota windows, 1 residue item, QC `not_needed`.
+These are pure calls of the tab builders over fixture snapshots; a mount is needed only for the strip, I9(b), I18 and I19 (presses). Matrix: fixtures {`richWorld` (existing), `busyWorld` (new), `emptyWorld` (new: every source missing)} × locale {zh-TW, en} × cols {40, 60, 76, 100, 120, 160}. `busyWorld` reproduces the owner's screenshots: 32 finished reviewer runs with ~30-cell ids, 4 code seats (3 × SHIP-AS-IS, 1 × FIX-THEN-SHIP), a plan review with `updated_at` 27 days before `NOW` (CONDITIONAL, seats READY / STOP), 3 decisions with long English rationales (`richWorld` has `rows: []`), 32 undocumented dispatches, brain 175.33 / 150, a 24-sample history crossing the day reset, 16 background shells whose tails are `[exited with code 0]`, 39/39 tasks, account plus two quota windows, 1 residue item, QC `not_needed`.
 
 | Id | Assertion |
 |---|---|
 | I1 | `displayWidth(line.text) <= cols` for every line of every tab |
-| I2 | every line has a `kind` |
+| I2 | every line is `isMade` (made by a component, §6.1) and has a `kind` |
 | I3 | the first non-blank cell of every line is in `GRID`; for `kind:'kv'`, the value starts at exactly 12; a wrapped continuation starts at its line's hang, and the hang is in `GRID` |
 | I4 | every `kind:'header'` line matches `^[▾▸] \S.*─+$`, has the width `cols - 1`, and starts at column 0; no line anywhere contains `▌`; a bold segment occurs only in `header`, `verdict`, `need_you` items and meter headline values |
-| I5 | every glyph segment (components tag them `role:'glyph'`) is in `GLYPHS`; no character in any line outside `kind:'detail'` matches `/\p{Emoji}/u` |
+| I5 | (a) every `GLYPHS` entry fails `/\p{Extended_Pictographic}/u` and is not in `EMOJI_BANNED`; (b) every glyph segment (components tag them `role:'glyph'`) is in `GLYPHS`; (c) no line of any kind contains U+FE0F or U+20E3, and no line outside `kind:'detail'` contains an Extended_Pictographic character. Digits, `#` and `*` are legal everywhere (they carry the `Emoji` property as keycap bases, but are not pictographs) |
 | I6 | colour pairing: a glyph segment's colour equals `STATES[state].key`; `claude` appears only on segments tagged `here`; `suggestion` appears only on `running` glyphs and words; no segment has `backgroundColor` or `inverse` (extends `expectThemeOnly`, live.test.ts 2127) |
-| I7 | no segment tagged `role:'state'` or `role:'value'` (i.e. not free text: decision rationales and task subjects are `role:'prose'` and exempt) outside `kind:'detail'` contains a `STATUS_MAP` raw token (whole word, case-sensitive: `SHIP-AS-IS`, `FIX-THEN-SHIP`, `CONDITIONAL`, `READY`, `STOP`, `reviewed`, `not_needed`, …), `[exited with code`, or `/\brc \d/` |
-| I8 | formats: no `/\d %/`; every `$` amount matches `/\$[\d,]+\.\d\d/`; every duration matches the `dur` grammar (`/\b\d+h\d\dm\b/`, never `/\b\d+h\dm\b/`); no `/\d\*/` |
+| I7 | no segment tagged `role:'state'` or `role:'value'` (i.e. not free text: decision rationales and task subjects are `role:'prose'` and exempt) outside `kind:'detail'` contains a `STATUS_MAP` raw token (whole word, **case-insensitive**, matching the normalisation in `classify`: `SHIP-AS-IS`, `FIX-THEN-SHIP`, `CONDITIONAL`, `READY`, `STOP`, `reviewed`, `not_needed`, …), `[exited with code`, or `/\brc \d/` |
+| I8 | formats, one assertion per formatter kind of §3.5: money (`/\$[\d,]+\.\d\d/`), percent (no `/\d %/`), duration (`/\b\d+h\d\dm\b/`, never `/\b\d+h\dm\b/`), relative time, clock, size, sha (8 hex), `idTail` (a cut identifier starts with `…`), prose cut (ends with `…`), count (no `/\d\*/`); and every number in a non-prose, non-identifier segment must come from a segment the formatters tagged (`fmt:`), so a hand-typed `'12 MB'` is red |
 | I9 | (a) no tab builder emits `kind:'verdict'` (pure, over the matrix): only `pane.tsx` draws the header; (b) mounted: for each `PaneTab`, the rendered lines between the strip and the first body line are byte-identical for the same snapshot. Part (a) is what stops a tab drawing its own header; (b) alone would compare one function with itself |
 | I10 | no two consecutive `kind:'empty'` lines; `沒有資料` text appears only in `empty` lines |
-| I11 | freshness (`busyWorld`): the plan-review header is `◌` and folded; no `item` line with `●` belongs to a background task whose tail is an exit marker; 現況's 背景工作 section is `empty` + one `more` |
-| I12 | collapse (`busyWorld`, 76 cols): 派工 has ≤ 22 lines, 0 `kv` lines in the runs sections, exactly 5 finished `table` rows and 1 `more`; every run is one line at every width ≥ 40 |
-| I13 | mapping coverage: every token in the fixtures maps to a state that is not `unknown`; a planted token `WEIRD` renders `? 未知`, and `WEIRD` itself appears only in a `detail` line |
+| I11 | freshness (`busyWorld`, one fixture pair per row of §2.5, each at the threshold and just past it): a non-terminal plan review at 24 h -> `◌` and folded; a terminal plan review at 7 d -> one dim history line, no section; a non-converged code review at 24 h -> `◌`; a finished dispatch ended 24 h ago -> counted in the chip, not listed; a background task with an exit marker is never `●`; quiet 30 min -> `◌ 已停`; 現況's 背景工作 section is `empty` + one `more` |
+| I12 | collapse (`busyWorld`, 76 cols): 派工 has ≤ 22 lines, 0 `kv` lines in the runs sections, exactly 5 finished `table` rows and 1 `more`; every run is one line at every width ≥ 40. The same five-item cap with one `more` is asserted for every capped list (decisions, residue groups, finished tasks, ended background work) by I18 |
+| I13 | mapping coverage and precedence: every subject in the fixtures classifies to a state that is not `unknown`; a planted token `WEIRD` renders `? 未知`, and `WEIRD` itself appears only in a `detail` line; **pairwise conflict fixtures** pin each precedence row of §3.3: run `stall:true` + `rc 0` -> done, `stall:true` + `rc 1` -> failed, `rc 0` + `final_status failed` -> failed; round with findings + a running seat -> running, with a failed seat + findings -> failed; background exit marker 0 + quiet 6 h -> done; loadSource `dev` + behind 54 -> need_you, `dev` + behind 0 -> done, `cache:x` + behind 0 -> need_you; lowercase and padded tokens classify like upper-case ones |
 | I14 | the tab strip has exactly one active tab, no background (if Q1 is accepted), and each badge matches `^(▲|●\d+|⚑\d+)$` |
 | I15 | the `?` tab contains every `STATES` glyph followed by its word (the legend is generated) |
 | I16 | 現況 at 76 cols (`busyWorld`) has no 今日花費 or 帳號 section, and each summary row carries `goto` |
+| I17 | ownership (§2.6): every line with a `fact` whose `FACT_OWNER` is another tab is a `kv` or `item` with `goto`, carries no `role:'state'` segment other than its single derived state, and is the only line for that fact on the tab; 派工 emits no seat verdict word and no line of fact `review.*` without `goto` |
+| I18 | disclosure: in the default render no `detail` line and no `command` line is present, and no list shows more than 5 items (decisions, residue groups, finished runs, finished tasks, ended background; the seats of one round are counted separately); mounted: pressing an item or `more` toggle adds exactly its own `detail` / `command` / hidden items, pressing it again restores the default render |
+| I19 | navigation and folding (mounted): pressing every `goto` line of `busyWorld` calls `onTab` with its tab; pressing a `header` flips its fold; the default fold of every header equals `SECTION_DEFAULTS` (要你處理 never starts folded; stale 計畫審查 and 最近對話 start folded) |
+| I20 | vocabulary uniqueness and emphasis: no glyph character appears under two meanings across the state, structure and chart tables, and the ten `STATES` glyphs and words are pairwise distinct; no segment is both bold and dim; no line outside `header` and `verdict` has more than one bold value |
+| I21 | uniform lists: an `item` with `word:false` sits in a section whose `header` chip state equals the item's state; every other `item` shows its state word |
 
-Mutation controls (`references/evidence-discipline.md`). Each invariant gets one planted violation that must turn it red before the phase that introduces it lands: a builder pushing `{text:'▌ x', kind:'header'}` (I4), a raw `seg('x','suggestion')` on a done row (I6), `pct + ' %'` (I8), removing the freshness check (I11), restoring the block fallback (I12), and so on. Record each red/green pair in the phase evidence, as the existing P1W cases do in the test file's header.
+Mutation controls: every rule has its own named planted violation in the table of §6.4 (`references/evidence-discipline.md` §58). Record each red/green pair in the phase evidence, as the existing P1W cases do in the test file's header.
+
+### 6.4 Rule to mechanism to negative control (answers G1 R4)
+
+Every normative rule has an assertion and one named planted violation that must turn it red before its phase lands (`references/evidence-discipline.md` §58). Record each red/green pair in the phase evidence.
+
+| Rule | Mechanism | Negative control (planted violation, must go red) |
+|---|---|---|
+| Tab code builds lines only through components (§6.1) | I2, L5 | M1: `tabs.ts` returns `{kind:'kv', text:'x'}` |
+| Tab code never picks a state by hand (§3.3) | L7, I6 | M2: `item('done', …)` with a string literal; M3: a done row coloured `warning` |
+| Tab code never formats numbers itself (§3.5) | L6, I8 | M4: `pct + ' %'`; M5: a hand-typed `'12 MB'`; M6: `8h5m` |
+| No emoji-presentation glyph (§3.4 rule 1) | L3, I5 | M7: `GLYPHS.stalled = '⏸'`; M8: a line containing `⚙`; M9: a line containing `1` + U+FE0F + U+20E3. Control that must stay green: a line full of digits, `#` and `*` |
+| One glyph, one meaning (§3.4 rule 2) | I20 | M10: `●` also entered in the structure table |
+| Colour pairing and no background (§3.6) | I6 | M11: `seg('x','suggestion')` on a done row; M12: a `backgroundColor` on a tab |
+| Bold / dim discipline (§3.6) | I20 | M13: a bold + dim segment; M14: two bold values on one line |
+| Grid and widths (§3.1) | I1, I3 | M15: a 1-space indented note; M16: a line `cols + 1` wide |
+| Section header form, no `▌` (§4) | I4 | M17: `{text:'▌ x', kind:'header'}` |
+| One global header on every tab (§2.2) | I9 | M18: a tab builder emitting `kind:'verdict'` |
+| Raw tokens only in detail (§3.3) | I7, I13 | M19: `SHIP-AS-IS` in a `kv` value; M20: lowercase `ship-as-is` |
+| Total mapping and precedence (§3.3) | I13 | M21: swap the `run` precedence so `stall` beats `rc`; M22: planted token `WEIRD` shown raw outside detail |
+| Uniform-list state word (§4 `item`) | I21 | M23: `word:false` under a chip of another state |
+| Freshness, every row of §2.5 | I11 | M24: remove each freshness check in turn (six variants) |
+| Five-item cap and one-line items | I12, I18 | M25: restore the block fallback; M26: decisions list uncapped |
+| Details and commands hidden by default | I18 | M27: a `command` line in the default render |
+| `goto` switches tab | I19 | M28: a `goto` line whose press handler is missing |
+| Every section folds, with the declared default | I19 | M29: 要你處理 starting folded; M30: a header that ignores the press |
+| One home per fact (§2.6) | I17 | M31: 派工 emitting a seat verdict `item` without `goto` |
+| Empty states (§4) | I10 | M32: two consecutive `empty` lines |
+| Legend generated from the tables | I15 | M33: a state added to `STATES` but not rendered |
+| Active tab and badge form | I14 | M34: two active tabs |
+| 現況 hands off 用量 / 帳號 | I16 | M35: 帳號 section back in 現況 |
 
 ## 7. Migration phases
 
@@ -594,12 +667,12 @@ Each phase ships on its own. Each runs `bash mods/live/run-tests.sh` alone (600 
 
 | Phase | Ships | Tests that change |
 |---|---|---|
-| **P0 measure + tokens** | (a) Real-terminal measurement: draw a 1-cell ruler line of `cols` cells in the pane and compare `bodyColumns` with the visible width (diagnosis 17). Fix `paneWidth` if it is off. (b) Glyph check in the owner's terminal for `⊘ △ ○ ◌ ∅ ◦ › ━ ◐`, results written into `GLYPHS.verified`. (c) `ui.ts` with tokens, formatters and components; `PaneLine.kind` optional for now. (d) The `?` tab generated from `STATES` (I15). (e) Band glyph swap: `⏸`→`⊘`, `⚙N`→`●N`, hygiene `⚠`→`▲`. | `RICH_209` / `RICH_MID` / `RICH_SMALL` / `RICH_NARROW` and the band colour case (live.test.ts ~2085-2195) change glyphs; legend cases; new `ui-lint.test.js` with L3 only |
-| **P1 審查** | `STATUS_MAP` for seats, plan and code verdicts, gates and QC; freshness for plan and code review; decisions as one-line items with `more`/`detail`; QC chip `∅ 不需要` | review-tab cases asserting `● 進行中`, `▲ 未收斂`, raw verdict words, `沒有代你做過決定`; invariants I1-I8, I10, I13 enabled for 審查 |
-| **P2 派工** | `table` with column priorities; live vs finished sections; latest 5 + `more`; gates as items; footer as a note | the dispatch block-fallback cases are replaced; I12 enabled |
+| **P0 measure + tokens** | (a) Real-terminal measurement: draw a 1-cell ruler line of `cols` cells in the pane and compare `bodyColumns` with the visible width (diagnosis 17). Fix `paneWidth` if it is off. (b) Glyph check in the owner's terminal for `⊘ △ ○ ◌ ∅ ◦ › ━ ◐`, results written into `GLYPHS.verified`. (c) `ui.ts` with tokens, formatters, components, `mk` / `isMade` and the `classify*` functions (§3.3); `PaneLine.kind` optional and tab code not yet forced through `mk`. (d) The `?` tab generated from `STATES` (I15). (e) Band glyph swap: `⏸`→`⊘`, `⚙N`→`●N`, hygiene `⚠`→`▲`. | `RICH_209` / `RICH_MID` / `RICH_SMALL` / `RICH_NARROW` and the band colour case (live.test.ts ~2085-2195) change glyphs; legend cases; new `ui-lint.test.js` with L3 only; I5 (a), I20 and the M7-M10 controls |
+| **P1 審查** | `STATUS_MAP` and `classify*` for seats, rounds, gates and QC, with the pairwise conflict fixtures (I13); freshness for plan and code review; decisions as one-line items with `more`/`detail`; QC chip `∅ 不需要` | review-tab cases asserting `● 進行中`, `▲ 未收斂`, raw verdict words, `沒有代你做過決定`; invariants I1-I8, I10, I13 enabled for 審查 |
+| **P2 派工** | `table` with column priorities; live vs finished sections; latest 5 + `more`; the 審查關卡 section replaced by one pointer row to 審查 (§2.6); footer as a note | the dispatch block-fallback cases are replaced; I12 and I17 enabled |
 | **P3 用量** | meters (the tick line goes); account and quota move here; window labels; `pct` and `money` formatters; `SLOT_TAB.quota = 'spend'` | spend-tab cases (`117 %` becomes `117%`), the account/quota cases move from 現況 to 用量, and the band quota-press case now expects 用量 |
 | **P4 現況 + global header** | `buildSections` returns data; summary rows with `goto`; background freshness (exit marker, 30 min); tasks show unfinished only; the reason becomes an item; `verdictHeader` in `pane.tsx` on every tab | the Now-tab cases (W3a tasks, attention, foreman rows, the activity cases) are re-pinned to the new lines; I9, I11, I16 enabled |
-| **P5 殘留 + strip + lock** | 殘留 on components; the tab strip active mark (per Q1); `kind` becomes required in the type; `seg`/`row`/`rule`/`kv` removed from `model.ts`; L1, L2, L4 switched on; every invariant over every tab | `expectThemeOnly(tree, allowTabBackground)` loses the background allowance if Q1 is accepted; `isActiveTab` (live.test.ts ~2139) keys on the new mark |
+| **P5 殘留 + strip + lock** | 殘留 on components; the tab strip active mark (per Q1); `kind` becomes required in the type and every line must be `isMade`; `seg`/`row`/`rule`/`kv` removed from `model.ts`; L1, L2, L4, L5, L6, L7 switched on; every invariant over every tab | `expectThemeOnly(tree, allowTabBackground)` loses the background allowance if Q1 is accepted; `isActiveTab` (live.test.ts ~2139) keys on the new mark |
 
 
 The separate scanner defect (diagnosis 11: why `scanBackground` never ended these tasks) is a bug fix with its own red test, outside this plan. The freshness rule in P4 makes the pane right even while that bug exists.
@@ -623,3 +696,24 @@ The dispatch tree (the former P6 and §7.1: nested dispatch lineage across subag
 - Why `scanBackground` misses the end of these tasks (separate bug; P4 makes the pane right regardless).
 - The `━` under-segment staying aligned with a tab label in a wrapped strip (P5; fallback defined in Q1).
 - The quota numbers, reset times and residue row in the mockups are illustrative, not from the screenshots.
+
+## 10. G1 意見處理
+
+Source: the G1 plan review (seats `sol_deep`, STOP, 10 findings; `minimax_consult`, CONDITIONAL, 4 findings). Every finding has one row. The owner's five answers in §8 (active-tab mark, glyph swaps, account and quota to 用量, 完成待驗收 keeping `✓`, and the verdict mapping including plan-review `STOP` → `△ 待修`) are unchanged. No finding conflicted with them: R3 asks for a precedence rule and the mapping table keeps `STOP` → `findings`; R5's strip-glyph point is about the leading `›` chip, not Q1's active-tab mark.
+
+| # | Finding | Disposition | Where |
+|---|---|---|---|
+| 1 | sol R1: P6 is undiagnosed and outside the declared scope | adopted by moving it out: P6 and old §7.1 are now their own plan, with a pointer line here | [`2026-10-13-dispatch-tree.md`](2026-10-13-dispatch-tree.md) §1; §7 pointer line |
+| 2 | sol R2: review facts have two homes; no ownership matrix | adopted: field-level ownership table, projections defined as non-owning `goto` lines, 派工 gates become one pointer row, invariant I17 | §2.1, §2.6, §4 `kv`/`item`, §6.3 I17, §6.4 M31, P2 |
+| 3 | sol R3: exact-token `stateOf` cannot express overlapping states | modified: two-step `classify` + `STATUS_MAP` over structured subjects with an ordered precedence per domain, a `SEVERITY` total order for aggregates, case folding once, pairwise conflict fixtures; I7 made case-insensitive. The mockup of `dev` + behind now follows the loadSource rule | §3.3, §6.3 I7 and I13, §6.4 M19-M22, P1 |
+| 4 | sol R4a: the `Emoji`-property invariant matches digits, `#`, `*` | adopted with a changed repair: `Extended_Pictographic` (measured in Node) plus an explicit `EMOJI_BANNED` list, checked on the glyph table and glyph segments; U+FE0F and U+20E3 checked everywhere; digits stay legal | §3.4 rule 1, diagnosis 7, §6.2 L3, §6.3 I5, §6.4 M7-M9 |
+| 5 | sol R4b: `PaneLine.kind` does not stop hand-built lines | adopted: branded type, unexported `mk()`, module-private `WeakSet`, `isMade` in I2, static L5, L6 (formatter bypass), L7 (`stateOf` bypass) | §6.1, §6.2 L5-L7, §6.3 I2, §6.4 M1-M6 |
+| 6 | sol R4c: many rules have no failing mechanism; no named control per rule | adopted: five-item cap for every list (I18), details hidden by default (I18), `goto` presses (I19), section folds and defaults (I19), freshness for every §2.5 row (I11), glyph uniqueness and bold/dim (I20), one assertion per formatter kind (I8), and a rule-to-control table with 35 named controls | §6.3, §6.4 |
+| 7 | sol R5: mockups use components that do not exist, bare `▲`, a bespoke `▾` row, `▸` in the strip, and a tree | modified to the smallest addition: `kv {goto}` and a `bullet` component added, state word required except in uniform-state lists (I21), the opened decision keeps its bullet row, the strip chip drawn as `›`, `外掛來源` gets its chip; the tree line is not added here because P6 left | §4 `kv`/`item`/`bullet`, §5 mockups, §6.3 I21 |
+| 8 | sol R6: P6 is not shippable on its own; acceptance does not cover producers | adopted by moving it out; the new plan orders probe, producers, then renderer and gives each producer its own acceptance command | dispatch-tree plan §4 |
+| 9 | sol R7a: parent edges are guessed (subagent rails, loop-back, old records, fleet) | adopted by moving it out; the new plan requires a two-sided edge and groups everything else as untracked | dispatch-tree plan §3 |
+| 10 | sol R7b: a child's marker can be written into the parent's session state | adopted by moving it out; the new plan separates write identity from lineage and fails closed on a parent-equal id | dispatch-tree plan §6 |
+| 11 | minimax R5a: 120-column mockups draw a two-line header although §2.2 merges at ≥ 110 | not adopted as a defect: the one 120-column mockup that draws the header (現況) already shows the single merged line at 119 cells; the other tabs write `‹strip + header›`. Clarified in the §5 introduction so the abbreviation cannot be read as two lines | §5 introduction |
+| 12 | minimax R5b: no component produces a horizontal seat row | adopted, by changing the mockup (fewest additions): seats stack one per line at every width. The grid's column 14 entry, which this exposed as unused by any mockup, is removed; the nested seat starts at 12 | §3.1, §5.3 |
+| 13 | minimax R5c: identifier cut from the right in the 殘留 mockup | modified: the 14-cell worktree names fit, so they are shown whole; the rule is restated (a longer identifier is cut from the left; a command is never cut), and the expanded command is shown wrapped and complete | §5.5 |
+| 14 | minimax R7: `getSessionId()` inheritance is not on the unverified list | adopted by moving it out; the new plan names the check and gives it a phase | dispatch-tree plan §6, §7 |

@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0140 -->
+<!-- next-id: BL-0141 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1167,19 +1167,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/v2-35-5-qc-panel-follow-ups-managed-campaign-rail-debt-2026-08-31.md
 - **Context**: four Suggestion-tier items from the three-seat panels, all excluded from the ship with rationale: (1) whitespace re-indent churn in `src/campaign/cli.js` ~412-437/598 pollutes blame in the projection path — revert cosmetically; (2)…
 
-### context-budget falls back to inference after a long foreground tool call — live tick starves under the 120 s freshness cap
-- **Id**: BL-0091
-- **Status**: open
-- **Since**: 2026-09-05
-- **Origin**: self
-- **Problem**: 長時間前景指令（如 10 分鐘的測試）跑完後，上下文警告拿不到即時資料，退回用推測值，因為即時資料超過 120 秒就被視為過期。實際用時觀察到一次。 (draft)
-- **Impact**: 警告數字可能不準，只影響提示精確度，不會造成錯誤動作。 (draft)
-- **Trigger**: the next observed T2/T1 message without "(statusline)" on a host that has the live writer; or before shortening/lengthening `DEFAULT_MAX_AGE_MS`.
-- **Effort**: S
-- **Source**: v2.36.2 session live observation, 2026-09-05
-- **Pointer**: docs/backlog/context-budget-falls-back-to-inference-after-a-long-foreground-tool-call-live-ti.md
-- **Context**: observed 2026-09-05 in the v2.36.2 session: a 600 s foreground `hooks/tests/run.sh --parallel` was followed by a `context-budget` T2 at 155k with no "(statusline)" clause, while the live file 3 s later was fresh with…
-
 ### Stale `closed_findings` stamps on chain entries written by pre-v2.36.3 finalize have no repair path short of a new generation
 - **Id**: BL-0092
 - **Status**: open
@@ -1615,19 +1602,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
 - **Context**: detection shipped (scripts/lib/autocompact-window.js, T1 tip, dev-setup --check). Left: T2 wording when a window at or below T2 is set (guidance, needs ON/OFF eval); name it in the next release heading. Detail at Pointer.
 
-### autocompact-window resolver: managed path and DISABLE_* truthiness
-- **Id**: BL-0126
-- **Status**: open
-- **Since**: 2026-10-12
-- **Origin**: self
-- **Problem**: 自動壓縮視窗的判斷程式有兩個疑點：讀取系統層管理設定時沒有覆寫機制，測試無法隔離；另外把 DISABLE_AUTO_COMPACT=0 當成未設定，需對照實際程式確認。 (draft)
-- **Impact**: 可能在有管理設定的機器上誤判，影響很小；下次動到該程式時處理。 (draft)
-- **Trigger**: next touch of scripts/lib/autocompact-window.js
-- **Effort**: S
-- **Source**: hetero review g1 deferred findings, 2026-10-12
-- **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
-- **Context**: Hook and dev-setup paths read /etc/claude-code/managed-settings.json with no override (suites not isolated on a host that has one). truthyEnv treats DISABLE_AUTO_COMPACT=0 as unset; confirm against the binary.
-
 ### residue sweep records integration_ref HEAD after widening to the remote upstream
 - **Id**: BL-0127
 - **Status**: open
@@ -1783,3 +1757,16 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: lane Z review round 4, 2026-10-13
 - **Pointer**: none
 - **Context**: Uncovered shapes: case...esac &, xargs -P ... rail &, ionice wrapper, coproc, f(){...}; f &. Each needs a negative control in hooks/bash-launch-guard.test.js.
+
+### context-budget and depth0-gate tests leave temp dirs and read the real host config
+- **Id**: BL-0140
+- **Status**: open
+- **Since**: 2026-10-13
+- **Origin**: self
+- **Problem**: 幾個測試跑完不清自己的暫存目錄，記憶體暫存區已累積一萬三千多個；另外兩個測試會讀這台機器真實的設定檔。
+- **Impact**: 暫存目錄越積越多佔 inode；讀真實設定讓測試結果隨主機設定變動，換台機器可能紅。目前只讀不寫。
+- **Trigger**: next touch of these test files, or a test that turns red only on one host
+- **Effort**: S
+- **Source**: lane L review round 2 and lane Z review round 7, 2026-10-13
+- **Pointer**: none
+- **Context**: context-budget node tests (/dev/shm), hooks/depth0-delegate-gate.test.js (d0gate-home-*), context-budget-window-memory.test.sh, live-dir-xdg-inference.test.sh. Fix: cleanup in finally plus HOME/XDG isolation.

@@ -303,10 +303,13 @@ function launchAdvice(shape, rail) {
   if (kind === 'stage') {
     parts.push('Long job: pass `--ledger <path> --run-id <id> --stage <name>` (all three — without them no .exit file '
       + 'is written) and in the SAME command run `node scripts/wait-dispatch-results.js --ledger <path> --expect '
-      + '<id>.<name>`.');
+      + '<id>.<name>` — run that whole command with `run_in_background: true` (the waiter waits up to 3600 s by '
+      + "default, past the Bash tool's 600 s foreground limit).");
   } else if (kind === 'fixed') {
     parts.push('Long job: pass `--ledger <path> --run-id <id>` (the stage is fixed) and in the SAME command run '
-      + '`node scripts/wait-dispatch-results.js --ledger <path> --expect <id>.foreman`.');
+      + '`node scripts/wait-dispatch-results.js --ledger <path> --expect <id>.foreman` — run that whole command '
+      + "with `run_in_background: true` (the waiter waits up to 3600 s by default, past the Bash tool's 600 s "
+      + 'foreground limit).');
   } else {
     parts.push(`dispatch-${rail || '…'} never writes the .exit file wait-dispatch-results.js waits for, so only the `
       + 'option(s) above work for it.');

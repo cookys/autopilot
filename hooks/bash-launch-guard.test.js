@@ -201,6 +201,7 @@ test('message: `&` + ledger rail offers run_in_background, `& wait` and the ledg
   assert.match(r.reason, /put `wait` after it/);
   assert.match(r.reason, /--ledger.*--run-id.*--stage/);
   assert.match(r.reason, /wait-dispatch-results\.js --ledger <path> --expect/);
+  assert.match(r.reason, /whole command with `run_in_background: true`/); // the waiter outlasts the 600 s foreground limit
 });
 test('message: `&` + non-ledger rail offers run_in_background and `& wait`, no ledger recipe', () => {
   const r = run('nohup scripts/dispatch-consult.sh x &');
@@ -223,6 +224,7 @@ test('message: `setsid -f` + non-ledger rail offers run_in_background only', () 
 test('message: foreman has a fixed stage', () => {
   const r = run('nohup scripts/dispatch-foreman.sh x &');
   assert.match(r.reason, /--expect <id>\.foreman/);
+  assert.match(r.reason, /whole command\s+with `run_in_background: true`|whole command with `run_in_background: true`/);
   assert.doesNotMatch(r.reason, /--stage/);
 });
 

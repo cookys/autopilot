@@ -118,6 +118,10 @@ not drift.
 
 Autopilot is standalone-capable. When `superpowers` is installed, orchestrators (`ceo-agent`, `finish-flow`, `quality-pipeline`, `think-tank*`, `dev-flow`) consult `.claude/dispatch-config.md` to decide which methodology / reviewer / parallel dispatcher to delegate to. Defaults in [`project-config-template/dispatch-config.md`](project-config-template/dispatch-config.md). Per-scenario UX in [`docs/coexistence.md`](docs/coexistence.md).
 
+## Mission graph verification (campaign convention)
+
+In a Mission graph, each node's `verification_commands` hold only fast, fixed checks — never `bash hooks/tests/run.sh`. The whole suite runs once, alone, on this host before a campaign merges into `develop`; red means no merge. Sealed graphs keep their existing chain ([BL-0134](docs/BACKLOG.md)); details in `docs/backlog/hooks-tests-run-sh-is-red-on-develop-sealed-campaign-verify-cmd-is-unsatisfiable.md`.
+
 ## Where context lives
 
 | Topic | File |

@@ -68,7 +68,7 @@ const ALWAYS_RUN = [
   ['hooks/tests/check-canonical-invariants.test.sh', 'cross-file invariants over the real tree'],
   ['hooks/tests/p6d-gates-repair-ladder.test.sh', 'grep -rln repair_lock over all of src/'],
   ['hooks/tests/qualify-scorecard-vocabulary.test.sh', 'grep -rl a model-id charset over scripts/ and src/'],
-  ['hooks/tests/skill-onoff-stage-graph.test.sh', 'grep -rl eligible_max over all of scripts/'],
+  ['hooks/tests/skill-onoff-stage-graph.test.sh', 'greps all of scripts/ for the probe ladder field (only probe-unknown.js may print it)'],
   ['hooks/tests/skill-count-metadata.test.sh', 'counts the skills/ directories against the documented count (a new skill dir changes it)'],
   ['hooks/tests/qualify-recipe-credential-staging.test.sh', 'greps every docs/plans/evidence/*/administration/*/run.sh for staging variables'],
 ];

@@ -261,7 +261,11 @@ const CLASSIFY: { [D in Domain]: (s: Subject[D]) => string } = {
     if (ids.includes('failed')) return 'failed'
     if (ids.includes('findings')) return 'findings'
     if (r.converged || (ids.length > 0 && ids.every(i => i === 'done'))) return 'done'
-    return 'open' // seats not started / stopped / unknown and nothing converged (a gap in §3.3, filled as `stopped`)
+    // §3.3 has no row for a round whose seats are partly `unknown` and nothing is running, failed or to fix (a gap, decided in P1): the round is `unknown`, not
+    // `stopped`. `stopped` means "no verdict, or stale"; `unknown` means "a token missing from the mapping", and a round holding one is the second. worst() would
+    // rank it last and show `done`, which hides it again.
+    if (ids.includes('unknown')) return 'unknown'
+    return 'open' // no seats published: the round is not moving and has no verdict (`stopped`)
   },
   gate: g => (norm(g).startsWith('NEEDS') ? 'NEEDS' : norm(g)),
   qc: q => norm(q),
@@ -286,10 +290,10 @@ export const STATUS_MAP: { [D in Domain]: Record<string, StateId> } = {
   run: { failed: 'failed', done: 'done', weird: 'unknown', stall: 'stalled', running: 'running', stopped: 'stopped' },
   seat: {
     'code:SHIP-AS-IS': 'done', 'code:FIX-THEN-SHIP': 'findings', 'code:BLOCK': 'failed', 'code:REJECT': 'failed',
-    'plan:READY': 'done', 'plan:APPROVE': 'done', 'plan:PASS': 'done', 'plan:CONDITIONAL': 'findings', 'plan:STOP': 'findings', 'plan:REJECT': 'failed',
+    'plan:READY': 'done', 'plan:APPROVE': 'done', 'plan:PASS': 'done', 'plan:CONDITIONAL': 'findings', 'plan:STOP': 'findings', 'plan:REJECT': 'failed', 'plan:BLOCK': 'failed', // Q5: REJECT and BLOCK are both ✗ 失敗, in a plan review as in a code review
     'status:RUNNING': 'running', 'status:REVIEWED': 'done',
   },
-  round: { stale: 'stopped', running: 'running', failed: 'failed', findings: 'findings', done: 'done', open: 'stopped' },
+  round: { stale: 'stopped', running: 'running', failed: 'failed', findings: 'findings', done: 'done', unknown: 'unknown', open: 'stopped' },
   gate: { PASS: 'done', OK: 'done', ACCEPT: 'done', APPROVED: 'done', CONVERGED: 'done', OPEN: 'need_you', OWED: 'need_you', NEEDS: 'need_you', FAIL: 'failed', REJECT: 'failed', BLOCK: 'failed' },
   qc: { OK: 'done', OWED: 'need_you', NOT_NEEDED: 'skipped', UNKNOWN: 'unknown' },
   background: { exitN: 'failed', exit0: 'done', fresh: 'running', quiet: 'stopped' },
@@ -419,9 +423,25 @@ export const blank = (): PaneLine => mk({ kind: 'blank', text: '' })
 // `▾ Title  chip ────`: foldable section header (the toggle id is the section id); the rule runs to cols - 1
 export function header(u: Ctx, title: string, fold: { id: string; open: boolean }, o: { right?: Frag; fact?: FactId } = {}): PaneLine {
   if (o.right !== undefined && o.fact === undefined) throw new Error('header: a chip needs a fact')
-  const segs: Seg[] = [sg(fold.open ? GLYPHS.structure.open : GLYPHS.structure.folded, { color: 'subtle', role: 'glyph' }), sg(' '), sg(title, { bold: true, role: 'prose' })]
-  if (o.right !== undefined) segs.push(sg('  '), ...o.right.segs)
-  const fill = u.cols - 1 - displayWidth(segs.map(s => s.text).join('')) - 1
+  const lead: Seg = sg(fold.open ? GLYPHS.structure.open : GLYPHS.structure.folded, { color: 'subtle', role: 'glyph' })
+  const chip: Seg[] = o.right === undefined ? [] : [...o.right.segs]
+  const titleSeg: Seg = sg(title, { bold: true, role: 'prose' })
+  const widthOf = (): number => displayWidth([lead, sg(' '), titleSeg, ...(chip.length > 0 ? [sg('  '), ...chip] : [])].map(s => s.text).join(''))
+  // the line is `cols - 1` wide with a rule of at least 3 cells (I4): a title or chip too long is cut (§3.1: no line wider than cols). The title goes first, down to
+  // 6 cells; then the last chip segment (the dim meta) takes the rest.
+  const room = u.cols - 1 - 1 - 3 // one space and a 3-cell rule
+  let over = widthOf() - room
+  if (over > 0) {
+    titleSeg.text = cutProse(title, Math.max(Math.min(displayWidth(title), 6), displayWidth(title) - over))
+    over = widthOf() - room
+  }
+  if (over > 0 && chip.length > 0) {
+    const last = chip.length - 1
+    chip[last] = { ...chip[last], text: cutProse(chip[last].text, Math.max(1, displayWidth(chip[last].text) - over)) }
+  }
+  const segs: Seg[] = [lead, sg(' '), titleSeg]
+  if (chip.length > 0) segs.push(sg('  '), ...chip)
+  const fill = u.cols - 1 - widthOf() - 1
   if (fill >= 3) segs.push(sg(' ' + GLYPHS.structure.rule.repeat(fill), { color: 'subtle', role: 'rule' }))
   return lineOf('header', segs, { toggle: fold.id, ...(o.fact === undefined ? {} : { fact: o.fact }) })
 }
@@ -441,7 +461,7 @@ export function item(u: Ctx, s: Stated, body: string, meta: string | undefined, 
   const at = o.at ?? 0
   const segs: Seg[] = []
   if (at > 0) segs.push(sg(' '.repeat(at)))
-  segs.push(...stateLead(u, s, { word: o.word, wordW: o.wordW }).segs, sg(' '))
+  segs.push(...stateLead(u, s, { word: o.word, wordW: o.wordW }).segs, sg(o.word === false ? ' ' : '  ')) // §5 mockups: two cells after the state word, one after a bare glyph
   segs.push(sg(body, { role: 'prose', ...(s.id === 'need_you' ? { bold: true } : {}), ...(s.id === 'stopped' ? { dim: true } : {}) }))
   if (meta !== undefined && meta !== '') segs.push(dim(' · ' + meta, { role: 'value' }))
   return withToggle(u, 'item', segs, o)
@@ -454,18 +474,25 @@ export function bullet(u: Ctx, body: string, meta: string | undefined, o: { fact
 }
 function withToggle(u: Ctx, kind: 'item' | 'bullet', segs: Seg[], o: { fact: FactId; goto?: PaneTab; toggle?: { id: string; open: boolean } }): PaneLine {
   const extra: Partial<PaneLine> = { fact: o.fact, ...(o.goto === undefined ? {} : { goto: o.goto }) }
-  if (o.toggle !== undefined || o.goto !== undefined) {
-    const mark = o.toggle !== undefined ? (o.toggle.open ? GLYPHS.structure.open : GLYPHS.structure.folded) : tabName(o.goto as PaneTab, u)
-    const overflow = displayWidth(segs.map(s => s.text).join('')) + 1 + displayWidth(mark) - (u.cols - 1)
-    if (overflow > 0) { // too long: cut the body (the first prose segment) so the mark still fits
-      const body = segs.findIndex(s => s.role === 'prose')
-      if (body >= 0) segs[body] = { ...segs[body], text: cutProse(segs[body].text, Math.max(1, displayWidth(segs[body].text) - overflow)) }
-    }
-    const gap = Math.max(1, u.cols - 1 - displayWidth(segs.map(s => s.text).join('')) - displayWidth(mark))
-    segs.push(sg(' '.repeat(gap)), dim(mark, { role: 'glyph' }))
+  const widthOf = (): number => displayWidth(segs.map(s => s.text).join(''))
+  const mark = o.toggle !== undefined ? (o.toggle.open ? GLYPHS.structure.open : GLYPHS.structure.folded) : o.goto !== undefined ? tabName(o.goto, u) : ''
+  fitSegs(segs, u.cols - 1 - (mark === '' ? 0 : 1 + displayWidth(mark))) // one item is one line (§2.4): too long = the body is cut so the line (and its mark) still fits
+  if (mark !== '') {
+    segs.push(sg(' '.repeat(Math.max(1, u.cols - 1 - widthOf() - displayWidth(mark)))), dim(mark, { role: 'glyph' }))
     if (o.toggle !== undefined) extra.toggle = o.toggle.id
   }
   return lineOf(kind, segs, extra)
+}
+// cut `segs` (in place) so their text is at most `limit` cells: the body (first prose segment) down to 8 cells at most, then the dim meta, then the body further
+function fitSegs(segs: Seg[], limit: number): void {
+  const widthOf = (): number => displayWidth(segs.map(s => s.text).join(''))
+  const cutBy = (i: number, by: number): void => { segs[i] = { ...segs[i], text: cutProse(segs[i].text, Math.max(1, displayWidth(segs[i].text) - by)) } }
+  if (widthOf() <= limit) return
+  const b = segs.findIndex(s => s.role === 'prose')
+  const m = b < 0 ? -1 : segs.findIndex((s, i) => i > b && s.dim === true && s.role === 'value')
+  if (b >= 0) cutBy(b, Math.min(widthOf() - limit, Math.max(0, displayWidth(segs[b].text) - 8)))
+  if (widthOf() > limit && m >= 0) cutBy(m, widthOf() - limit)
+  if (widthOf() > limit && b >= 0) cutBy(b, widthOf() - limit)
 }
 const tabName = (tab: PaneTab, u: Ctx): string => u.t('tab.' + tab) + ' ' + GLYPHS.structure.goto
 
@@ -603,26 +630,33 @@ export type RowSpec = {
   group: string; ts: number; state: Stated; fact: FactId; body: string; meta?: string
   groupBody?: (n: number) => string // the text of a folded group of n rows
   kind?: 'item' | 'bullet'; toggle?: string; goto?: PaneTab; word?: boolean
+  at?: 0 | 12 // the column the row starts at (a seat `item` under the valueless `席位` key sits at 12)
+  children?: readonly PaneLine[] // the detail / command lines that follow the row while its toggle is open
+  bodyOpen?: string; metaOpen?: string // the row's own text while its toggle is open (an opened decision reads `id` + `可逆 · writer`)
 }
-export function list(u: Ctx, id: string, noun: string, rows: readonly RowSpec[], o: { cap?: number } = {}): PaneLine[] {
+// `keepOrder`: the rows stay in the order given (seats are a panel in seat order, not a queue; §5.3 draws s0, s1, s2, s3). Grouping and the cap still apply.
+export function list(u: Ctx, id: string, noun: string, rows: readonly RowSpec[], o: { cap?: number; keepOrder?: boolean } = {}): PaneLine[] {
   const cap = o.cap ?? 5
   const groups = new Map<string, { first: RowSpec; n: number; state: Stated }>()
-  for (const r of [...rows].sort((a, b) => b.ts - a.ts)) {
+  for (const r of o.keepOrder === true ? rows : [...rows].sort((a, b) => b.ts - a.ts)) {
     const g = groups.get(r.group)
     if (g === undefined) groups.set(r.group, { first: r, n: 1, state: r.state })
     else { g.n++; g.state = worst([g.state, r.state]) }
   }
-  const ordered = [...groups.values()].sort((a, b) => SEVERITY.indexOf(a.state.id) - SEVERITY.indexOf(b.state.id) || b.first.ts - a.first.ts)
+  const ordered = o.keepOrder === true ? [...groups.values()] : [...groups.values()].sort((a, b) => SEVERITY.indexOf(a.state.id) - SEVERITY.indexOf(b.state.id) || b.first.ts - a.first.ts)
   const expanded = u.expanded?.has('more:' + id) === true
   const shown = expanded ? ordered : ordered.slice(0, cap)
   const wordW = Math.max(0, ...shown.map(g => displayWidth(u.t('ui.state.' + g.state.id))))
-  const out = shown.map(g => {
+  const out = shown.flatMap(g => {
     const r = g.first
-    const body = g.n > 1 && r.groupBody !== undefined ? r.groupBody(g.n) : r.body
-    const tog = r.toggle === undefined ? undefined : { id: r.toggle, open: u.expanded?.has(r.toggle) === true }
-    return r.kind === 'bullet'
-      ? bullet(u, body, r.meta, { fact: r.fact, ...(tog === undefined ? {} : { toggle: tog }) })
-      : item(u, g.state, body, r.meta, { fact: r.fact, wordW, ...(r.word === undefined ? {} : { word: r.word }), ...(tog === undefined ? {} : { toggle: tog }), ...(r.goto === undefined ? {} : { goto: r.goto }) })
+    const isOpen = r.toggle !== undefined && u.expanded?.has(r.toggle) === true
+    const body = isOpen && r.bodyOpen !== undefined ? r.bodyOpen : g.n > 1 && r.groupBody !== undefined ? r.groupBody(g.n) : r.body
+    const meta = isOpen && r.bodyOpen !== undefined ? r.metaOpen : r.meta
+    const tog = r.toggle === undefined ? undefined : { id: r.toggle, open: isOpen }
+    const line = r.kind === 'bullet'
+      ? bullet(u, body, meta, { fact: r.fact, ...(tog === undefined ? {} : { toggle: tog }) })
+      : item(u, g.state, body, meta, { fact: r.fact, wordW, ...(r.at === undefined ? {} : { at: r.at }), ...(r.word === undefined ? {} : { word: r.word }), ...(tog === undefined ? {} : { toggle: tog }), ...(r.goto === undefined ? {} : { goto: r.goto }) })
+    return isOpen && r.children !== undefined ? [line, ...r.children] : [line]
   })
   if (ordered.length > cap) out.push(more(u, ordered.length - cap, noun, 'more:' + id, expanded))
   return out
@@ -658,4 +692,32 @@ export function verdictHeader(u: Ctx, v: { state: Stated; word: string; project:
   const mw = displayWidth(metrics.map(s => s.text).join(''))
   if (u.cols >= 110 && lw + 4 + mw <= u.cols - 1) return [lineOf('verdict', [...left, sg(' '.repeat(u.cols - 1 - lw - mw)), ...metrics])]
   return [lineOf('verdict', left), lineOf('verdict', metrics)]
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// P1 additions (the review tab): small helpers other tabs may reuse
+
+// a header chip: the state glyph and word, then optional dim meta after ` · ` (`● 執行中 · 1 席已有發現`)
+export function chip(u: Ctx, s: Stated, meta?: string, fmt?: FmtKind): Frag {
+  const segs: Seg[] = [...stateLead(u, s).segs]
+  if (meta !== undefined && meta !== '') segs.push(dim(' · ' + meta, { role: 'value', ...(fmt === undefined ? {} : { fmt }) })) // a number in the meta is tagged with the formatter that made it (I8)
+  return frag(segs)
+}
+// a count of cells as a bar: `on` filled (success; with `here`, the last filled cell is the current one, `claude`, tagged `here`), the rest inactive
+export function barValue(total: number, on: number, o: { here?: boolean } = {}): Frag {
+  const k = Math.max(0, Math.min(total, on))
+  const done = o.here === true ? Math.max(0, k - 1) : k
+  const segs: Seg[] = []
+  if (done > 0) segs.push(sg(GLYPHS.chart.meterOn.repeat(done), { color: 'success', role: 'glyph' }))
+  if (o.here === true && k > 0) segs.push(sg(GLYPHS.chart.meterOn, { color: 'claude', here: true, role: 'glyph' }))
+  if (total - k > 0) segs.push(sg(GLYPHS.chart.meterOff.repeat(total - k), { color: 'inactive', role: 'glyph' }))
+  return frag(segs)
+}
+// whether a foldable section is open. `folded` holds the sections the person TOGGLED away from their default (register.ts flips membership on every press),
+// so a section that starts folded (`defaultFolded`) is open exactly when it was toggled.
+export const sectionOpen = (folded: ReadonlySet<string> | undefined, id: string, defaultFolded = false): boolean => defaultFolded === (folded?.has(id) === true)
+// a wrapped piece of a made line keeps the brand and the line's identity (kind, fact, goto, hang); a hand-made line stays unbranded
+export function carry(from: PaneLine, piece: PaneLine): PaneLine {
+  if (!MADE.has(from)) return piece
+  return mk({ ...piece, kind: from.kind as LineKind, ...(from.fact === undefined ? {} : { fact: from.fact }), ...(from.goto === undefined ? {} : { goto: from.goto }), ...(from.hang === undefined ? {} : { hang: from.hang }) })
 }

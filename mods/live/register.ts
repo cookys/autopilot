@@ -44,7 +44,7 @@ import {
   acceptanceToast, autoResidueCount, makeRecentTracker, bandLine1, bandView, buildSections, checkEnvelope, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
   headerText, hhmm, projectName as projectNameOf, isKey, isSectionId, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
   readForeman, readLoadSource, readSpendHistory, hourlySpend, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
-  slotTab, slotUnfolds, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, MAX_ACTIVITY_ROWS, readQuota, readAccount,
+  slotTab, slotUnfolds, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, readQuota, readAccount,
 } from './model'
 import type { AccountView, ActivityItem, Counts, DecisionsView, RecentGroup, EnvelopeCheck, JobModel, Json, LiveSnapshot, Manifest, PaneTab, SlotId, QuotaWindow, Sources } from './model'
 
@@ -397,8 +397,8 @@ async function buildSnapshot($: EngineInterface, nowMs: number, t: T): Promise<{
   const band = bandView(env, jobModel, scope.key, nowMs, src, t)
   return {
     snap: plain('ok', bandLine1(band) + (band.reason === null ? '' : '\n' + band.reason), {
-      ...common, band, header: headerText(env, sid, ctx, t), decision: jobModel === null || !jobModel.needs_decision ? null : jobModel.decision,
-      sections: buildSections(src, foreman, identity, nowMs, t),
+      ...common, band, header: headerText(env, sid, ctx, t), metrics: { ctx }, decision: jobModel === null || !jobModel.needs_decision ? null : jobModel.decision,
+      sections: buildSections(src, foreman),
       review,
       detail: {
         counts: countsOf(env), stalled: stalledCount(env, foreman, nowMs),
@@ -437,10 +437,10 @@ async function readActivity($: EngineInterface, msgs: unknown, nowMs: number, pr
   else {
     answered = true
     const seen = new Set<string>()
-    for (const [i, task] of scanBackground(msgs as never).entries()) {
+    for (const task of scanBackground(msgs as never)) {
       let tail = task.lastEvent
       let quietMs: number | null = null
-      if (task.output !== null && i < MAX_ACTIVITY_ROWS) {
+      if (task.output !== null) {
         seen.add(task.output)
         try {
           const st = await $.fs.stat(task.output)
@@ -635,5 +635,5 @@ export const register: Register = on => {
     return Band($.ui.resolve(e), snapshot, e.props.bodyColumns, info, tr, slot)
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE_ID }, ($, e) => Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { paneTab = t; $.ui.invalidate('ui.render'); void ringToNext($) }, tr, e.props.bodyColumns, () => { paneTab = nextTab(paneTab); $.ui.invalidate('ui.render') }, expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') }, folded))
+  on('ui.render', { component: 'Pane', requestId: PANE_ID }, ($, e) => Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { paneTab = t; $.ui.invalidate('ui.render'); void ringToNext($) }, tr, e.props.bodyColumns, () => { paneTab = nextTab(paneTab); $.ui.invalidate('ui.render') }, expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') }, folded, e.props.scroll ?? null))
 }

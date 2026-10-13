@@ -45,14 +45,14 @@ export type StateId = (typeof STATE_IDS)[number]
 // terminal (P0 b). `fallback` is the next candidate when a glyph fails that check (§8 Q2); it is linted like every other glyph.
 export const GLYPHS = {
   state: { need_you: '▲', failed: '✗', stalled: '⊘', findings: '△', running: '●', done: '✓', pending: '○', stopped: '◌', skipped: '∅', unknown: '?' },
-  structure: { open: '▾', folded: '▸', rule: '─', detail: '└', command: '$', goto: '›', bullet: '◦', empty: '—', tabMark: '━', residue: '⚑' },
+  structure: { open: '▾', folded: '▸', rule: '─', detail: '└', command: '$', goto: '›', bullet: '◦', empty: '—', tabMark: '━', residue: '⚑', overflow: '↓' },
   chart: { meterOn: '▰', meterOff: '▱', here: '◐' },
   spark: ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'],
   fallback: { stalled: '◍', findings: '!' },
-  verified: { '⊘': '2026-10-13 owner-ssh-tmux', '△': '2026-10-13 owner-ssh-tmux', '○': '2026-10-13 owner-ssh-tmux', '◌': '2026-10-13 owner-ssh-tmux', '∅': '2026-10-13 owner-ssh-tmux', '◦': '2026-10-13 owner-ssh-tmux', '›': '2026-10-13 owner-ssh-tmux', '━': '2026-10-13 owner-ssh-tmux', '◐': '2026-10-13 owner-ssh-tmux', '◍': '2026-10-13 owner-ssh-tmux' } as Record<string, string>,
+  verified: { '⊘': '2026-10-13 owner-ssh-tmux', '△': '2026-10-13 owner-ssh-tmux', '○': '2026-10-13 owner-ssh-tmux', '◌': '2026-10-13 owner-ssh-tmux', '∅': '2026-10-13 owner-ssh-tmux', '◦': '2026-10-13 owner-ssh-tmux', '›': '2026-10-13 owner-ssh-tmux', '━': '2026-10-13 owner-ssh-tmux', '◐': '2026-10-13 owner-ssh-tmux', '◍': '2026-10-13 owner-ssh-tmux', '↓': 'pending-owner' } as Record<string, string>,
 }
 // glyphs that are new to the pane's vocabulary: each must carry a `verified` entry (L3)
-export const NEW_GLYPHS = ['⊘', '△', '○', '◌', '∅', '◦', '›', '━', '◐', '◍'] as const
+export const NEW_GLYPHS = ['⊘', '△', '○', '◌', '∅', '◦', '›', '━', '◐', '◍', '↓'] as const
 // Extended_Pictographic glyphs a terminal may draw as an emoji box (§3.4); repeated so the rule survives a Unicode update
 export const EMOJI_BANNED = ['⏸', '⚙', '⚠', '✔', '✖', '▶', '⏹', '⏺', '▪', '▫'] as const
 
@@ -320,7 +320,7 @@ export function worst(states: readonly Stated[]): Stated {
 // ---------------------------------------------------------------------------------------------------------------------------------------------
 // fact ownership (§2.6): every fact has one home tab; any other tab shows it only as a projection (a line with `goto`)
 
-export type Owner = PaneTab | 'header'
+export type Owner = PaneTab | 'header' | 'pane'
 export const FACT_OWNER = {
   'dispatch.runs': 'dispatch', 'dispatch.counts': 'dispatch',
   'review.round': 'review', 'review.seats': 'review', 'review.qc': 'review', 'review.gates': 'review', 'review.plan': 'review',
@@ -331,6 +331,7 @@ export const FACT_OWNER = {
   'usage.window_other': 'spend', // any other rate-limit window the host reports (spend_limit, an unknown kind)
   'residue.groups': 'hygiene', 'residue.cleanup': 'hygiene', 'residue.source': 'hygiene',
   'header.verdict': 'header',
+  'pane.overflow': 'pane', // pane.tsx's own scroll state, not a fact of the session: the header's last metrics line says how many rows lie below
 } as const satisfies Record<string, Owner>
 export type FactId = keyof typeof FACT_OWNER
 
@@ -409,9 +410,9 @@ export function stateBadge(s: BadgeStated, n: number | undefined, fact: FactId):
 }
 export const residueBadge = (n: number, fact: FactId): Frag => frag([sg(GLYPHS.structure.residue + n, { color: 'warning', role: 'glyph' })], fact)
 // a header's spend figures: one fragment per fact, no goto, typed as a projection of the 用量 facts
-export function headerProjection(fact: FactId, s: string): Frag {
+export function headerProjection(fact: FactId, s: string, label?: string): Frag {
   if (FACT_OWNER[fact] !== 'spend') throw new Error('headerProjection: ' + fact + ' is not a spend fact')
-  return frag([sg(s, { role: 'value', fmt: 'money', dim: true })], fact)
+  return frag([...(label === undefined ? [] : [sg(label + ' ', { role: 'prose', dim: true })]), sg(s, { role: 'value', fmt: 'money', dim: true })], fact)
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------
@@ -501,8 +502,9 @@ const tabName = (tab: PaneTab, u: Ctx): string => u.t('tab.' + tab) + ' ' + GLYP
 // an empty state: `—` at column 0, dim reason at 2. At most one per section (I10).
 export const empty = (reason: string, fact: FactId): PaneLine => lineOf('empty', [dim(GLYPHS.structure.empty, { role: 'glyph' }), dim(' ' + reason, { role: 'prose' })], { fact })
 // `  ▸ 還有 27 筆已完成` (open: `  ▾ 收起`), a toggle at column 2
-export function more(u: Ctx, n: number, noun: string, id: string, open = false): PaneLine {
-  const body = open ? u.t('ui.collapse') : u.t('ui.more', { n, noun })
+// `bare`: the whole group sits behind the toggle (`▸ 16 項已結束`), so there is no `還有` (it is not "more of a list")
+export function more(u: Ctx, n: number, noun: string, id: string, open = false, bare = false): PaneLine {
+  const body = open ? u.t('ui.collapse') : u.t(bare ? 'ui.more_all' : 'ui.more', { n, noun })
   return lineOf('more', [sg('  '), dim(open ? GLYPHS.structure.open : GLYPHS.structure.folded, { role: 'glyph' }), dim(' ' + body, { role: 'prose' })], { toggle: id })
 }
 
@@ -687,9 +689,9 @@ export function verdictHeader(u: Ctx, v: { state: Stated; word: string; project:
   const st = STATES[v.state.id]
   const left: Seg[] = [
     sg(st.glyph, { color: st.key, bold: true, role: 'glyph' }), sg(' '), sg(v.word, { color: st.key, bold: true, role: 'state' }), sg('  '),
-    sg(v.project, { bold: true, role: 'value' }), dim(' · ' + v.elapsed, { role: 'value' }),
+    sg(v.project, { bold: true, role: 'value' }), ...(v.elapsed === '' ? [] : [dim(' · ' + v.elapsed, { role: 'value' })]), // no known start: no elapsed segment
   ]
-  const metrics: Seg[] = v.metrics.flatMap((m, i) => [...(i > 0 ? [dim(' · ')] : []), ...m.segs.map(s => ({ ...s, dim: true }))])
+  const metrics: Seg[] = v.metrics.flatMap((m, i) => [...(i > 0 ? [dim(' · ')] : []), ...m.segs.map(s => ({ ...s, dim: true, ...(m.fact === undefined ? {} : { fact: m.fact }) }))])
   const lw = displayWidth(left.map(s => s.text).join(''))
   const mw = displayWidth(metrics.map(s => s.text).join(''))
   if (u.cols >= 110 && lw + 4 + mw <= u.cols - 1) return [lineOf('verdict', [...left, sg(' '.repeat(u.cols - 1 - lw - mw)), ...metrics])]

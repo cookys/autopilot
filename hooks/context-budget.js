@@ -150,6 +150,16 @@ function maybeWriteLive(base, sid, tpath, st, fresh) {
   writeLiveRecord(base, record);
 }
 
+// The context window of THIS session's status-line live file regardless of its age (readLive
+// applies the 120 s cap; a window does not go stale). Null when the file is absent, malformed,
+// not schema 1, authored by this hook, or carries no positive window.
+function readStaleWindow(base, sid) {
+  const rec = readLive(base, sid, { kind: 'main', maxAgeMs: Number.MAX_SAFE_INTEGER });
+  if (!rec || rec.writer === WRITER_ID || !rec.context_window) return null;
+  const w = rec.context_window.context_window_size;
+  return Number.isFinite(w) && w > 0 ? w : null;
+}
+
 function loadState(file) {
   try {
     const st = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -309,6 +319,14 @@ function emitT1(sid, message) {
       // Window inference (v2.32.56): scale the 200K-calibrated defaults to the
       // window implied by the largest context this session has actually reached.
       // Applied to the mustParse gate too, so the cheap path uses the same tiers.
+      // BL-0091: a hook with no memory yet (fresh state, first call after a long tool call)
+      // still has this session's own stale status-line file on disk. Its window never changes,
+      // so adopt it: only the freshness of the token total is in doubt, and that comes from
+      // the transcript on this branch.
+      if (!(Number.isFinite(st.knownWindow) && st.knownWindow > 0)) {
+        const staleWindow = readStaleWindow(live.base, sid);
+        if (staleWindow !== null) st.knownWindow = staleWindow;
+      }
       const rememberedWindow = Number.isFinite(st.knownWindow) && st.knownWindow > 0
         ? st.knownWindow : null;
       const effCfg = rememberedWindow !== null

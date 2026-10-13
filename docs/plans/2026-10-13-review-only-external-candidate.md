@@ -40,7 +40,7 @@ Each criterion names its threshold, check and negative control (ids from `refere
 - RO1 — No writer. Implementer, verification-author and repair dispatch counts are exactly 0 on the ready, findings and verify-red paths. Check: stub-dispatcher call log. Control (A5): the same fixture through `implement-review` records ≥ 1 implementer call, so the counter is shown to see calls.
 - RO2 — The range is re-derived, never supplied. Bytes each seat receives equal an independent `git diff base..head` at the sealed head; no flag or contract field carries a diff, file list or test result from the caller. Check: A1 parity. Control: a one-byte perturbed copy fails parity.
 - RO3 — The range is fixed at admission. A branch move after admission, or between interruption and resume, ends in a named refusal with 0 further review calls. Check: A5 at both moments.
-- RO4 — Malformed ranges are refused before spend, each with a named code and 0 model calls: head missing; base not an ancestor; head equals base; tip ≠ sealed head; a path outside the allowed prefixes; file or churn cap exceeded. Check: one A5 case per code plus one happy case.
+- RO4 — Malformed ranges are refused before spend, each with a named code and 0 model calls: head missing; base not an ancestor; head equals base; tip ≠ sealed head; a path outside the allowed prefixes; file cap exceeded. A churn-limit breach is a named warning in the receipt, never a refusal (the reporter splits diffs itself). Check: one A5 case per code plus one happy case.
 - RO5 — Verification runs on the adopted tree, not the operator checkout. Check (A2): an untracked file in the operator worktree that would make `verify_cmd` pass does not; the run is not-ready.
 - RO6 — Modes cannot cross. An adoption contract under `implement-review`, an implementation contract under `review-candidate`, and an adoption contract carrying mission or strict-dispatch fields are each refused before spend. Check: A5.
 - RO7 — A declaration cannot weaken the panel. Undeclared author → unknown family. A declared author family may only add an exclusion; if that leaves fewer than the required families the panel fails. Check: A2 on the declared-family case.
@@ -187,5 +187,21 @@ Order: P1 → {P2 ∥ P3} → P4. If Q1 picks the park, findings ranges are only
 | U4 | Whether `final-panel-seat-store.js` keys seat reuse on writer-fence or lineage fields | P2 |
 | U5 | Whether `campaign inspect` and `status task` read fields that assume an implementation chain | P1 |
 | U6 | Whether `stageVerifyOnConverge` should write a stage unit for a review-only run (fail-open today) | P1 |
-| U7 | Which D15 properties cuda actually needs | before P1 (fleet question) |
+| U7 | Answered 2026-10-13, see §12 | — |
 | U8 | What `deny-nonempty` does in the composition when findings are non-empty (the policy throws, `src/engine/campaign-disposition-authority.js:182-187`) | before Q1 is ruled |
+
+## 12. Reporter answers (cuda chatgpt-tunnel, fleet 2026-10-13)
+
+Their case: candidates are written outside autopilot by grok, agy or codex; the in-engine reviewer often returns no verdict on large diffs, so their depth-0 runs three `dispatch-review.sh` seats by hand as the final review. They want that inside a managed flow with a receipt.
+
+| D15 property | Needed | Their reason and what it changes here |
+|---|---|---|
+| Host admission | yes | Seats that cannot start were found only after spend (cc-shim without `--endpoint`, codex launched outside the repo, a seat timing out at ~35 KB of diff). Admission must refuse before spend. |
+| Sealed QC roster | yes | They swapped a seat mid-stream; the record must show who reviewed. |
+| Host re-runs `verify_cmd` in a clean worktree | yes, most important | An implementer's green is a claim (they saw green on one Node major, red on another). The receipt also records the verify runtime and its version. Adds to RO5/RO8. |
+| Sealed panel minimum and required families | yes | A unanimous pass once missed a real defect. |
+| Author-family exclusion | yes | Declared by them (e.g. xai, google, openai); add-only, as RO7 states. |
+| Path and churn scope | paths yes; churn warn-only | An external writer edited runner and manifest files it should not have. Churn is warn-only (RO4 updated). |
+| Terminal receipt | yes | Per ADR-0001 depth-0 must reach each seat's JSON artifact path, the exact `base..head` and the verify result from the receipt, to re-derive each finding. Adds to RO8. |
+
+On findings (Q1) they ask for B: park for depth-0 disposition, matching `final-panel-park`, because findings often hold false positives and a terminal end means a new campaign and a second review spend. They also ask that the disposition can deliberately end the campaign not-ready with the findings listed. Q1 and Q2 remain the owner's rulings.

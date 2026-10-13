@@ -1,0 +1,2 @@
+QRP_PROMPT_MODE must be reviewer, brain, va, consult, or discuss (got: owner)
+rc=1

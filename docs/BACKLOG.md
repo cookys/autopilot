@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0136 -->
+<!-- next-id: BL-0140 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1731,3 +1731,55 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: lane P2 review round 2, 2026-10-13
 - **Pointer**: none
 - **Context**: Case 1c stub calls REAL_SETSID=$(command -v setsid); skip 1c when it is empty.
+
+### dispatch-author drops runner stderr and cannot tell quota exhaustion apart
+- **Id**: BL-0136
+- **Status**: open
+- **Since**: 2026-10-13
+- **Origin**: self
+- **Problem**: 派工 rail 在幾種執行器失敗時把錯誤輸出整段丟掉，只回一句「執行器失敗」。這次 grok 帳戶餘額用完，回報看不出原因，要另外手動重跑才查到是付費額度問題。
+- **Impact**: 額度用完、金鑰失效這類非程式問題會被當成一般失敗，浪費重試與排查時間；審查席位掉線時也無法自動換家族。
+- **Trigger**: next touch of dispatch-author.sh runner branches, or the next seat failure whose cause is not in the receipt
+- **Effort**: S
+- **Source**: live-pane plan review G1 transport stop, 2026-10-13
+- **Pointer**: docs/plans/2026-10-13-live-pane-design-system.md
+- **Context**: grok, cc-shim, claude-native and qoderclicn branches (~lines 1100-1200) discard stderr; die_runner_failed at ~469. Keep a bounded stderr excerpt in error and raw_log, and classify HTTP 402 or "balance exhausted" as quota.
+
+### withLock busy-waits in foreman-guard and depth0-delegate-gate
+- **Id**: BL-0137
+- **Status**: open
+- **Since**: 2026-10-13
+- **Origin**: self
+- **Problem**: 兩個 hook 搶同一把檔案鎖時，用空轉迴圈等待，等待期間會吃滿一顆 CPU。
+- **Impact**: 平常鎖很快釋放，看不出來；多個 session 同時觸發 hook 時會拖慢每一次工具呼叫。
+- **Trigger**: next touch of hooks/foreman-guard.js or hooks/depth0-delegate-gate.js lock code, or a hook latency complaint
+- **Effort**: XS
+- **Source**: lane L review (BL-0091 pointer residue), 2026-10-13
+- **Pointer**: none
+- **Context**: withLock spins until the lock file disappears; replace the spin with Atomics.wait on a SharedArrayBuffer (synchronous sleep) between retries, keeping the existing timeout.
+
+### resolve-review-loop alias table and fresh-context seat follow-ups
+- **Id**: BL-0138
+- **Status**: open
+- **Since**: 2026-10-13
+- **Origin**: self
+- **Problem**: 審查路由腳本裡有第三份模型別名對照表，沒有共用既有函式；設定範本也沒寫「低風險審查席位不能和 QC 席位相同」；預設退回的 sonnet 席位也可能剛好和 QC 席位重複。
+- **Impact**: 別名改了只改到兩份時，審查會派到錯的模型；席位重複會讓「換一個家族看」的設計落空。
+- **Trigger**: next touch of scripts/resolve-review-loop.sh alias handling or review-loop-config template
+- **Effort**: S
+- **Source**: lane Y review, 2026-10-13
+- **Pointer**: none
+- **Context**: resolve-review-loop.sh:1323 has its own alias table; call normalize_agy_alias. Template review-loop-config.md:191 should say the seat must not equal a qc_panel seat. Native fallback sonnet may equal a qc seat.
+
+### bash-launch guard misses several background launch shapes
+- **Id**: BL-0139
+- **Status**: open
+- **Since**: 2026-10-13
+- **Origin**: self
+- **Problem**: 擋「背景啟動派工 rail 卻沒有喚醒機制」的防護，還漏掉幾種寫法：case 區塊整段丟背景、xargs 平行執行、ionice 包一層、coproc、先定義函式再丟背景。
+- **Impact**: 用這些寫法背景啟動 rail，session 不會被喚醒，結果落地也沒人收；屬於少見寫法，日常影響小。
+- **Trigger**: a missed wakeup traced to one of these shapes, or next touch of scripts/lib/bash-launch-rules.js
+- **Effort**: S
+- **Source**: lane Z review round 4, 2026-10-13
+- **Pointer**: none
+- **Context**: Uncovered shapes: case...esac &, xargs -P ... rail &, ionice wrapper, coproc, f(){...}; f &. Each needs a negative control in hooks/bash-launch-guard.test.js.

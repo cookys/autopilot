@@ -18,6 +18,7 @@
 const fs = require('fs');
 const { executableText } = require('./bash-wait-rules.js');
 
+
 // Rail entrypoint path: .../scripts/dispatch-<x>.sh|js, not a *.test.* file.
 const RAIL_PATH_RE = /(?:^|\/)scripts\/dispatch-[\w.-]*\.(?:sh|js)$/;
 const TEST_FILE_RE = /\.test\.(?:sh|js)$/;
@@ -109,7 +110,12 @@ function expandSegments(text, depth = 0) {
     const subRe = /\$\(([^()]*)\)|`([^`]*)`/g;
     let sm;
     while ((sm = subRe.exec(noSingle)) !== null) {
-      all.push(...expandSegments(sm[1] !== undefined ? sm[1] : sm[2], depth + 1).map((x) => ({ ...x, bg: false, sh: x.sh || seg.sh })));
+      // The body of `$(…)` / backticks is a fresh script: strip ITS heredoc bodies and comments too
+      // (`git commit -m "$(cat <<'EOF' … EOF)"` — the outer lexer treats the heredoc as quoted data).
+      // (noSingle only blanked quoted spans for matching; slice the ORIGINAL text so quotes survive.)
+      const open = sm[1] !== undefined ? 2 : 1;
+      const body = executableText(seg.text.slice(sm.index + open, sm.index + sm[0].length - 1));
+      all.push(...expandSegments(body, depth + 1).map((x) => ({ ...x, bg: false, sh: x.sh || seg.sh })));
     }
   }
   return all;

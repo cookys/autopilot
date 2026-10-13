@@ -103,6 +103,24 @@ for (const cmd of [
   });
 }
 
+// ---- heredoc bodies inside "$(…)" are data (commit / PR messages) ----
+const MSG_HEREDOC = [
+  'git commit -m "$(cat <<\'EOF\'\nnohup scripts/dispatch-review.sh x & \n\nEOF\n)"',
+  'gh pr create --title t --body "$(cat <<\'EOF\'\nnohup scripts/dispatch-review.sh x &\nEOF\n)"',
+];
+for (const cmd of MSG_HEREDOC) {
+  test(`heredoc in substitution is data (rule 1): ${JSON.stringify(cmd).slice(0, 50)}`, () => {
+    assert.strictEqual(run(cmd).deny, false);
+  });
+}
+test('heredoc in substitution is data (rule 3, zsh)', () => {
+  const r = run('git commit -m "$(cat <<\'EOF\'\nsee hooks/*.zzq and =x\nEOF\n)"', { shell: 'zsh' });
+  assert.doesNotMatch(r.ctx, /zsh-expansion/);
+});
+test('a REAL detached rail inside a substitution is still denied', () => {
+  assert.strictEqual(run('echo "$(nohup scripts/dispatch-review.sh x &)"').deny, true);
+});
+
 // ---- Rule 2: pkill/pgrep -f without [x] => warn only ----
 for (const cmd of ['pkill -f dispatch-review', 'pgrep -fa "my server"', 'sudo pkill -9 -f foo', 'kill $(pgrep -f myserver)', 'echo `pgrep -f foo`']) {
   test(`rule2 warns: ${cmd}`, () => {

@@ -28,7 +28,7 @@
 // --json schema (schema_version 1; additive changes only):
 //   { schema_version:1, session_id,
 //     sources:{ projects_dir, session_dir:string|null, runs_dir, marker_dir,
-//               marker:{ found:bool, expired:bool|null, root_run_id:string|null, campaign_roots:string[] } },
+//               marker:{ found:bool, expired:bool|null, started_at:string|null, root_run_id:string|null, campaign_roots:string[] } },
 //     counts:{ agents, rails, untracked },
 //     warnings:[string],
 //     root:{ kind:"session", id, children:[NODE] } }
@@ -36,7 +36,7 @@
 //                    untracked:bool, untracked_reason:string|null, trace_end:string|null, children:[NODE] }
 //   agent NODE adds: agent_type, description, tool_use_id, spawn_depth
 //   rail  NODE adds: role, runner, model, root_run_id, parent_run_id, final_status, joined_by
-//                    ("manifest.session_id"|"marker.root_run_id"|"parent_run_id")
+//                    ("session_id"|"marker"|"parent_run_id")
 //   untracked_reason: agent  "legacy_record_no_parent_info" | "missing_parentAgentId" | "parent_agent_not_found" | "cycle"
 //                     rail   "parent_run_not_found" | "cycle"
 //   children sorted by started_at (null last), then id.
@@ -145,12 +145,13 @@ function loadRails(runsDir, warnings) {
 }
 
 function readMarker(markerDir, session) {
-  const info = { found: false, expired: null, root_run_id: null, campaign_roots: [] };
+  const info = { found: false, expired: null, started_at: null, root_run_id: null, campaign_roots: [] };
   const safe = String(session).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64); // session-mode.js normalizeSessionId
   const m = readJson(path.join(markerDir, `${safe}.json`));
   if (!m) return info;
   info.found = true;
   info.expired = !m.expires_at || Date.parse(m.expires_at) <= Date.now();
+  info.started_at = str(m.started_at);
   info.root_run_id = str(m.root_run_id);
   info.campaign_roots = Array.isArray(m.campaign_roots) ? m.campaign_roots.filter((x) => typeof x === 'string' && x) : [];
   return info;
@@ -192,8 +193,8 @@ function attachRails(rails, session, marker, root) {
   const byId = new Map(rails.map((r) => [r.id, r]));
   const ours = new Set();
   for (const r of rails) {
-    if (r._session) { if (r._session === session) { ours.add(r); r.joined_by = 'manifest.session_id'; } }
-    else if (r.root_run_id && roots.has(r.root_run_id)) { ours.add(r); r.joined_by = 'marker.root_run_id'; }
+    if (r._session) { if (r._session === session) { ours.add(r); r.joined_by = 'session_id'; } }
+    else if (r.root_run_id && roots.has(r.root_run_id)) { ours.add(r); r.joined_by = 'marker'; }
   }
   // descendants by parent_run_id belong to us even when their own session/root differ (loop-back children)
   for (let grew = true; grew;) {
@@ -244,7 +245,7 @@ function build(opts) {
   if (!sessionDir) warnings.push(`no subagent record directory for session ${opts.session}`);
   const marker = readMarker(markerDir, opts.session);
   if (!marker.found) warnings.push('no session marker: rails joinable only through manifest.session_id');
-  else if (marker.expired) warnings.push('session marker is expired: rails joined through it may be incomplete');
+  else if (marker.expired) warnings.push(`session marker is expired (started_at ${marker.started_at || 'unknown'}): rails joined through it may be incomplete`);
   const root = { kind: 'session', id: opts.session, children: [] };
   attachAgents(loadAgents(sessionDir), root);
   attachRails(loadRails(runsDir, warnings), opts.session, marker, root);
@@ -261,7 +262,7 @@ function build(opts) {
 
 function label(n) {
   if (n.kind === 'agent') return `agent ${n.id}${n.agent_type ? ` [${n.agent_type}]` : ''}${n.description ? ` ${n.description}` : ''}`;
-  return `rail ${n.id}${n.role ? ` [${n.role}]` : ''}${n.runner ? ` ${n.runner}` : ''}${n.model ? `/${n.model}` : ''}${n.ended_at ? ` ended${n.final_status ? ` ${n.final_status}` : ''}` : ' live?'}`;
+  return `rail ${n.id}${n.role ? ` [${n.role}]` : ''}${n.runner ? ` ${n.runner}` : ''}${n.model ? `/${n.model}` : ''}${n.joined_by ? ` joined_by=${n.joined_by}` : ''}${n.ended_at ? ` ended${n.final_status ? ` ${n.final_status}` : ''}` : ' live?'}`;
 }
 
 function render(tree) {

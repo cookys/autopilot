@@ -1,6 +1,7 @@
 'use strict';
 // dispatch-tree.js — fixture-only tests (own temp dirs; never reads the real ~/.claude, ~/.autopilot or runs dir).
 const test = require('node:test');
+const { after } = test;
 const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
@@ -11,8 +12,12 @@ const SCRIPT = path.join(__dirname, 'dispatch-tree.js');
 const SID = 'sess-aaaa';
 const ENV = { PATH: process.env.PATH };
 
+const made = [];
+after(() => { for (const r of made) fs.rmSync(r, { recursive: true, force: true }); });
+
 function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-tree-'));
+  made.push(root);
   const d = { root, projects: path.join(root, 'projects'), runs: path.join(root, 'runs'), markers: path.join(root, 'markers') };
   const sub = path.join(d.projects, 'proj-x', SID, 'subagents');
   for (const p of [sub, d.runs, d.markers]) fs.mkdirSync(p, { recursive: true });
@@ -69,7 +74,7 @@ test('session -> rail by manifest.session_id (preferred, no marker needed); rail
   d.run('other', { runner: 'codex', root_run_id: 'other', depth: 0, session_id: 'sess-zzzz' });
   const t = json(d);
   const r0 = find(t.root, 'r0');
-  assert.strictEqual(r0.joined_by, 'manifest.session_id');
+  assert.strictEqual(r0.joined_by, 'session_id');
   assert.strictEqual(r0.children[0].id, 'r1');
   assert.strictEqual(r0.children[0].joined_by, 'parent_run_id');
   assert.strictEqual(find(t.root, 'other'), undefined);
@@ -84,7 +89,7 @@ test('manifest without session_id joins through the marker root_run_id (and camp
   d.run('m2', { runner: 'kimi', root_run_id: 'camp-1', depth: 0 });
   d.run('m3', { runner: 'kimi', root_run_id: 'job-2', depth: 0 });
   const t = json(d);
-  assert.strictEqual(find(t.root, 'm1').joined_by, 'marker.root_run_id');
+  assert.strictEqual(find(t.root, 'm1').joined_by, 'marker');
   assert.ok(find(t.root, 'm2'));
   assert.strictEqual(find(t.root, 'm3'), undefined);
   assert.strictEqual(t.sources.marker.expired, false);
@@ -110,6 +115,40 @@ test('rail with missing parent run is untracked; loop-back runner gets trace_end
   assert.strictEqual(find(t.root, 'p').children[0].id, 'kid');
   assert.strictEqual(find(t.root, 'lost').untracked_reason, 'parent_run_not_found');
   assert.strictEqual(t.root.children.find((c) => c.id === 'lost').untracked, true);
+});
+
+test('rail parent_run_id cycle: both rails still appear, flagged cycle', () => {
+  const d = fixture();
+  d.run('r1', { runner: 'codex', root_run_id: 'r1', parent_run_id: 'r2', depth: 1, session_id: SID });
+  d.run('r2', { runner: 'codex', root_run_id: 'r1', parent_run_id: 'r1', depth: 1, session_id: SID });
+  const t = json(d);
+  assert.strictEqual(t.counts.rails, 2);
+  assert.strictEqual(find(t.root, 'r1').untracked_reason, 'cycle');
+  assert.strictEqual(find(t.root, 'r2').untracked_reason, 'cycle');
+});
+
+test('manifest carrying another session_id cannot borrow the marker root', () => {
+  const d = fixture();
+  d.marker({ session_id: SID, root_run_id: 'job-1', expires_at: new Date(Date.now() + 3600e3).toISOString() });
+  d.run('foreign', { runner: 'codex', root_run_id: 'job-1', session_id: 'sess-zzzz', depth: 0 });
+  d.run('mine', { runner: 'codex', root_run_id: 'job-1', depth: 0 });
+  const t = json(d);
+  assert.strictEqual(find(t.root, 'foreign'), undefined);
+  assert.ok(find(t.root, 'mine'));
+});
+
+test('joined_by is shown in text and the expired warning names the marker started_at', () => {
+  const d = fixture();
+  d.marker({ session_id: SID, root_run_id: 'job-1', started_at: '2020-01-01T00:00:00.000Z', expires_at: '2020-01-02T00:00:00Z' });
+  d.run('viaMarker', { runner: 'codex', root_run_id: 'job-1', depth: 0 });
+  d.run('viaSid', { runner: 'codex', root_run_id: 'zz', depth: 0, session_id: SID });
+  const t = json(d);
+  assert.strictEqual(find(t.root, 'viaMarker').joined_by, 'marker');
+  assert.strictEqual(find(t.root, 'viaSid').joined_by, 'session_id');
+  assert.ok(t.warnings.some((w) => w.includes('2020-01-01T00:00:00.000Z')));
+  const out = run(d).stdout;
+  assert.match(out, /rail viaMarker.*joined_by=marker/);
+  assert.match(out, /rail viaSid.*joined_by=session_id/);
 });
 
 test('missing source dirs: warnings, exit 0, empty tree', () => {

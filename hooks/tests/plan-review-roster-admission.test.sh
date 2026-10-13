@@ -68,7 +68,7 @@ run_printed() {  # run_printed <stderr-marker> <config> ; applies the printed co
   local line cmd
   line="$(printf '%s\n' "$R_ERR" | grep -F "$1" | head -1)"
   cmd="${line#*: }"
-  bash -c "$cmd"
+  ${PSH:-bash} -c "$cmd"
 }
 
 # accept the single-family fallback
@@ -100,6 +100,53 @@ assert_eq "$R_EXIT" "0" "the printed seat command reaches exit 0 on the full tem
 assert_eq "$R_OUT" "config-explicit" "the written seats resolve as config-explicit"
 CFG_USE="$WR" run_resolver "$STALE_TOPO"
 assert_eq "$R_EXIT" "0" "whole resolve after writing the seats has no exit 3"
+
+# shell-neutral printed command: one node -e one-liner, no dollar/bang/bracket for a shell to expand.
+# Run under bash and zsh (zsh parses a dollar-name-bracket as an array subscript and failed the old
+# for-loop with rc=1 and no file change); each must take the query from exit 4 to exit 0.
+PC="$TEST_TMP/printed-src.md"; cp "$TEMPLATE" "$PC"
+CFG_USE="$PC" run_resolver "$STALE_TOPO" --field plan_reviewer_engine
+for MARK in "accept the single-family" "write the recommendation"; do
+  PLINE="$(printf '%s\n' "$R_ERR" | grep -F "$MARK" | head -1)"; PCMD="${PLINE#*: }"
+  assert_contains "$PCMD" "node -e '" "$MARK: printed as a node one-liner"
+  case "$PCMD" in *'$'*|*'!'*|*'['*) fail "$MARK: printed command contains a shell-special char" ;; *) echo "PASS: $MARK printed command has no dollar, bang or bracket" ;; esac
+done
+if command -v zsh >/dev/null 2>&1; then SHELLS="bash zsh"; else SHELLS="bash"; echo "SKIP: zsh not installed, printed-command zsh runs skipped"; fi
+for PSH in $SHELLS; do
+  case "$PSH" in zsh) PSH="zsh -f" ;; esac
+  Z="$TEST_TMP/shell-$$-${PSH// /_}.md"; cp "$TEMPLATE" "$Z"
+  CFG_USE="$Z" run_resolver "$STALE_TOPO" --field plan_reviewer_engine
+  run_printed "write the recommendation" "$Z"
+  CFG_USE="$Z" run_resolver "$STALE_TOPO" --field plan_reviewer_engine
+  assert_eq "$R_EXIT" "0" "[$PSH] printed seat command reaches exit 0"
+  CFG_USE="$Z" run_resolver "$STALE_TOPO" --field plan_reviewer_engine
+  Z2="$TEST_TMP/shell2-$$-${PSH// /_}.md"; { printf -- '- PLAN_REVIEW_ALLOW_NATIVE_FALLBACK: off\n- plan_review_allow_native_fallback: off\n'; cat "$TEMPLATE"; } > "$Z2"
+  CFG_USE="$Z2" run_resolver "$STALE_TOPO" --field plan_reviewer_engine
+  run_printed "accept the single-family" "$Z2"
+  CFG_USE="$Z2" run_resolver "$STALE_TOPO" --field plan_reviewer_engine
+  assert_eq "$R_EXIT" "0" "[$PSH] printed accept command reaches exit 0 (case-insensitive, every duplicate replaced)"
+  assert_eq "$(grep -ciE '^- plan_review_allow_native_fallback: on' "$Z2")" "2" "[$PSH] both off lines became on"
+  # missing config: directory and file are created
+  Z3="$TEST_TMP/newdir-$$-${PSH// /_}/sub/review-loop-config.md"
+  Z4="$TEST_TMP/shell4-$$-${PSH// /_}.md"; cp "$TEMPLATE" "$Z4"
+  CFG_USE="$Z4" run_resolver "$STALE_TOPO" --field plan_reviewer_engine
+  PLINE="$(printf '%s\n' "$R_ERR" | grep -F "accept the single-family" | head -1)"
+  PCMD="${PLINE#*: }"
+  ${PSH} -c "${PCMD//$Z4/$Z3}" 2>/dev/null
+  assert_eq "$(cat "$Z3" 2>/dev/null)" "- plan_review_allow_native_fallback: on" "[$PSH] missing config file and directory are created"
+done
+unset PSH
+# NEGATIVE CONTROL: the previous bash for-loop + GNU sed command must be red under zsh.
+if command -v zsh >/dev/null 2>&1; then
+  OLD="$TEST_TMP/old-sed.md"; cp "$TEMPLATE" "$OLD"
+  cat > "$TEST_TMP/old-cmd.sh" <<'OLDEOF'
+for kv in 'plan_review_allow_native_fallback=on'; do k=${kv%%=*}; v=${kv#*=}; if grep -qiE "^[[:space:]]*-?[[:space:]]*$k[[:space:]]*:" OLDFILE; then sed -i -E "s#^([[:space:]]*-?[[:space:]]*$k[[:space:]]*:).*#\\1 $v#I" OLDFILE; else printf -- '- %s: %s\n' "$k" "$v" >> OLDFILE; fi; done
+OLDEOF
+  OLDCMD="$(sed "s#OLDFILE#'$OLD'#g" "$TEST_TMP/old-cmd.sh")"
+  zsh -f -c "$OLDCMD" >/dev/null 2>&1
+  CFG_USE="$OLD" run_resolver "$STALE_TOPO" --field plan_reviewer_engine
+  assert_eq "$R_EXIT" "4" "negative control: the old sed command under zsh leaves the stop in place (red)"
+fi
 
 # implementer runner filter: implementer on grok, topology offers only grok => nothing recommended
 IMPL="$TEST_TMP/impl.md"

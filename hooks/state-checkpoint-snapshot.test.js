@@ -94,6 +94,29 @@ test('PreCompact: AUTOPILOT_PRECOMPACT_STDOUT=0 prints nothing but the file stil
   } finally { sb.cleanup(); }
 });
 
+// A `git` shim on PATH that logs each call, then runs the real one. The snapshot's git source must
+// run once per PreCompact however many sizes it is rendered at (file and stdout).
+function gitCalls(sb, extraEnv = {}) {
+  const real = spawnSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).stdout.trim();
+  const bin = path.join(sb.root, 'shim'); fs.mkdirSync(bin);
+  const log = path.join(sb.root, 'git-calls.log');
+  fs.writeFileSync(path.join(bin, 'git'), `#!/bin/sh\necho "$@" >> "${log}"\nexec "${real}" "$@"\n`, { mode: 0o755 });
+  const { r } = checkpoint(sb, { PATH: `${bin}:${process.env.PATH}`, ...extraEnv });
+  assert.strictEqual(r.status, 0, r.stderr);
+  const lines = fs.existsSync(log) ? fs.readFileSync(log, 'utf8').split('\n').filter(Boolean) : [];
+  return lines.filter((l) => /status --porcelain=v2/.test(l)).length;
+}
+
+test('PreCompact: the snapshot is collected once (git runs once) with the stdout copy on', () => {
+  const sb = sandbox();
+  try { assert.strictEqual(gitCalls(sb), 1); } finally { sb.cleanup(); }
+});
+
+test('PreCompact: the snapshot is collected once (git runs once) with the stdout copy off', () => {
+  const sb = sandbox();
+  try { assert.strictEqual(gitCalls(sb, { AUTOPILOT_PRECOMPACT_STDOUT: '0' }), 1); } finally { sb.cleanup(); }
+});
+
 test('PreCompact: tool placeholders are gone from the tail, text turns stay', () => {
   const sb = sandbox();
   try {
@@ -116,6 +139,72 @@ test('PreCompact: with every disk source missing the file is still written, each
     assert.match(content, /session: absent \(no unexpired session-mode marker\)/);
     assert.match(content, /task card: absent/);
     assert.match(content, /git: branch feat\/snap/);
+  } finally { sb.cleanup(); }
+});
+
+test('SessionEnd /clear: a task card goal holding a ``` run cannot break the workflow fence', () => {
+  const sb = sandbox();
+  try {
+    fs.writeFileSync(path.join(sb.root, 'tc', `${SID}.json`), JSON.stringify({ schema: 'autopilot.task-card/1', goal: 'fix the ```json fence\n```` and the rest' }));
+    fs.writeFileSync(path.join(sb.home, '.autopilot', 'config.json'), JSON.stringify({ handoff_inject: true }));
+    const payload = { session_id: SID, transcript_path: sb.transcript, cwd: sb.repo, hook_event_name: 'SessionEnd', reason: 'clear' };
+    const r = spawnSync('node', [HANDOFF], { input: JSON.stringify(payload), encoding: 'utf8', env: sb.env });
+    assert.strictEqual(r.status, 0, r.stderr);
+    const dir = path.join(sb.home, '.autopilot', 'handoff');
+    const body = fs.readdirSync(dir).filter((n) => n.endsWith('.md')).map((n) => fs.readFileSync(path.join(dir, n), 'utf8'))[0];
+    const start = body.indexOf('## Workflow state');
+    const end = body.indexOf('## Repo state');
+    const sec = body.slice(start, end).split('\n');
+    const opener = sec.find((l) => /^`{3,}$/.test(l));
+    assert.ok(opener, 'a fence opens the block');
+    assert.ok(opener.length >= 5, `fence is longer than the longest inner run (got ${opener.length})`);
+    const fences = sec.filter((l) => /^`{3,}\s*$/.test(l));
+    assert.deepStrictEqual(fences, [opener, opener], 'exactly one open and one close, same length');
+    assert.ok(sec.some((l) => l.includes('```json fence')), 'the content is intact');
+  } finally { sb.cleanup(); }
+});
+
+// Handoff body for a sandbox repo after `prep(sb)` has shaped it.
+function handoffBody(sb, prep) {
+  prep(sb);
+  fs.writeFileSync(path.join(sb.home, '.autopilot', 'config.json'), JSON.stringify({ handoff_inject: true }));
+  const payload = { session_id: SID, transcript_path: sb.transcript, cwd: sb.repo, hook_event_name: 'SessionEnd', reason: 'clear' };
+  const r = spawnSync('node', [HANDOFF], { input: JSON.stringify(payload), encoding: 'utf8', env: sb.env });
+  assert.strictEqual(r.status, 0, r.stderr);
+  const dir = path.join(sb.home, '.autopilot', 'handoff');
+  return fs.readdirSync(dir).filter((n) => n.endsWith('.md')).map((n) => fs.readFileSync(path.join(dir, n), 'utf8'))[0];
+}
+// The lines between the "## <from>" heading and the "## <to>" heading. (`git status -sb` itself prints
+// a "## branch" line, so "any ## line" cannot end a section.)
+function section(body, from, to) {
+  const a = body.indexOf(from);
+  return body.slice(a, body.indexOf(to, a)).split('\n');
+}
+function assertDynamicFence(sec, marker) {
+  const fences = sec.filter((l) => /^`{3,}\s*$/.test(l));
+  assert.strictEqual(fences.length, 2, `exactly one open and one close fence, got ${JSON.stringify(fences)}`);
+  assert.strictEqual(fences[0], fences[1], 'open and close fence are the same');
+  assert.ok(fences[0].length >= 4, `fence longer than the ${marker.length}-backtick run inside (got ${fences[0].length})`);
+  assert.ok(sec.some((l) => l.includes(marker)), 'the content is intact');
+}
+
+test('SessionEnd /clear: a commit subject holding ``` gets a longer fence in Recent commits', () => {
+  const sb = sandbox();
+  try {
+    const body = handoffBody(sb, (x) => {
+      spawnSync('git', ['-C', x.repo, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'fix the ``` fence']);
+    });
+    assertDynamicFence(section(body, '## Recent commits', '## Last action'), '```');
+  } finally { sb.cleanup(); }
+});
+
+test('SessionEnd /clear: a file name holding ``` gets a longer fence in the git status block', () => {
+  const sb = sandbox();
+  try {
+    const body = handoffBody(sb, (x) => fs.writeFileSync(path.join(x.repo, 'a```b.txt'), 'x'));
+    const sec = section(body, '## Repo state', '## Recent commits');
+    // Only the git status block sits in Repo state; the Recent commits block starts at the next heading.
+    assertDynamicFence(sec, 'a```b.txt');
   } finally { sb.cleanup(); }
 });
 
@@ -208,6 +297,28 @@ test('PostCompact: the stage after a hyphen (re-implement) does not count', () =
     assert.match(adv[0].text, /stage implement/);
   } finally { sb.cleanup(); }
 });
+
+test('PostCompact: a summary that starts with the stage name counts (the ^ anchor)', () => {
+  const sb = sandbox();
+  try {
+    const { adv } = postCompact(sb, 'implement is where we are; branch feat/snap');
+    assert.deepStrictEqual(adv, []);
+  } finally { sb.cleanup(); }
+});
+
+// Each spelling glues a word character to the stage on one side. Dropping `0-9` or `_` from either
+// side's character class, or dropping the `^|` start alternative, must turn one of these red.
+for (const word of ['plan2', 'plan_x', '2plan', 'pre_plan']) {
+  test(`PostCompact: the stage glued to a digit or underscore (${word}) does not count`, () => {
+    const sb = sandbox();
+    try {
+      fs.writeFileSync(path.join(sb.root, 'sm', `${SID}.json`), JSON.stringify({ session_id: SID, level: 'l4', size: 'L', stage: 'plan', expires_at: new Date(Date.now() + 3600e3).toISOString() }));
+      const { adv } = postCompact(sb, `branch feat/snap, now at ${word} here`);
+      assert.strictEqual(adv.length, 1);
+      assert.match(adv[0].text, /stage plan/);
+    } finally { sb.cleanup(); }
+  });
+}
 
 test('PostCompact: the stage match ignores case', () => {
   const sb = sandbox();

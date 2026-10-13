@@ -13,6 +13,7 @@ unset AUTOPILOT_CONTEXT_BUDGET_MODE
 # Contain every temp file the scripts under test create (dispatch-review logs, the
 # autopilot-dispatch-runs manifest dir, ...): they used to land in the real ${TMPDIR}.
 SUITE_TMPDIR="$(mktemp -d "${TMPDIR:-/tmp}/autopilot-test-hooks-live-state-misc-XXXXXX")"
+export AUTOPILOT_MANAGED_SETTINGS_FILE="$SUITE_TMPDIR/.no-managed-settings.json"  # isolate from a host /etc/claude-code
 trap 'rm -rf "$SUITE_TMPDIR"' EXIT
 export TMPDIR="$SUITE_TMPDIR"
 

@@ -129,12 +129,24 @@ function buildTranscriptTail(turns) {
   });
 }
 
-// The workflow snapshot (scripts/lib/workflow-snapshot.js). Every source inside it is fail-open; this
-// wrapper covers the require itself, so a missing or broken collector never costs the checkpoint file.
-function workflowSnapshot(input, maxBytes) {
+// The workflow snapshot (scripts/lib/workflow-snapshot.js). Every source inside it is fail-open; these
+// wrappers cover the require itself, so a missing or broken collector never costs the checkpoint file.
+// Collect once (it runs git and reads several files), render once per size: the saved file and the
+// PreCompact stdout want different byte budgets of the same snapshot.
+function collectWorkflowSnapshot(input) {
   try {
-    const { snapshotText } = require('../scripts/lib/workflow-snapshot.js');
-    return snapshotText({ sessionId: input.session_id, cwd: input.cwd, maxBytes });
+    const { collect } = require('../scripts/lib/workflow-snapshot.js');
+    return { snapshot: collect({ sessionId: input.session_id, cwd: input.cwd }) };
+  } catch (err) {
+    return { error: String(err && err.message).slice(0, 120) };
+  }
+}
+
+function renderWorkflowSnapshot(collected, maxBytes) {
+  if (collected.error !== undefined) return `Workflow state: unavailable (collector failed: ${collected.error})`;
+  try {
+    const { render } = require('../scripts/lib/workflow-snapshot.js');
+    return render(collected.snapshot, { maxBytes });
   } catch (err) {
     return `Workflow state: unavailable (collector failed: ${String(err && err.message).slice(0, 120)})`;
   }
@@ -208,7 +220,8 @@ function postCompactCheck(input) {
 
     // Build machine state header
     const failureCount = readFailureCounter();
-    const snapshotFile = workflowSnapshot(input, SNAPSHOT_FILE_BYTES);
+    const collectedSnapshot = collectWorkflowSnapshot(input);
+    const snapshotFile = renderWorkflowSnapshot(collectedSnapshot, SNAPSHOT_FILE_BYTES);
     let stateContent = `# Autopilot Compaction Checkpoint
 ## Workflow Snapshot
 ${snapshotFile}
@@ -335,7 +348,7 @@ ${body}`;
     // The model gets the same state a second time from the file session-start injects. Diagnostics
     // stay on stderr and in the log.
     if (input.session_id && process.env.AUTOPILOT_PRECOMPACT_STDOUT !== '0') {
-      const snap = workflowSnapshot(input, SNAPSHOT_STDOUT_BYTES);
+      const snap = renderWorkflowSnapshot(collectedSnapshot, SNAPSHOT_STDOUT_BYTES);
       process.stdout.write(`Preserve the following workflow state verbatim in the compaction summary (branch, stage, open tasks, dispatches, review state):\n${snap}\n`);
     }
 

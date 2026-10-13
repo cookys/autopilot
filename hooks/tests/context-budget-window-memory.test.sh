@@ -18,6 +18,7 @@ unset AUTOPILOT_CONTEXT_BUDGET_MODE
 # The live dir must be RAM-backed or resolveLiveDir() rejects the override and
 # silently falls through to the host's real live dir (this host's /tmp is ext4).
 TMP="$(mktemp -d "/dev/shm/context-budget-window-memory-XXXXXX")"
+export AUTOPILOT_MANAGED_SETTINGS_FILE="$TMP/.no-managed-settings.json"  # isolate from a host /etc/claude-code
 trap 'rm -rf "$TMP"' EXIT
 
 SID="11111111-2222-3333-4444-555555555555"
@@ -101,6 +102,36 @@ ERR="$(cat "$TMP/err.txt")"
 case "$ERR" in
   *"Context budget T2"*) ok "unseen session still fires T2 on the inferred window" ;;
   *) bad "unseen session should still fire T2 (inference path), got: [$ERR]" ;;
+esac
+
+# ---- 4. BL-0091: no memory yet, but this session's stale status-line file is on disk ---------
+# First hook call after a long foreground tool call (fresh state, live file >120 s old): the
+# window in that file is still this session's window. Without it the hook fell to the
+# unknown-window inference path.
+SID3="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+export CLAUDE_CODE_SESSION_ID="$SID3"
+SID="$SID3"
+PAYLOAD="{\"transcript_path\":\"$TRANSCRIPT\",\"session_id\":\"$SID3\"}"
+write_live "2026-09-09T08:00:00.000Z"
+RC="$(run_hook)"
+ERR="$(cat "$TMP/err.txt")"
+case "$ERR" in
+  *"16% of the ~1000k window (this session's window"*) ok "stale file, no memory: its window is adopted" ;;
+  *) bad "stale file, no memory: window not adopted: [$ERR]" ;;
+esac
+KNOWN="$(node -e 'const s=require(process.argv[1]);process.stdout.write(String(s.knownWindow||0))' "$TMP/state/$SID3.json" 2>/dev/null)"
+[ "$KNOWN" = "1000000" ] && ok "stale file window remembered in state" || bad "stale file window not remembered: $KNOWN"
+# A stale file authored by this hook (a derived echo) must not be adopted as a window source.
+SID4="bbbbbbbb-cccc-dddd-eeee-ffffffffffff"
+export CLAUDE_CODE_SESSION_ID="$SID4"; SID="$SID4"
+PAYLOAD="{\"transcript_path\":\"$TRANSCRIPT\",\"session_id\":\"$SID4\"}"
+write_live "2026-09-09T08:00:00.000Z"
+sed -i 's/"cc_version"/"writer":"context-budget","cc_version"/' "$LIVE/context/$SID4.json"
+RC="$(run_hook)"
+ERR="$(cat "$TMP/err.txt")"
+case "$ERR" in
+  *"this session's window"*) bad "own-writer stale file adopted as window: [$ERR]" ;;
+  *) ok "own-writer stale file is not a window source" ;;
 esac
 
 printf '\n%s\n' "context-budget-window-memory: $PASS passed, $FAIL failed"

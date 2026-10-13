@@ -52,6 +52,12 @@
 
 ### 修正
 
+- **壓縮相關的四個小問題**（branch `lane/l-compaction-smalls`；BL-0126、BL-0091 和工作流程快照審查的後續）：
+  - **自動壓縮是否被停用的判斷和 Claude Code 對齊**：`scripts/lib/autocompact-window.js` 原本把 `DISABLE_AUTO_COMPACT`、`DISABLE_COMPACT` 設成 `no`、`off` 或任何非空字串都當成已停用。照 Claude Code 2.1.296 binary 的判斷式，只有 `1`、`true`、`yes`、`on`（去空白、不分大小寫）才算停用。同時新增環境變數 `AUTOPILOT_MANAGED_SETTINGS_FILE`，讓測試把系統層 `managed-settings.json` 指到自己的暫存檔，測試不再讀到主機真實的檔案。
+  - **長時間前景指令之後，即時檔過期時的上下文警告改成和新鮮時一致**（BL-0091）：即時檔超過 120 秒會被視為過期，hook 又還沒記住視窗大小時，就退回用推測值。預設設定、1M 視窗、即時檔過期、153k 時，原本只發提醒（exit 0）；現在會發停止指令（exit 2），和即時檔新鮮時的行為一致。做法是採用這個 session 自己的過期即時檔裡的視窗大小（視窗不會中途改變，token 總數仍取自 transcript），訊息標示為「this session's window」。別的 session 的過期檔不採用。`maybeWriteLive` 也改用同一套驗證，schema 不對或缺 `written_at` 的檔不再被記成視窗來源。
+  - **PreCompact 只收集一次工作流程快照**：之前存檔和 stdout 各收集一次，git 跑兩次。
+  - **`session-handoff` 的程式碼圍欄不會被內容弄斷**：任務卡或 commit 標題含三個反引號時，圍欄會提早結束；現在圍欄比內容裡最長的反引號串多一個。
+
 - **自動壓縮前的狀態存檔從來沒寫出來過**（commit `995bb329`）：PreCompact hook 用 `/dev/stdin` 這個路徑讀 Claude Code 傳來的資料。Claude Code 交給 hook 的 stdin 是 socket，用路徑開啟 socket 會直接丟 ENXIO，所以每次自動壓縮，hook 都只記一筆「略過」，`~/.autopilot/compaction-state.md` 一次也沒寫出來。舊註解把這個錯誤解讀成「手動 `/compact` 不傳資料」。這次在新開的 session 實測自動壓縮時抓到。修正方式：
   - 改成直接讀 fd 0。
   - 新增測試，用 Node 啟動 hook，讓它真的拿到 socket stdin。舊版 hook 在這個測試有 4 項失敗。

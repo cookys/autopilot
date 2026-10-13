@@ -11,6 +11,7 @@ REPO_ROOT="$(cd "$SELF_DIR/../.." && pwd)"
 HOOK="$REPO_ROOT/hooks/context-budget.js"
 
 TMP="$(mktemp -d "/dev/shm/context-budget-unknown-window-XXXXXX")"
+export AUTOPILOT_MANAGED_SETTINGS_FILE="$TMP/.no-managed-settings.json"  # isolate from a host /etc/claude-code
 trap 'rm -rf "$TMP"' EXIT
 
 SID="aaaaaaaa-2222-3333-4444-555555555555"

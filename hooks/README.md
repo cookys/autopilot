@@ -352,7 +352,8 @@ and exit status through. Set `statusLine.command` to
 **Without it** (no writer, older codeforge, another host): `context-budget` and `foreman-guard` behave exactly as
 v2.36.0 (inference ratchet, Bash cap only), and `depth0-delegate-gate` warns but never blocks. Silence is never a
 gate pass. Knobs: `AUTOPILOT_LIVE_DIR` (override base, still probed), `AUTOPILOT_CONTEXT_BUDGET_DIR`,
-`AUTOPILOT_DEPTH0_GATE_DIR` (test seams).
+`AUTOPILOT_DEPTH0_GATE_DIR` (test seams), `AUTOPILOT_MANAGED_SETTINGS_FILE` (replaces the
+`/etc/claude-code/managed-settings.json` policy path the autocompact resolver reads; test seam).
 
 ## hooks.json wiring notes (moved out of the JSON)
 

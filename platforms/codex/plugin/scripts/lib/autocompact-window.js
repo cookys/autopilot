@@ -17,11 +17,13 @@
 //   3. Nothing set => Claude Code falls back to a server-supplied window, an experiment, then the
 //      model default (the full window for a native 1M model). None of these is visible here, so
 //      the answer is `configured: null`, never a guessed number.
-//   Compaction is off when env DISABLE_AUTO_COMPACT or DISABLE_COMPACT is set, or when
+//   Compaction is off when env DISABLE_AUTO_COMPACT or DISABLE_COMPACT is truthy (1/true/yes/on,
+//   case-insensitive, trimmed: the binary's own predicate; "0"/"false"/"no"/"off" leave it on), or when
 //   `autoCompactEnabled` is false (merged settings, else ~/.claude.json).
 // Not visible to this module (known gaps): `--settings <file>` (flag settings) and
 // `--autocompact <value>` on the claude command line.
 //
+// Env AUTOPILOT_MANAGED_SETTINGS_FILE replaces the managed-settings path (test isolation).
 // CLI: node scripts/lib/autocompact-window.js [--project-dir <dir>] [--model <id>]
 //   prints the resolve() result as JSON; exit 0 always (a read failure is "not set").
 
@@ -57,8 +59,11 @@ function envWindow(raw) {
   return Math.min(MAX_WINDOW, Math.max(MIN_WINDOW, Math.round(n)));
 }
 
+// Claude Code 2.1.296 reads DISABLE_COMPACT / DISABLE_AUTO_COMPACT through one predicate
+// (`Ne`, read from the binary 2026-10-13): String(v).toLowerCase().trim() is one of
+// "1", "true", "yes", "on". Everything else ("0", "false", "no", "off", "banana") is unset.
 function truthyEnv(v) {
-  return typeof v === 'string' && v !== '' && v !== '0' && v.toLowerCase() !== 'false';
+  return typeof v === 'string' && ['1', 'true', 'yes', 'on'].includes(v.toLowerCase().trim());
 }
 
 function readJson(file) {
@@ -84,7 +89,9 @@ function settingsSources(opts) {
     list.push({ source: 'project', file: path.join(projectDir, '.claude', 'settings.json') });
     list.push({ source: 'local', file: path.join(projectDir, '.claude', 'settings.local.json') });
   }
-  list.push({ source: 'policy', file: opts.managedPath || managedSettingsPath(opts.platform || process.platform) });
+  // AUTOPILOT_MANAGED_SETTINGS_FILE overrides the policy path so a suite on a host that has a real
+  // /etc/claude-code/managed-settings.json can point it at its own scratch file.
+  list.push({ source: 'policy', file: opts.managedPath || env.AUTOPILOT_MANAGED_SETTINGS_FILE || managedSettingsPath(opts.platform || process.platform) });
   const seen = new Set();
   return list.filter((s) => {
     const key = path.resolve(s.file);

@@ -158,6 +158,8 @@ function freshEnv(extra = {}) {
     // W2f: the hook now WRITES <live>/context/<sid>.json when no status line does, so a test
     // that omits an override would drop fixture rows into the host's real live dir.
     AUTOPILOT_LIVE_DIR: shmTmp('ctxbud-hermetic-live-'),
+    // The autocompact tip reads the policy file; a host's real /etc/claude-code one must not leak in.
+    AUTOPILOT_MANAGED_SETTINGS_FILE: path.join(dir, 'no-managed-settings.json'),
     CLAUDE_CODE_SESSION_ID: `t-${path.basename(dir)}`,
     ...extra,
   };
@@ -597,20 +599,36 @@ for (const bad of [0, -1]) {
   });
 }
 
-test('stale live file (>120s) ⇒ falls back to the inference path', () => {
+test('stale live file (>120s), no memory yet ⇒ its window is adopted, not attributed to the statusline (BL-0091)', () => {
   const liveDir = shmTmp('ctxbud-live-stale-');
   const sid = 'live-sid-stale';
   writeLiveMain(liveDir, sid, liveMainFixture({
     written_at: new Date(Date.now() - 121_000).toISOString(),
   }));
-  // 153k via transcript with NO live signal ⇒ inference treats it as a 200K session ⇒ T2 fires.
   const p = tmpFile([usageLine(1_000, 151_000, 1_000, 10)]);
   const r = runHook(
     { transcript_path: p, session_id: sid },
     freshEnv({ AUTOPILOT_LIVE_DIR: liveDir }),
   );
-  // A stale live file is unusable ⇒ window unknown ⇒ advisory T2 (row 1), never attributed to the statusline.
-  assertUnknownWindowAdvisory(r, 153, 'stale live file');
+  // The window never changes mid-session, so this session's own stale file still names it; the
+  // token total comes from the transcript (153k, past the absolute 150k T2).
+  assert.strictEqual(r.status, 2, r.stderr);
+  assert.match(r.stderr, /this session's window/);
+  assert.match(r.stderr, /context is 153k tokens/);
+  assert.doesNotMatch(r.stderr, /\(statusline\)/);
+});
+
+test('stale live file of ANOTHER session ⇒ still the inference path', () => {
+  const liveDir = shmTmp('ctxbud-live-stale-other-');
+  writeLiveMain(liveDir, 'live-sid-owner', liveMainFixture({
+    written_at: new Date(Date.now() - 121_000).toISOString(),
+  }));
+  const p = tmpFile([usageLine(1_000, 151_000, 1_000, 10)]);
+  const r = runHook(
+    { transcript_path: p, session_id: 'live-sid-someone-else' },
+    freshEnv({ AUTOPILOT_LIVE_DIR: liveDir }),
+  );
+  assertUnknownWindowAdvisory(r, 153, 'stale live file of another session');
 });
 
 test('schema_version 2 ⇒ treated as absent, inference path used', () => {

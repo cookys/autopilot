@@ -3,7 +3,8 @@
 // `more`, the full I19) are in live.test.ts, named "P4 mounted ...". Each check ships with a negative control: a deliberately broken input that must be flagged.
 import { test, expect } from 'claude-code/testing'
 import { makeT } from './i18n'
-import { NO_DETAIL, NO_SECTIONS, dispatchLines, headerLines, hygieneTabLines, legendLines, nowLines, reviewTabLines, spendTabLines, stripRows, treeRowCount, withOverflowHint, wrapLines } from './model'
+import { NO_DETAIL, NO_SECTIONS, wrapLines } from './model'
+import { dispatchLines, headerLines, hygieneTabLines, legendLines, nowLines, reviewTabLines, spendTabLines, stripRows, treeRowCount, withOverflowHint } from './tabs'
 import type { LiveSnapshot, PaneLine, Seg } from './model'
 import * as ui from './ui'
 
@@ -139,7 +140,7 @@ const i17 = (ls: PaneLine[]): string[] => {
     const at = 'line ' + i + ' ' + JSON.stringify(l.text.trimEnd())
     if (l.kind !== undefined && DATA_KINDS.has(l.kind) && l.fact === undefined && l.kind !== 'item') out.push(at + ' carries data and no fact')
     if (l.kind === 'item' && l.fact === undefined) out.push(at + ' is an item with no fact')
-    if (l.fact === undefined) return
+    if (l.fact === undefined || l.fact === 'pane.chrome') return // a heading, a toggle row or a spacer carries no fact of the session
     if (ui.FACT_OWNER[l.fact] !== 'now') {
       if (l.goto === undefined) out.push(at + ' shows ' + l.fact + ' (owned by ' + ui.FACT_OWNER[l.fact] + ') without goto')
       if (l.kind !== 'kv' && l.kind !== 'item') out.push(at + ' is a projection that is not kv / item')
@@ -161,7 +162,7 @@ const bareMismatch = (ls: PaneLine[]): string[] => {
 }
 // the golden table: the (fact, goto, kind) triples of the busy snapshot, in order
 const GOLDEN_NOW = [
-  'now.attention||header', 'now.attention||item', 'now.attention||item', 'residue.cleanup|hygiene|item',
+  'now.attention||header', 'now.attention||item', 'now.attention||item', 'now.attention|hygiene|item',
   'now.position||chart', 'now.position||chart', 'now.position||kv', 'now.position||kv', 'now.position||kv', 'now.position||kv',
   'dispatch.counts|dispatch|kv', 'review.round|review|kv', 'usage.limit_max|spend|kv', 'residue.groups|hygiene|kv',
   'now.background||item', 'now.tasks||header', 'now.tasks||item', 'now.tasks||item',
@@ -188,7 +189,7 @@ test('I17: every data line of 現況 has a fact; a foreign fact is a kv / item p
     expect(head.every(l => l.goto === undefined), 'the header carries no goto').toBe(true)
   }
   const zh = LOCALES[0][1]
-  const triples = nowLines(snap(), ctxOf(zh, 76)).flatMap(l => (l.fact === undefined ? [] : [l.fact + '|' + (l.goto ?? '') + '|' + l.kind]))
+  const triples = nowLines(snap(), ctxOf(zh, 76)).flatMap(l => (l.fact === undefined || l.fact === 'pane.chrome' ? [] : [l.fact + '|' + (l.goto ?? '') + '|' + l.kind]))
   expect(triples).toEqual(GOLDEN_NOW)
 })
 
@@ -264,7 +265,7 @@ test('hint: a tree exactly the window high has none, one row taller says 1 (both
     const probe = hinted(t, 76, { offset: 0, bodyRows: 0 }, 0)
     expect(hintSegOf(probe.out), loc + ': bodyRows == tree rows').toBeUndefined()
     const one = hinted(t, 76, { offset: 0, bodyRows: 0 }, 1)
-    expect(hintSegOf(one.out)?.text, loc).toBe(loc === 'zh-TW' ? '↓ 下方還有 1 行' : '↓ 1 more rows below')
+    expect(hintSegOf(one.out)?.text, loc).toBe(loc === 'zh-TW' ? '⇣ 下方還有 1 行' : '⇣ 1 more rows below')
     // negative control: a window taller than the tree has none either; and a window of 5 says total - 5
     expect(hintSegOf(hinted(t, 76, { offset: 0, bodyRows: 0 }, -3).out), loc).toBeUndefined()
     expect(hintSegOf(hinted(t, 76, { offset: 0, bodyRows: 5 }).out)?.text, loc).toContain(String(probe.total - 5))
@@ -281,8 +282,8 @@ test('hint: once the window has moved (offset > 0) there is none', () => {
 
 test('hint: its identity (own fact, owner pane, dim, glyph from GLYPHS) and the line is exactly as wide as the pane minus the edge', () => {
   expect(ui.FACT_OWNER['pane.overflow']).toBe('pane')
-  expect(ui.GLYPHS.structure.overflow).toBe('↓')
-  expect(ui.NEW_GLYPHS).toContain('↓')
+  expect(ui.GLYPHS.structure.overflow).toBe('⇣')
+  expect(ui.NEW_GLYPHS).toContain('⇣')
   for (const [loc, t] of LOCALES) {
     const r = hinted(t, 76, { offset: 0, bodyRows: 5 })
     const seg = hintSegOf(r.out) as Seg
@@ -322,6 +323,6 @@ test('hint: a tab strip that wraps makes the row count uncertain, so the hint sa
     // the header line at 30 columns: the metrics wrap, so give the hint a roomy line to show the wording
     const roomy = { text: 'x'.repeat(5), segs: [{ text: 'xxxxx' }] } as PaneLine
     const out = withOverflowHint([roomy, ui.blank()], c, { offset: 0, bodyRows: 5 }, 50, false)
-    expect(hintSegOf(out)?.text, loc).toBe(loc === 'zh-TW' ? '↓ 下方還有更多' : '↓ more rows below')
+    expect(hintSegOf(out)?.text, loc).toBe(loc === 'zh-TW' ? '⇣ 下方還有更多' : '⇣ more rows below')
   }
 })

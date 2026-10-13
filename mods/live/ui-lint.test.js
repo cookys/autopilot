@@ -88,3 +88,113 @@ test('glyph-check.js lists exactly the NEW_GLYPHS, in order', () => {
 test('FRESH_MS pins the five freshness thresholds (section 2.5)', () => {
   assert.deepEqual({ ...ui.FRESH_MS }, { quiet: 1_800_000, planReview: 86_400_000, terminalPlan: 604_800_000, codeReview: 86_400_000, dispatch: 86_400_000 })
 })
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// L1, L2, L4, L5, L6, L7 (plan section 6.2): text lints over the real sources. Each rule is a pure function of one source text, so the negative control
+// feeds it a planted violation and the real-source test feeds it the shipped file; a rule that goes quiet turns the control red.
+const fs = require('node:fs')
+const read = f => fs.readFileSync(path.join(__dirname, f), 'utf8')
+// code only: block comments and `// ...` line comments are dropped (a glyph in a comment is documentation, not drawing)
+const code = src => src.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, '')).split('\n').map(l => l.replace(/(^|\s)\/\/.*$/, '$1')).join('\n')
+const hits = (src, re) => code(src).split('\n').flatMap((l, i) => (re.test(l) ? [`${i + 1}: ${l.trim().slice(0, 100)}`] : []))
+const THEME_KEYS = 'claude|warning|error|success|suggestion|inactive|subtle'
+const STATE_IDS_RE = 'need_you|failed|stalled|findings|running|done|pending|stopped|skipped|unknown'
+
+const L1 = src => [
+  ...hits(src, new RegExp(`['"\`](${THEME_KEYS})['"\`]`)),
+  ...hits(src, /\b(color|bold|dim)\s*:/),
+  ...hits(src, /backgroundColor|\binverse\b/),
+  ...hits(src, /\b(color|bold|dimColor)\s*=\s*(\{?\s*["'`]|\{\s*(true|false)\b)/),
+  ...hits(src, /<(Text|Button|Box)[^>]*\s(bold|dimColor)(\s|>|\/)/),
+]
+// outside ui.ts: a codepoint in U+2190-2BFF or U+25A0-25FF (arrows, shapes, symbols, enclosed forms)
+const L2_RE = /[←-⯿■-◿]/u
+const L2 = src => hits(src, L2_RE)
+const L4 = src => {
+  const out = []
+  for (const m of code(src).matchAll(/import\s*(?:type\s*)?\{([^}]*)\}\s*from\s*['"]\.\/model['"]/g)) {
+    for (const name of m[1].split(',').map(x => x.trim().replace(/^type\s+/, '').split(/\s+as\s+/)[0])) if (['seg', 'row', 'rule', 'kv', 'padCells', 'NO_DATA'].includes(name)) out.push('imports ' + name + ' from ./model')
+  }
+  return out
+}
+const LINE_KINDS = 'verdict|header|kv|item|bullet|table|meter|empty|more|command|detail|chart|blank'
+// a hand-made line: a cast, a typed literal, or a spread of a PaneLine variable into a new object literal
+const L5_HAND = src => [...hits(src, /\bas PaneLine\b/), ...hits(src, /:\s*PaneLine\s*=\s*\{/), ...hits(src, /\{\s*\.\.\.\s*(line|l|piece|head\[[^\]]*\])\s*[,}]/)]
+const L5 = src => [...hits(src, new RegExp(`\\bkind\\s*:\\s*['"](${LINE_KINDS})['"]`)), ...L5_HAND(src)]
+const L6 = src => [
+  ...hits(src, /toFixed|toLocaleString/),
+  ...hits(src, /Math\.(round|floor)\([^)]*\)\s*\+\s*['"` ]*\s*(%|MB|GB|KB|h|m)\b/),
+  ...hits(src, /(['"`])(%| %|\$| MB| GB| KB|h|m|\*)\1/),
+]
+const L7 = src => [...hits(src, new RegExp(`['"\`](${STATE_IDS_RE})['"\`]`)), ...hits(src, /\b(GLYPHS|STATES)\b/)]
+
+const TABS = 'tabs.ts'
+const CHROME = ['tabs.ts', 'pane.tsx', 'band.tsx']
+
+test('L1: tabs.ts, pane.tsx and band.tsx hold no theme-key literal, no color:/bold:/dim: property, no background and no inverse', () => {
+  for (const f of CHROME) assert.deepEqual(L1(read(f)), [], f)
+})
+test('L1 control: each planted violation is reported', () => {
+  for (const bad of ["const k = 'warning'", 'const o = { color: x }', 'const o = { bold: true }', 'const o = { dim: true }', '<Text backgroundColor={x}>', 'const o = { inverse: true }', '<Text color="claude">', '<Text bold>hi</Text>', '<Text dimColor>hi</Text>']) {
+    assert.ok(L1(bad).length > 0, bad)
+  }
+  assert.deepEqual(L1('// the "claude" key\nconst a = drawSeg(s)'), []) // a comment and a plain call are fine
+})
+
+test('L2: outside ui.ts no source file carries a glyph; glyphs come from GLYPHS', () => {
+  const files = fs.readdirSync(__dirname).filter(f => /\.(ts|tsx)$/.test(f) && !/\.test\.ts$/.test(f) && f !== 'ui.ts' && f !== 'locales.ts')
+  assert.ok(files.includes('model.ts') && files.includes('tabs.ts') && files.includes('band.tsx'))
+  for (const f of files) assert.deepEqual(L2(read(f)), [], f)
+})
+test('L2: no string-table value carries a state or structure glyph', () => {
+  for (const loc of ['en', 'zh-TW']) {
+    const j = JSON.parse(read('locales/' + loc + '.json'))
+    const bad = Object.entries(j).filter(([, v]) => typeof v === 'string' && L2_RE.test(v)).map(([k, v]) => k + ': ' + v)
+    assert.deepEqual(bad, [], loc)
+  }
+})
+test('L2 control: a planted glyph is reported, a comment is not', () => {
+  assert.ok(L2("const g = '▲'").length > 0)
+  assert.ok(L2("const g = '→'").length > 0)
+  assert.ok(L2("const g = 'ⓘ'").length > 0)
+  assert.deepEqual(L2('// ▲ in a comment\nconst g = 1'), [])
+  assert.ok(L2_RE.test('⚑') && !L2_RE.test('abc 現況'))
+})
+
+test('L4: tabs.ts imports none of seg, row, rule, kv, padCells, NO_DATA from ./model', () => {
+  assert.deepEqual(L4(read(TABS)), [])
+})
+test('L4 control: each retired helper is reported', () => {
+  for (const n of ['seg', 'row', 'rule', 'kv', 'padCells', 'NO_DATA']) assert.ok(L4(`import { ${n}, other } from './model'`).length > 0, n)
+  assert.deepEqual(L4("import { oneLine } from './model'"), [])
+})
+
+test('L5: outside ui.ts no source builds a line by hand', () => {
+  for (const f of CHROME) assert.deepEqual(L5(read(f)), [], f)
+  for (const f of ['model.ts', 'register.ts']) assert.deepEqual(L5_HAND(read(f)), [], f)
+})
+test('L5 control: a hand-made line, a cast, a typed literal and a spread are reported', () => {
+  assert.ok(L5("return { kind: 'kv', text: 'x' }").length > 0)
+  assert.ok(L5('const l = { text: x } as PaneLine').length > 0)
+  assert.ok(L5("const l: PaneLine = { text: 'x' }").length > 0)
+  assert.ok(L5('out[at] = { ...line, text: x }').length > 0)
+  assert.deepEqual(L5("const a = { kind: 'plan', verdict: v }"), [])
+})
+
+test('L6: tabs.ts formats no number by hand', () => {
+  assert.deepEqual(L6(read(TABS)), [])
+})
+test('L6 control: toFixed, toLocaleString and a hand-typed unit are reported', () => {
+  for (const bad of ['x.toFixed(1)', 'x.toLocaleString()', "const s = n + ' MB'", "const s = n + '%'", "const s = '$' + n", "const s = n + 'h'", "const s = n + 'm'"]) assert.ok(L6(bad).length > 0, bad)
+  assert.deepEqual(L6('const s = ui.size(n)'), [])
+})
+
+test('L7: tabs.ts holds no StateId literal and never reads GLYPHS or STATES', () => {
+  assert.deepEqual(L7(read(TABS)), [])
+})
+test('L7 control: a state id literal and a table access are reported', () => {
+  for (const id of STATE_IDS_RE.split('|')) assert.ok(L7(`const s = '${id}'`).length > 0, id)
+  assert.ok(L7('const g = ui.GLYPHS.state.done').length > 0)
+  assert.ok(L7('const g = STATES[s.id]').length > 0)
+  assert.deepEqual(L7('const s = ui.stateOf(d, x)'), [])
+})

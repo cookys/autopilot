@@ -3,7 +3,8 @@
 // Enabled here for 審查: I1 to I8, I10 and I13 over every line of the tab, I11 rows F2 to F4, the QC chip, the toggles. The mounted I18 / I19 / I23 are in live.test.ts.
 import { test, expect } from 'claude-code/testing'
 import { makeT } from './i18n'
-import { NO_DETAIL, NO_SECTIONS, mergeDecisions, readDecisions, reviewTabLines } from './model'
+import { NO_DETAIL, NO_SECTIONS, mergeDecisions, readDecisions } from './model'
+import { reviewTabLines } from './tabs'
 import type { DecisionRow, DecisionsView, LiveSnapshot, PaneLine, ReviewSeat } from './model'
 import { GLYPHS, STATES, displayWidth, emojiViolations, emphasisViolations, isMade } from './ui'
 

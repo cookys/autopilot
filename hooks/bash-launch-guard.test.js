@@ -68,6 +68,15 @@ for (const cmd of [
   'while true; do for i in 1 2; do scripts/dispatch-review.sh $i; done; done &',
   'for i in 1 2; do scripts/dispatch-review.sh $i; done > /tmp/log 2>&1 &',
   'scripts/dispatch-review.sh x |& tee /tmp/l &', // `|&` pipeline that IS backgrounded
+  'cd scripts && bash dispatch-review.sh x &', // bare file name after a cd
+  'pushd scripts && ./dispatch-review.sh x &',
+  './dispatch-review.sh x &',
+  'bash dispatch-review.sh x &',
+  'cd /repo/scripts && setsid -f ./dispatch-hetero.sh x',
+  'scripts/dispatch-review.sh x & wait 999', // wait for a different pid
+  'scripts/dispatch-review.sh x & wait | cat', // a pipeline member waits for nothing
+  'scripts/dispatch-review.sh x & wait |& tee /tmp/l',
+  'scripts/dispatch-review.sh x & wait 123 456',
   'echo `nohup scripts/dispatch-review.sh x &`', // unquoted backtick substitution
   'x=`setsid -f scripts/dispatch-review.sh x`; echo $x',
   'echo `date; scripts/dispatch-review.sh x &`',
@@ -120,7 +129,17 @@ for (const cmd of [
   'for i in 1 2; do echo $i; done &', // backgrounded loop without a rail
   'for i in 1 2; do scripts/dispatch-review.sh $i; done', // same loop in the foreground
   'if true; then echo hi; fi &',
-  './dispatch-review.sh x &', // ./ form only counts after a cd scripts
+  // look-alikes that are NOT on the rail list
+  'bash dispatch-reviewer.sh x &',
+  'bash dispatch-review.sh.bak x &',
+  'bash my-dispatch-review.sh x &',
+  'bash dispatch-foo.sh x &',
+  'cd scripts && ./dispatch-review.test.sh &',
+  'cd scripts && bash dispatch-status.js &',
+  'scripts/dispatch-review.sh x & wait', // bare wait
+  'scripts/dispatch-review.sh x & wait $!',
+  'scripts/dispatch-review.sh x & wait "$!"',
+  'scripts/dispatch-review.sh x & wait 2>/dev/null',
 ]) {
   test(`rule1 allows: ${JSON.stringify(cmd)}`, () => {
     const r = run(cmd);

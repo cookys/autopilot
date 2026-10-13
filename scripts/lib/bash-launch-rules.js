@@ -25,7 +25,8 @@ const { executableText } = require('./bash-wait-rules.js');
 // Rail entrypoints that LAUNCH a worker (an explicit list: dispatch-status.js / dispatch-contract.js /
 // dispatch-tree.js are observers and validators, not launchers). Never a *.test.* file.
 const RAIL_NAMES = 'hetero|review|author|author-kimi|consult|discuss|explore|foreman|batch|anthropic-review|local-openai|plan-review|experience-critic';
-const RAIL_PATH_RE = new RegExp(`(?:^|/)scripts/dispatch-(?:${RAIL_NAMES})\\.(?:sh|js)$`);
+// Any path (or none) in front of a listed rail file name counts: `cd scripts && bash dispatch-review.sh &`.
+const RAIL_PATH_RE = new RegExp(`(?:^|/)dispatch-(?:${RAIL_NAMES})\\.(?:sh|js)$`);
 const TEST_FILE_RE = /\.test\.(?:sh|js)$/;
 const WAKE_HEADS = new Set(['wait']);
 const WAKE_SCRIPT_RE = /(?:^|\/)wait-dispatch-results(?:\.[a-z]+)?$/;
@@ -60,11 +61,12 @@ function segments(text) {
   // backgrounds the WHOLE list (`a && b | c &`), so every segment since listStart is marked.
   let listStart = 0;
   const big = s.length > SEG_MAX_TEXT;
+  let pipeNext = false; // the next segment is the right-hand side of a `|` / `|&`
   let subDepth = 0; // inside a `( … )` subshell: its background jobs are NOT waitable by the outer shell
   let inner = 0; // unquoted `(` that is not a subshell opener (`$(`, `f(`)
   let bt = false; // inside an unquoted backtick substitution
   const push = (bg, endsList = false) => {
-    if (cur.trim()) out.push({ text: cur.trim(), bg, sub: subDepth > 0 });
+    if (cur.trim()) { out.push({ text: cur.trim(), bg, sub: subDepth > 0, pipe: pipeNext }); pipeNext = false; }
     cur = '';
     if (bg) {
       for (let k = listStart; k < out.length; k += 1) out[k].bg = true;
@@ -105,7 +107,13 @@ function segments(text) {
     // re-parsed on its own by expandSegments), otherwise `echo $(rail &)` would be torn apart.
     if ((inner > 0 || bt) && (c === '\n' || c === ';' || c === '|' || c === '&')) { cur += c; continue; }
     if (c === '\n' || c === ';') { push(false, true); continue; }
-    if (c === '|') { push(false); if (s[i + 1] === '|' || s[i + 1] === '&') i += 1; continue; } // `||`, and `|&` (pipe stderr too)
+    if (c === '|') {
+      push(false);
+      if (s[i + 1] === '|') { i += 1; continue; } // `||`
+      if (s[i + 1] === '&') i += 1; // `|&` (pipe stderr too)
+      if (out.length) out[out.length - 1].pipe = true; // a pipeline member: `wait | cat` waits for nothing
+      pipeNext = true; continue;
+    }
     if (c === '&') {
       if (s[i + 1] === '&') { push(false); i += 1; continue; }
       if (s[i - 1] === '>' || s[i + 1] === '>') { cur += c; continue; } // `2>&1`, `&>file`
@@ -259,10 +267,16 @@ function commandPosition(segText) {
   return { head: null, detach, rest: [] };
 }
 
-const REL_RAIL_RE = new RegExp(`^\\./dispatch-(?:${RAIL_NAMES})\\.(?:sh|js)$`);
-function isRail(head, mentionsScripts) {
+function isRail(head) {
   if (!head || TEST_FILE_RE.test(head)) return false;
-  return RAIL_PATH_RE.test(head) || (mentionsScripts && REL_RAIL_RE.test(head));
+  return RAIL_PATH_RE.test(head);
+}
+
+// Only a bare `wait` or `wait $!` / `wait "$!"` is guaranteed to wait for the rail just launched
+// (`wait 999` waits for pid 999; redirections do not change that).
+function waitsForAll(rest) {
+  const args = rest.filter((a) => !/^\d*[<>]/.test(a));
+  return args.length === 0 || (args.length === 1 && /^"?\$!"?$/.test(args[0]));
 }
 
 // Rule 1. Returns { rule, why } or null.
@@ -275,14 +289,13 @@ function detectDetachNoWake(cmd) {
   // was `setsid -f` forked, that lives in a `( … )` subshell, or that runs inside `$(…)` / `bash -c`.
   const waiter = pos.some((p) => p.head && WAKE_SCRIPT_RE.test(p.head));
   if (waiter) return null;
-  const mentionsScripts = pos.some((p) => p.head === 'cd' && /(?:^|\/)scripts\/?$/.test(unq(p.rest[0] || '')));
   for (let idx = 0; idx < pos.length; idx += 1) {
     const p = pos[idx];
     if (!p.head || !(p.detach || p.seg.bg)) continue;
-    if (!isRail(p.head, mentionsScripts)) continue;
+    if (!isRail(p.head)) continue;
     const shape = p.detach ? 'setsid-f' : 'amp';
     if (shape === 'amp' && !p.seg.sub
-      && pos.slice(idx + 1).some((q) => q.head === 'wait' && !q.seg.sub && !q.seg.bg)) continue;
+      && pos.slice(idx + 1).some((q) => q.head === 'wait' && !q.seg.sub && !q.seg.bg && !q.seg.pipe && waitsForAll(q.rest))) continue;
     const rm = /dispatch-([a-z-]+)\.(?:sh|js)$/.exec(p.head);
     return {
       rule: 'detach-no-wake',

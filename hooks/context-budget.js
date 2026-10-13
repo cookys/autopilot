@@ -122,11 +122,10 @@ function maybeWriteLive(base, sid, tpath, st, fresh) {
   if (usage === null) return;
   let window = Number.isFinite(st.knownWindow) && st.knownWindow > 0 ? st.knownWindow : null;
   if (window === null) {
-    try {
-      const old = JSON.parse(fs.readFileSync(path.join(base, 'context', `${sid}.json`), 'utf8'));
-      const w = old && old.writer !== WRITER_ID && old.context_window && old.context_window.context_window_size;
-      if (Number.isFinite(w) && w > 0) { window = w; st.knownWindow = w; }
-    } catch { /* absent/corrupt ⇒ no earlier status-line window */ }
+    // Same validation as the inference branch (schema 1, parseable written_at, not our own echo,
+    // positive window): an unvalidated file must not become the remembered window here either.
+    const w = readStaleWindow(base, sid);
+    if (w !== null) { window = w; st.knownWindow = w; }
   }
   let windowSource = 'statusline';
   if (window === null) {

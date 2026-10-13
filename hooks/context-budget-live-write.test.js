@@ -128,6 +128,28 @@ test('stale status-line file ⇒ replaced; its window is kept as window_source s
   assert.ok(Date.now() - Date.parse(f.written_at) < 60000, 'fresh written_at');
 });
 
+for (const [label, mutate] of [
+  ['schema_version 2', (r) => ({ ...r, schema_version: 2 })],
+  ['no written_at', (r) => r],
+]) {
+  test(`stale status-line file with ${label} ⇒ its window is not adopted or remembered`, () => {
+    const live = shm('w2f-live-');
+    const rec = mutate(statusLineRec(1000000));
+    fs.mkdirSync(path.join(live, 'context'), { recursive: true });
+    // putFile stamps written_at; write the file by hand so "no written_at" really has none.
+    fs.writeFileSync(fileOf(live), JSON.stringify(label === 'no written_at' ? rec : { ...rec, written_at: new Date(Date.now() - 300000).toISOString() }));
+    const e = env(live);
+    const r1 = spawnSync('node', [HOOK], { input: JSON.stringify({ transcript_path: transcript([2, 100000, 500]), session_id: SID }), encoding: 'utf8', env: e });
+    assert.strictEqual(r1.status, 0, r1.stderr);
+    const f = readJson(fileOf(live));
+    assert.strictEqual(f.writer, 'context-budget');
+    assert.strictEqual(f.window_source, 'unknown', 'a file that fails validation is not a window source');
+    assert.strictEqual(f.context_window.context_window_size, null);
+    const st = readJson(path.join(e.AUTOPILOT_CONTEXT_BUDGET_DIR, `${SID}.json`));
+    assert.ok(!st.knownWindow, 'not remembered in hook state');
+  });
+}
+
 test('window remembered across calls: status line once fresh, then gone ⇒ statusline window persists after our own writes', () => {
   const live = shm('w2f-live-');
   const e = env(live);

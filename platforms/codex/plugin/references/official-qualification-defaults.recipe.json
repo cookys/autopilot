@@ -220,6 +220,56 @@
       "event_id": 221,
       "role": "discuss",
       "evidence_bundle": "docs/plans/evidence/2026-10-12-claude-5.5-requalify/broker/opus-low/discuss-v4"
+    },
+    {
+      "event_id": 230,
+      "role": "implementer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-gemini-4-argon-qualify/argon-low-qualify"
+    },
+    {
+      "event_id": 231,
+      "role": "implementer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-gemini-4-argon-qualify/argon-high-qualify"
+    },
+    {
+      "event_id": 232,
+      "role": "reviewer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-gemini-4-argon-qualify/out/reviewer-low"
+    },
+    {
+      "event_id": 233,
+      "role": "reviewer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-gemini-4-argon-qualify/out/reviewer-high"
+    },
+    {
+      "event_id": 234,
+      "role": "verification_author",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-gemini-4-argon-qualify/out/verification_author-low"
+    },
+    {
+      "event_id": 235,
+      "role": "verification_author",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-gemini-4-argon-qualify/out/verification_author-high"
+    },
+    {
+      "event_id": 236,
+      "role": "consult",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-gemini-4-argon-qualify/out/consult-low"
+    },
+    {
+      "event_id": 237,
+      "role": "consult",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-gemini-4-argon-qualify/out/consult-high"
+    },
+    {
+      "event_id": 238,
+      "role": "discuss",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-gemini-4-argon-qualify/out/discuss-low"
+    },
+    {
+      "event_id": 239,
+      "role": "discuss",
+      "evidence_bundle": "docs/plans/evidence/2026-10-14-gemini-4-argon-qualify/out/discuss-high"
     }
   ]
 }

@@ -5,7 +5,7 @@
 
 import { T_EN } from './i18n'
 import type { T } from './i18n'
-import { NEXT_TAB_GLYPH, dispatchLines, hygieneTabLines, legendLines, nowLines, paneWidth, PANE_TABS, reviewTabLines, spendTabLines, tabBadges, tabLabel } from './model'
+import { NEXT_TAB_GLYPH, dispatchLines, headerLines, hygieneTabLines, legendLines, nowLines, paneWidth, PANE_TABS, reviewTabLines, spendTabLines, tabBadges, tabLabel } from './model'
 import type { LiveSnapshot, PaneLine, PaneTab, Seg } from './model'
 
 export type { PaneTab } from './model'
@@ -51,20 +51,20 @@ export function Pane(el: { Box: El; Text: El; Link: El; Button?: El }, snap: Liv
   const { Box, Text, Link, Button } = el
   const cols = paneWidth(bodyColumns)
   const ctx = { t, cols, expanded, folded }
-  const plainLine = (l: PaneLine, i: number) => l.segs !== undefined
-    ? <Box key={'l' + i} flexWrap={l.wrap === true ? 'wrap' : undefined}>{l.segs.map((s, j) => <Text key={'g' + j} color={s.color} bold={s.bold} dimColor={s.dim} wrap={l.wrap === true ? 'wrap' : 'truncate'}>{s.text}</Text>)}</Box>
-    : <Text key={'l' + i} bold={l.bold} dimColor={l.dim} color={l.color ?? (l.warn ? 'warning' : undefined)} wrap={l.wrap === true ? 'wrap' : 'truncate'}>{l.text}</Text>
+  const plainLine = (l: PaneLine, i: number, k = '') => l.segs !== undefined
+    ? <Box key={k + 'l' + i} flexWrap={l.wrap === true ? 'wrap' : undefined}>{l.segs.map((s, j) => <Text key={'g' + j} color={s.color} bold={s.bold} dimColor={s.dim} wrap={l.wrap === true ? 'wrap' : 'truncate'}>{s.text}</Text>)}</Box>
+    : <Text key={k + 'l' + i} bold={l.bold} dimColor={l.dim} color={l.color ?? (l.warn ? 'warning' : undefined)} wrap={l.wrap === true ? 'wrap' : 'truncate'}>{l.text}</Text>
   // a line that carries a `toggle` id is a Button when the surface has them (a press expands / collapses its group), the plain line otherwise
-  const line = (l: PaneLine, i: number) => l.toggle !== undefined && Button !== undefined
-    ? <Button key={'b' + i} plain onPress={() => onToggle(l.toggle as string)}>
+  const line = (l: PaneLine, i: number, k = '') => l.toggle !== undefined && Button !== undefined
+    ? <Button key={k + 'b' + i} plain onPress={() => onToggle(l.toggle as string)}>
         {(l.segs ?? [{ text: l.text }]).map((x, j) => <Text key={'g' + j} color={(x as Seg).color} bold={(x as Seg).bold} dimColor={(x as Seg).dim} wrap="truncate">{x.text}</Text>)}
       </Button>
     // a line that carries a `goto` tab (a projection row, design plan §2.3) is a Button that opens that tab
     : l.goto !== undefined && Button !== undefined
-    ? <Button key={'g' + i} plain onPress={() => onTab(l.goto as PaneTab)}>
+    ? <Button key={k + 'g' + i} plain onPress={() => onTab(l.goto as PaneTab)}>
         {(l.segs ?? [{ text: l.text }]).map((x, j) => <Text key={'g' + j} color={(x as Seg).color} bold={(x as Seg).bold} dimColor={(x as Seg).dim} wrap="truncate">{x.text}</Text>)}
       </Button>
-    : plainLine(l, i)
+    : plainLine(l, i, k)
   const strip = tabStrip(el, tab, onTab, onNext, snap, t, cols)
   if (snap === null) {
     return (
@@ -74,15 +74,18 @@ export function Pane(el: { Box: El; Text: El; Link: El; Button?: El }, snap: Liv
       </Box>
     )
   }
-  if (tab === 'legend') return <Box flexDirection="column">{strip}{legendLines(ctx).map(line)}</Box>
-  if (tab === 'now') return <Box flexDirection="column">{strip}{nowLines(snap, ctx).map(line)}</Box>
-  if (tab === 'review') return <Box flexDirection="column">{strip}{reviewTabLines(snap, ctx).map(line)}</Box>
-  if (tab === 'spend') return <Box flexDirection="column">{strip}{spendTabLines(snap, ctx).map(line)}</Box>
-  if (tab === 'hygiene') return <Box flexDirection="column">{strip}{hygieneTabLines(snap, ctx).map(line)}</Box>
+  // the global header (design plan §2.2): drawn here, once, on every tab; no tab builder emits it (I9)
+  const head = headerLines(snap, ctx).map((l, i) => line(l, i, 'h'))
+  if (tab === 'legend') return <Box flexDirection="column">{strip}{head}{legendLines(ctx).map((l, i) => line(l, i))}</Box>
+  if (tab === 'now') return <Box flexDirection="column">{strip}{head}{nowLines(snap, ctx).map((l, i) => line(l, i))}</Box>
+  if (tab === 'review') return <Box flexDirection="column">{strip}{head}{reviewTabLines(snap, ctx).map((l, i) => line(l, i))}</Box>
+  if (tab === 'spend') return <Box flexDirection="column">{strip}{head}{spendTabLines(snap, ctx).map((l, i) => line(l, i))}</Box>
+  if (tab === 'hygiene') return <Box flexDirection="column">{strip}{head}{hygieneTabLines(snap, ctx).map((l, i) => line(l, i))}</Box>
   return (
     <Box flexDirection="column">
       {strip}
-      {dispatchLines(snap, ctx).map(line)}
+      {head}
+      {dispatchLines(snap, ctx).map((l, i) => line(l, i))}
       {snap.link === null ? null : <Link href={snap.link} label={t('dispatch.link')} />}
     </Box>
   )

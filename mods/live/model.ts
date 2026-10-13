@@ -53,14 +53,24 @@ export type LiveDecision = { question: string; options: { label: string; consequ
 // optional until P5 forces every tab line through a component.
 export type PaneLine = { toggle?: string; text: string; dim?: boolean; bold?: boolean; warn?: boolean; color?: ThemeKey; segs?: Seg[]; wrap?: boolean; hang?: number; kind?: LineKind; fact?: FactId; goto?: PaneTab; group?: string; ts?: number }
 export type VerdictKind = 'decide' | 'stalled' | 'waiting' | 'running' | 'idle'
-// attention = something awaits the human (drawn first); waiting = idle / source-not-wired note; the rest follow the gate rows
-export type PaneSections = { attention: PaneLine[]; waiting: PaneLine[]; tasks: PaneLine[]; decisions: PaneLine[]; foreman: PaneLine[] }
-export const NO_SECTIONS: PaneSections = { attention: [], waiting: [], tasks: [], decisions: [], foreman: [] }
+// P4: the sections are DATA, the tab builders turn them into lines (design plan §7). attention = a permission / question the session waits on; the notes say why a
+// source has nothing to show (its writer is not wired); the rest is the source view as read.
+export type PaneSections = {
+  attention: AttentionView | null
+  attentionNotWired: boolean
+  tasks: TasksView | null
+  tasksNote: 'todo_hint' | 'not_wired' | null // why `tasks` is null
+  decisionsNotWired: boolean
+  foreman: ForemanView | null
+  foremanNotWired: boolean
+}
+export const NO_SECTIONS: PaneSections = { attention: null, attentionNotWired: false, tasks: null, tasksNote: null, decisionsNotWired: false, foreman: null, foremanNotWired: false }
 
 // The two band lines of an ok snapshot. Every ok band carries one of five words; the fifth, 待命, is the idle word.
 export type BandView = {
   kind: VerdictKind
   key: ThemeKey
+  why: string // the verdict's own reason, always set: the first item under 要你處理 when the verdict asks something of the owner, else the first row of 位置 (§2.2)
   verdictReason: string | null // the one-phrase reason the wide band draws after a 要你決定 / 疑似卡住 verdict (null for the other verdicts)
   mark: string
   verdict: string
@@ -80,8 +90,10 @@ export type LiveSnapshot = {
   // the exact band text (an ok snapshot: line 1, then the reason on its own line)
   text: string
   band: BandView | null // set for state ok only
-  // pane header row: session cost / host cost / context (an ok snapshot); the state text otherwise
+  // the state text of a non-ok snapshot; for an ok one the legacy one-line "session / host / ctx" text (the pane draws the verdict header from `band` and `metrics`)
   header: string
+  // the context figure of the global header (`22%`, `—`); the two spend figures come from `detail.spend` (undefined = a snapshot built without it)
+  metrics?: { ctx: string }
   // what is awaited from the human, from the job model's decision object (null = nothing awaited)
   decision: LiveDecision | null
   project_key: string | null
@@ -829,6 +841,7 @@ export function bandView(env: Json, jobModel: JobModel | null, projectKey: strin
   return {
     kind,
     key: pick.key,
+    why: reason ?? '',
     verdictReason: kind === 'decide' || kind === 'stalled' ? reason : null,
     mark: pick.mark,
     verdict: pick.word,
@@ -1031,62 +1044,19 @@ const MAX_TASK_ROWS = 8
 // "<age> ago" / "<age> 前": the one place a time and its direction word live together (word order differs per language)
 export const agoText = (s: number, t: T = T_EN): string => t('ago', { age: ageText(s) })
 
-export function buildSections(src: Sources, foreman: ForemanView | null, identity: unknown, nowMs: number, t: T = T_EN): PaneSections {
+export function buildSections(src: Sources, foreman: ForemanView | null): PaneSections {
   const m = src.manifest
   const a = src.attention
-  const nw = t(NOT_WIRED_ID)
-  const attention: PaneLine[] = a !== null && a.kind !== 'idle'
-    ? [{ text: t('verdict.decide'), bold: true, warn: true }, { text: attentionReason(a, nowMs, t) }]
-    : []
-  const waiting: PaneLine[] = []
-  if (a !== null && a.kind === 'idle') {
-    const n = waitingMinutes(a.since_ms, nowMs)
-    waiting.push({ text: n === null ? t('hold.idle') : t('hold.idle_min', { n }), dim: true })
-  } else if (a === null && liveSource(m, 'attention') === false) {
-    waiting.push({ text: t('hold.not_wired', { nw }), dim: true })
-  }
-
-  const tasks: PaneLine[] = []
   const tk = src.tasks
-  if (tk !== null) {
-    if (tk.total === 0) tasks.push({ text: t('tasks.none'), dim: true })
-    else {
-      tasks.push({ text: t('tasks.summary', { c: tk.completed, total: tk.total, p: tk.in_progress }), bold: true })
-      if (tk.current !== null) tasks.push({ text: t('tasks.current', { what: tk.current }) })
-      for (const r of tk.rows.slice(0, MAX_TASK_ROWS)) tasks.push({ text: (r.status === 'completed' ? '[x] ' : r.status === 'in_progress' ? '[~] ' : '[ ] ') + r.subject, dim: r.status === 'completed' })
-    }
-  } else if (liveSource(m, 'tasks') === true) tasks.push({ text: t(TODO_TOOLS_ID), dim: true })
-  else if (liveSource(m, 'tasks') === false) tasks.push({ text: t('tasks.not_wired', { nw }), dim: true })
-
-  const decisions: PaneLine[] = []
-  const d = src.decisions
-  if (d !== null) {
-    const common = commonDirOf(identity)
-    if (d.count > 0) {
-      decisions.push({ text: t('proxy.decided', { n: d.count, irr: d.irreversible }), bold: true })
-      const label = writersLabel(d.writers, t)
-      if (label !== null) decisions.push({ text: label, dim: true })
-      for (const r of d.rows.slice(-MAX_DECISION_ROWS)) {
-        decisions.push({ text: '[' + (r.decision_id === null ? '—' : r.decision_id) + '] ' + r.decision + ' · ' + t(r.irreversible ? 'decision.irreversible' : 'decision.reversible') + ' · ' + (r.writer === null ? '—' : r.writer) + (r.round === null ? '' : ' · ' + t('decision.round', { r: r.round })) })
-        decisions.push({ text: vetoLine(r, common, d.root, t), dim: true })
-      }
-      if (d.rows.length > MAX_DECISION_ROWS) decisions.push({ text: t('decisions.older', { n: d.rows.length - MAX_DECISION_ROWS }), dim: true })
-    }
-    if (d.undocumented > 0) decisions.push({ text: t('proxy.undocumented', { n: d.undocumented }), dim: true })
-  } else if (notWired(m, ['ledger_engine', 'ledger_depth0'])) decisions.push({ text: t('decisions.not_wired', { nw }), dim: true })
-
-  const fm: PaneLine[] = []
-  if (foreman === null) fm.push({ text: t('foreman.not_wired', { nw }), dim: true })
-  else {
-    fm.push({ text: foreman.binding === 'session' ? t('foreman.head_session') : t('foreman.head_bound', { b: foreman.binding }), bold: true })
-    const age = (at: number | null, published: number | null) => agoText(at !== null ? (nowMs - at) / 1000 : published === null ? NaN : published, t)
-    for (const g of foreman.agents) {
-      fm.push({ text: (g.description || g.id) + ' · ' + (g.label || '—') + ' · ' + age(g.at_ms, g.age_s) + (g.stale ? ' · ' + t('foreman.quiet') : ''), dim: g.stale })
-    }
-    if (foreman.stage !== null) fm.push({ text: foreman.stage_source === null ? t('foreman.stage', { stage: foreman.stage, age: age(foreman.stage_at_ms, foreman.stage_age_s) }) : t('foreman.stage_src', { stage: foreman.stage, age: age(foreman.stage_at_ms, foreman.stage_age_s), src: foreman.stage_source }) })
-    if (foreman.agents.length === 0 && foreman.stage === null) fm.push({ text: t('foreman.empty'), dim: true })
+  return {
+    attention: a !== null && a.kind !== 'idle' ? a : null,
+    attentionNotWired: a === null && liveSource(m, 'attention') === false,
+    tasks: tk,
+    tasksNote: tk !== null ? null : liveSource(m, 'tasks') === true ? 'todo_hint' : liveSource(m, 'tasks') === false ? 'not_wired' : null,
+    decisionsNotWired: src.decisions === null && notWired(m, ['ledger_engine', 'ledger_depth0']),
+    foreman,
+    foremanNotWired: foreman === null,
   }
-  return { attention, waiting, tasks, decisions, foreman: fm }
 }
 
 // ---- stage-graph P7d: the review fact (<live>/runs/<project_key>.review.json, schema autopilot.review/1, written by the watcher) ----
@@ -1141,7 +1111,7 @@ export type ThemeKey = 'claude' | 'warning' | 'error' | 'success' | 'suggestion'
 export type SlotId = 'verdict' | 'position' | 'unit' | 'dispatch' | 'review' | 'decisions' | 'spend' | 'quota' | 'hygiene'
 // tag: which part the width table may drop or shorten (age, k/N, 族, the bar, the stage text)
 export type SegTag = 'age' | 'kn' | 'fam' | 'bar' | 'stage' | 'live' | 'stalled' | 'chip' | 'wt' | 'walk' | 'arrow' | 'reason' | 'round' | 'qc' | 'amt' | 'pct' | 'bar10' | 'bar5' | 'bar3' | 'qx'
-export type Seg = { text: string; color?: ThemeKey; bold?: boolean; dim?: boolean; tag?: SegTag; slot?: SlotId; role?: SegRole; here?: boolean; fmt?: FmtKind } // slot: set by layoutBand on the band line (the Button it presses); a separator has none
+export type Seg = { text: string; color?: ThemeKey; bold?: boolean; dim?: boolean; tag?: SegTag; slot?: SlotId; role?: SegRole; here?: boolean; fmt?: FmtKind; fact?: FactId } // slot: set by layoutBand on the band line (the Button it presses); a separator has none
 export type Slot = { id: SlotId; segs: Seg[] }
 
 // displayWidth / cellWidth live in ui.ts (the design system owns the width rules); displayWidth is re-exported for the band and the tests.
@@ -1670,7 +1640,7 @@ export function rule(title: string, right: Seg[], cols: number, fold?: { id: str
 }
 
 // the Now tab's foldable sections (what waits for you never folds); the ids share the toggle channel with the recent groups, hence the prefix
-export const SECTION = { where: 'sec:where', working: 'sec:working', cost: 'sec:cost', account: 'sec:account', recent: 'sec:recent', limits: 'sec:limits', today: 'sec:today', last24: 'sec:last24' } as const
+export const SECTION = { where: 'sec:now.where', account: 'sec:account', recent: 'sec:now.recent', limits: 'sec:limits', today: 'sec:today', last24: 'sec:last24' } as const
 export const isSectionId = (id: string): boolean => id.startsWith('sec:') || /^(now|dispatch|review|spend|hygiene|legend)\./.test(id)
 const isFolded = (ctx: PaneCtx, id: string): boolean => ctx.folded !== undefined && ctx.folded.has(id)
 // a heading plus its body, or the heading alone when the person folded it
@@ -1703,118 +1673,254 @@ export function tabBadges(snap: LiveSnapshot): Partial<Record<PaneTab, TabBadge>
 // ================= Now =================
 const KEY_IDS = { stage: 'label.stage', unit: 'label.unit', progress: 'label.progress', phase: 'label.phase', dispatch: 'label.dispatch', review: 'label.review', cost: 'label.cost' } as const
 
-// the walk as a diagram: `●──●──◐──○──○` with one label under each node when they fit, else only the current one's
-export function walkRows(w: StageWalkView, current: string, head: string, ctx: PaneCtx): PaneLine[] {
-  const t = ctx.t
-  const at = w.walk.indexOf(current)
-  const n = w.walk.length
-  const step = Math.max(3, Math.min(12, Math.floor((ctx.cols - KEY_W - 2) / Math.max(1, n - 1))))
-  const nodes: Seg[] = [dseg(padCells(head, KEY_W))]
-  w.walk.forEach((_id, i) => {
-    if (i > 0) nodes.push(seg('─'.repeat(step - 1), 'subtle'))
-    nodes.push(i < at ? seg('●', 'success') : i === at ? seg('◐', 'claude', true) : seg('○', 'inactive'))
-  })
-  const labels = w.walk.map(id => { const key = 'stage.' + id; const text = t(key); return text === key ? id : text })
-  const starts = labels.map((l, i) => KEY_W + i * step - Math.floor(displayWidth(l) / 2))
-  const fitsAll = labels.every((_l, i) => starts[i] >= (i === 0 ? 0 : starts[i - 1] + displayWidth(labels[i - 1]) + 1))
-  const lab: Seg[] = []
-  let cursor = 0
-  const place = (i: number, text: string) => {
-    const start = Math.max(cursor, starts[i])
-    lab.push(seg(' '.repeat(start - cursor)))
-    lab.push(i < at ? dseg(text) : i === at ? seg(text, 'claude', true) : seg(text, 'inactive'))
-    cursor = start + displayWidth(text)
-  }
-  if (fitsAll) labels.forEach((l, i) => place(i, l))
-  else place(at, labels[at])
-  return [row(...nodes), row(...lab)]
+// P4: the 現況 tab and the global header, built from ui.ts components only (design plan §2.1-§2.3, §5.1). The section order, ids and defaults come from SECTION_ORDER /
+// SECTION_DEFAULTS. A summary row is a projection of another tab's fact (a `kv` with `goto`); the tab's own facts are 要你處理, 位置, 背景工作, 任務 and 最近對話.
+const nowId = (key: string): string => 'sec:now.' + key
+const uiCtxOf = (ctx: PaneCtx): UiCtx => ({ t: ctx.t, cols: ctx.cols, ...(ctx.expanded === undefined ? {} : { expanded: ctx.expanded }) })
+const nowMsOf = (snap: LiveSnapshot): number => (typeof snap.detail.now_ms === 'number' && Number.isFinite(snap.detail.now_ms) ? snap.detail.now_ms : 0)
+const dotFrag = (): Frag => ui.val(' · ', { dim: true })
+
+// a foldable section: the header (its chip needs a fact), then the body while it is open
+function nowSection(u: UiCtx, ctx: PaneCtx, key: string, title: string, body: readonly PaneLine[], o: { right?: Frag; fact?: FactId; defaultFolded?: boolean } = {}): PaneLine[] {
+  const id = nowId(key)
+  const open = U.sectionOpen(ctx.folded, id, o.defaultFolded === true)
+  const head = ui.header(u, title, { id, open }, o.right === undefined ? {} : { right: o.right, fact: o.fact })
+  return open ? [head, ...body] : [head]
 }
 
-const needsYouLines = (snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] => {
+// ---- the global header (§2.2): drawn by pane.tsx above every tab, never by a tab builder ----
+export function headerLines(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
+  const b = snap.band
+  if (b === null) return [{ text: snap.header, dim: true }, ui.blank()] // a non-ok snapshot: the state text, nothing invented around it
   const t = ctx.t
+  const u = uiCtxOf(ctx)
+  const sp = snap.detail.spend
+  const ctxFigure = snap.metrics === undefined ? '—' : snap.metrics.ctx
+  const metrics: Frag[] = [
+    ui.headerProjection('spend.session', sp === null ? '$—' : sp.session, t('header.session')),
+    ui.headerProjection('spend.local_today', sp === null ? '$—' : sp.host_all, t('header.host')),
+    ui.val(t('header.ctx') + ' ' + ctxFigure, { fmt: 'pct', fact: 'header.verdict' }),
+  ]
+  const verdict = ui.stateOf('verdict', b.kind.toUpperCase())
+  const lines = ui.verdictHeader(u, { state: verdict, word: b.verdict, project: snap.detail.project ?? b.project, elapsed: b.elapsed === '—' ? '' : t('now.since', { e: b.elapsed }), metrics })
+  return wrapLines([...lines, ui.blank()], ctx.cols)
+}
+
+// ---- 要你處理: the verdict's reason first when it asks something of the owner, then the open decision, the attention ask and the residue the owner has to act on ----
+function attentionPart(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
+  const t = ctx.t
+  const b = snap.band as BandView
+  const nowMs = nowMsOf(snap)
   const d = snap.decision
-  const attn = snap.sections.attention
-  const wt = snap.detail.residue === null ? 0 : snap.detail.residue.needs_human_count
-  const asks = (d !== null ? 1 : 0) + (attn.length > 0 ? 1 : 0)
-  const badge: Seg[] = []
-  if (asks > 0) badge.push(seg('▲ ' + asks, 'warning', true))
-  if (wt > 0) badge.push(...(badge.length > 0 ? [seg('  ')] : []), seg('⚑ ' + wt, 'warning', true))
-  const out: PaneLine[] = [rule(t('now.needs_you'), badge, ctx.cols)]
-  if (d !== null) {
-    out.push(row(seg(' ▲ ', 'warning', true), seg(d.question + staleSuffix(d, t), undefined, true)))
-    d.options.forEach((o, i) => out.push(row(seg('   '), seg((i + 1) + '.', 'warning'), seg(' ' + o.label), dseg(o.consequence ? ' — ' + o.consequence : ''))))
+  const a = snap.sections.attention
+  const needYou = ui.stateOf('verdict', 'DECIDE')
+  const lines: PaneLine[] = []
+  const states: Stated[] = []
+  const put = (s: Stated, line: PaneLine, children: readonly PaneLine[] = []): void => { states.push(s); lines.push(line, ...children) }
+  const asks = b.kind === 'decide' || b.kind === 'stalled' || b.kind === 'waiting'
+  if (asks && !(b.kind === 'decide' && (d !== null || a !== null))) { // a decision question or an attention ask IS the reason of a 要你決定 verdict; do not say it twice
+    const s = b.kind === 'stalled' ? ui.stateOf('verdict', 'STALLED') : b.kind === 'waiting' ? ui.stateOf('attention', { source: null }) : needYou
+    put(s, ui.item(u, s, b.why, undefined, { fact: 'now.attention', word: false }))
   }
-  if (attn.length > 1) out.push(row(seg(' ▲ ', 'warning', true), seg(attn[1].text)))
-  if (wt > 0) out.push(row(seg(' ⚑ ', 'warning', true), seg(t('now.residue', { n: wt }), undefined, true), dseg(' → ' + t('now.see_hygiene'))))
-  if (asks === 0 && wt === 0) out.push(row(seg(' ✓', 'success'), dseg(' ' + t('now.nothing_waits'))))
-  return out
+  if (d !== null) {
+    const open = d.options.length > 0 && u.expanded?.has('now:decision') === true
+    put(needYou, ui.item(u, needYou, d.question + staleSuffix(d, t), undefined, { fact: 'now.attention', word: false, ...(d.options.length > 0 ? { toggle: { id: 'now:decision', open } } : {}) }),
+      open ? d.options.flatMap((o, i) => ui.detail(u, (i + 1) + '. ' + o.label + (o.consequence ? ' — ' + o.consequence : ''), { attached: true })) : [])
+  }
+  if (a !== null) put(needYou, ui.item(u, needYou, attentionReason(a, nowMs, t), undefined, { fact: 'now.attention', word: false }))
+  const wt = snap.detail.residue === null ? 0 : snap.detail.residue.needs_human_count
+  if (wt > 0) put(needYou, ui.projection('now', 'residue.cleanup', ui.item(u, needYou, t('now.residue', { n: wt }), undefined, { fact: 'residue.cleanup', word: false, goto: 'hygiene' })))
+  if (lines.length === 0) return nowSection(u, ctx, 'attention', t('now.needs_you'), [ui.empty(t('now.nothing_waits'), 'now.attention')])
+  return nowSection(u, ctx, 'attention', t('now.needs_you'), lines, { right: ui.countChip(u, ui.worst(states), states.length, 'now.attention'), fact: 'now.attention' })
+}
+
+// ---- 位置: the walk, stage, unit, progress and phase; the reason is the first row when the verdict asks nothing of the owner ----
+function positionPart(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
+  const t = ctx.t
+  const b = snap.band as BandView
+  const d = snap.detail
+  const m = d.marker
+  const F = 'now.position' as const
+  const body: PaneLine[] = []
+  if (b.kind === 'running' || b.kind === 'idle') body.push(ui.kv(u, t('label.reason'), [ui.val(b.why, { role: 'prose' })], { fact: F }))
+  if (snap.sections.attentionNotWired) body.push(ui.kv(u, t('label.waiting'), [ui.absent(t(NOT_WIRED_ID))], { fact: F }))
+  const head = m === null ? '' : [m.size === null ? null : m.size + (m.urgent ? '!' : ''), m.level].filter((x): x is string => x !== null).join('·')
+  const noStage = m === null || m.stage === null
+  const noUnit = m === null || m.unit === null || slotUnit(m, t) === null
+  if (m !== null && m.stage !== null && d.stage !== null && walkSegs(d.stage, m.stage) !== null) {
+    const labels = d.stage.walk.map(id => { const key = 'stage.' + id; const text = t(key); return text === key ? id : text })
+    const at = d.stage.walk.indexOf(m.stage)
+    const all = labels.join(' ')
+    body.push(...ui.chart(u, head, ui.walkValue(at, d.stage.walk.length), ui.KEY_W + displayWidth(all) <= ctx.cols - 1 ? all : labels[at], F))
+  }
+  if (noStage && noUnit) body.push(ui.empty(t('nodata.stage_unit'), F))
+  else {
+    if (m === null || m.stage === null) body.push(ui.kv(u, t(KEY_IDS.stage), [ui.absent(t('nodata.stage'))], { fact: F }))
+    else {
+      const age = m.stage_set_at_ms === null ? '—' : elapsedFrom(m.stage_set_at_ms, d.now_ms ?? 0)
+      body.push(ui.kv(u, t(KEY_IDS.stage), [ui.val(m.stage, { bold: true }), ...(age === '—' ? [] : [ui.val(' · ' + t('now.in_stage', { e: age }), { dim: true, fmt: 'dur' })]), ...(head === '' ? [] : [ui.val(' · ' + head, { dim: true, fmt: 'id' })])], { fact: F }))
+    }
+    if (m === null || m.unit === null || slotUnit(m, t) === null) body.push(ui.kv(u, t(KEY_IDS.unit), [ui.absent(t('nodata.unit'))], { fact: F }))
+    else {
+      const { index, total } = m.unit
+      const k = Math.min(Math.max(index, 1), total)
+      const cells = Math.min(total, 10)
+      const on = total > 10 ? Math.max(1, Math.min(10, Math.ceil((k * 10) / total))) : k
+      const extra = (m.unit.label === '' ? '' : ' ' + m.unit.label) + ' (' + m.unit.kind + ')' + (m.review_families.length > 0 ? ' · ' + t('now.families', { n: m.review_families.length }) : '')
+      body.push(ui.kv(u, t(KEY_IDS.unit), [ui.stepBar(cells, on, { here: true }), ui.fmtd('count', ' ' + index + '/' + total), ui.val(extra, { role: 'prose', dim: true })], { fact: F }))
+    }
+  }
+  body.push(ui.kv(u, t(KEY_IDS.progress), [ui.val(b.progress, { role: 'prose', ...(b.progressDim ? { dim: true } : {}) })], { fact: F }))
+  if (!b.phase.includes('▸')) body.push(ui.kv(u, t(KEY_IDS.phase), [ui.val(b.phase, { role: 'prose' })], { fact: F }))
+  return nowSection(u, ctx, 'where', t('now.where'), body.map(l => (l.fact === undefined ? l : ui.ownerRow('now', l.fact, l))))
+}
+
+// ---- 各分頁: one projection row per other tab (§2.3), each a `kv` with `goto` and its own fact ----
+// the code-review round as the review tab and this tab's one review row both read it (§3.3), so the two cannot disagree
+function codeRound(c: CodeReviewView, snap: LiveSnapshot): { age: number | null; stale: boolean; states: Stated[]; round: Stated; findings: number; unknown: number } {
+  const age = ageMsOf(snap.detail.now_ms, c.at)
+  const stale = !c.converged && age !== null && U.isStale('codeReview', age) // F4
+  const states = c.seats.map(s => U.stateOf('seat', seatSubject('code', s)))
+  const round = U.stateOf('round', { stale, converged: c.converged, seats: states })
+  return { age, stale, states, round, findings: states.filter(s => s.id === 'findings').length, unknown: states.filter(s => s.id === 'unknown').length }
+}
+
+function limitWins(t: T, s: SpendView | null, quota: readonly QuotaWindow[], nowMs: number | null): LimitWin[] {
+  const wins: LimitWin[] = []
+  if (s !== null && s.brain !== null && s.cap !== null) {
+    wins.push({ key: t('label.brain_today'), value: s.brain, cap: s.cap, fact: 'usage.brain', amount: ui.cat(ui.fmtd('money', ui.money(s.brain)), ui.val(' / ', { role: 'prose', dim: true }), ui.fmtd('money', ui.money(s.cap))) })
+  }
+  for (const w of quota) {
+    const k = QUOTA_KEYS[w.kind]
+    const fact: FactId = w.kind === 'five_hour' ? 'usage.window5h' : w.kind === 'seven_day' ? 'usage.window7d' : 'usage.window_other'
+    wins.push({ key: k === undefined ? bgLabel(w.kind.replace(/_/g, ' ')) : t(k), value: w.pct, cap: 100, fact, ...(w.resetsAtMs === null || nowMs === null || w.resetsAtMs <= nowMs ? {} : { resetMs: w.resetsAtMs - nowMs }) })
+  }
+  return wins
+}
+
+function tabsPart(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
+  const t = ctx.t
+  const d = snap.detail
+  const nowMs = nowMsOf(snap)
+  const body: PaneLine[] = []
+  // 派工 ›
+  {
+    const rows = snap.rows
+    if (rows === null) body.push(ui.kv(u, t('tab.dispatch'), [ui.absent(t('nodata.prefix', { what: t('nodata.runs') }))], { fact: 'dispatch.counts', goto: 'dispatch' }))
+    else if (rows.length === 0) body.push(ui.kv(u, t('tab.dispatch'), [ui.absent(t('dispatch.no_runs'))], { fact: 'dispatch.counts', goto: 'dispatch' }))
+    else {
+      const st = ui.worst(rows.map(r => ui.stateOf('run', runSubject(r))))
+      const live = d.counts === null ? rows.filter(r => !r.ended && r.fresh).length : d.counts.confirmed_live
+      const parts: Frag[] = [ui.stateLead(u, st), ui.val('  '), ui.fmtd('count', t('now.sum_runs', { n: rows.length })), dotFrag(), ui.fmtd('count', live > 0 ? t('now.running', { n: live }) : t('now.sum_idle'))]
+      if (d.stalled > 0) parts.push(dotFrag(), ui.fmtd('count', t('now.stalled', { n: d.stalled })))
+      const ended = rows.map(runEndedMs).filter((x): x is number => x !== null)
+      if (ctx.cols >= 100 && ended.length > 0 && nowMs > 0) parts.push(dotFrag(), ui.fmtd('ago', t('now.sum_last_end', { age: ui.dur(Math.max(0, nowMs - Math.max(...ended))) })))
+      body.push(ui.kv(u, t('tab.dispatch'), parts, { fact: 'dispatch.counts', goto: 'dispatch' }))
+    }
+  }
+  // 審查 ›: the code-review round only (§2.6): its state, the round id and how many seats have findings
+  {
+    const c = snap.review === null ? null : snap.review.code
+    if (c === null) body.push(ui.kv(u, t('tab.review'), [ui.absent(t('nodata.review'))], { fact: 'review.round', goto: 'review' }))
+    else {
+      const r = codeRound(c, snap)
+      const parts: Frag[] = [ui.stateLead(u, r.round), ui.val('  '), ui.val(t('review.code'), { role: 'prose' }), ui.val(' '), ui.fmtd('id', c.generation === null ? 'R—' : 'R' + c.generation)]
+      if (r.findings > 0) parts.push(dotFrag(), ui.fmtd('count', t('now.sum_review_fix', { n: r.findings })))
+      body.push(ui.kv(u, t('tab.review'), parts, { fact: 'review.round', goto: 'review' }))
+    }
+  }
+  // 用量 ›: the most-used of the brain cap, 5 h and 7 d (one fact, `usage.limit_max`)
+  {
+    const wins = limitWins(t, d.spend, snap.account === undefined ? [] : snap.account.quota, d.now_ms)
+    if (wins.length === 0) body.push(ui.kv(u, t('tab.spend'), [ui.absent(t('nodata.prefix', { what: t(d.spend === null ? 'nodata.spend' : 'nodata.brain') }))], { fact: 'usage.limit_max', goto: 'spend' }))
+    else {
+      const top = wins.reduce((a, w) => ((w.cap > 0 ? w.value / w.cap : 0) > (a.cap > 0 ? a.value / a.cap : 0) ? w : a))
+      body.push(ui.kv(u, t('tab.spend'), [ui.meterValue(top.value, top.cap, { cells: 10 }), ui.val('  '), top.amount ?? ui.val(top.key, { role: 'prose', dim: true })], { fact: 'usage.limit_max', goto: 'spend' }))
+    }
+  }
+  // 殘留 ›
+  {
+    const rs = d.residue
+    if (rs === null) body.push(ui.kv(u, t('tab.hygiene'), [ui.absent(t('nodata.prefix', { what: t('nodata.residue') }))], { fact: 'residue.groups', goto: 'hygiene' }))
+    else if (rs.needs_human_count === 0) body.push(ui.kv(u, t('tab.hygiene'), [ui.stateLead(u, ui.stateOf('cleanup', { errors: 0, done: 0 })), ui.val('  '), ui.val(t('now.sum_no_residue'), { role: 'prose' })], { fact: 'residue.groups', goto: 'hygiene' }))
+    else {
+      const parts: Frag[] = [ui.stateLead(u, ui.stateOf('residueGroup', 'dirty')), ui.val('  '), ui.fmtd('count', t('now.sum_residue', { n: rs.needs_human_count }))]
+      if (rs.needs_human_bytes !== null) parts.push(dotFrag(), ui.fmtd('size', ui.size(rs.needs_human_bytes)))
+      body.push(ui.kv(u, t('tab.hygiene'), parts, { fact: 'residue.groups', goto: 'hygiene' }))
+    }
+  }
+  return nowSection(u, ctx, 'tabs', t('now.tabs'), body.map(l => ui.projection('now', l.fact as FactId, l)))
+}
+
+// ---- 背景工作: live rows first; the ended and the quiet ones sit behind one `▸ N 項已結束` toggle (F1, X0, X1) ----
+const BG_EXIT = /^\[exited with code (\d+)\]$/
+export const exitCodeOf = (tail: string | null): number | null => {
+  if (tail === null) return null
+  const m = BG_EXIT.exec(tail.trim())
+  return m === null ? null : Number(m[1])
+}
+const ACTIVITY_KEYS = { shell: 'label.bg_shell', monitor: 'label.bg_monitor', agent: 'label.bg_agent' } as const
+
+function backgroundPart(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
+  const t = ctx.t
+  const nowMs = nowMsOf(snap)
+  const live: U.RowSpec[] = []
+  const gone: U.RowSpec[] = []
+  ;(snap.activity ?? []).forEach((it, i) => {
+    const state = ui.stateOf('background', { exit: exitCodeOf(it.tail), quietMs: it.quietMs ?? 0 }) // an item with no output file has no clock: it counts as live
+    const key = 'bg:' + i + ':' + it.label.slice(0, 24)
+    const showQuiet = (state.id === 'running' || state.id === 'stopped') && it.quietMs !== null
+    const meta = [t(ACTIVITY_KEYS[it.kind]), ...(it.detail === null ? [] : [it.detail]), ...(showQuiet ? [t('bg.quiet', { age: ui.dur(it.quietMs as number) })] : [])].join(' · ')
+    const spec: U.RowSpec = {
+      group: key, ts: nowMs - (it.quietMs ?? 0) + i / 1000, state, fact: 'now.background', body: it.label, meta,
+      ...(it.tail === null ? {} : { toggle: key, children: ui.detail(u, it.tail, { attached: true }) }),
+    }
+    ;(state.id === 'running' ? live : gone).push(spec)
+  })
+  const body: PaneLine[] = live.length === 0 ? [ui.empty(t('bg.none'), 'now.background')] : ui.list(u, 'now.background', t('bg.noun_live'), live)
+  if (gone.length > 0) {
+    const open = u.expanded?.has('more:now.background.ended') === true
+    body.push(ui.more(u, gone.length, t('bg.noun_ended'), 'more:now.background.ended', open, true))
+    if (open) body.push(...ui.list(u, 'now.background.gone', t('bg.noun_live'), gone))
+  }
+  return nowSection(u, ctx, 'background', t('now.background'), body)
+}
+
+// ---- 任務: the unfinished ones; the finished ones sit behind one `▸ N 項已完成` toggle ----
+function tasksPart(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
+  const t = ctx.t
+  const tk = snap.sections.tasks
+  if (tk === null) {
+    const note = snap.sections.tasksNote
+    if (note === null) return []
+    return nowSection(u, ctx, 'tasks', t('now.tasks'), [ui.empty(note === 'todo_hint' ? t(TODO_TOOLS_ID) : t('tasks.not_wired', { nw: t(NOT_WIRED_ID) }), 'now.tasks')])
+  }
+  const chip = ui.fmtd('count', tk.completed + '/' + tk.total, 'now.tasks')
+  if (tk.total === 0) return nowSection(u, ctx, 'tasks', t('now.tasks'), [ui.empty(t('tasks.none'), 'now.tasks')], { right: chip, fact: 'now.tasks' })
+  const spec = (r: { subject: string; status: string }, i: number): U.RowSpec => ({ group: 'task:' + i, ts: i, state: ui.stateOf('task', r.status), fact: 'now.tasks', body: r.subject, word: false })
+  const rows = tk.rows.map((r, i) => ({ r, i }))
+  const open = rows.filter(x => x.r.status !== 'completed').sort((a, b) => Number(b.r.status === 'in_progress') - Number(a.r.status === 'in_progress') || a.i - b.i).map(x => spec(x.r, x.i))
+  const done = rows.filter(x => x.r.status === 'completed').map(x => spec(x.r, x.i))
+  const body: PaneLine[] = open.length === 0 ? [ui.empty(t('tasks.all_done'), 'now.tasks')] : ui.list(u, 'now.tasks', t('tasks.noun_open'), open, { keepOrder: true })
+  if (tk.completed > 0) {
+    const shown = u.expanded?.has('more:now.tasks.done') === true
+    body.push(ui.more(u, tk.completed, t('tasks.noun_done'), 'more:now.tasks.done', shown, true))
+    if (shown) body.push(...ui.list(u, 'now.tasks.shown', t('tasks.noun_done'), done, { keepOrder: true }))
+  }
+  return nowSection(u, ctx, 'tasks', t('now.tasks'), body, { right: chip, fact: 'now.tasks' })
 }
 
 function nowLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
-  const t = ctx.t
-  const d = snap.detail
-  const b = snap.band
-  const out: PaneLine[] = []
-  if (b === null) return [{ text: snap.header, dim: true }] // a non-ok snapshot: the state text, nothing invented around it
-  if (b !== null) {
-    out.push(row(seg(b.mark + ' ' + b.verdict, b.key, b.kind !== 'idle'), seg('  ' + (d.project ?? b.project), undefined, true), dseg(b.elapsed === '—' ? '' : ' · ' + t('now.since', { e: b.elapsed }))))
-    if (b.reason !== null) out.push({ text: b.reason, dim: true })
-  }
-  out.push({ text: snap.header, dim: true })
-  out.push(BLANK)
-  const awaiting = snap.decision !== null || snap.sections.attention.length > 0 || (d.residue !== null && d.residue.needs_human_count > 0)
-  const needs = needsYouLines(snap, ctx)
-  if (awaiting) out.push(...needs, BLANK)
-
-  // Where you are: the walk diagram, then stage / unit / progress / phase as key-value rows
-  const where: PaneLine[] = []
-  const m = d.marker
-  const head = m === null ? '' : [m.size === null ? null : m.size + (m.urgent ? '!' : ''), m.level].filter((x): x is string => x !== null).join('·')
-  if (m !== null && m.stage !== null && d.stage !== null && walkSegs(d.stage, m.stage) !== null) where.push(...walkRows(d.stage, m.stage, head, ctx))
-  if (m === null || m.stage === null) where.push(NO_DATA(t, 'nodata.stage'))
-  else {
-    const age = m.stage_set_at_ms === null ? '—' : elapsedFrom(m.stage_set_at_ms, d.now_ms ?? 0)
-    where.push(kv(t(KEY_IDS.stage), seg(m.stage, 'claude', true), dseg(age === '—' ? '' : ' · ' + t('now.in_stage', { e: age })), ...(head === '' ? [] : [dseg(' · ' + head)])))
-  }
-  const unit = slotUnit(m, t)
-  if (unit === null || m === null || m.unit === null) where.push(NO_DATA(t, 'nodata.unit'))
-  else {
-    const bar = unitBarSegs(m.unit.index, m.unit.total)
-    const extra = (m.unit.label === '' ? '' : ' ' + m.unit.label) + ' (' + m.unit.kind + ')' + (m.review_families.length > 0 ? ' · ' + t('now.families', { n: m.review_families.length }) : '')
-    where.push(kv(t(KEY_IDS.unit), ...bar, seg(' ' + m.unit.index, undefined, true), seg('/' + m.unit.total), dseg(extra)))
-  }
-  where.push(kv(t(KEY_IDS.progress), b.progressDim ? dseg(b.progress) : seg(b.progress)))
-  if (!b.phase.includes('▸')) where.push(kv(t(KEY_IDS.phase), seg(b.phase)))
-  out.push(...section(ctx, SECTION.where, t('now.where'), [], where))
-
-  // Working now: dispatches, review / QC, background work, the session's tasks
-  const work: PaneLine[] = []
-  if (d.counts !== null) {
-    const live = d.counts.confirmed_live
-    work.push(kv(t(KEY_IDS.dispatch), seg('●', live > 0 ? 'suggestion' : 'inactive', live > 0), seg(' ' + t('now.running', { n: live }), undefined, live > 0), dseg('  ' + t('now.stalled', { n: d.stalled }))))
-  }
-  const round = reviewRound(snap.review)
-  const chip = qcChip(d.qc)
-  if (round !== null || chip !== null) {
-    const segs: Seg[] = []
-    if (round !== null) segs.push(dseg('↺ '), seg('R' + round))
-    if (chip !== null) segs.push(seg(round === null ? '' : '  '), d.qc !== null && d.qc.state === 'owed' ? seg(chip, 'warning', true) : seg(chip, 'success'), d.qc !== null && d.qc.state === 'owed' ? seg(' ' + t('now.qc_owed'), 'warning') : dseg(' ' + t('now.qc_ok')))
-    work.push(kv(t(KEY_IDS.review), ...segs))
-  }
-  work.push(...activityLines(snap.activity, ctx))
-  work.push(...snap.sections.tasks)
-  if (work.length > 0) out.push(BLANK, ...section(ctx, SECTION.working, t('now.working'), [], work))
-  if (!awaiting) out.push(BLANK, ...needs)
-
-  // Cost today: brain-tier spend against the cap
-  const sp_ = d.spend
-  if (sp_ !== null && sp_.brain !== null && sp_.cap !== null) {
-    const pct = Math.round((sp_.brain / sp_.cap) * 100)
-    const color = spendColor(sp_.brain, sp_.cap)
-    out.push(BLANK, ...section(ctx, SECTION.cost, t('now.cost'), [], [kv(t(KEY_IDS.cost), seg(usd(sp_.brain), color), dseg(' / ' + usd(sp_.cap) + '  '), ...spendBarSegs(sp_.brain, sp_.cap, 24), dseg('  ' + pct + '%'))]))
-  }
-  if (snap.recent !== undefined) out.push(BLANK, ...recentLines(snap.recent, ctx))
-  return out
+  if (snap.band === null) return [] // a non-ok snapshot: the header line is the state text, there is no body
+  const u = uiCtxOf(ctx)
+  return U.sections('now', {
+    attention: attentionPart(u, ctx, snap),
+    where: positionPart(u, ctx, snap),
+    tabs: tabsPart(u, ctx, snap),
+    background: backgroundPart(u, ctx, snap),
+    tasks: tasksPart(u, ctx, snap),
+    recent: snap.recent === undefined ? [] : recentLines(snap.recent, ctx),
+  })
 }
 
 // ================= Recent prompts (the Now tab's trailing section) =================
@@ -1891,8 +1997,9 @@ export function collapsedPrompt(prompt: string): string {
 
 export function recentLines(recent: RecentGroup[] | null | undefined, ctx: PaneCtx): PaneLine[] {
   const t = ctx.t
-  const out: PaneLine[] = section(ctx, SECTION.recent, t('recent.title'), [], [])
-  if (isFolded(ctx, SECTION.recent)) return out
+  const open = U.sectionOpen(ctx.folded, SECTION.recent, true) // the history starts folded (SECTION_DEFAULTS)
+  const out: PaneLine[] = [ui.header(uiCtxOf(ctx), t('recent.title'), { id: SECTION.recent, open })]
+  if (!open) return out
   if (recent === null || recent === undefined || recent.length === 0) return [...out, { text: ' ' + t('recent.empty'), dim: true }]
   const you = t('recent.you')
   const ai = t('recent.ai')
@@ -1927,7 +2034,6 @@ export function recentLines(recent: RecentGroup[] | null | undefined, ctx: PaneC
 export type BgKind = 'shell' | 'monitor'
 export type BgTask = { id: string; kind: BgKind; label: string; output: string | null; lastEvent: string | null }
 export type ActivityItem = { kind: BgKind | 'agent'; label: string; detail: string | null; tail: string | null; quietMs: number | null }
-export const MAX_ACTIVITY_ROWS = 6
 const BG_LABEL_CHARS = 200
 const BG_TAIL_CHARS = 300
 
@@ -2006,23 +2112,6 @@ export function lastOutputLine(text: string): string | null {
     if (parts.length > 0) return oneLineClip(redactSecrets(parts[parts.length - 1]), BG_TAIL_CHARS)
   }
   return null
-}
-
-const ACTIVITY_KEYS = { shell: 'label.bg_shell', monitor: 'label.bg_monitor', agent: 'label.bg_agent' } as const
-export function activityLines(items: readonly ActivityItem[] | null | undefined, ctx: PaneCtx): PaneLine[] {
-  if (items === null || items === undefined || items.length === 0) return []
-  const t = ctx.t
-  const out: PaneLine[] = []
-  for (const it of items.slice(0, MAX_ACTIVITY_ROWS)) {
-    const quiet = it.quietMs === null ? '' : ' · ' + t('bg.quiet', { age: ageText(Math.max(0, it.quietMs) / 1000) })
-    const detail = it.detail === null ? '' : ' (' + it.detail + ')'
-    const room = Math.max(8, ctx.cols - KEY_W - 2 - displayWidth(detail + quiet))
-    const label = displayWidth(it.label) <= room ? it.label : truncateToWidth(it.label, room)
-    out.push(kv(t(ACTIVITY_KEYS[it.kind]), seg('● ', 'suggestion'), seg(label), dseg(detail + quiet)))
-    if (it.tail !== null) out.push(row(dseg(padCells('', KEY_W) + '└ ' + truncateToWidth(it.tail, Math.max(8, ctx.cols - KEY_W - 2)))))
-  }
-  if (items.length > MAX_ACTIVITY_ROWS) out.push(row(dseg(padCells('', KEY_W) + t('bg.more', { n: items.length - MAX_ACTIVITY_ROWS }))))
-  return out
 }
 
 // ================= Account and quota =================
@@ -2115,6 +2204,25 @@ export const runAgedOut = (r: LivePaneRow, nowMs: number | null): boolean => {
 }
 const DISPATCH_SEC = { running: 'dispatch.running', finished: 'dispatch.finished', other: 'dispatch.other' } as const
 
+// the foreman sidecar (a job's agents and stage) as rows of 執行中: one `item` per agent, notes for the binding, the stage and the empty case (P4: was hand-built text in buildSections)
+function foremanLines(u: UiCtx, snap: LiveSnapshot, nowMs: number | null): PaneLine[] {
+  const t = u.t
+  const f = snap.sections.foreman
+  const fact = 'dispatch.runs' as const
+  if (f === null) return snap.sections.foremanNotWired ? ui.detail(u, t('foreman.not_wired', { nw: t(NOT_WIRED_ID) }), { fact }) : []
+  const out: PaneLine[] = ui.detail(u, f.binding === 'session' ? t('foreman.head_session') : t('foreman.head_bound', { b: f.binding }), { fact })
+  const age = (at: number | null, published: number | null): string => ui.ago(at !== null && nowMs !== null ? Math.max(0, nowMs - at) : published === null ? NaN : published * 1000, t)
+  const rows: U.RowSpec[] = f.agents.map((g, i) => ({
+    group: 'fm:' + i, ts: g.at_ms ?? 0, fact, body: g.description || g.id,
+    state: ui.stateOf('run', { rc: g.ended ? 0 : null, final_status: null, stall: false, fresh: !g.stale }),
+    meta: (g.label || '—') + ' · ' + age(g.at_ms, g.age_s) + (g.stale ? ' · ' + t('foreman.quiet') : ''),
+  }))
+  if (rows.length > 0) out.push(...ui.list(u, 'dispatch.foreman', t('foreman.noun'), rows))
+  if (f.stage !== null) out.push(...ui.detail(u, f.stage_source === null ? t('foreman.stage', { stage: f.stage, age: age(f.stage_at_ms, f.stage_age_s) }) : t('foreman.stage_src', { stage: f.stage, age: age(f.stage_at_ms, f.stage_age_s), src: f.stage_source }), { fact }))
+  if (f.agents.length === 0 && f.stage === null) out.push(...ui.detail(u, t('foreman.empty'), { fact }))
+  return out
+}
+
 function dispatchLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
   const t = ctx.t
   const u: UiCtx = { t, cols: ctx.cols, ...(ctx.expanded === undefined ? {} : { expanded: ctx.expanded }) }
@@ -2132,7 +2240,7 @@ function dispatchLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
     col(t('dispatch.col_elapsed'), 3, 2, 'right'), col(last, 4, 3, 'right'),
   ]
   const baseCells = (r: LivePaneRow): string[] => [r.run_id, cell(r.role), cell(r.runner) + ' / ' + cell(r.model), r.elapsed_s === null ? '—' : ui.dur(r.elapsed_s * 1000)]
-  const out: PaneLine[] = [{ text: snap.header, dim: true }, ui.blank()]
+  const out: PaneLine[] = []
   const running: UiTableListRow[] = []
   const finished: UiTableListRow[] = []
   let finishedAll: Stated[] = []
@@ -2155,7 +2263,7 @@ function dispatchLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
   if (rows === null) runBody.push(ui.empty(t('nodata.prefix', { what: t('nodata.runs') }), 'dispatch.runs'))
   else if (running.length === 0) runBody.push(ui.empty(t(rows.length === 0 ? 'dispatch.no_runs' : 'dispatch.no_running'), 'dispatch.runs'))
   else runBody.push(...ui.tableList(u, DISPATCH_SEC.running, t('dispatch.more_running'), columns(t('dispatch.col_seen')), running, { fact: 'dispatch.runs' }))
-  runBody.push(...snap.sections.waiting, ...snap.sections.foreman) // legacy hand-built lines until P4 turns buildSections into data
+  runBody.push(...foremanLines(u, snap, nowMs))
   const runChip = running.length === 0 ? undefined : ui.countChip(u, ui.worst(running.map(r => r.state)), running.length, 'dispatch.counts')
   out.push(...sec(DISPATCH_SEC.running, t('dispatch.running'), runChip, runBody.map(l => (l.kind === undefined ? l : own(l)))))
   // 已完成: ended runs, the latest 5 and a toggle for the rest; a run older than a day is counted in the chip only
@@ -2216,12 +2324,7 @@ function codeSection(u: U.Ctx, c: CodeReviewView | null, snap: LiveSnapshot, ctx
   const t = u.t
   const id = secId('code')
   if (c === null) return snap.review === null ? [U.header(u, t('review.code'), { id, open: U.sectionOpen(ctx.folded, id) }), ...(U.sectionOpen(ctx.folded, id) ? [U.empty(t('nodata.review'), 'review.round')] : [])] : []
-  const age = ageMsOf(snap.detail.now_ms, c.at)
-  const stale = !c.converged && age !== null && U.isStale('codeReview', age) // F4
-  const states = c.seats.map(s => U.stateOf('seat', seatSubject('code', s)))
-  const round = U.stateOf('round', { stale, converged: c.converged, seats: states })
-  const findings = states.filter(s => s.id === 'findings').length
-  const unknown = states.filter(s => s.id === 'unknown').length
+  const { age, stale, states, round, findings, unknown } = codeRound(c, snap)
   const meta = stale && age !== null ? U.ago(age, t) : round.id === 'running' && findings > 0 ? t('review.findings_running', { n: findings }) : round.id === 'unknown' && unknown > 0 ? t('review.unknown_seats', { n: unknown }) : undefined
   const metaFmt: U.FmtKind = stale ? 'ago' : 'count'
   const open = U.sectionOpen(ctx.folded, id, stale)
@@ -2259,8 +2362,7 @@ function decisionsSection(u: U.Ctx, snap: LiveSnapshot, ctx: PaneCtx): PaneLine[
   const head = U.header(u, t('review.decided'), { id, open }, chip === undefined ? {} : { right: chip, fact: 'review.decisions' })
   if (!open) return [head]
   if (dv === null) {
-    const note = snap.sections.decisions[0]
-    return [head, U.empty(note !== undefined ? note.text : t('nodata.decisions'), 'review.decisions')] // the W3a note ("來源未接") is reused as is until P4 rebuilds the sections
+    return [head, U.empty(snap.sections.decisionsNotWired ? t('decisions.not_wired', { nw: t(NOT_WIRED_ID) }) : t('nodata.decisions'), 'review.decisions')]
   }
   const out: PaneLine[] = [head]
   if (dv.count === 0) out.push(U.empty(t('review.none_decided'), 'review.decisions'))
@@ -2316,8 +2418,6 @@ function reviewTabLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
   const u: U.Ctx = { t: ctx.t, cols: ctx.cols, ...(ctx.expanded === undefined ? {} : { expanded: ctx.expanded }) }
   const r = snap.review
   return [
-    { text: snap.header, dim: true }, // the legacy global header line: P4 replaces it with the verdict header
-    U.blank(),
     ...U.sections('review', {
       code: codeSection(u, r === null ? null : r.code, snap, ctx),
       qc: qcSection(u, snap, ctx),
@@ -2339,15 +2439,7 @@ function withMoney(template: string, amount: ui.Frag): ui.Frag {
 type LimitWin = { key: string; value: number; cap: number; amount?: ui.Frag; resetMs?: number; fact: FactId }
 function limitsSection(u: ui.Ctx, ctx: PaneCtx, s: SpendView | null, quota: readonly QuotaWindow[], nowMs: number | null): PaneLine[] {
   const t = ctx.t
-  const wins: LimitWin[] = []
-  if (s !== null && s.brain !== null && s.cap !== null) {
-    wins.push({ key: t('label.brain_today'), value: s.brain, cap: s.cap, fact: 'usage.brain', amount: ui.cat(ui.fmtd('money', ui.money(s.brain)), ui.val(' / ', { role: 'prose', dim: true }), ui.fmtd('money', ui.money(s.cap))) })
-  }
-  for (const w of quota) {
-    const k = QUOTA_KEYS[w.kind]
-    const fact: FactId = w.kind === 'five_hour' ? 'usage.window5h' : w.kind === 'seven_day' ? 'usage.window7d' : 'usage.window_other'
-    wins.push({ key: k === undefined ? bgLabel(w.kind.replace(/_/g, ' ')) : t(k), value: w.pct, cap: 100, fact, ...(w.resetsAtMs === null || nowMs === null || w.resetsAtMs <= nowMs ? {} : { resetMs: w.resetsAtMs - nowMs }) })
-  }
+  const wins = limitWins(t, s, quota, nowMs)
   const open = !isFolded(ctx, SECTION.limits)
   if (wins.length === 0) {
     const what = s === null ? 'nodata.spend' : 'nodata.brain'
@@ -2435,7 +2527,6 @@ function spendTabLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
   const u: ui.Ctx = { t: ctx.t, cols: ctx.cols, ...(ctx.expanded === undefined ? {} : { expanded: ctx.expanded }) }
   const s = snap.detail.spend
   return [
-    { text: snap.header, dim: true }, BLANK, // the global header is P4's (§2.2): until then the tab keeps its legacy header line
     ...ui.sections('spend', {
       limits: limitsSection(u, ctx, s, snap.account === undefined ? [] : snap.account.quota, snap.detail.now_ms),
       today: todaySection(u, ctx, s),
@@ -2452,7 +2543,7 @@ function hygieneTabLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
   const ls = snap.detail.load_source
   const residue = snap.detail.residue
   const nowMs = snap.detail.now_ms
-  const out: PaneLine[] = [{ text: snap.header, dim: true }, BLANK]
+  const out: PaneLine[] = []
   if (ls === null) out.push(NO_DATA(t, 'nodata.load_source'))
   else {
     const chip = hygieneChip(ls)

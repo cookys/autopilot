@@ -22,7 +22,7 @@ function snap(o: Over): LiveSnapshot {
   return {
     header: 'cost $1.00 · host $2.00', review: o.review ?? null,
     detail: { ...NO_DETAIL, now_ms: o.now === undefined ? NOW : o.now, qc: o.qc ?? null, decisions: o.decisions ?? null },
-    sections: { ...NO_SECTIONS, decisions: o.note === undefined ? [] : [{ text: o.note, dim: true }] },
+    sections: { ...NO_SECTIONS, decisionsNotWired: o.note !== undefined },
   } as never
 }
 
@@ -62,7 +62,7 @@ const LOCALES: [string, typeof zh][] = [['zh-TW', zh], ['en', en]]
 
 const render = (s: LiveSnapshot, cols = 76, extra: { expanded?: string[]; folded?: string[]; t?: typeof zh } = {}): PaneLine[] =>
   reviewTabLines(s, { t: extra.t ?? zh, cols, expanded: new Set(extra.expanded ?? []), folded: new Set(extra.folded ?? []) })
-const textsOf = (lines: PaneLine[]): string[] => lines.slice(2).map(l => l.text.trimEnd()) // without the legacy header line and its blank
+const textsOf = (lines: PaneLine[]): string[] => lines.map(l => l.text.trimEnd())
 
 // ---- the invariants I1 to I8 and I10 over a tab's lines (line 0, the legacy global header, is P4's: it is unbranded until the verdict header replaces it) ----
 const RAW_TOKENS = ['SHIP-AS-IS', 'FIX-THEN-SHIP', 'BLOCK', 'REJECT', 'READY', 'APPROVE', 'PASS', 'CONDITIONAL', 'STOP', 'REVIEWED', 'NOT_NEEDED', 'WEIRD']
@@ -75,7 +75,7 @@ function violations(lines: PaneLine[], cols: number, t: typeof zh): string[] {
   const out: string[] = []
   const wordKey = new Map<string, string>(Object.entries(STATES).map(([id, s]) => [t('ui.state.' + id), s.key]))
   let empties = 0
-  lines.slice(1).forEach((l, i) => {
+  lines.forEach((l, i) => {
     const at = 'line ' + (i + 1) + ' ' + JSON.stringify(l.text)
     if (displayWidth(l.text) > cols) out.push('I1 ' + at + ' is ' + displayWidth(l.text) + ' wide')
     if (!isMade(l) || l.kind === undefined) out.push('I2 ' + at + ' is not made by a component')
@@ -96,7 +96,7 @@ function violations(lines: PaneLine[], cols: number, t: typeof zh): string[] {
     for (const v of emphasisViolations(l)) out.push('I4 ' + at + ' ' + v)
     const needYouItem = l.kind === 'item' && (l.segs ?? []).some(g => g.role === 'glyph' && g.text === STATES.need_you.glyph) // the plan lets a need_you item bold its mark, word and body (§3.6)
     for (const s of l.segs ?? []) { // a bold segment only in a header, a verdict, a here segment, a need_you item, or a meter headline value (fmt pct)
-      const meterHeadline = s.role === 'value' && s.fmt === 'pct' && (l.segs ?? []).some(g => g.role === 'glyph' && g.text.includes(GLYPHS.chart.meterOn)) // a meter: the same line carries the filled cells
+      const meterHeadline = s.role === 'value' && s.fmt === 'pct' && l.kind === 'meter' // a meter is a line KIND (ui.meter), not a line that happens to draw filled cells: a 0% meter has none
       if (s.bold === true && l.kind !== 'header' && l.kind !== 'verdict' && s.here !== true && !needYouItem && !meterHeadline) out.push('I4 ' + at + ' seg ' + JSON.stringify(s.text) + ' is bold outside header / verdict / need_you / here / meter headline')
     }
     if (l.kind !== 'detail' && emojiViolations(l.text).length > 0) out.push('I5 ' + at + ' ' + emojiViolations(l.text).join(','))
@@ -144,7 +144,7 @@ test('I1-I8, I10: every line of the Review tab, over fixtures x locales x widths
 
 test('negative controls of the checker: a hand-made line, a raw token in a value, an unformatted number, a 1-space indent, a too-wide line and a second empty line are each flagged', () => {
   const lines = render(busy(), 76)
-  const bad = [lines[0], lines[1], { text: '  hand made', kind: 'kv' as const }, ...lines.slice(2)]
+  const bad = [{ text: '  hand made', kind: 'kv' as const }, ...lines]
   expect(violations(bad, 76, zh).some(v => v.startsWith('I2'))).toBe(true)
   const withSeg = (extra: { text: string; role: 'value' }): PaneLine[] => lines.map(l => (l.kind === 'kv' && l.text.startsWith('範圍') ? { ...l, segs: [...(l.segs ?? []), extra] } : l))
   expect(violations(withSeg({ text: ' SHIP-AS-IS', role: 'value' }), 76, zh).some(v => v.startsWith('I7'))).toBe(true)
@@ -165,8 +165,12 @@ test('negative controls of the checker: a hand-made line, a raw token in a value
     : l)
   expect(i4(needYouItem)).toEqual([])
   const pct = { text: ' 80%', role: 'value' as const, fmt: 'pct' as const, bold: true, color: 'warning' as const }
-  const meterRow = (l: PaneLine): PaneLine => (l.kind === 'kv' && l.text.startsWith('範圍') ? { ...l, segs: [{ text: GLYPHS.chart.meterOn.repeat(4), role: 'glyph' as const, color: 'warning' as const }, pct] } : l) // a synthetic meter line: filled cells, then the bold value
+  const meterRow = (l: PaneLine): PaneLine => (l.kind === 'kv' && l.text.startsWith('範圍') ? { ...l, kind: 'meter' as const, segs: [{ text: GLYPHS.chart.meterOn.repeat(4), role: 'glyph' as const, color: 'warning' as const }, pct] } : l) // a synthetic meter line: filled cells, then the bold value
   expect(i4(meterRow)).toEqual([])
+  const pct0 = { ...pct, text: ' 0%', color: 'success' as const }
+  const meter0 = (kind: PaneLine['kind']) => (l: PaneLine): PaneLine => (l.kind === 'kv' && l.text.startsWith('範圍') ? { ...l, kind, segs: [{ text: GLYPHS.chart.meterOff.repeat(4), role: 'glyph' as const, color: 'success' as const }, pct0] } : l)
+  expect(i4(meter0('meter'))).toEqual([]) // a 0% meter has no filled cell and its bold value is still allowed (the P1 check keyed on the filled glyph and rejected it)
+  expect(i4(meter0('kv')).length).toBeGreaterThan(0) // the same segments on a plain kv row are not a meter
   expect(i4(l => (l.kind === 'kv' && l.text.startsWith('範圍') ? { ...l, segs: [...(l.segs ?? []), pct] } : l)).length).toBeGreaterThan(0) // a bold pct on a plain kv row is not a meter
   expect(i4(l => (l.kind === 'kv' ? { ...l, text: l.text + '▌' } : l)).length).toBeGreaterThan(0)
   expect(i4(l => (l.kind === 'header' ? { ...l, text: l.text.slice(0, -1) } : l)).length).toBeGreaterThan(0) // a header one cell short
@@ -267,7 +271,7 @@ test('I23 golden: the opened decision and the first opened seat equal the §5.3 
     '            △ 待修  s1 · zhipu                                            ▸',
   ])
   expect(seat0.slice(s0, s0 + 3).map(l => l.kind)).toEqual(['item', 'detail', 'item'])
-  for (const l of [...dec.slice(1), ...seat0.slice(1)]) expect(isMade(l)).toBe(true)
+  for (const l of [...dec, ...seat0]) expect(isMade(l)).toBe(true)
 })
 
 test('120 columns: the round line gains the seat count, the decision rows fill the width', () => {
@@ -307,7 +311,7 @@ test('a round holding a seat the mapping does not know is unknown, not stopped (
   expect(lines.map(l => l.text).join('\n')).not.toContain('WEIRD')
   expect(render(weird(), 76, { expanded: ['seat:code:s1'] }).filter(l => l.text.includes('WEIRD')).map(l => l.kind)).toEqual(['detail'])
   // a round with no seats at all is still stopped (no verdict)
-  expect(render(snap({ review: { plan: null, code: codeRound({ seats: [] }) } }), 76)[2].text).toContain('已停')
+  expect(render(snap({ review: { plan: null, code: codeRound({ seats: [] }) } }), 76)[0].text).toContain('已停')
 })
 
 test('QC chip: not_needed is `∅ 不需要`, owed needs you, unknown is unknown; the protected-file count reads as a count', () => {
@@ -416,7 +420,7 @@ test('I11 X0 / X1: with no clock, or a timestamp that does not parse, nothing is
 
 // ---- the empty world, and a narrow pane ----
 test('the empty world: every section says what is missing, once; nothing throws', () => {
-  const lines = render(empty(), 76).slice(2)
+  const lines = render(empty(), 76)
   expect(lines.map(l => l.kind)).toEqual(['header', 'empty', 'header', 'empty', 'header', 'empty'])
   expect(lines.filter(l => l.kind === 'empty').map(l => l.text)).toEqual(['— 沒有審查資料', '— 沒有 QC 狀態', '— 沒有決策資料'])
 })

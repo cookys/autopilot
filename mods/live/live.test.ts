@@ -63,8 +63,8 @@
 // in-memory tree; a missing file makes the bottom hook throw, which the mod sees as a rejected read.
 import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
-import { readQc, qcChip, readReview, reviewSlot, displayWidth, truncateToWidth, layoutBand, readMarker, readResidue, readStageWalk, bandSlots, slotUnit, slotPosition, slotDispatch, slotDecisions, slotSpend, slotHygiene, slotReview, readLoadSource, PANE_TABS, verdictOf, reviewTabLines, wrapLines, legendLines, bandView, hygieneTabLines, dispatchLines, spendTabLines, readSpendHistory, hourlySpend, sparkText, SPARK_BARS, INJECTED_PREFIXES, RECENT_EXPANDED_LINES, collapsedPrompt, groupRecent, makeRecentTracker, recentLines, redactSecrets, scanBackground, lastOutputLine, activityLines, MAX_ACTIVITY_ROWS, readQuota, readAccount, slotQuota, slotTab, slotUnfolds, SECTION } from './model'
-import type { ActivityItem, SessionMsg, QuotaWindow, AccountSnap } from './model'
+import { readQc, qcChip, readReview, reviewSlot, displayWidth, truncateToWidth, layoutBand, readMarker, readResidue, readStageWalk, bandSlots, slotUnit, slotPosition, slotDispatch, slotDecisions, slotSpend, slotHygiene, slotReview, readLoadSource, PANE_TABS, verdictOf, reviewTabLines, wrapLines, legendLines, bandView, hygieneTabLines, dispatchLines, spendTabLines, readSpendHistory, hourlySpend, sparkText, SPARK_BARS, INJECTED_PREFIXES, RECENT_EXPANDED_LINES, collapsedPrompt, groupRecent, makeRecentTracker, recentLines, redactSecrets, scanBackground, lastOutputLine, NO_SECTIONS, readQuota, readAccount, slotQuota, slotTab, slotUnfolds, SECTION, proxySegments } from './model'
+import type { SessionMsg, QuotaWindow, AccountSnap } from './model'
 import { makeT, resolveLocale, localeFromLanguage } from './i18n'
 import { EN, ZH_TW } from './locales'
 import type { Slot } from './model'
@@ -249,7 +249,8 @@ async function bandParts($: any, surface: (typeof SURFACES)[number], columns = 1
   if (head && head.type === 'Box') {
     // TUI v2 Now tab: hero = `<verdict>  <project> · <since elapsed>`; the reason is its own dim line; progress and phase are key/value rows
     // (phase is absent when the marker produced it: it is the stage row)
-    const hero = walkTexts(head).map(textOf).join('')
+    // P4: kids[1] is the global verdict header (pane.tsx draws it on every tab); its right end carries the spend / ctx metrics, which paneHeader reads
+    const hero = walkTexts(head).map(textOf).join('').replace(/ {3,}(工作階段|session) .*$/, '')
     const hm = /^(.+?) {2}(.+?)(?: · (?:已進行 (\S+)|(\S+) since start))?$/.exec(hero) as RegExpExecArray
     const row = hm[1] + ' ' + hm[2] + ' · ' + (hm[3] ?? hm[4] ?? '—')
     const texts = kids.map(k => textOf(k))
@@ -260,7 +261,13 @@ async function bandParts($: any, surface: (typeof SURFACES)[number], columns = 1
     const cut = row.lastIndexOf(' · ')
     // summary: the pre-P7 row shape, rebuilt from the new pieces, so the semantic cases keep asserting verdict / project / phase / elapsed / progress
     const summary = row.slice(0, cut) + ' · ' + phase + ' · ' + row.slice(cut + 3) + ' · ' + progress
-    return { line1: summary, row, line2: textOf(kids[2]) || undefined, last: walkTexts(progressNode).pop() as Node, tree }
+    // the reason: the first row of 要你處理 when it asks something (decide / stalled / waiting), else the 原因 row of 位置 (running / idle)
+    const needs = texts.findIndex(x => /^▾ (要你處理|Needs you)/.test(x))
+    const first = needs >= 0 ? texts[needs + 1] : undefined
+    const kvReason = texts.find(x => /^(原因|reason)\s/.test(x))
+    const reason = kvReason !== undefined ? kvReason.replace(/^(原因|reason)\s+/, '').trimEnd()
+      : first !== undefined && !first.startsWith('—') ? first.replace(/^\S+ /, '').replace(/\s+[▸▾]$/, '').trimEnd() : undefined
+    return { line1: summary, row, line2: reason, last: walkTexts(progressNode).pop() as Node, tree }
   }
   const line = await bandLine($, surface, columns)
   const cells = walkTexts(line.tree)
@@ -294,11 +301,16 @@ async function paneParts($: any, surface: (typeof SURFACES)[number], tab: string
   const tree = (await pane.drawn()) as Node
   const link = await pane.find({ type: 'Link' })
   await pane.unmount()
-  return { texts: rowsOf(tree), href: link?.props.href as string | undefined, tree }
+  return { texts: rowsOf(tree), head: headOf(tree), href: link?.props.href as string | undefined, tree }
 }
 
-// the lines of a pane: every child of the pane's column Box after the tab strip (child 0), one string per line
-const rowsOf = (tree: Node): string[] => ((tree.children || []) as Node[]).slice(1).map(k => textOf(k))
+// the lines of a pane: every child of the pane's column Box after the tab strip (child 0), one string per line. P4: pane.tsx draws the global header (verdict
+// line, the metrics when narrow, one blank) on every tab, so `rowsOf` is the tab's own body (its first row is the first section; a 'b' + index key counts from
+// there) and `headOf` is the header. A pane with no snapshot has no header (no blank row), so its body starts at 0.
+const allRows = (tree: Node): string[] => ((tree.children || []) as Node[]).slice(1).map(k => textOf(k))
+const headEnd = (rows: string[]): number => rows.indexOf('') + 1
+const rowsOf = (tree: Node): string[] => { const r = allRows(tree); return r.slice(headEnd(r)) }
+const headOf = (tree: Node): string[] => { const r = allRows(tree); return r.slice(0, headEnd(r)) }
 // the tab strip: one entry per tab, `[label, badge]` as drawn
 const fullText = (n: Node): string => (n.type === 'Button' && typeof n.props?.label === 'string' ? (n.props.label as string) : (n.children || []).map(c => (typeof c === 'string' ? c : fullText(c as Node))).join(''))
 const stripOf = (tree: Node): string => fullText(((tree.children || []) as Node[])[0]).replace(/\s*─+$/, '') // without the baseline rule
@@ -323,8 +335,17 @@ async function pressRow($: any, surface: (typeof SURFACES)[number], tab: string,
   return line
 }
 
-// the header line of the Dispatch tab (its first line): `session … · host … · ctx …`, or the state text of a non-ok snapshot
-const paneHeader = async ($: any, surface: (typeof SURFACES)[number]) => (await paneParts($, surface)).texts[0] as string
+// P4: the 最近對話 section starts folded; press its heading once so the groups are drawn (the fold persists across mounts)
+const openRecent = ($: any, surface: (typeof SURFACES)[number] = 'terminal') => pressRow($, surface, 'now', l => /^▸ (Recent conversation|最近對話)/.test(l))
+
+// the metrics of the global header (P4: pane.tsx draws it on every tab; the first row is the verdict line, the metrics sit at its right end or, when narrow, on the next row):
+// `session … · host … · ctx …`, or the state text of a non-ok snapshot
+const paneHeader = async ($: any, surface: (typeof SURFACES)[number]) => {
+  const rows = (await paneParts($, surface)).head
+  const row = rows.find(l => /ctx/.test(l)) ?? (rows[0] as string)
+  const at = Math.min(...['工作階段', 'session'].map(k => row.indexOf(k)).filter(i => i >= 0), row.length)
+  return row.slice(at === row.length ? 0 : at).trimEnd()
+}
 
 // base() world: confirmed_live 2, one row with stall:true (last_event_age_s 240), earliest start 09:50:00, now 10:00:30
 const FRESH_LINE1 = '⊘ 疑似卡住 repo · — · 10m · —'
@@ -337,14 +358,14 @@ for (const surface of SURFACES) {
     world(on, base())
     await start($, surface)
     expect(await bandText($, surface)).toBe(FRESH_TEXT())
-    expect((await paneHeader($, surface))).toBe('工作階段 $0.42 · 本機 $3.10 · ctx 37%')
+    expect((await paneHeader($, surface))).toBe('工作階段 $0.42 · 本機今日 $3.10 · ctx 37%')
   })
 
   test('band: two sessions of one repo each show their own sid cost and ctx (' + surface + ')', async ($, on) => {
     const w = world(on, base(), NOW_FRESH, SID_B)
     await start($, surface)
     const text = await paneHeader($, surface)
-    expect(text).toContain('工作階段 $9.99 · 本機 $3.10')
+    expect(text).toContain('工作階段 $9.99 · 本機今日 $3.10')
     expect(text).toContain('ctx 88%')
     expect(text).not.toContain('$0.42')
     expect(text).not.toContain('ctx 37%')
@@ -358,7 +379,7 @@ for (const surface of SURFACES) {
     world(on, files)
     await start($, surface)
     const text = await paneHeader($, surface)
-    expect(text).toBe('工作階段 $— · 本機 $— · ctx —')
+    expect(text).toBe('工作階段 $— · 本機今日 $— · ctx —')
     expect(text).not.toContain('$0')
     expect(text).not.toContain('ctx 0')
   })
@@ -412,7 +433,7 @@ for (const surface of SURFACES) {
     await $.session.end({ reason: 'clear', sessionId: SID_A, resume: {} } as never)
     await w.clock.advance(5000) // the timer must have survived the clear
     expect(await bandText($, surface)).toContain('疑似卡住 repo')
-    expect(await paneHeader($, surface)).toBe('工作階段 $— · 本機 $3.10 · ctx —')
+    expect(await paneHeader($, surface)).toBe('工作階段 $— · 本機今日 $3.10 · ctx —')
   })
 
   test('band: an expired marker is ignored (' + surface + ')', async ($, on) => {
@@ -515,7 +536,7 @@ for (const surface of SURFACES) {
     files[AHOME + '/review/' + KEY + '/live/runs.' + KEY + '--' + ROOT + '.json'] = j(envelope({ host_today_usd: 7.5 }))
     const w = worldEn(on, files)
     await start($, surface)
-    expect(await paneHeader($, surface)).toContain('host $7.50') // served from the SSD copy
+    expect(await paneHeader($, surface)).toContain('host today $7.50') // served from the SSD copy
     delete w.files[AHOME + '/review/' + KEY + '/live/runs.' + KEY + '--' + ROOT + '.json']
     await w.clock.advance(5000)
     expect(await bandText($, surface)).toContain('unavailable · run: autopilot status runs --watch --project ' + KEY)
@@ -539,7 +560,7 @@ for (const surface of SURFACES) {
     files[LIVE + '/runs/' + KEY + '.json'] = j(envelope({ host_today_usd: 1.25 }, null))
     world(on, files)
     await start($, surface)
-    expect(await paneHeader($, surface)).toContain('本機 $1.25')
+    expect(await paneHeader($, surface)).toContain('本機今日 $1.25')
   })
 
   test('PLAINROOT band: a plain marker (level null) carrying a job root reads that root scope, not the project scope (' + surface + ')', async ($, on) => {
@@ -552,7 +573,7 @@ for (const surface of SURFACES) {
     world(on, files)
     await start($, surface)
     const header = await paneHeader($, surface)
-    expect(header).toContain('本機 $1.25')
+    expect(header).toContain('本機今日 $1.25')
     expect(header).not.toContain('7.77')
   })
 
@@ -750,8 +771,6 @@ for (const surface of SURFACES) {
     await pressRow($, surface, 'review', t => t.includes('d-1') && t.includes('先拆 plan 再實作'))
     await pressRow($, surface, 'review', t => t.includes('s0') && t.includes('minimax'))
     expect((await paneParts($, surface, 'review', 76)).texts).toEqual([
-      "工作階段 $0.42 · 本機 $3.10 · ctx 37%",
-      "",
       "▾ 程式碼審查  △ 待修 ──────────────────────────────────────────────────────",
       "輪次        R3 · 11111111..aaaaaaaa · p7d",
       "席位        ",
@@ -832,7 +851,7 @@ for (const surface of SURFACES) {
     delete w.files[LIVE + '/runs/' + KEY + '--' + ROOT + '.json']
     await w.clock.advance(5000)
     const pane2 = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
-    expect(rowsOf((await pane2.drawn()) as Node).some(t => t.startsWith('unavailable'))).toBe(true)
+    expect(allRows((await pane2.drawn()) as Node).some(t => t.startsWith('unavailable'))).toBe(true)
     expect(await pane2.find({ type: 'Link' })).toBeUndefined()
     await pane2.unmount()
   })
@@ -986,7 +1005,7 @@ for (const surface of SURFACES) {
     expect(p.line2).toBe('沒有派工在跑')
     expect(p.line1).not.toContain('○')
     const lead = walkTexts(p.tree).find(n => /^[▲⊘✓●◌]/.test(textOf(n))) as Node
-    expect(lead.props?.bold).not.toBe(true) // idle is drawn plain
+    expect(lead.props?.bold).toBe(true) // P4: the global header draws every verdict glyph bold (§2.2)
     // no job page at all: still the idle word, with an em dash progress
     delete w.files[MODEL_PATH]
     await w.clock.advance(5000)
@@ -1130,8 +1149,7 @@ for (const surface of SURFACES) {
     await start($, surface)
     const text = await bandText($, surface)
     expect(text).not.toMatch(/\$|ctx|host|session/)
-    const pane = await paneParts($, surface)
-    expect(pane.texts[0]).toBe('工作階段 $0.42 · 本機 $3.10 · ctx 37%')
+    expect(await paneHeader($, surface)).toBe('工作階段 $0.42 · 本機今日 $3.10 · ctx 37%')
   })
 
   test('pane: when a decision is awaited it is the first section, built from the model decision; the Link stays (' + surface + ')', async ($, on) => {
@@ -1140,13 +1158,18 @@ for (const surface of SURFACES) {
     const w = world(on, files)
     await start($, surface)
     let pane = await paneParts($, surface, 'now')
-    expect(pane.texts[0]).toContain('▲ 要你決定') // the hero row (verdict · project · since) is the first line
-    expect(pane.texts.find(t => t.startsWith('工作階段 $'))).toBe('工作階段 $0.42 · 本機 $3.10 · ctx 37%') // the header stays on top, dim
-    const rule = pane.texts.findIndex(t => t.startsWith('▌ 待你處理')) // the awaited decision is the first section (before "where you are")
-    expect(rule).toBeGreaterThan(0)
-    expect(rule).toBeLessThan(pane.texts.findIndex(t => t.startsWith('▾ 目前位置'))) // a foldable section, open by default
-    expect(pane.texts.slice(rule + 1, rule + 4)).toEqual([' ▲ 要合併 plan 還是拆開？', '   1. 合併 — 一次驗收', '   2. 拆開 — 兩次驗收'])
-    expect(pane.texts[rule]).toContain('▲ 1') // the section badge counts what awaits you
+    expect(pane.head[0]).toContain('▲ 要你決定') // the global header's verdict line (verdict · project · since) is drawn above the tab body
+    expect(await paneHeader($, surface)).toBe('工作階段 $0.42 · 本機今日 $3.10 · ctx 37%') // and carries the spend / ctx metrics
+    const rule = pane.texts.findIndex(t => t.startsWith('▾ 要你處理')) // the awaited decision is the first section (before "where you are")
+    expect(rule).toBe(0)
+    expect(rule).toBeLessThan(pane.texts.findIndex(t => t.startsWith('▾ 位置'))) // a foldable section, open by default
+    expect(pane.texts[rule + 1]).toMatch(/^▲ 要合併 plan 還是拆開？ +▸$/) // one item line; the options sit behind its toggle (§2.4)
+    expect(pane.texts.some(t => t.includes('一次驗收'))).toBe(false)
+    expect(pane.texts[rule]).toContain('▲ 1') // the section chip counts what awaits you
+    await pressRow($, surface, 'now', t => t.startsWith('▲ 要合併 plan 還是拆開？'))
+    const opened = (await paneParts($, surface, 'now')).texts
+    expect(opened.some(t => t.includes('合併 — 一次驗收'))).toBe(true)
+    expect(opened.some(t => t.includes('拆開 — 兩次驗收'))).toBe(true)
     const disp = await paneParts($, surface, 'dispatch') // the table is still there, on its own tab, and so is the Link
     expect(disp.texts.some(t => t.includes('這是執行狀態，不是進度'))).toBe(true)
     expect(disp.texts.some(t => t.startsWith('審查 ›'))).toBe(true) // the former 審查關卡 section is one pointer row to 審查
@@ -1156,14 +1179,14 @@ for (const surface of SURFACES) {
     put(w.files, null, { needs_decision: true, decision: { question: '只有問題', options: [], not_authorized: null } })
     await w.clock.advance(5000)
     pane = await paneParts($, surface, 'now')
-    const at2 = pane.texts.indexOf(' ▲ 只有問題')
-    expect(at2).toBeGreaterThan(0)
+    const at2 = pane.texts.findIndex(t => t.startsWith('▲ 只有問題'))
+    expect(at2).toBeGreaterThanOrEqual(0)
     expect(pane.texts[at2 + 1]).not.toMatch(/^ *\d\. /)
     put(w.files, null, { needs_decision: false, decision: null })
     await w.clock.advance(5000)
     pane = await paneParts($, surface, 'now')
     expect(pane.texts.some(t => t.includes('只有問題'))).toBe(false)
-    expect(pane.texts.some(t => t.includes('目前沒有事要你處理'))).toBe(true) // an empty "needs you" still says so
+    expect(pane.texts[0].startsWith('▾ 要你處理')).toBe(true) // the section stays (the stalled reason is its item now)
   })
 }
 
@@ -1413,9 +1436,9 @@ for (const surface of SURFACES) {
     world(on, files)
     await start($, surface)
     const pane = await paneParts($, surface, 'now')
-    const at = pane.texts.findIndex(t => t.startsWith('▌ 待你處理'))
-    expect(at).toBeGreaterThan(0)
-    expect(pane.texts[at + 1]).toBe(' ▲ 等你批准：Bash: rm -rf build（等了 5 分）')
+    const at = pane.texts.findIndex(t => t.startsWith('▾ 要你處理'))
+    expect(at).toBe(0)
+    expect(pane.texts[at + 1]).toBe('▲ 等你批准：Bash: rm -rf build（等了 5 分）')
     expect((await paneParts($, surface, 'dispatch')).texts.some(t => t.includes('等你批准'))).toBe(false)
   })
 
@@ -1425,7 +1448,7 @@ for (const surface of SURFACES) {
     const w = world(on, files)
     await start($, surface)
     expect((await bandParts($, surface)).line2).toBe('要合併 plan 還是拆開？（已等 3 天）')
-    expect((await paneParts($, surface, 'now')).texts).toContain(' ▲ 要合併 plan 還是拆開？（已等 3 天）')
+    expect((await paneParts($, surface, 'now')).texts.some(t => /^▲ 要合併 plan 還是拆開？（已等 3 天） +▸$/.test(t))).toBe(true)
     files[W_MODEL] = j(model({ needs_decision: true, decision: { ...DECISION_W, stale: false, age_s: 40 } }))
     await w.clock.advance(5000)
     expect((await bandParts($, surface)).line2).toBe('要合併 plan 還是拆開？')
@@ -1444,9 +1467,11 @@ for (const surface of SURFACES) {
     const last = p.last as Node
     expect(last.props?.dimColor).toBe(true)
     const pane = await paneParts($, surface, 'now')
-    expect(pane.texts).toContain('任務 1/3 完成 · 進行中 1')
-    expect(pane.texts).toContain('目前：接線')
-    expect(pane.texts).toContain('[x] 寫測試')
+    expect(pane.texts.some(t => t.startsWith('▾ 任務  1/3'))).toBe(true) // the section chip counts completed / total
+    expect(pane.texts).toContain('● 接線') // unfinished only, the one in progress first
+    expect(pane.texts).toContain('○ 收尾')
+    expect(pane.texts.some(t => t.includes('寫測試'))).toBe(false) // the completed task leaves the list (P4: 任務 shows unfinished only)
+    expect(pane.texts.some(t => t.includes('1 項已完成'))).toBe(true) // and sits behind one bare `more`
     files[P_TASKS()] = j(allDone())
     await w.clock.advance(5000)
     p = await bandParts($, surface)
@@ -1467,7 +1492,7 @@ for (const surface of SURFACES) {
     await w.clock.advance(5000)
     expect(verdicts(await bandText($, surface))).toEqual(['待命'])
     expect((await bandParts($, surface)).line1.endsWith('· —')).toBe(true)
-    expect((await paneParts($, surface, 'now')).texts).toContain('沒有任務')
+    expect((await paneParts($, surface, 'now')).texts.some(x => x.includes('沒有任務'))).toBe(true)
     files[P_TASKS()] = j(tasksFile())
     files[W_MODEL] = j(model({ progress: { frozen: true, percent: 62.5, done: 5, total: 8 } }))
     await w.clock.advance(5000)
@@ -1573,46 +1598,41 @@ for (const surface of SURFACES) {
     expect(text.split('\n')[0]?.split(' · ')[2]).toBe('20m')
   })
 
-  test('W3a decisions sidecar: line 2 carries 代你決定 m 件（k 件不可逆）, only when non-zero (' + surface + ')', async ($, on) => {
+  test('W3a decisions sidecar: the count and the irreversible count sit in the Review tab header chip, only when non-zero; Now carries no decisions line (P4: the owner tab is 審查) (' + surface + ')', async ($, on) => {
     const files = quietWorld()
     files[P_DEC] = j(decisionsSidecar())
     const w = world(on, files)
     await start($, surface)
-    expect((await bandParts($, surface)).line2).toBe('沒有派工在跑 · 代你決定 2 件（1 件不可逆）')
+    const chip = async () => (await paneParts($, surface, 'review')).texts.find(x => x.startsWith('▾ 代你決定'))
+    expect(await chip()).toContain('2 件 · 1 件不可逆')
+    expect((await bandParts($, surface)).line2).toBe('沒有派工在跑') // 現況 never repeats the count
     files[P_DEC] = j(decisionsSidecar({ count: 0, irreversible_count: 0, rows: [] }))
     await w.clock.advance(5000)
-    expect((await bandParts($, surface)).line2).toBe('沒有派工在跑')
+    expect(await chip()).not.toContain('件 ·')
     files[P_DEC] = j(decisionsSidecar({ count: 1, irreversible_count: 0, rows: [] }))
     await w.clock.advance(5000)
-    expect((await bandParts($, surface)).line2).toBe('沒有派工在跑 · 代你決定 1 件（0 件不可逆）')
+    expect(await chip()).toContain('1 件 · 0 件不可逆')
   })
 
-  test('W3a decisions sidecar: 僅自動裁決 is worded from the actual writers_wired list; no depth-0 writer = label (' + surface + ')', async ($, on) => {
-    const files = quietWorld()
-    files[P_DEC] = j(decisionsSidecar({ writers_wired: ['engine'] }))
-    const w = world(on, files)
-    await start($, surface)
-    expect((await bandParts($, surface)).line2).toBe('沒有派工在跑 · 代你決定 2 件（1 件不可逆） · 僅 engine 自動裁決')
-    files[P_DEC] = j(decisionsSidecar({ writers_wired: [] }))
-    await w.clock.advance(5000)
-    expect((await bandParts($, surface)).line2).toBe('沒有派工在跑 · 代你決定 2 件（1 件不可逆） · 決策寫入端未接')
-    files[P_DEC] = j(decisionsSidecar({ writers_wired: ['next-pick'] }))
-    await w.clock.advance(5000)
-    expect((await bandParts($, surface)).line2).toBe('沒有派工在跑 · 代你決定 2 件（1 件不可逆）') // a depth-0 writer is wired: no label
-    files[P_DEC] = j(decisionsSidecar({ writers_wired: ['engine', 'next-pick'] }))
-    await w.clock.advance(5000)
-    expect((await bandParts($, surface)).line2).toBe('沒有派工在跑 · 代你決定 2 件（1 件不可逆）')
+  test('W3a decisions sidecar: 僅自動裁決 is worded from the actual writers_wired list; no depth-0 writer = label (pure: the band reason keeps the tail; no tab draws it) (' + surface + ')', () => {
+    const view = (writers: string[]) => ({ rows: [], count: 2, irreversible: 1, undocumented: 0, writers, ladder: null, identity: null, root: null }) as never
+    expect(proxySegments(view(['engine']), makeT('zh-TW'))).toEqual(['代你決定 2 件（1 件不可逆）', '僅 engine 自動裁決'])
+    expect(proxySegments(view([]), makeT('zh-TW'))).toEqual(['代你決定 2 件（1 件不可逆）', '決策寫入端未接'])
+    expect(proxySegments(view(['next-pick']), makeT('zh-TW'))).toEqual(['代你決定 2 件（1 件不可逆）']) // a depth-0 writer is wired: no label
+    expect(proxySegments(view(['engine', 'next-pick']), makeT('zh-TW'))).toEqual(['代你決定 2 件（1 件不可逆）'])
   })
 
-  test('W3a decisions sidecar: undocumented dispatches are counted on line 2, on their own or after the decisions (' + surface + ')', async ($, on) => {
+  test('W3a decisions sidecar: undocumented dispatches are counted on the Review tab, on their own or after the decisions (' + surface + ')', async ($, on) => {
     const files = quietWorld()
     files[P_DEC] = j(decisionsSidecar({ count: 0, irreversible_count: 0, rows: [], undocumented_dispatches: 3 }))
     const w = world(on, files)
     await start($, surface)
-    expect((await bandParts($, surface)).line2).toBe('沒有派工在跑 · 3 件派工無決策紀錄')
+    expect((await paneParts($, surface, 'review')).texts.some(x => x.startsWith('未記錄') && x.includes('3 件派工沒有決策紀錄'))).toBe(true)
     files[P_DEC] = j(decisionsSidecar({ undocumented_dispatches: 3 }))
     await w.clock.advance(5000)
-    expect((await bandParts($, surface)).line2).toBe('沒有派工在跑 · 代你決定 2 件（1 件不可逆） · 3 件派工無決策紀錄')
+    const t = (await paneParts($, surface, 'review')).texts
+    expect(t.some(x => x.startsWith('▾ 代你決定') && x.includes('2 件 · 1 件不可逆'))).toBe(true)
+    expect(t.some(x => x.startsWith('未記錄') && x.includes('3 件派工沒有決策紀錄'))).toBe(true)
   })
 
   test('W3a decisions pane: one row per decision with the real veto command; no id means no veto (' + surface + ')', async ($, on) => {
@@ -1664,19 +1684,18 @@ for (const surface of SURFACES) {
     await start($, surface)
     const pane = await paneParts($, surface)
     const t = pane.texts
-    expect(t).toContain('工頭活動（依工作階段綁定：同一工作階段的多個工作會看到同一批）')
-    expect(t).toContain('修 parser · running · 30s 前')
-    expect(t).toContain('a2 · last tool: Bash · 20m 前 · 久未動')
-    expect(t).toContain('階段 implement · 1m 前（run_ledger:tmp）')
-    const nodes = walkTexts(pane.tree)
-    expect(nodes.find(n => textOf(n) === 'a2 · last tool: Bash · 20m 前 · 久未動')?.props?.dimColor).toBe(true)
-    expect(nodes.find(n => textOf(n) === '修 parser · running · 30s 前')?.props?.dimColor).not.toBe(true)
+    expect(t).toContain('  工頭活動（依工作階段綁定：同一工作階段的多個工作會看到同一批）')
+    expect(t).toContain('● 執行中  修 parser · running · 30s 前')
+    expect(t).toContain('◌ 已停    a2 · last tool: Bash · 20m 前 · 久未動')
+    expect(t).toContain('  階段 implement · 1m 前（run_ledger:tmp）')
+    const nodes = walkTexts(pane.tree) // P4: a stale row is the `stopped` state, drawn in its own colour, not a hand-dimmed line
+    expect(nodes.find(n => textOf(n) === '◌')?.props?.color).not.toBe(nodes.find(n => textOf(n) === '●')?.props?.color)
   })
 
   test('W3a foreman: an absent sidecar reads 工頭狀態：來源未接 (' + surface + ')', async ($, on) => {
     world(on, base())
     await start($, surface)
-    expect((await paneParts($, surface)).texts).toContain('工頭狀態：來源未接')
+    expect((await paneParts($, surface)).texts).toContain('  工頭狀態：來源未接')
   })
 
   test('FOREMAN: an un-ended stamped agent quiet < 180 s is 進行中 (工頭在跑), >= 180 s is 疑似卡住 (工頭 N 分沒有動作); ended, over-TTL or unstamped rows are ignored (' + surface + ')', async ($, on) => {
@@ -1788,9 +1807,9 @@ for (const surface of SURFACES) {
     const both = async () => [...(await paneParts($, surface, 'dispatch')).texts, ...(await paneParts($, surface, 'review')).texts]
     let t = await both()
     expect(t.some(x => x.startsWith('代你決定'))).toBe(false)
-    expect(t).toContain('工頭狀態：來源未接') // the foreign foreman rows are not shown
+    expect(t).toContain('  工頭狀態：來源未接') // the foreign foreman rows are not shown
     expect(t.some(x => x.includes('修 parser'))).toBe(false)
-    expect(t.some(x => x.includes('來源未接') && x !== '工頭狀態：來源未接')).toBe(false) // the foreign manifest is not obeyed
+    expect(t.some(x => x.includes('來源未接') && x !== '  工頭狀態：來源未接')).toBe(false) // the foreign manifest is not obeyed
     files[P_DEC] = j(decisionsSidecar({}, { root_run_id: 'other-root' }))
     files[P_FOREMAN] = j(foremanSidecar({}, { root_run_id: 'other-root' }))
     await w.clock.advance(5000)
@@ -1844,18 +1863,18 @@ for (const surface of SURFACES) {
     files[P_SOURCES] = j(manifest())
     await w.clock.advance(5000)
     t = (await paneParts($, surface, 'now')).texts
-    expect(t).toContain('任務工具未開 · 設 CLAUDE_CODE_ENABLE_TODO_TOOLS=1 後才會記錄任務')
+    expect(t).toContain('— 任務工具未開 · 設 CLAUDE_CODE_ENABLE_TODO_TOOLS=1 後才會記錄任務')
     files[P_SOURCES] = j(manifest({ tasks: OFF }))
     await w.clock.advance(5000)
     t = (await paneParts($, surface, 'now')).texts
-    expect(t).toContain('任務：來源未接')
+    expect(t).toContain('— 任務：來源未接')
     expect(t.some(x => x.includes('CLAUDE_CODE_ENABLE_TODO_TOOLS'))).toBe(false)
     // a file that exists is shown whatever the manifest says
     files[P_TASKS()] = j(tasksFile())
     await w.clock.advance(5000)
     t = (await paneParts($, surface, 'now')).texts
-    expect(t).toContain('任務 1/3 完成 · 進行中 1')
-    expect(t).not.toContain('任務：來源未接')
+    expect(t.some(x => x.startsWith('▾ 任務  1/3'))).toBe(true)
+    expect(t).not.toContain('— 任務：來源未接')
   })
 
   test('W3a attention source not installed: the pane says so, the band stays silent (' + surface + ')', async ($, on) => {
@@ -1863,7 +1882,7 @@ for (const surface of SURFACES) {
     files[P_SOURCES] = j(manifest({ attention: OFF }))
     world(on, files)
     await start($, surface)
-    expect((await paneParts($, surface)).texts).toContain('等待狀態：來源未接')
+    expect((await paneParts($, surface, 'now')).texts.some(x => /^等待 +.*來源未接/.test(x))).toBe(true) // P4: a 等待 row of 位置 (was a hand-built line on Dispatch)
     expect(verdicts(await bandText($, surface))).toEqual(['待命'])
   })
 
@@ -1873,18 +1892,18 @@ for (const surface of SURFACES) {
     files[P_SOURCES] = j(manifest({ context: OFF }))
     const w = world(on, files)
     await start($, surface)
-    expect(await paneHeader($, surface)).toBe('工作階段 $0.42 · 本機 $3.10 · ctx 來源未接')
+    expect(await paneHeader($, surface)).toBe('工作階段 $0.42 · 本機今日 $3.10 · ctx 來源未接')
     files[P_SOURCES] = j(manifest())
     files[LIVE + '/context/' + SID_A + '.json'] = j({ schema_version: 1, session_id: SID_A, written_at: '2026-10-04T10:00:20.000Z', writer: 'context-budget', window_source: 'unknown', model: {}, context_window: { context_window_size: null, used_percentage: null, total_input_tokens: 90000, current_usage: {} } })
     await w.clock.advance(5000)
-    expect(await paneHeader($, surface)).toBe('工作階段 $0.42 · 本機 $3.10 · ctx —')
+    expect(await paneHeader($, surface)).toBe('工作階段 $0.42 · 本機今日 $3.10 · ctx —')
     files[LIVE + '/context/' + SID_A + '.json'] = j({ schema_version: 1, session_id: SID_A, written_at: '2026-10-04T10:00:20.000Z', writer: 'context-budget', window_source: 'observed', model: {}, context_window: { context_window_size: 1000000, used_percentage: 9, total_input_tokens: 90000, current_usage: {} } })
     await w.clock.advance(5000)
-    expect(await paneHeader($, surface)).toBe('工作階段 $0.42 · 本機 $3.10 · ctx 9%')
+    expect(await paneHeader($, surface)).toBe('工作階段 $0.42 · 本機今日 $3.10 · ctx 9%')
     // data beats the manifest
     files[P_SOURCES] = j(manifest({ context: OFF }))
     await w.clock.advance(5000)
-    expect(await paneHeader($, surface)).toBe('工作階段 $0.42 · 本機 $3.10 · ctx 9%')
+    expect(await paneHeader($, surface)).toBe('工作階段 $0.42 · 本機今日 $3.10 · ctx 9%')
   })
 }
 
@@ -1998,7 +2017,10 @@ for (const surface of SURFACES) {
     files[LIVE + '/runs/' + KEY + '--' + CAMP + '.decisions.json'] = scopeDecisions(CAMP, 2, 1, 3)
     world(on, files)
     await start($, surface)
-    expect((await bandParts($, surface)).line2).toBe('1 個派工在跑 · 代你決定 3 件（1 件不可逆） · 3 件派工無決策紀錄')
+    const review = (await paneParts($, surface, 'review')).texts // P4: the sums sit on the owner tab, not on 現況
+    expect((await bandParts($, surface)).line2).toBe('1 個派工在跑')
+    expect(review.some(x => x.startsWith('▾ 代你決定') && x.includes('3 件 · 1 件不可逆'))).toBe(true)
+    expect(review.some(x => x.startsWith('未記錄') && x.includes('3 件派工沒有決策紀錄'))).toBe(true)
   })
 
   test('SCOPE: progress and phase come from the NEWEST campaign root that has them (' + surface + ')', async ($, on) => {
@@ -2361,7 +2383,7 @@ for (const surface of SURFACES) {
     expect(w.opens[0]?.focus).toBe(true)
     expect(w.opens[0]?.closeOnEscape).toBe(true)
     const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
-    const texts = rowsOf((await pane.drawn()) as Node)
+    const texts = allRows((await pane.drawn()) as Node)
     // the keyboard lands on the first-drawn `▸` next-tab chip, whose Enter steps on (never on the active tab's own button: that Enter is a no-op)
     const tabButtons = (await pane.findAll({ type: 'Button' })) as Drawn[]
     expect(tabButtons.filter(b => b.props?.key === 'next' || (PANE_TABS as readonly string[]).includes(b.props?.key as string)).length).toBe(7) // the section headings are Buttons too
@@ -2369,7 +2391,7 @@ for (const surface of SURFACES) {
     expect(tabButtons[0].props?.key).toBe('next')
     await pane.unmount()
     expect(texts[0]).toContain('⊘ 疑似卡住') // the Now tab: its hero row, then the dim header
-    expect(texts.some(t => t.startsWith('工作階段 $'))).toBe(true)
+    expect(texts[0]).toContain('工作階段 $') // and the spend / ctx metrics on its right (P4: one global header)
     expect(texts.some(t => t.startsWith('▌ 狀態列符號'))).toBe(false) // not the legend
   })
 
@@ -2430,7 +2452,7 @@ for (const surface of SURFACES) {
     expect(w.opens.every(o => o.id === 'autopilot-live' && o.focus === true && o.closeOnEscape === true)).toBe(true)
   })
 
-  test('P8 band: pressing the position slot opens a folded 目前位置 section (' + surface + ')', async ($, on) => {
+  test('P8 band: pressing the position slot opens a folded 位置 section (' + surface + ')', async ($, on) => {
     world(on, richWorld())
     await start($, surface)
     const mountPane = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
@@ -2438,16 +2460,16 @@ for (const surface of SURFACES) {
     await first.press({ key: 'now' })
     await first.unmount()
     const rowsNow = async () => { const p = await mountPane(); const r = rowsOf((await p.drawn()) as Node); await p.unmount(); return r }
-    const at = (await rowsNow()).findIndex(r => r.startsWith('▾ 目前位置'))
-    expect(at).toBeGreaterThan(0)
+    const at = (await rowsNow()).findIndex(r => r.startsWith('▾ 位置'))
+    expect(at).toBeGreaterThanOrEqual(0)
     const fold = await mountPane()
     await fold.press({ key: 'b' + at })
     await fold.unmount()
-    expect((await rowsNow())[at].startsWith('▸ 目前位置')).toBe(true)
+    expect((await rowsNow())[at].startsWith('▸ 位置')).toBe(true)
     const band = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: 209 }, viewport: { columns: 209, rows: 50, isFullscreen: true } })
     await band.press({ key: 'position' })
     await band.unmount()
-    expect((await rowsNow())[at].startsWith('▾ 目前位置')).toBe(true)
+    expect((await rowsNow())[at].startsWith('▾ 位置')).toBe(true)
   })
 
   test('P8 band: a slot pressed while an ⓘ press is still opening wins, and the next ⓘ steps on from the slot\'s tab (' + surface + ')', async ($, on) => {
@@ -2673,7 +2695,7 @@ for (const surface of SURFACES) {
     expect(band.text.includes('\n')).toBe(false)
     expect((await bandLine($, surface, 159)).text).not.toContain('要合併 plan 還是拆開？')
     const now = (await paneParts($, surface, 'now')).texts
-    expect(now).toContain(' ▲ 要合併 plan 還是拆開？')
+    expect(now.some(t => /^▲ 要合併 plan 還是拆開？ +▸$/.test(t))).toBe(true)
   })
 
   test('P7 panel: the tab strip is six Buttons in contract order, the active one on a subtle background, with badges (' + surface + ')', async ($, on) => {
@@ -2681,7 +2703,7 @@ for (const surface of SURFACES) {
     await start($, surface)
     const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
     const tree = (await pane.drawn()) as Drawn
-    const buttons = walkAll(tree).filter(n => n.type === 'Button').map(n => n.props?.key as string).filter(k => !/^b\d+$/.test(k)) // the body's toggle lines (section headings, recent groups) are Buttons too
+    const buttons = walkAll(tree).filter(n => n.type === 'Button').map(n => n.props?.key as string).filter(k => !/^[bg]\d+$/.test(k)) // the body's toggle lines (and the summary rows' goto Buttons) (section headings, recent groups) are Buttons too
     expect(buttons).toEqual(['next', 'now', 'dispatch', 'review', 'spend', 'hygiene', 'legend']) // the ▸ chip first (it carries the autoFocus), then the six tabs in contract order
     // the strip (child 0): zh labels, a badge per tab that holds something for the owner: ●N live runs, ⚑N residue (QC is ok here, so no ▲ on Review)
     const strip = stripOf(tree as Node)
@@ -2734,16 +2756,16 @@ for (const surface of SURFACES) {
     expectThemeOnly(legend.tree as Drawn, true)
 
     const now = await tab('now')
-    expect(now.texts[0]).toContain('⊘ 疑似卡住  repo')
-    expect(now.texts).toContain('工作階段 $0.42 · 本機 $3.10 · ctx 37%')
+    expect(now.head[0]).toContain('⊘ 疑似卡住  repo')
+    expect(now.head.join('\n')).toContain('工作階段 $0.42 · 本機今日 $3.10 · ctx 37%')
     expect(has(now.texts, '階段', 'implement', '已在此階段 3m', 'M!·l5')).toBe(true)
     expect(has(now.texts, '單元', '▰▰▰▱▱ 3/5', 'band (deliverable)', '2 個審查家族')).toBe(true)
     const walk = now.texts.find(t => t.includes('◐')) as string // the stage-walk diagram: five nodes, the third is the current one
-    expect(walk.match(/[●◐○]/g)?.join('')).toBe('●●◐○○')
+    expect(walk.match(/[✓◐○]/g)?.join('')).toBe('✓✓◐○○')
     expect(now.texts.some(t => t.includes('實作') && !t.includes('◐') && !t.includes('階段') && !t.includes('⊘'))).toBe(true) // the label row under the diagram (stage ids are translated labels)
-    expect(has(now.texts, '派工', '● 2', '2 個執行中', '1 個疑似卡住')).toBe(true)
-    expect(has(now.texts, '審查', '↺ R3', 'QC✓')).toBe(true)
-    expect(now.texts.some(t => t.startsWith('最久的派工 4m 沒有輸出'))).toBe(true) // the verdict reason, dim, under the hero row
+    expect(has(now.texts, '派工 ›', '2 個執行中', '1 個疑似卡住')).toBe(true)
+    expect(has(now.texts, '審查 ›', '待修', '程式碼審查 R3', '1 席待修')).toBe(true)
+    expect(now.texts[1]).toBe('⊘ 最久的派工 4m 沒有輸出') // the verdict reason is the first item of 要你處理 (P4)
     expectThemeOnly(now.tree as Drawn, true)
 
     const dispatch = await tab('dispatch')
@@ -2768,7 +2790,7 @@ for (const surface of SURFACES) {
     expect(has(spend.texts, 'brain 今日', '80%', '$120.40 / $150.00')).toBe(true)
     expect(has(spend.texts, 'brain 到 80% 開始提醒', '保險絲只提醒、不擋')).toBe(true)
     expect(has(spend.texts, '本機', '$3.10', '所有層')).toBe(true)
-    expect(has(spend.texts, '工作階段', '$0.42')).toBe(true)
+    expect(has(spend.head, '工作階段', '$0.42')).toBe(true) // the session total is the header projection (P4)
     expectThemeOnly(spend.tree as Drawn, true)
 
     const hygiene = await tab('hygiene')
@@ -2791,7 +2813,7 @@ for (const surface of SURFACES) {
     worldEn(on, base())
     await start($, surface)
     const ndata = async (id: string) => (await paneParts($, surface, id)).texts.filter(t => t.replace(/^— /, '').startsWith('no data'))
-    expect(await ndata('now')).toEqual(['no data · no stage recorded for this session', 'no data · no unit recorded'])
+    expect((await paneParts($, surface, 'now')).texts).toContain('— this session has no stage or unit recorded') // one Position line (P4)
     expect((await paneParts($, surface, 'review')).texts.filter(t => t.startsWith('— no '))).toEqual(['— no review published', '— no QC status published', '— no decisions sidecar published'])
     expect(await ndata('spend')).toEqual(['— no data · brain-tier spend today is not published'])
     expect(await ndata('hygiene')).toEqual(['no data · no load source published', 'no data · no worktree residue published'])
@@ -3001,9 +3023,9 @@ for (const surface of SURFACES) {
     const now = await paneParts($, surface, 'now')
     const p = await bandParts($, surface)
     expect(p.row).toBe('⊘ 疑似卡住 repo · 10m')
-    expect(now.texts[0]).not.toContain('implement') // the hero repeats no stage
+    expect(now.head[0]).not.toContain('implement') // the hero repeats no stage
     expect(now.texts.some(t => /^進度\s+—$/.test(t))).toBe(true)
-    const verdict = walkTexts(now.tree).find(n => textOf(n) === '⊘ 疑似卡住')
+    const verdict = walkTexts(now.tree).find(n => textOf(n) === '疑似卡住')
     expect(verdict?.props?.color).toBe('error')
     expect(verdict?.props?.bold).toBe(true)
   })
@@ -3290,7 +3312,7 @@ test('layoutBand: a long reason is clipped to the room left: a prefix of it is d
 
 test('Review tab: a ladder rung outside U0..U5 is clamped, never a negative repeat', () => {
   const snap = (rung: string) => ({
-    header: 'h', review: null, decision: null, sections: { attention: [], waiting: [], tasks: [], decisions: [], foreman: [] },
+    header: 'h', review: null, decision: null, sections: NO_SECTIONS,
     detail: { qc: null, now_ms: 1000, decisions: { rows: [], count: 1, irreversible: 0, writers: [], undocumented: 0, identity: null, root: null, ladder: { rung, at: new Date(0).toISOString() } } },
   }) as never
   for (const rung of ['U7', 'U9', 'U5', 'U0', 'Ux']) {
@@ -3377,7 +3399,7 @@ test('hygiene tab: a long cache dir, worktree path and reason wrap in full at 60
   const dir = '/home/cookys/.claude/plugins/cache/autopilot/autopilot/2.36.36'
   const target = '/home/cookys/projects/autopilot/.claude/worktrees/some-very-long-worktree-name-here'
   const snap = {
-    header: 'h', sections: { attention: [], waiting: [], tasks: [], decisions: [], foreman: [] },
+    header: 'h', sections: NO_SECTIONS,
     detail: {
       now_ms: 1000,
       load_source: { source: 'dev', plugin_version: '3.0.0', marketplace: 'directory', flags: [], behind_upstream: null, stale_cache_dirs: [{ dir, in_use_pids: [18089, 18090], alive: [18089] }] },
@@ -3400,7 +3422,7 @@ const D_NOW = Date.parse('2026-10-13T08:00:00.000Z')
 const D_DAY = 86_400_000
 const dispatchSnap = (rows: object[] | null, over: object = {}) => ({
   header: 'h', rows, gates: null, link: null, published_at: '2026-10-13T07:59:55.000Z', session_as_of: null, host_as_of: null,
-  sections: { attention: [], waiting: [], tasks: [], decisions: [], foreman: [] },
+  sections: NO_SECTIONS,
   detail: { counts: null, stalled: 0, now_ms: D_NOW },
   ...over,
 }) as never
@@ -3433,7 +3455,7 @@ test('dispatch tab: every run is ONE table line at every width, 執行中 / 已�
       for (const l of lines.filter(x => x.kind !== 'table')) expect(l.text.includes('…'), 'only a table row may cut a cell: ' + l.text).toBe(false)
       const at = (id: string) => lines.findIndex(l => l.toggle === id)
       const [r0, f0, o0] = [at('dispatch.running'), at('dispatch.finished'), at('dispatch.other')]
-      expect(r0 > 0 && f0 > r0 && o0 > f0, locale + ' ' + cols + ' section order').toBe(true)
+      expect(r0 >= 0 && f0 > r0 && o0 > f0, locale + ' ' + cols + ' section order').toBe(true)
       const running = lines.slice(r0, f0)
       const finished = lines.slice(f0, o0)
       expect(running.filter(l => l.kind === 'kv').length, 'no kv among the runs').toBe(0)
@@ -3725,7 +3747,7 @@ test('spend history: sparkText scales to the peak over the eight bars; zeros are
 
 const spendSnap = (hourly: number[] | null) => ({
   header: 'h', rows: null, gates: null, link: null, published_at: null, session_as_of: null, host_as_of: null,
-  sections: { attention: [], waiting: [], tasks: [], decisions: [], foreman: [] },
+  sections: NO_SECTIONS,
   detail: { counts: null, stalled: 0, now_ms: SH_NOW, spend: { session: '$1.00', host_all: '$20.00', host_all_n: 20, brain: 12, cap: 150, mode: 'warn', hourly } },
 }) as never
 const HOURLY = [0, 0, 0.5, 1, 0, 0, 2, 3.5, 1, 0, 0, 0, 0.2, 0, 4, 2, 1, 0, 0, 0.5, 0, 1, 2, 3]
@@ -3765,7 +3787,7 @@ for (const width of [60, 76, 90]) {
 
 const shareSnap = () => ({
   header: 'h', rows: null, gates: null, link: null, published_at: null, session_as_of: null, host_as_of: null,
-  sections: { attention: [], waiting: [], tasks: [], decisions: [], foreman: [] },
+  sections: NO_SECTIONS,
   detail: { counts: null, stalled: 0, now_ms: SH_NOW, spend: { session: '$1.00', host_all: '$112.40', host_all_n: 112.4, brain: 87.2, cap: 150, mode: 'warn', hourly: HOURLY } },
 }) as never
 
@@ -3883,6 +3905,8 @@ test('recent: every redaction pattern becomes ***, ordinary text is untouched', 
   expect(/[\uD800-\uDBFF]$/.test(emoji.prompt)).toBe(false)
 })
 
+const OPEN_RECENT: ReadonlySet<string> = new Set(['sec:now.recent']) // membership = toggled away from its folded default = open
+
 test('recent: a collapsed prompt is one line of at most 60 characters plus …', () => {
   const long = 'word '.repeat(40) + '\n\nsecond paragraph'
   const c = collapsedPrompt(long)
@@ -3892,7 +3916,7 @@ test('recent: a collapsed prompt is one line of at most 60 characters plus …',
   expect(collapsedPrompt('short  prompt\nhere')).toBe('short prompt here')
   const exact = 'x'.repeat(60)
   expect(collapsedPrompt(exact)).toBe(exact)
-  const lines = recentLines(groupRecent([U(long), A('reply')]), { t: makeT('en'), cols: 100, expanded: new Set() })
+  const lines = recentLines(groupRecent([U(long), A('reply')]), { t: makeT('en'), cols: 100, expanded: new Set(), folded: OPEN_RECENT })
   const g = lines.find(l => l.toggle === '0') as { text: string } // the group (id = its transcript index), not the foldable heading
   expect(g.text).toBe('▸ You: ' + c)
 })
@@ -3900,7 +3924,7 @@ test('recent: a collapsed prompt is one line of at most 60 characters plus …',
 test('recent: an expanded group is capped at 20 lines with a final … line; a short one is shown whole', () => {
   const reply = Array.from({ length: 60 }, (_v, i) => 'reply line ' + i).join('\n')
   const groups = groupRecent([U('a question\nin two lines'), A(reply)])
-  const ctx = { t: makeT('en'), cols: 80, expanded: new Set([groups[0].id]) }
+  const ctx = { t: makeT('en'), cols: 80, expanded: new Set([groups[0].id]), folded: OPEN_RECENT }
   const lines = recentLines(groups, ctx).slice(1) // without the section heading
   expect(lines.length).toBe(RECENT_EXPANDED_LINES)
   expect(lines[0].text).toBe('▾ You:')
@@ -3941,6 +3965,7 @@ for (const locale of ['en', 'zh-TW'] as const) {
     const w = world(on, base(), NOW_FRESH, SID_A, locale)
     on('session.messages', () => ({ value: messages }))
     await start($, 'terminal')
+    await openRecent($)
     const empty = (await paneParts($, 'terminal', 'now')).texts
     expect(empty.slice(-2)).toEqual([expect.stringContaining(t('recent.title')), ' ' + t('recent.empty')])
     messages = [U('synthetic question one'), A('synthetic answer one'), U('<system-reminder>noise'), U('synthetic question two'), A('synthetic answer two')]
@@ -3957,6 +3982,7 @@ test('recent: the pane lists the section after a tick, and a throwing $.session.
   const w = worldEn(on, base())
   on('session.messages', () => { calls++; if (throwing) throw new Error('transcript unavailable'); return { value: messages } })
   await start($, 'terminal')
+  await openRecent($)
   const rows = async () => (await paneParts($, 'terminal', 'now')).texts
   let r = await rows()
   expect(r.slice(-2)).toEqual([expect.stringContaining('Recent conversation'), '▸ You: synthetic question one'])
@@ -3981,6 +4007,7 @@ test('recent: pressing a group Button expands it, pressing again collapses it', 
   const w = worldEn(on, base())
   on('session.messages', () => ({ value: [U('synthetic question one'), A('synthetic answer one')] }))
   await start($, 'terminal')
+  await openRecent($)
   const mountPane = () => $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
   const first = await mountPane()
   await first.press({ key: 'now' })
@@ -4022,7 +4049,7 @@ test('wrap: a toggle line that wraps keeps its toggle on every line (each piece 
 
 test('recent: a collapsed CJK prompt wider than the pane is cut to one line that fits, and it is the toggle line', () => {
   const groups = groupRecent([U('第一則'), A('a'), U('這是一個很長的中文問題'.repeat(8)), A('b')])
-  const lines = recentLines(groups, { t: makeT('zh-TW'), cols: 40, expanded: new Set() }).slice(1)
+  const lines = recentLines(groups, { t: makeT('zh-TW'), cols: 40, expanded: new Set(), folded: OPEN_RECENT }).slice(1)
   expect(lines.length).toBe(2)
   for (const l of lines) {
     expect(l.toggle).toBeDefined()
@@ -4036,6 +4063,7 @@ test('recent: on a narrow pane the long CJK group (the second one) opens on a pr
   world(on, base(), NOW_FRESH, SID_A, 'zh-TW')
   on('session.messages', () => ({ value: [U('第一則'), A('答一'), U('這是一個很長的中文問題'.repeat(8)), A('答二')] }))
   await start($, 'terminal')
+  await openRecent($)
   const mountPane = () => $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'Pane', requestId: 'autopilot-live', props: { ...PANE_PROPS, bodyColumns: 48 }, viewport: { columns: 160, rows: 50, isFullscreen: true } })
   const first = await mountPane()
   await first.press({ key: 'now' })
@@ -4069,18 +4097,20 @@ test('now: a section heading runs a rule to the edge; pressing it folds the sect
     return rows
   }
   const open = await draw(null)
-  const at = open.findIndex(r => r.startsWith('▾ Where you are'))
+  const at = open.findIndex(r => r.startsWith('▾ Position'))
   expect(at).toBeGreaterThan(0)
   expect(open[at]).toMatch(/ ─{3,}$/)
-  expect(displayWidth(open[at])).toBe(PANE_PROPS.bodyColumns)
+  expect(displayWidth(open[at])).toBe(PANE_PROPS.bodyColumns - 1) // the rule stops one column short of the edge (a full-width row would wrap)
   const next = open.findIndex((r, i) => i > at && /^[▾▸▌] /.test(r)) // the following section's heading
   expect(next - at).toBeGreaterThan(2) // the open section has a body
   const folded = await draw(at)
-  expect(folded[at].startsWith('▸ Where you are')).toBe(true)
-  expect(folded.length).toBe(open.length - (next - at - 2)) // the body is gone; the heading and the blank before the next section stay
-  expect(folded[at + 2]).toBe(open[next])
+  expect(folded[at].startsWith('▸ Position')).toBe(true)
+  expect(folded.length).toBe(open.length - (next - at - 1)) // the body is gone; the heading stays and the next section follows it
+  expect(folded[at + 1]).toBe(open[next])
   expect(await draw(at)).toEqual(open)
-  expect(open.some(r => r.startsWith('▾ Needs you') || r.startsWith('▸ Needs you'))).toBe(false) // what waits for you never folds away
+  expect(open[0].startsWith('▾ Needs you')).toBe(true) // 要你處理 is the first section and starts open (plan 2.2: every section folds, it never STARTS folded)
+  expect((await draw(0))[0].startsWith('▸ Needs you')).toBe(true)
+  expect(await draw(0)).toEqual(open)
 })
 
 // ---- background work in the Now tab's working section: shells and watches from the messages, subagents from $.agent.list() ----
@@ -4165,28 +4195,6 @@ test('activity: the last output line drops escape codes, takes the final \\r red
   expect(lastOutputLine('\n \n')).toBe(null)
 })
 
-for (const locale of ['en', 'zh-TW'] as const) {
-  for (const cols of [48, 120]) {
-    test('activity: every row fits the pane, the overflow is one +N row (' + locale + ', ' + cols + ' columns)', () => {
-      const t = makeT(locale)
-      const items: ActivityItem[] = [
-        { kind: 'shell', label: '全部測試 '.repeat(20), detail: null, tail: 'ℹ duration_ms 219.56 '.repeat(10), quietMs: 42000 },
-        { kind: 'monitor', label: 'watch CI', detail: null, tail: 'build 4 of 7', quietMs: null },
-        ...Array.from({ length: MAX_ACTIVITY_ROWS }, (_v, i): ActivityItem => ({ kind: 'agent', label: 'review phase ' + i, detail: 'autopilot:reviewer', tail: null, quietMs: null })),
-      ]
-      const lines = activityLines(items, { t, cols })
-      for (const l of lines) expect(displayWidth(l.text), l.text).toBeLessThanOrEqual(cols)
-      expect(lines.filter(l => l.text.includes('●')).length).toBe(MAX_ACTIVITY_ROWS)
-      expect(lines[lines.length - 1].text.trim()).toBe(t('bg.more', { n: items.length - MAX_ACTIVITY_ROWS }))
-      expect(lines[0].text).toContain(t('label.bg_shell'))
-      expect(lines[0].text).toContain(t('bg.quiet', { age: '42s' }))
-      expect(lines[1].text.trim().startsWith('└ ℹ duration_ms')).toBe(true)
-      expect(activityLines([], { t, cols })).toEqual([])
-      expect(activityLines(null, { t, cols })).toEqual([])
-    })
-  }
-}
-
 test('activity: the Now tab lists the running shell with its last line and quiet time, and the running agents; finished ones leave', async ($, on) => {
   const t = makeT('zh-TW')
   let messages: SessionMsg[] = [U('跑全套'), A('', [bgUse('bqd50316d'), monUse('bng8w6gpz')])]
@@ -4201,15 +4209,18 @@ test('activity: the Now tab lists the running shell with its last line and quiet
   await start($, 'terminal')
   const rows = async () => (await paneParts($, 'terminal', 'now')).texts
   let r = await rows()
-  const at = r.findIndex(x => x.includes(t('now.working')))
+  const at = r.findIndex(x => x.startsWith('▾ ' + t('now.background')))
   expect(at).toBeGreaterThan(0)
   const body = r.slice(at + 1).join('\n')
   expect(body).toContain(t('label.bg_shell'))
   expect(body).toContain('full suite')
   expect(body).toContain(t('bg.quiet', { age: '20s' }))
-  expect(body).toContain('└ (pass) recent: tracker')
+  expect(body).not.toContain('└') // the tail sits behind the row's toggle
+  await pressRow($, 'terminal', 'now', x => x.includes('full suite'))
+  r = await rows()
+  expect(r.join('\n')).toContain('(pass) recent: tracker')
   expect(body).toContain(t('label.bg_monitor'))
-  expect(body).toContain('審查 phase 1 (autopilot:reviewer)')
+  expect(body).toContain('審查 phase 1 · ' + t('label.bg_agent') + ' · autopilot:reviewer')
   expect(body).not.toContain('已完成的')
   // an unchanged output file (same size and mtime) is not read again
   const outReads = () => w.reads.filter(p => p === BG_OUT).length
@@ -4222,7 +4233,7 @@ test('activity: the Now tab lists the running shell with its last line and quiet
   w.files[BG_OUT] = 'ℹ tests 336\nℹ pass 336\n'
   w.stats[BG_OUT] = { size: 30, mtimeMs: NOW_FRESH }
   await w.clock.advance(5000)
-  expect((await rows()).join('\n')).toContain('└ ℹ pass 336')
+  expect((await rows()).join('\n')).toContain('ℹ pass 336')
   messages = [...messages, doneNote('bqd50316d')]
   agentsThrow = true
   await w.clock.advance(5000)
@@ -4250,7 +4261,7 @@ test('activity: an output file over 1 MiB shows no tail; an unread transcript ke
   expect(b).toContain(t('bg.quiet', { age: '5s' }))
   expect(b).not.toContain('└')
   expect(w.reads).not.toContain(BG_OUT)
-  expect(b).toContain('審查 *** (autopilot:reviewer)')
+  expect(b).toContain('審查 *** · ' + t('label.bg_agent') + ' · autopilot:reviewer')
   messagesThrow = true
   await w.clock.advance(5000)
   b = await body()
@@ -4277,7 +4288,7 @@ const win = (kind: string, pct: number): QuotaWindow => ({ kind, pct, resetsAtMs
 // a snapshot for the 用量 tab: the account and the quota windows ride in `account`, the spend in `detail.spend` (null = nothing published)
 const usageSnap = (account: AccountSnap | undefined, spend: unknown = null) => ({
   header: 'h', rows: null, gates: null, link: null, published_at: null, session_as_of: null, host_as_of: null,
-  sections: { attention: [], waiting: [], tasks: [], decisions: [], foreman: [] }, account,
+  sections: NO_SECTIONS, account,
   detail: { counts: null, stalled: 0, now_ms: NOW_FRESH, spend },
 }) as never
 
@@ -4458,7 +4469,7 @@ for (const surface of SURFACES) {
     const mountPane = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
     const rowsNow = async () => { const q = await mountPane(); await q.press({ key: 'spend' }); await q.unmount(); const p = await mountPane(); const r = rowsOf((await p.drawn()) as Node); await p.unmount(); return r }
     const at = (await rowsNow()).findIndex(r => r.startsWith('▾ ' + t('usage.limits')))
-    expect(at).toBeGreaterThan(0)
+    expect(at).toBeGreaterThanOrEqual(0)
     const fold = await mountPane()
     await fold.press({ key: 'b' + at })
     await fold.unmount()
@@ -4542,3 +4553,103 @@ test('account: with CLAUDE_CONFIG_DIR set the account comes from that directory,
   await w.clock.advance(5000)
   expect(await body()).toContain('owner@example.com')
 })
+
+// ---- P4 (live-pane plan §7): the mounted halves of I9 (b), I18 (tasks and background `more`) and the full I19 (every summary row calls onTab) ----
+const mountOn = ($: any, surface: (typeof SURFACES)[number], props: object = PANE_PROPS) => $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+// the Now tab's body rows, drawn fresh (the host draws again after every press: a press only sets state)
+const nowRows = async ($: any, surface: (typeof SURFACES)[number]): Promise<string[]> => (await paneParts($, surface, 'now')).texts
+const pressAt = async ($: any, surface: (typeof SURFACES)[number], key: string) => {
+  const first = await mountOn($, surface)
+  await first.press({ key: 'now' })
+  await first.unmount()
+  const pane = await mountOn($, surface)
+  await pane.press({ key })
+  await pane.unmount()
+}
+
+for (const surface of SURFACES) {
+  test('P4 mounted (I9 b): the global header lines are byte-identical on all six tabs, and the header is drawn above the body (' + surface + ')', async ($, on) => {
+    world(on, richWorld())
+    await start($, surface)
+    const heads: string[][] = []
+    for (const tab of ['now', 'dispatch', 'review', 'spend', 'hygiene', 'legend']) heads.push((await paneParts($, surface, tab)).head)
+    expect(heads[0].length, 'the header has a verdict line and the blank under it').toBeGreaterThanOrEqual(2)
+    expect(heads[0][0]).toContain('⊘ 疑似卡住  repo')
+    expect(heads[0].join('\n')).toContain('工作階段 $0.42 · 本機今日 $3.10 · ctx 37%')
+    expect(heads[0][heads[0].length - 1]).toBe('')
+    heads.forEach((h, i) => expect(h, 'tab ' + i).toEqual(heads[0]))
+    // negative control: the comparison sees one byte of difference
+    expect(JSON.stringify(heads[0].map((l, i) => (i === 0 ? l + ' ' : l)))).not.toBe(JSON.stringify(heads[1]))
+  })
+
+  test('P4 mounted (I18): the tasks `more` row lists the finished tasks, pressing it again restores the default (' + surface + ')', async ($, on) => {
+    const files = base()
+    files[P_TASKS()] = j(tasksFile())
+    world(on, files)
+    await start($, surface)
+    const before = await nowRows($, surface)
+    expect(before.some(x => x.includes('寫測試')), 'the completed task is not listed by default').toBe(false)
+    const at = before.findIndex(x => x.includes('1 項已完成'))
+    expect(at, before.join('\n')).toBeGreaterThanOrEqual(0)
+    await pressAt($, surface, 'b' + at)
+    const opened = await nowRows($, surface)
+    expect(opened.some(x => x.includes('寫測試')), 'pressed: exactly the hidden task appears').toBe(true)
+    expect(opened.length).toBe(before.length + 1)
+    await pressAt($, surface, 'b' + at)
+    expect(await nowRows($, surface)).toEqual(before)
+  })
+
+  test('P4 mounted (I18): the background `more` row lists the ended items, pressing it again restores the default (' + surface + ')', async ($, on) => {
+    const w = world(on, { ...base(), [BG_OUT]: 'building\n[exited with code 0]\n' })
+    w.stats[BG_OUT] = { size: 30, mtimeMs: NOW_FRESH - 5000 }
+    on('session.messages', () => ({ value: [U('跑全套'), A('', [bgUse('bqd50316d')])] }))
+    await start($, surface)
+    const before = await nowRows($, surface)
+    expect(before.some(x => x.includes('full suite')), 'an ended item is not listed by default').toBe(false)
+    const at = before.findIndex(x => x.includes('1 項已結束'))
+    expect(at, before.join('\n')).toBeGreaterThanOrEqual(0)
+    await pressAt($, surface, 'b' + at)
+    const opened = await nowRows($, surface)
+    expect(opened.some(x => x.startsWith('✓ 完成') && x.includes('full suite')), opened.join('\n')).toBe(true)
+    await pressAt($, surface, 'b' + at)
+    expect(await nowRows($, surface)).toEqual(before)
+  })
+
+  test('P4 mounted (I19): pressing every summary row and the residue item calls onTab with its tab; pressing a header flips its fold; defaults equal SECTION_DEFAULTS (' + surface + ')', async ($, on) => {
+    world(on, richWorld())
+    await start($, surface)
+    const activeAfter = async (key: string): Promise<string> => {
+      await pressAt($, surface, key)
+      const pane = await mountOn($, surface)
+      const active = ((await pane.findAll({ type: 'Button' })) as Drawn[]).find(b => isActiveTab(b))?.props?.key as string
+      await pane.unmount()
+      return active
+    }
+    const rows = await nowRows($, surface)
+    const targets: [string, string][] = [['派工 ›', 'dispatch'], ['審查 ›', 'review'], ['用量 ›', 'spend'], ['殘留 ›', 'hygiene']]
+    for (const [prefix, tab] of targets) {
+      const at = rows.findIndex(r => r.startsWith(prefix))
+      expect(at, prefix).toBeGreaterThanOrEqual(0)
+      expect(await activeAfter('g' + at), prefix).toBe(tab)
+    }
+    const residueItem = rows.findIndex(r => r.startsWith('▲ ') && r.includes('worktree') && r.trimEnd().endsWith('殘留 ›'))
+    expect(residueItem, rows.join('\n')).toBeGreaterThanOrEqual(0)
+    expect(await activeAfter('g' + residueItem)).toBe('hygiene')
+    // folds: every header starts as SECTION_DEFAULTS says, and a press flips it and a second press restores it
+    const heads = (rs: string[]) => rs.map((r, i) => ({ r, i })).filter(x => /^[▾▸] \S/.test(x.r))
+    const start0 = heads(await nowRows($, surface))
+    expect(start0.length).toBeGreaterThanOrEqual(5)
+    for (const h of start0) {
+      const folded = h.r.startsWith('▸')
+      const wantFolded = h.r.includes('最近對話') // SECTION_DEFAULTS: 現況's history starts folded, nothing else does
+      expect(folded, h.r).toBe(wantFolded)
+    }
+    expect(start0[0].r.startsWith('▾ 要你處理'), '要你處理 starts open').toBe(true)
+    const before = await nowRows($, surface)
+    await pressAt($, surface, 'b' + start0[0].i)
+    const flipped = await nowRows($, surface)
+    expect(flipped[start0[0].i].startsWith('▸ 要你處理')).toBe(true)
+    await pressAt($, surface, 'b' + start0[0].i)
+    expect(await nowRows($, surface)).toEqual(before)
+  })
+}

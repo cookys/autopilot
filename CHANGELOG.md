@@ -5391,7 +5391,6 @@ review 抓住。鎖機器退場,拒絕本身扛起整個閘。
   713→717 = v2.34.23;harness-maintenance 58→59 = v2.34.28),justification 見各該版節。
 
 
-<<<<<<< HEAD
 ## v2.34.31 — QRP_CLI_HOME 要 per-invocation clone:共用一個會讓考試把傳輸故障記成模型失分
 
 agy 連兩次資格考卡在 `provider_process_failed`(2/4 輪)。我原本判它「傳輸不可靠」,
@@ -5429,6 +5428,7 @@ agy 每次執行都寫 `$HOME/.gemini/config/{config.json,mcp_config.json,projec
 | MiniMax-M3 | 26/42 | 15/38 | 2 | ❌ degraded |
 
 四筆已 record(scorecard 34 → 38)。
+
 ## v2.34.31 — plan-review PANEL 層可觀測性:哪席在飛、deadline 剩多少,一條指令
 
 **Headline**: v2.34.21 讓席位可觀測,但 PANEL 層仍是黑箱——循序三席 20m/席,驅動端到最後
@@ -5466,7 +5466,6 @@ agy 每次執行都寫 `$HOME/.gemini/config/{config.json,mcp_config.json,projec
   prose-justification: 本版零 skill prose 變動;ratchet 差額為既往版本之遺留
   (dev-flow 713→717 = v2.34.23 gate advisory;harness-maintenance 58→59 = v2.34.28
   probe row),justification 見各該版節。
->>>>>>> origin/develop
 
 ## v2.34.30 — QRP_CLI_HOME:只吃 HOME 的 CLI 也能送考(推翻我自己的「不可考」)
 

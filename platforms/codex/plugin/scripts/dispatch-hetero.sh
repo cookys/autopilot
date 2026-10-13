@@ -1414,10 +1414,13 @@ NODE
 }
 
 # Marker → sealed campaign admission bridge (zero-runner under enforce mismatch).
-# Active L5/L6 markers and L3 fallbacks whose entry_level is L4-L6 must carry the
-# same repo/policy/graph digests as the sealed campaign mission_runtime. Caller
-# flags and environment variables are never substitutes for sealed contract bytes
-# or marker admission bytes.
+# The CALLER'S OWN active L5/L6 marker (and its L3 fallback whose entry_level is L4-L6)
+# must carry the same repo/policy/graph digests as the sealed campaign mission_runtime.
+# "Own" = the marker whose session_id equals CLAUDE_CODE_SESSION_ID: another session's
+# marker (an aborted /l5 run's leftover) is none of this dispatch's business and no longer
+# fences it (BL-0009). With CLAUDE_CODE_SESSION_ID unset the bridge cannot tell whose
+# marker is whose and keeps scanning the whole directory (never relaxed). Caller flags and
+# environment variables are never substitutes for sealed contract bytes or marker admission bytes.
 check_marker_campaign_admission_bridge() {
   local marker_dir="${AUTOPILOT_SESSION_MODE_DIR:-${HOME:-}/.autopilot/session-mode}"
   local marker bridge_state bridge_rc consumed_repo normalized_repo
@@ -1440,7 +1443,7 @@ check_marker_campaign_admission_bridge() {
       || die_precondition "authoritative session-mode marker is not a regular file: $marker"
     bridge_state="$(
       node - "$marker" "$normalized_repo" "$CAMPAIGN_CONTRACT_FILE" \
-        "$CAMPAIGN_MISSION_MODE" "$SELF_DIR/session-mode.js" <<'NODE' 2>&1
+        "$CAMPAIGN_MISSION_MODE" "$SELF_DIR/session-mode.js" "${CLAUDE_CODE_SESSION_ID:-}" <<'NODE' 2>&1
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -1450,6 +1453,7 @@ const [
   campaignPath,
   missionMode,
   sessionModePath,
+  callerSession,
 ] = process.argv.slice(2);
 const managedLevels = new Set(['l5', 'l6']);
 const fallbackEntryLevels = new Set(['l4', 'l5', 'l6']);
@@ -1478,6 +1482,14 @@ try {
       || path.resolve(data.repo_root) !== path.resolve(repo)) {
     process.stdout.write('INACTIVE');
     process.exit(0);
+  }
+  if (callerSession) {
+    // Same normalisation as session-mode.js normalizeSessionId (markers store the normalised id).
+    const own = String(callerSession).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
+    if (data.session_id !== own && path.basename(markerPath) !== `${own}.json`) {
+      process.stdout.write('INACTIVE');
+      process.exit(0);
+    }
   }
   const isManaged = managedLevels.has(data.level)
     || (data.level === 'l3' && fallbackEntryLevels.has(data.entry_level));

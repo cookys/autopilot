@@ -670,11 +670,11 @@ function dispatch(extraEnv = {}) {
 
 const repoRootAbs = fs.realpathSync(repo);
 
-// Two gates guard this path and they do not see the same thing. Managed
-// admission runs first and resolves exactly one marker — <session id>.json —
-// while the bridge that runs after it scans every marker in the directory.
-// So a foreign stale marker is the bridge's alone to catch, and the negatives
-// below have to clear admission before the bridge is even reached.
+// Two gates guard this path. Managed admission resolves exactly one marker —
+// <session id>.json. The bridge that runs after it checks the CALLER'S OWN
+// marker too (session_id == CLAUDE_CODE_SESSION_ID) and, since BL-0009, skips
+// every other session's marker: a dead session's leftover must not fence this
+// dispatch. With no CLAUDE_CODE_SESSION_ID it still scans the whole directory.
 const BRIDGE_SESSION_ID = 'bridge-admission-sess';
 const validSessionMarker = () => ({
   level: 'l6',
@@ -693,19 +693,52 @@ const validSessionMarker = () => ({
   },
 });
 
-// Negatives under enforce first (before positive creates a durable branch).
-// Each must be precondition_failed with zero runner effects.
+// BL-0009: a FOREIGN session's marker (any of the shapes the bridge used to refuse) must not
+// fence this session's dispatch. Mutation check: with the session filter removed in
+// check_marker_campaign_admission_bridge the first case below goes red (bridge failed, 0 effects).
 function negative(name, marker) {
   clearMarkers();
   writeMarker(BRIDGE_SESSION_ID, validSessionMarker());
   writeMarker(name, marker);
   const result = dispatch();
+  const ok = result.status === 0
+    && result.effects === 1
+    && !/admission bridge failed/.test(result.stdout);
+  check(`foreign_${name}_does_not_block`, ok);
+}
+
+// The old behaviour is still what happens with no session id: scan everything. The session
+// id is withheld from CLAUDE_CODE_SESSION_ID only; AUTOPILOT_SESSION_ID lets admission find
+// the caller's marker. A foreign marker with no mission_routing must still stop the dispatch.
+function noSessionIdScansAll(name, marker) {
+  clearMarkers();
+  writeMarker(BRIDGE_SESSION_ID, validSessionMarker());
+  writeMarker(name, marker);
+  const result = dispatch({ CLAUDE_CODE_SESSION_ID: '', AUTOPILOT_SESSION_ID: BRIDGE_SESSION_ID });
   const ok = result.status === 2
     && result.effects === 0
     && /precondition_failed/.test(result.stdout)
     && /marker-to-campaign admission bridge failed/.test(result.stdout);
-  check(`negative_${name}_zero_runner`, ok);
+  check(`no_session_id_${name}_still_blocks`, ok);
 }
+
+// An aborted /l5 session's marker with no mission_routing at all (the l5e fence).
+const abortedL5 = {
+  level: 'l5',
+  session_id: 'aborted-l5-session',
+  repo_root: repoRootAbs,
+  started_at: '2026-07-28T00:00:00.000Z',
+  expires_at: '2099-01-01T00:00:00.000Z',
+};
+negative('aborted_l5_no_routing', abortedL5);
+noSessionIdScansAll('aborted_l5_no_routing', abortedL5);
+
+// The caller's OWN marker without mission_routing still stops the dispatch (zero runner).
+clearMarkers();
+writeMarker(BRIDGE_SESSION_ID, { ...abortedL5, level: 'l6', session_id: BRIDGE_SESSION_ID });
+const ownNoRouting = dispatch();
+check('own_marker_no_routing_still_blocks_zero_runner',
+  ownNoRouting.status === 2 && ownNoRouting.effects === 0 && /dev_flow_admission|precondition_failed/.test(ownNoRouting.stdout));
 
 // Graph mismatch: marker graph A, campaign graph B.
 negative('graph_mismatch', {
@@ -831,7 +864,7 @@ check('positive_l6_marker_reaches_runner_once',
   positive.status === 0 && positive.effects === 1);
 
 // mods P1W SCOPE: `bind-campaign-root` adds a top-level campaign_roots to the session's own marker (and the §2.9 init / stage writers add size /
-// stage / stage_set_at). Neither the session's own admission nor the bridge that scans EVERY marker may treat those additive fields as a
+// stage / stage_set_at). Neither the session's own admission nor the bridge (own marker; every marker when no session id) may treat those additive fields as a
 // malformed marker: the second dispatch of a campaign (repair round, resume) runs against the bound marker.
 clearMarkers();
 writeMarker(BRIDGE_SESSION_ID, {
@@ -992,9 +1025,11 @@ for key in \
   prepare_created mission_seal_is_v2 icc_id_is_v1_distinct intake_admitted_dual_identity \
   strict_projection_uses_icc_v1 engine_rejects_mission_v2_as_run_id terminal_binds_both_identities \
   positive_l6_marker_reaches_runner_once bound_marker_with_campaign_roots_reaches_runner_once \
-  negative_graph_mismatch_zero_runner negative_policy_mismatch_zero_runner \
-  negative_repo_mismatch_zero_runner negative_missing_admission_zero_runner \
-  negative_malformed_admission_zero_runner negative_legacy_l3_fallback_zero_runner \
+  foreign_graph_mismatch_does_not_block foreign_policy_mismatch_does_not_block \
+  foreign_repo_mismatch_does_not_block foreign_missing_admission_does_not_block \
+  foreign_malformed_admission_does_not_block foreign_legacy_l3_fallback_does_not_block \
+  foreign_aborted_l5_no_routing_does_not_block no_session_id_aborted_l5_no_routing_still_blocks \
+  own_marker_no_routing_still_blocks_zero_runner \
   negative_session_marker_mismatch_zero_runner \
   off_mode_without_managed_marker_compatible; do
   assert_contains "$OUT" "${key}	PASS" "oracle proves $key"

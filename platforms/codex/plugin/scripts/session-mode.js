@@ -65,11 +65,13 @@
  *   node scripts/session-mode.js status
  *
  * retire (v2.36.48): retire ANOTHER session's managed marker for this repo once its
- * deliverable is integrated. The marker-to-campaign bridge in dispatch-hetero.sh scans
- * every marker in the directory and refuses a live one whose graph digest differs from
- * the sealed campaign's — correct as a concurrency guard, but a finished deliverable's
- * marker used to have no exit short of its 24h TTL (or hand deletion, which is
- * gate-input deletion). `retire` re-derives completion instead of trusting a claim
+ * deliverable is integrated. The marker-to-campaign bridge in dispatch-hetero.sh checks
+ * only the CALLER'S OWN marker (session_id == CLAUDE_CODE_SESSION_ID; with that variable
+ * unset it still scans every marker in the directory) and refuses a live one whose graph
+ * digest differs from the sealed campaign's. A finished deliverable's marker used to have
+ * no exit short of its 24h TTL (or hand deletion, which is gate-input deletion); since
+ * BL-0009 another session's leftover no longer fences this one, but `retire` remains the
+ * evidence-backed way to remove a marker. `retire` re-derives completion instead of trusting a claim
  * (ADR-0001): the marker's graph digest names a Mission lineage in the repo's
  * registry; that lineage holds a claim for `unit_id`; the receipt from
  * `scripts/record-integration.js` names that claim's branch as source_ref; and git

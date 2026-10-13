@@ -179,9 +179,10 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
     `logical_plan_id` AND a new `--ticket` (the old ticket stays bound to the old id), keeping the
     earlier generation's artifact and dispositions as evidence (2026-09-17).
 6. `node scripts/session-mode.js set --level l5 --size <XS|S|M|L|XL> [--urgent] [--bug] --repo-root <repo>` → `READY`. First check
-   `~/.autopilot/session-mode/` for another ACTIVE managed marker of this repo: the bridge scans
-   every marker and one with a different graph digest blocks intake (a deliberate concurrency
-   fence). If that marker's deliverable is already integrated, retire it with evidence —
+   `~/.autopilot/session-mode/` for another ACTIVE managed marker of this repo: the bridge checks
+   only your own marker (`session_id` == `CLAUDE_CODE_SESSION_ID`), so another session's marker no
+   longer blocks intake; with `CLAUDE_CODE_SESSION_ID` unset it still scans every marker and one
+   with a different graph digest blocks. If a marker's deliverable is already integrated, retire it with evidence —
    `node scripts/session-mode.js retire --session <id> --integration-receipt <record-integration
    receipt>` re-derives lineage claim + git ancestry (v2.36.48); never delete a marker by hand.
 6b. Run `bash scripts/resolve-review-loop.sh --check-scorecard --field override_admitted_seats` and

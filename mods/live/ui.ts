@@ -221,7 +221,7 @@ const stated = (id: StateId): Stated => STATED_OBJS[id]
 export const isStated = (v: unknown): v is Stated => typeof v === 'object' && v !== null && Object.values(STATED_OBJS).includes(v as Stated)
 
 export type Domain = 'verdict' | 'run' | 'seat' | 'round' | 'gate' | 'qc' | 'background' | 'task' | 'loadSource' | 'attention' | 'residueGroup' | 'cleanup'
-export type RunSubject = { rc: number | null; final_status: string | null; stall: boolean; fresh: boolean }
+export type RunSubject = { rc: number | null; final_status: string | null; stall: boolean; fresh: boolean; starting?: boolean } // `starting`: never probed yet, but inside the freshness bound since launch
 export type SeatSubject = { kind: 'code' | 'plan'; verdict: string | null; status: string | null }
 export type RoundSubject = { stale: boolean; converged: boolean; seats: readonly Stated[] }
 export type BackgroundSubject = { exit: number | null; quietMs: number }
@@ -247,7 +247,7 @@ const CLASSIFY: { [D in Domain]: (s: Subject[D]) => string } = {
     if (r.rc === 0 || (fs !== null && DONE_FINAL.includes(fs))) return 'done'
     if (fs !== null) return 'weird' // a final_status in neither set beats stall and freshness; the raw text goes to detail
     if (r.stall) return 'stall'
-    return r.fresh ? 'running' : 'stopped'
+    return r.fresh ? 'running' : r.starting === true ? 'starting' : 'stopped'
   },
   seat: s => {
     if (present(s.verdict)) return s.kind + ':' + norm(s.verdict)
@@ -283,7 +283,7 @@ const CLASSIFY: { [D in Domain]: (s: Subject[D]) => string } = {
 const ATTENTION_FROM = Object.fromEntries(STATE_IDS.map(id => ['from:' + id, id])) as Record<string, StateId>
 export const STATUS_MAP: { [D in Domain]: Record<string, StateId> } = {
   verdict: { DECIDE: 'need_you', STALLED: 'stalled', WAITING: 'done', RUNNING: 'running', IDLE: 'stopped' },
-  run: { failed: 'failed', done: 'done', weird: 'unknown', stall: 'stalled', running: 'running', stopped: 'stopped' },
+  run: { failed: 'failed', done: 'done', weird: 'unknown', stall: 'stalled', running: 'running', starting: 'pending', stopped: 'stopped' },
   seat: {
     'code:SHIP-AS-IS': 'done', 'code:FIX-THEN-SHIP': 'findings', 'code:BLOCK': 'failed', 'code:REJECT': 'failed',
     'plan:READY': 'done', 'plan:APPROVE': 'done', 'plan:PASS': 'done', 'plan:CONDITIONAL': 'findings', 'plan:STOP': 'findings', 'plan:REJECT': 'failed',
@@ -558,7 +558,7 @@ export function sparkValue(values: readonly number[]): Frag {
 // always kept). When the table is still too wide, the `flex` column is cut to fit (an identifier from the left), then the others down to `min`. It never falls
 // back to key/value blocks.
 export type Column = { head: string; min: number; priority: number; flex?: boolean; cut: 'left' | 'right' }
-export type TableRow = { state: Stated; cells: readonly string[] }
+export type TableRow = { state: Stated; cells: readonly string[]; group?: string; ts?: number } // group / ts are stamped on the line (I22); tableList() requires them
 export function table(u: Ctx, columns: readonly Column[], rows: readonly TableRow[], o: { fact: FactId }): PaneLine[] {
   const stateHead = u.t('ui.table.state')
   const stateW = Math.max(displayWidth(stateHead), ...rows.map(r => displayWidth(u.t('ui.state.' + r.state.id)))) // the word column; the glyph and a space precede it
@@ -592,7 +592,7 @@ export function table(u: Ctx, columns: readonly Column[], rows: readonly TableRo
     return lineOf('table', [
       sg(st.glyph, { color: st.key, role: 'glyph' }), sg(' '), sg(padCells(u.t('ui.state.' + r.state.id), stateW), { color: st.key, role: 'state' }),
       ...keep.flatMap(i => [sg('  '), sg(fit(r.cells[i] ?? '', i), { role: 'value' })]),
-    ], { fact: o.fact })
+    ], { fact: o.fact, ...(r.group === undefined ? {} : { group: r.group }), ...(r.ts === undefined ? {} : { ts: r.ts }) })
   })
   return [head, ...body]
 }
@@ -662,6 +662,29 @@ export function verdictHeader(u: Ctx, v: { state: Stated; word: string; project:
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------
+// P2 (派工) helpers
+
+// a header chip made of a state glyph (no word) and a count: `✓ 32`. The section header names the state, the count says how many.
+export function countChip(u: Ctx, s: Stated, n: number, fact: FactId): Frag {
+  return frag([...stateLead(u, s, { word: false }).segs, sg(' '), sg(String(n), { role: 'value', fmt: 'count' })], fact)
+}
+
+// a table whose rows go through the same rules as list(): equal `group` keys fold into one row (the newest), rows run in SEVERITY order and, inside a
+// state, newest `ts` first, the cap applies to the grouped rows, and a `more` toggle carries the rest. A row without a `group` or a finite `ts` is refused.
+export type TableListRow = TableRow & { group: string; ts: number }
+export function tableList(u: Ctx, id: string, noun: string, columns: readonly Column[], rows: readonly TableListRow[], o: { fact: FactId; cap?: number }): PaneLine[] {
+  for (const r of rows) if (typeof r.group !== 'string' || r.group === '' || !Number.isFinite(r.ts)) throw new Error('tableList: ' + id + ' has a row without group or ts')
+  const cap = o.cap ?? 5
+  const seen = new Set<string>()
+  const ordered = [...rows].sort((a, b) => b.ts - a.ts).filter(r => (seen.has(r.group) ? false : (seen.add(r.group), true)))
+    .sort((a, b) => SEVERITY.indexOf(a.state.id) - SEVERITY.indexOf(b.state.id) || b.ts - a.ts)
+  const expanded = u.expanded?.has('more:' + id) === true
+  const shown = expanded ? ordered : ordered.slice(0, cap)
+  const out = table(u, columns, shown, { fact: o.fact })
+  if (ordered.length > cap) out.push(more(u, ordered.length - cap, noun, 'more:' + id, expanded))
+  return out
+}
+
 // P3 (用量) helpers: fragments a tab joins into one value
 
 // several fragments as one (a `chart` takes a single value fragment)

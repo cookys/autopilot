@@ -59,6 +59,11 @@ export function Pane(el: { Box: El; Text: El; Link: El; Button?: El }, snap: Liv
     ? <Button key={'b' + i} plain onPress={() => onToggle(l.toggle as string)}>
         {(l.segs ?? [{ text: l.text }]).map((x, j) => <Text key={'g' + j} color={(x as Seg).color} bold={(x as Seg).bold} dimColor={(x as Seg).dim} wrap="truncate">{x.text}</Text>)}
       </Button>
+    // a line that carries a `goto` tab (a projection row, design plan §2.3) is a Button that opens that tab
+    : l.goto !== undefined && Button !== undefined
+    ? <Button key={'g' + i} plain onPress={() => onTab(l.goto as PaneTab)}>
+        {(l.segs ?? [{ text: l.text }]).map((x, j) => <Text key={'g' + j} color={(x as Seg).color} bold={(x as Seg).bold} dimColor={(x as Seg).dim} wrap="truncate">{x.text}</Text>)}
+      </Button>
     : plainLine(l, i)
   const strip = tabStrip(el, tab, onTab, onNext, snap, t, cols)
   if (snap === null) {

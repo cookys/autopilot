@@ -1018,6 +1018,7 @@ QODER_CWD=""
 CNATIVE_CWD=""
 CURSOR_CWD=""
 CURSOR_ERR=""
+RUNNER_ERR_FILE=""
 AUTHOR_WRAP_FILE=""
 AUTHOR_PARSE_FILE=""
 AUTHOR_BLOCK_FILE=""
@@ -1032,6 +1033,7 @@ cleanup() {
   [ -n "$CNATIVE_CWD" ] && rm -rf "$CNATIVE_CWD" || true
   [ -n "$CURSOR_CWD" ] && rm -rf "$CURSOR_CWD" || true
   [ -n "$CURSOR_ERR" ] && rm -f "$CURSOR_ERR" || true
+  [ -n "$RUNNER_ERR_FILE" ] && rm -f "$RUNNER_ERR_FILE" || true
   [ -n "$AUTHOR_WRAP_FILE" ] && rm -f "$AUTHOR_WRAP_FILE" || true
   [ -n "$AUTHOR_PARSE_FILE" ] && rm -f "$AUTHOR_PARSE_FILE" || true
   [ -n "$AUTHOR_BLOCK_FILE" ] && rm -f "$AUTHOR_BLOCK_FILE" || true

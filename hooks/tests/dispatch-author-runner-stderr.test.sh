@@ -72,4 +72,27 @@ assert_contains "$OUT" 'TAIL-MARKER' "big stderr: tail retained"
 if [ "${#OUT}" -lt 3500 ]; then pass_big=1; else pass_big=0; fi
 assert_eq "1" "$pass_big" "big stderr: result JSON bounded"
 
+# 5. timeout (rc 124) is classified timeout, not exit_failure
+F="$TEST_TMP/fake-sleep"
+printf '#!/usr/bin/env bash\nsleep 5\n' > "$F"; chmod +x "$F"
+OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=10 "$SCRIPT" --runner claude-native --model claude-fable-5 \
+  --prompt-file "$PROMPT" --bin "$F" --timeout 1s 2>/dev/null)"
+assert_contains "$OUT" '"status": "runner_failed"' "timeout: runner_failed"
+assert_contains "$OUT" '"transport_status": "timeout"' "timeout: classified timeout"
+
+# 6. no stderr temp residue: precondition_failed, runner_failed and success paths (private TMPDIR)
+LEAK_TMP="$TEST_TMP/leak-tmp"; mkdir -p "$LEAK_TMP"
+leaks() { find "$LEAK_TMP" -maxdepth 1 -name 'dispatch-author-runner-err-*' | wc -l | tr -d ' '; }
+F="$TEST_TMP/fake-ok"
+printf '#!/usr/bin/env bash\ncat >/dev/null\nprintf "hello\\n"\n' > "$F"; chmod +x "$F"
+OUT="$(env -u ANTHROPIC_BASE_URL -u ANTHROPIC_AUTH_TOKEN TMPDIR="$LEAK_TMP" DISPATCH_QUIET=1 "$SCRIPT" \
+  --runner cc-shim --model glm-5.2 --prompt-file "$PROMPT" --bin "$F" --timeout 10s 2>/dev/null)"
+assert_contains "$OUT" '"status": "precondition_failed"' "residue: precondition_failed reached"
+assert_eq "0" "$(leaks)" "residue: none after precondition_failed"
+F2="$TEST_TMP/fake-fail"; make_fake "$F2" 'boom' 1
+TMPDIR="$LEAK_TMP" run_author claude-native claude-fable-5 "$F2" >/dev/null
+assert_eq "0" "$(leaks)" "residue: none after runner_failed"
+TMPDIR="$LEAK_TMP" run_author claude-native claude-fable-5 "$F" >/dev/null
+assert_eq "0" "$(leaks)" "residue: none after success"
+
 finalize_test

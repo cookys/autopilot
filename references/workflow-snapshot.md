@@ -25,7 +25,7 @@ PreCompact stdout on exit 0 is merged into the compaction summarizer's custom in
 | git | `git status --porcelain=v2 --branch` in the payload cwd |
 | task card | `${AUTOPILOT_TASK_CARD_DIR:-~/.autopilot/task-card}/<sid>.json` |
 | session tasks | `<live>/tasks/<sid>.json` |
-| code review | `<live>/review-rounds/<project_key>.json` |
+| code review | `<live>/review-rounds/<project_key>.json` (shared by every worktree of the repo; a round recorded at another head than this checkout's HEAD is kept but marked `[head differs ...]`) |
 | plan review | not collected (its state key cannot be derived from the session) |
 | decision ledger | task card `ledger`, else newest `docs/projects/*/ledger/decisions.jsonl` under 24 h old |
 | dispatches | `${AUTOPILOT_DISPATCH_RUNS_DIR:-$TMPDIR/autopilot-dispatch-runs}/*.manifest.json` with the marker root or a campaign root, not ended, pid alive |

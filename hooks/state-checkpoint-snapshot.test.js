@@ -180,6 +180,16 @@ test('PostCompact: a stage that only appears inside a longer stage name does not
   } finally { sb.cleanup(); }
 });
 
+test('PostCompact: a stage that only appears as the tail of a longer word does not count', () => {
+  const sb = sandbox();
+  try {
+    fs.writeFileSync(path.join(sb.root, 'sm', `${SID}.json`), JSON.stringify({ session_id: SID, level: 'l4', size: 'L', stage: 'plan', expires_at: new Date(Date.now() + 3600e3).toISOString() }));
+    const { adv } = postCompact(sb, 'branch feat/snap, we are in preplan now');
+    assert.strictEqual(adv.length, 1);
+    assert.match(adv[0].text, /stage plan/);
+  } finally { sb.cleanup(); }
+});
+
 test('PostCompact: no marker and no git work tree means nothing to check, nothing raised', () => {
   const sb = sandbox();
   try {

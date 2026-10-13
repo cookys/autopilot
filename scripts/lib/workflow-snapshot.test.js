@@ -55,7 +55,7 @@ function fullFixture(f, over = {}) {
     tasks: [{ id: '1', subject: 'write collector', status: 'completed' }, { id: '2', subject: 'write hook tests', status: 'in_progress' }, { id: '3', subject: 'wire docs', status: 'pending' }],
   });
   put(path.join(f.dirs.live, 'review-rounds', `${KEY}.json`), {
-    schema: 'autopilot.review-round/1', phase: 'full', generation: 2, head: 'abcdef1234', converged: false, at: iso(NOW - 600e3),
+    schema: 'autopilot.review-round/1', phase: 'full', generation: 2, head: '1234567890', converged: false, at: iso(NOW - 600e3),
     seats: [{ id: 's0', family: 'anthropic', verdict: 'SHIP-AS-IS' }, { id: 's1', family: 'zhipu', verdict: 'FIX-THEN-SHIP' }],
   });
   put(path.join(f.cwd, 'docs/projects/p1/ledger/decisions.jsonl'),
@@ -79,7 +79,7 @@ test('every source present: the lines name each fact', () => {
     assert.match(t, /success criteria: tests green \| no stdout noise/);
     assert.match(t, /session tasks: 1\/3 completed/);
     assert.match(t, /\[doing\] #2 write hook tests/);
-    assert.match(t, /code review: phase full generation 2 head abcdef12 not converged; anthropic=SHIP-AS-IS zhipu=FIX-THEN-SHIP/);
+    assert.match(t, /code review: phase full generation 2 head 12345678 not converged; anthropic=SHIP-AS-IS zhipu=FIX-THEN-SHIP/);
     assert.match(t, /decision ledger \(task card\): last 2/);
     assert.match(t, /decision d2: keep tail short/);
     assert.match(t, /dispatches in flight: 1/);
@@ -158,6 +158,21 @@ test('an unknown stage or size is absent, not a crash of the whole snapshot', ()
   } finally { f.cleanup(); }
 });
 
+test('code review: a round recorded at another head is flagged, one at this checkout\'s head is not', () => {
+  const f = mk();
+  try {
+    fullFixture(f);
+    assert.doesNotMatch(text(run(f)), /head differs/);
+    put(path.join(f.dirs.live, 'review-rounds', `${KEY}.json`), {
+      schema: 'autopilot.review-round/1', phase: 'full', generation: 1, head: 'fedcba9876', converged: true, at: iso(NOW - 600e3), seats: [],
+    });
+    const t = text(run(f));
+    assert.match(t, /code review: phase full generation 1 head fedcba98 converged.*\[head differs: round reviewed fedcba98, this checkout is at 12345678;/);
+    const noGit = text(run(f, { git: () => null }));
+    assert.doesNotMatch(noGit, /head differs/); // HEAD unknown: no claim either way
+  } finally { f.cleanup(); }
+});
+
 test('dispatches: another root, an ended run and a dead pid are not in flight', () => {
   const f = mk();
   try {
@@ -167,7 +182,7 @@ test('dispatches: another root, an ended run and a dead pid are not in flight', 
     put(path.join(f.dirs.dispatchRuns, 'ended.manifest.json'), { ...base, run_id: 'ended', root_run_id: 'job-root-1', pid: process.pid, ended_at: iso(NOW) });
     put(path.join(f.dirs.dispatchRuns, 'dead.manifest.json'), { ...base, run_id: 'dead', root_run_id: 'job-root-1', pid: 2147483000, ended_at: null });
     put(path.join(f.dirs.dispatchRuns, 'camp.manifest.json'), { ...base, run_id: 'camp', root_run_id: 'camp-root-2', pid: process.pid, ended_at: null });
-    const t = text(run(f, { now: Date.now() }));
+    const t = text(run(f));
     assert.match(t, /dispatches in flight: 2/);
     assert.match(t, /run run-a/);
     assert.match(t, /run camp/);
@@ -224,7 +239,8 @@ test('no session id: one absent line, the other session-keyed sources are not re
 test('the decision ledger without a task card falls back to the newest project ledger under 24h, and says so', () => {
   const f = mk();
   try {
-    fullFixture(f, { card: { ledger: null } }); // the fallback compares file mtime (real clock) with now
+    // The fallback compares file mtime (real clock) with now, so this test runs on the real clock and its marker must expire relative to it.
+    fullFixture(f, { card: { ledger: null }, marker: { expires_at: iso(Date.now() + 3600e3) } });
     const t = text(run(f, { now: Date.now() }));
     assert.match(t, /decision ledger \(newest docs\/projects\/\*\/ledger by mtime, under 24h\)/);
   } finally { f.cleanup(); }

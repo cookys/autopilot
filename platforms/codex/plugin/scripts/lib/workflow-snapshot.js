@@ -124,6 +124,7 @@ function srcGit(ctx) {
   }
   if (!head) return absent('git', 'no branch header in git output');
   const short = oid && oid !== '(initial)' ? oid.slice(0, 8) : 'no commit';
+  ctx.headOid = oid && oid !== '(initial)' ? oid : null; // srcCodeReview compares the recorded round's head with this
   return ok('git', [`git: branch ${head === '(detached)' ? '(detached HEAD)' : head} @ ${short}, ${dirty} changed path${dirty === 1 ? '' : 's'}`]);
 }
 
@@ -168,7 +169,14 @@ function srcCodeReview(ctx) {
   const verdicts = seats.map((s) => `${clip(s.family || s.id, 12)}=${clip(s.verdict || s.status, 16)}`).join(' ');
   const when = ageLabel(r.at, ctx.now);
   const stale = Date.parse(r.at) && ctx.now - Date.parse(r.at) > STALE_MS ? ' [stale]' : '';
-  return ok('code review', [`code review: phase ${clip(r.phase, 24)} generation ${clip(r.generation, 4)} head ${String(r.head || '').slice(0, 8)} ${r.converged ? 'converged' : 'not converged'}${verdicts ? `; ${verdicts}` : ''}${when ? ` (${when})` : ''}${stale}`]);
+  // review-rounds/<project_key>.json is shared by every worktree of the repo (the key comes from the git
+  // common dir), so the last writer wins. A recorded head that is not this checkout's HEAD may be another
+  // lane's round or an older round of this one: keep the facts but say so, never present it as this lane's.
+  const recorded = String(r.head || '');
+  const cur = ctx.headOid ? String(ctx.headOid) : '';
+  const differs = recorded && cur && !(cur.startsWith(recorded) || recorded.startsWith(cur));
+  const headNote = differs ? ` [head differs: round reviewed ${recorded.slice(0, 8)}, this checkout is at ${cur.slice(0, 8)}; may be another worktree's or an older round]` : '';
+  return ok('code review', [`code review: phase ${clip(r.phase, 24)} generation ${clip(r.generation, 4)} head ${recorded.slice(0, 8)} ${r.converged ? 'converged' : 'not converged'}${verdicts ? `; ${verdicts}` : ''}${when ? ` (${when})` : ''}${stale}${headNote}`]);
 }
 
 function srcPlanReview() {

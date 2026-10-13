@@ -65,6 +65,7 @@ test('parentAgentId cycle does not hang and is flagged', () => {
   const t = json(d);
   assert.ok(find(t.root, 'c1') && find(t.root, 'c2'));
   assert.ok(t.counts.untracked >= 1);
+  assert.strictEqual(find(t.root, 'c1').untracked_reason, 'cycle');
 });
 
 test('session -> rail by manifest.session_id (preferred, no marker needed); rail -> rail depth 1', () => {
@@ -149,6 +150,16 @@ test('joined_by is shown in text and the expired warning names the marker starte
   const out = run(d).stdout;
   assert.match(out, /rail viaMarker.*joined_by=marker/);
   assert.match(out, /rail viaSid.*joined_by=session_id/);
+  assert.match(out, /^! session marker is expired/m);
+});
+
+test('rail whose parent exists but belongs to another session gets its own reason', () => {
+  const d = fixture();
+  d.run('theirs', { runner: 'codex', root_run_id: 'theirs', depth: 0, session_id: 'sess-zzzz' });
+  d.run('mine', { runner: 'codex', root_run_id: 'theirs', parent_run_id: 'theirs', depth: 1, session_id: SID });
+  const t = json(d);
+  assert.strictEqual(find(t.root, 'mine').untracked_reason, 'parent_run_other_session');
+  assert.strictEqual(find(t.root, 'theirs'), undefined);
 });
 
 test('missing source dirs: warnings, exit 0, empty tree', () => {

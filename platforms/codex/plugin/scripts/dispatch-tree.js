@@ -38,7 +38,7 @@
 //   rail  NODE adds: role, runner, model, root_run_id, parent_run_id, final_status, joined_by
 //                    ("session_id"|"marker"|"parent_run_id")
 //   untracked_reason: agent  "legacy_record_no_parent_info" | "missing_parentAgentId" | "parent_agent_not_found" | "cycle"
-//                     rail   "parent_run_not_found" | "cycle"
+//                     rail   "parent_run_not_found" | "parent_run_other_session" | "cycle"
 //   children sorted by started_at (null last), then id.
 
 const fs = require('fs');
@@ -214,7 +214,8 @@ function attachRails(rails, session, marker, root) {
         if (q === r || hops > rails.length) { cyc = true; break; }
       }
       if (cyc) { r.untracked = true; r.untracked_reason = 'cycle'; }
-      else if (!p || !ours.has(p)) { r.untracked = true; r.untracked_reason = 'parent_run_not_found'; }
+      else if (!p) { r.untracked = true; r.untracked_reason = 'parent_run_not_found'; }
+      else if (!ours.has(p)) { r.untracked = true; r.untracked_reason = 'parent_run_other_session'; }
       else parent = p;
     }
     parent.children.push(r);

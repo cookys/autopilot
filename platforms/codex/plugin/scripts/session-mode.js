@@ -156,6 +156,10 @@ const NOOP_ADOPTION_KEYS = Object.freeze([
   'source_work_order_digest',
 ]);
 
+// BL-0017 (a): the same one-line hint is in dispatch-author.sh, dispatch-hetero.sh and
+// hooks/dispatch-model-guard.js (hooks/tests/blocked-dispatch-guidance.test.sh pins all four equal).
+const MASK_LINE = 'To run a non-strict dispatch in this session, prefix that one command with: AUTOPILOT_SESSION_MODE_DIR=$(mktemp -d)';
+
 function markerDir() {
   return process.env.AUTOPILOT_SESSION_MODE_DIR
     || path.join(os.homedir(), '.autopilot', 'session-mode');
@@ -1017,6 +1021,9 @@ function cmdSet(args) {
   try { writeLivePointer(); } catch (_error) { /* fail-open: pointer is advisory for the mod */ }
   startProjectWatcher(marker, repoRoot);
   process.stdout.write(`${JSON.stringify({ ok: true, marker_path: markerPath(), ...marker }, null, 2)}\n`);
+  if (marker.level === 'l5' || marker.level === 'l6') {
+    process.stderr.write(`session-mode: ${marker.level} marker set — non-strict dispatch (dispatch-author/consult/plan-review seats) is refused while it is live. ${MASK_LINE}\n`);
+  }
   return 0;
 }
 

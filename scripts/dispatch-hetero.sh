@@ -1036,7 +1036,7 @@ NODE
       die_precondition "authoritative session-mode marker is invalid: ${marker_state:-marker could not be classified}"
     fi
     if [[ "$marker_state" == ACTIVE:* ]]; then
-      die_precondition "active session-mode=${marker_state#ACTIVE:} requires a sealed campaign strict projection (repo=$consumed_repo)"
+      die_precondition "active session-mode=${marker_state#ACTIVE:} requires a sealed campaign strict projection (repo=$consumed_repo). To run a non-strict dispatch in this session, prefix that one command with: AUTOPILOT_SESSION_MODE_DIR=\$(mktemp -d)"
     fi
   done
 }

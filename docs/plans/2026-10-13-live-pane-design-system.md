@@ -1,6 +1,6 @@
 # Live pane design system — one IA, one visual vocabulary, enforced in code
 
-Status: **draft for owner review** (2026-10-13), revised twice after the G1 plan reviews (§10, §10.2). Plan only; no product code changed. The dispatch tree (formerly P6) moved to [`2026-10-13-dispatch-tree.md`](2026-10-13-dispatch-tree.md).
+Status: **frozen** (2026-10-13) after two plan-review generations (§10, §10.2, §10.3; receipts in [`evidence/2026-10-13-live-pane/plan-review/`](evidence/2026-10-13-live-pane/plan-review/README.md)). Ready for P0; no product code changed yet. The dispatch tree (formerly P6) moved to [`2026-10-13-dispatch-tree.md`](2026-10-13-dispatch-tree.md).
 Scope: the live mod's pane (`mods/live/pane.tsx`, `mods/live/model.ts`) and the glyphs it shares with the band (`mods/live/band.tsx`).
 Builds on the approved TUI v2 design: [`evidence/2026-10-10-tui-v2/ia.md`](evidence/2026-10-10-tui-v2/ia.md) (colour semantics, glyph vocabulary) and [`i18n.md`](evidence/2026-10-10-tui-v2/i18n.md).
 

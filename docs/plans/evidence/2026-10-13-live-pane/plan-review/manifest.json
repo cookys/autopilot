@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_manifest",
+  "logical_plan_id": "live-pane-design-system-2026-10-13-r2",
+  "minimum_distinct_families": 2,
+  "max_attempts_per_seat": 2,
+  "seats": [
+    {
+      "id": "sol_chair",
+      "runner": "codex",
+      "model": "gpt-5.6-sol",
+      "effort": "max",
+      "endpoint": "default",
+      "role": "chair",
+      "family": "openai",
+      "readiness_status": "ready",
+      "qualification_status": "qualified",
+      "required": true,
+      "excluded_families": [],
+      "fallbacks": []
+    },
+    {
+      "id": "kimi_deep",
+      "runner": "kimi",
+      "model": "kimi-code-k3",
+      "effort": "high",
+      "endpoint": "default",
+      "role": "deep-reviewer",
+      "family": "moonshot",
+      "readiness_status": "ready",
+      "qualification_status": "qualified",
+      "required": false,
+      "excluded_families": [],
+      "fallbacks": []
+    },
+    {
+      "id": "minimax_consult",
+      "runner": "cc-shim",
+      "model": "MiniMax-M3",
+      "effort": "high",
+      "endpoint": "minimax",
+      "role": "consult",
+      "family": "minimax",
+      "readiness_status": "ready",
+      "qualification_status": "qualified",
+      "required": false,
+      "excluded_families": [],
+      "fallbacks": []
+    }
+  ]
+}

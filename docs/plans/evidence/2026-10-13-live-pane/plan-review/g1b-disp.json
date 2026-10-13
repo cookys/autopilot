@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "live-pane-design-system-2026-10-13-r2",
+  "generation": 1,
+  "findings": [
+    {
+      "fingerprint": "36d1ea507b272a7ff164ad9f1129800b987c51c30264bffde564adf0c379c035",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: sec 5.5 had the classifier correction and sec 1 had no row. Added diagnosis 19 (and found the producer is already fixed by dc30d96c/793880e6, so the plan changes no classifier), P5 acceptance (repo-residue-sweep.test.sh stale-develop case plus owner-machine check) and a sec 9 unverified item. Kept in scope."
+    },
+    {
+      "fingerprint": "967cf0183bb11f517389df479528e8de74e4cefc2377ba75aba365d9b464f3db",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified against sec 2.2, 5.1, 5.2, 2.6. Spend totals now owned by usage tab and projected into the global header (FACT_OWNER row, rule 7 headerProjection); spend stamps removed from the dispatch tab 120-col footer; Now-tab review row cut to state, round id and a count (QC/decisions dropped); usage row cut to one limit; fact granularity frozen (rule 6)."
+    },
+    {
+      "fingerprint": "44ef8b01f9b5248dc1207f1b69fd522d2150cfa1e57ddf86572a98c88cadd62e",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: Domain lacked attention/residue/cleanup and I14 allows glyph-only badges. Added domains attention, residueGroup, cleanup and worst() as the only aggregate producer (sec 3.3); sec 3.2 now names the two word-less forms (word:false under same-state chip, badge()) and I14/I21 enforce them; added badge component and M47."
+    },
+    {
+      "fingerprint": "ef5e85acdb984e7e28c3155ceef58edee020db6adb966324aea065a834a8061d",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: sec 2.5 said older than / more than while I11 aged out at exactly the threshold. sec 2.5 rewritten as strict > millisecond predicates with FRESH_MS shared by classify; I11 now tests T-1ms, T, T+1ms per predicate; M24a-f flip > to >=."
+    },
+    {
+      "fingerprint": "fdf014d12e269759a010b7e621ae601b4b3a3c7d861109534030006261c73aca",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: fact optional on kv/item and I17 only saw tagged lines; I12/I18 did not check grouping/order. fact is now required by constructors (rule 7, sec 4), I17 rewritten with golden (tab, fact) pairs, I10 is per section, new I22 covers grouping, order and one command per group; mutations M36-M44."
+    },
+    {
+      "fingerprint": "30561f59b1dd18329d339261a6cd4e0f2015167993bbd56c5fe0a5e24a2bc025",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: opened decision text lacked the attached mark at column 2, and the expanded residue group matched no component. Redrew sec 5.3 (detail with its mark at col 2, text at 4) and sec 5.5 (group stays an item with its fold glyph, children are bullets at col 0, detail at 2); added golden render invariant I23 and M45-M46."
+    },
+    {
+      "fingerprint": "c975cecf13637b4b205db8c620fa72298f1fff1248e14567a2fd6c42989419a7",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: P0 shipped the generated ? tab while P1-P4 still used legacy glyphs; I18/I19 only at P5. Generated legend moved to P5 (P0 only swaps three glyphs in the existing legend); P1, P2, P4, P5 each enable and name the mounted I18/I19/I23 tests for the controls they first ship."
+    },
+    {
+      "fingerprint": "d326de8fc4f2ca3496bcdc5d6003a81a881d6d0f240d19032d36afb25ded00ef",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Verified: sec 5.5 expanded first line has no matching component. Same fix as the sol R5 finding: the row stays an item with a fold glyph; no new groupOpen component needed."
+    },
+    {
+      "fingerprint": "864469a97667fe0cbc4e754e62010618f6e5fb3891fec025f41415703d637103",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Verified: sec 4 kv text described only the value column while sec 2.3 and the mockups render a state glyph and word inside the value. kv text now says the value may lead with one derived state or a meter, and I17 allows no other state segment."
+    },
+    {
+      "fingerprint": "328faf91f95b21c9fbe3fe270e83676c89a59d31c49c1f8f20719e7bdaf523b3",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Verified: sec 7 table had no dependency column. Added a Depends on column (P1-P3 on P0, P4 on P0 reading P1-P3, P5 on P0-P4) and a sentence on ui.ts consumption."
+    },
+    {
+      "fingerprint": "704332f23d72eb855fe7b5e622733a6899e8708d767743b88c735e583b0d01da",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Verified: I11 only had the negative never-running assertion. I11 now asserts exit marker 0 -> done and non-zero -> failed; added M24g and M24h negative controls."
+    }
+  ]
+}

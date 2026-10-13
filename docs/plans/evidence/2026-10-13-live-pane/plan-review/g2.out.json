@@ -1,0 +1,483 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "live-pane-design-system-2026-10-13-r2",
+  "logical_plan_id": "live-pane-design-system-2026-10-13-r2",
+  "session_id": "a14bb1ea-4b8b-421d-9e3d-a7fa6e844a18",
+  "session_key": "831ef15b86e9c1c51eeeeeefe454e4e3e518502b01cd540e3de3e9d67552d629",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "75b9c4f50db6ca76c857014c532e72d428741153d3ab582f4872c626f590035d",
+  "manifest_sha256": "96fd3b3d91043ff7aeacfb94449b59dc3da7b1059a300688f08d4f712e86470d",
+  "plan_sha256": "c2d88f7e941c357d39213834de2a4e3cf564ad6691ff7aab2966661476e082bd",
+  "growth_ratio": {
+    "numerator": 1591,
+    "denominator": 1399
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "9a0e267d0659dde4b9506db1eb7cc47623752f27118108e0bcfcc13f901a91fe"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "10b00de54a26bb53bbf53d43800c31630f2d6288314871a7fefb559ef97e4727",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-uVhlo3/stdout",
+          "digest": "10b00de54a26bb53bbf53d43800c31630f2d6288314871a7fefb559ef97e4727"
+        },
+        "receipt_digest": "ebb26f46ff97187281d10b2cbec33173372856021704b4aafc440f43204328d1"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "kimi_deep",
+      "target_id": "kimi_deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "kimi",
+          "model": "kimi-code-k3",
+          "operation": "plan-review",
+          "request_digest": "a9078845bc5ec411140a03c72745bcb76285b42a50f84df6fd5c5dd1019ae5db"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 3,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "aa8f8ec0cbe749e3ef2d545d87afb9d30fc144de57cc2ff840f85822be87b9f0",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-IPhNWb",
+          "digest": "aa8f8ec0cbe749e3ef2d545d87afb9d30fc144de57cc2ff840f85822be87b9f0"
+        },
+        "receipt_digest": "22405158cda946f59b0e25b77f64c78b8b1bb80784a442b9606906307b3a8452"
+      },
+      "transport_status": "exit_failure",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "kimi_deep",
+      "target_id": "kimi_deep",
+      "attempt": 2,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "kimi",
+          "model": "kimi-code-k3",
+          "operation": "plan-review",
+          "request_digest": "a6a3320c1dbbfce2eaf3821285a507cc1cae9945083888e341373f6309eccc61"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 3,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "aa8f8ec0cbe749e3ef2d545d87afb9d30fc144de57cc2ff840f85822be87b9f0",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-CcWqsa",
+          "digest": "aa8f8ec0cbe749e3ef2d545d87afb9d30fc144de57cc2ff840f85822be87b9f0"
+        },
+        "receipt_digest": "ae06840adf333ec792a2b98e3d8d5b9cce86bdcf85309ada1313dd3ba4d2d2f4"
+      },
+      "transport_status": "exit_failure",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_consult",
+      "target_id": "minimax_consult",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "26755abd6ad71518543b3787a3a0925de165ccc33c14e9374ad10ea8af2ee2d1"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "6fe4895a1ba35b5a9550b0b9de4d12951c34539683895fc00cecdc8155cba76b",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-uoQQYF",
+          "digest": "6fe4895a1ba35b5a9550b0b9de4d12951c34539683895fc00cecdc8155cba76b"
+        },
+        "receipt_digest": "7425d1c989ae6cad0537840fdf4d3b5288aa92a43e075dcc3a08a3cc8cbd13f3"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "family": "openai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "minimax_consult",
+      "target_id": "minimax_consult",
+      "family": "minimax",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Fact ownership, global header, and data-bearing components",
+      "claim": "Fact ownership is neither closed nor consistent with the declared one-fact-per-projection rule.",
+      "evidence": "Rule 6 says a projection line carries exactly one fact and two facts require two lines, but the global header places spend.session and spend.local_today on the same line. FactId is required only for kv, item, bullet, and table, while meter rows, charts, header chips, badges, snapshot notes, and details also render facts without mandatory ownership metadata. I17 therefore permits untagged or duplicated facts outside its covered kinds.",
+      "evidence_reference": "§2.2; §2.6 rules 6-7; §4 meter, chart, badge, detail, and verdictHeader; §6.3 I17",
+      "repair": "Choose line-level or segment-level fact granularity. Require FactId on every data-bearing line or segment, explicitly define the header exception if retained, and extend I17, its golden table, and negative controls to meters, charts, header chips, badges, notes, and details.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "90052a64379781f247c9dad8287e5a3c5d6f0ea63ce474e1db85302502cf323c"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Run-state classifier and unknown-token handling",
+      "claim": "An unknown run final_status can be classified as running instead of unknown.",
+      "evidence": "The run precedence reaches the no-rc-and-fresh branch after testing only recognized success and failure tokens. A fresh run with final_status WEIRD, no rc, and no stall therefore becomes running, contradicting the rule that an unmapped atom becomes unknown and its raw text appears only in detail. I13 does not explicitly pin this structured-run case.",
+      "evidence_reference": "§3.3 run precedence and unknown-atom rule; §6.3 I13; §6.4 M21-M22",
+      "repair": "Distinguish an absent final_status from a present but unrecognized token before applying freshness. Map the latter to unknown and add conflict fixtures for unknown final_status with and without rc, stall, and freshness.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "03ffd0ce1255407cce6f8fba3e299a147b82f47ec09b47876b3f4a47d505a4aa"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Compact badges in the band, tab strip, and legend",
+      "claim": "The compact badge vocabulary, badge constructor, and invariant describe different state sets.",
+      "evidence": "The allowed forms include ●2, ⊘1, ▲, and ⚑1, but I14 accepts only ▲, ●N, and ⚑N. badge(stated, n?) has no discriminant that can produce the non-state residue glyph ⚑ rather than the need_you glyph ▲, while accepting an unrestricted Stated also permits compact forms not authorized by §3.2.",
+      "evidence_reference": "§3.2 compact forms; §4 badge; §5.6 legend; §6.3 I14",
+      "repair": "Define an explicit BadgeSpec or separate stateBadge and residueBadge constructors, enumerate every permitted form including ⊘N, bind each form to its colour source, and test both band and strip with rejecting controls for unauthorized states.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "703b4ebe0c2c2d1d2f2839c6a2c6be7fc8d454bc28f2815ebc24575101c304a0"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "List grouping, ordering, section order, and five-item cap",
+      "claim": "Several global list rules remain advisory because callers can omit metadata or use an uncovered list.",
+      "evidence": "group and ts are optional on PaneLine, item, and bullet, so a caller can evade I22. The universal five-item rule is tested only for named finished or capped lists and explicitly excludes seats; running dispatches, unfinished tasks, live background work, recent prompts, and other lists are not covered. No invariant or negative control pins the per-tab section order declared in §2.1.",
+      "evidence_reference": "§2.1; §2.4; §4 item and bullet; §6.1 PaneLine; §6.3 I18 and I22; §6.4 M25-M26 and M40-M42",
+      "repair": "Introduce a central list or section builder that derives mandatory grouping and ordering metadata, applies the cap uniformly, and emits the declared section sequence. Add missing-metadata, reordered-section, and over-cap controls for every list category.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "f59743cf323c275afb3d74caf9a2a96f42fea16f30bcb553bc83923bb33dc6d5"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Freshness boundary tests and mutation controls",
+      "claim": "The freshness control matrix cannot be implemented as written.",
+      "evidence": "There are five time comparisons: quiet background, non-terminal plan review, terminal plan review, code review, and finished dispatch. The exit-marker rule has no threshold. I11 nevertheless requires T−1, T, and T+1 fixtures for six predicates, while M24a-f asks to flip six greater-than comparisons. FRESH_MS contains only four constants because plan and code review share one.",
+      "evidence_reference": "§2.5; §6.3 I11; §6.4 M24a-h",
+      "repair": "Enumerate the five timed predicates individually with their shared or distinct constants, then list exit-code-zero and exit-code-nonzero as separate non-temporal branches. Give every actual comparison and marker branch its own named mutation.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "1304a0176aa762defff706eb66e07777735eee71f149206c2d5184b5f4499c21"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Component return types and inline composition",
+      "claim": "The component algebra cannot produce several specified mockup lines.",
+      "evidence": "The plan says every component returns PaneLines with a kind, yet kv may contain a meter inside its value and the strip and band embed badges inside larger lines. A PaneLine cannot be nested inside another PaneLine, and no branded inline-fragment type or composition operation is defined. The mandatory blank between header and body likewise has a kind but no named builder.",
+      "evidence_reference": "§4 opening contract; §4 kv, meter, badge, verdictHeader, and blank-line rule; §5.1 usage projection; §5.6 strip badges; §6.1 PaneLine",
+      "repair": "Separate line builders from branded inline fragments. Define meterValue and badgeFragment or an equivalent typed composition API, reserve meter for full rows if needed, add a blank builder or renderer-owned spacer, and align kinds and invariants with those types.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "ab726986924412625a8c004d63f2b304681eb758f00a98c0919775ba9c63e690"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Review-seat rows and disclosure controls",
+      "claim": "The first review seat cannot expose the promised raw-verdict detail through the declared components.",
+      "evidence": "The mockup renders the first seat as the value of a kv line and later seats as nested items. kv supports goto but no toggle, and none of the seat rows shows the required closed-toggle glyph. Nevertheless §2.4 says every seat has raw verdict and status behind detail, while P1 and I18 require mounted seat toggles.",
+      "evidence_reference": "§2.4 seats; §4 kv and item; §5.3 review mockups; §6.3 I18; §7 P1",
+      "repair": "Define one producible seat-list layout, such as a label followed by item rows at column 12, or add an explicit toggle-capable labelled-row component. Show the toggles in the mockup and pin opening every seat, including the first, in I18 and I23.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "e352e2e4dd6603dddb80891533c22486c62effe86410f6a5663364706af9ebf1"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Bold-emphasis policy, stage chart, and active tab",
+      "claim": "Approved visual treatments violate the plan's own exhaustive bold rule and I4.",
+      "evidence": "The stage rule makes the current node and label claude bold, and Q1 makes the active tab bold. Section 3.6 says bold is used only for section titles, verdict and project, need_you item text, and meter headline values, with nothing else allowed. I4 repeats an allowlist that excludes chart labels and active-tab text.",
+      "evidence_reference": "§3.4 rule 3; §3.6 emphasis; §6.3 I4; §8 Q1",
+      "repair": "Either remove bold from the current stage and active tab or add both as explicit normative exceptions, then update I4 and add negative controls that distinguish those exceptions from arbitrary bold chart or strip text.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "fc6d4b719f42e2f889d612f02f5bbf738715d08e7d9e44116d2dcdaa2c71a8ed"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Migration dependency graph for P4",
+      "claim": "P4 declares only P0 as a dependency while consuming contracts introduced by P1 through P3.",
+      "evidence": "The P4 dependency cell says P0 but also says it reads P1-P3 for goto targets. P4 ships summary projections, fact tags, state derivation, and the global spend header using review, dispatch, and usage contracts introduced in those phases. A controller following the declared DAG may therefore schedule P4 before its required producers exist.",
+      "evidence_reference": "§7 phase table, especially P1-P4; §2.3; §2.6; §7 dependency sentence",
+      "repair": "Declare P4 as depending on P1, P2, and P3 in addition to P0, or move every required shared contract into P0 and state which later tab implementations are optional targets. Add an acceptance check that runs P4 against the exact predecessor state.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d7eb591c81d7395fdca4c8c7d4c7ec10bf0d2c2f2136f3ec5beb521ef5936ced"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "P0 real-terminal glyph qualification",
+      "claim": "The declared fallback glyph can ship without receiving the required terminal-width check.",
+      "evidence": "Every new glyph must pass P0 in the owner's terminal, but P0 lists only the primary glyphs. Q2 permits ◍ when ⊘ fails, and ◍ is itself a new ambiguous-width glyph absent from the measurement list.",
+      "evidence_reference": "§3.4 rule 4; §7 P0(b); §8 Q2",
+      "repair": "Add every fallback candidate to the P0 real-terminal matrix before selection, or use an already-qualified ASCII fallback.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "f1324ea4845f72825cba76c914804c179c3d7f9cd9e61b73d761b304b04d618e"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "§4 component signatures and §5.3 審查 mockup seats under 席位",
+      "claim": "The 審查 mockup stacks the seats under one kv value at column 12, but no defined component produces that layout; §4 kv takes a single value and §4 item has no nesting rule for being placed inside a kv value column.",
+      "evidence": "§4 kv says the value may lead with one state glyph and word or with a meter and I17 allows no other state segment; §3.1 grid note admits a list item nested in a value at column 12 without naming a component producer; §5.3 76-col and 120-col mockups render four seats (s0, s1, s2, s3) vertically aligned under the 席位 key as if part of one kv value.",
+      "evidence_reference": "§3.1 column 12 row; §4 kv definition; §4 item definition (at: 0 | 12); §5.3 76-col seats block and 120-col seats block.",
+      "repair": "Decide one: (a) extend §4 with a kv-with-list variant whose value is an array of items rendered at column 12 with grouping handled under the kv group key and I17 'one derived state' relaxed to one state per child item, or (b) reshape §5.3 so the seats become separate item lines below an empty 席位 kv, each carrying the round fact and the seats own group key, and adjust I22 for the seats ordering within that group.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_consult",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "b6baf18046724b8b570c20b53996768f0172b7e26bbd3bd248e234c053a47eb3"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "§4 meter component signature and §5.4 用量 mockups",
+      "claim": "The 用量 meter mockup lines show reset times (for example 2h10m 後重置 and 4d04h 後重置) after the amount, but the §4 meter component is defined as taking only {cells, label} options and the prose says key, bar, percent right-aligned in 4 cells, then the amount with no reset-time field.",
+      "evidence": "§4 meter is meter(value, cap, {cells, label}) with description key, bar, percent right-aligned in 4 cells, then the amount; §5.4 76-col mockup ends each quota row with 2h10m 後重置 and 4d04h 後重置; §3.5 lists the relative-time format with example 2h10m 後重置 but does not tie it to the meter component.",
+      "evidence_reference": "§4 meter definition; §5.4 76-col 用量 meter rows for 5 小時 and 7 天; §5.4 120-col same rows; §3.5 relative-time row.",
+      "repair": "Add a reset?: {atMs: number} option to the §4 meter signature that renders the relative-time formatter result after the amount, or move the reset time to a separate kv row beneath each meter and redraw §5.4 accordingly.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_consult",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "b8ab70085905470308772aee2a65b8f24221b8b41de393aea0efd190bd4d9b75"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "f1324ea4845f72825cba76c914804c179c3d7f9cd9e61b73d761b304b04d618e",
+      "rubric_id": "R6",
+      "affected_surface": "P0 real-terminal glyph qualification",
+      "claim": "The declared fallback glyph can ship without receiving the required terminal-width check.",
+      "evidence_reference": "§3.4 rule 4; §7 P0(b); §8 Q2",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-10-13T09:16:46.059Z"
+}

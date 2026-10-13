@@ -1,0 +1,483 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "live-pane-design-system-2026-10-13-r2",
+  "logical_plan_id": "live-pane-design-system-2026-10-13-r2",
+  "session_id": "a14bb1ea-4b8b-421d-9e3d-a7fa6e844a18",
+  "session_key": "831ef15b86e9c1c51eeeeeefe454e4e3e518502b01cd540e3de3e9d67552d629",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "75b9c4f50db6ca76c857014c532e72d428741153d3ab582f4872c626f590035d",
+  "manifest_sha256": "96fd3b3d91043ff7aeacfb94449b59dc3da7b1059a300688f08d4f712e86470d",
+  "plan_sha256": "837b72e34ca193605ad69173ca70e7cae5db3b97078010ff01161a6d6535ba11",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "27e2b99983a36e38532eea94ab80a60e0c3cf4211ebcfaa97a55266da75080d8"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "824a08f2fbaf20108a4e6576764f16116a7f8a72fcc77b2b2a3d092574f7c2ad",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-wcX0wE/stdout",
+          "digest": "824a08f2fbaf20108a4e6576764f16116a7f8a72fcc77b2b2a3d092574f7c2ad"
+        },
+        "receipt_digest": "c831b857a84997946ba92f26e981bd282fecd059c1d3c3f490c9720d80eb5ac6"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "kimi_deep",
+      "target_id": "kimi_deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "kimi",
+          "model": "kimi-code-k3",
+          "operation": "plan-review",
+          "request_digest": "61d66631f60808c489251caaee22db63074be470c79d5086fbb73e5a4dc9374f"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 3,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "aa8f8ec0cbe749e3ef2d545d87afb9d30fc144de57cc2ff840f85822be87b9f0",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-yGo70p",
+          "digest": "aa8f8ec0cbe749e3ef2d545d87afb9d30fc144de57cc2ff840f85822be87b9f0"
+        },
+        "receipt_digest": "26402c77a670744f9e92a019a0372ec0971736f3983ad8f1c6ddb79ccd6bc024"
+      },
+      "transport_status": "exit_failure",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "kimi_deep",
+      "target_id": "kimi_deep",
+      "attempt": 2,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "kimi",
+          "model": "kimi-code-k3",
+          "operation": "plan-review",
+          "request_digest": "ad2085162ff41e3473a70d307f43b0ab9fe188f66526cba85e4acf5d9c1dd23a"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 3,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "aa8f8ec0cbe749e3ef2d545d87afb9d30fc144de57cc2ff840f85822be87b9f0",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-kGQRyQ",
+          "digest": "aa8f8ec0cbe749e3ef2d545d87afb9d30fc144de57cc2ff840f85822be87b9f0"
+        },
+        "receipt_digest": "69ef1a879bd6b0645e9850b60576cfe57bdbe6669d1d1f04acb260d1d923c233"
+      },
+      "transport_status": "exit_failure",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_consult",
+      "target_id": "minimax_consult",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "ed5a9e93fbff03c599f9362b00f194e5b2d8f17d659f82ffbc4fd433bad5df45"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "a1e1423d3279059f1f764f5529b55bad94176566f6d87c70fcad3e498307c59c",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-v72LQS",
+          "digest": "a1e1423d3279059f1f764f5529b55bad94176566f6d87c70fcad3e498307c59c"
+        },
+        "receipt_digest": "9887d601cdea2b9f50572fa53febdcd6f6df18da60460b319a629e0eb6506ef3"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "family": "openai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "minimax_consult",
+      "target_id": "minimax_consult",
+      "family": "minimax",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Residue classification scope and diagnosis",
+      "claim": "The plan introduces a normative residue-classifier correction that is absent from the Diagnosis and has no declared implementation boundary.",
+      "evidence": "Section 5.5 specifies that integrated worktrees must be measured against the newer of develop and origin/develop and requires a separate red test. Section 1 has no corresponding diagnosis row, while P5 mentions only moving Residue onto components and does not say whether it implements this producer fix.",
+      "evidence_reference": "§1 Diagnosis; §5.5 殘留; §7 P5; §9 Unverified",
+      "repair": "Decide the scope now: either add the classifier defect to Diagnosis and assign its implementation and acceptance command to a phase, or mark it explicitly out of scope, remove any dependency from this plan's mockups and acceptance, and link a separate tracked fix.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "36d1ea507b272a7ff164ad9f1129800b987c51c30264bffde564adf0c379c035"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Fact ownership across the global header, 現況, 派工, 審查 and 用量",
+      "claim": "The one-home ownership model conflicts with the designed surfaces and mockups.",
+      "evidence": "The global header repeats session and local-today spend on every tab, although FACT_OWNER assigns spend to 用量 and permits its projection only on 現況. The 120-column 派工 footer also carries spend freshness timestamps without goto. The 120-column 現況 review row combines review state, a seat finding, QC state and a decision count even though §2.6 limits that projection to worst state, count and round ID, forbids verdict words, and says one line per fact.",
+      "evidence_reference": "§2.2; §2.6; §5.1 120-column mockup; §5.2 120-column mockup",
+      "repair": "Freeze fact granularity explicitly. Assign headline spend totals either to the global header or 用量, represent any duplication as a typed projection, remove spend metadata from 派工, and split or reduce the 審查 projection to exactly the payload allowed by FACT_OWNER. Update mockups and ownership tests accordingly.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "967cf0183bb11f517389df479528e8de74e4cefc2377ba75aba365d9b464f3db"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "State classifier API and compact state presentation",
+      "claim": "The vocabulary is not closed over every state-bearing object the plan renders, and its always-together rule has unresolved exceptions.",
+      "evidence": "stateOf is declared the only Stated producer, but Domain omits attention actions, residue groups, cleanup history and cross-tab aggregates, all of which render state glyphs in §5.1 and §5.5. SEVERITY describes aggregate selection without defining a Stated-producing API. Separately, §3.2 says glyph, colour and word are always together, while item word:false and I14 explicitly permit glyph-only items and badges such as ●2 and ▲.",
+      "evidence_reference": "§3.2; §3.3; §4 item; §5.1; §5.5; §6.3 I14 and I21",
+      "repair": "Add typed domains and subjects for every state-bearing producer plus a typed aggregate function that returns Stated. Define the exact compact contexts where the state word may be omitted, or remove those exceptions, and enforce the final rule in both components and badges.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "44ef8b01f9b5248dc1207f1b69fd522d2150cfa1e57ddf86572a98c88cadd62e"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Freshness boundary semantics",
+      "claim": "The classifier and its tests disagree at every exact freshness threshold, so boundary inputs do not have an unambiguous state.",
+      "evidence": "Section 2.5 uses older than or more than 24 hours and quiet greater than 30 minutes; §3.3 correspondingly keeps background work running at quiet less than or equal to 30 minutes. I11 instead requires plan review, code review and dispatch rows to age out at exactly 24 hours and a background row to become stopped at exactly 30 minutes. The terminal-review rule similarly says older than 7 days while I11 ages it out at 7 days.",
+      "evidence_reference": "§2.5; §3.3 background mapping; §6.3 I11",
+      "repair": "Choose inclusive or exclusive comparisons for 30 minutes, 24 hours and 7 days, state them as exact millisecond predicates, and make each invariant test one instant before, exactly at, and one instant after its threshold.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "ef5e85acdb984e7e28c3155ceef58edee020db6adb966324aea065a834a8061d"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "FACT_OWNER enforcement and render invariants",
+      "claim": "Several normative rules can be violated while all named checks remain green.",
+      "evidence": "fact is optional on kv and item, and I17 examines only lines that already carry a fact, so an illegal duplicate can evade ownership checking by omitting the tag; the 派工 spend note demonstrates such an untagged fact-bearing line. In addition, §2.4 mandates grouping before capping, fixed state order, newest-first order and one command per group, but I12 and I18 check only counts and disclosure. The empty component allows at most one per section, while I10 rejects only consecutive empty lines. No named negative controls cover these omissions.",
+      "evidence_reference": "§2.4; §4 kv, item and empty; §6.3 I10, I12, I17 and I18; §6.4",
+      "repair": "Make semantic fact identity mandatory through typed owner-row and projection constructors, and add omission and duplicate-fact mutations. Add metadata-backed invariants and negative controls for grouping, ordering, one-command grouping, and per-section empty cardinality, or remove those requirements from the normative plan.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "fdf014d12e269759a010b7e621ae601b4b3a3c7d861109534030006261c73aca"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Expanded decision and residue mockups",
+      "claim": "Several mockup lines cannot be produced by the declared component set.",
+      "evidence": "An attached detail must begin with └ at column 2, but the opened decision rationale begins as unmarked text at column 4. The expanded residue group begins with ▾ but has no header rule, so it is neither header, item, bullet nor more. Its child bullets begin at column 2 although bullet is fixed at column 0, and its attached └ is shown at column 4 rather than column 2.",
+      "evidence_reference": "§4 bullet, header, more and detail; §5.3 opened decision; §5.5 expanded residue group",
+      "repair": "Either redraw these examples using the existing item or bullet row with a right-edge toggle and the specified detail indentation, or add an explicit nested-group component and indentation API. Then cover each expanded example with a component-level render assertion.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "30561f59b1dd18329d339261a6cd4e0f2015167993bbd56c5fe0a5e24a2bc025"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P0 through P2 migration shippability",
+      "claim": "The early phases expose user-facing contracts before their consumers and interaction checks are ready.",
+      "evidence": "P0 ships the generated legend declaring the new one-glyph-one-meaning vocabulary while the diagnosed legacy tabs still use ● and ▲ for conflicting meanings until P1 through P4, so the independently shipped legend would be false. P1 introduces decision disclosure and P2 introduces more and goto controls, but the mounted disclosure and navigation invariants I18 and I19 are not enabled in those phase rows; screenshots cannot detect a dead toggle or pointer, and P5 is the first phase promising every invariant over every tab.",
+      "evidence_reference": "§1 diagnosis 4-6; §5.6; §6.3 I18-I19; §7 P0-P5",
+      "repair": "Move the generated legend to the lock phase or atomically migrate every legacy glyph consumer before exposing it. Enable the relevant mounted controls in the phase that first ships each toggle, more row or goto row, with P1 and P2 acceptance explicitly requiring those tests.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c975cecf13637b4b205db8c620fa72298f1fff1248e14567a2fd6c42989419a7"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "§5.5 殘留 expanded mockup and §4 components (item, header, bullet)",
+      "claim": "The expanded view's first line `▾ 已整合，可清理  12 個 · 280 MB` (with `▾` at column 0 and no rule) does not match any defined component.",
+      "evidence": "§5.5 shows the expanded parent row as `▾ 已整合，可清理  12 個 · 280 MB` then indented children. §4 `item` with `toggle` puts `▸/▾` at the right edge of the row, not the left. §4 `header` always ends with a `subtle` rule to `cols - 1`; the expanded row has no rule. §4 `bullet` uses `◦` at column 0, not `▾`. No defined component produces the expanded first line.",
+      "evidence_reference": "§5.5 殘留 expanded view (after `▲ worktree  已整合，可清理  12 個 · 280 MB  ▸`); §4 item, header, bullet definitions",
+      "repair": "Either define a new `groupOpen` (or similar) component for the focused/expanded parent row — fold glyph + text + optional chip, starting at column 0, no rule — or revise the §5.5 mockup so the original `▲ worktree  已整合，可清理  12 個 · 280 MB  ▸` row stays put when expanded and the children render beneath it, matching §4 `bullet`'s rule that an opened row keeps its own bullet line.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_consult",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d326de8fc4f2ca3496bcdc5d6003a81a881d6d0f240d19032d36afb25ded00ef"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "§4 `kv` component description, §2.3 summary rows, §5.1 現況 mockup, §6.3 I17",
+      "claim": "§4 `kv` describes only `value at column 12`, but the §2.3 summary rows and §5.1 mockup render a derived state glyph + state word inside the value (e.g. `派工 ›      ✓ 完成  32 筆 · 沒有派工在跑`). The component description does not mention this.",
+      "evidence": "§4 `kv`: key dim, padded to 12 cells; value at column 12; absent value is `—` then dim reason. §2.3: a key/value row whose key is the tab name plus `›`. §6.3 I17: every line with a `fact` whose owner is another tab carries no `role:'state'` segment other than its single derived state. §5.1 現況 76-col and 120-col mockups render `✓ 完成  32 筆 · 沒有派工在跑` (state glyph + state word + count + meta) inside the value at column 12.",
+      "evidence_reference": "§4 `kv` definition; §2.3 summary row rule; §5.1 現況 mockup (76-col and 120-col); §6.3 I17",
+      "repair": "Extend the §4 `kv` description to say: the value field may begin with one state glyph + state word segment (derived from the `fact`'s `stateOf` result, per §3.3) before its text and meta; reference I17's `single derived state` clause. No change to mockups required.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_consult",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "864469a97667fe0cbc4e754e62010618f6e5fb3891fec025f41415703d637103"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "§7 Migration phases table",
+      "claim": "Phase dependencies are not stated explicitly; P1, P2, P3, P4 each depend on P0 (which ships ui.ts, classify*, formatters, components, GLYPHS), and P5 depends on P0 and on P1–P4 having moved their tabs onto the components.",
+      "evidence": "§7 lists P0–P5 with `Ships` and `Tests that change` columns and no `Depends on` column. P0 ships ui.ts, the components, classify*, the ? tab, and the band glyph swap; P1 ships `STATUS_MAP and classify* for seats, rounds, gates and QC` (consumes P0); P2 ships `table with column priorities` (consumes P0); P3 ships `meters … pct and money formatters` (consumes P0); P4 ships `verdictHeader in pane.tsx on every tab` (consumes P0); P5 ships `kind becomes required in the type and every line must be isMade` plus L1, L2, L4, L5, L6, L7 (consumes P0 and prior tab migrations). The plan claims `with an order whose dependencies are explicit` but the dependency graph is implicit, not stated.",
+      "evidence_reference": "§7 phases table; §6.2 L1, L2, L4–L7; §6.3 invariants; §6.4 rule-to-control table",
+      "repair": "Add a `Depends on` column to the §7 phases table (`P1: P0`, `P2: P0`, `P3: P0`, `P4: P0`, `P5: P0, P1, P2, P3, P4`) and a sentence stating that every tab phase consumes ui.ts from P0 and that P5's lint switches require every prior tab to be on components. No code change.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_consult",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "328faf91f95b21c9fbe3fe270e83676c89a59d31c49c1f8f20719e7bdaf523b3"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "§6.3 I11 freshness check, §2.5 freshness row 1, §6.4 M24",
+      "claim": "I11 covers §2.5 row 1 with the negative assertion `a background task with an exit marker is never ●` but has no positive assertion for the two branches (exit marker 0 → ✓ 完成; non-zero → ✗ 失敗).",
+      "evidence": "§2.5 row 1: background command whose last output line matches the exit-marker regex → `✓ 完成` (code 0) or `✗ 失敗` (non-zero). §6.3 I11 asserts only `a background task with an exit marker is never ●` (negative) and pairs it with one M24 variant (`remove each freshness check in turn (six variants)`). The positive mapping for the two branches is asserted by I13 (`background exit marker 0 + quiet 6 h -> done`), but that is the conflict-fixture path, not the freshness path; §6.4 row 13 (Freshness) has no M24a/M24b pair that turns the 0/✓ vs ≠0/✗ split red.",
+      "evidence_reference": "§2.5 freshness table row 1; §6.3 I11; §6.3 I13 conflict fixture for exit marker 0; §6.4 row 13 / M24",
+      "repair": "Extend I11's row-1 case into two positive assertions: (a) exit marker 0 → `✓ 完成`; (b) exit marker non-zero → `✗ 失敗`. Add two M24 variants (a = force code 0 to map to `running` and assert it goes red; b = force code 1 to map to `done` and assert it goes red). Other I11 rows are unaffected.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_consult",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "704332f23d72eb855fe7b5e622733a6899e8708d767743b88c735e583b0d01da"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "d326de8fc4f2ca3496bcdc5d6003a81a881d6d0f240d19032d36afb25ded00ef",
+      "rubric_id": "R5",
+      "affected_surface": "§5.5 殘留 expanded mockup and §4 components (item, header, bullet)",
+      "claim": "The expanded view's first line `▾ 已整合，可清理  12 個 · 280 MB` (with `▾` at column 0 and no rule) does not match any defined component.",
+      "evidence_reference": "§5.5 殘留 expanded view (after `▲ worktree  已整合，可清理  12 個 · 280 MB  ▸`); §4 item, header, bullet definitions",
+      "disposition": null
+    },
+    {
+      "fingerprint": "864469a97667fe0cbc4e754e62010618f6e5fb3891fec025f41415703d637103",
+      "rubric_id": "R5",
+      "affected_surface": "§4 `kv` component description, §2.3 summary rows, §5.1 現況 mockup, §6.3 I17",
+      "claim": "§4 `kv` describes only `value at column 12`, but the §2.3 summary rows and §5.1 mockup render a derived state glyph + state word inside the value (e.g. `派工 ›      ✓ 完成  32 筆 · 沒有派工在跑`). The component description does not mention this.",
+      "evidence_reference": "§4 `kv` definition; §2.3 summary row rule; §5.1 現況 mockup (76-col and 120-col); §6.3 I17",
+      "disposition": null
+    },
+    {
+      "fingerprint": "328faf91f95b21c9fbe3fe270e83676c89a59d31c49c1f8f20719e7bdaf523b3",
+      "rubric_id": "R6",
+      "affected_surface": "§7 Migration phases table",
+      "claim": "Phase dependencies are not stated explicitly; P1, P2, P3, P4 each depend on P0 (which ships ui.ts, classify*, formatters, components, GLYPHS), and P5 depends on P0 and on P1–P4 having moved their tabs onto the components.",
+      "evidence_reference": "§7 phases table; §6.2 L1, L2, L4–L7; §6.3 invariants; §6.4 rule-to-control table",
+      "disposition": null
+    },
+    {
+      "fingerprint": "704332f23d72eb855fe7b5e622733a6899e8708d767743b88c735e583b0d01da",
+      "rubric_id": "R4",
+      "affected_surface": "§6.3 I11 freshness check, §2.5 freshness row 1, §6.4 M24",
+      "claim": "I11 covers §2.5 row 1 with the negative assertion `a background task with an exit marker is never ●` but has no positive assertion for the two branches (exit marker 0 → ✓ 完成; non-zero → ✗ 失敗).",
+      "evidence_reference": "§2.5 freshness table row 1; §6.3 I11; §6.3 I13 conflict fixture for exit marker 0; §6.4 row 13 / M24",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-10-13T08:54:05.473Z"
+}

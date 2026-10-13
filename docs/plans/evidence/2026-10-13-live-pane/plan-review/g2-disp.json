@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "live-pane-design-system-2026-10-13-r2",
+  "generation": 2,
+  "findings": [
+    {
+      "fingerprint": "90052a64379781f247c9dad8287e5a3c5d6f0ea63ce474e1db85302502cf323c",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: rule 6 said one fact per line while the header carries two spend figures, and meter/chart/chip/badge/note had no mandatory FactId. Granularity is now the fragment; the header exception is stated once; fact is required on every data-bearing builder and fragment (sec 2.6 rules 6-7, sec 4); I17 and its golden table widened; M51."
+    },
+    {
+      "fingerprint": "03ffd0ce1255407cce6f8fba3e299a147b82f47ec09b47876b3f4a47d505a4aa",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: run precedence reached 'no rc, fresh -> running' with an unrecognised final_status. Sec 3.3 run row now has step 3 (present but unrecognised final_status -> unknown, before stall and freshness); I13 gains fixtures with and without rc, stall and freshness; M50."
+    },
+    {
+      "fingerprint": "703b4ebe0c2c2d1d2f2839c6a2c6be7fc8d454bc28f2815ebc24575101c304a0",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: sec 3.2 lists a triangle badge, running N, stalled N and residue N while I14 omitted stalled N and badge() had no residue discriminant. Replaced with stateBadge (need_you, running, stalled only) and residueBadge; I14 regex includes the stalled form, applies to strip and band; M48-M49."
+    },
+    {
+      "fingerprint": "f59743cf323c275afb3d74caf9a2a96f42fea16f30bcb553bc83923bb33dc6d5",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: group/ts were optional and I18/I22 covered only named lists. Added list() and section() builders with required group/ts, uniform cap for every list category and SECTION_ORDER per tab (sec 4, 6.1); I18 covers all categories, I22 pins section order; M52a-e, M53, M54."
+    },
+    {
+      "fingerprint": "1304a0176aa762defff706eb66e07777735eee71f149206c2d5184b5f4499c21",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: there are five timed comparisons and four constants. Sec 2.5 now names F1-F5 each with its own FRESH_MS constant and X0/X1 as untimed branches; I11 uses T-1/T/T+1 for F1-F5 only; mutations M24a-e (flip), M24f-j (remove), M24k, M24l."
+    },
+    {
+      "fingerprint": "ab726986924412625a8c004d63f2b304681eb758f00a98c0919775ba9c63e690",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: a kv value cannot hold a PaneLine and no blank builder existed. Sec 4 now separates line builders from branded Frag fragments (meterValue, badgeFragment, stateLead, formatter results), keeps meter as a full row, and adds blank(); kind union and header/strip descriptions updated."
+    },
+    {
+      "fingerprint": "e352e2e4dd6603dddb80891533c22486c62effe86410f6a5663364706af9ebf1",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: the first seat sat in a kv value with no toggle. Chose one producible layout: a valueless kv for the seats key plus one toggled item per seat at column 12; sec 5.3 sketches closed and opened states (detail shifts right by 12); I18 and I23 cover opening the first seat; M55."
+    },
+    {
+      "fingerprint": "fc6d4b719f42e2f889d612f02f5bbf738715d08e7d9e44116d2dcdaa2c71a8ed",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: sec 3.4 rule 3 and Q1 use bold but sec 3.6 and I4 exclude it. Added both as explicit owner-approved exceptions tagged here (sec 3.6, I4, I20 counts a node and label as one value); M56 bold non-current stage label, M57 bold inactive tab. Bold not removed."
+    },
+    {
+      "fingerprint": "d7eb591c81d7395fdca4c8c7d4c7ec10bf0d2c2f2136f3ec5beb521ef5936ced",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: P4 cell said P0 but reads P1-P3. Dependency changed to P0-P3 and acceptance runs against exactly that predecessor state (sec 7)."
+    },
+    {
+      "fingerprint": "f1324ea4845f72825cba76c914804c179c3d7f9cd9e61b73d761b304b04d618e",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Verified: Q2 allows the circled-dot fallback which was not in the P0 matrix. Added it to P0(b) and sec 3.4 rule 4; the other fallback is ASCII and needs no check."
+    },
+    {
+      "fingerprint": "b6baf18046724b8b570c20b53996768f0172b7e26bbd3bd248e234c053a47eb3",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: sec 5.3 stacks four seats under one kv value with no producer. Adopted option (b), same change as the sol seat finding: bare seats key plus separate item rows, each with the round fact path via list() grouping."
+    },
+    {
+      "fingerprint": "b8ab70085905470308772aee2a65b8f24221b8b41de393aea0efd190bd4d9b75",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: sec 5.4 shows reset times but meter had no field. Added reset?: atMs to meter, rendering the relative-time formatter after the amount (sec 4 meter)."
+    }
+  ]
+}

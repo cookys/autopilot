@@ -25,9 +25,11 @@ campaign node or campaign close, but it does block the merge into `develop`.
 
 - Each node's `verification_commands` hold only fast, fixed checks; no node starts with
   `bash hooks/tests/run.sh`. New graphs only: a sealed graph keeps its chain (BL-0134).
-- The whole suite runs once, alone, before the merge into `develop` (the qc-gate test step already
-  names it for M–XL); red means no merge.
-- CI cannot carry it under the 15 min cap, so the run happens on a host without that cap.
+- The whole suite runs once, alone, before a campaign's merge into `develop`; red means no merge.
+  Ordinary changes do not: the owner approved BL-0001 on 2026-10-13, so their qc-gate test step
+  moves to the suites the diff touches once BL-0001 ships.
+- It runs on this host, not GitHub CI: the 15 min cap is too short, and the owner ruled out running
+  checks on GitHub CI per push (quota, BL-0094).
 - Why not B now: B needs the suite selection of BL-0001, which does not exist yet; a wrong selection
   passes green without running the suite that would have failed. B comes back on top of C once
   BL-0001 is shown not to miss suites.

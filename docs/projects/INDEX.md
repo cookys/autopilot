@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-10-13 | [live pane design system: one IA, one visual vocabulary, enforced in code](../plans/2026-10-13-live-pane-design-system.md) | active | — | [plan](../plans/2026-10-13-live-pane-design-system.md) |
 | 2026-10-13 | [l5 mission scaffold generator](../plans/2026-10-13-l5-mission-scaffold-generator.md) | active | — | [plan](../plans/2026-10-13-l5-mission-scaffold-generator.md) |
 | 2026-10-13 | [final panel with findings parks for depth-0 disposition instead of terminal-stopping](../plans/2026-10-13-final-panel-park.md) | active | — | [plan](../plans/2026-10-13-final-panel-park.md) |
 | 2026-10-12 | [TMPDIR residue containment: contain test temp dirs, delete runtime temp files after use, gate unregistered prefixes](../plans/2026-10-12-tmp-residue-containment.md) | active | — | [plan](../plans/2026-10-12-tmp-residue-containment.md) |

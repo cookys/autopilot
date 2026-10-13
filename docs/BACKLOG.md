@@ -20,8 +20,8 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Since**: 2026-10-12
 - **Origin**: self
 - **Problem**: 擁有者或工頭每次在送出前跑品質檢查（qc-gate）時，都會把整套測試從頭跑到尾，即使這次改動只碰到少數檔案，一輪常要花約 30 分鐘。目前沒有工具能依改動範圍只挑出相關的測試。 (draft)
-- **Impact**: 每次中大型改動多等約 30 分鐘；只是慢，不會出錯。改動檢查規則還需擁有者核准。 (draft)
-- **Trigger**: owner approves changing the M-XL test step (guidance change)
+- **Impact**: 每次中大型改動多等約 30 分鐘。擁有者 2026-10-13 核准只跑相關測試；照規定先跑評測證明不會漏測。
+- **Trigger**: approved 2026-10-13: run the eval ON/OFF first (scorecard-first), then change the M-XL test step
 - **Effort**: M
 - **Source**: feat/autocompact-detect qc-gate, 2026-10-12
 - **Pointer**: docs/backlog/qc-gate-affected-suites.md
@@ -98,8 +98,8 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Since**: 2026-10-06
 - **Origin**: self
 - **Problem**: l5 的說明文件把 AUTOPILOT_ROOT_RUN_ID 描述成工頭追蹤用的根編號，但引擎實際要求它必須是任務封存的根編號，填錯會被拒絕。照說明做的人會踩到。 (draft)
-- **Impact**: 照文件操作的 /l5 使用者會被引擎拒絕而卡住；修文字即可，但要重新釘定相關雜湊。 (draft)
-- **Trigger**: FIRED — mods P1W SCOPE row, 2026-10-05
+- **Impact**: 照文件操作的 /l5 使用者會被引擎拒絕。擁有者 2026-10-13 同意當成事實更正直接改，不另跑評測。
+- **Trigger**: ready: owner approved as a factual correction, no eval (2026-10-13)
 - **Effort**: S
 - **Source**: depth-0 verified (autopilot-engine.js managed_strict_root_identity_mismatch)
 - **Pointer**: docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/RESULTS.md
@@ -229,9 +229,9 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Reporter**: openclaw
 - **Report**: msg_01M2PHM6PWH6VY7WP059Y0Q1TT
 - **Reply**: 2026-09-17 msg_01M2PHNG5TTNXQYJQ2G3EKANFW
-- **Problem**: openclaw 回報：若簡報同時指定 l5 層級又用非嚴格派工，工頭預算會被白白燒光。需要在畫面提示或加簡報檢查，等擁有者確認已轉達的裁決後才動工。 (draft)
-- **Impact**: 照這種簡報派工的專案會浪費工頭預算；目前靠使用者自己避開。 (draft)
-- **Trigger**: in-session operator confirmation of the relayed ruling (a)=B, (b) approved
+- **Problem**: openclaw 回報：簡報同時指定 l5 層級又用非嚴格派工時，工頭預算會被白白燒光。轉述的裁定是畫面印出被遮掉的那行並加簡報檢查，同一個拒絕連續兩次就停止升級。
+- **Impact**: 照這種簡報派工會浪費工頭預算。擁有者 2026-10-13 已親口確認轉述的裁定。
+- **Trigger**: ready: owner confirmed (a)=B and (b) in session 2026-10-13; wave 2 lane Q
 - **Effort**: S
 - **Source**: `openclaw` msg `msg_01M2PHM6PWH6VY7WP059Y0Q1TT` (2026-09-17, /l5 ×3 on fleet-comms + chatgpt-tunnel-host); replied `msg_01M2PHNG5TTNXQYJQ2G3EKANFW`
 - **Pointer**: docs/projects/ongoing-maintenance/HANDOFF.md
@@ -262,8 +262,8 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Report**: msg_01M2KS2TXH2V1T90DQ7X8F2TB1
 - **Reply**: 2026-09-16 msg_01M2KS6RBYNB9X43MT9PMTKGVG
 - **Problem**: openclaw 回報三種工具呼叫的踩雷：背景啟動卻沒有喚醒機制、pkill -f 會比對到自己、zsh 對等號與萬用字元直接中止。希望在執行前加一道防護，目前沒有。 (draft)
-- **Impact**: 使用者與代理仍可能重複踩到這些坑；需擁有者決定是否採用，新增防護還要登記。 (draft)
-- **Trigger**: operator decision on adoption; three regex rules on `tool_input.command`, must fire for depth-0 too
+- **Impact**: 使用者與代理仍可能重複踩到這些坑。擁有者 2026-10-13 同意採用，第三條先只警告。
+- **Trigger**: ready: owner adopted 2026-10-13: (1) deny, (2) warn, (3) warn only at first
 - **Effort**: S
 - **Source**: `openclaw` msgs `msg_01M2KS2TXH2V1T90DQ7X8F2TB1`, `msg_01M2KS5WZKY5WTFXPGEKJ9QH8W`; replied `msg_01M2KS6RBYNB9X43MT9PMTKGVG`
 - **Pointer**: docs/projects/ongoing-maintenance/HANDOFF.md
@@ -625,7 +625,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Since**: 2026-08-22
 - **Origin**: self
 - **Problem**: 引擎評分機制會記錄席位的「失誤次數」，但目前只做影子記錄、不會真的把席位降級，因為怕誤判。要等影子資料累積並人工確認屬實，才打開。 (draft)
-- **Impact**: 不打開則表現差的席位不會被自動降級，目前靠人工留意。 (draft)
+- **Impact**: 表現差的席位不會被自動降級，目前靠人工留意。擁有者 2026-10-13 同意等 11/22 檢討再決定。
 - **Trigger**: When shadow data exists for a role — i.e. `would_requalify` has fired at least once against a seat and the operator has replayed those strikes and agrees each was a true engine/pair failure. Also: this row must be re-read by…
 - **Effort**: S
 - **Source**: hetero design panel 2026-08-22 (kimi's "trench coat" objection), shipped shadow-first per synthesis §8.
@@ -781,8 +781,8 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Since**: 2026-08-08
 - **Origin**: self
 - **Problem**: 一天內就發現三個檢查雖然存在卻沒真正擋東西，卻都通過了 CI。需要一套固定做法，要求每個檢查都要配一個「應該失敗」的對照測試。 (draft)
-- **Impact**: 檢查形同虛設卻沒人發現的情形可能再發生。 (draft)
-- **Trigger**: 下一次新增或修改任何「閘」（release gate、drift gate、anti-gaming scan、admission check、hook）時；或再抓到一個閘存在卻沒在擋東西。
+- **Impact**: 檢查形同虛設卻沒人發現的情形可能再發生。擁有者 2026-10-13 同意寫成開發規則。
+- **Trigger**: ready: owner approved 2026-10-13: any gate change ships with a negative control that must fail
 - **Effort**: M
 - **Source**: 2026-08-08 CI triage（11/273 → 1/273）三起獨立成因的共同模式；本檔另有三條各自的條目。
 - **Pointer**: docs/backlog/every-gate-needs-a-negative-control-the-caution-needs-a-routine-behind-it.md
@@ -820,7 +820,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Since**: 2026-08-08
 - **Origin**: self
 - **Problem**: 有界限的一次性 campaign 若沒有 Mission 資料，引擎與命令列的處理方式不一致：派工腳本已放行，但命令列仍被擋，使用者會遇到莫名拒絕。 (draft)
-- **Impact**: 一般誠實使用者不會碰到；只有走特殊路徑才被擋。 (draft)
+- **Impact**: 一般使用不會碰到，只有走特殊路徑才被擋。擁有者 2026-10-13 同意先不做。
 - **Trigger**: 要把 session-marker 紀律擴到非 Mission 的 managed campaign 時；或 threat model 升級為「同一 host 上未經 /l3–/l6 進入的呼叫端不得驅動 managed loop」。單純誠實使用者不觸發。
 - **Effort**: M
 - **Source**: 2026-08-08 v2.34.8 pre-push QC。兩個 family（MiniMax-M3、GLM-5.2）皆回 SHIP-AS-IS 且 findings=none，都沒抓到這條；MiniMax-M3…
@@ -1202,8 +1202,8 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Report**: 2026-10-03 fleet
 - **Reply**: 2026-10-02 session 7236b3c6:2745
 - **Problem**: cuda 專案經 fleet 要求：希望能只審查他們自己寫好的程式範圍，但目前最終審查只能經由完整的實作流程進入，會強制先跑一次寫程式階段，無法採用外部已寫好的提交。 (draft)
-- **Impact**: 外部專案無法單獨使用我方的最終審查；需要擁有者決定優先度並做計畫。 (draft)
-- **Trigger**: FIRED as a peer request — needs owner prioritization and a plan before code
+- **Impact**: 外部專案無法單獨使用我方的最終審查。擁有者 2026-10-13 同意做，先寫計畫。
+- **Trigger**: ready: write the plan after the dispatch-tree plan (owner 2026-10-13)
 - **Effort**: L
 - **Source**: PEER-REPORTED cuda/chatgpt-tunnel (fleet, 2026-10-03), verified by reading code
 - **Pointer**: docs/backlog/review-only-adoption-of-external-candidate.md
@@ -1259,8 +1259,8 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Since**: 2026-09-23
 - **Origin**: self
 - **Problem**: 自動測試只在版本號變動時才會跑，平常推到 develop 的修改完全沒人測。上次修 CI 時發現，兩次發版之間已經悄悄壞掉 34 個測試，等到發版才一次爆出來。 (draft)
-- **Impact**: 問題會累積到發版當下才被發現，修起來更費時；但全套測試只在發版時跑是刻意設計。 (draft)
-- **Trigger**: owner decision on CI cost vs coverage, or the next time a release lands red for reasons older than that release
+- **Impact**: 問題會累積到發版當下才被發現。擁有者 2026-10-13 否決用 GitHub CI 在每次推送時跑（推送頻繁，額度很快用完）。
+- **Trigger**: a way to run checks between releases that does not use GitHub CI is proposed, or a release lands red again for reasons older than that release
 - **Effort**: S
 - **Source**: 2026-09-23 PEACE-side CI repair (34 tests had rotted between releases; `.github/workflows/test.yml` path filter = `.claude-plugin/plugin.json` only)
 - **Pointer**: docs/backlog/ci-repair-2026-09-23-followups.md
@@ -1272,8 +1272,8 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Since**: 2026-09-23
 - **Origin**: self
 - **Problem**: 設定檔裡明明指定了某個諮詢（consult）模型，但派工時選到「auto」自動模式，系統會悄悄換成別的模型，不照指定的來。同類問題在計畫主席那邊已修成「指定的優先」。 (draft)
-- **Impact**: 指定的諮詢模型可能沒被用到而不自知；要擁有者先裁定指定的是否該優先。 (draft)
-- **Trigger**: owner ruling on whether a declared `consult_engine` should win over topology/sonnet fallback under `consult_dispatch: auto`
+- **Impact**: 指定的諮詢模型可能沒被用到而不自知。擁有者 2026-10-13 裁定：指定的優先。
+- **Trigger**: ready: owner ruled declared wins (2026-10-13); schedule in wave 2
 - **Effort**: S
 - **Source**: 2026-09-23 CI repair, review-loop cluster (5679a392 made consult default `auto`; resolve-review-loop-role-admission)
 - **Pointer**: docs/backlog/ci-repair-2026-09-23-followups.md

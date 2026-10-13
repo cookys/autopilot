@@ -202,6 +202,26 @@
       "file": "scripts/resolve-repo-placement.js",
       "match": "const temp = path.join(os.tmpdir(), name);",
       "reason": "Prints a template only; the caller allocates. Its name is <prefix>-<slug>-XXXXXX, and the rail prefixes (hetero-, foreman-, batch-integ-) are registered for exactly this fallback."
+    },
+    {
+      "file": "scripts/session-mode.js",
+      "match": "const MASK_LINE =",
+      "reason": "BL-0017 hint text only: the string tells the operator to mask the marker directory with an empty directory they create themselves; this script allocates nothing."
+    },
+    {
+      "file": "hooks/dispatch-model-guard.js",
+      "match": "const MASK_LINE =",
+      "reason": "BL-0017 hint text only (same line as session-mode.js): advisory output, nothing is allocated."
+    },
+    {
+      "file": "scripts/dispatch-author.sh",
+      "match": "blocks non-strict dispatch",
+      "reason": "BL-0017 hint text only inside the precondition_failed message; the dollar-paren is escaped and never executed."
+    },
+    {
+      "file": "scripts/dispatch-hetero.sh",
+      "match": "requires a sealed campaign strict projection",
+      "reason": "BL-0017 hint text only inside the precondition_failed message; the dollar-paren is escaped and never executed."
     }
   ]
 }

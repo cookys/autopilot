@@ -1101,9 +1101,10 @@ assert_eq "false" "$([ -e "$TEST_TMP/captured_prompt.txt" ] && echo true || echo
   "bare dispatch under live L6 spawns no runner"
 
 # The marker-to-campaign admission bridge is a second, independent gate. Its
-# dedicated strict fixture plants a foreign marker with a stale graph digest
-# and must still fail before the runner even though 12a now bypasses only the
-# session-mode gate for a bounded non-Mission campaign.
+# dedicated strict fixture exercises the caller's own marker, and (with no
+# CLAUDE_CODE_SESSION_ID) a foreign marker with no routing, which must still
+# fail before the runner even though 12a now bypasses only the session-mode
+# gate for a bounded non-Mission campaign.
 BRIDGE_OUT="$(bash "$REPO_ROOT/hooks/tests/mission-routing-campaign-bridge.test.sh" 2>&1)"; BRIDGE_EXIT=$?
 assert_eq "0" "$BRIDGE_EXIT" \
   "strict campaign with stale-digest marker remains refused by marker bridge: $BRIDGE_OUT"
@@ -2717,7 +2718,7 @@ OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-cc-bin:$PATH" \
   "$SCRIPT" --runner cc-shim --model mini --endpoint TESTEP --branch feat/cc-argv --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "hetero cc-shim argv capture exit 0"
 assert_eq "$(normalize_argv < "$HETERO_CC_ARGV")" "$(printf '%s\n' \
-  -p --model mini --dangerously-skip-permissions)" \
+  -p --session-id UUID --model mini --dangerously-skip-permissions)" \
   "hetero cc-shim argv matches frozen literal (preservation, green at base)"
 
 finalize_test

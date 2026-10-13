@@ -817,7 +817,7 @@ OUT="$(env ANTHROPIC_BASE_URL="http://127.0.0.1:9/v1" ANTHROPIC_AUTH_TOKEN="t" A
   --bin "$TEST_TMP/author-cc-argv" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "author cc-shim argv capture exit 0"
 assert_eq "$(normalize_argv < "$AUTHOR_CC_ARGV")" "$(printf '%s\n' \
-  -p --model mini --setting-sources project --strict-mcp-config --tools '')" \
+  -p --session-id UUID --model mini --setting-sources project --strict-mcp-config --tools '')" \
   "author cc-shim argv matches frozen literal (preservation, green at base)"
 
 # Well-framed non-codex draft → authored; artifact/raw_log has no frame lines.

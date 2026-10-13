@@ -265,7 +265,7 @@ test('dispatch-hetero classifier: a malformed level (not null, not l3-l6) stays 
 
 function bridgeSnippet() {
   const text = fs.readFileSync(HETERO, 'utf8').split('\n');
-  const start = text.findIndex((l) => l.includes('"$CAMPAIGN_MISSION_MODE" "$SELF_DIR/session-mode.js" <<\'NODE\''));
+  const start = text.findIndex((l) => l.includes('"$CAMPAIGN_MISSION_MODE" "$SELF_DIR/session-mode.js"') && l.includes("<<'NODE'"));
   assert.ok(start > 0, 'bridge heredoc located');
   const end = text.indexOf('NODE', start + 1);
   return text.slice(start + 1, end).join('\n');

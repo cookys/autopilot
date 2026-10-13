@@ -736,7 +736,7 @@ The dispatch tree (the former P6 and §7.1: nested dispatch lineage across subag
 
 Verified as of 2026-10-14 (struck items below):
 - ~~One-cell rendering of `⊘ △ ○ ◌ ∅ ◦ › ━ ◐`~~ confirmed by the owner in ssh + tmux on 2026-10-13 (`GLYPHS.verified`, `glyph-check.js`).
-- ~~The `━` under-segment in a wrapped strip~~ the strip falls back to bold `claude` text alone when it wraps (Q1); covered by the P5 strip tests in `live.test.ts`.
+- ~~The `━` under-segment in a wrapped strip~~ the strip falls back to bold `claude` text alone when it wraps (Q1); covered by `mods/live/now.test.ts:324-329` (a wrapped strip draws no `━`, the active label stays bold `claude`; 76-column unwrapped control alongside).
 
 - Whether the owner's 殘留 screenshot (17 lane worktrees as unintegrated) predates the producer fix: awaiting confirmation on the owner's machine (P5 acceptance); the producer is fixed (`dc30d96c`, `793880e6`; stale-develop case in `hooks/tests/repo-residue-sweep.test.sh`).
 - `bodyColumns` overstating the drawable width (P0 a).

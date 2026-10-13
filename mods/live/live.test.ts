@@ -2387,7 +2387,7 @@ for (const surface of SURFACES) {
     expect(w.opens[0]?.closeOnEscape).toBe(true)
     const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
     const texts = allRows((await pane.drawn()) as Node)
-    // the keyboard lands on the first-drawn `▸` next-tab chip, whose Enter steps on (never on the active tab's own button: that Enter is a no-op)
+    // the keyboard lands on the first-drawn `›` next-tab chip, whose Enter steps on (never on the active tab's own button: that Enter is a no-op)
     const tabButtons = (await pane.findAll({ type: 'Button' })) as Drawn[]
     expect(tabButtons.filter(b => b.props?.key === 'next' || (PANE_TABS as readonly string[]).includes(b.props?.key as string)).length).toBe(7) // the section headings are Buttons too
     expect(tabButtons.filter(b => b.props?.autoFocus === true).map(b => b.props?.key)).toEqual(['next'])
@@ -2537,7 +2537,7 @@ for (const surface of SURFACES) {
   })
 
   // Real machine 2026-10-10 (120 columns): Ctrl+x Tab can land the ring on the pane's active tab Button, where Enter pressed the tab it already showed.
-  // The first-drawn Button is now the `▸` next-tab chip and it alone carries autoFocus.
+  // The first-drawn Button is now the `›` next-tab chip and it alone carries autoFocus.
   const paneTabs = async ($: any, surface: any) => $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
 
   test('keyboard: Enter on the › chip (where the ring lands) steps through all six tabs and wraps, whatever tab shows (' + surface + ')', async ($, on) => {
@@ -2561,7 +2561,7 @@ for (const surface of SURFACES) {
     expect(await shownTabOf($, surface)).toBe('hygiene')
   })
 
-  test('keyboard: › and the ⓘ share one order: a ⓘ press after a ▸ press continues from the tab showing (' + surface + ')', async ($, on) => {
+  test('keyboard: › and the ⓘ share one order: a ⓘ press after a › press continues from the tab showing (' + surface + ')', async ($, on) => {
     const w = world(on, richWorld())
     await start($, surface)
     const band = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })

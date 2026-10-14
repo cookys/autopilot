@@ -94,8 +94,8 @@ failures out would turn an honest record into a marketing page, and would let a 
 retried by accident.
 
 The recipe's `excluded[]` array records, with a reason, every store row deliberately left out
-(legacy pre-schema rows, superseded corpora, and the brain-seat sittings, which are not scorecard
-rows at all). Exclusions are a documented editorial decision, not a silent one.
+(legacy pre-schema rows, superseded corpora, and the brain-seat sittings, which are recordable scorecard rows but
+distinguished only by `methodology_kind: owner_brain_seat` and scope `brain-seat`). Exclusions are a documented editorial decision, not a silent one.
 
 ## Adoption is a copy, not an import of authority
 
@@ -269,5 +269,5 @@ A feed is a remote document written by someone else, and is treated that way end
 - It does not create routing authority that survives your own evidence. Local wins.
 - It does not protect a seat from downgrade. Strikes apply identically.
 - It does not ship brain-seat sittings — those are `owner-brain-seat-v1` records in the capability
-  store with their own semantics (forced brain-seat scope, no expiry, 3-strike revocation), not
-  scorecard rows. Deferred to a BACKLOG row rather than forced into this shape.
+  store with their own semantics (forced brain-seat scope, advisory-only expiry, 3-strike revocation).
+  They can be recorded as scorecard rows, told apart by `methodology_kind` and scope. Deferred to a BACKLOG row rather than forced into this shape.

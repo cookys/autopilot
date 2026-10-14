@@ -1,7 +1,7 @@
 /**
  * Tests for the HOOKQ row (mods P1W, plan R5.8): questions and merges are recorded by hooks, not by skill text.
- *   A. depth-0 AskUserQuestion (PreToolUse, exact matcher) opens decision/1; PostToolUse (hosted in audit-log.js) and
- *      SessionEnd (hosted in awaiting-owner.js) close only a file this session's hook opened.
+ *   A. depth-0 AskUserQuestion (PreToolUse, exact matcher) adds an entry to decision/2; PostToolUse (hosted in audit-log.js) and
+ *      SessionEnd (hosted in awaiting-owner.js) close only the entry this session's hook added.
  *   B. a successful merge into the integration branch, for a session whose marker has a root, runs the W1b writer
  *      DETACHED (hosted in audit-log.js's PostToolUse process), once per (root, HEAD sha).
  *
@@ -102,6 +102,9 @@ const readJ = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
 const decDir = (repo) => path.join(repo, '.git', 'autopilot', 'decisions');
 const decFiles = (repo) => (fs.existsSync(decDir(repo)) ? fs.readdirSync(decDir(repo)).filter((f) => f.endsWith('.json')).sort() : []);
 
+const entriesOf = (repo, file) => readJ(path.join(decDir(repo), file)).decisions;
+const allEntries = (repo) => decFiles(repo).flatMap((f) => entriesOf(repo, f));
+
 const q = (text, labels) => ({ question: text, header: 'h', multiSelect: false, options: (labels || []).map((l) => ({ label: l, description: `${l} desc` })) });
 const pre = (repo, sid, questions, over = {}) => ({
   session_id: sid, hook_event_name: 'PreToolUse', tool_name: 'AskUserQuestion', cwd: repo, tool_input: { questions }, ...over,
@@ -128,7 +131,7 @@ test('wiring: ONE new PreToolUse entry with the exact matcher AskUserQuestion; n
 
 // ---------- A: AskUserQuestion opens / closes a decision file ----------
 
-test('A: 1 question with 3 options -> decision/1 with question, options, not_authorized null, root, session, source', () => {
+test('A: 1 question with 3 options -> a decision/2 entry with question, options (label + description), root, session, source, origin', () => {
   const e = mkEnv(); const repo = mkRepo();
   marker(e, 'sess-a1', 'job-a1');
   run(ASK, pre(repo, 'sess-a1', [q('Ship it now?', ['yes', 'no', 'later'])]), e.env);
@@ -136,27 +139,31 @@ test('A: 1 question with 3 options -> decision/1 with question, options, not_aut
   assert.strictEqual(files.length, 1, files.join());
   assert.match(files[0], /--job-a1\.json$/);
   const d = readJ(path.join(decDir(repo), files[0]));
-  assert.strictEqual(d.schema, 'autopilot.decision/1');
-  assert.strictEqual(d.question, 'Ship it now?');
-  assert.deepStrictEqual(d.options, ['yes', 'no', 'later']);
-  assert.strictEqual(d.not_authorized, null);
+  assert.strictEqual(d.schema, 'autopilot.decision/2');
   assert.strictEqual(d.root_run_id, 'job-a1');
-  assert.strictEqual(d.opened_by_session, 'sess-a1');
-  assert.strictEqual(d.source, 'ask_user_question');
-  assert.ok(Number.isFinite(Date.parse(d.opened_at)));
+  assert.strictEqual(d.decisions.length, 1);
+  const e1 = d.decisions[0];
+  assert.match(e1.id, /^d-[0-9a-f]{8}$/);
+  assert.strictEqual(e1.question, 'Ship it now?');
+  assert.deepStrictEqual(e1.options, [{ label: 'yes', description: 'yes desc' }, { label: 'no', description: 'no desc' }, { label: 'later', description: 'later desc' }]);
+  assert.strictEqual(e1.opened_by_session, 'sess-a1');
+  assert.strictEqual(e1.origin, 'ask_user_question');
+  assert.strictEqual(e1.source, 'depth-0 AskUserQuestion');
+  assert.ok(Number.isFinite(Date.parse(e1.opened_at)));
 });
 
 test('A: 3 questions -> first question text + （共 3 題）, first question options; single option -> options null', () => {
   const e = mkEnv(); const repo = mkRepo();
   marker(e, 'sess-a2', 'job-a2');
   run(ASK, pre(repo, 'sess-a2', [q('First?', ['x', 'y']), q('Second?', ['p', 'q']), q('Third?', ['m', 'n'])]), e.env);
-  let d = readJ(path.join(decDir(repo), decFiles(repo)[0]));
-  assert.strictEqual(d.question, 'First?（共 3 題）');
-  assert.deepStrictEqual(d.options, ['x', 'y']);
+  let d = allEntries(repo);
+  assert.strictEqual(d.length, 1);
+  assert.strictEqual(d[0].question, 'First?（共 3 題）');
+  assert.deepStrictEqual(d[0].options.map((o) => o.label), ['x', 'y']);
   run(ASK, pre(repo, 'sess-a2', [q('Only one option?', ['lonely'])]), e.env);
-  d = readJ(path.join(decDir(repo), decFiles(repo)[0]));
-  assert.strictEqual(d.options, null);
-  assert.strictEqual(decFiles(repo).length, 1, 'same session replaces its own earlier file');
+  d = allEntries(repo);
+  assert.strictEqual(d.length, 1, 'same session supersedes its own earlier unanswered entry');
+  assert.strictEqual(d[0].options, null);
 });
 
 test('A: a subagent payload (agent_id) opens nothing; neither does a payload without a session id or a question', () => {
@@ -197,38 +204,40 @@ test('A: an unanswered question stays — a Bash PostToolUse, however much later
   assert.strictEqual(decFiles(repo).length, 1);
 });
 
-test('A: a hand-opened file (open-decision.js, no source) is never overwritten or closed by the hook', () => {
+test('A: a hand-opened entry (open-decision.js, no origin) is never overwritten or closed by the hook; the hook\'s entry sits beside it', () => {
   const e = mkEnv(); const repo = mkRepo();
   marker(e, 'sess-a7', 'job-a7');
   const env = { ...e.env, AUTOPILOT_SESSION_ID: 'sess-a7' };
   const r = spawnSync('node', [OPEN, 'open', '--question', 'By hand', '--option', 'one', '--option', 'two', '--cwd', repo], { encoding: 'utf8', env });
   assert.strictEqual(r.status, 0, r.stderr);
-  const f = path.join(decDir(repo), decFiles(repo)[0]);
-  const before = fs.readFileSync(f, 'utf8');
-  assert.ok(!('source' in JSON.parse(before)));
+  const hand = allEntries(repo);
+  assert.strictEqual(hand.length, 1);
+  assert.ok(!('origin' in hand[0]));
   run(ASK, pre(repo, 'sess-a7', [q('Hook question?', ['a', 'b'])]), e.env);
-  assert.strictEqual(fs.readFileSync(f, 'utf8'), before, 'hand-opened file untouched by the open leg');
+  assert.deepStrictEqual(allEntries(repo).map((x) => x.question).sort(), ['By hand', 'Hook question?'], 'the hook ADDS: the hand-opened entry is still there');
+  assert.deepStrictEqual(allEntries(repo).find((x) => x.question === 'By hand'), hand[0], 'untouched by the open leg');
   run(AUDIT, postAsk(repo, 'sess-a7'), e.env);
   run(ATTN, { session_id: 'sess-a7', hook_event_name: 'SessionEnd', cwd: repo }, e.env);
-  assert.strictEqual(fs.readFileSync(f, 'utf8'), before, 'and by the close legs');
+  assert.deepStrictEqual(allEntries(repo), hand, 'the close legs remove the hook\'s entry and leave the hand-opened one');
 });
 
-test('A: the same session replaced the hook\'s file by hand (--replace, no source) -> the close legs leave it', () => {
+test('A: the same session adds an entry by hand next to the hook\'s -> the close legs remove only the hook\'s', () => {
   const e = mkEnv(); const repo = mkRepo();
   marker(e, 'sess-a8', 'job-a8');
   run(ASK, pre(repo, 'sess-a8', [q('Hook first?', ['a', 'b'])]), e.env);
   const env = { ...e.env, AUTOPILOT_SESSION_ID: 'sess-a8' };
-  const r = spawnSync('node', [OPEN, 'open', '--replace', '--question', 'Then by hand', '--cwd', repo], { encoding: 'utf8', env });
+  const r = spawnSync('node', [OPEN, 'open', '--question', 'Then by hand', '--cwd', repo], { encoding: 'utf8', env });
   assert.strictEqual(r.status, 0, r.stderr);
-  const f = path.join(decDir(repo), decFiles(repo)[0]);
-  const before = fs.readFileSync(f, 'utf8');
-  assert.ok(!('source' in JSON.parse(before)) && JSON.parse(before).opened_by_session === 'sess-a8');
+  const both = allEntries(repo);
+  assert.strictEqual(both.length, 2);
+  const hand = both.find((x) => x.question === 'Then by hand');
+  assert.ok(!('origin' in hand) && hand.opened_by_session === 'sess-a8');
   run(AUDIT, postAsk(repo, 'sess-a8'), e.env);
   run(ATTN, { session_id: 'sess-a8', hook_event_name: 'SessionEnd', cwd: repo }, e.env);
-  assert.strictEqual(fs.readFileSync(f, 'utf8'), before, 'same session id, but no source: not the hook\'s file');
+  assert.deepStrictEqual(allEntries(repo), [hand], 'same session id, but no origin: not the hook\'s entry');
 });
 
-test('A: session A never closes session B\'s file (other roots, and the same root after B replaced A)', () => {
+test('A: session A never closes session B\'s entry (other roots, and the same root: both entries coexist, each closes only its own)', () => {
   const e = mkEnv(); const repo = mkRepo();
   marker(e, 'sess-A', 'job-A'); marker(e, 'sess-B', 'job-B');
   run(ASK, pre(repo, 'sess-A', [q('A asks?', ['a', 'b'])]), e.env);
@@ -238,14 +247,16 @@ test('A: session A never closes session B\'s file (other roots, and the same roo
   const left = decFiles(repo);
   assert.strictEqual(left.length, 1);
   assert.match(left[0], /--job-B\.json$/);
-  // same root: B (hook-opened) replaces A's file; A's close must leave it
+  // same root: C and D (both hook-opened) coexist in ONE file; C's close removes C's entry and leaves D's
   marker(e, 'sess-C', 'job-shared'); marker(e, 'sess-D', 'job-shared');
   run(ASK, pre(repo, 'sess-C', [q('C asks?', ['a', 'b'])]), e.env);
   run(ASK, pre(repo, 'sess-D', [q('D asks?', ['a', 'b'])]), e.env);
+  const sharedFile = decFiles(repo).find((f) => /--job-shared\.json$/.test(f));
+  assert.deepStrictEqual(entriesOf(repo, sharedFile).map((x) => x.opened_by_session).sort(), ['sess-C', 'sess-D'], 'D did not overwrite C');
   run(AUDIT, postAsk(repo, 'sess-C'), e.env);
   const shared = decFiles(repo).find((f) => /--job-shared\.json$/.test(f));
   assert.ok(shared, 'D\'s file survives C\'s close');
-  assert.strictEqual(readJ(path.join(decDir(repo), shared)).opened_by_session, 'sess-D');
+  assert.deepStrictEqual(entriesOf(repo, shared).map((x) => x.opened_by_session), ['sess-D']);
 });
 
 test('A: knob AUTOPILOT_ASK_DECISION=off -> nothing opened, nothing closed', () => {

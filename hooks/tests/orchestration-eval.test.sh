@@ -7,6 +7,12 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 EVAL_DIR="$REPO_ROOT/evals/orchestration"
 
+# BL-0122 guard: the committed task fixtures must be byte-identical after this suite. Every
+# oracle/stub run must work on a temp copy; the T7 fixture's own tests/tool.test.js rewrites
+# its sibling config.json, so anything that runs it in place silently dirties the source.
+fixture_digest() { (cd "$EVAL_DIR/tasks" && find . -type f | LC_ALL=C sort | xargs sha256sum); }
+FIXTURES_BEFORE=$(fixture_digest)
+
 echo "=== Running Oracle Self-Tests ==="
 
 # --- T1 Pristine and Fixed Self-Test ---
@@ -737,5 +743,12 @@ fi
 # Clean up
 rm -rf "$TEST_OUT_DIR"
 rm -f "$STUB_BIN"
+
+FIXTURES_AFTER=$(fixture_digest)
+if [ "$FIXTURES_BEFORE" != "$FIXTURES_AFTER" ]; then
+  echo "Assertion failed: committed evals/orchestration/tasks fixtures changed during the suite:" >&2
+  diff <(printf '%s\n' "$FIXTURES_BEFORE") <(printf '%s\n' "$FIXTURES_AFTER") >&2 || true
+  exit 1
+fi
 
 echo "All tests passed successfully!"

@@ -124,7 +124,7 @@ function model(over: Record<string, unknown> = {}) {
   return {
     schema: 'review-job-model/1', job: ROOT, date: '2026-10-04', project: KEY, root_run_id: ROOT, published_at: PUBLISHED,
     axes: { execution: { running: 2, exited: 1, unknown: 0 }, acceptance: 'unknown', can_close: null },
-    conclusion: '驗收結論：尚未產生', needs_decision: false, decision: null, progress: null,
+    conclusion: '驗收結論：尚未產生', needs_decision: false, decisions: [], progress: null,
     gates: [{ phase: 'plan', generation: 1, verdict: 'PASS', status: 'LIVE GATE · 未綁定候選' }],
     ...over,
   }
@@ -902,7 +902,7 @@ for (const surface of SURFACES) {
   const verdictsIn = (t: string) => VERDICTS.filter(v => t.includes(v))
   const quietCounts = (live: number) => ({ confirmed_live: live, exited: 1, unknown: 0, fresh_bound_s: 30 })
   const exitedRow = () => row({ run_id: 'r9', phase: 'exited', alive: false, rc: 0, final_status: 'done' })
-  const DECISION = { question: '要合併 plan 還是拆開？', options: [{ label: '合併', consequence: '一次驗收' }, { label: '拆開', consequence: '兩次驗收' }], not_authorized: null }
+  const DECISION = { question: '要合併 plan 還是拆開？', options: [{ label: '合併', description: '一次驗收' }, { label: '拆開', description: '兩次驗收' }] }
   const FROZEN_DONE = { frozen: true, percent: 100, done: 8, total: 8 }
   // everything the four verdicts are made of lives in two files; this puts both in place
   const put = (files: Tree, env: Record<string, unknown> | null, mdl: Record<string, unknown> | null) => {
@@ -912,7 +912,7 @@ for (const surface of SURFACES) {
 
   test('verdict 要你決定: the loudest word, wins over a stalled run, reason is the decision question (' + surface + ')', async ($, on) => {
     const files = base() // base() has a stalled row
-    put(files, null, { needs_decision: true, decision: DECISION })
+    put(files, null, { needs_decision: true, decisions: [DECISION] })
     world(on, files)
     await start($, surface)
     const p = await bandParts($, surface)
@@ -980,11 +980,11 @@ for (const surface of SURFACES) {
   test('verdict precedence: needs_decision > stalled > waiting acceptance > running (' + surface + ')', async ($, on) => {
     const files = base()
     // every condition holds at once: a decision is pending, a row stalls, nothing live, frozen complete, acceptance open
-    put(files, { runs: [row({ run_id: 'r2', stall: true, last_event_age_s: 300 })], counts: quietCounts(0) }, { needs_decision: true, decision: DECISION, progress: FROZEN_DONE })
+    put(files, { runs: [row({ run_id: 'r2', stall: true, last_event_age_s: 300 })], counts: quietCounts(0) }, { needs_decision: true, decisions: [DECISION], progress: FROZEN_DONE })
     const w = world(on, files)
     await start($, surface)
     expect(verdictsIn(await bandText($, surface))).toEqual(['要你決定'])
-    put(w.files, null, { needs_decision: false, decision: null, progress: FROZEN_DONE }) // the decision is gone
+    put(w.files, null, { needs_decision: false, decisions: [], progress: FROZEN_DONE }) // the decision is gone
     await w.clock.advance(5000)
     expect(verdictsIn(await bandText($, surface))).toEqual(['疑似卡住'])
     put(w.files, { runs: [exitedRow()], counts: quietCounts(0) }, null) // the stall is gone
@@ -1020,10 +1020,10 @@ for (const surface of SURFACES) {
     put(w.files, { runs: [row({ run_id: 'r2', stall: true })], counts: quietCounts(0) }, null)
     await w.clock.advance(5000)
     expect(verdictsIn(await bandText($, surface))).toEqual(['疑似卡住'])
-    put(w.files, { runs: [exitedRow()], counts: quietCounts(0) }, { needs_decision: true, decision: DECISION })
+    put(w.files, { runs: [exitedRow()], counts: quietCounts(0) }, { needs_decision: true, decisions: [DECISION] })
     await w.clock.advance(5000)
     expect(verdictsIn(await bandText($, surface))).toEqual(['要你決定'])
-    put(w.files, null, { needs_decision: false, decision: null, progress: FROZEN_DONE })
+    put(w.files, null, { needs_decision: false, decisions: [], progress: FROZEN_DONE })
     await w.clock.advance(5000)
     expect(verdictsIn(await bandText($, surface))).toEqual(['完成待驗收'])
   })
@@ -1158,7 +1158,7 @@ for (const surface of SURFACES) {
 
   test('pane: when a decision is awaited it is the first section, built from the model decision; the Link stays (' + surface + ')', async ($, on) => {
     const files = base()
-    put(files, null, { needs_decision: true, decision: DECISION })
+    put(files, null, { needs_decision: true, decisions: [DECISION] })
     const w = world(on, files)
     await start($, surface)
     let pane = await paneParts($, surface, 'now')
@@ -1167,26 +1167,26 @@ for (const surface of SURFACES) {
     const rule = pane.texts.findIndex(t => t.startsWith('▾ 要你處理')) // the awaited decision is the first section (before "where you are")
     expect(rule).toBe(0)
     expect(rule).toBeLessThan(pane.texts.findIndex(t => t.startsWith('▾ 位置'))) // a foldable section, open by default
-    expect(pane.texts[rule + 1]).toMatch(/^▲ 要合併 plan 還是拆開？ +▸$/) // one item line; the options sit behind its toggle (§2.4)
-    expect(pane.texts.some(t => t.includes('一次驗收'))).toBe(false)
+    expect(pane.texts[rule + 1]).toBe('▲ 要合併 plan 還是拆開？') // one item line: the oldest question; its full text is the 待決議事項 block below
     expect(pane.texts[rule]).toContain('▲ 1') // the section chip counts what awaits you
-    await pressRow($, surface, 'now', t => t.startsWith('▲ 要合併 plan 還是拆開？'))
-    const opened = (await paneParts($, surface, 'now')).texts
-    expect(opened.some(t => t.includes('合併 — 一次驗收'))).toBe(true)
-    expect(opened.some(t => t.includes('拆開 — 兩次驗收'))).toBe(true)
+    const block = pane.texts.findIndex(t => t.startsWith('▾ 待決議事項（1）'))
+    expect(block).toBeGreaterThan(rule)
+    expect(pane.texts[block + 1]).toBe('▲ 1. 要合併 plan 還是拆開？')
+    expect(pane.texts.some(t => t.includes('1) 合併 — 一次驗收'))).toBe(true) // the options are shown in full, no toggle to press
+    expect(pane.texts.some(t => t.includes('2) 拆開 — 兩次驗收'))).toBe(true)
     const disp = await paneParts($, surface, 'dispatch') // the table is still there, on its own tab, and so is the Link
     expect(disp.texts.some(t => t.includes('這是執行狀態，不是進度'))).toBe(true)
     expect(disp.texts.some(t => t.startsWith('審查 ›'))).toBe(true) // the former 審查關卡 section is one pointer row to 審查
     expect(disp.texts.some(t => t.includes('要合併 plan 還是拆開？'))).toBe(false)
     expect(disp.href).toBe('http://localhost:8787/' + KEY + '/2026-10-04/' + ROOT + '/current/')
     // fields that do not exist are not shown: a question with no options, then no decision at all
-    put(w.files, null, { needs_decision: true, decision: { question: '只有問題', options: [], not_authorized: null } })
+    put(w.files, null, { needs_decision: true, decisions: [{ question: '只有問題', options: [] }] })
     await w.clock.advance(5000)
     pane = await paneParts($, surface, 'now')
     const at2 = pane.texts.findIndex(t => t.startsWith('▲ 只有問題'))
     expect(at2).toBeGreaterThanOrEqual(0)
     expect(pane.texts[at2 + 1]).not.toMatch(/^ *\d\. /)
-    put(w.files, null, { needs_decision: false, decision: null })
+    put(w.files, null, { needs_decision: false, decisions: [] })
     await w.clock.advance(5000)
     pane = await paneParts($, surface, 'now')
     expect(pane.texts.some(t => t.includes('只有問題'))).toBe(false)
@@ -1195,7 +1195,7 @@ for (const surface of SURFACES) {
 }
 
 // ---- mods P1W W3a: the mod reads every wired source (tasks, attention, phase, decisions sidecar, foreman, manifest) ----
-const DECISION_W = { question: '要合併 plan 還是拆開？', options: [{ label: '合併', consequence: '一次驗收' }, { label: '拆開', consequence: '兩次驗收' }], not_authorized: null }
+const DECISION_W = { question: '要合併 plan 還是拆開？', options: [{ label: '合併', description: '一次驗收' }, { label: '拆開', description: '兩次驗收' }] }
 const SID_RAW = 'sid/with:odd chars'
 const SID_FILE = 'sid_with_odd_chars' // sanitizeSessionId: every scalar outside [A-Za-z0-9_-] becomes one "_"
 const SCOPE_KEY = KEY + '--' + ROOT
@@ -1448,15 +1448,15 @@ for (const surface of SURFACES) {
 
   test('W3a decision age: a stale open decision shows 已等 N 天 in band and pane; a fresh one does not (' + surface + ')', async ($, on) => {
     const files = base()
-    files[W_MODEL] = j(model({ needs_decision: true, decision: { ...DECISION_W, stale: true, age_s: 3 * 86400 + 5 } }))
+    files[W_MODEL] = j(model({ needs_decision: true, decisions: [{ ...DECISION_W, stale: true, age_s: 3 * 86400 + 5 }] }))
     const w = world(on, files)
     await start($, surface)
     expect((await bandParts($, surface)).line2).toBe('要合併 plan 還是拆開？（已等 3 天）')
-    expect((await paneParts($, surface, 'now')).texts.some(t => /^▲ 要合併 plan 還是拆開？（已等 3 天） +▸$/.test(t))).toBe(true)
-    files[W_MODEL] = j(model({ needs_decision: true, decision: { ...DECISION_W, stale: false, age_s: 40 } }))
+    expect((await paneParts($, surface, 'now')).texts.some(t => /^▲ 要合併 plan 還是拆開？（已等 3 天）$/.test(t))).toBe(true)
+    files[W_MODEL] = j(model({ needs_decision: true, decisions: [{ ...DECISION_W, stale: false, age_s: 40 }] }))
     await w.clock.advance(5000)
     expect((await bandParts($, surface)).line2).toBe('要合併 plan 還是拆開？')
-    files[W_MODEL] = j(model({ needs_decision: true, decision: { ...DECISION_W, stale: true, age_s: 3600 } })) // stale but under a day
+    files[W_MODEL] = j(model({ needs_decision: true, decisions: [{ ...DECISION_W, stale: true, age_s: 3600 }] })) // stale but under a day
     await w.clock.advance(5000)
     expect((await bandParts($, surface)).line2).toBe('要合併 plan 還是拆開？')
   })
@@ -2085,7 +2085,7 @@ for (const surface of SURFACES) {
   test('SCOPE: a decision awaited under the campaign root reads 要你決定 with its question (' + surface + ')', async ($, on) => {
     const files = campaignWorld({ runs: liveRows(1, CAMP), counts: counts(1) })
     files[modelPathOf(ROOT)] = j(model())
-    files[modelPathOf(CAMP)] = j(model({ root_run_id: CAMP, job: CAMP, needs_decision: true, decision: { question: '要合併 campaign 分支嗎？', options: [{ label: '合併', consequence: '進 develop' }], stale: false, age_s: 5 } }))
+    files[modelPathOf(CAMP)] = j(model({ root_run_id: CAMP, job: CAMP, needs_decision: true, decisions: [{ question: '要合併 campaign 分支嗎？', options: [{ label: '合併', description: '進 develop' }], stale: false, age_s: 5 }] }))
     world(on, files)
     await start($, surface)
     const p = await bandParts($, surface)
@@ -2690,7 +2690,7 @@ for (const surface of SURFACES) {
 
   test('P7 band: the former second line is gone; the awaited decision is a clipped reason on the wide band and whole on the Now tab (' + surface + ')', async ($, on) => {
     const files = richWorld()
-    files[AHOME + '/review/' + KEY + '/2026-10-04/' + ROOT + '/current/model.json'] = j(model({ needs_decision: true, decision: { question: '要合併 plan 還是拆開？', options: [{ label: '合併', consequence: '一次驗收' }], not_authorized: null } }))
+    files[AHOME + '/review/' + KEY + '/2026-10-04/' + ROOT + '/current/model.json'] = j(model({ needs_decision: true, decisions: [{ question: '要合併 plan 還是拆開？', options: [{ label: '合併', description: '一次驗收' }] }] }))
     world(on, files)
     await start($, surface)
     const band = await bandLine($, surface, 209)
@@ -2698,7 +2698,8 @@ for (const surface of SURFACES) {
     expect(band.text.includes('\n')).toBe(false)
     expect((await bandLine($, surface, 159)).text).not.toContain('要合併 plan 還是拆開？')
     const now = (await paneParts($, surface, 'now')).texts
-    expect(now.some(t => /^▲ 要合併 plan 還是拆開？ +▸$/.test(t))).toBe(true)
+    expect(now.some(t => /^▲ 要合併 plan 還是拆開？$/.test(t))).toBe(true)
+    expect(now.some(t => t.includes('1) 合併 — 一次驗收'))).toBe(true) // whole on the Now tab, options included
   })
 
   test('P7 panel: the tab strip is six Buttons in contract order, the active one bold, with badges (' + surface + ')', async ($, on) => {
@@ -3324,7 +3325,7 @@ test('layoutBand: a long reason is clipped to the room left: a prefix of it is d
 
 test('Review tab: a ladder rung outside U0..U5 is clamped, never a negative repeat', () => {
   const snap = (rung: string) => ({
-    header: 'h', review: null, decision: null, sections: NO_SECTIONS,
+    header: 'h', review: null, pending: [], sections: NO_SECTIONS,
     detail: { qc: null, now_ms: 1000, decisions: { rows: [], count: 1, irreversible: 0, writers: [], undocumented: 0, identity: null, root: null, ladder: { rung, at: new Date(0).toISOString() } } },
   }) as never
   for (const rung of ['U7', 'U9', 'U5', 'U0', 'Ux']) {
@@ -3422,7 +3423,7 @@ test('wrapLines: no continuation line is only a closing punctuation mark or a si
 })
 
 test('band phase: a task-sourced phase renders in the session locale, not the producer zh prefix; other sources are shown as given', () => {
-  const model = (phase: unknown) => ({ phase, acceptance: null, gates: [], needs_decision: false, conclusion: null, decision: null, progress: null, sources_manifest: null }) as unknown as Parameters<typeof bandView>[1]
+  const model = (phase: unknown) => ({ phase, acceptance: null, gates: [], needs_decision: false, conclusion: null, decisions: [], progress: null, sources_manifest: null }) as unknown as Parameters<typeof bandView>[1]
   const ph = { code: '1', label: '做：alpha', source: 'task' }
   expect(bandView({}, model(ph), 'p', 0, undefined, makeT('en')).phase).toBe('doing: alpha')
   expect(bandView({}, model(ph), 'p', 0, undefined, makeT('zh-TW')).phase).toBe('做：alpha')
@@ -3456,6 +3457,7 @@ test('hygiene tab: a long cache dir, worktree path and reason wrap in full at 60
 // Local fixtures (no global busyWorld): rows are LivePaneRow-shaped, `detail.now_ms` is the clock F5 reads.
 const D_NOW = Date.parse('2026-10-13T08:00:00.000Z')
 const D_DAY = 86_400_000
+const D_AGE_OUT = 6 * 3_600_000 // BL-0149: FRESH_MS.dispatch
 const dispatchSnap = (rows: object[] | null, over: object = {}) => ({
   header: 'h', rows, gates: null, link: null, published_at: '2026-10-13T07:59:55.000Z', session_as_of: null, host_as_of: null,
   sections: NO_SECTIONS,
@@ -3605,10 +3607,10 @@ test('tableList refuses a row without group or ts (M53)', () => {
   expect(() => ui.tableList(u, 'x', 'n', cols, [{ state: ok.state, cells: ['a'], group: 'a' } as never], { fact: 'dispatch.runs' })).toThrow(/group or ts/)
 })
 
-test('dispatch tab: F5 a finished run older than a day is counted in the chip, not listed (I11 at T-1, T, T+1 ms; M24e, M24j)', () => {
+test('dispatch tab: F5 a finished run older than 6 h is counted in the chip, not listed (I11 at T-1, T, T+1 ms; M24e, M24j)', () => {
   const t = makeT('zh-TW')
   const T = ui.FRESH_MS.dispatch
-  expect(T).toBe(D_DAY)
+  expect(T).toBe(D_AGE_OUT)
   for (const [delta, listed] of [[-1, true], [0, true], [1, false]] as const) {
     const row = RUN_FIN('edge', T + delta)
     const lines = dispatchLines(dispatchSnap([row]), { t, cols: 120 })
@@ -3618,6 +3620,15 @@ test('dispatch tab: F5 a finished run older than a day is counted in the chip, n
     if (!listed) expect(lines.some(l => l.text.includes(t('dispatch.no_finished')))).toBe(true)
     expect(runAgedOut(paneRows({ runs: [{ ...row, phase: 'exited' }] } as never)?.[0] as never, D_NOW)).toBe(!listed)
   }
+})
+
+test('dispatch tab: BL-0149 the role column shows the manifest role (plan-review stays plan-review, not author)', () => {
+  const t = makeT('en')
+  const lines = dispatchLines(dispatchSnap([RUN_FIN('seat-1', 60_000, { role: 'plan-review' }), RUN_FIN('auth-1', 120_000, { role: 'author' })]), { t, cols: 120 })
+  const rowOf = (id: string) => bodyRows(lines).find(l => l.text.includes(id))?.text ?? ''
+  expect(rowOf('seat-1')).toContain('plan-review')
+  expect(rowOf('seat-1')).not.toContain('author')
+  expect(rowOf('auth-1')).toContain('author')
 })
 
 test('dispatch tab: who computes `fresh` (§2.5 gap): a row that ended with no rc and no final_status is stopped, never running; a stale probe is not running either', () => {

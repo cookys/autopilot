@@ -953,13 +953,16 @@ write_author_manifest() {
   [ -n "$AUTHOR_FINAL_STATUS" ] && final_json="\"$(json_escape "$AUTHOR_FINAL_STATUS")\""
   local parent_json="null"; [ -n "${LINEAGE_PARENT:-}" ] && parent_json="\"$(json_escape "$LINEAGE_PARENT")\""
   local root_json="null"; [ -n "${LINEAGE_ROOT:-}" ] && root_json="\"$(json_escape "$LINEAGE_ROOT")\""
+  # Caller-stamped role (BL-0149): plan review drives this script for its reviewer seats, which are not authors. Token-only, else "author".
+  local role_tok="author"
+  case "${AUTOPILOT_DISPATCH_ROLE:-}" in ""|[!a-z]*|*[!a-z0-9-]*) ;; *) role_tok="$AUTOPILOT_DISPATCH_ROLE" ;; esac
   local depth_json="${LINEAGE_DEPTH:-0}"; case "$depth_json" in *[!0-9]*|"") depth_json=0 ;; esac; depth_json=$((10#$depth_json))
   # repo_identity (mods P1a R1): explicit --repo-root wins, else the cwd's toplevel.
   if declare -F repo_identity_resolve_fields >/dev/null 2>&1; then repo_identity_resolve_fields "${AUTHOR_REPO_ROOT_EXPLICIT:-}" "" || true; fi
   [ -n "${REPO_IDENTITY_FIELDS:-}" ] || REPO_IDENTITY_FIELDS='"repo_identity": null, "repo_identity_source": null'
   {
-    printf '{ "schema": 1, "run_id": "%s", "role": "author", "allow_narrative": null, "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "log_format": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "diff_file": null, "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, %s, "session_id": %s, "child_session_id": %s }\n' \
-      "$(json_escape "$AUTHOR_RUN_ID")" "$RUNNER" "$(json_escape "$MODEL")" \
+    printf '{ "schema": 1, "run_id": "%s", "role": "%s", "allow_narrative": null, "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "log_format": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "diff_file": null, "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, %s, "session_id": %s, "child_session_id": %s }\n' \
+      "$(json_escape "$AUTHOR_RUN_ID")" "$role_tok" "$RUNNER" "$(json_escape "$MODEL")" \
       "$(json_escape "$RAW_LOG")" "$log_format" "$aux_json" "$$" \
       "$AUTHOR_STARTED_AT" "$AUTHOR_STARTED_EPOCH" \
       "$(json_escape "${PROMPT_FILE_ORIG:-$PROMPT_FILE}")" \

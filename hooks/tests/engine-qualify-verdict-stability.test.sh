@@ -3499,8 +3499,12 @@ fs.rmSync(shortTmpBase, { recursive: true, force: true });
   // Executable half for roles with exported pure pin/verdict helpers.
   // verification_author's verifyPinnedVaEvaluationAssets is intentionally
   // unexported — its KR7 gate is the runVaQualification source-half below.
+  // reviewer's verifyPinnedEvaluationAssets left this list on 2026-10-14: the base module pins
+  // the OLD reviewer generator hash and the generator file on disk is now v5 (clean-case
+  // equivalence fix), so the base module cannot verify the current tree. Reviewer pin
+  // correctness is asserted directly by engine-qualify-b.test.sh section 12 (pin mismatch,
+  // mutated generator/manifest/base/oracle all fail closed) instead.
   const pinPairs = [
-    ['reviewer', 'verifyPinnedEvaluationAssets'],
     ['implementer', 'verifyPinnedImplEvaluationAssets'],
   ];
   for (const [roleName, fnName] of pinPairs) {
@@ -3520,11 +3524,21 @@ fs.rmSync(shortTmpBase, { recursive: true, force: true });
   // scripts/engine-qualify-impl.test.js, and the pin below can only name a commit already
   // on origin/develop — so an intentional implementer change cannot advance it before it
   // lands. The consult/discuss leak guard keeps the other four bodies + the executable half.
+  //
+  // runQualification left this list on 2026-10-14: the reviewer/owner path gained --raw-dir
+  // (per-case raw answers, same as VA/brain/implementer/consult), so its body can no longer be
+  // byte-identical to dbf0e123 and a pin can only name a commit already on origin/develop.
+  // consult/discuss never run inside runQualification (it returns early into
+  // runConsultDiscussQualification), so the leak guard loses no consult/discuss coverage; the
+  // reviewer path is covered end to end by engine-qualify-a/b.test.sh and the raw-dir test there.
+  //
+  // runBrainQualification left this list on 2026-10-14: its emitted row gained capability_score,
+  // cost and expires so `engine-scorecard.js record` accepts a brain sitting. Same reasoning as
+  // runQualification above — the pin names an old commit, and the brain path is now covered end to
+  // end by scripts/engine-qualify-brain.test.js (record accepted; each missing field refused).
   const fns = [
     'runVaQualification',
-    'runBrainQualification',
     'ownerRuleViolations',
-    'runQualification',
   ];
   for (const name of fns) {
     const a = baseEq[name].toString();

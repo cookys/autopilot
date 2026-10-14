@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # hooks/tests/runs-watch-inputs.test.sh — mods P1W WATCH-A: the watcher's own inputs reach the published model.json
 # (planned W1g, decision W2a-m, compare W2e-m, sources manifest W1i, marker stage (P2b read side)) plus the
-# scripts/open-decision.js helper (decision/1) and the pure modules behind them.
+# scripts/open-decision.js helper (decision/2) and the pure modules behind them.
 # Each item drives the real createWatcher (fake clock, real publish()) and asserts the published model.json field,
 # the sources row, and one negative control (stale file, file of another root, file of another repo, file left after the end signal).
 # RED at 8666aba4 (base: runs-watch.js passes decision/planned/compare = null/null/[]; no open-decision.js, no src/status/watch-inputs.js):
@@ -42,45 +42,71 @@ chmod +x "$SB/task-bin.sh"
 export AUTOPILOT_RENDER_TASK_STATUS_BIN="$SB/task-bin.sh"
 export AUTOPILOT_REVIEW_RETAIN_MS=999999999
 
-# ---- A. open-decision.js helper (decision/1) --------------------------------------------------------------
+# ---- A. open-decision.js helper (decision/2) --------------------------------------------------------------
 odo() { (cd "$REPO" && wenv "$NODE" "$OD" "$@" 2> "$SB/od.err" < /dev/null); }
+# jf <file> <js expr over v>: print an expression of the parsed JSON file
+jf() { node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(eval(process.argv[2])))' "$1" "$2"; }
 COMMON="$REPO/.git"
-odo open --question 'Q one?' --option 'A' --option 'B' --not-authorized 'DOA boundary' --context 'ctx' --root-run-id R1 > "$SB/od.out"; eq 0 "$?" "open writes a decision (stderr: $(head -c 200 "$SB/od.err"))"
+ID1=$(odo open --question 'Q one?' --background 'BG one' --option 'A::desc A' --option 'B::desc B' --recommendation A --why 'WHY one' --blocks 'BLOCKS one' --not-authorized 'NA one' --source 'SRC one' --root-run-id R1); eq 0 "$?" "open writes a decision (stderr: $(head -c 200 "$SB/od.err"))"
 F1="$COMMON/autopilot/decisions/${KEY}--R1.json"
 assert_file_exists "$F1" "decision file at <git-common-dir>/autopilot/decisions/<project_key>--<root>.json"
-eq 'autopilot.decision/1|Q one?|A,B|DOA boundary|R1|ctx' "$(node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write([v.schema,v.question,(v.options||[]).join(","),v.not_authorized,v.root_run_id,v.context].join("|"))' "$F1")" "decision/1 fields (question, options, not_authorized, root_run_id, context)"
-eq "$IDENT|$KEY" "$(node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(v.repo_identity+"|"+v.project_key)' "$F1")" "decision carries repo_identity and project_key"
-odo open --question 'Q two?' --root-run-id R1 > /dev/null; eq 3 "$?" "open refuses to overwrite an open question (exit 3)"
-eq 'Q one?' "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).question)' "$F1")" "refused open left the file untouched"
-odo open --question 'Q two?' --root-run-id R1 --replace > /dev/null; eq 0 "$?" "open --replace overwrites"
-eq 'Q two?|null|null' "$(node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write([v.question,JSON.stringify(v.options),JSON.stringify(v.not_authorized)].join("|"))' "$F1")" "no --option -> options null; no --not-authorized -> null"
-odo open --question 'Q3' --option only-one --root-run-id R1 --replace > /dev/null; eq 2 "$?" "a single --option is a usage error (exit 2)"
-eq 'Q two?' "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).question)' "$F1")" "usage error left the file untouched"
-odo open --root-run-id R1 --replace > /dev/null; eq 2 "$?" "open without --question is a usage error"
-odo show --root-run-id R1 --json > "$SB/show.out"; eq 0 "$?" "show --json exits 0 when a question is open"
-eq 'Q two?' "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).question)' "$SB/show.out")" "show --json prints the open file"
+eq yes "$(printf '%s' "$ID1" | grep -Eq '^d-[0-9a-f]{8}$' && echo yes || echo no)" "open prints the new id (and nothing else)"
+eq 'autopilot.decision/2|1|R1' "$(jf "$F1" '[v.schema,v.decisions.length,v.root_run_id].join("|")')" "decision/2 file: schema, one entry, root_run_id"
+eq "Q one?|BG one|A:desc A,B:desc B|A|WHY one|BLOCKS one|NA one|SRC one|$ID1" "$(jf "$F1" 'const d=v.decisions[0];[d.question,d.background,d.options.map((o)=>o.label+":"+o.description).join(","),d.recommendation,d.why,d.blocks,d.not_authorized,d.source,d.id].join("|")')" "entry fields (question, background, options[{label,description}], recommendation, why, blocks, source, id)"
+eq "$IDENT|$KEY" "$(jf "$F1" 'v.repo_identity+"|"+v.project_key')" "decision carries repo_identity and project_key"
+ID2=$(odo open --question 'Q two?' --root-run-id R1); eq 0 "$?" "a second open on the same scope succeeds (questions coexist)"
+eq "Q one?,Q two?" "$(jf "$F1" 'v.decisions.map((d)=>d.question).join(",")')" "both questions are in the one file; the first is untouched"
+eq 'null|null|null|null|null' "$(jf "$F1" 'const d=v.decisions[1];[d.options,d.background,d.recommendation,d.why,d.not_authorized].map((x)=>JSON.stringify(x)).join("|")')" "an entry with only --question stores the rest as null"
+odo open --question 'Q3' --option only-one --root-run-id R1 > /dev/null; eq 2 "$?" "a single --option is a usage error (exit 2)"
+odo open --root-run-id R1 > /dev/null; eq 2 "$?" "open without --question is a usage error"
+odo open --question 'Q4' --replace --root-run-id R1 > /dev/null; eq 2 "$?" "the removed --replace flag is refused (no compat shim)"
+eq 2 "$(jf "$F1" 'v.decisions.length')" "usage errors left the file untouched"
+odo show --root-run-id R1 --json > "$SB/show.out"; eq 0 "$?" "show --json exits 0 when questions are open"
+eq 'Q one?,Q two?' "$(jf "$SB/show.out" 'v.decisions.map((d)=>d.question).join(",")')" "show --json prints every open entry"
+odo show --root-run-id R1 > "$SB/show.txt"; eq 0 "$?" "show (text) exits 0"
+eq 'yes' "$(grep -q 'Q one?' "$SB/show.txt" && grep -q 'Q two?' "$SB/show.txt" && grep -q 'BG one' "$SB/show.txt" && grep -q 'not_authorized: NA one' "$SB/show.txt" && echo yes || echo no)" "show (text) lists both questions with their context"
 odo show --root-run-id R-none --json > "$SB/show2.out"; eq 1 "$?" "show --json exits 1 when none is open (other root)"
-odo close --root-run-id R1 > /dev/null; eq 0 "$?" "close removes the file"
-assert_file_absent "$F1" "closed decision file is gone"
-odo close --root-run-id R1 > /dev/null; eq 0 "$?" "close is idempotent"
-odo show --root-run-id R1 --json > /dev/null; eq 1 "$?" "show exits 1 after close"
-# six concurrent opens: exactly one wins, the rest are refused, the file is intact JSON
+odo close --root-run-id R1 > /dev/null; eq 2 "$?" "close without --id is a usage error (it would be ambiguous)"
+odo close --id "$ID1" --root-run-id R1 > "$SB/close.out"; eq 0 "$?" "close --id removes one entry"
+eq "$ID2" "$(jf "$F1" 'v.decisions.map((d)=>d.id).join(",")')" "closing one entry leaves the other"
+odo close --id "$ID1" --root-run-id R1 > "$SB/close2.out"; eq 0 "$?" "close of an already-closed id is idempotent (exit 0)"
+eq 'not open: '"$ID1" "$(cat "$SB/close2.out")" "and says so"
+odo close --id "$ID2" --root-run-id R1 > /dev/null; eq 0 "$?" "close of the last entry succeeds"
+assert_file_absent "$F1" "the file is removed when its last entry goes"
+odo show --root-run-id R1 --json > /dev/null; eq 1 "$?" "show exits 1 after the last close"
+# six concurrent opens: ALL win, none is lost, the file is intact JSON
 rm -f "$SB"/c*.rc
 for i in 1 2 3 4 5 6; do ( odo open --question "P$i" --root-run-id RC > /dev/null; echo $? > "$SB/c$i.rc" ) & done; wait
-eq '0 3 3 3 3 3' "$(cat "$SB"/c?.rc | sort | tr '\n' ' ' | sed 's/ $//')" "concurrent open x6: one wins (0), five are refused (3)"
-eq yes "$(node -e 'try{JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write("yes")}catch(e){process.stdout.write("no")}' "$COMMON/autopilot/decisions/${KEY}--RC.json")" "concurrent open leaves one intact file"
-odo close --root-run-id RC > /dev/null
+eq '0 0 0 0 0 0' "$(cat "$SB"/c?.rc | sort | tr '\n' ' ' | sed 's/ $//')" "concurrent open x6: all six succeed"
+eq '6|6' "$(jf "$COMMON/autopilot/decisions/${KEY}--RC.json" 'v.decisions.length+"|"+new Set(v.decisions.map((d)=>d.id)).size')" "concurrent open leaves one intact file with six distinct entries (none lost)"
+rm -f "$COMMON/autopilot/decisions/${KEY}--RC.json"
+# concurrent close x12 + open x12 on one scope: every close lands, every open lands, nothing else is lost (the close path takes the same lock)
+FK="$COMMON/autopilot/decisions/${KEY}--RK.json"
+: > "$SB/keep.ids"; : > "$SB/gone.ids"
+for i in $(seq 1 12); do odo open --question "keep-$i" --root-run-id RK >> "$SB/keep.ids"; odo open --question "gone-$i" --root-run-id RK >> "$SB/gone.ids"; done
+eq 24 "$(jf "$FK" 'v.decisions.length')" "setup: 24 entries open on the scope"
+rm -f "$SB"/k*.rc "$SB"/n*.rc "$SB"/new.ids.*
+i=0; while read -r gid; do i=$((i+1)); ( odo close --id "$gid" --root-run-id RK > /dev/null; echo $? > "$SB/k$i.rc" ) & done < "$SB/gone.ids"
+for i in $(seq 1 12); do ( odo open --question "new-$i" --root-run-id RK > "$SB/new.ids.$i"; echo $? > "$SB/n$i.rc" ) & done; wait
+eq '0' "$(cat "$SB"/k*.rc "$SB"/n*.rc | sort -u | tr '\n' ' ' | sed 's/ $//')" "concurrent close x12 + open x12: every call exits 0"
+cat "$SB/keep.ids" "$SB"/new.ids.* | LC_ALL=C sort > "$SB/want.ids"
+jf "$FK" 'v.decisions.map((d)=>d.id).sort().join("\n")' > "$SB/have.ids"; echo >> "$SB/have.ids"
+eq 24 "$(wc -l < "$SB/have.ids" | tr -d ' ')" "concurrent close + open: 24 entries remain (12 kept + 12 new, 12 closed gone)"
+eq same "$(cmp -s "$SB/want.ids" "$SB/have.ids" && echo same || echo differ)" "concurrent close + open: the surviving id set is exactly the kept + new ids (no lost update, no resurrected close)"
+rm -f "$FK"
 # unbound scope file name = project_key
-odo open --question 'unbound?' > /dev/null; eq 0 "$?" "open without a root targets the unbound scope"
+IDU=$(odo open --question 'unbound?'); eq 0 "$?" "open without a root targets the unbound scope"
 assert_file_exists "$COMMON/autopilot/decisions/${KEY}.json" "unbound decision file is <project_key>.json"
-odo close > /dev/null
+odo close --id "$IDU" > /dev/null
 # schema file validates a written file
-odo open --question 'S?' --option a --option b --not-authorized x --root-run-id RS > /dev/null
-eq yes "$(node -e 'const {validateJsonSchema}=require(process.argv[1]+"/scripts/validate-json-schema.js");const s=JSON.parse(require("fs").readFileSync(process.argv[1]+"/schemas/decision.schema.json","utf8"));const v=JSON.parse(require("fs").readFileSync(process.argv[2],"utf8"));process.stdout.write(validateJsonSchema(s,v).valid?"yes":"no")' "$REPO_ROOT" "$COMMON/autopilot/decisions/${KEY}--RS.json" 2>&1 | tail -1)" "schemas/decision.schema.json validates the helper's output"
-eq no "$(node -e 'const {validateJsonSchema}=require(process.argv[1]+"/scripts/validate-json-schema.js");const s=JSON.parse(require("fs").readFileSync(process.argv[1]+"/schemas/decision.schema.json","utf8"));process.stdout.write(validateJsonSchema(s,{schema:"autopilot.decision/1",question:5}).valid?"yes":"no")' "$REPO_ROOT" 2>&1 | tail -1)" "schema rejects a non-string question"
+odo open --question 'S?' --option a --option b --recommendation a --root-run-id RS > /dev/null
+vs() { node -e 'const {validateJsonSchema}=require(process.argv[1]+"/scripts/validate-json-schema.js");const s=JSON.parse(require("fs").readFileSync(process.argv[1]+"/schemas/decision.schema.json","utf8"));const v=JSON.parse(process.argv[2]);process.stdout.write(validateJsonSchema(s,v).valid?"yes":"no")' "$REPO_ROOT" "$1" 2>&1 | tail -1; }
+eq yes "$(vs "$(cat "$COMMON/autopilot/decisions/${KEY}--RS.json")")" "schemas/decision.schema.json validates the helper's output"
+eq no "$(vs '{"schema":"autopilot.decision/2","decisions":[{"question":5}]}')" "schema rejects a non-string question"
+eq no "$(vs '{"schema":"autopilot.decision/1","question":"Q","options":null}')" "schema rejects the old decision/1 shape"
+eq no "$(vs "$(node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));j.decisions=[];process.stdout.write(JSON.stringify(j))' "$COMMON/autopilot/decisions/${KEY}--RS.json")")" "schema rejects an empty decisions[] (the file is removed instead)"
 rm -f "$COMMON/autopilot/decisions/${KEY}--RS.json"
-node -e 'const fs=require("fs");const v={schema:"autopilot.decision/1",question:"Q",options:null,context:null,root_run_id:"RS",repo_identity:"x",project_key:"y",opened_at:"2026-10-05T00:00:00.000Z",opened_by_session:null};fs.writeFileSync(process.argv[1],JSON.stringify(v))' "$SB/no-na.json"
-eq yes "$(node -e 'const {validateJsonSchema}=require(process.argv[1]+"/scripts/validate-json-schema.js");const s=JSON.parse(require("fs").readFileSync(process.argv[1]+"/schemas/decision.schema.json","utf8"));process.stdout.write(validateJsonSchema(s,JSON.parse(require("fs").readFileSync(process.argv[2],"utf8"))).valid?"yes":"no")' "$REPO_ROOT" "$SB/no-na.json" 2>&1 | tail -1)" "schema: a brief-shape file WITHOUT not_authorized validates"
+
 
 # ---- B. watcher driver ------------------------------------------------------------------------------------
 cat > "$SB/driver.js" <<'JS'
@@ -115,7 +141,8 @@ const srcRoles = (m) => (m ? m.sources.map((s) => s.role).join(',') : 'nomodel')
 const tasksFile = (sid, o) => W(path.join(live, 'tasks', `${sid}.json`), { schema: 'autopilot.session-tasks/1', session_id: sid, cwd: repo, project_key: key, updated_at: iso(T), first_created_at: iso(T), tasks: [], counts: { total: 0, completed: 0, in_progress: 0 }, current: null, ...o });
 const marker = (sid, o) => W(path.join(sessDir, `${sid}.json`), { session_id: sid, level: 'l3', repo_root: repo, started_at: iso(T), expires_at: iso(T + 3600e3), repo_identity: ident, project_key: key, root_run_id: null, ...o });
 const wrec = (extra = {}) => ({ schema_version: 1, artifact_type: 'controller_progress_receipt', project_id: 'm', deliverable_id: 'n', generation: 0, active_process: null, completed_deliverables: ['d1'], remaining_deliverables: ['d2'], deliverable_count: 2, frozen_denominator_digest: 'f'.repeat(64), blocked_reason: null, eta_basis: 'x', gate_state: { entries: [] }, resource_debt_state: { open: [], released: [] }, phase: 'IMPLEMENTING', work_order_id: 'wo', root_run_id: 'R1', issued_at: '2026-10-04T02:00:00.000Z', digest: 'e'.repeat(64), deliverable_titles: { d1: 'First deliverable' }, ...extra });
-const decisionFile = (root, o) => W(path.join(common, 'autopilot', 'decisions', `${scopeKey(root)}.json`), { schema: 'autopilot.decision/1', question: 'DQ?', options: ['yes', 'no'], context: null, not_authorized: 'NA-reason', root_run_id: root, repo_identity: ident, project_key: key, opened_at: iso(T - 60e3), opened_by_session: null, ...o });
+const dEntry = (o) => ({ id: 'd-00000001', question: 'DQ?', background: 'DBG', options: [{ label: 'yes', description: 'yes-desc' }, { label: 'no', description: 'no-desc' }], recommendation: 'yes', why: 'DWHY', blocks: 'DBLOCKS', not_authorized: 'DNA', source: 'DSRC', opened_at: iso(T - 60e3), opened_by_session: null, ...o });
+const decisionFile = (root, o = {}, entries = null) => { const { entry, ...top } = o; W(path.join(common, 'autopilot', 'decisions', `${scopeKey(root)}.json`), { schema: 'autopilot.decision/2', root_run_id: root, repo_identity: ident, project_key: key, decisions: entries || [dEntry(entry || {})], ...top }); };
 const cmpDir = (root) => path.join(common, 'autopilot', 'compare', root);
 const sha = (b) => require('crypto').createHash('sha256').update(b).digest('hex');
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
@@ -172,16 +199,23 @@ out('d_before_needs', model('R1').needs_decision);
 decisionFile('R1', {});
 const vd = versions('R1'); settle();
 m = model('R1');
-out('d_needs', m.needs_decision); out('d_question', m.decision && m.decision.question);
-out('d_options', m.decision ? m.decision.options.map((o) => o.label).join(',') : '-');
-out('d_not_authorized', m.decision && m.decision.not_authorized);
+out('d_needs', m.needs_decision); out('d_question', m.decisions[0] && m.decisions[0].question);
+out('d_options', m.decisions[0] ? m.decisions[0].options.map((o) => o.label + ':' + o.description).join(',') : '-');
+out('d_context', m.decisions[0] && [m.decisions[0].background, m.decisions[0].recommendation, m.decisions[0].why, m.decisions[0].blocks, m.decisions[0].not_authorized, m.decisions[0].source].join('|'));
 out('d_source', srcRoles(m).includes('decision') ? 'yes' : 'no');
 out('d_republish', versions('R1') - vd);
 decisionFile('R1', { root_run_id: 'R9' }); settle(); out('d_other_root', model('R1').needs_decision);
 decisionFile('R1', { repo_identity: ident2 }); settle(); out('d_other_repo', model('R1').needs_decision);
-decisionFile('R1', { opened_at: iso(T - 30 * 86400e3) }); settle(); out('d_stale', model('R1').needs_decision); out('d_stale_flag', model('R1').decision && `${model('R1').decision.stale}:${model('R1').decision.age_s >= 30 * 86400}`); out('d_stale_text', html('R1').includes('（已等 30 天）') ? 'yes' : 'no');
-decisionFile('R1', { opened_at: iso(T + 3600e3) }); settle(); out('d_future', model('R1').needs_decision);
-decisionFile('R1', {}); settle(); out('d_fresh_flag', model('R1').decision && String(model('R1').decision.stale));
+decisionFile('R1', { entry: { opened_at: iso(T - 30 * 86400e3) } }); settle(); out('d_stale', model('R1').needs_decision); out('d_stale_flag', model('R1').decisions[0] && `${model('R1').decisions[0].stale}:${model('R1').decisions[0].age_s >= 30 * 86400}`); out('d_stale_text', html('R1').includes('（已等 30 天）') ? 'yes' : 'no');
+decisionFile('R1', { entry: { opened_at: iso(T + 3600e3) } }); settle(); out('d_future', model('R1').needs_decision);
+decisionFile('R1', {}); settle(); out('d_fresh_flag', model('R1').decisions[0] && String(model('R1').decisions[0].stale));
+// two coexisting entries: both reach the model (oldest first) and the page prints both in full
+decisionFile('R1', {}, [dEntry({ id: 'd-00000002', question: 'DQ-NEWER?', opened_at: iso(T - 30e3) }), dEntry({ id: 'd-00000001', question: 'DQ-OLDER?', opened_at: iso(T - 90e3) })]); settle();
+out('d_two_order', model('R1').decisions.map((d) => d.question).join(','));
+out('d_two_page', ['DQ-OLDER?', 'DQ-NEWER?', 'DBG', 'yes-desc', 'DWHY', 'DBLOCKS', '為什麼要你決定', 'DNA', 'DSRC'].every((x) => html('R1').includes(x)) ? 'yes' : 'no');
+// one entry malformed (no question): the other still shows
+decisionFile('R1', {}, [dEntry({ question: '' }), dEntry({ id: 'd-00000003', question: 'DQ-OK?' })]); settle(); out('d_bad_entry', model('R1').needs_decision ? 'shown' : 'hidden'); out('d_bad_entry_q', model('R1').decisions.map((d) => d.question).join(','));
+decisionFile('R1', {}); settle();
 W(path.join(common, 'autopilot', 'decisions', `${scopeKey('R1')}.json`), '{ nope'); settle(); out('d_corrupt', model('R1').needs_decision);
 decisionFile('R1', {}); settle(); out('d_back', model('R1').needs_decision);
 fs.unlinkSync(path.join(common, 'autopilot', 'decisions', `${scopeKey('R1')}.json`)); settle(); out('d_after_close', model('R1').needs_decision);
@@ -317,8 +351,8 @@ eq yes "$(dv p1_after_end_signal_not_unbound)" "planned: a session whose marker 
 eq false "$(dv d_before_needs)" "decision: none before the file exists"
 eq true "$(dv d_needs)" "decision: an open file makes needs_decision"
 eq 'DQ?' "$(dv d_question)" "decision: question on the model"
-eq 'yes,no' "$(dv d_options)" "decision: string options reach the renderer as labels"
-eq 'NA-reason' "$(dv d_not_authorized)" "decision: not_authorized reaches the model"
+eq 'yes:yes-desc,no:no-desc' "$(dv d_options)" "decision: options reach the model as label + description"
+eq 'DBG|yes|DWHY|DBLOCKS|DNA|DSRC' "$(dv d_context)" "decision: background, recommendation, why, blocks and source reach the model"
 eq yes "$(dv d_source)" "decision: source role decision recorded"
 eq 1 "$(dv d_republish)" "decision: appearing republishes once"
 eq false "$(dv d_other_root)" "decision negative: a file of another root is ignored"
@@ -328,6 +362,10 @@ eq 'true:true' "$(dv d_stale_flag)" "decision: stale file carries stale:true and
 eq yes "$(dv d_stale_text)" "decision: the page says （已等 30 天）"
 eq false "$(dv d_future)" "decision negative: a file dated in the future is rejected"
 eq false "$(dv d_fresh_flag)" "decision: a fresh file has stale:false"
+eq 'DQ-OLDER?,DQ-NEWER?' "$(dv d_two_order)" "decision: two coexisting entries both reach the model, oldest first"
+eq yes "$(dv d_two_page)" "decision: the page prints both questions with their full context"
+eq shown "$(dv d_bad_entry)" "decision: one malformed entry does not hide the other"
+eq 'DQ-OK?' "$(dv d_bad_entry_q)" "decision: only the valid entry is kept"
 eq false "$(dv d_corrupt)" "decision negative: a corrupt file is ignored"
 eq true "$(dv d_back)" "decision: a valid file is honoured again"
 eq false "$(dv d_after_close)" "decision: after close the page clears"
@@ -447,7 +485,7 @@ out('u_manifest_on_text', page.includes('本回合沒有待決事項') ? 'yes' :
 model = R.buildJobModel({ ...base, sourcesManifest: man({ decision: off, tasks: off, progress: off, compare: off }) });
 out('u_manifest_off_decision', model.wired.decision); out('u_manifest_off_planned', model.wired.planned);
 out('u_manifest_off_text', R.renderJobHtml(model).includes('決定：來源未接') ? 'yes' : 'no');
-model = R.buildJobModel({ ...base, decision: { question: 'q' }, sourcesManifest: man({ decision: off }) });
+model = R.buildJobModel({ ...base, decisions: [{ id: 'd-1', question: 'q', opened_at: '2026-10-04T00:00:00.000Z' }], sourcesManifest: man({ decision: off }) });
 out('u_input_beats_manifest', model.wired.decision);
 model = R.buildJobModel({ ...base });
 model = R.buildJobModel({ ...base, sourcesManifest: man({ task_status_input: on }) });

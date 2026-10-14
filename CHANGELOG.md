@@ -4,6 +4,7 @@
 
 ### 新增
 
+- **即時面板「待決議事項」區塊**：現況分頁多一個「待決議事項（N）」區塊，列出每一個正在等 owner 回答的問題，附完整脈絡：問題、背景、每個選項與說明、建議與理由、卡住了什麼、來源，以及選填的「為什麼要你決定」。owner 不必往前翻對話找要回什麼。決議檔改成 `autopilot.decision/2`：同一範圍可同時掛多題，`open` 追加並回傳 id，`close --id` 關一題，`show` 列全部；`ask-decision` hook 只取代自己 session 尚未回答的那題。審查頁、model.json、schema 與 Codex 鏡像同步。不做相容墊片：舊的 decision/1 檔和 `--replace` 已移除，殘留的 v1 檔要手動刪。後續小缺口見 BL-0163。
 - **`autopilot engine review-candidate`：只審、不寫的外部範圍審查（BL-0090 P1）**（plan `docs/plans/2026-10-13-review-only-external-candidate.md`）：外部團隊自己寫好、自己提交的一段 `base..head`，可以直接交給我們審，不必假裝成我們的 implementer。這個子命令不呼叫任何寫手、驗證作者或修復的模型；範圍只認 sealed 合約裡的 `adoption.head_sha`，從 Git 重新推導。
   - **收件**：合約新增選填的 `adoption` 區段（`head_sha`，選填 `author_family`）。收件時重新檢查：分支尖端必須等於 sealed head、base 必須是祖先、範圍不得為空、路徑都在 allowed prefixes 內、檔案數不超過上限。每一種拒絕都有具名原因，且在花任何模型呼叫之前發生。churn 超限只是回執上的警告，不拒絕。
   - **驗證**：`verify_cmd` 在被收件那個 commit 的全新 detached worktree 裡執行，不在操作者的 checkout，所以一個被 gitignore 的「讓測試通過」檔案不會讓它變綠。
@@ -81,6 +82,15 @@
 
 ### 修正
 
+- **資格考的 HTTP 通道真的送出思考強度**：`qualification-review-provider.js` 走 HTTP 時原本從不送思考強度，成績上的強度標籤其實是端點預設。新增 `QRP_HTTP_EFFORT`：Responses 送 `reasoning.effort`、chat completions 送 `reasoning_effort`；未設或 `default` 不送；不在 none／minimal／low／medium／high／xhigh 內的值（含 max）直接拒絕，不悄悄降級；Messages 協定與 cli 通道設了也拒絕。要讓 broker 放行，得列進 `--provider-env`。標籤與實際送出值的比對見 BL-0166。
+- **腦力題結果可以登記進成績單**：`engine-qualify.js` 產生的腦力題成績列補上 `capability_score`（抓到的埋點比例；合格的一定是 1，只用來比較失敗的程度）、`cost`（未知）與 `expires`（只提醒、不阻擋），`engine-scorecard.js record` 不再拒收。合格判定與評分器不變。穩定性測試原本對這段做逐位元組比對，改成對每一場失敗局與滿分局逐欄斷言。後續見 BL-0164、BL-0165。
+- **審查科資格考的「乾淨題」改成真的等價**：審查科考卷裡應該判「沒問題」的乾淨題，有 14 題（共 19 題）其實改變了行為（例如把鎖狀態用 `=== true` 收窄、`Object.is` 對 NaN／-0、`Number(null)` 變 0），審查者抓出來反而被算成誤報。這 14 題已改寫為真正等價；新增 `scripts/reviewer-clean-equivalence.test.js`，用型別邊界輸入在三個 seed 上逐題比對前後行為，把舊寫法放回去就會紅。之後再把 5 題改成「看起來可疑、其實等價」的寫法，才量得到過度標記。考卷版本 v4 → v6，鎖定指紋同步更新；舊的成績列不動。審查科與工頭作答時，`--raw-dir` 會寫下 `<role>-exchanges.jsonl`，有爭議的判定可以重新評分不必重考。後續見 BL-0162。
+- **腦力題評分器鎖定指紋更新**：`engine-qualify.js`（與 Codex 鏡像）的 `EXPECTED_BRAIN_GRADER_HASH` 改成跑到底版評分器的指紋，腦力題不再因指紋不符而拒考。
+- **作者派工紀錄標出真正的角色**（BL-0149）：`dispatch-author.sh` 寫的派工紀錄改從 `AUTOPILOT_DISPATCH_ROLE` 讀角色（只接受簡單代號，否則仍記 author），`dispatch-plan-review.js` 會帶 `plan-review`，即時面板不再把計畫審查算成寫手。面板上派工紀錄的有效時間改為 6 小時。新增 `hooks/tests/dispatch-author-manifest-role.test.sh`。
+- **l5／l6 標記的模型守衛只在真的跑非嚴格派工時警告**（BL-0141）：`dispatch-model-guard.js` 只有在 l5／l6 標記出現在一個非嚴格派工指令之前（同一行也算）才警告，不再對無關的指令誤報。
+- **review-candidate 的新測試檔進白名單、過期檢查改看 git 有沒有追蹤**（BL-0104）：`resolve-review-loop-consult-discuss-switch.test.sh` 把 `review-candidate` 的驅動與測試加進預設允許清單；判斷白名單項目是否過期改用 `git ls-files --error-unmatch`，不再因工作樹裡暫時不存在而誤判。
+- **嚴格端點的作者派工測試不再因隨機 session id 而紅**（BL-0151）：`dispatch-author-strict-endpoint.test.sh` 先把 UUID 遮掉再比對完整參數，並修正斷言的實際值／期望值順序。
+- **評測範例檔被改寫時直接點名**（BL-0122）：`orchestration-eval.test.sh` 在前後各算一次 `evals/orchestration/tasks` 的摘要，套件內任何測試寫到已提交的範例檔就會失敗並點名是哪個檔。套件外的寫入者仍待查，見 BL-0122。
 - **資格考一律把每一題考完（跑到底）**：consult／discuss 的題池折疊（tier1、locked_fail、locked_qualify）和腦力題評分器遇到 malformed、forged_telemetry 都不再提早停止；判定規則不變，同樣的答案得到同樣的合格與否。Tier-1 一旦出現就黏著，整場判不合格。`stop_reason` 記錄真正做出判定的規則，新資料列的 `tier1_terminated` 一律為 false。時間上限截斷與預算耗盡也不再蓋掉先前已定的失敗。模型回覆沒有可解析的 JSON 時，改成判該題失敗並繼續下一題，不再當成傳輸失敗中止整場。後續待辦見 BL-0160、BL-0161。
 - **完整性掃描不再把 mktemp 樣板當待辦標記，`--files` 也不再漏掃**（BL-0119）：6 個以上的 X 視為 mktemp 樣板，3 到 5 個仍是標記。`--files` 收到一整串檔名時會自動拆開，含換行就只按換行拆，檔名裡的空白不受影響，CRLF 的 `\r` 會去掉。不存在的檔案逐一在 stderr 警告，資料夾不警告。指向一般檔案的捷徑（symlink）照常掃描，不再被當成二進位檔默默跳過。新增 `hooks/tests/completeness-scan.test.sh`。剩下的小毛病見 BL-0159。
 - **repo-identity 失敗時說出真正原因**（BL-0128）：只有確定 git 低於 2.31 才提示版本，其他情況直接附上那次 rev-parse 的 git 錯誤訊息，不再重跑。找不到 git、`git --version` 失敗、git 成功卻沒給路徑，各自印一行說明；呼叫端開了 `set -euo pipefail` 也不會默默中止。`hooks/tests/repo-identity-parity.test.sh` 加了 36 格失敗情境矩陣。

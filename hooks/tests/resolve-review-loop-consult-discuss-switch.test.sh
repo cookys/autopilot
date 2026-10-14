@@ -381,6 +381,8 @@ hooks/tests/engine-lifecycle-observation.test.sh|partial roster fixture, resolve
 hooks/tests/final-panel-kimi-agy-intake.test.sh|kimi/agy final-panel intake fixture roster (lands with the in-flight release)
 hooks/tests/final-panel-seat-resume.test.sh|in-process roster object literal for a seat-resume fixture, never resolved from config; consult/discuss not involved
 hooks/tests/lib/final-panel-seat-xproc-driver.js|in-process roster object literal for a seat-resume fixture, never resolved from config; consult/discuss not involved
+hooks/tests/lib/review-candidate-driver.js|in-process roster object literal built from seat fixtures for a review-candidate fixture, never resolved from config; consult/discuss not involved
+hooks/tests/review-candidate.test.sh|in-process roster object literals passed straight to the candidate builder, never resolved from config; consult/discuss not involved
 hooks/tests/lib/boundary-resume-terminal-driver.js|in-process roster object literal for a seat-resume fixture, never resolved from config; consult/discuss not involved
 hooks/tests/fixtures/implementation-campaign/probe-red-baseline.js|campaign probe fixture roster literal
 hooks/tests/fixtures/pre-consult-discuss-review-loop-config.md|frozen pre-D6 shipped-template copy
@@ -415,7 +417,10 @@ done <<< "$POP_B_MATCHED"
 assert_eq "" "$POP_B_UNREVIEWED" "Population B: every 'reviewer_engine:' file pins the switches explicitly or is a named POP_B_DEFAULT_ALLOW member (unreviewed paths listed)"
 POP_B_STALE=""
 while IFS='|' read -r p _; do
-  [ -f "$REPO_ROOT/$p" ] || continue
+  # Same universe as POP_B_MATCHED (git grep sees tracked files only): an entry is stale only if it
+  # is TRACKED and does not match. A file that merely exists on disk (untracked, mid-rename, not yet
+  # added by a parallel hand) is outside the grep's view, so calling it stale is a false red (BL-0104).
+  git -C "$REPO_ROOT" ls-files --error-unmatch -- "$p" >/dev/null 2>&1 || continue
   printf '%s\n' "$POP_B_MATCHED" | grep -qxF "$p" || POP_B_STALE="$POP_B_STALE $p"
 done <<< "$POP_B_DEFAULT_ALLOW"
 assert_eq "" "$POP_B_STALE" "Population B: no allowlisted file exists without matching 'reviewer_engine:' (stale entries listed)"

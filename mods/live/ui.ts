@@ -71,8 +71,8 @@ export const STATES: Record<StateId, { glyph: string; key: ThemeKey; bold: boole
 // the one total order of "worse" (§3.3); `unknown` ranks last so a missing mapping never hides a real finding
 export const SEVERITY: readonly StateId[] = ['need_you', 'failed', 'stalled', 'findings', 'running', 'stopped', 'pending', 'done', 'skipped', 'unknown']
 
-// freshness thresholds (§2.5), ms; every comparison is strict (`>`): exactly at the threshold is still fresh
-export const FRESH_MS = { quiet: 1_800_000, planReview: 86_400_000, terminalPlan: 604_800_000, codeReview: 86_400_000, dispatch: 86_400_000 } as const
+// freshness thresholds (§2.5), ms; dispatch = a finished run older than 6 h is counted in the chip, not listed (BL-0149); every comparison is strict (`>`): exactly at the threshold is still fresh
+export const FRESH_MS = { quiet: 1_800_000, planReview: 86_400_000, terminalPlan: 604_800_000, codeReview: 86_400_000, dispatch: 21_600_000 } as const
 export type FreshKind = keyof typeof FRESH_MS
 export const isStale = (kind: FreshKind, ageMs: number): boolean => ageMs > FRESH_MS[kind]
 
@@ -325,7 +325,7 @@ export const FACT_OWNER = {
   'dispatch.runs': 'dispatch', 'dispatch.counts': 'dispatch',
   'review.round': 'review', 'review.seats': 'review', 'review.qc': 'review', 'review.gates': 'review', 'review.plan': 'review',
   'review.decisions': 'review', 'review.ladder': 'review', 'review.undocumented': 'review',
-  'now.attention': 'now', 'now.position': 'now', 'now.background': 'now', 'now.tasks': 'now', 'now.recent': 'now',
+  'now.attention': 'now', 'now.pending': 'now', 'now.position': 'now', 'now.background': 'now', 'now.tasks': 'now', 'now.recent': 'now',
   'usage.limit_max': 'spend', 'usage.brain': 'spend', 'usage.window5h': 'spend', 'usage.window7d': 'spend', 'usage.today': 'spend', 'usage.history': 'spend', 'usage.account': 'spend',
   'spend.session': 'spend', 'spend.local_today': 'spend',
   'usage.window_other': 'spend', // any other rate-limit window the host reports (spend_limit, an unknown kind)
@@ -339,7 +339,7 @@ export type FactId = keyof typeof FACT_OWNER
 
 // the order of sections inside each tab (§2.1), as data; and the sections that start folded (要你處理 never does)
 export const SECTION_ORDER: Record<PaneTab, readonly string[]> = {
-  now: ['attention', 'where', 'tabs', 'background', 'tasks', 'recent'],
+  now: ['attention', 'questions', 'where', 'tabs', 'background', 'tasks', 'recent'],
   dispatch: ['running', 'finished', 'other'],
   review: ['code', 'qc', 'decisions', 'plan'],
   spend: ['limits', 'today', 'last24', 'account'],

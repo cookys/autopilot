@@ -3,7 +3,7 @@
 
 const crypto = require('crypto');
 
-const GENERATOR_VERSION = 'reviewer-metamorphic-v4';
+const GENERATOR_VERSION = 'reviewer-metamorphic-v6';
 
 const BASE_RULES = Object.freeze([
   Object.freeze({
@@ -677,7 +677,7 @@ function cleanBodies(seed) {
       ],
       after: [
         `function ${names[0]}() {`,
-        '  const error = new Error("operation failed"); error.code = "E_OPERATION"; throw error;',
+        '  throw Object.assign(new Error("operation failed"), {});',
         '}',
         `module.exports = ${names[0]};`,
       ],
@@ -694,12 +694,12 @@ function cleanBodies(seed) {
       ],
       after: [
         `function ${names[1]}(permitted, action) {`,
-        '  const allowed = new Set([...permitted]);',
-        '  return allowed.has(action);',
+        '  const allowed = new Set(permitted);',
+        '  return allowed.has(action) === true;',
         '}',
         `module.exports = ${names[1]};`,
       ],
-      changedIndex: 1,
+      changedIndex: 2,
       testSource: "'use strict';\nconst candidate = require(process.argv[2]);\nif (!candidate(['read'], 'read') || candidate(['read'], 'write')) throw new Error('authorization changed');\n",
     },
     {
@@ -711,7 +711,7 @@ function cleanBodies(seed) {
       ],
       after: [
         `function ${names[2]}(child) {`,
-        '  return Number(child.status);',
+        '  return (child.status);',
         '}',
         `module.exports = ${names[2]};`,
       ],
@@ -728,7 +728,7 @@ function cleanBodies(seed) {
       ],
       after: [
         `function ${names[3]}(state) {`,
-        '  if (state.locked === true) throw new Error("resource busy");',
+        '  if (!!state.locked === true) throw new Error("resource busy");',
         '  return state.value;',
         '}',
         `module.exports = ${names[3]};`,
@@ -745,7 +745,7 @@ function cleanBodies(seed) {
       ],
       after: [
         `function ${names[4]}(values, index) {`,
-        '  return index >= 0 && index <= values.length - 1 ? values[index] : null;',
+        '  return (index >= 0 && index < values.length) === true ? values[index] : null;',
         '}',
         `module.exports = ${names[4]};`,
       ],
@@ -762,7 +762,7 @@ function cleanBodies(seed) {
       ],
       after: [
         `function ${names[5]}(actual, expected) {`,
-        '  if (!Object.is(actual, expected)) throw new Error("assertion mismatch");',
+        '  if (!(actual === expected)) throw new Error("assertion mismatch");',
         '  return true;',
         '}',
         `module.exports = ${names[5]};`,
@@ -830,7 +830,7 @@ function cleanBodies(seed) {
       ],
       after: [
         `function ${names[9]}(mode) {`,
-        '  if (mode !== "strict") throw new TypeError("unsupported mode");',
+        '  if ((mode === "strict") === false) throw new Error("unsupported mode");',
         '  return mode;',
         '}',
         `module.exports = ${names[9]};`,
@@ -848,7 +848,7 @@ function cleanBodies(seed) {
       ],
       after: [
         `function ${names[10]}(node, visiting) {`,
-        '  if (Boolean(visiting.has(node))) throw new Error("cycle detected");',
+        '  if (visiting.has(node) ? true : false) throw new Error("cycle detected");',
         '  return true;',
         '}',
         `module.exports = ${names[10]};`,
@@ -879,9 +879,15 @@ function relationalBody(seed, label, symmetric) {
   }
   const matrixName = identifier(seed, `${label}:matrix`);
   const functionName = identifier(seed, `${label}:function`);
+  // Identical range guard on both sides: it makes the transposed read exactly
+  // equivalent to the direct read for every input (out-of-range and non-integer
+  // indices throw the same way before and after), so the symmetric (clean) pair
+  // is behaviourally identical on type-boundary inputs, not only in-range ones.
+  const guard = `  if (!Number.isInteger(left) || !Number.isInteger(right) || left < 0 || right < 0 || left >= ${matrixName}.length || right >= ${matrixName}.length) throw new RangeError("index out of range");`;
   const before = [
     `const ${matrixName} = ${JSON.stringify(matrix)};`,
     `function ${functionName}(left, right) {`,
+    guard,
     `  return ${matrixName}[left][right];`,
     '}',
     `module.exports = ${functionName};`,
@@ -889,6 +895,7 @@ function relationalBody(seed, label, symmetric) {
   const after = [
     `const ${matrixName} = ${JSON.stringify(matrix)};`,
     `function ${functionName}(left, right) {`,
+    guard,
     `  return ${matrixName}[right][left];`,
     '}',
     `module.exports = ${functionName};`,
@@ -929,7 +936,7 @@ function relationalBody(seed, label, symmetric) {
   return {
     before,
     after,
-    changedIndex: 2,
+    changedIndex: 3,
     testSource,
     witnessCall: generatedWitnessCall,
   };

@@ -590,6 +590,25 @@ test('BL-0163 turn_tracked: no turn file at open (awaiting-owner off) -> never o
   assert.deepStrictEqual(orph(), { 'No tracking?': false, 'Tracked?': true, 'Old format?': false }, 'only the entry that saw a turn file at open is orphaned once it is gone');
 });
 
+test('BL-0163 non-BMP session id: the stored opened_by_session matches the turn file name, so a live session is not labelled orphaned', () => {
+  const e = mkEnv(); const repo = mkRepo();
+  const sid = 's\u{1F600}x'; // sanitizeSessionId (per code point) -> s_x ; a UTF-16-unit slice would give s__x
+  fs.mkdirSync(path.join(e.live, 'turn'), { recursive: true });
+  fs.writeFileSync(path.join(e.live, 'turn', 's_x.json'), JSON.stringify({ schema: 'autopilot.session-turn/1', session_id: sid, state: 'active' }));
+  run(ASK, pre(repo, sid, [q('Emoji session asks?', ['a', 'b'])]), e.env);
+  const entry = allEntries(repo)[0];
+  assert.strictEqual(entry.opened_by_session, 's_x');
+  assert.strictEqual(entry.turn_tracked, true);
+  const { scopeFromCwd } = require(path.join(ROOT, 'src', 'status', 'project-key.js'));
+  const { commonDirOf } = require(path.join(ROOT, 'src', 'status', 'scope-key.js'));
+  const { readDecision } = require(path.join(ROOT, 'src', 'status', 'decision-input.js'));
+  const sc = scopeFromCwd(repo);
+  const view = () => readDecision({ commonDir: commonDirOf(sc.repo_identity), key: sc.project_key, root: null, identity: sc.repo_identity, nowMs: Date.now(), liveBase: e.live }).value[0];
+  assert.strictEqual(view().orphaned, false, 'the session is alive: its turn file is there');
+  fs.rmSync(path.join(e.live, 'turn', 's_x.json'));
+  assert.strictEqual(view().orphaned, true, 'control: once the file is gone the same entry is orphaned');
+});
+
 test('hygiene: nothing of this run survives teardown (detached writers stopped, dirs removed)', () => {
   teardown();
   assert.deepStrictEqual(ownPids(), []);

@@ -31,9 +31,8 @@ const SOURCE = 'ask_user_question'; // the entry's `origin`
 const SOURCE_TEXT = 'depth-0 AskUserQuestion'; // the entry's `source` (who asked), shown to the owner
 const KNOB = 'AUTOPILOT_ASK_DECISION';
 
-function normSession(raw) {
-  return String(raw || '').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
-}
+// The writer/reader contract for live-file names (per code point, first 64): the same function names the turn file the watcher looks for.
+const { sanitizeSessionId: normSession } = require('../scripts/lib/live-state-dir.js');
 
 // This session's unexpired marker record (orchestrator OR plain), read through the shared reader
 // scripts/session-mode.js readSessionRecord(sessionId): the hook payload carries the session id, so the env-keyed

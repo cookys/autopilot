@@ -19,7 +19,8 @@ Git repository and runs the managed review rail over exactly that range:
 
 Autopilot writes no code here. There is no implementer, no verification-author and no repair model
 call at any point; the adopted-range adapter refuses to dispatch a writer if anything ever reaches it
-(`src/engine/autopilot-engine.js:8061`). Findings are reported, never fixed by autopilot.
+(`src/engine/autopilot-engine.js:8061`). Findings are reported, never fixed inside this campaign. If you want autopilot's writer to fix them, the
+`repair` choice (section 6) closes this campaign and hands you a separate `implement-review` campaign to run.
 
 Two things this is not:
 
@@ -45,7 +46,7 @@ authority on what is legal; an unknown field anywhere is rejected.
 |---|---|
 | `adoption.head_sha` | Required. A 40-hex commit id that exists in the repository and differs from `base_sha`. (The sealer also accepts a 64-hex id in a sha256 repository, but intake supports only 40-hex SHA-1 repositories and refuses such a run with `campaign_repo_precondition_failed`.) |
 | `adoption.author_family` | Optional. Names the model family that wrote the range. It can only tighten the panel: that family's seats do not count toward the required family count. Use exactly one of `openai`, `anthropic`, `alibaba`, `google`, `xai`, `minimax`, `zhipu`. The match is literal against each seat's family (derived from its model name), and **a value that matches no seat is accepted silently and excludes nothing**, so check the spelling. |
-| `adoption.disposition_preset` | Optional, `end` or `return`. Applies your choice to a parked review (section 6): `end` closes it at the first park, `return` is applied by a later `--resume`. `repair` is rejected at seal time (`review_candidate_repair_not_provided`). |
+| `adoption.disposition_preset` | Optional, `end`, `return` or `repair`. Applies your choice to a parked review (section 6): `end` and `repair` close it at the first park, `return` is applied by a later `--resume`. |
 | `max_repair_generations` | Must be exactly `0`. |
 | `mission_runtime`, `strict_dispatch`, `unit_class` | Must be absent. |
 | `branch` | The branch whose tip is the head. At admission the tip must equal `adoption.head_sha`. |
@@ -317,11 +318,13 @@ phases `VERTICAL_VERIFICATION`, `REVIEWING` or `ADJUDICATING` while a run is act
 | `final_panel_seat_cleanroom_unavailable` | A `codex`, `kimi` or `agy` seat failed its cleanroom probe | Fix that runner's install or login, or replace the seat. |
 | `final_panel_seat_unqualified` | A seat is not the qualified reviewer tuple, not pinned, and has no scorecard row | Pin the seat or use a qualified one (section 4). |
 | `review_candidate_governance_enforce` | Seal-time, governance is `enforce` | Use governance `off` or `shadow`. |
-| `review_candidate_repair_not_provided` | `repair` was sealed as a preset, or passed as a continuation | Not available yet (section 6). Use `end` or `return`. |
-| `review_candidate_continuation_unknown` | `--campaign-continuation` is not `end` or `return` | Use one of those. |
+| `review_candidate_repair_reviewed_head_missing` | `repair`, but the reviewed head of the parked review could not be determined (a resume has no fallback to the sealed head) | The review stays parked. Use `end` or `return`. |
+| `review_candidate_repair_head_mismatch` | `repair`, but the reviewed head is not the candidate the park itself stored | The review stays parked. Use `end` or `return`. |
+| `review_candidate_repair_seed_base_mismatch` | The seeded contract's `base_sha` is not the reviewed head (a seed that is not a faithful repair of the reviewed range is refused; the other `review_candidate_repair_seed_*` codes mean the same family of failure) | The review stays parked. Use `end` or `return`. |
+| `review_candidate_continuation_unknown` | `--campaign-continuation` is not `end`, `return` or `repair` | Use one of those. |
 | `review_candidate_continuation_requires_resume` | `--campaign-continuation` without `--resume` | Add `--resume`. |
-| `review_candidate_continuation_not_parked` | A continuation other than `end` on a campaign that is not parked | `return` needs the parked state. (`end` works on any non-terminal review-only campaign.) |
-| `review_candidate_continuation_required` | Resumed a parked review with neither a flag nor a preset | Pass `--campaign-continuation end` or `return`. |
+| `review_candidate_continuation_not_parked` | A continuation other than `end` on a campaign that is not parked | `return` and `repair` need the parked state. (`end` works on any non-terminal review-only campaign.) |
+| `review_candidate_continuation_required` | Resumed a parked review with neither a flag nor a preset | Pass `--campaign-continuation end`, `return` or `repair`. |
 | `review_candidate_return_no_new_head` | `return`, but the branch is still at the reviewed head | Push your fix first. |
 | `review_candidate_return_not_descendant` | `return`, but the new tip does not descend from the reviewed head | Do not rewrite history; add commits on top of the reviewed head. |
 | `review_candidate_resume_phase_unsupported` | A review interrupted between its verdict and the park (phase `ADJUDICATING`) cannot be resumed | Close it with `--resume --campaign-continuation end`, or seal a new contract (section 3) and run again. |
@@ -337,10 +340,10 @@ Other blocked results can carry non-`review_candidate_` codes from shared intake
 provider-readiness refusal when a seat is not live). A refusal at the `provider_readiness` phase carries
 its code in `rejection_code`, not `code`. Read `reason` first.
 
-## 6. After a park: end, return, preset
+## 6. After a park: end, return, repair, preset
 
 When the review finds problems it parks as `awaiting_disposition`. You decide what happens next, per
-campaign or ahead of time with a preset. There are two choices today.
+campaign or ahead of time with a preset. There are three choices.
 
 ### `end`: close it not-ready
 
@@ -396,17 +399,59 @@ re-derived first, and seats that already reviewed are not asked again).
 
 - `end`: a review that parks on findings closes itself in the same invocation. One command, terminal
   not-ready, findings listed. Use it when no human is available to choose.
+- `repair`: like `end`, the review closes itself at the first park, and the result carries the
+  `repair_handoff` described below. Use it for an unattended caller that wants a writer round.
 - `return`: the review still parks. A later `--resume` with no `--campaign-continuation` applies `return`.
   On a review that is parked and not yet closed, a `--campaign-continuation` flag wins over the preset.
-  (A preset of `end` closes at the first park, so there is nothing left for a flag to override; to
-  choose `return` after all, seal without a preset, or one set to `return`.)
+  (A preset of `end` or `repair` closes at the first park, so there is nothing left for a flag to
+  override; to choose another exit after all, seal without a preset, or one set to `return`.)
 
-### `repair`: not provided yet
+### `repair`: hand the findings to a writer
 
-A third choice, handing the findings to autopilot's writer through a seeded `implement-review` campaign,
-is planned but not available. Sealing `repair` as a preset, or passing `--campaign-continuation repair`,
-is refused with `review_candidate_repair_not_provided` before any spend. Use `end` or `return`. This
-section will describe the handoff when it ships.
+A review-only campaign never writes. Choosing `repair` (`--campaign-continuation repair`, or a sealed
+`adoption.disposition_preset: "repair"` for an unattended caller) authorizes **one repair round**. It does
+not mean you accept every finding: the findings stay the reviewers' claims.
+
+```bash
+AUTOPILOT_LEVEL=l4 node bin/autopilot.js engine review-candidate \
+  --campaign-contract /abs/review/contract.json --campaign-seal /abs/review/contract.seal.json \
+  --spec-file /abs/review/spec.md --cwd /abs/path/to/repo \
+  --resume --campaign-continuation repair
+```
+
+What happens:
+
+1. The review-only campaign closes **not-ready**, which is honest because the range did not pass, and the
+   findings are listed. No model call is made while closing, and the range is not re-derived. The output
+   is `status: "blocked"`, `phase: "review_candidate_repair"`,
+   `code: "review_candidate_disposition_repair"`.
+2. The result carries `repair_handoff`, and the same files are written under
+   `<git-common-dir>/autopilot/review-candidate-repair/<campaign-id>/`: `contract.json` and `task.md`
+   (if the write fails, `repair_handoff.write_error` says why and the inline copy in the result is the
+   only one). The seed is built and checked **before** the campaign closes: its base must be the head
+   that was reviewed, cross-checked against the candidate stored when the review parked. If that cannot
+   be established, `repair` is refused (`review_candidate_repair_reviewed_head_missing` or
+   `review_candidate_repair_head_mismatch`) and the review stays parked, so you can still `end` or
+   `return`.
+3. `contract.json` is a normal, unsealed `implement-review` contract with no `adoption` section.
+   `base_sha` is the reviewed head (the latest head if you used `return` earlier), `branch` is
+   `repair/<ticket>-repair`, and paths, verify command, acceptance and caps are copied from your adoption
+   contract. `max_repair_generations` is `min(2, profile ceiling)`. Edit the draft first if you want
+   different bounds.
+4. `task.md` lists the findings as reviewer claims. The writer must verify each one against the code, fix
+   only those that hold, and list every finding it judges not to hold, with the reason, in its delivery.
+   Seal the contract with `scripts/implementation-campaign-check.js seal` (section 3) and run
+   `autopilot engine implement-review` with `task.md` as the prompt.
+
+Cost: one writer run plus that campaign's own review. Seat verdicts are not reused across campaigns: the
+new campaign's panel reviews `reviewed_head..new_head` from scratch.
+
+Refusals: `repair` on a review that is not parked is refused (`review_candidate_continuation_not_parked`),
+and so is `repair` without `--resume` (`review_candidate_continuation_requires_resume`).
+
+**Known limitation: a second repair of the same ticket reuses the branch name.** The seeded branch is
+always `repair/<ticket>-repair`, so repairing the same ticket again can overwrite the branch of the
+previous repair. To repair again, seal a new contract with a different `ticket` first (section 3).
 
 ### Findings you want to adjudicate
 
@@ -415,7 +460,7 @@ section will describe the handoff when it ships.
 `campaign_id`, `contract_digest`, `reviews[{review_digest, decisions[]}]`). It is bound to one campaign,
 contract and review digest, so a file for another run or another review is refused as stale. If must-fix
 findings remain after it, the campaign ends not-ready at the zero-repair ceiling with the findings listed.
-Most operators never need this; `end` and `return` are the normal exits.
+Most operators never need this; `end`, `return` and `repair` are the normal exits.
 
 ## 7. Common problems
 

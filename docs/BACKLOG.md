@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0156 -->
+<!-- next-id: BL-0158 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1841,3 +1841,29 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: BL-0090 P5 reviews, 2026-10-14
 - **Pointer**: docs/plans/2026-10-13-review-only-external-candidate.md
 - **Context**: Campaign digest in repair/<ticket>-repair; sweep review-candidate-repair/; control seed-before-close; drop seed if close fails; prompt says 1 round, contract allows 2; preset first-run seed refusal untested.
+
+### qualification provider: kimi CLI exams run without the no-tools agent file
+- **Id**: BL-0156
+- **Status**: open
+- **Since**: 2026-10-14
+- **Origin**: self
+- **Problem**: Kimi 參加資格考時，provider 直接用 kimi 預設的 agent，沒有套上我們做好的「不給工具」設定，事後也沒有檢查它有沒有動用工具。其他家考試都有關掉工具。
+- **Impact**: 中。Kimi 考試時理論上能讀寫檔或執行指令，隔離比其他家弱；8/30 的諮詢成績和今天的審查考試都是這樣考的。
+- **Trigger**: 下次 Kimi 考試前，或改 qualification-review-provider.js 的 kimi 分支時
+- **Effort**: S
+- **Source**: 2026-10-14 reviewer requalify (kimi lane)
+- **Pointer**: none
+- **Context**: qualification-review-provider.js kimi branch (~:1001) runs `kimi -m <model> -p` with the default agent; scripts/lib/kimi-containment.js write/audit is never called. Changes the containment fingerprint.
+
+### Kimi seat identity is spelled two ways, so strikes may miss the seat
+- **Id**: BL-0157
+- **Status**: open
+- **Since**: 2026-10-14
+- **Origin**: self
+- **Problem**: 同一個 Kimi K3 席位，成績紀錄和扣分紀錄用了兩種不同的寫法（一個用短橫線、一個用斜線），名字對不上。
+- **Impact**: 中。Kimi 的扣分可能算不到它的席位上，派工時看不到它被記過，該降級時不會降級。
+- **Trigger**: 下次調整 Kimi 席位，或改 strike 寫入時的席位辨識邏輯時
+- **Effort**: S
+- **Source**: 2026-10-14 Kimi qualification history check
+- **Pointer**: none
+- **Context**: scorecard events 157/166/182 use engine `kimi-code-k3`; strikes.jsonl #71 uses `kimi-code/k3` (implementer, engine_output). Check how strike lookup keys seats; normalise one side.

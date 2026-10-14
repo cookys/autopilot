@@ -64,15 +64,15 @@ rail_failed() { # <work-unit> [cause]
 CAUSE='precondition_failed: active session-mode=l5 blocks non-strict dispatch'
 seed same; rail_failed same "$CAUSE"; rail_failed same "$CAUSE"
 OUT="$(node "$PROBE" classify --ledger "$LB" --work-unit same "${PIN[@]}")"
-assert_eq "none" "$(printf '%s' "$OUT" | field recommend)" "(b) same cause twice: classify does not climb"
-assert_eq "repeated-refusal" "$(printf '%s' "$OUT" | field reason)" "(b) the stop names repeated-refusal"
+assert_eq "$(printf '%s' "$OUT" | field recommend)" "none" "(b) same cause twice: classify does not climb"
+assert_eq "$(printf '%s' "$OUT" | field reason)" "repeated-refusal" "(b) the stop names repeated-refusal"
 assert_contains "$(printf '%s' "$OUT" | field stop.cause)" "blocks non-strict dispatch" "(b) the stop carries the cause"
 seed diff; rail_failed diff "$CAUSE"; rail_failed diff "precondition_failed: something else"
 OUT="$(node "$PROBE" classify --ledger "$LB" --work-unit diff "${PIN[@]}")"
-assert_eq "U2" "$(printf '%s' "$OUT" | field recommend)" "(b) two different causes: the ladder still climbs"
+assert_eq "$(printf '%s' "$OUT" | field recommend)" "U2" "(b) two different causes: the ladder still climbs"
 seed nocause; rail_failed nocause; rail_failed nocause
 OUT="$(node "$PROBE" classify --ledger "$LB" --work-unit nocause "${PIN[@]}")"
-assert_eq "U2" "$(printf '%s' "$OUT" | field recommend)" "(b) rail-failed rows without a cause behave as before"
+assert_eq "$(printf '%s' "$OUT" | field recommend)" "U2" "(b) rail-failed rows without a cause behave as before"
 
 # dispatch-consult records the dispatcher's precondition reason as the row's cause
 Q="$TEST_TMP/q.txt"; printf 'which layer owns invalidation?\n' > "$Q"
@@ -97,12 +97,12 @@ for _ in 1 2; do
     --ladder-terms dead --ladder-unknown-type why --ladder-signals S1 --ladder-work-unit cw >/dev/null 2>&1
 done
 CAUSES="$(node -e 'const rows=require("fs").readFileSync(process.argv[1],"utf8").trim().split("\n").map(JSON.parse).filter(r=>r.kind==="ladder");process.stdout.write(rows.map(r=>r.reason+"|"+r.cause).join("\n"))' "$LC")"
-assert_eq "rail-failed|precondition_failed: active session-mode=l5 blocks non-strict dispatch
-rail-failed|precondition_failed: active session-mode=l5 blocks non-strict dispatch" "$CAUSES" "(b) dispatch-consult writes the refusal cause on each rail-failed row"
+assert_eq "$CAUSES" "rail-failed|precondition_failed: active session-mode=l5 blocks non-strict dispatch
+rail-failed|precondition_failed: active session-mode=l5 blocks non-strict dispatch" "(b) dispatch-consult writes the refusal cause on each rail-failed row"
 node "$LEDGER" append --ledger "$LC" --kind hypothesis --json '{"hypothesis_id":"cwa","text":"x","status":"refuted","work_unit":"cw"}' >/dev/null
 node "$LEDGER" append --ledger "$LC" --kind hypothesis --json '{"hypothesis_id":"cwb","text":"y","status":"refuted","work_unit":"cw"}' >/dev/null
 OUT="$(node "$PROBE" classify --ledger "$LC" --work-unit cw "${PIN[@]}")"
-assert_eq "repeated-refusal" "$(printf '%s' "$OUT" | field reason)" "(b) end to end: two consult refusals stop the ladder"
+assert_eq "$(printf '%s' "$OUT" | field reason)" "repeated-refusal" "(b) end to end: two consult refusals stop the ladder"
 
 # the cause is cut only at " (" or ". " -- a dot inside a token (resolved_engine.model vs .runner) is not a cut
 STUB2="$TEST_TMP/author-refuse2.sh"
@@ -121,11 +121,11 @@ consult_once() { # <err>
 consult_once 'resolved_engine.model is unavailable (repo=/x). hint one'
 consult_once 'resolved_engine.runner is unavailable (repo=/y). hint two'
 DOTC="$(node -e 'const rows=require("fs").readFileSync(process.argv[1],"utf8").trim().split("\n").map(JSON.parse).filter(r=>r.kind==="ladder");process.stdout.write(rows.map(r=>r.cause).join("|"))' "$LD")"
-assert_eq "precondition_failed: resolved_engine.model is unavailable|precondition_failed: resolved_engine.runner is unavailable" "$DOTC" "(b) cause keeps dotted tokens and drops only the ' (' / '. ' tails"
+assert_eq "$DOTC" "precondition_failed: resolved_engine.model is unavailable|precondition_failed: resolved_engine.runner is unavailable" "(b) cause keeps dotted tokens and drops only the ' (' / '. ' tails"
 node "$LEDGER" append --ledger "$LD" --kind hypothesis --json '{"hypothesis_id":"dwa","text":"x","status":"refuted","work_unit":"dw"}' >/dev/null
 node "$LEDGER" append --ledger "$LD" --kind hypothesis --json '{"hypothesis_id":"dwb","text":"y","status":"refuted","work_unit":"dw"}' >/dev/null
 OUT="$(node "$PROBE" classify --ledger "$LD" --work-unit dw "${PIN[@]}")"
-assert_eq "U2" "$(printf '%s' "$OUT" | field recommend)" "(b) .model vs .runner refusals are different causes: the ladder still climbs"
+assert_eq "$(printf '%s' "$OUT" | field recommend)" "U2" "(b) .model vs .runner refusals are different causes: the ladder still climbs"
 
 # --- (c) dispatch-model-guard brief lint: warn, never block --------------------------------------
 mkpayload() { # <prompt text, with \n escapes already JSON-encoded>
@@ -133,7 +133,7 @@ mkpayload() { # <prompt text, with \n escapes already JSON-encoded>
 }
 BAD="$(mkpayload 'Run node scripts/session-mode.js set --level l5 --size S --repo-root . then bash scripts/dispatch-author.sh --runner codex --prompt-file p.txt')"
 run_hook dispatch-model-guard.js "$BAD"
-assert_eq 0 "$__RUN_EXIT" "(c) bad brief: hook exits 0 (advisory)"
+assert_eq "$__RUN_EXIT" 0 "(c) bad brief: hook exits 0 (advisory)"
 assert_contains "$__RUN_STDOUT" '"additionalContext"' "(c) bad brief: warning delivered as additionalContext"
 assert_contains "$__RUN_STDOUT" 'AUTOPILOT_SESSION_MODE_DIR=$(mktemp -d)' "(c) bad brief: the warning carries the mask line"
 assert_not_contains "$__RUN_STDOUT" 'permissionDecision' "(c) bad brief: never a deny/ask"
@@ -142,12 +142,12 @@ run_hook dispatch-model-guard.js "$BAD6"
 assert_contains "$__RUN_STDOUT" '"additionalContext"' "(c) l6 + dispatch-consult is flagged too"
 GOOD1="$(mkpayload 'Run node scripts/session-mode.js set --level l5 --size S --repo-root . then dispatch-hetero.sh --strict-contract --contract-file c.json')"
 run_hook dispatch-model-guard.js "$GOOD1"
-assert_eq "" "$__RUN_STDOUT" "(c) l5 marker with only a strict/hetero dispatch is not flagged"
+assert_eq "$__RUN_STDOUT" "" "(c) l5 marker with only a strict/hetero dispatch is not flagged"
 GOOD2="$(mkpayload 'Run bash scripts/dispatch-author.sh --runner codex --prompt-file p.txt (no marker involved)')"
 run_hook dispatch-model-guard.js "$GOOD2"
-assert_eq "" "$__RUN_STDOUT" "(c) a non-strict dispatch without an l5/l6 marker is not flagged"
+assert_eq "$__RUN_STDOUT" "" "(c) a non-strict dispatch without an l5/l6 marker is not flagged"
 GOOD3="$(mkpayload 'Run node scripts/session-mode.js set --level l3 --size S then dispatch-author.sh')"
 run_hook dispatch-model-guard.js "$GOOD3"
-assert_eq "" "$__RUN_STDOUT" "(c) an l3 marker is not flagged"
+assert_eq "$__RUN_STDOUT" "" "(c) an l3 marker is not flagged"
 
 finalize_test

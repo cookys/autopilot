@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0158 -->
+<!-- next-id: BL-0159 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1867,3 +1867,16 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: 2026-10-14 Kimi qualification history check
 - **Pointer**: none
 - **Context**: scorecard events 157/166/182 use engine `kimi-code-k3`; strikes.jsonl #71 uses `kimi-code/k3` (implementer, engine_output). Check how strike lookup keys seats; normalise one side.
+
+### Owner-role qualification has no exam provider
+- **Id**: BL-0158
+- **Status**: open
+- **Since**: 2026-10-14
+- **Origin**: self
+- **Problem**: 「工頭」這個角色目前沒辦法考資格：考試程式缺少把工頭題目送給模型作答的那一段，所以不管哪個模型都考不了，只能沿用舊成績或不派這個角色。
+- **Impact**: 中。新模型（MiniMax-M3.1、GLM-5.3、Qwen3.8-Max、Kimi K3）都沒有工頭成績，派工頭時只能靠人工指定。
+- **Trigger**: 想讓非 Claude 模型擔任工頭，或下一輪全角色資格考前
+- **Effort**: M
+- **Source**: 2026-10-14 all-role requalify matrix
+- **Pointer**: none
+- **Context**: qualification-review-provider.js has no owner mode (brain mode rides role owner but is a different exam); an owner-provider.js was drafted earlier but never committed. engine-qualify --role owner needs a broker provider that runs the foreman corpus.

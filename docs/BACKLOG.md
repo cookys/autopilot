@@ -1382,7 +1382,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: before the 3.0.0 final cut
 - **Effort**: M
 - **Source**: packet-guidance owner ruling, 2026-10-11
-- **Pointer**: docs/plans/2026-10-06-dev-flow-stage-graph.md
+- **Pointer**: none
 - **Context**: Gate blocks: hetero-review SKILL.md and code-loop.md are outside prereg guidance.files; hetero-loops.md hash differs from v10. Write a prereg revision adding both files (as P5 did), freeze v11, then run it.
 
 ### PEER-REPORTED (c4140 llm-playground): revise dev-flow SKILL.md foreground-wait advice

@@ -130,6 +130,15 @@
  *                   it just gives HOME-only CLIs the redirect the others have.
  *   QRP_CLI_BIN     cli: optional absolute binary override (default = the kind name)
  *   QRP_CLI_EFFORT  cli/codex: optional model_reasoning_effort override
+ *   QRP_HTTP_EFFORT http, responses | chat_completions ONLY: optional reasoning
+ *                   effort. Responses -> body `reasoning: {effort}`; chat
+ *                   completions -> body `reasoning_effort`. Vocabulary:
+ *                   none|minimal|low|medium|high|xhigh are sent VERBATIM;
+ *                   unset/empty/`default` sends nothing (endpoint default);
+ *                   `max` is refused (no OpenAI-compatible endpoint accepts it,
+ *                   and silently clamping would make the scorecard label lie).
+ *                   The messages protocol has no effort field: setting this with
+ *                   it is refused. List it in --provider-env for the broker.
  *   QRP_PROMPT_MODE reviewer | brain | va | consult | discuss (default reviewer)
  *   QRP_TIMEOUT_MS  per-case transport timeout (default 180000)
  *
@@ -634,7 +643,25 @@ const CHAT_USER_AGENT = 'autopilot-qualify/1.0';
 // `503 Upstream request failed: Endpoint is unavailable.`, which reads as an outage
 // and is not one. Verified 2026-09-21/22; routing table in
 // references/multi-agent-portability.md.
-async function callResponses(baseUrl, token, model, maxTokens, systemPrompt, userMessage) {
+//
+// Effort: when QRP_HTTP_EFFORT is set, the body carries `reasoning: { effort }`
+// (see httpReasoningEffort for the vocabulary). Before 2026-10-14 this body never
+// carried it, so a scorecard row labelled with an effort tier was examined at the
+// endpoint default. Unset / `default` keeps the body exactly as before.
+// QRP_HTTP_EFFORT -> the value sent on the wire, or '' for "send nothing".
+const HTTP_EFFORT_WIRE_VALUES = Object.freeze(['none', 'minimal', 'low', 'medium', 'high', 'xhigh']);
+function httpReasoningEffort(raw, protocol) {
+  const effort = String(raw || '').trim();
+  if (!effort || effort === 'default') return '';
+  if (protocol === 'messages') {
+    throw new Error(`QRP_HTTP_EFFORT is not supported by the messages protocol (got: ${effort}); use responses or chat_completions`);
+  }
+  if (!HTTP_EFFORT_WIRE_VALUES.includes(effort)) {
+    throw new Error(`QRP_HTTP_EFFORT must be one of ${HTTP_EFFORT_WIRE_VALUES.join('|')} or default (got: ${effort}); max has no OpenAI-compatible wire value and is never silently clamped`);
+  }
+  return effort;
+}
+async function callResponses(baseUrl, token, model, maxTokens, systemPrompt, userMessage, effort) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
@@ -652,6 +679,7 @@ async function callResponses(baseUrl, token, model, maxTokens, systemPrompt, use
         temperature: 0,
         instructions: systemPrompt,
         input: userMessage,
+        ...(effort ? { reasoning: { effort } } : {}),
       }),
     });
     if (!response.ok) {
@@ -806,7 +834,10 @@ function chatContentOrThrow(text, observed, finish) {
 // Live probe the same day: POST /v1/chat/completions returned 200 with
 // choices[0].message.content "PONG"; /v1/messages and /v1/responses stayed 503.
 // reasoning_content is the thinking trace and is never the answer.
-async function callChatCompletions(baseUrl, token, model, maxTokens, systemPrompt, userMessage) {
+//
+// Effort: QRP_HTTP_EFFORT, when set, rides as the OpenAI-compatible top-level
+// `reasoning_effort` field (same vocabulary as the Responses path).
+async function callChatCompletions(baseUrl, token, model, maxTokens, systemPrompt, userMessage, effort) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
@@ -824,6 +855,7 @@ async function callChatCompletions(baseUrl, token, model, maxTokens, systemPromp
         max_tokens: maxTokens,
         temperature: 0,
         stream: true,
+        ...(effort ? { reasoning_effort: effort } : {}),
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userMessage },
@@ -1474,6 +1506,17 @@ async function main() {
   if (transport === 'cli' && !CLI_KINDS.includes(cliKind || '')) {
     fail(`QRP_TRANSPORT=cli requires QRP_CLI_KIND to be one of: ${CLI_KINDS.join(', ')}`);
   }
+  const httpEffortRaw = process.env.QRP_HTTP_EFFORT || '';
+  if (httpEffortRaw && transport !== 'http') {
+    fail('QRP_HTTP_EFFORT applies to QRP_TRANSPORT=http only (cli uses QRP_CLI_EFFORT)');
+  }
+  const httpProtocolForEffort = process.env.QRP_HTTP_PROTOCOL || 'messages';
+  let httpEffort = '';
+  try {
+    httpEffort = httpReasoningEffort(httpEffortRaw, httpProtocolForEffort);
+  } catch (error) {
+    fail(error.message);
+  }
   const cliEffort = process.env.QRP_CLI_EFFORT || '';
   if (cliEffort && !/^[a-z]+$/u.test(cliEffort)) {
     // Interpolated into a TOML string for codex -c; keep the value inert.
@@ -1592,7 +1635,7 @@ async function main() {
         : httpProtocol === 'chat_completions'
           ? callChatCompletions
           : callModel;
-      result = await call(baseUrl, token, model, maxTokens, systemPrompt, userMessage);
+      result = await call(baseUrl, token, model, maxTokens, systemPrompt, userMessage, httpEffort);
     }
   } catch (error) {
     fail(`model call failed: ${error.message}`);

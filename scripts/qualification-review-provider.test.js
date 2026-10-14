@@ -1008,8 +1008,8 @@ function roleOnlyRequest(role, content = 'x') {
   const ok = runProvider({ env: recovers.env, request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT });
   equal(ok.child.status, 0, 'agy 503 x2 then success: the case succeeds');
   equal(calls(recovers.counter), 3, 'agy 503 x2 then success: agy ran three times');
-  equal(ok.child.stderr.match(/agy transient 503, retry \d\/2/gu),
-    ['agy transient 503, retry 1/2', 'agy transient 503, retry 2/2'],
+  equal(ok.child.stderr.match(/agy transient error, retry \d\/2/gu),
+    ['agy transient error, retry 1/2', 'agy transient error, retry 2/2'],
     'agy 503 x2 then success: stderr carries exactly two retry lines');
   equal(fs.readFileSync(`${recovers.counter}.homes`, 'utf8').trim().split('\n'),
     ['fresh', 'fresh', 'fresh'],
@@ -1027,7 +1027,7 @@ function roleOnlyRequest(role, content = 'x') {
   const noRetry = runProvider({ env: other.env, request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT });
   equal(noRetry.child.status, 1, 'agy non-503 failure: the case fails');
   equal(calls(other.counter), 1, 'agy non-503 failure runs once (no retry)');
-  check(!/agy transient 503/.test(noRetry.child.stderr), 'agy non-503 failure logs no retry line');
+  check(!/agy transient error/.test(noRetry.child.stderr), 'agy non-503 failure logs no retry line');
 
   // Invalid QRP_AGY_RETRY_DELAYS_MS is rejected at startup, never defaulted.
   for (const bad of ['abc', '-1', '1,,2', '1,2,3', '2147483648', ',', '1,', '1.5', ' 1']) {
@@ -1054,7 +1054,7 @@ function roleOnlyRequest(role, content = 'x') {
   });
   equal(timedOut.child.status, 1, 'agy timeout: the case fails');
   equal(calls(slow.counter), 1, 'agy timeout runs once (no retry)');
-  check(!/agy transient 503/.test(timedOut.child.stderr), 'agy timeout logs no retry line');
+  check(!/agy transient error/.test(timedOut.child.stderr), 'agy timeout logs no retry line');
 
   // One delay => at most one retry, and the message total says so.
   const single = retryEnv('single', E503, 99);
@@ -1062,8 +1062,27 @@ function roleOnlyRequest(role, content = 'x') {
     env: { ...single.env, QRP_AGY_RETRY_DELAYS_MS: '0' }, request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT,
   });
   equal(calls(single.counter), 2, 'a single delay allows exactly one retry');
-  equal(oneRetry.child.stderr.match(/agy transient 503, retry \d\/\d/gu), ['agy transient 503, retry 1/1'],
+  equal(oneRetry.child.stderr.match(/agy transient error, retry \d\/\d/gu), ['agy transient error, retry 1/1'],
     'with one delay the retry line reads retry 1/1');
+
+  // The other Google-side blips seen in real argon exams retry the same way.
+  for (const [name, text] of [
+    ['502', 'Eligibility check failed: failed to get load code assist response: request failed (code 502): HTML response "Error 502 (Server Error)!!1"'],
+    ['504', 'request failed (code 504): Gateway Timeout'],
+    ['unknown-model', 'error: invalid model selection (--model "gemini-4-argon-low" --effort ""): model gemini-4-argon-low is not recognized as a known model or custom model in settings'],
+  ]) {
+    const blip = retryEnv(`blip-${name}`, text, 1);
+    const recovered = runProvider({ env: blip.env, request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT });
+    equal(recovered.child.status, 0, `agy ${name} once then success: the case succeeds`);
+    equal(calls(blip.counter), 2, `agy ${name} once then success: agy ran twice`);
+  }
+
+  // NEGATIVE CONTROL: a 500, or a 5023 inside an id, is not a transient blip.
+  for (const [name, text] of [['500', 'request failed (code 500): Internal'], ['5023', 'trace code 5023 failed']]) {
+    const hard = retryEnv(`hard-${name}`, text, 99);
+    runProvider({ env: hard.env, request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT });
+    equal(calls(hard.counter), 1, `agy "${name}" failure runs once (no retry)`);
+  }
 
   // A kind other than agy never retries even on a 503 body.
   const codex = retryEnv('claude-kind', E503, 99);
@@ -2011,5 +2030,5 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
 }
 
 fs.rmSync(tempRoot, { recursive: true, force: true });
-if (assertions !== 399) throw new Error(`qualification-review-provider: expected exactly 399 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 407) throw new Error(`qualification-review-provider: expected exactly 407 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);

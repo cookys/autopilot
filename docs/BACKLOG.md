@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0148 -->
+<!-- next-id: BL-0149 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1763,3 +1763,19 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: BL-0124 review, 2026-10-14
 - **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
 - **Context**: Review (a): compaction fired near 217k for a 250k window (README:122-125). Candidate fix: when context exceeds the window by more than one step, fall back to STOP. Verify CC compaction timing first.
+
+### pgrep -f / pkill -f self-match only warns; peers ask for a hard deny
+- **Id**: BL-0148
+- **Status**: open
+- **Since**: 2026-10-14
+- **Origin**: peer
+- **Reporter**: c4140 llm-playground（llm-playground--claude-2）
+- **Report**: 01M4W2DK5M1R0P6440TNVTZMY5
+- **Reply**: 2026-10-14 01M4W2EVWFK17B6NC7NSAPXHN4
+- **Problem**: c4140 回報：用程序名稱比對去等待或砍程序時，會比對到 Claude Code 包住指令的那個 shell 自己；現在只會警告，模型照樣執行。
+- **Impact**: 等待迴圈永遠不結束，或殺掉自己。c4140 實測三個背景迴圈空轉 1.5 小時到近兩天，他們先自己寫了暫行 hook。
+- **Trigger**: 手上的第二波工作道收完後開工；c4140 等我們出版才刪暫行 hook
+- **Effort**: S
+- **Source**: fleet c4140 llm-playground, 2026-10-14 (message 01M4W2DK5M1R0P6440TNVTZMY5)
+- **Pointer**: none
+- **Context**: scripts/lib/bash-launch-rules.js detectPkillSelfMatch (BL-0019), WARN. Ask: DENY + off/warn escape, pidfile hint; port 27 cases (llm-playground d45fc6d86) incl. heredoc and quote traps.

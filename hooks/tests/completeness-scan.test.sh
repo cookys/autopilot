@@ -72,6 +72,17 @@ assert_eq "$(printf '%s\n' "$err" | grep -c 'nope.sh')" "1" "missing piece warne
 mkdir adir
 err="$(bash "$SCAN" --files adir a.sh 2>&1 >/dev/null)"
 assert_eq "$err" "" "directory argument gives no warning"
+ln -s adir dlink
+err="$(bash "$SCAN" --files dlink a.sh 2>&1 >/dev/null)"
+assert_eq "$err" "" "symlink-to-directory argument gives no warning"
+# (2j) tab-separated joined argument
+out="$(bash "$SCAN" --files $'a.sh\tb.sh' 2>/dev/null)"
+assert_eq "$(scanned "$out")" "2" "tab-joined arg scans 2 files"
+# (2k) a symlink to a regular file is scanned, not skipped as binary
+ln -s real.sh rlink.sh
+out="$(bash "$SCAN" --files rlink.sh 2>/dev/null)"
+assert_eq "$(scanned "$out")" "1" "symlink to a regular file is scanned"
+assert_eq "$(count "$out")" "1" "symlink to a regular file reports its marker"
 
 # (3) marker length: 4 and 5 X are markers, 6+ is a mktemp template
 printf 'a=1 # %s\n' "$X4" > x4.sh

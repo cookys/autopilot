@@ -8,6 +8,9 @@
 #   scripts/completeness-scan.sh --all           # scan all tracked files
 #   scripts/completeness-scan.sh --range A..B    # scan files changed in commit range
 #   scripts/completeness-scan.sh --files f1 f2   # explicit file list
+#     A single joined argument is split automatically; if it holds a newline it
+#     splits on newlines only (names with spaces survive), CRLF loses the \r;
+#     warnings go to stderr; directories give no warning.
 #
 # Exit codes:
 #   0  clean (no new findings; pre-existing findings still allowed)
@@ -51,7 +54,7 @@ while [[ $# -gt 0 ]]; do
                 shift
               done ;;
     -h|--help)
-      sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+      sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -92,7 +95,7 @@ is_scannable() {
   esac
   # heuristic: if file(1) says binary, skip
   if command -v file >/dev/null 2>&1; then
-    case "$(file -b --mime-encoding "$f" 2>/dev/null)" in
+    case "$(file -L -b --mime-encoding "$f" 2>/dev/null)" in
       binary) return 1 ;;
     esac
   fi

@@ -4719,7 +4719,8 @@ function runConsultDiscussQualification(options) {
       repeated_trials: options.trials,
     };
 
-  const terminalIncomplete = pooledVerdict.stop_reason === 'continue' || wallTruncated;
+  // Only an undecided pool is incomplete; a tier1 / lock already decided the verdict and a later wall truncation must not erase the failed record.
+  const terminalIncomplete = pooledVerdict.stop_reason === 'continue';
   const rowStatus = qualified
     ? 'qualified'
     : (terminalIncomplete ? 'no_verdict' : 'failed');

@@ -106,7 +106,7 @@ function gradeTrial(admin, trialIndex, trace, envelope = {}) {
   for (let index = 0; index < trial.rounds.length; index += 1) {
     const round = trial.rounds[index];
     if (envelope.budget_exhausted_at_round != null && round.round_id >= envelope.budget_exhausted_at_round) {
-      stopReason = 'insufficient_budget';
+      if (stopReason === 'completed') stopReason = 'insufficient_budget';
       break;
     }
     const row = rows[index];
@@ -115,7 +115,7 @@ function gradeTrial(admin, trialIndex, trace, envelope = {}) {
       if (hardFails.length === 0) {
         hardFails.push({ rule: 'early_end_before_late_window', round_id: round.round_id, detail: 'trace ended with no prior hard fail before the stream completed' });
       }
-      stopReason = 'early_end';
+      if (stopReason === 'completed') stopReason = 'early_end';
       break;
     }
     const malformed = validateRoundRow(row, round, corpusActions);

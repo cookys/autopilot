@@ -1710,7 +1710,7 @@ assert(stickyTier1AfterEarlyStop >= 1,
   // 1 / 5 / 56 instead of 60); with the new logic they are green.
   const fullOpts = (role, adapterPath, rawDir) => (
     { ...baseOpts(role, adapterPath, rawDir), testAdministrationsOverride: undefined });
-  function runScripted(label, seed, decide) {
+  function runScripted(label, seed, decide, extra) {
     const counterPath = path.join(tempRoot, label + '-counter.txt');
     fs.writeFileSync(counterPath, '0');
     const adapterPath = writeScriptedConsultAdapter(seed, counterPath, decide);
@@ -1718,7 +1718,7 @@ assert(stickyTier1AfterEarlyStop >= 1,
     process.env.QUAL_FAKE_MODEL = 'consult-model-exact';
     process.env.AUTOPILOT_QUALIFY_SEED = seed;
     return eq.runConsultDiscussQualification(
-      fullOpts('consult', adapterPath, path.join(tempRoot, 'raw-' + label)));
+      { ...fullOpts('consult', adapterPath, path.join(tempRoot, 'raw-' + label)), ...(extra || {}) });
   }
   // (a) the very FIRST case is Tier-1 => the full 60-case pool is still
   // administered, and the sitting is failed.
@@ -1743,6 +1743,27 @@ assert(stickyTier1AfterEarlyStop >= 1,
     assert(r.row.status === 'qualified' && r.qualified === true, 'RTC(c) locked_qualify sitting is qualified, got ' + r.row.status);
     assert(r.stop_reason === 'locked_qualify' && r.pooled.passes === 60,
       'RTC(c) deciding rule locked_qualify with the full pool counted, got ' + r.stop_reason + ' ' + r.pooled.passes);
+  }
+
+  // (e) WALL TRUNCATION AFTER A DECIDED VERDICT must not erase the failed
+  // record (negative control: with `|| wallTruncated` in terminalIncomplete
+  // these rows come back no_verdict instead of failed).
+  {
+    const r = runScripted('rtc-trunc-locked-fail', 'd4-rtc-e1', (attempt, idx) => (attempt === 1 && idx < 5 ? 'tier2' : 'pass'), { testTruncateAfterCases: 20 });
+    assert(r.wall_truncated === true && r.started_cases === 20, 'RTC(e1) truncation seam fired at 20, got ' + r.started_cases);
+    assert(r.row.status === 'failed' && r.qualified === false, 'RTC(e1) locked_fail then truncation stays failed, got ' + r.row.status);
+    assert(r.stop_reason === 'locked_fail', 'RTC(e1) deciding rule survives truncation, got ' + r.stop_reason);
+  }
+  {
+    const r = runScripted('rtc-trunc-tier1', 'd4-rtc-e2', (attempt, idx) => (attempt === 1 && idx === 0 ? 'tier1' : 'pass'), { testTruncateAfterCases: 20 });
+    assert(r.wall_truncated === true, 'RTC(e2) truncation seam fired');
+    assert(r.row.status === 'failed' && r.stop_reason === 'tier1', 'RTC(e2) tier1 then truncation stays failed, got ' + r.row.status + ' ' + r.stop_reason);
+  }
+  // (f) a genuinely undecided pool (all pass, cut at 20) stays no_verdict.
+  {
+    const r = runScripted('rtc-trunc-continue', 'd4-rtc-e3', () => 'pass', { testTruncateAfterCases: 20 });
+    assert(r.wall_truncated === true && r.stop_reason === 'continue', 'RTC(f) undecided pool is continue, got ' + r.stop_reason);
+    assert(r.row.status === 'no_verdict' && r.qualified === false, 'RTC(f) undecided truncated pool stays no_verdict, got ' + r.row.status);
   }
 
   // Retry cap: 3 harness-contaminated attempts followed by 2 clean ones

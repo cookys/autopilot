@@ -29,6 +29,9 @@ process.on('exit', rmAll);
 function run(cmd, { shell = 'bash', extra = {}, env = {} } = {}) {
   const home = mk('blg-home-');
   const live = mk('blg-live-');
+  // An ambient knob must not leak in: only the `env` argument may set it.
+  const baseEnv = { ...process.env };
+  delete baseEnv.AUTOPILOT_BASH_GUARD_PKILL_MODE;
   const r = spawnSync('node', [HOOK], {
     input: JSON.stringify({
       tool_name: 'Bash', session_id: 'blg', hook_event_name: 'PreToolUse', cwd: home,
@@ -36,7 +39,7 @@ function run(cmd, { shell = 'bash', extra = {}, env = {} } = {}) {
     }),
     encoding: 'utf8',
     env: {
-      ...process.env, HOME: home, AUTOPILOT_LIVE_DIR: live, AUTOPILOT_BASH_GUARD_SHELL: shell, ...env,
+      ...baseEnv, HOME: home, AUTOPILOT_LIVE_DIR: live, AUTOPILOT_BASH_GUARD_SHELL: shell, ...env,
     },
   });
   let out = null;
@@ -183,19 +186,93 @@ test('a REAL detached rail inside a substitution is still denied', () => {
   assert.strictEqual(run('echo "$(nohup scripts/dispatch-review.sh x &)"').deny, true);
 });
 
-// ---- Rule 2: pkill/pgrep -f without [x] => warn only ----
-for (const cmd of ['pkill -f dispatch-review', 'pgrep -fa "my server"', 'sudo pkill -9 -f foo', 'kill $(pgrep -f myserver)', 'echo `pgrep -f foo`', 'pgrep -u me -f foo', 'pkill -u me -f "my server"']) {
-  test(`rule2 warns: ${cmd}`, () => {
+// ---- Rule 2: pkill/pgrep -f without [x] => DENY by default (BL-0148; was warn-only BL-0019) ----
+// Cases are data, run through the real hook; the command text never reaches a live Bash tool call.
+const PK_DENY = [
+  'until ! pgrep -f "selftest-s1-winb.sh all" >/dev/null; do sleep 20; done',
+  'until ! pgrep -f "selftest-stub-s0c.sh nospace2" >/dev/null; do sleep 15; done; sleep 5',
+  'pkill -f dispatch-review', 'pkill -f vllm', 'sudo pkill -f -9 vllm', 'sudo pkill -9 -f foo',
+  'pgrep -af "s1-winb-runner" | head', 'pgrep -fa "my server"',
+  'n=$(pgrep -fc stub_server)', 'echo "count: $(pgrep -fc runner)"',
+  'x; /usr/bin/pgrep --full foo',
+  'while true; do\npgrep -f foo || break; sleep 5; done',
+  'test -n "`pgrep -f bar`"', 'kill $(pgrep -f myserver)', 'echo `pgrep -f foo`',
+  'pgrep -u me -f foo', 'pkill -u me -f "my server"',
+  "cat > f <<'EOF'\ndata\nEOF\npkill -f vllm",
+  "pkill -f 'vllm serve'",
+  'git commit -m "see `pgrep -f x`"',
+];
+for (const cmd of PK_DENY) {
+  test(`rule2 denies: ${JSON.stringify(cmd)}`, () => {
+    const r = run(cmd);
+    assert.strictEqual(r.deny, true);
+    assert.match(r.reason, /pkill-self-match/);
+  });
+}
+const PK_ALLOW = [
+  "pkill -f '[d]ispatch-review'", 'pgrep -f "[f]oo bar"', 'pkill node', 'pkill -x node', 'echo "pkill -f foo"', 'pkill -f "$PAT"',
+  'pgrep -u me -f "[f]oo"', 'pkill -P 1 -fa "[f]oo"', 'pgrep -f --uid me "[f]oo"',
+  'pgrep -f "[s]elftest-s1-winb.sh all"', 'pgrep -x las', 'pgrep -c -x las', 'kill -0 "$(cat out/runner.pid)"',
+  'grep -n pgrep doc/x.md', 'echo "never use pkill -f"',
+  'git commit -qm "hooks: deny self-matching pgrep -f / pkill -f in Bash"', "git commit -m 'x: pgrep -f foo is bad'",
+  'grep -c "pgrep -f" notes.md', 'echo unbalanced "quote',
+  "cat >> notes.md <<'EOF'\nany literal `pgrep -f X` hits the wrapper shell\nEOF\ngrep -c x notes.md",
+  'cat > f <<EOF\npkill -f vllm\nEOF',
+  "echo 'use `pgrep -f x` never'",
+  "pgrep -f '[s]elftest'",
+];
+for (const cmd of PK_ALLOW) {
+  test(`rule2 allows: ${JSON.stringify(cmd)}`, () => {
     const r = run(cmd);
     assert.strictEqual(r.deny, false);
-    assert.match(r.ctx, /pkill-self-match/);
+    assert.doesNotMatch(r.ctx, /pkill-self-match/);
   });
 }
-for (const cmd of ["pkill -f '[d]ispatch-review'", 'pgrep -f "[f]oo bar"', 'pkill node', 'pkill -x node', 'echo "pkill -f foo"', 'pkill -f "$PAT"', 'pgrep -u me -f "[f]oo"', 'pkill -P 1 -fa "[f]oo"', 'pgrep -f --uid me "[f]oo"']) {
-  test(`rule2 silent: ${cmd}`, () => {
-    assert.doesNotMatch(run(cmd).ctx, /pkill-self-match/);
+test('rule2 deny message names the alternatives', () => {
+  const r = run('pkill -f foo');
+  assert.match(r.reason, /pidfile/);
+  assert.match(r.reason, /PID/);
+  assert.match(r.reason, /variable/);
+  assert.match(r.reason, /AUTOPILOT_BASH_GUARD_PKILL_MODE/);
+});
+// Knob: env AUTOPILOT_BASH_GUARD_PKILL_MODE or ~/.autopilot/config.json depth0_delegate_gate.pkill_self_match.
+test('rule2 knob warn: back to advisory (the old BL-0019 behaviour)', () => {
+  const r = run('pgrep -f foo', { env: { AUTOPILOT_BASH_GUARD_PKILL_MODE: 'warn' } });
+  assert.strictEqual(r.deny, false);
+  assert.match(r.ctx, /pkill-self-match/);
+});
+test('rule2 knob off: silent', () => {
+  const r = run('pgrep -f foo', { env: { AUTOPILOT_BASH_GUARD_PKILL_MODE: 'off' } });
+  assert.strictEqual(r.deny, false);
+  assert.doesNotMatch(r.ctx, /pkill-self-match/);
+});
+test('rule2 knob deny: explicit deny', () => {
+  assert.strictEqual(run('pgrep -f foo', { env: { AUTOPILOT_BASH_GUARD_PKILL_MODE: 'deny' } }).deny, true);
+});
+test('rule2 knob garbage falls back to the deny default', () => {
+  assert.strictEqual(run('pgrep -f foo', { env: { AUTOPILOT_BASH_GUARD_PKILL_MODE: 'bogus' } }).deny, true);
+});
+test('rule2 knob via config.json', () => {
+  const home = mk('blg-cfg-');
+  fs.mkdirSync(path.join(home, '.autopilot'));
+  fs.writeFileSync(path.join(home, '.autopilot', 'config.json'), JSON.stringify({ depth0_delegate_gate: { pkill_self_match: 'warn' } }));
+  const env = { ...process.env, HOME: home, AUTOPILOT_LIVE_DIR: mk('blg-live-'), AUTOPILOT_BASH_GUARD_SHELL: 'bash' };
+  delete env.AUTOPILOT_BASH_GUARD_PKILL_MODE;
+  const r = spawnSync('node', [HOOK], {
+    input: JSON.stringify({ tool_name: 'Bash', session_id: 'blg', cwd: home, tool_input: { command: 'pgrep -f foo' } }),
+    encoding: 'utf8',
+    env,
   });
-}
+  const out = JSON.parse(r.stdout);
+  assert.strictEqual(out.hookSpecificOutput.permissionDecision, undefined);
+  assert.match(out.hookSpecificOutput.additionalContext, /pkill-self-match/);
+});
+test('rule2 denies in warn and block gate modes alike; gate mode off silences it', () => {
+  for (const mode of ['warn', 'block']) {
+    assert.strictEqual(run('pkill -f foo', { env: { AUTOPILOT_DEPTH0_DELEGATE_GATE_MODE: mode } }).deny, true);
+  }
+  assert.strictEqual(run('pkill -f foo', { env: { AUTOPILOT_DEPTH0_DELEGATE_GATE_MODE: 'off' } }).deny, false);
+});
 
 // ---- Rule 3: zsh only, warn only ----
 for (const cmd of ['git config a =b', 'echo foo ==x', 'curl https://x.test/a?b=1', 'ls /nonexistent-dir-blg/*.zzz', 'grep -r foo --include=*.zzz .']) {
@@ -225,14 +302,15 @@ test('rule1 still denies in block and warn modes', () => {
   }
 });
 
-test('pkill warning merges with the wait advisory (no early return)', () => {
-  const r = run('pkill -f foo; tail -f /tmp/x.log');
+test('pkill warning (knob warn) merges with the wait advisory (no early return)', () => {
+  const r = run('pkill -f foo; tail -f /tmp/x.log', { env: { AUTOPILOT_BASH_GUARD_PKILL_MODE: 'warn' } });
   assert.match(r.ctx, /pkill-self-match/);
   assert.match(r.ctx, /foreground wait/);
 });
 
-test('warnings also reach subagent depth (agent_id present)', () => {
-  assert.match(run('pkill -f foo', { extra: { agent_id: 'a1' } }).ctx, /pkill-self-match/);
+test('rule2 also applies at subagent depth (agent_id present): deny, and warn under the knob', () => {
+  assert.strictEqual(run('pkill -f foo', { extra: { agent_id: 'a1' } }).deny, true);
+  assert.match(run('pkill -f foo', { extra: { agent_id: 'a1' }, env: { AUTOPILOT_BASH_GUARD_PKILL_MODE: 'warn' } }).ctx, /pkill-self-match/);
 });
 
 // The message offers only what literally works for this (shape, rail) pair.

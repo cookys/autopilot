@@ -1,6 +1,7 @@
 # Dispatch tree — follow every piece of work from the session, without guessing a parent
 
 Status: **frozen** (2026-10-13) after two plan-review generations (G2 blockers ruled by the coordinator; receipts in [`evidence/2026-10-13-dispatch-tree/plan-review/`](evidence/2026-10-13-dispatch-tree/plan-review/README.md); `lane/w-dispatch-rail` merged as `544b654b`). Plan only; no product code changed.
+D0 ran 2026-10-15 ([`d0-summary.md`](evidence/2026-10-13-dispatch-tree/d0-summary.md)): 3a, 3b, 3c may start; **5 is blocked** (row h bad: the stamp rewrite makes the rail command compound, so the allow rule no longer covers it); **R is blocked** (row d2 bad: the codex runner does not export `AUTOPILOT_PARENT_SESSION_ID`; kimi, agy, opencode not_run), so per §4 the plan is revised and plan-reviewed again before R.
 Split out of [`2026-10-13-live-pane-design-system.md`](2026-10-13-live-pane-design-system.md) (its former P6 and §7.1) by owner ruling 2026-10-13: the dispatch tree is scheduled as its own plan, after the related branches merge. The live-pane plan keeps one pointer line and no dependency on this plan.
 Scope: run manifests, the dispatch rails' child launch, the session marker, the subagent records, and one read-only renderer in the 派工 tab (`mods/live`). It touches producers, so it is not a pane-only change.
 

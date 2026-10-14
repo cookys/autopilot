@@ -74,11 +74,14 @@ function validateRepairSeed({ seed, adoptionContract, reviewedHead }) {
 
 function renderTask({ findings, reviewedHead, base, branch, campaignId }) {
   const lines = [
-    '# Repair task: accepted findings of a review-only campaign',
+    "# Repair task: a review-only campaign's findings (reviewer claims, not yet adjudicated by depth-0)",
     '',
     `The range ${base}..${reviewedHead} (external branch \`${branch}\`) was reviewed by campaign ${campaignId}`,
-    'and did not pass. Fix every finding below on top of the reviewed head. Do not widen scope beyond',
-    'the sealed allowed path prefixes. The verify command of the contract must pass afterwards.',
+    'and did not pass. Choosing repair authorizes one repair round; it does not accept each finding.',
+    'Every finding below is a reviewer claim. Verify each one against the code first, and fix only the',
+    'ones that hold, on top of the reviewed head. List every finding you judge not to hold, with the',
+    'reason, in your delivery. Do not widen scope beyond the sealed allowed path prefixes. The verify',
+    'command of the contract must pass afterwards.',
     '',
     '## Findings',
     '',

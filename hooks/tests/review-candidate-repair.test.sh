@@ -44,6 +44,8 @@ eq "$(jf rp 'j.first_head')" "$(sf rp 0 handoff.base_sha)" "seed: base is the re
 eq "false" "$(sf rp 0 handoff.has_adoption)" "seed: no adoption section (it is a normal implement-review contract)"
 eq "true" "$(sf rp 0 handoff.task_has_findings)" "seed: the task prompt carries the findings"
 eq "true" "$(sf rp 0 'handoff.task_prompt.includes("planted defect")')" "seed: the task prompt names the reviewed finding"
+eq "true" "$(jf rp 'j.steps[0].handoff.task_prompt.includes("reviewer claims, not yet adjudicated by depth-0") && j.steps[0].handoff.task_prompt.includes("Verify each one against the code first") && j.steps[0].handoff.task_prompt.includes("List every finding you judge not to hold, with the")')" "seed: findings are framed as reviewer claims to verify, with not-holding ones listed with reasons"
+eq "false" "$(jf rp 'j.steps[0].handoff.task_prompt.includes("accepted findings") || j.steps[0].handoff.task_prompt.includes("Fix every finding")')" "seed: the old accept-everything wording is gone"
 eq "true" "$(sf rp 0 handoff.task_file_matches)" "seed: the task file on disk equals the inline prompt"
 eq "true" "$(sf rp 0 handoff.contract_file_matches)" "seed: the contract file on disk equals the inline contract"
 eq "true" "$(sf rp 0 'handoff.verify_cmd')" "seed: verify command copied from the adoption contract"
@@ -135,6 +137,34 @@ mut "$SEED" "if (seed.base_sha !== reviewedHead) {" "if (false) {"
 run_in "$MC" mp2b ",$FIX"',"steps":[{"continuation":"repair"}]' ok
 eq "true" "$(jf mp2b 'j.steps[0].handoff && j.steps[0].handoff.base_sha !== j.first_head')" "MUTATION both removed: the hand-off carries a base that is not the reviewed head (red)"
 restore "$SEED"
+
+# P6 the reviewed-head SOURCE is broken (review fix 2): the runtime must refuse, not just a test turn red
+mut "$ENG" "? ((continuation && continuation.reviewed_head) || null)" "? (false && continuation.reviewed_head) || null"
+run_in "$MC" mp6 ",$FIX"',"steps":[{"continuation":"repair"}]' ok
+eq "review_candidate_repair_reviewed_head_missing" "$(jf mp6 'j.steps[0].code')" "head source lost on resume: the runtime refuses by name (no silent fallback to the sealed head)"
+eq "AWAITING_DISPOSITION" "$(jf mp6 'j.steps[0].campaign_phase')" "head source lost: the review stays parked"
+eq "null" "$(jf mp6 'j.steps[0].handoff')" "head source lost: no hand-off"
+restore "$ENG"
+# P7 the source reads a STALE head (the sealed one) after a return: the independent park-candidate cross-check refuses
+mut "$ENG" "? ((continuation && continuation.reviewed_head) || null)" "? (campaignControl.contract.adoption.head_sha)"
+run_in "$MC" mp7 ",$FIX"',"steps":[{"continuation":"return","move":"forward","env":{"RC_VERDICT":"fix"}},{"continuation":"repair"}]' ok
+eq "review_candidate_repair_head_mismatch" "$(jf mp7 'j.steps[1].code')" "stale head source after a return: the cross-check refuses by name at runtime"
+eq "AWAITING_DISPOSITION" "$(jf mp7 'j.steps[1].campaign_phase')" "stale head source: the review stays parked"
+# ... and with the cross-check also removed, the stale-based hand-off escapes (red)
+mut "$ENG" "if (parkedCommit !== reviewedHead) {" "if (false) {"
+run_in "$MC" mp7b ",$FIX"',"steps":[{"continuation":"return","move":"forward","env":{"RC_VERDICT":"fix"}},{"continuation":"repair"}]' ok
+eq "true" "$(jf mp7b 'j.steps[1].handoff && j.steps[1].handoff.base_sha === j.first_head')" "MUTATION cross-check removed: a seed based on the stale sealed head escapes (red)"
+restore "$ENG"
+
+# P8 closeOnly covers repair: the repair close skips the repair-round wall check like end (review fix 3)
+run_sc rp_wall ",$FIX"',"steps":[{"mustFixAuthority":100000,"continuation":"repair"}]' ok
+eq "review_candidate_disposition_repair" "$(sf rp_wall 0 code)" "repair with too little wall left for a repair round still closes with the repair code"
+eq "TERMINAL_STOP" "$(sf rp_wall 0 campaign_phase)" "repair with too little wall left for a repair round leaves a terminal campaign"
+eq "0" "$(sf rp_wall 0 handoff.seal_status)" "repair with too little wall left for a repair round: the hand-off still seals"
+mut "src/engine/campaign-intake.js" "['end', 'repair'].includes(reviewCandidateContinuation.continuation) ? { closeOnly: true } : {}" "['end'].includes(reviewCandidateContinuation.continuation) ? { closeOnly: true } : {}"
+run_in "$MC" mp8 ",$FIX"',"steps":[{"mustFixAuthority":100000,"continuation":"repair"}]' ok
+eq "true" "$(jf mp8 'j.steps[0].code !== "review_candidate_disposition_repair"')" "MUTATION closeOnly limited to end: repair with too little wall left for a repair round is no longer closed (red)"
+restore "src/engine/campaign-intake.js"
 
 # P3 repair no longer closes (engine path for a resume)
 mut "$ENG" "|| continuationState.continuation === 'repair')) {" "|| false)) {"

@@ -204,12 +204,14 @@ const gitWt = ({ commit } = {}) => {
 };
 // A step's clockSkewSeconds moves the engine clock forward (a long interruption); it persists for later steps.
 let clockSkewMs = 0;
+// A step's mustFixAuthority sets the repair-round estimate the intake sees (the engine does not forward one).
+let intakeEstimateSeconds = 0;
 const options = {
   cwd: sbx,
   clock: () => new Date(Date.now() + clockSkewMs).toISOString(),
   campaignDispositionProvider: compileCampaignDispositionPolicy('acceptance-bound'),
   campaignIntake(input, engineAdapters) {
-    return runCampaignIntake(input, {
+    return runCampaignIntake(intakeEstimateSeconds ? { ...input, repairRoundEstimateSeconds: intakeEstimateSeconds } : input, {
       readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
       contextGate: () => ({ owner: 'context_window', status: 'ready' }),
       occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
@@ -469,12 +471,18 @@ for (const stepSpec of (ctx.steps || [])) {
     git(worktree, 'commit', '-q', '--allow-empty', '-m', 'empty follow-up');
     currentHead = git(worktree, 'rev-parse', 'HEAD');
   }
+  intakeEstimateSeconds = Number.isFinite(stepSpec.mustFixAuthority) ? stepSpec.mustFixAuthority : 0;
   const stepEngine = new AutopilotEngine(options);
   installImplControl(stepEngine);
   const stepInput = {
     ...input,
     resume: stepSpec.resume !== false,
     ...(stepSpec.continuation ? { campaignContinuation: stepSpec.continuation } : {}),
+    // P5: a caller that authorizes a repair round (must-fix-now) with a long round estimate; closing
+    // (end/repair) must not be refused by the "not enough wall left for a repair round" budget check.
+    ...(stepSpec.mustFixAuthority ? {
+      campaignDispositionAuthority: { reviews: [{ decisions: [{ disposition: { disposition: 'must-fix-now' } }] }] },
+    } : {}),
   };
   let stepResult;
   let stepThrown = null;

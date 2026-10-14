@@ -7590,11 +7590,29 @@ class AutopilotEngine {
         const admitted = (campaignControl.steps || []).find((item) => (
           item && item.owner === 'adoption_admission' && item.status === 'ready' && isStr(item.head)
         )) || null;
-        const reviewedHead = (continuation && continuation.reviewed_head)
-          || (admitted && admitted.head)
-          || (campaignControl.contract && campaignControl.contract.adoption
-            && campaignControl.contract.adoption.head_sha);
+        // A resume reads the reviewed head from the ledger facts and has no fallback: a missing one is
+        // refused, never replaced by the sealed head (which is stale after a return). Only the first-run
+        // preset park reads the head from the ready admission step.
+        const resumePath = Boolean(continuation && continuation.continuation === 'repair');
+        const reviewedHead = resumePath
+          ? ((continuation && continuation.reviewed_head) || null)
+          : ((admitted && admitted.head) || null);
         try {
+          if (!reviewedHead) {
+            throw new reviewCandidateRepairSeed.RepairSeedError(
+              'review_candidate_repair_reviewed_head_missing',
+              'the reviewed head of the parked review could not be determined; close the review with end or return',
+            );
+          }
+          // Independent cross-check: the candidate the park itself stored must be the head the seed will use.
+          const parkedCandidate = parkedControllerState && parkedControllerState.candidate;
+          const parkedCommit = parkedCandidate && parkedCandidate.commit;
+          if (parkedCommit !== reviewedHead) {
+            throw new reviewCandidateRepairSeed.RepairSeedError(
+              'review_candidate_repair_head_mismatch',
+              `the reviewed head ${reviewedHead} is not the candidate stored at the park (${parkedCommit || 'none'})`,
+            );
+          }
           repairSeed = reviewCandidateRepairSeed.buildRepairSeed({
             adoptionContract: campaignControl.contract,
             reviewedHead,
@@ -7621,6 +7639,27 @@ class AutopilotEngine {
             ledger,
           };
         }
+      }
+      // The seed is written to disk BEFORE terminalizing, so a terminalization failure cannot lose it;
+      // it is attached to every return after the campaign is terminal (not to a still-parked one).
+      let repairHandoff = null;
+      if (isRepair && repairSeed) {
+        const written = reviewCandidateRepairSeed.writeRepairSeed({
+          commonDir: workOrder.resolveGitCommonDir(loopCwd),
+          campaignId: campaignControl.campaign_id,
+          seed: repairSeed,
+        });
+        repairHandoff = {
+          kind: 'implement_review_seed',
+          review_campaign_id: campaignControl.campaign_id,
+          base_sha: repairSeed.contract.base_sha,
+          branch: repairSeed.contract.branch,
+          contract: repairSeed.contract,
+          task_prompt: repairSeed.task_prompt,
+          ...written,
+          next_step: 'seal contract with scripts/implementation-campaign-check.js seal, then run '
+            + 'autopilot engine implement-review with the task file as the prompt',
+        };
       }
       repairLineage.terminal_worktree_disposition = 'not_created_adopted_range';
       campaignControl.terminal_failure = this.terminalizeManagedCampaignFailure({
@@ -7664,6 +7703,7 @@ class AutopilotEngine {
             || 'the parked review could not be terminalized',
         };
       }
+      if (repairHandoff) blockedEnd.repair_handoff = repairHandoff;
       try {
         terminalizeControllerWorkOrder({
           terminalStatus: 'failed',
@@ -7677,24 +7717,6 @@ class AutopilotEngine {
           phase: 'controller_work_order_terminalize',
           code: error.code || 'controller_work_order_terminalize',
           reason: error.message || String(error),
-        };
-      }
-      if (isRepair && repairSeed) {
-        const written = reviewCandidateRepairSeed.writeRepairSeed({
-          commonDir: workOrder.resolveGitCommonDir(loopCwd),
-          campaignId: campaignControl.campaign_id,
-          seed: repairSeed,
-        });
-        blockedEnd.repair_handoff = {
-          kind: 'implement_review_seed',
-          review_campaign_id: campaignControl.campaign_id,
-          base_sha: repairSeed.contract.base_sha,
-          branch: repairSeed.contract.branch,
-          contract: repairSeed.contract,
-          task_prompt: repairSeed.task_prompt,
-          ...written,
-          next_step: 'seal contract with scripts/implementation-campaign-check.js seal, then run '
-            + 'autopilot engine implement-review with the task file as the prompt',
         };
       }
       return blockedEnd;
@@ -9446,8 +9468,11 @@ class AutopilotEngine {
           && campaignControl.contract
           && campaignControl.contract.adoption
           && ['end', 'repair'].includes(campaignControl.contract.adoption.disposition_preset)) {
+        // composition.controller is the snapshot taken when the wait was built, before the park persisted the
+        // candidate; the latest persisted controller (campaignController) is the one that stores it.
         return closeParkedReviewAsEnd(
-          composition.controller || campaignController,
+          (campaignControl.contract.adoption.disposition_preset === 'repair' && campaignController)
+            || composition.controller || campaignController,
           composition.findings,
           campaignControl.contract.adoption.disposition_preset,
         );

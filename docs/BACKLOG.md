@@ -1609,19 +1609,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: context-budget node tests (/dev/shm), hooks/depth0-delegate-gate.test.js (d0gate-home-*), context-budget-window-memory.test.sh, live-dir-xdg-inference.test.sh. Fix: cleanup in finally plus HOME/XDG isolation.
 
-### claude children started in a non-git temp dir get no session marker
-- **Id**: BL-0142
-- **Status**: open
-- **Since**: 2026-10-13
-- **Origin**: self
-- **Problem**: 派工 rail 若在不是 git 專案的暫存目錄裡啟動 claude 子行程，子行程開場時不會建立自己的工作階段標記，它的身分只記在派工紀錄檔裡。
-- **Impact**: 派工樹要追子行程時，只能靠派工紀錄檔那一欄；那份紀錄遺失或沒寫成，這個子行程就和父行程斷線。
-- **Trigger**: the dispatch-tree plan wires child_session_id, or a child shows up unlinked in a tree view
-- **Effort**: S
-- **Source**: lane W review round 1, 2026-10-13
-- **Pointer**: docs/plans/2026-10-13-dispatch-tree.md
-- **Context**: hooks/runs-watch-autostart.js returns at "not a git repo" before ensurePlainMarker, so author/review children in a non-git cwd rely only on manifest child_session_id. Settle in the dispatch-tree plan.
-
 ### fleet dispatch carries no lineage, so work sent to a peer drops out of the dispatch tree
 - **Id**: BL-0144
 - **Status**: open

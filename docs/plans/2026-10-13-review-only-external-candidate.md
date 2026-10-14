@@ -140,7 +140,7 @@ Before any spend, intake re-derives the range with read-only probes (D9): the br
 - Input: P1; Q2 ruling.
 - Output: profile; re-pointed context gate.
 - Acceptance: RO12; RO9 on the l4/l5 implement-review suites.
-- Also (from the P1 review, 2026-10-14): under owner-kernel governance `enforce`, an adoption contract cannot be sealed. `scripts/implementation-campaign-check.js` requires `mission_grant_ref`, a v2 seal requires `mission_runtime`, and an adoption contract forbids `mission_runtime`. Give this a named refusal at seal time instead of the generic missing-field error; P4's doc states that review-only needs governance `off` or `warn`. Repos without a governance file default to `off` and are unaffected. Control: an enforce-mode adoption seal yields the named code.
+- Also (from the P1 review, 2026-10-14): under owner-kernel governance `enforce`, an adoption contract cannot be sealed. `scripts/implementation-campaign-check.js` requires `mission_grant_ref`, a v2 seal requires `mission_runtime`, and an adoption contract forbids `mission_runtime`. Give this a named refusal at seal time instead of the generic missing-field error; P4's doc states that review-only needs governance `off` or `shadow` (the modes are `off`, `shadow`, `enforce`). Repos without a governance file default to `off` and are unaffected. Control: an enforce-mode adoption seal yields the named code.
 - Boundaries: `implement-review` profiles unchanged at every level.
 
 ### P4 — External operator handoff (depends on P1, plus P2/P3 when shipped)
@@ -213,7 +213,7 @@ Order: P1 → P2 → P4 is the critical path, because the park only becomes usab
 |---|---|---|
 | U1 | How an external repo produces contract, seal and endpoints/roster (seal tooling not read) | P4 |
 | U2 | `reduceCampaignState` accepts a run with no implementation events before verification | P1, first task |
-| U3 | Whether managed `implement-review` dispatches the verification-author seat or only requires its readiness | P3 |
+| U3 | Whether managed `implement-review` dispatches the verification-author seat or only requires its readiness | P3 — answered 2026-10-14: readiness only. No caller in `src/engine` dispatches it; it appears only as a readiness requirement and probe (P3 review confirmed by grep). |
 | U4 | Whether `final-panel-seat-store.js` keys seat reuse on writer-fence or lineage fields | P2 |
 | U5 | Whether `campaign inspect` and `status task` read fields that assume an implementation chain | P1 |
 | U6 | Whether `stageVerifyOnConverge` should write a stage unit for a review-only run (fail-open today) | P1 |

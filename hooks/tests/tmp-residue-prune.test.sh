@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tmp-residue-prune.test.sh — KR4 of docs/plans/2026-10-12-tmp-residue-containment.md: the daily
+# tmp-residue-prune.test.sh — KR4 of docs/plans/_archive/2026/10/2026-10-12-tmp-residue-containment.md: the daily
 # temp-root prune that rides on `repo-residue-sweep.js reap --auto` actually fires, and only on
 # what the registry allows.
 #   case 1: the sweep's receipt lists exactly the aged scratch entry; fresh scratch, an aged

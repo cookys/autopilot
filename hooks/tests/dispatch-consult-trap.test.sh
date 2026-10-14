@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# KR3 (docs/plans/2026-10-12-tmp-residue-containment.md): dispatch-consult.sh owns one scratch dir
+# KR3 (docs/plans/_archive/2026/10/2026-10-12-tmp-residue-containment.md): dispatch-consult.sh owns one scratch dir
 # for every temp file it writes and removes it on EVERY exit path, including SIGTERM mid-transport.
 # Negative control: the same scenario against a copy of the script with its traps stripped MUST
 # leave the dir behind (otherwise this test could not fail).

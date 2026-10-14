@@ -20,7 +20,7 @@ What already works (this shrinks the plan)
 - D7. Verification is already re-derivation: a fresh detached worktree at `candidate.commit` runs the sealed `verify_cmd` (`autopilot-engine.js:8445-8510`).
 - D8. The final-panel quorum handles an unknown author: `implementer_family === 'unknown'` relaxes exclusion to "at least the required number of families" (`campaign-composition.js:603`).
 - D9. Read-only range probes exist: `defaultResumeInspect` / `resumeInspectBlocked` (`autopilot-engine.js:2511`, `:2551`) check tip exists, base is an ancestor, tip ≠ base, and move no ref.
-- D10. Findings without authority already park: the in-loop path parks `AWAITING_DISPOSITION` and resumes disposition-only (`campaign-composition.js:1944-1976`); the active `docs/plans/2026-10-13-final-panel-park.md` extends the park to final-panel findings, which today terminalize.
+- D10. Findings without authority already park: the in-loop path parks `AWAITING_DISPOSITION` and resumes disposition-only (`campaign-composition.js:1944-1976`); the active `docs/plans/_archive/2026/10/2026-10-13-final-panel-park.md` extends the park to final-panel findings, which today terminalize.
 
 What blocks a foreign candidate (exact-key discipline, not policy)
 - D11. `normalizeCampaignArtifactReference` accepts a `git_candidate` only with `writer_fence` + `repair_lineage`, and the fence must be an `implementation_campaign_writer_fence` with `dispatch_exit|terminal_ledger` evidence (`src/engine/implementation-campaign.js:451-557`).

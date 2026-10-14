@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# KR3 (docs/plans/2026-10-12-tmp-residue-containment.md): the engine's DEFAULT diffProvider and
+# KR3 (docs/plans/_archive/2026/10/2026-10-12-tmp-residue-containment.md): the engine's DEFAULT diffProvider and
 # repairPromptWriter dirs are deleted by their owner. Every other engine suite injects its own
 # diffProvider and would pass with the delete code removed, so this one uses the defaults.
 #

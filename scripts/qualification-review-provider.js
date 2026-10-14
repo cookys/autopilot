@@ -131,7 +131,7 @@
  *                   it just gives HOME-only CLIs the redirect the others have.
  *   QRP_CLI_BIN     cli: optional absolute binary override (default = the kind name)
  *   QRP_CLI_EFFORT  cli/codex: optional model_reasoning_effort override
- *   QRP_HTTP_EFFORT http, responses | chat_completions ONLY: optional reasoning
+ *   QRP_HTTP_EFFORT http ONLY (responses | chat_completions | messages): optional reasoning
  *                   effort. Responses -> body `reasoning: {effort}`; chat
  *                   completions -> body `reasoning_effort`. Vocabulary:
  *                   none|minimal|low|medium|high|xhigh are sent VERBATIM;
@@ -659,7 +659,8 @@ const CHAT_USER_AGENT = 'autopilot-qualify/1.0';
 // references/multi-agent-portability.md.
 //
 // Effort: when QRP_HTTP_EFFORT is set, the body carries `reasoning: { effort }`
-// (see httpReasoningEffort for the vocabulary). Before 2026-10-14 this body never
+// (responses), `reasoning_effort` (chat) or `output_config: { effort }` (messages);
+// see httpReasoningEffort for each protocol's vocabulary. Before 2026-10-14 this body never
 // carried it, so a scorecard row labelled with an effort tier was examined at the
 // endpoint default. Unset / `default` keeps the body exactly as before.
 // QRP_HTTP_EFFORT -> the value sent on the wire, or '' for "send nothing".

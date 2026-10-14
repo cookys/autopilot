@@ -1522,6 +1522,57 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
     'the Responses body uses input + max_output_tokens, not messages + max_tokens');
   check(sent.body.messages === undefined && sent.body.max_tokens === undefined,
     'the Messages-shaped fields are absent from a Responses request');
+  check(!('reasoning' in sent.body) && !('reasoning_effort' in sent.body),
+    'QRP_HTTP_EFFORT unset: a Responses body carries no reasoning field');
+
+  // QRP_HTTP_EFFORT -> body.reasoning.effort (the scorecard effort label must reach the wire).
+  const respEffortCases = [['high', 'high'], ['low', 'low'], ['minimal', 'minimal'], ['xhigh', 'xhigh'], ['none', 'none']];
+  for (const [knob, wire] of respEffortCases) {
+    const stub = startRespStub({
+      model: 'fake-model-exact', status: 'completed',
+      output: [{ type: 'message', content: [{ type: 'output_text', text: REVIEWER_MODEL_OUTPUT }] }],
+    });
+    const { child } = runProvider({
+      request: reviewerRequest(),
+      env: {
+        QRP_HTTP_PROTOCOL: 'responses', QRP_HTTP_EFFORT: knob,
+        QRP_BASE_URL: `http://127.0.0.1:${stub.port}`, QRP_AUTH_TOKEN: 'stub-token', QRP_OPENCODE_SESSION: 'ses_stub',
+      },
+    });
+    stub.proc.kill();
+    equal(child.status, 0, `Responses with QRP_HTTP_EFFORT=${knob} succeeds`);
+    const effortSent = JSON.parse(fs.readFileSync(reqFile, 'utf8'));
+    equal(effortSent.body.reasoning && effortSent.body.reasoning.effort, wire,
+      `QRP_HTTP_EFFORT=${knob} sends reasoning.effort=${wire}`);
+  }
+  {
+    const stub = startRespStub({
+      model: 'fake-model-exact', status: 'completed',
+      output: [{ type: 'message', content: [{ type: 'output_text', text: REVIEWER_MODEL_OUTPUT }] }],
+    });
+    const { child } = runProvider({
+      request: reviewerRequest(),
+      env: {
+        QRP_HTTP_PROTOCOL: 'responses', QRP_HTTP_EFFORT: 'default',
+        QRP_BASE_URL: `http://127.0.0.1:${stub.port}`, QRP_AUTH_TOKEN: 'stub-token', QRP_OPENCODE_SESSION: 'ses_stub',
+      },
+    });
+    stub.proc.kill();
+    equal(child.status, 0, 'Responses with QRP_HTTP_EFFORT=default succeeds');
+    check(!('reasoning' in JSON.parse(fs.readFileSync(reqFile, 'utf8')).body),
+      'QRP_HTTP_EFFORT=default sends no reasoning field');
+  }
+  for (const [env, re, label] of [
+    [{ QRP_HTTP_PROTOCOL: 'responses', QRP_HTTP_EFFORT: 'max' }, /max has no OpenAI-compatible wire value/, 'max is refused, not clamped'],
+    [{ QRP_HTTP_PROTOCOL: 'messages', QRP_HTTP_EFFORT: 'high' }, /not supported by the messages protocol/, 'messages protocol refuses an effort'],
+  ]) {
+    const { child } = runProvider({
+      request: reviewerRequest(),
+      env: { ...env, QRP_BASE_URL: 'http://127.0.0.1:1', QRP_AUTH_TOKEN: 'stub-token' },
+    });
+    equal(child.status, 1, `QRP_HTTP_EFFORT: ${label} (exit 1)`);
+    check(re.test(child.stderr), `QRP_HTTP_EFFORT: ${label} (message)`);
+  }
 
   const trunc = startRespStub({
     model: 'fake-model-exact',
@@ -1600,6 +1651,26 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
     'Responses-shaped fields are absent from a chat request');
   equal(chatSent.body.stream, true,
     'chat completions streams so a long think is not a silent socket');
+  check(!('reasoning_effort' in chatSent.body) && !('reasoning' in chatSent.body),
+    'QRP_HTTP_EFFORT unset: a chat body carries no reasoning_effort');
+  {
+    const chatEff = startRespStub({
+      model: 'fake-model-exact',
+      choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: REVIEWER_MODEL_OUTPUT } }],
+    });
+    const { child } = runProvider({
+      request: reviewerRequest(),
+      env: {
+        QRP_HTTP_PROTOCOL: 'chat_completions', QRP_HTTP_EFFORT: 'high',
+        QRP_BASE_URL: `http://127.0.0.1:${chatEff.port}`, QRP_AUTH_TOKEN: 'stub-token',
+        QRP_OPENCODE_SESSION: 'ses_chat', QRP_MAX_TOKENS: '32',
+      },
+    });
+    chatEff.proc.kill();
+    equal(child.status, 0, 'chat completions with QRP_HTTP_EFFORT=high succeeds');
+    equal(JSON.parse(fs.readFileSync(reqFile, 'utf8')).body.reasoning_effort, 'high',
+      'QRP_HTTP_EFFORT=high sends reasoning_effort=high on chat completions');
+  }
 
   const sseServerFile = path.join(tempRoot, 'stub-chat-sse.js');
   const ssePortFile = path.join(tempRoot, 'stub-chat-sse-port');
@@ -1669,8 +1740,15 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(${JSON.stringify(ssePortFil
   equal(protoOnCli.status, 1, 'QRP_HTTP_PROTOCOL on the cli transport exits 1');
   check(/QRP_HTTP_PROTOCOL applies to QRP_TRANSPORT=http only/.test(protoOnCli.stderr),
     'the protocol knob refuses the cli transport instead of being silently ignored');
+  const { child: effortOnCli } = runProvider({
+    request: reviewerRequest(),
+    env: { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'codex', QRP_HTTP_EFFORT: 'high' },
+  });
+  equal(effortOnCli.status, 1, 'QRP_HTTP_EFFORT on the cli transport exits 1');
+  check(/applies to QRP_TRANSPORT=http only/.test(effortOnCli.stderr),
+    'the http effort knob refuses the cli transport instead of being silently ignored');
 }
 
 fs.rmSync(tempRoot, { recursive: true, force: true });
-if (assertions !== 270) throw new Error(`qualification-review-provider: expected exactly 270 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 292) throw new Error(`qualification-review-provider: expected exactly 292 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);

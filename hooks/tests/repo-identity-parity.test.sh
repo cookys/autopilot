@@ -112,4 +112,62 @@ assert_not_contains "$(cat "$TEST_TMP/new.err")" "git 2.53" "new git query failu
 S2="$(repo_identity_of "$TEST_TMP/home" 2>/dev/null)"; eq "" "$S2" "non-repo dir: empty output"
 eq "<null>" "$(node_identity "$TEST_TMP/home")" "non-repo dir: node null"
 
+# 7. caller under set -euo pipefail, direct call, new git with a real rev-parse failure: the function
+# must still print its diagnostic and return 1 (not abort the caller with git's 128).
+( set -euo pipefail; PATH="$FAKEBIN2:$PATH"; repo_identity_of "$MAIN" >/dev/null ) 2>"$TEST_TMP/eu.err"; EU_RC=$?
+eq "1" "$EU_RC" "set -euo pipefail: direct call returns 1"
+assert_contains "$(cat "$TEST_TMP/eu.err")" "detected dubious ownership" "set -euo pipefail: diagnostic printed"
+
+# 8. rev-parse succeeds (rc=0) but the common dir cannot be entered: named as such, not a git failure.
+FAKEBIN3="$TEST_TMP/fakebin-nodir"; mkdir -p "$FAKEBIN3"
+cat > "$FAKEBIN3/git" <<'EOS'
+#!/usr/bin/env bash
+if [ "$1" = "--version" ]; then echo "git version 2.53.0"; exit 0; fi
+for a in "$@"; do
+  if [ "$a" = "rev-parse" ]; then echo "/nonexistent/common"; exit 0; fi
+done
+exit 1
+EOS
+chmod +x "$FAKEBIN3/git"
+OLD_PATH="$PATH"
+export PATH="$FAKEBIN3:$PATH"
+ND_OUT="$(repo_identity_of "$MAIN" 2>"$TEST_TMP/nd.err")"; ND_RC=$?
+export PATH="$OLD_PATH"
+eq "" "$ND_OUT" "unresolvable common dir: empty stdout"
+assert_neq "0" "$ND_RC" "unresolvable common dir: non-zero return"
+eq "1" "$ND_RC" "unresolvable common dir: returns 1"
+assert_contains "$(cat "$TEST_TMP/nd.err")" "cannot resolve common dir /nonexistent/common" "unresolvable common dir: named"
+assert_not_contains "$(cat "$TEST_TMP/nd.err")" "git rev-parse failed" "unresolvable common dir: not blamed on git"
+
+# 9. version boundary table: the hint appears only for git < 2.31. A version with no minor part
+# ("2") must not be read as 2.2. Non-hint rows must show git's real stderr instead.
+FAKEBIN4="$TEST_TMP/fakebin-ver"; mkdir -p "$FAKEBIN4"
+cat > "$FAKEBIN4/git" <<'EOS'
+#!/usr/bin/env bash
+if [ "$1" = "--version" ]; then printf 'git version %s\n' "$FAKE_GIT_VERSION"; exit 0; fi
+for a in "$@"; do
+  if [ "$a" = "rev-parse" ]; then echo "fatal: boundary probe" >&2; exit 128; fi
+done
+exit 1
+EOS
+chmod +x "$FAKEBIN4/git"
+OLD_PATH="$PATH"
+export PATH="$FAKEBIN4:$PATH"
+for row in "2.31.0|nohint" "2.30.9|hint" "2.4.1|hint" "2.100.0|nohint" "2.39.3 (Apple Git-146)|nohint" "2|nohint"; do
+  ver="${row%%|*}"; want="${row##*|}"
+  export FAKE_GIT_VERSION="$ver"
+  BR_OUT="$(repo_identity_of "$MAIN" 2>"$TEST_TMP/bv.err")"; BR_RC=$?
+  BR_ERR="$(cat "$TEST_TMP/bv.err")"
+  eq "" "$BR_OUT" "boundary[$ver]: empty stdout"
+  eq "1" "$BR_RC" "boundary[$ver]: returns 1"
+  if [ "$want" = "hint" ]; then
+    assert_contains "$BR_ERR" "need >= 2.31" "boundary[$ver]: version hint printed"
+  else
+    assert_contains "$BR_ERR" "fatal: boundary probe" "boundary[$ver]: real git stderr printed"
+    assert_not_contains "$BR_ERR" "need >= 2.31" "boundary[$ver]: no version hint"
+  fi
+done
+unset FAKE_GIT_VERSION
+export PATH="$OLD_PATH"
+
 finalize_test

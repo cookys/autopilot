@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0170 -->
+<!-- next-id: BL-0172 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1829,32 +1829,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: ask-decision.js closeOwn only clears its own pointer; dead-session items persist (stale after 7 d). isOurs in closeDecisionById has no counter-example test. withWriteLock ensureDir creates decisions/ on close.
 
-### Official defaults recipe still says brain sittings are not scorecard rows
-- **Id**: BL-0164
-- **Status**: open
-- **Since**: 2026-10-14
-- **Origin**: self
-- **Problem**: 腦力題考完現在可以登記進成績單，但官方預設值的配方檔仍寫著「腦力題不是成績單的列」，並把 owner 角色整個排除在官方預設值之外。下次產生官方預設值時，腦力題結果不會被收進去。
-- **Impact**: 低。只影響官方預設值的內容；本機成績單照常登記。
-- **Trigger**: 下次重產 references/official-qualification-defaults.json，或要把腦力題結果放進官方預設值時
-- **Effort**: S
-- **Source**: review of brain-row merge e7013833, 2026-10-14
-- **Pointer**: none
-- **Context**: references/official-qualification-defaults.recipe.json:40 exclusion reason is byte-pinned by build-qualification-defaults; change the reason and re-pin together.
-
-### Brain pass makes the foreman seat look qualified
-- **Id**: BL-0165
-- **Status**: open
-- **Since**: 2026-10-14
-- **Origin**: self
-- **Problem**: 腦力題和工頭題登記時角色都是 owner，只靠 scope 區分。成績單的非嚴格查詢不看 scope，所以某個模型只要腦力題合格，查工頭席位也會顯示合格。
-- **Impact**: 中。工頭席位可能被誤認為已考過，派工時選到沒考過工頭題的模型。
-- **Trigger**: 第一筆合格的腦力題登記進成績單之前
-- **Effort**: S
-- **Source**: review of brain-row merge e7013833, 2026-10-14
-- **Pointer**: none
-- **Context**: engine-scorecard.js findSeatBaseline :1747-1767 and computeSeatProjection :1546-1548 match seats without scope / methodology_kind; filter owner rows by scope.
-
 ### Exam effort label is not checked against the effort actually sent
 - **Id**: BL-0166
 - **Status**: open
@@ -1893,3 +1867,29 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: review of usage lane cafae461/5086079a, 2026-10-14
 - **Pointer**: none
 - **Context**: qualification-usage.js summarize :111-143 has no expected n_cases; validateUsageBlock :203-235 lacks cross-checks. verdict-stability :3501 and the empty-output comment are imprecise.
+
+### Brain and foreman strikes share one fold
+- **Id**: BL-0170
+- **Status**: open
+- **Since**: 2026-10-15
+- **Origin**: self
+- **Problem**: 成績單已經把腦力題和工頭題的合格分開算，但扣點（strike）和撤銷待定仍以 engine+runner+role 為鍵。同一個模型的腦力題失誤，會累積到工頭席位的扣點，反之亦然。
+- **Impact**: 低。目前成績單沒有腦力題的扣點；一旦有，可能誤降級另一種席位。
+- **Trigger**: 第一筆腦力題的 strike 進成績單之前
+- **Effort**: S
+- **Source**: review of lane/brain-rows-guard (BL-0165), 2026-10-15
+- **Pointer**: none
+- **Context**: engine-scorecard.js:2007-2012 strike fold and pending_revocation are seat-wide; seatKindOf (:1777) already exists. Also add a scope-only brain fixture for seatKindOf :1779.
+
+### Plan graduation --archive applies one --shipped-in to every stem
+- **Id**: BL-0171
+- **Status**: open
+- **Since**: 2026-10-15
+- **Origin**: self
+- **Problem**: 一次歸檔多份計畫時，出貨版本只能給一個值，每份計畫在專案索引的版本欄都會被寫成同一個值，要手動改回各自的合併點。改寫引用時也漏掉腳本清單文件裡的相對連結。
+- **Impact**: 低。歸檔後 INDEX 記錯合併點，連結斷掉要靠 doc-drift-gate 抓。
+- **Trigger**: 下次一次歸檔兩份以上計畫，或動 check-plan-graduation.js 時
+- **Effort**: S
+- **Source**: archive-shipped lane, 2026-10-15
+- **Pointer**: none
+- **Context**: check-plan-graduation.js:168 out.shippedIn = need() is single-valued; :1271 const version = shippedIn || 'shipped' applies to all stems. Accept stem=sha pairs.

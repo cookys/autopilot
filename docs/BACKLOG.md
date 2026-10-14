@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0153 -->
+<!-- next-id: BL-0155 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1751,22 +1751,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
 - **Context**: Review (a): compaction fired near 217k for a 250k window (README:122-125). Candidate fix: when context exceeds the window by more than one step, fall back to STOP. Verify CC compaction timing first.
 
-### pgrep -f / pkill -f self-match only warns; peers ask for a hard deny
-- **Id**: BL-0148
-- **Status**: open
-- **Since**: 2026-10-14
-- **Origin**: peer
-- **Reporter**: c4140 llm-playground（llm-playground--claude-2）
-- **Report**: 01M4W2DK5M1R0P6440TNVTZMY5
-- **Reply**: 2026-10-14 01M4W2EVWFK17B6NC7NSAPXHN4
-- **Problem**: c4140 回報：用程序名稱比對去等待或砍程序時，會比對到 Claude Code 包住指令的那個 shell 自己；現在只會警告，模型照樣執行。
-- **Impact**: 等待迴圈永遠不結束，或殺掉自己。c4140 實測三個背景迴圈空轉 1.5 小時到近兩天，他們先自己寫了暫行 hook。
-- **Trigger**: 手上的第二波工作道收完後開工；c4140 等我們出版才刪暫行 hook
-- **Effort**: S
-- **Source**: fleet c4140 llm-playground, 2026-10-14 (message 01M4W2DK5M1R0P6440TNVTZMY5)
-- **Pointer**: none
-- **Context**: scripts/lib/bash-launch-rules.js detectPkillSelfMatch (BL-0019), WARN. Ask: DENY + off/warn escape, pidfile hint; port 27 cases (llm-playground d45fc6d86) incl. heredoc and quote traps.
-
 ### Live pane lists a plan-review seat as an author run and keeps finished runs
 - **Id**: BL-0149
 - **Status**: open
@@ -1818,3 +1802,29 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: review of the session-id scrub work, 2026-10-14
 - **Pointer**: none
 - **Context**: scripts/dispatch-hetero.sh: tests pass callerSession undefined, so the if (callerSession) branch (~:1487) never runs; gap since 803b9b89. Add a real-callerSession case plus a mutation control.
+
+### pkill/pgrep -f self-match guard misses some forms and over-blocks others
+- **Id**: BL-0153
+- **Status**: open
+- **Since**: 2026-10-14
+- **Origin**: self
+- **Problem**: 「pkill/pgrep -f 比對到自己」的檢查改成直接擋下之後，還有幾種寫法沒擋到，其中三種真的會殺掉自己的 shell；另外有幾種其實不會比對到自己的寫法被誤擋。
+- **Impact**: 沒擋到的寫法會讓等待迴圈永遠不結束，或殺掉自己。誤擋的寫法會被拒絕，使用者得改寫（拒絕訊息有給改寫方式）。
+- **Trigger**: 有人回報漏擋或誤擋，或下次改 bash-launch-rules.js 的 pkill 偵測時
+- **Effort**: M
+- **Source**: BL-0148 review, 2026-10-14
+- **Pointer**: none
+- **Context**: Missed: script run from a heredoc, write-then-run in one call, P=foo; pgrep -f "$P", xargs/eval/watch, \pkill. Over-blocked: [fF]oo, ^x, x\.py, -d ,. Fix: test RegExp(pattern) on the call's own text.
+
+### review-candidate return is refused when a fix shrinks the cumulative file count
+- **Id**: BL-0154
+- **Status**: open
+- **Since**: 2026-10-14
+- **Origin**: self
+- **Problem**: 只審不寫的 campaign 選 return 重審時，如果修正把某個檔案整個改回原樣，累積的檔案數變少，這次重審就會被拒絕（BUDGET_RESET）。
+- **Impact**: 外部團隊修正後重審，在這個情境會卡住；目前只能改用「修改而不是還原」，或 end 後重新封存。
+- **Trigger**: 有人回報 return 被拒為 BUDGET_RESET，或下次改 review-candidate 的 adoption 記帳時
+- **Effort**: S
+- **Source**: BL-0090 P4 doc review (reproduced: revB refused, revCtl converged), 2026-10-14
+- **Pointer**: none
+- **Context**: autopilot-engine.js ~:7716-7722 books adoption changed_files as the cumulative absolute count; implementation-campaign.js ~:911-915 requires usage to be monotonic. Book a monotonic value or exempt adoption.

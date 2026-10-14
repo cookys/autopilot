@@ -1810,7 +1810,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: self
 - **Problem**: 「pkill/pgrep -f 比對到自己」的檢查改成直接擋下之後，還有幾種寫法沒擋到，其中三種真的會殺掉自己的 shell；另外有幾種其實不會比對到自己的寫法被誤擋。
 - **Impact**: 沒擋到的寫法會讓等待迴圈永遠不結束，或殺掉自己。誤擋的寫法會被拒絕，使用者得改寫（拒絕訊息有給改寫方式）。
-- **Trigger**: 有人回報漏擋或誤擋，或下次改 bash-launch-rules.js 的 pkill 偵測時
+- **Trigger**: c4140 保留暫行 hook 等這條（他們已擋 $P 與 \pkill，可參考其 no-pgrep-selfmatch.py）；或有人回報漏擋／誤擋時
 - **Effort**: M
 - **Source**: BL-0148 review, 2026-10-14
 - **Pointer**: none

@@ -68,6 +68,65 @@ eq "converged" "$(jf strict_readiness 'j.status')" "strict l4 readiness with a r
 eq "true" "$(jf strict_readiness 'j.strict_readiness_ready')" "strict readiness was really consumed (strict_l5_provider_readiness:ready in the ledger)"
 eq "0" "$(jf strict_readiness 'j.impl')" "strict readiness path: 0 implementer calls"
 
+# ---- RO12 (BL-0090 P3): review-only admission asks only for the seats it uses -------------------------------------
+# The fixture's implementer provider is EXHAUSTED (its live probe is blocked), as on the host whose grok quota ran out.
+COMMA='String.fromCharCode(44)'
+run_sc strict_readiness_review_only
+eq "converged" "$(jf strict_readiness_review_only 'j.status')" "RO12 l4 review-only converges although the implementer provider is exhausted"
+eq "0" "$(jf strict_readiness_review_only 'j.impl')" "RO12 review-only: 0 implementer calls"
+eq "reviewer,qc:1,qc:2,qc:3" "$(jf strict_readiness_review_only "j.probed_seats.filter((v,i,a)=>a.indexOf(v)===i).join($COMMA)")" "RO12 probe log: only reviewer and the QC panel are probed (no implementer, no verification author)"
+run_sc strict_readiness_review_only ',"level":"l5","withVerificationAuthor":true'
+eq "converged" "$(jf strict_readiness_review_only 'j.status')" "RO12 l5 review-only with a configured verification author and exhausted implementer converges"
+eq "reviewer,qc:1,qc:2,qc:3" "$(jf strict_readiness_review_only "j.probed_seats.filter((v,i,a)=>a.indexOf(v)===i).join($COMMA)")" "RO12 l5 probe log excludes implementer and verification author"
+# control: the same fixture WITHOUT the review-only profile probes the implementer and is blocked by it
+run_sc strict_readiness_review_only ',"omitReviewOnlyFlag":true'
+eq "true" "$(jf strict_readiness_review_only "j.probed_seats.includes('implementer')")" "RO12 control: the implement profile probes the implementer seat"
+eq "false" "$(jf strict_readiness_review_only "j.status === 'converged'")" "RO12 control: the exhausted implementer blocks the implement profile"
+RO_PROFILE="$(node -e "
+const b = require('$REPO_ROOT/src/readiness/provider-bootstrap');
+const base = { reviewer_engine: 'r', reviewer_effort: 'high', reviewer_runner: 'cc-shim', reviewer_family: 'anthropic', reviewer_endpoint: null,
+  implementer_engine: 'i', implementer_effort: 'high', implementer_runner: 'fixture', implementer_family: 'fixture', implementer_endpoint: null,
+  qc_panel_seats_complete: true, qc_panel_seats: [{ role: 'qc', runner: 'cc-shim', model: 'q1', effort: 'high', endpoint: null, family: 'openai' }] };
+const roles = (o, lvl, opt) => b.deriveStrictL5InvocationPolicy(o, lvl, opt).invocation_policy.map((e) => e.tuple.role).sort().join('+');
+const out = [];
+out.push('ro=' + roles(base, 'l5', { reviewOnly: true }));
+out.push('impl_l5_va_missing=' + (() => { try { roles(base, 'l5'); return 'accepted'; } catch (e) { return e.code; } })());
+out.push('impl_l4=' + roles(base, 'l4'));
+out.push('ro_no_qc=' + (() => { try { roles({ ...base, qc_panel_seats_complete: false, qc_panel_seats: [] }, 'l4', { reviewOnly: true }); return 'accepted'; } catch (e) { return e.code; } })());
+out.push('impl_l5_with_va=' + roles({ ...base, verification_author_present: true, verification_author_engine: 'v', verification_author_runner: 'fixture', verification_author_effort: 'high', verification_author_endpoint: null, verification_author_family: 'f' }, 'l5'));
+process.stdout.write(out.join('\n'));
+")"
+assert_contains "$RO_PROFILE" "ro=qc+reviewer" "RO12 review-only policy at l5 holds only reviewer and qc seats"
+assert_contains "$RO_PROFILE" "impl_l5_va_missing=strict_l5_provider_roster_incomplete" "RO12 l5 implement-review still requires the verification-author seat"
+assert_contains "$RO_PROFILE" "impl_l4=implementer+qc+reviewer" "RO12 l4 implement-review profile still requires the implementer"
+assert_contains "$RO_PROFILE" "ro_no_qc=strict_l5_provider_roster_incomplete" "RO12/Q2 review-only requires a complete QC panel at l4 too"
+assert_contains "$RO_PROFILE" "impl_l5_with_va=implementer+qc+reviewer+verification_author" "RO12 l5 implement-review requires implementer and verification-author"
+
+# ---- context gate measures the reviewer seat in review-only -------------------------------------------------------
+CTX_OUT="$(node -e "
+const intake = require('$REPO_ROOT/src/engine/campaign-intake');
+const f = '$RC/ctx-prompt.md'; require('fs').writeFileSync(f, 'small prompt\\n');
+const run = (contract, roster) => { const r = intake.defaultContextGate({ contract, roster, promptFile: f, contractPath: f, repo: '$REPO_ROOT' }); return (r.code || r.rejection_code || (r.receipt && r.receipt.model) || r.status); };
+const both = { reviewer_engine: 'rev-model-x', implementer_engine: 'impl-model-y' };
+const out = [];
+out.push('ro_both=' + run({ adoption: { head_sha: 'x' } }, both));
+out.push('impl_both=' + run({}, both));
+out.push('ro_implementer_only=' + run({ adoption: { head_sha: 'x' } }, { implementer_engine: 'impl-model-y' }));
+out.push('impl_reviewer_only=' + run({}, { reviewer_engine: 'rev-model-x' }));
+process.stdout.write(out.join('\\n'));
+")"
+assert_contains "$CTX_OUT" "ro_both=rev-model-x" "context gate: review-only measures the reviewer seat"
+assert_contains "$CTX_OUT" "impl_both=impl-model-y" "context gate: implement-review still measures the implementer seat"
+assert_contains "$CTX_OUT" "ro_implementer_only=reviewer_identity_missing" "context gate: review-only does not fall back to the implementer seat"
+assert_contains "$CTX_OUT" "impl_reviewer_only=implementer_identity_missing" "context gate: implement-review still needs the implementer identity"
+
+# ---- governance enforce: a named refusal at seal time ------------------------------------------------------------------
+run_sc enforce_seal
+eq "3" "$(jf enforce_seal 'j.seal_status')" "enforce-mode adoption seal is refused"
+assert_contains "$(jf enforce_seal 'j.seal_error')" "review_candidate_governance_enforce" "enforce-mode adoption seal carries the named code"
+assert_contains "$(jf enforce_seal 'j.seal_error')" "governance off or warn" "the refusal says review-only needs governance off or warn"
+assert_not_contains "$(jf enforce_seal 'j.seal_error')" "mission_grant_ref: required" "the generic missing-field error is replaced, not appended"
+
 # ---- RO2: the range is re-derived, never supplied ----------------------------------------------------
 eq "3" "$(jf ok 'j.seat_diff_count')" "RO2 each seat received a diff file"
 eq "true" "$(jf ok 'j.seat_diff_parity')" "RO2 bytes every seat received equal an independent git diff base..head"

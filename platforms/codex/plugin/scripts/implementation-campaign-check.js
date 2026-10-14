@@ -556,6 +556,17 @@ function validateContract(contract, context) {
   if (!contract || typeof contract !== 'object' || Array.isArray(contract)) {
     return ['contract: expected object'];
   }
+  // Review-only adoption cannot be sealed under owner-kernel governance `enforce`: enforce wants
+  // mission_grant_ref and (for a v2 seal) mission_runtime, and an adoption contract forbids
+  // mission_runtime. Name the refusal up front instead of surfacing the generic missing-field
+  // errors that follow from it (BL-0090 P3).
+  if (hasOwn(contract, 'adoption') && context && context.missionMode === 'enforce') {
+    return [
+      'review_candidate_governance_enforce: a review-only (adoption) contract cannot be sealed '
+        + 'while owner-kernel governance enforcement_mode is enforce; review-only needs '
+        + 'governance off or warn (shadow)',
+    ];
+  }
   for (const key of Object.keys(contract)) {
     if (!CONTRACT_FIELDS.has(key)) errors.push(`contract: unknown field '${key}'`);
   }

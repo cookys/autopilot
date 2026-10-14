@@ -214,6 +214,11 @@ rail_codex() { # <name> <script> <args...>
 }
 rail_codex "(e) author codex" dispatch-author.sh --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --bin "$BINDIR/codex" --timeout 30s --run-id smwt-a1
 rail_codex "(e) review codex" dispatch-review.sh --runner codex --model gpt-5.5 --diff-file "$DIFFF" --bin "$BINDIR/codex" --run-id smwt-r1
+# The manifest's session_id is the launching Claude Code session (C), not null: the rail scrubs C from the CHILD's env
+# only, and its own manifest write must still see it. (Native runners share the same manifest writer and the same
+# apply_env/pin calls, so the codex cells cover the shared path.)
+eq "$C" "$(mf_get "$HRUNS/smwt-a1.manifest.json" session_id)" "(e) author codex: manifest session_id == the launcher's CLAUDE_CODE_SESSION_ID"
+eq "$C" "$(mf_get "$HRUNS/smwt-r1.manifest.json" session_id)" "(e) review codex: manifest session_id == the launcher's CLAUDE_CODE_SESSION_ID"
 rail_codex "(e) explore codex" dispatch-explore.sh --runner codex --model gpt-5.5 --bin "$BINDIR/codex" --prompt-file "$PROMPT"
 
 # ---- (f)-(h): the child's own `session-mode set` -> exit 3, the launcher's marker byte-identical -------------------

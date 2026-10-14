@@ -86,7 +86,7 @@ _repo_identity_json_str() {
 # Live-pane plan section 7.1 identity hand-off 2: session -> rail no longer depends on an
 # unexpired marker. AUTOPILOT_SESSION_ID is deliberately not consulted: rails scrub it for children.
 manifest_session_id_json() {
-  local sid="${CLAUDE_CODE_SESSION_ID:-}"
+  local sid="${_RAIL_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-}}"   # _RAIL_SESSION_ID: kept by child_session_pin/apply_env (never exported)
   if [ -n "$sid" ]; then
     printf '"%s"' "$(_repo_identity_json_str "$sid")"
   else
@@ -139,6 +139,7 @@ child_session_env_setup() {
 # what is left after the scrub; every later child_session_env_setup then returns the pinned values.
 child_session_pin() {
   _CHILD_SESSION_PINNED=0
+  _RAIL_SESSION_ID="${_RAIL_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-}}"   # this rail's own manifest identity; the child's copy may be scrubbed
   child_session_env_setup "$@"
   _CHILD_SESSION_PIN_UNSET=("${CHILD_SESSION_UNSET[@]}"); _CHILD_SESSION_PIN_PARENT="$CHILD_SESSION_PARENT"; _CHILD_SESSION_PINNED=1
   return 0
@@ -148,6 +149,7 @@ child_session_pin() {
 # function or a bare `timeout ... cmd`): export P and scrub the same ids in THIS shell. Call it only after the rail's
 # own session lookups are done and before the runner chain; the claude branches' explicit `env` agrees with it.
 child_session_apply_env() {
+  _RAIL_SESSION_ID="${_RAIL_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-}}"   # keep the launcher's id for this rail's manifest before it is scrubbed
   child_session_env_setup "$@"
   local _a
   for _a in "${CHILD_SESSION_UNSET[@]}"; do [ "$_a" = "-u" ] || unset "$_a"; done

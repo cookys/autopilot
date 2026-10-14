@@ -236,7 +236,7 @@ function buildJobModel(inputs) {
     options: (Array.isArray(d.options) ? d.options : []).filter(isObject)
       .map((x) => ({ label: String(x.label == null ? '' : x.label), description: String(x.description == null ? '' : x.description) })),
     recommendation: optText(d.recommendation), why: optText(d.why), blocks: optText(d.blocks), not_authorized: optText(d.not_authorized), source: optText(d.source), opened_at: optText(d.opened_at),
-    stale: d.stale === true, age_s: Number.isFinite(d.age_s) ? d.age_s : null,
+    stale: d.stale === true, age_s: Number.isFinite(d.age_s) ? d.age_s : null, orphaned: d.orphaned === true,
   }));
 
   const progress = buildProgress(o.progressReceipt, root);
@@ -406,11 +406,11 @@ function renderJobHtml(model) {
   const s1 = `<h1>${esc(m.job)} <span class="muted">· ${esc(m.project)}</span></h1>\n<p class="updated muted">updated ${esc(m.published_at)} @ ${m.commit ? esc(m.commit) : 'unknown'}</p>`;
   const decWired = isWired(m, 'decision');
   const ph = isObject(m.phase) && typeof m.phase.label === 'string' ? m.phase : null;
-  const s2 = `<p>${chip(acceptanceChip(m.axes.acceptance, m.axes.can_close), accCls)}${m.needs_decision ? chip('需要你決定', 'warn') : (decWired ? chip('知會', 'info') : chip(NOT_WIRED, 'warn'))}${ph ? chip(`階段：${ph.label}`, 'info') : ''}</p>\n<p><strong>${esc(m.conclusion)}</strong></p>\n<p>${m.needs_decision ? `需要你決定（${ds.length || 1} 件）：${oldest && typeof oldest.question === 'string' ? esc(oldest.question) : unknownSpan()}${oldest && oldest.stale && oldest.age_s !== null ? `（已等 ${Math.floor(oldest.age_s / 86400)} 天）` : ''}${ds.length > 1 ? `；另 ${ds.length - 1} 件見下方「待決事項」` : ''}` : (decWired ? '知會：目前沒有待你決定的事項。' : `決定：${NOT_WIRED}（沒有 decision 輸入；不代表沒有待決事項）`)}</p>`;
+  const s2 = `<p>${chip(acceptanceChip(m.axes.acceptance, m.axes.can_close), accCls)}${m.needs_decision ? chip('需要你決定', 'warn') : (decWired ? chip('知會', 'info') : chip(NOT_WIRED, 'warn'))}${ph ? chip(`階段：${ph.label}`, 'info') : ''}</p>\n<p><strong>${esc(m.conclusion)}</strong></p>\n<p>${m.needs_decision ? `需要你決定（${ds.length || 1} 件）：${oldest && typeof oldest.question === 'string' ? esc(oldest.question) : unknownSpan()}${oldest && oldest.stale && oldest.age_s !== null ? `（已等 ${Math.floor(oldest.age_s / 86400)} 天）` : ''}${oldest && oldest.orphaned ? '（提問的 session 已結束）' : ''}${ds.length > 1 ? `；另 ${ds.length - 1} 件見下方「待決事項」` : ''}` : (decWired ? '知會：目前沒有待你決定的事項。' : `決定：${NOT_WIRED}（沒有 decision 輸入；不代表沒有待決事項）`)}</p>`;
   const decisionBlock = (d, i) => {
     const opts = Array.isArray(d.options) ? d.options.filter(isObject) : [];
     const line = (label, v) => (v ? `<p>${label}：${esc(v)}</p>` : '');
-    return `<h3>${i + 1}. ${esc(d.question)}${d.stale && d.age_s !== null ? `<span class="muted">（已等 ${Math.floor(d.age_s / 86400)} 天）</span>` : ''}</h3>\n`
+    return `<h3>${i + 1}. ${esc(d.question)}${d.stale && d.age_s !== null ? `<span class="muted">（已等 ${Math.floor(d.age_s / 86400)} 天）</span>` : ''}${d.orphaned ? '<span class="muted">（提問的 session 已結束）</span>' : ''}</h3>\n`
       + line('背景', d.background)
       + (opts.length ? `<ol>${opts.map((x) => `<li>${esc(x.label)}${x.description ? ` — ${esc(x.description)}` : ''}</li>`).join('')}</ol>\n` : '')
       + (d.recommendation ? `<p>建議：${esc(d.recommendation)}${d.why ? `（${esc(d.why)}）` : ''}</p>\n` : line('理由', d.why))

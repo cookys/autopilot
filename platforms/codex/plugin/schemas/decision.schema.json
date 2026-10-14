@@ -130,6 +130,9 @@
             "enum": [
               "ask_user_question"
             ]
+          },
+          "turn_tracked": {
+            "const": true
           }
         }
       }

@@ -1461,6 +1461,17 @@ for (const surface of SURFACES) {
     expect((await bandParts($, surface)).line2).toBe('要合併 plan 還是拆開？')
   })
 
+  test('BL-0163 orphan: an orphaned open decision says the asker session ended in band and pane, a live one does not, and it is never dropped (' + surface + ')', async ($, on) => {
+    const files = base()
+    files[W_MODEL] = j(model({ needs_decision: true, decisions: [{ ...DECISION_W, orphaned: true, stale: false, age_s: 40 }] }))
+    const w = world(on, files)
+    await start($, surface)
+    expect((await bandParts($, surface)).line2).toBe('要合併 plan 還是拆開？（提問的 session 已結束）')
+    files[W_MODEL] = j(model({ needs_decision: true, decisions: [{ ...DECISION_W, orphaned: false, stale: false, age_s: 40 }] }))
+    await w.clock.advance(5000)
+    expect((await bandParts($, surface)).line2).toBe('要合併 plan 還是拆開？')
+  })
+
   test('W3a tasks: counts feed an unfrozen progress, the pane lists them, all completed is 完成待驗收, a frozen model progress wins (' + surface + ')', async ($, on) => {
     const files = quietWorld()
     files[P_TASKS()] = j(tasksFile())

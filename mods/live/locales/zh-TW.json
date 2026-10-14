@@ -34,6 +34,7 @@
   "reason.idle": "沒有派工在跑",
   "reason.idle_hold": "停在等你指示 {n} 分",
   "decision.stale_days": "（已等 {d} 天）",
+  "decision.orphaned": "（提問的 session 已結束）",
   "decision.irreversible": "不可逆",
   "decision.reversible": "可逆",
   "sep.list": "、",

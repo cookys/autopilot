@@ -90,7 +90,8 @@ function attentionPart(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
   const t = ctx.t
   const b = snap.band as BandView
   const nowMs = nowMsOf(snap)
-  const d = snap.decision
+  const pending = snap.pending
+  const d = pending.length > 0 ? pending[0] : null // the full text of every open question is the 待決議事項 block below; this section keeps one row for the oldest
   const a = snap.sections.attention
   const needYou = ui.stateOf('verdict', 'DECIDE')
   const entries: { s: Stated, make: (bare: boolean) => PaneLine, children: readonly PaneLine[] }[] = []
@@ -101,9 +102,7 @@ function attentionPart(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
     put(s, bare => ui.item(u, s, b.why, undefined, { fact: 'now.attention', word: !bare }))
   }
   if (d !== null) {
-    const open = d.options.length > 0 && u.expanded?.has('now:decision') === true
-    put(needYou, bare => ui.item(u, needYou, d.question + staleSuffix(d, t), undefined, { fact: 'now.attention', word: !bare, ...(d.options.length > 0 ? { toggle: { id: 'now:decision', open } } : {}) }),
-      open ? d.options.flatMap((o, i) => ui.detail(u, (i + 1) + '. ' + o.label + (o.consequence ? ' — ' + o.consequence : ''), { attached: true })) : [])
+    put(needYou, bare => ui.item(u, needYou, d.question + staleSuffix(d, t) + (pending.length > 1 ? ' (+' + (pending.length - 1) + ')' : ''), undefined, { fact: 'now.attention', word: !bare }))
   }
   if (a !== null) put(needYou, bare => ui.item(u, needYou, attentionReason(a, nowMs, t), undefined, { fact: 'now.attention', word: !bare }))
   const wt = snap.detail.residue === null ? 0 : snap.detail.residue.needs_human_count
@@ -112,6 +111,27 @@ function attentionPart(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
   const chip = ui.worst(entries.map(e => e.s))
   const lines = entries.flatMap(e => [e.make(e.s.id === chip.id), ...e.children])
   return nowSection(u, ctx, 'attention', t('now.needs_you'), lines, { right: ui.countChip(u, chip, entries.length, 'now.attention'), fact: 'now.attention' })
+}
+
+// ---- 待決議事項: every open owner question in full (background, options, recommendation and why, what stalls), so the owner can answer without scrolling back; no block at all when none is open ----
+function pendingPart(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
+  const t = ctx.t
+  const list = snap.pending
+  if (list.length === 0) return []
+  const needYou = ui.stateOf('verdict', 'DECIDE')
+  const F = 'now.pending' as const
+  const lines: PaneLine[] = []
+  list.forEach((d, i) => {
+    lines.push(ui.item(u, needYou, (i + 1) + '. ' + d.question + staleSuffix(d, t), undefined, { fact: F, word: false }))
+    if (d.background !== null) lines.push(...ui.detail(u, t('pending.background') + ': ' + d.background, { attached: true }))
+    d.options.forEach((o, k) => lines.push(...ui.detail(u, '  ' + (k + 1) + ') ' + o.label + (o.description === '' ? '' : ' — ' + o.description), { attached: true })))
+    if (d.recommendation !== null) lines.push(...ui.detail(u, t('pending.recommend') + ': ' + d.recommendation + (d.why === null ? '' : ' — ' + d.why), { attached: true }))
+    else if (d.why !== null) lines.push(...ui.detail(u, t('pending.why') + ': ' + d.why, { attached: true }))
+    if (d.blocks !== null) lines.push(...ui.detail(u, t('pending.blocks') + ': ' + d.blocks, { attached: true }))
+    if (d.not_authorized !== null) lines.push(...ui.detail(u, t('pending.not_authorized') + ': ' + d.not_authorized, { attached: true }))
+    if (d.source !== null) lines.push(...ui.detail(u, t('pending.source') + ': ' + d.source, { attached: true }))
+  })
+  return nowSection(u, ctx, 'questions', t('now.pending', { n: list.length }), lines, { right: ui.countChip(u, needYou, list.length, F), fact: F })
 }
 
 // ---- 位置: the walk, stage, unit, progress and phase; the reason is the first row when the verdict asks nothing of the owner ----
@@ -289,6 +309,7 @@ function nowLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
   const u = uiCtxOf(ctx)
   return U.sections('now', {
     attention: attentionPart(u, ctx, snap),
+    questions: pendingPart(u, ctx, snap),
     where: positionPart(u, ctx, snap),
     tabs: tabsPart(u, ctx, snap),
     background: backgroundPart(u, ctx, snap),

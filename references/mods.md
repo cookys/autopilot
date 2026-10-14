@@ -68,7 +68,7 @@ S5a, S5b, S7, S8; `README.md` there is the verdict table). A mod is CC-only; non
   the `hooks.json` `modules` key alone.
 - Reads only: `$HOME/.autopilot/live-pointer.json`, the session marker, `<live_base>/runs/paths/*.json`, the scoped envelope
   (SSD copy as fallback), `<live_base>/context/<sid>.json`, `<live_base>/review/server.json` (port, default 8787) and the job
-  page's `model.json` (acceptance axis, gate rows, `needs_decision` / `decision` incl. `stale` / `age_s`, `progress`, `phase`). It never writes, never starts a program, never sends a prompt.
+  page's `model.json` (acceptance axis, gate rows, `needs_decision` / `decisions[]` incl. `stale` / `age_s`, `progress`, `phase`). It never writes, never starts a program, never sends a prompt.
 - **Band contract (P1c C3)**: for a person who left the computer, the band says which project, which phase, how long it has
   run and how far along, led by one of five verdict words. One entry, two lines: line 1 is `<mark> <verdict> <project> · <phase> ·
   <elapsed> · <progress>`, line 2 one short reason sentence (zh-TW, built from fields only). The state texts `no pointer`,
@@ -94,8 +94,9 @@ S5a, S5b, S7, S8; `README.md` there is the verdict table). A mod is CC-only; non
     axes: progress never comes from run counts.
   - Moved to the pane: session cost, host cost and context % are the pane's header row (`session $0.42 · host $3.10 ·
     ctx 37%`, same sources and `—` rules as before). When `needs_decision`, the first section under the header lists
-    what is awaited from the model's `decision` object (question, then `n. label — consequence` for each option that
-    exists); the execution-status table, the gate rows and the review Link stay.
+    the oldest awaited question (one row, `(+N)` when more); the 待決議事項（N）section right after it lists EVERY open question of the model's
+    `decisions[]` in full and wrapped (question, 背景, `n) label — description` per option, 建議 + 理由, 不回會卡住, 為什麼要你決定 (`not_authorized`), 提出者; fields that do not exist are not
+    shown, and with none open the section is absent); the execution-status table, the gate rows and the review Link stay.
 - **Every wired source (W3a)**: besides the above the mod reads, all through the live pointer's `live_base` (never computed
   in the mod): `tasks/<sid>.json` (`autopilot.session-tasks/1`), `attention/<sid>.json` (`autopilot.attention/1`) and `turn/<sid>.json`
   (`autopilot.session-turn/1`, mods P1W TURN: `state` `active` from the UserPromptSubmit, `ended` from Stop, removed at SessionEnd; written by

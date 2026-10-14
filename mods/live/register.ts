@@ -105,7 +105,7 @@ async function readObject($: EngineInterface, path: string): Promise<Json | null
 
 function plain(state: LiveSnapshot['state'], text: string, over: Partial<LiveSnapshot> = {}): LiveSnapshot {
   return {
-    state, text, band: null, header: text, decision: null, project_key: null, root_run_id: null, link: null, rows: null, gates: null,
+    state, text, band: null, header: text, pending: [], project_key: null, root_run_id: null, link: null, rows: null, gates: null,
     sections: NO_SECTIONS, review: null, published_at: null, session_as_of: null, host_as_of: null, detail: NO_DETAIL, ...over,
   }
 }
@@ -397,7 +397,7 @@ async function buildSnapshot($: EngineInterface, nowMs: number, t: T): Promise<{
   const band = bandView(env, jobModel, scope.key, nowMs, src, t)
   return {
     snap: plain('ok', bandLine1(band) + (band.reason === null ? '' : '\n' + band.reason), {
-      ...common, band, header: headerText(env, sid, ctx, t), metrics: { ctx }, decision: jobModel === null || !jobModel.needs_decision ? null : jobModel.decision,
+      ...common, band, header: headerText(env, sid, ctx, t), metrics: { ctx }, pending: jobModel === null || !jobModel.needs_decision ? [] : jobModel.decisions,
       sections: buildSections(src, foreman),
       review,
       detail: {

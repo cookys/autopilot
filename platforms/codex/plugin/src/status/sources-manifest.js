@@ -60,7 +60,7 @@ function buildSourcesManifest({ pluginRoot, env = process.env, autopilotHome, sc
   hookSource('turn', 'awaiting-owner.js', 'AUTOPILOT_AWAITING_OWNER', 'awaiting-owner', '');
 
   const decisionInstalled = exists(path.join(pluginRoot, 'scripts', 'open-decision.js'));
-  out.decision = { installed: decisionInstalled, enabled: decisionInstalled, how: 'script scripts/open-decision.js open|close|show (depth-0 writes it at a DOA question)' };
+  out.decision = { installed: decisionInstalled, enabled: decisionInstalled, how: 'script scripts/open-decision.js open|close --id|show (depth-0 adds one entry per open owner question)' };
 
   const engineLedger = exists(path.join(pluginRoot, 'scripts', 'decision-ledger.js')) && fileHas('src/engine/autopilot-engine.js', 'decision-ledger.js');
   out.ledger_engine = { installed: engineLedger, enabled: engineLedger, how: 'engine adjudication appends decision rows through scripts/decision-ledger.js' };

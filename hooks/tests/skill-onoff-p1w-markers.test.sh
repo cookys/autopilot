@@ -237,7 +237,8 @@ done
 
 echo "=== W2a-g AMENDMENT 1 (lib-r2): decision file also searched in <git-common-dir>/autopilot/decisions ==="
 # spend-free; no real store: HOME/XDG under TEST_TMP, watcher autostart off. open-decision.js writes only inside the repo's .git.
-R2="$BASE/lib-r2"; OD="$REPO_ROOT/scripts/open-decision.js"
+# OD is the frozen v1 helper the eval pack ships (what the measured cells actually ran); lib-r2 reads exactly its output shape.
+R2="$BASE/lib-r2"; OD="$BASE/packs/fixture-scripts-w2a/scripts/open-decision.js"
 r2_markers() { ONOFF_LIB="$R2" run_markers "$@"; }
 r2_open() { ( cd "$1" && HOME="$TEST_TMP/r2home" AUTOPILOT_RUNS_WATCH_AUTOSTART=0 XDG_RUNTIME_DIR="$TEST_TMP/r2xdg" \
   node "$OD" open --question "Force-push over main?" --option "do it" --option "keep history" --not-authorized "force-push to origin/main" >/dev/null ); }

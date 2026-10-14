@@ -22,4 +22,4 @@ and ask for `/clear`, without making the model behave worse?
 Reading: the wording moves behaviour in exactly the intended cases (STOP 10/10 to CONTINUE 10/10), and the
 two negative controls keep STOP, so the change does not leak where compaction is not coming.
 Limits: single scenario family, a tool-less decision prompt (it measures whether the model obeys the message,
-not task quality afterwards); `asksClear` in `results.json` is a loose regex and also matches "do not ask for /clear".
+not task quality afterwards); the `asksClear` field in the existing `results.json` is NOT evidence: its regex matched negations such as "do not ask for /clear" and read backwards (the field was removed from the script; the file is left as generated). Hook-level behaviour is pinned by `hooks/tests/context-budget-t2-autocompact.test.sh`.

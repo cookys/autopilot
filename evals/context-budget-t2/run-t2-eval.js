@@ -20,7 +20,16 @@ const RUNS_ON = Number(arg('--runs-on', 5));
 const RUNS_CTL = Number(arg('--runs-control', 3));
 const OUT = arg('--out', path.join(__dirname, 'results.json'));
 const CFGDIR = process.env.CLAUDE_EVAL_CONFIG_DIR;
-if (!CFGDIR && !process.argv.includes('--dry')) { console.error('set CLAUDE_EVAL_CONFIG_DIR'); process.exit(2); }
+// Never hand the real ~/.claude to the child: claude resets a real config dir.
+if (CFGDIR) {
+  const real = path.join(require('os').homedir(), '.claude');
+  const cands = [path.resolve(CFGDIR)];
+  try { cands.push(fs.realpathSync(CFGDIR)); } catch { /* absent dir: resolve() result is enough */ }
+  if (cands.some((p) => p === real || p === fs.realpathSync(real))) {
+    console.error('refusing: CLAUDE_EVAL_CONFIG_DIR is the real ~/.claude'); process.exit(2);
+  }
+}
+if (!CFGDIR &&!process.argv.includes('--dry')) { console.error('set CLAUDE_EVAL_CONFIG_DIR'); process.exit(2); }
 
 const base = { t1: 100000, t2: 300000, step: 25000, inferredWindow: 1000000, windowSource: 'statusline' };
 const cases = [
@@ -46,7 +55,8 @@ function prompt(c, msg) {
 }
 function grade(text) {
   const m = /^\s*ACTION:\s*(CONTINUE|STOP)\b/im.exec(text || '');
-  return { action: m ? m[1].toUpperCase() : 'UNPARSED', asksClear: /\/clear/i.test(text || '') && /ask|tell|request|please|need/i.test(text || '') };
+  // No asksClear field: its regex matched negations ("do not ask for /clear") and read backwards.
+  return { action: m ? m[1].toUpperCase() : 'UNPARSED' };
 }
 function messageFor(c, arm) {
   const cfg = { ...base, autocompactWindow: arm === 'ON' ? c.awc : null };
@@ -76,8 +86,8 @@ for (const j of jobs) {
 const summary = {};
 for (const x of results) {
   const k = `${x.case}|${x.arm}`;
-  summary[k] = summary[k] || { n: 0, CONTINUE: 0, STOP: 0, UNPARSED: 0, asksClear: 0 };
-  summary[k].n++; summary[k][x.action]++; if (x.asksClear) summary[k].asksClear++;
+  summary[k] = summary[k] || { n: 0, CONTINUE: 0, STOP: 0, UNPARSED: 0 };
+  summary[k].n++; summary[k][x.action]++;
 }
 fs.writeFileSync(OUT, JSON.stringify({ model: MODEL, summary, results }, null, 1));
 console.log(JSON.stringify(summary, null, 1));

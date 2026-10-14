@@ -510,13 +510,17 @@ function defaultReadiness() {
   });
 }
 
-function defaultContextGate({ roster, promptFile, contractPath, repo }) {
-  const model = roster && roster.implementer_engine;
+function defaultContextGate({ contract, roster, promptFile, contractPath, repo }) {
+  // Review-only (adoption contract) runs have no implementer: the reviewer is the seat that
+  // reads the prompt and the contract, so the window is measured against it (BL-0090 P3).
+  const reviewOnly = Boolean(contract && Object.prototype.hasOwnProperty.call(contract, 'adoption'));
+  const seat = reviewOnly ? 'reviewer' : 'implementer';
+  const model = roster && roster[`${seat}_engine`];
   if (typeof model !== 'string' || model.length === 0) {
     return rejected(
       'context_window',
-      'implementer_identity_missing',
-      'context-window gate requires the resolved implementer identity',
+      `${seat}_identity_missing`,
+      `context-window gate requires the resolved ${seat} identity`,
     );
   }
   const result = spawnSync(process.execPath, [
@@ -3193,6 +3197,7 @@ function runCampaignIntake(input = {}, adapters = {}) {
 
 module.exports = {
   defaultAdoptionAdmission,
+  defaultContextGate,
   reviewCandidatePanelRejection,
   appendCampaignEvent,
   CampaignIntakeError,

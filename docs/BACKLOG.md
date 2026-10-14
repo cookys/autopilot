@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0146 -->
+<!-- next-id: BL-0147 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1738,3 +1738,15 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: dispatch tree plan, step 4 deferred by owner ruling 2026-10-13
 - **Pointer**: docs/plans/2026-10-13-dispatch-tree.md
 - **Context**: Plan §4, D4. Carry root/parent/depth as remote-reported telemetry, never an edge (the far side is an LLM relaying it; G1 finding 56a3391e). Needs a fleet dispatch field plus a receiver record, shown as a labelled hint.
+### a returned review-only campaign re-reviews the whole range instead of only the fix
+- **Id**: BL-0146
+- **Status**: open
+- **Since**: 2026-10-14
+- **Origin**: self
+- **Problem**: 外部作者修好審查挑出的問題、把新版本帶回同一個審查時，每個審查席位都會把整段變更從頭再審一次，不會只看新改的部分。
+- **Impact**: 每帶回一次就付一整輪審查費。正確性不受影響。回報者（cuda）提過第二輪花費會卡住他們。
+- **Trigger**: 外部呼叫方回報帶回重審的費用過高，或同一個 campaign 經常帶回兩次以上
+- **Effort**: M
+- **Source**: BL-0090 P2, Q3 ruled (c) on 2026-10-14
+- **Pointer**: docs/plans/2026-10-13-review-only-external-candidate.md
+- **Context**: §10 Q3. Seat reuse keys on the whole input binding and seats have no context channel; delta-only needs a new reuse key, a touched-files re-check and a cumulative-context packet (option (a)).

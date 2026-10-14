@@ -545,6 +545,8 @@ if (args[0] === 'engine') {
           strictL5Bootstrap = createStrictL5ProviderBootstrap({
             cwd: parsed.cwd || process.cwd(),
             level,
+            // BL-0090 P3: review-only admission probes only the seats it uses.
+            ...(reviewCandidateMode ? { reviewOnly: true } : {}),
           });
         } catch (error) {
           process.stdout.write(`${JSON.stringify({

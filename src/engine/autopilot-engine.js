@@ -22,6 +22,7 @@ const { dispatchImplementJson } = require('../runners/implementer');
 const { createEngineLifecycleObservationSession } = require('./engine-lifecycle-observation');
 const { finalPanelSeatQualified } = require('./final-panel-qualification');
 const finalPanelSeatStore = require('./final-panel-seat-store');
+const reviewCandidateRepairSeed = require('./review-candidate-repair-seed');
 const {
   consumeStrictL5ProviderReadiness,
   isStrictL5ProviderReadinessAuthority,
@@ -7552,7 +7553,10 @@ class AutopilotEngine {
     // listed. No model call and no range re-derivation: the answer is "stop" whatever the branch
     // looks like now. Used on a resume (--campaign-continuation end / adoption.disposition_preset)
     // and when a first run parks on findings under a preset of end.
-    const closeParkedReviewAsEnd = (parkedControllerState, directFindings = null) => {
+    // disposition 'repair' (P5) is the same close plus a hand-off: a seeded implement-review contract
+    // the caller seals and runs. The review-only campaign itself still spends no writer call (RO1).
+    const closeParkedReviewAsEnd = (parkedControllerState, directFindings = null, disposition = 'end') => {
+      const isRepair = disposition === 'repair';
       const parkedFindings = (() => {
         const nonEmpty = (value) => (Array.isArray(value) && value.length > 0 ? value : null);
         const fromController = parkedControllerState
@@ -7574,24 +7578,105 @@ class AutopilotEngine {
       const findingLines = parkedFindings.map((item) => (
         `${item && item.finding_id ? `[${item.finding_id}] ` : ''}${item && item.claim ? item.claim : JSON.stringify(item)}`
       ));
-      const endReason = 'review_candidate_disposition_end: the review was closed by the caller; '
+      const phaseName = isRepair ? 'review_candidate_repair' : 'review_candidate_end';
+      const dispositionCode = isRepair ? 'review_candidate_disposition_repair' : 'review_candidate_disposition_end';
+      const endReason = `${dispositionCode}: the review was closed by the caller${isRepair ? ' and handed to a repair campaign' : ''}; `
         + `${parkedFindings.length} finding(s) left unresolved${findingLines.length ? `: ${findingLines.join(' | ')}` : ''}`;
+      // Build and verify the seed BEFORE terminalizing: a seed that is not a faithful repair of the
+      // reviewed head leaves the campaign parked, so the caller can still end or return.
+      let repairSeed = null;
+      if (isRepair) {
+        const continuation = campaignControl.review_candidate_continuation || null;
+        const admitted = (campaignControl.steps || []).find((item) => (
+          item && item.owner === 'adoption_admission' && item.status === 'ready' && isStr(item.head)
+        )) || null;
+        // A resume reads the reviewed head from the ledger facts and has no fallback: a missing one is
+        // refused, never replaced by the sealed head (which is stale after a return). Only the first-run
+        // preset park reads the head from the ready admission step.
+        const resumePath = Boolean(continuation && continuation.continuation === 'repair');
+        const reviewedHead = resumePath
+          ? ((continuation && continuation.reviewed_head) || null)
+          : ((admitted && admitted.head) || null);
+        try {
+          if (!reviewedHead) {
+            throw new reviewCandidateRepairSeed.RepairSeedError(
+              'review_candidate_repair_reviewed_head_missing',
+              'the reviewed head of the parked review could not be determined; close the review with end or return',
+            );
+          }
+          // Independent cross-check: the candidate the park itself stored must be the head the seed will use.
+          const parkedCandidate = parkedControllerState && parkedControllerState.candidate;
+          const parkedCommit = parkedCandidate && parkedCandidate.commit;
+          if (parkedCommit !== reviewedHead) {
+            throw new reviewCandidateRepairSeed.RepairSeedError(
+              'review_candidate_repair_head_mismatch',
+              `the reviewed head ${reviewedHead} is not the candidate stored at the park (${parkedCommit || 'none'})`,
+            );
+          }
+          repairSeed = reviewCandidateRepairSeed.buildRepairSeed({
+            adoptionContract: campaignControl.contract,
+            reviewedHead,
+            findings: parkedFindings,
+            campaignId: campaignControl.campaign_id,
+          });
+        } catch (error) {
+          return {
+            status: 'blocked',
+            phase: 'review_candidate_repair',
+            code: error.code || 'review_candidate_repair_seed_invalid',
+            reason: error.message || String(error),
+            findings: parkedFindings,
+            rounds: 0,
+            verdict: null,
+            roster,
+            resolveResult,
+            implementation: null,
+            review: null,
+            implementationChain: [],
+            reviewChain: [],
+            dispatcher_called: false,
+            model_calls: 0,
+            ledger,
+          };
+        }
+      }
+      // The seed is written to disk BEFORE terminalizing, so a terminalization failure cannot lose it;
+      // it is attached to every return after the campaign is terminal (not to a still-parked one).
+      let repairHandoff = null;
+      if (isRepair && repairSeed) {
+        const written = reviewCandidateRepairSeed.writeRepairSeed({
+          commonDir: workOrder.resolveGitCommonDir(loopCwd),
+          campaignId: campaignControl.campaign_id,
+          seed: repairSeed,
+        });
+        repairHandoff = {
+          kind: 'implement_review_seed',
+          review_campaign_id: campaignControl.campaign_id,
+          base_sha: repairSeed.contract.base_sha,
+          branch: repairSeed.contract.branch,
+          contract: repairSeed.contract,
+          task_prompt: repairSeed.task_prompt,
+          ...written,
+          next_step: 'seal contract with scripts/implementation-campaign-check.js seal, then run '
+            + 'autopilot engine implement-review with the task file as the prompt',
+        };
+      }
       repairLineage.terminal_worktree_disposition = 'not_created_adopted_range';
       campaignControl.terminal_failure = this.terminalizeManagedCampaignFailure({
         campaignControl,
         reason: endReason,
-        phase: 'review_candidate_end',
+        phase: phaseName,
         cwd: loopCwd,
         repairLineage,
         forceTerminal: true,
       });
-      ledger.push(this.ledgerEntry('review_candidate_disposition', 'end', this.now(), {
+      ledger.push(this.ledgerEntry('review_candidate_disposition', disposition, this.now(), {
         findings: parkedFindings.length,
       }));
       const blockedEnd = {
         status: 'blocked',
-        phase: 'review_candidate_end',
-        code: 'review_candidate_disposition_end',
+        phase: phaseName,
+        code: dispositionCode,
         reason: endReason,
         findings: parkedFindings,
         rounds: 0,
@@ -7618,10 +7703,11 @@ class AutopilotEngine {
             || 'the parked review could not be terminalized',
         };
       }
+      if (repairHandoff) blockedEnd.repair_handoff = repairHandoff;
       try {
         terminalizeControllerWorkOrder({
           terminalStatus: 'failed',
-          phase: 'review_candidate_end',
+          phase: phaseName,
           reason: endReason,
           controller: campaignController,
         });
@@ -7664,8 +7750,9 @@ class AutopilotEngine {
         };
       };
       const continuationState = campaignControl.review_candidate_continuation || null;
-      if (continuationState && continuationState.continuation === 'end') {
-        return closeParkedReviewAsEnd(priorController);
+      if (continuationState
+          && (continuationState.continuation === 'end' || continuationState.continuation === 'repair')) {
+        return closeParkedReviewAsEnd(priorController, null, continuationState.continuation);
       }
       const sealedAdoption = campaignControl.contract && campaignControl.contract.adoption;
       const admissionStep = (campaignControl.steps || []).find((item) => (
@@ -9373,17 +9460,21 @@ class AutopilotEngine {
           campaignControl.controller = composition.controller;
         } catch (_e) { /* already persisted or not */ }
       }
-      // A review that parks on findings under a sealed preset of end closes itself: the caller
+      // A review that parks on findings under a sealed preset of end or repair closes itself: the caller
       // decided in advance, so no second invocation is needed.
       if (input.reviewCandidate === true
           && (composition.status === 'awaiting_disposition'
             || composition.status === durableAwaitDisposition)
           && campaignControl.contract
           && campaignControl.contract.adoption
-          && campaignControl.contract.adoption.disposition_preset === 'end') {
+          && ['end', 'repair'].includes(campaignControl.contract.adoption.disposition_preset)) {
+        // composition.controller is the snapshot taken when the wait was built, before the park persisted the
+        // candidate; the latest persisted controller (campaignController) is the one that stores it.
         return closeParkedReviewAsEnd(
-          composition.controller || campaignController,
+          (campaignControl.contract.adoption.disposition_preset === 'repair' && campaignController)
+            || composition.controller || campaignController,
           composition.findings,
+          campaignControl.contract.adoption.disposition_preset,
         );
       }
       const parkEstimate = estimateRepairRoundSeconds(ledger);
@@ -10160,10 +10251,7 @@ class AutopilotEngine {
       if (!refusal && continuationFlag !== null) {
         if (!['end', 'return', 'repair'].includes(continuationFlag)) {
           refusal = ['review_candidate_continuation_unknown',
-            `unknown --campaign-continuation ${JSON.stringify(continuationFlag)}: choose end or return`];
-        } else if (continuationFlag === 'repair') {
-          refusal = ['review_candidate_repair_not_provided',
-            'repair of a reviewed range is not provided yet: close the review with end, or return a new head'];
+            `unknown --campaign-continuation ${JSON.stringify(continuationFlag)}: choose end, return or repair`];
         } else if (input.resume !== true) {
           refusal = ['review_candidate_continuation_requires_resume',
             '--campaign-continuation closes a parked review and needs --resume'];

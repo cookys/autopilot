@@ -31,7 +31,7 @@ function printHelp() {
   node bin/autopilot.js dispatch review [dispatch-review args...]
   node bin/autopilot.js engine review-loop [resolve-review-loop args...]
   node bin/autopilot.js engine implement-review --campaign-contract <file> [--campaign-seal <file>] [--campaign-ledger <file>] [--campaign-disposition-authority <file>|--campaign-disposition-policy deny-nonempty|acceptance-bound] [--lifecycle-receipt <file>] [--mission-prepared <receipt>] --prompt-file <file> --branch <branch> --base <sha> [--cwd <repo>] [--max-rounds N] [--verify-cmd <shell command>] [--no-verify-first] [--require-qualified-reviewer|--allow-unqualified-reviewer] [--no-review-spec] [--resume] [--prior-status none|no_verdict|ambiguous]
-  node bin/autopilot.js engine review-candidate --campaign-contract <file> [--campaign-seal <file>] --spec-file <file> [--campaign-disposition-authority <file>|--campaign-disposition-policy deny-nonempty|acceptance-bound] [--campaign-continuation end|return] [--cwd <repo>] [--resume]
+  node bin/autopilot.js engine review-candidate --campaign-contract <file> [--campaign-seal <file>] --spec-file <file> [--campaign-disposition-authority <file>|--campaign-disposition-policy deny-nonempty|acceptance-bound] [--campaign-continuation end|return|repair] [--cwd <repo>] [--resume]
   node bin/autopilot.js harness report [harness report args...]
   node bin/autopilot.js endpoints <init|list|which|set|doctor> [--json]
   node bin/autopilot.js status [quota|runs|roster|readiness] [--json] [--probe]  (--probe: bounded live spend: runs per-seat transport and live probes; quota --probe stays a no-spend safe probe)
@@ -77,8 +77,10 @@ Commands:
                     interrupted or parked review (the range is re-derived first; seats
                     that already reviewed are not asked again). A parked review is closed
                     with --campaign-continuation end (terminal not-ready, findings listed)
-                    or return (a new head that descends from the reviewed head; the same campaign is re-reviewed);
-                    repair is not provided yet. The contract may preset the choice.
+                    or return (a new head that descends from the reviewed head; the same campaign is re-reviewed),
+                    or repair (close not-ready like end, and emit a seeded implement-review
+                    contract + task file for the caller to seal and run: repair_handoff in the
+                    result). The contract may preset the choice.
   harness report    Emit read-only harness capability state and stale flags.
   endpoints         Manage endpoint credentials (list/which/set/doctor/init; --json).
   status            State overview or task DONE/NOT DONE from authoritative receipts.

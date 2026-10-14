@@ -2960,7 +2960,7 @@ function runCampaignIntake(input = {}, adapters = {}) {
       return releaseAfterRejection(rejected(
         'campaign_contract',
         'review_candidate_continuation_unknown',
-        `unknown continuation ${JSON.stringify(flag)}: choose end or return`,
+        `unknown continuation ${JSON.stringify(flag)}: choose end, return or repair`,
       ));
     }
     // end closes ANY non-terminal review-only campaign (a crash between verdict and park, a branch that
@@ -2978,14 +2978,7 @@ function runCampaignIntake(input = {}, adapters = {}) {
         'campaign_generation',
         'review_candidate_continuation_required',
         'this review is parked on findings: close it with --campaign-continuation end, or return a new head '
-          + 'with --campaign-continuation return (the contract may preset the choice)',
-      ));
-    }
-    if (continuation === 'repair') {
-      return releaseAfterRejection(rejected(
-        'campaign_generation',
-        'review_candidate_repair_not_provided',
-        'repair of a reviewed range is not provided yet: close the review with end, or return a new head',
+          + 'with --campaign-continuation return, or hand it to a writer with --campaign-continuation repair (the contract may preset the choice)',
       ));
     }
     reviewCandidateContinuation = {
@@ -2995,9 +2988,9 @@ function runCampaignIntake(input = {}, adapters = {}) {
       reviewed_head: facts ? facts.reviewedHead : null,
     };
     let admission;
-    if (continuation === 'end') {
-      // Closing a parked review spends nothing: the range is not re-derived, because the answer
-      // is "stop" whatever the branch now looks like.
+    if (continuation === 'end' || continuation === 'repair') {
+      // Closing a parked review (end, or repair = close and hand off) spends nothing: the range is
+      // not re-derived, because the answer is "stop" whatever the branch now looks like.
       admission = step('adoption_admission', 'skipped', {
         phase: 'admission', reason: 'review_candidate_end_does_not_re_derive',
       });
@@ -3159,7 +3152,7 @@ function runCampaignIntake(input = {}, adapters = {}) {
       campaignDispositionAuthority: input.campaignDispositionAuthority,
       repairRoundEstimateSeconds: input.repairRoundEstimateSeconds,
       ...(input.reviewCandidate === true ? { reviewCandidate: true } : {}),
-      ...(reviewCandidateContinuation && reviewCandidateContinuation.continuation === 'end' ? { closeOnly: true } : {}),
+      ...(reviewCandidateContinuation && ['end', 'repair'].includes(reviewCandidateContinuation.continuation) ? { closeOnly: true } : {}),
       missionBinding: missionClaim.status === 'claimed' && typeof missionClaim.claim_id === 'string'
         ? { claim_id: missionClaim.claim_id, campaign_id: missionClaim.campaign_id }
         : null,

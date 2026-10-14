@@ -760,8 +760,6 @@ function validateAdoption(contract, context) {
   if (hasOwn(adoption, 'disposition_preset')
       && !['end', 'return', 'repair'].includes(adoption.disposition_preset)) {
     errors.push("adoption.disposition_preset: expected one of 'end', 'return', 'repair'");
-  } else if (adoption.disposition_preset === 'repair') {
-    errors.push('adoption.disposition_preset: review_candidate_repair_not_provided: repair is not provided yet; seal end or return');
   }
   if (contract.max_repair_generations !== 0) {
     errors.push('adoption: max_repair_generations must be 0 for a review-only contract');

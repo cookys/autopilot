@@ -204,12 +204,14 @@ const gitWt = ({ commit } = {}) => {
 };
 // A step's clockSkewSeconds moves the engine clock forward (a long interruption); it persists for later steps.
 let clockSkewMs = 0;
+// A step's mustFixAuthority sets the repair-round estimate the intake sees (the engine does not forward one).
+let intakeEstimateSeconds = 0;
 const options = {
   cwd: sbx,
   clock: () => new Date(Date.now() + clockSkewMs).toISOString(),
   campaignDispositionProvider: compileCampaignDispositionPolicy('acceptance-bound'),
   campaignIntake(input, engineAdapters) {
-    return runCampaignIntake(input, {
+    return runCampaignIntake(intakeEstimateSeconds ? { ...input, repairRoundEstimateSeconds: intakeEstimateSeconds } : input, {
       readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
       contextGate: () => ({ owner: 'context_window', status: 'ready' }),
       occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
@@ -397,6 +399,37 @@ const killLease = () => {
     '--idempotency-key', `rc-driver-park:${lease.generation}:${lease.nonce}`,
   ], { cwd: sbx, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 };
+// P5: summarize a repair hand-off. The seeded contract is also run through the real checker (seal),
+// exactly as a caller would, so "passes implementation-campaign-check.js" is observed and not assumed.
+const handoffSummary = (r) => {
+  const h = r && r.repair_handoff;
+  if (!h) return null;
+  let sealStatus = null;
+  let sealError = null;
+  let onDisk = null;
+  try {
+    if (h.contract_path) onDisk = JSON.parse(fs.readFileSync(h.contract_path, 'utf8'));
+    const seedFile = path.join(outDir, `seed-${Math.random().toString(36).slice(2, 8)}.json`);
+    fs.writeFileSync(seedFile, `${JSON.stringify(h.contract, null, 2)}\n`);
+    const sealed = spawnSync(process.execPath, [
+      path.join(root, 'scripts', 'implementation-campaign-check.js'),
+      'seal', '--contract', seedFile, '--repo', sbx, '--mission-mode', 'shadow', '--out', `${seedFile}.seal`,
+    ], { cwd: sbx, encoding: 'utf8' });
+    sealStatus = sealed.status;
+    sealError = `${sealed.stderr || ''}${sealed.stdout || ''}`.slice(0, 400);
+  } catch (error) { sealError = String(error && error.message || error); }
+  return {
+    base_sha: h.base_sha, branch: h.branch, has_adoption: Object.prototype.hasOwnProperty.call(h.contract, 'adoption'),
+    max_repair_generations: h.contract.max_repair_generations,
+    verify_cmd: h.contract.verify_cmd, allowed_path_prefixes: h.contract.allowed_path_prefixes,
+    task_has_findings: typeof h.task_prompt === 'string' && h.task_prompt.includes('## Findings'),
+    task_prompt: h.task_prompt,
+    task_file_matches: h.task_path ? fs.readFileSync(h.task_path, 'utf8') === h.task_prompt : null,
+    contract_file_matches: onDisk ? JSON.stringify(onDisk) === JSON.stringify(h.contract) : null,
+    write_error: h.write_error || null,
+    seal_status: sealStatus, seal_error: sealError,
+  };
+};
 const stepsOut = [];
 let currentHead = head;
 for (const stepSpec of (ctx.steps || [])) {
@@ -438,12 +471,18 @@ for (const stepSpec of (ctx.steps || [])) {
     git(worktree, 'commit', '-q', '--allow-empty', '-m', 'empty follow-up');
     currentHead = git(worktree, 'rev-parse', 'HEAD');
   }
+  intakeEstimateSeconds = Number.isFinite(stepSpec.mustFixAuthority) ? stepSpec.mustFixAuthority : 0;
   const stepEngine = new AutopilotEngine(options);
   installImplControl(stepEngine);
   const stepInput = {
     ...input,
     resume: stepSpec.resume !== false,
     ...(stepSpec.continuation ? { campaignContinuation: stepSpec.continuation } : {}),
+    // P5: a caller that authorizes a repair round (must-fix-now) with a long round estimate; closing
+    // (end/repair) must not be refused by the "not enough wall left for a repair round" budget check.
+    ...(stepSpec.mustFixAuthority ? {
+      campaignDispositionAuthority: { reviews: [{ decisions: [{ disposition: { disposition: 'must-fix-now' } }] }] },
+    } : {}),
   };
   let stepResult;
   let stepThrown = null;
@@ -460,7 +499,7 @@ for (const stepSpec of (ctx.steps || [])) {
     review_calls_delta: logNow.length - beforeReviews, review_models_delta: logNow.slice(beforeReviews),
     verify_runs_delta: verifyRuns - beforeVerify,
     model_calls: stepResult.model_calls == null ? null : stepResult.model_calls,
-    result_keys: Object.keys(stepResult),
+    result_keys: Object.keys(stepResult), impl_after: impl, handoff: handoffSummary(stepResult), findings_count: Array.isArray(stepResult.findings) ? stepResult.findings.length : null,
   });
 }
 
@@ -508,7 +547,7 @@ emit({
   forced_called: forced.called, forced_result: forced.result,
   admission_stub_calls: adopterAdmissionCalls,
   operator_status_clean: mainStatus === '' || /^\?\? /.test(mainStatus) === false,
-  result_keys: Object.keys(result),
+  result_keys: Object.keys(result), handoff: handoffSummary(result), findings_count: Array.isArray(result.findings) ? result.findings.length : null,
   result_head: JSON.stringify(result).slice(0, 700),
   ledger_head: Array.isArray(result.ledger)
     ? result.ledger.map((e) => `${e.stage || e.name}:${e.status}`).join(',') : null,

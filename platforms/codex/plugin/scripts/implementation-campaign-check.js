@@ -729,7 +729,7 @@ function validateAdoption(contract, context) {
   }
   if (!hasOwn(adoption, 'head_sha')) errors.push("adoption: missing required field 'head_sha'");
   for (const key of Object.keys(adoption)) {
-    if (key !== 'head_sha' && key !== 'author_family') {
+    if (key !== 'head_sha' && key !== 'author_family' && key !== 'disposition_preset') {
       errors.push(`adoption: unknown field '${key}'`);
     }
   }
@@ -745,6 +745,10 @@ function validateAdoption(contract, context) {
   if (hasOwn(adoption, 'author_family')
       && (!nonEmptyString(adoption.author_family) || adoption.author_family.length > 64)) {
     errors.push('adoption.author_family: expected bounded non-empty string');
+  }
+  if (hasOwn(adoption, 'disposition_preset')
+      && !['end', 'return', 'repair'].includes(adoption.disposition_preset)) {
+    errors.push("adoption.disposition_preset: expected one of 'end', 'return', 'repair'");
   }
   if (contract.max_repair_generations !== 0) {
     errors.push('adoption: max_repair_generations must be 0 for a review-only contract');

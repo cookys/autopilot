@@ -30,7 +30,7 @@ function printHelp() {
   node bin/autopilot.js dispatch review [dispatch-review args...]
   node bin/autopilot.js engine review-loop [resolve-review-loop args...]
   node bin/autopilot.js engine implement-review --campaign-contract <file> [--campaign-seal <file>] [--campaign-ledger <file>] [--campaign-disposition-authority <file>|--campaign-disposition-policy deny-nonempty|acceptance-bound] [--lifecycle-receipt <file>] [--mission-prepared <receipt>] --prompt-file <file> --branch <branch> --base <sha> [--cwd <repo>] [--max-rounds N] [--verify-cmd <shell command>] [--no-verify-first] [--require-qualified-reviewer|--allow-unqualified-reviewer] [--no-review-spec] [--resume] [--prior-status none|no_verdict|ambiguous]
-  node bin/autopilot.js engine review-candidate --campaign-contract <file> [--campaign-seal <file>] --spec-file <file> [--campaign-disposition-authority <file>|--campaign-disposition-policy deny-nonempty|acceptance-bound] [--cwd <repo>] [--resume]
+  node bin/autopilot.js engine review-candidate --campaign-contract <file> [--campaign-seal <file>] --spec-file <file> [--campaign-disposition-authority <file>|--campaign-disposition-policy deny-nonempty|acceptance-bound] [--campaign-continuation end|return] [--cwd <repo>] [--resume]
   node bin/autopilot.js harness report [harness report args...]
   node bin/autopilot.js endpoints <init|list|which|set|doctor> [--json]
   node bin/autopilot.js status [quota|runs|roster|readiness] [--json] [--probe]  (--probe: bounded live spend: runs per-seat transport and live probes; quota --probe stays a no-spend safe probe)
@@ -72,8 +72,12 @@ Commands:
                     the command line. The range is re-derived from the repository,
                     verified in a detached worktree, reviewed by the sealed panel,
                     and ends in a terminal campaign receipt. Zero implementer,
-                    verification-author or repair model calls. --resume is refused
-                    with a named reason in this release.
+                    verification-author or repair model calls. --resume continues an
+                    interrupted or parked review (the range is re-derived first; seats
+                    that already reviewed are not asked again). A parked review is closed
+                    with --campaign-continuation end (terminal not-ready, findings listed)
+                    or return (a descendant head; named refusal until delta review ships);
+                    repair is not provided yet. The contract may preset the choice.
   harness report    Emit read-only harness capability state and stale flags.
   endpoints         Manage endpoint credentials (list/which/set/doctor/init; --json).
   status            State overview or task DONE/NOT DONE from authoritative receipts.
@@ -108,6 +112,7 @@ function parseReviewCandidateArgs(rawArgs) {
     campaignLedger: null,
     campaignDispositionAuthority: null,
     campaignDispositionPolicy: null,
+    campaignContinuation: null,
     campaignManaged: true,
     legacyUnmanaged: false,
     reviewCandidate: true,
@@ -121,6 +126,9 @@ function parseReviewCandidateArgs(rawArgs) {
     '--cwd': 'cwd',
     '--campaign-disposition-authority': 'campaignDispositionAuthority',
     '--campaign-disposition-policy': 'campaignDispositionPolicy',
+    // The value is validated by the engine (named refusal), not here, so a bad choice is a
+    // review_candidate_continuation_unknown refusal and not a generic usage error.
+    '--campaign-continuation': 'campaignContinuation',
   };
   let i = 0;
   while (i < rawArgs.length) {
@@ -461,14 +469,6 @@ if (args[0] === 'engine') {
           })}\n`);
           process.exit(1);
         };
-        if (parsed.resume) {
-          refuse(
-            'review_candidate_resume_unsupported',
-            'review-candidate cannot resume yet: a parked or interrupted review is not resumable '
-              + 'in this release; to review the range again, make a new contract with a new ticket, '
-              + 'seal it again, and put it in a new directory',
-          );
-        }
         let sealed;
         try {
           sealed = JSON.parse(fs.readFileSync(

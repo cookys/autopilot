@@ -77,6 +77,9 @@ export AUTOPILOT_TEST_RUN_GUARD=1
 # Global; set by the parallel branch, cleared after its own successful rm -rf.
 # The EXIT trap also removes it (belt-and-suspenders on an interrupted run).
 PARALLEL_TMP=""
+# The in-flight serial SKIP-capture temp file (run_one / serial tail). __suite_on_exit removes it,
+# so an interrupted run leaves no hooks-run-skipcap.* behind.
+SKIP_CAP_FILE=""
 # Per-run L1 (node --test) temp dir + its liveness-lock fd; see the L1 block below.
 L1_TMP=""
 L1_LOCK_FD=""
@@ -144,6 +147,9 @@ __suite_on_exit() {
   if [ -n "${TS_LOCK_FD:-}" ]; then
     eval "exec ${TS_LOCK_FD}>&-" 2>/dev/null || true
     TS_LOCK_FD=""
+  fi
+  if [ -n "${SKIP_CAP_FILE:-}" ]; then
+    rm -f "$SKIP_CAP_FILE"
   fi
   if [ -n "$PARALLEL_TMP" ]; then
     rm -rf "$PARALLEL_TMP"
@@ -307,7 +313,8 @@ trap '__suite_on_interrupt TERM' TERM
 
 # ── Argument parsing ──
 # Support, in any order: optional --parallel [N], optional substring FILTER.
-# Serial (no --parallel) is the default and must stay byte-identical to pre-flag.
+# Serial (no --parallel) is the default: same output content as before the flag, but each file is
+# captured and printed when it finishes (not live), with stderr merged into stdout.
 PARALLEL=0
 PARALLEL_N=""
 FILTER=""
@@ -472,6 +479,17 @@ is_suite_timeout_ec() {
 TOTAL=0
 FAILED=0
 declare -a FAILED_TESTS=()
+# A suite that ran but asserted nothing prints a greppable `SKIP [suite] ...` line (exit 0). The
+# per-file output is long, so without a summary entry that line is invisible next to the
+# "ALL TESTS PASSED" banner. collect_skips <rel> <captured-output-file> records each one.
+declare -a SKIPPED_TESTS=()
+collect_skips() {
+  local rel="$1" out="$2" line
+  [ -f "$out" ] || return 0
+  while IFS= read -r line; do
+    SKIPPED_TESTS+=("$rel: $line")
+  done < <(grep -a '^SKIP \[' "$out" | sort -u)
+}
 
 # ── Real-store pollution guard ───────────────────────────────────────────────
 # Incident: hooks/tests/engine-qualify.test.sh appended 100 fixture rows
@@ -522,8 +540,15 @@ run_one() {
   fi
   echo ""
   echo "──────── $rel ────────"
-  timeout --kill-after=10 "${AUTOPILOT_TEST_SUITE_TIMEOUT_SECS}s" bash "$file"
+  local skip_cap
+  skip_cap="$(mktemp "${TMPDIR:-/tmp}/hooks-run-skipcap.XXXXXX")"
+  SKIP_CAP_FILE="$skip_cap"
+  timeout --kill-after=10 "${AUTOPILOT_TEST_SUITE_TIMEOUT_SECS}s" bash "$file" >"$skip_cap" 2>&1
   ec=$?
+  cat "$skip_cap"
+  collect_skips "$rel" "$skip_cap"
+  rm -f "$skip_cap"
+  SKIP_CAP_FILE=""
   if [ "$ec" -eq 0 ]; then
     : # PASS line printed by finalize_test
   elif is_suite_timeout_ec "$ec"; then
@@ -612,7 +637,7 @@ if [ "${#NON_EXEC[@]}" -gt 0 ]; then
 fi
 
 if [ "$PARALLEL" -eq 0 ]; then
-  # ── Serial path (default; byte-identical to pre--parallel) ──
+  # ── Serial path (default; same output content as pre--parallel, printed per file after it finishes) ──
   for file in "$TESTS_DIR"/*.test.sh; do
     run_one "$file"
   done
@@ -750,6 +775,7 @@ else
       echo "──────── $rel ────────"
       if [ -f "$out" ]; then
         cat "$out"
+        collect_skips "$rel" "$out"
       fi
       if [ "$ec" -eq 0 ]; then
         : # PASS
@@ -836,8 +862,14 @@ else
     rel="${file#$REPO_ROOT/}"
     echo ""
     echo "──────── $rel (serial tail) ────────"
-    AUTOPILOT_TEST_TIMING_FACTOR=1 timeout --kill-after=10 "${AUTOPILOT_TEST_SUITE_TIMEOUT_SECS}s" bash "$file"
+    tail_cap="$(mktemp "${TMPDIR:-/tmp}/hooks-run-skipcap.XXXXXX")"
+    SKIP_CAP_FILE="$tail_cap"
+    AUTOPILOT_TEST_TIMING_FACTOR=1 timeout --kill-after=10 "${AUTOPILOT_TEST_SUITE_TIMEOUT_SECS}s" bash "$file" >"$tail_cap" 2>&1
     serial_tail_ec=$?
+    cat "$tail_cap"
+    collect_skips "$rel" "$tail_cap"
+    rm -f "$tail_cap"
+    SKIP_CAP_FILE=""
     if [ "$serial_tail_ec" -eq 0 ]; then
       :
     elif is_suite_timeout_ec "$serial_tail_ec"; then
@@ -867,6 +899,10 @@ fi
 # ── Summary ──
 echo ""
 echo "════════ Summary ════════"
+if [ "${#SKIPPED_TESTS[@]}" -gt 0 ]; then
+  echo "⚠️  ${#SKIPPED_TESTS[@]} suite(s) reported a SKIP (ran but asserted nothing; green here is not coverage):"
+  for t in "${SKIPPED_TESTS[@]}"; do echo "   - $t"; done
+fi
 if [ "$FAILED" -eq 0 ]; then
   echo "✅ ALL TESTS PASSED ($TOTAL test files)"
   exit 0

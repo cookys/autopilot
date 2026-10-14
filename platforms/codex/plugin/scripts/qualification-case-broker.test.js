@@ -12,6 +12,7 @@ const {
 const {
   BrokerError,
   MAX_DIFF_BYTES,
+  redactSecrets,
   runBrokerCase,
   sandboxArguments,
 } = require('./qualification-case-broker');
@@ -263,6 +264,27 @@ async function main() {
   check(failed.error.message.includes('[redacted]'), 'redaction leaves a visible marker');
   check(!Object.hasOwn(malformed.error, 'message'), 'non-process failures keep the code-only error shape');
 
+  // Keyed and long-token credential shapes (review: each leaked verbatim before).
+  for (const [input, leaked] of [
+    ['password=hunter2 secret=s3cr3t', ['hunter2', 's3cr3t']],
+    ['token=abc.def&sid=1234567', ['abc.def', '1234567']],
+    ['{"access_token":"ya29.a0.short","refresh_token":"1//0gAbCdEf.Gh"}', ['ya29.a0.short', '1//0gAbCdEf.Gh']],
+    ['Authorization: Basic dXNlcjpwYXNz', ['dXNlcjpwYXNz']],
+    ['Cookie: session=abc123; sid=zz', ['abc123', 'sid=zz']],
+    ['ya29.a0AfH6SMBx.1234.abcd~efgh.ijkl', ['ya29.a0AfH6SMBx', 'abcd~efgh']],
+    ['aaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbb', ['aaaaaaaaaaaaaaaaaaa', 'bbbbbbbbbbbbbbbbbbb']],
+  ]) {
+    const out = redactSecrets(input);
+    check(
+      leaked.every((value) => !out.includes(value)) && out.includes('[redacted]'),
+      `redactSecrets hides every credential in: ${input} (got: ${out})`,
+    );
+  }
+  // NEGATIVE CONTROL for over-redaction: an ordinary error sentence stays readable.
+  const plain = redactSecrets('Eligibility check failed: UNAVAILABLE (code 503): The service is currently unavailable.');
+  check(plain.includes('code 503') && plain.includes('UNAVAILABLE') && !plain.includes('[redacted]'),
+    'an ordinary 503 error sentence survives redaction unchanged');
+
   process.env.FAKE_BROKER_MODE = 'oversized';
   const oversized = await runBrokerCase(brokerOptions(providerScript), firstDiff);
   equal(oversized.status, 'failed', 'oversized provider output fails closed');
@@ -284,7 +306,7 @@ async function main() {
   check(requestTooLarge instanceof BrokerError, 'oversized request is rejected before dispatch');
   equal(requestTooLarge.code, 'request_too_large', 'oversized request has a stable error name');
 
-  if (assertions !== 54) throw new Error(`qualification-case-broker: expected exactly 54 assertions (count pin moved here from hooks/tests/qualification-case-broker.test.sh so the L1 run enforces it), got ${assertions}`);
+  if (assertions !== 62) throw new Error(`qualification-case-broker: expected exactly 62 assertions (count pin moved here from hooks/tests/qualification-case-broker.test.sh so the L1 run enforces it), got ${assertions}`);
   process.stdout.write(`qualification case broker: ${assertions} assertions passed\n`);
 }
 

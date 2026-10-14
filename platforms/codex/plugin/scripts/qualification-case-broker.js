@@ -452,10 +452,14 @@ function runChild(command, args, options, limits = {}) {
 // base64/hex/path-like run is replaced.
 function redactSecrets(text) {
   return String(text)
+    // Quoted JSON form: "access_token":"<anything up to the closing quote>".
+    .replace(/(["'])([^"'\s]*(?:token|secret|passw(?:or)?d|authorization|cookie|session|sid|api[_-]?key|key)[^"'\s]*)\1\s*:\s*(["'])[^"']*\3/giu, '$1$2$1:"[redacted]"')
+    // key=value / key: value, value runs to whitespace, `&`, `;`, `,` or a quote.
+    .replace(/\b([A-Za-z0-9_-]*(?:token|secret|passw(?:or)?d|authorization|cookie|session|sid|api[_-]?key|key)[A-Za-z0-9_-]*)(\s*[=:]\s*)(?:Bearer\s+|Basic\s+)?[^\s&;,"']+/giu, '$1$2[redacted]')
     .replace(/\beyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*/gu, '[redacted]')
-    .replace(/\bBearer\s+\S+/giu, '[redacted]')
+    .replace(/\b(?:Bearer|Basic)\s+\S+/giu, '[redacted]')
     .replace(/\bsk-[A-Za-z0-9_-]+/gu, '[redacted]')
-    .replace(/[A-Za-z0-9+/=_-]{20,}/gu, '[redacted]');
+    .replace(/[A-Za-z0-9+/=_.~-]{20,}/gu, '[redacted]');
 }
 
 function redactedExcerpt(text, maxBytes) {
@@ -851,6 +855,7 @@ module.exports = {
   MAX_PROVIDER_OUTPUT_BYTES,
   normalizeOptions,
   parseProviderResponse,
+  redactSecrets,
   runBrokerCase,
   sandboxArguments,
 };

@@ -1029,6 +1029,33 @@ function roleOnlyRequest(role, content = 'x') {
   equal(calls(other.counter), 1, 'agy non-503 failure runs once (no retry)');
   check(!/agy transient 503/.test(noRetry.child.stderr), 'agy non-503 failure logs no retry line');
 
+  // Invalid QRP_AGY_RETRY_DELAYS_MS is rejected at startup, never defaulted.
+  for (const bad of ['abc', '-1', '1,,2', '1,2,3', '2147483648', ',', '1,', '1.5', ' 1']) {
+    const { env } = retryEnv(`bad-${bad.replace(/\W/gu, '_')}`, E503, 0);
+    const { child } = runProvider({
+      env: { ...env, QRP_AGY_RETRY_DELAYS_MS: bad }, request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT,
+    });
+    check(child.status === 1 && /QRP_AGY_RETRY_DELAYS_MS/.test(child.stderr) && !child.stdout.includes('"verdict'),
+      `QRP_AGY_RETRY_DELAYS_MS=${JSON.stringify(bad)} is rejected loudly`);
+  }
+  {
+    const { env } = retryEnv('good-single', E503, 0);
+    const { child } = runProvider({
+      env: { ...env, QRP_AGY_RETRY_DELAYS_MS: '0' }, request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT,
+    });
+    equal(child.status, 0, 'a single-value QRP_AGY_RETRY_DELAYS_MS is accepted');
+  }
+
+  // NEGATIVE CONTROL: an agy timeout is never retried.
+  const slow = retryEnv('timeout', '', 0);
+  const timedOut = runProvider({
+    env: { ...slow.env, QRP_TIMEOUT_MS: '300' },
+    request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT, stubSleepMs: 2500,
+  });
+  equal(timedOut.child.status, 1, 'agy timeout: the case fails');
+  equal(calls(slow.counter), 1, 'agy timeout runs once (no retry)');
+  check(!/agy transient 503/.test(timedOut.child.stderr), 'agy timeout logs no retry line');
+
   // A kind other than agy never retries even on a 503 body.
   const codex = retryEnv('claude-kind', E503, 99);
   runProvider({
@@ -1975,5 +2002,5 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
 }
 
 fs.rmSync(tempRoot, { recursive: true, force: true });
-if (assertions !== 384) throw new Error(`qualification-review-provider: expected exactly 384 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 397) throw new Error(`qualification-review-provider: expected exactly 397 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);

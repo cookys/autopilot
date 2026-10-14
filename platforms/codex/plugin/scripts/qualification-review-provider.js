@@ -155,6 +155,8 @@
  *                   spends QRP_MAX_TOKENS: raise it. List it in --provider-env.
  *   QRP_PROMPT_MODE reviewer | brain | va | consult | discuss (default reviewer)
  *   QRP_TIMEOUT_MS  per-case transport timeout (default 180000)
+ *   QRP_AGY_RETRY_DELAYS_MS  agy transient-503 retry backoff, `N` or `N,M` ms
+ *                   (default 15000,45000; max 2 retries; invalid values are rejected)
  *
  * HONESTY BOUNDARY (evidence-discipline / ADR-0001): each system prompt teaches
  * the OUTPUT CONTRACT and standing vocabulary only. Reviewer mode: rule vocabulary
@@ -1054,13 +1056,22 @@ const qualificationUsage = require('./lib/qualification-usage');
 // template, so a retry never reuses a used home.
 const AGY_RETRY_DEFAULT_DELAYS_MS = [15_000, 45_000];
 
-function agyRetryDelays() {
-  const raw = process.env.QRP_AGY_RETRY_DELAYS_MS;
-  if (raw === undefined || raw.trim() === '') return AGY_RETRY_DEFAULT_DELAYS_MS;
-  const parsed = raw.split(',').map((part) => Number(part.trim()));
-  if (parsed.some((n) => !Number.isFinite(n) || n < 0)) return AGY_RETRY_DEFAULT_DELAYS_MS;
-  return parsed.slice(0, 2);
+// Strict, loud parsing (same stance as QRP_TIMEOUT_MS): a silently-defaulted
+// delay list would misconfigure the retry budget. Validated once in main().
+function parseAgyRetryDelays(raw) {
+  if (raw === undefined || raw === '') return AGY_RETRY_DEFAULT_DELAYS_MS;
+  if (!/^\d+(,\d+)?$/u.test(raw)) {
+    fail(`QRP_AGY_RETRY_DELAYS_MS must be one or two comma-separated non-negative integers (got: ${raw})`);
+  }
+  const delays = raw.split(',').map(Number);
+  if (delays.some((n) => !Number.isSafeInteger(n) || n > 2147483647)) {
+    fail(`QRP_AGY_RETRY_DELAYS_MS values must be <= 2147483647 (got: ${raw})`);
+  }
+  return delays;
 }
+
+let agyRetryDelaysResolved = AGY_RETRY_DEFAULT_DELAYS_MS;
+function agyRetryDelays() { return agyRetryDelaysResolved; }
 
 async function callCli(kind, bin, model, effort, timeoutMs, prompt) {
   if (kind !== 'agy') return callCliOnce(kind, bin, model, effort, timeoutMs, prompt);
@@ -1071,7 +1082,7 @@ async function callCli(kind, bin, model, effort, timeoutMs, prompt) {
     } catch (error) {
       const transient = /^agy CLI exited /u.test(error.message) && /code 503/u.test(error.message);
       if (!transient || attempt >= delays.length) throw error;
-      process.stderr.write(`agy transient 503, retry ${attempt + 1}/${delays.length}\n`);
+      process.stderr.write(`agy transient 503, retry ${attempt + 1}/2\n`);
       await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
     }
   }
@@ -1586,6 +1597,7 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
 }
 
 async function main() {
+  agyRetryDelaysResolved = parseAgyRetryDelays(process.env.QRP_AGY_RETRY_DELAYS_MS);
   const transport = process.env.QRP_TRANSPORT || 'http';
   const promptMode = process.env.QRP_PROMPT_MODE || 'reviewer';
   const baseUrl = process.env.QRP_BASE_URL;

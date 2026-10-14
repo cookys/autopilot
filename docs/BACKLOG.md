@@ -1829,15 +1829,3 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: check-plan-graduation.js:168 out.shippedIn = need() is single-valued; :1271 const version = shippedIn || 'shipped' applies to all stems. Accept stem=sha pairs.
 
-### Other exam paths still write a lone newline for zero raw rows
-- **Id**: BL-0172
-- **Status**: open
-- **Since**: 2026-10-15
-- **Origin**: self
-- **Problem**: 資格考裡審查科和工頭的原始作答檔，零筆時已改成寫空檔；但其他幾科的原始作答檔零筆時仍寫一個換行，各科不一致。
-- **Impact**: 低。讀作答檔的程式若把一個換行當成一筆空紀錄，會多數一筆；目前沒有已知的讀者會這樣做。
-- **Trigger**: 下次動 engine-qualify.js 的原始作答輸出，或有讀者開始逐行解析這些檔案時
-- **Effort**: S
-- **Source**: qualification-labels lane (BL-0162) report, 2026-10-15
-- **Pointer**: none
-- **Context**: engine-qualify.js VA, brain, implementer, consult/discuss raw sinks (~:2525, :2887, :3523, :4671 at 64a7e40a) write "\n" for zero rows; KR7 pins reviewer and owner only. verdict-stability ~:3501 comment imprecise.

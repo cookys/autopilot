@@ -69,7 +69,9 @@
      blind-incompatible 席位（codex 有工具），blind review redesign 自己的 campaign
      也會被擋，所以 redesign 期間 qc_panel[0] 暫時換成 packet-tier 的
      claude-fable-5-1 @ claude-native。redesign 落地（cleanroom tier 讓 codex 合法）後
-     換回 gpt-5.6-sol @ codex max。這是 operator 決定，不是資格評定。 -->
+     換回 codex 席。這是 operator 決定，不是資格評定。
+     2026-10-14 使用者裁定：gpt-5.6 全面退役，換回時用 gpt-6.1-sol @ codex low
+     （reviewer 資格 event 288；只考過 low，別寫成 max）。 -->
 - qc_panel: claude-fable-5-1, GLM-5.2, MiniMax-M3, Qwen3.8-Max-Preview
 - qc_panel_runners: claude-native, cc-shim, cc-shim, qoderclicn
 - qc_panel_efforts: high, high, high, high

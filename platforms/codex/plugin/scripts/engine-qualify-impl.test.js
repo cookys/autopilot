@@ -388,6 +388,11 @@ check(truncRun.row.quality.corpus_pass.endsWith('/24'),
   `truncated row denominator is the full corpus (got ${truncRun.row.quality.corpus_pass})`);
 check(truncRun.row.capability_score < 1,
   `truncated row capability_score < 1 (got ${truncRun.row.capability_score})`);
+// BL-0168: the usage block must say this was a half-run exam. Before, the unrun cases simply
+// vanished from n_cases and nothing in the block told a reader the exam was cut short.
+equal(truncRun.row.usage.n_cases, 6, 'truncated usage block counts the cases that actually ran');
+equal(truncRun.row.usage.n_cases_expected, 24, 'truncated usage block carries the planned corpus size');
+equal(truncRun.row.usage.cases_complete, false, 'truncated usage block is flagged cases_complete=false');
 
 // The degenerate shape — truncation before ANY case starts — is no_verdict, and
 // is now reachable deterministically too (it used to ride on the same clock).

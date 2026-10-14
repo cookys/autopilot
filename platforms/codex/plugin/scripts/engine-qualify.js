@@ -104,6 +104,7 @@ const {
 } = require('./qualification-case-broker');
 const { extractJsonObject } = require('./lib/extract-json-object');
 const qualUsage = require('./lib/qualification-usage');
+const { checkEffortLabel } = require('./lib/qualification-effort-label');
 const { wilsonLower } = require('../src/engine/verification-strength');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
@@ -2444,14 +2445,14 @@ function parseVaPlanOutput(stdout) {
 // (not columns on the exchanges file) because the solved verdict only exists after
 // grading, brain exchanges are per ROUND while a case there is a trial, and one
 // schema across roles is what a downstream reader needs.
-function finalizeUsage(options, role, records) {
+function finalizeUsage(options, role, records, expectedCases = null) {
   let pricing;
   try {
     pricing = qualUsage.parsePricing(options);
   } catch (error) {
     throw new Error(`price options invalid: ${error.message}`);
   }
-  const summary = qualUsage.summarize(records, pricing);
+  const summary = qualUsage.summarize(records, pricing, expectedCases);
   if (options.rawDir) {
     fs.mkdirSync(options.rawDir, { recursive: true });
     fs.writeFileSync(
@@ -3546,7 +3547,10 @@ function runImplQualification(options) {
   }
 
   const qualified = folded.qualified;
-  const usageFin = finalizeUsage(options, 'implementer', usageRecords);
+  // The implementer plan is fixed, so a truncated or aborted administration is detectable: the
+  // block says how many cases were planned (BL-0168). Adaptive-stop roles pass nothing.
+  const plannedCases = administration.trials.reduce((n, trial) => n + trial.cases.length, 0);
+  const usageFin = finalizeUsage(options, 'implementer', usageRecords, plannedCases);
   const row = {
     engine: options.engine,
     model: options.model,
@@ -5219,7 +5223,7 @@ function runQualification(options) {
       fs.mkdirSync(options.rawDir, { recursive: true });
       fs.writeFileSync(
         path.join(options.rawDir, `${role}-exchanges.jsonl`),
-        `${rawExchanges.map((row) => JSON.stringify(row)).join('\n')}\n`,
+        rawExchanges.length === 0 ? '' : `${rawExchanges.map((row) => JSON.stringify(row)).join('\n')}\n`,
         { mode: 0o600 },
       );
     }
@@ -5497,6 +5501,13 @@ function createSessionRoleCapabilityVerifier(runResult, expectedRequest) {
   });
 }
 
+// The row printed by --emit-row. A null row (instrument_error path) stays null: attaching
+// effort_check would fabricate a row made of nothing else. Unverifiable checks add no field.
+function buildEmittedRow(row, effortCheck) {
+  if (row === null || row === undefined || effortCheck.status === 'unverifiable') return row;
+  return { ...row, effort_check: effortCheck };
+}
+
 function main() {
   const options = parseArgs(process.argv.slice(2));
   let runResult;
@@ -5512,8 +5523,18 @@ function main() {
     authority_status: 'untrusted_telemetry',
   };
   delete verdict.qualified;
+  // BL-0166: compare the --effort label with the effort the provider was told to send. Advisory
+  // only (never blocks); a row is marked only when the provider's effort is observable.
+  const effortCheck = checkEffortLabel({
+    label: options.effort,
+    listedEnvNames: [...(options.providerEnvironment || []), ...(options.panelEnvironment || [])],
+    env: process.env,
+  });
+  if (effortCheck.status === 'mismatch') {
+    process.stderr.write(`engine-qualify: WARNING effort label '${effortCheck.label}' does not match the effort sent (${effortCheck.sent}): ${effortCheck.reason}; an emitted row is marked effort_check=mismatch\n`);
+  }
   if (options.emitRow) {
-    process.stdout.write(`${JSON.stringify(runResult.row)}\n`);
+    process.stdout.write(`${JSON.stringify(buildEmittedRow(runResult.row, effortCheck))}\n`);
     process.stderr.write(`${JSON.stringify(verdict)}\n`);
   } else {
     process.stdout.write(`${JSON.stringify(verdict)}\n`);
@@ -5916,6 +5937,7 @@ function classifyQualificationOutcome(input) {
 if (require.main === module) main();
 
 module.exports = {
+  buildEmittedRow,
   buildConsultCaseEnvelope,
   buildDiscussCaseEnvelope,
   classifyQualificationOutcome,

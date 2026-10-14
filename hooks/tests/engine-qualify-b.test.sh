@@ -344,4 +344,27 @@ $SCRIPT "${QUALIFY_ARGS[@]}" --panel-cmd "$PASS_PANEL" --panel-env HOME 2>/dev/n
 BAD_CONTROL_ENV_RC=$?
 assert_exit_code "$BAD_CONTROL_ENV_RC" "2" "panel env cannot override sandbox control variables"
 
+# 14) BL-0166: the --effort label is checked against the effort the provider is told to send.
+#     Advisory: a mismatch is marked on the row and warned on stderr, never blocks the exam.
+EFFORT_SCORECARD="$TEST_TMP/effort-scorecard"
+EFFORT_ERR="$TEST_TMP/effort-mismatch.err"
+# label high (QUALIFY_ARGS) but the provider is told low -> mismatch, row still emitted and recordable
+EFFORT_ROW="$(QRP_HTTP_EFFORT=low $SCRIPT "${QUALIFY_ARGS[@]}" --panel-cmd "$PASS_PANEL" --panel-env QRP_HTTP_EFFORT --emit-row 2>"$EFFORT_ERR")"
+EFFORT_RC=$?
+assert_exit_code "$EFFORT_RC" "0" "a label/wire effort mismatch does not block the exam"
+assert_contains "$EFFORT_ROW" '"effort_check":{"status":"mismatch","label":"high","sent":"low"' \
+  "mismatch is marked on the emitted row with the effort actually sent"
+assert_contains "$(cat "$EFFORT_ERR")" "effort label" "mismatch is warned on stderr"
+EFFORT_REC_RC=0
+printf '%s\n' "$EFFORT_ROW" | ENGINE_SCORECARD_DIR="$EFFORT_SCORECARD" \
+  node "$REPO_ROOT/scripts/engine-scorecard.js" record >/dev/null 2>&1 || EFFORT_REC_RC=$?
+assert_exit_code "$EFFORT_REC_RC" "0" "a row carrying effort_check is still accepted by engine-scorecard record"
+# negative control twin: label equals the wire value -> match, no warning
+OK_ROW="$(QRP_HTTP_EFFORT=high $SCRIPT "${QUALIFY_ARGS[@]}" --panel-cmd "$PASS_PANEL" --panel-env QRP_HTTP_EFFORT --emit-row 2>"$EFFORT_ERR")"
+assert_contains "$OK_ROW" '"effort_check":{"status":"match"' "matching label is recorded as match"
+assert_not_contains "$(cat "$EFFORT_ERR")" "effort label" "matching label prints no warning"
+# a custom panel command with no QRP_* variable is not observable: no field, no warning
+PLAIN_ROW="$($SCRIPT "${QUALIFY_ARGS[@]}" --panel-cmd "$PASS_PANEL" --emit-row 2>"$EFFORT_ERR")"
+assert_not_contains "$PLAIN_ROW" "effort_check" "unobservable provider adds no effort_check field"
+
 finalize_test

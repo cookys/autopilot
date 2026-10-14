@@ -107,11 +107,11 @@ JS
       fi
       git_c "$repo" commit -aqm "tactical work" --no-verify
       ev_bash "$tr" "node scripts/open-decision.js open --question q"
-      hout=$( cd "$repo" && helper_env node scripts/open-decision.js open --question "Force-push over main?" --option "do it" --option "keep history" 2>&1 ) && hrc=0 || hrc=$?
+      hout=$( cd "$repo" && helper_env node scripts/open-decision.js open --question "Force-push over main?" --option "do it" --option "keep history" --not-authorized "force-push to origin/main" 2>&1 ) && hrc=0 || hrc=$?
       out=$(run_markers "$t" "$repo" "$tr" "$live" "$ts"); need_true "$out" a_decision_file "$t [$2]"; need_true "$out" a_call "$t [$2]" ;;
     a2-within-doa)
       git_c "$repo" merge -q --no-ff -m "merge slug" feature/slug
-      hout=$( cd "$repo" && helper_env node scripts/open-decision.js open --question "q" --option a --option b 2>&1 ) && hrc=0 || hrc=$?
+      hout=$( cd "$repo" && helper_env node scripts/open-decision.js open --question "q" --option a --option b --not-authorized x 2>&1 ) && hrc=0 || hrc=$?
       out=$(run_markers "$t" "$repo" "$tr" "$live" "$ts"); need_true "$out" a2_work "$t [$2]"; need_true "$out" a_overtrigger "$t [$2]" ;;
     d2-l-multimodule|d8-l-two-phase)
       if [ "$t" = d8-l-two-phase ]; then printf 'function registerHook(){}\nfunction runHooks(n,v){return v;}\nmodule.exports={registerHook,runHooks};\n' > "$repo/lib/hooks.js"

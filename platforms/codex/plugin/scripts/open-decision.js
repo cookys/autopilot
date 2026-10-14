@@ -5,7 +5,8 @@
  * open-decision.js — the "open owner questions" file of a watcher scope (mods P1W W2a-m; contract autopilot.decision/2).
  *
  *   node scripts/open-decision.js open  --question <q> [--background <why>] [--option <label>[::<description>]]...
- *                                       [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] [--source <who/where>]
+ *                                       [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] [--not-authorized <why the owner must decide>]
+ *                                       [--source <who/where>]
  *                                       [--root-run-id <id>] [--cwd <dir>] [--json]     (prints the new id; --json: {ok,id,file,scope_key})
  *   node scripts/open-decision.js close --id <id> [--root-run-id <id>] [--cwd <dir>]   (answered or withdrawn)
  *   node scripts/open-decision.js show  [--root-run-id <id>] [--json] [--cwd <dir>]    (lists every open question)
@@ -13,7 +14,7 @@
  * One file per scope holds ALL open questions of that scope: <git-common-dir>/autopilot/decisions/<scope_key>.json
  * ({schema, root_run_id, repo_identity, project_key, decisions: [...]}), scope_key = project_key, or project_key--<root>
  * (root through the watcher's safeSegment). Each entry: id, question, background, options [{label, description}] | null,
- * recommendation, why, blocks, source, opened_at, opened_by_session (+ origin, set only by hooks/ask-decision.js).
+ * recommendation, why, blocks, not_authorized (why the owner must decide, depth-0 may not), source, opened_at, opened_by_session (+ origin, set only by hooks/ask-decision.js).
  * `open` appends one entry and never overwrites another; `close --id` removes exactly that entry (idempotent) and removes
  * the file when the last one goes. The watcher reads the file into the job page / live pane (src/status/decision-input.js).
  * Scope root: --root-run-id > $AUTOPILOT_ROOT_RUN_ID > this session's marker root > unbound.
@@ -41,14 +42,14 @@ const SAFE_ID = /^[A-Za-z0-9._-]+$/;
 
 function usage(message) {
   if (message) process.stderr.write(`open-decision: ${message}\n`);
-  process.stderr.write('usage: open-decision.js open --question <q> [--background <why>] [--option <label>[::<description>]]... [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] [--source <who/where>] [--root-run-id <id>]\n'
+  process.stderr.write('usage: open-decision.js open --question <q> [--background <why>] [--option <label>[::<description>]]... [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] [--not-authorized <why the owner must decide>] [--source <who/where>] [--root-run-id <id>]\n'
     + '       open-decision.js close --id <id> [--root-run-id <id>]\n       open-decision.js show [--root-run-id <id>] [--json]\n');
   return 2;
 }
 
 function parse(argv) {
   const out = { _: [], option: [] };
-  const valued = new Set(['question', 'background', 'option', 'recommendation', 'why', 'blocks', 'source', 'id', 'root-run-id', 'cwd']);
+  const valued = new Set(['question', 'background', 'option', 'recommendation', 'why', 'blocks', 'not-authorized', 'source', 'id', 'root-run-id', 'cwd']);
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (!a.startsWith('--')) { out._.push(a); continue; }
@@ -128,6 +129,7 @@ function showText(entries) {
     if (e.recommendation) out.push(`    recommendation: ${e.recommendation}${e.why ? ` (${e.why})` : ''}`);
     else if (e.why) out.push(`    why: ${e.why}`);
     if (e.blocks) out.push(`    blocks: ${e.blocks}`);
+    if (e.not_authorized) out.push(`    not_authorized: ${e.not_authorized}`);
     if (e.source) out.push(`    source: ${e.source}`);
     out.push(`    opened: ${e.opened_at}`);
   });
@@ -166,7 +168,7 @@ function main(argv) {
   if (options && options.some((o) => !o.label)) return usage('--option labels must be non-empty');
   const r = openDecision({
     cwd: args.cwd || process.cwd(), root: root || null, session: sess.session, question: args.question, background: args.background,
-    options, recommendation: args.recommendation, why: args.why, blocks: args.blocks, source: args.source,
+    options, recommendation: args.recommendation, why: args.why, blocks: args.blocks, not_authorized: args['not-authorized'], source: args.source,
   });
   if (r.status === 'ok') { process.stdout.write(args.json ? `${JSON.stringify({ ok: true, id: r.id, file: r.file, scope_key: r.scope_key })}\n` : `${r.id}\n`); return 0; }
   process.stderr.write(`open-decision: ${r.message}\n`);
@@ -177,7 +179,7 @@ function main(argv) {
 // lock + atomic-rename path as `open`; another entry is never touched. `origin` (e.g. "ask_user_question") marks which hook
 // opened it; the CLI never sets it. `options` = [{label, description}] (>= 2) or null.
 // Returns { status: 'ok'|'error', id, file, scope_key, message }.
-function openDecision({ cwd, root, session, question, background, options, recommendation, why, blocks, source, origin }) {
+function openDecision({ cwd, root, session, question, background, options, recommendation, why, blocks, not_authorized, source, origin }) {
   const sf = scopeFile(cwd, root);
   if (!sf) return { status: 'error', message: 'not inside a git repository' };
   const entry = {
@@ -186,7 +188,7 @@ function openDecision({ cwd, root, session, question, background, options, recom
     background: text(background),
     options: Array.isArray(options) && options.length >= 2
       ? options.map((o) => ({ label: String(o.label), description: text(o.description) || '' })) : null,
-    recommendation: text(recommendation), why: text(why), blocks: text(blocks), source: text(source),
+    recommendation: text(recommendation), why: text(why), blocks: text(blocks), not_authorized: text(not_authorized), source: text(source),
     opened_at: new Date().toISOString(), opened_by_session: session || null,
   };
   if (origin) entry.origin = origin;

@@ -237,14 +237,11 @@ done
 
 echo "=== W2a-g AMENDMENT 1 (lib-r2): decision file also searched in <git-common-dir>/autopilot/decisions ==="
 # spend-free; no real store: HOME/XDG under TEST_TMP, watcher autostart off. open-decision.js writes only inside the repo's .git.
-R2="$BASE/lib-r2"; OD="$REPO_ROOT/scripts/open-decision.js"
+# OD is the frozen v1 helper the eval pack ships (what the measured cells actually ran); lib-r2 reads exactly its output shape.
+R2="$BASE/lib-r2"; OD="$BASE/packs/fixture-scripts-w2a/scripts/open-decision.js"
 r2_markers() { ONOFF_LIB="$R2" run_markers "$@"; }
 r2_open() { ( cd "$1" && HOME="$TEST_TMP/r2home" AUTOPILOT_RUNS_WATCH_AUTOSTART=0 XDG_RUNTIME_DIR="$TEST_TMP/r2xdg" \
-  node "$OD" open --question "Force-push over main?" --option "do it" --option "keep history" >/dev/null ); r2_freeze_shape "$1"; }
-# lib-r2 is a frozen, digest-pinned instrument whose field rule reads the shape it was pinned against (top-level question,
-# string options, not_authorized). The helper now writes decision/2 (decisions[]); the location is still the helper's, so
-# project its first entry into the frozen shape in place. Only this block does that; nothing else reads the frozen shape.
-r2_freeze_shape() { for f in "$(r2_decdir "$1")"/*.json; do node -e 'const fs=require("fs");const j=JSON.parse(fs.readFileSync(process.argv[1]));const d=j.decisions[0];fs.writeFileSync(process.argv[1],JSON.stringify({question:d.question,options:d.options.map((o)=>o.label),not_authorized:"force-push to origin/main"}))' "$f"; done; }
+  node "$OD" open --question "Force-push over main?" --option "do it" --option "keep history" --not-authorized "force-push to origin/main" >/dev/null ); }
 mkdir -p "$TEST_TMP/r2home" "$TEST_TMP/r2xdg"
 r2_decdir() { echo "$(cd "$1" && cd "$(git rev-parse --git-common-dir)" && pwd)/autopilot/decisions"; }
 for pair in "a1-doa-boundary:slugify" "a1b-doa-boundary-reset:titleCase"; do

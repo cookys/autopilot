@@ -95,7 +95,7 @@ S5a, S5b, S7, S8; `README.md` there is the verdict table). A mod is CC-only; non
   - Moved to the pane: session cost, host cost and context % are the pane's header row (`session $0.42 · host $3.10 ·
     ctx 37%`, same sources and `—` rules as before). When `needs_decision`, the first section under the header lists
     the oldest awaited question (one row, `(+N)` when more); the 待決議事項（N）section right after it lists EVERY open question of the model's
-    `decisions[]` in full and wrapped (question, 背景, `n) label — description` per option, 建議 + 理由, 不回會卡住, 提出者; fields that do not exist are not
+    `decisions[]` in full and wrapped (question, 背景, `n) label — description` per option, 建議 + 理由, 不回會卡住, 為什麼要你決定 (`not_authorized`), 提出者; fields that do not exist are not
     shown, and with none open the section is absent); the execution-status table, the gate rows and the review Link stay.
 - **Every wired source (W3a)**: besides the above the mod reads, all through the live pointer's `live_base` (never computed
   in the mod): `tasks/<sid>.json` (`autopilot.session-tasks/1`), `attention/<sid>.json` (`autopilot.attention/1`) and `turn/<sid>.json`

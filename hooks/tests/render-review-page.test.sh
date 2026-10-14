@@ -106,7 +106,7 @@ fs.mkdirSync(path.join(F, 'compare-dirty'), { recursive: true });
 fs.copyFileSync(path.join(F, 'compare', 'before.png'), path.join(F, 'compare-dirty', 'before.png')); fs.copyFileSync(path.join(F, 'compare', 'after.png'), path.join(F, 'compare-dirty', 'after.png'));
 W('valid-record.json', rec('cmp-valid', false));
 W('invalid-record.json', { ...rec('cmp-bad', false), verdict: 'PASS' });
-W('decisions.json', [{ id: 'd-0000000a', question: 'DECISION-QUESTION-1', background: 'BACKGROUND-1', options: [{ label: 'opt A', description: 'description A' }, { label: 'opt B', description: 'description B' }, { label: 'opt C', description: 'description C' }], recommendation: 'opt B', why: 'WHY-1', blocks: 'BLOCKS-1', source: 'SOURCE-1', opened_at: '2026-10-04T01:00:00.000Z', stale: false, age_s: 3600 },
+W('decisions.json', [{ id: 'd-0000000a', question: 'DECISION-QUESTION-1', background: 'BACKGROUND-1', options: [{ label: 'opt A', description: 'description A' }, { label: 'opt B', description: 'description B' }, { label: 'opt C', description: 'description C' }], recommendation: 'opt B', why: 'WHY-1', blocks: 'BLOCKS-1', not_authorized: 'NOTAUTH-1', source: 'SOURCE-1', opened_at: '2026-10-04T01:00:00.000Z', stale: false, age_s: 3600 },
   { id: 'd-0000000b', question: 'DECISION-QUESTION-2', background: null, options: null, recommendation: null, why: null, blocks: null, source: null, opened_at: '2026-10-04T01:30:00.000Z', stale: false, age_s: 1800 }]);
 JS
 node "$SB/gen.js" "$F" || fail "fixture generator failed"
@@ -141,6 +141,8 @@ assert_contains "$S3" "description B" "section 3 carries each option description
 assert_contains "$S3" "BACKGROUND-1" "section 3 carries the background"
 assert_contains "$S3" "WHY-1" "section 3 carries the recommendation reason"
 assert_contains "$S3" "BLOCKS-1" "section 3 carries what stalls if unanswered"
+assert_contains "$S3" "為什麼要你決定" "section 3 labels the not_authorized text"
+assert_contains "$S3" "NOTAUTH-1" "section 3 carries why the owner must decide"
 assert_contains "$S3" "SOURCE-1" "section 3 carries who raised it"
 assert_contains "$S3" "DECISION-QUESTION-2" "section 3 carries the second coexisting question too (none is hidden)"
 assert_contains "$S2" "另 1 件" "section 2 points at the other open question"

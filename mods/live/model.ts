@@ -52,7 +52,7 @@ export type LiveGateRow = {
 // one open owner question (autopilot.decision/2 entry, as the job model carries it): the full context the owner needs to answer without scrolling back
 export type LiveDecision = {
   id: string | null; question: string; background: string | null; options: { label: string; description: string }[]
-  recommendation: string | null; why: string | null; blocks: string | null; source: string | null; opened_at: string | null
+  recommendation: string | null; why: string | null; blocks: string | null; not_authorized: string | null; source: string | null; opened_at: string | null
   stale: boolean; age_s: number | null
 }
 
@@ -945,7 +945,7 @@ export function readJobModel(text: string | null): JobModel | null {
       label: typeof o.label === 'string' ? o.label : '',
       description: typeof o.description === 'string' ? o.description : '',
     })).filter(o => o.label !== ''),
-    recommendation: optText(d.recommendation), why: optText(d.why), blocks: optText(d.blocks), source: optText(d.source), opened_at: optText(d.opened_at),
+    recommendation: optText(d.recommendation), why: optText(d.why), blocks: optText(d.blocks), not_authorized: optText(d.not_authorized), source: optText(d.source), opened_at: optText(d.opened_at),
     stale: d.stale === true,
     age_s: finite(d.age_s) ? d.age_s : null,
   }))

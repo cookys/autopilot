@@ -128,6 +128,7 @@ function pendingPart(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
     if (d.recommendation !== null) lines.push(...ui.detail(u, t('pending.recommend') + ': ' + d.recommendation + (d.why === null ? '' : ' — ' + d.why), { attached: true }))
     else if (d.why !== null) lines.push(...ui.detail(u, t('pending.why') + ': ' + d.why, { attached: true }))
     if (d.blocks !== null) lines.push(...ui.detail(u, t('pending.blocks') + ': ' + d.blocks, { attached: true }))
+    if (d.not_authorized !== null) lines.push(...ui.detail(u, t('pending.not_authorized') + ': ' + d.not_authorized, { attached: true }))
     if (d.source !== null) lines.push(...ui.detail(u, t('pending.source') + ': ' + d.source, { attached: true }))
   })
   return nowSection(u, ctx, 'questions', t('now.pending', { n: list.length }), lines, { right: ui.countChip(u, needYou, list.length, F), fact: F })

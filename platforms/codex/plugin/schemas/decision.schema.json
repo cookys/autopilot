@@ -104,6 +104,12 @@
               "null"
             ]
           },
+          "not_authorized": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "source": {
             "type": [
               "string",

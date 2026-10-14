@@ -235,7 +235,7 @@ function buildJobModel(inputs) {
     id: optText(d.id), question: d.question, background: optText(d.background),
     options: (Array.isArray(d.options) ? d.options : []).filter(isObject)
       .map((x) => ({ label: String(x.label == null ? '' : x.label), description: String(x.description == null ? '' : x.description) })),
-    recommendation: optText(d.recommendation), why: optText(d.why), blocks: optText(d.blocks), source: optText(d.source), opened_at: optText(d.opened_at),
+    recommendation: optText(d.recommendation), why: optText(d.why), blocks: optText(d.blocks), not_authorized: optText(d.not_authorized), source: optText(d.source), opened_at: optText(d.opened_at),
     stale: d.stale === true, age_s: Number.isFinite(d.age_s) ? d.age_s : null,
   }));
 
@@ -414,7 +414,7 @@ function renderJobHtml(model) {
       + line('背景', d.background)
       + (opts.length ? `<ol>${opts.map((x) => `<li>${esc(x.label)}${x.description ? ` — ${esc(x.description)}` : ''}</li>`).join('')}</ol>\n` : '')
       + (d.recommendation ? `<p>建議：${esc(d.recommendation)}${d.why ? `（${esc(d.why)}）` : ''}</p>\n` : line('理由', d.why))
-      + line('不回會卡住', d.blocks) + line('提出者', d.source);
+      + line('不回會卡住', d.blocks) + line('為什麼要你決定', d.not_authorized) + line('提出者', d.source);
   };
   const s3 = ds.length
     ? ds.map(decisionBlock).join('\n')

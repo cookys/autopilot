@@ -27,7 +27,7 @@ function snap(o: Over = {}): LiveSnapshot {
   const tasks = o.tasks ?? [task('done one', 'completed'), task('now doing', 'in_progress'), task('later', 'pending')]
   return {
     state: 'ok', text: '', header: 'h', metrics: { ctx: '37%' }, band: band(o.kind ?? 'stalled', 'longest run 4m quiet'),
-    pending: o.decision === false ? [] : [{ id: 'd-1', question: 'merge or split?', background: null, options: [{ label: 'merge', description: 'one acceptance' }], recommendation: null, why: null, blocks: null, source: null, opened_at: null, stale: false, age_s: 60 }],
+    pending: o.decision === false ? [] : [{ id: 'd-1', question: 'merge or split?', background: null, options: [{ label: 'merge', description: 'one acceptance' }], recommendation: null, why: null, blocks: null, not_authorized: null, source: null, opened_at: null, stale: false, age_s: 60 }],
     project_key: null, root_run_id: null, link: null,
     rows: [run('r1'), run('r2', { stall: true, probe_age_s: 200 })], gates: null,
     sections: { ...NO_SECTIONS, tasks: { total: tasks.length, completed: tasks.filter(t => t.status === 'completed').length, in_progress: 1, current: 'now doing', first_created_ms: null, rows: tasks } },
@@ -511,12 +511,12 @@ test('strip: the active label and the ━ run are the here mark (I4 / I6); every
 
 // ---- 待決議事項: every open owner question in full; no block at all when none is open ----
 const pend = (id: string, q: string, over: Partial<LiveSnapshot['pending'][number]> = {}): LiveSnapshot['pending'][number] => ({
-  id, question: q, background: null, options: [], recommendation: null, why: null, blocks: null, source: null, opened_at: null, stale: false, age_s: 60, ...over,
+  id, question: q, background: null, options: [], recommendation: null, why: null, blocks: null, not_authorized: null, source: null, opened_at: null, stale: false, age_s: 60, ...over,
 })
 test('PENDING: two open questions are both shown in full (question, background, options, recommendation and why, what stalls, source), wrapped and counted; zero shows no block', () => {
   const long = 'this background sentence is deliberately long enough that it has to wrap at seventy-six columns and must never be cut off by the pane'
   const two = [
-    pend('d-1', 'merge or split?', { background: long, options: [{ label: 'merge', description: 'one acceptance' }, { label: 'split', description: 'two acceptances' }], recommendation: 'merge', why: 'fewer round trips', blocks: 'the release cannot start', source: 'depth-0 AskUserQuestion' }),
+    pend('d-1', 'merge or split?', { background: long, options: [{ label: 'merge', description: 'one acceptance' }, { label: 'split', description: 'two acceptances' }], recommendation: 'merge', why: 'fewer round trips', blocks: 'the release cannot start', not_authorized: 'a force-push over main is beyond depth-0 authority', source: 'depth-0 AskUserQuestion' }),
     pend('d-2', 'which engine?', { options: [{ label: 'a', description: '' }, { label: 'b', description: '' }], why: 'cheaper' }),
   ]
   for (const [loc, t] of LOCALES) {
@@ -525,14 +525,18 @@ test('PENDING: two open questions are both shown in full (question, background, 
     expect(heads.length, loc).toBe(1)
     expect(heads[0].text, loc).toContain(t('now.pending', { n: 2 }))
     const text = ls.map(l => l.text).join('\n')
-    for (const must of ['merge or split?', 'which engine?', 'one acceptance', 'two acceptances', 'fewer round trips', 'the release cannot start', 'depth-0 AskUserQuestion', 'cheaper'])
+    for (const must of ['merge or split?', 'which engine?', 'one acceptance', 'two acceptances', 'fewer round trips', 'the release cannot start', 'depth-0 AskUserQuestion', 'cheaper', 'a force-push over main is beyond depth-0 authority'])
       expect(text, loc + ': ' + must).toContain(must)
+    expect(text, loc + ': the why-you label').toContain(t('pending.not_authorized'))
+    expect(text.split(t('pending.not_authorized')).length - 1, loc + ': only the entry that has it shows the label').toBe(1)
     expect(text.replace(/\s+/g, ' '), loc + ': the long background is whole after wrapping').toContain('this background sentence is deliberately long enough that it has to wrap')
     expect(text.replace(/\s+/g, ' '), loc + ': the long background keeps its tail').toContain('never be cut off by the pane')
     for (const l of ls) expect(ui.displayWidth(l.text), loc + ': "' + l.text + '"').toBeLessThanOrEqual(75)
     expect(i17(ls), loc).toEqual([])
   }
   // negative control: with none pending there is no block, no header and no fact
+  expect(makeT('en')('pending.not_authorized')).toBe('Why you')
+  expect(makeT('zh-TW')('pending.not_authorized')).toBe('為什麼要你決定')
   const none = nowLines({ ...snap(), pending: [] }, ctxOf(makeT('en'), 76))
   expect(none.some(l => l.fact === 'now.pending')).toBe(false)
   expect(none.map(l => l.text).join('\n')).not.toContain('Pending decisions')

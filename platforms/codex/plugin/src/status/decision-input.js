@@ -10,7 +10,7 @@
 // Age never hides a question (expiry warns, never blocks): older than STALE_MS only sets `stale: true`; `age_s` is always given.
 // Only `open-decision.js close --id` removes a question. Anything else is ignored.
 // Returns { value, sha256, file } where value is the list shaped for the renderer, oldest first:
-//   [{ id, question, background, options: [{label, description}], recommendation, why, blocks, source, opened_at, stale, age_s }]
+//   [{ id, question, background, options: [{label, description}], recommendation, why, blocks, not_authorized, source, opened_at, stale, age_s }]
 // or null when no entry counts.
 
 const fs = require('fs');
@@ -35,7 +35,7 @@ function viewOf(e, nowMs) {
     .map((o) => ({ label: o.label, description: typeof o.description === 'string' ? o.description : '' }));
   return {
     id: e.id, question: e.question, background: str(e.background), options, recommendation: str(e.recommendation), why: str(e.why),
-    blocks: str(e.blocks), source: str(e.source), opened_at: new Date(opened).toISOString(),
+    blocks: str(e.blocks), not_authorized: str(e.not_authorized), source: str(e.source), opened_at: new Date(opened).toISOString(),
     stale: nowMs - opened > STALE_MS, age_s: Math.max(0, Math.floor((nowMs - opened) / 1000)),
   };
 }

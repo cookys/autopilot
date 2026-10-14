@@ -108,7 +108,8 @@
  *                   (`400 MissingSessionID`) before the model is consulted; any
  *                   `ses_`-prefixed string is accepted.
  *   QRP_MAX_TOKENS  http ONLY (the cli transport has no equivalent): optional
- *                   completion budget (default 8192). A REASONING endpoint spends
+ *                   completion budget (default 8192; integer 16..131072, anything
+ *                   else is refused). A REASONING endpoint spends
  *                   this budget on its thinking block too, so 8192 is NOT enough for
  *                   brain rounds much past the fifth — the bundle grows monotonically,
  *                   the thinking grows with it, and the reply arrives as a lone
@@ -137,10 +138,21 @@
  *                   unset/empty/`default` sends nothing (endpoint default);
  *                   `max` is refused (no OpenAI-compatible endpoint accepts it,
  *                   and silently clamping would make the scorecard label lie).
- *                   The messages protocol has no effort field: setting this with
- *                   it is refused. Valid with the http transport ONLY: combined
- *                   with QRP_TRANSPORT=cli it is rejected (cli uses QRP_CLI_EFFORT).
- *                   List it in --provider-env for the broker.
+ *                   messages -> body `output_config: {effort}` (Anthropic-compatible
+ *                   vendors: MiniMax M3.1-Flash-Preview, Z.ai GLM-5.3). Vocabulary
+ *                   there is low|medium|high|xhigh|max, sent VERBATIM (max is legal
+ *                   here because both vendors define it); none|minimal are refused.
+ *                   Unset/empty/`default` sends nothing on every protocol. Valid with
+ *                   the http transport ONLY: combined with QRP_TRANSPORT=cli it is
+ *                   rejected (cli uses QRP_CLI_EFFORT). List it in --provider-env.
+ *   QRP_HTTP_THINKING http, messages ONLY: optional thinking switch. `adaptive` ->
+ *                   body `thinking: {type: "adaptive"}` (MiniMax-M3 does not think on
+ *                   this protocol unless asked), `disabled` -> `{type: "disabled"}`
+ *                   (MiniMax-M3.1 answers 400 to it). Unset/empty/`default` sends
+ *                   nothing. Any other value, or any other protocol/transport, is
+ *                   refused rather than ignored. A thinking reply carries `thinking`
+ *                   blocks; only `text` blocks are ever read as the answer. Thinking
+ *                   spends QRP_MAX_TOKENS: raise it. List it in --provider-env.
  *   QRP_PROMPT_MODE reviewer | brain | va | consult | discuss (default reviewer)
  *   QRP_TIMEOUT_MS  per-case transport timeout (default 180000)
  *
@@ -652,11 +664,38 @@ const CHAT_USER_AGENT = 'autopilot-qualify/1.0';
 // endpoint default. Unset / `default` keeps the body exactly as before.
 // QRP_HTTP_EFFORT -> the value sent on the wire, or '' for "send nothing".
 const HTTP_EFFORT_WIRE_VALUES = Object.freeze(['none', 'minimal', 'low', 'medium', 'high', 'xhigh']);
+// The messages protocol carries it as `output_config.effort`; both vendors that
+// accept it (MiniMax M3.1-Flash-Preview, Z.ai GLM-5.3) define `max`.
+const MESSAGES_EFFORT_WIRE_VALUES = Object.freeze(['low', 'medium', 'high', 'xhigh', 'max']);
+// QRP_HTTP_THINKING (messages only) -> `thinking: {type}`, or '' for "send nothing".
+const HTTP_THINKING_WIRE_VALUES = Object.freeze(['adaptive', 'disabled']);
+function httpThinkingMode(raw, protocol) {
+  const mode = String(raw || '').trim();
+  if (!mode || mode === 'default') return '';
+  if (protocol !== 'messages') {
+    throw new Error(`QRP_HTTP_THINKING applies to the messages protocol only (got protocol: ${protocol})`);
+  }
+  if (!HTTP_THINKING_WIRE_VALUES.includes(mode)) {
+    throw new Error(`QRP_HTTP_THINKING must be one of ${HTTP_THINKING_WIRE_VALUES.join('|')} or default (got: ${mode})`);
+  }
+  return mode;
+}
+// QRP_MAX_TOKENS: unset keeps the historical 8192; anything else must be a sane integer.
+function httpMaxTokens(raw) {
+  if (raw === undefined || raw === '') return 8192;
+  if (!/^[0-9]+$/u.test(raw) || Number(raw) < 16 || Number(raw) > 131072) {
+    throw new Error(`QRP_MAX_TOKENS must be an integer between 16 and 131072 (got: ${raw})`);
+  }
+  return Number(raw);
+}
 function httpReasoningEffort(raw, protocol) {
   const effort = String(raw || '').trim();
   if (!effort || effort === 'default') return '';
   if (protocol === 'messages') {
-    throw new Error(`QRP_HTTP_EFFORT is not supported by the messages protocol (got: ${effort}); use responses or chat_completions`);
+    if (!MESSAGES_EFFORT_WIRE_VALUES.includes(effort)) {
+      throw new Error(`QRP_HTTP_EFFORT on the messages protocol must be one of ${MESSAGES_EFFORT_WIRE_VALUES.join('|')} or default (got: ${effort})`);
+    }
+    return effort;
   }
   if (!HTTP_EFFORT_WIRE_VALUES.includes(effort)) {
     throw new Error(`QRP_HTTP_EFFORT must be one of ${HTTP_EFFORT_WIRE_VALUES.join('|')} or default (got: ${effort}); max has no OpenAI-compatible wire value and is never silently clamped`);
@@ -722,7 +761,7 @@ async function callResponses(baseUrl, token, model, maxTokens, systemPrompt, use
   }
 }
 
-async function callModel(baseUrl, token, model, maxTokens, systemPrompt, userMessage) {
+async function callModel(baseUrl, token, model, maxTokens, systemPrompt, userMessage, effort, thinking) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
@@ -745,6 +784,8 @@ async function callModel(baseUrl, token, model, maxTokens, systemPrompt, userMes
           role: 'user',
           content: userMessage,
         }],
+        ...(effort ? { output_config: { effort } } : {}),
+        ...(thinking ? { thinking: { type: thinking } } : {}),
       }),
     });
     if (!response.ok) {
@@ -1480,7 +1521,12 @@ async function main() {
   const token = process.env.QRP_AUTH_TOKEN;
   const model = process.env.QRP_MODEL;
   const provider = process.env.QRP_PROVIDER;
-  const maxTokens = Number(process.env.QRP_MAX_TOKENS || 8192);
+  let maxTokens = 8192;
+  try {
+    maxTokens = httpMaxTokens(process.env.QRP_MAX_TOKENS);
+  } catch (error) {
+    fail(error.message);
+  }
   const cliKind = process.env.QRP_CLI_KIND;
   if (!['http', 'cli'].includes(transport)) {
     fail(`QRP_TRANSPORT must be http or cli (got: ${transport})`);
@@ -1516,6 +1562,16 @@ async function main() {
   let httpEffort = '';
   try {
     httpEffort = httpReasoningEffort(httpEffortRaw, httpProtocolForEffort);
+  } catch (error) {
+    fail(error.message);
+  }
+  const httpThinkingRaw = process.env.QRP_HTTP_THINKING || '';
+  if (httpThinkingRaw && transport !== 'http') {
+    fail('QRP_HTTP_THINKING applies to QRP_TRANSPORT=http only');
+  }
+  let httpThinking = '';
+  try {
+    httpThinking = httpThinkingMode(httpThinkingRaw, httpProtocolForEffort);
   } catch (error) {
     fail(error.message);
   }
@@ -1637,7 +1693,7 @@ async function main() {
         : httpProtocol === 'chat_completions'
           ? callChatCompletions
           : callModel;
-      result = await call(baseUrl, token, model, maxTokens, systemPrompt, userMessage, httpEffort);
+      result = await call(baseUrl, token, model, maxTokens, systemPrompt, userMessage, httpEffort, httpThinking);
     }
   } catch (error) {
     fail(`model call failed: ${error.message}`);

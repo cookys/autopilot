@@ -1,0 +1,11 @@
+{
+  "session_id": "33558769-c72c-4598-8223-70c516003127",
+  "level": null,
+  "repo_root": "/tmp/d0probe-agSICG/repo-cf/.claude/worktrees/hetero-d0-cf-outer-aLbrgb",
+  "started_at": "2026-10-14T18:57:12.267Z",
+  "expires_at": "2026-10-15T18:57:12.267Z",
+  "repo_identity": "git-common-dir:/tmp/d0probe-agSICG/repo-cf/.git",
+  "project_key": "314b245124f10e48",
+  "root_run_id": "hetero-1792004231-1573620-963f",
+  "parent_session_id": "efd89f92-059d-4ef4-80ec-48249c585ef2"
+}

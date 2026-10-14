@@ -1,0 +1,19 @@
+{
+  "agents": [
+    {
+      "agentId": "a2a2cceaf7d2d16c4",
+      "meta_toolUseId": "toolu_01U1z43SzGmJxRpeSbpA6HWR",
+      "requestShape": "background",
+      "spawnDepth": 1,
+      "exact_matching_results_in_session_transcript": 1
+    },
+    {
+      "agentId": "a4d50cbd3e59d242b",
+      "meta_toolUseId": "toolu_01TcC1zxhxZ6KcC3xs3xDVYN",
+      "requestShape": "foreground",
+      "spawnDepth": 1,
+      "exact_matching_results_in_session_transcript": 1
+    }
+  ],
+  "note": "exact = one tool_result in the session transcript with toolUseResult.agentId == meta agent id AND tool_use_id == meta toolUseId"
+}

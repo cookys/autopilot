@@ -1,0 +1,8 @@
+CLAUDE_CODE_SESSION_ID=<unset>
+AUTOPILOT_PARENT_RUN_ID=d1-foreman
+AUTOPILOT_DISPATCH_DEPTH=1
+AUTOPILOT_PARENT_SESSION_ID=<unset>
+dispatch-hetero: codex/gpt-5-codex (effort=xhigh) may run for MANY minutes — ensure a high Bash-tool timeout (BASH_DEFAULT_TIMEOUT_MS); the 120s default SIGTERMs long runs.
+dispatch-hetero: run_id=hetero-1792004242-1575729-3c14 manifest=/tmp/d0probe-agSICG/runs-d1/hetero-1792004242-1575729-3c14.manifest.json log=/tmp/hetero-hands-d1-u1-log-o5LJb4 (watch: scripts/dispatch-status.js --run hetero-1792004242-1575729-3c14)
+{ "status": "no_op", "runner": "codex", "model": "gpt-5-codex", "containment": "setsid", "contained": true, "branch": "hands/d1/u1", "base": "develop", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": "/tmp/d0probe-agSICG/repo-d1/.claude/worktrees/hetero-hands-d1-u1-NwsQfn", "agent_log": "/tmp/hetero-hands-d1-u1-log-o5LJb4", "error": "agent exited cleanly with no commit — judged nothing was needed (agent exit 0); worktree kept", "dispatcher_called": true, "model_calls": 1, "mutation_attempts": 1, "gate_attempts": 0, "resources_created": 1, "zero_diff_receipt_digest": null, "skill_mode_effective": "off", "skills_injected": [], "orphan_worktree": null, "run_id": "hetero-1792004242-1575729-3c14", "usage": null, "wall_secs": 1, "duplex": null, "provider_session_id": null, "provider_session_reused": false, "worktree_reused": false, "retention_lease": null, "timed_out": false, "timeout_enforced": true, "timeout_seconds": 180, "timeout_source": "caller" }
+hetero rc=1

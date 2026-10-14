@@ -8,6 +8,8 @@ const EFFORT_DEFAULT_SECONDS = Object.freeze({
   max: 1200,
   xhigh: 1200,
   high: 600,
+  // default = no effort sent: the endpoint's own default thinking budget is unknown, so size the seat like max.
+  default: 1200,
 });
 function effortSeatTimeoutSeconds(effort, explicitSeconds) {
   if (Number.isSafeInteger(explicitSeconds) && explicitSeconds > 0) return explicitSeconds;

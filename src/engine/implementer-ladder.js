@@ -3,7 +3,7 @@
 // Implementer ladder: cheapest sufficient engine by unit_class, climb on red repair.
 // Empty ladder ⇒ identity (the three implementer_* fields are the single rung).
 
-const VALID_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
+const VALID_EFFORTS = new Set(['default', 'low', 'medium', 'high', 'xhigh', 'max']);
 const VALID_IMPL_RUNNERS = new Set([
   'auto',
   'codex',

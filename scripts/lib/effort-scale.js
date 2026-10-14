@@ -36,9 +36,11 @@
  * adjacency rule (see resolve-dispatch-topology.js), which needs no cross-vendor scale at all.
  */
 
-const EFFORT_ORDER = Object.freeze(['low', 'medium', 'high', 'xhigh', 'max']);
+// `default` (no effort sent; the endpoint's own default ran) is placed LAST by rule, not by measurement:
+// its real compute is unknown, so a cheapest-first ordering must never rank it ahead of a known effort.
+const EFFORT_ORDER = Object.freeze(['low', 'medium', 'high', 'xhigh', 'max', 'default']);
 
-const IDENTITY = Object.freeze({ low: 1, medium: 2, high: 3, xhigh: 4, max: 5 });
+const IDENTITY = Object.freeze({ low: 1, medium: 2, high: 3, xhigh: 4, max: 5, default: 6 });
 
 const UNKNOWN_RANK = 99;
 

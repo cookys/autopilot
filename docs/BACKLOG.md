@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0162 -->
+<!-- next-id: BL-0164 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1246,19 +1246,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/v2-36-114-review-follow-ups.md
 - **Context**: Left: run the CLI and assert ADVISORY on stderr plus parseable stdout; fix M1/M4 wording in the test header; move the F asserts off the `# D.` label; no trailing colon when an advisory has no message.
 
-### Population B switch suite flakes with a stale entry under parallel runs
-- **Id**: BL-0104
-- **Status**: open
-- **Since**: 2026-10-03
-- **Origin**: self
-- **Problem**: 「Population B」切換測試在多個測試同時平行執行時，會偶爾誤報有殘留舊條目而失敗，單獨重跑就綠燈。已經在兩次工作中遇到。 (draft)
-- **Impact**: 偶發的假紅燈會干擾判斷、浪費排查時間；根本原因疑似測試只看得到已追蹤的檔案。 (draft)
-- **Trigger**: FIRED 2026-10-03 — seen twice (w112 G check, w113 hand I); green on solo rerun
-- **Effort**: S
-- **Source**: w112 row G check and w113 hand I
-- **Pointer**: docs/backlog/population-b-switch-suite-flakes-with-a-stale-entry-under-parallel-runs.md
-- **Context**: stale-entry report from the Population B switch suite is intermittent under --parallel; likely cause (w114 hand J): the suite uses `git grep`, which sees only tracked files — see the sidecar.
-
 ### cost-fuse dispatch exemption prefix and session-id collisions
 - **Id**: BL-0105
 - **Status**: open
@@ -1453,18 +1440,18 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: the qualification prompt now states that a seat with a this-seat round keeps that round's axis; the production prompt (around lines 280–297) still only says pick a declared axis. Align the two so a qualified seat meets the same rule live.
 
-### orchestration-eval full run rewrites the committed t7-config-rename fixture
+### Find what rewrites the committed t7-config-rename fixture outside the suite
 - **Id**: BL-0122
 - **Status**: open
 - **Since**: 2026-10-12
 - **Origin**: self
-- **Problem**: 跑完整套測試後，已提交的評測範例檔 config.json 被改寫成壓縮格式，表示測試某個步驟仍在寫入原始檔，而不是暫存副本。 (draft)
-- **Impact**: 提交過的範例檔被無聲改動，容易誤提交或造成後續比對混亂。 (draft)
-- **Trigger**: next touch of hooks/tests/orchestration-eval.test.sh or evals/orchestration
+- **Problem**: 已提交的評測範例檔 config.json 曾被改寫成壓縮格式。測試套件內已確認都只寫暫存副本，並加了斷言：套件內再寫到範例檔會直接點名是哪個檔。真正的寫入者還沒抓到，最可能是有人在原位執行該題自己的測試。
+- **Impact**: 低。範例檔被無聲改動，容易誤提交；套件內的回歸已有斷言擋住。
+- **Trigger**: config.json 再次在 git status 出現改動時，當下查是哪個流程在原位跑了 t7
 - **Effort**: S
-- **Source**: discuss-exam-fix full suite in a hands worktree, 2026-10-12
+- **Source**: discuss-exam-fix full suite 2026-10-12; narrowed by BL-0122 lane 2026-10-14
 - **Pointer**: none
-- **Context**: after `bash hooks/tests/run.sh`, evals/orchestration/tasks/t7-config-rename/repo/config.json was rewritten to minified JSON. The suite copies the fixture to a temp dir (line 262), so some step still writes the source.
+- **Context**: The only writer found: t7's own tests/tool.test.js writes {"timeout":5} to repo/config.json when run in place (eval hands, bare node --test). orchestration-eval.test.sh now digests evals/orchestration/tasks before/after.
 
 ### mods/live recent conversation: groups expand by mouse only
 - **Id**: BL-0123
@@ -1622,19 +1609,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: context-budget node tests (/dev/shm), hooks/depth0-delegate-gate.test.js (d0gate-home-*), context-budget-window-memory.test.sh, live-dir-xdg-inference.test.sh. Fix: cleanup in finally plus HOME/XDG isolation.
 
-### l5 brief lint warns even when the marker is set after the non-strict dispatches
-- **Id**: BL-0141
-- **Status**: open
-- **Since**: 2026-10-13
-- **Origin**: self
-- **Problem**: 派工前的簡報檢查，只要簡報裡同時出現「設 l5 標記」和「非嚴格派工」就提醒，不看先後順序。照提醒建議把標記放到派工之後，還是會被提醒。
-- **Impact**: 只是提醒、不會擋；但正確寫法也被提醒，久了大家會忽略這個提醒。
-- **Trigger**: a correctly ordered brief gets the warning in a real dispatch, or next touch of the brief lint
-- **Effort**: S
-- **Source**: lane W review round 1, 2026-10-13
-- **Pointer**: none
-- **Context**: hooks/dispatch-model-guard.js briefLintWarning tests SETS_MANAGED_MARKER_RE and NON_STRICT_RAIL_RE independently; compare match offsets and warn only when the marker line precedes a non-strict rail line. Negative control: reversed order.
-
 ### claude children started in a non-git temp dir get no session marker
 - **Id**: BL-0142
 - **Status**: open
@@ -1686,19 +1660,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
 - **Context**: Review (a): compaction fired near 217k for a 250k window (README:122-125). Candidate fix: when context exceeds the window by more than one step, fall back to STOP. Verify CC compaction timing first.
 
-### Live pane lists a plan-review seat as an author run and keeps finished runs
-- **Id**: BL-0149
-- **Status**: open
-- **Since**: 2026-10-14
-- **Origin**: self
-- **Problem**: 活面板的派工分頁把計畫審查的席位顯示成「實作」，而且前一天就結束的派工還留在清單上，擁有者看了以為派了另一家模型去寫程式。
-- **Impact**: 擁有者對誰在寫程式產生誤判；清單越積越長，看不出現在真正在跑什麼。
-- **Trigger**: 下次動活面板的派工分頁，或擁有者再次誤讀派工角色時
-- **Effort**: S
-- **Source**: owner question, 2026-10-14
-- **Pointer**: none
-- **Context**: Plan-review codex seat runs via dispatch-author.sh, so its manifest says role=author (dispatch tab in mods/live/tabs.ts). Fix: stamp the role from the caller; collapse runs that ended more than N hours ago.
-
 ### Codex author failures omit the transport status field
 - **Id**: BL-0150
 - **Status**: open
@@ -1711,19 +1672,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: C2 review, 2026-10-14
 - **Pointer**: none
 - **Context**: scripts/dispatch-author.sh runner_failed for codex (around :1368, :1529-1536 at review time) carries no transport_status; consumers must not assume it.
-
-### Three suites fail before the change when run from a linked worktree
-- **Id**: BL-0151
-- **Status**: open
-- **Since**: 2026-10-14
-- **Origin**: self
-- **Problem**: 有三個測試在改動之前就已經失敗，看起來跟測試從副本工作目錄執行的路徑有關；每次審查都會看到它們紅，要另外說明不是新改動造成的。
-- **Impact**: 整套測試跑不出全綠，合併前的整套驗收會被這三個擋住，也會遮住真正的新紅燈。
-- **Trigger**: 下一次合併前要跑整套測試時，先處理這三個
-- **Effort**: S
-- **Source**: C2 and B2 reviews, 2026-10-14
-- **Pointer**: none
-- **Context**: Red at 1750618f before the change: dispatch-author strict-endpoint Case 1; one case each in resolve-review-loop-a and autopilot-engine (tied to the worktree path). Reproduce from main checkout and a worktree first.
 
 ### Hetero dispatch caller-session filter branch has no test
 - **Id**: BL-0152
@@ -1801,7 +1749,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: 2026-10-14 Kimi qualification history check
 - **Pointer**: none
-- **Context**: scorecard events 157/166/182 use engine `kimi-code-k3`; strikes.jsonl #71 uses `kimi-code/k3` (implementer, engine_output). Check how strike lookup keys seats; normalise one side.
+- **Context**: scorecard events 157/166/182 use engine `kimi-code-k3`; strikes.jsonl #71 uses `kimi-code/k3`. Kimi 2.8 too: reviewer/VA rows use `kimi-k2.8-preview`, implementer `kimi-code/kimi-for-coding`. Normalise one key.
 
 ### Owner-role qualification has no exam provider
 - **Id**: BL-0158
@@ -1834,13 +1782,13 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-14
 - **Origin**: self
-- **Problem**: 資格考改成每題都考完之後，時間上限沒有重算，慢的考生比較容易考到一半就到時間、記成「無結果」。另外，已鎖定合格的場次中途到時間仍算合格，但沒考到的題目裡可能有會讓它不合格的嚴重錯誤。
+- **Problem**: 資格考改成每題考完後，總時間上限約 3 小時，平均每題超過約 3 分鐘才會撞到，先觀察重考有沒有「中途到時間」。另外已鎖定合格的場次中途到時間仍算合格，沒考到的題目可能藏著嚴重錯誤。
 - **Impact**: 中。慢模型可能一直拿不到判定；截斷時可能放過一個沒考到的嚴重錯誤。
 - **Trigger**: 重考 consult／discuss 出現 wall-truncated 紀錄，或 owner 決定截斷怎麼判
 - **Effort**: S
 - **Source**: review of 763f77de, 2026-10-14
 - **Pointer**: docs/backlog/qualification-wall-cap-after-run-to-completion.md
-- **Context**: engine-qualify.js:3750,3765 wall budget predates run-to-completion; a truncated locked_qualify pool stays qualified though sticky Tier-1 could still fail it.
+- **Context**: engine-qualify.js:3740-3767: 1800 s per administration x 3 x2 multiplier, 400 s per call; observe first. A truncated locked_qualify pool stays qualified though sticky Tier-1 could still fail it.
 
 ### Qualification provider: CLI error text and reviewer last-line rule
 - **Id**: BL-0161
@@ -1854,3 +1802,29 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: review of 763f77de, 2026-10-14 (UNVERIFIED live behavior)
 - **Pointer**: docs/backlog/qualification-provider-cli-error-text-and-last-line-rule.md
 - **Context**: qualification-review-provider.js:1608-1610 passes exit-0 text through; no quota/auth pattern match. parsePanelResult (:807-820) takes the last parseable JSON object.
+
+### Restore the KR7 byte guard over the reviewer exam path
+- **Id**: BL-0162
+- **Status**: open
+- **Since**: 2026-10-14
+- **Origin**: self
+- **Problem**: 審查科考卷換版時，穩定性測試裡「改別科不會順帶改到審查科評分程式」的逐位元組比對被拿掉了，因為比對基準還鎖著舊考卷。另外審查科與工頭的原始作答檔在零筆時只寫一個換行，工頭那條也沒有測試。
+- **Impact**: 低。改 consult／discuss 時若不小心動到審查科評分，不會被這支測試抓到；其他測試仍會檢查考卷鎖定指紋。
+- **Trigger**: 審查科 v6 考卷已在 origin/develop 後，下次動 engine-qualify-verdict-stability 或 engine-qualify.js 審查科路徑時
+- **Effort**: S
+- **Source**: review of reviewer clean-case fix 11922aca, 2026-10-14
+- **Pointer**: none
+- **Context**: Move KR7 baseSha (verdict-stability.test.sh ~:3499-3537) to a v6 + --raw-dir commit; restore runQualification + reviewer verifyPinnedEvaluationAssets. raw sink :5031-5038 writes "\n" for zero rows; owner --raw-dir untested.
+
+### Pending-decisions follow-ups: orphaned items and untested guards
+- **Id**: BL-0163
+- **Status**: open
+- **Since**: 2026-10-14
+- **Origin**: self
+- **Problem**: 待決議事項區塊有三個小缺口：session 當掉沒正常結束時，它問 owner 的題目會一直留在區塊裡，只能手動關；「只關自己 session 那筆」的第二道判斷沒有反例測試；對沒開過決議的 repo 執行 close 會建出空目錄。
+- **Impact**: 低。區塊可能累積已沒人在等的舊題，owner 會以為還要回答。
+- **Trigger**: owner 看到區塊裡有已經沒人在等的舊題，或下次改 ask-decision.js / open-decision.js
+- **Effort**: S
+- **Source**: review of decision/2 eb9f702e, 2026-10-14
+- **Pointer**: none
+- **Context**: ask-decision.js closeOwn only clears its own pointer; dead-session items persist (stale after 7 d). isOurs in closeDecisionById has no counter-example test. withWriteLock ensureDir creates decisions/ on close.

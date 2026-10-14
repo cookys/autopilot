@@ -3456,6 +3456,7 @@ test('hygiene tab: a long cache dir, worktree path and reason wrap in full at 60
 // Local fixtures (no global busyWorld): rows are LivePaneRow-shaped, `detail.now_ms` is the clock F5 reads.
 const D_NOW = Date.parse('2026-10-13T08:00:00.000Z')
 const D_DAY = 86_400_000
+const D_AGE_OUT = 6 * 3_600_000 // BL-0149: FRESH_MS.dispatch
 const dispatchSnap = (rows: object[] | null, over: object = {}) => ({
   header: 'h', rows, gates: null, link: null, published_at: '2026-10-13T07:59:55.000Z', session_as_of: null, host_as_of: null,
   sections: NO_SECTIONS,
@@ -3605,10 +3606,10 @@ test('tableList refuses a row without group or ts (M53)', () => {
   expect(() => ui.tableList(u, 'x', 'n', cols, [{ state: ok.state, cells: ['a'], group: 'a' } as never], { fact: 'dispatch.runs' })).toThrow(/group or ts/)
 })
 
-test('dispatch tab: F5 a finished run older than a day is counted in the chip, not listed (I11 at T-1, T, T+1 ms; M24e, M24j)', () => {
+test('dispatch tab: F5 a finished run older than 6 h is counted in the chip, not listed (I11 at T-1, T, T+1 ms; M24e, M24j)', () => {
   const t = makeT('zh-TW')
   const T = ui.FRESH_MS.dispatch
-  expect(T).toBe(D_DAY)
+  expect(T).toBe(D_AGE_OUT)
   for (const [delta, listed] of [[-1, true], [0, true], [1, false]] as const) {
     const row = RUN_FIN('edge', T + delta)
     const lines = dispatchLines(dispatchSnap([row]), { t, cols: 120 })
@@ -3618,6 +3619,15 @@ test('dispatch tab: F5 a finished run older than a day is counted in the chip, n
     if (!listed) expect(lines.some(l => l.text.includes(t('dispatch.no_finished')))).toBe(true)
     expect(runAgedOut(paneRows({ runs: [{ ...row, phase: 'exited' }] } as never)?.[0] as never, D_NOW)).toBe(!listed)
   }
+})
+
+test('dispatch tab: BL-0149 the role column shows the manifest role (plan-review stays plan-review, not author)', () => {
+  const t = makeT('en')
+  const lines = dispatchLines(dispatchSnap([RUN_FIN('seat-1', 60_000, { role: 'plan-review' }), RUN_FIN('auth-1', 120_000, { role: 'author' })]), { t, cols: 120 })
+  const rowOf = (id: string) => bodyRows(lines).find(l => l.text.includes(id))?.text ?? ''
+  expect(rowOf('seat-1')).toContain('plan-review')
+  expect(rowOf('seat-1')).not.toContain('author')
+  expect(rowOf('auth-1')).toContain('author')
 })
 
 test('dispatch tab: who computes `fresh` (§2.5 gap): a row that ended with no rc and no final_status is stopped, never running; a stale probe is not running either', () => {

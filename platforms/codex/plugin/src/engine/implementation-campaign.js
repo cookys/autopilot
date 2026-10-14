@@ -1075,7 +1075,14 @@ function reduceCampaignState(currentState, event) {
     CAMPAIGN_EVENTS.TERMINAL_READY,
     CAMPAIGN_EVENTS.TERMINAL_FOLLOW_UP,
   ]).has(event.event_type);
-  if (event.event_type === CAMPAIGN_EVENTS.BOUNDARY_REJECTED) {
+  if (event.event_type === CAMPAIGN_EVENTS.RESUMED
+      && isPlainObject(event.payload)
+      && Object.prototype.hasOwnProperty.call(event.payload, 'close_only')) {
+    if (event.payload.close_only !== true) {
+      fail('INVALID_PAYLOAD', 'resumed.payload.close_only must be true when present');
+    }
+    assertExactKeys(event.payload, new Set(['close_only']), `${event.event_type}.payload`);
+  } else if (event.event_type === CAMPAIGN_EVENTS.BOUNDARY_REJECTED) {
     const optional = new Set(['git_candidate']);
     if (!isPlainObject(event.payload)) {
       fail('INVALID_SHAPE', `${event.event_type}.payload must be a plain object`);
@@ -1127,7 +1134,12 @@ function reduceCampaignState(currentState, event) {
       CAMPAIGN_EVENTS.TERMINAL_STOP,
       CAMPAIGN_EVENTS.BOUNDARY_REJECTED,
       CAMPAIGN_EVENTS.AWAITING_CONVERGENCE,
-    ]).has(event.event_type),
+    ]).has(event.event_type)
+      // A review-candidate "end" resumes only to write TERMINAL_STOP, which may overrun by design; the
+      // resume marker that precedes it must not be refused for the same overrun (any other event
+      // that follows an overrun state is still refused by its own budget check).
+      || (event.event_type === CAMPAIGN_EVENTS.RESUMED
+        && event.payload && event.payload.close_only === true),
   });
   if (MUTATION_START_EVENTS.has(event.event_type)
       && event.usage.elapsed_wall_seconds >= currentState.limits.max_wall_seconds) {
@@ -1176,6 +1188,25 @@ function reduceCampaignState(currentState, event) {
       fail('INVALID_PAYLOAD', 'candidate_adopted requires the adopted head sha');
     }
     next.phase = CAMPAIGN_STATES.VERTICAL_VERIFICATION;
+  } else if (currentState.phase === CAMPAIGN_STATES.AWAITING_DISPOSITION
+      && event.event_type === CAMPAIGN_EVENTS.CANDIDATE_ADOPTED) {
+    // review-candidate "return": the author came back with a new head, so the parked review is
+    // adopted again and re-enters verification. The head must be new (the same head would only
+    // repeat the review that parked), and no writer lease exists for an adopted range.
+    if (currentState.live_lease) {
+      fail('LIVE_LEASE_CONFLICT', 'candidate adoption cannot replace a live lease owner');
+    }
+    requireScopeCheck(event);
+    if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(event.payload.adopted_head || '')) {
+      fail('INVALID_PAYLOAD', 'candidate_adopted requires the adopted head sha');
+    }
+    const parkedRef = currentState.awaiting_disposition
+      && currentState.awaiting_disposition.candidate_ref;
+    if (parkedRef && parkedRef === event.payload.adopted_head) {
+      fail('RETURN_HEAD_UNCHANGED', 'a returned head must differ from the head the review parked on');
+    }
+    next.phase = CAMPAIGN_STATES.VERTICAL_VERIFICATION;
+    next.awaiting_disposition = null;
   } else if (currentState.phase === CAMPAIGN_STATES.IMPLEMENTING
       && event.event_type === CAMPAIGN_EVENTS.IMPLEMENTATION_COMPLETED) {
     requireLease(currentState, event);

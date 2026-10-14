@@ -2,7 +2,10 @@
 // Driver for hooks/tests/review-candidate.test.sh: ONE scenario per process, in a throwaway repo
 // under ctx.tmp (the ledger lives in that repo's own git common dir, never the real one).
 //   node review-candidate-driver.js <ctx.json>
-// ctx: { root, tmp, tag, stub, scenario, seats?, verdict?, stubAdmission?, authorFamily? }
+// ctx: { root, tmp, tag, stub, scenario, seats?, verdict?, stubAdmission?, authorFamily?, preset?,
+//        steps? }   steps: [{ env?: {RC_VERDICT, RC_FAIL_MODEL}, move?: 'forward'|'sideways'|'same',
+//        continuation?: 'end'|'return'|..., resume?: true (default) }] run after the first run, each
+//        with a fresh engine over the same options (a new process in production).
 // Prints ONE json line of observations (last stdout line).
 const fs = require('fs');
 const path = require('path');
@@ -139,6 +142,7 @@ if (scenario === 'head_equals_base') contractBody.adoption = { head_sha: base };
 else if (!isImplControl && scenario !== 'impl_under_candidate') {
   contractBody.adoption = { head_sha: sealedHead, ...(authorFamily ? { author_family: authorFamily } : {}) };
 }
+if (ctx.preset && contractBody.adoption) contractBody.adoption.disposition_preset = ctx.preset;
 if (scenario === 'adoption_with_strict_dispatch') contractBody.strict_dispatch = true;
 fs.writeFileSync(promptFile, 'review the externally produced range\n');
 fs.writeFileSync(contractPath, `${JSON.stringify(contractBody, null, 2)}\n`);
@@ -162,7 +166,7 @@ const roster = {
   reviewer_engine: seats[0].model, reviewer_effort: 'high', reviewer_runner: 'cc-shim',
   reviewer_qualified: true, implementer_engine: 'fixture-implementer',
   implementer_effort: 'high', implementer_runner: 'fixture',
-  loop_max_rounds: 3, loop_convergence_verdict: 'SHIP-AS-IS', min_panel_size: 3,
+  loop_max_rounds: 3, loop_convergence_verdict: 'SHIP-AS-IS', min_panel_size: ctx.minPanel || 3,
   qc_panel_seats_complete: true, qc_panel_seats: seats, in_rail_review: 'panel',
   override_admitted_seats: ['qc_panel[0]', 'qc_panel[1]', 'qc_panel[2]'],
 };
@@ -198,9 +202,11 @@ const gitWt = ({ commit } = {}) => {
     observed_tree_sha: git(verifyWt, 'rev-parse', 'HEAD^{tree}'), detached: true,
   };
 };
+// A step's clockSkewSeconds moves the engine clock forward (a long interruption); it persists for later steps.
+let clockSkewMs = 0;
 const options = {
   cwd: sbx,
-  clock: () => new Date().toISOString(),
+  clock: () => new Date(Date.now() + clockSkewMs).toISOString(),
   campaignDispositionProvider: compileCampaignDispositionPolicy('acceptance-bound'),
   campaignIntake(input, engineAdapters) {
     return runCampaignIntake(input, {
@@ -330,8 +336,9 @@ if (scenario === 'strict_readiness' || scenario === 'strict_readiness_review_onl
   Object.assign(roster, resolvedRoster);
 }
 const engine = new AutopilotEngine(options);
-if (isImplControl) {
-  engine.implementTask = () => {
+const installImplControl = (eng) => {
+  if (!isImplControl) return;
+  eng.implementTask = () => {
     impl += 1;
     return {
       status: 'committed', dispatcher_called: true,
@@ -343,7 +350,8 @@ if (isImplControl) {
       ledger: [],
     };
   };
-}
+};
+installImplControl(engine);
 const reviewMode = !(isImplControl || scenario === 'adopt_under_implement');
 const input = {
   promptFile, branch, base, roster,
@@ -364,6 +372,98 @@ let result;
 let thrown = null;
 try { result = engine.runImplementationReviewLoop(input); } catch (error) { thrown = String(error && error.message || error); result = {}; }
 
+// ---- resume steps (P2): move the branch, flip the stub env, run a fresh engine with --resume ----
+const campaignPhaseNow = () => {
+  try {
+    const cli = require(path.join(root, 'src', 'campaign', 'cli'));
+    const rows = cli.loadRows(ledgerPath);
+    const intakeRow = rows.find((r) => r.op === 'campaign_intake');
+    return intakeRow ? cli.projectCampaign(rows, intakeRow.run_id).state.phase : null;
+  } catch (_e) { return null; }
+};
+// The first run's process "died": this driver stays in one process, so its own campaign lease would
+// read as alive. Close it the way a real exit does (a run-ledger stage-transition to dead).
+const killLease = () => {
+  const cli = require(path.join(root, 'src', 'campaign', 'cli'));
+  const rows = cli.loadRows(ledgerPath);
+  const intakeRow = rows.find((r) => r.op === 'campaign_intake');
+  if (!intakeRow) return;
+  const lease = cli.projectCampaign(rows, intakeRow.run_id).latest_lease;
+  if (!lease || lease.state !== 'leased') return;
+  execFileSync('bash', [
+    path.join(root, 'scripts', 'run-ledger.sh'), 'stage-transition',
+    '--ledger', ledgerPath, '--run-id', intakeRow.run_id, '--stage', 'campaign',
+    '--generation', String(lease.generation), '--nonce', lease.nonce, '--to-state', 'dead',
+    '--idempotency-key', `rc-driver-park:${lease.generation}:${lease.nonce}`,
+  ], { cwd: sbx, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+};
+const stepsOut = [];
+let currentHead = head;
+for (const stepSpec of (ctx.steps || [])) {
+  // keepLease leaves the previous run's lease live, as a still-running owner would.
+  if (stepSpec.keepLease !== true) {
+    try { killLease(); } catch (_e) { /* surfaced by the step itself */ }
+  }
+  // dropEvents: simulate a crash by deleting journaled campaign events (e.g. the park) from the ledger.
+  if (Array.isArray(stepSpec.dropEvents) && stepSpec.dropEvents.length > 0) {
+    const kept = fs.readFileSync(ledgerPath, 'utf8').split('\n').filter((line) => {
+      if (!line) return false;
+      try {
+        const row = JSON.parse(line);
+        if (row.op !== 'campaign_event') return true;
+        return !stepSpec.dropEvents.includes(JSON.parse(row.payload).event.event_type);
+      } catch (_e) { return true; }
+    });
+    fs.writeFileSync(ledgerPath, `${kept.join('\n')}\n`);
+  }
+  if (Number.isFinite(stepSpec.clockSkewSeconds)) clockSkewMs = stepSpec.clockSkewSeconds * 1000;
+  const stepEnv = stepSpec.env || {};
+  process.env.RC_VERDICT = stepEnv.RC_VERDICT || 'ship';
+  process.env.RC_FAIL_MODEL = stepEnv.RC_FAIL_MODEL || '';
+  const beforeReviews = fs.readFileSync(logFile, 'utf8').split('\n').filter(Boolean).length;
+  const beforeVerify = verifyRuns;
+  if (stepSpec.move === 'forward') {
+    fs.writeFileSync(path.join(worktree, 'src', 'value.txt'), `external-${stepsOut.length + 2}\n`);
+    git(worktree, 'add', '-A');
+    git(worktree, 'commit', '-qm', 'author follow-up');
+    currentHead = git(worktree, 'rev-parse', 'HEAD');
+  } else if (stepSpec.move === 'sideways') {
+    git(worktree, 'reset', '-q', '--hard', base);
+    fs.writeFileSync(path.join(worktree, 'src', 'value.txt'), `sideways-${stepsOut.length}\n`);
+    git(worktree, 'add', '-A');
+    git(worktree, 'commit', '-qm', 'rewritten history');
+    currentHead = git(worktree, 'rev-parse', 'HEAD');
+  } else if (stepSpec.move === 'noop_commit') {
+    // A descendant commit that leaves the tree identical.
+    git(worktree, 'commit', '-q', '--allow-empty', '-m', 'empty follow-up');
+    currentHead = git(worktree, 'rev-parse', 'HEAD');
+  }
+  const stepEngine = new AutopilotEngine(options);
+  installImplControl(stepEngine);
+  const stepInput = {
+    ...input,
+    resume: stepSpec.resume !== false,
+    ...(stepSpec.continuation ? { campaignContinuation: stepSpec.continuation } : {}),
+  };
+  let stepResult;
+  let stepThrown = null;
+  try { stepResult = stepEngine.runImplementationReviewLoop(stepInput); } catch (error) {
+    stepThrown = String(error && error.message || error); stepResult = {};
+  }
+  const logNow = fs.readFileSync(logFile, 'utf8').split('\n').filter(Boolean);
+  stepsOut.push({
+    status: stepResult.status || null, phase: stepResult.phase || null, code: stepResult.code || null,
+    reason: stepResult.reason ? String(stepResult.reason).slice(0, 300) : null,
+    verdict: stepResult.verdict || null, thrown: stepThrown,
+    durable_wait: stepResult.durable_wait === true, resumable: stepResult.resumable === true,
+    campaign_phase: campaignPhaseNow(), head: currentHead,
+    review_calls_delta: logNow.length - beforeReviews, review_models_delta: logNow.slice(beforeReviews),
+    verify_runs_delta: verifyRuns - beforeVerify,
+    model_calls: stepResult.model_calls == null ? null : stepResult.model_calls,
+    result_keys: Object.keys(stepResult),
+  });
+}
+
 // ---- observations ----------------------------------------------------------------------------------------
 const reviewLog = fs.readFileSync(logFile, 'utf8').split('\n').filter(Boolean);
 let events = [];
@@ -382,6 +482,10 @@ let independentDiff = null;
 if (reviewBase) {
   independentDiff = execFileSync('git', ['-C', sbx, 'diff', '--no-ext-diff', '--no-textconv', `${base}..${reviewBase}`]);
 }
+let finalIndependentDiff = null;
+if (reviewBase && currentHead) {
+  finalIndependentDiff = execFileSync('git', ['-C', sbx, 'diff', '--no-ext-diff', '--no-textconv', `${base}..${currentHead}`]);
+}
 const mainStatus = git(sbx, 'status', '--porcelain');
 emit({
   scenario, thrown, status: result.status, phase: result.phase || null, code: result.code || null,
@@ -396,6 +500,9 @@ emit({
   seat_diff_count: seatDiffs.length,
   seat_diff_parity: seatDiffs.length > 0 && independentDiff !== null
     && seatDiffs.every((d) => Buffer.compare(d, independentDiff) === 0),
+  // P2: after a return the seats' last diff must be base..final head (the files are overwritten per model).
+  seat_diff_final_parity: seatDiffs.length > 0 && finalIndependentDiff !== null
+    && seatDiffs.every((d) => Buffer.compare(d, finalIndependentDiff) === 0),
   seat_diff_perturbed_parity: seatDiffs.length > 0 && independentDiff !== null
     && seatDiffs.every((d) => Buffer.compare(d, Buffer.concat([independentDiff, Buffer.from('x')])) === 0),
   forced_called: forced.called, forced_result: forced.result,
@@ -407,4 +514,7 @@ emit({
     ? result.ledger.map((e) => `${e.stage || e.name}:${e.status}`).join(',') : null,
   warnings_in_result: JSON.stringify(result).includes('review_candidate_churn_'),
   intake_exports: typeof intake.defaultAdoptionAdmission,
+  steps: stepsOut,
+  first_head: head, final_head: currentHead,
+  durable_wait: result.durable_wait === true, resumable: result.resumable === true,
 });

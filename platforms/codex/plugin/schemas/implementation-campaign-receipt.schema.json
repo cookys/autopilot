@@ -80,6 +80,7 @@
         "final_panel_quorum_met": { "type": "boolean" },
         "sealed_required_review_families": { "type": "integer", "minimum": 1 },
         "implementer_family": { "type": "string", "minLength": 1 },
+        "author_family_excluded": { "const": true },
         "final_panel_seat_receipts": {
           "type": "array",
           "items": { "$ref": "#/$defs/finalPanelSeat" }

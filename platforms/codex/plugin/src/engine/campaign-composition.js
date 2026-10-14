@@ -602,6 +602,10 @@ function validateFinalPanelReceipt(receipt, expectedMinimum) {
   let familiesOk = families.size >= requiredFamilies;
   if (receipt.implementer_family === 'unknown') {
     familiesOk = requiredFamilies < 2 || families.size >= requiredFamilies;
+  } else if (receipt.author_family_excluded === true) {
+    // review-candidate (RO7): the author family is subtracted before the remaining families are counted.
+    familiesOk = familiesOk
+      && [...families].filter((family) => family !== receipt.implementer_family).length >= requiredFamilies;
   } else {
     familiesOk = familiesOk && [...families].some((family) => family !== receipt.implementer_family);
   }
@@ -3092,6 +3096,7 @@ function runCampaignComposition(input = {}, adapters = {}) {
           ? { sealed_required_review_families: reusableJ.result.sealed_required_review_families } : {}),
         ...(Object.prototype.hasOwnProperty.call(reusableJ.result, 'implementer_family')
           ? { implementer_family: reusableJ.result.implementer_family } : {}),
+        ...(reusableJ.result.author_family_excluded === true ? { author_family_excluded: true } : {}),
       };
       trace.push('final_panel_gate_reused');
     } else {
@@ -3167,6 +3172,7 @@ function runCampaignComposition(input = {}, adapters = {}) {
             ? { sealed_required_review_families: terminalReview.sealed_required_review_families } : {}),
           ...(terminalReview.implementer_family !== undefined
             ? { implementer_family: terminalReview.implementer_family } : {}),
+          ...(terminalReview.author_family_excluded === true ? { author_family_excluded: true } : {}),
           seat_receipts: panelValidationEarly.final_panel_seat_receipts || [],
           review_digest: terminalReview.review_digest || terminalReview.receipt_digest || null,
           verdict: terminalReview.verdict || null,
@@ -3303,6 +3309,7 @@ function runCampaignComposition(input = {}, adapters = {}) {
       ? { sealed_required_review_families: terminalReview.sealed_required_review_families } : {}),
     ...(Object.prototype.hasOwnProperty.call(terminalReview, 'implementer_family')
       ? { implementer_family: terminalReview.implementer_family } : {}),
+    ...(terminalReview.author_family_excluded === true ? { author_family_excluded: true } : {}),
     follow_up: followUps,
     rejected_findings: rejectedFindings,
     unresolved_final_findings: finalMustFix,

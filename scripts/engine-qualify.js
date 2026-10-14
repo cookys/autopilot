@@ -104,6 +104,7 @@ const {
 } = require('./qualification-case-broker');
 const { extractJsonObject } = require('./lib/extract-json-object');
 const qualUsage = require('./lib/qualification-usage');
+const { checkEffortLabel } = require('./lib/qualification-effort-label');
 const { wilsonLower } = require('../src/engine/verification-strength');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
@@ -5515,8 +5516,20 @@ function main() {
     authority_status: 'untrusted_telemetry',
   };
   delete verdict.qualified;
+  // BL-0166: compare the --effort label with the effort the provider was told to send. Advisory
+  // only (never blocks); a row is marked only when the provider's effort is observable.
+  const effortCheck = checkEffortLabel({
+    label: options.effort,
+    listedEnvNames: [...(options.providerEnvironment || []), ...(options.panelEnvironment || [])],
+    env: process.env,
+  });
+  if (effortCheck.status === 'mismatch') {
+    process.stderr.write(`engine-qualify: WARNING effort label '${effortCheck.label}' does not match the effort sent (${effortCheck.sent}): ${effortCheck.reason}; an emitted row is marked effort_check=mismatch\n`);
+  }
   if (options.emitRow) {
-    process.stdout.write(`${JSON.stringify(runResult.row)}\n`);
+    const emitted = effortCheck.status === 'unverifiable'
+      ? runResult.row : { ...runResult.row, effort_check: effortCheck };
+    process.stdout.write(`${JSON.stringify(emitted)}\n`);
     process.stderr.write(`${JSON.stringify(verdict)}\n`);
   } else {
     process.stdout.write(`${JSON.stringify(verdict)}\n`);

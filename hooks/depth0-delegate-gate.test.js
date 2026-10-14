@@ -28,9 +28,17 @@ function runHook(stdinObj, env) {
   });
 }
 
+// freshEnv() has no test context to hang t.after() on, so every dir it makes is registered and
+// removed when this test file's process exits. That runs after failed assertions too.
+const freshDirs = [];
+process.on('exit', () => {
+  for (const d of freshDirs) fs.rmSync(d, { recursive: true, force: true });
+});
+
 function freshEnv(extra = {}) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'd0gate-home-'));
   const liveDir = shmTmp('d0gate-live-');
+  freshDirs.push(home, liveDir);
   return {
     HOME: home,
     AUTOPILOT_LIVE_DIR: liveDir,
@@ -318,21 +326,24 @@ test('lock held by another writer: waiting costs no CPU, and the 2 s timeout sti
   // must stay well under wall-clock time, and the wait itself must really happen.
   const env = freshEnv();
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'd0gate-lockwait-'));
-  const file = path.join(stateDir, 'd0-test-session.json');
-  fs.writeFileSync(`${file}.lock`, '');
-  const r = spawnSync('bash', ['-c', 'LC_ALL=C; TIMEFORMAT="%U %S %R"; time node "$1"', 'bash', HOOK], {
-    input: JSON.stringify(payload('Read')),
-    encoding: 'utf8',
-    env: { ...process.env, ...env, LC_ALL: 'C', AUTOPILOT_DEPTH0_GATE_DIR: stateDir },
-  });
-  assert.strictEqual(r.status, 0, `hook exits 0 (stderr: ${r.stderr})`);
-  const [user, sys, wall] = r.stderr.trim().split('\n').pop().split(' ').map(Number);
-  const cpu = user + sys;
-  assert.ok(wall >= 1.5, `the lock wait really happened (wall ${wall}s; deadline is 2 s)`);
-  assert.ok(cpu < wall / 2, `waiting does not spin: cpu ${cpu}s vs wall ${wall}s`);
-  const st = JSON.parse(fs.readFileSync(file, 'utf8'));
-  assert.strictEqual(st.reads, 1, 'timeout fails open: the read is still counted without the lock');
-  fs.rmSync(stateDir, { recursive: true, force: true });
+  try {
+    const file = path.join(stateDir, 'd0-test-session.json');
+    fs.writeFileSync(`${file}.lock`, '');
+    const r = spawnSync('bash', ['-c', 'LC_ALL=C; TIMEFORMAT="%U %S %R"; time node "$1"', 'bash', HOOK], {
+      input: JSON.stringify(payload('Read')),
+      encoding: 'utf8',
+      env: { ...process.env, ...env, LC_ALL: 'C', AUTOPILOT_DEPTH0_GATE_DIR: stateDir },
+    });
+    assert.strictEqual(r.status, 0, `hook exits 0 (stderr: ${r.stderr})`);
+    const [user, sys, wall] = r.stderr.trim().split('\n').pop().split(' ').map(Number);
+    const cpu = user + sys;
+    assert.ok(wall >= 1.5, `the lock wait really happened (wall ${wall}s; deadline is 2 s)`);
+    assert.ok(cpu < wall / 2, `waiting does not spin: cpu ${cpu}s vs wall ${wall}s`);
+    const st = JSON.parse(fs.readFileSync(file, 'utf8'));
+    assert.strictEqual(st.reads, 1, 'timeout fails open: the read is still counted without the lock');
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
 });
 
 test('subagent fire with empty or null agent_id is still skipped (presence, not truthiness)', () => {

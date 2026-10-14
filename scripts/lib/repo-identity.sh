@@ -110,6 +110,30 @@ child_session_mint() {
   return 0
 }
 
+# child_marker_hook_setup -- plan dispatch-tree step 3a (D2). The claude child's SessionStart marker is
+# written by a hook the rail hands it with `--settings` (the user-scope plugin does not load in a
+# project-only child). Sets CHILD_MARKER_SETTINGS (inline settings JSON; empty when no child id was minted
+# or the script path is unsafe to quote) and CHILD_MARKER_DIR (the LAUNCHER's marker dir, resolved before a
+# cc-shim scratch HOME hides ~/.autopilot; the rail exports it to the child as AUTOPILOT_SESSION_MODE_DIR).
+child_marker_hook_setup() {
+  CHILD_MARKER_SETTINGS=""
+  CHILD_MARKER_DIR="${AUTOPILOT_SESSION_MODE_DIR:-${HOME:-}/.autopilot/session-mode}"
+  [ -n "${CHILD_SESSION_ID:-}" ] || return 0
+  local sm nodebin
+  sm="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd)/session-mode.js"
+  [ -r "$sm" ] || return 0
+  case "$sm" in *\'*|*\"*|*\\*)
+    echo "child_marker_hook_setup: session-mode.js path contains a quote or backslash; child marker hook not installed" >&2
+    return 0 ;;
+  esac
+  # Absolute node: a cc-shim child runs under a scratch HOME, where a $HOME-based shim (asdf, nvm) would not resolve.
+  nodebin="$(command -v node 2>/dev/null || true)"
+  case "$nodebin" in /*) ;; *) nodebin="node" ;; esac
+  case "$nodebin" in *\'*|*\"*|*\\*) nodebin="node" ;; esac
+  CHILD_MARKER_SETTINGS="{\"hooks\":{\"SessionStart\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"'$nodebin' '$sm' ensure-child\"}]}]}}"
+  return 0
+}
+
 # manifest_child_session_json -- the JSON value for a manifest's "child_session_id": the minted id as a
 # quoted string, else the bare literal null (runners that start no claude child, or no mint yet).
 manifest_child_session_json() {

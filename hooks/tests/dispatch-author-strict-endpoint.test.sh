@@ -113,10 +113,10 @@ assert_eq "1" "$run_count" "Case 1: fake runner started exactly once"
 argv_content=""
 if [ -f "$RECORDED_ARGV" ]; then
   # The rail mints the claude child's --session-id (child_session_mint); mask the random UUID.
-  argv_content=$(sed -E 's#[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}#UUID#g' "$RECORDED_ARGV")
+  argv_content=$(sed -E -e 's#[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}#UUID#g' -e 's# --settings \{"hooks".*# --settings SETTINGS_JSON#' "$RECORDED_ARGV")
 fi
 assert_eq "$argv_content" \
-  "-p --session-id UUID --model glm-5.2 --setting-sources project --strict-mcp-config --tools  --effort high" \
+  "-p --session-id UUID --model glm-5.2 --setting-sources project --strict-mcp-config --tools  --effort high --settings SETTINGS_JSON" \
   "Case 1: full cc-shim argv shape reached fake process (not just --model)"
 
 # Assert endpoint-derived ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN reached the fake process

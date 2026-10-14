@@ -266,6 +266,10 @@ function run(perCaseModeSource, extra) {
   check(failedRow.outcome !== 'pass' && failedRow.outcome !== 'infra_fail'
     && failedRow.outcome !== 'provider_unavailable',
     `content-wrong case gets a CONTENT taxonomy outcome, not a transport one (got: ${failedRow.outcome})`);
+  // usage.n_solved must be the grader's own pass count, and a failing scenario must lower it.
+  const passCount = exchanges.filter((row) => row.outcome === 'pass').length;
+  check(result.row.usage.n_solved < result.row.usage.n_cases, 'a failing scenario: usage.n_solved < usage.n_cases');
+  equal(result.row.usage.n_solved, passCount, 'usage.n_solved equals the grader pass count over the exchanges');
 }
 
 // ── 5. transport-attributed failure ⇒ distinct classification, run excluded ─
@@ -548,6 +552,6 @@ require('fs').writeFileSync(${JSON.stringify(sentinelPath)}, 'module-top-level-c
     'planted negative: with declared_axes stripped from the envelope again, the envelope-only stub flips red (proves the previous test is load-bearing)');
 }
 
-if (assertions !== 60) throw new Error(`engine-qualify-discuss: expected exactly 60 assertions (count pin moved here from hooks/tests/engine-qualify-discuss.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 62) throw new Error(`engine-qualify-discuss: expected exactly 62 assertions (count pin moved here from hooks/tests/engine-qualify-discuss.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);
 fs.rmSync(tempRoot, { recursive: true, force: true });

@@ -103,6 +103,7 @@ const {
   normalizeOptions: normalizeBrokerOptions,
 } = require('./qualification-case-broker');
 const { extractJsonObject } = require('./lib/extract-json-object');
+const qualUsage = require('./lib/qualification-usage');
 const { wilsonLower } = require('../src/engine/verification-strength');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
@@ -250,7 +251,11 @@ const HELP = `Usage:
     [--provider-env <name>] [--remote-timeout-ms <n>]
     --task-class <class> --domain <domain> --language <language> --tool <tool>
     [--trials <n>] [--expires-days <n>] [--store <path>] [--emit-row]
-    [--raw-dir <path>]   (dump raw per-case exchanges/ledger into this directory)
+    [--raw-dir <path>]   (dump raw per-case exchanges/ledger into this directory;
+      also <role>-usage.jsonl, one row per case: wall_s, token counts, solved)
+    [--price-usd-per-mtok-in <n> --price-usd-per-mtok-out <n> --price-as-of <YYYY-MM-DD>
+      --price-source <manual|measured> [--price-ref <text>]]   (all four required together;
+      without them cost stays source=unknown and usage.usd_per_solved is null)
     [--version-source runtime|operator-asserted]   (CLI transports observe no
       runtime model id — pass operator-asserted so the row says so)
 
@@ -391,6 +396,12 @@ function parseArgs(argv) {
     ['--runner-bin', 'runnerBin'],
     ['--dispatch-timeout', 'dispatchTimeout'],
     ['--endpoint', 'endpoint'],
+    // Optional price inputs (all-or-nothing, see parsePricing). Never defaulted.
+    ['--price-usd-per-mtok-in', 'priceUsdPerMtokIn'],
+    ['--price-usd-per-mtok-out', 'priceUsdPerMtokOut'],
+    ['--price-as-of', 'priceAsOf'],
+    ['--price-source', 'priceSource'],
+    ['--price-ref', 'priceRef'],
   ]);
   const repeated = new Map([
     ['--task-class', 'taskClasses'],
@@ -507,6 +518,11 @@ function parseArgs(argv) {
   const expiresCap = options.role === 'implementer' ? IMPL_EXPIRES_CAP : 30;
   if (options.expiresDays > expiresCap) {
     usage(2, `${options.role} --expires-days cannot exceed ${expiresCap}`);
+  }
+  try {
+    qualUsage.parsePricing(options);
+  } catch (error) {
+    usage(2, error.message);
   }
   // --plan is the D3 dry-run surface (plan 2026-08-28-consult-discuss-
   // qualification.md §8 ruling 1): consult/discuss only. `--plan` combined
@@ -1619,9 +1635,19 @@ function parseBrokerResponse(stdout, panelConfig) {
   } catch {
     throw new Error('case broker returned malformed JSON');
   }
-  if (!hasExactKeys(value, ['schema_version', 'status', 'output', 'error', 'receipt'])
+  // Optional `usage` telemetry key (qualification-usage.js); a response without it
+  // is the historic shape and stays valid.
+  const brokerKeys = ['schema_version', 'status', 'output', 'error', 'receipt'];
+  if (!hasExactKeys(value, Object.hasOwn(value, 'usage') ? [...brokerKeys, 'usage'] : brokerKeys)
       || value.schema_version !== 1 || !['ok', 'failed'].includes(value.status)) {
     throw new Error('case broker response has an invalid shape');
+  }
+  if (Object.hasOwn(value, 'usage')) {
+    try {
+      qualUsage.validateWireUsage(value.usage, 'case broker usage');
+    } catch (error) {
+      throw new Error(`case broker response has an invalid shape: ${error.message}`);
+    }
   }
   if (!value.receipt || typeof value.receipt !== 'object' || Array.isArray(value.receipt)) {
     throw new Error('case broker response is missing its bound receipt');
@@ -1666,7 +1692,21 @@ function parseBrokerResponse(stdout, panelConfig) {
   };
 }
 
+// Wraps the transport call with a wall-clock reading and the provider-reported
+// usage (null whenever the transport did not report one — local --panel-cmd, CLI
+// transports, an adapter without the optional usage key). Telemetry only: nothing
+// here feeds a verdict or a hash.
 function executePanelCase(panelConfig, diff) {
+  const started = process.hrtime.bigint();
+  const result = executePanelCaseTransport(panelConfig, diff);
+  return {
+    ...result,
+    wall_s: Number(process.hrtime.bigint() - started) / 1e9,
+    usage: result.usage || null,
+  };
+}
+
+function executePanelCaseTransport(panelConfig, diff) {
   if (panelConfig.transport === 'local') {
     const result = spawnSync(BWRAP_PATH, sandboxArguments(panelConfig), {
       input: diff,
@@ -1732,7 +1772,8 @@ function executePanelCase(panelConfig, diff) {
   if (broker.value.status !== 'ok' || result.status !== 0) {
     return {
       ok: false,
-      error: `case broker failed: ${broker.value.error.code}`,
+      error: `case broker failed: ${broker.value.error.code}`
+        + (typeof broker.value.error.message === 'string' ? ` (${broker.value.error.message})` : ''),
       stdout: '',
       receiptHash: broker.receiptHash,
     };
@@ -1742,6 +1783,7 @@ function executePanelCase(panelConfig, diff) {
     error: null,
     stdout: broker.value.output,
     receiptHash: broker.receiptHash,
+    usage: broker.value.usage || null,
   };
 }
 
@@ -1813,6 +1855,8 @@ function runPanelCase(panelConfig, testCase, rawSink = null) {
     transport_ok: result.ok,
     mutation_target: testCase.mutationTarget,
     transport_receipt_hash: result.receiptHash,
+    // Telemetry only (never hashed, never graded): wall + provider-reported usage.
+    telemetry: { wall_s: result.wall_s, usage: result.usage },
   };
 }
 
@@ -1867,10 +1911,12 @@ function runOwnerPanelCase(panelConfig, testCase, rawSink = null) {
     transport_ok: result.ok,
     mutation_target: testCase.mutationTarget,
     transport_receipt_hash: result.receiptHash,
+    // Telemetry only (never hashed, never graded): wall + provider-reported usage.
+    telemetry: { wall_s: result.wall_s, usage: result.usage },
   };
 }
 
-function runTrial(cases, oracle, panelConfig, trialId, observedAt, seed, rawSink = null) {
+function runTrial(cases, oracle, panelConfig, trialId, observedAt, seed, rawSink = null, usageSink = null, usageRole = 'reviewer') {
   const ordered = deterministicShuffle(cases, `${seed}:${trialId}`);
   // Sequential, not .map(): a dead transport must stop the trial at the first case
   // instead of driving the broker through all remaining ones. Without the abort a
@@ -1883,6 +1929,17 @@ function runTrial(cases, oracle, panelConfig, trialId, observedAt, seed, rawSink
     const result = runPanelCase(panelConfig, testCase, rawSink
       ? { push: (row) => rawSink.push({ trial: trialId, ...row }) } : null);
     results.push(result);
+    if (usageSink) {
+      usageSink.push(qualUsage.caseRecord({
+        role: usageRole,
+        trialId,
+        caseId: result.artifact_id,
+        wallS: result.telemetry.wall_s,
+        usage: result.telemetry.usage,
+        solved: result.oracle_passed,
+        usageSource: result.telemetry.usage ? 'provider' : null,
+      }));
+    }
     if (!result.transport_ok) {
       return {
         transportAbort: `transport failure on ${trialId} case ${result.artifact_id}`,
@@ -1953,7 +2010,7 @@ function runTrial(cases, oracle, panelConfig, trialId, observedAt, seed, rawSink
   };
 }
 
-function runOwnerTrial(cases, oracle, panelConfig, trialId, observedAt, seed, rawSink = null) {
+function runOwnerTrial(cases, oracle, panelConfig, trialId, observedAt, seed, rawSink = null, usageSink = null, usageRole = 'owner') {
   const ordered = deterministicShuffle(cases, `${seed}:owner:${trialId}`);
   // See runTrial: sequential so a dead transport aborts at the first case.
   const results = [];
@@ -1961,6 +2018,17 @@ function runOwnerTrial(cases, oracle, panelConfig, trialId, observedAt, seed, ra
     const result = runOwnerPanelCase(panelConfig, testCase, rawSink
       ? { push: (row) => rawSink.push({ trial: trialId, ...row }) } : null);
     results.push(result);
+    if (usageSink) {
+      usageSink.push(qualUsage.caseRecord({
+        role: usageRole,
+        trialId,
+        caseId: result.artifact_id,
+        wallS: result.telemetry.wall_s,
+        usage: result.telemetry.usage,
+        solved: result.oracle_passed,
+        usageSource: result.telemetry.usage ? 'provider' : null,
+      }));
+    }
     if (!result.transport_ok) {
       return {
         transportAbort: `transport failure on ${trialId} case ${result.artifact_id}`,
@@ -2371,6 +2439,30 @@ function parseVaPlanOutput(stdout) {
   return null;
 }
 
+// Builds the row's `usage` summary and `cost` block from per-case records and, when
+// --raw-dir is set, writes the per-case file `<role>-usage.jsonl`. A separate file
+// (not columns on the exchanges file) because the solved verdict only exists after
+// grading, brain exchanges are per ROUND while a case there is a trial, and one
+// schema across roles is what a downstream reader needs.
+function finalizeUsage(options, role, records) {
+  let pricing;
+  try {
+    pricing = qualUsage.parsePricing(options);
+  } catch (error) {
+    throw new Error(`price options invalid: ${error.message}`);
+  }
+  const summary = qualUsage.summarize(records, pricing);
+  if (options.rawDir) {
+    fs.mkdirSync(options.rawDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(options.rawDir, `${role}-usage.jsonl`),
+      records.length === 0 ? '' : `${records.map((row) => JSON.stringify(row)).join('\n')}\n`,
+      { mode: 0o600 },
+    );
+  }
+  return { usage: summary, cost: qualUsage.costBlock(summary, pricing) };
+}
+
 function runVaQualification(options) {
   let staticAssets;
   try {
@@ -2397,11 +2489,16 @@ function runVaQualification(options) {
 
   const plansPerTrial = [];
   const rawExchanges = [];
+  // Per-case transport telemetry, joined to the grader's verdict by (trial_id, case_id).
+  const execTelemetry = new Map();
   let transportAbort = null;
   for (const trial of admin.trials) {
     const plans = {};
     for (const caseData of trial.cases) {
       const execution = executePanelCase(panelConfig, caseData.envelope);
+      execTelemetry.set(`${trial.trial_id}|${caseData.case_id}`, {
+        wall_s: execution.wall_s, usage: execution.usage,
+      });
       const output = typeof execution.stdout === 'string' ? execution.stdout : '';
       rawExchanges.push({
         trial_id: trial.trial_id,
@@ -2499,6 +2596,22 @@ function runVaQualification(options) {
     containment_fingerprint: options.containmentFingerprint,
     identity_resolved: true,
   };
+  const vaUsageRecords = [];
+  for (const trialResult of graded.trials) {
+    for (const r of trialResult.results) {
+      const telemetry = execTelemetry.get(`${trialResult.trial_id}|${r.case_id}`) || null;
+      vaUsageRecords.push(qualUsage.caseRecord({
+        role: 'verification_author',
+        trialId: trialResult.trial_id,
+        caseId: r.case_id,
+        wallS: telemetry ? telemetry.wall_s : null,
+        usage: telemetry ? telemetry.usage : null,
+        solved: r.outcome === 'pass',
+        usageSource: telemetry && telemetry.usage ? 'provider' : null,
+      }));
+    }
+  }
+  const usageFin = finalizeUsage(options, 'verification_author', vaUsageRecords);
   const outcomeCount = (trialResult, outcome) => trialResult.results
     .filter((r) => r.outcome === outcome).length;
   const trials = graded.trials.map((trialResult, index) => ({
@@ -2582,12 +2695,8 @@ function runVaQualification(options) {
     capability_score: totals('cases_total') === 0
       ? 0
       : totals('cases_passed') / totals('cases_total'),
-    cost: {
-      source: 'unknown',
-      usd_per_mtok_input: 0,
-      usd_per_mtok_output: 0,
-      sample_tokens: 0,
-    },
+    cost: usageFin.cost,
+    usage: usageFin.usage,
     latency: { sample_wall_time_s: Math.max(0, Math.round((Date.now() - started) / 1000)) },
     status: qualified ? 'qualified' : 'failed',
     qualified_at: issuedAt.slice(0, 10),
@@ -2677,6 +2786,7 @@ function runBrainQualification(options) {
     const trial = admin.trials[trialIndex];
     const trace = [];
     const rawExchanges = [];
+    const roundTelemetry = [];
     const envelope = {};
     const trialObservedAt = timestamp();
     let trialSpend = 0;
@@ -2706,6 +2816,11 @@ function runBrainQualification(options) {
         action_receipts: realizedActions.slice(),
       });
       const execution = executePanelCase(panelConfig, input);
+      roundTelemetry.push(qualUsage.caseRecord({
+        role: 'brain', unit: 'round', trialId: trial.trial_id, caseId: `round-${round.round_id}`,
+        wallS: execution.wall_s, usage: execution.usage, solved: false,
+        usageSource: execution.usage ? 'provider' : null,
+      }));
       const stdout = typeof execution.stdout === 'string' ? execution.stdout : '';
       if (!execution.ok) {
         transportAbort = `transport failure on trial ${trialIndex + 1} round ${round.round_id}: ${execution.error}`;
@@ -2740,7 +2855,9 @@ function runBrainQualification(options) {
     }
     traces.push(trace);
     envelopes.push(envelope);
-    trialMeta.push({ observedAt: trialObservedAt, spend: trialSpend, rawExchanges });
+    trialMeta.push({
+      observedAt: trialObservedAt, spend: trialSpend, rawExchanges, roundTelemetry,
+    });
     if (transportAbort) break;
   }
   if (options.rawDir) {
@@ -2954,6 +3071,29 @@ function runBrainQualification(options) {
     throw new Error(`cannot persist qualifier evidence: ${error.message}`);
   }
   const qualified = state === 'qualified';
+  // A brain "case" is a TRIAL (many round exchanges). solved = the sealed grader's own
+  // four per-trial flags, all true; the cross-trial pair_delta check is not per-trial
+  // and is not part of it. Token spend here is the transport-reported usage summed over
+  // the trial's rounds, NOT the bytes/4 budget estimate (spend_tokens).
+  const brainUsageRecords = graded.trials.map((graderTrial, index) => {
+    const folded = qualUsage.foldRounds(trialMeta[index].roundTelemetry);
+    return qualUsage.caseRecord({
+      role: 'brain',
+      unit: 'trial',
+      trialId: graderTrial.trial_id,
+      caseId: graderTrial.trial_id,
+      wallS: folded.wall_s,
+      usage: folded.usage,
+      rounds: folded.rounds,
+      solved: graderTrial.diligence_pass === true
+        && graderTrial.fairness_correctness_pass === true
+        && graderTrial.convergence_pass === true
+        && graderTrial.containment_pass === true,
+      usageSource: trialMeta[index].roundTelemetry.every((r) => r.usage_source === 'provider')
+        ? 'provider' : null,
+    });
+  });
+  const usageFin = finalizeUsage(options, 'brain', brainUsageRecords);
   const row = {
     engine: options.engine,
     model: options.model,
@@ -2986,13 +3126,9 @@ function runBrainQualification(options) {
       ? 0
       : trials.reduce((sum, t) => sum + t.plants_caught, 0)
         / trials.reduce((sum, t) => sum + t.plants_total, 0),
-    // Same unknown-cost block as every other role: the exam does not meter price.
-    cost: {
-      source: 'unknown',
-      usd_per_mtok_input: 0,
-      usd_per_mtok_output: 0,
-      sample_tokens: 0,
-    },
+    // cost stays the unknown block unless price flags were given (qualification-usage.js).
+    cost: usageFin.cost,
+    usage: usageFin.usage,
     latency: { sample_wall_time_s: Math.max(0, Math.round((Date.now() - started) / 1000)) },
     status: qualified ? 'qualified' : 'failed',
     qualified_at: issuedAt.slice(0, 10),
@@ -3191,6 +3327,7 @@ function runImplQualification(options) {
   };
   const ledger = [];
   const rawExchanges = [];
+  const usageRecords = [];
 
   const workRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'impl-qualify-live-'));
   let administrationOutcome = 'completed';
@@ -3220,7 +3357,7 @@ function runImplQualification(options) {
         startedCases += 1;
         const observation = runImplCase({
           caseSpec, options, dispatchTimeout, workRoot,
-          canaryToken: administration.canary_token, budget, ledger, rawExchanges,
+          canaryToken: administration.canary_token, budget, ledger, rawExchanges, usageRecords,
         });
         if (observation.administration_abort) {
           administrationOutcome = observation.administration_abort;
@@ -3409,6 +3546,7 @@ function runImplQualification(options) {
   }
 
   const qualified = folded.qualified;
+  const usageFin = finalizeUsage(options, 'implementer', usageRecords);
   const row = {
     engine: options.engine,
     model: options.model,
@@ -3441,12 +3579,8 @@ function runImplQualification(options) {
       repeated_trials: options.trials,
     },
     capability_score: folded.passed / implExpectedTotal(),
-    cost: {
-      source: 'unknown',
-      usd_per_mtok_input: 0,
-      usd_per_mtok_output: 0,
-      sample_tokens: 0,
-    },
+    cost: usageFin.cost,
+    usage: usageFin.usage,
     latency: { sample_wall_time_s: Math.max(0, Math.round((Date.now() - started) / 1000)) },
     status: qualified ? 'qualified' : 'failed',
     qualified_at: issuedAt.slice(0, 10),
@@ -3538,6 +3672,7 @@ function readAgentLog(dispatchJson) {
 function runImplCase(context) {
   const {
     caseSpec, options, dispatchTimeout, workRoot, canaryToken, budget, ledger, rawExchanges,
+    usageRecords = null,
   } = context;
   const repoDir = fs.mkdtempSync(path.join(workRoot, `impl-live-${caseSpec.case_id}-`));
   const ledgerRow = {
@@ -3591,6 +3726,7 @@ function runImplCase(context) {
       env.ANTHROPIC_AUTH_TOKEN = process.env[options.endpointBinding.token_env];
     }
     budget.spent += 1;
+    const dispatchStartedAt = process.hrtime.bigint();
     const run = spawnSync('bash', argv, {
       cwd: repoDir,
       env,
@@ -3607,6 +3743,7 @@ function runImplCase(context) {
     // allowlist misses pre-exec failures (EAGAIN/ENOMEM/E2BIG) and would
     // charge the seat for a process that never started, while ETIMEDOUT is
     // the one spawnSync error that PROVES the process ran (it was killed).
+    const dispatchWallS = Number(process.hrtime.bigint() - dispatchStartedAt) / 1e9;
     const timedOut = Boolean(run.error) && run.error.code === 'ETIMEDOUT';
     const spawnFailed = Boolean(run.error) && !timedOut;
     ledgerRow.dispatcher_called = !spawnFailed;
@@ -3647,6 +3784,22 @@ function runImplCase(context) {
       oracle: collectionResult.oracle,
     });
     ledgerRow.outcome = outcome;
+    if (usageRecords) {
+      // Rail-reported usage only (dispatch-hetero's `usage`, parsed from the harness
+      // event stream): codex reports a total with no in/out split, cc-shim/plain/kimi/
+      // qoder report null. Whatever the rail did not report stays null.
+      const railUsage = dispatchJson && dispatchJson.usage && typeof dispatchJson.usage === 'object'
+        ? dispatchJson.usage : null;
+      usageRecords.push(qualUsage.caseRecord({
+        role: 'implementer',
+        trialId: ledgerRow.trial_id,
+        caseId: caseSpec.case_id,
+        wallS: dispatchWallS,
+        usage: railUsage,
+        solved: outcome === 'pass',
+        usageSource: railUsage && typeof railUsage.source === 'string' ? railUsage.source : null,
+      }));
+    }
     if (outcome === 'contract_violation' && ledgerRow.dispatch_status === 'no_op' && !ledgerRow.scored_sha) {
       const warning = implGrader.unparsedToolCallWarning(readAgentLog(dispatchJson));
       if (warning) ledgerRow.warning = warning;
@@ -4248,6 +4401,9 @@ function runConsultDiscussQualification(options) {
   const pooledAdministrations = []; // case-record arrays for foldPooledVerdict
   const administrationRows = [];
   const allRawExchanges = [];
+  // Every executed case counts, harness-excluded administrations included: the time and
+  // tokens were spent even though that administration is dropped from the pooled verdict.
+  const allUsageRecords = [];
   const allScoredTrials = [];
   // Same shape as allScoredTrials, but excludes any administration that was
   // harness_excluded — evidence promotion and the quality.* per-violation
@@ -4388,6 +4544,15 @@ function runConsultDiscussQualification(options) {
           family: caseSpec.family,
         };
         caseRecords.push(caseRecord);
+        allUsageRecords.push(qualUsage.caseRecord({
+          role,
+          trialId: `run-${runIndex}/trial-${trial.trial}`,
+          caseId: caseSpec.case_id,
+          wallS: execution.wall_s,
+          usage: execution.usage,
+          solved: outcome === 'pass',
+          usageSource: execution.usage ? 'provider' : null,
+        }));
         rawExchanges.push({
           run: runIndex,
           trial: trial.trial,
@@ -4773,6 +4938,7 @@ function runConsultDiscussQualification(options) {
     ? 'qualified'
     : (terminalIncomplete ? 'no_verdict' : 'failed');
 
+  const usageFin = finalizeUsage(options, role, allUsageRecords);
   const row = {
     engine: options.engine,
     model: options.model,
@@ -4789,12 +4955,8 @@ function runConsultDiscussQualification(options) {
     date: issuedAt.slice(0, 10),
     quality,
     capability_score: fullN === 0 ? 0 : pooledPasses / fullN,
-    cost: {
-      source: 'unknown',
-      usd_per_mtok_input: 0,
-      usd_per_mtok_output: 0,
-      sample_tokens: 0,
-    },
+    cost: usageFin.cost,
+    usage: usageFin.usage,
     latency: { sample_wall_time_s: Math.max(0, Math.round((Date.now() - started) / 1000)) },
     status: rowStatus,
     qualified_at: issuedAt.slice(0, 10),
@@ -4957,6 +5119,7 @@ function runQualification(options) {
 
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-engine-qualify-'));
   const rawExchanges = [];
+  const usageRecords = [];
   const trials = [];
   const failures = [];
   const started = Date.now();
@@ -4982,6 +5145,8 @@ function runQualification(options) {
           observedAt,
           masterSeed,
           options.rawDir ? rawExchanges : null,
+          usageRecords,
+          role,
         )
         : runTrial(
           oracle.trials[index].cases,
@@ -4991,6 +5156,8 @@ function runQualification(options) {
           observedAt,
           masterSeed,
           options.rawDir ? rawExchanges : null,
+          usageRecords,
+          role,
         );
       if (outcome.transportAbort) {
         // NO verdict, never PASS or FAIL: nothing is appended and no row admits the
@@ -5161,6 +5328,7 @@ function runQualification(options) {
   const cleanFalse = trials.reduce((sum, trial) => sum + trial.clean_false_positives, 0);
   const cleanTotal = trials.reduce((sum, trial) => sum + trial.clean_total, 0);
   const qualified = state === 'qualified';
+  const usageFin = finalizeUsage(options, role, usageRecords);
   const row = {
     engine: options.engine,
     model: options.model,
@@ -5182,12 +5350,8 @@ function runQualification(options) {
       repeated_trials: options.trials,
     },
     capability_score: knownBadTotal === 0 ? 0 : caught / knownBadTotal,
-    cost: {
-      source: 'unknown',
-      usd_per_mtok_input: 0,
-      usd_per_mtok_output: 0,
-      sample_tokens: 0,
-    },
+    cost: usageFin.cost,
+    usage: usageFin.usage,
     latency: { sample_wall_time_s: Math.max(0, Math.round((Date.now() - started) / 1000)) },
     status: qualified ? 'qualified' : 'failed',
     qualified_at: issuedAt.slice(0, 10),

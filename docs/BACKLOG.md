@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0167 -->
+<!-- next-id: BL-0169 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1867,3 +1867,29 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: review of provider HTTP effort merge 9490ad6e, 2026-10-14
 - **Pointer**: none
 - **Context**: engine-qualify.js never maps --effort to QRP_HTTP_EFFORT / QRP_CLI_EFFORT; --provider-env records names only. Either refuse a mismatch or record the effort the provider actually sent.
+
+### Grok and Kimi seats still owe the 2026-10-14 exams
+- **Id**: BL-0167
+- **Status**: open
+- **Since**: 2026-10-14
+- **Origin**: owner
+- **Problem**: 2026-10-14 那輪資格考沒考到 Grok 和 Kimi。grok-4.7 帳戶餘額用完（402），沒有成績；Kimi K3、2.8 額度用完。owner 決定星期五（2026-10-16）補考。
+- **Impact**: 中。這三個席位在新版審查題（v6）和這輪加考的強度上沒有成績，排序時不會被推薦，也無法和其他模型比較。
+- **Trigger**: 2026-10-16（星期五），且 Grok 已儲值、Kimi 額度已重置
+- **Effort**: S
+- **Source**: owner 2026-10-14「grok / kimi 都先排 backlog , 星期五補考」
+- **Pointer**: none
+- **Context**: Grok: `bash run-rv6-cli-chain.sh grok grok:grok-4.7:low` (reviewer-requalify evidence folder). Kimi: reviewer v6 plus every role this round sat; no early stop.
+
+### Usage block cannot tell a truncated exam from a complete one
+- **Id**: BL-0168
+- **Status**: open
+- **Since**: 2026-10-14
+- **Origin**: self
+- **Problem**: 成績列 usage 區塊的題數只算實際跑過的題。考試被時間上限截斷，或 implementer 走例外路徑沒推紀錄時，沒跑的題會直接消失，usage_complete 仍是 true。驗證也沒交叉比對缺 token 數、每小時答對數和價格原因。
+- **Impact**: 低。這些路徑多半判 no_verdict 或中止；但看 usage 排序時，可能把半場的耗時當成整場。
+- **Trigger**: llm-playground 開始讀 usage 區塊做綜合評估之前
+- **Effort**: S
+- **Source**: review of usage lane cafae461/5086079a, 2026-10-14
+- **Pointer**: none
+- **Context**: qualification-usage.js summarize :111-143 has no expected n_cases; validateUsageBlock :203-235 lacks cross-checks. verdict-stability :3501 and the empty-output comment are imprecise.

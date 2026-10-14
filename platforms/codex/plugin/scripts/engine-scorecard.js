@@ -6,6 +6,7 @@ const path = require('path');
 const process = require('process');
 const transcriptSecrets = require('../hooks/_shared/secret-patterns');
 const { expandTilde, ensureDir, sleepMs, acquireLock, releaseLock, withWriteLock, appendRow, writeSnapshot, toEventId, maxEventId } = require('./lib/jsonl-store');
+const { validateUsageBlock } = require('./lib/qualification-usage');
 const {
   buildCapabilityEvidenceReceipt,
   capabilityEvidenceProducerHash,
@@ -446,6 +447,17 @@ function validateRecordRow(row, capabilityRowsOverride = null) {
 
   if (!VALID_COST_SOURCES.has(row.cost.source)) {
     failValidation(`invalid cost.source '${row.cost.source}'`);
+  }
+
+  // OPTIONAL per-case usage summary (qualification-usage.js). Rows recorded before it
+  // existed simply lack it and stay valid; a present block must be coherent, notably
+  // usage_complete=false must carry no derived token/usd figure.
+  if (row.usage !== undefined) {
+    try {
+      validateUsageBlock(row.usage);
+    } catch (error) {
+      failValidation(error.message);
+    }
   }
 
   if (row.evidence !== undefined) {

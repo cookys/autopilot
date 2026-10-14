@@ -17,6 +17,21 @@ assert_exit_code "$FAIL_RC" "1" "all-true panel-cmd exits 1 (qualification faile
 assert_contains "$FAIL_OUT" '"status":"failed"' "emit-row status failed on false positive critical"
 assert_not_contains "$FAIL_OUT" '"false_pass_critical":0' "critical false-pass present"
 
+# 7a) usage.n_solved is the oracle's pass count, not "every case". An accept-everything panel
+#     passes only the clean (and mutation-control) cases; every known-bad case is missed.
+USAGE_RAW="$TEST_TMP/reviewer-usage-raw"
+USAGE_OUT="$($SCRIPT "${QUALIFY_ARGS[@]}" --panel-cmd "$ALL_PASS_PANEL" --raw-dir "$USAGE_RAW" --emit-row 2>&1)"
+USAGE_EXPECT="$(node -e '
+const rows = require("fs").readFileSync(process.argv[1], "utf8").trim().split("\n").map((l) => JSON.parse(l));
+const solved = rows.filter((r) => r.panel_verdict === "pass" && (r.kind === "clean" || r.kind === "mutation")).length;
+process.stdout.write(`${solved} ${rows.length}`);
+' "$USAGE_RAW/reviewer-exchanges.jsonl")"
+USAGE_SOLVED="${USAGE_EXPECT% *}"
+USAGE_TOTAL="${USAGE_EXPECT#* }"
+assert_contains "$USAGE_OUT" "\"n_solved\":$USAGE_SOLVED," "reviewer usage.n_solved equals the oracle pass count ($USAGE_SOLVED)"
+assert_contains "$USAGE_OUT" "\"n_cases\":$USAGE_TOTAL," "reviewer usage.n_cases counts every executed case ($USAGE_TOTAL)"
+if [ "$USAGE_SOLVED" -lt "$USAGE_TOTAL" ]; then assert_eq "lt" "lt" "a failing reviewer: usage.n_solved < usage.n_cases"; else assert_eq "lt" "ge" "a failing reviewer: usage.n_solved < usage.n_cases"; fi
+
 # 7b) A dead transport aborts with NO verdict — it is not the panel's answer.
 # Regression for 2026-09-21: runPanelCase used to substitute {verdict:'fail',
 # findings:[]} when the transport died, which scores every clean case as a false

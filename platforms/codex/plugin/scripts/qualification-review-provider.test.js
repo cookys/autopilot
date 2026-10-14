@@ -120,6 +120,22 @@ fs.writeFileSync(stubClaude, `#!/usr/bin/env node
 const fs = require('fs');
 const path = require('path');
 const stdin = fs.readFileSync(0, 'utf8');
+// Transient-failure emulation: fail the first STUB_FAIL_TIMES invocations
+// (counted in STUB_FAIL_COUNT_FILE) with STUB_STDERR and exit 1. Also log
+// whether HOME already held a marker from an earlier attempt (a reused home).
+if (process.env.STUB_FAIL_COUNT_FILE) {
+  const counter = process.env.STUB_FAIL_COUNT_FILE;
+  let calls = 0;
+  try { calls = Number(fs.readFileSync(counter, 'utf8')); } catch { /* first call */ }
+  fs.writeFileSync(counter, String(calls + 1));
+  const marker = path.join(process.env.HOME || '', 'stub-used-marker');
+  fs.appendFileSync(counter + '.homes', (fs.existsSync(marker) ? 'reused' : 'fresh') + '\\n');
+  fs.writeFileSync(marker, 'x');
+  if (calls < Number(process.env.STUB_FAIL_TIMES || 0)) {
+    fs.writeSync(2, process.env.STUB_STDERR || '');
+    process.exit(1);
+  }
+}
 // Capture the clone's forced-deny settings.json (if any) BEFORE this process
 // exits — callCli removes the clone only after the child settles, but reading
 // it from inside the child is the only vantage that predates that removal.
@@ -967,6 +983,95 @@ function roleOnlyRequest(role, content = 'x') {
     check(!child.stdout.includes('"verdict'), `agy ${mode}: no answer is emitted`);
   }
 }
+// ── 11c. agy transient-503 retry (transport layer) ─────────────────────────────
+// Why: agy's `UNAVAILABLE (code 503)` is a Google-side blip that voided whole
+// exams. Only that shape retries (max 2, delays from QRP_AGY_RETRY_DELAYS_MS);
+// every other failure runs exactly once. Nothing scored is re-rolled.
+{
+  const template = path.join(tempRoot, 'agy-retry-clihome-template');
+  fs.mkdirSync(template, { recursive: true });
+  const E503 = 'Eligibility check failed: UNAVAILABLE (code 503): The service is currently unavailable.';
+  const retryEnv = (name, stderr, times) => {
+    const counter = path.join(tempRoot, `retry-count-${name}`);
+    return {
+      counter,
+      env: {
+        QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'agy', QRP_CLI_BIN: stubClaude,
+        QRP_CLI_HOME: template, STUB_AGY_MODE: 'clean', QRP_AGY_RETRY_DELAYS_MS: '0,0',
+        STUB_FAIL_COUNT_FILE: counter, STUB_FAIL_TIMES: String(times), STUB_STDERR: stderr,
+      },
+    };
+  };
+  const calls = (counter) => Number(fs.readFileSync(counter, 'utf8'));
+
+  const recovers = retryEnv('recovers', E503, 2);
+  const ok = runProvider({ env: recovers.env, request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT });
+  equal(ok.child.status, 0, 'agy 503 x2 then success: the case succeeds');
+  equal(calls(recovers.counter), 3, 'agy 503 x2 then success: agy ran three times');
+  equal(ok.child.stderr.match(/agy transient 503, retry \d\/2/gu),
+    ['agy transient 503, retry 1/2', 'agy transient 503, retry 2/2'],
+    'agy 503 x2 then success: stderr carries exactly two retry lines');
+  equal(fs.readFileSync(`${recovers.counter}.homes`, 'utf8').trim().split('\n'),
+    ['fresh', 'fresh', 'fresh'],
+    'every retry runs in a freshly staged home, never a used one');
+
+  const always = retryEnv('always', E503, 99);
+  const dead = runProvider({ env: always.env, request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT });
+  equal(dead.child.status, 1, 'agy 503 forever: the case fails');
+  equal(calls(always.counter), 3, 'agy 503 forever: one try plus exactly two retries');
+  check(/UNAVAILABLE \(code 503\)/.test(dead.child.stderr),
+    'agy 503 forever: the failure message keeps the 503 text');
+
+  // NEGATIVE CONTROL: a non-503 failure must not be retried.
+  const other = retryEnv('other', 'Error: model quota exhausted (code 429)', 99);
+  const noRetry = runProvider({ env: other.env, request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT });
+  equal(noRetry.child.status, 1, 'agy non-503 failure: the case fails');
+  equal(calls(other.counter), 1, 'agy non-503 failure runs once (no retry)');
+  check(!/agy transient 503/.test(noRetry.child.stderr), 'agy non-503 failure logs no retry line');
+
+  // Invalid QRP_AGY_RETRY_DELAYS_MS is rejected at startup, never defaulted.
+  for (const bad of ['abc', '-1', '1,,2', '1,2,3', '2147483648', ',', '1,', '1.5', ' 1']) {
+    const { env } = retryEnv(`bad-${bad.replace(/\W/gu, '_')}`, E503, 0);
+    const { child } = runProvider({
+      env: { ...env, QRP_AGY_RETRY_DELAYS_MS: bad }, request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT,
+    });
+    check(child.status === 1 && /QRP_AGY_RETRY_DELAYS_MS/.test(child.stderr) && !child.stdout.includes('"verdict'),
+      `QRP_AGY_RETRY_DELAYS_MS=${JSON.stringify(bad)} is rejected loudly`);
+  }
+  {
+    const { env } = retryEnv('good-single', E503, 0);
+    const { child } = runProvider({
+      env: { ...env, QRP_AGY_RETRY_DELAYS_MS: '0' }, request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT,
+    });
+    equal(child.status, 0, 'a single-value QRP_AGY_RETRY_DELAYS_MS is accepted');
+  }
+
+  // NEGATIVE CONTROL: an agy timeout is never retried.
+  const slow = retryEnv('timeout', '', 0);
+  const timedOut = runProvider({
+    env: { ...slow.env, QRP_TIMEOUT_MS: '300' },
+    request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT, stubSleepMs: 2500,
+  });
+  equal(timedOut.child.status, 1, 'agy timeout: the case fails');
+  equal(calls(slow.counter), 1, 'agy timeout runs once (no retry)');
+  check(!/agy transient 503/.test(timedOut.child.stderr), 'agy timeout logs no retry line');
+
+  // One delay => at most one retry, and the message total says so.
+  const single = retryEnv('single', E503, 99);
+  const oneRetry = runProvider({
+    env: { ...single.env, QRP_AGY_RETRY_DELAYS_MS: '0' }, request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT,
+  });
+  equal(calls(single.counter), 2, 'a single delay allows exactly one retry');
+  equal(oneRetry.child.stderr.match(/agy transient 503, retry \d\/\d/gu), ['agy transient 503, retry 1/1'],
+    'with one delay the retry line reads retry 1/1');
+
+  // A kind other than agy never retries even on a 503 body.
+  const codex = retryEnv('claude-kind', E503, 99);
+  runProvider({
+    env: { ...codex.env, QRP_CLI_KIND: 'claude' }, request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT,
+  });
+  equal(calls(codex.counter), 1, 'a non-agy kind with a 503 body is never retried');
+}
 {
   // (a) negative: the OTHER kinds must NOT gain the flag (and, unlike agy,
   // must NOT require QRP_CLI_HOME either -- this run deliberately omits it).
@@ -1512,6 +1617,10 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
   });
   good.proc.kill();
   equal(okChild.status, 0, 'a completed Responses reply succeeds');
+  // Usage passthrough: reported counts reach the wire, an absent count stays null (never 0).
+  equal(JSON.parse(okChild.stdout).usage,
+    { input_tokens: null, output_tokens: 182, reasoning_tokens: 167, total_tokens: null },
+    'Responses usage is passed through; the count the stub did not report stays null');
   const sent = JSON.parse(fs.readFileSync(reqFile, 'utf8'));
   equal(sent.url, '/v1/responses', 'the Responses protocol posts to /v1/responses');
   check(sent.headers.authorization === 'Bearer stub-token',
@@ -1564,7 +1673,7 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
   }
   for (const [env, re, label] of [
     [{ QRP_HTTP_PROTOCOL: 'responses', QRP_HTTP_EFFORT: 'max' }, /max has no OpenAI-compatible wire value/, 'max is refused, not clamped'],
-    [{ QRP_HTTP_PROTOCOL: 'messages', QRP_HTTP_EFFORT: 'high' }, /not supported by the messages protocol/, 'messages protocol refuses an effort'],
+    [{ QRP_HTTP_PROTOCOL: 'messages', QRP_HTTP_EFFORT: 'none' }, /messages protocol must be one of low\|medium\|high\|xhigh\|max/, 'messages protocol refuses none'],
   ]) {
     const { child } = runProvider({
       request: reviewerRequest(),
@@ -1749,6 +1858,158 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(${JSON.stringify(ssePortFil
     'the http effort knob refuses the cli transport instead of being silently ignored');
 }
 
+
+// --- Messages protocol: output_config.effort / thinking / thinking-block reply / budget ---
+// GLM-5.3 and MiniMax-M3(.1) are reached over /v1/messages. Effort rides as
+// `output_config.effort`; M3 only thinks when `thinking.type=adaptive` is sent. Every
+// case inspects the BODY the stub actually received, both the send and no-send sides.
+{
+  const { spawn, execFileSync } = require('child_process');
+  const serverFile = path.join(tempRoot, 'stub-msg-body.js');
+  const portFile = path.join(tempRoot, 'stub-msg-body-port');
+  const reqFile = path.join(tempRoot, 'stub-msg-body-request.json');
+  fs.writeFileSync(serverFile, `
+const http = require('http');
+const fs = require('fs');
+const reply = JSON.parse(process.env.STUB_REPLY);
+const server = http.createServer((req, res) => {
+  let body = '';
+  req.on('data', (c) => { body += c; });
+  req.on('end', () => {
+    fs.writeFileSync(process.env.STUB_REQ_FILE, JSON.stringify({ url: req.url, raw: body }));
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify(reply));
+  });
+});
+server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE, String(server.address().port)));
+`);
+  const startMsgStub = (reply) => {
+    for (const f of [portFile, reqFile]) if (fs.existsSync(f)) fs.rmSync(f);
+    const proc = spawn(process.execPath, [serverFile], {
+      env: { ...process.env, STUB_REPLY: JSON.stringify(reply), STUB_PORT_FILE: portFile, STUB_REQ_FILE: reqFile },
+      stdio: 'ignore',
+    });
+    for (let i = 0; i < 100 && !fs.existsSync(portFile); i += 1) {
+      try { execFileSync('sleep', ['0.05']); } catch { /* keep polling */ }
+    }
+    return { proc, port: fs.readFileSync(portFile, 'utf8').trim() };
+  };
+  const textReply = {
+    model: 'fake-model-exact', stop_reason: 'end_turn',
+    content: [{ type: 'text', text: REVIEWER_MODEL_OUTPUT }],
+  };
+  // Runs one messages call against a fresh stub; returns the child and the exact request body.
+  const sendMessages = (env, reply = textReply) => {
+    const stub = startMsgStub(reply);
+    const { child } = runProvider({
+      request: reviewerRequest(),
+      env: { QRP_BASE_URL: `http://127.0.0.1:${stub.port}`, QRP_AUTH_TOKEN: 'stub-token', ...env },
+    });
+    stub.proc.kill();
+    const seen = fs.existsSync(reqFile) ? JSON.parse(fs.readFileSync(reqFile, 'utf8')) : null;
+    return { child, seen, body: seen ? JSON.parse(seen.raw) : null };
+  };
+  const BASE_KEYS = ['max_tokens', 'messages', 'model', 'system', 'temperature'];
+
+  // (1) nothing set -> the body is exactly the historical shape.
+  {
+    const { child, seen, body } = sendMessages({});
+    equal(child.status, 0, 'messages with no effort/thinking knob succeeds');
+    equal(seen.url, '/v1/messages', 'messages posts to /v1/messages');
+    equal(JSON.stringify(Object.keys(body).sort()), JSON.stringify(BASE_KEYS),
+      'unset knobs: the messages body carries exactly the historical keys');
+    equal(body.max_tokens, 8192, 'unset QRP_MAX_TOKENS keeps the 8192 default');
+  }
+  // (2) default / empty are "send nothing" too.
+  for (const env of [{ QRP_HTTP_EFFORT: 'default', QRP_HTTP_THINKING: 'default' }, { QRP_HTTP_EFFORT: '', QRP_HTTP_THINKING: '' }]) {
+    const { child, body } = sendMessages(env);
+    equal(child.status, 0, `messages with knobs ${JSON.stringify(env)} succeeds`);
+    check(!('output_config' in body) && !('thinking' in body),
+      `knobs ${JSON.stringify(env)} send neither output_config nor thinking`);
+  }
+  // (3) effort is sent verbatim, under output_config only.
+  for (const effort of ['low', 'medium', 'high', 'xhigh', 'max']) {
+    const { child, body } = sendMessages({ QRP_HTTP_EFFORT: effort });
+    equal(child.status, 0, `messages with QRP_HTTP_EFFORT=${effort} succeeds`);
+    equal(JSON.stringify(body.output_config), JSON.stringify({ effort }),
+      `QRP_HTTP_EFFORT=${effort} sends output_config.effort=${effort}`);
+    check(!('thinking' in body) && !('reasoning' in body) && !('reasoning_effort' in body),
+      `QRP_HTTP_EFFORT=${effort} alone sends no thinking and no OpenAI-style field`);
+  }
+  // (4) effort refusals: none/minimal/garbage never reach the endpoint.
+  for (const bad of ['none', 'minimal', 'extreme']) {
+    const { child, seen } = sendMessages({ QRP_HTTP_EFFORT: bad });
+    equal(child.status, 1, `messages refuses QRP_HTTP_EFFORT=${bad} (exit 1)`);
+    check(/messages protocol must be one of low\|medium\|high\|xhigh\|max/.test(child.stderr),
+      `messages refuses QRP_HTTP_EFFORT=${bad} (message)`);
+    equal(seen, null, `refused QRP_HTTP_EFFORT=${bad} sends no request at all`);
+  }
+  // (5) thinking is sent as {type}.
+  for (const mode of ['adaptive', 'disabled']) {
+    const { child, body } = sendMessages({ QRP_HTTP_THINKING: mode });
+    equal(child.status, 0, `messages with QRP_HTTP_THINKING=${mode} succeeds`);
+    equal(JSON.stringify(body.thinking), JSON.stringify({ type: mode }),
+      `QRP_HTTP_THINKING=${mode} sends thinking.type=${mode}`);
+    check(!('output_config' in body), `QRP_HTTP_THINKING=${mode} alone sends no output_config`);
+  }
+  // (6) both together.
+  {
+    const { child, body } = sendMessages({ QRP_HTTP_EFFORT: 'high', QRP_HTTP_THINKING: 'adaptive' });
+    equal(child.status, 0, 'effort + thinking together succeeds');
+    equal(JSON.stringify([body.output_config, body.thinking]),
+      JSON.stringify([{ effort: 'high' }, { type: 'adaptive' }]),
+      'effort + thinking are both on the wire');
+  }
+  // (7) thinking refusals: bad value, wrong protocol, cli transport.
+  for (const [env, re, label] of [
+    [{ QRP_HTTP_THINKING: 'enabled' }, /QRP_HTTP_THINKING must be one of adaptive\|disabled/, 'unknown value'],
+    [{ QRP_HTTP_PROTOCOL: 'responses', QRP_HTTP_THINKING: 'adaptive' }, /applies to the messages protocol only/, 'responses protocol'],
+    [{ QRP_HTTP_PROTOCOL: 'chat_completions', QRP_HTTP_THINKING: 'disabled' }, /applies to the messages protocol only/, 'chat_completions protocol'],
+    [{ QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'codex', QRP_HTTP_THINKING: 'adaptive' }, /applies to QRP_TRANSPORT=http only/, 'cli transport'],
+  ]) {
+    const { child, seen } = sendMessages(env);
+    equal(child.status, 1, `QRP_HTTP_THINKING refused: ${label} (exit 1)`);
+    check(re.test(child.stderr), `QRP_HTTP_THINKING refused: ${label} (message)`);
+    equal(seen, null, `QRP_HTTP_THINKING refused: ${label} sends no request`);
+  }
+  // (8) a reply with thinking blocks: only the text block is the answer.
+  {
+    const marker = 'THINKING-MARKER-must-not-leak {"findings":["bogus"]}';
+    const { child } = sendMessages({ QRP_HTTP_THINKING: 'adaptive', QRP_HTTP_EFFORT: 'low' }, {
+      model: 'fake-model-exact', stop_reason: 'end_turn',
+      content: [
+        { type: 'thinking', thinking: marker, signature: 'sig' },
+        { type: 'text', text: REVIEWER_MODEL_OUTPUT },
+      ],
+    });
+    equal(child.status, 0, 'a thinking+text reply succeeds');
+    const { parsed, output } = parseResponse(child);
+    check(!parsed.output.includes('THINKING-MARKER') && !parsed.output.includes('bogus'),
+      'the thinking block never reaches the answer');
+    check(Array.isArray(output.findings) && output.findings.length > 0,
+      'JSON extraction reads the text block, not the brace-bearing thinking block');
+  }
+  // (9) QRP_MAX_TOKENS override: sent verbatim; out-of-range / junk refused.
+  {
+    const { child, body } = sendMessages({ QRP_MAX_TOKENS: '32000' });
+    equal(child.status, 0, 'QRP_MAX_TOKENS=32000 succeeds');
+    equal(body.max_tokens, 32000, 'QRP_MAX_TOKENS=32000 is the max_tokens on the wire');
+  }
+  for (const bad of ['0', '15', '131073', '-5', 'abc', '8192.5', '1e4']) {
+    const { child, seen } = sendMessages({ QRP_MAX_TOKENS: bad });
+    equal(child.status, 1, `QRP_MAX_TOKENS=${bad} is refused (exit 1)`);
+    check(/QRP_MAX_TOKENS must be an integer between 16 and 131072/.test(child.stderr),
+      `QRP_MAX_TOKENS=${bad} is refused (message)`);
+    equal(seen, null, `QRP_MAX_TOKENS=${bad} sends no request`);
+  }
+  // (10) the Responses / chat bodies still refuse max and never gain output_config.
+  {
+    const { child } = sendMessages({ QRP_HTTP_PROTOCOL: 'chat_completions', QRP_HTTP_EFFORT: 'max' });
+    equal(child.status, 1, 'chat_completions still refuses QRP_HTTP_EFFORT=max');
+    check(/max has no OpenAI-compatible wire value/.test(child.stderr), 'chat_completions max refusal text unchanged');
+  }
+}
+
 fs.rmSync(tempRoot, { recursive: true, force: true });
-if (assertions !== 292) throw new Error(`qualification-review-provider: expected exactly 292 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 399) throw new Error(`qualification-review-provider: expected exactly 399 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);

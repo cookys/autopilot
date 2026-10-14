@@ -12,6 +12,7 @@ const {
   canonicalJson,
   sha256,
 } = require('../src/engine/owner-kernel/canonical');
+const { validateWireUsage } = require('./lib/qualification-usage');
 
 const BWRAP_PATH = '/usr/bin/bwrap';
 const SCHEMA_VERSION = 1;
@@ -324,7 +325,13 @@ function parseProviderResponse(stdout, expected) {
   } catch {
     throw new BrokerError('provider response is not JSON', 'malformed_provider_response');
   }
-  if (!hasExactKeys(value, ['schema_version', 'provider', 'model', 'output'])
+  // `usage` is an OPTIONAL fifth key: an adapter that predates it keeps working.
+  // When present it is validated strictly and travels with the response; it is
+  // telemetry, never an input to the identity check below.
+  const hasUsage = value && typeof value === 'object' && Object.hasOwn(value, 'usage');
+  if (!hasExactKeys(value, hasUsage
+        ? ['schema_version', 'provider', 'model', 'output', 'usage']
+        : ['schema_version', 'provider', 'model', 'output'])
       || value.schema_version !== SCHEMA_VERSION
       || typeof value.output !== 'string'
       || Buffer.byteLength(value.output) > MAX_PROVIDER_OUTPUT_BYTES) {
@@ -332,6 +339,16 @@ function parseProviderResponse(stdout, expected) {
       'provider response has an invalid shape',
       'malformed_provider_response',
     );
+  }
+  if (hasUsage) {
+    try {
+      validateWireUsage(value.usage, 'provider usage');
+    } catch {
+      throw new BrokerError(
+        'provider response has an invalid usage object',
+        'malformed_provider_response',
+      );
+    }
   }
   requireToken(value.provider, 'returned provider');
   requireModelId(value.model, 'returned model');
@@ -417,6 +434,7 @@ function runChild(command, args, options, limits = {}) {
         signal,
         stdout: Buffer.concat(stdout).toString('utf8'),
         stderrHash: byteHash(Buffer.concat(stderr)),
+        stderrExcerpt: redactedExcerpt(Buffer.concat(stderr), 500),
         timedOut,
         oversized,
       });
@@ -424,6 +442,61 @@ function runChild(command, args, options, limits = {}) {
     child.stdin.once('error', () => {});
     child.stdin.end(options.input || '');
   });
+}
+
+// Provider stderr is the only place a transient upstream error (e.g. agy
+// "UNAVAILABLE (code 503)") is visible; the broker used to keep only its hash,
+// so a failed exam left `provider_process_failed` with no cause.
+//
+// Redaction is BEST EFFORT, not a guarantee: it pattern-matches common
+// credential shapes (keyed values, headers, URL userinfo, known token prefixes,
+// PEM blocks, long token-like runs) and deliberately over-redacts, but natural
+// language ("my password is hunter2") and unknown formats can still pass. The
+// excerpt it protects is written ONLY into local exam evidence (the raw file's
+// transport_error); it never goes to a remote service or a peer.
+//
+// Order of operations is a safety AND a performance property: the raw stderr is
+// first cut to REDACT_INPUT_MAX_BYTES (dropping a trailing half UTF-8 char),
+// then redacted, and only then cut to the 500-byte excerpt. The input cap bounds
+// regex work (this runs synchronously in the child 'close' handler, so a 64 KiB
+// pathological stderr must not stall the broker); the redact-before-excerpt
+// order keeps a cut from leaving a partial token no pattern would match.
+const REDACT_INPUT_MAX_BYTES = 4096;
+
+function redactSecrets(text) {
+  // Keyword must start a word-ish run (lookbehind) so the scan is not restarted
+  // from every position of a long run of key-like characters.
+  const KW = 'token|secret|passw(?:or)?d|pwd|authorization|auth|cookie|session|sid|api[_-]?key|key|credentials?|csrf|jwt|otp';
+  const WORD = '[A-Za-z0-9_-]*';
+  const KEY = `(?<![A-Za-z0-9_-])${WORD}(?:${KW})${WORD}`;
+  const QUOTED_KEY = `${WORD}(?:${KW})${WORD}`;
+  return String(text)
+    // PEM / PGP private-key block (to its END marker, or to the end if cut).
+    .replace(/-----BEGIN [A-Z ]*PRIVATE KEY[A-Z ]*-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY[A-Z ]*-----|$)/gu, '[redacted]')
+    // user:password@ inside a URL.
+    .replace(/(\b[a-z][a-z0-9+.-]*:\/\/)[^\s/@]+@/giu, '$1[redacted]@')
+    // Authorization / Cookie headers carry multi-part values: mask to end of line.
+    .replace(/\b((?:set-)?cookie|authorization)(\s*[:=]\s*)[^\n]*/giu, '$1$2[redacted]')
+    // Quoted JSON form: "access_token":"..." | 123 | true | false | null.
+    .replace(new RegExp(`(["'])(${QUOTED_KEY})\\1\\s*:\\s*(?:"[^"]*"|'[^']*'|\\d+|true|false|null)`, 'giu'), '$1$2$1:"[redacted]"')
+    // Space-separated CLI flag: --api-key abc123 / --token abc123.
+    .replace(new RegExp(`(?<![A-Za-z0-9_-])(--${WORD}(?:${KW})${WORD})(\\s+)(?!-)(?:"[^"]*"|'[^']*'|\\S+)`, 'giu'), '$1$2[redacted]')
+    // key=value / key: value; the value may be quoted (and contain spaces) or run
+    // to whitespace, `&`, `;`, `,` or a quote.
+    .replace(new RegExp(`(${KEY})(\\s*[=:]\\s*)(?:"[^"]*"|'[^']*'|(?:Bearer\\s+|Basic\\s+)?[^\\s&;,"']+)`, 'giu'), '$1$2[redacted]')
+    // Well-known token prefixes, any length.
+    .replace(/\b(?:gh[pousr]_[A-Za-z0-9]+|github_pat_[A-Za-z0-9_]+|xox[abpr]-[A-Za-z0-9-]+|AKIA[0-9A-Z]+|AIza[A-Za-z0-9_-]+)/gu, '[redacted]')
+    .replace(/\beyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*/gu, '[redacted]')
+    .replace(/\b(?:Bearer|Basic)\s+\S+/giu, '[redacted]')
+    .replace(/\bsk-[A-Za-z0-9_-]+/gu, '[redacted]')
+    .replace(/[A-Za-z0-9+/=_.~-]{20,}/gu, '[redacted]');
+}
+
+function redactedExcerpt(input, maxBytes) {
+  const raw = Buffer.isBuffer(input) ? input : Buffer.from(String(input), 'utf8');
+  const head = raw.subarray(0, REDACT_INPUT_MAX_BYTES).toString('utf8').replace(/�$/u, '');
+  const flat = redactSecrets(head).replace(/\s+/gu, ' ').trim();
+  return Buffer.from(flat, 'utf8').subarray(0, maxBytes).toString('utf8').replace(/�$/u, '');
 }
 
 function providerEnvironment(options, providerRoot) {
@@ -463,8 +536,9 @@ async function executeProvider(options, providerRoot, providerRequest) {
     throw new BrokerError('provider response exceeded its bound', 'provider_output_too_large');
   }
   if (result.signal || result.status !== 0) {
+    const excerpt = result.stderrExcerpt ? `: ${result.stderrExcerpt}` : '';
     const error = new BrokerError(
-      `provider adapter exited unsuccessfully (${result.status ?? result.signal})`,
+      `provider adapter exited unsuccessfully (${result.status ?? result.signal})${excerpt}`,
       'provider_process_failed',
     );
     error.stderrHash = result.stderrHash;
@@ -538,18 +612,22 @@ function failedResponse(error, receipt = null) {
     output: null,
     error: {
       code: error && error.code ? error.code : 'broker_error',
+      // Only the provider-exit failure carries its (redacted) cause; every other
+      // BrokerError keeps the code-only shape.
+      ...(error && error.code === 'provider_process_failed' ? { message: error.message } : {}),
     },
     receipt,
   });
 }
 
-function successfulResponse(output, receipt) {
+function successfulResponse(output, receipt, usage) {
   return Object.freeze({
     schema_version: SCHEMA_VERSION,
     status: 'ok',
     output,
     error: null,
     receipt,
+    ...(usage === undefined ? {} : { usage }),
   });
 }
 
@@ -668,7 +746,7 @@ async function runBrokerCase(rawOptions, rawDiff) {
             responseHash: providerResult.responseHash,
             returnedIdentityHash: providerResult.returnedIdentityHash,
           });
-          respond(successfulResponse(providerResult.value.output, receipt));
+          respond(successfulResponse(providerResult.value.output, receipt, providerResult.value.usage));
         }).catch((error) => {
           const receipt = receiptFor(options, policyHash, requestHash, {
             status: 'failed',
@@ -809,6 +887,8 @@ module.exports = {
   MAX_PROVIDER_OUTPUT_BYTES,
   normalizeOptions,
   parseProviderResponse,
+  redactSecrets,
+  redactedExcerpt,
   runBrokerCase,
   sandboxArguments,
 };

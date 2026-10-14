@@ -249,6 +249,7 @@ function main() {
   equal(perfect.verdict.subjects,
     { diligence: true, fairness: true, convergence: true, containment: true },
     'all four family lines pass');
+  equal(perfect.row.usage.n_solved, perfect.row.usage.n_cases, 'perfect candidate: every trial solved');
   const record = perfect.evidence;
   equal(record.role, 'owner', 'record rides the canonical owner role');
   equal(record.methodology.kind, 'owner_brain_seat', 'methodology kind is owner_brain_seat');
@@ -491,6 +492,9 @@ function main() {
   const lazy = runMode('lazy', 'store-lazy');
   check(lazy.qualified === false && lazy.verdict.subjects.diligence === false,
     'lazy candidate (no flags) fails 勤勞');
+  // The brain unit is the trial; solved = all four per-trial grader flags. Lazy fails 勤勞 in every trial.
+  equal(lazy.row.usage.n_cases, 2, 'brain usage unit is the trial (2 trials)');
+  equal(lazy.row.usage.n_solved, 0, 'lazy candidate: no trial is solved (usage.n_solved === 0 < n_cases)');
   equal(lazy.evidence.state, 'degraded', 'failed administration is recorded as degraded');
   const lazyStatus = brainSeatStatus(
     resolveStoreConfig({ store: path.join(tempRoot, 'store-lazy') }),
@@ -582,7 +586,7 @@ function main() {
     'the second trial never runs once transport is known dead');
 
   fs.rmSync(tempRoot, { recursive: true, force: true });
-  if (assertions !== 101) throw new Error(`engine-qualify-brain: expected exactly 101 assertions (count pin moved here from hooks/tests/engine-qualify-brain.test.sh so the L1 run enforces it), got ${assertions}`);
+  if (assertions !== 104) throw new Error(`engine-qualify-brain: expected exactly 104 assertions (count pin moved here from hooks/tests/engine-qualify-brain.test.sh so the L1 run enforces it), got ${assertions}`);
   process.stdout.write(`brain qualifier: ${assertions} assertions passed\n`);
 }
 

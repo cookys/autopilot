@@ -3,7 +3,8 @@
 > Part of [Autopilot](../README.md). Detail docs: [Skills](skills.md) · [Coexistence](coexistence.md) · [Configuration](configuration.md) · [Installation](installation.md) · [Architecture](architecture.md) · [Hooks](../hooks/README.md)
 
 How an operator outside this repository gets autopilot's managed final review over a commit range
-that someone else already wrote. Everything you need to run one campaign to a receipt is on this page.
+that someone else already wrote. Everything you need to run one campaign to a receipt is on this page,
+in the order you need it. Section 4 opens with the one-time steps that must be done before the first run.
 
 ## 1. What it is
 
@@ -75,7 +76,7 @@ values; section 3 shows a script that fills them from Git.
   "max_repair_generations": 0,
   "max_wall_seconds": 1500,
   "final_panel_reserve_seconds": 0,
-  "verify_cmd": "node test.js",
+  "verify_cmd": "node src/math.test.js",
   "rubric_ids": ["ICC-RC1"],
   "adoption": {
     "head_sha": "<40-hex head commit>",
@@ -112,6 +113,14 @@ Field notes, each checked by the sealer:
 - `verify_cmd`: space-delimited argv, optionally chained with ` && `. Only characters
   `A-Za-z0-9_./:@%+=,-` are allowed in each word. No quotes, pipes, redirects, `;` or `$()`. Put anything
   complicated in a script in the repository and call it (`bash tools/ci-check.sh`).
+  The command runs in a detached worktree at the head commit, so the files it names must exist **at the
+  head**. `allowed_path_prefixes` does not restrict what `verify_cmd` can run: it restricts only the paths
+  the range **changes**. The examples keep them consistent: the range changes `src/math.js` and adds
+  `src/math.test.js`, both under `src/`. If the range also changed a test file outside the prefixes
+  (say a root-level `test.js`), admission would refuse the whole range as `review_candidate_out_of_scope`
+  even though the verify command is fine: add that file's path to the prefixes (a prefix may be a single
+  file) or move the test under an allowed directory. A test file that already exists at the base and is
+  not changed by the range needs no prefix.
 - `rubric_ids`: 1 to 128 ids matching `^[A-Za-z][A-Za-z0-9_-]*[0-9]+$` (for example `ICC-RC1`).
 
 ## 3. Seal the contract
@@ -182,7 +191,7 @@ cat > "$OUT/contract.json" <<EOF
   "max_extra_churn": 50,
   "max_repair_generations": 0,
   "max_wall_seconds": 1500,
-  "verify_cmd": "node test.js",
+  "verify_cmd": "node src/math.test.js",
   "rubric_ids": ["ICC-RC1"],
   "adoption": { "head_sha": "$HEAD_SHA" }
 }
@@ -192,12 +201,44 @@ node scripts/implementation-campaign-check.js seal \
   --contract "$OUT/contract.json" --repo "$REPO" --mission-mode off --out "$OUT/contract.seal.json"
 ```
 
+The ticket is `review-<date>-<branch>`, so running this script again the same day for the same branch
+produces the same contract bytes: `seal` then refuses the existing output, and a fresh `$OUT` with the
+same bytes maps back to the same campaign. Change the ticket (add a counter or a time, for example
+`$(date +%Y%m%d-%H%M%S)`) whenever you seal again (see "You cannot reseal in place" above).
+
 (`--path-format=absolute` needs Git 2.31 or newer. On older Git, resolve the path with `realpath`
 from inside `$REPO`.)
 
 ## 4. Run the review
 
-Write a spec file: a short plain-text statement of what the range claims to do. Reviewers read it as
+### Before the first run (one time)
+
+1. **Settle the roster** (the bullets under "Environment and roster" below) and check it from inside the
+   repository under review: `cd /abs/path/to/repo` and run `/abs/autopilot/scripts/resolve-review-loop.sh`.
+   Read `source`, `config_path` and `qc_panel_seats` in the JSON it prints.
+2. **Admit every `qc_panel` seat.** A seat that is not the qualified reviewer tuple, has no scorecard row
+   and is not pinned is refused at the first run (`final_panel_seat_unqualified`). The shipped template's
+   seats carry no operator admission, so with the template the first run is always refused. The resolver
+   warns about each such seat on stderr (`qc_panel[N] seat ... has no recorded operator admission`).
+   Pin each one:
+
+   ```bash
+   node scripts/engine-capability-state.js pin-seat --role qc_panel --engine gpt-5.5 --runner codex \
+     --effort xhigh --endpoint @none --reason "operator-chosen review seat" --operator <your name>
+   ```
+
+   Repeat per seat, with the exact engine, runner, effort and endpoint of the seat. This writes the
+   **operator's own** `~/.autopilot/engine-capability/pins.jsonl` (the default store; `--store` overrides
+   it), not anything in the repository. A pin is a standing, recorded operator decision, not an earned
+   qualification, and applies to every repository on that account. Check with
+   `node scripts/engine-capability-state.js pins --role qc_panel`; re-run the resolver and confirm that
+   `override_admitted_seats` lists every `qc_panel[N]` index and the warnings are gone. The engine reads
+   the pins from the home directory of the user it runs as.
+3. **Endpoint credentials**, if a seat names an `endpoint` (see "Endpoints" below), and a working CLI
+   login for every OAuth-runner seat.
+4. **A clean repository**, with the contract, seal and spec outside it (section 3).
+
+Then write a spec file: a short plain-text statement of what the range claims to do. Reviewers read it as
 the intended behavior.
 
 ```bash
@@ -235,14 +276,29 @@ from Git and the contract, so none can disagree with it. Any other flag is a usa
 
 - **`AUTOPILOT_LEVEL=l4`** (or `l5`, `l6`) builds the host's provider-readiness check, which probes the
   seats this run will use before any spend. The recorded runs used `l4`.
-- **The review roster** comes from `scripts/resolve-review-loop.sh`: the first of
-  `$REVIEW_LOOP_CONFIG_OVERRIDE`, `<repo>/.claude/review-loop-config.md`, the autopilot checkout's own
-  `.claude/review-loop-config.md`, then the shipped
-  [`project-config-template/review-loop-config.md`](../project-config-template/review-loop-config.md).
+- **The review roster** comes from `scripts/resolve-review-loop.sh`, which is run **in the directory
+  you pass as `--cwd`**, that is, in the repository under review (the engine and the host readiness
+  check both spawn it with that directory as its working directory; see
+  `src/readiness/provider-bootstrap.js` and `scripts/lib/resolve-config.sh`). The first readable file of
+  these wins:
+  1. `$REVIEW_LOOP_CONFIG_OVERRIDE`;
+  2. `<--cwd repo>/.claude/review-loop-config.md`;
+  3. the autopilot checkout's own `.claude/review-loop-config.md`, **only when the repository under
+     review is that same autopilot checkout**. For any other repository this tier is skipped;
+  4. the shipped
+     [`project-config-template/review-loop-config.md`](../project-config-template/review-loop-config.md).
+
+  So running the command from your autopilot checkout with `--cwd` pointing at another repository that
+  has no `.claude/review-loop-config.md` uses the shipped template (panel `gpt-5.5`/`codex`,
+  `claude-opus`/`claude-native`, `gemini-3.6-flash-high`/`agy`), not your checkout's own config. Running
+  `scripts/resolve-review-loop.sh` by hand gives a different answer depending on where you stand
+  (tier 3 applies only when you stand in the autopilot checkout): to see what a run will use, `cd` into
+  the repository under review first and read `source`, `config_path` and `qc_panel_seats` in its JSON.
   To choose your own panel, put a `review-loop-config.md` in `<repo>/.claude/`. **Commit it first**:
   an untracked or modified file in the repository fails the clean-tree check
   (`campaign_repo_precondition_failed`). Alternatively keep it outside the repository and point
-  `REVIEW_LOOP_CONFIG_OVERRIDE=/abs/path/review-loop-config.md` at it.
+  `REVIEW_LOOP_CONFIG_OVERRIDE=/abs/path/review-loop-config.md` at it; that is the simplest route when you
+  do not control the repository.
   Review-only reads `qc_panel` (with `qc_panel_runners`, `qc_panel_efforts`, `qc_panel_endpoints`
   aligned 1:1), `min_panel_size` and `required_review_families`. It does not require, and does not probe,
   the implementer or verification-author seats.
@@ -292,9 +348,30 @@ node bin/autopilot.js campaign inspect --campaign-id <campaign-v1-...> \
 ```
 
 The ledger is `<git-common-dir>/autopilot/implementation-campaign.jsonl` of the repository under review.
-The phase reads `TERMINAL_READY`, `AWAITING_DISPOSITION` or `TERMINAL_STOP`, or one of the in-flight
+`campaign inspect` prints `status: "found"` plus the whole projection. The **current** phase is
+`state.phase`; `initial_state.phase` is the snapshot taken at intake and always reads `PREPARED`, so do
+not read the campaign's progress from it. The current phase reads `TERMINAL_READY`, `AWAITING_DISPOSITION` or `TERMINAL_STOP`, or one of the in-flight
 phases `VERTICAL_VERIFICATION`, `REVIEWING` or `ADJUDICATING` while a run is active or was interrupted. A closed review's
 `terminal_reason` begins with the code and lists any unresolved findings.
+
+### Other things you will see
+
+- **stderr** carries `strict /l5 POLICY OVERRIDE ... reason: advisory_default` on every run whose
+  `qc_panel` seats are not the frozen canonical policy roster. That is expected for any custom panel, and
+  for the shipped template: it only records that those seats run without a capability claim
+  (`src/readiness/provider-bootstrap.js`). It is not an error and does not change the verdict. A
+  `strict /l5 policy note` line is the quieter variant for a certified subset.
+- **`advisory_findings` and `ratchet_reverted_rounds`** appear in the result because the result formatter is
+  shared with `implement-review`. `ratchet_reverted_rounds` counts reverted writer rounds, and review-only
+  has no writer, so expect `0`. `advisory_findings` is filled only by the writer-loop convergence path, so
+  do not read the review's findings from it: they are in `campaign_receipt.findings`, and a ready
+  campaign has none.
+- **Writes under `~/.autopilot`.** This rail reads `~/.autopilot/engine-capability/` (pins, scorecard) and,
+  for seats that name an endpoint, `~/.autopilot/endpoints.env`. Its own state is written next to the
+  contract (`qc_panel_snapshot.json`) and under `<git-common-dir>/autopilot/` (the campaign ledger and any
+  repair seed). No write to `~/.autopilot` was found in the review-candidate path in the source, but it has
+  not been run under a scratch home to prove it. To check on your machine, run
+  `touch /tmp/mark`, then the review, then `find ~/.autopilot -newer /tmp/mark`.
 
 ### Refusal and outcome codes
 
@@ -341,8 +418,25 @@ phases `VERTICAL_VERIFICATION`, `REVIEWING` or `ADJUDICATING` while a run is act
 Any code not in this table, whether it starts with `review_candidate_` (for example
 `review_candidate_recheck_failed`, `review_candidate_scope_session`, `review_candidate_adoption_journal`)
 or comes from shared intake (for example a provider-readiness refusal when a seat is not live), is
-reported with a `reason`: read `reason` first. A refusal at the `provider_readiness` phase carries its
-code in `rejection_code`, not `code`.
+reported with a `reason`: read `reason` first. A refusal at the `provider_readiness` phase comes in two shapes:
+
+- The host could not even build its readiness check (for example an incomplete roster,
+  `strict_l5_provider_roster_incomplete`). The object has `reason` and `rejection_code`.
+- The check was built but a seat's live probe was not usable. The object has `phase: "provider_readiness"`,
+  a generic `reason` and **no `rejection_code`**. Look at `provider_readiness_diagnostics`: one entry per
+  probed seat with `seat_id` (`qc:1` is the first `qc_panel` entry, `qc:2` the second, and so on),
+  `role`, `runner`, `model`, `required`, `status` and `reasons` (`axis`, `status`, `reason`). The broken
+  seats are the ones whose `status` is not `usable`. When **every** seat shows
+  `probe-needed` with `reason: transport_failure`, the probe itself could not reach any provider, so
+  suspect something common to all of them (network, an expired login, a sandbox without the CLIs) before
+  suspecting each seat. The machine code `strict_l5_provider_not_ready` appears only on the
+  `strict_l5_provider_readiness` entry of the result's `ledger`.
+
+Readiness runs first. The host builds and consumes the readiness receipt before campaign intake, and
+`final_panel_seat_unqualified` (like the other `final_panel_seat_*` codes) is raised later, inside intake.
+A roster with both a dead seat and an unpinned seat therefore reports the dead seat first; you see the
+unqualified refusal only after every probed seat is usable. Without `AUTOPILOT_LEVEL` there is no readiness
+check at all and intake is the first gate.
 
 ## 6. After a park: end, return, repair, preset
 
@@ -500,7 +594,8 @@ Most operators never need this; `end`, `return` and `repair` are the normal exit
 | `campaign_repo_precondition_failed` with `dirty:` | The repository has uncommitted or untracked files. Commit or ignore them, and keep the contract, seal, spec and any review-loop config outside the repository (or committed). |
 | `final_panel_seat_*` refusals | A `qc_panel` seat is on a runner that cannot do a blind review, or is not qualified. See section 4. |
 | `return` refused with `BUDGET_RESET` | Your fix shrank the changed-file count. See the known limitation in section 6. |
-| `blocked` with `provider_readiness` wording | A seat in your roster is not live or not logged in. `node bin/autopilot.js endpoints doctor`, check the seat's CLI login, or change the panel. |
+| `blocked`, `phase: "provider_readiness"` | A seat in your roster is not live or not logged in. Read `provider_readiness_diagnostics` (section 5): the seats whose `status` is not `usable` are the broken ones. Then `node bin/autopilot.js endpoints doctor`, check the seat's CLI login, or change the panel. |
+| `final_panel_seat_unqualified` on the first run | Template or custom seats have no operator admission yet. Pin them (section 4, "Before the first run"). |
 | Roster refused as incomplete | `qc_panel`, `qc_panel_runners`, `qc_panel_efforts`, `qc_panel_endpoints` must have the same length. |
 | Verify is red but passes on your machine | Verification runs in a detached worktree at the head commit. Files that are untracked or uncommitted in your checkout are not there. Commit what the command needs. |
 | `--resume` refused | `campaign_resume_not_found` (nothing to resume), `campaign_already_terminal` (finished; seal a new contract), or `review_candidate_resume_phase_unsupported` (close it with `--campaign-continuation end`). See the code table in section 5. |

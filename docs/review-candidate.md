@@ -4,7 +4,9 @@
 
 How an operator outside this repository gets autopilot's managed final review over a commit range
 that someone else already wrote. Everything you need to run one campaign to a receipt is on this page,
-in the order you need it. Section 4 opens with the one-time steps that must be done before the first run.
+in the order you need it. Section 4 opens with the one-time steps that must be done before the first run:
+the roster and its operator authorization have to be settled **before** you run. Sealing (section 3) never
+looks at the roster, but the run does.
 
 ## 1. What it is
 
@@ -165,7 +167,7 @@ contract path with `.json` replaced by `.seal.json`) when `--campaign-seal` is n
 
 ```bash
 REPO=/abs/path/to/repo        # the repository that holds the range
-BASE=<base commit-ish>        # e.g. the merge-base with your main branch
+BASE=<base commit-ish>        # e.g. the merge-base with your main branch; HEAD~1 if the range is just the last commit
 BRANCH=feature-x              # the branch whose tip is the range head
 OUT=/abs/review               # a directory outside $REPO
 mkdir -p "$OUT"
@@ -232,7 +234,10 @@ from inside `$REPO`.)
    it), not anything in the repository. A pin is a standing, recorded operator decision, not an earned
    qualification, and applies to every repository on that account. Check with
    `node scripts/engine-capability-state.js pins --role qc_panel`; re-run the resolver and confirm that
-   `override_admitted_seats` lists every `qc_panel[N]` index and the warnings are gone. The engine reads
+   `override_admitted_seats` lists every `qc_panel[N]` index. That list is the proof the authorization
+   worked. The `no recorded operator admission` warning goes away, but each pinned seat then prints an
+   `EVIDENCE-FREE standing operator pin` warning: that one is expected, it only says the seat is an operator
+   decision and not an earned qualification. The engine reads
    the pins from the home directory of the user it runs as.
 3. **Endpoint credentials**, if a seat names an `endpoint` (see "Endpoints" below), and a working CLI
    login for every OAuth-runner seat.
@@ -296,7 +301,11 @@ from Git and the contract, so none can disagree with it. Any other flag is a usa
   the repository under review first and read `source`, `config_path` and `qc_panel_seats` in its JSON.
   To choose your own panel, put a `review-loop-config.md` in `<repo>/.claude/`. **Commit it first**:
   an untracked or modified file in the repository fails the clean-tree check
-  (`campaign_repo_precondition_failed`). Alternatively keep it outside the repository and point
+  (`campaign_repo_precondition_failed`). Commit it **at the base commit or before it**, not inside the
+  reviewed range: a config added between base and head is a changed path of the range, and unless
+  `allowed_path_prefixes` covers `.claude/review-loop-config.md` the range is refused as
+  `review_candidate_out_of_scope`. (Committing it on top of the head would move the branch tip and fail
+  with `review_candidate_branch_moved`.) Alternatively keep it outside the repository and point
   `REVIEW_LOOP_CONFIG_OVERRIDE=/abs/path/review-loop-config.md` at it; that is the simplest route when you
   do not control the repository.
   Review-only reads `qc_panel` (with `qc_panel_runners`, `qc_panel_efforts`, `qc_panel_endpoints`
@@ -366,12 +375,21 @@ phases `VERTICAL_VERIFICATION`, `REVIEWING` or `ADJUDICATING` while a run is act
   has no writer, so expect `0`. `advisory_findings` is filled only by the writer-loop convergence path, so
   do not read the review's findings from it: they are in `campaign_receipt.findings`, and a ready
   campaign has none.
-- **Writes under `~/.autopilot`.** This rail reads `~/.autopilot/engine-capability/` (pins, scorecard) and,
-  for seats that name an endpoint, `~/.autopilot/endpoints.env`. Its own state is written next to the
-  contract (`qc_panel_snapshot.json`) and under `<git-common-dir>/autopilot/` (the campaign ledger and any
-  repair seed). No write to `~/.autopilot` was found in the review-candidate path in the source, but it has
-  not been run under a scratch home to prove it. To check on your machine, run
-  `touch /tmp/mark`, then the review, then `find ~/.autopilot -newer /tmp/mark`.
+- **Writes under `~/.autopilot`.** The run **does** write there. Before any review spend, the host's
+  readiness check live-probes every seat it will use and appends one observation per probed seat to
+  `~/.autopilot/engine-capability/capability.jsonl` (`src/readiness/probe.js`, `persistLiveObservation`,
+  through `engine-capability-state.js record`). Each row is a capability event for that exact
+  runner/model/role/effort/endpoint tuple: `capability.quota.status`, an evidence tag
+  `provider_live_probe.minimal_no_effect.<outcome>`, and a `ttl_seconds`. It is written so the readiness
+  receipt can bind a fresh, recorded observation of each seat (and so later `status` reads see it). The
+  probed seats are the `qc_panel` seats **and the roster's `reviewer_*` seat** (for the template that is
+  `gpt-5.5`), so expect one row per probed seat per probe: four rows for a three-seat panel. A probe that is
+  still fresh may be reused, so a quick second run can append fewer rows. `pins.jsonl` is only read, never
+  changed. The same directory is also read for the scorecard, and `~/.autopilot/endpoints.env` is read for
+  seats that name an endpoint. The campaign's own state is written next to the contract
+  (`qc_panel_snapshot.json`) and under `<git-common-dir>/autopilot/` (the campaign ledger and any repair
+  seed). To see exactly what a run added, count the lines of `~/.autopilot/engine-capability/capability.jsonl`
+  (`wc -l`) before and after; do not use a whole-`~/.autopilot` `find`, other sessions write there too.
 
 ### Refusal and outcome codes
 

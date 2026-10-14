@@ -5,7 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
-const REPO_ROOT = '/home/cookys/projects/autopilot/.claude/worktrees/agent-a17bc6ae73b1915b4';
+const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const [outDir, kind] = process.argv.slice(2);
 const git = (cwd, ...a) => execFileSync('git', ['-C', cwd, ...a], { encoding: 'utf8' }).trim();
 fs.rmSync(outDir, { recursive: true, force: true });

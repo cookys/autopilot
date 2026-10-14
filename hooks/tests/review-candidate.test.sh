@@ -102,6 +102,34 @@ assert_contains "$RO_PROFILE" "impl_l4=implementer+qc+reviewer" "RO12 l4 impleme
 assert_contains "$RO_PROFILE" "ro_no_qc=strict_l5_provider_roster_incomplete" "RO12/Q2 review-only requires a complete QC panel at l4 too"
 assert_contains "$RO_PROFILE" "impl_l5_with_va=implementer+qc+reviewer+verification_author" "RO12 l5 implement-review requires implementer and verification-author"
 
+# ---- the CLI itself hands reviewOnly to the bootstrap (the driver builds its own bootstrap and cannot see this) ------------
+CLI_PRELOAD="$RC/cli-options-preload.cjs"
+cat > "$CLI_PRELOAD" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const mod = require(path.join(process.env.CLI_OPTS_ROOT, 'src', 'readiness', 'provider-bootstrap.js'));
+mod.createStrictL5ProviderBootstrap = (options) => {
+  fs.writeFileSync(process.env.CLI_OPTS_OUT, JSON.stringify(options));
+  throw new Error('options captured');
+};
+NODE
+printf '{"schema_version":1,"base_sha":"%s","branch":"external/x","adoption":{"head_sha":"%s"}}\n' \
+  "$(printf 'a%.0s' $(seq 40))" "$(printf 'b%.0s' $(seq 40))" > "$RC/cli-contract.json"
+echo spec > "$RC/cli-spec.md"
+for mode in review-candidate implement-review; do
+  rm -f "$RC/cli-opts-$mode.json"
+  if [ "$mode" = review-candidate ]; then
+    MODE_ARGS=(engine review-candidate --campaign-contract "$RC/cli-contract.json" --spec-file "$RC/cli-spec.md" --cwd "$RC")
+  else
+    MODE_ARGS=(engine implement-review --prompt-file "$RC/cli-spec.md" --branch b --base "$(printf 'a%.0s' $(seq 40))" --cwd "$RC" --campaign-contract "$RC/cli-contract.json")
+  fi
+  CLI_OPTS_ROOT="$REPO_ROOT" CLI_OPTS_OUT="$RC/cli-opts-$mode.json" NODE_OPTIONS="--require=$CLI_PRELOAD" \
+    AUTOPILOT_LEVEL=l4 node "$REPO_ROOT/bin/autopilot.js" "${MODE_ARGS[@]}" > "$RC/cli-$mode.out" 2>&1
+done
+eq '{"cwd":"'"$RC"'","level":"l4","reviewOnly":true}' "$(cat "$RC/cli-opts-review-candidate.json" 2>/dev/null)" "RO12 the CLI passes reviewOnly:true to the bootstrap for engine review-candidate"
+eq '{"cwd":"'"$RC"'","level":"l4"}' "$(cat "$RC/cli-opts-implement-review.json" 2>/dev/null)" "RO12 the CLI does not pass reviewOnly for engine implement-review"
+
 # ---- context gate measures the reviewer seat in review-only -------------------------------------------------------
 CTX_OUT="$(node -e "
 const intake = require('$REPO_ROOT/src/engine/campaign-intake');
@@ -124,7 +152,7 @@ assert_contains "$CTX_OUT" "impl_reviewer_only=implementer_identity_missing" "co
 run_sc enforce_seal
 eq "3" "$(jf enforce_seal 'j.seal_status')" "enforce-mode adoption seal is refused"
 assert_contains "$(jf enforce_seal 'j.seal_error')" "review_candidate_governance_enforce" "enforce-mode adoption seal carries the named code"
-assert_contains "$(jf enforce_seal 'j.seal_error')" "governance off or warn" "the refusal says review-only needs governance off or warn"
+assert_contains "$(jf enforce_seal 'j.seal_error')" "governance off or shadow" "the refusal says review-only needs governance off or shadow"
 assert_not_contains "$(jf enforce_seal 'j.seal_error')" "mission_grant_ref: required" "the generic missing-field error is replaced, not appended"
 
 # ---- RO2: the range is re-derived, never supplied ----------------------------------------------------

@@ -564,7 +564,7 @@ function validateContract(contract, context) {
     return [
       'review_candidate_governance_enforce: a review-only (adoption) contract cannot be sealed '
         + 'while owner-kernel governance enforcement_mode is enforce; review-only needs '
-        + 'governance off or warn (shadow)',
+        + 'governance off or shadow',
     ];
   }
   for (const key of Object.keys(contract)) {

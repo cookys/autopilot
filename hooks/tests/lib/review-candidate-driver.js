@@ -471,6 +471,10 @@ for (const stepSpec of (ctx.steps || [])) {
     git(worktree, 'commit', '-q', '--allow-empty', '-m', 'empty follow-up');
     currentHead = git(worktree, 'rev-parse', 'HEAD');
   }
+  // BL-0155: branches a previous repair of the same ticket left behind (created at the base commit).
+  for (const name of (stepSpec.preBranches || [])) git(sbx, 'branch', name, base);
+  // A tag spelled like a branch makes `%(refname:short)` print `heads/<name>`.
+  for (const name of (stepSpec.preTags || [])) git(sbx, 'tag', name, base);
   intakeEstimateSeconds = Number.isFinite(stepSpec.mustFixAuthority) ? stepSpec.mustFixAuthority : 0;
   const stepEngine = new AutopilotEngine(options);
   installImplControl(stepEngine);
@@ -499,6 +503,10 @@ for (const stepSpec of (ctx.steps || [])) {
     review_calls_delta: logNow.length - beforeReviews, review_models_delta: logNow.slice(beforeReviews),
     verify_runs_delta: verifyRuns - beforeVerify,
     model_calls: stepResult.model_calls == null ? null : stepResult.model_calls,
+    seed_files: (() => {
+      const dir = path.join(commonDir, 'autopilot', 'review-candidate-repair');
+      try { return fs.readdirSync(dir).flatMap((d) => fs.readdirSync(path.join(dir, d)).map((f) => `${d}/${f}`)); } catch (_e) { return []; }
+    })(),
     result_keys: Object.keys(stepResult), impl_after: impl, handoff: handoffSummary(stepResult), findings_count: Array.isArray(stepResult.findings) ? stepResult.findings.length : null,
   });
 }

@@ -105,6 +105,29 @@ seed_check() { # <root> -> prints the refusal code, or OK when the bad seed was 
 }
 eq "review_candidate_repair_seed_base_mismatch" "$(seed_check "$REPO_ROOT")" "control: a seeded contract whose base is not the reviewed head is refused by name"
 
+# ---- BL-0155 (ruled for the owner by the coordinator): a repeated repair never reuses a branch name ----------
+run_sc rp_b1 ",$FIX"',"steps":[{"continuation":"repair"}]' ok
+eq "repair/rp_b1-repair" "$(sf rp_b1 0 handoff.branch)" "first repair of a ticket keeps the plain branch name"
+run_sc rp_b2 ",$FIX"',"steps":[{"continuation":"repair","preBranches":["repair/rp_b2-repair"]}]' ok
+eq "repair/rp_b2-repair-r2" "$(sf rp_b2 0 handoff.branch)" "second repair of the same ticket gets -r2, never the existing branch"
+run_sc rp_b3 ",$FIX"',"steps":[{"continuation":"repair","preBranches":["repair/rp_b3-repair","repair/rp_b3-repair-r2"]}]' ok
+eq "repair/rp_b3-repair-r3" "$(sf rp_b3 0 handoff.branch)" "third repair gets -r3"
+eq "0" "$(sf rp_b3 0 handoff.seal_status)" "a suffixed seeded contract still seals"
+run_sc rp_b4 ",$FIX"',"steps":[{"continuation":"repair","preBranches":["repair/rp_b4-repair"],"preTags":["repair/rp_b4-repair"]}]' ok
+eq "repair/rp_b4-repair-r2" "$(sf rp_b4 0 handoff.branch)" "a same-named tag does not hide the existing repair branch (still -r2)"
+list_check() { # <root> <cwd> -> prints the error code, or the branch list when the listing succeeded
+  ROOT_UNDER_TEST="$1" LIST_CWD="$2" node -e "
+    const m = require(process.env.ROOT_UNDER_TEST + '/src/engine/review-candidate-repair-seed.js');
+    try { process.stdout.write(JSON.stringify(m.listRepairBranches(process.env.LIST_CWD))); }
+    catch (e) { process.stdout.write(e.code || 'THROWN'); }"
+}
+NOT_A_REPO="$TEST_TMP/not-a-repo"; mkdir -p "$NOT_A_REPO"
+eq "review_candidate_repair_seed_invalid" "$(list_check "$REPO_ROOT" "$NOT_A_REPO")" "a failing branch listing fails closed with a named code (no silent empty list)"
+
+# ---- BL-0155: the prompt states what the contract allows (not "one round") -----------------------------------------
+eq "false" "$(jf rp 'j.steps[0].handoff.task_prompt.includes("one repair round")')" "seed: the prompt does not claim one round while the contract allows more"
+eq "true" "$(jf rp 'j.steps[0].handoff.task_prompt.includes("authorizes a repair campaign")')" "seed: the prompt says choosing repair authorizes a repair campaign (plan RO13 wording)"
+
 # ---- MUTATION: break each guard in a private copy ------------------------------------------------------------------
 MC="$TEST_TMP/mcopy"; mkdir -p "$MC"
 ( cd "$REPO_ROOT" && rsync -a src scripts schemas bin references profiles skills agents plugin.json .claude-plugin hooks "$MC/" ) \
@@ -154,6 +177,32 @@ eq "AWAITING_DISPOSITION" "$(jf mp7 'j.steps[1].campaign_phase')" "stale head so
 mut "$ENG" "if (parkedCommit !== reviewedHead) {" "if (false) {"
 run_in "$MC" mp7b ",$FIX"',"steps":[{"continuation":"return","move":"forward","env":{"RC_VERDICT":"fix"}},{"continuation":"repair"}]' ok
 eq "true" "$(jf mp7b 'j.steps[1].handoff && j.steps[1].handoff.base_sha === j.first_head')" "MUTATION cross-check removed: a seed based on the stale sealed head escapes (red)"
+restore "$ENG"
+
+# P9 preset repair on the FIRST run (BL-0155): a seed that is refused must not terminalize or emit a hand-off
+mut "$SEED" "seed.base_sha = reviewedHead;" "seed.base_sha = adoptionContract.base_sha;"
+run_in "$MC" mp9 ",$FIX"',"preset":"repair"' ok
+eq "review_candidate_repair_seed_base_mismatch" "$(jf mp9 'j.code')" "preset repair first run: a wrongly-based seed is refused by name"
+eq "null" "$(jf mp9 'j.handoff')" "preset repair first run: a refused seed emits no hand-off"
+eq "AWAITING_DISPOSITION" "$(jf mp9 'j.campaign_phase')" "preset repair first run: a refused seed leaves the review parked"
+mut "$SEED" "if (seed.base_sha !== reviewedHead) {" "if (false) {"
+run_in "$MC" mp9b ",$FIX"',"preset":"repair"' ok
+eq "true" "$(jf mp9b 'j.handoff && j.handoff.base_sha !== j.first_head')" "MUTATION both removed on the preset path: the wrong-based hand-off escapes (red)"
+restore "$SEED"
+run_in "$MC" mp9r ",$FIX"',"preset":"repair"' ok
+eq "review_candidate_disposition_repair" "$(jf mp9r 'j.code')" "MUTATION restored: the preset repair closes with the repair code again (green)"
+
+# P10 seed-before-close (BL-0155, items 3 and 4): when terminalizing fails, the seed written before the close
+# must still be on disk (kept, not dropped). The failure is forced in the private copy.
+mut "$ENG" "|| campaignControl.terminal_failure.status !== 'terminalized') {" "|| true) {"
+run_in "$MC" mp10 ",$FIX"',"steps":[{"continuation":"repair"}]' ok
+eq "true" "$(jf mp10 'j.steps[0].code !== "review_candidate_disposition_repair"')" "forced close failure: the repair does not report a closed campaign"
+eq "true" "$(jf mp10 'j.steps[0].seed_files.some((f) => f.endsWith("contract.json"))')" "close failed: the seeded contract file is still on disk"
+eq "true" "$(jf mp10 'j.steps[0].seed_files.some((f) => f.endsWith("task.md"))')" "close failed: the seeded task file is still on disk"
+# control: the seed write removed (a seed written only after the close would look the same): nothing on disk (red)
+mut "$ENG" "if (isRepair && repairSeed) {" "if (false) {"
+run_in "$MC" mp10b ",$FIX"',"steps":[{"continuation":"repair"}]' ok
+eq "0" "$(jf mp10b 'j.steps[0].seed_files.length')" "MUTATION seed not written before the close: no seed on disk after a failed close (red)"
 restore "$ENG"
 
 # P8 closeOnly covers repair: the repair close skips the repair-round wall check like end (review fix 3)

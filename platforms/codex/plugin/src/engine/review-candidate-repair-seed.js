@@ -7,6 +7,7 @@
 // the writer that later runs is an ordinary implement-review writer on top of the reviewed head.
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 
 const SCHEMA_PATH = path.resolve(__dirname, '..', '..', 'schemas', 'implementation-campaign-contract.schema.json');
 // Fields the seed sets itself; everything else (paths, verify, caps, wall, profile ...) comes from
@@ -77,7 +78,7 @@ function renderTask({ findings, reviewedHead, base, branch, campaignId }) {
     "# Repair task: a review-only campaign's findings (reviewer claims, not yet adjudicated by depth-0)",
     '',
     `The range ${base}..${reviewedHead} (external branch \`${branch}\`) was reviewed by campaign ${campaignId}`,
-    'and did not pass. Choosing repair authorizes one repair round; it does not accept each finding.',
+    'and did not pass. Choosing repair authorizes a repair campaign; it does not accept each finding.',
     'Every finding below is a reviewer claim. Verify each one against the code first, and fix only the',
     'ones that hold, on top of the reviewed head. List every finding you judge not to hold, with the',
     'reason, in your delivery. Do not widen scope beyond the sealed allowed path prefixes. The verify',
@@ -103,8 +104,23 @@ function renderTask({ findings, reviewedHead, base, branch, campaignId }) {
   return lines.join('\n');
 }
 
+// Local branches under repair/, as bare names. `lstrip=2` drops `refs/heads/` even when a tag of the same
+// name exists (`refname:short` would then print `heads/<name>` and hide the branch). Fails closed: a listing
+// that cannot be made must not look like "no earlier repair branch".
+function listRepairBranches(cwd) {
+  const listed = spawnSync('git', ['-C', cwd, 'for-each-ref', '--format=%(refname:lstrip=2)', 'refs/heads/repair/'],
+    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  if (listed.error || listed.status !== 0) {
+    throw new RepairSeedError(
+      'review_candidate_repair_seed_invalid',
+      `could not list existing repair branches (git for-each-ref failed: ${String((listed.error && listed.error.message) || listed.stderr || listed.status).trim().slice(0, 200)})`,
+    );
+  }
+  return String(listed.stdout || '').split('\n').filter(Boolean);
+}
+
 // Build the seeded contract and task prompt. Pure: no I/O besides reading the schema ceiling.
-function buildRepairSeed({ adoptionContract, reviewedHead, findings, campaignId }) {
+function buildRepairSeed({ adoptionContract, reviewedHead, findings, campaignId, existingBranches = [] }) {
   if (!adoptionContract || !adoptionContract.adoption) {
     throw new RepairSeedError('review_candidate_repair_seed_invalid', 'an adoption contract is required');
   }
@@ -115,7 +131,13 @@ function buildRepairSeed({ adoptionContract, reviewedHead, findings, campaignId 
   const suffix = '-repair';
   seed.ticket = `${adoptionContract.ticket.slice(0, 128 - suffix.length)}${suffix}`;
   seed.base_sha = reviewedHead;
-  seed.branch = `repair/${seed.ticket}`;
+  // A second repair of the same ticket must never reuse (and so overwrite) an earlier repair's branch:
+  // the first is `repair/<ticket>-repair`, later ones `-r2`, `-r3`, ... (smallest unused n).
+  const taken = new Set(Array.isArray(existingBranches) ? existingBranches : []);
+  const plain = `repair/${seed.ticket}`;
+  let branch = plain;
+  for (let n = 2; taken.has(branch); n += 1) branch = `${plain}-r${n}`;
+  seed.branch = branch;
   seed.max_repair_generations = Math.min(2, repairCeiling(adoptionContract.profile));
   validateRepairSeed({ seed, adoptionContract, reviewedHead });
   const list = Array.isArray(findings) ? findings : [];
@@ -148,4 +170,4 @@ function writeRepairSeed({ commonDir, campaignId, seed }) {
   }
 }
 
-module.exports = { RepairSeedError, buildRepairSeed, validateRepairSeed, writeRepairSeed };
+module.exports = { RepairSeedError, buildRepairSeed, listRepairBranches, validateRepairSeed, writeRepairSeed };

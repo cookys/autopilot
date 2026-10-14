@@ -7618,6 +7618,7 @@ class AutopilotEngine {
             reviewedHead,
             findings: parkedFindings,
             campaignId: campaignControl.campaign_id,
+            existingBranches: reviewCandidateRepairSeed.listRepairBranches(loopCwd),
           });
         } catch (error) {
           return {

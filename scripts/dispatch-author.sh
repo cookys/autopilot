@@ -150,7 +150,7 @@ _AUTHOR_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 [ -r "$_AUTHOR_SELF_DIR/lib/context-window.sh" ] && . "$_AUTHOR_SELF_DIR/lib/context-window.sh" || true
 
 CONTEXT_WINDOW_GATE=""   # off|warn|block; empty ⇒ AUTOPILOT_CONTEXT_WINDOW_GATE, else block
-RUNNER=""; MODEL=""; PROMPT_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""; ENDPOINT=""
+RUNNER=""; MODEL=""; PROMPT_FILE=""; EFFORT="xhigh"; EFFORT_EXPLICIT=0; TIMEOUT="5m"; BIN=""; ENDPOINT=""
 REPO_ROOT=""; STRICT_ROSTER=0; STRICT_CONTRACT=0; CONTRACT_FILE=""; CONTRACT_FILE_SUPPLIED=0
 TIMEOUT_SUPPLIED=0
 POLARITY_RECEIPT=""; REQUIRE_POLARITY_RECEIPT=0; POLARITY_RECEIPT_DIGEST=""
@@ -167,7 +167,7 @@ while [[ $# -gt 0 ]]; do
     --runner)      RUNNER="${2:-}"; RUNNER_SUPPLIED=1; shift 2 ;;
     --model)       MODEL="${2:-}"; MODEL_SUPPLIED=1; shift 2 ;;
     --prompt-file)  PROMPT_FILE="${2:-}"; shift 2 ;;
-    --effort)      EFFORT="${2:-}"; EFFORT_SUPPLIED=1; shift 2 ;;
+    --effort)      EFFORT="${2:-}"; EFFORT_SUPPLIED=1; EFFORT_EXPLICIT=1; shift 2 ;;
     --timeout)     TIMEOUT="${2:-}"; TIMEOUT_SUPPLIED=1; shift 2 ;;
     --bin)         BIN="${2:-}"; shift 2 ;;
     --context-window) CONTEXT_WINDOW_GATE="${2:-}"; shift 2 ;;
@@ -665,7 +665,7 @@ run_strict_contract_preflight() {
   fi
 
   load_verification_author_contract_config
-  EFFORT="$VERIFICATION_AUTHOR_EFFORT"
+  EFFORT="$VERIFICATION_AUTHOR_EFFORT"; EFFORT_EXPLICIT=1
   if [ "$ENDPOINT_SUPPLIED" -eq 1 ]; then
     [[ "$ENDPOINT" == "$VERIFICATION_AUTHOR_ENDPOINT" ]] || die_precondition "caller --endpoint ($ENDPOINT) disagrees with verification_author_endpoint ($VERIFICATION_AUTHOR_ENDPOINT)"
   fi
@@ -762,6 +762,7 @@ if [[ "$STRICT_ROSTER" -eq 1 ]]; then
   [[ "$config_path" == "$REVIEW_LOOP_CONFIG" ]] || die_precondition "strict roster requires config_path to equal --repo-root/.claude/review-loop-config.md"
   RUNNER="$verification_author_runner"; status=$?; [[ "$status" -eq 0 ]] || die_precondition "internal failure assigning strict roster runner"
   MODEL="$verification_author_engine"; status=$?; [[ "$status" -eq 0 ]] || die_precondition "internal failure assigning strict roster model"
+  EFFORT_EXPLICIT=1
   EFFORT="$verification_author_effort"; status=$?; [[ "$status" -eq 0 ]] || die_precondition "internal failure assigning strict roster effort"
   ENDPOINT="$verification_author_endpoint"; status=$?; [[ "$status" -eq 0 ]] || die_precondition "internal failure assigning strict roster endpoint"
   SELECTION_PATH="$REVIEW_LOOP_CONFIG"
@@ -786,18 +787,21 @@ if [[ "$RUNNER" = "cursor" ]]; then
 fi
 [[ -n "$PROMPT_FILE" && -r "$PROMPT_FILE" ]] || die_precondition "--prompt-file is required and must be readable"
 case "$EFFORT" in default|low|medium|high|xhigh|max) ;; *) die_precondition "--effort must be default|low|medium|high|xhigh|max" ;; esac
-# `default` = no effort sent, the endpoint default runs. Only a runner with no effort control can honour that;
+# `default` = no effort sent, the endpoint default runs. Only a runner whose effort is optional can honour that;
 # a runner that consumes --effort would be handed the literal word "default".
 if [ "$EFFORT" = "default" ]; then
   case "$RUNNER" in
     anthropic-compatible|cc-shim|claude-native|kimi) ;;
-    *) die_precondition "--effort default (no effort sent) is only for runners with no effort control (anthropic-compatible|cc-shim|claude-native|kimi); runner '$RUNNER' takes an explicit effort" ;;
+    *) die_precondition "--effort default (no effort sent) is only for runners whose effort is optional (anthropic-compatible|cc-shim|claude-native|kimi); runner '$RUNNER' takes an explicit effort" ;;
   esac
 fi
 # claude CLI (cc-shim / claude-native) takes --effort low|medium|high|xhigh|max (claude 2.1.299 --help); the enum
-# check above already rejects anything else, so no value is ever silently remapped. `default` sends nothing.
+# check above already rejects anything else, so no value is ever silently remapped. It is forwarded ONLY when the
+# caller (or a strict roster) explicitly set EFFORT: the literal EFFORT="xhigh" above is a script default, not a
+# seat decision, and silently raising an unspecified call (sonnet medium -> xhigh; xhigh is unprobed on GLM/M3)
+# is not this change's job. `default` sends nothing.
 CLAUDE_EFFORT_ARG=""
-if [ "$EFFORT" != "default" ]; then CLAUDE_EFFORT_ARG="$EFFORT"; fi
+if [ "$EFFORT_EXPLICIT" -eq 1 ] && [ "$EFFORT" != "default" ]; then CLAUDE_EFFORT_ARG="$EFFORT"; fi
 
 
 if [ "$RUNNER" = "agy" ]; then

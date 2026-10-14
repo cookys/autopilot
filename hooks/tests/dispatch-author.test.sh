@@ -817,14 +817,20 @@ OUT="$(env ANTHROPIC_BASE_URL="http://127.0.0.1:9/v1" ANTHROPIC_AUTH_TOKEN="t" A
   --bin "$TEST_TMP/author-cc-argv" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "author cc-shim argv capture exit 0"
 assert_eq "$(normalize_argv < "$AUTHOR_CC_ARGV")" "$(printf '%s\n' \
-  -p --session-id UUID --model mini --setting-sources project --strict-mcp-config --tools '' --effort xhigh)" \
-  "author cc-shim argv matches frozen literal (default effort xhigh is forwarded to claude)"
+  -p --session-id UUID --model mini --setting-sources project --strict-mcp-config --tools '')" \
+  "author cc-shim argv matches frozen literal (no --effort given => none sent; the script's xhigh default is not forwarded)"
 
 # Same contract as dispatch-review: seat effort rides to `claude -p --effort`; default sends nothing; invalid
 # is refused up front. This is the path dispatch-consult / dispatch-discuss / dispatch-plan-review reach via
 # dispatch-author.sh. Negative control: drop ${6:+--effort "$6"} from the bash -c templates in
 # scripts/dispatch-author.sh and the "forwards" assertions go red.
 for _au_runner in cc-shim claude-native; do
+  rm -f "$AUTHOR_CC_ARGV"
+  OUT="$(env ANTHROPIC_BASE_URL="http://127.0.0.1:9/v1" ANTHROPIC_AUTH_TOKEN="t" AUTOPILOT_SETTLE_MS=0 \
+    DISPATCH_QUIET=1 "$SCRIPT" --runner "$_au_runner" --model mini --prompt-file "$PROMPT" \
+    --bin "$TEST_TMP/author-cc-argv" 2>&1)"; EXIT=$?
+  assert_eq "0" "$EXIT" "author $_au_runner without --effort exit 0"
+  assert_not_contains "$(cat "$AUTHOR_CC_ARGV")" "--effort" "author $_au_runner without --effort sends no --effort"
   for _au_eff in low medium high xhigh max; do
     rm -f "$AUTHOR_CC_ARGV"
     OUT="$(env ANTHROPIC_BASE_URL="http://127.0.0.1:9/v1" ANTHROPIC_AUTH_TOKEN="t" AUTOPILOT_SETTLE_MS=0 \

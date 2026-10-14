@@ -228,6 +228,7 @@ CAMPAIGN_STRICT_AUTHORITY=0
 CAMPAIGN_PROJECTION_BOUND=0
 RUNNER="auto"
 EFFORT="xhigh"
+EFFORT_EXPLICIT=0
 ENDPOINT=""          # optional named endpoint (cc-shim only) → resolve-endpoint.sh
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=lib/repo-identity.sh
@@ -1826,7 +1827,7 @@ while [ $# -gt 0 ]; do
     --campaign-seal) CAMPAIGN_SEAL_FILE="${2:-}"; shift 2 ;;
     --model) MODEL="${2:-}"; MODEL_SUPPLIED=1; MODEL_IS_DEFAULT=0; shift 2 ;;
     --runner) RUNNER="${2:-}"; RUNNER_SUPPLIED=1; shift 2 ;;
-    --effort) EFFORT="${2:-}"; shift 2 ;;
+    --effort) EFFORT="${2:-}"; EFFORT_EXPLICIT=1; shift 2 ;;
     --context-window) CONTEXT_WINDOW_GATE="${2:-}"; shift 2 ;;
     --endpoint) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--endpoint requires a non-empty value"; ENDPOINT="$2"; [ "$ENDPOINT" = "@none" ] && ENDPOINT=""; shift 2 ;;
     --base) BASE="${2:-}"; BASE_SUPPLIED=1; shift 2 ;;
@@ -2069,18 +2070,21 @@ case "$EFFORT" in
   default|low|medium|high|xhigh|max) ;;
   *) die_precondition "--effort must be one of default|low|medium|high|xhigh|max (got: $EFFORT)" ;;
 esac
-# `default` = no effort sent, the endpoint default runs. Only a runner with no effort control can honour that;
+# `default` = no effort sent, the endpoint default runs. Only a runner whose effort is optional can honour that;
 # a runner that consumes --effort would be handed the literal word "default".
 if [ "$EFFORT" = "default" ]; then
   case "$RUNNER" in
     anthropic-compatible|cc-shim|claude-native|kimi) ;;
-    *) die_precondition "--effort default (no effort sent) is only for runners with no effort control (anthropic-compatible|cc-shim|claude-native|kimi); runner '$RUNNER' takes an explicit effort" ;;
+    *) die_precondition "--effort default (no effort sent) is only for runners whose effort is optional (anthropic-compatible|cc-shim|claude-native|kimi); runner '$RUNNER' takes an explicit effort" ;;
   esac
 fi
 # claude CLI (cc-shim / claude-native) takes --effort low|medium|high|xhigh|max (claude 2.1.299 --help); the enum
-# check above already rejects anything else, so no value is ever silently remapped. `default` sends nothing.
+# check above already rejects anything else, so no value is ever silently remapped. It is forwarded ONLY when the
+# caller (or a strict roster) explicitly set EFFORT: the literal EFFORT="xhigh" above is a script default, not a
+# seat decision, and silently raising an unspecified call (sonnet medium -> xhigh; xhigh is unprobed on GLM/M3)
+# is not this change's job. `default` sends nothing.
 CLAUDE_EFFORT_ARG=""
-if [ "$EFFORT" != "default" ]; then CLAUDE_EFFORT_ARG="$EFFORT"; fi
+if [ "$EFFORT_EXPLICIT" -eq 1 ] && [ "$EFFORT" != "default" ]; then CLAUDE_EFFORT_ARG="$EFFORT"; fi
 
 case "$SKILL_MODE" in
   off|prompt|native|auto) ;;
@@ -3853,7 +3857,7 @@ elif [ "$IS_KIMI" -eq 1 ]; then
   #   edits; prompt travels ONLY as one -p argv string (no --prompt-file, no STDIN — `-p ''` is
   #   rejected, `-p -` is taken literally) — guarded pre-spend above (KIMI_EDIT_ONLY /
   #   KIMI_ARGV_LIMIT, same shape as dispatch-review.sh's kimi gate); no effort flag exists on
-  #   this route — EFFORT is a seat label only, same as cc-shim/opencode; --output-format text
+  #   this route — EFFORT is a seat label only, same as opencode (cc-shim forwards an explicit effort as claude --effort); --output-format text
   #   for a clean parseable capture. KIMI_EDIT_ONLY was computed once at the pre-spend gate
   #   (above) so the run here sends the EXACT bytes that were size-checked.
   KIMI_PROMPT_FILE="$(mktemp -t dispatch-hetero-kimi-prompt-XXXXXX)"

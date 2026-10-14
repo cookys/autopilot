@@ -234,6 +234,28 @@ const baseOptions = {
   providerEnvironment: [],
 };
 
+// Per-case outcome pins, derived from the grader's rule (evals/va-eval-grader.js gradeCase:
+// malformed_plan > budget_exceeded > declared_mismatch > missed_defect > pass), NOT copied from a
+// runVaQualification output: a spec-complete plan passes every case; a plan whose declarations
+// contradict the contract is declared_mismatch on every case; unparseable/empty output is
+// malformed_plan on every case; a happy-path-only plan is blind to residue so some case is a
+// missed_defect. Outcome counts must also partition the case set.
+const sumTrials = (result, key) => result.evidence.trials.reduce((n, t) => n + t[key], 0);
+function pinOutcomes(result, label, expected) {
+  const total = sumTrials(result, 'cases_total');
+  equal(sumTrials(result, 'cases_passed'), expected.passed === 'all' ? total : expected.passed,
+    `${label}: per-case pass count`);
+  if (expected.declared_mismatches !== undefined) {
+    equal(sumTrials(result, 'declared_mismatches'), expected.declared_mismatches === 'all' ? total : expected.declared_mismatches,
+      `${label}: declared_mismatch count`);
+  }
+  if (expected.robustness_violations !== undefined) {
+    equal(sumTrials(result, 'robustness_violations'), expected.robustness_violations === 'all' ? total : expected.robustness_violations,
+      `${label}: robustness violation count`);
+  }
+  return total;
+}
+
 function run(mode, storeDir) {
   return runVaQualification({
     ...baseOptions,
@@ -267,6 +289,8 @@ try {
     path.join(store, 'qualification-evidence.jsonl'), 'utf8',
   ).trim().split('\n');
   equal(stored.length, 1, 'exactly one evidence row appended to the isolated store');
+  pinOutcomes(result, 'perfect plan', { passed: 'all', declared_mismatches: 0, robustness_violations: 0 });
+  equal(sumTrials(result, 'missed_defects'), 0, 'perfect plan: no missed_defect');
 }
 
 // ── deviants through the real sandbox ────────────────────────────────────────
@@ -280,12 +304,16 @@ try {
   const gradedPass = result.evidence.trials.reduce((n, t) => n + t.cases_passed, 0);
   check(result.row.usage.n_solved < result.row.usage.n_cases, 'happy-path-only: usage.n_solved < usage.n_cases');
   equal(result.row.usage.n_solved, gradedPass, 'usage.n_solved equals the grader pass count');
+  const happyTotal = pinOutcomes(result, 'happy-path-only plan', { declared_mismatches: 0, robustness_violations: 0, passed: gradedPass });
+  check(sumTrials(result, 'missed_defects') > 0, 'happy-path-only plan: at least one case is a missed_defect');
+  equal(gradedPass + sumTrials(result, 'missed_defects'), happyTotal, 'happy-path-only: pass + missed_defect partitions the cases');
 }
 {
   const store = fs.mkdtempSync(path.join(tempRoot, 'store-strict-'));
   const result = run('overstrict', store);
   equal(result.verdict.qualified, false, 'over-strict declarations fail');
   equal(result.verdict.subjects.declared_accuracy, false, 'declared accuracy fails');
+  pinOutcomes(result, 'over-strict plan', { passed: 0, declared_mismatches: 'all', robustness_violations: 0 });
 }
 {
   const store = fs.mkdtempSync(path.join(tempRoot, 'store-flood-'));
@@ -299,6 +327,7 @@ try {
   const result = run('lazy', store);
   equal(result.verdict.qualified, false, 'empty provider output fails');
   check(result.verdict.reason.includes('malformed_plan'), 'empty output is malformed_plan');
+  pinOutcomes(result, 'empty output', { passed: 0, robustness_violations: 'all' });
 }
 {
   const store = fs.mkdtempSync(path.join(tempRoot, 'store-mal-'));
@@ -405,6 +434,6 @@ process.stdout.write(JSON.stringify({
   assertions += 1;
 }
 
-if (assertions !== 31) throw new Error(`engine-qualify-va: expected exactly 31 assertions (count pin moved here from hooks/tests/engine-qualify-va.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 45) throw new Error(`engine-qualify-va: expected exactly 45 assertions (count pin moved here from hooks/tests/engine-qualify-va.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);
 fs.rmSync(tempRoot, { recursive: true, force: true });

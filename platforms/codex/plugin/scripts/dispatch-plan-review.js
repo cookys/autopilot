@@ -1256,7 +1256,7 @@ function dispatchSeat(
   try {
     const run = spawnSync(DISPATCH_AUTHOR, args, {
       cwd: childCwd,
-      env: { ...process.env, DISPATCH_QUIET: '1', DISPATCH_DETACH: '0' },
+      env: { ...process.env, DISPATCH_QUIET: '1', DISPATCH_DETACH: '0', AUTOPILOT_DISPATCH_ROLE: 'plan-review' },
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
       maxBuffer: 16 * 1024 * 1024,

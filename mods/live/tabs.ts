@@ -387,7 +387,7 @@ function dispatchLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
   runBody.push(...foremanLines(u, snap, nowMs))
   const runChip = running.length === 0 ? undefined : ui.countChip(u, ui.worst(running.map(r => r.state)), running.length, 'dispatch.counts')
   out.push(...sec(DISPATCH_SEC.running, t('dispatch.running'), runChip, runBody.map(l => (l.kind === undefined ? l : own(l)))))
-  // 已完成: ended runs, the latest 5 and a toggle for the rest; a run older than a day is counted in the chip only
+  // 已完成: ended runs, the latest 5 and a toggle for the rest; a run ended more than 6 h ago (FRESH_MS.dispatch) is counted in the chip only
   if (rows !== null) {
     const finBody = finished.length === 0
       ? [ui.empty(t('dispatch.no_finished'), 'dispatch.runs')]

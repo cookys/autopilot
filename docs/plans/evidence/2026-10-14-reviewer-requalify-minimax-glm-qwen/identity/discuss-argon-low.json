@@ -1,0 +1,24 @@
+{
+  "identity": "gemini-4-argon-low",
+  "model_alias": "gemini-4-argon-low",
+  "model_version": "gemini-4-argon-low",
+  "family": "google",
+  "runner": "agy",
+  "runner_version": "1.3.5",
+  "harness_version": "engine-qualify:3a9187f5",
+  "effort": "low",
+  "identity_resolved": true,
+  "prompt_config_hash": "977f546946baec22eb74593baecb3efd2d421e34caeaef76dc0a183b6a9aa494",
+  "semantic_fingerprint": "93e27564c99a0c6e8c150637fb8a41f1ff62c178670252f6bca517aaf94de9d1",
+  "containment_fingerprint": "2165abcabdb85a9f7e54df2b0269a025058ebab93a53b1e4d1f511c87c9dd6b3",
+  "_invented": [
+    "agy transport/posture/credential surface strings (no precedent for these roles)"
+  ],
+  "_semantic_surface": null,
+  "_containment_surface": {
+    "kind": "discuss-containment-surface-v1",
+    "exam_transport": "qualification-case-broker-networkless-bwrap",
+    "cli_posture": "agy -p --model --dangerously-skip-permissions --agent autopilot-toolless-reviewer + forced permissions.deny",
+    "credential_isolation": "qrp-cli-home-credential-only-seed"
+  }
+}

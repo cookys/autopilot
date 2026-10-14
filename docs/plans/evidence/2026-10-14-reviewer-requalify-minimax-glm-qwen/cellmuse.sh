@@ -39,6 +39,7 @@ idv() { node -e "console.log(require('$HERE/identity/$ROLE-$LANE.json')['$1'])";
 MODEL="$(idv identity)"; ENGINE="$(idv engine)"; FAMILY="$(idv family)"; RUNNER="$(idv runner)"; EFFORT="$(idv effort)"
 MODEL_VERSION="$MODEL"; VERSION_SOURCE=operator-asserted
 case "$ROLE" in
+  reviewer)            mode=reviewer; tc=code_review;;
   verification_author) mode=va;      tc=verification_authoring;;
   consult)             mode=consult; tc=consult; extra=(--execute);;
   discuss)             mode=discuss; tc=discuss; extra=(--execute);;
@@ -46,7 +47,7 @@ case "$ROLE" in
   *) say "unsupported role $ROLE"; fin 2;;
 esac
 extra+=(--emit-row)
-case "$ROLE" in consult|discuss) tmo=21600;; *) tmo=10800;; esac
+case "$ROLE" in consult|discuss) tmo=21600;; reviewer) tmo=18000;; *) tmo=10800;; esac
 PROVIDER=opencode-go
 PROVIDER_CMD="node $REPO/scripts/qualification-review-provider.js"
 [ "$DRY" = 1 ] && PROVIDER_CMD="node /nonexistent-dry-run-provider.js" && extra+=(--store "$D/dry-store.jsonl")

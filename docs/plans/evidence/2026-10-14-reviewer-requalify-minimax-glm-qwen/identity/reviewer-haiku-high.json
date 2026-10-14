@@ -1,0 +1,30 @@
+{
+  "identity": "claude-haiku-5-5",
+  "model_alias": "claude-haiku-5-5",
+  "model_version": "claude-haiku-5-5",
+  "family": "anthropic",
+  "runner": "claude-native",
+  "runner_version": "2.1.299-Claude-Code",
+  "harness_version": "engine-qualify:3a9187f5",
+  "effort": "high",
+  "identity_resolved": true,
+  "prompt_config_hash": "3cbe203c5958ec413269d63e2d5d1841336394d15f3c4a3ab4285ea3e73e3530",
+  "semantic_fingerprint": "ab343cb3657c1e2eae1e93545e990c2e2c702574d9ffa93583bb4ec63ede6f5d",
+  "containment_fingerprint": "38afb52467e6ae65e48ac16496306ef041181fb8f46e1d78ef8c93b68fa01fbb",
+  "_invented": [
+    "claude-specific surface strings"
+  ],
+  "_semantic_surface": {
+    "kind": "reviewer-semantic-surface-v1",
+    "model": "claude-haiku-5-5",
+    "transport": "claude-p-tools-empty",
+    "reasoning_effort": "high",
+    "endpoint": "@none"
+  },
+  "_containment_surface": {
+    "kind": "reviewer-containment-surface-v1",
+    "exam_transport": "qualification-case-broker-networkless-bwrap",
+    "cli_posture": "claude -p --tools \"\" --setting-sources \"\" --strict-mcp-config",
+    "credential_isolation": "dedicated-exam-config-dir-credentials-only"
+  }
+}

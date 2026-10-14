@@ -4,6 +4,7 @@
 
 ### 新增
 
+- **資格考會比對思考強度標籤和實際送出的強度**（BL-0166）：`engine-qualify.js` 會把 `--effort` 標籤和 provider 實際收到的 effort 比對；grok 的夾值也算在內，夾值邏輯抽成共用的 `scripts/lib/grok-effort.js`。環境變數名稱沒有透過 `--provider-env`／`--panel-env` 傳進去，就算沒送出；agy 和 kimi 沒有 effort 旗標，標籤應該是 `none`。不一致時只在 stderr 警告，`--emit-row` 的 row 會多一個 `effort_check`（含實際送出的值），不擋考試、不改結果和結束碼。看不到 provider 環境的自訂 panel 指令記為無法驗證，不加欄位。
 - **即時面板「待決議事項」區塊**：現況分頁多一個「待決議事項（N）」區塊，列出每一個正在等 owner 回答的問題，附完整脈絡：問題、背景、每個選項與說明、建議與理由、卡住了什麼、來源，以及選填的「為什麼要你決定」。owner 不必往前翻對話找要回什麼。決議檔改成 `autopilot.decision/2`：同一範圍可同時掛多題，`open` 追加並回傳 id，`close --id` 關一題，`show` 列全部；`ask-decision` hook 只取代自己 session 尚未回答的那題。審查頁、model.json、schema 與 Codex 鏡像同步。不做相容墊片：舊的 decision/1 檔和 `--replace` 已移除，殘留的 v1 檔要手動刪。提問的 session 已結束的題目會標上「（提問的 session 已結束）」（BL-0163）：只有開題當下該 session 的 turn 檔存在的題目才會這樣判定，所以關掉 `AUTOPILOT_AWAITING_OWNER` 不會讓還在等的題目被誤標；舊格式的題目一律不標，也不會被自動刪除。在沒有任何決議的 repo 上關題，不再建立空的 `decisions/` 目錄。
 - **`autopilot engine review-candidate`：只審、不寫的外部範圍審查（BL-0090 P1）**（plan `docs/plans/2026-10-13-review-only-external-candidate.md`）：外部團隊自己寫好、自己提交的一段 `base..head`，可以直接交給我們審，不必假裝成我們的 implementer。這個子命令不呼叫任何寫手、驗證作者或修復的模型；範圍只認 sealed 合約裡的 `adoption.head_sha`，從 Git 重新推導。
   - **收件**：合約新增選填的 `adoption` 區段（`head_sha`，選填 `author_family`）。收件時重新檢查：分支尖端必須等於 sealed head、base 必須是祖先、範圍不得為空、路徑都在 allowed prefixes 內、檔案數不超過上限。每一種拒絕都有具名原因，且在花任何模型呼叫之前發生。churn 超限只是回執上的警告，不拒絕。
@@ -82,6 +83,8 @@
 
 ### 修正
 
+- **資格考用量紀錄分得出被截斷的考試**（BL-0168）：usage 區塊多了 `n_cases_expected` 和 `cases_complete`，只有題數固定的 implementer 會填，其他科一律是 null；`validateUsageBlock` 會交叉檢查缺 token 題數、總耗時、每小時答對數和價格欄位彼此是否一致。舊的 row 照樣通過。
+- **審查科評分程式重新受逐位元組比對保護**（BL-0162）：`engine-qualify-verdict-stability.test.sh` 的 KR7 比對基準改到 `6fdcf5ac`，`runQualification` 和審查科的 `verifyPinnedEvaluationAssets` 重新納入，唯一刻意的差異有列名宣告，negative control 走同一個比對函式。審查科和工頭的原始作答檔零筆時改寫空檔（原本寫一個換行），工頭的 `--raw-dir` 有了第一個測試。
 - **review-candidate 的 repair 交接不再蓋掉前一次的修復分支**（BL-0155）：同一個 ticket 第二次以後選 `repair`，交接的分支名稱改用 `repair/<ticket>-repair` 之後最小的未使用 `-rN`，前一次的修復分支不會被重用。列出既有分支改用 `%(refname:lstrip=2)`，所以 repo 裡有同名 tag 時也不會漏看；列不出來時以 `review_candidate_repair_seed_invalid` 擋下，不產生交接檔。任務說明改為授權「一個 repair campaign」，不再寫成只有一輪（contract 允許兩輪）。交接檔在結案之前寫入磁碟的順序，以及 preset repair 第一次執行時拒絕交接的情境，都已有測試保護。遠端已存在的同名分支還不會算進編號（BL-0155）。
 - **腦力題合格不再讓工頭席位看起來也合格**（BL-0165、BL-0164）：腦力題和工頭題登記的角色都是 owner，`engine-scorecard.js` 的 `findSeatBaseline`、`computeSeatProjection` 和嚴格路徑（`--require-evidence`）現在按席位種類分開計算（`methodology_kind: owner_brain_seat` 或 `brain-seat` scope），腦力題的合格列只算腦力題席位。`current` 仍列出腦力題列，各自在自己的種類內判定。官方預設 recipe 的排除理由改成「腦力題是可登記的成績列，只是目前沒有出貨」。新增 `hooks/tests/scorecard-brain-foreman-separation.test.sh`。
 - **合格的 Claude 席位現在會出現在審查員階梯**：`resolve-dispatch-topology.js` 把 `claude-native` 視為本機裝了 `claude` 就可用，審查員、顧問、討論階梯與計畫審查面板都看得到；審查員階梯把 anthropic 家族排在其他家族之後，面板同強度時也不讓 anthropic 當主席；實作者階梯明確不收 claude-native（dispatch-hetero 沒有這個 runner）。

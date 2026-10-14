@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0172 -->
+<!-- next-id: BL-0173 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1803,32 +1803,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/qualification-provider-cli-error-text-and-last-line-rule.md
 - **Context**: qualification-review-provider.js:1608-1610 passes exit-0 text through; no quota/auth pattern match. parsePanelResult (:807-820) takes the last parseable JSON object.
 
-### Restore the KR7 byte guard over the reviewer exam path
-- **Id**: BL-0162
-- **Status**: open
-- **Since**: 2026-10-14
-- **Origin**: self
-- **Problem**: 審查科考卷換版時，穩定性測試裡「改別科不會順帶改到審查科評分程式」的逐位元組比對被拿掉了，因為比對基準還鎖著舊考卷。另外審查科與工頭的原始作答檔在零筆時只寫一個換行，工頭那條也沒有測試。
-- **Impact**: 低。改 consult／discuss 時若不小心動到審查科評分，不會被這支測試抓到；其他測試仍會檢查考卷鎖定指紋。
-- **Trigger**: 審查科 v6 考卷已在 origin/develop 後，下次動 engine-qualify-verdict-stability 或 engine-qualify.js 審查科路徑時
-- **Effort**: S
-- **Source**: review of reviewer clean-case fix 11922aca, 2026-10-14
-- **Pointer**: none
-- **Context**: Move KR7 baseSha (verdict-stability.test.sh ~:3499-3537) to a v6 + --raw-dir commit; restore runQualification + reviewer verifyPinnedEvaluationAssets. raw sink :5031-5038 writes "\n" for zero rows; owner --raw-dir untested.
-
-### Exam effort label is not checked against the effort actually sent
-- **Id**: BL-0166
-- **Status**: open
-- **Since**: 2026-10-14
-- **Origin**: self
-- **Problem**: 資格考成績上的思考強度，是操作員用 --effort 自己填的標籤，實際送給模型的強度要另外設環境變數。兩者沒有任何比對，填錯或漏設時，成績單會記一個沒生效的強度，這次那 13 筆就是這樣來的。
-- **Impact**: 中。派工照成績選席位時，可能以為某強度考過，其實考的是端點預設。
-- **Trigger**: 下次動 engine-qualify.js 的施考參數，或再發現一筆標籤與實際不符時
-- **Effort**: S
-- **Source**: review of provider HTTP effort merge 9490ad6e, 2026-10-14
-- **Pointer**: none
-- **Context**: engine-qualify.js never maps --effort to QRP_HTTP_EFFORT / QRP_CLI_EFFORT; --provider-env records names only. Either refuse a mismatch or record the effort the provider actually sent.
-
 ### Grok and Kimi seats still owe the 2026-10-14 exams
 - **Id**: BL-0167
 - **Status**: open
@@ -1841,19 +1815,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: owner 2026-10-14「grok / kimi 都先排 backlog , 星期五補考」
 - **Pointer**: none
 - **Context**: Grok: `bash run-rv6-cli-chain.sh grok grok:grok-4.7:low` (reviewer-requalify evidence folder). Kimi: reviewer v6 plus every role this round sat; no early stop.
-
-### Usage block cannot tell a truncated exam from a complete one
-- **Id**: BL-0168
-- **Status**: open
-- **Since**: 2026-10-14
-- **Origin**: self
-- **Problem**: 成績列 usage 區塊的題數只算實際跑過的題。考試被時間上限截斷，或 implementer 走例外路徑沒推紀錄時，沒跑的題會直接消失，usage_complete 仍是 true。驗證也沒交叉比對缺 token 數、每小時答對數和價格原因。
-- **Impact**: 低。這些路徑多半判 no_verdict 或中止；但看 usage 排序時，可能把半場的耗時當成整場。
-- **Trigger**: llm-playground 開始讀 usage 區塊做綜合評估之前
-- **Effort**: S
-- **Source**: review of usage lane cafae461/5086079a, 2026-10-14
-- **Pointer**: none
-- **Context**: qualification-usage.js summarize :111-143 has no expected n_cases; validateUsageBlock :203-235 lacks cross-checks. verdict-stability :3501 and the empty-output comment are imprecise.
 
 ### Brain and foreman strikes share one fold
 - **Id**: BL-0170
@@ -1880,3 +1841,16 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: archive-shipped lane, 2026-10-15
 - **Pointer**: none
 - **Context**: check-plan-graduation.js:168 out.shippedIn = need() is single-valued; :1271 const version = shippedIn || 'shipped' applies to all stems. Accept stem=sha pairs.
+
+### Other exam paths still write a lone newline for zero raw rows
+- **Id**: BL-0172
+- **Status**: open
+- **Since**: 2026-10-15
+- **Origin**: self
+- **Problem**: 資格考裡審查科和工頭的原始作答檔，零筆時已改成寫空檔；但其他幾科的原始作答檔零筆時仍寫一個換行，各科不一致。
+- **Impact**: 低。讀作答檔的程式若把一個換行當成一筆空紀錄，會多數一筆；目前沒有已知的讀者會這樣做。
+- **Trigger**: 下次動 engine-qualify.js 的原始作答輸出，或有讀者開始逐行解析這些檔案時
+- **Effort**: S
+- **Source**: qualification-labels lane (BL-0162) report, 2026-10-15
+- **Pointer**: none
+- **Context**: engine-qualify.js VA, brain, implementer, consult/discuss raw sinks (~:2525, :2887, :3523, :4671 at 64a7e40a) write "\n" for zero rows; KR7 pins reviewer and owner only. verdict-stability ~:3501 comment imprecise.

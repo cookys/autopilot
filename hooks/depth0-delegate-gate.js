@@ -161,6 +161,11 @@ function saveState(file, st) {
 // counted 22–23 unlocked (v2.36.1 pre-merge review). Same shape as foreman-guard.js's
 // withLock; duplicated on purpose (single-crash isolation between the two hooks, like
 // executableText above). Stale locks (>5 s) are broken; a nudge must never wedge on its state.
+// BL-0137: synchronous sleep for withLock's retry gap. Atomics.wait parks the thread on a
+// private cell that nothing notifies, so it waits the full timeout without burning CPU.
+const SLEEP_CELL = new Int32Array(new SharedArrayBuffer(4));
+function sleepSync(ms) { Atomics.wait(SLEEP_CELL, 0, 0, ms); }
+
 function withLock(file, fn) {
   const lock = `${file}.lock`;
   const deadline = Date.now() + 2000;
@@ -176,8 +181,7 @@ function withLock(file, fn) {
         if (age > 5000) { fs.unlinkSync(lock); continue; }
       } catch { /* vanished */ }
       if (Date.now() > deadline) return fn(); // fail-open: count without the lock rather than block
-      const until = Date.now() + 15;
-      while (Date.now() < until) { /* spin briefly */ }
+      sleepSync(15); // synchronous sleep (BL-0137): no CPU burn while the holder finishes
     }
   }
 }

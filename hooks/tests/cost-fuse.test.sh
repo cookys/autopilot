@@ -251,6 +251,24 @@ run_hook cost-fuse.js "$(make_payload Bash 'bash scripts/dispatch-hetero.sh --x 
 assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case9i: block mode + >( ) denied"
 run_hook cost-fuse.js "$(make_payload Bash 'git push origin x' 'fuse-session-1')"
 assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case9d: an ordinary mutating Bash is still fused"
+# ── 10. BL-0137: a held lock is waited out by sleeping, not spinning (warn mode) ──
+# A fresh (<5 s) lock file ⇒ withLock waits its 2 s deadline then runs the warn body without the
+# lock (fail-open). user+sys CPU must stay well under wall-clock time, and the warn must still land.
+export AUTOPILOT_COST_FUSE_MODE=warn
+# $200 is above the built-in brain default ($150); HOOK_HOME has no cost_fuse config, so that default applies.
+write_costs "claude-fable-5-1" 200 "fuse-session-lock"
+write_transcript "claude-fable-5-1"
+rm -rf "$AUTOPILOT_COST_FUSE_DIR"; mkdir -p "$AUTOPILOT_COST_FUSE_DIR"
+: > "$AUTOPILOT_COST_FUSE_DIR/fuse-session-lock.json.lock"
+LOCK_TIMING="$( { LC_ALL=C; TIMEFORMAT='%U %S %R'; time HOME="$HOOK_HOME" TMPDIR="$HOOK_TMPDIR" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" node "$HOOKS_DIR/cost-fuse.js" >/dev/null 2>&1 <<< "$(make_payload Edit '' 'fuse-session-lock')"; } 2>&1 | tail -1 )"
+read -r LOCK_U LOCK_S LOCK_R <<< "$LOCK_TIMING"
+if LC_ALL=C awk -v u="$LOCK_U" -v s="$LOCK_S" -v r="$LOCK_R" 'BEGIN{exit !(r >= 1.5 && (u + s) < r / 2)}'; then
+  assert_eq ok ok "held lock: waited the timeout without spinning (cpu ${LOCK_U}+${LOCK_S}s, wall ${LOCK_R}s)"
+else
+  fail "held lock: waiting burned CPU (cpu ${LOCK_U}+${LOCK_S}s, wall ${LOCK_R}s)"
+fi
+assert_contains "$(cat "$AUTOPILOT_COST_FUSE_DIR/fuse-session-lock.json")" '"warned_multiple":1' "timeout fails open: the warn is still recorded"
+rm -f "$AUTOPILOT_COST_FUSE_DIR/fuse-session-lock.json.lock"
 unset AUTOPILOT_COST_FUSE_MODE
 
 finalize_test

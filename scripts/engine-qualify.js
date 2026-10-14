@@ -1772,7 +1772,8 @@ function executePanelCaseTransport(panelConfig, diff) {
   if (broker.value.status !== 'ok' || result.status !== 0) {
     return {
       ok: false,
-      error: `case broker failed: ${broker.value.error.code}`,
+      error: `case broker failed: ${broker.value.error.code}`
+        + (typeof broker.value.error.message === 'string' ? ` (${broker.value.error.message})` : ''),
       stdout: '',
       receiptHash: broker.receiptHash,
     };

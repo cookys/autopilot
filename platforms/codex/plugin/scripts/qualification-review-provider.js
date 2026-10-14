@@ -155,6 +155,8 @@
  *                   spends QRP_MAX_TOKENS: raise it. List it in --provider-env.
  *   QRP_PROMPT_MODE reviewer | brain | va | consult | discuss (default reviewer)
  *   QRP_TIMEOUT_MS  per-case transport timeout (default 180000)
+ *   QRP_AGY_RETRY_DELAYS_MS  agy transient-503 retry backoff, `N` or `N,M` ms
+ *                   (default 15000,45000; max 2 retries; invalid values are rejected)
  *
  * HONESTY BOUNDARY (evidence-discipline / ADR-0001): each system prompt teaches
  * the OUTPUT CONTRACT and standing vocabulary only. Reviewer mode: rule vocabulary
@@ -1043,7 +1045,50 @@ function grokEffortClamp(effort, model, bin) {
 const agyContainment = require('./lib/agy-containment');
 const qualificationUsage = require('./lib/qualification-usage');
 
-function callCli(kind, bin, model, effort, timeoutMs, prompt) {
+// Transient-503 retry for the agy transport ONLY. agy sometimes exits non-zero
+// with `Eligibility check failed: UNAVAILABLE (code 503)` — a Google-side blip
+// that, with max_attempts 1 and ~60-100 s per case, voided a whole multi-dozen
+// case exam. This is a TRANSPORT-layer retry: the failed attempt produced no
+// answer (non-zero exit, nothing parsed, nothing scored), so no answer is
+// discarded or re-rolled and grading fairness is unaffected. Anything else —
+// containment audit failure, timeout, other exit codes — is never retried.
+// Each attempt re-enters callCliOnce, which re-clones the staged home from the
+// template, so a retry never reuses a used home.
+const AGY_RETRY_DEFAULT_DELAYS_MS = [15_000, 45_000];
+
+// Strict, loud parsing (same stance as QRP_TIMEOUT_MS): a silently-defaulted
+// delay list would misconfigure the retry budget. Validated once in main().
+function parseAgyRetryDelays(raw) {
+  if (raw === undefined || raw === '') return AGY_RETRY_DEFAULT_DELAYS_MS;
+  if (!/^\d+(,\d+)?$/u.test(raw)) {
+    fail(`QRP_AGY_RETRY_DELAYS_MS must be one or two comma-separated non-negative integers (got: ${raw})`);
+  }
+  const delays = raw.split(',').map(Number);
+  if (delays.some((n) => !Number.isSafeInteger(n) || n > 2147483647)) {
+    fail(`QRP_AGY_RETRY_DELAYS_MS values must be <= 2147483647 (got: ${raw})`);
+  }
+  return delays;
+}
+
+let agyRetryDelaysResolved = AGY_RETRY_DEFAULT_DELAYS_MS;
+function agyRetryDelays() { return agyRetryDelaysResolved; }
+
+async function callCli(kind, bin, model, effort, timeoutMs, prompt) {
+  if (kind !== 'agy') return callCliOnce(kind, bin, model, effort, timeoutMs, prompt);
+  const delays = agyRetryDelays();
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await callCliOnce(kind, bin, model, effort, timeoutMs, prompt);
+    } catch (error) {
+      const transient = /^agy CLI exited /u.test(error.message) && /code 503/u.test(error.message);
+      if (!transient || attempt >= delays.length) throw error;
+      process.stderr.write(`agy transient 503, retry ${attempt + 1}/${delays.length}\n`);
+      await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
+    }
+  }
+}
+
+function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
   const { spawn } = require('child_process');
   const fs = require('fs');
   const os = require('os');
@@ -1552,6 +1597,7 @@ function callCli(kind, bin, model, effort, timeoutMs, prompt) {
 }
 
 async function main() {
+  agyRetryDelaysResolved = parseAgyRetryDelays(process.env.QRP_AGY_RETRY_DELAYS_MS);
   const transport = process.env.QRP_TRANSPORT || 'http';
   const promptMode = process.env.QRP_PROMPT_MODE || 'reviewer';
   const baseUrl = process.env.QRP_BASE_URL;

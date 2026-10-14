@@ -158,8 +158,10 @@ function buildSelectedRoster(
   now,
   ttlSeconds = DEFAULT_RECEIPT_TTL_SECONDS,
 ) {
-  const seats = [
-    {
+  const seats = [];
+  // Review-only admission projects the implementer seat out (implementer_present === false).
+  if (resolved.implementer_present !== false) {
+    seats.push({
       seat_id: 'implementer',
       required: true,
       family: resolved.implementer_family || familyOf(resolved.implementer_engine),
@@ -172,7 +174,9 @@ function buildSelectedRoster(
       ),
       observations: {},
       fallbacks: [],
-    },
+    });
+  }
+  seats.push(
     {
       seat_id: 'reviewer',
       required: true,
@@ -187,7 +191,7 @@ function buildSelectedRoster(
       observations: {},
       fallbacks: [],
     },
-  ];
+  );
   if (resolved.verification_author_present) {
     seats.push({
       seat_id: 'verification_author',

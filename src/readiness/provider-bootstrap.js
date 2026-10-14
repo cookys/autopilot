@@ -301,7 +301,27 @@ const LEVEL_ROSTER_PROFILE = deepFreeze({
   l6: { verification_author: 'required', qc_panel: 'required' },
 });
 
-function rosterProfileFor(level) {
+// Review-only admission (`engine review-candidate`, BL-0090 P3) asks only for the seats the
+// review uses: the reviewer, its fallbacks and a complete QC panel (Q2 ruling B: every level).
+// The implementer and verification-author seats are neither required nor probed, so an exhausted
+// implementer provider cannot block a review that never spawns one. Level-independent; the
+// implement-review profiles above are unchanged.
+const REVIEW_ONLY_ROSTER_PROFILE = deepFreeze({
+  implementer: 'omitted',
+  verification_author: 'omitted',
+  qc_panel: 'required',
+});
+
+function rosterProfileFor(level, reviewOnly = false) {
+  if (reviewOnly === true) {
+    if (!STRICT_LEVELS.includes(level)) {
+      fail(
+        'strict_l5_provider_bootstrap_invalid',
+        'strict /l4|l5|l6 bootstrap accepts only a host cwd and level (l4, l5 or l6)',
+      );
+    }
+    return REVIEW_ONLY_ROSTER_PROFILE;
+  }
   const profile = LEVEL_ROSTER_PROFILE[level];
   if (!profile) {
     fail(
@@ -322,10 +342,18 @@ function qcPanelResolved(resolved) {
 // unresolved QC names, so a profile that SKIPS an optional seat must hand the collector a roster
 // without it — otherwise the live roster drifts from the derived invocation policy. Required
 // seats are never touched here; l5/l6 pass through byte-identical.
-function projectRosterForLevel(resolved, level) {
-  const profile = rosterProfileFor(level);
+function projectRosterForLevel(resolved, level, reviewOnly = false) {
+  const profile = rosterProfileFor(level, reviewOnly);
   const omitted = [];
   let projected = resolved;
+  if (profile.implementer === 'omitted') {
+    omitted.push('implementer');
+    projected = { ...projected, implementer_present: false };
+  }
+  if (profile.verification_author === 'omitted') {
+    omitted.push('verification_author');
+    projected = { ...projected, verification_author_present: false };
+  }
   if (profile.verification_author === 'optional' && resolved.verification_author_present !== true) {
     omitted.push('verification_author');
     projected = { ...projected, verification_author_present: false };
@@ -342,13 +370,15 @@ function projectRosterForLevel(resolved, level) {
   return { roster: projected, omitted_seats: omitted };
 }
 
-function deriveStrictL5InvocationPolicy(resolved, level = 'l5') {
-  const profile = rosterProfileFor(level);
+function deriveStrictL5InvocationPolicy(resolved, level = 'l5', options = {}) {
+  const reviewOnly = isRecord(options) && options.reviewOnly === true;
+  const profile = rosterProfileFor(level, reviewOnly);
   if (!isRecord(resolved)) {
     fail('strict_l5_provider_roster_unavailable', 'strict /l5 review roster is unavailable');
   }
-  const seats = [
-    {
+  const seats = [];
+  if (profile.implementer !== 'omitted') {
+    seats.push({
       seat_id: 'implementer',
       tuple: resolvedTuple(
         'implementer',
@@ -359,7 +389,9 @@ function deriveStrictL5InvocationPolicy(resolved, level = 'l5') {
         resolved.implementer_family,
         'strict /l5 implementer tuple',
       ),
-    },
+    });
+  }
+  seats.push(
     {
       seat_id: 'reviewer',
       tuple: resolvedTuple(
@@ -372,8 +404,10 @@ function deriveStrictL5InvocationPolicy(resolved, level = 'l5') {
         'strict /l5 reviewer tuple',
       ),
     },
-  ];
-  if (resolved.verification_author_present !== true) {
+  );
+  if (profile.verification_author === 'omitted') {
+    // review-only: the seat is neither required nor probed, even when configured
+  } else if (resolved.verification_author_present !== true) {
     if (profile.verification_author === 'required') {
       fail(
         'strict_l5_provider_roster_incomplete',
@@ -585,7 +619,8 @@ function validateCollectedBundle(bundle, matched) {
 
 function createStrictL5ProviderBootstrap(options = {}, hostDependencies = {}) {
   if (!isRecord(options)
-      || Object.keys(options).some((key) => key !== 'cwd' && key !== 'level')
+      || Object.keys(options).some((key) => key !== 'cwd' && key !== 'level' && key !== 'reviewOnly')
+      || (options.reviewOnly !== undefined && typeof options.reviewOnly !== 'boolean')
       || (options.cwd !== undefined && typeof options.cwd !== 'string')
       || (options.level !== undefined && !STRICT_LEVELS.includes(options.level))) {
     fail(
@@ -594,6 +629,7 @@ function createStrictL5ProviderBootstrap(options = {}, hostDependencies = {}) {
     );
   }
   const strictLevel = options.level || 'l5';
+  const reviewOnly = options.reviewOnly === true;
   if (!isRecord(hostDependencies)
       || Object.keys(hostDependencies).some((key) => !new Set([
         'collectReadiness',
@@ -611,8 +647,8 @@ function createStrictL5ProviderBootstrap(options = {}, hostDependencies = {}) {
     }
     resolved = result.result;
   }
-  const matched = deriveStrictL5InvocationPolicy(resolved, strictLevel);
-  const projection = projectRosterForLevel(resolved, strictLevel);
+  const matched = deriveStrictL5InvocationPolicy(resolved, strictLevel, { reviewOnly });
+  const projection = projectRosterForLevel(resolved, strictLevel, reviewOnly);
   resolved = projection.roster;
   const authorizedProviderTuples = new Set(
     matched.invocation_policy.map((entry) => providerTupleKey(entry.tuple)),
@@ -635,7 +671,7 @@ function createStrictL5ProviderBootstrap(options = {}, hostDependencies = {}) {
     if (!isRecord(request) || !isRecord(request.roster)) {
       fail('strict_l5_provider_roster_unavailable', 'strict /l5 invocation roster is missing');
     }
-    const requested = deriveStrictL5InvocationPolicy(request.roster, strictLevel);
+    const requested = deriveStrictL5InvocationPolicy(request.roster, strictLevel, { reviewOnly });
     if (requested.roster_digest !== matched.roster_digest) {
       fail('strict_l5_provider_roster_drift', 'strict /l5 invocation roster changed after bootstrap');
     }
@@ -678,6 +714,7 @@ function createStrictL5ProviderBootstrap(options = {}, hostDependencies = {}) {
     qualificationProvider,
     matched,
     strictLevel,
+    reviewOnly,
   });
   return deepFreeze({
     roster: resolved,
@@ -689,6 +726,7 @@ function createStrictL5ProviderBootstrap(options = {}, hostDependencies = {}) {
     strict_level: strictLevel,
     roster_profile: {
       level: strictLevel,
+      ...(reviewOnly ? { review_only: true } : {}),
       omitted_seats: [...projection.omitted_seats],
     },
   });
@@ -721,7 +759,9 @@ function consumeStrictL5ProviderReadiness(authority, bundle, context = {}) {
   if (bundle.strict_level !== state.strictLevel || !STRICT_LEVELS.includes(bundle.strict_level)) {
     fail('strict_l5_provider_level_drift', 'strict /l4|l5|l6 readiness bundle level drifted');
   }
-  const requested = deriveStrictL5InvocationPolicy(context.roster, state.strictLevel);
+  const requested = deriveStrictL5InvocationPolicy(context.roster, state.strictLevel, {
+    reviewOnly: state.reviewOnly === true,
+  });
   if (requested.roster_digest !== state.matched.roster_digest) {
     fail('strict_l5_provider_roster_drift', 'strict /l5 consume roster drifted');
   }

@@ -1,6 +1,6 @@
 # Plan — review-only entry: a host-admitted final panel over an externally produced candidate range
 
-> Status: **ruled, size L — Q1′ ruled 2026-10-14 (caller chooses at disposition, §10); P1 open** · Owner: depth-0 · Source: BACKLOG BL-0090 (peer-reported, cuda/chatgpt-tunnel, fleet 2026-10-03; owner approved 2026-10-13) · Pointer: `docs/backlog/review-only-adoption-of-external-candidate.md` · Version: stays on the 3.0.0 line (no bump) · Code read at `459dd869`.
+> Status: **ruled, size L — Q1′ ruled 2026-10-14 (caller chooses at disposition, §10); P1 shipped 2026-10-14 (merge 8a650a95); P2 and P3 open** · Owner: depth-0 · Source: BACKLOG BL-0090 (peer-reported, cuda/chatgpt-tunnel, fleet 2026-10-03; owner approved 2026-10-13) · Pointer: `docs/backlog/review-only-adoption-of-external-candidate.md` · Version: stays on the 3.0.0 line (no bump) · Code read at `459dd869`.
 
 ## 1. Why
 
@@ -131,6 +131,7 @@ Before any spend, intake re-derives the range with read-only probes (D9): the br
 - Input: P1 candidate kind; the Q1′ ruling (§10).
 - Output: resume with drift refusal and seat-verdict reuse. The `return` and `end` dispositions. An optional contract preset (adoption section) that applies a choice without waiting. The adoption-contract preset field shares its schema, checker and intake updates with P1's section.
 - Acceptance: RO11, RO13 (`return`, `end`, preset), RO3 (resume moment), RO9.
+- Also (from the P1 review, 2026-10-14): (a) the run-time quorum (`src/engine/campaign-composition.js:598-604`) still counts "at least one non-author family" while intake applies the RO7 subtract-then-count reading; align run time to RO7 so a mid-run seat loss cannot pass a quorum intake would refuse. (b) A seat lost at run time that leaves the panel short must reach terminal not-ready; P1 only tests the pre-campaign roster refusal, which carries no `code`. (c) RO10's planted-defect run parks at `awaiting_disposition`; record its `end` to terminal not-ready under the same evidence directory once `end` ships.
 - Boundaries: same-campaign `git_candidate` resume unchanged; existing resume suites untouched.
 
 ### P3 — Review-only readiness profile (depends on P1)

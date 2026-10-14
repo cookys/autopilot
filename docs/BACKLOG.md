@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0166 -->
+<!-- next-id: BL-0167 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1854,3 +1854,16 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: review of brain-row merge e7013833, 2026-10-14
 - **Pointer**: none
 - **Context**: engine-scorecard.js findSeatBaseline :1747-1767 and computeSeatProjection :1546-1548 match seats without scope / methodology_kind; filter owner rows by scope.
+
+### Exam effort label is not checked against the effort actually sent
+- **Id**: BL-0166
+- **Status**: open
+- **Since**: 2026-10-14
+- **Origin**: self
+- **Problem**: 資格考成績上的思考強度，是操作員用 --effort 自己填的標籤，實際送給模型的強度要另外設環境變數。兩者沒有任何比對，填錯或漏設時，成績單會記一個沒生效的強度，這次那 13 筆就是這樣來的。
+- **Impact**: 中。派工照成績選席位時，可能以為某強度考過，其實考的是端點預設。
+- **Trigger**: 下次動 engine-qualify.js 的施考參數，或再發現一筆標籤與實際不符時
+- **Effort**: S
+- **Source**: review of provider HTTP effort merge 9490ad6e, 2026-10-14
+- **Pointer**: none
+- **Context**: engine-qualify.js never maps --effort to QRP_HTTP_EFFORT / QRP_CLI_EFFORT; --provider-env records names only. Either refuse a mismatch or record the effort the provider actually sent.

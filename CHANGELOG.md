@@ -82,6 +82,7 @@
 
 ### 修正
 
+- **資格考的 HTTP 通道真的送出思考強度**：`qualification-review-provider.js` 走 HTTP 時原本從不送思考強度，成績上的強度標籤其實是端點預設。新增 `QRP_HTTP_EFFORT`：Responses 送 `reasoning.effort`、chat completions 送 `reasoning_effort`；未設或 `default` 不送；不在 none／minimal／low／medium／high／xhigh 內的值（含 max）直接拒絕，不悄悄降級；Messages 協定與 cli 通道設了也拒絕。要讓 broker 放行，得列進 `--provider-env`。標籤與實際送出值的比對見 BL-0166。
 - **腦力題結果可以登記進成績單**：`engine-qualify.js` 產生的腦力題成績列補上 `capability_score`（抓到的埋點比例；合格的一定是 1，只用來比較失敗的程度）、`cost`（未知）與 `expires`（只提醒、不阻擋），`engine-scorecard.js record` 不再拒收。合格判定與評分器不變。穩定性測試原本對這段做逐位元組比對，改成對每一場失敗局與滿分局逐欄斷言。後續見 BL-0164、BL-0165。
 - **審查科資格考的「乾淨題」改成真的等價**：審查科考卷裡應該判「沒問題」的乾淨題，有 14 題（共 19 題）其實改變了行為（例如把鎖狀態用 `=== true` 收窄、`Object.is` 對 NaN／-0、`Number(null)` 變 0），審查者抓出來反而被算成誤報。這 14 題已改寫為真正等價；新增 `scripts/reviewer-clean-equivalence.test.js`，用型別邊界輸入在三個 seed 上逐題比對前後行為，把舊寫法放回去就會紅。之後再把 5 題改成「看起來可疑、其實等價」的寫法，才量得到過度標記。考卷版本 v4 → v6，鎖定指紋同步更新；舊的成績列不動。審查科與工頭作答時，`--raw-dir` 會寫下 `<role>-exchanges.jsonl`，有爭議的判定可以重新評分不必重考。後續見 BL-0162。
 - **腦力題評分器鎖定指紋更新**：`engine-qualify.js`（與 Codex 鏡像）的 `EXPECTED_BRAIN_GRADER_HASH` 改成跑到底版評分器的指紋，腦力題不再因指紋不符而拒考。

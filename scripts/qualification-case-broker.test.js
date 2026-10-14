@@ -331,6 +331,14 @@ async function main() {
   const plain = redactSecrets('Eligibility check failed: UNAVAILABLE (code 503): The service is currently unavailable.');
   check(plain.includes('code 503') && plain.includes('UNAVAILABLE') && !plain.includes('[redacted]'),
     'an ordinary 503 error sentence survives redaction unchanged');
+  // Token-count telemetry is the diagnosis of a truncated reply (seen redacted in a
+  // real M3 exam, 2026-10-14) and must survive; a credential beside it must not.
+  const truncated = 'endpoint response carried no text content (stop_reason=max_tokens output_tokens=32768 max_tokens=32768 blocks=[thinking])';
+  equal(redactSecrets(truncated), truncated, 'token-count telemetry and stop_reason survive redaction unchanged');
+  check(!redactSecrets('output_tokens=812 token=abc123').includes('abc123'),
+    'a credential next to token-count telemetry is still redacted');
+  check(!redactSecrets('dXNlcjpwYXNzd29yZGxvbmc==').includes('dXNlcjpw'),
+    'a long base64 run with trailing padding is still redacted');
 
   process.env.FAKE_BROKER_MODE = 'oversized';
   const oversized = await runBrokerCase(brokerOptions(providerScript), firstDiff);
@@ -353,7 +361,7 @@ async function main() {
   check(requestTooLarge instanceof BrokerError, 'oversized request is rejected before dispatch');
   equal(requestTooLarge.code, 'request_too_large', 'oversized request has a stable error name');
 
-  if (assertions !== 94) throw new Error(`qualification-case-broker: expected exactly 94 assertions (count pin moved here from hooks/tests/qualification-case-broker.test.sh so the L1 run enforces it), got ${assertions}`);
+  if (assertions !== 97) throw new Error(`qualification-case-broker: expected exactly 97 assertions (count pin moved here from hooks/tests/qualification-case-broker.test.sh so the L1 run enforces it), got ${assertions}`);
   process.stdout.write(`qualification case broker: ${assertions} assertions passed\n`);
 }
 

@@ -470,7 +470,11 @@ function redactSecrets(text) {
   const WORD = '[A-Za-z0-9_-]*';
   const KEY = `(?<![A-Za-z0-9_-])${WORD}(?:${KW})${WORD}`;
   const QUOTED_KEY = `${WORD}(?:${KW})${WORD}`;
-  return String(text)
+  // Token-count telemetry (`output_tokens=812 max_tokens=32768`) is the diagnosis
+  // of a truncated reply, not a credential: shield `<name>_tokens=<digits>` from
+  // the keyword rule with a NUL in place of `=`, restored at the end.
+  return String(text).replace(/\0/gu, '')
+    .replace(/\b([A-Za-z]+_tokens)=(\d+)\b/gu, '$1\0$2')
     // PEM / PGP private-key block (to its END marker, or to the end if cut).
     .replace(/-----BEGIN [A-Z ]*PRIVATE KEY[A-Z ]*-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY[A-Z ]*-----|$)/gu, '[redacted]')
     // user:password@ inside a URL.
@@ -489,7 +493,10 @@ function redactSecrets(text) {
     .replace(/\beyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*/gu, '[redacted]')
     .replace(/\b(?:Bearer|Basic)\s+\S+/giu, '[redacted]')
     .replace(/\bsk-[A-Za-z0-9_-]+/gu, '[redacted]')
-    .replace(/[A-Za-z0-9+/=_.~-]{20,}/gu, '[redacted]');
+    // Long opaque runs; `=` only as trailing base64 padding, so `stop_reason=max_tokens`
+    // stays readable.
+    .replace(/[A-Za-z0-9+/_.~-]{20,}={0,2}/gu, '[redacted]')
+    .replace(/\0/gu, '=');
 }
 
 function redactedExcerpt(input, maxBytes) {

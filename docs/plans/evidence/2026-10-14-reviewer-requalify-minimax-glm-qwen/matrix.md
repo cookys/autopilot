@@ -52,4 +52,12 @@
 
 - Kimi OAuth：上次 `The provided authorization grant is invalid`（憑證 10-02 過期）。kimi runner 每格開考前先跑 `kimi-auth-probe.sh`，失敗則該格以 rc=3 結束、不計費、後面 Kimi 格子一併跳過；需主人重新登入。
 - 同一 OAuth 不可並行：kimi runner 先等 out/kimi 的 `rc=`。minimax runner 先等 out/minimax31 的 `rc=`。
+- Kimi K2.8 Preview：見文末追加段。
 - 提早停止機制的行號（約 :3939、:4189-4350、:1850、:2372、:2683）未逐行逐一複核；協調者的調查結論為準。
+
+## 追加：Kimi K2.8 Preview（owner 2026-10-14）
+
+- 模型：CLI 設定裡 `kimi-code/kimi-for-coding` 的 display_name 是 "K2.8 Preview"（由真 `~/.kimi-code/config.toml` 暫存出的複本；CLI 清單為 kimi-for-coding=K2.8 Preview、kimi-for-coding-highspeed=K2.7 Code Highspeed、k3、k3-256k）。送進 CLI 的 id 原樣為 `kimi-code/kimi-for-coding`；這是浮動別名，日後顯示名可能換。身分欄 engine=`kimi-k2.8-preview`、model_version=`kimi-for-coding:K2.8-Preview`。
+- 現在排：reviewer、verification_author、implementer（effort high，`run-kimi28.sh`，排在 K3 家之後；transport_fail 不算 verdict，改名 `-attemptN-transport` 重考，最多 3 次）。VA 走 qrp-lenient.js（壞 JSON 判不及格、不中止）。
+- 待考（等考試工具修正合併後）：consult、discuss、brain（參數層已 dry-run，`dry-k28.sh`）。
+- owner 不能考（同其他模型）。

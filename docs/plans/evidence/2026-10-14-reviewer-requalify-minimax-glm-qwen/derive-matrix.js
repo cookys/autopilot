@@ -5,7 +5,7 @@
 // Adapted from ../2026-10-14-gemini-4-argon-qualify/derive-fingerprints.js (corpus/prompt hashing) and
 // ./derive-fingerprints.js (per-lane transport surfaces). Surface strings with no precedent for that role are listed in _invented.
 const fs = require('fs'), path = require('path'), crypto = require('crypto');
-const [lane, role, rootArg] = process.argv.slice(2);
+const [lane, role, rootArg] = process.argv.slice(2);  // lane also: kimi28 (display name 'K2.8 Preview', alias kimi-code/kimi-for-coding)
 const LANES = {
   glm:       { engine: 'GLM-5.3',                    model: 'glm-5.3',                    family: 'zhipu',    kind: 'http', endpoint: 'glm',     effort: 'high' },
   minimax:   { engine: 'MiniMax-M3',                 model: 'MiniMax-M3',                 family: 'minimax',  kind: 'http', endpoint: 'minimax', effort: 'high' },
@@ -13,6 +13,8 @@ const LANES = {
   qwen:      { engine: 'Qwen3.8-Max',                model: 'Qwen3.8-Max',                family: 'alibaba',  kind: 'cli',  cli: 'qoderclicn', effort: 'high',
                transport: 'qoderclicn-p-tools-empty', posture: 'qoderclicn -p --model --tools "" --permission-mode dont_ask (no skip-permissions)' },
   kimi:      { engine: 'kimi-code-k3',               model: 'kimi-code/k3',               family: 'moonshot', kind: 'cli',  cli: 'kimi', effort: 'high',
+               transport: 'kimi-m-p-argv', posture: 'kimi -m <model> -p <prompt> (default agent; no tool-deny in provider kimi branch)' },
+  kimi28:    { engine: 'kimi-k2.8-preview',          model: 'kimi-code/kimi-for-coding',  family: 'moonshot', kind: 'cli',  cli: 'kimi', effort: 'high',
                transport: 'kimi-m-p-argv', posture: 'kimi -m <model> -p <prompt> (default agent; no tool-deny in provider kimi branch)' },
 };
 const L = LANES[lane];

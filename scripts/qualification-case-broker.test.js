@@ -71,6 +71,11 @@ fs.writeFileSync(providerScript, [
   "  })}\\n`);",
   "  const mode = process.env.FAKE_BROKER_MODE;",
   "  if (mode === 'timeout') { setTimeout(() => {}, 60_000); return; }",
+  "  if (mode === 'fail') {",
+  "    process.stderr.write('Eligibility check failed: UNAVAILABLE (code 503): The service is currently unavailable. ' +",
+  "      'Authorization: Bearer abc.def-ghi key=sk-live1234 jwt=eyJhbGciOi.eyJzdWIiOi.c2lnbmF0dXJl hex=0123456789abcdef0123456789abcdef b64=QUJDREVGR0hJSktMTU5PUFFSU1RVVldY ' + 'z'.repeat(2000));",
+  "    process.exit(1);",
+  "  }",
   "  if (mode === 'malformed') { process.stdout.write('not-json'); return; }",
   "  if (mode === 'oversized') { process.stdout.write('x'.repeat(3 * 1024 * 1024)); return; }",
   '  process.stdout.write(JSON.stringify({',
@@ -239,6 +244,25 @@ async function main() {
   equal(timeout.receipt.attempt_count, 1, 'timeout is never retried ambiguously');
   check(Date.now() - timeoutStarted < 5_000, 'timeout kills the provider process promptly');
 
+  // Provider non-zero exit keeps a redacted stderr excerpt (hash is kept too).
+  process.env.FAKE_BROKER_MODE = 'fail';
+  const failed = await runBrokerCase(brokerOptions(providerScript), firstDiff);
+  equal(failed.status, 'failed', 'a provider non-zero exit fails closed');
+  equal(failed.error.code, 'provider_process_failed', 'a non-zero exit keeps its stable error name');
+  check(
+    typeof failed.error.message === 'string'
+      && failed.error.message.includes('UNAVAILABLE (code 503)'),
+    'the failure carries the provider stderr cause, not just the code',
+  );
+  check(Buffer.byteLength(failed.error.message) <= 560, 'the stderr excerpt is bounded (500 bytes plus the fixed prefix)');
+  // NEGATIVE CONTROL: no credential-shaped value may survive into the message.
+  for (const secret of ['abc.def-ghi', 'sk-live1234', 'eyJhbGciOi', 'c2lnbmF0dXJl',
+    '0123456789abcdef0123456789abcdef', 'QUJDREVGR0hJSktMTU5PUFFSU1RVVldY']) {
+    check(!failed.error.message.includes(secret), `credential-shaped value "${secret}" is redacted`);
+  }
+  check(failed.error.message.includes('[redacted]'), 'redaction leaves a visible marker');
+  check(!Object.hasOwn(malformed.error, 'message'), 'non-process failures keep the code-only error shape');
+
   process.env.FAKE_BROKER_MODE = 'oversized';
   const oversized = await runBrokerCase(brokerOptions(providerScript), firstDiff);
   equal(oversized.status, 'failed', 'oversized provider output fails closed');
@@ -260,7 +284,7 @@ async function main() {
   check(requestTooLarge instanceof BrokerError, 'oversized request is rejected before dispatch');
   equal(requestTooLarge.code, 'request_too_large', 'oversized request has a stable error name');
 
-  if (assertions !== 42) throw new Error(`qualification-case-broker: expected exactly 42 assertions (count pin moved here from hooks/tests/qualification-case-broker.test.sh so the L1 run enforces it), got ${assertions}`);
+  if (assertions !== 54) throw new Error(`qualification-case-broker: expected exactly 54 assertions (count pin moved here from hooks/tests/qualification-case-broker.test.sh so the L1 run enforces it), got ${assertions}`);
   process.stdout.write(`qualification case broker: ${assertions} assertions passed\n`);
 }
 

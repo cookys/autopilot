@@ -434,6 +434,7 @@ function runChild(command, args, options, limits = {}) {
         signal,
         stdout: Buffer.concat(stdout).toString('utf8'),
         stderrHash: byteHash(Buffer.concat(stderr)),
+        stderrExcerpt: redactedExcerpt(Buffer.concat(stderr).toString('utf8'), 500),
         timedOut,
         oversized,
       });
@@ -441,6 +442,25 @@ function runChild(command, args, options, limits = {}) {
     child.stdin.once('error', () => {});
     child.stdin.end(options.input || '');
   });
+}
+
+// Provider stderr is the only place a transient upstream error (e.g. agy
+// "UNAVAILABLE (code 503)") is visible; the broker used to keep only its hash,
+// so a failed exam left `provider_process_failed` with no cause. The excerpt is
+// credential-redacted BEFORE the byte cut (a cut could otherwise leave a partial
+// token that no pattern matches). Over-redaction is deliberate: any >=20-char
+// base64/hex/path-like run is replaced.
+function redactSecrets(text) {
+  return String(text)
+    .replace(/\beyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*/gu, '[redacted]')
+    .replace(/\bBearer\s+\S+/giu, '[redacted]')
+    .replace(/\bsk-[A-Za-z0-9_-]+/gu, '[redacted]')
+    .replace(/[A-Za-z0-9+/=_-]{20,}/gu, '[redacted]');
+}
+
+function redactedExcerpt(text, maxBytes) {
+  const flat = redactSecrets(text).replace(/\s+/gu, ' ').trim();
+  return Buffer.from(flat, 'utf8').subarray(0, maxBytes).toString('utf8').replace(/\uFFFD$/u, '');
 }
 
 function providerEnvironment(options, providerRoot) {
@@ -480,8 +500,9 @@ async function executeProvider(options, providerRoot, providerRequest) {
     throw new BrokerError('provider response exceeded its bound', 'provider_output_too_large');
   }
   if (result.signal || result.status !== 0) {
+    const excerpt = result.stderrExcerpt ? `: ${result.stderrExcerpt}` : '';
     const error = new BrokerError(
-      `provider adapter exited unsuccessfully (${result.status ?? result.signal})`,
+      `provider adapter exited unsuccessfully (${result.status ?? result.signal})${excerpt}`,
       'provider_process_failed',
     );
     error.stderrHash = result.stderrHash;
@@ -555,6 +576,9 @@ function failedResponse(error, receipt = null) {
     output: null,
     error: {
       code: error && error.code ? error.code : 'broker_error',
+      // Only the provider-exit failure carries its (redacted) cause; every other
+      // BrokerError keeps the code-only shape.
+      ...(error && error.code === 'provider_process_failed' ? { message: error.message } : {}),
     },
     receipt,
   });

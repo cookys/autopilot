@@ -120,6 +120,22 @@ fs.writeFileSync(stubClaude, `#!/usr/bin/env node
 const fs = require('fs');
 const path = require('path');
 const stdin = fs.readFileSync(0, 'utf8');
+// Transient-failure emulation: fail the first STUB_FAIL_TIMES invocations
+// (counted in STUB_FAIL_COUNT_FILE) with STUB_STDERR and exit 1. Also log
+// whether HOME already held a marker from an earlier attempt (a reused home).
+if (process.env.STUB_FAIL_COUNT_FILE) {
+  const counter = process.env.STUB_FAIL_COUNT_FILE;
+  let calls = 0;
+  try { calls = Number(fs.readFileSync(counter, 'utf8')); } catch { /* first call */ }
+  fs.writeFileSync(counter, String(calls + 1));
+  const marker = path.join(process.env.HOME || '', 'stub-used-marker');
+  fs.appendFileSync(counter + '.homes', (fs.existsSync(marker) ? 'reused' : 'fresh') + '\\n');
+  fs.writeFileSync(marker, 'x');
+  if (calls < Number(process.env.STUB_FAIL_TIMES || 0)) {
+    fs.writeSync(2, process.env.STUB_STDERR || '');
+    process.exit(1);
+  }
+}
 // Capture the clone's forced-deny settings.json (if any) BEFORE this process
 // exits — callCli removes the clone only after the child settles, but reading
 // it from inside the child is the only vantage that predates that removal.
@@ -966,6 +982,59 @@ function roleOnlyRequest(role, content = 'x') {
       `agy ${mode}: stderr names the breach (${pattern})`);
     check(!child.stdout.includes('"verdict'), `agy ${mode}: no answer is emitted`);
   }
+}
+// ── 11c. agy transient-503 retry (transport layer) ─────────────────────────────
+// Why: agy's `UNAVAILABLE (code 503)` is a Google-side blip that voided whole
+// exams. Only that shape retries (max 2, delays from QRP_AGY_RETRY_DELAYS_MS);
+// every other failure runs exactly once. Nothing scored is re-rolled.
+{
+  const template = path.join(tempRoot, 'agy-retry-clihome-template');
+  fs.mkdirSync(template, { recursive: true });
+  const E503 = 'Eligibility check failed: UNAVAILABLE (code 503): The service is currently unavailable.';
+  const retryEnv = (name, stderr, times) => {
+    const counter = path.join(tempRoot, `retry-count-${name}`);
+    return {
+      counter,
+      env: {
+        QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'agy', QRP_CLI_BIN: stubClaude,
+        QRP_CLI_HOME: template, STUB_AGY_MODE: 'clean', QRP_AGY_RETRY_DELAYS_MS: '0,0',
+        STUB_FAIL_COUNT_FILE: counter, STUB_FAIL_TIMES: String(times), STUB_STDERR: stderr,
+      },
+    };
+  };
+  const calls = (counter) => Number(fs.readFileSync(counter, 'utf8'));
+
+  const recovers = retryEnv('recovers', E503, 2);
+  const ok = runProvider({ env: recovers.env, request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT });
+  equal(ok.child.status, 0, 'agy 503 x2 then success: the case succeeds');
+  equal(calls(recovers.counter), 3, 'agy 503 x2 then success: agy ran three times');
+  equal(ok.child.stderr.match(/agy transient 503, retry \d\/2/gu),
+    ['agy transient 503, retry 1/2', 'agy transient 503, retry 2/2'],
+    'agy 503 x2 then success: stderr carries exactly two retry lines');
+  equal(fs.readFileSync(`${recovers.counter}.homes`, 'utf8').trim().split('\n'),
+    ['fresh', 'fresh', 'fresh'],
+    'every retry runs in a freshly staged home, never a used one');
+
+  const always = retryEnv('always', E503, 99);
+  const dead = runProvider({ env: always.env, request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT });
+  equal(dead.child.status, 1, 'agy 503 forever: the case fails');
+  equal(calls(always.counter), 3, 'agy 503 forever: one try plus exactly two retries');
+  check(/UNAVAILABLE \(code 503\)/.test(dead.child.stderr),
+    'agy 503 forever: the failure message keeps the 503 text');
+
+  // NEGATIVE CONTROL: a non-503 failure must not be retried.
+  const other = retryEnv('other', 'Error: model quota exhausted (code 429)', 99);
+  const noRetry = runProvider({ env: other.env, request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT });
+  equal(noRetry.child.status, 1, 'agy non-503 failure: the case fails');
+  equal(calls(other.counter), 1, 'agy non-503 failure runs once (no retry)');
+  check(!/agy transient 503/.test(noRetry.child.stderr), 'agy non-503 failure logs no retry line');
+
+  // A kind other than agy never retries even on a 503 body.
+  const codex = retryEnv('claude-kind', E503, 99);
+  runProvider({
+    env: { ...codex.env, QRP_CLI_KIND: 'claude' }, request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT,
+  });
+  equal(calls(codex.counter), 1, 'a non-agy kind with a 503 body is never retried');
 }
 {
   // (a) negative: the OTHER kinds must NOT gain the flag (and, unlike agy,
@@ -1906,5 +1975,5 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
 }
 
 fs.rmSync(tempRoot, { recursive: true, force: true });
-if (assertions !== 373) throw new Error(`qualification-review-provider: expected exactly 373 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 384) throw new Error(`qualification-review-provider: expected exactly 384 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);

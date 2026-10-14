@@ -1043,7 +1043,41 @@ function grokEffortClamp(effort, model, bin) {
 const agyContainment = require('./lib/agy-containment');
 const qualificationUsage = require('./lib/qualification-usage');
 
-function callCli(kind, bin, model, effort, timeoutMs, prompt) {
+// Transient-503 retry for the agy transport ONLY. agy sometimes exits non-zero
+// with `Eligibility check failed: UNAVAILABLE (code 503)` — a Google-side blip
+// that, with max_attempts 1 and ~60-100 s per case, voided a whole multi-dozen
+// case exam. This is a TRANSPORT-layer retry: the failed attempt produced no
+// answer (non-zero exit, nothing parsed, nothing scored), so no answer is
+// discarded or re-rolled and grading fairness is unaffected. Anything else —
+// containment audit failure, timeout, other exit codes — is never retried.
+// Each attempt re-enters callCliOnce, which re-clones the staged home from the
+// template, so a retry never reuses a used home.
+const AGY_RETRY_DEFAULT_DELAYS_MS = [15_000, 45_000];
+
+function agyRetryDelays() {
+  const raw = process.env.QRP_AGY_RETRY_DELAYS_MS;
+  if (raw === undefined || raw.trim() === '') return AGY_RETRY_DEFAULT_DELAYS_MS;
+  const parsed = raw.split(',').map((part) => Number(part.trim()));
+  if (parsed.some((n) => !Number.isFinite(n) || n < 0)) return AGY_RETRY_DEFAULT_DELAYS_MS;
+  return parsed.slice(0, 2);
+}
+
+async function callCli(kind, bin, model, effort, timeoutMs, prompt) {
+  if (kind !== 'agy') return callCliOnce(kind, bin, model, effort, timeoutMs, prompt);
+  const delays = agyRetryDelays();
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await callCliOnce(kind, bin, model, effort, timeoutMs, prompt);
+    } catch (error) {
+      const transient = /^agy CLI exited /u.test(error.message) && /code 503/u.test(error.message);
+      if (!transient || attempt >= delays.length) throw error;
+      process.stderr.write(`agy transient 503, retry ${attempt + 1}/${delays.length}\n`);
+      await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
+    }
+  }
+}
+
+function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
   const { spawn } = require('child_process');
   const fs = require('fs');
   const os = require('os');

@@ -2440,6 +2440,13 @@ function parseVaPlanOutput(stdout) {
   return null;
 }
 
+// Raw-answer sinks (--raw-dir *.jsonl): zero rows => an EMPTY file (a lone newline is a blank
+// line, not a JSONL row, and breaks naive readers); otherwise one JSON row per line, each
+// terminated by a newline. Every raw sink routes through here (BL-0172).
+function rawRowsText(rows) {
+  return rows.length === 0 ? '' : `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`;
+}
+
 // Builds the row's `usage` summary and `cost` block from per-case records and, when
 // --raw-dir is set, writes the per-case file `<role>-usage.jsonl`. A separate file
 // (not columns on the exchanges file) because the solved verdict only exists after
@@ -2457,7 +2464,7 @@ function finalizeUsage(options, role, records, expectedCases = null) {
     fs.mkdirSync(options.rawDir, { recursive: true });
     fs.writeFileSync(
       path.join(options.rawDir, `${role}-usage.jsonl`),
-      records.length === 0 ? '' : `${records.map((row) => JSON.stringify(row)).join('\n')}\n`,
+      rawRowsText(records),
       { mode: 0o600 },
     );
   }
@@ -2523,7 +2530,7 @@ function runVaQualification(options) {
     fs.mkdirSync(options.rawDir, { recursive: true });
     fs.writeFileSync(
       path.join(options.rawDir, 'va-exchanges.jsonl'),
-      `${rawExchanges.map((row) => JSON.stringify(row)).join('\n')}\n`,
+      rawRowsText(rawExchanges),
       { mode: 0o600 },
     );
   }
@@ -2884,7 +2891,7 @@ function runBrainQualification(options) {
     for (let index = 0; index < trialMeta.length; index += 1) {
       fs.writeFileSync(
         path.join(options.rawDir, `brain-trial-${index + 1}.exchanges.jsonl`),
-        `${trialMeta[index].rawExchanges.map((row) => JSON.stringify(row)).join('\n')}\n`,
+        rawRowsText(trialMeta[index].rawExchanges),
         { mode: 0o600 },
       );
     }
@@ -3517,11 +3524,11 @@ function runImplQualification(options) {
     fs.mkdirSync(options.rawDir, { recursive: true });
     fs.writeFileSync(
       path.join(options.rawDir, 'impl-dispatch-ledger.jsonl'),
-      `${ledger.map((row) => JSON.stringify(row)).join('\n')}\n`,
+      rawRowsText(ledger),
     );
     fs.writeFileSync(
       path.join(options.rawDir, 'impl-exchanges.jsonl'),
-      `${rawExchanges.map((row) => JSON.stringify(row)).join('\n')}\n`,
+      rawRowsText(rawExchanges),
     );
     fs.writeFileSync(
       path.join(options.rawDir, 'impl-seed-envelope.json'),
@@ -4672,7 +4679,7 @@ function runConsultDiscussQualification(options) {
     fs.mkdirSync(options.rawDir, { recursive: true });
     fs.writeFileSync(
       path.join(options.rawDir, `${role}-exchanges.jsonl`),
-      `${allRawExchanges.map((row) => JSON.stringify(row)).join('\n')}\n`,
+      rawRowsText(allRawExchanges),
       { mode: 0o600 },
     );
   }
@@ -5223,7 +5230,7 @@ function runQualification(options) {
       fs.mkdirSync(options.rawDir, { recursive: true });
       fs.writeFileSync(
         path.join(options.rawDir, `${role}-exchanges.jsonl`),
-        rawExchanges.length === 0 ? '' : `${rawExchanges.map((row) => JSON.stringify(row)).join('\n')}\n`,
+        rawRowsText(rawExchanges),
         { mode: 0o600 },
       );
     }
@@ -5937,6 +5944,7 @@ function classifyQualificationOutcome(input) {
 if (require.main === module) main();
 
 module.exports = {
+  rawRowsText,
   buildEmittedRow,
   buildConsultCaseEnvelope,
   buildDiscussCaseEnvelope,

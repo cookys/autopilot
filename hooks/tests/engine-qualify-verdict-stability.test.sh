@@ -3497,7 +3497,9 @@ fs.rmSync(shortTmpBase, { recursive: true, force: true });
 
   // Executable half for roles with exported pure pin/verdict helpers.
   // verification_author's verifyPinnedVaEvaluationAssets is intentionally
-  // unexported — its KR7 gate is the runVaQualification source-half below.
+  // unexported and runVaQualification is no longer in the source-half list below (it left on
+  // 2026-10-14), so VA is only checked for presence here; its grading is covered by
+  // scripts/engine-qualify-va.test.js.
   const pinPairs = [
     ['reviewer', 'verifyPinnedEvaluationAssets'],
     ['implementer', 'verifyPinnedImplEvaluationAssets'],
@@ -3521,8 +3523,9 @@ fs.rmSync(shortTmpBase, { recursive: true, force: true });
   // lands. The consult/discuss leak guard keeps the other four bodies + the executable half.
   //
   // runQualification is guarded again (BL-0162): the reviewer/owner path must stay byte-identical to
-  // the base, except for ONE deliberate, named delta below (the raw-answer sink writes an empty file
-  // for zero rows instead of a lone newline). Anything else that touches the body fails here.
+  // the base, except for ONE deliberate, named delta below (the raw-answer sink goes through
+  // rawRowsText(), which writes an empty file for zero rows instead of a lone newline; BL-0162,
+  // BL-0172). Anything else that touches the body fails here.
   //
   // runBrainQualification left this list on 2026-10-14: its emitted row gained capability_score,
   // cost and expires so `engine-scorecard.js record` accepts a brain sitting. Same reasoning as
@@ -3551,7 +3554,7 @@ fs.rmSync(shortTmpBase, { recursive: true, force: true });
   const BT = String.fromCharCode(96);
   const SINK = BT + '${rawExchanges.map((row) => JSON.stringify(row)).join(\'\\n\')}\\n' + BT + ',';
   const DELTAS = {
-    runQualification: [[SINK, "rawExchanges.length === 0 ? '' : " + SINK]],
+    runQualification: [[SINK, 'rawRowsText(rawExchanges),']],
   };
   const expectedBody = (name, baseText) => {
     let text = baseText;
@@ -3573,7 +3576,7 @@ fs.rmSync(shortTmpBase, { recursive: true, force: true });
   // one-token drift, one with the declared delta removed, and one with an unrelated line added.
   const curRun = curEq.runQualification.toString();
   const drifted = curRun.replace('verifySandboxRuntime();', '/* drift */');
-  const noDelta = curRun.replace("rawExchanges.length === 0 ? '' : ", '');
+  const noDelta = curRun.replace('rawRowsText(rawExchanges),', SINK);
   const extraLine = curRun.replace('const role = options.role', 'const leaked = 1;\n  const role = options.role');
   assert(drifted !== curRun && noDelta !== curRun && extraLine !== curRun,
     'KR7 negative control inputs really differ from the current body');

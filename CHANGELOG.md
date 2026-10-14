@@ -85,6 +85,7 @@
 
 ### 修正
 
+- **只審不寫的 campaign 重審時，修正把檔案整個還原不再被拒**（BL-0154）：adoption 記帳的 `changed_files` 改記「上一輪已記值與本輪累積數取大者」，所以修正把某個檔案改回原樣、累積檔案數變少時，`return` 不會再被拒為 `BUDGET_RESET`。campaign 的單調檢查本身沒有放寬。Codex 鏡像同步。
 - **資格考用量紀錄分得出被截斷的考試**（BL-0168）：usage 區塊多了 `n_cases_expected` 和 `cases_complete`，只有題數固定的 implementer 會填，其他科一律是 null；`validateUsageBlock` 會交叉檢查缺 token 題數、總耗時、每小時答對數和價格欄位彼此是否一致。舊的 row 照樣通過。
 - **審查科評分程式重新受逐位元組比對保護**（BL-0162）：`engine-qualify-verdict-stability.test.sh` 的 KR7 比對基準改到 `6fdcf5ac`，`runQualification` 和審查科的 `verifyPinnedEvaluationAssets` 重新納入，唯一刻意的差異有列名宣告，negative control 走同一個比對函式。審查科和工頭的原始作答檔零筆時改寫空檔（原本寫一個換行），工頭的 `--raw-dir` 有了第一個測試。
 - **review-candidate 的 repair 交接不再蓋掉前一次的修復分支**（BL-0155）：同一個 ticket 第二次以後選 `repair`，交接的分支名稱改用 `repair/<ticket>-repair` 之後最小的未使用 `-rN`，前一次的修復分支不會被重用。列出既有分支改用 `%(refname:lstrip=2)`，所以 repo 裡有同名 tag 時也不會漏看；列不出來時以 `review_candidate_repair_seed_invalid` 擋下，不產生交接檔。任務說明改為授權「一個 repair campaign」，不再寫成只有一輪（contract 允許兩輪）。交接檔在結案之前寫入磁碟的順序，以及 preset repair 第一次執行時拒絕交接的情境，都已有測試保護。遠端已存在的同名分支還不會算進編號（BL-0155）。

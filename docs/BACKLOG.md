@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0173 -->
+<!-- next-id: BL-0174 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1686,18 +1686,18 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: Missed: script run from a heredoc, write-then-run in one call, P=foo; pgrep -f "$P", xargs/eval/watch, \pkill. Over-blocked: [fF]oo, ^x, x\.py, -d ,. Fix: test RegExp(pattern) on the call's own text.
 
-### review-candidate return is refused when a fix shrinks the cumulative file count
-- **Id**: BL-0154
+### A repair that fully reverts a file may be refused as a budget reset
+- **Id**: BL-0173
 - **Status**: open
-- **Since**: 2026-10-14
+- **Since**: 2026-10-15
 - **Origin**: self
-- **Problem**: 只審不寫的 campaign 選 return 重審時，如果修正把某個檔案整個改回原樣，累積的檔案數變少，這次重審就會被拒絕（BUDGET_RESET）。
-- **Impact**: 外部團隊修正後重審，在這個情境會卡住；目前只能改用「修改而不是還原」，或 end 後重新封存。
-- **Trigger**: 有人回報 return 被拒為 BUDGET_RESET，或下次改 review-candidate 的 adoption 記帳時
+- **Problem**: 一般 campaign 的修復回合，如果修正把某個檔案整個改回原樣，累積的檔案數會變少，可能和只審不寫那條路徑一樣被拒絕為預算重設。
+- **Impact**: 推測：修復回合在這個情境會卡住，只能改用修改而不是還原。尚未實際重現。
+- **Trigger**: 有人回報修復回合被拒為 BUDGET_RESET，或下次改修復回合的記帳時
 - **Effort**: S
-- **Source**: BL-0090 P4 doc review (reproduced: revB refused, revCtl converged), 2026-10-14
+- **Source**: BL-0154 review (code reading, not reproduced), 2026-10-15
 - **Pointer**: docs/backlog/review-candidate-follow-ups.md
-- **Context**: autopilot-engine.js ~:7716-7722 books adoption changed_files as the cumulative absolute count; implementation-campaign.js ~:911-915 requires usage to be monotonic. Book a monotonic value or exempt adoption.
+- **Context**: autopilot-engine.js ~:8783-8786 after_repair_mutation books receipt.changed_files.length (cumulative) while the campaign requires monotonic usage; BL-0154 fixed adoption only with a max() high-water mark.
 
 ### review-candidate repair branch numbering ignores remote branches
 - **Id**: BL-0155

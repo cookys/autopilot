@@ -1266,7 +1266,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: peer
 - **Reporter**: cuda chatgpt-tunnel
 - **Report**: 2026-10-03 peer
-- **Reply**: 2026-10-03 session 76c98aac:1628
+- **Reply**: 2026-10-03 session 76c98aac:1628; 2026-10-15 reporter: no campaign run since 10-08, in_rail_review: single at seal is enough, shelve until hit
 - **Problem**: 其他專案的 campaign（自動化連續任務）建立後被封存，之後想在同一個 campaign 內改成「每次修復單獨審查、最後再整體審查」，目前做不到，只能在建立時選。 (draft)
 - **Impact**: 遇到這種需求的專案只能重建 campaign；建立時就選好的情況不受影響。 (draft)
 - **Trigger**: next peer/operator campaign needing per-repair single review plus a terminal panel inside one already-sealed campaign

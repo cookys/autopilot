@@ -82,6 +82,7 @@
 
 ### 修正
 
+- **review-candidate 的 repair 交接不再蓋掉前一次的修復分支**（BL-0155）：同一個 ticket 第二次以後選 `repair`，交接的分支名稱改用 `repair/<ticket>-repair` 之後最小的未使用 `-rN`，前一次的修復分支不會被重用。列出既有分支改用 `%(refname:lstrip=2)`，所以 repo 裡有同名 tag 時也不會漏看；列不出來時以 `review_candidate_repair_seed_invalid` 擋下，不產生交接檔。任務說明改為授權「一個 repair campaign」，不再寫成只有一輪（contract 允許兩輪）。交接檔在結案之前寫入磁碟的順序，以及 preset repair 第一次執行時拒絕交接的情境，都已有測試保護。遠端已存在的同名分支還不會算進編號（BL-0155）。
 - **腦力題合格不再讓工頭席位看起來也合格**（BL-0165、BL-0164）：腦力題和工頭題登記的角色都是 owner，`engine-scorecard.js` 的 `findSeatBaseline`、`computeSeatProjection` 和嚴格路徑（`--require-evidence`）現在按席位種類分開計算（`methodology_kind: owner_brain_seat` 或 `brain-seat` scope），腦力題的合格列只算腦力題席位。`current` 仍列出腦力題列，各自在自己的種類內判定。官方預設 recipe 的排除理由改成「腦力題是可登記的成績列，只是目前沒有出貨」。新增 `hooks/tests/scorecard-brain-foreman-separation.test.sh`。
 - **合格的 Claude 席位現在會出現在審查員階梯**：`resolve-dispatch-topology.js` 把 `claude-native` 視為本機裝了 `claude` 就可用，審查員、顧問、討論階梯與計畫審查面板都看得到；審查員階梯把 anthropic 家族排在其他家族之後，面板同強度時也不讓 anthropic 當主席；實作者階梯明確不收 claude-native（dispatch-hetero 沒有這個 runner）。
 - **重新產生席位不會再把退役模型帶回來，名單也不再重複或標錯家族**（BL-0169）：`resolve-dispatch-topology.js` 現在會讀 `~/.autopilot/config.json`（或 `AUTOPILOT_CONFIG_FILE`）裡的 `topology.exclude_seats`，每次產生、`--check`、`--resolve-live` 都套用，並和 `--exclude-seats` 合併；只寫引擎名就是退掉該模型所有強度與 runner。設定檔壞掉會直接報錯結束，不會默默當成沒有。審查員、顧問、討論三種階梯與面板的候選，同一席因兩份題庫版本都合格而出現兩次，現在合併成一席並取最新的基準事件。`MiniMax-M3.1-Flash-Preview` 名字含 `flash` 被誤標成 google，現在先認廠商名。走 HTTP 的 `anthropic-compatible` 席位（例如 GLM-5.3 審查員）原本因為沒有本機執行檔一律被當成沒裝而被濾掉，現在只要有設定對應的 endpoint 就算可用。

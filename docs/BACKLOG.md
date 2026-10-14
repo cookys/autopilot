@@ -1712,18 +1712,18 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/review-candidate-follow-ups.md
 - **Context**: autopilot-engine.js ~:7716-7722 books adoption changed_files as the cumulative absolute count; implementation-campaign.js ~:911-915 requires usage to be monotonic. Book a monotonic value or exempt adoption.
 
-### review-candidate repair handoff leftovers
+### review-candidate repair branch numbering ignores remote branches
 - **Id**: BL-0155
 - **Status**: open
 - **Since**: 2026-10-14
 - **Origin**: self
-- **Problem**: 把停車的審查交給寫手修（repair）已上線，審查留下幾個加固項：同一個 ticket 第二次 repair 可能蓋掉前一次的分支、交接檔目錄沒有清理機制、「先寫檔再結案」的順序沒有測試保護。
-- **Impact**: 低。同 ticket 重做 repair 可能弄丟前一次的修復分支（未實測）；每次留兩個小交接檔；改了寫檔順序測試不會發現。
-- **Trigger**: 有人回報 repair 分支被蓋掉，或下次改 review-candidate 的 repair 交接時
+- **Problem**: 把停車的審查交給寫手修時，新修復分支的編號只看本機已有的分支；別的 clone 已經推上遠端、本機還沒有的同名分支不會被算進去。
+- **Impact**: 低。兩台機器對同一個 ticket 各自 repair 時，推送可能撞名，要改名或強推。目前沒有人這樣用。
+- **Trigger**: 有人回報 repair 分支推送撞名，或 review-candidate 開始跨機器共用同一個 repo
 - **Effort**: S
-- **Source**: BL-0090 P5 reviews, 2026-10-14
+- **Source**: BL-0155 re-review round 2, 2026-10-15
 - **Pointer**: docs/backlog/review-candidate-follow-ups.md
-- **Context**: Campaign digest in repair/<ticket>-repair; sweep review-candidate-repair/; control seed-before-close; drop seed if close fails; prompt says 1 round, contract allows 2; preset first-run seed refusal untested.
+- **Context**: listRepairBranches lists refs/heads/repair/ only; also count refs/remotes/*/repair/. Engine catch to blocked for review_candidate_repair_seed_invalid has unit coverage only, no end-to-end case.
 
 ### qualification provider: kimi CLI exams run without the no-tools agent file
 - **Id**: BL-0156

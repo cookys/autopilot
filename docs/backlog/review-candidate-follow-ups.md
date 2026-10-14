@@ -11,10 +11,11 @@ Source: the review-only external candidate plan (BL-0090), archived 2026-10-15 a
   cumulative absolute count while the campaign requires usage to be monotonic, so a fix that fully reverts a file is
   refused as `BUDGET_RESET`. Reproduced in the P4 doc review (revB refused, revCtl converged). Fix: book a monotonic
   value or exempt adoption from the monotonic check.
-- **BL-0155 — repair handoff leftovers.** Items from the P5 reviews: a second repair of the same ticket can reuse the
-  previous repair branch name; the seed files should survive a failed close; the write-seed-before-close order has no
-  test; the prompt says one round while the contract allows two. The `review-candidate-repair/<id>/` handoff
-  directory has no cleanup; it is the caller's deliverable when the review-only campaign closes, so deleting it there
-  would remove what the caller needs. Options were (a) an age-based sweep with a tmp-residue registry kind, (b) the
-  repair campaign deleting the seed directory it consumed, (c) leave it; (c) was chosen on the owner's behalf on
-  2026-10-15.
+- **BL-0155 — repair branch numbering ignores remote branches.** The P5 hardening merged 2026-10-15 (`-rN` suffix,
+  `%(refname:lstrip=2)` listing, fail-closed `review_candidate_repair_seed_invalid`, seed written before close, prompt
+  says "a repair campaign"). Left open: `listRepairBranches` counts `refs/heads/repair/` only, so a same-named branch
+  another clone already pushed is not seen; the engine path that turns a listing failure into `blocked` has unit
+  coverage only. Not a follow-up: the `review-candidate-repair/<id>/` handoff directory has no cleanup on purpose. It
+  is the caller's deliverable when the review-only campaign closes; options were (a) an age-based sweep with a
+  tmp-residue registry kind, (b) the repair campaign deleting the seed directory it consumed, (c) leave it, and (c)
+  was chosen on the owner's behalf on 2026-10-15.

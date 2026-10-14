@@ -37,7 +37,7 @@
     {
       "event_ids": [],
       "role": "owner",
-      "reason": "Brain-seat sittings are NOT scorecard rows. They live in the capability store as atomic owner-brain-seat-v1 records with their own semantics (forced brain-seat scope, no expiry, 3-strike revocation via engine-capability-state.js brain-status). Packaging them needs a second record shape; deferred to a BACKLOG row rather than forced into this artifact."
+      "reason": "No brain-seat (owner_brain_seat) row is shipped yet. Brain sittings ARE scorecard rows (since v2.36: recordable via engine-scorecard record, role owner, told apart from foreman rows by methodology_kind owner_brain_seat and the forced brain-seat scope), and the atomic owner-brain-seat-v1 record in the capability store remains their evidence source (no expiry, 3-strike revocation via engine-capability-state.js brain-status). Add an entry here once a passing brain row is worth shipping as a default."
     }
   ],
   "entries": [

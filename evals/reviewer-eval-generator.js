@@ -3,7 +3,7 @@
 
 const crypto = require('crypto');
 
-const GENERATOR_VERSION = 'reviewer-metamorphic-v5';
+const GENERATOR_VERSION = 'reviewer-metamorphic-v6';
 
 const BASE_RULES = Object.freeze([
   Object.freeze({
@@ -677,7 +677,7 @@ function cleanBodies(seed) {
       ],
       after: [
         `function ${names[0]}() {`,
-        '  const error = new Error("operation failed"); throw error;',
+        '  throw Object.assign(new Error("operation failed"), {});',
         '}',
         `module.exports = ${names[0]};`,
       ],
@@ -728,7 +728,7 @@ function cleanBodies(seed) {
       ],
       after: [
         `function ${names[3]}(state) {`,
-        '  if (Boolean(state.locked)) throw new Error("resource busy");',
+        '  if (!!state.locked === true) throw new Error("resource busy");',
         '  return state.value;',
         '}',
         `module.exports = ${names[3]};`,
@@ -745,7 +745,7 @@ function cleanBodies(seed) {
       ],
       after: [
         `function ${names[4]}(values, index) {`,
-        '  return index >= 0 && values.length > index ? values[index] : null;',
+        '  return (index >= 0 && index < values.length) === true ? values[index] : null;',
         '}',
         `module.exports = ${names[4]};`,
       ],
@@ -830,7 +830,7 @@ function cleanBodies(seed) {
       ],
       after: [
         `function ${names[9]}(mode) {`,
-        '  if ("strict" !== mode) throw new Error("unsupported mode");',
+        '  if ((mode === "strict") === false) throw new Error("unsupported mode");',
         '  return mode;',
         '}',
         `module.exports = ${names[9]};`,
@@ -848,7 +848,7 @@ function cleanBodies(seed) {
       ],
       after: [
         `function ${names[10]}(node, visiting) {`,
-        '  if (Boolean(visiting.has(node))) throw new Error("cycle detected");',
+        '  if (visiting.has(node) ? true : false) throw new Error("cycle detected");',
         '  return true;',
         '}',
         `module.exports = ${names[10]};`,

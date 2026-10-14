@@ -122,7 +122,7 @@ const EXPECTED_CORPUS_MANIFEST_HASH =
 const EXPECTED_ARTIFACT_ORACLE_HASH =
   '0f0a5519a0eade5de937aff0f6ed78e79b21cfcdc9fcf9476f3897b876ee86f5';
 const EXPECTED_GENERATOR_HASH =
-  '728df8c3771c0d947bda24b3b894443a06f3045508e104ca0e8c43877ea33a99';
+  'ae3e4f1a90e82b20008fa7e2fc5bb9516394e123b4b1d9d947b32cf199663af9';
 const BRAIN_GENERATOR_PATH = path.join(REPO_ROOT, 'evals', 'brain-eval-generator.js');
 const BRAIN_STATE_PATH = path.join(REPO_ROOT, 'evals', 'brain-campaign-state.js');
 const BRAIN_GRADER_PATH = path.join(REPO_ROOT, 'evals', 'brain-eval-grader.js');

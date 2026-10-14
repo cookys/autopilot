@@ -149,5 +149,21 @@ assert_eq "$__RUN_STDOUT" "" "(c) a non-strict dispatch without an l5/l6 marker 
 GOOD3="$(mkpayload 'Run node scripts/session-mode.js set --level l3 --size S then dispatch-author.sh')"
 run_hook dispatch-model-guard.js "$GOOD3"
 assert_eq "$__RUN_STDOUT" "" "(c) an l3 marker is not flagged"
+# BL-0141: order matters. A marker set AFTER the non-strict dispatch is the advised fix and must not warn.
+ORDER_OK="$(mkpayload 'Run bash scripts/dispatch-author.sh --runner codex --prompt-file p.txt first, then node scripts/session-mode.js set --level l5 --size S --repo-root .')"
+run_hook dispatch-model-guard.js "$ORDER_OK"
+assert_eq "$__RUN_STDOUT" "" "(c) BL-0141 correct order (rail before marker) is not flagged"
+ORDER_BAD="$(mkpayload 'Run node scripts/session-mode.js set --level l5 --size S --repo-root . then bash scripts/dispatch-author.sh --runner codex --prompt-file p.txt')"
+run_hook dispatch-model-guard.js "$ORDER_BAD"
+assert_contains "$__RUN_STDOUT" '"additionalContext"' "(c) BL-0141 wrong order (marker before rail) still flagged"
+MARK_ONLY="$(mkpayload 'Run node scripts/session-mode.js set --level l5 --size S --repo-root . and then a strict dispatch-hetero.sh --strict-contract')"
+run_hook dispatch-model-guard.js "$MARK_ONLY"
+assert_eq "$__RUN_STDOUT" "" "(c) BL-0141 marker with no non-strict rail is not flagged"
+ML_BAD="$(mkpayload 'Step 1: node scripts/session-mode.js set --level l6 --size M\nStep 2: bash scripts/dispatch-plan-review.js --panel x')"
+run_hook dispatch-model-guard.js "$ML_BAD"
+assert_contains "$__RUN_STDOUT" '"additionalContext"' "(c) BL-0141 multi-line: marker line before rail line is flagged"
+ML_OK="$(mkpayload 'Step 1: bash scripts/dispatch-plan-review.js --panel x\nStep 2: node scripts/session-mode.js set --level l6 --size M')"
+run_hook dispatch-model-guard.js "$ML_OK"
+assert_eq "$__RUN_STDOUT" "" "(c) BL-0141 multi-line: rail line before marker line is not flagged"
 
 finalize_test

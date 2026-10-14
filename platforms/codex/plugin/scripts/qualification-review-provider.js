@@ -1016,30 +1016,8 @@ function resolveCliBin(kind) {
   return 'kimi';
 }
 
-// grok effort clamp — DELEGATES to scripts/lib/grok-effort.sh's grok_effort_clamp (the canonical owner).
-// This used to restate the table in JS ("re-probe both copies together"), and both copies carried the
-// same 2026-09-23 defect: the enum is per-MODEL (grok-4.5 rejects xhigh; 4.6/4.7 accept it) but the table
-// was global, so an explicit `--model grok-4.5` run died rc=1 on the default xhigh. Calling the bash lib
-// gives this rail the same per-model live-enum probe with one implementation. If bash/the lib is
-// unavailable, fall back to the static table (the old behavior), never to an unvalidated value.
-function grokEffortClamp(effort, model, bin) {
-  const staticClamp = () => {
-    switch (effort) {
-      case 'low': case 'medium': case 'high': case 'xhigh': return effort;
-      default: return 'xhigh'; // 'max' and anything unrecognized clamp to the ceiling
-    }
-  };
-  try {
-    const { execFileSync } = require('child_process');
-    const path = require('path');
-    const lib = path.join(__dirname, 'lib', 'grok-effort.sh');
-    const out = execFileSync('bash', ['-c', '. "$1"; grok_effort_clamp "$2" "$3" "$4"', '_',
-      lib, String(effort || ''), String(model || ''), String(bin || 'grok')],
-      { encoding: 'utf8', timeout: 45000, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-    if (['low', 'medium', 'high', 'xhigh'].includes(out)) return out;
-  } catch { /* fall through to the static table */ }
-  return staticClamp();
-}
+// grok effort clamp: shared with the exam row's effort-label check; see lib/grok-effort.js.
+const { grokEffortClamp } = require('./lib/grok-effort');
 
 // Tool-less agent + post-run audit: single owner shared with dispatch-review.sh.
 const agyContainment = require('./lib/agy-containment');

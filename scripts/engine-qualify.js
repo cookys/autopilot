@@ -5501,6 +5501,13 @@ function createSessionRoleCapabilityVerifier(runResult, expectedRequest) {
   });
 }
 
+// The row printed by --emit-row. A null row (instrument_error path) stays null: attaching
+// effort_check would fabricate a row made of nothing else. Unverifiable checks add no field.
+function buildEmittedRow(row, effortCheck) {
+  if (row === null || row === undefined || effortCheck.status === 'unverifiable') return row;
+  return { ...row, effort_check: effortCheck };
+}
+
 function main() {
   const options = parseArgs(process.argv.slice(2));
   let runResult;
@@ -5527,9 +5534,7 @@ function main() {
     process.stderr.write(`engine-qualify: WARNING effort label '${effortCheck.label}' does not match the effort sent (${effortCheck.sent}): ${effortCheck.reason}; an emitted row is marked effort_check=mismatch\n`);
   }
   if (options.emitRow) {
-    const emitted = effortCheck.status === 'unverifiable'
-      ? runResult.row : { ...runResult.row, effort_check: effortCheck };
-    process.stdout.write(`${JSON.stringify(emitted)}\n`);
+    process.stdout.write(`${JSON.stringify(buildEmittedRow(runResult.row, effortCheck))}\n`);
     process.stderr.write(`${JSON.stringify(verdict)}\n`);
   } else {
     process.stdout.write(`${JSON.stringify(verdict)}\n`);
@@ -5932,6 +5937,7 @@ function classifyQualificationOutcome(input) {
 if (require.main === module) main();
 
 module.exports = {
+  buildEmittedRow,
   buildConsultCaseEnvelope,
   buildDiscussCaseEnvelope,
   classifyQualificationOutcome,

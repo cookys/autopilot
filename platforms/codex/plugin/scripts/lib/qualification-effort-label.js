@@ -10,6 +10,8 @@
 // 2026-10-14). This module is pure: advisory by design (the caller warns and marks the row; it
 // never blocks the exam), and silent about custom panel commands it knows nothing about.
 
+const { grokEffortClamp } = require('./grok-effort');
+
 const EFFORT_CHECK_STATUSES = Object.freeze(['match', 'mismatch', 'unverifiable']);
 // CLI kinds whose provider branch never sends an effort flag (effort lives in the model name /
 // a boolean config); the scorecard vocabulary labels that dimension `none`.
@@ -39,6 +41,10 @@ function checkEffortLabel({ label, listedEnvNames, env }) {
       reason = `cli kind ${kind} takes no effort flag`;
     } else {
       sent = normalizeSent(visible('QRP_CLI_EFFORT'));
+      // The provider clamps grok's effort before sending, so compare the clamped value.
+      if (kind === 'grok' && sent !== 'default') {
+        sent = grokEffortClamp(sent, visible('QRP_MODEL') || '', visible('QRP_CLI_BIN') || '');
+      }
     }
   } else {
     sent = normalizeSent(visible('QRP_HTTP_EFFORT'));

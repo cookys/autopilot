@@ -270,8 +270,11 @@ Every `engine-qualify.js` run records, per case (per trial for the brain seat), 
 sealed grader's own verdict, never recomputed. A count the transport did not report is `null`
 (not measured), never 0, and nothing is estimated. With `--raw-dir` the cases land in
 `<raw-dir>/<role>-usage.jsonl`; the row carries a summary `usage` block
-(`n_cases`, `n_solved`, `total_wall_s`, `solved_per_hour`, `med_wall_s`, `usage_complete`,
-`tok_per_solved`, `usd_per_solved`). `usage_complete` is true only when every case has tokens;
+(`n_cases`, `n_cases_expected`, `cases_complete`, `n_solved`, `total_wall_s`, `solved_per_hour`,
+`med_wall_s`, `usage_complete`, `tok_per_solved`, `usd_per_solved`). `n_cases` counts only cases that ran;
+`n_cases_expected` is the planned count (fixed-plan exams, i.e. the implementer; null for adaptive-stop
+roles) and `cases_complete` is `n_cases === n_cases_expected` (null when unknown), so a time-capped or
+aborted exam is distinguishable from a complete one. `usage_complete` is true only when every case has tokens;
 otherwise `tok_per_solved` and `usd_per_solved` are null. Cost stays `source: unknown` unless
 `--price-usd-per-mtok-in`, `--price-usd-per-mtok-out`, `--price-as-of` (YYYY-MM-DD) and
 `--price-source manual|measured` (optional `--price-ref`) are all given; then `usd_per_solved` is

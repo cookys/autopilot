@@ -3561,19 +3561,30 @@ fs.rmSync(shortTmpBase, { recursive: true, force: true });
     }
     return text;
   };
+  // The one comparison function used by the guard AND by its negative controls.
+  const bodyMatchesBase = (name, currentText) => (
+    expectedBody(name, baseEq[name].toString()) === currentText
+  );
   for (const name of fns) {
-    const a = expectedBody(name, baseEq[name].toString());
-    const b = curEq[name].toString();
-    assert(a === b, name + ' Function.prototype.toString byte-identical vs base (plus declared deltas); leaked consult/discuss change');
+    assert(bodyMatchesBase(name, curEq[name].toString()),
+      name + ' Function.prototype.toString byte-identical vs base (plus declared deltas); leaked consult/discuss change');
   }
-  // Negative control: the comparison must be able to fail. A body with a one-token drift in the
-  // reviewer pin call and one with the declared delta removed are both rejected.
-  const drifted = curEq.runQualification.toString().replace('verifySandboxRuntime();', '/* drift */');
-  assert(drifted !== expectedBody('runQualification', baseEq.runQualification.toString()),
-    'KR7 negative control: a drifted runQualification body is NOT accepted');
-  const noDelta = curEq.runQualification.toString().replace("rawExchanges.length === 0 ? '' : ", '');
-  assert(noDelta !== expectedBody('runQualification', baseEq.runQualification.toString()),
-    'KR7 negative control: dropping the declared delta is NOT accepted');
+  // Negative controls go through bodyMatchesBase itself and must come back false: a body with a
+  // one-token drift, one with the declared delta removed, and one with an unrelated line added.
+  const curRun = curEq.runQualification.toString();
+  const drifted = curRun.replace('verifySandboxRuntime();', '/* drift */');
+  const noDelta = curRun.replace("rawExchanges.length === 0 ? '' : ", '');
+  const extraLine = curRun.replace('const role = options.role', 'const leaked = 1;\n  const role = options.role');
+  assert(drifted !== curRun && noDelta !== curRun && extraLine !== curRun,
+    'KR7 negative control inputs really differ from the current body');
+  assert(bodyMatchesBase('runQualification', curRun) === true,
+    'KR7 control: the unmodified current body passes the same function');
+  assert(bodyMatchesBase('runQualification', drifted) === false,
+    'KR7 negative control: a drifted runQualification body is rejected by the guard comparison');
+  assert(bodyMatchesBase('runQualification', noDelta) === false,
+    'KR7 negative control: dropping the declared delta is rejected by the guard comparison');
+  assert(bodyMatchesBase('runQualification', extraLine) === false,
+    'KR7 negative control: an added statement is rejected by the guard comparison');
 
   cleanup();
   // Confirm the temp file is gone and not staged residue.

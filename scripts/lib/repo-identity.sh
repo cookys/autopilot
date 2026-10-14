@@ -119,11 +119,18 @@ child_marker_hook_setup() {
   CHILD_MARKER_SETTINGS=""
   CHILD_MARKER_DIR="${AUTOPILOT_SESSION_MODE_DIR:-${HOME:-}/.autopilot/session-mode}"
   [ -n "${CHILD_SESSION_ID:-}" ] || return 0
-  local sm
+  local sm nodebin
   sm="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd)/session-mode.js"
   [ -r "$sm" ] || return 0
-  case "$sm" in *\'*|*\"*|*\\*) return 0 ;; esac
-  CHILD_MARKER_SETTINGS="{\"hooks\":{\"SessionStart\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"node '$sm' ensure-child\"}]}]}}"
+  case "$sm" in *\'*|*\"*|*\\*)
+    echo "child_marker_hook_setup: session-mode.js path contains a quote or backslash; child marker hook not installed" >&2
+    return 0 ;;
+  esac
+  # Absolute node: a cc-shim child runs under a scratch HOME, where a $HOME-based shim (asdf, nvm) would not resolve.
+  nodebin="$(command -v node 2>/dev/null || true)"
+  case "$nodebin" in /*) ;; *) nodebin="node" ;; esac
+  case "$nodebin" in *\'*|*\"*|*\\*) nodebin="node" ;; esac
+  CHILD_MARKER_SETTINGS="{\"hooks\":{\"SessionStart\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"'$nodebin' '$sm' ensure-child\"}]}]}}"
   return 0
 }
 

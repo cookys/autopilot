@@ -1550,7 +1550,7 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
   # skips that one line by exact string match; every other leading line still hits
   # the first-non-blank / vocabulary / prompt-echo guards.
   CCSHIM_CWD="$(mktemp -d -t dispatch-review-ccshimcwd-XXXXXX)"
-  child_marker_hook_setup 2>/dev/null || { CHILD_MARKER_SETTINGS=""; CHILD_MARKER_DIR="${AUTOPILOT_SESSION_MODE_DIR:-}"; }
+  child_marker_hook_setup || { CHILD_MARKER_SETTINGS=""; CHILD_MARKER_DIR="${AUTOPILOT_SESSION_MODE_DIR:-}"; }
   timeout "$TIMEOUT" env -u ANTHROPIC_API_KEY HOME="$CCSHIM_CWD" \
       CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT=1 ${CLAUDE_CODE_SESSION_ID:+"AUTOPILOT_PARENT_SESSION_ID=$CLAUDE_CODE_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" \
       bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "" ${6:+--effort "$6"} ${7:+--settings "$7"} < "$4"' \
@@ -1579,7 +1579,7 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
   # (native OAuth-session / subscription credentials commonly live under the real HOME; unlike
   # cc-shim's explicit bearer token, there is no HOME-independent credential to pass instead).
   CNATIVE_CWD="$(mktemp -d -t dispatch-review-cnativecwd-XXXXXX)"
-  child_marker_hook_setup 2>/dev/null || { CHILD_MARKER_SETTINGS=""; CHILD_MARKER_DIR="${AUTOPILOT_SESSION_MODE_DIR:-}"; }
+  child_marker_hook_setup || { CHILD_MARKER_SETTINGS=""; CHILD_MARKER_DIR="${AUTOPILOT_SESSION_MODE_DIR:-}"; }
   timeout "$TIMEOUT" env ${CLAUDE_CODE_SESSION_ID:+"AUTOPILOT_PARENT_SESSION_ID=$CLAUDE_CODE_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "" ${6:+--effort "$6"} ${7:+--settings "$7"} < "$4"' \
       _ "$CNATIVE_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "${CHILD_MARKER_SETTINGS:-}" > "$RAW_LOG" 2>&1
   CNATIVE_RC=$?

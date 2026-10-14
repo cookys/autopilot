@@ -112,6 +112,25 @@ for name in author-native author-ccshim review-native review-ccshim; do
   [ ! -e "$HOME/.autopilot/session-mode/$csid.json" ] && eq ok ok "$name: nothing written under the real HOME" || fail "$name: marker leaked into the real HOME"
 done
 
+# The rail's own AUTOPILOT_SESSION_MODE_DIR export: the launcher sets NO marker-dir variable, only a scratch
+# HOME holding .autopilot/session-mode. cc-shim swaps HOME for a scratch dir, so without the rail's export the
+# child's hook would look under the (deleted) scratch HOME and the marker would be lost.
+for name in author-ccshim review-ccshim; do
+  FH="$TEST_TMP/fakehome-$name"; mkdir -p "$FH/.autopilot/session-mode"; RUNS="$TEST_TMP/runs-fh-$name"; LOG="$TEST_TMP/log-fh-$name"
+  mkdir -p "$RUNS"; : > "$LOG"
+  cmd="${CMDS[$name]//@BIN@/$BINDIR/claude}"
+  # shellcheck disable=SC2086
+  ( cd "$SBX" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT -u AUTOPILOT_SESSION_MODE_DIR HOME="$FH" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" STUB_LOG="$LOG" \
+      AUTOPILOT_RUNS_WATCH_AUTOSTART=0 ANTHROPIC_BASE_URL=http://127.0.0.1:9 ANTHROPIC_AUTH_TOKEN=test PATH="$BINDIR:$PATH" CLAUDE_CODE_SESSION_ID="$PARENT" \
+      $cmd >/dev/null 2>&1 ) || true
+  mf="$(one_manifest "$RUNS")"; csid="$(mf_get "$mf" child_session_id)"
+  if [ -f "$FH/.autopilot/session-mode/$csid.json" ]; then
+    eq "$PARENT" "$(mf_get "$FH/.autopilot/session-mode/$csid.json" parent_session_id)" "$name (no marker-dir env at launch): child marker lands in the launcher's <HOME>/.autopilot/session-mode with parent P"
+  else
+    fail "$name (no marker-dir env at launch): no $csid.json under the launcher's HOME marker dir; hook output: $(cat "$LOG.hook" 2>/dev/null)"
+  fi
+done
+
 # Negative control: with the hook flag removed there is no child marker (and P.json is untouched).
 for name in author-native review-ccshim; do
   run_shape "$name" "$BINDIR/claude-nosettings" "nc-$name"

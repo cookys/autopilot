@@ -11137,6 +11137,9 @@ class AutopilotEngine {
 
     for (let round = 1; round <= maxRounds; round += 1) {
       const implementationBudgetAt = this.now();
+      // Kept on the first-pass `>=` (no `repair` option): AWAITING_CONVERGENCE_ADJUDICATION is not in
+      // REPAIR_RESUME_PHASES because no evidence yet shows its resume can authorize another repair round.
+      // Change when it does: add it to REPAIR_RESUME_PHASES and pass `{ repair: kind !== 'initial' }` here.
       const implementationBudget = campaignMutationBudgetStatus(
         campaignControl,
         implementationBudgetAt,

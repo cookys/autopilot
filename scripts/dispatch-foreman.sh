@@ -359,6 +359,18 @@ if [ "${ENV_PASSTHROUGH[*]+set}" = set ]; then
   done
 fi
 FOREMAN_ENV+=("AUTOPILOT_DISPATCH_DEPTH=1" "AUTOPILOT_PARENT_RUN_ID=$RUN_ID")
+# dispatch-tree 3b rule 3: the foreman is a child runner; hand it this rail's own write target as the parent id
+# (the allowlist drops CLAUDE_CODE_SESSION_ID, so without this its nested rails would see no parent).
+if [ -r "$(dirname "${BASH_SOURCE[0]:-$0}")/lib/repo-identity.sh" ]; then
+  # shellcheck source=/dev/null
+  . "$(dirname "${BASH_SOURCE[0]:-$0}")/lib/repo-identity.sh"
+  child_session_env_setup "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)" 2>/dev/null || true
+  if [ -n "${CHILD_SESSION_PARENT:-}" ]; then
+    _fe=()
+    for _e in ${FOREMAN_ENV[@]+"${FOREMAN_ENV[@]}"}; do case "$_e" in AUTOPILOT_PARENT_SESSION_ID=*) ;; *) _fe+=("$_e") ;; esac; done
+    FOREMAN_ENV=("${_fe[@]}" "AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT")
+  fi
+fi
 # 308 BACKLOG #46 gap 1 + gap 2: every hand this foreman spawns (a nested dispatch-hetero.sh,
 # which reads this env var via main_checkout_seed_sibling_env_defaults) inherits the FULL
 # exclude-prefixes array — this run's own hands namespace AND every --sibling-ref-prefix the

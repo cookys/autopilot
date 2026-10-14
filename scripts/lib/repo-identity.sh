@@ -86,7 +86,7 @@ _repo_identity_json_str() {
 # Live-pane plan section 7.1 identity hand-off 2: session -> rail no longer depends on an
 # unexpired marker. AUTOPILOT_SESSION_ID is deliberately not consulted: rails scrub it for children.
 manifest_session_id_json() {
-  local sid="${CLAUDE_CODE_SESSION_ID:-}"
+  local sid="${_RAIL_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-}}"   # _RAIL_SESSION_ID: kept by child_session_pin/apply_env (never exported)
   if [ -n "$sid" ]; then
     printf '"%s"' "$(_repo_identity_json_str "$sid")"
   else
@@ -110,12 +110,60 @@ child_session_mint() {
   return 0
 }
 
+# child_session_env_setup -- plan dispatch-tree step 3b (section 6 rule 3). A rail hands EVERY child runner its own
+# marker write target as AUTOPILOT_PARENT_SESSION_ID (the id `session-mode.js write-target --rail` resolves: env
+# chain or cwd included, or the inherited parent when this rail is itself below one) and scrubs the ids the child
+# could otherwise write under. Sets CHILD_SESSION_UNSET (array of `-u NAME`; must precede any NAME=VALUE in an `env`
+# argv) and CHILD_SESSION_PARENT (the id, empty when nothing resolved; pass as AUTOPILOT_PARENT_SESSION_ID=<id>).
+# Optional $1: the scripts/ dir (a function re-declared in a detached child has no useful BASH_SOURCE).
+# CLAUDE_CODE_SESSION_ID goes only when it differs from the parent id: a runner below it must see it as inherited.
+child_session_env_setup() {
+  if [ "${_CHILD_SESSION_PINNED:-0}" = "1" ]; then   # resolved by child_session_pin before the rail scrubbed its own env
+    CHILD_SESSION_UNSET=("${_CHILD_SESSION_PIN_UNSET[@]}"); CHILD_SESSION_PARENT="$_CHILD_SESSION_PIN_PARENT"; return 0
+  fi
+  CHILD_SESSION_UNSET=(-u AUTOPILOT_SESSION_ID -u CLAUDE_SESSION_ID)
+  CHILD_SESSION_PARENT=""
+  local sm
+  if [ -n "${1:-}" ]; then sm="$1/session-mode.js"; else sm="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd)/session-mode.js"; fi
+  if [ -r "$sm" ]; then
+    CHILD_SESSION_PARENT="$(node "$sm" write-target --rail 2>/dev/null | head -1 || true)"
+  fi
+  if [ -n "$CHILD_SESSION_PARENT" ] && [ -n "${CLAUDE_CODE_SESSION_ID:-}" ] && [ "${CLAUDE_CODE_SESSION_ID}" != "$CHILD_SESSION_PARENT" ]; then
+    CHILD_SESSION_UNSET+=(-u CLAUDE_CODE_SESSION_ID)
+  fi
+  return 0
+}
+
+# child_session_pin [scripts-dir] -- a rail that scrubs its own AUTOPILOT_SESSION_ID at startup (author, review,
+# explore) calls this FIRST, so the parent id handed to every child is resolved from the launcher's env, not from
+# what is left after the scrub; every later child_session_env_setup then returns the pinned values.
+child_session_pin() {
+  _CHILD_SESSION_PINNED=0
+  _RAIL_SESSION_ID="${_RAIL_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-}}"   # this rail's own manifest identity; the child's copy may be scrubbed
+  child_session_env_setup "$@"
+  _CHILD_SESSION_PIN_UNSET=("${CHILD_SESSION_UNSET[@]}"); _CHILD_SESSION_PIN_PARENT="$CHILD_SESSION_PARENT"; _CHILD_SESSION_PINNED=1
+  return 0
+}
+
+# child_session_apply_env [scripts-dir] -- for a runner the rail starts in-process (no `env` wrapper possible around a
+# function or a bare `timeout ... cmd`): export P and scrub the same ids in THIS shell. Call it only after the rail's
+# own session lookups are done and before the runner chain; the claude branches' explicit `env` agrees with it.
+child_session_apply_env() {
+  _RAIL_SESSION_ID="${_RAIL_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-}}"   # keep the launcher's id for this rail's manifest before it is scrubbed
+  child_session_env_setup "$@"
+  local _a
+  for _a in "${CHILD_SESSION_UNSET[@]}"; do [ "$_a" = "-u" ] || unset "$_a"; done
+  [ -n "$CHILD_SESSION_PARENT" ] && export AUTOPILOT_PARENT_SESSION_ID="$CHILD_SESSION_PARENT"
+  return 0
+}
+
 # child_marker_hook_setup -- plan dispatch-tree step 3a (D2). The claude child's SessionStart marker is
 # written by a hook the rail hands it with `--settings` (the user-scope plugin does not load in a
 # project-only child). Sets CHILD_MARKER_SETTINGS (inline settings JSON; empty when no child id was minted
 # or the script path is unsafe to quote) and CHILD_MARKER_DIR (the LAUNCHER's marker dir, resolved before a
 # cc-shim scratch HOME hides ~/.autopilot; the rail exports it to the child as AUTOPILOT_SESSION_MODE_DIR).
 child_marker_hook_setup() {
+  child_session_env_setup   # 3b: the claude child's parent id + scrubbed ids (callers expand CHILD_SESSION_UNSET / CHILD_SESSION_PARENT)
   CHILD_MARKER_SETTINGS=""
   CHILD_MARKER_DIR="${AUTOPILOT_SESSION_MODE_DIR:-${HOME:-}/.autopilot/session-mode}"
   [ -n "${CHILD_SESSION_ID:-}" ] || return 0

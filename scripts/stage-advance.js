@@ -321,10 +321,10 @@ const RESUME_HINT = 'fall back to the re-walk in skills/dev-flow/references/cont
 const RESUME_COPY = ['size', 'bug', 'urgent', 'stage', 'unit', 'base_ref', 'high_risk', 'review_families'];
 
 // -> { code, err } | { patch }. Pure over the two marker snapshots.
-function decideResume(marker, old, oldId) {
+function decideResume(marker, old, oldId, currentId = sessionMode.getSessionId()) {
   const refuse = (why) => ({ code: 6, err: `stage-advance: --resume-from ${oldId} refused: ${why}; ${RESUME_HINT}` });
   if (!old) return refuse('no unexpired readable marker for that session id');
-  if (sessionMode.normalizeSessionId(oldId) === sessionMode.getSessionId()) return refuse('that is the current session id');
+  if (sessionMode.normalizeSessionId(oldId) === currentId) return refuse('that is the current session id');
   if (typeof marker.stage === 'string') return refuse(`this session already has stage ${marker.stage}`);
   if (typeof old.stage !== 'string') return refuse('the old marker has no stage yet');
   if (!sessionMode.SIZES.includes(old.size)) return refuse('the old marker has no size');
@@ -343,16 +343,16 @@ function decideResume(marker, old, oldId) {
   return { patch };
 }
 
-function runResume(opts, file) {
+function runResume(opts, file, sid) {
   const oldId = opts['resume-from'];
   const timeoutMs = Number(process.env.AUTOPILOT_SESSION_MODE_LOCK_TIMEOUT_MS) > 0
     ? Number(process.env.AUTOPILOT_SESSION_MODE_LOCK_TIMEOUT_MS) : sessionMode.PHASE_LOCK_TIMEOUT_MS;
   let result = null;
   try {
     withWriteLock({ storeDir: sessionMode.markerDir(), lockFile: `${file}.lock`, name: 'session-mode marker', timeoutMs }, () => {
-      const current = sessionMode.readSessionRecord();
+      const current = sessionMode.readSessionRecord(sid);
       if (!current) { result = { code: 2, err: 'stage-advance: no unexpired session marker for this session (run `session-mode.js set --size <S>` first)', out: null }; return; }
-      const d = decideResume(current, sessionMode.readSessionRecord(oldId), oldId);
+      const d = decideResume(current, sessionMode.readSessionRecord(oldId), oldId, sid);
       if (d.err) { result = { code: d.code, err: d.err, out: null }; return; }
       const next = { ...current, ...d.patch };
       sessionMode.writeMarkerFile(file, next);
@@ -376,13 +376,17 @@ function run(argv) {
   }
   if (opts['session-id']) process.env.AUTOPILOT_SESSION_ID = opts['session-id'];
   const repoRootArg = opts['repo-root'] ? path.resolve(opts['repo-root']) : null;
-  const file = sessionMode.markerPath();
-  if (opts['resume-from'] !== undefined) return runResume(opts, file);
+  // dispatch-tree 3b: the marker this process writes comes from the one resolver (--session-id is the explicit id).
+  const target = sessionMode.resolveMarkerWriteTarget({ explicitId: opts['session-id'] });
+  if (target.refused) return { code: 3, err: `stage-advance: marker write refused (source ${target.source}): ${target.reason}; no file touched`, out: null };
+  const sid = target.id;
+  const file = path.join(sessionMode.markerDir(), `${sid}.json`);
+  if (opts['resume-from'] !== undefined) return runResume(opts, file, sid);
 
   const timeoutMs = Number(process.env.AUTOPILOT_SESSION_MODE_LOCK_TIMEOUT_MS) > 0
     ? Number(process.env.AUTOPILOT_SESSION_MODE_LOCK_TIMEOUT_MS) : sessionMode.PHASE_LOCK_TIMEOUT_MS;
   for (let attempt = 0; attempt < 3; attempt++) {
-    const marker = sessionMode.readSessionRecord();
+    const marker = sessionMode.readSessionRecord(sid);
     if (!marker) return { code: 2, err: 'stage-advance: no unexpired session marker for this session (run `session-mode.js set --size <S>` first)', out: null };
     if (!sessionMode.SIZES.includes(marker.size)) return { code: 5, err: 'stage-advance: the marker has no size (run `session-mode.js set --size <S>`)', out: null };
     let d;
@@ -394,7 +398,7 @@ function run(argv) {
     let result = null;
     try {
       withWriteLock({ storeDir: sessionMode.markerDir(), lockFile: `${file}.lock`, name: 'session-mode marker', timeoutMs }, () => {
-        const current = sessionMode.readSessionRecord();
+        const current = sessionMode.readSessionRecord(sid);
         if (!current) { result = { code: 2, err: 'stage-advance: marker disappeared while waiting for the lock; nothing written', out: null }; return; }
         if (fingerprint(current) !== fingerprint(marker)) { result = { retry: true }; return; }
         const next = { ...current, ...d.patch };

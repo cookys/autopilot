@@ -3648,6 +3648,9 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
   # CHILD session, and session-mode.js getSessionId() prefers that variable, so a leaked parent id
   # would let the child write its marker over the parent's. (This rail itself still reads it for
   # the job-root lookup earlier on; only the spawn is scrubbed.)
+  # 3b rule 3: the child env (parent id = this rail's own write target, scrubbed ids) is resolved at spawn time,
+  # so the detached child (a re-exec of this function) computes the same thing from its inherited env.
+  if declare -F child_session_env_setup >/dev/null 2>&1; then child_session_env_setup "$SELF_DIR"; else CHILD_SESSION_UNSET=(-u AUTOPILOT_SESSION_ID); CHILD_SESSION_PARENT=""; fi
   WORKER_TIMED_OUT=0
   WATCHDOG_PID=""
   WATCHDOG_TOKEN_FILE=""
@@ -3665,12 +3668,12 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
     # group so the watchdog never signals the dispatcher session.
     CONTAINMENT="setsid"
     if [ "${HETERO_TEST_NO_SETSID:-}" != "1" ] && command -v setsid >/dev/null 2>&1; then
-      setsid env -u AUTOPILOT_SESSION_ID "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 &
+      setsid env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 &
       rp=$!
       WORKER_SID="$rp"
     else
       set -m 2>/dev/null || true
-      env -u AUTOPILOT_SESSION_ID "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 </dev/null &
+      env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 </dev/null &
       rp=$!
       WORKER_SID="$(ps -o pgid= -p "$rp" 2>/dev/null | tr -d ' ' || true)"
       [ -z "$WORKER_SID" ] && WORKER_SID="$rp"
@@ -3684,7 +3687,7 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
     # Isolate the systemd-run job so its pgid can be a safe fallback if
     # systemctl --user kill fails (must not share the dispatcher group).
     set -m 2>/dev/null || true
-    systemd-run --user --scope --quiet --unit="$SCOPE_UNIT" -- env -u AUTOPILOT_SESSION_ID "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 </dev/null &
+    systemd-run --user --scope --quiet --unit="$SCOPE_UNIT" -- env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 </dev/null &
     rp=$!
     local selfpg="" pg=""
     selfpg="$(_self_pgid)" || selfpg=""
@@ -3696,7 +3699,7 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
     _wait_worker_with_watchdog "$rp"
   elif [ "$HAVE_SETSID" -eq 1 ]; then
     CONTAINMENT="setsid"
-    setsid --wait env -u AUTOPILOT_SESSION_ID "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 &
+    setsid --wait env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 &
     rp=$!
     WORKER_SID="$(_setsid_wait_worker_sid "$rp")"
     [ -z "$WORKER_SID" ] && WORKER_SID="$rp"
@@ -3704,12 +3707,12 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
   else
     CONTAINMENT="plain"
     if [ "${HETERO_TEST_NO_SETSID:-}" != "1" ] && command -v setsid >/dev/null 2>&1; then
-      setsid env -u AUTOPILOT_SESSION_ID "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 &
+      setsid env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 &
       rp=$!
       WORKER_SID="$rp"
     else
       set -m 2>/dev/null || true
-      env -u AUTOPILOT_SESSION_ID "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 </dev/null &
+      env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} "${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"}" "$@" >"$LOG" 2>&1 </dev/null &
       rp=$!
       WORKER_SID="$(ps -o pgid= -p "$rp" 2>/dev/null | tr -d ' ' || true)"
       [ -z "$WORKER_SID" ] && WORKER_SID="$rp"
@@ -3750,8 +3753,8 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
 "
   CCSHIM_PROMPT_FILE="$(mktemp -t dispatch-hetero-ccshim-prompt-XXXXXX)"
   printf '%s' "${CCSHIM_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$CCSHIM_PROMPT_FILE"
-  run_worker bash -c 'cd "$1" && exec env -u ANTHROPIC_API_KEY ${4:+AUTOPILOT_PARENT_SESSION_ID="$4"} claude -p ${5:+--session-id "$5"} --model "$2" \
-      --dangerously-skip-permissions ${6:+--effort "$6"} < "$3"' _ "$WT" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CLAUDE_CODE_SESSION_ID:-}" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG"
+  run_worker bash -c 'cd "$1" && exec env -u ANTHROPIC_API_KEY claude -p ${4:+--session-id "$4"} --model "$2" \
+      --dangerously-skip-permissions ${5:+--effort "$5"} < "$3"' _ "$WT" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG"
   rm -f "$CCSHIM_PROMPT_FILE"
 elif [ "$IS_GROK" -eq 1 ]; then
   # grok (xAI Grok Build CLI; models grok-4.5 (ex-grok-build) / grok-composer-2.5-fast). Unlike agy,
@@ -4965,7 +4968,7 @@ dispatch_detached_run() {
     # Preserve pi supervisor poll/stall bounds across setsid detach.
     declare -p PI_RPC_DIRECTIVE_POLL_SECS PI_RPC_STALL_PROBE_SECS PI_RPC_MAX_SECS PI_RPC_PROVIDER PI_MODELS_JSON 2>/dev/null || true
     declare -p STRIKE_DETECTOR_VERSION 2>/dev/null || true
-    declare -f repo_identity_of _repo_identity_json_str repo_identity_resolve_fields manifest_session_id_json manifest_child_session_json child_session_mint json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _watchdog_sleeppid_cmdline_has_tag _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_pgid_has_live _watchdog_worker_alive _watchdog_signal_worker _arm_worker_watchdog _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts passive_capture \
+    declare -f child_session_env_setup repo_identity_of _repo_identity_json_str repo_identity_resolve_fields manifest_session_id_json manifest_child_session_json child_session_mint json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _watchdog_sleeppid_cmdline_has_tag _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_pgid_has_live _watchdog_worker_alive _watchdog_signal_worker _arm_worker_watchdog _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts passive_capture \
       _is_engine_unavailable _hetero_runner_token seat_strike_capture classify_outcome heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks _fp_unverifiable main_checkout_fingerprint check_main_checkout_boundary run_hands_content_gate \
       _cont_terminal_on_exit _cont_finalize_or_die \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \

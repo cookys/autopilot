@@ -29,6 +29,9 @@ process.on('exit', rmAll);
 function run(cmd, { shell = 'bash', extra = {}, env = {} } = {}) {
   const home = mk('blg-home-');
   const live = mk('blg-live-');
+  // An ambient knob must not leak in: only the `env` argument may set it.
+  const baseEnv = { ...process.env };
+  delete baseEnv.AUTOPILOT_BASH_GUARD_PKILL_MODE;
   const r = spawnSync('node', [HOOK], {
     input: JSON.stringify({
       tool_name: 'Bash', session_id: 'blg', hook_event_name: 'PreToolUse', cwd: home,
@@ -36,7 +39,7 @@ function run(cmd, { shell = 'bash', extra = {}, env = {} } = {}) {
     }),
     encoding: 'utf8',
     env: {
-      ...process.env, HOME: home, AUTOPILOT_LIVE_DIR: live, AUTOPILOT_BASH_GUARD_SHELL: shell, ...env,
+      ...baseEnv, HOME: home, AUTOPILOT_LIVE_DIR: live, AUTOPILOT_BASH_GUARD_SHELL: shell, ...env,
     },
   });
   let out = null;

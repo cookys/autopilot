@@ -1,6 +1,6 @@
 # Plan — review-only entry: a host-admitted final panel over an externally produced candidate range
 
-> Status: **ruled, size L — Q1′ ruled 2026-10-14 (caller chooses at disposition, §10); P1 (merge 8a650a95), P3 (merge 0d6fcc2a) and P2 (merge of lane/review-candidate-p2b) shipped 2026-10-14; P4 and P5 open** · Owner: depth-0 · Source: BACKLOG BL-0090 (peer-reported, cuda/chatgpt-tunnel, fleet 2026-10-03; owner approved 2026-10-13) · Pointer: `docs/backlog/review-only-adoption-of-external-candidate.md` · Version: stays on the 3.0.0 line (no bump) · Code read at `459dd869`.
+> Status: **ruled, size L — Q1′ ruled 2026-10-14 (caller chooses at disposition, §10); P1 (merge 8a650a95), P3 (merge 0d6fcc2a), P2 (merge of lane/review-candidate-p2b) and P5 (merge of lane/review-candidate-p5) shipped 2026-10-14; P4 open** · Owner: depth-0 · Source: BACKLOG BL-0090 (peer-reported, cuda/chatgpt-tunnel, fleet 2026-10-03; owner approved 2026-10-13) · Pointer: `docs/backlog/review-only-adoption-of-external-candidate.md` · Version: stays on the 3.0.0 line (no bump) · Code read at `459dd869`.
 
 ## 1. Why
 
@@ -153,7 +153,7 @@ Before any spend, intake re-derives the range with read-only probes (D9): the br
 
 ### P5 — `repair` handoff (depends on P2)
 - Goal: a caller who disposes `repair` gets autopilot's writer without a writer on the adopted range.
-- Design: `repair` terminalizes the review-only campaign not-ready, which is honest because the range did not pass. It then emits a seeded `implement-review` contract. In that contract, base is the reviewed head, the task is the accepted findings, and paths and verify come from the adoption contract. The caller seals and runs it as a normal campaign. Our writer writes on top of the external head under the existing writer fence and repair lineage. D11 and D12 are untouched, and RO1 holds for the review-only campaign.
+- Design: `repair` terminalizes the review-only campaign not-ready, which is honest because the range did not pass. It then emits a seeded `implement-review` contract. In that contract, base is the reviewed head, the task is the findings, and paths and verify come from the adoption contract. **Ruled 2026-10-14 (P5 review):** choosing `repair` authorizes a repair campaign; it does not accept each finding. The findings stay reviewer claims (ADR-0001): the writer verifies each one against the code, fixes only those that hold, and lists the rest with reasons. Shipped: the seed is cross-checked against the candidate stored at park (`review_candidate_repair_head_mismatch`; a missing reviewed head on resume is `review_candidate_repair_reviewed_head_missing`), and the seed files are written before the campaign closes. The caller seals and runs it as a normal campaign. Our writer writes on top of the external head under the existing writer fence and repair lineage. D11 and D12 are untouched, and RO1 holds for the review-only campaign.
 - Cost, stated to the caller: one writer run, plus that campaign's own review. Seat verdicts are not reused across campaigns.
 - Acceptance: RO13 (`repair`); RO1 still 0 writer calls in the review-only campaign; the seeded contract passes `implementation-campaign-check.js`; control: a seeded contract whose base is not the reviewed head is refused.
 - Boundaries: no change to `git_candidate`, writer fence or repair-lineage code.

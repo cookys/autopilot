@@ -29,6 +29,7 @@ const {
 const {
   appendCampaignEvent,
   completeCampaignAdmission,
+  defaultAdoptionAdmission,
   releaseCampaignAdmission,
   runCampaignIntake,
   buildQcPanelSnapshot,
@@ -133,6 +134,7 @@ const {
   createLedgerReconciliationReceipt,
   createVerificationReceipt,
   createVerificationRequest,
+  createAdoptedWriterFence,
   createWriterFence,
   environmentFingerprint,
   reusableGreenReceipt,
@@ -2757,6 +2759,10 @@ class AutopilotEngine {
     this.classifyDiffRisk = options.classifyDiffRisk || defaultClassifyDiffRisk;
     this.lifecycleObserver = options.lifecycleObserver || null;
     this.campaignIntake = options.campaignIntake || runCampaignIntake;
+    // Review-only adoption: the one re-derivation of the externally produced range
+    // (intake admission AND the pre-review recheck). Injectable only so a test can
+    // remove it and prove the suite goes red.
+    this.adoptionAdmission = options.adoptionAdmission || defaultAdoptionAdmission;
     this.campaignAdmissionReleaser = options.campaignAdmissionReleaser
       || releaseCampaignAdmission;
     this.campaignEventAppender = options.campaignEventAppender || appendCampaignEvent;
@@ -5166,6 +5172,27 @@ class AutopilotEngine {
       vertical_failed: verticalFailed = false,
       verification = null,
     }) => {
+      if (input.reviewCandidate === true) {
+        // RO3: the branch may have moved since admission. Re-derive before any reviewer
+        // sees a byte; a moved or rewritten range is a named refusal with 0 review calls.
+        const recheck = this.adoptionAdmission({
+          contract: campaignControl.contract,
+          repo: loopCwd,
+          phase: 'pre_review',
+        });
+        if (!recheck || recheck.status !== 'ready') {
+          const recheckCode = (recheck && recheck.code) || 'review_candidate_recheck_failed';
+          const recheckReason = (recheck && recheck.reason)
+            || 'adopted range could not be re-derived before review';
+          ledger.push(this.ledgerEntry('adoption_admission', 'blocked', this.now(), {
+            rejection_code: recheckCode,
+            moment: 'pre_review',
+          }));
+          // Named refusal: thrown so the composition surfaces the code, not a generic
+          // review-authority error. No reviewer has been called at this point.
+          throw Object.assign(new Error(`${recheckCode}: ${recheckReason}`), { code: recheckCode });
+        }
+      }
       let diffFile;
       try {
         diffFile = this.diffProvider({
@@ -5704,7 +5731,10 @@ class AutopilotEngine {
           requiredReviewFamilies: Number.isSafeInteger(roster.required_review_families)
             ? roster.required_review_families
             : 1,
-          implementerFamily: modelFamilyOfEngine(roster.implementer_engine),
+          implementerFamily: typeof roster.implementer_family === 'string'
+            && roster.implementer_family.length > 0
+            ? roster.implementer_family
+            : modelFamilyOfEngine(roster.implementer_engine),
           ...(Object.prototype.hasOwnProperty.call(snapshot, 'review_station')
             ? { reviewStation: resolveReviewStation(roster) }
             : {}),
@@ -6422,8 +6452,13 @@ class AutopilotEngine {
       const unitIdx = frozenDeliverableIds.indexOf(controllerGraphNode);
       const unit = unitIdx >= 0
         ? unitArg(unitIdx + 1, frozenDeliverableIds.length, controllerGraphNode) : null;
-      this.stageUnit = unit;
-      stageWrite({ to: 'implement', unit });
+      if (input.reviewCandidate === true) {
+        // Review-only: nothing was implemented, so neither stage is this session's to write.
+        this.stageUnit = null;
+      } else {
+        this.stageUnit = unit;
+        stageWrite({ to: 'implement', unit });
+      }
     }
     const controllerFrozenBase = base || currentBase || null;
     const controllerSealedScope = {
@@ -7489,6 +7524,110 @@ class AutopilotEngine {
         live_seats_complete: roster.qc_panel_seats_complete === true,
       }));
     }
+    let adoptedCandidate = null;
+    if (input.reviewCandidate === true) {
+      const adoptionBlocked = (code, reason) => {
+        const rejection = {
+          owner: 'adoption_admission', status: 'rejected', code, reason,
+        };
+        const release = releaseCampaignNoEffect(rejection);
+        ledger.push(this.ledgerEntry('adoption_admission', 'blocked', this.now(), {
+          rejection_code: code,
+        }));
+        return {
+          status: 'blocked',
+          phase: 'review_candidate_adoption',
+          code,
+          reason: `${code}: ${reason}`,
+          rounds: 0,
+          verdict: null,
+          roster,
+          resolveResult,
+          implementation: null,
+          review: null,
+          implementationChain: [],
+          reviewChain: [],
+          dispatcher_called: false,
+          model_calls: 0,
+          admission_release: release,
+          ledger,
+        };
+      };
+      const sealedAdoption = campaignControl.contract && campaignControl.contract.adoption;
+      const admissionStep = (campaignControl.steps || []).find((item) => (
+        item && item.owner === 'adoption_admission' && item.status === 'ready'
+      )) || null;
+      if (!sealedAdoption
+          || !admissionStep
+          || admissionStep.head !== sealedAdoption.head_sha
+          || !/^[0-9a-f]{64}$/.test(admissionStep.scope_receipt_digest || '')
+          || !isStr(admissionStep.tree_sha)) {
+        return adoptionBlocked(
+          'review_candidate_admission_missing',
+          'no admitted adoption receipt for the sealed head',
+        );
+      }
+      adoptedCandidate = {
+        committed: true,
+        commit: sealedAdoption.head_sha,
+        tree_sha: admissionStep.tree_sha,
+        branch,
+        owned_worktrees_current: 0,
+        resource_inventory_delta: [],
+        dispatcher_called: false,
+        model_calls: 0,
+        mutation_attempts: 0,
+        gate_attempts: 0,
+        resources_created: 0,
+        writer_fence: createAdoptedWriterFence({
+          campaignId: campaignControl.campaign_id,
+          stageIdentity: `campaign-adoption:${campaignControl.initial_state.generation}`,
+          candidateCommit: sealedAdoption.head_sha,
+          candidateTreeSha: admissionStep.tree_sha,
+        }),
+      };
+      try {
+        recordCampaignEvent({
+          eventType: CAMPAIGN_EVENTS.CANDIDATE_ADOPTED,
+          generation: campaignControl.initial_state.generation,
+          stageIdentity: `campaign-adoption:${campaignControl.initial_state.generation}`,
+          usage: {
+            changed_files: Array.isArray(admissionStep.changed_files)
+              ? admissionStep.changed_files.length : 0,
+            // Churn limits are warn-only for an adopted range (plan RO4): a breach is a named
+            // warning in the admission receipt, so the budget meter is not charged for it.
+            churn: 0,
+          },
+          payload: {
+            scope_check_passed: true,
+            scope_check_digest: admissionStep.scope_receipt_digest,
+            adopted_head: sealedAdoption.head_sha,
+          },
+          artifactReference: {
+            kind: 'adopted_candidate',
+            digest: campaignCanonicalDigest({
+              commit: adoptedCandidate.commit,
+              tree_sha: adoptedCandidate.tree_sha,
+              branch,
+              base,
+              authored_by_campaign: false,
+            }),
+          },
+        });
+      } catch (error) {
+        return adoptionBlocked(
+          error && error.code ? error.code : 'review_candidate_adoption_journal',
+          error && error.message ? error.message : String(error),
+        );
+      }
+      // No worktree is ever created for an adopted range; the validator only accepts a
+      // null worktree with this terminal disposition.
+      repairLineage.terminal_worktree_disposition = 'not_created_failed_dispatch';
+      ledger.push(this.ledgerEntry('adoption_admission', 'admitted', this.now(), {
+        head: sealedAdoption.head_sha,
+        warnings: Array.isArray(admissionStep.warnings) ? admissionStep.warnings : [],
+      }));
+    }
     const composition = this.campaignComposer({
       maxRepairGenerations,
       minPanelSize: roster.min_panel_size,
@@ -7502,6 +7641,21 @@ class AutopilotEngine {
       gitCwd: loopCwd,
       promptFile,
       resume: (() => {
+        if (adoptedCandidate) {
+          // D4: an adopted range enters composition as an already-committed candidate waiting
+          // for verification, so no mutation is attempted.
+          return {
+            phase: 'VERTICAL_VERIFICATION',
+            repair_generation: campaignControl.initial_state.generation,
+            candidate: adoptedCandidate,
+            controller: campaignController,
+            verification: null,
+            review: null,
+            findings: null,
+            full_diff_barriers: null,
+            convergence_adjudication_receipt: null,
+          };
+        }
         // Production resume authority is the controller Work Order — not
         // optional generation_claim resume_* fields that intake never produces.
         const claim = campaignControl.generation_claim || {};
@@ -7764,6 +7918,17 @@ class AutopilotEngine {
         review_input_mode: reviewInputMode = 'full_diff_generation',
         controller: implementController,
       }) => {
+        if (input.reviewCandidate === true) {
+          // Review-only has no writer. Reaching this adapter is a bug: fail closed with no
+          // dispatch, no model call and no checkout.
+          return {
+            committed: false,
+            phase: 'review_candidate_no_writer',
+            reason: 'review-candidate has no writer: the implement adapter is unreachable by design',
+            dispatcher_called: false,
+            model_calls: 0,
+          };
+        }
         // Joint repair budget (durable controller) before any model/checkout spend.
         const joint = checkJointRepairBudget(
           (implementController || campaignController).repair_budget_usage,
@@ -9831,6 +9996,39 @@ class AutopilotEngine {
       return lifecycleObservation ? lifecycleObservation.finalize(output) : output;
     };
 
+    if (input.reviewCandidate === true) {
+      const refusal = input.resume === true
+        ? ['review_candidate_resume_unsupported',
+          'review-candidate cannot resume yet: a parked or interrupted review is not resumable in this release; '
+            + 'seal a new adoption contract for the range instead']
+        : (!input.campaignContract
+          ? ['review_candidate_contract_required', 'review-candidate requires a sealed adoption contract']
+          : null);
+      if (refusal) {
+        const startedAt = this.now();
+        ledger.push(this.ledgerEntry('review_candidate', 'blocked', startedAt, {
+          rejection_code: refusal[0],
+        }));
+        return finish({
+          status: 'blocked',
+          phase: 'review_candidate',
+          code: refusal[0],
+          reason: refusal[1],
+          rounds: 0,
+          verdict: null,
+          roster: input.roster || null,
+          resolveResult: null,
+          implementation: null,
+          review: null,
+          implementationChain: [],
+          reviewChain: [],
+          dispatcher_called: false,
+          model_calls: 0,
+          ledger,
+        });
+      }
+    }
+
     if (!promptFile || typeof promptFile !== 'string') {
       const startedAt = this.now();
       ledger.push(this.ledgerEntry('prepare_implementation_loop', 'blocked', startedAt));
@@ -10023,6 +10221,16 @@ class AutopilotEngine {
       }
       validateReviewRoster(roster, rosterOpts);
       validateImplementerRoster(roster);
+      if (input.reviewCandidate === true) {
+        // No implementer ran. The author family is the sealed declaration (an added
+        // exclusion only) or unknown, never the roster's unused implementer engine.
+        roster = {
+          ...roster,
+          implementer_family: typeof input.authorFamily === 'string' && input.authorFamily.length > 0
+            ? input.authorFamily
+            : 'unknown',
+        };
+      }
     } catch (error) {
       const startedAt = this.now();
       ledger.push(this.ledgerEntry('prepare_implementation_loop', 'blocked', startedAt));
@@ -10349,7 +10557,13 @@ class AutopilotEngine {
             observedAt: intakeStartedAt,
             level: String(process.env.AUTOPILOT_LEVEL || '').toLowerCase(),
             campaignDispositionAuthority: input.campaignDispositionAuthority,
-          }, trustedMissionAdapters || undefined);
+            ...(input.reviewCandidate === true ? {
+              reviewCandidate: true,
+              authorFamily: typeof input.authorFamily === 'string' ? input.authorFamily : null,
+            } : {}),
+          }, input.reviewCandidate === true
+            ? { ...(trustedMissionAdapters || {}), adoptionAdmission: this.adoptionAdmission }
+            : (trustedMissionAdapters || undefined));
         }
       } catch (error) {
         intake = {

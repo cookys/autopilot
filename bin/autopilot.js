@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
+const fs = require('fs');
 const path = require('path');
 const { dispatchReview } = require('../src/runners/review');
 const { resolveReviewLoop } = require('../src/engine/resolve-review-loop');
@@ -29,6 +30,7 @@ function printHelp() {
   node bin/autopilot.js dispatch review [dispatch-review args...]
   node bin/autopilot.js engine review-loop [resolve-review-loop args...]
   node bin/autopilot.js engine implement-review --campaign-contract <file> [--campaign-seal <file>] [--campaign-ledger <file>] [--campaign-disposition-authority <file>|--campaign-disposition-policy deny-nonempty|acceptance-bound] [--lifecycle-receipt <file>] [--mission-prepared <receipt>] --prompt-file <file> --branch <branch> --base <sha> [--cwd <repo>] [--max-rounds N] [--verify-cmd <shell command>] [--no-verify-first] [--require-qualified-reviewer|--allow-unqualified-reviewer] [--no-review-spec] [--resume] [--prior-status none|no_verdict|ambiguous]
+  node bin/autopilot.js engine review-candidate --campaign-contract <file> [--campaign-seal <file>] --spec-file <file> [--campaign-disposition-authority <file>|--campaign-disposition-policy deny-nonempty|acceptance-bound] [--cwd <repo>] [--resume]
   node bin/autopilot.js harness report [harness report args...]
   node bin/autopilot.js endpoints <init|list|which|set|doctor> [--json]
   node bin/autopilot.js status [quota|runs|roster|readiness] [--json] [--probe]  (--probe: bounded live spend: runs per-seat transport and live probes; quota --probe stays a no-spend safe probe)
@@ -63,6 +65,15 @@ Commands:
                     does not certify the reviewer seat (ledger records
                     reviewer_qualification: waived + reason) unless
                     --require-qualified-reviewer is passed. v2.36.8.
+  engine review-candidate
+                    Review an externally produced base..head range with no writer.
+                    The sealed adoption contract is the only source of base, branch,
+                    head and verify command: nothing about the range is passed on
+                    the command line. The range is re-derived from the repository,
+                    verified in a detached worktree, reviewed by the sealed panel,
+                    and ends in a terminal campaign receipt. Zero implementer,
+                    verification-author or repair model calls. --resume is refused
+                    with a named reason in this release.
   harness report    Emit read-only harness capability state and stale flags.
   endpoints         Manage endpoint credentials (list/which/set/doctor/init; --json).
   status            State overview or task DONE/NOT DONE from authoritative receipts.
@@ -76,6 +87,67 @@ Exit codes:
   Delegated commands preserve the wrapped command exit code.
   2 = usage error / unknown command
 `);
+}
+
+// engine review-candidate: the range (base, branch, head, verify command) comes only from the
+// sealed adoption contract. The CLI reads base and branch from it so the single binding check in
+// campaign intake stays authoritative; it never accepts a diff, a file list or a test result.
+function parseReviewCandidateArgs(rawArgs) {
+  const output = {
+    promptFile: null,
+    branch: null,
+    base: null,
+    cwd: null,
+    maxRounds: null,
+    requireQualifiedReviewer: true,
+    verifyCmd: null,
+    noVerifyFirst: false,
+    resume: false,
+    campaignContract: null,
+    campaignSeal: null,
+    campaignLedger: null,
+    campaignDispositionAuthority: null,
+    campaignDispositionPolicy: null,
+    campaignManaged: true,
+    legacyUnmanaged: false,
+    reviewCandidate: true,
+    authorFamily: null,
+    reviewerQualificationForced: false,
+  };
+  const valued = {
+    '--campaign-contract': 'campaignContract',
+    '--campaign-seal': 'campaignSeal',
+    '--spec-file': 'promptFile',
+    '--cwd': 'cwd',
+    '--campaign-disposition-authority': 'campaignDispositionAuthority',
+    '--campaign-disposition-policy': 'campaignDispositionPolicy',
+  };
+  let i = 0;
+  while (i < rawArgs.length) {
+    const arg = rawArgs[i];
+    if (Object.prototype.hasOwnProperty.call(valued, arg)) {
+      const value = rawArgs[i + 1];
+      if (!value) return { error: `${arg} requires a value` };
+      output[valued[arg]] = value;
+      i += 2;
+      continue;
+    }
+    if (arg === '--resume') {
+      output.resume = true;
+      i += 1;
+      continue;
+    }
+    return { error: `unknown engine review-candidate option: ${arg}` };
+  }
+  if (!output.campaignContract || !output.promptFile) {
+    return { error: 'flags --campaign-contract and --spec-file are required' };
+  }
+  if (output.campaignDispositionAuthority && output.campaignDispositionPolicy) {
+    return {
+      error: '--campaign-disposition-authority and --campaign-disposition-policy cannot be combined',
+    };
+  }
+  return output;
 }
 
 function parseImplementReviewArgs(rawArgs) {
@@ -369,10 +441,53 @@ if (args[0] === 'dispatch') {
 
 if (args[0] === 'engine') {
   if (args[1] !== 'review-loop') {
-    if (args[1] === 'implement-review') {
-      const parsed = parseImplementReviewArgs(args.slice(2));
+    if (args[1] === 'implement-review' || args[1] === 'review-candidate') {
+      const reviewCandidateMode = args[1] === 'review-candidate';
+      const parsed = reviewCandidateMode
+        ? parseReviewCandidateArgs(args.slice(2))
+        : parseImplementReviewArgs(args.slice(2));
       if (parsed.error) {
         failUsage(parsed.error);
+      }
+      if (reviewCandidateMode) {
+        const refuse = (code, reason) => {
+          process.stdout.write(`${JSON.stringify({
+            status: 'blocked',
+            phase: 'review_candidate',
+            code,
+            reason,
+            dispatcher_called: false,
+            model_calls: 0,
+          })}\n`);
+          process.exit(1);
+        };
+        if (parsed.resume) {
+          refuse(
+            'review_candidate_resume_unsupported',
+            'review-candidate cannot resume yet: a parked or interrupted review is not resumable '
+              + 'in this release; seal a new adoption contract for the range instead',
+          );
+        }
+        let sealed;
+        try {
+          sealed = JSON.parse(fs.readFileSync(
+            path.resolve(parsed.cwd || process.cwd(), parsed.campaignContract),
+            'utf8',
+          ));
+        } catch (error) {
+          refuse('campaign_contract_unreadable', error.message || String(error));
+        }
+        if (!sealed || typeof sealed.base_sha !== 'string' || typeof sealed.branch !== 'string'
+            || !sealed.adoption || typeof sealed.adoption !== 'object') {
+          refuse(
+            'review_candidate_mode_mismatch',
+            'engine review-candidate requires a sealed adoption contract',
+          );
+        }
+        parsed.base = sealed.base_sha;
+        parsed.branch = sealed.branch;
+        parsed.authorFamily = typeof sealed.adoption.author_family === 'string'
+          ? sealed.adoption.author_family : null;
       }
       const level = String(process.env.AUTOPILOT_LEVEL || '').toLowerCase();
       if (parsed.legacyUnmanaged && (level === 'l5' || level === 'l6')) {
@@ -486,7 +601,7 @@ if (args[0] === 'engine') {
           ? { ...parsed, roster: strictL5Bootstrap.roster }
           : parsed);
       // Stage graph (plan §2.7 writers): the per-deliverable review converged = that unit's `verify`. Fail-open.
-      implementReviewEngine.stageVerifyOnConverge(result);
+      if (!reviewCandidateMode) implementReviewEngine.stageVerifyOnConverge(result);
       process.stdout.write(`${JSON.stringify(result)}\n`);
       process.exit(result.status === 'converged' ? 0 : 1);
     }

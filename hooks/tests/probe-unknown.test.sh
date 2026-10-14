@@ -407,4 +407,25 @@ node "$LEDGER" append --ledger "$EX" --kind ladder --json '{"rung":"U4","unknown
 assert_eq "$(node "$PROBE" classify --ledger "$EX" --work-unit e1 "${PIN[@]}" --repo-root "$ISO" | field budget.used.U4)" "1" "experiment receipt spends U4"
 assert_eq "$(node "$PROBE" classify --ledger "$EX" --work-unit e2 "${PIN[@]}" --repo-root "$ISO" | field budget.used.U4)" "1" "rail-failed U4 spends U4"
 
+# ── BL-0003: default memory dir from a git worktree resolves to the MAIN checkout's memory ──
+# A scratch main repo + linked worktree; the memory note lives under the main checkout's slug only.
+MAINR="$TEST_TMP/my.repo"   # a dot in the main checkout name: Claude Code turns it into '-' as well
+mkdir -p "$MAINR"
+git -C "$MAINR" init -q
+git -C "$MAINR" -c user.email=t@t.invalid -c user.name=t commit -q --allow-empty -m init
+WTD="$TEST_TMP/bl0003-wt"
+git -C "$MAINR" worktree add -q "$WTD" -b bl0003-wt
+# The absolute path prefix comes from mktemp (random), so the whole slug cannot be a fixed literal.
+# The rule-bearing tail is pinned literally as "-my-repo"; the prefix is the mktemp path with every non-alnum -> '-'.
+MSLUG="$(printf '%s' "$(cd "$TEST_TMP" && pwd -P)" | tr -c 'A-Za-z0-9' '-')-my-repo"
+BLHOME="$TEST_TMP/bl0003-home"   # fake HOME: never touches the real ~/.claude
+mkdir -p "$BLHOME/.claude/projects/$MSLUG/memory" "$TEST_TMP/bl0003-k"
+BLTERM="blzeta$RANDOM$RANDOM"
+printf '# lesson: %s\n' "$BLTERM" > "$BLHOME/.claude/projects/$MSLUG/memory/lesson.md"
+OUT="$(cd "$WTD" && HOME="$BLHOME" node "$PROBE" classify --ledger "$TEST_TMP/bl0003.jsonl" --terms "$BLTERM" --knowledge-dir "$TEST_TMP/bl0003-k" --knob auto --consult-resolved-from topology --consult-dispatch auto --budget-u1 2 --budget-u2 1 --budget-u3 1)"
+assert_eq "$(printf '%s' "$OUT" | field terms_hits.$BLTERM.knowledge_or_memory)" "1" "BL-0003: run from a worktree finds the main checkout's memory note"
+# Normal case (relative `.git` common dir from the main checkout) must still resolve the same memory dir.
+OUT="$(cd "$MAINR" && HOME="$BLHOME" node "$PROBE" classify --ledger "$TEST_TMP/bl0003-main.jsonl" --terms "$BLTERM" --knowledge-dir "$TEST_TMP/bl0003-k" --knob auto --consult-resolved-from topology --consult-dispatch auto --budget-u1 2 --budget-u2 1 --budget-u3 1)"
+assert_eq "$(printf '%s' "$OUT" | field terms_hits.$BLTERM.knowledge_or_memory)" "1" "BL-0003: run from the main checkout still finds its own memory note"
+
 finalize_test

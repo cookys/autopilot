@@ -359,8 +359,11 @@ function mainCheckoutOf(root) {
 }
 
 function defaultMemoryDir(root) {
-  // Claude Code memory dir convention: ~/.claude/projects/<slug>/memory where slug = main checkout with '/' → '-'.
-  const slug = mainCheckoutOf(root).replace(/\//g, '-');
+  // Claude Code memory dir convention: ~/.claude/projects/<slug>/memory where slug = main checkout path with every
+  // character outside [A-Za-z0-9] → '-' (observed: '/' and '.' both become '-'; 1153 project dirs, none containing '.',
+  // and .claude/worktrees → -claude-worktrees). Inferred, NOT sample-verified: '_' and non-ASCII are assumed to map
+  // to '-' too; no project dir in the sample exercised either.
+  const slug = mainCheckoutOf(root).replace(/[^A-Za-z0-9]/g, '-');
   return path.join(os.homedir(), '.claude', 'projects', slug, 'memory');
 }
 

@@ -409,13 +409,15 @@ assert_eq "$(node "$PROBE" classify --ledger "$EX" --work-unit e2 "${PIN[@]}" --
 
 # ── BL-0003: default memory dir from a git worktree resolves to the MAIN checkout's memory ──
 # A scratch main repo + linked worktree; the memory note lives under the main checkout's slug only.
-MAINR="$TEST_TMP/bl0003-main"
+MAINR="$TEST_TMP/my.repo"   # a dot in the main checkout name: Claude Code turns it into '-' as well
 mkdir -p "$MAINR"
 git -C "$MAINR" init -q
 git -C "$MAINR" -c user.email=t@t.invalid -c user.name=t commit -q --allow-empty -m init
 WTD="$TEST_TMP/bl0003-wt"
 git -C "$MAINR" worktree add -q "$WTD" -b bl0003-wt
-MSLUG="$(git -C "$MAINR" rev-parse --show-toplevel | sed 's#/#-#g')"
+# The absolute path prefix comes from mktemp (random), so the whole slug cannot be a fixed literal.
+# The rule-bearing tail is pinned literally as "-my-repo"; the prefix is the mktemp path with every non-alnum -> '-'.
+MSLUG="$(printf '%s' "$(cd "$TEST_TMP" && pwd -P)" | tr -c 'A-Za-z0-9' '-')-my-repo"
 BLHOME="$TEST_TMP/bl0003-home"   # fake HOME: never touches the real ~/.claude
 mkdir -p "$BLHOME/.claude/projects/$MSLUG/memory" "$TEST_TMP/bl0003-k"
 BLTERM="blzeta$RANDOM$RANDOM"

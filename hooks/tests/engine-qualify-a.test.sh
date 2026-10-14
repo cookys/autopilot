@@ -20,6 +20,22 @@ assert_contains "$PASS_OUT" '"admitted":false' "serialized qualifier result cann
 assert_contains "$PASS_OUT" '"authority_status":"untrusted_telemetry"' \
   "serialized qualifier result declares its non-authoritative boundary"
 
+# 2b) --raw-dir keeps every case's raw answer for the reviewer role (VA/brain/implementer/
+#     consult already do; the reviewer exam used to leave nothing to audit a verdict against).
+RAW_DIR="$TEST_TMP/reviewer-raw"
+RAW_OUT="$($SCRIPT "${QUALIFY_ARGS[@]}" --panel-cmd "$PASS_PANEL" --raw-dir "$RAW_DIR" 2>&1)"
+assert_file_exists "$RAW_DIR/reviewer-exchanges.jsonl" "reviewer --raw-dir writes reviewer-exchanges.jsonl"
+RAW_SUMMARY="$(node -e '
+const rows = require("fs").readFileSync(process.argv[1], "utf8").trim().split("\n").map((l) => JSON.parse(l));
+const trials = new Set(rows.map((r) => r.trial));
+const clean = rows.filter((r) => r.kind === "clean").length;
+const withAnswer = rows.every((r) => typeof r.stdout === "string" && r.stdout.length > 0 && r.envelope.includes("diff --git"));
+process.stdout.write(`rows=${rows.length} trials=${trials.size} clean=${clean} answers=${withAnswer}`);
+' "$RAW_DIR/reviewer-exchanges.jsonl")"
+assert_contains "$RAW_SUMMARY" "trials=2" "raw file covers both trials"
+assert_contains "$RAW_SUMMARY" "clean=38" "raw file holds all 19 clean cases per trial"
+assert_contains "$RAW_SUMMARY" "answers=true" "every raw row keeps the envelope and the raw answer"
+
 # 3) Remote reviewer output crosses the case-only broker, then passes the same host witness oracle.
 REMOTE_ADAPTER="$TEST_TMP/engine-qualify-remote-adapter.js"
 cat >"$REMOTE_ADAPTER" <<'NODE'

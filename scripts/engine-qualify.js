@@ -122,7 +122,7 @@ const EXPECTED_CORPUS_MANIFEST_HASH =
 const EXPECTED_ARTIFACT_ORACLE_HASH =
   '0f0a5519a0eade5de937aff0f6ed78e79b21cfcdc9fcf9476f3897b876ee86f5';
 const EXPECTED_GENERATOR_HASH =
-  'a5d686853ee5e070f7e2a598e5999f063ad48110e2223d3e684834b4e8d525f3';
+  '728df8c3771c0d947bda24b3b894443a06f3045508e104ca0e8c43877ea33a99';
 const BRAIN_GENERATOR_PATH = path.join(REPO_ROOT, 'evals', 'brain-eval-generator.js');
 const BRAIN_STATE_PATH = path.join(REPO_ROOT, 'evals', 'brain-campaign-state.js');
 const BRAIN_GRADER_PATH = path.join(REPO_ROOT, 'evals', 'brain-eval-grader.js');
@@ -1745,7 +1745,7 @@ function executePanelCase(panelConfig, diff) {
   };
 }
 
-function runPanelCase(panelConfig, testCase) {
+function runPanelCase(panelConfig, testCase, rawSink = null) {
   const result = executePanelCase(panelConfig, testCase.diff);
   let panel = null;
   let parseError = null;
@@ -1755,6 +1755,19 @@ function runPanelCase(panelConfig, testCase) {
   } catch (error) {
     parseError = error.message;
     panel = { verdict: 'fail', findings: [] };
+  }
+  if (rawSink) {
+    rawSink.push({
+      case_id: testCase.id,
+      kind: testCase.kind,
+      artifact_hash: testCase.artifactHash,
+      envelope: testCase.diff,
+      transport_ok: result.ok,
+      transport_error: result.error || null,
+      stdout: result.stdout,
+      parse_error: parseError,
+      panel_verdict: panel.verdict,
+    });
   }
   let oraclePassed;
   let witnessResult = null;
@@ -1811,7 +1824,7 @@ function ownerViolationMatchesOracle(violation, testCase) {
     && rank[violation.severity] >= rank[testCase.expectedClass]);
 }
 
-function runOwnerPanelCase(panelConfig, testCase) {
+function runOwnerPanelCase(panelConfig, testCase, rawSink = null) {
   const result = executePanelCase(panelConfig, testCase.diff);
   let panel;
   let parseError = null;
@@ -1821,6 +1834,19 @@ function runOwnerPanelCase(panelConfig, testCase) {
   } catch (error) {
     parseError = error.message;
     panel = { decision: 'reject', violations: [] };
+  }
+  if (rawSink) {
+    rawSink.push({
+      case_id: testCase.id,
+      kind: testCase.kind,
+      artifact_hash: testCase.artifactHash,
+      envelope: testCase.diff,
+      transport_ok: result.ok,
+      transport_error: result.error || null,
+      stdout: result.stdout,
+      parse_error: parseError,
+      panel_verdict: panel.decision === 'reject' ? 'fail' : 'pass',
+    });
   }
   const oraclePassed = testCase.kind === 'known_bad'
     ? panel.decision === 'reject'
@@ -1844,7 +1870,7 @@ function runOwnerPanelCase(panelConfig, testCase) {
   };
 }
 
-function runTrial(cases, oracle, panelConfig, trialId, observedAt, seed) {
+function runTrial(cases, oracle, panelConfig, trialId, observedAt, seed, rawSink = null) {
   const ordered = deterministicShuffle(cases, `${seed}:${trialId}`);
   // Sequential, not .map(): a dead transport must stop the trial at the first case
   // instead of driving the broker through all remaining ones. Without the abort a
@@ -1854,7 +1880,8 @@ function runTrial(cases, oracle, panelConfig, trialId, observedAt, seed) {
   // (2026-09-21, the brain-seat sibling of this bug).
   const results = [];
   for (const testCase of ordered) {
-    const result = runPanelCase(panelConfig, testCase);
+    const result = runPanelCase(panelConfig, testCase, rawSink
+      ? { push: (row) => rawSink.push({ trial: trialId, ...row }) } : null);
     results.push(result);
     if (!result.transport_ok) {
       return {
@@ -1926,12 +1953,13 @@ function runTrial(cases, oracle, panelConfig, trialId, observedAt, seed) {
   };
 }
 
-function runOwnerTrial(cases, oracle, panelConfig, trialId, observedAt, seed) {
+function runOwnerTrial(cases, oracle, panelConfig, trialId, observedAt, seed, rawSink = null) {
   const ordered = deterministicShuffle(cases, `${seed}:owner:${trialId}`);
   // See runTrial: sequential so a dead transport aborts at the first case.
   const results = [];
   for (const testCase of ordered) {
-    const result = runOwnerPanelCase(panelConfig, testCase);
+    const result = runOwnerPanelCase(panelConfig, testCase, rawSink
+      ? { push: (row) => rawSink.push({ trial: trialId, ...row }) } : null);
     results.push(result);
     if (!result.transport_ok) {
       return {
@@ -4908,6 +4936,7 @@ function runQualification(options) {
   }));
 
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-engine-qualify-'));
+  const rawExchanges = [];
   const trials = [];
   const failures = [];
   const started = Date.now();
@@ -4932,6 +4961,7 @@ function runQualification(options) {
           `trial-${index + 1}`,
           observedAt,
           masterSeed,
+          options.rawDir ? rawExchanges : null,
         )
         : runTrial(
           oracle.trials[index].cases,
@@ -4940,6 +4970,7 @@ function runQualification(options) {
           `trial-${index + 1}`,
           observedAt,
           masterSeed,
+          options.rawDir ? rawExchanges : null,
         );
       if (outcome.transportAbort) {
         // NO verdict, never PASS or FAIL: nothing is appended and no row admits the
@@ -4995,6 +5026,16 @@ function runQualification(options) {
     }
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });
+    // Per-case raw answers (same convention as VA/brain/implementer/consult):
+    // written in `finally` so a transport abort still leaves the evidence.
+    if (options.rawDir) {
+      fs.mkdirSync(options.rawDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(options.rawDir, `${role}-exchanges.jsonl`),
+        `${rawExchanges.map((row) => JSON.stringify(row)).join('\n')}\n`,
+        { mode: 0o600 },
+      );
+    }
   }
 
   const issuedAt = timestamp();

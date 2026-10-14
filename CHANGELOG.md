@@ -77,6 +77,7 @@
 
 ### 修正
 
+- **v2.36.112 審查留下的小項目**（BL-0101）：`hooks/tests/run.sh` 的 Summary 會列出 SKIP 行（serial、parallel、serial tail 三條路徑都收）。serial 改成先寫進暫存檔、跑完再印，不再經過管線，留在背景的程序拖不住 run.sh；stderr 一併收進來，中斷時暫存檔由 EXIT trap 清掉。代價是 serial 不再即時輸出。`dispatch-local-openai.js` 收到 `finish_reason=length` 且內容只有空白時，判為 `output_budget_exhausted`。`campaign-resume` 的 B3 改成整行比對 `campaign_resume_git_drift`。新增 `hooks/tests/run-summary-skip.test.sh`。
 - **設了自動壓縮視窗時，T2 不再叫你停下**（BL-0124）：`autoCompactWindow` 設在 T2 門檻以下時，T2 的提示改成「自動壓縮已設在 Nk，不要停、不要請使用者 /clear，到下個階段邊界寫 handoff」。沒設視窗、值不合法、視窗高於 T2，或設了 `DISABLE_AUTO_COMPACT` 時，仍然是 STOP。只有到 T2 才讀視窗設定。ON/OFF 評測（sonnet 26 次）：舊文字 10/10 叫停，新文字 10/10 繼續，對照組 6/6 照常叫停；證據 `docs/plans/evidence/2026-10-14-t2-wording-onoff/`。新增 hook 層測試 `hooks/tests/context-budget-t2-autocompact.test.sh` 與 lib 層 `hooks/context-budget-t2-autocompact.test.js`。已知疑點：T2 觸發時 context 已超過視窗，當下壓縮可能其實沒發生（BL-0147）。
 - **壓縮相關的四個小問題**（branch `lane/l-compaction-smalls`；BL-0126、BL-0091 和工作流程快照審查的後續）：
   - **自動壓縮是否被停用的判斷和 Claude Code 對齊**：`scripts/lib/autocompact-window.js` 原本把 `DISABLE_AUTO_COMPACT`、`DISABLE_COMPACT` 設成 `no`、`off` 或任何非空字串都當成已停用。照 Claude Code 2.1.296 binary 的判斷式，只有 `1`、`true`、`yes`、`on`（去空白、不分大小寫）才算停用。同時新增環境變數 `AUTOPILOT_MANAGED_SETTINGS_FILE`，讓測試把系統層 `managed-settings.json` 指到自己的暫存檔，測試不再讀到主機真實的檔案。

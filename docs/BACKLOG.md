@@ -1235,13 +1235,13 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-03
 - **Origin**: self
-- **Problem**: v2.36.112 版審查留下的一批小項目：測試輸出隱藏了略過的行、幾個名詞不一致、一個環境旋鈕、一個符號連結逃出範圍的邊角情況、一段過時註解等。 (draft)
+- **Problem**: v2.36.112 版審查留下的小項目大多已修完，剩一個摘要內容擺放位置的調整，以及一個收件檔數上限的拒絕路徑沒有測試。
 - **Impact**: 都是低嚴重度的小瑕疵，不修也不會壞；下次動到對應檔案時順便處理。 (draft)
 - **Trigger**: next touch of the respective file
 - **Effort**: S
 - **Source**: v2.36.112 per-row and landing reviews (🔵)
 - **Pointer**: docs/backlog/v2-36-112-review-follow-ups.md
-- **Context**: run.sh hides SKIP lines, seat-sweep terminal/abandoned vocabulary, sweep env knob, verify-red-green in-repo symlink escape, B3 rejection code, whitespace-only finish_reason=length, E digest-body placement, stale finalize-gate comment.
+- **Context**: Rest shipped 2026-10-14 (BL-0101 merge). Left: Row E digest-body placement (after BL-0090 P2); intake file-cap refusal has no test (PREPARED fixture, 4 files). Declined: sweep env knob, symlink escape, rollover guard.
 
 ### dispatch-plan-review: terminal-ticket reuse is a silent 0-call run
 - **Id**: BL-0102

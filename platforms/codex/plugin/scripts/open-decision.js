@@ -2,28 +2,32 @@
 'use strict';
 
 /**
- * open-decision.js — the "open owner question" file of a watcher scope (mods P1W W2a-m, contract autopilot.decision/1).
+ * open-decision.js — the "open owner questions" file of a watcher scope (mods P1W W2a-m; contract autopilot.decision/2).
  *
- *   node scripts/open-decision.js open  --question <q> [--option <o>]... [--not-authorized <reason>] [--context <c>]
- *                                       [--root-run-id <id>] [--replace] [--cwd <dir>]
- *   node scripts/open-decision.js close [--root-run-id <id>] [--cwd <dir>]
- *   node scripts/open-decision.js show  [--root-run-id <id>] [--json] [--cwd <dir>]
+ *   node scripts/open-decision.js open  --question <q> [--background <why>] [--option <label>[::<description>]]...
+ *                                       [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] [--source <who/where>]
+ *                                       [--root-run-id <id>] [--cwd <dir>] [--json]     (prints the new id; --json: {ok,id,file,scope_key})
+ *   node scripts/open-decision.js close --id <id> [--root-run-id <id>] [--cwd <dir>]   (answered or withdrawn)
+ *   node scripts/open-decision.js show  [--root-run-id <id>] [--json] [--cwd <dir>]    (lists every open question)
  *
- * One file per scope: <git-common-dir>/autopilot/decisions/<scope_key>.json, scope_key = project_key, or
- * project_key--<root> (root through the watcher's safeSegment). Present = an open question the owner has to answer;
- * `close` (answered or withdrawn) removes it, idempotently. The watcher reads it into the job page / band
- * (src/status/decision-input.js). Scope root: --root-run-id > $AUTOPILOT_ROOT_RUN_ID > this session's marker root > unbound.
+ * One file per scope holds ALL open questions of that scope: <git-common-dir>/autopilot/decisions/<scope_key>.json
+ * ({schema, root_run_id, repo_identity, project_key, decisions: [...]}), scope_key = project_key, or project_key--<root>
+ * (root through the watcher's safeSegment). Each entry: id, question, background, options [{label, description}] | null,
+ * recommendation, why, blocks, source, opened_at, opened_by_session (+ origin, set only by hooks/ask-decision.js).
+ * `open` appends one entry and never overwrites another; `close --id` removes exactly that entry (idempotent) and removes
+ * the file when the last one goes. The watcher reads the file into the job page / live pane (src/status/decision-input.js).
+ * Scope root: --root-run-id > $AUTOPILOT_ROOT_RUN_ID > this session's marker root > unbound.
  *
- * --option may repeat; none -> options null, one -> usage error (a choice needs at least two). --not-authorized is why
- * depth-0 may not decide this itself (the DOA boundary reason); optional. Writes take a lock and rename atomically.
+ * --option may repeat; none -> options null, one -> usage error (a choice needs at least two). Everything except
+ * --question is optional text for the owner; an empty value is stored as null. Writes take a lock and rename atomically.
  * Node built-ins only. This script writes nothing outside the decisions directory.
- * The library functions openDecision / closeDecisionIf are also called by hooks/ask-decision.js (depth-0 AskUserQuestion opens
- * a file with `source: "ask_user_question"`; mods P1W HOOKQ).
+ * The library functions openDecision / closeDecisionById are also called by hooks/ask-decision.js (depth-0 AskUserQuestion
+ * adds an entry with `origin: "ask_user_question"`; mods P1W HOOKQ).
  *
- * Exit: 0 ok (show: an open question exists) | 1 show: none open | 2 usage / not a git repo | 3 open: a question is
- * already open (use --replace) | 4 write failure.
+ * Exit: 0 ok (show: at least one open) | 1 show: none open | 2 usage / not a git repo | 4 write failure.
  */
 
+const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -31,19 +35,20 @@ const { scopeFromCwd } = require('../src/status/project-key');
 const { scopeKeyOf, commonDirOf } = require('../src/status/scope-key');
 const { withWriteLock } = require('./lib/jsonl-store');
 
-const SCHEMA = 'autopilot.decision/1';
+const SCHEMA = 'autopilot.decision/2';
 const SAFE_ROOT = /^[A-Za-z0-9._-]+$/;
+const SAFE_ID = /^[A-Za-z0-9._-]+$/;
 
 function usage(message) {
   if (message) process.stderr.write(`open-decision: ${message}\n`);
-  process.stderr.write('usage: open-decision.js open --question <q> [--option <o>]... [--not-authorized <reason>] [--context <c>] [--root-run-id <id>] [--replace]\n'
-    + '       open-decision.js close [--root-run-id <id>]\n       open-decision.js show [--root-run-id <id>] [--json]\n');
+  process.stderr.write('usage: open-decision.js open --question <q> [--background <why>] [--option <label>[::<description>]]... [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] [--source <who/where>] [--root-run-id <id>]\n'
+    + '       open-decision.js close --id <id> [--root-run-id <id>]\n       open-decision.js show [--root-run-id <id>] [--json]\n');
   return 2;
 }
 
 function parse(argv) {
   const out = { _: [], option: [] };
-  const valued = new Set(['question', 'option', 'not-authorized', 'context', 'root-run-id', 'cwd']);
+  const valued = new Set(['question', 'background', 'option', 'recommendation', 'why', 'blocks', 'source', 'id', 'root-run-id', 'cwd']);
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (!a.startsWith('--')) { out._.push(a); continue; }
@@ -52,7 +57,7 @@ function parse(argv) {
       if (i + 1 >= argv.length) return { error: `--${name} needs a value` };
       const v = argv[i + 1]; i += 1;
       if (name === 'option') out.option.push(v); else out[name] = v;
-    } else if (name === 'replace' || name === 'json') out[name] = true;
+    } else if (name === 'json') out[name] = true;
     else return { error: `unknown argument: ${a}` };
   }
   return out;
@@ -72,13 +77,61 @@ function sessionRoot() {
   }
 }
 
-function readOpen(file) {
+const text = (v) => (typeof v === 'string' && v.trim() ? v : null);
+
+// A stored entry that can be shown: an id, a question, a parseable opened_at. Anything else is dropped on read.
+function validEntry(e) {
+  return e && typeof e === 'object' && typeof e.id === 'string' && e.id && typeof e.question === 'string' && e.question;
+}
+
+// The open entries of a scope file ([] = none / unreadable / another schema).
+function readFile(file) {
   try {
     const v = JSON.parse(fs.readFileSync(file, 'utf8'));
-    return v && v.schema === SCHEMA && typeof v.question === 'string' && v.question ? v : null;
+    return v && v.schema === SCHEMA && Array.isArray(v.decisions) ? v.decisions.filter(validEntry) : [];
   } catch (_error) {
-    return null;
+    return [];
   }
+}
+
+function scopeFile(cwd, root) {
+  const scope = scopeFromCwd(path.resolve(cwd || process.cwd()));
+  const commonDir = commonDirOf(scope.repo_identity);
+  if (!scope.project_key || !commonDir) return null;
+  const dir = path.join(commonDir, 'autopilot', 'decisions');
+  return { scope, dir, key: scopeKeyOf(scope.project_key, root || null), file: path.join(dir, `${scopeKeyOf(scope.project_key, root || null)}.json`) };
+}
+
+function writeEntries(sf, root, entries) {
+  if (entries.length === 0) { fs.unlinkSync(sf.file); return; }
+  const body = { schema: SCHEMA, root_run_id: root || null, repo_identity: sf.scope.repo_identity, project_key: sf.scope.project_key, decisions: entries };
+  const tmp = `${sf.file}.tmp-${process.pid}`;
+  fs.writeFileSync(tmp, `${JSON.stringify(body, null, 2)}\n`, { mode: 0o600 });
+  fs.renameSync(tmp, sf.file);
+}
+
+function parseOptions(raw) {
+  return raw.map((o) => {
+    const at = o.indexOf('::');
+    const label = (at < 0 ? o : o.slice(0, at)).trim();
+    const description = at < 0 ? '' : o.slice(at + 2).trim();
+    return { label, description };
+  });
+}
+
+function showText(entries) {
+  const out = [`open decisions: ${entries.length}`];
+  entries.forEach((e, i) => {
+    out.push('', `[${i + 1}] ${e.id}  ${e.question}`);
+    if (e.background) out.push(`    background: ${e.background}`);
+    if (Array.isArray(e.options)) e.options.forEach((o, k) => out.push(`    option ${k + 1}: ${o.label}${o.description ? ` — ${o.description}` : ''}`));
+    if (e.recommendation) out.push(`    recommendation: ${e.recommendation}${e.why ? ` (${e.why})` : ''}`);
+    else if (e.why) out.push(`    why: ${e.why}`);
+    if (e.blocks) out.push(`    blocks: ${e.blocks}`);
+    if (e.source) out.push(`    source: ${e.source}`);
+    out.push(`    opened: ${e.opened_at}`);
+  });
+  return `${out.join('\n')}\n`;
 }
 
 function main(argv) {
@@ -89,89 +142,84 @@ function main(argv) {
   const sess = sessionRoot();
   const root = args['root-run-id'] !== undefined ? args['root-run-id'] : (process.env.AUTOPILOT_ROOT_RUN_ID || sess.root);
   if (root && (!SAFE_ROOT.test(root) || root === '.' || root === '..')) return usage('--root-run-id must match [A-Za-z0-9._-]+');
-  const scope = scopeFromCwd(path.resolve(args.cwd || process.cwd()));
-  const commonDir = commonDirOf(scope.repo_identity);
-  if (!scope.project_key || !commonDir) return usage('not inside a git repository');
-  const dir = path.join(commonDir, 'autopilot', 'decisions');
-  const file = path.join(dir, `${scopeKeyOf(scope.project_key, root || null)}.json`);
+  const sf = scopeFile(args.cwd, root);
+  if (!sf) return usage('not inside a git repository');
 
   if (cmd === 'show') {
-    const v = readOpen(file);
-    if (!v) { if (!args.json) process.stdout.write('no open decision\n'); return 1; }
-    process.stdout.write(args.json ? `${JSON.stringify(v, null, 2)}\n` : `open decision: ${v.question}\n`);
+    const entries = readFile(sf.file);
+    if (entries.length === 0) { if (!args.json) process.stdout.write('no open decision\n'); return 1; }
+    process.stdout.write(args.json ? `${JSON.stringify({ schema: SCHEMA, decisions: entries }, null, 2)}\n` : showText(entries));
     return 0;
   }
   if (cmd === 'close') {
-    try { fs.unlinkSync(file); } catch (error) { if (!error || error.code !== 'ENOENT') { process.stderr.write(`open-decision: ${error.message}\n`); return 4; } }
-    process.stdout.write('closed\n');
+    if (typeof args.id !== 'string' || !SAFE_ID.test(args.id)) return usage('close needs --id <id> (see `show`)');
+    const r = closeDecisionById(sf.file, args.id);
+    if (r.status === 'error') { process.stderr.write(`open-decision: ${r.message}\n`); return 4; }
+    process.stdout.write(r.status === 'closed' ? `closed ${args.id}\n` : `not open: ${args.id}\n`);
     return 0;
   }
 
   // open
   if (typeof args.question !== 'string' || !args.question.trim()) return usage('open needs a non-empty --question');
   if (args.option.length === 1) return usage('--option needs at least two options (or none)');
-  if (args.option.some((o) => !o.trim())) return usage('--option values must be non-empty');
+  const options = args.option.length ? parseOptions(args.option) : null;
+  if (options && options.some((o) => !o.label)) return usage('--option labels must be non-empty');
   const r = openDecision({
-    cwd: args.cwd || process.cwd(), root: root || null, session: sess.session, question: args.question,
-    options: args.option.length ? args.option : null, context: args.context,
-    notAuthorized: args['not-authorized'], replace: !!args.replace,
+    cwd: args.cwd || process.cwd(), root: root || null, session: sess.session, question: args.question, background: args.background,
+    options, recommendation: args.recommendation, why: args.why, blocks: args.blocks, source: args.source,
   });
-  if (r.status === 'ok') { process.stdout.write(`${JSON.stringify({ ok: true, file: r.file, scope_key: r.scope_key })}\n`); return 0; }
-  if (r.status === 'exists') { process.stderr.write('open-decision: a question is already open for this scope; close it or pass --replace\n'); return 3; }
+  if (r.status === 'ok') { process.stdout.write(args.json ? `${JSON.stringify({ ok: true, id: r.id, file: r.file, scope_key: r.scope_key })}\n` : `${r.id}\n`); return 0; }
   process.stderr.write(`open-decision: ${r.message}\n`);
   return 4;
 }
 
-// Library entry (also used by hooks/ask-decision.js — mods P1W HOOKQ): write the decision file of a scope through the
-// same lock + atomic-rename path as `open`. `source` (optional, e.g. "ask_user_question") marks who opened the file;
-// the CLI never sets it, so a hand-opened file has no `source`. `mayReplace(existing)` lets a caller overwrite a file it
-// owns without --replace. Returns { status: 'ok'|'exists'|'declined'|'error', file, scope_key, message }.
-function openDecision({ cwd, root, session, question, options, context, notAuthorized, source, replace, mayReplace }) {
-  const scope = scopeFromCwd(path.resolve(cwd || process.cwd()));
-  const commonDir = commonDirOf(scope.repo_identity);
-  if (!scope.project_key || !commonDir) return { status: 'error', message: 'not inside a git repository' };
-  const dir = path.join(commonDir, 'autopilot', 'decisions');
-  const key = scopeKeyOf(scope.project_key, root || null);
-  const file = path.join(dir, `${key}.json`);
-  const record = {
-    schema: SCHEMA, question, options: Array.isArray(options) && options.length ? options : null,
-    context: context === undefined ? null : context,
-    not_authorized: typeof notAuthorized !== 'string' || !notAuthorized.trim() ? null : notAuthorized,
-    root_run_id: root || null, repo_identity: scope.repo_identity, project_key: scope.project_key,
+// Library entry (also used by hooks/ask-decision.js — mods P1W HOOKQ): append one entry to the scope file through the same
+// lock + atomic-rename path as `open`; another entry is never touched. `origin` (e.g. "ask_user_question") marks which hook
+// opened it; the CLI never sets it. `options` = [{label, description}] (>= 2) or null.
+// Returns { status: 'ok'|'error', id, file, scope_key, message }.
+function openDecision({ cwd, root, session, question, background, options, recommendation, why, blocks, source, origin }) {
+  const sf = scopeFile(cwd, root);
+  if (!sf) return { status: 'error', message: 'not inside a git repository' };
+  const entry = {
+    id: `d-${crypto.randomBytes(4).toString('hex')}`,
+    question,
+    background: text(background),
+    options: Array.isArray(options) && options.length >= 2
+      ? options.map((o) => ({ label: String(o.label), description: text(o.description) || '' })) : null,
+    recommendation: text(recommendation), why: text(why), blocks: text(blocks), source: text(source),
     opened_at: new Date().toISOString(), opened_by_session: session || null,
   };
-  if (source) record.source = source;
+  if (origin) entry.origin = origin;
   try {
-    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-    return withWriteLock({ storeDir: dir, lockFile: `${file}.lock`, name: path.basename(file), timeoutMs: 5000 }, () => {
-      const existing = readOpen(file);
-      if (existing && !replace) {
-        if (!mayReplace) return { status: 'exists', file, scope_key: key };
-        if (!mayReplace(existing)) return { status: 'declined', file, scope_key: key };
-      }
-      const tmp = `${file}.tmp-${process.pid}`;
-      fs.writeFileSync(tmp, `${JSON.stringify(record, null, 2)}\n`, { mode: 0o600 });
-      fs.renameSync(tmp, file);
-      return { status: 'ok', file, scope_key: key };
+    fs.mkdirSync(sf.dir, { recursive: true, mode: 0o700 });
+    return withWriteLock({ storeDir: sf.dir, lockFile: `${sf.file}.lock`, name: path.basename(sf.file), timeoutMs: 5000 }, () => {
+      writeEntries(sf, root, [...readFile(sf.file), entry]);
+      return { status: 'ok', id: entry.id, file: sf.file, scope_key: sf.key };
     });
   } catch (error) {
     return { status: 'error', message: error.message };
   }
 }
 
-// Remove `file` under the same lock when `isOurs(parsedFile)` says so. Idempotent; never throws.
-function closeDecisionIf(file, isOurs) {
+// Remove the entry `id` from the scope `file` under the same lock (the file goes with its last entry). Idempotent.
+// `isOurs(entry)` (optional) must agree first. Returns { status: 'closed'|'absent'|'error', message }; never throws.
+function closeDecisionById(file, id, isOurs) {
   try {
     return withWriteLock({ storeDir: path.dirname(file), lockFile: `${file}.lock`, name: path.basename(file), timeoutMs: 3000 }, () => {
-      const v = readOpen(file);
-      if (!v || !isOurs(v)) return false;
-      fs.unlinkSync(file);
-      return true;
+      const entries = readFile(file);
+      const hit = entries.find((e) => e.id === id);
+      if (!hit || (isOurs && !isOurs(hit))) return { status: 'absent' };
+      const sf = { file, scope: null };
+      const rest = entries.filter((e) => e.id !== id);
+      if (rest.length === 0) { fs.unlinkSync(file); return { status: 'closed' }; }
+      const v = JSON.parse(fs.readFileSync(file, 'utf8'));
+      writeEntries({ ...sf, scope: { repo_identity: v.repo_identity, project_key: v.project_key } }, v.root_run_id, rest);
+      return { status: 'closed' };
     });
-  } catch (_error) {
-    return false;
+  } catch (error) {
+    return error && error.code === 'ENOENT' ? { status: 'absent' } : { status: 'error', message: error.message };
   }
 }
 
 if (require.main === module) process.exitCode = main(process.argv.slice(2));
-module.exports = { main, openDecision, closeDecisionIf, SAFE_ROOT };
+module.exports = { main, openDecision, closeDecisionById, SAFE_ROOT, SCHEMA };

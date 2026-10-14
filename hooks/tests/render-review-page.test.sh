@@ -106,7 +106,8 @@ fs.mkdirSync(path.join(F, 'compare-dirty'), { recursive: true });
 fs.copyFileSync(path.join(F, 'compare', 'before.png'), path.join(F, 'compare-dirty', 'before.png')); fs.copyFileSync(path.join(F, 'compare', 'after.png'), path.join(F, 'compare-dirty', 'after.png'));
 W('valid-record.json', rec('cmp-valid', false));
 W('invalid-record.json', { ...rec('cmp-bad', false), verdict: 'PASS' });
-W('decision.json', { question: 'DECISION-QUESTION-1', options: [{ label: 'opt A', consequence: 'consequence A' }, { label: 'opt B', consequence: 'consequence B' }, { label: 'opt C', consequence: 'consequence C' }], not_authorized: 'NOT-AUTH-1' });
+W('decisions.json', [{ id: 'd-0000000a', question: 'DECISION-QUESTION-1', background: 'BACKGROUND-1', options: [{ label: 'opt A', description: 'description A' }, { label: 'opt B', description: 'description B' }, { label: 'opt C', description: 'description C' }], recommendation: 'opt B', why: 'WHY-1', blocks: 'BLOCKS-1', source: 'SOURCE-1', opened_at: '2026-10-04T01:00:00.000Z', stale: false, age_s: 3600 },
+  { id: 'd-0000000b', question: 'DECISION-QUESTION-2', background: null, options: null, recommendation: null, why: null, blocks: null, source: null, opened_at: '2026-10-04T01:30:00.000Z', stale: false, age_s: 1800 }]);
 JS
 node "$SB/gen.js" "$F" || fail "fixture generator failed"
 C3="$(node -e 'process.stdout.write(require(process.argv[1]).c3)' "$F/shas.json")"
@@ -126,7 +127,7 @@ render() { # render <outfile> <args...>  -> rc in $RC
 # ---- 1. full page: nine sections in order -------------------------------------------------------------------
 P1="$SB/p1.html"
 render "$P1" --runs "$F/runs.json" --root R1 --task-receipt "$F/task-accepted.json" --progress-receipt "$F/progress-frozen.json" \
-  --compare "$F/compare" --decision "$F/decision.json" "${COMMON[@]}"
+  --compare "$F/compare" --decisions "$F/decisions.json" "${COMMON[@]}"
 assert_eq "$RC" "0" "renderer rc 0 on the full fixture (stderr: $(head -c 200 "$P1.err"))"
 ORDER="$(grep -o 'data-section="[0-9]"' "$P1" | tr -d 'a-z="-' | tr -d '\n')"
 assert_eq "$ORDER" "123456789" "nine sections present exactly once, in the fixed order"
@@ -136,8 +137,13 @@ assert_contains "$S2" "accepted" "section 2 copies acceptance_verdict"
 assert_contains "$S2" "需要你決定" "section 2 flags a needed decision when a decision file is given"
 S3="$(sec "$P1" 3)"
 assert_contains "$S3" "DECISION-QUESTION-1" "section 3 carries the question"
-assert_contains "$S3" "consequence B" "section 3 carries each option consequence"
-assert_contains "$S3" "NOT-AUTH-1" "section 3 carries what the decision does not authorize"
+assert_contains "$S3" "description B" "section 3 carries each option description"
+assert_contains "$S3" "BACKGROUND-1" "section 3 carries the background"
+assert_contains "$S3" "WHY-1" "section 3 carries the recommendation reason"
+assert_contains "$S3" "BLOCKS-1" "section 3 carries what stalls if unanswered"
+assert_contains "$S3" "SOURCE-1" "section 3 carries who raised it"
+assert_contains "$S3" "DECISION-QUESTION-2" "section 3 carries the second coexisting question too (none is hidden)"
+assert_contains "$S2" "另 1 件" "section 2 points at the other open question"
 S4="$(sec "$P1" 4)"
 assert_contains "$S4" "50%" "section 4: total percent from the frozen denominator (2 of 4)"
 assert_contains "$S4" "規劃" "section 4 has a planned part"
@@ -168,7 +174,7 @@ assert_contains "$(cat "$P1")" 'src="../assets/' "images use ../assets/<sha>.<ex
 # ---- 3. determinism ----------------------------------------------------------------------------------------
 P1B="$SB/p1b.html"
 render "$P1B" --runs "$F/runs.json" --root R1 --task-receipt "$F/task-accepted.json" --progress-receipt "$F/progress-frozen.json" \
-  --compare "$F/compare" --decision "$F/decision.json" "${COMMON[@]}"
+  --compare "$F/compare" --decisions "$F/decisions.json" "${COMMON[@]}"
 assert_eq "$(sha256sum < "$P1" | cut -d' ' -f1)" "$(sha256sum < "$P1B" | cut -d' ' -f1)" "fixed clock + same input -> byte-identical output"
 
 # ---- 4. no manifest free text / receipt goal text ----------------------------------------------------------
@@ -437,8 +443,8 @@ assert_contains "$(sec "$SB/fu1.html" 2)" "PENDING" "missing --task-receipt path
 printf '{not json' > "$F/bad-progress.json"
 render "$SB/fu2.html" --runs "$F/runs.json" --root R1 --task-receipt none --progress-receipt "$F/bad-progress.json" "${COMMON[@]}"
 assert_contains "$(cat "$SB/fu2.html.err")" "$F/bad-progress.json" "malformed --progress-receipt: stderr names it"
-render "$SB/fu3.html" --runs "$F/runs.json" --root R1 --task-receipt none --decision "$F/no-decision.json" "${COMMON[@]}"
-assert_contains "$(cat "$SB/fu3.html.err")" "$F/no-decision.json" "missing --decision path: stderr names it"
+render "$SB/fu3.html" --runs "$F/runs.json" --root R1 --task-receipt none --decisions "$F/no-decisions.json" "${COMMON[@]}"
+assert_contains "$(cat "$SB/fu3.html.err")" "$F/no-decisions.json" "missing --decisions path: stderr names it"
 render "$SB/fu4.html" --runs "$F/runs.json" --root R1 --task-receipt none --planned "$F/no-planned.json" "${COMMON[@]}"
 assert_contains "$(cat "$SB/fu4.html.err")" "$F/no-planned.json" "missing --planned path: stderr names it"
 env -u AUTOPILOT_SESSION_ID node "$R" --runs "$F/runs.json" --root R1 --task-receipt none --job J1 --date 2026-10-04 --project abcdef0123456789 --now not-a-date --print > "$SB/fu5.out" 2> "$SB/fu5.err" < /dev/null; RC=$?
@@ -486,7 +492,7 @@ assert_contains "$ROOTIDX" 'href="aaaa000000000001/index.html"' "root index list
 NULLDEC="$(node -e '
 const r = require(process.argv[1]);
 const m = r.buildJobModel({ runs: [], root: null, job: "J", date: "2026-10-04", project: "abcdef0123456789", now: 0, commit: null, sources: [] });
-m.needs_decision = true; m.decision = null;
+m.needs_decision = true; m.decisions = [];
 try { process.stdout.write(r.renderJobHtml(m).includes("unknown") ? "unknown" : "no-unknown"); } catch (e) { process.stdout.write("threw " + e.message); }' "${NULLDEC_R:-$R}")"
 assert_eq "$NULLDEC" "unknown" "needs_decision with a null decision renders unknown (never throws)"
 
@@ -516,7 +522,7 @@ out.liveAwaiting = JSON.stringify(model(null, lp('awaiting_disposition')).phase)
 out.liveBoundary = model(null, lp('boundary_rejected')).phase.label === '邊界被拒';
 out.liveUnknown = JSON.stringify(model(null, lp('weird_state')).phase) === JSON.stringify({ code: 'weird_state', label: 'weird_state', source: 'campaign' });
 out.liveEmptyFallsBack = model(task([camp('REVIEWING')]), lp('')).phase.code === 'REVIEWING' && model(null, lp(null)).phase.source === 'deliverable';
-out.awaitingNotOwner = ['awaiting_disposition', 'AWAITING_DISPOSITION', 'Awaiting_Disposition'].every((c) => { const m = model(null, lp(c)); return m.needs_decision === false && m.decision === null && m.phase.label === '等待處置' && m.phase.source === 'campaign'; });
+out.awaitingNotOwner = ['awaiting_disposition', 'AWAITING_DISPOSITION', 'Awaiting_Disposition'].every((c) => { const m = model(null, lp(c)); return m.needs_decision === false && m.decisions.length === 0 && m.phase.label === '等待處置' && m.phase.source === 'campaign'; });
 out.livePhaseInModel = model(null, lp('REVIEWING')).progress.live_phase === 'REVIEWING';
 const html = r.renderJobHtml(model(task([camp('REVIEWING')]), prog));
 out.htmlLabel = /階段：審查/.test(html);
@@ -617,7 +623,7 @@ out.prog0 = sec(h0, 4).includes('總進度：來源未接') && !sec(h0, 4).inclu
 out.planned0 = sec(h0, 4).includes('規劃清單：來源未接') && !sec(h0, 4).includes('沒有規劃清單輸入');
 out.compare0 = sec(h0, 5).includes(NW) && !sec(h0, 5).includes('沒有 compare-record');
 // provided and empty
-const hE = r.renderJobHtml(r.buildJobModel({ ...base, taskReceipt: task, progressReceipt: progE, decision: {}, planned: [], compare: [], compareProvided: true }));
+const hE = r.renderJobHtml(r.buildJobModel({ ...base, taskReceipt: task, progressReceipt: progE, decisions: [], planned: [], compare: [], compareProvided: true }));
 out.decE_s2 = sec(hE, 2).includes('知會：目前沒有待你決定的事項') && !sec(hE, 2).includes(NW);
 out.decE_s3 = sec(hE, 3).includes('本回合沒有待決事項') && !sec(hE, 3).includes(NW);
 out.taskE = sec(hE, 2).includes('驗收結論：unknown') && !sec(hE, 2).includes(NW);
@@ -630,7 +636,7 @@ out.compareWatcher = sec(r.renderJobHtml(r.buildJobModel({ ...base, compare: [] 
 const hW = r.renderJobHtml(r.buildJobModel({ ...base, taskReceipt: { ...task, root_run_id: 'R2' } }));
 out.taskWrongRoot = sec(hW, 2).includes('本回合尚無驗收 verdict') && !sec(hW, 2).includes('驗收結論：來源未接');
 // a real decision / planned / compare still render as before
-const hD = r.renderJobHtml(r.buildJobModel({ ...base, decision: { question: 'Q-1', options: [] } }));
+const hD = r.renderJobHtml(r.buildJobModel({ ...base, decisions: [{ id: 'd-1', question: 'Q-1', options: null, opened_at: '2026-10-04T01:00:00.000Z', stale: false, age_s: 60 }] }));
 out.decReal = sec(hD, 2).includes('需要你決定') && !sec(hD, 2).includes('決定：' + NW) && !sec(hD, 3).includes(NW) && sec(hD, 3).includes('Q-1');
 // project index
 const mk = (job, wired, nd) => ({ job, date: '2026-10-04', project: 'p', published_at: '2026-10-04T02:00:00.000Z', axes: { execution: { running: 0, exited: 0, unknown: 0 }, acceptance: 'unknown' }, needs_decision: nd, wired: { decision: wired } });
@@ -663,7 +669,7 @@ render "$P_NW" --runs "$F/runs.json" --root R1 --task-receipt none "${COMMON[@]}
 assert_contains "$(sec "$P_NW" 2)" "來源未接" "CLI with no decision input: the conclusion section says 來源未接"
 assert_not_contains "$(sec "$P_NW" 2)" "目前沒有待你決定" "CLI with no decision input: never says there is nothing to decide"
 printf '[]' > "$SB/planned-empty.json"
-render "$SB/pnw2.html" --runs "$F/runs.json" --root R1 --task-receipt "$F/task-accepted.json" --progress-receipt "$F/progress-frozen.json" --decision "$F/decision.json" --compare "$F/compare" --planned "$SB/planned-empty.json" "${COMMON[@]}"
+render "$SB/pnw2.html" --runs "$F/runs.json" --root R1 --task-receipt "$F/task-accepted.json" --progress-receipt "$F/progress-frozen.json" --decisions "$F/decisions.json" --compare "$F/compare" --planned "$SB/planned-empty.json" "${COMMON[@]}"
 assert_not_contains "$(cat "$SB/pnw2.html")" "來源未接" "CLI with every input wired: no 來源未接 anywhere"
 
 finalize_test

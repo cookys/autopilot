@@ -325,7 +325,7 @@ export const FACT_OWNER = {
   'dispatch.runs': 'dispatch', 'dispatch.counts': 'dispatch',
   'review.round': 'review', 'review.seats': 'review', 'review.qc': 'review', 'review.gates': 'review', 'review.plan': 'review',
   'review.decisions': 'review', 'review.ladder': 'review', 'review.undocumented': 'review',
-  'now.attention': 'now', 'now.position': 'now', 'now.background': 'now', 'now.tasks': 'now', 'now.recent': 'now',
+  'now.attention': 'now', 'now.pending': 'now', 'now.position': 'now', 'now.background': 'now', 'now.tasks': 'now', 'now.recent': 'now',
   'usage.limit_max': 'spend', 'usage.brain': 'spend', 'usage.window5h': 'spend', 'usage.window7d': 'spend', 'usage.today': 'spend', 'usage.history': 'spend', 'usage.account': 'spend',
   'spend.session': 'spend', 'spend.local_today': 'spend',
   'usage.window_other': 'spend', // any other rate-limit window the host reports (spend_limit, an unknown kind)
@@ -339,7 +339,7 @@ export type FactId = keyof typeof FACT_OWNER
 
 // the order of sections inside each tab (§2.1), as data; and the sections that start folded (要你處理 never does)
 export const SECTION_ORDER: Record<PaneTab, readonly string[]> = {
-  now: ['attention', 'where', 'tabs', 'background', 'tasks', 'recent'],
+  now: ['attention', 'questions', 'where', 'tabs', 'background', 'tasks', 'recent'],
   dispatch: ['running', 'finished', 'other'],
   review: ['code', 'qc', 'decisions', 'plan'],
   spend: ['limits', 'today', 'last24', 'account'],

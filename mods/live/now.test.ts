@@ -27,7 +27,7 @@ function snap(o: Over = {}): LiveSnapshot {
   const tasks = o.tasks ?? [task('done one', 'completed'), task('now doing', 'in_progress'), task('later', 'pending')]
   return {
     state: 'ok', text: '', header: 'h', metrics: { ctx: '37%' }, band: band(o.kind ?? 'stalled', 'longest run 4m quiet'),
-    decision: o.decision === false ? null : { question: 'merge or split?', options: [{ label: 'merge', consequence: 'one acceptance' }], stale: false, age_s: 60 },
+    pending: o.decision === false ? [] : [{ id: 'd-1', question: 'merge or split?', background: null, options: [{ label: 'merge', description: 'one acceptance' }], recommendation: null, why: null, blocks: null, source: null, opened_at: null, stale: false, age_s: 60 }],
     project_key: null, root_run_id: null, link: null,
     rows: [run('r1'), run('r2', { stall: true, probe_age_s: 200 })], gates: null,
     sections: { ...NO_SECTIONS, tasks: { total: tasks.length, completed: tasks.filter(t => t.status === 'completed').length, in_progress: 1, current: 'now doing', first_created_ms: null, rows: tasks } },
@@ -164,6 +164,7 @@ const bareMismatch = (ls: PaneLine[]): string[] => {
 // the golden table: the (fact, goto, kind) triples of the busy snapshot, in order
 const GOLDEN_NOW = [
   'now.attention||header', 'now.attention||item', 'now.attention||item', 'now.attention|hygiene|item',
+  'now.pending||header', 'now.pending||item',
   'now.position||chart', 'now.position||chart', 'now.position||kv', 'now.position||kv', 'now.position||kv', 'now.position||kv',
   'dispatch.counts|dispatch|kv', 'review.round|review|kv', 'usage.limit_max|spend|meter', 'residue.groups|hygiene|kv',
   'now.background||item', 'now.tasks||header', 'now.tasks||item', 'now.tasks||item',
@@ -199,7 +200,7 @@ test('I18 (pure): 現況 by default has no detail or command line and no list ov
   const many = Array.from({ length: 8 }, (_, i) => task('open ' + i, i === 0 ? 'in_progress' : 'pending'))
   const live = Array.from({ length: 7 }, (_, i) => item('job ' + i, 1_000 + i))
   const t = makeT('en')
-  const s = snap({ tasks: many, activity: [...live, item('ended', 1_000, '[exited with code 0]')] })
+  const s = snap({ tasks: many, activity: [...live, item('ended', 1_000, '[exited with code 0]')], decision: false }) // the 待決議事項 block is open by design (full context), so this default holds while none is pending
   const ls = nowLines(s, ctxOf(t, 100))
   expect(ls.filter(l => l.kind === 'detail' || l.kind === 'command').length).toBe(0)
   const section = (id: string) => { const from = ls.findIndex(l => l.toggle === id); return ls.slice(from + 1, ls.findIndex((l, i) => i > from && l.kind === 'header') === -1 ? undefined : ls.findIndex((l, i) => i > from && l.kind === 'header')) }
@@ -506,4 +507,33 @@ test('strip: the active label and the ━ run are the here mark (I4 / I6); every
     expect(sr.tabs.filter(x => x.on).length).toBe(1)
     expect(sr.rule.some(s => s.here === true && s.text.includes('━')), loc + ': the ━ run carries here').toBe(true)
   }
+})
+
+// ---- 待決議事項: every open owner question in full; no block at all when none is open ----
+const pend = (id: string, q: string, over: Partial<LiveSnapshot['pending'][number]> = {}): LiveSnapshot['pending'][number] => ({
+  id, question: q, background: null, options: [], recommendation: null, why: null, blocks: null, source: null, opened_at: null, stale: false, age_s: 60, ...over,
+})
+test('PENDING: two open questions are both shown in full (question, background, options, recommendation and why, what stalls, source), wrapped and counted; zero shows no block', () => {
+  const long = 'this background sentence is deliberately long enough that it has to wrap at seventy-six columns and must never be cut off by the pane'
+  const two = [
+    pend('d-1', 'merge or split?', { background: long, options: [{ label: 'merge', description: 'one acceptance' }, { label: 'split', description: 'two acceptances' }], recommendation: 'merge', why: 'fewer round trips', blocks: 'the release cannot start', source: 'depth-0 AskUserQuestion' }),
+    pend('d-2', 'which engine?', { options: [{ label: 'a', description: '' }, { label: 'b', description: '' }], why: 'cheaper' }),
+  ]
+  for (const [loc, t] of LOCALES) {
+    const ls = nowLines({ ...snap(), pending: two }, ctxOf(t, 76))
+    const heads = ls.filter(l => l.kind === 'header' && l.fact === 'now.pending')
+    expect(heads.length, loc).toBe(1)
+    expect(heads[0].text, loc).toContain(t('now.pending', { n: 2 }))
+    const text = ls.map(l => l.text).join('\n')
+    for (const must of ['merge or split?', 'which engine?', 'one acceptance', 'two acceptances', 'fewer round trips', 'the release cannot start', 'depth-0 AskUserQuestion', 'cheaper'])
+      expect(text, loc + ': ' + must).toContain(must)
+    expect(text.replace(/\s+/g, ' '), loc + ': the long background is whole after wrapping').toContain('this background sentence is deliberately long enough that it has to wrap')
+    expect(text.replace(/\s+/g, ' '), loc + ': the long background keeps its tail').toContain('never be cut off by the pane')
+    for (const l of ls) expect(ui.displayWidth(l.text), loc + ': "' + l.text + '"').toBeLessThanOrEqual(75)
+    expect(i17(ls), loc).toEqual([])
+  }
+  // negative control: with none pending there is no block, no header and no fact
+  const none = nowLines({ ...snap(), pending: [] }, ctxOf(makeT('en'), 76))
+  expect(none.some(l => l.fact === 'now.pending')).toBe(false)
+  expect(none.map(l => l.text).join('\n')).not.toContain('Pending decisions')
 })

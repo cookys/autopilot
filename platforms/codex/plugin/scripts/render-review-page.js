@@ -12,7 +12,7 @@
 //
 // CLI (no --print publishes under --out-root; --print prints the page to stdout):
 //   render-review-page.js --runs <runs-live.json|status-runs.json> [--root <root_run_id>]
-//     [--task-receipt <file|none>] [--progress-receipt <file>] [--compare <dir>] [--decision <file>]
+//     [--task-receipt <file|none>] [--progress-receipt <file>] [--compare <dir>] [--decisions <file>]
 //     [--planned <file>] --job <id> --date <YYYY-MM-DD> --project <project_key>
 //     [--repo <dir>] [--commit <sha>] [--now <iso>] [--out-root <dir>] [--print]
 //   render-review-page.js --reap [--days N] --project <project_key> [--out-root <dir>] [--now <iso>]
@@ -217,7 +217,7 @@ function buildJobModel(inputs) {
   const writerLive = (name) => Boolean(msrc && isObject(msrc[name]) && msrc[name].installed === true && msrc[name].enabled === true);
   const wired = {
     task: isObject(o.taskReceipt) || writerLive('task_status_input'), progress: isObject(o.progressReceipt) || writerLive('progress'),
-    decision: isObject(o.decision) || writerLive('decision'),
+    decision: Array.isArray(o.decisions) || writerLive('decision'),
     planned: Array.isArray(o.planned) || writerLive('tasks') || writerLive('progress'),
     compare: (Array.isArray(o.compare) && (o.compare.length > 0 || o.compareProvided === true)) || writerLive('compare'),
   };
@@ -230,13 +230,14 @@ function buildJobModel(inputs) {
   markConflicts(gates);
   gates.sort((a, b) => (a.phase < b.phase ? -1 : a.phase > b.phase ? 1 : (a.generation || 0) - (b.generation || 0) || String(a.source).localeCompare(String(b.source))));
 
-  const decision = isObject(o.decision) && typeof o.decision.question === 'string' ? {
-    question: o.decision.question,
-    options: (Array.isArray(o.decision.options) ? o.decision.options : []).filter(isObject)
-      .map((x) => ({ label: String(x.label == null ? '' : x.label), consequence: String(x.consequence == null ? '' : x.consequence) })),
-    not_authorized: o.decision.not_authorized == null ? null : String(o.decision.not_authorized),
-    stale: o.decision.stale === true, age_s: Number.isFinite(o.decision.age_s) ? o.decision.age_s : null,
-  } : null;
+  const optText = (v) => (v == null || v === '' ? null : String(v));
+  const decisions = (Array.isArray(o.decisions) ? o.decisions : []).filter((d) => isObject(d) && typeof d.question === 'string' && d.question).map((d) => ({
+    id: optText(d.id), question: d.question, background: optText(d.background),
+    options: (Array.isArray(d.options) ? d.options : []).filter(isObject)
+      .map((x) => ({ label: String(x.label == null ? '' : x.label), description: String(x.description == null ? '' : x.description) })),
+    recommendation: optText(d.recommendation), why: optText(d.why), blocks: optText(d.blocks), source: optText(d.source), opened_at: optText(d.opened_at),
+    stale: d.stale === true, age_s: Number.isFinite(d.age_s) ? d.age_s : null,
+  }));
 
   const progress = buildProgress(o.progressReceipt, root);
   const planned = Array.isArray(o.planned) ? o.planned.map((p) => (isObject(p) ? { id: String(p.id == null ? '' : p.id), title: p.title == null ? null : String(p.title) } : { id: String(p), title: null })) : [];
@@ -255,7 +256,7 @@ function buildJobModel(inputs) {
       issued_at: task.issued_at || null,
       failed_predicates: Array.isArray(task.failed_predicates) ? task.failed_predicates.map(String) : [],
     } : null,
-    conclusion, needs_decision: Boolean(decision), decision, wired,
+    conclusion, needs_decision: decisions.length > 0, decisions, wired,
     phase: buildPhase(task, progress, o.markerStage, o.taskPhase), progress, planned, compare: o.compare || [], dispatch, gates,
     scope: envelope && isObject(envelope.scope) ? {
       project_key: envelope.scope.project_key || null, repo_identity: envelope.scope.repo_identity || null,
@@ -400,14 +401,23 @@ function renderDetails(model) {
 function renderJobHtml(model) {
   const m = model;
   const accCls = m.axes.acceptance === 'unknown' ? 'pending' : m.axes.acceptance;
-  const dd = m.decision;
+  const ds = Array.isArray(m.decisions) ? m.decisions.filter(isObject) : [];
+  const oldest = ds.length ? ds[0] : null;
   const s1 = `<h1>${esc(m.job)} <span class="muted">· ${esc(m.project)}</span></h1>\n<p class="updated muted">updated ${esc(m.published_at)} @ ${m.commit ? esc(m.commit) : 'unknown'}</p>`;
   const decWired = isWired(m, 'decision');
   const ph = isObject(m.phase) && typeof m.phase.label === 'string' ? m.phase : null;
-  const s2 = `<p>${chip(acceptanceChip(m.axes.acceptance, m.axes.can_close), accCls)}${m.needs_decision ? chip('需要你決定', 'warn') : (decWired ? chip('知會', 'info') : chip(NOT_WIRED, 'warn'))}${ph ? chip(`階段：${ph.label}`, 'info') : ''}</p>\n<p><strong>${esc(m.conclusion)}</strong></p>\n<p>${m.needs_decision ? `需要你決定：${dd && typeof dd.question === 'string' ? esc(dd.question) : unknownSpan()}${dd && dd.stale && dd.age_s !== null ? `（已等 ${Math.floor(dd.age_s / 86400)} 天）` : ''}` : (decWired ? '知會：目前沒有待你決定的事項。' : `決定：${NOT_WIRED}（沒有 decision 輸入；不代表沒有待決事項）`)}</p>`;
-  const d = m.decision;
-  const s3 = d
-    ? `<p><strong>${esc(d.question)}</strong></p>\n<ol>${d.options.map((x) => `<li>${esc(x.label)}${x.consequence ? ` — ${esc(x.consequence)}` : ''}</li>`).join('')}</ol>\n<p>這份裁決不授權的事：${d.not_authorized ? esc(d.not_authorized) : unknownSpan()}</p>`
+  const s2 = `<p>${chip(acceptanceChip(m.axes.acceptance, m.axes.can_close), accCls)}${m.needs_decision ? chip('需要你決定', 'warn') : (decWired ? chip('知會', 'info') : chip(NOT_WIRED, 'warn'))}${ph ? chip(`階段：${ph.label}`, 'info') : ''}</p>\n<p><strong>${esc(m.conclusion)}</strong></p>\n<p>${m.needs_decision ? `需要你決定（${ds.length || 1} 件）：${oldest && typeof oldest.question === 'string' ? esc(oldest.question) : unknownSpan()}${oldest && oldest.stale && oldest.age_s !== null ? `（已等 ${Math.floor(oldest.age_s / 86400)} 天）` : ''}${ds.length > 1 ? `；另 ${ds.length - 1} 件見下方「待決事項」` : ''}` : (decWired ? '知會：目前沒有待你決定的事項。' : `決定：${NOT_WIRED}（沒有 decision 輸入；不代表沒有待決事項）`)}</p>`;
+  const decisionBlock = (d, i) => {
+    const opts = Array.isArray(d.options) ? d.options.filter(isObject) : [];
+    const line = (label, v) => (v ? `<p>${label}：${esc(v)}</p>` : '');
+    return `<h3>${i + 1}. ${esc(d.question)}${d.stale && d.age_s !== null ? `<span class="muted">（已等 ${Math.floor(d.age_s / 86400)} 天）</span>` : ''}</h3>\n`
+      + line('背景', d.background)
+      + (opts.length ? `<ol>${opts.map((x) => `<li>${esc(x.label)}${x.description ? ` — ${esc(x.description)}` : ''}</li>`).join('')}</ol>\n` : '')
+      + (d.recommendation ? `<p>建議：${esc(d.recommendation)}${d.why ? `（${esc(d.why)}）` : ''}</p>\n` : line('理由', d.why))
+      + line('不回會卡住', d.blocks) + line('提出者', d.source);
+  };
+  const s3 = ds.length
+    ? ds.map(decisionBlock).join('\n')
     : (decWired ? '<p class="muted">本回合沒有待決事項。</p>' : notWired('沒有 decision 輸入，不代表沒有待決事項'));
   const sources = m.sources.length
     ? `<ul>${m.sources.map((s) => `<li>${esc(s.role)} · <code>${esc(s.path)}</code> · sha256 <code>${esc(s.sha256)}</code></li>`).join('')}</ul>`
@@ -862,7 +872,7 @@ function assemble(o) {
     runs: o.runsValue, root: o.root, job: o.job, date: o.date, project: o.project,
     now: o.now, commit,
     taskReceipt: o.task ? o.task.value : null, progressReceipt: o.progress ? o.progress.value : null,
-    reviewReceipts, compare: o.compare || [], compareProvided: o.compareProvided === true, decision: o.decision ? o.decision.value : null, planned: o.planned ? o.planned.value : null,
+    reviewReceipts, compare: o.compare || [], compareProvided: o.compareProvided === true, decisions: o.decision ? o.decision.value : null, planned: o.planned ? o.planned.value : null,
     markerStage: o.markerStage || null, taskPhase: o.taskPhase || null, sourcesManifest: o.sourcesManifest || null,
     isAncestor: gitIsAncestor(o.repo), sources,
   });
@@ -871,7 +881,7 @@ function assemble(o) {
 
 function parseArgs(argv) {
   const flags = {};
-  const valued = new Set(['runs', 'root', 'task-receipt', 'progress-receipt', 'compare', 'decision', 'planned', 'job', 'date', 'project', 'repo', 'commit', 'now', 'out-root', 'days']);
+  const valued = new Set(['runs', 'root', 'task-receipt', 'progress-receipt', 'compare', 'decisions', 'planned', 'job', 'date', 'project', 'repo', 'commit', 'now', 'out-root', 'days']);
   const bool = new Set(['print', 'reap', 'serve-stop']);
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
@@ -939,8 +949,8 @@ function main(argv, env) {
     progress = readExplicit('progress-receipt', flags['progress-receipt'], isObject);
     if (progress) sources.push({ role: 'controller_progress_receipt', path: path.resolve(flags['progress-receipt']), sha256: progress.sha256 });
   }
-  const decision = flags.decision ? readExplicit('decision', flags.decision, (v) => isObject(v) && typeof v.question === 'string') : null;
-  if (decision) sources.push({ role: 'decision', path: path.resolve(flags.decision), sha256: decision.sha256 });
+  const decision = flags.decisions ? readExplicit('decisions', flags.decisions, Array.isArray) : null;
+  if (decision) sources.push({ role: 'decision', path: path.resolve(flags.decisions), sha256: decision.sha256 });
   const planned = flags.planned ? readExplicit('planned', flags.planned, Array.isArray) : null;
   if (planned) sources.push({ role: 'planned', path: path.resolve(flags.planned), sha256: planned.sha256 });
   const compare = flags.compare ? loadCompare(flags.compare) : [];

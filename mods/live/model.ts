@@ -49,7 +49,12 @@ export type LiveGateRow = {
   status: string | null
 }
 
-export type LiveDecision = { question: string; options: { label: string; consequence: string }[]; stale: boolean; age_s: number | null }
+// one open owner question (autopilot.decision/2 entry, as the job model carries it): the full context the owner needs to answer without scrolling back
+export type LiveDecision = {
+  id: string | null; question: string; background: string | null; options: { label: string; description: string }[]
+  recommendation: string | null; why: string | null; blocks: string | null; source: string | null; opened_at: string | null
+  stale: boolean; age_s: number | null
+}
 
 // `kind`, `fact`, `goto`, `group` and `ts` are stamped by the ui.ts components (the design system, docs/plans/2026-10-13-live-pane-design-system.md §6.1); `kind` and
 // `fact` are required: a line no component made does not type-check.
@@ -96,8 +101,8 @@ export type LiveSnapshot = {
   header: string
   // the context figure of the global header (`22%`, `—`); the two spend figures come from `detail.spend` (undefined = a snapshot built without it)
   metrics?: { ctx: string }
-  // what is awaited from the human, from the job model's decision object (null = nothing awaited)
-  decision: LiveDecision | null
+  // what is awaited from the human, from the job model's decisions list, oldest first ([] = nothing awaited)
+  pending: LiveDecision[]
   project_key: string | null
   root_run_id: string | null
   // page the Link in the pane points at (null until an envelope was found)
@@ -524,7 +529,7 @@ export function mergeJobModels(primary: JobModel | null, campaigns: JobModel[]):
   return {
     ...base,
     needs_decision: asking !== undefined,
-    decision: asking !== undefined ? asking.decision : base.decision,
+    decisions: all.flatMap(m => m.decisions).sort((a, b) => (Date.parse(a.opened_at ?? '') || 0) - (Date.parse(b.opened_at ?? '') || 0)),
     conclusion: asking !== undefined ? asking.conclusion : base.conclusion,
     progress: frozen !== undefined ? frozen.progress : base.progress,
     phase: phased !== undefined ? phased.phase : base.phase,
@@ -785,7 +790,7 @@ export function bandView(env: Json, jobModel: JobModel | null, projectKey: strin
   if (awaiting !== null || (jobModel !== null && jobModel.needs_decision)) {
     kind = 'decide'
     if (awaiting !== null) reason = attentionReason(awaiting, nowMs, t)
-    else if (jobModel !== null && jobModel.decision !== null) reason = jobModel.decision.question + staleSuffix(jobModel.decision, t)
+    else if (jobModel !== null && jobModel.decisions.length > 0) reason = jobModel.decisions[0].question + staleSuffix(jobModel.decisions[0], t)
     else reason = (jobModel !== null && jobModel.conclusion) || t('reason.decide_fallback')
   } else if (stalled !== null) {
     kind = 'stalled'
@@ -910,7 +915,7 @@ export type JobModel = {
   gates: LiveGateRow[]
   needs_decision: boolean
   conclusion: string | null
-  decision: LiveDecision | null
+  decisions: LiveDecision[]
   progress: JobProgress | null
   phase: { code: string | null; label: string; source: string | null } | null
   sources_manifest: unknown
@@ -931,18 +936,19 @@ export function readJobModel(text: string | null): JobModel | null {
     verdict: typeof g.verdict === 'string' ? g.verdict : null,
     status: typeof g.status === 'string' ? g.status : null,
   }))
-  const d = m.decision
-  const decision: LiveDecision | null = isObject(d) && typeof d.question === 'string' && d.question
-    ? {
-        question: d.question,
-        options: (Array.isArray(d.options) ? d.options : []).filter(isObject).map(o => ({
-          label: typeof o.label === 'string' ? o.label : '',
-          consequence: typeof o.consequence === 'string' ? o.consequence : '',
-        })).filter(o => o.label !== ''),
-        stale: d.stale === true,
-        age_s: finite(d.age_s) ? d.age_s : null,
-      }
-    : null
+  const optText = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null)
+  const decisions: LiveDecision[] = (Array.isArray(m.decisions) ? m.decisions : []).filter(isObject).filter(d => typeof d.question === 'string' && d.question !== '').map(d => ({
+    id: optText(d.id),
+    question: d.question as string,
+    background: optText(d.background),
+    options: (Array.isArray(d.options) ? d.options : []).filter(isObject).map(o => ({
+      label: typeof o.label === 'string' ? o.label : '',
+      description: typeof o.description === 'string' ? o.description : '',
+    })).filter(o => o.label !== ''),
+    recommendation: optText(d.recommendation), why: optText(d.why), blocks: optText(d.blocks), source: optText(d.source), opened_at: optText(d.opened_at),
+    stale: d.stale === true,
+    age_s: finite(d.age_s) ? d.age_s : null,
+  }))
   const p = m.progress
   const progress: JobProgress | null = isObject(p)
     ? {
@@ -954,7 +960,7 @@ export function readJobModel(text: string | null): JobModel | null {
     : null
   const ph = m.phase
   const phase = isObject(ph) && typeof ph.label === 'string' && ph.label ? { code: typeof ph.code === 'string' ? ph.code : null, label: ph.label, source: typeof ph.source === 'string' ? ph.source : null } : null
-  return { acceptance, gates, needs_decision: m.needs_decision === true, conclusion: typeof m.conclusion === 'string' && m.conclusion ? m.conclusion : null, decision, progress, phase, sources_manifest: m.sources_manifest }
+  return { acceptance, gates, needs_decision: m.needs_decision === true, conclusion: typeof m.conclusion === 'string' && m.conclusion ? m.conclusion : null, decisions, progress, phase, sources_manifest: m.sources_manifest }
 }
 
 // Axis words follow the review page's chip mapping (plan A12).

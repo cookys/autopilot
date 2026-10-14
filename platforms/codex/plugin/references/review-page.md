@@ -107,9 +107,12 @@ The project watcher feeds the page and the band five inputs beyond runs / task /
 - planned (`planned-input.js`): campaign scope = the controller receipt's deliverable list (`deliverable_titles[id]` when
   present); other scopes = the union of `<live>/tasks/<sid>.json` of this project's sessions whose unexpired marker root equals
   the scope root (no marker = unbound), within 24 h, by `first_created_at`. Display-only: never a denominator.
-- decision (`decision-input.js`): `<git-common-dir>/autopilot/decisions/<scope_key>.json`, schema `autopilot.decision/1`,
-  written by `scripts/open-decision.js open|close|show` (depth-0 opens it at a DOA question; `show --json` exits 0 when open,
-  1 when none). Ignored when project_key / repo_identity / root differ or `opened_at` is in the future beyond a small slack. Older than 7 days it is still shown, with `stale:true` and 「已等 N 天」: age never hides a question, only `close` removes it.
+- decisions (`decision-input.js`): `<git-common-dir>/autopilot/decisions/<scope_key>.json`, schema `autopilot.decision/2`: one file per scope holding
+  EVERY open question in `decisions[]` (`id`, `question`, `background`, `options[{label, description}]`, `recommendation`, `why`, `blocks`, `source`,
+  `opened_at`, `opened_by_session`, hook-set `origin`). Written by `scripts/open-decision.js open|close --id|show` (depth-0 adds an entry at a DOA question; `open` prints
+  the new id and never overwrites another entry; `show --json` exits 0 when any is open, 1 when none). The model.json carries them as `decisions[]` (oldest first,
+  each with `stale` / `age_s`; `needs_decision` = non-empty); the page prints each in full and the live pane's 現況 tab shows them in the 待決議事項（N）block.
+  An entry is ignored when its file's project_key / repo_identity / root differ or its `opened_at` is in the future beyond a small slack. Older than 7 days it is still shown, with `stale:true` and 「已等 N 天」: age never hides a question, only `close --id` removes it.
 - compare (`compare-input.js`): `<git-common-dir>/autopilot/compare/<root>/*.json` through the renderer's `loadCompare`;
   the unbound scope reads nothing; the writer is a guidance row (W2e-g), so the manifest says `installed:false`.
 - marker stage (`phase-input.js`): `size`, `urgent`, `level`, `stage`, `stage_set_at`, `unit` and `review_families` (§2.9 fields; a marker without a valid `stage` is ignored) of unexpired markers of this scope; newest `stage_set_at` wins. Precedence:

@@ -1,55 +1,19 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://autopilot.local/schemas/decision.schema.json",
-  "title": "autopilot-decision-1",
+  "title": "autopilot-decision-2",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "schema",
-    "question",
-    "options",
-    "context",
     "root_run_id",
     "repo_identity",
     "project_key",
-    "opened_at",
-    "opened_by_session"
+    "decisions"
   ],
   "properties": {
     "schema": {
-      "const": "autopilot.decision/1"
-    },
-    "question": {
-      "type": "string",
-      "minLength": 1
-    },
-    "options": {
-      "type": [
-        "array",
-        "null"
-      ],
-      "items": {
-        "type": "string",
-        "minLength": 1
-      },
-      "minItems": 2
-    },
-    "context": {
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "not_authorized": {
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "source": {
-      "enum": [
-        "ask_user_question"
-      ]
+      "const": "autopilot.decision/2"
     },
     "root_run_id": {
       "type": [
@@ -65,15 +29,104 @@
       "type": "string",
       "minLength": 1
     },
-    "opened_at": {
-      "type": "string",
-      "minLength": 1
-    },
-    "opened_by_session": {
-      "type": [
-        "string",
-        "null"
-      ]
+    "decisions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "question",
+          "background",
+          "options",
+          "recommendation",
+          "why",
+          "blocks",
+          "source",
+          "opened_at",
+          "opened_by_session"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "question": {
+            "type": "string",
+            "minLength": 1
+          },
+          "background": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "options": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "minItems": 2,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "label",
+                "description"
+              ],
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "description": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "recommendation": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "why": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "blocks": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "opened_at": {
+            "type": "string",
+            "minLength": 1
+          },
+          "opened_by_session": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "origin": {
+            "enum": [
+              "ask_user_question"
+            ]
+          }
+        }
+      }
     }
   }
 }

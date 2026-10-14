@@ -166,6 +166,16 @@ const roster = {
   qc_panel_seats_complete: true, qc_panel_seats: seats, in_rail_review: 'panel',
   override_admitted_seats: ['qc_panel[0]', 'qc_panel[1]', 'qc_panel[2]'],
 };
+if (scenario === 'strict_readiness') {
+  // The strict l4 bootstrap digests the roster the host resolved, implementer_family included.
+  // review-candidate overrides that field for the panel's family rule, so the override must
+  // land AFTER the readiness check or the digest reads as drift ("roster changed after bootstrap").
+  Object.assign(roster, {
+    implementer_family: 'fixture', reviewer_family: 'anthropic', implementer_endpoint: null, reviewer_endpoint: null,
+    verification_author_present: false, verification_author_engine: '', verification_author_runner: '',
+    verification_author_effort: '', verification_author_endpoint: '', verification_author_family: 'unknown',
+  });
+}
 let impl = 0;
 let verifyRuns = 0;
 let adopterAdmissionCalls = 0;
@@ -267,6 +277,40 @@ if (scenario === 'forced_writer') {
     return runCampaignComposition(composeInput, composeAdapters);
   };
 }
+if (scenario === 'strict_readiness') {
+  const { createStrictL5ProviderBootstrap } = require(path.join(root, 'src', 'readiness', 'provider-bootstrap'));
+  const { buildSelectedRoster } = require(path.join(root, 'src', 'readiness', 'status'));
+  const { createProviderReadinessReceipt } = require(path.join(root, 'src', 'readiness', 'receipt'));
+  const NOW = new Date().toISOString();
+  const resolvedRoster = { ...roster, provider_readiness_receipt_ttl_seconds: 3600, provider_readiness_fallback_family_constraint: 'different' };
+  const observation = (tuple, axis, ttl) => ({
+    schema_version: 1, artifact_type: 'provider_axis_observation', tuple, axis, status: 'ready',
+    observed_at: NOW, ttl_seconds: ttl,
+    evidence_class: axis === 'qualification' ? 'host-injected-exact-role' : (axis === 'transport' ? 'safe-surface' : 'live-probe'),
+    reason: null,
+  });
+  const readyCollector = (o) => {
+    const ttl = o.resolvedRoster.provider_readiness_receipt_ttl_seconds;
+    const selected = buildSelectedRoster(o.resolvedRoster, o.now, ttl);
+    for (const seat of selected) {
+      for (const candidate of [seat, ...seat.fallbacks]) {
+        candidate.observations = {
+          transport: observation(candidate.tuple, 'transport', ttl),
+          live: observation(candidate.tuple, 'live', ttl),
+          qualification: observation(candidate.tuple, 'qualification', ttl),
+        };
+      }
+    }
+    const policy = { receipt_ttl_seconds: ttl, fallback_family_constraint: o.resolvedRoster.provider_readiness_fallback_family_constraint };
+    return { receipt: createProviderReadinessReceipt({ roster: selected, policy, now: o.now }), roster: selected, policy };
+  };
+  const bootstrap = createStrictL5ProviderBootstrap({ cwd: sbx, level: 'l4' }, {
+    resolvedRoster, collectReadiness: readyCollector, now: () => NOW,
+  });
+  options.providerReadinessAuthority = bootstrap.providerReadinessAuthority;
+  options.qualificationProvider = bootstrap.qualificationProvider;
+  Object.assign(roster, resolvedRoster);
+}
 const engine = new AutopilotEngine(options);
 if (isImplControl) {
   engine.implementTask = () => {
@@ -325,6 +369,7 @@ emit({
   scenario, thrown, status: result.status, phase: result.phase || null, code: result.code || null,
   reason: result.reason ? String(result.reason).slice(0, 300) : null,
   verdict: result.verdict || null,
+  strict_readiness_ready: Array.isArray(result.ledger) && result.ledger.some((e) => e.unit === 'strict_l5_provider_readiness' && e.status === 'ready'),
   impl, review_calls: reviewLog.length, review_models: reviewLog,
   verify_runs: verifyRuns, verify_cwds: verifyCwds,
   events, campaign_phase: phase, campaign_id: campaignId, ledger_path: ledgerPath,

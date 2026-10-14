@@ -62,6 +62,12 @@ eq "review_candidate_no_writer" "$(jf forced_writer 'j.forced_result.phase')" "R
 eq "false" "$(jf forced_writer 'j.forced_result.dispatcher_called')" "RO1 forced implement adapter dispatches nothing"
 eq "0" "$(jf forced_writer 'j.impl')" "RO1 forced implement adapter: implementer dispatch count stays 0"
 
+# ---- strict readiness: the implementer_family override lands AFTER the host roster digest check ----------------------
+run_sc strict_readiness
+eq "converged" "$(jf strict_readiness 'j.status')" "strict l4 readiness with a roster-digesting bootstrap: review-only converges (no roster drift)"
+eq "true" "$(jf strict_readiness 'j.strict_readiness_ready')" "strict readiness was really consumed (strict_l5_provider_readiness:ready in the ledger)"
+eq "0" "$(jf strict_readiness 'j.impl')" "strict readiness path: 0 implementer calls"
+
 # ---- RO2: the range is re-derived, never supplied ----------------------------------------------------
 eq "3" "$(jf ok 'j.seat_diff_count')" "RO2 each seat received a diff file"
 eq "true" "$(jf ok 'j.seat_diff_parity')" "RO2 bytes every seat received equal an independent git diff base..head"

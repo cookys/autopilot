@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0164 -->
+<!-- next-id: BL-0166 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1828,3 +1828,29 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: review of decision/2 eb9f702e, 2026-10-14
 - **Pointer**: none
 - **Context**: ask-decision.js closeOwn only clears its own pointer; dead-session items persist (stale after 7 d). isOurs in closeDecisionById has no counter-example test. withWriteLock ensureDir creates decisions/ on close.
+
+### Official defaults recipe still says brain sittings are not scorecard rows
+- **Id**: BL-0164
+- **Status**: open
+- **Since**: 2026-10-14
+- **Origin**: self
+- **Problem**: 腦力題考完現在可以登記進成績單，但官方預設值的配方檔仍寫著「腦力題不是成績單的列」，並把 owner 角色整個排除在官方預設值之外。下次產生官方預設值時，腦力題結果不會被收進去。
+- **Impact**: 低。只影響官方預設值的內容；本機成績單照常登記。
+- **Trigger**: 下次重產 references/official-qualification-defaults.json，或要把腦力題結果放進官方預設值時
+- **Effort**: S
+- **Source**: review of brain-row merge e7013833, 2026-10-14
+- **Pointer**: none
+- **Context**: references/official-qualification-defaults.recipe.json:40 exclusion reason is byte-pinned by build-qualification-defaults; change the reason and re-pin together.
+
+### Brain pass makes the foreman seat look qualified
+- **Id**: BL-0165
+- **Status**: open
+- **Since**: 2026-10-14
+- **Origin**: self
+- **Problem**: 腦力題和工頭題登記時角色都是 owner，只靠 scope 區分。成績單的非嚴格查詢不看 scope，所以某個模型只要腦力題合格，查工頭席位也會顯示合格。
+- **Impact**: 中。工頭席位可能被誤認為已考過，派工時選到沒考過工頭題的模型。
+- **Trigger**: 第一筆合格的腦力題登記進成績單之前
+- **Effort**: S
+- **Source**: review of brain-row merge e7013833, 2026-10-14
+- **Pointer**: none
+- **Context**: engine-scorecard.js findSeatBaseline :1747-1767 and computeSeatProjection :1546-1548 match seats without scope / methodology_kind; filter owner rows by scope.

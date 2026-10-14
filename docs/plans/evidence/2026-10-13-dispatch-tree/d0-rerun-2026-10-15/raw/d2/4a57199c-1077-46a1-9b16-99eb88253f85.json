@@ -1,0 +1,11 @@
+{
+  "session_id": "4a57199c-1077-46a1-9b16-99eb88253f85",
+  "level": null,
+  "repo_root": "/tmp/d0probe-ylVl6Q/repo-d2/.claude/worktrees/hetero-d0-d2-outer-qQvE7D",
+  "started_at": "2026-10-14T21:38:31.216Z",
+  "expires_at": "2026-10-15T21:38:31.216Z",
+  "repo_identity": "git-common-dir:/tmp/d0probe-ylVl6Q/repo-d2/.git",
+  "project_key": "3e5a727a8176126b",
+  "root_run_id": "hetero-1792013910-1061685-f480",
+  "parent_session_id": "304bf760-eda3-4950-a4aa-25044700668f"
+}

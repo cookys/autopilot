@@ -1,0 +1,55 @@
+{
+  "schema": "autopilot.d0-result/1",
+  "plan": "docs/plans/2026-10-13-dispatch-tree.md",
+  "generated_at": "2026-10-14T21:38:42Z",
+  "claude_version": "2.1.300 (Claude Code)",
+  "omit_sentinel_negative_control": false,
+  "rows": [
+    {
+      "row": "d2",
+      "status": "pass",
+      "evidence": "Claude->codex(stub)->Claude end to end: inner marker names the outer session, outer marker unchanged, nested manifest parent_run_id == harness run",
+      "detail": {
+        "outer_session": "304bf760-eda3-4950-a4aa-25044700668f",
+        "inner_session": "4a57199c-1077-46a1-9b16-99eb88253f85",
+        "outer_claude_rc": 0,
+        "codex_stub_env": "CLAUDE_CODE_SESSION_ID=304bf760-eda3-4950-a4aa-25044700668f AUTOPILOT_PARENT_RUN_ID=hetero-1792013910-1061685-f480 AUTOPILOT_DISPATCH_DEPTH=1 AUTOPILOT_PARENT_SESSION_ID=304bf760-eda3-4950-a4aa-25044700668f AUTOPILOT_SESSION_ID=<unset> AUTOPILOT_ROOT_RUN_ID=hetero-1792013910-1061685-f480 inner-claude rc=0 ",
+        "inner_claude_bash_env": "CLAUDE_CODE_SESSION_ID=4a57199c-1077-46a1-9b16-99eb88253f85 AUTOPILOT_PARENT_RUN_ID=hetero-1792013910-1061685-f480 AUTOPILOT_DISPATCH_DEPTH=1 AUTOPILOT_PARENT_SESSION_ID=304bf760-eda3-4950-a4aa-25044700668f AUTOPILOT_SESSION_ID=<unset> AUTOPILOT_ROOT_RUN_ID=hetero-1792013910-1061685-f480 inner-review rc=1 ",
+        "inner_marker_exists": true,
+        "inner_marker_session_id": "4a57199c-1077-46a1-9b16-99eb88253f85",
+        "inner_marker_parent_session_id": "304bf760-eda3-4950-a4aa-25044700668f",
+        "outer_marker_unchanged": "true",
+        "outer_hetero_run_id": "hetero-1792013910-1061685-f480",
+        "nested_manifest_parent_run_id": "hetero-1792013910-1061685-f480",
+        "nested_manifest_session_id": "4a57199c-1077-46a1-9b16-99eb88253f85",
+        "nested_manifest_depth": "1",
+        "note": "inner_session is the id the stub codex passed as --session-id; no manifest claims it, so section 3 places the nested rail by a named reason"
+      }
+    }
+  ],
+  "blocking": {
+    "3a": [
+      "a",
+      "b",
+      "c"
+    ],
+    "3b": [
+      "a",
+      "f"
+    ],
+    "3c": [],
+    "5": [
+      "g",
+      "h",
+      "i"
+    ],
+    "R": [
+      "c",
+      "d1",
+      "d2",
+      "e",
+      "f",
+      "k"
+    ]
+  }
+}

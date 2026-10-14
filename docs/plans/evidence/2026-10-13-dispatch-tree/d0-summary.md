@@ -38,3 +38,14 @@ Re-run: `bash d0-probe.sh --out d0-result.json`. Negative control: `AUTOPILOT_RU
 - 3a, 3b, 3c: not blocked by D0 (a, b, c, f pass).
 - 5: blocked (h bad).
 - R: blocked (d2 bad, kimi/agy/opencode not_run), plan must be revised and re-reviewed first.
+
+## Re-run 2026-10-15 after 3b (row d2)
+
+`bash d0-probe.sh --rows d2` at `bae71599` (3b merged as `92002f7f`), claude 2.1.300; result and raw dumps in
+[`d0-rerun-2026-10-15/`](d0-rerun-2026-10-15/d0-result.json) (secret scan: 0 hits, 0 redactions).
+
+- **d2 codex path: pass.** The codex child now sees `AUTOPILOT_PARENT_SESSION_ID` = the outer session and no
+  `AUTOPILOT_SESSION_ID`; the inner Claude's marker names itself with `parent_session_id` = the outer session; the
+  outer marker is unchanged; the nested manifest `parent_run_id` = the hetero run, `session_id` = the inner session.
+- kimi, agy, opencode remain `not_run` (no provider credentials under an isolated HOME), so by the plan's rule
+  R stays blocked until they run in a credentialed environment. Row h (step 5) is unchanged: still bad.

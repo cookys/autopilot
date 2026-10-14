@@ -8,6 +8,9 @@
 #   scripts/completeness-scan.sh --all           # scan all tracked files
 #   scripts/completeness-scan.sh --range A..B    # scan files changed in commit range
 #   scripts/completeness-scan.sh --files f1 f2   # explicit file list
+#     A single joined argument is split automatically; if it holds a newline it
+#     splits on newlines only (names with spaces survive), CRLF loses the \r;
+#     warnings go to stderr; directories give no warning.
 #
 # Exit codes:
 #   0  clean (no new findings; pre-existing findings still allowed)
@@ -21,14 +24,37 @@ set -euo pipefail
 
 MODE="staged"
 FILES=()
+declare -A SPLIT_FROM=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --all)    MODE="all"; shift ;;
     --range)  MODE="range"; RANGE="$2"; shift 2 ;;
-    --files)  MODE="files"; shift; while [[ $# -gt 0 && "$1" != --* ]]; do FILES+=("$1"); shift; done ;;
+    --files)  MODE="files"; shift
+              while [[ $# -gt 0 && "$1" != --* ]]; do
+                # One argument holding a joined list ("f1 f2", or one file per line) is
+                # not a file; split it instead of silently scanning 0 files (clean:true).
+                # A newline-bearing argument splits on newlines only, so names with
+                # spaces survive; otherwise it splits on whitespace.
+                if [[ ! -f "$1" && "$1" =~ [[:space:]] ]]; then
+                  if [[ "$1" == *$'\n'* ]]; then
+                    IFS=$'\n' read -r -d '' -a _split <<< "$1" || true
+                  else
+                    read -r -d '' -a _split <<< "$1" || true
+                  fi
+                  for _p in "${_split[@]}"; do
+                    _p="${_p%$'\r'}"
+                    [[ -n "$_p" ]] || continue
+                    SPLIT_FROM["$_p"]="$1"
+                    FILES+=("$_p")
+                  done
+                else
+                  FILES+=("$1")
+                fi
+                shift
+              done ;;
     -h|--help)
-      sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+      sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -69,7 +95,7 @@ is_scannable() {
   esac
   # heuristic: if file(1) says binary, skip
   if command -v file >/dev/null 2>&1; then
-    case "$(file -b --mime-encoding "$f" 2>/dev/null)" in
+    case "$(file -L -b --mime-encoding "$f" 2>/dev/null)" in
       binary) return 1 ;;
     esac
   fi
@@ -77,7 +103,8 @@ is_scannable() {
 }
 
 # Pattern definitions (POSIX ERE)
-PAT_MARKER='(TODO|FIXME|HACK|XXX|TEMP)\b'
+# Three to five X in a row is a marker; six or more is a mktemp template, not a marker.
+PAT_MARKER='(TODO|FIXME|HACK|TEMP)\b|(^|[^X])X{3,5}\b'
 PAT_EMPTY_IMPL='^[[:space:]]*return[[:space:]]+(\{\}|0)[[:space:]]*;[[:space:]]*$'
 PAT_DISABLED_TEST='(\bDISABLED_[A-Za-z0-9_]+|GTEST_SKIP\(\)|^[[:space:]]*//[[:space:]]*TEST[[:space:]]*\()'
 PAT_PLACEHOLDER_ASSERT='EXPECT_TRUE\([[:space:]]*true[[:space:]]*\)|assert\([[:space:]]*True[[:space:]]*\)'
@@ -162,6 +189,13 @@ trap 'rm -f "$TMPF"' EXIT
 scanned=0
 for f in "${FILES[@]:-}"; do
   [[ -n "$f" ]] || continue
+  if [[ ! -e "$f" || ( ! -d "$f" && ! -f "$f" ) ]]; then
+    if [[ -n "${SPLIT_FROM[$f]:-}" ]]; then
+      echo "completeness-scan: argument '${SPLIT_FROM[$f]}' was split; piece '$f' is not a regular file" >&2
+    else
+      echo "completeness-scan: skipping '$f' (not a regular file)" >&2
+    fi
+  fi
   if ! is_scannable "$f"; then continue; fi
   scanned=$((scanned + 1))
   scan_file "$f" >> "$TMPF" || true

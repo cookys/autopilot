@@ -832,8 +832,10 @@ function normalizeEngineToken(raw, label) {
 
 // Mirrors engine-scorecard.js's EFFORT_VALUES. `none` is a real, distinct state (a transport with
 // no effort dimension) and is NOT the same as an absent effort, which means "recorded before
-// effort partitioning".
-const SEAT_EFFORT_VALUES = ['none', 'low', 'medium', 'high', 'xhigh', 'max'];
+// effort partitioning". `default` is a third distinct state: the endpoint has an effort dimension
+// but the runner sent none, so the endpoint default ran (hash-distinct from absent and from every
+// explicit effort).
+const SEAT_EFFORT_VALUES = ['none', 'default', 'low', 'medium', 'high', 'xhigh', 'max'];
 
 function normalizeSeatEffort(effort) {
   const token = normalizeSeatToken(effort, 'effort');

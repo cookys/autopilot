@@ -464,7 +464,15 @@ if [[ -n "$SPEC_FILE" || -n "$PACK_FILE" ]]; then
     fi
   fi
 fi
-case "$EFFORT" in low|medium|high|xhigh|max) ;; *) die_precondition "--effort must be low|medium|high|xhigh|max" ;; esac
+case "$EFFORT" in default|low|medium|high|xhigh|max) ;; *) die_precondition "--effort must be default|low|medium|high|xhigh|max" ;; esac
+# `default` = no effort sent, the endpoint default runs. Only a runner with no effort control can honour that;
+# a runner that consumes --effort would be handed the literal word "default".
+if [ "$EFFORT" = "default" ]; then
+  case "$RUNNER" in
+    anthropic-compatible|cc-shim|claude-native|kimi) ;;
+    *) die_precondition "--effort default (no effort sent) is only for runners with no effort control (anthropic-compatible|cc-shim|claude-native|kimi); runner '$RUNNER' takes an explicit effort" ;;
+  esac
+fi
 
 # R1 detach: when ledger coords are supplied and detach is on (default), re-run this dispatch
 # INLINE inside a kill-surviving setsid session and relay its durable result. Byte-identical

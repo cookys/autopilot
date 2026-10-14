@@ -91,7 +91,7 @@ const RUNNERS = new Set([
   'cursor',
   'opencode',
 ]);
-const EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
+const EFFORTS = new Set(['default', 'low', 'medium', 'high', 'xhigh', 'max']);
 
 class CliError extends Error {
   constructor(message, exitCode = 2) {

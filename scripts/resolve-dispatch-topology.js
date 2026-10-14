@@ -7,7 +7,7 @@
  *
  * Ordering:
  * Cheapest-first — there is no reliable price data; effort rank
- * low < medium < high < xhigh < max, then ascending latency.sample_wall_time_s,
+ * low < medium < high < xhigh < max < default, then ascending latency.sample_wall_time_s,
  * then engine name (string compare) as final tiebreak.
  *
  * ADR-0001: topology facts are re-derived from installed binaries + scorecard,
@@ -47,6 +47,10 @@ const EFFORT_RANK = Object.freeze({
   high: 3,
   xhigh: 4,
   max: 5,
+  // `default` = no effort sent, the endpoint's own default ran. Its real cost is unknown, so it
+  // sorts AFTER every explicit effort (a cheapest-first ladder must not put an unknown cost
+  // ahead of a known-cheap one). Must stay in step with scripts/lib/effort-scale.js.
+  default: 6,
 });
 
 const CLAUDE_FALLBACK_LADDER = Object.freeze([
@@ -767,8 +771,8 @@ function deriveTopology(repoRoot, options = {}) {
     const seats = [...getReviewerQualified()];
     seats.sort((a, b) => {
       // In ordering: empty effort ranks below every explicit effort (sorts last)
-      const rankA = a.effort ? (EFFORT_RANK[a.effort] || 99) : 999;
-      const rankB = b.effort ? (EFFORT_RANK[b.effort] || 99) : 999;
+      const rankA = a.effort ? (EFFORT_RANK[a.effort] ?? 99) : 999;
+      const rankB = b.effort ? (EFFORT_RANK[b.effort] ?? 99) : 999;
       if (rankA !== rankB) return rankA - rankB;
       if (a.latency !== b.latency) return a.latency - b.latency;
       return a.engine.localeCompare(b.engine);
@@ -786,8 +790,11 @@ function deriveTopology(repoRoot, options = {}) {
       const diffB = b.family !== askingFamily ? 0 : 1;
       if (diffA !== diffB) return diffA - diffB;
       // An originally-empty effort ranks below every explicit effort
-      const rankA = a.effort ? 0 : 1;
-      const rankB = b.effort ? 0 : 1;
+      // `default` (no effort sent, endpoint default ran, cost unknown) is not a measured explicit effort,
+      // so it ties with the empty/legacy effort at rank 1 and sorts after every explicit one.
+      const explicitEffort = (s) => (s.effort && s.effort !== 'default' ? 0 : 1);
+      const rankA = explicitEffort(a);
+      const rankB = explicitEffort(b);
       if (rankA !== rankB) return rankA - rankB;
       if (a.latency !== b.latency) return a.latency - b.latency;
       if (a.costRank !== b.costRank) return a.costRank - b.costRank;
@@ -828,8 +835,11 @@ function deriveTopology(repoRoot, options = {}) {
       // In panel ordering: highest effort rank first.
       // An originally-empty effort ranks below every explicit effort, so rank 0 ensures it sorts last
       // and never becomes chair over any explicit effort.
-      const rankA = a.effort ? (EFFORT_RANK[a.effort] || 0) : -1;
-      const rankB = b.effort ? (EFFORT_RANK[b.effort] || 0) : -1;
+      // EFFORT_RANK is ASCENDING (default = 6, last); this comparator is DESCENDING, so `default`
+      // (unknown cost) must be pinned below every explicit effort here or it would chair the panel.
+      const chairRank = (s) => (s.effort === 'default' ? 0 : s.effort ? (EFFORT_RANK[s.effort] || 0) : -1);
+      const rankA = chairRank(a);
+      const rankB = chairRank(b);
       if (rankA !== rankB) return rankB - rankA; // highest effort rank first
       if (a.latency !== b.latency) return a.latency - b.latency;
       return a.engine.localeCompare(b.engine);

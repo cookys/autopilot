@@ -2066,9 +2066,17 @@ validate_d2_agy_claims() {
 }
 
 case "$EFFORT" in
-  low|medium|high|xhigh|max) ;;
-  *) die_precondition "--effort must be one of low|medium|high|xhigh|max (got: $EFFORT)" ;;
+  default|low|medium|high|xhigh|max) ;;
+  *) die_precondition "--effort must be one of default|low|medium|high|xhigh|max (got: $EFFORT)" ;;
 esac
+# `default` = no effort sent, the endpoint default runs. Only a runner with no effort control can honour that;
+# a runner that consumes --effort would be handed the literal word "default".
+if [ "$EFFORT" = "default" ]; then
+  case "$RUNNER" in
+    anthropic-compatible|cc-shim|claude-native|kimi) ;;
+    *) die_precondition "--effort default (no effort sent) is only for runners with no effort control (anthropic-compatible|cc-shim|claude-native|kimi); runner '$RUNNER' takes an explicit effort" ;;
+  esac
+fi
 
 case "$SKILL_MODE" in
   off|prompt|native|auto) ;;

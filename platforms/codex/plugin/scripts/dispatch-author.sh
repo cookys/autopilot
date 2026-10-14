@@ -785,7 +785,15 @@ if [[ "$RUNNER" = "cursor" ]]; then
   cursor_is_family_alias "$MODEL" && die_precondition "--model for --runner cursor must be a full cursor-agent model id, not a family alias (got: $MODEL); see cursor-agent --list-models"
 fi
 [[ -n "$PROMPT_FILE" && -r "$PROMPT_FILE" ]] || die_precondition "--prompt-file is required and must be readable"
-case "$EFFORT" in low|medium|high|xhigh|max) ;; *) die_precondition "--effort must be low|medium|high|xhigh|max" ;; esac
+case "$EFFORT" in default|low|medium|high|xhigh|max) ;; *) die_precondition "--effort must be default|low|medium|high|xhigh|max" ;; esac
+# `default` = no effort sent, the endpoint default runs. Only a runner with no effort control can honour that;
+# a runner that consumes --effort would be handed the literal word "default".
+if [ "$EFFORT" = "default" ]; then
+  case "$RUNNER" in
+    anthropic-compatible|cc-shim|claude-native|kimi) ;;
+    *) die_precondition "--effort default (no effort sent) is only for runners with no effort control (anthropic-compatible|cc-shim|claude-native|kimi); runner '$RUNNER' takes an explicit effort" ;;
+  esac
+fi
 
 
 if [ "$RUNNER" = "agy" ]; then

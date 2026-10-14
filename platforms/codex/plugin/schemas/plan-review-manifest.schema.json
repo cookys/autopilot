@@ -84,6 +84,7 @@
         "effort": {
           "type": "string",
           "enum": [
+            "default",
             "low",
             "medium",
             "high",
@@ -156,6 +157,7 @@
         "effort": {
           "type": "string",
           "enum": [
+            "default",
             "low",
             "medium",
             "high",
@@ -231,6 +233,7 @@
         "effort": {
           "type": "string",
           "enum": [
+            "default",
             "low",
             "medium",
             "high",

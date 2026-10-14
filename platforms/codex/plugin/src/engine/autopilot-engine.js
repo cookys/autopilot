@@ -3569,7 +3569,7 @@ class AutopilotEngine {
           ...roster,
           reviewer_engine: fallbackModel,
           reviewer_runner: fallbackRow.runner,
-          ...(typeof fallbackRow.effort === 'string' && VALID_EFFORTS.has(fallbackRow.effort)
+          ...(typeof fallbackRow.effort === 'string' && (VALID_EFFORTS.has(fallbackRow.effort) || fallbackRow.effort === 'default')
             ? { reviewer_effort: fallbackRow.effort }
             : {}),
           // The fallback row comes from the QUALIFIED ladder (post-R5 a retired

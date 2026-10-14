@@ -11,7 +11,10 @@
 # ledger parked in AWAITING_DISPOSITION at the cap -> intake claims it, a repair confined to the
 # counted paths completes at usage == cap, a repair adding a path beyond the cap is refused by the
 # reducer (usage unchanged), usage never decreases; C cli/intake use ONE shared predicate;
-# D the admission advisory (cap == output_paths with repairs allowed).
+# D the admission advisory (cap == output_paths with repairs allowed); E real sealed contract through
+# runCampaignIntake plus the stderr rendering; F cli.js vs campaign-intake.js side by side per phase
+# (BOUNDARY_REJECTED / REVIEWING / AWAITING_DISPOSITION / AWAITING_CONVERGENCE_ADJUDICATION, recorded
+# calls to the shared predicate + verdict).
 # RED at 7a239e565caaa42b96dc9c4534f9563f5966c16a (new suite, unmodified src), 22 failed / 13 passed:
 #   FAIL AWAITING_DISPOSITION at the cap is resumable: 'a_AWAITING_DISPOSITION_at_cap=resumable' not found
 #   FAIL real AWAITING_DISPOSITION at the cap is cli-resumable: 'b_cli_eligibility=resumable' not found
@@ -19,6 +22,11 @@
 #   FAIL one shared pre-spend predicate is exported: 'c_helper_exported=true' not found
 #   FAIL advisory fires when cap == output_paths and repairs are allowed: 'd_cap_equals_paths_repairs=...' not found
 # Mutation: helper reverted to `used >= max` for every phase -> 14 FAIL (all of (a), the real-ledger intake and repair stages).
+# Stage F mutations (each applied alone, then restored; all restored = green, 48 assertions):
+#   M1 cli.js: `repair: false,` added to the predicate call -> RED, 11 fail (every cli a_* repair-phase row at/below/over cap, b_cli_eligibility, f_* blocked/parity incl. AWAITING_CONVERGENCE_ADJUDICATION)
+#   M2 campaign-intake.js: predicate replaced by inline `usage >= max` -> RED, 11 fail (b_intake_status=claimed, repair lifecycle b_*, c_intake_uses_helper, f_BOUNDARY_REJECTED/AWAITING_DISPOSITION parity, intake-reached-predicate)
+#   M3 cli.js: `!reviewingResumable && ` removed -> RED, 1 fail (f_REVIEWING parity: cli now calls the predicate, intake does not)
+#   M4 cli.js: predicate negated -> RED, 22 fail (all a_* rows, b_cli_eligibility, f_* blocked/parity)
 TEST_NAME="campaign-repair-at-file-cap"
 . "$(dirname "$0")/lib.sh"
 unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
@@ -192,7 +200,7 @@ function boundaryResult(fx) {
     gate_attempts: 1, resources_created: 1, zero_diff_receipt_digest: null,
   };
 }
-function toReviewing(fx, { disposition = false, stopAtBoundary = false } = {}) {
+function toReviewing(fx, { disposition = false, stopAtBoundary = false, convergence = false } = {}) {
   const { parseImplementationOutput } = require(path.join(root, 'src', 'runners', 'implementer'));
   const stdout = `${JSON.stringify(boundaryResult(fx))}\n`;
   const r = new AutopilotEngine({
@@ -229,6 +237,20 @@ function toReviewing(fx, { disposition = false, stopAtBoundary = false } = {}) {
   });
   assert.strictEqual(appended.state.phase, icc.CAMPAIGN_STATES.REVIEWING);
   let last = appended;
+  if (convergence) {
+    fx.control.initial_state = appended.state;
+    last = intake.appendCampaignEvent({
+      repo: fx.repo, campaignControl: fx.control, observedAt: '2026-08-30T00:00:03.000Z',
+      eventType: icc.CAMPAIGN_EVENTS.AWAITING_CONVERGENCE,
+      generation: fx.control.initial_state.generation,
+      stageIdentity: 'campaign-convergence:fixture',
+      payload: {
+        reason: 'budget exhausted', exceeded_axes: ['changed_files'],
+        budget_receipt_digest: icc.canonicalDigest({ fixture: 'budget' }),
+      },
+    });
+    assert.strictEqual(last.state.phase, icc.CAMPAIGN_STATES.AWAITING_CONVERGENCE_ADJUDICATION);
+  }
   if (disposition) {
     fx.control.initial_state = appended.state;
     const reviewDigest = icc.canonicalDigest({ fixture: 'product-review', id: fx.campaignId });
@@ -379,6 +401,7 @@ if (hasHelper) {
     ['BOUNDARY_REJECTED', fxBoundary, toReviewing(fxBoundary, { stopAtBoundary: true })],
     ['REVIEWING', fxReviewing, toReviewing(fxReviewing)],
     ['AWAITING_DISPOSITION', fxB, null],
+    ['AWAITING_CONVERGENCE_ADJUDICATION', null, null],
   ];
   for (const [phase, fx, st] of cases) {
     const observed = '2026-08-30T00:00:05.000Z';
@@ -387,6 +410,11 @@ if (hasHelper) {
     if (phase === 'AWAITING_DISPOSITION') {
       target = reviewingFixture('parity-disposition', { usageFiles: 4 });
       state = toReviewing(target, { disposition: true });
+    }
+    if (phase === 'AWAITING_CONVERGENCE_ADJUDICATION') {
+      // first-pass `>=`: 4/4 is the predicate-TRUE row, so both sides must REFUSE
+      target = reviewingFixture('parity-convergence', { usageFiles: 4 });
+      state = toReviewing(target, { convergence: true });
     }
     const projT = campaignCli.projectCampaign(campaignCli.loadRows(target.ledger), target.campaignId);
     preSpendCalls.length = 0;
@@ -399,6 +427,7 @@ if (hasHelper) {
       || claimed.reason_code === 'campaign_file_budget_exhausted';
     console.log(`f_${phase}_cli_calls=${cliCallsT}`);
     console.log(`f_${phase}_intake_calls=${intakeCalls}`);
+    console.log(`f_${phase}_blocked=cli:${cliBlocked},intake:${intakeBlocked}`);
     console.log(`f_${phase}_parity=${cliCallsT === intakeCalls && cliBlocked === intakeBlocked}`);
   }
 }
@@ -448,7 +477,9 @@ assert_contains "$OUT" "c_intake_uses_helper=true" "campaign-intake.js uses the 
 assert_contains "$OUT" "c_engine_uses_helper=true" "campaignMutationBudgetStatus uses the shared predicate"
 assert_contains "$OUT" "c_table=PREPARED:3=false,PREPARED:4=true,PREPARED:5=true,IMPLEMENTING:3=false,IMPLEMENTING:4=true,IMPLEMENTING:5=true,BOUNDARY_REJECTED:3=false,BOUNDARY_REJECTED:4=false,BOUNDARY_REJECTED:5=true,VERTICAL_VERIFICATION:3=false,VERTICAL_VERIFICATION:4=false,VERTICAL_VERIFICATION:5=true,ADJUDICATING:3=false,ADJUDICATING:4=false,ADJUDICATING:5=true,AWAITING_DISPOSITION:3=false,AWAITING_DISPOSITION:4=false,AWAITING_DISPOSITION:5=true,REPAIRING:3=false,REPAIRING:4=false,REPAIRING:5=true,REVIEWING:3=false,REVIEWING:4=true,REVIEWING:5=true" "predicate table: >= for first pass, > for repair phases"
 # D. advisory
-for ph in BOUNDARY_REJECTED REVIEWING AWAITING_DISPOSITION; do
+assert_contains "$OUT" "f_AWAITING_CONVERGENCE_ADJUDICATION_blocked=cli:true,intake:true" "AWAITING_CONVERGENCE_ADJUDICATION at 4/4 (predicate true): both sides refuse with campaign_file_budget_exhausted"
+assert_contains "$OUT" "f_AWAITING_DISPOSITION_blocked=cli:false,intake:false" "AWAITING_DISPOSITION at 4/4 (repair phase): neither side refuses"
+for ph in BOUNDARY_REJECTED REVIEWING AWAITING_DISPOSITION AWAITING_CONVERGENCE_ADJUDICATION; do
   assert_contains "$OUT" "f_${ph}_parity=true" "$ph: cli.js and campaign-intake.js evaluate the pre-spend predicate identically (same calls, same verdict)"
 done
 assert_contains "$OUT" "f_AWAITING_DISPOSITION_intake_calls=AWAITING_DISPOSITION:4/4:repair=undefined->false" "intake really reached the predicate for the disposition resume (not vacuous parity)"

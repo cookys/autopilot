@@ -106,6 +106,7 @@
     "reviewer_effort": {
       "type": "string",
       "enum": [
+        "default",
         "low",
         "medium",
         "high",
@@ -140,6 +141,7 @@
     "implementer_effort": {
       "type": "string",
       "enum": [
+        "default",
         "low",
         "medium",
         "high",
@@ -177,7 +179,7 @@
           "engine": { "type": "string", "minLength": 1 },
           "effort": {
             "type": "string",
-            "enum": ["low", "medium", "high", "xhigh", "max"]
+            "enum": ["default", "low", "medium", "high", "xhigh", "max"]
           },
           "runner": {
             "type": "string",
@@ -384,6 +386,7 @@
       "type": "string",
       "enum": [
         "",
+        "default",
         "low",
         "medium",
         "high",
@@ -494,6 +497,7 @@
           "effort": {
             "type": "string",
             "enum": [
+              "default",
               "low",
               "medium",
               "high",
@@ -589,6 +593,7 @@
       "type": "string",
       "enum": [
         "",
+        "default",
         "low",
         "medium",
         "high",
@@ -623,6 +628,7 @@
       "type": "string",
       "enum": [
         "",
+        "default",
         "low",
         "medium",
         "high",
@@ -721,6 +727,7 @@
       "type": "string",
       "enum": [
         "",
+        "default",
         "low",
         "medium",
         "high",
@@ -757,6 +764,7 @@
       "type": "string",
       "enum": [
         "",
+        "default",
         "low",
         "medium",
         "high",

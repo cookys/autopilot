@@ -7,7 +7,7 @@
  *
  * Ordering:
  * Cheapest-first — there is no reliable price data; effort rank
- * low < medium < high < xhigh < max, then ascending latency.sample_wall_time_s,
+ * low < medium < high < xhigh < max < default, then ascending latency.sample_wall_time_s,
  * then engine name (string compare) as final tiebreak.
  *
  * ADR-0001: topology facts are re-derived from installed binaries + scorecard,
@@ -47,6 +47,10 @@ const EFFORT_RANK = Object.freeze({
   high: 3,
   xhigh: 4,
   max: 5,
+  // `default` = no effort sent, the endpoint's own default ran. Its real cost is unknown, so it
+  // sorts AFTER every explicit effort (a cheapest-first ladder must not put an unknown cost
+  // ahead of a known-cheap one). Must stay in step with scripts/lib/effort-scale.js.
+  default: 6,
 });
 
 const CLAUDE_FALLBACK_LADDER = Object.freeze([

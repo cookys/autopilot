@@ -127,7 +127,7 @@ function reviewerFallbacks(resolved, primaryTuple, now, ttlSeconds) {
     const complete = typeof model === 'string'
       && model.length > 0
       && /^(?:codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor)$/.test(runner)
-      && /^(?:low|medium|high|xhigh|max)$/.test(effort)
+      && /^(?:default|low|medium|high|xhigh|max)$/.test(effort)
       && (endpoint === null
         || (typeof endpoint === 'string' && /^[A-Za-z0-9_]+$/.test(endpoint)));
     const boundTuple = providerTuple(

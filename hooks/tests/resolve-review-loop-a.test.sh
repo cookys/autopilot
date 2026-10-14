@@ -248,7 +248,7 @@ cat > "$STALE_TOPO_FILE" <<'JSON'
 JSON
 STALE_TOPO_ERR="$(AUTOPILOT_TOPOLOGY_FILE="$STALE_TOPO_FILE" REVIEW_LOOP_CONFIG_OVERRIDE="$AUTO_CFG" bash "$SCRIPT" 2>&1 1>/dev/null)"; STALE_TOPO_RC=$?
 assert_exit_code "$STALE_TOPO_RC" 3 "implementer_ladder: auto with an empty-effort rung exits 3"
-assert_contains "$STALE_TOPO_ERR" "invalid implementer_ladder effort (must be low|medium|high|xhigh|max): grok-4.5/@grok" "empty-effort auto rung error names the rung"
+assert_contains "$STALE_TOPO_ERR" "invalid implementer_ladder effort (must be default|low|medium|high|xhigh|max): grok-4.5/@grok" "empty-effort auto rung error names the rung"
 assert_contains "$STALE_TOPO_ERR" "rerun scripts/resolve-dispatch-topology.js" "empty-effort auto rung error names the fix"
 
 # (d) default ladder_start_rung_judgment is 0 when absent from config, 1 when 1, falls back to 0 for garbage

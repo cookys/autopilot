@@ -365,9 +365,9 @@ else
       ;;
   esac
   case "$VER_AUTH_EFFORT" in
-    low|medium|high|xhigh|max) ;;
+    default|low|medium|high|xhigh|max) ;;
     *)
-      echo "resolve-review-loop: invalid verification_author_effort (must be low|medium|high|xhigh|max): $VER_AUTH_EFFORT" >&2
+      echo "resolve-review-loop: invalid verification_author_effort (must be default|low|medium|high|xhigh|max): $VER_AUTH_EFFORT" >&2
       exit 3
       ;;
   esac
@@ -387,8 +387,8 @@ fi
 REV_ENGINE_LOW_RISK="$(read_field "$CONFIG" reviewer_engine_low_risk "$DEF_REV_ENGINE_LOW_RISK")"
 REV_EFFORT_LOW_RISK="$(read_field "$CONFIG" reviewer_effort_low_risk "$DEF_REV_EFFORT_LOW_RISK")"
 case "$REV_EFFORT_LOW_RISK" in
-  ''|low|medium|high|xhigh|max) ;;
-  *) echo "resolve-review-loop: ignoring invalid reviewer_effort_low_risk (must be low|medium|high|xhigh|max): $REV_EFFORT_LOW_RISK" >&2; REV_EFFORT_LOW_RISK="" ;;
+  ''|default|low|medium|high|xhigh|max) ;;
+  *) echo "resolve-review-loop: ignoring invalid reviewer_effort_low_risk (must be default|low|medium|high|xhigh|max): $REV_EFFORT_LOW_RISK" >&2; REV_EFFORT_LOW_RISK="" ;;
 esac
 ON_FAMILY_CONFLICT="$(read_field "$CONFIG" on_family_conflict "$DEF_ON_FAMILY_CONFLICT")"
 case "$ON_FAMILY_CONFLICT" in
@@ -472,11 +472,11 @@ case "$PLAN_DEEP_RUNNER" in ''|codex|agy|grok|cc-shim|anthropic-compatible|claud
   echo "resolve-review-loop: invalid plan_deep_reviewer_runner: $PLAN_DEEP_RUNNER" >&2
   exit 3
 esac
-case "$PLAN_REV_EFFORT" in ''|low|medium|high|xhigh|max) ;; *)
+case "$PLAN_REV_EFFORT" in ''|default|low|medium|high|xhigh|max) ;; *)
   echo "resolve-review-loop: invalid plan_reviewer_effort: $PLAN_REV_EFFORT" >&2
   exit 3
 esac
-case "$PLAN_DEEP_EFFORT" in ''|low|medium|high|xhigh|max) ;; *)
+case "$PLAN_DEEP_EFFORT" in ''|default|low|medium|high|xhigh|max) ;; *)
   echo "resolve-review-loop: invalid plan_deep_reviewer_effort: $PLAN_DEEP_EFFORT" >&2
   exit 3
 esac
@@ -500,7 +500,7 @@ for _seat in consult discuss; do
     *) echo "resolve-review-loop: invalid ${_seat}_runner: $_s_run" >&2; exit 3 ;;
   esac
   case "$_s_eff" in
-    ''|low|medium|high|xhigh|max) ;;
+    ''|default|low|medium|high|xhigh|max) ;;
     *) echo "resolve-review-loop: invalid ${_seat}_effort: $_s_eff" >&2; exit 3 ;;
   esac
   [[ -z "$_s_ep" || "$_s_ep" =~ ^[A-Za-z0-9_]+$ ]] || {
@@ -846,10 +846,10 @@ if [[ "$QC_PANEL_SEATS_COMPLETE" == "true" ]]; then
         ;;
     esac
     case "${QC_PANEL_EFFORTS[$_i]}" in
-      low|medium|high|xhigh|max) ;;
+      default|low|medium|high|xhigh|max) ;;
       *)
         QC_PANEL_SEATS_COMPLETE="false"
-        echo "resolve-review-loop: invalid qc_panel_efforts[$_i] (must be low|medium|high|xhigh|max): ${QC_PANEL_EFFORTS[$_i]:-<empty>} — qc_panel_seats_complete=false, readiness fails closed" >&2
+        echo "resolve-review-loop: invalid qc_panel_efforts[$_i] (must be default|low|medium|high|xhigh|max): ${QC_PANEL_EFFORTS[$_i]:-<empty>} — qc_panel_seats_complete=false, readiness fails closed" >&2
         ;;
     esac
     if [[ "${QC_PANEL_ENDPOINTS[$_i]}" != "@none" \
@@ -894,8 +894,8 @@ case "$REV_RUNNER" in
     exit 3
     ;;
 esac
-case "$REV_EFFORT" in low|medium|high|xhigh|max) ;; *) REV_EFFORT="$DEF_REV_EFFORT" ;; esac
-case "$IMPL_EFFORT" in low|medium|high|xhigh|max) ;; *) IMPL_EFFORT="$DEF_IMPL_EFFORT" ;; esac
+case "$REV_EFFORT" in default|low|medium|high|xhigh|max) ;; *) REV_EFFORT="$DEF_REV_EFFORT" ;; esac
+case "$IMPL_EFFORT" in default|low|medium|high|xhigh|max) ;; *) IMPL_EFFORT="$DEF_IMPL_EFFORT" ;; esac
 case "$IMPL_RUNNER" in
   auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor|opencode|kimi) ;;
   *)
@@ -922,7 +922,7 @@ if [[ "$IMPL_LADDER_RAW" == "auto" ]]; then
   _auto_ladder="$(node -e '
 const fs = require("fs");
 const VALID_RUNNERS = new Set(["auto","codex","agy","grok","cc-shim","pi","qoderclicn","cursor","opencode"]);
-const VALID_EFFORTS = new Set(["low","medium","high","xhigh","max"]);
+const VALID_EFFORTS = new Set(["default","low","medium","high","xhigh","max"]);
 const file = process.argv[1];
 let raw;
 try {
@@ -954,7 +954,7 @@ for (const r of rungs) {
   }
   if (!VALID_EFFORTS.has(r.effort)) {
     process.stdout.write(
-      "invalid implementer_ladder effort (must be low|medium|high|xhigh|max): " +
+      "invalid implementer_ladder effort (must be default|low|medium|high|xhigh|max): " +
       r.engine + "/" + String(r.effort) + "@" + r.runner +
       " — stale topology (pre-v2.36.16 emitted \"\" for legacy seats); rerun scripts/resolve-dispatch-topology.js"
     );
@@ -1014,9 +1014,9 @@ elif [[ -n "$IMPL_LADDER_RAW" ]]; then
     _lf="${BASH_REMATCH[2]}"
     _lr="${BASH_REMATCH[3]}"
     case "$_lf" in
-      low|medium|high|xhigh|max) ;;
+      default|low|medium|high|xhigh|max) ;;
       *)
-        echo "resolve-review-loop: invalid implementer_ladder effort (must be low|medium|high|xhigh|max): ${_item}" >&2
+        echo "resolve-review-loop: invalid implementer_ladder effort (must be default|low|medium|high|xhigh|max): ${_item}" >&2
         exit 3
         ;;
     esac

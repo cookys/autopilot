@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const process = require('process');
 const transcriptSecrets = require('../hooks/_shared/secret-patterns');
-const { expandTilde, ensureDir, sleepMs, acquireLock, releaseLock, withWriteLock, appendRow, toEventId, maxEventId } = require('./lib/jsonl-store');
+const { expandTilde, ensureDir, sleepMs, acquireLock, releaseLock, withWriteLock, appendRow, writeSnapshot, toEventId, maxEventId } = require('./lib/jsonl-store');
 const {
   buildCapabilityEvidenceReceipt,
   capabilityEvidenceProducerHash,
@@ -105,10 +105,14 @@ const REQUIRED_FIELDS = [
   'expires',
 ];
 
-// The effort vocabulary, owned once. `none` is a real, distinct state (the transport has no
-// effort dimension at all) and is NOT the same as an absent effort, which means the row
-// predates effort partitioning.
-const EFFORT_VALUES = ['none', 'low', 'medium', 'high', 'xhigh', 'max'];
+// The effort vocabulary, owned once. Three states that look alike and are NOT interchangeable:
+//   - `none`    the transport has no effort dimension at all (nothing could have been sent);
+//   - `default` the endpoint HAS an effort dimension but no effort was sent, so the endpoint's own
+//               default ran. The label is a fact about what was sent, not a calibrated level;
+//   - absent    the row predates effort partitioning: provenance unknown, its own legacy partition.
+// Each is a separate seat partition; a query for one never answers for another.
+const EFFORT_VALUES = ['none', 'default', 'low', 'medium', 'high', 'xhigh', 'max'];
+const RELABEL_TARGET_EFFORT = 'default';
 
 const CONFIGURED_IDENTITY_FIELDS = [
   'engine',
@@ -133,6 +137,7 @@ const HELP_TEXT = `Usage:\n\
   node scripts/engine-scorecard.js import-transcripts --root <codex|grok|opencode|agy>=<path> [--root ...] [--output <path>]\n\
   node scripts/engine-scorecard.js seat-status --engine <token> --runner <token> --role <role> [--effort <effort>] [--now <ISO-date>]\n\
     [--require-evidence --scope-file <path> [--identity-file <path>]] [--role-default-scope]\n\
+  node scripts/engine-scorecard.js relabel-effort --to default --reason <text> [--event-id <N>]... [--evidence-event-id <N>]... [--dry-run]\n\
 \n  --file <path>  Read one JSON row from this file (optional with --supersede-provisional).\n\
   --supersede-provisional  Append a record_kind=supersession marker for a prior event.\n\
   --supersedes-event-id <N>  Target event_id that must exist and match engine/runner/role.\n\
@@ -163,6 +168,13 @@ const HELP_TEXT = `Usage:\n\
     checks, and applicability-scope match against the caller-supplied --scope-file — never the\n\
     row's own scope. Absent/unreadable scorecard or qualification-evidence stores refuse; an\n\
     absent strikes.jsonl is a valid empty history, a present-but-unreadable one refuses.\n\
+  relabel-effort corrects a FALSE effort label to "default" (no effort was sent; the endpoint default\n\
+    ran). It is the only relabel there is: --to accepts nothing else. --event-id rewrites a scorecard\n\
+    row AND the capability-evidence record it anchors (identity.effort is sealed into evidence_id and\n\
+    transcript_hash, so both stores move together). --evidence-event-id rewrites an evidence record\n\
+    that has no scorecard row yet, so it can be registered later at "default". All-or-nothing: any\n\
+    unknown/legacy/already-default target aborts with nothing written. Backs both stores up\n\
+    (<file>.bak-relabel-effort-<UTC>) before an atomic rewrite under both locks. --dry-run plans only.\n\
 \nExit codes:\n\
   0 = success\n\
   1 = validation error\n\
@@ -173,7 +185,12 @@ function usage(code) {
   process.exit(code);
 }
 
+// relabel-effort validates several rows while holding two store locks. process.exit there would
+// strand both lock files, so that one command flips this flag and gets a throw it can unwind.
+let failValidationThrows = false;
+
 function failValidation(message) {
+  if (failValidationThrows) throw new Error(message);
   process.stderr.write(`ERROR: ${message}\n`);
   process.exit(1);
 }
@@ -375,7 +392,7 @@ function identityFieldMissing(row) {
   return null;
 }
 
-function validateRecordRow(row) {
+function validateRecordRow(row, capabilityRowsOverride = null) {
   const missing = REQUIRED_FIELDS.filter((field) => row[field] === undefined);
   if (missing.length > 0) {
     failValidation(`missing required field(s): ${missing.join(', ')}`);
@@ -399,13 +416,15 @@ function validateRecordRow(row) {
   // calibrated reasoning effort of this row's invocation tuple. Only codex-runner
   // consumers require it; absent = "not effort-calibrated" (ladder projects null).
   // `none` is a real, distinct state — the transport has NO effort dimension at
-  // all (http /v1/messages, agy where effort is baked into the model name, kimi
-  // whose config exposes only `[thinking] enabled`). That is not the same as
-  // omitting the field, which means "unknown/unrecorded". Collapsing the two
-  // would lose the fact that the tuple was checked and found effort-less.
+  // all (agy where effort is baked into the model name, kimi whose config exposes
+  // only `[thinking] enabled`). `default` is different again: the endpoint has an
+  // effort dimension (e.g. an Anthropic-compatible /v1/messages endpoint) but the
+  // runner sent none, so the endpoint default ran. Neither is the same as omitting
+  // the field, which means "unknown/unrecorded". Collapsing them would lose the
+  // fact that the tuple was checked and found effort-less (none) or unsent (default).
   if (row.effort !== undefined
       && !EFFORT_VALUES.includes(row.effort)) {
-    failValidation(`invalid effort '${row.effort}' (none|low|medium|high|xhigh|max or omit)`);
+    failValidation(`invalid effort '${row.effort}' (none|default|low|medium|high|xhigh|max or omit)`);
   }
 
   // OPTIONAL model (v2.32.25): the exact --model string for this row's runner when
@@ -475,7 +494,7 @@ function validateRecordRow(row) {
     }
     row.evidence = evidence;
     if (evidence.source === 'internal_eval') {
-      verifyEvidenceStoreAnchor(row, readCapabilityEvidenceRows());
+      verifyEvidenceStoreAnchor(row, capabilityRowsOverride || readCapabilityEvidenceRows());
     }
   }
 }
@@ -2543,6 +2562,340 @@ function cmdLadder(args) {
   process.stdout.write(`${JSON.stringify(ladder)}\n`);
 }
 
+// ---------------------------------------------------------------------------------------------
+// relabel-effort: correct a FALSE effort label to `default`.
+//
+// Why this is not a field edit. effort is sealed into the capability evidence (identity.effort ->
+// identity_hash, grant_identity_hash, evidence_id/evidence_hash) and the evidence ledger wraps each
+// record in a transcript_hash; the scorecard row repeats effort, embeds the evidence and anchors to
+// the ledger by event_id + transcript_hash. And effort is part of the seat identity hash, so strikes
+// (strikes.jsonl keyed by seat_hash) and operator pins (pins.jsonl keyed by engine/runner/role/effort)
+// recorded against the old seat must travel with the relabelled rows or they orphan / silently reset.
+// Everything is planned in memory first (all-or-nothing), backed up, then rewritten atomically.
+// ---------------------------------------------------------------------------------------------
+const RELABEL_HASH_FIELDS = [
+  'evidence_id', 'evidence_hash', 'scope_hash', 'identity_hash', 'grant_identity_hash', 'trial_set_hash',
+];
+
+function parseRelabelArgs(args) {
+  const out = { eventIds: [], evidenceEventIds: [], to: null, reason: null, dryRun: false };
+  const positive = (flag, value) => {
+    const n = Number(value);
+    if (!Number.isInteger(n) || n <= 0) failUsage(`${flag} requires a positive integer (got '${value}')`);
+    return n;
+  };
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (isHelpToken(arg)) usage(0);
+    if (arg === '--event-id') {
+      if (i + 1 >= args.length) failUsage('--event-id requires a value');
+      out.eventIds.push(positive('--event-id', args[++i]));
+    } else if (arg === '--evidence-event-id') {
+      if (i + 1 >= args.length) failUsage('--evidence-event-id requires a value');
+      out.evidenceEventIds.push(positive('--evidence-event-id', args[++i]));
+    } else if (arg === '--to') {
+      if (i + 1 >= args.length) failUsage('--to requires a value');
+      out.to = args[++i];
+    } else if (arg === '--reason') {
+      if (i + 1 >= args.length) failUsage('--reason requires a value');
+      out.reason = args[++i];
+    } else if (arg === '--dry-run') {
+      out.dryRun = true;
+    } else {
+      failUsage(`unknown option: ${arg}`);
+    }
+  }
+  if (out.to !== RELABEL_TARGET_EFFORT) {
+    failUsage(`relabel-effort only relabels to '${RELABEL_TARGET_EFFORT}' (--to ${RELABEL_TARGET_EFFORT})`);
+  }
+  if (typeof out.reason !== 'string' || out.reason.trim().length === 0) failUsage('relabel-effort requires --reason');
+  if (out.eventIds.length + out.evidenceEventIds.length === 0) {
+    failUsage('relabel-effort requires at least one --event-id or --evidence-event-id');
+  }
+  return out;
+}
+
+function readJsonlStrict(file, label) {
+  if (!fs.existsSync(file)) return null;
+  return readTextLines(file).map((line, index) => {
+    try {
+      const value = JSON.parse(line);
+      if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('not an object');
+      return value;
+    } catch (error) {
+      throw new Error(`${label} line ${index + 1} is not a JSON object (${error.message}); refusing to rewrite it`);
+    }
+  });
+}
+
+function relabelEvidenceRecord(evidence) {
+  const raw = JSON.parse(JSON.stringify(evidence));
+  raw.identity.effort = RELABEL_TARGET_EFFORT;
+  for (const field of RELABEL_HASH_FIELDS) delete raw[field];
+  return compileCapabilityEvidence(raw);
+}
+
+// Planner: no disk I/O. Throws Error(message) listing every problem so a bad request changes nothing.
+function planEffortRelabel(opts, scorecardRows, evidenceWrappers, strikeRows, pinRows) {
+  const errors = [];
+  const rowById = new Map();
+  for (const row of scorecardRows) {
+    if (row.record_kind === undefined) rowById.set(toEventId(row.event_id), row);
+  }
+  const markerIds = new Set(scorecardRows.filter((r) => r.record_kind !== undefined).map((r) => toEventId(r.event_id)));
+  const wrapperById = new Map(evidenceWrappers.map((w) => [w.event_id, w]));
+  const seen = new Set();
+  const dup = (list, flag) => {
+    for (const id of list) {
+      if (seen.has(`${flag}:${id}`)) errors.push(`${flag} ${id} given more than once`);
+      seen.add(`${flag}:${id}`);
+    }
+  };
+  dup(opts.eventIds, '--event-id');
+  dup(opts.evidenceEventIds, '--evidence-event-id');
+
+  const anchoredBy = new Map();
+  for (const row of scorecardRows) {
+    if (row.evidence_store && row.evidence_store.event_id !== undefined) {
+      anchoredBy.set(toEventId(row.evidence_store.event_id), toEventId(row.event_id));
+    }
+  }
+
+  const rowTargets = [];
+  const evidenceTargets = new Map();
+  for (const id of opts.eventIds) {
+    const row = rowById.get(id);
+    if (!row) {
+      errors.push(markerIds.has(id)
+        ? `event ${id} is a supersession marker, not a scorecard row`
+        : `event ${id} does not exist in the scorecard`);
+      continue;
+    }
+    if (row.effort === undefined) {
+      errors.push(`event ${id} has no effort label (legacy partition); relabel only corrects a false label`);
+      continue;
+    }
+    if (row.effort === RELABEL_TARGET_EFFORT) {
+      errors.push(`event ${id} is already '${RELABEL_TARGET_EFFORT}'`);
+      continue;
+    }
+    if (row.evidence !== undefined) {
+      const anchor = row.evidence_store;
+      const wrapper = anchor ? wrapperById.get(toEventId(anchor.event_id)) : null;
+      if (!wrapper) {
+        errors.push(`event ${id} carries evidence but its evidence-store record is missing`);
+        continue;
+      }
+      if (wrapper.evidence.identity.effort !== row.effort) {
+        errors.push(`event ${id} effort '${row.effort}' disagrees with its evidence '${wrapper.evidence.identity.effort}'`);
+        continue;
+      }
+      evidenceTargets.set(wrapper.event_id, `scorecard event ${id}`);
+    }
+    rowTargets.push(row);
+  }
+  for (const id of opts.evidenceEventIds) {
+    const wrapper = wrapperById.get(id);
+    if (!wrapper) {
+      errors.push(`evidence event ${id} does not exist in the evidence store`);
+      continue;
+    }
+    if (anchoredBy.has(id)) {
+      errors.push(`evidence event ${id} is anchored by scorecard event ${anchoredBy.get(id)}; relabel it with --event-id ${anchoredBy.get(id)}`);
+      continue;
+    }
+    if (wrapper.evidence.identity.effort === RELABEL_TARGET_EFFORT) {
+      errors.push(`evidence event ${id} is already '${RELABEL_TARGET_EFFORT}'`);
+      continue;
+    }
+    evidenceTargets.set(id, '--evidence-event-id');
+  }
+  if (errors.length > 0) throw new Error(errors.join('; '));
+
+  const newWrappers = evidenceWrappers.map((w) => {
+    if (!evidenceTargets.has(w.event_id)) return w;
+    const evidence = relabelEvidenceRecord(w.evidence);
+    return {
+      event_id: w.event_id,
+      producer: w.producer,
+      transcript_hash: capabilityEvidenceProducerHash(evidence, w.producer),
+      evidence,
+    };
+  });
+  const ids = new Set(newWrappers.map((w) => w.evidence.evidence_id));
+  if (ids.size !== newWrappers.length) {
+    throw new Error('relabel would make two evidence records identical (duplicate evidence_id)');
+  }
+  for (const w of newWrappers) {
+    if (evidenceTargets.has(w.event_id)) validateEvidenceProducer(w.evidence, w.producer);
+  }
+  const newWrapperById = new Map(newWrappers.map((w) => [w.event_id, w]));
+
+  const today = new Date().toISOString().slice(0, 10);
+  const changed = new Map();
+  for (const row of rowTargets) {
+    const next = { ...row, effort: RELABEL_TARGET_EFFORT };
+    if (row.evidence !== undefined) {
+      const wrapper = newWrapperById.get(toEventId(row.evidence_store.event_id));
+      next.evidence = wrapper.evidence;
+      next.evidence_store = { ...row.evidence_store, transcript_hash: wrapper.transcript_hash };
+    }
+    next.effort_relabel = { from: row.effort, to: RELABEL_TARGET_EFFORT, reason: opts.reason.trim(), date: today };
+    changed.set(toEventId(row.event_id), next);
+  }
+  const newRows = scorecardRows.map((r) => changed.get(toEventId(r.event_id)) || r);
+  failValidationThrows = true;
+  try {
+    for (const next of changed.values()) validateRecordRow(JSON.parse(JSON.stringify(next)), newWrappers);
+  } finally {
+    failValidationThrows = false;
+  }
+
+  // An old seat is VACATED when no ordinary row is left on it after the relabel. Only then do its
+  // strikes and pins travel; a seat that still has rows keeps them (they are not orphaned).
+  const seatKey = (r) => [r.engine, r.runner, r.role, r.effort].join('\u0000');
+  const remaining = new Set(newRows.filter((r) => r.record_kind === undefined && r.effort !== undefined).map(seatKey));
+  const moves = new Map();
+  const staying = new Map();
+  for (const row of rowTargets) {
+    const key = seatKey(row);
+    if (moves.has(key) || staying.has(key)) continue;
+    const info = {
+      engine: row.engine, runner: row.runner, role: row.role, from: row.effort,
+      oldHash: seatIdentityHash(row.engine, row.runner, row.role, row.effort),
+      newHash: seatIdentityHash(row.engine, row.runner, row.role, RELABEL_TARGET_EFFORT),
+    };
+    (remaining.has(key) ? staying : moves).set(key, info);
+  }
+  const byOldHash = new Map([...moves.values()].map((m) => [m.oldHash, m]));
+
+  let newStrikes = null;
+  let movedStrikes = 0;
+  if (strikeRows) {
+    const existing = new Set(strikeRows.filter((r) => !byOldHash.has(r.seat_hash))
+      .map((r) => [r.seat_hash, r.dedup_key, r.class, r.kind].join('\u0000')));
+    newStrikes = strikeRows.map((r) => {
+      const move = byOldHash.get(r.seat_hash);
+      if (!move) return r;
+      const key = [move.newHash, r.dedup_key, r.class, r.kind].join('\u0000');
+      if (existing.has(key)) {
+        throw new Error(`strike event ${r.event_id} would collide with an existing strike on the default seat`);
+      }
+      existing.add(key);
+      movedStrikes += 1;
+      return { ...r, seat_hash: move.newHash };
+    });
+  }
+  const stayingHashes = new Set([...staying.values()].map((s) => s.oldHash));
+  const strandedStrikes = (strikeRows || []).filter((r) => stayingHashes.has(r.seat_hash)).length;
+
+  let newPins = null;
+  let movedPins = 0;
+  if (pinRows) {
+    newPins = pinRows.map((p) => {
+      const move = [...moves.values()].find((m) => m.engine === p.engine && m.runner === p.runner
+        && m.role === p.role && m.from === p.effort);
+      if (!move) return p;
+      movedPins += 1;
+      return { ...p, effort: RELABEL_TARGET_EFFORT };
+    });
+  }
+
+  return {
+    newRows, newWrappers, newStrikes, newPins,
+    summary: {
+      scorecard_rows: [...changed.keys()],
+      evidence_records: [...evidenceTargets.keys()],
+      evidence_only_records: opts.evidenceEventIds.slice(),
+      seats_moved: moves.size,
+      strikes_moved: movedStrikes,
+      pins_moved: movedPins,
+      seats_not_vacated: [...staying.values()].map((s) => `${s.engine}/${s.from}@${s.runner}/${s.role}`),
+      strikes_left_on_old_seat: strandedStrikes,
+    },
+  };
+}
+
+function backupFile(file, tag) {
+  for (let n = 0; n < 1000; n += 1) {
+    const dest = `${file}.bak-relabel-effort-${tag}${n === 0 ? '' : `-${n}`}`;
+    try {
+      fs.copyFileSync(file, dest, fs.constants.COPYFILE_EXCL);
+      fs.chmodSync(dest, 0o600);
+      return dest;
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+    }
+  }
+  throw new Error(`cannot allocate a backup name for ${file}`);
+}
+
+function rewriteKeepingMode(file, rows) {
+  const mode = fs.statSync(file).mode & 0o777;
+  writeSnapshot(file, rows);
+  fs.chmodSync(file, mode);
+}
+
+function cmdRelabelEffort(args) {
+  const opts = parseRelabelArgs(args);
+  const strikesFile = path.join(CAPABILITY_DIR, 'strikes.jsonl');
+  const pinsFile = path.join(CAPABILITY_DIR, 'pins.jsonl');
+  const evidenceLock = { storeDir: CAPABILITY_DIR, lockFile: path.join(CAPABILITY_DIR, '.lock'), name: 'capability' };
+  const scorecardLock = { storeDir: SCORECARD_DIR, lockFile: LOCK_FILE, name: 'scorecard' };
+
+  const run = () => {
+    let plan;
+    failValidationThrows = true;
+    try {
+      const scorecardRows = readJsonlStrict(SCORECARD_FILE, 'scorecard');
+      if (!scorecardRows) throw new Error(`scorecard store not found: ${SCORECARD_FILE}`);
+      if (!fs.existsSync(CAPABILITY_EVIDENCE_FILE)) throw new Error('capability evidence store not found');
+      const evidenceWrappers = readCapabilityEvidenceRows();
+      plan = planEffortRelabel(
+        opts,
+        scorecardRows,
+        evidenceWrappers,
+        readJsonlStrict(strikesFile, 'strikes'),
+        readJsonlStrict(pinsFile, 'pins'),
+      );
+    } finally {
+      failValidationThrows = false;
+    }
+    const report = { dry_run: opts.dryRun, to: RELABEL_TARGET_EFFORT, ...plan.summary, backups: [] };
+    if (opts.dryRun) return report;
+
+    const tag = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
+    const files = [
+      [CAPABILITY_EVIDENCE_FILE, plan.newWrappers.map((w) => ({
+        event_id: w.event_id, producer: w.producer, transcript_hash: w.transcript_hash, evidence: w.evidence,
+      }))],
+      [SCORECARD_FILE, plan.newRows],
+    ];
+    if (plan.summary.strikes_moved > 0) files.push([strikesFile, plan.newStrikes]);
+    if (plan.summary.pins_moved > 0) files.push([pinsFile, plan.newPins]);
+    // Every backup exists before the first byte of any store changes. Evidence is rewritten first:
+    // the scorecard anchors to it.
+    for (const [file] of files) report.backups.push(backupFile(file, tag));
+    for (const [file, rows] of files) rewriteKeepingMode(file, rows);
+    return report;
+  };
+
+  let report;
+  try {
+    if (opts.dryRun) {
+      report = run(); // read-only: no locks taken, no directories created
+    } else {
+      const locks = [scorecardLock];
+      if (evidenceLock.lockFile !== scorecardLock.lockFile) locks.push(evidenceLock);
+      const nest = (i) => (i >= locks.length ? run() : withWriteLock(locks[i], () => nest(i + 1)));
+      report = nest(0);
+    }
+  } catch (error) {
+    failValidation(`relabel-effort refused, nothing written: ${error.message}`);
+  }
+  process.stdout.write(`${JSON.stringify(report)}\n`);
+}
+
 function main() {
   const argv = process.argv.slice(2);
 
@@ -2558,6 +2911,7 @@ function main() {
   else if (command === 'ladder') cmdLadder(commandArgs);
   else if (command === 'import-transcripts') cmdImportTranscripts(commandArgs);
   else if (command === 'seat-status') cmdSeatStatus(commandArgs);
+  else if (command === 'relabel-effort') cmdRelabelEffort(commandArgs);
   else failUsage(`unknown subcommand '${command}'`);
 }
 

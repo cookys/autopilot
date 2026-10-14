@@ -273,6 +273,21 @@ async function main() {
     ['Cookie: session=abc123; sid=zz', ['abc123', 'sid=zz']],
     ['ya29.a0AfH6SMBx.1234.abcd~efgh.ijkl', ['ya29.a0AfH6SMBx', 'abcd~efgh']],
     ['aaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbb', ['aaaaaaaaaaaaaaaaaaa', 'bbbbbbbbbbbbbbbbbbb']],
+    ["token='abc123'", ['abc123']],
+    ['password="hunter2"', ['hunter2']],
+    ["api_key: 'abcd1234'", ['abcd1234']],
+    ['client_secret = "abc def"', ['abc def', 'abc', 'def']],
+    ['{"token":12345}', ['12345']],
+    ['Cookie: a=1; b=SECRETVAL', ['SECRETVAL', 'a=1']],
+    ['Authorization: token abcSECRET', ['abcSECRET']],
+    ['proxy https://bob:hunter2@proxy.example/x', ['bob', 'hunter2']],
+    ['gh ghp_abc123', ['ghp_abc123']],
+    ['gh gho_abc123', ['gho_abc123']],
+    ['pat github_pat_11AB', ['github_pat_11AB']],
+    ['slack xoxb-123-abc', ['xoxb-123-abc']],
+    ['aws AKIAABCD1234', ['AKIAABCD1234']],
+    ['gcp AIzaSyShort', ['AIzaSyShort']],
+    ['-----BEGIN RSA PRIVATE KEY-----\nMIIBshort\n-----END RSA PRIVATE KEY----- tail', ['MIIBshort', 'BEGIN RSA']],
   ]) {
     const out = redactSecrets(input);
     check(
@@ -280,6 +295,9 @@ async function main() {
       `redactSecrets hides every credential in: ${input} (got: ${out})`,
     );
   }
+  // Same-line text AFTER a keyed value (not a header) survives: only the value goes.
+  check(redactSecrets('password=hunter2 then retry later').includes('then retry later'),
+    'redaction stops at the end of a keyed value');
   // NEGATIVE CONTROL for over-redaction: an ordinary error sentence stays readable.
   const plain = redactSecrets('Eligibility check failed: UNAVAILABLE (code 503): The service is currently unavailable.');
   check(plain.includes('code 503') && plain.includes('UNAVAILABLE') && !plain.includes('[redacted]'),
@@ -306,7 +324,7 @@ async function main() {
   check(requestTooLarge instanceof BrokerError, 'oversized request is rejected before dispatch');
   equal(requestTooLarge.code, 'request_too_large', 'oversized request has a stable error name');
 
-  if (assertions !== 62) throw new Error(`qualification-case-broker: expected exactly 62 assertions (count pin moved here from hooks/tests/qualification-case-broker.test.sh so the L1 run enforces it), got ${assertions}`);
+  if (assertions !== 78) throw new Error(`qualification-case-broker: expected exactly 78 assertions (count pin moved here from hooks/tests/qualification-case-broker.test.sh so the L1 run enforces it), got ${assertions}`);
   process.stdout.write(`qualification case broker: ${assertions} assertions passed\n`);
 }
 

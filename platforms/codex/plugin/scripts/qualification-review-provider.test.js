@@ -1056,6 +1056,15 @@ function roleOnlyRequest(role, content = 'x') {
   equal(calls(slow.counter), 1, 'agy timeout runs once (no retry)');
   check(!/agy transient 503/.test(timedOut.child.stderr), 'agy timeout logs no retry line');
 
+  // One delay => at most one retry, and the message total says so.
+  const single = retryEnv('single', E503, 99);
+  const oneRetry = runProvider({
+    env: { ...single.env, QRP_AGY_RETRY_DELAYS_MS: '0' }, request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT,
+  });
+  equal(calls(single.counter), 2, 'a single delay allows exactly one retry');
+  equal(oneRetry.child.stderr.match(/agy transient 503, retry \d\/\d/gu), ['agy transient 503, retry 1/1'],
+    'with one delay the retry line reads retry 1/1');
+
   // A kind other than agy never retries even on a 503 body.
   const codex = retryEnv('claude-kind', E503, 99);
   runProvider({
@@ -2002,5 +2011,5 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
 }
 
 fs.rmSync(tempRoot, { recursive: true, force: true });
-if (assertions !== 397) throw new Error(`qualification-review-provider: expected exactly 397 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 399) throw new Error(`qualification-review-provider: expected exactly 399 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);

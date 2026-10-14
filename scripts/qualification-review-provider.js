@@ -1082,7 +1082,7 @@ async function callCli(kind, bin, model, effort, timeoutMs, prompt) {
     } catch (error) {
       const transient = /^agy CLI exited /u.test(error.message) && /code 503/u.test(error.message);
       if (!transient || attempt >= delays.length) throw error;
-      process.stderr.write(`agy transient 503, retry ${attempt + 1}/2\n`);
+      process.stderr.write(`agy transient 503, retry ${attempt + 1}/${delays.length}\n`);
       await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
     }
   }

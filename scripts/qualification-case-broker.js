@@ -451,11 +451,21 @@ function runChild(command, args, options, limits = {}) {
 // token that no pattern matches). Over-redaction is deliberate: any >=20-char
 // base64/hex/path-like run is replaced.
 function redactSecrets(text) {
+  const KEY = '[A-Za-z0-9_-]*(?:token|secret|passw(?:or)?d|authorization|cookie|session|sid|api[_-]?key|key)[A-Za-z0-9_-]*';
   return String(text)
-    // Quoted JSON form: "access_token":"<anything up to the closing quote>".
-    .replace(/(["'])([^"'\s]*(?:token|secret|passw(?:or)?d|authorization|cookie|session|sid|api[_-]?key|key)[^"'\s]*)\1\s*:\s*(["'])[^"']*\3/giu, '$1$2$1:"[redacted]"')
-    // key=value / key: value, value runs to whitespace, `&`, `;`, `,` or a quote.
-    .replace(/\b([A-Za-z0-9_-]*(?:token|secret|passw(?:or)?d|authorization|cookie|session|sid|api[_-]?key|key)[A-Za-z0-9_-]*)(\s*[=:]\s*)(?:Bearer\s+|Basic\s+)?[^\s&;,"']+/giu, '$1$2[redacted]')
+    // PEM private-key block (to its END marker, or to the end of the text if cut).
+    .replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)/gu, '[redacted]')
+    // user:password@ inside a URL.
+    .replace(/(\b[a-z][a-z0-9+.-]*:\/\/)[^\s/@]+@/giu, '$1[redacted]@')
+    // Authorization / Cookie headers carry multi-part values: mask to end of line.
+    .replace(/\b((?:set-)?cookie|authorization)(\s*[:=]\s*)[^\n]*/giu, '$1$2[redacted]')
+    // Quoted JSON form: "access_token":"..." | 123 | true | false | null.
+    .replace(new RegExp(`(["'])(${KEY})\\1\\s*:\\s*(?:"[^"]*"|'[^']*'|\\d+|true|false|null)`, 'giu'), '$1$2$1:"[redacted]"')
+    // key=value / key: value; the value may be quoted (and contain spaces) or run
+    // to whitespace, `&`, `;`, `,` or a quote.
+    .replace(new RegExp(`\\b(${KEY})(\\s*[=:]\\s*)(?:"[^"]*"|'[^']*'|(?:Bearer\\s+|Basic\\s+)?[^\\s&;,"']+)`, 'giu'), '$1$2[redacted]')
+    // Well-known token prefixes, any length.
+    .replace(/\b(?:gh[pousr]_[A-Za-z0-9]+|github_pat_[A-Za-z0-9_]+|xox[abpr]-[A-Za-z0-9-]+|AKIA[0-9A-Z]+|AIza[A-Za-z0-9_-]+)/gu, '[redacted]')
     .replace(/\beyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*/gu, '[redacted]')
     .replace(/\b(?:Bearer|Basic)\s+\S+/giu, '[redacted]')
     .replace(/\bsk-[A-Za-z0-9_-]+/gu, '[redacted]')

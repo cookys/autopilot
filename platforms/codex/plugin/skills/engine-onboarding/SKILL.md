@@ -17,7 +17,7 @@ If the task is about **how far to implement a cross-harness integration** or whe
 
 ## Current scope
 
-Reviewer, owner, and brain-seat end-to-end qualification are shipped gate paths today (`brain` = the 勤勞×公平×收斂 standing exam; one atomic `owner-brain-seat-v1` record on the owner role with forced `brain-seat` scope, no expiry, 3-strike revocation via `engine-capability-state.js brain-status`).
+Reviewer, owner, and brain-seat end-to-end qualification are shipped gate paths today (`brain` = the 勤勞×公平×收斂 standing exam; one atomic `owner-brain-seat-v1` record on the owner role with forced `brain-seat` scope, advisory-only expiry (default 30 days, warns never blocks), 3-strike revocation via `engine-capability-state.js brain-status`).
 
 - ✅ `stage-0 spike` and exact-scope `stage-1 reviewer/owner qualification` are implemented with separate repeated nonce-derived corpora, host oracles, and executable mutation controls.
 - ✅ Qualification evidence is keyed by exact role, task/domain/language/tool scope and deployment identity; legacy scorecard rows remain compatibility-only.

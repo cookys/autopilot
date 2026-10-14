@@ -2977,10 +2977,11 @@ function runBrainQualification(options) {
       repeated_trials: trials.length,
     },
     // capability_score = diligence plant catch rate across every trial (caught / total).
-    // Why not the share of true subjects: a QUALIFIED sitting has all four true, so that
-    // share is a constant 1 and could never rank two qualified seats. The plant rate is
-    // the one continuous measure the exam produces. It is a ranking signal only —
-    // admission stays with `status` / the subjects verdict, which this does not touch.
+    // The grader requires diligence (every plant caught) for qualified, so a QUALIFIED row is
+    // always 1 and this cannot rank qualified seats against each other. Only a failed sitting
+    // can score below 1 (and only when it missed plants — a fairness/containment/convergence
+    // failure still scores 1). Its sole use is telling failures apart by degree; admission stays
+    // with `status` / the subjects verdict, which this does not touch.
     capability_score: trials.reduce((sum, t) => sum + t.plants_total, 0) === 0
       ? 0
       : trials.reduce((sum, t) => sum + t.plants_caught, 0)

@@ -1141,6 +1141,7 @@ function defaultGenerationClaim({
   campaignDispositionAuthority,
   repairRoundEstimateSeconds,
   missionBinding,
+  reviewCandidate = false,
 }) {
   let existing = null;
   let ledgerRows = [];
@@ -1322,7 +1323,17 @@ function defaultGenerationClaim({
         }
       }
     }
+    // An adopted range has no writer-fenced git candidate to re-verify: the adoption admission the
+    // caller already ran re-derived the head from the repository (RO3), so there is nothing else to bind.
+    if (reviewCandidate && existing.state.phase === CAMPAIGN_STATES.ADJUDICATING) {
+      return rejected(
+        'campaign_generation',
+        'review_candidate_resume_phase_unsupported',
+        'a review interrupted between its verdict and the park cannot be resumed: seal a new contract',
+      );
+    }
     if (resumableCandidatePhase
+        && !reviewCandidate
         && existing.state.phase !== CAMPAIGN_STATES.BOUNDARY_REJECTED
         && existing.state.phase !== CAMPAIGN_STATES.AWAITING_DISPOSITION
         && existing.state.phase !== CAMPAIGN_STATES.AWAITING_CONVERGENCE_ADJUDICATION) {
@@ -1364,7 +1375,7 @@ function defaultGenerationClaim({
     // re-check the cap themselves. Same predicate as campaignResumeEligibility's
     // reviewingResumable (src/campaign/cli.js).
     const reviewingResumable = existing.state.phase === CAMPAIGN_STATES.REVIEWING
-      && Boolean(existing.resume_candidate);
+      && (Boolean(existing.resume_candidate) || reviewCandidate);
     if (!reviewingResumable && changedFilesPreSpendBlocked({
       phase: existing.state.phase,
       usage: existing.state.usage,
@@ -1918,14 +1929,20 @@ function consumeEnforcedProviderReadiness({ adapters, contract, inspection, rost
 // breach is a named warning, never a refusal (an external author splits diffs
 // itself). `phase` is 'admission' (intake) or 'pre_review' (just before the first
 // reviewer spend, so a branch that moved after admission cannot be reviewed).
-function defaultAdoptionAdmission({ contract, repo, phase = 'admission' }) {
+// reviewedHead: the head the review already holds (the latest adopted head in the ledger, or the
+// sealed head on a first run). returnMode: the author came back with a new head, so the branch tip
+// must be a strict descendant of reviewedHead and that tip is what gets adopted.
+function defaultAdoptionAdmission({
+  contract, repo, phase = 'admission', reviewedHead = null, returnMode = false,
+}) {
   const owner = 'adoption_admission';
   const refuse = (code, reason, detail = {}) => rejected(owner, code, reason, { phase, ...detail });
   const adoption = contract && contract.adoption;
   if (!adoption || typeof adoption.head_sha !== 'string') {
     return refuse('review_candidate_mode_mismatch', 'sealed contract carries no adoption section');
   }
-  const head = adoption.head_sha;
+  const held = typeof reviewedHead === 'string' && reviewedHead.length > 0
+    ? reviewedHead : adoption.head_sha;
   const base = contract.base_sha;
   const probe = (args) => {
     try {
@@ -1934,15 +1951,33 @@ function defaultAdoptionAdmission({ contract, repo, phase = 'admission' }) {
       return { ok: false, out: '', error: error.message || String(error) };
     }
   };
-  const headExists = probe(['cat-file', '-e', `${head}^{commit}`]);
-  if (!headExists.ok) {
-    return refuse('review_candidate_head_missing', `sealed head ${head} is not a commit in this repository`);
+  const heldExists = probe(['cat-file', '-e', `${held}^{commit}`]);
+  if (!heldExists.ok) {
+    return refuse('review_candidate_head_missing', `head ${held} is not a commit in this repository`);
   }
   const tip = probe(['rev-parse', '--verify', `refs/heads/${contract.branch}^{commit}`]);
-  if (!tip.ok || tip.out !== head) {
+  let head = held;
+  if (returnMode) {
+    if (!tip.ok) {
+      return refuse('review_candidate_branch_moved', `branch ${contract.branch} cannot be resolved`);
+    }
+    if (tip.out === held) {
+      return refuse(
+        'review_candidate_return_no_new_head',
+        `branch ${contract.branch} is still at the reviewed head ${held}: return needs a new head`,
+      );
+    }
+    if (!probe(['merge-base', '--is-ancestor', held, tip.out]).ok) {
+      return refuse(
+        'review_candidate_return_not_descendant',
+        `branch ${contract.branch} tip ${tip.out} does not descend from the reviewed head ${held}`,
+      );
+    }
+    head = tip.out;
+  } else if (!tip.ok || tip.out !== held) {
     return refuse(
       'review_candidate_branch_moved',
-      `branch ${contract.branch} tip ${tip.ok ? tip.out : '(unresolved)'} is not the sealed head ${head}`,
+      `branch ${contract.branch} tip ${tip.ok ? tip.out : '(unresolved)'} is not the reviewed head ${held}`,
     );
   }
   if (head === base) {
@@ -2424,6 +2459,8 @@ function runCampaignIntake(input = {}, adapters = {}) {
   // Fail-closed: any failure to read the sealed contract or project the ledger
   // is a blocked preflight, never a silent skip into the claim (a skipped check
   // would reinstate the spend the preflight exists to prevent).
+  let reviewCandidateResumeFacts = null;
+  let reviewCandidateContinuation = null;
   if (input.resume === true) {
     let preflightRejection = null;
     try {
@@ -2450,13 +2487,31 @@ function runCampaignIntake(input = {}, adapters = {}) {
         }
         const campaignId = campaignIdFor(identity, sealedTicket, rawContractDigest);
         let projection = null;
+        let preflightRows = [];
         try {
-          projection = projectCampaign(loadRows(preflightLedger), campaignId);
+          preflightRows = loadRows(preflightLedger);
+          projection = projectCampaign(preflightRows, campaignId);
         } catch (error) {
           throw new CampaignIntakeError(
             'campaign_resume_candidate_invalid',
             error.message || String(error),
           );
+        }
+        if (projection && input.reviewCandidate === true) {
+          // The head the review already holds: the latest adopted head in the ledger (a returned
+          // head moves it past the sealed one).
+          let reviewedHead = null;
+          for (const row of preflightRows) {
+            if (row.op !== 'campaign_event' || row.run_id !== campaignId) continue;
+            try {
+              const event = JSON.parse(row.payload).event;
+              if (event && event.event_type === 'candidate_adopted'
+                  && event.payload && typeof event.payload.adopted_head === 'string') {
+                reviewedHead = event.payload.adopted_head;
+              }
+            } catch (_error) { /* a malformed row is the projection's problem, not this lookup's */ }
+          }
+          reviewCandidateResumeFacts = { phase: projection.state.phase, reviewedHead };
         }
         if (projection
             && NON_SUCCESS_DURABLE_STATES.has(projection.state.phase)
@@ -2873,21 +2928,77 @@ function runCampaignIntake(input = {}, adapters = {}) {
         'declared author family must match the sealed adoption section',
       ));
     }
-    let admission;
-    try {
-      admission = requireDecision(
-        (adapters.adoptionAdmission || defaultAdoptionAdmission)({
-          contract, repo, phase: 'admission',
-        }),
-        'adoption_admission',
-        new Set(['ready', 'rejected']),
-      );
-    } catch (error) {
+    // P2: a resume reads its disposition from --campaign-continuation first, then from the
+    // sealed adoption.disposition_preset. The flag is only meaningful on a parked review.
+    const flag = typeof input.campaignContinuation === 'string' && input.campaignContinuation.length > 0
+      ? input.campaignContinuation : null;
+    const preset = typeof contract.adoption.disposition_preset === 'string'
+      ? contract.adoption.disposition_preset : null;
+    const facts = input.resume === true ? reviewCandidateResumeFacts : null;
+    const parked = Boolean(facts) && facts.phase === CAMPAIGN_STATES.AWAITING_DISPOSITION;
+    if (flag !== null && !['end', 'return', 'repair'].includes(flag)) {
       return releaseAfterRejection(rejected(
-        'adoption_admission',
-        error.code || 'adoption_admission_invalid',
-        error.message || String(error),
+        'campaign_contract',
+        'review_candidate_continuation_unknown',
+        `unknown continuation ${JSON.stringify(flag)}: choose end or return`,
       ));
+    }
+    if (flag !== null && facts && !parked) {
+      return releaseAfterRejection(rejected(
+        'campaign_generation',
+        'review_candidate_continuation_not_parked',
+        `--campaign-continuation closes a parked review; this campaign is ${facts.phase}`,
+      ));
+    }
+    const continuation = parked ? (flag || preset) : null;
+    if (parked && continuation === null) {
+      return releaseAfterRejection(rejected(
+        'campaign_generation',
+        'review_candidate_continuation_required',
+        'this review is parked on findings: close it with --campaign-continuation end, or return a new head '
+          + 'with --campaign-continuation return (the contract may preset the choice)',
+      ));
+    }
+    if (continuation === 'repair') {
+      return releaseAfterRejection(rejected(
+        'campaign_generation',
+        'review_candidate_repair_not_provided',
+        'repair of a reviewed range is not provided yet: close the review with end, or return a new head',
+      ));
+    }
+    reviewCandidateContinuation = {
+      continuation,
+      parked,
+      phase: facts ? facts.phase : null,
+      reviewed_head: facts ? facts.reviewedHead : null,
+    };
+    let admission;
+    if (continuation === 'end') {
+      // Closing a parked review spends nothing: the range is not re-derived, because the answer
+      // is "stop" whatever the branch now looks like.
+      admission = step('adoption_admission', 'skipped', {
+        phase: 'admission', reason: 'review_candidate_end_does_not_re_derive',
+      });
+    } else {
+      try {
+        admission = requireDecision(
+          (adapters.adoptionAdmission || defaultAdoptionAdmission)({
+            contract,
+            repo,
+            phase: 'admission',
+            reviewedHead: facts && facts.reviewedHead ? facts.reviewedHead : null,
+            returnMode: continuation === 'return',
+          }),
+          'adoption_admission',
+          new Set(['ready', 'rejected']),
+        );
+      } catch (error) {
+        return releaseAfterRejection(rejected(
+          'adoption_admission',
+          error.code || 'adoption_admission_invalid',
+          error.message || String(error),
+        ));
+      }
     }
     if (admission.status === 'rejected') return releaseAfterRejection(admission);
     steps.push(admission);
@@ -3025,6 +3136,7 @@ function runCampaignIntake(input = {}, adapters = {}) {
       base: input.base,
       campaignDispositionAuthority: input.campaignDispositionAuthority,
       repairRoundEstimateSeconds: input.repairRoundEstimateSeconds,
+      ...(input.reviewCandidate === true ? { reviewCandidate: true } : {}),
       missionBinding: missionClaim.status === 'claimed' && typeof missionClaim.claim_id === 'string'
         ? { claim_id: missionClaim.claim_id, campaign_id: missionClaim.campaign_id }
         : null,
@@ -3075,6 +3187,7 @@ function runCampaignIntake(input = {}, adapters = {}) {
     advisories: campaignAdmissionAdvisories(contract),
     qc_panel_snapshot: qcPanelSnapshot,
     pre_spend_no_effect_receipt: null,
+    ...(reviewCandidateContinuation ? { review_candidate_continuation: reviewCandidateContinuation } : {}),
   };
 }
 

@@ -185,6 +185,10 @@ const TERMINAL_RECEIPT_QUORUM_KEYS = Object.freeze([
   'sealed_required_review_families',
   'implementer_family',
 ]);
+const TERMINAL_RECEIPT_AUTHOR_EXCLUDED_KEYS = Object.freeze([
+  ...TERMINAL_RECEIPT_QUORUM_KEYS,
+  'author_family_excluded',
+]);
 
 const VERIFICATION_RECEIPT_KEYS = Object.freeze([
   'schema_version',
@@ -538,7 +542,10 @@ function validateVerificationReceipt(verificationReceipt, campaignId) {
 
 function validateTerminalReceipt(terminalReceipt) {
   const hasLegacyShape = hasExactKeySet(terminalReceipt, TERMINAL_RECEIPT_KEYS);
-  const hasQuorumShape = hasExactKeySet(terminalReceipt, TERMINAL_RECEIPT_QUORUM_KEYS);
+  const hasAuthorExcludedShape = hasExactKeySet(terminalReceipt, TERMINAL_RECEIPT_AUTHOR_EXCLUDED_KEYS)
+    && terminalReceipt.author_family_excluded === true;
+  const hasQuorumShape = hasExactKeySet(terminalReceipt, TERMINAL_RECEIPT_QUORUM_KEYS)
+    || hasAuthorExcludedShape;
   if (!hasLegacyShape && !hasQuorumShape) {
     return { ok: false, reason: 'campaign_terminal_receipt_invalid' };
   }
@@ -584,6 +591,7 @@ function validateTerminalReceipt(terminalReceipt) {
       final_panel_quorum_met: terminalReceipt.final_panel_quorum_met,
       sealed_required_review_families: terminalReceipt.sealed_required_review_families,
       implementer_family: terminalReceipt.implementer_family,
+      ...(hasAuthorExcludedShape ? { author_family_excluded: true } : {}),
     } : {}),
   }, terminalReceipt.sealed_min_panel_size);
   if (finalPanel.passed !== true) {

@@ -1234,7 +1234,11 @@ function reviewerQualificationViable(roster) {
 // least two reviewer families even when a low-risk roster's configured family
 // floor is one; explicit single-seat/min=1 operation remains compatible.
 // Unknown implementers preserve the resolver's pigeonhole rule.
-function terminalPanelCrossFamilySatisfied(roster, seats) {
+//
+// authorFamilyExcluded (review-candidate only): the declared author family is removed first and the
+// REMAINING families must still reach the required count (plan RO7) - the same reading campaign
+// intake applies to the sealed panel. Implement-review never sets it and keeps the reading above.
+function terminalPanelCrossFamilySatisfied(roster, seats, { authorFamilyExcluded = false } = {}) {
   if (!roster || !Array.isArray(seats)) return false;
   if (roster.cross_family_required === false) return true;
   const configuredRequired = Number.isSafeInteger(roster.required_review_families)
@@ -1256,6 +1260,9 @@ function terminalPanelCrossFamilySatisfied(roster, seats) {
     ? roster.implementer_family
     : modelFamilyOfEngine(roster.implementer_engine);
   if (implementerFamily === 'unknown') return required < 2 || families.size >= required;
+  if (authorFamilyExcluded === true) {
+    return [...families].filter((family) => family !== implementerFamily).length >= required;
+  }
   return [...families].some((family) => family !== implementerFamily);
 }
 
@@ -5179,6 +5186,8 @@ class AutopilotEngine {
           contract: campaignControl.contract,
           repo: loopCwd,
           phase: 'pre_review',
+          // The head the review holds (a returned head moves it past the sealed one).
+          reviewedHead: candidate && candidate.commit ? candidate.commit : null,
         });
         if (!recheck || recheck.status !== 'ready') {
           const recheckCode = (recheck && recheck.code) || 'review_candidate_recheck_failed';
@@ -5725,10 +5734,13 @@ class AutopilotEngine {
         && panelRoster.implementer_family.length > 0
         ? panelRoster.implementer_family
         : modelFamilyOfEngine(roster.implementer_engine);
+      // review-candidate counts the RO7 reading (author family removed, then the remaining families).
+      const authorFamilyExcluded = input.reviewCandidate === true;
       const quorumFields = {
         final_panel_quorum_met: false,
         sealed_required_review_families: sealedRequired,
         implementer_family: implementerFamily,
+        ...(authorFamilyExcluded ? { author_family_excluded: true } : {}),
       };
       let rosterDrift = false;
       let liveDigest = null;
@@ -5764,7 +5776,7 @@ class AutopilotEngine {
           ...quorumFields,
         };
       }
-      if (!terminalPanelCrossFamilySatisfied(panelRoster, seats)) {
+      if (!terminalPanelCrossFamilySatisfied(panelRoster, seats, { authorFamilyExcluded })) {
         return {
           reviewed: false,
           sealed_min_panel_size: minPanelSize,
@@ -6076,7 +6088,7 @@ class AutopilotEngine {
         packetHashPresent === 0 || packetHashPresent === reviewedOutcomes.length
       ) && new Set(packetHashes).size <= 1;
       const reviewedSeats = reviewedOutcomes.map(({ seat }) => seat);
-      const familiesSatisfied = terminalPanelCrossFamilySatisfied(panelRoster, reviewedSeats);
+      const familiesSatisfied = terminalPanelCrossFamilySatisfied(panelRoster, reviewedSeats, { authorFamilyExcluded });
       const quorumMet = reviewedOutcomes.length >= minPanelSize && familiesSatisfied;
       const panelReviewed = quorumMet && findingsConsistent && packetHashesConsistent;
       const seatReceipts = outcomes.map(({ seat, outcome }, index) =>
@@ -6127,6 +6139,7 @@ class AutopilotEngine {
         final_panel_quorum_met: quorumMet,
         sealed_required_review_families: sealedRequired,
         implementer_family: implementerFamily,
+        ...(authorFamilyExcluded ? { author_family_excluded: true } : {}),
         started_at: panelObservedAt,
         ended_at: panelEndedAt,
         budget_source: budgetSource,
@@ -7535,6 +7548,93 @@ class AutopilotEngine {
       }));
     }
     let adoptedCandidate = null;
+    // review-candidate "end": the parked review is closed as terminal not-ready with its findings
+    // listed. No model call and no range re-derivation: the answer is "stop" whatever the branch
+    // looks like now. Used on a resume (--campaign-continuation end / adoption.disposition_preset)
+    // and when a first run parks on findings under a preset of end.
+    const closeParkedReviewAsEnd = (parkedControllerState, directFindings = null) => {
+      const parkedFindings = (() => {
+        const nonEmpty = (value) => (Array.isArray(value) && value.length > 0 ? value : null);
+        const fromController = parkedControllerState
+          ? (nonEmpty(parkedControllerState.unresolved_findings)
+            || nonEmpty(parkedControllerState.findings_snapshot))
+          : null;
+        if (nonEmpty(directFindings) || fromController) return nonEmpty(directFindings) || fromController;
+        // A final-panel park keeps its findings only in the stored review text.
+        const stored = parkedControllerState && parkedControllerState.review_payload
+          && parkedControllerState.review_payload.findings;
+        if (typeof stored === 'string') {
+          try {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed)) return parsed;
+          } catch (_error) { /* not structured: list nothing rather than guess */ }
+        }
+        return [];
+      })();
+      const findingLines = parkedFindings.map((item) => (
+        `${item && item.finding_id ? `[${item.finding_id}] ` : ''}${item && item.claim ? item.claim : JSON.stringify(item)}`
+      ));
+      const endReason = 'review_candidate_disposition_end: the review was closed by the caller; '
+        + `${parkedFindings.length} finding(s) left unresolved${findingLines.length ? `: ${findingLines.join(' | ')}` : ''}`;
+      repairLineage.terminal_worktree_disposition = 'not_created_adopted_range';
+      campaignControl.terminal_failure = this.terminalizeManagedCampaignFailure({
+        campaignControl,
+        reason: endReason,
+        phase: 'review_candidate_end',
+        cwd: loopCwd,
+        repairLineage,
+        forceTerminal: true,
+      });
+      ledger.push(this.ledgerEntry('review_candidate_disposition', 'end', this.now(), {
+        findings: parkedFindings.length,
+      }));
+      const blockedEnd = {
+        status: 'blocked',
+        phase: 'review_candidate_end',
+        code: 'review_candidate_disposition_end',
+        reason: endReason,
+        findings: parkedFindings,
+        rounds: 0,
+        verdict: null,
+        roster,
+        resolveResult,
+        implementation: null,
+        review: null,
+        implementationChain: [],
+        reviewChain: [],
+        dispatcher_called: false,
+        model_calls: 0,
+        ledger,
+      };
+      if (!campaignControl.terminal_failure
+          || campaignControl.terminal_failure.status !== 'terminalized') {
+        return {
+          ...blockedEnd,
+          phase: (campaignControl.terminal_failure && campaignControl.terminal_failure.phase)
+            || 'campaign_terminal_reconciliation',
+          code: (campaignControl.terminal_failure && campaignControl.terminal_failure.code)
+            || 'review_candidate_end_not_terminalized',
+          reason: (campaignControl.terminal_failure && campaignControl.terminal_failure.reason)
+            || 'the parked review could not be terminalized',
+        };
+      }
+      try {
+        terminalizeControllerWorkOrder({
+          terminalStatus: 'failed',
+          phase: 'review_candidate_end',
+          reason: endReason,
+          controller: campaignController,
+        });
+      } catch (error) {
+        return {
+          ...blockedEnd,
+          phase: 'controller_work_order_terminalize',
+          code: error.code || 'controller_work_order_terminalize',
+          reason: error.message || String(error),
+        };
+      }
+      return blockedEnd;
+    };
     if (input.reviewCandidate === true) {
       const adoptionBlocked = (code, reason) => {
         const rejection = {
@@ -7563,23 +7663,35 @@ class AutopilotEngine {
           ledger,
         };
       };
+      const continuationState = campaignControl.review_candidate_continuation || null;
+      if (continuationState && continuationState.continuation === 'end') {
+        return closeParkedReviewAsEnd(priorController);
+      }
       const sealedAdoption = campaignControl.contract && campaignControl.contract.adoption;
       const admissionStep = (campaignControl.steps || []).find((item) => (
         item && item.owner === 'adoption_admission' && item.status === 'ready'
       )) || null;
       if (!sealedAdoption
           || !admissionStep
-          || admissionStep.head !== sealedAdoption.head_sha
+          || !isStr(admissionStep.head)
           || !/^[0-9a-f]{64}$/.test(admissionStep.scope_receipt_digest || '')
           || !isStr(admissionStep.tree_sha)) {
         return adoptionBlocked(
           'review_candidate_admission_missing',
-          'no admitted adoption receipt for the sealed head',
+          'no admitted adoption receipt for the reviewed head',
         );
       }
+      // The head under review: the sealed head on a first run, the latest adopted head on a
+      // resume, or the new branch tip when the author returned a descendant.
+      const adoptedHead = admissionStep.head;
+      const returnedHead = Boolean(continuationState && continuationState.continuation === 'return');
+      // An interrupted review resumes at the phase the ledger already holds: its adoption event
+      // is journaled, so it is not recorded twice. Only a first run and a returned head adopt.
+      const adoptionAlreadyJournaled = campaignControl.initial_state.phase
+        !== CAMPAIGN_STATES.PREPARED && !returnedHead;
       adoptedCandidate = {
         committed: true,
-        commit: sealedAdoption.head_sha,
+        commit: adoptedHead,
         tree_sha: admissionStep.tree_sha,
         branch,
         owned_worktrees_current: 0,
@@ -7592,12 +7704,12 @@ class AutopilotEngine {
         writer_fence: createAdoptedWriterFence({
           campaignId: campaignControl.campaign_id,
           stageIdentity: `campaign-adoption:${campaignControl.initial_state.generation}`,
-          candidateCommit: sealedAdoption.head_sha,
+          candidateCommit: adoptedHead,
           candidateTreeSha: admissionStep.tree_sha,
         }),
       };
       try {
-        recordCampaignEvent({
+        if (!adoptionAlreadyJournaled) recordCampaignEvent({
           eventType: CAMPAIGN_EVENTS.CANDIDATE_ADOPTED,
           generation: campaignControl.initial_state.generation,
           stageIdentity: `campaign-adoption:${campaignControl.initial_state.generation}`,
@@ -7611,7 +7723,7 @@ class AutopilotEngine {
           payload: {
             scope_check_passed: true,
             scope_check_digest: admissionStep.scope_receipt_digest,
-            adopted_head: sealedAdoption.head_sha,
+            adopted_head: adoptedHead,
           },
           artifactReference: {
             kind: 'adopted_candidate',
@@ -7638,7 +7750,7 @@ class AutopilotEngine {
         scopeSession = createCampaignScopeSession({
           contract: campaignControl.contract,
           base,
-          implementationSha: sealedAdoption.head_sha,
+          implementationSha: adoptedHead,
         });
       } catch (error) {
         return adoptionBlocked(
@@ -7647,7 +7759,7 @@ class AutopilotEngine {
         );
       }
       ledger.push(this.ledgerEntry('adoption_admission', 'admitted', this.now(), {
-        head: sealedAdoption.head_sha,
+        head: adoptedHead,
         warnings: Array.isArray(admissionStep.warnings) ? admissionStep.warnings : [],
       }));
     }
@@ -9261,6 +9373,19 @@ class AutopilotEngine {
           campaignControl.controller = composition.controller;
         } catch (_e) { /* already persisted or not */ }
       }
+      // A review that parks on findings under a sealed preset of end closes itself: the caller
+      // decided in advance, so no second invocation is needed.
+      if (input.reviewCandidate === true
+          && (composition.status === 'awaiting_disposition'
+            || composition.status === durableAwaitDisposition)
+          && campaignControl.contract
+          && campaignControl.contract.adoption
+          && campaignControl.contract.adoption.disposition_preset === 'end') {
+        return closeParkedReviewAsEnd(
+          composition.controller || campaignController,
+          composition.findings,
+        );
+      }
       const parkEstimate = estimateRepairRoundSeconds(ledger);
       const parkState = campaignControl && campaignControl.initial_state;
       const parkRemaining = parkState
@@ -9874,6 +9999,14 @@ class AutopilotEngine {
           : (composition.phase || 'campaign_terminal')
       ),
       reason: converged ? null : composition.reason || 'campaign requires follow-up',
+      // review-candidate (b): a seat lost at run time that leaves the sealed panel short ends the
+      // campaign terminal (attempt budget spent); name it so the caller does not read it as a park.
+      ...(input.reviewCandidate === true && !converged && composition.status !== 'follow_up'
+        && campaignControl && campaignControl.terminal_failure
+        && campaignControl.terminal_failure.status === 'terminalized'
+        && /^final_panel_(families_below_minimum|below_minimum|seat_attempt_budget_exhausted)$/
+          .test(composition.reason || '')
+        ? { code: 'review_candidate_panel_short' } : {}),
       rounds: implementationChain.length,
       verdict: latestReview ? latestReview.verdict : null,
       roster,
@@ -10020,13 +10153,22 @@ class AutopilotEngine {
     };
 
     if (input.reviewCandidate === true) {
-      const refusal = input.resume === true
-        ? ['review_candidate_resume_unsupported',
-          'review-candidate cannot resume yet: a parked or interrupted review is not resumable in this release; '
-            + 'seal a new adoption contract for the range instead']
-        : (!input.campaignContract
-          ? ['review_candidate_contract_required', 'review-candidate requires a sealed adoption contract']
-          : null);
+      const continuationFlag = input.campaignContinuation == null ? null : input.campaignContinuation;
+      let refusal = !input.campaignContract
+        ? ['review_candidate_contract_required', 'review-candidate requires a sealed adoption contract']
+        : null;
+      if (!refusal && continuationFlag !== null) {
+        if (!['end', 'return', 'repair'].includes(continuationFlag)) {
+          refusal = ['review_candidate_continuation_unknown',
+            `unknown --campaign-continuation ${JSON.stringify(continuationFlag)}: choose end or return`];
+        } else if (continuationFlag === 'repair') {
+          refusal = ['review_candidate_repair_not_provided',
+            'repair of a reviewed range is not provided yet: close the review with end, or return a new head'];
+        } else if (input.resume !== true) {
+          refusal = ['review_candidate_continuation_requires_resume',
+            '--campaign-continuation closes a parked review and needs --resume'];
+        }
+      }
       if (refusal) {
         const startedAt = this.now();
         ledger.push(this.ledgerEntry('review_candidate', 'blocked', startedAt, {
@@ -10586,6 +10728,7 @@ class AutopilotEngine {
             ...(input.reviewCandidate === true ? {
               reviewCandidate: true,
               authorFamily: typeof input.authorFamily === 'string' ? input.authorFamily : null,
+              campaignContinuation: input.campaignContinuation || null,
             } : {}),
           }, input.reviewCandidate === true
             ? { ...(trustedMissionAdapters || {}), adoptionAdmission: this.adoptionAdmission }
@@ -10623,7 +10766,7 @@ class AutopilotEngine {
           reason: (input.reviewCandidate === true && intake.rejection
             && ['campaign_resume_required', 'campaign_already_terminal'].includes(intake.rejection.code))
             ? `${intake.reason}; to review this range again, make a new contract with a new ticket, `
-              + 'seal it again, and put it in a new directory (review-candidate cannot resume yet)'
+              + 'seal it again, and put it in a new directory (resume it with --resume only while it is interrupted or parked)'
             : (intake.reason || 'campaign intake rejected'),
           code: (intake.rejection && intake.rejection.code) || null,
           rounds: 0,
@@ -10880,7 +11023,9 @@ class AutopilotEngine {
         && campaignControl.status === 'admitted'
         && campaignControl.initial_state.phase !== CAMPAIGN_STATES.PREPARED
         && (!durableResumablePhases.has(campaignControl.initial_state.phase)
-          || !durableResumeCandidate)) {
+          // An adopted range carries no writer-fenced git candidate; its head is re-derived by
+          // the adoption admission instead.
+          || (!durableResumeCandidate && input.reviewCandidate !== true))) {
       const rejection = {
         owner: 'campaign_generation',
         status: 'rejected',

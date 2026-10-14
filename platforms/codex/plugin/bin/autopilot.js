@@ -76,7 +76,7 @@ Commands:
                     interrupted or parked review (the range is re-derived first; seats
                     that already reviewed are not asked again). A parked review is closed
                     with --campaign-continuation end (terminal not-ready, findings listed)
-                    or return (a descendant head; named refusal until delta review ships);
+                    or return (a new head that descends from the reviewed head; the same campaign is re-reviewed);
                     repair is not provided yet. The contract may preset the choice.
   harness report    Emit read-only harness capability state and stale flags.
   endpoints         Manage endpoint credentials (list/which/set/doctor/init; --json).

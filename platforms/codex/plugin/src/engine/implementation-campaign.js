@@ -1176,6 +1176,25 @@ function reduceCampaignState(currentState, event) {
       fail('INVALID_PAYLOAD', 'candidate_adopted requires the adopted head sha');
     }
     next.phase = CAMPAIGN_STATES.VERTICAL_VERIFICATION;
+  } else if (currentState.phase === CAMPAIGN_STATES.AWAITING_DISPOSITION
+      && event.event_type === CAMPAIGN_EVENTS.CANDIDATE_ADOPTED) {
+    // review-candidate "return": the author came back with a new head, so the parked review is
+    // adopted again and re-enters verification. The head must be new (the same head would only
+    // repeat the review that parked), and no writer lease exists for an adopted range.
+    if (currentState.live_lease) {
+      fail('LIVE_LEASE_CONFLICT', 'candidate adoption cannot replace a live lease owner');
+    }
+    requireScopeCheck(event);
+    if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(event.payload.adopted_head || '')) {
+      fail('INVALID_PAYLOAD', 'candidate_adopted requires the adopted head sha');
+    }
+    const parkedRef = currentState.awaiting_disposition
+      && currentState.awaiting_disposition.candidate_ref;
+    if (parkedRef && parkedRef === event.payload.adopted_head) {
+      fail('RETURN_HEAD_UNCHANGED', 'a returned head must differ from the head the review parked on');
+    }
+    next.phase = CAMPAIGN_STATES.VERTICAL_VERIFICATION;
+    next.awaiting_disposition = null;
   } else if (currentState.phase === CAMPAIGN_STATES.IMPLEMENTING
       && event.event_type === CAMPAIGN_EVENTS.IMPLEMENTATION_COMPLETED) {
     requireLease(currentState, event);

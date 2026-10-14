@@ -87,7 +87,7 @@ assert_contains "$BADFLAG" "unknown engine review-candidate option: --diff" "RO2
 # ---- RO3: the range is fixed at admission -------------------------------------------------------------
 run_sc moved_before
 eq "blocked" "$(jf moved_before 'j.status')" "RO3 tip moved before admission is refused"
-assert_contains "$(jf moved_before 'j.reason')" "is not the sealed head" "RO3 the refusal says the tip is not the sealed head"
+assert_contains "$(jf moved_before 'j.reason')" "is not the reviewed head" "RO3 the refusal says the tip is not the reviewed head (P2 wording: after a return the reviewed head is the new one)"
 eq "review_candidate_branch_moved" "$(jf moved_before 'j.code')" "RO3 moved-before carries the named code at the top level"
 eq "0" "$(jf moved_before 'j.review_calls')" "RO3 moved-before: 0 review calls"
 eq "0" "$(jf moved_before 'j.impl')" "RO3 moved-before: 0 implementer calls"
@@ -98,8 +98,11 @@ eq "0" "$(jf moved_after 'j.review_calls')" "RO3 moved-after: 0 further review c
 eq "TERMINAL_STOP" "$(jf moved_after 'j.campaign_phase')" "RO3 a drifted branch terminalizes the campaign (no state whose only exit is a re-refusal)"
 eq "1" "$(jf moved_after 'j.verify_runs')" "RO3 control: the verify step really ran before the move was caught"
 RESUME_OUT="$(node "$CLI" engine review-candidate --campaign-contract c.json --spec-file s.md --resume 2>&1)"; RESUME_RC=$?
-eq "1" "$RESUME_RC" "RO3 --resume is refused (exit non-zero) in P1"
-assert_contains "$RESUME_OUT" "review_candidate_resume_unsupported" "RO3 --resume refusal is named"
+# P2: --resume is a real path now (review-candidate-resume.test.sh); the P1 "resume unsupported" refusal is gone.
+# With no readable contract it is refused by the contract check, naming that and spending nothing.
+eq "1" "$RESUME_RC" "RO3 --resume with an unreadable contract is refused (exit non-zero)"
+assert_not_contains "$RESUME_OUT" "review_candidate_resume_unsupported" "RO3 the P1 resume refusal no longer exists"
+assert_contains "$RESUME_OUT" "campaign_contract_unreadable" "RO3 --resume refusal is named by the contract check"
 assert_contains "$RESUME_OUT" '"model_calls":0' "RO3 --resume refusal spends nothing"
 
 # ---- RO4: malformed ranges are refused before spend, each with a reason -----------------------------------

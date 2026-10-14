@@ -13,6 +13,7 @@ const {
   BrokerError,
   MAX_DIFF_BYTES,
   redactSecrets,
+  redactedExcerpt,
   runBrokerCase,
   sandboxArguments,
 } = require('./qualification-case-broker');
@@ -287,6 +288,16 @@ async function main() {
     ['slack xoxb-123-abc', ['xoxb-123-abc']],
     ['aws AKIAABCD1234', ['AKIAABCD1234']],
     ['gcp AIzaSyShort', ['AIzaSyShort']],
+    ['run --api-key abc123 now', ['abc123']],
+    ['run --token abc123', ['abc123']],
+    ['run --password hunter2', ['hunter2']],
+    ['{"auth":"abc"}', ['"abc"']],
+    ['pwd=p4ss', ['p4ss']],
+    ['credentials=cr3d', ['cr3d']],
+    ['csrf: tok9', ['tok9']],
+    ['jwt=j9', ['j9']],
+    ['otp=123456', ['123456']],
+    ['-----BEGIN PGP PRIVATE KEY BLOCK-----\nlQOYBFshort\n-----END PGP PRIVATE KEY BLOCK----- tail', ['lQOYBFshort', 'PGP']],
     ['-----BEGIN RSA PRIVATE KEY-----\nMIIBshort\n-----END RSA PRIVATE KEY----- tail', ['MIIBshort', 'BEGIN RSA']],
   ]) {
     const out = redactSecrets(input);
@@ -298,6 +309,24 @@ async function main() {
   // Same-line text AFTER a keyed value (not a header) survives: only the value goes.
   check(redactSecrets('password=hunter2 then retry later').includes('then retry later'),
     'redaction stops at the end of a keyed value');
+  // Redaction must stay linear: pathological 64 KiB stderr is capped and scanned
+  // in well under 100 ms (a quadratic KEY pattern took ~5 s on these shapes).
+  for (const [name, input] of [
+    ['key x 21845', 'key'.repeat(21845)],
+    ['quote + key x 21845', `"${'key'.repeat(21845)}`],
+    ['a-_ x 21845 + !', `${'a-_'.repeat(21845)}!`],
+    ['a. x 32768 + !', `${'a.'.repeat(32768)}!`],
+  ]) {
+    const started = process.hrtime.bigint();
+    redactedExcerpt(Buffer.from(input), 500);
+    const ms = Number(process.hrtime.bigint() - started) / 1e6;
+    check(ms < 100, `redactedExcerpt stays fast on pathological input "${name}" (${ms.toFixed(1)} ms)`);
+  }
+  check(redactedExcerpt(`${'a'.repeat(4095)}\u20ac tail`, 500).length > 0,
+    'a UTF-8 character split by the input cap does not break the excerpt');
+  // Over-redaction control: a flag that is not a credential keeps its value.
+  check(redactSecrets('run --verbose yes --count 3').includes('--verbose yes --count 3'),
+    'non-credential flags and their values survive redaction');
   // NEGATIVE CONTROL for over-redaction: an ordinary error sentence stays readable.
   const plain = redactSecrets('Eligibility check failed: UNAVAILABLE (code 503): The service is currently unavailable.');
   check(plain.includes('code 503') && plain.includes('UNAVAILABLE') && !plain.includes('[redacted]'),
@@ -324,7 +353,7 @@ async function main() {
   check(requestTooLarge instanceof BrokerError, 'oversized request is rejected before dispatch');
   equal(requestTooLarge.code, 'request_too_large', 'oversized request has a stable error name');
 
-  if (assertions !== 78) throw new Error(`qualification-case-broker: expected exactly 78 assertions (count pin moved here from hooks/tests/qualification-case-broker.test.sh so the L1 run enforces it), got ${assertions}`);
+  if (assertions !== 94) throw new Error(`qualification-case-broker: expected exactly 94 assertions (count pin moved here from hooks/tests/qualification-case-broker.test.sh so the L1 run enforces it), got ${assertions}`);
   process.stdout.write(`qualification case broker: ${assertions} assertions passed\n`);
 }
 

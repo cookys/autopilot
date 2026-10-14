@@ -434,7 +434,7 @@ function runChild(command, args, options, limits = {}) {
         signal,
         stdout: Buffer.concat(stdout).toString('utf8'),
         stderrHash: byteHash(Buffer.concat(stderr)),
-        stderrExcerpt: redactedExcerpt(Buffer.concat(stderr).toString('utf8'), 500),
+        stderrExcerpt: redactedExcerpt(Buffer.concat(stderr), 500),
         timedOut,
         oversized,
       });
@@ -446,24 +446,44 @@ function runChild(command, args, options, limits = {}) {
 
 // Provider stderr is the only place a transient upstream error (e.g. agy
 // "UNAVAILABLE (code 503)") is visible; the broker used to keep only its hash,
-// so a failed exam left `provider_process_failed` with no cause. The excerpt is
-// credential-redacted BEFORE the byte cut (a cut could otherwise leave a partial
-// token that no pattern matches). Over-redaction is deliberate: any >=20-char
-// base64/hex/path-like run is replaced.
+// so a failed exam left `provider_process_failed` with no cause.
+//
+// Redaction is BEST EFFORT, not a guarantee: it pattern-matches common
+// credential shapes (keyed values, headers, URL userinfo, known token prefixes,
+// PEM blocks, long token-like runs) and deliberately over-redacts, but natural
+// language ("my password is hunter2") and unknown formats can still pass. The
+// excerpt it protects is written ONLY into local exam evidence (the raw file's
+// transport_error); it never goes to a remote service or a peer.
+//
+// Order of operations is a safety AND a performance property: the raw stderr is
+// first cut to REDACT_INPUT_MAX_BYTES (dropping a trailing half UTF-8 char),
+// then redacted, and only then cut to the 500-byte excerpt. The input cap bounds
+// regex work (this runs synchronously in the child 'close' handler, so a 64 KiB
+// pathological stderr must not stall the broker); the redact-before-excerpt
+// order keeps a cut from leaving a partial token no pattern would match.
+const REDACT_INPUT_MAX_BYTES = 4096;
+
 function redactSecrets(text) {
-  const KEY = '[A-Za-z0-9_-]*(?:token|secret|passw(?:or)?d|authorization|cookie|session|sid|api[_-]?key|key)[A-Za-z0-9_-]*';
+  // Keyword must start a word-ish run (lookbehind) so the scan is not restarted
+  // from every position of a long run of key-like characters.
+  const KW = 'token|secret|passw(?:or)?d|pwd|authorization|auth|cookie|session|sid|api[_-]?key|key|credentials?|csrf|jwt|otp';
+  const WORD = '[A-Za-z0-9_-]*';
+  const KEY = `(?<![A-Za-z0-9_-])${WORD}(?:${KW})${WORD}`;
+  const QUOTED_KEY = `${WORD}(?:${KW})${WORD}`;
   return String(text)
-    // PEM private-key block (to its END marker, or to the end of the text if cut).
-    .replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)/gu, '[redacted]')
+    // PEM / PGP private-key block (to its END marker, or to the end if cut).
+    .replace(/-----BEGIN [A-Z ]*PRIVATE KEY[A-Z ]*-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY[A-Z ]*-----|$)/gu, '[redacted]')
     // user:password@ inside a URL.
     .replace(/(\b[a-z][a-z0-9+.-]*:\/\/)[^\s/@]+@/giu, '$1[redacted]@')
     // Authorization / Cookie headers carry multi-part values: mask to end of line.
     .replace(/\b((?:set-)?cookie|authorization)(\s*[:=]\s*)[^\n]*/giu, '$1$2[redacted]')
     // Quoted JSON form: "access_token":"..." | 123 | true | false | null.
-    .replace(new RegExp(`(["'])(${KEY})\\1\\s*:\\s*(?:"[^"]*"|'[^']*'|\\d+|true|false|null)`, 'giu'), '$1$2$1:"[redacted]"')
+    .replace(new RegExp(`(["'])(${QUOTED_KEY})\\1\\s*:\\s*(?:"[^"]*"|'[^']*'|\\d+|true|false|null)`, 'giu'), '$1$2$1:"[redacted]"')
+    // Space-separated CLI flag: --api-key abc123 / --token abc123.
+    .replace(new RegExp(`(?<![A-Za-z0-9_-])(--${WORD}(?:${KW})${WORD})(\\s+)(?!-)(?:"[^"]*"|'[^']*'|\\S+)`, 'giu'), '$1$2[redacted]')
     // key=value / key: value; the value may be quoted (and contain spaces) or run
     // to whitespace, `&`, `;`, `,` or a quote.
-    .replace(new RegExp(`\\b(${KEY})(\\s*[=:]\\s*)(?:"[^"]*"|'[^']*'|(?:Bearer\\s+|Basic\\s+)?[^\\s&;,"']+)`, 'giu'), '$1$2[redacted]')
+    .replace(new RegExp(`(${KEY})(\\s*[=:]\\s*)(?:"[^"]*"|'[^']*'|(?:Bearer\\s+|Basic\\s+)?[^\\s&;,"']+)`, 'giu'), '$1$2[redacted]')
     // Well-known token prefixes, any length.
     .replace(/\b(?:gh[pousr]_[A-Za-z0-9]+|github_pat_[A-Za-z0-9_]+|xox[abpr]-[A-Za-z0-9-]+|AKIA[0-9A-Z]+|AIza[A-Za-z0-9_-]+)/gu, '[redacted]')
     .replace(/\beyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*/gu, '[redacted]')
@@ -472,9 +492,11 @@ function redactSecrets(text) {
     .replace(/[A-Za-z0-9+/=_.~-]{20,}/gu, '[redacted]');
 }
 
-function redactedExcerpt(text, maxBytes) {
-  const flat = redactSecrets(text).replace(/\s+/gu, ' ').trim();
-  return Buffer.from(flat, 'utf8').subarray(0, maxBytes).toString('utf8').replace(/\uFFFD$/u, '');
+function redactedExcerpt(input, maxBytes) {
+  const raw = Buffer.isBuffer(input) ? input : Buffer.from(String(input), 'utf8');
+  const head = raw.subarray(0, REDACT_INPUT_MAX_BYTES).toString('utf8').replace(/�$/u, '');
+  const flat = redactSecrets(head).replace(/\s+/gu, ' ').trim();
+  return Buffer.from(flat, 'utf8').subarray(0, maxBytes).toString('utf8').replace(/�$/u, '');
 }
 
 function providerEnvironment(options, providerRoot) {
@@ -866,6 +888,7 @@ module.exports = {
   normalizeOptions,
   parseProviderResponse,
   redactSecrets,
+  redactedExcerpt,
   runBrokerCase,
   sandboxArguments,
 };

@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0159 -->
+<!-- next-id: BL-0162 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -39,19 +39,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: feat/mods-activity review, 2026-10-12 (UNVERIFIED live behavior)
 - **Pointer**: docs/backlog/mods-activity-row-never-ends.md
 - **Context**: rows end only on a `<task-notification>` status or a TaskStop (mods/live/model.ts scanBackground). Probe a resume after quitting mid `sleep 600`; Bash results with `backgroundEndsWithFinalResponse` say no notification follows.
-
-### probe-unknown default memory dir misses the main checkout's memory from a worktree
-- **Id**: BL-0003
-- **Status**: open
-- **Since**: 2026-10-12
-- **Origin**: self
-- **Problem**: 在工作樹（worktree）裡執行 probe-unknown 時，它預設去找的記憶目錄是工作樹自己的路徑，找不到主目錄那份記憶，所以會漏讀已累積的經驗。 (draft)
-- **Impact**: 在工作樹裡跑的探測會少看到記憶，結果較不完整；手動指定目錄即可繞過。 (draft)
-- **Trigger**: probe-unknown runs from a worktree session, or memory recall returns nothing there
-- **Effort**: XS
-- **Source**: feat/mods-activity session, 2026-10-12
-- **Pointer**: docs/backlog/probe-unknown-memory-dir-from-worktree.md
-- **Context**: scripts/probe-unknown.js:334-338 `defaultMemoryDir` slugs the worktree root, so it looks under `-home-…-autopilot--claude-worktrees-<name>` instead of the main project's memory dir.
 
 ### Cross-repo dispatch has no worktree or handoff rule
 - **Id**: BL-0004
@@ -1440,19 +1427,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: check-phase-review-receipt --packets requires every packet's G1 at one head. Workaround used: temp branch at the set head, re-collect with --branch. Allow a later G1 when that packet's files are unchanged between heads.
 
-### completeness-scan: mktemp XXXXXX templates read as markers; --files with several files scans 0
-- **Id**: BL-0119
-- **Status**: open
-- **Since**: 2026-10-12
-- **Origin**: self
-- **Problem**: 程式完整度掃描把 mktemp 的 XXXXXX 暫存檔樣板當成「待辦標記」，一次誤報 21 項；另外一次指定多個檔案時，掃描竟然掃了 0 個檔案。 (draft)
-- **Impact**: 會有大量誤報，且多檔案模式可能漏掃，讓品質檢查失去意義。 (draft)
-- **Trigger**: next quality-pipeline run on a diff that adds mktemp templates
-- **Effort**: S
-- **Source**: tmp-residue qc-gate, 2026-10-12 (21 new findings, all XXXXXX templates)
-- **Pointer**: none
-- **Context**: the XXX marker rule matches mktemp templates; exclude XXXXXX runs. The phase-3 hand also saw --files f1 f2 report scannedFiles 0.
-
 ### cost-digest --tree: review follow-ups (test strength, cycle placement, label collisions)
 - **Id**: BL-0120
 - **Status**: open
@@ -1530,19 +1504,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: lane N review, 2026-10-13
 - **Pointer**: none
 - **Context**: integration_ref stays HEAD while integration_sha is the upstream's; :1116-1117 resolves @{upstream} twice.
-
-### repo-identity blames the git version for every rev-parse failure
-- **Id**: BL-0128
-- **Status**: open
-- **Since**: 2026-10-13
-- **Origin**: self
-- **Problem**: 判斷儲存庫身分的共用程式在查詢失敗時，一律印「git 版本太舊、需要 2.31 以上」，但這台的 git 是 2.53，真正的原因是別的。
-- **Impact**: 測試輸出出現誤導的警告，排查時會往錯的方向找；功能本身不受影響。
-- **Trigger**: next touch of scripts/lib/repo-identity.sh
-- **Effort**: XS
-- **Source**: lane A test runs, 2026-10-13
-- **Pointer**: none
-- **Context**: :33 prints the version hint on any failure (non-repo dir included); name the real cause, keep the hint only when the version is below 2.31.
 
 ### mission-terminal-rollover tests read the live registry and sealed graph
 - **Id**: BL-0129
@@ -1622,19 +1583,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: Case 1c stub calls REAL_SETSID=$(command -v setsid); skip 1c when it is empty.
 
-### withLock busy-waits in foreman-guard and depth0-delegate-gate
-- **Id**: BL-0137
-- **Status**: open
-- **Since**: 2026-10-13
-- **Origin**: self
-- **Problem**: 兩個 hook 搶同一把檔案鎖時，用空轉迴圈等待，等待期間會吃滿一顆 CPU。
-- **Impact**: 平常鎖很快釋放，看不出來；多個 session 同時觸發 hook 時會拖慢每一次工具呼叫。
-- **Trigger**: next touch of hooks/foreman-guard.js or hooks/depth0-delegate-gate.js lock code, or a hook latency complaint
-- **Effort**: XS
-- **Source**: lane L review (BL-0091 pointer residue), 2026-10-13
-- **Pointer**: none
-- **Context**: withLock spins until the lock file disappears; replace the spin with Atomics.wait on a SharedArrayBuffer (synchronous sleep) between retries, keeping the existing timeout.
-
 ### resolve-review-loop alias table and fresh-context seat follow-ups
 - **Id**: BL-0138
 - **Status**: open
@@ -1699,19 +1647,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: lane W review round 1, 2026-10-13
 - **Pointer**: docs/plans/2026-10-13-dispatch-tree.md
 - **Context**: hooks/runs-watch-autostart.js returns at "not a git repo" before ensurePlainMarker, so author/review children in a non-git cwd rely only on manifest child_session_id. Settle in the dispatch-tree plan.
-
-### two dispatch identity tests can pass without checking what they claim
-- **Id**: BL-0143
-- **Status**: open
-- **Since**: 2026-10-13
-- **Origin**: self
-- **Problem**: 子行程身分的分離派工測試，在沒有 setsid 的機器上會改走一般路徑，照樣綠燈；另一個測試的比對參數順序寫反，轉紅時預期值和實際值會顯示顛倒。
-- **Impact**: 前者在少數機器上等於沒驗到分離派工；後者只影響除錯時看錯訊息。
-- **Trigger**: next touch of either test file
-- **Effort**: XS
-- **Source**: lane W delta review, 2026-10-13
-- **Pointer**: none
-- **Context**: child-session-identity.test.sh:96-103 add an assert that manifest containment_planned is setsid-detached; blocked-dispatch-guidance.test.sh:122,127 swap assert_eq args (lib.sh:396 wants actual first).
 
 ### fleet dispatch carries no lineage, so work sent to a peer drops out of the dispatch tree
 - **Id**: BL-0144
@@ -1879,4 +1814,43 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: 2026-10-14 all-role requalify matrix
 - **Pointer**: none
-- **Context**: qualification-review-provider.js has no owner mode (brain mode rides role owner but is a different exam); an owner-provider.js was drafted earlier but never committed. engine-qualify --role owner needs a broker provider that runs the foreman corpus.
+- **Context**: qualification-review-provider.js has no owner mode (brain rides role owner but is a different exam); an owner-provider.js was drafted but never committed. engine-qualify --role owner needs a foreman-corpus provider.
+
+### completeness-scan follow-ups left by the BL-0119 review
+- **Id**: BL-0159
+- **Status**: open
+- **Since**: 2026-10-14
+- **Origin**: self
+- **Problem**: 完整性掃描還有三個小毛病：指定的檔案全部不存在時仍回報乾淨並放行；掃到這支掃描器自己的規則那一行會誤報；換行分隔的檔名清單不會去掉行首空白。
+- **Impact**: 低。第一項最值得修：檔名打錯時檢查會默默放行；其餘兩項只會多報或少掃，人看得出來。
+- **Trigger**: 下次改 completeness-scan，或有人回報掃描放行了不存在的檔案
+- **Effort**: S
+- **Source**: BL-0119 review rounds 1-3, 2026-10-14
+- **Pointer**: docs/backlog/completeness-scan-follow-ups-after-bl-0119.md
+- **Context**: (1) --files all missing → clean:true exit 0; (2) --range over the PAT_MARKER line or the gate.md marker row self-reports; (3) newline-split pieces keep leading blanks.
+
+### Qualification wall cap and truncation rules after run-to-completion
+- **Id**: BL-0160
+- **Status**: open
+- **Since**: 2026-10-14
+- **Origin**: self
+- **Problem**: 資格考改成每題都考完之後，時間上限沒有重算，慢的考生比較容易考到一半就到時間、記成「無結果」。另外，已鎖定合格的場次中途到時間仍算合格，但沒考到的題目裡可能有會讓它不合格的嚴重錯誤。
+- **Impact**: 中。慢模型可能一直拿不到判定；截斷時可能放過一個沒考到的嚴重錯誤。
+- **Trigger**: 重考 consult／discuss 出現 wall-truncated 紀錄，或 owner 決定截斷怎麼判
+- **Effort**: S
+- **Source**: review of 763f77de, 2026-10-14
+- **Pointer**: docs/backlog/qualification-wall-cap-after-run-to-completion.md
+- **Context**: engine-qualify.js:3750,3765 wall budget predates run-to-completion; a truncated locked_qualify pool stays qualified though sticky Tier-1 could still fail it.
+
+### Qualification provider: CLI error text and reviewer last-line rule
+- **Id**: BL-0161
+- **Status**: open
+- **Since**: 2026-10-14
+- **Origin**: self
+- **Problem**: 資格考現在把看不懂的回覆算成答錯。若命令列工具在額度用完或登入失效時照常結束、只印錯誤文字，也會被算成考生答錯而誤判不合格。另待決：程式審查題前面輸出壞掉、最後一行是合法的「通過」，目前算通過。
+- **Impact**: 中。第一項尚未實機確認；若發生會寫出錯誤的不合格紀錄並累積扣點。
+- **Trigger**: 某次考試出現一連串 protocol_violation，或確認某個 CLI 遇額度／登入錯誤會以 0 結束
+- **Effort**: S
+- **Source**: review of 763f77de, 2026-10-14 (UNVERIFIED live behavior)
+- **Pointer**: docs/backlog/qualification-provider-cli-error-text-and-last-line-rule.md
+- **Context**: qualification-review-provider.js:1608-1610 passes exit-0 text through; no quota/auth pattern match. parsePanelResult (:807-820) takes the last parseable JSON object.

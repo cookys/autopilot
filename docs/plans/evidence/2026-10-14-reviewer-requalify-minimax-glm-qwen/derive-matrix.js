@@ -15,6 +15,8 @@ const LANES = {
   kimi:      { engine: 'kimi-code-k3',               model: 'kimi-code/k3',               family: 'moonshot', kind: 'cli',  cli: 'kimi', effort: 'high',
                transport: 'kimi-m-p-argv', posture: 'kimi -m <model> -p <prompt> (default agent; no tool-deny in provider kimi branch)' },
   muse:      { engine: 'muse-spark-1.3-contributor', model: 'muse-spark-1.3-contributor', family: 'meta',     kind: 'http', endpoint: 'opencode-go', effort: 'default', protocol: 'responses' },
+  muse_low:  { engine: 'muse-spark-1.3-contributor', model: 'muse-spark-1.3-contributor', family: 'meta',     kind: 'http', endpoint: 'opencode-go', effort: 'low',  protocol: 'responses' },
+  muse_high: { engine: 'muse-spark-1.3-contributor', model: 'muse-spark-1.3-contributor', family: 'meta',     kind: 'http', endpoint: 'opencode-go', effort: 'high', protocol: 'responses' },
   kimi28:    { engine: 'kimi-k2.8-preview',          model: 'kimi-code/kimi-for-coding',  family: 'moonshot', kind: 'cli',  cli: 'kimi', effort: 'high',
                transport: 'kimi-m-p-argv', posture: 'kimi -m <model> -p <prompt> (default agent; no tool-deny in provider kimi branch)' },
 };
@@ -51,7 +53,7 @@ else {
   harness = 'qrp:' + sha(fs.readFileSync(path.join(REPO, 'scripts/qualification-review-provider.js'))).slice(0, 8);
   invented.push(`${L.cli} ${role} transport/posture/credential surface strings (no precedent for this role)`);
 }
-const semBase = (kind) => ({ kind, model: L.model, transport: T, ...(http ? { endpoint: L.endpoint } : { reasoning_effort: L.effort, endpoint: '@none' }) });
+const semBase = (kind) => ({ kind, model: L.model, transport: T, ...(L.protocol === 'responses' && L.effort !== 'default' ? { http_reasoning_effort: L.effort } : {}), ...(http ? { endpoint: L.endpoint } : { reasoning_effort: L.effort, endpoint: '@none' }) });
 const conBase = (kind, extra = {}) => ({ kind, exam_transport: TRANSPORT, ...extra, ...(http ? {} : { cli_posture: L.posture }), credential_isolation: CRED });
 let prompt, sem, con, semHex;
 if (role === 'reviewer') { prompt = tmpl('SYSTEM_PROMPT'); sem = semBase('reviewer-semantic-surface-v1'); con = conBase('reviewer-containment-surface-v1'); }

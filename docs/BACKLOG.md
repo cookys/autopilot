@@ -1816,19 +1816,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: Move KR7 baseSha (verdict-stability.test.sh ~:3499-3537) to a v6 + --raw-dir commit; restore runQualification + reviewer verifyPinnedEvaluationAssets. raw sink :5031-5038 writes "\n" for zero rows; owner --raw-dir untested.
 
-### Pending-decisions follow-ups: orphaned items and untested guards
-- **Id**: BL-0163
-- **Status**: open
-- **Since**: 2026-10-14
-- **Origin**: self
-- **Problem**: 待決議事項區塊有三個小缺口：session 當掉沒正常結束時，它問 owner 的題目會一直留在區塊裡，只能手動關；「只關自己 session 那筆」的第二道判斷沒有反例測試；對沒開過決議的 repo 執行 close 會建出空目錄。
-- **Impact**: 低。區塊可能累積已沒人在等的舊題，owner 會以為還要回答。
-- **Trigger**: owner 看到區塊裡有已經沒人在等的舊題，或下次改 ask-decision.js / open-decision.js
-- **Effort**: S
-- **Source**: review of decision/2 eb9f702e, 2026-10-14
-- **Pointer**: none
-- **Context**: ask-decision.js closeOwn only clears its own pointer; dead-session items persist (stale after 7 d). isOurs in closeDecisionById has no counter-example test. withWriteLock ensureDir creates decisions/ on close.
-
 ### Exam effort label is not checked against the effort actually sent
 - **Id**: BL-0166
 - **Status**: open

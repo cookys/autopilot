@@ -4,7 +4,7 @@
 
 ### 新增
 
-- **即時面板「待決議事項」區塊**：現況分頁多一個「待決議事項（N）」區塊，列出每一個正在等 owner 回答的問題，附完整脈絡：問題、背景、每個選項與說明、建議與理由、卡住了什麼、來源，以及選填的「為什麼要你決定」。owner 不必往前翻對話找要回什麼。決議檔改成 `autopilot.decision/2`：同一範圍可同時掛多題，`open` 追加並回傳 id，`close --id` 關一題，`show` 列全部；`ask-decision` hook 只取代自己 session 尚未回答的那題。審查頁、model.json、schema 與 Codex 鏡像同步。不做相容墊片：舊的 decision/1 檔和 `--replace` 已移除，殘留的 v1 檔要手動刪。後續小缺口見 BL-0163。
+- **即時面板「待決議事項」區塊**：現況分頁多一個「待決議事項（N）」區塊，列出每一個正在等 owner 回答的問題，附完整脈絡：問題、背景、每個選項與說明、建議與理由、卡住了什麼、來源，以及選填的「為什麼要你決定」。owner 不必往前翻對話找要回什麼。決議檔改成 `autopilot.decision/2`：同一範圍可同時掛多題，`open` 追加並回傳 id，`close --id` 關一題，`show` 列全部；`ask-decision` hook 只取代自己 session 尚未回答的那題。審查頁、model.json、schema 與 Codex 鏡像同步。不做相容墊片：舊的 decision/1 檔和 `--replace` 已移除，殘留的 v1 檔要手動刪。提問的 session 已結束的題目會標上「（提問的 session 已結束）」（BL-0163）：只有開題當下該 session 的 turn 檔存在的題目才會這樣判定，所以關掉 `AUTOPILOT_AWAITING_OWNER` 不會讓還在等的題目被誤標；舊格式的題目一律不標，也不會被自動刪除。在沒有任何決議的 repo 上關題，不再建立空的 `decisions/` 目錄。
 - **`autopilot engine review-candidate`：只審、不寫的外部範圍審查（BL-0090 P1）**（plan `docs/plans/2026-10-13-review-only-external-candidate.md`）：外部團隊自己寫好、自己提交的一段 `base..head`，可以直接交給我們審，不必假裝成我們的 implementer。這個子命令不呼叫任何寫手、驗證作者或修復的模型；範圍只認 sealed 合約裡的 `adoption.head_sha`，從 Git 重新推導。
   - **收件**：合約新增選填的 `adoption` 區段（`head_sha`，選填 `author_family`）。收件時重新檢查：分支尖端必須等於 sealed head、base 必須是祖先、範圍不得為空、路徑都在 allowed prefixes 內、檔案數不超過上限。每一種拒絕都有具名原因，且在花任何模型呼叫之前發生。churn 超限只是回執上的警告，不拒絕。
   - **驗證**：`verify_cmd` 在被收件那個 commit 的全新 detached worktree 裡執行，不在操作者的 checkout，所以一個被 gitignore 的「讓測試通過」檔案不會讓它變綠。

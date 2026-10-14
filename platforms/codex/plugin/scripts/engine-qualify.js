@@ -5223,7 +5223,7 @@ function runQualification(options) {
       fs.mkdirSync(options.rawDir, { recursive: true });
       fs.writeFileSync(
         path.join(options.rawDir, `${role}-exchanges.jsonl`),
-        `${rawExchanges.map((row) => JSON.stringify(row)).join('\n')}\n`,
+        rawExchanges.length === 0 ? '' : `${rawExchanges.map((row) => JSON.stringify(row)).join('\n')}\n`,
         { mode: 0o600 },
       );
     }

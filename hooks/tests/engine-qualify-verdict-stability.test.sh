@@ -3388,18 +3388,17 @@ for (const role of ['consult', 'discuss']) {
 
 fs.rmSync(shortTmpBase, { recursive: true, force: true });
 
-// KR7 — other-role parity vs base dbf0e123.
-// Base advanced 4e204137 -> b24d900a (2026-09-23): runBrainQualification and
-// runQualification changed deliberately, NOT via a consult/discuss leak —
-// 27483f8e/cf49bf27 (brain + reviewer/owner abort on transport failure),
-// a2b8b95f (brain campaign-state open_findings + plant attribution fields),
-// b24d900a (brain-trial-order.json join map), then dbf0e123 (2026-09-24, chat completions /
-// claude effort / unparsed-tool warning — also re-pinned the implementer grader, which is why
-// the implementer pin comparison went red against b24d900a). dbf0e123 is the last commit to
-// touch scripts/engine-qualify.js and is on origin/develop; the guard still
-// catches any FUTURE consult/discuss change that leaks into these bodies.
+// KR7 — other-role parity vs base 6fdcf5ac (restored 2026-10-15, BL-0162).
+// The base is a commit already on origin/develop that carries the reviewer v6 corpus, the
+// reviewer/owner --raw-dir sink and the per-case usage block, so the reviewer/owner path
+// (runQualification + verifyPinnedEvaluationAssets) is guarded again. History of earlier pins:
+// dbf0e123 (2026-09-24) preceded the v5/v6 reviewer generator, whose pinned hash the base module
+// could no longer verify against the tree, which is why the reviewer half was dropped on
+// 2026-10-14. The guard still catches any FUTURE consult/discuss change that leaks into these
+// bodies. When an intentional change to a guarded body lands, advance baseSha to a commit that
+// already contains it (it must be an ancestor of origin/develop; the check below enforces it).
 {
-  const baseSha = 'dbf0e12303b9f77e2e26d5311d30199fe615eef2';
+  const baseSha = '6fdcf5ac4bf1d4830a6331a6bfed23faf3731e06';
   const parityPath = path.join(root, 'scripts', '.d6-parity-engine-qualify-' + process.pid + '.js');
   const cleanup = () => {
     try { fs.unlinkSync(parityPath); } catch { /* already gone */ }
@@ -3499,12 +3498,8 @@ fs.rmSync(shortTmpBase, { recursive: true, force: true });
   // Executable half for roles with exported pure pin/verdict helpers.
   // verification_author's verifyPinnedVaEvaluationAssets is intentionally
   // unexported — its KR7 gate is the runVaQualification source-half below.
-  // reviewer's verifyPinnedEvaluationAssets left this list on 2026-10-14: the base module pins
-  // the OLD reviewer generator hash and the generator file on disk is now v5 (clean-case
-  // equivalence fix), so the base module cannot verify the current tree. Reviewer pin
-  // correctness is asserted directly by engine-qualify-b.test.sh section 12 (pin mismatch,
-  // mutated generator/manifest/base/oracle all fail closed) instead.
   const pinPairs = [
+    ['reviewer', 'verifyPinnedEvaluationAssets'],
     ['implementer', 'verifyPinnedImplEvaluationAssets'],
   ];
   for (const [roleName, fnName] of pinPairs) {
@@ -3525,12 +3520,9 @@ fs.rmSync(shortTmpBase, { recursive: true, force: true });
   // on origin/develop — so an intentional implementer change cannot advance it before it
   // lands. The consult/discuss leak guard keeps the other four bodies + the executable half.
   //
-  // runQualification left this list on 2026-10-14: the reviewer/owner path gained --raw-dir
-  // (per-case raw answers, same as VA/brain/implementer/consult), so its body can no longer be
-  // byte-identical to dbf0e123 and a pin can only name a commit already on origin/develop.
-  // consult/discuss never run inside runQualification (it returns early into
-  // runConsultDiscussQualification), so the leak guard loses no consult/discuss coverage; the
-  // reviewer path is covered end to end by engine-qualify-a/b.test.sh and the raw-dir test there.
+  // runQualification is guarded again (BL-0162): the reviewer/owner path must stay byte-identical to
+  // the base, except for ONE deliberate, named delta below (the raw-answer sink writes an empty file
+  // for zero rows instead of a lone newline). Anything else that touches the body fails here.
   //
   // runBrainQualification left this list on 2026-10-14: its emitted row gained capability_score,
   // cost and expires so `engine-scorecard.js record` accepts a brain sitting. Same reasoning as
@@ -3552,12 +3544,36 @@ fs.rmSync(shortTmpBase, { recursive: true, force: true });
   // the same pass counts.
   const fns = [
     'ownerRuleViolations',
+    'runQualification',
   ];
+  // Deliberate deltas applied to the BASE text before comparing: [function, old, new]. Each `old`
+  // must occur exactly once in the base body, so a stale entry fails loudly instead of masking.
+  const BT = String.fromCharCode(96);
+  const SINK = BT + '${rawExchanges.map((row) => JSON.stringify(row)).join(\'\\n\')}\\n' + BT + ',';
+  const DELTAS = {
+    runQualification: [[SINK, "rawExchanges.length === 0 ? '' : " + SINK]],
+  };
+  const expectedBody = (name, baseText) => {
+    let text = baseText;
+    for (const [from, to] of DELTAS[name] || []) {
+      assert(text.split(from).length === 2, name + ' base body holds delta anchor exactly once: ' + from);
+      text = text.replace(from, () => to);
+    }
+    return text;
+  };
   for (const name of fns) {
-    const a = baseEq[name].toString();
+    const a = expectedBody(name, baseEq[name].toString());
     const b = curEq[name].toString();
-    assert(a === b, name + ' Function.prototype.toString byte-identical vs base; leaked consult/discuss change');
+    assert(a === b, name + ' Function.prototype.toString byte-identical vs base (plus declared deltas); leaked consult/discuss change');
   }
+  // Negative control: the comparison must be able to fail. A body with a one-token drift in the
+  // reviewer pin call and one with the declared delta removed are both rejected.
+  const drifted = curEq.runQualification.toString().replace('verifySandboxRuntime();', '/* drift */');
+  assert(drifted !== expectedBody('runQualification', baseEq.runQualification.toString()),
+    'KR7 negative control: a drifted runQualification body is NOT accepted');
+  const noDelta = curEq.runQualification.toString().replace("rawExchanges.length === 0 ? '' : ", '');
+  assert(noDelta !== expectedBody('runQualification', baseEq.runQualification.toString()),
+    'KR7 negative control: dropping the declared delta is NOT accepted');
 
   cleanup();
   // Confirm the temp file is gone and not staged residue.

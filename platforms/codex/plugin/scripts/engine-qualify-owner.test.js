@@ -237,6 +237,38 @@ function main() {
     'owner evidence cannot qualify reviewer and role evidence is not interchangeable',
   );
 
+  // BL-0162: --raw-dir on the owner exam (it was only exercised for the reviewer). Every case's raw
+  // answer lands in owner-exchanges.jsonl; a run that dies before any case leaves an EMPTY file, not
+  // a lone newline (a blank line is not a JSONL row and breaks naive readers).
+  const rawOk = path.join(tempRoot, 'raw-owner-ok');
+  const rawRun = runQualification({
+    ...baseOptions, store: path.join(tempRoot, 'raw-owner-store'), rawDir: rawOk,
+  });
+  const rawRows = fs.readFileSync(path.join(rawOk, 'owner-exchanges.jsonl'), 'utf8')
+    .split('\n').filter((line) => line.length > 0).map((line) => JSON.parse(line));
+  equal(rawRows.length, rawRun.row.usage.n_cases, 'owner --raw-dir keeps one row per executed case');
+  check(rawRows.every((row) => typeof row.stdout === 'string' && row.stdout.length > 0),
+    'every owner raw row keeps the raw answer');
+  check(fs.readFileSync(path.join(rawOk, 'owner-exchanges.jsonl'), 'utf8').endsWith('}\n'),
+    'a non-empty raw file ends with exactly one newline after the last row');
+  for (const [roleName, rawDirName] of [['owner', 'raw-owner-zero'], ['reviewer', 'raw-reviewer-zero']]) {
+    const rawDead = path.join(tempRoot, rawDirName);
+    try {
+      runQualification({
+        ...baseOptions,
+        role: roleName,
+        store: path.join(tempRoot, `${rawDirName}-store`),
+        rawDir: rawDead,
+        panelCmd: baseOptions.panelCmd, trials: 0,
+        taskClasses: roleName === 'owner' ? baseOptions.taskClasses : ['code_review'],
+        tools: roleName === 'owner' ? baseOptions.tools : ['diff_read'],
+      });
+    } catch { /* an aborted administration may throw or return no_verdict; only the raw file matters */ }
+    const deadText = fs.readFileSync(path.join(rawDead, `${roleName}-exchanges.jsonl`), 'utf8');
+    check(!deadText.startsWith('\n') && !(deadText.length > 0 && deadText.trim() === ''),
+      `${roleName} raw file with zero rows is empty, never a lone newline (got ${JSON.stringify(deadText.slice(0, 20))})`);
+  }
+
   const allAccept = runMode('all-accept', 'all-accept');
   equal(allAccept.qualified, false, 'an owner that ignores planted failures cannot qualify');
   check(
@@ -350,7 +382,7 @@ function main() {
   check(!fs.existsSync(path.join(deadStoreDir, 'qualification-evidence.jsonl')),
     'owner transport_fail appends NO row admitting the role');
 
-  if (assertions !== 36) throw new Error(`engine-qualify-owner: expected exactly 36 assertions (count pin moved here from hooks/tests/engine-qualify-owner.test.sh so the L1 run enforces it), got ${assertions}`);
+  if (assertions !== 41) throw new Error(`engine-qualify-owner: expected exactly 41 assertions (count pin moved here from hooks/tests/engine-qualify-owner.test.sh so the L1 run enforces it), got ${assertions}`);
   process.stdout.write(`owner qualifier: ${assertions} assertions passed\n`);
 }
 

@@ -22,7 +22,7 @@
 #       their OWN variables explicitly so an ambient exported REPO_ROOT can never leak in.
 
 repo_identity_of() {
-  local dir="${1:-.}" common canon
+  local dir="${1:-.}" common canon reason ver maj min
   if common="$(git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" \
       && [ -n "$common" ] \
       && canon="$(cd "$common" 2>/dev/null && pwd -P)" \
@@ -30,7 +30,20 @@ repo_identity_of() {
     printf 'git-common-dir:%s\n' "$canon"
     return 0
   fi
-  echo "repo-identity: git rev-parse --path-format failed (git $(git --version 2>/dev/null | awk '{print $3}'); need >= 2.31)" >&2
+  # Failure: name the real cause (git's own stderr, joined to one line). The version hint is
+  # printed only when git is actually older than 2.31; a newer git never gets blamed.
+  ver="$(git --version 2>/dev/null | awk '{print $3}')"
+  maj="${ver%%.*}"; min="${ver#*.}"; min="${min%%[!0-9]*}"
+  case "$maj" in ''|*[!0-9]*) maj="" ;; esac
+  case "$min" in ''|*[!0-9]*) min="" ;; esac
+  if [ -n "$maj" ] && [ -n "$min" ] \
+      && { [ "$maj" -lt 2 ] || { [ "$maj" -eq 2 ] && [ "$min" -lt 31 ]; }; }; then
+    echo "repo-identity: git rev-parse --path-format failed (git $ver; need >= 2.31)" >&2
+  else
+    reason="$(git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>&1 >/dev/null | tr '\n' ' ')"
+    [ -n "$reason" ] || reason="no output from git rev-parse (path-format=absolute, --git-common-dir) in $dir"
+    echo "repo-identity: git rev-parse failed in $dir: ${reason% }" >&2
+  fi
   return 1
 }
 

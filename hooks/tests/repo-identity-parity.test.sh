@@ -61,6 +61,7 @@ FAKEBIN="$TEST_TMP/fakebin"; mkdir -p "$FAKEBIN"
 REAL_GIT="$(command -v git)"
 cat > "$FAKEBIN/git" <<EOS
 #!/usr/bin/env bash
+if [ "\$1" = "--version" ]; then echo "git version 2.30.2"; exit 0; fi
 for a in "\$@"; do
   if [ "\$a" = "--path-format=absolute" ]; then
     echo "error: unknown option \`path-format=absolute'" >&2
@@ -81,6 +82,31 @@ eq "<null>" "$N_OUT" "fake old git: node returns null"
 assert_contains "$(cat "$TEST_TMP/fake.err")" "repo-identity: git rev-parse --path-format failed" "fake old git: named stderr diagnostic"
 assert_contains "$(cat "$TEST_TMP/fake.err")" "need >= 2.31" "fake old git: diagnostic names the minimum version"
 eq "1" "$(wc -l < "$TEST_TMP/fake.err" | tr -d ' ')" "fake old git: diagnostic is exactly one line"
+
+# 6. new git (2.53) whose rev-parse fails for a real reason (dubious ownership): the stderr must
+# carry git's actual message, never the "upgrade git" version hint.
+FAKEBIN2="$TEST_TMP/fakebin-new"; mkdir -p "$FAKEBIN2"
+cat > "$FAKEBIN2/git" <<EOS
+#!/usr/bin/env bash
+if [ "\$1" = "--version" ]; then echo "git version 2.53.0"; exit 0; fi
+for a in "\$@"; do
+  if [ "\$a" = "rev-parse" ]; then
+    echo "fatal: detected dubious ownership in repository at '/x/y'" >&2
+    exit 128
+  fi
+done
+exec "$REAL_GIT" "\$@"
+EOS
+chmod +x "$FAKEBIN2/git"
+OLD_PATH="$PATH"
+export PATH="$FAKEBIN2:$PATH"
+N_OUT2="$(repo_identity_of "$MAIN" 2>"$TEST_TMP/new.err")"; N_RC2=$?
+export PATH="$OLD_PATH"
+eq "" "$N_OUT2" "new git query failure: empty stdout"
+assert_neq "0" "$N_RC2" "new git query failure: non-zero return"
+assert_contains "$(cat "$TEST_TMP/new.err")" "detected dubious ownership" "new git query failure: real git reason printed"
+assert_not_contains "$(cat "$TEST_TMP/new.err")" "need >= 2.31" "new git query failure: no version hint"
+assert_not_contains "$(cat "$TEST_TMP/new.err")" "git 2.53" "new git query failure: git version not blamed"
 
 # a non-repo dir also fails named, not silently
 S2="$(repo_identity_of "$TEST_TMP/home" 2>/dev/null)"; eq "" "$S2" "non-repo dir: empty output"

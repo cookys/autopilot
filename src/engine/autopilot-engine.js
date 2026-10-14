@@ -7802,8 +7802,15 @@ class AutopilotEngine {
           generation: campaignControl.initial_state.generation,
           stageIdentity: `campaign-adoption:${campaignControl.initial_state.generation}`,
           usage: {
-            changed_files: Array.isArray(admissionStep.changed_files)
-              ? admissionStep.changed_files.length : 0,
+            // BL-0154: the campaign requires usage to be monotonic, but the cumulative base..head
+            // count shrinks when a returned fix fully reverts a file. Book the larger of the prior
+            // durable value and this round's count (a high-water mark of files touched).
+            changed_files: Math.max(
+              Number.isSafeInteger(campaignControl.initial_state.usage.changed_files)
+                ? campaignControl.initial_state.usage.changed_files : 0,
+              Array.isArray(admissionStep.changed_files)
+                ? admissionStep.changed_files.length : 0,
+            ),
             // Churn limits are warn-only for an adopted range (plan RO4): a breach is a named
             // warning in the admission receipt, so the budget meter is not charged for it.
             churn: 0,

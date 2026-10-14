@@ -144,6 +144,34 @@ manifest_child_session_json() {
   fi
 }
 
+# ccshim_keep_transcript <scratch-home> <run-id> -- dispatch-tree 3c (D3). Called just before a cc-shim rail
+# removes its scratch HOME: copies <scratch>/.claude/projects/*/<child_session_id>.jsonl to
+# <runs>/<run_id>.child-transcript.jsonl and sets CHILD_TRANSCRIPT_PATH (empty on any failure). Best-effort:
+# always returns 0, so a failed copy can never change the run's status.
+ccshim_keep_transcript() {
+  CHILD_TRANSCRIPT_PATH=""
+  local scratch="${1:-}" rid="${2:-}" dir src dest safe
+  { [ "${AUTOPILOT_DISPATCH_MANIFEST:-1}" = "0" ] || [ -z "$scratch" ] || [ -z "$rid" ] || [ -z "${CHILD_SESSION_ID:-}" ]; } && return 0
+  dir="${AUTOPILOT_DISPATCH_RUNS_DIR:-${TMPDIR:-/tmp}/autopilot-dispatch-runs}"
+  safe="$(printf '%s' "$rid" | tr -c 'A-Za-z0-9._-' '-')"
+  src="$(ls -1 "$scratch"/.claude/projects/*/"$CHILD_SESSION_ID".jsonl 2>/dev/null | head -1)" || src=""
+  [ -n "$src" ] && [ -f "$src" ] || return 0
+  dest="$dir/${safe}.child-transcript.jsonl"
+  { mkdir -p "$dir" && cp -f "$src" "$dest.tmp.$$" && mv -f "$dest.tmp.$$" "$dest"; } 2>/dev/null \
+    && CHILD_TRANSCRIPT_PATH="$dest" || rm -f "$dest.tmp.$$" 2>/dev/null
+  return 0
+}
+
+# manifest_child_transcript_json -- the JSON value for a manifest's "child_transcript": the kept copy's path
+# as a quoted string, else the bare literal null.
+manifest_child_transcript_json() {
+  if [ -n "${CHILD_TRANSCRIPT_PATH:-}" ]; then
+    printf '"%s"' "$(_repo_identity_json_str "$CHILD_TRANSCRIPT_PATH")"
+  else
+    printf 'null'
+  fi
+}
+
 repo_identity_resolve_fields() {
   [ -n "${REPO_IDENTITY_FIELDS:-}" ] && return 0
   local root="${1:-}" consuming="${2:-}" dir="" src="" id=""

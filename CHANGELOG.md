@@ -77,6 +77,7 @@
 
 ### 修正
 
+- **設了自動壓縮視窗時，T2 不再叫你停下**（BL-0124）：`autoCompactWindow` 設在 T2 門檻以下時，T2 的提示改成「自動壓縮已設在 Nk，不要停、不要請使用者 /clear，到下個階段邊界寫 handoff」。沒設視窗、值不合法、視窗高於 T2，或設了 `DISABLE_AUTO_COMPACT` 時，仍然是 STOP。只有到 T2 才讀視窗設定。ON/OFF 評測（sonnet 26 次）：舊文字 10/10 叫停，新文字 10/10 繼續，對照組 6/6 照常叫停；證據 `docs/plans/evidence/2026-10-14-t2-wording-onoff/`。新增 hook 層測試 `hooks/tests/context-budget-t2-autocompact.test.sh` 與 lib 層 `hooks/context-budget-t2-autocompact.test.js`。已知疑點：T2 觸發時 context 已超過視窗，當下壓縮可能其實沒發生（BL-0147）。
 - **壓縮相關的四個小問題**（branch `lane/l-compaction-smalls`；BL-0126、BL-0091 和工作流程快照審查的後續）：
   - **自動壓縮是否被停用的判斷和 Claude Code 對齊**：`scripts/lib/autocompact-window.js` 原本把 `DISABLE_AUTO_COMPACT`、`DISABLE_COMPACT` 設成 `no`、`off` 或任何非空字串都當成已停用。照 Claude Code 2.1.296 binary 的判斷式，只有 `1`、`true`、`yes`、`on`（去空白、不分大小寫）才算停用。同時新增環境變數 `AUTOPILOT_MANAGED_SETTINGS_FILE`，讓測試把系統層 `managed-settings.json` 指到自己的暫存檔，測試不再讀到主機真實的檔案。
   - **長時間前景指令之後，即時檔過期時的上下文警告改成和新鮮時一致**（BL-0091）：即時檔超過 120 秒會被視為過期，hook 又還沒記住視窗大小時，就退回用推測值。預設設定、1M 視窗、即時檔過期、153k 時，原本只發提醒（exit 0）；現在會發停止指令（exit 2），和即時檔新鮮時的行為一致。做法是採用這個 session 自己的過期即時檔裡的視窗大小（視窗不會中途改變，token 總數仍取自 transcript），訊息標示為「this session's window」。別的 session 的過期檔不採用。`maybeWriteLive` 也改用同一套驗證，schema 不對或缺 `written_at` 的檔不再被記成視窗來源。

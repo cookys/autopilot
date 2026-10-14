@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0147 -->
+<!-- next-id: BL-0148 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -193,7 +193,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: L
 - **Source**: owner request 2026-09-16 after v2.36.58
 - **Pointer**: docs/plans/evidence/2026-09-16-blind-review-redesign/consult-claude-fable-5-1.md
-- **Context**: packet (tree + git diff + spec, deny-list); packet/cleanroom tiers; intake canary; verify-once; parallel seats; quorum + snapshot; panel station; shared packet. Shipped: 1a-A..2-C v2.36.59-69. Open: 2-D overlap/pre-pass.
+- **Context**: Shipped 1a-A..2-C (v2.36.59-69) and 2-D D2 (v2.36.77). Open: D1 station overlap per frozen docs/plans/2026-09-19-blind-review-2d-overlap.md, after BL-0090 P2. Pre-pass is a Spike (§7).
 
 ### PEER-REPORTED (hangar): register preview/review servers with lab-ingress instead of ad-hoc 0.0.0.0 ports
 - **Id**: BL-0018
@@ -1523,13 +1523,13 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-12
 - **Origin**: owner
-- **Problem**: 使用者通常不知道要設定自動壓縮視窗（autoCompactWindow），所以到 T2 門檻時，系統仍然提示「請停下來」；偵測功能已完成，剩下是調整 T2 的提示文字。 (draft)
+- **Problem**: 使用者通常不知道要設定自動壓縮視窗（autoCompactWindow），偵測功能和 T2 新提示文字都已完成，剩下是在下一版發布標題寫出這個設定，讓使用者知道要設。 (draft)
 - **Impact**: 使用者會被不必要地要求停下重開；擁有者已驗證 Claude Code 的摘要夠用，改文字屬指引，需評測證據。 (draft)
-- **Trigger**: owner 2026-10-12 — fresh-session test done: Claude Code's summary was enough (see Pointer)
+- **Trigger**: next alpha or 3.0.0 release cut
 - **Effort**: M
 - **Source**: context reset cost analysis, 2026-10-12
 - **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
-- **Context**: detection shipped (scripts/lib/autocompact-window.js, T1 tip, dev-setup --check). Left: T2 wording when a window at or below T2 is set (guidance, needs ON/OFF eval); name it in the next release heading. Detail at Pointer.
+- **Context**: detection and T2 wording shipped (BL-0124 merge, ON/OFF eval docs/plans/evidence/2026-10-14-t2-wording-onoff/). Left: name autoCompactWindow in the next release heading so users learn to set it.
 
 ### residue sweep records integration_ref HEAD after widening to the remote upstream
 - **Id**: BL-0127
@@ -1750,3 +1750,16 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: BL-0090 P2, Q3 ruled (c) on 2026-10-14
 - **Pointer**: docs/plans/2026-10-13-review-only-external-candidate.md
 - **Context**: §10 Q3. Seat reuse keys on the whole input binding and seats have no context channel; delta-only needs a new reuse key, a touched-files re-check and a cumulative-context packet (option (a)).
+
+### T2 says auto-compact will handle it, though context already passed the window
+- **Id**: BL-0147
+- **Status**: open
+- **Since**: 2026-10-14
+- **Origin**: self
+- **Problem**: 設了自動壓縮視窗時，T2 新提示要模型「不要停，會自動壓縮」；但 T2 觸發時對話已超過視窗，代表當下壓縮其實沒發生，提示可能不實。
+- **Impact**: 壓縮若真的沒發生，模型會繼續塞 context 而不停。Claude Code 實際何時壓縮尚未驗證。
+- **Trigger**: 有人回報 T2 叫繼續後 context 持續上升沒有壓縮，或查證 Claude Code 壓縮時機時
+- **Effort**: S
+- **Source**: BL-0124 review, 2026-10-14
+- **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
+- **Context**: Review (a): compaction fired near 217k for a 250k window (README:122-125). Candidate fix: when context exceeds the window by more than one step, fall back to STOP. Verify CC compaction timing first.

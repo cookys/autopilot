@@ -1,6 +1,6 @@
 # Plan — review-only entry: a host-admitted final panel over an externally produced candidate range
 
-> Status: **ruled, size L — Q1′ ruled 2026-10-14 (caller chooses at disposition, §10); P1 (merge 8a650a95), P3 (merge 0d6fcc2a), P2 (merge of lane/review-candidate-p2b) and P5 (merge of lane/review-candidate-p5) shipped 2026-10-14; P4 doc merged (`docs/review-candidate.md`, merges of lane/review-candidate-p4-doc and -p4-doc2) and accepted 2026-10-14 by a doc-only agent run to a ready receipt (its operator pin step substituted with already-pinned seats); the cuda reply open** · Owner: depth-0 · Source: BACKLOG BL-0090 (peer-reported, cuda/chatgpt-tunnel, fleet 2026-10-03; owner approved 2026-10-13) · Pointer: `docs/backlog/review-only-adoption-of-external-candidate.md` · Version: stays on the 3.0.0 line (no bump) · Code read at `459dd869`.
+> Status: ✅ Merged to develop as 6926ef6f (P1 8a650a95, P3 0d6fcc2a, P2 a0492a74, P4 doc 5c30895f + f0cc1196, P5 6926ef6f) — ships with 3.0.0; cuda replied 2026-10-15 (fleet message 01M4XVC8KH3WHGGKZ00AYN2K6K to cookys/cuda/chatgpt-tunnel-host--claude); deferred follow-ups BL-0146, BL-0154, BL-0155 in BACKLOG. Was: ruled, size L — Q1′ ruled 2026-10-14 (caller chooses at disposition, §10); P1 (merge 8a650a95), P3 (merge 0d6fcc2a), P2 (merge of lane/review-candidate-p2b) and P5 (merge of lane/review-candidate-p5) shipped 2026-10-14; P4 doc merged (`docs/review-candidate.md`, merges of lane/review-candidate-p4-doc and -p4-doc2) and accepted 2026-10-14 by a doc-only agent run to a ready receipt (its operator pin step substituted with already-pinned seats); the cuda reply sent** · Owner: depth-0 · Source: BACKLOG BL-0090 (peer-reported, cuda/chatgpt-tunnel, fleet 2026-10-03; owner approved 2026-10-13) · Pointer: `docs/backlog/review-only-adoption-of-external-candidate.md` · Version: stays on the 3.0.0 line (no bump) · Code read at `459dd869`.
 
 ## 1. Why
 
@@ -20,7 +20,7 @@ What already works (this shrinks the plan)
 - D7. Verification is already re-derivation: a fresh detached worktree at `candidate.commit` runs the sealed `verify_cmd` (`autopilot-engine.js:8445-8510`).
 - D8. The final-panel quorum handles an unknown author: `implementer_family === 'unknown'` relaxes exclusion to "at least the required number of families" (`campaign-composition.js:603`).
 - D9. Read-only range probes exist: `defaultResumeInspect` / `resumeInspectBlocked` (`autopilot-engine.js:2511`, `:2551`) check tip exists, base is an ancestor, tip ≠ base, and move no ref.
-- D10. Findings without authority already park: the in-loop path parks `AWAITING_DISPOSITION` and resumes disposition-only (`campaign-composition.js:1944-1976`); the active `docs/plans/2026-10-13-final-panel-park.md` extends the park to final-panel findings, which today terminalize.
+- D10. Findings without authority already park: the in-loop path parks `AWAITING_DISPOSITION` and resumes disposition-only (`campaign-composition.js:1944-1976`); the active `docs/plans/_archive/2026/10/2026-10-13-final-panel-park.md` extends the park to final-panel findings, which today terminalize.
 
 What blocks a foreign candidate (exact-key discipline, not policy)
 - D11. `normalizeCampaignArtifactReference` accepts a `git_candidate` only with `writer_fence` + `repair_lineage`, and the fence must be an `implementation_campaign_writer_fence` with `dispatch_exit|terminal_ledger` evidence (`src/engine/implementation-campaign.js:451-557`).
@@ -148,6 +148,7 @@ Before any spend, intake re-derives the range with read-only probes (D9): the br
 - Scope: a usage doc under `docs/` (contract section, seal, endpoints, reading the receipt); BL-0090 row and pointer; fleet reply to cuda.
 - Input: U1 findings; a P1 live-run log.
 - Output: doc; BL-0090 closed or narrowed.
+- Evidence (2026-10-15): reply to the reporter sent over fleet to `cookys/cuda/chatgpt-tunnel-host--claude`, message_id `01M4XVC8KH3WHGGKZ00AYN2K6K` (shipped; entry point and `docs/review-candidate.md`; `return` re-reviews the whole range; BL-0146 trigger condition). BL-0090 row closed; follow-ups BL-0146/0154/0155 point at `docs/review-candidate.md`.
 - Acceptance: a fresh session that has not seen this plan follows the doc in a scratch repo to a ready receipt (recorded).
 - Boundaries: no `skills/` edits.
 

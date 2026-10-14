@@ -1,5 +1,5 @@
 # Plan — `scaffold-mission.js`: generate the /l5 mission scaffold instead of hand-authoring it
-> Status: R0 2026-10-13. Owner decisions needed: none (see §5). BACKLOG row: "/l5 has no generator for the mission scaffold".
+> Status: ✅ Merged to develop as 46ee16a6 — ships with 3.0.0. (Was: R0 2026-10-13.) BACKLOG row: "/l5 has no generator for the mission scaffold".
 
 ## 1. Problem
 Before `mission prepare` a managed /l5 deliverable needs five artifacts that depth-0 writes by hand

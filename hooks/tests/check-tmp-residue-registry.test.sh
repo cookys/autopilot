@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# check-tmp-residue-registry.test.sh — KR5 of docs/plans/2026-10-12-tmp-residue-containment.md.
+# check-tmp-residue-registry.test.sh — KR5 of docs/plans/_archive/2026/10/2026-10-12-tmp-residue-containment.md.
 # The gate scripts/check-tmp-residue-registry.js must block an unregistered temp reference at the
 # two real entry points, not merely exist:
 #   - `--self-test` exits 0 and prints a verdict for every planted fixture (each negative exits 1,
@@ -50,8 +50,8 @@ git -C "$CL" config autopilot.testIdentityGate off
 assert_eq "$(git -C "$CL" config --get core.hooksPath)" ".githooks" "case2: clone uses the repo's .githooks"
 
 # 2a. clean change passes the real hook
-echo "clean change $$" >> "$CL/docs/plans/2026-10-12-tmp-residue-containment.md"
-git -C "$CL" add docs/plans/2026-10-12-tmp-residue-containment.md
+echo "clean change $$" >> "$CL/docs/plans/_archive/2026/10/2026-10-12-tmp-residue-containment.md"
+git -C "$CL" add docs/plans/_archive/2026/10/2026-10-12-tmp-residue-containment.md
 OUT="$(git -C "$CL" commit -q -m "chore: clean change" 2>&1)"
 assert_eq "$?" "0" "case2a: clean change is let through by the real pre-commit"
 assert_not_contains "$OUT" "tmp-residue gate failed" "case2a: no gate complaint on the clean change"

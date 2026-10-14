@@ -1,6 +1,6 @@
 # Final panel with findings parks for depth-0 disposition
 
-Status: active (backlog row: "Final panel with non-empty findings terminal-stops instead of parking for depth-0 disposition")
+Status: ✅ Merged to develop as 2561e59f (resume fix d7078b8e, docs 643a8db7) — ships with 3.0.0.
 
 ## Current behaviour
 

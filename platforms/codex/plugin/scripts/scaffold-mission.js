@@ -3,7 +3,7 @@
 
 // scaffold-mission.js — generate the /l5 mission scaffold (rubric, sources manifest, execution
 // graph, task-authority envelope) from a committed plan, then self-check it with the same
-// validators the rail runs. Plan: docs/plans/2026-10-13-l5-mission-scaffold-generator.md.
+// validators the rail runs. Plan: docs/plans/_archive/2026/10/2026-10-13-l5-mission-scaffold-generator.md.
 //
 // Exit codes: 0 generated (or --check passed), 1 usage error, 2 pre-check / validation failure
 // (nothing is left half-written: a failed write restores or removes every touched file), 3 an output already exists (use --force).

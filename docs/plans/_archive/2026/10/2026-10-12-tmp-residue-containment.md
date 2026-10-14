@@ -1,5 +1,5 @@
 # Plan — TMPDIR residue containment: contain test temp dirs, delete runtime temp files after use, gate unregistered prefixes
-> Status: **active, size L, R2 FROZEN** (2026-10-12; plan-review receipt: `check-phase-review-receipt.js --plan-artifact …g2-artifact.json --dispositions …g2-dispositions.json` exit 0 on the as-reviewed G2 bytes) · Owner: cookys · Branch: `feat/tmp-residue-containment` · Frame: dev-flow L, no version bump (owner 2026-10-11: 3.0.0 not yet; the shipped-code changes here are PATCH-class and ride the next cut)
+> Status: ✅ Merged to develop as 5bb28735 (follow-ups 93774a9b, 8f2b7821, fb9c132f) — ships with 3.0.0. KR1 suite-red skill-onoff-generic is a pre-existing red on develop, recorded as an adjudication in the Review log (explicit deferral). Was: size L, R2 FROZEN (2026-10-12; plan-review receipt: `check-phase-review-receipt.js --plan-artifact …g2-artifact.json --dispositions …g2-dispositions.json` exit 0 on the as-reviewed G2 bytes) · Owner: cookys · Branch: `feat/tmp-residue-containment` · Frame: dev-flow L, no version bump (owner 2026-10-11: 3.0.0 not yet; the shipped-code changes here are PATCH-class and ride the next cut)
 
 ## Project Goal
 
@@ -195,8 +195,8 @@ Assumptions carried: the AF_UNIX 108-byte limit bounds the per-run dir path; all
 - **G2** (2026-10-12): CONDITIONAL, terminal (generation cap; sol STOP, grok STOP, MiniMax CONDITIONAL). 17 findings, 11 blocker candidates; depth-0 accepted all 11 (2 and 8 are one fold; 11 and 16 duplicate 0 and 10). As-reviewed sha256 `a3781c0c…`.
 - **R2** bounded repair of the G2 accepted blockers only: per-instance owned dirs; owner pid+start-time liveness for runtime scratch; registry is the only registration source and the gate checks reaper parity itself; occurrence = any temp-root reference; KR1 under `set -e` with a defined scan universe; registry core moved to phase 1; `apt.*` holds its own lock; rule (b) allocation inside the `try`; `*.test.*` excluded everywhere. Frozen after R2 (no G3).
 - **R0** (2026-10-12, depth-0 Opus 5.5): drafted from the read-only inventory of 2026-10-11 and the proposal answers.
-  - Frozen rubric: `docs/plans/2026-10-12-tmp-residue-containment.rubric.md` (R1–R8).
-  - Manifest: `docs/plans/2026-10-12-tmp-residue-containment.plan-review-manifest.json`, `logical_plan_id: tmp-residue-containment-2026-10-12`.
+  - Frozen rubric: `docs/plans/_archive/2026/10/2026-10-12-tmp-residue-containment.rubric.md` (R1–R8).
+  - Manifest: `docs/plans/_archive/2026/10/2026-10-12-tmp-residue-containment.plan-review-manifest.json`, `logical_plan_id: tmp-residue-containment-2026-10-12`.
   - Seats: sol chair (openai, not required: codex quota has run dry before), grok deep (xai, required), MiniMax consult; minimum 2 families.
 - **Implementation adjudications (depth-0, 2026-10-12)**:
   - KR1 excludes `/tmp/sessions` (external, kind `live`) and `source: session-hook` counters written by the live session running the suite.

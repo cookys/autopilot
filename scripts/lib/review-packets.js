@@ -7,7 +7,7 @@
 // check-phase-review-receipt.js (--packets) proves the cover. This module is the shared, side-effect
 // free part: file validation, the changed-path list, the packet diff and the cover comparison.
 // It is deliberately NOT an exclusion mechanism — see exclude-allowlist.js, which stays the only
-// place that decides what a review may leave out. Plan: docs/plans/2026-10-11-review-packet-mode.md.
+// place that decides what a review may leave out. Plan: docs/plans/_archive/2026/10/2026-10-11-review-packet-mode.md.
 
 const fs = require('fs');
 const crypto = require('crypto');

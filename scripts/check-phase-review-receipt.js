@@ -11,7 +11,7 @@
  *   Every packet phase `<set>-<id>` must pass Mode A (SHIP-AS-IS), the packets must cover the reviewed range
  *   exactly once, and no packet file may have changed since its packet's last reviewed head. A packet
  *   receipt alone is refused by Mode A. Exit 0 only when the whole set holds. Plan:
- *   docs/plans/2026-10-11-review-packet-mode.md. Shared rules: scripts/lib/review-packets.js.
+ *   docs/plans/_archive/2026/10/2026-10-11-review-packet-mode.md. Shared rules: scripts/lib/review-packets.js.
  *
  * Mode B: plan-artifact / dispositions validation
  *   Flags: --plan-artifact <gN.json> --dispositions <gN-disposition.json>
@@ -1243,7 +1243,7 @@ function runModeAInProcess(flags, opts) {
 
 // Mode C — review packet set. The packets file defines the cover; each packet is its own phase
 // (`<set>-<id>`) validated by Mode A (so SHIP-AS-IS, reviewed-seat floor, packet diff re-derived);
-// this function adds the set rules. Plan: docs/plans/2026-10-11-review-packet-mode.md §2.4.
+// this function adds the set rules. Plan: docs/plans/_archive/2026/10/2026-10-11-review-packet-mode.md §2.4.
 function validatePacketSet(flags) {
   const fail = (msg) => { console.error(msg); process.exit(1); };
   const ledgerDir = flags.ledger;

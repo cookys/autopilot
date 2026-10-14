@@ -1,6 +1,6 @@
 # Plan — review packet mode: carry a range over the packet ceiling without slicing it away
 
-> Status: **active, size S** · Owner: depth-0 · Branch: `batch/b-packet` · Source: BACKLOG row "hetero-review-loop cannot carry a range over its packet ceiling: no phase-keyed packet mode" (3.0.0 total QC, 2026-10-08; evidence `docs/plans/evidence/2026-10-06-stage-graph/qc-total-2026-10-08/README.md`).
+> Status: ✅ Merged to develop as 40c6ccdf (feature fd04dc41; guidance text 56a951ce, its stage-graph v11 eval is deferred as BL-0116) — ships with 3.0.0. Was: size S · Owner: depth-0 · Branch: `batch/b-packet` · Source: BACKLOG row "hetero-review-loop cannot carry a range over its packet ceiling: no phase-keyed packet mode" (3.0.0 total QC, 2026-10-08; evidence `docs/plans/evidence/2026-10-06-stage-graph/qc-total-2026-10-08/README.md`).
 
 ## 1. Problem
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# l1-tmpdir-containment.test.sh — KR2 of docs/plans/2026-10-12-tmp-residue-containment.md.
+# l1-tmpdir-containment.test.sh — KR2 of docs/plans/_archive/2026/10/2026-10-12-tmp-residue-containment.md.
 #
 # hooks/tests/run.sh runs the L1 `node --test` pass inside a short per-run `apl1.XXXXXX` dir that
 # holds a live flock. This suite proves, on the real entry points:

@@ -143,9 +143,9 @@ assert_contains "$STATE6" '"bash_calls":12' "12 parallel calls counted exactly 1
 reset_state
 set_marker l4
 : > "$AUTOPILOT_FOREMAN_GUARD_DIR"/fg-test-session-agent-8.json.lock
-LOCK_TIMING="$( { TIMEFORMAT='%U %S %R'; time HOME="$HOOK_HOME" TMPDIR="$HOOK_TMPDIR" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" node "$HOOKS_DIR/foreman-guard.js" >/dev/null 2>&1 <<< "$(bash_payload agent-8 'echo waited')"; } 2>&1 | tail -1 )"
+LOCK_TIMING="$( { LC_ALL=C; TIMEFORMAT='%U %S %R'; time HOME="$HOOK_HOME" TMPDIR="$HOOK_TMPDIR" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" node "$HOOKS_DIR/foreman-guard.js" >/dev/null 2>&1 <<< "$(bash_payload agent-8 'echo waited')"; } 2>&1 | tail -1 )"
 read -r LOCK_U LOCK_S LOCK_R <<< "$LOCK_TIMING"
-if awk -v u="$LOCK_U" -v s="$LOCK_S" -v r="$LOCK_R" 'BEGIN{exit !(r >= 1.5 && (u + s) < r / 2)}'; then
+if LC_ALL=C awk -v u="$LOCK_U" -v s="$LOCK_S" -v r="$LOCK_R" 'BEGIN{exit !(r >= 1.5 && (u + s) < r / 2)}'; then
   assert_eq ok ok "held lock: waited the timeout without spinning (cpu ${LOCK_U}+${LOCK_S}s, wall ${LOCK_R}s)"
 else
   fail "held lock: waiting burned CPU (cpu ${LOCK_U}+${LOCK_S}s, wall ${LOCK_R}s)"

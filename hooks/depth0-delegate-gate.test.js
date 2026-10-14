@@ -320,10 +320,10 @@ test('lock held by another writer: waiting costs no CPU, and the 2 s timeout sti
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'd0gate-lockwait-'));
   const file = path.join(stateDir, 'd0-test-session.json');
   fs.writeFileSync(`${file}.lock`, '');
-  const r = spawnSync('bash', ['-c', 'TIMEFORMAT="%U %S %R"; time node "$1"', 'bash', HOOK], {
+  const r = spawnSync('bash', ['-c', 'LC_ALL=C; TIMEFORMAT="%U %S %R"; time node "$1"', 'bash', HOOK], {
     input: JSON.stringify(payload('Read')),
     encoding: 'utf8',
-    env: { ...process.env, ...env, AUTOPILOT_DEPTH0_GATE_DIR: stateDir },
+    env: { ...process.env, ...env, LC_ALL: 'C', AUTOPILOT_DEPTH0_GATE_DIR: stateDir },
   });
   assert.strictEqual(r.status, 0, `hook exits 0 (stderr: ${r.stderr})`);
   const [user, sys, wall] = r.stderr.trim().split('\n').pop().split(' ').map(Number);
@@ -332,6 +332,7 @@ test('lock held by another writer: waiting costs no CPU, and the 2 s timeout sti
   assert.ok(cpu < wall / 2, `waiting does not spin: cpu ${cpu}s vs wall ${wall}s`);
   const st = JSON.parse(fs.readFileSync(file, 'utf8'));
   assert.strictEqual(st.reads, 1, 'timeout fails open: the read is still counted without the lock');
+  fs.rmSync(stateDir, { recursive: true, force: true });
 });
 
 test('subagent fire with empty or null agent_id is still skipped (presence, not truthiness)', () => {

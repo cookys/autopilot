@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0149 -->
+<!-- next-id: BL-0153 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1235,13 +1235,13 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-03
 - **Origin**: self
-- **Problem**: v2.36.112 版審查留下的小項目大多已修完，剩一個摘要內容擺放位置的調整，以及一個收件檔數上限的拒絕路徑沒有測試。
+- **Problem**: v2.36.112 版審查留下的小項目大多已修完，只剩一個收件檔數上限的拒絕路徑沒有測試。
 - **Impact**: 都是低嚴重度的小瑕疵，不修也不會壞；下次動到對應檔案時順便處理。 (draft)
 - **Trigger**: next touch of the respective file
 - **Effort**: S
 - **Source**: v2.36.112 per-row and landing reviews (🔵)
 - **Pointer**: docs/backlog/v2-36-112-review-follow-ups.md
-- **Context**: Rest shipped 2026-10-14 (BL-0101 merge). Left: Row E digest-body placement (after BL-0090 P2); intake file-cap refusal has no test (PREPARED fixture, 4 files). Declined: sweep env knob, symlink escape, rollover guard.
+- **Context**: Rest shipped 2026-10-14 (BL-0101 merge). Row E closed (keep, see pointer). Left: intake file-cap refusal has no test (PREPARED fixture, 4 files). Declined: sweep env knob, symlink escape, rollover guard.
 
 ### dispatch-plan-review: terminal-ticket reuse is a silent 0-call run
 - **Id**: BL-0102
@@ -1672,7 +1672,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: lane Z review round 4, 2026-10-13
 - **Pointer**: none
-- **Context**: Uncovered: case...esac &, xargs -P, ionice/flock/time wrappers, coproc, f(){...}; f &, triple-nested $(), python os.system. False deny: bash -c 'rail & wait', wait >| f. Each needs a negative control.
+- **Context**: Uncovered: case...esac &, xargs -P, ionice/flock/time wrappers, coproc, f(){...}; f &, triple $(), python os.system. False allow: any waiter in the command. False deny: bash -c 'rail & wait', wait >| f, wait $pid. Each needs a control.
 
 ### context-budget and depth0-gate tests leave temp dirs and read the real host config
 - **Id**: BL-0140
@@ -1779,3 +1779,55 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: fleet c4140 llm-playground, 2026-10-14 (message 01M4W2DK5M1R0P6440TNVTZMY5)
 - **Pointer**: none
 - **Context**: scripts/lib/bash-launch-rules.js detectPkillSelfMatch (BL-0019), WARN. Ask: DENY + off/warn escape, pidfile hint; port 27 cases (llm-playground d45fc6d86) incl. heredoc and quote traps.
+
+### Live pane lists a plan-review seat as an author run and keeps finished runs
+- **Id**: BL-0149
+- **Status**: open
+- **Since**: 2026-10-14
+- **Origin**: self
+- **Problem**: 活面板的派工分頁把計畫審查的席位顯示成「實作」，而且前一天就結束的派工還留在清單上，擁有者看了以為派了另一家模型去寫程式。
+- **Impact**: 擁有者對誰在寫程式產生誤判；清單越積越長，看不出現在真正在跑什麼。
+- **Trigger**: 下次動活面板的派工分頁，或擁有者再次誤讀派工角色時
+- **Effort**: S
+- **Source**: owner question, 2026-10-14
+- **Pointer**: none
+- **Context**: Plan-review codex seat runs via dispatch-author.sh, so its manifest says role=author (dispatch tab in mods/live/tabs.ts). Fix: stamp the role from the caller; collapse runs that ended more than N hours ago.
+
+### Codex author failures omit the transport status field
+- **Id**: BL-0150
+- **Status**: open
+- **Since**: 2026-10-14
+- **Origin**: self
+- **Problem**: 派 codex 寫程式失敗時，輸出結果少了一個欄位，說不出是連線那一層壞掉還是模型本身失敗，其他失敗路徑都有這個欄位。
+- **Impact**: 讀結果的程式不能假設欄位一定存在，排查 codex 失敗時要多翻原始紀錄。
+- **Trigger**: 下次改 codex 寫程式的派工路徑，或有使用端開始讀這個欄位時
+- **Effort**: S
+- **Source**: C2 review, 2026-10-14
+- **Pointer**: none
+- **Context**: scripts/dispatch-author.sh runner_failed for codex (around :1368, :1529-1536 at review time) carries no transport_status; consumers must not assume it.
+
+### Three suites fail before the change when run from a linked worktree
+- **Id**: BL-0151
+- **Status**: open
+- **Since**: 2026-10-14
+- **Origin**: self
+- **Problem**: 有三個測試在改動之前就已經失敗，看起來跟測試從副本工作目錄執行的路徑有關；每次審查都會看到它們紅，要另外說明不是新改動造成的。
+- **Impact**: 整套測試跑不出全綠，合併前的整套驗收會被這三個擋住，也會遮住真正的新紅燈。
+- **Trigger**: 下一次合併前要跑整套測試時，先處理這三個
+- **Effort**: S
+- **Source**: C2 and B2 reviews, 2026-10-14
+- **Pointer**: none
+- **Context**: Red at 1750618f before the change: dispatch-author strict-endpoint Case 1; one case each in resolve-review-loop-a and autopilot-engine (tied to the worktree path). Reproduce from main checkout and a worktree first.
+
+### Hetero dispatch caller-session filter branch has no test
+- **Id**: BL-0152
+- **Status**: open
+- **Since**: 2026-10-14
+- **Origin**: self
+- **Problem**: 異質派工裡「只看自己這個對話開出的工作」那段判斷沒有任何測試走到；把它改壞，測試照樣全綠。
+- **Impact**: 這段判斷之後若被改壞，可能把別的對話的工作當成自己的，而測試不會發現。
+- **Trigger**: 下次改異質派工的 marker 或對話過濾邏輯時
+- **Effort**: S
+- **Source**: review of the session-id scrub work, 2026-10-14
+- **Pointer**: none
+- **Context**: scripts/dispatch-hetero.sh: tests pass callerSession undefined, so the if (callerSession) branch (~:1487) never runs; gap since 803b9b89. Add a real-callerSession case plus a mutation control.

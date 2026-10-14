@@ -201,4 +201,44 @@ function record(row) {
 }
 fs.rmSync(dir, { recursive: true, force: true });
 
+// ── BL-0168: a truncated exam must be distinguishable from a complete one ─
+{
+  const two = [rec(), rec({ caseId: 'c2' })];
+  const full = U.summarize(two, null, 2);
+  equal([full.n_cases_expected, full.cases_complete], [2, true], 'expected count met -> cases_complete true');
+  const half = U.summarize(two, null, 24);
+  equal([half.n_cases, half.n_cases_expected, half.cases_complete], [2, 24, false],
+    'a half-run exam keeps its true n_cases but says it was 24 planned and is NOT complete');
+  check(half.usage_complete === true, 'token completeness is a separate axis: it stays true for the cases that ran');
+  const unknown = U.summarize(two);
+  equal([unknown.n_cases_expected, unknown.cases_complete], [null, null],
+    'no expected count (adaptive stop) -> both fields present and null, never a guess');
+  assert.throws(() => U.summarize(two, null, -1), /expected/); assertions += 1;
+  assert.throws(() => U.summarize(two, null, 1.5), /expected/); assertions += 1;
+  // block validation: the new fields must agree with n_cases, and legacy blocks still pass
+  U.validateUsageBlock(full); U.validateUsageBlock(half); U.validateUsageBlock(unknown);
+  const legacyBlock = { ...full }; delete legacyBlock.n_cases_expected; delete legacyBlock.cases_complete;
+  U.validateUsageBlock(legacyBlock); assertions += 1;
+  const bad = (patch, re, why) => { assert.throws(() => U.validateUsageBlock({ ...half, ...patch }), re, why); assertions += 1; };
+  bad({ cases_complete: true }, /cases_complete/, 'claiming complete while n_cases != expected is refused');
+  bad({ n_cases_expected: 2, cases_complete: false }, /cases_complete/, 'claiming incomplete while n_cases == expected is refused');
+  bad({ n_cases_expected: null, cases_complete: true }, /cases_complete/, 'complete without an expected count is refused');
+  bad({ n_cases_expected: -3 }, /n_cases_expected/, 'a negative expected count is refused');
+  // cross-checks the validator used to lack
+  const base = U.summarize(two, { inPerMtok: 1, outPerMtok: 2, asOf: '2026-10-01', source: 'manual', ref: null }, 2);
+  U.validateUsageBlock(base);
+  const bad2 = (patch, re, why) => { assert.throws(() => U.validateUsageBlock({ ...base, ...patch }), re, why); assertions += 1; };
+  bad2({ n_cases_missing_tokens: 1 }, /n_cases_missing_tokens/, 'usage_complete=true cannot coexist with missing-token cases');
+  bad2({ n_cases_missing_tokens: 5 }, /n_cases_missing_tokens/, 'missing-token count above n_cases is refused');
+  bad2({ total_wall_s: null }, /solved_per_hour|med_wall_s/, 'rate/median without a total wall is refused');
+  bad2({ solved_per_hour: 999999 }, /solved_per_hour/, 'solved_per_hour must agree with n_solved and total_wall_s');
+  bad2({ usd_unavailable_reason: 'usage_incomplete' }, /usd_unavailable_reason/, 'a usd figure together with an unavailable reason is refused');
+  const noPrice = U.summarize(two, { inPerMtok: 1, outPerMtok: 2, asOf: '2026-10-01', source: 'manual', ref: null }, 2);
+  const incompleteTokens = U.summarize([rec(), rec({ caseId: 'c2', usage: null })], { inPerMtok: 1, outPerMtok: 2, asOf: '2026-10-01', source: 'manual', ref: null }, 2);
+  U.validateUsageBlock(incompleteTokens);
+  assert.throws(() => U.validateUsageBlock({ ...incompleteTokens, n_cases_missing_tokens: 0 }), /n_cases_missing_tokens/); assertions += 1;
+  assert.throws(() => U.validateUsageBlock({ ...incompleteTokens, usd_unavailable_reason: undefined, usd_per_solved: null, usage_complete: false, tok_per_solved: null, total_tokens: null, n_cases_missing_tokens: 0 }), /n_cases_missing_tokens/); assertions += 1;
+  check(noPrice.usd_unavailable_reason === undefined, 'priced complete block has no unavailable reason');
+}
+
 console.log(`qualification-usage: ${assertions} assertions passed`);

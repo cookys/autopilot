@@ -2444,14 +2444,14 @@ function parseVaPlanOutput(stdout) {
 // (not columns on the exchanges file) because the solved verdict only exists after
 // grading, brain exchanges are per ROUND while a case there is a trial, and one
 // schema across roles is what a downstream reader needs.
-function finalizeUsage(options, role, records) {
+function finalizeUsage(options, role, records, expectedCases = null) {
   let pricing;
   try {
     pricing = qualUsage.parsePricing(options);
   } catch (error) {
     throw new Error(`price options invalid: ${error.message}`);
   }
-  const summary = qualUsage.summarize(records, pricing);
+  const summary = qualUsage.summarize(records, pricing, expectedCases);
   if (options.rawDir) {
     fs.mkdirSync(options.rawDir, { recursive: true });
     fs.writeFileSync(
@@ -3546,7 +3546,10 @@ function runImplQualification(options) {
   }
 
   const qualified = folded.qualified;
-  const usageFin = finalizeUsage(options, 'implementer', usageRecords);
+  // The implementer plan is fixed, so a truncated or aborted administration is detectable: the
+  // block says how many cases were planned (BL-0168). Adaptive-stop roles pass nothing.
+  const plannedCases = administration.trials.reduce((n, trial) => n + trial.cases.length, 0);
+  const usageFin = finalizeUsage(options, 'implementer', usageRecords, plannedCases);
   const row = {
     engine: options.engine,
     model: options.model,

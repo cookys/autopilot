@@ -108,7 +108,15 @@ function median(values) {
 }
 
 // pricing: null | {inPerMtok, outPerMtok, asOf, source, ref}
-function summarize(records, pricing = null) {
+// expectedCases: null | the number of cases the exam PLANNED to run. Only a fixed-plan exam knows
+// it (implementer); an adaptive stop (consult/discuss/reviewer pools) legitimately runs fewer
+// cases, so those callers pass nothing and the block says null instead of guessing. It exists
+// because n_cases only counts cases that ran: a time-capped or aborted exam otherwise looks
+// like a short, complete one (BL-0168).
+function summarize(records, pricing = null, expectedCases = null) {
+  if (expectedCases !== null && !(Number.isSafeInteger(expectedCases) && expectedCases >= 0)) {
+    throw new Error('summarize: expectedCases must be null or a non-negative integer');
+  }
   const nCases = records.length;
   const nSolved = records.filter((r) => r.solved === true).length;
   const walls = records.map((r) => r.wall_s);
@@ -139,6 +147,8 @@ function summarize(records, pricing = null) {
   return {
     schema_version: USAGE_SCHEMA_VERSION,
     n_cases: nCases,
+    n_cases_expected: expectedCases,
+    cases_complete: expectedCases === null ? null : nCases === expectedCases,
     n_solved: nSolved,
     total_wall_s: totalWall,
     solved_per_hour: totalWall !== null && totalWall > 0 ? round((nSolved * 3600) / totalWall, 4) : null,
@@ -230,6 +240,38 @@ function validateUsageBlock(block) {
   }
   if (block.n_solved === 0 && (block.tok_per_solved !== null || block.usd_per_solved !== null)) {
     fail('n_solved=0 requires tok_per_solved and usd_per_solved to be null');
+  }
+  // Truncation fields (BL-0168). Absent on legacy blocks; when present they must agree with n_cases.
+  if (block.n_cases_expected !== undefined || block.cases_complete !== undefined) {
+    const expected = block.n_cases_expected;
+    if (expected !== null && !(Number.isSafeInteger(expected) && expected >= 0)) {
+      fail('n_cases_expected must be a non-negative integer or null');
+    }
+    if (expected === null) {
+      if (block.cases_complete !== null) fail('cases_complete must be null when n_cases_expected is null');
+    } else if (block.cases_complete !== (block.n_cases === expected)) {
+      fail('cases_complete must equal (n_cases === n_cases_expected)');
+    }
+  }
+  // Cross-checks between figures that are derived from the same records.
+  if (block.n_cases_missing_tokens !== undefined) {
+    intOrFail('n_cases_missing_tokens');
+    if (block.n_cases_missing_tokens > block.n_cases) fail('n_cases_missing_tokens exceeds n_cases');
+    if (block.usage_complete !== (block.n_cases > 0 && block.n_cases_missing_tokens === 0)) {
+      fail('n_cases_missing_tokens disagrees with usage_complete');
+    }
+  }
+  if (block.total_wall_s === null && (block.solved_per_hour !== null || block.med_wall_s !== null)) {
+    fail('solved_per_hour and med_wall_s require total_wall_s (an unmeasured wall has no rate or median)');
+  }
+  if (block.total_wall_s !== null && block.total_wall_s > 0 && block.solved_per_hour !== null) {
+    const expectedRate = (block.n_solved * 3600) / block.total_wall_s;
+    if (Math.abs(block.solved_per_hour - expectedRate) > Math.max(1e-3, expectedRate * 1e-3)) {
+      fail('solved_per_hour disagrees with n_solved and total_wall_s');
+    }
+  }
+  if (block.usd_unavailable_reason !== undefined && block.usd_per_solved !== null) {
+    fail('usd_unavailable_reason cannot accompany a usd_per_solved figure');
   }
   return block;
 }

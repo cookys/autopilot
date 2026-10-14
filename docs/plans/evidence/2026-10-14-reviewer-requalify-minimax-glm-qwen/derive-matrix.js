@@ -17,6 +17,11 @@ const LANES = {
   muse:      { engine: 'muse-spark-1.3-contributor', model: 'muse-spark-1.3-contributor', family: 'meta',     kind: 'http', endpoint: 'opencode-go', effort: 'default', protocol: 'responses' },
   muse_low:  { engine: 'muse-spark-1.3-contributor', model: 'muse-spark-1.3-contributor', family: 'meta',     kind: 'http', endpoint: 'opencode-go', effort: 'low',  protocol: 'responses' },
   muse_high: { engine: 'muse-spark-1.3-contributor', model: 'muse-spark-1.3-contributor', family: 'meta',     kind: 'http', endpoint: 'opencode-go', effort: 'high', protocol: 'responses' },
+  glm_low:        { engine: 'GLM-5.3',                    model: 'glm-5.3',                    family: 'zhipu',    kind: 'http', endpoint: 'glm',     effort: 'low',  wire: 'messages' },
+  glm_high:       { engine: 'GLM-5.3',                    model: 'glm-5.3',                    family: 'zhipu',    kind: 'http', endpoint: 'glm',     effort: 'high', wire: 'messages' },
+  minimax31_low:  { engine: 'MiniMax-M3.1-Flash-Preview', model: 'MiniMax-M3.1-Flash-Preview', family: 'minimax',  kind: 'http', endpoint: 'minimax', effort: 'low',  wire: 'messages' },
+  minimax31_high: { engine: 'MiniMax-M3.1-Flash-Preview', model: 'MiniMax-M3.1-Flash-Preview', family: 'minimax',  kind: 'http', endpoint: 'minimax', effort: 'high', wire: 'messages' },
+  minimax_think:  { engine: 'MiniMax-M3',                 model: 'MiniMax-M3',                 family: 'minimax',  kind: 'http', endpoint: 'minimax', effort: 'default', wire: 'messages', thinking: 'adaptive' },
   kimi28:    { engine: 'kimi-k2.8-preview',          model: 'kimi-code/kimi-for-coding',  family: 'moonshot', kind: 'cli',  cli: 'kimi', effort: 'high',
                transport: 'kimi-m-p-argv', posture: 'kimi -m <model> -p <prompt> (default agent; no tool-deny in provider kimi branch)' },
 };
@@ -53,7 +58,7 @@ else {
   harness = 'qrp:' + sha(fs.readFileSync(path.join(REPO, 'scripts/qualification-review-provider.js'))).slice(0, 8);
   invented.push(`${L.cli} ${role} transport/posture/credential surface strings (no precedent for this role)`);
 }
-const semBase = (kind) => ({ kind, model: L.model, transport: T, ...(L.protocol === 'responses' && L.effort !== 'default' ? { http_reasoning_effort: L.effort } : {}), ...(http ? { endpoint: L.endpoint } : { reasoning_effort: L.effort, endpoint: '@none' }) });
+const semBase = (kind) => ({ kind, model: L.model, transport: T, ...((L.protocol === 'responses' || L.wire === 'messages') && L.effort !== 'default' ? { http_reasoning_effort: L.effort } : {}), ...(L.thinking ? { http_thinking: L.thinking } : {}), ...(http ? { endpoint: L.endpoint } : { reasoning_effort: L.effort, endpoint: '@none' }) });
 const conBase = (kind, extra = {}) => ({ kind, exam_transport: TRANSPORT, ...extra, ...(http ? {} : { cli_posture: L.posture }), credential_isolation: CRED });
 let prompt, sem, con, semHex;
 if (role === 'reviewer') { prompt = tmpl('SYSTEM_PROMPT'); sem = semBase('reviewer-semantic-surface-v1'); con = conBase('reviewer-containment-surface-v1'); }

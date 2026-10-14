@@ -15,7 +15,7 @@ for item in "$@"; do
     "${CMD[@]}" > /dev/null 2>&1; rc=$?; secs=$(( $(date +%s) - t0 ))
     note "ITEM $item END rc=$rc secs=$secs dir=${d#$O/}"
     if cat "$d/stderr.log" "$d/stdout.json" 2>/dev/null | grep -q '"outcome":"transport_fail"' && [ "$n" -lt 3 ]; then
-      mv "$d" "$d-attempt$n-transport"; note "ITEM $item transport_fail is not a verdict; renamed, re-sitting"; n=$((n+1)); continue
+      k=$n; while [ -e "$d-attempt$k-transport" ]; do k=$((k+1)); done; mv "$d" "$d-attempt$k-transport"; note "ITEM $item transport_fail is not a verdict; renamed, re-sitting"; n=$((n+1)); continue
     fi
     break
   done

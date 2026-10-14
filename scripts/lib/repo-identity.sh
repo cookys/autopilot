@@ -13,9 +13,13 @@
 #           failed (git <ver>; need >= 2.31)` — the version hint.
 #         - any other case: `repo-identity: git rev-parse failed in <dir>: <git's own
 #           stderr, joined to one line>`.
-#       rev-parse succeeds but the common dir cannot be entered:
-#       `repo-identity: cannot resolve common dir <path>` (not blamed on git).
-#       Safe under a caller's `set -euo pipefail`.
+#       git exits 0 but prints no common dir: `repo-identity: git rev-parse returned no
+#       common dir in <dir>`.
+#       git exits 0 with a common dir that cannot be entered: `repo-identity: cannot resolve
+#       common dir <path>` (not blamed on git).
+#       A missing git (PATH), `git --version` failing, or a git reporting 127 is a failure
+#       like any other: the version hint is printed only for a KNOWN version below 2.31.
+#       Safe under a caller's `set -euo pipefail`, called directly or conditionally.
 #
 #   repo_identity_resolve_fields <repo_root> <consuming_repo_root>
 #       sets REPO_IDENTITY_FIELDS to the two manifest JSON members
@@ -28,9 +32,20 @@
 #       their OWN variables explicitly so an ambient exported REPO_ROOT can never leak in.
 
 repo_identity_of() {
-  local dir="${1:-.}" common canon reason ver maj min
-  if common="$(git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" \
-      && [ -n "$common" ]; then
+  local dir="${1:-.}" common="" canon="" rc=0 errf="" err="" ver="" maj="" min=""
+  # One rev-parse call; its stderr is kept in a temp file so the failure reason is git's own
+  # message from THIS call (never a second run's). Every command that can fail is guarded
+  # (`|| x=`) so a caller's set -euo pipefail sees the diagnostic, not a silent abort.
+  errf="$(mktemp -t repo-identity-err-XXXXXX 2>/dev/null)" || errf=""
+  if [ -n "$errf" ]; then
+    common="$(git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>"$errf")" || rc=$?
+    err="$(tr '\n' ' ' <"$errf" 2>/dev/null)" || err=""
+    rm -f "$errf"
+  else
+    common="$(git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || rc=$?
+    err=""
+  fi
+  if [ "$rc" -eq 0 ] && [ -n "$common" ]; then
     if canon="$(cd "$common" 2>/dev/null && pwd -P)" && [ -n "$canon" ]; then
       printf 'git-common-dir:%s\n' "$canon"
       return 0
@@ -38,20 +53,25 @@ repo_identity_of() {
     echo "repo-identity: cannot resolve common dir $common" >&2
     return 1
   fi
-  # Failure: name the real cause (git's own stderr, joined to one line). The version hint is
-  # printed only when git is actually older than 2.31; a newer git never gets blamed.
-  ver="$(git --version 2>/dev/null | awk '{print $3}')"
+  if [ "$rc" -eq 0 ]; then
+    echo "repo-identity: git rev-parse returned no common dir in $dir" >&2
+    return 1
+  fi
+  # Failure: the version hint only when git is actually older than 2.31 (a missing or unreadable
+  # git version counts as unknown, never as old); otherwise git's own stderr, one line.
+  ver="$(git --version 2>/dev/null | awk '{print $3}')" || ver=""
   case "$ver" in *.*) maj="${ver%%.*}"; min="${ver#*.}"; min="${min%%[!0-9]*}" ;; *) maj="$ver"; min="" ;; esac
   case "$maj" in ''|*[!0-9]*) maj="" ;; esac
   case "$min" in ''|*[!0-9]*) min="" ;; esac
+  [ "${#maj}" -le 9 ] || maj=""
+  [ "${#min}" -le 9 ] || min=""
   if [ -n "$maj" ] && [ -n "$min" ] \
       && { [ "$maj" -lt 2 ] || { [ "$maj" -eq 2 ] && [ "$min" -lt 31 ]; }; }; then
     echo "repo-identity: git rev-parse --path-format failed (git $ver; need >= 2.31)" >&2
   else
-    # `|| true`: under a caller's set -euo pipefail, the pipeline status (git's 128) would abort here.
-    reason="$(git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>&1 >/dev/null | tr '\n' ' ')" || true
-    [ -n "$reason" ] || reason="no output from git rev-parse (path-format=absolute, --git-common-dir) in $dir"
-    echo "repo-identity: git rev-parse failed in $dir: ${reason% }" >&2
+    err="${err% }"
+    [ -n "$err" ] || err="git rev-parse exited $rc with no stderr"
+    echo "repo-identity: git rev-parse failed in $dir: $err" >&2
   fi
   return 1
 }

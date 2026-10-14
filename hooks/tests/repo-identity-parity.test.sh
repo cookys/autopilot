@@ -170,4 +170,58 @@ done
 unset FAKE_GIT_VERSION
 export PATH="$OLD_PATH"
 
+# 10. failure matrix: every git situation x caller set options x call form must return 1, print
+# nothing on stdout, and print exactly one stderr line that names the real cause (no version hint).
+# PATH with every /bin and /usr/bin entry except git, so "git missing" is a real absence.
+NOGIT_BIN="$TEST_TMP/nogit-bin"; mkdir -p "$NOGIT_BIN"
+for d in /usr/bin /bin; do
+  for f in "$d"/*; do b="${f##*/}"; [ "$b" = git ] && continue; [ -e "$NOGIT_BIN/$b" ] || ln -s "$f" "$NOGIT_BIN/$b"; done
+done
+NOGIT_PATH="$NOGIT_BIN"
+PATH="$NOGIT_PATH" command -v git >/dev/null 2>&1 && fail "matrix: NOGIT_PATH still exposes git"
+mx_fake() { # <name> <body> -> writes an executable git into a fresh dir, prints the dir
+  local d="$TEST_TMP/mx-$1"; mkdir -p "$d"
+  printf '#!/usr/bin/env bash\n%s\n' "$2" > "$d/git"; chmod +x "$d/git"; printf '%s' "$d"
+}
+V253='if [ "$1" = "--version" ]; then echo "git version 2.53.0"; exit 0; fi'
+MX_VERSION_FAIL="$(mx_fake version-fail 'if [ "$1" = "--version" ]; then exit 1; fi; echo "fatal: version probe failed" >&2; exit 128')"
+MX_DUBIOUS="$(mx_fake dubious "$V253"$'\n'"echo \"fatal: detected dubious ownership in repository at /x\" >&2; exit 128")"
+MX_127="$(mx_fake exit127 'echo "fake: exec not found" >&2; exit 127')"
+MX_NODIR="$(mx_fake nodir "$V253"$'\n'"echo /nonexistent/common; exit 0")"
+MX_EMPTY="$(mx_fake empty "$V253"$'\n'"exit 0")"
+# scenario | PATH prefix | expected stderr fragment
+MX_ROWS=(
+  "missing|$NOGIT_PATH|not found"
+  "version-fail|$MX_VERSION_FAIL:$PATH|version probe failed"
+  "dubious|$MX_DUBIOUS:$PATH|detected dubious ownership"
+  "exit127|$MX_127:$PATH|fake: exec not found"
+  "nodir|$MX_NODIR:$PATH|cannot resolve common dir /nonexistent/common"
+  "empty|$MX_EMPTY:$PATH|returned no common dir"
+)
+MX_SETS=("set -uo pipefail" "set -euo pipefail")
+MX_FORMS=(direct or-form if-form)
+MX_OUT="$TEST_TMP/mx.out"; MX_ERR="$TEST_TMP/mx.err"; MX_RC="$TEST_TMP/mx.rc"
+for row in "${MX_ROWS[@]}"; do
+  IFS='|' read -r name mxpath frag <<<"$row"
+  for set_opts in "${MX_SETS[@]}"; do
+    for form in "${MX_FORMS[@]}"; do
+      cell="$name / $set_opts / $form"
+      rm -f "$MX_OUT" "$MX_ERR" "$MX_RC"
+      case "$form" in
+        direct)  ( PATH="$mxpath"; $set_opts; repo_identity_of "$MAIN" >"$MX_OUT" 2>"$MX_ERR" ); CELL_RC=$? ;;
+        or-form) ( PATH="$mxpath"; $set_opts; r=0; repo_identity_of "$MAIN" >"$MX_OUT" 2>"$MX_ERR" || r=$?; echo "$r" > "$MX_RC" ); CELL_RC=$? ;;
+        if-form) ( PATH="$mxpath"; $set_opts; if repo_identity_of "$MAIN" >"$MX_OUT" 2>"$MX_ERR"; then echo 0 > "$MX_RC"; else echo "$?" > "$MX_RC"; fi ); CELL_RC=$? ;;
+      esac
+      # direct: the caller's set -e exits with the function's return code; or/if forms: the caller
+      # survives and writes the code it saw.
+      if [ "$form" = direct ]; then got="$CELL_RC"; else got="$(cat "$MX_RC" 2>/dev/null)"; fi
+      eq "1" "$got" "matrix[$cell]: returns 1"
+      eq "" "$(cat "$MX_OUT")" "matrix[$cell]: stdout empty"
+      eq "1" "$(wc -l < "$MX_ERR" | tr -d ' ')" "matrix[$cell]: stderr exactly one line"
+      assert_contains "$(cat "$MX_ERR")" "$frag" "matrix[$cell]: names the real cause"
+      assert_not_contains "$(cat "$MX_ERR")" "need >= 2.31" "matrix[$cell]: no version hint"
+    done
+  done
+done
+
 finalize_test

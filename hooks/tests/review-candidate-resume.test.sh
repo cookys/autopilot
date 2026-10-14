@@ -110,7 +110,8 @@ eq "review_candidate_return_no_new_head" "$(sf pk_same 0 code)" "return: no new 
 run_sc pk_bogus ",$FIX"',"steps":[{"continuation":"bogus"}]' ok
 eq "review_candidate_continuation_unknown" "$(sf pk_bogus 0 code)" "an unknown continuation value is refused by name"
 run_sc pk_rep ",$FIX"',"steps":[{"continuation":"repair"}]' ok
-eq "review_candidate_repair_not_provided" "$(sf pk_rep 0 code)" "repair is refused by name (P5 is not shipped)"
+eq "review_candidate_disposition_repair" "$(sf pk_rep 0 code)" "repair (P5) closes the parked review with the named repair code instead of a refusal"
+eq "TERMINAL_STOP" "$(sf pk_rep 0 campaign_phase)" "repair: the review-only campaign is terminal not-ready"
 run_sc pk_none ",$FIX"',"steps":[{}]' ok
 eq "review_candidate_continuation_required" "$(sf pk_none 0 code)" "resuming a parked review with no continuation and no preset is refused by name"
 eq "0" "$(sf pk_none 0 review_calls_delta)" "a refused parked resume spends no review call"
@@ -125,8 +126,8 @@ run_sc pr_ret ",$FIX"',"preset":"return","steps":[{"move":"forward",'"$SHIP_ENV"
 eq "AWAITING_DISPOSITION" "$(jf pr_ret 'j.steps.length ? "AWAITING_DISPOSITION" : "x"')" "preset return: the first run parks (return needs a new head)"
 eq "converged" "$(sf pr_ret 0 status)" "preset return: a plain --resume with a new head returns without the flag"
 run_sc pr_rep ",$FIX"',"preset":"repair"' ok
-assert_contains "$(jf pr_rep 'j.seal_error')" "review_candidate_repair_not_provided" "preset repair is rejected by name when the contract is sealed"
-eq "undefined" "$(jf pr_rep 'j.status')" "preset repair: the engine never ran, so no model call was made"
+eq "undefined" "$(jf pr_rep 'j.seal_error')" "preset repair now seals (P5): the checker no longer rejects it"
+eq "review_candidate_disposition_repair" "$(jf pr_rep 'j.code')" "preset repair: a first run that parks on a finding closes itself with the repair code, no wait"
 run_sc pr_flag ",$FIX"',"preset":"end","steps":[{"continuation":"return","move":"forward",'"$SHIP_ENV"'}]' ok
 # preset end closes the first run, so the later flag meets a terminal campaign: a refusal, never a re-review
 eq "0" "$(sf pr_flag 0 review_calls_delta)" "the flag after a preset-ended review spends no review call"
@@ -182,14 +183,14 @@ eq "true" "$(jf m2 'j.steps[0].code !== "review_candidate_continuation_unknown"'
 restore "$ENG"; restore "$INT"
 
 # M3 end terminal transition removed
-mut "$ENG" "return closeParkedReviewAsEnd(priorController);" "/* end removed */"
+mut "$ENG" "return closeParkedReviewAsEnd(priorController, null, continuationState.continuation);" "/* end removed */"
 run_in "$MC" m3 ",$FIX"',"steps":[{"continuation":"end"}]' ok
 eq "true" "$(jf m3 'j.steps[0].campaign_phase !== "TERMINAL_STOP"')" "MUTATION end transition removed: the campaign is no longer terminal (red)"
 restore "$ENG"
 
 # M4 preset ignored (resume path in intake, first-run path in the engine)
 mut "$INT" "const continuation = parked ? (flag || preset) : (facts && flag === 'end' ? 'end' : null);" "const continuation = parked ? (flag) : (facts && flag === 'end' ? 'end' : null);"
-mut "$ENG" "&& campaignControl.contract.adoption.disposition_preset === 'end') {" "&& false) {"
+mut "$ENG" "&& ['end', 'repair'].includes(campaignControl.contract.adoption.disposition_preset)) {" "&& false) {"
 run_in "$MC" m4 ",$FIX"',"preset":"return","steps":[{"move":"forward",'"$SHIP_ENV"'}]' ok
 eq "review_candidate_continuation_required" "$(jf m4 'j.steps[0].code')" "MUTATION preset ignored (resume): the preset return no longer applies (red)"
 run_in "$MC" m4b ",$FIX"',"preset":"end"' ok
@@ -230,11 +231,11 @@ run_in "$MC" m11c ",$FIX"',"steps":[{"dropEvents":["awaiting_disposition"],"cloc
 eq "true" "$(jf m11c 'j.steps[0].campaign_phase !== "TERMINAL_STOP"')" "MUTATION resume marker not overrun-tolerant: the reducer refuses the closing resume (red)"
 restore "$INT"
 
-# M10 seal-time rejection of a repair preset removed: the contract seals and a review would run
-mut "scripts/implementation-campaign-check.js" "} else if (adoption.disposition_preset === 'repair') {" "} else if (false) {"
+# M10 (P5) the repair preset is applied at the first-run park: without it the review would wait forever
+mut "$ENG" "&& ['end', 'repair'].includes(campaignControl.contract.adoption.disposition_preset)) {" "&& ['end'].includes(campaignControl.contract.adoption.disposition_preset)) {"
 run_in "$MC" m10 ",$FIX"',"preset":"repair"' ok
-eq "true" "$(jf m10 'j.seal_status !== 3')" "MUTATION repair rejection removed: the repair preset is no longer rejected at seal (red)"
-restore "scripts/implementation-campaign-check.js"
+eq "true" "$(jf m10 'j.code !== "review_candidate_disposition_repair"')" "MUTATION repair preset not applied at the park: the review no longer closes itself (red)"
+restore "$ENG"
 
 # M6 run-time quorum reverted to the old reading
 mut "$ENG" "const authorFamilyExcluded = input.reviewCandidate === true;" "const authorFamilyExcluded = false;"

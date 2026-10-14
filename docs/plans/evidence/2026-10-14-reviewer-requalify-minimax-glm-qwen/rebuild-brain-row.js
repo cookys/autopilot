@@ -9,7 +9,10 @@
 const fs = require('fs'), path = require('path'), os = require('os');
 const lane = process.argv[2];
 const D = path.join(__dirname, 'out', `m-${lane}-brain`);
-const verdict = JSON.parse(fs.readFileSync(path.join(D, 'stdout.json'), 'utf8').trim().split('\n').pop());
+// Cells run without --emit-row print the verdict on stdout; with --emit-row stdout is the row and the verdict is the last stderr JSON line.
+const lastJson = (f) => { const ls = fs.readFileSync(path.join(D, f), 'utf8').trim().split('\n').filter((l) => l.startsWith('{')); return JSON.parse(ls.pop()); };
+let verdict = lastJson('stdout.json');
+if (verdict.role === 'owner' && verdict.methodology_kind) verdict = lastJson('stderr.log');
 const eventId = Number(process.argv[3] || verdict.evidence_store_event_id);
 if (verdict.evidence_store_event_id !== eventId) throw new Error(`verdict names store event ${verdict.evidence_store_event_id}, not ${eventId}`);
 const store = path.join(process.env.ENGINE_CAPABILITY_DIR || path.join(os.homedir(), '.autopilot', 'engine-capability'), 'qualification-evidence.jsonl');
@@ -17,9 +20,16 @@ const rec = fs.readFileSync(store, 'utf8').trim().split('\n').map((l) => JSON.pa
 if (!rec) throw new Error(`store event ${eventId} not found`);
 const ev = rec.evidence;
 const must = (cond, msg) => { if (!cond) throw new Error('cross-check failed: ' + msg); };
-must(ev.evidence_id === verdict.evidence_id, 'evidence_id');
-must(ev.scope_hash === verdict.scope_hash && ev.identity_hash === verdict.identity_hash && ev.trial_set_hash === verdict.trial_set_hash, 'scope/identity/trial_set hash');
-must(rec.transcript_hash === verdict.evidence_store_transcript_hash, 'transcript hash');
+// RELABELED=1: the store event was relabelled effort -> default after the sitting (coordinator, 2026-10-14), which legitimately changes
+// evidence_id / identity_hash / transcript_hash. Everything that does not depend on the identity block is still cross-checked.
+const relabeled = process.env.RELABELED === '1';
+if (relabeled) must(ev.identity.effort === 'default', 'relabelled evidence must carry effort default');
+must(ev.trial_set_hash === verdict.trial_set_hash && ev.scope_hash === verdict.scope_hash, 'scope/trial_set hash');
+if (!relabeled) {
+  must(ev.evidence_id === verdict.evidence_id, 'evidence_id');
+  must(ev.identity_hash === verdict.identity_hash, 'identity hash');
+  must(rec.transcript_hash === verdict.evidence_store_transcript_hash, 'transcript hash');
+}
 must(ev.identity.identity === verdict.model && ev.identity.runner === verdict.runner, 'model/runner');
 const trials = ev.trials, id = ev.identity;
 const sum = (k) => trials.reduce((s, t) => s + t[k], 0);

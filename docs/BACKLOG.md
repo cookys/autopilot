@@ -1644,7 +1644,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: 外部呼叫方回報帶回重審的費用過高，或同一個 campaign 經常帶回兩次以上
 - **Effort**: M
 - **Source**: BL-0090 P2, Q3 ruled (c) on 2026-10-14
-- **Pointer**: docs/review-candidate.md
+- **Pointer**: docs/backlog/review-candidate-follow-ups.md
 - **Context**: §10 Q3. Seat reuse keys on the whole input binding and seats have no context channel; delta-only needs a new reuse key, a touched-files re-check and a cumulative-context packet (option (a)).
 
 ### T2 says auto-compact will handle it, though context already passed the window
@@ -1709,7 +1709,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: 有人回報 return 被拒為 BUDGET_RESET，或下次改 review-candidate 的 adoption 記帳時
 - **Effort**: S
 - **Source**: BL-0090 P4 doc review (reproduced: revB refused, revCtl converged), 2026-10-14
-- **Pointer**: docs/review-candidate.md
+- **Pointer**: docs/backlog/review-candidate-follow-ups.md
 - **Context**: autopilot-engine.js ~:7716-7722 books adoption changed_files as the cumulative absolute count; implementation-campaign.js ~:911-915 requires usage to be monotonic. Book a monotonic value or exempt adoption.
 
 ### review-candidate repair handoff leftovers
@@ -1722,7 +1722,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: 有人回報 repair 分支被蓋掉，或下次改 review-candidate 的 repair 交接時
 - **Effort**: S
 - **Source**: BL-0090 P5 reviews, 2026-10-14
-- **Pointer**: docs/review-candidate.md
+- **Pointer**: docs/backlog/review-candidate-follow-ups.md
 - **Context**: Campaign digest in repair/<ticket>-repair; sweep review-candidate-repair/; control seed-before-close; drop seed if close fails; prompt says 1 round, contract allows 2; preset first-run seed refusal untested.
 
 ### qualification provider: kimi CLI exams run without the no-tools agent file

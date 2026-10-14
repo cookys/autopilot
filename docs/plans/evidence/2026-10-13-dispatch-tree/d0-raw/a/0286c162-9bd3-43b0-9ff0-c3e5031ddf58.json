@@ -1,0 +1,10 @@
+{
+  "session_id": "0286c162-9bd3-43b0-9ff0-c3e5031ddf58",
+  "level": null,
+  "repo_root": "/tmp/d0probe-agSICG/repo-a",
+  "started_at": "2026-10-14T18:56:34.512Z",
+  "expires_at": "2026-10-15T18:56:34.512Z",
+  "repo_identity": "git-common-dir:/tmp/d0probe-agSICG/repo-a/.git",
+  "project_key": "21972b1dfe45dcd6",
+  "root_run_id": "job-1792004194-015b94f4"
+}

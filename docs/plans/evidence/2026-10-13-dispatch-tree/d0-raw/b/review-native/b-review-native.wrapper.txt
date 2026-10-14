@@ -1,0 +1,7 @@
+cwd=/tmp/dispatch-review-cnativecwd-9Ge9bb
+HOME=/tmp/d0probe-agSICG/home
+CLAUDE_CONFIG_DIR=/tmp/d0probe-agSICG/cfg-main
+AUTOPILOT_PARENT_SESSION_ID=1e1d6db0-5276-46ae-bacb-2d092ec1dc01
+CLAUDE_CODE_SESSION_ID=1e1d6db0-5276-46ae-bacb-2d092ec1dc01
+AUTOPILOT_SESSION_MODE_DIR=/tmp/d0probe-agSICG/session-mode
+ARGV: [-p] [--session-id] [6b2bd2c8-632a-41af-9984-9a688ecb4518] [--model] [haiku] [--setting-sources] [project] [--strict-mcp-config] [--tools] []

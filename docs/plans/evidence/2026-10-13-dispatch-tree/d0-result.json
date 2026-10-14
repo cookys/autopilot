@@ -1,0 +1,270 @@
+{
+  "schema": "autopilot.d0-result/1",
+  "plan": "docs/plans/2026-10-13-dispatch-tree.md",
+  "generated_at": "2026-10-14T18:59:08Z",
+  "claude_version": "2.1.299 (Claude Code)",
+  "omit_sentinel_negative_control": false,
+  "rows": [
+    {
+      "row": "a",
+      "status": "pass",
+      "evidence": "SessionStart fired with payload id == --session-id (sentinel=true, plugin marker=true) and the Bash tool saw CLAUDE_CODE_SESSION_ID == --session-id",
+      "detail": {
+        "session_id_passed": "0286c162-9bd3-43b0-9ff0-c3e5031ddf58",
+        "claude_rc": 0,
+        "sentinel_hook_fired_with_payload_id": true,
+        "sentinel_payload_session_id": "0286c162-9bd3-43b0-9ff0-c3e5031ddf58",
+        "plugin_path_marker_written": true,
+        "marker_parent_session_id": "",
+        "bash_CLAUDE_CODE_SESSION_ID": "0286c162-9bd3-43b0-9ff0-c3e5031ddf58",
+        "omit_sentinel_negative_control": false
+      }
+    },
+    {
+      "row": "b",
+      "status": "pass",
+      "evidence": "all 4 shapes: a hook fired with payload id == manifest child_session_id (--settings flag dropped in: none)",
+      "detail": {
+        "shapes": {
+          "author-native": {
+            "rail_rc": 0,
+            "manifest_child_session_id": "f5ba394d-7285-478f-bb0f-298c9a8dea83",
+            "wrapper_reached": true,
+            "settings_flag_hook_fired": true,
+            "settings_flag_payload_id_matches_child_session_id": true,
+            "cwd_settings_hook_fired": true,
+            "cwd_settings_payload_id_matches": true,
+            "plugin_dir_hook_fired": true,
+            "user_scope_plugin_hook_fired": false,
+            "hook_sees_AUTOPILOT_PARENT_SESSION_ID": true,
+            "hook_sees_mode_dir": "AUTOPILOT_SESSION_MODE_DIR=/tmp/d0probe-agSICG/session-mode"
+          },
+          "review-native": {
+            "rail_rc": 0,
+            "manifest_child_session_id": "6b2bd2c8-632a-41af-9984-9a688ecb4518",
+            "wrapper_reached": true,
+            "settings_flag_hook_fired": true,
+            "settings_flag_payload_id_matches_child_session_id": true,
+            "cwd_settings_hook_fired": true,
+            "cwd_settings_payload_id_matches": true,
+            "plugin_dir_hook_fired": true,
+            "user_scope_plugin_hook_fired": false,
+            "hook_sees_AUTOPILOT_PARENT_SESSION_ID": true,
+            "hook_sees_mode_dir": "AUTOPILOT_SESSION_MODE_DIR=/tmp/d0probe-agSICG/session-mode"
+          },
+          "author-ccshim": {
+            "rail_rc": 0,
+            "manifest_child_session_id": "2f2f0fb2-11bb-4fb0-808f-93643fba7210",
+            "wrapper_reached": true,
+            "settings_flag_hook_fired": true,
+            "settings_flag_payload_id_matches_child_session_id": true,
+            "cwd_settings_hook_fired": true,
+            "cwd_settings_payload_id_matches": true,
+            "plugin_dir_hook_fired": true,
+            "user_scope_plugin_hook_fired": false,
+            "hook_sees_AUTOPILOT_PARENT_SESSION_ID": true,
+            "hook_sees_mode_dir": "AUTOPILOT_SESSION_MODE_DIR=/tmp/d0probe-agSICG/session-mode"
+          },
+          "review-ccshim": {
+            "rail_rc": 0,
+            "manifest_child_session_id": "420b26fa-f202-4e6c-8adc-25c82f57b4f3",
+            "wrapper_reached": true,
+            "settings_flag_hook_fired": true,
+            "settings_flag_payload_id_matches_child_session_id": true,
+            "cwd_settings_hook_fired": true,
+            "cwd_settings_payload_id_matches": true,
+            "plugin_dir_hook_fired": true,
+            "user_scope_plugin_hook_fired": false,
+            "hook_sees_AUTOPILOT_PARENT_SESSION_ID": true,
+            "hook_sees_mode_dir": "AUTOPILOT_SESSION_MODE_DIR=/tmp/d0probe-agSICG/session-mode"
+          }
+        },
+        "parent_session_id_exported_by_rails": "CLAUDE_CODE_SESSION_ID of the launcher is exported as AUTOPILOT_PARENT_SESSION_ID (check hook_sees_AUTOPILOT_PARENT_SESSION_ID)"
+      }
+    },
+    {
+      "row": "c",
+      "status": "pass",
+      "evidence": "hetero cc-shim child wrote marker 33558769-c72c-4598-8223-70c516003127.json with parent_session_id == launcher P",
+      "detail": {
+        "launcher_session_id_P": "efd89f92-059d-4ef4-80ec-48249c585ef2",
+        "hetero_rc": 1,
+        "manifest_session_id": "efd89f92-059d-4ef4-80ec-48249c585ef2",
+        "manifest_child_session_id": "33558769-c72c-4598-8223-70c516003127",
+        "child_marker_exists": true,
+        "child_marker_session_id": "33558769-c72c-4598-8223-70c516003127",
+        "child_marker_parent_session_id": "efd89f92-059d-4ef4-80ec-48249c585ef2",
+        "wrapper_head": "cwd=/tmp/d0probe-agSICG/repo-cf/.claude/worktrees/hetero-d0-cf-outer-aLbrgb AUTOPILOT_PARENT_SESSION_ID=efd89f92-059d-4ef4-80ec-48249c585ef2 CLAUDE_CODE_SESSION_ID=efd89f92-059d-4ef4-80ec-48249c585ef2 "
+      }
+    },
+    {
+      "row": "d1",
+      "status": "pass",
+      "evidence": "nested rail: session_id null, parent_run_id == foreman run (d1-foreman), depth 1",
+      "detail": {
+        "launcher_session_id_exported_to_foreman": "2be55322-2265-47a7-a5f4-6f17c5030c45",
+        "foreman_rc": 1,
+        "foreman_status": "main_checkout_mutated",
+        "nested_manifest_found": true,
+        "nested_session_id": null,
+        "nested_parent_run_id": "d1-foreman",
+        "nested_depth": "1",
+        "nested_env_dump": "CLAUDE_CODE_SESSION_ID=<unset> AUTOPILOT_PARENT_RUN_ID=d1-foreman AUTOPILOT_DISPATCH_DEPTH=1 AUTOPILOT_PARENT_SESSION_ID=<unset> dispatch-hetero: codex/gpt-5-codex (effort=xhigh) may run for MANY minutes — ensure a high Bash-tool timeout (BASH_DEFAULT_TIMEOUT_MS); the 120s default SIGTERMs long runs. dispatch-hetero: run_id=hetero-1792004242-1575729-3c14 manifest=/tmp/d0probe-agSICG/runs-d1/hete"
+      }
+    },
+    {
+      "row": "d2",
+      "status": "bad",
+      "evidence": "codex path: inner marker parent_session_id='<none>' != outer e742edd9-4de9-4b6b-b541-aabdf3fa0bf9. kimi/agy/opencode: not run (provider credentials are not available under an isolated HOME; real ~/.kimi-code must not be touched) = bad by the plan's rule",
+      "detail": {
+        "outer_session": "e742edd9-4de9-4b6b-b541-aabdf3fa0bf9",
+        "inner_session": "5b304186-3ab6-42ca-b2a5-03dfcc5e4e40",
+        "outer_claude_rc": 0,
+        "codex_stub_env": "CLAUDE_CODE_SESSION_ID=e742edd9-4de9-4b6b-b541-aabdf3fa0bf9 AUTOPILOT_PARENT_RUN_ID=hetero-1792004246-1577036-cf65 AUTOPILOT_DISPATCH_DEPTH=1 AUTOPILOT_PARENT_SESSION_ID=<unset> AUTOPILOT_SESSION_ID=<unset> AUTOPILOT_ROOT_RUN_ID=hetero-1792004246-1577036-cf65 inner-claude rc=0 ",
+        "inner_claude_bash_env": "CLAUDE_CODE_SESSION_ID=5b304186-3ab6-42ca-b2a5-03dfcc5e4e40 AUTOPILOT_PARENT_RUN_ID=hetero-1792004246-1577036-cf65 AUTOPILOT_DISPATCH_DEPTH=1 AUTOPILOT_PARENT_SESSION_ID=<unset> AUTOPILOT_SESSION_ID=<unset> AUTOPILOT_ROOT_RUN_ID=hetero-1792004246-1577036-cf65 inner-review rc=1 ",
+        "inner_marker_exists": true,
+        "inner_marker_session_id": "5b304186-3ab6-42ca-b2a5-03dfcc5e4e40",
+        "inner_marker_parent_session_id": "",
+        "outer_marker_unchanged": "true",
+        "outer_hetero_run_id": "hetero-1792004246-1577036-cf65",
+        "nested_manifest_parent_run_id": "hetero-1792004246-1577036-cf65",
+        "nested_manifest_session_id": "5b304186-3ab6-42ca-b2a5-03dfcc5e4e40",
+        "nested_manifest_depth": "1",
+        "note": "inner_session is the id the stub codex passed as --session-id; no manifest claims it, so section 3 places the nested rail by a named reason"
+      }
+    },
+    {
+      "row": "e",
+      "status": "pass",
+      "evidence": "top-level and foreground-subagent Bash both saw CLAUDE_CODE_SESSION_ID == the session (background subagent saw '6af06923-d4b1-4e1e-b22e-3cbcd0b8c8f7')",
+      "detail": {
+        "session_id_passed": "6af06923-d4b1-4e1e-b22e-3cbcd0b8c8f7",
+        "claude_rc": 0,
+        "top_level_bash_CLAUDE_CODE_SESSION_ID": "6af06923-d4b1-4e1e-b22e-3cbcd0b8c8f7",
+        "foreground_subagent_bash_CLAUDE_CODE_SESSION_ID": "6af06923-d4b1-4e1e-b22e-3cbcd0b8c8f7",
+        "background_subagent_bash_CLAUDE_CODE_SESSION_ID": "6af06923-d4b1-4e1e-b22e-3cbcd0b8c8f7"
+      }
+    },
+    {
+      "row": "f",
+      "status": "pass",
+      "evidence": "nested rail manifest session_id == the claude child's own id (33558769-c72c-4598-8223-70c516003127), parent_run_id == outer run, depth=1 (outer depth 0)",
+      "detail": {
+        "outer_run_id": "hetero-1792004231-1573620-963f",
+        "outer_depth": "0",
+        "nested_manifest_found": true,
+        "nested_session_id": "33558769-c72c-4598-8223-70c516003127",
+        "nested_parent_run_id": "hetero-1792004231-1573620-963f",
+        "nested_depth": "1",
+        "expected_nested_session_id_is_childs_own": "33558769-c72c-4598-8223-70c516003127",
+        "inner_env": "CLAUDE_CODE_SESSION_ID=33558769-c72c-4598-8223-70c516003127 AUTOPILOT_PARENT_RUN_ID=hetero-1792004231-1573620-963f AUTOPILOT_DISPATCH_DEPTH=1 AUTOPILOT_PARENT_SESSION_ID=efd89f92-059d-4ef4-80ec-48249c585ef2 AUTOPILOT_SESSION_ID=<unset> AUTOPILOT_ROOT_RUN_ID=hetero-1792004231-1573620-963f inner-review rc=1 "
+      }
+    },
+    {
+      "row": "g",
+      "status": "pass",
+      "evidence": "updatedInput applied with no permissionDecision: echo A -> B (top and subagent); rail stamped session / subagent agent_id and the stamp reached the process env",
+      "detail": {
+        "top_echo_A": "false|B",
+        "top_rail": "false|ORIGIN=session ARGS=x .",
+        "sub_echo_A": "false|B",
+        "sub_rail": "false|ORIGIN=a80f1ae0a20d08cb3 ARGS=y .",
+        "subagent_agent_id_in_hook_payload": "a80f1ae0a20d08cb3",
+        "subagent_payload_keys": "[\"session_id\",\"transcript_path\",\"cwd\",\"prompt_id\",\"permission_mode\",\"agent_id\",\"agent_type\",\"effort\",\"hook_event_name\",\"tool_name\",\"tool_input\",\"tool_use_id\"]"
+      }
+    },
+    {
+      "row": "h",
+      "status": "bad",
+      "evidence": "export-stamped rail: top='true|This Bash command contains multiple operations. The following part requires approval:' sub='true|This Bash command contains multiple operations. The following part requires approval:'; control plain: 'false|ORIGIN=<unset> ARGS=x'; control compound(export Z=1; rail): 'true|This Bash command contains multiple operations. The following part requires approval:'",
+      "detail": {
+        "allow_rule": "Bash(./rail.sh:*)",
+        "with_export_stamp_hook": {
+          "top_rail_x": "true|This Bash command contains multiple operations. The following part requires approval: export AUTOPILOT_ORIGIN_AGENT_ID=session",
+          "top_compound_export_Z_then_rail": "true|This Bash command contains multiple operations. The following parts require approval: export AUTOPILOT_ORIGIN_AGENT_ID=session, export Z=1",
+          "subagent_rail_y": "true|This Bash command contains multiple operations. The following part requires approval: export AUTOPILOT_ORIGIN_AGENT_ID=aa3caf84d713408ea"
+        },
+        "control_no_rewrite_hook": {
+          "top_rail_x": "false|ORIGIN=<unset> ARGS=x",
+          "top_compound_export_Z_then_rail": "true|This Bash command contains multiple operations. The following part requires approval: export Z=1",
+          "subagent_rail_y": "false|ORIGIN=<unset> ARGS=y ."
+        },
+        "informational_inline_assignment_form": {
+          "top_rail_x": "true|This command requires approval",
+          "subagent_rail_y": "true|This command requires approval"
+        }
+      }
+    },
+    {
+      "row": "i",
+      "status": "pass",
+      "evidence": "rewrite survived the plugin's default-on Bash PreToolUse hooks (echo A -> B, rail stamped; top and subagent)",
+      "detail": {
+        "plugin_hooks_PreToolUse_matching_Bash": ".*: opt-in-multiplexer.js PreToolUse ; Bash|Monitor: foreman-guard.js ; Bash|Edit|Write|MultiEdit|NotebookEdit: cost-fuse.js ; WebFetch|WebSearch|Read|Grep|Glob|Bash|Agent|Task|Skill: depth0-delegate-gate.js",
+        "plugin": "this worktree via --plugin-dir (default-on hooks only; opt-in hooks not enabled)",
+        "top_echo_A": "false|B",
+        "top_rail": "false|ORIGIN=session ARGS=x .",
+        "sub_echo_A": "false|B",
+        "sub_rail": "false|ORIGIN=aac6d8b9dfbb2bbf1 ARGS=y ."
+      }
+    },
+    {
+      "row": "j",
+      "status": "not_run",
+      "evidence": "step 3c is not implemented (no child_transcript copy to age) and the check is defined as one day later; cannot be measured in D0. Non-blocking row.",
+      "detail": {
+        "reason": "needs step 3c (child_transcript copy) to exist and a one-day-later re-check; neither is possible in a same-day D0 run",
+        "blocks": "nothing"
+      }
+    },
+    {
+      "row": "k",
+      "status": "pass",
+      "evidence": "both foreground and background Agent launches carry toolUseResult.agentId + tool_use_id matching the subagent meta (exactly one result each)",
+      "detail": {
+        "agents": [
+          {
+            "agentId": "a2a2cceaf7d2d16c4",
+            "meta_toolUseId": "toolu_01U1z43SzGmJxRpeSbpA6HWR",
+            "requestShape": "background",
+            "spawnDepth": 1,
+            "exact_matching_results_in_session_transcript": 1
+          },
+          {
+            "agentId": "a4d50cbd3e59d242b",
+            "meta_toolUseId": "toolu_01TcC1zxhxZ6KcC3xs3xDVYN",
+            "requestShape": "foreground",
+            "spawnDepth": 1,
+            "exact_matching_results_in_session_transcript": 1
+          }
+        ],
+        "note": "exact = one tool_result in the session transcript with toolUseResult.agentId == meta agent id AND tool_use_id == meta toolUseId"
+      }
+    }
+  ],
+  "blocking": {
+    "3a": [
+      "a",
+      "b",
+      "c"
+    ],
+    "3b": [
+      "a",
+      "f"
+    ],
+    "3c": [],
+    "5": [
+      "g",
+      "h",
+      "i"
+    ],
+    "R": [
+      "c",
+      "d1",
+      "d2",
+      "e",
+      "f",
+      "k"
+    ]
+  }
+}

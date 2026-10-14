@@ -1,0 +1,40 @@
+# D0 measurement summary (dispatch-tree plan, section 4 and section 7)
+
+Source of truth: `d0-result.json` (written by `d0-probe.sh`, claude 2.1.299). Raw dumps (secret-scanned and redacted): `d0-raw/<row>/`.
+Re-run: `bash d0-probe.sh --out d0-result.json`. Negative control: `AUTOPILOT_RUNS_WATCH_AUTOSTART=0 bash d0-probe.sh --omit-sentinel --out <f>` must report row a `bad` (exit 0); it did, and the normal run reports row a `pass`.
+
+| Row | Status | Blocks | Evidence |
+|-----|--------|--------|----------|
+| a | pass | 3a, 3b | `d0-raw/a/` |
+| b | pass | 3a | `d0-raw/b/<shape>/` |
+| c | pass | 3a, R | `d0-raw/c/` |
+| d1 | pass | R | `d0-raw/d1/` |
+| d2 | **bad** | R | `d0-raw/d2/` |
+| e | pass | R | `d0-raw/e/` |
+| f | pass | 3b, R | `d0-raw/f/` |
+| g | pass | 5 | `d0-raw/g/` |
+| h | **bad** | 5 | `d0-raw/h0,h1,h2/` |
+| i | pass | 5 | `d0-raw/i/` |
+| j | not_run | none | no step 3c yet; defined as a one-day-later check |
+| k | pass | R | `d0-raw/k/`, `d0-raw/e/calls.json` |
+
+## Conclusions
+
+- **a pass**: `claude -p --session-id u` fires SessionStart with payload `u` (cwd settings sentinel and plugin path both), the plugin writes `u.json`, and Bash sees `CLAUDE_CODE_SESSION_ID == u`. Step 3a and 3b are not blocked by this row.
+- **b pass**: in all four shapes (author/review x claude-native/cc-shim) a SessionStart hook fired with payload id == manifest `child_session_id`. `--settings` flag, `<cwd>/.claude/settings.json` and `--plugin-dir` all fired under `--setting-sources project --strict-mcp-config --tools ""`; the user-scope installed plugin did NOT fire (only project-scoped mechanisms do). Hooks also saw `AUTOPILOT_PARENT_SESSION_ID`; see detail per shape.
+- **c pass**: a real hetero cc-shim child (minimax endpoint) wrote `<child>.json` with `parent_session_id == P`.
+- **d1 pass**: foreman nested rail manifest: `session_id` null, `parent_run_id` = foreman run, depth 1.
+- **d2 BAD (codex path)**: the inner Claude's marker exists and names itself, but `parent_session_id` is empty: the codex runner path exports `AUTOPILOT_PARENT_RUN_ID`, depth and root run id, but not `AUTOPILOT_PARENT_SESSION_ID`, and the codex task's `CLAUDE_CODE_SESSION_ID` is the outer session (inherited), so a marker cannot name the outer session as parent. The outer marker stayed unchanged and the nested manifest `parent_run_id` equals the harness run (both OK). kimi, agy, opencode: `not_run` (no provider credentials under an isolated HOME; real `~/.kimi-code` must not be touched) = bad by the plan's rule. **Plan section 7 design change: stop; plan revised and re-reviewed before R.**
+- **e pass**: top-level and foreground-subagent Bash both see the session `CLAUDE_CODE_SESSION_ID` (background subagent too).
+- **f pass**: nested rail from the claude child writes the child's own id, `parent_run_id` = outer run, depth 1.
+- **g pass**: `updatedInput` without `permissionDecision` is applied (`echo A` -> `echo B`, top and subagent); the hook payload carries `agent_id` for subagents, absent for top level.
+- **h BAD**: an `export AUTOPILOT_ORIGIN_AGENT_ID=...; ./rail.sh x` rewrite makes the command compound, and the allow rule `Bash(./rail.sh:*)` no longer covers it: headless -p returned is_error "This Bash command contains multiple operations. The following part requires approval: export ...". Control without rewrite: allowed. The inline-assignment form (`VAR=x ./rail.sh`) is also not allowed ("requires approval"). Headless -p auto-denies the would-be prompt immediately as is_error. **Plan section 7 design change: step 5 not shipped.**
+- **i pass**: rewrite and stamp survive the plugin's default-on Bash PreToolUse hooks. Moot while h is bad.
+- **j not_run**: needs step 3c plus one day; non-blocking.
+- **k pass**: foreground and background Agent launches both carry `toolUseResult.agentId` and a `tool_use_id` equal to the subagent `meta.json` `toolUseId`.
+
+## Steps
+
+- 3a, 3b, 3c: not blocked by D0 (a, b, c, f pass).
+- 5: blocked (h bad).
+- R: blocked (d2 bad, kimi/agy/opencode not_run), plan must be revised and re-reviewed first.

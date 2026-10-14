@@ -1,0 +1,1 @@
+{ "runner": "claude-native", "model": "haiku", "status": "authored", "raw_log": "/tmp/dispatch-author-log-6vASV0", "error": null, "selection_source": "explicit_cli", "selection_path": null, "verification_author": null }

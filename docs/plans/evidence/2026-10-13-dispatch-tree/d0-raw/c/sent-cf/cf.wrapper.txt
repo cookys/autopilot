@@ -1,0 +1,4 @@
+cwd=/tmp/d0probe-agSICG/repo-cf/.claude/worktrees/hetero-d0-cf-outer-aLbrgb
+AUTOPILOT_PARENT_SESSION_ID=efd89f92-059d-4ef4-80ec-48249c585ef2
+CLAUDE_CODE_SESSION_ID=efd89f92-059d-4ef4-80ec-48249c585ef2
+ARGV: [-p] [--session-id] [33558769-c72c-4598-8223-70c516003127] [--model] [MiniMax-M3] [--dangerously-skip-permissions] [--effort] [high]

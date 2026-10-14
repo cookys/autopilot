@@ -1,0 +1,7 @@
+cwd=/tmp/dispatch-review-ccshimcwd-k3EWff
+HOME=/tmp/dispatch-review-ccshimcwd-k3EWff
+CLAUDE_CONFIG_DIR=<unset>
+AUTOPILOT_PARENT_SESSION_ID=1e1d6db0-5276-46ae-bacb-2d092ec1dc01
+CLAUDE_CODE_SESSION_ID=1e1d6db0-5276-46ae-bacb-2d092ec1dc01
+AUTOPILOT_SESSION_MODE_DIR=/tmp/d0probe-agSICG/session-mode
+ARGV: [-p] [--session-id] [420b26fa-f202-4e6c-8adc-25c82f57b4f3] [--model] [MiniMax-M3] [--setting-sources] [project] [--strict-mcp-config] [--tools] []

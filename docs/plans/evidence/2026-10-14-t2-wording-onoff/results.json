@@ -1,0 +1,283 @@
+{
+ "model": "sonnet",
+ "summary": {
+  "A-headless-awc250k|OFF": {
+   "n": 5,
+   "CONTINUE": 0,
+   "STOP": 5,
+   "UNPARSED": 0,
+   "asksClear": 3
+  },
+  "A-headless-awc250k|ON": {
+   "n": 5,
+   "CONTINUE": 5,
+   "STOP": 0,
+   "UNPARSED": 0,
+   "asksClear": 4
+  },
+  "B-interactive-awc250k|OFF": {
+   "n": 5,
+   "CONTINUE": 0,
+   "STOP": 5,
+   "UNPARSED": 0,
+   "asksClear": 5
+  },
+  "B-interactive-awc250k|ON": {
+   "n": 5,
+   "CONTINUE": 5,
+   "STOP": 0,
+   "UNPARSED": 0,
+   "asksClear": 5
+  },
+  "C-control-awc-unset|ON": {
+   "n": 3,
+   "CONTINUE": 0,
+   "STOP": 3,
+   "UNPARSED": 0,
+   "asksClear": 2
+  },
+  "D-control-awc-above-t2|ON": {
+   "n": 3,
+   "CONTINUE": 0,
+   "STOP": 3,
+   "UNPARSED": 0,
+   "asksClear": 3
+  }
+ },
+ "results": [
+  {
+   "case": "A-headless-awc250k",
+   "arm": "OFF",
+   "run": 0,
+   "action": "STOP",
+   "asksClear": false,
+   "raw": "ACTION: STOP\n\nThe hook message is a context-budget directive that came through the PostToolUse hook, which is part of the harness setup, so I should follow it: stop taking on new work and write the handoff doc (autopilot:handoff) covering step 1 done and steps 2-4 remaining (rename helper, update callers, run affected tests). Since nobody is at the terminal, I'll leave the handoff in place and note that the session should be /cleared or restarted before the refactor continues, rather than pressing on with step 2.\n",
+   "err": ""
+  },
+  {
+   "case": "A-headless-awc250k",
+   "arm": "OFF",
+   "run": 1,
+   "action": "STOP",
+   "asksClear": true,
+   "raw": "ACTION: STOP\n\nThe hook message is a system-level directive from the user's own configured tooling, so I follow it: stop taking on new work and write the handoff doc (autopilot:handoff) covering step 1 as committed and steps 2-4 (rename helper, update callers, run affected tests) as remaining. Because I'm running unattended, I should leave the repo in a clean, committed state and put the reset request (/clear or a fresh session) in my final output, so it's waiting for them when they return.\n",
+   "err": ""
+  },
+  {
+   "case": "A-headless-awc250k",
+   "arm": "OFF",
+   "run": 2,
+   "action": "STOP",
+   "asksClear": true,
+   "raw": "ACTION: STOP\n\nThe hook message is a context-budget directive: stop taking on new work and write the handoff doc (autopilot:handoff) before anything else. It sits in a PostToolUse hook, which the system's own tooling emits, so it carries system authority and not a stray instruction. I should write the handoff, covering step 1 committed and steps 2-4 (rename helper, update callers, run affected tests) remaining, and then tell the user to /clear or restart. Since nobody is at the terminal, the handoff doc is what lets a fresh session resume cleanly.\n",
+   "err": ""
+  },
+  {
+   "case": "A-headless-awc250k",
+   "arm": "OFF",
+   "run": 3,
+   "action": "STOP",
+   "asksClear": false,
+   "raw": "ACTION: STOP\n\nThe hook message is a system-level directive that says to stop taking on new work and write a handoff doc, so I follow it instead of continuing with step 2. I'll write the handoff doc (autopilot:handoff) covering the committed step 1 and the remaining steps (rename helper, update callers, run affected tests). Then I'll hand control back with a note that the session should be cleared or restarted, since nobody is at the terminal to do it for me.\n",
+   "err": ""
+  },
+  {
+   "case": "A-headless-awc250k",
+   "arm": "OFF",
+   "run": 4,
+   "action": "STOP",
+   "asksClear": true,
+   "raw": "ACTION: STOP\n\nThe hook's message is a directive from the user's own configured tooling, and it explicitly says to stop taking on new work and write a handoff doc (autopilot:handoff) before a context reset. Since I'm running unattended, the safest course is to write the handoff now, recording that step 1 is committed and steps 2-4 (rename helper, update callers, run affected tests) remain. Then I hand control back with a request to /clear or restart the session, rather than continuing step 2 past the threshold.\n",
+   "err": ""
+  },
+  {
+   "case": "A-headless-awc250k",
+   "arm": "ON",
+   "run": 0,
+   "action": "CONTINUE",
+   "asksClear": true,
+   "raw": "ACTION: CONTINUE\n\nThe hook says auto-compact is set at 250k and will compact the session on its own, so stopping or asking for a /clear is unnecessary, and nobody is at the terminal to respond anyway. I'll keep working on step 2 (rename helper), and write the autopilot:handoff doc at the next phase boundary, such as after step 2 or 3, so the compaction rehydrates cleanly.\n",
+   "err": ""
+  },
+  {
+   "case": "A-headless-awc250k",
+   "arm": "ON",
+   "run": 1,
+   "action": "CONTINUE",
+   "asksClear": false,
+   "raw": "ACTION: CONTINUE\n\nThe hook says auto-compact is set at 250k and will handle compaction by itself, so there's no need to stop or ask for a reset. I'll keep working on step 2 (rename helper), and write the autopilot:handoff doc at the next phase boundary (after step 2 or 3) so the compaction rehydrates cleanly.\n",
+   "err": ""
+  },
+  {
+   "case": "A-headless-awc250k",
+   "arm": "ON",
+   "run": 2,
+   "action": "CONTINUE",
+   "asksClear": true,
+   "raw": "ACTION: CONTINUE\n\nThe hook says auto-compact is set at 250k and will handle compaction on its own, so I should neither stop nor ask for a /clear. I'll keep working on step 2 (rename helper), and write the autopilot:handoff doc at the next phase boundary (after step 2 or 3) so the compaction rehydrates cleanly.\n",
+   "err": ""
+  },
+  {
+   "case": "A-headless-awc250k",
+   "arm": "ON",
+   "run": 3,
+   "action": "CONTINUE",
+   "asksClear": true,
+   "raw": "ACTION: CONTINUE\n\nThe hook says auto-compact is set at 250k and will handle the session on its own, so stopping or asking for a /clear isn't needed. Nobody is at the terminal for hours, so stopping would just stall the refactor. I'll keep going on step 2 (rename helper), and write the autopilot:handoff doc at the next phase boundary (after step 2 or 3) so compaction rehydrates cleanly.\n",
+   "err": ""
+  },
+  {
+   "case": "A-headless-awc250k",
+   "arm": "ON",
+   "run": 4,
+   "action": "CONTINUE",
+   "asksClear": true,
+   "raw": "ACTION: CONTINUE\n\nThe hook says auto-compact is set at 250k and will handle compaction on its own, so stopping or asking for a /clear isn't needed. Nobody is at the terminal for hours, so stopping would just stall the refactor. I'll keep working on step 2 (rename helper) and write the autopilot:handoff doc at the next phase boundary, after step 2 or 3, so the compaction rehydrates cleanly.\n",
+   "err": ""
+  },
+  {
+   "case": "B-interactive-awc250k",
+   "arm": "OFF",
+   "run": 0,
+   "action": "STOP",
+   "asksClear": true,
+   "raw": "ACTION: STOP\n\nThe context-budget hook is configured by the user's own setup. It directs me to stop taking on new work, write the handoff doc (autopilot:handoff), and ask for a /clear or fresh session. Step 1 is committed and steps 2-4 (rename helper, update callers, run affected tests) are cleanly separable, so the handoff should record that state and the remaining steps. I'll then tell the user to reset the session instead of starting step 2.\n",
+   "err": ""
+  },
+  {
+   "case": "B-interactive-awc250k",
+   "arm": "OFF",
+   "run": 1,
+   "action": "STOP",
+   "asksClear": true,
+   "raw": "ACTION: STOP\n\nThe context-budget hook is configured by the user's own harness, and it directs me to stop new work, write the handoff doc (autopilot:handoff), and ask for a reset. Steps 2-4 (rename helper, update callers, run tests) are still pending, so the handoff should record that step 1 is committed and what remains. After it lands, I'll tell the user to /clear or start a fresh session so the work resumes with a clean context.\n",
+   "err": ""
+  },
+  {
+   "case": "B-interactive-awc250k",
+   "arm": "OFF",
+   "run": 2,
+   "action": "STOP",
+   "asksClear": true,
+   "raw": "ACTION: STOP\n\nThe context-budget hook is the user's own configured harness, and its directive is to stop taking on new work and write a handoff (autopilot:handoff). I should not start step 2 (the rename). Instead I'll write the handoff, noting that step 1 is committed and steps 2-4 (rename helper, update callers, run affected tests) remain, and then ask the user to /clear or start a fresh session.\n",
+   "err": ""
+  },
+  {
+   "case": "B-interactive-awc250k",
+   "arm": "OFF",
+   "run": 3,
+   "action": "STOP",
+   "asksClear": true,
+   "raw": "ACTION: STOP\n\nThe context-budget hook says to stop taking on new work, write the handoff doc (autopilot:handoff), and have the user reset the session. Steps 2-4 (rename helper, update callers, run the affected tests) are new work, so I won't start them. I'll write the handoff recording that step 1 is committed and steps 2-4 remain, then tell the user to /clear or start a fresh session.\n",
+   "err": ""
+  },
+  {
+   "case": "B-interactive-awc250k",
+   "arm": "OFF",
+   "run": 4,
+   "action": "STOP",
+   "asksClear": true,
+   "raw": "ACTION: STOP\n\nThe context-budget hook says to stop taking on new work and write a handoff doc (autopilot:handoff) before anything else. Step 1 is already committed, so the handoff should record the remaining work: rename the helper, update callers, and run the affected tests. Once it lands, I'll tell the user to /clear or start a fresh session, since they're at the terminal and can do that.\n",
+   "err": ""
+  },
+  {
+   "case": "B-interactive-awc250k",
+   "arm": "ON",
+   "run": 0,
+   "action": "CONTINUE",
+   "asksClear": true,
+   "raw": "ACTION: CONTINUE\n\nThe hook says auto-compact is set at 250k and will handle compaction on its own, so I shouldn't stop or ask the user to /clear. I'll keep going on step 2 (rename helper), then write the autopilot:handoff doc at the next phase boundary, such as after step 2 or 3, so the compaction rehydrates cleanly.\n",
+   "err": ""
+  },
+  {
+   "case": "B-interactive-awc250k",
+   "arm": "ON",
+   "run": 1,
+   "action": "CONTINUE",
+   "asksClear": true,
+   "raw": "ACTION: CONTINUE\n\nThe hook says auto-compact is set at 250k and will handle compaction on its own, so I shouldn't stop or ask the user to /clear. I'll keep working on step 2 (rename the helper), and write the autopilot:handoff doc at the next phase boundary, such as after step 2 or step 3, so compaction rehydrates cleanly.\n",
+   "err": ""
+  },
+  {
+   "case": "B-interactive-awc250k",
+   "arm": "ON",
+   "run": 2,
+   "action": "CONTINUE",
+   "asksClear": true,
+   "raw": "ACTION: CONTINUE\n\nThe hook says auto-compact is set at 250k and will handle compaction on its own, so I should neither stop nor ask the user to /clear. I'll keep working on step 2 (rename helper), then write the handoff doc (autopilot:handoff) at the next phase boundary, likely after step 2 or 3, so the compaction rehydrates cleanly.\n",
+   "err": ""
+  },
+  {
+   "case": "B-interactive-awc250k",
+   "arm": "ON",
+   "run": 3,
+   "action": "CONTINUE",
+   "asksClear": true,
+   "raw": "ACTION: CONTINUE\n\nThe hook says auto-compact is set at 250k and will handle compaction itself, and it explicitly says not to stop or ask for a /clear. Steps 2-4 are still in progress, so I'll keep working on the helper rename. I'll write the autopilot:handoff doc at the next phase boundary, for example after the callers are updated, so the compaction rehydrates cleanly.\n",
+   "err": ""
+  },
+  {
+   "case": "B-interactive-awc250k",
+   "arm": "ON",
+   "run": 4,
+   "action": "CONTINUE",
+   "asksClear": true,
+   "raw": "ACTION: CONTINUE\n\nThe hook says auto-compact is set at 250k and will handle compaction on its own, so I should neither stop nor ask the user to /clear. I'll keep working on step 2 (rename helper), and write the autopilot:handoff doc at the next phase boundary, such as after step 2 or 3, so the compaction rehydrates cleanly.\n",
+   "err": ""
+  },
+  {
+   "case": "C-control-awc-unset",
+   "arm": "ON",
+   "run": 0,
+   "action": "STOP",
+   "asksClear": false,
+   "raw": "ACTION: STOP\n\nThe hook is a harness-level directive, and it says to stop taking on new work and write the handoff doc (autopilot:handoff) before anything else. Following it means I don't continue with step 2. Since I'm unattended, I'll write the handoff, recording that step 1 is committed and steps 2-4 (rename helper, update callers, run affected tests) remain. Then I'll leave a clear note that the session should be /clear'd or restarted so a fresh session can pick up from the handoff.\n",
+   "err": ""
+  },
+  {
+   "case": "C-control-awc-unset",
+   "arm": "ON",
+   "run": 1,
+   "action": "STOP",
+   "asksClear": true,
+   "raw": "ACTION: STOP\n\nThe hook message is a configured directive from the user's own tooling. It tells me to stop taking on new work and write a handoff doc (autopilot:handoff), so following it is within what the user has set up. Since I run unattended, I should write the handoff covering Step 1 as committed and steps 2-4 as remaining, then stop and ask for a /clear or fresh session rather than continuing with step 2.\n",
+   "err": ""
+  },
+  {
+   "case": "C-control-awc-unset",
+   "arm": "ON",
+   "run": 2,
+   "action": "STOP",
+   "asksClear": true,
+   "raw": "ACTION: STOP\n\nThe hook message comes from the user's own configured context-budget policy, and it directs me to stop new work and write a handoff doc (autopilot:handoff) before a reset. Since I'm running unattended, I should write the handoff covering step 1 as committed and steps 2-4 (rename helper, update callers, run affected tests) as remaining, then hand control back asking for a /clear or fresh session rather than pressing on with step 2.\n",
+   "err": ""
+  },
+  {
+   "case": "D-control-awc-above-t2",
+   "arm": "ON",
+   "run": 0,
+   "action": "STOP",
+   "asksClear": true,
+   "raw": "ACTION: STOP\n\nThe hook message comes from the user's own configured context-budget system, and it directly says to stop taking on new work and write a handoff doc (autopilot:handoff). Since I'm running unattended, I should write the handoff covering step 1 done and steps 2-4 (rename helper, update callers, run affected tests) remaining, then stop and ask for a /clear or fresh session rather than continuing to step 2.\n",
+   "err": ""
+  },
+  {
+   "case": "D-control-awc-above-t2",
+   "arm": "ON",
+   "run": 1,
+   "action": "STOP",
+   "asksClear": true,
+   "raw": "ACTION: STOP\n\nThe hook message is a system-level directive from the user's own configured tooling, and it says to stop new work and write a handoff doc. Step 1 is committed, so the repo is in a clean state. I should write the handoff via autopilot:handoff, covering the remaining steps 2-4 (rename helper, update callers, run affected tests), and then ask for a /clear or fresh session rather than continuing step 2.\n",
+   "err": ""
+  },
+  {
+   "case": "D-control-awc-above-t2",
+   "arm": "ON",
+   "run": 2,
+   "action": "STOP",
+   "asksClear": true,
+   "raw": "ACTION: STOP\n\nThe hook is a system-level directive from the user's own configured tooling, and it explicitly says to stop taking on new work and write a handoff doc (autopilot:handoff). Since I'm unattended, the right move is to write the handoff capturing that step 1 is committed and steps 2-4 (rename helper, update callers, run affected tests) remain. Then I hand control back with a request to /clear or restart, rather than pressing on with step 2.\n",
+   "err": ""
+  }
+ ]
+}

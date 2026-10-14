@@ -241,6 +241,18 @@ function budgetDecision(state, cfg) {
           'on a 1M window this is early and no action is needed.',
       };
     }
+    // An auto-compact window at or below T2 is set and compaction is on: Claude Code will reset
+    // this context itself, so stopping for a human /clear only adds an interruption (BL-0124).
+    if (Number.isFinite(cfg.autocompactWindow) && cfg.autocompactWindow > 0 && cfg.autocompactWindow <= cfg.t2) {
+      return {
+        tier: 't2',
+        message:
+          `Context budget T2: context is ${k}k tokens${pct} (threshold ${Math.round(cfg.t2 / 1000)}k). ` +
+          `Auto-compact is set at ${Math.round(cfg.autocompactWindow / 1000)}k, so Claude Code compacts ` +
+          'this session on its own: do NOT stop and do NOT ask the user to /clear. Keep working; ' +
+          'write a handoff doc (autopilot:handoff) at the next phase boundary so the compaction rehydrates cleanly.',
+      };
+    }
     return {
       tier: 't2',
       message:

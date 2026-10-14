@@ -202,6 +202,17 @@ function withAutocompactTip(message, window, payload, model) {
   } catch { return message; }
 }
 
+// BL-0124: the effective auto-compact window, only when compaction is on and this context is
+// already at T2 (the only place it matters; avoids settings reads on every tool call).
+function autocompactForT2(contextTokens, t2, payload, model) {
+  try {
+    if (!(t2 > 0 && contextTokens >= t2)) return null;
+    const projectDir = process.env.CLAUDE_PROJECT_DIR || (payload && typeof payload.cwd === 'string' ? payload.cwd : undefined);
+    const r = autocompact.resolve({ projectDir, model });
+    return r.enabled && Number.isFinite(r.configured) ? r.configured : null;
+  } catch { return null; }
+}
+
 function emitT1(sid, message) {
   const sink = require('./_shared/advisory-sink.js');
   if (sink.advisoryMode('context_budget') === 'inject') { emitInjected(message); return; }
@@ -297,7 +308,7 @@ function emitT1(sid, message) {
       resetBelowTiers(st, contextTokens, liveCfg);
       const d = budgetDecision(
         { contextTokens, calls: st.calls, lastT1Context: st.lastT1Context, lastT2Context: st.lastT2Context },
-        { ...liveCfg, windowSource: 'statusline' },
+        { ...liveCfg, windowSource: 'statusline', autocompactWindow: autocompactForT2(contextTokens, liveCfg.t2, payload, st.knownModel) },
       );
       if (d.tier === 't1') {
         st.lastT1Context = contextTokens;
@@ -349,7 +360,7 @@ function emitT1(sid, message) {
           const d = budgetDecision(
             { contextTokens: tokens, calls: st.calls, lastT1Context: st.lastT1Context, lastT2Context: st.lastT2Context },
             rememberedWindow !== null
-              ? { ...liveCfg, windowSource: 'session-window' }
+              ? { ...liveCfg, windowSource: 'session-window', autocompactWindow: autocompactForT2(tokens, liveCfg.t2, payload, st.knownModel) }
               // Unknown window: no live file, nothing remembered, and observedMax < 200K (200K and
               // 1M are indistinguishable). A user-explicit T2 keeps today's directive behaviour.
               : { ...liveCfg, windowUnknown: !cfg.explicitT2 && st.observedMax < BASE_WINDOW },

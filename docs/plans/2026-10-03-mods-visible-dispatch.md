@@ -228,7 +228,7 @@ O：owner 不用問「怎麼這麼慢」就知道誰在跑、跑多久、最後 
 | U2 | 現況各區塊分隔不清楚、不能收合：區塊標題可點收合、區塊間 `subtle` 分隔線 | S | 本分支 |
 | U3 | band 每個 slot 可點，直接開 pane 到對應分頁 | S | 本分支 |
 | U4 | ⓘ 只有左半格點得到（ambiguous 寬度，owner 終端畫成 2 格） | XS | 本分支 |
-| U5 | pane 看不出現在在跑什麼（背景工作、子步驟、進度）；與 BACKLOG「Workflow snapshot」P2 子代理名冊重疊，先查資料來源再定大小 | ? | 待 spike |
+| U5 | pane 看不出現在在跑什麼（背景工作、子步驟、進度）；與 BACKLOG「Workflow snapshot」P2 子代理名冊重疊，先查資料來源再定大小 | S+S（U5a 子代理目前步驟、U5b task activeForm）；U5c run stage M 條件式；譜系歸 dispatch-tree | spike 完成（[u5-spike.md](evidence/2026-10-03-mods-visible-dispatch/u5-spike.md)）；先跑 P1/P2 probe，待 owner §7 Q1–Q5 |
 | U6 | 顯示登入帳號、組織、剩餘額度：先抓一次真 status line payload 確認 `rate_limits`／`spend_limit`；email 是否遮罩待 owner | ? | 待 spike |
 
 ## 5. Test / validation

@@ -1826,7 +1826,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: 有人回報 return 被拒為 BUDGET_RESET，或下次改 review-candidate 的 adoption 記帳時
 - **Effort**: S
 - **Source**: BL-0090 P4 doc review (reproduced: revB refused, revCtl converged), 2026-10-14
-- **Pointer**: none
+- **Pointer**: docs/plans/2026-10-13-review-only-external-candidate.md
 - **Context**: autopilot-engine.js ~:7716-7722 books adoption changed_files as the cumulative absolute count; implementation-campaign.js ~:911-915 requires usage to be monotonic. Book a monotonic value or exempt adoption.
 
 ### review-candidate repair handoff leftovers
@@ -1840,4 +1840,4 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: BL-0090 P5 reviews, 2026-10-14
 - **Pointer**: docs/plans/2026-10-13-review-only-external-candidate.md
-- **Context**: Add campaign digest to repair/<ticket>-repair; residue sweep for review-candidate-repair/; control for seed-write-before-terminalize; drop the seed when close fails; prompt says one repair round, contract allows 2.
+- **Context**: Campaign digest in repair/<ticket>-repair; sweep review-candidate-repair/; control seed-before-close; drop seed if close fails; prompt says 1 round, contract allows 2; preset first-run seed refusal untested.

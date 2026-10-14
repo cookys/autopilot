@@ -80,6 +80,11 @@ const range = {
     fs.writeFileSync(path.join(worktree, 'src', 'a.txt'), 'a\n');
     fs.writeFileSync(path.join(worktree, 'src', 'b.txt'), 'b\n');
   },
+  // BL-0154: two changed files, under the cap, so a later step can fully revert one of them.
+  two_files: () => {
+    fs.writeFileSync(path.join(worktree, 'src', 'a.txt'), 'a\n');
+    fs.writeFileSync(path.join(worktree, 'src', 'b.txt'), 'b\n');
+  },
   churn_warn: () => {
     fs.writeFileSync(path.join(worktree, 'src', 'value.txt'), `${'line\n'.repeat(60)}`);
   },
@@ -91,7 +96,7 @@ const range = {
 };
 const rangeKind = {
   out_of_scope: 'out_of_scope', file_cap: 'file_cap', churn_warn: 'churn_warn',
-  marker_committed: 'marker_committed',
+  marker_committed: 'marker_committed', two_files: 'two_files',
 }[scenario] || 'ok';
 let head = null;
 if (!isImplControl) {
@@ -465,6 +470,12 @@ for (const stepSpec of (ctx.steps || [])) {
     fs.writeFileSync(path.join(worktree, 'src', 'value.txt'), `sideways-${stepsOut.length}\n`);
     git(worktree, 'add', '-A');
     git(worktree, 'commit', '-qm', 'rewritten history');
+    currentHead = git(worktree, 'rev-parse', 'HEAD');
+  } else if (stepSpec.move === 'revert_one') {
+    // BL-0154: a follow-up that fully reverts one file of the range (the cumulative base..head
+    // changed-file count shrinks) while keeping the other.
+    git(worktree, 'rm', '-q', 'src/b.txt');
+    git(worktree, 'commit', '-qm', 'revert b');
     currentHead = git(worktree, 'rev-parse', 'HEAD');
   } else if (stepSpec.move === 'noop_commit') {
     // A descendant commit that leaves the tree identical.

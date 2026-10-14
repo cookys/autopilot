@@ -105,6 +105,11 @@ eq "0" "$(sf pk_side 0 review_calls_delta)" "return not-descendant: no review ca
 eq "AWAITING_DISPOSITION" "$(sf pk_side 0 campaign_phase)" "return not-descendant: the review stays parked (caller can still end it)"
 run_sc pk_same ",$FIX"',"steps":[{"continuation":"return"}]' ok
 eq "review_candidate_return_no_new_head" "$(sf pk_same 0 code)" "return: no new head is refused by name"
+# BL-0154: a return whose fix fully reverts one file shrinks the cumulative base..head file count (2 -> 1);
+# adoption must book a monotonic usage so the campaign's no-decrease check does not refuse it.
+run_sc pk_shrink ",$FIX"',"steps":[{"continuation":"return","move":"revert_one",'"$SHIP_ENV"'}]' two_files
+eq "converged" "$(sf pk_shrink 0 status)" "return after a file revert: accepted, not refused as BUDGET_RESET"
+eq "TERMINAL_READY" "$(sf pk_shrink 0 campaign_phase)" "return after a file revert: the SAME campaign reaches TERMINAL_READY"
 
 # ---- refusals ------------------------------------------------------------------------------------------------
 run_sc pk_bogus ",$FIX"',"steps":[{"continuation":"bogus"}]' ok

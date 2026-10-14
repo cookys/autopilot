@@ -1664,6 +1664,15 @@ function campaignAdmissionAdvisories(contract) {
   return advisories;
 }
 
+// One stderr line per admission advisory (the JSON result on stdout already carries them in
+// campaign_control.advisories; this makes them visible to a human reading the terminal).
+function formatCampaignAdvisories(control) {
+  const advisories = control && Array.isArray(control.advisories) ? control.advisories : [];
+  return advisories
+    .filter((a) => a && typeof a.code === 'string')
+    .map((a) => `ADVISORY ${a.code}: ${a.message || ''}`.trimEnd());
+}
+
 function buildNoEffectReceipt({ missionClaim, rejection, campaignDigest, now }) {
   const receipt = {
     schema_version: 1,
@@ -3216,6 +3225,7 @@ module.exports = {
   withStrandedClaim,
   buildNoEffectReceipt,
   campaignAdmissionAdvisories,
+  formatCampaignAdvisories,
   buildQcPanelSnapshot,
   resolveReviewStation,
   qcPanelSnapshotIdentityBody,

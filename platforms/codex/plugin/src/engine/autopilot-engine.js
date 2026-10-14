@@ -11137,6 +11137,7 @@ class AutopilotEngine {
 
     for (let round = 1; round <= maxRounds; round += 1) {
       const implementationBudgetAt = this.now();
+      // First-pass call (no `repair` option). See the AWAITING_CONVERGENCE_ADJUDICATION note at REPAIR_RESUME_PHASES.
       const implementationBudget = campaignMutationBudgetStatus(
         campaignControl,
         implementationBudgetAt,

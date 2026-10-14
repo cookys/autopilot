@@ -19,6 +19,7 @@ const {
   compileCampaignDispositionProvider,
   loadCampaignDispositionAuthority,
 } = require('../src/engine');
+const { formatCampaignAdvisories } = require('../src/engine/campaign-intake');
 const {
   devFlowAdmissionRejection,
   validateManagedDevFlowAdmission,
@@ -605,6 +606,7 @@ if (args[0] === 'engine') {
           : parsed);
       // Stage graph (plan §2.7 writers): the per-deliverable review converged = that unit's `verify`. Fail-open.
       if (!reviewCandidateMode) implementReviewEngine.stageVerifyOnConverge(result);
+      for (const line of formatCampaignAdvisories(result.campaign_control)) process.stderr.write(`${line}\n`);
       process.stdout.write(`${JSON.stringify(result)}\n`);
       process.exit(result.status === 'converged' ? 0 : 1);
     }

@@ -62,6 +62,11 @@ const NON_SUCCESS_DURABLE_STATES = new Set([
 // The first pass (PREPARED / IMPLEMENTING) keeps `>=`: nothing is written yet, so a spent budget
 // leaves no room for a first write. ONE predicate for src/campaign/cli.js, campaign-intake.js and
 // campaignMutationBudgetStatus so the three cannot drift again.
+// AWAITING_CONVERGENCE_ADJUDICATION is deliberately NOT listed (kept on `>=`): no evidence yet shows its
+// resume can authorize another repair round, and the engine call site that would reach it
+// (campaignMutationBudgetStatus before implementation dispatch, no `repair` option) is dead for an admitted
+// campaign (a non-admitted control exits early in that function). The real `>=` decision is this set, used by
+// cli.js and campaign-intake.js. To let that phase repair, add it HERE; do not special-case a call site.
 const REPAIR_RESUME_PHASES = new Set([
   CAMPAIGN_STATES.BOUNDARY_REJECTED,
   CAMPAIGN_STATES.VERTICAL_VERIFICATION,

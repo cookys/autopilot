@@ -138,6 +138,20 @@ wait
 STATE6="$(cat "$AUTOPILOT_FOREMAN_GUARD_DIR"/fg-test-session-agent-6.json)"
 assert_contains "$STATE6" '"bash_calls":12' "12 parallel calls counted exactly 12 (lock, no lost increment)"
 [ -e "$AUTOPILOT_FOREMAN_GUARD_DIR"/fg-test-session-agent-6.json.lock ] && fail "lock file leaked" || assert_eq ok ok "lock released"
+# BL-0137: a held lock is waited out by sleeping, not spinning. Fresh (<5 s) lock file ⇒ the hook
+# waits its 2 s deadline then fails open. user+sys CPU must stay well under wall-clock time.
+reset_state
+set_marker l4
+: > "$AUTOPILOT_FOREMAN_GUARD_DIR"/fg-test-session-agent-8.json.lock
+LOCK_TIMING="$( { TIMEFORMAT='%U %S %R'; time HOME="$HOOK_HOME" TMPDIR="$HOOK_TMPDIR" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" node "$HOOKS_DIR/foreman-guard.js" >/dev/null 2>&1 <<< "$(bash_payload agent-8 'echo waited')"; } 2>&1 | tail -1 )"
+read -r LOCK_U LOCK_S LOCK_R <<< "$LOCK_TIMING"
+if awk -v u="$LOCK_U" -v s="$LOCK_S" -v r="$LOCK_R" 'BEGIN{exit !(r >= 1.5 && (u + s) < r / 2)}'; then
+  assert_eq ok ok "held lock: waited the timeout without spinning (cpu ${LOCK_U}+${LOCK_S}s, wall ${LOCK_R}s)"
+else
+  fail "held lock: waiting burned CPU (cpu ${LOCK_U}+${LOCK_S}s, wall ${LOCK_R}s)"
+fi
+assert_contains "$(cat "$AUTOPILOT_FOREMAN_GUARD_DIR"/fg-test-session-agent-8.json)" '"bash_calls":1' "timeout fails open: the call is still counted"
+rm -f "$AUTOPILOT_FOREMAN_GUARD_DIR"/fg-test-session-agent-8.json.lock
 unset AUTOPILOT_FOREMAN_GUARD_BASH_CAP
 
 # ── 5. modes ───────────────────────────────────────────────────────────

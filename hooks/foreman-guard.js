@@ -434,6 +434,11 @@ function maybeGcStateDir() {
 // Exclusive-create lock around load→modify→save so parallel PreToolUse invocations
 // (a foreman fanning out, or a retry storm) never lose an increment (review round 1,
 // gpt-5.6-sol). Stale locks (>5 s) are broken — a guard must never wedge on its own state.
+// BL-0137: synchronous sleep for withLock's retry gap. Atomics.wait parks the thread on a
+// private cell that nothing notifies, so it waits the full timeout without burning CPU.
+const SLEEP_CELL = new Int32Array(new SharedArrayBuffer(4));
+function sleepSync(ms) { Atomics.wait(SLEEP_CELL, 0, 0, ms); }
+
 function withLock(file, fn) {
   const lock = `${file}.lock`;
   const deadline = Date.now() + 2000;
@@ -449,8 +454,7 @@ function withLock(file, fn) {
         if (age > 5000) { fs.unlinkSync(lock); continue; }
       } catch { /* vanished */ }
       if (Date.now() > deadline) return fn(); // fail-open: count without the lock rather than block
-      const until = Date.now() + 15;
-      while (Date.now() < until) { /* spin briefly */ }
+      sleepSync(15); // synchronous sleep (BL-0137): no CPU burn while the holder finishes
     }
   }
 }

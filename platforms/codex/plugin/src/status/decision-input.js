@@ -9,7 +9,8 @@
 // not from the future (beyond a small slack); the others are ignored.
 // Age never hides a question (expiry warns, never blocks): older than STALE_MS only sets `stale: true`; `age_s` is always given.
 // Only `open-decision.js close --id` removes a question. Anything else is ignored.
-// Orphan (BL-0163): a question the ask-decision hook opened (`origin: ask_user_question`) whose asking session left no turn file under
+// Orphan (BL-0163): a question the ask-decision hook opened (`origin: ask_user_question`, `turn_tracked: true` = the asker's turn file existed at open time;
+// turn tracking has its own knob, so without the flag a missing file proves nothing) whose asking session left no turn file under
 // <liveBase>/turn/ is `orphaned: true` — SessionEnd removes that file and answers close the entry, so an entry that outlived both
 // was left by a session that died without a clean end (or by a wiped live dir). Derived from the session's own artefact, never from age.
 // It only labels: the entry stays listed until `open-decision.js close --id`. Not judged (false) when no entry names a session, the entry is
@@ -36,7 +37,7 @@ const ASK_ORIGIN = 'ask_user_question';
 
 // True when the hook-opened entry's asking session has no turn file under <liveBase>/turn (see header). Fail-safe: false when it cannot be judged.
 function sessionGone(e, liveBase) {
-  if (e.origin !== ASK_ORIGIN || typeof e.opened_by_session !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(e.opened_by_session)) return false;
+  if (e.origin !== ASK_ORIGIN || e.turn_tracked !== true || typeof e.opened_by_session !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(e.opened_by_session)) return false;
   if (typeof liveBase !== 'string' || !liveBase) return false;
   try {
     if (!fs.statSync(liveBase).isDirectory()) return false;

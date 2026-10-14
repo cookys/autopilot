@@ -179,7 +179,7 @@ function main(argv) {
 // lock + atomic-rename path as `open`; another entry is never touched. `origin` (e.g. "ask_user_question") marks which hook
 // opened it; the CLI never sets it. `options` = [{label, description}] (>= 2) or null.
 // Returns { status: 'ok'|'error', id, file, scope_key, message }.
-function openDecision({ cwd, root, session, question, background, options, recommendation, why, blocks, not_authorized, source, origin }) {
+function openDecision({ cwd, root, session, question, background, options, recommendation, why, blocks, not_authorized, source, origin, turn_tracked }) {
   const sf = scopeFile(cwd, root);
   if (!sf) return { status: 'error', message: 'not inside a git repository' };
   const entry = {
@@ -192,6 +192,7 @@ function openDecision({ cwd, root, session, question, background, options, recom
     opened_at: new Date().toISOString(), opened_by_session: session || null,
   };
   if (origin) entry.origin = origin;
+  if (turn_tracked === true) entry.turn_tracked = true; // the asker's turn file existed at open time (hooks/ask-decision.js): only then is its absence later evidence the session ended
   try {
     fs.mkdirSync(sf.dir, { recursive: true, mode: 0o700 });
     return withWriteLock({ storeDir: sf.dir, lockFile: `${sf.file}.lock`, name: path.basename(sf.file), timeoutMs: 5000 }, () => {

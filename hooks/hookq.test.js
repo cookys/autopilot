@@ -533,12 +533,13 @@ test('BL-0163 close on a repo that never opened a decision creates no decisions/
 test('BL-0163 orphan: a hook-opened question whose asker left no turn file is orphaned (derived, not by age); live, hand-opened or unjudgeable ones are not; nothing is removed', () => {
   const e = mkEnv(); const repo = mkRepo();
   marker(e, 'sess-o1', 'job-o'); marker(e, 'sess-o2', 'job-o');
+  const turn = (sid) => { fs.mkdirSync(path.join(e.live, 'turn'), { recursive: true }); fs.writeFileSync(path.join(e.live, 'turn', `${sid}.json`), JSON.stringify({ schema: 'autopilot.session-turn/1', session_id: sid, state: 'active' })); };
+  turn('sess-o1'); turn('sess-o2'); // both askers have a turn file when they open: their entries are turn_tracked
   run(ASK, pre(repo, 'sess-o1', [q('Alive asks?', ['a', 'b'])]), e.env);
   run(ASK, pre(repo, 'sess-o2', [q('Dead asks?', ['a', 'b'])]), e.env);
   const hand = spawnSync('node', [OPEN, 'open', '--question', 'By hand', '--cwd', repo, '--root-run-id', 'job-o'], { encoding: 'utf8', env: { ...e.env, AUTOPILOT_SESSION_ID: 'sess-o3' } });
   assert.strictEqual(hand.status, 0, hand.stderr);
-  const turn = (sid) => { fs.mkdirSync(path.join(e.live, 'turn'), { recursive: true }); fs.writeFileSync(path.join(e.live, 'turn', `${sid}.json`), JSON.stringify({ schema: 'autopilot.session-turn/1', session_id: sid, state: 'active' })); };
-  turn('sess-o1'); // sess-o1 is alive (its turn file is there); sess-o2 and the hand-opening sess-o3 have none
+  fs.rmSync(path.join(e.live, 'turn', 'sess-o2.json')); // sess-o1 stays alive; sess-o2's turn file is gone (it ended); the hand-opening sess-o3 never had one
   const { scopeFromCwd } = require(path.join(ROOT, 'src', 'status', 'project-key.js'));
   const { commonDirOf } = require(path.join(ROOT, 'src', 'status', 'scope-key.js'));
   const { readDecision } = require(path.join(ROOT, 'src', 'status', 'decision-input.js'));
@@ -561,6 +562,32 @@ test('BL-0163 orphan: a hook-opened question whose asker left no turn file is or
   assert.strictEqual(w1.assemble.decision.value.filter((d) => d.orphaned).length, 1);
   turn('sess-o2');
   assert.notStrictEqual(wi(e.live).signature, w1.signature, 'the signature changes when an entry stops being orphaned');
+});
+
+test('BL-0163 turn_tracked: no turn file at open (awaiting-owner off) -> never orphaned; turn file at open then deleted -> orphaned; an entry without the field (old format) -> never orphaned', () => {
+  const e = mkEnv(); const repo = mkRepo();
+  marker(e, 'sess-t1', 'job-t'); marker(e, 'sess-t2', 'job-t');
+  run(ASK, pre(repo, 'sess-t1', [q('No tracking?', ['a', 'b'])]), e.env); // (a) no turn file exists at open
+  fs.mkdirSync(path.join(e.live, 'turn'), { recursive: true });
+  fs.writeFileSync(path.join(e.live, 'turn', 'sess-t2.json'), JSON.stringify({ schema: 'autopilot.session-turn/1', session_id: 'sess-t2', state: 'active' }));
+  run(ASK, pre(repo, 'sess-t2', [q('Tracked?', ['a', 'b'])]), e.env); // (b) a turn file exists at open
+  const byQ = (q2) => allEntries(repo).find((x) => x.question === q2);
+  assert.ok(!('turn_tracked' in byQ('No tracking?')), 'no turn file at open: no field');
+  assert.strictEqual(byQ('Tracked?').turn_tracked, true);
+  // (c) an old-format entry: origin + session, no turn_tracked field
+  const file = path.join(decDir(repo), decFiles(repo)[0]);
+  const doc = readJ(file);
+  doc.decisions.push({ ...byQ('Tracked?'), id: 'd-0ld0ld01', question: 'Old format?', opened_by_session: 'sess-t3' });
+  delete doc.decisions[doc.decisions.length - 1].turn_tracked;
+  fs.writeFileSync(file, JSON.stringify(doc));
+  const { scopeFromCwd } = require(path.join(ROOT, 'src', 'status', 'project-key.js'));
+  const { commonDirOf } = require(path.join(ROOT, 'src', 'status', 'scope-key.js'));
+  const { readDecision } = require(path.join(ROOT, 'src', 'status', 'decision-input.js'));
+  const sc = scopeFromCwd(repo);
+  const orph = () => Object.fromEntries(readDecision({ commonDir: commonDirOf(sc.repo_identity), key: sc.project_key, root: 'job-t', identity: sc.repo_identity, nowMs: Date.now(), liveBase: e.live }).value.map((d) => [d.question, d.orphaned]));
+  assert.deepStrictEqual(orph(), { 'No tracking?': false, 'Tracked?': false, 'Old format?': false }, 'sess-t2 still has its turn file');
+  fs.rmSync(path.join(e.live, 'turn', 'sess-t2.json'));
+  assert.deepStrictEqual(orph(), { 'No tracking?': false, 'Tracked?': true, 'Old format?': false }, 'only the entry that saw a turn file at open is orphaned once it is gone');
 });
 
 test('hygiene: nothing of this run survives teardown (detached writers stopped, dirs removed)', () => {

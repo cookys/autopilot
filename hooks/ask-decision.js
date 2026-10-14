@@ -9,6 +9,7 @@
  * (a subagent never opens one). question = the first question's text (`（共 N 題）` appended when several),
  * options = its option labels + descriptions (>= 2, else null), source = "depth-0 AskUserQuestion", root = this session's
  * marker root (plain-inclusive record, unexpired), opened_by_session = the normalised session id, `origin: "ask_user_question"`.
+ * `turn_tracked: true` is added when this session's `<live>/turn/<sid>.json` exists at open time (the watcher then reads a later missing file as "session ended").
  * Written through scripts/open-decision.js openDecision() (library call, same lock + atomic rename). It APPENDS an entry: no
  * other entry of the scope (hand-opened or another session's) is ever overwritten. Only this session's own earlier, still
  * unanswered entry (the pointer below) is superseded by the new question.
@@ -75,9 +76,13 @@ function onPreToolUse(p) {
   const session = normSession(p.session_id);
   closeOwn(p); // this session's earlier unanswered question is superseded; nobody else's entry is touched
   const { openDecision } = require('../scripts/open-decision.js');
+  // turn tracking is a separate hook (awaiting-owner, own knob): record whether this session's turn file exists NOW, so a later
+  // missing file only counts as "session ended" for an entry that saw it present (src/status/decision-input.js sessionGone)
+  let turnTracked = false;
+  try { const tf = L.sessionFile(p, 'turn'); turnTracked = !!tf && require('fs').existsSync(tf); } catch { /* unknown: not tracked */ }
   const r = openDecision({
     cwd: p.cwd, root: markerRoot(p.session_id), session, question: q.question, options: q.options,
-    source: SOURCE_TEXT, origin: SOURCE,
+    source: SOURCE_TEXT, origin: SOURCE, turn_tracked: turnTracked,
   });
   if (r.status !== 'ok') { L.failOpen('ask-decision', new Error(r.message)); return; }
   L.atomicWriteJson(L.sessionFile(p, 'ask-decision'), { schema: 'autopilot.ask-decision/2', decision_file: r.file, decision_id: r.id, opened_by_session: session });

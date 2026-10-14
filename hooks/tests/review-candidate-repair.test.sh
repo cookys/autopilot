@@ -156,6 +156,19 @@ run_in "$MC" mp7b ",$FIX"',"steps":[{"continuation":"return","move":"forward","e
 eq "true" "$(jf mp7b 'j.steps[1].handoff && j.steps[1].handoff.base_sha === j.first_head')" "MUTATION cross-check removed: a seed based on the stale sealed head escapes (red)"
 restore "$ENG"
 
+# P9 preset repair on the FIRST run (BL-0155): a seed that is refused must not terminalize or emit a hand-off
+mut "$SEED" "seed.base_sha = reviewedHead;" "seed.base_sha = adoptionContract.base_sha;"
+run_in "$MC" mp9 ",$FIX"',"preset":"repair"' ok
+eq "review_candidate_repair_seed_base_mismatch" "$(jf mp9 'j.code')" "preset repair first run: a wrongly-based seed is refused by name"
+eq "null" "$(jf mp9 'j.handoff')" "preset repair first run: a refused seed emits no hand-off"
+eq "AWAITING_DISPOSITION" "$(jf mp9 'j.campaign_phase')" "preset repair first run: a refused seed leaves the review parked"
+mut "$SEED" "if (seed.base_sha !== reviewedHead) {" "if (false) {"
+run_in "$MC" mp9b ",$FIX"',"preset":"repair"' ok
+eq "true" "$(jf mp9b 'j.handoff && j.handoff.base_sha !== j.first_head')" "MUTATION both removed on the preset path: the wrong-based hand-off escapes (red)"
+restore "$SEED"
+run_in "$MC" mp9r ",$FIX"',"preset":"repair"' ok
+eq "review_candidate_disposition_repair" "$(jf mp9r 'j.code')" "MUTATION restored: the preset repair closes with the repair code again (green)"
+
 # P8 closeOnly covers repair: the repair close skips the repair-round wall check like end (review fix 3)
 run_sc rp_wall ",$FIX"',"steps":[{"mustFixAuthority":100000,"continuation":"repair"}]' ok
 eq "review_candidate_disposition_repair" "$(sf rp_wall 0 code)" "repair with too little wall left for a repair round still closes with the repair code"

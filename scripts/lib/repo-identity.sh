@@ -147,7 +147,7 @@ manifest_child_session_json() {
 # ccshim_keep_transcript <scratch-home> <run-id> -- dispatch-tree 3c (D3). Called just before a cc-shim rail
 # removes its scratch HOME: copies <scratch>/.claude/projects/*/<child_session_id>.jsonl to
 # <runs>/<run_id>.child-transcript.jsonl and sets CHILD_TRANSCRIPT_PATH (empty on any failure). Best-effort:
-# always returns 0, so a failed copy can never change the run's status.
+# always returns 0, so a failed copy can never change the run's status. A symlink source is skipped; the copy is 0600.
 ccshim_keep_transcript() {
   CHILD_TRANSCRIPT_PATH=""
   local scratch="${1:-}" rid="${2:-}" dir src dest safe
@@ -155,9 +155,12 @@ ccshim_keep_transcript() {
   dir="${AUTOPILOT_DISPATCH_RUNS_DIR:-${TMPDIR:-/tmp}/autopilot-dispatch-runs}"
   safe="$(printf '%s' "$rid" | tr -c 'A-Za-z0-9._-' '-')"
   src="$(ls -1 "$scratch"/.claude/projects/*/"$CHILD_SESSION_ID".jsonl 2>/dev/null | head -1)" || src=""
-  [ -n "$src" ] && [ -f "$src" ] || return 0
+  # A symlink source is never followed (a prompt-injected child could point it at any readable file).
+  [ -n "$src" ] && [ -f "$src" ] && [ ! -L "$src" ] || return 0
   dest="$dir/${safe}.child-transcript.jsonl"
-  { mkdir -p "$dir" && cp -f "$src" "$dest.tmp.$$" && mv -f "$dest.tmp.$$" "$dest"; } 2>/dev/null \
+  # umask 077 + chmod 600 on the temp file BEFORE the rename: the transcript is never visible world-readable.
+  { mkdir -p "$dir" && rm -f "$dest.tmp.$$" && (umask 077; cp "$src" "$dest.tmp.$$") && chmod 600 "$dest.tmp.$$" \
+      && mv -f "$dest.tmp.$$" "$dest"; } 2>/dev/null \
     && CHILD_TRANSCRIPT_PATH="$dest" || rm -f "$dest.tmp.$$" 2>/dev/null
   return 0
 }

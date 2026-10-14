@@ -42,7 +42,18 @@ cat >/dev/null
 echo "ok"
 exit 0
 EOS
-chmod +x "$BINDIR/claude" "$BINDIR/claude-silent"
+# symlink stub: the child's transcript is a symlink to another readable file (prompt-injection shape).
+cat > "$BINDIR/claude-symlink" <<'EOS'
+#!/usr/bin/env bash
+sid=""; while [ $# -gt 0 ]; do [ "$1" = "--session-id" ] && sid="$2"; shift; done
+cat >/dev/null
+mkdir -p "$HOME/.claude/projects/-scratch"
+echo SECRET > "$HOME/secret.txt"
+ln -s "$HOME/secret.txt" "$HOME/.claude/projects/-scratch/$sid.jsonl"
+echo "ok"
+exit 0
+EOS
+chmod +x "$BINDIR/claude" "$BINDIR/claude-silent" "$BINDIR/claude-symlink"
 PROMPT="$TEST_TMP/prompt.txt"; echo "say ok" > "$PROMPT"
 DIFF="$TEST_TMP/d.diff"; printf '+x\n' > "$DIFF"
 
@@ -56,9 +67,11 @@ run_case() { # <runs> <cmd...>
       ANTHROPIC_BASE_URL=http://127.0.0.1:9 ANTHROPIC_AUTH_TOKEN=test PATH="$BINDIR:$PATH" "$@" >/dev/null 2>&1 ) || true
 }
 
-declare -A CMD_W CMD_S
+declare -A CMD_W CMD_S CMD_L
 CMD_W[author]="$AUTHOR --runner cc-shim --model MiniMax-M3 --prompt-file $PROMPT --bin $BINDIR/claude"
 CMD_S[author]="$AUTHOR --runner cc-shim --model MiniMax-M3 --prompt-file $PROMPT --bin $BINDIR/claude-silent"
+CMD_L[author]="$AUTHOR --runner cc-shim --model MiniMax-M3 --prompt-file $PROMPT --bin $BINDIR/claude-symlink"
+CMD_L[review]="$REVIEW --runner cc-shim --model MiniMax-M3 --endpoint TESTEP --diff-file $DIFF --bin $BINDIR/claude-symlink"
 CMD_W[review]="$REVIEW --runner cc-shim --model MiniMax-M3 --endpoint TESTEP --diff-file $DIFF --bin $BINDIR/claude"
 CMD_S[review]="$REVIEW --runner cc-shim --model MiniMax-M3 --endpoint TESTEP --diff-file $DIFF --bin $BINDIR/claude-silent"
 
@@ -73,6 +86,7 @@ for rail in author review; do
   eq "$runs/${rid}.child-transcript.jsonl" "$ct" "$rail: child_transcript is <runs>/<run_id>.child-transcript.jsonl"
   if [ -f "$ct" ]; then eq "$KNOWN" "$(cat "$ct")" "$rail: the kept file holds exactly the bytes the child wrote"; else fail "$rail: kept transcript missing: $ct"; fi
   W_STATUS="$(mf_get "$mf" final_status)"
+  eq "600" "$(stat -c %a "$ct")" "$rail: the kept transcript is mode 600"
   leftover="$(find "$TMPDIR" -maxdepth 1 -name "dispatch-$rail-ccshimcwd-*" 2>/dev/null | head -1)"
   eq "" "$leftover" "$rail: the scratch HOME is gone"
 
@@ -84,6 +98,15 @@ for rail in author review; do
   eq "<null>" "$(mf_get "$mf" child_transcript)" "$rail: stub writes nothing -> child_transcript null"
   eq "0" "$(find "$runs" -name '*.child-transcript.jsonl' | wc -l | tr -d ' ')" "$rail: no transcript file created when none written"
   eq "$W_STATUS" "$(mf_get "$mf" final_status)" "$rail: run status identical with and without a transcript"
+
+  runs="$TEST_TMP/runs-$rail-l"
+  # shellcheck disable=SC2086
+  run_case "$runs" ${CMD_L[$rail]}
+  mf="$(one_manifest "$runs")"
+  [ -n "$mf" ] || { fail "$rail/symlink: no manifest"; continue; }
+  eq "<null>" "$(mf_get "$mf" child_transcript)" "$rail: symlink source -> child_transcript null"
+  eq "0" "$(find "$runs" -name '*.child-transcript.jsonl*' | wc -l | tr -d ' ')" "$rail: symlink source is not copied"
+  eq "$W_STATUS" "$(mf_get "$mf" final_status)" "$rail: run status identical with a symlink source"
 done
 
 finalize_test

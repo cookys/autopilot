@@ -52,7 +52,7 @@ case "$ROLE" in
   verification_author) mode=va;       tc=verification_authoring;;
   consult)             mode=consult;  tc=consult; extra=(--execute);;
   discuss)             mode=discuss;  tc=discuss; extra=(--execute);;
-  brain)               mode=brain;    tc=brain-seat; emit=0;;
+  brain)               mode=brain;    tc=brain-seat;;   # emit-row on (owner 2026-10-14); note the row lacks capability_score/cost/expires so `record` rejects it
   *) say "unsupported role $ROLE"; fin 2;;
 esac
 [ "$emit" = 1 ] && extra+=(--emit-row)

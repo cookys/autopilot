@@ -33,9 +33,7 @@ for c in $CELLS; do
   done
   [ "$credfail" = 1 ] && continue
   if cat "$d/stderr.log" "$d/stdout.json" "$d/emit-row.json" 2>/dev/null | grep -q 'wall_truncated":true'; then note "cell $l $r WALL_TRUNCATED"; fi
-  if [ "$r" = brain ]; then
-    note "cell $l $r brain verdict (evidence store, no scorecard row): $(head -c 420 "$d/stdout.json" | tr '\n' ' ')"
-  elif [ -s "$d/emit-row.json" ] && node -e 'JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"))' "$d/emit-row.json" 2>/dev/null; then
+  if [ -s "$d/emit-row.json" ] && node -e 'JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"))' "$d/emit-row.json" 2>/dev/null; then
     ( cd "$REPO" && node scripts/engine-scorecard.js record --file "$d/emit-row.json" > "$d/record-out.json" 2> "$d/record-err.log" ); rrc=$?
     note "cell $l $r RECORDED rc=$rrc event=$(grep -o '"event_id":[0-9]*' "$d/record-out.json" | head -1) summary=$(node -e 'const r=require(process.argv[1]);console.log(JSON.stringify(r.quality||{}).slice(0,300),r.status)' "$d/emit-row.json" 2>/dev/null)"
   else

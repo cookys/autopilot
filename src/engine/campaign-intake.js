@@ -1146,6 +1146,7 @@ function defaultGenerationClaim({
   repairRoundEstimateSeconds,
   missionBinding,
   reviewCandidate = false,
+  closeOnly = false,
 }) {
   let existing = null;
   let ledgerRows = [];
@@ -1329,7 +1330,8 @@ function defaultGenerationClaim({
     }
     // An adopted range has no writer-fenced git candidate to re-verify: the adoption admission the
     // caller already ran re-derived the head from the repository (RO3), so there is nothing else to bind.
-    if (reviewCandidate && existing.state.phase === CAMPAIGN_STATES.ADJUDICATING) {
+    // closeOnly (an end continuation) only terminalizes: it never resumes the review, so no phase blocks it.
+    if (reviewCandidate && !closeOnly && existing.state.phase === CAMPAIGN_STATES.ADJUDICATING) {
       return rejected(
         'campaign_generation',
         'review_candidate_resume_phase_unsupported',
@@ -1355,7 +1357,7 @@ function defaultGenerationClaim({
         );
       }
     }
-    if (existing.state.phase === CAMPAIGN_STATES.ADJUDICATING) {
+    if (existing.state.phase === CAMPAIGN_STATES.ADJUDICATING && !closeOnly) {
       const reviewReference = existing.last_artifact_reference;
       if (!reviewReference
           || reviewReference.kind !== 'product_review'
@@ -2947,14 +2949,16 @@ function runCampaignIntake(input = {}, adapters = {}) {
         `unknown continuation ${JSON.stringify(flag)}: choose end or return`,
       ));
     }
-    if (flag !== null && facts && !parked) {
+    // end closes ANY non-terminal review-only campaign (a crash between verdict and park, a branch that
+    // moved under an interrupted review); the other continuations need the parked state.
+    if (flag !== null && facts && !parked && flag !== 'end') {
       return releaseAfterRejection(rejected(
         'campaign_generation',
         'review_candidate_continuation_not_parked',
         `--campaign-continuation closes a parked review; this campaign is ${facts.phase}`,
       ));
     }
-    const continuation = parked ? (flag || preset) : null;
+    const continuation = parked ? (flag || preset) : (facts && flag === 'end' ? 'end' : null);
     if (parked && continuation === null) {
       return releaseAfterRejection(rejected(
         'campaign_generation',
@@ -3141,6 +3145,7 @@ function runCampaignIntake(input = {}, adapters = {}) {
       campaignDispositionAuthority: input.campaignDispositionAuthority,
       repairRoundEstimateSeconds: input.repairRoundEstimateSeconds,
       ...(input.reviewCandidate === true ? { reviewCandidate: true } : {}),
+      ...(reviewCandidateContinuation && reviewCandidateContinuation.continuation === 'end' ? { closeOnly: true } : {}),
       missionBinding: missionClaim.status === 'claimed' && typeof missionClaim.claim_id === 'string'
         ? { claim_id: missionClaim.claim_id, campaign_id: missionClaim.campaign_id }
         : null,

@@ -128,7 +128,7 @@
         "head_sha": { "type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$" },
         "author_family": { "type": "string", "minLength": 1, "maxLength": 64 },
         "disposition_preset": {
-          "description": "Caller's choice for a parked review, decided ahead of time so a caller with no human present is not left waiting. end terminalizes not-ready at the park with the findings listed; return keeps the park and waits for a descendant head; repair is not provided yet and is refused at admission.",
+          "description": "Caller's choice for a parked review, decided ahead of time so a caller with no human present is not left waiting. end terminalizes not-ready at the park with the findings listed; return keeps the park and waits for a descendant head; repair is not provided yet: the checker rejects it when the contract is sealed (review_candidate_repair_not_provided), before any review runs.",
           "enum": ["end", "return", "repair"]
         }
       }

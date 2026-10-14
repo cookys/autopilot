@@ -399,6 +399,18 @@ const stepsOut = [];
 let currentHead = head;
 for (const stepSpec of (ctx.steps || [])) {
   try { killLease(); } catch (_e) { /* surfaced by the step itself */ }
+  // dropEvents: simulate a crash by deleting journaled campaign events (e.g. the park) from the ledger.
+  if (Array.isArray(stepSpec.dropEvents) && stepSpec.dropEvents.length > 0) {
+    const kept = fs.readFileSync(ledgerPath, 'utf8').split('\n').filter((line) => {
+      if (!line) return false;
+      try {
+        const row = JSON.parse(line);
+        if (row.op !== 'campaign_event') return true;
+        return !stepSpec.dropEvents.includes(JSON.parse(row.payload).event.event_type);
+      } catch (_e) { return true; }
+    });
+    fs.writeFileSync(ledgerPath, `${kept.join('\n')}\n`);
+  }
   const stepEnv = stepSpec.env || {};
   process.env.RC_VERDICT = stepEnv.RC_VERDICT || 'ship';
   process.env.RC_FAIL_MODEL = stepEnv.RC_FAIL_MODEL || '';

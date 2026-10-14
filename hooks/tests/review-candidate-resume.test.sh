@@ -45,8 +45,26 @@ eq "1" "$(sf ia 0 review_calls_delta)" "interrupted review: only the lost seat i
 eq "gpt-5.4" "$(sf ia 0 'review_models_delta[0]')" "interrupted review: the seat asked again is the one that failed"
 eq "TERMINAL_READY" "$(sf ia 0 campaign_phase)" "interrupted review: the campaign projects TERMINAL_READY"
 run_sc ia_flag ',"failModel":"gpt-5.4","steps":[{"continuation":"end"}]' ok
-eq "review_candidate_continuation_not_parked" "$(sf ia_flag 0 code)" "a continuation flag on a review that is not parked is refused by name"
-eq "0" "$(sf ia_flag 0 review_calls_delta)" "a refused continuation flag spends no review call"
+eq "review_candidate_disposition_end" "$(sf ia_flag 0 code)" "end on an interrupted (not parked) review closes it with the named code"
+eq "TERMINAL_STOP" "$(sf ia_flag 0 campaign_phase)" "end on an interrupted review: the campaign projects TERMINAL_STOP"
+eq "0" "$(sf ia_flag 0 review_calls_delta)" "end on an interrupted review spends no review call"
+run_sc ia_ret ',"failModel":"gpt-5.4","steps":[{"continuation":"return","move":"forward"}]' ok
+eq "review_candidate_continuation_not_parked" "$(sf ia_ret 0 code)" "return on a review that is not parked is still refused by name"
+
+# ---- a campaign no resume can move is closed by end (no dead state) -----------------------------------------------
+# crash between the verdict and the park: the park event is gone, the campaign sits in ADJUDICATING
+run_sc adj0 ",$FIX"',"steps":[{"dropEvents":["awaiting_disposition"],"resume":true}]' ok
+eq "review_candidate_resume_phase_unsupported" "$(sf adj0 0 code)" "ADJUDICATING crash: a plain --resume is still refused by name"
+run_sc adj1 ",$FIX"',"steps":[{"dropEvents":["awaiting_disposition"],"continuation":"end"}]' ok
+eq "review_candidate_disposition_end" "$(sf adj1 0 code)" "ADJUDICATING crash: end closes it with the named code"
+eq "TERMINAL_STOP" "$(sf adj1 0 campaign_phase)" "ADJUDICATING crash: end leaves a terminal campaign"
+eq "0" "$(sf adj1 0 review_calls_delta)" "ADJUDICATING crash: end spends no review call"
+# interrupted review, then the branch moved forward: resume is refused and the campaign stays in REVIEWING
+run_sc stk ',"failModel":"gpt-5.4","steps":[{"move":"forward"},{"continuation":"end"}]' ok
+eq "review_candidate_branch_moved" "$(sf stk 0 code)" "stuck REVIEWING: resume after the branch moved is refused by name"
+eq "REVIEWING" "$(sf stk 0 campaign_phase)" "stuck REVIEWING: the campaign is still non-terminal"
+eq "review_candidate_disposition_end" "$(sf stk 1 code)" "stuck REVIEWING: end closes it with the named code"
+eq "TERMINAL_STOP" "$(sf stk 1 campaign_phase)" "stuck REVIEWING: end leaves a terminal campaign"
 
 # ---- the parked review: end ---------------------------------------------------------------------------------
 run_sc pk ",$FIX" ok
@@ -95,8 +113,9 @@ eq "review_candidate_disposition_end" "$(sf pr_endr 0 code)" "preset end: an int
 run_sc pr_ret ",$FIX"',"preset":"return","steps":[{"move":"forward",'"$SHIP_ENV"'}]' ok
 eq "AWAITING_DISPOSITION" "$(jf pr_ret 'j.steps.length ? "AWAITING_DISPOSITION" : "x"')" "preset return: the first run parks (return needs a new head)"
 eq "converged" "$(sf pr_ret 0 status)" "preset return: a plain --resume with a new head returns without the flag"
-run_sc pr_rep ",$FIX"',"preset":"repair","steps":[{}]' ok
-eq "review_candidate_repair_not_provided" "$(sf pr_rep 0 code)" "preset repair is refused by name"
+run_sc pr_rep ",$FIX"',"preset":"repair"' ok
+assert_contains "$(jf pr_rep 'j.seal_error')" "review_candidate_repair_not_provided" "preset repair is rejected by name when the contract is sealed"
+eq "undefined" "$(jf pr_rep 'j.status')" "preset repair: the engine never ran, so no model call was made"
 run_sc pr_flag ",$FIX"',"preset":"end","steps":[{"continuation":"return","move":"forward",'"$SHIP_ENV"'}]' ok
 # preset end closes the first run, so the later flag meets a terminal campaign: a refusal, never a re-review
 eq "0" "$(sf pr_flag 0 review_calls_delta)" "the flag after a preset-ended review spends no review call"
@@ -158,7 +177,7 @@ eq "true" "$(jf m3 'j.steps[0].campaign_phase !== "TERMINAL_STOP"')" "MUTATION e
 restore "$ENG"
 
 # M4 preset ignored (resume path in intake, first-run path in the engine)
-mut "$INT" "const continuation = parked ? (flag || preset) : null;" "const continuation = parked ? (flag) : null;"
+mut "$INT" "const continuation = parked ? (flag || preset) : (facts && flag === 'end' ? 'end' : null);" "const continuation = parked ? (flag) : (facts && flag === 'end' ? 'end' : null);"
 mut "$ENG" "&& campaignControl.contract.adoption.disposition_preset === 'end') {" "&& false) {"
 run_in "$MC" m4 ",$FIX"',"preset":"return","steps":[{"move":"forward",'"$SHIP_ENV"'}]' ok
 eq "review_candidate_continuation_required" "$(jf m4 'j.steps[0].code')" "MUTATION preset ignored (resume): the preset return no longer applies (red)"
@@ -172,10 +191,27 @@ mut "$STO" "|| artifact.input_binding !== expect.inputBinding" "|| false"
 mut "$STO" "|| result.tree_sha !== expect.treeSha" "|| false"
 mut "$STO" "if (SHA256.test(expect.packetHash || '') && expect.packetHash !== result.packet_hash) {" "if (false) {"
 run_in "$MC" m5 ",$FIX"',"steps":[{"continuation":"return","move":"forward",'"$SHIP_ENV"'}]' ok
-eq "true" "$(jf m5 'j.steps[0].review_calls_delta !== 3')" "MUTATION always-reuse: a returned head reuses the old head's verdicts instead of 3 fresh reviews (red)"
+eq "0" "$(jf m5 'j.steps[0].review_calls_delta')" "MUTATION always-reuse: a returned head reuses all 3 old verdicts, so 0 fresh review calls instead of 3 (red)"
 restore "$STO"
 run_in "$MC" m5r ",$FIX"',"steps":[{"continuation":"return","move":"forward",'"$SHIP_ENV"'}]' ok
 eq "3" "$(jf m5r 'j.steps[0].review_calls_delta')" "MUTATION restored: the returned head is reviewed fresh again (green)"
+
+# M9 end no longer closes an ADJUDICATING campaign / a stuck REVIEWING one
+mut "$INT" "if (reviewCandidate && !closeOnly && existing.state.phase === CAMPAIGN_STATES.ADJUDICATING) {" "if (reviewCandidate && existing.state.phase === CAMPAIGN_STATES.ADJUDICATING) {"
+mut "$INT" "if (existing.state.phase === CAMPAIGN_STATES.ADJUDICATING && !closeOnly) {" "if (existing.state.phase === CAMPAIGN_STATES.ADJUDICATING) {"
+run_in "$MC" m9 ",$FIX"',"steps":[{"dropEvents":["awaiting_disposition"],"continuation":"end"}]' ok
+eq "true" "$(jf m9 'j.steps[0].campaign_phase !== "TERMINAL_STOP"')" "MUTATION end blocked on ADJUDICATING: the dead state is back (red)"
+restore "$INT"
+mut "$INT" "if (flag !== null && facts && !parked && flag !== 'end') {" "if (flag !== null && facts && !parked) {"
+run_in "$MC" m9b ',"failModel":"gpt-5.4","steps":[{"move":"forward"},{"continuation":"end"}]' ok
+eq "true" "$(jf m9b 'j.steps[1].campaign_phase !== "TERMINAL_STOP"')" "MUTATION end refused when not parked: a stuck REVIEWING campaign cannot be closed (red)"
+restore "$INT"
+
+# M10 seal-time rejection of a repair preset removed: the contract seals and a review would run
+mut "scripts/implementation-campaign-check.js" "} else if (adoption.disposition_preset === 'repair') {" "} else if (false) {"
+run_in "$MC" m10 ",$FIX"',"preset":"repair"' ok
+eq "true" "$(jf m10 'j.seal_status !== 3')" "MUTATION repair rejection removed: the repair preset is no longer rejected at seal (red)"
+restore "scripts/implementation-campaign-check.js"
 
 # M6 run-time quorum reverted to the old reading
 mut "$ENG" "const authorFamilyExcluded = input.reviewCandidate === true;" "const authorFamilyExcluded = false;"

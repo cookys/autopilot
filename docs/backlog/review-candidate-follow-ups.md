@@ -1,4 +1,4 @@
-# review-candidate follow-ups (BL-0146, BL-0155, BL-0173)
+# review-candidate follow-ups (BL-0146, BL-0155)
 
 Source: the review-only external candidate plan (BL-0090), archived 2026-10-15 at
 `docs/plans/_archive/2026/10/2026-10-13-review-only-external-candidate.md`; operator doc `docs/review-candidate.md`.
@@ -15,8 +15,3 @@ Source: the review-only external candidate plan (BL-0090), archived 2026-10-15 a
   is the caller's deliverable when the review-only campaign closes; options were (a) an age-based sweep with a
   tmp-residue registry kind, (b) the repair campaign deleting the seed directory it consumed, (c) leave it, and (c)
   was chosen on the owner's behalf on 2026-10-15.
-- **BL-0173 — a repair that fully reverts a file.** BL-0154 (merged 2026-10-15) books adoption `changed_files` as
-  `max(prior, cumulative)` so a review-candidate `return` no longer trips `BUDGET_RESET`; the monotonic check in
-  `implementation-campaign.js` is unchanged. The author repair checkpoint `after_repair_mutation`
-  (`autopilot-engine.js` ~:8783-8786 at the BL-0154 merge) still books the cumulative count, so the same refusal is
-  expected there; found by code reading in the BL-0154 review, not reproduced. Same fix shape applies.

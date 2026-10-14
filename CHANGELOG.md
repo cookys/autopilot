@@ -85,6 +85,7 @@
 
 ### 修正
 
+- **campaign 修復回合把檔案整個還原時不再被拒**（BL-0173）：修復檢查點記的 `changed_files` 和 `churn` 改成「上一輪已記值與本輪累積值取大者」，所以修正把某個檔案改回原樣、累積檔數或改動行數變少時，不會再被拒為 `BUDGET_RESET`。campaign 的單調檢查本身沒有放寬。改動行數已記到上限時，還原後的下一輪修復仍會被預算檢查擋下（修正前是直接被拒）。Codex 鏡像同步。
 - **資格考各科的原始作答檔，零筆時一律寫成空檔**（BL-0172）：`engine-qualify.js` 新增共用的 `rawRowsText`，七個原始作答檔都改用它。零筆時寫空檔，不再只寫一個換行；有資料時的內容和以前完全相同。Codex 鏡像同步。
 - **只審不寫的 campaign 重審時，修正把檔案整個還原不再被拒**（BL-0154）：adoption 記帳的 `changed_files` 改記「上一輪已記值與本輪累積數取大者」，所以修正把某個檔案改回原樣、累積檔案數變少時，`return` 不會再被拒為 `BUDGET_RESET`。campaign 的單調檢查本身沒有放寬。Codex 鏡像同步。
 - **資格考用量紀錄分得出被截斷的考試**（BL-0168）：usage 區塊多了 `n_cases_expected` 和 `cases_complete`，只有題數固定的 implementer 會填，其他科一律是 null；`validateUsageBlock` 會交叉檢查缺 token 題數、總耗時、每小時答對數和價格欄位彼此是否一致。舊的 row 照樣通過。

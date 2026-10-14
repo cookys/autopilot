@@ -1686,19 +1686,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: Missed: script run from a heredoc, write-then-run in one call, P=foo; pgrep -f "$P", xargs/eval/watch, \pkill. Over-blocked: [fF]oo, ^x, x\.py, -d ,. Fix: test RegExp(pattern) on the call's own text.
 
-### A repair that fully reverts a file may be refused as a budget reset
-- **Id**: BL-0173
-- **Status**: open
-- **Since**: 2026-10-15
-- **Origin**: self
-- **Problem**: 一般 campaign 的修復回合，如果修正把某個檔案整個改回原樣，累積的檔案數會變少，可能和只審不寫那條路徑一樣被拒絕為預算重設。
-- **Impact**: 推測：修復回合在這個情境會卡住，只能改用修改而不是還原。尚未實際重現。
-- **Trigger**: 有人回報修復回合被拒為 BUDGET_RESET，或下次改修復回合的記帳時
-- **Effort**: S
-- **Source**: BL-0154 review (code reading, not reproduced), 2026-10-15
-- **Pointer**: docs/backlog/review-candidate-follow-ups.md
-- **Context**: autopilot-engine.js ~:8783-8786 after_repair_mutation books receipt.changed_files.length (cumulative) while the campaign requires monotonic usage; BL-0154 fixed adoption only with a max() high-water mark.
-
 ### review-candidate repair branch numbering ignores remote branches
 - **Id**: BL-0155
 - **Status**: open

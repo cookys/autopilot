@@ -722,6 +722,8 @@ assert_eq "MiniMax-M3.1-Flash-Preview=minimax,gemini-3.8-flash=google" "$FAMS" "
 # usable when an endpoint for the engine is configured, and absent when none is.
 # -----------------------------------------------------------------------------
 rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$TOPOLOGY_OUT"
+# An ambient AUTOPILOT_ENDPOINT_* (a shell that exported one) would make the negative control red: scrub them first.
+for _v in $(compgen -e | grep "^AUTOPILOT_ENDPOINT_"); do unset "$_v"; done
 write_scorecard_row "GLM-5.3" "anthropic-compatible" "low" 10.0 "qualified" 2401 "reviewer" "zhipu"
 node "$SCRIPT" --json --role reviewer --out "$TOPOLOGY_OUT" >/dev/null 2>&1
 assert_eq "0" "$(node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).reviewer_ladder.length))' "$TOPOLOGY_OUT")" "Case 24 (negative control): no endpoint configured -> HTTP seat absent"

@@ -13,6 +13,10 @@
  * ADR-0001: topology facts are re-derived from installed binaries + scorecard,
  * never trusted from a feed or a prior receipt.
  *
+ * Persistent exclusions (topology.exclude_seats in the operator config) filter the ladders and panel only;
+ * judge, claude_fallback_ladder and operator pins are not filtered. HTTP seats (anthropic-compatible)
+ * depend on AUTOPILOT_ENDPOINT_*_URL in the calling environment, so --check can differ per shell.
+ *
  * Node >= 20, built-ins only.
  */
 
@@ -188,7 +192,9 @@ function usage(code = 2) {
     'Operator config (persistent exclusions, always applied, also by --check and --resolve-live):\n' +
     '  file: $AUTOPILOT_CONFIG_FILE or ~/.autopilot/config.json\n' +
     '  key:  { "topology": { "exclude_seats": ["gpt-5.6-sol/max@codex", "gpt-5.5-sol"] } }\n' +
-    '  A missing file or key is no exclusions; unparseable JSON or a wrong shape exits 1.\n'
+    '  A missing file or key is no exclusions; unparseable JSON or a wrong shape exits 1.\n' +
+    '  Exclusions apply to the ladders and the panel only; judge, claude_fallback_ladder and operator pins are not filtered (a pin wins in --resolve-live).\n' +
+    '  HTTP seats (anthropic-compatible) appear only when an AUTOPILOT_ENDPOINT_*_URL is in the environment at call time, so --check can differ between shells that did and did not load endpoints.env.\n'
   );
   process.exit(code);
 }

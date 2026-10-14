@@ -3536,8 +3536,13 @@ fs.rmSync(shortTmpBase, { recursive: true, force: true });
   // cost and expires so `engine-scorecard.js record` accepts a brain sitting. Same reasoning as
   // runQualification above — the pin names an old commit, and the brain path is now covered end to
   // end by scripts/engine-qualify-brain.test.js (record accepted; each missing field refused).
+  //
+  // runVaQualification left this list on 2026-10-14: every seat's row gained a per-case `usage`
+  // block and a `cost` derived from it (scripts/lib/qualification-usage.js), so the body can no
+  // longer be byte-identical to the pinned base. Grading is untouched (`solved` is read from the
+  // grader's own verdict, never recomputed); the VA path stays covered end to end by
+  // scripts/engine-qualify-va.test.js and the executable deep-equal half above.
   const fns = [
-    'runVaQualification',
     'ownerRuleViolations',
   ];
   for (const name of fns) {

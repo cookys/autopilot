@@ -1512,6 +1512,10 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
   });
   good.proc.kill();
   equal(okChild.status, 0, 'a completed Responses reply succeeds');
+  // Usage passthrough: reported counts reach the wire, an absent count stays null (never 0).
+  equal(JSON.parse(okChild.stdout).usage,
+    { input_tokens: null, output_tokens: 182, reasoning_tokens: 167, total_tokens: null },
+    'Responses usage is passed through; the count the stub did not report stays null');
   const sent = JSON.parse(fs.readFileSync(reqFile, 'utf8'));
   equal(sent.url, '/v1/responses', 'the Responses protocol posts to /v1/responses');
   check(sent.headers.authorization === 'Bearer stub-token',
@@ -1750,5 +1754,5 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(${JSON.stringify(ssePortFil
 }
 
 fs.rmSync(tempRoot, { recursive: true, force: true });
-if (assertions !== 292) throw new Error(`qualification-review-provider: expected exactly 292 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 293) throw new Error(`qualification-review-provider: expected exactly 293 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);

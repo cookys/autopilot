@@ -35,7 +35,7 @@ produce them.
 
 The contract is a JSON file in the closed `implementation-campaign-contract` format
 ([`schemas/implementation-campaign-contract.schema.json`](../schemas/implementation-campaign-contract.schema.json)),
-plus one extra section, `adoption`, that marks it review-only. The checker
+whose optional `adoption` section marks it review-only. The checker
 ([`scripts/implementation-campaign-check.js`](../scripts/implementation-campaign-check.js)) is the
 authority on what is legal; an unknown field anywhere is rejected.
 
@@ -43,9 +43,9 @@ authority on what is legal; an unknown field anywhere is rejected.
 
 | Rule | Value |
 |---|---|
-| `adoption.head_sha` | Required. Full object id (40 hex, or 64 on a sha256 repository), must exist in the repository and differ from `base_sha`. |
-| `adoption.author_family` | Optional, 1 to 64 characters. Names the model family that wrote the range. It can only tighten the panel: that family's seats do not count toward the required family count. |
-| `adoption.disposition_preset` | Optional, `end` or `return`. Applies your choice to a parked review without waiting (section 6). `repair` is rejected at seal time (`review_candidate_repair_not_provided`). |
+| `adoption.head_sha` | Required. A 40-hex commit id that exists in the repository and differs from `base_sha`. (The sealer also accepts a 64-hex id in a sha256 repository, but intake supports only 40-hex SHA-1 repositories and refuses such a run with `campaign_repo_precondition_failed`.) |
+| `adoption.author_family` | Optional. Names the model family that wrote the range. It can only tighten the panel: that family's seats do not count toward the required family count. Use exactly one of `openai`, `anthropic`, `alibaba`, `google`, `xai`, `minimax`, `zhipu`. The match is literal against each seat's family (derived from its model name), and **a value that matches no seat is accepted silently and excludes nothing**, so check the spelling. |
+| `adoption.disposition_preset` | Optional, `end` or `return`. Applies your choice to a parked review (section 6): `end` closes it at the first park, `return` is applied by a later `--resume`. `repair` is rejected at seal time (`review_candidate_repair_not_provided`). |
 | `max_repair_generations` | Must be exactly `0`. |
 | `mission_runtime`, `strict_dispatch`, `unit_class` | Must be absent. |
 | `branch` | The branch whose tip is the head. At admission the tip must equal `adoption.head_sha`. |
@@ -97,14 +97,17 @@ Field notes, each checked by the sealer:
 - `vertical_acceptance`: 1 to 64 non-empty strings, the acceptance statements the range claims to meet.
 - `allowed_path_prefixes`: 1 to 128 normalized relative prefixes (no leading `./`, no `..`, no `.git`,
   no backslashes). Every changed path in the range must sit under one of them, otherwise admission
-  refuses the range (`review_candidate_out_of_scope`).
+  refuses the range (`review_candidate_out_of_scope`). There is no whole-repository prefix: `.` and the
+  empty string are rejected, so list the directories you allow. A prefix may also be a single file path.
 - `max_changed_files`: 1 to 4096. A range that changes more distinct files is refused
   (`review_candidate_file_cap`).
 - `baseline_churn` (integer 1 or more), `max_growth_ratio` (1 to 1.5) and `max_extra_churn`: a churn
   budget. `max_extra_churn` may not exceed `floor(baseline_churn * (max_growth_ratio - 1))`. For a
   review-only range, going over the churn budget is a warning in the receipt
   (`review_candidate_churn_*`), not a refusal.
-- `max_wall_seconds`: 1 to 7200.
+- `max_wall_seconds`: 1 to 7200. One clock for the whole campaign: every `--resume` and every `return`
+  shares it. Time spent parked on `awaiting_disposition` does not count; review time after each resume
+  does. Exhaustion ends the campaign (`status: "wall_expired"`).
 - `verify_cmd`: space-delimited argv, optionally chained with ` && `. Only characters
   `A-Za-z0-9_./:@%+=,-` are allowed in each word. No quotes, pipes, redirects, `;` or `$()`. Put anything
   complicated in a script in the repository and call it (`bash tools/ci-check.sh`).
@@ -128,12 +131,24 @@ node scripts/implementation-campaign-check.js seal \
 `shadow`: under `enforce` a review-only contract cannot be sealed and the sealer says
 `review_candidate_governance_enforce`.
 
-Output is one JSON line: `{"verdict":"SEALED",...}` and exit 0. `{"verdict":"REJECTED","errors":[...]}`
-with exit 3 means a rule in section 2 failed; the `errors` array names the field. Exit 2 is a usage or
-I/O error. Verify a seal at any time with the same flags but `check --seal <file>` in place of `--out`.
+Output is indented multi-line JSON: `"verdict": "SEALED"` and exit 0. `"verdict": "REJECTED"` with an
+`errors` array and exit 3 means a rule in section 2 failed; the array names the field. Exit 3 also covers
+failures that print only one line on stderr and no `errors` array: a `--mission-mode` that does not match
+the repository, a seal target that already exists, and a `check` that finds drift. Exit 2 is a usage or
+I/O error. Verify a seal at any time with the same flags but `check --seal <file>` in place of `--out`
+(`"verdict": "VALID"`).
 
-Keep the contract, seal and spec outside the repository working tree. The recorded runs did, and it
-keeps the review checkout clean. The engine looks for the seal at `<contract>.seal.json` (the
+**You cannot reseal in place.** `seal` refuses an existing output file (`seal target already exists`,
+exit 3). The engine also writes a `qc_panel_snapshot.json` next to the contract on the first run; it is
+bound to that contract's bytes and campaign, so a changed contract run against the old snapshot is refused
+(`qc_panel_snapshot_identity_invalid`), and a contract whose bytes did not change maps back to the same
+campaign. To seal a changed contract, use a new directory, or delete both `<contract>.seal.json` and
+`qc_panel_snapshot.json` first. Either way the contract content must really change (for example a new
+`ticket`), because the campaign id derives from the contract bytes.
+
+Keep the contract, seal and spec **outside** the repository working tree; this is required, not a
+preference. The review refuses a repository with uncommitted or untracked files
+(`campaign_repo_precondition_failed`), and files you write inside it would trip that check. The engine looks for the seal at `<contract>.seal.json` (the
 contract path with `.json` replaced by `.seal.json`) when `--campaign-seal` is not given.
 
 ### A script that builds and seals a contract
@@ -223,7 +238,10 @@ from Git and the contract, so none can disagree with it. Any other flag is a usa
   `$REVIEW_LOOP_CONFIG_OVERRIDE`, `<repo>/.claude/review-loop-config.md`, the autopilot checkout's own
   `.claude/review-loop-config.md`, then the shipped
   [`project-config-template/review-loop-config.md`](../project-config-template/review-loop-config.md).
-  To choose your own panel, put a `review-loop-config.md` in `<repo>/.claude/`.
+  To choose your own panel, put a `review-loop-config.md` in `<repo>/.claude/`. **Commit it first**:
+  an untracked or modified file in the repository fails the clean-tree check
+  (`campaign_repo_precondition_failed`). Alternatively keep it outside the repository and point
+  `REVIEW_LOOP_CONFIG_OVERRIDE=/abs/path/review-loop-config.md` at it.
   Review-only reads `qc_panel` (with `qc_panel_runners`, `qc_panel_efforts`, `qc_panel_endpoints`
   aligned 1:1), `min_panel_size` and `required_review_families`. It does not require, and does not probe,
   the implementer or verification-author seats.
@@ -231,6 +249,16 @@ from Git and the contract, so none can disagree with it. Any other flag is a usa
   runner/effort/endpoint metadata, spanning at least two families when it has more than one seat. The
   declared `author_family` is excluded from that family count. A panel that cannot meet this is refused
   before spend (`review_candidate_panel_incomplete`).
+- **Which runners may hold a `qc_panel` seat.** A `qc_panel` seat must be able to run a no-tools blind
+  review. Allowed runners: `anthropic-compatible`, `cc-shim`, `claude-native`, `qoderclicn` (no-tools
+  tier), and `codex`, `kimi`, `agy` (cleanroom tier, which is probed before spend). Any other runner,
+  `grok` for example, is refused (`final_panel_seat_blind_incompatible`).
+- **Each seat must also be qualified.** A seat passes only if it is the exact tuple (runner, model, effort,
+  endpoint) of the current qualified `reviewer_*` seat, or its panel index is recorded in the roster's
+  `override_admitted_seats` (a standing operator pin, written with
+  `node scripts/engine-capability-state.js pin-seat --role qc_panel --engine <model> --runner <runner> --effort <effort> --endpoint <endpoint|@none> --reason <text> --operator <who>`),
+  or the roster's `fallback_ladder` has a scorecard row with the same tuple. A custom seat that is none
+  of these is refused (`final_panel_seat_unqualified`).
 - **Endpoints.** A seat that names an `endpoint` (for example `glm`) needs credentials in
   `~/.autopilot/endpoints.env`, never in the repository. Set them up with:
 
@@ -255,7 +283,7 @@ is not ready.** The fields to read:
 | `status: "blocked"` with a `code` | **Not ready.** The `code` names why (table below). |
 | `dispatcher_called: false`, `model_calls: 0` on a refusal | Nothing was spent. |
 
-Inspect the durable campaign state at any time (the id is in the output, `campaign_id`):
+Inspect the durable campaign state at any time (the id is in the output at `campaign_control.campaign_id`):
 
 ```bash
 node bin/autopilot.js campaign inspect --campaign-id <campaign-v1-...> \
@@ -263,7 +291,8 @@ node bin/autopilot.js campaign inspect --campaign-id <campaign-v1-...> \
 ```
 
 The ledger is `<git-common-dir>/autopilot/implementation-campaign.jsonl` of the repository under review.
-The phase reads `TERMINAL_READY`, `AWAITING_DISPOSITION` or `TERMINAL_STOP`. A closed review's
+The phase reads `TERMINAL_READY`, `AWAITING_DISPOSITION` or `TERMINAL_STOP`, or one of the in-flight
+phases `VERTICAL_VERIFICATION`, `REVIEWING` or `ADJUDICATING` while a run is active or was interrupted. A closed review's
 `terminal_reason` begins with the code and lists any unresolved findings.
 
 ### Refusal and outcome codes
@@ -273,32 +302,40 @@ The phase reads `TERMINAL_READY`, `AWAITING_DISPOSITION` or `TERMINAL_STOP`. A c
 | `review_candidate_contract_required` | No contract given | Pass `--campaign-contract`. |
 | `campaign_contract_unreadable` | The contract path does not resolve | Use absolute paths. |
 | `review_candidate_mode_mismatch` | The contract has no `adoption` section, or an adoption contract ran under `implement-review` | Seal an adoption contract and use `engine review-candidate`. |
-| `review_candidate_head_missing` | The sealed head is not a commit in the repository | Fetch the commit, or reseal with the right head. |
-| `review_candidate_branch_moved` | The branch tip is no longer the reviewed head (at admission, or just before the first review) | Restore the tip, or reseal with the new head. A move discovered just before review ends the campaign not-ready. |
+| `campaign_repo_precondition_failed` | The repository under review has uncommitted or untracked files (or HEAD is not a 40-hex SHA-1 commit). The reason starts `dirty:` or `base:` | Commit or ignore the untracked files (`.gitignore`), and keep the contract, seal, spec and config outside the repository. |
+| `review_candidate_head_missing` | The sealed head is not a commit in the repository | Fetch the commit, or seal a new contract with the right head (section 3, "You cannot reseal in place"). |
+| `review_candidate_branch_moved` | The branch tip is no longer the reviewed head (at admission, or just before the first review) | Restore the tip, or seal a new contract with the new head (a fresh directory and a changed `ticket`; section 3). A move discovered just before review ends the campaign not-ready. |
 | `review_candidate_empty_range` | The head equals the base | Nothing to review. |
-| `review_candidate_base_not_ancestor` | The base is not an ancestor of the head | Reseal with a base on the head's history. |
+| `review_candidate_base_not_ancestor` | The base is not an ancestor of the head | Seal a new contract with a base on the head's history (section 3). |
 | `review_candidate_scope_unreadable` | The path scope could not be computed | Check the repository and the contract's prefixes. |
-| `review_candidate_out_of_scope` | A changed path is outside `allowed_path_prefixes` | Widen the prefixes (reseal), or review a narrower range. |
-| `review_candidate_file_cap` | More distinct files than `max_changed_files` | Raise the cap (reseal), or split the range. |
+| `review_candidate_out_of_scope` | A changed path is outside `allowed_path_prefixes` | Widen the prefixes in a new sealed contract (section 3), or review a narrower range. |
+| `review_candidate_file_cap` | More distinct files than `max_changed_files` | Raise the cap in a new sealed contract (section 3), or split the range. |
 | `review_candidate_churn_ratio_trip`, `review_candidate_churn_absolute_trip` | Churn above budget | Warning in the receipt only; the review continues. (The exact suffix is the scope trip reason.) |
 | `review_candidate_panel_incomplete` | The roster is incomplete, too small, or has too few families outside the declared author family | Fix `qc_panel` and its aligned metadata, or the declaration. |
-| `review_candidate_panel_short` | A seat was lost mid-run and the panel fell below the sealed minimum | The campaign is terminal not-ready. Fix the seat and seal a new contract. |
+| `review_candidate_panel_short` | A seat was lost mid-run and the panel fell below the sealed minimum | The campaign is terminal not-ready. Fix the seat and seal a new contract (section 3). |
+| `final_panel_seat_blind_incompatible` | A `qc_panel` seat uses a runner that cannot run a no-tools blind review (for example `grok`) | Replace the seat with one on an allowed runner (section 4). |
+| `final_panel_seat_cleanroom_unavailable` | A `codex`, `kimi` or `agy` seat failed its cleanroom probe | Fix that runner's install or login, or replace the seat. |
+| `final_panel_seat_unqualified` | A seat is not the qualified reviewer tuple, not pinned, and has no scorecard row | Pin the seat or use a qualified one (section 4). |
 | `review_candidate_governance_enforce` | Seal-time, governance is `enforce` | Use governance `off` or `shadow`. |
 | `review_candidate_repair_not_provided` | `repair` was sealed as a preset, or passed as a continuation | Not available yet (section 6). Use `end` or `return`. |
 | `review_candidate_continuation_unknown` | `--campaign-continuation` is not `end` or `return` | Use one of those. |
 | `review_candidate_continuation_requires_resume` | `--campaign-continuation` without `--resume` | Add `--resume`. |
-| `review_candidate_continuation_not_parked` | `return` on a campaign that is not parked | `return` needs the parked state. (`end` works on any non-terminal review-only campaign.) |
+| `review_candidate_continuation_not_parked` | A continuation other than `end` on a campaign that is not parked | `return` needs the parked state. (`end` works on any non-terminal review-only campaign.) |
 | `review_candidate_continuation_required` | Resumed a parked review with neither a flag nor a preset | Pass `--campaign-continuation end` or `return`. |
 | `review_candidate_return_no_new_head` | `return`, but the branch is still at the reviewed head | Push your fix first. |
 | `review_candidate_return_not_descendant` | `return`, but the new tip does not descend from the reviewed head | Do not rewrite history; add commits on top of the reviewed head. |
-| `review_candidate_resume_phase_unsupported` | A review interrupted between its verdict and the park | Seal a new contract and run again. |
+| `review_candidate_resume_phase_unsupported` | A review interrupted between its verdict and the park (phase `ADJUDICATING`) cannot be resumed | Close it with `--resume --campaign-continuation end`, or seal a new contract (section 3) and run again. |
+| `campaign_resume_required` | A campaign for this contract already exists and you ran without `--resume` | Add `--resume`, or seal a new contract (section 3) to start over. |
+| `campaign_resume_not_found` | `--resume` but no campaign exists for this contract | Run without `--resume`. |
+| `campaign_already_terminal` | `--resume` on a campaign that is already ready or stopped | It is finished. Seal a new contract (section 3) to review again. |
 | `review_candidate_disposition_end` | You closed the review with `end` | Terminal not-ready; the unresolved findings are in `findings`. This is the expected result of `end`. |
 | `review_candidate_end_not_terminalized` | `end` could not terminalize the campaign | Inspect with `campaign inspect`; report the reason. |
-| `review_candidate_admission_missing` | A resume found no admitted adoption record | Run from the start with a new contract. |
+| `review_candidate_admission_missing` | A resume found no admitted adoption record | Seal a new contract (section 3) and run from the start. |
 | `review_candidate_no_writer` | Internal: the writer adapter was reached | A bug; it fails closed with no spend. Report it. |
 
 Other blocked results can carry non-`review_candidate_` codes from shared intake (for example a
-provider-readiness refusal when a seat is not live). Read `reason` first.
+provider-readiness refusal when a seat is not live). A refusal at the `provider_readiness` phase carries
+its code in `rejection_code`, not `code`. Read `reason` first.
 
 ## 6. After a park: end, return, preset
 
@@ -335,7 +372,15 @@ re-reviews the **cumulative** `base..new_head` diff in the same campaign: seats 
 range again, not just your fix. A reviewer's earlier pass is reused only when its input is byte-identical,
 and a new head changes every input, so expect a full review spend per `return`. There is no stale pass:
 nothing reviewed an older head counts for the new one. A cheaper delta re-review is a tracked follow-up
-(BL-0146).
+(BL-0146). The wall budget (`max_wall_seconds`) is shared by every `return` of the campaign.
+
+**Known limitation: a fix that shrinks the range can be refused.** The campaign records the cumulative
+count of changed files, and that count may not decrease. If your fix reverts a whole file to its `base`
+content, so that `base..new_head` touches fewer files than before, the `return` is refused with
+`BUDGET_RESET` (`event.usage.changed_files cannot decrease`). A `return` is therefore not guaranteed to
+succeed. Workaround: keep every file that differs in the reviewed range still differing from `base`
+(change it rather than revert it), or `end` this campaign and seal a new contract for the fixed head
+(section 3). This is a known defect in the engine, not in your branch.
 
 A head that is not a descendant (for example after a force-push) is refused
 (`review_candidate_return_not_descendant`) before any review call. The campaign stays parked, so you can
@@ -347,12 +392,14 @@ re-derived first, and seats that already reviewed are not asked again).
 
 ### Presets
 
-`adoption.disposition_preset` in the sealed contract applies a choice when no flag is given:
+`adoption.disposition_preset` in the sealed contract applies a choice when you give no flag:
 
 - `end`: a review that parks on findings closes itself in the same invocation. One command, terminal
   not-ready, findings listed. Use it when no human is available to choose.
 - `return`: the review still parks. A later `--resume` with no `--campaign-continuation` applies `return`.
-  A `--campaign-continuation` flag always wins over the preset.
+  On a review that is parked and not yet closed, a `--campaign-continuation` flag wins over the preset.
+  (A preset of `end` closes at the first park, so there is nothing left for a flag to override; to
+  choose `return` after all, seal without a preset, or one set to `return`.)
 
 ### `repair`: not provided yet
 
@@ -379,12 +426,18 @@ Most operators never need this; `end` and `return` are the normal exits.
 | Seal says `--mission-mode X does not match authoritative project mode Y` | Pass the repository's actual governance mode; with no governance file it is `off`. |
 | Seal says `adoption: max_repair_generations must be 0` or `... must be absent` | Remove `strict_dispatch`, `unit_class`, `mission_runtime`; set `max_repair_generations` to 0. |
 | Seal says `verify_cmd: expected bounded space-delimited argv ...` | No quotes, pipes, redirects or `;` in `verify_cmd`. Move logic into a repository script. |
-| `review_candidate_branch_moved` on a rerun | You added commits after sealing. Either reseal with the new head, or (on a parked review) use `return`. |
+| `review_candidate_branch_moved` on a rerun | You added commits after sealing. Either seal a new contract with the new head (new directory, changed `ticket`), or (on a parked review) use `return`. |
+| Sealing again fails with `seal target already exists`, or the rerun fails with `qc_panel_snapshot_identity_invalid` | A seal and a `qc_panel_snapshot.json` already sit in that directory. Use a new directory, or delete both files, and change the contract (for example the `ticket`). See section 3. |
+| `campaign_repo_precondition_failed` with `dirty:` | The repository has uncommitted or untracked files. Commit or ignore them, and keep the contract, seal, spec and any review-loop config outside the repository (or committed). |
+| `final_panel_seat_*` refusals | A `qc_panel` seat is on a runner that cannot do a blind review, or is not qualified. See section 4. |
+| `return` refused with `BUDGET_RESET` | Your fix shrank the changed-file count. See the known limitation in section 6. |
 | `blocked` with `provider_readiness` wording | A seat in your roster is not live or not logged in. `node bin/autopilot.js endpoints doctor`, check the seat's CLI login, or change the panel. |
 | Roster refused as incomplete | `qc_panel`, `qc_panel_runners`, `qc_panel_efforts`, `qc_panel_endpoints` must have the same length. |
 | Verify is red but passes on your machine | Verification runs in a detached worktree at the head commit. Files that are untracked or uncommitted in your checkout are not there. Commit what the command needs. |
-| `--resume` refused with a phase message | Only an interrupted, parked or non-terminal review resumes. A terminal campaign is finished; seal a new contract. |
+| `--resume` refused | `campaign_resume_not_found` (nothing to resume), `campaign_already_terminal` (finished; seal a new contract), or `review_candidate_resume_phase_unsupported` (close it with `--campaign-continuation end`). See the code table in section 5. |
 | Nothing printed on stdout | Check stderr and the exit code; usage errors print to stderr with exit 2. |
 
 Residue: a review creates no branch of its own and removes its temporary worktrees at the terminal
-state. A parked review keeps its panel working files until it is resumed or closed.
+state. A parked review keeps its panel working files until it is resumed or closed. The engine also
+leaves `qc_panel_snapshot.json` in the contract's directory (it is how a rerun detects a changed
+contract); delete it together with the seal when you start over.

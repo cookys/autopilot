@@ -280,7 +280,7 @@ const stateB3 = toReviewing(fxB3);
 git(fxB3.repo, ['worktree', 'remove', '--force', fxB3.worktree]);
 git(fxB3.repo, ['branch', '-D', fxB3.branch]);
 const claimedB3 = claim(fxB3, stateB3);
-console.log(`b3_intake_nocand_at_cap status=${claimedB3.status} resume_candidate=${Boolean(claimedB3.resume_candidate)}`);
+console.log(`b3_intake_nocand_at_cap status=${claimedB3.status} resume_candidate=${Boolean(claimedB3.resume_candidate)} code=${claimedB3.code || claimedB3.reason_code || ''}`);
 
 NODE
 )"; EXIT=$?
@@ -317,6 +317,10 @@ assert_contains "$OUT" "b2_usage_files=4" "fixture really sits at the changed-fi
 assert_contains "$OUT" "b2_intake_at_cap status=claimed" "intake claims a REVIEWING resume at the changed-file cap (same predicate as cli)"
 assert_not_contains "$OUT" "b3_intake_nocand_at_cap status=claimed" "REVIEWING at the cap without a resolved candidate is not claimed at intake"
 assert_contains "$OUT" "b3_intake_nocand_at_cap status=rejected resume_candidate=false" "REVIEWING at the cap without a resolved candidate stays rejected at intake"
+# The rejection CODE is pinned too: with the branch and worktree gone, the candidate drift check
+# fires before the changed-file cap predicate is reached, so B3 proves "blocked", not "blocked by
+# the cap". A change that lets this claim through, or re-routes it to another code, goes red.
+assert_contains "$OUT" "b3_intake_nocand_at_cap status=rejected resume_candidate=false code=campaign_resume_git_drift" "B3 rejection code is campaign_resume_git_drift"
 # ---- C. engine: REVIEWING reached through a final-panel transient seat fault ----------------
 # Same lineage as final-panel-seat-resume-xproc run 1 (seat 2 transport fault -> gate_transient
 # -> durable_wait, ledger parked in REVIEWING) and a real --resume in a SEPARATE process, with the

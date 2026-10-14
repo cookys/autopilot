@@ -525,7 +525,7 @@ re-derived first, and seats that already reviewed are not asked again).
 ### `repair`: hand the findings to a writer
 
 A review-only campaign never writes. Choosing `repair` (`--campaign-continuation repair`, or a sealed
-`adoption.disposition_preset: "repair"` for an unattended caller) authorizes **one repair round**. It does
+`adoption.disposition_preset: "repair"` for an unattended caller) authorizes **a repair campaign**. It does
 not mean you accept every finding: the findings stay the reviewers' claims.
 
 ```bash
@@ -585,9 +585,10 @@ new campaign's panel reviews `reviewed_head..new_head` from scratch.
 Refusals: `repair` on a review that is not parked is refused (`review_candidate_continuation_not_parked`),
 and so is `repair` without `--resume` (`review_candidate_continuation_requires_resume`).
 
-**Known limitation: a second repair of the same ticket reuses the branch name.** The seeded branch is
-always `repair/<ticket>-repair`, so repairing the same ticket again can overwrite the branch of the
-previous repair. To repair again, seal a new contract with a different `ticket` first (section 3).
+**A second repair of the same ticket gets a new branch name.** The first seeded branch is
+`repair/<ticket>-repair`. If that branch already exists in the repository, the next seed uses
+`repair/<ticket>-repair-r2`, then `-r3`, and so on (the smallest unused number), so an earlier repair's branch
+is never overwritten. Only branches that exist are counted: a seed whose branch you never created keeps its name.
 
 ### Findings you want to adjudicate
 

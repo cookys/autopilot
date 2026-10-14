@@ -2077,6 +2077,10 @@ if [ "$EFFORT" = "default" ]; then
     *) die_precondition "--effort default (no effort sent) is only for runners with no effort control (anthropic-compatible|cc-shim|claude-native|kimi); runner '$RUNNER' takes an explicit effort" ;;
   esac
 fi
+# claude CLI (cc-shim / claude-native) takes --effort low|medium|high|xhigh|max (claude 2.1.299 --help); the enum
+# check above already rejects anything else, so no value is ever silently remapped. `default` sends nothing.
+CLAUDE_EFFORT_ARG=""
+if [ "$EFFORT" != "default" ]; then CLAUDE_EFFORT_ARG="$EFFORT"; fi
 
 case "$SKILL_MODE" in
   off|prompt|native|auto) ;;
@@ -3743,7 +3747,7 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
   CCSHIM_PROMPT_FILE="$(mktemp -t dispatch-hetero-ccshim-prompt-XXXXXX)"
   printf '%s' "${CCSHIM_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$CCSHIM_PROMPT_FILE"
   run_worker bash -c 'cd "$1" && exec env -u ANTHROPIC_API_KEY ${4:+AUTOPILOT_PARENT_SESSION_ID="$4"} claude -p ${5:+--session-id "$5"} --model "$2" \
-      --dangerously-skip-permissions < "$3"' _ "$WT" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CLAUDE_CODE_SESSION_ID:-}" "${CHILD_SESSION_ID:-}"
+      --dangerously-skip-permissions ${6:+--effort "$6"} < "$3"' _ "$WT" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CLAUDE_CODE_SESSION_ID:-}" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG"
   rm -f "$CCSHIM_PROMPT_FILE"
 elif [ "$IS_GROK" -eq 1 ]; then
   # grok (xAI Grok Build CLI; models grok-4.5 (ex-grok-build) / grok-composer-2.5-fast). Unlike agy,
@@ -4927,7 +4931,7 @@ dispatch_detached_run() {
   rm -f "$RESULT_FILE" "$EXIT_FILE"
   local state_file; state_file="$(mktemp -t hetero-detach-state-XXXXXX)"
   {
-  declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN QODER_BIN CURSOR_BIN OPENCODE_BIN KIMI_BIN KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER EFFORT \
+  declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN QODER_BIN CURSOR_BIN OPENCODE_BIN KIMI_BIN KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER EFFORT CLAUDE_EFFORT_ARG \
       SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_QODER IS_CURSOR IS_OPENCODE IS_KIMI RUNNER_RESOLVED CURSOR_FAST PI_BIN MANAGED_CODEX_HOME CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
       WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID WORKER_FALLBACK_PGID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE QODER_PROMPT_FILE CURSOR_PROMPT_FILE OPENCODE_PROMPT_FILE KIMI_PROMPT_FILE KIMI_EDIT_ONLY \
       AGY_ENVELOPE AGY_STDERR AGY_PARSED AGY_USAGE_JSON \

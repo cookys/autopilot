@@ -473,6 +473,10 @@ if [ "$EFFORT" = "default" ]; then
     *) die_precondition "--effort default (no effort sent) is only for runners with no effort control (anthropic-compatible|cc-shim|claude-native|kimi); runner '$RUNNER' takes an explicit effort" ;;
   esac
 fi
+# claude CLI (cc-shim / claude-native) takes --effort low|medium|high|xhigh|max (claude 2.1.299 --help); the enum
+# check above already rejects anything else, so no value is ever silently remapped. `default` sends nothing.
+CLAUDE_EFFORT_ARG=""
+if [ "$EFFORT" != "default" ]; then CLAUDE_EFFORT_ARG="$EFFORT"; fi
 
 # R1 detach: when ledger coords are supplied and detach is on (default), re-run this dispatch
 # INLINE inside a kill-surviving setsid session and relay its durable result. Byte-identical
@@ -1545,8 +1549,8 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
   CCSHIM_CWD="$(mktemp -d -t dispatch-review-ccshimcwd-XXXXXX)"
   timeout "$TIMEOUT" env -u ANTHROPIC_API_KEY HOME="$CCSHIM_CWD" \
       CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT=1 ${CLAUDE_CODE_SESSION_ID:+"AUTOPILOT_PARENT_SESSION_ID=$CLAUDE_CODE_SESSION_ID"} \
-      bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "" < "$4"' \
-      _ "$CCSHIM_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" > "$RAW_LOG" 2>&1
+      bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "" ${6:+--effort "$6"} < "$4"' \
+      _ "$CCSHIM_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" > "$RAW_LOG" 2>&1
   CCSHIM_RC=$?
   wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" 30000 || true
   rm -rf "$CCSHIM_CWD"; CCSHIM_CWD=""   # clear so the EXIT trap doesn't rm the path a 2nd time
@@ -1571,8 +1575,8 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
   # (native OAuth-session / subscription credentials commonly live under the real HOME; unlike
   # cc-shim's explicit bearer token, there is no HOME-independent credential to pass instead).
   CNATIVE_CWD="$(mktemp -d -t dispatch-review-cnativecwd-XXXXXX)"
-  timeout "$TIMEOUT" env ${CLAUDE_CODE_SESSION_ID:+"AUTOPILOT_PARENT_SESSION_ID=$CLAUDE_CODE_SESSION_ID"} bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "" < "$4"' \
-      _ "$CNATIVE_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" > "$RAW_LOG" 2>&1
+  timeout "$TIMEOUT" env ${CLAUDE_CODE_SESSION_ID:+"AUTOPILOT_PARENT_SESSION_ID=$CLAUDE_CODE_SESSION_ID"} bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "" ${6:+--effort "$6"} < "$4"' \
+      _ "$CNATIVE_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" > "$RAW_LOG" 2>&1
   CNATIVE_RC=$?
   wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" 30000 || true
   rm -rf "$CNATIVE_CWD"; CNATIVE_CWD=""   # clear so the EXIT trap doesn't rm the path a 2nd time

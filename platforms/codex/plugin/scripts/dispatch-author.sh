@@ -794,6 +794,10 @@ if [ "$EFFORT" = "default" ]; then
     *) die_precondition "--effort default (no effort sent) is only for runners with no effort control (anthropic-compatible|cc-shim|claude-native|kimi); runner '$RUNNER' takes an explicit effort" ;;
   esac
 fi
+# claude CLI (cc-shim / claude-native) takes --effort low|medium|high|xhigh|max (claude 2.1.299 --help); the enum
+# check above already rejects anything else, so no value is ever silently remapped. `default` sends nothing.
+CLAUDE_EFFORT_ARG=""
+if [ "$EFFORT" != "default" ]; then CLAUDE_EFFORT_ARG="$EFFORT"; fi
 
 
 if [ "$RUNNER" = "agy" ]; then
@@ -1254,8 +1258,8 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
   CCSHIM_CWD="$(mktemp -d -t dispatch-author-ccshimcwd-XXXXXX)"
   set +e
   timeout "$TIMEOUT" env -u ANTHROPIC_API_KEY HOME="$CCSHIM_CWD" ${CLAUDE_CODE_SESSION_ID:+"AUTOPILOT_PARENT_SESSION_ID=$CLAUDE_CODE_SESSION_ID"} \
-    bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "" < "$4"' \
-    _ "$CCSHIM_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" > "$RAW_LOG" 2>"$RUNNER_ERR_FILE"
+    bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "" ${6:+--effort "$6"} < "$4"' \
+    _ "$CCSHIM_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" > "$RAW_LOG" 2>"$RUNNER_ERR_FILE"
   RUNNER_EXIT=$?
   set -e
   rm -rf "$CCSHIM_CWD"; CCSHIM_CWD=""
@@ -1271,8 +1275,8 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
   # otherwise uses the same scratch-cwd/no-tools posture as the reviewer rail.
   CNATIVE_CWD="$(mktemp -d)"
   set +e
-  timeout "$TIMEOUT" env ${CLAUDE_CODE_SESSION_ID:+"AUTOPILOT_PARENT_SESSION_ID=$CLAUDE_CODE_SESSION_ID"} bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "" < "$4"' \
-    _ "$CNATIVE_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" > "$RAW_LOG" 2>"$RUNNER_ERR_FILE"
+  timeout "$TIMEOUT" env ${CLAUDE_CODE_SESSION_ID:+"AUTOPILOT_PARENT_SESSION_ID=$CLAUDE_CODE_SESSION_ID"} bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "" ${6:+--effort "$6"} < "$4"' \
+    _ "$CNATIVE_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" > "$RAW_LOG" 2>"$RUNNER_ERR_FILE"
   RUNNER_EXIT=$?
   set -e
   rm -rf "$CNATIVE_CWD"; CNATIVE_CWD=""

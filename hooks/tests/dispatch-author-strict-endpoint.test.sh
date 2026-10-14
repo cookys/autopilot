@@ -116,7 +116,7 @@ if [ -f "$RECORDED_ARGV" ]; then
   argv_content=$(sed -E 's#[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}#UUID#g' "$RECORDED_ARGV")
 fi
 assert_eq "$argv_content" \
-  "-p --session-id UUID --model glm-5.2 --setting-sources project --strict-mcp-config --tools " \
+  "-p --session-id UUID --model glm-5.2 --setting-sources project --strict-mcp-config --tools  --effort high" \
   "Case 1: full cc-shim argv shape reached fake process (not just --model)"
 
 # Assert endpoint-derived ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN reached the fake process

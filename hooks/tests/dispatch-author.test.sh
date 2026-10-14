@@ -817,8 +817,36 @@ OUT="$(env ANTHROPIC_BASE_URL="http://127.0.0.1:9/v1" ANTHROPIC_AUTH_TOKEN="t" A
   --bin "$TEST_TMP/author-cc-argv" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "author cc-shim argv capture exit 0"
 assert_eq "$(normalize_argv < "$AUTHOR_CC_ARGV")" "$(printf '%s\n' \
-  -p --session-id UUID --model mini --setting-sources project --strict-mcp-config --tools '')" \
-  "author cc-shim argv matches frozen literal (preservation, green at base)"
+  -p --session-id UUID --model mini --setting-sources project --strict-mcp-config --tools '' --effort xhigh)" \
+  "author cc-shim argv matches frozen literal (default effort xhigh is forwarded to claude)"
+
+# Same contract as dispatch-review: seat effort rides to `claude -p --effort`; default sends nothing; invalid
+# is refused up front. This is the path dispatch-consult / dispatch-discuss / dispatch-plan-review reach via
+# dispatch-author.sh. Negative control: drop ${6:+--effort "$6"} from the bash -c templates in
+# scripts/dispatch-author.sh and the "forwards" assertions go red.
+for _au_runner in cc-shim claude-native; do
+  for _au_eff in low medium high xhigh max; do
+    rm -f "$AUTHOR_CC_ARGV"
+    OUT="$(env ANTHROPIC_BASE_URL="http://127.0.0.1:9/v1" ANTHROPIC_AUTH_TOKEN="t" AUTOPILOT_SETTLE_MS=0 \
+      DISPATCH_QUIET=1 "$SCRIPT" --runner "$_au_runner" --model mini --prompt-file "$PROMPT" \
+      --bin "$TEST_TMP/author-cc-argv" --effort "$_au_eff" 2>&1)"; EXIT=$?
+    assert_eq "0" "$EXIT" "author $_au_runner --effort $_au_eff exit 0"
+    assert_contains "$(tr '\n' ' ' < "$AUTHOR_CC_ARGV")" "--effort $_au_eff " "author $_au_runner forwards --effort $_au_eff to claude"
+  done
+  rm -f "$AUTHOR_CC_ARGV"
+  OUT="$(env ANTHROPIC_BASE_URL="http://127.0.0.1:9/v1" ANTHROPIC_AUTH_TOKEN="t" AUTOPILOT_SETTLE_MS=0 \
+    DISPATCH_QUIET=1 "$SCRIPT" --runner "$_au_runner" --model mini --prompt-file "$PROMPT" \
+    --bin "$TEST_TMP/author-cc-argv" --effort default 2>&1)"; EXIT=$?
+  assert_eq "0" "$EXIT" "author $_au_runner --effort default exit 0"
+  assert_not_contains "$(cat "$AUTHOR_CC_ARGV")" "--effort" "author $_au_runner --effort default sends no --effort"
+  rm -f "$AUTHOR_CC_ARGV"
+  OUT="$(env ANTHROPIC_BASE_URL="http://127.0.0.1:9/v1" ANTHROPIC_AUTH_TOKEN="t" AUTOPILOT_SETTLE_MS=0 \
+    DISPATCH_QUIET=1 "$SCRIPT" --runner "$_au_runner" --model mini --prompt-file "$PROMPT" \
+    --bin "$TEST_TMP/author-cc-argv" --effort ultra 2>&1)"; EXIT=$?
+  assert_eq "2" "$EXIT" "author $_au_runner invalid --effort ultra exits 2"
+  assert_contains "$OUT" "precondition_failed" "author $_au_runner invalid effort is a precondition failure"
+  assert_file_absent "$AUTHOR_CC_ARGV" "author $_au_runner invalid effort never launched claude"
+done
 
 # Well-framed non-codex draft → authored; artifact/raw_log has no frame lines.
 STUB_FRAMED_OK="$TEST_TMP/runner-framed-ok"

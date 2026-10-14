@@ -2718,7 +2718,29 @@ OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-cc-bin:$PATH" \
   "$SCRIPT" --runner cc-shim --model mini --endpoint TESTEP --branch feat/cc-argv --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "hetero cc-shim argv capture exit 0"
 assert_eq "$(normalize_argv < "$HETERO_CC_ARGV")" "$(printf '%s\n' \
-  -p --session-id UUID --model mini --dangerously-skip-permissions)" \
-  "hetero cc-shim argv matches frozen literal (preservation, green at base)"
+  -p --session-id UUID --model mini --dangerously-skip-permissions --effort xhigh)" \
+  "hetero cc-shim argv matches frozen literal (default effort xhigh is forwarded to claude)"
+
+# Seat effort rides to `claude -p --effort` on the implementer path too; `default` sends nothing; invalid is
+# refused at the precondition. Negative control: drop ${6:+--effort "$6"} from the cc-shim run_worker template
+# in scripts/dispatch-hetero.sh and the "forwards" assertions go red.
+for _he_eff in low medium high xhigh max; do
+  rm -f "$HETERO_CC_ARGV"
+  OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-cc-bin:$PATH" \
+    "$SCRIPT" --runner cc-shim --model mini --endpoint TESTEP --effort "$_he_eff" --branch "feat/cc-eff-$_he_eff" --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
+  assert_eq "0" "$EXIT" "hetero cc-shim --effort $_he_eff exit 0"
+  assert_contains "$(tr '\n' ' ' < "$HETERO_CC_ARGV")" "--effort $_he_eff " "hetero cc-shim forwards --effort $_he_eff to claude"
+done
+rm -f "$HETERO_CC_ARGV"
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-cc-bin:$PATH" \
+  "$SCRIPT" --runner cc-shim --model mini --endpoint TESTEP --effort default --branch feat/cc-eff-default --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "hetero cc-shim --effort default exit 0"
+assert_not_contains "$(cat "$HETERO_CC_ARGV")" "--effort" "hetero cc-shim --effort default sends no --effort"
+rm -f "$HETERO_CC_ARGV"
+OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-cc-bin:$PATH" \
+  "$SCRIPT" --runner cc-shim --model mini --endpoint TESTEP --effort ultra --branch feat/cc-eff-bad --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "hetero cc-shim invalid --effort ultra exits 2"
+assert_contains "$OUT" "precondition_failed" "hetero cc-shim invalid effort is a precondition failure"
+assert_file_absent "$HETERO_CC_ARGV" "hetero cc-shim invalid effort never launched claude"
 
 finalize_test

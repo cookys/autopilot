@@ -660,6 +660,24 @@ function ensurePlainMarker({ sessionId, repoRoot, scope, now = Date.now(), dir =
   return result;
 }
 
+// plan dispatch-tree step 3a: `ensure-child`, the SessionStart hook a dispatch rail hands its claude child with
+// `--settings`. Reads ONLY the hook payload on stdin ({session_id, cwd}); writes a plain marker for that
+// payload id alone, with parent_session_id from AUTOPILOT_PARENT_SESSION_ID (ensurePlainMarker's rule). Never
+// touches another session's marker (the parent's file is not even opened); an existing marker is kept. Fail-open:
+// always exit 0 with no stdout (SessionStart stdout becomes model context).
+function cmdEnsureChild() {
+  let payload = {};
+  try { payload = JSON.parse(fs.readFileSync(0, 'utf8')); } catch (_error) { return 0; }
+  if (!payload || typeof payload !== 'object' || typeof payload.session_id !== 'string') return 0;
+  try {
+    const cwd = typeof payload.cwd === 'string' && payload.cwd ? payload.cwd : process.cwd();
+    ensurePlainMarker({ sessionId: payload.session_id, repoRoot: cwd, scope: { repo_identity: null, project_key: null } });
+  } catch (error) {
+    process.stderr.write(`session-mode ensure-child: marker not ensured: ${error.message}\n`);
+  }
+  return 0;
+}
+
 function cmdSetPlain(args) {
   // A plain `set` is a record, not an exit from orchestrator mode: it never replaces this session's unexpired
   // l3-l6 marker (that would drop an l5/l6 session's mode without its close evidence). `clear` is the exit.
@@ -1303,6 +1321,7 @@ function main() {
     case 'clear': return cmdClear(args);
     case 'retire': return cmdRetire(args);
     case 'bind-campaign-root': return cmdBindCampaignRoot(args);
+    case 'ensure-child': return cmdEnsureChild();
     case 'status': return cmdStatus();
     case 'root': return cmdRoot();
     default:
@@ -1312,7 +1331,7 @@ function main() {
         '[--fallback none|solo|precondition_failed] [--repo-root <dir>] [--ttl-hours N] [--root-run-id <id>] | ' +
         'set --size XS|S|M|L|XL [--urgent] [--bug] [--base-ref <sha>] (create-or-merge; size only moves up) | ' +
         'set --new-task [--size XS|S|M|L|XL] [--urgent] [--bug] [--base-ref <sha>] (restart the stage walk for a second task) | ' +
-        'clear | retire --session <id> --integration-receipt <file> [--integration-ref <ref>] | bind-campaign-root --root <id> (--repo-identity <id> | --repo-root <dir>) | status | root\n',
+        'clear | retire --session <id> --integration-receipt <file> [--integration-ref <ref>] | bind-campaign-root --root <id> (--repo-identity <id> | --repo-root <dir>) | ensure-child (SessionStart payload on stdin) | status | root\n',
       );
       return 2;
   }

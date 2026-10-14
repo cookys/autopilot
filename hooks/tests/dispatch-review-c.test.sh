@@ -933,8 +933,8 @@ OUT="$(AUTOPILOT_SETTLE_MS=0 \
   "$SCRIPT" --runner cc-shim --model mini --diff-file "$DIFF" --bin "$TEST_TMP/review-cc-stub" \
   --endpoint TESTEP 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "review cc-shim argv capture exit 0"
-assert_eq "$(normalize_argv < "$REVIEW_CC_ARGV")" "$(printf '%s\n' \
-  -p --session-id UUID --model mini --setting-sources project --strict-mcp-config --tools '')" \
+assert_eq "$(normalize_argv < "$REVIEW_CC_ARGV" | sed -E 's#^\{"hooks":.*#SETTINGS_JSON#')" "$(printf '%s\n' \
+  -p --session-id UUID --model mini --setting-sources project --strict-mcp-config --tools '' --settings SETTINGS_JSON)" \
   "review cc-shim argv matches frozen literal (no --effort given => none sent; the script's xhigh default is not forwarded)"
 
 # cc-shim / claude-native forward the seat effort to `claude -p --effort` (they used to send nothing, so the

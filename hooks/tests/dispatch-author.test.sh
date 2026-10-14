@@ -816,8 +816,8 @@ OUT="$(env ANTHROPIC_BASE_URL="http://127.0.0.1:9/v1" ANTHROPIC_AUTH_TOKEN="t" A
   DISPATCH_QUIET=1 "$SCRIPT" --runner cc-shim --model mini --prompt-file "$PROMPT" \
   --bin "$TEST_TMP/author-cc-argv" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "author cc-shim argv capture exit 0"
-assert_eq "$(normalize_argv < "$AUTHOR_CC_ARGV")" "$(printf '%s\n' \
-  -p --session-id UUID --model mini --setting-sources project --strict-mcp-config --tools '')" \
+assert_eq "$(normalize_argv < "$AUTHOR_CC_ARGV" | sed -E 's#^\{"hooks":.*#SETTINGS_JSON#')" "$(printf '%s\n' \
+  -p --session-id UUID --model mini --setting-sources project --strict-mcp-config --tools '' --settings SETTINGS_JSON)" \
   "author cc-shim argv matches frozen literal (no --effort given => none sent; the script's xhigh default is not forwarded)"
 
 # Same contract as dispatch-review: seat effort rides to `claude -p --effort`; default sends nothing; invalid

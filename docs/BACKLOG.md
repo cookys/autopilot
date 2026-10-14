@@ -182,19 +182,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: `docs/plans/2026-09-13-foreman-rail-b-build.md`, ship-time adjudication.
 - **Pointer**: docs/backlog/foreman-rail-residuals-v2-36-34-accepted-and-named-not-hidden.md
 
-### Blind review redesign: blind the packet and the process boundary, not the runner
-- **Id**: BL-0016
-- **Status**: open
-- **Since**: 2026-09-16
-- **Origin**: owner
-- **Problem**: 擁有者要求重新設計盲審：應該遮蔽審查封包與流程邊界，而不是只換執行者。大部分已出貨，只剩「測試套件與審查面板的站點重疊」這一項尚未做。 (draft)
-- **Impact**: 剩餘一項影響盲審的嚴謹度；其他已完成，不急。 (draft)
-- **Trigger**: owner asked 2026-09-16 how to keep review independence while tool-capable reviewers sit on the panel and the loop gets faster; gpt-6-astra and claude-fable-5-1 converged
-- **Effort**: L
-- **Source**: owner request 2026-09-16 after v2.36.58
-- **Pointer**: docs/plans/evidence/2026-09-16-blind-review-redesign/consult-claude-fable-5-1.md
-- **Context**: Shipped 1a-A..2-C (v2.36.59-69) and 2-D D2 (v2.36.77). Open: D1 station overlap per frozen docs/plans/2026-09-19-blind-review-2d-overlap.md, after BL-0090 P2. Pre-pass is a Spike (§7).
-
 ### PEER-REPORTED (hangar): register preview/review servers with lab-ingress instead of ad-hoc 0.0.0.0 ports
 - **Id**: BL-0018
 - **Status**: open

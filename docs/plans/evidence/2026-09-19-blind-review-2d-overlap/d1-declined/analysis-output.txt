@@ -1,0 +1,26 @@
+checkpoint roots 64 distinct root_run_id 64 days 2026-07-30,2026-08-05,2026-08-29,2026-08-30,2026-09-11,2026-09-12,2026-09-13,2026-09-14,2026-09-15,2026-09-16,2026-09-17,2026-09-18,2026-09-19,2026-09-20
+full_suite entries 15 fresh 12 reused(<=1s) 3
+fresh suite s: median 257.767 max 1174.983 min 5.821 sum 4299.0650000000005
+full_diff_review entries 20 with panel duration 20
+panel s: median 143.50650000000002
+--- both fresh (suite fresh & panel known)
+campaign-v1-aa64ebe3 proof-parity-raw-log-2026-09-1 suite 487 panel 235 save 235 wall 3791 6.2%
+campaign-v1-e1426d3a blind-review-packet-2026-09-16 suite 409 panel 109 save 109 wall 3872 2.8%
+campaign-v1-317ca8dd d1-pin-store suite 6 panel 43 save 6 wall 661 0.9%
+campaign-v1-3c712b1b blind-review-packet-deny-confi suite 1175 panel 160 save 160 wall 7269 2.2%
+campaign-v1-304a9977 backlog-entry-schema-p123 suite 24 panel 86 save 24 wall 1085 2.3%
+campaign-v1-718a03c1 blind-review-cleanroom-launche suite 447 panel 251 save 251 wall 5091 4.9%
+campaign-v1-7eed0dee d4-strike-fold-pending-revocat suite 20 panel 209 save 20 wall 1126 1.8%
+campaign-v1-7182a055 p23-input-containment-gates suite 8 panel 66 save 8 wall 488 1.7%
+campaign-v1-308465d7 d2-live-resolver suite 75 panel 126 save 75 wall 1188 6.3%
+campaign-v1-7a15d59b red-verification-repair-2026-0 suite 107 panel 67 save 67 wall 2135 3.1%
+campaign-v1-ba5300dd final-panel-blind-admission-20 suite 1065 panel 109 save 109 wall 5636 1.9%
+campaign-v1-acdd7c9e peer-residue-2026-09-15 suite 476 panel 44 save 44 wall 3058 1.5%
+n both 12 save sum 1108 median save 70.8725 max 250.583
+--- reused pairs
+campaign-v1-72aac3fa shared-packet suite 0 panel 549.333 gate
+campaign-v1-6c2313d7 snapshot-contract suite 0 panel 332.653 gate
+campaign-v1-6e8e8cf0 blind-review-panel-standby-202 suite 0 panel 420.244 audit_reserved->result
+total wall all roots 114666 s 31.9 h; roots reaching a gate 62771 s 17.4 h
+save / total wall all 0.97%  save / wall of gate-reaching roots 1.77%
+save / wall of the both-fresh roots 3.13%

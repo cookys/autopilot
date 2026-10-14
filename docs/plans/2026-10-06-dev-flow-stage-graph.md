@@ -50,7 +50,7 @@ None of this is recorded mechanically outside `/l5–/l6` campaigns. Claude-only
 ## 2. OKR / KRs
 
 - **KR1 — real-machine gate.** The gate re-run passes per field (`references/evidence-discipline.md` §54) in every mode: dev-flow, `/l3`, ceo, `/l4`, `/l5`, `/l6`.
-  - The band shows `size·level ▸ stage [unit k/N] [·n族]`.
+  - The band shows `size·level·stage [unit k/N] [·n族]` (owner ruling 2026-10-14, recorded in `docs/plans/2026-10-13-live-pane-design-system.md` §8 item 7: the band separator is `·`; `▸` only ever means folded).
   - Each slot is derived from a marker field (§2.9), with no dash placeholder.
   - Each check has a colored screenshot (same file, §55).
 - **KR2 — rail tests.** Every rail row in §2.7 has a deterministic test that runs the rail against a temp marker and asserts `stage`, `stage_set_at` and, where applicable, `review_families`.
@@ -404,7 +404,7 @@ Phase sizes use the **pre-plan** vocabulary (S/L/H/Fix), because the new one doe
 ### P7 — TUI band + ⓘ panel (L; mechanism; Train B → alpha.2)
 
 1. Implement V4a (TUI README) on the §2.9 fields:
-   - band line: `size·level ▸ stage`, `unit k/N`, `·n族`, and the `stage_set_at` age;
+   - band line: `size·level·stage`, `unit k/N`, `·n族`, and the `stage_set_at` age;
    - panel: legend, detail, and the graph with the current node highlighted.
 2. `gate/check.js`:
    - judges each slot against its marker field, expected output `PASS <mode> fields=<n>`;
@@ -541,7 +541,7 @@ V4a, one line, theme-key text colour only, sized to `bodyColumns`. Slots appear 
 | Slot | Shows | Example |
 |---|---|---|
 | verdict | the verdict glyph and word | `▲ 要你決定` |
-| position | size·level ▸ stage, plus the `stage_set_at` age | `L·l5 ▸ verify ◷12m` |
+| position | size·level·stage, plus the `stage_set_at` age | `L·l5·verify ◷12m` |
 | unit | the unit bar, k/N, and family count | `▰▰▱▱ 2/4 ·3族` |
 | dispatch | live dispatch count and stalled count | `⚙n ⏸n` |
 | review | the review round and QC chip (P7c) | `R2 ⟲ · QC ✓` |

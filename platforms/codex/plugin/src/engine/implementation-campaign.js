@@ -1075,7 +1075,14 @@ function reduceCampaignState(currentState, event) {
     CAMPAIGN_EVENTS.TERMINAL_READY,
     CAMPAIGN_EVENTS.TERMINAL_FOLLOW_UP,
   ]).has(event.event_type);
-  if (event.event_type === CAMPAIGN_EVENTS.BOUNDARY_REJECTED) {
+  if (event.event_type === CAMPAIGN_EVENTS.RESUMED
+      && isPlainObject(event.payload)
+      && Object.prototype.hasOwnProperty.call(event.payload, 'close_only')) {
+    if (event.payload.close_only !== true) {
+      fail('INVALID_PAYLOAD', 'resumed.payload.close_only must be true when present');
+    }
+    assertExactKeys(event.payload, new Set(['close_only']), `${event.event_type}.payload`);
+  } else if (event.event_type === CAMPAIGN_EVENTS.BOUNDARY_REJECTED) {
     const optional = new Set(['git_candidate']);
     if (!isPlainObject(event.payload)) {
       fail('INVALID_SHAPE', `${event.event_type}.payload must be a plain object`);
@@ -1127,7 +1134,12 @@ function reduceCampaignState(currentState, event) {
       CAMPAIGN_EVENTS.TERMINAL_STOP,
       CAMPAIGN_EVENTS.BOUNDARY_REJECTED,
       CAMPAIGN_EVENTS.AWAITING_CONVERGENCE,
-    ]).has(event.event_type),
+    ]).has(event.event_type)
+      // A review-candidate "end" resumes only to write TERMINAL_STOP, which may overrun by design; the
+      // resume marker that precedes it must not be refused for the same overrun (any other event
+      // that follows an overrun state is still refused by its own budget check).
+      || (event.event_type === CAMPAIGN_EVENTS.RESUMED
+        && event.payload && event.payload.close_only === true),
   });
   if (MUTATION_START_EVENTS.has(event.event_type)
       && event.usage.elapsed_wall_seconds >= currentState.limits.max_wall_seconds) {

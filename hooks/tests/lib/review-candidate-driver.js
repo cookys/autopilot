@@ -202,9 +202,11 @@ const gitWt = ({ commit } = {}) => {
     observed_tree_sha: git(verifyWt, 'rev-parse', 'HEAD^{tree}'), detached: true,
   };
 };
+// A step's clockSkewSeconds moves the engine clock forward (a long interruption); it persists for later steps.
+let clockSkewMs = 0;
 const options = {
   cwd: sbx,
-  clock: () => new Date().toISOString(),
+  clock: () => new Date(Date.now() + clockSkewMs).toISOString(),
   campaignDispositionProvider: compileCampaignDispositionPolicy('acceptance-bound'),
   campaignIntake(input, engineAdapters) {
     return runCampaignIntake(input, {
@@ -398,7 +400,10 @@ const killLease = () => {
 const stepsOut = [];
 let currentHead = head;
 for (const stepSpec of (ctx.steps || [])) {
-  try { killLease(); } catch (_e) { /* surfaced by the step itself */ }
+  // keepLease leaves the previous run's lease live, as a still-running owner would.
+  if (stepSpec.keepLease !== true) {
+    try { killLease(); } catch (_e) { /* surfaced by the step itself */ }
+  }
   // dropEvents: simulate a crash by deleting journaled campaign events (e.g. the park) from the ledger.
   if (Array.isArray(stepSpec.dropEvents) && stepSpec.dropEvents.length > 0) {
     const kept = fs.readFileSync(ledgerPath, 'utf8').split('\n').filter((line) => {
@@ -411,6 +416,7 @@ for (const stepSpec of (ctx.steps || [])) {
     });
     fs.writeFileSync(ledgerPath, `${kept.join('\n')}\n`);
   }
+  if (Number.isFinite(stepSpec.clockSkewSeconds)) clockSkewMs = stepSpec.clockSkewSeconds * 1000;
   const stepEnv = stepSpec.env || {};
   process.env.RC_VERDICT = stepEnv.RC_VERDICT || 'ship';
   process.env.RC_FAIL_MODEL = stepEnv.RC_FAIL_MODEL || '';

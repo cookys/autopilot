@@ -65,6 +65,17 @@ eq "review_candidate_branch_moved" "$(sf stk 0 code)" "stuck REVIEWING: resume a
 eq "REVIEWING" "$(sf stk 0 campaign_phase)" "stuck REVIEWING: the campaign is still non-terminal"
 eq "review_candidate_disposition_end" "$(sf stk 1 code)" "stuck REVIEWING: end closes it with the named code"
 eq "TERMINAL_STOP" "$(sf stk 1 campaign_phase)" "stuck REVIEWING: end leaves a terminal campaign"
+# the interruption outlasted the contract's wall budget (600 s in the fixture): end still closes it
+run_sc adjw ",$FIX"',"steps":[{"dropEvents":["awaiting_disposition"],"clockSkewSeconds":3600,"continuation":"end"}]' ok
+eq "review_candidate_disposition_end" "$(sf adjw 0 code)" "ADJUDICATING past the wall budget: end closes it with the named code"
+eq "TERMINAL_STOP" "$(sf adjw 0 campaign_phase)" "ADJUDICATING past the wall budget: end leaves a terminal campaign"
+run_sc stkw ',"failModel":"gpt-5.4","steps":[{"move":"forward"},{"clockSkewSeconds":3600,"continuation":"end"}]' ok
+eq "review_candidate_disposition_end" "$(sf stkw 1 code)" "stuck REVIEWING past the wall budget: end closes it with the named code"
+eq "TERMINAL_STOP" "$(sf stkw 1 campaign_phase)" "stuck REVIEWING past the wall budget: end leaves a terminal campaign"
+# a live lease means a running owner: end must not close the campaign under it
+run_sc lv ',"failModel":"gpt-5.4","steps":[{"keepLease":true,"continuation":"end"}]' ok
+eq "campaign_lease_live" "$(sf lv 0 code)" "end with a live lease is refused by name"
+eq "REVIEWING" "$(sf lv 0 campaign_phase)" "end with a live lease leaves the campaign non-terminal"
 
 # ---- the parked review: end ---------------------------------------------------------------------------------
 run_sc pk ",$FIX" ok
@@ -205,6 +216,18 @@ restore "$INT"
 mut "$INT" "if (flag !== null && facts && !parked && flag !== 'end') {" "if (flag !== null && facts && !parked) {"
 run_in "$MC" m9b ',"failModel":"gpt-5.4","steps":[{"move":"forward"},{"continuation":"end"}]' ok
 eq "true" "$(jf m9b 'j.steps[1].campaign_phase !== "TERMINAL_STOP"')" "MUTATION end refused when not parked: a stuck REVIEWING campaign cannot be closed (red)"
+restore "$INT"
+
+# M11 end subject to the wall budget again: the closeOnly skip (intake check + the resume marker) removed
+mut "$INT" "if (!closeOnly && resumePreflight.usage.elapsed_wall_seconds" "if (resumePreflight.usage.elapsed_wall_seconds"
+run_in "$MC" m11 ",$FIX"',"steps":[{"dropEvents":["awaiting_disposition"],"clockSkewSeconds":3600,"continuation":"end"}]' ok
+eq "true" "$(jf m11 'j.steps[0].campaign_phase !== "TERMINAL_STOP"')" "MUTATION wall check applies to end: an ADJUDICATING campaign past the wall budget is stuck (red)"
+run_in "$MC" m11b ',"failModel":"gpt-5.4","steps":[{"move":"forward"},{"clockSkewSeconds":3600,"continuation":"end"}]' ok
+eq "true" "$(jf m11b 'j.steps[1].campaign_phase !== "TERMINAL_STOP"')" "MUTATION wall check applies to end: a stuck REVIEWING campaign past the wall budget is stuck (red)"
+restore "$INT"
+mut "$INT" "payload: closeOnly ? { close_only: true } : {}," "payload: {},"
+run_in "$MC" m11c ",$FIX"',"steps":[{"dropEvents":["awaiting_disposition"],"clockSkewSeconds":3600,"continuation":"end"}]' ok
+eq "true" "$(jf m11c 'j.steps[0].campaign_phase !== "TERMINAL_STOP"')" "MUTATION resume marker not overrun-tolerant: the reducer refuses the closing resume (red)"
 restore "$INT"
 
 # M10 seal-time rejection of a repair preset removed: the contract seals and a review would run

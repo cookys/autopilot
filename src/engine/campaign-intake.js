@@ -941,6 +941,7 @@ function buildResumeEvent({
   idempotencyKey,
   observedAt,
   stageIdentity,
+  closeOnly = false,
 }) {
   const observedMs = Date.parse(observedAt);
   return {
@@ -958,7 +959,7 @@ function buildResumeEvent({
       ...existingState.usage,
       elapsed_wall_seconds: campaignClockElapsedSeconds(existingState, observedMs),
     },
-    payload: {},
+    payload: closeOnly ? { close_only: true } : {},
   };
 }
 
@@ -1382,7 +1383,9 @@ function defaultGenerationClaim({
     // reviewingResumable (src/campaign/cli.js).
     const reviewingResumable = existing.state.phase === CAMPAIGN_STATES.REVIEWING
       && (Boolean(existing.resume_candidate) || reviewCandidate);
-    if (!reviewingResumable && changedFilesPreSpendBlocked({
+    // closeOnly spends nothing (it only writes TERMINAL_STOP, which may overrun), so no budget check
+    // below may refuse it; the terminal-state and lease checks above this point stay in force.
+    if (!closeOnly && !reviewingResumable && changedFilesPreSpendBlocked({
       phase: existing.state.phase,
       usage: existing.state.usage,
       limits: existing.state.limits,
@@ -1393,7 +1396,7 @@ function defaultGenerationClaim({
         'durable campaign has no changed-file budget remaining',
       );
     }
-    if (existing.state.usage.churn >= existing.state.limits.max_churn) {
+    if (!closeOnly && existing.state.usage.churn >= existing.state.limits.max_churn) {
       return rejected(
         'campaign_generation',
         'campaign_churn_budget_exhausted',
@@ -1411,6 +1414,7 @@ function defaultGenerationClaim({
       })}`,
       observedAt,
       stageIdentity: 'campaign-resume-preflight',
+      closeOnly,
     });
     try {
       resumePreflight = reduceCampaignState(existing.state, preflightEvent);
@@ -1421,7 +1425,7 @@ function defaultGenerationClaim({
         error.message || String(error),
       );
     }
-    if (resumePreflight.usage.elapsed_wall_seconds
+    if (!closeOnly && resumePreflight.usage.elapsed_wall_seconds
         >= resumePreflight.limits.max_wall_seconds) {
       return rejected(
         'campaign_generation',
@@ -1445,7 +1449,7 @@ function defaultGenerationClaim({
         : fromLedger.repair_round_estimate_seconds,
     };
     const authority = loadDispositionAuthorityValue(campaignDispositionAuthority);
-    if (dispositionAuthorizesRepairRound(authority)
+    if (!closeOnly && dispositionAuthorizesRepairRound(authority)
         && Number.isSafeInteger(estimate.repair_round_estimate_seconds)
         && remaining < estimate.repair_round_estimate_seconds) {
       const reason = formatRepairRoundBudgetShortfall({ remaining, estimate })
@@ -1513,6 +1517,7 @@ function defaultGenerationClaim({
       idempotencyKey: `campaign-resume:${lease.generation}:${lease.nonce}`,
       observedAt,
       stageIdentity: `run-ledger:${lease.generation}:${lease.nonce}`,
+      closeOnly,
     });
     try {
       resumedState = reduceCampaignState(existing.state, resumeEvent);

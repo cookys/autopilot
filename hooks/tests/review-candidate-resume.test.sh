@@ -191,4 +191,34 @@ run_in "$MC" m7 "$RTQ_SEATS"',"failModel":"gemini-3-pro","steps":[{'"$GEM"'},{'"
 eq "true" "$(jf m7 'j.steps[2].code !== "review_candidate_panel_short"')" "MUTATION short-panel code removed: the terminal carries no code (red)"
 restore "$ENG"
 
+# M8 (P3 merge): the --resume path must hand reviewOnly to the readiness bootstrap, or a resume probes the
+# implementer seat again. The CLI builds the bootstrap before the run, first run and resume alike.
+CLI_PRELOAD="$RC/cli-options-preload.cjs"
+cat > "$CLI_PRELOAD" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const mod = require(path.join(process.env.CLI_OPTS_ROOT, 'src', 'readiness', 'provider-bootstrap.js'));
+mod.createStrictL5ProviderBootstrap = (options) => {
+  fs.writeFileSync(process.env.CLI_OPTS_OUT, JSON.stringify(options));
+  throw new Error('options captured');
+};
+NODE
+printf '{"schema_version":1,"base_sha":"%s","branch":"external/x","adoption":{"head_sha":"%s"}}\n' \
+  "$(printf 'a%.0s' $(seq 40))" "$(printf 'b%.0s' $(seq 40))" > "$RC/cli-contract.json"
+echo spec > "$RC/cli-spec.md"
+cli_opts() { # <root> <out>
+  rm -f "$2"
+  CLI_OPTS_ROOT="$1" CLI_OPTS_OUT="$2" NODE_OPTIONS="--require=$CLI_PRELOAD" AUTOPILOT_LEVEL=l4 \
+    node "$1/bin/autopilot.js" engine review-candidate --campaign-contract "$RC/cli-contract.json" \
+    --spec-file "$RC/cli-spec.md" --cwd "$RC" --resume --campaign-continuation end > "$2.out" 2>&1
+  cat "$2" 2>/dev/null
+}
+WANT='{"cwd":"'"$RC"'","level":"l4","reviewOnly":true}'
+eq "$WANT" "$(cli_opts "$REPO_ROOT" "$RC/cli-resume.json")" "RO12 resume: the CLI passes reviewOnly:true to the bootstrap on --resume"
+mut "bin/autopilot.js" "...(reviewCandidateMode ? { reviewOnly: true } : {})," ""
+eq "true" "$([ "$(cli_opts "$MC" "$RC/cli-resume-mut.json")" != "$WANT" ] && echo true || echo false)" "MUTATION reviewOnly dropped: the resume bootstrap no longer carries it (red)"
+restore "bin/autopilot.js"
+eq "$WANT" "$(cli_opts "$MC" "$RC/cli-resume-r.json")" "MUTATION restored: the resume bootstrap carries reviewOnly again (green)"
+
 finalize_test

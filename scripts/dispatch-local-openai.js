@@ -241,7 +241,9 @@ function parseChatResponse(raw, endpoint, requestId) {
   const message = raw.choices[0] && raw.choices[0].message;
   // The response spent the whole output cap (endpoint.max_tokens) and produced no content
   // (empty or reasoning-only): the named failure, never a pass. The parser is not relaxed.
-  if (message && (typeof message.content !== 'string' || message.content.length === 0)
+  // Whitespace-only counts as no content here: a model that burns the whole cap on blank output
+  // (e.g. a reasoning channel that leaks newlines) produced nothing usable.
+  if (message && (typeof message.content !== 'string' || message.content.trim().length === 0)
       && raw.choices[0].finish_reason === 'length') {
     throw new LocalDeploymentError(
       'output_budget_exhausted: finish_reason=length with no content '

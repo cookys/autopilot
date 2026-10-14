@@ -164,8 +164,8 @@ const server = http.createServer(async (request, response) => {
         if (state.mode === 'malformed-tool-call') {
           message.tool_calls = { name: 'unexpected' };
         }
-        if (['length-empty', 'stop-empty', 'length-reasoning-only'].includes(state.mode)) {
-          message.content = '';
+        if (['length-empty', 'stop-empty', 'length-reasoning-only', 'length-whitespace'].includes(state.mode)) {
+          message.content = state.mode === 'length-whitespace' ? ' \n\t \n' : '';
           if (state.mode === 'length-reasoning-only') message.reasoning_content = 'thinking '.repeat(40);
         }
         json(response, 200, {
@@ -175,7 +175,7 @@ const server = http.createServer(async (request, response) => {
           choices: [{
             index: 0,
             message,
-            finish_reason: ['length-empty', 'length-reasoning-only'].includes(state.mode)
+            finish_reason: ['length-empty', 'length-reasoning-only', 'length-whitespace'].includes(state.mode)
               ? 'length' : 'stop',
           }],
           usage: {
@@ -466,7 +466,7 @@ async function main() {
   // A response that spent the whole output cap (finish_reason=length) without any content is the
   // NAMED failure output_budget_exhausted; still a failure (never a pass, parser not relaxed).
   // RED at 8a338ccb: GENERATION_PROTOCOL_ERROR instead of output_budget_exhausted (both length cases).
-  for (const mode of ['length-empty', 'length-reasoning-only']) {
+  for (const mode of ['length-empty', 'length-reasoning-only', 'length-whitespace']) {
     reset(mode);
     await expectCode(
       () => runLocalDispatch(options()),
@@ -608,7 +608,7 @@ async function main() {
     'dispatch CLI invalid arguments emit a stable reason',
   );
 
-  if (assertions !== 72) throw new Error(`dispatch-local-openai: expected exactly 72 assertions (count pin moved here from hooks/tests/dispatch-local-openai.test.sh so the L1 run enforces it), got ${assertions}`);
+  if (assertions !== 75) throw new Error(`dispatch-local-openai: expected exactly 75 assertions (count pin moved here from hooks/tests/dispatch-local-openai.test.sh so the L1 run enforces it), got ${assertions}`);
   process.stdout.write(`local OpenAI dispatch: ${assertions} assertions passed\n`);
 }
 

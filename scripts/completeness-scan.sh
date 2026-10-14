@@ -21,6 +21,7 @@ set -euo pipefail
 
 MODE="staged"
 FILES=()
+declare -A SPLIT_FROM=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -28,14 +29,22 @@ while [[ $# -gt 0 ]]; do
     --range)  MODE="range"; RANGE="$2"; shift 2 ;;
     --files)  MODE="files"; shift
               while [[ $# -gt 0 && "$1" != --* ]]; do
-                # One argument holding a whitespace-joined list ("f1 f2") is not a
-                # file; word-split it instead of silently scanning 0 files (clean:true).
+                # One argument holding a joined list ("f1 f2", or one file per line) is
+                # not a file; split it instead of silently scanning 0 files (clean:true).
+                # A newline-bearing argument splits on newlines only, so names with
+                # spaces survive; otherwise it splits on whitespace.
                 if [[ ! -f "$1" && "$1" =~ [[:space:]] ]]; then
-                  read -r -d '' -a _split <<< "$1" || true
+                  if [[ "$1" == *$'\n'* ]]; then
+                    IFS=$'\n' read -r -d '' -a _split <<< "$1" || true
+                  else
+                    read -r -d '' -a _split <<< "$1" || true
+                  fi
                   for _p in "${_split[@]}"; do
-                    [[ -f "$_p" ]] || echo "completeness-scan: argument '$1' was split on whitespace; piece '$_p' is not a regular file" >&2
+                    _p="${_p%$'\r'}"
+                    [[ -n "$_p" ]] || continue
+                    SPLIT_FROM["$_p"]="$1"
+                    FILES+=("$_p")
                   done
-                  FILES+=("${_split[@]}")
                 else
                   FILES+=("$1")
                 fi
@@ -177,7 +186,13 @@ trap 'rm -f "$TMPF"' EXIT
 scanned=0
 for f in "${FILES[@]:-}"; do
   [[ -n "$f" ]] || continue
-  [[ -f "$f" ]] || echo "completeness-scan: skipping '$f' (not a regular file)" >&2
+  if [[ ! -e "$f" || ( ! -d "$f" && ! -f "$f" ) ]]; then
+    if [[ -n "${SPLIT_FROM[$f]:-}" ]]; then
+      echo "completeness-scan: argument '${SPLIT_FROM[$f]}' was split; piece '$f' is not a regular file" >&2
+    else
+      echo "completeness-scan: skipping '$f' (not a regular file)" >&2
+    fi
+  fi
   if ! is_scannable "$f"; then continue; fi
   scanned=$((scanned + 1))
   scan_file "$f" >> "$TMPF" || true

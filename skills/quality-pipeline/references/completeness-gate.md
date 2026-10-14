@@ -7,7 +7,7 @@
 
 | Category | Patterns Detected | Why Prohibited |
 |----------|-------------------|----------------|
-| **TODO/FIXME markers** | `TODO`, `FIXME`, `HACK`, `XXX`, `TEMP` | Unfinished work must not ship |
+| **TODO/FIXME markers** | `TODO`, `FIXME`, `HACK`, `XXX`, `TEMP` (six or more consecutive X is a mktemp template, not a marker) | Unfinished work must not ship |
 | **Empty implementations** | `return {};`, `return 0;` as sole function body | Every function must have real logic |
 | **Skipped tests** | `DISABLED_`, `GTEST_SKIP()`, commented-out `TEST()` | No new skipped tests allowed |
 | **Hardcoded test data** | Test values in `src/` (not `test/`) | Test data must not leak into production |

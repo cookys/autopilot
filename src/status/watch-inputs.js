@@ -27,7 +27,7 @@ function readWatchInputs({ env, key, identity, root, nowMs, liveBase, autopilotH
   const commonDir = commonDirOf(identity);
   const scope = { project_key: key, root_run_id: root || null };
   const planned = readPlanned({ liveBase, key, root, progressReceipt, markers, nowMs });
-  const decision = readDecision({ commonDir, key, root, identity, nowMs });
+  const decision = readDecision({ commonDir, key, root, identity, nowMs, liveBase });
   const cmp = root ? readCompare({ commonDir, root }) : { provided: false, entries: [], signature: [] };
   const markerStage = readMarkerStage({ markers, key, root });
   const taskPhase = readInProgressTask({ liveBase, key, root, markers, nowMs });
@@ -46,7 +46,7 @@ function readWatchInputs({ env, key, identity, root, nowMs, liveBase, autopilotH
     },
     sources,
     signature: JSON.stringify({
-      planned: planned ? planned.sha256 : null, decision: decision ? `${decision.sha256}:${decision.value.map((d) => Math.floor(d.age_s / 86400)).join(',')}` : null, compare: cmp.signature,
+      planned: planned ? planned.sha256 : null, decision: decision ? `${decision.sha256}:${decision.value.map((d) => `${Math.floor(d.age_s / 86400)}${d.orphaned ? 'o' : ''}`).join(',')}` : null, compare: cmp.signature,
       stage: markerStage ? `${markerStage.stage}@${markerStage.stage_set_at}|${markerStage.size}${markerStage.urgent ? '!' : ''}|${markerStage.level}|${markerStage.unit ? `${markerStage.unit.index}/${markerStage.unit.total}` : ''}|${markerStage.review_families.length}` : null,
       task_phase: taskPhase ? `${taskPhase.session_id}#${taskPhase.id}:${taskPhase.subject}` : null, manifest: sha(manifestText),
     }),

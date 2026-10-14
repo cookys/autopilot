@@ -3,7 +3,7 @@
 // `more`, the full I19) are in live.test.ts, named "P4 mounted ...". Each check ships with a negative control: a deliberately broken input that must be flagged.
 import { test, expect } from 'claude-code/testing'
 import { makeT } from './i18n'
-import { NO_DETAIL, NO_SECTIONS, wrapLines } from './model'
+import { NO_DETAIL, NO_SECTIONS, staleSuffix, wrapLines } from './model'
 import { dispatchLines, headerLines, hygieneTabLines, legendLines, nowLines, reviewTabLines, spendTabLines, stripOf, stripRows, treeRowCount, withOverflowHint } from './tabs'
 import type { LiveSnapshot, PaneLine, Seg } from './model'
 import * as ui from './ui'
@@ -27,7 +27,7 @@ function snap(o: Over = {}): LiveSnapshot {
   const tasks = o.tasks ?? [task('done one', 'completed'), task('now doing', 'in_progress'), task('later', 'pending')]
   return {
     state: 'ok', text: '', header: 'h', metrics: { ctx: '37%' }, band: band(o.kind ?? 'stalled', 'longest run 4m quiet'),
-    pending: o.decision === false ? [] : [{ id: 'd-1', question: 'merge or split?', background: null, options: [{ label: 'merge', description: 'one acceptance' }], recommendation: null, why: null, blocks: null, not_authorized: null, source: null, opened_at: null, stale: false, age_s: 60 }],
+    pending: o.decision === false ? [] : [{ id: 'd-1', question: 'merge or split?', background: null, options: [{ label: 'merge', description: 'one acceptance' }], recommendation: null, why: null, blocks: null, not_authorized: null, source: null, opened_at: null, stale: false, age_s: 60, orphaned: false }],
     project_key: null, root_run_id: null, link: null,
     rows: [run('r1'), run('r2', { stall: true, probe_age_s: 200 })], gates: null,
     sections: { ...NO_SECTIONS, tasks: { total: tasks.length, completed: tasks.filter(t => t.status === 'completed').length, in_progress: 1, current: 'now doing', first_created_ms: null, rows: tasks } },
@@ -511,7 +511,7 @@ test('strip: the active label and the ━ run are the here mark (I4 / I6); every
 
 // ---- 待決議事項: every open owner question in full; no block at all when none is open ----
 const pend = (id: string, q: string, over: Partial<LiveSnapshot['pending'][number]> = {}): LiveSnapshot['pending'][number] => ({
-  id, question: q, background: null, options: [], recommendation: null, why: null, blocks: null, not_authorized: null, source: null, opened_at: null, stale: false, age_s: 60, ...over,
+  id, question: q, background: null, options: [], recommendation: null, why: null, blocks: null, not_authorized: null, source: null, opened_at: null, stale: false, age_s: 60, orphaned: false, ...over,
 })
 test('PENDING: two open questions are both shown in full (question, background, options, recommendation and why, what stalls, source), wrapped and counted; zero shows no block', () => {
   const long = 'this background sentence is deliberately long enough that it has to wrap at seventy-six columns and must never be cut off by the pane'
@@ -540,4 +540,17 @@ test('PENDING: two open questions are both shown in full (question, background, 
   const none = nowLines({ ...snap(), pending: [] }, ctxOf(makeT('en'), 76))
   expect(none.some(l => l.fact === 'now.pending')).toBe(false)
   expect(none.map(l => l.text).join('\n')).not.toContain('Pending decisions')
+})
+
+// ---- orphan label (BL-0163): the asker's session is gone; the entry stays listed, labelled, never dropped ----
+test('PENDING: an orphaned question carries the asker-ended label in pane and band suffix, stays listed; a live one carries none', () => {
+  for (const [loc, t] of LOCALES) {
+    const text = (o: boolean): string => nowLines({ ...snap(), pending: [pend('d-9', 'ship it?', { orphaned: o })] }, ctxOf(t, 76)).map(l => l.text).join('\n')
+    expect(text(true), loc).toContain('ship it?')
+    expect(text(true), loc + ': orphan label').toContain(t('decision.orphaned').trim())
+    expect(text(false), loc + ': a live question has no orphan label').not.toContain(t('decision.orphaned').trim())
+    expect(staleSuffix(pend('d-9', 'q', { orphaned: true }), t), loc).toBe(t('decision.orphaned'))
+    expect(staleSuffix(pend('d-9', 'q', { orphaned: true, stale: true, age_s: 8 * 86400 }), t), loc + ': stale and orphaned both say so').toBe(t('decision.stale_days', { d: 8 }) + t('decision.orphaned'))
+    expect(staleSuffix(pend('d-9', 'q'), t), loc).toBe('')
+  }
 })

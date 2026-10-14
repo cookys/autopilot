@@ -9,8 +9,13 @@
 // not from the future (beyond a small slack); the others are ignored.
 // Age never hides a question (expiry warns, never blocks): older than STALE_MS only sets `stale: true`; `age_s` is always given.
 // Only `open-decision.js close --id` removes a question. Anything else is ignored.
+// Orphan (BL-0163): a question the ask-decision hook opened (`origin: ask_user_question`) whose asking session left no turn file under
+// <liveBase>/turn/ is `orphaned: true` — SessionEnd removes that file and answers close the entry, so an entry that outlived both
+// was left by a session that died without a clean end (or by a wiped live dir). Derived from the session's own artefact, never from age.
+// It only labels: the entry stays listed until `open-decision.js close --id`. Not judged (false) when no entry names a session, the entry is
+// hand-opened (no origin), or the live dir itself is unavailable. A session killed hard with its live dir intact still has its turn file: not detected.
 // Returns { value, sha256, file } where value is the list shaped for the renderer, oldest first:
-//   [{ id, question, background, options: [{label, description}], recommendation, why, blocks, not_authorized, source, opened_at, stale, age_s }]
+//   [{ id, question, background, options: [{label, description}], recommendation, why, blocks, not_authorized, source, opened_at, stale, age_s, orphaned }]
 // or null when no entry counts.
 
 const fs = require('fs');
@@ -27,7 +32,21 @@ function decisionFile(commonDir, key, root) {
 
 const str = (v) => (typeof v === 'string' && v.trim() ? v : null);
 
-function viewOf(e, nowMs) {
+const ASK_ORIGIN = 'ask_user_question';
+
+// True when the hook-opened entry's asking session has no turn file under <liveBase>/turn (see header). Fail-safe: false when it cannot be judged.
+function sessionGone(e, liveBase) {
+  if (e.origin !== ASK_ORIGIN || typeof e.opened_by_session !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(e.opened_by_session)) return false;
+  if (typeof liveBase !== 'string' || !liveBase) return false;
+  try {
+    if (!fs.statSync(liveBase).isDirectory()) return false;
+    return !fs.existsSync(path.join(liveBase, 'turn', `${e.opened_by_session}.json`));
+  } catch (_error) {
+    return false;
+  }
+}
+
+function viewOf(e, nowMs, liveBase) {
   if (!e || typeof e !== 'object' || typeof e.id !== 'string' || !e.id || typeof e.question !== 'string' || !e.question) return null;
   const opened = Date.parse(e.opened_at);
   if (!Number.isFinite(opened) || opened - nowMs > FUTURE_SLACK_MS) return null;
@@ -37,10 +56,11 @@ function viewOf(e, nowMs) {
     id: e.id, question: e.question, background: str(e.background), options, recommendation: str(e.recommendation), why: str(e.why),
     blocks: str(e.blocks), not_authorized: str(e.not_authorized), source: str(e.source), opened_at: new Date(opened).toISOString(),
     stale: nowMs - opened > STALE_MS, age_s: Math.max(0, Math.floor((nowMs - opened) / 1000)),
+    orphaned: sessionGone(e, liveBase),
   };
 }
 
-function readDecision({ commonDir, key, root, identity, nowMs }) {
+function readDecision({ commonDir, key, root, identity, nowMs, liveBase }) {
   try {
     if (!commonDir || !key) return null;
     const file = decisionFile(commonDir, key, root);
@@ -48,7 +68,7 @@ function readDecision({ commonDir, key, root, identity, nowMs }) {
     const v = JSON.parse(raw);
     if (!v || typeof v !== 'object' || v.schema !== 'autopilot.decision/2' || !Array.isArray(v.decisions)) return null;
     if (v.project_key !== key || v.repo_identity !== identity || (v.root_run_id || null) !== (root || null)) return null;
-    const value = v.decisions.map((e) => viewOf(e, nowMs)).filter(Boolean)
+    const value = v.decisions.map((e) => viewOf(e, nowMs, liveBase)).filter(Boolean)
       .sort((a, b) => Date.parse(a.opened_at) - Date.parse(b.opened_at) || (a.id < b.id ? -1 : 1));
     if (value.length === 0) return null;
     return { value, sha256: crypto.createHash('sha256').update(raw).digest('hex'), file };
@@ -57,4 +77,4 @@ function readDecision({ commonDir, key, root, identity, nowMs }) {
   }
 }
 
-module.exports = { readDecision, decisionFile, STALE_MS };
+module.exports = { readDecision, decisionFile, sessionGone, STALE_MS };

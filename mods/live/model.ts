@@ -54,6 +54,7 @@ export type LiveDecision = {
   id: string | null; question: string; background: string | null; options: { label: string; description: string }[]
   recommendation: string | null; why: string | null; blocks: string | null; not_authorized: string | null; source: string | null; opened_at: string | null
   stale: boolean; age_s: number | null
+  orphaned: boolean // the asking session left no turn file: it ended (or crashed) without answering; the watcher derives it, the entry is never removed by it
 }
 
 // `kind`, `fact`, `goto`, `group` and `ts` are stamped by the ui.ts components (the design system, docs/plans/2026-10-13-live-pane-design-system.md §6.1); `kind` and
@@ -744,10 +745,13 @@ export function attentionReason(a: AttentionView, nowMs: number, t: T = T_EN): s
   return t((a.kind === 'permission' ? 'reason.permission' : 'reason.question') + (n === null ? '' : '_waited'), { summary: a.summary, n: n === null ? 0 : n })
 }
 
-// 「（已等 N 天）」: only the model's stale flag, only when a whole day has passed
+// 「（已等 N 天）」: only the model's stale flag, only when a whole day has passed. 「（提問的 session 已結束）」: only the model's orphaned flag (the asker is gone,
+// nobody is waiting on this any more); the entry stays listed, closing it is the owner's `open-decision.js close --id`
 export function staleSuffix(d: LiveDecision | null, t: T = T_EN): string {
-  if (d === null || !d.stale || d.age_s === null || d.age_s < 86400) return ''
-  return t('decision.stale_days', { d: Math.floor(d.age_s / 86400) })
+  if (d === null) return ''
+  const orphan = d.orphaned ? t('decision.orphaned') : ''
+  if (!d.stale || d.age_s === null || d.age_s < 86400) return orphan
+  return t('decision.stale_days', { d: Math.floor(d.age_s / 86400) }) + orphan
 }
 
 // 僅自動裁決, worded from the writers the sidecar says are wired; next-pick is the depth-0 writer
@@ -948,6 +952,7 @@ export function readJobModel(text: string | null): JobModel | null {
     recommendation: optText(d.recommendation), why: optText(d.why), blocks: optText(d.blocks), not_authorized: optText(d.not_authorized), source: optText(d.source), opened_at: optText(d.opened_at),
     stale: d.stale === true,
     age_s: finite(d.age_s) ? d.age_s : null,
+    orphaned: d.orphaned === true,
   }))
   const p = m.progress
   const progress: JobProgress | null = isObject(p)

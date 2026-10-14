@@ -206,6 +206,8 @@ function openDecision({ cwd, root, session, question, background, options, recom
 // Remove the entry `id` from the scope `file` under the same lock (the file goes with its last entry). Idempotent.
 // `isOurs(entry)` (optional) must agree first. Returns { status: 'closed'|'absent'|'error', message }; never throws.
 function closeDecisionById(file, id, isOurs) {
+  // Nothing to close: do not enter the lock, whose store dir / lock file would create decisions/ in a repo that never opened one.
+  if (!fs.existsSync(file)) return { status: 'absent' };
   try {
     return withWriteLock({ storeDir: path.dirname(file), lockFile: `${file}.lock`, name: path.basename(file), timeoutMs: 3000 }, () => {
       const entries = readFile(file);

@@ -34,6 +34,7 @@
   "reason.idle": "no dispatch running",
   "reason.idle_hold": "waiting for your instruction for {n} min",
   "decision.stale_days": " (waiting {d} days)",
+  "decision.orphaned": " (asker session ended)",
   "decision.irreversible": "irreversible",
   "decision.reversible": "reversible",
   "sep.list": ", ",

@@ -5188,6 +5188,16 @@ class AutopilotEngine {
             rejection_code: recheckCode,
             moment: 'pre_review',
           }));
+          // A drifted branch has no exit: a resume would re-derive the same drift and refuse
+          // again. Terminalize now (not-ready, named code); no reviewer has been called.
+          campaignControl.terminal_failure = this.terminalizeManagedCampaignFailure({
+            campaignControl,
+            reason: `${recheckCode}: ${recheckReason}`,
+            phase: 'review_candidate_pre_review',
+            cwd: loopCwd,
+            repairLineage,
+            forceTerminal: true,
+          });
           // Named refusal: thrown so the composition surfaces the code, not a generic
           // review-authority error. No reviewer has been called at this point.
           throw Object.assign(new Error(`${recheckCode}: ${recheckReason}`), { code: recheckCode });
@@ -7620,9 +7630,22 @@ class AutopilotEngine {
           error && error.message ? error.message : String(error),
         );
       }
-      // No worktree is ever created for an adopted range; the validator only accepts a
-      // null worktree with this terminal disposition.
-      repairLineage.terminal_worktree_disposition = 'not_created_failed_dispatch';
+      // No worktree is ever created for an adopted range and no dispatch ever failed: say so.
+      repairLineage.terminal_worktree_disposition = 'not_created_adopted_range';
+      // The scope checker reads this session at every scope checkpoint; an adopted range has no
+      // implementation round that would build it, so seal it here against the adopted head.
+      try {
+        scopeSession = createCampaignScopeSession({
+          contract: campaignControl.contract,
+          base,
+          implementationSha: sealedAdoption.head_sha,
+        });
+      } catch (error) {
+        return adoptionBlocked(
+          'review_candidate_scope_session',
+          error && error.message ? error.message : String(error),
+        );
+      }
       ledger.push(this.ledgerEntry('adoption_admission', 'admitted', this.now(), {
         head: sealedAdoption.head_sha,
         warnings: Array.isArray(admissionStep.warnings) ? admissionStep.warnings : [],
@@ -10221,16 +10244,6 @@ class AutopilotEngine {
       }
       validateReviewRoster(roster, rosterOpts);
       validateImplementerRoster(roster);
-      if (input.reviewCandidate === true) {
-        // No implementer ran. The author family is the sealed declaration (an added
-        // exclusion only) or unknown, never the roster's unused implementer engine.
-        roster = {
-          ...roster,
-          implementer_family: typeof input.authorFamily === 'string' && input.authorFamily.length > 0
-            ? input.authorFamily
-            : 'unknown',
-        };
-      }
     } catch (error) {
       const startedAt = this.now();
       ledger.push(this.ledgerEntry('prepare_implementation_loop', 'blocked', startedAt));
@@ -10295,6 +10308,19 @@ class AutopilotEngine {
           ledger,
         });
       }
+    }
+
+    if (input.reviewCandidate === true) {
+      // No implementer ran. The author family is the sealed declaration (an added
+      // exclusion only) or unknown, never the roster's unused implementer engine.
+      // Applied AFTER the strict provider-readiness check: that check digests the roster
+      // as the host bootstrap resolved it, so changing it earlier reads as roster drift.
+      roster = {
+        ...roster,
+        implementer_family: typeof input.authorFamily === 'string' && input.authorFamily.length > 0
+          ? input.authorFamily
+          : 'unknown',
+      };
     }
 
     const requireQualifiedReviewer = input.requireQualifiedReviewer === true;
@@ -10594,7 +10620,12 @@ class AutopilotEngine {
         return finish({
           status: 'blocked',
           phase: 'campaign_intake',
-          reason: intake.reason || 'campaign intake rejected',
+          reason: (input.reviewCandidate === true && intake.rejection
+            && ['campaign_resume_required', 'campaign_already_terminal'].includes(intake.rejection.code))
+            ? `${intake.reason}; to review this range again, make a new contract with a new ticket, `
+              + 'seal it again, and put it in a new directory (review-candidate cannot resume yet)'
+            : (intake.reason || 'campaign intake rejected'),
+          code: (intake.rejection && intake.rejection.code) || null,
           rounds: 0,
           verdict: null,
           roster,

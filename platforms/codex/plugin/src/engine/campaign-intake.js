@@ -2001,7 +2001,7 @@ function defaultAdoptionAdmission({ contract, repo, phase = 'admission' }) {
   });
 }
 
-function reviewCandidatePanelRejection(roster) {
+function reviewCandidatePanelRejection(roster, authorFamily = null) {
   const seats = roster && Array.isArray(roster.qc_panel_seats) ? roster.qc_panel_seats : [];
   const minSize = roster && Number.isSafeInteger(roster.min_panel_size) ? roster.min_panel_size : 3;
   const configuredFamilies = roster
@@ -2013,11 +2013,16 @@ function reviewCandidatePanelRejection(roster) {
   const requiredFamilies = seats.length > 1 || minSize > 1
     ? Math.max(2, configuredFamilies)
     : configuredFamilies;
+  // The declared author family is EXCLUDED from the family count: the remaining families
+  // must still satisfy the sealed minimum. A declaration can only tighten the panel.
+  const declared = typeof authorFamily === 'string' && authorFamily.length > 0 ? authorFamily : null;
   const families = new Set();
   for (const seat of seats) {
     if (!seat || typeof seat.family !== 'string' || seat.family.length === 0) continue;
     const derived = modelFamilyOfEngine(seat.model);
-    families.add(derived === 'unknown' ? seat.family : derived);
+    const family = derived === 'unknown' ? seat.family : derived;
+    if (declared !== null && family === declared) continue;
+    families.add(family);
   }
   if (!roster || roster.qc_panel_seats_complete !== true
       || seats.length < minSize || families.size < requiredFamilies) {
@@ -2025,7 +2030,8 @@ function reviewCandidatePanelRejection(roster) {
       'campaign_generation',
       'review_candidate_panel_incomplete',
       `review-candidate requires the complete sealed panel: ${seats.length} seats `
-        + `(minimum ${minSize}), ${families.size} families (required ${requiredFamilies}), `
+        + `(minimum ${minSize}), ${families.size} families outside the declared author family `
+        + `${declared === null ? '(none declared)' : declared} (required ${requiredFamilies}), `
         + `complete=${Boolean(roster && roster.qc_panel_seats_complete === true)}`,
     );
   }
@@ -2054,7 +2060,7 @@ function runCampaignIntake(input = {}, adapters = {}) {
       : 'unknown')
     : modelFamilyOfEngine(input.roster && input.roster.implementer_engine));
   if (input.reviewCandidate === true) {
-    const panelRejection = reviewCandidatePanelRejection(input.roster);
+    const panelRejection = reviewCandidatePanelRejection(input.roster, input.authorFamily);
     if (panelRejection) {
       return {
         status: 'blocked',

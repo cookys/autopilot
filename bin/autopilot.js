@@ -465,7 +465,8 @@ if (args[0] === 'engine') {
           refuse(
             'review_candidate_resume_unsupported',
             'review-candidate cannot resume yet: a parked or interrupted review is not resumable '
-              + 'in this release; seal a new adoption contract for the range instead',
+              + 'in this release; to review the range again, make a new contract with a new ticket, '
+              + 'seal it again, and put it in a new directory',
           );
         }
         let sealed;

@@ -620,7 +620,9 @@ function validateRepairLineage(lineage, campaignId, branch) {
   if (lineage.lineage_id !== campaignId
       || lineage.branch !== branch
       || (lineage.worktree === null
-        ? lineage.terminal_worktree_disposition !== 'not_created_failed_dispatch'
+        ? !['not_created_failed_dispatch', 'not_created_adopted_range'].includes(
+          lineage.terminal_worktree_disposition,
+        )
         : (typeof lineage.worktree !== 'string' || !path.isAbsolute(lineage.worktree)))
       || (lineage.provider_session_id !== null
         && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
@@ -638,7 +640,9 @@ function validateRepairLineage(lineage, campaignId, branch) {
       || lineage.cleanup_epoch < 0
       || (lineage.cleanup_epoch === 0
         && (lineage.worktree !== null
-          || lineage.terminal_worktree_disposition !== 'not_created_failed_dispatch'))
+          || !['not_created_failed_dispatch', 'not_created_adopted_range'].includes(
+            lineage.terminal_worktree_disposition,
+          )))
       || (lineage.cleanup_receipt_id !== null
         && !isSha256(lineage.cleanup_receipt_id))
       || ((lineage.terminal_worktree_disposition === 'removed_clean')
@@ -657,6 +661,8 @@ function validateRepairLineage(lineage, campaignId, branch) {
         'active',
         'retained_failed_dispatch',
         'not_created_failed_dispatch',
+        // Review-only adopted range: no writer ran and no worktree was ever created.
+        'not_created_adopted_range',
         'blocked_cleanup_journal',
         'blocked_dirty_or_unverifiable',
         'removed_clean',

@@ -193,7 +193,12 @@ const options = {
       ...(engineAdapters || {}),
     });
   },
-  campaignScopeChecker() {
+  campaignScopeChecker({ session, head } = {}) {
+    // The engine must hand the checker a scope session sealed to the adopted head; a missing one
+    // is what made the live run trip "campaign scope seal drifted" while this stub stayed green.
+    if (!session || !session.contract || session.contract.implementation_sha !== head) {
+      return { passed: false, reason: 'campaign scope seal drifted', changed_files: [] };
+    }
     return { passed: true, changed_files: ['src/value.txt'], total_churn: 1, receipt_digest: 'd'.repeat(64) };
   },
   implementationDispatcher() {
@@ -207,13 +212,6 @@ const options = {
         worktree: wt,
       },
     };
-  },
-  diffProvider() {
-    const diffFile = path.join(outDir, `${scenario}.diff`);
-    fs.writeFileSync(diffFile, execFileSync('git', [
-      '-C', sbx, 'diff', '--no-ext-diff', '--no-textconv', `${base}..${reviewBase}`,
-    ]));
-    return diffFile;
   },
   gitWorktreeAdd: gitWt,
   gitWorktreeRemove({ worktree: wt } = {}) {

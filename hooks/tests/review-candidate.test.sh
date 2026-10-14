@@ -34,6 +34,10 @@ run_sc() {
 # jf <scenario> <js expression over j>
 jf() { node -e "const j=JSON.parse(require('fs').readFileSync('$RC/$1.json','utf8'));const v=($2);process.stdout.write(String(v))" 2>/dev/null; }
 
+seat() { printf '{"role":"qc","runner":"cc-shim","model":"%s","effort":"high","endpoint":null,"family":"%s"}' "$1" "$2"; }
+ANTH_ANTH_OPENAI='"seats":['"$(seat claude-opus-4-6 anthropic),$(seat claude-sonnet-4-6 anthropic),$(seat gpt-5.4 openai)"']'
+ANTH_OPENAI_GOOGLE='"seats":['"$(seat claude-opus-4-6 anthropic),$(seat gpt-5.4 openai),$(seat gemini-3-pro google)"']'
+TWO_SEATS='"seats":['"$(seat claude-opus-4-6 anthropic),$(seat gpt-5.4 openai)"']'
 ALL_ANTHROPIC='"seats":[{"role":"qc","runner":"cc-shim","model":"claude-opus-4-6","effort":"high","endpoint":null,"family":"anthropic"},{"role":"qc","runner":"cc-shim","model":"claude-sonnet-4-6","effort":"high","endpoint":null,"family":"anthropic"},{"role":"qc","runner":"cc-shim","model":"claude-haiku-4-5","effort":"high","endpoint":null,"family":"anthropic"}]'
 
 # ---- RO1/RO8: ready path, no writer ----------------------------------------------------------------
@@ -78,12 +82,14 @@ assert_contains "$BADFLAG" "unknown engine review-candidate option: --diff" "RO2
 run_sc moved_before
 eq "blocked" "$(jf moved_before 'j.status')" "RO3 tip moved before admission is refused"
 assert_contains "$(jf moved_before 'j.reason')" "is not the sealed head" "RO3 the refusal says the tip is not the sealed head"
+eq "review_candidate_branch_moved" "$(jf moved_before 'j.code')" "RO3 moved-before carries the named code at the top level"
 eq "0" "$(jf moved_before 'j.review_calls')" "RO3 moved-before: 0 review calls"
 eq "0" "$(jf moved_before 'j.impl')" "RO3 moved-before: 0 implementer calls"
 run_sc moved_after
 eq "blocked" "$(jf moved_after 'j.status')" "RO3 branch moved after admission (during verification) is refused"
 eq "review_candidate_branch_moved" "$(jf moved_after 'j.code')" "RO3 moved-after carries the named code review_candidate_branch_moved"
 eq "0" "$(jf moved_after 'j.review_calls')" "RO3 moved-after: 0 further review calls"
+eq "TERMINAL_STOP" "$(jf moved_after 'j.campaign_phase')" "RO3 a drifted branch terminalizes the campaign (no state whose only exit is a re-refusal)"
 eq "1" "$(jf moved_after 'j.verify_runs')" "RO3 control: the verify step really ran before the move was caught"
 RESUME_OUT="$(node "$CLI" engine review-candidate --campaign-contract c.json --spec-file s.md --resume 2>&1)"; RESUME_RC=$?
 eq "1" "$RESUME_RC" "RO3 --resume is refused (exit non-zero) in P1"
@@ -94,12 +100,15 @@ assert_contains "$RESUME_OUT" '"model_calls":0' "RO3 --resume refusal spends not
 for sc in out_of_scope file_cap not_ancestor dirty_operator; do run_sc "$sc"; done
 eq "blocked" "$(jf out_of_scope 'j.status')" "RO4 a path outside the allowed prefixes is refused"
 assert_contains "$(jf out_of_scope 'j.reason')" "docs/leak.md" "RO4 out-of-scope names the offending path"
+eq "review_candidate_out_of_scope" "$(jf out_of_scope 'j.code')" "RO4 out-of-scope carries its code at the top level"
 eq "0" "$(jf out_of_scope 'j.review_calls')" "RO4 out-of-scope: 0 review calls"
 eq "blocked" "$(jf file_cap 'j.status')" "RO4 file cap exceeded is refused"
 assert_contains "$(jf file_cap 'j.reason')" "the sealed cap is 1" "RO4 file-cap names the cap"
+eq "review_candidate_file_cap" "$(jf file_cap 'j.code')" "RO4 file-cap carries its code at the top level"
 eq "0" "$(jf file_cap 'j.review_calls')" "RO4 file-cap: 0 review calls"
 eq "blocked" "$(jf not_ancestor 'j.status')" "RO4 base not an ancestor of head is refused"
 assert_contains "$(jf not_ancestor 'j.reason')" "is not an ancestor" "RO4 not-ancestor names the reason"
+eq "review_candidate_base_not_ancestor" "$(jf not_ancestor 'j.code')" "RO4 not-ancestor carries its code at the top level"
 eq "0" "$(jf not_ancestor 'j.review_calls')" "RO4 not-ancestor: 0 review calls"
 run_sc head_equals_base
 eq "3" "$(jf head_equals_base 'j.seal_status')" "RO4 head equal to base is refused at seal"
@@ -126,6 +135,7 @@ eq "converged" "$(jf marker_committed 'j.status')" "RO5 control: the same verify
 # ---- RO6: modes cannot cross ---------------------------------------------------------------------------------
 run_sc adopt_under_implement
 eq "blocked" "$(jf adopt_under_implement 'j.status')" "RO6 an adoption contract under implement-review is refused"
+eq "review_candidate_mode_mismatch" "$(jf adopt_under_implement 'j.code')" "RO6 adoption-under-implement carries its code"
 assert_contains "$(jf adopt_under_implement 'j.reason')" "use engine review-candidate" "RO6 adoption-under-implement names review-candidate"
 eq "0" "$(jf adopt_under_implement 'j.impl')" "RO6 adoption-under-implement: 0 implementer calls"
 run_sc impl_under_candidate
@@ -143,13 +153,23 @@ assert_contains "$CLI_OUT" "review_candidate_mode_mismatch" "RO6 CLI refusal is 
 assert_contains "$CLI_OUT" '"dispatcher_called":false' "RO6 CLI refusal dispatches nothing"
 
 # ---- RO7: a declaration cannot weaken the panel ------------------------------------------------------------------
+# The declared family is EXCLUDED from the family count; what remains must still meet the sealed minimum.
 run_sc declared_family ',"authorFamily":"anthropic"'
 eq "converged" "$(jf declared_family 'j.status')" "RO7 a declared family that leaves a diverse panel still converges"
-eq "3" "$(jf declared_family 'j.review_calls')" "RO7 a declaration removes no seat (add-only exclusion)"
+eq "3" "$(jf declared_family 'j.review_calls')" "RO7 a declaration removes no seat from the review, only from the family count"
+run_sc excl_leaves_one ",$ANTH_ANTH_OPENAI"',"authorFamily":"openai"'
+eq "blocked" "$(jf excl_leaves_one 'j.status')" "RO7 (a) anthropic,anthropic,openai declaring openai leaves one family: the panel fails"
+eq "review_candidate_panel_incomplete" "$(jf excl_leaves_one 'j.code')" "RO7 (a) fails with the named panel code"
+assert_contains "$(jf excl_leaves_one 'j.reason')" "1 families outside the declared author family openai" "RO7 (a) names the families that remain"
+eq "0" "$(jf excl_leaves_one 'j.review_calls')" "RO7 (a): 0 review calls"
+run_sc excl_leaves_two ",$ANTH_OPENAI_GOOGLE"',"authorFamily":"openai"'
+eq "converged" "$(jf excl_leaves_two 'j.status')" "RO7 (b) anthropic,openai,google declaring openai leaves two families: the panel passes"
+eq "3" "$(jf excl_leaves_two 'j.review_calls')" "RO7 (b) all three seats review"
 run_sc same_family ",$ALL_ANTHROPIC"',"authorFamily":"anthropic"'
-eq "blocked" "$(jf same_family 'j.status')" "RO7 control: declared family equal to every seat's family is refused"
-assert_contains "$(jf same_family 'j.reason')" "complete sealed panel" "RO7 refusal names the panel rule"
-eq "0" "$(jf same_family 'j.review_calls')" "RO7 same-family panel: 0 review calls"
+eq "blocked" "$(jf same_family 'j.status')" "RO7 (c) control: declared family equal to every seat's family is refused"
+eq "review_candidate_panel_incomplete" "$(jf same_family 'j.code')" "RO7 (c) carries the named panel code"
+assert_contains "$(jf same_family 'j.reason')" "complete sealed panel" "RO7 (c) refusal names the panel rule"
+eq "0" "$(jf same_family 'j.review_calls')" "RO7 (c) same-family panel: 0 review calls"
 run_sc undeclared_same_family ",$ALL_ANTHROPIC"
 eq "blocked" "$(jf undeclared_same_family 'j.status')" "RO7 a single-family panel fails with no declaration at all (Q2: sealed minimum families)"
 eq "0" "$(jf undeclared_same_family 'j.review_calls')" "RO7 undeclared single-family panel: 0 review calls"
@@ -169,6 +189,11 @@ run_sc quorum ',"failModel":"gpt-5.4"'
 eq "blocked" "$(jf quorum 'j.status')" "RO8 an unmet quorum is not ready"
 assert_contains "$(jf quorum 'j.reason')" "final_panel_seat_transport_failed" "RO8 unmet quorum names the failing seat condition"
 eq "0" "$(jf quorum 'j.impl')" "RO8 unmet quorum: 0 writer calls"
+run_sc short_panel ",$TWO_SEATS"
+eq "blocked" "$(jf short_panel 'j.status')" "RO8 a panel smaller than the sealed minimum is not ready"
+assert_contains "$(jf short_panel 'j.reason')" "must satisfy min_panel_size" "RO8 the short panel is refused for its size (a roster fact), not as a transport failure"
+eq "0" "$(jf short_panel 'j.review_calls')" "RO8 short panel: 0 review calls and 0 writer calls"
+eq "0" "$(jf short_panel 'j.impl')" "RO8 short panel: 0 writer calls"
 # ADR-0001: depth-0 re-derives the terminal state from the ledger through `campaign inspect`
 INSPECT="$(node "$CLI" campaign inspect --campaign-id "$(jf ok 'j.campaign_id')" --ledger "$(jf ok 'j.ledger_path')" 2>&1)"; INSPECT_RC=$?
 eq "0" "$INSPECT_RC" "RO8 campaign inspect reads the adopted-range ledger"

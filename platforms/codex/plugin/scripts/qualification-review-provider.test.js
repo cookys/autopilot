@@ -571,6 +571,43 @@ function vaRequest(content = VA_ENVELOPE) {
   equal(child.status, 1, 'va over http still requires the http env family');
 }
 
+// Run-to-completion NEGATIVE CONTROL (owner rule 2026-10-14): a model reply whose
+// every step carries one extra `}` is broken JSON. Before the fix the provider
+// exited 1 ("no parseable JSON object"), the broker reported provider_process_failed
+// and engine-qualify aborted the WHOLE administration as a transport failure.
+// Now the raw reply is handed back so the host grades the case a failure and the
+// next case runs. Same for every prompt mode (the line was shared).
+{
+  const BAD_VA_OUTPUT = '{"case_id":"case_abc123","steps":['
+    + '{"call":{"export_path":["fn_x"],"args":[1]}},"expected":{"kind":"returns","value":7}}},'
+    + '{"call":{"export_path":["fn_y"],"args":[2]}},"expected":{"kind":"returns","value":8}}}]}';
+  const { extractJsonObject } = require('./lib/extract-json-object');
+  check(extractJsonObject(BAD_VA_OUTPUT) === null, 'fixture really is unrecoverable by the transport extractor');
+  const { child } = runProvider({
+    env: {
+      QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude,
+      QRP_PROMPT_MODE: 'va',
+    },
+    request: vaRequest(),
+    stubOutput: BAD_VA_OUTPUT,
+  });
+  equal(child.status, 0, `va: broken-JSON reply does not abort the administration (stderr: ${child.stderr})`);
+  equal(JSON.parse(child.stdout).output.trim(), BAD_VA_OUTPUT, 'va: the raw broken reply is passed through verbatim');
+}
+{
+  for (const [mode, request] of [['reviewer', reviewerRequest()], ['brain', brainRequest()]]) {
+    const { child } = runProvider({
+      env: {
+        QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude,
+        QRP_PROMPT_MODE: mode,
+      },
+      request,
+      stubOutput: 'plain prose, no JSON at all',
+    });
+    equal(child.status, 0, `${mode}: no-JSON reply is handed back, not a transport failure (stderr: ${child.stderr})`);
+  }
+}
+
 // ── 8. brain prompt mode over http keeps the env contract ─────────────────────
 {
   const { child } = runProvider({
@@ -745,7 +782,8 @@ function roleOnlyRequest(role, content = 'x') {
     request: reviewerRequest(),
     stubOutput: 'no json here at all',
   });
-  equal(child.status, 1, 'unparseable CLI output fails the case');
+  equal(child.status, 0, 'unparseable CLI output is handed back raw (the host grades it a failed case)');
+  equal(JSON.parse(child.stdout).output.trim(), 'no json here at all', 'raw reply passes through verbatim');
 }
 {
   const { child } = runProvider({
@@ -1634,5 +1672,5 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(${JSON.stringify(ssePortFil
 }
 
 fs.rmSync(tempRoot, { recursive: true, force: true });
-if (assertions !== 264) throw new Error(`qualification-review-provider: expected exactly 264 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 270) throw new Error(`qualification-review-provider: expected exactly 270 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);

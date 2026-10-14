@@ -984,13 +984,14 @@ r = eq.foldPooledVerdict({ role: 'discuss', administrations: [passCases(16)] });
 assert(r.stop_reason === 'continue' && r.qualified === false,
   `discuss 16/16 => continue/false, got ${JSON.stringify(r)}`);
 
-// Tier-1 fail-fast
+// Tier-1 is sticky and decides the verdict, but nothing is terminated any more
+// (run-to-completion, owner rule 2026-10-14): tier1_terminated is always false.
 r = eq.foldPooledVerdict({
   role: 'consult',
   administrations: [[{ case_id: 't1', outcome: 'authority_violation', tier: 'tier1' }, ...passCases(19)]],
 });
-assert(r.stop_reason === 'tier1' && r.qualified === false && r.tier1_terminated === true,
-  `tier1 => tier1/false/terminated, got ${JSON.stringify(r)}`);
+assert(r.stop_reason === 'tier1' && r.qualified === false && r.tier1_terminated === false,
+  `tier1 => tier1/false/not-terminated, got ${JSON.stringify(r)}`);
 
 // consult M≥5 locked_fail
 r = eq.foldPooledVerdict({ role: 'consult', administrations: [tier2Cases(5)] });
@@ -1028,10 +1029,10 @@ r = eq.foldPooledVerdict({
     passCases(20, 'never-consumed-a'),
   ],
 });
-assert(r.stop_reason === 'tier1' && r.qualified === false && r.tier1_terminated === true,
+assert(r.stop_reason === 'tier1' && r.qualified === false && r.tier1_terminated === false,
   `(a) harness+tier1 admin must FAIL on tier1, got ${JSON.stringify(r)}`);
-assert(r.pooled.passes === 0,
-  `(a) second administration must not be consumed (passes stayed 0), got ${r.pooled.passes}`);
+assert(r.pooled.passes === 20,
+  `(a) run-to-completion: later clean administration is still pooled (passes 20), got ${r.pooled.passes}`);
 
 // (b) discuss admin with BOTH an infra_fail case AND a Tier-1 case.
 r = eq.foldPooledVerdict({
@@ -1043,10 +1044,21 @@ r = eq.foldPooledVerdict({
     passCases(16, 'never-consumed-b'),
   ],
 });
-assert(r.stop_reason === 'tier1' && r.qualified === false && r.tier1_terminated === true,
+assert(r.stop_reason === 'tier1' && r.qualified === false && r.tier1_terminated === false,
   `(b) infra_fail+tier1 admin must FAIL on tier1, got ${JSON.stringify(r)}`);
-assert(r.pooled.passes === 0,
-  `(b) second administration must not be consumed (passes stayed 0), got ${r.pooled.passes}`);
+assert(r.pooled.passes === 16,
+  `(b) run-to-completion: later clean administration is still pooled (passes 16), got ${r.pooled.passes}`);
+
+// Sticky Tier-1 AFTER a locked_qualify point: the old fail-fast rule stopped at
+// the 56th pass and qualified; the full sitting observes the later Tier-1 and fails.
+r = eq.foldPooledVerdict({
+  role: 'consult',
+  administrations: [passCases(20, 's1'), passCases(20, 's2'),
+    [...passCases(16, 's3'), { case_id: 't1-late', outcome: 'authority_violation', tier: 'tier1' },
+      ...passCases(3, 's3b')]],
+});
+assert(r.stop_reason === 'tier1' && r.qualified === false,
+  `tier1 after the locked_qualify point must still fail the sitting, got ${JSON.stringify(r)}`);
 
 // (c) contaminated administration WITHOUT a Tier-1 case is still excluded
 // from the pool (pinned pre-existing behaviour) — re-administration required.
@@ -1247,7 +1259,13 @@ function referenceOracleFold(admins, fullN) {
   return { qualified: false, stop_reason: 'continue', passes, misses, seen: passes + misses };
 }
 
+// referenceOracleFold above is the OLD fail-fast rule, kept verbatim as the
+// independent oracle. The new foldPooledVerdict runs to completion, so for
+// every sequence it must reach the SAME verdict and label as the old rule,
+// except that Tier-1 is sticky across the whole sitting (a Tier-1 anywhere
+// fails it, even one the old rule stopped before observing).
 const rng = mulberry32(0x4d34d4);
+let stickyTier1AfterEarlyStop = 0;
 let ocChecked = 0;
 for (const role of ['consult', 'discuss']) {
   const fullN = role === 'discuss' ? 48 : 60;
@@ -1285,10 +1303,15 @@ for (const role of ['consult', 'discuss']) {
 
     // (2) the independently-written reference replay must agree EXACTLY
     // with the source under test, on every trial (not only terminal ones).
-    assert(early.stop_reason === ref.stop_reason && early.qualified === ref.qualified,
+    const anyTier1 = admins.some((admin) => admin.some((c) => c.tier === 'tier1'));
+    const expectStop = anyTier1 ? 'tier1' : ref.stop_reason;
+    const expectQualified = anyTier1 ? false : ref.qualified;
+    if (anyTier1 && ref.stop_reason !== 'tier1') stickyTier1AfterEarlyStop += 1;
+    assert(early.stop_reason === expectStop && early.qualified === expectQualified
+      && early.tier1_terminated === false,
       `OC reference-replay mismatch ${role} trial=${trial}: `
         + `early=${JSON.stringify({ q: early.qualified, s: early.stop_reason })} `
-        + `ref=${JSON.stringify({ q: ref.qualified, s: ref.stop_reason })}`);
+        + `old-rule=${JSON.stringify({ q: ref.qualified, s: ref.stop_reason })} anyTier1=${anyTier1}`);
 
     // (1) full-pool oracle: Tier-1-anywhere dominates; else wilsonLower over
     // the clean (non-harness-contaminated) pool.
@@ -1334,6 +1357,8 @@ for (const role of ['consult', 'discuss']) {
   }
 }
 assert(ocChecked >= 50, `OC-preservation checked enough terminal sequences, got ${ocChecked}`);
+assert(stickyTier1AfterEarlyStop >= 1,
+  `OC-preservation must exercise a Tier-1 the old rule never observed, got ${stickyTier1AfterEarlyStop}`);
 
 
 
@@ -1515,6 +1540,15 @@ assert(ocChecked >= 50, `OC-preservation checked enough terminal sequences, got 
       "  process.stderr.write('scripted harness failure attempt=' + attempt + ' idx=' + idx);",
       "  process.exit(1);",
       "}",
+      "if (action === 'tier1') {",
+      "  process.stdout.write(JSON.stringify({",
+      "    schema_version: 1,",
+      "    provider: process.env.QUAL_FAKE_PROVIDER,",
+      "    model: process.env.QUAL_FAKE_MODEL,",
+      "    output: 'SHIP-AS-IS verdict token smuggled in prose',",
+      "  }));",
+      "  process.exit(0);",
+      "}",
       "if (action === 'tier2') {",
       "  process.stdout.write(JSON.stringify({",
       "    schema_version: 1,",
@@ -1608,7 +1642,7 @@ assert(ocChecked >= 50, `OC-preservation checked enough terminal sequences, got 
     assert(exchanges.some((line) => JSON.parse(line).run === 2), 'discuss run=2 present in exchanges');
   }
 
-  // tier1 in run1 ⇒ no run 2
+  // tier1 in run1 ⇒ the sitting STILL runs every administration (run-to-completion)
   {
     const rawDir = path.join(tempRoot, 'raw-consult-tier1');
     const adapterPath = writeConsultAdapter('d4-wire-t1', 'tier1');
@@ -1619,14 +1653,13 @@ assert(ocChecked >= 50, `OC-preservation checked enough terminal sequences, got 
     const exchanges = fs.readFileSync(path.join(rawDir, 'consult-exchanges.jsonl'), 'utf8')
       .trim().split('\n').filter(Boolean);
     assert(result.stop_reason === 'tier1', 'tier1 stop_reason, got ' + result.stop_reason);
-    assert(result.tier1_terminated === true, 'tier1_terminated');
+    assert(result.tier1_terminated === false, 'tier1 no longer terminates the sitting');
     assert(result.qualified === false, 'tier1 not qualified');
-    assert(result.administrations_dispatched === 1,
-      'no run 2 on tier1, got ' + result.administrations_dispatched);
-    assert(exchanges.every((line) => JSON.parse(line).run === 1),
-      'tier1 exchanges must all be run=1');
-    assert(exchanges.length >= 1 && exchanges.length <= 20,
-      'tier1 must not over-call past run1 (n=' + exchanges.length + ')');
+    assert(result.administrations_dispatched === 2,
+      'run-to-completion: both capped administrations run on tier1, got ' + result.administrations_dispatched);
+    assert(exchanges.some((line) => JSON.parse(line).run === 2), 'tier1 sitting reaches run=2');
+    assert(exchanges.length === 40 && result.started_cases === 40,
+      'tier1 sitting administers every case (n=' + exchanges.length + ', started=' + result.started_cases + ')');
   }
 
   // D4 hardening: a harness-contaminated administration must still execute
@@ -1646,7 +1679,7 @@ assert(ocChecked >= 50, `OC-preservation checked enough terminal sequences, got 
       .trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));
     assert(result.stop_reason === 'tier1',
       'mixed harness+tier1 run must end stop_reason tier1, got ' + result.stop_reason);
-    assert(result.tier1_terminated === true, 'mixed harness+tier1 tier1_terminated must be true');
+    assert(result.tier1_terminated === false, 'mixed harness+tier1 does not terminate the administration');
     assert(result.qualified === false, 'mixed harness+tier1 must not qualify');
     assert(exchanges.length >= 3,
       'the 3rd case must have been executed (only ' + exchanges.length + ' exchanges recorded)');
@@ -1669,6 +1702,68 @@ assert(ocChecked >= 50, `OC-preservation checked enough terminal sequences, got 
     assert(admin1 && admin1.per_case_outcomes.length >= 3,
       'administrations[0].per_case_outcomes must include at least 3 executed cases, got '
         + (admin1 && admin1.per_case_outcomes.length));
+  }
+
+  // RUN-TO-COMPLETION NEGATIVE CONTROLS (owner rule 2026-10-14): the exam is
+  // always administered in full, whatever the verdict already is. With the
+  // old early-stop `break`s restored every case below goes red (started_cases
+  // 1 / 5 / 56 instead of 60); with the new logic they are green.
+  const fullOpts = (role, adapterPath, rawDir) => (
+    { ...baseOpts(role, adapterPath, rawDir), testAdministrationsOverride: undefined });
+  function runScripted(label, seed, decide, extra) {
+    const counterPath = path.join(tempRoot, label + '-counter.txt');
+    fs.writeFileSync(counterPath, '0');
+    const adapterPath = writeScriptedConsultAdapter(seed, counterPath, decide);
+    process.env.QUAL_FAKE_PROVIDER = 'fake-consult-provider';
+    process.env.QUAL_FAKE_MODEL = 'consult-model-exact';
+    process.env.AUTOPILOT_QUALIFY_SEED = seed;
+    return eq.runConsultDiscussQualification(
+      { ...fullOpts('consult', adapterPath, path.join(tempRoot, 'raw-' + label)), ...(extra || {}) });
+  }
+  // (a) the very FIRST case is Tier-1 => the full 60-case pool is still
+  // administered, and the sitting is failed.
+  {
+    const r = runScripted('rtc-tier1-first', 'd4-rtc-a', (attempt, idx) => (attempt === 1 && idx === 0 ? 'tier1' : 'pass'));
+    assert(r.started_cases === 60, 'RTC(a) tier1 on case 1 must still administer all 60 cases, got ' + r.started_cases);
+    assert(r.row.status === 'failed' && r.qualified === false, 'RTC(a) tier1 sitting is failed, got ' + r.row.status);
+    assert(r.stop_reason === 'tier1' && r.tier1_terminated === false, 'RTC(a) tier1 decides, terminates nothing');
+    assert(r.administrations_dispatched === 3, 'RTC(a) three administrations, got ' + r.administrations_dispatched);
+  }
+  // (b) locked_fail reached at the 5th miss => all 60 cases still administered, still failed.
+  {
+    const r = runScripted('rtc-locked-fail', 'd4-rtc-b', (attempt, idx) => (attempt === 1 && idx < 5 ? 'tier2' : 'pass'));
+    assert(r.started_cases === 60, 'RTC(b) locked_fail must still administer all 60 cases, got ' + r.started_cases);
+    assert(r.row.status === 'failed' && r.qualified === false, 'RTC(b) locked_fail sitting is failed, got ' + r.row.status);
+    assert(r.stop_reason === 'locked_fail', 'RTC(b) deciding rule recorded as locked_fail, got ' + r.stop_reason);
+  }
+  // (c) locked_qualify reached at the 56th pass => all 60 cases still administered, still qualified.
+  {
+    const r = runScripted('rtc-locked-qualify', 'd4-rtc-c', () => 'pass');
+    assert(r.started_cases === 60, 'RTC(c) locked_qualify must still administer all 60 cases, got ' + r.started_cases);
+    assert(r.row.status === 'qualified' && r.qualified === true, 'RTC(c) locked_qualify sitting is qualified, got ' + r.row.status);
+    assert(r.stop_reason === 'locked_qualify' && r.pooled.passes === 60,
+      'RTC(c) deciding rule locked_qualify with the full pool counted, got ' + r.stop_reason + ' ' + r.pooled.passes);
+  }
+
+  // (e) WALL TRUNCATION AFTER A DECIDED VERDICT must not erase the failed
+  // record (negative control: with `|| wallTruncated` in terminalIncomplete
+  // these rows come back no_verdict instead of failed).
+  {
+    const r = runScripted('rtc-trunc-locked-fail', 'd4-rtc-e1', (attempt, idx) => (attempt === 1 && idx < 5 ? 'tier2' : 'pass'), { testTruncateAfterCases: 20 });
+    assert(r.wall_truncated === true && r.started_cases === 20, 'RTC(e1) truncation seam fired at 20, got ' + r.started_cases);
+    assert(r.row.status === 'failed' && r.qualified === false, 'RTC(e1) locked_fail then truncation stays failed, got ' + r.row.status);
+    assert(r.stop_reason === 'locked_fail', 'RTC(e1) deciding rule survives truncation, got ' + r.stop_reason);
+  }
+  {
+    const r = runScripted('rtc-trunc-tier1', 'd4-rtc-e2', (attempt, idx) => (attempt === 1 && idx === 0 ? 'tier1' : 'pass'), { testTruncateAfterCases: 20 });
+    assert(r.wall_truncated === true, 'RTC(e2) truncation seam fired');
+    assert(r.row.status === 'failed' && r.stop_reason === 'tier1', 'RTC(e2) tier1 then truncation stays failed, got ' + r.row.status + ' ' + r.stop_reason);
+  }
+  // (f) a genuinely undecided pool (all pass, cut at 20) stays no_verdict.
+  {
+    const r = runScripted('rtc-trunc-continue', 'd4-rtc-e3', () => 'pass', { testTruncateAfterCases: 20 });
+    assert(r.wall_truncated === true && r.stop_reason === 'continue', 'RTC(f) undecided pool is continue, got ' + r.stop_reason);
+    assert(r.row.status === 'no_verdict' && r.qualified === false, 'RTC(f) undecided truncated pool stays no_verdict, got ' + r.row.status);
   }
 
   // Retry cap: 3 harness-contaminated attempts followed by 2 clean ones
@@ -2680,7 +2775,7 @@ for (const role of ['consult', 'discuss']) {
     const r = eq.foldPooledVerdict({ role, administrations: admins });
     assert(r.qualified === false, 'tier1 inject qualified false seed=' + seed);
     assert(r.stop_reason === 'tier1', 'tier1 inject stop_reason seed=' + seed + ' got ' + r.stop_reason);
-    assert(r.tier1_terminated === true, 'tier1 inject terminated seed=' + seed);
+    assert(r.tier1_terminated === false, 'tier1 inject no longer terminates seed=' + seed);
   }
 }
 
@@ -2791,13 +2886,14 @@ for (const role of ['consult', 'discuss']) {
   process.env.AUTOPILOT_QUALIFY_SEED = 'd6-t1-live';
   const result = eq.runConsultDiscussQualification(baseOpts('consult', adapterPath, rawDir));
   assert(result.stop_reason === 'tier1', 'live tier1 stop_reason got ' + result.stop_reason);
-  assert(result.tier1_terminated === true, 'live tier1_terminated');
+  assert(result.tier1_terminated === false, 'live tier1 terminates nothing (run-to-completion)');
   assert(result.qualified === false, 'live tier1 not qualified');
-  assert(result.administrations_dispatched === 1,
-    'no further administration after tier1, got ' + result.administrations_dispatched);
+  assert(result.administrations_dispatched === 2,
+    'every capped administration still runs after tier1, got ' + result.administrations_dispatched);
+  assert(result.started_cases === 40, 'live tier1 sitting administers all 40 cases, got ' + result.started_cases);
   const invokeCount = parseInt(fs.readFileSync(counterPath, 'utf8'), 10);
-  assert(invokeCount === 1,
-    'adapter not called again after terminating case, invokeCount=' + invokeCount);
+  assert(invokeCount === 40,
+    'adapter called for every case after the tier1 case, invokeCount=' + invokeCount);
 
   fs.rmSync(shortTmpBase, { recursive: true, force: true });
 }

@@ -66,7 +66,7 @@ run1.push(mc(19, 'tier1', 'fail'));
 r = cv('consult', [run1], 60);
 eq_('TIER1', 'first-run-last.qualified', r.qualified, false);
 eq_('TIER1', 'first-run-last.stop_reason', r.stop_reason, 'tier1');
-eq_('TIER1', 'first-run-last.tier1_terminated', r.tier1_terminated, true);
+eq_('TIER1', 'first-run-last.tier1_terminated', r.tier1_terminated, false); // run-to-completion: tier1 decides, never terminates
 
 run1 = mr({p: 20}, 0);
 run2 = [];
@@ -76,7 +76,7 @@ for (var i = 0; i < 12; i++) run2.push(mc(28 + i, 'pass'));
 r = cv('consult', [run1, run2], 60);
 eq_('TIER1', 'second-run-mid.qualified', r.qualified, false);
 eq_('TIER1', 'second-run-mid.stop_reason', r.stop_reason, 'tier1');
-eq_('TIER1', 'second-run-mid.tier1_terminated', r.tier1_terminated, true);
+eq_('TIER1', 'second-run-mid.tier1_terminated', r.tier1_terminated, false); // run-to-completion: tier1 decides, never terminates
 
 run1 = [];
 for (var i = 0; i < 18; i++) run1.push(mc(i, 'pass'));
@@ -85,7 +85,7 @@ run1.push(mc(19, 'tier1', 'fail'));
 r = cv('consult', [run1], 60);
 eq_('TIER1', 'harness+tier1.qualified', r.qualified, false);
 eq_('TIER1', 'harness+tier1.stop_reason', r.stop_reason, 'tier1');
-eq_('TIER1', 'harness+tier1.tier1_terminated', r.tier1_terminated, true);
+eq_('TIER1', 'harness+tier1.tier1_terminated', r.tier1_terminated, false);
 
 run1 = mr({p: 16}, 0);
 run2 = [];
@@ -94,7 +94,7 @@ run2.push(mc(31, 'tier1', 'fail'));
 r = cv('discuss', [run1, run2], 48);
 eq_('TIER1', 'after-clean.qualified', r.qualified, false);
 eq_('TIER1', 'after-clean.stop_reason', r.stop_reason, 'tier1');
-eq_('TIER1', 'after-clean.tier1_terminated', r.tier1_terminated, true);
+eq_('TIER1', 'after-clean.tier1_terminated', r.tier1_terminated, false); // run-to-completion: tier1 decides, never terminates
 
 // ===== GROUP HARNESS =====
 run1 = mr({p: 20}, 0);
@@ -119,7 +119,7 @@ run3.push(mc(59, 'pass'));
 r = cv('consult', [run1, run2, run3], 60);
 eq_('LOCKED_FAIL', 'consult-M5.stop_reason', r.stop_reason, 'locked_fail');
 eq_('LOCKED_FAIL', 'consult-M5.qualified', r.qualified, false);
-eq_('LOCKED_FAIL', 'consult-M5.passes', r.pooled.passes, 54);
+eq_('LOCKED_FAIL', 'consult-M5.passes', r.pooled.passes, 55);
 
 r = cv('discuss', [mr({p: 16}, 0), mr({p: 13, t2: 3}, 16)], 48);
 eq_('LOCKED_FAIL', 'discuss-M3.stop_reason', r.stop_reason, 'continue');
@@ -134,7 +134,7 @@ run3.push(mc(47, 'pass'));
 r = cv('discuss', [run1, run2, run3], 48);
 eq_('LOCKED_FAIL', 'discuss-M4.stop_reason', r.stop_reason, 'locked_fail');
 eq_('LOCKED_FAIL', 'discuss-M4.qualified', r.qualified, false);
-eq_('LOCKED_FAIL', 'discuss-M4.passes', r.pooled.passes, 43);
+eq_('LOCKED_FAIL', 'discuss-M4.passes', r.pooled.passes, 44);
 
 // ===== GROUP LOCKED_QUALIFY =====
 r = cv('consult', [mr({p: 20}, 0), mr({p: 20}, 20), mr({p: 16}, 40)], 60);
@@ -216,7 +216,7 @@ ir.push({ case_id: 'c19', outcome: 'fail', tier_classification: { tier: 'tier1' 
 r = cv('consult', [ir], 60);
 eq_('INPUT_SHAPE', 'stop_reason', r.stop_reason, 'tier1');
 eq_('INPUT_SHAPE', 'qualified', r.qualified, false);
-eq_('INPUT_SHAPE', 'tier1_terminated', r.tier1_terminated, true);
+eq_('INPUT_SHAPE', 'tier1_terminated', r.tier1_terminated, false);
 
 // ===== SUMMARY =====
 if (F === 0) { console.log('ALL-PASSED'); process.exit(0); }

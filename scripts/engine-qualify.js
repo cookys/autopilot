@@ -2976,9 +2976,28 @@ function runBrainQualification(options) {
       hard_fails: trials.reduce((sum, t) => sum + t.hard_fail_count, 0),
       repeated_trials: trials.length,
     },
+    // capability_score = diligence plant catch rate across every trial (caught / total).
+    // Why not the share of true subjects: a QUALIFIED sitting has all four true, so that
+    // share is a constant 1 and could never rank two qualified seats. The plant rate is
+    // the one continuous measure the exam produces. It is a ranking signal only —
+    // admission stays with `status` / the subjects verdict, which this does not touch.
+    capability_score: trials.reduce((sum, t) => sum + t.plants_total, 0) === 0
+      ? 0
+      : trials.reduce((sum, t) => sum + t.plants_caught, 0)
+        / trials.reduce((sum, t) => sum + t.plants_total, 0),
+    // Same unknown-cost block as every other role: the exam does not meter price.
+    cost: {
+      source: 'unknown',
+      usd_per_mtok_input: 0,
+      usd_per_mtok_output: 0,
+      sample_tokens: 0,
+    },
     latency: { sample_wall_time_s: Math.max(0, Math.round((Date.now() - started) / 1000)) },
     status: qualified ? 'qualified' : 'failed',
     qualified_at: issuedAt.slice(0, 10),
+    // Must equal evidence.expires_at's date (engine-scorecard record cross-checks it).
+    // Advisory only for the brain seat — standing qualification, never blocks.
+    expires: expiresAt.slice(0, 10),
     standing: true,
     evidence_store: {
       event_id: evidenceStoreRecord.event_id,

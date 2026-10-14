@@ -157,6 +157,7 @@ const baseOptions = {
   engine: 'brain-engine',
   model: 'brain-model-exact',
   modelVersion: '2026-08-17',
+  versionSource: 'operator-asserted',
   runner: 'brain-harness',
   runnerVersion: '1.0.0',
   family: 'test-family',
@@ -373,6 +374,54 @@ function main() {
   equal(receipt.state, 'qualified',
     'brain record is NOT stale 60 days later — standing qualification, no TTL');
 
+  // --- the brain row is recordable by `engine-scorecard.js record` ----------------------
+  // Everything below runs against TEMP stores only (never ~/.autopilot).
+  {
+    const brainRow = perfect.row;
+    check(typeof brainRow.capability_score === 'number' && brainRow.capability_score === 1,
+      `perfect sitting scores 1 (plant catch rate), got ${brainRow.capability_score}`);
+    equal(brainRow.cost && brainRow.cost.source, 'unknown', 'brain row carries the unknown-cost block');
+    equal(brainRow.expires, record.expires_at.slice(0, 10), 'row.expires mirrors evidence.expires_at');
+    equal(brainRow.methodology_kind, 'owner_brain_seat',
+      'methodology_kind marks the row as brain (role alone is shared with the foreman exam)');
+    const capDir = path.join(tempRoot, 'store-perfect');
+    const recordRow = (row, scorecardName) => {
+      const scDir = path.join(tempRoot, scorecardName);
+      fs.mkdirSync(scDir, { recursive: true });
+      const rowFile = path.join(tempRoot, `${scorecardName}.row.json`);
+      fs.writeFileSync(rowFile, JSON.stringify(row));
+      const result = spawnSync(process.execPath, [
+        path.join(__dirname, 'engine-scorecard.js'), 'record', '--file', rowFile,
+      ], {
+        encoding: 'utf8',
+        env: { ...process.env, ENGINE_SCORECARD_DIR: scDir, ENGINE_CAPABILITY_DIR: capDir },
+      });
+      return { result, scDir };
+    };
+    const accepted = recordRow(brainRow, 'sc-accept');
+    check(accepted.result.status === 0,
+      `brain row is accepted by engine-scorecard record (${accepted.result.stdout}${accepted.result.stderr})`.slice(0, 400));
+    // Negative controls: dropping any one of the three fields must be refused.
+    for (const field of ['capability_score', 'cost', 'expires']) {
+      const broken = { ...brainRow };
+      delete broken[field];
+      const refused = recordRow(broken, `sc-missing-${field}`);
+      check(refused.result.status !== 0
+        && new RegExp(`missing required field.*${field}`, 'u').test(refused.result.stdout + refused.result.stderr),
+      `record refuses a brain row without ${field} (status ${refused.result.status})`);
+    }
+    // Consumer-side separation: role owner is shared with the foreman exam, so the
+    // brain row must be distinguishable by its scope (task_classes ['brain-seat']).
+    const current = spawnSync(process.execPath, [
+      path.join(__dirname, 'engine-scorecard.js'), 'current', '--role', 'owner',
+    ], {
+      encoding: 'utf8',
+      env: { ...process.env, ENGINE_SCORECARD_DIR: accepted.scDir, ENGINE_CAPABILITY_DIR: capDir },
+    });
+    check(current.status === 0 && /brain-seat/u.test(current.stdout),
+      `current --role owner output carries the brain-seat scope (${current.stdout.slice(0, 300)}${current.stderr})`);
+  }
+
   // --- strike revocation fold ------------------------------------------------------
   const statusFresh = brainSeatStatus(storeConfig, identityFixture, null);
   equal(statusFresh.status, 'qualified', 'brain-status reads the standing pass');
@@ -507,7 +556,7 @@ function main() {
     'the second trial never runs once transport is known dead');
 
   fs.rmSync(tempRoot, { recursive: true, force: true });
-  if (assertions !== 64) throw new Error(`engine-qualify-brain: expected exactly 64 assertions (count pin moved here from hooks/tests/engine-qualify-brain.test.sh so the L1 run enforces it), got ${assertions}`);
+  if (assertions !== 73) throw new Error(`engine-qualify-brain: expected exactly 73 assertions (count pin moved here from hooks/tests/engine-qualify-brain.test.sh so the L1 run enforces it), got ${assertions}`);
   process.stdout.write(`brain qualifier: ${assertions} assertions passed\n`);
 }
 

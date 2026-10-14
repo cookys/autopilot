@@ -3531,9 +3531,13 @@ fs.rmSync(shortTmpBase, { recursive: true, force: true });
   // consult/discuss never run inside runQualification (it returns early into
   // runConsultDiscussQualification), so the leak guard loses no consult/discuss coverage; the
   // reviewer path is covered end to end by engine-qualify-a/b.test.sh and the raw-dir test there.
+  //
+  // runBrainQualification left this list on 2026-10-14: its emitted row gained capability_score,
+  // cost and expires so `engine-scorecard.js record` accepts a brain sitting. Same reasoning as
+  // runQualification above — the pin names an old commit, and the brain path is now covered end to
+  // end by scripts/engine-qualify-brain.test.js (record accepted; each missing field refused).
   const fns = [
     'runVaQualification',
-    'runBrainQualification',
     'ownerRuleViolations',
   ];
   for (const name of fns) {

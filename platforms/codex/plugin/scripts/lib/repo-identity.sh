@@ -110,12 +110,34 @@ child_session_mint() {
   return 0
 }
 
+# child_session_env_setup -- plan dispatch-tree step 3b (section 6 rule 3). A rail hands EVERY child runner its own
+# marker write target as AUTOPILOT_PARENT_SESSION_ID (the id `session-mode.js write-target --rail` resolves: env
+# chain or cwd included, or the inherited parent when this rail is itself below one) and scrubs the ids the child
+# could otherwise write under. Sets CHILD_SESSION_UNSET (array of `-u NAME`; must precede any NAME=VALUE in an `env`
+# argv) and CHILD_SESSION_PARENT (the id, empty when nothing resolved; pass as AUTOPILOT_PARENT_SESSION_ID=<id>).
+# Optional $1: the scripts/ dir (a function re-declared in a detached child has no useful BASH_SOURCE).
+# CLAUDE_CODE_SESSION_ID goes only when it differs from the parent id: a runner below it must see it as inherited.
+child_session_env_setup() {
+  CHILD_SESSION_UNSET=(-u AUTOPILOT_SESSION_ID -u CLAUDE_SESSION_ID)
+  CHILD_SESSION_PARENT=""
+  local sm
+  if [ -n "${1:-}" ]; then sm="$1/session-mode.js"; else sm="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd)/session-mode.js"; fi
+  if [ -r "$sm" ]; then
+    CHILD_SESSION_PARENT="$(node "$sm" write-target --rail 2>/dev/null | head -1 || true)"
+  fi
+  if [ -n "$CHILD_SESSION_PARENT" ] && [ -n "${CLAUDE_CODE_SESSION_ID:-}" ] && [ "${CLAUDE_CODE_SESSION_ID}" != "$CHILD_SESSION_PARENT" ]; then
+    CHILD_SESSION_UNSET+=(-u CLAUDE_CODE_SESSION_ID)
+  fi
+  return 0
+}
+
 # child_marker_hook_setup -- plan dispatch-tree step 3a (D2). The claude child's SessionStart marker is
 # written by a hook the rail hands it with `--settings` (the user-scope plugin does not load in a
 # project-only child). Sets CHILD_MARKER_SETTINGS (inline settings JSON; empty when no child id was minted
 # or the script path is unsafe to quote) and CHILD_MARKER_DIR (the LAUNCHER's marker dir, resolved before a
 # cc-shim scratch HOME hides ~/.autopilot; the rail exports it to the child as AUTOPILOT_SESSION_MODE_DIR).
 child_marker_hook_setup() {
+  child_session_env_setup   # 3b: the claude child's parent id + scrubbed ids (callers expand CHILD_SESSION_UNSET / CHILD_SESSION_PARENT)
   CHILD_MARKER_SETTINGS=""
   CHILD_MARKER_DIR="${AUTOPILOT_SESSION_MODE_DIR:-${HOME:-}/.autopilot/session-mode}"
   [ -n "${CHILD_SESSION_ID:-}" ] || return 0

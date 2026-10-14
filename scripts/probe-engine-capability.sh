@@ -5,6 +5,9 @@ set -uo pipefail
 
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 STATE_CLI="$SELF_DIR/engine-capability-state.js"
+# dispatch-tree 3b rule 3: the probe's `claude -p` children get this process's write target as the parent id.
+# shellcheck source=lib/repo-identity.sh
+[ -r "$SELF_DIR/lib/repo-identity.sh" ] && . "$SELF_DIR/lib/repo-identity.sh" || true
 
 RUNNER=""
 MODEL=""
@@ -453,13 +456,16 @@ if [ "$LIVE_SPEND" -eq 1 ] && [ "$BINARY_FOUND" -eq 1 ]; then
         PROBE_EXIT=1
         echo "cc-shim exact endpoint unobserved: ANTHROPIC_BASE_URL unset after resolve" >"$PROBE_ERR_FILE"
       else
-        env -u ANTHROPIC_API_KEY claude -p "Respond only with OK" --model "$MODEL" --tools "" >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
+        child_session_env_setup "$SELF_DIR" 2>/dev/null || true
+        env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} -u ANTHROPIC_API_KEY ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} claude -p "Respond only with OK" --model "$MODEL" --tools "" >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
       fi
       ;;
     claude-native)
       # Local Claude Code CLI on its own ambient auth — unlike cc-shim, no ANTHROPIC_*
       # override, so the ambient credential is exactly what dispatch would use.
-      claude -p "Respond only with OK" --model "$MODEL" --tools "" \
+      child_session_env_setup "$SELF_DIR" 2>/dev/null || true
+      env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} \
+        claude -p "Respond only with OK" --model "$MODEL" --tools "" \
         >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
       ;;
     kimi)

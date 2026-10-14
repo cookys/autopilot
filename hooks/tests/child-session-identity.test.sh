@@ -2,8 +2,9 @@
 # Live-pane plan 7.1 identity hand-off 3 -- every rail that starts a `claude` child (author: cc-shim and
 # claude-native; review: cc-shim and claude-native; hetero: cc-shim) mints the child's session id, passes it
 # as `--session-id`, records it as the manifest's child_session_id, and hands the child
-# AUTOPILOT_PARENT_SESSION_ID=$CLAUDE_CODE_SESSION_ID (nothing when unset). The child's SessionStart marker
-# writer (ensurePlainMarker) turns that variable into parent_session_id; `session-mode set` never does.
+# AUTOPILOT_PARENT_SESSION_ID=<the rail's own marker write target> (dispatch-tree 3b: $CLAUDE_CODE_SESSION_ID when that is the
+# launcher's id; with no id at all, the cwd-derived id). The child's SessionStart marker writer (ensurePlainMarker) turns that
+# variable into parent_session_id; `session-mode set` never does.
 # Seam: a stub `claude` that records its argv and env; own temp dirs; no real claude is ever started.
 . "$(dirname "$0")/lib.sh"
 eq() { assert_eq "$2" "$1" "$3"; }  # eq <expected> <actual> <msg>
@@ -68,11 +69,13 @@ check_case() { # <name> <runs> <log> <parent-or-empty>
     eq "PARENT:$parent" "$(grep '^PARENT:' "$log" | head -1)" "$name: child gets AUTOPILOT_PARENT_SESSION_ID=\$CLAUDE_CODE_SESSION_ID"
     eq "$parent" "$(mf_get "$mf" session_id)" "$name: manifest session_id is still the parent id"
   else
-    eq "PARENT:<unset>" "$(grep '^PARENT:' "$log" | head -1)" "$name: no parent id => the variable is not exported to the child"
+    # 3b rule 3: a launcher with no session id still has a write target (cwd), and the child gets it.
+    eq "PARENT:$CWD_ID" "$(grep '^PARENT:' "$log" | head -1)" "$name: no session id => the child gets the rail's cwd-derived write target"
   fi
 }
 
 PARENT="aaaaaaaa-1111-2222-3333-444444444444"
+CWD_ID="$(cd "$SBX" && node -e 'process.stdout.write(process.cwd().replace(/[^a-zA-Z0-9_-]/g,"_").slice(0,64))')"
 declare -A CMDS
 CMDS[author-native]="$AUTHOR --runner claude-native --model claude-haiku --prompt-file $PROMPT --bin $BINDIR/claude"
 CMDS[author-ccshim]="$AUTHOR --runner cc-shim --model MiniMax-M3 --prompt-file $PROMPT --bin $BINDIR/claude"
@@ -125,9 +128,10 @@ env AUTOPILOT_PARENT_SESSION_ID="$PARENT" node -e "$EPM" "$REPO_ROOT/scripts/ses
 eq "$PARENT" "$(mf_get "$MD/child-1.json" parent_session_id)" "SessionStart marker: parent_session_id from AUTOPILOT_PARENT_SESSION_ID"
 env -u AUTOPILOT_PARENT_SESSION_ID node -e "$EPM" "$REPO_ROOT/scripts/session-mode.js" child-2 "$SBX" "$MD" >/dev/null
 eq "<absent>" "$(mf_get "$MD/child-2.json" parent_session_id)" "SessionStart marker: no variable => no parent_session_id key"
-env AUTOPILOT_PARENT_SESSION_ID=child-3 node -e "$EPM" "$REPO_ROOT/scripts/session-mode.js" child-3 "$SBX" "$MD" >/dev/null
-eq "<absent>" "$(mf_get "$MD/child-3.json" parent_session_id)" "SessionStart marker: a parent equal to the session itself is ignored"
-( cd "$SBX" && env AUTOPILOT_PARENT_SESSION_ID="$PARENT" AUTOPILOT_SESSION_MODE_DIR="$MD" AUTOPILOT_SESSION_ID=set-1 AUTOPILOT_RUNS_WATCH_AUTOSTART=0 \
+# 3b rule 2: a session id equal to the launching session's own is the PARENT's marker: refused, nothing written.
+eq "refused_parent" "$(env AUTOPILOT_PARENT_SESSION_ID=child-3 node -e "$EPM" "$REPO_ROOT/scripts/session-mode.js" child-3 "$SBX" "$MD")" "SessionStart marker: a session equal to the parent is refused"
+[ ! -e "$MD/child-3.json" ] && eq ok ok "SessionStart marker: no file for a session equal to the parent" || fail "SessionStart marker: wrote the parent's own marker"
+( cd "$SBX" && env AUTOPILOT_PARENT_SESSION_ID="$PARENT" AUTOPILOT_SESSION_MODE_DIR="$MD" CLAUDE_CODE_SESSION_ID=set-1 AUTOPILOT_RUNS_WATCH_AUTOSTART=0 \
     node "$REPO_ROOT/scripts/session-mode.js" set --level l3 --size S --repo-root "$SBX" >/dev/null 2>&1 ) || true
 eq "<absent>" "$(mf_get "$MD/set-1.json" parent_session_id)" "session-mode set never writes parent_session_id (even with the variable in the env)"
 

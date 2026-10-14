@@ -66,6 +66,8 @@ _EXPLORE_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # The explore engines are child sessions; this rail never reads the caller's explicit session
 # binding, so scrub it before anything is launched (see session-mode.js getSessionId()).
 unset AUTOPILOT_SESSION_ID
+# shellcheck source=/dev/null
+[ -r "$_EXPLORE_SELF_DIR/lib/repo-identity.sh" ] && . "$_EXPLORE_SELF_DIR/lib/repo-identity.sh" || true
 # Startup retention prune of OUR OWN aged ${TMPDIR} residue (raw logs, prompt temps,
 # agy run scripts). Best-effort; AUTOPILOT_TMP_LOG_RETENTION_DAYS=0 disables.
 # shellcheck source=/dev/null
@@ -179,7 +181,9 @@ if [[ "$RUNNER" = "codex" ]]; then
     SANDBOX_ARGS=(--dangerously-bypass-approvals-and-sandbox); SANDBOX_MODE="bypass"
     echo "dispatch-explore: NOTE — bubblewrap (bwrap) not on PATH; codex read-only sandbox cannot exec file reads, so using --dangerously-bypass-approvals-and-sandbox (repo is trusted, task is read-only). Install bubblewrap to keep codex sandboxed: e.g. 'sudo apt install bubblewrap'." >&2
   fi
-  "$CODEX_BIN" exec --model "$MODEL" "${SANDBOX_ARGS[@]}" --skip-git-repo-check -C "$REPO" \
+  child_session_env_setup "$_EXPLORE_SELF_DIR" 2>/dev/null || true   # dispatch-tree 3b rule 3
+  env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} \
+      "$CODEX_BIN" exec --model "$MODEL" "${SANDBOX_ARGS[@]}" --skip-git-repo-check -C "$REPO" \
       -c "model_reasoning_effort=\"$EFFORT\"" < "$PROMPT_BUILT" > "$RAW_LOG" 2>/dev/null
 else
   AGY_BIN="${BIN:-agy}"
@@ -197,7 +201,9 @@ else
       "$AGY_BIN" "$PROMPT_BUILT" "$MODEL" "$TIMEOUT"
   } > "$RUN_SH"
   chmod +x "$RUN_SH"
-  script -qec "$RUN_SH" "$RAW_LOG" >/dev/null 2>&1 || true
+  child_session_env_setup "$_EXPLORE_SELF_DIR" 2>/dev/null || true   # dispatch-tree 3b rule 3
+  env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} \
+    script -qec "$RUN_SH" "$RAW_LOG" >/dev/null 2>&1 || true
   rm -rf "$RUN_SH"
   tr -d '\r' < "$RAW_LOG" > "$RAW_LOG.clean" && mv "$RAW_LOG.clean" "$RAW_LOG"
 fi

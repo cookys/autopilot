@@ -185,6 +185,57 @@ function markerPath() {
   return path.join(markerDir(), `${getSessionId()}.json`);
 }
 
+// plan dispatch-tree step 3b (D7, section 6): ONE resolver for every marker WRITER. Let P =
+// AUTOPILOT_PARENT_SESSION_ID (the id a rail exports to its child runner = the rail's own write target).
+//   rule 1  P unset: payload, explicit, then today's getSessionId() chain (env AUTOPILOT_SESSION_ID,
+//           CLAUDE_CODE_SESSION_ID, CLAUDE_SESSION_ID, CODEX_THREAD_ID, cwd). Unchanged.
+//   rule 2  P set: payload and explicit (each unless equal to P), then CLAUDE_CODE_SESSION_ID only when it
+//           differs from P (Claude replaces it in its children). Every other env source and cwd is refused: a
+//           process with P set cannot tell its own value from an inherited one.
+// -> { id, source } with source in payload | explicit | env:<NAME> | cwd; or { id: null, source, refused: true,
+// reason } where `source` names what rule 1 would have written under. Inherited ids are read-only (rule 4).
+const ENV_ID_CHAIN = ['AUTOPILOT_SESSION_ID', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_SESSION_ID', 'CODEX_THREAD_ID'];
+function resolveMarkerWriteTarget({ payloadId, explicitId, env = process.env } = {}) {
+  const hasValue = (v) => typeof v === 'string' && v !== '' && normalizeSessionId(v) !== '';
+  const parentRaw = typeof env.AUTOPILOT_PARENT_SESSION_ID === 'string' ? env.AUTOPILOT_PARENT_SESSION_ID.trim() : '';
+  const parent = parentRaw ? normalizeSessionId(parentRaw) : '';
+  const named = [['payload', payloadId], ['explicit', explicitId]];
+  if (!parent) {
+    for (const [source, v] of named) if (hasValue(v)) return { id: normalizeSessionId(v), source };
+    for (const name of ENV_ID_CHAIN) if (env[name]) return { id: normalizeSessionId(env[name]), source: `env:${name}` };
+    return { id: normalizeSessionId(process.cwd()), source: 'cwd' };
+  }
+  for (const [source, v] of named) {
+    if (!hasValue(v)) continue;
+    if (normalizeSessionId(v) === parent) {
+      return { id: null, source, refused: true, reason: `the ${source} session id is the parent session ${parent}; a child never writes the parent's marker` };
+    }
+    return { id: normalizeSessionId(v), source };
+  }
+  const cc = env.CLAUDE_CODE_SESSION_ID;
+  if (hasValue(cc) && normalizeSessionId(cc) !== parent) return { id: normalizeSessionId(cc), source: 'env:CLAUDE_CODE_SESSION_ID' };
+  const first = ENV_ID_CHAIN.find((name) => env[name]);
+  const source = first ? `env:${first}` : 'cwd';
+  return {
+    id: null,
+    source,
+    refused: true,
+    reason: `AUTOPILOT_PARENT_SESSION_ID is set (${parent}) and the only id available is inherited (${source}); an inherited id is read-only`,
+  };
+}
+
+// The target a writer commits to. A refusal is one stderr line (the caller prints it) and exit 3; nothing is
+// touched before this returns. With P unset the id equals getSessionId() (plus an explicit id, none by default).
+function writeTarget(opts = {}) {
+  const t = resolveMarkerWriteTarget(opts);
+  if (t.refused) return t;
+  return { ...t, file: path.join(markerDir(), `${t.id}.json`) };
+}
+
+function refusalLine(cmd, t) {
+  return `session-mode: ${cmd}: marker write refused (source ${t.source}): ${t.reason}; no file touched\n`;
+}
+
 // The ORCHESTRATOR marker: null for absent, expired, corrupt, and for a plain-session record (level null).
 // Every mode gate reads this one, so "plain session" == "no marker" for them by construction.
 function readMarker() {
@@ -537,7 +588,9 @@ function bindCampaignRoot({ root, repoIdentity, now = Date.now() } = {}) {
   if (!isSafeCampaignRoot(root)) return refuse(2, 'invalid --root: want 1-128 characters of [A-Za-z0-9._-]');
   if (typeof repoIdentity !== 'string' || !repoIdentity) return refuse(2, 'bind-campaign-root needs --repo-identity or --repo-root');
   if (!hasExplicitSessionId()) return refuse(3, 'no session id in the environment; nothing bound');
-  const file = markerPath();
+  const target = writeTarget();
+  if (target.refused) return refuse(3, `${target.reason} (source ${target.source}); nothing bound`);
+  const file = target.file;
   const timeoutMs = Number(process.env.AUTOPILOT_SESSION_MODE_LOCK_TIMEOUT_MS) > 0
     ? Number(process.env.AUTOPILOT_SESSION_MODE_LOCK_TIMEOUT_MS) : PHASE_LOCK_TIMEOUT_MS;
   if (!fs.existsSync(file)) return refuse(3, 'no session marker for this session; nothing bound');
@@ -547,7 +600,7 @@ function bindCampaignRoot({ root, repoIdentity, now = Date.now() } = {}) {
       let current;
       try { current = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { outcome = refuse(3, 'session marker unreadable; nothing bound'); return; }
       if (!current || typeof current !== 'object' || Array.isArray(current)) { outcome = refuse(3, 'session marker malformed; nothing bound'); return; }
-      if (current.session_id !== getSessionId()) { outcome = refuse(3, 'session marker belongs to another session; nothing bound'); return; }
+      if (current.session_id !== target.id) { outcome = refuse(3, 'session marker belongs to another session; nothing bound'); return; }
       const expires = Date.parse(current.expires_at);
       if (!Number.isFinite(expires) || expires <= now) { outcome = refuse(3, 'session marker expired; nothing bound'); return; }
       if (current.level !== 'l5' && current.level !== 'l6') { outcome = refuse(3, `session marker level ${current.level === null ? 'none' : current.level} is below l5; nothing bound`); return; }
@@ -575,6 +628,8 @@ function bindCampaignRoot({ root, repoIdentity, now = Date.now() } = {}) {
 }
 
 function cmdBindCampaignRoot(args) {
+  const target = writeTarget();
+  if (target.refused) { process.stderr.write(refusalLine('bind-campaign-root', target)); return 3; }
   let repoIdentity = typeof args['repo-identity'] === 'string' ? args['repo-identity'] : '';
   if (!repoIdentity && typeof args['repo-root'] === 'string' && args['repo-root']) {
     try { repoIdentity = markerRepoIdentity(path.resolve(args['repo-root'])) || ''; } catch { repoIdentity = ''; }
@@ -584,7 +639,7 @@ function cmdBindCampaignRoot(args) {
     process.stderr.write(`session-mode: bind-campaign-root: ${result.reason}\n`);
     return result.code;
   }
-  process.stdout.write(`${JSON.stringify({ ok: true, changed: result.changed, marker_path: markerPath(), campaign_roots: result.campaign_roots })}\n`);
+  process.stdout.write(`${JSON.stringify({ ok: true, changed: result.changed, marker_path: target.file, campaign_roots: result.campaign_roots })}\n`);
   return 0;
 }
 
@@ -629,13 +684,16 @@ function writeMarkerFile(file, marker) {
 // or plain marker leave the bytes alone). An EXPIRED marker (parseable, expires_at in the past) is replaced;
 // an unreadable or malformed one is left untouched (not ours to destroy; fail-open). Takes the same
 // <marker>.lock as the `set --size` init so a concurrent writer cannot interleave.
-// -> 'created' | 'replaced_expired' | 'kept' | 'kept_unreadable' | 'skipped' (no usable session id).
+// -> 'created' | 'replaced_expired' | 'kept' | 'kept_unreadable' | 'skipped' (no usable session id) | 'refused_parent' (3b: the id is the parent's).
 // parentSessionId: the launching session's id. Only the SessionStart path reads AUTOPILOT_PARENT_SESSION_ID
 // (exported by the rails onto the claude command line); `session-mode set` never does, so an explicit set cannot
 // claim a parent. Ignored when it is empty or equals this session's own id.
 function ensurePlainMarker({ sessionId, repoRoot, scope, now = Date.now(), dir = markerDir(), parentSessionId = process.env.AUTOPILOT_PARENT_SESSION_ID }) {
   const sid = normalizeSessionId(sessionId);
   if (!sid) return 'skipped';
+  // 3b rule 2: a session id equal to the launching session's own is the PARENT's: never written from a child.
+  // Checked before any directory, lock or file is touched.
+  if (typeof parentSessionId === 'string' && parentSessionId.trim() && normalizeSessionId(parentSessionId.trim()) === sid) return 'refused_parent';
   const parent = typeof parentSessionId === 'string' && parentSessionId.trim() && parentSessionId.trim() !== sessionId
     ? parentSessionId.trim().slice(0, 128) : null;
   const file = path.join(dir, `${sid}.json`);
@@ -679,9 +737,12 @@ function cmdEnsureChild() {
 }
 
 function cmdSetPlain(args) {
+  const target = writeTarget();
+  if (target.refused) { process.stderr.write(refusalLine('set', target)); return 3; }
   // A plain `set` is a record, not an exit from orchestrator mode: it never replaces this session's unexpired
   // l3-l6 marker (that would drop an l5/l6 session's mode without its close evidence). `clear` is the exit.
-  const live = readMarker();
+  const liveRecord = readSessionRecord(target.id);
+  const live = liveRecord && liveRecord.level !== null ? liveRecord : null;
   if (live) {
     process.stderr.write(
       `session-mode: refusing plain \`set\`: this session has an unexpired ${live.level} marker; ` +
@@ -700,17 +761,17 @@ function cmdSetPlain(args) {
   const explicitRoot = typeof args['root-run-id'] === 'string' && /^[A-Za-z0-9._-]+$/.test(args['root-run-id'])
     ? args['root-run-id'] : '';
   const marker = buildPlainMarker({
-    sessionId: getSessionId(),
+    sessionId: target.id,
     repoRoot,
     scope,
     now: Date.now(),
     ttlHours,
     rootRunId: resolveJobRoot({ explicit: explicitRoot, now: Date.now() }),
   });
-  writeMarkerFile(markerPath(), marker);
+  writeMarkerFile(target.file, marker);
   try { writeLivePointer(); } catch (_error) { /* fail-open: pointer is advisory for the mod */ }
   startProjectWatcher(marker, repoRoot);
-  process.stdout.write(`${JSON.stringify({ ok: true, marker_path: markerPath(), ...marker }, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify({ ok: true, marker_path: target.file, ...marker }, null, 2)}\n`);
   return 0;
 }
 
@@ -838,6 +899,8 @@ function applyInitFields(marker, init, repoRoot, prior) {
 // (plain marker, level null) / merge-if-present (level and every other field preserved), under the marker
 // lock + atomic rename. --size is upward-only against an existing marker's size.
 function cmdSetInit(args) {
+  const target = writeTarget();
+  if (target.refused) { process.stderr.write(refusalLine('set', target)); return 3; }
   const parsed = parseInit(args);
   if (parsed.error) { process.stderr.write(`session-mode: ${parsed.error}\n`); return 2; }
   const { init } = parsed;
@@ -850,12 +913,12 @@ function cmdSetInit(args) {
   const repoRoot = path.resolve(args['repo-root'] || gitToplevel());
   const timeoutMs = Number(process.env.AUTOPILOT_SESSION_MODE_LOCK_TIMEOUT_MS) > 0
     ? Number(process.env.AUTOPILOT_SESSION_MODE_LOCK_TIMEOUT_MS) : PHASE_LOCK_TIMEOUT_MS;
-  const file = markerPath();
+  const file = target.file;
   fs.mkdirSync(markerDir(), { recursive: true });
   let result = null; // { marker, created } | { refusal }
   try {
     withWriteLock({ storeDir: markerDir(), lockFile: `${file}.lock`, name: 'session-mode marker', timeoutMs }, () => {
-      const current = readSessionRecord();
+      const current = readSessionRecord(target.id);
       if (current && newTask) {
         const asked = args.level === 'none' ? null : args.level; // none means a plain (level null) session
         if (asked !== undefined && asked !== current.level) {
@@ -899,7 +962,7 @@ function cmdSetInit(args) {
       const explicitRoot = typeof args['root-run-id'] === 'string' && /^[A-Za-z0-9._-]+$/.test(args['root-run-id'])
         ? args['root-run-id'] : '';
       const marker = applyInitFields(buildPlainMarker({
-        sessionId: getSessionId(), repoRoot, scope, now, ttlHours,
+        sessionId: target.id, repoRoot, scope, now, ttlHours,
         rootRunId: resolveJobRoot({ explicit: explicitRoot, now }),
       }), init, repoRoot, null);
       if (newTask) { marker.task_seq = 1; marker.task_started_at = new Date(now).toISOString(); }
@@ -935,6 +998,8 @@ function cmdSet(args) {
   if (args['new-task'] === true) return cmdSetInit(args); // --level, if any, is checked there against the live marker
   if ((!hasLevel || args.level === 'none') && hasInitFlags(args)) return cmdSetInit(args);
   if (!hasLevel || args.level === 'none') return cmdSetPlain(args);
+  const target = writeTarget();
+  if (target.refused) { process.stderr.write(refusalLine('set', target)); return 3; }
   const level = args.level;
   const initParsed = parseInit(args);
   if (initParsed.error) {
@@ -957,7 +1022,7 @@ function cmdSet(args) {
       repoRoot,
       entryLevel: args['entry-level'] || level,
       fallback: args.fallback || 'none',
-      markerFile: markerPath(),
+      markerFile: target.file,
       // Ordinary production: no allowTestCallerEvidence; registry-only evidence.
     });
   } catch (error) {
@@ -974,7 +1039,7 @@ function cmdSet(args) {
   // Surface ordinary zero-spend no-op adoption on the marker for consumers.
   const now = Date.now();
   const marker = {
-    session_id: getSessionId(),
+    session_id: target.id,
     level,
     repo_root: repoRoot,
     started_at: new Date(now).toISOString(),
@@ -1040,12 +1105,12 @@ function cmdSet(args) {
   }
   if (hasInitFlags(args)) applyInitFields(marker, initParsed.init, repoRoot, null);
   fs.mkdirSync(markerDir(), { recursive: true });
-  const tmp = `${markerPath()}.tmp-${process.pid}`;
+  const tmp = `${target.file}.tmp-${process.pid}`;
   fs.writeFileSync(tmp, `${JSON.stringify(marker, null, 2)}\n`);
-  fs.renameSync(tmp, markerPath()); // atomic on same fs
+  fs.renameSync(tmp, target.file); // atomic on same fs
   try { writeLivePointer(); } catch (_error) { /* fail-open: pointer is advisory for the mod */ }
   startProjectWatcher(marker, repoRoot);
-  process.stdout.write(`${JSON.stringify({ ok: true, marker_path: markerPath(), ...marker }, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify({ ok: true, marker_path: target.file, ...marker }, null, 2)}\n`);
   if (marker.level === 'l5' || marker.level === 'l6') {
     process.stderr.write(`session-mode: ${marker.level} marker set — non-strict dispatch (dispatch-author/consult/plan-review seats) is refused while it is live. ${MASK_LINE}\n`);
   }
@@ -1122,7 +1187,10 @@ function validateCloseReceipt(file, rootRunId, marker = readMarker()) {
 }
 
 function cmdClear(args) {
-  const marker = readMarker();
+  const target = writeTarget();
+  if (target.refused) { process.stderr.write(refusalLine('clear', target)); return 3; }
+  const record = readSessionRecord(target.id);
+  const marker = record && record.level !== null ? record : null;
   const explicitCloseReceipt = args['task-status-receipt'] !== undefined
     || args['root-run-id'] !== undefined;
   if (explicitCloseReceipt || (marker && (marker.level === 'l5' || marker.level === 'l6'))) {
@@ -1138,18 +1206,18 @@ function cmdClear(args) {
     }
   }
   try {
-    fs.unlinkSync(markerPath());
+    fs.unlinkSync(target.file);
   } catch (error) {
     if (error.code !== 'ENOENT') {
       process.stderr.write(`session-mode: marker clear failed: ${error.message}\n`);
       return 1;
     }
   }
-  if (fs.existsSync(markerPath())) {
+  if (fs.existsSync(target.file)) {
     process.stderr.write('session-mode: marker clear failed: marker still exists\n');
     return 1;
   }
-  process.stdout.write(`${JSON.stringify({ ok: true, cleared: markerPath() }, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify({ ok: true, cleared: target.file }, null, 2)}\n`);
   return 0;
 }
 
@@ -1175,6 +1243,11 @@ function cmdRetire(args) {
   if (!sessionId || !receiptFile) {
     process.stderr.write('session-mode: retire requires --session <id> and --integration-receipt <file>\n');
     return 2;
+  }
+  const parentId = typeof process.env.AUTOPILOT_PARENT_SESSION_ID === 'string' ? normalizeSessionId(process.env.AUTOPILOT_PARENT_SESSION_ID.trim()) : '';
+  if (parentId && normalizeSessionId(sessionId) === parentId) {
+    process.stderr.write(refusalLine('retire', { source: 'explicit', reason: `--session is the parent session ${parentId}; a child never retires the parent's marker` }));
+    return 3;
   }
   const target = path.join(markerDir(), `${normalizeSessionId(sessionId)}.json`);
   let marker;
@@ -1313,6 +1386,23 @@ function cmdRoot() {
   return 0;
 }
 
+// `write-target [--rail]`: print the resolver's id for this environment (shell rails read it). Rule 3: a rail
+// exports it as AUTOPILOT_PARENT_SESSION_ID to every child runner. --rail never fails: on a refusal it prints the
+// inherited P (fail closed: the descendants stay unable to write under it); with nothing it prints an empty line.
+function cmdWriteTarget(args) {
+  const t = resolveMarkerWriteTarget({ explicitId: typeof args.explicit === 'string' ? args.explicit : undefined });
+  if (t.refused) {
+    if (args.rail) {
+      process.stdout.write(`${normalizeSessionId((process.env.AUTOPILOT_PARENT_SESSION_ID || '').trim())}\n`);
+      return 0;
+    }
+    process.stderr.write(refusalLine('write-target', t));
+    return 3;
+  }
+  process.stdout.write(`${t.id}\n`);
+  return 0;
+}
+
 function main() {
   const [cmd, ...rest] = process.argv.slice(2);
   const args = parseArgs(rest);
@@ -1324,6 +1414,7 @@ function main() {
     case 'ensure-child': return cmdEnsureChild();
     case 'status': return cmdStatus();
     case 'root': return cmdRoot();
+    case 'write-target': return cmdWriteTarget(args);
     default:
       process.stderr.write(
         'Usage: session-mode.js set [--level none] [--root-run-id <id>] (plain session) | ' +
@@ -1331,7 +1422,7 @@ function main() {
         '[--fallback none|solo|precondition_failed] [--repo-root <dir>] [--ttl-hours N] [--root-run-id <id>] | ' +
         'set --size XS|S|M|L|XL [--urgent] [--bug] [--base-ref <sha>] (create-or-merge; size only moves up) | ' +
         'set --new-task [--size XS|S|M|L|XL] [--urgent] [--bug] [--base-ref <sha>] (restart the stage walk for a second task) | ' +
-        'clear | retire --session <id> --integration-receipt <file> [--integration-ref <ref>] | bind-campaign-root --root <id> (--repo-identity <id> | --repo-root <dir>) | ensure-child (SessionStart payload on stdin) | status | root\n',
+        'clear | retire --session <id> --integration-receipt <file> [--integration-ref <ref>] | bind-campaign-root --root <id> (--repo-identity <id> | --repo-root <dir>) | ensure-child (SessionStart payload on stdin) | write-target [--rail] | status | root\n',
       );
       return 2;
   }
@@ -1346,6 +1437,7 @@ module.exports = {
   ensurePlainMarker,
   resolveJobRoot,
   getSessionId,
+  resolveMarkerWriteTarget,
   normalizeSessionId,
   markerPath,
   markerRepoIdentity,

@@ -42,6 +42,7 @@ done
 { printf 'CWD:%s\n' "$PWD"; printf 'HOME:%s\n' "$HOME"; printf 'SID:%s\n' "$sid"; printf 'SETTINGS:%s\n' "${settings:+yes}"; } >> "${STUB_LOG:?}"
 if [ -n "$settings" ] && [ -n "$sid" ]; then
   cmd="$(printf '%s' "$settings" | node -e 'const o=JSON.parse(require("fs").readFileSync(0,"utf8"));process.stdout.write(o.hooks.SessionStart[0].hooks[0].command)')"
+  printf 'HOOKCMD:%s\n' "$cmd" >> "${STUB_LOG}"
   printf '{"session_id":"%s","cwd":"%s","hook_event_name":"SessionStart","source":"startup"}' "$sid" "$PWD" | bash -c "$cmd" >> "${STUB_LOG}.hook" 2>&1 || true
 fi
 cat >/dev/null
@@ -95,6 +96,10 @@ for name in author-native author-ccshim review-native review-ccshim; do
   [ -n "$mf" ] || { fail "$name: no manifest"; continue; }
   csid="$(mf_get "$mf" child_session_id)"
   eq "SETTINGS:yes" "$(grep '^SETTINGS:' "$LOG" | head -1)" "$name: the claude child is launched with --settings"
+  # 3a left this untested: the hook command must name node by ABSOLUTE path, because a cc-shim child runs under a
+  # scratch HOME where a $HOME-based node shim (asdf, nvm) would not resolve a bare `node`.
+  hookcmd="$(grep '^HOOKCMD:' "$LOG" | head -1 | cut -d: -f2-)"
+  case "$hookcmd" in "'/"*) eq ok ok "$name: the --settings hook command starts with an absolute node path" ;; *) fail "$name: the hook command does not start with an absolute node path: $hookcmd" ;; esac
   eq "$csid" "$(grep '^SID:' "$LOG" | head -1 | cut -d: -f2-)" "$name: stub saw --session-id == manifest child_session_id"
   if [ -f "$MD/$csid.json" ]; then
     eq "$PARENT" "$(mf_get "$MD/$csid.json" parent_session_id)" "$name: child marker parent_session_id == P"
@@ -150,5 +155,15 @@ printf '{"session_id":"u-2","cwd":"%s"}' "$SBX" | env -u AUTOPILOT_PARENT_SESSIO
 eq "<absent>" "$(mf_get "$UD/u-2.json" parent_session_id)" "ensure-child: no parent variable => no parent_session_id"
 eq "2" "$(ls "$UD" | grep -c '\.json$')" "ensure-child: writes for payload.session_id only, never an env-derived id"
 printf 'not json' | env AUTOPILOT_SESSION_MODE_DIR="$UD" node "$REPO_ROOT/scripts/session-mode.js" ensure-child; eq "0" "$?" "ensure-child: malformed payload exits 0"
+
+# 3a left this untested: a scripts path containing a quote cannot be quoted into the hook command, so the rail
+# installs no hook and must say so on stderr (otherwise the child just has no marker, silently).
+QD="$TEST_TMP/q'uote"; mkdir -p "$QD"; cp -R "$REPO_ROOT/scripts" "$QD/scripts"
+QLOG="$TEST_TMP/log-quote"; : > "$QLOG"; QRUNS="$TEST_TMP/runs-quote"; mkdir -p "$QRUNS"
+QERR="$( cd "$SBX" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT AUTOPILOT_DISPATCH_RUNS_DIR="$QRUNS" STUB_LOG="$QLOG" \
+    AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/markers-quote" AUTOPILOT_RUNS_WATCH_AUTOSTART=0 PATH="$BINDIR:$PATH" CLAUDE_CODE_SESSION_ID="$PARENT" \
+    "$QD/scripts/dispatch-review.sh" --runner claude-native --model claude-haiku --diff-file "$DIFF" --bin "$BINDIR/claude" 2>&1 >/dev/null )" || true
+case "$QERR" in *"contains a quote or backslash"*) eq ok ok "quoted scripts path: the rail warns on stderr that the child marker hook is not installed" ;; *) fail "quoted scripts path: no warning on stderr (got: ${QERR:0:200})" ;; esac
+eq "SETTINGS:" "$(grep '^SETTINGS:' "$QLOG" | head -1)" "quoted scripts path: the claude child is launched without --settings"
 
 finalize_test

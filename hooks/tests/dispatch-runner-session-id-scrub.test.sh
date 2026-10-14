@@ -62,7 +62,9 @@ check_scrubbed() {
   assert_file_exists "$2" "$1: the stub runner actually ran (env dump exists)"
   assert_contains "$(cat "$2" 2>/dev/null)" "PATH=" "$1: env dump is a real env"
   assert_not_contains "$(cat "$2" 2>/dev/null)" "AUTOPILOT_SESSION_ID" "$1: child runner does NOT see AUTOPILOT_SESSION_ID"
-  assert_not_contains "$(cat "$2" 2>/dev/null)" "parent-x" "$1: parent id value absent from child env"
+  # dispatch-tree 3b rule 3: the parent's id legitimately reaches the child, but ONLY as AUTOPILOT_PARENT_SESSION_ID
+  # (read-only provenance); under any other name it would be a write target for the child's own marker.
+  assert_not_contains "$(grep -v '^AUTOPILOT_PARENT_SESSION_ID=' "$2" 2>/dev/null)" "parent-x" "$1: parent id value absent from child env (outside AUTOPILOT_PARENT_SESSION_ID)"
 }
 
 # ================================================================= 1 dispatch-hetero (cc-shim)

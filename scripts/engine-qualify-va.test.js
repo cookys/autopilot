@@ -276,6 +276,10 @@ try {
   equal(result.verdict.qualified, false, 'happy-path-only fails');
   equal(result.verdict.subjects.sensitivity, false, 'sensitivity is the failing subject');
   check(result.verdict.reason.includes('missed_defect'), 'reason names missed_defect');
+  // usage.n_solved is the grader's pass count (evidence trials' cases_passed), not a recomputation.
+  const gradedPass = result.evidence.trials.reduce((n, t) => n + t.cases_passed, 0);
+  check(result.row.usage.n_solved < result.row.usage.n_cases, 'happy-path-only: usage.n_solved < usage.n_cases');
+  equal(result.row.usage.n_solved, gradedPass, 'usage.n_solved equals the grader pass count');
 }
 {
   const store = fs.mkdtempSync(path.join(tempRoot, 'store-strict-'));
@@ -401,6 +405,6 @@ process.stdout.write(JSON.stringify({
   assertions += 1;
 }
 
-if (assertions !== 29) throw new Error(`engine-qualify-va: expected exactly 29 assertions (count pin moved here from hooks/tests/engine-qualify-va.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 31) throw new Error(`engine-qualify-va: expected exactly 31 assertions (count pin moved here from hooks/tests/engine-qualify-va.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);
 fs.rmSync(tempRoot, { recursive: true, force: true });

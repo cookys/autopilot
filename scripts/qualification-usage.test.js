@@ -134,6 +134,31 @@ const rec = (over = {}) => U.caseRecord({
   equal(g.usage.total_tokens, null, 'one unmeasured round -> the trial total is unknown, not half a total');
 }
 
+// ── foldRounds: a missing wall is unknown, never 0 ──────────────────────────
+{
+  const g = U.foldRounds([rec({ wallS: 5 }), rec({ wallS: null })]);
+  equal(g.wall_s, null, 'one round without wall -> the trial wall is null, not a partial sum');
+  equal(U.foldRounds([rec({ wallS: 5 }), rec({ wallS: 6 })]).wall_s, 11, 'all rounds measured -> summed');
+}
+
+// ── validateUsageBlock: symmetric invariants ────────────────────────────────
+{
+  const good = U.summarize([rec(), rec({ caseId: 'c2' })]);
+  assert.doesNotThrow(() => U.validateUsageBlock(good));
+  assertions += 1;
+  assert.throws(() => U.validateUsageBlock({ ...good, total_tokens: null }), /usage_complete=true requires total_tokens/);
+  assertions += 1;
+  assert.throws(() => U.validateUsageBlock({ ...good, tok_per_solved: null }), /usage_complete=true requires/);
+  assertions += 1;
+  const none = U.summarize([rec({ solved: false })]);
+  assert.doesNotThrow(() => U.validateUsageBlock(none));
+  assertions += 1;
+  assert.throws(() => U.validateUsageBlock({ ...none, tok_per_solved: 99 }), /n_solved=0 requires/);
+  assertions += 1;
+  assert.throws(() => U.validateUsageBlock({ ...none, usd_per_solved: 0.5 }), /n_solved=0 requires/);
+  assertions += 1;
+}
+
 // ── scorecard: optional usage block ─────────────────────────────────────────
 const sc = path.join(__dirname, 'engine-scorecard.js');
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qual-usage-scorecard-'));

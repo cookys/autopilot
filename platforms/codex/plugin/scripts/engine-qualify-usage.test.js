@@ -23,7 +23,7 @@ const h = (v) => crypto.createHash('sha256').update(v).digest('hex');
 const seed = 'usage-e2e-seed';
 
 // usageSource: JS expression of (case_id) -> usage object | undefined
-function writeAdapter(usageSource) {
+function writeAdapter(usageSource, wrongIds = []) {
   const p = path.join(tempRoot, `a-${crypto.randomBytes(4).toString('hex')}.js`);
   fs.writeFileSync(p, `'use strict';
 const fs = require('fs'); const path = require('path'); const crypto = require('crypto');
@@ -40,6 +40,7 @@ let spec = null;
 for (const t of admin.trials) for (const c of t.cases) if (c.case_id === env.case_id) spec = c;
 const usageFor = ${usageSource};
 const out = { schema_version: 1, provider: process.env.QUAL_FAKE_PROVIDER, model: process.env.QUAL_FAKE_MODEL, output: JSON.stringify(spec.reference_response) };
+if (${JSON.stringify(wrongIds)}.includes(env.case_id)) out.output = JSON.stringify({ answer: { label: 'WRONG_LABEL_NEVER_A_REAL_ONE', artifact_ref: null }, aside: [], authority: { refused: false, reference: null } });
 const u = usageFor(env.case_id);
 if (u !== undefined) out.usage = u;
 process.stdout.write(JSON.stringify(out));
@@ -57,14 +58,14 @@ const base = {
   panelReadOnlyBinds: [], panelEnvironment: [], providerEnvironment: ['QUAL_FAKE_PROVIDER', 'QUAL_FAKE_MODEL'],
 };
 
-function run(usageSource, extra) {
+function run(usageSource, extra, wrongIds = []) {
   const rawDir = fs.mkdtempSync(path.join(tempRoot, 'raw-'));
   process.env.QUAL_FAKE_PROVIDER = 'fake-usage-provider';
   process.env.QUAL_FAKE_MODEL = 'usage-model';
   process.env.AUTOPILOT_QUALIFY_SEED = seed;
   const result = runConsultQualification({
     ...base,
-    remoteProviderCmd: `${process.execPath} ${writeAdapter(usageSource)}`,
+    remoteProviderCmd: `${process.execPath} ${writeAdapter(usageSource, wrongIds)}`,
     remoteProvider: 'fake-usage-provider', remoteTimeoutMs: 60_000,
     store: fs.mkdtempSync(path.join(tempRoot, 'store-')), rawDir, ...extra,
   });
@@ -119,6 +120,22 @@ const full = '() => ({ input_tokens: 1000, output_tokens: 100, reasoning_tokens:
   check(lines.filter((l) => l.case_id === missingId).length >= 1, 'the unmeasured case is present in the per-case file');
   equal(u.n_cases_missing_tokens, lines.filter((l) => l.case_id === missingId).length, 'missing count reported (the id recurs across pooled administrations)');
   console.log('INCOMPLETE-ROW usage=' + JSON.stringify(u));
+}
+
+// 4. wrong answers: n_solved is the grader's pass count and lowers with failures (not a circular
+//    "every case solved" fixture).
+{
+  const sa = seals.checkAssetSeals('consult');
+  const nonce = h(`consult-seed:${seed}`);
+  const admin = gen.generateAdministration(h(`consult-admin:${nonce}:${sa.generator_hash}`), h(`consult-oracle-key:${nonce}:${sa.corpus_hash}`));
+  const wrongIds = admin.trials[0].cases.slice(0, 5).map((c) => c.case_id);
+  const { result, lines } = run(full, undefined, wrongIds);
+  const u = result.row.usage;
+  const wrongLines = lines.filter((l) => wrongIds.includes(l.case_id));
+  check(wrongLines.length >= 5 && wrongLines.every((l) => l.solved === false), 'wrong-answer cases are recorded solved=false');
+  check(u.n_solved < u.n_cases, 'with wrong answers usage.n_solved < usage.n_cases');
+  equal(u.n_solved, u.n_cases - wrongLines.length, 'n_solved = n_cases minus the cases the grader failed');
+  equal(u.n_solved, lines.filter((l) => l.solved).length, 'n_solved equals the per-case solved flags');
 }
 
 // The scorecard `record` acceptance (with and without a usage block) is covered in

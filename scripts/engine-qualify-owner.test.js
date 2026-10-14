@@ -207,6 +207,7 @@ function main() {
     'every owner trial passes planted, clean, critical, and mutation controls',
   );
   equal(passed.oracle.transport, 'local', 'local owner qualification records its transport');
+  equal(passed.row.usage.n_solved, passed.row.usage.n_cases, 'passing owner: every case is solved');
 
   const ownerRequest = {
     run_id: 'owner-run',
@@ -242,6 +243,14 @@ function main() {
     allAccept.evidence.trials.some((trial) => trial.false_pass_critical > 0),
     'all-accept control records critical false passes',
   );
+  // Expected solved = caught known-bad + clean not falsely flagged (trial evidence, grader counts) +
+  // the per-trial defect-reversal mutation control, which an accept-everything owner passes and a
+  // reject-everything owner fails.
+  const expectedSolved = (r, mutationPasses) => r.evidence.trials.reduce(
+    (n, t) => n + t.known_bad_caught + (t.clean_total - t.clean_false_positives)
+      + (mutationPasses ? 1 : 0), 0);
+  check(allAccept.row.usage.n_solved < allAccept.row.usage.n_cases, 'all-accept: usage.n_solved < usage.n_cases');
+  equal(allAccept.row.usage.n_solved, expectedSolved(allAccept, true), 'all-accept: usage.n_solved equals the oracle pass count');
 
   const allReject = runMode('all-reject', 'all-reject');
   equal(allReject.qualified, false, 'an owner that rejects clean decisions cannot qualify');
@@ -249,6 +258,8 @@ function main() {
     allReject.evidence.trials.some((trial) => trial.clean_false_positives > 0),
     'all-reject control records clean false positives',
   );
+  check(allReject.row.usage.n_solved < allReject.row.usage.n_cases, 'all-reject: usage.n_solved < usage.n_cases');
+  equal(allReject.row.usage.n_solved, expectedSolved(allReject, false), 'all-reject: usage.n_solved equals the oracle pass count');
 
   const wrongRule = runMode('wrong-rule', 'wrong-rule');
   equal(wrongRule.qualified, false, 'rule-inspecific owner findings cannot qualify');
@@ -339,7 +350,7 @@ function main() {
   check(!fs.existsSync(path.join(deadStoreDir, 'qualification-evidence.jsonl')),
     'owner transport_fail appends NO row admitting the role');
 
-  if (assertions !== 31) throw new Error(`engine-qualify-owner: expected exactly 31 assertions (count pin moved here from hooks/tests/engine-qualify-owner.test.sh so the L1 run enforces it), got ${assertions}`);
+  if (assertions !== 36) throw new Error(`engine-qualify-owner: expected exactly 36 assertions (count pin moved here from hooks/tests/engine-qualify-owner.test.sh so the L1 run enforces it), got ${assertions}`);
   process.stdout.write(`owner qualifier: ${assertions} assertions passed\n`);
 }
 

@@ -86,7 +86,9 @@ function foldRounds(roundRecords) {
   const sumOrNull = (key) => (roundRecords.length > 0 && roundRecords.every((r) => r[key] !== null)
     ? roundRecords.reduce((s, r) => s + r[key], 0) : null);
   return {
-    wall_s: roundRecords.reduce((s, r) => s + (Number.isFinite(r.wall_s) ? r.wall_s : 0), 0),
+    // A round with no measured wall makes the trial wall unknown; a missing wall is never 0.
+    wall_s: roundRecords.length > 0 && roundRecords.every((r) => Number.isFinite(r.wall_s))
+      ? roundRecords.reduce((s, r) => s + r.wall_s, 0) : null,
     usage: {
       input_tokens: sumOrNull('input_tokens'),
       output_tokens: sumOrNull('output_tokens'),
@@ -222,6 +224,13 @@ function validateUsageBlock(block) {
     fail('usage_complete=false requires tok_per_solved, usd_per_solved and total_tokens to be null');
   }
   if (block.usage_complete === true && block.n_cases === 0) fail('usage_complete=true requires n_cases > 0');
+  if (block.usage_complete === true && (block.total_tokens === null
+      || (block.n_solved > 0 && block.tok_per_solved === null))) {
+    fail('usage_complete=true requires total_tokens (and tok_per_solved when n_solved > 0) to be non-null');
+  }
+  if (block.n_solved === 0 && (block.tok_per_solved !== null || block.usd_per_solved !== null)) {
+    fail('n_solved=0 requires tok_per_solved and usd_per_solved to be null');
+  }
   return block;
 }
 

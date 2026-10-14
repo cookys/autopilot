@@ -6,7 +6,7 @@
 //      (one of the explicit RAIL_NAMES list below — observers such as dispatch-status.js and *.test.* files are
 //      not rails, and never match the exact-name pattern) with nothing in the same command that wakes the session.
 //      Only the COMMAND-POSITION word counts: `grep dispatch-review.sh x &` is not a launch.
-//   2. pkill-self-match (WARN) — `pkill -f` / `pgrep -f` (also inside `$(…)`) whose pattern lacks the
+//   2. pkill-self-match (DENY by default since BL-0148; knob off|warn|deny in the hook) — `pkill -f` / `pgrep -f` (also inside `$(…)`) whose pattern lacks the
 //      `[x]` self-exclusion trick, so the pattern matches the Bash tool's own command line.
 //   3. zsh-expansion (WARN, zsh only, never a deny) — a word starting with `=<char>` (zsh EQUALS
 //      expansion) or an unquoted glob that matches nothing (zsh `nomatch` aborts the whole line).
@@ -427,8 +427,11 @@ function detectPkillSelfMatch(cmd) {
     return {
       rule: 'pkill-self-match',
       pattern,
-      why: `${name} -f pattern "${pattern}" also matches this Bash call's own command line — write it as `
-        + "'[f]oo' (bracket one character) or kill by PID",
+      why: `${name} -f pattern "${pattern}" also matches this Bash call's own command line (the shell running it), `
+        + 'so it can match and kill its own shell. Instead: read the PID from a pidfile (`kill "$(cat x.pid)"`), '
+        + 'use the PID directly, or assemble the pattern in a variable from pieces so the whole literal never appears '
+        + 'in the same command (`a=fo; b=o; pgrep -f "$a$b"`; a `$VAR` pattern is not flagged), or bracket one '
+        + "character (`'[f]oo'`)",
     };
   }
   return null;

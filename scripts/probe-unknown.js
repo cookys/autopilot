@@ -349,9 +349,18 @@ function termHits(terms, opts) {
   return hits;
 }
 
+// BL-0003: a linked worktree's `--show-toplevel` is the worktree itself, but Claude Code's memory dir is
+// keyed by the MAIN checkout. `--git-common-dir` points at <main>/.git from any worktree; its parent is main.
+function mainCheckoutOf(root) {
+  const r = spawnSync('git', ['rev-parse', '--git-common-dir'], { cwd: root, encoding: 'utf8' });
+  if (r.status !== 0) return root;
+  const common = path.resolve(root, r.stdout.trim());
+  return path.basename(common) === '.git' ? path.dirname(common) : root;
+}
+
 function defaultMemoryDir(root) {
-  // Claude Code memory dir convention: ~/.claude/projects/<slug>/memory where slug = root with '/' → '-'.
-  const slug = root.replace(/\//g, '-');
+  // Claude Code memory dir convention: ~/.claude/projects/<slug>/memory where slug = main checkout with '/' → '-'.
+  const slug = mainCheckoutOf(root).replace(/\//g, '-');
   return path.join(os.homedir(), '.claude', 'projects', slug, 'memory');
 }
 

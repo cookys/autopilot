@@ -48,3 +48,18 @@ attempt without dummy env failed `QRP_BASE_URL is not set`, which was the dry-ru
 
 `bash record.sh <lane>` appends `out/<lane>/emit-row.json` to the scorecard. Read `emit-row.json` and `stderr.log`
 first; failed rows are append-only.
+
+## minimax31 lane: MiniMax-M3.1-Flash-Preview (owner-added)
+
+- Files: `cell-m31.sh minimax31`, `derive-fingerprints-m31.js`, `identity/reviewer-minimax31.json`, output `out/minimax31/`
+  (separate files so the running `cell.sh` / `cell-v2.sh` were never touched).
+- Identity: engine = model = `MiniMax-M3.1-Flash-Preview`, runner `anthropic-compatible`, runner_version `node-direct-http-fetch`,
+  family `minimax`, endpoint/token = the `minimax` lane's (`AUTOPILOT_ENDPOINT_MINIMAX_*`). The model is absent from /v1/models but
+  the owner's probe showed 200 with `model` echoed unchanged. `cell-m31.sh` repeats a 16-token probe and logs the resolved id;
+  model_version is that id when it matches the TOKEN shape. Fingerprint recipes are the minimax lane's with the model swapped.
+- effort = `max` (label). Provider read (`callModel`, qualification-review-provider.js ~:694-745): the HTTP messages path
+  sends only model/max_tokens/temperature/system/messages, with NO effort or thinking field, so effort cannot be sent. The label
+  records the endpoint's documented default for this model (thinking forced on, default effort max). The M3 / GLM rows labelled
+  high are labels too, not endpoint settings, so `max` here is NOT comparable as the same effort to them.
+- max_tokens: the default 8192 is shared with thinking, and a lone thinking block fails the case (provider header ~:109-117).
+  Because this model thinks at max by default, `QRP_MAX_TOKENS=32768` is set and listed in `--provider-env`.

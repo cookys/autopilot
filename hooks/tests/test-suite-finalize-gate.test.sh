@@ -31,9 +31,8 @@ codex-postcompact-production-live-driver.test.sh
 orchestration-eval.test.sh
 probe-mutation.test.sh
 "
-# ALWAYS-GREEN — needs finalize_test (assertions accumulate, no nonzero exit path):
-#   autopilot-engine-boundary-resume   (prints green_reason=git worktree command exited with status 1
-#                                       and asserts nothing on it)
+# (autopilot-engine-boundary-resume used to be listed here as ALWAYS-GREEN; it now ends in
+# finalize_test and is not on the allowlist.)
 # own harness, exits nonzero at its last line (a node driver whose catch sets process.exitCode = 1,
 # the suite's final command) — the gate does not try to prove that shape:
 #   codex-postcompact-production-live-driver

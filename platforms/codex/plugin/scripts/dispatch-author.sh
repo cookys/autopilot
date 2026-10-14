@@ -934,6 +934,8 @@ fi
 # The job-root lookup above was this rail's only legitimate read of the caller's explicit session
 # binding. Every runner launched below is a CHILD session: scrub the variable so it cannot make
 # session-mode.js getSessionId() resolve to the parent's id and overwrite the parent's marker.
+# 3b: resolve the parent id handed to every child BEFORE the scrub below.
+declare -F child_session_pin >/dev/null 2>&1 && child_session_pin "$_AUTHOR_SELF_DIR" 2>/dev/null || true
 unset AUTOPILOT_SESSION_ID
 [ -n "$LINEAGE_PARENT" ] && LINEAGE_PARENT="$(printf '%s' "$LINEAGE_PARENT" | tr -c 'A-Za-z0-9._-' '-')"
 [ -n "$LINEAGE_ROOT" ] && LINEAGE_ROOT="$(printf '%s' "$LINEAGE_ROOT" | tr -c 'A-Za-z0-9._-' '-')"
@@ -1124,6 +1126,7 @@ fi
 # Runner stderr capture (BL-0136): grok / qoderclicn / cc-shim / claude-native write here
 # instead of /dev/null; read only on failure, bounded + redacted, never salvaged as output.
 RUNNER_ERR_FILE="$(mktemp -t dispatch-author-runner-err-XXXXXX)"
+declare -F child_session_apply_env >/dev/null 2>&1 && child_session_apply_env "$_AUTHOR_SELF_DIR" 2>/dev/null || true   # 3b rule 3 for the in-process runner branches
 
 if [[ "$RUNNER" = "codex" ]]; then
   CODEX_BIN="${BIN:-codex}"

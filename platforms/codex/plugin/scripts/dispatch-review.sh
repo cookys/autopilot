@@ -922,6 +922,8 @@ fi
 # The job-root lookup above was this rail's only legitimate read of the caller's explicit session
 # binding. Every runner launched below is a CHILD session: scrub the variable so it cannot make
 # session-mode.js getSessionId() resolve to the parent's id and overwrite the parent's marker.
+# 3b: resolve the parent id handed to every child BEFORE the scrub below.
+declare -F child_session_pin >/dev/null 2>&1 && child_session_pin "$_REVIEW_SELF_DIR" 2>/dev/null || true
 unset AUTOPILOT_SESSION_ID
 # Sanitize inherited lineage ids (control chars would corrupt the manifest JSON —
 # readers then skip the whole file) and force base-10 depth ("08" is octal-invalid
@@ -1107,6 +1109,7 @@ EOF
 [ -n "${DISPATCH_QUIET:-}" ] || echo "dispatch-review: ${RUNNER}/${MODEL} (effort=${EFFORT}) may run for MINUTES — ensure a high Bash-tool timeout (BASH_DEFAULT_TIMEOUT_MS); the 120s default SIGTERMs long runs." >&2
 
 # --- dispatch (read-only) ---
+declare -F child_session_apply_env >/dev/null 2>&1 && child_session_apply_env "$_REVIEW_SELF_DIR" 2>/dev/null || true   # 3b rule 3 for the in-process runner branches
 if [[ "$RUNNER" = "codex" ]]; then
   CODEX_BIN="${BIN:-codex}"
   command -v "$CODEX_BIN" >/dev/null 2>&1 || die_precondition "codex binary not found: $CODEX_BIN"

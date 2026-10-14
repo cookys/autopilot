@@ -65,9 +65,10 @@ set -uo pipefail
 _EXPLORE_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # The explore engines are child sessions; this rail never reads the caller's explicit session
 # binding, so scrub it before anything is launched (see session-mode.js getSessionId()).
-unset AUTOPILOT_SESSION_ID
 # shellcheck source=/dev/null
 [ -r "$_EXPLORE_SELF_DIR/lib/repo-identity.sh" ] && . "$_EXPLORE_SELF_DIR/lib/repo-identity.sh" || true
+declare -F child_session_pin >/dev/null 2>&1 && child_session_pin "$_EXPLORE_SELF_DIR" 2>/dev/null || true   # 3b: resolve P before the scrub
+unset AUTOPILOT_SESSION_ID
 # Startup retention prune of OUR OWN aged ${TMPDIR} residue (raw logs, prompt temps,
 # agy run scripts). Best-effort; AUTOPILOT_TMP_LOG_RETENTION_DAYS=0 disables.
 # shellcheck source=/dev/null

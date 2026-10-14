@@ -195,6 +195,26 @@ for runner in claude-native cc-shim; do
   eq "$X" "$(seen "$TEST_TMP/e-probe-$runner.log" AUTOPILOT_PARENT_SESSION_ID)" "(e) probe $runner: stub claude sees the parent id"
   eq "<unset>" "$(seen "$TEST_TMP/e-probe-$runner.log" AUTOPILOT_SESSION_ID)" "(e) probe $runner: stub claude sees no AUTOPILOT_SESSION_ID"
 done
+# author / review / explore, non-claude runner: the in-process runner branches get P and a scrubbed env too (rule 3).
+# The launcher binds AUTOPILOT_SESSION_ID=X AND CLAUDE_CODE_SESSION_ID=C: the write target is X, and these rails scrub
+# AUTOPILOT_SESSION_ID at startup, so P must be resolved BEFORE that scrub or the child is told C instead of X.
+DIFFF="$TEST_TMP/d.diff"; printf '+x\n' > "$DIFFF"
+rail_codex() { # <name> <script> <args...>
+  local name="$1" script="$2"; shift 2
+  local log="$TEST_TMP/rail-$name.log"; : > "$log"
+  ( cd "$SBX" && timeout 120 env -u REPO_ROOT -u CONSUMING_REPO_ROOT AUTOPILOT_DISPATCH_RUNS_DIR="$HRUNS" AUTOPILOT_SESSION_MODE_DIR="$MD" \
+      STUB_BODY="$TEST_TMP/stub-body.sh" STUB_LOG="$log" PATH="$BINDIR:$PATH" AUTOPILOT_SETTLE_MS=0 \
+      CLAUDE_CODE_SESSION_ID="$C" CLAUDE_SESSION_ID="cs-launch" AUTOPILOT_SESSION_ID="$X" CODEX_THREAD_ID="t-launch" \
+      bash "$REPO_ROOT/scripts/$script" "$@" >"$log.out" 2>&1 ) || true
+  eq "$X" "$(seen "$log" AUTOPILOT_PARENT_SESSION_ID)" "$name: the codex child sees AUTOPILOT_PARENT_SESSION_ID == the launcher's write target"
+  eq "<unset>" "$(seen "$log" AUTOPILOT_SESSION_ID)" "$name: the codex child sees no AUTOPILOT_SESSION_ID"
+  eq "<unset>" "$(seen "$log" CLAUDE_SESSION_ID)" "$name: the codex child sees no CLAUDE_SESSION_ID"
+  eq "<unset>" "$(seen "$log" CLAUDE_CODE_SESSION_ID)" "$name: the codex child sees no CLAUDE_CODE_SESSION_ID (differs from the parent)"
+  eq "t-launch" "$(seen "$log" CODEX_THREAD_ID)" "$name: the codex child keeps CODEX_THREAD_ID"
+}
+rail_codex "(e) author codex" dispatch-author.sh --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --bin "$BINDIR/codex" --timeout 30s --run-id smwt-a1
+rail_codex "(e) review codex" dispatch-review.sh --runner codex --model gpt-5.5 --diff-file "$DIFFF" --bin "$BINDIR/codex" --run-id smwt-r1
+rail_codex "(e) explore codex" dispatch-explore.sh --runner codex --model gpt-5.5 --bin "$BINDIR/codex" --prompt-file "$PROMPT"
 
 # ---- (f)-(h): the child's own `session-mode set` -> exit 3, the launcher's marker byte-identical -------------------
 WCWD="$(cd "$SBX" && node -e 'process.stdout.write(process.cwd().replace(/[^a-zA-Z0-9_-]/g,"_").slice(0,64))')"

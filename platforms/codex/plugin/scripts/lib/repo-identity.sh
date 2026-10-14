@@ -118,6 +118,9 @@ child_session_mint() {
 # Optional $1: the scripts/ dir (a function re-declared in a detached child has no useful BASH_SOURCE).
 # CLAUDE_CODE_SESSION_ID goes only when it differs from the parent id: a runner below it must see it as inherited.
 child_session_env_setup() {
+  if [ "${_CHILD_SESSION_PINNED:-0}" = "1" ]; then   # resolved by child_session_pin before the rail scrubbed its own env
+    CHILD_SESSION_UNSET=("${_CHILD_SESSION_PIN_UNSET[@]}"); CHILD_SESSION_PARENT="$_CHILD_SESSION_PIN_PARENT"; return 0
+  fi
   CHILD_SESSION_UNSET=(-u AUTOPILOT_SESSION_ID -u CLAUDE_SESSION_ID)
   CHILD_SESSION_PARENT=""
   local sm
@@ -128,6 +131,27 @@ child_session_env_setup() {
   if [ -n "$CHILD_SESSION_PARENT" ] && [ -n "${CLAUDE_CODE_SESSION_ID:-}" ] && [ "${CLAUDE_CODE_SESSION_ID}" != "$CHILD_SESSION_PARENT" ]; then
     CHILD_SESSION_UNSET+=(-u CLAUDE_CODE_SESSION_ID)
   fi
+  return 0
+}
+
+# child_session_pin [scripts-dir] -- a rail that scrubs its own AUTOPILOT_SESSION_ID at startup (author, review,
+# explore) calls this FIRST, so the parent id handed to every child is resolved from the launcher's env, not from
+# what is left after the scrub; every later child_session_env_setup then returns the pinned values.
+child_session_pin() {
+  _CHILD_SESSION_PINNED=0
+  child_session_env_setup "$@"
+  _CHILD_SESSION_PIN_UNSET=("${CHILD_SESSION_UNSET[@]}"); _CHILD_SESSION_PIN_PARENT="$CHILD_SESSION_PARENT"; _CHILD_SESSION_PINNED=1
+  return 0
+}
+
+# child_session_apply_env [scripts-dir] -- for a runner the rail starts in-process (no `env` wrapper possible around a
+# function or a bare `timeout ... cmd`): export P and scrub the same ids in THIS shell. Call it only after the rail's
+# own session lookups are done and before the runner chain; the claude branches' explicit `env` agrees with it.
+child_session_apply_env() {
+  child_session_env_setup "$@"
+  local _a
+  for _a in "${CHILD_SESSION_UNSET[@]}"; do [ "$_a" = "-u" ] || unset "$_a"; done
+  [ -n "$CHILD_SESSION_PARENT" ] && export AUTOPILOT_PARENT_SESSION_ID="$CHILD_SESSION_PARENT"
   return 0
 }
 

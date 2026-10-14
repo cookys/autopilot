@@ -45,8 +45,24 @@ const SETS_MANAGED_MARKER_RE = /session-mode(?:\.js)?\s+set\s+--level\s+l[56]\b/
 // Rails the l5/l6 marker refuses unless strict: dispatch-author (and dispatch-consult /
 // dispatch-plan-review, which ride it). `--strict-contract` on the same line marks a strict call.
 const NON_STRICT_RAIL_RE = /^(?!.*--strict-contract).*\bdispatch-(?:author|consult|plan-review)(?:\.sh|\.js)?\b/m;
+// BL-0141: warn only when a marker line comes BEFORE a non-strict rail line (the marker refuses the
+// rail only once it is set). A brief that dispatches first and sets the marker after is the advised fix.
+function markerPrecedesNonStrictRail(prompt) {
+  const markerAt = new RegExp(SETS_MANAGED_MARKER_RE.source, 'g');
+  const railAt = new RegExp(NON_STRICT_RAIL_RE.source, 'gm');
+  const firstMarker = markerAt.exec(prompt);
+  if (!firstMarker) return false;
+  let rail;
+  while ((rail = railAt.exec(prompt)) !== null) {
+    // The match starts at the line start (and greedily runs to the last dispatch token on it), so
+    // locate the dispatch token itself; a same-line "marker ... dispatch" must still count.
+    const tokenAt = rail.index + rail[0].lastIndexOf('dispatch-');
+    if (tokenAt > firstMarker.index) return true;
+  }
+  return false;
+}
 function briefLintWarning(prompt) {
-  if (!SETS_MANAGED_MARKER_RE.test(prompt) || !NON_STRICT_RAIL_RE.test(prompt)) return '';
+  if (!markerPrecedesNonStrictRail(prompt)) return '';
   return 'dispatch-model-guard: this brief sets an l5/l6 session-mode marker AND runs a non-strict dispatch '
     + '(dispatch-author/consult/plan-review) - the marker refuses it with precondition_failed and the foreman burns '
     + 'budget on the refusal. Set the marker AFTER those dispatches, or mask it for that command. ' + MASK_LINE;

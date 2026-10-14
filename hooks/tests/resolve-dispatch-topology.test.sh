@@ -574,4 +574,26 @@ JUDGE_17B="$(node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv
 assert_eq "null null null" "$JUDGE_17B" \
   "Case 17: a refused review-loop config leaves every judge field null"
 
+# -----------------------------------------------------------------------------
+# Case 18: plan_review_panel chair is the HIGHEST explicit effort; `default` (unknown cost) never chairs.
+# EFFORT_RANK is ascending (default=6) but comparePanelCandidates is descending, so default needs its
+# own pin below `low`. Negative control: mapping default back to its ascending rank 6 makes it chair.
+# Effort-rank sites in resolve-dispatch-topology.js: decorrelateAdjacent rankOf (ascending, normalizeEffort),
+# implementer ladder sort (ascending, normalizeEffort), reviewer_ladder sort (ascending, EFFORT_RANK),
+# sortConsultDiscuss (boolean has-effort only), comparePanelCandidates (DESCENDING, chairRank).
+# -----------------------------------------------------------------------------
+rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$TOPOLOGY_OUT"
+write_scorecard_row "gpt-4o" "agy" "max" 10.0 "qualified" 1801 "reviewer" "openai"
+write_scorecard_row "claude-sonnet" "agy" "default" 10.0 "qualified" 1802 "reviewer" "anthropic"
+write_scorecard_row "gemini-flash" "agy" "low" 10.0 "qualified" 1803 "reviewer" "google"
+OUT="$(node "$SCRIPT" --json --role reviewer,plan_reviewer --out "$TOPOLOGY_OUT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "Case 18: exit 0"
+CHAIR_PANEL="$(node - "$TOPOLOGY_OUT" <<'NODE'
+const topo = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+process.stdout.write(topo.plan_review_panel.map(s => `${s.engine}/${s.effort}`).join(','));
+NODE
+)"
+assert_eq "gpt-4o/max,gemini-flash/low,claude-sonnet/default" "$CHAIR_PANEL" \
+  "Case 18: max chairs the panel; default sorts after every explicit effort"
+
 finalize_test

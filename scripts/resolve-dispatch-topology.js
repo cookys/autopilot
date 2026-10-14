@@ -832,8 +832,11 @@ function deriveTopology(repoRoot, options = {}) {
       // In panel ordering: highest effort rank first.
       // An originally-empty effort ranks below every explicit effort, so rank 0 ensures it sorts last
       // and never becomes chair over any explicit effort.
-      const rankA = a.effort ? (EFFORT_RANK[a.effort] || 0) : -1;
-      const rankB = b.effort ? (EFFORT_RANK[b.effort] || 0) : -1;
+      // EFFORT_RANK is ASCENDING (default = 6, last); this comparator is DESCENDING, so `default`
+      // (unknown cost) must be pinned below every explicit effort here or it would chair the panel.
+      const chairRank = (s) => (s.effort === 'default' ? 0 : s.effort ? (EFFORT_RANK[s.effort] || 0) : -1);
+      const rankA = chairRank(a);
+      const rankB = chairRank(b);
       if (rankA !== rankB) return rankB - rankA; // highest effort rank first
       if (a.latency !== b.latency) return a.latency - b.latency;
       return a.engine.localeCompare(b.engine);

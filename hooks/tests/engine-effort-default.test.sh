@@ -6,8 +6,9 @@
 # dimension at all) and from an absent effort (the legacy partition). `relabel-effort` corrects rows
 # whose label was false (anthropic-compatible exams recorded "high"/"max" while no effort was sent).
 #
-# Every assertion has a planted negative control, shown red then green in the dispatching report
-# (evidence-discipline §58). All stores are temp dirs; the operator's real ~/.autopilot is only
+# Each behaviour group (vocabulary, seat hash, strike migration, pin migration, not-vacated seat, v1 strike
+# refusal, backups, partial-write restore, rank, timeout) was shown red under a planted mutation and green
+# after restore (evidence-discipline §58); the reviewer-facing mutation list is in the commit report. All stores are temp dirs; the operator's real ~/.autopilot is only
 # stat'ed before/after to prove it was not written.
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
@@ -39,15 +40,27 @@ const ok = (m) => { pass += 1; console.log(`PASS: ${m}`); };
 const bad = (m) => { fail += 1; console.log(`FAIL: ${m}`); };
 const check = (cond, m, detail) => (cond ? ok(m) : bad(`${m}${detail === undefined ? '' : ` (got: ${detail})`}`));
 
-const SC = path.join(testdir, 'scorecard');
-const CAP = path.join(testdir, 'capability');
+let SC = path.join(testdir, 'scorecard');
+let CAP = path.join(testdir, 'capability');
 fs.mkdirSync(SC, { recursive: true });
 fs.mkdirSync(CAP, { recursive: true });
-const env = { ...process.env, ENGINE_SCORECARD_DIR: SC, ENGINE_CAPABILITY_DIR: CAP };
+let env = { ...process.env, ENGINE_SCORECARD_DIR: SC, ENGINE_CAPABILITY_DIR: CAP };
 const run = (args, input) => spawnSync(process.execPath, [ESC, ...args], { env, encoding: 'utf8', input });
-const scFile = path.join(SC, 'scorecard.jsonl');
-const evFile = path.join(CAP, 'qualification-evidence.jsonl');
-const strikeFile = path.join(CAP, 'strikes.jsonl');
+let scFile = path.join(SC, 'scorecard.jsonl');
+let evFile = path.join(CAP, 'qualification-evidence.jsonl');
+let strikeFile = path.join(CAP, 'strikes.jsonl');
+let pinsFile = path.join(CAP, 'pins.jsonl');
+function useStores(name) {
+  SC = path.join(testdir, `${name}-sc`);
+  CAP = path.join(testdir, `${name}-cap`);
+  fs.mkdirSync(SC, { recursive: true });
+  fs.mkdirSync(CAP, { recursive: true });
+  env = { ...process.env, ENGINE_SCORECARD_DIR: SC, ENGINE_CAPABILITY_DIR: CAP };
+  scFile = path.join(SC, 'scorecard.jsonl');
+  evFile = path.join(CAP, 'qualification-evidence.jsonl');
+  strikeFile = path.join(CAP, 'strikes.jsonl');
+  pinsFile = path.join(CAP, 'pins.jsonl');
+}
 const sha = (f) => (fs.existsSync(f) ? sha256(fs.readFileSync(f, 'utf8')) : 'absent');
 const lines = (f) => fs.readFileSync(f, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
 
@@ -239,6 +252,98 @@ check(/EFFORT_RANK = Object\.freeze\(\{[^}]*max: 5,[^}]*default: 6,/s.test(topo)
   'rank: the topology EFFORT_RANK table also places default after max');
 const timeout = require(path.join(root, 'scripts/lib/plan-review-timeout.js'));
 check(timeout.effortSeatTimeoutSeconds('default', null) === 1200, 'plan-review seat timeout: default gets the long tier');
+
+
+// ---- extra scenarios, each on its own fresh store pair ----------------------------------------
+const strikeV2 = (hash, e, r, ro, key) => ({
+  schema_version: 2, event_id: 1, kind: 'strike', seat_hash: hash, engine: e, runner: r, role: ro,
+  class: 'ordinary_strike', predicate_id: null, cause_class: 'engine_output', writer: 'dispatch_hetero_failclosed',
+  dedup_key: key, detector_id: 'dispatch_hetero_classify_outcome', detector_version: '1',
+  artifact_sha256: 'b'.repeat(64), receipt_ref: 'log=/tmp/relabel-fixture', observed_at: now.toISOString(),
+  invalidates_event_id: null, proof_artifact_sha256: null, proof_detector_id: null,
+});
+const pinRow = (row, effort) => ({
+  engine: row.engine, runner: row.runner, role: row.role, effort, endpoint: null,
+  reason: 'fixture pin', operator: 'tester', expires: null,
+});
+function freshHighSeat(name, alias) {
+  useStores(name);
+  const ev = makeEvidence(alias, 'high');
+  const w = appendWrapper(1, ev);
+  const row = rowFor(ev, w, 'high');
+  const rec = recordRow(row);
+  if (rec.status !== 0) bad(`${name}: fixture row did not record: ${rec.stderr}`);
+  return row;
+}
+
+// pins travel with a vacated seat
+{
+  const row = freshHighSeat('pin', 'pin-fixture-model');
+  fs.writeFileSync(pinsFile, `${JSON.stringify(pinRow(row, 'high'))}\n`);
+  const r = run(['relabel-effort', '--to', 'default', '--reason', 'pin move', '--event-id', '1']);
+  const rep = JSON.parse(r.stdout || '{}');
+  check(r.status === 0 && rep.pins_moved === 1 && lines(pinsFile)[0].effort === 'default',
+    'pins: a pin on the vacated seat is re-pointed at the default seat', r.stderr || r.stdout);
+  check(rep.backups.some((b) => b.includes('pins.jsonl.bak-relabel-effort')),
+    'pins: the pins file was backed up before it was rewritten');
+}
+
+// a seat that still has another ordinary row is NOT vacated: strikes and pins stay, and it is reported
+{
+  const row = freshHighSeat('nv', 'nv-fixture-model');
+  const other = JSON.parse(JSON.stringify(row));
+  delete other.evidence; delete other.evidence_store;
+  const rec2 = recordRow(other);
+  check(rec2.status === 0, 'not-vacated: a second ordinary high row on the same seat records', rec2.stderr);
+  const oldHash = independentSeatHash(row.engine, row.runner, row.role, 'high');
+  fs.writeFileSync(strikeFile, `${JSON.stringify(strikeV2(oldHash, row.engine, row.runner, row.role, 'nv-strike'))}\n`);
+  fs.writeFileSync(pinsFile, `${JSON.stringify(pinRow(row, 'high'))}\n`);
+  const r = run(['relabel-effort', '--to', 'default', '--reason', 'partial seat', '--event-id', '1']);
+  const rep = JSON.parse(r.stdout || '{}');
+  check(r.status === 0 && Array.isArray(rep.seats_not_vacated) && rep.seats_not_vacated.length === 1
+    && rep.strikes_moved === 0 && rep.pins_moved === 0 && rep.strikes_left_on_old_seat === 1,
+  'not-vacated: report names the seat and says no strike or pin moved', r.stderr || r.stdout);
+  check(lines(strikeFile)[0].seat_hash === oldHash && lines(pinsFile)[0].effort === 'high',
+    'not-vacated: the strike and the pin stay on the old seat (nothing silently reset or orphaned)');
+}
+
+// legacy v1 strikes keyed to the old identity_hash block the evidence re-seal
+{
+  const row = freshHighSeat('v1', 'v1-fixture-model');
+  fs.writeFileSync(strikeFile, `${JSON.stringify({
+    schema_version: 1, event_id: 7, identity_hash: row.evidence.identity_hash, source: 'fuse',
+    observed_at: now.toISOString(), receipt_ref: 'fixture-v1',
+  })}\n`);
+  const s = snap();
+  const r = run(['relabel-effort', '--to', 'default', '--reason', 'v1 guard', '--event-id', '1']);
+  check(r.status !== 0 && /v1 strike/.test(r.stderr) && /7/.test(r.stderr) && /nothing written/.test(r.stderr) && snap() === s,
+    'v1 strike keyed to the old identity_hash: relabel refuses, names the strike, writes nothing', r.stderr.trim());
+}
+
+// a failure after writing began restores every store and says so honestly
+{
+  const row = freshHighSeat('rb', 'rb-fixture-model');
+  const oldHash = independentSeatHash(row.engine, row.runner, row.role, 'high');
+  fs.writeFileSync(strikeFile, `${JSON.stringify(strikeV2(oldHash, row.engine, row.runner, row.role, 'rb-strike'))}\n`);
+  const inject = path.join(testdir, 'inject-fail.js');
+  // Fail the rename onto the SECOND file written (the scorecard; the evidence ledger already landed).
+  fs.writeFileSync(inject, `
+const fs = require('fs');
+const real = fs.renameSync;
+fs.renameSync = function (from, to) {
+  if (String(to).endsWith('scorecard.jsonl')) { const e = new Error('ENOSPC: injected'); e.code = 'ENOSPC'; throw e; }
+  return real.apply(this, arguments);
+};`);
+  const s = snap();
+  const r = spawnSync(process.execPath, ['--require', inject, ESC, 'relabel-effort', '--to', 'default', '--reason', 'rollback', '--event-id', '1'],
+    { env, encoding: 'utf8' });
+  check(r.status !== 0 && snap() === s,
+    'partial write: all three stores are byte-identical to before after a mid-write failure', `${r.status} ${snap() === s}`);
+  check(/after writing began/.test(r.stderr) && /RESTORED/.test(r.stderr) && !/nothing written/.test(r.stderr),
+    'partial write: the message says writing began and was restored, never "nothing written"', r.stderr.trim());
+  check(lines(evFile)[0].evidence.identity.effort === 'high' && lines(scFile)[0].effort === 'high',
+    'partial write: ledger and scorecard both still say high (anchor consistent)');
+}
 
 console.log(`SUMMARY ${pass} ${fail}`);
 process.exit(fail === 0 ? 0 : 1);

@@ -2722,6 +2722,16 @@ function planEffortRelabel(opts, scorecardRows, evidenceWrappers, strikeRows, pi
       evidence,
     };
   });
+  // Legacy v1 strikes are keyed by the evidence identity_hash, which re-sealing changes. Moving them
+  // is not defined (they feed brainSeatStatus against the old hash), so refuse rather than orphan them.
+  for (const w of evidenceWrappers) {
+    if (!evidenceTargets.has(w.event_id)) continue;
+    const newHash = newWrappers.find((n) => n.event_id === w.event_id).evidence.identity_hash;
+    const v1 = (strikeRows || []).filter((r) => r.schema_version === 1 && r.identity_hash === w.evidence.identity_hash);
+    if (v1.length > 0 && newHash !== w.evidence.identity_hash) {
+      throw new Error(`legacy v1 strike event(s) ${v1.map((r) => r.event_id).join(',')} are keyed to the identity_hash of evidence event ${w.event_id}, which relabel would change; refusing so they are not orphaned`);
+    }
+  }
   const ids = new Set(newWrappers.map((w) => w.evidence.evidence_id));
   if (ids.size !== newWrappers.length) {
     throw new Error('relabel would make two evidence records identical (duplicate evidence_id)');
@@ -2876,7 +2886,30 @@ function cmdRelabelEffort(args) {
     // Every backup exists before the first byte of any store changes. Evidence is rewritten first:
     // the scorecard anchors to it.
     for (const [file] of files) report.backups.push(backupFile(file, tag));
-    for (const [file, rows] of files) rewriteKeepingMode(file, rows);
+    // From here on a failure leaves a partial write behind, so restore every store from its backup
+    // (original bytes, original mode kept because copyFileSync onto an existing file keeps the mode).
+    const written = [];
+    try {
+      for (const [file, rows] of files) {
+        written.push(file);
+        rewriteKeepingMode(file, rows);
+      }
+    } catch (writeError) {
+      const failedRestores = [];
+      files.forEach(([file], i) => {
+        if (!written.includes(file)) return;
+        try {
+          fs.copyFileSync(report.backups[i], file);
+        } catch (restoreError) {
+          failedRestores.push(`${file} (backup kept at ${report.backups[i]}: ${restoreError.message})`);
+        }
+      });
+      const err = new Error(failedRestores.length === 0
+        ? `PARTIAL WRITE then RESTORED: ${writeError.message}; every store was put back from its backup`
+        : `PARTIAL WRITE and RESTORE FAILED for ${failedRestores.join('; ')}; original cause: ${writeError.message}`);
+      err.partialWrite = true;
+      throw err;
+    }
     return report;
   };
 
@@ -2891,7 +2924,9 @@ function cmdRelabelEffort(args) {
       report = nest(0);
     }
   } catch (error) {
-    failValidation(`relabel-effort refused, nothing written: ${error.message}`);
+    failValidation(error.partialWrite
+      ? `relabel-effort FAILED after writing began: ${error.message}`
+      : `relabel-effort refused, nothing written: ${error.message}`);
   }
   process.stdout.write(`${JSON.stringify(report)}\n`);
 }

@@ -713,6 +713,47 @@ function validateContract(contract, context) {
     contract,
     context && context.requireMissionProjection === true,
   ));
+  if (hasOwn(contract, 'adoption')) errors.push(...validateAdoption(contract, context));
+  return errors;
+}
+
+// Review-only adoption section (autopilot engine review-candidate): the sealed
+// head of an externally produced range. It carries no repair budget and no
+// mission/strict-dispatch projection; the range itself is re-derived from the
+// repository at admission, never trusted from this record.
+function validateAdoption(contract, context) {
+  const errors = [];
+  const adoption = contract.adoption;
+  if (!adoption || typeof adoption !== 'object' || Array.isArray(adoption)) {
+    return ['adoption: expected object'];
+  }
+  if (!hasOwn(adoption, 'head_sha')) errors.push("adoption: missing required field 'head_sha'");
+  for (const key of Object.keys(adoption)) {
+    if (key !== 'head_sha' && key !== 'author_family') {
+      errors.push(`adoption: unknown field '${key}'`);
+    }
+  }
+  const expectedObjectLength = context.objectFormat === 'sha256' ? 64 : 40;
+  if (typeof adoption.head_sha !== 'string'
+      || !new RegExp(`^[0-9a-f]{${expectedObjectLength}}$`).test(adoption.head_sha)) {
+    errors.push(`adoption.head_sha: expected ${expectedObjectLength}-hex object ID`);
+  } else if (adoption.head_sha === contract.base_sha) {
+    errors.push('adoption.head_sha: must differ from base_sha');
+  } else if (runGit(context.repo, ['cat-file', '-e', `${adoption.head_sha}^{commit}`]).status !== 0) {
+    errors.push('adoption.head_sha: commit does not exist in repository');
+  }
+  if (hasOwn(adoption, 'author_family')
+      && (!nonEmptyString(adoption.author_family) || adoption.author_family.length > 64)) {
+    errors.push('adoption.author_family: expected bounded non-empty string');
+  }
+  if (contract.max_repair_generations !== 0) {
+    errors.push('adoption: max_repair_generations must be 0 for a review-only contract');
+  }
+  for (const forbidden of ['mission_runtime', 'strict_dispatch', 'unit_class']) {
+    if (hasOwn(contract, forbidden)) {
+      errors.push(`adoption: ${forbidden} must be absent for a review-only contract`);
+    }
+  }
   return errors;
 }
 

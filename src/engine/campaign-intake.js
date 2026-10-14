@@ -45,6 +45,7 @@ const {
   reviewSeatTier,
 } = require('./final-panel-qualification');
 const repoPreconditions = require('./repo-preconditions');
+const { evaluate: evaluateRepairScope } = require('../../scripts/check-repair-scope');
 
 
 const RUN_LEDGER = path.resolve(__dirname, '..', '..', 'scripts', 'run-ledger.sh');
@@ -1911,6 +1912,132 @@ function consumeEnforcedProviderReadiness({ adapters, contract, inspection, rost
   return result;
 }
 
+// Review-only adoption (autopilot engine review-candidate). The adopted range is
+// re-derived from the repository, never taken from the caller: tip, ancestry,
+// emptiness, path scope and file cap are read here with named refusals. A churn
+// breach is a named warning, never a refusal (an external author splits diffs
+// itself). `phase` is 'admission' (intake) or 'pre_review' (just before the first
+// reviewer spend, so a branch that moved after admission cannot be reviewed).
+function defaultAdoptionAdmission({ contract, repo, phase = 'admission' }) {
+  const owner = 'adoption_admission';
+  const refuse = (code, reason, detail = {}) => rejected(owner, code, reason, { phase, ...detail });
+  const adoption = contract && contract.adoption;
+  if (!adoption || typeof adoption.head_sha !== 'string') {
+    return refuse('review_candidate_mode_mismatch', 'sealed contract carries no adoption section');
+  }
+  const head = adoption.head_sha;
+  const base = contract.base_sha;
+  const probe = (args) => {
+    try {
+      return { ok: true, out: repoPreconditions.runGit(repo, args).trim() };
+    } catch (error) {
+      return { ok: false, out: '', error: error.message || String(error) };
+    }
+  };
+  const headExists = probe(['cat-file', '-e', `${head}^{commit}`]);
+  if (!headExists.ok) {
+    return refuse('review_candidate_head_missing', `sealed head ${head} is not a commit in this repository`);
+  }
+  const tip = probe(['rev-parse', '--verify', `refs/heads/${contract.branch}^{commit}`]);
+  if (!tip.ok || tip.out !== head) {
+    return refuse(
+      'review_candidate_branch_moved',
+      `branch ${contract.branch} tip ${tip.ok ? tip.out : '(unresolved)'} is not the sealed head ${head}`,
+    );
+  }
+  if (head === base) {
+    return refuse('review_candidate_empty_range', 'sealed head equals the base: there is nothing to review');
+  }
+  if (!probe(['merge-base', '--is-ancestor', base, head]).ok) {
+    return refuse('review_candidate_base_not_ancestor', `base ${base} is not an ancestor of the sealed head`);
+  }
+  const prefixes = contract.allowed_path_prefixes;
+  const scopeContract = {
+    schema: 1,
+    task_id: contract.ticket,
+    base_sha: base,
+    implementation_sha: head,
+    allowed_path_prefixes: [...prefixes],
+    allowed_new_paths: prefixes.map((prefix) => (prefix.endsWith('/') ? `${prefix}**` : `${prefix}/**`)),
+    baseline_churn: contract.baseline_churn,
+    max_growth_ratio: contract.max_growth_ratio,
+    max_extra_churn: contract.max_extra_churn,
+  };
+  let scope;
+  try {
+    scope = evaluateRepairScope(scopeContract, repo, head);
+  } catch (error) {
+    return refuse('review_candidate_scope_unreadable', error.message || String(error));
+  }
+  const churnReasons = new Set(['ratio_trip', 'absolute_trip']);
+  const hardTrips = scope.trips.filter((trip) => !churnReasons.has(trip.reason));
+  const warnings = scope.trips.filter((trip) => churnReasons.has(trip.reason));
+  if (hardTrips.length > 0) {
+    return refuse(
+      'review_candidate_out_of_scope',
+      `range touches paths outside the sealed allowed_path_prefixes: ${hardTrips.map((t) => t.path || t.reason).join(', ')}`,
+      { trips: hardTrips },
+    );
+  }
+  if (scope.changed_files.length > contract.max_changed_files) {
+    return refuse(
+      'review_candidate_file_cap',
+      `range changes ${scope.changed_files.length} files; the sealed cap is ${contract.max_changed_files}`,
+    );
+  }
+  const tree = probe(['rev-parse', `${head}^{tree}`]);
+  if (!tree.ok) return refuse('review_candidate_head_missing', `cannot resolve the tree of ${head}`);
+  const body = { ...scope, file_cap: contract.max_changed_files, file_cap_passed: true };
+  return step(owner, 'ready', {
+    phase,
+    head,
+    base,
+    branch: contract.branch,
+    tree_sha: tree.out,
+    changed_files: scope.changed_files,
+    total_churn: scope.total_churn,
+    scope_receipt_digest: canonicalDigest(body),
+    warnings: warnings.map((trip) => ({ ...trip, code: `review_candidate_churn_${trip.reason}` })),
+  });
+}
+
+function reviewCandidatePanelRejection(roster, authorFamily = null) {
+  const seats = roster && Array.isArray(roster.qc_panel_seats) ? roster.qc_panel_seats : [];
+  const minSize = roster && Number.isSafeInteger(roster.min_panel_size) ? roster.min_panel_size : 3;
+  const configuredFamilies = roster
+    && Number.isSafeInteger(roster.required_review_families)
+    && roster.required_review_families >= 1
+    ? roster.required_review_families
+    : 1;
+  // Same rule as the engine quorum: a multi-seat panel always needs two families.
+  const requiredFamilies = seats.length > 1 || minSize > 1
+    ? Math.max(2, configuredFamilies)
+    : configuredFamilies;
+  // The declared author family is EXCLUDED from the family count: the remaining families
+  // must still satisfy the sealed minimum. A declaration can only tighten the panel.
+  const declared = typeof authorFamily === 'string' && authorFamily.length > 0 ? authorFamily : null;
+  const families = new Set();
+  for (const seat of seats) {
+    if (!seat || typeof seat.family !== 'string' || seat.family.length === 0) continue;
+    const derived = modelFamilyOfEngine(seat.model);
+    const family = derived === 'unknown' ? seat.family : derived;
+    if (declared !== null && family === declared) continue;
+    families.add(family);
+  }
+  if (!roster || roster.qc_panel_seats_complete !== true
+      || seats.length < minSize || families.size < requiredFamilies) {
+    return rejected(
+      'campaign_generation',
+      'review_candidate_panel_incomplete',
+      `review-candidate requires the complete sealed panel: ${seats.length} seats `
+        + `(minimum ${minSize}), ${families.size} families outside the declared author family `
+        + `${declared === null ? '(none declared)' : declared} (required ${requiredFamilies}), `
+        + `complete=${Boolean(roster && roster.qc_panel_seats_complete === true)}`,
+    );
+  }
+  return null;
+}
+
 function runCampaignIntake(input = {}, adapters = {}) {
   const repo = path.resolve(input.repo || process.cwd());
   const contractPath = input.contractPath && path.resolve(repo, input.contractPath);
@@ -1925,6 +2052,25 @@ function runCampaignIntake(input = {}, adapters = {}) {
     : (typeof adapters.now === 'function' ? adapters.now() : new Date().toISOString());
   const steps = [];
   let qcPanelSnapshot = null;
+  // Review-only runs have no implementer engine: the author family is the sealed
+  // declaration (added exclusion only) or unknown, never derived from the roster.
+  const snapshotImplementerFamily = () => (input.reviewCandidate === true
+    ? (typeof input.authorFamily === 'string' && input.authorFamily.length > 0
+      ? input.authorFamily
+      : 'unknown')
+    : modelFamilyOfEngine(input.roster && input.roster.implementer_engine));
+  if (input.reviewCandidate === true) {
+    const panelRejection = reviewCandidatePanelRejection(input.roster, input.authorFamily);
+    if (panelRejection) {
+      return {
+        status: 'blocked',
+        reason: panelRejection.reason,
+        rejection: panelRejection,
+        steps: [panelRejection],
+        pre_spend_no_effect_receipt: null,
+      };
+    }
+  }
   // `--campaign-ledger` accepts exactly one value: the canonical Git common-dir
   // ledger. That is pure argv validation and needs no contract, seal, or Mission
   // claim — reject it here, BEFORE the claim adapter runs, so a mistyped flag
@@ -2209,7 +2355,7 @@ function runCampaignIntake(input = {}, adapters = {}) {
       seats: qcSeats,
       minPanelSize: minSize,
       requiredReviewFamilies: requiredFamilies,
-      implementerFamily: modelFamilyOfEngine(input.roster && input.roster.implementer_engine),
+      implementerFamily: snapshotImplementerFamily(),
       reviewStation: resolveReviewStation(input.roster),
     });
     const snapPath = snapPathCandidate;
@@ -2548,7 +2694,7 @@ function runCampaignIntake(input = {}, adapters = {}) {
             seats: qcSeats,
             minPanelSize: minSize,
             requiredReviewFamilies: requiredFamilies,
-            implementerFamily: modelFamilyOfEngine(input.roster && input.roster.implementer_engine),
+            implementerFamily: snapshotImplementerFamily(),
           });
         const rejection = rejected(
           'qc_panel_snapshot',
@@ -2572,7 +2718,7 @@ function runCampaignIntake(input = {}, adapters = {}) {
         seats: qcSeats,
         minPanelSize: minSize,
         requiredReviewFamilies: requiredFamilies,
-        implementerFamily: modelFamilyOfEngine(input.roster && input.roster.implementer_engine),
+        implementerFamily: snapshotImplementerFamily(),
       });
     const liveDrift = qcPanelSnapshot.digest !== driftLive.digest;
     const sealedOnResume = !pendingQcPanelSnapshot.existing
@@ -2704,6 +2850,48 @@ function runCampaignIntake(input = {}, adapters = {}) {
     contract_digest: inspection.contract_sha256,
     seal_path: inspection.seal_path,
   }));
+
+  // Modes cannot cross: an adoption contract is review-only and an implementation
+  // contract is not; each is refused here, before readiness, context, occupancy or
+  // any generation claim, so nothing is spent.
+  const hasAdoption = Object.prototype.hasOwnProperty.call(contract, 'adoption');
+  if (hasAdoption !== (input.reviewCandidate === true)) {
+    return releaseAfterRejection(rejected(
+      'campaign_contract',
+      'review_candidate_mode_mismatch',
+      hasAdoption
+        ? 'an adoption (review-only) contract cannot run under implement-review; use engine review-candidate'
+        : 'engine review-candidate requires a sealed adoption contract',
+    ));
+  }
+  if (hasAdoption) {
+    const declared = contract.adoption.author_family || null;
+    if ((input.authorFamily || null) !== declared) {
+      return releaseAfterRejection(rejected(
+        'campaign_contract',
+        'campaign_binding_mismatch',
+        'declared author family must match the sealed adoption section',
+      ));
+    }
+    let admission;
+    try {
+      admission = requireDecision(
+        (adapters.adoptionAdmission || defaultAdoptionAdmission)({
+          contract, repo, phase: 'admission',
+        }),
+        'adoption_admission',
+        new Set(['ready', 'rejected']),
+      );
+    } catch (error) {
+      return releaseAfterRejection(rejected(
+        'adoption_admission',
+        error.code || 'adoption_admission_invalid',
+        error.message || String(error),
+      ));
+    }
+    if (admission.status === 'rejected') return releaseAfterRejection(admission);
+    steps.push(admission);
+  }
 
   // Enforced ICC may not delegate exact-role authority to a serializable
   // decision adapter. The constructor-owned host must supply both the sealed
@@ -2891,6 +3079,8 @@ function runCampaignIntake(input = {}, adapters = {}) {
 }
 
 module.exports = {
+  defaultAdoptionAdmission,
+  reviewCandidatePanelRejection,
   appendCampaignEvent,
   CampaignIntakeError,
   buildStrandedClaim,

@@ -22,6 +22,9 @@ const CAMPAIGN_STATES = Object.freeze({
 const CAMPAIGN_EVENTS = Object.freeze({
   IMPLEMENTATION_STARTED: 'implementation_started',
   IMPLEMENTATION_COMPLETED: 'implementation_completed',
+  // Review-only adoption of an externally produced range: PREPARED -> VERTICAL_VERIFICATION
+  // without any implementation lease. Never a replayed implementation event.
+  CANDIDATE_ADOPTED: 'candidate_adopted',
   MUTATION_FAILED: 'mutation_failed',
   BOUNDARY_REJECTED: 'boundary_rejected',
   VERTICAL_VERIFIED: 'vertical_verified',
@@ -298,6 +301,11 @@ const EVENT_PAYLOAD_KEYS = Object.freeze({
     'scope_check_passed',
     'scope_check_digest',
   ],
+  [CAMPAIGN_EVENTS.CANDIDATE_ADOPTED]: [
+    'scope_check_passed',
+    'scope_check_digest',
+    'adopted_head',
+  ],
   [CAMPAIGN_EVENTS.MUTATION_FAILED]: [
     'reason',
     'failure_receipt_digest',
@@ -398,6 +406,7 @@ function canonicalDigest(value) {
 // Extra keys such as repair_lineage may ride on the wrapper; they must not enter the
 // digest the reducer recomputes, or MUTATION_FAILED is refused as evidence mismatch.
 const DIGEST_ARTIFACT_KINDS = new Set([
+  'adopted_candidate',
   'verification_receipt',
   'product_review',
   'finding_registry',
@@ -611,7 +620,9 @@ function validateRepairLineage(lineage, campaignId, branch) {
   if (lineage.lineage_id !== campaignId
       || lineage.branch !== branch
       || (lineage.worktree === null
-        ? lineage.terminal_worktree_disposition !== 'not_created_failed_dispatch'
+        ? !['not_created_failed_dispatch', 'not_created_adopted_range'].includes(
+          lineage.terminal_worktree_disposition,
+        )
         : (typeof lineage.worktree !== 'string' || !path.isAbsolute(lineage.worktree)))
       || (lineage.provider_session_id !== null
         && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
@@ -629,7 +640,9 @@ function validateRepairLineage(lineage, campaignId, branch) {
       || lineage.cleanup_epoch < 0
       || (lineage.cleanup_epoch === 0
         && (lineage.worktree !== null
-          || lineage.terminal_worktree_disposition !== 'not_created_failed_dispatch'))
+          || !['not_created_failed_dispatch', 'not_created_adopted_range'].includes(
+            lineage.terminal_worktree_disposition,
+          )))
       || (lineage.cleanup_receipt_id !== null
         && !isSha256(lineage.cleanup_receipt_id))
       || ((lineage.terminal_worktree_disposition === 'removed_clean')
@@ -648,6 +661,8 @@ function validateRepairLineage(lineage, campaignId, branch) {
         'active',
         'retained_failed_dispatch',
         'not_created_failed_dispatch',
+        // Review-only adopted range: no writer ran and no worktree was ever created.
+        'not_created_adopted_range',
         'blocked_cleanup_journal',
         'blocked_dirty_or_unverifiable',
         'removed_clean',
@@ -1150,6 +1165,17 @@ function reduceCampaignState(currentState, event) {
       && event.event_type === CAMPAIGN_EVENTS.IMPLEMENTATION_STARTED) {
     acquireLease(next, event);
     next.phase = CAMPAIGN_STATES.IMPLEMENTING;
+  } else if (currentState.phase === CAMPAIGN_STATES.PREPARED
+      && event.event_type === CAMPAIGN_EVENTS.CANDIDATE_ADOPTED) {
+    // No writer lease exists for an adopted range; the scope re-derivation is still required.
+    if (currentState.live_lease) {
+      fail('LIVE_LEASE_CONFLICT', 'candidate adoption cannot replace a live lease owner');
+    }
+    requireScopeCheck(event);
+    if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(event.payload.adopted_head || '')) {
+      fail('INVALID_PAYLOAD', 'candidate_adopted requires the adopted head sha');
+    }
+    next.phase = CAMPAIGN_STATES.VERTICAL_VERIFICATION;
   } else if (currentState.phase === CAMPAIGN_STATES.IMPLEMENTING
       && event.event_type === CAMPAIGN_EVENTS.IMPLEMENTATION_COMPLETED) {
     requireLease(currentState, event);

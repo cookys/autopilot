@@ -4,6 +4,15 @@
 
 ### 新增
 
+- **`autopilot engine review-candidate`：只審、不寫的外部範圍審查（BL-0090 P1）**（plan `docs/plans/2026-10-13-review-only-external-candidate.md`）：外部團隊自己寫好、自己提交的一段 `base..head`，可以直接交給我們審，不必假裝成我們的 implementer。這個子命令不呼叫任何寫手、驗證作者或修復的模型；範圍只認 sealed 合約裡的 `adoption.head_sha`，從 Git 重新推導。
+  - **收件**：合約新增選填的 `adoption` 區段（`head_sha`，選填 `author_family`）。收件時重新檢查：分支尖端必須等於 sealed head、base 必須是祖先、範圍不得為空、路徑都在 allowed prefixes 內、檔案數不超過上限。每一種拒絕都有具名原因，且在花任何模型呼叫之前發生。churn 超限只是回執上的警告，不拒絕。
+  - **驗證**：`verify_cmd` 在被收件那個 commit 的全新 detached worktree 裡執行，不在操作者的 checkout，所以一個被 gitignore 的「讓測試通過」檔案不會讓它變綠。
+  - **審查**：sealed 的審查面板與最後面板照舊；l4 另外要求面板席位數與家族數達到 sealed 最小值。宣告的作者家族只會多排除，不會削弱面板；沒宣告就是 `unknown`。
+  - **結果**：全綠且面板達標才是 ready（結束碼 0）。驗證紅燈、面板不足、或有 must-fix 發現（停在 `awaiting_disposition`）都是非零結束碼並寫明原因。這個版本不支援 `--resume`，會以 `review_candidate_resume_unsupported` 拒絕（P2 補上）。
+  - **狀態機**：新增事件 `candidate_adopted`（PREPARED 直接進 VERTICAL_VERIFICATION，沒有 lease）與 artifact kind `adopted_candidate`；`implement` adapter 在這個模式下是一個一律拒絕的 adapter，抵達它就視為 bug 並 fail closed。模式不能交叉：adoption 合約不能跑 `implement-review`，一般合約不能跑 `review-candidate`，adoption 合約不得帶 `mission_runtime`、`strict_dispatch`、`unit_class`，且 `max_repair_generations` 必須是 0。
+  - **測試**：新增 `hooks/tests/review-candidate.test.sh`（驅動器 `hooks/tests/lib/review-candidate-driver.js`）：RO1 至 RO8，每個負向對照都跑過；閘門突變（把收件重新推導換成永遠 ready 的 stub）會讓 RO3、RO4 全部變紅。
+  - **複審修正**：實機演練抓到並修掉兩個測試看不到的缺陷（採用範圍沒建立 scope session，scope 檢查點誤報「seal drifted」；`implementer_family` 覆寫在嚴格 readiness 之前，造成 roster digest 漂移）。宣告家族改成先從家族數扣除（RO7 字面讀法）；審查前分支被移動改為終止並給代碼 `review_candidate_branch_moved`；每個收件拒絕在頂層帶 `code`；帳本不再寫 `not_created_failed_dispatch`，改為 `not_created_adopted_range`；RO2 不再覆寫 diff provider。證據：`docs/plans/evidence/2026-10-14-review-candidate-ro10/`。
+
 - **背景啟動 dispatch rail 卻沒有喚醒機制，現在會被擋下**（BL-0019，openclaw 回報）：用結尾 `&` 或 `setsid -f` 把會啟動 worker 的 dispatch rail（`dispatch-review.sh` 等；`dispatch-status.js` 這類觀察工具不算）丟到背景，而同一個指令裡沒有 `wait` 或 `wait-dispatch-results.js` 時，session 永遠不會知道它跑完。這個檢查預設就生效，連 warn 模式也會擋，所有深度（包含 depth-0 和子代理）都適用；擋下時的訊息會列出改用 `run_in_background`，或搭配等待者的做法。
   - 只看命令位置的那個字詞：`grep dispatch-review.sh x &`、`git log -- scripts/dispatch-review.sh &`、背景跑 `dispatch-*.test.sh` 都不會被擋。
   - 另外兩條只警告、不擋：`pkill -f`／`pgrep -f` 的 pattern 沒用 `[x]` 寫法（會比對到自己），以及 zsh 下以 `=` 開頭的字詞或沒有檔案符合的萬用字元（zsh 會中止整行）。萬用字元只查單層路徑，用 `opendirSync` 邊讀目錄邊看時間（總預算 50 ms），超時、目錄讀不到或輸入過長（超過 8 KiB）就不警告；`=` 開頭的字詞在輸入過長時也不檢查。

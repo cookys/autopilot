@@ -246,6 +246,35 @@ function createWriterFence({
   };
 }
 
+// Review-only adoption: no writer ever existed for an externally produced range, so the
+// fence is closed by construction. It is bound to the adopted commit and tree like a
+// dispatch fence and is accepted only by the verification receipt, never by a git_candidate
+// reference (which keeps its dispatch_exit/terminal_ledger evidence modes).
+function createAdoptedWriterFence({
+  campaignId, stageIdentity, candidateCommit, candidateTreeSha,
+}) {
+  if (typeof campaignId !== 'string' || campaignId.length === 0
+      || typeof stageIdentity !== 'string' || stageIdentity.length === 0
+      || !isGitObject(candidateCommit)
+      || !isGitObject(candidateTreeSha)) {
+    throw new TypeError('adopted writer fence identity is invalid');
+  }
+  const body = {
+    schema_version: 1,
+    artifact_type: 'implementation_campaign_writer_fence',
+    campaign_id: campaignId,
+    stage_identity: stageIdentity,
+    candidate_commit: candidateCommit,
+    candidate_tree_sha: candidateTreeSha,
+    status: 'closed',
+    evidence_mode: 'adopted_range',
+    closure_evidence_digest: canonicalDigest({
+      adopted: true, candidate_commit: candidateCommit, candidate_tree_sha: candidateTreeSha,
+    }),
+  };
+  return { ...body, receipt_digest: canonicalDigest(body) };
+}
+
 function createLedgerReconciliationReceipt({
   campaignId,
   stageIdentity,
@@ -450,6 +479,7 @@ module.exports = {
   createLedgerReconciliationReceipt,
   createVerificationReceipt,
   createVerificationRequest,
+  createAdoptedWriterFence,
   createWriterFence,
   environmentFingerprint,
   reusableGreenReceipt,

@@ -1,0 +1,19 @@
+{
+  "identity": "muse-spark-1.3-contributor",
+  "engine": "muse-spark-1.3-contributor",
+  "family": "meta",
+  "runner": "anthropic-compatible",
+  "runner_version": "opencode-go-responses-v1",
+  "harness_version": "engine-qualify-122ae705",
+  "effort": "default",
+  "prompt_config_hash": "977f546946baec22eb74593baecb3efd2d421e34caeaef76dc0a183b6a9aa494",
+  "semantic_fingerprint": "574f62c8c9c7df1807fa5746a7cc84359b610a5588d834ecaa4bf42d182d15af",
+  "containment_fingerprint": "5fd0ff93cc01ef4abcefc68225d30aee9acf1b51ddc069eee9c671b1cbad98eb",
+  "_invented": [],
+  "_semantic_surface": null,
+  "_containment_surface": {
+    "kind": "discuss-containment-surface-v1",
+    "exam_transport": "qualification-case-broker-networkless-bwrap",
+    "credential_isolation": "broker-env-allowlist-http-token"
+  }
+}

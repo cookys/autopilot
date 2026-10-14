@@ -14,6 +14,7 @@ const LANES = {
                transport: 'qoderclicn-p-tools-empty', posture: 'qoderclicn -p --model --tools "" --permission-mode dont_ask (no skip-permissions)' },
   kimi:      { engine: 'kimi-code-k3',               model: 'kimi-code/k3',               family: 'moonshot', kind: 'cli',  cli: 'kimi', effort: 'high',
                transport: 'kimi-m-p-argv', posture: 'kimi -m <model> -p <prompt> (default agent; no tool-deny in provider kimi branch)' },
+  muse:      { engine: 'muse-spark-1.3-contributor', model: 'muse-spark-1.3-contributor', family: 'meta',     kind: 'http', endpoint: 'opencode-go', effort: 'default', protocol: 'responses' },
   kimi28:    { engine: 'kimi-k2.8-preview',          model: 'kimi-code/kimi-for-coding',  family: 'moonshot', kind: 'cli',  cli: 'kimi', effort: 'high',
                transport: 'kimi-m-p-argv', posture: 'kimi -m <model> -p <prompt> (default agent; no tool-deny in provider kimi branch)' },
 };
@@ -39,9 +40,9 @@ const corp = (r) => { const c = fs.readFileSync(path.join(REPO, `evals/${r}-capa
   return { prompt: sha(Buffer.concat([c, g])), sem: sha(Buffer.from(JSON.stringify({ corpus_version: j.corpus_version, families: j.families, thresholds: j.thresholds, canary_closure: 'negative_control_admission_failed:true' }), 'utf8')) }; };
 const TRANSPORT = 'qualification-case-broker-networkless-bwrap';
 const http = L.kind === 'http';
-const T = http ? 'anthropic-compatible-http' : L.transport;
+const T = http ? (L.protocol === 'responses' ? 'opencode-go-responses-http' : 'anthropic-compatible-http') : L.transport;
 const CRED = http ? 'broker-env-allowlist-http-token' : 'qrp-cli-home-credential-only-seed';
-let runnerVersion = 'node-direct-http-fetch', runner = 'anthropic-compatible', harness;
+let runnerVersion = L.protocol === 'responses' ? 'opencode-go-responses-v1' : 'node-direct-http-fetch', runner = 'anthropic-compatible', harness;
 const invented = [];
 if (http) { harness = 'engine-qualify-' + sha(fs.readFileSync(path.join(REPO, 'scripts/engine-qualify.js'))).slice(0, 8); }
 else {

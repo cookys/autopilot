@@ -1597,8 +1597,17 @@ async function main() {
   } catch (error) {
     fail(`model call failed: ${error.message}`);
   }
-  const output = extractJsonObject(result.text);
-  if (!output) fail('model response contained no parseable JSON object');
+  // A model that answers badly (no / broken JSON) has failed THIS case; it must
+  // not abort the whole administration. Hand the raw reply back unchanged: the
+  // host parser of every mode (parseVaPlanOutput, parseConsultDiscussCaseResponse,
+  // parseBrainRoundOutput, parsePanelResult) already grades unparseable output as
+  // a failed case and the exam continues (owner rule 2026-10-14: every question
+  // runs to completion). Only a transport failure (connection / HTTP / CLI
+  // exit / empty output, handled above) is a provider failure. Never invents
+  // content: the reply is passed through verbatim.
+  const output = extractJsonObject(result.text)
+    || (typeof result.text === 'string' && result.text.trim() !== '' ? result.text : '');
+  if (!output) fail('model response was empty');
   let normalized = output;
   if (promptMode === 'reviewer') {
     try {

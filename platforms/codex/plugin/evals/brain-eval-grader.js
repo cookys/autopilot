@@ -121,9 +121,12 @@ function gradeTrial(admin, trialIndex, trace, envelope = {}) {
     const malformed = validateRoundRow(row, round, corpusActions);
     if (malformed) {
       hardFails.push({ rule: 'malformed_round_output', round_id: round.round_id, detail: malformed });
-      stopReason = 'malformed';
-      malformedAt = round.round_id;
-      break;
+      // Run-to-completion (owner rule 2026-10-14): a malformed row is a hard
+      // fail for the trial, but the remaining rounds are still graded. The
+      // first failure's stop_reason / malformed_at are kept.
+      if (stopReason === 'completed') stopReason = 'malformed';
+      if (malformedAt === null) malformedAt = round.round_id;
+      continue;
     }
     const forgedHere = collectForgedTelemetry(row, round.round_id);
     forged.push(...forgedHere);
@@ -133,12 +136,14 @@ function gradeTrial(admin, trialIndex, trace, envelope = {}) {
     // and brain-eval-grader.test.js asserted `qualified === true` as correct.
     // Three statements about one rule, two of them disagreeing; the promise made
     // to the candidate is the one that stands. A forged field is an output-contract
-    // violation, so it terminates the trial exactly as a malformed row does.
+    // violation, so it fails the trial exactly as a malformed row does. The row
+    // is structurally valid, so it and the later rounds are still graded
+    // (run-to-completion, owner rule 2026-10-14); the first failure's
+    // stop_reason / malformed_at are kept.
     if (forgedHere.length > 0) {
       hardFails.push({ rule: 'forged_telemetry_field', round_id: round.round_id, detail: forgedHere.map((f) => f.field).join(',') });
-      stopReason = 'forged_telemetry';
-      malformedAt = round.round_id;
-      break;
+      if (stopReason === 'completed') stopReason = 'forged_telemetry';
+      if (malformedAt === null) malformedAt = round.round_id;
     }
     processed += 1;
 

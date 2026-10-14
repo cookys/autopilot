@@ -267,6 +267,26 @@ check(malformed.trials[0].stop_reason === 'malformed', 'action outside the close
 check(hardRules(malformed).has('malformed_round_output'), 'malformed round output fails closed');
 check(malformed.qualified === false, 'malformed output fails the administration');
 
+// Run-to-completion (owner rule 2026-10-14) negative control: a malformed row
+// is a hard fail but must NOT stop grading. Rounds AFTER the bad one are still
+// graded (their plants are scored), the first failure's position is kept, and
+// the administration is still failed.
+const lastRound = admin.trials[0].rounds.length;
+const lateMalformed = gradeWith((trace) => { trace[2].next_action = { type: 'invent_new_process' }; });
+check(lateMalformed.trials[0].malformed_at === 3, 'malformed_at keeps the first failing round');
+check(lateMalformed.trials[0].diligence.plant_results.some((r) => r.round_id > 3),
+  'rounds after a malformed row are still graded (plants scored past the failure)');
+check(lateMalformed.trials[0].diligence.plant_results.every((r) => r.round_id !== 3),
+  'the malformed round itself is not graded');
+const doubleBad = gradeWith((trace) => {
+  trace[2].next_action = { type: 'invent_new_process' };
+  trace[lastRound - 2].next_action = { type: 'invent_other_process' };
+});
+check(doubleBad.trials[0].hard_fails.filter((f) => f.rule === 'malformed_round_output').length === 2,
+  'a second malformed row after the first is recorded too');
+check(doubleBad.trials[0].malformed_at === 3 && doubleBad.qualified === false,
+  'two malformed rows: first position kept, administration failed');
+
 // --- forged telemetry: FAILS THE TRIAL, as the seat prompt promises ---------------
 // Inverted 2026-09-22. This assertion used to read `forged.qualified === true`
 // with the rationale "ignored for verdicts, loudly flagged" — so a candidate that
@@ -281,6 +301,8 @@ check(forged.qualified === false, 'a forged telemetry field fails the administra
 check(hardRules(forged).has('forged_telemetry_field'), 'forged telemetry raises its own hard fail');
 check(forged.trials[0].stop_reason === 'forged_telemetry',
   'forged telemetry terminates the trial as an output-contract violation');
+check(forged.trials[0].diligence.plant_results.some((r) => r.round_id > 2),
+  'rounds after forged telemetry are still graded (run-to-completion)');
 check(forged.trials[0].forged_telemetry_flags.some((f) => f.forbidden === true),
   'forged telemetry fields are recorded and marked forbidden');
 
@@ -333,5 +355,5 @@ check(twinRound !== undefined, 'a verified-but-unclosed control exists in trial 
 check(twinRound.oracle.expected_flags.every((p) => p.plant_kind !== 'reversal'),
   'the verified-but-unclosed control carries no reversal plant');
 
-if (assertions !== 51) throw new Error(`brain-eval-grader: expected exactly 51 assertions (count pin moved here from hooks/tests/brain-eval-grader.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 57) throw new Error(`brain-eval-grader: expected exactly 57 assertions (count pin moved here from hooks/tests/brain-eval-grader.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`brain grader: ${assertions} assertions passed\n`);

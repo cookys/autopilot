@@ -1868,8 +1868,11 @@ check(
 // re-derivation, z/tau pinning, exclusive pooled/legacy schema branches.
 // ═══════════════════════════════════════════════════════════════════════════
 
-// (1) a receipt containing a Tier-1 outcome with tier1_terminated:false is
-// rejected — the flag is independently re-derived, never trusted bare.
+// (1) Tier-1 presence is independently re-derived from the per-case outcomes,
+// never trusted bare. Run-to-completion (owner rule 2026-10-14): tier1_terminated
+// only records an ACTUAL early termination (legacy rows), so a tier1 outcome is
+// carried by stop_reason 'tier1' and tier1_terminated may be false; but the flag
+// can never claim a termination the outcomes do not contain.
 {
   const tier1Admin = {
     run: 1,
@@ -1891,12 +1894,39 @@ check(
       stop_reason: 'continue',
     });
   } catch (err) {
-    rejected = /tier1_terminated.*does not match/.test(err.message);
+    rejected = /stop_reason must be 'tier1'/.test(err.message);
   }
-  check(rejected, 'D6-c2 a tier1 outcome with tier1_terminated:false is REJECTED');
+  check(rejected, 'D6-c2 a tier1 outcome labelled stop_reason continue is REJECTED');
 
-  // The correctly-flagged version (tier1_terminated:true, stop_reason:'tier1')
-  // is accepted.
+  // tier1_terminated:true with NO tier1 outcome is a false termination claim.
+  let falseTermRejected = false;
+  try {
+    compileCapabilityEvidence({
+      ...pooledInput,
+      state: 'degraded',
+      tier1_terminated: true,
+      stop_reason: 'complete',
+    });
+  } catch (err) {
+    falseTermRejected = /tier1_terminated is true but no per-case tier1/.test(err.message);
+  }
+  check(falseTermRejected, 'D6-c2 tier1_terminated:true without a tier1 outcome is REJECTED');
+
+  // New honest shape: tier1 decided the verdict, nothing was terminated.
+  const acceptedNoTerm = compileCapabilityEvidence({
+    ...pooledInput,
+    state: 'degraded',
+    administrations: [tier1Admin, makeAdmin(2, 0), makeAdmin(3, 0)],
+    pooled: { passes: 19, eligible_full_N: 60, tier2_misses_by_class: {}, harness_excluded: 0 },
+    competence: { wilson_lower: wilsonLower(19, 60, Z), z: Z, tau: TAU, n: 60 },
+    tier1_terminated: false,
+    stop_reason: 'tier1',
+  });
+  check(acceptedNoTerm.tier1_terminated === false && acceptedNoTerm.stop_reason === 'tier1',
+    'D6-c2 run-to-completion tier1 row (stop_reason tier1, tier1_terminated false) is accepted');
+
+  // The legacy fail-fast shape (tier1_terminated:true, stop_reason:'tier1')
+  // is still accepted.
   const acceptedTier1 = compileCapabilityEvidence({
     ...pooledInput,
     state: 'degraded',
@@ -1906,7 +1936,7 @@ check(
     tier1_terminated: true,
     stop_reason: 'tier1',
   });
-  check(acceptedTier1.tier1_terminated === true, 'D6-c2 correctly-flagged tier1 row is accepted');
+  check(acceptedTier1.tier1_terminated === true, 'D6-c2 legacy fail-fast tier1 row is still accepted');
 
   // A qualified row can never carry a tier1 outcome, regardless of the flag.
   let qualifiedRejected = false;

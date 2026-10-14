@@ -3917,12 +3917,22 @@ function foldPooledVerdict(input) {
   let passes = 0;
   let tier2Misses = 0;
 
-  const build = (stopReason, qualified, tier1Terminated) => {
+  // Run-to-completion (owner rule 2026-10-14): the exam is ALWAYS administered
+  // in full, so no rule below ends the sitting early. `stop_reason` records
+  // which rule DECIDED the verdict (tier1 | locked_fail | locked_qualify |
+  // complete = the plain full-pool threshold) and `tier1_terminated` is
+  // always false: nothing is terminated any more. The verdict itself is
+  // unchanged versus the old fail-fast rules for the same answers (a lock is
+  // only declared when the full-N Wilson bound can no longer change sides),
+  // with one deliberate exception: Tier-1 is STICKY across the whole sitting,
+  // so a Tier-1 case observed AFTER a locked_qualify point now fails the
+  // sitting (the old rule stopped before observing it).
+  const build = (stopReason, qualified) => {
     const wilson = wilsonLower(passes, fullN, VERDICT_Z);
     return {
       qualified: Boolean(qualified),
       stop_reason: stopReason,
-      tier1_terminated: Boolean(tier1Terminated),
+      tier1_terminated: false,
       pooled: { passes, eligible_full_N: fullN },
       competence: {
         wilson_lower: wilson,
@@ -3933,70 +3943,68 @@ function foldPooledVerdict(input) {
     };
   };
 
+  // Tier-1 (plan §2.5 / §4 D4 step 1): scan ALL cases of ALL administrations
+  // first, regardless of harness contamination or pool completion — one
+  // Tier-1 occurrence fails the sitting and must never be silently discarded
+  // by the harness-contamination exclusion below.
+  let tier1Seen = administrations.some(
+    (administration) => (Array.isArray(administration) ? administration : [])
+      .some((record) => qualificationCaseTier(record) === 'tier1'),
+  );
+  let lockedLabel = null;
+  let completed = false;
+
   for (const administration of administrations) {
+    if (completed) break;
     const cases = Array.isArray(administration) ? administration : [];
-
-    // Tier-1 fail-fast (plan §2.5 / §4 D4 step 1): scan ALL cases in this
-    // administration for a trust violation FIRST, regardless of harness
-    // contamination. One Tier-1 occurrence terminates the verdict
-    // immediately and must never be silently discarded by the
-    // harness-contamination exclusion below.
-    for (const record of cases) {
-      if (qualificationCaseTier(record) === 'tier1') {
-        return build('tier1', false, true);
-      }
-    }
-
-    let harnessContaminated = false;
-    for (const record of cases) {
-      if (qualificationCaseTier(record) === 'harness') {
-        harnessContaminated = true;
-        break;
-      }
-    }
     // Harness-attributed cases exclude the whole administration from the pool.
-    if (harnessContaminated) continue;
+    if (cases.some((record) => qualificationCaseTier(record) === 'harness')) continue;
 
     for (const record of cases) {
       const tier = qualificationCaseTier(record);
-      if (tier === 'tier1') {
-        return build('tier1', false, true);
-      }
       if (tier === 'pass') {
         passes += 1;
       } else if (tier === 'tier2') {
         tier2Misses += 1;
-      } else if (tier === 'harness') {
-        continue;
+      } else if (tier === 'tier1') {
+        continue; // already recorded by the scan above
       } else {
         // Fail-closed: unknown / missing tier is treated as Tier-1.
-        return build('tier1', false, true);
+        tier1Seen = true;
+        continue;
       }
 
       const seen = passes + tier2Misses;
       const remaining = fullN - seen;
-
-      // Complete: the full pool has been observed. Checked BEFORE
-      // locked_fail/locked_qualify below — at seen===fullN, remaining===0,
-      // so those checks reduce to the exact same wilsonLower(passes,fullN)
-      // comparison as 'complete' anyway; checking completion first only
-      // changes the reported stop_reason label, never the qualified value.
+      // Complete: the full pool has been observed (checked before the locks,
+      // which reduce to the same comparison at remaining===0).
       if (seen === fullN) {
-        const qualified = wilsonLower(passes, fullN, VERDICT_Z) >= VERDICT_TAU;
-        return build('complete', qualified, false);
+        completed = true;
+        break;
       }
-      // Locked-fail: even if every remaining case passed, full-N bound cannot reach τ.
-      if (wilsonLower(passes + remaining, fullN, VERDICT_Z) < VERDICT_TAU) {
-        return build('locked_fail', false, false);
-      }
-      // Locked-qualify: full-N bound with remaining assumed FAILURES already clears τ.
-      if (wilsonLower(passes, fullN, VERDICT_Z) >= VERDICT_TAU) {
-        return build('locked_qualify', true, false);
+      if (lockedLabel === null) {
+        // Locked-fail: even if every remaining case passed, full-N bound cannot reach τ.
+        if (wilsonLower(passes + remaining, fullN, VERDICT_Z) < VERDICT_TAU) {
+          lockedLabel = 'locked_fail';
+        } else if (wilsonLower(passes, fullN, VERDICT_Z) >= VERDICT_TAU) {
+          // Locked-qualify: full-N bound with remaining assumed FAILURES already clears τ.
+          lockedLabel = 'locked_qualify';
+        }
       }
     }
   }
 
-  return build('continue', false, false);
+  if (tier1Seen) return build('tier1', false);
+  if (completed) {
+    return build(
+      lockedLabel === null ? 'complete' : lockedLabel,
+      wilsonLower(passes, fullN, VERDICT_Z) >= VERDICT_TAU,
+    );
+  }
+  // Pool not fully observed (e.g. a shrunk test cap) but a lock was already
+  // reached: the verdict is determined, same as the old early stop reported.
+  if (lockedLabel !== null) return build(lockedLabel, lockedLabel === 'locked_qualify');
+  return build('continue', false);
 }
 
 function foldDiscussAdministration(trials, corpus) {
@@ -4201,8 +4209,8 @@ function runConsultDiscussQualification(options) {
   const cleanScoredTrials = [];
   let pooledVerdict = foldPooledVerdict({ role, administrations: [], fullN });
   let cleanAdministrationCount = 0;
-  // Retry until administrationCap CLEAN administrations are reached, a
-  // terminal verdict fires, or wall time runs out — harness-contaminated
+  // Retry until administrationCap CLEAN administrations are reached, or wall time
+  // runs out (run-to-completion: no verdict rule ends the sitting early) —
   // attempts alone must never exhaust the loop while wall time remains.
   // `administrationCap * 4` is only a safety backstop against runaway
   // retries (e.g. every attempt harness-contaminated forever); reaching it
@@ -4211,7 +4219,6 @@ function runConsultDiscussQualification(options) {
   const maxAttempts = administrationCap * 4;
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    if (pooledVerdict.stop_reason !== 'continue') break;
     if (cleanAdministrationCount >= administrationCap) break;
     if (Date.now() >= wallDeadline
         || (truncateAfterCases !== null && startedCases >= truncateAfterCases)) {
@@ -4347,26 +4354,10 @@ function runConsultDiscussQualification(options) {
         });
         cases.push({ family: caseSpec.family, case_id: caseSpec.case_id, outcome });
 
-        // Evaluate the pooled stopping rules after every case (fail-fast).
-        const provisional = foldPooledVerdict({
-          role,
-          administrations: [...pooledAdministrations, caseRecords],
-          fullN,
-        });
-        if (provisional.stop_reason !== 'continue') {
-          pooledVerdict = provisional;
-          stopAdministration = true;
-          break;
-        }
-        // Harness contamination excludes the whole administration from the
-        // pool (harness_excluded stays true below), but a Tier-1 violation
-        // in a LATER case of this same administration must still be
-        // observed — plan §2.5/§4 D4 step 1 (Tier-1 fail-fast, zero
-        // tolerance) dominates step 2 (harness exclusion). So keep
-        // executing the administration's remaining cases; every executed
-        // case still runs through classifyQualificationOutcome and the
-        // provisional foldPooledVerdict above, whose Tier-1 scan terminates
-        // on any tier1 regardless of contamination.
+        // Run-to-completion (owner rule 2026-10-14): no pooled rule ends the
+        // administration early. Tier-1 stays sticky (foldPooledVerdict scans
+        // every case, including harness-contaminated administrations), and
+        // the verdict is folded once from the full pool after the last case.
       }
       trialResults.push({ trial: trial.trial, cases, run: runIndex });
       if (stopAdministration || wallTruncated) break;
@@ -4412,7 +4403,6 @@ function runConsultDiscussQualification(options) {
       administrations: pooledAdministrations,
       fullN,
     });
-    if (pooledVerdict.stop_reason !== 'continue') break;
     if (wallTruncated) break;
   }
 
@@ -4797,7 +4787,7 @@ function runConsultDiscussQualification(options) {
     }
   }
   if (wallTruncated) failures.push(`administration wall-truncated after ${startedCases} started cases`);
-  if (pooledVerdict.stop_reason === 'tier1') failures.push('tier1_terminated');
+  if (pooledVerdict.stop_reason === 'tier1') failures.push('tier1');
   if (pooledVerdict.stop_reason === 'locked_fail') failures.push('locked_fail');
   if (pooledVerdict.stop_reason === 'continue') {
     failures.push(`pooled_incomplete stop_reason=continue clean_admins=${cleanAdministrationCount}/${administrationCap}`);

@@ -26,7 +26,17 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --all)    MODE="all"; shift ;;
     --range)  MODE="range"; RANGE="$2"; shift 2 ;;
-    --files)  MODE="files"; shift; while [[ $# -gt 0 && "$1" != --* ]]; do FILES+=("$1"); shift; done ;;
+    --files)  MODE="files"; shift
+              while [[ $# -gt 0 && "$1" != --* ]]; do
+                # One argument holding a whitespace-joined list ("f1 f2") is not a
+                # file; word-split it instead of silently scanning 0 files (clean:true).
+                if [[ ! -f "$1" && "$1" =~ [[:space:]] ]]; then
+                  read -r -a _split <<< "$1"; FILES+=("${_split[@]}")
+                else
+                  FILES+=("$1")
+                fi
+                shift
+              done ;;
     -h|--help)
       sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
@@ -77,7 +87,8 @@ is_scannable() {
 }
 
 # Pattern definitions (POSIX ERE)
-PAT_MARKER='(TODO|FIXME|HACK|XXX|TEMP)\b'
+# XXX marker, but not inside a longer X run: a mktemp template (foo.XXXXXX) is not a marker.
+PAT_MARKER='(TODO|FIXME|HACK|TEMP)\b|(^|[^X])XXX\b'
 PAT_EMPTY_IMPL='^[[:space:]]*return[[:space:]]+(\{\}|0)[[:space:]]*;[[:space:]]*$'
 PAT_DISABLED_TEST='(\bDISABLED_[A-Za-z0-9_]+|GTEST_SKIP\(\)|^[[:space:]]*//[[:space:]]*TEST[[:space:]]*\()'
 PAT_PLACEHOLDER_ASSERT='EXPECT_TRUE\([[:space:]]*true[[:space:]]*\)|assert\([[:space:]]*True[[:space:]]*\)'
@@ -162,6 +173,7 @@ trap 'rm -f "$TMPF"' EXIT
 scanned=0
 for f in "${FILES[@]:-}"; do
   [[ -n "$f" ]] || continue
+  [[ -f "$f" ]] || echo "completeness-scan: skipping '$f' (not a regular file)" >&2
   if ! is_scannable "$f"; then continue; fi
   scanned=$((scanned + 1))
   scan_file "$f" >> "$TMPF" || true

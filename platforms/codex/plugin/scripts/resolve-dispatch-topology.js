@@ -771,8 +771,8 @@ function deriveTopology(repoRoot, options = {}) {
     const seats = [...getReviewerQualified()];
     seats.sort((a, b) => {
       // In ordering: empty effort ranks below every explicit effort (sorts last)
-      const rankA = a.effort ? (EFFORT_RANK[a.effort] || 99) : 999;
-      const rankB = b.effort ? (EFFORT_RANK[b.effort] || 99) : 999;
+      const rankA = a.effort ? (EFFORT_RANK[a.effort] ?? 99) : 999;
+      const rankB = b.effort ? (EFFORT_RANK[b.effort] ?? 99) : 999;
       if (rankA !== rankB) return rankA - rankB;
       if (a.latency !== b.latency) return a.latency - b.latency;
       return a.engine.localeCompare(b.engine);
@@ -790,8 +790,11 @@ function deriveTopology(repoRoot, options = {}) {
       const diffB = b.family !== askingFamily ? 0 : 1;
       if (diffA !== diffB) return diffA - diffB;
       // An originally-empty effort ranks below every explicit effort
-      const rankA = a.effort ? 0 : 1;
-      const rankB = b.effort ? 0 : 1;
+      // `default` (no effort sent, endpoint default ran, cost unknown) is not a measured explicit effort,
+      // so it ties with the empty/legacy effort at rank 1 and sorts after every explicit one.
+      const explicitEffort = (s) => (s.effort && s.effort !== 'default' ? 0 : 1);
+      const rankA = explicitEffort(a);
+      const rankB = explicitEffort(b);
       if (rankA !== rankB) return rankA - rankB;
       if (a.latency !== b.latency) return a.latency - b.latency;
       if (a.costRank !== b.costRank) return a.costRank - b.costRank;

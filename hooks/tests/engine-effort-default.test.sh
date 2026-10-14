@@ -334,6 +334,7 @@ fs.renameSync = function (from, to) {
   if (String(to).endsWith('scorecard.jsonl')) { const e = new Error('ENOSPC: injected'); e.code = 'ENOSPC'; throw e; }
   return real.apply(this, arguments);
 };`);
+  fs.chmodSync(scFile, 0o664); fs.chmodSync(evFile, 0o644);
   const s = snap();
   const r = spawnSync(process.execPath, ['--require', inject, ESC, 'relabel-effort', '--to', 'default', '--reason', 'rollback', '--event-id', '1'],
     { env, encoding: 'utf8' });
@@ -343,6 +344,35 @@ fs.renameSync = function (from, to) {
     'partial write: the message says writing began and was restored, never "nothing written"', r.stderr.trim());
   check(lines(evFile)[0].evidence.identity.effort === 'high' && lines(scFile)[0].effort === 'high',
     'partial write: ledger and scorecard both still say high (anchor consistent)');
+  const modeOf = (f) => (fs.statSync(f).mode & 0o777).toString(8);
+  check(modeOf(scFile) === '664' && modeOf(evFile) === '644',
+    'partial write: restored files keep their original modes (not the 0600 of the backup)', `${modeOf(scFile)} ${modeOf(evFile)}`);
+}
+
+// a failed write AND a failed restore is reported as RESTORE FAILED with the backup paths
+{
+  const row = freshHighSeat('rf', 'rf-fixture-model');
+  const inject = path.join(testdir, 'inject-fail-restore.js');
+  fs.writeFileSync(inject, `
+const fs = require('fs');
+const realRename = fs.renameSync;
+fs.renameSync = function (from, to) {
+  if (String(to).endsWith('scorecard.jsonl')) { const e = new Error('ENOSPC: injected'); e.code = 'ENOSPC'; throw e; }
+  return realRename.apply(this, arguments);
+};
+const realCopy = fs.copyFileSync;
+fs.copyFileSync = function (from, to) {
+  if (String(from).includes('.bak-relabel-effort-') && String(to).endsWith('qualification-evidence.jsonl')) {
+    const e = new Error('EIO: injected restore failure'); e.code = 'EIO'; throw e;
+  }
+  return realCopy.apply(this, arguments);
+};`);
+  const r = spawnSync(process.execPath, ['--require', inject, ESC, 'relabel-effort', '--to', 'default', '--reason', 'rf', '--event-id', '1'],
+    { env, encoding: 'utf8' });
+  const baks = fs.readdirSync(CAP).filter((f) => f.startsWith('qualification-evidence.jsonl.bak-relabel-effort-'));
+  check(r.status !== 0 && /RESTORE FAILED/.test(r.stderr) && !/then RESTORED/.test(r.stderr)
+    && baks.length === 1 && r.stderr.includes(path.join(CAP, baks[0])),
+  'restore failure: message says RESTORE FAILED and names the surviving backup path', r.stderr.trim());
 }
 
 console.log(`SUMMARY ${pass} ${fail}`);

@@ -596,4 +596,30 @@ NODE
 assert_eq "gpt-4o/max,gemini-flash/low,claude-sonnet/default" "$CHAIR_PANEL" \
   "Case 18: max chairs the panel; default sorts after every explicit effort"
 
+# -----------------------------------------------------------------------------
+# Case 19: `default` sorts after every explicit effort in the consult ladder (boolean has-effort sort)
+# and in the reviewer ladder (ascending EFFORT_RANK). Negative controls: removing the `!== 'default'`
+# test, or setting EFFORT_RANK.default to 0, puts default first.
+# -----------------------------------------------------------------------------
+rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$TOPOLOGY_OUT"
+write_scorecard_row "gemini-3-pro" "agy" "default" 50.0 "qualified" 1901 "consult" "google"
+write_scorecard_row "gemini-flash" "agy" "low" 10.0 "qualified" 1902 "consult" "google"
+write_scorecard_row "rev-default" "agy" "default" 10.0 "qualified" 1903 "reviewer" "google"
+write_scorecard_row "rev-low" "agy" "low" 50.0 "qualified" 1904 "reviewer" "openai"
+write_scorecard_row "rev-max" "agy" "max" 50.0 "qualified" 1905 "reviewer" "anthropic"
+OUT="$(node "$SCRIPT" --json --role consult,reviewer --out "$TOPOLOGY_OUT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "Case 19: exit 0"
+CON_ORDER="$(node - "$TOPOLOGY_OUT" <<'NODE'
+const topo = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+process.stdout.write(topo.consult_ladder.map(s => `${s.engine}/${s.effort}`).join(','));
+NODE
+)"
+assert_eq "gemini-flash/low,gemini-3-pro/default" "$CON_ORDER" "Case 19: consult ladder puts low before default"
+REV_ORDER="$(node - "$TOPOLOGY_OUT" <<'NODE'
+const topo = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+process.stdout.write(topo.reviewer_ladder.map(s => `${s.engine}/${s.effort}`).join(','));
+NODE
+)"
+assert_eq "rev-low/low,rev-max/max,rev-default/default" "$REV_ORDER" "Case 19: reviewer ladder puts default after every explicit effort"
+
 finalize_test

@@ -2887,7 +2887,8 @@ function cmdRelabelEffort(args) {
     // the scorecard anchors to it.
     for (const [file] of files) report.backups.push(backupFile(file, tag));
     // From here on a failure leaves a partial write behind, so restore every store from its backup
-    // (original bytes, original mode kept because copyFileSync onto an existing file keeps the mode).
+    // (original bytes). The backup is 0600, so the original mode is recorded first and put back after.
+    const modes = new Map(files.map(([file]) => [file, fs.statSync(file).mode & 0o777]));
     const written = [];
     try {
       for (const [file, rows] of files) {
@@ -2900,6 +2901,7 @@ function cmdRelabelEffort(args) {
         if (!written.includes(file)) return;
         try {
           fs.copyFileSync(report.backups[i], file);
+          fs.chmodSync(file, modes.get(file));
         } catch (restoreError) {
           failedRestores.push(`${file} (backup kept at ${report.backups[i]}: ${restoreError.message})`);
         }

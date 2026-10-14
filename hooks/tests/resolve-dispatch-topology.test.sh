@@ -42,10 +42,11 @@ write_scorecard_row() {
   local role="${7:-implementer}"
   local family="${8:-test-family}"
   local cost="${9:-null}"
+  local corpus="${10:-1.0}"
 
-  node - "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$engine" "$runner" "$effort" "$latency" "$status" "$event_id" "$role" "$family" "$cost" <<'NODE'
+  node - "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$engine" "$runner" "$effort" "$latency" "$status" "$event_id" "$role" "$family" "$cost" "$corpus" <<'NODE'
 const fs = require('fs');
-const [file, engine, runner, effort, latency, status, eventId, role, family, costRaw] = process.argv.slice(2);
+const [file, engine, runner, effort, latency, status, eventId, role, family, costRaw, corpus] = process.argv.slice(2);
 const row = {
   engine,
   runner,
@@ -53,7 +54,7 @@ const row = {
   role,
   model_version: '1.0',
   version_source: 'runtime',
-  corpus_version: '1.0',
+  corpus_version: corpus || "1.0",
   harness_version: '1.0',
   runner_version: '1.1.10',
   prompt_config_hash: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
@@ -621,5 +622,110 @@ process.stdout.write(topo.reviewer_ladder.map(s => `${s.engine}/${s.effort}`).jo
 NODE
 )"
 assert_eq "rev-low/low,rev-max/max,rev-default/default" "$REV_ORDER" "Case 19: reviewer ladder puts default after every explicit effort"
+
+# -----------------------------------------------------------------------------
+# Case 20: persistent operator exclusion (BL-0169). topology.exclude_seats in the operator
+# config is applied on EVERY derivation path without --exclude-seats: ladders, panel, --check,
+# --resolve-live. A bare engine entry retires every effort. Negative control: with the key
+# removed the seats come back.
+# -----------------------------------------------------------------------------
+export AUTOPILOT_CONFIG_FILE="$TEST_TMP/operator-config.json"
+rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$TOPOLOGY_OUT"
+write_scorecard_row "retired-a" "agy" "high" 10.0 "qualified" 2001 "implementer" "google"
+write_scorecard_row "retired-a" "agy" "low" 10.0 "qualified" 2002 "implementer" "google"
+write_scorecard_row "retired-b" "agy" "high" 11.0 "qualified" 2003 "reviewer" "google"
+write_scorecard_row "retired-b" "agy" "high" 11.0 "qualified" 2004 "consult" "google"
+write_scorecard_row "keeper" "agy" "high" 12.0 "qualified" 2005 "implementer" "anthropic"
+write_scorecard_row "keeper" "agy" "high" 12.0 "qualified" 2006 "reviewer" "anthropic"
+write_scorecard_row "keeper" "agy" "high" 12.0 "qualified" 2007 "consult" "anthropic"
+printf '%s\n' '{"topology":{"exclude_seats":["retired-a","retired-b/high@agy"]}}' > "$AUTOPILOT_CONFIG_FILE"
+
+show_engines() {
+  node - "$TOPOLOGY_OUT" <<'NODE'
+const t = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+const j = (a) => a.map((s) => s.engine).join(',');
+process.stdout.write([j(t.implementer_ladder), j(t.reviewer_ladder), j(t.consult_ladder), j(t.plan_review_panel)].join('|'));
+NODE
+}
+node "$SCRIPT" --json --out "$TOPOLOGY_OUT" >/dev/null 2>&1; EXIT=$?
+assert_eq "0" "$EXIT" "Case 20: exit 0"
+assert_eq "keeper|keeper|keeper|keeper" "$(show_engines)" "Case 20: config exclusions applied to every ladder and the panel"
+node "$SCRIPT" --check --out "$TOPOLOGY_OUT" >/dev/null 2>&1; EXIT=$?
+assert_eq "0" "$EXIT" "Case 20: --check applies the same persistent exclusions"
+
+# --resolve-live: a stale on-disk topology that still lists the retired seat first must not win.
+node - "$TOPOLOGY_OUT" <<'NODE'
+const fs = require('fs');
+const t = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+t.implementer_ladder.unshift({ rung: 'retired-a/high@agy', engine: 'retired-a', effort: 'high', runner: 'agy', family: 'google' });
+fs.writeFileSync(process.argv[2], JSON.stringify(t));
+NODE
+LIVE_STORE="$TEST_TMP/live-store"; mkdir -p "$LIVE_STORE"
+LIVE_ENGINE="$(node "$SCRIPT" --resolve-live --role implementer --store "$LIVE_STORE" --out "$TOPOLOGY_OUT" 2>/dev/null | node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(0,"utf8")).preferred_tuple.engine)')"
+assert_eq "keeper" "$LIVE_ENGINE" "Case 20: --resolve-live skips a persistently excluded seat"
+
+# union with the one-shot flag
+node "$SCRIPT" --json --out "$TOPOLOGY_OUT" --exclude-seats "keeper/high@agy" >/dev/null 2>&1
+assert_eq "|||" "$(show_engines)" "Case 20: --exclude-seats is unioned with the config list"
+
+# negative control: without the config key the retired seats return
+printf '%s\n' '{}' > "$AUTOPILOT_CONFIG_FILE"
+node "$SCRIPT" --json --out "$TOPOLOGY_OUT" >/dev/null 2>&1
+case "$(show_engines)" in
+  *retired-a*|*retired-b*) assert_eq 1 1 "Case 20 (negative control): no config key -> retired seats regenerate" ;;
+  *) fail "Case 20 (negative control): retired seats absent without the config key" ;;
+esac
+
+# -----------------------------------------------------------------------------
+# Case 21: a malformed operator config fails loudly instead of silently dropping the list.
+# -----------------------------------------------------------------------------
+for BAD in '{not json' '[]' '{"topology":[]}' '{"topology":{"exclude_seats":"retired-a"}}' '{"topology":{"exclude_seats":["ok",""]}}'; do
+  printf '%s\n' "$BAD" > "$AUTOPILOT_CONFIG_FILE"
+  ERR="$(node "$SCRIPT" --json --out "$TOPOLOGY_OUT" 2>&1 >/dev/null)"; EXIT=$?
+  assert_eq "1" "$EXIT" "Case 21: bad config '$BAD' exits 1"
+  case "$ERR" in *"Operator config"*) assert_eq 1 1 "Case 21: '$BAD' names the operator config" ;; *) fail "Case 21: '$BAD' stderr lacks the operator config message: $ERR" ;; esac
+done
+rm -f "$AUTOPILOT_CONFIG_FILE"
+
+# -----------------------------------------------------------------------------
+# Case 22: one seat qualified under two corpus rows (two events, same engine/effort/runner)
+# is ONE rung in reviewer_ladder, carrying the latest baseline. Negative control: reverting the
+# dedupe leaves two rungs.
+# -----------------------------------------------------------------------------
+rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$TOPOLOGY_OUT"
+write_scorecard_row "dup-rev" "agy" "low" 10.0 "qualified" 2201 "reviewer" "google" null "c-v4"
+write_scorecard_row "dup-rev" "agy" "low" 10.0 "qualified" 2202 "reviewer" "google" null "c-v6"
+node "$SCRIPT" --json --role reviewer --out "$TOPOLOGY_OUT" >/dev/null 2>&1
+DUP="$(node - "$TOPOLOGY_OUT" <<'NODE'
+const t = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+process.stdout.write(`${t.reviewer_ladder.length}:${t.reviewer_ladder[0].baseline_event_id}`);
+NODE
+)"
+assert_eq "1:2202" "$DUP" "Case 22: duplicate reviewer rows collapse to one rung with the latest baseline"
+
+# -----------------------------------------------------------------------------
+# Case 23: vendor name beats the generic `flash` hint when deriving family.
+# -----------------------------------------------------------------------------
+rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$TOPOLOGY_OUT"
+write_scorecard_row "MiniMax-M3.1-Flash-Preview" "agy" "high" 10.0 "qualified" 2301 "implementer" "minimax"
+write_scorecard_row "gemini-3.8-flash" "agy" "low" 10.0 "qualified" 2302 "implementer" "google"
+node "$SCRIPT" --json --role implementer --out "$TOPOLOGY_OUT" >/dev/null 2>&1
+FAMS="$(node - "$TOPOLOGY_OUT" <<'NODE'
+const t = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+process.stdout.write(t.implementer_ladder.map((r) => `${r.engine}=${r.family}`).sort().join(','));
+NODE
+)"
+assert_eq "MiniMax-M3.1-Flash-Preview=minimax,gemini-3.8-flash=google" "$FAMS" "Case 23: MiniMax Flash is minimax, a Gemini flash stays google"
+
+# -----------------------------------------------------------------------------
+# Case 24: anthropic-compatible is an HTTP runner with no binary: a qualified reviewer seat is
+# usable when an endpoint for the engine is configured, and absent when none is.
+# -----------------------------------------------------------------------------
+rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$TOPOLOGY_OUT"
+write_scorecard_row "GLM-5.3" "anthropic-compatible" "low" 10.0 "qualified" 2401 "reviewer" "zhipu"
+node "$SCRIPT" --json --role reviewer --out "$TOPOLOGY_OUT" >/dev/null 2>&1
+assert_eq "0" "$(node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).reviewer_ladder.length))' "$TOPOLOGY_OUT")" "Case 24 (negative control): no endpoint configured -> HTTP seat absent"
+AUTOPILOT_ENDPOINT_GLM_URL="http://127.0.0.1:1" node "$SCRIPT" --json --role reviewer --out "$TOPOLOGY_OUT" >/dev/null 2>&1
+assert_eq "GLM-5.3@anthropic-compatible" "$(node -e 'const t=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(t.reviewer_ladder.map(s=>s.engine+"@"+s.runner).join(","))' "$TOPOLOGY_OUT")" "Case 24: endpoint configured -> HTTP seat joins reviewer_ladder"
 
 finalize_test

@@ -32,6 +32,9 @@ const PANEL_ELIGIBLE_RUNNERS = Object.freeze([
 
 const PANEL_RUNNERS_SET = new Set(PANEL_ELIGIBLE_RUNNERS);
 
+// Runners with no local binary; availability is a configured endpoint, not an installed CLI.
+const HTTP_RUNNERS = new Set(['anthropic-compatible']);
+
 const VALID_ROLES = Object.freeze([
   'implementer', 'plan_reviewer', 'reviewer', 'consult', 'discuss',
 ]);
@@ -121,14 +124,16 @@ function familyOf(engine) {
   if (e.includes('qwen') || e.includes('qwq')) {
     return 'alibaba';
   }
-  if (e.includes('gemini') || e.includes('flash') || e.includes('bison')) {
-    return 'google';
-  }
   if (e.includes('grok') || e.includes('composer')) {
     return 'xai';
   }
+  // Vendor names are checked before the generic model-line words: `MiniMax-M3.1-Flash-Preview`
+  // contains `flash`, and `flash` alone is only a Gemini hint when no vendor name matched.
   if (e.includes('minimax') || e.includes('abab')) {
     return 'minimax';
+  }
+  if (e.includes('gemini') || e.includes('flash') || e.includes('bison')) {
+    return 'google';
   }
   if (e.includes('glm') || e.includes('zhipu')) {
     return 'zhipu';
@@ -176,9 +181,14 @@ function usage(code = 2) {
     '  --out <path>             Custom output file path (default: $AUTOPILOT_TOPOLOGY_FILE or ~/.autopilot/topology.json)\n' +
     '  --role <roles>           Comma-separated or repeatable role filter (implementer, plan_reviewer, reviewer, consult, discuss; default: all five). Required (exactly one) with --resolve-live\n' +
     '  --store <dir>            Capability store directory for pins.jsonl lookup (--resolve-live only; default: $ENGINE_CAPABILITY_DIR or ~/.autopilot/engine-capability)\n' +
-    '  --exclude-seats <seats>  Comma-separated list of engine/effort@runner seats to exclude\n' +
+    '  --exclude-seats <seats>  Comma-separated seats to exclude (engine/effort@runner, or a bare engine for every effort and runner);\n' +
+    '                           unioned with topology.exclude_seats in the operator config (see below)\n' +
     '  --asking-family <family> Family name for consult/discuss ladder sorting (default: anthropic)\n' +
-    '  -h, --help               Print this help message\n'
+    '  -h, --help               Print this help message\n\n' +
+    'Operator config (persistent exclusions, always applied, also by --check and --resolve-live):\n' +
+    '  file: $AUTOPILOT_CONFIG_FILE or ~/.autopilot/config.json\n' +
+    '  key:  { "topology": { "exclude_seats": ["gpt-5.6-sol/max@codex", "gpt-5.5-sol"] } }\n' +
+    '  A missing file or key is no exclusions; unparseable JSON or a wrong shape exits 1.\n'
   );
   process.exit(code);
 }
@@ -264,7 +274,9 @@ function resolveCapabilityStoreDir(storeArg) {
 function resolveLiveTuple(repoRoot, role, outPath, storeArg, deriveOptions) {
   const topology = loadTopologyNoWrite(repoRoot, outPath, deriveOptions);
   const ladderKey = ladderKeyForRole(role);
-  const ladder = Array.isArray(topology[ladderKey]) ? topology[ladderKey] : [];
+  const excludeSet = (deriveOptions && deriveOptions.excludeSet) || new Set();
+  const ladder = (Array.isArray(topology[ladderKey]) ? topology[ladderKey] : [])
+    .filter((r) => !(r && excludeSet.size > 0 && seatMatchesExcluded(r.engine, r.effort, r.runner, excludeSet)));
   const ladderTuple = tupleFromLadderRung(ladder[0]);
 
   const pin = readPinForRole(repoRoot, role, storeArg);
@@ -520,8 +532,12 @@ function getQualifiedSeatsForRole(repoRoot, role, runnersInstalled) {
     const effort = c.effort || null;
     if (!runner || !engine) continue;
 
-    // A seat is usable only if its runner is installed
-    if (!runnersInstalled[runner]) continue;
+    // A seat is usable only if its runner is installed. HTTP runners have no binary to find
+    // (`anthropic-compatible` drives dispatch-anthropic-review.js over HTTP), so they are usable
+    // when an endpoint for the engine is configured in the environment.
+    if (HTTP_RUNNERS.has(runner)) {
+      if (!resolveEndpoint(engine, runner)) continue;
+    } else if (!runnersInstalled[runner]) continue;
 
     // Query scorecard status with the row's runner token (or normalized).
     // When effort is empty/null, omit --effort to query the legacy partition.
@@ -590,15 +606,85 @@ function getQualifiedSeatsForRole(repoRoot, role, runnersInstalled) {
       family,
       latency: rowLatency,
       costRank,
+      eventId: c.event_id,
       seatObj,
       legacyRungObj,
     });
   }
 
-  return qualified;
+  return dedupeSeats(qualified);
+}
+
+// `scorecard current` returns one row per qualification event, so a seat qualified under two
+// corpus versions (v4 and v6) arrives twice and both pass seat-status. One dispatch identity
+// (engine + effort + normalized runner) is one rung. Keep the row with the latest baseline
+// event, then the latest row event, so the surviving baseline_event_id is the newest qualified one.
+function dedupeSeats(seats) {
+  const evOf = (s) => (typeof s.seatObj.baseline_event_id === 'number' ? s.seatObj.baseline_event_id : -1);
+  const rank = (s) => [evOf(s), typeof s.eventId === 'number' ? s.eventId : -1];
+  const best = new Map();
+  const order = [];
+  for (const s of seats) {
+    const key = `${s.engine}\u0000${s.emittedEffort}\u0000${s.runner}`;
+    const cur = best.get(key);
+    if (!cur) { best.set(key, s); order.push(key); continue; }
+    const [a1, a2] = rank(s);
+    const [b1, b2] = rank(cur);
+    if (a1 > b1 || (a1 === b1 && a2 > b2)) best.set(key, s);
+  }
+  return order.map((k) => best.get(k));
+}
+
+// Operator-owned persistent exclusions: `topology.exclude_seats` in the operator config.
+// A missing file or missing key means no exclusions. A file that exists but cannot be parsed,
+// or a key of the wrong shape, is a hard error: silently ignoring it would revive retired
+// seats on the next regeneration, which is the failure this list exists to prevent.
+function operatorConfigPath() {
+  return process.env.AUTOPILOT_CONFIG_FILE
+    || path.join(os.homedir(), '.autopilot', 'config.json');
+}
+
+function loadOperatorExcludeSeats() {
+  const file = operatorConfigPath();
+  if (!fs.existsSync(file)) return [];
+  let cfg;
+  try {
+    cfg = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (err) {
+    process.stderr.write(`Operator config unreadable at ${file}: ${err.message}\n`);
+    process.exit(1);
+  }
+  if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg)) {
+    process.stderr.write(`Operator config at ${file} must be a JSON object\n`);
+    process.exit(1);
+  }
+  if (cfg.topology === undefined) return [];
+  if (!cfg.topology || typeof cfg.topology !== 'object' || Array.isArray(cfg.topology)) {
+    process.stderr.write(`Operator config ${file}: "topology" must be an object\n`);
+    process.exit(1);
+  }
+  const list = cfg.topology.exclude_seats;
+  if (list === undefined) return [];
+  if (!Array.isArray(list) || list.some((x) => typeof x !== 'string' || x.trim() === '')) {
+    process.stderr.write(`Operator config ${file}: "topology.exclude_seats" must be an array of non-empty strings\n`);
+    process.exit(1);
+  }
+  return list.map((x) => x.trim());
+}
+
+function addExcludeEntry(excludeSet, entry) {
+  excludeSet.add(entry);
+  const atIdx = entry.indexOf('@');
+  if (atIdx !== -1) {
+    const prefix = entry.slice(0, atIdx);
+    const normR = normalizeRunner(entry.slice(atIdx + 1));
+    excludeSet.add(`${prefix}@${normR}`);
+  }
 }
 
 function seatMatchesExcluded(engine, effort, runner, excludeSet) {
+  // A bare engine entry (no `/effort`, no `@runner`) retires the model at every effort and runner.
+  if (excludeSet.has(engine)) return true;
   const normRunner = normalizeRunner(runner);
   const defaultedEffort = effort || 'high';
   const emittedTuple = `${engine}/${defaultedEffort}@${normRunner}`;
@@ -974,17 +1060,11 @@ function main() {
 
   const excludeSet = new Set();
   if (excludeSeatsArg) {
-    const parts = excludeSeatsArg.split(',').map((s) => s.trim()).filter(Boolean);
-    for (const p of parts) {
-      excludeSet.add(p);
-      const atIdx = p.indexOf('@');
-      if (atIdx !== -1) {
-        const prefix = p.slice(0, atIdx);
-        const normR = normalizeRunner(p.slice(atIdx + 1));
-        excludeSet.add(`${prefix}@${normR}`);
-      }
+    for (const p of excludeSeatsArg.split(',').map((x) => x.trim()).filter(Boolean)) {
+      addExcludeEntry(excludeSet, p);
     }
   }
+  for (const p of loadOperatorExcludeSeats()) addExcludeEntry(excludeSet, p);
 
   const repoRoot = path.resolve(__dirname, '..');
   const outPath = resolveOutputPath(outArg);

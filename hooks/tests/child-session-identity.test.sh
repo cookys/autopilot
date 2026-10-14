@@ -100,6 +100,14 @@ DRUNS="$TEST_TMP/runs-detached"; DLOG="$TEST_TMP/log-detached"; mkdir -p "$DRUNS
     "$HETERO" --runner cc-shim --model MiniMax-M3 --effort high --branch feat/csid-det --prompt-file "$PROMPT" \
     --ledger "$LEDGER" --run-id det-1 --stage implement >/dev/null 2>&1 ) || true
 check_case "hetero-ccshim detached" "$DRUNS" "$DLOG" "$PARENT"
+# Without a usable setsid the rail stays inline, so the checks above would pass without ever crossing the
+# setsid boundary. The skip condition mirrors dispatch-hetero.sh HAVE_SETSID (setsid present AND --help has
+# --wait); a setsid lacking --wait (busybox) makes the rail fall back, so it must skip, not fail.
+if command -v setsid >/dev/null 2>&1 && setsid --help 2>&1 | grep -q -- --wait; then
+  eq "setsid-detached" "$(mf_get "$(one_manifest "$DRUNS")" containment_planned)" "detached hetero: manifest containment_planned is setsid-detached"
+else
+  echo "SKIP [child-session-identity] detached containment: no setsid, or setsid does not support --wait; setsid-boundary assertion not run" >&2
+fi
 
 # A rail that starts no claude child leaves child_session_id null and still has the key.
 GROK_STUB="$TEST_TMP/grok-stub"

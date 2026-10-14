@@ -384,9 +384,7 @@ resolve_runner_version() { # runner -> rc 0 usable
 
 stage0_probe() { # runner model effort -> rc 0 ok
   local runner="$1" model="$2" effort="${3:-high}"
-  # Templateless on purpose: an explicit mktemp placeholder template trips
-  # completeness-scan.sh's anti-stub marker pattern (see PAT_MARKER in that
-  # script). Same throwaway dir, no false-positive gate finding.
+  # Throwaway scratch dir (mktemp without a template).
   local pd; pd=$(mktemp -d)
   ( cd "$pd" && git init -q -b main && git config user.email t@t.invalid && git config user.name t \
     && printf 'placeholder\n' > note.md && git add -A && git commit -q -m base ) || { rm -rf "$pd"; return 3; }

@@ -1287,21 +1287,23 @@ function normalizePooledReceipt(rawFields, methodologyKind, state) {
     n: integer(competenceRaw.n, 'competence.n', 1),
   };
 
-  // R4/[1]: tier1_terminated is INDEPENDENTLY RE-DERIVED from the per-case
-  // outcomes, never trusted as a bare stored boolean — a receipt containing a
-  // Tier-1 outcome with the flag set false must be rejected regardless. The
-  // scan covers ALL administrations, including harness-contaminated ones:
-  // Tier-1 fail-fast dominates harness exclusion (plan §4 D4 step 1 over step
-  // 2; scripts/engine-qualify.js's foldPooledVerdict scans for tier1 before
-  // ever checking harness contamination).
+  // R4/[1]: Tier-1 presence is INDEPENDENTLY RE-DERIVED from the per-case
+  // outcomes, never trusted from a stored boolean. The scan covers ALL
+  // administrations, including harness-contaminated ones: Tier-1 dominates
+  // harness exclusion (plan §4 D4 step 1 over step 2).
+  // Run-to-completion (owner rule 2026-10-14): the sitting is always
+  // administered in full, so `tier1_terminated` means only "the administration
+  // was actually cut short by a Tier-1" — false on every new row, true on
+  // pre-2026-10-14 fail-fast rows. A tier1 outcome is carried by
+  // `stop_reason: 'tier1'` (the deciding rule), checked below. The flag can
+  // never claim a termination the per-case outcomes do not contain.
   const derivedTier1 = administrations.some(
     (admin) => admin.per_case_outcomes.some((c) => c.tier === 'tier1'),
   );
   const tier1Terminated = boolean(rawFields.tier1_terminated, 'tier1_terminated');
-  if (tier1Terminated !== derivedTier1) {
+  if (tier1Terminated && !derivedTier1) {
     evidenceError(
-      `tier1_terminated (${tier1Terminated}) does not match the per-case outcomes `
-      + `(a tier1 outcome is present: ${derivedTier1})`,
+      'tier1_terminated is true but no per-case tier1 outcome is present',
     );
   }
   const stopReason = enumValue(rawFields.stop_reason, POOLED_STOP_REASONS, 'stop_reason');
@@ -1431,16 +1433,20 @@ function normalizePooledReceipt(rawFields, methodologyKind, state) {
 
 function enforcePooledPromotionInvariants(record) {
   if (!record.administrations) return;
+  // stop_reason === 'tier1' is re-derived from the per-case outcomes by the
+  // pooled-receipt validator (it is the sticky Tier-1 flag; tier1_terminated
+  // only records an actual early termination on pre-2026-10-14 rows).
+  const tier1 = record.tier1_terminated === true || record.stop_reason === 'tier1';
   const derivedQualified = record.competence.wilson_lower >= record.competence.tau
-    && record.tier1_terminated === false;
+    && !tier1;
   if ((record.state === 'qualified') !== derivedQualified) {
     evidenceError(
-      'qualified flag must equal wilson_lower >= tau && !tier1_terminated',
+      'qualified flag must equal wilson_lower >= tau && no tier1 outcome',
       'EVIDENCE_PROMOTION_DENIED',
     );
   }
-  if (record.state === 'qualified' && record.tier1_terminated !== false) {
-    evidenceError('qualified row requires tier1_terminated === false', 'EVIDENCE_PROMOTION_DENIED');
+  if (record.state === 'qualified' && tier1) {
+    evidenceError('qualified row cannot carry a tier1 outcome', 'EVIDENCE_PROMOTION_DENIED');
   }
 }
 

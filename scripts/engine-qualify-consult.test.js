@@ -249,17 +249,19 @@ function run(perCaseModeSource, extra) {
   const result = run("() => 'reference'");
   equal(result.qualified, true, `green pool qualifies (reason: ${result.verdict.reason})`);
   equal(result.row.role, 'consult', 'row carries the consult role');
-  equal(result.row.quality.corpus_pass, '56/60', 'pooled corpus_pass at locked-qualify is 56/60');
+  equal(result.row.quality.corpus_pass, '60/60', 'run-to-completion: pooled corpus_pass covers the whole 60-case pool');
   equal(result.evidence.methodology.kind, 'consult_panel', 'D5 methodology kind is consult_panel');
   check(result.evidence.trials.length >= 2, 'evidence carries repeated trials');
   equal(result.evidence.trials[0].cases_total, 10, 'per-trial case count is 10');
   equal(result.evidence.trials[0].cases_passed, 10, 'per-trial pass bar 10/10');
   equal(result.evidence.trials[1].cases_total, 10, 'second trial case count is 10');
   equal(result.evidence.trials[1].cases_passed, 10, 'second trial pass bar 10/10');
-  equal(result.row.capability_score, 56 / 60, 'capability_score is pooled point estimate passes/fullN');
+  equal(result.row.capability_score, 1, 'capability_score is pooled point estimate passes/fullN');
   equal(result.row.status, 'qualified', 'row status is qualified');
   equal(result.wall_truncated, false, 'a completed administration is not wall_truncated');
-  equal(result.started_cases, 56, 'locked-qualify stops after the 56th pass');
+  equal(result.started_cases, 60, 'locked-qualify no longer stops early: every case is administered');
+  equal(result.stop_reason, 'locked_qualify', 'stop_reason records the deciding rule (locked_qualify)');
+  equal(result.tier1_terminated, false, 'nothing was terminated');
 }
 
 // ── 4. five wrong-content cases ⇒ locked_fail (M≥5); content label preserved ─
@@ -274,6 +276,9 @@ function run(perCaseModeSource, extra) {
     { rawDir },
   );
   equal(result.qualified, false, 'five wrong-content cases lock-fail the pooled verdict');
+  equal(result.stop_reason, 'locked_fail', 'stop_reason records the deciding rule (locked_fail)');
+  equal(result.started_cases, 60, 'locked_fail no longer stops early: every case is administered');
+  equal(result.row.status, 'failed', 'locked_fail row status is failed');
   const exchanges = fs.readFileSync(path.join(rawDir, 'consult-exchanges.jsonl'), 'utf8')
     .trim().split('\n').map((line) => JSON.parse(line));
   const failedRow = exchanges.find((row) => row.case_id === wrongIds[0]);
@@ -549,8 +554,8 @@ require('fs').writeFileSync(${JSON.stringify(sentinelPath)}, 'module-top-level-c
   });
   equal(result.qualified, true,
     `envelope-only stub qualifies (reason: ${result.verdict.reason}) — the envelope carries what the disclosure fix promised`);
-  equal(result.row.quality.corpus_pass, '56/60',
-    'envelope-only stub clears cases through locked-qualify (56/60) from envelope fields alone');
+  equal(result.row.quality.corpus_pass, '60/60',
+    'envelope-only stub clears cases through the full pool (60/60) from envelope fields alone');
 }
 
 // ── 14. planted negative: strip closed_label_set from the envelope again
@@ -595,6 +600,6 @@ require('fs').writeFileSync(${JSON.stringify(sentinelPath)}, 'module-top-level-c
     'planted negative: with closed_label_set stripped from the envelope again, the envelope-only stub flips red (proves test 13 is load-bearing)');
 }
 
-if (assertions !== 56) throw new Error(`engine-qualify-consult: expected exactly 56 assertions (count pin moved here from hooks/tests/engine-qualify-consult.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 61) throw new Error(`engine-qualify-consult: expected exactly 61 assertions (count pin moved here from hooks/tests/engine-qualify-consult.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);
 fs.rmSync(tempRoot, { recursive: true, force: true });

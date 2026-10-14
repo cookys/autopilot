@@ -231,17 +231,19 @@ function run(perCaseModeSource, extra) {
   const result = run("() => 'reference'");
   equal(result.qualified, true, `green pool qualifies (reason: ${result.verdict.reason})`);
   equal(result.row.role, 'discuss', 'row carries the discuss role');
-  equal(result.row.quality.corpus_pass, '45/48', 'pooled corpus_pass at locked-qualify is 45/48');
+  equal(result.row.quality.corpus_pass, '48/48', 'run-to-completion: pooled corpus_pass covers the whole 48-case pool');
   equal(result.evidence.methodology.kind, 'discuss_rounds', 'D5 methodology kind is discuss_rounds');
   check(result.evidence.trials.length >= 2, 'evidence carries repeated trials');
   equal(result.evidence.trials[0].cases_total, 8, 'per-trial case count is 8');
   equal(result.evidence.trials[0].cases_passed, 8, 'per-trial pass bar 8/8');
   equal(result.evidence.trials[1].cases_total, 8, 'second trial case count is 8');
   equal(result.evidence.trials[1].cases_passed, 8, 'second trial pass bar 8/8');
-  equal(result.row.capability_score, 45 / 48, 'capability_score is pooled point estimate passes/fullN');
+  equal(result.row.capability_score, 1, 'capability_score is pooled point estimate passes/fullN');
   equal(result.row.status, 'qualified', 'row status is qualified');
   equal(result.wall_truncated, false, 'a completed administration is not wall_truncated');
-  equal(result.started_cases, 45, 'locked-qualify stops after the 45th pass');
+  equal(result.started_cases, 48, 'locked-qualify no longer stops early: every case is administered');
+  equal(result.stop_reason, 'locked_qualify', 'stop_reason records the deciding rule (locked_qualify)');
+  equal(result.tier1_terminated, false, 'nothing was terminated');
 }
 
 // ── 4. four wrong-content cases ⇒ locked_fail (M≥4); content label preserved ─
@@ -254,6 +256,9 @@ function run(perCaseModeSource, extra) {
     { rawDir },
   );
   equal(result.qualified, false, 'four wrong-content cases lock-fail the pooled verdict');
+  equal(result.stop_reason, 'locked_fail', 'stop_reason records the deciding rule (locked_fail)');
+  equal(result.started_cases, 48, 'locked_fail no longer stops early: every case is administered');
+  equal(result.row.status, 'failed', 'locked_fail row status is failed');
   const exchanges = fs.readFileSync(path.join(rawDir, 'discuss-exchanges.jsonl'), 'utf8')
     .trim().split('\n').map((line) => JSON.parse(line));
   const failedRow = exchanges.find((row) => row.case_id === wrongIds[0]);
@@ -543,6 +548,6 @@ require('fs').writeFileSync(${JSON.stringify(sentinelPath)}, 'module-top-level-c
     'planted negative: with declared_axes stripped from the envelope again, the envelope-only stub flips red (proves the previous test is load-bearing)');
 }
 
-if (assertions !== 55) throw new Error(`engine-qualify-discuss: expected exactly 55 assertions (count pin moved here from hooks/tests/engine-qualify-discuss.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 60) throw new Error(`engine-qualify-discuss: expected exactly 60 assertions (count pin moved here from hooks/tests/engine-qualify-discuss.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);
 fs.rmSync(tempRoot, { recursive: true, force: true });

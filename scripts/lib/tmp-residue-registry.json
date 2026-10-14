@@ -17,6 +17,13 @@
       "reason": "detach state scratch"
     },
     {
+      "pattern": "repo-identity-err-*",
+      "kind": "scratch",
+      "owner": "scripts/lib/repo-identity.sh",
+      "retention_days": null,
+      "reason": "rev-parse stderr capture for repo_identity_of; removed before the function returns"
+    },
+    {
       "pattern": "dispatch-author-*",
       "kind": "scratch",
       "owner": "scripts/dispatch-author.sh",

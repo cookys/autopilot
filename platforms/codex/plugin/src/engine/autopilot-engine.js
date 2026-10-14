@@ -8781,12 +8781,21 @@ class AutopilotEngine {
               generation: completionIdentity.generation,
               stageIdentity: completionIdentity.stage_identity,
               usage: {
-                changed_files: Array.isArray(receipt.changed_files)
-                  ? receipt.changed_files.length
-                  : state.usage.changed_files,
-                churn: Number.isSafeInteger(receipt.total_churn)
-                  ? receipt.total_churn
-                  : state.usage.churn,
+                // BL-0173: the campaign requires usage to be monotonic, but the cumulative
+                // base..head count/churn shrinks when a repair fully reverts a file. Book the
+                // larger of the prior durable value and this round's value (BL-0154 parity).
+                changed_files: Math.max(
+                  Number.isSafeInteger(state.usage.changed_files) ? state.usage.changed_files : 0,
+                  Array.isArray(receipt.changed_files)
+                    ? receipt.changed_files.length
+                    : state.usage.changed_files,
+                ),
+                churn: Math.max(
+                  Number.isSafeInteger(state.usage.churn) ? state.usage.churn : 0,
+                  Number.isSafeInteger(receipt.total_churn)
+                    ? receipt.total_churn
+                    : state.usage.churn,
+                ),
               },
               payload: {
                 scope_check_passed: true,

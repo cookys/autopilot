@@ -58,6 +58,29 @@ run_mode sync-all --parallel 1
 assert_eq "$RC" "0" "tail: run.sh exits 0"
 assert_contains "$SUMMARY" "sync-all.test.sh: SKIP [fake]" "tail: Summary names a SKIP from the serial tail"
 
+mk_suite sync-all.test.sh 'printf "SKIP [fake-tail-err] VACUOUS RUN\n" >&2; exit 0'
+run_mode sync-all --parallel 1
+assert_contains "$SUMMARY" "SKIP [fake-tail-err]" "tail: a SKIP printed on stderr is collected"
+
+# Case 6: an interrupted run (TERM: a background job cannot trap INT, it is ignored on entry) leaves no hooks-run-skipcap.* temp file behind. bash runs a trap only
+# after the foreground suite ends, so the suite is short (sleep 3) and the signal arrives mid-suite.
+rm_suites
+mk_suite fake-slow.test.sh 'sleep 3; exit 0'
+ITMP="$TEST_TMP/itmp"
+mkdir -p "$ITMP"
+(cd "$SCR" && TMPDIR="$ITMP" AUTOPILOT_TEST_DURATIONS_FILE="$TEST_TMP/dur.tsv" exec bash hooks/tests/run.sh fake-slow >/dev/null 2>&1) &
+RPID=$!
+for _ in $(seq 1 100); do
+  compgen -G "$ITMP/hooks-run-skipcap.*" >/dev/null && break
+  sleep 0.1
+done
+SEEN="$(compgen -G "$ITMP/hooks-run-skipcap.*" | wc -l | tr -d ' ')"
+kill -TERM "$RPID" 2>/dev/null
+wait "$RPID" 2>/dev/null
+LEFT="$(compgen -G "$ITMP/hooks-run-skipcap.*" | wc -l | tr -d ' ')"
+assert_eq "$SEEN" "1" "interrupt: the capture file existed while the suite ran"
+assert_eq "$LEFT" "0" "interrupt: TERM leaves no hooks-run-skipcap.* behind"
+
 # Case 5: a suite that leaves a background process behind must not stall run.sh. A pipe-based
 # collector (| tee) waits for the leftover's write end to close: measured 21s against 7s.
 rm_suites

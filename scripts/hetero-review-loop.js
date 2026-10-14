@@ -5,7 +5,7 @@
 // Packet mode (--packets <file> --packet <id>) carries a range too big for one review packet by
 // splitting it BY PATH into per-packet phases that a set check proves cover the range exactly once
 // (check-phase-review-receipt.js --packets); it never excludes a path. Without those flags every
-// behavior is unchanged. Plan: docs/plans/2026-10-11-review-packet-mode.md.
+// behavior is unchanged. Plan: docs/plans/_archive/2026/10/2026-10-11-review-packet-mode.md.
 
 const fs = require('fs');
 const path = require('path');
@@ -131,7 +131,7 @@ const reviewPackets = require('./lib/review-packets');
 
 // Packet mode (collect/finalize): --packets <packets.json> --packet <id> makes this call one packet of a
 // packet set — its own phase `<set>-<id>`, reviewing only that packet's files of the full range. Returns
-// null when neither flag is given (the unchanged, whole-range path). Plan: docs/plans/2026-10-11-review-packet-mode.md.
+// null when neither flag is given (the unchanged, whole-range path). Plan: docs/plans/_archive/2026/10/2026-10-11-review-packet-mode.md.
 function resolvePacketFlags(flags) {
   if (flags.packets === undefined && flags.packet === undefined) return null;
   if (typeof flags.packets !== 'string' || typeof flags.packet !== 'string') {

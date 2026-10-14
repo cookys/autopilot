@@ -1411,7 +1411,7 @@ node -e '
   console.log("OK");' "$LOCKH" "$TOKDIR" > "$TEST_TMP/t11h.out" 2>&1
 assert_eq "$(cat "$TEST_TMP/t11h.out")" "OK" "test 11h: release is token-checked (old holder cannot remove successor's lock)"
 
-# ─── packet mode (plan docs/plans/2026-10-11-review-packet-mode.md) ───
+# ─── packet mode (plan docs/plans/_archive/2026/10/2026-10-11-review-packet-mode.md) ───
 # A range too big for one packet is split BY PATH: packets.json -> one phase per packet -> a set check
 # (check-phase-review-receipt.js --packets). Every negative case is proved twice: the writer (collect)
 # refuses it AND the checker refuses a hand-built ledger that bypassed the writer; then the guarded

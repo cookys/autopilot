@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0168 -->
+<!-- next-id: BL-0169 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1880,3 +1880,16 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: owner 2026-10-14「grok / kimi 都先排 backlog , 星期五補考」
 - **Pointer**: none
 - **Context**: Grok: `bash run-rv6-cli-chain.sh grok grok:grok-4.7:low` (reviewer-requalify evidence folder). Kimi: reviewer v6 plus every role this round sat; no early stop.
+
+### Usage block cannot tell a truncated exam from a complete one
+- **Id**: BL-0168
+- **Status**: open
+- **Since**: 2026-10-14
+- **Origin**: self
+- **Problem**: 成績列 usage 區塊的題數只算實際跑過的題。考試被時間上限截斷，或 implementer 走例外路徑沒推紀錄時，沒跑的題會直接消失，usage_complete 仍是 true。驗證也沒交叉比對缺 token 數、每小時答對數和價格原因。
+- **Impact**: 低。這些路徑多半判 no_verdict 或中止；但看 usage 排序時，可能把半場的耗時當成整場。
+- **Trigger**: llm-playground 開始讀 usage 區塊做綜合評估之前
+- **Effort**: S
+- **Source**: review of usage lane cafae461/5086079a, 2026-10-14
+- **Pointer**: none
+- **Context**: qualification-usage.js summarize :111-143 has no expected n_cases; validateUsageBlock :203-235 lacks cross-checks. verdict-stability :3501 and the empty-output comment are imprecise.

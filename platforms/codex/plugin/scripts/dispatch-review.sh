@@ -973,14 +973,15 @@ write_review_manifest() {
   if declare -F repo_identity_resolve_fields >/dev/null 2>&1; then repo_identity_resolve_fields "" "" || true; fi
   [ -n "${REPO_IDENTITY_FIELDS:-}" ] || REPO_IDENTITY_FIELDS='"repo_identity": null, "repo_identity_source": null'
   {
-    printf '{ "schema": 1, "run_id": "%s", "role": "reviewer", "allow_narrative": %s, "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "log_format": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "diff_file": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, %s, "session_id": %s, "child_session_id": %s }\n' \
+    printf '{ "schema": 1, "run_id": "%s", "role": "reviewer", "allow_narrative": %s, "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "log_format": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "diff_file": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, %s, "session_id": %s, "child_session_id": %s, "child_transcript": %s }\n' \
       "$(json_escape "$REVIEW_RUN_ID")" "$( if [[ -n "$ALLOW_NARRATIVE" ]]; then json_escape "$ALLOW_NARRATIVE"; else printf null; fi )" "$RUNNER" "$(json_escape "$MODEL")" \
       "$(json_escape "$live_log")" "$log_format" "$aux_json" "$$" \
       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$REVIEW_STARTED_EPOCH" \
       "$(json_escape "$PROMPT_FILE")" "$(json_escape "$DIFF_FILE")" \
       "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$parent_json" "$root_json" "$depth_json" "$REPO_IDENTITY_FIELDS" \
       "$(declare -F manifest_session_id_json >/dev/null 2>&1 && manifest_session_id_json || printf null)" \
-      "$(declare -F manifest_child_session_json >/dev/null 2>&1 && manifest_child_session_json || printf null)" > "$tmp"
+      "$(declare -F manifest_child_session_json >/dev/null 2>&1 && manifest_child_session_json || printf null)" \
+      "$(declare -F manifest_child_transcript_json >/dev/null 2>&1 && manifest_child_transcript_json || printf null)" > "$tmp"
   } 2>/dev/null && mv -f "$tmp" "$REVIEW_MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
   return 0
 }
@@ -1556,6 +1557,7 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
       _ "$CCSHIM_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" > "$RAW_LOG" 2>&1
   CCSHIM_RC=$?
   wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" 30000 || true
+  declare -F ccshim_keep_transcript >/dev/null 2>&1 && { ccshim_keep_transcript "$CCSHIM_CWD" "$REVIEW_RUN_ID" || true; }
   rm -rf "$CCSHIM_CWD"; CCSHIM_CWD=""   # clear so the EXIT trap doesn't rm the path a 2nd time
   if [ "$CCSHIM_RC" -ne 0 ]; then
     printf '\n[dispatch-review: cc-shim (claude) exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \

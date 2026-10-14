@@ -977,7 +977,7 @@ write_author_manifest() {
   if declare -F repo_identity_resolve_fields >/dev/null 2>&1; then repo_identity_resolve_fields "${AUTHOR_REPO_ROOT_EXPLICIT:-}" "" || true; fi
   [ -n "${REPO_IDENTITY_FIELDS:-}" ] || REPO_IDENTITY_FIELDS='"repo_identity": null, "repo_identity_source": null'
   {
-    printf '{ "schema": 1, "run_id": "%s", "role": "%s", "allow_narrative": null, "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "log_format": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "diff_file": null, "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, %s, "session_id": %s, "child_session_id": %s }\n' \
+    printf '{ "schema": 1, "run_id": "%s", "role": "%s", "allow_narrative": null, "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "log_format": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "diff_file": null, "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, %s, "session_id": %s, "child_session_id": %s, "child_transcript": %s }\n' \
       "$(json_escape "$AUTHOR_RUN_ID")" "$role_tok" "$RUNNER" "$(json_escape "$MODEL")" \
       "$(json_escape "$RAW_LOG")" "$log_format" "$aux_json" "$$" \
       "$AUTHOR_STARTED_AT" "$AUTHOR_STARTED_EPOCH" \
@@ -985,7 +985,8 @@ write_author_manifest() {
       "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" \
       "$parent_json" "$root_json" "$depth_json" "$REPO_IDENTITY_FIELDS" \
       "$(declare -F manifest_session_id_json >/dev/null 2>&1 && manifest_session_id_json || printf null)" \
-      "$(declare -F manifest_child_session_json >/dev/null 2>&1 && manifest_child_session_json || printf null)" > "$tmp"
+      "$(declare -F manifest_child_session_json >/dev/null 2>&1 && manifest_child_session_json || printf null)" \
+      "$(declare -F manifest_child_transcript_json >/dev/null 2>&1 && manifest_child_transcript_json || printf null)" > "$tmp"
   } 2>/dev/null && mv -f "$tmp" "$AUTHOR_MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
   return 0
 }
@@ -1266,6 +1267,7 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
     _ "$CCSHIM_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" > "$RAW_LOG" 2>"$RUNNER_ERR_FILE"
   RUNNER_EXIT=$?
   set -e
+  declare -F ccshim_keep_transcript >/dev/null 2>&1 && { ccshim_keep_transcript "$CCSHIM_CWD" "$AUTHOR_RUN_ID" || true; }
   rm -rf "$CCSHIM_CWD"; CCSHIM_CWD=""
 elif [[ "$RUNNER" = "claude-native" ]]; then
   CC_BIN="$(command -v "${BIN:-claude}" 2>/dev/null || true)"

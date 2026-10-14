@@ -19,7 +19,7 @@ Git repository and runs the managed review rail over exactly that range:
 
 Autopilot writes no code here. There is no implementer, no verification-author and no repair model
 call at any point; the adopted-range adapter refuses to dispatch a writer if anything ever reaches it
-(`src/engine/autopilot-engine.js:8061`). Findings are reported, never fixed inside this campaign. If you want autopilot's writer to fix them, the
+(`review_candidate_no_writer`, section 5). Findings are reported, never fixed inside this campaign. If you want autopilot's writer to fix them, the
 `repair` choice (section 6) closes this campaign and hands you a separate `implement-review` campaign to run.
 
 Two things this is not:
@@ -330,15 +330,19 @@ phases `VERTICAL_VERIFICATION`, `REVIEWING` or `ADJUDICATING` while a run is act
 | `review_candidate_resume_phase_unsupported` | A review interrupted between its verdict and the park (phase `ADJUDICATING`) cannot be resumed | Close it with `--resume --campaign-continuation end`, or seal a new contract (section 3) and run again. |
 | `campaign_resume_required` | A campaign for this contract already exists and you ran without `--resume` | Add `--resume`, or seal a new contract (section 3) to start over. |
 | `campaign_resume_not_found` | `--resume` but no campaign exists for this contract | Run without `--resume`. |
+| `campaign_lease_live` | `--resume` (including `--campaign-continuation end`) while the previous run of this campaign still holds its lease: that process is alive | Wait for the previous process to finish, then resume. Check that it is really running before you assume it is stuck. |
+| `campaign_lease_unknown` | `--resume`, and the previous lease's process cannot be verified: the pid cannot be probed (for example it belongs to another user or the process table is not visible) or its start time is unreadable | The code has no override flag. Resume as the same user and in the same environment as the original run, so the pid can be probed. If that is impossible, leave the campaign and seal a new contract (section 3). |
 | `campaign_already_terminal` | `--resume` on a campaign that is already ready or stopped | It is finished. Seal a new contract (section 3) to review again. |
 | `review_candidate_disposition_end` | You closed the review with `end` | Terminal not-ready; the unresolved findings are in `findings`. This is the expected result of `end`. |
 | `review_candidate_end_not_terminalized` | `end` could not terminalize the campaign | Inspect with `campaign inspect`; report the reason. |
 | `review_candidate_admission_missing` | A resume found no admitted adoption record | Seal a new contract (section 3) and run from the start. |
 | `review_candidate_no_writer` | Internal: the writer adapter was reached | A bug; it fails closed with no spend. Report it. |
 
-Other blocked results can carry non-`review_candidate_` codes from shared intake (for example a
-provider-readiness refusal when a seat is not live). A refusal at the `provider_readiness` phase carries
-its code in `rejection_code`, not `code`. Read `reason` first.
+Any code not in this table, whether it starts with `review_candidate_` (for example
+`review_candidate_recheck_failed`, `review_candidate_scope_session`, `review_candidate_adoption_journal`)
+or comes from shared intake (for example a provider-readiness refusal when a seat is not live), is
+reported with a `reason`: read `reason` first. A refusal at the `provider_readiness` phase carries its
+code in `rejection_code`, not `code`.
 
 ## 6. After a park: end, return, repair, preset
 
@@ -440,8 +444,28 @@ What happens:
    different bounds.
 4. `task.md` lists the findings as reviewer claims. The writer must verify each one against the code, fix
    only those that hold, and list every finding it judges not to hold, with the reason, in its delivery.
-   Seal the contract with `scripts/implementation-campaign-check.js seal` (section 3) and run
-   `autopilot engine implement-review` with `task.md` as the prompt.
+   Seal the contract with `scripts/implementation-campaign-check.js seal` (section 3), then run
+   `implement-review` (below) with `task.md` as the prompt.
+
+The next step, to copy. Take `<base_sha>` and `<branch>` from `repair_handoff.base_sha` and
+`repair_handoff.branch` (they equal `contract.json`'s `base_sha` and `branch`), and the paths from
+`repair_handoff.contract_path` and `repair_handoff.task_path`. Seal first, outside the repository
+(`--out` is the seal file; `<mode>` is the project's mission mode, as in section 3), then run:
+
+```bash
+node scripts/implementation-campaign-check.js seal --contract /abs/repair/contract.json \
+  --repo /abs/path/to/repo --mission-mode <mode> --out /abs/repair/contract.seal.json
+
+AUTOPILOT_LEVEL=l4 node bin/autopilot.js engine implement-review \
+  --campaign-contract /abs/repair/contract.json --campaign-seal /abs/repair/contract.seal.json \
+  --prompt-file /abs/repair/task.md --branch <branch> --base <base_sha> --cwd /abs/path/to/repo
+```
+
+`--prompt-file`, `--branch` and `--base` are all required (a missing one is a usage error), and
+`--branch` and `--base` must equal the sealed contract's `branch` and `base_sha`, otherwise the run is
+refused as `campaign_binding_mismatch`. The roster for this step must have an implementer seat:
+`implementer_runner`, `implementer_engine` and `implementer_effort` must all be set. The review-only roster
+of section 4 is not enough.
 
 Cost: one writer run plus that campaign's own review. Seat verdicts are not reused across campaigns: the
 new campaign's panel reviews `reviewed_head..new_head` from scratch.

@@ -79,6 +79,7 @@
 
 ### 修正
 
+- **v2.36.114 審查留下的小項目**（BL-0103）：campaign 收件的建議事項（例如 `campaign_file_cap_no_first_pass_headroom`）改由 `bin/autopilot.js` 寫到 stderr，stdout 的 JSON 不受影響。AWAITING_CONVERGENCE_ADJUDICATION 維持 `>=`，理由寫在 `REPAIR_RESUME_PHASES` 旁；引擎那個呼叫點對已收件的 campaign 不會執行，日後要讓這個階段走修復，就把它加進這張清單。`hooks/tests/campaign-repair-at-file-cap.test.sh` 新增 Stage F：逐個階段讓 cli.js 和 campaign-intake.js 實際跑同一個判斷並比對結果，包含檔數 4/4 時兩邊都擋下的情況；四個突變的紅燈紀錄寫在測試檔開頭。
 - **v2.36.112 審查留下的小項目**（BL-0101）：`hooks/tests/run.sh` 的 Summary 會列出 SKIP 行（serial、parallel、serial tail 三條路徑都收）。serial 改成先寫進暫存檔、跑完再印，不再經過管線，留在背景的程序拖不住 run.sh；stderr 一併收進來，中斷時暫存檔由 EXIT trap 清掉。代價是 serial 不再即時輸出。`dispatch-local-openai.js` 收到 `finish_reason=length` 且內容只有空白時，判為 `output_budget_exhausted`。`campaign-resume` 的 B3 改成整行比對 `campaign_resume_git_drift`。新增 `hooks/tests/run-summary-skip.test.sh`。
 - **設了自動壓縮視窗時，T2 不再叫你停下**（BL-0124）：`autoCompactWindow` 設在 T2 門檻以下時，T2 的提示改成「自動壓縮已設在 Nk，不要停、不要請使用者 /clear，到下個階段邊界寫 handoff」。沒設視窗、值不合法、視窗高於 T2，或設了 `DISABLE_AUTO_COMPACT` 時，仍然是 STOP。只有到 T2 才讀視窗設定。ON/OFF 評測（sonnet 26 次）：舊文字 10/10 叫停，新文字 10/10 繼續，對照組 6/6 照常叫停；證據 `docs/plans/evidence/2026-10-14-t2-wording-onoff/`。新增 hook 層測試 `hooks/tests/context-budget-t2-autocompact.test.sh` 與 lib 層 `hooks/context-budget-t2-autocompact.test.js`。已知疑點：T2 觸發時 context 已超過視窗，當下壓縮可能其實沒發生（BL-0147）。
 - **壓縮相關的四個小問題**（branch `lane/l-compaction-smalls`；BL-0126、BL-0091 和工作流程快照審查的後續）：

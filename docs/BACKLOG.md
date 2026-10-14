@@ -1251,13 +1251,13 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-03
 - **Origin**: self
-- **Problem**: v2.36.114 版審查留下的小項目：某個等待判定條件要保持原寫法、審查入口的輸出要多顯示建議事項、一個測試資料欄位改名、補一個兩處判斷一致性的測試。 (draft)
-- **Impact**: 都是低嚴重度整理，不影響現有功能；下次動到 campaign 入口時一併處理。 (draft)
+- **Problem**: 主項目已在 2026-10-14 合併；剩下的是測試品質小項：建議事項輸出到 stderr 這件事只用原始碼字串比對來測，沒有實際跑 CLI；突變紀錄的文字有兩處跟實際紅的列對不上。
+- **Impact**: 低。若有人把建議事項改寫到 stdout，JSON 輸出會被污染但測試不會紅；紀錄文字不準會誤導之後對照斷言的人。
 - **Trigger**: next touch of src/engine/implementation-campaign.js / campaign-intake.js
 - **Effort**: S
 - **Source**: v2.36.114 landing reviews (🔵)
 - **Pointer**: docs/backlog/v2-36-114-review-follow-ups.md
-- **Context**: keep AWAITING_CONVERGENCE_ADJUDICATION on `>=` pending evidence; surface `control.advisories` in intake output; rename `a_vertical_at_cap` fixture key; cli.js/campaign-intake.js predicate parity test.
+- **Context**: Left: run the CLI and assert ADVISORY on stderr plus parseable stdout; fix M1/M4 wording in the test header; move the F asserts off the `# D.` label; no trailing colon when an advisory has no message.
 
 ### Population B switch suite flakes with a stale entry under parallel runs
 - **Id**: BL-0104

@@ -48,7 +48,7 @@ Each criterion names its threshold, check and negative control (ids from `refere
 - RO9 — No regression: `hooks/tests/autopilot-engine*.test.sh`, `hooks/tests/campaign-*.test.sh`, `hooks/tests/final-panel-park.test.sh`, `hooks/tests/autopilot-cli.test.sh` stay green; any red is classified with A7 before merge.
 - RO10 — Live (A6). One real-engine run over a trivial range in a throwaway repo reaches ready with ≥ 1 reviewed seat and 0 implementer calls; one live run over a planted-defect range ends not-ready. Engine and version recorded.
 - RO11 (P2) — An interrupted or parked review resumes without re-spending reviewed seats and without trusting the stored range: head, tree and ancestry are re-derived first. Check: A5 interrupt-then-resume case plus RO3's resume moment.
-- RO13 (P2) — Caller-chosen continuation (Q1′ ruling). A parked review offers exactly three dispositions: `return`, `end` and `repair`. `return` re-reviews a head that moved forward from the reviewed head inside the same campaign and spends seats only on the delta. `end` terminalizes not-ready with the findings listed. `repair` is P5. A head that is not a descendant of the reviewed head is a named refusal. A contract preset applies its choice with no wait. Check: A5 per choice, plus the preset path. Control: a non-descendant head and an unknown choice value are each refused before spend.
+- RO13 (P2) — Caller-chosen continuation (Q1′ ruling). A parked review offers exactly three dispositions: `return`, `end` and `repair`. `return` re-reviews a head that moved forward from the reviewed head inside the same campaign. Seats re-review the cumulative `base..new_head` with the existing `focused_delta_round` added; a seat outcome is reused only when its input binding is identical (Q3 ruled (c)). `end` terminalizes not-ready with the findings listed. `repair` is P5. A head that is not a descendant of the reviewed head is a named refusal. A contract preset applies its choice with no wait. Check: A5 per choice, plus the preset path. Control: a non-descendant head and an unknown choice value are each refused before spend.
 - RO12 (P3) — At l5/l6 review-only admission neither requires nor probes the implementer or verification-author seat, while `implement-review` at l5 still requires both. Check: probe-log count; A2 on the l5 implement path.
 
 ## 4. Scope boundary
@@ -201,11 +201,11 @@ Order: P1 → P2 → P4 is the critical path, because the park only becomes usab
 
     An optional contract preset lets a caller with no human present pick ahead of time. RO13 pins all of this. `return` and `end` ship in P2; `repair` ships in P5. U8 is moot, because `end` is an explicit choice and not `deny-nonempty`.
 
-- Q3 — open, P2 design; the reporter asked on 2026-10-14. On `return`, what does "re-review only the delta" cover when the fix touches files or behavior an earlier seat already passed? There are two candidates:
+- Q3 — ruled 2026-10-14 (see below); the reporter asked on 2026-10-14. On `return`, what does "re-review only the delta" cover when the fix touches files or behavior an earlier seat already passed? There are two candidates:
   - (a) Seats review `reviewed_head..new_head` with the cumulative `base..new_head` as read-only context. The final panel judges the cumulative range, and a seat verdict is reused only for a seat whose reviewed files the delta does not touch.
   - (b) Seats review only `reviewed_head..new_head`.
 
-  Leaning (a): a fix that edits a reviewed file would otherwise keep a stale pass. P2 decides this with evidence and pins it in RO13. The reporter is told the result in the P4 doc.
+  **Ruled 2026-10-14 (P2 evidence): (c), neither (a) nor (b).** A seat outcome is reused only when its whole input binding is identical (`deriveReusableOutcome`), and seats have no read-only context channel, so (a) would need a new reuse key, re-check and packet shape: a design change, not P2. (c) keeps the existing mechanism: on `return`, seats re-review the cumulative `base..new_head` with the existing `focused_delta_round` added. No stale pass is possible, because a changed head changes every binding. The cost is a full re-review per `return`; a cheaper delta re-review is BL-0146. The reporter is told in the P4 doc.
 
 ## 11. Unverified
 

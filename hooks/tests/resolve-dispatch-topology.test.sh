@@ -730,4 +730,49 @@ assert_eq "0" "$(node -e 'process.stdout.write(String(JSON.parse(require("fs").r
 AUTOPILOT_ENDPOINT_GLM_URL="http://127.0.0.1:1" node "$SCRIPT" --json --role reviewer --out "$TOPOLOGY_OUT" >/dev/null 2>&1
 assert_eq "GLM-5.3@anthropic-compatible" "$(node -e 'const t=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(t.reviewer_ladder.map(s=>s.engine+"@"+s.runner).join(","))' "$TOPOLOGY_OUT")" "Case 24: endpoint configured -> HTTP seat joins reviewer_ladder"
 
+# -----------------------------------------------------------------------------
+# Case 25: claude-native (local `claude` CLI) seats. Available when `claude` is installed, listed
+# after every other family in the reviewer ladder, never in the implementer ladder.
+# -----------------------------------------------------------------------------
+CLAUDE_BIN_DIR="$TEST_TMP/claude-bin"
+mkdir -p "$CLAUDE_BIN_DIR"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$CLAUDE_BIN_DIR/claude"
+chmod +x "$CLAUDE_BIN_DIR/claude"
+lad() { node -e 'const t=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write((t[process.argv[2]]||[]).map(s=>s.engine+"/"+s.effort+"@"+s.runner).join(","))' "$TOPOLOGY_OUT" "$1"; }
+
+rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$TOPOLOGY_OUT"
+write_scorecard_row "claude-opus-5-5" "claude-native" "low" 5.0 "qualified" 2501 "reviewer"
+write_scorecard_row "rev-high" "agy" "high" 10.0 "qualified" 2502 "reviewer"
+write_scorecard_row "claude-opus-5-5" "claude-native" "high" 5.0 "qualified" 2503 "consult"
+write_scorecard_row "con-agy" "agy" "high" 50.0 "qualified" 2504 "consult"
+write_scorecard_row "claude-opus-5-5" "claude-native" "high" 5.0 "qualified" 2505 "implementer"
+
+# negative control: no `claude` binary -> no claude-native seat anywhere
+node "$SCRIPT" --json --out "$TOPOLOGY_OUT" >/dev/null 2>&1
+assert_eq "$(lad reviewer_ladder)" "rev-high/high@agy" "Case 25 (negative control): claude not installed -> claude-native seat absent"
+
+PATH="$CLAUDE_BIN_DIR:$PATH" node "$SCRIPT" --json --out "$TOPOLOGY_OUT" >/dev/null 2>&1
+assert_eq "$(lad reviewer_ladder)" "rev-high/high@agy,claude-opus-5-5/low@claude-native" "Case 25: claude installed -> claude-native joins reviewer_ladder, after the other family even at lower effort"
+assert_eq "$(lad consult_ladder)" "con-agy/high@agy,claude-opus-5-5/high@claude-native" "Case 25: consult asking-family demotion keeps claude-native last"
+assert_eq "$(lad implementer_ladder)" "" "Case 25 (negative control): claude-native never enters the implementer ladder"
+assert_not_contains "$(node -e 'const t=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(JSON.stringify(t.candidates_to_qualify))' "$TOPOLOGY_OUT")" "claude-native" "Case 25: claude-native is not an implementer qualify candidate"
+
+# openai asking family: anthropic seat is no longer demoted in consult
+PATH="$CLAUDE_BIN_DIR:$PATH" node "$SCRIPT" --json --asking-family openai --role consult --out "$TOPOLOGY_OUT" >/dev/null 2>&1
+assert_eq "$(lad consult_ladder)" "claude-opus-5-5/high@claude-native,con-agy/high@agy" "Case 25: --asking-family openai does not demote the claude-native consult seat (latency order)"
+
+# legacy no-effort row next to the explicit-effort row of the same engine -> one rung
+rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$TOPOLOGY_OUT"
+write_scorecard_row "claude-opus-5-5" "claude-native" "" 5.0 "qualified" 2601 "reviewer"
+write_scorecard_row "claude-opus-5-5" "claude-native" "high" 5.0 "qualified" 2602 "reviewer"
+PATH="$CLAUDE_BIN_DIR:$PATH" node "$SCRIPT" --json --role reviewer --out "$TOPOLOGY_OUT" >/dev/null 2>&1
+assert_eq "$(lad reviewer_ladder)" "claude-opus-5-5/high@claude-native" "Case 25: legacy no-effort row and explicit high row are one rung"
+
+# plan-review chair: at equal effort an anthropic seat does not chair ahead of another family
+rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$TOPOLOGY_OUT"
+write_scorecard_row "claude-opus-5-5" "claude-native" "high" 1.0 "qualified" 2701 "reviewer"
+write_scorecard_row "gemini-x" "agy" "high" 90.0 "qualified" 2702 "reviewer"
+PATH="$CLAUDE_BIN_DIR:$PATH" node "$SCRIPT" --json --role reviewer,plan_reviewer --out "$TOPOLOGY_OUT" >/dev/null 2>&1
+assert_eq "$(lad plan_review_panel)" "gemini-x/high@agy,claude-opus-5-5/high@claude-native" "Case 25: panel chair is the non-anthropic seat on an effort tie"
+
 finalize_test

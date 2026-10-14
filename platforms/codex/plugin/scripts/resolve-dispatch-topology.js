@@ -17,6 +17,12 @@
  * judge, claude_fallback_ladder and operator pins are not filtered. HTTP seats (anthropic-compatible)
  * depend on AUTOPILOT_ENDPOINT_*_URL in the calling environment, so --check can differ per shell.
  *
+ * claude-native (the local `claude` CLI) counts as available for reviewer/consult/discuss and the panel
+ * when `claude` is installed, never for the implementer ladder (dispatch-hetero has no such runner).
+ * The reviewer ladder lists anthropic-family seats after every other family (depth-0 is usually Claude),
+ * and an anthropic seat only chairs the plan-review panel when no other family ties it on effort;
+ * consult/discuss keep their --asking-family demotion.
+ *
  * Node >= 20, built-ins only.
  */
 
@@ -29,6 +35,12 @@ const { spawnSync } = require('child_process');
 const RUNNER_TOKENS = Object.freeze([
   'agy', 'codex', 'grok', 'cursor', 'kimi', 'opencode', 'qoderclicn', 'pi', 'cc-shim',
 ]);
+
+// Runners that count as available for the reviewer/consult/discuss ladders and the plan-review panel
+// but are NOT implementer runners (dispatch-hetero.sh --runner accepts no claude-native). Availability
+// reuses the `claude` binary cc-shim resolves to (runner-binary.js). RUNNER_TOKENS stays implementer-only,
+// so candidates_to_qualify is unchanged and the implementer ladder skips these seats explicitly.
+const NON_IMPLEMENTER_RUNNERS = Object.freeze(['claude-native']);
 
 const PANEL_ELIGIBLE_RUNNERS = Object.freeze([
   'codex', 'agy', 'grok', 'cc-shim', 'anthropic-compatible', 'claude-native', 'qoderclicn', 'cursor',
@@ -194,6 +206,8 @@ function usage(code = 2) {
     '  key:  { "topology": { "exclude_seats": ["gpt-5.6-sol/max@codex", "gpt-5.5-sol"] } }\n' +
     '  A missing file or key is no exclusions; unparseable JSON or a wrong shape exits 1.\n' +
     '  Exclusions apply to the ladders and the panel only; judge, claude_fallback_ladder and operator pins are not filtered (a pin wins in --resolve-live).\n' +
+    '  claude-native seats (local claude CLI) are available for reviewer/consult/discuss/panel when `claude` is on PATH, never for the implementer ladder;\n' +
+    '  the reviewer ladder lists anthropic-family seats after every other family.\n' +
     '  HTTP seats (anthropic-compatible) appear only when an AUTOPILOT_ENDPOINT_*_URL is in the environment at call time, so --check can differ between shells that did and did not load endpoints.env.\n'
   );
   process.exit(code);
@@ -380,7 +394,7 @@ function getInstalledRunners(repoRoot) {
   } catch {
     versionBinaryFor = null;
   }
-  for (const r of RUNNER_TOKENS) {
+  for (const r of [...RUNNER_TOKENS, ...NON_IMPLEMENTER_RUNNERS]) {
     let binaryName = null;
     if (typeof versionBinaryFor === 'function') {
       const binary = versionBinaryFor(r);
@@ -726,6 +740,8 @@ function deriveTopology(repoRoot, options = {}) {
       if (!runner || !engine) continue;
 
       if (!runnersInstalled[runner]) continue;
+      // claude-native is available for review/consult/discuss only; dispatch-hetero has no such runner.
+      if (NON_IMPLEMENTER_RUNNERS.includes(runner)) continue;
 
       const status = checkSeatStatus(repoRoot, engine, origRunner, effort, 'implementer')
         || checkSeatStatus(repoRoot, engine, runner, effort, 'implementer');
@@ -862,6 +878,11 @@ function deriveTopology(repoRoot, options = {}) {
   if (roles.has('reviewer')) {
     const seats = [...getReviewerQualified()];
     seats.sort((a, b) => {
+      // depth-0 is usually Claude, so an anthropic reviewer is the least decorrelated one: all other
+      // families first, anthropic seats after them (stable; effort/latency order holds inside each group).
+      const famA = a.family === 'anthropic' ? 1 : 0;
+      const famB = b.family === 'anthropic' ? 1 : 0;
+      if (famA !== famB) return famA - famB;
       // In ordering: empty effort ranks below every explicit effort (sorts last)
       const rankA = a.effort ? (EFFORT_RANK[a.effort] ?? 99) : 999;
       const rankB = b.effort ? (EFFORT_RANK[b.effort] ?? 99) : 999;
@@ -933,6 +954,10 @@ function deriveTopology(repoRoot, options = {}) {
       const rankA = chairRank(a);
       const rankB = chairRank(b);
       if (rankA !== rankB) return rankB - rankA; // highest effort rank first
+      // At equal effort an anthropic seat (the depth-0 family) never chairs ahead of another family.
+      const famA = a.family === 'anthropic' ? 1 : 0;
+      const famB = b.family === 'anthropic' ? 1 : 0;
+      if (famA !== famB) return famA - famB;
       if (a.latency !== b.latency) return a.latency - b.latency;
       return a.engine.localeCompare(b.engine);
     }

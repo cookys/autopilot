@@ -229,6 +229,7 @@ The deep material, moved out of this page so it stays an onboarding tour:
 | **Per-project configuration** — the `.claude/` injection model | [docs/configuration.md](docs/configuration.md) |
 | **Installation & development** — every platform, dev mode | [docs/installation.md](docs/installation.md) |
 | **Architecture & design** — philosophy, methodology agents, credits | [docs/architecture.md](docs/architecture.md) |
+| **Review-only candidate review** — managed review of a range someone else wrote | [docs/review-candidate.md](docs/review-candidate.md) |
 | **Hooks** — 25 runtime-enforcement hooks (tiers in the doc) | [hooks/README.md](hooks/README.md) |
 | **Changelog** | [CHANGELOG.md](CHANGELOG.md) |
 

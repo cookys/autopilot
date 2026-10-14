@@ -111,8 +111,8 @@
        1-2 recorded e9eb3890).
        CLI-transport administrations from here on pass
        --version-source operator-asserted.
-     Effort 'default': claude -p exposes no effort control; the seat runs the
-     model default. Re-pin prompt_config_hash + harness_version when the brain
+     Effort 'default': the seat sends no --effort to claude -p (an explicit
+     low|medium|high|xhigh|max is forwarded as --effort); Claude Code picks the effort. Re-pin prompt_config_hash + harness_version when the brain
      prompt or engine-qualify.js changes AND the seat re-sits — the identity file
      records the SEATED deployment, not the repo tip.
      Prompt-hash history: af99c673… (sitting 1 2026-08-17, FAILED — diagnosis

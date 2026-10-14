@@ -1740,8 +1740,15 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(${JSON.stringify(ssePortFil
   equal(protoOnCli.status, 1, 'QRP_HTTP_PROTOCOL on the cli transport exits 1');
   check(/QRP_HTTP_PROTOCOL applies to QRP_TRANSPORT=http only/.test(protoOnCli.stderr),
     'the protocol knob refuses the cli transport instead of being silently ignored');
+  const { child: effortOnCli } = runProvider({
+    request: reviewerRequest(),
+    env: { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'codex', QRP_HTTP_EFFORT: 'high' },
+  });
+  equal(effortOnCli.status, 1, 'QRP_HTTP_EFFORT on the cli transport exits 1');
+  check(/applies to QRP_TRANSPORT=http only/.test(effortOnCli.stderr),
+    'the http effort knob refuses the cli transport instead of being silently ignored');
 }
 
 fs.rmSync(tempRoot, { recursive: true, force: true });
-if (assertions !== 290) throw new Error(`qualification-review-provider: expected exactly 290 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 292) throw new Error(`qualification-review-provider: expected exactly 292 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);

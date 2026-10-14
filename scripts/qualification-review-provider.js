@@ -138,7 +138,9 @@
  *                   `max` is refused (no OpenAI-compatible endpoint accepts it,
  *                   and silently clamping would make the scorecard label lie).
  *                   The messages protocol has no effort field: setting this with
- *                   it is refused. List it in --provider-env for the broker.
+ *                   it is refused. Valid with the http transport ONLY: combined
+ *                   with QRP_TRANSPORT=cli it is rejected (cli uses QRP_CLI_EFFORT).
+ *                   List it in --provider-env for the broker.
  *   QRP_PROMPT_MODE reviewer | brain | va | consult | discuss (default reviewer)
  *   QRP_TIMEOUT_MS  per-case transport timeout (default 180000)
  *

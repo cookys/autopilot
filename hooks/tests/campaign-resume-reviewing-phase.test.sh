@@ -320,7 +320,7 @@ assert_contains "$OUT" "b3_intake_nocand_at_cap status=rejected resume_candidate
 # The rejection CODE is pinned too: with the branch and worktree gone, the candidate drift check
 # fires before the changed-file cap predicate is reached, so B3 proves "blocked", not "blocked by
 # the cap". A change that lets this claim through, or re-routes it to another code, goes red.
-assert_contains "$OUT" "b3_intake_nocand_at_cap status=rejected resume_candidate=false code=campaign_resume_git_drift" "B3 rejection code is campaign_resume_git_drift"
+assert_eq "$(printf "%s\n" "$OUT" | grep "^b3_intake_nocand_at_cap ")" "b3_intake_nocand_at_cap status=rejected resume_candidate=false code=campaign_resume_git_drift" "B3 line matches in full (status, candidate, exact rejection code)"
 # ---- C. engine: REVIEWING reached through a final-panel transient seat fault ----------------
 # Same lineage as final-panel-seat-resume-xproc run 1 (seat 2 transport fault -> gate_transient
 # -> durable_wait, ledger parked in REVIEWING) and a real --resume in a SEPARATE process, with the

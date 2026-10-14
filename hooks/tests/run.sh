@@ -535,8 +535,9 @@ run_one() {
   echo "──────── $rel ────────"
   local skip_cap
   skip_cap="$(mktemp "${TMPDIR:-/tmp}/hooks-run-skipcap.XXXXXX")"
-  timeout --kill-after=10 "${AUTOPILOT_TEST_SUITE_TIMEOUT_SECS}s" bash "$file" | tee "$skip_cap"
-  ec=${PIPESTATUS[0]}
+  timeout --kill-after=10 "${AUTOPILOT_TEST_SUITE_TIMEOUT_SECS}s" bash "$file" >"$skip_cap" 2>&1
+  ec=$?
+  cat "$skip_cap"
   collect_skips "$rel" "$skip_cap"
   rm -f "$skip_cap"
   if [ "$ec" -eq 0 ]; then
@@ -853,8 +854,9 @@ else
     echo ""
     echo "──────── $rel (serial tail) ────────"
     tail_cap="$(mktemp "${TMPDIR:-/tmp}/hooks-run-skipcap.XXXXXX")"
-    AUTOPILOT_TEST_TIMING_FACTOR=1 timeout --kill-after=10 "${AUTOPILOT_TEST_SUITE_TIMEOUT_SECS}s" bash "$file" | tee "$tail_cap"
-    serial_tail_ec=${PIPESTATUS[0]}
+    AUTOPILOT_TEST_TIMING_FACTOR=1 timeout --kill-after=10 "${AUTOPILOT_TEST_SUITE_TIMEOUT_SECS}s" bash "$file" >"$tail_cap" 2>&1
+    serial_tail_ec=$?
+    cat "$tail_cap"
     collect_skips "$rel" "$tail_cap"
     rm -f "$tail_cap"
     if [ "$serial_tail_ec" -eq 0 ]; then

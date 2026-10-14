@@ -39,6 +39,10 @@ const row = {
   quality: { subjects: verdict.subjects,
     plants: `${sum('plants_caught')}/${sum('plants_total')}`, pair_deltas: verdict.pair_delta_count,
     hard_fails: sum('hard_fail_count'), repeated_trials: trials.length },
+  // Aligned with runBrainQualification at origin/develop 12594f51 (scripts/engine-qualify.js:2979-3001).
+  capability_score: sum('plants_total') === 0 ? 0 : sum('plants_caught') / sum('plants_total'),
+  cost: { source: 'unknown', usd_per_mtok_input: 0, usd_per_mtok_output: 0, sample_tokens: 0 },
+  expires: ev.expires_at.slice(0, 10),
   latency: { sample_wall_time_s: wall }, status: qualified ? 'qualified' : 'failed', qualified_at: ev.issued_at.slice(0, 10), standing: true,
   evidence_store: { event_id: rec.event_id, producer: rec.producer, transcript_hash: rec.transcript_hash },
   evidence: ev,

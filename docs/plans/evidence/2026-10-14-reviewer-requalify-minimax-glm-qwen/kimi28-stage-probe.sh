@@ -14,6 +14,7 @@ label="$(awk '/^\[models\."kimi-code\/kimi-for-coding"\]/{f=1;next} /^\[/{f=0} f
 echo "kimi28 alias label: $label"
 printf '%s' "$label" | grep -q '2\.8' || { echo "kimi28: alias kimi-code/kimi-for-coding is not labelled 2.8 in the CLI config"; exit 3; }
 out="$(HOME="$H" timeout 120 kimi -m kimi-code/kimi-for-coding -p "reply with the single word PONG" 2>&1)"; rc=$?
-echo "kimi28-probe rc=$rc: $(printf '%s' "$out" | head -c 160 | tr '\n' ' ')"
+echo "kimi28-probe rc=$rc: $(printf '%s' "$out" | head -c 600 | tr '\n' ' ')"
 [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q PONG && exit 0
-exit 3
+if printf "%s" "$out" | grep -qi "usage limit"; then echo "kimi: quota exhausted, wait for reset (not a login problem)"; exit 4; fi
+echo "kimi: credential or other error, owner may need to log in again"; exit 3

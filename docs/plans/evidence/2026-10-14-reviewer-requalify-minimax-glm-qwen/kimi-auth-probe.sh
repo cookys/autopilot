@@ -9,6 +9,7 @@ for f in config.toml device_id; do qualify_stage_identity "$KD/$f" "$HOME/.kimi-
 qualify_stage_credential "$KD/credentials/kimi-code.json" "$HOME/.kimi-code/credentials/kimi-code.json" execute
 qualify_stage_credential "$KD/oauth/kimi-code" "$HOME/.kimi-code/oauth/kimi-code" execute
 out="$(HOME="$H" timeout 120 kimi -m kimi-code/k3 -p "reply with the single word PONG" 2>&1)"; rc=$?
-echo "kimi-auth-probe rc=$rc: $(printf '%s' "$out" | head -c 160 | tr '\n' ' ')"
+echo "kimi-auth-probe rc=$rc: $(printf '%s' "$out" | head -c 600 | tr '\n' ' ')"
 [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q PONG && exit 0
-exit 3
+if printf "%s" "$out" | grep -qi "usage limit"; then echo "kimi: quota exhausted, wait for reset (not a login problem)"; exit 4; fi
+echo "kimi: credential or other error, owner may need to log in again"; exit 3

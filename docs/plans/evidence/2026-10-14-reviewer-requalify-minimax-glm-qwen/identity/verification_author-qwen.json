@@ -4,7 +4,7 @@
   "family": "alibaba",
   "runner": "qoderclicn",
   "runner_version": "1.1.70",
-  "harness_version": "qrp:884bcc3a",
+  "harness_version": "qrp:a7355843",
   "effort": "high",
   "prompt_config_hash": "99d8c8386b234f683b787965a70184e4fa1fc789eb9b19420802e4ee13b09aad",
   "semantic_fingerprint": "9ebfeba3db5a44d99b3819be88a40b20a25265a806e0c4f9ffce750b37b96da3",

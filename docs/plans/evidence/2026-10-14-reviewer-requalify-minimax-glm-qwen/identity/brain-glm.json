@@ -4,7 +4,7 @@
   "family": "zhipu",
   "runner": "anthropic-compatible",
   "runner_version": "node-direct-http-fetch",
-  "harness_version": "engine-qualify-3a7d468d",
+  "harness_version": "engine-qualify-122ae705",
   "effort": "high",
   "prompt_config_hash": "3044021e650feb173a7d5ac652bb258e31aa95b40503184d9e9e194f93af1814",
   "semantic_fingerprint": "b722c084d5c11dba818c7248c972776a8bad2d4bfdce69af533388c883fd8a79",

@@ -4,7 +4,7 @@
   "family": "minimax",
   "runner": "anthropic-compatible",
   "runner_version": "node-direct-http-fetch",
-  "harness_version": "engine-qualify-3a7d468d",
+  "harness_version": "engine-qualify-122ae705",
   "effort": "high",
   "prompt_config_hash": "99d8c8386b234f683b787965a70184e4fa1fc789eb9b19420802e4ee13b09aad",
   "semantic_fingerprint": "7d653369d12677bfac4bc19c7e057180df54d55ff912e6e77095e1880ca56ad8",

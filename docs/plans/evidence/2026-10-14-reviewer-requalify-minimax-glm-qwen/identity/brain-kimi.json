@@ -4,7 +4,7 @@
   "family": "moonshot",
   "runner": "kimi",
   "runner_version": "2.1.1",
-  "harness_version": "qrp:884bcc3a",
+  "harness_version": "qrp:a7355843",
   "effort": "high",
   "prompt_config_hash": "3044021e650feb173a7d5ac652bb258e31aa95b40503184d9e9e194f93af1814",
   "semantic_fingerprint": "518ae23fa0c8e896558637d2d117a23334b5f4ec867d002647231c72121a09c8",

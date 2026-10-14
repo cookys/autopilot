@@ -26,7 +26,7 @@ if [ "$ROLE" = implementer ]; then
     kimi28)    ENGINE=kimi-code/kimi-for-coding; MODEL=$ENGINE; MV=kimi-for-coding:K2.8-Preview; RUNNER=kimi; FAMILY=moonshot; EXTRA=();;
     *) say "implementer not scheduled for $LANE (already qualified)"; fin 2;;
   esac
-  if [ "$RUNNER" = kimi ] && [ "$DRY" != 1 ]; then bash "$HERE/kimi28-stage-probe.sh" >> "$LOG" 2>&1 || { say "kimi credential unusable"; fin 3; }; fi
+  if [ "$RUNNER" = kimi ] && [ "$DRY" != 1 ]; then bash "$HERE/kimi28-stage-probe.sh" >> "$LOG" 2>&1 || { say "kimi unusable (see probe line above)"; fin 3; }; fi
   RV="$(node scripts/lib/runner-binary.js version --runner "$RUNNER" --json | node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(0,"utf8")).token)')"
   ARGV=(node scripts/engine-qualify.js implementer --engine "$ENGINE" --model "$MODEL" --model-version "$MV"
     --runner "$RUNNER" --runner-version "$RV" --family "$FAMILY" --harness-version dispatch-hetero:7481ead3 --effort high
@@ -75,7 +75,7 @@ if true; then
     fi
   else
     PROVIDER=moonshot; STAGING_ROOT="$HOME/.autopilot/qualify-staging/reviewer-kimi-k2.8-preview"; STAGING_HOME="$STAGING_ROOT/kimi-home"
-    if [ "$DRY" != 1 ]; then bash "$HERE/kimi28-stage-probe.sh" >> "$LOG" 2>&1 || { say "kimi credential unusable (owner must log in again)"; fin 3; }; fi
+    if [ "$DRY" != 1 ]; then bash "$HERE/kimi28-stage-probe.sh" >> "$LOG" 2>&1 || { say "kimi unusable (quota exhausted or login; see probe line above)"; fin 3; }; fi
   fi
   PENV=(--provider-env QRP_MODEL --provider-env QRP_PROVIDER --provider-env QRP_PROMPT_MODE --provider-env QRP_TRANSPORT
         --provider-env QRP_CLI_KIND --provider-env QRP_CLI_HOME --provider-env QRP_TIMEOUT_MS)

@@ -228,6 +228,7 @@ local runtime 或 agentic local runner。
 | **各專案設定** —— `.claude/` 注入模型 | [docs/configuration.md](docs/configuration.md) |
 | **安裝與開發** —— 每個平台、dev mode | [docs/installation.md](docs/installation.md) |
 | **架構與設計** —— 哲學、方法論 agent、致謝 | [docs/architecture.md](docs/architecture.md) |
+| **只審查的候選範圍審查** —— 對別人寫好的 commit 範圍做受管審查（英文文件） | [docs/review-candidate.md](docs/review-candidate.md) |
 | **Hooks** —— 37 個 runtime 強制 hook（分層見該文件） | [hooks/README.md](hooks/README.md) |
 | **Changelog** | [CHANGELOG.md](CHANGELOG.md) |
 

@@ -3536,8 +3536,21 @@ fs.rmSync(shortTmpBase, { recursive: true, force: true });
   // cost and expires so `engine-scorecard.js record` accepts a brain sitting. Same reasoning as
   // runQualification above — the pin names an old commit, and the brain path is now covered end to
   // end by scripts/engine-qualify-brain.test.js (record accepted; each missing field refused).
+  //
+  // runVaQualification left this list on 2026-10-14: every seat's row gained a per-case `usage`
+  // block and a `cost` derived from it (scripts/lib/qualification-usage.js), so the body can no
+  // longer be byte-identical to the pinned base. The executable deep-equal half above does NOT
+  // cover VA grading (it only checks that runVaQualification is a function), so coverage moved
+  // to scripts/engine-qualify-va.test.js, whose per-case outcome pins are derived from the
+  // grader's rule (evals/va-eval-grader.js gradeCase), not copied from runVaQualification output:
+  // perfect plan => every case passes, no declared_mismatch / missed_defect / robustness
+  // violation; over-strict plan => declared_mismatch on every case, none pass; empty output =>
+  // malformed_plan on every case, none pass; happy-path-only plan => at least one missed_defect
+  // and pass + missed_defect partition the cases. Mutation check: counting missed_defect as 0 in
+  // the evidence trial turns the happy-path pin red. The grader itself stays pinned by its sealed
+  // hash (a changed grader aborts the run before any verdict), and usage.n_solved is pinned to
+  // the same pass counts.
   const fns = [
-    'runVaQualification',
     'ownerRuleViolations',
   ];
   for (const name of fns) {

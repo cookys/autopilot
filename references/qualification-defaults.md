@@ -263,6 +263,23 @@ A feed is a remote document written by someone else, and is treated that way end
   explicit command. `~/.autopilot/config.json` `qualification_feed.url` only saves retyping the URL.
 
 
+## Usage telemetry (per-case time and tokens)
+
+Every `engine-qualify.js` run records, per case (per trial for the brain seat), `wall_s`,
+`input_tokens`, `output_tokens`, `reasoning_tokens`, `total_tokens` and `solved`. `solved` is the
+sealed grader's own verdict, never recomputed. A count the transport did not report is `null`
+(not measured), never 0, and nothing is estimated. With `--raw-dir` the cases land in
+`<raw-dir>/<role>-usage.jsonl`; the row carries a summary `usage` block
+(`n_cases`, `n_solved`, `total_wall_s`, `solved_per_hour`, `med_wall_s`, `usage_complete`,
+`tok_per_solved`, `usd_per_solved`). `usage_complete` is true only when every case has tokens;
+otherwise `tok_per_solved` and `usd_per_solved` are null. Cost stays `source: unknown` unless
+`--price-usd-per-mtok-in`, `--price-usd-per-mtok-out`, `--price-as-of` (YYYY-MM-DD) and
+`--price-source manual|measured` (optional `--price-ref`) are all given; then `usd_per_solved` is
+computed from the measured input/output split. Provider HTTP transports (Messages, Responses,
+chat) report tokens; CLI transports and rails with no usage output report null, and the opencode
+rail is never priced (output accounting unverified). Rows without a `usage` block (older
+administrations) are still valid. Library: `scripts/lib/qualification-usage.js`.
+
 ## What this does NOT do
 
 - It does not make a default trustworthy. It makes it **legible**.

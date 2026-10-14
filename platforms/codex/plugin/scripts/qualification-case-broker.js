@@ -12,6 +12,7 @@ const {
   canonicalJson,
   sha256,
 } = require('../src/engine/owner-kernel/canonical');
+const { validateWireUsage } = require('./lib/qualification-usage');
 
 const BWRAP_PATH = '/usr/bin/bwrap';
 const SCHEMA_VERSION = 1;
@@ -324,7 +325,13 @@ function parseProviderResponse(stdout, expected) {
   } catch {
     throw new BrokerError('provider response is not JSON', 'malformed_provider_response');
   }
-  if (!hasExactKeys(value, ['schema_version', 'provider', 'model', 'output'])
+  // `usage` is an OPTIONAL fifth key: an adapter that predates it keeps working.
+  // When present it is validated strictly and travels with the response; it is
+  // telemetry, never an input to the identity check below.
+  const hasUsage = value && typeof value === 'object' && Object.hasOwn(value, 'usage');
+  if (!hasExactKeys(value, hasUsage
+        ? ['schema_version', 'provider', 'model', 'output', 'usage']
+        : ['schema_version', 'provider', 'model', 'output'])
       || value.schema_version !== SCHEMA_VERSION
       || typeof value.output !== 'string'
       || Buffer.byteLength(value.output) > MAX_PROVIDER_OUTPUT_BYTES) {
@@ -332,6 +339,16 @@ function parseProviderResponse(stdout, expected) {
       'provider response has an invalid shape',
       'malformed_provider_response',
     );
+  }
+  if (hasUsage) {
+    try {
+      validateWireUsage(value.usage, 'provider usage');
+    } catch {
+      throw new BrokerError(
+        'provider response has an invalid usage object',
+        'malformed_provider_response',
+      );
+    }
   }
   requireToken(value.provider, 'returned provider');
   requireModelId(value.model, 'returned model');
@@ -543,13 +560,14 @@ function failedResponse(error, receipt = null) {
   });
 }
 
-function successfulResponse(output, receipt) {
+function successfulResponse(output, receipt, usage) {
   return Object.freeze({
     schema_version: SCHEMA_VERSION,
     status: 'ok',
     output,
     error: null,
     receipt,
+    ...(usage === undefined ? {} : { usage }),
   });
 }
 
@@ -668,7 +686,7 @@ async function runBrokerCase(rawOptions, rawDiff) {
             responseHash: providerResult.responseHash,
             returnedIdentityHash: providerResult.returnedIdentityHash,
           });
-          respond(successfulResponse(providerResult.value.output, receipt));
+          respond(successfulResponse(providerResult.value.output, receipt, providerResult.value.usage));
         }).catch((error) => {
           const receipt = receiptFor(options, policyHash, requestHash, {
             status: 'failed',

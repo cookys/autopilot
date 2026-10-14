@@ -756,7 +756,17 @@ async function callResponses(baseUrl, token, model, maxTokens, systemPrompt, use
       }
       throw new Error(`endpoint response carried no output_text part (${observed})`);
     }
-    return { text, resolvedModel: typeof payload.model === 'string' ? payload.model : model };
+    const u = payload.usage || {};
+    return {
+      text,
+      resolvedModel: typeof payload.model === 'string' ? payload.model : model,
+      usage: {
+        input_tokens: u.input_tokens,
+        output_tokens: u.output_tokens,
+        reasoning_tokens: (u.output_tokens_details || {}).reasoning_tokens,
+        total_tokens: u.total_tokens,
+      },
+    };
   } finally {
     clearTimeout(timer);
   }
@@ -821,7 +831,14 @@ async function callModel(baseUrl, token, model, maxTokens, systemPrompt, userMes
       }
       throw new Error(`endpoint response carried no text content (${observed})`);
     }
-    return { text, resolvedModel: typeof payload.model === 'string' ? payload.model : model };
+    // Messages reports thinking inside output_tokens with no separate field:
+    // reasoning_tokens stays null (not separable), never inferred.
+    const u = payload.usage || {};
+    return {
+      text,
+      resolvedModel: typeof payload.model === 'string' ? payload.model : model,
+      usage: { input_tokens: u.input_tokens, output_tokens: u.output_tokens },
+    };
   } finally {
     clearTimeout(timer);
   }
@@ -838,6 +855,7 @@ function assembleChatStream(raw) {
   let finish = null;
   let resolvedModel = null;
   let completionTokens = null;
+  let usage = null;
   for (const line of String(raw).split('\n')) {
     const trimmed = line.trim();
     if (!trimmed.startsWith('data:')) continue;
@@ -853,6 +871,16 @@ function assembleChatStream(raw) {
     if (chunk.usage && chunk.usage.completion_tokens != null) {
       completionTokens = chunk.usage.completion_tokens;
     }
+    // Present only when the server emits a final usage chunk (stream_options is
+    // not requested); otherwise usage stays null, never estimated.
+    if (chunk.usage && typeof chunk.usage === 'object') {
+      usage = {
+        input_tokens: chunk.usage.prompt_tokens,
+        output_tokens: chunk.usage.completion_tokens,
+        reasoning_tokens: (chunk.usage.completion_tokens_details || {}).reasoning_tokens,
+        total_tokens: chunk.usage.total_tokens,
+      };
+    }
     const choice = Array.isArray(chunk.choices) ? chunk.choices[0] : null;
     if (!choice) continue;
     if (choice.finish_reason) finish = choice.finish_reason;
@@ -860,7 +888,7 @@ function assembleChatStream(raw) {
     if (typeof delta.content === 'string') content += delta.content;
     if (typeof delta.reasoning_content === 'string' && delta.reasoning_content) reasoning = true;
   }
-  return { content, reasoning, finish, resolvedModel, completionTokens };
+  return { content, reasoning, finish, resolvedModel, completionTokens, usage };
 }
 
 function chatContentOrThrow(text, observed, finish) {
@@ -926,6 +954,7 @@ async function callChatCompletions(baseUrl, token, model, maxTokens, systemPromp
       return {
         text: chatContentOrThrow(assembled.content, observed, assembled.finish),
         resolvedModel: assembled.resolvedModel || model,
+        usage: assembled.usage,
       };
     }
     const payload = JSON.parse(raw);
@@ -944,6 +973,12 @@ async function callChatCompletions(baseUrl, token, model, maxTokens, systemPromp
     return {
       text: chatContentOrThrow(text, observed, choice && choice.finish_reason),
       resolvedModel: typeof payload.model === 'string' ? payload.model : model,
+      usage: {
+        input_tokens: usage.prompt_tokens ?? usage.input_tokens,
+        output_tokens: usage.completion_tokens ?? usage.output_tokens,
+        reasoning_tokens: (usage.completion_tokens_details || {}).reasoning_tokens,
+        total_tokens: usage.total_tokens,
+      },
     };
   } finally {
     clearTimeout(timer);
@@ -1006,6 +1041,7 @@ function grokEffortClamp(effort, model, bin) {
 
 // Tool-less agent + post-run audit: single owner shared with dispatch-review.sh.
 const agyContainment = require('./lib/agy-containment');
+const qualificationUsage = require('./lib/qualification-usage');
 
 function callCli(kind, bin, model, effort, timeoutMs, prompt) {
   const { spawn } = require('child_process');
@@ -1737,6 +1773,9 @@ async function main() {
     provider,
     model,
     output: normalized,
+    // Optional wire key. HTTP transports report what the endpoint returned; the
+    // CLI transports run in plain-text mode and report all-null (not measured).
+    usage: qualificationUsage.normalizeUsage(result.usage),
   }));
 }
 

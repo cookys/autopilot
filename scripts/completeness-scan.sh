@@ -31,7 +31,11 @@ while [[ $# -gt 0 ]]; do
                 # One argument holding a whitespace-joined list ("f1 f2") is not a
                 # file; word-split it instead of silently scanning 0 files (clean:true).
                 if [[ ! -f "$1" && "$1" =~ [[:space:]] ]]; then
-                  read -r -a _split <<< "$1"; FILES+=("${_split[@]}")
+                  read -r -d '' -a _split <<< "$1" || true
+                  for _p in "${_split[@]}"; do
+                    [[ -f "$_p" ]] || echo "completeness-scan: argument '$1' was split on whitespace; piece '$_p' is not a regular file" >&2
+                  done
+                  FILES+=("${_split[@]}")
                 else
                   FILES+=("$1")
                 fi
@@ -87,8 +91,8 @@ is_scannable() {
 }
 
 # Pattern definitions (POSIX ERE)
-# XXX marker, but not inside a longer X run: a mktemp template (foo.XXXXXX) is not a marker.
-PAT_MARKER='(TODO|FIXME|HACK|TEMP)\b|(^|[^X])XXX\b'
+# Three to five X in a row is a marker; six or more is a mktemp template, not a marker.
+PAT_MARKER='(TODO|FIXME|HACK|TEMP)\b|(^|[^X])X{3,5}\b'
 PAT_EMPTY_IMPL='^[[:space:]]*return[[:space:]]+(\{\}|0)[[:space:]]*;[[:space:]]*$'
 PAT_DISABLED_TEST='(\bDISABLED_[A-Za-z0-9_]+|GTEST_SKIP\(\)|^[[:space:]]*//[[:space:]]*TEST[[:space:]]*\()'
 PAT_PLACEHOLDER_ASSERT='EXPECT_TRUE\([[:space:]]*true[[:space:]]*\)|assert\([[:space:]]*True[[:space:]]*\)'

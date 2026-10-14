@@ -40,4 +40,24 @@ assert_eq "$(count "$out")" "2" "--files \"a b\" finds 2 markers"
 err="$(bash "$SCAN" --files nope.sh a.sh 2>&1 >/dev/null)"
 assert_contains "$err" "nope.sh" "missing file named on stderr"
 
+# (2d) newline-separated single argument: every line is a file
+out="$(bash "$SCAN" --files "$(printf 'a.sh\nb.sh')" 2>/dev/null)"
+assert_eq "$(scanned "$out")" "2" "--files newline-joined arg scans 2 files"
+assert_eq "$(count "$out")" "2" "--files newline-joined arg finds 2 markers"
+# (2e) the split warning names the original argument first
+err="$(bash "$SCAN" --files "a.sh nope.sh" 2>&1 >/dev/null)"
+assert_contains "$err" "argument 'a.sh nope.sh' was split" "split warning quotes the original argument"
+assert_contains "$err" "piece 'nope.sh'" "split warning names the missing piece"
+
+# (3) marker length: 4 and 5 X are markers, 6+ is a mktemp template
+printf 'a=1 # XXXX\n' > x4.sh
+printf 'a=1 # XXXXX\n' > x5.sh
+printf 'a=mktemp /tmp/q.XXXXXX\n' > x6.sh
+for n in 4 5; do
+  out="$(bash "$SCAN" --files "x$n.sh" 2>/dev/null)"
+  assert_eq "$(count "$out")" "1" "X x$n still a marker"
+done
+out="$(bash "$SCAN" --files x6.sh 2>/dev/null)"
+assert_eq "$(count "$out")" "0" "X x6 is a template, not a marker"
+
 finalize_test

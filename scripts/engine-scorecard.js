@@ -1575,7 +1575,7 @@ function currentRowsForRole(role, nowMs, options = {}) {
     // Strike-decay projection (frozen contract §2.7.5): pair-scoped to this
     // row's own engine+runner+role seat — the only admission authority.
     const seatProjection = computeSeatProjection(
-      row.engine, row.runner, row.role, nowMs, seatEffortOf(row),
+      row.engine, row.runner, row.role, nowMs, seatEffortOf(row), CAPABILITY_DIR, seatKindOf(row),
     ).projection;
 
     output.push({
@@ -1771,12 +1771,23 @@ function seatEffortOf(row) {
   return row && row.effort !== undefined ? String(row.effort) : undefined;
 }
 
+// BL-0165: brain (owner_brain_seat) and foreman exams are both role `owner`; only the row's
+// methodology_kind / forced `brain-seat` scope tells them apart. A seat's standing is per KIND:
+// a qualified brain row must never make the foreman seat look qualified (nor the reverse).
+function seatKindOf(row) {
+  if (row && row.methodology_kind === 'owner_brain_seat') return 'brain';
+  const classes = row && row.evidence && row.evidence.scope && row.evidence.scope.task_classes;
+  if (Array.isArray(classes) && classes.includes('brain-seat')) return 'brain';
+  return 'default';
+}
+
 function normRunnerToken(r) {
   return r === 'codex-cli' ? 'codex' : r;
 }
 
 function findSeatBaseline(
   engine, runner, role, nowMs, allRows, supersededEventIds = new Set(), effort = undefined,
+  seatKind = 'default',
 ) {
   let best = null;
   for (const row of allRows) {
@@ -1790,6 +1801,7 @@ function findSeatBaseline(
     // grok-4.6@high (23/24, one integrity violation, failed) are two seats, and latest-wins across
     // them let the failed one inherit the passing one's standing.
     if (seatEffortOf(row) !== effort) continue;
+    if (seatKindOf(row) !== seatKind) continue;
     let evidence = row.evidence;
     if (evidence !== undefined) {
       try {
@@ -1992,11 +2004,13 @@ function strikeEnforcementMode() {
 // Optional `storeDir` selects the strikes.jsonl directory (defaults to
 // CAPABILITY_DIR). `active_strike_rows` is the post-fold survivor set — the
 // sole pending_revocation producer (plan 2026-09-11 KR7 / P3).
-function computeSeatProjection(engine, runner, role, nowMs, effort = undefined, storeDir = CAPABILITY_DIR) {
+function computeSeatProjection(
+  engine, runner, role, nowMs, effort = undefined, storeDir = CAPABILITY_DIR, seatKind = 'default',
+) {
   const seatHashValue = seatIdentityHash(engine, runner, role, effort);
   const partition = readStorePartition(true);
   const baseline = findSeatBaseline(
-    engine, runner, role, nowMs, partition.ordinaryRows, partition.supersededEventIds, effort,
+    engine, runner, role, nowMs, partition.ordinaryRows, partition.supersededEventIds, effort, seatKind,
   );
 
   const projection = {
@@ -2391,6 +2405,7 @@ function computeSeatProjectionStrict(engine, runner, role, nowMs, scope, identit
     const storedRole = normalizeCapabilityRole(row.role, { allowLegacy: true });
     if (storedRole !== role) continue;
     if (seatEffortOf(row) !== effort) continue;   // same effort partitioning as the read path
+    if (seatKindOf(row) !== 'default') continue;  // BL-0165: brain rows never baseline a foreman seat
 
     // validateRecordRow is the forgery/anchor gate: a hand-authored,
     // schema-plausible row that fails field validation, evidence binding, or

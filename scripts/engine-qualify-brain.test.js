@@ -427,6 +427,22 @@ function main() {
     });
     check(current.status === 0 && /brain-seat/u.test(current.stdout),
       `current --role owner output carries the brain-seat scope (${current.stdout.slice(0, 300)}${current.stderr})`);
+    // BL-0165 strict path: the brain row's OWN scope is passed as the applicability scope, so the
+    // scope check cannot be what refuses it — only the seat-kind partition can. A qualified brain
+    // row must not baseline the foreman (default-kind) owner seat under --require-evidence.
+    const strictScope = path.join(tempRoot, 'strict-brain-scope.json');
+    fs.writeFileSync(strictScope, JSON.stringify(record.scope));
+    const strictSeat = spawnSync(process.execPath, [
+      path.join(__dirname, 'engine-scorecard.js'), 'seat-status',
+      '--engine', brainRow.engine, '--runner', brainRow.runner, '--role', 'owner',
+      '--effort', String(brainRow.effort), '--now', brainRow.date,
+      '--require-evidence', '--scope-file', strictScope,
+    ], {
+      encoding: 'utf8',
+      env: { ...process.env, ENGINE_SCORECARD_DIR: accepted.scDir, ENGINE_CAPABILITY_DIR: capDir },
+    });
+    check(strictSeat.status === 0 && /"admission_status":"no_record"/u.test(strictSeat.stdout),
+      `strict seat-status for the foreman owner seat is no_record when only a brain row exists (${strictSeat.stdout.slice(0, 200)}${strictSeat.stderr.slice(0, 200)})`);
   }
 
   // --- strike revocation fold ------------------------------------------------------
@@ -586,7 +602,7 @@ function main() {
     'the second trial never runs once transport is known dead');
 
   fs.rmSync(tempRoot, { recursive: true, force: true });
-  if (assertions !== 104) throw new Error(`engine-qualify-brain: expected exactly 104 assertions (count pin moved here from hooks/tests/engine-qualify-brain.test.sh so the L1 run enforces it), got ${assertions}`);
+  if (assertions !== 105) throw new Error(`engine-qualify-brain: expected exactly 105 assertions (count pin moved here from hooks/tests/engine-qualify-brain.test.sh so the L1 run enforces it), got ${assertions}`);
   process.stdout.write(`brain qualifier: ${assertions} assertions passed\n`);
 }
 

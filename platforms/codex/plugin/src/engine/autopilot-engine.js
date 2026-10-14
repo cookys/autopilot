@@ -7618,11 +7618,7 @@ class AutopilotEngine {
             reviewedHead,
             findings: parkedFindings,
             campaignId: campaignControl.campaign_id,
-            existingBranches: (() => {
-              const listed = spawnSync('git', ['-C', loopCwd, 'for-each-ref', '--format=%(refname:short)', 'refs/heads/repair/'],
-                { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-              return listed.status === 0 ? String(listed.stdout || '').split('\n').filter(Boolean) : [];
-            })(),
+            existingBranches: reviewCandidateRepairSeed.listRepairBranches(loopCwd),
           });
         } catch (error) {
           return {

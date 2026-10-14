@@ -113,6 +113,16 @@ eq "repair/rp_b2-repair-r2" "$(sf rp_b2 0 handoff.branch)" "second repair of the
 run_sc rp_b3 ",$FIX"',"steps":[{"continuation":"repair","preBranches":["repair/rp_b3-repair","repair/rp_b3-repair-r2"]}]' ok
 eq "repair/rp_b3-repair-r3" "$(sf rp_b3 0 handoff.branch)" "third repair gets -r3"
 eq "0" "$(sf rp_b3 0 handoff.seal_status)" "a suffixed seeded contract still seals"
+run_sc rp_b4 ",$FIX"',"steps":[{"continuation":"repair","preBranches":["repair/rp_b4-repair"],"preTags":["repair/rp_b4-repair"]}]' ok
+eq "repair/rp_b4-repair-r2" "$(sf rp_b4 0 handoff.branch)" "a same-named tag does not hide the existing repair branch (still -r2)"
+list_check() { # <root> <cwd> -> prints the error code, or the branch list when the listing succeeded
+  ROOT_UNDER_TEST="$1" LIST_CWD="$2" node -e "
+    const m = require(process.env.ROOT_UNDER_TEST + '/src/engine/review-candidate-repair-seed.js');
+    try { process.stdout.write(JSON.stringify(m.listRepairBranches(process.env.LIST_CWD))); }
+    catch (e) { process.stdout.write(e.code || 'THROWN'); }"
+}
+NOT_A_REPO="$TEST_TMP/not-a-repo"; mkdir -p "$NOT_A_REPO"
+eq "review_candidate_repair_seed_invalid" "$(list_check "$REPO_ROOT" "$NOT_A_REPO")" "a failing branch listing fails closed with a named code (no silent empty list)"
 
 # ---- BL-0155: the prompt states what the contract allows (not "one round") -----------------------------------------
 eq "false" "$(jf rp 'j.steps[0].handoff.task_prompt.includes("one repair round")')" "seed: the prompt does not claim one round while the contract allows more"

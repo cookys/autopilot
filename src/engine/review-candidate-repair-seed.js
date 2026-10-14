@@ -7,6 +7,7 @@
 // the writer that later runs is an ordinary implement-review writer on top of the reviewed head.
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 
 const SCHEMA_PATH = path.resolve(__dirname, '..', '..', 'schemas', 'implementation-campaign-contract.schema.json');
 // Fields the seed sets itself; everything else (paths, verify, caps, wall, profile ...) comes from
@@ -103,6 +104,21 @@ function renderTask({ findings, reviewedHead, base, branch, campaignId }) {
   return lines.join('\n');
 }
 
+// Local branches under repair/, as bare names. `lstrip=2` drops `refs/heads/` even when a tag of the same
+// name exists (`refname:short` would then print `heads/<name>` and hide the branch). Fails closed: a listing
+// that cannot be made must not look like "no earlier repair branch".
+function listRepairBranches(cwd) {
+  const listed = spawnSync('git', ['-C', cwd, 'for-each-ref', '--format=%(refname:lstrip=2)', 'refs/heads/repair/'],
+    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  if (listed.error || listed.status !== 0) {
+    throw new RepairSeedError(
+      'review_candidate_repair_seed_invalid',
+      `could not list existing repair branches (git for-each-ref failed: ${String((listed.error && listed.error.message) || listed.stderr || listed.status).trim().slice(0, 200)})`,
+    );
+  }
+  return String(listed.stdout || '').split('\n').filter(Boolean);
+}
+
 // Build the seeded contract and task prompt. Pure: no I/O besides reading the schema ceiling.
 function buildRepairSeed({ adoptionContract, reviewedHead, findings, campaignId, existingBranches = [] }) {
   if (!adoptionContract || !adoptionContract.adoption) {
@@ -154,4 +170,4 @@ function writeRepairSeed({ commonDir, campaignId, seed }) {
   }
 }
 
-module.exports = { RepairSeedError, buildRepairSeed, validateRepairSeed, writeRepairSeed };
+module.exports = { RepairSeedError, buildRepairSeed, listRepairBranches, validateRepairSeed, writeRepairSeed };

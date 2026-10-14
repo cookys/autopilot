@@ -473,6 +473,8 @@ for (const stepSpec of (ctx.steps || [])) {
   }
   // BL-0155: branches a previous repair of the same ticket left behind (created at the base commit).
   for (const name of (stepSpec.preBranches || [])) git(sbx, 'branch', name, base);
+  // A tag spelled like a branch makes `%(refname:short)` print `heads/<name>`.
+  for (const name of (stepSpec.preTags || [])) git(sbx, 'tag', name, base);
   intakeEstimateSeconds = Number.isFinite(stepSpec.mustFixAuthority) ? stepSpec.mustFixAuthority : 0;
   const stepEngine = new AutopilotEngine(options);
   installImplControl(stepEngine);

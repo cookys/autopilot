@@ -472,6 +472,17 @@ is_suite_timeout_ec() {
 TOTAL=0
 FAILED=0
 declare -a FAILED_TESTS=()
+# A suite that ran but asserted nothing prints a greppable `SKIP [suite] ...` line (exit 0). The
+# per-file output is long, so without a summary entry that line is invisible next to the
+# "ALL TESTS PASSED" banner. collect_skips <rel> <captured-output-file> records each one.
+declare -a SKIPPED_TESTS=()
+collect_skips() {
+  local rel="$1" out="$2" line
+  [ -f "$out" ] || return 0
+  while IFS= read -r line; do
+    SKIPPED_TESTS+=("$rel: $line")
+  done < <(grep -a '^SKIP \[' "$out" | sort -u)
+}
 
 # ── Real-store pollution guard ───────────────────────────────────────────────
 # Incident: hooks/tests/engine-qualify.test.sh appended 100 fixture rows
@@ -522,8 +533,12 @@ run_one() {
   fi
   echo ""
   echo "──────── $rel ────────"
-  timeout --kill-after=10 "${AUTOPILOT_TEST_SUITE_TIMEOUT_SECS}s" bash "$file"
-  ec=$?
+  local skip_cap
+  skip_cap="$(mktemp "${TMPDIR:-/tmp}/hooks-run-skipcap.XXXXXX")"
+  timeout --kill-after=10 "${AUTOPILOT_TEST_SUITE_TIMEOUT_SECS}s" bash "$file" | tee "$skip_cap"
+  ec=${PIPESTATUS[0]}
+  collect_skips "$rel" "$skip_cap"
+  rm -f "$skip_cap"
   if [ "$ec" -eq 0 ]; then
     : # PASS line printed by finalize_test
   elif is_suite_timeout_ec "$ec"; then
@@ -750,6 +765,7 @@ else
       echo "──────── $rel ────────"
       if [ -f "$out" ]; then
         cat "$out"
+        collect_skips "$rel" "$out"
       fi
       if [ "$ec" -eq 0 ]; then
         : # PASS
@@ -836,8 +852,11 @@ else
     rel="${file#$REPO_ROOT/}"
     echo ""
     echo "──────── $rel (serial tail) ────────"
-    AUTOPILOT_TEST_TIMING_FACTOR=1 timeout --kill-after=10 "${AUTOPILOT_TEST_SUITE_TIMEOUT_SECS}s" bash "$file"
-    serial_tail_ec=$?
+    tail_cap="$(mktemp "${TMPDIR:-/tmp}/hooks-run-skipcap.XXXXXX")"
+    AUTOPILOT_TEST_TIMING_FACTOR=1 timeout --kill-after=10 "${AUTOPILOT_TEST_SUITE_TIMEOUT_SECS}s" bash "$file" | tee "$tail_cap"
+    serial_tail_ec=${PIPESTATUS[0]}
+    collect_skips "$rel" "$tail_cap"
+    rm -f "$tail_cap"
     if [ "$serial_tail_ec" -eq 0 ]; then
       :
     elif is_suite_timeout_ec "$serial_tail_ec"; then
@@ -867,6 +886,10 @@ fi
 # ── Summary ──
 echo ""
 echo "════════ Summary ════════"
+if [ "${#SKIPPED_TESTS[@]}" -gt 0 ]; then
+  echo "⚠️  ${#SKIPPED_TESTS[@]} suite(s) reported a SKIP (ran but asserted nothing; green here is not coverage):"
+  for t in "${SKIPPED_TESTS[@]}"; do echo "   - $t"; done
+fi
 if [ "$FAILED" -eq 0 ]; then
   echo "✅ ALL TESTS PASSED ($TOTAL test files)"
   exit 0

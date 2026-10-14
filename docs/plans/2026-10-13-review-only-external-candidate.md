@@ -1,6 +1,6 @@
 # Plan — review-only entry: a host-admitted final panel over an externally produced candidate range
 
-> Status: **ruled, size L — Q1′ ruled 2026-10-14 (caller chooses at disposition, §10); P1 shipped 2026-10-14 (merge 8a650a95); P2 and P3 open** · Owner: depth-0 · Source: BACKLOG BL-0090 (peer-reported, cuda/chatgpt-tunnel, fleet 2026-10-03; owner approved 2026-10-13) · Pointer: `docs/backlog/review-only-adoption-of-external-candidate.md` · Version: stays on the 3.0.0 line (no bump) · Code read at `459dd869`.
+> Status: **ruled, size L — Q1′ ruled 2026-10-14 (caller chooses at disposition, §10); P1 (merge 8a650a95), P3 (merge 0d6fcc2a) and P2 (merge of lane/review-candidate-p2b) shipped 2026-10-14; P4 and P5 open** · Owner: depth-0 · Source: BACKLOG BL-0090 (peer-reported, cuda/chatgpt-tunnel, fleet 2026-10-03; owner approved 2026-10-13) · Pointer: `docs/backlog/review-only-adoption-of-external-candidate.md` · Version: stays on the 3.0.0 line (no bump) · Code read at `459dd869`.
 
 ## 1. Why
 

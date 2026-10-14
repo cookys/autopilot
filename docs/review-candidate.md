@@ -383,8 +383,8 @@ phases `VERTICAL_VERIFICATION`, `REVIEWING` or `ADJUDICATING` while a run is act
   `provider_live_probe.minimal_no_effect.<outcome>`, and a `ttl_seconds`. It is written so the readiness
   receipt can bind a fresh, recorded observation of each seat (and so later `status` reads see it). The
   probed seats are the `qc_panel` seats **and the roster's `reviewer_*` seat** (for the template that is
-  `gpt-5.5`), so expect one row per probed seat per probe: four rows for a three-seat panel. A probe that is
-  still fresh may be reused, so a quick second run can append fewer rows. `pins.jsonl` is only read, never
+  `gpt-5.5`), so expect one row per probed seat per probe: four rows for a three-seat panel. Every run probes
+  again: two runs seven minutes apart both appended a row for the same seat. `pins.jsonl` is only read, never
   changed. The same directory is also read for the scorecard, and `~/.autopilot/endpoints.env` is read for
   seats that name an endpoint. The campaign's own state is written next to the contract
   (`qc_panel_snapshot.json`) and under `<git-common-dir>/autopilot/` (the campaign ledger and any repair

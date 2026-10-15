@@ -738,6 +738,8 @@ The dispatch tree (the former P6 and §7.1: nested dispatch lineage across subag
 
 **Owner ruling 2026-10-16, Q1 revised** (decision `d-5723c838`, answered 「合併＋白字」 after comparing both renders): the active tab name is no longer orange. It is bold default text, or bold yellow when that tab needs the owner; orange (`here`) stays only on the `━` run under it. This replaces the 2026-10-13 Q1 mark wherever it says "bold `claude` text" (§3.6, §4, Q1 above, §9); §12.5 has the rule.
 
+**Owner ruling 2026-10-16, 待決 tab** (answered in conversation): 「這個 IA 跟排版你調過又壞了? 完整盤點跟整理一下?」. Resolved in §12.6: the 待決 card gets a section header, a bold wrapping question and the pane's key/value rows, and the blank lines that were never drawn are drawn.
+
 ## 9. Unverified (each is checked in the named phase)
 
 Verified as of 2026-10-14 (struck items below):
@@ -839,7 +841,7 @@ The owner's attention is drawn in yellow text once per surface. In the pane that
 
 ### 12.3 Bold is a whitelist
 
-Bold is allowed on exactly these: a section title, the verdict line, the active tab name, the name of a tab that needs the owner, the picked option on a decision card, and the card's send button (`BOLD_USES` in `ui.ts`). Nothing else is bold, including a meter's percent, the text of a `need_you` row, `QC▲`, `⚑N`, the stage label and the current-stage node. This replaces the §3.6 bold bullet and the exemptions that grew around it in invariant I4.
+Bold is allowed on exactly these: a section title, the verdict line, the active tab name, the name of a tab that needs the owner, a decision card's question, the picked option on a decision card, and the card's send button (`BOLD_USES` in `ui.ts`). Nothing else is bold, including a meter's percent, the text of a `need_you` row, `QC▲`, `⚑N`, the stage label and the current-stage node. This replaces the §3.6 bold bullet and the exemptions that grew around it in invariant I4.
 
 ### 12.4 Enforcement
 
@@ -852,3 +854,35 @@ Bold is allowed on exactly these: a section title, the verdict line, the active 
 The tab strip draws a tab that needs the owner as bold `attention` text, replacing the strip's count badges (§3.2 b), and the active tab as a bold name with an orange (`here`) `━` run under it. The active name is bold default text, or bold `attention` when that tab needs the owner: the need stays visible on the tab you are looking at, and orange appears in the strip only on the `━` run (owner 2026-10-16, decision `d-5723c838`, 「合併＋白字」; the first build of this revision kept the name orange, as the 2026-10-13 Q1 had it, and was compared side by side before the ruling). A strip that wraps draws no `━` and keeps the bold name alone; there an active tab that needs the owner looks like any other needing tab, and the top verdict line still says it.
 
 The active label carries the `here` tag without the `here` colour: I4 reads the tag to tell the active name from a stray bold tab (`boldUseOf` in `ui.ts`; a bold tab name with neither the tag nor the attention colour, or one painted `claude`, is a violation, with a negative control in `ui.test.ts`). Tests find the active tab by the column of the `━` run, not by colour (`activeKeyOf` in `live.test.ts`).
+
+### 12.6 The 待決 card
+
+The owner reviewed the 待決 tab (76 columns, three questions) and found its IA and layout confused. The inventory found ten defects, and this section is the fix. A card used to be a `└` copy of the question under a cut headline, a run of unlabelled text, a `★` that appeared twice, a `補充 選填` label glued to its placeholder, two facts squeezed on one `卡住：… · 來源：…` line, the stall placed last, and no section header while every other tab has one.
+
+**Layout.** The tab is one section, `▾ 待你回答  3 ───` (`en`: `Waiting for you`), built with `ui.header` like every other tab: open by default, id `sec:decide.cards`, the question count as a plain number on the right. Under it, per question:
+
+```
+▲ 1. P5 殘留分頁：請在你的機器上看一眼截圖，畫面正常就算活面板計畫驗收完成
+  背景      P5 已審查通過並合併（bcaef0cc）。審查員指出計畫裡「殘留分頁截
+            圖」只有資料產生端的證據，沒有你機器上的畫面，所以這一項改回待
+            確認。
+  卡住      活面板計畫無法標成完成
+  選項      [ ] ★ OK  [ ] 有問題
+  建議      OK：只差你肉眼確認，程式與測試都已過
+  補充      （輸入框，提示字「選填，可留空」）
+
+  [ 送出（已選 0/3） ]  答案會貼進這個對話送出
+```
+
+- **Question line** (`cardTitle`, kind `item`): `▲ n. question`, the whole text bold default text, the `▲` stays `attention`. A long question wraps and its continuation lines start at column 2; the question is never repeated under a `└`. A sent question keeps the `○ … · 已送出，等處理` form and is not bold.
+- **Rows** (`cardRow`, `choiceRows`, `fieldRow`) use the pane's key/value grammar: the key (dim) at column 2, the value at column 12, continuation lines hung at column 12 (`GRID` is unchanged). Order: 背景 (value dim) → 卡住 (default text) → 選項 → 建議 → 補充. A row with nothing to say is not drawn. The option row keeps the Buttons, `[x]` bold when picked, `[ ]` otherwise; the picked option's description stays under it as dim text at column 12.
+- **`★` has one meaning:** it marks the recommended option and is drawn on the option only. 建議 reads `<recommended option>：<reason>` in default text with no `★`; without a reason it is the option alone; a recommendation that matches no option is written as given.
+- **補充** is the key, with the Input at column 12 and the placeholder `選填，可留空` (`optional`). A question with no options uses the key 回覆 and the old placeholder. A surface without Input keeps the "answer in the conversation" line.
+- **來源** is not drawn: it is a code name for the assistant, and it stays in the decision file.
+- **Send row**: `[ 送出（已選 n/m） ]` followed by a dim note, `答案會貼進這個對話送出` (`answers are pasted into this conversation`); a note that does not fit beside the button wraps below it at column 2. The button's behaviour is unchanged.
+
+**Bold** gains one use, `question title` (`BOLD_USES`; `boldUseOf` accepts a segment of role `title` on an `item` line). I4 still reads only `boldUseOf`; a bold on a background value, or a title segment that lost its role, is flagged (negative controls in `decide.test.ts`).
+
+**Blank lines are now drawn.** `blank()` had always been emitted (the header's trailing blank, and the one after each card), but `pane.tsx` drew it as an empty `<Text>`, which takes no row, so no blank was ever on screen, including the line §4 requires between the header and the first section. `pane.tsx` now draws a blank as a one-cell Text, on every tab, and `treeRowCount` counts every line as a row. The rule of §4 is unchanged except for one exception: a 待決 card is closed by one blank, so cards are told apart by a drawn empty row; the other tabs have no blank in the body.
+
+**Wrapping.** `wrapPlain` no longer starts a continuation line with a closing mark (`）」』、。，；：！？`): the character before it goes down with it.

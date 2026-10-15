@@ -1,0 +1,334 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "dispatch-tree-3d-2026-10-15",
+  "logical_plan_id": "dispatch-tree-3d-2026-10-15",
+  "session_id": "a14bb1ea-4b8b-421d-9e3d-a7fa6e844a18",
+  "session_key": "ee21708a510175523f261969ff6fc5351a5da53e6a05466135e340f3f5fc9a79",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "5f13943732504f9daeba0d3ae06e0a165c8904189da807afab64d1748d4d078b",
+  "manifest_sha256": "c64d5ff2d556324e40466e9f95c8c99a8e27bebef406c625700ed12c619761a3",
+  "plan_sha256": "5dea8f22f38f37d0673c97019701aebba6a769a5b37a85737357616b47c01953",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-6.1-sol",
+          "operation": "plan-review",
+          "request_digest": "c82e01f75e51192a577a70df381d454a4a966e219ba124345dafbdc466657c94"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "d65dd27b98124eb7acf8e0cd98468cfaedf1b15554e6a7c2dac0413f08dfcbd6",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-dPOGoo/stdout",
+          "digest": "d65dd27b98124eb7acf8e0cd98468cfaedf1b15554e6a7c2dac0413f08dfcbd6"
+        },
+        "receipt_digest": "a97b6b7db52b8131b5add3776bd95b9b65e0039246a2a27379f076be598cf074"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_deep",
+      "target_id": "minimax_deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "7fcd5557e5cc5b5f08f99086d277f43989e194161d4c181071985aeb5a484241"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "5e4e88b1d3670c0ac885f7e64f188a8f8c358f377f34bf6bd95d999fc62bf895",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-FPrU6O",
+          "digest": "5e4e88b1d3670c0ac885f7e64f188a8f8c358f377f34bf6bd95d999fc62bf895"
+        },
+        "receipt_digest": "98e6ba24bf3d4561bdb35290912091876e5847e8e02f3215112c7c511919a97e"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "glm_consult",
+      "target_id": "glm_consult",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "GLM-5.2",
+          "operation": "plan-review",
+          "request_digest": "aa55fcdb8fc79eeecfdb6f960c1a53fb049b232ad7aaae22acdfd71f7a03de2b"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "a6e6a96680ccad4856b8a1a253737c303d996dab547ba9234c1dfbcd71fb0c08",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-gzfLqr",
+          "digest": "a6e6a96680ccad4856b8a1a253737c303d996dab547ba9234c1dfbcd71fb0c08"
+        },
+        "receipt_digest": "d13b0479a7fcfaa2d57a213b05a640e84b624bf6985c3a50a5ef30bcb1929307"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "family": "openai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "minimax_deep",
+      "target_id": "minimax_deep",
+      "family": "minimax",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "glm_consult",
+      "target_id": "glm_consult",
+      "family": "zhipu",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Step 3d launch matrix and probe-engine-capability.sh non-Claude launches",
+      "claim": "The revision leaves non-Claude capability probes passing an inherited child id to runners whose ids the probe did not choose.",
+      "evidence": "The launch matrix and acceptance case (f) cover only cc-shim and claude-native probes. The codex, agy, grok, qoderclicn, cursor, kimi and opencode probe branches launch directly without child_session_env_setup or CHILD_SESSION_UNSET. Adding C removal to that helper therefore cannot scrub these branches when a probe runs inside a named Claude child.",
+      "evidence_reference": "Plan §4 step 3d launch matrix, mechanism and acceptance (f); scripts/probe-engine-capability.sh:388-390,413,421-425,432-438,448-449,474,484-489.",
+      "repair": "Extend C removal to every probe runner launch. Add stub acceptance cases with inherited C for the non-Claude probe branches and a targeted mutation control proving their scrub is exercised.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "8f7f053b5ff94f858c63f723f10657c526ff4ca1a6645ec3019b39e4b36c34da"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "§7 row l live acceptance procedure",
+      "claim": "The stated author-child procedure cannot start tmux through a model tool call under the existing author launch flags.",
+      "evidence": "Row l requires an author run whose real Claude child starts tmux. Both author Claude branches explicitly pass --tools with an empty value, disabling the Bash tool needed for that action. The row specifies no hook or test wrapper that performs the launch independently.",
+      "evidence_reference": "Plan §7 row l; scripts/dispatch-author.sh:1269-1271,1289-1290.",
+      "repair": "Specify a test-only SessionStart hook that launches tmux with the child's environment, or use the hetero cc-shim branch that permits tools. Preserve the author branches' production tool restrictions.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0c93d007d11c2445be8b7d42dc30d7d9dc92f1c95e5c89f99c2454ac57c7e251"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Step 3d negative-control expectations",
+      "claim": "Removing C from child_session_env_setup cannot make every scrub case red as promised.",
+      "evidence": "Acceptance (f) includes the foreman hand, but the proposed foreman protection independently excludes C from FOREMAN_ENV. That allowlist remains effective when the helper's -u entry is removed, and the foreman launches through env -i. Its scrub assertion should remain green under that mutation.",
+      "evidence_reference": "Plan §4 step 3d foreman launch row, acceptance (f) and negative controls; scripts/dispatch-foreman.sh:346-358,367-371,409.",
+      "repair": "Limit the helper mutation's expected failures to helper-dependent launches. Keep the separate foreman-filter mutation and require its foreman assertion to turn red.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "acdcca81685dbe4e3e484fddb505c0bead20510d14f2b68e2628d210192683a3"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "§3d writer-rule and rail-rule citations; §1 D10 and D2 evidence rows",
+      "claim": "The revision cites file:line references that no longer match the develop code for the two SessionStart paths the writer rule depends on and for the pinned-set copy the helper depends on.",
+      "evidence": "The provided hooks/runs-watch-autostart.js shows the SessionStart cache-hit ensurePlainMarker call inside the watcherAliveFast cache branch (roughly L150-L165) and the full-path ensurePlainMarker call inside the event === 'SessionStart' && sid block (roughly L170-L185); the cited :275 and :293 are well past both. The provided scripts/lib/repo-identity.sh shows child_session_pin and the _CHILD_SESSION_PIN_UNSET=... assignment at a line range outside the cited :140-:145. The two SessionStart paths still reach the helper and the pinned copy still captures whatever child_session_env_setup returned, so the structural claim is unchanged; only the cited line numbers have drifted against the restructured fast-path / full-path split introduced by P1W MARKER and P1W PERF.",
+      "evidence_reference": "Source context: CONTEXT_FILE hooks/runs-watch-autostart.js (cache fast path ~L150-L165, full path ~L170-L185, both call scripts/session-mode.js ensurePlainMarker); CONTEXT_FILE scripts/lib/repo-identity.sh (child_session_pin and _CHILD_SESSION_PIN_UNSET pinned-copy lines). Plan citations: §3d writer rule 'Both SessionStart paths reach it (ensure-child, session-mode.js:742; the plugin hook, runs-watch-autostart.js:275 fast path and :293 full path)'; §3d Mechanism 'the pinned set copies it, repo-identity.sh:140-145'; §1 D10 evidence 'session-mode.js:696-713, :742; hooks/runs-watch-autostart.js:275, :293'; §1 D2 evidence 'hooks/runs-watch-autostart.js:288-297'.",
+      "repair": "Re-derive the cited line numbers against current develop (grep -n on each cited file or git blame) and update the citations in §3d (writer-rule prose naming the two SessionStart paths, rail-rule Mechanism line naming repo-identity.sh, accept and negative-control rows that mention child_session_env_setup / child_session_apply_env / repo-identity.sh) and in the §1 D10 and D2 evidence rows before landing. No design change; keep the rule in exactly one place (ensurePlainMarker), keep resolveMarkerWriteTarget untouched, and keep -u AUTOPILOT_CHILD_SESSION_ID in child_session_env_setup so the pinned copy still captures it.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "51d9a47996531c663f6bf24f80b8b1213a49b1996f630fd5e0d8a1e59caf0a8e"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "dispatch-hetero.sh detached child re-exec (re-declared helper functions at :4971, re-exec at :3653) and scrub coverage in acceptance case (f) of the new hooks/tests/child-parent-record.test.sh",
+      "claim": "The revision claims every child launch either sets AUTOPILOT_CHILD_SESSION_ID to the rail-minted id or removes it, so no launch path passes an inherited child id, and case (f) is said to verify the scrub per rail including hetero.",
+      "evidence": "The revision itself states that the detached hetero child re-declares these functions as frozen text (dispatch-hetero.sh:4971) and that otherwise the re-exec silently falls back to the old scrub (:3653). Editing child_session_env_setup in scripts/lib/repo-identity.sh therefore does not reach the detached path unless the copied body is updated in the same commit, and that update is nowhere required by the acceptance section. Case (f) names hetero x codex, kimi, agy, opencode but names no detached-mode variant, while the pass case (e) does enumerate each wrapper variant, so the detached mode is plausibly absent. The listed negative control (dropping the -u from child_session_env_setup) cannot turn red a detached case that executes the frozen copy, so a stale :4971 copy with the old unset set is undetectable by the stated tests. Rubric R3 explicitly names detached re-exec among the paths that must hold.",
+      "evidence_reference": "Plan section 4 step 3d, Mechanism paragraph (dispatch-hetero.sh:4971 and :3653) and Acceptance case (f) with its negative controls; scripts/lib/repo-identity.sh child_session_env_setup body and child_session_pin copy of CHILD_SESSION_UNSET (lines 140-145)",
+      "repair": "Add to case (f) an explicit detached-hetero scrub case: run dispatch-hetero.sh in its detached mode with AUTOPILOT_CHILD_SESSION_ID pre-set in the rail environment and assert the stub runner sees it unset. State in the Mechanism paragraph that the re-declared function bodies at :4971 are updated in the same commit. Add a negative control that reverts the :4971 copy to the old body and shows exactly that detached case red.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "glm_consult",
+          "runner": "cc-shim",
+          "model": "GLM-5.2"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "5f28c878823737c2181f5613dd82d1b52d08597f9c8b74dc777148d98ef47dac"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "hooks/tests/child-parent-record.test.sh acceptance case (a); hooks/runs-watch-autostart.js SessionStart fast path (plan-cited :275)",
+      "claim": "Case (a) says the replayed rail-child environment is run through node hooks/runs-watch-autostart.js on both the fast and the full path.",
+      "evidence": "In the supplied hooks/runs-watch-autostart.js the fast path reaches ensurePlainMarker only when liveBase resolves, the per-cwd cache matches the cwd, inspectWatcher sees a live current watcher (envelope writer.pid whose /proc cmdline names status runs --watch --project <key> and whose plugin root and version match this install), and the live pointer file exists. The plan states no staging for any of this; if it is not staged the fast-path leg silently reduces to the full path while the acceptance text still claims both paths ran, leaving the :275 call site unexercised and the claim overstated.",
+      "evidence_reference": "Plan section 4 step 3d, Acceptance case (a); hooks/runs-watch-autostart.js run() fast-path guards (watcherAliveFast, inspectWatcher, pointer existence) and the two ensurePlainMarker call sites (plan-cited :275 fast and :293 full)",
+      "repair": "State the staging in the plan: either start a real watcher via startWatcherDetached into the temp dirs (or fabricate the cache, envelope and pointer files) before replaying the SessionStart payload, or narrow the claim to the full path and note that the shared ensurePlainMarker rule is already exercised directly through the ensure-child and writer cases, which is the function both call sites invoke.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_consult",
+          "runner": "cc-shim",
+          "model": "GLM-5.2"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "ce6cdbb4715193044189bf572405ea57a5bada3026338010fcf3b9f9ce0d34b4"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "0c93d007d11c2445be8b7d42dc30d7d9dc92f1c95e5c89f99c2454ac57c7e251",
+      "rubric_id": "R5",
+      "affected_surface": "§7 row l live acceptance procedure",
+      "claim": "The stated author-child procedure cannot start tmux through a model tool call under the existing author launch flags.",
+      "evidence_reference": "Plan §7 row l; scripts/dispatch-author.sh:1269-1271,1289-1290.",
+      "disposition": null
+    },
+    {
+      "fingerprint": "acdcca81685dbe4e3e484fddb505c0bead20510d14f2b68e2628d210192683a3",
+      "rubric_id": "R5",
+      "affected_surface": "Step 3d negative-control expectations",
+      "claim": "Removing C from child_session_env_setup cannot make every scrub case red as promised.",
+      "evidence_reference": "Plan §4 step 3d foreman launch row, acceptance (f) and negative controls; scripts/dispatch-foreman.sh:346-358,367-371,409.",
+      "disposition": null
+    },
+    {
+      "fingerprint": "51d9a47996531c663f6bf24f80b8b1213a49b1996f630fd5e0d8a1e59caf0a8e",
+      "rubric_id": "R4",
+      "affected_surface": "§3d writer-rule and rail-rule citations; §1 D10 and D2 evidence rows",
+      "claim": "The revision cites file:line references that no longer match the develop code for the two SessionStart paths the writer rule depends on and for the pinned-set copy the helper depends on.",
+      "evidence_reference": "Source context: CONTEXT_FILE hooks/runs-watch-autostart.js (cache fast path ~L150-L165, full path ~L170-L185, both call scripts/session-mode.js ensurePlainMarker); CONTEXT_FILE scripts/lib/repo-identity.sh (child_session_pin and _CHILD_SESSION_PIN_UNSET pinned-copy lines). Plan citations: §3d writer rule 'Both SessionStart paths reach it (ensure-child, session-mode.js:742; the plugin hook, runs-watch-autostart.js:275 fast path and :293 full path)'; §3d Mechanism 'the pinned set copies it, repo-identity.sh:140-145'; §1 D10 evidence 'session-mode.js:696-713, :742; hooks/runs-watch-autostart.js:275, :293'; §1 D2 evidence 'hooks/runs-watch-autostart.js:288-297'.",
+      "disposition": null
+    },
+    {
+      "fingerprint": "ce6cdbb4715193044189bf572405ea57a5bada3026338010fcf3b9f9ce0d34b4",
+      "rubric_id": "R5",
+      "affected_surface": "hooks/tests/child-parent-record.test.sh acceptance case (a); hooks/runs-watch-autostart.js SessionStart fast path (plan-cited :275)",
+      "claim": "Case (a) says the replayed rail-child environment is run through node hooks/runs-watch-autostart.js on both the fast and the full path.",
+      "evidence_reference": "Plan section 4 step 3d, Acceptance case (a); hooks/runs-watch-autostart.js run() fast-path guards (watcherAliveFast, inspectWatcher, pointer existence) and the two ensurePlainMarker call sites (plan-cited :275 fast and :293 full)",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-10-15T02:51:27.428Z"
+}

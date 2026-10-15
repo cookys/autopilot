@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "dispatch-tree-3d-2026-10-15",
+  "generation": 1,
+  "findings": [
+    {
+      "fingerprint": "8f7f053b5ff94f858c63f723f10657c526ff4ca1a6645ec3019b39e4b36c34da",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: scripts/probe-engine-capability.sh:388-489 launches codex, agy, grok, qoderclicn, cursor, kimi and opencode with no child-session helper; only the claude branches (:459-467) call child_session_env_setup. The launch table now routes every probe branch through child_session_env_setup, and case (f) lists every probe runner with a stub, so the helper -u mutation turns them red."
+    },
+    {
+      "fingerprint": "0c93d007d11c2445be8b7d42dc30d7d9dc92f1c95e5c89f99c2454ac57c7e251",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Verified: both author claude branches pass --tools \"\" (dispatch-author.sh:1270). Row l now uses one hetero cc-shim run, whose child keeps its tools; author production flags unchanged."
+    },
+    {
+      "fingerprint": "acdcca81685dbe4e3e484fddb505c0bead20510d14f2b68e2628d210192683a3",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Verified: dispatch-foreman.sh:351-357 filters AUTOPILOT_* itself and launches through env -i, so the helper mutation cannot turn the foreman case red. The negative control now expects only helper-dependent scrub cases red and keeps the separate foreman-filter mutation for the foreman case."
+    },
+    {
+      "fingerprint": "51d9a47996531c663f6bf24f80b8b1213a49b1996f630fd5e0d8a1e59caf0a8e",
+      "disposition": "rejected",
+      "rationale": "Checked on develop with grep -n: ensurePlainMarker is called at hooks/runs-watch-autostart.js:275 (fast path) and :293 (full path); session-mode.js:696 defines it and :742 is the ensure-child call; repo-identity.sh:140 starts child_session_pin and :144 copies _CHILD_SESSION_PIN_UNSET. The cited lines match; the seat estimated positions from the context file instead of counting."
+    },
+    {
+      "fingerprint": "5f28c878823737c2181f5613dd82d1b52d08597f9c8b74dc777148d98ef47dac",
+      "disposition": "accepted_blocker",
+      "rationale": "Partly verified. The detached child is not frozen text: dispatch-hetero.sh:4971 writes declare -f child_session_env_setup at detach time, so an edited helper body reaches it. The real gap is the fallback at :3653 (helper absent), which unsets only AUTOPILOT_SESSION_ID. Folded: the mechanism paragraph states declare -f and requires the :3653 fallback to remove C; case (f) adds hetero codex in detached mode; a negative control removes the helper from the :4971 list while the fallback lacks C removal and shows that case red."
+    },
+    {
+      "fingerprint": "ce6cdbb4715193044189bf572405ea57a5bada3026338010fcf3b9f9ce0d34b4",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Verified: the fast path at runs-watch-autostart.js:275 needs a live watcher, cache and pointer. Case (a) now claims only the full path through the hook, plus the direct ensurePlainMarker writer cases that both call sites share; no watcher staging is attempted."
+    }
+  ]
+}

@@ -1236,4 +1236,73 @@ if cmp -s "$d/proj/audit.json" "$TEST_TMP/marked-audit2.before"; then r=same; el
 assert_eq "$r" "same" "BL-0096: a marked file is byte-identical after --migrate-archive-layout"
 
 
+# --- BL-0191: the migrate pass reports (not just skips) a frozen file that mentions a legacy path;
+#     --archive skips the marked file too; a deleted marker is surfaced via --frozen-base. ---
+d="$(fixture_repo migrate-reports-frozen)"
+mkdir -p "$d/docs/plans/_archive" "$d/proj"
+printf '# Plan\n' > "$d/docs/plans/_archive/2026-08-09-legacy.md"
+printf '{"observed_paths":["docs/plans/_archive/2026-08-09-legacy.md"]}\n' > "$d/proj/audit.json"
+printf '{"note":"docs/plans/_archive/2026-08-09-legacy.md"}\n' > "$d/proj/loose.json"
+printf 'audit.json\n' > "$d/proj/.frozen-evidence"
+git -C "$d" add -A >/dev/null
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+out="$(node "$GATE" --repo-root "$d" --migrate-archive-layout --json)"
+assert_contains "$out" '"plan_reference_frozen","path":"proj/audit.json"' \
+  "BL-0191: --migrate-archive-layout reports the frozen skip as plan_reference_frozen"
+assert_not_contains "$out" '"path":"proj/loose.json"' \
+  "control (BL-0191 migrate): an unfrozen rewritten file is not reported as frozen"
+
+d="$(fixture_repo archive-skips-marked-evidence)"
+printf '# Plan\n' > "$d/docs/plans/2026-01-01-widget.md"
+mkdir -p "$d/proj"
+printf '{"observed_paths":["docs/plans/2026-01-01-widget.md"]}\n' > "$d/proj/audit.json"
+printf '{"note":"docs/plans/2026-01-01-widget.md"}\n' > "$d/proj/loose.json"
+printf 'audit.json\n' > "$d/proj/.frozen-evidence"
+cp "$d/proj/audit.json" "$TEST_TMP/marked-audit3.before"
+git -C "$d" add -A >/dev/null
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+out="$(node "$GATE" --repo-root "$d" --archive 2026-01-01-widget --shipped-in v1.2.3 --json)"
+assert_contains "$(cat "$d/proj/loose.json")" "docs/plans/_archive/2026/01/2026-01-01-widget.md" \
+  "control (BL-0191 archive): an unmarked json IS rewritten by --archive"
+if cmp -s "$d/proj/audit.json" "$TEST_TMP/marked-audit3.before"; then r=same; else r=changed; fi
+assert_eq "$r" "same" "BL-0191: a marked file is byte-identical after --archive"
+assert_contains "$out" '"plan_reference_frozen","path":"proj/audit.json"' \
+  "BL-0191: --archive reports the frozen skip"
+
+d="$(fixture_repo marker-deleted-guard)"
+mkdir -p "$d/proj/a" "$d/proj/b"
+printf '.\n' > "$d/proj/a/.frozen-evidence"; printf '{}\n' > "$d/proj/a/x.json"
+printf '.\n' > "$d/proj/b/.frozen-evidence"; printf '{}\n' > "$d/proj/b/y.json"
+git -C "$d" add -A >/dev/null
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+out="$(node "$GATE" --repo-root "$d" --frozen-base HEAD --json)"
+assert_not_contains "$out" '"code":"frozen_marker_deleted"' "control (BL-0191): no marker deleted -> not reported"
+git -C "$d" rm -q proj/a/.frozen-evidence
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m "drop marker" >/dev/null
+rc=0; out="$(node "$GATE" --repo-root "$d" --frozen-base HEAD~1 --json)" || rc=$?
+assert_contains "$out" '"code":"frozen_marker_deleted","kind":"marker","path":"proj/a/.frozen-evidence"' \
+  "BL-0191: a marker deleted in the commit range is reported"
+assert_not_contains "$out" '"path":"proj/b/.frozen-evidence"' "BL-0191: the surviving marker is not reported"
+assert_eq "$rc" "0" "BL-0191: marker deletion is report-only (exit 0)"
+rm -f "$d/proj/b/.frozen-evidence"
+out="$(node "$GATE" --repo-root "$d" --frozen-base HEAD --json)"
+assert_contains "$out" '"path":"proj/b/.frozen-evidence"' "BL-0191: an uncommitted marker deletion is reported too"
+out="$(node "$GATE" --repo-root "$d" --json)"
+assert_not_contains "$out" '"code":"frozen_marker_deleted"' "BL-0191: without --frozen-base the guard is off"
+
+
+# --- BL-0191 review fix: --frozen-base is a ref, never a git option ---
+d="$(fixture_repo frozen-base-injection)"
+git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init >/dev/null
+inj="$TEST_TMP/injected-output.txt"
+rc=0; node "$GATE" --repo-root "$d" --frozen-base "--output=$inj" --json >/dev/null 2>&1 || rc=$?
+assert_eq "$rc" "2" "BL-0191: a dash-leading --frozen-base is a usage error (exit 2)"
+if [ -e "$inj" ]; then r=created; else r=absent; fi
+assert_eq "$r" "absent" "BL-0191: --frozen-base --output=<path> never makes git write that file"
+out="$(node "$GATE" --repo-root "$d" --frozen-base no-such-ref --json)"
+assert_contains "$out" '"code":"frozen_marker_deleted","kind":"frozen_base"' \
+  "BL-0191: an unresolvable ref is reported as a frozen_base problem, not a fake marker path"
+assert_not_contains "$out" '"path":".frozen-evidence"' "BL-0191: no invented marker path for a bad ref"
+
+
 finalize_test

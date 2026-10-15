@@ -45,6 +45,11 @@
  *                                 path that exists in neither docs/plans/ nor
  *                                 docs/plans/_archive/
  *
+ *   frozen_marker_deleted         report-only, non-blocking, opt-in via `--frozen-base <git-ref>`:
+ *                                 a `.frozen-evidence` marker present at <ref> is gone from the
+ *                                 working tree (committed or not). Without the marker the next
+ *                                 writing pass rewrites the evidence it froze (BL-0191)
+ *
  * --fix deletes the offending BACKLOG rows (backlog_row_has_plan, backlog_row_done,
  * backlog_title_closed_status_open) and git mv's released plans — plus their
  * `<same stem>.*.md` sidecars and `docs/plans/evidence/<stem>/` dir, if present —
@@ -122,7 +127,9 @@ const BLOCKING_CODES = new Set([
   'plan_stem_malformed',
   'peer_row_unanswered',
 ]);
-const REPORT_ONLY_CODES = new Set(['plan_orphan', 'plan_active_lineage', 'plan_reference_dangling']);
+const REPORT_ONLY_CODES = new Set([
+  'plan_orphan', 'plan_active_lineage', 'plan_reference_dangling', 'frozen_marker_deleted',
+]);
 const CODES = [...BLOCKING_CODES, ...REPORT_ONLY_CODES];
 // Rewritten/scanned for stray docs/plans/<stem> references; excluded because both files
 // are intentional HISTORY — a CHANGELOG entry or a deleted BACKLOG row is expected to
@@ -133,7 +140,7 @@ function usage(code) {
   process.stderr.write(
     'Usage: node scripts/check-plan-graduation.js [--repo-root <dir>] ' +
     '[--backlog <file>] [--changelog <file>] [--plans-dir <dir>] ' +
-    '[--allowlist <file>] [--fix] [--json]\n' +
+    '[--allowlist <file>] [--frozen-base <git-ref>] [--fix] [--json]\n' +
     '   or: node scripts/check-plan-graduation.js --register-template <stem> [--repo-root <dir>]\n' +
     '   or: node scripts/check-plan-graduation.js --archive <stem> [--archive <stem>...] ' +
     '[--shipped-in <version-or-sha> | --shipped-in <stem>=<version-or-sha>[,<stem>=<sha>...]...] ' +
@@ -151,6 +158,7 @@ function parseArgs(argv) {
     changelog: null,
     plansDir: null,
     allowlist: null,
+    frozenBase: null,
     fix: false,
     json: false,
     registerTemplate: null,
@@ -170,6 +178,10 @@ function parseArgs(argv) {
     else if (a === '--changelog') out.changelog = need();
     else if (a === '--plans-dir') out.plansDir = need();
     else if (a === '--allowlist') out.allowlist = need();
+    else if (a === '--frozen-base') {
+      out.frozenBase = need();
+      if (out.frozenBase.startsWith('-')) usage(2); // a ref, never a git option (`--output=<path>` would write a file)
+    }
     else if (a === '--fix') out.fix = true;
     else if (a === '--json') out.json = true;
     else if (a === '--register-template') out.registerTemplate = need();
@@ -493,6 +505,31 @@ function markedFrozenEvidenceFiles(repoRoot) {
     }
   }
   return frozen;
+}
+
+// `.frozen-evidence` markers that exist at `baseRef` but not in the working tree. A deleted marker
+// silently un-freezes the evidence it named, so the next writing pass would rewrite it (BL-0191).
+// Report-only: deleting a marker on purpose is legitimate, losing one by accident is not.
+function deletedFrozenMarkers(repoRoot, baseRef) {
+  let out;
+  try {
+    // Resolve to a sha first: --end-of-options keeps a dash-leading value from being read as a git option.
+    const sha = execFileSync('git', ['-C', repoRoot, 'rev-parse', '--verify', '--end-of-options', `${baseRef}^{commit}`],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+    out = execFileSync('git', ['-C', repoRoot, 'diff', '--name-only', '--diff-filter=D', '-z', sha, '--'],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  } catch (e) {
+    return [{
+      code: 'frozen_marker_deleted', kind: 'frozen_base', ref: baseRef,
+      detail: `--frozen-base ${baseRef} did not resolve to a commit; marker deletions were NOT checked`,
+    }];
+  }
+  return out.split('\0').filter((f) => f && path.posix.basename(f) === '.frozen-evidence').map((f) => ({
+    code: 'frozen_marker_deleted',
+    kind: 'marker',
+    path: f,
+    detail: `.frozen-evidence marker present at ${baseRef} is deleted — the evidence it froze is rewritable again`,
+  }));
 }
 
 // Reference files a WRITING pass may rewrite: trackedReferenceFiles minus frozenAssetFiles.
@@ -1056,6 +1093,9 @@ function run(opts) {
   // --- dangling reference scan (report-only, whole-repo) ---
   violations.push(...planReferenceDangling(repoRoot, plansDir));
 
+  // --- deleted .frozen-evidence markers (report-only, opt-in) ---
+  if (opts.frozenBase) violations.push(...deletedFrozenMarkers(repoRoot, opts.frozenBase));
+
   return {
     repoRoot,
     backlogPath,
@@ -1285,6 +1325,22 @@ function fixPlans(repoRoot, plansDir, archiveDir, violations, activeLineageStems
   return { moved, blocked, referencesRewritten, indexRowsFlipped };
 }
 
+// Frozen reference files whose text matches any of `res`: skipped by the writing passes, so name
+// them (code: plan_reference_frozen) instead of leaving the stale mention silent.
+function frozenMentions(repoRoot, res) {
+  const frozen = frozenAssetFiles(repoRoot);
+  const found = [];
+  for (const rel of trackedReferenceFiles(repoRoot)) {
+    if (!frozen.has(rel)) continue;
+    const text = readFileSafe(path.join(repoRoot, rel));
+    if (text == null) continue;
+    if (res.some((re) => { re.lastIndex = 0; return re.test(text); })) {
+      found.push({ code: 'plan_reference_frozen', path: rel });
+    }
+  }
+  return found;
+}
+
 // The --migrate-archive-layout counterpart of rewritePlanReferences: rewrites an already
 // LEGACY-FLAT archived reference (`docs/plans/_archive/<stem>` /
 // `docs/plans/_archive/evidence/<stem>`) to its dated form. Distinct from
@@ -1306,6 +1362,7 @@ function rewriteLegacyArchiveReferences(repoRoot, stem) {
     },
   ];
   const rewritten = [];
+  rewritten.frozen = frozenMentions(repoRoot, passes.map((p) => p.re));
   for (const rel of rewritableReferenceFiles(repoRoot)) {
     const abs = path.join(repoRoot, rel);
     let text = readFileSafe(abs);
@@ -1460,6 +1517,7 @@ function migrateArchiveLayout(repoRoot, plansDir, archiveDir) {
   const projectsMoved = [];
   const projectsBlocked = [];
   const referencesRewritten = new Set();
+  const referencesFrozen = new Map();
 
   let entries = [];
   try {
@@ -1493,7 +1551,9 @@ function migrateArchiveLayout(repoRoot, plansDir, archiveDir) {
       gitMv(repoRoot, path.relative(repoRoot, m.from), path.relative(repoRoot, m.to));
       plansMoved.push({ from: path.relative(repoRoot, m.from), to: path.relative(repoRoot, m.to) });
     }
-    for (const f of rewriteLegacyArchiveReferences(repoRoot, stem)) referencesRewritten.add(f);
+    const legacyRewritten = rewriteLegacyArchiveReferences(repoRoot, stem);
+    for (const f of legacyRewritten) referencesRewritten.add(f);
+    for (const fz of legacyRewritten.frozen || []) referencesFrozen.set(fz.path, fz);
     if (archiveIndexRow(repoRoot, stem, {}).changed) referencesRewritten.add('docs/projects/INDEX.md');
   }
 
@@ -1530,6 +1590,7 @@ function migrateArchiveLayout(repoRoot, plansDir, archiveDir) {
     const bareTo = `_archive/${m[1]}/${m[2]}/${ent.name}`;
     const boundaryRe = new RegExp(`${escapeRegExp(fromRel)}(?![A-Za-z0-9-])`, 'g');
     const bareRe = new RegExp(`(?<![A-Za-z0-9-/])${escapeRegExp(bareFrom)}(?![A-Za-z0-9-])`, 'g');
+    for (const fz of frozenMentions(repoRoot, [boundaryRe, bareRe])) referencesFrozen.set(fz.path, fz);
     for (const rel of rewritableReferenceFiles(repoRoot)) {
       const abs = path.join(repoRoot, rel);
       let t = readFileSafe(abs);
@@ -1560,6 +1621,7 @@ function migrateArchiveLayout(repoRoot, plansDir, archiveDir) {
     projectsMoved,
     projectsBlocked,
     referencesRewritten: [...referencesRewritten].sort(),
+    referencesFrozen: [...referencesFrozen.values()].sort((a, b) => a.path.localeCompare(b.path)),
   };
 }
 
@@ -1585,6 +1647,9 @@ function main() {
       process.stdout.write(`--migrate-archive-layout: moved ${result.plansMoved.length} plan file(s), `
         + `${result.projectsMoved.length} project dir(s); rewrote ${result.referencesRewritten.length} file(s); `
         + `${result.plansBlocked.length + result.projectsBlocked.length} blocked\n`);
+      for (const fz of result.referencesFrozen) {
+        process.stdout.write(`${fz.code}: ${fz.path} — frozen, left unrewritten (stale mention kept)\n`);
+      }
     }
     process.exit((result.plansBlocked.length || result.projectsBlocked.length) ? 1 : 0);
   }
@@ -1654,6 +1719,7 @@ function main() {
       for (const v of finalResult.violations) {
         const where = v.kind === 'backlog_row' ? `BACKLOG row "${v.title}"`
           : v.kind === 'reference' ? `docs/plans/${v.stem}`
+            : v.kind === 'frozen_base' ? `--frozen-base ${v.ref}`
             : v.path;
         const tag = BLOCKING_CODES.has(v.code) ? v.code : `${v.code} (report-only)`;
         process.stdout.write(`${tag}: ${where} — ${v.detail}\n`);

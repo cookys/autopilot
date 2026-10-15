@@ -503,6 +503,13 @@
       "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
     },
     {
+      "pattern": "qrp-kimi-agent-*",
+      "kind": "scratch",
+      "owner": "scripts/qualification-review-provider.js",
+      "retention_days": null,
+      "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
+    },
+    {
       "pattern": "qrp-clihome-*",
       "kind": "scratch",
       "owner": "scripts/qualification-review-provider.js",

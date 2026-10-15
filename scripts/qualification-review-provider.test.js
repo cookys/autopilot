@@ -114,6 +114,31 @@ if (sidecarFlag !== -1 && process.env.STUB_OUTPUT !== undefined) {
 process.exit(Number(process.env.STUB_EXIT || 0));
 `, { mode: 0o755 });
 
+// kimi stub: records argv, writes a wire.jsonl under $HOME/.kimi-code/sessions the way the
+// real CLI does (STUB_KIMI_WIRE = clean | leak | none), then prints STUB_OUTPUT. Never calls kimi.
+const KIMI_FIX = path.join(__dirname, 'lib', 'fixtures', 'kimi-containment');
+const stubKimi = path.join(tempRoot, 'stub-kimi');
+fs.writeFileSync(stubKimi, `#!/usr/bin/env node
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const argv = process.argv.slice(2);
+const flag = argv.indexOf('--agent-file');
+const agentFile = flag === -1 ? null : argv[flag + 1];
+let agentText = null;
+try { agentText = agentFile ? fs.readFileSync(agentFile, 'utf8') : null; } catch { /* absent */ }
+if (process.env.STUB_CAPTURE) {
+  fs.writeFileSync(process.env.STUB_CAPTURE, JSON.stringify({ argv, agentFile, agentText, home: process.env.HOME }));
+}
+const mode = process.env.STUB_KIMI_WIRE || 'clean';
+if (mode !== 'none') {
+  const dir = path.join(process.env.HOME, '.kimi-code', 'sessions', 'wd_x', 'session_0', 'agents', 'main');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.copyFileSync(path.join(process.env.STUB_KIMI_FIX, mode === 'leak' ? 'k1-leak' : 'k2-clean', 'wire.jsonl'), path.join(dir, 'wire.jsonl'));
+}
+process.stdout.write(process.env.STUB_OUTPUT || '');
+`, { mode: 0o755 });
+
 const stubClaude = path.join(tempRoot, 'stub-claude');
 fs.writeFileSync(stubClaude, `#!/usr/bin/env node
 'use strict';
@@ -1094,7 +1119,7 @@ function roleOnlyRequest(role, content = 'x') {
 {
   // (a) negative: the OTHER kinds must NOT gain the flag (and, unlike agy,
   // must NOT require QRP_CLI_HOME either -- this run deliberately omits it).
-  for (const [kind, bin] of [['codex', stubCodex], ['claude', stubClaude], ['kimi', stubClaude]]) {
+  for (const [kind, bin] of [['codex', stubCodex], ['claude', stubClaude]]) {
     const { captured } = runProvider({
       env: { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: kind, QRP_CLI_BIN: bin },
       request: reviewerRequest(),
@@ -2029,6 +2054,52 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
   }
 }
 
+// ── kimi containment (BL-0156): tool-less agent file + post-run wire audit ─────
+{
+  const kimiTemplate = path.join(tempRoot, 'kimi-clihome-template');
+  fs.mkdirSync(path.join(kimiTemplate, '.kimi-code'), { recursive: true });
+  fs.writeFileSync(path.join(kimiTemplate, '.kimi-code', 'config.toml'), '# stub\n');
+  const kimiEnv = (wire, extra = {}) => ({
+    QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'kimi', QRP_CLI_BIN: stubKimi,
+    QRP_CLI_HOME: kimiTemplate, STUB_KIMI_FIX: KIMI_FIX, STUB_KIMI_WIRE: wire, ...extra,
+  });
+  // Green: tool-less agent passed, clean wire -> answer accepted.
+  const ok = runProvider({ env: kimiEnv('clean'), request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT });
+  equal(ok.child.status, 0, 'kimi with the tool-less agent and a clean wire passes');
+  check(ok.captured !== null && ok.captured.argv.includes('--agent-file'), 'kimi argv carries --agent-file');
+  check(ok.captured && /^tools: \[\]$/m.test(ok.captured.agentText || ''), 'the agent file the CLI saw has tools: []');
+  check(ok.captured && !ok.captured.argv.includes('--dangerously-skip-permissions'), 'kimi argv has no skip-permissions flag');
+  check(ok.captured && ok.captured.home !== kimiTemplate && ok.captured.home !== tempRoot, 'kimi ran under a cloned HOME, not the template or ambient home');
+  check(ok.captured && !fs.existsSync(ok.captured.agentFile), 'the temp agent file is removed after the run');
+  // Negative control (red): a wire where the default tool-using agent ran -> case rejected.
+  const leak = runProvider({ env: kimiEnv('leak'), request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT });
+  equal(leak.child.status, 1, 'kimi run whose wire shows tool use is rejected');
+  check(/kimi containment breach/.test(leak.child.stderr), 'the rejection names the kimi containment breach');
+  // Negative control: no wire at all -> fail closed (exit 0 is not proof).
+  const none = runProvider({ env: kimiEnv('none'), request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT });
+  equal(none.child.status, 1, 'kimi run that left no wire is rejected (fail closed)');
+  check(/containment unverified/.test(none.child.stderr), 'the missing-wire rejection says containment is unverified');
+  // Stale sessions in the TEMPLATE (a prior default-agent run, as in real staging dirs) must not
+  // be audited: only the wire this run produced counts. The template itself stays untouched.
+  const staleWire = path.join(kimiTemplate, '.kimi-code', 'sessions', 'wd_old', 'session_old', 'agents', 'main');
+  fs.mkdirSync(staleWire, { recursive: true });
+  fs.copyFileSync(path.join(KIMI_FIX, 'k1-leak', 'wire.jsonl'), path.join(staleWire, 'wire.jsonl'));
+  const stale = runProvider({ env: kimiEnv('clean'), request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT });
+  equal(stale.child.status, 0, 'a clean kimi run passes even when the template holds an old leaking session');
+  check(fs.existsSync(path.join(staleWire, 'wire.jsonl')), 'the template HOME keeps its old session (only the clone is cleaned)');
+  const staleLeak = runProvider({ env: kimiEnv('leak'), request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT });
+  equal(staleLeak.child.status, 1, 'a kimi run that itself used tools is still rejected with a stale template present');
+  fs.rmSync(path.join(kimiTemplate, '.kimi-code', 'sessions'), { recursive: true, force: true });
+  // Fail closed: no QRP_CLI_HOME -> refuse before spawn.
+  const bare = runProvider({
+    env: { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'kimi', QRP_CLI_BIN: stubKimi, STUB_KIMI_FIX: KIMI_FIX },
+    request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT,
+  });
+  equal(bare.child.status, 1, 'kimi without QRP_CLI_HOME fails the case');
+  check(/QRP_CLI_HOME/.test(bare.child.stderr), 'the refusal names QRP_CLI_HOME');
+  check(bare.captured === null, 'kimi without QRP_CLI_HOME never reaches spawn');
+}
+
 fs.rmSync(tempRoot, { recursive: true, force: true });
-if (assertions !== 407) throw new Error(`qualification-review-provider: expected exactly 407 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 421) throw new Error(`qualification-review-provider: expected exactly 421 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);

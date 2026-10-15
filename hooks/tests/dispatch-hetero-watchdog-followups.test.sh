@@ -23,6 +23,7 @@
 #
 # Follow-ups 1/9: no-setsid / no-job-control degrade + set +m scoping.
 . "$(dirname "$0")/lib.sh"
+export AUTOPILOT_TEST_ALLOW_HETERO_SEAMS=1   # HETERO_TEST_* seams in dispatch-hetero.sh are inert without it
 
 unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
   AUTOPILOT_PARENT_RUN_ID AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID \
@@ -134,10 +135,10 @@ assert_r1_nojobcontrol_reports_unenforced() {
     --branch feat/wdog-njc --prompt-file "$PROMPT" --timeout 3s 2>&1)" || true
   json="$(last_json "$out")"
   [ -n "$json" ] || fail "assert_r1_nojobcontrol_reports_unenforced: missing JSON: $out"
-  assert_eq "false" "$(json_get "$json" timeout_enforced)" "plain nojobcontrol timeout_enforced"
+  assert_eq "$(json_get "$json" timeout_enforced)" "false" "plain nojobcontrol timeout_enforced"
   mf="$(find "$runs" -name '*.manifest.json' | head -1)"
   [ -n "$mf" ] || fail "assert_r1_nojobcontrol_reports_unenforced: no manifest"
-  assert_eq "false" "$(json_get "$(cat "$mf")" timeout_enforced)" "manifest timeout_enforced"
+  assert_eq "$(json_get "$(cat "$mf")" timeout_enforced)" "false" "manifest timeout_enforced"
 }
 
 assert_r1_nojobcontrol_detached_real_path() {
@@ -163,7 +164,7 @@ assert_r1_nojobcontrol_detached_real_path() {
   local json
   json="$(cat "$result")"
   [ -n "$json" ] || fail "assert_r1_nojobcontrol_detached_real_path: empty result"
-  assert_eq "false" "$(json_get "$json" timeout_enforced)" "detached nojobcontrol timeout_enforced"
+  assert_eq "$(json_get "$json" timeout_enforced)" "false" "detached nojobcontrol timeout_enforced"
 }
 
 assert_r1_nosetsid_with_jobcontrol_still_enforces() {
@@ -186,8 +187,8 @@ assert_r1_nosetsid_with_jobcontrol_still_enforces() {
     return
   fi
   [ "$elapsed" -lt 30 ] || fail "assert_r1_nosetsid_with_jobcontrol_still_enforces: took ${elapsed}s"
-  assert_eq "true" "$(json_get "$json" timed_out)" "nosetsid+jobcontrol timed_out"
-  assert_eq "true" "$(json_get "$json" timeout_enforced)" "nosetsid+jobcontrol timeout_enforced"
+  assert_eq "$(json_get "$json" timed_out)" "true" "nosetsid+jobcontrol timed_out"
+  assert_eq "$(json_get "$json" timeout_enforced)" "true" "nosetsid+jobcontrol timeout_enforced"
   stubpid="$(cat "$pidfile" 2>/dev/null || true)"
   [ -n "$stubpid" ] || fail "assert_r1_nosetsid_with_jobcontrol_still_enforces: no pidfile"
   if pid_alive "$stubpid"; then
@@ -231,7 +232,11 @@ wait_pid_dead() {
 reap_pid() {
   local pid="$1"
   [ -n "$pid" ] || return 0
-  kill -KILL "$pid" 2>/dev/null || true
+  # Only signal a pid that is still present: after wait_pid_dead confirmed it
+  # gone, a bare kill could hit a recycled pid.
+  if pid_alive "$pid"; then
+    kill -KILL "$pid" 2>/dev/null || true
+  fi
   wait "$pid" 2>/dev/null || true
 }
 
@@ -269,7 +274,7 @@ assert_r2_cgroup_kill_failure_falls_back_to_pgid() {
   wait "$dispid" 2>/dev/null || true
   json="$(last_json "$(cat "$outf")")"
   [ -n "$json" ] || fail "assert_r2_cgroup_kill_failure_falls_back_to_pgid: missing JSON: $(cat "$outf")"
-  assert_eq "true" "$(json_get "$json" timed_out)" "r2 cgroup fallback timed_out"
+  assert_eq "$(json_get "$json" timed_out)" "true" "r2 cgroup fallback timed_out"
 }
 
 assert_r2_cgroup_kill_failure_detached_real_path() {
@@ -303,7 +308,7 @@ assert_r2_cgroup_kill_failure_detached_real_path() {
   fi
   json="$(cat "$result")"
   [ -n "$json" ] || fail "assert_r2_cgroup_kill_failure_detached_real_path: empty result"
-  assert_eq "true" "$(json_get "$json" timed_out)" "r2 detached timed_out"
+  assert_eq "$(json_get "$json" timed_out)" "true" "r2 detached timed_out"
   stubpid="$(cat "$pidfile" 2>/dev/null || true)"
   [ -n "$stubpid" ] || fail "assert_r2_cgroup_kill_failure_detached_real_path: no pidfile"
   if ! wait_pid_dead "$stubpid" 30; then
@@ -325,6 +330,7 @@ assert_r6_cancel_skips_kill_when_cmdline_lacks_tag() {
   echo "$helper" > "${tok}.sleeppid"
   set -e -o pipefail
   _cancel_worker_watchdog
+  set +e   # restore file-scope errexit state (lib.sh runs without -e)
   if ! pid_alive "$helper"; then
     fail "assert_r6_cancel_skips_kill_when_cmdline_lacks_tag: unrelated helper $helper was killed"
     return
@@ -397,6 +403,7 @@ assert_r6_cancel_kills_when_cmdline_has_tag() {
   echo "$helper" > "${tok}.sleeppid"
   set -e -o pipefail
   _cancel_worker_watchdog
+  set +e   # restore file-scope errexit state (lib.sh runs without -e)
   if pid_alive "$helper"; then
     reap_pid "$helper"
     fail "assert_r6_cancel_kills_when_cmdline_has_tag: tagged sleeper $helper still alive"
@@ -414,7 +421,6 @@ assert_r3_zombie_worker_not_stamped_timed_out() {
   set +e
   unset SCOPE_UNIT WORKER_FALLBACK_PGID WORKER_SID WORKER_RP
   eval "$(sed -n '/^_self_pgid() {/,/^}$/p' "$SCRIPT")"
-  eval "$(sed -n '/^_watchdog_pgid_has_live() {/,/^}$/p' "$SCRIPT")"
   eval "$(sed -n '/^_watchdog_worker_alive() {/,/^}$/p' "$SCRIPT")"
   eval "$(sed -n '/^_watchdog_signal_worker() {/,/^}$/p' "$SCRIPT")"
   eval "$(sed -n '/^_arm_worker_watchdog() {/,/^}$/p' "$SCRIPT")"
@@ -522,7 +528,7 @@ assert_r3_natural_exit_before_deadline_not_timed_out_real_path() {
     --branch feat/wdog-r3-nat --prompt-file "$PROMPT" --timeout 30s 2>&1)" || true
   json="$(last_json "$out")"
   [ -n "$json" ] || fail "assert_r3_natural_exit_before_deadline_not_timed_out_real_path: missing JSON: $out"
-  assert_eq "false" "$(json_get "$json" timed_out)" "inline natural-exit timed_out"
+  assert_eq "$(json_get "$json" timed_out)" "false" "inline natural-exit timed_out"
   _r3_assert_no_leftover_watchdog "$wdtmp" "assert_r3_natural_exit_before_deadline_not_timed_out_real_path inline"
 
   local stubd="$TEST_TMP/grok-r3-nat-d"
@@ -547,7 +553,7 @@ assert_r3_natural_exit_before_deadline_not_timed_out_real_path() {
   fi
   json="$(cat "$result")"
   [ -n "$json" ] || fail "assert_r3_natural_exit_before_deadline_not_timed_out_real_path: empty detached result"
-  assert_eq "false" "$(json_get "$json" timed_out)" "detached natural-exit timed_out"
+  assert_eq "$(json_get "$json" timed_out)" "false" "detached natural-exit timed_out"
   wait "$wrap" 2>/dev/null || true
   _r3_assert_no_leftover_watchdog "$wdtmpd" "assert_r3_natural_exit_before_deadline_not_timed_out_real_path detached"
 }
@@ -564,7 +570,6 @@ assert_r6_cancel_kills_when_cmdline_has_tag
 assert_r3_alive_helper_matches_exact_pgid() {
   set +e
   unset SCOPE_UNIT WORKER_FALLBACK_PGID WORKER_SID WORKER_RP
-  eval "$(sed -n '/^_watchdog_pgid_has_live() {/,/^}$/p' "$SCRIPT")"
   eval "$(sed -n '/^_watchdog_worker_alive() {/,/^}$/p' "$SCRIPT")"
   local live="" other="" holder="" zfile="$TEST_TMP/r3-pgid-z.pid"
   : > "$zfile"
@@ -674,7 +679,7 @@ assert_r10_result_json_never_default_timeout_source() {
   assert_r10_result_ok "$json" "no-timeout"
   mf="$(find "$runs" -name '*.manifest.json' | head -1)"
   [ -n "$mf" ] || fail "assert_r10_result_json_never_default_timeout_source: no manifest"
-  assert_eq "default" "$(json_get "$(cat "$mf")" timeout_source)" "no-timeout manifest timeout_source"
+  assert_eq "$(json_get "$(cat "$mf")" timeout_source)" "default" "no-timeout manifest timeout_source"
 
   local stubt="$TEST_TMP/grok-r10-t" runst="$TEST_TMP/runs-r10-t"
   mkdir -p "$runst"
@@ -752,7 +757,7 @@ assert_r8_detached_reaps_worker_session_descendants() {
     fail "assert_r8_detached_reaps_worker_session_descendants: sleeper pid $sleeper still alive after result"
   fi
   if [ -n "$(json_get "$json" contained)" ]; then
-    assert_eq "true" "$(json_get "$json" contained)" "detached contained"
+    assert_eq "$(json_get "$json" contained)" "true" "detached contained"
   fi
   reap_pid "$sleeper"
   wait "$wrap" 2>/dev/null || true
@@ -774,7 +779,7 @@ assert_r8_detached_reaps_worker_session_descendants() {
     fail "assert_r8 inline: sleeper pid $sleeperi still alive"
   fi
   if [ -n "$(json_get "$jsoni" contained)" ]; then
-    assert_eq "true" "$(json_get "$jsoni" contained)" "inline contained"
+    assert_eq "$(json_get "$jsoni" contained)" "true" "inline contained"
   fi
   reap_pid "$sleeperi"
 }
@@ -791,7 +796,6 @@ assert_r8_detached_reaps_worker_session_descendants
 assert_r6_alive_check_fails_open_to_firing() {
   set +e
   unset SCOPE_UNIT WORKER_FALLBACK_PGID WORKER_SID WORKER_RP
-  eval "$(sed -n '/^_watchdog_pgid_has_live() {/,/^}$/p' "$SCRIPT")"
   eval "$(sed -n '/^_watchdog_worker_alive() {/,/^}$/p' "$SCRIPT")"
 
   local stubdir="$TEST_TMP/r6-ps-stub"
@@ -865,7 +869,6 @@ assert_r6_alive_check_fails_open_to_firing
 assert_r7_scope_unknown_state_no_fallback_fires() {
   set +e
   unset SCOPE_UNIT WORKER_FALLBACK_PGID WORKER_SID WORKER_RP
-  eval "$(sed -n '/^_watchdog_pgid_has_live() {/,/^}$/p' "$SCRIPT")"
   eval "$(sed -n '/^_watchdog_worker_alive() {/,/^}$/p' "$SCRIPT")"
 
   local stubdir="$TEST_TMP/r7-ps-stub"
@@ -932,7 +935,6 @@ assert_r7_scope_unknown_state_no_fallback_fires
 assert_r8_alive_check_matrix() {
   set +e
   unset SCOPE_UNIT WORKER_FALLBACK_PGID WORKER_SID WORKER_RP
-  eval "$(sed -n '/^_watchdog_pgid_has_live() {/,/^}$/p' "$SCRIPT")"
   eval "$(sed -n '/^_watchdog_worker_alive() {/,/^}$/p' "$SCRIPT")"
 
   local stubdir="$TEST_TMP/r8-ps-stub"
@@ -1025,5 +1027,95 @@ ROWS
 }
 
 assert_r8_alive_check_matrix
+
+# BL-0099 item 2: no-setsid watchdog sleeper carries the argv0 tag, so cancel can reap it
+# even when the watchdog subshell is already gone (WATCHDOG_PID empty).
+assert_r11_nosetsid_sleeper_tagged_and_cancel_reaps() {
+  set +e
+  eval "$(sed -n '/^_watchdog_sleeppid_cmdline_has_tag() {/,/^}$/p' "$SCRIPT")"
+  eval "$(sed -n '/^_cancel_worker_watchdog() {/,/^}$/p' "$SCRIPT")"
+  eval "$(sed -n '/^_watchdog_worker_alive() {/,/^}$/p' "$SCRIPT")"
+  eval "$(sed -n '/^_watchdog_signal_worker() {/,/^}$/p' "$SCRIPT")"
+  eval "$(sed -n '/^_arm_worker_watchdog() {/,/^}$/p' "$SCRIPT")"
+  unset SCOPE_UNIT WORKER_FALLBACK_PGID WORKER_SID WORKER_RP
+  WATCHDOG_TOKEN_FILE=""; WATCHDOG_PID=""
+  HETERO_TEST_NO_SETSID=1 _arm_worker_watchdog 120
+  local wd="$WATCHDOG_PID" tok="$WATCHDOG_TOKEN_FILE" sp="" cmd=""
+  poll_until 5 test -s "${tok}.sleeppid"
+  sp="$(cat "${tok}.sleeppid" 2>/dev/null)"
+  cmd="$(tr '\0' ' ' < "/proc/$sp/cmdline" 2>/dev/null)"
+  case "$cmd" in
+    *"hetero-wall-watchdog-${tok##*/}"*) ;;
+    *) fail "assert_r11: no-setsid sleeper cmdline lacks tag: '$cmd'" ;;
+  esac
+  WATCHDOG_PID=""   # simulate a lost watchdog subshell: cancel must reap the sleeper itself
+  _cancel_worker_watchdog
+  if ! wait_pid_dead "$sp" 3; then
+    fail "assert_r11: no-setsid sleeper $sp survived cancel"
+    reap_pid "$sp"
+  fi
+  reap_pid "$wd"
+}
+
+# BL-0099 item 3: the watchdog subshell clears sp once the sleeper is reaped so the TERM
+# trap cannot signal a recycled pid. Pid recycling cannot be reproduced deterministically,
+# so this pins the statement order in the function body.
+assert_r11_watchdog_clears_sp_after_wait() {
+  local body
+  body="$(sed -n '/^_arm_worker_watchdog() {/,/^}$/p' "$SCRIPT")"
+  if ! printf '%s\n' "$body" | grep -A1 'wait "\$sp"' | grep -q 'sp=""'; then
+    fail "assert_r11: sp is not cleared right after wait \"\$sp\""
+  fi
+}
+
+# BL-0099 item 4: a transient systemctl kill failure is retried (bounded), not given up on.
+assert_r11_systemctl_kill_retries_transient_failure() {
+  set +e
+  eval "$(sed -n '/^_self_pgid() {/,/^}$/p' "$SCRIPT")"
+  eval "$(sed -n '/^_watchdog_signal_worker() {/,/^}$/p' "$SCRIPT")"
+  local bin="$TEST_TMP/r11-sysctl-bin" cnt="$TEST_TMP/r11-sysctl.cnt" rc
+  mkdir -p "$bin"
+  cat > "$bin/systemctl" <<STUB
+#!/usr/bin/env bash
+n=\$(cat "$cnt" 2>/dev/null || echo 0); n=\$((n+1)); echo \$n > "$cnt"
+[ "\$n" -ge "\${R11_OK_AT:-2}" ] && exit 0
+exit 1
+STUB
+  chmod +x "$bin/systemctl"
+  SCOPE_UNIT="r11.scope"; unset WORKER_FALLBACK_PGID WORKER_SID
+  echo 0 > "$cnt"
+  PATH="$bin:$PATH" R11_OK_AT=2 _watchdog_signal_worker TERM
+  rc=$?
+  assert_eq "$rc" "0" "transient failure then success returns 0"
+  assert_eq "$(cat "$cnt")" "2" "systemctl called twice"
+  echo 0 > "$cnt"
+  PATH="$bin:$PATH" R11_OK_AT=99 _watchdog_signal_worker TERM
+  rc=$?
+  assert_eq "$rc" "1" "persistent failure still returns 1"
+  assert_eq "$(cat "$cnt")" "2" "retry is bounded to one extra attempt"
+  unset SCOPE_UNIT
+}
+
+# BL-0099 item 6: HETERO_TEST_* knobs are inert without AUTOPILOT_TEST_ALLOW_HETERO_SEAMS=1.
+assert_r11_test_knobs_inert_without_switch() {
+  local hide="$TEST_TMP/hide-cgroup-r11sw"
+  hide_cgroup_dir "$hide"
+  local stub="$TEST_TMP/grok-r11sw" runs="$TEST_TMP/runs-r11sw"
+  mkdir -p "$runs"
+  install_sleep_stub "$stub"
+  local out json
+  out="$(cd "$SBX" && env -u AUTOPILOT_TEST_ALLOW_HETERO_SEAMS PATH="$hide:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
+    HETERO_TEST_NO_SETSID=1 HETERO_TEST_NO_JOBCONTROL=1 HETERO_TEST_SLEEP=0 \
+    "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+    --branch feat/wdog-r11sw --prompt-file "$PROMPT" --timeout 3s 2>&1)" || true
+  json="$(last_json "$out")"
+  [ -n "$json" ] || { fail "assert_r11 switch: missing JSON: $out"; return; }
+  assert_eq "$(json_get "$json" timeout_enforced)" "true" "knobs ignored without switch: timeout_enforced stays true"
+}
+
+assert_r11_nosetsid_sleeper_tagged_and_cancel_reaps
+assert_r11_watchdog_clears_sp_after_wait
+assert_r11_systemctl_kill_retries_transient_failure
+assert_r11_test_knobs_inert_without_switch
 
 finalize_test

@@ -172,6 +172,13 @@
 
 set -uo pipefail
 
+# Test seams: the HETERO_TEST_* knobs below (watchdog / containment fault injection) are
+# honoured only when the single test-mode switch is on. Without it any inherited knob is
+# dropped here, before it can reach a code path (BL-0099).
+if [ "${AUTOPILOT_TEST_ALLOW_HETERO_SEAMS:-}" != "1" ]; then
+  unset HETERO_TEST_SYSTEMCTL_KILL_FAIL HETERO_TEST_NO_SETSID HETERO_TEST_NO_JOBCONTROL
+fi
+
 # Default is the agy *alias*, never a literal vendor id: agy_resolve_model_alias() resolves it
 # against the live `agy models` inventory and fails closed when no tier match exists. A literal
 # id rots silently — "Gemini 3.5 Flash (High)" outlived its own model and every --model-less
@@ -3444,30 +3451,6 @@ _setsid_wait_worker_sid() {
 # Alive unless the process table positively proves the worker dead.
 # kill -0 is insufficient: an unreaped natural exit is still a pid (state Z).
 # procps `ps -g N` matches session leaders / group *names*, not PGID.
-_watchdog_pgid_has_live() {
-  local target="$1" pid="" pgid="" st="" out="" ps_rc=0
-  [ -n "$target" ] || return 0
-  out="$(ps -e -o pid=,pgid=,state= 2>/dev/null)" || ps_rc=$?
-  if [ "$ps_rc" -ne 0 ] || [ -z "$out" ]; then
-    return 0
-  fi
-  while read -r pid pgid st || [ -n "${pid:-}" ]; do
-    pgid="${pgid#"${pgid%%[![:space:]]*}"}"
-    pgid="${pgid%"${pgid##*[![:space:]]}"}"
-    st="${st#"${st%%[![:space:]]*}"}"
-    st="${st%"${st##*[![:space:]]}"}"
-    [ -n "$pgid" ] || continue
-    [ "$pgid" = "$target" ] || continue
-    case "$st" in
-      Z*) continue ;;
-      *) return 0 ;;
-    esac
-  done <<EOF
-$out
-EOF
-  return 1
-}
-
 _watchdog_worker_alive() {
   local pid="" pgid="" st="" out="" ps_rc=0
   local rp="${WORKER_RP:-}"
@@ -3523,6 +3506,12 @@ _watchdog_signal_worker() {
       sc=1
     else
       systemctl --user kill "$SCOPE_UNIT" --signal="$sig" >/dev/null 2>&1 || sc=$?
+      if [ "$sc" -ne 0 ]; then
+        # One bounded retry: a transient failure must not leave the run unbounded.
+        sleep 0.3
+        sc=0
+        systemctl --user kill "$SCOPE_UNIT" --signal="$sig" >/dev/null 2>&1 || sc=$?
+      fi
     fi
     if [ "$sc" -eq 0 ]; then
       return 0
@@ -3569,11 +3558,13 @@ _arm_worker_watchdog() {
     if [ "${HETERO_TEST_NO_SETSID:-}" != "1" ] && command -v setsid >/dev/null 2>&1; then
       setsid bash -c 'exec -a "hetero-wall-watchdog-'"$tag"'" sleep "$1"' bash "$secs" &
     else
-      sleep "$secs" &
+      # No setsid: still tag argv0 so _cancel_worker_watchdog can recognise and kill it.
+      bash -c 'exec -a "hetero-wall-watchdog-'"$tag"'" sleep "$1"' bash "$secs" &
     fi
     sp=$!
     echo "$sp" > "${tok}.sleeppid"
     wait "$sp" 2>/dev/null || true
+    sp=""   # reaped: the TERM trap must not signal a recycled pid
     [ -f "$tok" ] || exit 0
     if ! _watchdog_worker_alive; then
       exit 0
@@ -4970,7 +4961,7 @@ dispatch_detached_run() {
     # Preserve pi supervisor poll/stall bounds across setsid detach.
     declare -p PI_RPC_DIRECTIVE_POLL_SECS PI_RPC_STALL_PROBE_SECS PI_RPC_MAX_SECS PI_RPC_PROVIDER PI_MODELS_JSON 2>/dev/null || true
     declare -p STRIKE_DETECTOR_VERSION 2>/dev/null || true
-    declare -f child_session_env_setup repo_identity_of _repo_identity_json_str repo_identity_resolve_fields manifest_session_id_json manifest_child_session_json child_session_mint json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _watchdog_sleeppid_cmdline_has_tag _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_pgid_has_live _watchdog_worker_alive _watchdog_signal_worker _arm_worker_watchdog _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts passive_capture \
+    declare -f child_session_env_setup repo_identity_of _repo_identity_json_str repo_identity_resolve_fields manifest_session_id_json manifest_child_session_json child_session_mint json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _watchdog_sleeppid_cmdline_has_tag _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_worker_alive _watchdog_signal_worker _arm_worker_watchdog _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts passive_capture \
       _is_engine_unavailable _hetero_runner_token seat_strike_capture classify_outcome heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks _fp_unverifiable main_checkout_fingerprint check_main_checkout_boundary run_hands_content_gate \
       _cont_terminal_on_exit _cont_finalize_or_die \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \

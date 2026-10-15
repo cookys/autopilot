@@ -1046,10 +1046,12 @@ function residueNameRow(u: Ctx, e: ResidueEntry, state: Stated | null): PaneLine
 }
 // one residue section's rows: newest first (judge rows by severity first), each entry the name row, its reason (dim, column 2) and its command (`$`, never cut), at most
 // `cap` entries and a `more` row for the rest. No grouping, no per-row fold: what the owner has to read is on the screen.
+// newest first; an entry with no age goes last, and two with no age keep their order (Infinity - Infinity is NaN, which a comparator must never return)
+const ageOrder = (a: number | null, b: number | null): number => (a === null ? (b === null ? 0 : 1) : b === null ? -1 : a - b)
 export function residueRows(u: Ctx, id: string, entries: readonly ResidueEntry[], o: { judge: boolean; cap?: number }): PaneLine[] {
   const cap = o.cap ?? 5
   const rows = entries.map(e => ({ e, state: o.judge ? stateOf('residueGroup', e.cls) : null }))
-  rows.sort((a, b) => (a.state === null || b.state === null ? 0 : SEVERITY.indexOf(a.state.id) - SEVERITY.indexOf(b.state.id)) || (a.e.ageMs ?? Infinity) - (b.e.ageMs ?? Infinity))
+  rows.sort((a, b) => (a.state === null || b.state === null ? 0 : SEVERITY.indexOf(a.state.id) - SEVERITY.indexOf(b.state.id)) || ageOrder(a.e.ageMs, b.e.ageMs))
   const expanded = u.expanded?.has('more:' + id) === true
   const shown = expanded ? rows : rows.slice(0, cap)
   const out = shown.flatMap(({ e, state }) => [

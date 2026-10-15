@@ -283,3 +283,9 @@ test('tab name: 殘留 turns yellow when the 外掛來源 row shows ▲ even wit
     expect(hyg(snapOf(clean, bad)).some(l => l.startsWith('▲ ')), 'the row shows ▲ too').toBe(true)
   }
 })
+
+test('order: newest first within a section; entries with no age go last and keep their published order', () => {
+  const es = [entry({ path: '/w/no-age-a', age_days: null }), entry({ path: '/w/no-age-b', age_days: null }), entry({ path: '/w/old', age_days: 3 }), entry({ path: '/w/new', age_days: 1 })]
+  const names = hyg(snapOf(resWith(es), REAL_LOAD)).filter(l => l.startsWith('▲ ')).map(l => l.slice(2).trim().split(/\s+/)[0])
+  expect(names).toEqual(['new', 'old', 'no-age-a', 'no-age-b'])
+})

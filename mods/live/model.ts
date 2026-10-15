@@ -1417,7 +1417,7 @@ export function slotSpend(s: { brain: number; cap: number } | null): Slot | null
   }
 }
 
-// hygieneChip text (`dev↓3`, the arrow dim) + ` ⚑<n>` (n = needs_human_count = what a person must act on, n > 0 only; the owner reminder, never dropped)
+// hygieneChip text (`dev↓3`, the arrow dim) + ` ⚑<n>` (n = residueTally(...).judgeCount = what a person must judge, the cleanable entries not counted, n > 0 only; the owner reminder, never dropped)
 export function slotHygiene(ls: LoadSourceView | null, residue: ResidueView | null): Slot | null {
   const chip = hygieneChip(ls)
   const wt = residue === null ? 0 : residueTally(residue).judgeCount // what the owner has to judge; the cleanable ones are not a reminder

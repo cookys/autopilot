@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0194 -->
+<!-- next-id: BL-0195 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1443,5 +1443,17 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: 有人回報上面任一現象，或下次動 compaction-handoff.js
 - **Effort**: S
 - **Source**: hand review 2026-10-15
+- **Pointer**: none
+
+### Move exam registration to llm-playground; autopilot reads one JSON
+- **Id**: BL-0194
+- **Status**: open
+- **Since**: 2026-10-15
+- **Origin**: owner
+- **Problem**: 考試登記機制要全部搬到 llm-playground，不維護多份；由 dyno 產出一份 JSON 給 autopilot 綜合評估，至少含每小時解題數、資格、通過率、花費。
+- **Impact**: 兩邊各記一份會不一致，排席位時看到的數字對不上。
+- **Trigger**: 和 fable、astra 談定 JSON 欄位與產出方式後開工
+- **Effort**: M
+- **Source**: owner, 2026-10-15
 - **Pointer**: none
 

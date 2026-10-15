@@ -1440,8 +1440,9 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: owner
 - **Problem**: 考試登記機制要全部搬到 llm-playground，不維護多份；由 dyno 產出一份 JSON 給 autopilot 綜合評估，至少含每小時解題數、資格、通過率、花費。
 - **Impact**: 兩邊各記一份會不一致，排席位時看到的數字對不上。
-- **Trigger**: 和 fable、astra 談定 JSON 欄位與產出方式後開工
+- **Trigger**: JSON 欄位與產出方式經 hetero 討論（dispatch-discuss）定案後開工
 - **Effort**: M
 - **Source**: owner, 2026-10-15
 - **Pointer**: none
+- **Context**: owner 2026-10-15: review or discussion goes through the hetero engine, not fleet peers. Exams run inside the llm-playground project (a project, not a machine); scheduling around its GPU jobs is that project's concern.
 

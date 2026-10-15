@@ -11,7 +11,7 @@ import { violations } from './invariants.testkit'
 
 const LOCALES = [['zh-TW', makeT('zh-TW')], ['en', makeT('en')]] as const
 const dec = (id: string | null, question: string, over: Partial<LiveDecision> = {}): LiveDecision => ({
-  id, question, background: null, options: [], recommendation: null, why: null, blocks: null, not_authorized: null, source: null, opened_at: null, stale: false, age_s: 60, orphaned: false, ...over,
+  id, question, background: null, options: [], recommendation: null, why: null, blocks: null, not_authorized: null, source: null, opened_at: null, stale: false, age_s: 60, orphaned: false, origin: null, ...over,
 })
 const OPT = (label: string, description = ''): { label: string; description: string } => ({ label, description })
 const THREE = [
@@ -176,4 +176,58 @@ test('DECIDE reply: the head line, then `<id>｜<first 30 characters> → <answe
   expect(decideReply([dec(null, '沒有 id', { options: [OPT('甲'), OPT('乙')] })], { ...NO_DECIDE, picks: { null: 0 } })).toBeNull()
   // one answered question among three: only that one is in the text
   expect(decideReply(THREE, { ...NO_DECIDE, picks: { 'd-c24ecfd9': 0 } })?.text).toBe('[待決回覆]\nd-c24ecfd9｜U6 要不要把建議也寫進回覆 → 要')
+})
+
+// ---- review round 1 ----
+test('DECIDE meta: one subtle line `卡住：… · 來源：…`, the ★ reason line only under a recommendation; empty parts are left out, never drawn empty (all / none / source only)', () => {
+  const zh = makeT('zh-TW')
+  const one = (over: Partial<LiveDecision>) => texts(decideTabLines(snapOf([dec('d-1', 'q?', { options: [OPT('甲'), OPT('乙')], ...over })]), ctxOf(zh, 76, view())))
+  const all = one({ recommendation: '甲', why: '少一屏', blocks: '下一個派工', source: 'lane-x', not_authorized: '深度零不能決定' })
+  expect(all).toContain('  ★ 少一屏')
+  expect(all).toContain('  卡住：下一個派工 · 來源：lane-x')
+  expect(all.indexOf('  ★ 少一屏'), 'the reason follows the option row').toBe(all.findIndex(x => x.startsWith('  [ ] ★ 甲')) + 1)
+  expect(all.join('\n'), 'not_authorized is deliberately not drawn: being on this tab already says the owner decides').not.toContain('深度零不能決定')
+  const none = one({})
+  expect(none.some(x => x.includes('卡住') || x.includes('來源') || x.includes('★ '))).toBe(false)
+  expect(none.join('\n')).not.toMatch(/卡住：\s*$|來源：\s*$/m)
+  const src = one({ source: 'lane-x' })
+  expect(src).toContain('  來源：lane-x')
+  expect(src.some(x => x.includes('卡住'))).toBe(false)
+  // a reason without a recommendation has nothing to hang under: not drawn
+  expect(one({ why: '少一屏' }).some(x => x.includes('少一屏'))).toBe(false)
+  // the ★ line is a detail line made by the design system: the glyph from GLYPHS, dim, no background
+  const ls = decideTabLines(snapOf([dec('d-1', 'q?', { options: [OPT('甲'), OPT('乙')], recommendation: '甲', why: '少一屏' })]), ctxOf(zh, 76, view()))
+  const why = ls.find(l => l.text.includes('少一屏')) as PaneLine
+  expect(why.kind).toBe('detail')
+  expect(why.segs?.find(s => s.role === 'glyph')?.text).toBe(ui.GLYPHS.structure.recommend)
+  expect(why.segs?.every(s => s.dim === true || s.text.trim() === '')).toBe(true)
+})
+
+test('DECIDE send row: the total counts only the questions still open from the pane (an id, not sent, not a dialog)', () => {
+  const zh = makeT('zh-TW')
+  const list = [THREE[0], THREE[1], THREE[2], dec(null, '沒有 id', { options: [OPT('甲'), OPT('乙')] }), dec('d-dlg', '對話框題', { options: [OPT('甲'), OPT('乙')], origin: 'ask_user_question' })]
+  const ls = decideTabLines(snapOf(list), ctxOf(zh, 76, view({ picks: { 'd-4290499d': 0 }, sent: { 'd-0000free': 3 } })))
+  expect(ls[ls.length - 1].text.trim()).toBe('[ 送出（已選 1/2） ]')
+})
+
+test('DECIDE dialog: a question the asking session\'s dialog answers has no option Buttons, no field, says so, and is not counted or sent', () => {
+  for (const [loc, t] of LOCALES) {
+    const d = dec('d-dlg', '要不要繼續？', { options: [OPT('是'), OPT('否')], origin: 'ask_user_question' })
+    const ls = decideTabLines(snapOf([d]), ctxOf(t, 76, view()))
+    expect(pressIds(ls), loc).toEqual([])
+    expect(ls.some(l => l.field !== undefined), loc).toBe(false)
+    expect(texts(ls).some(x => x === '  ' + t('decide.in_dialog')), loc).toBe(true)
+    expect(ls.some(l => l.text.includes('[ ]')), loc + ': the options are still shown, as plain text').toBe(true)
+  }
+  expect(texts(decideTabLines(snapOf([dec('d-dlg', 'q', { origin: 'ask_user_question' })]), ctxOf(makeT('zh-TW'), 76, view())))).toContain('  請在對話框回答。')
+  expect(decideReply([dec('d-dlg', 'q', { options: [OPT('是'), OPT('否')], origin: 'ask_user_question' })], { ...NO_DECIDE, picks: { 'd-dlg': 0 } })).toBeNull()
+  // the other cards still send
+  expect(decideReply([dec('d-dlg', 'q', { options: [OPT('是'), OPT('否')], origin: 'ask_user_question' }), THREE[1]], { ...NO_DECIDE, picks: { 'd-dlg': 0, 'd-c24ecfd9': 0 } })?.ids).toEqual(['d-c24ecfd9'])
+})
+
+test('DECIDE reply: one question is one line whatever the labels and typed text hold (line breaks become blanks, a typed `｜` is not a separator)', () => {
+  const d = dec('d-x', '第一行\n第二行\r\n第三行？', { options: [OPT('甲\n乙'), OPT('丙')] })
+  const r = decideReply([d, THREE[2]], { picks: { 'd-x': 0 }, notes: { 'd-x': '先做\n\n再做｜然後', 'd-0000free': '一行\n又一行｜x' }, sent: {} })
+  expect(r?.text).toBe('[待決回覆]\nd-x｜第一行 第二行 第三行？ → 甲 乙｜補充：先做 再做|然後\nd-0000free｜這個分支要叫什麼名字？ → 一行 又一行|x')
+  expect(r?.text.split('\n').length, 'the head and one line per question').toBe(3)
 })

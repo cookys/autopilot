@@ -561,6 +561,11 @@ export function actionRow(u: Ctx, label: string, o: { press?: string; fact: Fact
   const text = cutProse('[ ' + label + ' ]', Math.max(1, u.cols - 1 - 2))
   return lineOf('choice', [sg('  '), o.press === undefined ? dim(text, { role: 'prose' }) : sg(text, { role: 'prose', color: 'success', press: o.press })], { fact: o.fact })
 }
+// the recommendation's reason, one subtle line under the option row: `  ★ <why>`
+export function recommendNote(u: Ctx, why: string, fact: FactId): PaneLine {
+  const lead = sg('  '), mark = sg(GLYPHS.structure.recommend, { color: 'suggestion', role: 'glyph', dim: true })
+  return lineOf('detail', [lead, mark, sg(' ', { dim: true }), dim(cutProse(why, Math.max(1, u.cols - 1 - 4)), { role: 'prose' })], { fact })
+}
 // a labelled text field: the label is drawn here, the Input after it by pane.tsx (a surface without Input never gets this line: the tab says to answer in the conversation)
 export function fieldRow(u: Ctx, label: string, o: { key: string; placeholder: string; value: string; fact: FactId }): PaneLine {
   return lineOf('field', [sg('  '), dim(cutProse(label, Math.max(1, u.cols - 1 - 4)), { role: 'prose' }), sg(' ')], { fact: o.fact, field: { key: o.key, placeholder: o.placeholder, value: o.value } })

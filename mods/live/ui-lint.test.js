@@ -204,3 +204,26 @@ test('L7 control: a state id literal and a table access are reported', () => {
   assert.ok(L7('const g = STATES[s.id]').length > 0)
   assert.deepEqual(L7('const s = ui.stateOf(d, x)'), [])
 })
+
+// docs/plans/2026-10-03-mods-visible-dispatch.md §2.5 (owner ruling 2026-10-15): the pane may send ONE prompt, the owner's own 送出 press, and never as the user.
+test('prompt.submit allowlist: only register.ts sendDecide calls $.prompt.submit; no file uses asUser or process spawning', () => {
+  const files = fs.readdirSync(__dirname).filter(f => /\.(ts|tsx)$/.test(f) && !/\.(test|testkit)\.ts$/.test(f) && f !== 'locales.ts')
+  const offenders = []
+  for (const f of files) {
+    const src = code(read(f))
+    if (/\basUser\b/.test(src)) offenders.push(f + ': asUser')
+    if (/process\.(spawn|run)\b/.test(src)) offenders.push(f + ': process spawn')
+    const calls = [...src.matchAll(/prompt\.submit\(/g)]
+    if (f !== 'register.ts' && calls.length > 0) offenders.push(f + ': prompt.submit')
+    if (f === 'register.ts') {
+      assert.equal(calls.length, 1, 'exactly one call site')
+      const from = src.lastIndexOf('async function ', calls[0].index)
+      assert.match(src.slice(from, from + 40), /^async function sendDecide\b/, 'the call is inside sendDecide')
+    }
+  }
+  assert.deepEqual(offenders, [])
+})
+test('prompt.submit allowlist control: a second call site and asUser are reported', () => {
+  assert.ok(/prompt\.submit\(/.test(code('async function other($) { $.prompt.submit({ text }) }')))
+  assert.ok(/\basUser\b/.test(code('$.prompt.submit({ text, asUser: true })')))
+})

@@ -15,7 +15,7 @@ owner 看不到派工在跑什麼、跑多久、最後結果，只能問或等�
 ## 2. OKR / KRs
 O：owner 不用問「怎麼這麼慢」就知道誰在跑、跑多久、最後 rc；每回合一頁可 review 且每階段自動刷新；radar 有快照可吃。
 - KR1（P1）：真跑一次 `/l5`，band 在 ≤ 20 s 內（watcher 10 s ＋ mod 5 s ＋ 發佈）顯示 live run 數、最老 elapsed、stalled、session cost、context %；派出／`.exit` 落地／review receipt／task receipt 四個事件各自在 ≤ 30 s 內觸發頁面重發佈（refresh 看到新內容）。
-- KR2（P1）：§4 P1 的負對照全綠；`grep -r "prompt.submit\|asUser\|process.spawn" mods/` 空。
+- KR2（P1）：§4 P1 的負對照全綠；`grep -r "prompt.submit\|asUser\|process.spawn" mods/` 空。（owner 裁決 2026-10-15 的例外見 §2.5 末。）
 - KR3（P2）：classic hook 每次 hook 區間的 p50／p95 有基線 JSON；正對照（已知 200 ms 延遲）量得到、負對照（hook 數 = 0）允許差近零。
 - KR4（P3）：事件核心 `--once` 在 CC-有-mod、CC-無-mod、Codex 三種環境印同一組事件行；預設設定下 `$.prompt.submit` 呼叫數 = 0（mock 計數）；宣告 `nothing_left` 後新 run 一開始就被標 `superseded`。
 - KR5（P4）：固定時計、同輸入重播兩次，`progress.json` 去掉 freshness envelope 後的 canonical payload byte-identical；真實 heartbeat 下 `published_at` 單調遞增而 payload 不變；重排器在 fake `child_process`／PATH 假 `fleet` 下零呼叫。
@@ -31,8 +31,10 @@ O：owner 不用問「怎麼這麼慢」就知道誰在跑、跑多久、最後 
 - 頁面只由 `scripts/render-review-page.js` 從 JSON 產生，不手寫、數字不重打；served root 是 host 層級的 `~/.autopilot/review/`，每個 project 一個子目錄 `<project_key>/`，不從 checkout 提供；發佈順序 候選目錄 → smoke → 原子 rename → 舊版 `.prev`。**整台機器一個 server、一個 port**（D2，R4.1）：`python3 -m http.server --bind 127.0.0.1 <port> --directory ~/.autopilot/review`，port 取 `~/.autopilot/config.json` 的 `review.port`（預設 8787；這個檔沒有中央 schema，各讀者自己讀，同 `replan.roots` 的作法，鍵寫進 `references/review-page.md`）；watcher 啟動時 ensure 它：server **不是 watcher 的子程序**，以 S5(b) 驗過的同一形狀 detached 起（`setsid nohup flock -n <live-base>/review/server.lock python3 -m http.server …`），watcher `--idle-exit`／`--stop` 都不影響它，自己有 `render-review-page.js --serve-stop`（核對 `/proc/<pid>/cmdline` 後才送 SIGTERM，同 runs-watch `--stop` 的作法）；`flock -n` 保證單一（已被持有就不起、印持有者 pid；port 被別的程序占用 → stderr 一行＋band 顯示 `review server: port busy`，不換 port）。根目錄 `index.html` 列出所有專案（`project_key`、顯示名＝主 worktree basename（display-only）、最後 `published_at`、需要決定數），每次發佈時在 host 級 `<live-base>/review/root-index.lock` 下重產；它是靜態目錄頁，不是 cockpit。**永遠只綁 127.0.0.1**；從手機或別台看，走使用者自己的反向代理（`tailscale serve`、caddy、`ssh -L`），指令寫進 `references/review-page.md`；auth／TLS 由代理負責，autopilot 不做。
 - 給 owner 看的圖，交付前實作者先自己截圖看過；比對頁的每張圖先派一個獨立審圖席（model: sonnet）逐張看過並留紀錄（revival.3d 教訓：leaf 把全黑畫面判 ACCEPT）；審圖席是程序，不是 gate。
 - severity 只用 🔴 Critical／🟠 Major／🟡 Minor／🔵 Suggestion；ADR-0001：不加 hash chain／attestation，頁面只列可重推的證據（路徑、commit、sha256）。
-- P1–P2 任何程式路徑不得出現 `$.prompt.submit`／`asUser`（grep 閘）；wake 預設 `notify`；`mods/` 不進 codex／opencode 鏡像；mod 不寫 repo 檔。
+- P1–P2 任何程式路徑不得出現 `$.prompt.submit`／`asUser`（grep 閘；唯一例外見本節末「owner 裁決 2026-10-15」）；wake 預設 `notify`；`mods/` 不進 codex／opencode 鏡像；mod 不寫 repo 檔。
 - 本 plan 不做：像素 diff、各專案截圖工具、gantt 時間軸 render、跨專案排程、quota、auth／TLS、guard 搬 function hook、Artifact 發佈功能。
+
+- **owner 裁決（2026-10-15）：待決分頁的「送出」是 `$.prompt.submit` 的唯一例外。** owner 原話：「多一個 tab 然後讓我可以在上面選好後送出」。例外限定為「只有 owner 自己按下『送出』這一條路徑、不用 `asUser`」：允許清單只有 `mods/live/register.ts` 的 `sendDecide` 一處呼叫 `$.prompt.submit`；`asUser`、其他檔案、其他函式、任何由計時器或事件觸發的送出一律仍禁止，`process.spawn` 的禁令不變。由 `mods/live/ui-lint.test.js` 的 `prompt.submit allowlist` 測試逐檔檢查，不是整個關掉。
 
 ## 2.6 Change-policy decisions
 - **Compatibility impact**: `published-compatible` — `autopilot status runs --json` 陣列形狀不變、只加欄；`--watch --out` 的 envelope 是新契約；三個 dispatcher 的 manifest 加 additive 欄 `repo_identity`（舊 manifest 缺欄 → `project: null`，顯示 `unscoped`）；新子命令 `work-round`、`declare-idle`；`hooks/hooks.json` 加頂層 `modules`（`scripts/check-hook-inventory.js:stemsFromHookBlock` 只走 `hooksJson.hooks` [V-file]）；`progress/1`、`compare-record/1`、`runs-live/1` 皆 additive。

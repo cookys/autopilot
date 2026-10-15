@@ -6,7 +6,7 @@ import type { T } from './i18n'
 import * as ui from './ui'
 import * as U from './ui'
 import { cellWidth, displayWidth, isStale, stateOf } from './ui'
-import { NO_DECIDE, bandAsks, bandIsDecide, bandIsQuiet, bandIsStalled, bandIsWaiting, DEFAULT_PANE_COLS, NOT_WIRED_ID, PANE_TABS, QUOTA_KEYS, RECENT_EXPANDED_LINES, SECTION, TODO_TOOLS_ID, agoText, attentionReason, bgLabel, collapsedPrompt, commonDirOf, decideLine, decideOpen, decidePick, recommendedIndex, elapsedFrom, exitCodeOf, hygieneChip, loadSourceFor, oneLine, runAgedOut, runEndedMs, runSubject, slotUnit, staleSuffix, tabLabel, truncateToWidth, verdictOf, vetoStep, walkSegs, wrapLines } from './model'
+import { NO_DECIDE, bandAsks, bandIsDecide, bandIsQuiet, bandIsStalled, bandIsWaiting, DEFAULT_PANE_COLS, NOT_WIRED_ID, PANE_TABS, QUOTA_KEYS, RECENT_EXPANDED_LINES, SECTION, TODO_TOOLS_ID, agoText, attentionReason, bgLabel, collapsedPrompt, commonDirOf, decideDialog, decideLine, decideOpen, decidePick, recommendedIndex, elapsedFrom, exitCodeOf, hygieneChip, loadSourceFor, oneLine, runAgedOut, runEndedMs, runSubject, slotUnit, staleSuffix, tabLabel, truncateToWidth, verdictOf, vetoStep, walkSegs, wrapLines } from './model'
 import type { AccountSnap, BandView, CodeReviewView, LivePaneRow, LiveSnapshot, PaneCtx, PaneLine, PaneTab, PlanReviewView, QuotaWindow, RecentGroup, ReviewSeat, Seg, SpendView, VerdictKind } from './model'
 import type { Ctx as UiCtx, Column as UiColumn, FactId, FmtKind, Frag, LineKind, RunSubject, SegRole, Stated, TableListRow as UiTableListRow } from './ui'
 
@@ -318,24 +318,27 @@ function decideCards(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
     if (d.background !== null) out.push(...ui.detail(u, d.background, { fact: F }))
     const pick = decidePick(d, dv)
     const rec = recommendedIndex(d)
+    const dialog = decideDialog(d)
     if (d.options.length > 0) {
-      out.push(...ui.choiceRows(u, d.options.map((o, k) => ({ label: o.label, picked: pick === k, recommended: rec === k, ...(sent || id === null ? {} : { press: 'pick:' + id + ':' + k }) })), { fact: F }))
+      out.push(...ui.choiceRows(u, d.options.map((o, k) => ({ label: o.label, picked: pick === k, recommended: rec === k, ...(sent || id === null || dialog ? {} : { press: 'pick:' + id + ':' + k }) })), { fact: F }))
+      if (d.recommendation !== null && d.why !== null) out.push(ui.recommendNote(u, d.why, F))
       if (pick !== null && d.options[pick].description !== '') out.push(...ui.detail(u, d.options[pick].description, { attached: true, at: 0 }))
     }
     if (!sent) {
-      if (id !== null && dv.inputs) out.push(ui.fieldRow(u, t(d.options.length > 0 ? 'decide.note' : 'decide.reply'), { key: 'note:' + id, placeholder: t(d.options.length > 0 ? 'decide.note_ph' : 'decide.reply_ph'), value: dv.notes[id] ?? '', fact: F }))
+      if (id !== null && dv.inputs && !dialog) out.push(ui.fieldRow(u, t(d.options.length > 0 ? 'decide.note' : 'decide.reply'), { key: 'note:' + id, placeholder: t(d.options.length > 0 ? 'decide.note_ph' : 'decide.reply_ph'), value: dv.notes[id] ?? '', fact: F }))
+      else if (dialog) out.push(...ui.detail(u, t('decide.in_dialog'), { fact: F }))
       else if (d.options.length === 0 || id === null) out.push(...ui.detail(u, t('decide.in_chat'), { fact: F }))
     }
-    const meta = [...(d.blocks === null ? [] : [t('decide.blocks', { b: d.blocks })]), ...(d.recommendation !== null && rec === null ? [t('decide.recommend', { r: d.recommendation })] : [])]
+    const meta = [...(d.blocks === null ? [] : [t('decide.blocks', { b: d.blocks })]), ...(d.source === null ? [] : [t('decide.source', { s: d.source })]), ...(d.recommendation !== null && rec === null ? [t('decide.recommend', { r: d.recommendation })] : [])]
     if (meta.length > 0) out.push(...ui.detail(u, meta.join(' · '), { fact: F }))
     out.push(ui.blank())
   })
-  const withId = list.filter(d => d.id !== null) // a question with no id cannot be answered from here: it only says so
-  const open = withId.filter(d => decideOpen(d, dv))
+  const mine = list.filter(d => d.id !== null && !decideDialog(d)) // a question with no id, or one the asker's dialog answers, cannot be answered from here: it only says so
+  const open = mine.filter(d => decideOpen(d, dv))
   const answered = open.filter(d => decideLine(d, dv) !== null).length
-  if (withId.length === 0) return out.slice(0, -1) // no send row: drop the blank that closed the last card
+  if (mine.length === 0) return out.slice(0, -1) // no send row: drop the blank that closed the last card
   if (open.length === 0) out.push(ui.actionRow(u, t('decide.sent_all'), { fact: F }))
-  else out.push(ui.actionRow(u, t('decide.submit', { n: answered, total: list.length }), { fact: F, ...(answered > 0 ? { press: 'submit' } : {}) }))
+  else out.push(ui.actionRow(u, t('decide.submit', { n: answered, total: open.length }), { fact: F, ...(answered > 0 ? { press: 'submit' } : {}) }))
   return out
 }
 function decideLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {

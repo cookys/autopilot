@@ -295,6 +295,8 @@
   "decide.note_ph": "選填",
   "decide.reply_ph": "請輸入你的回答",
   "decide.in_chat": "這題請在對話裡回答。",
+  "decide.source": "來源：{s}",
+  "decide.in_dialog": "請在對話框回答。",
   "decide.blocks": "卡住：{b}",
   "decide.recommend": "建議：{r}",
   "decide.submit": "送出（已選 {n}/{total}）",

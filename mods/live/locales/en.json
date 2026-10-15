@@ -295,6 +295,8 @@
   "decide.note_ph": "optional",
   "decide.reply_ph": "type your answer",
   "decide.in_chat": "Answer this one in the conversation.",
+  "decide.source": "From: {s}",
+  "decide.in_dialog": "Answer this one in the dialog the session opened.",
   "decide.blocks": "Stalls: {b}",
   "decide.recommend": "Recommended: {r}",
   "decide.submit": "Send ({n}/{total} chosen)",

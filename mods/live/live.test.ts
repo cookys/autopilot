@@ -3273,8 +3273,15 @@ for (const surface of SURFACES) {
       for (const width of [60, 76, 90]) {
         for (const id of PANE_TABS) {
           const parts = await paneParts($, surface, id, width)
-          for (const text of [stripOf(parts.tree), ...parts.texts]) {
-            expect(displayWidth(text), width + ' ' + id + ': ' + text).toBeLessThanOrEqual(text === stripOf(parts.tree) ? width + 8 : width) // the strip is Buttons in a wrapping Box: its joined text may pass the width a little (en, 60 columns), the pane puts the last tab on a second row
+          // the strip is Buttons in a wrapping Box: lay its entries out row by row the way a wrapping Box does (an entry that does not fit starts the next row) and hold every ROW to the width
+          const entries = (((((parts.tree.children || []) as Node[])[0].children || []) as Node[])[0].children || []) as Node[]
+          const rowsW: number[] = [0]
+          for (const e of entries) { const w = displayWidth(fullText(e)); if (rowsW[rowsW.length - 1] > 0 && rowsW[rowsW.length - 1] + w > width) rowsW.push(0); rowsW[rowsW.length - 1] += w }
+          expect(entries.length, width + ' ' + id + ': the strip entries (› chip + 7 tabs)').toBe(8)
+          for (const w of rowsW) expect(w, width + ' ' + id + ' strip row').toBeLessThanOrEqual(width)
+          expect(stripOf(parts.tree).includes('…'), width + ' ' + id + ' strip').toBe(false)
+          for (const text of parts.texts) {
+            expect(displayWidth(text), width + ' ' + id + ': ' + text).toBeLessThanOrEqual(width)
             if (id !== 'dispatch' || !/^[⊘●✓◌○✗?▲△∅] /.test(text)) expect(text.includes('…'), width + ' ' + id + ': ' + text).toBe(false) // only a 派工 table ROW may cut a cell (§4 table, §3.5); the strip, headers, the pointer row and the footer must not
           }
         }
@@ -4993,6 +5000,17 @@ for (const surface of SURFACES) {
     await now.press({ key: 'g' + at })
     await now.unmount()
     expect(await shownTabOf($, surface)).toBe('decide')
+  })
+
+  test('DECIDE mounted: two presses on send at the same moment submit ONE prompt (' + surface + ')', async ($, on) => {
+    const { submits } = decideWorld(on)
+    await start($, surface)
+    const a = await paneOn($, surface, 'decide')
+    await a.press({ key: 'pick:d-4290499d:0' })
+    await Promise.all([a.press({ key: 'submit' }), a.press({ key: 'submit' })]) // a double click: both presses run before either has written its marks
+    await a.unmount()
+    expect(submits.length).toBe(1)
+    expect(submits[0].text).toBe('[待決回覆]\nd-4290499d｜P5 殘留分頁要不要把已清掉的也列出來 → OK')
   })
 
   test('DECIDE mounted: a phone draws no text field; a question without options says to answer in the conversation, the option Buttons still work (' + surface + ')', async ($, on) => {

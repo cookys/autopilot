@@ -578,14 +578,22 @@ async function decidePress($: EngineInterface, id: string): Promise<void> {
 
 // One prompt carries every answered question that was not sent yet. The questions are marked sent BEFORE the prompt goes, so a second press cannot send them twice;
 // a prompt the session refuses takes the marks back. The prompt starts a turn once the session is idle: it is not awaited here.
+// The guard is a module flag taken before the first await: two presses landing together (a double click) both run this function before either has written its marks.
+let sending = false
 async function sendDecide($: EngineInterface): Promise<void> {
-  const reply = decideReply(snapshot === null ? [] : snapshot.pending, await read($, DECIDE))
-  if (reply === null) return
-  const at = await $.clock.now()
-  await update($, DECIDE, s => ({ ...s, sent: { ...s.sent, ...Object.fromEntries(reply.ids.map(i => [i, at])) } }))
-  $.prompt.submit({ text: reply.text }).catch(async () => {
-    await update($, DECIDE, s => { const sent = { ...s.sent }; for (const i of reply.ids) delete sent[i]; return { ...s, sent } })
-  })
+  if (sending) return
+  sending = true
+  try {
+    const reply = decideReply(snapshot === null ? [] : snapshot.pending, await read($, DECIDE))
+    if (reply === null) return
+    const at = await $.clock.now()
+    await update($, DECIDE, s => ({ ...s, sent: { ...s.sent, ...Object.fromEntries(reply.ids.map(i => [i, at])) } }))
+    $.prompt.submit({ text: reply.text }).catch(async () => {
+      await update($, DECIDE, s => { const sent = { ...s.sent }; for (const i of reply.ids) delete sent[i]; return { ...s, sent } })
+    })
+  } finally {
+    sending = false
+  }
 }
 
 // An edit of a note field (`note:<id>`).

@@ -54,6 +54,7 @@ export type LiveDecision = {
   id: string | null; question: string; background: string | null; options: { label: string; description: string }[]
   recommendation: string | null; why: string | null; blocks: string | null; not_authorized: string | null; source: string | null; opened_at: string | null
   stale: boolean; age_s: number | null
+  origin: string | null // `ask_user_question`: hooks/ask-decision.js opened it, the asker's own dialog answers it (the pane never does)
   orphaned: boolean // the asking session left no turn file: it ended (or crashed) without answering; the watcher derives it, the entry is never removed by it
 }
 
@@ -953,6 +954,7 @@ export function readJobModel(text: string | null): JobModel | null {
     stale: d.stale === true,
     age_s: finite(d.age_s) ? d.age_s : null,
     orphaned: d.orphaned === true,
+    origin: optText(d.origin),
   }))
   const p = m.progress
   const progress: JobProgress | null = isObject(p)
@@ -1543,14 +1545,18 @@ const DECIDE_ARROW = '\u2192' // written as an escape: it is wire text the model
 const DECIDE_EXCERPT = 30
 const flat = (s: string): string => s.replace(/\s+/g, ' ').trim()
 const excerptOf = (q: string): string => { const cs = [...flat(q)]; return cs.length <= DECIDE_EXCERPT ? cs.join('') : cs.slice(0, DECIDE_EXCERPT).join('') + '…' }
-// a question the owner can answer from the pane: it has an id, and was not sent yet
-export const decideOpen = (d: LiveDecision, st: DecideState): boolean => d.id !== null && st.sent[d.id] === undefined
+// a question the dialog of the asking session answers itself: the pane shows it but never answers it (a second answer would be a duplicate)
+export const decideDialog = (d: LiveDecision): boolean => d.origin === 'ask_user_question'
+// a question the owner can answer from the pane: it has an id, the pane is the way to answer it, and it was not sent yet
+export const decideOpen = (d: LiveDecision, st: DecideState): boolean => d.id !== null && !decideDialog(d) && st.sent[d.id] === undefined
 // the picked option of a question (an index that is still one of its options), else null
 export const decidePick = (d: LiveDecision, st: DecideState): number | null => {
   const k = d.id === null ? undefined : st.picks[d.id]
   return k !== undefined && Number.isInteger(k) && k >= 0 && k < d.options.length ? k : null
 }
 const decideNote = (d: LiveDecision, st: DecideState): string => flat(d.id === null ? '' : st.notes[d.id] ?? '')
+// one question is ONE line of the reply: line breaks in a label or a typed text become blanks (`flat`), and `｜` in a free text is the separator, so it is replaced
+const wire = (s: string): string => flat(s).replace(/｜/g, '|')
 // which option the question recommends: its `recommendation` text equals an option's label, or one starts with the other (a recommendation often adds a reason); null = none
 export function recommendedIndex(d: LiveDecision): number | null {
   const r = d.recommendation === null ? '' : flat(d.recommendation).toLowerCase()
@@ -1563,11 +1569,11 @@ export function recommendedIndex(d: LiveDecision): number | null {
 }
 // the answer line of one question, or null when nothing is chosen (an option question needs a pick, a free one needs text)
 export function decideLine(d: LiveDecision, st: DecideState): string | null {
-  if (d.id === null) return null
+  if (d.id === null || decideDialog(d)) return null
   const note = decideNote(d, st)
   const pick = decidePick(d, st)
-  const answer = d.options.length === 0 ? note : pick === null ? '' : d.options[pick].label + (note === '' ? '' : '｜補充：' + note)
-  return answer === '' ? null : d.id + '｜' + excerptOf(d.question) + ' ' + DECIDE_ARROW + ' ' + answer
+  const answer = d.options.length === 0 ? wire(note) : pick === null ? '' : wire(d.options[pick].label) + (note === '' ? '' : '｜補充：' + wire(note))
+  return answer === '' ? null : d.id + '｜' + wire(excerptOf(d.question)) + ' ' + DECIDE_ARROW + ' ' + answer
 }
 // the reply to send now: every open question that has an answer, in list order; null when there is none
 export function decideReply(list: readonly LiveDecision[], st: DecideState): { text: string; ids: string[] } | null {

@@ -311,6 +311,11 @@ __suite_on_interrupt() {
   # touching run.sh's own group). Fall back to a plain-PID signal too in case
   # the group form ever fails to reach anything (belt and suspenders; a
   # redundant second signal to an already-dying process is harmless).
+  # Serial path: the active suite is this shell's own background job, so the
+  # signal must be forwarded to its group here (BL-0100).
+  if declare -F __suite_kill_active >/dev/null 2>&1; then
+    __suite_kill_active "$sig"
+  fi
   for pid in "${PARALLEL_CHILD_PIDS[@]:-}"; do
     [ -n "$pid" ] || continue
     kill -s "$sig" -- "-$pid" >/dev/null 2>&1 || true
@@ -485,12 +490,75 @@ record_test_durations() {
     && mv -f "$tmp" "$TEST_DURATIONS_FILE"
 }
 
-# timeout(1) exit codes (GNU coreutils / uutils): 124 = the command was still
-# running at the deadline and was sent TERM; 137 = it ignored TERM and was
-# escalated to KILL 10s later (128+9). Both mean TIMEOUT, not "the suite
-# itself failed" — everything else is the suite's own exit code, unchanged.
-is_suite_timeout_ec() {
-  [ "$1" = "124" ] || [ "$1" = "137" ]
+# Run one suite under the wall-clock ceiling. BL-0088 + BL-0100.
+#
+# This replaces `timeout --kill-after=10 SECS bash FILE`, which had two defects:
+#   - TIMEOUT was inferred from exit code 124/137, but a suite can exit 124/137
+#     on its own (e.g. propagating a child's SIGKILL), so a plain failure was
+#     mislabelled [TIMEOUT]. Now a watchdog drops a marker file when IT fires;
+#     the label depends on that marker, never on the exit code.
+#   - `timeout` puts the suite in its own process group and runs as a FOREGROUND
+#     child, so bash deferred a trapped INT/TERM until the suite finished
+#     (interrupt latency = the longest running file). Now the suite is a
+#     background job (own group via `set -m`) that this shell `wait`s on, which
+#     a trapped signal interrupts at once; __suite_kill_active then signals the
+#     suite's group directly.
+#
+# $1 = suite file, $2 = capture file. Sets SUITE_EC (the suite's own status)
+# and SUITE_TIMED_OUT (1 only if the watchdog fired). stdin is /dev/null: a
+# background group reading a tty would be stopped by SIGTTIN (the parallel
+# workers already ran their suites outside the foreground group).
+SUITE_PID=""
+SUITE_WD_PID=""
+SUITE_EC=0
+SUITE_TIMED_OUT=0
+run_suite_guarded() {
+  local file="$1" out="$2" marker
+  marker="$(mktemp "${TMPDIR:-/tmp}/hooks-run-timeout.XXXXXX")" || marker=""
+  [ -z "$marker" ] || rm -f "$marker"
+  SUITE_TIMED_OUT=0
+  bash "$file" >"$out" 2>&1 </dev/null &
+  SUITE_PID=$!
+  (
+    sleep "$AUTOPILOT_TEST_SUITE_TIMEOUT_SECS"
+    [ -z "$marker" ] || : >"$marker"
+    kill -s TERM -- "-$SUITE_PID" >/dev/null 2>&1 || kill -s TERM "$SUITE_PID" >/dev/null 2>&1
+    sleep 10
+    kill -s KILL -- "-$SUITE_PID" >/dev/null 2>&1 || kill -s KILL "$SUITE_PID" >/dev/null 2>&1
+  ) >/dev/null 2>&1 &
+  SUITE_WD_PID=$!
+  wait "$SUITE_PID"
+  SUITE_EC=$?
+  if [ -n "$marker" ] && [ -e "$marker" ]; then
+    SUITE_TIMED_OUT=1
+  fi
+  [ -z "$marker" ] || rm -f "$marker"
+  # Retire the watchdog (and its sleep) -- the suite is done.
+  kill -s KILL -- "-$SUITE_WD_PID" >/dev/null 2>&1 || kill -s KILL "$SUITE_WD_PID" >/dev/null 2>&1 || true
+  wait "$SUITE_WD_PID" 2>/dev/null || true
+  SUITE_PID=""
+  SUITE_WD_PID=""
+}
+
+# Interrupt path for run_suite_guarded: forward $1 (default TERM) to the active
+# suite's whole group, give it ~3s, then KILL; retire the watchdog. Used by the
+# serial interrupt trap and by each parallel worker's own trap.
+__suite_kill_active() {
+  local sig="${1:-TERM}" i
+  if [ -n "${SUITE_WD_PID:-}" ]; then
+    kill -s KILL -- "-$SUITE_WD_PID" >/dev/null 2>&1 || kill -s KILL "$SUITE_WD_PID" >/dev/null 2>&1 || true
+  fi
+  if [ -n "${SUITE_PID:-}" ]; then
+    kill -s "$sig" -- "-$SUITE_PID" >/dev/null 2>&1 || kill -s "$sig" "$SUITE_PID" >/dev/null 2>&1 || true
+    for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+      kill -0 "$SUITE_PID" 2>/dev/null || break
+      sleep 0.2
+    done
+    kill -s KILL -- "-$SUITE_PID" >/dev/null 2>&1 || kill -s KILL "$SUITE_PID" >/dev/null 2>&1 || true
+    wait "$SUITE_PID" 2>/dev/null || true
+  fi
+  SUITE_PID=""
+  SUITE_WD_PID=""
 }
 
 TOTAL=0
@@ -560,15 +628,15 @@ run_one() {
   local skip_cap
   skip_cap="$(mktemp "${TMPDIR:-/tmp}/hooks-run-skipcap.XXXXXX")"
   SKIP_CAP_FILE="$skip_cap"
-  timeout --kill-after=10 "${AUTOPILOT_TEST_SUITE_TIMEOUT_SECS}s" bash "$file" >"$skip_cap" 2>&1
-  ec=$?
+  run_suite_guarded "$file" "$skip_cap"
+  ec=$SUITE_EC
   cat "$skip_cap"
   collect_skips "$rel" "$skip_cap"
   rm -f "$skip_cap"
   SKIP_CAP_FILE=""
   if [ "$ec" -eq 0 ]; then
     : # PASS line printed by finalize_test
-  elif is_suite_timeout_ec "$ec"; then
+  elif [ "$SUITE_TIMED_OUT" -eq 1 ]; then
     echo "TIMEOUT: $rel exceeded ${AUTOPILOT_TEST_SUITE_TIMEOUT_SECS}s (AUTOPILOT_TEST_SUITE_TIMEOUT_SECS)" >&2
     FAILED=$((FAILED + 1))
     FAILED_TESTS+=("$rel [TIMEOUT]")
@@ -764,8 +832,15 @@ else
           { exec {SUITE_ORACLE_LOCK_FD}>&-; } 2>/dev/null || true
         fi
         _t0=$SECONDS
-        timeout --kill-after=10 "${AUTOPILOT_TEST_SUITE_TIMEOUT_SECS}s" bash "$file" >"$out" 2>&1
-        echo $? >"$ecf"
+        # BL-0100: this worker owns its suite's group; a forwarded signal must
+        # reach it now, not after the suite finishes.
+        # A subshell runs without job control; turn it on so the suite is a group leader.
+        set -m
+        trap '__suite_kill_active INT; exit 130' INT
+        trap '__suite_kill_active TERM; exit 143' TERM HUP
+        run_suite_guarded "$file" "$out"
+        echo "$SUITE_EC" >"$ecf"
+        if [ "$SUITE_TIMED_OUT" -eq 1 ]; then : >"$PARALLEL_TMP/$i.timeout"; fi
         echo $((SECONDS - _t0)) >"$PARALLEL_TMP/$i.secs"
         # Done marker last so readers only see complete buffers.
         touch "$donef"
@@ -796,7 +871,7 @@ else
       fi
       if [ "$ec" -eq 0 ]; then
         : # PASS
-      elif is_suite_timeout_ec "$ec"; then
+      elif [ -f "$PARALLEL_TMP/$i.timeout" ]; then
         echo "TIMEOUT: $rel exceeded ${AUTOPILOT_TEST_SUITE_TIMEOUT_SECS}s (AUTOPILOT_TEST_SUITE_TIMEOUT_SECS)" >&2
         FAILED=$((FAILED + 1))
         FAILED_TESTS+=("$rel [TIMEOUT]")
@@ -881,15 +956,15 @@ else
     echo "──────── $rel (serial tail) ────────"
     tail_cap="$(mktemp "${TMPDIR:-/tmp}/hooks-run-skipcap.XXXXXX")"
     SKIP_CAP_FILE="$tail_cap"
-    AUTOPILOT_TEST_TIMING_FACTOR=1 timeout --kill-after=10 "${AUTOPILOT_TEST_SUITE_TIMEOUT_SECS}s" bash "$file" >"$tail_cap" 2>&1
-    serial_tail_ec=$?
+    AUTOPILOT_TEST_TIMING_FACTOR=1 run_suite_guarded "$file" "$tail_cap"
+    serial_tail_ec=$SUITE_EC
     cat "$tail_cap"
     collect_skips "$rel" "$tail_cap"
     rm -f "$tail_cap"
     SKIP_CAP_FILE=""
     if [ "$serial_tail_ec" -eq 0 ]; then
       :
-    elif is_suite_timeout_ec "$serial_tail_ec"; then
+    elif [ "$SUITE_TIMED_OUT" -eq 1 ]; then
       echo "TIMEOUT: $rel exceeded ${AUTOPILOT_TEST_SUITE_TIMEOUT_SECS}s (AUTOPILOT_TEST_SUITE_TIMEOUT_SECS)" >&2
       FAILED=$((FAILED + 1))
       FAILED_TESTS+=("$rel [TIMEOUT]")

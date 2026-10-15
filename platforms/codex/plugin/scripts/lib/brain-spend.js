@@ -78,8 +78,15 @@ function costsFileOf(opts = {}) {
   return env.AUTOPILOT_COSTS_FILE || path.join(homeOf(opts), '.claude', 'metrics', 'costs.jsonl');
 }
 
+// Filename-safe session key. Injective (BL-0105): an id that needed sanitising or truncating gets a hash of the
+// ORIGINAL appended, so 'a/b' and 'a_b' never share a key (and so never share spend or warn state). Ids that are
+// already clean keep their exact old key.
 function safe(s) {
-  return String(s || 'unknown').replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 96);
+  const raw = String(s || 'unknown');
+  const clean = raw.replace(/[^A-Za-z0-9._-]/g, '_');
+  if (clean === raw && raw.length <= 96) return raw;
+  const h = require('crypto').createHash('sha256').update(raw).digest('hex').slice(0, 12);
+  return `${clean.slice(0, 80)}-${h}`;
 }
 
 // Subagent rows (cost-tracker appends `sidechain:true` + `agent_id`). Owner ruling 2026-10-12: subagent spend is EXCLUDED from the

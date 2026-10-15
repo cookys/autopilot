@@ -235,7 +235,10 @@ function isDispatchBash(cmd) {
   // backgrounding `&` are tolerated.
   const noRedir = t.replace(/\d*>&\d+/g, '').replace(/&>>?/g, '').replace(/\s*&\s*$/, '');
   if (noRedir.includes('&')) return false;
-  return /^(?:(?:bash|node)\s+)?\S*scripts\/dispatch-[A-Za-z0-9._-]+\.(?:sh|js)(?:\s|$)/.test(t);
+  // BL-0105: the command word itself must be the rail: an optional `bash|node`, then a plain path (no `=`, so
+  // `FOO=scripts/dispatch-x.sh ...` is an env assignment, not the rail) whose `scripts/` is a whole directory
+  // segment (not `myscripts/`).
+  return /^(?:(?:bash|node)\s+)?\/?(?:[A-Za-z0-9._~${}-]+\/)*scripts\/dispatch-[A-Za-z0-9._-]+\.(?:sh|js)(?:\s|$)/.test(t);
 }
 
 (function main() {
@@ -273,7 +276,8 @@ function isDispatchBash(cmd) {
     const todaySpend = sumTodayTierSpend(costsFile, tiersSet);
     const thisSessionId = payload.session_id || process.env.AUTOPILOT_SESSION_ID
       || process.env.CLAUDE_CODE_SESSION_ID || process.env.CLAUDE_SESSION_ID || '';
-    const sessionSpend = thisSessionId ? sumTodayTierSpend(costsFile, tiersSet, thisSessionId) : 0;
+    // BL-0105: with no resolvable session id there is no per-session figure; say so instead of printing $0.00.
+    const sessionSpend = thisSessionId ? sumTodayTierSpend(costsFile, tiersSet, thisSessionId) : null;
     const threshold = cfg.daily_usd_brain;
 
     if (todaySpend < threshold) {
@@ -288,7 +292,7 @@ function isDispatchBash(cmd) {
       process.exit(0);
     }
 
-    const reason = `cost-fuse: brain-tier spend today: this session $${sessionSpend.toFixed(2)} / host today $${todaySpend.toFixed(2)} (≥ $${threshold} on this host) — brief the change and dispatch it to hands (model: sonnet|haiku, or the hetero ladder); read-only commands stay allowed; AUTOPILOT_COST_FUSE_MODE=off to override`;
+    const reason = `cost-fuse: brain-tier spend today: this session ${sessionSpend === null ? 'unknown' : `$${sessionSpend.toFixed(2)}`} / host today $${todaySpend.toFixed(2)} (≥ $${threshold} on this host) — brief the change and dispatch it to hands (model: sonnet|haiku, or the hetero ladder); read-only commands stay allowed; AUTOPILOT_COST_FUSE_MODE=off to override`;
 
     if (cfg.mode === 'block') {
       emit('deny', reason);

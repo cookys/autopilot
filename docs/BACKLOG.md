@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0181 -->
+<!-- next-id: BL-0182 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1816,15 +1816,15 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: no caller passes --seat-kind brain; computeSeatProjection in topology/scaffold-tier lacks seatKind. Also: HELP lines omit --seat-kind; invalid kind silently = default; no invalidate-strike brain test.
 
-### Tests read the host operator config unless each one pins it
-- **Id**: BL-0180
+### Hooks read ~/.autopilot/config.json directly, ignoring AUTOPILOT_CONFIG_FILE
+- **Id**: BL-0181
 - **Status**: open
 - **Since**: 2026-10-15
 - **Origin**: self
-- **Problem**: 大約一百支測試會間接讀到這台機器自己的操作員設定檔（例如排除哪些席位）。只要本機設定一改，測試結果就跟著變；BL-0179 那支就是這樣轉紅的。
-- **Impact**: 中。綠燈或紅燈可能只反映本機設定，不反映程式；換一台機器結果不同。
-- **Trigger**: next host-dependent red, or before the 3.0.0 cut
+- **Problem**: 約 20 個 hook 和共用程式直接讀家目錄底下的設定檔，不看指定設定檔的那個變數。測試若沒有另外改家目錄，就會讀到這台機器的真實設定；BL-0180 的統一釘住管不到它們。
+- **Impact**: 低到中。目前會讀設定的測試都有自己改家目錄；新寫的測試忘了改，結果就會跟著機器設定變。
+- **Trigger**: next host-dependent red in a hook test, or next touch of the config readers
 - **Effort**: S
-- **Source**: review of lane/bl0179, 2026-10-15
+- **Source**: lane/bl0180 report, 2026-10-15
 - **Pointer**: none
-- **Context**: config read at resolve-dispatch-topology.js:663 and run-approval.js:37; only resolve-dispatch-topology.test.sh and pending-revocation-fold pin it. Pin AUTOPILOT_CONFIG_FILE once in hooks/tests/run.sh.
+- **Context**: e.g. cost-tracker, foreman-guard, context-budget, opt-in, session-start and scripts/lib/*.js read os.homedir()/.autopilot/config.json. Route them through one reader that honours AUTOPILOT_CONFIG_FILE.

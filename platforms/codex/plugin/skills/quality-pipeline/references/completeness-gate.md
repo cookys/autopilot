@@ -31,7 +31,7 @@ scripts/error-path-scan.sh --staged           # advisory error-path scan
 ```
 
 **What the scripts do:**
-1. `completeness-scan.sh`: Lists all staged files (`git diff --cached --name-only`), skipping binaries. Runs regex patterns for all 5 categories above. Uses `git blame --porcelain` to classify each finding as **new** (uncommitted) vs **pre-existing**. Outputs JSON. Exit code: `0` clean, `1` has new findings (gate fails), `2` usage error. `--files` splitting: one joined argument is split automatically; if it contains a newline it splits on newlines only (names with spaces survive); CRLF loses the `\r`; warnings for missing pieces go to stderr; directories give no warning.
+1. `completeness-scan.sh`: Lists all staged files (`git diff --cached --name-only`), skipping binaries. Runs regex patterns for all 5 categories above. Uses `git blame --porcelain` to classify each finding as **new** (uncommitted) vs **pre-existing**. Outputs JSON. Exit code: `0` clean, `1` has new findings (gate fails), `2` usage error (including `--files` naming no existing regular file — a directory is not a file, so it never counts). `--files` splitting: one joined argument is split automatically; if it contains a newline it splits on newlines only (names with spaces survive); CRLF loses the `\r`; warnings for missing pieces go to stderr; directories give no warning.
 2. `secret-scan-diff.js`: **BLOCKING** step. Range/staged secret scan. Outputs JSON findings. Exit `1` if findings (gate fails), `0` clean, `2` usage error.
 3. `error-path-scan.sh`: **ADVISORY** step. Deterministic scan for swallowed errors, broadened catches, and untested error paths. Output is attached to the review dispatch as advisory findings input. Exit `0` always when scan ran, `2` usage error.
 

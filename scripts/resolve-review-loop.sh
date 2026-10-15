@@ -1246,7 +1246,9 @@ process.stdout.write(JSON.stringify(a));
 // Canonicalize runner aliases before every collision/exclusion/tuple-key comparison — codex-cli
 // and codex are the same rail and must never be treated as distinct.
 function normRunner(r) { return r === "codex-cli" ? "codex" : r; }
-function normEngine(e) { return e === "gemini-flash" ? "gemini-3.6-flash-high" : e; }
+// argv[6] is normalize_agy_alias gemini-flash — the shell function stays the single alias table.
+const flashAlias = process.argv[6] || "gemini-flash";
+function normEngine(e) { return e === "gemini-flash" ? flashAlias : e; }
 try {
   const d = JSON.parse(process.argv[1]);
   const ladder = d.consult_ladder;
@@ -1285,7 +1287,7 @@ try {
   }
 } catch {}
 process.exit(1);
-' "$_topo_json" "$_qc_panel_arg" "$_qc_panel_runners_arg" "$_qc_panel_efforts_arg" "$IMPL_RUNNER" 2>/dev/null)"
+' "$_topo_json" "$_qc_panel_arg" "$_qc_panel_runners_arg" "$_qc_panel_efforts_arg" "$IMPL_RUNNER" "$(normalize_agy_alias gemini-flash)" 2>/dev/null)"
     fi
 
     if [[ -n "$_consult_picked" ]]; then
@@ -1342,9 +1344,9 @@ fi
 # resolver enforces the exclusion). The topology pick excludes qc_panel seats itself; a
 # seat the config DECLARES - under `on`, or under `auto` (config-explicit) - is refused
 # here by the same (engine, runner, effort) key with the same aliases.
+_norm_r() { [[ "$1" == "codex-cli" ]] && echo codex || echo "$1"; }
+_norm_e() { normalize_agy_alias "$1"; }
 if [[ "$CONSULT_DISPATCH" == "on" || "$CONSULT_RESOLVED_FROM" == "config-explicit" ]]; then
-  _norm_r() { [[ "$1" == "codex-cli" ]] && echo codex || echo "$1"; }
-  _norm_e() { [[ "$1" == "gemini-flash" ]] && echo gemini-3.6-flash-high || echo "$1"; }
   _cq_n=${#QC_PANEL[@]}
   [[ ${#QC_PANEL_RUNNERS[@]} -lt $_cq_n ]] && _cq_n=${#QC_PANEL_RUNNERS[@]}
   [[ ${#QC_PANEL_EFFORTS[@]} -lt $_cq_n ]] && _cq_n=${#QC_PANEL_EFFORTS[@]}
@@ -1352,6 +1354,28 @@ if [[ "$CONSULT_DISPATCH" == "on" || "$CONSULT_RESOLVED_FROM" == "config-explici
     if [[ "$(_norm_e "${QC_PANEL[$_cq_i]}")|$(_norm_r "${QC_PANEL_RUNNERS[$_cq_i]}")|${QC_PANEL_EFFORTS[$_cq_i]}" == "$(_norm_e "$CONSULT_ENGINE")|$(_norm_r "$CONSULT_RUNNER")|$CONSULT_EFFORT" ]]; then
       echo "resolve-review-loop: declared consult seat ($CONSULT_ENGINE/$CONSULT_RUNNER/$CONSULT_EFFORT) is also qc_panel[$_cq_i] - a consult seat must not be a qc_panel seat; declare a different consult seat" >&2
       exit 3
+    fi
+  done
+fi
+# The native fallback seat (sonnet/high@claude-native) is a last resort and is never refused,
+# but it can coincide with a qc_panel seat, which defeats the point of a second look (BL-0138).
+# Advisory only: stderr + capability_warnings, exit code and every other field unchanged.
+if [[ "$CONSULT_RESOLVED_FROM" == "native-fallback" ]]; then
+  _cq_n=${#QC_PANEL[@]}
+  [[ ${#QC_PANEL_RUNNERS[@]} -lt $_cq_n ]] && _cq_n=${#QC_PANEL_RUNNERS[@]}
+  [[ ${#QC_PANEL_EFFORTS[@]} -lt $_cq_n ]] && _cq_n=${#QC_PANEL_EFFORTS[@]}
+  for ((_cq_i = 0; _cq_i < _cq_n; _cq_i++)); do
+    if [[ "$(_norm_e "${QC_PANEL[$_cq_i]}")|$(_norm_r "${QC_PANEL_RUNNERS[$_cq_i]}")|${QC_PANEL_EFFORTS[$_cq_i]}" == "$(_norm_e "$CONSULT_ENGINE")|$(_norm_r "$CONSULT_RUNNER")|$CONSULT_EFFORT" ]]; then
+      _consult_dup_warn="consult_dispatch auto: native fallback seat ($CONSULT_ENGINE/$CONSULT_RUNNER/$CONSULT_EFFORT) is also qc_panel[$_cq_i] - the consult opinion is not independent of that panel seat; declare a different consult seat or seat a qualified topology consult"
+      echo "resolve-review-loop: ⚠ ${_consult_dup_warn}" >&2
+      CAP_WARNINGS_JSON="$(node -e '
+let a = [];
+try { a = JSON.parse(process.argv[1]); } catch { a = []; }
+if (!Array.isArray(a)) a = [];
+a.push(process.argv[2]);
+process.stdout.write(JSON.stringify(a));
+' "$CAP_WARNINGS_JSON" "$_consult_dup_warn" 2>/dev/null || printf '%s' "$CAP_WARNINGS_JSON")"
+      break
     fi
   done
 fi

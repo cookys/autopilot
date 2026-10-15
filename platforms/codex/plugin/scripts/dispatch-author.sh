@@ -529,13 +529,38 @@ check_session_mode_gate() {
   done
 }
 
+# run_review_loop_resolver — sets REVIEW_LOOP_JSON / REVIEW_LOOP_JSON_RC from the resolver.
+# The resolver prints one "qc_panel[N] seat ... has no recorded operator admission" stderr note
+# per unpinned final-panel seat. Those describe the managed review rail's final panel, which
+# the author role never touches (BL-0097), so a SUCCESSFUL resolve drops exactly those lines
+# and forwards everything else; a FAILED resolve forwards its whole stderr (the notes can be
+# part of the diagnosis). The resolver itself still prints them for its other callers.
+run_review_loop_resolver() {
+  local _rl_err
+  _rl_err="$(mktemp -t dispatch-author-resolver-err-XXXXXX)" || _rl_err=""
+  if [[ -z "$_rl_err" ]]; then
+    REVIEW_LOOP_JSON="$(
+      cd "$REPO_ROOT" && REVIEW_LOOP_CONFIG_OVERRIDE="$REVIEW_LOOP_CONFIG" "$_AUTHOR_SELF_DIR/resolve-review-loop.sh"
+    )"
+    REVIEW_LOOP_JSON_RC=$?
+    return 0
+  fi
+  REVIEW_LOOP_JSON="$(
+    cd "$REPO_ROOT" && REVIEW_LOOP_CONFIG_OVERRIDE="$REVIEW_LOOP_CONFIG" "$_AUTHOR_SELF_DIR/resolve-review-loop.sh" 2>"$_rl_err"
+  )"
+  REVIEW_LOOP_JSON_RC=$?
+  if [[ "$REVIEW_LOOP_JSON_RC" -eq 0 ]]; then
+    grep -v -E '^resolve-review-loop: ⚠ qc_panel\[[0-9]+\] seat \(.*\) has no recorded operator admission' "$_rl_err" >&2 || true
+  else
+    cat "$_rl_err" >&2
+  fi
+  rm -f "$_rl_err"
+}
+
 load_verification_author_from_review_loop() {
   REVIEW_LOOP_CONFIG="$REPO_ROOT/.claude/review-loop-config.md"
   [[ -r "$REVIEW_LOOP_CONFIG" ]] || die_precondition "config missing at --repo-root/.claude/review-loop-config.md"
-  REVIEW_LOOP_JSON="$(
-    cd "$REPO_ROOT" && REVIEW_LOOP_CONFIG_OVERRIDE="$REVIEW_LOOP_CONFIG" "$_AUTHOR_SELF_DIR/resolve-review-loop.sh"
-  )"
-  REVIEW_LOOP_JSON_RC=$?
+  run_review_loop_resolver
   if [[ "$REVIEW_LOOP_JSON_RC" -ne 0 ]]; then
     die_precondition "resolve-review-loop failed"
   fi
@@ -677,10 +702,7 @@ run_strict_contract_preflight() {
 load_verification_author_contract_config() {
   REVIEW_LOOP_CONFIG="$REPO_ROOT/.claude/review-loop-config.md"
   [[ -r "$REVIEW_LOOP_CONFIG" ]] || die_precondition "config missing at --repo-root/.claude/review-loop-config.md"
-  REVIEW_LOOP_JSON="$(
-    cd "$REPO_ROOT" && REVIEW_LOOP_CONFIG_OVERRIDE="$REVIEW_LOOP_CONFIG" "$_AUTHOR_SELF_DIR/resolve-review-loop.sh"
-  )"
-  REVIEW_LOOP_JSON_RC=$?
+  run_review_loop_resolver
   if [[ "$REVIEW_LOOP_JSON_RC" -ne 0 ]]; then
     die_precondition "resolve-review-loop failed"
   fi
@@ -725,10 +747,7 @@ if [[ "$STRICT_ROSTER" -eq 1 ]]; then
   REPO_ROOT="$(cd "$REPO_ROOT" && pwd -P)"
   REVIEW_LOOP_CONFIG="$REPO_ROOT/.claude/review-loop-config.md"
   [[ -r "$REVIEW_LOOP_CONFIG" ]] || die_precondition "config missing at --repo-root/.claude/review-loop-config.md"
-  REVIEW_LOOP_JSON="$(
-    cd "$REPO_ROOT" && REVIEW_LOOP_CONFIG_OVERRIDE="$REVIEW_LOOP_CONFIG" "$_AUTHOR_SELF_DIR/resolve-review-loop.sh"
-  )"
-  REVIEW_LOOP_JSON_RC=$?
+  run_review_loop_resolver
   if [[ "$REVIEW_LOOP_JSON_RC" -ne 0 ]]; then
     die_precondition "resolve-review-loop failed"
   fi

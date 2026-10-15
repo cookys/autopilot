@@ -74,6 +74,19 @@ cd "$REPO_ROOT"
 # from L1 (node --test) and L2 (bash suite) children of this runner.
 export AUTOPILOT_TEST_RUN_GUARD=1
 
+# BL-0180: pin the operator config. resolve-dispatch-topology.js and run-approval.js read
+# $AUTOPILOT_CONFIG_FILE (default ~/.autopilot/config.json); ~100 suites reach them through
+# dispatch-hetero / dispatch-author / resolve-review-loop / dispatch-contract. A host config with
+# topology.exclude_seats turned pending-revocation-fold red (BL-0179). Unless the caller set the
+# variable, point it at an empty `{}` in a run-private dir. The outer/inner snapshot re-exec
+# inherits the export, so the inner run sees it as "caller-set" and leaves it alone.
+CFG_PIN_DIR=""
+if [ -z "${AUTOPILOT_CONFIG_FILE:-}" ]; then
+  CFG_PIN_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ts-cfgpin.XXXXXX")"
+  printf '{}\n' >"$CFG_PIN_DIR/config.json"
+  export AUTOPILOT_CONFIG_FILE="$CFG_PIN_DIR/config.json"
+fi
+
 # Global; set by the parallel branch, cleared after its own successful rm -rf.
 # The EXIT trap also removes it (belt-and-suspenders on an interrupted run).
 PARALLEL_TMP=""
@@ -153,6 +166,10 @@ __suite_on_exit() {
   fi
   if [ -n "$PARALLEL_TMP" ]; then
     rm -rf "$PARALLEL_TMP"
+  fi
+  if [ -n "${CFG_PIN_DIR:-}" ]; then
+    rm -rf "$CFG_PIN_DIR"
+    CFG_PIN_DIR=""
   fi
   # L1 per-run dir: release the liveness lock, then remove (the node process group is
   # gone by now — its pipeline finished or the interrupt trap waited on it).

@@ -288,6 +288,42 @@ assert_eq "" "$__RUN_STDOUT" "case11c: control: bare relative rail is still exem
 run_hook cost-fuse.js "$(make_payload Bash 'node /home/u/.claude/plugins/autopilot/scripts/dispatch-review.js --x 2>&1' 'fuse-session-1')"
 assert_eq "" "$__RUN_STDOUT" "case11d: control: absolute plugin-root rail is still exempt"
 
+# ── 11e. BL-0183: quoted rail paths are exempt; disguises still are not ──
+i=0
+for cmd in \
+  'bash "$REPO_ROOT/scripts/dispatch-x.sh" --brief b.md' \
+  'bash "${CLAUDE_PLUGIN_ROOT}"/scripts/dispatch-x.sh --x 2>&1' \
+  'node "${CLAUDE_PLUGIN_ROOT}/scripts/dispatch-review.js" --x &' \
+  "bash '\$REPO_ROOT/scripts/dispatch-x.sh'"; do
+  i=$((i+1))
+  rm -rf "$AUTOPILOT_COST_FUSE_DIR"
+  run_hook cost-fuse.js "$(make_payload Bash "$cmd" 'fuse-session-1')"
+  assert_eq "" "$__RUN_STDOUT" "case11e$i: quoted rail form is exempt: $cmd"
+done
+i=0
+for cmd in \
+  'FOO="scripts/dispatch-x.sh" rm -rf build' \
+  'FOO="$X/scripts/dispatch-x.sh" rm -rf build' \
+  'bash "/tmp/evil/myscripts/dispatch-x.sh"' \
+  'bash "${X}"/myscripts/dispatch-x.sh' \
+  'bash -c="scripts/dispatch-x.sh"' \
+  'bash --rcfile="scripts/dispatch-x.sh"' \
+  'bash --rcfile=scripts/dispatch-x.sh' \
+  'bash -c=scripts/dispatch-x.sh' \
+  'bash "$REPO_ROOT/scripts/dispatch-x.sh' \
+  'bash "$REPO_ROOT/scripts/dispatch-x.sh"; git push origin x' \
+  'bash "$REPO_ROOT/scripts/dispatch-x.sh" && rm -rf build'; do
+  i=$((i+1))
+  rm -rf "$AUTOPILOT_COST_FUSE_DIR"
+  run_hook cost-fuse.js "$(make_payload Bash "$cmd" 'fuse-session-1')"
+  assert_contains "$__RUN_STDOUT" '"additionalContext"' "case11f$i: disguise is not exempt: $cmd"
+done
+rm -rf "$AUTOPILOT_COST_FUSE_DIR"
+export AUTOPILOT_COST_FUSE_MODE=block
+run_hook cost-fuse.js "$(make_payload Bash 'bash "$REPO_ROOT/scripts/dispatch-x.sh"' 'fuse-session-1')"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case11g: block mode exempts nothing, quoted rail included"
+export AUTOPILOT_COST_FUSE_MODE=warn
+
 # ── 12. BL-0105: distinct session ids never share a sanitised key ──
 write_transcript "claude-fable-5-1"
 cat > "$AUTOPILOT_COSTS_FILE" <<EOF

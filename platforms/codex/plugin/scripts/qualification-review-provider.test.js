@@ -2100,6 +2100,43 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
   check(bare.captured === null, 'kimi without QRP_CLI_HOME never reaches spawn');
 }
 
+// ── BL-0161: a CLI that exits 0 with a quota/auth error is an infra failure ────
+{
+  const cliEnv = (extra = {}) => ({
+    QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude, ...extra,
+  });
+  for (const [label, stdout, stderr] of [
+    ['stdout quota text', 'Error: usage limit reached, quota exceeded', undefined],
+    ['stdout rate limit', 'Rate limit exceeded. Try again later.', undefined],
+    ['stdout login text', 'Please log in to continue.', undefined],
+    ['stdout http 401', 'API Error: 401 Unauthorized', undefined],
+    ['stderr token expired', 'garbled non-answer', 'error: token expired'],
+    ['stderr 429', 'garbled non-answer', 'HTTP 429 Too Many Requests'],
+  ]) {
+    const { child } = runProvider({
+      env: cliEnv(stderr ? { STUB_STDERR: stderr } : {}), request: reviewerRequest(), stubOutput: stdout,
+    });
+    equal(child.status, 1, `exit-0 ${label} is a provider (infra) failure, not a graded answer`);
+    check(/quota\/auth/u.test(child.stderr), `exit-0 ${label} failure names the cause`);
+  }
+  // Negative control: a legal answer that merely MENTIONS the words is still scored.
+  const mentioning = JSON.stringify({
+    verdict: 'pass', findings: [],
+    note: 'the code retries on rate limit and quota exceeded, token expired, 401',
+  });
+  const legal = runProvider({ env: cliEnv(), request: reviewerRequest(), stubOutput: mentioning });
+  equal(legal.child.status, 0, 'a parseable answer mentioning "rate limit" is graded as an answer');
+  const legalWithStderr = runProvider({
+    env: cliEnv({ STUB_STDERR: 'warn: rate limit nearly reached' }),
+    request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT,
+  });
+  equal(legalWithStderr.child.status, 0, 'a parseable answer with a rate-limit stderr warning is still graded');
+  // A long unparseable prose answer that discusses rate limits is a wrong answer, not infra.
+  const longProse = 'Reviewing the change: the retry loop handles rate limit gracefully. '.repeat(40);
+  const prose = runProvider({ env: cliEnv(), request: reviewerRequest(), stubOutput: longProse });
+  equal(prose.child.status, 0, 'a long unparseable prose answer mentioning rate limit is handed back for grading');
+}
+
 fs.rmSync(tempRoot, { recursive: true, force: true });
-if (assertions !== 421) throw new Error(`qualification-review-provider: expected exactly 421 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 436) throw new Error(`qualification-review-provider: expected exactly 436 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);

@@ -1024,6 +1024,37 @@ const agyContainment = require('./lib/agy-containment');
 const kimiContainment = require('./lib/kimi-containment');
 const qualificationUsage = require('./lib/qualification-usage');
 
+// BL-0161: a CLI that hits a quota / login wall can still exit 0 and just print the
+// error. Left alone that text reaches the host parser as an "answer" and grades as a
+// protocol violation (a false failed row plus a strike). It is a transport failure
+// (the same provider-failure class as a non-zero exit / empty output), never a miss.
+// Only consulted when the reply holds NO parseable JSON object, so a real answer that
+// merely mentions these words is never reclassified; a long unparseable reply is prose
+// (a wrong answer), so stdout is only matched when short like an error banner.
+const CLI_QUOTA_AUTH_ERROR = new RegExp([
+  String.raw`\brate[ -]?limit(?:ed|s)?\b`,
+  String.raw`\bquota\b`,
+  String.raw`\binsufficient (?:credits?|quota|balance)\b`,
+  String.raw`\busage limit\b`,
+  String.raw`\btoo many requests\b`,
+  String.raw`\bunauthori[sz]ed\b`,
+  String.raw`\bplease (?:log ?in|sign ?in|re-?authenticate)\b`,
+  String.raw`\b(?:not|no longer) (?:logged|signed) in\b`,
+  String.raw`\b(?:token|session|credentials?|api key) (?:has )?(?:expired|invalid|revoked)\b`,
+  String.raw`\b(?:invalid|expired) (?:token|api key|credentials?)\b`,
+  String.raw`\b(?:http|status|error|code)[ :=]*(?:401|403|429)\b`,
+  String.raw`\b(?:401|403|429) (?:unauthorized|forbidden|too many)`,
+].join('|'), 'iu');
+const CLI_ERROR_STDOUT_MAX_CHARS = 1000;
+
+function cliQuotaAuthError(text, stderrText) {
+  if (extractJsonObject(text)) return null;
+  const err = String(stderrText || '');
+  const hit = CLI_QUOTA_AUTH_ERROR.exec(err)
+    || (text.length <= CLI_ERROR_STDOUT_MAX_CHARS ? CLI_QUOTA_AUTH_ERROR.exec(text) : null);
+  return hit ? hit[0] : null;
+}
+
 // Transient-error retry for the agy transport ONLY (shapes: AGY_TRANSIENT below). agy sometimes exits non-zero
 // with `Eligibility check failed: UNAVAILABLE (code 503)` — a Google-side blip
 // that, with max_attempts 1 and ~60-100 s per case, voided a whole multi-dozen
@@ -1556,6 +1587,15 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
         const detail = Buffer.concat(stderr).toString('utf8').slice(0, 300);
         const suffix = detail ? `: ${detail}` : '';
         finish(new Error(`${kind} CLI produced no output${suffix}`));
+        return;
+      }
+      const stderrText = Buffer.concat(stderr).toString('utf8');
+      const wall = cliQuotaAuthError(text, stderrText);
+      if (wall) {
+        finish(new Error(
+          `${kind} CLI exited 0 but reported a quota/auth error ("${wall}"), no parseable answer: `
+          + `${(stderrText.trim() || text.trim()).slice(0, 300)}`,
+        ));
         return;
       }
       finish(null, { text, resolvedModel: model });

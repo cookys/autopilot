@@ -113,7 +113,6 @@ test('DECIDE none: no question is one empty line and no badge; each question add
   const dtab = strip.tabs.find(x => x.id === 'decide')!
   expect(dtab.label.color).toBe('warning')
   expect(dtab.label.bold).toBe(true)
-  expect(dtab.badge.map(s => s.text).join('')).toBe('')
   expect(strip.rule.map(s => s.text).join('')).not.toMatch(/[▲●⚑]/)
   expect(strip.tabs.map(x => x.id)).toEqual(['now', 'decide', 'dispatch', 'review', 'spend', 'hygiene', 'legend'])
 })
@@ -130,6 +129,22 @@ test('DECIDE every invariant: I1-I8 and I10 hold on the tab in both locales, wit
   // control: the checker does flag a background planted on an option segment
   const bent = decideTabLines(snapOf(THREE), ctxOf(makeT('en'), 76, view())).map(l => (l.kind === 'choice' && l.segs !== undefined ? ui.carry(l, { ...l, segs: l.segs.map(s => ({ ...s, backgroundColor: 'red' }) as never) }) : l))
   expect(violations(bent, 76, makeT('en')).some(v => v.startsWith('I6'))).toBe(true)
+})
+
+test('DECIDE bold whitelist (I4): only the picked option and the send button may be bold; an unpicked option, the star or a plain segment on a choice line is flagged (negative control)', () => {
+  const t = makeT('en')
+  const ls = decideTabLines(snapOf(THREE), ctxOf(t, 76, view({ picks: { 'd-4290499d': 1 } })))
+  expect(violations(ls, 76, t).filter(v => v.startsWith('I4'))).toEqual([]) // control: the real card (picked option bold, send button bold) is clean
+  expect(ls.some(l => l.kind === 'choice' && (l.segs ?? []).some(s => s.bold === true && s.role === 'pick'))).toBe(true)
+  expect(ls.some(l => l.kind === 'choice' && (l.segs ?? []).some(s => s.bold === true && s.role === 'send'))).toBe(true)
+  // plant: bold on every NON-picked, non-send segment of the option rows (an unpicked option label, the star, the spacing)
+  const bent = ls.map(l => (l.kind === 'choice' && l.segs !== undefined ? ui.carry(l, { ...l, segs: l.segs.map(s => (s.role === 'pick' || s.role === 'send' || s.text.trim() === '' ? s : { ...s, bold: true })) }) : l))
+  expect(violations(bent, 76, t).some(v => v.startsWith('I4'))).toBe(true)
+  // the same bold on a send-role seg that has no press id (a button that cannot be pressed) is flagged too
+  const dead = ls.map(l => (l.kind === 'choice' && l.segs !== undefined ? ui.carry(l, { ...l, segs: l.segs.map(s => (s.role === 'send' ? { ...s, press: undefined } : s)) }) : l))
+  expect(violations(dead, 76, t).some(v => v.startsWith('I4'))).toBe(true)
+  // BOLD_USES is the list I4 reads
+  expect(ui.BOLD_USES).toContain('picked option')
 })
 
 test('DECIDE owner: the cards are the 待決 tab\'s own fact, and 現況 shows only the one summary row', () => {

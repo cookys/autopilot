@@ -55,7 +55,7 @@ export function headerLines(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
 export type ScrollView = { offset: number; bodyRows: number }
 // ---- tab attention: which tab holds something for the owner, visible without opening it. The tab NAME is drawn warning bold (no symbol): 待決 while a question is open, 殘留 while
 // residue needs a person, 審查 while QC is owed. Dispatch is not marked: a running dispatch needs nobody. No number in this variant. ----
-export type TabNeed = { count?: number }
+export type TabNeed = Record<string, never>
 export function tabNeeds(snap: LiveSnapshot): Partial<Record<PaneTab, TabNeed>> {
   const out: Partial<Record<PaneTab, TabNeed>> = {}
   if (snap.detail.qc !== null && ui.isNeedYou(ui.stateOf('qc', snap.detail.qc.state))) out.review = {}
@@ -66,7 +66,7 @@ export function tabNeeds(snap: LiveSnapshot): Partial<Record<PaneTab, TabNeed>> 
 }
 export function stripOf(snap: LiveSnapshot | null, ctx: PaneCtx, tab: PaneTab, hasButton: boolean): ui.Strip {
   const needs = snap === null ? {} : tabNeeds(snap)
-  return ui.strip(uiCtxOf(ctx), tab, PANE_TABS.map(id => { const n = needs[id]; return { id, label: tabLabel(id, ctx.t), ...(n === undefined ? {} : { need: true, ...({}) }) } }), hasButton)
+  return ui.strip(uiCtxOf(ctx), tab, PANE_TABS.map(id => { const n = needs[id]; return { id, label: tabLabel(id, ctx.t), ...(n === undefined ? {} : { need: true }) } }), hasButton)
 }
 export const stripRows = (snap: LiveSnapshot, ctx: PaneCtx, tab: PaneTab, hasButton: boolean): { rows: number; exact: boolean } => { const s = stripOf(snap, ctx, tab, hasButton); return { rows: s.rows, exact: s.exact } }
 // an empty-text line is drawn as an empty Text, which takes no row on screen (the header's trailing blank is one): count only the rows that are really drawn

@@ -36,7 +36,6 @@ function tabStrip(el: { Box: El; Text: El; Button?: El }, tab: PaneTab, onTab: (
         {strip.tabs.map(x => (
           <Box key={x.id}>
             {Button === undefined ? draw(x.label, 'label') : <Button key={x.id} plain onPress={() => onTab(x.id)}>{draw(x.label, 'label')}</Button>}
-            {x.badge.map((b, i) => draw(b, 'badge' + i))}
             <Text> </Text>
           </Box>
         ))}

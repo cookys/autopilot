@@ -499,7 +499,7 @@ test('every tab: the shared checker flags a hand-written number, a bold mark wit
 test('strip: the active label and the ━ run are the here mark (I4 / I6); every bold or claude seg of the strip carries here', () => {
   for (const [loc, t] of LOCALES) {
     const sr = stripOf(snap(), ctxOf(t, 120), 'now', true)
-    const marked = [...sr.tabs.map(x => x.label), ...sr.tabs.flatMap(x => x.badge), ...sr.rule]
+    const marked = [...sr.tabs.map(x => x.label), ...sr.rule]
     for (const s of marked) if ((s.bold === true || s.color === 'claude') && s.color !== 'warning') expect(s.here, loc + ': strip seg "' + s.text.trim() + '" is bold or claude without here').toBe(true)
     expect(sr.tabs.filter(x => x.on).length).toBe(1)
     expect(sr.rule.some(s => s.here === true && s.text.includes('━')), loc + ': the ━ run carries here').toBe(true)
@@ -579,7 +579,7 @@ test('tab colour: a running dispatch never marks 派工; no symbol badge is draw
   const sr = stripOf(needSnap({ pending: true, residue: 2, qc: 'owed', live: 3 }), ctxOf(t, 120), 'now', true)
   expect(loud(sr, 'dispatch')).toBe(false)
   expect(tabNeeds(needSnap({ live: 3 })).dispatch).toBeUndefined()
-  const text = [...sr.tabs.flatMap(x => [x.label, ...x.badge]), ...sr.rule].map(g => g.text).join('')
+  const text = [...sr.tabs.map(x => x.label), ...sr.rule].map(g => g.text).join('')
   expect(text).not.toMatch(/[▲●⚑⊘]/)
 })
 test('tab colour: the active tab stays claude bold with its ━ run even when it needs the owner', () => {
@@ -589,6 +589,4 @@ test('tab colour: the active tab stays claude bold with its ━ run even when it
   expect(on.label.color).toBe('claude')
   expect(on.label.bold).toBe(true)
   expect(sr.rule.some(g => g.text.includes('━') && g.color === 'claude')).toBe(true)
-  expect(sr.tabs.flatMap(x => x.badge).every(g => g.color !== 'warning' || !x_on(sr, g))).toBe(true)
 })
-const x_on = (sr: ui.Strip, g: Seg): boolean => sr.tabs.some(x => x.on && x.badge.includes(g))

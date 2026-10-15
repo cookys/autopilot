@@ -67,6 +67,15 @@ export type PaletteRole = 'attention' | 'here' | 'broken' | 'done' | 'running' |
 export const PALETTE: Record<PaletteRole, ThemeKey> = { attention: 'warning', here: 'claude', broken: 'error', done: 'success', running: 'suggestion', idle: 'inactive', structure: 'subtle' }
 // the one bold whitelist: a section title, the verdict line, the active tab name, a tab name that needs the owner, a picked decision option and the send button. Nothing else is bold.
 export const BOLD_USES = ['header title', 'verdict line', 'active tab name', 'needing tab name', 'picked option', 'send button'] as const
+// which whitelist entry a bold segment belongs to, or null (a violation); invariant I4 reads this so the test never keeps its own copy of the list
+export function boldUseOf(line: PaneLine, s: Seg): (typeof BOLD_USES)[number] | null {
+  if (line.kind === 'verdict') return 'verdict line'
+  if (line.kind === 'header' && s.role === 'prose') return 'header title'
+  if (s.role === 'tab') return s.color === PALETTE.here ? 'active tab name' : s.color === PALETTE.attention ? 'needing tab name' : null
+  if (line.kind === 'choice' && s.role === 'pick') return 'picked option'
+  if (line.kind === 'choice' && s.role === 'send' && s.press !== undefined) return 'send button'
+  return null
+}
 // a segment option that sets a colour only when there is one (the default text colour is the absence of a key)
 export const tone = (k: ThemeKey | undefined): { color?: ThemeKey } => (k === undefined ? {} : { color: k })
 
@@ -389,7 +398,7 @@ function frag(segs: Seg[], fact?: FactId): Frag {
 export const isFrag = (v: unknown): v is Frag => typeof v === 'object' && v !== null && FRAGS.has(v)
 
 export type FmtKind = 'money' | 'pct' | 'dur' | 'ago' | 'clock' | 'size' | 'sha' | 'id' | 'count'
-export type SegRole = 'glyph' | 'state' | 'value' | 'prose' | 'key' | 'rule' | 'tab'
+export type SegRole = 'glyph' | 'state' | 'value' | 'prose' | 'key' | 'rule' | 'tab' | 'pick' | 'send'
 type SegOpts = { color?: ThemeKey; bold?: boolean; dim?: boolean; role?: SegRole; here?: boolean; fmt?: FmtKind; press?: string }
 const sg = (text: string, o: SegOpts = {}): Seg => ({ text, ...o })
 const dim = (text: string, o: SegOpts = {}): Seg => sg(text, { ...o, dim: true })
@@ -549,7 +558,7 @@ export function choiceRows(u: Ctx, choices: readonly Choice[], o: { fact: FactId
   const room = u.cols - 1 - 2
   const piece = (c: Choice): Seg[] => {
     const press = c.press === undefined ? {} : { press: c.press }
-    const pick = c.picked ? { bold: true } : c.press === undefined ? { dim: true } : {}
+    const pick = c.picked ? { bold: true, role: 'pick' as const } : c.press === undefined ? { dim: true } : {}
     const head = c.picked ? '[x] ' : '[ ] '
     const star: Seg[] = c.recommended ? [sg(GLYPHS.structure.recommend, { role: 'glyph', ...press }), sg(' ', { role: 'prose', ...press })] : []
     const used = displayWidth(head) + star.reduce((n, x) => n + displayWidth(x.text), 0)
@@ -572,7 +581,7 @@ export function choiceRows(u: Ctx, choices: readonly Choice[], o: { fact: FactId
 // one action row: `[ label ]`, bold default text and pressable under `press`, dim and inert without it (nothing chosen yet, or already sent)
 export function actionRow(u: Ctx, label: string, o: { press?: string; fact: FactId }): PaneLine {
   const text = cutProse('[ ' + label + ' ]', Math.max(1, u.cols - 1 - 2))
-  return lineOf('choice', [sg('  '), o.press === undefined ? dim(text, { role: 'prose' }) : sg(text, { role: 'prose', bold: true, press: o.press })], { fact: o.fact })
+  return lineOf('choice', [sg('  '), o.press === undefined ? dim(text, { role: 'prose' }) : sg(text, { role: 'send', bold: true, press: o.press })], { fact: o.fact })
 }
 // the recommendation's reason, one subtle line under the option row: `  ★ <why>`
 export function recommendNote(u: Ctx, why: string, fact: FactId): PaneLine {
@@ -856,11 +865,11 @@ export function drawSeg(s: Seg): { color: ThemeKey | undefined; bold: boolean | 
   return { color: s.color, bold: s.bold, dimColor: s.dim }
 }
 
-// `need`: the tab holds something for the owner, so its name is drawn attention bold (the colour of `▲ 要你決定`); `count` (variant B) is the number after the name
-export type StripTab = { id: PaneTab; label: string; need?: boolean; count?: number }
+// `need`: the tab holds something for the owner, so its name is drawn attention bold (the colour of `▲ 要你決定`)
+export type StripTab = { id: PaneTab; label: string; need?: boolean }
 export type Strip = {
   next: Seg | null // the next-tab chip `›`
-  tabs: { id: PaneTab; on: boolean; label: Seg; badge: readonly Seg[] }[]
+  tabs: { id: PaneTab; on: boolean; label: Seg }[]
   rule: Seg[] // the baseline under the strip; on one row it carries the active mark (`━` under the active label)
   rows: number // drawn rows: the strip's wrapped rows + the baseline
   exact: boolean // the strip fits one row, so `rows` is certain and the `━` mark is drawn
@@ -874,8 +883,7 @@ export function strip(u: Ctx, active: PaneTab, tabs: readonly StripTab[], hasNex
     // the active tab stays claude bold even when it needs the owner (the `━` run already marks it); an inactive one that needs the owner is warning bold, the rest dim
     const o: SegOpts = on ? { color: PALETTE.here, bold: true, here: true, role: 'tab' } : needs ? { color: PALETTE.attention, bold: true, role: 'tab' } : { dim: true, role: 'tab' }
     const label = sg(' ' + tb.label + ' ', o)
-    const badge: readonly Seg[] = needs && tb.count !== undefined && tb.count > 0 ? [sg(String(tb.count), o)] : []
-    return { id: tb.id, on, label, badge, width: displayWidth(label.text) + displayWidth(badge.map(s => s.text).join('')) + 1 }
+    return { id: tb.id, on, label, width: displayWidth(label.text) + 1 }
   })
   let rows = 1
   let x = next === null ? 0 : displayWidth(next.text) + 1
@@ -884,7 +892,7 @@ export function strip(u: Ctx, active: PaneTab, tabs: readonly StripTab[], hasNex
   let markW = 0
   for (const b of built) {
     if (w > 0 && w + b.width > u.cols) { rows++; w = 0 }
-    if (b.on) { markAt = x; markW = displayWidth(b.label.text) + displayWidth(b.badge.map(s => s.text).join('')) }
+    if (b.on) { markAt = x; markW = displayWidth(b.label.text) }
     w += b.width
     x += b.width
   }
@@ -893,7 +901,7 @@ export function strip(u: Ctx, active: PaneTab, tabs: readonly StripTab[], hasNex
   const rule: Seg[] = exact && markAt >= 0
     ? [...bar(markAt, GLYPHS.structure.rule, { color: PALETTE.structure }), ...bar(markW, GLYPHS.structure.tabMark, { color: PALETTE.here, here: true }), ...bar(u.cols - markAt - markW, GLYPHS.structure.rule, { color: PALETTE.structure })]
     : bar(u.cols, GLYPHS.structure.rule, { color: PALETTE.structure })
-  return { next, tabs: built.map(({ id, on, label, badge }) => ({ id, on, label, badge })), rule, rows: rows + 1, exact }
+  return { next, tabs: built.map(({ id, on, label }) => ({ id, on, label })), rule, rows: rows + 1, exact }
 }
 
 // a hint at the right edge of a made line: in the gap when the line leaves room, else in the run of blanks the one-line header already holds; null = no room

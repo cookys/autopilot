@@ -2,7 +2,7 @@
 // locales x widths) and now.test.ts (every tab, P5). Test support only: nothing in the pane imports it.
 import type { PaneLine } from './model'
 import type { makeT } from './i18n'
-import { GLYPHS, PALETTE, STATES, displayWidth, emojiViolations, emphasisViolations, isMade } from './ui'
+import { GLYPHS, STATES, boldUseOf, displayWidth, emojiViolations, emphasisViolations, isMade } from './ui'
 
 type Tr = ReturnType<typeof makeT>
 // ---- the invariants I1 to I8 and I10 over a tab's lines (line 0, the legacy global header, is P4's: it is unbranded until the verdict header replaces it) ----
@@ -36,7 +36,7 @@ export function violations(lines: PaneLine[], cols: number, t: Tr): string[] {
     if (l.text.includes('▌')) out.push('I4 ' + at + ' contains ▌')
     for (const v of emphasisViolations(l)) out.push('I4 ' + at + ' ' + v)
     for (const s of l.segs ?? []) { // I4: bold is a whitelist (ui.BOLD_USES): a section header, the verdict line, a tab name (active or needing the owner), and on a decision card the picked option and the send button. Nothing else is bold.
-      if (s.bold === true && l.kind !== 'header' && l.kind !== 'verdict' && l.kind !== 'choice' && !(s.role === 'tab' && (s.color === PALETTE.attention || s.color === PALETTE.here))) out.push('I4 ' + at + ' seg ' + JSON.stringify(s.text) + ' is bold outside the bold whitelist (header / verdict / picked option / send button)')
+      if (s.bold === true && boldUseOf(l, s) === null) out.push('I4 ' + at + ' seg ' + JSON.stringify(s.text) + ' is bold outside the bold whitelist (ui.BOLD_USES)')
     }
     if (l.kind !== 'detail' && emojiViolations(l.text).length > 0) out.push('I5 ' + at + ' ' + emojiViolations(l.text).join(','))
     if (/[️⃣]/u.test(l.text)) out.push('I5 ' + at + ' has VS16 or keycap')

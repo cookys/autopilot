@@ -811,7 +811,7 @@ G2 is the last generation: depth-0 ruled on each finding, and this file is froze
 
 ## 12. Revision 2026-10-16: the semantic palette
 
-Owner ruling 2026-10-16 (see §8): 「整個 panel 顏色盤點重整，考慮視覺重量跟顏色代表的意涵，盡量讓介面清楚明瞭，然後更新為預設開發 design pattern」. This section is the default design pattern for the live mod's pane and band and for any mod surface written after it. It changes colour and weight only: no layout and no glyph shape changes, except the band's finished stage node (`●` to `✓`, §3.4 rule 3), and the worst-of aggregation (§3.3) is untouched.
+Owner ruling 2026-10-16 (see §8): 「整個 panel 顏色盤點重整，考慮視覺重量跟顏色代表的意涵，盡量讓介面清楚明瞭，然後更新為預設開發 design pattern」. This section is the default design pattern for the live mod's pane and band and for any mod surface written after it. It changes colour and weight only: no glyph shape changes, except the band's finished stage node (`●` to `✓`, §3.4 rule 3), and the worst-of aggregation (§3.3) is untouched. Two layout changes follow from the rules and are part of this revision: the tab strip no longer carries count badges (the tab name's colour says it, §12.5), and the `要你處理` section title shows a plain `N` where it showed `▲ N` (§12.2).
 
 Method: every use of a theme key in `mods/live` was inventoried (file and line), each key was found to carry between two and seven meanings, and the table below gives each key exactly one.
 

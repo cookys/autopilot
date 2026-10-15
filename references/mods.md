@@ -143,6 +143,9 @@ S5a, S5b, S7, S8; `README.md` there is the verdict table). A mod is CC-only; non
   rejected read to the mod (message `no implementation for fs.read`), which is how a fixture says "file missing". The bottom
   also needs `on('session.start')` (`{ cwd }`), `on('session.end')`, `on('ui.toast' | 'ui.open' | 'ui.invalidate')`;
   `mock.clock` and `mock.env` do time and `$HOME`. A plugin named `autopilot` is required for the repo's own module name.
+  Run the suite with `bash mods/live/run-tests.sh`, which copies `mods/live` to a temp plugin. `claude plugin test .` at the
+  repo root is not a supported entry point: it also picks up the 2026-10-03 spike evidence tests (S4 image, S5
+  `clock.every`), which need their own register files and fail there.
 - **Loading it before it is wired**: `claude plugin validate` refuses a module path that leaves the plugin directory and a
   symlink that resolves outside it, so a scratch wrapper plugin (name `autopilot`, `hooks/hooks.json` =
   `{"modules": ["../mods/live/register.ts"]}`) holds a **copy** of `mods/`; re-copy after each edit.

@@ -1129,18 +1129,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: release-gating is deliberate (header comment). A cheap develop-triggered `dispatch-detach` smoke + `sync-all --check` would catch drift weeks earlier; the full suite can stay release-gated.
 
 
-### dispatch-author forwards three final-panel qc_panel admission warnings on every run (noise for the author role)
-- **Id**: BL-0097
-- **Status**: open
-- **Since**: 2026-09-23
-- **Origin**: self
-- **Problem**: 作者角色派工時，每次都會多印出三則關於最終審查名單的受理警告，這些警告與作者無關。 (draft)
-- **Impact**: 只是輸出雜訊，不影響結果；要先決定作者派工是否該隱藏這些提示。 (draft)
-- **Trigger**: next edit to dispatch-author's resolver call or to resolve-review-loop's qc_panel notes
-- **Effort**: S
-- **Source**: 2026-09-23 CI repair, dispatch cluster (fa2a0c50 notes surface through dispatch-author stderr)
-- **Pointer**: docs/backlog/ci-repair-2026-09-23-followups.md
-- **Context**: product call whether author rails should suppress panel-intake notes; tests now read JSON from stdout only, so this is noise, not breakage.
 
 
 ### dispatch-hetero watchdog round-2 cleanups: dead _watchdog_pgid_has_live, test-helper hygiene, HETERO_TEST_* knobs
@@ -1220,18 +1208,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 
 
 
-### Pre-existing red suites: mods spike artifacts, 4 failures in claude plugin test
-- **Id**: BL-0114
-- **Status**: open
-- **Since**: 2026-10-08
-- **Origin**: self
-- **Problem**: mods 試驗（spike）產出的測試中，圖片與時鐘兩項試驗有 4 項失敗，是既有問題，與當時的 stage-graph 工作無關。 (draft)
-- **Impact**: 影響只在 mods 試驗資料，對使用者功能無影響；是否仍失敗需重新確認。 (draft)
-- **Trigger**: when mods spikes are next touched
-- **Effort**: S
-- **Source**: stage-graph plan execution, 2026-10-06..08
-- **Pointer**: docs/plans/evidence/2026-10-06-stage-graph/README.md
-- **Context**: docs/plans/evidence/2026-10-03-mods-spikes/: S4 Image and S5 clock.every fail.
 
 
 ### remove dispatch-hetero.sh --gc and stale_reaper_age_days at 3.0.0 final
@@ -1375,18 +1351,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: Pre-date 2f3a2477; list via a sha256 scan of docs/mission-*-sources.json. Restore bytes from the sealing commit, never re-seal.
 
 
-### resolve-review-loop alias table and fresh-context seat follow-ups
-- **Id**: BL-0138
-- **Status**: open
-- **Since**: 2026-10-13
-- **Origin**: self
-- **Problem**: 審查路由腳本裡有第三份模型別名對照表，沒有共用既有函式；設定範本也沒寫「低風險審查席位不能和 QC 席位相同」；預設退回的 sonnet 席位也可能剛好和 QC 席位重複。
-- **Impact**: 別名改了只改到兩份時，審查會派到錯的模型；席位重複會讓「換一個家族看」的設計落空。
-- **Trigger**: next touch of scripts/resolve-review-loop.sh alias handling or review-loop-config template
-- **Effort**: S
-- **Source**: lane Y review, 2026-10-13
-- **Pointer**: none
-- **Context**: resolve-review-loop.sh:1323 has its own alias table; call normalize_agy_alias. Template review-loop-config.md:191 should say the seat must not equal a qc_panel seat. Native fallback sonnet may equal a qc seat.
 
 
 

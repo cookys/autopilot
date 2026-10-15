@@ -27,7 +27,9 @@ historical `observed_paths` in `docs/projects/_archive/2026/07/2026-07-26-missio
 candidate-path-audit.json` (restored byte-identical by the mission cluster). Needs an explicit frozen
 marker (e.g. a seal) rather than a path heuristic.
 
-## 4. dispatch-author forwards qc_panel admission notes
+## 4. dispatch-author forwards qc_panel admission notes — Done (BL-0097, merge of lane rvwfu)
+dispatch-author now drops these notes when the resolver succeeds and forwards all stderr on failure.
+
 `fa2a0c50` made `resolve-review-loop.sh` print one `⚠ qc_panel[N] … has no recorded operator admission`
 line per unpinned final-panel seat. `dispatch-author.sh` calls the resolver on every strict run, so every
 author dispatch prints three panel-intake notes that are irrelevant to the author role. Tests now parse

@@ -1403,18 +1403,18 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: Grok: `bash run-rv6-cli-chain.sh grok grok:grok-4.7:low` (reviewer-requalify evidence folder). Kimi: reviewer v6 plus every role this round sat; no early stop.
 
-### Dispatch-tree 3d live checks: tmux row l, codex row d2, kimi child env
+### Dispatch-tree 3d live check: kimi child env
 - **Id**: BL-0176
 - **Status**: open
 - **Since**: 2026-10-15
 - **Origin**: self
-- **Problem**: tmux 讓新 session 掛錯上層的問題已在程式裡修好（3d），測試也全綠，但還沒用真的 claude＋tmux 實跑確認；codex 那條端到端檢查要照新規則重跑；kimi 子程序拿到的身分仍只看過程式碼。
+- **Problem**: tmux 掛錯上層的問題（3d）與 codex 端到端已實跑確認通過；只剩 kimi 子程序拿到的身分仍只看過程式碼，需要有憑證的環境。
 - **Impact**: 低。程式和模擬測試都已涵蓋；實跑是確認，不是已知缺陷。
-- **Trigger**: next dispatch-tree live session (rows l and d2 before R), or a credentialed env for kimi
+- **Trigger**: a credentialed env for kimi
 - **Effort**: S
 - **Source**: review of lane/dispatch-tree-3b and lane/dt3d, 2026-10-15
 - **Pointer**: docs/backlog/dispatch-tree-3b-follow-ups.md
-- **Context**: 3d merged 2026-10-15 (plan §4 step 3d). Open: §7 row l (one hetero cc-shim run, child starts tmux then claude -p), row d2 re-run on codex, kimi with creds.
+- **Context**: 3d merged 2026-10-15 (plan §4 step 3d). Rows l and d2 (codex) ran and passed 2026-10-15 (d0-rerun-2026-10-15b). Open: kimi with creds.
 
 
 

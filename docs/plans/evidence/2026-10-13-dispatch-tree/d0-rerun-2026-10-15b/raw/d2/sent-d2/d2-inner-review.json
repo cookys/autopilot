@@ -1,0 +1,1 @@
+{ "runner": "grok", "model": "grok-4.5", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "/tmp/dispatch-review-log-0ASgXL", "error": "no derived BEGIN frame found in response", "usage": null, "unratified_verdict": null }

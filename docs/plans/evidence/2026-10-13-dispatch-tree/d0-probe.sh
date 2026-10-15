@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# d0-probe.sh -- D0 measurement gate of docs/plans/2026-10-13-dispatch-tree.md (section 4 "D0", section 7 rows a-k).
+# d0-probe.sh -- D0 measurement gate of docs/plans/2026-10-13-dispatch-tree.md (section 4 "D0", section 7 rows a-l).
 #
 # Runs each section-7 Unknown against the REAL claude CLI and the REAL dispatch rails, then writes
 # d0-result.json (one {row, status: pass|bad|not_run, evidence} per row, plus a per-row detail object) and the
 # raw dumps (redacted) next to it. No product code is changed; nothing here is a hooks/tests suite.
 #
+# Rows: a b c d1 d2 e f g h i j k l (l = 3d live check: AUTOPILOT_CHILD_SESSION_ID reaches a hetero cc-shim child's hook env;
+#   a real tmux started inside it keeps it, yet a new top-level claude there writes a marker with no parent).
+# d2 judges the post-3d rule: the inner marker of a non-Claude harness carries no parent_session_id.
 #   bash d0-probe.sh --out <evidence>/d0-result.json [--rows a,b,...] [--omit-sentinel] [--keep-scratch]
 #
 # Exit 0 when every requested row came back pass|bad|not_run (a bad row is a RESULT, not a probe failure).
@@ -25,7 +28,7 @@ set -uo pipefail
 
 SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$SELF/../../../.." && pwd)"
-OUT="$SELF/d0-result.json"; ROWS="a,b,c,d1,d2,e,f,g,h,i,j,k"; OMIT=0; KEEP=0; CLAUDE_T=150; RAW_OUT=""
+OUT="$SELF/d0-result.json"; ROWS="a,b,c,d1,d2,e,f,g,h,i,j,k,l"; OMIT=0; KEEP=0; CLAUDE_T=150; RAW_OUT=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --out) OUT="${2:?}"; shift 2 ;;
@@ -473,11 +476,12 @@ bash $SCR/d2-outer-cmd.sh"
   copy_raw d2 "$sent" "$omf" "$imf" "$imk" "$SCR/d2-outer.err"
   local why=()
   [ "$imk_ok" = true ] || why+=("inner session marker $INNER.json absent")
-  { [ "$imk_ok" = true ] && [ "$imk_parent" = "$OUTER" ]; } || why+=("inner marker parent_session_id='${imk_parent:-<none>}' != outer $OUTER")
+  # plan section 7 row d2 note (after 3d): for a non-Claude harness the rail mints no child id, so the inner marker carries NO parent
+  { [ "$imk_ok" = true ] && [ -z "$imk_parent" ]; } || why+=("inner marker parent_session_id='${imk_parent:-<none>}' (want none: the codex rail mints no AUTOPILOT_CHILD_SESSION_ID)")
   [ "$omk_same" = true ] || why+=("outer marker unchanged=$omk_same")
   { [ -n "$outer_run" ] && [ "$nested_parent" = "$outer_run" ]; } || why+=("nested manifest parent_run_id='${nested_parent:-<none>}' != harness run '$outer_run'")
   if [ -z "$omf" ]; then rec d2 not_run "the outer Claude did not start the hetero rail (rc=$rc; see raw/d2)" "$SCR/d2.detail.json"
-  elif [ "${#why[@]}" -eq 0 ]; then rec d2 pass "Claude->codex(stub)->Claude end to end: inner marker names the outer session, outer marker unchanged, nested manifest parent_run_id == harness run" "$SCR/d2.detail.json"
+  elif [ "${#why[@]}" -eq 0 ]; then rec d2 pass "Claude->codex(stub)->Claude end to end (post-3d rule, plan section 7 row d2 note): inner marker carries no parent_session_id, outer marker unchanged, nested manifest parent_run_id == harness run" "$SCR/d2.detail.json"
   else rec d2 bad "codex path: $(IFS=';'; echo "${why[*]}"). kimi/agy/opencode: not run (provider credentials are not available under an isolated HOME; real ~/.kimi-code must not be touched) = bad by the plan's rule" "$SCR/d2.detail.json"; fi
 }
 
@@ -592,6 +596,72 @@ row_j() {
   rec j not_run "step 3c is not implemented (no child_transcript copy to age) and the check is defined as one day later; cannot be measured in D0. Non-blocking row." "$SCR/j.detail.json"
 }
 
+# ====================================================================================== row l (3d live check)
+# One real hetero cc-shim run (minimax). The claude child's SessionStart hook (a --settings sentinel added by the PATH
+# wrapper, next to the autopilot plugin that writes the marker) dumps its env. The child's Bash then starts a SECOND
+# `claude -p` inside a real tmux server on a private socket (`tmux -L <unique>`; killed at the end; the user's tmux is
+# never touched). The tmux server was started inside the child, so it keeps the child's env incl. AUTOPILOT_CHILD_SESSION_ID.
+judge_l() { # <hook.env> <manifest-csid> <argv-session-id> <child-marker> <tmux-marker> <P> -> prints one reason per failed condition
+  local henv="$1" csid="$2" asid="$3" cmk="$4" tmk="$5" P="$6" hc="" cp="" cs=""
+  [ -f "$henv" ] && hc="$(sed -n 's/^AUTOPILOT_CHILD_SESSION_ID=//p' "$henv" | head -1)"
+  { [ -n "$hc" ] && [ "$hc" = "$csid" ] && [ "$hc" = "$asid" ]; } || echo "(1) child hook env AUTOPILOT_CHILD_SESSION_ID='${hc:-<none>}' vs manifest child_session_id='${csid:-<none>}' vs --session-id='${asid:-<none>}'"
+  if [ -f "$cmk" ]; then cp="$(jq -r '.parent_session_id // empty' "$cmk")"; cs="$(jq -r '.session_id // empty' "$cmk")"; fi
+  { [ -f "$cmk" ] && [ "$cp" = "$P" ] && [ -n "$P" ] && [ "$cs" = "$csid" ]; } || echo "(2) child marker exists=$([ -f "$cmk" ] && echo true || echo false) session_id='${cs:-<none>}' parent_session_id='${cp:-<none>}' (want $csid / $P)"
+  if [ ! -f "$tmk" ]; then echo "(3) tmux-started claude wrote no marker"
+  elif jq -e 'has("parent_session_id")' "$tmk" >/dev/null; then echo "(3) tmux-started claude marker HAS parent_session_id='$(jq -r '.parent_session_id' "$tmk")'"; fi
+}
+row_l() {
+  local sent="$SCR/sent-l" repo="$SCR/repo-l"; mkdir -p "$sent"; mk_repo "$repo"
+  local U2 SOCK; U2="$(uuid)"; SOCK="d0l-$(uuid | cut -c1-8)-$$"
+  jq -n --arg c 'cat > "$PROBE_SENTINEL_DIR/$PROBE_TAG-hook.json"; env | grep -E "^(AUTOPILOT_|CLAUDE_CODE_SESSION_ID)" > "$PROBE_SENTINEL_DIR/$PROBE_TAG-hook.env"' \
+    '{hooks:{SessionStart:[{hooks:[{type:"command",command:$c,timeout:5}]}]}}' > "$SCR/l-settings.json"
+  mkdir -p "$SCR/bin-l"; cat > "$SCR/bin-l/claude" <<EOF
+#!/usr/bin/env bash
+mkdir -p "$sent"
+{ echo "cwd=\$PWD"; echo "AUTOPILOT_CHILD_SESSION_ID=\${AUTOPILOT_CHILD_SESSION_ID-<unset>}"; printf 'ARGV:'; printf ' [%s]' "\$@"; echo; } > "$sent/\$PROBE_TAG.wrapper.txt"
+exec "$REAL_CLAUDE" "\$@" --plugin-dir "$REPO" --settings "$SCR/l-settings.json"
+EOF
+  chmod +x "$SCR/bin-l/claude"
+  # the second claude: started by tmux, so its env is the tmux server's (= the claude child's Bash env)
+  cat > "$SCR/l2-run.sh" <<EOF
+#!/usr/bin/env bash
+env | grep -E '^(AUTOPILOT_|CLAUDE_CODE_SESSION_ID)' > "$sent/l2-tmux-env.txt"
+PROBE_TAG=l2 claude -p --session-id "$U2" --model MiniMax-M3 "say ok" > "$sent/l2.out" 2>&1
+echo "rc=\$?" > "$sent/l2.rc"
+EOF
+  cat > "$SCR/l-inner.sh" <<EOF
+#!/usr/bin/env bash
+env | grep -E '^(AUTOPILOT_|CLAUDE_CODE_SESSION_ID)' > "$sent/l-child-bash-env.txt"
+tmux -L "$SOCK" -f /dev/null new-session -d -s d0l "bash $SCR/l2-run.sh" > "$sent/l-tmux.log" 2>&1
+echo "tmux new rc=\$?" >> "$sent/l-tmux.log"
+for i in \$(seq 1 70); do [ -f "$sent/l2.rc" ] && break; sleep 2; done
+tmux -L "$SOCK" kill-server >> "$sent/l-tmux.log" 2>&1
+echo "kill-server rc=\$?" >> "$sent/l-tmux.log"
+EOF
+  chmod +x "$SCR/l2-run.sh" "$SCR/l-inner.sh"
+  printf 'This is a measurement run. Do exactly one thing: use your Bash tool to run this single command, then stop and reply DONE:\nbash %s\nDo not edit any file and do not run anything else.\n' "$SCR/l-inner.sh" > "$SCR/l-prompt.txt"
+  local P; P="$(uuid)"; local runs="$SCR/runs-l"; mkdir -p "$runs"
+  run 480 "$repo" "PATH=$SCR/bin-l:$SCR/bin:$PATH" "CLAUDE_CODE_SESSION_ID=$P" "AUTOPILOT_DISPATCH_RUNS_DIR=$runs" "PROBE_TAG=l" "PROBE_SENTINEL_DIR=$sent" \
+    "AUTOPILOT_ENDPOINTS_ENV=$REAL_HOME/.autopilot/endpoints.env" "DISPATCH_DETACH=0" \
+    -- bash "$REPO/scripts/dispatch-hetero.sh" --runner cc-shim --model MiniMax-M3 --endpoint minimax --effort high --branch d0/l-outer --prompt-file "$SCR/l-prompt.txt" --timeout 7m --base develop > "$SCR/l.stdout" 2> "$SCR/l.stderr"; local rc=$?
+  sleep 3
+  tmux -L "$SOCK" kill-server >/dev/null 2>&1 || true   # belt and braces: our private socket only
+  kill_scratch_procs
+  local mf csid; mf="$(for m in $(find "$runs" -name '*.manifest.json'); do [ "$(json_file_field "$m" 'o.runner')" = cc-shim ] && echo "$m"; done | head -1)"; csid=""
+  [ -n "$mf" ] && csid="$(json_file_field "$mf" 'o.child_session_id')"
+  local asid; asid="$(sed -n 's/.*\[--session-id\] \[\([^]]*\)\].*/\1/p' "$sent/l.wrapper.txt" 2>/dev/null | head -1)"
+  local reasons; reasons="$(judge_l "$sent/l-hook.env" "$csid" "$asid" "$MODE_DIR/$csid.json" "$MODE_DIR/$U2.json" "$P")"
+  jq -n --arg P "$P" --arg csid "$csid" --arg asid "$asid" --arg U2 "$U2" --argjson rc "$rc" \
+    --arg henv "$(tr '\n' ' ' < "$sent/l-hook.env" 2>/dev/null)" --arg benv "$(tr '\n' ' ' < "$sent/l-child-bash-env.txt" 2>/dev/null)" \
+    --arg tenv "$(tr '\n' ' ' < "$sent/l2-tmux-env.txt" 2>/dev/null)" --arg t2hook "$(tr '\n' ' ' < "$sent/l2-hook.env" 2>/dev/null)" --arg tlog "$(tr '\n' ' ' < "$sent/l-tmux.log" 2>/dev/null)" \
+    --arg cmk "$(jq -c . "$MODE_DIR/$csid.json" 2>/dev/null)" --arg tmk "$(jq -c . "$MODE_DIR/$U2.json" 2>/dev/null)" --arg why "$reasons" \
+    '{launcher_session_id_P:$P,hetero_rc:$rc,manifest_child_session_id:$csid,wrapper_argv_session_id:$asid,tmux_started_session_id:$U2,child_hook_env:$henv,child_bash_env:$benv,tmux_server_env_seen_by_second_claude:$tenv,second_claude_hook_env:$t2hook,tmux_log:$tlog,child_marker:$cmk,tmux_claude_marker:$tmk,failed_conditions:$why}' > "$SCR/l.detail.json"
+  copy_raw l "$sent" "$SCR/l.stdout" "$SCR/l.stderr" "$mf" "$MODE_DIR/$csid.json" "$MODE_DIR/$U2.json" "$SCR/l-prompt.txt"
+  if [ -z "$mf" ] || [ -z "$csid" ]; then rec l not_run "hetero cc-shim produced no manifest / child session id (rc=$rc; see raw/l)" "$SCR/l.detail.json"
+  elif [ -z "$reasons" ]; then rec l pass "hetero cc-shim child's hook env had AUTOPILOT_CHILD_SESSION_ID == manifest child_session_id == --session-id; child marker parent == P; the claude started in a real tmux (private socket) wrote a marker with no parent_session_id" "$SCR/l.detail.json"
+  else rec l bad "$(echo "$reasons" | tr '\n' ';')" "$SCR/l.detail.json"; fi
+}
+
 # ====================================================================================== drive
 want_row() { [[ ",$ROWS," == *,"$1",* ]]; }
 want_any() { local r; for r in "$@"; do want_row "$r" && return 0; done; return 1; }
@@ -603,6 +673,7 @@ want_row d2 && row_d2
 want_any e k && row_ek
 want_any g h i && row_ghi "$ROWS"
 want_row j && row_j
+want_row l && row_l
 
 # a requested row that left no verdict is a probe malfunction
 RC=0
@@ -611,11 +682,11 @@ for r in ${ROWS//,/ }; do [ -f "$ROWD/$r.json" ] || { log "row $r left no verdic
 
 # --------------------------------------------------------------------------------------- assemble
 mkdir -p "$(dirname "$OUT")"
-ORDER='["a","b","c","d1","d2","e","f","g","h","i","j","k"]'
+ORDER='["a","b","c","d1","d2","e","f","g","h","i","j","k","l"]'
 jq -s --argjson order "$ORDER" --arg ver "$CLAUDE_VERSION" --arg omit "$OMIT" --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   '{schema:"autopilot.d0-result/1",plan:"docs/plans/2026-10-13-dispatch-tree.md",generated_at:$ts,claude_version:$ver,omit_sentinel_negative_control:($omit=="1"),
     rows:([.[]]|sort_by(.row as $r|$order|index($r))),
-    blocking:{"3a":["a","b","c"],"3b":["a","f"],"3c":[],"5":["g","h","i"],"R":["c","d1","d2","e","f","k"]}}' "$ROWD"/*.json > "$SCR/result.json" || { log "assemble failed"; exit 1; }
+    blocking:{"3a":["a","b","c"],"3b":["a","f"],"3c":[],"5":["g","h","i"],"R":["c","d1","d2","e","f","k"],"3d":["l"]}}' "$ROWD"/*.json > "$SCR/result.json" || { log "assemble failed"; exit 1; }
 
 # redact + scan the raw dumps, then publish them next to the result
 SECRETS="$SCR/secrets.json"

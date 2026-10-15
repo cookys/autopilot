@@ -49,3 +49,26 @@ Re-run: `bash d0-probe.sh --out d0-result.json`. Negative control: `AUTOPILOT_RU
   outer marker is unchanged; the nested manifest `parent_run_id` = the hetero run, `session_id` = the inner session.
 - kimi, agy, opencode remain `not_run` (no provider credentials under an isolated HOME), so by the plan's rule
   R stays blocked until they run in a credentialed environment. Row h (step 5) is unchanged: still bad.
+
+## Re-run 2026-10-15 after 3d (rows d2, l)
+
+`bash d0-probe.sh --rows d2,l` on `30219b0a` (3d merged) plus the probe edit in this commit, claude 2.1.300; result and
+raw dumps in [`d0-rerun-2026-10-15b/`](d0-rerun-2026-10-15b/d0-result.json). One real run, no retry. Secret scan:
+the probe's redactor masked the endpoint token values in 5 env dumps (names kept, values `REDACTED`); the follow-up
+scan found 0 remaining hits.
+
+- **d2 codex path: pass, judged by the post-3d rule** (plan section 7 row d2 note: the rail mints no child id for a
+  non-Claude harness, so the inner marker carries no parent). The inner Claude's marker `parent_session_id` is absent,
+  the outer marker is unchanged, and the nested manifest `parent_run_id` = the hetero run. This replaces the 3b-era
+  codex pass above, which was measured against the old wording (inner marker names the outer session).
+- **l pass** (new row, one hetero cc-shim run through the minimax seat). The child's SessionStart hook environment had
+  `AUTOPILOT_CHILD_SESSION_ID` = manifest `child_session_id` = its `--session-id`; the child's own marker has
+  `parent_session_id` = the launcher P; a second `claude -p` started by a real `tmux new -d` (private socket, killed
+  afterwards) inherited the same `AUTOPILOT_CHILD_SESSION_ID` in its hook environment, yet its own session id differs
+  and its marker has no `parent_session_id`. The tmux-held variable is therefore harmless, which is what 3d claims.
+- **Negative control for row l.** The verdict is a pure function (`judge_l` in `d0-probe.sh`). It was fed fake hook env
+  and marker files offline: a tmux marker carrying a parent, a hook env without C, a child marker without parent, a
+  missing tmux marker, and a `--session-id` that differs from C each produced the matching failed condition; the good set
+  produced none. No second paid run was made.
+- kimi, agy, opencode remain `not_run` (no provider credentials under an isolated HOME), so R stays blocked on them.
+  Row h (step 5) is unchanged: still bad.

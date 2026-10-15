@@ -1,0 +1,3 @@
+cwd=/tmp/d0probe-pZGP7Z/repo-l/.claude/worktrees/hetero-d0-l-outer-FDSICf
+AUTOPILOT_CHILD_SESSION_ID=4176436a-4367-47a9-8a1a-48c075339099
+ARGV: [-p] [--session-id] [46cae707-9527-4209-85fb-ab4f880b0bf3] [--model] [MiniMax-M3] [say ok]

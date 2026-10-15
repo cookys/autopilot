@@ -19,7 +19,8 @@ Left open by the 3b review (three rounds, merged as `92002f7f`, 2026-10-15). Pla
     `child_session_mint` exists only on the claude branch, so non-claude runners carry no child id.
     (2) a liveness/time-window check on P's marker: heuristic, can misjudge, against ADR-0001. Preferred: (1).
     **Chosen and shipped: (1)**, as plan step 3d (plan review frozen after two generations, receipts in
-    `docs/plans/evidence/2026-10-13-dispatch-tree/plan-review-3d/`), merged 2026-10-15. Still open: the live
-    §7 row l run and the codex row d2 re-run.
+    `docs/plans/evidence/2026-10-13-dispatch-tree/plan-review-3d/`), merged 2026-10-15. The live §7 row l run
+    and the codex row d2 re-run are **done** (both pass, 2026-10-15,
+    `docs/plans/evidence/2026-10-13-dispatch-tree/d0-rerun-2026-10-15b/`; summary in `d0-summary.md`).
   - kimi: the review's stub made `dispatch-author-kimi.js` exit 2, so the child env was checked only by
     reading code. Needs a credentialed environment (owner).

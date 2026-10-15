@@ -56,14 +56,14 @@ export function headerLines(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
 // "more" without a number. A header line too narrow for the hint drops it: the spend segments are never squeezed or cut.
 export type ScrollView = { offset: number; bodyRows: number }
 // ---- tab attention: which tab holds something for the owner, visible without opening it. The tab NAME is drawn warning bold (no symbol): 待決 while a question is open, 殘留 while
-// residue needs a person, 審查 while QC is owed. Dispatch is not marked: a running dispatch needs nobody. No number in this variant. ----
+// residue needs a person or the plugin load source is wrong (the 外掛來源 row shows ▲), 審查 while QC is owed. Dispatch is not marked: a running dispatch needs nobody. No number in this variant. ----
 export type TabNeed = Record<string, never>
 // what the owner has to judge (residueTally): the one number behind the tab name, the 現況 row, its summary and the band's ⚑N; the cleanable entries are not counted
 const judgeCountOf = (snap: LiveSnapshot): number => (snap.detail.residue === null ? 0 : residueTally(snap.detail.residue).judgeCount)
 export function tabNeeds(snap: LiveSnapshot): Partial<Record<PaneTab, TabNeed>> {
   const out: Partial<Record<PaneTab, TabNeed>> = {}
   if (snap.detail.qc !== null && ui.isNeedYou(ui.stateOf('qc', snap.detail.qc.state))) out.review = {}
-  if (judgeCountOf(snap) > 0) out.hygiene = {}
+  if (judgeCountOf(snap) > 0 || (snap.detail.load_source !== null && ui.isNeedYou(sourceStateOf(snap.detail.load_source)))) out.hygiene = {}
   if (snap.pending.length > 0) out.decide = {}
   return out
 }
@@ -764,6 +764,10 @@ function residueAuto(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
 }
 // the load-source facts that really put the owner on the wrong copy; a flag outside this list (stale_cache_dirs: old copies nobody runs) is information, not a request
 const BAD_SOURCE_FLAGS = ['marketplace_not_directory', 'marketplace_not_this_repo', 'dev_link_missing_or_stale']
+// the one state of the plugin load source: the 外掛來源 row and the 殘留 tab name both read it, so the tab turns yellow exactly when the row shows ▲
+function sourceStateOf(ls: NonNullable<LiveSnapshot['detail']['load_source']>): Stated {
+  return ui.stateOf('loadSource', { source: ls.source, behind: ls.behind_upstream ?? 0, flags: ls.flags.filter(f => BAD_SOURCE_FLAGS.includes(f)).length + (ls.marketplace === 'missing' ? 1 : 0) })
+}
 const shq = (x: string): string => (/^[\w@%+=:,./-]+$/.test(x) ? x : "'" + x.replace(/'/g, "'\\''") + "'")
 function residueSource(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
   const t = ctx.t
@@ -772,7 +776,7 @@ function residueSource(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
   const F = 'residue.source' as const
   if (ls === null) return hygSection(u, ctx, 'source', title, [ui.empty(t('nodata.prefix', { what: t('nodata.load_source') }), F)])
   const behind = ls.behind_upstream ?? 0
-  const s = ui.stateOf('loadSource', { source: ls.source, behind, flags: ls.flags.filter(f => BAD_SOURCE_FLAGS.includes(f)).length + (ls.marketplace === 'missing' ? 1 : 0) })
+  const s = sourceStateOf(ls)
   const src = ls.source.toLowerCase()
   const isDev = src === 'dev' || src === 'directory'
   const cacheV = src.startsWith('cache:') ? ls.source.slice('cache:'.length) : null

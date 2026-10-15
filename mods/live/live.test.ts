@@ -2795,6 +2795,10 @@ for (const surface of SURFACES) {
     delete w.files[LIVE + '/runs/' + KEY + '.qc.json']
     delete w.files[LIVE + '/runs/' + KEY + '.residue.json']
     await w.clock.advance(5000)
+    // the rich world's plugin source is behind upstream: the 外掛來源 row shows ▲, so 殘留 stays marked with no residue at all
+    expect(loud(await tree0(), 'hygiene'), 'a load source behind upstream marks Hygiene').toBe(true)
+    w.files[LIVE + '/load-source.json'] = j({ schema: 'autopilot.load-source/1', checked_at: PUBLISHED, plugin_version: '2.37.0', source: 'dev', source_basis: 'dev_link', marketplace: 'directory', behind_upstream: 0, flags: [], stale_cache_dirs: [] })
+    await w.clock.advance(5000)
     const quiet = await tree0()
     for (const id of ['review', 'hygiene', 'dispatch', 'decide']) expect(loud(quiet, id), id + ' with nothing to do is not marked').toBe(false)
     expect(stripOf(quiet)).not.toMatch(/[▲●⚑]/)

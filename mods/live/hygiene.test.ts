@@ -269,3 +269,17 @@ const GOLDEN_ZH_76: string[] = [
   "  舊版快取 2.36.36 沒有程式在用，可以刪",
   "  $ rm -rf /home/cookys/.claude/plugins/cache/autopilot/autopilot/2.36.36/",
 ]
+
+test('tab name: 殘留 turns yellow when the 外掛來源 row shows ▲ even with nothing to judge, and not for an old cache copy alone', () => {
+  const clean = resWith([entry({ class: 'clean-integrated', reason: 'HEAD is an ancestor of the integration ref' })])
+  expect(tabNeeds(snapOf(clean, REAL_LOAD)).hygiene).toBeUndefined() // only stale_cache_dirs: information, not a request
+  for (const bad of [
+    { ...REAL_LOAD, flags: ['marketplace_not_directory'], marketplace: 'git' },
+    { ...REAL_LOAD, flags: ['dev_link_missing_or_stale'] },
+    { ...REAL_LOAD, behind_upstream: 3 },
+    { ...REAL_LOAD, source: 'unknown', flags: [] },
+  ]) {
+    expect(tabNeeds(snapOf(clean, bad)).hygiene, JSON.stringify(bad.flags) + ' ' + bad.source + ' ' + bad.behind_upstream).toEqual({})
+    expect(hyg(snapOf(clean, bad)).some(l => l.startsWith('▲ ')), 'the row shows ▲ too').toBe(true)
+  }
+})

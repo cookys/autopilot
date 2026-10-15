@@ -634,10 +634,16 @@ function wrapPlain(body: string, firstW: number, restW: number): string[] {
   for (const ch of body) {
     const cw = cellWidth(ch.codePointAt(0) as number)
     if (w + cw > limit && cur !== '') {
-      let cut = lastBreak > 0 ? lastBreak : cur.length
-      if (cut === cur.length && cut > 1 && CLOSING_PUNCT_UI.includes(ch)) cut -= 1 // a closing mark never starts a line: the character before it goes down with it
-      out.push(cur.slice(0, cut).replace(/ +$/, ''))
-      cur = cur.slice(cut).replace(/^ +/, '')
+      // in code points, so a step back never splits a surrogate pair
+      const cps = [...cur]
+      let cut = lastBreak > 0 ? [...cur.slice(0, lastBreak)].length : cps.length
+      // a closing mark never starts a line: while the next line would open with one (after its leading spaces are dropped), the character before the cut goes
+      // down too. This covers a run of marks (`。」`), a space before the mark, and a cut at an earlier break; at least one character stays on this line.
+      const head = (k: number): string => (cps.slice(k).join('') + ch).replace(/^ +/, '')[0] ?? ''
+      const closing = (c: string): boolean => c !== '' && CLOSING_PUNCT_UI.includes(c)
+      while (cut > 1 && closing(head(cut))) cut -= 1
+      out.push(cps.slice(0, cut).join('').replace(/ +$/, ''))
+      cur = cps.slice(cut).join('').replace(/^ +/, '')
       w = displayWidth(cur)
       limit = restW
       lastBreak = -1

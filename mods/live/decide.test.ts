@@ -262,6 +262,23 @@ test('DECIDE wrap: a closing mark never starts a continuation line (negative con
   expect(startsClosed([{ ...decideTabLines(snapOf(THREE), ctxOf(zh, 76, view()))[0], text: '            」只有' }])).toEqual(['            」只有'])
 })
 
+test('DECIDE wrap: a run of closing marks, a space before a mark and an astral character never put a closing mark at the head of a line, and nothing is lost', () => {
+  const zh = makeT('zh-TW')
+  const cases = [
+    '他說「這一項改回待確認。」然後又說「這是第二句話，後面還有括號（註一）。」最後一句「結束了！」）」',
+    '𠀋𠀋𠀋 名字裡有擴充字元「𠀋」。後面接一串「引號裡的句子。」再一串（括號裡的句子。）以及更多文字直到換行為止。',
+    'the reviewer said (see the plan ) and then ( more text here ) , then a list ; of items : done !',
+  ]
+  const closing = /^\s+[）」』、。，；：！？)\]}】》〉,.;:!?]/
+  for (const bg of cases) for (let cols = 40; cols <= 80; cols++) {
+    const ls = decideTabLines(snapOf([dec('d-1', 'q?', { background: bg, options: [OPT('甲'), OPT('乙')] })]), ctxOf(zh, cols, view()))
+    const rows = texts(ls).filter(x => x.startsWith('  背景') || x.startsWith('            '))
+    expect(rows.filter(x => closing.test(x.replace(/^  背景/, '    '))), 'cols ' + cols + ': ' + bg.slice(0, 12)).toEqual([])
+    expect(rows.some(x => /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(x)), 'cols ' + cols + ': a lone surrogate').toBe(false)
+    expect(rows.map(x => x.trim()).join('').replace(/^背景\s+/, '').replace(/ /g, ''), 'cols ' + cols + ': nothing lost').toBe(bg.replace(/ /g, ''))
+  }
+})
+
 // ---- the reply text: a wire format the model reads back; the id is what ties an answer to its question ----
 test('DECIDE reply: the head line, then `<id>｜<first 30 characters> → <answer>` per answered question, `｜補充：` for a note; only answered, unsent questions with an id', () => {
   const st = { picks: { 'd-4290499d': 0, 'd-c24ecfd9': 1 }, notes: { 'd-c24ecfd9': '  要，\n但只寫一句 ', 'd-0000free': '叫 main' }, sent: {} }

@@ -4,7 +4,7 @@
 import { test, expect } from 'claude-code/testing'
 import { makeT } from './i18n'
 import { NO_DETAIL, NO_SECTIONS, staleSuffix, wrapLines } from './model'
-import { dispatchLines, headerLines, hygieneTabLines, legendLines, nowLines, reviewTabLines, spendTabLines, stripOf, stripRows, treeRowCount, withOverflowHint } from './tabs'
+import { decideTabLines, dispatchLines, headerLines, hygieneTabLines, legendLines, nowLines, reviewTabLines, spendTabLines, stripOf, stripRows, treeRowCount, withOverflowHint } from './tabs'
 import type { LiveSnapshot, PaneLine, Seg } from './model'
 import * as ui from './ui'
 import { violations } from './invariants.testkit'
@@ -50,7 +50,7 @@ test('I9 (a): no tab builder emits a verdict line, in either locale and at every
   for (const [loc, t] of LOCALES) for (const cols of [40, 76, 120, 160]) {
     const c = ctxOf(t, cols, { expanded: ['more:now.tasks.done', 'more:now.background.ended'] })
     const s = snap()
-    const tabs: [string, PaneLine[]][] = [['now', nowLines(s, c)], ['dispatch', dispatchLines(s, c)], ['review', reviewTabLines(s, c)], ['spend', spendTabLines(s, c)], ['hygiene', hygieneTabLines(s, c)], ['legend', legendLines(c)]]
+    const tabs: [string, PaneLine[]][] = [['now', nowLines(s, c)], ['decide', decideTabLines(s, c)], ['dispatch', dispatchLines(s, c)], ['review', reviewTabLines(s, c)], ['spend', spendTabLines(s, c)], ['hygiene', hygieneTabLines(s, c)], ['legend', legendLines(c)]]
     for (const [name, ls] of tabs) expect(verdictLinesOf(ls).length, loc + ' ' + cols + ' ' + name).toBe(0)
     expect(verdictLinesOf(headerLines(s, c)).length, 'control: the header builder is what draws a verdict line').toBeGreaterThan(0)
     expect(verdictLinesOf([...nowLines(s, c), ...headerLines(s, c)]).length, 'control: the checker sees a verdict line a tab emitted').toBeGreaterThan(0)
@@ -163,8 +163,7 @@ const bareMismatch = (ls: PaneLine[]): string[] => {
 }
 // the golden table: the (fact, goto, kind) triples of the busy snapshot, in order
 const GOLDEN_NOW = [
-  'now.attention||header', 'now.attention||item', 'now.attention||item', 'now.attention|hygiene|item',
-  'now.pending||header', 'now.pending||item',
+  'now.attention||header', 'now.attention||item', 'decide.cards|decide|item', 'now.attention|hygiene|item',
   'now.position||chart', 'now.position||chart', 'now.position||kv', 'now.position||kv', 'now.position||kv', 'now.position||kv',
   'dispatch.counts|dispatch|kv', 'review.round|review|kv', 'usage.limit_max|spend|meter', 'residue.groups|hygiene|kv',
   'now.background||item', 'now.tasks||header', 'now.tasks||item', 'now.tasks||item',
@@ -367,7 +366,7 @@ test('usage row: with a brain cap and four quota windows the row is the single m
 })
 
 // ---- P5: every structural invariant over every tab (plan §7: "every invariant over every tab") ----
-const ALL_TABS = ['now', 'dispatch', 'review', 'spend', 'hygiene', 'legend'] as const
+const ALL_TABS = ['now', 'decide', 'dispatch', 'review', 'spend', 'hygiene', 'legend'] as const
 const richSnap = (): LiveSnapshot => {
   const s = withQuota([{ kind: 'five_hour', pct: 40, resetsAtMs: NOW + 3_600_000 }, { kind: 'seven_day', pct: 92, resetsAtMs: null }]) as never as { detail: { residue: object } }
   s.detail.residue = { reapable: 0, by_class: {}, at: null, needs_human_count: 2, needs_human_bytes: 3_000_000, auto_ran_at: iso(3_600_000), auto_removed_count: 2, auto_archived_count: 1,
@@ -378,7 +377,7 @@ const richSnap = (): LiveSnapshot => {
   return s as never
 }
 const tabLinesOf = (tab: (typeof ALL_TABS)[number], s: LiveSnapshot, c: ReturnType<typeof ctxOf>): PaneLine[] =>
-  tab === 'now' ? nowLines(s, c) : tab === 'dispatch' ? dispatchLines(s, c) : tab === 'review' ? reviewTabLines(s, c) : tab === 'spend' ? spendTabLines(s, c) : tab === 'hygiene' ? hygieneTabLines(s, c) : legendLines(c)
+  tab === 'now' ? nowLines(s, c) : tab === 'decide' ? decideTabLines(s, c) : tab === 'dispatch' ? dispatchLines(s, c) : tab === 'review' ? reviewTabLines(s, c) : tab === 'spend' ? spendTabLines(s, c) : tab === 'hygiene' ? hygieneTabLines(s, c) : legendLines(c)
 // the invariants of the plan that hold on every tab, as a list of violations (empty = holds)
 const ONE_LINE_KINDS = new Set(['header', 'item', 'bullet', 'table', 'more'])
 const everyTab = (tab: (typeof ALL_TABS)[number], ls: PaneLine[], cols: number, expanded: boolean): string[] => {
@@ -434,7 +433,7 @@ test('every tab: negative controls, each invariant is reported when its line is 
 const EXEMPT: Record<string, RegExp> = { legend: /^(I3 |I10 .* says no data outside an empty line)/ }
 const tabViolations = (tab: (typeof ALL_TABS)[number], ls: PaneLine[], cols: number, t: ReturnType<typeof makeT>): string[] =>
   violations(ls, cols, t).filter(v => !(EXEMPT[tab] ?? /^$/).test(v)).map(v => tab + ' ' + v)
-test('every tab: I1-I8 and I10 hold on all six tabs, in both locales, at 40-160 columns, default and with every toggle open', () => {
+test('every tab: I1-I8 and I10 hold on all seven tabs, in both locales, at 40-160 columns, default and with every toggle open', () => {
   const found = new Set<string>()
   const ids = (ls: PaneLine[]) => ls.filter(l => l.toggle !== undefined).map(l => l.toggle as string)
   for (const [, t] of LOCALES) for (const cols of [40, 60, 76, 120, 160]) for (const tab of ALL_TABS) {
@@ -509,43 +508,41 @@ test('strip: the active label and the ━ run are the here mark (I4 / I6); every
   }
 })
 
-// ---- 待決議事項: every open owner question in full; no block at all when none is open ----
+// ---- 待決議事項 on 現況: one row that points at the 待決 tab (the cards are decide.test.ts); no row at all when none is open ----
 const pend = (id: string, q: string, over: Partial<LiveSnapshot['pending'][number]> = {}): LiveSnapshot['pending'][number] => ({
   id, question: q, background: null, options: [], recommendation: null, why: null, blocks: null, not_authorized: null, source: null, opened_at: null, stale: false, age_s: 60, orphaned: false, ...over,
 })
-test('PENDING: two open questions are both shown in full (question, background, options, recommendation and why, what stalls, source), wrapped and counted; zero shows no block', () => {
+test('PENDING (現況): any number of open questions is ONE row that counts them and points at 待決; no question text, no block, no header', () => {
   const long = 'this background sentence is deliberately long enough that it has to wrap at seventy-six columns and must never be cut off by the pane'
   const two = [
-    pend('d-1', 'merge or split?', { background: long, options: [{ label: 'merge', description: 'one acceptance' }, { label: 'split', description: 'two acceptances' }], recommendation: 'merge', why: 'fewer round trips', blocks: 'the release cannot start', not_authorized: 'a force-push over main is beyond depth-0 authority', source: 'depth-0 AskUserQuestion' }),
-    pend('d-2', 'which engine?', { options: [{ label: 'a', description: '' }, { label: 'b', description: '' }], why: 'cheaper' }),
+    pend('d-1', 'merge or split?', { background: long, options: [{ label: 'merge', description: 'one acceptance' }, { label: 'split', description: 'two acceptances' }], recommendation: 'merge', why: 'fewer round trips', blocks: 'the release cannot start', source: 'depth-0 AskUserQuestion' }),
+    pend('d-2', 'which engine?', { options: [{ label: 'a', description: '' }, { label: 'b', description: '' }] }),
   ]
   for (const [loc, t] of LOCALES) {
     const ls = nowLines({ ...snap(), pending: two }, ctxOf(t, 76))
-    const heads = ls.filter(l => l.kind === 'header' && l.fact === 'now.pending')
-    expect(heads.length, loc).toBe(1)
-    expect(heads[0].text, loc).toContain(t('now.pending', { n: 2 }))
+    const rows = ls.filter(l => l.fact === 'decide.cards')
+    expect(rows.length, loc).toBe(1)
+    expect(rows[0].kind, loc).toBe('item')
+    expect(rows[0].goto, loc).toBe('decide')
+    expect(rows[0].text, loc).toContain(t('now.pending_sum', { n: 2 }))
+    expect(rows[0].text.trimEnd().endsWith(t('tab.decide') + ' ›'), loc + ': the row ends with the tab it opens').toBe(true)
     const text = ls.map(l => l.text).join('\n')
-    for (const must of ['merge or split?', 'which engine?', 'one acceptance', 'two acceptances', 'fewer round trips', 'the release cannot start', 'depth-0 AskUserQuestion', 'cheaper', 'a force-push over main is beyond depth-0 authority'])
-      expect(text, loc + ': ' + must).toContain(must)
-    expect(text, loc + ': the why-you label').toContain(t('pending.not_authorized'))
-    expect(text.split(t('pending.not_authorized')).length - 1, loc + ': only the entry that has it shows the label').toBe(1)
-    expect(text.replace(/\s+/g, ' '), loc + ': the long background is whole after wrapping').toContain('this background sentence is deliberately long enough that it has to wrap')
-    expect(text.replace(/\s+/g, ' '), loc + ': the long background keeps its tail').toContain('never be cut off by the pane')
+    for (const gone of ['merge or split?', 'which engine?', 'one acceptance', 'fewer round trips', 'the release cannot start', 'depth-0 AskUserQuestion', 'this background sentence'])
+      expect(text, loc + ': ' + gone + ' is on the 待決 tab, not here').not.toContain(gone)
+    expect(ls.some(l => l.kind === 'header' && l.text.includes(t('tab.decide'))), loc + ': no section header for it').toBe(false)
     for (const l of ls) expect(ui.displayWidth(l.text), loc + ': "' + l.text + '"').toBeLessThanOrEqual(75)
     expect(i17(ls), loc).toEqual([])
   }
-  // negative control: with none pending there is no block, no header and no fact
-  expect(makeT('en')('pending.not_authorized')).toBe('Why you')
-  expect(makeT('zh-TW')('pending.not_authorized')).toBe('為什麼要你決定')
+  // negative control: with none pending there is no row and no fact
   const none = nowLines({ ...snap(), pending: [] }, ctxOf(makeT('en'), 76))
-  expect(none.some(l => l.fact === 'now.pending')).toBe(false)
-  expect(none.map(l => l.text).join('\n')).not.toContain('Pending decisions')
+  expect(none.some(l => l.fact === 'decide.cards')).toBe(false)
+  expect(none.map(l => l.text).join('\n')).not.toContain('pending decisions')
 })
 
 // ---- orphan label (BL-0163): the asker's session is gone; the entry stays listed, labelled, never dropped ----
 test('PENDING: an orphaned question carries the asker-ended label in pane and band suffix, stays listed; a live one carries none', () => {
   for (const [loc, t] of LOCALES) {
-    const text = (o: boolean): string => nowLines({ ...snap(), pending: [pend('d-9', 'ship it?', { orphaned: o })] }, ctxOf(t, 76)).map(l => l.text).join('\n')
+    const text = (o: boolean): string => decideTabLines({ ...snap(), pending: [pend('d-9', 'ship it?', { orphaned: o })] }, ctxOf(t, 76)).map(l => l.text).join('\n')
     expect(text(true), loc).toContain('ship it?')
     expect(text(true), loc + ': orphan label').toContain(t('decision.orphaned').trim())
     expect(text(false), loc + ': a live question has no orphan label').not.toContain(t('decision.orphaned').trim())

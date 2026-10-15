@@ -117,7 +117,7 @@ const L4 = src => {
   }
   return out
 }
-const LINE_KINDS = 'verdict|header|kv|item|bullet|table|meter|empty|more|command|detail|chart|blank'
+const LINE_KINDS = 'verdict|header|kv|item|bullet|table|meter|empty|more|command|detail|chart|blank|choice|field'
 // a hand-made line: a cast, a typed literal, or a spread of a PaneLine variable into a new object literal
 const L5_HAND = src => [...hits(src, /\bas PaneLine\b/), ...hits(src, /:\s*PaneLine\s*=\s*\{/), ...hits(src, /\{\s*\.\.\.\s*(line|l|piece|head\[[^\]]*\])\s*[,}]/)]
 const L5 = src => [...hits(src, new RegExp(`\\bkind\\s*:\\s*['"](${LINE_KINDS})['"]`)), ...L5_HAND(src)]

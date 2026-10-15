@@ -59,7 +59,7 @@ export type LiveDecision = {
 
 // `kind`, `fact`, `goto`, `group` and `ts` are stamped by the ui.ts components (the design system, docs/plans/2026-10-13-live-pane-design-system.md §6.1); `kind` and
 // `fact` are required: a line no component made does not type-check.
-export type PaneLine = { toggle?: string; text: string; dim?: boolean; bold?: boolean; warn?: boolean; color?: ThemeKey; segs?: Seg[]; wrap?: boolean; hang?: number; kind: LineKind; fact: FactId; goto?: PaneTab; group?: string; ts?: number }
+export type PaneLine = { toggle?: string; text: string; dim?: boolean; bold?: boolean; warn?: boolean; color?: ThemeKey; segs?: Seg[]; wrap?: boolean; hang?: number; kind: LineKind; fact: FactId; goto?: PaneTab; group?: string; ts?: number; field?: { key: string; placeholder: string; value: string } }
 export type VerdictKind = 'decide' | 'stalled' | 'waiting' | 'running' | 'idle'
 // P4: the sections are DATA, the tab builders turn them into lines (design plan §7). attention = a permission / question the session waits on; the notes say why a
 // source has nothing to show (its writer is not wired); the rest is the source view as read.
@@ -1109,7 +1109,7 @@ export type ThemeKey = 'claude' | 'warning' | 'error' | 'success' | 'suggestion'
 export type SlotId = 'verdict' | 'position' | 'unit' | 'dispatch' | 'review' | 'decisions' | 'spend' | 'quota' | 'hygiene'
 // tag: which part the width table may drop or shorten (age, k/N, 族, the bar, the stage text)
 export type SegTag = 'age' | 'kn' | 'fam' | 'bar' | 'stage' | 'live' | 'stalled' | 'chip' | 'wt' | 'walk' | 'dot' | 'reason' | 'round' | 'qc' | 'amt' | 'pct' | 'bar10' | 'bar5' | 'bar3' | 'qx'
-export type Seg = { text: string; color?: ThemeKey; bold?: boolean; dim?: boolean; tag?: SegTag; slot?: SlotId; role?: SegRole; here?: boolean; fmt?: FmtKind; fact?: FactId } // slot: set by layoutBand on the band line (the Button it presses); a separator has none
+export type Seg = { text: string; color?: ThemeKey; bold?: boolean; dim?: boolean; tag?: SegTag; slot?: SlotId; role?: SegRole; here?: boolean; fmt?: FmtKind; fact?: FactId; press?: string } // slot: set by layoutBand on the band line (the Button it presses); a separator has none
 export type Slot = { id: SlotId; segs: Seg[] }
 
 // displayWidth / cellWidth live in ui.ts (the design system owns the width rules); displayWidth is re-exported for the band and the tests.
@@ -1520,7 +1520,7 @@ export function plainBandText(reason: string, columns: number): string {
 }
 
 // ---- the panel's tabs: Now (absorbs the stage walk) · Dispatch · Review (absorbs the decisions) · Spend · Hygiene · ? (the legend) ----
-export const PANE_TABS = ['now', 'dispatch', 'review', 'spend', 'hygiene', 'legend'] as const
+export const PANE_TABS = ['now', 'decide', 'dispatch', 'review', 'spend', 'hygiene', 'legend'] as const
 export type PaneTab = (typeof PANE_TABS)[number]
 // a band slot pressed opens the pane on the tab that explains it; position and unit live in Now's 目前位置 section, which the press also unfolds
 const SLOT_TAB: Record<SlotId, PaneTab> = { verdict: 'now', position: 'now', unit: 'now', dispatch: 'dispatch', review: 'review', decisions: 'review', spend: 'spend', quota: 'spend', hygiene: 'hygiene' }
@@ -1529,7 +1529,51 @@ export const slotUnfolds = (id: SlotId): string | null => (id === 'position' || 
 export const tabLabel = (tab: PaneTab, t: T): string => t('tab.' + tab)
 
 // What a pane line is drawn with: the translator and the pane's width in cells (rules and bars size themselves to it)
-export type PaneCtx = { t: T; cols: number; expanded?: ReadonlySet<string>; folded?: ReadonlySet<string> }
+export type PaneCtx = { t: T; cols: number; expanded?: ReadonlySet<string>; folded?: ReadonlySet<string>; decide?: DecideView }
+
+// ---- the 待決 tab: what the owner picked and typed, and what was already sent. The pane keeps it in $.state (`autopilot.decide`, types/index.d.ts), keyed by the
+// decision id; `inputs` says whether the surface draws text fields (a phone does not). The reply is one machine-readable prompt: the head line, then one line per
+// answered question `<id>｜<first 30 characters of the question> → <answer>[｜補充：<note>]`. These strings are a wire format the model reads back, so they are not
+// in the locale tables and do not change with the language. ----
+export type DecideState = { picks: Record<string, number>; notes: Record<string, string>; sent: Record<string, number> }
+export const NO_DECIDE: DecideState = { picks: {}, notes: {}, sent: {} }
+export type DecideView = DecideState & { inputs: boolean }
+export const DECIDE_REPLY_HEAD = '[待決回覆]'
+const DECIDE_ARROW = '\u2192' // written as an escape: it is wire text the model parses, never a glyph the pane draws (ui-lint L2 keeps drawn glyphs in GLYPHS)
+const DECIDE_EXCERPT = 30
+const flat = (s: string): string => s.replace(/\s+/g, ' ').trim()
+const excerptOf = (q: string): string => { const cs = [...flat(q)]; return cs.length <= DECIDE_EXCERPT ? cs.join('') : cs.slice(0, DECIDE_EXCERPT).join('') + '…' }
+// a question the owner can answer from the pane: it has an id, and was not sent yet
+export const decideOpen = (d: LiveDecision, st: DecideState): boolean => d.id !== null && st.sent[d.id] === undefined
+// the picked option of a question (an index that is still one of its options), else null
+export const decidePick = (d: LiveDecision, st: DecideState): number | null => {
+  const k = d.id === null ? undefined : st.picks[d.id]
+  return k !== undefined && Number.isInteger(k) && k >= 0 && k < d.options.length ? k : null
+}
+const decideNote = (d: LiveDecision, st: DecideState): string => flat(d.id === null ? '' : st.notes[d.id] ?? '')
+// which option the question recommends: its `recommendation` text equals an option's label, or one starts with the other (a recommendation often adds a reason); null = none
+export function recommendedIndex(d: LiveDecision): number | null {
+  const r = d.recommendation === null ? '' : flat(d.recommendation).toLowerCase()
+  if (r === '') return null
+  const labels = d.options.map(o => flat(o.label).toLowerCase())
+  const exact = labels.indexOf(r)
+  if (exact >= 0) return exact
+  const part = labels.findIndex(l => l !== '' && (r.startsWith(l) || l.startsWith(r)))
+  return part >= 0 ? part : null
+}
+// the answer line of one question, or null when nothing is chosen (an option question needs a pick, a free one needs text)
+export function decideLine(d: LiveDecision, st: DecideState): string | null {
+  if (d.id === null) return null
+  const note = decideNote(d, st)
+  const pick = decidePick(d, st)
+  const answer = d.options.length === 0 ? note : pick === null ? '' : d.options[pick].label + (note === '' ? '' : '｜補充：' + note)
+  return answer === '' ? null : d.id + '｜' + excerptOf(d.question) + ' ' + DECIDE_ARROW + ' ' + answer
+}
+// the reply to send now: every open question that has an answer, in list order; null when there is none
+export function decideReply(list: readonly LiveDecision[], st: DecideState): { text: string; ids: string[] } | null {
+  const rows = list.filter(d => decideOpen(d, st)).flatMap(d => { const line = decideLine(d, st); return line === null ? [] : [{ id: d.id as string, line }] })
+  return rows.length === 0 ? null : { text: [DECIDE_REPLY_HEAD, ...rows.map(r => r.line)].join('\n'), ids: rows.map(r => r.id) }
+}
 export const DEFAULT_PANE_COLS = 76
 // the panel is exactly as wide as the body the host gives it (rules, bars and wrapping all size to it); no body width known -> the default
 export const paneWidth = (bodyColumns: number | null | undefined): number => (typeof bodyColumns === 'number' && Number.isFinite(bodyColumns) ? Math.max(20, Math.floor(bodyColumns)) : DEFAULT_PANE_COLS)
@@ -1619,7 +1663,7 @@ export const wrapLines = (lines: PaneLine[], cols: number): PaneLine[] => lines.
 
 // the Now tab's foldable sections (what waits for you never folds); the ids share the toggle channel with the recent groups, hence the prefix
 export const SECTION = { where: 'sec:now.where', account: 'sec:account', recent: 'sec:now.recent', limits: 'sec:limits', today: 'sec:today', last24: 'sec:last24' } as const
-export const isSectionId = (id: string): boolean => id.startsWith('sec:') || /^(now|dispatch|review|spend|hygiene|legend)\./.test(id)
+export const isSectionId = (id: string): boolean => id.startsWith('sec:') || /^(now|decide|dispatch|review|spend|hygiene|legend)\./.test(id)
 const BG_EXIT = /^\[exited with code (\d+)\]$/
 export const exitCodeOf = (tail: string | null): number | null => {
   if (tail === null) return null

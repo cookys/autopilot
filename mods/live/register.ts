@@ -1,8 +1,8 @@
 // mods/live/register.ts — the `live` mod (mods plan P1c; Claude Code only).
 //
 // Reads files the project watcher publishes and draws a band above the prompt, a pane in a wide fullscreen
-// terminal and a toast on an axis change. It is read-only: no file is written outside its own $.state value,
-// no program is started, nothing is sent to the model.
+// terminal and a toast on an axis change. It writes no file and starts no program. The one thing it sends to the model is the owner's
+// answer from the 待決 tab: the send Button submits one prompt (`$.prompt.submit`, not as the user).
 //
 //   pointer  $HOME/.autopilot/live-pointer.json
 //   project  session marker <autopilot_home>/session-mode/<sid>.json  ->  <live_base>/runs/paths/*.json longest prefix
@@ -23,7 +23,7 @@
 //   P7       <live_base>/runs/<project_key>.qc.json, .residue.json, .review.json; <live_base>/stage/<sid>.json; load-source.json; the marker's
 //            §2.9 fields (size, urgent, level, stage, stage_set_at, unit, review_families); the envelope's host_today_brain_usd / brain_cap_usd;
 //            the decisions sidecar's `ladder`. Each is optional: absent -> its slot is left out and its tab says "no data".
-//            The band is ONE line (band.tsx, layout in model.ts layoutBand); the ⓘ opens the pane on the Now tab (6 tabs: Now Dispatch Review Spend Hygiene ?).
+//            The band is ONE line (band.tsx, layout in model.ts layoutBand); the ⓘ opens the pane on the Now tab (7 tabs: Now Decide Dispatch Review Spend Hygiene ?).
 //
 //   i18n     every word comes from mods/live/locales/{en,zh-TW}.json (compiled to locales.ts) through `t`; the locale is resolved on every tick:
 //            ~/.autopilot/config.json ui.locale > AUTOPILOT_LOCALE > Claude Code's language setting ($.config.list() row `language`, else the
@@ -37,16 +37,17 @@ import type { EngineInterface, Register } from 'claude-code'
 import { newTracker, parseAdvisories, takeNew } from './advisories'
 import { makeT, resolveLocale, T_EN } from './i18n'
 import type { T } from './i18n'
+import { atom, read, update } from 'claude-code'
 import type { AdvisoryTracker } from './advisories'
 import { Band } from './band'
 import { Pane } from './pane'
 import {
-  acceptanceToast, autoResidueCount, makeRecentTracker, bandLine1, bandView, buildSections, checkEnvelope, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
+  acceptanceToast, autoResidueCount, decideReply, NO_DECIDE, makeRecentTracker, bandLine1, bandView, buildSections, checkEnvelope, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
   headerText, hhmm, projectName as projectNameOf, isKey, isSectionId, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
   readForeman, readLoadSource, readSpendHistory, hourlySpend, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
   slotTab, slotUnfolds, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, readQuota, readAccount,
 } from './model'
-import type { AccountView, ActivityItem, Counts, DecisionsView, RecentGroup, EnvelopeCheck, JobModel, Json, LiveSnapshot, Manifest, PaneTab, SlotId, QuotaWindow, Sources } from './model'
+import type { AccountView, ActivityItem, Counts, DecideState, DecisionsView, RecentGroup, EnvelopeCheck, JobModel, Json, LiveSnapshot, Manifest, PaneTab, SlotId, QuotaWindow, Sources } from './model'
 
 const TICK_MS = 5000
 const PANE_ID = 'autopilot-live'
@@ -56,9 +57,12 @@ const MAX_RECEIPT_FILES = 64
 const MAX_CAMPAIGN_ROOTS = 8 // session-mode.js CAMPAIGN_ROOTS_MAX
 
 // Module state. A hot reload drops it and session.start rebuilds it (the first tick refills the snapshot at once).
-// It is a module variable and not $.state on purpose: a $.state ref needs the plugin manifest to name a types
-// contract, and this mod is wired by the hooks.json `modules` key alone.
+// What the owner picked and typed on the 待決 tab is NOT here: a drawing's inputs belong in $.state (below), so a hot reload keeps them.
 let snapshot: LiveSnapshot | null = null
+// the 待決 tab's picks, notes and what was already sent, by decision id (the contract is types/index.d.ts, named by plugin.json)
+const DECIDE = atom({ plugin: 'autopilot', key: 'decide' } as const, NO_DECIDE)
+const SURFACES_WITH_INPUT = new Set<string>(['terminal', 'desktop', 'vscode']) // the elements tables with an `Input`; a phone has none (the resolved table hands out a stand-in for it, so the surface is what tells)
+const DECIDE_KEEP_MS = 24 * 3600 * 1000 // a sent question the session never closed is forgotten after a day
 let timer: { cancel: () => void } | undefined
 let viewport: { columns: number; isFullscreen?: boolean } | null = null
 let paneAttempted = false
@@ -525,6 +529,7 @@ async function refresh($: EngineInterface): Promise<void> {
       // garnish too: keep the previous rows
     }
     snapshot = { ...built.snap, recent, activity, account: { account, quota } }
+    await pruneDecide($, new Set(built.snap.pending.flatMap(d => (d.id === null ? [] : [d.id]))), built.snap.state === 'ok', nowMs).catch(() => undefined)
     $.ui.invalidate('ui.render')
     // toasts: only between two fresh snapshots of the same scope
     if (built.snap.state === 'ok') {
@@ -551,6 +556,58 @@ async function refresh($: EngineInterface): Promise<void> {
   } catch (_e) {
     // a bad tick must never take the session down; the next tick tries again
   }
+}
+
+// A press on the 待決 tab: `pick:<id>:<k>` chooses option k of question id (pressing the chosen one again unchooses it), `submit` sends every answered question.
+async function decidePress($: EngineInterface, id: string): Promise<void> {
+  try {
+    const m = /^pick:(.+):(\d+)$/.exec(id)
+    if (m !== null) {
+      const k = Number(m[2])
+      await update($, DECIDE, s => {
+        const picks = { ...s.picks }
+        if (picks[m[1]] === k) delete picks[m[1]]
+        else picks[m[1]] = k
+        return { ...s, picks }
+      })
+    } else if (id === 'submit') await sendDecide($)
+  } catch (_e) {
+    // a press never takes the session down
+  }
+}
+
+// One prompt carries every answered question that was not sent yet. The questions are marked sent BEFORE the prompt goes, so a second press cannot send them twice;
+// a prompt the session refuses takes the marks back. The prompt starts a turn once the session is idle: it is not awaited here.
+async function sendDecide($: EngineInterface): Promise<void> {
+  const reply = decideReply(snapshot === null ? [] : snapshot.pending, await read($, DECIDE))
+  if (reply === null) return
+  const at = await $.clock.now()
+  await update($, DECIDE, s => ({ ...s, sent: { ...s.sent, ...Object.fromEntries(reply.ids.map(i => [i, at])) } }))
+  $.prompt.submit({ text: reply.text }).catch(async () => {
+    await update($, DECIDE, s => { const sent = { ...s.sent }; for (const i of reply.ids) delete sent[i]; return { ...s, sent } })
+  })
+}
+
+// An edit of a note field (`note:<id>`).
+async function decideNote($: EngineInterface, key: string, value: string): Promise<void> {
+  if (!key.startsWith('note:')) return
+  const id = key.slice(5)
+  try {
+    await update($, DECIDE, s => ({ ...s, notes: { ...s.notes, [id]: value } }))
+  } catch (_e) {
+    // keep the last text
+  }
+}
+
+// Forget the picks and notes of questions that left the list, and sent marks a day old. Writes only when something is dropped (a write redraws the pane).
+async function pruneDecide($: EngineInterface, listed: ReadonlySet<string>, ok: boolean, nowMs: number): Promise<void> {
+  const st: DecideState = await read($, DECIDE)
+  const gone = (id: string): boolean => !listed.has(id) && (st.sent[id] !== undefined ? nowMs - st.sent[id] > DECIDE_KEEP_MS : ok)
+  const ids = new Set([...Object.keys(st.picks), ...Object.keys(st.notes), ...Object.keys(st.sent)])
+  const drop = [...ids].filter(gone)
+  if (drop.length === 0) return
+  const keep = <V,>(o: Record<string, V>): Record<string, V> => Object.fromEntries(Object.entries(o).filter(([id]) => !drop.includes(id)))
+  await update($, DECIDE, s => ({ picks: keep(s.picks), notes: keep(s.notes), sent: keep(s.sent) }))
 }
 
 const nextTab = (t: PaneTab): PaneTab => PANE_TABS[(PANE_TABS.indexOf(t) + 1) % PANE_TABS.length]
@@ -588,7 +645,7 @@ export const register: Register = on => {
   on('ui.render', { component: 'AbovePrompt' }, ($, e, next) => {
     viewport = e.viewport ? { columns: e.viewport.columns, isFullscreen: e.viewport.isFullscreen } : null
     if (e.props.hasSurvey) return next(e)
-    // the ⓘ opens the panel on the Now tab; pressed again while the panel is open it shows the next tab (6 tabs, the ? legend last, then Now again) (the pane never gets the keyboard
+    // the ⓘ opens the panel on the Now tab; pressed again while the panel is open it shows the next tab (7 tabs, the ? legend last, then Now again) (the pane never gets the keyboard
     // while the person holds the ⓘ, so this is the keyboard way to change tab). "Open" is the engine's own record, $.ui.panes() (the pane
     // is listed until it closes, however it was opened). No hotkey: the band's autoFocus puts the keyboard path at Ctrl+x Tab, Enter.
     const info = async () => {
@@ -635,5 +692,5 @@ export const register: Register = on => {
     return Band($.ui.resolve(e), snapshot, e.props.bodyColumns, info, tr, slot)
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE_ID }, ($, e) => Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { paneTab = t; $.ui.invalidate('ui.render'); void ringToNext($) }, tr, e.props.bodyColumns, () => { paneTab = nextTab(paneTab); $.ui.invalidate('ui.render') }, expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') }, folded, e.props.scroll ?? null))
+  on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { paneTab = t; $.ui.invalidate('ui.render'); void ringToNext($) }, tr, e.props.bodyColumns, () => { paneTab = nextTab(paneTab); $.ui.invalidate('ui.render') }, expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') }, folded, e.props.scroll ?? null, { state: await read($, DECIDE), inputs: SURFACES_WITH_INPUT.has(e.surface), onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) } }))
 }

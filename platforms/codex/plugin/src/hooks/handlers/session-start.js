@@ -28,6 +28,7 @@ function composeSessionStartContext({
   handoffInjected = '',
   intentHint = '',
   disableWarning = '',
+  budgetWarning = '',
   updateNotice = '',
   injectHandoffSection,
   limit = 10000,
@@ -46,6 +47,12 @@ function composeSessionStartContext({
   }
   if (disableWarning) {
     context += disableWarning;
+  }
+  if (budgetWarning) {
+    const budgetBlock = `\n\n${budgetWarning}`;
+    if (context.length + budgetBlock.length < limit) {
+      context += budgetBlock;
+    }
   }
   if (updateNotice) {
     const updateNoticeBlock = `\n\n${updateNotice}`;

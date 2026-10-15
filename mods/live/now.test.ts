@@ -4,7 +4,7 @@
 import { test, expect } from 'claude-code/testing'
 import { makeT } from './i18n'
 import { NO_DETAIL, NO_SECTIONS, staleSuffix, wrapLines } from './model'
-import { decideTabLines, dispatchLines, headerLines, hygieneTabLines, legendLines, nowLines, reviewTabLines, spendTabLines, stripOf, stripRows, treeRowCount, withOverflowHint } from './tabs'
+import { decideTabLines, dispatchLines, headerLines, hygieneTabLines, legendLines, nowLines, reviewTabLines, spendTabLines, stripOf, stripRows, tabNeeds, treeRowCount, withOverflowHint } from './tabs'
 import type { LiveSnapshot, PaneLine, Seg } from './model'
 import * as ui from './ui'
 import { violations } from './invariants.testkit'
@@ -502,7 +502,7 @@ test('strip: the active label and the ━ run are the here mark (I4 / I6); every
   for (const [loc, t] of LOCALES) {
     const sr = stripOf(snap(), ctxOf(t, 120), 'now', true)
     const marked = [...sr.tabs.map(x => x.label), ...sr.tabs.flatMap(x => x.badge), ...sr.rule]
-    for (const s of marked) if (s.bold === true || s.color === 'claude') expect(s.here, loc + ': strip seg "' + s.text.trim() + '" is bold or claude without here').toBe(true)
+    for (const s of marked) if ((s.bold === true || s.color === 'claude') && s.color !== 'warning') expect(s.here, loc + ': strip seg "' + s.text.trim() + '" is bold or claude without here').toBe(true)
     expect(sr.tabs.filter(x => x.on).length).toBe(1)
     expect(sr.rule.some(s => s.here === true && s.text.includes('━')), loc + ': the ━ run carries here').toBe(true)
   }
@@ -551,3 +551,46 @@ test('PENDING: an orphaned question carries the asker-ended label in pane and ba
     expect(staleSuffix(pend('d-9', 'q'), t), loc).toBe('')
   }
 })
+
+// ---- the tab NAME carries the need (owner 2026-10-16): warning bold for a tab that holds something for the owner, no symbol; a running dispatch is not marked ----
+// Negative controls: the old strip draws symbol badges after the name and never colours it, so every colour assertion below fails on it.
+const needSnap = (over: { pending?: boolean; residue?: number; qc?: string | null; live?: number }): LiveSnapshot => {
+  const s = snap({ decision: over.pending === true }) as never as { detail: { residue: unknown; qc: unknown; counts: unknown } }
+  s.detail.residue = over.residue === undefined ? null : { needs_human_count: over.residue, needs_human: [], needs_human_bytes: 0, by_class: {}, reapable_worktrees: 0, at: null }
+  s.detail.qc = over.qc === undefined || over.qc === null ? null : { state: over.qc, range: null, protected_files_count: 0, evidence: null, mode: 'block', checked_at: null }
+  s.detail.counts = { confirmed_live: over.live ?? 0, exited: 0, unknown: 0, fresh_bound_s: 30 }
+  return s as never
+}
+const loud = (sr: ui.Strip, id: string): boolean => { const l = sr.tabs.find(x => x.id === id)!.label; return l.color === 'warning' && l.bold === true }
+test('tab colour: 待決 / 殘留 / 審查 go warning bold when they need the owner, and not otherwise', () => {
+  const t = makeT('zh-TW')
+  const c = ctxOf(t, 120)
+  const all = stripOf(needSnap({ pending: true, residue: 2, qc: 'owed' }), c, 'now', true)
+  for (const id of ['decide', 'hygiene', 'review']) expect(loud(all, id), id + ' needs the owner').toBe(true)
+  const none = stripOf(needSnap({ pending: false, residue: 0, qc: 'ok' }), c, 'now', true)
+  for (const id of ['decide', 'hygiene', 'review']) expect(loud(none, id), id + ' has nothing for the owner').toBe(false)
+  expect(none.tabs.find(x => x.id === 'review')!.label.dim).toBe(true)
+  // one at a time: each condition marks only its own tab
+  expect(['decide', 'hygiene', 'review'].filter(id => loud(stripOf(needSnap({ pending: true }), c, 'now', true), id))).toEqual(['decide'])
+  expect(['decide', 'hygiene', 'review'].filter(id => loud(stripOf(needSnap({ residue: 1 }), c, 'now', true), id))).toEqual(['hygiene'])
+  expect(['decide', 'hygiene', 'review'].filter(id => loud(stripOf(needSnap({ qc: 'owed' }), c, 'now', true), id))).toEqual(['review'])
+  for (const q of ['ok', 'not_needed', 'unknown']) expect(loud(stripOf(needSnap({ qc: q }), c, 'now', true), 'review'), 'qc ' + q).toBe(false)
+})
+test('tab colour: a running dispatch never marks 派工; no symbol badge is drawn anywhere in the strip', () => {
+  const t = makeT('zh-TW')
+  const sr = stripOf(needSnap({ pending: true, residue: 2, qc: 'owed', live: 3 }), ctxOf(t, 120), 'now', true)
+  expect(loud(sr, 'dispatch')).toBe(false)
+  expect(tabNeeds(needSnap({ live: 3 })).dispatch).toBeUndefined()
+  const text = [...sr.tabs.flatMap(x => [x.label, ...x.badge]), ...sr.rule].map(g => g.text).join('')
+  expect(text).not.toMatch(/[▲●⚑⊘]/)
+})
+test('tab colour: the active tab stays claude bold with its ━ run even when it needs the owner', () => {
+  const sr = stripOf(needSnap({ pending: true }), ctxOf(makeT('zh-TW'), 120), 'decide', true)
+  const on = sr.tabs.find(x => x.on)!
+  expect(on.id).toBe('decide')
+  expect(on.label.color).toBe('claude')
+  expect(on.label.bold).toBe(true)
+  expect(sr.rule.some(g => g.text.includes('━') && g.color === 'claude')).toBe(true)
+  expect(sr.tabs.flatMap(x => x.badge).every(g => g.color !== 'warning' || !x_on(sr, g))).toBe(true)
+})
+const x_on = (sr: ui.Strip, g: Seg): boolean => sr.tabs.some(x => x.on && x.badge.includes(g))

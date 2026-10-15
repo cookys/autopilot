@@ -841,7 +841,8 @@ export function drawSeg(s: Seg): { color: ThemeKey | undefined; bold: boolean | 
   return { color: s.color, bold: s.bold, dimColor: s.dim }
 }
 
-export type StripTab = { id: PaneTab; label: string; badge?: Frag }
+// `need`: the tab holds something for the owner, so its name is drawn warning bold (the colour of `▲ 要你決定`); `count` (variant B) is the number after the name
+export type StripTab = { id: PaneTab; label: string; need?: boolean; count?: number }
 export type Strip = {
   next: Seg | null // the next-tab chip `›`
   tabs: { id: PaneTab; on: boolean; label: Seg; badge: readonly Seg[] }[]
@@ -854,8 +855,11 @@ export function strip(u: Ctx, active: PaneTab, tabs: readonly StripTab[], hasNex
   const next = hasNext ? sg(GLYPHS.structure.goto, { color: 'claude', role: 'glyph' }) : null
   const built = tabs.map(tb => {
     const on = tb.id === active
-    const label = sg(' ' + tb.label + ' ', on ? { color: 'claude', bold: true, here: true, role: 'value' } : { dim: true, role: 'value' })
-    const badge: readonly Seg[] = tb.badge === undefined ? [] : tb.badge.segs
+    const needs = tb.need === true
+    // the active tab stays claude bold even when it needs the owner (the `━` run already marks it); an inactive one that needs the owner is warning bold, the rest dim
+    const o: SegOpts = on ? { color: 'claude', bold: true, here: true, role: 'value' } : needs ? { color: 'warning', bold: true, role: 'value' } : { dim: true, role: 'value' }
+    const label = sg(' ' + tb.label + ' ', o)
+    const badge: readonly Seg[] = needs && tb.count !== undefined && tb.count > 0 ? [sg(String(tb.count), o)] : []
     return { id: tb.id, on, label, badge, width: displayWidth(label.text) + displayWidth(badge.map(s => s.text).join('')) + 1 }
   })
   let rows = 1
@@ -865,7 +869,7 @@ export function strip(u: Ctx, active: PaneTab, tabs: readonly StripTab[], hasNex
   let markW = 0
   for (const b of built) {
     if (w > 0 && w + b.width > u.cols) { rows++; w = 0 }
-    if (b.on) { markAt = x; markW = displayWidth(b.label.text) }
+    if (b.on) { markAt = x; markW = displayWidth(b.label.text) + displayWidth(b.badge.map(s => s.text).join('')) }
     w += b.width
     x += b.width
   }
@@ -917,7 +921,7 @@ export function legendParts(u: Ctx, folded: ReadonlySet<string> | undefined): Re
   const ex = (...segs: Seg[]): Frag => frag(segs)
   const bar = ex(sg(GLYPHS.chart.meterOn, { color: meterKey(0.5), role: 'glyph' }), sg(GLYPHS.chart.meterOn, { color: meterKey(0.9), role: 'glyph' }), sg(GLYPHS.chart.meterOn, { color: meterKey(1), role: 'glyph' }), sg(GLYPHS.chart.meterOff, { color: 'inactive', role: 'glyph' }))
   const walk = ex(sg(GLYPHS.state.done, { color: STATES.done.key, role: 'glyph' }), dim(S.rule, { role: 'glyph' }), sg(GLYPHS.chart.here, { color: 'claude', here: true, role: 'glyph' }), dim(S.rule, { role: 'glyph' }), sg(GLYPHS.state.pending, { color: STATES.pending.key, role: 'glyph' }))
-  const badges = cat(stateBadge(stated('running') as BadgeStated, 2, 'legend.structure'), val(' '), stateBadge(stated('stalled') as BadgeStated, 1, 'legend.structure'), val(' '), residueBadge(1, 'legend.structure'))
+  const badges = ex(sg(' Aa ', { color: 'warning', bold: true, role: 'value' }))
   const structure = [
     legendRow(u, ex(dim(S.open, { role: 'glyph' }), sg(' '), dim(S.folded, { role: 'glyph' })), t('legend.fold'), 'legend.structure'),
     legendRow(u, ex(dim(S.goto, { role: 'glyph' })), t('legend.goto'), 'legend.structure'),

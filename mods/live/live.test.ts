@@ -318,6 +318,9 @@ const headOf = (tree: Node): string[] => { const r = allRows(tree); return r.sli
 const fullText = (n: Node): string => (n.type === 'Button' && typeof n.props?.label === 'string' ? (n.props.label as string) : (n.children || []).map(c => (typeof c === 'string' ? c : fullText(c as Node))).join(''))
 const stripOf = (tree: Node): string => fullText(((tree.children || []) as Node[])[0]).replace(/\s*[─━]+$/, '') // without the baseline rule
 
+// the drawn Text of one tab's name in the strip (its colour and weight say whether the tab needs the owner)
+const tabName = (tree: Node, id: string): Drawn => walkAll(tree as never).find(n => n.type === 'Button' && n.props?.key === id && n.props?.key !== 'next') ? (walkAll(walkAll(tree as never).find(n => n.type === 'Button' && n.props?.key === id) as Drawn).find(n => n.type === 'Text') as Drawn) : ({} as Drawn)
+
 // a mounted pane on one tab (the caller unmounts it)
 async function paneOn($: any, surface: (typeof SURFACES)[number], tab: string) {
   const mountPane = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
@@ -2303,7 +2306,7 @@ function expectThemeOnly(tree: Drawn, _allowTabBackground = false) {
 const joined = (texts: string[]) => texts.join('')
 
 // the tab showing: its Button wraps a bold Text (bold `claude`); the others wrap a plain one, and the `next` chip is no tab
-const isActiveTab = (b: Drawn): boolean => b.props?.key !== 'next' && (b.children || []).some((c: unknown) => typeof c !== 'string' && (c as Drawn).props?.bold === true)
+const isActiveTab = (b: Drawn): boolean => b.props?.key !== 'next' && (b.children || []).some((c: unknown) => typeof c !== 'string' && (c as Drawn).props?.bold === true && (c as Drawn).props?.color === 'claude')
 
 async function shownTabOf($: any, surface: any) {
   const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
@@ -2734,14 +2737,18 @@ for (const surface of SURFACES) {
     const strip = stripOf(tree as Node)
     expect(strip).toContain('現況')
     expect(strip).toContain('待決')
-    expect(strip.slice(strip.indexOf('待決'), strip.indexOf('派工'))).not.toContain('▲') // nothing is pending in this world: the tab carries no badge
     expect(strip).toContain('派工')
-    expect(strip).toContain('●2')
     expect(strip).toContain('審查')
     expect(strip).toContain('用量')
     expect(strip).toContain('殘留')
-    expect(strip).toContain('⚑2')
     expect(strip.trim().endsWith('?')).toBe(true)
+    expect(strip).not.toMatch(/[▲●⚑]/) // no symbol badge anywhere in the strip
+    // names only: 殘留 needs the owner (2 worktrees) and is warning bold; 派工 has 2 live runs and is plain dim; 待決 has nothing pending here and is plain dim
+    const nameNode = (id: string) => tabName(tree as Node, id)
+    expect(nameNode('hygiene').props?.color).toBe('warning')
+    expect(nameNode('hygiene').props?.bold).toBe(true)
+    for (const id of ['dispatch', 'decide', 'spend']) { expect(nameNode(id).props?.color, id).toBeUndefined(); expect(nameNode(id).props?.bold, id).not.toBe(true) }
+    expect(strip).not.toMatch(/殘留 \d/) // variant A: colour only, no number
     // the active tab (Now) is bold `claude` text with a `━` run in the rule under it; the inactive ones are dim; nothing carries a background (§8 Q1)
     const stripNodes = walkAll(((tree.children || [])[0]) as Drawn)
     expect(stripNodes.filter(n => n.props?.backgroundColor !== undefined).length).toBe(0)
@@ -2752,24 +2759,24 @@ for (const surface of SURFACES) {
     await pane.unmount()
   })
 
-  test('P7 panel: tab badges: ▲ on Review when QC is owed, ⚑N on Hygiene, ●N on Dispatch, nothing when there is nothing (' + surface + ')', async ($, on) => {
+  test('P7 panel: tab names: Review, Hygiene and Decide go warning bold when they need the owner, Dispatch never does, no symbol anywhere (' + surface + ')', async ($, on) => {
     const files = richWorld()
     files[LIVE + '/runs/' + KEY + '.qc.json'] = j({ schema: 'autopilot.qc-status/1', scope: { project_key: KEY, root_run_id: null }, state: 'owed', range: null, protected_files_count: 1, evidence: null })
     const w = world(on, files)
     await start($, surface)
-    const strip = async () => stripOf((await paneParts($, surface, 'now')).tree)
-    const owed = await strip()
-    expect(owed).toContain('審查 ▲')
-    expect(owed).toContain('⚑2')
-    expect(owed).toContain('●2')
+    const tree0 = async () => (await paneParts($, surface, 'now')).tree
+    const loud = (tree: Node, id: string) => { const p = tabName(tree, id).props; return p?.color === 'warning' && p?.bold === true }
+    const owed = await tree0()
+    expect(loud(owed, 'review'), 'QC owed marks Review').toBe(true)
+    expect(loud(owed, 'hygiene'), 'residue marks Hygiene').toBe(true)
+    expect(loud(owed, 'dispatch'), 'a live dispatch marks nothing').toBe(false)
+    expect(stripOf(owed)).not.toMatch(/[▲●⚑]/)
     delete w.files[LIVE + '/runs/' + KEY + '.qc.json']
     delete w.files[LIVE + '/runs/' + KEY + '.residue.json']
-    w.files[LIVE + '/runs/' + KEY + '--' + ROOT + '.json'] = j(envelope({ runs: [], counts: { confirmed_live: 0, exited: 0, unknown: 0, fresh_bound_s: 30 }, published_at: '2026-10-04T10:00:25.000Z' }))
     await w.clock.advance(5000)
-    const quiet0 = await strip()
-    expect(quiet0).not.toContain('▲')
-    expect(quiet0).not.toContain('⚑')
-    expect(quiet0).not.toContain('●')
+    const quiet = await tree0()
+    for (const id of ['review', 'hygiene', 'dispatch', 'decide']) expect(loud(quiet, id), id + ' with nothing to do is not marked').toBe(false)
+    expect(stripOf(quiet)).not.toMatch(/[▲●⚑]/)
   })
 
   test('P7 panel: every tab renders its fixture facts, theme colours only (' + surface + ')', async ($, on) => {
@@ -2780,7 +2787,7 @@ for (const surface of SURFACES) {
     const legend = await tab('legend')
     expect(legend.texts[0]).toContain('狀態') // the generated `?` tab (I15) opens on its states section
     for (const id of ui.STATE_IDS) expect(joined(legend.texts)).toContain(ui.STATES[id].glyph + ' ' + makeT('zh-TW')('ui.state.' + id)) // every state glyph with its word
-    for (const k of ['open', 'folded', 'goto', 'bullet', 'detail', 'command', 'tabMark', 'residue', 'behind'] as const) expect(joined(legend.texts)).toContain(ui.GLYPHS.structure[k])
+    for (const k of ['open', 'folded', 'goto', 'bullet', 'detail', 'command', 'tabMark', 'behind'] as const) expect(joined(legend.texts)).toContain(ui.GLYPHS.structure[k])
     expect(legend.texts.some(t => t.includes('Ctrl+x Tab'))).toBe(true)
     expectThemeOnly(legend.tree as Drawn, true)
 
@@ -3387,7 +3394,7 @@ test('wrapLines: a kv row wraps with a hanging indent of 12 cells, a long path b
 
 // I15 (plan section 5.6): the `?` tab is generated from the tables the pane draws from. Every state of STATES (glyph + word) and every structure glyph a tab draws
 // is on it, in both locales, at every width, and each entry is one example plus its explanation.
-const LEGEND_STRUCTURE = ['open', 'folded', 'detail', 'command', 'goto', 'bullet', 'empty', 'tabMark', 'residue', 'behind'] as const // the glyphs the tabs draw (the band's own symbols are not tab symbols)
+const LEGEND_STRUCTURE = ['open', 'folded', 'detail', 'command', 'goto', 'bullet', 'empty', 'tabMark', 'behind'] as const // the glyphs the tabs draw (the band's own symbols are not tab symbols)
 const legendMissing = (lines: { text: string }[], t: ReturnType<typeof makeT>): string[] => {
   const all = lines.map(l => l.text).join('\n')
   const out: string[] = []
@@ -4985,13 +4992,15 @@ for (const surface of SURFACES) {
     ])
   })
 
-  test('DECIDE mounted: the strip badges the tab with the number of questions, and the 現況 summary row opens it (' + surface + ')', async ($, on) => {
+  test('DECIDE mounted: the strip colours the 待決 tab, and the 現況 summary row opens it (' + surface + ')', async ($, on) => {
     decideWorld(on)
     await start($, surface)
     const pane = await paneOn($, surface, 'now')
     const tree = (await pane.drawn()) as Node
     await pane.unmount()
-    expect(stripOf(tree)).toContain('待決 ▲3')
+    expect(stripOf(tree)).not.toContain('▲')
+    expect(tabName(tree, 'decide').props?.color).toBe('warning')
+    expect(stripOf(tree)).not.toMatch(/待決 \d/)
     const rows = rowsOf(tree)
     const at = rows.findIndex(t => /^▲ 待決議事項 3 件\s+待決 ›$/.test(t))
     expect(at).toBeGreaterThanOrEqual(0)

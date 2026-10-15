@@ -5,7 +5,7 @@ import { test, expect } from 'claude-code/testing'
 import { makeT } from './i18n'
 import { DECIDE_REPLY_HEAD, NO_DECIDE, NO_DETAIL, NO_SECTIONS, decideLine, decideReply, recommendedIndex } from './model'
 import type { DecideView, LiveDecision, LiveSnapshot, PaneLine } from './model'
-import { decideTabLines, nowLines, stripOf, tabBadges } from './tabs'
+import { decideTabLines, nowLines, stripOf, tabNeeds } from './tabs'
 import * as ui from './ui'
 import { violations } from './invariants.testkit'
 
@@ -105,14 +105,16 @@ test('DECIDE none: no question is one empty line and no badge; each question add
     const none = decideTabLines(snapOf([]), ctxOf(t, 76, view()))
     expect(none.map(l => l.kind), loc).toEqual(['empty'])
     expect(none[0].text, loc).toContain(t('decide.none'))
-    expect(tabBadges(snapOf([])).decide, loc).toBeUndefined()
-    const badge = tabBadges(snapOf(THREE)).decide as ui.Frag
-    expect(badge.text, loc).toBe('▲3')
-    expect(badge.segs[0].color, loc).toBe('warning')
+    expect(tabNeeds(snapOf([])).decide, loc).toBeUndefined()
+    expect(tabNeeds(snapOf(THREE)).decide, loc).toEqual({})
   }
-  // the badge reaches the strip, after the tab's label
+  // the need reaches the strip: the tab name is warning bold, no symbol; no number
   const strip = stripOf(snapOf(THREE), { t: makeT('zh-TW'), cols: 76 }, 'now', true)
-  expect(strip.tabs.find(x => x.id === 'decide')?.badge.map(s => s.text).join('')).toBe('▲3')
+  const dtab = strip.tabs.find(x => x.id === 'decide')!
+  expect(dtab.label.color).toBe('warning')
+  expect(dtab.label.bold).toBe(true)
+  expect(dtab.badge.map(s => s.text).join('')).toBe('')
+  expect(strip.rule.map(s => s.text).join('')).not.toMatch(/[▲●⚑]/)
   expect(strip.tabs.map(x => x.id)).toEqual(['now', 'decide', 'dispatch', 'review', 'spend', 'hygiene', 'legend'])
 })
 

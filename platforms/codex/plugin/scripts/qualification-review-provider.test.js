@@ -2100,6 +2100,69 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
   check(bare.captured === null, 'kimi without QRP_CLI_HOME never reaches spawn');
 }
 
+// ── BL-0161: a CLI that exits 0 with a quota/auth error is an infra failure ────
+{
+  const cliEnv = (extra = {}) => ({
+    QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude, ...extra,
+  });
+  for (const [label, stdout, stderr] of [
+    ['stdout quota text', 'Error: usage limit reached, quota exceeded', undefined],
+    ['stdout rate limit', 'Rate limit exceeded. Try again later.', undefined],
+    ['stdout login text', 'Please log in to continue.', undefined],
+    ['stdout http 401', 'API Error: 401 Unauthorized', undefined],
+    ['stderr token expired', 'garbled non-answer', 'error: token expired'],
+    ['stderr 429', 'garbled non-answer', 'HTTP 429 Too Many Requests'],
+  ]) {
+    const { child } = runProvider({
+      env: cliEnv(stderr ? { STUB_STDERR: stderr } : {}), request: reviewerRequest(), stubOutput: stdout,
+    });
+    equal(child.status, 1, `exit-0 ${label} is a provider (infra) failure, not a graded answer`);
+    check(/quota\/auth/u.test(child.stderr), `exit-0 ${label} failure names the cause`);
+  }
+  // Every context phrase works on stdout; the bare words work on stderr only.
+  for (const phrase of [
+    'You have hit your limit', 'Your credit balance is too low', 'weekly limit exhausted',
+    'limit reached for this plan', 'Please run /login', 'login required',
+    'authentication failed', 'Authentication error', 'insufficient_quota', 'RESOURCE_EXHAUSTED',
+    'insufficient credits', 'quota exceeded',
+  ]) {
+    const { child } = runProvider({ env: cliEnv(), request: reviewerRequest(), stubOutput: phrase });
+    equal(child.status, 1, `stdout "${phrase}" is an infra failure`);
+  }
+  for (const phrase of ['unauthorized', 'quota', 'Forbidden']) {
+    const { child } = runProvider({
+      env: cliEnv({ STUB_STDERR: phrase }), request: reviewerRequest(), stubOutput: 'garbled',
+    });
+    equal(child.status, 1, `stderr bare "${phrase}" is an infra failure`);
+  }
+  for (const phrase of ['Found an unauthorized access path in handler.py', 'The quota handling looks forbidden-safe']) {
+    const { child } = runProvider({ env: cliEnv(), request: reviewerRequest(), stubOutput: phrase });
+    equal(child.status, 0, `short prose answer "${phrase}" is graded, not an infra failure`);
+  }
+  // Non-claude kinds share the path.
+  const grokOut = runProvider({
+    env: { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'grok', QRP_CLI_BIN: stubClaude },
+    request: reviewerRequest(), stubOutput: 'You have hit your limit',
+  });
+  equal(grokOut.child.status, 1, 'grok: exit-0 limit text is an infra failure');
+  // Negative control: a legal answer that merely MENTIONS the words is still scored.
+  const mentioning = JSON.stringify({
+    verdict: 'pass', findings: [],
+    note: 'the code retries on rate limit and quota exceeded, token expired, 401',
+  });
+  const legal = runProvider({ env: cliEnv(), request: reviewerRequest(), stubOutput: mentioning });
+  equal(legal.child.status, 0, 'a parseable answer mentioning "rate limit" is graded as an answer');
+  const legalWithStderr = runProvider({
+    env: cliEnv({ STUB_STDERR: 'warn: rate limit nearly reached' }),
+    request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT,
+  });
+  equal(legalWithStderr.child.status, 0, 'a parseable answer with a rate-limit stderr warning is still graded');
+  // A long unparseable prose answer that discusses rate limits is a wrong answer, not infra.
+  const longProse = 'Reviewing the change: the retry loop handles rate limit gracefully. '.repeat(40);
+  const prose = runProvider({ env: cliEnv(), request: reviewerRequest(), stubOutput: longProse });
+  equal(prose.child.status, 0, 'a long unparseable prose answer mentioning rate limit is handed back for grading');
+}
+
 fs.rmSync(tempRoot, { recursive: true, force: true });
-if (assertions !== 421) throw new Error(`qualification-review-provider: expected exactly 421 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 454) throw new Error(`qualification-review-provider: expected exactly 454 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);

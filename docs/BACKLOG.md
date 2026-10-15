@@ -1070,18 +1070,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/hooks-tests-run-sh-is-red-on-develop-sealed-campaign-verify-cmd-is-unsatisfiable.md
 - **Context**: Full run green at f108ec42 (480/480, ~56 min serial). Graph authors write each node's verification_commands by hand (no scaffold default names the suite). Option B (per-node affected suites) waits on BL-0001.
 
-### `hooks/tests/run.sh` TIMEOUT marker collides with a suite that self-exits 124/137
-- **Id**: BL-0088
-- **Status**: open
-- **Since**: 2026-08-30
-- **Origin**: self
-- **Problem**: 測試執行器把任何 124 或 137 的結束碼都當成逾時，若某個測試自己以這個碼結束，會被誤標為逾時。建議改用逾時標記檔判斷。 (draft)
-- **Impact**: 可能誤導排查方向，把正常結束誤當逾時；發生條件罕見。 (draft)
-- **Trigger**: a suite observed to exit 124/137 on its own (e.g. propagating a child's SIGKILL) shows as `[TIMEOUT]` in the summary.
-- **Effort**: M
-- **Source**: rail-fix qc panel 2026-08-30 (GLM-5.2 🔵).
-- **Pointer**: docs/backlog/hooks-tests-run-sh-timeout-marker-collides-with-a-suite-that-self-exits-124-137.md
-- **Context**: `is_suite_timeout_ec` treats any 124/137 as the wrapper's timeout.
 
 ### v2.35.5 qc-panel 🔵 follow-ups (managed-campaign rail debt, 2026-08-31)
 - **Id**: BL-0089
@@ -1179,18 +1167,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: v2.36.104 landing review rounds 1-4
 - **Pointer**: docs/backlog/dispatch-hetero-watchdog-round2-cleanups.md
 
-### run.sh: a group INT is deferred until the running test file finishes (timeout puts each file in its own process group)
-- **Id**: BL-0100
-- **Status**: open
-- **Since**: 2026-10-03
-- **Origin**: self
-- **Problem**: 跑整套測試時，若使用者按 Ctrl+C 中斷，要等目前正在跑的那個測試檔跑完才會停，因為每個檔案被放進各自獨立的程序群組。 (draft)
-- **Impact**: 中斷會延遲，最長等到最久的測試檔結束；只影響開發者體驗。 (draft)
-- **Trigger**: next run.sh touch
-- **Effort**: S
-- **Source**: tsflake hand 2026-10-03
-- **Pointer**: docs/backlog/run-sh-a-group-int-is-deferred-until-the-running-test-file-finishes.md
-- **Context**: with `timeout` giving each test file its own process group, a group INT reaches the file only after bash finishes the foreground child, so interrupt latency is bounded by the longest running file.
 
 
 
@@ -1545,18 +1521,18 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/qualification-wall-cap-after-run-to-completion.md
 - **Context**: engine-qualify.js:3740-3767: 1800 s per administration x 3 x2 multiplier, 400 s per call; observe first. A truncated locked_qualify pool stays qualified though sticky Tier-1 could still fail it.
 
-### Qualification provider: CLI error text and reviewer last-line rule
+### Qualification reviewer last-line rule
 - **Id**: BL-0161
 - **Status**: open
 - **Since**: 2026-10-14
 - **Origin**: self
-- **Problem**: 資格考現在把看不懂的回覆算成答錯。若命令列工具在額度用完或登入失效時照常結束、只印錯誤文字，也會被算成考生答錯而誤判不合格。另待決：程式審查題前面輸出壞掉、最後一行是合法的「通過」，目前算通過。
-- **Impact**: 中。第一項尚未實機確認；若發生會寫出錯誤的不合格紀錄並累積扣點。
-- **Trigger**: 某次考試出現一連串 protocol_violation，或確認某個 CLI 遇額度／登入錯誤會以 0 結束
+- **Problem**: 程式審查題的回覆如果前面輸出壞掉、最後一行是合法的「通過」，目前算通過。要決定維持這條規則並寫進文件，還是改成格式違規；改成違規可能讓會印進度文字的工具被誤判。
+- **Impact**: 低。符合解析器既定規則，不算誤判通過；只差一個決定和文件。
+- **Trigger**: owner 決定 A（維持並寫文件）或 B（前段雜訊算格式違規）
 - **Effort**: S
 - **Source**: review of 763f77de, 2026-10-14 (UNVERIFIED live behavior)
 - **Pointer**: docs/backlog/qualification-provider-cli-error-text-and-last-line-rule.md
-- **Context**: qualification-review-provider.js:1608-1610 passes exit-0 text through; no quota/auth pattern match. parsePanelResult (:807-820) takes the last parseable JSON object.
+- **Context**: parsePanelResult takes the last parseable JSON object. Part 1 (exit-0 quota/auth text) shipped as cliQuotaAuthError, merge of lane/q161.
 
 ### Grok and Kimi seats still owe the 2026-10-14 exams
 - **Id**: BL-0167
@@ -1585,17 +1561,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: 3d merged 2026-10-15 (plan §4 step 3d). Open: §7 row l (one hetero cc-shim run, child starts tmux then claude -p), row d2 re-run on codex, kimi with creds.
 
 
-### session-id scrub case 1b still needs setsid
-- **Id**: BL-0184
-- **Status**: open
-- **Since**: 2026-10-15
-- **Origin**: self
-- **Problem**: 派工身分清除那支測試在沒有 setsid 的主機上，已把兩個需要 setsid 的案例改成略過，但還有一個案例同樣需要 setsid 卻沒有略過，在那種主機上仍會假紅。
-- **Impact**: 低。只影響沒有 setsid 的主機，這台和 CI 都有。
-- **Trigger**: first run on a host without setsid, or next touch of the session-id scrub test
-- **Effort**: XS
-- **Source**: xs3 lane review 2026-10-15 (merged as bfbd8026): hetero_case 1b exercises the setsid --wait branch and is not skipped
-- **Pointer**: none
 
 ### bash-launch guard still misses some background launch shapes
 - **Id**: BL-0185

@@ -1703,8 +1703,8 @@ export function collapsedPrompt(prompt: string): string {
 // What the session left running: background Bash commands (asked for, or moved to the background by a timeout) and Monitor watches, scanned from
 // $.session.messages(), plus the subagents $.agent.list() reports running. A task ends on a <task-notification> that carries a <status> (a Monitor
 // event notification has none), or on a TaskStop of its id, or, for a result flagged `backgroundEndsWithFinalResponse`, on the next real prompt.
-// A resume after the owning process exited leaves no marker in the messages, so that case is not ended (BL-0002, unverified). Known gap: a task that ends mid-turn keeps its row until the turn ends, because its
-// notification waits in the input queue, not in the messages.
+// Known gap (BL-0002, unverified): a row left running across a session resume never ends; the transcript carries no resume marker.
+// Known gap: a task that ends mid-turn keeps its row until the turn ends, because its notification waits in the input queue, not in the messages.
 export type BgKind = 'shell' | 'monitor'
 export type BgTask = { id: string; kind: BgKind; label: string; output: string | null; lastEvent: string | null }
 export type ActivityItem = { kind: BgKind | 'agent'; label: string; detail: string | null; tail: string | null; quietMs: number | null }
@@ -1770,8 +1770,9 @@ export function scanBackground(messages: readonly SessionMsg[]): BgTask[] {
       const label = strOf(input.description) ?? strOf(input.command) ?? id
       // The output file is named after the task id, so only a path ending in `<id>.output` is taken.
       const output = kind === 'shell' ? (new RegExp('written to: (\\S+/' + id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\.output)').exec(text)?.[1] ?? null) : null
-      // Claude Code marks a result `backgroundEndsWithFinalResponse` when the command dies with the final response of the turn that started it and no
-      // completion notification can follow. The evidence that the turn is over is a later real prompt; until then the command is still running.
+      // Source: Claude Code 2.1.300 Bash result schema, `backgroundEndsWithFinalResponse`: "True when this backgrounded command is terminated at its
+      // caller's final response, so no completion notification can follow (a synchronous subagent's command, or a headless session ...)". So it shows up
+      // mainly in a synchronous subagent or headless. The evidence that the turn is over is a later real prompt; until then the command is still running.
       tasks.push({ id, toolUseId, kind, label: bgLabel(label), output, lastEvent: null, turn, endsWithFinal: result.backgroundEndsWithFinalResponse === true })
     }
   }

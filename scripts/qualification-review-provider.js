@@ -1031,27 +1031,35 @@ const qualificationUsage = require('./lib/qualification-usage');
 // Only consulted when the reply holds NO parseable JSON object, so a real answer that
 // merely mentions these words is never reclassified; a long unparseable reply is prose
 // (a wrong answer), so stdout is only matched when short like an error banner.
-const CLI_QUOTA_AUTH_ERROR = new RegExp([
+const CLI_QUOTA_AUTH_CONTEXT = new RegExp([
   String.raw`\brate[ -]?limit(?:ed|s)?\b`,
-  String.raw`\bquota\b`,
-  String.raw`\binsufficient (?:credits?|quota|balance)\b`,
-  String.raw`\busage limit\b`,
+  String.raw`\bquota (?:exceeded|exhausted|reached)\b`,
+  String.raw`\binsufficient[ _](?:credits?|quota|balance)\b`,
+  String.raw`\b(?:usage|weekly|daily|monthly) limit\b`,
+  String.raw`\bhit your (?:\w+ )?limit\b`,
+  String.raw`\blimit reached\b`,
+  String.raw`\bcredit balance\b`,
+  String.raw`\bresource_exhausted\b`,
   String.raw`\btoo many requests\b`,
-  String.raw`\bunauthori[sz]ed\b`,
-  String.raw`\bplease (?:log ?in|sign ?in|re-?authenticate)\b`,
+  String.raw`\bplease (?:log ?in|sign ?in|re-?authenticate|run /login)\b`,
+  String.raw`\blogin required\b`,
   String.raw`\b(?:not|no longer) (?:logged|signed) in\b`,
+  String.raw`\bauthentication (?:failed|error|required)\b`,
   String.raw`\b(?:token|session|credentials?|api key) (?:has )?(?:expired|invalid|revoked)\b`,
-  String.raw`\b(?:invalid|expired) (?:token|api key|credentials?)\b`,
+  String.raw`\b(?:invalid|expired) (?:token|api[ _-]?key|credentials?)\b`,
   String.raw`\b(?:http|status|error|code)[ :=]*(?:401|403|429)\b`,
-  String.raw`\b(?:401|403|429) (?:unauthorized|forbidden|too many)`,
+  String.raw`\b(?:401 unauthorized|403 forbidden|429 too many)`,
 ].join('|'), 'iu');
+// Bare words: far too common in a short prose ANSWER ("found an unauthorized access
+// path"), so they only count on the CLI's own stderr channel.
+const CLI_QUOTA_AUTH_BARE = /\b(?:unauthori[sz]ed|forbidden|quota|insufficient_quota)\b/iu;
 const CLI_ERROR_STDOUT_MAX_CHARS = 1000;
 
 function cliQuotaAuthError(text, stderrText) {
   if (extractJsonObject(text)) return null;
   const err = String(stderrText || '');
-  const hit = CLI_QUOTA_AUTH_ERROR.exec(err)
-    || (text.length <= CLI_ERROR_STDOUT_MAX_CHARS ? CLI_QUOTA_AUTH_ERROR.exec(text) : null);
+  const hit = CLI_QUOTA_AUTH_CONTEXT.exec(err) || CLI_QUOTA_AUTH_BARE.exec(err)
+    || (text.length <= CLI_ERROR_STDOUT_MAX_CHARS ? CLI_QUOTA_AUTH_CONTEXT.exec(text) : null);
   return hit ? hit[0] : null;
 }
 

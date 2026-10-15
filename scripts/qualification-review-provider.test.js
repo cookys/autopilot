@@ -2119,6 +2119,32 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
     equal(child.status, 1, `exit-0 ${label} is a provider (infra) failure, not a graded answer`);
     check(/quota\/auth/u.test(child.stderr), `exit-0 ${label} failure names the cause`);
   }
+  // Every context phrase works on stdout; the bare words work on stderr only.
+  for (const phrase of [
+    'You have hit your limit', 'Your credit balance is too low', 'weekly limit exhausted',
+    'limit reached for this plan', 'Please run /login', 'login required',
+    'authentication failed', 'Authentication error', 'insufficient_quota', 'RESOURCE_EXHAUSTED',
+    'insufficient credits', 'quota exceeded',
+  ]) {
+    const { child } = runProvider({ env: cliEnv(), request: reviewerRequest(), stubOutput: phrase });
+    equal(child.status, 1, `stdout "${phrase}" is an infra failure`);
+  }
+  for (const phrase of ['unauthorized', 'quota', 'Forbidden']) {
+    const { child } = runProvider({
+      env: cliEnv({ STUB_STDERR: phrase }), request: reviewerRequest(), stubOutput: 'garbled',
+    });
+    equal(child.status, 1, `stderr bare "${phrase}" is an infra failure`);
+  }
+  for (const phrase of ['Found an unauthorized access path in handler.py', 'The quota handling looks forbidden-safe']) {
+    const { child } = runProvider({ env: cliEnv(), request: reviewerRequest(), stubOutput: phrase });
+    equal(child.status, 0, `short prose answer "${phrase}" is graded, not an infra failure`);
+  }
+  // Non-claude kinds share the path.
+  const grokOut = runProvider({
+    env: { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'grok', QRP_CLI_BIN: stubClaude },
+    request: reviewerRequest(), stubOutput: 'You have hit your limit',
+  });
+  equal(grokOut.child.status, 1, 'grok: exit-0 limit text is an infra failure');
   // Negative control: a legal answer that merely MENTIONS the words is still scored.
   const mentioning = JSON.stringify({
     verdict: 'pass', findings: [],
@@ -2138,5 +2164,5 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
 }
 
 fs.rmSync(tempRoot, { recursive: true, force: true });
-if (assertions !== 436) throw new Error(`qualification-review-provider: expected exactly 436 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 454) throw new Error(`qualification-review-provider: expected exactly 454 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);

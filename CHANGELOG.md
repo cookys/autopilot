@@ -86,6 +86,7 @@
 
 ### 修正
 
+- **腦力題和工頭題的扣點分開記**（BL-0170）：同一個模型的腦力題失誤不會再累積到工頭席位的扣點與撤銷待定，反之亦然。腦力席位的 `seat_hash` 多帶 `seat_kind=brain`；工頭與舊有席位的雜湊不變，已記的扣點不會失聯。`strike-seat`、`invalidate-strike`、`seat-hash`、`seat-status` 新增 `--seat-kind brain`。嚴重違規立即執法、扣點衰減與到期只提醒的規則不變。
 - **巢狀子 session 的入場檢查改讀自己的工作階段標記；子 session 不寫標記時會說原因**（BL-0174、BL-0175）：`session-mode.js` 的 managed dev-flow 入場檢查改用和寫入端相同的 `resolveMarkerWriteTarget` 判定身分。以前在有父 session 的巢狀子 session 裡，入場可能讀到父 session 的標記或繼承來的 id；現在只認自己的。有父 session 而只帶 `CLAUDE_SESSION_ID` 時改為拒絕，和寫入端一致；沒有父 session 時行為不變。`ensure-child` 不寫子標記時，在 stderr 印一行原因碼（`payload_unreadable`、`no_session_id`、`empty_session_id`、`child_is_parent`、`marker_unreadable`、`write_failed`），結束碼仍是 0，不會擋住子 session。Codex 鏡像同步。
 - **campaign 修復回合把檔案整個還原時不再被拒**（BL-0173）：修復檢查點記的 `changed_files` 和 `churn` 改成「上一輪已記值與本輪累積值取大者」，所以修正把某個檔案改回原樣、累積檔數或改動行數變少時，不會再被拒為 `BUDGET_RESET`。campaign 的單調檢查本身沒有放寬。改動行數已記到上限時，還原後的下一輪修復仍會被預算檢查擋下（修正前是直接被拒）。Codex 鏡像同步。
 - **資格考各科的原始作答檔，零筆時一律寫成空檔**（BL-0172）：`engine-qualify.js` 新增共用的 `rawRowsText`，七個原始作答檔都改用它。零筆時寫空檔，不再只寫一個換行；有資料時的內容和以前完全相同。Codex 鏡像同步。

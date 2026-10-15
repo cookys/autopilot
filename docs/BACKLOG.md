@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0178 -->
+<!-- next-id: BL-0180 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1790,19 +1790,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: none
 - **Context**: Grok: `bash run-rv6-cli-chain.sh grok grok:grok-4.7:low` (reviewer-requalify evidence folder). Kimi: reviewer v6 plus every role this round sat; no early stop.
 
-### Brain and foreman strikes share one fold
-- **Id**: BL-0170
-- **Status**: open
-- **Since**: 2026-10-15
-- **Origin**: self
-- **Problem**: 成績單已經把腦力題和工頭題的合格分開算，但扣點（strike）和撤銷待定仍以 engine+runner+role 為鍵。同一個模型的腦力題失誤，會累積到工頭席位的扣點，反之亦然。
-- **Impact**: 低。目前成績單沒有腦力題的扣點；一旦有，可能誤降級另一種席位。
-- **Trigger**: 第一筆腦力題的 strike 進成績單之前
-- **Effort**: S
-- **Source**: review of lane/brain-rows-guard (BL-0165), 2026-10-15
-- **Pointer**: none
-- **Context**: engine-scorecard.js:2007-2012 strike fold and pending_revocation are seat-wide; seatKindOf (:1777) already exists. Also add a scope-only brain fixture for seatKindOf :1779.
-
 ### Plan graduation --archive applies one --shipped-in to every stem
 - **Id**: BL-0171
 - **Status**: open
@@ -1841,3 +1828,29 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: review of lane/bl0174-0175, 2026-10-15 (red on base feb910b4 and on head, identical lines)
 - **Pointer**: none
 - **Context**: scripts/tests/session-mode-null-admission.test.sh: 2 asserts red (admission=null, mission_noop), also with CC unset; run.sh skips scripts/tests/. Fix and move, or delete.
+
+### Brain-seat strikes have no writer yet
+- **Id**: BL-0178
+- **Status**: open
+- **Since**: 2026-10-15
+- **Origin**: self
+- **Problem**: 腦力題和工頭題的扣點現在能分開記，但目前沒有任何程式會用「腦力席位」的身分去記扣點，所以分開記的功能還沒真的被用到。
+- **Impact**: 低。現在不會算錯；等第一筆腦力題扣點要進來時，得先把寫入端接上，否則會記到工頭席位。
+- **Trigger**: 第一筆腦力題 strike 進成績單之前（同 BL-0170 原觸發條件）
+- **Effort**: S
+- **Source**: review of lane/bl0170, 2026-10-15
+- **Pointer**: none
+- **Context**: no caller passes --seat-kind brain; computeSeatProjection in topology/scaffold-tier lacks seatKind. Also: HELP lines omit --seat-kind; invalid kind silently = default; no invalidate-strike brain test.
+
+### pending-revocation-fold KR3 has two red asserts
+- **Id**: BL-0179
+- **Status**: open
+- **Since**: 2026-10-15
+- **Origin**: self
+- **Problem**: 一支檢查「撤銷待定」的測試有兩項失敗，在改動之前的版本就已經是紅的，不是這次造成的。
+- **Impact**: 不確定。可能是測試讀到這台機器上的即時文件；查清楚前，這兩項保護沒有作用。
+- **Trigger**: next touch of engine-scorecard pending_revocation, or before the 3.0.0 cut
+- **Effort**: S
+- **Source**: review of lane/bl0170, 2026-10-15 (red on base feb910b4 and on merge)
+- **Pointer**: none
+- **Context**: hooks/tests/pending-revocation-fold.test.sh 67/2: KR3 strike-reason text not found; "unpinned live doc changed the decision bytes".
